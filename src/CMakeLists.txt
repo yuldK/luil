@@ -61,7 +61,11 @@ luil_add_source_filter(luil_files "text"
     "${public_headers}/text/utf8_text.h")
 
 # theme: 색·글꼴 선호 값과 팔레트 합성이다.
-
+luil_add_source_filter(luil_files "theme"
+    theme/appearance.cpp
+    "${public_headers}/theme/appearance.h"
+    theme/ui_theme.cpp
+    "${public_headers}/theme/ui_theme.h")
 
 # ui: view 무관 UI element 계층이다.
 # 불변 tree와 그 위에 얹히는 element를, 하는 일에 따라 나눈다.
