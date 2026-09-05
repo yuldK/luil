@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.25)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+project(luil_package_consumer LANGUAGES CXX RC)
+find_package(luil CONFIG REQUIRED)
+luil_generate_third_party_notices("${CMAKE_CURRENT_BINARY_DIR}/notices.txt")
+luil_configure_resource_script("${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
+    "${CMAKE_CURRENT_BINARY_DIR}/notices.txt")
+add_executable(package_consumer main.cpp "${CMAKE_CURRENT_BINARY_DIR}/resources.rc")
+target_link_libraries(package_consumer PRIVATE luil::luil)
+target_compile_definitions(package_consumer PRIVATE UNICODE _UNICODE)

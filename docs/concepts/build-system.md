@@ -35,4 +35,4 @@ cmake --preset vs2026-tests
 cmake --preset vs2026-analysis
 ```
 
-tooling을 요청해도 clang-format 또는 PowerShell이 없으면 관련 형식 검사 타깃을 경고와 함께 생략한다. 라이브러리·테스트·예제의 구성은 계속된다. 실행 파일의 리소스 통합은 소비자 계약을 따른다.
+tooling을 요청해도 clang-format 또는 PowerShell이 없으면 관련 형식 검사 타깃을 경고와 함께 생략한다. 라이브러리·테스트·예제의 구성은 계속된다. 실행 파일의 리소스 통합은 [소비자 계약](consumer-contract.md)을 따른다.

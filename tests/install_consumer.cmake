@@ -1,0 +1,23 @@
+function(run_checked)
+    execute_process(COMMAND ${ARGV} RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors)
+    if(NOT result EQUAL 0)
+        message(FATAL_ERROR "${ARGV}\n${output}\n${errors}")
+    endif()
+endfunction()
+
+set(work "${BINARY_DIR}/package-consumer-${CONFIG}")
+run_checked("${CMAKE_COMMAND}" --install "${BINARY_DIR}" --config "${CONFIG}" --prefix "${work}/installed")
+# 설치 위치를 바꾸고 공백이 있는 경로에서도 resource가 풀리는지 확인한다.
+file(COPY "${work}/installed/" DESTINATION "${work}/relocated package")
+set(generator_options -G "${GENERATOR}")
+if(PLATFORM)
+    list(APPEND generator_options -A "${PLATFORM}")
+endif()
+run_checked("${CMAKE_COMMAND}" -S "${SOURCE_DIR}/package_consumer" -B "${work}/consumer"
+    ${generator_options} "-DCMAKE_PREFIX_PATH=${work}/relocated package" "-DCMAKE_CONFIGURATION_TYPES=${CONFIG}" "-DCMAKE_BUILD_TYPE=${CONFIG}")
+run_checked("${CMAKE_COMMAND}" --build "${work}/consumer" --config "${CONFIG}")
+if(EXISTS "${work}/consumer/${CONFIG}/package_consumer.exe")
+    run_checked("${work}/consumer/${CONFIG}/package_consumer.exe")
+else()
+    run_checked("${work}/consumer/package_consumer.exe")
+endif()

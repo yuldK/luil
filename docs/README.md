@@ -5,6 +5,7 @@
 
 ## 시작과 빌드
 
+- [시작 가이드](how-to-start.md)
 - [Skia 빌드 준비](skia-build.md)
 - [컴포넌트 안내](components.md)
 
@@ -13,6 +14,7 @@
 - [앱 메시지와 UI 명령](concepts/app-message.md)
 - [자산 파이프라인](concepts/asset-pipeline.md)
 - [빌드 체계](concepts/build-system.md)
+- [소비자 계약](concepts/consumer-contract.md)
 - [불변 UI tree](concepts/immutable-tree.md)
 - [입력 pump](concepts/input-pump.md)
 - [상호작용](concepts/interaction.md)

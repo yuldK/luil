@@ -1,5 +1,13 @@
 include(Catch)
 
+if(LUIL_INSTALL)
+    add_test(NAME luil_installed_consumer
+        COMMAND "${CMAKE_COMMAND}" "-DBINARY_DIR=${PROJECT_BINARY_DIR}"
+            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DCONFIG=$<CONFIG>"
+            "-DGENERATOR=${CMAKE_GENERATOR}" "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/install_consumer.cmake")
+    set_tests_properties(luil_installed_consumer PROPERTIES TIMEOUT 120 LABELS "package")
+endif()
 
 # test 실행 파일도 라이브러리 resource(코디콘 폰트·라이선스·고지)를
 # 내장해야 embedded assets 경로가 실제와 같은 방식으로 검증된다.

@@ -16,7 +16,15 @@ luil_configure_resource_script("${luil_demo_resource}" "${luil_demo_notices}")
 luil_add_source_filter(luil_example_resource "resource"
     "${luil_demo_resource}")
 
-
+luil_add_source_filter(luil_hello_files "app"
+    hello/hello_app.cpp
+    hello/hello_app.h
+    hello/main.cpp)
+add_executable(luil_hello WIN32
+    ${luil_example_resource}
+    ${luil_hello_files})
+target_include_directories(luil_hello PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(luil_hello PRIVATE luil::luil luil_options)
 
 # widgets — 흔한 element를 섹션별 파일 하나씩으로 보여 주는 진열장이다.
 luil_add_source_filter(luil_widgets_files "app"
@@ -102,4 +110,4 @@ add_custom_command(TARGET luil_demo POST_BUILD
     COMMENT "Copying the demo sample images"
     VERBATIM)
 
-luil_set_ide_folder("Examples" luil_demo luil_widgets)
+luil_set_ide_folder("Examples" luil_demo luil_hello luil_widgets)

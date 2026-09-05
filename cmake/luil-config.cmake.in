@@ -1,0 +1,70 @@
+@PACKAGE_INIT@
+
+# 손으로 빌드한 Skia의 위치는 소비자 환경이 이 변수들로 지정하는 것이 계약이다.
+# 설치 시점의 경로는 같은 머신에서 쓸 때의 편의 기본값일 뿐이다 —
+# LUIL_SKIA_ROOT만 바꾸면 빌드 디렉터리는 패키지의 기본 위치로 따라온다.
+# 검사 논리는 빌드 트리와 동일한 cmake/dependencies/skia.cmake 하나다 —
+# 잘못 빌드한 Skia는 링크 오류가 아니라 원인이 드러나는 메시지로 잡히고,
+# 지금 빌드하는 구성에 필요한 flavor(Debug·Release)만 검사된다.
+if(NOT DEFINED LUIL_SKIA_ROOT)
+    set(LUIL_SKIA_ROOT "@LUIL_SKIA_ROOT@")
+    set(_luil_build_debug_default "@LUIL_SKIA_BUILD_DEBUG@")
+    set(_luil_build_release_default "@LUIL_SKIA_BUILD_RELEASE@")
+else()
+    set(_luil_build_debug_default "${LUIL_SKIA_ROOT}/out/skia-ui-debug")
+    set(_luil_build_release_default "${LUIL_SKIA_ROOT}/out/skia-ui-release")
+endif()
+if(NOT DEFINED LUIL_SKIA_BUILD_DEBUG)
+    set(LUIL_SKIA_BUILD_DEBUG "${_luil_build_debug_default}")
+endif()
+if(NOT DEFINED LUIL_SKIA_BUILD_RELEASE)
+    set(LUIL_SKIA_BUILD_RELEASE "${_luil_build_release_default}")
+endif()
+unset(_luil_build_debug_default)
+unset(_luil_build_release_default)
+set(LUIL_SKIA_COMPONENTS "@LUIL_SKIA_COMPONENTS@")
+set(LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES "@LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES@")
+set(LUIL_SKIA_REQUIRED_ARGUMENTS "@LUIL_SKIA_REQUIRED_ARGUMENTS@")
+
+include("${CMAKE_CURRENT_LIST_DIR}/skia.cmake")
+luil_find_skia()
+
+# WebView2 SDK도 같은 규칙이다 — 검사 논리가 빌드 트리와 같은 파일 하나이고,
+# 설치 시점의 경로는 같은 머신 편의 기본값이다.
+#  - flavor 축이 없다. 로더 아카이브가 CRT 중립이라 구성마다 갈리지 않는다
+#    (cmake/dependencies/webview2.cmake).
+if(NOT DEFINED LUIL_WEBVIEW2_ROOT)
+    set(LUIL_WEBVIEW2_ROOT "@LUIL_WEBVIEW2_ROOT@")
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/webview2.cmake")
+luil_find_webview2()
+
+include("${CMAKE_CURRENT_LIST_DIR}/luil-targets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/generate_notices.cmake")
+
+# 설치본에 지금 빌드하는 구성의 luil 산출물이 있는지 확인한다.
+# 없는 구성은 조용한 CRT 불일치 링크 오류가 아니라 여기서 원인과 함께 잡힌다.
+get_target_property(_luil_installed_configurations luil::luil
+    IMPORTED_CONFIGURATIONS)
+foreach(_luil_configuration IN ITEMS Debug Release)
+    string(TOUPPER "${_luil_configuration}" _luil_flavor)
+    if(LUIL_SKIA_NEEDS_${_luil_flavor}
+        AND NOT "${_luil_flavor}" IN_LIST _luil_installed_configurations)
+        message(FATAL_ERROR
+            "This luil package was not installed for the "
+            "${_luil_configuration} configuration "
+            "(installed: ${_luil_installed_configurations}).\n"
+            "Install it from the luil build tree:\n"
+            "  cmake --install <luil build directory> "
+            "--config ${_luil_configuration}")
+    endif()
+endforeach()
+unset(_luil_installed_configurations)
+unset(_luil_configuration)
+unset(_luil_flavor)
+
+# 빌드 트리에서는 $<BUILD_INTERFACE>로 잇던 것들을 설치본에서 다시 잇는다.
+set_property(TARGET luil::luil APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_skia)
+set_property(TARGET luil::luil APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_webview2)
+
+check_required_components(luil)
