@@ -32,8 +32,8 @@
 | 그룹 머리행 목록 | `grouped_list_element` | [ui/grouped_list_element.h](../include/luil/ui/grouped_list_element.h) | [설명](list-view-design.md) |
 | 탭 선택·닫기·재정렬 | `tab_bar_element` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](focus-group-design.md) |
 | 선택 묶음 | `choice_group_element` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
-| 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | — |
-| 드롭다운 | `dropdown_element` | [ui/dropdown_element.h](../include/luil/ui/dropdown_element.h) | — |
+| 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | [설명](popup-overlay-design.md) |
+| 드롭다운 | `dropdown_element` | [ui/dropdown_element.h](../include/luil/ui/dropdown_element.h) | [설명](popup-overlay-design.md) |
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |
 | 창 캡션 | `caption_element` | [ui/caption_element.h](../include/luil/ui/caption_element.h) | [설명](caption-button-design.md) |
 | 알림과 만료 | `toast_stack_element` | [ui/toast_element.h](../include/luil/ui/toast_element.h) | [설명](concepts/ui-element.md) |

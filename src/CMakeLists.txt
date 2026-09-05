@@ -218,7 +218,13 @@ luil_add_source_filter(luil_files "win32/caption"
     win32/caption_surface.h)
 
 # 떠 있는 창의 자리·대조·닫힘이다 (메뉴·드롭다운).
-
+luil_add_source_filter(luil_files "win32/popup"
+    win32/popup_dismiss.cpp
+    win32/popup_dismiss.h
+    win32/popup_reconcile.cpp
+    win32/popup_reconcile.h
+    win32/popup_surface.cpp
+    win32/popup_surface.h)
 
 # OS에서 들어오는 것이다 (포인터·휠 번역, IME, 클립보드, 파일 끌어놓기).
 luil_add_source_filter(luil_files "win32/input"

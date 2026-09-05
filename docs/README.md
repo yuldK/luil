@@ -46,6 +46,9 @@
 
 - [Win32 window surface](win32-surface-design.md)
 - [여러 top-level window](multi-window-design.md)
+- [Popup overlay 표면](popup-overlay-design.md)
+- [Popup 앵커 표면](popup-anchor-design.md)
+- [Popup 안의 텍스트 입력과 IME](popup-ime-design.md)
 - [OS 파일 drag & drop](os-dragdrop-design.md)
 - [UI Automation 접근성](accessibility-design.md)
 - [접근성 동작](accessibility-action-design.md)

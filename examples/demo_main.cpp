@@ -8,6 +8,7 @@
 //  - 탭: 선택·닫기·순서·가로 스크롤·넘침 메뉴 popup        (demo/tabs_page)
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
 //  - 토스트: 심각도별 알림과 실행 취소 토스트               (demo/toasts_page)
+//  - 메뉴·팝업: 드롭다운과 컨텍스트 메뉴 (popup 창)         (demo/popups_page)
 //  - 창: 보조 top-level 창(도구 창) 여닫기와 그 안의 입력   (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
 //  - 테마: 테마 선호와 키 컬러                             (demo/theme_page)
@@ -24,6 +25,7 @@
 #include "demo/groups_page.h"
 #include "demo/images_page.h"
 #include "demo/lists_page.h"
+#include "demo/popups_page.h"
 #include "demo/tabs_page.h"
 #include "demo/theme_page.h"
 #include "demo/toasts_page.h"
@@ -196,6 +198,7 @@ namespace demo {
                     page_ = navigate->page;
                     // 페이지를 떠나면 그 페이지의 popup도 닫는다.
                     tabs_.close_popups();
+                    popups_.close_popups();
                     return;
                 }
                 if (message.get<sidebar_toggle_intent>() != nullptr)
@@ -222,10 +225,17 @@ namespace demo {
                 if (message.get<popup_close_intent>() != nullptr)
                 {
                     tabs_.close_popups();
+                    popups_.close_popups();
                     windows_.close_popups();
                     return;
                 }
                 // 컨텍스트 메뉴 선택은 페이지가 메뉴를 닫고 셸이 토스트로 잇는다.
+                if (const auto* const select { message.get<card_menu_select_intent>() }; select != nullptr)
+                {
+                    static_cast<void>(popups_.handle(message));
+                    static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"컨텍스트 메뉴: " + select->key, luil::toast_severity::success } }));
+                    return;
+                }
 
                 // 도구 창 메뉴의 선택도 같은 규칙이다: 페이지가 메뉴(와 필요하면 창)를 닫고 셸이 잇는다.
                 if (const auto* const tool_select { message.get<tool_menu_select_intent>() }; tool_select != nullptr)
@@ -238,7 +248,7 @@ namespace demo {
 
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
-                if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message)
+                if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message)
                     || windows_.handle(message) || images_.handle(message) || theme_.handle(message))
                     return;
             }
@@ -295,6 +305,8 @@ namespace demo {
                 // popup은 이번 frame에서 배치된 element의 자리를 쓰므로 tree를 만든 뒤 단다.
                 // 현재 페이지의 것만 뜬다 (다른 페이지의 열림 상태는 이동 때 닫았다).
                 for (luil::win32::ui_popup& popup : tabs_.make_popups(scale))
+                    frame->popups.push_back(std::move(popup));
+                for (luil::win32::ui_popup& popup : popups_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
                 // 도구 창은 페이지의 일부가 아니라 어느 페이지에서든 열려 있다.
                 for (luil::win32::ui_window& window : windows_.make_windows())
@@ -367,6 +379,7 @@ namespace demo {
                 add_page(page_tabs, u8"탭");
                 add_page(page_groups, u8"그룹");
                 add_page(page_toasts, u8"토스트");
+                add_page(page_popups, u8"메뉴·팝업");
                 add_page(page_windows, u8"창");
                 add_page(page_images, u8"이미지");
                 add_page(page_theme, u8"테마");
@@ -391,6 +404,8 @@ namespace demo {
                     return groups_.build(width, height, scale);
                 if (page_ == page_toasts)
                     return toasts_.build(width, height, scale);
+                if (page_ == page_popups)
+                    return popups_.build(width, height, scale);
                 if (page_ == page_windows)
                     return windows_.build(width, height, scale);
                 if (page_ == page_images)
@@ -405,6 +420,7 @@ namespace demo {
             tabs_page tabs_ {};
             groups_page groups_ {};
             toasts_page toasts_ {};
+            popups_page popups_ {};
             windows_page windows_ {};
             images_page images_ {};
             theme_page theme_ {};
