@@ -129,3 +129,52 @@ TEST_CASE("Popup clamping pushes the popup inside the work area", "[win32][popup
     REQUIRE(kept_x == 400);
     REQUIRE(kept_y == 300);
 }
+
+TEST_CASE("Webview reconciliation creates and destroys by id", "[win32][webview]")
+{
+    using luil::win32::webview_placement;
+
+    const std::vector<webview_placement> alive {
+        { u8"docs", {} },
+        { u8"help", {} },
+    };
+    const std::vector<webview_placement> wanted {
+        { u8"docs", {} },
+        { u8"preview", {} },
+    };
+
+    const auto plan { luil::win32::reconcile_webviews(alive, wanted) };
+    REQUIRE(plan.create == std::vector<std::size_t> { 1 });
+    REQUIRE(plan.destroy == std::vector<std::u8string> { u8"help" });
+}
+
+TEST_CASE("Webview reconciliation leaves an unchanged webview alone", "[win32][webview]")
+{
+    using luil::win32::webview_placement;
+
+    // 자리는 목록이 갖지 않으므로 같은 id·같은 앵커면 할 일이 없다 —
+    // 자리가 바뀌어도 여기서는 아무 일도 나지 않는다 (tree가 그 답을 갖는다).
+    const std::vector<webview_placement> same {
+        { u8"docs", u8"tools" },
+    };
+    const auto plan { luil::win32::reconcile_webviews(same, same) };
+    REQUIRE(plan.create.empty());
+    REQUIRE(plan.destroy.empty());
+}
+
+TEST_CASE("Webview reconciliation rebuilds a webview whose anchor changed", "[win32][webview]")
+{
+    using luil::win32::webview_placement;
+
+    // 웹뷰는 그 표면의 합성 visual과 parentWindow에 매여 있어 옮기지 못한다.
+    const std::vector<webview_placement> alive {
+        { u8"docs", {} },
+    };
+    const std::vector<webview_placement> wanted {
+        { u8"docs", u8"tools" },
+    };
+
+    const auto plan { luil::win32::reconcile_webviews(alive, wanted) };
+    REQUIRE(plan.create == std::vector<std::size_t> { 0 });
+    REQUIRE(plan.destroy == std::vector<std::u8string> { u8"docs" });
+}

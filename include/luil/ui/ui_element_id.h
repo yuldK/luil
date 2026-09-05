@@ -83,6 +83,9 @@ namespace luil {
         // 여럿이 겹칠 수 있어 owner로 구분한다.
         modal_host,
         modal_scrim,
+        // 웹 콘텐츠가 앉을 자리다. 여럿이 동시에 있을 수 있어 owner로 구분한다.
+        //  - owner가 곧 `ui_webview::id`다. 자리표와 수명이 그 값 하나로 만난다.
+        webview,
         // 앱이 정의하는 kind는 이 값부터다.
         // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         first_application_kind = 64,

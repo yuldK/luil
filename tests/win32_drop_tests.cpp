@@ -223,6 +223,24 @@ namespace {
             return nullptr;
         }
 
+        // 창 없는 test는 웹뷰를 세우지 않는다.
+        [[nodiscard]] std::span<const luil::pixel_rect> apply_webviews(
+            const std::u8string&, const luil::ui_tree*, IDCompositionVisual*, int, int) override
+        {
+            return {};
+        }
+
+        // 창 없는 test는 웹뷰를 세우지 않는다.
+        [[nodiscard]] bool relay_webview_pointer(const std::u8string&, UINT, WPARAM, int, int) override
+        {
+            return false;
+        }
+
+        void webview_pointer_left(const std::u8string&) override
+        {}
+        void cancel_webview_pointer(const std::u8string&) override
+        {}
+
         [[nodiscard]] sk_sp<SkTypeface> apply_frame_appearance(luil::frame_state&, const luil::win32::ui_frame*) override
         {
             return nullptr;

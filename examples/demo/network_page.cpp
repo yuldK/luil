@@ -312,7 +312,57 @@ namespace demo {
             if (path == "/euc-kr")
                 return make_body_response("text/plain; charset=euc-kr", std::vector<std::uint8_t> { euc_kr_sample.begin(), euc_kr_sample.end() });
             if (path == "/page")
-                return make_text_response("text/html; charset=utf-8", "<!doctype html><title>luil</title><h1>webview의 자리</h1><p>라이브러리는 이 문서를 풀지 않는다.</p>");
+            {
+                // `?tab=notes`는 같은 문서의 다른 갈래다 — 새 창 요청을 이 웹뷰에서
+                // 열었을 때 어디로 갔는지가 제목으로 보이게 한다.
+                const bool notes { request.target.find("tab=notes") != std::string::npos };
+                std::string html {
+                    "<!doctype html><title>luil</title>"
+                    "<style>body{font-family:system-ui;margin:24px}"
+                    ".tail{margin-top:1400px;background:#ffcc00;padding:16px;font-weight:700}</style>",
+                };
+                if (notes)
+                    html += "<h1>메모</h1><p>새 창 요청이 이 웹뷰에서 열린 갈래다.</p>";
+                else
+                    html += "<h1>webview의 자리</h1><p>라이브러리는 이 문서를 풀지 않는다. 웹뷰가 푼다.</p>";
+                html +=
+                    // 배율 자다. CSS 100px 상자의 **물리** 폭이 곧 래스터 배율이다 —
+                    // 창의 배율이 바뀐 뒤 이 폭이 따라 바뀌면 웹뷰가 우리 배율을
+                    // 따른 것이다 (webview-composition-design.md).
+                    "<div style=\"width:100px;height:24px;background:#ff00ff\"></div>"
+                    "<p>위 띠는 CSS 100px이다. 물리 폭이 배율이다.</p>"
+                    // 정책이 막는 것들이다. 눌러 보면 페이지 아래 상태 줄에 무엇이
+                    // 막혔는지 찍힌다 (webview-composition-design.md).
+                    "<p><a href=\"/page?tab=notes\" target=\"_blank\">새 창으로 메모 열기 (target=_blank)</a> · "
+                    "<a href=\"/download\">내려받기 (attachment)</a> · "
+                    "<a href=\"about:blank\">about:blank (스킴 밖)</a></p>"
+                    // 권한이다. 127.0.0.1은 보안 문맥이라 위치를 실제로 묻는다.
+                    "<p id=\"perm\">위치 권한: 묻는 중</p>"
+                    "<script>navigator.geolocation.getCurrentPosition("
+                    "function(){document.getElementById('perm').textContent='위치 권한: 허용됨'},"
+                    "function(e){document.getElementById('perm').textContent='위치 권한: 거부됨 (code '+e.code+')'})</script>"
+                    // web message다. 열리면 하나 보내고, 단추 둘은 상한을 건드린다 —
+                    // 초당 건수(300개를 한꺼번에)와 크기(상한 256 KiB를 넘는 하나).
+                    "<p><button id=\"flood\">메시지 300개 쏟기</button> <button id=\"big\">300 KiB 메시지</button> "
+                    "<span id=\"sent\"></span></p>"
+                    "<script>var w=window.chrome&&window.chrome.webview;"
+                    "if(w){w.postMessage({hello:'luil',dpr:devicePixelRatio,tab:" + std::string { notes ? "'notes'" : "'doc'" } + "});"
+                    "document.getElementById('flood').onclick=function(){for(var i=0;i<300;i++)w.postMessage({flood:i});"
+                    "document.getElementById('sent').textContent='300개 보냈다'};"
+                    "document.getElementById('big').onclick=function(){w.postMessage({big:'x'.repeat(300*1024)});"
+                    "document.getElementById('sent').textContent='300 KiB 보냈다'}}</script>"
+                    // 휠 중계를 눈으로 확인할 수 있게 문서를 길게 둔다 —
+                    // 중계하지 않으면 이 띠에 영영 닿지 못한다.
+                    "<div class=tail>여기까지 굴러왔다면 휠이 중계된 것이다.</div>";
+                return make_text_response("text/html; charset=utf-8", html);
+            }
+            if (path == "/download")
+            {
+                // 내려받기 갈래다. 라이브러리가 막으므로 이 몸은 디스크에 닿지 않아야 한다.
+                luil::testing::loopback_response response { make_text_response("text/plain; charset=utf-8", "이 파일은 내려받히지 않아야 한다.\n") };
+                response.headers.push_back({ "Content-Disposition", "attachment; filename=\"luil.txt\"" });
+                return response;
+            }
             if (path == "/octet")
             {
                 // **Content-Type을 적지 않는다.** 냄새로 그림이 되는 자리다.

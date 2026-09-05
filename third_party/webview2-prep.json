@@ -1,0 +1,18 @@
+{
+    "schema": 1,
+    "source": "https://www.nuget.org/packages/Microsoft.Web.WebView2",
+    "version": "1.0.4191.47",
+    "target": "win-x64",
+    "asset_base_url": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.4191.47",
+    "asset": {
+        "file": "microsoft.web.webview2.1.0.4191.47.nupkg",
+        "size": 9259926,
+        "sha256": "f492bbf547d0da329553b6727435b677579b1e9f91cc9e4a1ad029366d5f23d0"
+    },
+    "install": {
+        "build/native/include/WebView2.h": "WebView2.h",
+        "build/native/include/WebView2EnvironmentOptions.h": "WebView2EnvironmentOptions.h",
+        "build/native/x64/WebView2LoaderStatic.lib": "WebView2LoaderStatic.lib",
+        "LICENSE.txt": "LICENSE.txt"
+    }
+}

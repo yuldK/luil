@@ -65,6 +65,9 @@ add_executable(luil_tests
     uia_provider_tests.cpp
     wrap_element_tests.cpp
     utf8_tests.cpp
+    webview_element_tests.cpp
+    webview_layout_tests.cpp
+    webview_message_gate_tests.cpp
     win32_clipboard_tests.cpp
     win32_drop_tests.cpp
     win32_fonts_tests.cpp

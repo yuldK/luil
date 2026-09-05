@@ -27,6 +27,9 @@ function(luil_generate_third_party_notices output_file)
         message(FATAL_ERROR "LUIL_SKIA_ROOT is required to generate notices.")
     endif()
 
+    if(NOT DEFINED LUIL_WEBVIEW2_ROOT)
+        message(FATAL_ERROR "LUIL_WEBVIEW2_ROOT is required to generate notices.")
+    endif()
 
     # luil 자신이 싣는 것이다. 어느 갈래에서나 같다.
     set(luil_notice_entries
@@ -38,6 +41,7 @@ function(luil_generate_third_party_notices output_file)
         #    Antlr·StringTemplate의 고지라 실행 파일에 들어가지 않는다.
         #  - Evergreen Runtime은 여기 없다. 우리가 배포하지 않고 소비자가
         #    Microsoft에서 직접 받는다 (docs/concepts/consumer-contract.md).
+        "Microsoft Edge WebView2 SDK|${LUIL_WEBVIEW2_ROOT}/LICENSE.txt"
         "Visual Studio Code Icons (Codicons)|${LUIL_ASSET_DIRECTORY}/LICENSE"
         "Visual Studio Code Icons (Codicons) - Code|${LUIL_ASSET_DIRECTORY}/LICENSE-CODE")
 

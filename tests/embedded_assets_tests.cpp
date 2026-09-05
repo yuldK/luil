@@ -36,4 +36,6 @@ TEST_CASE("Executable resources contain the Codicons font and licenses", "[asset
     REQUIRE(notice_text.find("Component: Skia") != std::string_view::npos);
     REQUIRE(notice_text.find("Component: SPIRV-Cross") != std::string_view::npos);
     REQUIRE(notice_text.find("Codicons") != std::string_view::npos);
+    // 웹뷰 로더는 정적으로 링크되므로 그 코드가 이 실행 파일에 들어 있다.
+    REQUIRE(notice_text.find("Component: Microsoft Edge WebView2 SDK") != std::string_view::npos);
 }

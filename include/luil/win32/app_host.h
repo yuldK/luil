@@ -8,6 +8,7 @@
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/win32/webview.h"
 
 #include <atomic>
 #include <chrono>
@@ -134,6 +135,10 @@ namespace luil::win32 {
         std::vector<ui_popup> popups {};
         // 주 창 곁의 보조 top-level 창들이다.
         std::vector<ui_window> windows {};
+        // 표면들에 얹힌 웹뷰들이다.
+        // popup·보조 창처럼 실으면 서고 빼면 사라진다. **자리는 여기 없다** —
+        // tree의 자리표(`webview_element`)가 정한다 (webview.h에 이유가 있다).
+        std::vector<ui_webview> webviews {};
         // 외양·글꼴의 유효 선호다.
         // 실제 팔레트는 UI thread가 OS 상태(고대비·밝은 모드)와 함께 해석한다.
         appearance_settings appearance {};

@@ -389,6 +389,7 @@ namespace luil::win32 {
         case WM_MOUSELEAVE:
             // hover 강조가 창 밖에서 남지 않게 한다.
             tracking_mouse_ = false;
+            context_.webview_pointer_left(id_);
             if (app_host* const host { context_.host() }; host != nullptr)
                 host->post_raw_input(pointer_left_event { id_ });
             return LRESULT { 0 };
@@ -396,6 +397,8 @@ namespace luil::win32 {
         case WM_LBUTTONDBLCLK:
         case WM_RBUTTONDOWN:
         case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONDBLCLK:
             // 이 표면 위의 누름은 popup 밖 클릭이다.
             // 닫자는 메시지를 내고 클릭 자체는 그대로 진행한다.
             if (input_dismisses_popups())
@@ -406,7 +409,9 @@ namespace luil::win32 {
             return std::nullopt;
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
-            release_pointer_capture();
+        case WM_MBUTTONUP:
+            if ((word_parameter & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
+                release_pointer_capture();
             if (post_pointer_message(message, word_parameter, long_parameter))
                 return LRESULT { 0 };
             return std::nullopt;
@@ -475,6 +480,14 @@ namespace luil::win32 {
             }
             return std::nullopt;
         case WM_SETFOCUS:
+            // 웹뷰에서 돌아온 것이면 잃은 적이 없다. 알린 적도 없으므로 알리지 않는다.
+            if (webview_focused_)
+            {
+                webview_focused_ = false;
+                if (text_input_ != nullptr)
+                    text_input_->set_window_focused(true);
+                return LRESULT { 0 };
+            }
             // 창 focus만 돌아왔다고 text focus를 복구하지 않는다.
             // 새 text focus는 사용자가 텍스트 박스를 다시 눌러야 생긴다.
             if (text_input_ != nullptr)
@@ -485,6 +498,16 @@ namespace luil::win32 {
             context_.surface_focus_gained(id_);
             return std::nullopt;
         case WM_KILLFOCUS:
+            // **웹뷰가 가져간 초점은 창이 초점을 잃은 것이 아니다.**
+            // 이 저장소에는 웹뷰 말고 자식 창이 없으므로 "자식이 가져갔는가"가 곧
+            // 그 판정이다. 창은 여전히 활성이라 popup도 살아 있어야 하고, TSF
+            // composition도 끝내지 않는다 — 끝내면 캐럿이 영영 사라진다.
+            if (const HWND taker { reinterpret_cast<HWND>(word_parameter) };
+                window_ != nullptr && taker != nullptr && IsChild(window_, taker) != FALSE)
+            {
+                webview_focused_ = true;
+                return LRESULT { 0 };
+            }
             // 먼저 이전 target이 살아 있을 때 실제 TSF composition을 끝낸다.
             // 그 뒤 input thread에도 알려 이 표면의 text focus를 거둔다.
             if (text_input_ != nullptr)
@@ -576,6 +599,10 @@ namespace luil::win32 {
         const sk_sp<SkTypeface> code { context_.apply_frame_appearance(state, frame.get()) };
         state.tree = tree_.get();
         prepare_frame(state);
+        // 웹뷰를 자리에 앉히고 비울 자리를 받는다. **`prepare_frame` 뒤라야 한다** —
+        // 주 표면은 자기 tree를 거기서 집으므로, 앞에 두면 한 frame 낡은 tree에서
+        // 자리표를 찾게 된다.
+        state.holes = context_.apply_webviews(id_, state.tree, renderer_->underlay(), state.width, state.height);
         // 값·상태·구조 변경을 prepare_frame 뒤에 직전 접근성 발행본과 비교한다.
         // prepare_frame 전에 비교하면 주 표면이 이전 tree를 사용해 변경 알림을 놓친다.
         announce_accessibility_changes();
@@ -602,6 +629,13 @@ namespace luil::win32 {
         // 나머지는 이미 그 표면의 client 좌표다.
         if (message == WM_MOUSEWHEEL && ScreenToClient(window_, &point) == FALSE)
             return false;
+
+        // **웹뷰가 먼저다.** 그 자리의 포인터는 웹 콘텐츠의 것이고, 같은 포인터를
+        // 양쪽에 주면 웹뷰 위에서 굴린 휠이 뒤의 목록도 함께 스크롤한다.
+        //  - 자식 창이 0x0이라 마우스 메시지가 전부 우리에게 온다. 넘기지 않으면
+        //    페이지는 아무것도 받지 못한다.
+        if (context_.relay_webview_pointer(id_, message, word_parameter, point.x, point.y))
+            return true;
 
         pointer_message translated {};
         translated.message = message;
@@ -639,6 +673,7 @@ namespace luil::win32 {
 
     void window_surface::cancel_pointer_press()
     {
+        context_.cancel_webview_pointer(id_);
         app_host* const host { context_.host() };
         if (host == nullptr)
             return;
@@ -719,6 +754,16 @@ namespace luil::win32 {
     std::optional<text_input_target> surface_tsf_host::focused_text_target() const
     {
         if (context_->host() == nullptr || context_->policy() == nullptr || text_surface() == nullptr)
+            return std::nullopt;
+        // **웹뷰가 Win32 초점을 쥐고 있으면 TSF를 양보한다.**
+        //
+        // WebView2는 우리 스레드의 **같은** thread manager에 자기 document manager를
+        // 얹는다. 그동안 우리가 초점을 가져오면 `SetFocus`가 S_OK로 성공하면서
+        // 웹뷰의 IME가 조용히 죽는다 — 한글 조합 중이면 이어 친 키가 날 라틴으로
+        // 들어간다.
+        //  - 오류가 아니라 조용한 양보다. 웹뷰가 자기 IME를 갖는 것이 옳고, 우리가
+        //    되찾을 계기는 사용자가 우리 쪽을 누르는 것뿐이다.
+        if (surface_ != nullptr && surface_->webview_has_focus())
             return std::nullopt;
         return context_->policy()->text_target_of(context_->host()->acquire_interaction().focused_input.kind);
     }

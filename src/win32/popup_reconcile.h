@@ -52,6 +52,40 @@ namespace luil::win32 {
     // 없던 id는 만들고 사라진 id는 없앤다. 크기 유효성은 호출자가 미리 거른다.
     [[nodiscard]] window_reconcile_result reconcile_windows(std::span<const std::u8string> alive, std::span<const std::u8string> wanted);
 
+    // 웹뷰 하나의 **수명**이다.
+    //
+    // 자리가 없는 것이 이 타입의 요점이다 — 웹뷰의 자리는 목록이 아니라 tree의
+    // 자리표(`webview_element`)가 정한다. 앱은 `arrange` 결과를 미리 모르고,
+    // 흘리는 창 안의 잘림은 `ui_tree::visible_bounds`만 아는 답이기 때문이다
+    // (webview-composition-design.md).
+    struct webview_placement
+    {
+        std::u8string id {};
+        // 이 웹뷰가 앉는 표면이다 (`ui_window::id`와 같은 이름 공간).
+        // 비어 있으면 주 창이다.
+        std::u8string anchor {};
+
+        [[nodiscard]] bool operator==(const webview_placement&) const = default;
+    };
+
+    // 살아 있는 웹뷰와 frame이 원하는 웹뷰를 대조한 결과다.
+    // create의 index는 원하는 목록(wanted)의 자리다.
+    // 자리를 목록이 갖지 않으므로 `move`가 없다 — popup이 아니라 보조 창과 같은 모양이다.
+    struct webview_reconcile_result
+    {
+        std::vector<std::size_t> create {};
+        std::vector<std::u8string> destroy {};
+    };
+
+    // frame이 올 때마다 만들고 없앨 웹뷰를 정한다.
+    // 없던 id는 만들고 사라진 id는 없앤다.
+    //  - 같은 id라도 **앵커가 다르면** 없앴다가 다시 만든다. 웹뷰는 그 표면의
+    //    합성 visual과 `parentWindow`에 함께 매여 있어, 옮기려면 둘을 같이 옮겨야
+    //    한다 — popup의 소유자와 같은 판정이다 (popup-anchor-design.md).
+    //  - 페이지 상태가 날아가는 것이 그 대가다. 표면을 옮기는 것은 앱이 목록에서
+    //    앵커를 바꿔 적었을 때뿐이라 드물고, 조용히 옮기는 것보다 낫다.
+    [[nodiscard]] webview_reconcile_result reconcile_webviews(std::span<const webview_placement> alive, std::span<const webview_placement> wanted);
+
     // 화면의 한 영역이다 (물리 픽셀, 반열림).
     struct screen_area
     {

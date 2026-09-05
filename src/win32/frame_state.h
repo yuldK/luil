@@ -4,12 +4,24 @@
 #include "luil/ui/ui_tree.h"
 #include "luil/win32/renderer_policy.h"
 
+#include <span>
 #include <string>
 
 class SkCanvas;
 class SkTypeface;
 
 namespace luil {
+    // 물리 픽셀 사각형이다 (창 client 기준).
+    struct pixel_rect
+    {
+        int x { 0 };
+        int y { 0 };
+        int width { 0 };
+        int height { 0 };
+
+        [[nodiscard]] bool operator==(const pixel_rect&) const noexcept = default;
+    };
+
     // 렌더러가 한 frame을 그리는 데 필요한 전부다.
     // UI thread가 매 frame 채우고,
     // 값의 근원은 logic이 게시한 tree·외양 선호와 input thread의 상호작용 발행본이다.
@@ -43,6 +55,17 @@ namespace luil {
         // 글꼴 미리 보기는 `fonts`가 해석한다.
         SkTypeface* code_typeface { nullptr };
         const font_resolver* fonts { nullptr };
+
+        // 이 frame에서 알파 0으로 비울 사각형들이다 (물리 픽셀, client 기준).
+        //
+        // tree를 **다 그린 뒤** 비운다. 그 자리 아래에 웹뷰 visual이 있어 비워진
+        // 만큼 페이지가 드러난다 (webview-composition-design.md).
+        //  - 그리기 도중에 비우면 뒤에 그려지는 것이 도로 덮는다. 반대로 다 그린
+        //    뒤에 비우면 **그 자리에 그려진 것이 전부 지워진다** — 그래서 무언가
+        //    그 위를 덮어야 하는 frame에서는 목록에 아예 담기지 않는다. 담을지
+        //    말지는 `plan_webview_layout`이 판정한다.
+        //  - 비어 있는 것이 보통이다. 웹뷰를 싣지 않은 앱은 이 경로를 지나지 않는다.
+        std::span<const pixel_rect> holes {};
     };
 
     // frame을 그린다.

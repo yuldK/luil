@@ -69,6 +69,10 @@ namespace luil::win32 {
                 }
                 if (visual_ != nullptr)
                     visual_->Release();
+                if (underlay_ != nullptr)
+                    underlay_->Release();
+                if (root_ != nullptr)
+                    root_->Release();
                 if (target_ != nullptr)
                     target_->Release();
 
@@ -192,6 +196,11 @@ namespace luil::win32 {
                 return renderer_backend::direct3d;
             }
 
+            [[nodiscard]] IDCompositionVisual* underlay() noexcept override
+            {
+                return underlay_;
+            }
+
             [[nodiscard]] bool resize(const int width, const int height, std::u8string& error) override
             {
                 const int safe_width { std::max(1, width) };
@@ -224,6 +233,25 @@ namespace luil::win32 {
 
             [[nodiscard]] bool render(const frame_state& state, std::u8string& error) override
             {
+                // 투명한 구멍이 있는 frame에서는 LCD 서브픽셀 글자를 끈다.
+                // 알파 0인 배경에 채널별 커버리지가 섞이면 경계에 잘못된 색이 생긴다.
+                // 구멍 유무가 바뀔 때만 같은 백버퍼를 다른 픽셀 배치로 다시 감싼다.
+                // 구멍이 없는 frame은 LCD 표시를 유지한다.
+                if (const bool subpixel { state.holes.empty() }; subpixel != subpixel_text_)
+                {
+                    subpixel_text_ = subpixel;
+                    if (wait_for_gpu() == false)
+                    {
+                        error = fence_wait_error(u8"Failed to wait for the GPU before changing the text pixel geometry");
+                        return false;
+                    }
+                    context_->flush();
+                    context_->submit(GrSyncCpu::kYes);
+                    release_surfaces();
+                    if (setup_surfaces(error) == false)
+                        return false;
+                }
+
                 const UINT frame_index { swap_chain_->GetCurrentBackBufferIndex() };
                 if (wait_for_fence(frame_fence_values_[frame_index]) == false)
                 {
@@ -273,11 +301,23 @@ namespace luil::win32 {
                     error = make_hresult_error(u8"Failed to create the DirectComposition target", result);
                     return false;
                 }
-                result = composition_->CreateVisual(&visual_);
-                if (FAILED(result))
+                // visual 셋을 세운다.
+                //
+                //   root
+                //     ├─ underlay   ← 웹뷰가 여기 들어간다 (아래)
+                //     └─ visual     ← 우리 스왑체인 (위)
+                //
+                // 우리가 위에 있어야 알파 0으로 비운 자리에 **아래**가 비친다.
+                // 컨테이너를 따로 두는 이유: `IDCompositionTarget`은 root를 하나만
+                // 받고, 그 하나가 스왑체인이면 형제를 놓을 자리가 없다.
+                for (IDCompositionVisual** slot : { &root_, &underlay_, &visual_ })
                 {
-                    error = make_hresult_error(u8"Failed to create the DirectComposition visual", result);
-                    return false;
+                    result = composition_->CreateVisual(slot);
+                    if (FAILED(result))
+                    {
+                        error = make_hresult_error(u8"Failed to create a DirectComposition visual", result);
+                        return false;
+                    }
                 }
                 result = visual_->SetContent(swap_chain_.get());
                 if (FAILED(result))
@@ -285,7 +325,16 @@ namespace luil::win32 {
                     error = make_hresult_error(u8"Failed to attach the swapchain to the DirectComposition visual", result);
                     return false;
                 }
-                result = target_->SetRoot(visual_);
+                // 먼저 넣은 visual이 아래에 놓이도록 두 번째 삽입의 기준 visual을 명시한다.
+                result = root_->AddVisual(underlay_, FALSE, nullptr);
+                if (SUCCEEDED(result))
+                    result = root_->AddVisual(visual_, TRUE, underlay_);
+                if (FAILED(result))
+                {
+                    error = make_hresult_error(u8"Failed to order the DirectComposition visuals", result);
+                    return false;
+                }
+                result = target_->SetRoot(root_);
                 if (FAILED(result))
                 {
                     error = make_hresult_error(u8"Failed to set the DirectComposition root visual", result);
@@ -328,7 +377,9 @@ namespace luil::win32 {
                     };
 
                     // 픽셀 배치(RGB 가로)를 알려야 LCD 서브픽셀 글자가 실제로 켜진다.
-                    const SkSurfaceProps surface_properties { 0, kRGB_H_SkPixelGeometry };
+                    // 구멍을 뚫는 frame은 `kUnknown`으로 감싼다 — 그러면 Skia가 회색조로
+                    // 물러서므로 그리는 쪽의 ClearType 판정은 건드리지 않는다.
+                    const SkSurfaceProps surface_properties { 0, subpixel_text_ ? kRGB_H_SkPixelGeometry : kUnknown_SkPixelGeometry };
                     surfaces_[index] = SkSurfaces::WrapBackendRenderTarget(context_.get(), render_target, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, &surface_properties);
                     if (surfaces_[index] == nullptr)
                     {
@@ -402,6 +453,9 @@ namespace luil::win32 {
             IDCompositionDevice* composition_ { nullptr };
             // 창이 소유하는 쪽이다. 렌더러와 수명을 같이한다.
             IDCompositionTarget* target_ { nullptr };
+            // root 아래에 underlay(웹뷰)와 visual(우리 스왑체인)이 이 순서로 든다.
+            IDCompositionVisual* root_ { nullptr };
+            IDCompositionVisual* underlay_ { nullptr };
             IDCompositionVisual* visual_ { nullptr };
             int width_ { 1 };
             int height_ { 1 };
@@ -416,6 +470,9 @@ namespace luil::win32 {
             std::array<std::uint64_t, frame_count> frame_fence_values_ {};
             std::array<gr_cp<ID3D12Resource>, frame_count> buffers_ {};
             std::array<sk_sp<SkSurface>, frame_count> surfaces_ {};
+            // 지금 표면이 LCD 서브픽셀 글자를 켜고 감싸졌는가. 구멍을 뚫는 frame은 끈다
+            // (`render`).
+            bool subpixel_text_ { true };
             sk_sp<GrDirectContext> context_ {};
             sk_sp<SkTypeface> codicon_typeface_ {};
             sk_sp<SkTypeface> ui_typeface_ {};

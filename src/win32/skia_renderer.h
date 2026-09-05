@@ -9,6 +9,7 @@
 #include <string>
 
 struct IDCompositionDevice;
+struct IDCompositionVisual;
 
 namespace luil::win32 {
     class skia_renderer
@@ -19,6 +20,16 @@ namespace luil::win32 {
         [[nodiscard]] virtual renderer_backend backend() const noexcept = 0;
         [[nodiscard]] virtual bool resize(int width, int height, std::u8string& error) = 0;
         [[nodiscard]] virtual bool render(const frame_state& state, std::u8string& error) = 0;
+
+        // 우리가 그린 것 **아래**에 놓이는 visual이다. 웹뷰가 여기 들어간다.
+        //
+        // 없으면 nullptr다 — CPU 렌더러가 그렇다. 그 백엔드에는 합성이 없어
+        // 웹뷰가 설 자리도 없고, 자리표의 placeholder가 그 사실을 화면에 남긴다
+        // (webview-composition-design.md).
+        [[nodiscard]] virtual IDCompositionVisual* underlay() noexcept
+        {
+            return nullptr;
+        }
     };
 
     struct renderer_factory_result
@@ -51,6 +62,9 @@ namespace luil::win32 {
         [[nodiscard]] bool used_fallback() const noexcept;
         [[nodiscard]] bool resize(int width, int height, std::u8string& error);
         [[nodiscard]] bool render(frame_state state, std::u8string& error);
+        // 지금 렌더러가 내주는 웹뷰 자리다 (없으면 nullptr).
+        //  - CPU로 물러선 창은 여기서 nullptr가 되고, 그 순간 웹뷰는 설 자리를 잃는다.
+        [[nodiscard]] IDCompositionVisual* underlay() noexcept;
 
     private:
         renderer_host(HWND window, renderer_mode mode, std::unique_ptr<skia_renderer> renderer, bool used_fallback, int loss_after_frames) noexcept;

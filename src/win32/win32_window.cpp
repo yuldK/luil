@@ -1,6 +1,7 @@
 #include "luil/win32/win32_window.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/webview_element.h"
 #include "win32/caption_surface.h"
 #include "win32/composition_device.h"
 #include "win32/dpi_scale.h"
@@ -12,6 +13,8 @@
 #include "win32/surface_input.h"
 #include "win32/surface_invalidate.h"
 #include "win32/utf8.h"
+#include "win32/webview_host.h"
+#include "win32/webview_layout.h"
 #include "win32/win32_clipboard.h"
 #include "win32/win32_drop.h"
 #include "win32/win32_error.h"
@@ -317,6 +320,127 @@ namespace luil::win32 {
                 return composition_.acquire(error);
             }
 
+            // 웹뷰가 알려 온 초점 신호를 우리 초점 기계로 옮긴다.
+            //
+            // **가둠에서 나가는 것은 그냥 Tab이다.** `Ctrl+Tab`을 우리 세계의 Tab으로
+            // 옮기면 초점 순서·묶음·가둠이 이미 아는 길을 그대로 탄다 — 여기에
+            // "다음 자리 찾기"를 새로 쓰지 않는다 (keyboard-focus-design.md).
+            void report_webview_focus(const std::u8string& id, const std::u8string& anchor, const webview_focus_signal signal)
+            {
+                app_host* const host { host_.get() };
+                if (host == nullptr)
+                    return;
+                const auto now { std::chrono::steady_clock::now() };
+                switch (signal)
+                {
+                case webview_focus_signal::entered:
+                    // 논리 초점을 자리표로 옮긴다. 클릭 진입은 raw input이 우리에게
+                    // 오지 않아, 이것이 없으면 초점 테가 이전 자리에 남는다.
+                    host->post_raw_input(access_focus_event { ui_element_id { ui_element_kind::webview, id }, anchor, now });
+                    return;
+                case webview_focus_signal::left:
+                    // 거두지 않는다. 초점이 어디로 갔는지는 우리 쪽 사건이 말한다 —
+                    // 여기서 지우면 우리 창을 눌러 옮긴 초점을 도로 지운다.
+                    return;
+                case webview_focus_signal::leave_forward:
+                case webview_focus_signal::leave_backward:
+                    // 창의 초점을 먼저 되찾는다. 그러지 않으면 자식 창이 초점을 쥔
+                    // 채라 우리가 옮긴 논리 초점에 키가 오지 않는다.
+                    if (window_ != nullptr)
+                        static_cast<void>(SetFocus(window_));
+                    host->post_raw_input(key_pressed_event {
+                        .key = key_code::tab,
+                        .shift = signal == webview_focus_signal::leave_backward,
+                        .time = now,
+                        .surface = anchor,
+                    });
+                    return;
+                case webview_focus_signal::dismiss:
+                    if (window_ != nullptr)
+                        static_cast<void>(SetFocus(window_));
+                    host->post_raw_input(key_pressed_event { .key = key_code::escape, .time = now, .surface = anchor });
+                    return;
+                }
+            }
+
+            [[nodiscard]] bool relay_webview_pointer(const std::u8string& surface, const UINT message, const WPARAM word_parameter, const int client_x, const int client_y) override
+            {
+                return webviews_.relay_pointer(surface, message, word_parameter, client_x, client_y);
+            }
+
+            void webview_pointer_left(const std::u8string& surface) override
+            {
+                webviews_.relay_pointer_left(surface);
+            }
+
+            void cancel_webview_pointer(const std::u8string& surface) override
+            {
+                webviews_.cancel_pointer(surface);
+            }
+
+            [[nodiscard]] std::span<const pixel_rect> apply_webviews(
+                const std::u8string& surface, const ui_tree* const tree, IDCompositionVisual* const underlay, const int client_width, const int client_height) override
+            {
+                webview_holes_.clear();
+                if (tree == nullptr || last_frame_ == nullptr)
+                    return webview_holes_;
+
+                // 이 표면의 배율이다. 다른 배율로 배치된 tree는 아래에서 자리를 주지
+                // 않는다 (표면의 배율과 tree의 배율은 같은 식 `dpi / 96`으로 난다).
+                const window_surface* const anchor { anchor_surface(surface) };
+                const float surface_scale { anchor != nullptr ? dpi_scale(anchor->dpi()) : 1.0f };
+
+                // 지금 논리 초점이 어디인가. 자리표에 **닿는 순간**에만 페이지로
+                // 넘기려면 직전 값과 견줘야 한다.
+                ui_element_id state_focus {};
+                if (app_host* const focus_host { host_.get() }; focus_host != nullptr)
+                    state_focus = interaction_for_surface(focus_host->acquire_interaction(), surface).focused;
+
+                for (const ui_webview& want : last_frame_->webviews)
+                {
+                    if (want.anchor != surface || want.id.empty())
+                        continue;
+                    const ui_element_id placeholder_id { ui_element_kind::webview, want.id };
+                    // **자리표가 아니면 자리도 없다.** id만 같은 다른 element는 자리를
+                    // 말하지 못한다 — 자리·가림·배율을 전부 자리표에서만 읽는다.
+                    const auto* const placeholder { dynamic_cast<const webview_element*>(tree->find(placeholder_id)) };
+                    const std::optional<rect_f> visible { placeholder != nullptr ? tree->visible_bounds(*placeholder) : std::nullopt };
+                    // 배율은 **자리표가 배치된 값**이다. 표면의 `dpi()`가 아니다 —
+                    // 자리와 배율은 같은 tree에서 나온 한 쌍이라야 한다 (webview_layout.h).
+                    const webview_layout layout {
+                        plan_webview_layout(visible, client_width, client_height, occluded(*tree, placeholder, visible), placeholder != nullptr ? placeholder->scale() : 1.0f),
+                    };
+                    // **이 표면의 배율로 배치된 tree만 자리를 준다.** `WM_DPICHANGED`
+                    // 직후 아직 옛 배율의 tree를 **새 크기의 client**에 그리는 frame이
+                    // 하나 있다. 그 tree의 자리는 client에 잘려 크기가 바뀌므로 그대로
+                    // 주면 옛 배율의 좁아진 자리로 한 번, 새 tree가 오면 다시 한 번
+                    // 리플로한다. 그 frame에는 자리를 건드리지 않는다 — 웹뷰는 옛 자리·
+                    // 옛 배율 그대로이고, 아래의 구멍은 그 자리를 client에 자른 것이라
+                    // 웹뷰 밖으로 나가지 않는다. 자리표가 없는 frame(감추기)은 배율과
+                    // 무관하게 그대로 준다.
+                    const float tree_scale { placeholder != nullptr ? placeholder->scale() : surface_scale };
+                    const bool arranged_for_this_surface { tree_scale - surface_scale < 0.001f && surface_scale - tree_scale < 0.001f };
+                    if (arranged_for_this_surface)
+                        webviews_.apply_layout(want.id, layout, underlay);
+                    // **초점이 자리표에 닿으면 페이지로 넘긴다.**
+                    //
+                    // Tab이 자리표를 하나의 자리로 보고 거기 서면, 그 자리는 그릴
+                    // 것이 없는 빈 상자다 — 사용자가 보기에 초점이 사라진다. 그때
+                    // 페이지 안으로 들여보내야 그 다음 Tab이 페이지 안을 돈다.
+                    //  - 웹뷰가 이미 쥐고 있으면 다시 넘기지 않는다. 매 frame 부르면
+                    //    페이지 안에서 옮긴 초점이 첫 자리로 되돌아간다.
+                    if (last_focus_ != placeholder_id && placeholder_id == state_focus)
+                        static_cast<void>(webviews_.move_focus_in(want.id, false));
+                    // **웹뷰가 실제로 서 있을 때만 비운다.** 서지 않은 자리를 비우면
+                    // 그 아래에 아무것도 없어 바탕 화면이 비친다 — 자리표의
+                    // placeholder가 보여야 하는 자리다 (webview_element.h).
+                    if (layout.punch_hole && webviews_.standing(want.id))
+                        webview_holes_.push_back(pixel_rect { layout.x, layout.y, layout.width, layout.height });
+                }
+                last_focus_ = state_focus;
+                return webview_holes_;
+            }
+
             [[nodiscard]] bool pointer_capture_active() const noexcept override
             {
                 return pointer_capture_active_;
@@ -551,6 +675,7 @@ namespace luil::win32 {
                     // popup의 앵커 표면이 있어야 그 위에 배치할 수 있다.
                     // 대조 결과는 표면별 현재 콘텐츠와 게시된 콘텐츠의 차이를 반영한다.
                     std::vector<surface_content> contents { synchronize_windows() };
+                    synchronize_webviews();
                     for (surface_content& popup_content : synchronize_popups())
                         contents.push_back(std::move(popup_content));
                     contents.push_back(main_surface_content());
@@ -720,6 +845,10 @@ namespace luil::win32 {
                     invalidate_all_surfaces();
                     return 0;
                 case WM_DESTROY:
+                    // **웹뷰가 가장 먼저다.** 웹뷰는 표면 렌더러가 소유한 visual에
+                    // 붙어 있고 배출구가 `app_host`를 잡고 있어, 그 둘보다 늦게
+                    // 정리되면 이미 놓인 것을 만진다.
+                    webviews_.shutdown();
                     // WM_CLOSE를 거치지 않은 파괴 경로에서도 스레드를 먼저 정리한다.
                     if (host_ != nullptr)
                     {
@@ -1193,6 +1322,41 @@ namespace luil::win32 {
             // frame의 popup 목록과 살아 있는 창을 대조해 만들고·옮기고·없앤다.
             // 대조를 마친 표면들이 지금 무엇을 그리고 있고 이 frame이 무엇을 실었는지
             // 함께 돌려준다 — 다시 그릴 대상을 고르는 것은 부른 쪽이다 (rendering.md).
+            // frame의 웹뷰 목록과 살아 있는 것을 대조한다.
+            //
+            // **창 대조 뒤다.** 앵커 표면이 이미 있어야 그 창을 컨트롤러의
+            // parentWindow로 줄 수 있다 (popup과 같은 순서다).
+            void synchronize_webviews()
+            {
+                if (host_ == nullptr)
+                    return;
+                last_frame_ = host_->acquire_frame();
+                if (last_frame_ == nullptr)
+                    return;
+                // 배출구는 한 번만 꽂는다. 사건은 입력이 아니라 앱 메시지이고
+                // 받는 곳은 logic thread다 (http_client_config::deliver와 같은 자리).
+                if (webview_deliver_bound_ == false)
+                {
+                    app_host* const target { host_.get() };
+                    webviews_.set_deliver([target](app_message message) { target->post_app_message(std::move(message)); });
+                    // 초점 신호는 **입력**이다. 앱 메시지가 아니라 raw input으로 가야
+                    // input thread의 초점 상태 기계가 그것을 본다.
+                    webviews_.set_focus_reporter(
+                        [this](const std::u8string& id, const std::u8string& anchor, const webview_focus_signal signal) { report_webview_focus(id, anchor, signal); });
+                    webview_deliver_bound_ = true;
+                }
+
+                std::vector<webview_target> targets {};
+                targets.reserve(last_frame_->webviews.size());
+                for (const ui_webview& want : last_frame_->webviews)
+                {
+                    const window_surface* const anchor { anchor_surface(want.anchor) };
+                    targets.push_back(webview_target { &want, anchor != nullptr ? anchor->window() : nullptr });
+                }
+                std::u8string composition_error {};
+                webviews_.synchronize(targets, composition_.acquire(composition_error));
+            }
+
             [[nodiscard]] std::vector<surface_content> synchronize_popups()
             {
                 // 주 창과 함께 파괴된 표면을 먼저 걷어낸다.
@@ -1764,7 +1928,47 @@ namespace luil::win32 {
             // 표면의 렌더러가 든다 (webview-composition-design.md).
             //  - **표면들보다 오래 살아야 한다.** 렌더러 소멸자가 이 device로
             //    `Commit`을 부르므로 선언 순서가 곧 파괴 순서의 계약이다.
+            // 가림 판정이다. 자리표의 사각형 다섯 지점에서 hit test가 자기 자신을
+            // 돌려주면 아무것도 덮지 않은 것이다.
+            //
+            // 다섯 점은 **전부 아니면 전무**의 값싼 근사다. 걸치는 것을 rect
+            // 차집합으로 빼는 것은 오버레이가 여럿이면 layer가 되므로 짓지 않았다
+            // (webview-composition-design.md).
+            [[nodiscard]] static bool occluded(const ui_tree& tree, const ui_element* const placeholder, const std::optional<rect_f>& visible) noexcept
+            {
+                if (placeholder == nullptr || visible.has_value() == false)
+                    return true;
+                const float inset { 1.0f };
+                const float left { visible->x + inset };
+                const float top { visible->y + inset };
+                const float right { visible->x + visible->width - inset };
+                const float bottom { visible->y + visible->height - inset };
+                const float center_x { visible->x + visible->width / 2.0f };
+                const float center_y { visible->y + visible->height / 2.0f };
+                const std::array<std::pair<float, float>, 5> probes {
+                    std::pair { center_x, center_y },
+                    std::pair { left, top },
+                    std::pair { right, top },
+                    std::pair { left, bottom },
+                    std::pair { right, bottom },
+                };
+                for (const auto& [x, y] : probes)
+                    if (tree.hit_test(x, y) != placeholder)
+                        return true;
+                return false;
+            }
+
             composition_host composition_ {};
+            // 살아 있는 웹뷰들이다. 창 하나에 하나이고 표면들이 나눠 쓴다.
+            webview_host webviews_ {};
+            bool webview_deliver_bound_ { false };
+            // 이번 표면에서 비울 자리들이다. 표면 하나를 그리는 동안만 유효하다.
+            std::vector<pixel_rect> webview_holes_ {};
+            // 직전 frame의 논리 초점이다. 자리표에 **닿는 순간**을 가리기 위한 것이고,
+            // 매 frame 넘기면 페이지 안에서 옮긴 초점이 첫 자리로 되돌아간다.
+            ui_element_id last_focus_ {};
+            // 마지막으로 본 게시본이다. 자리 계산이 그리기 시점에 목록을 다시 본다.
+            std::shared_ptr<const ui_frame> last_frame_ {};
             std::unique_ptr<app_host> host_ {};
             // 주 창의 표면이다.
             // 자기 renderer와 TSF 연결을 들고 있다 (win32-surface-design.md).

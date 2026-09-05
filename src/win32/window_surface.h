@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,26 @@ namespace luil::win32 {
         //    것은 target·visual·스왑체인이고 device는 소유자 하나가 든다
         //    (webview-composition-design.md).
         [[nodiscard]] virtual IDCompositionDevice* composition_device(std::u8string& error) noexcept = 0;
+
+        // 이 표면의 웹뷰들을 자리에 앉히고, 이번 frame에 **비울** 사각형들을 답한다.
+        //
+        // 자리는 tree의 자리표가 정하므로 그리기 직전에야 알 수 있다 — 그래서
+        // 대조(수명)와 달리 이것은 표면마다 render 안에서 불린다.
+        //  - `underlay`는 이 표면의 렌더러가 내준 자리다. nullptr이면(CPU 백엔드)
+        //    웹뷰가 설 자리가 없어 아무것도 앉히지 않고 빈 span을 답한다.
+        //  - 돌려준 span은 **다음 호출까지만** 유효하다. 표면 하나를 그리는 동안만
+        //    쓰이고, 그리기가 끝나면 다음 표면이 같은 자리를 다시 채운다.
+        [[nodiscard]] virtual std::span<const pixel_rect> apply_webviews(
+            const std::u8string& surface, const ui_tree* tree, IDCompositionVisual* underlay, int client_width, int client_height)
+            = 0;
+
+        // 이 표면의 웹뷰가 이 포인터를 가져갔는가.
+        // 참이면 우리 tree는 그것을 보지 않는다 — 같은 포인터를 양쪽에 주면 웹뷰
+        // 위에서 굴린 휠이 뒤의 목록도 함께 스크롤한다.
+        [[nodiscard]] virtual bool relay_webview_pointer(const std::u8string& surface, UINT message, WPARAM word_parameter, int client_x, int client_y) = 0;
+        // 포인터가 이 표면을 떠났다.
+        virtual void webview_pointer_left(const std::u8string& surface) = 0;
+        virtual void cancel_webview_pointer(const std::u8string& surface) = 0;
 
         // frame의 외양 선호를 `frame_state`로 옮긴다 (테마·고대비·글꼴).
         // 돌려준 typeface는 그 frame을 그리는 동안 살아 있어야 한다.
@@ -196,6 +217,12 @@ namespace luil::win32 {
 
         // 창이 아직 살아 있는지다.
         // `WM_DESTROY`가 오면 거짓이 되고 소유자가 목록에서 걷어낸다.
+        // 이 표면의 웹뷰가 Win32 초점을 쥐고 있는가 (TSF 양보의 판정).
+        [[nodiscard]] bool webview_has_focus() const noexcept
+        {
+            return webview_focused_;
+        }
+
         [[nodiscard]] bool attached() const noexcept
         {
             return window_ != nullptr;
@@ -374,6 +401,10 @@ namespace luil::win32 {
         surface_context& context_;
         HWND window_ { nullptr };
         std::u8string id_ {};
+        // 이 표면의 웹뷰가 Win32 초점을 갖는지 나타낸다.
+        // 페이지 클릭으로 크기 0인 자식 창에 초점이 옮겨도 부모 창은 활성을 유지한다.
+        // WM_KILLFOCUS를 창 비활성으로 처리하지 않아 열린 메뉴와 텍스트 캐럿을 유지한다.
+        bool webview_focused_ { false };
         std::uint32_t dpi_ { 96 };
         std::unique_ptr<renderer_host> renderer_ {};
         // host가 session보다 오래 살아야 한다 (선언 순서가 곧 파괴 순서의 역이다).

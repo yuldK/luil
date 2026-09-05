@@ -65,6 +65,34 @@ namespace luil::win32 {
         return result;
     }
 
+    webview_reconcile_result reconcile_webviews(const std::span<const webview_placement> alive, const std::span<const webview_placement> wanted)
+    {
+        const auto find = [](const std::span<const webview_placement> list, const std::u8string& id) -> const webview_placement* {
+            for (const webview_placement& entry : list)
+                if (entry.id == id)
+                    return &entry;
+            return nullptr;
+        };
+
+        webview_reconcile_result result {};
+        for (std::size_t index = 0; index < wanted.size(); ++index)
+        {
+            const webview_placement* const existing { find(alive, wanted[index].id) };
+            // 앵커가 바뀌면 합성 visual과 parentWindow를 함께 옮겨야 하므로 다시 만든다.
+            // 없애는 쪽은 아래 순회가 같은 판정으로 낸다.
+            if (existing == nullptr || existing->anchor != wanted[index].anchor)
+                result.create.push_back(index);
+        }
+
+        for (const webview_placement& current : alive)
+        {
+            const webview_placement* const still { find(wanted, current.id) };
+            if (still == nullptr || still->anchor != current.anchor)
+                result.destroy.push_back(current.id);
+        }
+        return result;
+    }
+
     std::pair<int, int> clamp_popup_position(int x, int y, const int width, const int height, const screen_area& area) noexcept
     {
         if (x + width > area.right)

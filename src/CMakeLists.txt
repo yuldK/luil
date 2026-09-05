@@ -140,6 +140,8 @@ luil_add_source_filter(luil_files "ui/content"
     "${public_headers}/ui/image_element.h"
     ui/label_element.cpp
     "${public_headers}/ui/label_element.h"
+    ui/webview_element.cpp
+    "${public_headers}/ui/webview_element.h"
     ui/progress_element.cpp
     "${public_headers}/ui/progress_element.h")
 
@@ -186,7 +188,8 @@ luil_add_source_filter(luil_files "win32/host"
     win32/frame_state.cpp
     win32/frame_state.h
     win32/win32_window.cpp
-    "${public_headers}/win32/win32_window.h")
+    "${public_headers}/win32/win32_window.h"
+    "${public_headers}/win32/webview.h")
 
 # Skia 뒷단 선택과 frame 그리기다 (CPU·Direct3D).
 luil_add_source_filter(luil_files "win32/renderer"
@@ -207,6 +210,12 @@ luil_add_source_filter(luil_files "win32/surface"
     win32/secondary_surface.h
     win32/surface_invalidate.cpp
     win32/surface_invalidate.h
+    win32/webview_host.cpp
+    win32/webview_host.h
+    win32/webview_layout.cpp
+    win32/webview_layout.h
+    win32/webview_message_gate.cpp
+    win32/webview_message_gate.h
     win32/window_surface.cpp
     win32/window_surface.h)
 
@@ -309,6 +318,7 @@ target_link_libraries(luil
         # 트리에서만 여기서 잇는다 — 감싸지 않으면 install(EXPORT)가 "export set에
         # 없는 target"으로 세운다. include 경로는 그 target 안에만 있어야 한다:
         # luil에 직접 걸면 **경고 하나 없이** 설치본에 빌드 트리 절대 경로가 박힌다.
+        "$<BUILD_INTERFACE:luil_webview2>"
         # win32 계층이 쓰는 Windows 시스템 라이브러리다.
         # static library라 최종 링크는 소비자 몫이므로 PUBLIC으로 나른다.
         # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.

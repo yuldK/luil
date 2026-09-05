@@ -65,6 +65,11 @@ namespace luil::win32 {
         return true;
     }
 
+    IDCompositionVisual* renderer_host::underlay() noexcept
+    {
+        return renderer_->underlay();
+    }
+
     renderer_backend renderer_host::backend() const noexcept
     {
         return renderer_->backend();

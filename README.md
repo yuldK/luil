@@ -10,6 +10,7 @@ Windows 11 x64, Visual Studio 2022 또는 2026, CMake 4.2 이상을 사용한다
 ```powershell
 git submodule update --init third_party/nlohmann_json
 scripts\fetch_skia.ps1 -Configuration Debug,Release
+scripts\fetch_webview2.ps1
 cmake --preset vs2026
 cmake --build --preset vs2026-release
 ```

@@ -9,6 +9,7 @@ set(LUIL_DEPENDENCIES_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/dependencies")
 # Catch2를 실제로 구성할지는 luil_find_dependencies의 BUILD_TESTS가 정한다.
 include("${LUIL_DEPENDENCIES_DIRECTORY}/skia.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/nlohmann_json.cmake")
+include("${LUIL_DEPENDENCIES_DIRECTORY}/webview2.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/catch2.cmake")
 
 function(luil_find_dependencies)
@@ -24,6 +25,7 @@ function(luil_find_dependencies)
     luil_find_nlohmann_json()
     # 웹뷰가 붙는 SDK다. 같은 이유로 라이브러리 구성마다 요구한다 —
     # 없으면 웹뷰만 서지 않는 빌드가 생긴다 (CMakeLists.txt의 LUIL_WEBVIEW2_ROOT).
+    luil_find_webview2()
 
     # Catch2는 test 구성에서만 요구한다.
     # 앱만 빌드하는 환경에서는 submodule이 초기화되어 있지 않아도 된다.
