@@ -37,9 +37,15 @@ set(LUIL_GENERATED_CODICONS
     "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/codicons.h")
 # 키 컬러 정의는 JSON에서 빌드 시점에 만든다.
 # 소비자는 자기 카탈로그 JSON으로 바꿔칠 수 있다
-# (같은 스키마여야 하며 기본 id `mint`를 담아야 한다).
+# (같은 스키마여야 하며 LUIL_DEFAULT_ACCENT_ID를 담아야 한다).
 set(LUIL_ACCENT_CATALOG "${PROJECT_SOURCE_DIR}/assets/accents.json"
     CACHE FILEPATH "Accent catalog JSON embedded at build time.")
+set(LUIL_DEFAULT_ACCENT_ID "mint" CACHE STRING "Default accent id in the embedded catalog.")
+if(NOT LUIL_DEFAULT_ACCENT_ID MATCHES "^[a-z0-9-]+$" OR LUIL_DEFAULT_ACCENT_ID STREQUAL "system")
+    message(FATAL_ERROR "LUIL_DEFAULT_ACCENT_ID must be a non-reserved accent id.")
+endif()
+configure_file("${LUIL_CMAKE_DIRECTORY}/accent_defaults.h.in"
+    "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/accent_defaults.h" @ONLY)
 set(LUIL_GENERATED_ACCENTS
     "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/accents.h")
 # 판번 헤더는 project VERSION 하나에서 생성한다.

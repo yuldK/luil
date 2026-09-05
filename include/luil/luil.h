@@ -13,6 +13,7 @@
 
 // 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 한 줄 편집 상태 기계).
 #include "luil/text/text_edit.h"
+#include "luil/text/fonts.h"
 #include "luil/text/utf8_text.h"
 
 // 색·글꼴 선호 값과 팔레트 합성이다.

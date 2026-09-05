@@ -1,6 +1,7 @@
 #include "win32/win32_fonts.h"
 
 #include "luil/text/utf8_text.h"
+#include "luil/text/fonts.h"
 #include "win32/embedded_assets.h"
 
 #include "include/core/SkFontMgr.h"
@@ -18,6 +19,20 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <utility>
+
+namespace luil {
+    std::vector<std::u8string> installed_font_families()
+    {
+        return win32::installed_font_families();
+    }
+
+    void set_ui_typeface_families(std::vector<std::u8string> families)
+    {
+        win32::set_ui_typeface_families(std::move(families));
+        win32::clear_font_caches();
+    }
+} // namespace luil
 
 namespace luil::win32 {
     namespace {
@@ -212,6 +227,8 @@ namespace luil::win32 {
         font_registry& state { registry() };
         const std::lock_guard<std::mutex> lock { state.mutex };
         if (state.ui_typeface == nullptr)
+            state.ui_typeface = resolve_locked(state, state.ui_family);
+        if (state.ui_typeface == nullptr)
             state.ui_typeface = load_ui_typeface();
         return state.ui_typeface;
     }
@@ -220,6 +237,8 @@ namespace luil::win32 {
     {
         font_registry& state { registry() };
         const std::lock_guard<std::mutex> lock { state.mutex };
+        if (state.code_typeface == nullptr)
+            state.code_typeface = resolve_locked(state, state.code_family);
         if (state.code_typeface == nullptr)
             state.code_typeface = load_ui_typeface();
         return state.code_typeface;

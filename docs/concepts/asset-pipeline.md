@@ -26,4 +26,15 @@ set(LUIL_ACCENT_CATALOG "${PROJECT_SOURCE_DIR}/assets/accents.json"
     CACHE FILEPATH "Accent catalog JSON embedded at build time.")
 ```
 
-대체 파일은 같은 스키마를 사용하고 기본 id `mint`를 포함해야 한다. 색 이름은 표시 문자열이므로 앱과 배포 환경의 언어에 맞는 카탈로그를 선택할 수 있다.
+대체 파일은 같은 스키마의 JSON 배열을 사용한다. 파일 이름은 `accent.json` 등 자유롭게 지정할 수 있다. 기본 id는 `mint`이며 `LUIL_DEFAULT_ACCENT_ID`로 바꿀 수 있다. 지정한 기본 id는 카탈로그에 반드시 있어야 한다. `system`은 OS accent용 예약 id다.
+
+```cmake
+# add_subdirectory(luil) 전에 설정한다. 기존 캐시에는 -D 옵션으로 변경한다.
+set(LUIL_ACCENT_CATALOG "${CMAKE_CURRENT_SOURCE_DIR}/accent.json" CACHE FILEPATH "Accent catalog")
+set(LUIL_DEFAULT_ACCENT_ID "brand" CACHE STRING "Default accent")
+add_subdirectory(luil)
+```
+
+각 항목에는 `id`, `label`, `swatch`, `dark`, `light`가 필요하다. 두 테마 각각 `accent`, `accentHover`, `accentSoft`, `accentEmphasisFg`를 `#rrggbb`로 지정한다. 기본 파일을 복사해 수정하면 된다. 알 수 없는 id의 fallback과 `appearance_settings`의 초기값에 같은 기본 id를 사용한다. 표시 이름에는 UTF-8과 따옴표·줄바꿈·역슬래시를 사용할 수 있다.
+
+카탈로그는 빌드 시 내장된다. JSON 변경 후 라이브러리를 다시 빌드해야 하며 설치된 바이너리의 JSON을 실행 중 읽는 기능은 아니다.

@@ -481,7 +481,7 @@ namespace luil {
         // 강조는 언제나 우리 몫이다 — 놓을 자리를 아는 것은 이쪽뿐이라
         // 밖에서 온 끌기(파일)에도 서야 한다.
         // custom_visual이 누르는 것은 ghost 하나다.
-        return drag_overlay_plan { true, payload.custom_visual == false };
+        return drag_overlay_plan { payload.suppress_drop_highlight == false, payload.custom_visual == false };
     }
 
     void ui_tree::draw_drag_visual(draw_context& context, const drag_visual& drag) const

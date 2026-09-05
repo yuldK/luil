@@ -1,0 +1,7 @@
+#pragma once
+
+#include <string_view>
+
+namespace luil {
+    inline constexpr std::u8string_view default_accent_id { u8"@LUIL_DEFAULT_ACCENT_ID@" };
+} // namespace luil

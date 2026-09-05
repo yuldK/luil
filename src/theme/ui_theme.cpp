@@ -277,7 +277,7 @@ namespace luil {
             if (value.id == id)
                 return value;
         // 목록에 없는 id는 기본 색으로 물러선다.
-        // 생성 script가 mint의 존재를 보장하므로 첫 항목 fallback은 실제로 도달하지 않는다.
+        // 생성 script가 기본 id의 존재를 보장하므로 첫 항목 fallback은 실제로 도달하지 않는다.
         for (const accent_definition& value : catalog())
             if (value.id == default_accent_id)
                 return value;

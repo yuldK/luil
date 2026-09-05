@@ -174,6 +174,21 @@ TEST_CASE("A custom-visual drag still paints the drop target highlight", "[ui][r
         REQUIRE(frame.pixel_at(80, 50) == palette.window_background);
     }
 
+    SECTION("강조를 꺼도 ghost와 drop 대상은 유지한다")
+    {
+        const luil::ui_tree tree { build() };
+        auto interaction { dragging(false) };
+        interaction.drag->payload.suppress_drop_highlight = true;
+        luil::testing::raster_frame frame { 400, 220, palette, raster_scale };
+        frame.draw(tree, interaction);
+        REQUIRE(frame.count_color(target_box, palette.accent) == 0);
+        REQUIRE(frame.pixel_at(170, 164) == palette.accent);
+        REQUIRE(interaction.drag->hovered_drop_target == target);
+        interaction.drag->payload.custom_visual = true;
+        REQUIRE(luil::plan_drag_overlay(interaction.drag->payload).ghost == false);
+        REQUIRE(luil::plan_drag_overlay(interaction.drag->payload).highlight_target == false);
+    }
+
     SECTION("통상 끌기는 강조와 ghost를 함께 그린다")
     {
         const luil::ui_tree tree { build() };

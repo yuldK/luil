@@ -59,7 +59,7 @@ namespace luil {
     };
 
     // 앱 설정이 모르는 id를 담고 있을 때 물러설 기본 키 컬러다.
-    inline constexpr std::u8string_view default_accent_id { u8"mint" };
+    // default_accent_id는 LUIL_DEFAULT_ACCENT_ID로 구성하며 appearance.h가 제공한다.
 
     // 빌드 시점에 내장된 키 컬러 목록이다.
     // 순서는 JSON 그대로다.

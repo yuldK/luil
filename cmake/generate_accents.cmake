@@ -6,6 +6,13 @@ if(NOT DEFINED INPUT_FILE OR NOT DEFINED OUTPUT_FILE)
 endif()
 
 file(READ "${INPUT_FILE}" accents_json)
+if(NOT DEFINED DEFAULT_ACCENT_ID)
+    set(DEFAULT_ACCENT_ID "mint")
+endif()
+string(JSON catalog_type ERROR_VARIABLE type_error TYPE "${accents_json}")
+if(type_error OR NOT catalog_type STREQUAL "ARRAY")
+    message(FATAL_ERROR "Accent catalog must be a JSON array: ${INPUT_FILE}")
+endif()
 string(JSON accent_count ERROR_VARIABLE json_error LENGTH "${accents_json}")
 if(json_error)
     message(FATAL_ERROR "Accent catalog is not valid JSON: ${INPUT_FILE}\n${json_error}")
@@ -90,14 +97,20 @@ foreach(accent_index RANGE 0 ${last_accent_index})
     luil_accent_role_set(dark_roles ${accent_index} "${entry_json}" "dark")
     luil_accent_role_set(light_roles ${accent_index} "${entry_json}" "light")
 
+    # 표시 이름을 C++ 문자열로 안전하게 내보낸다.
+    string(REPLACE "\\" "\\\\" accent_label "${accent_label}")
+    string(REPLACE "\"" "\\\"" accent_label "${accent_label}")
+    string(REPLACE "\n" "\\n" accent_label "${accent_label}")
+    string(REPLACE "\r" "\\r" accent_label "${accent_label}")
+    string(REPLACE "\t" "\\t" accent_label "${accent_label}")
     string(APPEND output_text
         "        { u8\"${accent_id}\", u8\"${accent_label}\", ${swatch_color}, { ${dark_roles} }, { ${light_roles} } },\n")
 endforeach()
 
 # 앱 설정이 모르는 id를 담고 있을 때 물러설 기본 색이다.
 # 없으면 오류 처리한다.
-if(NOT "mint" IN_LIST seen_identifiers)
-    message(FATAL_ERROR "The accent catalog must contain the default id: mint")
+if(NOT DEFAULT_ACCENT_ID IN_LIST seen_identifiers)
+    message(FATAL_ERROR "The accent catalog must contain the default id: ${DEFAULT_ACCENT_ID}")
 endif()
 
 string(APPEND output_text "    };\n} // namespace luil::generated\n")

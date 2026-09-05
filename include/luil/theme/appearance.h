@@ -1,5 +1,7 @@
 #pragma once
 
+#include "luil/generated/accent_defaults.h"
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -23,7 +25,7 @@ namespace luil {
         // 키 컬러 id다.
         // 표시 계층의 목록(assets/accents.json)에 없으면
         // 그쪽이 기본색으로 물러서고 저장된 값은 그대로 둔다.
-        std::u8string accent_id { u8"mint" };
+        std::u8string accent_id { default_accent_id };
 
         [[nodiscard]] bool operator==(const appearance_settings&) const noexcept = default;
     };

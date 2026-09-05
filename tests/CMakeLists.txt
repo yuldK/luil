@@ -1,5 +1,9 @@
 include(Catch)
 
+add_test(NAME luil_accent_catalog
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/accent_catalog_tests.cmake")
+
 if(LUIL_INSTALL)
     add_test(NAME luil_installed_consumer
         COMMAND "${CMAKE_COMMAND}" "-DBINARY_DIR=${PROJECT_BINARY_DIR}"

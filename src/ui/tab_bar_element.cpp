@@ -101,7 +101,7 @@ namespace luil {
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const rect_f box { bounds() };
                 const bool dragged { interaction.drag.has_value() && interaction.drag->payload.dragged_owner == item_.key };
-                const bool drop_here { interaction.drag.has_value() && interaction.drag->hovered_drop_target == id() };
+                const bool drop_here { interaction.drag.has_value() && interaction.drag->payload.suppress_drop_highlight == false && interaction.drag->hovered_drop_target == id() };
 
                 ui_color background { 0 };
                 bool fill { false };

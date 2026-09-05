@@ -18,6 +18,7 @@ add_custom_command(
     OUTPUT "${LUIL_GENERATED_ACCENTS}"
     COMMAND "${CMAKE_COMMAND}"
         "-DINPUT_FILE=${LUIL_ACCENT_CATALOG}"
+        "-DDEFAULT_ACCENT_ID=${LUIL_DEFAULT_ACCENT_ID}"
         "-DOUTPUT_FILE=${LUIL_GENERATED_ACCENTS}"
         -P "${LUIL_CMAKE_DIRECTORY}/generate_accents.cmake"
     DEPENDS
@@ -56,6 +57,7 @@ luil_add_source_filter(luil_files "messaging"
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
 luil_add_source_filter(luil_files "text"
     text/text_edit.cpp
+    "${public_headers}/text/fonts.h"
     "${public_headers}/text/text_edit.h"
     text/utf8_text.cpp
     "${public_headers}/text/utf8_text.h")

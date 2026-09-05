@@ -136,6 +136,9 @@ namespace luil {
         // 기존 위치 초기화를 보존하기 위해 끝에 둔다. 밖에서 온 끌기는 비어 있다.
         ui_element_id container {};
 
+        // 기본 drop 강조(테두리와 목록·탭 배경)만 끈다. 수락과 drop 동작은 유지한다.
+        bool suppress_drop_highlight { false };
+
         [[nodiscard]] bool operator==(const drag_payload&) const = default;
     };
 

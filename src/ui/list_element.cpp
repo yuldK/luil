@@ -161,7 +161,7 @@ namespace luil {
                 const rect_f box { bounds() };
                 const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
                 const bool dragged { interaction.drag.has_value() && interaction.drag->payload.dragged_owner == item_.key };
-                const bool drop_here { interaction.drag.has_value() && interaction.drag->hovered_drop_target == id() };
+                const bool drop_here { interaction.drag.has_value() && interaction.drag->payload.suppress_drop_highlight == false && interaction.drag->hovered_drop_target == id() };
 
                 // 놓을 자리 · 고른 행 · 눌린 행 · hover의 순서다.
                 // 고름은 앱 상태라 포인터 상태보다 오래가고, 놓을 자리는 지금 끄는

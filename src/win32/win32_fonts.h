@@ -11,7 +11,7 @@ class SkTypeface;
 
 namespace luil::win32 {
     // 시스템에 설치된 글꼴 가족 이름을 이름 순으로 돌려준다.
-    // GDI font manager를 쓰며, 만들지 못하면 빈 목록이다.
+    // DirectWrite font manager를 쓰며, 만들지 못하면 빈 목록이다.
     // OS 호출이라 UI thread에서 한 번만 부른다.
     [[nodiscard]] std::vector<std::u8string> installed_font_families();
 

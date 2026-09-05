@@ -85,6 +85,8 @@ namespace luil::win32 {
 
         for (const std::u8string& family : families)
         {
+            if (family.empty() || family.find(u8'\0') != std::u8string::npos)
+                continue;
             const std::string name { reinterpret_cast<const char*>(family.c_str()), family.size() };
             if (sk_sp<SkTypeface> typeface { font_manager->matchFamilyStyle(name.c_str(), SkFontStyle::Normal()) }; typeface != nullptr)
                 return typeface;

@@ -1,4 +1,5 @@
 #include "win32/win32_fonts.h"
+#include "luil/text/fonts.h"
 
 #include "luil/text/utf8_text.h"
 #include "luil/ui/draw_primitives.h"
@@ -51,7 +52,7 @@ namespace {
 //  - 한국어 Windows에서 `맑은 고딕`을 CP949 바이트로 돌려주었다.
 TEST_CASE("Installed font family names are valid UTF-8", "[win32][fonts]")
 {
-    const std::vector<std::u8string> families { luil::win32::installed_font_families() };
+    const std::vector<std::u8string> families { luil::installed_font_families() };
     REQUIRE_FALSE(families.empty());
 
     const SkFont font {};
