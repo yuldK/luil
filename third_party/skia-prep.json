@@ -1,0 +1,22 @@
+{
+    "schema": 1,
+    "source": "https://github.com/yuldK/skia-prep",
+    "tag": "skia-152-0873ec164a06",
+    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-152-0873ec164a06",
+    "target": "win-x64",
+    "png_codec": "rust",
+    "skia_commit": "0873ec164a06966b90ae0d43ef783cfb180084ae",
+    "skia_milestone": "152",
+    "assets": {
+        "Release": {
+            "file": "skia-prep-0873ec164a06-win-x64-release.zip",
+            "size": 26978273,
+            "sha256": "d16943e2e6a0675b7507ec3e97d09bb9a9a7a88921be3a071adad517b8fd0fd7"
+        },
+        "Debug": {
+            "file": "skia-prep-0873ec164a06-win-x64-debug.zip",
+            "size": 214147927,
+            "sha256": "52cb15cd0fbeec26688151dc2b1e835847c3b7e7142ae8f7706f6d732ae0aae0"
+        }
+    }
+}
