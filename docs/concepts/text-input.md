@@ -1,6 +1,6 @@
 # 텍스트 입력
 
-한 줄 입력은 `text_input_element`가 사용하는 확정된 초안, 입력 초점, 배치 계산을 분리한다.
+한 줄 입력은 [`text_input_element`](../../include/luil/ui/dialog_elements.h)가 사용하는 확정된 초안, 입력 초점, 배치 계산을 분리한다.
 
 | 상태 | 소유자 |
 | --- | --- |

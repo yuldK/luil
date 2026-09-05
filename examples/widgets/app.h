@@ -8,6 +8,7 @@
 //   inputs_section.cpp   — 한 줄 텍스트 입력 (편집·IME·붙여넣기·필터)
 //   choices_section.cpp  — 라디오·토글 묶음, 낱개 컨트롤(체크박스·라디오·스위치), 접이식 그룹
 //   status_section.cpp   — 진행률 막대, 상태 배지
+//   toasts_section.cpp   — 토스트 알림과 시간 만료(tick)
 //
 // 구조는 hello와 같다: driver가 상태를 소유하고, element는 상태를 설정으로
 // 받아 그리며, 상호작용은 "바꾸자"는 메시지(intent)로만 돌아온다.
@@ -30,6 +31,7 @@ namespace widgets {
     constexpr luil::ui_element_kind kind_counter_button { luil::application_element_kind(2) };
     constexpr luil::ui_element_kind kind_icon_button { luil::application_element_kind(3) };
     constexpr luil::ui_element_kind kind_note_input { luil::application_element_kind(4) };
+    constexpr luil::ui_element_kind kind_toast_button { luil::application_element_kind(5) };
     constexpr luil::ui_element_kind kind_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_progress { luil::application_element_kind(7) };
     constexpr luil::ui_element_kind kind_badge { luil::application_element_kind(8) };
@@ -104,6 +106,11 @@ namespace widgets {
     };
 
     // toasts: 알림 요청.
+    struct toast_intent
+    {
+        std::u8string text {};
+        luil::toast_severity severity { luil::toast_severity::info };
+    };
 
     // --- 앱 상태 ---
     // driver가 소유하고 섹션 빌더가 읽는다.
@@ -126,6 +133,15 @@ namespace widgets {
         // 하나의 앱 상태를 컨트롤과 표시가 나눠 본다.
         float progress { 0.3f };
         // 토스트 목록이다. 만료 판정도 앱 몫이다 (tick이 지운다).
+        struct toast_entry
+        {
+            std::u8string id {};
+            std::u8string text {};
+            luil::toast_severity severity { luil::toast_severity::info };
+            std::chrono::steady_clock::time_point shown_at {};
+        };
+        std::vector<toast_entry> toasts {};
+        int next_toast_id { 0 };
     };
 
     // --- 섹션 빌더의 공통 반환형 ---
@@ -142,7 +158,9 @@ namespace widgets {
     [[nodiscard]] section build_inputs_section(const app_state& state);
     [[nodiscard]] section build_choices_section(const app_state& state);
     [[nodiscard]] section build_status_section(const app_state& state);
+    [[nodiscard]] section build_toasts_section(const app_state& state);
     // 토스트 오버레이는 섹션이 아니라 창 전체 위에 얹는다.
+    [[nodiscard]] std::unique_ptr<luil::ui_element> build_toast_overlay(const app_state& state);
 
     // --- logic thread ---
     class widgets_driver final : public luil::win32::logic_driver
@@ -155,6 +173,8 @@ namespace widgets {
 
         // 토스트 만료의 시간 경로다.
         // 다음 만료 시각을 예고하면 메시지가 없어도 그 시각에 tick이 온다.
+        [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() override;
+        void tick(std::chrono::steady_clock::time_point now) override;
 
     private:
         metrics_intent metrics_ {};

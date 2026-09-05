@@ -36,3 +36,5 @@
 - [키보드로 값 조절하기](value-step-design.md)
 - [활성 표면과 초점 수명](active-surface-design.md)
 - [키 이벤트의 표면 라우팅](key-surface-routing-design.md)
+- [Modal dialog host](modal-dialog-design.md)
+- [Caption 버튼 구성](caption-button-design.md)

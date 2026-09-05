@@ -9,12 +9,15 @@ add_executable(luil_tests
     badge_element_tests.cpp
     check_element_tests.cpp
     choice_group_element_tests.cpp
+    dialog_elements_tests.cpp
     dropdown_element_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp
     list_element_tests.cpp
+    menu_element_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
+    modal_host_element_tests.cpp
     progress_element_tests.cpp
     raster_probe.cpp
     scroll_view_element_tests.cpp
@@ -27,6 +30,7 @@ add_executable(luil_tests
     tab_bar_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_tests.cpp
+    toast_element_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
     ui_interaction_tests.cpp

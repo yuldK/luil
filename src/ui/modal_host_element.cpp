@@ -1,0 +1,78 @@
+#include "luil/ui/modal_host_element.h"
+
+#include "luil/ui/draw_primitives.h"
+#include "luil/ui/panel_element.h"
+
+#include <utility>
+
+namespace luil {
+    modal_host_element::modal_host_element(modal_host_config config)
+        : ui_element { ui_element_id { ui_element_kind::modal_host, config.owner } }
+        , config_ { std::move(config) }
+    {
+        // 초점을 이 안에 가두고 Esc를 받는다.
+        // 없는 dismiss는 세우지 않는다 — 빈 액션이 "Esc로는 닫지 않는다"다.
+        set_focus_trap(true);
+        if (config_.dismiss)
+            set_dismiss_action(config_.dismiss);
+        // 이름 지은 자리가 있으면 뜨는 순간 초점이 거기 서고, 사라지면 되돌아간다.
+        // 빈 이름을 그대로 넘긴다 — 그것이 "자동 초점 없음"·"되돌리지 않음"이다.
+        set_focus_entry(config_.focus_entry);
+        set_focus_return(config_.focus_return);
+
+        // scrim은 언제나 만든다.
+        // 진하기 0은 "보이지 않게 막는다"이지 "막지 않는다"가 아니다 — 포인터를
+        // 막는 것이 modal의 몫이라 여기서 그것을 뺄 수 없다.
+        panel_config scrim {};
+        const float opacity { config_.scrim_opacity };
+        // 구체 색이 아니라 역할이다. 알파는 그리는 쪽이 정한다는 그 역할의 규칙을 따른다.
+        scrim.background = [opacity](const ui_color_palette& palette) { return with_alpha(palette.content_shadow, opacity); };
+        auto panel { std::make_unique<panel_element>(ui_element_id { ui_element_kind::modal_scrim, config_.owner }, std::move(scrim)) };
+        if (config_.outside)
+            panel->set_action(ui_trigger::left_click, config_.outside);
+        // 액션이 없어도 뒤로 새지 않게 흡수한다.
+        panel->set_hit_opaque(true);
+        // 누를 수 있어도 Tab의 자리는 아니다 — 화면을 덮는 판이라 테를 두를 자리가 없다.
+        panel->set_tab_stop(false);
+        scrim_ = panel.get();
+        add_child(std::move(panel));
+    }
+
+    void modal_host_element::set_content(std::unique_ptr<ui_element> content)
+    {
+        // dialog의 빈 자리를 눌러도 뒤의 scrim으로 새지 않는다.
+        // 앱이 손으로 흡수 액션을 다는 대신 host가 세운다 — 잊으면 바깥 클릭으로
+        // 닫히는 dialog가 자기 몸을 눌러도 닫힌다.
+        content->set_hit_opaque(true);
+        content_ = content.get();
+        add_child(std::move(content));
+    }
+
+    void modal_host_element::arrange(const arrange_context& context)
+    {
+        set_bounds(context.slot);
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        // scrim은 준 자리를 그대로 덮는다.
+        scrim_->arrange(context);
+        if (content_ == nullptr)
+            return;
+
+        // 가운데에 놓고 앱이 준 만큼 밀어낸다.
+        const float width { config_.content_width * scale };
+        const float height { config_.content_height * scale };
+        const float left { context.slot.x + (context.slot.width - width) / 2.0f + config_.offset_x * scale };
+        const float top { context.slot.y + (context.slot.height - height) / 2.0f + config_.offset_y * scale };
+        content_->arrange(context.for_child({ left, top, width, height }));
+    }
+
+    void modal_host_element::draw(draw_context& context, const interaction_snapshot& interaction) const
+    {
+        // scrim이 먼저, 내용이 그 위다 (자식 순서 그대로).
+        draw_children(context, interaction);
+    }
+    access_info modal_host_element::accessibility() const
+    {
+        // 이름은 통상 안에 담긴 dialog 캡션이 말한다.
+        return { .role = access_role::dialog };
+    }
+} // namespace luil

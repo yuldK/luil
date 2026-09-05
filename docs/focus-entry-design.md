@@ -2,7 +2,7 @@
 
 초점 진입은 새로 나타난 focus trap이 명시한 element에 논리 초점을 두는 규칙이다. 초점 복귀는 trap이 사라진 뒤 앱이 명시한 바깥 element로 초점을 돌려보낸다. 두 동작은 tree의 선언을 `interaction_controller`가 해석한다.
 
-관련 API는 [ui_element.h](../include/luil/ui/ui_element.h), [ui_tree.h](../include/luil/ui/ui_tree.h), modal_host_element.h에 있다.
+관련 API는 [ui_element.h](../include/luil/ui/ui_element.h), [ui_tree.h](../include/luil/ui/ui_tree.h), [modal_host_element.h](../include/luil/ui/modal_host_element.h)에 있다.
 
 ## 선언 모델
 
@@ -85,4 +85,4 @@ Controller는 유효한 trap이 있는 동안 그 trap의 `focus_return`과 활�
 
 ## 검증 지침
 
-[ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)에서 진입점 성공, fallback, 빈 진입점, 사용자 선점, 숨김·비활성화, 중첩 trap, 복귀 성공과 실패, 여러 표면을 검증한다. modal_host_element_tests.cpp는 host의 trap, entry, return 속성을 확인한다.
+[ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)에서 진입점 성공, fallback, 빈 진입점, 사용자 선점, 숨김·비활성화, 중첩 trap, 복귀 성공과 실패, 여러 표면을 검증한다. [modal_host_element_tests.cpp](../tests/modal_host_element_tests.cpp)는 host의 trap, entry, return 속성을 확인한다.

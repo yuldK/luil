@@ -156,10 +156,21 @@ luil_add_source_filter(luil_files "ui/lists"
     "${public_headers}/ui/tab_bar_element.h")
 
 # 다른 것 위에 떠서 잠깐 사는 element다.
-
+luil_add_source_filter(luil_files "ui/overlays"
+    ui/dialog_elements.cpp
+    "${public_headers}/ui/dialog_elements.h"
+    ui/menu_element.cpp
+    "${public_headers}/ui/menu_element.h"
+    ui/modal_host_element.cpp
+    "${public_headers}/ui/modal_host_element.h"
+    ui/toast_element.cpp
+    "${public_headers}/ui/toast_element.h")
 
 # 직접 그리는 창 캡션이다. 치수는 win32의 비클라이언트 hit test와 나눠 쓴다.
-
+luil_add_source_filter(luil_files "ui/caption"
+    ui/caption_element.cpp
+    "${public_headers}/ui/caption_element.h"
+    "${public_headers}/ui/caption_metrics.h")
 
 # win32: Win32와 Skia 조립이다.
 # 여기 남은 header는 비공개 구현 세부이고, 묶음은 계층 안의 관심사로 나눈다.

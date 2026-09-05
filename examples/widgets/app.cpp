@@ -6,6 +6,7 @@
 namespace widgets {
     namespace {
         // 토스트가 화면에 머무는 시간이다.
+        constexpr std::chrono::milliseconds toast_duration { 3000 };
 
         [[nodiscard]] luil::caption_config make_caption()
         {
@@ -105,6 +106,16 @@ namespace widgets {
                 state_.progress = 1.0f;
             return;
         }
+        if (const auto* const toast { message.get<toast_intent>() }; toast != nullptr)
+        {
+            app_state::toast_entry entry {};
+            entry.id = u8"toast-" + to_u8(++state_.next_toast_id);
+            entry.text = toast->text;
+            entry.severity = toast->severity;
+            entry.shown_at = std::chrono::steady_clock::now();
+            state_.toasts.push_back(std::move(entry));
+            return;
+        }
     }
 
     std::shared_ptr<const luil::win32::ui_frame> widgets_driver::make_frame()
@@ -128,7 +139,7 @@ namespace widgets {
         column_config.padding = luil::edge_insets::all(24.0f);
         column_config.spacing = 20.0f;
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, column_config) };
-        for (section (*build)(const app_state&) : { &build_controls_section, &build_inputs_section, &build_choices_section, &build_status_section })
+        for (section (*build)(const app_state&) : { &build_controls_section, &build_inputs_section, &build_choices_section, &build_status_section, &build_toasts_section })
         {
             section built { build(state_) };
             column->add(std::move(built.element), built.height);
@@ -137,6 +148,11 @@ namespace widgets {
         root->add(std::move(column));
 
         // 토스트 오버레이는 섹션 위가 아니라 창 전체 위에 얹는다.
+        if (auto overlay { build_toast_overlay(state_) }; overlay != nullptr)
+        {
+            overlay->arrange({ { 0.0f, 0.0f, width, height }, scale });
+            root->add(std::move(overlay));
+        }
 
         auto frame { std::make_shared<luil::win32::ui_frame>() };
         frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
@@ -153,7 +169,25 @@ namespace widgets {
         return closed_.load();
     }
 
+    std::optional<std::chrono::steady_clock::time_point> widgets_driver::next_tick()
+    {
+        // 다음에 만료되는 토스트의 시각을 예고한다.
+        // 예고가 없으면 시간 경로는 완전히 잠잔다 (평소 비용 0).
+        std::optional<std::chrono::steady_clock::time_point> next {};
+        for (const app_state::toast_entry& entry : state_.toasts)
+        {
+            const std::chrono::steady_clock::time_point at { entry.shown_at + toast_duration };
+            if (next.has_value() == false || at < *next)
+                next = at;
+        }
+        return next;
+    }
 
+    void widgets_driver::tick(const std::chrono::steady_clock::time_point now)
+    {
+        // 예고한 시각이 지나면 메시지가 없어도 여기가 불리고 frame이 다시 게시된다.
+        std::erase_if(state_.toasts, [now](const app_state::toast_entry& entry) { return now >= entry.shown_at + toast_duration; });
+    }
 
     std::optional<luil::text_input_target> widgets_policy::text_target_of(const luil::ui_element_kind kind) const
     {

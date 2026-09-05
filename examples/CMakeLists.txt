@@ -27,7 +27,8 @@ luil_add_source_filter(luil_widgets_files "sections"
     widgets/choices_section.cpp
     widgets/controls_section.cpp
     widgets/inputs_section.cpp
-    widgets/status_section.cpp)
+    widgets/status_section.cpp
+    widgets/toasts_section.cpp)
 add_executable(luil_widgets WIN32
     ${luil_example_resource}
     ${luil_widgets_files})
@@ -48,7 +49,9 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/tabs_page.cpp
     demo/tabs_page.h
     demo/theme_page.cpp
-    demo/theme_page.h)
+    demo/theme_page.h
+    demo/toasts_page.cpp
+    demo/toasts_page.h)
 # 데모가 자기 안에 세우는 되돌이 HTTP 서버다. 예제가 인터넷·회사 프록시·남의 API
 # 사정에 흔들리면 예제가 아니라서 있다.
 #  - test의 도우미를 **같은 파일 그대로** 컴파일한다. 데모용으로 한 벌 더 두면
