@@ -93,6 +93,7 @@ namespace demo {
     inline constexpr std::u8string_view page_tabs { u8"tabs" };
     inline constexpr std::u8string_view page_groups { u8"groups" };
     inline constexpr std::u8string_view page_toasts { u8"toasts" };
+    inline constexpr std::u8string_view page_windows { u8"windows" };
     inline constexpr std::u8string_view page_images { u8"images" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
 

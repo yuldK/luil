@@ -3,14 +3,23 @@ include(Catch)
 
 # test 실행 파일도 라이브러리 resource(코디콘 폰트·라이선스·고지)를
 # 내장해야 embedded assets 경로가 실제와 같은 방식으로 검증된다.
+set(luil_tests_notices "${LUIL_GENERATED_DIRECTORY}/third_party_notices.txt")
+set(luil_tests_resource "${LUIL_GENERATED_DIRECTORY}/luil_tests.rc")
+luil_generate_third_party_notices("${luil_tests_notices}")
+luil_configure_resource_script("${luil_tests_resource}" "${luil_tests_notices}")
 
 add_executable(luil_tests
+    "${luil_tests_resource}"
     accessibility_tests.cpp
+    app_host_tests.cpp
     badge_element_tests.cpp
+    caption_layout_tests.cpp
     check_element_tests.cpp
     choice_group_element_tests.cpp
     dialog_elements_tests.cpp
     dropdown_element_tests.cpp
+    embedded_assets_tests.cpp
+    font_fallback_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp
     image_animation_tests.cpp
@@ -30,16 +39,24 @@ add_executable(luil_tests
     split_handle_element_tests.cpp
     stack_element_tests.cpp
     strip_element_tests.cpp
+    surface_input_tests.cpp
     tab_bar_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_tests.cpp
     toast_element_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
+    tsf_input_tests.cpp
     ui_interaction_tests.cpp
     ui_theme_tests.cpp
+    uia_provider_tests.cpp
     wrap_element_tests.cpp
-    utf8_tests.cpp)
+    utf8_tests.cpp
+    win32_clipboard_tests.cpp
+    win32_drop_tests.cpp
+    win32_fonts_tests.cpp
+    win32_window_tests.cpp
+    window_position_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
@@ -117,6 +134,29 @@ add_test(NAME luil_source_style
         "-DROOT_DIRECTORY=${PROJECT_SOURCE_DIR}"
         -P "${LUIL_CMAKE_DIRECTORY}/run_style_check.cmake")
 
+add_test(NAME luil_smoke_cpu
+    COMMAND "$<TARGET_FILE:luil_demo>" --renderer=cpu --smoke-test)
+add_test(NAME luil_smoke_auto
+    COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test)
+add_test(NAME luil_smoke_auto_fallback
+    COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test
+        --simulate-direct3d-failure)
+add_test(NAME luil_smoke_direct3d
+    COMMAND "$<TARGET_FILE:luil_demo>" --renderer=direct3d --smoke-test)
+set_tests_properties(luil_smoke_direct3d PROPERTIES SKIP_RETURN_CODE 77)
+# 성공적으로 그린 뒤 잃는 경로다. 생성 시점 실패(위)와 달리 창이 이미 제시에
+# 붙어 있으므로, 물러서면서 그것을 놓지 않으면 CPU 픽셀이 화면에 닿지 못한다
+# (docs/webview-composition-design.md).
+add_test(NAME luil_smoke_auto_runtime_loss
+    COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test
+        --simulate-direct3d-loss-after-frames=1)
+set_tests_properties(
+    luil_smoke_cpu
+    luil_smoke_auto
+    luil_smoke_auto_fallback
+    luil_smoke_auto_runtime_loss
+    luil_smoke_direct3d
+    PROPERTIES TIMEOUT 30 LABELS "smoke")
 
 luil_set_ide_folder("Tests"
     luil_messaging_asan_tests

@@ -63,5 +63,8 @@
 #include "luil/ui/wrap_element.h"
 
 // Win32 platform 조립이다 (창 실행, 앱 계약).
+#include "luil/win32/app_host.h"
+#include "luil/win32/renderer_policy.h"
+#include "luil/win32/win32_window.h"
 
 // HTTP 요청·답이다 (값과 몸 판정, 그리고 WinHTTP 위의 비동기 client).

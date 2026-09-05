@@ -82,6 +82,6 @@ luil::win32::ui_window inspector {
 
 ## 검증 지침
 
-caption_layout_tests.cpp는 전체 버튼, 일부 버튼, 버튼 없음의 경계와 hit 결과를 검증한다. 또한 `caption_element` bounds와 `make_caption_layout()`의 일치, 버튼 opt-out과 창 style의 일치를 확인한다.
+[caption_layout_tests.cpp](../tests/caption_layout_tests.cpp)는 전체 버튼, 일부 버튼, 버튼 없음의 경계와 hit 결과를 검증한다. 또한 `caption_element` bounds와 `make_caption_layout()`의 일치, 버튼 opt-out과 창 style의 일치를 확인한다.
 
-Win32 구현 경계는 caption_layout.cpp, caption_surface.cpp, caption_surface.h에 있다.
+Win32 구현 경계는 [caption_layout.cpp](../src/win32/caption_layout.cpp), [caption_surface.cpp](../src/win32/caption_surface.cpp), [caption_surface.h](../src/win32/caption_surface.h)에 있다.

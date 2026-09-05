@@ -83,6 +83,6 @@ Popup 안 텍스트 입력이나 메뉴 항목에 논리 초점이 있으면 pop
 
 ## 검증 지침
 
-surface_input_tests.cpp는 Win32 key 정규화와 surface 전달을 확인한다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 보조 창 첫 Tab, 표면별 기본 버튼과 dismiss, popup 논리 초점, 사라진 표면을 검증한다.
+[surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 Win32 key 정규화와 surface 전달을 확인한다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 보조 창 첫 Tab, 표면별 기본 버튼과 dismiss, popup 논리 초점, 사라진 표면을 검증한다.
 
-플랫폼 연결은 surface_input.cpp, controller 선택 로직은 [ui_interaction.cpp](../src/ui/ui_interaction.cpp)에 있다.
+플랫폼 연결은 [surface_input.cpp](../src/win32/surface_input.cpp), controller 선택 로직은 [ui_interaction.cpp](../src/ui/ui_interaction.cpp)에 있다.

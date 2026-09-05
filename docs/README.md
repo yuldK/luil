@@ -21,7 +21,9 @@
 - [텍스트 입력](concepts/text-input.md)
 - [테마와 글꼴](concepts/theming.md)
 - [스레드 모델](concepts/threading-model.md)
+- [TSF와 IME 입력](concepts/tsf-input.md)
 - [UI element](concepts/ui-element.md)
+- [Win32 창과 표면](concepts/window.md)
 
 ## UI와 입력
 
@@ -41,6 +43,10 @@
 
 ## 플랫폼과 콘텐츠
 
+- [여러 top-level window](multi-window-design.md)
+- [OS 파일 drag & drop](os-dragdrop-design.md)
+- [UI Automation 접근성](accessibility-design.md)
+- [접근성 동작](accessibility-action-design.md)
 - [이미지](image-design.md)
 - [이미지 디코딩](image-decode-design.md)
 - [움직이는 이미지](image-anim-design.md)

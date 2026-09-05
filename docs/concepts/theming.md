@@ -23,4 +23,4 @@ accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `sys
 
 공개 `font_resolver::family(name)`는 글꼴 가족 이름을 미리 보기용 `SkTypeface*`로 바꾸는 인터페이스다. 빈 이름은 기본 글꼴이며 찾지 못한 이름은 null을 반환한다. draw 호출 동안 포인터가 유효하도록 구현이 수명을 유지해야 한다.
 
-내부 `win32_fonts`는 설정된 UI·코드 글꼴과 글리프 fallback을 관리한다. 그리기와 입력 측정이 같은 글꼴을 사용하도록 registry를 공유한다. `fallback_typeface(codepoint)`는 사용자 UI 언어를 사용해 DirectWrite에 대체 글꼴을 요청하고 `sk_sp<SkTypeface>`를 반환한다. code point별 cache는 4096개 상한에 닿으면 비운다. `WM_FONTCHANGE`에서는 글꼴 cache와 관리자를 무효화하고 다음 조회에서 다시 만든다. 이미 반환한 `sk_sp`의 typeface는 계속 살아 있다.
+내부 [`win32_fonts`](../../src/win32/win32_fonts.h)는 설정된 UI·코드 글꼴과 글리프 fallback을 관리한다. 그리기와 입력 측정이 같은 글꼴을 사용하도록 registry를 공유한다. `fallback_typeface(codepoint)`는 사용자 UI 언어를 사용해 DirectWrite에 대체 글꼴을 요청하고 `sk_sp<SkTypeface>`를 반환한다. code point별 cache는 4096개 상한에 닿으면 비운다. `WM_FONTCHANGE`에서는 글꼴 cache와 관리자를 무효화하고 다음 조회에서 다시 만든다. 이미 반환한 `sk_sp`의 typeface는 계속 살아 있다.

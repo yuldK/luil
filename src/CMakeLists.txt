@@ -180,33 +180,62 @@ luil_add_source_filter(luil_files "ui/caption"
 # 여기 남은 header는 비공개 구현 세부이고, 묶음은 계층 안의 관심사로 나눈다.
 
 # 앱 runtime과 창 하나의 수명, 그리고 한 frame이 나르는 것이다.
-
+luil_add_source_filter(luil_files "win32/host"
+    win32/app_host.cpp
+    "${public_headers}/win32/app_host.h"
+    win32/frame_state.cpp
+    win32/frame_state.h
+    win32/win32_window.cpp
+    "${public_headers}/win32/win32_window.h")
 
 # Skia 뒷단 선택과 frame 그리기다 (CPU·Direct3D).
-
+luil_add_source_filter(luil_files "win32/renderer"
+    win32/renderer_policy.cpp
+    "${public_headers}/win32/renderer_policy.h")
 
 # 창 하나가 그리는 표면과 다시 그릴 자리 판정이다.
 
 
 # 캡션 표면과 비클라이언트 hit test다.
-
+luil_add_source_filter(luil_files "win32/caption"
+    win32/caption_layout.cpp
+    win32/caption_layout.h
+    win32/caption_surface.cpp
+    win32/caption_surface.h)
 
 # 떠 있는 창의 자리·대조·닫힘이다 (메뉴·드롭다운).
 
 
 # OS에서 들어오는 것이다 (포인터·휠 번역, IME, 클립보드, 파일 끌어놓기).
-
+luil_add_source_filter(luil_files "win32/input"
+    win32/surface_input.cpp
+    win32/surface_input.h
+    win32/win32_clipboard.cpp
+    win32/win32_clipboard.h
+    win32/win32_drop.cpp
+    win32/win32_drop.h
+    win32/win32_tsf_input.cpp
+    win32/win32_tsf_input.h)
 
 # 글꼴이다. 시스템 글꼴 열거와, 실행 파일 resource에 박힌 codicon 폰트·고지다.
-
+luil_add_source_filter(luil_files "win32/fonts"
+    win32/embedded_assets.cpp
+    win32/embedded_assets.h
+    win32/resource_ids.h
+    win32/win32_fonts.cpp
+    win32/win32_fonts.h)
 
 # 보조 기술이 읽는 UIA provider다.
-
+luil_add_source_filter(luil_files "win32/accessibility"
+    win32/uia_provider.cpp
+    win32/uia_provider.h)
 
 # 계층 안에서 두루 쓰는 것이다 (UTF-8 변환, HRESULT 오류 글).
 luil_add_source_filter(luil_files "win32/support"
     win32/utf8.cpp
-    win32/utf8.h)
+    win32/utf8.h
+    win32/win32_error.cpp
+    win32/win32_error.h)
 
 # net: HTTP 요청과 답이다.
 # 어휘와 몸 판정은 창도 소켓도 모르는 값·순수 함수라 test가 서버 없이 규약 전부를
