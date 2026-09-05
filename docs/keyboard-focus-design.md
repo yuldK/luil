@@ -72,7 +72,7 @@ Space와 Enter는 초점 element의 `left_click` 액션을 실행할 수 있다.
 
 ## Focus group
 
-Group은 여러 항목을 Tab의 한 자리로 접고 내부 탐색을 방향키에 맡긴다. 텍스트 편집과 값 step이 group 이동보다 우선한다. Group 계약은 focus-group-design.md에 정리되어 있다.
+Group은 여러 항목을 Tab의 한 자리로 접고 내부 탐색을 방향키에 맡긴다. 텍스트 편집과 값 step이 group 이동보다 우선한다. Group 계약은 [focus-group-design.md](focus-group-design.md)에 정리되어 있다.
 
 ## Modal 범위
 

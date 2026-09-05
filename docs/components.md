@@ -17,6 +17,16 @@
 | 진행률 | `progress_element` | [ui/progress_element.h](../include/luil/ui/progress_element.h) | [설명](value-step-design.md) |
 | 상태 배지 | `badge_element` | [ui/badge_element.h](../include/luil/ui/badge_element.h) | [설명](concepts/ui-element.md) |
 | 값 조절 | `slider_element` | [ui/slider_element.h](../include/luil/ui/slider_element.h) | [설명](value-step-design.md) |
+| 세로·가로 배치 | `stack_element` | [ui/stack_element.h](../include/luil/ui/stack_element.h) | [설명](stack-expressiveness-design.md) |
+| 줄바꿈 배치 | `wrap_element` | [ui/wrap_element.h](../include/luil/ui/wrap_element.h) | [설명](stack-expressiveness-design.md) |
+| 가로 스크롤 배치 | `strip_element` | [ui/strip_element.h](../include/luil/ui/strip_element.h) | [설명](stack-expressiveness-design.md) |
+| 최상위 화면 | `root_element` | [ui/root_element.h](../include/luil/ui/root_element.h) | [설명](tree-arrange-design.md) |
+| 배경과 자식 컨테이너 | `panel_element` | [ui/panel_element.h](../include/luil/ui/panel_element.h) | [설명](tree-arrange-design.md) |
+| 스크롤 영역 | `scroll_view_element` | [ui/scroll_view_element.h](../include/luil/ui/scroll_view_element.h) | [설명](focus-reveal-design.md) |
+| 스크롤 막대 | `scrollbar_element` | [ui/scrollbar_element.h](../include/luil/ui/scrollbar_element.h) | [설명](value-step-design.md) |
+| 두 영역의 폭·높이 조절 | `split_handle_element` | [ui/split_handle_element.h](../include/luil/ui/split_handle_element.h) | [설명](stack-expressiveness-design.md) |
+| 사이드바 | `sidebar_element` | [ui/sidebar_element.h](../include/luil/ui/sidebar_element.h) | [설명](concepts/ui-element.md) |
+| 접이식 섹션 | `group_element` | [ui/group_element.h](../include/luil/ui/group_element.h) | [설명](tree-arrange-design.md) |
 
 ## UI 구성 규칙
 

@@ -25,8 +25,12 @@
 
 ## UI와 입력
 
+- [Tree 배치 진입점과 진단](tree-arrange-design.md)
+- [Stack, strip, wrap 배치](stack-expressiveness-design.md)
 - [키보드 초점과 Tab 순회](keyboard-focus-design.md)
+- [Focus group과 Tab 순서](focus-group-design.md)
 - [초점 진입과 복귀](focus-entry-design.md)
+- [키보드 초점 자동 스크롤](focus-reveal-design.md)
 - [Enter와 기본 버튼](enter-default-design.md)
 - [키보드로 값 조절하기](value-step-design.md)
 - [활성 표면과 초점 수명](active-surface-design.md)

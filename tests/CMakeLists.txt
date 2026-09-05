@@ -8,17 +8,25 @@ add_executable(luil_tests
     accessibility_tests.cpp
     badge_element_tests.cpp
     check_element_tests.cpp
+    group_element_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
     progress_element_tests.cpp
     raster_probe.cpp
+    scroll_view_element_tests.cpp
+    scrollbar_element_tests.cpp
+    sidebar_element_tests.cpp
     slider_element_tests.cpp
+    split_handle_element_tests.cpp
+    stack_element_tests.cpp
+    strip_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
     ui_interaction_tests.cpp
     ui_theme_tests.cpp
+    wrap_element_tests.cpp
     utf8_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE

@@ -26,10 +26,19 @@
 #include "luil/ui/button_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/group_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/layout_metrics.h"
+#include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"
+#include "luil/ui/root_element.h"
+#include "luil/ui/scroll_view_element.h"
+#include "luil/ui/scrollbar_element.h"
+#include "luil/ui/sidebar_element.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/split_handle_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/strip_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/transition.h"
 #include "luil/ui/ui_cursor.h"
@@ -38,6 +47,7 @@
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/wrap_element.h"
 
 // Win32 platform 조립이다 (창 실행, 앱 계약).
 

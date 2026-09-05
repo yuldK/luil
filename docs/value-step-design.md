@@ -106,4 +106,4 @@ Keyboard step은 접근성 RangeValue action과 같은 앱 상태를 바꾸지�
 
 ## 검증 지침
 
-[slider_element_tests.cpp](../tests/slider_element_tests.cpp), scrollbar_element_tests.cpp, split_handle_element_tests.cpp는 key mapping, delta, 범위 끝, 축, Home/End 지원 여부를 검증한다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 수정자와 focus group 우선순위를 확인한다.
+[slider_element_tests.cpp](../tests/slider_element_tests.cpp), [scrollbar_element_tests.cpp](../tests/scrollbar_element_tests.cpp), [split_handle_element_tests.cpp](../tests/split_handle_element_tests.cpp)는 key mapping, delta, 범위 끝, 축, Home/End 지원 여부를 검증한다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 수정자와 focus group 우선순위를 확인한다.

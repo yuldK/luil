@@ -97,7 +97,27 @@ luil_add_source_filter(luil_files "ui/drawing"
     "${public_headers}/ui/transition.h")
 
 # 자식을 담고 자리를 정하는 element다.
-
+luil_add_source_filter(luil_files "ui/layout"
+    ui/group_element.cpp
+    "${public_headers}/ui/group_element.h"
+    ui/panel_element.cpp
+    "${public_headers}/ui/panel_element.h"
+    ui/root_element.cpp
+    "${public_headers}/ui/root_element.h"
+    ui/scroll_view_element.cpp
+    "${public_headers}/ui/scroll_view_element.h"
+    ui/scrollbar_element.cpp
+    "${public_headers}/ui/scrollbar_element.h"
+    ui/sidebar_element.cpp
+    "${public_headers}/ui/sidebar_element.h"
+    ui/split_handle_element.cpp
+    "${public_headers}/ui/split_handle_element.h"
+    ui/stack_element.cpp
+    "${public_headers}/ui/stack_element.h"
+    ui/strip_element.cpp
+    "${public_headers}/ui/strip_element.h"
+    ui/wrap_element.cpp
+    "${public_headers}/ui/wrap_element.h")
 
 # 사용자가 값을 바꾸는 element다.
 luil_add_source_filter(luil_files "ui/controls"
