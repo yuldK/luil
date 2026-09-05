@@ -6,7 +6,9 @@ include(Catch)
 
 add_executable(luil_tests
     messaging_channel_tests.cpp
-    messaging_latest_slot_tests.cpp)
+    messaging_latest_slot_tests.cpp
+    text_edit_tests.cpp
+    utf8_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"

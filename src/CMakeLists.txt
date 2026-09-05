@@ -54,7 +54,11 @@ luil_add_source_filter(luil_files "messaging"
     "${public_headers}/messaging/latest_slot.h")
 
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
-
+luil_add_source_filter(luil_files "text"
+    text/text_edit.cpp
+    "${public_headers}/text/text_edit.h"
+    text/utf8_text.cpp
+    "${public_headers}/text/utf8_text.h")
 
 # theme: 색·글꼴 선호 값과 팔레트 합성이다.
 
@@ -121,7 +125,9 @@ luil_add_source_filter(luil_files "messaging"
 
 
 # 계층 안에서 두루 쓰는 것이다 (UTF-8 변환, HRESULT 오류 글).
-
+luil_add_source_filter(luil_files "win32/support"
+    win32/utf8.cpp
+    win32/utf8.h)
 
 # net: HTTP 요청과 답이다.
 # 어휘와 몸 판정은 창도 소켓도 모르는 값·순수 함수라 test가 서버 없이 규약 전부를
