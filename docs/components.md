@@ -9,6 +9,16 @@
 | 최신 상태 게시 | `messaging::latest_slot` | [messaging/latest_slot.h](../include/luil/messaging/latest_slot.h) | [설명](concepts/messaging.md) |
 | UTF-8 텍스트 편집 | `text::text_edit_state` | [text/text_edit.h](../include/luil/text/text_edit.h) | [설명](concepts/text-editing.md) |
 | 테마·팔레트 | `color_theme`, `ui_color_palette` | [theme/ui_theme.h](../include/luil/theme/ui_theme.h) | [설명](concepts/theming.md) |
+| 불변 화면 트리 | `ui_tree` | [ui/ui_tree.h](../include/luil/ui/ui_tree.h) | [설명](concepts/immutable-tree.md) |
+| 포인터·키보드 입력 정책 | `interaction_policy` | [ui/ui_interaction.h](../include/luil/ui/ui_interaction.h) | [설명](concepts/interaction.md) |
+
+## UI 구성 규칙
+
+- 앱 상태는 logic driver가 소유하고 element 액션은 변경 요청을 메시지로 반환한다.
+- 게시한 tree의 구조는 유지한다. 다음 화면은 새 상태를 바탕으로 구성한다.
+- 배치 설정에는 논리 픽셀을 사용하고 배율은 배치 문맥에서 적용한다.
+- 기본 버튼 표시와 키보드 초점 표시는 구별한다.
+- 입력·초점·접근성은 요소의 실제 가시성과 활성 상태를 따른다.
 
 ## 예제
 

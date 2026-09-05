@@ -20,6 +20,18 @@
 #include "luil/theme/ui_theme.h"
 
 // view 무관 UI element 계층이다.
+#include "luil/ui/accessibility.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/draw_primitives.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/text_input_state.h"
+#include "luil/ui/transition.h"
+#include "luil/ui/ui_cursor.h"
+#include "luil/ui/ui_element.h"
+#include "luil/ui/ui_element_id.h"
+#include "luil/ui/ui_events.h"
+#include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_tree.h"
 
 // Win32 platform 조립이다 (창 실행, 앱 계약).
 

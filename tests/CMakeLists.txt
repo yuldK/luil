@@ -5,9 +5,14 @@ include(Catch)
 # 내장해야 embedded assets 경로가 실제와 같은 방식으로 검증된다.
 
 add_executable(luil_tests
+    accessibility_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
+    raster_probe.cpp
     text_edit_tests.cpp
+    transition_tests.cpp
+    ui_element_tests.cpp
+    ui_interaction_tests.cpp
     ui_theme_tests.cpp
     utf8_tests.cpp)
 target_include_directories(luil_tests

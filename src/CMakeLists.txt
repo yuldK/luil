@@ -71,13 +71,30 @@ luil_add_source_filter(luil_files "theme"
 # 불변 tree와 그 위에 얹히는 element를, 하는 일에 따라 나눈다.
 
 # tree 자체와 그 정체성이다. 앱으로 나가는 메시지와 보조 기술이 읽는 역할도 여기 있다.
-
+luil_add_source_filter(luil_files "ui/foundation"
+    ui/accessibility.cpp
+    "${public_headers}/ui/accessibility.h"
+    "${public_headers}/ui/app_message.h"
+    ui/ui_element.cpp
+    "${public_headers}/ui/ui_element.h"
+    "${public_headers}/ui/ui_element_id.h"
+    ui/ui_tree.cpp
+    "${public_headers}/ui/ui_tree.h")
 
 # 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
-
+luil_add_source_filter(luil_files "ui/interaction"
+    "${public_headers}/ui/text_input_state.h"
+    "${public_headers}/ui/ui_cursor.h"
+    "${public_headers}/ui/ui_events.h"
+    ui/ui_interaction.cpp
+    "${public_headers}/ui/ui_interaction.h")
 
 # element가 공유하는 그리기 조각과 배치 값이다.
-
+luil_add_source_filter(luil_files "ui/drawing"
+    ui/draw_primitives.cpp
+    "${public_headers}/ui/draw_primitives.h"
+    "${public_headers}/ui/layout_metrics.h"
+    "${public_headers}/ui/transition.h")
 
 # 자식을 담고 자리를 정하는 element다.
 
