@@ -125,6 +125,10 @@ luil_add_source_filter(luil_files "ui/controls"
     "${public_headers}/ui/button_element.h"
     ui/check_element.cpp
     "${public_headers}/ui/check_element.h"
+    ui/choice_group_element.cpp
+    "${public_headers}/ui/choice_group_element.h"
+    ui/dropdown_element.cpp
+    "${public_headers}/ui/dropdown_element.h"
     ui/slider_element.cpp
     "${public_headers}/ui/slider_element.h")
 
@@ -142,7 +146,14 @@ luil_add_source_filter(luil_files "ui/content"
 
 
 # 항목을 늘어놓고 그중 하나를 고르는 element다.
-
+luil_add_source_filter(luil_files "ui/lists"
+    ui/grouped_list_element.cpp
+    "${public_headers}/ui/grouped_list_element.h"
+    ui/list_element.cpp
+    "${public_headers}/ui/list_element.h"
+    ui/reorder_drop.h
+    ui/tab_bar_element.cpp
+    "${public_headers}/ui/tab_bar_element.h")
 
 # 다른 것 위에 떠서 잠깐 사는 element다.
 

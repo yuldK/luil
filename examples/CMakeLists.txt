@@ -24,6 +24,7 @@ luil_add_source_filter(luil_widgets_files "app"
     widgets/app.h
     widgets/main.cpp)
 luil_add_source_filter(luil_widgets_files "sections"
+    widgets/choices_section.cpp
     widgets/controls_section.cpp
     widgets/inputs_section.cpp
     widgets/status_section.cpp)
@@ -40,6 +41,12 @@ luil_add_source_filter(luil_demo_files "app"
 luil_add_source_filter(luil_demo_files "pages"
     demo/basics_page.cpp
     demo/basics_page.h
+    demo/groups_page.cpp
+    demo/groups_page.h
+    demo/lists_page.cpp
+    demo/lists_page.h
+    demo/tabs_page.cpp
+    demo/tabs_page.h
     demo/theme_page.cpp
     demo/theme_page.h)
 # 데모가 자기 안에 세우는 되돌이 HTTP 서버다. 예제가 인터넷·회사 프록시·남의 API

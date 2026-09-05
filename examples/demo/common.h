@@ -89,6 +89,9 @@ namespace demo {
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.
     inline constexpr std::u8string_view page_basics { u8"basics" };
+    inline constexpr std::u8string_view page_lists { u8"lists" };
+    inline constexpr std::u8string_view page_tabs { u8"tabs" };
+    inline constexpr std::u8string_view page_groups { u8"groups" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
 
     // --- 셸 수준 메시지 ---

@@ -58,7 +58,32 @@ namespace widgets {
                 state_.composition = composition->event;
             return;
         }
+        if (const auto* const fruit { message.get<choose_fruit_intent>() }; fruit != nullptr)
+        {
+            state_.fruit = fruit->value;
+            return;
+        }
+        if (const auto* const view { message.get<choose_view_intent>() }; view != nullptr)
+        {
+            state_.view = view->value;
+            return;
+        }
+        if (message.get<collapse_intent>() != nullptr)
+        {
+            state_.choices_collapsed = state_.choices_collapsed == false;
+            return;
+        }
         // 뒤집는 것은 앱이다. element는 어느 것인지만 말한다.
+        if (const auto* const check { message.get<check_intent>() }; check != nullptr)
+        {
+            if (check->owner == u8"wrap")
+                state_.wrap_lines = state_.wrap_lines == false;
+            else if (check->owner == u8"metric")
+                state_.use_metric = state_.use_metric == false;
+            else if (check->owner == u8"dark")
+                state_.dark_preview = state_.dark_preview == false;
+            return;
+        }
         // 다듬는 것은 앱이다. element는 변화량만 나르므로 범위 밖으로 끌면
         // 그만큼이 쌓여, 되돌아올 때 헛돈다 — 여기서 잘라 상태에 되돌려 쓴다.
         if (const auto* const slide { message.get<slide_intent>() }; slide != nullptr)
@@ -103,7 +128,7 @@ namespace widgets {
         column_config.padding = luil::edge_insets::all(24.0f);
         column_config.spacing = 20.0f;
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, column_config) };
-        for (section (*build)(const app_state&) : { &build_controls_section, &build_inputs_section, &build_status_section })
+        for (section (*build)(const app_state&) : { &build_controls_section, &build_inputs_section, &build_choices_section, &build_status_section })
         {
             section built { build(state_) };
             column->add(std::move(built.element), built.height);

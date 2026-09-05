@@ -6,6 +6,7 @@
 // 하나씩 떼어 보여 주는 진열장이다. 섹션마다 파일 하나씩이다.
 //   controls_section.cpp — 버튼(글자·아이콘)·라벨·panel·tooltip·커서
 //   inputs_section.cpp   — 한 줄 텍스트 입력 (편집·IME·붙여넣기·필터)
+//   choices_section.cpp  — 라디오·토글 묶음, 낱개 컨트롤(체크박스·라디오·스위치), 접이식 그룹
 //   status_section.cpp   — 진행률 막대, 상태 배지
 //
 // 구조는 hello와 같다: driver가 상태를 소유하고, element는 상태를 설정으로
@@ -68,11 +69,25 @@ namespace widgets {
     };
 
     // choices: 선택과 접기.
+    struct choose_fruit_intent
+    {
+        std::u8string value {};
+    };
 
+    struct choose_view_intent
+    {
+        std::u8string value {};
+    };
 
+    struct collapse_intent
+    {};
 
     // choices: 낱개 컨트롤 하나를 뒤집는다.
     // 어느 것인지는 owner가 말한다 — element는 뒤집지 않고 이 메시지만 낸다.
+    struct check_intent
+    {
+        std::u8string owner {};
+    };
 
     // status: 진행률을 끈 만큼 바꾼다 (값 단위, +가 오른쪽).
     // 범위 다듬기는 값을 가진 앱의 몫이다 — element는 변화량만 나른다.
@@ -100,7 +115,13 @@ namespace widgets {
         // 확정 글의 진실은 언제나 이 초안이고, 조합 글은 표시 상태일 뿐이다.
         luil::text::text_edit_state note {};
         std::optional<luil::text_composition_event> composition {};
+        std::u8string fruit { u8"apple" };
+        std::u8string view { u8"list" };
+        bool choices_collapsed { false };
         // 낱개 컨트롤 셋의 상태다 (체크박스·라디오·스위치).
+        bool wrap_lines { true };
+        bool use_metric { false };
+        bool dark_preview { false };
         // slider가 정하고 progress가 보여 주는 값이다 (0..1).
         // 하나의 앱 상태를 컨트롤과 표시가 나눠 본다.
         float progress { 0.3f };
@@ -119,6 +140,7 @@ namespace widgets {
     // 섹션 빌더들이다. 각 파일이 하나씩 구현한다.
     [[nodiscard]] section build_controls_section(const app_state& state);
     [[nodiscard]] section build_inputs_section(const app_state& state);
+    [[nodiscard]] section build_choices_section(const app_state& state);
     [[nodiscard]] section build_status_section(const app_state& state);
     // 토스트 오버레이는 섹션이 아니라 창 전체 위에 얹는다.
 

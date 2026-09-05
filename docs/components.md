@@ -27,6 +27,11 @@
 | 두 영역의 폭·높이 조절 | `split_handle_element` | [ui/split_handle_element.h](../include/luil/ui/split_handle_element.h) | [설명](stack-expressiveness-design.md) |
 | 사이드바 | `sidebar_element` | [ui/sidebar_element.h](../include/luil/ui/sidebar_element.h) | [설명](concepts/ui-element.md) |
 | 접이식 섹션 | `group_element` | [ui/group_element.h](../include/luil/ui/group_element.h) | [설명](tree-arrange-design.md) |
+| 선택·계층·재정렬 목록 | `list_element` | [ui/list_element.h](../include/luil/ui/list_element.h) | [설명](list-view-design.md) |
+| 그룹 머리행 목록 | `grouped_list_element` | [ui/grouped_list_element.h](../include/luil/ui/grouped_list_element.h) | [설명](list-view-design.md) |
+| 탭 선택·닫기·재정렬 | `tab_bar_element` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](focus-group-design.md) |
+| 선택 묶음 | `choice_group_element` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
+| 드롭다운 | `dropdown_element` | [ui/dropdown_element.h](../include/luil/ui/dropdown_element.h) | — |
 
 ## UI 구성 규칙
 

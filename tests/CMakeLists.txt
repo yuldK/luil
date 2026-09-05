@@ -8,7 +8,11 @@ add_executable(luil_tests
     accessibility_tests.cpp
     badge_element_tests.cpp
     check_element_tests.cpp
+    choice_group_element_tests.cpp
+    dropdown_element_tests.cpp
     group_element_tests.cpp
+    grouped_list_element_tests.cpp
+    list_element_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
     progress_element_tests.cpp
@@ -20,6 +24,7 @@ add_executable(luil_tests
     split_handle_element_tests.cpp
     stack_element_tests.cpp
     strip_element_tests.cpp
+    tab_bar_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_tests.cpp
     transition_tests.cpp
