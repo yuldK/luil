@@ -68,7 +68,7 @@ Caret은 `focused_input`과 `focus_started_at`을 사용하며 `focus_visible`�
 
 Space와 Enter는 초점 element의 `left_click` 액션을 실행할 수 있다. 텍스트 입력에 초점이 있으면 Space는 문자 입력으로 남고 Enter는 기본 버튼 경로로 흐를 수 있다.
 
-키보드 실행은 포인터 클릭과 같은 action과 `interaction_policy::on_click()` hook을 사용한다. 자세한 기본 버튼 규칙은 enter-default-design.md를 참고한다.
+키보드 실행은 포인터 클릭과 같은 action과 `interaction_policy::on_click()` hook을 사용한다. 자세한 기본 버튼 규칙은 [enter-default-design.md](enter-default-design.md)를 참고한다.
 
 ## Focus group
 
@@ -76,7 +76,7 @@ Group은 여러 항목을 Tab의 한 자리로 접고 내부 탐색을 방향키
 
 ## Modal 범위
 
-`ui_tree::focus_trap()`이 있으면 focus order와 기존 초점은 trap 안으로 제한된다. 가둠 밖의 초점은 tree 갱신 때 제거된다. Entry와 return 동작은 focus-entry-design.md를 따른다.
+`ui_tree::focus_trap()`이 있으면 focus order와 기존 초점은 trap 안으로 제한된다. 가둠 밖의 초점은 tree 갱신 때 제거된다. Entry와 return 동작은 [focus-entry-design.md](focus-entry-design.md)를 따른다.
 
 ## 여러 표면
 

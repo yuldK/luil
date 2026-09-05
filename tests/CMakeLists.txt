@@ -6,9 +6,14 @@ include(Catch)
 
 add_executable(luil_tests
     accessibility_tests.cpp
+    badge_element_tests.cpp
+    check_element_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
+    progress_element_tests.cpp
     raster_probe.cpp
+    slider_element_tests.cpp
+    text_button_element_tests.cpp
     text_edit_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp

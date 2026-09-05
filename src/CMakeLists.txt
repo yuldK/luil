@@ -100,10 +100,22 @@ luil_add_source_filter(luil_files "ui/drawing"
 
 
 # 사용자가 값을 바꾸는 element다.
-
+luil_add_source_filter(luil_files "ui/controls"
+    ui/button_element.cpp
+    "${public_headers}/ui/button_element.h"
+    ui/check_element.cpp
+    "${public_headers}/ui/check_element.h"
+    ui/slider_element.cpp
+    "${public_headers}/ui/slider_element.h")
 
 # 보여 주기만 하는 element다 (글·그림·상태 표시).
-
+luil_add_source_filter(luil_files "ui/content"
+    ui/badge_element.cpp
+    "${public_headers}/ui/badge_element.h"
+    ui/label_element.cpp
+    "${public_headers}/ui/label_element.h"
+    ui/progress_element.cpp
+    "${public_headers}/ui/progress_element.h")
 
 # 이미지 파일과 바이트를 픽셀로 읽는다 (Skia 코덱 — png·jpeg·webp·gif).
 # element가 아니라 값을 만드는 자리라 `ui/content`와 나눈다.

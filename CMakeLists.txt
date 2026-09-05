@@ -179,6 +179,9 @@ endif()
 
 add_subdirectory(src)
 # smoke test가 예제 실행 파일을 쓰므로 test 구성은 예제를 함께 만든다.
+if(LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS)
+    add_subdirectory(examples)
+endif()
 if(LUIL_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
