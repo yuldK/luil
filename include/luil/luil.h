@@ -7,6 +7,9 @@
 #include "luil/version.h"
 
 // 스레드 경계 채널이다.
+#include "luil/messaging/channel.h"
+#include "luil/messaging/envelope.h"
+#include "luil/messaging/latest_slot.h"
 
 // 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 한 줄 편집 상태 기계).
 

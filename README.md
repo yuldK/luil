@@ -19,3 +19,12 @@ Visual Studio 2022에서는 대응하는 `vs2022` preset을 사용한다.
 
 - [문서 안내](docs/README.md)
 - [컴포넌트 안내](docs/components.md)
+
+## 테스트
+
+```powershell
+git submodule update --init third_party/catch2
+cmake --preset vs2026-tests
+cmake --build --preset vs2026-tests-debug
+ctest --preset vs2026-tests-debug
+```

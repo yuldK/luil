@@ -12,3 +12,5 @@
 
 - [자산 파이프라인](concepts/asset-pipeline.md)
 - [빌드 체계](concepts/build-system.md)
+- [스레드 경계 messaging](concepts/messaging.md)
+- [스레드 모델](concepts/threading-model.md)

@@ -48,7 +48,10 @@ luil_add_source_filter(luil_files "core"
     "${public_headers}/version.h")
 
 # messaging: thread 사이로 값을 나르는 통로다 (header-only).
-
+luil_add_source_filter(luil_files "messaging"
+    "${public_headers}/messaging/channel.h"
+    "${public_headers}/messaging/envelope.h"
+    "${public_headers}/messaging/latest_slot.h")
 
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
 

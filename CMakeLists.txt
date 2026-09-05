@@ -179,7 +179,9 @@ endif()
 
 add_subdirectory(src)
 # smoke test가 예제 실행 파일을 쓰므로 test 구성은 예제를 함께 만든다.
-
+if(LUIL_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 # clang-format target은 **있으면 만든다.**
 # 그것이 없다고 라이브러리와 test를 세우지 못할 이유가 없는데, test preset이
