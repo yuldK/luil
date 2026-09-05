@@ -2,7 +2,7 @@
 
 Application은 `ui_frame::windows`에 secondary top-level window를 publish한다. 각 `ui_window`는 자체 tree, custom caption, renderer, DPI, input state, text-input session을 가진 owned tool 또는 document window를 설명한다.
 
-공개 frame 계약은 [`include/luil/win32/app_host.h`](../include/luil/win32/app_host.h)에 있다. Platform 동작은 `src/win32/secondary_surface.h`와 [`src/win32/win32_window.cpp`](../src/win32/win32_window.cpp)의 reconciliation code에 구현되어 있다.
+공개 frame 계약은 [`include/luil/win32/app_host.h`](../include/luil/win32/app_host.h)에 있다. Platform 동작은 [`src/win32/secondary_surface.h`](../src/win32/secondary_surface.h)와 [`src/win32/win32_window.cpp`](../src/win32/win32_window.cpp)의 reconciliation code에 구현되어 있다.
 
 ## Window publish
 
@@ -84,4 +84,4 @@ WebView는 `ui_webview::anchor`에 같은 id를 지정하고 secondary tree에 �
 
 ## 검증
 
-`tests/secondary_surface_tests.cpp`는 live secondary surface가 최신 caption data, minimum size, callback, tree를 적용하는지 검증한다. Window reconciliation, focus routing, popup anchoring, surface input translation, renderer fallback, text-input 동작은 대응하는 Win32 component test에서 반복 검증한다.
+[`tests/secondary_surface_tests.cpp`](../tests/secondary_surface_tests.cpp)는 live secondary surface가 최신 caption data, minimum size, callback, tree를 적용하는지 검증한다. Window reconciliation, focus routing, popup anchoring, surface input translation, renderer fallback, text-input 동작은 대응하는 Win32 component test에서 반복 검증한다.

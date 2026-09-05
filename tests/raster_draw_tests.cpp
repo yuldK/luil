@@ -1,0 +1,186 @@
+#include "raster_probe.h"
+
+#include "luil/theme/ui_theme.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/ui_element.h"
+#include "luil/ui/ui_tree.h"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <memory>
+#include <utility>
+
+namespace {
+    constexpr float raster_scale { 2.0f };
+
+    // 자식을 실제로 그리는 컨테이너다.
+    // 다른 test 파일의 `test_panel`은 `draw`가 빈 몸통이라 이 축에서는 쓸 수
+    // 없다 — 자식이 하나도 그려지지 않아 어떤 픽셀 단언도 배경색만 보게 되고,
+    // 그 test는 결함이 있든 없든 똑같이 실패한다.
+    class raster_group final : public luil::ui_element
+    {
+    public:
+        using ui_element::ui_element;
+
+        void add(std::unique_ptr<ui_element> child)
+        {
+            add_child(std::move(child));
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+        {
+            draw_children(context, interaction);
+        }
+    };
+
+    // 글자는 비워 둔다. 이 축이 보는 것은 도형과 색이라, 글꼴을 싣지 않으면
+    // OS에 무엇이 깔려 있든 같은 픽셀이 나온다.
+    [[nodiscard]] std::unique_ptr<luil::ui_element> make_button(const luil::ui_element_id& id, const luil::rect_f& slot, const bool default_button)
+    {
+        auto button { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .default_button = default_button }) };
+        button->arrange({ slot, raster_scale });
+        return button;
+    }
+} // namespace
+
+TEST_CASE("The default button is painted as a fill and the focus ring as a ring", "[ui][raster][draw]")
+{
+    // 기본 버튼이 강조색 채움으로 표시되는지 픽셀 면적을 검사한다.
+    // 같은 색의 테만 그리는 결과는 키보드 초점 표시와 구별되지 않으므로 실패해야 한다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_element_id primary { luil::application_element_kind(1), u8"primary" };
+    const luil::ui_element_id secondary { luil::application_element_kind(1), u8"secondary" };
+    // 자리는 전부 물리 픽셀이다 (raster_probe.h의 규약).
+    const luil::rect_f primary_box { 20.0f, 20.0f, 160.0f, 40.0f };
+    const luil::rect_f secondary_box { 220.0f, 20.0f, 160.0f, 40.0f };
+
+    const auto build = [&primary, &secondary, &primary_box, &secondary_box] {
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 120.0f }, raster_scale });
+        root->add(make_button(primary, primary_box, true));
+        root->add(make_button(secondary, secondary_box, false));
+        return luil::ui_tree { std::move(root) };
+    };
+
+    SECTION("기본 버튼은 상자를 채우고 보통 버튼은 채우지 않는다")
+    {
+        const luil::ui_tree tree { build() };
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+
+        // 한가운데가 강조색이면 테가 아니라 채움이다.
+        REQUIRE(frame.pixel_at(100, 40) == palette.accent);
+        // 보통 버튼은 강조색으로 채우지 않는다.
+        //  - 옅은 바탕(`input_background`)은 반투명이라 배경과 섞인 값이 나온다.
+        //    그 합성값을 적어 두면 팔레트를 손볼 때마다 test가 깨지므로, 여기서는
+        //    "강조색이 아니다"와 "그래도 무엇인가 그려졌다"만 묻는다. 뒤엣것이
+        //    없으면 자식이 아예 그려지지 않는 test도 초록으로 지나간다.
+        REQUIRE(frame.pixel_at(300, 40) != palette.accent);
+        REQUIRE(frame.pixel_at(300, 40) != palette.window_background);
+        // 상자의 절반을 훨씬 넘게 덮는다 — 테는 결코 그럴 수 없다.
+        REQUIRE(frame.count_color(primary_box, palette.accent) > 160 * 40 / 2);
+    }
+
+    // 테는 몸 밖에 선다 — 여백 1×배율 + 굵기 2×배율이라 몸에서 4물리픽셀까지
+    // 나간다. 테를 몽땅 담는 질의 영역은 상자를 그만큼 두 배 여유로 넓힌 것이다.
+    const luil::rect_f secondary_ring_box { 212.0f, 12.0f, 176.0f, 56.0f };
+
+    SECTION("초점 테는 두를 뿐 채우지 않는다")
+    {
+        const luil::ui_tree tree { build() };
+        luil::interaction_snapshot interaction {};
+        interaction.focused = secondary;
+        interaction.focus_visible = true;
+
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.draw(tree, interaction);
+
+        // 테는 몸 **밖**에 선다 (여백 1×배율, 굵기 2×배율 — 획 중심이 몸에서 2×배율).
+        REQUIRE(frame.pixel_at(216, 40) == palette.accent);
+        // 몸의 가장자리 안쪽은 테가 아니다 — 몸과 테 사이가 띄어져 띠로 읽힌다.
+        REQUIRE(frame.pixel_at(221, 40) != palette.accent);
+        // 그리고 안쪽은 그대로다. 이 한 줄이 "채움과 테가 갈렸다"의 전부다.
+        REQUIRE(frame.pixel_at(300, 40) != palette.accent);
+
+        // 넓이로도 갈린다. 같은 색이어도 덮는 양이 다르다.
+        const int filled { frame.count_color(primary_box, palette.accent) };
+        const int ringed { frame.count_color(secondary_ring_box, palette.accent) };
+        REQUIRE(ringed > 0);
+        REQUIRE(filled > ringed * 3);
+    }
+
+    SECTION("눌러서 잡은 초점에는 테가 서지 않는다")
+    {
+        const luil::ui_tree tree { build() };
+        luil::interaction_snapshot interaction {};
+        interaction.focused = secondary;
+        interaction.focus_visible = false;
+
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.draw(tree, interaction);
+        REQUIRE(frame.count_color(secondary_ring_box, palette.accent) == 0);
+    }
+}
+
+TEST_CASE("A custom-visual drag still paints the drop target highlight", "[ui][raster][drag]")
+{
+    // custom_visual이 있어도 외부 파일 드롭 대상의 강조가 그려져야 한다.
+    // 사용자 정의 끌기 그림과 놓을 자리 표시는 독립적으로 검사한다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_element_id target { luil::application_element_kind(0), u8"drop" };
+    const luil::rect_f target_box { 20.0f, 20.0f, 120.0f, 60.0f };
+    // ghost는 포인터에서 10×배율 떨어진 112×24 논리 픽셀 상자다.
+    const luil::rect_f ghost_box { 170.0f, 140.0f, 224.0f, 48.0f };
+
+    const auto build = [&target, &target_box] {
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 220.0f }, raster_scale });
+        // 대상은 아무것도 그리지 않는다 — 강조는 element가 아니라 tree가 얹는다.
+        auto drop { std::make_unique<raster_group>(target) };
+        drop->arrange({ target_box, raster_scale });
+        root->add(std::move(drop));
+        return luil::ui_tree { std::move(root) };
+    };
+
+    const auto dragging = [&target](const bool custom_visual) {
+        luil::interaction_snapshot interaction {};
+        luil::drag_visual drag {};
+        drag.payload.dragged_owner = u8"row";
+        drag.payload.custom_visual = custom_visual;
+        drag.x = 150.0f;
+        drag.y = 120.0f;
+        drag.hovered_drop_target = target;
+        interaction.drag = drag;
+        return interaction;
+    };
+
+    SECTION("스스로 그리는 끌기도 놓을 자리를 강조한다")
+    {
+        const luil::ui_tree tree { build() };
+        luil::testing::raster_frame frame { 400, 220, palette, raster_scale };
+        frame.draw(tree, dragging(true));
+
+        // 강조는 대상의 테두리에 선다 (굵기 1×배율이라 경계 안팎 한 칸씩).
+        REQUIRE(frame.pixel_at(20, 50) == palette.accent);
+        REQUIRE(frame.contains_color(target_box, palette.accent));
+        // 누르는 것은 ghost 하나다 — 그 자리에는 아무것도 서지 않는다.
+        REQUIRE(frame.count_color(ghost_box, palette.accent) == 0);
+        // 강조는 테이므로 대상 한가운데는 배경 그대로다.
+        REQUIRE(frame.pixel_at(80, 50) == palette.window_background);
+    }
+
+    SECTION("통상 끌기는 강조와 ghost를 함께 그린다")
+    {
+        const luil::ui_tree tree { build() };
+        luil::testing::raster_frame frame { 400, 220, palette, raster_scale };
+        frame.draw(tree, dragging(false));
+
+        REQUIRE(frame.pixel_at(20, 50) == palette.accent);
+        REQUIRE(frame.pixel_at(170, 164) == palette.accent);
+    }
+}

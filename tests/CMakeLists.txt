@@ -17,8 +17,10 @@ add_executable(luil_tests
     check_element_tests.cpp
     choice_group_element_tests.cpp
     dialog_elements_tests.cpp
+    dpi_scale_tests.cpp
     dropdown_element_tests.cpp
     embedded_assets_tests.cpp
+    fence_wait_tests.cpp
     font_fallback_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp
@@ -32,20 +34,24 @@ add_executable(luil_tests
     modal_host_element_tests.cpp
     progress_element_tests.cpp
     raster_probe.cpp
+    raster_draw_tests.cpp
     scroll_view_element_tests.cpp
     scrollbar_element_tests.cpp
+    secondary_surface_tests.cpp
     sidebar_element_tests.cpp
     slider_element_tests.cpp
     split_handle_element_tests.cpp
     stack_element_tests.cpp
     strip_element_tests.cpp
     surface_input_tests.cpp
+    surface_invalidate_tests.cpp
     tab_bar_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_tests.cpp
     toast_element_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
+    renderer_policy_tests.cpp
     tsf_input_tests.cpp
     ui_interaction_tests.cpp
     ui_theme_tests.cpp

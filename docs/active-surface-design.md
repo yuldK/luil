@@ -72,4 +72,4 @@ Tree 갱신 후 controller는 활성 표면의 tree에서만 `focus_trap()`을 �
 
 [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)에서 주 창과 보조 창 사이의 활성 전환, 보조 창 modal 진입, popup 논리 초점, 표면별 복귀, 닫힌 표면을 검증한다.
 
-Win32 연결은 window_surface.cpp, popup과 TSF의 표면 선택은 window_surface.h에서 확인할 수 있다.
+Win32 연결은 [window_surface.cpp](../src/win32/window_surface.cpp), popup과 TSF의 표면 선택은 [window_surface.h](../src/win32/window_surface.h)에서 확인할 수 있다.

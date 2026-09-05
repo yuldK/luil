@@ -2,7 +2,7 @@
 
 Windows 파일 drop은 내부 drag와 같은 `drag_payload`와 element `drop_target` 모델로 들어온다. platform 계층은 OLE 협상과 좌표를 맡고, UI 모델은 payload를 받을 element와 drop이 만들 액션을 정한다.
 
-element API는 [`include/luil/ui/ui_element.h`](../include/luil/ui/ui_element.h), Windows 연결은 [`src/win32/win32_drop.h`](../src/win32/win32_drop.h)와 `src/win32/window_surface.cpp`에 있다.
+element API는 [`include/luil/ui/ui_element.h`](../include/luil/ui/ui_element.h), Windows 연결은 [`src/win32/win32_drop.h`](../src/win32/win32_drop.h)와 [`src/win32/window_surface.cpp`](../src/win32/window_surface.cpp)에 있다.
 
 ## 앱 설정
 
@@ -65,4 +65,4 @@ drag event에는 표면 id가 실린다. 보조 창은 자기 tree에서 대상�
 
 ## 검증
 
-[`tests/win32_drop_tests.cpp`](../tests/win32_drop_tests.cpp)는 경로 순서와 상한, 빈 payload, COM 전달, copy-only 협상, copy를 허락하지 않은 source의 거절, element 액션, fallback을 확인한다. `tests/raster_draw_tests.cpp`는 OS가 drag visual을 소유해도 대상 강조가 남는지 확인한다.
+[`tests/win32_drop_tests.cpp`](../tests/win32_drop_tests.cpp)는 경로 순서와 상한, 빈 payload, COM 전달, copy-only 협상, copy를 허락하지 않은 source의 거절, element 액션, fallback을 확인한다. [`tests/raster_draw_tests.cpp`](../tests/raster_draw_tests.cpp)는 OS가 drag visual을 소유해도 대상 강조가 남는지 확인한다.

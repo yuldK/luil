@@ -17,6 +17,7 @@
 - [입력 pump](concepts/input-pump.md)
 - [상호작용](concepts/interaction.md)
 - [스레드 경계 messaging](concepts/messaging.md)
+- [렌더링](concepts/rendering.md)
 - [텍스트 편집](concepts/text-editing.md)
 - [텍스트 입력](concepts/text-input.md)
 - [테마와 글꼴](concepts/theming.md)
@@ -43,6 +44,7 @@
 
 ## 플랫폼과 콘텐츠
 
+- [Win32 window surface](win32-surface-design.md)
 - [여러 top-level window](multi-window-design.md)
 - [OS 파일 drag & drop](os-dragdrop-design.md)
 - [UI Automation 접근성](accessibility-design.md)
@@ -50,3 +52,4 @@
 - [이미지](image-design.md)
 - [이미지 디코딩](image-decode-design.md)
 - [움직이는 이미지](image-anim-design.md)
+- [Raster 그리기 test](raster-test-design.md)

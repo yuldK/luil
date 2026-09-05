@@ -190,11 +190,25 @@ luil_add_source_filter(luil_files "win32/host"
 
 # Skia 뒷단 선택과 frame 그리기다 (CPU·Direct3D).
 luil_add_source_filter(luil_files "win32/renderer"
+    win32/composition_device.cpp
+    win32/composition_device.h
+    win32/cpu_skia_renderer.cpp
+    win32/direct3d_skia_renderer.cpp
+    win32/fence_wait.h
     win32/renderer_policy.cpp
-    "${public_headers}/win32/renderer_policy.h")
+    "${public_headers}/win32/renderer_policy.h"
+    win32/skia_renderer.cpp
+    win32/skia_renderer.h)
 
 # 창 하나가 그리는 표면과 다시 그릴 자리 판정이다.
-
+luil_add_source_filter(luil_files "win32/surface"
+    win32/dpi_scale.h
+    win32/secondary_surface.cpp
+    win32/secondary_surface.h
+    win32/surface_invalidate.cpp
+    win32/surface_invalidate.h
+    win32/window_surface.cpp
+    win32/window_surface.h)
 
 # 캡션 표면과 비클라이언트 hit test다.
 luil_add_source_filter(luil_files "win32/caption"

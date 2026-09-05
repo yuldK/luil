@@ -40,7 +40,7 @@
 | 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
 | 이미지 파일·바이트 디코딩 | `load_image_file`, `decode_image_bytes`, `decode_animated_image_bytes` | [ui/image_decode.h](../include/luil/ui/image_decode.h) | [설명](image-decode-design.md) |
 | Windows 창과 실행 | `win32::run_application_window` | [win32/win32_window.h](../include/luil/win32/win32_window.h) | [설명](concepts/window.md) |
-| 렌더러 선택 | `renderer_mode` | [win32/renderer_policy.h](../include/luil/win32/renderer_policy.h) | — |
+| 렌더러 선택 | `renderer_mode` | [win32/renderer_policy.h](../include/luil/win32/renderer_policy.h) | [설명](concepts/rendering.md) |
 
 ## UI 구성 규칙
 
