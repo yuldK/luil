@@ -55,4 +55,5 @@
 - [이미지](image-design.md)
 - [이미지 디코딩](image-decode-design.md)
 - [움직이는 이미지](image-anim-design.md)
+- [HTTP client](http-client-design.md)
 - [Raster 그리기 test](raster-test-design.md)

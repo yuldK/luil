@@ -24,10 +24,15 @@ add_executable(luil_tests
     font_fallback_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp
+    http_body_tests.cpp
+    http_client_tests.cpp
+    http_media_type_tests.cpp
     image_animation_tests.cpp
     image_decode_tests.cpp
     image_element_tests.cpp
     list_element_tests.cpp
+    loopback_http_server.cpp
+    loopback_http_server_tests.cpp
     menu_element_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp

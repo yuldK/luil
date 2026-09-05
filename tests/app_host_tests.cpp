@@ -527,3 +527,21 @@ TEST_CASE("Cancel frees a stalled driver within the shutdown budget", "[win32][h
     REQUIRE(driver.closed.load());
     REQUIRE(elapsed < 2500ms);
 }
+
+TEST_CASE("An app message posted from a foreign thread reaches the driver", "[win32][host]")
+{
+    counting_driver driver {};
+    {
+        luil::win32::app_host host { luil::win32::app_host::config {}, driver, nullptr };
+        REQUIRE(wait_until([&] { return driver.started.load(); }));
+
+        // `post_app_message`가 UI thread 전용이 아니라는 주석을 코드로 잠근다.
+        // app inbox는 MPSC라 낯선 thread가 넣어도 되고, net 계층의 client가 자기
+        // pump thread에서 답을 정확히 이 문으로 넘긴다.
+        std::thread stranger { [&host] { host.post_app_message(luil::app_message { ping_intent { u8"stranger" } }); } };
+        stranger.join();
+
+        REQUIRE(wait_until([&] { return driver.pings.load() >= 1; }));
+    }
+    REQUIRE(driver.closed.load());
+}

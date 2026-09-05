@@ -8,6 +8,7 @@ Windows 11 x64, Visual Studio 2022 또는 2026, CMake 4.2 이상을 사용한다
 아래 명령은 저장소 루트에서 실행한다.
 
 ```powershell
+git submodule update --init third_party/nlohmann_json
 scripts\fetch_skia.ps1 -Configuration Debug,Release
 cmake --preset vs2026
 cmake --build --preset vs2026-release

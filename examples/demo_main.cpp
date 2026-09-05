@@ -11,6 +11,7 @@
 //  - 메뉴·팝업: 드롭다운과 컨텍스트 메뉴 (popup 창)         (demo/popups_page)
 //  - 창: 보조 top-level 창(도구 창) 여닫기와 그 안의 입력   (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
+//  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 테마: 테마 선호와 키 컬러                             (demo/theme_page)
 // 이 파일은 셸이다: 사이드바 내비게이션, 페이지 전환, driver·policy·delegate 조립.
 //
@@ -25,12 +26,14 @@
 #include "demo/groups_page.h"
 #include "demo/images_page.h"
 #include "demo/lists_page.h"
+#include "demo/network_page.h"
 #include "demo/popups_page.h"
 #include "demo/tabs_page.h"
 #include "demo/theme_page.h"
 #include "demo/toasts_page.h"
 #include "demo/windows_page.h"
 
+#include "luil/net/http_client.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/sidebar_element.h"
@@ -171,8 +174,75 @@ namespace demo {
                 : restore_ { restore }
             {}
 
+            // 창과 host가 준비된 직후 UI thread가 알려 주는 자리다.
+            // 배출구(`deliver`)가 답을 logic thread로 나르려면 이 포인터가 필요하다.
+            //  - `on_started`는 메시지 루프 **전**에 불리고 첫 요청은 사람이 눌러야
+            //    나가므로, 붙기 전에 답이 올 창은 없다.
+            void bind_host(luil::win32::app_host& host) noexcept
+            {
+                host_.store(&host);
+            }
+
+            // logic thread가 시작한 직후 한 번이다.
+            //
+            // **서버도 client도 여기서 선다.** driver는 smoke 모드에서도 만들어지지만
+            // (wWinMain) host를 조립하지 않는 그 모드에서는 `start()`가 불리지 않는다 —
+            // 한 frame만 그리는 길에 소켓도 thread도 서지 않는 것이 그래서다.
+            void start() override
+            {
+                server_ = std::make_unique<luil::testing::loopback_http_server>();
+                server_->set_handler(make_network_handler());
+                if (server_->port() != 0)
+                    network_.set_base_url(server_->url(""));
+                live_server_.store(server_.get());
+
+                luil::net::http_client_config config {};
+                config.user_agent = u8"luil-demo";
+                // 되돌이 주소를 두드리므로 시스템 proxy를 타지 않는다 — proxy가
+                // 127.0.0.1을 가로채면 예제의 성패를 남의 설정이 정한다.
+                config.use_system_proxy = false;
+                // **배출구는 client가 소유한 thread에서 불린다.** 여기서 하는 일은
+                // 값을 logic thread로 나르는 것 하나다 (http_client.h의 계약).
+                config.deliver = [this](luil::net::http_response response) {
+                    if (luil::win32::app_host* const host { host_.load() }; host != nullptr)
+                        host->post_app_message(luil::app_message { network_response_intent { std::move(response) } });
+                };
+                client_ = luil::net::http_client::create(std::move(config), client_error_);
+                live_client_.store(client_.get());
+            }
+
             void handle(luil::app_message message) override
             {
+                // 네트워크 메시지는 셸이 먼저 받는다 — client를 든 것이 셸이고
+                // 페이지는 그 답만 본다 (컨텍스트 메뉴 선택과 같은 자리다).
+                if (const auto* const send { message.get<network_send_intent>() }; send != nullptr)
+                {
+                    send_network_request(*send);
+                    return;
+                }
+                if (message.get<network_cancel_intent>() != nullptr)
+                {
+                    cancel_network_request();
+                    return;
+                }
+                if (const auto* const beat { message.get<network_heartbeat_intent>() }; beat != nullptr)
+                {
+                    toggle_network_heartbeat(beat->on);
+                    return;
+                }
+                if (const auto* const answer { message.get<network_response_intent>() }; answer != nullptr)
+                {
+                    // **답이 온 흐름은 표를 잊는다.** 잊지 않으면 취소가 이미 끝난
+                    // 표를 겨누고, `cancel`은 모르는 표에 아무 일도 하지 않으므로
+                    // (http_client.h) 단추가 눌리는데 아무 일도 없는 자리가 생긴다.
+                    if (answer->response.ticket == network_pending_)
+                        network_pending_ = {};
+                    if (answer->response.last && answer->response.ticket == network_heartbeat_)
+                        network_heartbeat_ = {};
+                    static_cast<void>(network_.handle(message));
+                    return;
+                }
+
                 if (message.get<close_intent>() != nullptr)
                 {
                     // 종료 저장이다.
@@ -249,12 +319,36 @@ namespace demo {
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message)
-                    || windows_.handle(message) || images_.handle(message) || theme_.handle(message))
+                    || windows_.handle(message) || images_.handle(message) || network_.handle(message) || theme_.handle(message))
                     return;
+            }
+
+            // 종료 0단계다. 여기서 접어 두면 3단계의 `stop()` 기다림이 수 ms로 줄어든다
+            // (http_client.h의 `stop` 주석과 짝이다).
+            //  - **UI thread에서 불린다.** 그래서 손잡이를 원자적으로 든다 —
+            //    소유는 logic thread의 `client_`이고 이쪽은 볼 뿐이다.
+            void cancel() noexcept override
+            {
+                if (luil::net::http_client* const client { live_client_.load() }; client != nullptr)
+                    client->cancel_all();
+            }
+
+            // 종료 3단계다 (threading-model.md). 이 줄 뒤로는 배출구가 다시
+            // 불리지 않으므로, logic thread가 빠져나가는 동안 답이 들어올 자리가 없다.
+            void stop_workers() override
+            {
+                if (luil::net::http_client* const client { live_client_.load() }; client != nullptr)
+                    client->stop();
+                if (luil::testing::loopback_http_server* const server { live_server_.load() }; server != nullptr)
+                    server->stop();
             }
 
             [[nodiscard]] std::shared_ptr<const luil::win32::ui_frame> make_frame() override
             {
+                // 네트워크 페이지는 client를 모르므로 "지금 몇 개가 날아가 있는가"도
+                // 셸이 물어 넣는다 (취소 단추가 잠기는 자리다).
+                network_.set_in_flight(client_ != nullptr ? client_->in_flight() : 0);
+
                 const float scale { metrics_.scale > 0.0f ? metrics_.scale : 1.0f };
                 const float width { metrics_.width > 0.0f ? metrics_.width : 1280.0f };
                 const float height { metrics_.height > 0.0f ? metrics_.height : 720.0f };
@@ -346,6 +440,73 @@ namespace demo {
             }
 
         private:
+            // 주소 하나를 보낸다. 표를 페이지에게 되돌려 주는 것까지가 이 함수다 —
+            // 페이지는 그 표로 자기 흐름을 알아본다 (http-client-design.md).
+            void send_network_request(const network_send_intent& request)
+            {
+                if (client_ == nullptr)
+                {
+                    network_.note_sent(request, {}, client_error_.empty() ? std::u8string { u8"The HTTP client is not available." } : client_error_);
+                    return;
+                }
+
+                luil::net::http_request outgoing {};
+                outgoing.url = request.url;
+                outgoing.method = request.post ? luil::net::http_method::post : luil::net::http_method::get;
+                if (request.post)
+                {
+                    outgoing.body = luil::net::http_text_body(u8"데모가 보낸 몸이다.");
+                    outgoing.content_type = u8"text/plain; charset=utf-8";
+                }
+                // **밖에서 오는 그림에는 상한을 건다** (http_body.h의 그 문단).
+                // 미리 보기 칸이 커질 수 있는 만큼만 잡으면 장 수가 곱해져도 안전하다.
+                outgoing.parse.image.decode = { .max_width = 1600, .max_height = 1600 };
+
+                std::u8string error {};
+                const luil::net::http_ticket ticket { client_->send(std::move(outgoing), error) };
+                network_pending_ = ticket;
+                network_.note_sent(request, ticket, error);
+            }
+
+            void cancel_network_request()
+            {
+                if (client_ == nullptr)
+                    return;
+                // 취소는 **본문 흐름 하나**를 겨눈다. `cancel_all()`은 되풀이표까지
+                // 비우므로 심장 박동이 도는 중에 느린 요청 하나를 접는 자리에서는
+                // 지나치다 — 겨눌 것이 없으면 아무 일도 하지 않는다 (단추도 잠겨 있다).
+                if (network_pending_)
+                    client_->cancel(network_pending_);
+            }
+
+            void toggle_network_heartbeat(const bool on)
+            {
+                if (on == false)
+                {
+                    // 멈추는 것도 한 번짜리와 같은 `cancel` 하나다 (3.12).
+                    if (client_ != nullptr && network_heartbeat_)
+                        client_->cancel(network_heartbeat_);
+                    network_heartbeat_ = {};
+                    network_.note_heartbeat_stopped();
+                    return;
+                }
+
+                const std::u8string url { network_.heartbeat_url() };
+                if (client_ == nullptr || url.empty())
+                {
+                    network_.note_heartbeat({}, client_ == nullptr ? client_error_ : std::u8string { u8"The loopback server is not listening." });
+                    return;
+                }
+
+                luil::net::http_request request {};
+                request.url = url;
+                std::u8string error {};
+                const luil::net::http_heartbeat schedule { .interval = std::chrono::milliseconds { 1000 }, .immediate = true, .max_rounds = 0 };
+                const luil::net::http_ticket ticket { client_->start_heartbeat(std::move(request), schedule, error) };
+                network_heartbeat_ = ticket;
+                network_.note_heartbeat(ticket, error);
+            }
+
             // 접힘이 끝났을 때의 폭이다 (전환의 목표).
             [[nodiscard]] float target_sidebar_width() const
             {
@@ -382,6 +543,7 @@ namespace demo {
                 add_page(page_popups, u8"메뉴·팝업");
                 add_page(page_windows, u8"창");
                 add_page(page_images, u8"이미지");
+                add_page(page_network, u8"네트워크");
                 add_page(page_theme, u8"테마");
                 navigation.selected = page_;
                 navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
@@ -410,6 +572,8 @@ namespace demo {
                     return windows_.build(width, height, scale);
                 if (page_ == page_images)
                     return images_.build(width, height, scale);
+                if (page_ == page_network)
+                    return network_.build(width, height, scale);
                 if (page_ == page_theme)
                     return theme_.build(width, height, scale);
                 return basics_.build(width, height, scale);
@@ -423,7 +587,25 @@ namespace demo {
             popups_page popups_ {};
             windows_page windows_ {};
             images_page images_ {};
+            network_page network_ {};
             theme_page theme_ {};
+
+            // --- 네트워크 페이지가 기대는 조각들 ---
+            // 되돌이 서버와 client는 **셸이 든다.** 페이지는 메시지만 주고받는다.
+            //  - 둘 다 `start()`(logic thread)에서 서고 소멸자(UI thread, join 뒤)에서
+            //    사라진다. 그 사이 UI thread가 만지는 자리가 둘 있어(`cancel`·
+            //    `stop_workers`) 그쪽만 원자적 손잡이로 본다 — 소유는 여전히 아래 둘이다.
+            std::unique_ptr<luil::testing::loopback_http_server> server_ {};
+            std::unique_ptr<luil::net::http_client> client_ {};
+            std::atomic<luil::testing::loopback_http_server*> live_server_ { nullptr };
+            std::atomic<luil::net::http_client*> live_client_ { nullptr };
+            // client가 서지 못한 이유다 (`create`의 규약 — 성공하면 건드리지 않는다).
+            std::u8string client_error_ {};
+            // 배출구가 답을 나를 자리다. `demo_delegate::on_started`가 채운다.
+            std::atomic<luil::win32::app_host*> host_ { nullptr };
+            // 셸이 아는 표 둘이다 (취소가 겨눌 자리 — 페이지의 것과 같은 값이다).
+            luil::net::http_ticket network_pending_ {};
+            luil::net::http_ticket network_heartbeat_ {};
 
             // 복원할 배치와 마지막으로 보고된 배치다.
             // 하나는 시작에 쓰고 하나는 종료 저장에 쓴다.
@@ -460,6 +642,8 @@ namespace demo {
                     return target_dropdown_search;
                 if (kind == kind_tool_menu_search_input)
                     return target_tool_menu_search;
+                if (kind == kind_network_url_input)
+                    return target_network_url;
                 return std::nullopt;
             }
 
@@ -491,7 +675,9 @@ namespace demo {
                 // 지금 tree에 없는 페이지의 대상은 find가 걸러 준다.
                 if (auto actions { lists_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
                     return actions;
-                return tabs_page::route_wheel(tree, event, scroll_delta);
+                if (auto actions { tabs_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+                    return actions;
+                return network_page::route_wheel(tree, event, scroll_delta);
             }
 
             [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override
@@ -557,6 +743,19 @@ namespace demo {
         class demo_delegate final : public luil::win32::window_delegate
         {
         public:
+            // driver를 아는 유일한 이유는 배출구가 쓸 host를 건네주기 위해서다.
+            // 둘 다 wWinMain의 지역이라 수명이 같다.
+            explicit demo_delegate(demo_driver& driver) noexcept
+                : driver_ { driver }
+            {}
+
+            // 창과 host가 준비된 직후다 (메시지 루프 전).
+            // HTTP client의 배출구가 답을 넣을 곳이 이 host다.
+            void on_started(luil::win32::app_host& host) override
+            {
+                driver_.bind_host(host);
+            }
+
             // 파일 dialog는 UI thread의 일이고, 고른 경로는 여느 앱 메시지다 —
             // 드롭이 내는 것과 **같은 메시지**라 logic 쪽에 갈래가 늘지 않는다.
             void execute_app_ui_command(luil::win32::app_host& host, const luil::app_ui_command& command) override
@@ -584,6 +783,9 @@ namespace demo {
                 host.post_app_message(luil::app_message { toast_request_intent { u8"받은 파일: " + path, luil::toast_severity::info } });
                 return true;
             }
+
+        private:
+            demo_driver& driver_;
         };
     } // namespace
 } // namespace demo
@@ -668,7 +870,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
 
     demo::demo_driver driver { restore };
     demo::demo_policy policy {};
-    demo::demo_delegate delegate {};
+    demo::demo_delegate delegate { driver };
 
     luil::win32::window_environment environment {};
     if (config.smoke_test == false)

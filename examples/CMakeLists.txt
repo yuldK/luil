@@ -49,6 +49,8 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/images_page.h
     demo/lists_page.cpp
     demo/lists_page.h
+    demo/network_page.cpp
+    demo/network_page.h
     demo/popups_page.cpp
     demo/popups_page.h
     demo/tabs_page.cpp
@@ -63,7 +65,9 @@ luil_add_source_filter(luil_demo_files "pages"
 # 사정에 흔들리면 예제가 아니라서 있다.
 #  - test의 도우미를 **같은 파일 그대로** 컴파일한다. 데모용으로 한 벌 더 두면
 #    언젠가 한쪽만 고쳐지고, 그 순간 예제와 test가 다른 서버를 말하게 된다.
-
+luil_add_source_filter(luil_demo_files "loopback"
+    "${LUIL_TEST_DIRECTORY}/loopback_http_server.cpp"
+    "${LUIL_TEST_DIRECTORY}/loopback_http_server.h")
 add_executable(luil_demo WIN32
     ${luil_example_resource}
     ${luil_demo_files})

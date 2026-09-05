@@ -68,3 +68,7 @@
 #include "luil/win32/win32_window.h"
 
 // HTTP 요청·답이다 (값과 몸 판정, 그리고 WinHTTP 위의 비동기 client).
+#include "luil/net/http_body.h"
+#include "luil/net/http_client.h"
+#include "luil/net/http_media_type.h"
+#include "luil/net/http_message.h"

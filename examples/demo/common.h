@@ -69,6 +69,14 @@ namespace demo {
     // 이미지 페이지의 드롭 영역과 미리 보기 칸이다.
     constexpr luil::ui_element_kind kind_image_drop { luil::application_element_kind(30) };
     constexpr luil::ui_element_kind kind_image_preview { luil::application_element_kind(31) };
+    // 네트워크 페이지다. 미리 놓은 과녁 단추들은 kind 하나를 owner로 가른다.
+    constexpr luil::ui_element_kind kind_network_target { luil::application_element_kind(32) };
+    constexpr luil::ui_element_kind kind_network_url_input { luil::application_element_kind(33) };
+    constexpr luil::ui_element_kind kind_network_send { luil::application_element_kind(34) };
+    constexpr luil::ui_element_kind kind_network_cancel { luil::application_element_kind(35) };
+    constexpr luil::ui_element_kind kind_network_beat { luil::application_element_kind(36) };
+    // 결과 칸이다 (띠·흘리는 창·그림이 owner로 갈린다).
+    constexpr luil::ui_element_kind kind_network_preview { luil::application_element_kind(37) };
 
     // --- UI thread에서 실행해야 하는 앱 명령 ---
     // 라이브러리는 이 번호를 해석하지 않고 셸의 delegate에 그대로 넘긴다
@@ -85,6 +93,7 @@ namespace demo {
     constexpr luil::text_input_target target_tool_note { static_cast<luil::text_input_target>(3) };
     constexpr luil::text_input_target target_dropdown_search { static_cast<luil::text_input_target>(4) };
     constexpr luil::text_input_target target_tool_menu_search { static_cast<luil::text_input_target>(5) };
+    constexpr luil::text_input_target target_network_url { static_cast<luil::text_input_target>(6) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.
@@ -96,6 +105,7 @@ namespace demo {
     inline constexpr std::u8string_view page_popups { u8"popups" };
     inline constexpr std::u8string_view page_windows { u8"windows" };
     inline constexpr std::u8string_view page_images { u8"images" };
+    inline constexpr std::u8string_view page_network { u8"network" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
 
     // --- 셸 수준 메시지 ---

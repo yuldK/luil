@@ -269,9 +269,17 @@ namespace luil::win32 {
         // 참이면 새 frame과 입력 처리가 더는 없다 — 창을 닫고 종료하는 것이 맞다.
         [[nodiscard]] bool faulted() const noexcept;
 
-        // UI thread 전용 진입점들이다.
+        // UI thread 전용 진입점이다 (창 프로시저가 받은 입력을 그대로 넣는다).
+        // 입력 inbox는 drop_oldest라 밀리면 오래된 것부터 버려진다.
         void post_raw_input(raw_input_event event) noexcept;
+        // **어느 thread에서 불러도 된다.** app inbox는 MPSC라 넣기가 thread-safe하고
+        // 막히지 않는다 — 라이브러리의 input thread가 이미 UI thread가 아닌 곳에서
+        // 같은 inbox에 넣고 있고, `http_client_config::deliver`도 client가 든
+        // thread에서 이 문으로 답을 넘긴다 (http-client-design.md).
+        //  - 포화하면 조용히 버려진다 (reject_newest). 유실 여부는
+        //    `app_inbox_statistics`가 답한다.
         void post_app_message(app_message message) noexcept;
+        // 아래 셋도 UI thread 전용이다 — 마지막으로 본 판을 멤버에 들고 있어서다.
         // 마지막으로 게시된 frame이다.
         // 새 것이 없으면 이전 값이다.
         [[nodiscard]] std::shared_ptr<const ui_frame> acquire_frame();

@@ -31,6 +31,7 @@ function(luil_generate_third_party_notices output_file)
     # luil 자신이 싣는 것이다. 어느 갈래에서나 같다.
     set(luil_notice_entries
         # HTTP 응답의 JSON 본문 타입이다. header-only라 실행 파일에 그대로 실린다.
+        "nlohmann/json|${LUIL_NLOHMANN_JSON_ROOT}/LICENSE.MIT"
         # 웹뷰 로더다. 정적으로 링크하므로 그 코드가 실행 파일에 들어가고,
         # 라이선스(BSD 3-Clause 형태)가 바이너리 재배포에 고지 재현을 요구한다.
         #  - 패키지의 NOTICE.txt는 넣지 않는다. 그것은 WinRT 투영 **도구**가 쓰는

@@ -263,7 +263,23 @@ luil_add_source_filter(luil_files "win32/support"
 #  - `win32` 안이 아닌 이유는 그 계층의 정체가 **창**이어서다 (HWND·메시지 루프·
 #    COM STA·렌더러·IME 어느 것도 HTTP에 없다). `win32` **위**인 이유는 의존
 #    방향이다 — utf8 변환과 오류 글을 그 계층에서 가져다 쓴다.
-
+luil_add_source_filter(luil_files "net"
+    net/http_body.cpp
+    "${public_headers}/net/http_body.h"
+    net/http_client.cpp
+    "${public_headers}/net/http_client.h"
+    net/http_media_type.cpp
+    "${public_headers}/net/http_media_type.h"
+    net/http_message.cpp
+    "${public_headers}/net/http_message.h"
+    net/http_request_context.cpp
+    net/http_request_context.h
+    net/http_text_transcode.cpp
+    net/http_text_transcode.h
+    net/http_url.cpp
+    net/http_url.h
+    net/winhttp_error.cpp
+    net/winhttp_error.h)
 
 # 라이브러리 전체가 하나의 static library다.
 # 계층(messaging → text → theme → ui → win32 → net)은 디렉터리
@@ -288,6 +304,7 @@ target_link_libraries(luil
         "$<BUILD_INTERFACE:luil_skia>"
         # JSON 본문 타입이다 (header-only). Skia와 같은 이유로 빌드 트리에서만
         # 여기서 잇고, 설치본은 헤더 사본을 include/에 함께 둔다 (cmake/install.cmake).
+        "$<BUILD_INTERFACE:luil_nlohmann_json>"
         # 웹뷰가 붙는 SDK다 (헤더 둘 + 정적 로더). Skia와 같은 이유로 빌드
         # 트리에서만 여기서 잇는다 — 감싸지 않으면 install(EXPORT)가 "export set에
         # 없는 target"으로 세운다. include 경로는 그 target 안에만 있어야 한다:
@@ -310,6 +327,7 @@ target_link_libraries(luil
         uiautomationcore
         user32
         # net 계층의 HTTP client다.
+        winhttp
     PRIVATE
         luil_options)
 
