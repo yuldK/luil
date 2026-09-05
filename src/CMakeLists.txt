@@ -136,6 +136,8 @@ luil_add_source_filter(luil_files "ui/controls"
 luil_add_source_filter(luil_files "ui/content"
     ui/badge_element.cpp
     "${public_headers}/ui/badge_element.h"
+    ui/image_element.cpp
+    "${public_headers}/ui/image_element.h"
     ui/label_element.cpp
     "${public_headers}/ui/label_element.h"
     ui/progress_element.cpp
@@ -143,7 +145,9 @@ luil_add_source_filter(luil_files "ui/content"
 
 # 이미지 파일과 바이트를 픽셀로 읽는다 (Skia 코덱 — png·jpeg·webp·gif).
 # element가 아니라 값을 만드는 자리라 `ui/content`와 나눈다.
-
+luil_add_source_filter(luil_files "ui/image"
+    ui/image_decode.cpp
+    "${public_headers}/ui/image_decode.h")
 
 # 항목을 늘어놓고 그중 하나를 고르는 element다.
 luil_add_source_filter(luil_files "ui/lists"

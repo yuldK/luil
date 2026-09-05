@@ -37,6 +37,8 @@
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |
 | 창 캡션 | `caption_element` | [ui/caption_element.h](../include/luil/ui/caption_element.h) | [설명](caption-button-design.md) |
 | 알림과 만료 | `toast_stack_element` | [ui/toast_element.h](../include/luil/ui/toast_element.h) | [설명](concepts/ui-element.md) |
+| 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
+| 이미지 파일·바이트 디코딩 | `load_image_file`, `decode_image_bytes`, `decode_animated_image_bytes` | [ui/image_decode.h](../include/luil/ui/image_decode.h) | [설명](image-decode-design.md) |
 
 ## UI 구성 규칙
 

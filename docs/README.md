@@ -38,3 +38,9 @@
 - [키 이벤트의 표면 라우팅](key-surface-routing-design.md)
 - [Modal dialog host](modal-dialog-design.md)
 - [Caption 버튼 구성](caption-button-design.md)
+
+## 플랫폼과 콘텐츠
+
+- [이미지](image-design.md)
+- [이미지 디코딩](image-decode-design.md)
+- [움직이는 이미지](image-anim-design.md)

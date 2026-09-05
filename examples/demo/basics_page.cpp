@@ -4,9 +4,15 @@
 #include "luil/ui/button_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/image_decode.h"
 #include "luil/ui/modal_host_element.h"
 
+#include <windows.h>
 
+#include <array>
+#include <chrono>
+#include <filesystem>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -37,9 +43,33 @@ namespace demo {
         // 실행 파일이 있는 디렉터리다. 자산은 그 옆에 선다.
         // 작업 디렉터리로 찾으면 바로 가기·디버거·탐색기 중 무엇으로 띄웠느냐에
         // 따라 자리가 달라진다.
+        [[nodiscard]] std::filesystem::path module_directory()
+        {
+            std::array<wchar_t, MAX_PATH> buffer {};
+            const DWORD length { GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size())) };
+            if (length == 0 || length >= buffer.size())
+                return {};
+            return std::filesystem::path { std::wstring { buffer.data(), length } }.parent_path();
+        }
 
         // 가로는 색상, 세로는 밝기가 변하는 견본 이미지를 파일에서 읽는다.
         // fit 설정에 따른 여백과 잘림의 차이를 확인할 수 있다.
+        [[nodiscard]] luil::ui_image load_demo_picture(std::u8string& error)
+        {
+            const std::filesystem::path directory { module_directory() };
+            if (directory.empty())
+            {
+                error = u8"Failed to locate the executable directory.";
+                return {};
+            }
+
+            // 그림 칸이 220 논리 픽셀이라 배율 2까지 쳐도 440이면 넉넉하다 —
+            // 480×240 파일이 440×220으로 줄어 들어온다.
+            //  - 배율이 바뀌면 다시 읽는 것이 더 옳지만 그 판단은 앱의 것이고,
+            //    이 데모는 한 번 읽는 쪽을 보인다.
+            const std::filesystem::path path { directory / L"assets" / L"gradient.png" };
+            return luil::load_image_file(path.u8string(), { .max_width = 440, .max_height = 440 }, error);
+        }
 
         // 움직이는 견본 하나를 읽는다 (실행 파일 옆 `assets/`의 webp·gif).
         //  - **정지 그림과 같은 문을 쓰지 않는다.** 정지 쪽 문은 여러 장이 든
@@ -47,6 +77,16 @@ namespace demo {
         //  - 상한은 **들고 있을** 크기를 정한다. 칸이 96 논리 픽셀 높이라 배율
         //    2까지 쳐도 200이면 넉넉하고, 움직이는 그림에서는 그 값에 장 수가
         //    곱해진다 — 상한 하나가 여기서 열둘·열여섯 번 값을 낸다.
+        [[nodiscard]] luil::ui_animated_image load_demo_film(const std::filesystem::path& directory, const std::wstring_view name, std::u8string& error)
+        {
+            if (directory.empty())
+            {
+                error = u8"Failed to locate the executable directory.";
+                return {};
+            }
+            const std::filesystem::path path { directory / L"assets" / name };
+            return luil::load_animated_image_file(path.u8string(), { .max_height = 200 }, error);
+        }
     } // namespace
 
     bool basics_page::handle(const luil::app_message& message)
@@ -59,6 +99,11 @@ namespace demo {
         if (message.get<counter_reset_intent>() != nullptr)
         {
             clicks_ = 0;
+            return true;
+        }
+        if (message.get<playback_toggle_intent>() != nullptr)
+        {
+            toggle_playback();
             return true;
         }
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
@@ -135,7 +180,32 @@ namespace demo {
         dialog_open_ = open;
     }
 
+    void basics_page::read_films()
+    {
+        films_read_ = true;
+        const std::filesystem::path directory { module_directory() };
+        sweep_ = load_demo_film(directory, L"sweep.webp", film_error_);
+        spinner_ = load_demo_film(directory, L"spinner.gif", film_error_);
+        // **값을 채우는 것이 곧 재생의 시작이다** (image_element.h). 읽은 것이
+        // 하나도 없으면 시작하지 않는다 — 그러면 element가 다음 장을 예고하지
+        // 않아 창이 그대로 잠잔다.
+        if (sweep_.valid() || spinner_.valid())
+            playback_.started = std::chrono::steady_clock::now();
+    }
 
+    void basics_page::toggle_playback()
+    {
+        const std::chrono::steady_clock::time_point now { std::chrono::steady_clock::now() };
+        // 멈추는 것은 시각 하나를 적는 일이라 라이브러리에 함수가 없다. 산수가
+        // 있는 쪽은 잇는 쪽뿐이다 — 멈춰 있던 만큼 시작 시각을 밀어 **선 자리에서**
+        // 이어 간다 (그러지 않으면 다시 돌리는 순간 멈춰 있던 만큼 건너뛴다).
+        if (playback_.paused_at.has_value())
+        {
+            playback_ = luil::playback_resumed(playback_, now);
+            return;
+        }
+        playback_.paused_at = now;
+    }
 
     luil::text_input_view basics_page::make_input_view(const luil::text::text_edit_state& state, const luil::text_input_target target) const
     {
@@ -147,6 +217,20 @@ namespace demo {
         static_cast<void>(width);
         static_cast<void>(height);
         static_cast<void>(scale);
+        // 그림은 한 번만 읽는다.
+        // frame마다 읽으면 디스크와 디코딩이 매 frame 선다 (image-decode-design.md).
+        //  - `valid()`로 물으면 **읽지 못한** 파일을 frame마다 다시 열어 본다.
+        //    실패도 한 번이어야 하므로 읽었다는 사실을 따로 기억한다.
+        if (picture_read_ == false)
+        {
+            picture_read_ = true;
+            picture_ = load_demo_picture(picture_error_);
+        }
+        // 움직이는 그림도 같은 규칙으로 한 번만 읽는다. 한 편이 장 수만큼의
+        // 디코딩이라, frame마다 읽으면 그 값이 장 수만큼 곱절로 든다.
+        if (films_read_ == false)
+            read_films();
+
         luil::stack_config config {};
         config.padding = luil::edge_insets::all(24.0f);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"basics" }, config) };
@@ -154,6 +238,22 @@ namespace demo {
         column->add_gap(16.0f);
         column->add(make_input_row(), 50.0f);
         column->add_gap(22.0f);
+        column->add(make_image_row(), 78.0f);
+        column->add_gap(4.0f);
+        column->add(make_picture_status(), 16.0f);
+        column->add_gap(16.0f);
+        column->add(make_film_row(), 118.0f);
+        column->add_gap(4.0f);
+        column->add(make_film_status(), 16.0f);
+        // 멈출 것이 없으면 단추도 두지 않는다 — 라이브러리가 없는 것을 두지 않는
+        // 것과 같은 규칙이고, 눌러도 아무 일도 없는 단추가 화면에서 고장으로
+        // 보이는 자리를 여기서 자른다.
+        if (sweep_.valid() || spinner_.valid())
+        {
+            column->add_gap(8.0f);
+            column->add(make_playback_button(), { .length = 26.0f, .cross_length = 132.0f });
+        }
+        column->add_gap(12.0f);
         column->add(make_label(luil::ui_element_id { kind_text, u8"basics-hint" }, u8"확인 dialog는 캡션을 잡아 옮기고 Esc로 닫는다.", 11.0f, luil::label_color_role::dim), 18.0f);
         column->add_gap(10.0f);
 
@@ -185,12 +285,97 @@ namespace demo {
         return row;
     }
 
+    std::unique_ptr<luil::stack_element> basics_page::make_image_row() const
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 24.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"pictures" }, config) };
+        row->add(make_labeled_picture(u8"contain", u8"이미지 (contain — 남는 자리는 배경)", luil::image_fit::contain, u8"그러데이션 견본, 전부 보이게"), 220.0f);
+        row->add(make_labeled_picture(u8"cover", u8"이미지 (cover — 넘친 만큼 잘림)", luil::image_fit::cover, u8"그러데이션 견본, 칸을 덮게"), 220.0f);
+        return row;
+    }
 
+    std::unique_ptr<luil::label_element> basics_page::make_picture_status() const
+    {
+        // 읽지 못한 파일은 조용히 비지 않는다 — 이유가 화면에 남는다.
+        // 라이브러리가 내는 글은 진단용 영문이고, 사람에게 보일 문장은 앱이 짓는다.
+        if (picture_.valid() == false)
+            return make_label(luil::ui_element_id { kind_text, u8"picture-status" }, u8"그림을 읽지 못했다 — " + picture_error_, 11.0f, luil::label_color_role::primary);
+        return make_label(luil::ui_element_id { kind_text, u8"picture-status" },
+            u8"assets/gradient.png을 " + to_u8(picture_.width()) + u8"×" + to_u8(picture_.height()) + u8" 픽셀로 읽었다 (원본 480×240).", 11.0f,
+            luil::label_color_role::dim);
+    }
 
+    std::unique_ptr<luil::stack_element> basics_page::make_labeled_picture(std::u8string owner, std::u8string label, const luil::image_fit fit, std::u8string description) const
+    {
+        luil::stack_config config {};
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"picture-" + owner }, config) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"picture-" + owner }, std::move(label), 11.0f, luil::label_color_role::dim), 18.0f);
+        column->add_gap(4.0f);
+        column->add(std::make_unique<luil::image_element>(luil::ui_element_id { kind_picture, std::move(owner) },
+                        luil::image_config { .image = picture_, .fit = fit, .description = std::move(description) }),
+            56.0f);
+        return column;
+    }
 
+    std::unique_ptr<luil::stack_element> basics_page::make_film_row() const
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 24.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"films" }, config) };
+        // 형식을 둘 다 세운다 — 코덱이 우리 것이 된 자리가 한 화면에 함께 선다.
+        // gif 쪽은 배경이 비쳐, 테마를 바꾸면 같은 파일이 다른 바탕 위에서 돈다.
+        row->add(make_labeled_film(u8"sweep", u8"움직이는 webp (16장 · 80 ms)", sweep_, u8"띠 하나가 왼쪽에서 오른쪽으로 훑고 지나가는 그러데이션"), 220.0f);
+        row->add(make_labeled_film(u8"spinner", u8"움직이는 gif (12장 · 90 ms)", spinner_, u8"점 열둘이 둥글게 놓이고 밝은 점 하나가 시계 방향으로 도는 표시 — 배경이 비친다"), 160.0f);
+        row->add_flexible_gap();
+        return row;
+    }
 
+    std::unique_ptr<luil::label_element> basics_page::make_film_status() const
+    {
+        // 정지 그림과 같은 규칙이다 — 읽지 못한 파일은 조용히 비지 않는다.
+        if (sweep_.valid() == false || spinner_.valid() == false)
+            return make_label(luil::ui_element_id { kind_text, u8"film-status" }, u8"움직이는 그림을 읽지 못했다 — " + film_error_, 11.0f, luil::label_color_role::primary);
+        return make_label(luil::ui_element_id { kind_text, u8"film-status" },
+            u8"assets/sweep.webp를 " + to_u8(sweep_.width()) + u8"×" + to_u8(sweep_.height()) + u8" " + to_u8(static_cast<int>(sweep_.frame_count())) + u8"장으로, assets/spinner.gif를 "
+                + to_u8(spinner_.width()) + u8"×" + to_u8(spinner_.height()) + u8" " + to_u8(static_cast<int>(spinner_.frame_count()))
+                + u8"장으로 읽었다. 둘이 한 재생 시계를 타고, 창은 장이 바뀌는 경계에만 깨어난다.",
+            11.0f, luil::label_color_role::dim);
+    }
 
+    std::unique_ptr<luil::stack_element> basics_page::make_labeled_film(std::u8string owner, std::u8string label, const luil::ui_animated_image& film, std::u8string description) const
+    {
+        luil::stack_config config {};
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"film-" + owner }, config) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"film-" + owner }, std::move(label), 11.0f, luil::label_color_role::dim), 18.0f);
+        column->add_gap(4.0f);
+        // element는 재생 시계를 들지 않는다. frame마다 이 config에 실리는 것이
+        // 시계이고, 어느 장인지는 그리는 시각에서 매번 새로 나온다
+        // (image_element.h). 그래서 필름 둘에 같은 시계를 실으면 둘이 함께 돌고
+        // 함께 선다 — 멈춤 단추가 하나로 족한 이유다.
+        //  - 설명은 보조 기술이 읽는다. 움직인다는 것은 이름이 아니라 그림의
+        //    성질이라 그 글에 담는다 (image-design.md).
+        column->add(std::make_unique<luil::image_element>(luil::ui_element_id { kind_picture, std::move(owner) },
+                        luil::image_config { .description = std::move(description), .animation = film, .playback = playback_ }),
+            96.0f);
+        return column;
+    }
 
+    std::unique_ptr<luil::ui_element> basics_page::make_playback_button() const
+    {
+        // 단추의 글은 **누르면 무엇이 되는지**를 말한다. 지금 상태("멈춤")를
+        // 적으면 사람이 그것을 뒤집어 읽어야 한다.
+        const bool paused { playback_.paused_at.has_value() };
+        luil::text_button_config button_config {};
+        button_config.text = paused ? u8"이어서 돌린다" : u8"잠시 멈춘다";
+        auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_playback_toggle }, std::move(button_config)) };
+        button->set_tooltip(paused ? u8"멈춘 자리에서 이어 간다" : u8"보이는 장에 멈춘다");
+        button->set_cursor(luil::ui_cursor::hand);
+        button->set_action(luil::ui_trigger::left_click, luil::make_message_action(playback_toggle_intent {}));
+        return button;
+    }
 
     std::unique_ptr<luil::stack_element> basics_page::make_input_row() const
     {

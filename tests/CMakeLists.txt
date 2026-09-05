@@ -13,6 +13,9 @@ add_executable(luil_tests
     dropdown_element_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp
+    image_animation_tests.cpp
+    image_decode_tests.cpp
+    image_element_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
     messaging_channel_tests.cpp

@@ -70,7 +70,7 @@ scripts\fetch_skia.ps1 -Configuration Debug,Release
 `LUIL_SKIA_REQUIRED_ARGUMENTS`가 정의한다. 여기에는 Direct3D,
 JPEG·WebP·GIF·Rust PNG 디코딩 설정이 포함된다.
 현재 PNG 경로는 APNG를 읽을 수 있는 Rust 코덱을 사용한다.
-이미지 API가 지원하는 형식과 제한은 이미지 디코딩을 본다.
+이미지 API가 지원하는 형식과 제한은 [이미지 디코딩](image-decode-design.md)을 본다.
 
 검사는 configure 대상 구성에 적용된다. Release만 구성하는 소비자에게는
 Debug 산출물이 필요하지 않다. Visual Studio 같은 다중 구성 generator에서는
