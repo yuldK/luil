@@ -1,0 +1,10 @@
+#pragma once
+
+// CMake의 project(luil VERSION ...)에서 configure 시점에 생성된다.
+// 손으로 고치지 않는다 — 근원은 최상위 CMakeLists.txt 하나다.
+// clang-format off
+#define LUIL_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define LUIL_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define LUIL_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define LUIL_VERSION_STRING "@PROJECT_VERSION@"
+// clang-format on

@@ -1,0 +1,186 @@
+# Codicons C++ 매핑은 파일 하나를 만드는 custom command다.
+# 결과 header를 라이브러리 소스에 넣어 두면 빌드 순서가 저절로 맞으므로 별도 target을 두지 않는다.
+add_custom_command(
+    OUTPUT "${LUIL_GENERATED_CODICONS}"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT_FILE=${LUIL_ASSET_DIRECTORY}/mapping.json"
+        "-DOUTPUT_FILE=${LUIL_GENERATED_CODICONS}"
+        -P "${LUIL_CMAKE_DIRECTORY}/generate_codicons.cmake"
+    DEPENDS
+        "${LUIL_ASSET_DIRECTORY}/mapping.json"
+        "${LUIL_CMAKE_DIRECTORY}/generate_codicons.cmake"
+    COMMENT "Generating the Codicons C++ mapping"
+    VERBATIM)
+
+# 키 컬러 표도 같은 방식이다.
+# JSON이 원본이고 형식 검증은 생성 script가 한다.
+add_custom_command(
+    OUTPUT "${LUIL_GENERATED_ACCENTS}"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT_FILE=${LUIL_ACCENT_CATALOG}"
+        "-DOUTPUT_FILE=${LUIL_GENERATED_ACCENTS}"
+        -P "${LUIL_CMAKE_DIRECTORY}/generate_accents.cmake"
+    DEPENDS
+        "${LUIL_ACCENT_CATALOG}"
+        "${LUIL_CMAKE_DIRECTORY}/generate_accents.cmake"
+    COMMENT "Generating the accent catalog"
+    VERBATIM)
+
+# 파일은 IDE 필터 단위로 적고, 그렇게 모인 것이 곧 라이브러리의 source 목록이다
+# (luil_add_source_filter, cmake/macro.cmake).
+#
+# 묶음은 **하는 일** 단위다. 낱개 element마다 나누면 필터가 파일 목록을 한 번 더
+# 적은 것에 지나지 않아 아무것도 줄여 주지 않는다.
+# 한 묶음 안에는 구현(.cpp)과 그 header(.h)를 함께 둔다 — 공개 헤더가 include/에,
+# 구현이 src/에 있어 디렉터리로는 갈라지지만, 고칠 때 여는 파일은 한자리에 모인다.
+set(public_headers "${LUIL_INCLUDE_DIRECTORY}/luil")
+set(luil_files)
+
+# 생성 파일이다. source tree 밖에 있어 어느 계층에도 속하지 않는다.
+luil_add_source_filter(luil_files "generated"
+    "${LUIL_GENERATED_CODICONS}"
+    "${LUIL_GENERATED_ACCENTS}")
+
+# core: 소비자가 처음 여는 우산 헤더와 판번이다.
+luil_add_source_filter(luil_files "core"
+    luil/version.cpp
+    "${public_headers}/luil.h"
+    "${public_headers}/version.h")
+
+# messaging: thread 사이로 값을 나르는 통로다 (header-only).
+
+
+# text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
+
+
+# theme: 색·글꼴 선호 값과 팔레트 합성이다.
+
+
+# ui: view 무관 UI element 계층이다.
+# 불변 tree와 그 위에 얹히는 element를, 하는 일에 따라 나눈다.
+
+# tree 자체와 그 정체성이다. 앱으로 나가는 메시지와 보조 기술이 읽는 역할도 여기 있다.
+
+
+# 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
+
+
+# element가 공유하는 그리기 조각과 배치 값이다.
+
+
+# 자식을 담고 자리를 정하는 element다.
+
+
+# 사용자가 값을 바꾸는 element다.
+
+
+# 보여 주기만 하는 element다 (글·그림·상태 표시).
+
+
+# 이미지 파일과 바이트를 픽셀로 읽는다 (Skia 코덱 — png·jpeg·webp·gif).
+# element가 아니라 값을 만드는 자리라 `ui/content`와 나눈다.
+
+
+# 항목을 늘어놓고 그중 하나를 고르는 element다.
+
+
+# 다른 것 위에 떠서 잠깐 사는 element다.
+
+
+# 직접 그리는 창 캡션이다. 치수는 win32의 비클라이언트 hit test와 나눠 쓴다.
+
+
+# win32: Win32와 Skia 조립이다.
+# 여기 남은 header는 비공개 구현 세부이고, 묶음은 계층 안의 관심사로 나눈다.
+
+# 앱 runtime과 창 하나의 수명, 그리고 한 frame이 나르는 것이다.
+
+
+# Skia 뒷단 선택과 frame 그리기다 (CPU·Direct3D).
+
+
+# 창 하나가 그리는 표면과 다시 그릴 자리 판정이다.
+
+
+# 캡션 표면과 비클라이언트 hit test다.
+
+
+# 떠 있는 창의 자리·대조·닫힘이다 (메뉴·드롭다운).
+
+
+# OS에서 들어오는 것이다 (포인터·휠 번역, IME, 클립보드, 파일 끌어놓기).
+
+
+# 글꼴이다. 시스템 글꼴 열거와, 실행 파일 resource에 박힌 codicon 폰트·고지다.
+
+
+# 보조 기술이 읽는 UIA provider다.
+
+
+# 계층 안에서 두루 쓰는 것이다 (UTF-8 변환, HRESULT 오류 글).
+
+
+# net: HTTP 요청과 답이다.
+# 어휘와 몸 판정은 창도 소켓도 모르는 값·순수 함수라 test가 서버 없이 규약 전부를
+# 잠그고, 그 뒤의 WinHTTP 조립이 같은 묶음에 있다.
+#  - `win32` 안이 아닌 이유는 그 계층의 정체가 **창**이어서다 (HWND·메시지 루프·
+#    COM STA·렌더러·IME 어느 것도 HTTP에 없다). `win32` **위**인 이유는 의존
+#    방향이다 — utf8 변환과 오류 글을 그 계층에서 가져다 쓴다.
+
+
+# 라이브러리 전체가 하나의 static library다.
+# 계층(messaging → text → theme → ui → win32 → net)은 디렉터리
+# 구조와 코드 리뷰로 지키며, target 경계로는 나누지 않는다.
+add_library(luil STATIC ${luil_files})
+add_library(luil::luil ALIAS luil)
+target_include_directories(luil
+    PUBLIC
+        "$<BUILD_INTERFACE:${LUIL_INCLUDE_DIRECTORY}>"
+        "$<BUILD_INTERFACE:${LUIL_GENERATED_INCLUDE_DIRECTORY}>"
+        "$<INSTALL_INTERFACE:include>"
+    PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}")
+target_link_libraries(luil
+    PUBLIC
+        # 소비자 요건(C++20·/utf-8)만 전파한다.
+        # /W4 /WX 같은 내부 규율은 PRIVATE의 luil_options에 있다.
+        luil_usage
+        # Skia는 imported target이라 export할 수 없다.
+        # 빌드 트리에서만 여기서 잇고, 설치본은 package config가
+        # 같은 검사(cmake/dependencies/skia.cmake)로 다시 만들어 잇는다.
+        "$<BUILD_INTERFACE:luil_skia>"
+        # JSON 본문 타입이다 (header-only). Skia와 같은 이유로 빌드 트리에서만
+        # 여기서 잇고, 설치본은 헤더 사본을 include/에 함께 둔다 (cmake/install.cmake).
+        # 웹뷰가 붙는 SDK다 (헤더 둘 + 정적 로더). Skia와 같은 이유로 빌드
+        # 트리에서만 여기서 잇는다 — 감싸지 않으면 install(EXPORT)가 "export set에
+        # 없는 target"으로 세운다. include 경로는 그 target 안에만 있어야 한다:
+        # luil에 직접 걸면 **경고 하나 없이** 설치본에 빌드 트리 절대 경로가 박힌다.
+        # win32 계층이 쓰는 Windows 시스템 라이브러리다.
+        # static library라 최종 링크는 소비자 몫이므로 PUBLIC으로 나른다.
+        # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.
+        d3d12
+        # Direct3D 제시가 창이 아니라 합성에 붙는다
+        # (webview-composition-design.md).
+        dcomp
+        dwrite
+        dwmapi
+        dxgi
+        gdi32
+        imm32
+        ole32
+        oleaut32
+        shell32
+        uiautomationcore
+        user32
+        # net 계층의 HTTP client다.
+    PRIVATE
+        luil_options)
+
+# 자산 checksum 검증은 빌드마다 한 번 실행한다.
+# 별도 target 대신 라이브러리의 빌드 전 단계에 붙여 솔루션 구성 요소를 늘리지 않는다.
+add_custom_command(TARGET luil PRE_BUILD
+    COMMAND "${CMAKE_COMMAND}"
+        "-DASSET_DIRECTORY=${LUIL_ASSET_DIRECTORY}"
+        -P "${LUIL_CMAKE_DIRECTORY}/verify_codicons.cmake"
+    COMMENT "Verifying Codicons checksums"
+    VERBATIM)
