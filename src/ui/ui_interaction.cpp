@@ -987,11 +987,14 @@ namespace luil {
 
     interaction_controller::menu_location interaction_controller::find_menu(const menu_kinds& kinds) const
     {
-        const ui_element_id container { kinds.container };
-        if (tree_ != nullptr && tree_->find(container) != nullptr)
+        // kind로만 찾는다. `menu_config::owner`를 채운 메뉴는 root id가
+        // `{ menu, owner }`라 owner 없는 id로는 닿지 않는다 — 정책이 주는 것은
+        // kind 짝이지 owner가 아니므로, owner가 무엇이든 그 kind가 서 있으면 열린 것이다.
+        const auto holds_menu = [&kinds](const ui_tree& tree) { return tree.ids_of_kind(kinds.container).empty() == false; };
+        if (tree_ != nullptr && holds_menu(*tree_))
             return { tree_.get(), {} };
         for (const auto& [id, tree] : surface_trees_)
-            if (tree != nullptr && tree->find(container) != nullptr)
+            if (tree != nullptr && holds_menu(*tree))
                 return { tree.get(), id };
         return {};
     }

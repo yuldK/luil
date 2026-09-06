@@ -98,6 +98,7 @@ namespace luil {
 
     // 컨텍스트 메뉴의 키보드 탐색에 필요한 kind 짝이다.
     // container가 tree에 있으면 메뉴가 열린 것으로 보고 ↑/↓/Enter/Esc를 메뉴가 가져간다.
+    //  - owner는 보지 않는다. `menu_config::owner`로 구분한 메뉴도 같은 kind면 찾는다.
     struct menu_kinds
     {
         ui_element_kind container { ui_element_kind::none };

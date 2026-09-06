@@ -13,7 +13,7 @@ include("${LUIL_DEPENDENCIES_DIRECTORY}/webview2.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/catch2.cmake")
 
 function(luil_find_dependencies)
-    cmake_parse_arguments(PARSE_ARGV 0 arguments "" "BUILD_TESTS" "")
+    cmake_parse_arguments(PARSE_ARGV 0 arguments "" "BUILD_TESTS;ENABLE_WEBVIEW" "")
     if(arguments_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR
             "Unknown arguments passed to luil_find_dependencies: "
@@ -23,9 +23,12 @@ function(luil_find_dependencies)
     luil_find_skia()
     # JSON 본문이 공개 API로 나가므로 라이브러리 구성마다 요구한다.
     luil_find_nlohmann_json()
-    # 웹뷰가 붙는 SDK다. 같은 이유로 라이브러리 구성마다 요구한다 —
-    # 없으면 웹뷰만 서지 않는 빌드가 생긴다 (CMakeLists.txt의 LUIL_WEBVIEW2_ROOT).
-    luil_find_webview2()
+    # 웹뷰가 붙는 SDK다. 웹뷰를 켠 구성에서 요구한다 — 조용히 빠지는 길은 없고,
+    # 빼는 것은 LUIL_ENABLE_WEBVIEW=OFF라는 명시적 선택뿐이다
+    # (CMakeLists.txt의 LUIL_WEBVIEW2_ROOT).
+    if(NOT DEFINED arguments_ENABLE_WEBVIEW OR arguments_ENABLE_WEBVIEW)
+        luil_find_webview2()
+    endif()
 
     # Catch2는 test 구성에서만 요구한다.
     # 앱만 빌드하는 환경에서는 submodule이 초기화되어 있지 않아도 된다.

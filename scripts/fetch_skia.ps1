@@ -11,7 +11,8 @@
 # 사내 파일 서버든 이 스크립트는 구별하지 않는다.
 #
 # 이미 내려받아 둔 zip이 있으면 -ArchiveDirectory로 가리킨다. 그때는 네트워크를
-# 전혀 쓰지 않는다.
+# 전혀 쓰지 않는다. -Offline을 주면 zip이 없어도 받으러 가지 않고 실패한다 —
+# 시도 자체가 허용되지 않는 환경을 위한 스위치다.
 
 [CmdletBinding()]
 param(
@@ -20,7 +21,10 @@ param(
     [string]$Destination,
     [string]$PinFile,
     [string]$ArchiveDirectory,
-    [switch]$Force
+    [switch]$Force,
+    # 네트워크를 쓰지 않는다. 아카이브가 없거나 해시가 다르면 받지 않고
+    # 어디에 두어야 하는지만 말하고 실패한다.
+    [switch]$Offline
 )
 
 $ErrorActionPreference = 'Stop'
@@ -112,10 +116,26 @@ function Resolve-Asset {
             Write-Host "cached         : $($asset.file)"
             return $path
         }
+        if ($Offline) {
+            throw @"
+The $name archive does not match the pinned hash, and -Offline forbids fetching it:
+  $path
+  expected: $($asset.sha256)
+  actual  : $((Get-FileHashText -path $path))
+Replace it with the pinned archive and run again.
+"@
+        }
         Write-Host "stale, refetch : $($asset.file)"
         Remove-Item -LiteralPath $path -Force
     }
 
+    if ($Offline) {
+        throw @"
+The $name archive was not found, and -Offline forbids fetching it:
+  $path
+Put the archive there (or pass -ArchiveDirectory) and run again.
+"@
+    }
     if (-not $pin.asset_base_url) {
         throw @"
 The $name archive was not found and the pin file has no asset_base_url:

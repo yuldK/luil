@@ -27,6 +27,7 @@ cmake --build --preset vs2026-release
 의존성의 버전과 체크섬은 저장소에 고정되어 있다. CMake configure는
 의존성을 내려받지 않는다. 자세한 준비 방법은 [Skia 빌드 준비](docs/skia-build.md)를 본다.
 WebView2 Evergreen Runtime은 웹 콘텐츠 실행에 필요한 별도 구성 요소다.
+웹뷰를 쓰지 않는 앱은 `-DLUIL_ENABLE_WEBVIEW=OFF`로 SDK 준비를 생략할 수 있다.
 
 ## 예제 실행
 

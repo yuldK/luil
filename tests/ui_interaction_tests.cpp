@@ -412,6 +412,31 @@ TEST_CASE("Pressing elsewhere or losing the window releases the text focus", "[u
     REQUIRE(controller.snapshot().focused_input == luil::ui_element_id {});
 }
 
+TEST_CASE("Menu keys reach a menu whose root carries an owner", "[ui][interaction][policy]")
+{
+    // `menu_config::owner`를 채우면 root id가 `{ menu, owner }`다.
+    // 정책이 주는 것은 kind뿐이라 owner가 무엇이든 그 메뉴가 열린 것으로 보아야 한다.
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto menu { std::make_unique<test_panel>(luil::ui_element_id { kind_menu, u8"context" }) };
+    menu->arrange({ { 10.0f, 10.0f, 100.0f, 30.0f }, 1.0f });
+    auto item { std::make_unique<test_panel>(luil::ui_element_id { kind_menu_item, u8"only" }) };
+    item->arrange({ { 10.0f, 10.0f, 100.0f, 20.0f }, 1.0f });
+    menu->add(std::move(item));
+    root->add(std::move(menu));
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::arrow_down }));
+    REQUIRE(controller.snapshot().menu_highlight == luil::ui_element_id { kind_menu_item, u8"only" });
+
+    const auto actions { controller.process(luil::key_pressed_event { luil::key_code::escape }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"close-menu");
+}
+
 TEST_CASE("Menu keys highlight items and escape asks the policy to close", "[ui][interaction][policy]")
 {
     recording_policy policy {};

@@ -60,7 +60,7 @@ function(luil_validate_msvc)
 endfunction()
 
 function(luil_apply_msvc_options target)
-    cmake_parse_arguments(PARSE_ARGV 1 arguments "" "ENABLE_ANALYZE" "")
+    cmake_parse_arguments(PARSE_ARGV 1 arguments "" "ENABLE_ANALYZE;WARNINGS_AS_ERRORS" "")
 
     if(arguments_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR
@@ -80,7 +80,6 @@ function(luil_apply_msvc_options target)
 
     target_compile_options("${target}" ${option_scope}
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4>
-        $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/WX>
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/permissive->
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/sdl>
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/utf-8>
@@ -88,6 +87,12 @@ function(luil_apply_msvc_options target)
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:preprocessor>
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/external:anglebrackets>
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/external:W0>)
+
+    # 기본은 켬이다. 인자를 주지 않은 호출도 지금까지처럼 /WX를 받는다.
+    if(NOT DEFINED arguments_WARNINGS_AS_ERRORS OR arguments_WARNINGS_AS_ERRORS)
+        target_compile_options("${target}" ${option_scope}
+            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/WX>)
+    endif()
 
     if(arguments_ENABLE_ANALYZE)
         target_compile_options("${target}" ${option_scope}

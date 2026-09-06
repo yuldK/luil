@@ -205,6 +205,14 @@ luil_add_source_filter(luil_files "win32/renderer"
     win32/skia_renderer.cpp
     win32/skia_renderer.h)
 
+# 웹뷰 host다. 웹뷰를 끈 구성은 같은 인터페이스의 stub을 대신 컴파일한다 —
+# 창 계층은 어느 쪽인지 모르고, SDK 헤더를 드는 파일은 실제 host 하나뿐이다.
+if(LUIL_ENABLE_WEBVIEW)
+    set(luil_webview_host_source win32/webview_host.cpp)
+else()
+    set(luil_webview_host_source win32/webview_host_stub.cpp)
+endif()
+
 # 창 하나가 그리는 표면과 다시 그릴 자리 판정이다.
 luil_add_source_filter(luil_files "win32/surface"
     win32/dpi_scale.h
@@ -212,7 +220,7 @@ luil_add_source_filter(luil_files "win32/surface"
     win32/secondary_surface.h
     win32/surface_invalidate.cpp
     win32/surface_invalidate.h
-    win32/webview_host.cpp
+    "${luil_webview_host_source}"
     win32/webview_host.h
     win32/webview_layout.cpp
     win32/webview_layout.h
@@ -320,7 +328,8 @@ target_link_libraries(luil
         # 트리에서만 여기서 잇는다 — 감싸지 않으면 install(EXPORT)가 "export set에
         # 없는 target"으로 세운다. include 경로는 그 target 안에만 있어야 한다:
         # luil에 직접 걸면 **경고 하나 없이** 설치본에 빌드 트리 절대 경로가 박힌다.
-        "$<BUILD_INTERFACE:luil_webview2>"
+        # 웹뷰를 끈 구성에는 그 target이 없다 (LUIL_ENABLE_WEBVIEW).
+        "$<$<BOOL:${LUIL_ENABLE_WEBVIEW}>:$<BUILD_INTERFACE:luil_webview2>>"
         # win32 계층이 쓰는 Windows 시스템 라이브러리다.
         # static library라 최종 링크는 소비자 몫이므로 PUBLIC으로 나른다.
         # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.

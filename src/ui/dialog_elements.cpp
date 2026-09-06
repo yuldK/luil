@@ -214,7 +214,7 @@ namespace luil {
             return;
 
         const button_config clear_button {
-            .glyph = codicons::icon_close,
+            .glyph = config_.clear_glyph != 0 ? config_.clear_glyph : codicons::icon_close,
             .icon_size = 10.0f,
             .corner_radius = 3.0f,
         };

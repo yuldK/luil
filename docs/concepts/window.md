@@ -31,4 +31,4 @@ UI thread는 다음 계기를 `ui_popup::dismiss(reason)`으로 전달한다.
 
 caption button은 `caption_config::buttons`, `caption_layout`, `window_style_for()`가 같은 목록을 사용해야 그림·hit test·Win32 style이 일치한다. 없는 버튼은 자리와 style을 모두 차지하지 않는다. `WS_THICKFRAME`과 `WS_SYSMENU`는 버튼 목록과 독립이다.
 
-창 배치는 `WM_EXITSIZEMOVE`, maximized/restored 전환, `WM_CLOSE`에서 delegate에 보고한다. 앱이 복원할 배치는 `window_placement_revision`이 새로울 때만 적용한다. 창 또는 renderer 생성이 실패하면 `show_startup_error`가 디버그 출력과 메시지 상자를 내며 smoke 모드에서는 상자를 생략한다.
+창 배치는 `WM_EXITSIZEMOVE`, maximized/restored 전환, `WM_CLOSE`에서 delegate에 보고한다. 앱이 복원할 배치는 `window_placement_revision`이 새로울 때만 적용한다. 창 또는 renderer 생성이 실패하면 `show_startup_error`가 디버그 출력과 메시지 상자를 내며 smoke 모드에서는 상자를 생략한다. 상자의 제목과 앞글은 `window_config::startup_error`로 앱이 정한다.

@@ -75,7 +75,7 @@ set(LUIL_SKIA_BUILD_RELEASE "${LUIL_SKIA_ROOT}/out/skia-ui-release"
 set(LUIL_CATCH2_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/catch2")
 # HTTP 응답의 JSON 본문 타입이다 (header-only submodule, 라이브러리 구성마다 필요).
 set(LUIL_NLOHMANN_JSON_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/nlohmann_json")
-# WebView2 SDK는 모든 라이브러리 구성에서 필요하다.
+# WebView2 SDK는 LUIL_ENABLE_WEBVIEW가 켜진 라이브러리 구성에서 필요하다.
 # scripts/fetch_webview2.ps1로 헤더와 정적 로더를 준비한다.
 set(LUIL_WEBVIEW2_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/webview2-prep"
     CACHE PATH "WebView2 SDK package that provides the headers and the static loader.")
@@ -132,6 +132,15 @@ option(LUIL_BUILD_TESTS "Build the luil test targets." OFF)
 option(LUIL_BUILD_EXAMPLES "Build the luil example targets." OFF)
 option(LUIL_BUILD_TOOLING "Build the clang-format and source style targets." OFF)
 option(LUIL_ENABLE_MSVC_ANALYZE "Enable MSVC /analyze for library sources." OFF)
+# 웹뷰를 WebView2로 세운다. 끄면 SDK를 찾지도 로더를 링크하지도 않고, 고지에서도
+# 빠진다. 공개 API는 그대로다 — 웹뷰를 실은 frame에서는 placeholder만 남는다
+# (런타임이 없는 기계와 같은 모습). 웹뷰를 쓰지 않는 앱이 SDK 준비 절차와
+# 그 네트워크 접근을 빼는 자리다.
+option(LUIL_ENABLE_WEBVIEW "Host web content with WebView2 (requires the SDK package)." ON)
+# 라이브러리 자신의 경고를 오류로 본다 (/WX). 저장소 안에서는 늘 켠다.
+# 소비자가 끄는 자리다 — 핀으로 박힌 luil 소스를 새 toolset이 경고할 때
+# 소비자가 소스를 고칠 수 없으므로, 빌드가 막히지 않을 길은 이것뿐이다.
+option(LUIL_WARNINGS_AS_ERRORS "Treat luil's own compiler warnings as errors." ON)
 # 설치 규칙은 최상위 빌드에서만 기본으로 켠다.
 # add_subdirectory 소비자의 install에 끼어들지 않는다.
 option(LUIL_INSTALL "Generate install and find_package rules." ${PROJECT_IS_TOP_LEVEL})
@@ -157,6 +166,7 @@ luil_apply_windows_options(luil_options)
 luil_apply_msvc_options(
     luil_options
     ENABLE_ANALYZE "${LUIL_ENABLE_MSVC_ANALYZE}"
+    WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
 )
 
 # 소비자에게 전파되는 사용 요건이다.
@@ -171,7 +181,9 @@ target_compile_options(luil_usage INTERFACE
 # 의존성은 submodule과 사용자가 손으로 빌드한 Skia로만 구성한다.
 # 취득을 자동화하지 않으므로 configure는 네트워크를 전혀 쓰지 않는다.
 include("${LUIL_CMAKE_DIRECTORY}/dependencies.cmake")
-luil_find_dependencies(BUILD_TESTS ${LUIL_BUILD_TESTS})
+luil_find_dependencies(
+    BUILD_TESTS ${LUIL_BUILD_TESTS}
+    ENABLE_WEBVIEW ${LUIL_ENABLE_WEBVIEW})
 
 # 고지 생성과 .rc 조각 구성 함수다.
 # 소비자 실행 파일과 test가 쓴다.

@@ -13,7 +13,7 @@ luil의 [CMake 구성](../../CMakeLists.txt)은 준비된 의존성을 검사하
 | Windows SDK | 10.0.22621.0 이상 |
 | 언어 | C++20 |
 
-[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia, nlohmann/json, WebView2 SDK를 모든 라이브러리 구성에서 찾는다. HTTP·웹뷰를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. Catch2는 테스트를 켰을 때 필요하다.
+[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`(기본 켬)가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. Catch2는 테스트를 켰을 때 필요하다.
 
 Skia 위치는 `LUIL_SKIA_ROOT`, Debug·Release 산출물 위치는 `LUIL_SKIA_BUILD_DEBUG`와 `LUIL_SKIA_BUILD_RELEASE`로 지정한다. 검사는 필요한 정적 라이브러리와 Direct3D·JPEG·WebP·Wuffs·Rust PNG 디코더의 GN 설정을 확인한다. WebView2 SDK 위치는 `LUIL_WEBVIEW2_ROOT`로 지정한다.
 
@@ -25,7 +25,7 @@ Skia 위치는 `LUIL_SKIA_ROOT`, Debug·Release 산출물 위치는 `LUIL_SKIA_B
 
 ## 구성 선택
 
-기본 빌드는 라이브러리를 만든다. `LUIL_BUILD_TESTS`, `LUIL_BUILD_EXAMPLES`, `LUIL_BUILD_TOOLING`, `LUIL_ENABLE_MSVC_ANALYZE`는 기본적으로 꺼져 있다. 테스트를 켜면 smoke 실행 파일에 필요한 예제도 함께 만든다. 설치 규칙을 켜는 `LUIL_INSTALL`은 최상위 프로젝트에서만 기본값이 켜진다.
+기본 빌드는 라이브러리를 만든다. `LUIL_BUILD_TESTS`, `LUIL_BUILD_EXAMPLES`, `LUIL_BUILD_TOOLING`, `LUIL_ENABLE_MSVC_ANALYZE`는 기본적으로 꺼져 있다. 테스트를 켜면 smoke 실행 파일에 필요한 예제도 함께 만든다. 설치 규칙을 켜는 `LUIL_INSTALL`은 최상위 프로젝트에서만 기본값이 켜진다. `LUIL_ENABLE_WEBVIEW`와 `LUIL_WARNINGS_AS_ERRORS`는 기본적으로 켜져 있다. 후자는 luil 자신의 소스에 거는 `/WX`이며, 핀으로 고정한 luil을 새 toolset이 경고할 때 소비자가 끌 수 있다.
 
 [프리셋](../../CMakePresets.json)은 일반·테스트·분석 구성을 제공한다.
 

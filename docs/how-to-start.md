@@ -17,6 +17,7 @@ Skia와 WebView2 SDK의 버전·체크섬은 `third_party`의 패키지 설정 �
 고정되어 있다. 의존성을 준비한 뒤에는 CMake configure가 네트워크를 사용하지 않는다.
 Skia를 직접 빌드해 사용하는 방법은 [Skia 준비](skia-build.md)에 있다.
 웹 콘텐츠를 실행하는 환경에는 WebView2 Evergreen Runtime도 필요하다.
+웹뷰를 쓰지 않는 앱은 `LUIL_ENABLE_WEBVIEW=OFF`로 구성해 `fetch_webview2.ps1` 단계를 생략할 수 있다.
 
 ## 최소 예제 실행
 

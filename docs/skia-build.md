@@ -28,9 +28,12 @@ scripts\fetch_skia.ps1 -Configuration Debug,Release
 | `-ArchiveDirectory` | 아카이브 캐시 디렉터리 |
 | `-PinFile` | 버전과 다운로드 정보를 담은 설정 파일 |
 | `-Force` | 설치 상태와 관계없이 패키지 재설치 |
+| `-Offline` | 네트워크를 시도하지 않음. 아카이브가 없거나 체크섬이 다르면 안내만 내고 실패 |
 
 네트워크를 사용할 수 없는 환경에서는 설정 파일에 지정된 아카이브를
 캐시 디렉터리에 준비한다. 캐시 파일에도 같은 체크섬 검사가 적용된다.
+다운로드 시도 자체가 허용되지 않는 환경에서는 `-Offline`을 함께 준다.
+`fetch_webview2.ps1`도 같은 `-ArchiveDirectory`·`-Offline` 스위치를 받는다.
 
 ## 패키지 내용
 

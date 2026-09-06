@@ -53,6 +53,9 @@ namespace luil::win32 {
         dismiss,
     };
 
+    // 웹뷰를 끈 구성(LUIL_ENABLE_WEBVIEW=OFF)은 같은 인터페이스의 stub
+    // (webview_host_stub.cpp)을 대신 컴파일한다 — 아무것도 세우지 않고 placeholder만
+    // 남는다. 창 계층은 어느 쪽인지 묻지 않는다.
     class webview_host
     {
     public:

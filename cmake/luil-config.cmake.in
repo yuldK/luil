@@ -33,11 +33,16 @@ luil_find_skia()
 # 설치 시점의 경로는 같은 머신 편의 기본값이다.
 #  - flavor 축이 없다. 로더 아카이브가 CRT 중립이라 구성마다 갈리지 않는다
 #    (cmake/dependencies/webview2.cmake).
+#  - 웹뷰를 끄고 설치한 라이브러리에는 로더가 링크되지 않았으므로 SDK를 찾지도
+#    잇지도 않는다. 고지 생성기도 같은 값을 본다.
+set(LUIL_ENABLE_WEBVIEW @LUIL_ENABLE_WEBVIEW@)
 if(NOT DEFINED LUIL_WEBVIEW2_ROOT)
     set(LUIL_WEBVIEW2_ROOT "@LUIL_WEBVIEW2_ROOT@")
 endif()
-include("${CMAKE_CURRENT_LIST_DIR}/webview2.cmake")
-luil_find_webview2()
+if(LUIL_ENABLE_WEBVIEW)
+    include("${CMAKE_CURRENT_LIST_DIR}/webview2.cmake")
+    luil_find_webview2()
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/luil-targets.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/generate_notices.cmake")
@@ -65,6 +70,8 @@ unset(_luil_flavor)
 
 # 빌드 트리에서는 $<BUILD_INTERFACE>로 잇던 것들을 설치본에서 다시 잇는다.
 set_property(TARGET luil::luil APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_skia)
-set_property(TARGET luil::luil APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_webview2)
+if(LUIL_ENABLE_WEBVIEW)
+    set_property(TARGET luil::luil APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_webview2)
+endif()
 
 check_required_components(luil)

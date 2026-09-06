@@ -76,6 +76,19 @@ namespace luil::win32 {
     // 화면 사각형의 int 덧셈에서 넘치는 것은 적용하는 쪽이 이것으로 먼저 거른다.
     [[nodiscard]] bool placement_in_screen_range(const window_placement& placement) noexcept;
 
+    // 시작에 실패했을 때(리소스 검증·창 생성) 사용자에게 내는 메시지 상자다.
+    // 창도 delegate도 서기 전이라 값으로 받는다.
+    //  - `title`이 비어 있으면 "luil startup error"다.
+    //  - `preface`가 비어 있지 않으면 진단 글 앞에 한 문단으로 둔다 — 앱 이름으로
+    //    "…을 시작할 수 없습니다" 같은 안내를 쓰는 자리다. 진단 글은 그대로 뒤따른다.
+    // 디버거 출력(`OutputDebugString`)은 언제나 진단 글만이며, smoke test에서는
+    // 상자를 띄우지 않는다.
+    struct startup_error_config
+    {
+        std::u8string title {};
+        std::u8string preface {};
+    };
+
     // 창의 겉모습과 정책이다.
     // 값만 바꾸면 되도록 한곳에 모아 둔다 (논리 96 DPI 기준 px).
     struct window_config
@@ -118,6 +131,8 @@ namespace luil::win32 {
         // host를 조립하지 않는다.
         // 위의 런타임 손실을 주입하면 그 손실이 실제로 오는 frame까지 그린다.
         bool smoke_test { false };
+        // 시작 실패 메시지 상자의 제목과 앞글이다.
+        startup_error_config startup_error {};
         // 주 창·보조 창이 OS 파일 끌기를 받는다 (표면마다 IDropTarget 하나).
         // 놓인 자리의 drop 대상 element가 받고, 없으면 delegate의
         // `on_file_dropped`가 본다 (os-dragdrop-design.md).

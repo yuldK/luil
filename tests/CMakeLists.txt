@@ -99,6 +99,8 @@ target_link_libraries(luil_tests
 # test는 win32 내부의 순수 계산(caption_layout·popup_reconcile 등)도 검증하므로
 # 비공개 header가 있는 src/를 직접 본다. 소비자에게는 열리지 않는 경로다.
 target_include_directories(luil_tests PRIVATE "${LUIL_SOURCE_DIRECTORY}")
+# 고지 검사가 웹뷰 구성을 따라간다 — 끈 구성의 실행 파일에는 로더가 없다.
+target_compile_definitions(luil_tests PRIVATE "LUIL_TESTS_WEBVIEW=$<BOOL:${LUIL_ENABLE_WEBVIEW}>")
 luil_disable_automatic_windows_manifest(luil_tests)
 
 # messaging의 ASan 검증이다.

@@ -27,21 +27,30 @@ function(luil_generate_third_party_notices output_file)
         message(FATAL_ERROR "LUIL_SKIA_ROOT is required to generate notices.")
     endif()
 
-    if(NOT DEFINED LUIL_WEBVIEW2_ROOT)
+    # 웹뷰를 끈 구성(LUIL_ENABLE_WEBVIEW=OFF)에는 로더가 링크되지 않으므로 SDK
+    # 고지도 싣지 않는다. 변수가 없으면(옵션이 생기기 전 호출자) 켠 것으로 본다.
+    if(NOT DEFINED LUIL_ENABLE_WEBVIEW)
+        set(LUIL_ENABLE_WEBVIEW ON)
+    endif()
+    if(LUIL_ENABLE_WEBVIEW AND NOT DEFINED LUIL_WEBVIEW2_ROOT)
         message(FATAL_ERROR "LUIL_WEBVIEW2_ROOT is required to generate notices.")
     endif()
 
     # luil 자신이 싣는 것이다. 어느 갈래에서나 같다.
     set(luil_notice_entries
         # HTTP 응답의 JSON 본문 타입이다. header-only라 실행 파일에 그대로 실린다.
-        "nlohmann/json|${LUIL_NLOHMANN_JSON_ROOT}/LICENSE.MIT"
-        # 웹뷰 로더다. 정적으로 링크하므로 그 코드가 실행 파일에 들어가고,
-        # 라이선스(BSD 3-Clause 형태)가 바이너리 재배포에 고지 재현을 요구한다.
-        #  - 패키지의 NOTICE.txt는 넣지 않는다. 그것은 WinRT 투영 **도구**가 쓰는
-        #    Antlr·StringTemplate의 고지라 실행 파일에 들어가지 않는다.
-        #  - Evergreen Runtime은 여기 없다. 우리가 배포하지 않고 소비자가
-        #    Microsoft에서 직접 받는다 (docs/concepts/consumer-contract.md).
-        "Microsoft Edge WebView2 SDK|${LUIL_WEBVIEW2_ROOT}/LICENSE.txt"
+        "nlohmann/json|${LUIL_NLOHMANN_JSON_ROOT}/LICENSE.MIT")
+    if(LUIL_ENABLE_WEBVIEW)
+        list(APPEND luil_notice_entries
+            # 웹뷰 로더다. 정적으로 링크하므로 그 코드가 실행 파일에 들어가고,
+            # 라이선스(BSD 3-Clause 형태)가 바이너리 재배포에 고지 재현을 요구한다.
+            #  - 패키지의 NOTICE.txt는 넣지 않는다. 그것은 WinRT 투영 **도구**가 쓰는
+            #    Antlr·StringTemplate의 고지라 실행 파일에 들어가지 않는다.
+            #  - Evergreen Runtime은 여기 없다. 우리가 배포하지 않고 소비자가
+            #    Microsoft에서 직접 받는다 (docs/concepts/consumer-contract.md).
+            "Microsoft Edge WebView2 SDK|${LUIL_WEBVIEW2_ROOT}/LICENSE.txt")
+    endif()
+    list(APPEND luil_notice_entries
         "Visual Studio Code Icons (Codicons)|${LUIL_ASSET_DIRECTORY}/LICENSE"
         "Visual Studio Code Icons (Codicons) - Code|${LUIL_ASSET_DIRECTORY}/LICENSE-CODE")
 
@@ -75,7 +84,9 @@ function(luil_generate_third_party_notices output_file)
             "pack_skia.ps1 does, and the package it makes carries NOTICE.md.")
     endif()
 
-    set(notice_text
+    # `set`에 인자를 여럿 주면 list가 되어 줄 사이에 `;`가 박혀 파일에 그대로 나간다.
+    # 한 문자열로 이어 붙인다.
+    string(CONCAT notice_text
         "luil 제3자 소프트웨어 고지\n"
         "================================\n\n"
         "이 파일은 실행 파일에 포함되는 제3자 구성 요소의 라이선스 원문을 모아\n"

@@ -60,5 +60,10 @@ TEST_CASE("Executable resources contain the Codicons font and licenses", "[asset
     REQUIRE(notice_text.find("Component: SPIRV-Cross") != std::string_view::npos);
     REQUIRE(notice_text.find("Codicons") != std::string_view::npos);
     // 웹뷰 로더는 정적으로 링크되므로 그 코드가 이 실행 파일에 들어 있다.
+    // 웹뷰를 끈 구성(LUIL_ENABLE_WEBVIEW=OFF)에는 로더가 없으므로 고지도 없어야 한다.
+#if LUIL_TESTS_WEBVIEW
     REQUIRE(notice_text.find("Component: Microsoft Edge WebView2 SDK") != std::string_view::npos);
+#else
+    REQUIRE(notice_text.find("Component: Microsoft Edge WebView2 SDK") == std::string_view::npos);
+#endif
 }

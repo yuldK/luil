@@ -1991,15 +1991,26 @@ namespace luil::win32 {
             bool secondary_class_registered_ { false };
         };
 
-        void show_startup_error(const std::u8string& error, const bool smoke_test)
+        void show_startup_error(const std::u8string& error, const window_config& config)
         {
             const auto wide_error { utf8_to_utf16(error) };
             if (wide_error.value.has_value() == false)
                 return;
             OutputDebugStringW(wide_error.value->c_str());
             OutputDebugStringW(L"\n");
-            if (smoke_test == false)
-                MessageBoxW(nullptr, wide_error.value->c_str(), L"luil startup error", MB_OK | MB_ICONERROR);
+            if (config.smoke_test)
+                return;
+
+            // 제목·앞글은 앱이 준 것을 쓴다 (`startup_error_config`).
+            // 변환에 실패한 값은 없는 것으로 본다 — 시작 실패를 알리는 자리에서
+            // 설정 문자열 하나 때문에 상자를 못 띄우면 안 된다.
+            std::wstring title { L"luil startup error" };
+            if (const auto wide_title { utf8_to_utf16(config.startup_error.title) }; config.startup_error.title.empty() == false && wide_title.value.has_value())
+                title = *wide_title.value;
+            std::wstring text { *wide_error.value };
+            if (const auto wide_preface { utf8_to_utf16(config.startup_error.preface) }; config.startup_error.preface.empty() == false && wide_preface.value.has_value())
+                text = *wide_preface.value + L"\n\n" + text;
+            MessageBoxW(nullptr, text.c_str(), title.c_str(), MB_OK | MB_ICONERROR);
         }
     } // namespace
 
@@ -2052,7 +2063,7 @@ namespace luil::win32 {
         std::u8string error {};
         if (verify_embedded_resources(error) == false)
         {
-            show_startup_error(error, config.smoke_test);
+            show_startup_error(error, config);
             return 1;
         }
 
@@ -2061,7 +2072,7 @@ namespace luil::win32 {
         application_window window { GetModuleHandleW(nullptr), config, environment };
         if (window.create(error) == false)
         {
-            show_startup_error(error, config.smoke_test);
+            show_startup_error(error, config);
             if (config.smoke_test && config.renderer == renderer_mode::direct3d)
                 return direct3d_unavailable_exit_code;
             return 1;

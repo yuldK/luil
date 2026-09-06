@@ -3,6 +3,7 @@
 # third_party/webview2-prep.json의 버전과 SHA-256을 검사한다.
 # 로더는 CRT 중립이므로 Debug·Release에서 같은 파일을 사용한다.
 # 캐시된 nupkg는 -ArchiveDirectory로 지정한다.
+# -Offline을 주면 nupkg가 없어도 받으러 가지 않고 실패한다.
 # 페이지 실행에 필요한 Evergreen Runtime은 별도로 설치한다
 # (docs/concepts/consumer-contract.md).
 
@@ -11,7 +12,10 @@ param(
     [string]$Destination,
     [string]$PinFile,
     [string]$ArchiveDirectory,
-    [switch]$Force
+    [switch]$Force,
+    # 네트워크를 쓰지 않는다. 아카이브가 없거나 해시가 다르면 받지 않고
+    # 어디에 두어야 하는지만 말하고 실패한다.
+    [switch]$Offline
 )
 
 $ErrorActionPreference = 'Stop'
@@ -87,10 +91,26 @@ function Resolve-Asset {
             Write-Host "cached         : $($asset.file)"
             return $path
         }
+        if ($Offline) {
+            throw @"
+The WebView2 SDK package does not match the pinned hash, and -Offline forbids fetching it:
+  $path
+  expected: $($asset.sha256)
+  actual  : $((Get-FileHashText -path $path))
+Replace it with the pinned archive and run again.
+"@
+        }
         Write-Host "stale, refetch : $($asset.file)"
         Remove-Item -LiteralPath $path -Force
     }
 
+    if ($Offline) {
+        throw @"
+The WebView2 SDK package was not found, and -Offline forbids fetching it:
+  $path
+Put the archive there (or pass -ArchiveDirectory) and run again.
+"@
+    }
     if (-not $pin.asset_base_url) {
         throw @"
 The WebView2 SDK package was not found and the pin file has no asset_base_url:

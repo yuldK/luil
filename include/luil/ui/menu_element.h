@@ -27,6 +27,7 @@ namespace luil {
     struct menu_config
     {
         // 같은 화면에 메뉴가 여럿일 때 구분하는 키다.
+        // 채워도 키보드 탐색은 그대로 붙는다 — 정책의 `menu_kinds`는 kind로만 찾는다.
         std::u8string owner {};
         std::vector<menu_item_config> items {};
         // 없으면 항목이 눌리지 않는다.

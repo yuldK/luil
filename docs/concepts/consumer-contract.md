@@ -31,7 +31,7 @@ target_link_libraries(my_app PRIVATE luil::luil)
 
 이 코드는 `my_app` 실행 파일이 이미 정의된 위치에서 사용한다. 소스 트리용 리소스 생성 함수가 읽는 세 디렉터리는 부모 호출 scope에도 명시한다. `LUIL_SKIA_ROOT`와 `LUIL_WEBVIEW2_ROOT`는 라이브러리 구성에서 선택한 캐시 값을 사용한다. 앱의 아이콘·manifest·버전 리소스는 별도로 더한다. 부모 프로젝트는 RC 언어를 사용할 수 있어야 하며 Skia와 같은 정적 CRT(`/MT`, Debug는 `/MTd`)를 설정해야 한다. 라이브러리를 하위 프로젝트로 포함할 때 luil은 소비자의 CRT 설정을 바꾸지 않는다.
 
-모든 라이브러리 구성에 Skia, nlohmann/json, WebView2 SDK가 필요하다. 고지 생성기는 Skia 패키지의 `NOTICE.md`를 우선 사용한다. 직접 빌드한 Skia 소스 트리에는 Bazel 캐시의 Rust PNG crate 고지가 없으므로 생성기가 불완전한 고지를 경고한다. 배포용 고지는 이를 포함하는 패키지에서 생성한다.
+모든 라이브러리 구성에 Skia와 nlohmann/json이 필요하다. WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`를 켠 구성(기본)에 필요하며, 끈 구성은 SDK 없이 빌드되고 웹뷰는 placeholder로 남는다. 고지 생성기는 Skia 패키지의 `NOTICE.md`를 우선 사용한다. 직접 빌드한 Skia 소스 트리에는 Bazel 캐시의 Rust PNG crate 고지가 없으므로 생성기가 불완전한 고지를 경고한다. 배포용 고지는 이를 포함하는 패키지에서 생성한다.
 
 ## HTTP와 웹뷰
 
