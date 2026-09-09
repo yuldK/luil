@@ -575,6 +575,9 @@ namespace luil::win32 {
         state.width = std::max(1L, client.right - client.left);
         state.height = std::max(1L, client.bottom - client.top);
         state.dpi_scale = static_cast<float>(dpi_) / 96.0F;
+        // 최대화는 OS에 묻는다. 전체 화면은 여기서 알 수 없는 상태라 기본값(거짓)으로
+        // 두고, 그 상태를 든 표면이 `prepare_frame`에서 둘을 한 모드로 함께 세운다
+        // (`caption_surface::prepare_frame` — 둘이 동시에 참이 되지 않는 자리다).
         state.maximized = IsZoomed(window_) != FALSE;
 
         std::shared_ptr<const ui_frame> frame {};

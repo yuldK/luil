@@ -217,7 +217,7 @@ namespace luil::net {
 
         void fill_image(http_body& body, const std::span<const std::uint8_t> bytes, const http_image_options& options)
         {
-            std::u8string error {};
+            image_decode_error error {};
             if (options.animated)
             {
                 body.image = decode_animated_image_bytes(bytes, options.decode, error);
@@ -237,8 +237,14 @@ namespace luil::net {
             }
             // 실패해도 갈래는 `image`다 — 갈래는 서버가 한 말이고 `parse_error`는
             // 우리에게 일어난 일이다 (http-client-design.md).
-            if (body.image.valid() == false && error.empty() == false)
-                body.parse_error = std::move(error);
+            //  - **그림이 섰는지를 보고 가리지 않는다.** 디코더는
+            //    `image_decode_options::incomplete`가 `accept`면 잘린 그림과 그
+            //    사실을 함께 답하고(image_decode.h), 그 짝이 곧 이 슬롯의 계약이다
+            //    ("비어 있지 않다고 값이 없는 것은 아니다" — http_body.h:118-123).
+            //    갈래는 `image_decode_error::kind`가 들고 있으므로 여기서 잃는 것은
+            //    없다: 몸은 언제나 바이트를 그대로 들고 있어 앱이 다시 풀 수 있다.
+            if (error.empty() == false)
+                body.parse_error = std::move(error.message);
         }
 
         [[nodiscard]] http_body_kind decide_kind(const http_body& body, const http_media_type& content_type, const http_body_parse_options& options, http_body_kind_source& source) noexcept

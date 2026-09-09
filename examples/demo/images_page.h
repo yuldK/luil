@@ -7,6 +7,7 @@
 // 어디서 왔는지 알 필요가 없다.
 
 #include "demo/common.h"
+#include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/ui_element.h"
@@ -53,9 +54,12 @@ namespace demo {
         // 그림은 만들 때 한 번 준비되는 불변 값이라 페이지가 들고 있는다 —
         // frame마다 config에 실리는 것은 손잡이뿐이다 (image-design.md).
         // 파일은 밖에서 오므로 실패할 수 있다: 이유를 함께 들어 화면에 남긴다.
+        //  - **그림과 이유가 함께 설 수 있다.** 이 페이지는 잘린 파일을 받기로
+        //    했으므로(`image_incomplete_policy::accept`) 미리 보기가 서 있는데도
+        //    이유가 남아 있는 자리가 있다 — 상태 줄이 그 둘을 갈라 읽는다.
         luil::ui_animated_image animation_ {};
         luil::image_playback playback_ {};
         std::u8string picture_name_ {};
-        std::u8string picture_error_ {};
+        luil::image_decode_error picture_error_ {};
     };
 } // namespace demo

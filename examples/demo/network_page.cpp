@@ -3,7 +3,7 @@
 #include "luil/ui/check_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/panel_element.h"
-#include "luil/ui/scroll_view_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/strip_element.h"
 
@@ -434,6 +434,13 @@ namespace demo {
                 preview_scroll_ = 0.0f;
             return true;
         }
+        if (const auto* const preview_to { message.get<network_preview_scroll_to_intent>() }; preview_to != nullptr)
+        {
+            // 절대 자리는 그대로 받는다. 위쪽 한계만 다듬고 아래쪽은 영역의
+            // `arrange`가 같은 식으로 다듬는다 — 창 높이를 아는 것이 그쪽뿐이다.
+            preview_scroll_ = preview_to->offset > 0.0f ? preview_to->offset : 0.0f;
+            return true;
+        }
         return false;
     }
 
@@ -793,10 +800,22 @@ namespace demo {
 
     std::unique_ptr<luil::ui_element> network_page::make_lines_view() const
     {
-        luil::scroll_view_config config {};
+        // 흘리는 창 하나에 막대·치수·휠·되살리기가 딸려 온다.
+        //
+        // 손으로 조립하던 때 이 칸에는 **막대가 없었다.** 막대를 세우려면 창이 실제로
+        // 받은 높이를 알아야 하는데 그 높이는 배치가 정해져야 나오고, 앱은 그것을
+        // 추측할 수밖에 없었다 — 추측이 틀리면 thumb와 흘릴 수 있는 양이 어긋난다.
+        // 여기 설정 하나가 그 다섯을 `arrange` 안으로 가져간다 (scroll-area-design.md).
+        luil::scroll_area_config config {};
+        config.owner = u8"network-preview";
         config.content_height = static_cast<float>(preview_lines_.size()) * preview_line_height;
         config.scroll_offset = preview_scroll_;
-        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { kind_network_preview, u8"scroll" }, config) };
+        // **이 하나가 넷을 함께 켠다** — 휠, 막대의 끌기와 키, 그리고 초점 되살리기다.
+        config.scroll = [](const float delta) { return luil::make_app_action(network_preview_scroll_intent { delta }); };
+        // 절대 자리는 따로 받는다. 델타로 환산해 보내면 오래된 발행본 기준의
+        // 변화량이 겹쳐 쌓여 보조 기술이 겨눈 자리에 서지 못한다.
+        config.scroll_to = [](const float offset) { return luil::make_app_action(network_preview_scroll_to_intent { offset }); };
+        auto view { std::make_unique<luil::scroll_area_element>(std::move(config)) };
 
         luil::stack_config inner {};
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-lines" }, inner) };
@@ -810,9 +829,10 @@ namespace demo {
 
     std::vector<luil::input_action> network_page::route_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float delta)
     {
-        // 결과 칸이 먼저다 — 띠와 겹치지 않지만, 표는 덮는 것이 임자라 순서가 곧 규칙이다.
+        // 표에 남는 것은 가로로 흘리는 띠 하나다.
+        // 결과 칸의 줄이 여기서 사라진 것이 요점이다 — 그 칸을 영역으로 바꾸자
+        // 휠도 되살리기도 적을 것이 없어졌다.
         static const luil::scroll_route routes[] {
-            { { kind_network_preview, u8"scroll" }, [](const float value) { return luil::make_app_action(network_preview_scroll_intent { value }); } },
             { { kind_network_preview, u8"strip" }, [](const float value) { return luil::make_app_action(network_strip_scroll_intent { value }); } },
         };
         return luil::route_wheel(tree, event.x, event.y, delta, routes);

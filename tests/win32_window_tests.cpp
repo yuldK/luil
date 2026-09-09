@@ -1,4 +1,5 @@
 #include "luil/win32/win32_window.h"
+#include "win32/caption_surface.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -53,6 +54,35 @@ namespace {
         static_cast<void>(PeekMessageW(&message, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE));
     }
 
+    // 비클라이언트 판정만 재는 창의 클래스 이름이다.
+    // 메시지는 기본 처리에 맡긴다 — 재는 것은 `caption_hit_test` 하나다.
+    constexpr const wchar_t* hit_test_class_name { L"Luil.Test.WindowMode" };
+
+    // 그 클래스로 창 하나를 만든다.
+    // 보이지 않는 창이라 화면을 건드리지 않는다 (`WS_VISIBLE`을 주지 않는다).
+    [[nodiscard]] HWND create_hit_test_window()
+    {
+        WNDCLASSEXW window_class {};
+        window_class.cbSize = sizeof(window_class);
+        window_class.lpfnWndProc = &DefWindowProcW;
+        window_class.hInstance = GetModuleHandleW(nullptr);
+        window_class.lpszClassName = hit_test_class_name;
+        if (RegisterClassExW(&window_class) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+            return nullptr;
+        const DWORD style { luil::win32::custom_window_style_for({}, luil::win32::window_display_mode::normal) };
+        return CreateWindowExW(WS_EX_APPWINDOW, hit_test_class_name, L"hit test", style, 100, 100, 1000, 800, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    }
+
+    // 창 왼쪽 위에서 (x, y)만큼 떨어진 자리를 이 모드로 판정한다.
+    // `WM_NCHITTEST`의 lParam은 **화면 좌표**라 창 자리를 더해 넘긴다.
+    [[nodiscard]] LRESULT hit_test_at(const HWND window, const luil::win32::window_display_mode mode, const int x, const int y)
+    {
+        RECT bounds {};
+        GetWindowRect(window, &bounds);
+        const LPARAM position { MAKELPARAM(bounds.left + x, bounds.top + y) };
+        return luil::win32::caption_hit_test(window, position, 96, luil::caption_config {}, luil::win32::window_config {}, mode);
+    }
+
     // 두 test가 함께 쓰는 설정이다.
     // 파일 끌기를 켜야 표면이 IDropTarget을 등록하고, 그래야 실패 정리가
     // 등록 해제까지 도는지 실제 OLE 위에서 확인된다.
@@ -67,6 +97,30 @@ namespace {
         return config;
     }
 } // namespace
+
+TEST_CASE("A fullscreen window has no non-client area at all", "[win32][window]")
+{
+    // 순수 판정은 window_mode_tests가 잰다.
+    // 여기서 재는 것은 **창을 든 경로**다: 화면 좌표를 창 좌표로 옮기고, 답을 Win32
+    // `HT*`로 옮기고, 전체 화면이면 DWM에게 묻지도 않는 그 자리다.
+    const HWND window { create_hit_test_window() };
+    REQUIRE(window != nullptr);
+
+    // 통상 창의 모서리와 캡션은 살아 있다.
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 1, 1) == HTTOPLEFT);
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, 10) == HTCAPTION);
+
+    // 전체 화면에서는 같은 자리가 전부 client다.
+    // 가장자리가 남으면 화면 끝을 노려 누르다 창 크기가 바뀌고, 캡션 띠가 남으면
+    // 끌기 한 번에 전체 화면이 통째로 딸려 나온다.
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 1, 1) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 10, 10) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 300, 10) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 980, 10) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 500, 400) == HTCLIENT);
+
+    DestroyWindow(window);
+}
 
 TEST_CASE("A failed renderer leaves no window behind", "[win32][window]")
 {

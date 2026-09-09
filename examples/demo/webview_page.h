@@ -10,6 +10,7 @@
 // 흔들리면 예제가 아니어서다 (network_page와 같은 판단이다).
 
 #include "demo/common.h"
+#include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/win32/webview.h"
 
@@ -83,6 +84,9 @@ namespace demo {
         unsigned generation_ { 0 };
         [[nodiscard]] std::u8string webview_id() const;
         luil::ui_image picture_ {};
-        std::u8string picture_error_ {};
+        // 읽지 못한 이유다 (값이지 글이 아니다 — `luil::image_decode_error`).
+        // 이 페이지는 그림이 서지 않으면 빈 칸을 보이므로 화면에 적지는 않지만,
+        // 이유를 버리면 "왜 안 뜨는가"가 디버거에서도 사라진다.
+        luil::image_decode_error picture_error_ {};
     };
 } // namespace demo

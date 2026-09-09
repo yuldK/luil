@@ -90,11 +90,27 @@ TEST_CASE("A missing caption button drops its window style", "[caption]")
 {
     // 버튼을 빼면 캡션 더블클릭·Win+↑·시스템 메뉴까지 함께 멎어야 한다.
     constexpr luil::caption_buttons close_only { .minimize = false, .maximize = false, .close = true };
-    const DWORD style = luil::win32::window_style_for(close_only);
+    const DWORD style = luil::win32::window_style_for(close_only, luil::win32::window_display_mode::normal);
     REQUIRE((style & WS_MAXIMIZEBOX) == 0);
     REQUIRE((style & WS_MINIMIZEBOX) == 0);
     // 크기 조절과 시스템 메뉴는 버튼과 무관하다.
     REQUIRE((style & luil::win32::retained_window_styles) == luil::win32::retained_window_styles);
     // 만들 때와 크기를 잴 때 쓰는 스타일은 시스템 캡션 하나만 다르다.
-    REQUIRE(luil::win32::custom_window_style_for(close_only) == (style & ~static_cast<DWORD>(WS_CAPTION)));
+    REQUIRE(luil::win32::custom_window_style_for(close_only, luil::win32::window_display_mode::normal) == (style & ~static_cast<DWORD>(WS_CAPTION)));
+}
+
+TEST_CASE("The caption geometry is the same computation the window hit test uses", "[caption][window-mode]")
+{
+    // 캡션 자리를 두 번 재지 않는다는 계약이다.
+    // 비클라이언트 판정은 `make_caption_layout`이 낸 자리를 그대로 쓰므로,
+    // 버튼을 뺀 캡션의 빈자리는 판정에서도 그대로 끌기가 된다.
+    constexpr luil::caption_buttons close_only { .minimize = false, .maximize = false, .close = true };
+    const luil::win32::window_frame_metrics metrics { luil::default_caption_ui_metrics, close_only, 4, 10 };
+    const auto layout = luil::win32::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, close_only);
+
+    // 닫기 버튼의 왼쪽 경계 바로 오른쪽은 두 계산 모두에서 닫기다.
+    REQUIRE(luil::win32::hit_test_caption(layout, layout.close_left + 1, 20) == luil::win32::caption_hit::close);
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, layout.close_left + 1, 20) == luil::win32::window_hit::close_button);
+    // 빠진 최대화 버튼의 자리는 끌기다.
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, 930, 20) == luil::win32::window_hit::caption_drag);
 }

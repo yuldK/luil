@@ -191,8 +191,16 @@ namespace demo {
         // (image_decode.h의 thread 규칙). 만들어진 그림은 불변이라 UI thread가
         // 그려도 새 동기화가 없다.
         picture_name_ = file_name_of(open->path);
-        picture_error_.clear();
-        animation_ = luil::load_animated_image_file(open->path, { .max_width = preview_pixel_limit, .max_height = preview_pixel_limit }, picture_error_);
+        picture_error_ = {};
+        // **잘린 파일도 받는다.** 사람이 끌어다 놓는 그림은 내려받다 끊긴 것이
+        // 흔하고, 보는 창에서는 반쪽이라도 보이는 편이 아무것도 없는 것보다
+        // 낫다 — 대신 반쪽이라는 사실을 상태 줄에 적는다. 인쇄로 넘길 원본을
+        // 고르는 창이라면 기본값(통째로 거절)이 옳다 (image_decode.h).
+        luil::image_decode_options options {};
+        options.max_width = preview_pixel_limit;
+        options.max_height = preview_pixel_limit;
+        options.incomplete = luil::image_incomplete_policy::accept;
+        animation_ = luil::load_animated_image_file(open->path, options, picture_error_);
         playback_ = animation_.valid() ? luil::image_playback { .started = std::chrono::steady_clock::now() } : luil::image_playback {};
         return true;
     }
@@ -280,14 +288,30 @@ namespace demo {
     std::unique_ptr<luil::label_element> images_page::make_status() const
     {
         const luil::ui_element_id id { kind_text, u8"images-status" };
-        // 읽지 못한 파일은 조용히 비지 않는다 — 이유가 화면에 남는다.
-        // 라이브러리가 내는 글은 진단용 영문이고, 사람에게 보일 문장은 앱이 짓는다.
-        if (picture_error_.empty() == false)
-            return make_label(id, u8"그림을 읽지 못했다 — " + picture_name_ + u8": " + picture_error_, 11.0f, luil::label_color_role::primary);
+        // **두 가지를 따로 묻는다.** `valid()`가 "그림이 있는가"이고
+        // `error.empty()`가 "그것이 그림 전부인가"다 (image_decode.h) — 잘린 파일을
+        // 받기로 한 자리에서는 그림이 서 있는데도 이유가 남는다.
+        //  - 읽지 못한 파일은 조용히 비지 않는다. 라이브러리가 내는 글은 진단용
+        //    영문이고, 사람에게 보일 문장은 앱이 짓는다.
         if (animation_.valid() == false)
-            return make_label(id, u8"아직 고른 그림이 없다.", 11.0f, luil::label_color_role::dim);
+        {
+            if (picture_error_.empty())
+                return make_label(id, u8"아직 고른 그림이 없다.", 11.0f, luil::label_color_role::dim);
+            return make_label(id, u8"그림을 읽지 못했다 — " + picture_name_ + u8": " + picture_error_.message, 11.0f, luil::label_color_role::primary);
+        }
         const std::u8string playback { animation_.animated() ? u8" frame 애니메이션으로 읽었다." : u8" frame으로 읽었다." };
-        return make_label(id, picture_name_ + u8" — " + to_u8(animation_.width()) + u8"×" + to_u8(animation_.height()) + u8" 픽셀, " + to_u8(static_cast<int>(animation_.frame_count())) + playback,
-            11.0f, luil::label_color_role::dim);
+        const std::u8string measured { to_u8(animation_.width()) + u8"×" + to_u8(animation_.height()) + u8" 픽셀, " + to_u8(static_cast<int>(animation_.frame_count())) };
+        const std::u8string read { picture_name_ + u8" — " + measured + playback };
+        // 반쪽이라는 사실은 **그림과 함께** 온다. 이 줄이 없으면 잘린 그림이
+        // 화면에서 "원래 그런 그림"이 된다 — 받기로 한 대가로 앱이 지는 몫이다.
+        //  - 사람에게 보일 문장을 갈래로 고른다. 진단 영문을 그대로 붙이지 않는
+        //    것이 계약이고, **문장을 뒤지지 않고 `kind`를 보는 것**이 갈래가 값인
+        //    이유다.
+        if (picture_error_.empty() == false)
+        {
+            const std::u8string reason { picture_error_.kind == luil::image_decode_error_kind::incomplete_input ? u8" 다만 파일이 도중에 끝나 " : u8" 다만 " };
+            return make_label(id, read + reason + to_u8(static_cast<int>(picture_error_.frame)) + u8"번째 장부터는 읽지 못했다.", 11.0f, luil::label_color_role::primary);
+        }
+        return make_label(id, read, 11.0f, luil::label_color_role::dim);
     }
 } // namespace demo

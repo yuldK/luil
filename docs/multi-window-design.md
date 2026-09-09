@@ -58,6 +58,12 @@ Caption close button과 Alt+F4는 `ui_window::close`를 호출한다. UI thread�
 
 `close`가 비어 있으면 닫기 요청을 무시한다. Close callback은 published frame당 최대 한 번 발생하며 window를 다시 publish하면 재활성화된다. 반복 system message가 application을 flood하지 않으면서 열린 상태를 application이 결정하게 한다.
 
+## 주 창만의 것
+
+창 배치 보고·복원과 전체 화면은 **주 창의 것이다.** Secondary window는 자기 caption과 크기 조절을 갖지만 `window_placement`에 실리지 않고 `ui_command::window_toggle_fullscreen`의 대상도 아니다. 보조 창의 자리는 만들 때 한 번 정해지고 그 뒤로는 사용자의 것이므로 저장하고 되돌릴 주체가 없으며, 화면을 덮는 창이 여럿이면 어느 것이 덮는지가 앱 상태 밖에서 갈린다.
+
+Secondary window의 style은 언제나 통상 모드의 계산이다([window_mode.h](../src/win32/window_mode.h)의 `window_style_for(buttons, normal)`). 전체 화면 계약은 [Win32 창과 표면](concepts/window.md)에 있다.
+
 ## Rendering과 DPI
 
 각 top-level surface는 자체 swap chain 또는 CPU bitmap을 소유하고 `window_config`의 renderer policy를 사용한다. `automatic`은 해당 surface에서 Direct3D를 시도한 뒤 CPU로 fallback한다. Runtime renderer loss도 같은 fallback 경로를 쓴다.

@@ -1,6 +1,7 @@
 #include "luil/ui/image_decode.h"
 
 #include "raster_probe.h"
+#include "sample_image_bytes.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/ui_element.h"
@@ -16,6 +17,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -351,9 +353,62 @@ namespace {
         0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3B,
     };
 
+    // 0 byte짜리 파일의 내용이다.
+    // MSVC의 `std::array<T, 0>`은 크기가 0이어도 `data()`가 null이 아닌 자리를
+    // 답하므로, 빈 span을 만드는 데 특별한 자리가 필요 없다.
+    constexpr std::array<std::uint8_t, 0> empty_file {};
+
     [[nodiscard]] std::span<const std::uint8_t> bytes_of(const auto& fixture) noexcept
     {
         return std::span<const std::uint8_t> { fixture.data(), fixture.size() };
+    }
+
+    // 한 장의 압축 자료 한가운데를 **아직 짓지 않은 코드**로 바꾼 사본이다.
+    //
+    // 자른 파일과 갈리는 것이 요점이다. 파일은 끝까지 다 있고 블록 구조도 온전해
+    // 장 수도 시간표도 그대로 읽히는데, 그 장의 LZW 코드 하나가 사전에 없는 511이라
+    // 코덱이 "자료가 모자라다"가 아니라 **"자료가 틀렸다"**고 답한다 —
+    // `incomplete_input`이 아닌 장 실패의 모양이고, 잘라서는 결코 나오지 않는다.
+    //  - `data`는 그 장의 LZW 자료가 시작하는 자리다 (min code size와 블록 크기
+    //    바로 다음). 견본들의 흐름은 9비트로 clear(256)·0·258이라 셋째 코드가 셋째와
+    //    넷째 byte에 걸쳐 있고, 그 둘을 이렇게 두면 셋째 코드가 511이 된다.
+    [[nodiscard]] std::vector<std::uint8_t> with_broken_frame_data(const std::span<const std::uint8_t> bytes, const std::size_t data)
+    {
+        std::vector<std::uint8_t> broken { bytes.begin(), bytes.end() };
+        broken[data + 2] = std::uint8_t { 0xFCu };
+        broken[data + 3] = std::uint8_t { 0x07u };
+        return broken;
+    }
+
+    // 성공하면 오류를 **건드리지 않는다**는 계약을 잠그는 씨앗이다 (image_decode.h).
+    //
+    // 빈 값으로 두고 "비었다"만 보면, 성공할 때마다 오류를 비우는 구현도 초록이다 —
+    // 그러면 앞선 실패를 들고 있던 앱의 값이 조용히 지워지는 자리를 test가 놓친다.
+    [[nodiscard]] luil::image_decode_error seeded_error()
+    {
+        return { luil::image_decode_error_kind::internal_error, u8"untouched" };
+    }
+
+    [[nodiscard]] bool untouched(const luil::image_decode_error& error)
+    {
+        return error.kind == luil::image_decode_error_kind::internal_error && error.message == u8"untouched" && error.frame == 0;
+    }
+
+    // 언제나 접는 갈고리다.
+    [[nodiscard]] std::function<bool()> always_cancelled()
+    {
+        return [] { return true; };
+    }
+
+    // `count`번째 물음부터 접는 갈고리다 (0이면 처음부터).
+    //
+    // 세는 것이 요점이다 — 디코딩이 **어디서** 묻는지를 이 하나로 고를 수 있어,
+    // 파일을 읽는 중·장을 푸는 중처럼 서로 다른 자리에서 접히는 것을 같은 도구로
+    // 본다. 갈고리는 디코딩 thread에서 불리고 그 thread는 test thread 하나뿐이라
+    // 세는 값에 동기화가 필요 없다.
+    [[nodiscard]] std::function<bool()> cancelled_after(const std::shared_ptr<int>& asked, const int count)
+    {
+        return [asked, count] { return (*asked)++ >= count; };
     }
 
     // 그린 픽셀을 그대로 답한다.
@@ -505,13 +560,13 @@ TEST_CASE("The decoded size honours the limits and never grows the image", "[ui]
 
 TEST_CASE("A png decodes into the pixels it encodes", "[ui][image][decode][raster]")
 {
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(quadrant_png), error) };
     REQUIRE(decoded.valid());
     REQUIRE(decoded.width() == 2);
     REQUIRE(decoded.height() == 2);
     // 성공하면 error를 건드리지 않는다.
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
 
     // 사분면 색이 제자리에 선다 — 채널 뒤바뀜(RGB↔BGR)과 상하 뒤집힘이 여기 걸린다.
     constexpr int size { 40 };
@@ -538,7 +593,7 @@ TEST_CASE("The decoded alpha is straight, not multiplied twice", "[ui][image][de
     // straight로 푼다. 그 마지막 한 번을 빠뜨리고 `make_rgba_image`에 premul을 그대로
     // 넘기면 알파가 두 번 곱해져 반투명한 자리가 한 번 더 묽어진다 — 조용히 틀리는
     // 종류다.
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(alpha_png), error) };
     REQUIRE(decoded.valid());
 
@@ -563,7 +618,7 @@ TEST_CASE("A jpeg decodes through the same path as a png", "[ui][image][decode][
 {
     // 코덱을 우리가 들고 있어도 문은 하나다 — 형식마다 갈라지는 것은 안쪽 사정이고,
     // 앱은 어느 형식이든 같은 두 함수로 연다.
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(solid_jpeg), error) };
     REQUIRE(decoded.valid());
     REQUIRE(decoded.width() == 8);
@@ -580,7 +635,7 @@ TEST_CASE("A jpeg decodes through the same path as a png", "[ui][image][decode][
 
 TEST_CASE("The decode shrinks the image when a limit is given", "[ui][image][decode][raster]")
 {
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(solid_png), { .max_width = 16 }, error) };
     REQUIRE(decoded.valid());
     REQUIRE(decoded.width() == 16);
@@ -603,7 +658,7 @@ TEST_CASE("Scaling happens in premultiplied space", "[ui][image][decode][raster]
     // straight alpha를 그대로 섞으면 완전히 투명한 픽셀의 색값이 이웃과 평균되어
     // 가장자리에 테가 생긴다 — 불투명 빨강 하나와 투명한 흰색 셋을 1×1로 줄이면
     // 그 차이가 색 하나로 드러난다.
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(halo_png), { .max_width = 1 }, error) };
     REQUIRE(decoded.valid());
     REQUIRE(decoded.width() == 1);
@@ -625,19 +680,20 @@ TEST_CASE("A format this build does not decode is refused by name", "[ui][image]
 {
     // 읽을 수 있는 목록이 빌드로 고정된 대가다. 켜지 않은 코덱은 사용자가 무엇을
     // 깔아도 늘지 않는다 — 그 대신 어느 Windows에서나 같은 것을 읽는다.
-    std::u8string error {};
+    luil::image_decode_error error {};
     REQUIRE(luil::decode_image_bytes(bytes_of(small_tiff), error).valid() == false);
     // **어느 실패인지까지 짚는다.** 그냥 빈 이미지만 보면 바이트가 깨졌다는 이유로
     // 거절해도 test는 초록이고, "이 빌드가 아는 형식이 아니다"라는 글은 잠기지 않는다.
-    REQUIRE(error.find(u8"not in a format this build can decode") != std::u8string::npos);
+    REQUIRE(error.kind == luil::image_decode_error_kind::unsupported_format);
+    REQUIRE(error.message.find(u8"not in a format this build can decode") != std::u8string::npos);
 }
 
 TEST_CASE("An EXIF orientation is applied to the pixels and to the size", "[ui][image][decode][raster]")
 {
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(oriented_jpeg), error) };
     REQUIRE(decoded.valid());
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
 
     // 파일은 16 가로 × 32 세로다. 돌려세우면 축이 바뀐다 — 이 두 줄이 없으면
     // 담는 쪽이 잡은 칸이 처음부터 틀린 채로 선다 (배치에 측정 단계가 없다).
@@ -681,7 +737,7 @@ TEST_CASE("The decode limit is measured on the oriented axes", "[ui][image][deco
     // 걸어야 16×8이다.
     //  - 그림은 어느 쪽이든 옳게 뜨므로 눈으로는 갈리지 않는다. 세로로 찍은
     //    사진만 상한이 반대 축에 걸려 엉뚱하게 줄어드는 자리다.
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(oriented_jpeg), { .max_width = 16 }, error) };
     REQUIRE(decoded.valid());
     REQUIRE(decoded.width() == 16);
@@ -694,10 +750,10 @@ TEST_CASE("A gif whose first frame is smaller than the screen decodes at screen 
     const std::u8string path { sample.path() };
     REQUIRE(path.empty() == false);
 
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_image decoded { luil::load_image_file(path, error) };
     REQUIRE(decoded.valid());
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
     // 장의 사각형은 (1,1)에 놓인 2×2이지만, 나오는 것은 합성이 끝난 논리 화면이다.
     REQUIRE(decoded.width() == 4);
     REQUIRE(decoded.height() == 4);
@@ -714,37 +770,48 @@ TEST_CASE("A gif whose first frame is smaller than the screen decodes at screen 
 
 TEST_CASE("Bytes that are not an image fail with a reason", "[ui][image][decode]")
 {
+    // **갈래까지 견준다.** 글은 사람이 읽고 갈래는 코드가 읽는다 — 갈래를 보지
+    // 않으면 어느 실패든 "빈 이미지 하나"로 뭉개져, 앱이 다르게 굴어야 하는 자리가
+    // test에 잠기지 않는다 (image_decode.h의 `image_decode_error_kind`).
     SECTION("빈 바이트")
     {
-        std::u8string error {};
+        luil::image_decode_error error {};
         REQUIRE(luil::decode_image_bytes({}, error).valid() == false);
-        REQUIRE(error.empty() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::file_empty);
+        REQUIRE(error.message.empty() == false);
     }
 
     SECTION("이미지가 아닌 바이트")
     {
-        constexpr std::array<std::uint8_t, 8> garbage { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
-        std::u8string error {};
+        // 코덱이 형식을 가리려면 서명을 볼 만큼은 있어야 한다. 여남은 byte로는
+        // "모르는 형식"과 "아직 덜 왔다"가 구별되지 않아 잘린 입력으로 떨어진다.
+        std::array<std::uint8_t, 64> garbage {};
+        garbage.fill(0x5Au);
+        luil::image_decode_error error {};
         REQUIRE(luil::decode_image_bytes(bytes_of(garbage), error).valid() == false);
-        REQUIRE(error.empty() == false);
+        // 아무 코덱도 이 바이트를 알아보지 못한다 — tiff와 같은 갈래로 떨어진다.
+        REQUIRE(error.kind == luil::image_decode_error_kind::unsupported_format);
     }
 
     SECTION("머리만 남고 잘린 png")
     {
-        std::u8string error {};
+        luil::image_decode_error error {};
         const std::span<const std::uint8_t> truncated { bytes_of(quadrant_png).first(40) };
         REQUIRE(luil::decode_image_bytes(truncated, error).valid() == false);
-        REQUIRE(error.empty() == false);
+        // 머리에서 끊겼든 픽셀에서 끊겼든 앱에게 뜻은 하나다 — 자료가 그림보다
+        // 먼저 끝났다.
+        REQUIRE(error.kind == luil::image_decode_error_kind::incomplete_input);
     }
 
     SECTION("상한을 넘는 크기라고 적힌 png")
     {
         // 40000×40000이면 RGBA로 6 GB다. 픽셀을 펴기 전에 머리에서 거른다.
-        std::u8string error {};
+        luil::image_decode_error error {};
         REQUIRE(luil::decode_image_bytes(bytes_of(oversized_png), error).valid() == false);
         // **어느 실패인지까지 짚는다.** 그냥 "빈 이미지"만 보면 이 png가 잘렸다는
         // 이유로 코덱이 거절해도 test는 초록이고, 상한은 잠기지 않는다.
-        REQUIRE(error.find(u8"decode limit") != std::u8string::npos);
+        REQUIRE(error.kind == luil::image_decode_error_kind::too_many_pixels);
+        REQUIRE(error.message.find(u8"decode limit") != std::u8string::npos);
     }
 }
 
@@ -754,7 +821,7 @@ TEST_CASE("An image file is read from its path", "[ui][image][decode]")
     const std::u8string path { sample.path() };
     REQUIRE(path.empty() == false);
 
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_image decoded { luil::load_image_file(path, { .max_width = 1 }, error) };
     REQUIRE(decoded.valid());
     REQUIRE(decoded.width() == 1);
@@ -769,27 +836,38 @@ TEST_CASE("A path that cannot be read fails with a reason", "[ui][image][decode]
     SECTION("없는 경로")
     {
         const temporary_image_file sample { bytes_of(quadrant_png), 1 };
-        std::u8string error {};
+        luil::image_decode_error error {};
         REQUIRE(luil::load_image_file(sample.path() + u8".missing", error).valid() == false);
-        REQUIRE(error.empty() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::file_unreadable);
     }
 
     SECTION("있지만 이미지가 아닌 파일")
     {
-        // 코덱이 아는 형식이 아니다. 없는 파일과 같은 자리에서 실패하고,
-        // 어느 쪽인지는 뒤에 붙는 코덱의 판정 이름이 말한다.
-        constexpr std::array<std::uint8_t, 12> text { 'n', 'o', 't', ' ', 'a', 'n', ' ', 'i', 'm', 'a', 'g', 'e' };
+        // 코덱이 아는 형식이 아니다. 파일은 읽혔으므로 **읽지 못한 것과 갈래가
+        // 갈린다** — 사람이 할 일이 서로 다르다(다른 파일을 고른다 / 권한을 본다).
+        // 코덱이 형식을 가리려면 서명을 볼 만큼은 있어야 한다. 여남은 byte로는
+        // "모르는 형식"과 "아직 덜 왔다"가 구별되지 않아 잘린 입력으로 떨어진다.
+        std::array<std::uint8_t, 64> text {};
+        text.fill(static_cast<std::uint8_t>('x'));
         const temporary_image_file sample { bytes_of(text), 2 };
-        std::u8string error {};
+        luil::image_decode_error error {};
         REQUIRE(luil::load_image_file(sample.path(), error).valid() == false);
-        REQUIRE(error.empty() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::unsupported_format);
+    }
+
+    SECTION("빈 파일")
+    {
+        const temporary_image_file sample { bytes_of(empty_file), 5 };
+        luil::image_decode_error error {};
+        REQUIRE(luil::load_image_file(sample.path(), error).valid() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::file_empty);
     }
 
     SECTION("빈 경로는 파일을 열어 보지도 않는다")
     {
-        std::u8string error {};
+        luil::image_decode_error error {};
         REQUIRE(luil::load_image_file({}, error).valid() == false);
-        REQUIRE(error.empty() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::path_empty);
     }
 
     SECTION("NUL이 든 경로는 잘린 채로 열리지 않는다")
@@ -801,18 +879,18 @@ TEST_CASE("A path that cannot be read fails with a reason", "[ui][image][decode]
         padded.push_back(u8'\0');
         padded += u8"tail";
 
-        std::u8string error {};
+        luil::image_decode_error error {};
         REQUIRE(luil::load_image_file(padded, error).valid() == false);
-        REQUIRE(error.empty() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::path_invalid);
     }
 }
 
 TEST_CASE("An animated gif decodes into every composited frame", "[ui][image][animation][raster]")
 {
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_animated_image image { luil::decode_animated_image_bytes(bytes_of(animated_gif), error) };
     REQUIRE(image.valid());
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
     REQUIRE(image.animated());
     REQUIRE(image.frame_count() == 3u);
     REQUIRE(image.width() == 2);
@@ -833,10 +911,10 @@ TEST_CASE("An animated gif decodes into every composited frame", "[ui][image][an
 
 TEST_CASE("An animated webp decodes into every composited frame", "[ui][image][animation][raster]")
 {
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_animated_image image { luil::decode_animated_image_bytes(bytes_of(animated_webp), error) };
     REQUIRE(image.valid());
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
     REQUIRE(image.animated());
     REQUIRE(image.frame_count() == 2u);
     REQUIRE(image.width() == 4);
@@ -852,12 +930,12 @@ TEST_CASE("An animated webp decodes into every composited frame", "[ui][image][a
 
 TEST_CASE("An animation that restores the previous frame decodes", "[ui][image][animation][raster]")
 {
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_animated_image image { luil::decode_animated_image_bytes(bytes_of(restore_previous_gif), error) };
     // **여기서 갈린다.** `fPriorFrame`에 `i - 1`을 준 구현은 셋째 장에서
     // `kInvalidParameters`를 받아 멀쩡한 gif를 통째로 거절한다.
     REQUIRE(image.valid());
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
     REQUIRE(image.frame_count() == 3u);
     REQUIRE(durations_of(image) == std::vector<std::chrono::milliseconds> { 100ms, 150ms, 200ms });
 
@@ -879,7 +957,7 @@ TEST_CASE("An animation composites a frame onto the one it needs", "[ui][image][
     // 앞의 견본들은 장마다 화면을 불투명하게 덮어, 앞 장을 하나도 보지 않고 그려도
     // 색이 맞는다. 여기 둘째 장은 왼쪽 절반만 초록이고 오른쪽 절반이 투명이라,
     // 합성을 빠뜨리면 오른쪽이 투명한 채로 남아 배경이 비친다.
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_animated_image image { luil::decode_animated_image_bytes(bytes_of(overlay_gif), error) };
     REQUIRE(image.valid());
     REQUIRE(image.frame_count() == 2u);
@@ -903,10 +981,10 @@ TEST_CASE("A still png opens through the animated door as one frame", "[ui][imag
 {
     // **무엇이 올지 모르는 파일을 여는 앱은 이 문 하나만 쓰면 된다.** 움직이지 않는
     // 파일이 실패로 오면 앱이 두 문을 갈라 쥐고 element 종류도 갈라야 한다.
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_animated_image image { luil::decode_animated_image_bytes(bytes_of(quadrant_png), error) };
     REQUIRE(image.valid());
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
     REQUIRE(image.frame_count() == 1u);
     // `valid`와 `animated`가 갈리는 자리다 — 한 장짜리도 **유효한** 값이다.
     REQUIRE(image.animated() == false);
@@ -922,18 +1000,24 @@ TEST_CASE("A truncated animation is refused whole", "[ui][image][animation][rast
     // 코덱이 두 장을 보고하더라도 첫 장만 온전한 입력이다.
     const std::span<const std::uint8_t> truncated { bytes_of(animated_gif).first(105) };
 
-    std::u8string error {};
+    luil::image_decode_error error {};
     REQUIRE(luil::decode_animated_image_bytes(truncated, error).valid() == false);
     // 절반만 돌려주면 화면에서 "원래 그런 그림"과 구별되지 않는다. 어느 장에서
-    // 걸렸는지가 글에 있다.
-    REQUIRE(error.find(u8"frame") != std::u8string::npos);
+    // 걸렸는지가 글에도 있고 **값에도 있다** — 글을 뒤져 번호를 캐내는 앱이
+    // 없어야 한다.
+    REQUIRE(error.message.find(u8"frame") != std::u8string::npos);
+    REQUIRE(error.frame == 1u);
+    // 갈래는 코덱의 판정을 따라 `incomplete_input`이나 `frame_failed`다. 둘 중
+    // 무엇인지는 이 test가 묻는 것이 아니고(그것은 wuffs의 판단이다), **비어 있지
+    // 않다는 것**과 장 번호가 이 축이 잠그는 것이다.
+    REQUIRE(error.empty() == false);
 
     // **같은 바이트를 정지 문으로 열면 첫 장은 나온다.** 고르는 것은 앱이다 —
     // 잘린 gif라도 첫 장은 필요한 자리가 있다.
-    std::u8string still_error { u8"untouched" };
+    luil::image_decode_error still_error { seeded_error() };
     const luil::ui_image first { luil::decode_image_bytes(truncated, still_error) };
     REQUIRE(first.valid());
-    REQUIRE(still_error == u8"untouched");
+    REQUIRE(untouched(still_error));
     REQUIRE(first.width() == 2);
     REQUIRE(first.height() == 2);
     REQUIRE(raster_pixels(first, 2, 2) == filled_with(4u, luil::ui_color { 0xFFFF0000 }));
@@ -941,18 +1025,19 @@ TEST_CASE("A truncated animation is refused whole", "[ui][image][animation][rast
 
 TEST_CASE("An animation that holds more pixels than the limit is refused with a way out", "[ui][image][animation]")
 {
-    std::u8string error {};
+    luil::image_decode_error error {};
     REQUIRE(luil::decode_animated_image_bytes(bytes_of(huge_screen_gif), error).valid() == false);
     // 거절만으로는 앱이 할 수 있는 일이 없다. **상한이 줄인 뒤의 크기에 걸리므로**
     // 이 조언이 실제로 통한다 — 원본에 걸었다면 손잡이를 쥐어 주고도 길이 없다.
-    REQUIRE(error.find(u8"max_width") != std::u8string::npos);
+    REQUIRE(error.kind == luil::image_decode_error_kind::animation_too_large);
+    REQUIRE(error.message.find(u8"max_width") != std::u8string::npos);
 
-    std::u8string smaller_error { u8"untouched" };
+    luil::image_decode_error smaller_error { seeded_error() };
     const luil::ui_animated_image smaller {
         luil::decode_animated_image_bytes(bytes_of(huge_screen_gif), { .max_width = 64 }, smaller_error),
     };
     REQUIRE(smaller.valid());
-    REQUIRE(smaller_error == u8"untouched");
+    REQUIRE(untouched(smaller_error));
     REQUIRE(smaller.frame_count() == 17u);
     REQUIRE(smaller.width() == 64);
     REQUIRE(smaller.height() == 64);
@@ -960,7 +1045,7 @@ TEST_CASE("An animation that holds more pixels than the limit is refused with a 
 
 TEST_CASE("An animated image decodes at the size that was asked for", "[ui][image][animation][raster]")
 {
-    std::u8string error {};
+    luil::image_decode_error error {};
     const luil::ui_animated_image image { luil::decode_animated_image_bytes(bytes_of(scaled_gif), { .max_width = 4 }, error) };
     REQUIRE(image.valid());
     REQUIRE(image.frame_count() == 3u);
@@ -982,11 +1067,232 @@ TEST_CASE("An APNG animates", "[ui][image][animation]")
     // 여기에 갈래가 없다 — libpng으로 세운 Skia는 configure에서 걸린다.
     static_assert(LUIL_ANIMATED_PNG == 1);
 
-    std::u8string error { u8"untouched" };
+    luil::image_decode_error error { seeded_error() };
     const luil::ui_animated_image image { luil::decode_animated_image_bytes(bytes_of(animated_png), error) };
     REQUIRE(image.valid());
-    REQUIRE(error == u8"untouched");
+    REQUIRE(untouched(error));
     REQUIRE(image.frame_count() == 2u);
     REQUIRE(image.animated());
     REQUIRE(image.frame_durations()[0] == std::chrono::milliseconds { 120 });
+}
+
+TEST_CASE("A cancelled decode hands back nothing and says it was cancelled", "[ui][image][decode][cancel]")
+{
+    SECTION("바이트를 여는 문")
+    {
+        // 견본은 `tests/sample_image_bytes.h`가 함께 든다. 이 축이 묻는 것은
+        // 접히는가이지 어느 그림인가가 아니므로 가장 작은 견본이면 족하다.
+        luil::image_decode_options options {};
+        options.cancelled = always_cancelled();
+
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_image_bytes(bytes_of(luil::testing::sample_quadrant_png), options, error).valid() == false);
+        // **접힌 것은 알아볼 수 있는 답이다.** 빈 이미지만 보면 앱은 접힌 것과
+        // 깨진 파일을 가르지 못한다 (`http_error_kind::cancelled`와 같은 규칙이다).
+        REQUIRE(error.kind == luil::image_decode_error_kind::cancelled);
+        REQUIRE(error.message.find(u8"cancelled") != std::u8string::npos);
+    }
+
+    SECTION("파일을 여는 문")
+    {
+        const temporary_image_file sample { bytes_of(quadrant_png), 6 };
+        luil::image_decode_options options {};
+        options.cancelled = always_cancelled();
+
+        luil::image_decode_error error {};
+        REQUIRE(luil::load_image_file(sample.path(), options, error).valid() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::cancelled);
+    }
+
+    SECTION("거짓을 답하는 갈고리는 아무것도 바꾸지 않는다")
+    {
+        // **갈고리가 있다는 것만으로 달라지면 안 된다.** 접지 않는 앱이 상시로
+        // 갈고리를 달아 두는 것이 보통이고(창이 살아 있으면 늘 거짓), 그 자리가
+        // 조금이라도 다르게 굴면 접기를 켠 앱만 다른 그림을 받는다.
+        luil::image_decode_options options {};
+        options.cancelled = [] { return false; };
+
+        luil::image_decode_error error { seeded_error() };
+        const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(quadrant_png), options, error) };
+        REQUIRE(decoded.valid());
+        REQUIRE(untouched(error));
+        REQUIRE(decoded.width() == 2);
+        REQUIRE(raster_pixels(decoded, 2, 2)[0] == luil::ui_color { 0xFFFF0000 });
+    }
+
+    SECTION("장을 푸는 도중에 접으면 푼 장도 남기지 않는다")
+    {
+        // **접힘은 `incomplete`가 아니다.** 잘린 파일을 받는 것은 앱이 고른 일이고,
+        // 접는 것은 앱이 그만두라고 한 일이다 — 그만두라고 했는데 반쪽이 오면
+        // 앱은 "접었다"와 "끝났다"를 다시 갈라 들어야 한다.
+        //  - 물음은 여러 자리에서 온다(바이트를 빌릴 때·목록을 짓기 전·장마다).
+        //    몇 번을 지나 보낸 뒤에 접으면 **이미 푼 장이 있는 자리**에서 접힌다.
+        const std::shared_ptr<int> asked { std::make_shared<int>(0) };
+        luil::image_decode_options options {};
+        options.cancelled = cancelled_after(asked, 4);
+
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_animated_image_bytes(bytes_of(animated_gif), options, error).valid() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::cancelled);
+        // 정말로 여러 자리에서 물었다 (한 번만 묻는 구현은 여기서 갈린다 —
+        // 그런 구현은 파일 하나를 다 푼 뒤에야 접힌다).
+        REQUIRE(*asked >= 5);
+    }
+}
+
+TEST_CASE("The app can set the source pixel limit for the picture it is opening", "[ui][image][decode]")
+{
+    SECTION("기본값이 받아들이는 그림을 앱이 거절한다")
+    {
+        // 64×32는 2048 픽셀이라 기본 상한(64 M) 근처에도 가지 않는다. 앱이 제
+        // 상한을 걸면 **같은 바이트가 거절된다** — 섬네일을 짓는 자리가 큰 원본을
+        // 아예 펴지 않게 하는 손잡이다.
+        luil::image_decode_options options {};
+        options.max_source_pixels = 1000;
+
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_image_bytes(bytes_of(luil::testing::sample_solid_png), options, error).valid() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::too_many_pixels);
+        // 글은 **앱이 건 값**을 적는다. 기본값의 문장("64 megapixel")을 그대로
+        // 쓰면 진단이 거짓이 되어 사람을 엉뚱한 데로 보낸다.
+        REQUIRE(error.message.find(u8"decode limit") != std::u8string::npos);
+        REQUIRE(error.message.find(u8"1000") != std::u8string::npos);
+    }
+
+    SECTION("상한을 걸지 않으면 그대로 선다")
+    {
+        luil::image_decode_error error { seeded_error() };
+        const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(luil::testing::sample_solid_png), error) };
+        REQUIRE(decoded.valid());
+        REQUIRE(untouched(error));
+        REQUIRE(decoded.width() == 64);
+        REQUIRE(decoded.height() == 32);
+    }
+
+    SECTION("올려도 합 상한은 그대로다")
+    {
+        // **이 손잡이는 원본 한 장에만 닿는다.** 장을 전부 합한 상한은 앱의
+        // 쓰임이 아니라 프로세스를 지키는 값이라 열지 않았다 (image_decode.h) —
+        // 아주 큰 값을 걸어도 열일곱 장의 합은 여전히 거절된다.
+        luil::image_decode_options options {};
+        options.max_source_pixels = 1024ull * 1024ull * 1024ull;
+
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_animated_image_bytes(bytes_of(huge_screen_gif), options, error).valid() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::animation_too_large);
+    }
+}
+
+TEST_CASE("An incomplete still image comes back only when the app asks for it", "[ui][image][decode][raster]")
+{
+    // 첫 장의 LZW 자료 한가운데에서 자른다 (8×8 gif의 자료는 64번째 byte부터
+    // 열다섯이다). 머리와 화면 크기는 온전하므로 코덱은 서고, 픽셀을 펴다가
+    // 자료가 모자라 멈춘다 — 그것이 "자료가 그림보다 먼저 끝났다"의 모양이다.
+    const std::span<const std::uint8_t> truncated { bytes_of(scaled_gif).first(70) };
+
+    SECTION("기본값은 통째로 거절한다")
+    {
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_image_bytes(truncated, error).valid() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::incomplete_input);
+    }
+
+    SECTION("받기로 하면 그림과 이유가 함께 온다")
+    {
+        luil::image_decode_options options {};
+        options.incomplete = luil::image_incomplete_policy::accept;
+
+        luil::image_decode_error error {};
+        const luil::ui_image decoded { luil::decode_image_bytes(truncated, options, error) };
+        // **둘을 따로 묻는다.** `valid()`가 "그림이 있는가"이고 `error.empty()`가
+        // "그것이 그림 전부인가"다 — 하나로 묻는 코드는 여기서 반드시 틀린다.
+        REQUIRE(decoded.valid());
+        REQUIRE(error.empty() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::incomplete_input);
+        // 크기는 잘리지 않는다. 논리 화면은 머리에 적혀 있고, 못 푼 자리는 투명이다.
+        REQUIRE(decoded.width() == 8);
+        REQUIRE(decoded.height() == 8);
+        // 그리기가 죽지 않는다 — 반쪽이어도 값은 어엿한 이미지다.
+        REQUIRE(raster_pixels(decoded, 8, 8).size() == 64u);
+    }
+}
+
+TEST_CASE("An incomplete animation keeps the frames that decoded when the app asks for it", "[ui][image][animation][raster]")
+{
+    luil::image_decode_options options {};
+    options.incomplete = luil::image_incomplete_policy::accept;
+
+    SECTION("첫 실패 앞까지가 값이 된다")
+    {
+        // 둘째 장의 자료 한가운데에서 자른 파일이다 (위의 "통째로 거절" 축과 같은
+        // 바이트다 — 갈리는 것은 정책 하나다).
+        const std::span<const std::uint8_t> truncated { bytes_of(animated_gif).first(105) };
+
+        luil::image_decode_error error {};
+        const luil::ui_animated_image image { luil::decode_animated_image_bytes(truncated, options, error) };
+        REQUIRE(image.valid());
+        REQUIRE(image.frame_count() == 1u);
+        // 한 장짜리라 움직이지 않는다 — 앱이 재생 시계를 돌려도 창을 깨우지 않는다.
+        REQUIRE(image.animated() == false);
+        REQUIRE(image.width() == 2);
+        REQUIRE(image.height() == 2);
+        // 남은 장은 **온전한 장**이다. 반쯤 합성된 장이 섞여 오면 화면에서
+        // "원래 그런 그림"이 된다.
+        REQUIRE(frame_pixels(image, 0) == filled_with(4u, luil::ui_color { 0xFFFF0000 }));
+
+        // 그리고 잘렸다는 사실이 값과 함께 온다. 몇 번째에서 끊겼는지가 `frame`이다.
+        REQUIRE(error.empty() == false);
+        REQUIRE(error.frame == 1u);
+    }
+
+    SECTION("한 장도 풀지 못했으면 받기로 했어도 실패다")
+    {
+        // 첫 장의 자료 한가운데에서 자른다. 장이 없는 애니메이션은 값이 아니므로
+        // (`make_animated_image`가 빈 값을 답한다) 정책과 상관없이 실패다 —
+        // 빈 값을 이유 없이 돌려주지 않는 것이 이 API의 계약이다.
+        const std::span<const std::uint8_t> truncated { bytes_of(animated_gif).first(66) };
+
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_animated_image_bytes(truncated, options, error).valid() == false);
+        REQUIRE(error.empty() == false);
+    }
+}
+
+TEST_CASE("An animation that fails for a reason other than truncation is refused whole", "[ui][image][animation]")
+{
+    // 셋째 장(2번)의 자료만 깨뜨린 파일이다. **자르지 않았다** — 뒤의 바이트도
+    // 트레일러도 그대로라 장 수는 여전히 셋이고 앞의 두 장은 온전히 풀린다.
+    //  - **두 장이 풀리는 것이 이 축의 전부다.** 한 장도 풀리지 않으면 "장이 없는
+    //    애니메이션은 값이 아니다"라는 다른 규칙에 걸려, 갈래를 보지 않는 구현도
+    //    초록이 된다. 위의 `accept` 축들이 전부 잘린 바이트만 보아 온 것이, 갈래를
+    //    보지 않는 구현이 test를 지나온 길이다.
+    const std::vector<std::uint8_t> broken { with_broken_frame_data(bytes_of(animated_gif), 142) };
+
+    SECTION("기본값은 통째로 거절한다")
+    {
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_animated_image_bytes(bytes_of(broken), error).valid() == false);
+        // **잘린 것이 아니다.** 코덱은 자료를 다 받고도 풀지 못했다고 답하므로
+        // 갈래가 `incomplete_input`이 아니고, 이 test 전체가 그 위에 선다.
+        REQUIRE(error.kind == luil::image_decode_error_kind::frame_failed);
+        REQUIRE(error.frame == 2u);
+    }
+
+    SECTION("받기로 해도 통째로 거절한다")
+    {
+        // **`accept`는 "자료가 그림보다 먼저 끝났다"에만 답한다.** 갈래를 보지 않고
+        // 아무 실패나 값으로 바꾸면 앱은 두 장짜리 애니메이션을 조용히 받아 들고,
+        // 코덱의 실패도 우리 쪽 사고도 화면에서 "그냥 그런 그림"이 된다.
+        //  - 잘린 같은 파일이 같은 정책에서 값이 되는 것은 바로 위의 축이 든다.
+        //    갈리는 것은 **갈래 하나**다.
+        luil::image_decode_options options {};
+        options.incomplete = luil::image_incomplete_policy::accept;
+
+        luil::image_decode_error error {};
+        REQUIRE(luil::decode_animated_image_bytes(bytes_of(broken), options, error).valid() == false);
+        REQUIRE(error.kind == luil::image_decode_error_kind::frame_failed);
+        // **몇 번째 장인지가 값에 있다.** 앱이 "여기까지가 그림이다"를 그대로 적는
+        // 자리라, 0으로 오면 화면에 적히는 말이 거짓이 된다.
+        REQUIRE(error.frame == 2u);
+    }
 }

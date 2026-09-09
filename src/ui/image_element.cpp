@@ -11,6 +11,7 @@
 #include "include/core/SkSamplingOptions.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <optional>
@@ -285,6 +286,74 @@ namespace luil {
         };
     }
 
+    rect_f image_source_rect(const rect_f& source, const int width, const int height) noexcept
+    {
+        // 빈 이미지는 빈 사각형이다 — 그릴 것이 없다는 답을 "전체"로 적을 수 없다.
+        if (width <= 0 || height <= 0)
+            return {};
+        const rect_f whole { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height) };
+        // 비었거나 음수로 적힌 조각은 "전부"다 (`image_config::source`의 계약).
+        if (source.width <= 0.0f || source.height <= 0.0f)
+            return whole;
+
+        // 걸친 조각은 이미지 안으로 자른다. 밖까지 그리면 그 자리가 조각의 일부인 양
+        // 늘어나 그림이 어긋난다.
+        const float left { source.x > 0.0f ? source.x : 0.0f };
+        const float top { source.y > 0.0f ? source.y : 0.0f };
+        const float right { source.x + source.width < whole.width ? source.x + source.width : whole.width };
+        const float bottom { source.y + source.height < whole.height ? source.y + source.height : whole.height };
+        // 통째로 밖이면 남는 것이 없다. 그때도 전체다 — 아무것도 그리지 않으면 앱은
+        // 이미지가 없는 것인지 조각이 어긋난 것인지 화면에서 가릴 수 없다.
+        if (right <= left || bottom <= top)
+            return whole;
+        return { left, top, right - left, bottom - top };
+    }
+
+    namespace {
+        // luil의 표본 어휘를 Skia 값으로 옮기는 **유일한 자리**다 (`image_sampling`).
+        // 공개 API에 Skia 타입을 늘리지 않으므로 이 표가 경계에 하나만 서고, 앱은
+        // filter와 mipmap을 손으로 짝짓지 않는다.
+        //  - 디코딩에서 줄일 때도 `smooth`와 같은 값을 쓴다 (`image_decode.cpp`의
+        //    `drawImageRect`) — 디코딩에서 줄인 그림과 그리기에서 줄인 그림이 같아
+        //    보이려면 두 자리의 표본이 같아야 한다.
+        [[nodiscard]] SkSamplingOptions sampling_options_for(const image_sampling sampling) noexcept
+        {
+            // `sharp`는 mipmap도 끈다. mipmap이 곧 줄이면서 섞는 장치라, 섞지
+            // 않겠다는 값과 짝지으면 뜻이 어긋난다.
+            if (sampling == image_sampling::sharp)
+                return SkSamplingOptions { SkFilterMode::kNearest, SkMipmapMode::kNone };
+            // linear가 확대의 기본이고, 축소는 mipmap이 함께여야 성기게 뭉개지지
+            // 않는다 (썸네일).
+            return SkSamplingOptions { SkFilterMode::kLinear, SkMipmapMode::kLinear };
+        }
+
+        // 조각이 이미지 전체인가 — 표본 제약을 가르는 물음이다.
+        // `image_source_rect`가 이미 이미지 안으로 다듬은 값이라 네 변만 본다.
+        [[nodiscard]] bool covers_whole_image(const rect_f& source, const int width, const int height) noexcept
+        {
+            return source.x <= 0.0f && source.y <= 0.0f && source.width >= static_cast<float>(width) && source.height >= static_cast<float>(height);
+        }
+
+        // 조각의 한 변을 `image_destination`에 넣을 정수로 옮긴다.
+        //
+        // **자르지 않고 반올림한다.** 자르면 32.7픽셀짜리 조각이 32로 앉아 앱이 청한
+        // 사각형에서 비율이 밀려나고, 그림은 뜨므로 눈으로는 "원래 저런 그림"과
+        // 갈리지 않는다.
+        //  - 그리고 **1 아래로 내려가지 않는다.** `image_source_rect`를 지난 조각은
+        //    그릴 것이 있는 조각인데, 0.5픽셀짜리 변이 0으로 접히면
+        //    `image_destination`이 빈 사각형을 답하고 그리기가 **아무 말 없이**
+        //    돌아선다 — 화면에서 "빈 이미지"와 구별되지 않아 아무도 실패를 못 본다.
+        //    `decoded_image_size`가 축소한 축을 0으로 만들지 않는 것과 같은 자리이자
+        //    같은 이유다.
+        //  - 뽑는 자리 자체는 소수점 그대로다. 반올림은 **칸에 맞추는 계산**에만
+        //    걸리고, 그리기에 넘기는 조각은 앱이 적은 사각형 그대로다.
+        [[nodiscard]] int source_extent(const float extent) noexcept
+        {
+            const int rounded { static_cast<int>(std::lround(extent)) };
+            return rounded > 0 ? rounded : 1;
+        }
+    } // namespace
+
     image_element::image_element(ui_element_id id, image_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
@@ -310,9 +379,20 @@ namespace luil {
         }
         if (picture->valid() == false)
             return;
+        // 뽑아 쓸 조각을 먼저 정한다. 걸치거나 어긋난 값이 여기서 다 다듬어져,
+        // 아래 계산은 언제나 이미지 안의 사각형 하나만 본다 (`image_source_rect`).
+        const rect_f source { image_source_rect(config_.source, picture->width(), picture->height()) };
+        if (source.width <= 0.0f || source.height <= 0.0f)
+            return;
         // 장이 전부 같은 크기라 아래 인자가 장마다 흔들리지 않는다 — 그리기는 여느
         // `ui_image`와 똑같은 한 번의 그리기다.
-        const rect_f destination { image_destination(bounds(), picture->width(), picture->height(), config_.fit) };
+        // **칸에 맞추는 것은 조각이지 이미지가 아니다.** 8:1 시트의 크기를 넣으면
+        // 거기서 잘라 낸 정사각 스프라이트가 시트의 비율로 자리를 잡아, 엉뚱한 여백
+        // 안에 앉는다 (`image_config::source`).
+        //  - 변은 **반올림해서** 넣는다 (`source_extent`). 잘라 넣으면 소수점이 든
+        //    조각이 청한 비율에서 밀려나고, 한 픽셀보다 좁은 조각은 0이 되어 그리기가
+        //    아무 말 없이 돌아선다.
+        const rect_f destination { image_destination(bounds(), source_extent(source.width), source_extent(source.height), config_.fit) };
         if (destination.width <= 0.0f || destination.height <= 0.0f)
             return;
 
@@ -325,12 +405,20 @@ namespace luil {
             // 잘린 가장자리도 그리기 가장자리와 같은 품질이어야 한다 — AA clip이다.
             context.canvas.clipRect(SkRect::MakeXYWH(bounds().x, bounds().y, bounds().width, bounds().height), true);
         }
-        // linear가 확대의 기본이고, 축소는 mipmap이 함께여야 성기게 뭉개지지
-        // 않는다 (썸네일). 가장자리는 다른 그리기(`solid_paint`)와 같이 AA다.
+        // 표본은 `sampling_options_for` 한 자리에서 나온다. 가장자리는 다른
+        // 그리기(`solid_paint`)와 같이 AA다.
         SkPaint paint {};
         paint.setAntiAlias(true);
-        context.canvas.drawImageRect(picture->backing()->image.get(), SkRect::MakeXYWH(destination.x, destination.y, destination.width, destination.height),
-            SkSamplingOptions { SkFilterMode::kLinear, SkMipmapMode::kLinear }, &paint);
+        // 조각이 이미지 전체면 fast다 — mipmap이 살아 있어 지금까지의 축소 품질이
+        // 그대로다. 일부면 strict다 — 그러지 않으면 필터가 조각 밖 한두 줄까지 읽어
+        // **옆 스프라이트가 가장자리에 번져 든다.**
+        //  - 그 대가로 Skia는 strict에서 mipmap을 끈다. 많이 줄여 그린 조각은 그래서
+        //    성기게 튀고, 답은 제약을 푸는 것이 아니라 **필요한 크기로 조각을 미리
+        //    짓는 것**이다 (image_element.h의 `image_config::source`).
+        const bool whole { covers_whole_image(source, picture->width(), picture->height()) };
+        const SkCanvas::SrcRectConstraint constraint { whole ? SkCanvas::kFast_SrcRectConstraint : SkCanvas::kStrict_SrcRectConstraint };
+        context.canvas.drawImageRect(picture->backing()->image.get(), SkRect::MakeXYWH(source.x, source.y, source.width, source.height),
+            SkRect::MakeXYWH(destination.x, destination.y, destination.width, destination.height), sampling_options_for(config_.sampling), &paint, constraint);
         if (clip)
             context.canvas.restore();
     }

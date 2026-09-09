@@ -197,6 +197,58 @@ namespace luil {
         std::function<std::optional<std::vector<input_action>>(value_step step)> on_step {};
     };
 
+    // 흘리는 컨테이너가 자기 스크롤을 청하는 메시지다.
+    //
+    // **자리표가 아니라 element가 든다.** 지금까지 휠과 초점 되살리기는 "어느
+    // 것을 어떤 메시지로 흘리는가"를 앱이 지은 표(`scroll_route`)에서 찾았다.
+    // 표는 계기마다 한 벌씩 필요했고 — 휠은 좌표가 **덮는** 것을, 되살리기는
+    // 초점을 **품는** 것을 묻는다 — 두 표의 줄이 어긋나면 마지막 행이 막대 밑에
+    // 남거나 초점이 화면 밖에 선다. 컨테이너가 자기 메시지를 들고 있으면 두
+    // 질문이 같은 답을 본다 (`route_wheel`·`route_reveal`의 표 없는 짝).
+    //  - `drag_source`·`drop_target`·`key_step_target`과 같은 자리·같은 규약이다.
+    //    비어 있으면 그 역할이 없는 것이라 아무도 이 컨테이너를 흘리지 않는다.
+    struct scroll_source
+    {
+        // 스크롤 위치를 이만큼 옮기자는 메시지다 (delta는 논리 픽셀).
+        // 부호는 휠과 같다: 양수 = offset 증가 = 내용이 위로 올라간다.
+        std::function<input_action(float delta)> scroll {};
+        // 논리 스크롤 변화량을 배치의 물리 좌표로 옮기는 배율이다.
+        // arrange에서 실제 배율을 넣는다. 중첩 reveal이 이동 후 위치를 계산한다.
+        float scale { 1.0f };
+        // 절대 자리(`scroll_to`)는 여기 두지 않는다. 휠도 되살리기도 변화량으로만
+        // 말하고, 절대 자리를 읽는 것은 보조 기술뿐이라 그 값은 그것을 실제로
+        // 내주는 자리(`scrollbar_config::scroll_to`)에 있다 — 아무도 읽지 않는
+        // 칸을 두면 채운 앱이 켜졌다고 믿는다.
+    };
+
+    // 초점을 가진 채 글자로 **자기 모델 안**을 찾는 element다 (가상 목록).
+    //
+    // 묶음의 글자 탐색은 tree에 선 항목만 본다 (`search_label`). 창에 걸치는
+    // 것만 짓는 목록에서는 그것이 곧 "보이는 것만 찾는다"가 되어, 같은 글자를
+    // 쳤을 때 어디로 갈지가 지금 스크롤 자리에 달리게 된다.
+    //  - 질의를 잇고 끊는 규칙(글자 이어 붙이기·시간 끊김·같은 글자 되풀이)은
+    //    controller가 한곳에서 쥔다. 여기는 **무엇이 맞는가**만 답한다 — 모델을
+    //    아는 것은 element뿐이고, 규칙이 둘로 갈리면 묶음의 글자 탐색과 목록의
+    //    글자 탐색이 서로 다르게 걷는다.
+    //  - 답이 없으면(nullopt) 맞는 것이 없다는 뜻이고, 그래도 글자는 이 element가
+    //    가진다 — 맞지 않는 글자가 앱으로 새지 않는 것이 묶음과 같은 규약이다.
+    struct key_search_target
+    {
+        // 질의로 맞는 항목의 자리로 옮기자는 메시지다.
+        // `query`는 이어 친 글자 전체이고 UTF-8이다.
+        //
+        // `first`는 **이 글자로 질의가 새로 시작하는가**다. 참이면 지금 자리의
+        // **다음**부터 찾고, 거짓이면 지금 자리부터 찾는다 — 글을 더 적은 것이지
+        // 다음으로 가자는 뜻이 아니기 때문이다.
+        //  - 참이 되는 것은 앞의 질의가 **끊긴** 다음이다 (시간이 지났거나 초점이
+        //    다른 길로 옮겨 갔다). 같은 글자를 시간 안에 거듭 치면 질의는 `aa`로
+        //    이어 붙고 그 접두로 다시 찾는다 — 묶음의 글자 탐색과 같은 규칙이다.
+        //  - **controller가 준다.** 질의의 길이로 element가 되짚으면 안 된다 —
+        //    UTF-8에서 한글 한 글자는 세 byte라 첫 글자부터 "이어 친 글자"가 되고,
+        //    질의를 잇고 끊는 것을 쥔 쪽만 이 값을 옳게 안다.
+        std::function<std::optional<std::vector<input_action>>(std::u8string_view query, bool first)> on_search {};
+    };
+
     // 배치 문맥이다.
     // slot은 부모가 준 영역이고 scroll_offset은 논리 픽셀이다.
     struct arrange_context
@@ -251,6 +303,12 @@ namespace luil {
         float scale { 1.0f };
         std::chrono::steady_clock::time_point now {};
         bool maximized { false };
+        // 창이 테두리 없는 전체 화면인가다 (`maximized`와 같은 규칙으로 UI thread가 채운다).
+        // 둘은 **함께 참이 되지 않는다** — 전체 화면인 동안은 최대화가 아니다.
+        //  - 캡션 줄을 접거나 화면 가장자리까지 그림을 넓히는 element가 이것을 본다.
+        //    tree를 다시 짓는 것(캡션 줄을 아예 빼는 것)은 앱의 몫이고, 그 앱은 같은
+        //    사실을 배치 메시지(`window_placement::fullscreen`)로 받는다.
+        bool fullscreen { false };
     };
 
     // update 판정의 문맥이다.
@@ -391,6 +449,11 @@ namespace luil {
         [[nodiscard]] const pointer_drag_target* pointer_drag() const noexcept;
         // 초점을 가진 채 키로 값을 바꾸는 역할이다. 없으면 nullptr다.
         [[nodiscard]] const key_step_target* key_step() const noexcept;
+        // 이 컨테이너를 흘리는 메시지다. 없으면 nullptr다.
+        // 휠과 초점 되살리기가 표 없이 이 값으로 임자를 찾는다.
+        [[nodiscard]] const scroll_source* scroll() const noexcept;
+        // 초점을 가진 채 글자로 자기 모델을 찾는 역할이다. 없으면 nullptr다.
+        [[nodiscard]] const key_search_target* key_search() const noexcept;
         // 앱이 지정한 포인터 모양이다.
         // `inherit`이면 지정하지 않았다는 뜻이라 `cursor_at`이 역할에서 고른다.
         [[nodiscard]] ui_cursor cursor() const noexcept;
@@ -404,6 +467,9 @@ namespace luil {
         // 마우스로 누를 수 있는데 키보드로는 갈 수 없는 자리를 만들지 않는 것이
         // 이 기본값의 뜻이다 (keyboard-focus-design.md).
         [[nodiscard]] bool tab_stop() const noexcept;
+        // 포인터로 눌렀을 때 초점을 받을 대상이다. 기본은 자신이다.
+        // 합성 컨트롤의 부품은 Tab 자리 없이도 컨트롤로 초점을 보낼 수 있다.
+        [[nodiscard]] virtual const ui_element_id& pointer_focus_target() const noexcept;
         // 이 element의 자손들이 Tab 순회에서 한 자리인가 (묶음).
         // `none`이 아니면 `focus_order`가 묶음을 자리 하나로 접고, 그 안은
         // 화살표가 돈다.
@@ -477,6 +543,12 @@ namespace luil {
         void set_pointer_drag_target(std::optional<pointer_drag_target> target);
         // 끌기와 짝이 되는 키 역할이다 (`set_pointer_drag_target`과 같은 build 시 설정).
         void set_key_step_target(std::optional<key_step_target> target);
+        // 이 컨테이너가 낼 스크롤 메시지다 (`set_key_step_target`과 같은 build 시 설정).
+        // 세우면 휠과 초점 되살리기가 표 없이 이 컨테이너를 찾아 쓴다 —
+        // `scroll_delta_to_reveal`을 재정의한 컨테이너와 짝이 되는 값이다.
+        void set_scroll_source(std::optional<scroll_source> source);
+        // 글자 탐색이 이 element의 모델을 묻게 한다 (가상 목록).
+        void set_key_search_target(std::optional<key_search_target> target);
         void set_clip_children(bool value) noexcept;
         void set_hit_opaque(bool value) noexcept;
         // 자손들을 Tab의 한 자리로 묶는다 (탭 막대·라디오 묶음·목록).
@@ -616,6 +688,8 @@ namespace luil {
         std::optional<drop_target> drop_target_ {};
         std::optional<pointer_drag_target> pointer_drag_target_ {};
         std::optional<key_step_target> key_step_target_ {};
+        std::optional<scroll_source> scroll_source_ {};
+        std::optional<key_search_target> key_search_target_ {};
         bool clip_children_ { false };
         bool hit_opaque_ { false };
         // 비어 있으면 액션 유무에서 판정한다 (`tab_stop`).

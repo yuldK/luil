@@ -254,6 +254,13 @@ namespace luil {
     {
         window_minimize,
         window_toggle_maximize,
+        // 주 창을 테두리 없는 전체 화면으로 넣고 뺀다.
+        // 최대화와 **다른 상태다**: 작업 표시줄 위까지 모니터를 덮고, 크기 조절
+        // 가장자리도 캡션 끌기 띠도 그동안 없다. 앱은 이 명령만 내고, 어느 모니터를
+        // 덮을지·나올 때 어디로 돌아갈지는 UI thread가 든다
+        // (docs/concepts/window.md).
+        //  - 주 창에만 듣는다. 보조 창은 배치 저장과 마찬가지로 대상이 아니다.
+        window_toggle_fullscreen,
         window_close,
     };
 

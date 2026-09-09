@@ -73,6 +73,14 @@ Attached surface마다 UI Automation fragment root 하나를 공개할 수 있�
 
 Main과 secondary caption surface는 `window_config::accept_file_drop`에 따라 file-drop을 등록하지만 popup은 등록하지 않는다. Drag hover는 input pump에 post하고 완료된 OLE drop은 현재 surface tree를 동기적으로 조회해 선택한 element action을 dispatch한다. 자세한 계약은 [OS 파일 drag & drop](os-dragdrop-design.md)에 있다.
 
+## 창 모드
+
+`caption_surface`는 custom caption과 함께 **창이 서 있는 모습**(`window_display_mode`)도 소유한다. 이미 창 style, 확장 style, `WM_GETMINMAXINFO`, DWM 프레임을 그 자리가 맡고 있어 전체 화면 진입·이탈이 손대야 하는 것이 전부 여기 모여 있기 때문이다.
+
+판단은 창을 모르는 [`window_mode.h`](../src/win32/window_mode.h)에 있고 surface는 그 답을 Win32에 옮긴다. Style(버튼 집합 + 모드), 비클라이언트 hit, 모니터 목표 사각형, 앱에 보고할 배치가 전부 그쪽의 순수 함수다. `caption_layout`, `popup_reconcile`, `surface_invalidate`와 같은 규칙이며 창 없이 test가 선다.
+
+전체 화면은 main surface만 사용한다. Secondary surface와 popup은 언제나 통상 모드다.
+
 ## Concrete surface 역할
 
 Main application window는 `window_surface`에 `app_host`, popup과 secondary surface collection, shared DirectComposition device, WebView, system appearance, timer, process shutdown ownership을 더한다.
@@ -81,4 +89,4 @@ Main application window는 `window_surface`에 `app_host`, popup과 secondary su
 
 ## 검증
 
-[`tests/surface_input_tests.cpp`](../tests/surface_input_tests.cpp)는 message 변환과 surface tag를 검증하고 [`tests/surface_invalidate_tests.cpp`](../tests/surface_invalidate_tests.cpp)는 repaint 판단을 검증한다. Secondary, popup, accessibility, renderer, text-input, WebView, OLE test는 공통 surface 경계에 붙은 service를 반복 검증한다.
+[`tests/surface_input_tests.cpp`](../tests/surface_input_tests.cpp)는 message 변환과 surface tag를 검증하고 [`tests/surface_invalidate_tests.cpp`](../tests/surface_invalidate_tests.cpp)는 repaint 판단을 검증하며 [`tests/window_mode_tests.cpp`](../tests/window_mode_tests.cpp)는 창 모드의 style·hit·목표 사각형·보고 배치를 검증한다. Secondary, popup, accessibility, renderer, text-input, WebView, OLE test는 공통 surface 경계에 붙은 service를 반복 검증한다.

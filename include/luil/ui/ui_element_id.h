@@ -86,6 +86,19 @@ namespace luil {
         // 웹 콘텐츠가 앉을 자리다. 여럿이 동시에 있을 수 있어 owner로 구분한다.
         //  - owner가 곧 `ui_webview::id`다. 자리표와 수명이 그 값 하나로 만난다.
         webview,
+        // 흘리는 창과 막대를 한 자리로 묶은 영역과 그 부품이다.
+        // 부품은 영역이 스스로 조립하므로 앱이 만들 일은 없다.
+        scroll_area,
+        scroll_area_view,
+        scroll_area_bar,
+        // 창에 걸치는 행만 짓는 목록과 그 행이다. 행은 항목 키를 owner로 쓴다.
+        //  - 행 kind가 `list_row`와 갈리는 이유는 접근성이다. 가상 목록의 행은
+        //    스크롤할 때마다 tree에서 나고 사라지므로, 같은 kind로 두면 보조
+        //    기술이 두 목록의 행을 한 이름 공간에서 본다 (list-view-design.md).
+        virtual_list,
+        virtual_list_row,
+        // 목록이 스스로 조립하는 부품이다 (행을 늘어놓는 레인).
+        virtual_list_lane,
         // 앱이 정의하는 kind는 이 값부터다.
         // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         first_application_kind = 64,

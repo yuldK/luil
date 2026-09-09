@@ -2,13 +2,17 @@
 
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/dialog_elements.h"
+#include "luil/ui/image_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace {
     constexpr float raster_scale { 2.0f };
@@ -45,6 +49,38 @@ namespace {
         auto button { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .default_button = default_button }) };
         button->arrange({ slot, raster_scale });
         return button;
+    }
+
+    struct rgb
+    {
+        std::uint8_t red { 0 };
+        std::uint8_t green { 0 };
+        std::uint8_t blue { 0 };
+    };
+
+    // 사분면 색이 다른 정사각 이미지다 (한 사분면이 `block`×`block` 단색).
+    // 윗줄은 빨강·초록, 아랫줄은 파랑·흰색이다.
+    //  - 단색 이미지로는 조각을 뽑아 그리는 축을 볼 수 없다. 이웃이 섞여 들어도
+    //    같은 색이라 픽셀이 달라지지 않아서다 — 사분면마다 색이 다르면 번져 든
+    //    이웃이 곧바로 다른 값으로 드러난다.
+    //  - `block`이 1이면 2×2다. 확대해도 경계가 흐려지지 않는지 보는 자리이고,
+    //    2면 4×4 시트라 한 사분면이 온전한 스프라이트 하나가 된다.
+    [[nodiscard]] luil::ui_image make_quadrant_image(const int block)
+    {
+        const rgb quadrants[4] { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 }, { 255, 255, 255 } };
+        const int size { block * 2 };
+        std::vector<std::uint8_t> pixels {};
+        pixels.reserve(static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4);
+        for (int y { 0 }; y < size; ++y)
+            for (int x { 0 }; x < size; ++x)
+            {
+                const rgb& color { quadrants[(y >= block ? 2 : 0) + (x >= block ? 1 : 0)] };
+                pixels.push_back(color.red);
+                pixels.push_back(color.green);
+                pixels.push_back(color.blue);
+                pixels.push_back(255);
+            }
+        return luil::make_rgba_image(size, size, pixels);
     }
 } // namespace
 
@@ -197,5 +233,93 @@ TEST_CASE("A custom-visual drag still paints the drop target highlight", "[ui][r
 
         REQUIRE(frame.pixel_at(20, 50) == palette.accent);
         REQUIRE(frame.pixel_at(170, 164) == palette.accent);
+    }
+}
+
+TEST_CASE("One sprite of a sheet is painted alone and sharp sampling keeps its edges", "[ui][raster][image]")
+{
+    // 조각을 뽑아 그리는 축은 순수 함수(`image_source_rect`)만으로 잠기지 않는다.
+    // 그 사각형이 정말 표본의 경계가 되는지는 픽셀에만 있다 — 제약이 fast로
+    // 남으면 필터가 조각 밖을 함께 읽어 **옆 사분면이 가장자리에 번져 든다.**
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    constexpr luil::ui_color red { 0xFFFF0000 };
+    constexpr luil::ui_color green { 0xFF00FF00 };
+    constexpr luil::ui_color blue { 0xFF0000FF };
+    constexpr luil::ui_color white { 0xFFFFFFFF };
+    // 자리는 전부 물리 픽셀이다 (raster_probe.h의 규약). 칸의 한가운데가 160÷2를
+    // 더한 100이라, 98과 102가 경계를 사이에 둔 두 픽셀이다.
+    const luil::rect_f box { 20.0f, 20.0f, 160.0f, 160.0f };
+
+    const auto build = [&box](const luil::image_config& config) {
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, raster_scale });
+        auto picture { std::make_unique<luil::image_element>(luil::ui_element_id { luil::application_element_kind(2), u8"sprite" }, config) };
+        picture->arrange({ box, raster_scale });
+        root->add(std::move(picture));
+        return luil::ui_tree { std::move(root) };
+    };
+
+    SECTION("왼쪽 위 조각만 그려지고 이웃 색은 한 픽셀도 서지 않는다")
+    {
+        const luil::image_config config { .image = make_quadrant_image(2), .fit = luil::image_fit::fill, .source = { 0.0f, 0.0f, 2.0f, 2.0f } };
+        const luil::ui_tree tree { build(config) };
+        luil::testing::raster_frame frame { 200, 200, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+
+        // 조각이 단색이므로 칸 어디를 찍어도 그 색이다.
+        REQUIRE(frame.pixel_at(30, 30) == red);
+        REQUIRE(frame.pixel_at(100, 100) == red);
+        REQUIRE(frame.pixel_at(170, 170) == red);
+        // 이웃 사분면은 조각 밖이다 — 한 픽셀이라도 나오면 표본이 조각을 넘었다.
+        REQUIRE(frame.count_color(box, green) == 0);
+        REQUIRE(frame.count_color(box, blue) == 0);
+        REQUIRE(frame.count_color(box, white) == 0);
+    }
+
+    SECTION("오른쪽 위 조각은 맞닿은 이웃을 가장자리로 물어 오지 않는다")
+    {
+        // 이 조각의 **왼쪽 변**이 빨강과 맞닿아 있다. 제약이 느슨하면 그 변에서
+        // 빨강이 섞여 나온다.
+        const luil::image_config config { .image = make_quadrant_image(2), .fit = luil::image_fit::fill, .source = { 2.0f, 0.0f, 2.0f, 2.0f } };
+        const luil::ui_tree tree { build(config) };
+        luil::testing::raster_frame frame { 200, 200, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+
+        REQUIRE(frame.pixel_at(24, 100) == green);
+        REQUIRE(frame.pixel_at(100, 100) == green);
+        REQUIRE(frame.count_color(box, red) == 0);
+        REQUIRE(frame.count_color(box, blue) == 0);
+    }
+
+    SECTION("sharp는 크게 늘려도 경계를 흐리지 않는다")
+    {
+        // 2×2를 80배로 늘린다. nearest는 경계를 사이에 둔 두 픽셀이 각각 원본 색
+        // 그대로다.
+        const luil::image_config config { .image = make_quadrant_image(1), .fit = luil::image_fit::fill, .sampling = luil::image_sampling::sharp };
+        const luil::ui_tree tree { build(config) };
+        luil::testing::raster_frame frame { 200, 200, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+
+        REQUIRE(frame.pixel_at(98, 60) == red);
+        REQUIRE(frame.pixel_at(102, 60) == green);
+        REQUIRE(frame.pixel_at(98, 140) == blue);
+        REQUIRE(frame.pixel_at(102, 140) == white);
+        // 네 색이 칸을 사분한다 — 섞인 값이 끼어들 자리가 없다.
+        REQUIRE(frame.count_color(box, red) + frame.count_color(box, green) + frame.count_color(box, blue) + frame.count_color(box, white) > 160 * 160 * 9 / 10);
+    }
+
+    SECTION("smooth는 같은 자리를 섞는다 — 두 방식이 정말 갈린다")
+    {
+        // 기본값으로 같은 그림을 그리면 경계의 두 픽셀이 원본 색이 아니다. 이
+        // 단언이 없으면 위 SECTION은 표본이 무엇이든 지나간다.
+        const luil::image_config config { .image = make_quadrant_image(1), .fit = luil::image_fit::fill };
+        const luil::ui_tree tree { build(config) };
+        luil::testing::raster_frame frame { 200, 200, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+
+        REQUIRE(frame.pixel_at(98, 60) != red);
+        REQUIRE(frame.pixel_at(98, 60) != green);
+        // 가장자리는 표본이 이미지 밖으로 나가지 않아 원본 색 그대로다.
+        REQUIRE(frame.pixel_at(30, 30) == red);
     }
 }

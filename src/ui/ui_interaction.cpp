@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <memory>
+#include <span>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -419,6 +421,129 @@ namespace luil {
         return {};
     }
 
+    namespace {
+        // 좌표를 덮는 가장 안쪽·가장 위의 element 중, 휠이 거기서 멈추는 것이다.
+        //
+        // 답은 둘 중 하나다: 흘리는 컨테이너이거나, **흘리지는 않지만 휠을
+        // 삼키는 것**(scrim·메뉴 같은 `hit_opaque`)이다. 두 답을 한 함수가 내는
+        // 이유는 찾는 방법이 같아서다 — 위에 떠 있는 것부터 안쪽으로 내려가다
+        // 처음 걸리는 것이 임자다. 무엇이 걸렸는지는 부르는 쪽이 가른다.
+        //  - **`hit_opaque`를 보는 것이 방벽이다.** 보지 않으면 modal dialog가
+        //    떠 있는 동안 scrim 위에서 굴린 휠이 뒤의 화면을 흘린다. 포인터를
+        //    막는 것이 modal의 몫이라면(modal-dialog-design.md) 휠도 포인터다.
+        //  - 자식을 역순으로 보는 것과 자르는 컨테이너 밖을 보지 않는 것은
+        //    `ui_element::hit_test`와 같은 규칙이다.
+        //  - 다만 `interactive()`는 묻지 않는다. 흘리는 창은 누를 것이 없어도
+        //    휠을 받는다.
+        //  - 비활성인 가지는 통째로 지나친다. 흐리게 그려 놓고 굴러가면 그것은
+        //    비활성이 아니다.
+        [[nodiscard]] const ui_element* wheel_owner_at(const ui_element& element, const float x, const float y)
+        {
+            if (element.visible() == false || element.enabled() == false)
+                return nullptr;
+            if (element.clip_children() && element.bounds().contains(x, y) == false)
+                return nullptr;
+            const std::span<const std::unique_ptr<ui_element>> children { element.children() };
+            for (std::size_t index = children.size(); index > 0u; --index)
+                if (const ui_element* const found { wheel_owner_at(*children[index - 1u], x, y) }; found != nullptr)
+                    return found;
+            if (element.bounds().contains(x, y) == false)
+                return nullptr;
+            const scroll_source* const source { element.scroll() };
+            if ((source != nullptr && source->scroll != nullptr) || element.hit_opaque())
+                return &element;
+            return nullptr;
+        }
+
+        // 뿌리에서 `id`까지의 길이다 (뿌리가 앞, 대상이 뒤).
+        // 찾지 못하면 `path`는 비어 있다.
+        [[nodiscard]] bool collect_ancestry(const ui_element& element, const ui_element_id& id, std::vector<const ui_element*>& path)
+        {
+            path.push_back(&element);
+            if (element.id() == id)
+                return true;
+            for (const std::unique_ptr<ui_element>& child : element.children())
+                if (collect_ancestry(*child, id, path))
+                    return true;
+            path.pop_back();
+            return false;
+        }
+
+        // 대상이 그 창 안에서 실제로 보이는 세로 구간이다.
+        //
+        // 겹치는 데가 없으면 창 전체다 — 아직 들이지 못한 대상은 "이 창 어딘가에
+        // 설 것"이므로 다음 겹에는 창을 통째로 이름 대는 것이 맞다.
+        //  - 가로는 보지 않는다. 되살리기가 세로 하나뿐이라 창의 x·width를 그대로
+        //    물려주면 바깥 겹의 판정이 안쪽 창의 가로 자리를 그대로 쓴다.
+        [[nodiscard]] rect_f visible_part_of(const rect_f& target, const rect_f& viewport) noexcept
+        {
+            const float top { target.y > viewport.y ? target.y : viewport.y };
+            const float target_bottom { target.y + target.height };
+            const float viewport_bottom { viewport.y + viewport.height };
+            const float bottom { target_bottom < viewport_bottom ? target_bottom : viewport_bottom };
+            if (bottom <= top)
+                return viewport;
+            return { viewport.x, top, viewport.width, bottom - top };
+        }
+    } // namespace
+
+    std::vector<input_action> route_wheel(const ui_tree& tree, const float x, const float y, const float delta)
+    {
+        const ui_element* const root { tree.root() };
+        if (root == nullptr)
+            return {};
+        const ui_element* const owner { wheel_owner_at(*root, x, y) };
+        if (owner == nullptr)
+            return {};
+        const scroll_source* const source { owner->scroll() };
+        // 흘리지 않고 삼키기만 하는 것이 걸렸으면 아무 일도 하지 않는다.
+        if (source == nullptr || source->scroll == nullptr)
+            return {};
+        return { source->scroll(delta) };
+    }
+
+    std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target)
+    {
+        const ui_element* const root { tree.root() };
+        const ui_element* const focused { tree.find(target) };
+        if (root == nullptr || focused == nullptr)
+            return {};
+        std::vector<const ui_element*> path {};
+        if (collect_ancestry(*root, target, path) == false || path.size() < 2u)
+            return {};
+
+        // 안쪽 창부터 바깥으로 **이어서** 들인다.
+        //
+        // 한 겹만 보고 끝내면 겹친 창에서 초점이 화면 밖에 남는다 — 행은 안쪽
+        // 목록 안에서 보이는데 그 목록이 바깥 판에서 밀려 나가 있는 경우다.
+        //
+        // 다음 겹의 대상은 안쪽 스크롤을 적용한 뒤 이 창에서 보이는 부분이다.
+        //  - 겹치는 부분을 쓰는 것이 요점이다. 창 전체를 그대로 넘기면, 안쪽 창이
+        //    바깥 창보다 **길** 때 `scroll_delta_to_reveal`이 앞 끝을 맞춰 0을
+        //    답한다 (layout_metrics.h: 대상이 창보다 길면 앞쪽 끝을 맞춘다). 그러면
+        //    800px짜리 안쪽 목록의 맨 아래 행이 300px 바깥 창에서 잘린 채로 남고
+        //    아무 메시지도 나오지 않는다.
+        //  - **전부 보이면 빈 목록이다.** 이것이 방벽이다 — 없으면 화살표를 누를
+        //    때마다 0짜리 스크롤 메시지가 logic을 깨워 tree를 다시 짓는다.
+        std::vector<input_action> actions {};
+        rect_f box { focused->bounds() };
+        for (std::size_t index = path.size() - 1u; index > 0u; --index)
+        {
+            const ui_element* const viewport { path[index - 1u] };
+            const scroll_source* const source { viewport->scroll() };
+            if (source == nullptr || source->scroll == nullptr)
+                continue;
+            // 얼마나 흘릴지는 그 창이 답한다 (표 있는 짝과 같은 줄).
+            if (const float delta { viewport->scroll_delta_to_reveal(box) }; delta != 0.0f)
+            {
+                actions.push_back(source->scroll(delta));
+                box.y -= delta * (source->scale > 0.0f ? source->scale : 1.0f);
+            }
+            box = visible_part_of(box, viewport->bounds());
+        }
+        return actions;
+    }
+
     void apply_text_edit(text::text_edit_state& state, const text_edit_request& request, const text_insert_filter& filter)
     {
         const auto filtered { [&filter](const std::u8string& value) { return filter != nullptr ? filter(value) : value; } };
@@ -544,9 +669,11 @@ namespace luil {
         //  - 초점을 그 부품으로 **옮기지도 않는다.** 초점은 그대로 칸에 남는다 —
         //    부품은 누르는 자리일 뿐 글이 갈 곳이 아니다.
         const bool inside_focused_input { snapshot_.focused_input != ui_element_id {} && tree->within(snapshot_.focused_input, hit->id()) };
-        if (hit->focusable() || hit_target.has_value())
+        const ui_element_id& focus_id { hit->pointer_focus_target() };
+        const ui_element* const pointer_focus { focus_id == hit->id() ? hit : tree->find(focus_id) };
+        if (hit_target.has_value() || (pointer_focus != nullptr && pointer_focus->focusable()))
         {
-            snapshot_.focused = hit->id();
+            snapshot_.focused = hit_target.has_value() ? hit->id() : pointer_focus->id();
             snapshot_.focused_input = hit_target.has_value() ? hit->id() : ui_element_id {};
             snapshot_.focused_surface = event.surface;
             snapshot_.focus_started_at = event.time;
@@ -1137,9 +1264,18 @@ namespace luil {
         const ui_tree* const tree { surface_tree(snapshot_.focused_surface) };
         if (tree == nullptr)
             return {};
+        // 초점을 가진 element가 자기 모델을 아는 목록이면 그것이 **먼저다**
+        // (가상 목록). `process_step_key`가 묶음보다 앞에 선 것과 같은 규칙이다 —
+        // 초점이 선 element 자신의 글자 쓰임이 감싼 묶음보다 앞선다. 뒤에 두면
+        // 목록을 감싼 묶음이 글자를 통째로 가져가 창에 걸친 행만 찾는다.
+        const ui_element* const focused_element { tree->find(snapshot_.focused) };
+        //  - 비활성 element는 묻지 않는다. `process_step_key`가 이미 그렇게 하고,
+        //    흐리게 그려 둔 목록이 글자만 삼키면 화살표는 죽었는데 글자는 사는
+        //    반쪽 상태가 된다.
+        const key_search_target* const search { focused_element != nullptr && focused_element->enabled() ? focused_element->key_search() : nullptr };
         // 묶음 밖에서는 글자로 갈 곳이 없다 — 그 글자는 앱의 것이 아니라 그냥 사라진다.
         const focus_group_scope scope { tree->focus_group_of(snapshot_.focused) };
-        if (scope.axis == focus_axis::none || scope.members.empty())
+        if (search == nullptr && (scope.axis == focus_axis::none || scope.members.empty()))
             return {};
 
         // 앞의 글자를 잊는 계기는 둘이다.
@@ -1156,6 +1292,22 @@ namespace luil {
         const bool first { typeahead_query_.empty() };
         typeahead_query_ += text::text_edit_encode_utf8(event.character);
         last_typeahead_time_ = event.time;
+
+        // 모델을 아는 목록은 자기가 답한다. 초점은 그 컨테이너에 그대로 서 있고
+        // (옮길 자리가 tree에 없을 수 있다), 옮기는 것은 앱 상태인 커서다 —
+        // 그래서 답이 자리표가 아니라 메시지다.
+        if (search != nullptr)
+        {
+            typeahead_focus_ = snapshot_.focused;
+            if (search->on_search == nullptr)
+                return {};
+            // `first`는 controller가 안다 — 질의를 잇고 끊는 것이 이쪽이라 element가
+            // 질의의 길이로 되짚으면 UTF-8 한 글자를 여러 글자로 센다.
+            std::optional<std::vector<input_action>> moved { search->on_search(typeahead_query_, first) };
+            // 맞는 것이 없어도 글자는 이 element가 가진다 — 질의는 남겨 두어
+            // 다음 글자가 이어 붙는다 (묶음의 글자 탐색과 같은 규약).
+            return moved.has_value() ? std::move(*moved) : std::vector<input_action> {};
+        }
 
         const auto found { std::find(scope.members.begin(), scope.members.end(), snapshot_.focused) };
         const std::size_t current { found != scope.members.end() ? static_cast<std::size_t>(found - scope.members.begin()) : 0u };

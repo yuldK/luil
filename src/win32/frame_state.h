@@ -40,6 +40,11 @@ namespace luil {
         // platform이 OS에서 읽어 채운다 (기본값은 검정 바탕 fallback).
         high_contrast_colors high_contrast {};
         bool maximized { false };
+        // 테두리 없는 전체 화면인가다.
+        // 최대화와 마찬가지로 view snapshot에 없는 창 상태라 표면이 채운다 —
+        // 채우는 곳은 그 상태를 든 자리(`caption_surface::prepare_frame`)이고,
+        // 거기서 둘을 한 모드에서 함께 세워 둘이 동시에 참이 되지 않는다.
+        bool fullscreen { false };
 
         // input thread가 게시한 상호작용 상태다.
         // caption의 비클라이언트 hover는 UI thread가 게시 전에 합쳐 둔다.

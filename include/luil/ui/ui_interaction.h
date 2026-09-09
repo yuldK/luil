@@ -96,6 +96,27 @@ namespace luil {
     //    때마다 0짜리 스크롤 메시지가 logic을 깨워 tree를 다시 짓는다.
     [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target, std::span<const scroll_route> routes);
 
+    // 표 없는 짝이다 — 임자를 `ui_element::scroll()`에서 찾는다.
+    //
+    // 앱이 표를 짓지 않는다. 흘리는 컨테이너가 자기 메시지를 들고 있으므로
+    // (`scroll_source`), policy의 몸통이 `return route_wheel(tree, event.x, event.y, delta);`
+    // 한 줄이 된다 — 화면에 창이 몇이든, 어느 페이지가 떠 있든 같은 줄이다.
+    //  - **표를 지우지 않는다.** 위의 표 있는 짝은 그대로 남는다. `scroll_source`를
+    //    세우지 않은 컨테이너(앱이 만든 것, 넘침 버튼이 있는 탭 막대처럼 휠과
+    //    되살리기의 임자가 갈리는 것)는 여전히 표로 이름 댄다.
+    //  - **휠은 하나가 가진다.** 그리기 순서를 거슬러 가장 안쪽·가장 위의 흘리는
+    //    컨테이너가 임자이고, 거기서 끝난다. 흘리지 않지만 포인터를 막는 것
+    //    (modal scrim 같은 `hit_opaque`)이 먼저 걸리면 아무 일도 하지 않는다 —
+    //    포인터를 막는 것이 modal의 몫이라면 휠도 포인터다.
+    //  - **되살리기는 겹겹이 이어진다.** 안쪽 창이 초점을 들인 다음에는 그 안쪽
+    //    창 자체가 바깥 창의 대상이 된다. 한 겹만 보고 끝내면 행은 안쪽 목록
+    //    안에서 보이는데 그 목록이 바깥 판에서 밀려 나가 있는 경우를 놓친다.
+    //    **표 있는 짝과 답의 모양이 여기서 갈린다** — 그쪽은 표에서 처음 맞은
+    //    한 줄로 끝난다.
+    //  - 전부 이미 보이면 빈 목록이다 (delta 0의 방벽과 같은 자리).
+    [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, float x, float y, float delta);
+    [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target);
+
     // 컨텍스트 메뉴의 키보드 탐색에 필요한 kind 짝이다.
     // container가 tree에 있으면 메뉴가 열린 것으로 보고 ↑/↓/Enter/Esc를 메뉴가 가져간다.
     //  - owner는 보지 않는다. `menu_config::owner`로 구분한 메뉴도 같은 kind면 찾는다.

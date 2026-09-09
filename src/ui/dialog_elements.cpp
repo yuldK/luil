@@ -118,7 +118,16 @@ namespace luil {
         //    자리에 그것을 세우면 거짓말이 된다.
         if (config.default_button && enabled)
             return text_button_fill::solid_accent;
+        // 되돌릴 수 없는 동작은 자기 색으로 채운다.
+        // 기본 버튼 판정보다 뒤인 것은 Enter의 자리가 먼저 보여야 하기 때문이다.
+        if (config.visual == text_button_visual::danger)
+            return text_button_fill::soft_danger;
         return config.visual == text_button_visual::accent ? text_button_fill::soft_accent : text_button_fill::plain;
+    }
+
+    float text_button_element::icon_width_for(const text_button_config& config) noexcept
+    {
+        return config.glyph != 0 ? text_button_icon_size + text_button_icon_gap : 0.0f;
     }
 
     text_button_element::text_button_element(const ui_element_id id, text_button_config config)
@@ -141,8 +150,11 @@ namespace luil {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
         const bool accent { config_.visual == text_button_visual::accent };
+        const bool danger { config_.visual == text_button_visual::danger };
         const bool link { config_.visual == text_button_visual::link };
         const bool hot { enabled() && (interaction.pressed == id() || interaction.hovered == id()) };
+        const bool down { enabled() && interaction.pressed == id() };
+        const bool over { enabled() && interaction.hovered == id() };
         const text_button_fill fill { text_button_fill_for(config_, enabled()) };
         const bool solid { fill == text_button_fill::solid_accent };
 
@@ -152,17 +164,24 @@ namespace luil {
         {
             const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
             const float radius { 3.0f * scale };
+            // 채운 버튼의 hover·눌림은 **자기 색 안에서** 움직인다.
+            // 중립색으로 갈아 끼우면 누르는 동안만 주 동작이 아닌 것처럼 보인다.
             ui_color background { context.palette.input_background };
             if (solid)
-                background = context.palette.accent;
+                background = down ? with_alpha(context.palette.accent, 0.70f) : (over ? context.palette.accent_hover : context.palette.accent);
             else if (fill == text_button_fill::soft_accent)
-                background = with_alpha(context.palette.accent_soft, 0.25f);
-            // 채운 버튼의 hover·눌림은 **강조색 안에서** 움직인다.
-            // 중립색으로 갈아 끼우면 누르는 동안만 주 동작이 아닌 것처럼 보인다.
-            if (enabled() && interaction.pressed == id())
-                background = solid ? with_alpha(context.palette.accent, 0.70f) : context.palette.button_pressed_background;
-            else if (enabled() && interaction.hovered == id())
-                background = solid ? context.palette.accent_hover : (accent ? with_alpha(context.palette.accent_hover, 0.35f) : context.palette.button_hover_background);
+                background = down ? context.palette.button_pressed_background : (over ? with_alpha(context.palette.accent_hover, 0.35f) : with_alpha(context.palette.accent_soft, 0.25f));
+            else if (fill == text_button_fill::soft_danger)
+                // 오류색에는 강조색과 달리 hover·soft 짝이 없다.
+                // 역할 하나를 알파로 층 지어 같은 자리를 만든다 — 색을 새로 정하지 않는다.
+                background = with_alpha(context.palette.error_accent, down ? 0.42f : (over ? 0.32f : 0.20f));
+            else if (down)
+                background = context.palette.button_pressed_background;
+            else if (over)
+                background = context.palette.button_hover_background;
+            // 선택자는 마지막에 얹고, 그 색은 hover·눌림에도 그대로 남는다.
+            if (config_.fill)
+                background = config_.fill(context.palette);
             context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(background));
         }
 
@@ -171,9 +190,14 @@ namespace luil {
         // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다.
         if (accent || solid)
             label_color = context.palette.accent_emphasis_foreground;
+        else if (danger)
+            // 옅은 바탕이라 뜻을 나르는 것은 글자다 — 오류색 그대로 쓴다.
+            label_color = context.palette.error_accent;
         else if (link)
             // 바탕이 없으니 hover를 글자 색이 말한다.
             label_color = hot ? context.palette.accent_hover : context.palette.accent;
+        if (config_.label_color)
+            label_color = config_.label_color(context.palette);
         const SkPaint foreground { solid_paint(enabled() ? label_color : context.palette.disabled_foreground) };
 
         // 아이콘과 글자를 **한 덩어리로** 가운데에 둔다.

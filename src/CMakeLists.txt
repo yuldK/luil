@@ -106,6 +106,8 @@ luil_add_source_filter(luil_files "ui/layout"
     "${public_headers}/ui/panel_element.h"
     ui/root_element.cpp
     "${public_headers}/ui/root_element.h"
+    ui/scroll_area_element.cpp
+    "${public_headers}/ui/scroll_area_element.h"
     ui/scroll_view_element.cpp
     "${public_headers}/ui/scroll_view_element.h"
     ui/scrollbar_element.cpp
@@ -161,7 +163,9 @@ luil_add_source_filter(luil_files "ui/lists"
     "${public_headers}/ui/list_element.h"
     ui/reorder_drop.h
     ui/tab_bar_element.cpp
-    "${public_headers}/ui/tab_bar_element.h")
+    "${public_headers}/ui/tab_bar_element.h"
+    ui/virtual_list_element.cpp
+    "${public_headers}/ui/virtual_list_element.h")
 
 # 다른 것 위에 떠서 잠깐 사는 element다.
 luil_add_source_filter(luil_files "ui/overlays"
@@ -234,7 +238,9 @@ luil_add_source_filter(luil_files "win32/caption"
     win32/caption_layout.cpp
     win32/caption_layout.h
     win32/caption_surface.cpp
-    win32/caption_surface.h)
+    win32/caption_surface.h
+    win32/window_mode.cpp
+    win32/window_mode.h)
 
 # 떠 있는 창의 자리·대조·닫힘이다 (메뉴·드롭다운).
 luil_add_source_filter(luil_files "win32/popup"

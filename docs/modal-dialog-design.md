@@ -2,6 +2,8 @@
 
 `modal_host_element`는 modal dialog에 필요한 scrim, 포인터 차단, focus trap, Esc action, 가운데 배치를 하나의 element로 제공한다. 앱은 dialog의 열림 상태와 action 결과를 소유하고 host는 frame에 주어진 상태만 표현한다.
 
+Host는 내용을 묻지 않는다. `set_content()`는 어떤 `ui_element`든 받아 가운데 자리 하나와 host의 세 가지 몫(포인터 차단, focus trap과 진입·복귀, Esc)을 준다. 앱이 정의한 dialog도 이 host 안에 그대로 들어가므로 modal을 새로 만들지 않고 이 element를 다시 쓴다. 어려운 부분은 전부 host 쪽에 있고 앱이 정하는 것은 "무엇을 닫는가"와 "무엇을 담는가"뿐이다.
+
 공개 API는 [modal_host_element.h](../include/luil/ui/modal_host_element.h)에 있다.
 
 ## 기본 구성
@@ -34,6 +36,18 @@ Host는 전체 slot을 덮는 scrim과 가운데 content 영역을 만든다. Sc
 
 Content 영역도 빈 부분의 click을 흡수한다. Dialog 내부의 버튼이나 필드가 hit되지 않은 click이 scrim까지 내려가 outside action을 실행하지 않는다.
 
+## Scrim 색
+
+기본 scrim은 `content_shadow` 역할에 `scrim_opacity`를 얹은 색이다. 다른 색이 필요하면 `scrim_background`에 팔레트 선택자를 준다.
+
+```cpp
+modal.scrim_background = [](const luil::ui_color_palette& palette) { return luil::with_alpha(palette.window_background, 0.7f); };
+```
+
+선택자를 주면 `scrim_opacity`는 쓰이지 않는다. 알파까지 정해진 색이 돌아오는데 그 위에 진하기를 다시 곱하면 앱이 적은 값과 화면의 값이 갈리기 때문이다. 진하기가 필요하면 선택자 안에서 `with_alpha()`로 적는다.
+
+구체 색이 아니라 선택자를 받는 이유는 라이브러리의 다른 자리와 같다. 색을 그대로 받으면 테마 전환과 고대비를 따라오지 못한다 ([concepts/theming.md](concepts/theming.md)).
+
 ## 배치
 
 Content는 host slot의 가운데에 `content_width`와 `content_height` 크기로 배치된다. 단위는 논리 픽셀이고 arrange scale이 적용된다.
@@ -41,6 +55,23 @@ Content는 host slot의 가운데에 `content_width`와 `content_height` 크기�
 `offset_x`와 `offset_y`는 가운데 위치에서 dialog를 이동한다. 끌어서 움직이는 dialog에서는 offset을 앱 상태로 보관하고 다음 frame에 다시 넣는다.
 
 Host는 offset을 화면 경계로 clamp하지 않는다. 앱이 자신의 상태를 `clamp_offset` 같은 정책으로 다듬어야 다음 drag도 실제 표시 위치에서 시작한다.
+
+## Dialog 표면
+
+`surface`에 `panel_config`를 주면 host가 content를 그 panel 안에 넣는다. 비어 있으면 표면을 만들지 않고 content가 가운데 자리를 그대로 받는다.
+
+```cpp
+luil::panel_config surface {};
+surface.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
+surface.corner_radius = 8.0f;
+modal.surface = surface;
+```
+
+편의 기능이다. 앱이 직접 `panel_element`로 content를 감싸도 화면은 같다. 다만 dialog를 세우는 앱이 예외 없이 같은 다섯 줄을 적고 있었고([examples/demo/basics_page.cpp](../examples/demo/basics_page.cpp)의 dialog), 되풀이되는 다섯 줄은 언젠가 한 앱에서만 모서리 반지름이 달라진다. 그래서 설정 한 줄로 옮겼다.
+
+표면은 가운데 자리를 받고 content는 그 안에서 같은 자리를 물려받는다. 크기는 여전히 `content_width`와 `content_height`가 정한다. Host는 content 크기를 재지 않는다 — framework에 측정 단계가 없어 element가 자기 크기를 말할 수 없고, host가 추측하면 그 추측이 앱의 배치와 어긋난다. 포인터 흡수도 그대로 content의 몫이다. panel은 자기 slot을 content에게 통째로 물려주므로 표면이 content보다 넓은 자리가 생기지 않는다.
+
+표면 panel은 host가 조립하는 내부 부품이라 앱이 찾는 id를 갖지 않는다. 이름으로 찾을 대상은 앱이 만든 content다.
 
 ## Focus trap
 
@@ -75,7 +106,10 @@ Modal host는 자신이 속한 한 표면의 입력만 가둔다. 활성 보조 
 ## 반드시 유지할 불변식
 
 - Scrim은 투명해도 포인터를 차단한다.
-- Content의 빈 영역은 outside click으로 취급되지 않는다.
+- `scrim_background`가 있으면 `scrim_opacity`는 쓰이지 않는다.
+- Content의 빈 영역은 outside click으로 취급되지 않는다. 표면이 있어도 흡수는 content가 한다.
+- `surface`가 비어 있으면 표면 element를 만들지 않고 배치도 달라지지 않는다.
+- Host는 content 크기를 재지 않고 offset도 clamp하지 않는다.
 - 열림 상태와 offset은 앱 상태다.
 - Host는 focus trap, entry, return, dismiss를 함께 선언한다.
 - Trap 밖의 초점과 기본 버튼은 modal 범위에서 무효다.
@@ -84,4 +118,4 @@ Modal host는 자신이 속한 한 표면의 입력만 가둔다. 활성 보조 
 
 ## 검증 지침
 
-[modal_host_element_tests.cpp](../tests/modal_host_element_tests.cpp)는 scrim과 content hit, 가운데 배치, offset, trap 속성을 검증한다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 Tab 가둠, 초점 진입과 복귀, Esc 우선순위, 기본 버튼, 여러 표면을 확인한다.
+[modal_host_element_tests.cpp](../tests/modal_host_element_tests.cpp)는 scrim과 content hit, 가운데 배치, offset, trap 속성을 검증한다. 같은 파일이 scrim 선택자가 `scrim_opacity`를 대신한다는 것을 실제로 칠해진 픽셀로 확인하고, 표면이 host와 content 사이에 서면서도 배치와 흡수가 달라지지 않는다는 것과 표면이 없을 때의 배치가 그대로라는 것을 함께 잠근다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 Tab 가둠, 초점 진입과 복귀, Esc 우선순위, 기본 버튼, 여러 표면을 확인한다.

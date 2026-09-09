@@ -19,6 +19,7 @@
 #include "win32/win32_drop.h"
 #include "win32/win32_error.h"
 #include "win32/win32_fonts.h"
+#include "win32/window_mode.h"
 #include "win32/window_surface.h"
 
 #include "include/core/SkFont.h"
@@ -499,8 +500,11 @@ namespace luil::win32 {
                 // 정했으면 그 값은 이미 물리 픽셀이라 배율을 곱하지 않는다.
                 const int initial_x { config_.initial_position.has_value() ? config_.initial_position->x : CW_USEDEFAULT };
                 const int initial_y { config_.initial_position.has_value() ? config_.initial_position->y : CW_USEDEFAULT };
-                window_ = CreateWindowExW(WS_EX_APPWINDOW, config_.class_name.c_str(), title.c_str(), window_style_for(config_.caption.buttons), initial_x, initial_y, config_.initial_width,
-                    config_.initial_height, nullptr, nullptr, instance_, this);
+                // 창은 통상 모습으로 선다.
+                // 저장된 배치가 전체 화면이더라도 그것은 창이 보인 **뒤에** 들어가는
+                // 상태다 (`apply_requested_window_placement`).
+                window_ = CreateWindowExW(WS_EX_APPWINDOW, config_.class_name.c_str(), title.c_str(), window_style_for(config_.caption.buttons, window_display_mode::normal), initial_x,
+                    initial_y, config_.initial_width, config_.initial_height, nullptr, nullptr, instance_, this);
 
                 if (window_ == nullptr)
                 {
@@ -514,7 +518,7 @@ namespace luil::win32 {
                     window_ = nullptr;
                     return false;
                 }
-                caption_surface::apply_dwm_frame(window_);
+                caption_surface::apply_dwm_frame(window_, window_display_mode::normal);
                 set_dpi(GetDpiForWindow(window_));
                 // 요청 크기는 논리 96 DPI 기준이다.
                 // 창이 어느 모니터에 뜰지는 만들어 봐야 알므로, 만든 뒤 그 모니터의
@@ -779,7 +783,11 @@ namespace luil::win32 {
                     // 최대화 ↔ 복원 전환만 배치로 알린다.
                     // 끌어서 크기를 바꾸는 동안 에도 SIZE_RESTORED가
                     // 연속으로 오므로 상태가 바뀐 경우로 한정 한다.
-                    if (word_parameter == SIZE_MAXIMIZED || word_parameter == SIZE_RESTORED)
+                    //  - **전체 화면으로 들어가는 길은 여기서 세지 않는다.** 그
+                    //    `SetWindowPos`도 `SIZE_RESTORED`로 오므로, 최대화 창에서
+                    //    들어가면 이 판정이 "최대화가 풀렸다"고 보아 갈무리해 둔 것과
+                    //    다른 배치를 알린다. 그 전환의 보고는 명령이 직접 한다.
+                    if (main_.fullscreen() == false && (word_parameter == SIZE_MAXIMIZED || word_parameter == SIZE_RESTORED))
                     {
                         const bool maximized { word_parameter == SIZE_MAXIMIZED };
                         if (maximized != posted_maximized_)
@@ -809,9 +817,24 @@ namespace luil::win32 {
                     return 0;
                 case WM_DPICHANGED: {
                     set_dpi(HIWORD(word_parameter));
-                    const auto* suggested_rectangle { reinterpret_cast<const RECT*>(long_parameter) };
-                    SetWindowPos(window_, nullptr, suggested_rectangle->left, suggested_rectangle->top, suggested_rectangle->right - suggested_rectangle->left,
-                        suggested_rectangle->bottom - suggested_rectangle->top, SWP_NOACTIVATE | SWP_NOZORDER);
+                    // **전체 화면 창에는 제안 사각형을 쓰지 않는다.** OS가 주는 것은
+                    // 지금 창 사각형에 배율 비를 곱한 값이라, 1920x1080 모니터가
+                    // 100%에서 150%로 바뀌면 모니터는 그대로인데 창만 2880x1620이
+                    // 된다. 그 창은 여전히 전체 화면이라 판정이 어디나 `HTCLIENT`고
+                    // `WS_THICKFRAME`도 없어, 사용자가 넘친 창을 되돌릴 길이 전체
+                    // 화면 해제밖에 없다. 덮을 자리를 정하는 것은 배율이 아니라
+                    // 모니터이므로 들어갈 때와 같은 유도로 다시 구한다
+                    // (`fullscreen_bounds_for`).
+                    //  - 배율 값 갱신·metrics 게시·popup 다시 맞추기는 두 길이
+                    //    똑같이 지난다. 달라지는 것은 사각형을 어디서 얻는가뿐이다.
+                    if (main_.fullscreen())
+                        static_cast<void>(main_.reapply_fullscreen_bounds());
+                    else
+                    {
+                        const auto* suggested_rectangle { reinterpret_cast<const RECT*>(long_parameter) };
+                        SetWindowPos(window_, nullptr, suggested_rectangle->left, suggested_rectangle->top, suggested_rectangle->right - suggested_rectangle->left,
+                            suggested_rectangle->bottom - suggested_rectangle->top, SWP_NOACTIVATE | SWP_NOZORDER);
+                    }
                     post_window_metrics();
                     // 배율이 바뀌면 popup의 물리 자리·크기도 다시 계산해야 한다.
                     //  - 이 대조도 새 tree를 표면에 옮겨 담으므로 **결과를 버리면
@@ -822,6 +845,22 @@ namespace luil::win32 {
                     InvalidateRect(window_, nullptr, FALSE);
                     return 0;
                 }
+                case WM_DISPLAYCHANGE:
+                    // 해상도나 모니터 구성이 바뀌었다.
+                    //
+                    // **전체 화면 창만 다시 앉힌다.** 그 사각형은 들어갈 때 한 번
+                    // 잰 모니터의 것이라, 그 뒤에 화면이 1920x1080에서 1280x720으로
+                    // 줄거나 덮고 있던 모니터가 빠지면 창만 옛 사각형에 남는다 —
+                    // 여전히 테두리가 없고 판정은 어디나 `HTCLIENT`라 크기를 되돌릴
+                    // 길이 전체 화면 해제밖에 없고, "전체 화면은 rcMonitor를 덮는
+                    // 창"이라는 말도 들어선 순간에만 참이 된다
+                    // (docs/concepts/window.md).
+                    //  - 전체 화면이 아니면 **아무것도 하지 않는다.** 통상 창을
+                    //    화면이 바뀔 때마다 옮기는 것은 사용자의 몫이고, 화면 밖으로
+                    //    나간 창을 다듬는 것은 이미 OS가 한다.
+                    if (main_.fullscreen())
+                        static_cast<void>(main_.reapply_fullscreen_bounds());
+                    return 0;
                 case WM_FONTCHANGE:
                     // 글꼴이 설치·삭제되면 캐시의 해석 결과를 비운다.
                     // 조회 결과에 소유권이 포함되므로 이미 사용하는 typeface는 살아 있다.
@@ -940,14 +979,28 @@ namespace luil::win32 {
                 case ui_command::window_toggle_maximize:
                     PostMessageW(window_, WM_SYSCOMMAND, IsZoomed(window_) ? SC_RESTORE : SC_MAXIMIZE, 0);
                     return;
+                case ui_command::window_toggle_fullscreen:
+                    // 최소화·최대화·닫기와 달리 OS에 맡길 명령이 없다. 스타일·자리·
+                    // 갈무리를 우리가 함께 바꾸는 상태 전환이라 표면이 그 자리에서 한다.
+                    //
+                    // 배치를 알리는 것도 여기다. 들어가고 나오는 것 자체가 **저장할
+                    // 값의 변화**이고(전체 화면 여부는 배치에 실려 저장된다), 이 전환의
+                    // `WM_SIZE`는 최대화 전환으로 세지 않아 아무도 알리지 않는다.
+                    if (main_.set_fullscreen(main_.fullscreen() == false))
+                        post_window_placement();
+                    return;
                 case ui_command::window_close:
                     PostMessageW(window_, WM_CLOSE, 0, 0);
                     return;
                 }
             }
 
-            // 종료 직전·크기 조절 뒤의 창 배치를 앱에 알린다.
+            // 종료 직전·크기 조절 뒤·전체 화면 전환의 창 배치를 앱에 알린다.
             // 최대화·최소화 상태 에서도 `rcNormalPosition`이 복원 크기를 담으므로 그대로 보낸다.
+            //  - **전체 화면인 동안은 관측값을 쓸 수 없다.** 들어갈 때의
+            //    `SetWindowPos`가 `rcNormalPosition`을 모니터 사각형으로 덮어썼기
+            //    때문이다. 그때 알릴 것은 표면이 갈무리해 둔 "돌아갈 자리"이고,
+            //    무엇을 고를지는 `placement_to_report`가 정한다 (window_mode.h).
             void post_window_placement() noexcept
             {
                 if (host_ == nullptr || environment_.delegate == nullptr)
@@ -957,12 +1010,13 @@ namespace luil::win32 {
                 if (GetWindowPlacement(window_, &placement) == FALSE)
                     return;
 
-                window_placement value {};
-                value.x = placement.rcNormalPosition.left;
-                value.y = placement.rcNormalPosition.top;
-                value.width = placement.rcNormalPosition.right - placement.rcNormalPosition.left;
-                value.height = placement.rcNormalPosition.bottom - placement.rcNormalPosition.top;
-                value.maximized = IsZoomed(window_) != FALSE;
+                window_placement observed {};
+                observed.x = placement.rcNormalPosition.left;
+                observed.y = placement.rcNormalPosition.top;
+                observed.width = placement.rcNormalPosition.right - placement.rcNormalPosition.left;
+                observed.height = placement.rcNormalPosition.bottom - placement.rcNormalPosition.top;
+                observed.maximized = IsZoomed(window_) != FALSE;
+                const window_placement value { placement_to_report(observed, main_.placement_before_fullscreen()) };
                 if (value.valid() == false)
                     return;
                 // delegate는 noexcept가 아니다.
@@ -983,6 +1037,12 @@ namespace luil::win32 {
             void apply_requested_window_placement()
             {
                 if (host_ == nullptr)
+                    return;
+                // **창이 보인 뒤에만 적용한다.** 전체 화면 요청은 스타일과 자리를 함께
+                // 바꾸는데, 아직 `ShowWindow`를 지나지 않은 창에 그것을 하면 뒤따르는
+                // `ShowWindow(SW_SHOWDEFAULT)`가 그 자리를 다시 잡는다. 게시 번호를
+                // 아직 소비하지 않았으므로 다음 게시가 그대로 다시 시도한다.
+                if (IsWindowVisible(window_) == FALSE)
                     return;
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
                 if (frame == nullptr || frame->window_placement_revision == applied_window_placement_revision_)
@@ -1025,9 +1085,27 @@ namespace luil::win32 {
                 placement.length = sizeof(placement);
                 if (GetWindowPlacement(window_, &placement) == FALSE)
                     return;
+
+                // 전체 화면 요청도 **정상 배치를 먼저 놓고** 들어간다.
+                // 요청의 자리·크기·최대화는 전체 화면 창의 사각형이 아니라 나올 때
+                // 돌아갈 배치이므로(app_host.h), 순서를 뒤집으면 돌아갈 자리로
+                // 갈무리되는 것이 지금 창의 자리가 된다.
+                //  - 이미 전체 화면인 창이면 먼저 빠져나온다. 그러지 않으면 갈무리해
+                //    둔 옛 배치가 아래의 `SetWindowPlacement`를 이겨 요청이 묻힌다.
+                const bool was_fullscreen { main_.fullscreen() };
+                if (was_fullscreen)
+                    static_cast<void>(main_.set_fullscreen(false));
                 placement.rcNormalPosition = bounds;
                 placement.showCmd = requested.maximized ? static_cast<UINT>(SW_SHOWMAXIMIZED) : static_cast<UINT>(SW_SHOWNORMAL);
                 static_cast<void>(SetWindowPlacement(window_, &placement));
+                if (requested.fullscreen)
+                    static_cast<void>(main_.set_fullscreen(true));
+                // 전체 화면 여부가 바뀌었으면 알린다.
+                // **요청을 그대로 되울리는 것이 아니다.** 앱은 이 사실로 tree를 다시
+                // 짓는데(캡션 줄을 접는다), 이 전환의 `WM_SIZE`는 최대화 전환으로 세지
+                // 않으므로 알리지 않으면 화면을 덮은 창이 캡션을 그린 채로 남는다.
+                if (main_.fullscreen() != was_fullscreen)
+                    post_window_placement();
             }
 
             void post_window_metrics() noexcept
@@ -1764,7 +1842,8 @@ namespace luil::win32 {
                 bounds.right = bounds.left + scaled_pixels(source.width, scale);
                 bounds.bottom = bounds.top + scaled_pixels(source.height, scale);
                 // client 크기를 창 크기로 바꾸고 작업 영역 안으로 다듬는다.
-                static_cast<void>(AdjustWindowRectExForDpi(&bounds, custom_window_style_for(source.caption.buttons), FALSE, 0, dpi_));
+                // 보조 창은 전체 화면이 되지 않는다 — 배치와 마찬가지로 주 창의 것이다.
+                static_cast<void>(AdjustWindowRectExForDpi(&bounds, custom_window_style_for(source.caption.buttons, window_display_mode::normal), FALSE, 0, dpi_));
                 int x { bounds.left };
                 int y { bounds.top };
                 const int width { bounds.right - bounds.left };
@@ -1790,7 +1869,7 @@ namespace luil::win32 {
                 secondary->set_minimum_client_size(source.minimum_width, source.minimum_height);
                 // 주 창이 소유해 언제나 그 위에 있다.
                 // 스타일은 이 창의 caption 버튼 집합에서 나오고 시스템 캡션만 뗀다.
-                const DWORD style { window_style_for(source.caption.buttons) };
+                const DWORD style { window_style_for(source.caption.buttons, window_display_mode::normal) };
                 const HWND handle { CreateWindowExW(0, secondary_class_name_.c_str(), title.c_str(), style, x, y, width, height, window_, nullptr, instance_, secondary.get()) };
                 if (handle == nullptr)
                 {
@@ -1805,7 +1884,7 @@ namespace luil::win32 {
                     failed_windows_.push_back(source.id);
                     return;
                 }
-                caption_surface::apply_dwm_frame(handle);
+                caption_surface::apply_dwm_frame(handle, window_display_mode::normal);
                 secondary->set_dpi(GetDpiForWindow(handle));
 
                 // 렌더러는 주 창 정책 그대로다.

@@ -1,12 +1,14 @@
 #pragma once
 
 // 목록 페이지다: 끌어서 순서를 바꾸는 스크롤 목록(막대 포함)과,
-// 그룹 머리행이 스크롤 중 위에 고정되는 목록.
+// 고르고 접는 tree, 만 줄이 넘는 모델을 창에 걸치는 만큼만 세우는 가상 목록,
+// 그리고 그룹 머리행이 스크롤 중 위에 고정되는 목록.
 
 #include "demo/common.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/virtual_list_element.h"
 
 #include <vector>
 
@@ -61,6 +63,31 @@ namespace demo {
         float offset { 0.0f };
     };
 
+    // 가상 목록의 앱 상태 변화 넷이다.
+    //
+    // **고름과 커서를 갈라 싣는다.** 어느 쪽을 언제 옮길지가 앱마다 다르므로
+    // element는 키만 실어 보내고, 훑는 것(커서)과 고르는 것을 어떻게 이을지는
+    // 이 페이지의 `handle`이 정한다 (virtual-list-design.md).
+    struct log_select_intent
+    {
+        std::u8string key {};
+    };
+
+    struct log_cursor_intent
+    {
+        std::u8string key {};
+    };
+
+    struct log_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct log_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+
     // 두 목록을 나눈 자리를 논리 픽셀만큼 옮긴다.
     // +가 아래 판이 넓어지는 쪽이다 (부호는 손잡이가 맞춘다).
     struct split_intent
@@ -91,6 +118,7 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_top_row(float viewport_height);
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_list_panel(float viewport_height);
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_tree_panel(float viewport_height);
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_log_panel(float viewport_height);
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_grouped_section(float viewport_height);
         // 그 키가 펼쳐진 가지인가.
         [[nodiscard]] bool is_expanded(const std::u8string& key) const;
@@ -102,6 +130,13 @@ namespace demo {
         std::u8string tree_selected_ {};
         std::vector<std::u8string> tree_expanded_ {};
         float tree_scroll_ { 0.0f };
+        // 가상 목록의 앱 상태다: 모델 전체·고른 항목·커서·흘러간 양.
+        //  - 모델은 **값**이라 만 줄이 넘어도 tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
+        //    이 벡터를 element로 들고 있으면 그 순간 element가 만 개다.
+        std::vector<luil::virtual_list_item> log_items_ {};
+        std::u8string log_selected_ {};
+        std::u8string log_cursor_ {};
+        float log_scroll_ { 0.0f };
         float grouped_scroll_ { 0.0f };
         // 아래 판(그룹 목록)의 높이다 (논리 픽셀). 나눈 자리가 이 값이고, 위 판은
         // 나머지를 갖는다 — 창이 커지면 늘어난 만큼은 위 판이 먹는다.

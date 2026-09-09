@@ -80,6 +80,12 @@ namespace luil {
         //    만들 때는 누를 수 있는지 알 수 없고, 커서를 미리 걸면 아무 일도 하지
         //    않는 link가 hit의 임자가 된다. 담는 쪽이 `set_cursor(hand)`를 준다.
         link,
+        // 되돌릴 수 없는 동작이다 (지우기·초기화) — 옅은 오류색 바탕과 오류색 글자다.
+        //  - 채움을 강조색에서 오류색으로 옮길 뿐 계약도 배치도 `accent`와 같다.
+        //  - `button_visual_role::danger`와 같은 뜻이고 같은 팔레트 역할(`error_accent`)을
+        //    쓴다. 아이콘 버튼과 글자 버튼이 한 dialog에 나란히 설 때 두 붉은색이
+        //    갈리면 그것은 두 element가 각자 색을 정했다는 뜻이다.
+        danger,
     };
 
     // 글자 버튼의 설정이다.
@@ -101,6 +107,24 @@ namespace luil {
         // link는 채울 상자가 없으므로 기본 버튼 표시와 Enter 대상 지정에서 제외한다.
         // 입력 우선순위는 enter-default-design.md를 따른다.
         bool default_button { false };
+        // 팔레트에서 채움과 글자 색을 직접 고른다.
+        // 비어 있으면 `visual`이 정한 색 그대로다 — 지금까지의 글자 버튼이 그 특수 경우다.
+        //
+        // 구체 색이 아니라 **선택자**인 이유는 아이콘 버튼과 같다. `ui_color`를 건네면
+        // 그 색이 테마를 따라오지 못해, 고대비에서는 사용자가 OS에서 고른 색을 이 버튼
+        // 하나만 무시한다. 무엇을 고를지만 담고 고르는 시점은 여전히 그리기다
+        // (`button_config`의 슬롯별 선택자·`panel_config::background`와 같은 규칙 —
+        // concepts/theming.md의 "선택자" 절).
+        //
+        // 선택자를 준 버튼은 **hover와 눌림에도 그 색 그대로**다. 상자 하나에 색 하나를
+        // 받았으니 상태마다 달라질 근거가 없고, 라이브러리가 임의로 밝기를 흔들면 앱이
+        // 고른 색이 앱이 고르지 않은 색으로 변한다. 상태마다 다른 색이 필요하다면 그것은
+        // 역할이 할 말이다 — 상태별 자리를 가진 쪽은 아이콘 버튼(`button_config`)뿐이고,
+        // 그것도 그 다섯 자리가 이미 팔레트에 있어서 열 수 있었다.
+        //  - `link`는 칠할 상자가 없어 `fill`이 설 자리도 없다. 글자 색은 `label_color`가
+        //    그대로 정하고 hover의 색 변화도 함께 잠긴다.
+        std::function<ui_color(const ui_color_palette&)> fill {};
+        std::function<ui_color(const ui_color_palette&)> label_color {};
     };
 
     // 글자 버튼이 자기 상자를 어떻게 칠하는가.
@@ -112,12 +136,18 @@ namespace luil {
         plain,
         // `accent` 모양의 옅은 강조 바탕이다.
         soft_accent,
+        // `danger` 모양의 옅은 오류색 바탕이다.
+        soft_danger,
         // 기본 버튼의 강조색 채움이다 ("Enter가 여기로 간다").
         solid_accent,
     };
 
     // 그리기 전에 버튼의 채움 종류를 고르는 순수 함수다.
     // 기본 버튼의 강조색 채움과 키보드 초점 테를 구별한다.
+    //  - `danger`도 기본 버튼이면 강조색으로 채운다. Enter가 어디로 가는지는 그 버튼이
+    //    무엇을 뜻하는지보다 급한 정보이고, 한 dialog에 채운 상자가 둘이면 어느 쪽이
+    //    Enter의 자리인지 사라진다. 되돌릴 수 없는 동작을 Enter에 걸지 말지는 앱의
+    //    판단이라 여기서 막지 않는다.
     [[nodiscard]] text_button_fill text_button_fill_for(const text_button_config& config, bool enabled) noexcept;
 
     // 아이콘 칸의 폭과 글자 사이의 간격이다 (논리 픽셀).
@@ -136,10 +166,10 @@ namespace luil {
         // 0이면 아이콘이 없다.
         //  - 버튼 폭은 담는 쪽이 정하므로(측정 단계가 없다) 그 쪽이 이 값을 더해
         //    잡을 수 있어야 한다. `check_element::indicator_width_for`와 같은 자리다.
-        [[nodiscard]] static constexpr float icon_width_for(const text_button_config& config) noexcept
-        {
-            return config.glyph != 0 ? text_button_icon_size + text_button_icon_gap : 0.0f;
-        }
+        //  - `constexpr`이 아닌 이유는 설정이 선택자(`std::function`)를 담아 상수 평가
+        //    안에서 지을 수 없어서다 — `text_input_element::leading_width_for`가 같은
+        //    이유로 같은 자리에 있다. 판정 자체는 그대로라 test가 값으로 잠근다.
+        [[nodiscard]] static float icon_width_for(const text_button_config& config) noexcept;
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;

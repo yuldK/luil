@@ -134,6 +134,81 @@ TEST_CASE("The image destination follows the fit", "[ui][image]")
     REQUIRE(luil::image_destination(bounds, 0, 10, luil::image_fit::contain).width == 0.0f);
 }
 
+TEST_CASE("A source rectangle is clamped into the image or means the whole image", "[ui][image]")
+{
+    // 좌표는 전부 **이미지 자신의 픽셀**이다 (칸과 목적 사각형의 물리 픽셀과 다른
+    // 단위다 — 둘이 같은 `rect_f`를 나눠 쓴다).
+    SECTION("비어 있으면 이미지 전체다")
+    {
+        const luil::rect_f whole { luil::image_source_rect({}, 64, 32) };
+        REQUIRE(whole.x == 0.0f);
+        REQUIRE(whole.y == 0.0f);
+        REQUIRE(whole.width == 64.0f);
+        REQUIRE(whole.height == 32.0f);
+    }
+
+    SECTION("안에 온전히 든 조각은 그대로다")
+    {
+        const luil::rect_f piece { luil::image_source_rect({ 16.0f, 8.0f, 16.0f, 16.0f }, 64, 32) };
+        REQUIRE(piece.x == 16.0f);
+        REQUIRE(piece.y == 8.0f);
+        REQUIRE(piece.width == 16.0f);
+        REQUIRE(piece.height == 16.0f);
+    }
+
+    SECTION("음수로 적힌 조각도 전체다")
+    {
+        // 뒤집힌 사각형을 그대로 넘기면 그리기가 뜻 모를 자리를 읽는다. 앱이 표에서
+        // 읽어 오는 값이라 어긋난 값이 오는 것이 정상이고, 죽는 대신 전체로 모은다.
+        const luil::rect_f flipped { luil::image_source_rect({ 20.0f, 10.0f, -8.0f, 10.0f }, 64, 32) };
+        REQUIRE(flipped.width == 64.0f);
+        REQUIRE(flipped.height == 32.0f);
+    }
+
+    SECTION("걸친 조각은 이미지 안으로 잘린다")
+    {
+        // 왼쪽과 아래로 함께 걸친 조각이다 — 남는 것은 24..32 줄의 0..20 칸이다.
+        const luil::rect_f clamped { luil::image_source_rect({ -10.0f, 24.0f, 30.0f, 40.0f }, 64, 32) };
+        REQUIRE(clamped.x == 0.0f);
+        REQUIRE(clamped.y == 24.0f);
+        REQUIRE(clamped.width == 20.0f);
+        REQUIRE(clamped.height == 8.0f);
+    }
+
+    SECTION("통째로 밖이면 전체다")
+    {
+        // 아무것도 그리지 않으면 앱은 이미지가 없는 것인지 조각이 어긋난 것인지
+        // 화면에서 가릴 수 없다.
+        const luil::rect_f outside { luil::image_source_rect({ 100.0f, 100.0f, 10.0f, 10.0f }, 64, 32) };
+        REQUIRE(outside.width == 64.0f);
+        REQUIRE(outside.height == 32.0f);
+    }
+
+    SECTION("빈 이미지는 빈 사각형이다")
+    {
+        // 그릴 것이 없다는 답을 "전체"로 적을 수는 없다.
+        REQUIRE(luil::image_source_rect({ 0.0f, 0.0f, 4.0f, 4.0f }, 0, 32).width == 0.0f);
+        REQUIRE(luil::image_source_rect({}, 64, -1).height == 0.0f);
+    }
+}
+
+TEST_CASE("The destination follows the source rectangle instead of the sheet", "[ui][image]")
+{
+    // 아틀라스의 요점이다. 8:1 시트에서 잘라 낸 정사각 스프라이트는 정사각으로
+    // 앉아야 하고, 시트의 크기로 계산하면 `contain`이 시트의 비율로 자리를 잡아
+    // 조각이 엉뚱한 여백 안에 앉는다.
+    const luil::rect_f bounds { 0.0f, 0.0f, 100.0f, 100.0f };
+
+    const luil::rect_f sheet { luil::image_destination(bounds, 256, 32, luil::image_fit::contain) };
+    REQUIRE(sheet.width == 100.0f);
+    REQUIRE(sheet.height == 12.5f);
+
+    const luil::rect_f sprite_source { luil::image_source_rect({ 64.0f, 0.0f, 32.0f, 32.0f }, 256, 32) };
+    const luil::rect_f sprite { luil::image_destination(bounds, static_cast<int>(sprite_source.width), static_cast<int>(sprite_source.height), luil::image_fit::contain) };
+    REQUIRE(sprite.width == 100.0f);
+    REQUIRE(sprite.height == 100.0f);
+}
+
 TEST_CASE("An image is not interactive", "[ui][image]")
 {
     // 표시뿐이다. 누르는 이미지는 담는 쪽이 액션을 걸어 만든다 —
@@ -208,6 +283,46 @@ TEST_CASE("An image is painted into its fitted rectangle", "[ui][image][raster]"
         REQUIRE(frame.pixel_at(96, 24) == luil::ui_color { 0xFF00FF00 });
         REQUIRE(frame.pixel_at(24, 56) == luil::ui_color { 0xFF0000FF });
         REQUIRE(frame.pixel_at(96, 56) == luil::ui_color { 0xFFFFFFFF });
+    }
+
+    SECTION("소수점이 든 조각은 잘리지 않고 반올림한 크기로 앉는다")
+    {
+        // 변을 **자르면** 1.9가 1이 되어 조각이 청한 것보다 좁게 앉는다. 그림은
+        // 그대로 뜨므로 눈으로는 "원래 저런 그림"과 갈리지 않는 종류다.
+        //  - 1.9×10 조각을 80×40 칸에 `contain`으로 놓으면 세로가 배율을 정해(4배)
+        //    목적 사각형이 8×40이고 가로로 56..64에 선다. 잘라 1로 본 구현은 4×40에
+        //    58..62라, 아래 자리가 배경으로 남는다.
+        const luil::ui_tree tree {
+            build({ .image = make_solid_image(16, 16, 255, 0, 0), .source = { 0.0f, 0.0f, 1.9f, 10.0f } }, { 20.0f, 20.0f, 80.0f, 40.0f }),
+        };
+        luil::testing::raster_frame frame { 200, 100, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+
+        REQUIRE(frame.pixel_at(57, 40) == red);
+        // 반올림은 한 픽셀의 일이다 — 칸 전체로 번지지 않는다.
+        REQUIRE(frame.pixel_at(30, 40) == palette.window_background);
+    }
+
+    SECTION("한 픽셀보다 좁은 조각도 사라지지 않는다")
+    {
+        // 자르면 0이 되고, 그러면 목적 사각형이 비어 그리기가 **아무 말 없이**
+        // 돌아선다 — 화면에서 "빈 이미지"와 구별되지 않아 아무도 실패를 못 본다.
+        const luil::ui_tree half {
+            build({ .image = make_solid_image(16, 16, 255, 0, 0), .source = { 0.0f, 0.0f, 0.5f, 10.0f } }, { 20.0f, 20.0f, 80.0f, 40.0f }),
+        };
+        luil::testing::raster_frame half_frame { 200, 100, palette, raster_scale };
+        half_frame.draw(half, luil::interaction_snapshot {});
+        REQUIRE(half_frame.pixel_at(60, 40) == red);
+
+        // 반올림마저 0으로 떨어지는 조각도 마찬가지다. 어느 변도 1 아래로 내려가지
+        // 않는다 — `decoded_image_size`가 축소한 축을 0으로 만들지 않는 것과 같은
+        // 자리이자 같은 이유다.
+        const luil::ui_tree sliver {
+            build({ .image = make_solid_image(16, 16, 255, 0, 0), .source = { 0.0f, 0.0f, 0.25f, 10.0f } }, { 20.0f, 20.0f, 80.0f, 40.0f }),
+        };
+        luil::testing::raster_frame sliver_frame { 200, 100, palette, raster_scale };
+        sliver_frame.draw(sliver, luil::interaction_snapshot {});
+        REQUIRE(sliver_frame.pixel_at(60, 40) == red);
     }
 
     SECTION("빈 이미지는 아무것도 그리지 않는다")

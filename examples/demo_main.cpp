@@ -4,12 +4,12 @@
 //
 // 화면은 접이식 사이드바로 오가는 페이지들이고, 각 페이지가 element 하나씩을 다룬다.
 //  - 기본: 버튼·카운터, 텍스트 입력, 확인 dialog          (demo/basics_page)
-//  - 목록: drag 순서 바꾸기, 스크롤 막대, sticky 그룹 머리행 (demo/lists_page)
+//  - 목록: drag 순서 바꾸기, tree, 만 줄짜리 가상 목록, sticky 머리행 (demo/lists_page)
 //  - 탭: 선택·닫기·순서·가로 스크롤·넘침 메뉴 popup        (demo/tabs_page)
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
 //  - 토스트: 심각도별 알림과 실행 취소 토스트               (demo/toasts_page)
 //  - 메뉴·팝업: 드롭다운과 컨텍스트 메뉴 (popup 창)         (demo/popups_page)
-//  - 창: 보조 top-level 창(도구 창) 여닫기와 그 안의 입력   (demo/windows_page)
+//  - 창: 보조 top-level 창(도구 창) 여닫기와 전체 화면 전환 (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
@@ -90,30 +90,41 @@ namespace demo {
             return std::filesystem::path { buffer } / L"luil-demo" / L"placement.txt";
         }
 
-        // "x,y,width,height,max"를 배치로 읽는다 (십진 정수 다섯, max는 0·1).
+        // "x,y,width,height,max,full"을 배치로 읽는다 (십진 정수 여섯, max·full은 0·1).
         // 형식이 다르면 빈 값이다 — 앞부분만 조용히 읽지 않는다
         // (parse_window_position과 같은 규칙이다).
+        //  - **다섯 개짜리도 받는다.** 전체 화면 칸이 생기기 전에 저장된 파일이 그것이고,
+        //    그때의 창은 전체 화면이 아니었으므로 뜻이 분명하다. 지난 설정 하나 때문에
+        //    사용자가 창 자리를 잃는 것이 형식을 엄히 지키는 것보다 나쁘다.
+        //  - 전체 화면이면 앞의 넷은 **돌아갈 자리**다 (app_host.h의 `window_placement`).
+        //    한 줄에 둘이 함께 실려 있어 따로 저장할 것이 없다.
         [[nodiscard]] std::optional<luil::win32::window_placement> parse_placement(const std::u8string_view text) noexcept
         {
-            std::array<int, 5> values {};
+            std::array<int, 6> values {};
             const char* cursor { reinterpret_cast<const char*>(text.data()) };
             const char* const end { cursor + text.size() };
-            for (std::size_t index = 0; index < values.size(); ++index)
+            std::size_t count { 0 };
+            for (; count < values.size(); ++count)
             {
-                if (index > 0)
+                if (count > 0)
                 {
-                    if (cursor == end || *cursor != ',')
+                    // 값 뒤에서 글이 끝나면 거기까지가 이 파일의 전부다.
+                    if (cursor == end)
+                        break;
+                    if (*cursor != ',')
                         return std::nullopt;
                     ++cursor;
                 }
-                const auto [next, error] { std::from_chars(cursor, end, values[index]) };
+                const auto [next, error] { std::from_chars(cursor, end, values[count]) };
                 if (error != std::errc {} || next == cursor)
                     return std::nullopt;
                 cursor = next;
             }
-            if (cursor != end || (values[4] != 0 && values[4] != 1))
+            if (cursor != end || count < values.size() - 1)
                 return std::nullopt;
-            const luil::win32::window_placement placement { values[0], values[1], values[2], values[3], values[4] != 0 };
+            if ((values[4] != 0 && values[4] != 1) || (values[5] != 0 && values[5] != 1))
+                return std::nullopt;
+            const luil::win32::window_placement placement { values[0], values[1], values[2], values[3], values[4] != 0, values[5] != 0 };
             if (placement.valid() == false)
                 return std::nullopt;
             return placement;
@@ -122,7 +133,7 @@ namespace demo {
         [[nodiscard]] std::string format_placement(const luil::win32::window_placement& placement)
         {
             return std::to_string(placement.x) + "," + std::to_string(placement.y) + "," + std::to_string(placement.width) + "," + std::to_string(placement.height) + ","
-                + (placement.maximized ? "1" : "0");
+                + (placement.maximized ? "1" : "0") + "," + (placement.fullscreen ? "1" : "0");
         }
 
         [[nodiscard]] std::optional<luil::win32::window_placement> load_placement()
@@ -367,11 +378,21 @@ namespace demo {
                 root->arrange({ { 0.0f, 0.0f, width, height }, scale });
 
                 // 높이는 height_for가 미리 알려 준다 (미리 arrange해 보는 우회가 필요 없다).
+                //
+                // **전체 화면에서는 캡션 줄을 아예 접는다.** 그동안 창에는 비클라이언트가
+                // 없어(가장자리도 끌기 띠도 시스템 메뉴도 없다 — docs/concepts/window.md)
+                // 창 chrome을 그려 둘 자리가 아니고, 화면을 덮는다는 뜻도 그것이다.
+                //  - 그 사실은 배치 메시지가 나른다 (`window_placement::fullscreen`).
+                //    창을 어떤 모습으로 세울지는 앱의 상태가 아니지만, 무엇을 그릴지는
+                //    앱의 것이다 — 라이브러리는 알리기만 하고 tree는 우리가 짓는다.
                 const luil::caption_config caption_config { make_caption_config() };
-                const float caption_height { luil::caption_element::height_for(caption_config) * scale };
-                auto caption { std::make_unique<luil::caption_element>(caption_config) };
-                caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
-                root->add(std::move(caption));
+                const float caption_height { placement_.fullscreen ? 0.0f : luil::caption_element::height_for(caption_config) * scale };
+                if (placement_.fullscreen == false)
+                {
+                    auto caption { std::make_unique<luil::caption_element>(caption_config) };
+                    caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+                    root->add(std::move(caption));
+                }
 
                 // 캡션 아래는 사이드바 + 현재 페이지의 가로 stack이다.
                 const luil::sidebar_config sidebar_config { make_sidebar_config() };
@@ -690,22 +711,39 @@ namespace demo {
 
             [[nodiscard]] std::vector<luil::input_action> on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta) override
             {
-                // 페이지마다 차례로 물어본다.
-                // 지금 tree에 없는 페이지의 대상은 find가 걸러 준다.
+                // **표를 든 페이지가 먼저다.**
+                //
+                // 표는 특정 id를 이름 대므로 그 자리에서만 답하고, 아래의 표 없는
+                // 짝은 좌표를 덮는 **아무** 흘리는 컨테이너나 답한다. 순서를 뒤집으면
+                // 표가 이름 댄 것을 감싼 영역이 휠을 먼저 삼켜, 그 표는 영영 불리지
+                // 않는다 — 탭 막대처럼 휠과 되살리기의 임자가 진짜로 갈리는 자리가
+                // 그때 조용히 망가진다.
+                //  - 지금 tree에 없는 페이지의 대상은 find가 걸러 준다.
                 if (auto actions { lists_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
                     return actions;
                 if (auto actions { tabs_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
                     return actions;
-                return network_page::route_wheel(tree, event, scroll_delta);
+                if (auto actions { network_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+                    return actions;
+                // 표에 없는 것은 자기 메시지를 든 컨테이너다 (`scroll_source`).
+                // 네트워크 페이지의 결과 칸과 목록 페이지의 가상 목록이 여기서 잡힌다 —
+                // 페이지가 늘어도 이 줄은 그대로다.
+                return luil::route_wheel(tree, event.x, event.y, scroll_delta);
             }
 
             [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override
             {
-                // 휠과 같은 모양으로 페이지마다 차례로 물어본다.
+                // 휠과 같은 순서다 — 이름 댄 표가 먼저고 표 없는 짝이 나중이다.
                 // 지금 tree에 없는 페이지의 창은 `route_reveal`이 걸러 준다.
                 if (auto actions { lists_page::route_reveal(tree, focused) }; actions.empty() == false)
                     return actions;
-                return tabs_page::route_reveal(tree, focused);
+                if (auto actions { tabs_page::route_reveal(tree, focused) }; actions.empty() == false)
+                    return actions;
+                // 네트워크 페이지에는 되살리기 표가 **아예 없었다.** 결과 칸을
+                // `scroll_area_element`로 바꾼 것만으로 이 한 줄이 그 페이지의
+                // 되살리기까지 세운다 — 표를 새로 적지 않아도, 자기 메시지를 든
+                // 컨테이너면 여기서 찾는다. 이것이 표 없는 짝의 값이다.
+                return luil::route_reveal(tree, focused);
             }
 
             // 이 셸에는 앱이 가로챌 키가 없다.

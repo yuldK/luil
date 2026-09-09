@@ -6,6 +6,11 @@
 #include <utility>
 
 namespace luil {
+    const ui_element_id& ui_element::pointer_focus_target() const noexcept
+    {
+        return id();
+    }
+
     bool rect_f::contains(const float point_x, const float point_y) const noexcept
     {
         return point_x >= x && point_x < x + width && point_y >= y && point_y < y + height;
@@ -114,6 +119,16 @@ namespace luil {
         return key_step_target_.has_value() ? &*key_step_target_ : nullptr;
     }
 
+    const scroll_source* ui_element::scroll() const noexcept
+    {
+        return scroll_source_.has_value() ? &*scroll_source_ : nullptr;
+    }
+
+    const key_search_target* ui_element::key_search() const noexcept
+    {
+        return key_search_target_.has_value() ? &*key_search_target_ : nullptr;
+    }
+
     bool ui_element::interactive() const noexcept
     {
         if (tooltip_.empty() == false || cursor_ != ui_cursor::inherit || drag_source_.has_value() || drop_target_.has_value() || pointer_drag_target_.has_value())
@@ -186,6 +201,19 @@ namespace luil {
         // 포인터 hit 판정(`interactive`)은 넓히지 않는다.
         // 키로 조작할 수 있다는 것이 "포인터가 여기서 멈춘다"를 뜻하지 않는다.
         key_step_target_ = std::move(target);
+    }
+
+    void ui_element::set_scroll_source(std::optional<scroll_source> source)
+    {
+        // `set_key_step_target`과 같은 이유로 `interactive`를 넓히지 않는다.
+        // 흘릴 수 있다는 것이 "포인터가 여기서 멈춘다"를 뜻하지 않는다 — 휠은
+        // hit 대상이 아니라 좌표를 **덮는** 컨테이너를 찾는다.
+        scroll_source_ = std::move(source);
+    }
+
+    void ui_element::set_key_search_target(std::optional<key_search_target> target)
+    {
+        key_search_target_ = std::move(target);
     }
 
     bool ui_element::clip_children() const noexcept

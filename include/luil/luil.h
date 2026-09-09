@@ -44,6 +44,7 @@
 #include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"
 #include "luil/ui/root_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scroll_view_element.h"
 #include "luil/ui/scrollbar_element.h"
 #include "luil/ui/sidebar_element.h"
@@ -61,6 +62,7 @@
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/virtual_list_element.h"
 #include "luil/ui/webview_element.h"
 #include "luil/ui/wrap_element.h"
 

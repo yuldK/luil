@@ -24,9 +24,13 @@ namespace luil {
         // 진하기 0은 "보이지 않게 막는다"이지 "막지 않는다"가 아니다 — 포인터를
         // 막는 것이 modal의 몫이라 여기서 그것을 뺄 수 없다.
         panel_config scrim {};
-        const float opacity { config_.scrim_opacity };
         // 구체 색이 아니라 역할이다. 알파는 그리는 쪽이 정한다는 그 역할의 규칙을 따른다.
-        scrim.background = [opacity](const ui_color_palette& palette) { return with_alpha(palette.content_shadow, opacity); };
+        // 앱이 선택자를 주었으면 그것을 그대로 넘긴다 — 진하기는 이미 그 안에서 정해졌고,
+        // 여기서 다시 곱하면 앱이 적은 색과 화면의 색이 갈린다.
+        if (config_.scrim_background)
+            scrim.background = config_.scrim_background;
+        else
+            scrim.background = [opacity = config_.scrim_opacity](const ui_color_palette& palette) { return with_alpha(palette.content_shadow, opacity); };
         auto panel { std::make_unique<panel_element>(ui_element_id { ui_element_kind::modal_scrim, config_.owner }, std::move(scrim)) };
         if (config_.outside)
             panel->set_action(ui_trigger::left_click, config_.outside);
@@ -44,8 +48,24 @@ namespace luil {
         // 앱이 손으로 흡수 액션을 다는 대신 host가 세운다 — 잊으면 바깥 클릭으로
         // 닫히는 dialog가 자기 몸을 눌러도 닫힌다.
         content->set_hit_opaque(true);
-        content_ = content.get();
-        add_child(std::move(content));
+        if (config_.surface.has_value() == false)
+        {
+            content_ = content.get();
+            add_child(std::move(content));
+            return;
+        }
+
+        // 표면은 내용을 감싸기만 한다.
+        // 흡수는 그대로 내용의 몫이다 — panel은 자기 slot을 내용에게 통째로 물려주어
+        // 표면이 내용보다 넓어지는 자리가 없고, 흡수를 표면으로 옮기면 같은 규칙을
+        // 두 자리에서 말하게 된다.
+        //  - 앱이 부르는 이름이 아니라 host가 조립하는 안쪽 부품이라 자기 kind를 갖지
+        //    않는다 (virtual_list가 행 안에 세우는 라벨과 같은 자리다). 이름으로 찾을
+        //    일이 있으면 그것은 앱이 만든 내용이지 이 표면이 아니다.
+        auto surface { std::make_unique<panel_element>(ui_element_id { ui_element_kind::none, config_.owner }, *config_.surface) };
+        surface->set_content(std::move(content));
+        content_ = surface.get();
+        add_child(std::move(surface));
     }
 
     void modal_host_element::arrange(const arrange_context& context)
@@ -58,6 +78,7 @@ namespace luil {
             return;
 
         // 가운데에 놓고 앱이 준 만큼 밀어낸다.
+        // 표면이 있으면 이 자리를 표면이 받고 내용은 그 안에서 같은 자리를 물려받는다.
         const float width { config_.content_width * scale };
         const float height { config_.content_height * scale };
         const float left { context.slot.x + (context.slot.width - width) / 2.0f + config_.offset_x * scale };

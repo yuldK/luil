@@ -150,6 +150,30 @@ namespace demo {
         toggle->set_action(luil::ui_trigger::left_click,
             [open](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(tool_window_toggle_intent { open == false }) }; });
         column->add(std::move(toggle), { .length = 26.0f, .cross_length = 140.0f });
+        column->add_gap(18.0f);
+
+        // 주 창의 전체 화면 전환이다.
+        //
+        // **이 단추는 앱 메시지를 내지 않는다.** 창을 어떤 모습으로 세울지는 앱 상태가
+        // 아니라 UI thread의 것이라, 액션이 `ui_command` 하나를 그대로 돌려주고
+        // logic thread는 지나지도 않는다 (ui_events.h의 `ui_command`). 그래서 이
+        // 페이지는 지금 전체 화면인지 **모르고** 단추 글도 상태를 따라 바뀌지 않는다 —
+        // 아는 것은 배치 보고를 받는 셸이고, 캡션 줄을 접는 것도 그쪽이다
+        // (demo_main.cpp의 make_frame).
+        column->add(make_label(luil::ui_element_id { kind_text, u8"windows-fullscreen-hint" }, u8"전체 화면은 테두리 없는 창이다 — 모니터를 덮고 캡션 줄은 접힌다.", 11.0f,
+                        luil::label_color_role::dim),
+            18.0f);
+        column->add_gap(2.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"windows-fullscreen-restore-hint" }, u8"다시 누르면 들어가기 전 자리로 돌아오고, 그 자리는 종료할 때 함께 저장된다.",
+                        11.0f, luil::label_color_role::dim),
+            18.0f);
+        column->add_gap(4.0f);
+        // id는 이 페이지의 전환 단추 종류를 이름으로 갈라 쓴다.
+        auto fullscreen { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, u8"fullscreen" }, luil::text_button_config { .text = u8"전체 화면 전환" }) };
+        fullscreen->set_cursor(luil::ui_cursor::hand);
+        fullscreen->set_action(luil::ui_trigger::left_click,
+            [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::ui_command::window_toggle_fullscreen } }; });
+        column->add(std::move(fullscreen), { .length = 26.0f, .cross_length = 140.0f });
         return column;
     }
 

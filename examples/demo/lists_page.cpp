@@ -7,6 +7,9 @@
 #include "luil/ui/split_handle_element.h"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -50,6 +53,85 @@ namespace demo {
             { u8"docs/components.md", u8"components.md", 1, false },
             { u8"README.md", u8"README.md", 0, false },
         };
+
+        // --- 가상 목록 (세 번째 판) ---
+        // 치수와 모델 크기다.
+        constexpr float log_row_height { 26.0f };
+        // 커서와 고른 항목을 함께 적는 아래 줄이다.
+        // 둘이 갈라져 있다는 것이 화면에 보여야 `move`와 `select`를 왜 나눴는지가
+        // 예제에서 읽힌다 — 상태 이름만으로는 아무도 그 차이를 보지 못한다.
+        constexpr float log_footer_height { 16.0f };
+        constexpr float log_footer_gap { 4.0f };
+        // 가상화가 요점이 되는 크기다. 이만큼을 `list_element`에 담으면 element가
+        // 만 개 넘게 서고, 그 tree는 frame마다 통째로 다시 지어진다.
+        constexpr std::size_t log_item_count { 12000 };
+        // 회차 이름 앞에 붙는 갈래다.
+        // 글자 탐색이 이 낱말로 후보를 돈다 — 모든 줄이 같은 낱말로 시작하면
+        // 글자를 쳐도 좁혀지는 것이 없어 탐색이 있는지조차 보이지 않는다.
+        constexpr std::array<std::u8string_view, 5> log_levels { u8"trace", u8"debug", u8"info", u8"warn", u8"error" };
+
+        // 다섯 자리로 맞춘 회차 번호다.
+        // 자리를 맞추지 않으면 badge 안의 글 폭이 줄마다 달라져 눈금이 흔들린다.
+        [[nodiscard]] std::u8string log_number(const std::size_t index)
+        {
+            std::u8string digits { to_u8(static_cast<int>(index)) };
+            while (digits.size() < 5u)
+                digits.insert(digits.begin(), u8'0');
+            return digits;
+        }
+
+        [[nodiscard]] std::u8string log_key(const std::size_t index)
+        {
+            return u8"log-" + log_number(index);
+        }
+
+        // 오른쪽 칸에 서는 보조 값이다 (그 회차가 걸린 시간).
+        // 색인에서 바로 뽑으므로 모델을 두 벌 들지 않는다.
+        [[nodiscard]] std::u8string log_elapsed_text(const std::size_t index)
+        {
+            return to_u8(static_cast<int>(index * 37u % 900u + 12u)) + u8" ms";
+        }
+
+        // 그 키의 이름이다. 모델에 없으면 "없음"이라 아래 줄이 거짓말을 하지 않는다.
+        [[nodiscard]] std::u8string log_label_of(const std::vector<luil::virtual_list_item>& items, const std::u8string& key)
+        {
+            for (const luil::virtual_list_item& item : items)
+                if (item.key == key)
+                    return item.label;
+            return u8"(없음)";
+        }
+
+        // 행 하나의 **내용**이다.
+        // 자리표·선택 표시·누름 액션·글자 탐색 이름은 그래도 목록이 쥔다 — 앱이
+        // 행을 통째로 만들면 앱마다 선택과 키보드를 다시 짜고 그중 하나를 반드시 틀린다.
+        //  - **아무것도 붙잡지 않는다.** tree를 짓는 동안 불리는 순수한 함수라야
+        //    하고, 필요한 것이 항목과 색인뿐이라 붙잡을 것도 없다. 페이지를 붙잡으면
+        //    게시된 tree가 앱 상태를 가리키는 셈이 된다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_log_row(const luil::virtual_list_item& item, const std::size_t index, const bool selected)
+        {
+            luil::stack_config config {};
+            config.direction = luil::stack_direction::row;
+            config.spacing = 8.0f;
+            config.padding = luil::edge_insets::symmetric(8.0f, 3.0f);
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"log-row-" + item.key }, config) };
+
+            // 색인 badge다. 바탕이 있어야 번호가 이름과 한 덩어리로 읽히지 않는다.
+            luil::label_config badge {};
+            badge.text = log_number(index);
+            badge.font_size = 10.0f;
+            badge.color = luil::label_color_role::dim;
+            badge.background = luil::label_background_role::notice;
+            badge.padding = 6.0f;
+            row->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"log-index-" + item.key }, std::move(badge)), 52.0f);
+
+            // 고름의 판정은 목록이 한다 — 앱은 그 답을 받아 글의 색만 고른다.
+            const luil::label_color_role color { selected ? luil::label_color_role::primary : luil::label_color_role::dim };
+            row->add_flexible(make_label(luil::ui_element_id { kind_text, u8"log-label-" + item.key }, item.label, 11.0f, color));
+            // 오른쪽 끝의 보조 칸이다. 고정 길이를 마지막에 담으면 남는 자리를 앞의
+            // 유연 항목이 다 먹으므로 이 칸이 오른쪽 끝에 붙는다.
+            row->add(make_label(luil::ui_element_id { kind_text, u8"log-elapsed-" + item.key }, log_elapsed_text(index), 10.0f, luil::label_color_role::dim), 56.0f);
+            return row;
+        }
     } // namespace
 
     lists_page::lists_page()
@@ -59,6 +141,20 @@ namespace demo {
         // 처음에는 뿌리 둘만 펼쳐 둔다.
         tree_expanded_.emplace_back(u8"src");
         tree_expanded_.emplace_back(u8"docs");
+
+        // 만 줄이 넘는 모델을 **값으로** 한 번 짓는다.
+        // 여기까지는 복사 한 번이고, tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
+        log_items_.reserve(log_item_count);
+        for (std::size_t index = 0; index < log_item_count; ++index)
+        {
+            luil::virtual_list_item item {};
+            item.key = log_key(index);
+            item.label = std::u8string { log_levels[index % log_levels.size()] } + u8" " + log_number(index);
+            log_items_.push_back(std::move(item));
+        }
+        // 커서의 첫 자리를 앱이 적어 둔다. 비워 두면 목록은 첫 항목을 커서로 보는데
+        // 앱 상태는 비어 있어, 같은 자리를 둘이 다르게 알고 아래 줄이 없는 것을 가리킨다.
+        log_cursor_ = log_items_.front().key;
     }
 
     bool lists_page::is_expanded(const std::u8string& key) const
@@ -106,6 +202,33 @@ namespace demo {
                 tree_expanded_.erase(found);
             return true;
         }
+        if (const auto* const select { message.get<log_select_intent>() }; select != nullptr)
+        {
+            // 고르는 것이 커서도 함께 옮긴다. 목록은 누름에 `select`만 내므로,
+            // 여기서 커서를 두고 오면 다음 화살표가 아까 서 있던 자리에서 이어져
+            // 방금 누른 줄에서 달아난다.
+            log_selected_ = select->key;
+            log_cursor_ = select->key;
+            return true;
+        }
+        if (const auto* const cursor { message.get<log_cursor_intent>() }; cursor != nullptr)
+        {
+            // 화살표·Page·Home/End·글자는 **커서만** 옮긴다.
+            // 훑는 것과 고르는 것을 가른 쪽을 이 페이지가 고른 것이고, 그 선택이
+            // 앱의 것이라 element는 옮길 키만 실어 보낸다.
+            log_cursor_ = cursor->key;
+            return true;
+        }
+        if (const auto* const scroll { message.get<log_scroll_intent>() }; scroll != nullptr)
+        {
+            log_scroll_ += scroll->delta;
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<log_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            log_scroll_ = scroll_to->offset;
+            return true;
+        }
         if (const auto* const scroll { message.get<tree_scroll_intent>() }; scroll != nullptr)
         {
             tree_scroll_ += scroll->delta;
@@ -145,7 +268,7 @@ namespace demo {
         config.padding = luil::edge_insets::all(24.0f);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"lists" }, config) };
         column->add(make_label(luil::ui_element_id { kind_text, u8"lists-hint" },
-                        u8"왼쪽은 끌어서 순서를 바꾸는 목록, 오른쪽은 고르고 접는 tree다 (Tab으로 들어가 ↑↓·Home/End·글자로 옮긴다). 두 목록 사이를 끌면 자리를 나눈다.", 11.0f,
+                        u8"왼쪽은 순서를 바꾸는 목록, 가운데는 접는 tree, 오른쪽은 만 줄이 넘는 가상 목록이다 (Tab으로 들어가 ↑↓·Page·Home/End·글자로 옮긴다). 판 사이를 끌면 자리를 나눈다.", 11.0f,
                         luil::label_color_role::dim),
             18.0f);
         column->add_gap(8.0f);
@@ -191,15 +314,19 @@ namespace demo {
 
     std::unique_ptr<luil::ui_element> lists_page::make_top_row(const float viewport_height)
     {
-        // 같은 element의 파생 둘을 나란히 세운다.
-        // 왼쪽은 `reorder`만, 오른쪽은 `select`+`toggle`이다 — 그래서 왼쪽에는
-        // Tab이 서지 않고 오른쪽에는 선다. 그 차이가 화면에서 그대로 보인다.
+        // 목록 셋을 나란히 세운다.
+        // 왼쪽 둘은 같은 `list_element`의 파생이다 — 왼쪽은 `reorder`만, 가운데는
+        // `select`+`toggle`이라 왼쪽에는 Tab이 서지 않고 가운데에는 선다.
+        // 오른쪽은 **계약이 다른** 목록이다: 행이 아니라 목록 자신이 Tab의 자리이고,
+        // 창에 걸치는 줄만 tree에 선다 (virtual-list-design.md의 표 다섯 줄).
+        // 그 차이가 한 화면에서 그대로 보인다.
         luil::stack_config config {};
         config.direction = luil::stack_direction::row;
         config.spacing = top_row_gap;
         auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"top-lists" }, config) };
         row->add_flexible(make_list_panel(viewport_height));
         row->add_flexible(make_tree_panel(viewport_height));
+        row->add_flexible(make_log_panel(viewport_height));
         return row;
     }
 
@@ -293,6 +420,55 @@ namespace demo {
         return panel;
     }
 
+    std::unique_ptr<luil::ui_element> lists_page::make_log_panel(const float viewport_height)
+    {
+        // 목록이 받는 높이는 아래 줄과 그 사이 간격을 뺀 나머지다.
+        // 다듬기의 기준이 실제 창 높이여야 하므로 여기서 미리 뺀다 — `add_flexible`이
+        // 나눠 줄 값을 눈대중으로 적으면 앱과 목록이 다른 창을 재게 된다.
+        const float list_height { viewport_height - log_footer_height - log_footer_gap };
+        const float content_height { luil::virtual_list_content_height(log_items_, log_row_height) };
+        // 다른 두 목록과 같은 자리에서 같은 식으로 다듬는다.
+        // 앱이 든 값과 목록이 재는 값이 어긋나면 커서를 따라가는 스크롤이 한 번에
+        // 닿지 못한다 — 목록은 다듬은 값에서, 앱은 원값에서 델타를 세기 때문이다.
+        log_scroll_ = luil::clamp_scroll(content_height, list_height, log_scroll_);
+
+        luil::virtual_list_config config {};
+        config.owner = u8"log";
+        // 모델 **전체**를 넘긴다. 창에 걸치지 않는 항목도 담아야 Home/End와 글자
+        // 탐색이 화면이 아니라 모델의 끝까지 간다.
+        config.items = log_items_;
+        config.selected = log_selected_;
+        config.cursor = log_cursor_;
+        config.row_height = log_row_height;
+        config.scroll_offset = log_scroll_;
+        // 기본 행은 이름 한 줄이다. 색인 badge와 오른쪽 보조 칸은 앱의 것이라
+        // 여기서 짓는다 (그 둘 말고는 전부 목록이 쥔다).
+        config.build_row = make_log_row;
+        config.select = [](const std::u8string& key) { return luil::make_app_action(log_select_intent { key }); };
+        // `move`가 없으면 목록은 Tab의 자리조차 아니다 — 커서가 앱 상태라
+        // 라이브러리가 고칠 수 없고, 옮길 길이 없는 화살표는 아무 일도 하지 않는다.
+        config.move = [](const std::u8string& key) { return luil::make_app_action(log_cursor_intent { key }); };
+        config.scroll = [](const float delta) { return luil::make_app_action(log_scroll_intent { delta }); };
+        config.scroll_to = [](const float offset) { return luil::make_app_action(log_scroll_to_intent { offset }); };
+
+        luil::stack_config inset {};
+        inset.padding = luil::edge_insets::all(panel_inset);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"log" }, inset) };
+        column->add_flexible(std::make_unique<luil::virtual_list_element>(std::move(config)));
+        column->add_gap(log_footer_gap);
+        // 커서와 고른 항목을 함께 적는다. 화살표로 훑기만 하면 앞의 값만 움직이고,
+        // 눌러야 뒤의 값이 따라온다 — 둘을 가른 이유가 이 한 줄에서 보인다.
+        const std::u8string footer { u8"커서 " + log_label_of(log_items_, log_cursor_) + u8"  ·  고른 것 " + log_label_of(log_items_, log_selected_) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"log-footer" }, footer, 10.0f, luil::label_color_role::dim), log_footer_height);
+
+        luil::panel_config surface_panel {};
+        surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
+        surface_panel.corner_radius = 6.0f;
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_list_panel, u8"log" }, std::move(surface_panel)) };
+        panel->set_content(std::move(column));
+        return panel;
+    }
+
     std::unique_ptr<luil::ui_element> lists_page::make_grouped_section(const float viewport_height)
     {
         // 머리행을 누르면 어느 그룹인지 토스트로 보여 준다 (activate factory의 예).
@@ -342,6 +518,9 @@ namespace demo {
     {
         // 어느 목록을 어떤 메시지로 스크롤할지(표)만 적는다.
         // 좌표 판정은 라이브러리의 route_wheel이 한다.
+        //  - **가상 목록은 이 표에 없다.** 그쪽은 자기 메시지를 든 흘리는 영역을
+        //    안에 품고 있어(`scroll_source`) 셸의 표 없는 짝이 찾는다. 여기 한 줄을
+        //    더 적으면 같은 factory가 두 곳에 살고 언젠가 한쪽만 고쳐진다.
         static const luil::scroll_route routes[] {
             { { luil::ui_element_kind::list, u8"items" }, [](const float value) { return luil::make_app_action(list_scroll_intent { value }); } },
             { { luil::ui_element_kind::list, u8"tree" }, [](const float value) { return luil::make_app_action(tree_scroll_intent { value }); } },
@@ -356,6 +535,8 @@ namespace demo {
         // 품어 창이 아니고, 그것을 대면 마지막 행이 막대 밑에 남는다.
         //  - 휠의 표와 줄이 겹치지만 같은 표가 아니다. 휠은 포인터가 덮는 것을
         //    묻고 되살리기는 초점을 품는 것을 묻는다.
+        //  - 가상 목록은 여기에도 없다. 커서는 초점이 아니라 앱 상태라 되살리기의
+        //    계기 자체가 오지 않고, 얼마나 흘릴지는 목록이 커서 메시지와 함께 낸다.
         static const luil::scroll_route routes[] {
             { { luil::ui_element_kind::list_scroll, u8"items" }, [](const float value) { return luil::make_app_action(list_scroll_intent { value }); } },
             { { luil::ui_element_kind::list_scroll, u8"tree" }, [](const float value) { return luil::make_app_action(tree_scroll_intent { value }); } },

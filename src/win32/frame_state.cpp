@@ -27,6 +27,7 @@ namespace luil {
             .scale = scale,
             .now = std::chrono::steady_clock::now(),
             .maximized = state.maximized,
+            .fullscreen = state.fullscreen,
         };
 
         // tree가 화면 전체를 그린다 (caption 포함).

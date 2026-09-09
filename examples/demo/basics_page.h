@@ -6,6 +6,7 @@
 
 #include "demo/common.h"
 #include "luil/text/text_edit.h"
+#include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/text_input_state.h"
@@ -99,8 +100,11 @@ namespace demo {
         // frame마다 config에 실리는 것은 손잡이뿐이다 (image-design.md).
         // 파일에서 읽으므로 실패할 수 있다: 읽었다는 사실과 실패 이유를 함께 든다
         // (`picture_`의 유효성으로 물으면 실패한 파일을 frame마다 다시 연다).
+        //  - 이유는 글이 아니라 **값**이다 (`luil::image_decode_error`). 화면에
+        //    적는 것은 그 안의 `message`뿐이지만, 갈래를 보고 다르게 굴어야 하는
+        //    앱은 문장을 뒤지지 않고 `kind`를 본다.
         luil::ui_image picture_ {};
-        std::u8string picture_error_ {};
+        luil::image_decode_error picture_error_ {};
         bool picture_read_ { false };
         // 움직이는 견본 둘이다 (webp 하나, gif 하나). 정지 그림과 같은 규칙으로
         // 한 번만 읽고, **읽었다는 사실**을 기억한다 — 성공을 기억하면 읽지 못한
@@ -110,7 +114,7 @@ namespace demo {
         //    쪽이 앞선 실패를 지우지 않는다.
         luil::ui_animated_image sweep_ {};
         luil::ui_animated_image spinner_ {};
-        std::u8string film_error_ {};
+        luil::image_decode_error film_error_ {};
         bool films_read_ { false };
         // 재생 시계다. 필름이 둘이어도 시계는 하나라 둘이 같은 장단에 돌고, 멈춤
         // 단추 하나가 둘을 함께 세운다 — 재생 위치가 element가 아니라 **앱**에

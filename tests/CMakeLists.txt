@@ -25,6 +25,7 @@ add_executable(luil_tests
     accessibility_tests.cpp
     app_host_tests.cpp
     badge_element_tests.cpp
+    button_element_tests.cpp
     caption_layout_tests.cpp
     check_element_tests.cpp
     choice_group_element_tests.cpp
@@ -54,6 +55,7 @@ add_executable(luil_tests
     progress_element_tests.cpp
     raster_probe.cpp
     raster_draw_tests.cpp
+    scroll_area_element_tests.cpp
     scroll_view_element_tests.cpp
     scrollbar_element_tests.cpp
     secondary_surface_tests.cpp
@@ -70,6 +72,7 @@ add_executable(luil_tests
     toast_element_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
+    virtual_list_element_tests.cpp
     renderer_policy_tests.cpp
     tsf_input_tests.cpp
     ui_interaction_tests.cpp
@@ -84,6 +87,7 @@ add_executable(luil_tests
     win32_drop_tests.cpp
     win32_fonts_tests.cpp
     win32_window_tests.cpp
+    window_mode_tests.cpp
     window_position_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE

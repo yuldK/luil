@@ -69,6 +69,12 @@ namespace demo {
         float delta { 0.0f };
     };
 
+    // 결과 칸을 이 자리로 흘린다 (막대가 나르는 보조 기술의 SetValue — 절대 offset).
+    struct network_preview_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+
     // 데모 서버가 내주는 길들이다 (docs/http-client-design.md의 데모 표).
     //
     // 하나의 handler가 경로로 가른다 — 되돌이 서버의 계약이 그렇다.
@@ -109,7 +115,12 @@ namespace demo {
         // 심장 박동을 껐다 (`cancel`은 셸이 이미 불렀다).
         void note_heartbeat_stopped() noexcept;
 
-        // 띠와 결과 칸을 휠로 흘린다 (탭 페이지와 같은 모양이다).
+        // 과녁 단추 띠를 휠로 흘린다.
+        //
+        // **결과 칸은 여기 없다.** 그쪽은 `scroll_area_element`라 자기 메시지를
+        // 스스로 들고 있어(`scroll_source`) 셸의 표 없는 `route_wheel`이 찾는다.
+        // 가로로 흘리는 띠는 그 조립이 아니라 표에 남는다 (scroll-area-design.md의
+        // "원시 도구를 그대로 쓰는 자리").
         [[nodiscard]] static std::vector<luil::input_action> route_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, float delta);
 
     private:

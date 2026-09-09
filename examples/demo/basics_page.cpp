@@ -54,12 +54,15 @@ namespace demo {
 
         // 가로는 색상, 세로는 밝기가 변하는 견본 이미지를 파일에서 읽는다.
         // fit 설정에 따른 여백과 잘림의 차이를 확인할 수 있다.
-        [[nodiscard]] luil::ui_image load_demo_picture(std::u8string& error)
+        [[nodiscard]] luil::ui_image load_demo_picture(luil::image_decode_error& error)
         {
             const std::filesystem::path directory { module_directory() };
             if (directory.empty())
             {
-                error = u8"Failed to locate the executable directory.";
+                // **앱의 실패도 라이브러리의 어휘로 적는다.** 화면과 로그가 두
+                // 가지 실패 값을 갈라 들면 그 자리마다 갈래가 하나 늘어난다 —
+                // 경로를 짓지 못한 것은 빈 경로와 같은 갈래다.
+                error = { luil::image_decode_error_kind::path_empty, u8"Failed to locate the executable directory." };
                 return {};
             }
 
@@ -77,11 +80,11 @@ namespace demo {
         //  - 상한은 **들고 있을** 크기를 정한다. 칸이 96 논리 픽셀 높이라 배율
         //    2까지 쳐도 200이면 넉넉하고, 움직이는 그림에서는 그 값에 장 수가
         //    곱해진다 — 상한 하나가 여기서 열둘·열여섯 번 값을 낸다.
-        [[nodiscard]] luil::ui_animated_image load_demo_film(const std::filesystem::path& directory, const std::wstring_view name, std::u8string& error)
+        [[nodiscard]] luil::ui_animated_image load_demo_film(const std::filesystem::path& directory, const std::wstring_view name, luil::image_decode_error& error)
         {
             if (directory.empty())
             {
-                error = u8"Failed to locate the executable directory.";
+                error = { luil::image_decode_error_kind::path_empty, u8"Failed to locate the executable directory." };
                 return {};
             }
             const std::filesystem::path path { directory / L"assets" / name };
@@ -301,7 +304,7 @@ namespace demo {
         // 읽지 못한 파일은 조용히 비지 않는다 — 이유가 화면에 남는다.
         // 라이브러리가 내는 글은 진단용 영문이고, 사람에게 보일 문장은 앱이 짓는다.
         if (picture_.valid() == false)
-            return make_label(luil::ui_element_id { kind_text, u8"picture-status" }, u8"그림을 읽지 못했다 — " + picture_error_, 11.0f, luil::label_color_role::primary);
+            return make_label(luil::ui_element_id { kind_text, u8"picture-status" }, u8"그림을 읽지 못했다 — " + picture_error_.message, 11.0f, luil::label_color_role::primary);
         return make_label(luil::ui_element_id { kind_text, u8"picture-status" },
             u8"assets/gradient.png을 " + to_u8(picture_.width()) + u8"×" + to_u8(picture_.height()) + u8" 픽셀로 읽었다 (원본 480×240).", 11.0f,
             luil::label_color_role::dim);
@@ -337,7 +340,7 @@ namespace demo {
     {
         // 정지 그림과 같은 규칙이다 — 읽지 못한 파일은 조용히 비지 않는다.
         if (sweep_.valid() == false || spinner_.valid() == false)
-            return make_label(luil::ui_element_id { kind_text, u8"film-status" }, u8"움직이는 그림을 읽지 못했다 — " + film_error_, 11.0f, luil::label_color_role::primary);
+            return make_label(luil::ui_element_id { kind_text, u8"film-status" }, u8"움직이는 그림을 읽지 못했다 — " + film_error_.message, 11.0f, luil::label_color_role::primary);
         return make_label(luil::ui_element_id { kind_text, u8"film-status" },
             u8"assets/sweep.webp를 " + to_u8(sweep_.width()) + u8"×" + to_u8(sweep_.height()) + u8" " + to_u8(static_cast<int>(sweep_.frame_count())) + u8"장으로, assets/spinner.gif를 "
                 + to_u8(spinner_.width()) + u8"×" + to_u8(spinner_.height()) + u8" " + to_u8(static_cast<int>(spinner_.frame_count()))
