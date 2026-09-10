@@ -4,6 +4,10 @@ include_guard(GLOBAL)
 # 패키지와 직접 빌드한 Skia 트리에 같은 검사를 적용한다 (docs/skia-build.md).
 # CMake는 네트워크나 GN을 실행하지 않는다.
 # 검사는 Debug·Release 단위로 독립이며 configure 대상 구성의 산출물만 요구한다.
+#
+# 검사가 보는 것은 **패키지가 자기 옆에 적어 둔 파일**이다 — args.gn과
+# toolchain.json. 컴파일러를 찾지도 부르지도 않으므로, 미리 빌드된 패키지를 쓰는
+# 소비자에게 clang 설치를 요구하지 않는다. 소비자의 컴파일러는 그대로 MSVC다.
 
 # 산출물이 실제로 luil와 맞는지 configure 시점에 검사한다.
 # 잘못된 옵션으로 빌드한 Skia를 링크 오류가 아니라 원인이 드러나는 메시지로 잡는다.
@@ -18,6 +22,7 @@ function(luil_check_skia_arguments build_directory)
     endif()
 
     file(READ "${arguments_file}" arguments_text)
+    set(LUIL_SKIA_ARGUMENTS_TEXT "${arguments_text}" PARENT_SCOPE)
     foreach(requirement IN LISTS LUIL_SKIA_REQUIRED_ARGUMENTS)
         string(REPLACE "=" ";" requirement_parts "${requirement}")
         list(GET requirement_parts 0 requirement_name)
@@ -30,6 +35,100 @@ function(luil_check_skia_arguments build_directory)
                 "Rebuild Skia with the argument file in third_party/skia-args.")
         endif()
     endforeach()
+endfunction()
+
+# 무엇이 이 산출물을 컴파일했는지 본다.
+# args.gn은 "그렇게 gen했다"는 말이고 CRT 지시문은 두 도구사슬이 똑같이 내므로,
+# 컴파일러는 패키지가 따로 적어 둔 toolchain.json이 말한다. 그것이 없는 트리
+# (손으로 gn gen한 자리)에서는 args.gn의 clang_win이 근거다.
+#
+# 이것이 계약인 이유는 어긋나도 링크가 성립하기 때문이다. SkRasterPipeline의
+# 벡터 형이 clang·gcc의 확장이라, MSVC로 세운 Skia는 CPU 래스터를 픽셀 하나씩
+# 처리한다 — 4000x7000 cubic 축소가 13.6 ms 대신 799.8 ms다
+# (skia-prep docs/skia-build.md 5.4의 실측).
+function(luil_check_skia_toolchain flavor build_directory arguments_text)
+    set(toolchain_file "${build_directory}/toolchain.json")
+    set(compiler "")
+    if(EXISTS "${toolchain_file}")
+        file(READ "${toolchain_file}" toolchain_text)
+        string(JSON compiler ERROR_VARIABLE toolchain_error
+            GET "${toolchain_text}" compiler)
+        if(toolchain_error)
+            set(compiler "")
+        endif()
+    elseif(arguments_text MATCHES "clang_win[ \t]*=[ \t\r\n]*\"[^\"]")
+        set(compiler "clang-cl")
+    endif()
+
+    if(NOT compiler STREQUAL "${LUIL_SKIA_REQUIRED_TOOLCHAIN}")
+        if(compiler)
+            set(recorded "${compiler}")
+        else()
+            set(recorded "not recorded")
+        endif()
+        message(FATAL_ERROR
+            "Skia was not compiled with ${LUIL_SKIA_REQUIRED_TOOLCHAIN} "
+            "(${flavor}: ${recorded}).\n"
+            "Build directory: ${build_directory}\n"
+            "luil needs it for the CPU raster path: SkRasterPipeline only "
+            "vectorises under clang or gcc, so a Skia built with anything else "
+            "links fine and then rasterises one pixel at a time.\n"
+            "With the pinned package: scripts/fetch_skia.ps1 -Force\n"
+            "  The package is already compiled - nothing here needs a clang "
+            "installation, and your own compiler stays MSVC.\n"
+            "With a Skia tree you built by hand: build it with clang-cl and "
+            "keep the toolchain.json that records it next to the libraries.\n"
+            "See docs/skia-build.md.")
+    endif()
+endfunction()
+
+# MSVC 소비자와 같은 ABI·CRT로 세운 것인지 본다.
+#  - is_trivial_abi가 참이면 sk_sp 같은 형이 clang에서만
+#    `[[clang::trivial_abi]]`를 달아 호출 규약이 바뀐다. 그 헤더를 MSVC로
+#    컴파일하는 luil와 소비자에게는 그 속성이 없으므로, 같은 형이 서로 다른
+#    ABI가 되고 링크가 성립한 채 런타임에 깨진다.
+#  - CRT는 Debug가 /MTd, 그 밖의 구성이 /MT다. 링커의 /FAILIFMISMATCH가 결국
+#    잡지만 그 메시지는 무엇을 어떻게 고쳐야 하는지 말하지 않는다.
+function(luil_check_skia_abi flavor build_directory arguments_text)
+    if(NOT arguments_text MATCHES "is_trivial_abi[ \t]*=[ \t]*false")
+        message(FATAL_ERROR
+            "Skia was not built with is_trivial_abi = false.\n"
+            "Build directory: ${build_directory}\n"
+            "That argument makes clang give sk_sp and friends "
+            "[[clang::trivial_abi]], which changes how they are passed. "
+            "luil and its consumers compile the same headers with MSVC, "
+            "where the attribute does not exist - the two halves would "
+            "disagree at run time while linking cleanly.\n"
+            "Fetch the pinned package (scripts/fetch_skia.ps1 -Force), or "
+            "rebuild Skia with the argument file in third_party/skia-args.")
+    endif()
+
+    if(flavor STREQUAL "Debug")
+        set(expected_runtime "/MTd")
+        set(other_runtime "/MT")
+    else()
+        set(expected_runtime "/MT")
+        set(other_runtime "/MTd")
+    endif()
+    set(runtime_flags "")
+    string(REGEX MATCHALL "\"/MTd?\"" runtime_matches "${arguments_text}")
+    foreach(match IN LISTS runtime_matches)
+        string(REPLACE "\"" "" match "${match}")
+        list(APPEND runtime_flags "${match}")
+    endforeach()
+    if(NOT "${expected_runtime}" IN_LIST runtime_flags
+        OR "${other_runtime}" IN_LIST runtime_flags)
+        message(FATAL_ERROR
+            "Skia's ${flavor} build does not use ${expected_runtime}.\n"
+            "Build directory: ${build_directory}\n"
+            "extra_cflags says: ${runtime_flags}\n"
+            "luil links the static CRT and a ${flavor} configuration needs the "
+            "${expected_runtime} flavour of it. Mixing them is what the "
+            "linker's /FAILIFMISMATCH would report later, without the "
+            "reason.\n"
+            "Fetch the pinned package for this configuration: "
+            "scripts/fetch_skia.ps1 -Configuration ${flavor} -Force")
+    endif()
 endfunction()
 
 # flavor 하나의 산출물 전체를 검사한다.
@@ -47,6 +146,12 @@ function(luil_check_skia_build flavor build_directory)
         endif()
     endforeach()
     luil_check_skia_arguments("${build_directory}")
+    # 기능 인자가 맞아도 무엇이 어떻게 컴파일했는가는 따로다.
+    # 그쪽이 어긋나면 링크가 성립한 채 조용히 다른 물건이 된다.
+    luil_check_skia_toolchain("${flavor}" "${build_directory}"
+        "${LUIL_SKIA_ARGUMENTS_TEXT}")
+    luil_check_skia_abi("${flavor}" "${build_directory}"
+        "${LUIL_SKIA_ARGUMENTS_TEXT}")
 endfunction()
 
 # 검증된 flavor의 location만 노출한다.
@@ -170,5 +275,7 @@ function(luil_find_skia)
     set(LUIL_SKIA_NEEDS_RELEASE "${LUIL_SKIA_NEEDS_RELEASE}" PARENT_SCOPE)
 
     string(REPLACE ";" ", " validated_flavors_text "${validated_flavors}")
-    message(STATUS "Skia: ${LUIL_SKIA_ROOT} (${validated_flavors_text})")
+    message(STATUS
+        "Skia: ${LUIL_SKIA_ROOT} "
+        "(${validated_flavors_text}; ${LUIL_SKIA_REQUIRED_TOOLCHAIN})")
 endfunction()

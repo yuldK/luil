@@ -7,6 +7,10 @@
 # 받을 것은 third_party/skia-prep.json이 정한다. 그 파일이 판번을 고정하는
 # 자리이며, 자산마다 SHA-256을 함께 담는다 — 값이 다르면 설치하지 않는다.
 #
+# 판번은 Skia commit 하나가 아니다. 같은 commit을 다른 도구사슬로 다시 패키징한
+# 것이 따로 있으므로(clang-cl로 세운 r2가 그것이다), 핀은 패키지 판번과 도구사슬을
+# 함께 적는다. 설치 생략 판정도 그것을 본다.
+#
 # 자산이 놓인 자리는 핀 파일의 asset_base_url이 말한다. GitHub Releases든
 # 사내 파일 서버든 이 스크립트는 구별하지 않는다.
 #
@@ -49,8 +53,42 @@ if (-not $ArchiveDirectory) {
 $pin = Get-Content -Raw -LiteralPath $PinFile | ConvertFrom-Json
 $configurations = @($Configuration | Sort-Object -Unique)
 
+function Get-FileHashText {
+    param([string]$path)
+
+    return (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+# manifest에 없는 것을 물어도 $null로 답한다.
+# StrictMode에서 없는 속성을 읽으면 예외가 난다. 판번이 다른 설치본
+# (도구사슬을 적지 않던 r1)을 "다르다"로 판정하려면 이 자리가 필요하다 —
+# 예외로 죽는 것과 다시 설치하는 것은 다른 일이다.
+function Get-ManifestValue {
+    param($manifest, [string]$path)
+
+    $current = $manifest
+    foreach ($segment in $path.Split('.')) {
+        if ($null -eq $current -or
+            @($current.PSObject.Properties.Name) -notcontains $segment) {
+            return $null
+        }
+        $current = $current.$segment
+    }
+    return $current
+}
+
+foreach ($field in @('skia_commit', 'png_codec', 'target', 'package_revision', 'toolchain')) {
+    if ($null -eq (Get-ManifestValue -manifest $pin -path $field)) {
+        throw @"
+The pin file has no ${field}: $PinFile
+A pin has to name the package revision and the toolchain, not just the Skia
+commit - the same commit gets packaged more than once. See docs/skia-build.md.
+"@
+    }
+}
+
 foreach ($name in $configurations) {
-    if (-not $pin.assets.PSObject.Properties.Name.Contains($name)) {
+    if (@($pin.assets.PSObject.Properties.Name) -notcontains $name) {
         throw @"
 The pin file has no $name asset: $PinFile
 Available: $($pin.assets.PSObject.Properties.Name -join ', ')
@@ -58,14 +96,44 @@ Available: $($pin.assets.PSObject.Properties.Name -join ', ')
     }
 }
 
-function Get-FileHashText {
-    param([string]$path)
+# 핀이 요구하는 것과 manifest가 말하는 것을 맞대는 목록이다.
+# 설치 생략 판정과 아카이브 검사가 같은 목록을 본다 — 한쪽이 통과시킨 것을
+# 다른 쪽이 막는 어긋남이 생기지 않는다.
+#
+# skia commit만으로는 갈리지 않는다. 같은 commit을 다른 도구사슬로 다시
+# 패키징한 것이 따로 있고(clang-cl로 세운 r2), 그것은 성능이 다른 물건이다.
+# 패키지 판번과 도구사슬이 그 둘을 가른다.
+function Get-PackageIdentity {
+    param($manifest)
 
-    return (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    return @(
+        @{ label = 'skia commit'; expected = $pin.skia_commit
+            actual = (Get-ManifestValue -manifest $manifest -path 'skia.commit') },
+        @{ label = 'package revision'; expected = $pin.package_revision
+            actual = (Get-ManifestValue -manifest $manifest -path 'package_revision') },
+        @{ label = 'png codec'; expected = $pin.png_codec
+            actual = (Get-ManifestValue -manifest $manifest -path 'png_codec') },
+        @{ label = 'target'; expected = $pin.target
+            actual = (Get-ManifestValue -manifest $manifest -path 'target') },
+        @{ label = 'toolchain'; expected = $pin.toolchain
+            actual = (Get-ManifestValue -manifest $manifest -path 'toolchain.compiler') })
 }
 
-# 이미 이 판번이 설치되어 있는지 본다.
-# 요구한 구성이 모두 있고 skia commit이 같으면 아무것도 하지 않는다.
+# 핀이 말하는 바로 그것이 이미 설치되어 있는지 본다.
+# 판정의 근거는 설치본이 스스로 적어 둔 VERSION.json이다.
+#
+# skia commit과 구성 이름만 보던 자리다. 그것으로는 같은 commit을 다시
+# 패키징한 것을 건너뛴다 — r1(MSVC)이 깔린 기계에서 r2(clang-cl)를 핀에
+# 걸어도 "이미 설치됨"이 되고, 링크는 되는데 래스터가 59배 느린 물건이
+# 그대로 남는다.
+#
+# 그래서 셋을 본다.
+#  1. 패키지 식별자다 — commit·판번·코덱·대상·도구사슬 (Get-PackageIdentity).
+#  2. 구성마다, 그 구성을 설치한 아카이브의 SHA-256이 핀의 것과 같은가.
+#     Resolve-Asset이 아카이브를 그 해시로 검사하므로 이것이 곧 내용의 동일성이다.
+#  3. 구성마다, 산출물이 그대로 있는가. args.gn은 구성 계약이라 체크섬까지 보고
+#     라이브러리는 크기까지 본다 — 700 MB를 다시 해싱하지 않고도 잘려 나간
+#     설치가 걸린다.
 function Test-Installed {
     $version_file = Join-Path $Destination 'VERSION.json'
     if (-not (Test-Path -LiteralPath $version_file -PathType Leaf)) {
@@ -77,16 +145,42 @@ function Test-Installed {
     catch {
         return $false
     }
-    if ($installed.skia.commit -ne $pin.skia_commit) {
-        return $false
-    }
-    foreach ($name in $configurations) {
-        if (-not $installed.configurations.PSObject.Properties.Name.Contains($name)) {
+    foreach ($check in (Get-PackageIdentity -manifest $installed)) {
+        if ($check.actual -ne $check.expected) {
             return $false
         }
-        $build_directory = Join-Path $Destination ('out\skia-ui-{0}' -f $name.ToLowerInvariant())
-        if (-not (Test-Path -LiteralPath (Join-Path $build_directory 'args.gn') -PathType Leaf)) {
+    }
+    foreach ($name in $configurations) {
+        $record = Get-ManifestValue -manifest $installed -path "configurations.$name"
+        if ($null -eq $record) {
             return $false
+        }
+        if ((Get-ManifestValue -manifest $record -path 'archive_sha256') -ne
+            $pin.assets.$name.sha256.ToLowerInvariant()) {
+            return $false
+        }
+
+        $build_directory = Join-Path $Destination ('out\skia-ui-{0}' -f $name.ToLowerInvariant())
+        $arguments_file = Join-Path $build_directory 'args.gn'
+        if (-not (Test-Path -LiteralPath $arguments_file -PathType Leaf)) {
+            return $false
+        }
+        if ((Get-FileHashText -path $arguments_file) -ne
+            (Get-ManifestValue -manifest $record -path 'args_sha256')) {
+            return $false
+        }
+
+        $files = Get-ManifestValue -manifest $record -path 'files'
+        if ($null -eq $files) {
+            return $false
+        }
+        foreach ($entry in $files.PSObject.Properties) {
+            $installed_file = Get-Item -ErrorAction Ignore `
+                -LiteralPath (Join-Path $build_directory $entry.Name)
+            if ($null -eq $installed_file -or $installed_file.Length -ne
+                (Get-ManifestValue -manifest $entry.Value -path 'size')) {
+                return $false
+            }
         }
     }
     return $true
@@ -95,6 +189,7 @@ function Test-Installed {
 if ((Test-Installed) -and -not $Force) {
     Write-Output "Already installed: $Destination"
     Write-Output "  skia           : $($pin.skia_commit)"
+    Write-Output "  package        : r$($pin.package_revision) ($($pin.toolchain))"
     Write-Output "  configurations : $($configurations -join ', ')"
     Write-Output 'Give -Force to install it again.'
     return
@@ -173,6 +268,8 @@ The $name archive does not match the pinned hash, so it was discarded.
 # 패키지가 핀이 말하는 그것인지 확인한다.
 # 구성 둘을 합칠 때 서로 다른 Skia에서 나온 것이 섞이면
 # 헤더 하나에 라이브러리 둘이 어긋나는 조용한 고장이 된다.
+# 도구사슬이 갈리는 것도 같은 종류다 — 같은 commit이라도 무엇이 컴파일했는가에
+# 따라 성능이 다른 물건이고, args.gn만으로는 그것이 드러나지 않는다.
 function Test-Package {
     param([string]$staging, [string]$name)
 
@@ -181,19 +278,17 @@ function Test-Package {
         throw "The $name archive has no VERSION.json - it is not a skia-prep package."
     }
     $version = Get-Content -Raw -LiteralPath $version_file | ConvertFrom-Json
-    foreach ($check in @(
-            @{ label = 'skia commit'; actual = $version.skia.commit; expected = $pin.skia_commit },
-            @{ label = 'png codec'; actual = $version.png_codec; expected = $pin.png_codec },
-            @{ label = 'target'; actual = $version.target; expected = $pin.target })) {
-        if ($check.expected -and $check.actual -ne $check.expected) {
+    foreach ($check in (Get-PackageIdentity -manifest $version)) {
+        if ($check.actual -ne $check.expected) {
+            $actual_text = if ($null -eq $check.actual) { '(absent)' } else { $check.actual }
             throw @"
 The $name archive does not match the pin file ($($check.label)):
   expected: $($check.expected)
-  actual  : $($check.actual)
+  actual  : $actual_text
 "@
         }
     }
-    if (-not $version.configurations.PSObject.Properties.Name.Contains($name)) {
+    if (@($version.configurations.PSObject.Properties.Name) -notcontains $name) {
         throw "The $name archive does not contain a $name build."
     }
     return $version
@@ -201,9 +296,19 @@ The $name archive does not match the pin file ($($check.label)):
 
 Write-Output "Pin file       : $PinFile"
 Write-Output "skia           : $($pin.skia_commit)"
+Write-Output "package        : r$($pin.package_revision) ($($pin.toolchain))"
 Write-Output "png codec      : $($pin.png_codec)"
 Write-Output "Configurations : $($configurations -join ', ')"
 Write-Output "Destination    : $Destination"
+
+# 아카이브를 먼저 모두 확보한다.
+# 설치본을 지우는 것은 그 뒤다 — 받지 못할 것을 미리 알면 이미 서 있는
+# 패키지를 잃지 않는다. 설치 생략 판정이 엄격해진 만큼 이 자리를 지나는 일이
+# 잦아졌고, 실패가 "Skia가 아예 없는 트리"로 끝나서는 안 된다.
+$archives = [ordered]@{}
+foreach ($name in $configurations) {
+    $archives[$name] = Resolve-Asset -name $name
+}
 
 $staging_root = Join-Path $repository_root 'build\skia-prep-staging'
 if (Test-Path -LiteralPath $staging_root) {
@@ -222,11 +327,11 @@ $shared_installed = $false
 $configuration_records = [ordered]@{}
 $packaged_at = ''
 $patches = @()
+$toolchain = $null
 $include_vendor_headers = $false
 foreach ($name in $configurations) {
-    $archive = Resolve-Asset -name $name
     $staging = Join-Path $staging_root $name
-    Expand-Archive -LiteralPath $archive -DestinationPath $staging -Force
+    Expand-Archive -LiteralPath $archives[$name] -DestinationPath $staging -Force
     $version = Test-Package -staging $staging -name $name
 
     if (-not $shared_installed) {
@@ -239,6 +344,7 @@ foreach ($name in $configurations) {
         $shared_installed = $true
         $packaged_at = $version.packaged_at
         $patches = $version.skia.patches
+        $toolchain = $version.toolchain
         $include_vendor_headers = $version.include_vendor_headers
     }
 
@@ -246,14 +352,25 @@ foreach ($name in $configurations) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Destination 'out') | Out-Null
     Copy-Item -LiteralPath (Join-Path $staging "out\$build_name") `
         -Destination (Join-Path $Destination "out\$build_name") -Recurse -Force
-    $configuration_records[$name] = $version.configurations.$name
+    # 이 구성을 어느 아카이브가 설치했는지 함께 적는다.
+    # 다음 실행의 설치 생략 판정이 그 값을 핀과 맞댄다. Resolve-Asset이 이미
+    # 그 해시로 아카이브를 검사했으므로 다시 재지 않는다.
+    $record = [ordered]@{
+        archive        = $pin.assets.$name.file
+        archive_sha256 = $pin.assets.$name.sha256.ToLowerInvariant()
+    }
+    foreach ($entry in $version.configurations.$name.PSObject.Properties) {
+        $record[$entry.Name] = $entry.Value
+    }
+    $configuration_records[$name] = $record
     Write-Output "installed      : $name"
 }
 
 # 합쳐 놓은 것을 그대로 말하는 VERSION.json을 다시 쓴다.
 # zip마다 들어 있던 것은 자기 구성 하나만 알고 있다.
 $merged = [ordered]@{
-    schema                 = 1
+    schema                 = 2
+    package_revision       = $pin.package_revision
     packaged_at            = $packaged_at
     installed_at           = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     skia                   = [ordered]@{
@@ -262,6 +379,7 @@ $merged = [ordered]@{
         patches   = $patches
     }
     png_codec              = $pin.png_codec
+    toolchain              = $toolchain
     target                 = $pin.target
     include_vendor_headers = [bool]$include_vendor_headers
     configurations         = $configuration_records

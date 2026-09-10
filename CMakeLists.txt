@@ -118,6 +118,16 @@ set(LUIL_SKIA_REQUIRED_ARGUMENTS
     "skia_use_wuffs=true"
     "skia_use_rust_png_decode=true")
 
+# Skia 자신을 컴파일한 도구사슬이다.
+# 바뀌는 것은 Skia를 컴파일한 컴파일러 하나이며 luil와 소비자는 그대로 MSVC다 —
+# Skia의 GN이 MSVC의 헤더와 CRT를 가리키므로 나오는 아카이브의 C++ ABI도 MSVC의
+# 것이다. 그런데도 이것을 요구하는 이유는 성능이다: SkRasterPipeline의 벡터 형이
+# clang·gcc의 확장이라 MSVC로 세운 Skia는 CPU 래스터를 픽셀 하나씩 처리한다.
+#
+# 검사는 패키지가 적어 둔 toolchain.json을 읽는 것이다 (cmake/dependencies/skia.cmake).
+# configure는 컴파일러를 찾지도 부르지도 않으므로 소비자에게 clang 설치가 필요 없다.
+set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang-cl")
+
 if(PROJECT_IS_TOP_LEVEL)
     set(CMAKE_CXX_STANDARD ${LUIL_CXX_STANDARD})
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
