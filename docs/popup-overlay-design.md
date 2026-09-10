@@ -54,6 +54,8 @@ Popup surface는 다음 창 정책을 사용한다.
 
 Tool window 확장 스타일 때문에 taskbar와 Alt+Tab의 독립 창으로 나타나지 않는다. Owner가 파괴되면 운영체제 소유 관계에 따라 popup도 사라진다.
 
+Popup 창 클래스는 `CS_DROPSHADOW`를 켠다. Popup은 자기 창이라 tree가 그린 것은 창 밖으로 드리울 수 없고, 메뉴·tooltip이 쓰는 OS의 그림자가 창 둘레에 선다. 그래서 `ui_popup`에는 그림자 설정이 없다.
+
 ## 렌더링
 
 각 popup surface는 자기 `window_surface`와 renderer를 갖는다. Popup renderer는 CPU 모드로 생성된다. Popup은 보통 작고 수명이 짧으므로 HWND마다 D3D swapchain과 실패 복구 수명을 추가하지 않는다.
@@ -61,6 +63,8 @@ Tool window 확장 스타일 때문에 taskbar와 Alt+Tab의 독립 창으로 �
 Tree가 바뀌면 해당 popup을 invalidate한다. 크기가 바뀌면 renderer도 새 client 크기에 맞춘다. 주 창과 popup은 같은 theme, font, interaction snapshot을 사용하지만 `interaction_for_surface()`로 각 표면의 상태만 남겨 그린다.
 
 Popup은 caption chrome을 만들지 않는다. 포인터, 휠, 커서, tree draw 같은 공통 surface 입력과 렌더링만 사용한다.
+
+`ui_popup::border`가 참이면(기본값) 표면이 tree를 다 그린 뒤 둘레에 1px `tooltip_border`를 긋는다 (`frame_state::border`). 다른 화면 위에 뜨는 판이라 경계가 있어야 아래 화면과 갈리고, tree 위에 긋기 때문에 가장자리까지 채운 내용에도 경계가 남는다. 자기 테두리를 긋는 tree(메뉴)는 같은 자리를 다시 긋는 것이라 해가 없고, 경계를 일부러 지우는 popup(꼬리 달린 말풍선)만 끈다.
 
 ## 입력 합류
 
@@ -98,6 +102,6 @@ Popup 좌표와 크기는 앵커 client 기준 논리 픽셀이다. UI thread는
 
 ## 검증 지침
 
-[popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다.
+[popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을 픽셀로 확인한다.
 
 전체 조립은 [win32_window.cpp](../src/win32/win32_window.cpp), popup 메시지 처리는 [popup_surface.cpp](../src/win32/popup_surface.cpp)에 있다.

@@ -115,6 +115,9 @@ namespace luil {
         // 스크롤 위치를 **이 자리로** 하라는 절대 메시지다 (offset은 논리 픽셀).
         std::function<input_action(float offset)> scroll_to {};
         scrollbar_visibility bar { scrollbar_visibility::automatic };
+        // 창의 위·아래 가장자리 표시다 (구분선과 흘린 쪽의 그림자).
+        // 안의 영역에 그대로 이어진다 — `scroll_area_config::edges`와 같은 설정·같은 그림이다.
+        scroll_edges edges {};
     };
 
     // 모델 안에서 키가 커서를 옮길 자리다.

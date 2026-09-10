@@ -36,6 +36,18 @@ namespace luil {
         if (state.tree != nullptr)
             state.tree->draw(context, state.interaction);
 
+        // popup의 테두리다. tree 위에 긋는다 — 가장자리까지 채운 내용에도 경계가 남는다.
+        // 획의 중심을 반 픽셀 안으로 들여 획 전체가 창 안에 든다.
+        if (state.border)
+        {
+            SkPaint border {};
+            border.setColor(colors.tooltip_border);
+            border.setStyle(SkPaint::kStroke_Style);
+            border.setStrokeWidth(scale);
+            const float inset { scale / 2.0f };
+            canvas.drawRect(SkRect::MakeXYWH(inset, inset, static_cast<float>(state.width) - scale, static_cast<float>(state.height) - scale), border);
+        }
+
         // 웹뷰가 드러날 자리를 비운다.
         //
         // **다 그린 뒤다.** 그리기 도중에 비우면 뒤에 그려지는 것이 도로 덮는다.
@@ -51,8 +63,7 @@ namespace luil {
         {
             if (hole.width <= 0 || hole.height <= 0)
                 continue;
-            canvas.drawRect(
-                SkRect::MakeXYWH(static_cast<float>(hole.x), static_cast<float>(hole.y), static_cast<float>(hole.width), static_cast<float>(hole.height)), clear);
+            canvas.drawRect(SkRect::MakeXYWH(static_cast<float>(hole.x), static_cast<float>(hole.y), static_cast<float>(hole.width), static_cast<float>(hole.height)), clear);
         }
     }
 } // namespace luil

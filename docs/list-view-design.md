@@ -75,6 +75,8 @@ Tree 모델과 펼침 상태는 앱이 소유한다. 앱은 현재 보이는 노
 
 초점 이동과 선택 상태는 별개다. 앱이 focus 이동에 맞춰 선택도 바꾸고 싶다면 policy와 action 모델에서 명시한다.
 
+고른 행의 그림은 [draw_row_selection()](../include/luil/ui/draw_primitives.h) 하나다 — 행 안쪽의 둥근 옅은 채움(`accent_soft`의 낮은 알파)과 왼쪽 가장자리의 키 컬러 표식이다. [가상 목록](virtual-list-design.md)의 행과 앱이 지은 행이 같은 함수를 부르므로 한 화면의 고름이 한 모양이다. 표식은 고대비 팔레트가 옅은 채움을 접어도 어느 행인지 남긴다.
+
 ## 스크롤 구성
 
 목록 내부는 두 칸으로 배치된다.
@@ -87,6 +89,8 @@ Tree 모델과 펼침 상태는 앱이 소유한다. 앱은 현재 보이는 노
 앱은 frame을 만들기 전에 `clamp_scroll()`로 상태를 다듬어 viewport, scrollbar, 목록이 같은 offset을 보게 하는 것이 좋다.
 
 `scroll_to` factory를 설정하면 scrollbar의 절대 위치 요청과 접근성 RangeValue 동작을 앱 메시지로 보낼 수 있다.
+
+`edges`는 창의 위·아래 가장자리 표시다 — [흘리는 영역](scroll-area-design.md)의 가장자리 표시와 같은 설정, 같은 그림이다. 목록이 `arrange`가 다듬은 offset과 최대치로 직접 그리므로 앱이 겹쳐 그리지 않는다. 기본값은 전부 거짓이다.
 
 ## 전체 행과 가상화
 
@@ -125,6 +129,6 @@ Reorder는 평평한 목록에서 `moved` 항목을 `target` 자리로 옮기라
 
 ## 검증 지침
 
-[list_element_tests.cpp](../tests/list_element_tests.cpp)는 행 배치, 선택, tree 들여쓰기와 expander, 스크롤 값, group entry, disabled 행, reorder를 검증한다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 방향키, Home/End, typeahead, focus reveal을 확인한다.
+[list_element_tests.cpp](../tests/list_element_tests.cpp)는 행 배치, 선택, tree 들여쓰기와 expander, 스크롤 값, group entry, disabled 행, reorder를 검증한다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 방향키, Home/End, typeahead, focus reveal을 확인한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 목록과 가상 목록의 고른 행이 같은 자리에 같은 표식을 두는 것을 픽셀로 잠근다.
 
 사용 예는 [lists_page.cpp](../examples/demo/lists_page.cpp)에서 볼 수 있다.

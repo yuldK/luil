@@ -61,6 +61,22 @@ Element는 이 값을 받아 tree를 만들고 factory를 통해 intent만 반�
 
 막대의 폭은 **영역의 폭을 넘지 않는다.** slot 폭으로 다듬지 않으면 아주 좁은 칸에서 막대의 왼쪽 끝이 영역 밖으로 나가, 화면에는 남의 자리에 그려지고 휠은 영역 밖이라 아무도 받지 않는다. 다듬은 frame에서 창에 남는 폭은 0이다 — 좁기는 어느 쪽이든 마찬가지지만 이쪽은 남의 자리를 침범하지 않는다.
 
+## 가장자리 표시
+
+`scroll_edges`가 창의 위·아래 가장자리를 정한다. 기본값은 전부 거짓이라 지금까지의 영역은 아무것도 더 그리지 않는다.
+
+| 필드 | 그림 |
+| --- | --- |
+| `shadows` | 흘린 만큼 위에, 더 흘릴 만큼 아래에 그림자를 드리운다 (`content_shadow`) |
+| `top_rule` | 위 가장자리에 늘 1px 구분선을 긋는다 (`divider`) |
+| `bottom_rule` | 아래 가장자리에 늘 1px 구분선을 긋는다 |
+
+그림자는 잘린 줄이 경계 밖으로 이어진다는 표시다. 맨 위에 선 창은 위가 깨끗하고 끝까지 흘린 창은 아래가 깨끗하다 — 흘릴 것이 없는 창은 어느 쪽에도 없다. 깊이는 10 논리 픽셀이고 창이 그보다 얕으면 절반까지라 위·아래가 겹치지 않는다.
+
+구분선은 머리글이나 단추와 맞닿는 쪽에 긋는다. 그것이 없으면 흘러가는 행이 그 위의 머리글과 섞인다. 흘린 양과 무관하게 늘 선다.
+
+영역이 **자기 치수로** 그린다. 앱이 `metrics()`를 읽어 겹쳐 그리면 그 offset은 앱이 앞서 든 값이라 한 frame 낡고, 다듬은 값과 어긋난 frame에서 그림자가 한 박자 늦게 선다. 같은 그림을 자기 창에 손으로 그리는 앱은 [draw_scroll_edges()](../include/luil/ui/draw_primitives.h)를 쓴다 — 영역과 [목록](list-view-design.md)이 부르는 그 함수라, 한 화면의 흘리는 창이 전부 한 모양이다.
+
 ## 치수 계약
 
 `metrics()`는 `scroll_metrics` 네 값을 돌려주고 전부 논리 픽셀이다.
@@ -161,7 +177,7 @@ area->set_content(build_paragraphs());
 
 ## 검증 지침
 
-[scroll_area_element_tests.cpp](../tests/scroll_area_element_tests.cpp)는 배율 1과 2의 치수, 범위를 벗어난 offset의 다듬기와 창·막대·치수의 일치, `scrollbar_visibility` 세 갈래와 그때마다 내용이 받은 폭, 내용이 한 frame에 **한 번만** 배치되는 것, 막대보다 좁은 칸에서 막대가 영역 안에 남는 것, `bar_tab_stop`과 넘침이 함께 정하는 Tab 자리, factory가 없는 영역, 표 없는 `route_wheel`·`route_reveal`(나란한 둘, 겹친 둘, 막대 칸을 품은 바깥, 겹겹이 이어지는 되살리기, scrim이 삼키는 휠), 내용 안 컨트롤의 hit test와 Tab 자리를 검증한다.
+[scroll_area_element_tests.cpp](../tests/scroll_area_element_tests.cpp)는 배율 1과 2의 치수, 범위를 벗어난 offset의 다듬기와 창·막대·치수의 일치, `scrollbar_visibility` 세 갈래와 그때마다 내용이 받은 폭, 내용이 한 frame에 **한 번만** 배치되는 것, 막대보다 좁은 칸에서 막대가 영역 안에 남는 것, `bar_tab_stop`과 넘침이 함께 정하는 Tab 자리, factory가 없는 영역, 표 없는 `route_wheel`·`route_reveal`(나란한 둘, 겹친 둘, 막대 칸을 품은 바깥, 겹겹이 이어지는 되살리기, scrim이 삼키는 휠), 내용 안 컨트롤의 hit test와 Tab 자리를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 가장자리 그림자가 흘린 쪽에만 서고(다듬은 offset 기준) 구분선이 흘린 양과 무관하게 서는 것을 픽셀로 잠근다.
 
 [scroll_view_element_tests.cpp](../tests/scroll_view_element_tests.cpp)는 안쪽 창의 다듬기와 reveal 계산을, [scrollbar_element_tests.cpp](../tests/scrollbar_element_tests.cpp)는 thumb 배치와 끌기·키 걸음을 따로 잠근다. 초점 되살리기의 호출 시점은 [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)에 있다.
 

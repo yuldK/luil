@@ -3,11 +3,22 @@
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/image_element.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/list_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/ui_element.h"
+#include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/virtual_list_element.h"
+
+#include "win32/frame_state.h"
+
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -321,5 +332,173 @@ TEST_CASE("One sprite of a sheet is painted alone and sharp sampling keeps its e
         REQUIRE(frame.pixel_at(98, 60) != green);
         // 가장자리는 표본이 이미지 밖으로 나가지 않아 원본 색 그대로다.
         REQUIRE(frame.pixel_at(30, 30) == red);
+    }
+}
+
+TEST_CASE("Scroll edges shade only the side that has more to show", "[ui][raster][scroll]")
+{
+    // 가장자리 그림자는 "이 너머에 더 있다"의 표시라, 흘린 쪽에만 서야 한다.
+    // 맨 위에 선 창의 위와 끝까지 흘린 창의 아래는 깨끗하다 — 이 축은 픽셀에만 있다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // 창은 100 논리 픽셀이고 내용은 그 네 배다 (최대치 300).
+    const auto build = [](const float offset, const luil::scroll_edges edges) {
+        luil::scroll_area_config config {};
+        config.owner = u8"page";
+        config.content_height = 400.0f;
+        config.scroll_offset = offset;
+        config.bar = luil::scrollbar_visibility::never;
+        config.edges = edges;
+        config.scroll = [](const float) { return luil::input_action {}; };
+        auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        area->set_content(std::make_unique<raster_group>(luil::ui_element_id { luil::application_element_kind(1), u8"content" }));
+        return luil::make_arranged_tree(std::move(area), { 0.0f, 0.0f, 200.0f, 200.0f }, raster_scale);
+    };
+    const auto paint = [&palette, &build](const float offset, const luil::scroll_edges edges) {
+        luil::testing::raster_frame frame { 200, 200, palette, raster_scale };
+        frame.draw(build(offset, edges), luil::interaction_snapshot {});
+        // 맨 윗줄·맨 아랫줄·한가운데다.
+        return std::array<luil::ui_color, 3> { frame.pixel_at(50, 0), frame.pixel_at(50, 199), frame.pixel_at(50, 100) };
+    };
+    const luil::scroll_edges shadows { .shadows = true };
+
+    SECTION("맨 위에 선 창은 아래에만 그림자가 있다")
+    {
+        const auto [top, bottom, middle] { paint(0.0f, shadows) };
+        REQUIRE(top == palette.window_background);
+        REQUIRE(bottom != palette.window_background);
+        REQUIRE(middle == palette.window_background);
+    }
+
+    SECTION("끝까지 흘린 창은 위에만 그림자가 있다")
+    {
+        const auto [top, bottom, middle] { paint(300.0f, shadows) };
+        REQUIRE(top != palette.window_background);
+        REQUIRE(bottom == palette.window_background);
+        REQUIRE(middle == palette.window_background);
+    }
+
+    SECTION("가운데 선 창은 양쪽에 있다")
+    {
+        const auto [top, bottom, middle] { paint(150.0f, shadows) };
+        REQUIRE(top != palette.window_background);
+        REQUIRE(bottom != palette.window_background);
+        REQUIRE(middle == palette.window_background);
+    }
+
+    SECTION("범위 밖 offset은 다듬은 값으로 판정한다")
+    {
+        // 최대치를 넘긴 값은 끝까지 흘린 것이다 — `arrange`가 다듬은 그 값을 본다.
+        const auto [top, bottom, middle] { paint(900.0f, shadows) };
+        REQUIRE(top != palette.window_background);
+        REQUIRE(bottom == palette.window_background);
+    }
+
+    SECTION("기본 설정은 아무것도 그리지 않는다")
+    {
+        const auto [top, bottom, middle] { paint(150.0f, luil::scroll_edges {}) };
+        REQUIRE(top == palette.window_background);
+        REQUIRE(bottom == palette.window_background);
+    }
+
+    SECTION("구분선은 흘린 양과 무관하게 선다")
+    {
+        const auto [top, bottom, middle] { paint(0.0f, luil::scroll_edges { .top_rule = true, .bottom_rule = true }) };
+        // `divider`는 알파를 지닌 색이라 배경과 섞인 값이지만, 배경 그대로는 아니다.
+        REQUIRE(top != palette.window_background);
+        REQUIRE(bottom != palette.window_background);
+        REQUIRE(middle == palette.window_background);
+        // 구분선은 1 논리 픽셀 = 물리 2픽셀이다. 그 아래는 배경이다 (그림자가 꺼져 있다).
+        luil::testing::raster_frame frame { 200, 200, palette, raster_scale };
+        frame.draw(build(0.0f, luil::scroll_edges { .top_rule = true }), luil::interaction_snapshot {});
+        REQUIRE(frame.pixel_at(50, 1) == top);
+        REQUIRE(frame.pixel_at(50, 2) == palette.window_background);
+    }
+}
+
+TEST_CASE("A selected row wears the shared selection mark in both lists", "[ui][raster][list]")
+{
+    // 목록과 가상 목록의 고른 행은 한 함수(`draw_row_selection`)가 그린다. 두 목록이
+    // 같은 자리에 같은 표식을 두는지는 픽셀만이 말한다 — 표식이 갈리면 한 화면에
+    // 두 모양의 고름이 선다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // 행은 20 논리 픽셀이다. 둘째 행이 고른 행이라 물리 y 40..80이고, 표식은 x 4..10·y 52..68이다.
+    constexpr float row_height { 20.0f };
+    const luil::rect_f slot { 0.0f, 0.0f, 400.0f, 200.0f };
+
+    const auto probe = [&palette](const luil::ui_tree& tree) {
+        luil::testing::raster_frame frame { 400, 200, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+        // 고른 행의 표식 · 고른 행의 채움 · 고르지 않은 행의 같은 자리다.
+        return std::array<luil::ui_color, 3> { frame.pixel_at(6, 60), frame.pixel_at(200, 60), frame.pixel_at(6, 20) };
+    };
+
+    const auto check = [&palette](const std::array<luil::ui_color, 3>& pixels) {
+        const auto [mark, fill, other] { pixels };
+        REQUIRE(mark == palette.accent);
+        // 채움은 `accent_soft`의 낮은 알파라 배경과 섞인 값이다 — 온전한 색이 아니다.
+        REQUIRE(fill != palette.window_background);
+        REQUIRE(fill != palette.accent_soft);
+        REQUIRE(other == palette.window_background);
+    };
+
+    SECTION("list_element")
+    {
+        luil::list_config config {};
+        config.owner = u8"list";
+        config.row_height = row_height;
+        for (const char8_t* key : { u8"a", u8"b", u8"c" })
+            config.items.push_back(luil::list_item { .key = key });
+        config.selected = u8"b";
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::list_element>(std::move(config)), slot, raster_scale) };
+        check(probe(tree));
+    }
+
+    SECTION("virtual_list_element")
+    {
+        luil::virtual_list_config config {};
+        config.owner = u8"virtual";
+        config.row_height = row_height;
+        for (const char8_t* key : { u8"a", u8"b", u8"c" })
+            config.items.push_back(luil::virtual_list_item { .key = key });
+        config.selected = u8"b";
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), slot, raster_scale) };
+        check(probe(tree));
+    }
+}
+
+TEST_CASE("A popup frame strokes its border over the whole surface", "[win32][raster][popup]")
+{
+    // popup의 테두리는 tree가 아니라 표면이 긋는다 (`frame_state::border`). tree가 없는
+    // frame에서도 서야 하고, 획은 창 안에 온전히 들어야 한다 — 밖으로 나간 반 픽셀은
+    // 창 밖이라 어디에도 그려지지 않는다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    SkBitmap pixels {};
+    pixels.allocN32Pixels(100, 60);
+    SkCanvas canvas { pixels };
+    luil::frame_state state {};
+    state.width = 100;
+    state.height = 60;
+    state.dpi_scale = raster_scale;
+    state.theme = luil::color_theme::dark;
+    const auto pixel_at = [&pixels](const int x, const int y) { return static_cast<luil::ui_color>(pixels.getColor(x, y)); };
+
+    SECTION("테두리를 켜면 둘레 1 논리 픽셀이 tooltip_border다")
+    {
+        state.border = true;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(pixel_at(0, 30) == palette.tooltip_border);
+        REQUIRE(pixel_at(1, 30) == palette.tooltip_border);
+        REQUIRE(pixel_at(50, 0) == palette.tooltip_border);
+        REQUIRE(pixel_at(99, 30) == palette.tooltip_border);
+        REQUIRE(pixel_at(50, 59) == palette.tooltip_border);
+        REQUIRE(pixel_at(2, 30) == palette.window_background);
+        REQUIRE(pixel_at(50, 30) == palette.window_background);
+    }
+
+    SECTION("기본값은 긋지 않는다")
+    {
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(pixel_at(0, 30) == palette.window_background);
+        REQUIRE(pixel_at(50, 59) == palette.window_background);
     }
 }

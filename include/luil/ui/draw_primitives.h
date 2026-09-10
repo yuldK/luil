@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/ui/layout_metrics.h"
 #include "luil/ui/ui_element.h"
 
 // 대체 typeface는 소유권을 함께 건네므로 `sk_sp`의 정의가 필요하다.
@@ -125,6 +126,33 @@ namespace luil {
     // 스크롤된 내용이 상단 막대 아래로 지나간다는 것을 보여 준다.
     // 셰이더 없이 알파를 낮춘 띠를 쌓는다.
     void draw_downward_shadow(SkCanvas& canvas, const rect_f& area, ui_color color, float strength);
+
+    // `area` 아래쪽 경계에서 위로 옅어지는 그림자다.
+    // 흘린 내용이 바닥 아래로 더 이어진다는 것을 보여 준다 — `draw_downward_shadow`의 짝이다.
+    void draw_upward_shadow(SkCanvas& canvas, const rect_f& area, ui_color color, float strength);
+
+    // 둥근 사각형 `box` 바깥으로 드리우는 그림자다 (dialog·카드가 바탕에서 떠 있음을 말한다).
+    // 바깥으로 넓힌 둥근 사각형을 옅은 알파로 겹쳐 쌓아 가장자리로 갈수록 진해지고, 아래로 조금
+    // 밀어 빛이 위에서 오는 것처럼 보인다. 셰이더 없이 그린다. 색은 `content_shadow`다.
+    //  - `radius`는 상자의 모서리 반지름이다 (`box`와 같은 물리 픽셀).
+    //  - `strength`는 가장자리에 닿는 진하기의 대략값이다 (0~1). 0 이하면 아무것도 그리지 않는다.
+    //  - 바깥에 그릴 자리가 있을 때만 뜻이 있다. 표면(창·popup)의 가장자리에 붙은 상자에서는 잘린다.
+    void draw_surface_shadow(draw_context& context, const rect_f& box, float radius, float strength);
+
+    // 흘리는 창의 위·아래 가장자리를 그린다 (`scroll_edges`의 규칙).
+    // 흘린 내용이 위로 지나갔으면(`scroll_offset > 0`) 위에, 아래에 더 있으면
+    // (`scroll_offset < maximum_scroll`) 아래에 그림자를 드리운다. 구분선은 설정이 켠 쪽에 늘 긋는다.
+    // 값은 전부 논리 픽셀이고 `box`는 물리 픽셀이다 (element의 bounds).
+    //  - `scroll_area_element`·`list_element`가 부르고, 자기 창을 손으로 지은 앱도 같은 함수로
+    //    같은 그림을 얻는다.
+    void draw_scroll_edges(draw_context& context, const rect_f& box, float scroll_offset, float maximum_scroll, const scroll_edges& edges);
+
+    // 고른 행의 표시다 — 행 안쪽의 둥근 옅은 채움과 왼쪽 가장자리의 키 컬러 표식이다.
+    // 목록·가상 목록의 행과 앱이 지은 행이 같은 함수를 써야 한 화면의 고름이 한 모양이다.
+    //  - 채움은 `accent_soft`의 낮은 알파라 위의 글이 읽히고, 표식은 고대비 팔레트가 옅은 바탕을
+    //    접어도 어느 행인지 남긴다.
+    //  - 안쪽으로 조금 들여 그린다. 진행 막대나 hover 채움이 같은 행에 겹쳐도 각각의 경계가 남는다.
+    void draw_row_selection(draw_context& context, const rect_f& box);
 
     // target 중앙에 글리프 하나를 그린다.
     // 글리프가 없으면 아무것도 그리지 않는다.

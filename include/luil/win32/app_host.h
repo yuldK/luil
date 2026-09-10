@@ -104,6 +104,13 @@ namespace luil::win32 {
         //  - 어느 popup도 닫자고 하지 않은 Esc는 삼켜지지 않고 앱의 키 라우팅으로
         //    간다 — 남기로 한 popup이 Esc를 자기 뜻대로 쓰는 길이다.
         std::function<input_action(popup_dismiss_reason)> dismiss {};
+        // 표면 둘레에 1px 테두리를 긋는다 (`tooltip_border`).
+        // popup은 다른 화면 위에 뜨는 판이라 경계가 있어야 아래 화면과 갈린다 — 그래서
+        // 기본이 참이다. 자기 테두리를 긋는 tree(메뉴)는 같은 자리를 다시 긋는 것이라
+        // 해가 없고, 경계를 일부러 지우는 popup(꼬리 달린 말풍선)만 끈다.
+        //  - 그림자는 여기 없다. popup은 자기 창이라 그림자를 밖으로 드리울 자리가 없고,
+        //    그것은 창 클래스의 drop shadow가 맡는다 (popup-overlay-design.md).
+        bool border { true };
     };
 
     // 주 창이 소유하는 보조 top-level 창 하나다 (도구 창·문서 창).

@@ -45,6 +45,10 @@ namespace luil {
         // 채우는 곳은 그 상태를 든 자리(`caption_surface::prepare_frame`)이고,
         // 거기서 둘을 한 모드에서 함께 세워 둘이 동시에 참이 되지 않는다.
         bool fullscreen { false };
+        // 표면 둘레에 1px 테두리를 긋는가다 (`tooltip_border`).
+        // popup 표면이 켠다 (`popup_surface::prepare_frame`) — 다른 화면 위에 뜨는 판이라
+        // 경계가 있어야 아래 화면과 갈린다. tree를 다 그린 뒤 그 위에 긋는다.
+        bool border { false };
 
         // input thread가 게시한 상호작용 상태다.
         // caption의 비클라이언트 hover는 UI thread가 게시 전에 합쳐 둔다.

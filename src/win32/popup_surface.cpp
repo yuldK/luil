@@ -62,7 +62,10 @@ namespace luil::win32 {
     {
         dismiss_ = source.dismiss;
         dismiss_requested_ = false;
-        return set_tree(source.tree);
+        // 테두리가 바뀐 것도 내용이 바뀐 것이다 — 다시 그려야 화면에 닿는다.
+        const bool border_changed { border_ != source.border };
+        border_ = source.border;
+        return set_tree(source.tree) || border_changed;
     }
 
     std::optional<input_action> popup_surface::take_dismiss_action(const popup_dismiss_reason reason)

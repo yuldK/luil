@@ -503,8 +503,8 @@ namespace luil::win32 {
                 // 창은 통상 모습으로 선다.
                 // 저장된 배치가 전체 화면이더라도 그것은 창이 보인 **뒤에** 들어가는
                 // 상태다 (`apply_requested_window_placement`).
-                window_ = CreateWindowExW(WS_EX_APPWINDOW, config_.class_name.c_str(), title.c_str(), window_style_for(config_.caption.buttons, window_display_mode::normal), initial_x,
-                    initial_y, config_.initial_width, config_.initial_height, nullptr, nullptr, instance_, this);
+                window_ = CreateWindowExW(WS_EX_APPWINDOW, config_.class_name.c_str(), title.c_str(), window_style_for(config_.caption.buttons, window_display_mode::normal), initial_x, initial_y,
+                    config_.initial_width, config_.initial_height, nullptr, nullptr, instance_, this);
 
                 if (window_ == nullptr)
                 {
@@ -1388,7 +1388,10 @@ namespace luil::win32 {
                 popup_class_name_ = config_.class_name + L".Popup";
                 WNDCLASSEXW popup_class {};
                 popup_class.cbSize = sizeof(popup_class);
-                popup_class.style = CS_HREDRAW | CS_VREDRAW;
+                // 그림자는 OS의 것이다 (메뉴·tooltip이 쓰는 그 그림자).
+                // popup은 자기 창이라 우리가 그린 것은 창 밖으로 드리울 수 없고, 창 클래스의
+                // drop shadow가 창 둘레에 그것을 얹는다 (popup-overlay-design.md).
+                popup_class.style = CS_HREDRAW | CS_VREDRAW | CS_DROPSHADOW;
                 popup_class.lpfnWndProc = &popup_surface::static_procedure;
                 popup_class.hInstance = instance_;
                 popup_class.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -1419,8 +1422,7 @@ namespace luil::win32 {
                     webviews_.set_deliver([target](app_message message) { target->post_app_message(std::move(message)); });
                     // 초점 신호는 **입력**이다. 앱 메시지가 아니라 raw input으로 가야
                     // input thread의 초점 상태 기계가 그것을 본다.
-                    webviews_.set_focus_reporter(
-                        [this](const std::u8string& id, const std::u8string& anchor, const webview_focus_signal signal) { report_webview_focus(id, anchor, signal); });
+                    webviews_.set_focus_reporter([this](const std::u8string& id, const std::u8string& anchor, const webview_focus_signal signal) { report_webview_focus(id, anchor, signal); });
                     webview_deliver_bound_ = true;
                 }
 

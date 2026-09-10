@@ -91,6 +91,9 @@ namespace luil {
         // 안에 서는 막대의 `scrollbar_config::scroll_to`로 그대로 이어진다 —
         // 없으면 보조 기술이 막대의 자리를 정할 수 없다.
         std::function<input_action(float offset)> scroll_to {};
+        // 창의 위·아래 가장자리 표시다 (구분선과 흘린 쪽의 그림자).
+        // `scroll_area_config::edges`와 같은 설정·같은 그림이다. 기본값은 전부 거짓이다.
+        scroll_edges edges {};
     };
 
     // 목록 오른쪽에 서는 스크롤 막대의 폭이다 (논리 픽셀).

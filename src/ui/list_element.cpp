@@ -175,11 +175,14 @@ namespace luil {
                 }
                 else if (selected_)
                 {
-                    // `accent_soft`는 **낮은 알파로 겹치는** 옅은 바탕이다 (팔레트가
-                    // "선택 행"을 그 역할의 쓰임으로 적어 두었다). 온전한 색으로
-                    // 깔면 밝은 띠가 되어 그 위의 글이 읽히지 않는다.
-                    background = with_alpha(context.palette.accent_soft, 0.25f);
-                    fill = true;
+                    // 고른 행의 모양은 공유 primitive 하나다 — 가상 목록의 행과 앱이 지은
+                    // 행이 같은 함수를 써야 한 화면의 고름이 한 모양이다.
+                    // 끌려 나간 행은 제자리에 흐리게 남는다 (hover 채움과 같은 규칙).
+                    if (dragged)
+                        context.canvas.saveLayerAlphaf(&shape, 0.35f);
+                    draw_row_selection(context, box);
+                    if (dragged)
+                        context.canvas.restore();
                 }
                 else if (interaction.pressed == id())
                 {
@@ -199,12 +202,6 @@ namespace luil {
                         paint.setAlphaf(0.35f);
                     context.canvas.drawRect(shape, paint);
                 }
-
-                // 고른 행은 왼쪽 가장자리의 강조선이 함께 말한다.
-                // 고대비 팔레트가 `accent_soft`를 접어도 어느 행인지가 남는다
-                // (배지가 tone에 글리프를 딸려 보낸 것과 같은 규칙이다).
-                if (selected_)
-                    context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, 2.0f * scale, box.height), solid_paint(context.palette.accent));
 
                 // 잡는 손잡이는 깊이 밖의 칸이다 — 행의 것이지 tree 계층의 것이 아니다.
                 if (handle_)
@@ -371,6 +368,8 @@ namespace luil {
         // 목록 자체는 바탕을 칠하지 않는다.
         // 표면 색과 모서리는 담는 쪽(panel)의 몫이다.
         draw_children(context, interaction);
+        // 가장자리는 행 위에 겹친다. `arrange`가 다듬은 offset과 최대치를 그대로 쓴다.
+        draw_scroll_edges(context, bounds(), config_.scroll_offset, maximum_scroll_, config_.edges);
     }
     access_info list_element::accessibility() const
     {

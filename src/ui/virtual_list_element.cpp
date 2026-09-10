@@ -127,8 +127,8 @@ namespace luil {
                 bool fill { false };
                 if (selected_)
                 {
-                    background = with_alpha(context.palette.accent_soft, 0.25f);
-                    fill = true;
+                    // 고른 행의 모양은 `list_element`와 같은 primitive 하나다.
+                    draw_row_selection(context, box);
                 }
                 else if (enabled() && interaction.pressed == id())
                 {
@@ -142,11 +142,6 @@ namespace luil {
                 }
                 if (fill)
                     context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), solid_paint(background));
-
-                // 고른 행은 왼쪽 가장자리의 강조선이 함께 말한다
-                // (고대비 팔레트가 옅은 바탕을 접어도 어느 행인지가 남는다).
-                if (selected_)
-                    context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, 2.0f * scale, box.height), solid_paint(context.palette.accent));
 
                 // 커서는 **초점이 목록에 있을 때만** 보인다.
                 // 초점 테는 `ui_tree`가 목록 전체에 두르므로, 그 안의 어느 행에
@@ -202,8 +197,7 @@ namespace luil {
         public:
             explicit virtual_lane_element(ui_element_id id) noexcept
                 : ui_element { std::move(id) }
-            {
-            }
+            {}
 
             void add_row(std::unique_ptr<ui_element> row, const virtual_list_span& span)
             {
@@ -251,7 +245,8 @@ namespace luil {
         return { begin, item_height(items[index], row_height) };
     }
 
-    virtual_list_range virtual_list_visible_range(const std::span<const virtual_list_item> items, const float row_height, const float scroll_offset, const float viewport_height, const int overscan) noexcept
+    virtual_list_range virtual_list_visible_range(
+        const std::span<const virtual_list_item> items, const float row_height, const float scroll_offset, const float viewport_height, const int overscan) noexcept
     {
         if (items.empty() || viewport_height <= 0.0f)
             return {};
@@ -321,7 +316,8 @@ namespace luil {
         return std::nullopt;
     }
 
-    std::optional<std::size_t> virtual_list_search_target(const std::span<const virtual_list_item> items, const std::optional<std::size_t> from, const std::u8string_view query, const bool first) noexcept
+    std::optional<std::size_t> virtual_list_search_target(
+        const std::span<const virtual_list_item> items, const std::optional<std::size_t> from, const std::u8string_view query, const bool first) noexcept
     {
         if (items.empty() || query.empty())
             return std::nullopt;
@@ -366,6 +362,7 @@ namespace luil {
         area.scroll = config_.scroll;
         area.scroll_to = config_.scroll_to;
         area.bar = config_.bar;
+        area.edges = config_.edges;
         // 막대는 Tab의 자리가 아니다. 목록 자신이 ↑/↓·Page·Home/End를 가진 자리라,
         // 막대까지 자리가 되면 같은 목록에 자리가 둘 선다 (`list_element`와 같은 판단).
         area.bar_tab_stop = false;
@@ -432,8 +429,7 @@ namespace luil {
         // 건너뛴다 — 화면 하나만큼 움직인다는 Page의 뜻이 지켜지지 않는다.
         // 커서에서부터 실제 높이를 더해 가며 세면 뜻이 그대로 남는다.
         //  - 배치 전에는 창을 모르므로 한 줄로 본다. 키가 멈추지는 않는다.
-        if (viewport_height_ <= 0.0f || config_.items.empty()
-            || (step != value_step::decrease_page && step != value_step::increase_page))
+        if (viewport_height_ <= 0.0f || config_.items.empty() || (step != value_step::decrease_page && step != value_step::increase_page))
             return 1;
         float used { 0.0f };
         int rows { 0 };

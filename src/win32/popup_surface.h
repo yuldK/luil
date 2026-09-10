@@ -50,6 +50,12 @@ namespace luil::win32 {
             return false;
         }
 
+        // popup 둘레의 테두리는 tree가 아니라 표면이 긋는다 (`ui_popup::border`).
+        void prepare_frame(frame_state& state) override
+        {
+            state.border = border_;
+        }
+
         std::u8string anchor_ {};
         int x_ { 0 };
         int y_ { 0 };
@@ -59,5 +65,7 @@ namespace luil::win32 {
         // 한 계기에 닫자는 메시지를 한 번만 낸다.
         // 새 frame이 popup을 계속 실으면 다시 낼 수 있게 풀린다.
         bool dismiss_requested_ { false };
+        // 새 frame이 실은 값을 그대로 따른다 (`adopt`).
+        bool border_ { true };
     };
 } // namespace luil::win32

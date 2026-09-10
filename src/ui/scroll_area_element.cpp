@@ -1,5 +1,7 @@
 #include "luil/ui/scroll_area_element.h"
 
+#include "luil/ui/draw_primitives.h"
+
 #include <algorithm>
 #include <utility>
 
@@ -137,5 +139,8 @@ namespace luil {
         // 영역 자체는 바탕을 칠하지 않는다.
         // 표면 색과 모서리는 담는 쪽(panel)의 몫이다 (`list_element`와 같다).
         draw_children(context, interaction);
+        // 가장자리는 내용 위에 겹친다. 치수는 `arrange`가 잰 그 값이라 창·막대·그림자가
+        // 같은 offset을 본다 — 앱이 앞서 든 값으로 그리면 한 frame 낡은 그림자가 선다.
+        draw_scroll_edges(context, bounds(), metrics_.scroll_offset, metrics_.maximum_scroll, config_.edges);
     }
 } // namespace luil

@@ -14,8 +14,8 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -284,6 +284,105 @@ namespace luil {
             const float top { area.y + band_height * static_cast<float>(band) };
             canvas.drawRect(SkRect::MakeXYWH(area.x, top, area.width, band_height), paint);
         }
+    }
+
+    void draw_upward_shadow(SkCanvas& canvas, const rect_f& area, const ui_color color, const float strength)
+    {
+        if (area.width <= 0.0f || area.height <= 0.0f || strength <= 0.0f)
+            return;
+
+        // `draw_downward_shadow`의 거울이다.
+        // 아래쪽이 가장 진하고 위로 갈수록 제곱으로 옅어진다.
+        constexpr int band_count { 8 };
+        const float band_height { area.height / static_cast<float>(band_count) };
+        for (int band = 0; band < band_count; ++band)
+        {
+            const float distance { static_cast<float>(band) / static_cast<float>(band_count) };
+            const float remaining { 1.0f - distance };
+            SkPaint paint { solid_paint(with_alpha(color, strength * remaining * remaining)) };
+            paint.setAntiAlias(false);
+            const float bottom { area.y + area.height - band_height * static_cast<float>(band) };
+            canvas.drawRect(SkRect::MakeXYWH(area.x, bottom - band_height, area.width, band_height), paint);
+        }
+    }
+
+    void draw_surface_shadow(draw_context& context, const rect_f& box, const float radius, const float strength)
+    {
+        if (box.width <= 0.0f || box.height <= 0.0f || strength <= 0.0f)
+            return;
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
+
+        // 바깥 띠부터 안쪽으로 겹쳐 쌓는다. 안쪽 띠는 바깥 띠 위에 다시 얹히므로 상자
+        // 가장자리에 닿을수록 겹친 알파가 쌓여 진해진다 — 띠 하나의 알파는 가장자리에서의
+        // 합이 대략 `strength`가 되도록 나눈다.
+        // 띠 개수는 고정이다 (`draw_downward_shadow`와 같은 이유).
+        constexpr int band_count { 8 };
+        // 띠 하나의 폭이다 (물리 픽셀). 닿는 거리는 전부 합쳐 12 논리 픽셀이다.
+        const float band_spread { 1.5f * scale };
+        // 가장자리 가까움의 제곱합이다 — 알파를 이 비율로 나눠 무게의 합이 1이 되게 한다.
+        float closeness_total { 0.0f };
+        for (int band = 1; band <= band_count; ++band)
+        {
+            const float closeness { 1.0f - static_cast<float>(band) / static_cast<float>(band_count + 1) };
+            closeness_total += closeness * closeness;
+        }
+        for (int band = band_count; band >= 1; --band)
+        {
+            const float spread { static_cast<float>(band) * band_spread };
+            const float closeness { 1.0f - static_cast<float>(band) / static_cast<float>(band_count + 1) };
+            // 바깥 띠에도 옅은 바닥값을 둔다 — 제곱만으로는 먼 띠가 사라져 경계가 딱딱하다.
+            const float weight { 0.1f / static_cast<float>(band_count) + 0.9f * closeness * closeness / closeness_total };
+            const SkPaint paint { solid_paint(with_alpha(context.palette.content_shadow, strength * weight)) };
+            // 아래로 반만큼 밀어 빛이 위에서 오는 것처럼 보인다.
+            const SkRect outset { shape.makeOutset(spread, spread).makeOffset(0.0f, spread * 0.5f) };
+            context.canvas.drawRRect(SkRRect::MakeRectXY(outset, radius + spread, radius + spread), paint);
+        }
+    }
+
+    void draw_scroll_edges(draw_context& context, const rect_f& box, const float scroll_offset, const float maximum_scroll, const scroll_edges& edges)
+    {
+        if (box.width <= 0.0f || box.height <= 0.0f)
+            return;
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        if (edges.shadows)
+        {
+            // 그림자의 깊이다 (물리 픽셀). 창이 얕으면 절반까지다 — 위·아래가 겹치지 않는다.
+            const float reach { std::min(10.0f * scale, box.height / 2.0f) };
+            // 반 픽셀 안쪽은 끝에 붙은 것으로 본다. 맨 위·맨 아래에 선 창은 깨끗하다.
+            if (scroll_offset > 0.5f)
+                draw_downward_shadow(context.canvas, { box.x, box.y, box.width, reach }, context.palette.content_shadow, 0.18f);
+            if (scroll_offset + 0.5f < maximum_scroll)
+                draw_upward_shadow(context.canvas, { box.x, box.y + box.height - reach, box.width, reach }, context.palette.content_shadow, 0.14f);
+        }
+        if (edges.top_rule == false && edges.bottom_rule == false)
+            return;
+        // 구분선은 흘린 양과 무관하게 늘 선다. 그림자 위에 긋는다.
+        SkPaint rule { solid_paint(context.palette.divider) };
+        rule.setAntiAlias(false);
+        if (edges.top_rule)
+            context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, scale), rule);
+        if (edges.bottom_rule)
+            context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y + box.height - scale, box.width, scale), rule);
+    }
+
+    void draw_row_selection(draw_context& context, const rect_f& box)
+    {
+        if (box.width <= 0.0f || box.height <= 0.0f)
+            return;
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        // `accent_soft`는 **낮은 알파로 겹치는** 옅은 바탕이다 (팔레트가 "선택 행"을 그
+        // 역할의 쓰임으로 적어 두었다). 온전한 색으로 깔면 밝은 띠가 되어 그 위의 글이
+        // 읽히지 않는다. 좌우 2px·위아래 1px 들여 이웃 행과 hover 채움에서 갈린다.
+        const float radius { 4.0f * scale };
+        const SkRect fill { SkRect::MakeXYWH(box.x + 2.0f * scale, box.y + scale, std::max(0.0f, box.width - 4.0f * scale), std::max(0.0f, box.height - 2.0f * scale)) };
+        context.canvas.drawRRect(SkRRect::MakeRectXY(fill, radius, radius), solid_paint(with_alpha(context.palette.accent_soft, 0.18f)));
+        // 왼쪽 표식은 고대비 팔레트가 `accent_soft`를 접어도 어느 행인지 남긴다
+        // (배지가 tone에 글리프를 딸려 보낸 것과 같은 규칙이다).
+        // 길이는 행에서 위아래 6px씩 뺀 값이고, 행이 그보다 얕으면 행의 절반이다.
+        const float mark_height { std::max(box.height - 12.0f * scale, box.height / 2.0f) };
+        const SkRect mark { SkRect::MakeXYWH(box.x + 2.0f * scale, box.y + (box.height - mark_height) / 2.0f, 3.0f * scale, mark_height) };
+        context.canvas.drawRRect(SkRRect::MakeRectXY(mark, 1.5f * scale, 1.5f * scale), solid_paint(context.palette.accent));
     }
 
     void draw_centered_glyph(SkCanvas& canvas, const char32_t codepoint, const rect_f& target, const SkFont& base_font, const SkPaint& paint)

@@ -73,6 +73,8 @@ modal.surface = surface;
 
 표면 panel은 host가 조립하는 내부 부품이라 앱이 찾는 id를 갖지 않는다. 이름으로 찾을 대상은 앱이 만든 content다.
 
+표면이 바탕에서 떠 보이려면 `panel_config`의 `shadow`(바깥으로 드리우는 그림자의 진하기)와 `border`(둘레 1px의 색 선택자)를 준다. dialog만의 것이 아니라 panel의 일반 필드다 — 카드가 바탕과 같은 색이면 테두리가 있어야 카드로 읽히고, overlay처럼 상자 바깥에 자리가 있는 곳이라야 그림자가 보인다. 그리는 순서는 그림자 → 바탕 → 내용 → 테두리다.
+
 ## Focus trap
 
 `modal_host_element`는 자신을 focus trap으로 설정한다. `ui_tree::focus_order()`와 기존 초점 검증은 trap 자손으로 범위를 제한한다.
@@ -118,4 +120,4 @@ Modal host는 자신이 속한 한 표면의 입력만 가둔다. 활성 보조 
 
 ## 검증 지침
 
-[modal_host_element_tests.cpp](../tests/modal_host_element_tests.cpp)는 scrim과 content hit, 가운데 배치, offset, trap 속성을 검증한다. 같은 파일이 scrim 선택자가 `scrim_opacity`를 대신한다는 것을 실제로 칠해진 픽셀로 확인하고, 표면이 host와 content 사이에 서면서도 배치와 흡수가 달라지지 않는다는 것과 표면이 없을 때의 배치가 그대로라는 것을 함께 잠근다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 Tab 가둠, 초점 진입과 복귀, Esc 우선순위, 기본 버튼, 여러 표면을 확인한다.
+[modal_host_element_tests.cpp](../tests/modal_host_element_tests.cpp)는 scrim과 content hit, 가운데 배치, offset, trap 속성을 검증한다. 같은 파일이 scrim 선택자가 `scrim_opacity`를 대신한다는 것을 실제로 칠해진 픽셀로 확인하고, 표면이 host와 content 사이에 서면서도 배치와 흡수가 달라지지 않는다는 것과 표면이 없을 때의 배치가 그대로라는 것을 함께 잠근다. [panel_element_tests.cpp](../tests/panel_element_tests.cpp)는 표면 panel의 테두리가 내용 위에 서고 그림자가 상자 밖에만, 아래쪽이 더 진하게 드리우는 것을 픽셀로 잠근다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 Tab 가둠, 초점 진입과 복귀, Esc 우선순위, 기본 버튼, 여러 표면을 확인한다.
