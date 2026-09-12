@@ -56,6 +56,7 @@ luil_add_source_filter(luil_files "messaging"
 
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
 luil_add_source_filter(luil_files "text"
+    text/fonts.cpp
     text/text_edit.cpp
     "${public_headers}/text/fonts.h"
     "${public_headers}/text/text_edit.h"
@@ -138,6 +139,8 @@ luil_add_source_filter(luil_files "ui/controls"
 
 # 보여 주기만 하는 element다 (글·그림·상태 표시).
 luil_add_source_filter(luil_files "ui/content"
+    ui/glyph_element.cpp
+    "${public_headers}/ui/glyph_element.h"
     ui/badge_element.cpp
     "${public_headers}/ui/badge_element.h"
     ui/image_element.cpp

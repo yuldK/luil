@@ -35,6 +35,7 @@ add_executable(luil_tests
     embedded_assets_tests.cpp
     fence_wait_tests.cpp
     font_fallback_tests.cpp
+    glyph_element_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp
     http_body_tests.cpp
