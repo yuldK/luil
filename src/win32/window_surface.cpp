@@ -7,12 +7,15 @@
 #include "win32/win32_error.h"
 #include "win32/win32_fonts.h"
 
+#include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkSurfaceProps.h"
+#include "include/encode/SkEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
 
 #include <windowsx.h>
@@ -26,6 +29,7 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace luil::win32 {
     namespace {
@@ -55,6 +59,48 @@ namespace luil::win32 {
             default:
                 return LoadCursorW(nullptr, IDC_ARROW);
             }
+        }
+        // 녹화의 마지막 장이 머무는 시간이다 (한 장짜리 녹화의 몫이기도 하다).
+        // 이을 frame이 없어 잴 수 없는 자리의 값이라, 60Hz 한 frame으로 둔다.
+        constexpr int default_frame_milliseconds { 16 };
+
+        // **무손실이다.** 화면을 다시 볼 값이라 손실 압축은 글자 가장자리를 뭉갠다.
+        // PNG가 아닌 이유는 이 Skia 패키지에 png 인코더가 없기 때문이다
+        // (webp는 있다 — `skia_use_libwebp_encode`).
+        [[nodiscard]] SkWebpEncoder::Options lossless_webp_options() noexcept
+        {
+            SkWebpEncoder::Options options {};
+            options.fCompression = SkWebpEncoder::Compression::kLossless;
+            return options;
+        }
+
+        // `SkFILEWStream`은 좁은 경로만 받아 한글 경로에서 끊긴다.
+        // 그래서 인코딩은 메모리에 하고 파일은 Win32로 연다.
+        [[nodiscard]] bool write_binary_file(const std::u8string& path, const SkData& data, std::u8string& error)
+        {
+            const auto native { utf8_to_utf16(path) };
+            if (native.value.has_value() == false)
+            {
+                error = u8"The output path is not valid UTF-8.";
+                return false;
+            }
+            const HANDLE file { CreateFileW(native.value->c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) };
+            if (file == INVALID_HANDLE_VALUE)
+            {
+                error = make_hresult_error(u8"Failed to create the output file.", HRESULT_FROM_WIN32(GetLastError()));
+                return false;
+            }
+
+            DWORD written { 0 };
+            const BOOL wrote { WriteFile(file, data.data(), static_cast<DWORD>(data.size()), &written, nullptr) };
+            const DWORD failure { GetLastError() };
+            CloseHandle(file);
+            if (wrote == FALSE || written != data.size())
+            {
+                error = make_hresult_error(u8"Failed to write the output file.", HRESULT_FROM_WIN32(failure));
+                return false;
+            }
+            return true;
         }
     } // namespace
 
@@ -631,7 +677,13 @@ namespace luil::win32 {
         // 조합 중이면 session이 미룬다.
         if (text_input_ != nullptr)
             text_input_->synchronize();
-        return renderer_->render(state, error);
+        if (renderer_->render(state, error) == false)
+            return false;
+
+        // 그린 뒤에 모은다. 실패한 frame은 화면에 닿지 않았으므로 녹화에도 없다.
+        if (recording_)
+            collect_recorded_frame(state);
+        return true;
     }
 
     bool window_surface::capture(const std::u8string& path, std::u8string& error)
@@ -651,68 +703,141 @@ namespace luil::win32 {
         // 알리지 않는다. 캡처는 **보는 일**이라 접근성 발행본의 기준선을 옮기면
         // 다음 그리기가 그 사이의 변화를 놓친다 (`announce_accessibility_changes`는
         // 직전 발행본과 대조하고 그 자리에서 기준선을 새로 잡는다).
-        //
-        // 웹뷰 자리도 비우지 않는다. 그 그림은 합성이 우리 **아래**에 얹는 것이라
-        // 어차피 담기지 않고, 구멍을 내면 그 자리가 검게 남는다.
-        const SkImageInfo info { SkImageInfo::MakeN32Premul(state.width, state.height) };
-        const SkSurfaceProps properties { 0, kRGB_H_SkPixelGeometry };
-        const sk_sp<SkSurface> surface { SkSurfaces::Raster(info, &properties) };
-        if (surface == nullptr)
-        {
-            error = u8"Failed to allocate the capture surface.";
+        SkBitmap image {};
+        if (draw_to_bitmap(state, image, error) == false)
             return false;
-        }
 
-        // 렌더러가 부르는 것과 **같은 인자**다. codicon 자리에 code(고정폭) typeface를
-        // 넘기면 캡션 버튼처럼 글리프로 그리는 것만 조용히 사라진다 — 나머지는
-        // 멀쩡해서 캡처를 눈으로 볼 때에야 드러난다.
-        //  - `code`는 `state.code_typeface`가 가리키는 것을 살려 두는 몫이다.
-        const sk_sp<SkTypeface> codicon { load_codicon_typeface() };
-        const sk_sp<SkTypeface> ui { configured_ui_typeface() };
-        draw_frame(*surface->getCanvas(), codicon.get(), ui.get(), state);
-
-        SkPixmap pixels {};
-        if (surface->peekPixels(&pixels) == false)
-        {
-            error = u8"Failed to read the captured pixels.";
-            return false;
-        }
-
-        const auto native { utf8_to_utf16(path) };
-        if (native.value.has_value() == false)
-        {
-            error = u8"The capture path is not valid UTF-8.";
-            return false;
-        }
-        // `SkFILEWStream`은 좁은 경로만 받아 한글 경로에서 끊긴다.
-        // 파일은 Win32로 열고 메모리에 담은 것을 그대로 쓴다.
         SkDynamicMemoryWStream memory {};
-        // **무손실이다.** 화면을 다시 볼 값이라 손실 압축은 글자 가장자리를
-        // 뭉갠다. PNG가 아닌 이유는 이 Skia 패키지에 png 인코더가 없기 때문이다
-        // (webp는 있다 — `skia_use_libwebp_encode`).
-        SkWebpEncoder::Options options {};
-        options.fCompression = SkWebpEncoder::Compression::kLossless;
-        if (SkWebpEncoder::Encode(&memory, pixels, options) == false)
+        if (SkWebpEncoder::Encode(&memory, image.pixmap(), lossless_webp_options()) == false)
         {
             error = u8"Failed to encode the capture.";
             return false;
         }
+        return write_binary_file(path, *memory.detachAsData(), error);
+    }
 
-        const sk_sp<SkData> encoded { memory.detachAsData() };
-        const HANDLE file { CreateFileW(native.value->c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) };
-        if (file == INVALID_HANDLE_VALUE)
+    bool window_surface::draw_to_bitmap(const frame_state& state, SkBitmap& image, std::u8string& error)
+    {
+        if (state.width <= 0 || state.height <= 0)
         {
-            error = make_hresult_error(u8"Failed to create the capture file.", HRESULT_FROM_WIN32(GetLastError()));
+            error = u8"The surface has no area to draw.";
+            return false;
+        }
+        if (image.tryAllocPixels(SkImageInfo::MakeN32Premul(state.width, state.height)) == false)
+        {
+            error = u8"Failed to allocate the capture bitmap.";
             return false;
         }
 
-        DWORD written { 0 };
-        const BOOL wrote { WriteFile(file, encoded->data(), static_cast<DWORD>(encoded->size()), &written, nullptr) };
-        const DWORD failure { GetLastError() };
-        CloseHandle(file);
-        if (wrote == FALSE || written != encoded->size())
+        // 웹뷰 자리는 비우지 않는다. 그 그림은 합성이 우리 **아래**에 얹는 것이라
+        // 어차피 담기지 않고, 구멍을 내면 그 자리가 검게 남는다.
+        //
+        // 렌더러가 부르는 것과 **같은 인자**다. codicon 자리에 code(고정폭) typeface를
+        // 넘기면 캡션 버튼처럼 글리프로 그리는 것만 조용히 사라진다 — 나머지는
+        // 멀쩡해서 그림을 눈으로 볼 때에야 드러난다.
+        const SkSurfaceProps properties { 0, kRGB_H_SkPixelGeometry };
+        SkCanvas canvas { image, properties };
+        const sk_sp<SkTypeface> codicon { load_codicon_typeface() };
+        const sk_sp<SkTypeface> ui { configured_ui_typeface() };
+        draw_frame(canvas, codicon.get(), ui.get(), state);
+        return true;
+    }
+
+    bool window_surface::start_recording(const std::u8string& path, std::u8string& error)
+    {
+        if (window_ == nullptr)
         {
-            error = make_hresult_error(u8"Failed to write the capture file.", HRESULT_FROM_WIN32(failure));
+            error = u8"The surface has no window to record.";
+            return false;
+        }
+        if (recording_)
+        {
+            error = u8"The surface is already recording.";
+            return false;
+        }
+        recorded_.clear();
+        recording_path_ = path;
+        recording_width_ = 0;
+        recording_height_ = 0;
+        recording_dropped_ = 0;
+        recording_ = true;
+        return true;
+    }
+
+    void window_surface::collect_recorded_frame(const frame_state& state)
+    {
+        // 첫 frame이 캔버스 크기를 정한다. 인코더는 모든 frame이 그 크기이기를
+        // 요구하므로, 창 크기가 바뀐 동안의 frame은 담지 못한다 — 조용히 흘리지
+        // 않고 세어 두었다가 멈출 때 알린다.
+        if (recorded_.empty())
+        {
+            recording_width_ = state.width;
+            recording_height_ = state.height;
+        }
+        else if (state.width != recording_width_ || state.height != recording_height_)
+        {
+            ++recording_dropped_;
+            return;
+        }
+
+        recorded_frame frame {};
+        if (std::u8string error {}; draw_to_bitmap(state, frame.image, error) == false)
+        {
+            ++recording_dropped_;
+            return;
+        }
+        frame.time = std::chrono::steady_clock::now();
+        recorded_.push_back(std::move(frame));
+    }
+
+    bool window_surface::stop_recording(std::u8string& error)
+    {
+        if (recording_ == false)
+        {
+            error = u8"The surface is not recording.";
+            return false;
+        }
+        recording_ = false;
+        const std::u8string path { std::move(recording_path_) };
+        recording_path_.clear();
+        std::vector<recorded_frame> frames {};
+        frames.swap(recorded_);
+        const std::size_t dropped { recording_dropped_ };
+        recording_dropped_ = 0;
+
+        if (frames.empty())
+        {
+            error = u8"The recording has no frames.";
+            return false;
+        }
+
+        // 지속 시간은 **다음 frame까지의 간격**이다. 마지막 장은 이을 것이 없어
+        // 직전 간격을 그대로 쓴다 (한 장뿐이면 한 frame 몫으로 친다).
+        // 0ms는 인코더가 건너뛰므로 최소 1ms로 든다.
+        std::vector<SkEncoder::Frame> encoded {};
+        encoded.reserve(frames.size());
+        for (std::size_t index = 0; index < frames.size(); ++index)
+        {
+            int duration { default_frame_milliseconds };
+            if (index + 1u < frames.size())
+                duration = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(frames[index + 1u].time - frames[index].time).count());
+            else if (frames.size() > 1u)
+                duration = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(frames.back().time - frames[frames.size() - 2u].time).count());
+            encoded.push_back(SkEncoder::Frame { frames[index].image.pixmap(), std::max(1, duration) });
+        }
+
+        SkDynamicMemoryWStream memory {};
+        if (SkWebpEncoder::EncodeAnimated(&memory, encoded, lossless_webp_options()) == false)
+        {
+            error = u8"Failed to encode the recording.";
+            return false;
+        }
+        if (write_binary_file(path, *memory.detachAsData(), error) == false)
+            return false;
+
+        if (dropped > 0)
+        {
+            error = u8"The recording was written, but frames were dropped because the window size changed.";
             return false;
         }
         return true;

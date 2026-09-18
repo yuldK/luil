@@ -976,7 +976,27 @@ namespace luil::win32 {
                     return;
                 }
                 if (const auto* const shot { std::get_if<capture_request>(&action) }; shot != nullptr)
+                {
                     execute_capture(*shot);
+                    return;
+                }
+                if (const auto* const record { std::get_if<record_request>(&action) }; record != nullptr)
+                    execute_record(*record);
+            }
+
+            // 찍기와 같은 자리다 — 실패해도 창을 끝내지 않고 알리기만 한다.
+            void execute_record(const record_request& request)
+            {
+                window_surface* const target { surface_for_capture(request.surface) };
+                if (target == nullptr)
+                {
+                    report_runtime_error(u8"The recording target surface is gone.");
+                    return;
+                }
+                std::u8string error {};
+                const bool done { request.command == record_command::start ? target->start_recording(request.path, error) : target->stop_recording(error) };
+                if (done == false)
+                    report_runtime_error(error);
             }
 
             // 찍기는 실패해도 창을 끝내지 않는다. 화면을 남기려던 것이지

@@ -42,6 +42,11 @@ namespace widgets {
             ++state_.clicks;
             return;
         }
+        if (message.get<toggle_record_intent>() != nullptr)
+        {
+            state_.recording = state_.recording == false;
+            return;
+        }
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
         {
             // 편집 적용은 라이브러리 도우미가 한다.

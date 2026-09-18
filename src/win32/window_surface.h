@@ -10,10 +10,12 @@
 #include "win32/win32_drop.h"
 #include "win32/win32_tsf_input.h"
 
+#include "include/core/SkBitmap.h"
 #include "include/core/SkTypeface.h"
 
 #include <windows.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -281,6 +283,19 @@ namespace luil::win32 {
         //  - 웹뷰는 우리가 그리는 것이 아니라 합성이 얹는 층이라 담기지 않는다.
         [[nodiscard]] bool capture(const std::u8string& path, std::u8string& error);
 
+        // 그리는 frame마다 한 장씩 모은다. 멈출 때 애니메이션 WebP로 낸다.
+        //
+        // **상한이 없다.** 인코더가 프레임 전부를 한 번에 받으므로 멈출 때까지
+        // 메모리에 쌓이고, 한 장이 너비×높이×4바이트다. 언제 멈출지는 부르는
+        // 쪽이 안다 — 여기서 임의의 문턱을 정하면 필요한 녹화가 잘린다.
+        [[nodiscard]] bool start_recording(const std::u8string& path, std::u8string& error);
+        [[nodiscard]] bool stop_recording(std::u8string& error);
+
+        [[nodiscard]] bool recording() const noexcept
+        {
+            return recording_;
+        }
+
     protected:
         // 이 표면 위의 입력이 popup 밖 입력인가다.
         // popup 자신만 거짓이다 — 자기 위 클릭은 popup 안 클릭이다.
@@ -312,6 +327,32 @@ namespace luil::win32 {
         //    발행본에서 오고 글리프는 typeface가 쥐고 있어, 먼저 놓으면 그리는
         //    중에 사라진다. 그래서 수명을 부르는 쪽에 돌려준다.
         [[nodiscard]] bool build_frame(frame_state& state, std::shared_ptr<const ui_frame>& frame, sk_sp<SkTypeface>& code, std::u8string& error);
+
+    private:
+        // 세워 둔 frame을 raster bitmap에 그린다 (찍기와 녹화가 함께 쓴다).
+        [[nodiscard]] bool draw_to_bitmap(const frame_state& state, SkBitmap& image, std::u8string& error);
+        // 녹화 중이면 이 frame을 모은다. 그린 뒤에 부른다.
+        void collect_recorded_frame(const frame_state& state);
+
+        // 녹화가 모아 둔 한 장이다.
+        // 시각은 멈출 때 프레임 간격(ms)으로 환산한다 — 인코더가 지속 시간을
+        // 프레임마다 받으므로, 고정 fps로 가정하지 않고 실제로 그린 간격을 쓴다.
+        struct recorded_frame
+        {
+            SkBitmap image {};
+            std::chrono::steady_clock::time_point time {};
+        };
+
+        bool recording_ { false };
+        std::u8string recording_path_ {};
+        // 첫 frame이 캔버스 크기를 정한다 (인코더가 모든 frame이 같기를 요구한다).
+        int recording_width_ { 0 };
+        int recording_height_ { 0 };
+        // 크기가 달라 담지 못한 frame 수다. 멈출 때 알린다 — 조용히 흘리지 않는다.
+        std::size_t recording_dropped_ { 0 };
+        std::vector<recorded_frame> recorded_ {};
+
+    protected:
 
         // 그리기가 실패했다.
         // 기본은 알리기만 하고, 주 창은 프로세스를 끝낸다.

@@ -39,6 +39,7 @@ namespace widgets {
     constexpr luil::ui_element_kind kind_link { luil::application_element_kind(10) };
     constexpr luil::ui_element_kind kind_slider { luil::application_element_kind(11) };
     constexpr luil::ui_element_kind kind_capture_button { luil::application_element_kind(12) };
+    constexpr luil::ui_element_kind kind_record_button { luil::application_element_kind(13) };
 
     // --- 텍스트 입력 대상 ---
     // 텍스트 박스마다 대상 id를 하나 정한다.
@@ -58,6 +59,11 @@ namespace widgets {
 
     // controls: 카운터 버튼.
     struct increment_intent
+    {};
+
+    // controls: 녹화 켬끔. 파일로 남기는 일은 라이브러리가 하고, 앱은 지금
+    // 켜져 있는지만 안다 (버튼의 글과 다음에 낼 명령이 그 값에서 난다).
+    struct toggle_record_intent
     {};
 
     // inputs: 편집·조합 메시지. policy가 라이브러리 요청을 이 봉투에 담는다.
@@ -119,6 +125,7 @@ namespace widgets {
     struct app_state
     {
         int clicks { 0 };
+        bool recording { false };
         // 텍스트 초안과 IME 조합 표시 상태다.
         // 확정 글의 진실은 언제나 이 초안이고, 조합 글은 표시 상태일 뿐이다.
         luil::text::text_edit_state note {};

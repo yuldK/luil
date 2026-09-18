@@ -68,6 +68,16 @@ Draw 뒤 owner는 모든 surface의 가장 이른 `next_update`를 schedule한�
 
 PNG가 아닌 이유는 Skia package에 png encoder가 없기 때문이다(`skia_use_libpng_encode = false`, rust encoder도 build되지 않았다). WebP encoder는 있고 `SkWebpEncoder::EncodeAnimated`까지 있다.
 
+## 녹화
+
+`record_request { command, path, surface }`는 같은 길의 여러 장짜리다. `start` 뒤로 surface가 그리는 frame마다 한 장씩 raster bitmap으로 모으고, `stop`에서 `SkWebpEncoder::EncodeAnimated`로 한 번에 낸다. 지속 시간은 실제로 그린 frame 간격(ms)이다 — 고정 fps로 가정하지 않는다.
+
+**상한을 두지 않는다.** Encoder가 frame 전부를 한 번에 받으므로 멈출 때까지 메모리에 쌓이고 한 장이 너비×높이×4바이트다. 언제 멈출지는 부르는 쪽이 안다. Library가 임의의 문턱(최대 길이, fps, 메모리)을 정하면 필요한 녹화가 조용히 잘린다.
+
+- 그린 뒤에 모은다. 실패한 frame은 화면에 닿지 않았으므로 녹화에도 없다.
+- 첫 frame이 canvas 크기다. Encoder가 모든 frame이 같기를 요구하므로 창 크기가 바뀐 동안의 frame은 담기지 않는다. 몇 장을 흘렸는지는 `stop`이 알린다 — 조용히 흘리지 않는다.
+- Frame 하나를 그리는 비용이 그리기 한 번 더다. 녹화 중에는 surface가 매 frame 두 번 그린다.
+
 ## Text input
 
 `surface_tsf_host`는 surface의 TSF document를 shared interaction 및 application pipeline에 연결한다. Focusable surface는 session 하나를 가진다. 해당 surface가 active이거나 여기에 anchor된 no-activate popup이 logical text focus를 가질 때만 text target을 보고한다.

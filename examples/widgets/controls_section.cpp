@@ -88,6 +88,21 @@ namespace widgets {
             luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::capture_request { .path = u8"widgets-capture.webp" } }; });
         row->add(std::move(shot), { .length = 120.0f });
 
+        // 녹화: 같은 길의 여러 장짜리다. 액션 하나가 **둘을 함께** 낸다 —
+        // 라이브러리에 시작·정지를 말하고, 앱 상태도 그에 맞춰 뒤집는다.
+        // 상한은 두지 않는다. 멈추는 것은 사람이 이 단추를 다시 누르는 것이다.
+        const bool recording { state.recording };
+        auto record { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_record_button }, luil::text_button_config { .text = recording ? u8"녹화 멈춤" : u8"녹화 시작" }) };
+        record->set_cursor(luil::ui_cursor::hand);
+        record->set_tooltip(recording ? u8"멈추고 widgets-recording.webp로 남긴다" : u8"지금부터 그리는 frame을 모은다");
+        record->set_action(luil::ui_trigger::left_click, [recording](const luil::ui_action_context&) -> std::vector<luil::input_action> {
+            return {
+                luil::input_action { luil::record_request { recording ? luil::record_command::stop : luil::record_command::start, u8"widgets-recording.webp" } },
+                luil::input_action { luil::app_message { toggle_record_intent {} } },
+            };
+        });
+        row->add(std::move(record), { .length = 108.0f });
+
         // 상태를 보여 주는 라벨. 상태는 언제나 앱(app_state)이 소유한다.
         luil::label_config count {};
         const std::string digits { std::to_string(state.clicks) };

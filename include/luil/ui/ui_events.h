@@ -322,10 +322,36 @@ namespace luil {
         [[nodiscard]] bool operator==(const capture_request&) const noexcept = default;
     };
 
+    enum class record_command
+    {
+        start,
+        stop,
+    };
+
+    // 화면을 움직이는 그림으로 남긴다 (애니메이션 WebP).
+    //
+    // `capture_request`의 여러 장짜리다. 그리는 길도 같다 — 매 frame을 raster로
+    // 한 번 더 태워 모으고, 멈출 때 한 번에 인코드한다.
+    //  - **상한을 두지 않는다.** 몇 장까지 모을지, 언제 멈출지는 부르는 쪽이 안다.
+    //    인코더가 프레임 전부를 한 번에 받으므로 멈출 때까지 메모리에 쌓이고,
+    //    한 장이 너비×높이×4바이트다. 오래 켜 두면 그만큼 든다.
+    //  - 첫 frame의 크기가 캔버스 크기다. 녹화 중 창 크기가 바뀌면 그 frame들은
+    //    담기지 않고, 멈출 때 몇 장을 흘렸는지 알린다.
+    struct record_request
+    {
+        record_command command { record_command::start };
+        // `start`일 때 남길 파일 경로다 (UTF-8). 이미 있으면 덮어쓴다.
+        std::u8string path {};
+        // 찍을 표면이다. 비면 주 창이다.
+        std::u8string surface {};
+
+        [[nodiscard]] bool operator==(const record_request&) const noexcept = default;
+    };
+
     // element 액션과 interaction controller가 돌려주는 후속 조치다.
     // 액션은 상태를 직접 바꾸지 않고 이 메시지를 반환만 한다.
     // 앱 메시지는 `app_message`에 담겨 다니고 앱이 경계에서 복원한다.
-    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request>;
+    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request, record_request>;
 
     // intent 하나를 액션 값으로 싸는 도우미다.
     // `input_action { app_message { intent {} } }` 3중 중첩을 대신한다.
