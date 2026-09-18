@@ -602,6 +602,11 @@ namespace luil::win32 {
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);
 
+                // 어떻게 보일지는 **띄우는 쪽이** 정한다.
+                // `SW_SHOWDEFAULT`는 STARTUPINFO의 `wShowWindow`를 그대로 따르므로,
+                // 자동화가 `SW_SHOWNOACTIVATE`로 실행하면 창이 사람의 포커스를 뺏지
+                // 않고 뜬다 (accessibility-design.md). 여기를 고정 값으로 바꾸면
+                // 그 길이 조용히 막힌다 — 창은 그대로 뜨고 포커스만 넘어간다.
                 ShowWindow(window_, SW_SHOWDEFAULT);
                 UpdateWindow(window_);
                 MSG message {};

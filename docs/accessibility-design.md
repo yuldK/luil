@@ -91,6 +91,18 @@ Role 변경은 structure event를 통한 교체로 취급한다. Element 추가�
 
 Win32 root는 이 변경을 UIA property, element-selected, structure event로 변환한다. Invoke는 snapshot으로 보이는 상태가 아닌 event이므로 해당 동작을 dispatch할 때 발생한다.
 
+## Foreground와 자동화 실행
+
+Automation client가 상태를 바꾸는 pattern을 호출하면 UIA 계층이 대상 window를 foreground로 세울 수 있다. Provider가 막을 수 있는 지점이 아니다. Automation 코드가 전혀 없는 표준 Win32 app에서도 같은 일이 일어나며 더 자주 일어난다. 읽기 전용 조회는 foreground를 바꾸지 않는다.
+
+Library가 보장하는 것은 시작 시점이다. 주 window는 `SW_SHOWDEFAULT`로 표시하므로 표시 방식은 process를 시작한 쪽이 `STARTUPINFO.wShowWindow`로 정한다. Automation harness는 `SW_SHOWNOACTIVATE`나 `SW_SHOWMINNOACTIVE`로 실행해 사람의 focus를 건드리지 않고 app을 띄울 수 있고, 두 경우 모두 접근성 tree를 완전하게 제공한다. 이 계약에 의존하는 호출자가 있으므로 표시 명령을 고정 값으로 바꾸지 않는다.
+
+접근성 tree는 published frame에서 만들어지고 published frame은 surface가 그릴 때 만들어진다. 따라서 **그린 적이 없는 window에는 tree가 없다.** `SW_HIDE`로 시작한 window는 element를 제공하지 않는다. 최소화로 시작한 window는 첫 표시에서 이미 그렸으므로 tree를 그대로 제공한다.
+
+`CreateDesktop`으로 만든 별도 desktop에서는 그리기가 정상으로 돌고 tree도 완전하다. Direct3D와 CPU renderer 모두 동작한다. UIA client는 desktop 단위이므로 같은 desktop에 있어야 조회와 조작이 된다. 그 desktop은 입력 desktop이 아니라 foreground window가 서지 않으며, 사람이 쓰는 desktop의 foreground와 cursor는 영향을 받지 않는다.
+
+Client가 surface window를 고를 때 `Process.MainWindowHandle`이나 "자식이 있는 window"에 기대면 안 된다. App process에는 시스템이 만든 보이는 top-level window(`UAC Input Indicator` 등)가 함께 있고 그것도 자식을 갖는다. Luil surface는 `AutomationId`가 `kind:owner` 꼴인 element를 가진 window다.
+
 ## 검증
 
 [`tests/accessibility_tests.cpp`](../tests/accessibility_tests.cpp)는 role과 property mapping, collapsed-tree navigation, visibility, geometry, hit testing, provider 수명, runtime id, focus, selection container, snapshot과 event, 지원 pattern, action, editable value, text range를 검증한다. Platform test는 fake surface host와 event sink를 사용해 screen reader 없이 COM 변환을 반복 검증한다.
