@@ -78,6 +78,16 @@ namespace widgets {
         link->set_action(luil::ui_trigger::left_click, luil::make_message_action(increment_intent {}));
         row->add(std::move(link), { .length = 104.0f });
 
+        // 화면 남기기: 라이브러리가 지금 frame을 그대로 파일로 낸다.
+        // 앱은 경로만 말하고 그리는 일은 하지 않는다 — 화면 캡처 도구도,
+        // 창이 앞에 있어야 한다는 조건도 필요 없다.
+        auto shot { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_capture_button }, luil::text_button_config { .text = u8"화면 남기기" }) };
+        shot->set_cursor(luil::ui_cursor::hand);
+        shot->set_tooltip(u8"지금 화면을 widgets-capture.webp로 남긴다");
+        shot->set_action(
+            luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::capture_request { .path = u8"widgets-capture.webp" } }; });
+        row->add(std::move(shot), { .length = 120.0f });
+
         // 상태를 보여 주는 라벨. 상태는 언제나 앱(app_state)이 소유한다.
         luil::label_config count {};
         const std::string digits { std::to_string(state.clicks) };

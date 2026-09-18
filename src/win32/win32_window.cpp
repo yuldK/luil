@@ -971,7 +971,44 @@ namespace luil::win32 {
                     return;
                 }
                 if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr)
+                {
                     execute_clipboard_request(clipboard_request { *paste });
+                    return;
+                }
+                if (const auto* const shot { std::get_if<capture_request>(&action) }; shot != nullptr)
+                    execute_capture(*shot);
+            }
+
+            // 찍기는 실패해도 창을 끝내지 않는다. 화면을 남기려던 것이지
+            // 화면을 세우려던 것이 아니라, 못 남겼다고 앱이 죽으면 손해가 크다.
+            void execute_capture(const capture_request& request)
+            {
+                window_surface* const target { surface_for_capture(request.surface) };
+                if (target == nullptr)
+                {
+                    report_runtime_error(u8"The capture target surface is gone.");
+                    return;
+                }
+                if (std::u8string error {}; target->capture(request.path, error) == false)
+                    report_runtime_error(error);
+            }
+
+            // 빈 표식은 주 창이다. 보조 창과 popup은 자기 id로 찾는다.
+            [[nodiscard]] window_surface* surface_for_capture(const std::u8string& surface)
+            {
+                if (surface.empty() || surface == main_.id())
+                    return &main_;
+                for (const std::unique_ptr<secondary_surface>& window : windows_)
+                {
+                    if (window->id() == surface)
+                        return window.get();
+                }
+                for (const std::unique_ptr<popup_surface>& popup : popups_)
+                {
+                    if (popup->id() == surface)
+                        return popup.get();
+                }
+                return nullptr;
             }
 
             void execute_ui_command(const ui_command command)

@@ -38,6 +38,7 @@ namespace widgets {
     constexpr luil::ui_element_kind kind_icon_text_button { luil::application_element_kind(9) };
     constexpr luil::ui_element_kind kind_link { luil::application_element_kind(10) };
     constexpr luil::ui_element_kind kind_slider { luil::application_element_kind(11) };
+    constexpr luil::ui_element_kind kind_capture_button { luil::application_element_kind(12) };
 
     // --- 텍스트 입력 대상 ---
     // 텍스트 박스마다 대상 id를 하나 정한다.

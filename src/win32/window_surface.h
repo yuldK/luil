@@ -273,6 +273,14 @@ namespace luil::win32 {
         // 이 표면 한 장을 그린다.
         [[nodiscard]] bool render(std::u8string& error);
 
+        // 이 표면의 지금 화면을 파일로 남긴다 (무손실 WebP).
+        //
+        // 화면을 긁거나 스왑체인을 되읽지 않는다. **같은 `draw_frame`을 raster
+        // surface에 한 번 더 태운다** — 그래서 백엔드를 묻지 않고, 창이 가려져
+        // 있거나 최소화되어 있거나 다른 데스크톱에 있어도 같은 그림이 나온다.
+        //  - 웹뷰는 우리가 그리는 것이 아니라 합성이 얹는 층이라 담기지 않는다.
+        [[nodiscard]] bool capture(const std::u8string& path, std::u8string& error);
+
     protected:
         // 이 표면 위의 입력이 popup 밖 입력인가다.
         // popup 자신만 거짓이다 — 자기 위 클릭은 popup 안 클릭이다.
@@ -295,6 +303,15 @@ namespace luil::win32 {
         {
             static_cast<void>(state);
         }
+
+        // 이번 frame에 **그릴 것**을 세운다. 알리기·웹뷰·TSF는 하지 않는다.
+        //
+        // `render`와 `capture`가 여기 하나를 함께 본다. 갈라 두면 화면과 캡처가
+        // 다른 그림을 내고, 그 어긋남은 캡처를 볼 때에야 드러난다.
+        //  - `frame`과 `code`는 **`state`를 쓰는 동안 살아 있어야 한다.** 외양은
+        //    발행본에서 오고 글리프는 typeface가 쥐고 있어, 먼저 놓으면 그리는
+        //    중에 사라진다. 그래서 수명을 부르는 쪽에 돌려준다.
+        [[nodiscard]] bool build_frame(frame_state& state, std::shared_ptr<const ui_frame>& frame, sk_sp<SkTypeface>& code, std::u8string& error);
 
         // 그리기가 실패했다.
         // 기본은 알리기만 하고, 주 창은 프로세스를 끝낸다.

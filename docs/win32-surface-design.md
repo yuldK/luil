@@ -55,6 +55,19 @@ WebView hole은 arranged tree만 clipped rectangle을 알기 때문에 draw 직�
 
 Draw 뒤 owner는 모든 surface의 가장 이른 `next_update`를 schedule한다. 각 tree에는 해당 surface로 filter한 interaction state를 제공한다. 다른 surface의 focus나 hover를 재사용하면 caret과 animation update를 잘못 억제할 수 있다.
 
+## 화면 남기기
+
+`capture_request { path, surface }`는 그 surface의 지금 화면을 무손실 WebP로 남긴다. Clipboard 요청과 같은 갈래다 — UI thread만 할 수 있고 인자를 나르며 application state가 아니다. Element action이 그대로 낼 수 있어 앱은 경로만 말한다.
+
+화면을 긁거나 swap chain을 되읽지 않는다. `window_surface::build_frame`이 세운 같은 `frame_state`를 raster surface에 `draw_frame`으로 한 번 더 태운다. `render`와 `capture`가 그 한 자리를 함께 보므로 화면과 캡처가 갈리지 않는다.
+
+- Backend를 묻지 않는다. Window가 가려져 있거나 최소화되어 있거나 다른 desktop에 있어도 같은 그림이다.
+- `draw_frame`의 첫 typeface 인자는 **codicon**이다. 여기에 code(고정폭) typeface를 넘기면 caption button처럼 glyph로 그리는 것만 조용히 사라진다.
+- 접근성 발행본의 기준선은 옮기지 않는다. `announce_accessibility_changes`는 직전 발행본과 대조하며 그 자리에서 기준선을 새로 잡으므로, 캡처가 그것을 부르면 다음 draw가 그 사이의 변화를 놓친다.
+- WebView는 composition이 우리 **아래**에 얹는 layer라 담기지 않는다. Hole도 내지 않는다 — 내면 그 자리가 검게 남는다.
+
+PNG가 아닌 이유는 Skia package에 png encoder가 없기 때문이다(`skia_use_libpng_encode = false`, rust encoder도 build되지 않았다). WebP encoder는 있고 `SkWebpEncoder::EncodeAnimated`까지 있다.
+
 ## Text input
 
 `surface_tsf_host`는 surface의 TSF document를 shared interaction 및 application pipeline에 연결한다. Focusable surface는 session 하나를 가진다. 해당 surface가 active이거나 여기에 anchor된 no-activate popup이 logical text focus를 가질 때만 text target을 보고한다.

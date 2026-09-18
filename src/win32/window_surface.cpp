@@ -1,11 +1,19 @@
 #include "win32/window_surface.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "win32/embedded_assets.h"
 #include "win32/surface_input.h"
 #include "win32/utf8.h"
+#include "win32/win32_error.h"
 #include "win32/win32_fonts.h"
 
+#include "include/core/SkData.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/encode/SkWebpEncoder.h"
 
 #include <windowsx.h>
 
@@ -556,14 +564,8 @@ namespace luil::win32 {
         }
     }
 
-    bool window_surface::render(std::u8string& error)
+    bool window_surface::build_frame(frame_state& state, std::shared_ptr<const ui_frame>& frame, sk_sp<SkTypeface>& code, std::u8string& error)
     {
-        if (renderer_ == nullptr)
-        {
-            error = u8"The surface has no renderer.";
-            return false;
-        }
-
         RECT client {};
         if (GetClientRect(window_, &client) == FALSE)
         {
@@ -571,7 +573,6 @@ namespace luil::win32 {
             return false;
         }
 
-        frame_state state {};
         state.width = std::max(1L, client.right - client.left);
         state.height = std::max(1L, client.bottom - client.top);
         state.dpi_scale = static_cast<float>(dpi_) / 96.0F;
@@ -580,7 +581,6 @@ namespace luil::win32 {
         // (`caption_surface::prepare_frame` — 둘이 동시에 참이 되지 않는 자리다).
         state.maximized = IsZoomed(window_) != FALSE;
 
-        std::shared_ptr<const ui_frame> frame {};
         if (app_host* const host { context_.host() }; host != nullptr)
         {
             frame = host->acquire_frame();
@@ -594,14 +594,31 @@ namespace luil::win32 {
             //    hover를 그 뒤에 얹으므로, 순서가 뒤집히면 방금 얹은 것이 도로
             //    지워진다.
             state.interaction = interaction_for_surface(host->acquire_interaction(), id_);
-            // 초점 변화는 언제나 발행본 게시로 오고 게시는 모든 표면을 깨우므로,
-            // 그리는 길이 곧 알리는 길이다 (accessibility-design.md).
-            announce_accessibility_focus(state.interaction.focused);
         }
-        // typeface는 이 호출이 끝날 때까지 살아 있어야 한다.
-        const sk_sp<SkTypeface> code { context_.apply_frame_appearance(state, frame.get()) };
+        code = context_.apply_frame_appearance(state, frame.get());
         state.tree = tree_.get();
         prepare_frame(state);
+        return true;
+    }
+
+    bool window_surface::render(std::u8string& error)
+    {
+        if (renderer_ == nullptr)
+        {
+            error = u8"The surface has no renderer.";
+            return false;
+        }
+
+        frame_state state {};
+        std::shared_ptr<const ui_frame> frame {};
+        // typeface는 이 호출이 끝날 때까지 살아 있어야 한다.
+        sk_sp<SkTypeface> code {};
+        if (build_frame(state, frame, code, error) == false)
+            return false;
+
+        // 초점 변화는 언제나 발행본 게시로 오고 게시는 모든 표면을 깨우므로,
+        // 그리는 길이 곧 알리는 길이다 (accessibility-design.md).
+        announce_accessibility_focus(state.interaction.focused);
         // 웹뷰를 자리에 앉히고 비울 자리를 받는다. **`prepare_frame` 뒤라야 한다** —
         // 주 표면은 자기 tree를 거기서 집으므로, 앞에 두면 한 frame 낡은 tree에서
         // 자리표를 찾게 된다.
@@ -615,6 +632,90 @@ namespace luil::win32 {
         if (text_input_ != nullptr)
             text_input_->synchronize();
         return renderer_->render(state, error);
+    }
+
+    bool window_surface::capture(const std::u8string& path, std::u8string& error)
+    {
+        if (window_ == nullptr)
+        {
+            error = u8"The surface has no window to capture.";
+            return false;
+        }
+
+        frame_state state {};
+        std::shared_ptr<const ui_frame> frame {};
+        sk_sp<SkTypeface> code {};
+        if (build_frame(state, frame, code, error) == false)
+            return false;
+
+        // 알리지 않는다. 캡처는 **보는 일**이라 접근성 발행본의 기준선을 옮기면
+        // 다음 그리기가 그 사이의 변화를 놓친다 (`announce_accessibility_changes`는
+        // 직전 발행본과 대조하고 그 자리에서 기준선을 새로 잡는다).
+        //
+        // 웹뷰 자리도 비우지 않는다. 그 그림은 합성이 우리 **아래**에 얹는 것이라
+        // 어차피 담기지 않고, 구멍을 내면 그 자리가 검게 남는다.
+        const SkImageInfo info { SkImageInfo::MakeN32Premul(state.width, state.height) };
+        const SkSurfaceProps properties { 0, kRGB_H_SkPixelGeometry };
+        const sk_sp<SkSurface> surface { SkSurfaces::Raster(info, &properties) };
+        if (surface == nullptr)
+        {
+            error = u8"Failed to allocate the capture surface.";
+            return false;
+        }
+
+        // 렌더러가 부르는 것과 **같은 인자**다. codicon 자리에 code(고정폭) typeface를
+        // 넘기면 캡션 버튼처럼 글리프로 그리는 것만 조용히 사라진다 — 나머지는
+        // 멀쩡해서 캡처를 눈으로 볼 때에야 드러난다.
+        //  - `code`는 `state.code_typeface`가 가리키는 것을 살려 두는 몫이다.
+        const sk_sp<SkTypeface> codicon { load_codicon_typeface() };
+        const sk_sp<SkTypeface> ui { configured_ui_typeface() };
+        draw_frame(*surface->getCanvas(), codicon.get(), ui.get(), state);
+
+        SkPixmap pixels {};
+        if (surface->peekPixels(&pixels) == false)
+        {
+            error = u8"Failed to read the captured pixels.";
+            return false;
+        }
+
+        const auto native { utf8_to_utf16(path) };
+        if (native.value.has_value() == false)
+        {
+            error = u8"The capture path is not valid UTF-8.";
+            return false;
+        }
+        // `SkFILEWStream`은 좁은 경로만 받아 한글 경로에서 끊긴다.
+        // 파일은 Win32로 열고 메모리에 담은 것을 그대로 쓴다.
+        SkDynamicMemoryWStream memory {};
+        // **무손실이다.** 화면을 다시 볼 값이라 손실 압축은 글자 가장자리를
+        // 뭉갠다. PNG가 아닌 이유는 이 Skia 패키지에 png 인코더가 없기 때문이다
+        // (webp는 있다 — `skia_use_libwebp_encode`).
+        SkWebpEncoder::Options options {};
+        options.fCompression = SkWebpEncoder::Compression::kLossless;
+        if (SkWebpEncoder::Encode(&memory, pixels, options) == false)
+        {
+            error = u8"Failed to encode the capture.";
+            return false;
+        }
+
+        const sk_sp<SkData> encoded { memory.detachAsData() };
+        const HANDLE file { CreateFileW(native.value->c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) };
+        if (file == INVALID_HANDLE_VALUE)
+        {
+            error = make_hresult_error(u8"Failed to create the capture file.", HRESULT_FROM_WIN32(GetLastError()));
+            return false;
+        }
+
+        DWORD written { 0 };
+        const BOOL wrote { WriteFile(file, encoded->data(), static_cast<DWORD>(encoded->size()), &written, nullptr) };
+        const DWORD failure { GetLastError() };
+        CloseHandle(file);
+        if (wrote == FALSE || written != encoded->size())
+        {
+            error = make_hresult_error(u8"Failed to write the capture file.", HRESULT_FROM_WIN32(failure));
+            return false;
+        }
+        return true;
     }
 
     void window_surface::on_render_failed(const std::u8string& error)

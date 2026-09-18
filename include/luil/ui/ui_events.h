@@ -305,10 +305,27 @@ namespace luil {
     // UI thread만 다룰 수 있는 클립보드 요청이다.
     using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_request>;
 
+    // 지금 화면을 파일로 남긴다 (무손실 WebP).
+    //
+    // 클립보드 요청과 같은 갈래다 — UI thread만 할 수 있고 인자를 나른다. 앱
+    // 상태가 아니므로 logic을 거치지 않는다.
+    //  - 화면을 긁지 않고 그리기와 **같은 길**을 raster로 한 번 더 태운다. 창이
+    //    가려져 있거나 최소화되어 있어도, 다른 desktop에 있어도 같은 그림이다.
+    //  - 웹뷰는 합성이 우리 아래에 얹는 층이라 담기지 않는다.
+    struct capture_request
+    {
+        // 남길 파일 경로다 (UTF-8). 이미 있으면 덮어쓴다.
+        std::u8string path {};
+        // 찍을 표면이다. 비면 주 창이다 (보조 창·popup은 자기 id를 준다).
+        std::u8string surface {};
+
+        [[nodiscard]] bool operator==(const capture_request&) const noexcept = default;
+    };
+
     // element 액션과 interaction controller가 돌려주는 후속 조치다.
     // 액션은 상태를 직접 바꾸지 않고 이 메시지를 반환만 한다.
     // 앱 메시지는 `app_message`에 담겨 다니고 앱이 경계에서 복원한다.
-    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request>;
+    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request>;
 
     // intent 하나를 액션 값으로 싸는 도우미다.
     // `input_action { app_message { intent {} } }` 3중 중첩을 대신한다.
