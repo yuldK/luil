@@ -90,6 +90,7 @@ namespace demo {
         add_theme(luil::theme_preference::light, u8"밝게");
         add_theme(luil::theme_preference::dark, u8"어둡게");
         themes.selected = std::u8string { luil::theme_preference_name(appearance_.theme) };
+        themes.name = u8"테마";
         themes.select = [](const std::u8string& value) {
             for (const luil::theme_preference preference : { luil::theme_preference::system, luil::theme_preference::light, luil::theme_preference::dark })
                 if (value == luil::theme_preference_name(preference))

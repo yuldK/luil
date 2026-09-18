@@ -736,7 +736,11 @@ namespace luil::win32 {
                 // 흘리는 창 **안에** 있을 때만 뜻이 있다. 창이 없으면 들일 자리가
                 // 없고, 그것을 매 요소마다 root에서 다시 찾지 않도록 tree가
                 // 배치 부모 색인으로 답한다.
-                if (tree != nullptr && tree->scroll_container_of(id_) != nullptr)
+                //  - **그 창의 막대는 그 창의 내용이 아니다.** 창이 자기 안에
+                //    세우는 손잡이라 배치로는 안에 있지만, 자기를 자기 안으로
+                //    들이라는 명령은 없는 일이다 ("상태와 기능은 서로 일치해야
+                //    한다"). 그 판정을 술어 하나가 쥔다 (`access_scroll_item`).
+                if (tree != nullptr && access_scroll_item(*tree, id_))
                     *result = static_cast<IScrollItemProvider*>(this);
                 break;
             case UIA_ExpandCollapsePatternId:
@@ -976,7 +980,8 @@ namespace luil::win32 {
                 return UIA_E_ELEMENTNOTAVAILABLE;
             if (access_reachable(*tree, id_) == false)
                 return UIA_E_ELEMENTNOTENABLED;
-            if (tree->scroll_container_of(id_) == nullptr)
+            // 내걸 때와 같은 술어를 쓴다 — 패턴이 서지 않는 자리는 실행도 없다.
+            if (access_scroll_item(*tree, id_) == false)
                 return UIA_E_INVALIDOPERATION;
             // 초점 되살리기와 **같은 길**이다. 얼마나 흘릴지는 그 창이 답하고,
             // 이미 보이면 빈 목록이다 — 그때 S_OK로 답하는 것은 다른 절대 명령이

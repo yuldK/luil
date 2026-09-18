@@ -312,6 +312,8 @@ namespace luil {
     }
     access_info tab_bar_element::accessibility() const
     {
-        return { .role = access_role::tab_list, .name = tooltip() };
+        // 이름은 `search_label` → 툴팁 순서다 (`ui_element::access_name`).
+        // 막대에 툴팁을 달면 탭 오른쪽 빈 자리에서 글 상자가 뜬다.
+        return { .role = access_role::tab_list, .name = access_name() };
     }
 } // namespace luil

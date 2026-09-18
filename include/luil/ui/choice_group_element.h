@@ -37,6 +37,12 @@ namespace luil {
         std::u8string selected {};
         // 없으면 선택지가 눌리지 않는다.
         choice_message_factory select {};
+        // 묶음의 이름이다 (「테마」·「유형」·「난이도」).
+        //
+        // **항목만으로는 반쪽이다.** 화면 읽기가 「어두움, 선택됨」까지는 말해도
+        // 무엇을 고르는 중인지는 묶음이 말한다 — 화면에 세운 머리글과 같은 말을
+        // 적는다. 비면 이름 없는 선택 묶음으로 선다.
+        std::u8string name {};
     };
 
     // 라디오 행 하나의 높이, 토글 묶음의 높이와 버튼 사이 간격이다 (논리 픽셀).
@@ -57,10 +63,10 @@ namespace luil {
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
-        // 라디오 스타일은 선택 container(`radio_group`)로 선다 — 항목의
+        // 두 스타일 다 선택 container(`radio_group`)로 선다 — 항목의
         // SelectionItem이 container를 물을 때 Selection 패턴이 있는 자리가 답이다.
-        // 토글 스타일은 여전히 구조다: 항목이 선택을 모르는 글자 버튼이라
-        // container가 내줄 선택 목록이 없다 (accessibility-design.md).
+        // 그리는 모양만 갈릴 뿐 하는 일이 같아, 토글 항목도 자기 선택을 말한다
+        // (`text_button_config::selected`, accessibility-design.md).
         [[nodiscard]] access_info accessibility() const override;
 
     private:

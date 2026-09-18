@@ -127,9 +127,17 @@ namespace luil {
 
     // 지금 사람의 손이 닿는 자리인가.
     // 보이지 않는 것은 읽을 자리도 실행할 자리도 아니고, 가둠(modal)이 서 있으면
-    // 그 안만이 자리다 — scrim이 포인터를 막고 가둠이 키보드를 막는 그 경계를
+    // 그 안이 자리다 — scrim이 포인터를 막고 가둠이 키보드를 막는 그 경계를
     // 보조 기술도 함께 지난다 (accessibility-action-design.md: "UIA로 할 수
     // 있는 일은 사람이 할 수 있는 일의 부분집합이다").
+    //  - **가둠 밖이어도 포인터가 닿으면 자리다.** modal은 자기가 받은 자리만
+    //    덮으므로 그 밖에 남는 캡션 단추는 사람이 그대로 누른다. 가둠만 보고
+    //    거절하면 보조 기술만 창을 닫지 못해 규약이 거꾸로 선다. 창 전체를 덮는
+    //    modal에서는 scrim이 좌표의 답이라 여전히 거절이다.
+    //    묻는 술어는 **사람이 쓰는 그것**이다 (`ui_tree::hit_test`) — 좌표
+    //    질의(`access_element_at`)는 역할이 있는 것에서 멈추므로 눌러도 통과하는
+    //    이름표 하나에 답이 갈린다. 상자는 아홉 자리로 훑는다. 절반만 덮인
+    //    단추는 사람이 드러난 쪽을 누르기 때문이다.
     //  - root부터 대상까지의 경로 전체가 보여야 한다 — 조상만 숨은 자식도 여기서
     //    걸러진다 (탐색 `access_children`이 거르는 것과 같은 답이다). 이 술어는
     //    **id로 곧장 묻는 길**의 몫이다 — 클라이언트가 쥔 provider는 tree 재빌드를
@@ -154,6 +162,17 @@ namespace luil {
     // container 질의(`access_selection_container_of`)와 패턴 광고가 같은 술어를
     // 쓴다 (accessibility-action-design.md의 `ISelectionProvider`).
     [[nodiscard]] bool access_selection_container(access_role role) noexcept;
+
+    // 이 자리를 흘리는 창 안으로 **들일 수 있는가** (`ui_tree::scroll_container_of`).
+    // 감싸는 창이 없으면 들일 자리도 없다.
+    //  - **그 창의 막대는 그 창의 내용이 아니다.** 창이 자기 안에 세우는 손잡이라
+    //    배치로는 창 안에 있지만, 자기를 자기 안으로 들이라는 명령은 없는 일이다.
+    //  - 거르는 것은 **그 창이 세운** 막대뿐이다. 짧아서 스스로 창이 되지 못한
+    //    안쪽 목록의 막대는 바깥 창이 들일 수 있는 자리라 그대로 대상이다 —
+    //    역할만 보고 막대를 통째로 거르면 그 자리를 함께 잃는다.
+    // ScrollItem을 내걸 때와 실행할 때가 같은 술어를 쓴다
+    // (accessibility-action-design.md).
+    [[nodiscard]] bool access_scroll_item(const ui_tree& tree, const ui_element_id& id);
 
     // 그 id를 감싸는 가장 안쪽 **선택 container**다. 없으면 nullptr다 —
     // 홀로 선 라디오(`check_element`)처럼 묶음 밖의 선택 항목이 그렇다.

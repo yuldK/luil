@@ -23,10 +23,12 @@
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/toast_element.h"
 #include "luil/ui/ui_element.h"
+#include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -58,6 +60,38 @@ namespace {
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
         {}
+    };
+
+    // 자식을 정해진 자리에 그대로 두는 판이다.
+    // 겹침을 만들 수 있어야 "얼마나 가려졌나"를 볼 수 있다 — `test_panel`은
+    // 자식 전부에게 같은 slot을 주므로 절반만 덮인 자리를 지을 수 없다.
+    class test_canvas final : public luil::ui_element
+    {
+    public:
+        using ui_element::ui_element;
+
+        void add(std::unique_ptr<ui_element> child, const luil::rect_f& box)
+        {
+            boxes_.push_back(box);
+            add_child(std::move(child));
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+            std::size_t index { 0u };
+            for (const std::unique_ptr<ui_element>& child : children())
+            {
+                child->arrange(context.for_child(boxes_[index]));
+                ++index;
+            }
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {}
+
+    private:
+        std::vector<luil::rect_f> boxes_ {};
     };
 
     luil::ui_action noop_action()
@@ -120,6 +154,17 @@ namespace {
         const auto* const intent { message->get<access_value_intent>() };
         REQUIRE(intent != nullptr);
         return intent->value;
+    }
+
+    // 흘리기 메시지 하나가 나른 변화량이다 (없거나 모양이 다르면 그 자리에서 실패한다).
+    [[nodiscard]] float delta_of(const std::vector<luil::input_action>& actions)
+    {
+        REQUIRE(actions.size() == 1u);
+        const auto* const message { std::get_if<luil::app_message>(&actions.front()) };
+        REQUIRE(message != nullptr);
+        const auto* const intent { message->get<access_delta_intent>() };
+        REQUIRE(intent != nullptr);
+        return intent->delta;
     }
 
     [[nodiscard]] access_state_intent state_of(const std::optional<std::vector<luil::input_action>>& planned)
@@ -277,13 +322,15 @@ TEST_CASE("An image reads as an image only when described", "[ui][access]")
     REQUIRE(decorative.accessibility().role == luil::access_role::none);
 }
 
-TEST_CASE("Choice items read selection where the radio style knows it", "[ui][access]")
+TEST_CASE("Choice items read selection whichever style draws them", "[ui][access]")
 {
     const luil::choice_message_factory select { [](const std::u8string&) { return luil::input_action {}; } };
-    const luil::choice_group_element radios { { .owner = u8"coffee", .items = { { u8"latte", u8"라떼" }, { u8"mocha", u8"모카" } }, .selected = u8"latte", .select = select } };
+    const luil::choice_group_element radios { { .owner = u8"coffee", .items = { { u8"latte", u8"라떼" }, { u8"mocha", u8"모카" } }, .selected = u8"latte", .select = select, .name = u8"커피" } };
     // 라디오 묶음은 항목들의 선택 container로 선다 — 항목의
     // SelectionItem이 container를 물으면 이 자리가 답이어야 한다.
     REQUIRE(radios.accessibility().role == luil::access_role::radio_group);
+    // 묶음의 이름이 「무엇을 고르는 중인가」다. 항목만으로는 반쪽이다.
+    REQUIRE(radios.accessibility().name == u8"커피");
     REQUIRE(radios.children()[0]->accessibility().role == luil::access_role::radio_button);
     REQUIRE(radios.children()[0]->accessibility().name == u8"라떼");
     REQUIRE(radios.children()[0]->accessibility().selected == true);
@@ -291,13 +338,30 @@ TEST_CASE("Choice items read selection where the radio style knows it", "[ui][ac
     // 켬/끔이 아니므로 Toggle의 자리를 내걸지 않는다.
     REQUIRE(radios.children()[0]->accessibility().checked.has_value() == false);
 
-    // toggle 스타일 항목은 글자 버튼이라 선택을 모른다 — 범위 밖으로 미룬 한계다
-    // (accessibility-design.md). container가 내줄 선택 목록이 없으므로 묶음도
-    // 구조 그대로다.
-    const luil::choice_group_element toggles { { .owner = u8"theme", .style = luil::choice_style::toggle, .items = { { u8"dark", u8"어두움" } }, .selected = u8"dark", .select = select } };
-    REQUIRE(toggles.accessibility().role == luil::access_role::none);
-    REQUIRE(toggles.children()[0]->accessibility().role == luil::access_role::button);
+    // **토글 스타일도 같은 일을 한다** — 그리는 모양만 글자 버튼이다. 강조 채움은
+    // 「기본 동작」에도 쓰이는 그림이라 버튼 혼자서는 그 둘을 가를 수 없고,
+    // 지금 고른 값을 아는 묶음이 그 상태를 실어 준다.
+    luil::choice_group_config toggle_config {};
+    toggle_config.owner = u8"theme";
+    toggle_config.style = luil::choice_style::toggle;
+    toggle_config.items = { { u8"dark", u8"어두움" }, { u8"light", u8"밝음" } };
+    toggle_config.selected = u8"dark";
+    toggle_config.select = select;
+    toggle_config.name = u8"테마";
+    const luil::choice_group_element toggles { std::move(toggle_config) };
+    REQUIRE(toggles.accessibility().role == luil::access_role::radio_group);
+    REQUIRE(toggles.accessibility().name == u8"테마");
+    REQUIRE(toggles.children()[0]->accessibility().role == luil::access_role::radio_button);
+    REQUIRE(toggles.children()[0]->accessibility().name == u8"어두움");
+    REQUIRE(toggles.children()[0]->accessibility().selected == true);
+    REQUIRE(toggles.children()[1]->accessibility().selected == false);
+    // 고르는 값이라 Toggle이 아니라 SelectionItem이다.
     REQUIRE(toggles.children()[0]->accessibility().checked.has_value() == false);
+
+    // 선택을 싣지 않은 글자 버튼은 지금까지 그대로 단추다.
+    const luil::text_button_element plain { luil::ui_element_id { kind_item, u8"save" }, luil::text_button_config { .text = u8"저장", .visual = luil::text_button_visual::accent } };
+    REQUIRE(plain.accessibility().role == luil::access_role::button);
+    REQUIRE(plain.accessibility().selected.has_value() == false);
 }
 
 TEST_CASE("A selection item finds its selection container, not just any parent", "[ui][access]")
@@ -464,8 +528,10 @@ TEST_CASE("A caption reads as the title bar and its window buttons carry tooltip
 
 TEST_CASE("A modal host reads as a dialog and its scrim stays silent", "[ui][access]")
 {
-    const luil::modal_host_element host { { .owner = u8"confirm", .outside = noop_action() } };
+    const luil::modal_host_element host { { .owner = u8"confirm", .name = u8"이 파일을 지울까요", .outside = noop_action() } };
     REQUIRE(host.accessibility().role == luil::access_role::dialog);
+    // 화면 읽기는 dialog가 뜨는 순간 이 이름을 말한다.
+    REQUIRE(host.accessibility().name == u8"이 파일을 지울까요");
     // scrim은 바깥 클릭 액션이 있어도 이름이 없어 승격되지 않는다.
     REQUIRE(host.children()[0]->id().kind == luil::ui_element_kind::modal_scrim);
     REQUIRE(host.children()[0]->accessibility().role == luil::access_role::none);
@@ -1029,4 +1095,172 @@ TEST_CASE("The tree names the scroll container that can reveal an element", "[ui
     REQUIRE(tree.scroll_container_of(inside->id()) == nullptr);
     REQUIRE(tree.scroll_container_of({ kind_item, u8"outside" }) == nullptr);
     REQUIRE(tree.scroll_container_of({ kind_item, u8"없다" }) == nullptr);
+}
+
+TEST_CASE("A container takes its name from the access name, not a visible tooltip", "[ui][access]")
+{
+    // 목록·탭 막대·막대는 자기 글을 세우지 않는다. 이름을 주려고 툴팁을 달면
+    // 화면에 글 상자가 뜨므로 화면에 뜨지 않는 이름의 자리를 따로 쓴다.
+    luil::list_config config {};
+    config.owner = u8"files";
+    config.items = { { .key = u8"a", .label = u8"가" }, { .key = u8"b", .label = u8"나" } };
+    config.select = [](const std::u8string&) { return luil::input_action {}; };
+    config.scroll = [](const float delta) { return luil::make_app_action(access_delta_intent { delta }); };
+    auto list { std::make_unique<luil::list_element>(std::move(config)) };
+    list->set_access_name(u8"파일 목록");
+    const luil::ui_element* const list_view { list.get() };
+
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::move(list));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f) };
+
+    REQUIRE(list_view->accessibility().name == u8"파일 목록");
+    REQUIRE(list_view->tooltip().empty());
+    // 안의 막대는 앱이 손댈 수 없는 부품이라 목록의 이름을 물려받는다.
+    const luil::ui_element* const bar { tree.find({ luil::ui_element_kind::list_scrollbar, u8"files" }) };
+    REQUIRE(bar != nullptr);
+    REQUIRE(bar->accessibility().name == u8"파일 목록");
+
+    // 툴팁뿐이면 그것이 이름이다 (지금까지의 자리 — 넘침 버튼이 그렇게 읽힌다).
+    luil::tab_bar_element tabs { { .owner = u8"docs", .items = { { u8"one", u8"하나" } }, .selected = u8"one" } };
+    tabs.set_tooltip(u8"열린 문서");
+    REQUIRE(tabs.accessibility().name == u8"열린 문서");
+    // 전용 이름이 있으면 그것이 이긴다.
+    tabs.set_access_name(u8"문서 탭");
+    REQUIRE(tabs.accessibility().name == u8"문서 탭");
+}
+
+TEST_CASE("A list is the scrolling window its rows are revealed in", "[ui][access]")
+{
+    luil::list_config config {};
+    config.owner = u8"log";
+    config.row_height = 20.0f;
+    for (int index { 0 }; index < 10; ++index)
+        config.items.push_back({ .key = u8"row" + std::u8string { static_cast<char8_t>(u8'0' + index) }, .label = u8"줄" });
+    config.select = [](const std::u8string&) { return luil::input_action {}; };
+    config.scroll = [](const float delta) { return luil::make_app_action(access_delta_intent { delta }); };
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::list_element>(std::move(config)));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 60.0f }, 1.0f) };
+
+    // 흘릴 것이 있으면 목록이 그 창이다 — 화면 밖으로 밀린 행에 "이 자리를
+    // 화면에 들여라"가 설 자리가 생긴다.
+    const luil::ui_element* const container { tree.scroll_container_of({ luil::ui_element_kind::list_row, u8"row9" }) };
+    REQUIRE(container != nullptr);
+    REQUIRE(container->id().kind == luil::ui_element_kind::list);
+    REQUIRE(container->scroll() != nullptr);
+    // 마지막 행을 들이려면 실제로 흘려야 한다 (이미 보이면 빈 목록이다).
+    // 값도 함께 못 박는다 — 창이 60이고 마지막 행의 아래가 200이라 140을 흘려야
+    // 그 행의 아래가 창의 아래에 닿는다. 목록이 자기 bounds로 다시 재면 여기가
+    // 어긋난다 (`list_element::scroll_delta_to_reveal`).
+    REQUIRE(delta_of(luil::route_reveal(tree, { luil::ui_element_kind::list_row, u8"row9" })) == 140.0f);
+    REQUIRE(luil::route_reveal(tree, { luil::ui_element_kind::list_row, u8"row0" }).empty());
+
+    // **그 창의 막대는 그 창의 내용이 아니다.** 배치로는 목록 안이지만 자기를
+    // 자기 안으로 들이라는 명령은 없는 일이다.
+    REQUIRE(luil::access_scroll_item(tree, { luil::ui_element_kind::list_row, u8"row9" }));
+    REQUIRE(luil::access_scroll_item(tree, { luil::ui_element_kind::list_scrollbar, u8"log" }) == false);
+
+    // 흘릴 것이 없는 짧은 목록은 임자가 아니다 (휠이 거기서 죽지 않는다).
+    luil::list_config short_config {};
+    short_config.owner = u8"short";
+    short_config.row_height = 20.0f;
+    short_config.items = { { .key = u8"only", .label = u8"하나" } };
+    short_config.select = [](const std::u8string&) { return luil::input_action {}; };
+    short_config.scroll = [](const float delta) { return luil::make_app_action(access_delta_intent { delta }); };
+    auto short_root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    short_root->add(std::make_unique<luil::list_element>(std::move(short_config)));
+    const luil::ui_tree short_tree { luil::make_arranged_tree(std::move(short_root), { 0.0f, 0.0f, 200.0f, 60.0f }, 1.0f) };
+    REQUIRE(short_tree.scroll_container_of({ luil::ui_element_kind::list_row, u8"only" }) == nullptr);
+}
+
+TEST_CASE("An inner bar its own list cannot reveal is still the outer window's item", "[ui][access]")
+{
+    // 짧은 목록은 스스로 창이 아니다. 그 막대를 화면에 들이는 것은 바깥 영역의
+    // 일이라, 역할만 보고 막대를 통째로 거르면 그 자리를 함께 잃는다.
+    luil::list_config inner {};
+    inner.owner = u8"short";
+    inner.row_height = 20.0f;
+    inner.items = { { .key = u8"only", .label = u8"하나" } };
+    inner.select = [](const std::u8string&) { return luil::input_action {}; };
+    inner.scroll = [](const float) { return luil::make_app_action(access_intent { u8"list" }); };
+
+    luil::scroll_area_config page {};
+    page.owner = u8"page";
+    page.content_height = 400.0f;
+    page.scroll = [](const float) { return luil::make_app_action(access_intent { u8"area" }); };
+    auto area { std::make_unique<luil::scroll_area_element>(std::move(page)) };
+    area->set_content(std::make_unique<luil::list_element>(std::move(inner)));
+
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::move(area));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+
+    // 영역이 자기 안에 세운 막대는 자기를 자기 안으로 들일 수 없다.
+    REQUIRE(luil::access_scroll_item(tree, { luil::ui_element_kind::scroll_area_bar, u8"page" }) == false);
+    // 목록의 막대는 그 영역의 내용이다 — 영역이 그 자리를 화면에 들일 수 있다.
+    REQUIRE(luil::access_scroll_item(tree, { luil::ui_element_kind::list_scrollbar, u8"short" }));
+
+    // 휠도 같은 답이다. 짧은 목록에서 죽지 않고 바깥 판이 그대로 굴러간다.
+    REQUIRE(tag_of(luil::route_wheel(tree, 100.0f, 50.0f, 1.0f)) == u8"area");
+}
+
+TEST_CASE("Outside a trap, what the pointer can reach stays reachable", "[ui][access]")
+{
+    // 앱의 modal은 자기가 받은 자리만 덮는다. 그 위에 남는 캡션 단추는 사람이
+    // 그대로 누르므로 보조 기술도 누를 수 있어야 한다 — 가둠만 보고 거절하면
+    // "보조 기술로 할 수 있는 일은 사람이 할 수 있는 일의 부분집합"이 거꾸로 선다.
+    // 겹치지 않는 두 칸으로 나눈다 — 캡션 줄과 그 아래의 dialog다.
+    auto root { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_panel, u8"root" }, luil::stack_config {}) };
+    auto caption { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"close" }, luil::text_button_config { .text = u8"닫기" }) };
+    caption->set_action(luil::ui_trigger::left_click, tagged_action(u8"close"));
+    root->add(std::move(caption), 20.0f);
+    auto dialog { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"dialog" }) };
+    dialog->set_focus_trap(true);
+    dialog->set_hit_opaque(true);
+    auto inside { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"ok" }, luil::text_button_config { .text = u8"확인" }) };
+    inside->set_action(luil::ui_trigger::left_click, tagged_action(u8"ok"));
+    dialog->add(std::move(inside));
+    root->add(std::move(dialog), 80.0f);
+
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+    REQUIRE(luil::access_reachable(tree, { kind_item, u8"ok" }));
+    // 가둠 밖이지만 scrim이 덮지 않는 자리라 여전히 손이 닿는다.
+    REQUIRE(luil::access_reachable(tree, { kind_item, u8"close" }));
+}
+
+TEST_CASE("A trap refuses only what it actually covers", "[ui][access]")
+{
+    // scrim이 오른쪽만 덮는다. 「절반」은 왼쪽 끝이 드러나고 「묻힘」은 통째로
+    // 잠긴다 — 사람의 손이 그렇게 갈리므로 보조 기술도 그렇게 갈려야 한다.
+    auto root { std::make_unique<test_canvas>(luil::ui_element_id { kind_panel, u8"root" }) };
+    auto half { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"half" }, luil::text_button_config { .text = u8"절반" }) };
+    half->set_action(luil::ui_trigger::left_click, tagged_action(u8"half"));
+    root->add(std::move(half), { 0.0f, 0.0f, 100.0f, 20.0f });
+    auto buried { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"buried" }, luil::text_button_config { .text = u8"묻힘" }) };
+    buried->set_action(luil::ui_trigger::left_click, tagged_action(u8"buried"));
+    root->add(std::move(buried), { 120.0f, 0.0f, 40.0f, 20.0f });
+
+    // 누르면 그대로 통과하는 이름표를 단추 위에 덮는다. 좌표 질의는 역할이 있는
+    // 것에서 멈추므로, 그것으로 물으면 사람이 누르는 단추를 보조 기술만 거절한다.
+    auto under { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"under" }, luil::text_button_config { .text = u8"아래" }) };
+    under->set_action(luil::ui_trigger::left_click, tagged_action(u8"under"));
+    root->add(std::move(under), { 0.0f, 40.0f, 40.0f, 20.0f });
+    root->add(make_note(u8"veil", u8"읽기 전용"), { 0.0f, 40.0f, 40.0f, 20.0f });
+
+    auto dialog { std::make_unique<test_canvas>(luil::ui_element_id { kind_panel, u8"dialog" }) };
+    dialog->set_focus_trap(true);
+    auto scrim { std::make_unique<test_canvas>(luil::ui_element_id { kind_panel, u8"scrim" }) };
+    scrim->set_hit_opaque(true);
+    dialog->add(std::move(scrim), { 50.0f, 0.0f, 150.0f, 100.0f });
+    root->add(std::move(dialog), { 0.0f, 0.0f, 200.0f, 100.0f });
+
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+    // 왼쪽 끝이 드러났으므로 사람은 누를 수 있다.
+    REQUIRE(luil::access_reachable(tree, { kind_item, u8"half" }));
+    // 통째로 덮인 것은 여전히 거절이다.
+    REQUIRE(luil::access_reachable(tree, { kind_item, u8"buried" }) == false);
+    // 이름표는 hit을 흡수하지 않으므로 가림이 아니다.
+    REQUIRE(tree.find({ kind_item, u8"veil" })->accessibility().role == luil::access_role::static_text);
+    REQUIRE(luil::access_reachable(tree, { kind_item, u8"under" }));
 }

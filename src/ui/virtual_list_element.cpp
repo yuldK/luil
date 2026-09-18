@@ -565,6 +565,8 @@ namespace luil {
             realized_ = virtual_list_visible_range(config_.items, config_.row_height, offset, viewport_height_, config_.overscan);
             build_rows();
         }
+        // 이름은 안쪽 영역을 지나 막대까지 이어진다 (`list_element`와 같은 줄).
+        area_->set_access_name(access_name());
         area_->arrange(context.for_child(context.slot));
     }
 
@@ -628,7 +630,7 @@ namespace luil {
 
     access_info virtual_list_element::accessibility() const
     {
-        access_info info { .role = access_role::list, .name = tooltip() };
+        access_info info { .role = access_role::list, .name = access_name() };
         // 커서가 선 항목의 이름을 목록의 "지금 값"으로 답한다.
         // 형제 순회는 지어진 행 안이라, 창 밖의 항목은 그 순회로 닿지 않는다 —
         // 그래서 지금 어디에 서 있는지는 목록 자신이 말해야 한다.

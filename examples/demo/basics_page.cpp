@@ -461,6 +461,8 @@ namespace demo {
         // scrim·초점 가둠·Esc는 host의 몫이다.
         // 앱이 정하는 것은 "무엇을 닫는가"뿐이다.
         luil::modal_host_config modal {};
+        // dialog의 이름이다. 화면 읽기가 뜨는 순간 말하는 말이라 캡션과 같은 말을 적는다.
+        modal.name = caption.title;
         modal.outside = luil::make_message_action(dialog_intent { false });
         modal.dismiss = luil::make_message_action(dialog_intent { false });
         // 뜨면 취소에 서고, 닫히면 이 dialog를 연 버튼으로 돌아간다.

@@ -164,7 +164,9 @@ namespace luil {
         // 범위는 흘릴 수 있는 양이다. 내용이 창보다 짧으면 0이다.
         const float maximum { config_.content_height > config_.viewport_height ? config_.content_height - config_.viewport_height : 0.0f };
         const float clamped { config_.scroll_offset < 0.0f ? 0.0f : (config_.scroll_offset > maximum ? maximum : config_.scroll_offset) };
-        return { .role = access_role::scroll_bar, .name = tooltip(), .range = access_range { 0.0f, maximum, clamped } };
+        // 이름은 `search_label` → 툴팁 순서다 (`ui_element::access_name`) —
+        // 막대는 글을 세우지 않아 툴팁 말고 이름을 담을 자리가 필요하다.
+        return { .role = access_role::scroll_bar, .name = access_name(), .range = access_range { 0.0f, maximum, clamped } };
     }
 
     std::optional<std::vector<input_action>> scrollbar_element::access_actions(const access_request& request) const

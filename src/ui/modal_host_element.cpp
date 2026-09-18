@@ -93,7 +93,8 @@ namespace luil {
     }
     access_info modal_host_element::accessibility() const
     {
-        // 이름은 통상 안에 담긴 dialog 캡션이 말한다.
-        return { .role = access_role::dialog };
+        // 이름은 앱이 준 말이다. 안에 담긴 캡션 글과 같은 말을 적는 자리라
+        // 라이브러리가 지어낼 수 있는 것이 없다 (`modal_host_config::name`).
+        return { .role = access_role::dialog, .name = config_.name };
     }
 } // namespace luil

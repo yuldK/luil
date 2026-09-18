@@ -64,9 +64,10 @@ namespace luil {
     float scroll_area_element::scroll_delta_to_reveal(const rect_f& target) const
     {
         // 안쪽 창이 답한다.
-        // **바깥인 이 영역을 이름 대도 옳은 값이 나온다**는 것이 요점이다 — 이
-        // 영역의 bounds는 막대 칸까지 품어 창보다 넓고, 그것으로 재면 마지막 행이
-        // 막대 밑에 남는다 (표를 둘로 나눠야 했던 바로 그 자리다).
+        // **바깥인 이 영역을 이름 대도 옳은 값이 나온다**는 것이 요점이다 — 다듬은
+        // offset과 배율을 쥔 것이 그 창뿐이라, 이 영역이 자기 bounds로 다시 재면
+        // 같은 식이 두 곳에 살고 언젠가 어긋난다 (표를 둘로 나눠야 했던 바로 그
+        // 자리다).
         return view_->scroll_delta_to_reveal(target);
     }
 
@@ -129,6 +130,8 @@ namespace luil {
         // 그것이 Tab의 자리로 남으면 사용자는 아무 일도 하지 않는 자리를 한 번
         // 더 지나고, 거기서 누른 키는 조용히 사라진다.
         bar_->set_tab_stop(config_.bar_tab_stop && metrics_.overflowing());
+        // 영역에 이름이 있으면 막대도 그 이름으로 읽힌다 (`list_element`와 같은 줄).
+        bar_->set_access_name(access_name());
         // 막대가 재는 창 높이는 **창이 실제로 받은 높이**다 (`list_element`와 같은 줄).
         bar_->set_metrics(metrics_.content_height, metrics_.viewport_height, metrics_.scroll_offset);
         bar_->arrange(context.for_child({ context.slot.x + context.slot.width - bar_width, context.slot.y, bar_width, context.slot.height }));

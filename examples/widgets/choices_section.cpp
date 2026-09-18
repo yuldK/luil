@@ -30,6 +30,8 @@ namespace widgets {
         fruit.selected = state.fruit;
         // 선택 메시지 factory는 고른 값(value)을 받아 메시지를 만든다.
         fruit.select = [](const std::u8string& value) { return luil::make_app_action(choose_fruit_intent { value }); };
+        // 묶음의 이름이 「무엇을 고르는 중인가」다.
+        fruit.name = u8"과일";
         // 높이는 정적 사이저가 알려 준다 (논리 픽셀). 배치 길이에 같은 값을 쓴다.
         const float fruit_height { luil::choice_group_element::height_for(fruit) };
         auto fruit_group { std::make_unique<luil::choice_group_element>(fruit) };
@@ -56,6 +58,7 @@ namespace widgets {
         };
         view.selected = state.view;
         view.select = [](const std::u8string& value) { return luil::make_app_action(choose_view_intent { value }); };
+        view.name = u8"보기 방식";
         const float view_height { luil::choice_group_element::height_for(view) };
 
         // 낱개 컨트롤 셋: 같은 element를 style만 바꿔 쓴다.

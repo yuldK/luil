@@ -41,6 +41,8 @@ namespace demo {
         coffee.items = { { u8"latte", u8"라떼" }, { u8"mocha", u8"모카" }, { u8"drip", u8"드립" } };
         coffee.selected = coffee_;
         coffee.select = [](const std::u8string& value) { return luil::make_app_action(coffee_intent { value }); };
+        // 묶음의 이름이 「무엇을 고르는 중인가」다. 화면의 머리글과 같은 말을 적는다.
+        coffee.name = u8"음료";
         const float coffee_height { luil::choice_group_element::height_for(coffee) };
 
         luil::stack_config inner_config {};
@@ -66,6 +68,7 @@ namespace demo {
         view.items = { { u8"grid", u8"바둑판" }, { u8"list", u8"목록" }, { u8"detail", u8"자세히" } };
         view.selected = view_;
         view.select = [](const std::u8string& value) { return luil::make_app_action(view_intent { value }); };
+        view.name = u8"보기 방식";
         const float view_height { luil::choice_group_element::height_for(view) };
 
         luil::stack_config config {};

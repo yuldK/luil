@@ -107,6 +107,22 @@ namespace luil {
         // link는 채울 상자가 없으므로 기본 버튼 표시와 Enter 대상 지정에서 제외한다.
         // 입력 우선순위는 enter-default-design.md를 따른다.
         bool default_button { false };
+        // 서로 배타적인 값 가운데 **이것이 고른 것인가**.
+        //
+        // 값이 있으면 보조 기술에 라디오 항목(`radio_button`)으로 서고 그 선택
+        // 상태를 함께 말한다. 비어 있으면 지금까지의 글자 버튼 그대로다.
+        //  - **패턴이 Invoke에서 Select로 갈린다.** 상태를 든 것은 그 상태의
+        //    패턴으로 실행한다는 기존 규칙이라(`invokable`), 값을 실은 버튼은
+        //    더 이상 Invoke를 내걸지 않는다.
+        //
+        // **그림으로는 알 수 없어 따로 싣는다.** 강조 시각(`text_button_visual::accent`)은
+        // 「Enter가 여기로 간다」에도 「이것이 고른 값이다」에도 쓰이므로, 채움만 보고
+        // 선택을 추론하면 저장 버튼이 골라진 것이 된다. 아는 것은 세우는 쪽뿐이라
+        // 그 답을 싣는 자리를 연다 (accessibility-action-design.md의 "상태와 기능은
+        // 서로 일치해야 한다").
+        //  - 담는 줄이 이름 있는 선택 container 안이어야 「무엇을 고르는 중인가」까지
+        //    읽힌다 (`choice_group_config::name`).
+        std::optional<bool> selected {};
         // 팔레트에서 채움과 글자 색을 직접 고른다.
         // 비어 있으면 `visual`이 정한 색 그대로다 — 지금까지의 글자 버튼이 그 특수 경우다.
         //

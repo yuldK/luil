@@ -110,6 +110,10 @@ namespace luil {
             text_button_config button_config {};
             button_config.text = item.label;
             button_config.visual = selected ? text_button_visual::accent : text_button_visual::normal;
+            // **그림과 함께 상태도 싣는다.** 강조 채움은 「기본 동작」에도 쓰이는
+            // 그림이라 버튼 혼자서는 그 둘을 가를 수 없다. 여기는 가를 수 있다 —
+            // 지금 고른 값을 알고 있는 자리다 (accessibility-action-design.md).
+            button_config.selected = selected;
             auto button { std::make_unique<text_button_element>(ui_element_id { ui_element_kind::choice, item.value }, std::move(button_config)) };
             button->set_search_label(item.label);
             if (config_.select != nullptr)
@@ -171,10 +175,9 @@ namespace luil {
 
     access_info choice_group_element::accessibility() const
     {
-        // 라디오 묶음은 항목들의 선택 container다. 토글 스타일은 항목이 선택을
-        // 모르는 글자 버튼이라 container로 세울 것이 없다 — 구조로 접힌다.
-        if (config_.style == choice_style::radio)
-            return { .role = access_role::radio_group };
-        return ui_element::accessibility();
+        // **스타일이 갈라도 하는 일은 하나다** — 여럿 가운데 하나를 고른다.
+        // 그래서 두 스타일 다 항목들의 선택 container로 서고, 이름은 앱이
+        // 준 말이다 (「무엇을 고르는 중인가」는 묶음만이 답할 수 있다).
+        return { .role = access_role::radio_group, .name = config_.name };
     }
 } // namespace luil

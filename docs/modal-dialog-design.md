@@ -12,6 +12,7 @@ Host는 내용을 묻지 않는다. `set_content()`는 어떤 `ui_element`든 �
 auto modal = std::make_unique<luil::modal_host_element>(
     luil::modal_host_config {
         .owner = u8"delete-confirmation",
+        .name = u8"이 파일을 지울까요",
         .scrim_opacity = 0.45f,
         .outside = luil::make_message_action(cancel_delete {}),
         .dismiss = luil::make_message_action(cancel_delete {}),
@@ -25,6 +26,8 @@ modal->set_content(make_delete_dialog());
 ```
 
 `owner`는 같은 tree의 여러 modal host id를 구분한다. 앱은 dialog가 열려 있을 때만 host를 tree에 포함한다.
+
+`name`은 dialog의 이름이다. 화면 읽기는 dialog가 뜨는 순간 그 이름을 말하므로 안에 담은 캡션 글과 같은 말을 적는다 — 그 글은 dialog 안의 한 줄일 뿐이라, 이름이 비면 "대화상자"라고만 들린다 ([접근성](accessibility-design.md)).
 
 ## 포인터 차단
 

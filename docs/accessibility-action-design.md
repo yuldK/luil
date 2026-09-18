@@ -54,11 +54,13 @@ Provider는 element의 현재 semantic 정보가 지원하는 pattern만 공개�
 | RangeValue | `range`가 있음 | range 조회, 계획이 있을 때만 쓰기 |
 | Value | edit, combo box 또는 비어 있지 않은 text value | 값 조회, edit는 text 경로로 쓰기 |
 | Text | editable element에 text-input document가 있음 | text range 공개 |
-| ScrollItem | 흘리는 창 안에 있음 (`ui_tree::scroll_container_of`) | 그 창을 이 자리가 보이도록 흘린다 |
+| ScrollItem | 흘리는 창 안에 있고 그 창이 세운 막대가 아님 (`access_scroll_item`) | 그 창을 이 자리가 보이도록 흘린다 |
 
 ScrollItem은 초점 되살리기와 **같은 길**을 탄다. 얼마나 흘릴지는 그 창이 답하고(`route_reveal`), 이미 보이면 아무 동작도 dispatch하지 않고 S_OK다 — 다른 절대 명령이 "이미 그 상태"에 답하는 것과 같은 규약이다. 흘리는 창이 없으면 패턴을 내걸지 않고, 그래도 호출되면 `UIA_E_INVALIDOPERATION`이다.
 
-**`scroll_source`를 세우는 element만 대상이다.** 지금은 `scroll_area_element` 하나다. `list_element`와 `virtual_list_element`는 application의 `scroll_route` 표로 흘리므로 library 혼자서는 그 행을 화면에 들일 수 없고, 그래서 그 자리에는 패턴이 서지 않는다. 그 경로까지 열려면 focus가 그러듯 요청을 input controller와 policy로 보내야 한다.
+**`scroll_source`를 세우는 element만 대상이다.** `scroll_area_element`, `list_element`, 그리고 안에 scroll area를 두는 `virtual_list_element`가 그 창이다. 셋 다 흘릴 것이 있을 때만 창이 되므로 짧은 목록의 행에는 패턴이 서지 않는다 — 들일 자리가 없는 명령을 내걸지 않는 것이 "상태와 기능은 서로 일치해야 한다"의 같은 자리다. 앱이 `scroll_route` 표로만 흘리는 자기 컨테이너는 여전히 대상이 아니다. 그 경로까지 열려면 focus가 그러듯 요청을 input controller와 policy로 보내야 한다.
+
+**그 창의 막대는 그 창의 내용이 아니다.** 창이 자기 안에 세우는 손잡이라 배치로는 창 안에 있지만, 자기를 자기 안으로 들이라는 명령은 없는 일이다. 거르는 것은 **그 창이 세운** 막대뿐이라 창의 직계 자식만 묻는다 — 내용은 언제나 안쪽 창 아래에 살고, 짧아서 스스로 창이 되지 못한 안쪽 목록의 막대는 바깥 창이 들일 수 있는 자리라 그대로 대상이다. 역할만 보고 막대를 통째로 거르면 그 자리를 함께 잃는다. 내걸 때와 실행할 때가 같은 술어(`access_scroll_item`)를 쓴다.
 
 Pattern 제공 여부와 쓰기 가능 여부는 별도로 판정한다. RangeValue의 `get_IsReadOnly`는 set-value 계획이 있는지 확인한다. Provider는 NaN, infinity, 공개된 최솟값과 최댓값 범위를 벗어난 값을 거부한다.
 
@@ -66,7 +68,9 @@ Value에서 combo box와 그 밖의 textual value는 읽기 전용이다. Edit�
 
 ## 도달 가능성과 오류
 
-실행 직전에 provider는 현재 tree에서 id를 다시 찾고 `enabled()`와 `access_reachable(tree, id)`를 확인한다. Element와 모든 ancestor가 visible이고 활성 focus trap이 있다면 그 안에 있을 때만 도달 가능하다. 따라서 automation은 modal overlay 뒤의 control을 실행할 수 없다. Viewport 밖으로 clip된 것만으로는 도달 불가능해지지 않는다. Keyboard focus가 해당 항목을 화면에 나타낼 수 있기 때문이다.
+실행 직전에 provider는 현재 tree에서 id를 다시 찾고 `enabled()`와 `access_reachable(tree, id)`를 확인한다. Element와 모든 ancestor가 visible이어야 하고, 활성 focus trap이 있으면 그 안이 자리다. 따라서 automation은 modal overlay 뒤의 control을 실행할 수 없다. Viewport 밖으로 clip된 것만으로는 도달 불가능해지지 않는다. Keyboard focus가 해당 항목을 화면에 나타낼 수 있기 때문이다.
+
+**Trap 밖이어도 pointer가 닿으면 도달 가능하다.** Modal host는 자기가 받은 자리만 덮으므로 그 밖에 남는 caption 버튼은 사람이 그대로 누른다. Trap만 보고 거절하면 보조 기술만 창을 닫지 못해 "UIA로 할 수 있는 일은 사람이 할 수 있는 일의 부분집합이다"가 거꾸로 선다. 그래서 trap 밖의 element에는 같은 질문을 pointer에게 다시 묻는다: 이 상자 안을 눌렀을 때 답이 이 element인가. 묻는 술어는 **사람이 쓰는 그것**이다(`ui_tree::hit_test`) — 좌표 질의(`access_element_at`)는 역할이 있는 것에서 멈추므로, 눌러도 그대로 통과하는 이름표가 위에 떠 있기만 해도 사람은 누르는데 보조 기술만 거절당한다. 상자는 아홉 자리로 훑는다. 가운데 한 점만 보면 절반이 덮인 버튼을 거절하는데, 사람은 드러난 쪽을 그대로 누르기 때문이다. 창 전체를 덮는 modal에서는 scrim이 `hit_opaque`로 hit을 흡수해 여전히 거절이다.
 
 UIA 경계는 실패 원인을 다음과 같이 구분한다.
 

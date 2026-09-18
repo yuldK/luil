@@ -138,6 +138,11 @@ namespace luil {
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        // 안쪽 창이 답한다 — 다듬은 offset과 배율을 쥔 것이 그 창뿐이라,
+        // 목록이 자기 bounds로 다시 재면 같은 식이 두 곳에 살고 언젠가 어긋난다.
+        // 그래서 바깥인 목록을 이름 대도 옳은 값이 나온다 (`scroll_area_element`와
+        // 같은 자리 — 기본값은 「나는 흘리지 않는다」라 재정의가 없으면 0이다).
+        [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
         [[nodiscard]] access_info accessibility() const override;
 
     private:

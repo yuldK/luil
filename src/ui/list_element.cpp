@@ -336,6 +336,11 @@ namespace luil {
         return config_.scroll_offset;
     }
 
+    float list_element::scroll_delta_to_reveal(const rect_f& target) const
+    {
+        return view_->scroll_delta_to_reveal(target);
+    }
+
     void list_element::arrange(const arrange_context& context)
     {
         set_bounds(context.slot);
@@ -353,8 +358,29 @@ namespace luil {
         // 다듬은 값을 그대로 물려받아 앱이 같은 값을 상태에 되돌릴 수 있게 한다.
         maximum_scroll_ = view_->maximum_scroll();
         config_.scroll_offset = view_->scroll_offset();
+
+        // **흘릴 것이 있으면 이 목록이 그 창이다** (`scroll_area_element`와 같은 판정).
+        // 휠과 초점 되살리기가 표 없이 임자를 찾고, 보조 기술의 "이 자리를 화면에
+        // 들여라"(ScrollItem)도 같은 길을 탄다 — 창을 세우지 않으면 화면 밖으로
+        // 밀린 행에 그 명령이 설 자리가 없다 (accessibility-action-design.md).
+        if (config_.scroll != nullptr)
+        {
+            if (maximum_scroll_ > 0.0f)
+            {
+                scroll_source source {};
+                source.scroll = config_.scroll;
+                source.scale = scale;
+                set_scroll_source(std::move(source));
+            }
+            else
+                set_scroll_source(std::nullopt);
+        }
+
         if (scrollbar_ == nullptr)
             return;
+        // 목록에 이름이 있으면 막대도 그 이름으로 읽힌다 — 앱이 손댈 수 없는
+        // 안쪽 부품이라 이름을 물려주는 것이 유일한 길이다 (`ui_element::access_name`).
+        scrollbar_->set_access_name(access_name());
 
         // 막대가 재는 창 높이는 **창이 실제로 받은 높이**다. 목록이 다시 계산하면
         // 같은 식이 두 곳에 살고 언젠가 어긋난다 (`clamp_scroll`의 규칙과 같다).
@@ -373,6 +399,8 @@ namespace luil {
     }
     access_info list_element::accessibility() const
     {
-        return { .role = access_role::list, .name = tooltip() };
+        // 이름은 `search_label` → 툴팁 순서다 (`ui_element::access_name`).
+        // 목록에 툴팁을 달면 행 사이 빈 자리에서 글 상자가 뜬다.
+        return { .role = access_role::list, .name = access_name() };
     }
 } // namespace luil

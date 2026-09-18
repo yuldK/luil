@@ -443,6 +443,16 @@ namespace luil {
         // 묶음 안 글자 탐색이 읽는 글이다 (그리기에는 쓰지 않는다).
         // 비어 있으면 그 항목은 글자로 찾을 수 없다.
         [[nodiscard]] const std::u8string& search_label() const noexcept;
+        // 보조 기술이 읽을 이름이다: `set_access_name` → `search_label` → tooltip 순서.
+        //
+        // **툴팁으로는 이름을 줄 수 없는 자리가 있다.** 목록·탭 막대·스크롤
+        // 막대처럼 자기 글을 세우지 않는 컨테이너에 이름을 주려고 툴팁을 달면
+        // 화면에 글 상자가 뜬다. 그래서 화면에 뜨지 않는 이름의 자리를 따로 둔다.
+        //  - 글자 탐색의 글(`search_label`)로도 물러선다. 항목이 보이는 글을
+        //    거기 적어 두고 있으면 그것이 곧 사람이 부르는 이름이다.
+        //  - `accessibility()`를 재정의한 element도 이 술어를 그대로 쓴다. 이름의
+        //    원천이 자리마다 갈리면 앱이 어디에 무엇을 적어야 할지 알 수 없다.
+        [[nodiscard]] const std::u8string& access_name() const noexcept;
         [[nodiscard]] const ui_action* action(ui_trigger trigger) const noexcept;
         [[nodiscard]] const drag_source* drag() const noexcept;
         [[nodiscard]] const drop_target* drop() const noexcept;
@@ -536,6 +546,11 @@ namespace luil {
         void set_visible(bool value) noexcept;
         void set_tooltip(std::u8string text);
         void set_search_label(std::u8string text);
+        // 화면에 뜨지 않는, 보조 기술만 읽는 이름이다 (`access_name`).
+        //
+        // 글을 세우지 않는 컨테이너(목록·탭 막대·스크롤 막대)에 이름을 주는 자리다.
+        // 그리기에도 글자 탐색에도 쓰이지 않으므로 화면은 그대로다.
+        void set_access_name(std::u8string text);
         void set_action(ui_trigger trigger, ui_action action);
         void clear_action(ui_trigger trigger) noexcept;
         void set_drag_source(std::optional<drag_source> source);
@@ -627,7 +642,9 @@ namespace luil {
         // (논리 픽셀). 흘리지 않으면 0이다.
         //
         // 기본값이 "나는 흘리지 않는다"이므로 **자르기만 하는 것은 재정의하지
-        // 않는다** (`tab_bar_element`). 재정의하는 것은 흘리는 둘뿐이다.
+        // 않는다** (`tab_bar_element`). 재정의하는 것은 흘리는 컨테이너다 —
+        // `scroll_view_element`·`strip_element`가 직접 재고, 그것을 안에 두는
+        // `scroll_area_element`·`list_element`·`virtual_list_element`가 물려준다.
         //  - 물리 좌표(`bounds()`)를 논리 값으로 옮기는 것은 배율을 아는 이쪽뿐이라
         //    여기가 자리다. `arrange` 뒤에만 유효하다.
         //  - virtual인 이유는 **앱이 만든 흘리는 컨테이너도 답해야 해서다.**
@@ -637,9 +654,9 @@ namespace luil {
 
         // 보조 기술이 읽는 이 요소의 정보다 (이름·역할·상태).
         // 기본 구현은 **누를 수 있고 이름이 있으면 단추로 읽힌다** — `tab_stop`의
-        // "누를 수 있으면 자리다"와 같은 문장이다. 이름은 `search_label` →
-        // `tooltip` 순으로 집고, 둘 다 비면 구조(`none`)다 — 이름 없는 단추는
-        // 스크린 리더에 소음이라(scrim) 이름 있는 것만 승격한다.
+        // "누를 수 있으면 자리다"와 같은 문장이다. 이름은 `access_name()`이 답하고
+        // (`set_access_name` → `search_label` → tooltip), 셋 다 비면 구조(`none`)다 —
+        // 이름 없는 단추는 스크린 리더에 소음이라(scrim) 이름 있는 것만 승격한다.
         //  - virtual인 이유는 `scroll_delta_to_reveal`과 같다. 앱이 만든 element도
         //    답해야 한다.
         [[nodiscard]] virtual access_info accessibility() const;
@@ -683,6 +700,7 @@ namespace luil {
         bool arranged_ { false };
         std::u8string tooltip_ {};
         std::u8string search_label_ {};
+        std::u8string access_name_ {};
         std::array<ui_action, ui_trigger_count> actions_ {};
         std::optional<drag_source> drag_source_ {};
         std::optional<drop_target> drop_target_ {};

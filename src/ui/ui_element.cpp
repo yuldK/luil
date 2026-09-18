@@ -93,6 +93,15 @@ namespace luil {
         return search_label_;
     }
 
+    const std::u8string& ui_element::access_name() const noexcept
+    {
+        // 화면에 뜨지 않는 이름이 먼저다 — 툴팁은 눈으로 읽는 글이라 컨테이너에
+        // 달면 그 위에 글 상자가 뜬다 (헤더의 설명).
+        if (access_name_.empty() == false)
+            return access_name_;
+        return search_label_.empty() ? tooltip_ : search_label_;
+    }
+
     const ui_action* ui_element::action(const ui_trigger trigger) const noexcept
     {
         const ui_action& stored { actions_[static_cast<std::size_t>(trigger)] };
@@ -169,6 +178,11 @@ namespace luil {
     void ui_element::set_search_label(std::u8string text)
     {
         search_label_ = std::move(text);
+    }
+
+    void ui_element::set_access_name(std::u8string text)
+    {
+        access_name_ = std::move(text);
     }
 
     void ui_element::set_action(const ui_trigger trigger, ui_action action)
@@ -406,7 +420,7 @@ namespace luil {
         // 이름이 있는 것만 승격한다.
         if (action(ui_trigger::left_click) == nullptr)
             return {};
-        const std::u8string& name { search_label_.empty() ? tooltip_ : search_label_ };
+        const std::u8string& name { access_name() };
         if (name.empty())
             return {};
         return { .role = access_role::button, .name = name };

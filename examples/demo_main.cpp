@@ -570,6 +570,7 @@ namespace demo {
                 luil::choice_group_config navigation {};
                 navigation.owner = u8"navigation";
                 navigation.style = luil::choice_style::radio;
+                navigation.name = u8"페이지";
                 const auto add_page = [&navigation](const std::u8string_view key, std::u8string label) { navigation.items.push_back({ std::u8string { key }, std::move(label) }); };
                 add_page(page_basics, u8"기본");
                 add_page(page_lists, u8"목록");
