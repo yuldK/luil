@@ -129,6 +129,13 @@ namespace luil {
         // 형제마다 root에서 부모를 재귀 탐색하면 긴 목록의 UIA 순회가
         // 형제 수의 제곱이 된다.
         [[nodiscard]] const ui_element* access_sibling_of(const ui_element_id& id, bool forward) const;
+        // 이 요소를 감싸는 가장 안쪽 **흘리는 창**이다 (색인 답, 없으면 nullptr).
+        // 보조 기술의 "이 자리를 화면에 들여라"가 설 자리가 있는지를 묻는다
+        // (`route_reveal`이 실제로 얼마나 흘릴지 답한다).
+        //  - 색인이 지을 때 적어 둔 값이라 O(1)이다. 형제마다 root에서 거슬러
+        //    오르면 긴 목록의 UIA 순회가 제곱이 된다 (`access_sibling_of`와 같은
+        //    이유다).
+        [[nodiscard]] const ui_element* scroll_container_of(const ui_element_id& id) const;
         // 초점이 받지 못한 Enter가 갈 자리다 (없으면 nullptr).
         //  - 여럿이면 **그리기 순서의 마지막**이 임자다 (가둠과 같은 규칙).
         //  - **가둠이 서 있으면 그 안에 있어야 한다.** 밖의 기본 버튼은 없는
@@ -149,7 +156,7 @@ namespace luil {
         void draw(draw_context& context, const interaction_snapshot& interaction) const;
 
     private:
-        void index_element(const ui_element& element, const ui_element* access_parent, bool visible_path);
+        void index_element(const ui_element& element, const ui_element* scroll_container, const ui_element* access_parent, bool visible_path);
         static void collect_focus_stops(const ui_element& element, std::vector<ui_element_id>& order);
         // 묶음의 항목들이다 (그리기 순서). 안에 든 다른 묶음은 접힌다.
         static void collect_group_members(const ui_element& group, std::vector<ui_element_id>& members);
@@ -182,6 +189,10 @@ namespace luil {
         {
             // 감싸는 가장 안쪽 접근 요소다 (없으면 nullptr — 그 자리는 창이다).
             const ui_element* parent { nullptr };
+            // 이 자리를 감싸는 가장 안쪽 흘리는 창이다 (자기 자신은 세지 않는다).
+            // 색인이 지을 때 적어 두므로 되묻는 값이 O(1)이고, 같은 id를 가진
+            // element가 둘 있어도 흔들리지 않는다 (포인터로 내려온 값이다).
+            const ui_element* scroll_container { nullptr };
             // 부모의 접근 자식 목록에서의 자리다.
             // 구조(`none`)는 줄에 서지 않으므로 `no_access_position`이다.
             std::size_t position { 0 };

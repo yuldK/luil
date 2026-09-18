@@ -18,7 +18,7 @@ namespace luil {
     {
         if (root_ != nullptr)
         {
-            index_element(*root_, nullptr, root_->visible());
+            index_element(*root_, nullptr, nullptr, root_->visible());
             find_focus_trap(*root_, trap_);
             // 가둠이 정해진 뒤에 거른다 — 밖의 기본 버튼은 없는 것이다.
             // 매 frame이 아니라 여기서 한 번 판정하면 그 뒤로는 물을 것이 없다.
@@ -171,6 +171,12 @@ namespace luil {
         if (forward)
             return position + 1 < siblings->size() ? (*siblings)[position + 1] : nullptr;
         return position > 0 ? (*siblings)[position - 1] : nullptr;
+    }
+
+    const ui_element* ui_tree::scroll_container_of(const ui_element_id& id) const
+    {
+        const auto found { access_index_.find(id) };
+        return found != access_index_.end() ? found->second.scroll_container : nullptr;
     }
 
     bool ui_tree::within(const ui_element_id& ancestor, const ui_element_id& id) const
@@ -326,7 +332,7 @@ namespace luil {
         draw_tooltip(context, interaction);
     }
 
-    void ui_tree::index_element(const ui_element& element, const ui_element* access_parent, const bool visible_path)
+    void ui_tree::index_element(const ui_element& element, const ui_element* const scroll_container, const ui_element* access_parent, const bool visible_path)
     {
         index_.push_back(&element);
         kinds_[static_cast<std::uint32_t>(element.id().kind)].push_back(element.id());
@@ -352,10 +358,14 @@ namespace luil {
                 siblings.push_back(&element);
                 next_access_parent = &element;
             }
-            access_index_.emplace(element.id(), access_entry { access_parent, position });
+            access_index_.emplace(element.id(), access_entry { access_parent, scroll_container, position });
         }
+        // 자기 자신은 자기를 감싸지 않는다 — 들이려는 자리는 언제나 그 창 **안의**
+        // 무엇이다. 그래서 자식에게 넘길 때에야 이 element가 창이 된다.
+        const scroll_source* const source { element.scroll() };
+        const ui_element* const next_scroll_container { source != nullptr && source->scroll != nullptr ? &element : scroll_container };
         for (const std::unique_ptr<ui_element>& child : element.children())
-            index_element(*child, next_access_parent, visible_path && child->visible());
+            index_element(*child, next_scroll_container, next_access_parent, visible_path && child->visible());
     }
 
     namespace {

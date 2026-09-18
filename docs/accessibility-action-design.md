@@ -54,6 +54,11 @@ Provider는 element의 현재 semantic 정보가 지원하는 pattern만 공개�
 | RangeValue | `range`가 있음 | range 조회, 계획이 있을 때만 쓰기 |
 | Value | edit, combo box 또는 비어 있지 않은 text value | 값 조회, edit는 text 경로로 쓰기 |
 | Text | editable element에 text-input document가 있음 | text range 공개 |
+| ScrollItem | 흘리는 창 안에 있음 (`ui_tree::scroll_container_of`) | 그 창을 이 자리가 보이도록 흘린다 |
+
+ScrollItem은 초점 되살리기와 **같은 길**을 탄다. 얼마나 흘릴지는 그 창이 답하고(`route_reveal`), 이미 보이면 아무 동작도 dispatch하지 않고 S_OK다 — 다른 절대 명령이 "이미 그 상태"에 답하는 것과 같은 규약이다. 흘리는 창이 없으면 패턴을 내걸지 않고, 그래도 호출되면 `UIA_E_INVALIDOPERATION`이다.
+
+**`scroll_source`를 세우는 element만 대상이다.** 지금은 `scroll_area_element` 하나다. `list_element`와 `virtual_list_element`는 application의 `scroll_route` 표로 흘리므로 library 혼자서는 그 행을 화면에 들일 수 없고, 그래서 그 자리에는 패턴이 서지 않는다. 그 경로까지 열려면 focus가 그러듯 요청을 input controller와 policy로 보내야 한다.
 
 Pattern 제공 여부와 쓰기 가능 여부는 별도로 판정한다. RangeValue의 `get_IsReadOnly`는 set-value 계획이 있는지 확인한다. Provider는 NaN, infinity, 공개된 최솟값과 최댓값 범위를 벗어난 값을 거부한다.
 

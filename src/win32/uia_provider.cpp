@@ -1,6 +1,7 @@
 #include "win32/uia_provider.h"
 
 #include "luil/text/text_edit.h"
+#include "luil/ui/ui_interaction.h"
 #include "luil/text/utf8_text.h"
 #include "win32/utf8.h"
 
@@ -663,6 +664,8 @@ namespace luil::win32 {
             *object = static_cast<IValueProvider*>(this);
         else if (riid == __uuidof(ITextProvider))
             *object = static_cast<ITextProvider*>(this);
+        else if (riid == __uuidof(IScrollItemProvider))
+            *object = static_cast<IScrollItemProvider*>(this);
         else
         {
             *object = nullptr;
@@ -699,7 +702,8 @@ namespace luil::win32 {
             if (result == nullptr)
                 return E_POINTER;
             *result = nullptr;
-            const ui_element* const element { resolve() };
+            const ui_tree* tree { nullptr };
+            const ui_element* const element { resolve(&tree) };
             if (element == nullptr)
                 return S_OK;
             // 값이 있는 것만 패턴이 된다 — "없는 것은 두지 않는다".
@@ -727,6 +731,13 @@ namespace luil::win32 {
                 // 곧 이 패턴을 내건다.
                 if (access_selection_container(info.role))
                     *result = static_cast<ISelectionProvider*>(this);
+                break;
+            case UIA_ScrollItemPatternId:
+                // 흘리는 창 **안에** 있을 때만 뜻이 있다. 창이 없으면 들일 자리가
+                // 없고, 그것을 매 요소마다 root에서 다시 찾지 않도록 tree가
+                // 배치 부모 색인으로 답한다.
+                if (tree != nullptr && tree->scroll_container_of(id_) != nullptr)
+                    *result = static_cast<IScrollItemProvider*>(this);
                 break;
             case UIA_ExpandCollapsePatternId:
                 if (info.expanded.has_value())
@@ -953,6 +964,29 @@ namespace luil::win32 {
     HRESULT uia_element_provider::Invoke()
     {
         return perform(access_request { access_command::invoke });
+    }
+
+    HRESULT uia_element_provider::ScrollIntoView()
+    {
+        return guarded([&]() -> HRESULT {
+            const ui_tree* tree { nullptr };
+            const ui_element* const element { resolve(&tree) };
+            uia_surface_host* const host { root_->host() };
+            if (element == nullptr || tree == nullptr || host == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            if (access_reachable(*tree, id_) == false)
+                return UIA_E_ELEMENTNOTENABLED;
+            if (tree->scroll_container_of(id_) == nullptr)
+                return UIA_E_INVALIDOPERATION;
+            // 초점 되살리기와 **같은 길**이다. 얼마나 흘릴지는 그 창이 답하고,
+            // 이미 보이면 빈 목록이다 — 그때 S_OK로 답하는 것은 다른 절대 명령이
+            // "이미 그 상태"에 답하는 것과 같은 규약이다
+            // (accessibility-action-design.md).
+            std::vector<input_action> actions { route_reveal(*tree, id_) };
+            if (actions.empty() == false)
+                host->accessibility_dispatch(std::move(actions));
+            return S_OK;
+        });
     }
 
     HRESULT uia_element_provider::SetValue(const double value)

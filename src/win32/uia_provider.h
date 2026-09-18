@@ -212,7 +212,8 @@ namespace luil::win32 {
         public ISelectionProvider,
         public IExpandCollapseProvider,
         public IValueProvider,
-        public ITextProvider
+        public ITextProvider,
+        public IScrollItemProvider
     {
     public:
         uia_element_provider(uia_root_provider& root, ui_element_id id) noexcept;
@@ -282,6 +283,11 @@ namespace luil::win32 {
         HRESULT STDMETHODCALLTYPE Expand() override;
         HRESULT STDMETHODCALLTYPE Collapse() override;
         HRESULT STDMETHODCALLTYPE get_ExpandCollapseState(ExpandCollapseState* result) override;
+
+        // IScrollItemProvider다 (보조 기술의 "이 자리를 화면에 들여라").
+        // 초점 되살리기와 **같은 길**을 탄다 — 얼마나 흘릴지는 그 창이 답한다
+        // (`route_reveal`). 흘리는 창이 없으면 패턴 자체를 내걸지 않는다.
+        HRESULT STDMETHODCALLTYPE ScrollIntoView() override;
 
         // IValueProvider다.
         // 텍스트 칸의 쓰기는 TSF와 같은 편집 파이프라인(`replace_all`)을 탄다 —

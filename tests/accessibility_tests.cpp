@@ -15,9 +15,11 @@
 #include "luil/ui/menu_element.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/progress_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scrollbar_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/split_handle_element.h"
+#include "luil/ui/stack_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/toast_element.h"
 #include "luil/ui/ui_element.h"
@@ -1000,4 +1002,31 @@ TEST_CASE("The point query hits read-only elements and stops at an absorbing sur
     covered->add(std::move(scrim));
     const luil::ui_tree blocked { luil::make_arranged_tree(std::move(covered), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
     REQUIRE(luil::access_element_at(blocked, 50.0f, 50.0f) == nullptr);
+}
+
+TEST_CASE("The tree names the scroll container that can reveal an element", "[ui][access]")
+{
+    luil::scroll_area_config config {};
+    config.owner = u8"log";
+    config.content_height = 600.0f;
+    config.scroll = [](const float delta) { return luil::make_app_action(access_delta_intent { delta }); };
+    auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+    auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_panel, u8"rows" }, luil::stack_config {}) };
+    column->add(make_note(u8"first", u8"첫 줄"), 20.0f);
+    column->add(make_note(u8"last", u8"끝 줄"), 20.0f);
+    area->set_content(std::move(column));
+
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(make_note(u8"outside", u8"창 밖"));
+    root->add(std::move(area));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+
+    // 창 안의 것은 들일 자리가 있다. 창 자신은 자기를 자기 안으로 들일 수 없고,
+    // 창 밖의 것은 애초에 그 창의 일이 아니다 — 셋이 갈려야 패턴을 옳게 내건다.
+    const luil::ui_element* const inside { tree.scroll_container_of({ kind_item, u8"first" }) };
+    REQUIRE(inside != nullptr);
+    REQUIRE(inside->id().owner == u8"log");
+    REQUIRE(tree.scroll_container_of(inside->id()) == nullptr);
+    REQUIRE(tree.scroll_container_of({ kind_item, u8"outside" }) == nullptr);
+    REQUIRE(tree.scroll_container_of({ kind_item, u8"없다" }) == nullptr);
 }
