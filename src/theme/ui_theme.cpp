@@ -1,6 +1,7 @@
 #include "luil/theme/ui_theme.h"
 
 #include "luil/generated/accents.h"
+#include "luil/theme/ui_style.h"
 
 #include <algorithm>
 #include <array>
@@ -39,69 +40,8 @@ namespace luil {
             return built;
         }
 
-        // 키 컬러와 무관한 중립 색이다.
-        // 팔레트 합성이 여기에 accent 4역할을 얹는다.
-        constexpr ui_color_palette dark_neutral_palette {
-            .window_background = make_ui_color(30, 30, 30),
-            .surface_background = make_ui_color(45, 45, 48),
-            .primary_foreground = make_ui_color(255, 255, 255),
-            // 전경색의 낮은 알파들이다.
-            // element마다 흩어져 있던 관례 값(0.75·0.45·0.12·0.08·0.35)을 역할로 승격했다.
-            .secondary_foreground = make_ui_color(255, 255, 255, 191),
-            .disabled_foreground = make_ui_color(255, 255, 255, 115),
-            .divider = make_ui_color(255, 255, 255, 31),
-            .input_background = make_ui_color(255, 255, 255, 20),
-            .input_border = make_ui_color(255, 255, 255, 89),
-            .warning_accent = make_ui_color(220, 170, 45),
-            .error_accent = make_ui_color(224, 108, 117),
-            .button_hover_background = make_ui_color(255, 255, 255, 26),
-            .button_hover_foreground = make_ui_color(255, 255, 255),
-            .button_pressed_background = make_ui_color(255, 255, 255, 45),
-            .tooltip_background = make_ui_color(37, 37, 38),
-            .tooltip_border = make_ui_color(90, 90, 92),
-            .content_shadow = make_ui_color(0, 0, 0),
-            .notice_background = make_ui_color(66, 36, 39),
-            .caption = {
-                .background = make_ui_color(37, 37, 38),
-                .foreground = make_ui_color(255, 255, 255),
-                .button_hover_background = make_ui_color(63, 63, 64),
-                .button_hover_foreground = make_ui_color(255, 255, 255),
-                .close_button_hover_background = make_ui_color(196, 43, 28),
-                .close_button_hover_foreground = make_ui_color(255, 255, 255),
-            },
-        };
-
-        // 밝은 바탕이다.
-        // 중립 색은 VSCode Light Modern에 맞췄다.
-        // 낮은 알파로 primary_foreground를 겹쳐 쓰는 그리기
-        // 코드는 전경색이 뒤집히면서 그대로 성립한다.
-        constexpr ui_color_palette light_neutral_palette {
-            .window_background = make_ui_color(248, 248, 248),
-            .surface_background = make_ui_color(255, 255, 255),
-            .primary_foreground = make_ui_color(31, 31, 31),
-            .secondary_foreground = make_ui_color(31, 31, 31, 191),
-            .disabled_foreground = make_ui_color(31, 31, 31, 115),
-            .divider = make_ui_color(31, 31, 31, 31),
-            .input_background = make_ui_color(31, 31, 31, 20),
-            .input_border = make_ui_color(31, 31, 31, 89),
-            .warning_accent = make_ui_color(154, 103, 0),
-            .error_accent = make_ui_color(192, 48, 58),
-            .button_hover_background = make_ui_color(0, 0, 0, 20),
-            .button_hover_foreground = make_ui_color(31, 31, 31),
-            .button_pressed_background = make_ui_color(0, 0, 0, 36),
-            .tooltip_background = make_ui_color(255, 255, 255),
-            .tooltip_border = make_ui_color(200, 200, 200),
-            .content_shadow = make_ui_color(0, 0, 0),
-            .notice_background = make_ui_color(253, 231, 233),
-            .caption = {
-                .background = make_ui_color(240, 240, 240),
-                .foreground = make_ui_color(31, 31, 31),
-                .button_hover_background = make_ui_color(218, 218, 218),
-                .button_hover_foreground = make_ui_color(31, 31, 31),
-                .close_button_hover_background = make_ui_color(196, 43, 28),
-                .close_button_hover_foreground = make_ui_color(255, 255, 255),
-            },
-        };
+        // 중립 색은 여기 없다 — assets/style.json이 원본이고 `default_ui_style()`이 그것이다.
+        // 팔레트 합성(`compose_palette`)이 그 위에 accent 4역할과 tone을 얹는다.
 
         // --- 시스템 accent의 색 계산 ---
         // 내장 표(assets/accents.json)는 OKLCH에서 밝기를 역할마다 고정하고
@@ -205,6 +145,65 @@ namespace luil {
         std::atomic<std::uint64_t> system_accent_key { 0 };
     } // namespace
 
+    float relative_luminance(const ui_color color) noexcept
+    {
+        const double red { linear_channel(static_cast<double>((color >> 16U) & 0xFFU) / 255.0) };
+        const double green { linear_channel(static_cast<double>((color >> 8U) & 0xFFU) / 255.0) };
+        const double blue { linear_channel(static_cast<double>(color & 0xFFU) / 255.0) };
+        return static_cast<float>(0.2126 * red + 0.7152 * green + 0.0722 * blue);
+    }
+
+    bool is_dark_background(const ui_color color) noexcept
+    {
+        // 흰 글자와의 대비가 검은 글자와의 대비 이상이면 어두운 바탕이다
+        // (WCAG 대비식 (L1+0.05)/(L2+0.05)에서 두 대비가 같아지는 밝기가 0.179다).
+        return relative_luminance(color) <= 0.179f;
+    }
+
+    ui_color_palette compose_palette(const neutral_color_palette& neutral, const accent_color_set& accent, const accent_tones& tones) noexcept
+    {
+        return ui_color_palette {
+            .window_background = neutral.window_background,
+            .surface_background = neutral.surface_background,
+            .primary_foreground = neutral.primary_foreground,
+            .secondary_foreground = neutral.secondary_foreground,
+            .disabled_foreground = neutral.disabled_foreground,
+            .divider = neutral.divider,
+            .input_background = neutral.input_background,
+            .input_border = neutral.input_border,
+            .control_border = neutral.control_border,
+            .group_border = neutral.group_border,
+            .accent = accent.accent,
+            .accent_hover = accent.hover,
+            .accent_soft = accent.soft,
+            .accent_emphasis_foreground = accent.emphasis_foreground,
+            // 파생 역할은 accent 위에 tone을 얹은 것이다.
+            // 어느 역할에 얹는지는 여기가 정하고, 양은 tone이 정한다.
+            .accent_pressed = with_alpha(accent.accent, tones.pressed),
+            .soft_button_background = with_alpha(accent.soft, tones.soft_button),
+            .soft_button_hover_background = with_alpha(accent.hover, tones.soft_button_hover),
+            .active_toggle_background = with_alpha(accent.soft, tones.active_toggle),
+            .selection_background = with_alpha(accent.soft, tones.selection),
+            // 옅은 선택 위의 글자는 본문 글자 그대로다 — 고대비만 highlight 짝으로 바꾼다.
+            .selection_foreground = neutral.primary_foreground,
+            .row_selection_background = with_alpha(accent.soft, tones.row_selection),
+            .drop_target_background = with_alpha(accent.accent, tones.drop_target),
+            .danger_button_background = with_alpha(neutral.error_accent, tones.danger_button),
+            .danger_button_hover_background = with_alpha(neutral.error_accent, tones.danger_button_hover),
+            .danger_button_pressed_background = with_alpha(neutral.error_accent, tones.danger_button_pressed),
+            .warning_accent = neutral.warning_accent,
+            .error_accent = neutral.error_accent,
+            .button_hover_background = neutral.button_hover_background,
+            .button_hover_foreground = neutral.button_hover_foreground,
+            .button_pressed_background = neutral.button_pressed_background,
+            .tooltip_background = neutral.tooltip_background,
+            .tooltip_border = neutral.tooltip_border,
+            .content_shadow = neutral.content_shadow,
+            .notice_background = neutral.notice_background,
+            .caption = neutral.caption,
+        };
+    }
+
     ui_color_palette high_contrast_palette_for(const high_contrast_colors& colors) noexcept
     {
         // 고대비는 사용자가 고른 시스템 색을 그대로 옮긴다.
@@ -220,12 +219,29 @@ namespace luil {
             .divider = colors.window_foreground,
             .input_background = colors.window_background,
             .input_border = colors.window_foreground,
+            .control_border = colors.window_foreground,
+            .group_border = colors.window_foreground,
             // 키 컬러는 쓰지 않는다.
             // 강조는 hotlight, 선택·hover는 highlight 짝이 맡는다.
             .accent = colors.emphasis,
             .accent_hover = colors.emphasis,
             .accent_soft = colors.highlight_background,
             .accent_emphasis_foreground = colors.highlight_foreground,
+            // 파생 역할도 알파 없이 highlight 짝으로 접는다.
+            // 옅은 버튼의 쉼은 버튼 표면이고, 누르거나 고른 자리는 highlight다.
+            .accent_pressed = colors.highlight_background,
+            .soft_button_background = colors.button_background,
+            .soft_button_hover_background = colors.highlight_background,
+            .active_toggle_background = colors.highlight_background,
+            .selection_background = colors.highlight_background,
+            .selection_foreground = colors.highlight_foreground,
+            // 고른 행의 채움은 접는다 — 행의 글자는 앱이 그려 highlight 글자로 바꿀 수
+            // 없으니, 온전한 highlight를 깔면 글이 사라진다. 왼쪽 표식(`accent`)이 남는다.
+            .row_selection_background = make_ui_color(0, 0, 0, 0),
+            .drop_target_background = colors.highlight_background,
+            .danger_button_background = colors.button_background,
+            .danger_button_hover_background = colors.highlight_background,
+            .danger_button_pressed_background = colors.highlight_background,
             .warning_accent = colors.window_foreground,
             .error_accent = colors.window_foreground,
             .button_hover_background = colors.highlight_background,
@@ -346,16 +362,7 @@ namespace luil {
 
     ui_color_palette color_palette_for(const color_theme theme, const accent_definition& accent) noexcept
     {
-        if (theme == color_theme::high_contrast)
-            return high_contrast_palette_for(high_contrast_colors {});
-
-        const accent_color_set& colors { accent.for_theme(theme) };
-        ui_color_palette palette { theme == color_theme::light ? light_neutral_palette : dark_neutral_palette };
-        palette.accent = colors.accent;
-        palette.accent_hover = colors.hover;
-        palette.accent_soft = colors.soft;
-        palette.accent_emphasis_foreground = colors.emphasis_foreground;
-        return palette;
+        return color_palette_for(default_ui_style(), theme, accent);
     }
 
     ui_color_palette color_palette_for(const color_theme theme) noexcept

@@ -31,7 +31,7 @@ namespace luil {
             case toast_severity::info:
                 break;
             }
-            return with_alpha(palette.primary_foreground, 0.75f);
+            return palette.secondary_foreground;
         }
 
         [[nodiscard]] char32_t severity_glyph(const toast_severity severity) noexcept
@@ -128,7 +128,7 @@ namespace luil {
         const float text_width { box.x + box.width - reserved - text_left };
         if (text_width > 0.0f)
         {
-            const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+            const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
             const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
             static_cast<void>(draw_text_within(context.canvas, config_.text, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
         }

@@ -40,6 +40,10 @@ namespace luil::testing {
 
         [[nodiscard]] const ui_color_palette& palette() const noexcept;
 
+        // 그리기에 줄 치수다 (`draw_context::metrics`). 기본은 내장 스타일과 같다.
+        // 스타일의 치수가 실제 픽셀에 닿는지 보는 축이 이것을 바꾼다.
+        void set_metrics(const ui_metrics& metrics) noexcept;
+
         // 물리 픽셀 하나의 색이다 (알파를 푼 ARGB — `ui_color`와 같은 배치다).
         // 화면 밖이면 0이다.
         [[nodiscard]] ui_color pixel_at(int x, int y) const;
@@ -50,6 +54,7 @@ namespace luil::testing {
 
     private:
         ui_color_palette palette_ {};
+        ui_metrics metrics_ {};
         float scale_ { 2.0f };
         SkBitmap pixels_ {};
     };

@@ -3,6 +3,9 @@ include(Catch)
 add_test(NAME luil_accent_catalog
     COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
         "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/accent_catalog_tests.cmake")
+add_test(NAME luil_style
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/style_tests.cmake")
 
 if(LUIL_INSTALL)
     add_test(NAME luil_installed_consumer
@@ -66,6 +69,7 @@ add_executable(luil_tests
     split_handle_element_tests.cpp
     stack_element_tests.cpp
     strip_element_tests.cpp
+    style_raster_tests.cpp
     surface_input_tests.cpp
     surface_invalidate_tests.cpp
     tab_bar_element_tests.cpp
@@ -78,6 +82,7 @@ add_executable(luil_tests
     renderer_policy_tests.cpp
     tsf_input_tests.cpp
     ui_interaction_tests.cpp
+    ui_style_tests.cpp
     ui_theme_tests.cpp
     uia_provider_tests.cpp
     wrap_element_tests.cpp

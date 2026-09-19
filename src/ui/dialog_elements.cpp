@@ -163,18 +163,18 @@ namespace luil {
         if (fill != text_button_fill::none)
         {
             const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
-            const float radius { 3.0f * scale };
+            const float radius { context.metrics.control_corner_radius * scale };
             // 채운 버튼의 hover·눌림은 **자기 색 안에서** 움직인다.
             // 중립색으로 갈아 끼우면 누르는 동안만 주 동작이 아닌 것처럼 보인다.
             ui_color background { context.palette.input_background };
             if (solid)
-                background = down ? with_alpha(context.palette.accent, 0.70f) : (over ? context.palette.accent_hover : context.palette.accent);
+                background = down ? context.palette.accent_pressed : (over ? context.palette.accent_hover : context.palette.accent);
             else if (fill == text_button_fill::soft_accent)
-                background = down ? context.palette.button_pressed_background : (over ? with_alpha(context.palette.accent_hover, 0.35f) : with_alpha(context.palette.accent_soft, 0.25f));
+                background = down ? context.palette.button_pressed_background : (over ? context.palette.soft_button_hover_background : context.palette.soft_button_background);
             else if (fill == text_button_fill::soft_danger)
                 // 오류색에는 강조색과 달리 hover·soft 짝이 없다.
-                // 역할 하나를 알파로 층 지어 같은 자리를 만든다 — 색을 새로 정하지 않는다.
-                background = with_alpha(context.palette.error_accent, down ? 0.42f : (over ? 0.32f : 0.20f));
+                // 팔레트가 역할 하나에 tone을 층 지어 같은 자리를 만든다 — 색을 새로 정하지 않는다.
+                background = down ? context.palette.danger_button_pressed_background : (over ? context.palette.danger_button_hover_background : context.palette.danger_button_background);
             else if (down)
                 background = context.palette.button_pressed_background;
             else if (over)
@@ -185,7 +185,7 @@ namespace luil {
             context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(background));
         }
 
-        const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
         ui_color label_color { context.palette.primary_foreground };
         // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다.
         if (accent || solid)
@@ -413,7 +413,7 @@ namespace luil {
         const bool focused { interaction.focused_input == id() };
         const rect_f box { bounds() };
         const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
-        const float radius { 3.0f * scale };
+        const float radius { context.metrics.control_corner_radius * scale };
         context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(context.palette.input_background));
         // 초점을 받은 칸은 테두리를 강조해 입력이 이곳으로 간다는 것을 보인다.
         SkPaint border { solid_paint(focused ? context.palette.accent : context.palette.input_border) };
@@ -460,16 +460,27 @@ namespace luil {
 
         context.canvas.save();
         context.canvas.clipRect(SkRect::MakeXYWH(left, box.y, visible, box.height));
+        std::optional<SkRect> selection {};
         if (selection_begin != selection_end)
         {
             const float from { left - scroll + measure(text.substr(0, selection_begin)) };
             const float to { left - scroll + measure(text.substr(0, selection_end)) };
-            context.canvas.drawRect(SkRect::MakeXYWH(from, box.y + 3.0f * scale, to - from, box.height - 6.0f * scale), solid_paint(with_alpha(context.palette.accent_soft, 0.35f)));
+            selection = SkRect::MakeXYWH(from, box.y + 3.0f * scale, to - from, box.height - 6.0f * scale);
+            context.canvas.drawRect(*selection, solid_paint(context.palette.selection_background));
         }
         if (text.empty() == false)
         {
             const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
             draw_text(context.canvas, text, left - scroll, baseline, font, foreground);
+            // 고른 구간의 글자는 그 바탕의 짝이다. 옅은 바탕에서는 본문 글자와 같은 값이라
+            // 겹쳐 그려도 같은 그림이고, 고대비에서만 highlight 글자로 바뀐다.
+            if (selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground)
+            {
+                context.canvas.save();
+                context.canvas.clipRect(*selection);
+                draw_text(context.canvas, text, left - scroll, baseline, font, solid_paint(context.palette.selection_foreground));
+                context.canvas.restore();
+            }
         }
 
         // 조합 구간은 밑줄로 표시한다.

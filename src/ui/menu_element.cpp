@@ -48,7 +48,8 @@ namespace luil {
                 if (enabled() && (highlighted || interaction.pressed == id()))
                 {
                     const ui_color background { interaction.pressed == id() ? context.palette.button_pressed_background : context.palette.button_hover_background };
-                    context.canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), 3.0f * scale, 3.0f * scale), solid_paint(background));
+                    const float radius { context.metrics.control_corner_radius * scale };
+                    context.canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), radius, radius), solid_paint(background));
                 }
 
                 const float inset { 8.0f * scale };
@@ -65,7 +66,7 @@ namespace luil {
                 const float text_width { box.x + box.width - inset - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
                     const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
                     static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }

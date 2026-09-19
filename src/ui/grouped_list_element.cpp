@@ -51,7 +51,7 @@ namespace luil {
                 const float text_width { box.width - 2.0f * inset };
                 if (text_width > 0.0f && title_.empty() == false)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), 11.0f * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.small_font_size * scale };
                     const SkPaint foreground { solid_paint(context.palette.secondary_foreground) };
                     static_cast<void>(draw_text_within(context.canvas, title_, box.x + inset, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }

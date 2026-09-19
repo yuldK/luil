@@ -100,9 +100,7 @@ namespace luil {
 
     void draw_text(SkCanvas& canvas, std::u8string_view text, float x, float y, const SkFont& font, const SkPaint& paint);
 
-    // 같은 색의 투명도만 바꾼 값이다.
-    // chip 배경처럼 강조색을 옅게 깔 때 쓴다.
-    [[nodiscard]] ui_color with_alpha(ui_color color, float alpha) noexcept;
+    // `with_alpha`는 theme/ui_theme.h로 옮겼다 — 팔레트 합성이 같은 함수로 tone을 얹는다.
 
     // hover·눌림 배경을 그린다.
     // 상태 판정(눌림 > hover)과 색 역할 선택이 한곳이라 element마다 어긋나지 않는다.

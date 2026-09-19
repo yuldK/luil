@@ -170,7 +170,7 @@ namespace luil {
                 bool fill { false };
                 if (drop_here)
                 {
-                    background = with_alpha(context.palette.accent, 0.30f);
+                    background = context.palette.drop_target_background;
                     fill = true;
                 }
                 else if (selected_)
@@ -224,7 +224,7 @@ namespace luil {
                 const float text_width { box.x + box.width - 8.0f * scale - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
                     static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }
                 draw_children(context, interaction);

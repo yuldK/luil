@@ -1,0 +1,78 @@
+{
+    "dark": {
+        "windowBackground": "#1e1e1e",
+        "surfaceBackground": "#2d2d30",
+        "primaryForeground": "#ffffff",
+        "secondaryForeground": "#ffffffbf",
+        "disabledForeground": "#ffffff73",
+        "divider": "#ffffff1f",
+        "inputBackground": "#ffffff14",
+        "inputBorder": "#ffffff59",
+        "controlBorder": "#ffffff8c",
+        "groupBorder": "#ffffff40",
+        "warningAccent": "#dcaa2d",
+        "errorAccent": "#e06c75",
+        "buttonHoverBackground": "#ffffff1a",
+        "buttonHoverForeground": "#ffffff",
+        "buttonPressedBackground": "#ffffff2d",
+        "tooltipBackground": "#252526",
+        "tooltipBorder": "#5a5a5c",
+        "contentShadow": "#000000",
+        "noticeBackground": "#422427",
+        "caption": {
+            "background": "#252526",
+            "foreground": "#ffffff",
+            "buttonHoverBackground": "#3f3f40",
+            "buttonHoverForeground": "#ffffff",
+            "closeButtonHoverBackground": "#c42b1c",
+            "closeButtonHoverForeground": "#ffffff"
+        }
+    },
+    "light": {
+        "windowBackground": "#f8f8f8",
+        "surfaceBackground": "#ffffff",
+        "primaryForeground": "#1f1f1f",
+        "secondaryForeground": "#1f1f1fbf",
+        "disabledForeground": "#1f1f1f73",
+        "divider": "#1f1f1f1f",
+        "inputBackground": "#1f1f1f14",
+        "inputBorder": "#1f1f1f59",
+        "controlBorder": "#1f1f1f8c",
+        "groupBorder": "#1f1f1f40",
+        "warningAccent": "#9a6700",
+        "errorAccent": "#c0303a",
+        "buttonHoverBackground": "#00000014",
+        "buttonHoverForeground": "#1f1f1f",
+        "buttonPressedBackground": "#00000024",
+        "tooltipBackground": "#ffffff",
+        "tooltipBorder": "#c8c8c8",
+        "contentShadow": "#000000",
+        "noticeBackground": "#fde7e9",
+        "caption": {
+            "background": "#f0f0f0",
+            "foreground": "#1f1f1f",
+            "buttonHoverBackground": "#dadada",
+            "buttonHoverForeground": "#1f1f1f",
+            "closeButtonHoverBackground": "#c42b1c",
+            "closeButtonHoverForeground": "#ffffff"
+        }
+    },
+    "tones": {
+        "pressed": 0.70,
+        "softButton": 0.25,
+        "softButtonHover": 0.35,
+        "activeToggle": 0.22,
+        "selection": 0.35,
+        "rowSelection": 0.18,
+        "dropTarget": 0.30,
+        "dangerButton": 0.20,
+        "dangerButtonHover": 0.32,
+        "dangerButtonPressed": 0.42
+    },
+    "metrics": {
+        "bodyFontSize": 12,
+        "smallFontSize": 11,
+        "controlCornerRadius": 3,
+        "rowCornerRadius": 4
+    }
+}

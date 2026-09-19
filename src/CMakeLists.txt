@@ -27,6 +27,19 @@ add_custom_command(
     COMMENT "Generating the accent catalog"
     VERBATIM)
 
+# 스타일(중립 색·tone·치수)도 같은 방식이다.
+add_custom_command(
+    OUTPUT "${LUIL_GENERATED_STYLE}"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT_FILE=${LUIL_STYLE}"
+        "-DOUTPUT_FILE=${LUIL_GENERATED_STYLE}"
+        -P "${LUIL_CMAKE_DIRECTORY}/generate_style.cmake"
+    DEPENDS
+        "${LUIL_STYLE}"
+        "${LUIL_CMAKE_DIRECTORY}/generate_style.cmake"
+    COMMENT "Generating the style"
+    VERBATIM)
+
 # 파일은 IDE 필터 단위로 적고, 그렇게 모인 것이 곧 라이브러리의 source 목록이다
 # (luil_add_source_filter, cmake/macro.cmake).
 #
@@ -40,7 +53,8 @@ set(luil_files)
 # 생성 파일이다. source tree 밖에 있어 어느 계층에도 속하지 않는다.
 luil_add_source_filter(luil_files "generated"
     "${LUIL_GENERATED_CODICONS}"
-    "${LUIL_GENERATED_ACCENTS}")
+    "${LUIL_GENERATED_ACCENTS}"
+    "${LUIL_GENERATED_STYLE}")
 
 # core: 소비자가 처음 여는 우산 헤더와 판번이다.
 luil_add_source_filter(luil_files "core"
@@ -67,6 +81,8 @@ luil_add_source_filter(luil_files "text"
 luil_add_source_filter(luil_files "theme"
     theme/appearance.cpp
     "${public_headers}/theme/appearance.h"
+    theme/ui_style.cpp
+    "${public_headers}/theme/ui_style.h"
     theme/ui_theme.cpp
     "${public_headers}/theme/ui_theme.h")
 

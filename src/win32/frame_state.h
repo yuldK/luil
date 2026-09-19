@@ -39,6 +39,9 @@ namespace luil {
         // theme이 고대비일 때 팔레트를 합성할 시스템 색이다.
         // platform이 OS에서 읽어 채운다 (기본값은 검정 바탕 fallback).
         high_contrast_colors high_contrast {};
+        // 앱이 frame에 실은 스타일이다 (`ui_frame::style`). 없으면 내장 스타일이다.
+        // 포인터는 렌더 호출 동안만 유효하면 된다 (tree와 같은 규칙).
+        const ui_style* style { nullptr };
         bool maximized { false };
         // 테두리 없는 전체 화면인가다.
         // 최대화와 마찬가지로 view snapshot에 없는 창 상태라 표면이 채운다 —
@@ -77,8 +80,15 @@ namespace luil {
         std::span<const pixel_rect> holes {};
     };
 
+    // frame이 쓸 스타일이다 — 실린 것이 없으면 내장 스타일이다.
+    [[nodiscard]] const ui_style& frame_style(const frame_state& state) noexcept;
+    // frame의 팔레트다.
+    // 고대비는 시스템 색으로, 나머지는 스타일의 중립 색 위에 키 컬러를 얹어 합성한다.
+    // 그리기(`draw_frame`)와 창 테두리(DWM)가 **같은 함수**로 같은 팔레트를 본다.
+    [[nodiscard]] ui_color_palette frame_palette(const frame_state& state) noexcept;
+
     // frame을 그린다.
-    // 팔레트는 theme·accent에서 합성하고,
+    // 팔레트는 `frame_palette`가 합성하고,
     // tree가 있으면 tree가 화면 전체를 그린다 (tooltip·drag 표시 포함).
     void draw_frame(SkCanvas& canvas, SkTypeface* codicon_typeface, SkTypeface* ui_typeface, const frame_state& state);
 } // namespace luil

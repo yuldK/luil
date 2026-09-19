@@ -3,6 +3,7 @@
 #include "luil/messaging/channel.h"
 #include "luil/messaging/latest_slot.h"
 #include "luil/theme/appearance.h"
+#include "luil/theme/ui_style.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/ui_events.h"
@@ -166,6 +167,12 @@ namespace luil::win32 {
         // 실제 팔레트는 UI thread가 OS 상태(고대비·밝은 모드)와 함께 해석한다.
         appearance_settings appearance {};
         font_settings fonts {};
+        // 앱의 스타일이다 (두 테마의 중립 색·accent tone·치수).
+        // 비어 있으면 내장 스타일(assets/style.json)이다. 앱이 한 번 세워 두고 매 frame
+        // 같은 포인터를 실으면 되고, 바꾸면 다음 frame부터 새 값이다.
+        //  - 선호(`appearance`)가 아니라 여기 있는 이유: 사용자 설정이 아니라 **앱의
+        //    것**이라 계층이 다르다 (ui_style.h).
+        std::shared_ptr<const ui_style> style {};
         // 창 배치 적용 요청이다.
         // revision이 바뀐 경우에만 UI thread가 적용한다.
         std::uint64_t window_placement_revision { 0 };

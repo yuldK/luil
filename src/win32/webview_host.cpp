@@ -560,12 +560,10 @@ namespace luil::win32 {
         //
         // 합성 호스팅에서 페이지가 배경을 정하지 않으면 그 자리가 알파 그대로
         // 합성된다. 우리는 그 자리를 이미 비워 두었으므로(구멍) 곧바로 **바탕 화면이
-        // 비친다.** 브라우저의 기본과 같은 흰색을 깔아 그 길을 막는다.
-        //  - 색을 앱이 고르게 하지 않는다 — 소비자가 없다. 페이지가 자기 배경을
-        //    정하는 것이 정상이고, 이 값은 정하지 않은 페이지의 바닥일 뿐이다.
-        ComPtr<ICoreWebView2Controller2> controller2 {};
-        if (SUCCEEDED(target->controller.As(&controller2)) && controller2 != nullptr)
-            static_cast<void>(controller2->put_DefaultBackgroundColor(COREWEBVIEW2_COLOR { 255, 255, 255, 255 }));
+        // 비친다.** 창 바탕색을 깔아 그 길을 막는다 (`set_default_background`).
+        //  - 페이지가 자기 배경을 정하는 것이 정상이고, 이 값은 정하지 않은 페이지의
+        //    바닥일 뿐이다. 그 바닥이 창 바탕과 같아야 페이지가 뜨는 동안 판이 번쩍이지 않는다.
+        apply_default_background(*target);
 
         // **배율은 우리가 소유한다.** 이 값을 끄지 않으면 `put_RasterizationScale`이
         // S_OK를 돌려주고도 아무 일도 하지 않는다.
@@ -947,6 +945,26 @@ namespace luil::win32 {
 
         // 서기 전에 온 명령을 이제 흘려보낸다.
         flush_commands(*target);
+    }
+
+    void webview_host::set_default_background(const ui_color color)
+    {
+        if (default_background_ == color)
+            return;
+        default_background_ = color;
+        for (const std::unique_ptr<entry>& current : entries_)
+            if (current->controller != nullptr)
+                apply_default_background(*current);
+    }
+
+    void webview_host::apply_default_background(entry& target) const
+    {
+        ComPtr<ICoreWebView2Controller2> controller2 {};
+        if (FAILED(target.controller.As(&controller2)) || controller2 == nullptr)
+            return;
+        // 알파는 언제나 불투명이다 — 바닥이 비치면 그 아래는 바탕 화면이다.
+        const auto channel = [this](const int shift) { return static_cast<BYTE>((default_background_ >> shift) & 0xFFu); };
+        static_cast<void>(controller2->put_DefaultBackgroundColor(COREWEBVIEW2_COLOR { 255, channel(16), channel(8), channel(0) }));
     }
 
     void webview_host::synchronize(const std::span<const webview_target> wanted, IDCompositionDevice* const composition)

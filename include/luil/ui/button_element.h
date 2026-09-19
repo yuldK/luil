@@ -18,10 +18,8 @@ namespace luil {
         danger,
     };
 
-    // 켜진 토글이 깔고 앉는 옅은 강조 바탕의 알파다.
-    // hover 바탕과 달리 이 값은 팔레트의 역할이 아니라 **이 element의 판단**이라
-    // 그리기 안의 숫자로 남으면 test가 잡을 자리가 없다. 이름을 주어 밖으로 낸다.
-    inline constexpr float button_active_fill_alpha { 0.22f };
+    // 켜진 토글이 깔고 앉는 옅은 강조 바탕은 팔레트의 `active_toggle_background`다
+    // (양은 `accent_tones::active_toggle`). 전에는 이 element의 상수였다.
 
     struct button_config
     {

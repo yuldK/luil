@@ -41,6 +41,7 @@ namespace luil::testing {
             .palette = palette_,
             .scale = scale_,
             .now = now,
+            .metrics = metrics_,
         };
         tree.draw(context, interaction);
     }
@@ -48,6 +49,11 @@ namespace luil::testing {
     const ui_color_palette& raster_frame::palette() const noexcept
     {
         return palette_;
+    }
+
+    void raster_frame::set_metrics(const ui_metrics& metrics) noexcept
+    {
+        metrics_ = metrics;
     }
 
     ui_color raster_frame::pixel_at(const int x, const int y) const

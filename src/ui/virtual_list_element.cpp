@@ -161,7 +161,7 @@ namespace luil {
                 // 나란히 놓아도 글의 왼쪽 끝이 맞는다.
                 if (children().empty())
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
                     const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
                     const float text_left { box.x + 8.0f * scale };
                     if (const float text_width { box.x + box.width - 8.0f * scale - text_left }; text_width > 0.0f)

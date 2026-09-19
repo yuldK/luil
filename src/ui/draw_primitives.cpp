@@ -172,13 +172,6 @@ namespace luil {
         }
     }
 
-    ui_color with_alpha(const ui_color color, const float alpha) noexcept
-    {
-        const float clamped { alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha) };
-        const auto value { static_cast<std::uint32_t>(clamped * 255.0f + 0.5f) };
-        return (color & 0x00ffffffU) | (value << 24U);
-    }
-
     void draw_hover_fill(draw_context& context, const rect_f& box, const ui_element_id& id, const interaction_snapshot& interaction, const bool enabled, const float radius)
     {
         if (enabled == false)
@@ -371,12 +364,12 @@ namespace luil {
         if (box.width <= 0.0f || box.height <= 0.0f)
             return;
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-        // `accent_soft`는 **낮은 알파로 겹치는** 옅은 바탕이다 (팔레트가 "선택 행"을 그
-        // 역할의 쓰임으로 적어 두었다). 온전한 색으로 깔면 밝은 띠가 되어 그 위의 글이
-        // 읽히지 않는다. 좌우 2px·위아래 1px 들여 이웃 행과 hover 채움에서 갈린다.
-        const float radius { 4.0f * scale };
+        // `row_selection_background`는 `accent_soft`에 낮은 알파를 얹은 파생 역할이다
+        // (양은 `accent_tones::row_selection`). 온전한 색으로 깔면 밝은 띠가 되어 그 위의
+        // 글이 읽히지 않는다. 좌우 2px·위아래 1px 들여 이웃 행과 hover 채움에서 갈린다.
+        const float radius { context.metrics.row_corner_radius * scale };
         const SkRect fill { SkRect::MakeXYWH(box.x + 2.0f * scale, box.y + scale, std::max(0.0f, box.width - 4.0f * scale), std::max(0.0f, box.height - 2.0f * scale)) };
-        context.canvas.drawRRect(SkRRect::MakeRectXY(fill, radius, radius), solid_paint(with_alpha(context.palette.accent_soft, 0.18f)));
+        context.canvas.drawRRect(SkRRect::MakeRectXY(fill, radius, radius), solid_paint(context.palette.row_selection_background));
         // 왼쪽 표식은 고대비 팔레트가 `accent_soft`를 접어도 어느 행인지 남긴다
         // (배지가 tone에 글리프를 딸려 보낸 것과 같은 규칙이다).
         // 길이는 행에서 위아래 6px씩 뺀 값이고, 행이 그보다 얕으면 행의 절반이다.

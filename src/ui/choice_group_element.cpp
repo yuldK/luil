@@ -44,13 +44,13 @@ namespace luil {
             {
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const rect_f box { bounds() };
-                draw_hover_fill(context, box, id(), interaction, enabled(), 3.0f);
+                draw_hover_fill(context, box, id(), interaction, enabled(), context.metrics.control_corner_radius);
 
                 // 바깥 고리와, 선택되었을 때만 채우는 안쪽 점이다.
                 const float inset { 4.0f * scale };
                 const float ring_size { 14.0f * scale };
                 const float ring_top { box.y + (box.height - ring_size) / 2.0f };
-                SkPaint ring { solid_paint(selected_ ? context.palette.accent : with_alpha(context.palette.primary_foreground, 0.55f)) };
+                SkPaint ring { solid_paint(selected_ ? context.palette.accent : context.palette.control_border) };
                 ring.setStyle(SkPaint::kStroke_Style);
                 ring.setStrokeWidth(1.5f * scale);
                 ring.setAntiAlias(true);
@@ -68,7 +68,7 @@ namespace luil {
                 const float text_width { box.x + box.width - inset - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
                     const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
                     static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }

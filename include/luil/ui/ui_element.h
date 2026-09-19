@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/theme/ui_style.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/accessibility.h"
 #include "luil/ui/ui_cursor.h"
@@ -309,6 +310,9 @@ namespace luil {
         //    tree를 다시 짓는 것(캡션 줄을 아예 빼는 것)은 앱의 몫이고, 그 앱은 같은
         //    사실을 배치 메시지(`window_placement::fullscreen`)로 받는다.
         bool fullscreen { false };
+        // 스타일의 치수다 (`ui_style::metrics`). 그리기 안에 박혀 있던 글자 크기·모서리가
+        // 여기서 온다. 기본값은 내장 스타일과 같아 채우지 않은 context도 지금까지의 그림이다.
+        ui_metrics metrics {};
     };
 
     // update 판정의 문맥이다.

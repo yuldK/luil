@@ -29,6 +29,16 @@ namespace luil::win32 {
         focus_reporter_ = std::move(reporter);
     }
 
+    void webview_host::set_default_background(const ui_color color)
+    {
+        default_background_ = color;
+    }
+
+    void webview_host::apply_default_background(entry& target) const
+    {
+        static_cast<void>(target);
+    }
+
     void webview_host::synchronize(const std::span<const webview_target> wanted, IDCompositionDevice* const composition)
     {
         static_cast<void>(wanted);

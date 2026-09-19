@@ -475,7 +475,7 @@ namespace luil {
             return;
 
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-        const SkFont font { sk_ref_sp(context.ui_typeface), 11.0f * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.small_font_size * scale };
         const std::u8string& text { hovered->tooltip() };
         const float text_width { measure_text(text, font) };
         const float padding { 5.0f * scale };
@@ -526,7 +526,8 @@ namespace luil {
                 SkPaint highlight { solid_paint(context.palette.accent) };
                 highlight.setStyle(SkPaint::kStroke_Style);
                 highlight.setStrokeWidth(1.0f * scale);
-                context.canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(target_bounds->x, target_bounds->y, target_bounds->width, target_bounds->height), 3.0f * scale, 3.0f * scale), highlight);
+                const float radius { context.metrics.control_corner_radius * scale };
+                context.canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(target_bounds->x, target_bounds->y, target_bounds->width, target_bounds->height), radius, radius), highlight);
             }
         }
 
@@ -541,13 +542,13 @@ namespace luil {
         const SkRect ghost { SkRect::MakeXYWH(drag.x + 10.0f * scale, drag.y + 10.0f * scale, 112.0f * scale, 24.0f * scale) };
         SkPaint fill { solid_paint(context.palette.surface_background) };
         fill.setAlphaf(0.85f);
-        context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, 3.0f * scale, 3.0f * scale), fill);
+        context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), fill);
         SkPaint border { solid_paint(context.palette.accent) };
         border.setStyle(SkPaint::kStroke_Style);
         border.setStrokeWidth(1.0f * scale);
-        context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, 3.0f * scale, 3.0f * scale), border);
+        context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), border);
 
-        const SkFont font { sk_ref_sp(context.ui_typeface), 11.0f * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.small_font_size * scale };
         const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
         const std::u8string& ghost_text { drag.payload.label.empty() ? drag.payload.dragged_owner : drag.payload.label };
         draw_text(context.canvas, ghost_text, ghost.left() + 7.0f * scale, ghost.top() + centered_text_baseline(font, ghost.height()), font, foreground);

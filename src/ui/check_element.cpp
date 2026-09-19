@@ -59,10 +59,10 @@ namespace luil {
     {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
-        draw_hover_fill(context, box, id(), interaction, enabled(), 3.0f);
+        draw_hover_fill(context, box, id(), interaction, enabled(), context.metrics.control_corner_radius);
 
         // 꺼진 표시의 선과 켜진 표시의 채움은 팔레트의 역할로만 고른다.
-        const ui_color line { enabled() ? with_alpha(context.palette.primary_foreground, 0.55f) : context.palette.disabled_foreground };
+        const ui_color line { enabled() ? context.palette.control_border : context.palette.disabled_foreground };
         const ui_color fill { enabled() ? context.palette.accent : context.palette.disabled_foreground };
         const rect_f mark { indicator_bounds(scale) };
         SkPaint stroke { solid_paint(config_.checked ? fill : line) };
@@ -76,7 +76,7 @@ namespace luil {
         {
         case check_style::checkbox: {
             const SkRect shape { SkRect::MakeXYWH(mark.x, mark.y, mark.width, mark.height) };
-            const float radius { 3.0f * scale };
+            const float radius { context.metrics.control_corner_radius * scale };
             if (config_.checked)
             {
                 context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), solid);
@@ -135,7 +135,7 @@ namespace luil {
         const float text_width { box.x + box.width - check_inset * scale - text_left };
         if (text_width <= 0.0f)
             return;
-        const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
         const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
         static_cast<void>(draw_text_within(context.canvas, config_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
     }

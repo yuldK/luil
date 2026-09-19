@@ -1387,9 +1387,16 @@ namespace luil::win32 {
                 // 매 frame·표면마다 시스템 호출을 반복하지 않고 WM_SETTINGCHANGE가 갱신한다.
                 state.theme = resolve_color_theme(appearance.theme, high_contrast_, system_prefers_light_);
                 state.accent_id = appearance.accent_id;
+                // 앱이 실은 스타일이다. frame은 이 렌더 동안 살아 있으므로 포인터로 족하다.
+                state.style = frame != nullptr ? frame->style.get() : nullptr;
                 if (state.theme == color_theme::high_contrast)
                     state.high_contrast = read_high_contrast_colors();
-                apply_frame_theme(state.theme, state.accent_id);
+                // 그리기와 창 테두리·웹뷰 바닥이 **같은 팔레트**를 본다.
+                const ui_color_palette palette { frame_palette(state) };
+                apply_frame_theme(state.theme, palette);
+                // 페이지가 배경을 정하기 전의 바닥은 창 바탕이다 — 흰색을 깔면 어두운
+                // 화면에서 페이지가 뜨는 동안 흰 판이 번쩍인다.
+                webviews_.set_default_background(palette.window_background);
 
                 // 글꼴은 앱 선호가 정한다.
                 // registry가 이름이 그대로면 아무 일도 하지 않으므로 매 frame 갱신해도 된다.
@@ -1401,25 +1408,23 @@ namespace luil::win32 {
                 return code;
             }
 
-            // 창 테두리를 테마에 맞춘다.
+            // 창 테두리를 팔레트에 맞춘다.
             // `USE_IMMERSIVE_DARK_MODE`는 OS가 그리는 창 요소의 명암을 설정한다.
             // `BORDER_COLOR`는 캔버스 바깥 DWM 테두리 색을 설정하며 팔레트의 divider를 사용한다.
-            // 같은 theme과 accent 조합에는 다시 호출하지 않고 high contrast에서는 OS 색을 보존한다.
-            void apply_frame_theme(const color_theme theme, const std::u8string& accent_id) noexcept
+            // 같은 답에는 다시 호출하지 않고 high contrast에서는 OS 색을 보존한다.
+            void apply_frame_theme(const color_theme theme, const ui_color_palette& palette) noexcept
             {
                 if (window_ == nullptr || theme == color_theme::high_contrast)
                     return;
-                if (frame_theme_.has_value() && frame_theme_->first == theme && frame_theme_->second == accent_id)
-                    return;
-                frame_theme_ = std::pair { theme, accent_id };
 
-                const BOOL dark { theme == color_theme::dark ? TRUE : FALSE };
-                static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)));
+                // 명암은 테마의 이름이 아니라 **바탕의 밝기**가 정한다.
+                // 앱이 세운 스타일은 "dark"에 밝은 바탕을 둘 수 있고, 그때 OS 그림이
+                // 이름을 따라가면 밝은 창에 어두운 모드의 요소가 선다.
+                const BOOL dark { is_dark_background(palette.window_background) ? TRUE : FALSE };
 
                 // **구분선은 알파가 실린 역할색이다.** 그대로 COLORREF로 보내면
                 // 어두운 테마에서 흰 테두리가 나온다 (띄워 재 보고 알았다) — DWM은
                 // 알파를 받지 않으므로 **창 바탕 위에 얹은 불투명 결과**를 보낸다.
-                const ui_color_palette palette { color_palette_for(theme, accent_for(accent_id)) };
                 const auto channel = [](const ui_color color, const int shift) { return static_cast<float>((color >> shift) & 0xFFu); };
                 const float alpha { channel(palette.divider, 24) / 255.0f };
                 const auto blend = [&](const int shift) {
@@ -1428,6 +1433,13 @@ namespace luil::win32 {
                 };
                 // ui_color는 0xAARRGGBB, COLORREF는 0x00BBGGRR다.
                 const COLORREF border { RGB(blend(16), blend(8), blend(0)) };
+
+                // 답이 같으면 DWM에 다시 말하지 않는다 — 키 컬러가 바뀌어도 테두리는
+                // 중립 색에서 나오므로 답이 같고, 스타일이 바뀌면 답이 달라진다.
+                if (frame_theme_.has_value() && frame_theme_->first == dark && frame_theme_->second == border)
+                    return;
+                frame_theme_ = std::pair { dark, border };
+                static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)));
                 // `DWMWA_BORDER_COLOR`는 지원되는 Windows에서 적용되며, 미지원 환경에서는 기본 테두리를 유지한다.
                 static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_BORDER_COLOR, &border, sizeof(border)));
             }
@@ -2023,9 +2035,10 @@ namespace luil::win32 {
             // 레지스트리 조회는 프레임마다 하지 않고 시작 시 한 번,
             // 이후 WM_SETTINGCHANGE·WM_THEMECHANGED에서만 갱신한다.
             bool system_prefers_light_ { read_system_prefers_light_theme() };
-            // DWM에 마지막으로 말한 테마와 키 컬러다 (아직 말하지 않았으면 비어 있다).
-            // 키 컬러도 함께 보는 이유는 테두리 색이 팔레트에서 나오기 때문이다.
-            std::optional<std::pair<color_theme, std::u8string>> frame_theme_ {};
+            // DWM에 마지막으로 말한 명암과 테두리 색이다 (아직 말하지 않았으면 비어 있다).
+            // 테마 이름이 아니라 **보낸 답**을 기억한다 — 스타일이 바뀌어 같은 테마의 답이
+            // 달라지는 경우를 이름으로는 잡을 수 없다.
+            std::optional<std::pair<BOOL, COLORREF>> frame_theme_ {};
             // 고대비 여부의 캐시다 (WM_SETTINGCHANGE가 갱신).
             bool high_contrast_ { read_high_contrast_enabled() };
             // update timer가 깨울 표면들이다.

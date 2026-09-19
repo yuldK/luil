@@ -52,7 +52,7 @@ namespace luil {
                 const float text_width { box.x + box.width - inset - text_left };
                 if (text_width > 0.0f && title_.empty() == false)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
                     const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
                     static_cast<void>(draw_text_within(context.canvas, title_, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }
@@ -114,8 +114,8 @@ namespace luil {
     {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
-        const float radius { 4.0f * scale };
-        SkPaint border { solid_paint(with_alpha(context.palette.primary_foreground, 0.25f)) };
+        const float radius { context.metrics.row_corner_radius * scale };
+        SkPaint border { solid_paint(context.palette.group_border) };
         border.setStyle(SkPaint::kStroke_Style);
         border.setStrokeWidth(1.0f * scale);
         context.canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), radius, radius), border);

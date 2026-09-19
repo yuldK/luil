@@ -197,6 +197,12 @@ TEST_CASE("Palettes compose the chosen accent, and high contrast ignores it", "[
     // 중립 색은 키 컬러와 무관하게 같다.
     REQUIRE(dark.window_background == luil::color_palette_for(luil::color_theme::dark).window_background);
     REQUIRE(dark.accent != luil::color_palette_for(luil::color_theme::dark).accent);
+    // 파생 역할은 고른 키 컬러에서 나온다 — 색조가 accent와 같고 알파만 tone이다.
+    REQUIRE((dark.accent_pressed & 0x00FFFFFFu) == (blue.dark.accent & 0x00FFFFFFu));
+    REQUIRE((dark.row_selection_background & 0x00FFFFFFu) == (blue.dark.soft & 0x00FFFFFFu));
+    REQUIRE((dark.drop_target_background & 0x00FFFFFFu) == (blue.dark.accent & 0x00FFFFFFu));
+    REQUIRE(dark.accent_pressed != luil::color_palette_for(luil::color_theme::dark).accent_pressed);
+    REQUIRE((dark.accent_pressed >> 24U) < 255u);
 
     // 고대비는 가독성이 우선이라 키 컬러를 쓰지 않는다.
     // 강조·선택은 시스템 색(hotlight·highlight 짝)이 맡는다.
@@ -238,6 +244,22 @@ TEST_CASE("High contrast palettes carry the chosen system colors verbatim", "[th
     REQUIRE(palette.button_hover_foreground == white.highlight_foreground);
     REQUIRE(palette.caption.background == white.button_background);
     REQUIRE(palette.caption.foreground == white.button_foreground);
+    // 새 중립 역할도 온전한 전경색이다.
+    REQUIRE(palette.control_border == white.window_foreground);
+    REQUIRE(palette.group_border == white.window_foreground);
+    // 파생 역할은 알파 없이 highlight 짝으로 접힌다.
+    REQUIRE(palette.accent_pressed == white.highlight_background);
+    REQUIRE(palette.soft_button_background == white.button_background);
+    REQUIRE(palette.soft_button_hover_background == white.highlight_background);
+    REQUIRE(palette.active_toggle_background == white.highlight_background);
+    REQUIRE(palette.selection_background == white.highlight_background);
+    REQUIRE(palette.selection_foreground == white.highlight_foreground);
+    REQUIRE(palette.drop_target_background == white.highlight_background);
+    REQUIRE(palette.danger_button_background == white.button_background);
+    REQUIRE(palette.danger_button_hover_background == white.highlight_background);
+    REQUIRE(palette.danger_button_pressed_background == white.highlight_background);
+    // 고른 행의 채움만은 접는다 — 행의 글자는 앱이 그려 짝을 맞출 수 없다.
+    REQUIRE((palette.row_selection_background >> 24U) == 0u);
 
     // 기본값은 OS를 읽을 수 없을 때 물러설 검정 바탕이다.
     const auto fallback { luil::high_contrast_palette_for({}) };
@@ -257,8 +279,15 @@ TEST_CASE("Neutral palettes define the derived roles as translucent foreground",
         REQUIRE(alpha_of(palette.disabled_foreground) < alpha_of(palette.secondary_foreground));
         REQUIRE(alpha_of(palette.secondary_foreground) < 255u);
         REQUIRE(alpha_of(palette.input_background) < alpha_of(palette.input_border));
+        // 그룹 틀은 구분선보다 진하고, 컨트롤 윤곽은 입력칸 테두리보다 진하다 —
+        // 칸의 경계가 아니라 표시 자체의 윤곽이라 눈에 띄어야 한다.
+        REQUIRE(alpha_of(palette.divider) < alpha_of(palette.group_border));
+        REQUIRE(alpha_of(palette.input_border) < alpha_of(palette.control_border));
+        REQUIRE(alpha_of(palette.control_border) < alpha_of(palette.secondary_foreground));
         // 색조는 전경색과 같다 (알파만 다르다).
         REQUIRE((palette.divider & 0x00FFFFFFu) == (palette.primary_foreground & 0x00FFFFFFu));
+        REQUIRE((palette.control_border & 0x00FFFFFFu) == (palette.primary_foreground & 0x00FFFFFFu));
+        REQUIRE((palette.group_border & 0x00FFFFFFu) == (palette.primary_foreground & 0x00FFFFFFu));
     }
 }
 

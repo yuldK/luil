@@ -51,7 +51,7 @@ namespace luil {
         // 켜진 토글은 hover가 아닌 동안에도 바탕과 강조색으로 상태를 계속 알린다.
         if (config.active)
         {
-            colors.rest_background = with_alpha(palette.accent_soft, button_active_fill_alpha);
+            colors.rest_background = palette.active_toggle_background;
             colors.foreground = palette.accent_emphasis_foreground;
         }
 

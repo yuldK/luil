@@ -1,6 +1,6 @@
 # 자산 파이프라인
 
-아이콘 글꼴과 accent 카탈로그의 배포 원본은 [`assets/`](../../assets/)에 두고, C++에서 사용하는 헤더는 빌드 시 생성한다. 원본과 생성물을 사람이 따로 편집하지 않으므로 이름과 코드포인트가 어긋나지 않는다.
+아이콘 글꼴과 accent 카탈로그, 스타일의 배포 원본은 [`assets/`](../../assets/)에 두고, C++에서 사용하는 헤더는 빌드 시 생성한다. 원본과 생성물을 사람이 따로 편집하지 않으므로 이름과 코드포인트가 어긋나지 않는다.
 
 ## Codicons
 
@@ -38,3 +38,16 @@ add_subdirectory(luil)
 각 항목에는 `id`, `label`, `swatch`, `dark`, `light`가 필요하다. 두 테마 각각 `accent`, `accentHover`, `accentSoft`, `accentEmphasisFg`를 `#rrggbb`로 지정한다. 기본 파일을 복사해 수정하면 된다. 알 수 없는 id의 fallback과 `appearance_settings`의 초기값에 같은 기본 id를 사용한다. 표시 이름에는 UTF-8과 따옴표·줄바꿈·역슬래시를 사용할 수 있다.
 
 카탈로그는 빌드 시 내장된다. JSON 변경 후 라이브러리를 다시 빌드해야 하며 설치된 바이너리의 JSON을 실행 중 읽는 기능은 아니다.
+
+## 스타일
+
+`assets/style.json`은 `cmake/generate_style.cmake`가 `ui_style.h`로 만들고, `luil::generated::default_style`이 [`default_ui_style()`](../../include/luil/theme/ui_style.h)의 값이다. 소비자는 configure 때 파일을 바꿀 수 있다.
+
+```cmake
+set(LUIL_STYLE "${CMAKE_CURRENT_SOURCE_DIR}/style.json" CACHE FILEPATH "Style")
+add_subdirectory(luil)
+```
+
+파일은 `dark`, `light`, `tones`, `metrics` 네 객체를 가진 JSON 객체다. `dark`·`light`는 `neutral_color_palette`의 역할을 camelCase 키로 담고(`windowBackground`, `secondaryForeground`, … 그리고 `caption` 객체), 색은 `#rrggbb` 또는 `#rrggbbaa`다 — 구분선·보조 글자처럼 알파가 실린 역할이 있어 accent 카탈로그와 달리 알파를 받는다. `tones`는 accent 위에 얹는 알파(0~1)이고 `metrics`는 논리 픽셀 치수다. 키가 빠지거나 낯선 키가 있으면 생성이 실패한다 — 생성물이 `ui_style`의 지정 초기화라 struct와 어긋난 파일이 조용히 지나가지 않는다. 기본 파일을 복사해 수정하면 된다.
+
+실행 시점에 값을 세우는 길은 [테마와 글꼴](theming.md)의 스타일 절에 있다.

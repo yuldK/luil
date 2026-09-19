@@ -107,7 +107,7 @@ namespace luil {
                 bool fill { false };
                 if (drop_here)
                 {
-                    background = with_alpha(context.palette.accent, 0.30f);
+                    background = context.palette.drop_target_background;
                     fill = true;
                 }
                 else if (selected_)
@@ -154,7 +154,7 @@ namespace luil {
                 const float text_width { box.x + box.width - reserved - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
                     SkPaint foreground { solid_paint(context.palette.primary_foreground) };
                     if (selected_ == false)
                         foreground.setAlphaf(0.75f);

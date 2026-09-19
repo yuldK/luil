@@ -55,7 +55,7 @@ namespace luil {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
         const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
-        const float radius { 3.0f * scale };
+        const float radius { context.metrics.control_corner_radius * scale };
 
         // 텍스트 입력 칸과 같은 표면·테두리 규칙이다.
         // 목록이 떠 있으면 초점을 받은 것처럼 테두리를 강조한다.
@@ -83,7 +83,7 @@ namespace luil {
         const float text_width { box.width - inset - arrow_width - 8.0f * scale };
         if (text_width <= 0.0f)
             return;
-        const SkFont font { sk_ref_sp(context.ui_typeface), 12.0f * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
         const bool empty { config_.text.empty() };
         if (empty && config_.placeholder.empty())
             return;

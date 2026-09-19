@@ -8,7 +8,8 @@
 | 메시지 큐 | `messaging::channel` | [messaging/channel.h](../include/luil/messaging/channel.h) | [설명](concepts/messaging.md) |
 | 최신 상태 게시 | `messaging::latest_slot` | [messaging/latest_slot.h](../include/luil/messaging/latest_slot.h) | [설명](concepts/messaging.md) |
 | UTF-8 텍스트 편집 | `text::text_edit_state` | [text/text_edit.h](../include/luil/text/text_edit.h) | [설명](concepts/text-editing.md) |
-| 테마·팔레트 | `color_theme`, `ui_color_palette` | [theme/ui_theme.h](../include/luil/theme/ui_theme.h) | [설명](concepts/theming.md) |
+| 테마·팔레트 | `color_theme`, `ui_color_palette`, `compose_palette` | [theme/ui_theme.h](../include/luil/theme/ui_theme.h) | [설명](concepts/theming.md) |
+| 앱 스타일(중립 색·tone·치수) | `ui_style`, `default_ui_style` | [theme/ui_style.h](../include/luil/theme/ui_style.h) | [설명](concepts/theming.md) |
 | 불변 화면 트리 | `ui_tree` | [ui/ui_tree.h](../include/luil/ui/ui_tree.h) | [설명](concepts/immutable-tree.md) |
 | 포인터·키보드 입력 정책 | `interaction_policy` | [ui/ui_interaction.h](../include/luil/ui/ui_interaction.h) | [설명](concepts/interaction.md) |
 | 텍스트 표시 | `label_element` | [ui/label_element.h](../include/luil/ui/label_element.h) | [설명](concepts/ui-element.md) |

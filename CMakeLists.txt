@@ -48,6 +48,12 @@ configure_file("${LUIL_CMAKE_DIRECTORY}/accent_defaults.h.in"
     "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/accent_defaults.h" @ONLY)
 set(LUIL_GENERATED_ACCENTS
     "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/accents.h")
+# 중립 색·tone·치수(스타일)도 JSON에서 빌드 시점에 만든다.
+# 소비자는 자기 파일로 바꿔칠 수 있다 (같은 스키마여야 한다 — 생성 script가 검사한다).
+set(LUIL_STYLE "${PROJECT_SOURCE_DIR}/assets/style.json"
+    CACHE FILEPATH "Style JSON (neutral palettes, accent tones, metrics) embedded at build time.")
+set(LUIL_GENERATED_STYLE
+    "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/ui_style.h")
 # 판번 헤더는 project VERSION 하나에서 생성한다.
 # version.cpp와 소비자 매크로가 같은 근원을 본다.
 configure_file(

@@ -60,7 +60,7 @@ element의 액션은 앱 상태를 직접 바꾸는 대신 `app_message`를 반�
 
 - 앱 설정의 길이는 논리 픽셀을 사용한다. 배치 문맥의 배율로 실제 그리기 좌표를 구한다.
 - element는 자신의 상태와 액션을 설정으로 받는다. 게시한 tree의 구조는 변경하지 않는다.
-- 색은 테마 팔레트의 역할을 통해 선택한다. 글꼴·테마·고대비 설정은 표시 계층에서 적용한다.
+- 색은 테마 팔레트의 역할을 통해 선택한다. 글꼴·테마·고대비 설정은 표시 계층에서 적용한다. 앱 고유의 중립 색·치수는 `ui_style`로 정한다 ([테마와 글꼴](concepts/theming.md)).
 - 앱 element 종류는 `application_element_kind`로, 앱 커서는 `application_cursor`로 정의한다.
 - 텍스트 편집은 `apply_text_edit`와 `make_text_input_view`로 편집 상태와 표시 상태를 연결한다.
 

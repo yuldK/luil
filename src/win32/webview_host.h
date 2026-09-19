@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/theme/ui_theme.h"
 #include "luil/win32/webview.h"
 #include "win32/webview_layout.h"
 
@@ -67,6 +68,11 @@ namespace luil::win32 {
         // 초점 신호를 창으로 나르는 자리다.
         // 무엇을 할지는 창이 정한다 — host는 tree도 초점 순서도 모른다.
         void set_focus_reporter(std::function<void(const std::u8string& id, const std::u8string& anchor, webview_focus_signal signal)> reporter);
+
+        // 페이지가 자기 배경을 정하기 전에 보이는 바닥색이다 (불투명으로 깐다).
+        // 창이 매 frame 팔레트의 창 바탕을 준다. 같은 값이면 아무 일도 하지 않고,
+        // 바뀌면 서 있는 웹뷰 전부와 앞으로 설 웹뷰에 적용한다.
+        void set_default_background(ui_color color);
 
         // 생성자도 .cpp에 둔다 — 헤더에서 만들면 unwind 경로가 `entry`의 소멸을
         // 요구하는데 그 타입은 여기서 불완전하다.
@@ -162,6 +168,9 @@ namespace luil::win32 {
         IDCompositionDevice* composition_ { nullptr };
         std::function<void(app_message)> deliver_ {};
         std::function<void(const std::u8string&, const std::u8string&, webview_focus_signal)> focus_reporter_ {};
+        // 브라우저의 기본과 같은 흰색에서 시작한다. 창이 첫 frame에서 팔레트 값으로 바꾼다.
+        ui_color default_background_ { make_ui_color(255, 255, 255) };
+        void apply_default_background(entry& target) const;
         std::vector<std::unique_ptr<environment>> environments_ {};
         std::vector<std::unique_ptr<entry>> entries_ {};
         // 컨트롤러 만들기의 시작 번호다 (`finish_controller`의 `serial`).

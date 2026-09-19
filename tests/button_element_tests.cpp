@@ -72,8 +72,8 @@ TEST_CASE("A toggled-on icon button keeps its state visible at rest", "[ui][butt
 
     SECTION("켜진 토글은 쉬는 동안의 두 색으로 말한다")
     {
-        // 알파는 이 element의 판단이라 팔레트가 아니라 이름 있는 상수에서 온다.
-        REQUIRE(colors.rest_background == luil::with_alpha(dark.accent_soft, luil::button_active_fill_alpha));
+        // 켜진 토글의 바탕은 팔레트의 파생 역할이다 — element가 알파를 발명하지 않는다.
+        REQUIRE(colors.rest_background == dark.active_toggle_background);
         REQUIRE(colors.foreground == dark.accent_emphasis_foreground);
     }
 

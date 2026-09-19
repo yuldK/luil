@@ -34,10 +34,12 @@ struct draw_context
     float scale;
     std::chrono::steady_clock::time_point now;
     bool maximized;
+    bool fullscreen;
+    ui_metrics metrics;
 };
 ```
 
-element는 테마·DPI·폰트 선택을 소유하지 않고 draw context로 받는다. `now`는 tooltip delay와 caret blink의 순수 계산에 사용한다.
+element는 테마·DPI·폰트 선택을 소유하지 않고 draw context로 받는다. `now`는 tooltip delay와 caret blink의 순수 계산에 사용한다. `metrics`는 앱 스타일의 치수(본문·작은 글자 크기, 컨트롤·행 모서리)로, 기본값이 내장 스타일과 같아 채우지 않은 context도 같은 그림이다 ([테마와 글꼴](theming.md)).
 
 `interaction_snapshot`에는 hover, press, focus, menu highlight, drag 표시가 값으로 들어 있다. element는 자신의 id와 비교하기만 하며 표면 선택은 window 계층이 한다. `ui_tree::cursor_at()`은 현재 잡고 있는 element 또는 hit 대상의 cursor를 조회하고, 결과가 `inherit`이면 창 기본값을 사용한다. drag 중에는 시작 element가 cursor를 계속 결정한다.
 
