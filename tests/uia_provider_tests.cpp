@@ -272,6 +272,34 @@ namespace {
         return owner;
     }
 
+    // 클라이언트의 자식 훑기다 — 첫(끝) 자식에서 시작해 형제를 잇는다.
+    // **끝에 닿지 못하면 그 자리에서 실패한다.** 줄에 같은 id가 둘 서면 "다음"이
+    // 제자리로 돌아와 진짜 클라이언트는 영영 답을 받지 못하므로, test는 줄 길이로
+    // 발을 묶어 그 자리를 멈춰 세운다.
+    [[nodiscard]] std::vector<std::u8string> walk_children(IRawElementProviderFragment& parent, const bool forward, const std::size_t limit = 8u)
+    {
+        std::vector<std::u8string> owners {};
+        IRawElementProviderFragment* step { nullptr };
+        REQUIRE(parent.Navigate(forward ? NavigateDirection_FirstChild : NavigateDirection_LastChild, &step) == S_OK);
+        while (step != nullptr)
+        {
+            auto* const child { static_cast<luil::win32::uia_element_provider*>(step) };
+            owners.push_back(child->element_id().owner);
+            IRawElementProviderFragment* next { nullptr };
+            REQUIRE(child->Navigate(forward ? NavigateDirection_NextSibling : NavigateDirection_PreviousSibling, &next) == S_OK);
+            child->Release();
+            step = next;
+            if (owners.size() > limit)
+            {
+                if (step != nullptr)
+                    step->Release();
+                break;
+            }
+        }
+        REQUIRE(owners.size() <= limit);
+        return owners;
+    }
+
     [[nodiscard]] int runtime_key_of(luil::win32::uia_element_provider& provider)
     {
         SAFEARRAY* array { nullptr };
@@ -405,6 +433,35 @@ TEST_CASE("UIA navigation walks the collapsed access tree", "[win32][uia]")
     last->Release();
     slider->Release();
     label->Release();
+    root->Release();
+}
+
+TEST_CASE("UIA child enumeration ends when one id stands twice", "[win32][uia]")
+{
+    // 같은 종류·이름의 id가 한 화면에 둘 서면 형제 줄의 "id → 자리"가 앞의 것을
+    // 가리켜 "다음"이 제자리로 돌아온다 — 클라이언트의 자식 훑기가 끝나지 못하던
+    // 자리다. 줄에는 id의 임자만 서고, 뒤의 것은 구조처럼 접힌다.
+    auto body { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"body" }) };
+    body->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"alpha" }, luil::label_config { .text = u8"앞" }));
+    body->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"twin" }, luil::label_config { .text = u8"쌍 앞" }));
+    body->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"beta" }, luil::label_config { .text = u8"뒤" }));
+    body->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"twin" }, luil::label_config { .text = u8"쌍 뒤" }));
+    luil::group_config section { .owner = u8"advanced", .title = u8"고급", .content_height = 40.0f };
+    auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    page->add(std::make_unique<luil::group_element>(std::move(section), std::move(body)));
+
+    fake_uia_host host {};
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const group { root->make_element_provider({ luil::ui_element_kind::group, u8"advanced" }) };
+
+    const std::vector<std::u8string> expected { u8"advanced", u8"alpha", u8"twin", u8"beta" };
+    REQUIRE(walk_children(*group, true) == expected);
+    // 뒤에서 앞으로 훑어도 같은 줄이다 — 네 방향이 한 줄을 읽는다.
+    const std::vector<std::u8string> backward { walk_children(*group, false) };
+    REQUIRE(std::vector<std::u8string> { backward.rbegin(), backward.rend() } == expected);
+
+    group->Release();
     root->Release();
 }
 

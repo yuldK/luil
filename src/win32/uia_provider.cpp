@@ -855,7 +855,10 @@ namespace luil::win32 {
             }
             case NavigateDirection_FirstChild:
             case NavigateDirection_LastChild: {
-                const std::vector<const ui_element*> children { access_children(*element) };
+                // 형제 줄과 **같은 줄을 읽는다** (표면 root가 최상위를 읽는 것과
+                // 같다). 여기서만 요소를 들고 자식을 다시 접으면 뒤로 훑은 답이
+                // 앞으로 훑은 답과 갈린다 — 같은 id가 둘 선 화면이 그 자리다.
+                const std::vector<const ui_element*>& children { tree->access_children_of(*element) };
                 if (children.empty())
                     return S_OK;
                 const ui_element* const child { direction == NavigateDirection_FirstChild ? children.front() : children.back() };

@@ -120,6 +120,14 @@ namespace luil {
         // root가 구조(`none`)면 접혀 그 자식들이고, 접근 요소면 root 하나다 —
         // 접근 tree의 통상 규칙 그대로다. 빈 tree(null root)면 비어 있다.
         [[nodiscard]] const std::vector<const ui_element*>& access_top_level() const noexcept;
+        // 이 요소의 접근 자식들이다 (색인 답, 발행 순서).
+        // 형제 줄 그 자체이므로 `access_sibling_of`와 **반드시 같은 줄이다** —
+        // 탐색의 네 방향이 한 줄을 읽어야 앞뒤로 훑은 답이 같다. 숨은 가지 위나
+        // 자식이 없는 요소면 빈 줄이다.
+        //  - 요소를 들고 묻는 `access_children`와 갈리는 자리가 하나 있다: 줄에는
+        //    **id의 임자만** 선다 (같은 id가 둘 서면 뒤의 것은 접힌다). 요소만
+        //    보는 그쪽은 tree 전체의 임자가 누구인지 알 수 없다.
+        [[nodiscard]] const std::vector<const ui_element*>& access_children_of(const ui_element& element) const;
         // 그 id를 감싸는 가장 안쪽 접근 요소다 (색인 답).
         // 없으면(최상위거나, 숨은 가지 위거나, tree에 없으면) nullptr다.
         [[nodiscard]] const ui_element* access_parent_of(const ui_element_id& id) const;
@@ -218,8 +226,9 @@ namespace luil {
         // **보이는 경로 위의 것만** 담는다 (`contains_id`와 같은 규칙) — 담겨
         // 있음이 곧 `visibly_contains`의 답이고, 같은 id는 첫 등록이 이긴다.
         std::unordered_map<ui_element_id, access_entry, id_hash> access_index_ {};
-        // 접근 요소 → 접근 자식들이다 (그리기 순서, `none` 접기를 거친 목록이라
-        // `access_children`와 같은 답). 자식이 없는 요소는 담기지 않는다.
+        // 접근 요소 → 접근 자식들이다 (그리기 순서, `none` 접기를 거친 목록).
+        // 자식이 없는 요소는 담기지 않는다. 같은 id의 뒤쪽 것도 접히므로
+        // `access_children`와 그 자리에서만 갈린다 (`access_children_of`).
         std::unordered_map<const ui_element*, std::vector<const ui_element*>> access_children_ {};
         // 최상위 접근 요소들이다 (감싸는 접근 요소가 없어 부모가 창인 것들).
         std::vector<const ui_element*> access_top_ {};

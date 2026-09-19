@@ -50,10 +50,15 @@ UIA에는 toggle switch, radio group, alert 전용 control type이 없다. 이 �
 
 - invisible branch는 제외한다.
 - role이 `none`인 element는 접고 accessible child를 상위로 올린다.
+- 같은 element id가 한 tree에 둘 이상 있으면 `ui_tree::find`가 답하는 첫 등록만 sibling 줄에 선다. 나머지는 role이 `none`인 것과 같게 접고 그 accessible child를 상위로 올린다.
 - accessible element는 publication 순서를 유지한다.
 - parent는 가장 가까운 accessible ancestor이며, 없으면 surface fragment root다.
 
 `access_children`, `access_parent`, `access_sibling`이 이 구조를 공개한다. `ui_tree`는 publish 시 index를 만들어 sibling과 parent navigation이 긴 목록을 매번 순회하지 않게 한다.
+
+중복 id를 접는 것은 진단이 아니라 navigation의 종료 조건이다. Sibling 줄에서의 자리를 id로 되묻으므로 같은 id가 둘 서면 뒤의 element가 앞의 element의 자리를 답하고, `NextSibling`이 이미 지난 자리로 돌아와 client의 child 열거가 끝나지 않는다. Runtime id도 element id에서 나오므로 한 fragment root 안에 같은 runtime id가 둘 생긴다. Element provider의 `FirstChild`와 `LastChild`는 element를 들고 자식을 다시 접지 않고 이 index 줄을 읽는다. 네 방향이 한 줄을 읽어야 앞에서 훑은 답과 뒤에서 훑은 답이 같다.
+
+중복 id 자체는 여전히 application의 결함이다. `ui_tree::duplicate_ids`가 그대로 보고하며, 접기는 화면이 멈추는 대신 뒤쪽 element가 접근성 tree에서 자기 자리를 잃는 형태로 저하시킨다.
 
 Selection container는 반드시 element의 직접 parent일 필요가 없다. `access_selection_container_of`는 바깥쪽으로 가장 가까운 accessible list, tab list, radio group을 찾는다. `access_selected_items`는 선택된 accessible child를 publication 순서로 반환한다. Main window, secondary window, popup은 각각 자신의 `HWND`와 surface-local tree에 연결된 fragment root를 가진다.
 

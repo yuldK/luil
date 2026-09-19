@@ -146,6 +146,14 @@ namespace luil {
         return access_top_;
     }
 
+    const std::vector<const ui_element*>& ui_tree::access_children_of(const ui_element& element) const
+    {
+        // 자식이 없는 요소는 색인에 담기지 않는다 — 빈 줄 하나로 답한다.
+        static const std::vector<const ui_element*> childless {};
+        const auto found { access_children_.find(&element) };
+        return found != access_children_.end() ? found->second : childless;
+    }
+
     const ui_element* ui_tree::access_parent_of(const ui_element_id& id) const
     {
         const auto found { access_index_.find(id) };
@@ -338,7 +346,8 @@ namespace luil {
         kinds_[static_cast<std::uint32_t>(element.id().kind)].push_back(element.id());
         // 같은 id는 첫 등록이 이긴다.
         // 뒤쪽 것은 중복 목록에 남아 test·진단이 잡아낸다.
-        if (lookup_.emplace(element.id(), &element).second == false)
+        const bool owns_id { lookup_.emplace(element.id(), &element).second };
+        if (owns_id == false)
             duplicates_.push_back(element.id());
         if (element.visible() && element.arranged() == false)
             unarranged_.push_back(element.id());
@@ -346,12 +355,19 @@ namespace luil {
         // 접근 색인은 보이는 경로 위의 것만 담는다 (`contains_id`와 같은 규칙 —
         // 보이지 않는 것은 읽을 자리도 아니다). 구조(`none`)는 형제 줄에 서지
         // 않고 그 자식이 이 부모 자리로 승격된다 (`access_children`와 같은 접기).
+        //  - **id의 임자만 줄에 선다** — `find`가 답하는 그 element다. 줄의 자리를
+        //    id로 되묻기 때문에(`access_sibling_of`) 같은 id가 둘 서면 뒤의 것이
+        //    앞의 것의 자리를 답하고, "다음"이 제자리로 돌아와 UIA 클라이언트의
+        //    자식 훑기가 영영 끝나지 않는다. 임자가 아닌 것은 구조처럼 접혀 그
+        //    자식이 이 부모 자리로 올라오므로 그 아래가 통째로 사라지지는 않는다.
+        //    UIA에게도 같은 말이다 — runtime id가 id에서 나오므로 줄에 둘이 서면
+        //    한 창에 같은 runtime id가 둘이다.
         const ui_element* next_access_parent { access_parent };
         if (visible_path)
         {
             visible_index_.push_back(&element);
             std::size_t position { no_access_position };
-            if (element.accessibility().role != access_role::none)
+            if (element.accessibility().role != access_role::none && owns_id)
             {
                 std::vector<const ui_element*>& siblings { access_parent != nullptr ? access_children_[access_parent] : access_top_ };
                 position = siblings.size();

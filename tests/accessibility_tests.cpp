@@ -921,6 +921,35 @@ TEST_CASE("Access siblings follow the collapsed order and stay inside their pare
     REQUIRE(luil::access_sibling(grouped, { kind_item, u8"nested" }, true) == nullptr);
 }
 
+TEST_CASE("A duplicated id stands in the access row only once", "[ui][access]")
+{
+    // 형제 줄의 자리는 id로 되묻는다. 같은 id가 둘 서면 뒤의 것이 앞의 것의
+    // 자리를 답해 "다음"이 제자리로 돌아오고, UIA 클라이언트의 자식 훑기가
+    // 영영 끝나지 않는다. 줄에는 **id의 임자**만 선다 — `find`가 답하는 그것이다.
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(make_note(u8"first", u8"앞"));
+    root->add(make_note(u8"twin", u8"쌍 앞"));
+    root->add(make_note(u8"last", u8"뒤"));
+    root->add(make_note(u8"twin", u8"쌍 뒤"));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+
+    REQUIRE(tree.duplicate_ids().size() == 1u);
+    const std::vector<const luil::ui_element*>& top { tree.access_top_level() };
+    REQUIRE(top.size() == 3u);
+    // 줄에 선 것은 첫 등록이다 — provider가 id로 되찾는 element와 같다.
+    REQUIRE(top[1] == tree.find({ kind_item, u8"twin" }));
+
+    // UIA 클라이언트의 자식 훑기다 (첫 자식 뒤로 형제를 잇는다). 끝에 닿아야 한다.
+    std::vector<luil::ui_element_id> walked {};
+    for (const luil::ui_element* step { top.front() }; step != nullptr && walked.size() <= top.size(); step = luil::access_sibling(tree, step->id(), true))
+        walked.push_back(step->id());
+
+    REQUIRE(walked.size() == 3u);
+    REQUIRE(walked.back() == luil::ui_element_id { kind_item, u8"last" });
+    // 뒤의 쌍은 줄에 없으니 그 자식들도 읽을 자리가 아니다.
+    REQUIRE(luil::access_sibling(tree, { kind_item, u8"last" }, true) == nullptr);
+}
+
 TEST_CASE("An access snapshot flattens the collapsed tree in publish order", "[ui][access]")
 {
     auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
