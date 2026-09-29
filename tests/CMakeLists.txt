@@ -179,25 +179,32 @@ add_test(NAME luil_smoke_cpu
     COMMAND "$<TARGET_FILE:luil_demo>" --renderer=cpu --smoke-test)
 add_test(NAME luil_smoke_auto
     COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test)
-add_test(NAME luil_smoke_auto_fallback
-    COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test
-        --simulate-direct3d-failure)
+# Direct3D 렌더러를 뺀 구성에서는 건너뜀(77)으로 끝난다 — 명시한 direct3d가
+# 창을 세우지 못하고 그 사실을 종료 코드로 알리는 것까지가 이 구성의 계약이다.
 add_test(NAME luil_smoke_direct3d
     COMMAND "$<TARGET_FILE:luil_demo>" --renderer=direct3d --smoke-test)
 set_tests_properties(luil_smoke_direct3d PROPERTIES SKIP_RETURN_CODE 77)
-# 성공적으로 그린 뒤 잃는 경로다. 생성 시점 실패(위)와 달리 창이 이미 제시에
-# 붙어 있으므로, 물러서면서 그것을 놓지 않으면 CPU 픽셀이 화면에 닿지 못한다
-# (docs/webview-composition-design.md).
-add_test(NAME luil_smoke_auto_runtime_loss
-    COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test
-        --simulate-direct3d-loss-after-frames=1)
-set_tests_properties(
+set(luil_smoke_tests
     luil_smoke_cpu
     luil_smoke_auto
-    luil_smoke_auto_fallback
-    luil_smoke_auto_runtime_loss
-    luil_smoke_direct3d
-    PROPERTIES TIMEOUT 30 LABELS "smoke")
+    luil_smoke_direct3d)
+# 두 주입은 Direct3D가 서 있어야 뜻이 있다. 렌더러를 뺀 구성에서는 처음부터
+# CPU라 아무것도 주입되지 않은 채 통과하므로 등록하지 않는다.
+if(LUIL_ENABLE_DIRECT3D)
+    add_test(NAME luil_smoke_auto_fallback
+        COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test
+            --simulate-direct3d-failure)
+    # 성공적으로 그린 뒤 잃는 경로다. 생성 시점 실패(위)와 달리 창이 이미 제시에
+    # 붙어 있으므로, 물러서면서 그것을 놓지 않으면 CPU 픽셀이 화면에 닿지 못한다
+    # (docs/webview-composition-design.md).
+    add_test(NAME luil_smoke_auto_runtime_loss
+        COMMAND "$<TARGET_FILE:luil_demo>" --renderer=auto --smoke-test
+            --simulate-direct3d-loss-after-frames=1)
+    list(APPEND luil_smoke_tests
+        luil_smoke_auto_fallback
+        luil_smoke_auto_runtime_loss)
+endif()
+set_tests_properties(${luil_smoke_tests} PROPERTIES TIMEOUT 30 LABELS "smoke")
 
 luil_set_ide_folder("Tests"
     luil_messaging_asan_tests

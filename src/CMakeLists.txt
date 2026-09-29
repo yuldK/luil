@@ -216,12 +216,20 @@ luil_add_source_filter(luil_files "win32/host"
     "${public_headers}/win32/win32_window.h"
     "${public_headers}/win32/webview.h")
 
+# Direct3D 렌더러다. 끈 구성은 "없음"을 돌려주는 stub을 대신 컴파일한다 —
+# Ganesh를 부르는 파일이 이것 하나라, 빠지면 링커가 Skia의 GPU 코드를 걷어 낸다.
+if(LUIL_ENABLE_DIRECT3D)
+    set(luil_direct3d_renderer_source win32/direct3d_skia_renderer.cpp)
+else()
+    set(luil_direct3d_renderer_source win32/direct3d_skia_renderer_stub.cpp)
+endif()
+
 # Skia 뒷단 선택과 frame 그리기다 (CPU·Direct3D).
 luil_add_source_filter(luil_files "win32/renderer"
     win32/composition_device.cpp
     win32/composition_device.h
     win32/cpu_skia_renderer.cpp
-    win32/direct3d_skia_renderer.cpp
+    "${luil_direct3d_renderer_source}"
     win32/fence_wait.h
     win32/renderer_policy.cpp
     "${public_headers}/win32/renderer_policy.h"

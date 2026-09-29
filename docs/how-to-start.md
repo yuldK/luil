@@ -18,6 +18,8 @@ Skia와 WebView2 SDK의 버전·체크섬은 `third_party`의 패키지 설정 �
 Skia를 직접 빌드해 사용하는 방법은 [Skia 준비](skia-build.md)에 있다.
 웹 콘텐츠를 실행하는 환경에는 WebView2 Evergreen Runtime도 필요하다.
 웹뷰를 쓰지 않는 앱은 `LUIL_ENABLE_WEBVIEW=OFF`로 구성해 `fetch_webview2.ps1` 단계를 생략할 수 있다.
+GPU가 필요 없는 앱은 `LUIL_ENABLE_DIRECT3D=OFF`로 CPU 렌더러만 넣는다. 이때 웹뷰도 기본으로 꺼지므로
+`fetch_webview2.ps1` 단계가 필요 없다. 나중에 GPU 렌더링이 필요해지면 옵션만 다시 켠다.
 
 ## 최소 예제 실행
 

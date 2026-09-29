@@ -479,6 +479,11 @@ namespace luil::win32 {
         };
     } // namespace
 
+    bool direct3d_renderer_built() noexcept
+    {
+        return true;
+    }
+
     renderer_factory_result create_direct3d_skia_renderer(const HWND window, IDCompositionDevice* const composition)
     {
         if (composition == nullptr)

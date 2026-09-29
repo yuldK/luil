@@ -21,9 +21,10 @@ namespace luil::win32 {
         renderer_factory_result direct3d_result {};
         if (fault.at_creation)
             direct3d_result.error = u8"The smoke test injected a Direct3D initialization failure.";
-        else if (composition == nullptr)
+        else if (composition == nullptr && direct3d_renderer_built())
             direct3d_result.error = u8"Direct3D presentation needs a DirectComposition device.";
         else
+            // 렌더러를 뺀 빌드에서는 stub이 그 사실을 오류로 돌려준다.
             direct3d_result = create_direct3d_skia_renderer(window, composition);
 
         if (direct3d_result.renderer != nullptr)

@@ -18,6 +18,30 @@ UI 스레드는 logic이 게시한 `ui_frame`과 input의 `interaction_snapshot`
 
 CPU 전환도 실패하면 오류를 반환한다. CPU로 전환한 host가 다음 frame에서 자동으로 Direct3D를 다시 시도하지는 않는다. 전환 시 이전 DirectComposition target을 해제해야 GDI 결과가 화면에 드러난다.
 
+## CPU 전용 빌드
+
+`LUIL_ENABLE_DIRECT3D=OFF`로 구성하면 Direct3D 렌더러 대신 "없음"을 돌려주는 stub이 들어간다. 모드별 동작은 다음과 같다.
+
+| 모드 | CPU 전용 빌드의 동작 |
+| --- | --- |
+| `cpu` | 기본 빌드와 같다. |
+| `automatic` | Direct3D 생성 실패와 같은 길로 CPU에 물러선다. |
+| `direct3d` | 창 생성이 실패한다. smoke test에서는 종료 코드가 77이다. |
+
+표면은 DirectComposition device도 만들지 않으므로 프로세스에 D3D12·DXGI가 올라오지 않는다. 앱 코드는 바꿀 필요가 없다. 나중에 GPU가 필요해지면 옵션만 다시 켠다.
+
+2026-09-29에 RTX 4080(드라이버 32.0.16.1714)에서 Release `hello`로 측정한 값이다.
+
+| 구성 | 실행 파일 | Private 메모리 |
+| --- | --- | --- |
+| 기본 빌드, `automatic`(Direct3D) | 8.07MB | 약 161MB |
+| 기본 빌드, `cpu` | 8.07MB | 약 7MB |
+| CPU 전용 빌드, `automatic` | 5.17MB | 약 7MB |
+
+메모리 차이는 렌더러 모드에서 나고 빌드 옵션에서 나지 않는다. CPU로 그리면 두 빌드 모두 약 7MB다(여러 번 측정해 6.9–7.4MB). 빌드 옵션이 줄이는 것은 실행 파일 크기와 올라오는 DLL(D3D12·DXGI·D3DCompiler)이다.
+
+Direct3D의 상주 메모리는 대부분 드라이버가 장치·큐·스왑체인에 잡는 몫이라 프로세스마다 따로 든다. CPU 렌더러는 FHD 이하에서 한 frame에 수 ms 안쪽이다. 4K에서 계속 움직이는 화면처럼 프레임 예산이 빠듯한 앱에만 Direct3D가 필요하다.
+
 ## 다시 그리기
 
 [`window_surface`](../../src/win32/window_surface.cpp)는 frame·interaction 게시, 창 크기·DPI·테마 변경, timer를 무효화 요청으로 모으고 `WM_PAINT`에서 그린다. interaction은 표면 id로 걸러 다른 창의 hover·focus·drag가 섞이지 않게 하고, caption의 비클라이언트 hover를 합친다.

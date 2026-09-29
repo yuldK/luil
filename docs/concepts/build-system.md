@@ -13,7 +13,7 @@ luil의 [CMake 구성](../../CMakeLists.txt)은 준비된 의존성을 검사하
 | Windows SDK | 10.0.22621.0 이상 |
 | 언어 | C++20 |
 
-[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`(기본 켬)가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. Catch2는 테스트를 켰을 때 필요하다.
+[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. 이 옵션의 기본값은 `LUIL_ENABLE_DIRECT3D`를 따른다. Catch2는 테스트를 켰을 때 필요하다.
 
 Skia 위치는 `LUIL_SKIA_ROOT`, Debug·Release 산출물 위치는 `LUIL_SKIA_BUILD_DEBUG`와 `LUIL_SKIA_BUILD_RELEASE`로 지정한다. 검사는 필요한 정적 라이브러리와 Direct3D·JPEG·WebP·Wuffs·Rust PNG 디코더의 GN 설정을 확인하고, 그 산출물이 luil과 같은 계약으로 컴파일된 것인지도 확인한다. 컴파일러(clang-cl)·ABI(`is_trivial_abi = false`)·CRT(Debug `/MTd`, 그 밖 `/MT`)이며, 근거는 패키지가 적어 둔 `args.gn`과 `toolchain.json`이다. configure는 컴파일러를 찾지도 부르지도 않으므로 소비자에게 clang 설치가 필요하지 않다 ([Skia 빌드 준비](../skia-build.md)). WebView2 SDK 위치는 `LUIL_WEBVIEW2_ROOT`로 지정한다.
 
@@ -25,7 +25,11 @@ Skia 위치는 `LUIL_SKIA_ROOT`, Debug·Release 산출물 위치는 `LUIL_SKIA_B
 
 ## 구성 선택
 
-기본 빌드는 라이브러리를 만든다. `LUIL_BUILD_TESTS`, `LUIL_BUILD_EXAMPLES`, `LUIL_BUILD_TOOLING`, `LUIL_ENABLE_MSVC_ANALYZE`는 기본적으로 꺼져 있다. 테스트를 켜면 smoke 실행 파일에 필요한 예제도 함께 만든다. 설치 규칙을 켜는 `LUIL_INSTALL`은 최상위 프로젝트에서만 기본값이 켜진다. `LUIL_ENABLE_WEBVIEW`와 `LUIL_WARNINGS_AS_ERRORS`는 기본적으로 켜져 있다. 후자는 luil 자신의 소스에 거는 `/WX`이며, 핀으로 고정한 luil을 새 toolset이 경고할 때 소비자가 끌 수 있다.
+기본 빌드는 라이브러리를 만든다. `LUIL_BUILD_TESTS`, `LUIL_BUILD_EXAMPLES`, `LUIL_BUILD_TOOLING`, `LUIL_ENABLE_MSVC_ANALYZE`는 기본적으로 꺼져 있다. 테스트를 켜면 smoke 실행 파일에 필요한 예제도 함께 만든다. 설치 규칙을 켜는 `LUIL_INSTALL`은 최상위 프로젝트에서만 기본값이 켜진다. `LUIL_ENABLE_DIRECT3D`와 `LUIL_WARNINGS_AS_ERRORS`는 기본적으로 켜져 있다. 후자는 luil 자신의 소스에 거는 `/WX`이며, 핀으로 고정한 luil을 새 toolset이 경고할 때 소비자가 끌 수 있다.
+
+`LUIL_ENABLE_DIRECT3D`를 끄면 Direct3D 렌더러 대신 stub을 컴파일해 CPU 렌더러만 남는다. luil에서 Ganesh를 부르는 파일은 그 렌더러 하나이므로, 링커가 Skia의 GPU 코드를 실행 파일에서 걷어 낸다. Skia 패키지와 GN 설정 검사는 그대로다. 동작은 [렌더링](rendering.md)에 있다.
+
+`LUIL_ENABLE_WEBVIEW`의 기본값은 `LUIL_ENABLE_DIRECT3D`와 같다. 웹뷰는 Direct3D 렌더러의 합성 아래에만 서므로 CPU 전용 구성에서는 켜도 placeholder뿐이다. 캐시에 이미 값이 있는 빌드 디렉터리에서 Direct3D만 끄면 웹뷰는 켜진 채 남는다. configure가 이 조합을 경고하므로 그때 웹뷰도 명시적으로 끈다.
 
 [프리셋](../../CMakePresets.json)은 일반·테스트·분석 구성을 제공한다.
 

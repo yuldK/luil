@@ -28,6 +28,9 @@ cmake --build --preset vs2026-release
 의존성을 내려받지 않는다. 자세한 준비 방법은 [Skia 빌드 준비](docs/skia-build.md)를 본다.
 WebView2 Evergreen Runtime은 웹 콘텐츠 실행에 필요한 별도 구성 요소다.
 웹뷰를 쓰지 않는 앱은 `-DLUIL_ENABLE_WEBVIEW=OFF`로 SDK 준비를 생략할 수 있다.
+GPU가 필요 없는 작은 앱은 `-DLUIL_ENABLE_DIRECT3D=OFF`로 CPU 렌더러만 넣는다.
+이 구성은 D3D12 장치를 열지 않고 Skia의 GPU 코드를 링크하지 않으며, 웹뷰도
+기본으로 꺼진다. 자세한 내용은 [렌더링](docs/concepts/rendering.md)을 본다.
 
 ## 예제 실행
 

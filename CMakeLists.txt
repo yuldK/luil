@@ -148,11 +148,35 @@ option(LUIL_BUILD_TESTS "Build the luil test targets." OFF)
 option(LUIL_BUILD_EXAMPLES "Build the luil example targets." OFF)
 option(LUIL_BUILD_TOOLING "Build the clang-format and source style targets." OFF)
 option(LUIL_ENABLE_MSVC_ANALYZE "Enable MSVC /analyze for library sources." OFF)
+# Direct3D 12 렌더러를 넣는다. 끄면 CPU 렌더러만 남는다 — `automatic`은 CPU로
+# 그리고 `direct3d`를 명시한 창은 만들기에 실패한다. 공개 API는 그대로다.
+# 작은 앱이 D3D12 드라이버 몫의 상주 메모리와 Ganesh 코드를 빼는 자리다:
+# luil이 Ganesh를 부르지 않으면 링커가 Skia의 GPU 코드를 걷어 내므로
+# Skia 패키지는 같은 것을 쓴다 (docs/concepts/rendering.md).
+option(LUIL_ENABLE_DIRECT3D "Build the Direct3D 12 renderer (CPU rendering only when OFF)." ON)
 # 웹뷰를 WebView2로 세운다. 끄면 SDK를 찾지도 로더를 링크하지도 않고, 고지에서도
 # 빠진다. 공개 API는 그대로다 — 웹뷰를 실은 frame에서는 placeholder만 남는다
 # (런타임이 없는 기계와 같은 모습). 웹뷰를 쓰지 않는 앱이 SDK 준비 절차와
 # 그 네트워크 접근을 빼는 자리다.
-option(LUIL_ENABLE_WEBVIEW "Host web content with WebView2 (requires the SDK package)." ON)
+#
+# 기본값은 Direct3D를 따른다. 웹뷰는 Direct3D 렌더러의 합성 아래에만 서므로
+# CPU 전용 구성에서는 켜 두어도 placeholder뿐이다.
+#  - option은 캐시에 이미 값이 있으면 기본값을 다시 보지 않는다. 한 번 구성한
+#    빌드 디렉터리에서 Direct3D만 끄면 웹뷰는 켜진 채 남으므로 아래에서 경고한다.
+if(LUIL_ENABLE_DIRECT3D)
+    set(luil_webview_default ON)
+else()
+    set(luil_webview_default OFF)
+endif()
+option(LUIL_ENABLE_WEBVIEW "Host web content with WebView2 (requires the SDK package)." ${luil_webview_default})
+unset(luil_webview_default)
+if(LUIL_ENABLE_WEBVIEW AND NOT LUIL_ENABLE_DIRECT3D)
+    message(WARNING
+        "LUIL_ENABLE_WEBVIEW is ON while LUIL_ENABLE_DIRECT3D is OFF.\n"
+        "Web content composes only under the Direct3D renderer, so every "
+        "webview stays a placeholder. Set LUIL_ENABLE_WEBVIEW=OFF to drop the "
+        "WebView2 SDK, or LUIL_ENABLE_DIRECT3D=ON to show web content.")
+endif()
 # 라이브러리 자신의 경고를 오류로 본다 (/WX). 저장소 안에서는 늘 켠다.
 # 소비자가 끄는 자리다 — 핀으로 박힌 luil 소스를 새 toolset이 경고할 때
 # 소비자가 소스를 고칠 수 없으므로, 빌드가 막히지 않을 길은 이것뿐이다.

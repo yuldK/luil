@@ -86,6 +86,10 @@ namespace luil::win32 {
     };
 
     [[nodiscard]] renderer_factory_result create_cpu_skia_renderer(HWND window);
+    // 이 빌드에 Direct3D 렌더러가 들어 있는가 (LUIL_ENABLE_DIRECT3D).
+    // 없으면 표면은 DirectComposition device도 묻지 않는다 — 쓸 곳이 없는데
+    // 물으면 그 때문에 프로세스에 device가 생긴다.
+    [[nodiscard]] bool direct3d_renderer_built() noexcept;
     // 합성 스왑체인을 만들어 `composition`이 만든 visual에 얹는다.
     // 창의 `IDCompositionTarget`도 이 렌더러가 소유한다 — HWND당 하나뿐인 자원이라
     // 렌더러가 살아 있는 동안만 창이 합성 대상이고, 놓으면 GDI가 다시 드러난다

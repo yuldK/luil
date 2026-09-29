@@ -37,6 +37,9 @@ luil_find_skia()
 #  - 웹뷰를 끄고 설치한 라이브러리에는 로더가 링크되지 않았으므로 SDK를 찾지도
 #    잇지도 않는다. 고지 생성기도 같은 값을 본다.
 set(LUIL_ENABLE_WEBVIEW @LUIL_ENABLE_WEBVIEW@)
+# 설치한 라이브러리에 Direct3D 렌더러가 들어 있는가다. 소비자가 읽기만 한다 —
+# Skia 패키지와 링크 목록은 어느 쪽이든 같다.
+set(LUIL_ENABLE_DIRECT3D @LUIL_ENABLE_DIRECT3D@)
 if(NOT DEFINED LUIL_WEBVIEW2_ROOT)
     set(LUIL_WEBVIEW2_ROOT "@LUIL_WEBVIEW2_ROOT@")
 endif()

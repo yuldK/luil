@@ -405,10 +405,12 @@ namespace luil::win32 {
 
     bool window_surface::create_renderer(const renderer_mode mode, const renderer_fault_injection fault, const int width, const int height, std::u8string& error)
     {
-        // CPU로 고정된 표면(popup)은 device를 묻지 않는다 — 만들 이유가 없고,
-        // 물으면 그 표면 때문에 프로세스에 device가 생긴다.
+        // CPU로 고정된 표면(popup)과 Direct3D 렌더러를 뺀 빌드는 device를 묻지 않는다 —
+        // 만들 이유가 없고, 물으면 그 표면 때문에 프로세스에 device가 생긴다.
         IDCompositionDevice* composition { nullptr };
-        if (mode != renderer_mode::cpu && fault.at_creation == false)
+        if (mode != renderer_mode::cpu
+            && fault.at_creation == false
+            && direct3d_renderer_built())
         {
             std::u8string composition_error {};
             composition = context_.composition_device(composition_error);
