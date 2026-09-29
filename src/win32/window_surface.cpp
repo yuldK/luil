@@ -333,44 +333,58 @@ namespace luil::win32 {
         drop_target_ = nullptr;
     }
 
-    void window_surface::file_drag_entered(const float x, const float y, std::vector<std::u8string> files)
+    bool window_surface::file_drop_open(const float x, const float y) const
     {
-        if (app_host* const host { context_.host() }; host != nullptr)
-            host->post_raw_input(file_drag_entered_event { x, y, std::move(files), id_ });
+        // 놓기와 같은 탐색이다 — 커서가 "받음"을 보인 자리에서 놓기가 사라지지 않는다.
+        return tree_ == nullptr || tree_->drop_hit_test(x, y, file_drag_payload_).blocked == false;
     }
 
-    void window_surface::file_drag_moved(const float x, const float y)
+    bool window_surface::file_drag_entered(const float x, const float y, std::vector<std::u8string> files)
+    {
+        file_drag_payload_.custom_visual = true;
+        file_drag_payload_.files = files;
+        if (app_host* const host { context_.host() }; host != nullptr)
+            host->post_raw_input(file_drag_entered_event { x, y, std::move(files), id_ });
+        return file_drop_open(x, y);
+    }
+
+    bool window_surface::file_drag_moved(const float x, const float y)
     {
         if (app_host* const host { context_.host() }; host != nullptr)
             host->post_raw_input(file_drag_moved_event { x, y, id_ });
+        return file_drop_open(x, y);
     }
 
     void window_surface::file_drag_left()
     {
+        file_drag_payload_ = {};
         if (app_host* const host { context_.host() }; host != nullptr)
             host->post_raw_input(file_drag_left_event { id_ });
     }
 
-    void window_surface::file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files)
+    bool window_surface::file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files)
     {
         // 답과 실행은 이 표면의 tree에 직접 묻는다 (os-dragdrop-design.md).
         // caption 버튼이 tree의 액션을 동기로 실행하는 것과 같은 자리다.
         drag_payload payload {};
         payload.custom_visual = true;
         payload.files = files;
-        const ui_element* const over { tree_ != nullptr ? tree_->find_drop_target(x, y, payload) : nullptr };
+        const drop_hit_result hit { tree_ != nullptr ? tree_->drop_hit_test(x, y, payload) : drop_hit_result {} };
+        const ui_element* const over { hit.target };
         if (over != nullptr && over->drop()->on_drop)
         {
             for (input_action& action : over->drop()->on_drop(payload, ui_action_context { over->id(), x, y, false }))
                 context_.dispatch_action(std::move(action));
         }
-        else
+        else if (hit.blocked == false)
         {
             // 수락 element가 없으면 지금까지의 물러섬이다 (delegate의 on_file_dropped).
             context_.deliver_file_drop(files);
         }
         // 놓기도 표시로는 떠남이다.
         file_drag_left();
+        // 위에 뜬 불투명 표면(modal·메뉴·토스트)이 가렸으면 아무도 받지 않았다.
+        return hit.blocked == false;
     }
 
     void window_surface::set_dpi(const std::uint32_t dpi) noexcept

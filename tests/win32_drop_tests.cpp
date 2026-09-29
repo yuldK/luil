@@ -171,15 +171,19 @@ namespace {
     {
     public:
         std::vector<drop_event_record> events {};
+        // 거짓이면 그 자리를 불투명 표면이 가린 것처럼 답한다.
+        bool open { true };
 
-        void file_drag_entered(const float x, const float y, std::vector<std::u8string> files) override
+        bool file_drag_entered(const float x, const float y, std::vector<std::u8string> files) override
         {
             events.push_back({ u8"entered", x, y, std::move(files) });
+            return open;
         }
 
-        void file_drag_moved(const float x, const float y) override
+        bool file_drag_moved(const float x, const float y) override
         {
             events.push_back({ u8"moved", x, y, {} });
+            return open;
         }
 
         void file_drag_left() override
@@ -187,9 +191,10 @@ namespace {
             events.push_back({ u8"left", 0.0f, 0.0f, {} });
         }
 
-        void file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files) override
+        bool file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files) override
         {
             events.push_back({ u8"dropped", x, y, files });
+            return open;
         }
     };
 
@@ -366,6 +371,37 @@ TEST_CASE("A surface drop target relays OLE calls to its host", "[win32][drop]")
     target->Release();
 }
 
+TEST_CASE("A covered spot answers none while the drag stays tracked", "[win32][drop]")
+{
+    // 불투명 표면이 가린 자리에서 COPY를 보이면 커서는 "받음"인데 놓아도 아무 일이 없다.
+    recording_drop_host host {};
+    host.open = false;
+    auto* const target { new luil::win32::surface_drop_target { nullptr, host } };
+    file_data_object data { { L"C:\\a\\first.txt" } };
+
+    DWORD effect { DROPEFFECT_COPY };
+    REQUIRE(target->DragEnter(&data, 0, POINTL { 10, 20 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_NONE);
+    effect = DROPEFFECT_COPY;
+    REQUIRE(target->DragOver(0, POINTL { 30, 40 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_NONE);
+
+    // 가린 것 밖으로 옮기면 같은 끌기를 받는다 — 목록은 들어올 때 쥔 그대로다.
+    host.open = true;
+    effect = DROPEFFECT_COPY;
+    REQUIRE(target->DragOver(0, POINTL { 50, 60 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_COPY);
+
+    // 가린 자리에 놓으면 아무도 받지 않았다고 답한다.
+    host.open = false;
+    effect = DROPEFFECT_COPY;
+    REQUIRE(target->Drop(&data, 0, POINTL { 30, 40 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_NONE);
+    REQUIRE(host.events.back().kind == u8"dropped");
+    REQUIRE(host.events.back().files == std::vector<std::u8string> { u8"C:\\a\\first.txt" });
+    target->Release();
+}
+
 TEST_CASE("A drag without files answers none and stays silent", "[win32][drop]")
 {
     recording_drop_host host {};
@@ -473,7 +509,7 @@ TEST_CASE("A dropped file runs the accepting element or falls back", "[win32][dr
     const std::vector<std::u8string> files { u8"C:\\a.txt" };
 
     // 수락 element 위 — on_drop의 액션이 통상 규칙으로 배분된다.
-    drops.file_drag_dropped(120.0f, 120.0f, files);
+    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, files));
     REQUIRE(context.dispatched.size() == 1u);
     REQUIRE(context.fallbacks.empty());
     const auto* const message { std::get_if<luil::app_message>(&context.dispatched[0]) };
@@ -482,8 +518,39 @@ TEST_CASE("A dropped file runs the accepting element or falls back", "[win32][dr
     REQUIRE(message->get<drop_intent>()->path == u8"C:\\a.txt");
 
     // 수락 element 밖 — delegate 물러섬이다.
-    drops.file_drag_dropped(10.0f, 10.0f, files);
+    REQUIRE(drops.file_drag_dropped(10.0f, 10.0f, files));
     REQUIRE(context.dispatched.size() == 1u);
     REQUIRE(context.fallbacks.size() == 1u);
     REQUIRE(context.fallbacks[0] == files);
+}
+
+TEST_CASE("An opaque overlay prevents a file drop from reaching the window fallback", "[win32][drop]")
+{
+    fake_surface_context context {};
+    luil::win32::window_surface surface { context };
+    auto root { std::make_unique<drop_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+
+    auto target { std::make_unique<drop_panel>(luil::ui_element_id { luil::application_element_kind(0), u8"files" }) };
+    target->arrange({ { 100.0f, 100.0f, 50.0f, 50.0f }, 1.0f });
+    luil::drop_target accepting {};
+    accepting.accepts = [](const luil::drag_payload& payload) { return payload.files.empty() == false; };
+    accepting.on_drop
+        = [](const luil::drag_payload& payload, const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(drop_intent { payload.files.front() }) }; };
+    target->set_drop_target(std::move(accepting));
+    root->add(std::move(target));
+
+    auto overlay { std::make_unique<drop_panel>(luil::ui_element_id { luil::ui_element_kind::modal_scrim }) };
+    overlay->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    overlay->set_hit_opaque(true);
+    root->add(std::move(overlay));
+    static_cast<void>(surface.set_tree(std::make_shared<const luil::ui_tree>(std::move(root))));
+
+    luil::win32::drop_target_host& drops { surface };
+    // 끄는 동안에도 같은 답이라 커서가 "받음"을 보이지 않는다.
+    REQUIRE(drops.file_drag_entered(120.0f, 120.0f, { u8"C:\\a.txt" }) == false);
+    REQUIRE(drops.file_drag_moved(10.0f, 10.0f) == false);
+    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, { u8"C:\\a.txt" }) == false);
+    REQUIRE(context.dispatched.empty());
+    REQUIRE(context.fallbacks.empty());
 }

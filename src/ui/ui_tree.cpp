@@ -40,7 +40,12 @@ namespace luil {
 
     const ui_element* ui_tree::find_drop_target(const float x, const float y, const drag_payload& payload) const
     {
-        return root_ != nullptr ? root_->find_drop_target(x, y, payload) : nullptr;
+        return drop_hit_test(x, y, payload).target;
+    }
+
+    drop_hit_result ui_tree::drop_hit_test(const float x, const float y, const drag_payload& payload) const
+    {
+        return root_ != nullptr ? root_->drop_hit_test(x, y, payload) : drop_hit_result {};
     }
 
     const ui_element* ui_tree::find(const ui_element_id& id) const noexcept

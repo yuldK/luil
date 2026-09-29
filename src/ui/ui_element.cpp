@@ -363,25 +363,32 @@ namespace luil {
 
     const ui_element* ui_element::find_drop_target(const float x, const float y, const drag_payload& payload) const
     {
+        return drop_hit_test(x, y, payload).target;
+    }
+
+    drop_hit_result ui_element::drop_hit_test(const float x, const float y, const drag_payload& payload) const
+    {
         if (visible_ == false)
-            return nullptr;
+            return {};
 
         // 잘려 보이지 않는 자리는 놓을 자리도 아니다 (hit test와 같은 규칙).
         if (clip_children_ && bounds_.contains(x, y) == false)
-            return nullptr;
+            return {};
 
         // 뒤에 추가된 자식이 위에 그려지므로 역순으로 검사한다.
         for (std::size_t index = children_.size(); index > 0; --index)
         {
-            const ui_element* const target { children_[index - 1]->find_drop_target(x, y, payload) };
-            if (target != nullptr)
-                return target;
+            const drop_hit_result result { children_[index - 1]->drop_hit_test(x, y, payload) };
+            if (result.target != nullptr || result.blocked)
+                return result;
         }
 
         // 일반 hit test와 달리 drop 대상이 아닌 element는 조용히 지나친다.
         if (enabled_ && bounds_.contains(x, y) && drop_target_.has_value() && drop_target_->accepts && drop_target_->accepts(payload))
-            return this;
-        return nullptr;
+            return { this, false };
+        if (hit_opaque_ && bounds_.contains(x, y))
+            return { nullptr, true };
+        return {};
     }
 
     std::optional<std::chrono::steady_clock::time_point> ui_element::next_update(const update_context& context, const interaction_snapshot& interaction) const

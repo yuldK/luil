@@ -443,10 +443,14 @@ namespace luil::win32 {
         // 표시(entered·moved·left)는 input thread의 스냅샷으로 보내고,
         // 놓기는 이 표면의 tree에 직접 물어 그 자리에서 실행한다
         // (os-dragdrop-design.md — caption 버튼의 동기 실행과 같은 자리다).
-        void file_drag_entered(float x, float y, std::vector<std::u8string> files) override;
-        void file_drag_moved(float x, float y) override;
+        bool file_drag_entered(float x, float y, std::vector<std::u8string> files) override;
+        bool file_drag_moved(float x, float y) override;
         void file_drag_left() override;
-        void file_drag_dropped(float x, float y, const std::vector<std::u8string>& files) override;
+        bool file_drag_dropped(float x, float y, const std::vector<std::u8string>& files) override;
+        // 불투명 표면이 그 자리를 가리지 않았는가 (진입·이동의 답).
+        [[nodiscard]] bool file_drop_open(float x, float y) const;
+        // 지금 끄는 파일이다. 이동마다 목록을 다시 받지 않으려고 진입 때 쥔다.
+        drag_payload file_drag_payload_ {};
 
         // OS 파일 끌기의 등록·해제다 (attach·detach에서 부른다).
         // OLE가 없거나 등록이 실패하면 드롭만 조용히 꺼진다 (com_sta_scope의 계약).

@@ -147,6 +147,38 @@ TEST_CASE("Hit testing prefers the topmost interactive child", "[ui][element]")
     REQUIRE(tree.hit_test(150.0f, 150.0f) == nullptr);
 }
 
+TEST_CASE("An opaque overlay blocks drop targets below it", "[ui][element][drop]")
+{
+    const auto build = [](const bool opaque) {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 100.0f, 100.0f }, 1.0f });
+
+        auto target { std::make_unique<test_panel>(card_id(kind_card_body, u8"target")) };
+        target->arrange({ { 10.0f, 10.0f, 40.0f, 40.0f }, 1.0f });
+        luil::drop_target drop {};
+        drop.accepts = [](const luil::drag_payload&) { return true; };
+        target->set_drop_target(std::move(drop));
+        root->add(std::move(target));
+
+        auto overlay { std::make_unique<test_panel>(card_id(kind_card_refresh, u8"overlay")) };
+        overlay->arrange({ { 10.0f, 10.0f, 40.0f, 40.0f }, 1.0f });
+        overlay->set_action(luil::ui_trigger::left_click, noop_action());
+        overlay->set_hit_opaque(opaque);
+        root->add(std::move(overlay));
+        return luil::ui_tree { std::move(root) };
+    };
+
+    const luil::drag_payload payload {};
+    const luil::ui_tree ordinary { build(false) };
+    REQUIRE(ordinary.drop_hit_test(20.0f, 20.0f, payload).target == ordinary.find(card_id(kind_card_body, u8"target")));
+    REQUIRE(ordinary.drop_hit_test(20.0f, 20.0f, payload).blocked == false);
+
+    const luil::ui_tree opaque { build(true) };
+    REQUIRE(opaque.find_drop_target(20.0f, 20.0f, payload) == nullptr);
+    REQUIRE(opaque.drop_hit_test(20.0f, 20.0f, payload).blocked);
+    REQUIRE(opaque.drop_hit_test(70.0f, 70.0f, payload).blocked == false);
+}
+
 TEST_CASE("The tree finds elements by identity and enumerates kinds in draw order", "[ui][element]")
 {
     auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };

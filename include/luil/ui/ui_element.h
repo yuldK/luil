@@ -154,6 +154,16 @@ namespace luil {
         std::function<std::vector<input_action>(const drag_payload&, const ui_action_context&)> on_drop {};
     };
 
+    class ui_element;
+
+    // drop 대상을 못 찾은 자리와 위쪽 불투명 요소가 가린 자리를 구별한다.
+    // OS 파일 drop은 전자에서만 창 전체 처리로 물러선다.
+    struct drop_hit_result
+    {
+        const ui_element* target { nullptr };
+        bool blocked { false };
+    };
+
     // 누른 채 끄는 동안 연속으로 반응하는 element다 (스크롤 막대).
     // 일반적인 drag & drop과 달리 ghost도 drop 대상도 없고, 포인터 이동을 그때그때 메시지로 바꾼다.
     // 눌린 동안에는 포인터가 element를 벗어나도 계속 호출된다.
@@ -620,6 +630,8 @@ namespace luil {
         // hit test와 같은 규칙으로 자르는 컨테이너 밖 좌표는 그 안을 보지 않는다.
         //  - 보이지 않는 것은 놓을 자리도 아니다.
         [[nodiscard]] const ui_element* find_drop_target(float x, float y, const drag_payload& payload) const;
+        // hit_opaque에 막혔는지도 돌려준다. 보통 element는 drop 대상이 아니면 지나친다.
+        [[nodiscard]] drop_hit_result drop_hit_test(float x, float y, const drag_payload& payload) const;
 
         // 다음에 그림이 달라지는 시각이다 (시간 update 계약).
         // 시각만의 함수로 그리는 element(회전 표시·토스트 흐려짐·caret 깜빡임)가 재정의한다.

@@ -52,7 +52,10 @@ namespace luil {
         // 좌표에서 payload를 수락하는 가장 위의 drop 대상을 찾는다.
         // 일반 hit test와 달리 drop 대상이 아닌 element(예: 끌 수 있는 항목 위의 버튼)를 건너뛰고,
         // hit test와 같은 규칙으로 잘려 보이지 않는 자리는 대상이 아니다.
+        // `hit_opaque` element(modal scrim·메뉴·토스트)가 가린 아래는 찾지 않는다.
         [[nodiscard]] const ui_element* find_drop_target(float x, float y, const drag_payload& payload) const;
+        // 불투명 요소가 위에서 가리면 target 없이 blocked를 돌려준다.
+        [[nodiscard]] drop_hit_result drop_hit_test(float x, float y, const drag_payload& payload) const;
         // id로 찾는다 (해시 색인이라 크기와 무관하게 싸다).
         // 같은 id가 여럿이면 그리기 순서의 첫 element가 임자다 — 중복은
         // 앱 버그이므로 duplicate_ids로 드러난다.

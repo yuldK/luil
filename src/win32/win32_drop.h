@@ -41,10 +41,12 @@ namespace luil::win32 {
         drop_target_host& operator=(drop_target_host&&) = delete;
         virtual ~drop_target_host() = default;
 
-        virtual void file_drag_entered(float x, float y, std::vector<std::u8string> files) = 0;
-        virtual void file_drag_moved(float x, float y) = 0;
+        // 진입·이동은 그 자리에 놓을 수 있는지, 놓기는 누가 받았는지를 답한다.
+        // 거짓이면 OLE에 NONE을 답해 커서와 source가 "받지 않음"을 본다.
+        [[nodiscard]] virtual bool file_drag_entered(float x, float y, std::vector<std::u8string> files) = 0;
+        [[nodiscard]] virtual bool file_drag_moved(float x, float y) = 0;
         virtual void file_drag_left() = 0;
-        virtual void file_drag_dropped(float x, float y, const std::vector<std::u8string>& files) = 0;
+        [[nodiscard]] virtual bool file_drag_dropped(float x, float y, const std::vector<std::u8string>& files) = 0;
     };
 
     // 창 하나의 IDropTarget이다.

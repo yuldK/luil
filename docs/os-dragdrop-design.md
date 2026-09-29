@@ -32,6 +32,8 @@ OS payload는 `custom_visual == true`이고 셸이 준 경로를 `files`에 순�
 
 Win32 adapter는 `IDropTarget`을 구현하고 `CF_HDROP`만 받는다. source가 copy를 허용하고 경로가 하나 이상일 때만 `DROPEFFECT_COPY`를 답한다. Move나 link를 답하지 않는다. 경로만 읽은 뒤 move를 주장하면 source가 앱이 옮기지 않은 원본을 지울 수 있다.
 
+받기로 한 끌기라도 포인터 자리를 `hit_opaque` 표면(modal scrim·dialog 내용·메뉴·토스트)이 가리고 그 위에 수락 element가 없으면 `DROPEFFECT_NONE`을 답한다. 그 자리에 놓아도 받는 이가 없으므로 커서도 "받지 않음"을 보인다. 끌기 자체는 계속 쥐고 있어 가린 것 밖으로 옮기면 다시 `DROPEFFECT_COPY`가 된다. `Drop`은 아무도 받지 않았을 때만 `DROPEFFECT_NONE`을 답한다.
+
 경로 목록은 4,096개로 제한한다. 밖에서 온 data object가 무한한 메모리 작업을 정하지 못하게 그 뒤의 항목은 무시한다.
 
 OLE의 `DragEnter`, `DragOver`, `DragLeave`, `Drop`은 UI STA에서 동기로 온다. 화면 좌표는 대상 표면의 물리 client 좌표로 한 번 바꾼다.
@@ -40,10 +42,11 @@ OLE의 `DragEnter`, `DragOver`, `DragLeave`, `Drop`은 UI STA에서 동기로 �
 
 진입, 이동, 떠남은 raw input event로 게시한다. Input controller는 이를 사용해 현재 drag visual과 포인터 아래 수락 element를 interaction snapshot에 게시한다. 따라서 hover 강조는 내부 drag와 같은 경로를 쓴다.
 
-최종 `Drop`은 OLE effect를 동기로 답해야 한다. UI thread가 현재 표면 tree의 `ui_tree::find_drop_target(x, y, payload)`를 직접 묻는다. 이 탐색은 다음 규칙을 따른다.
+최종 `Drop`은 OLE effect를 동기로 답해야 한다. UI thread가 현재 표면 tree의 `ui_tree::drop_hit_test(x, y, payload)`를 직접 묻는다. `DragEnter`·`DragOver`의 effect도 같은 탐색으로 정한다. 이 탐색은 다음 규칙을 따른다.
 
 - 보이는 최상위 수락 element를 찾는다.
-- drop target이 아닌 element는 아래 대상을 막지 않는다.
+- drop target이 아닌 보통 element는 아래 대상을 막지 않는다.
+- `hit_opaque` element는 막는다. 그 안의 수락 element는 찾지만, 그것이 가린 아래 대상은 찾지 않고 결과를 `blocked`로 알린다. 내부 drag의 대상 탐색(`find_drop_target`)도 같은 규칙이다.
 - clip과 visibility를 따른다.
 - 완전한 payload로 `accepts`를 부른다.
 
@@ -55,7 +58,7 @@ OLE의 `DragEnter`, `DragOver`, `DragLeave`, `Drop`은 UI STA에서 동기로 �
 
 완료된 drop을 받는 element가 없으면 platform은 `window_delegate::on_file_dropped`을 경로 순서대로 한 번씩 부른다. `true`를 돌려주면 나머지 경로를 보지 않는다. Element 대상은 좌표가 있는 동작을 제공하고, 이 callback은 간단한 창 전체 파일 열기 경로를 유지한다.
 
-element가 payload를 받았으면 fallback은 부르지 않는다.
+element가 payload를 받았으면 fallback은 부르지 않는다. 불투명 표면이 가린 자리(`blocked`)에서도 부르지 않는다. modal이 떠 있는 동안 뒤의 창이 파일을 여는 일이 없다.
 
 ## 수명과 실패
 
@@ -65,4 +68,4 @@ drag event에는 표면 id가 실린다. 보조 창은 자기 tree에서 대상�
 
 ## 검증
 
-[`tests/win32_drop_tests.cpp`](../tests/win32_drop_tests.cpp)는 경로 순서와 상한, 빈 payload, COM 전달, copy-only 협상, copy를 허락하지 않은 source의 거절, element 액션, fallback을 확인한다. [`tests/raster_draw_tests.cpp`](../tests/raster_draw_tests.cpp)는 OS가 drag visual을 소유해도 대상 강조가 남는지 확인한다.
+[`tests/win32_drop_tests.cpp`](../tests/win32_drop_tests.cpp)는 경로 순서와 상한, 빈 payload, COM 전달, copy-only 협상, copy를 허락하지 않은 source의 거절, 가린 자리의 NONE 답, element 액션, fallback과 불투명 표면이 막은 fallback을 확인한다. [`tests/raster_draw_tests.cpp`](../tests/raster_draw_tests.cpp)는 OS가 drag visual을 소유해도 대상 강조가 남는지 확인한다.

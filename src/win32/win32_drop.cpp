@@ -121,23 +121,27 @@ namespace luil::win32 {
             return S_OK;
         }
 
+        // 끌기는 창 단위로 받아 두고, 답만 자리에 따라 가린다 — 불투명 표면 위에서
+        // 들어와도 그 밖으로 옮기면 놓을 수 있다.
         const POINT client { client_point(point) };
-        host_->file_drag_entered(static_cast<float>(client.x), static_cast<float>(client.y), files_);
+        if (host_->file_drag_entered(static_cast<float>(client.x), static_cast<float>(client.y), files_) == false && effect != nullptr)
+            *effect = DROPEFFECT_NONE;
         return S_OK;
     }
 
     HRESULT surface_drop_target::DragOver(DWORD, const POINTL point, DWORD* const effect)
     {
         // 창 단위 수락이다 — 받기로 한 파일이 실려 있으면 받는다.
-        // 어디에 떨어지는가(element 대상인가 물러섬인가)는 놓는 순간 정한다
-        // (os-dragdrop-design.md).
+        // 다만 불투명 표면(modal·메뉴·토스트)이 가린 자리는 놓아도 받는 이가 없으므로
+        // NONE을 보인다. 어느 element가 받는가는 놓는 순간 정한다 (os-dragdrop-design.md).
         const DWORD chosen { accepted_effect(allowed_effect(effect), files_.empty() == false) };
         if (effect != nullptr)
             *effect = chosen;
         if (chosen != DROPEFFECT_NONE)
         {
             const POINT client { client_point(point) };
-            host_->file_drag_moved(static_cast<float>(client.x), static_cast<float>(client.y));
+            if (host_->file_drag_moved(static_cast<float>(client.x), static_cast<float>(client.y)) == false && effect != nullptr)
+                *effect = DROPEFFECT_NONE;
         }
         return S_OK;
     }
@@ -153,14 +157,16 @@ namespace luil::win32 {
     HRESULT surface_drop_target::Drop(IDataObject*, DWORD, const POINTL point, DWORD* const effect)
     {
         // 여기서도 허락 집합을 먼저 읽는다 — 거절이면 놓았다고 알리지 않는다.
-        // 소비자가 이미 파일을 처리한 뒤에 NONE을 답하면 답과 행동이 어긋난다.
+        // NONE은 **아무도 받지 않았을 때만** 답한다. 소비자가 이미 파일을 처리한 뒤에
+        // NONE을 답하면 답과 행동이 어긋난다.
         const DWORD chosen { accepted_effect(allowed_effect(effect), files_.empty() == false) };
         if (effect != nullptr)
             *effect = chosen;
         if (chosen != DROPEFFECT_NONE)
         {
             const POINT client { client_point(point) };
-            host_->file_drag_dropped(static_cast<float>(client.x), static_cast<float>(client.y), files_);
+            if (host_->file_drag_dropped(static_cast<float>(client.x), static_cast<float>(client.y), files_) == false && effect != nullptr)
+                *effect = DROPEFFECT_NONE;
         }
         files_.clear();
         return S_OK;
