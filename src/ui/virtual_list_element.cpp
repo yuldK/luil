@@ -573,7 +573,7 @@ namespace luil {
     void virtual_list_element::build_rows()
     {
         auto* const lane { static_cast<virtual_lane_element*>(lane_) };
-        const auto realize = [this, lane](const std::size_t index) {
+        const auto realize = [this, lane](const std::size_t index, const float begin) {
             const virtual_list_item& item { config_.items[index] };
             const bool selected { item.enabled && item.key == config_.selected };
             const bool at_cursor { cursor_.has_value() && *cursor_ == index };
@@ -609,16 +609,37 @@ namespace luil {
             // 글을 직접 그린다).
             if (config_.build_row != nullptr)
                 row->set_content(config_.build_row(item, index, selected));
-            lane->add_row(std::move(row), virtual_list_row_span(config_.items, config_.row_height, index));
+            lane->add_row(std::move(row), { begin, item_height(item, config_.row_height) });
         };
 
+        // 앞부분은 한 번만 더하고, 보이는 행들은 같은 합을 이어 쓴다.
+        // 매 행마다 0부터 더하면 목록 끝의 수십 행을 짓는 비용이 제곱으로 는다.
+        // 창 앞에 선 커서 행의 자리는 그 합을 지나며 적어 둔다.
+        const bool cursor_before { cursor_.has_value() && *cursor_ < realized_.begin };
+        float cursor_begin { 0.0f };
+        float begin { 0.0f };
+        for (std::size_t index = 0; index < realized_.begin; ++index)
+        {
+            if (cursor_before && index == *cursor_)
+                cursor_begin = begin;
+            begin += item_height(config_.items[index], config_.row_height);
+        }
         for (std::size_t index = realized_.begin; index < realized_.end; ++index)
-            realize(index);
+        {
+            realize(index, begin);
+            begin += item_height(config_.items[index], config_.row_height);
+        }
         // 커서 행은 창에 걸치지 않아도 짓는다.
         // 보조 기술이 "지금 어디에 서 있는가"를 물었을 때 답할 자리가 있어야
         // 하고, 커스텀 행 안의 컨트롤이 스크롤 한 번에 사라지지 않는다.
-        if (cursor_.has_value() && (*cursor_ < realized_.begin || *cursor_ >= realized_.end))
-            realize(*cursor_);
+        if (cursor_before)
+            realize(*cursor_, cursor_begin);
+        else if (cursor_.has_value() && *cursor_ >= realized_.end)
+        {
+            for (std::size_t index = realized_.end; index < *cursor_; ++index)
+                begin += item_height(config_.items[index], config_.row_height);
+            realize(*cursor_, begin);
+        }
     }
 
     void virtual_list_element::draw(draw_context& context, const interaction_snapshot& interaction) const

@@ -464,6 +464,53 @@ TEST_CASE("The cursor row is realised even where the viewport cannot reach it", 
     REQUIRE(row_at(*view, 7).bounds().y > 100.0f);
 }
 
+TEST_CASE("Deep variable height rows retain their exact spans with an offscreen cursor", "[ui][list]")
+{
+    const auto check = [](const std::size_t cursor_index) {
+        luil::virtual_list_config config { make_config(10000) };
+        for (std::size_t index = 0; index < config.items.size(); ++index)
+            if (index % 3u == 0u)
+                config.items[index].height = 17.3f;
+            else if (index % 3u == 1u)
+                config.items[index].height = 21.4f;
+        const std::vector<luil::virtual_list_item> items { config.items };
+        config.cursor = item_key(cursor_index);
+        config.scroll = scroll_factory();
+        config.scroll_offset = luil::virtual_list_row_span(items, config.row_height, 9000u).begin;
+        auto list { std::make_unique<luil::virtual_list_element>(std::move(config)) };
+        const luil::virtual_list_element* const view { list.get() };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(list), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+
+        REQUIRE(view->realized().begin > 8900u);
+        const luil::ui_element& lane { virtual_lane(*view) };
+        for (std::size_t index = view->realized().begin; index < view->realized().end; ++index)
+        {
+            const luil::virtual_list_span span { luil::virtual_list_row_span(items, 20.0f, index) };
+            const luil::ui_element& row { row_at(*view, index - view->realized().begin) };
+            REQUIRE(row.id() == row_id(item_key(index)));
+            REQUIRE(row.bounds().y == lane.bounds().y + span.begin);
+            REQUIRE(row.bounds().height == span.length);
+        }
+
+        const luil::virtual_list_span cursor_span { luil::virtual_list_row_span(items, 20.0f, cursor_index) };
+        const luil::ui_element& cursor_row { row_at(*view, view->realized().end - view->realized().begin) };
+        REQUIRE(cursor_row.id() == row_id(item_key(cursor_index)));
+        REQUIRE(cursor_row.bounds().y == lane.bounds().y + cursor_span.begin);
+        REQUIRE(cursor_row.bounds().height == cursor_span.length);
+        REQUIRE(tree.duplicate_ids().empty());
+    };
+
+    SECTION("커서가 보이는 행보다 앞에 있다")
+    {
+        check(0u);
+    }
+
+    SECTION("커서가 보이는 행보다 뒤에 있다")
+    {
+        check(9999u);
+    }
+}
+
 TEST_CASE("A virtual list is one Tab stop and its rows are not", "[ui][list]")
 {
     SECTION("자리는 목록 자신 하나다")
