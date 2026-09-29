@@ -70,7 +70,6 @@ luil_add_source_filter(luil_files "messaging"
 
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
 luil_add_source_filter(luil_files "text"
-    text/fonts.cpp
     text/text_edit.cpp
     "${public_headers}/text/fonts.h"
     "${public_headers}/text/text_edit.h"
@@ -289,11 +288,12 @@ luil_add_source_filter(luil_files "win32/input"
     win32/win32_tsf_input.cpp
     win32/win32_tsf_input.h)
 
-# 글꼴이다. 시스템 글꼴 열거와, 실행 파일 resource에 박힌 codicon 폰트·고지다.
+# 글꼴이다. 시스템 글꼴 열거, 파일·바이트 로딩, 실행 파일 resource에 박힌 codicon 폰트·고지다.
 luil_add_source_filter(luil_files "win32/fonts"
     win32/embedded_assets.cpp
     win32/embedded_assets.h
     win32/resource_ids.h
+    win32/typeface_loading.cpp
     win32/win32_fonts.cpp
     win32/win32_fonts.h)
 

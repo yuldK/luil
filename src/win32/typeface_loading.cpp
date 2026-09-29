@@ -31,7 +31,7 @@ namespace luil {
 
     sk_sp<SkTypeface> load_typeface_file(const std::filesystem::path& path, const int face_index)
     {
-        if (path.empty() || path.native().find(L'\0') != std::wstring::npos || face_index < 0)
+        if (path.empty() || face_index < 0 || path.native().find(std::filesystem::path::value_type {}) != std::filesystem::path::string_type::npos)
             return nullptr;
         std::error_code error {};
         if (std::filesystem::is_regular_file(path, error) == false || error)
