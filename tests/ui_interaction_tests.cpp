@@ -300,11 +300,14 @@ TEST_CASE("Wheel routing picks the first route whose element covers the pointer"
     REQUIRE(luil::route_wheel(tree, 500.0f, 500.0f, 48.0f, routes).empty());
 }
 
-TEST_CASE("Platform key codes round trip through the reserved band", "[ui][interaction][events]")
+TEST_CASE("Alphanumeric shortcuts have platform-neutral names and keep Win32 aliases", "[ui][interaction][events]")
 {
-    // 이름 키에 없는 단축키(Ctrl+S)는 platform 대역으로 표현한다.
+    // 종전 Win32 호출도 이름 키로 이어져 앱 단축키를 깨지 않는다.
     constexpr luil::key_code control_s { luil::platform_key_code(0x53u) };
+    STATIC_REQUIRE(control_s == luil::key_code::key_s);
     STATIC_REQUIRE(luil::platform_key_of(control_s) == 0x53u);
+    STATIC_REQUIRE(luil::platform_key_code('7') == luil::key_code::key_7);
+    STATIC_REQUIRE(luil::platform_key_of(luil::key_code::key_7) == '7');
     // 이름 키는 platform 대역이 아니다.
     STATIC_REQUIRE(luil::platform_key_of(luil::key_code::enter) == 0u);
 
@@ -369,6 +372,52 @@ TEST_CASE("A focused text input consumes characters and editing keys through the
     const auto* const paste { std::get_if<luil::clipboard_paste_request>(&actions[0]) };
     REQUIRE(paste != nullptr);
     REQUIRE(paste->target == query_target);
+}
+
+TEST_CASE("Text editing separates primary shortcuts from word navigation", "[ui][interaction][text][events]")
+{
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto input { std::make_unique<test_text_input>(luil::ui_element_id { kind_query_input }, u8"abcdef", 2u, 5u) };
+    input->arrange({ { 0.0f, 0.0f, 100.0f, 20.0f }, 1.0f });
+    root->add(std::move(input));
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 30.0f, 10.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(luil::pointer_released_event { 30.0f, 10.0f, luil::pointer_button::left, at(20) }));
+
+    // Command+왼쪽은 Ctrl+왼쪽의 낱말 이동으로 바뀌면 안 된다.
+    luil::key_pressed_event command_left { luil::key_code::arrow_left };
+    command_left.meta = true;
+    command_left.primary_shortcut = true;
+    command_left.word_navigation = false;
+    static_cast<void>(controller.process(command_left));
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::move_left);
+
+    // Option+왼쪽은 주 단축키 없이도 낱말 단위로 움직인다.
+    luil::key_pressed_event option_left { luil::key_code::arrow_left };
+    option_left.alt = true;
+    option_left.primary_shortcut = false;
+    option_left.word_navigation = true;
+    static_cast<void>(controller.process(option_left));
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::move_word_left);
+
+    luil::key_pressed_event command_copy { luil::key_code::key_c };
+    command_copy.meta = true;
+    command_copy.primary_shortcut = true;
+    command_copy.word_navigation = false;
+    const auto copied { controller.process(command_copy) };
+    REQUIRE(copied.size() == 1u);
+    REQUIRE(std::get_if<luil::clipboard_copy_request>(&copied[0]) != nullptr);
+
+    // 명시한 역할이 물리 Control보다 우선한다.
+    luil::key_pressed_event control_copy { luil::key_code::key_c, true };
+    control_copy.primary_shortcut = false;
+    control_copy.word_navigation = false;
+    const auto uncopied { controller.process(control_copy) };
+    for (const luil::input_action& action : uncopied)
+        REQUIRE(std::get_if<luil::clipboard_copy_request>(&action) == nullptr);
 }
 
 TEST_CASE("Pressing elsewhere or losing the window releases the text focus", "[ui][interaction][policy]")
@@ -1672,6 +1721,24 @@ TEST_CASE("Enter presses the focused control and flows on inside a text box", "[
     static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::enter, true, false, false, false, at(40) }));
     REQUIRE(clicks == 1);
     REQUIRE(policy.last_key == luil::key_code::enter);
+
+    // 역할로 알린 주 단축키(macOS의 Command)도 같은 판정이다 — 물리 Control이 없어도
+    // 초점 버튼을 누르지 않는다.
+    policy.last_key = luil::key_code::none;
+    luil::key_pressed_event command_enter { luil::key_code::enter, false, false, false, false, at(50) };
+    command_enter.meta = true;
+    command_enter.primary_shortcut = true;
+    static_cast<void>(controller.process(command_enter));
+    REQUIRE(clicks == 1);
+    REQUIRE(policy.last_key == luil::key_code::enter);
+
+    policy.last_key = luil::key_code::none;
+    luil::key_pressed_event command_space { luil::key_code::space, false, false, false, false, at(60) };
+    command_space.meta = true;
+    command_space.primary_shortcut = true;
+    static_cast<void>(controller.process(command_space));
+    REQUIRE(clicks == 1);
+    REQUIRE(policy.last_key == luil::key_code::space);
 }
 
 TEST_CASE("Enter that the focus did not take goes to the default button", "[ui][interaction][focus]")
@@ -1760,6 +1827,17 @@ TEST_CASE("Enter that the focus did not take goes to the default button", "[ui][
     {
         controller.set_tree(build(false, false, true));
         static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::enter, true, false, false, false, at(0) }));
+        REQUIRE(confirms == 0);
+        REQUIRE(policy.last_key == luil::key_code::enter);
+    }
+
+    SECTION("역할로 Control을 끈 Ctrl+Enter도 앱의 것이다")
+    {
+        // 물리 수정키가 눌렸으면 편집 역할과 무관하게 앱 단축키다.
+        controller.set_tree(build(false, false, true));
+        luil::key_pressed_event control_enter { luil::key_code::enter, true, false, false, false, at(0) };
+        control_enter.primary_shortcut = false;
+        static_cast<void>(controller.process(control_enter));
         REQUIRE(confirms == 0);
         REQUIRE(policy.last_key == luil::key_code::enter);
     }

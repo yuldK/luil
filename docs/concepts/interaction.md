@@ -26,7 +26,9 @@ input 스레드의 [`interaction_controller`](../../include/luil/ui/ui_interacti
 8. 기본 버튼의 Enter 실행
 9. 앱 정책의 `on_key()`
 
-텍스트 초점에서 Space 키 이벤트는 소비하고 실제 글자는 문자 이벤트로 받는다. Enter는 기본 버튼 경로까지 흐를 수 있다. Tab은 초점 element가 `takes_tab`을 선언하지 않았고 이동할 자리가 있을 때 이동으로 소비한다. 그렇지 않으면 뒤의 라우팅이 이어진다. Ctrl·Alt를 동반한 Enter는 기본 버튼 실행 대상에서 제외한다.
+텍스트 초점에서 Space 키 이벤트는 소비하고 실제 글자는 문자 이벤트로 받는다. Enter는 기본 버튼 경로까지 흐를 수 있다. Tab은 초점 element가 `takes_tab`을 선언하지 않았고 이동할 자리가 있을 때 이동으로 소비한다. 그렇지 않으면 뒤의 라우팅이 이어진다. Shift가 아닌 수정자를 동반한 Enter는 기본 버튼 실행 대상에서 제외한다.
+
+`key_pressed_event`는 물리 수정키(`control`, `alt`, `shift`, `meta`)와 편집 역할(`primary_shortcut`, `word_navigation`)을 구분한다. 역할을 생략하면 기존 Windows 규칙처럼 둘 다 Control을 따른다. Shift를 뺀 수정자가 하나라도 있으면(`shortcut_modifier_down`) 실행 키·기본 버튼·단계 키·묶음 키가 가로채지 않고 앱 단축키로 흐른다. 물리 키로 알리든 역할로 알리든 같은 판정이다. 다른 플랫폼 입력 뒷단은 역할을 명시할 수 있다. 예를 들어 macOS에서는 Command를 복사·붙여넣기의 주 단축키로, Option을 낱말 이동 수정자로 보낸다. 영문자와 숫자는 `key_code::key_*` 이름으로 나르며, `platform_key_code`는 기존 Win32 호출의 호환 경로이자 나머지 플랫폼 고유 키의 대역이다.
 
 ## 초점 상태와 tree 교체
 

@@ -43,7 +43,7 @@ namespace luil::win32 {
     // 수정자 조합의 키다.
     // 문자를 만드는 키(`character_key`)는 Ctrl·Alt가 눌린 동안에만 이벤트가 된다 —
     // 그냥 치는 글자는 문자 입력(`WM_CHAR`)으로 흘러야 그 글자를 칠 수 있다.
-    // 이름 키에 없는 나머지는 platform 대역(`platform_key_code`)으로 나른다.
+    // 영문자·숫자는 공통 이름 키로, 나머지는 platform 대역으로 나른다.
     //  - 어떤 키가 문자를 만드는지는 layout이 아는 값이라 창이 조회해 넘긴다.
     [[nodiscard]] key_code modified_key_from_virtual(WPARAM virtual_key, bool control, bool alt, bool character_key) noexcept;
 } // namespace luil::win32

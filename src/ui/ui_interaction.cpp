@@ -878,13 +878,15 @@ namespace luil {
         if (focused.has_value() == false)
             return std::nullopt;
         const text_input_target target { *focused };
+        const bool primary_shortcut { event.primary_shortcut_down() };
+        const bool word_navigation { event.word_navigation_down() };
 
         switch (event.key)
         {
         case key_code::arrow_left:
-            return std::vector<input_action> { text_edit_action(target, event.control ? text::text_edit_command::move_word_left : text::text_edit_command::move_left, event.shift) };
+            return std::vector<input_action> { text_edit_action(target, word_navigation ? text::text_edit_command::move_word_left : text::text_edit_command::move_left, event.shift) };
         case key_code::arrow_right:
-            return std::vector<input_action> { text_edit_action(target, event.control ? text::text_edit_command::move_word_right : text::text_edit_command::move_right, event.shift) };
+            return std::vector<input_action> { text_edit_action(target, word_navigation ? text::text_edit_command::move_word_right : text::text_edit_command::move_right, event.shift) };
         case key_code::home:
             return std::vector<input_action> { text_edit_action(target, text::text_edit_command::move_line_start, event.shift) };
         case key_code::end:
@@ -893,7 +895,7 @@ namespace luil {
             // Shift+Delete는 선택 영역을 잘라내고, Ctrl+Delete는 오른쪽 낱말을 지운다.
             if (event.shift && event.control == false)
                 return copy_focused_selection(target, true);
-            return std::vector<input_action> { text_edit_action(target, event.control ? text::text_edit_command::delete_word_right : text::text_edit_command::delete_forward) };
+            return std::vector<input_action> { text_edit_action(target, word_navigation ? text::text_edit_command::delete_word_right : text::text_edit_command::delete_forward) };
         case key_code::insert:
             // Ctrl+Insert는 복사, Shift+Insert는 붙여넣기다.
             if (event.control)
@@ -902,24 +904,24 @@ namespace luil {
                 return std::vector<input_action> { input_action { clipboard_paste_request { target } } };
             return std::nullopt;
         case key_code::key_z:
-            if (event.control)
+            if (primary_shortcut)
                 return std::vector<input_action> { text_edit_action(target, event.shift ? text::text_edit_command::redo : text::text_edit_command::undo) };
             return std::nullopt;
         case key_code::key_y:
-            if (event.control)
+            if (primary_shortcut)
                 return std::vector<input_action> { text_edit_action(target, text::text_edit_command::redo) };
             return std::nullopt;
         case key_code::key_a:
-            if (event.control)
+            if (primary_shortcut)
                 return std::vector<input_action> { text_edit_action(target, text::text_edit_command::select_all) };
             return std::nullopt;
         case key_code::key_c:
         case key_code::key_x:
-            if (event.control == false)
+            if (primary_shortcut == false)
                 return std::nullopt;
             return copy_focused_selection(target, event.key == key_code::key_x);
         case key_code::key_v:
-            if (event.control)
+            if (primary_shortcut)
                 return std::vector<input_action> { input_action { clipboard_paste_request { target } } };
             return std::nullopt;
         default:
@@ -1007,7 +1009,7 @@ namespace luil {
     std::optional<std::vector<input_action>> interaction_controller::process_default_key(const key_pressed_event& event)
     {
         // 수정자와 함께면 앱 단축키다 (실행 키와 같은 판정).
-        if (event.key != key_code::enter || event.control || event.alt)
+        if (event.key != key_code::enter || event.shortcut_modifier_down())
             return std::nullopt;
 
         // 초점이 있으면 그 표면에서, 없으면 **키가 온 표면**에서 찾는다
@@ -1023,7 +1025,7 @@ namespace luil {
         const rect_f box { button->bounds() };
         if (policy_ != nullptr)
             policy_->on_click(*button);
-        return run_trigger(*button, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, event.control);
+        return run_trigger(*button, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, false);
     }
 
     std::optional<std::vector<input_action>> interaction_controller::process_dismiss_key(const key_pressed_event& event)
@@ -1163,7 +1165,7 @@ namespace luil {
     {
         // 수정자와 함께라면 앱 단축키다 (Ctrl+Space·Ctrl+Enter 등).
         const bool space { event.key == key_code::space };
-        if ((space == false && event.key != key_code::enter) || event.control || event.alt)
+        if ((space == false && event.key != key_code::enter) || event.shortcut_modifier_down())
             return std::nullopt;
         // 초점이 텍스트 박스면 **두 키가 갈린다.**
         //  - Space는 글자다. 문자 경로(`character_typed_event`)가 그것을 먹으므로
@@ -1187,7 +1189,7 @@ namespace luil {
         const rect_f box { element->bounds() };
         if (policy_ != nullptr)
             policy_->on_click(*element);
-        return run_trigger(*element, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, event.control);
+        return run_trigger(*element, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, false);
     }
 
     std::vector<input_action> interaction_controller::process_access_focus(const access_focus_event& event)
@@ -1333,7 +1335,7 @@ namespace luil {
     std::optional<std::vector<input_action>> interaction_controller::process_step_key(const key_pressed_event& event)
     {
         // 수정자와 함께라면 앱 단축키다 (묶음과 같은 규칙).
-        if (event.control || event.alt || snapshot_.focused == ui_element_id {})
+        if (event.shortcut_modifier_down() || snapshot_.focused == ui_element_id {})
             return std::nullopt;
         const ui_tree* const tree { surface_tree(snapshot_.focused_surface) };
         const ui_element* const element { tree != nullptr ? tree->find(snapshot_.focused) : nullptr };
@@ -1391,7 +1393,7 @@ namespace luil {
     std::optional<std::vector<input_action>> interaction_controller::process_group_key(const key_pressed_event& event)
     {
         // 수정자와 함께라면 앱 단축키다.
-        if (event.control || event.alt || snapshot_.focused == ui_element_id {})
+        if (event.shortcut_modifier_down() || snapshot_.focused == ui_element_id {})
             return std::nullopt;
         const bool horizontal { event.key == key_code::arrow_left || event.key == key_code::arrow_right };
         const bool vertical { event.key == key_code::arrow_up || event.key == key_code::arrow_down };

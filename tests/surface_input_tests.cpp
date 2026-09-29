@@ -104,18 +104,19 @@ TEST_CASE("Character keys only become events under Ctrl or Alt", "[surface-input
     // 그냥 치는 글자는 WM_CHAR로 흘러야 그 글자를 칠 수 있다.
     REQUIRE(modified_key_from_virtual('C', false, false, true) == key_code::none);
     REQUIRE(modified_key_from_virtual('C', true, false, true) == key_code::key_c);
+    REQUIRE(modified_key_from_virtual('S', true, false, true) == key_code::key_s);
+    REQUIRE(modified_key_from_virtual('7', true, false, true) == key_code::key_7);
     REQUIRE(modified_key_from_virtual(VK_SPACE, false, true, true) == key_code::space);
     // Space는 예외다. 초점을 가진 컨트롤을 실행하는 키라 수정자 없이도 온다 —
     // 텍스트 박스에서는 controller가 키 쪽을 흘려보내고 WM_CHAR만 먹는다.
     REQUIRE(modified_key_from_virtual(VK_SPACE, false, false, true) == key_code::space);
 }
 
-TEST_CASE("Keys without a name travel in the platform band", "[surface-input]")
+TEST_CASE("Platform-specific keys still travel in the platform band", "[surface-input]")
 {
-    // 이름 키에 없는 단축키(Ctrl+S 등)가 앱에 닿는 경로다.
-    const key_code key { modified_key_from_virtual('S', true, false, true) };
-    REQUIRE(key == platform_key_code('S'));
-    REQUIRE(platform_key_of(key) == 'S');
+    const key_code key { modified_key_from_virtual(VK_OEM_1, true, false, true) };
+    REQUIRE(key == platform_key_code(VK_OEM_1));
+    REQUIRE(platform_key_of(key) == VK_OEM_1);
 }
 
 TEST_CASE("Modifier keys themselves are not events", "[surface-input]")

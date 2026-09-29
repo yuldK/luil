@@ -954,7 +954,10 @@ namespace luil::win32 {
         // 이 표면이 나른 키다 — 포인터·파일 끌기와 같은 표식이다.
         // 초점이 없을 때 Tab·Enter·Esc가 어느 tree에서 시작할지의 근거가 된다
         // (key-surface-routing-design.md).
-        host->post_raw_input(key_pressed_event { key, control, shift, alt, repeat, std::chrono::steady_clock::now(), id_ });
+        // 편집 역할은 비워 Windows 기본(Control)을 따르게 한다.
+        key_pressed_event event { key, control, shift, alt, repeat, std::chrono::steady_clock::now(), id_ };
+        event.meta = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
+        host->post_raw_input(std::move(event));
         return true;
     }
 

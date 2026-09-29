@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -140,7 +141,7 @@ namespace luil {
         home,
         end,
         delete_forward,
-        // 글자 키는 **Ctrl이나 Alt가 눌린 동안에만** 만든다.
+        // 글자 키는 단축키 수정자와 함께일 때만 키 이벤트로 만든다.
         // 그냥 치는 글자는 문자 입력(character_typed_event)의 것이다.
         key_a,
         key_c,
@@ -171,23 +172,113 @@ namespace luil {
         f10,
         f11,
         f12,
+        // 글자 단축키의 나머지 이름이다. 기존 이름 키의 값을 보존하려고 뒤에 둔다.
+        key_b,
+        key_d,
+        key_e,
+        key_f,
+        key_g,
+        key_h,
+        key_i,
+        key_j,
+        key_k,
+        key_l,
+        key_m,
+        key_n,
+        key_o,
+        key_p,
+        key_q,
+        key_r,
+        key_s,
+        key_t,
+        key_u,
+        key_w,
+        key_0,
+        key_1,
+        key_2,
+        key_3,
+        key_4,
+        key_5,
+        key_6,
+        key_7,
+        key_8,
+        key_9,
         // 이름 붙지 않은 나머지 키의 대역이다.
         // platform 가상 키(Win32 VK_*)를 이 값 위에 얹어 나른다 —
-        // 이름 키에 없는 단축키(Ctrl+S 등)를 앱이 받는 경로다.
-        // 문자를 만드는 키는 글자 키와 같은 규칙(Ctrl·Alt 동안에만)으로 온다.
+        // 이름 키에 없는 플랫폼 고유 단축키를 앱이 받는 경로다.
+        // 문자를 만드는 키는 글자 키와 같은 규칙(단축키 수정자가 있을 때)으로 온다.
         first_platform_key = 0x1000,
     };
 
+    // Win32의 영문자·숫자 VK는 ASCII와 같다. 공통 단축키는 이름 키로 바꾸고,
+    // 종전 platform_key_code('S') 호출도 같은 값으로 이어 준다.
+    [[nodiscard]] constexpr key_code alphanumeric_key_code(const std::uint32_t virtual_key) noexcept
+    {
+        constexpr key_code letters[] {
+            key_code::key_a,
+            key_code::key_b,
+            key_code::key_c,
+            key_code::key_d,
+            key_code::key_e,
+            key_code::key_f,
+            key_code::key_g,
+            key_code::key_h,
+            key_code::key_i,
+            key_code::key_j,
+            key_code::key_k,
+            key_code::key_l,
+            key_code::key_m,
+            key_code::key_n,
+            key_code::key_o,
+            key_code::key_p,
+            key_code::key_q,
+            key_code::key_r,
+            key_code::key_s,
+            key_code::key_t,
+            key_code::key_u,
+            key_code::key_v,
+            key_code::key_w,
+            key_code::key_x,
+            key_code::key_y,
+            key_code::key_z,
+        };
+        constexpr key_code digits[] {
+            key_code::key_0,
+            key_code::key_1,
+            key_code::key_2,
+            key_code::key_3,
+            key_code::key_4,
+            key_code::key_5,
+            key_code::key_6,
+            key_code::key_7,
+            key_code::key_8,
+            key_code::key_9,
+        };
+        if (virtual_key >= 'A' && virtual_key <= 'Z')
+            return letters[virtual_key - 'A'];
+        if (virtual_key >= '0' && virtual_key <= '9')
+            return digits[virtual_key - '0'];
+        return key_code::none;
+    }
+
     // platform 가상 키를 key_code로/에서 옮긴다.
-    // 값은 Win32 가상 키 코드다 (문자 키는 대문자 ASCII와 같다: 'S' == 0x53).
+    // 영문자·숫자는 공통 이름 키다. 그 밖의 값은 Win32 가상 키 코드다.
     [[nodiscard]] constexpr key_code platform_key_code(const std::uint32_t virtual_key) noexcept
     {
+        if (const key_code named { alphanumeric_key_code(virtual_key) }; named != key_code::none)
+            return named;
         return static_cast<key_code>(static_cast<std::uint32_t>(key_code::first_platform_key) + virtual_key);
     }
 
-    // platform 대역이 아니면 0이다.
+    // 영문자·숫자 이름 키는 종전 VK 값을 돌려준다. 나머지 이름 키는 0이다.
     [[nodiscard]] constexpr std::uint32_t platform_key_of(const key_code key) noexcept
     {
+        for (std::uint32_t virtual_key = 'A'; virtual_key <= 'Z'; ++virtual_key)
+            if (alphanumeric_key_code(virtual_key) == key)
+                return virtual_key;
+        for (std::uint32_t virtual_key = '0'; virtual_key <= '9'; ++virtual_key)
+            if (alphanumeric_key_code(virtual_key) == key)
+                return virtual_key;
         const auto value { static_cast<std::uint32_t>(key) };
         const auto first { static_cast<std::uint32_t>(key_code::first_platform_key) };
         return value >= first ? value - first : 0u;
@@ -216,6 +307,31 @@ namespace luil {
         //    popup 안 텍스트 칸과 메뉴 탐색이 함께 죽는다. 논리 초점이 있으면
         //    그것이 이긴다 (key-surface-routing-design.md).
         std::u8string surface {};
+        // 물리 수정키와 편집 의미를 갈라 둔다. 비어 있으면 기존 Windows 규칙인
+        // Control을 쓴다. 다른 플랫폼의 입력 뒷단은 각 역할을 명시한다:
+        // 예를 들어 macOS는 Command를 주 단축키, Option을 낱말 이동으로 보낸다.
+        std::optional<bool> primary_shortcut {};
+        std::optional<bool> word_navigation {};
+        // Windows 키·Command 키다.
+        bool meta { false };
+
+        // Shift를 뺀 수정자가 하나라도 눌렸는가. 눌렸으면 그 키는 앱 단축키라
+        // 실행 키·기본 버튼·단계 키가 가로채지 않는다 — 물리 키와 역할 중 어느 쪽으로
+        // 알려도 같은 판정이 되게 한곳에 둔다.
+        [[nodiscard]] bool shortcut_modifier_down() const noexcept
+        {
+            return control || alt || meta || primary_shortcut_down();
+        }
+
+        [[nodiscard]] bool primary_shortcut_down() const noexcept
+        {
+            return primary_shortcut.value_or(control);
+        }
+
+        [[nodiscard]] bool word_navigation_down() const noexcept
+        {
+            return word_navigation.value_or(control);
+        }
     };
 
     // WM_CHAR가 만드는 문자 입력이다.

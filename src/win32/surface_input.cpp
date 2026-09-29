@@ -137,25 +137,10 @@ namespace luil::win32 {
             return key_code::space;
         if (character_key && control == false && alt == false)
             return key_code::none;
-        switch (virtual_key)
-        {
-        case 'A':
-            return key_code::key_a;
-        case 'C':
-            return key_code::key_c;
-        case 'V':
-            return key_code::key_v;
-        case 'X':
-            return key_code::key_x;
-        case 'Y':
-            return key_code::key_y;
-        case 'Z':
-            return key_code::key_z;
-        default:
-            // 수정자 키 자체는 이벤트가 아니다.
-            if (virtual_key == VK_SHIFT || virtual_key == VK_CONTROL || virtual_key == VK_MENU || virtual_key == VK_LWIN || virtual_key == VK_RWIN)
-                return key_code::none;
-            return platform_key_code(static_cast<std::uint32_t>(virtual_key));
-        }
+        // 수정자 키 자체는 이벤트가 아니다. 영문자·숫자는 공통 이름 키로,
+        // 그 밖의 키는 플랫폼 대역으로 옮긴다.
+        if (virtual_key == VK_SHIFT || virtual_key == VK_CONTROL || virtual_key == VK_MENU || virtual_key == VK_LWIN || virtual_key == VK_RWIN)
+            return key_code::none;
+        return platform_key_code(static_cast<std::uint32_t>(virtual_key));
     }
 } // namespace luil::win32
