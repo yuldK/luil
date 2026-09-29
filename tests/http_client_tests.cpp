@@ -37,6 +37,7 @@ namespace {
     using luil::net::http_client;
     using luil::net::http_client_config;
     using luil::net::http_error_kind;
+    using luil::net::http_header_crosses_origins;
     using luil::net::http_heartbeat;
     using luil::net::http_method;
     using luil::net::http_redirect_policy;
@@ -790,6 +791,74 @@ TEST_CASE("http client follows a redirect unless the policy says otherwise", "[n
         CHECK(response.header(u8"Location").empty() == false);
         CHECK(server.request_count() == 1);
     }
+}
+
+TEST_CASE("http client clears app headers before a cross origin redirect", "[net][client]")
+{
+    loopback_http_server origin {};
+    loopback_http_server destination {};
+    REQUIRE(origin.port() != 0);
+    REQUIRE(destination.port() != 0);
+    REQUIRE(origin.port() != destination.port());
+    origin.set_handler([&](const loopback_request& request) {
+        loopback_response response {};
+        response.status = 302;
+        response.headers.emplace_back("Location", url_text(request.target == "/start" ? origin.url("/same") : destination.url("/final")));
+        return response;
+    });
+    destination.set_handler([](const loopback_request&) { return canned("text/plain", "arrived"); });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+
+    http_request request {};
+    request.url = origin.url("/start");
+    request.headers.push_back({ u8"Authorization", u8"Bearer secret" });
+    request.headers.push_back({ u8"Cookie", u8"session=secret" });
+    request.headers.push_back({ u8"X-Api-Key", u8"secret" });
+    request.headers.push_back({ u8"x-api-key", u8"secret" });
+    // 요청의 뜻을 정하는 표준 헤더는 다른 출처에도 간다 — 이어받기가 전체 받기로
+    // 바뀌거나 형식 협상이 풀리지 않는다.
+    request.headers.push_back({ u8"Range", u8"bytes=4-" });
+    request.headers.push_back({ u8"accept", u8"text/plain" });
+    request.headers.push_back({ u8"If-None-Match", u8"\"v1\"" });
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+
+    const http_response response { sink.at(0) };
+    CHECK(response.error.empty());
+    CHECK(response.status_code == 200);
+    CHECK(response.final_url == destination.url("/final"));
+
+    const std::vector<loopback_request> origin_requests { origin.requests() };
+    REQUIRE(origin_requests.size() == 2);
+    for (const loopback_request& seen : origin_requests)
+    {
+        CHECK(seen.header("authorization").value_or("") == "Bearer secret");
+        CHECK(seen.header("cookie").value_or("") == "session=secret");
+        CHECK(seen.header("x-api-key").value_or("") == "secret");
+    }
+
+    const std::vector<loopback_request> destination_requests { destination.requests() };
+    REQUIRE(destination_requests.size() == 1);
+    CHECK(destination_requests[0].header("authorization").has_value() == false);
+    CHECK(destination_requests[0].header("cookie").has_value() == false);
+    CHECK(header_count(destination_requests[0], "x-api-key") == 0);
+    CHECK(destination_requests[0].header("range").value_or("") == "bytes=4-");
+    CHECK(destination_requests[0].header("accept").value_or("") == "text/plain");
+    CHECK(destination_requests[0].header("if-none-match").value_or("") == "\"v1\"");
+}
+
+TEST_CASE("Only headers that carry no secret cross origins on a redirect", "[net][message]")
+{
+    CHECK(http_header_crosses_origins(u8"Range"));
+    CHECK(http_header_crosses_origins(u8"IF-NONE-MATCH"));
+    CHECK(http_header_crosses_origins(u8"accept"));
+    CHECK_FALSE(http_header_crosses_origins(u8"Authorization"));
+    CHECK_FALSE(http_header_crosses_origins(u8"Cookie"));
+    CHECK_FALSE(http_header_crosses_origins(u8"X-Api-Key"));
+    CHECK_FALSE(http_header_crosses_origins(u8"Accept-Charset-Token"));
 }
 
 TEST_CASE("http client never follows a redirect for a request with a body", "[net][client]")

@@ -106,6 +106,60 @@ namespace luil::net {
             return kind == http_error_kind::invalid_url || kind == http_error_kind::unsupported_scheme || kind == http_error_kind::invalid_header;
         }
 
+        [[nodiscard]] bool redirect_has_same_origin(const request_context& current, const wchar_t* url, std::size_t length) noexcept
+        {
+            if (url == nullptr || length == 0 || length > http_header_limit_bytes)
+                return false;
+            if (url[length - 1] == L'\0')
+                --length;
+            if (length == 0)
+                return false;
+
+            URL_COMPONENTS components {};
+            components.dwStructSize = static_cast<DWORD>(sizeof(components));
+            components.dwHostNameLength = static_cast<DWORD>(-1);
+            if (WinHttpCrackUrl(url, static_cast<DWORD>(length), 0, &components) == FALSE || components.lpszHostName == nullptr || components.dwHostNameLength == 0)
+                return false;
+            if (current.origin_host.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()) || components.dwHostNameLength > static_cast<DWORD>(std::numeric_limits<int>::max()))
+                return false;
+
+            const bool secure { components.nScheme == INTERNET_SCHEME_HTTPS };
+            return (components.nScheme == INTERNET_SCHEME_HTTP || secure) && secure == current.origin_secure && components.nPort == current.origin_port
+                && CompareStringOrdinal(current.origin_host.c_str(), static_cast<int>(current.origin_host.size()), components.lpszHostName, static_cast<int>(components.dwHostNameLength), TRUE)
+                == CSTR_EQUAL;
+        }
+
+        [[nodiscard]] bool clear_redirect_headers(request_context& current, unsigned long& code)
+        {
+            const HINTERNET live { borrow_handle(current) };
+            if (live == nullptr)
+            {
+                code = static_cast<unsigned long>(ERROR_WINHTTP_OPERATION_CANCELLED);
+                return false;
+            }
+
+            for (const http_header& header : current.request.headers)
+            {
+                if (http_header_crosses_origins(header.name))
+                    continue;
+                // 검증된 헤더 이름은 ASCII 토큰이다. 같은 이름이 여러 번 있으면
+                // 그 횟수만큼 지워, WinHTTP가 중복 줄 하나씩 지워도 남지 않게 한다.
+                std::wstring removal {};
+                removal.reserve(header.name.size() + 1);
+                for (const char8_t character : header.name)
+                    removal.push_back(static_cast<wchar_t>(character));
+                removal.push_back(L':');
+
+                if (WinHttpAddRequestHeaders(live, removal.c_str(), static_cast<DWORD>(-1), WINHTTP_ADDREQ_FLAG_REPLACE) == FALSE)
+                {
+                    code = GetLastError();
+                    if (code != static_cast<unsigned long>(ERROR_WINHTTP_HEADER_NOT_FOUND))
+                        return false;
+                }
+            }
+            return true;
+        }
+
         void read_next_chunk(request_context& current)
         {
             // 손잡이를 잠금 안에서 꺼내 잠금 **밖에서** 쓴다. 그 사이 다른 thread가
@@ -198,6 +252,17 @@ namespace luil::net {
                     return;
                 }
                 capture_redirect_url(current, static_cast<const wchar_t*>(information), static_cast<std::size_t>(length));
+                if (current.redirect_headers_cleared == false && current.request.headers.empty() == false
+                    && redirect_has_same_origin(current, static_cast<const wchar_t*>(information), static_cast<std::size_t>(length)) == false)
+                {
+                    unsigned long code { 0 };
+                    if (clear_redirect_headers(current, code) == false)
+                    {
+                        finish_and_close(current, make_winhttp_error(code, current.secure_flags));
+                        return;
+                    }
+                    current.redirect_headers_cleared = true;
+                }
                 return;
             }
             case WINHTTP_CALLBACK_STATUS_SECURE_FAILURE: {
@@ -702,6 +767,9 @@ namespace luil::net {
                 context->deadline = context->started + request.total_timeout;
             }
             context->final_url = request.url;
+            context->origin_secure = target->secure;
+            context->origin_host = target->host;
+            context->origin_port = target->port;
             context->upload = std::move(request.body);
             context->request = std::move(request);
 

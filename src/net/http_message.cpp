@@ -54,6 +54,25 @@ namespace luil::net {
         return {};
     }
 
+    bool http_header_crosses_origins(const std::u8string_view name) noexcept
+    {
+        // 비밀이 아니라 요청의 뜻(형식 협상·부분 요청·조건부 요청)을 담는 이름이다.
+        // 목록 밖은 모두 지운다 — 새 토큰 이름이 생겨도 기본이 "새지 않음"이다.
+        constexpr std::u8string_view kept[] {
+            u8"accept",
+            u8"accept-language",
+            u8"cache-control",
+            u8"range",
+            u8"if-range",
+            u8"if-none-match",
+            u8"if-modified-since",
+        };
+        for (const std::u8string_view safe : kept)
+            if (same_header_name(name, safe))
+                return true;
+        return false;
+    }
+
     std::vector<std::uint8_t> http_text_body(const std::u8string_view text)
     {
         const auto* const first { reinterpret_cast<const std::uint8_t*>(text.data()) };

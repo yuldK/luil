@@ -118,6 +118,12 @@ namespace luil::net {
         std::size_t content_length_hint { 0 };
         int redirects { 0 };
         unsigned long secure_flags { 0 };
+        // 자동 재지정은 사용자 지정 헤더를 그대로 다시 보낸다. 처음 출처를
+        // 기억해 두었다가 밖으로 나가는 첫 걸음에서 그 헤더를 지운다.
+        bool origin_secure { false };
+        std::wstring origin_host {};
+        unsigned short origin_port { 0 };
+        bool redirect_headers_cleared { false };
     };
 
     // 결말을 걸쇠에 적고(**먼저 적은 것이 이긴다**) 손잡이를 잠금 **밖에서** 닫는다.

@@ -41,6 +41,11 @@ namespace luil::net {
     // 없으면 빈 view다. 같은 이름이 여럿이면 첫 번째다.
     [[nodiscard]] std::u8string_view find_header(std::span<const http_header> headers, std::u8string_view name) noexcept;
 
+    // 재지정이 다른 출처로 옮길 때도 따라가는 요청 헤더인가 (`http_redirect_policy::follow`).
+    // `Accept`·`Accept-Language`·`Cache-Control`·`Range`·`If-Range`·`If-None-Match`·
+    // `If-Modified-Since`만 참이다. 그 밖의 이름은 비밀을 담을 수 있다고 보고 지운다.
+    [[nodiscard]] bool http_header_crosses_origins(std::u8string_view name) noexcept;
+
     // 글 하나를 요청 몸의 바이트로 옮긴다 (UTF-8 그대로, 변환 없음).
     // json을 실어 보내는 자리가 이것이다 — `dump()`한 글을 그대로 넣는다.
     [[nodiscard]] std::vector<std::uint8_t> http_text_body(std::u8string_view text);
@@ -53,6 +58,11 @@ namespace luil::net {
         // 따라간다. **https에서 http로 내려가는 것은 따라가지 않는다** — 그것을
         // 따라가면 앱이 요구한 보안이 서버 말 한마디로 사라진다. 그 한 걸음은 `none`과
         // 같이 처리된다: 그 3xx가 그대로 답이 되고 `Location`에 http 주소가 남는다.
+        // 다른 출처로 옮길 때는 `headers`에 넣은 헤더를 지운다. 토큰을 담은 이름을
+        // 라이브러리가 모두 알 수 없어서, 지울 이름이 아니라 **남길 이름**을 정한다.
+        // 남는 것은 비밀을 담지 않고 요청의 뜻을 정하는 표준 헤더뿐이다
+        // (`http_header_crosses_origins`) — 이어받기의 `Range`나 조건부 요청이
+        // 재지정 한 번에 다른 질문으로 바뀌지 않게 한다.
         //  - 켜는 손잡이를 두지 않는 이유는 인증서 검증을 끄는 손잡이를 두지 않는
         //    이유와 같다: 공개 API에 그 스위치가 있으면 켠 채로 출시하는 앱이 생긴다.
         follow,
