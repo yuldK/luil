@@ -1,9 +1,9 @@
 #include "luil/net/http_client.h"
 
+#include "luil/messaging/channel.h"
 #include "net/http_request_context.h"
 #include "net/http_url.h"
 #include "net/winhttp_error.h"
-#include "luil/messaging/channel.h"
 #include "win32/utf8.h"
 
 #include <algorithm>
@@ -156,13 +156,15 @@ namespace luil::net {
                 // 적혀 있든 그것은 오지 않을 몸의 크기라 상한을 볼 자리가 아니다.
                 const bool informational { current.status_code >= 100 && current.status_code < 200 };
                 const bool bodiless { current.request.method == http_method::head || current.status_code == 204 || current.status_code == 304 || informational };
-                // 상한을 넘는다고 적힌 답은 **한 바이트도 읽지 않는다.**
-                if (bodiless == false && current.content_length_hint > current.request.max_body_bytes)
+                // 압축되지 않은 답의 길이가 상한을 넘으면 한 바이트도 읽지 않는다.
+                // 압축된 답에서는 헤더의 길이와 우리가 받을 몸의 길이가 다르다.
+                const bool content_encoded { current.request.decompress && find_header(current.headers, u8"content-encoding").empty() == false };
+                if (bodiless == false && content_encoded == false && current.content_length_hint > current.request.max_body_bytes)
                 {
                     finish_and_close(current, make_http_error(http_error_kind::body_too_large, u8"The response Content-Length exceeds max_body_bytes.", 0));
                     return;
                 }
-                if (bodiless == false)
+                if (bodiless == false && content_encoded == false)
                     current.body.reserve(std::min(current.content_length_hint, http_body_reserve_limit_bytes));
                 read_next_chunk(current);
                 return;

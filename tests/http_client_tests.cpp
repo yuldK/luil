@@ -1,10 +1,10 @@
 #include "luil/net/http_client.h"
 
 #include "loopback_http_server.h"
-#include "sample_image_bytes.h"
 #include "luil/net/http_body.h"
 #include "luil/net/http_media_type.h"
 #include "luil/net/http_message.h"
+#include "sample_image_bytes.h"
 
 #include <nlohmann/json.hpp>
 
@@ -142,7 +142,8 @@ namespace {
 
     // 되돌이 주소를 쓰므로 proxy를 끈다 — CI 기계의 proxy가 127.0.0.1을 가로채면
     // 이 파일 전체가 소음이 된다.
-    [[nodiscard]] std::unique_ptr<http_client> make_client(collector& sink, const std::chrono::milliseconds stop_budget = 1000ms, const std::size_t max_in_flight = 32, const std::size_t max_pending = 128)
+    [[nodiscard]] std::unique_ptr<http_client> make_client(
+        collector& sink, const std::chrono::milliseconds stop_budget = 1000ms, const std::size_t max_in_flight = 32, const std::size_t max_pending = 128)
     {
         http_client_config configuration {};
         configuration.use_system_proxy = false;
@@ -221,6 +222,14 @@ namespace {
     {
         return std::string { reinterpret_cast<const char*>(url.data()), url.size() };
     }
+
+    // 각각 "ok"와 'A' 64개의 gzip 바이트다. 푼 크기와 선 위 크기를 다르게
+    // 두어 Content-Length가 몸 상한의 기준으로 잘못 쓰이는지 본다.
+    constexpr std::array<std::uint8_t, 22> gzip_ok { 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0xcb, 0xcf, 0x06, 0x00, 0x47, 0xdd, 0xdc, 0x79, 0x02, 0x00, 0x00, 0x00 };
+    constexpr std::array<std::uint8_t, 24> gzip_repeated_a {
+        0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x73, 0x74, 0xa4, 0x0c, 0x00, 0x00, 0x3c, 0x62, 0x4c, 0x41, 0x40, 0x00, 0x00,
+        0x00 // gzip 꼬리의 원래 길이는 64바이트다.
+    };
 } // namespace
 
 TEST_CASE("http client delivers a parsed json body", "[net][client]")
@@ -553,6 +562,49 @@ TEST_CASE("http client refuses a response longer than the body limit", "[net][cl
 
     CHECK(sink.at(0).error.kind == http_error_kind::body_too_large);
     CHECK(server.request_count() == 1);
+}
+
+TEST_CASE("http client applies the body limit to decompressed bytes", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request& request) {
+        loopback_response response {};
+        response.headers.emplace_back("Content-Type", "text/plain; charset=utf-8");
+        response.headers.emplace_back("Content-Encoding", "gzip");
+        if (request.target == "/small")
+            response.body.assign(gzip_ok.begin(), gzip_ok.end());
+        else
+            response.body.assign(gzip_repeated_a.begin(), gzip_repeated_a.end());
+        return response;
+    });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+
+    http_request small {};
+    small.url = server.url("/small");
+    small.max_body_bytes = 2;
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(small), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+    CHECK(sink.at(0).error.empty());
+    CHECK(sink.at(0).body.as_text() == u8"ok");
+
+    http_request expanded {};
+    expanded.url = server.url("/expanded");
+    expanded.max_body_bytes = 32;
+    REQUIRE(static_cast<bool>(client->send(std::move(expanded), error)));
+    REQUIRE(sink.wait_for(2, 10s));
+    CHECK(sink.at(1).error.kind == http_error_kind::body_too_large);
+
+    http_request encoded {};
+    encoded.url = server.url("/small");
+    encoded.decompress = false;
+    encoded.max_body_bytes = 2;
+    REQUIRE(static_cast<bool>(client->send(std::move(encoded), error)));
+    REQUIRE(sink.wait_for(3, 10s));
+    CHECK(sink.at(2).error.kind == http_error_kind::body_too_large);
 }
 
 TEST_CASE("http client refuses a streamed body that crosses the limit", "[net][client]")
