@@ -668,6 +668,8 @@ namespace luil::android {
             // 창 크기·안전 영역·배율을 다시 읽어 렌더러와 앱에 알린다.
             void refresh_metrics()
             {
+                const int previous_window_width { window_width_ };
+                const int previous_window_height { window_height_ };
                 if (app_->window != nullptr)
                 {
                     window_width_ = ANativeWindow_getWidth(app_->window);
@@ -677,11 +679,13 @@ namespace luil::android {
                 const int previous_width { content_width() };
                 const int previous_height { content_height() };
                 insets_ = read_safe_insets(app_->activity);
-                // 회전·키보드로 내용 크기가 바뀌었다. popup의 닻이 움직이므로 닫는 계기이고, 남는
-                // popup은 새 크기로 다시 자리 잡는다.
+                // 내용 크기가 바뀌면 popup은 새 크기로 다시 자리 잡는다. 닫는 계기는 창 자체가 바뀐
+                // 때(회전, 화면 나누기)뿐이다. 키보드는 창이 아니라 안전 영역만 줄인다 — popup 안 검색
+                // 칸을 누르면 키보드가 뜨는데, 그것으로 popup이 닫히면 칠 수가 없다.
                 if (content_width() != previous_width || content_height() != previous_height)
                 {
-                    static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
+                    if (window_width_ != previous_window_width || window_height_ != previous_window_height)
+                        static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
                     overlay_frame_.reset();
                 }
                 // 키보드가 올라와 아래가 줄었다. 줄어든 크기로 다시 지은 frame이 오면 초점 칸을
