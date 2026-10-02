@@ -637,14 +637,14 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 
 | 커밋 | 내용 |
 | --- | --- |
-| `2ee3a1b` | `luil_core` 대상, `luil_core_tests`, core 이식성 검사 test |
-| `09c3243` | popup·웹뷰 자리 대조, 다시 그리기 계획, fence 대기 예산을 core로 |
-| `ec9edce` | host API를 `luil/app/`과 `luil`로. 옛 경로는 별칭 헤더. frame 그리기와 렌더러 정책을 core로 |
-| `da5820d` | 줄 끝 정리 스크립트가 worktree를 건너뛴다 (작업 중 다른 세션의 자산을 건드린 것을 고침) |
-| `625983d` | 글꼴 registry를 core로. OS 글꼴 자원은 `platform_font_source()` |
-| `9ac1a1c` | `app_host`를 core로. 즉시 종료는 `platform_fail_fast()` |
-| `7a8473c` | 렌더러 interface와 실패 물러섬을 core로. `renderer_mode::gpu` |
-| `4d0a55e` | 터치·펜 접촉 추적을 core로. 접촉 단계 `pointer_phase` |
+| `7bcfb24` | `luil_core` 대상, `luil_core_tests`, core 이식성 검사 test |
+| `9feee30` | popup·웹뷰 자리 대조, 다시 그리기 계획, fence 대기 예산을 core로 |
+| `3ec69ae` | host API를 `luil/app/`과 `luil`로. 옛 경로는 별칭 헤더. frame 그리기와 렌더러 정책을 core로 |
+| `669b142` | 줄 끝 정리 스크립트가 worktree를 건너뛴다 (작업 중 다른 세션의 자산을 건드린 것을 고침) |
+| `d39eb00` | 글꼴 registry를 core로. OS 글꼴 자원은 `platform_font_source()` |
+| `6f9ec19` | `app_host`를 core로. 즉시 종료는 `platform_fail_fast()` |
+| `5e42000` | 렌더러 interface와 실패 물러섬을 core로. `renderer_mode::gpu` |
+| `7795050` | 터치·펜 접촉 추적을 core로. 접촉 단계 `pointer_phase` |
 
 **검증.** 커밋마다 Release, Debug, CPU 전용 Release의 CTest 전부를 돌렸다 (smoke 포함).
 
@@ -690,10 +690,10 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 
 | 커밋 | 내용 |
 | --- | --- |
-| `228c5fc` | core test용 플랫폼 hook 정의. `app_host_tests`를 core test로 옮김 |
-| `6c820c3` | `fetch_skia.ps1 -Target`과 android-arm64 r1 핀 |
-| `24aa9dc` | clang이 막은 쓰지 않는 람다 캡처 하나 (core 전체에서 clang 오류는 이것뿐이었다) |
-| `17c8f58` | CMake 플랫폼 분리, Android 검사·clang 옵션·Skia 링크 계약, adb test 실행, preset |
+| `095c121` | core test용 플랫폼 hook 정의. `app_host_tests`를 core test로 옮김 |
+| `838b29a` | `fetch_skia.ps1 -Target`과 android-arm64 r1 핀 |
+| `992f345` | clang이 막은 쓰지 않는 람다 캡처 하나 (core 전체에서 clang 오류는 이것뿐이었다) |
+| `ae36130` | CMake 플랫폼 분리, Android 검사·clang 옵션·Skia 링크 계약, adb test 실행, preset |
 
 **기기 검증.** Galaxy S22 Ultra(Android 14)에서 `ctest --preset android-arm64-core-release`와
 `-debug`가 각각 509개 모두 통과했다 (약 2분 20초·2분 40초). Windows의 `luil_core_tests`도 509개라 기기에서
@@ -725,11 +725,11 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 
 | 커밋 | 내용 |
 | --- | --- |
-| `35daf83` | GameActivity 4.4.2 핀과 `fetch_game_activity.ps1`, CMake의 `luil::game_activity` |
-| `e11955d` | 앱 delegate의 플랫폼 중립 부분을 `app_delegate`로. `win32::window_delegate`가 상속하고 수명 주기 메시지를 더함 |
-| `e7d00e5` | Android 앱 host(`luil::android::run_application`), CPU 렌더러, Android 글꼴, 내장 codicon, `frame_state`의 원점 |
-| `c311dcf` | hello를 Android APK로 (CMake 공유 라이브러리 + Gradle 포장) |
-| `5b1dd20` | 모바일 앱 바와 플랫폼 성질 (`app_bar_element`, `ui_platform`). 데스크톱 caption은 모바일에서 자리를 차지하지 않음 |
+| `44b2c29` | GameActivity 4.4.2 핀과 `fetch_game_activity.ps1`, CMake의 `luil::game_activity` |
+| `a251b80` | 앱 delegate의 플랫폼 중립 부분을 `app_delegate`로. `win32::window_delegate`가 상속하고 수명 주기 메시지를 더함 |
+| `9e95341` | Android 앱 host(`luil::android::run_application`), CPU 렌더러, Android 글꼴, 내장 codicon, `frame_state`의 원점 |
+| `eb6f935` | hello를 Android APK로 (CMake 공유 라이브러리 + Gradle 포장) |
+| `2f71a33` | 모바일 앱 바와 플랫폼 성질 (`app_bar_element`, `ui_platform`). 데스크톱 caption은 모바일에서 자리를 차지하지 않음 |
 
 **기기 검증.** Galaxy S22 Ultra(Android 14)에서 확인했다.
 
@@ -770,3 +770,19 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 - 입력은 비우기만 한다 (5단계). 뒤로 가기만 Activity에 남겨 앱을 끝낸다.
 - 예제의 서명은 Gradle의 debug keystore(`%USERPROFILE%\.android\debug.keystore`, 첫 빌드가 만든다)다.
   배포 서명은 8단계다.
+
+## origin/main 위로 옮김
+
+2026-10-02에 3단계까지의 커밋을 `origin/main`(`4860bcd`) 위로 rebase했다. 위 표의 해시는 옮긴 뒤의
+값이다. upstream의 터치·펜 정비와 확대·축소 보기(5개 커밋)와 겹친 자리는 다음과 같이 맞췄다.
+
+- upstream이 `pointer_sample`에 더한 `shift`는 core로 옮긴 `src/host/pointer_sequence`가 받고, 그 test
+  ("Pen presses retain Shift through a barrel switch")는 접촉 단계로 바꿔 `pointer_sequence_tests`로 옮겼다.
+- `zoom_view_tests`는 core 헤더만 써서 `luil_core_tests`에 넣었다. 기기에서도 돈다.
+- element 종류는 upstream의 zoom 계열 뒤에 앱 바 둘을 두어 upstream의 값을 그대로 지켰다.
+- 대화형 포인터 통합 test(`LUIL_BUILD_POINTER_INTEGRATION_TESTS`)는 공개 헤더만 써서 별칭 헤더로
+  그대로 컴파일된다 (컴파일만 확인했다. 실행은 대화형 환경이 필요하다).
+
+옮긴 뒤 Windows Release 841개, Debug 822개(asan 19개 제외), CPU 전용 Release 839개 CTest와 기기 core
+test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 바와 함께 뜨는 것을 확인했다.
+중간 커밋 하나하나는 다시 빌드하지 않았고 마지막 트리를 검증했다.
