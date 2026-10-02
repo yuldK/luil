@@ -3,9 +3,11 @@
 #include "android/android_clipboard.h"
 #include "android/android_fonts.h"
 #include "android/android_input.h"
+#include "android/android_system_theme.h"
 #include "android/android_text_input.h"
 #include "android/cpu_skia_renderer.h"
 #include "android/java_vm.h"
+#include "android/main_thread.h"
 #include "android/vulkan_device.h"
 #include "android/vulkan_skia_renderer.h"
 #include "host/font_registry.h"
@@ -148,9 +150,14 @@ namespace luil::android {
         }
 
         // 시스템의 밝은 모드 여부다. 어두운 모드가 아니면 밝다고 본다.
-        [[nodiscard]] bool read_prefers_light(AConfiguration* const configuration)
+        //  - glue의 `AConfiguration`이 아니라 GameActivity가 Java의 `Configuration`에서 받아 둔 값을 읽는다.
+        //    앱이 도는 중에 어두운 모드를 바꾸면 glue가 AssetManager에서 다시 읽은 구성은 옛 값이다.
+        [[nodiscard]] bool read_prefers_light(GameActivity* const activity)
         {
-            return AConfiguration_getUiModeNight(configuration) != ACONFIGURATION_UI_MODE_NIGHT_YES;
+            // `Configuration.UI_MODE_NIGHT_MASK`와 `UI_MODE_NIGHT_YES`다.
+            constexpr int night_mask { 0x30 };
+            constexpr int night_yes { 0x20 };
+            return (GameActivity_getUIMode(activity) & night_mask) != night_yes;
         }
 
         // popup이 떠 있는가다. 떠 있으면 뒤로 가기를 Activity에 넘기지 않고 받아 popup을 닫는다.
@@ -312,6 +319,7 @@ namespace luil::android {
                     close(wake_fd_);
                 }
                 set_font_fallback(nullptr);
+                set_system_accent(std::nullopt);
                 app_->userData = nullptr;
                 app_->onAppCmd = nullptr;
                 if (jni_attached_)
@@ -426,9 +434,20 @@ namespace luil::android {
                 // 휴대폰·태블릿이다. 창 caption이 없고 맨 위는 앱 바의 자리다.
                 // logic thread가 첫 frame을 짓기 전에 정한다.
                 set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false });
-                prefers_light_ = read_prefers_light(app_->config);
+                prefers_light_ = read_prefers_light(app_->activity);
                 scale_ = read_scale(app_->config);
                 set_font_fallback(&font_resolver_);
+
+                // 클립보드와 시스템 테마는 JNI로 다룬다. glue는 이 thread를 JVM에 붙이지 않으므로 여기서
+                // 붙인다. 시스템 accent는 logic thread가 첫 frame을 짓기 전에 세운다.
+                JavaVM* const vm { app_->activity->vm };
+                if (vm->GetEnv(reinterpret_cast<void**>(&jni_), JNI_VERSION_1_6) == JNI_EDETACHED)
+                {
+                    jni_attached_ = vm->AttachCurrentThread(&jni_, nullptr) == JNI_OK;
+                    if (jni_attached_ == false)
+                        jni_ = nullptr;
+                }
+                refresh_system_theme();
 
                 // UI thread를 깨우는 길이다. 다른 thread가 eventfd에 쓰면 looper가 깨어
                 // 그 큐를 비운다. Win32의 PostMessageW에 해당한다.
@@ -452,15 +471,6 @@ namespace luil::android {
                 host_config.interaction.double_click_time = double_tap_timeout;
                 host_config.interaction.touch = config_.touch;
                 host_ = std::make_unique<app_host>(std::move(host_config), *environment_.driver, environment_.policy);
-
-                // 클립보드는 JNI로 다룬다. glue는 이 thread를 JVM에 붙이지 않으므로 여기서 붙인다.
-                JavaVM* const vm { app_->activity->vm };
-                if (vm->GetEnv(reinterpret_cast<void**>(&jni_), JNI_VERSION_1_6) == JNI_EDETACHED)
-                {
-                    jni_attached_ = vm->AttachCurrentThread(&jni_, nullptr) == JNI_OK;
-                    if (jni_attached_ == false)
-                        jni_ = nullptr;
-                }
 
                 // IME다. 상태를 넘기고 키보드를 띄우는 일만 GameActivity에 맡긴다.
                 ime_ = std::make_unique<ime_session>(*this,
@@ -545,8 +555,9 @@ namespace luil::android {
                 case APP_CMD_CONFIG_CHANGED:
                     // 회전·밀도·어두운 모드는 Activity를 다시 만들지 않고 여기로 온다
                     // (매니페스트의 configChanges). glue가 구성을 이미 새로 읽어 두었다.
-                    prefers_light_ = read_prefers_light(app_->config);
+                    prefers_light_ = read_prefers_light(app_->activity);
                     scale_ = read_scale(app_->config);
+                    refresh_system_theme();
                     refresh_metrics();
                     break;
                 case APP_CMD_SOFTWARE_KB_VIS_CHANGED:
@@ -570,6 +581,10 @@ namespace luil::android {
                     post_lifecycle(app_lifecycle::background);
                     break;
                 case APP_CMD_RESUME:
+                    // 대비 설정은 구성 변경으로 오지 않는다. 설정 앱에서 돌아올 때 다시 읽는다.
+                    refresh_system_theme();
+                    dirty_ = true;
+                    break;
                 case APP_CMD_GAINED_FOCUS:
                     dirty_ = true;
                     break;
@@ -713,6 +728,25 @@ namespace luil::android {
                 reported_scale_ = scale_;
                 if (app_message message { environment_.delegate->make_window_metrics_message(width, height, scale_) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
+            }
+
+            // 시스템의 동적 색과 대비 설정을 읽는다. accent는 앱이 테마 목록에 보일 수 있게 프로세스에 세운다.
+            void refresh_system_theme()
+            {
+                if (jni_ == nullptr)
+                    return;
+                set_system_accent(read_dynamic_accent(*jni_, app_->activity->javaGameActivity));
+                high_contrast_ = read_high_contrast(*jni_, app_->activity->javaGameActivity);
+            }
+
+            // 상태 표시줄·내비게이션 막대의 아이콘을 그린 바탕에 맞춘다. 바뀔 때만 메인 thread에 넘긴다.
+            void update_system_bars(const color_theme theme)
+            {
+                const bool light { theme == color_theme::light || (theme == color_theme::high_contrast && prefers_light_) };
+                if (system_bars_light_.has_value() && *system_bars_light_ == light)
+                    return;
+                if (post_to_main_thread([light](JNIEnv& env, const jobject activity) { apply_system_bar_icons(env, activity, light); }))
+                    system_bars_light_ = light;
             }
 
             void post_lifecycle(const app_lifecycle lifecycle)
@@ -1007,8 +1041,11 @@ namespace luil::android {
                     layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id) });
                 state.overlays = layers;
                 const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
-                // 고대비는 아직 읽지 않는다 (접근성 단계). 밝은 모드만 시스템을 따른다.
-                state.theme = resolve_color_theme(appearance.theme, false, prefers_light_);
+                // 고대비는 시스템 대비 설정이 높음일 때다. Android는 시스템 고대비 색을 주지 않아 밝은
+                // 모드에 맞춘 기본 색을 쓴다.
+                state.theme = resolve_color_theme(appearance.theme, high_contrast_, prefers_light_);
+                state.high_contrast = default_high_contrast_colors(prefers_light_);
+                update_system_bars(state.theme);
                 state.accent_id = appearance.accent_id;
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
 
@@ -1078,6 +1115,9 @@ namespace luil::android {
             edge_insets insets_ {};
             float scale_ { 1.0f };
             bool prefers_light_ { false };
+            bool high_contrast_ { false };
+            // 마지막으로 맞춘 막대 아이콘이다 (밝은 바탕이면 참).
+            std::optional<bool> system_bars_light_ {};
             bool dirty_ { false };
             bool finishing_ { false };
             std::optional<std::chrono::steady_clock::time_point> update_deadline_ {};

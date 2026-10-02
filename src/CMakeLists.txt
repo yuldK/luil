@@ -497,11 +497,15 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_fonts.h
         android/android_input.cpp
         android/android_input.h
+        android/android_system_theme.cpp
+        android/android_system_theme.h
         android/android_text_input.cpp
         android/android_text_input.h
         android/cpu_skia_renderer.cpp
         android/cpu_skia_renderer.h
         android/fail_fast.cpp
+        android/main_thread.cpp
+        android/main_thread.h
         android/vulkan_device.cpp
         android/vulkan_device.h
         android/vulkan_memory_allocator.h
@@ -545,4 +549,7 @@ if(LUIL_PLATFORM STREQUAL "android")
             log
         PRIVATE
             luil_options)
+    # GameActivity가 메인 thread에서 부르는 생성 함수를 luil이 먼저 받는다 (android/main_thread.h).
+    # GameActivity의 Java 쪽은 이름을 바꿀 길을 주지 않아 링크에서 돌린다.
+    target_link_options(luil INTERFACE "LINKER:--wrap=GameActivity_onCreate")
 endif()
