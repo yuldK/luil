@@ -263,3 +263,16 @@ TEST_CASE("Pointer times move onto the steady clock", "[surface-input][touch]")
     REQUIRE(pointer_tick_time(1'000u, 1'200u, now) == now - std::chrono::milliseconds { 200 });
     REQUIRE(pointer_tick_time(1'300u, 1'200u, now) == now);
 }
+
+TEST_CASE("Pen presses retain Shift through a barrel switch", "[surface-input][pen]")
+{
+    pointer_sequence_tracker tracker {};
+    pointer_sample sample { make_sample(WM_POINTERDOWN, pointer_device::pen, true) };
+    sample.shift = true;
+    auto events { tracker.accept(sample) };
+    REQUIRE(std::get<pointer_pressed_event>(events.front()).shift);
+    sample.message = WM_POINTERUPDATE;
+    sample.barrel = true;
+    events = tracker.accept(sample);
+    REQUIRE(std::get<pointer_pressed_event>(events[1]).shift);
+}

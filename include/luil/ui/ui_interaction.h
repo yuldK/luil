@@ -383,6 +383,7 @@ namespace luil {
         //  - 끈 몸짓이 진행 중이면(스크롤을 끄면 대기·스크롤, 길게 누르기를 끄면 대기)
         //    그 접촉을 취소하고 남은 이벤트를 삼킨다. 다시 켜도 아직 닿아 있는
         //    손가락이 새 접촉이 되지 않는다.
+        //  - 손잡이 조작에서 길게 누르기를 끄면 조작은 이어가고 메뉴 후보만 거둔다.
         bool set_touch_config(const touch_gesture_config& config) noexcept;
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
@@ -438,6 +439,8 @@ namespace luil {
         [[nodiscard]] std::optional<pan_target> resolve_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
         // 진행 중인 터치 접촉을 액션 없이 거둔다.
         void cancel_touch() noexcept;
+        // 마우스·펜 조작을 액션 없이 거둔다. OS 파일 끌기는 별도 소유권이다.
+        void cancel_pointer_gesture() noexcept;
         // 마우스·펜의 진행 중 몸짓이 있는가 (누름·텍스트 끌기·전용 조작·내부 끌기).
         [[nodiscard]] bool pointer_gesture_active() const noexcept;
         // 누른 element로 초점을 옮기거나 거둔다 (마우스는 누를 때, 터치는 탭이 확정될 때).
@@ -598,8 +601,16 @@ namespace luil {
         float pressed_x_ { 0.0f };
         float pressed_y_ { 0.0f };
         bool drag_candidate_ { false };
-        // 마우스·펜 누름을 낸 장치다. 같은 장치의 취소만 그 누름을 거둔다.
-        pointer_device pressed_device_ { pointer_device::mouse };
+        // 누름 표시가 내부 끌기로 바뀌어도 시퀀스 소유권은 뗌·취소까지 남는다.
+        // 다른 장치의 hover나 늦은 뗌이 잡은 조작을 움직이거나 끝내면 안 된다.
+        struct pointer_contact
+        {
+            pointer_device device { pointer_device::mouse };
+            std::uint32_t id { 0 };
+            std::u8string surface {};
+            pointer_button button { pointer_button::none };
+        };
+        std::optional<pointer_contact> pointer_contact_ {};
 
         std::optional<touch_contact> touch_ {};
 

@@ -106,6 +106,8 @@ namespace luil {
         //  - 터치 접촉은 누름보다 오래 산다 (스크롤로 바뀐 뒤에도). 따로 거둔다.
         if (touch_.has_value() && touch_->surface.empty() == false && surface_tree(touch_->surface) == nullptr)
             cancel_touch();
+        if (pointer_contact_.has_value() && surface_tree(pointer_contact_->surface) == nullptr)
+            cancel_pointer_gesture();
         if (pressed_surface_.empty() == false && surface_tree(pressed_surface_) == nullptr)
         {
             text_drag_id_ = {};
@@ -145,7 +147,8 @@ namespace luil {
         // 되살리기를 그 넷에 각각 심으면 언젠가 하나를 빠뜨리므로, 옮겨진 사실을
         // **여기 한 곳에서** 전후 비교로 센다 (focus-reveal-design.md).
         const ui_element_id focused_before { snapshot_.focused };
-        std::vector<input_action> actions { std::visit(
+        std::vector<input_action> actions {};
+        actions = std::visit(
             [this](const auto& value) -> std::vector<input_action> {
                 using value_type = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<value_type, pointer_moved_event>)
@@ -261,8 +264,7 @@ namespace luil {
                 else
                     return {};
             },
-            event)
-        };
+            event);
 
         // **키보드로** 옮겨진 초점만 되살린다. 누른 자리는 이미 보인다 —
         // 마우스와 키보드를 가르는 값이 `focus_visible`로 이미 서 있어
@@ -294,6 +296,12 @@ namespace luil {
         // 터치가 조작을 쥐고 있으면 마우스·펜의 이동은 hover만 바꾼다.
         // 잡은 전용 조작(스크롤 막대)을 다른 장치가 끌면 안 된다.
         if (touch_.has_value())
+        {
+            update_hover(event.x, event.y, event.time);
+            return {};
+        }
+
+        if (pointer_contact_.has_value() && (pointer_contact_->device != event.device || pointer_contact_->id != event.pointer_id || pointer_contact_->surface != event.surface))
         {
             update_hover(event.x, event.y, event.time);
             return {};
@@ -767,6 +775,8 @@ namespace luil {
         // 취소된 접촉의 나머지 이벤트는 id가 맞는 접촉이 없어 삼켜진다.
         if (touch_.has_value())
             cancel_touch();
+        // 새 누름은 기존 조작을 인계받는다. 옛 선택·손잡이·drop 후보를 섞지 않는다.
+        cancel_pointer_gesture();
 
         const ui_tree* const tree { surface_tree(event.surface) };
         if (tree == nullptr)
@@ -783,7 +793,7 @@ namespace luil {
             return {};
         }
         pressed_surface_ = event.surface;
-        pressed_device_ = event.device;
+        pointer_contact_ = pointer_contact { event.device, event.pointer_id, event.surface, event.button };
 
         // 앱이 「어느 판을 만졌는가」를 듣는다. 이 누름의 다른 액션보다 앞선다.
         std::vector<input_action> actions {};
@@ -804,7 +814,8 @@ namespace luil {
         {
             // 연타는 표면을 넘지 않는다 — 좌표가 표면마다 자기 client 기준이라
             // 표면을 빼면 다른 창의 같은 자리가 같은 자리로 보인다. 장치도 넘지 않는다.
-            const bool repeat { hit->id() == last_click_id_ && event.surface == last_click_surface_ && event.device == last_click_device_ && event.time - last_click_time_ <= config_.double_click_time };
+            const bool same_target { hit->id() == last_click_id_ && event.surface == last_click_surface_ && event.device == last_click_device_ };
+            const bool repeat { same_target && event.time - last_click_time_ <= config_.double_click_time };
             const bool same_spot { repeat && distance_between(last_click_x_, last_click_y_, event.x, event.y) <= config_.double_click_distance };
             click_streak_ = same_spot ? click_streak_ + 1 : 1;
             last_click_id_ = hit->id();
@@ -902,6 +913,18 @@ namespace luil {
         // (그 장치의 새 누름은 터치를 먼저 취소했다).
         if (touch_.has_value())
             return {};
+
+        if (pointer_contact_.has_value() == false || pointer_contact_->device != event.device || pointer_contact_->id != event.pointer_id || pointer_contact_->button != event.button)
+            return {};
+        if (pointer_contact_->surface != event.surface)
+        {
+            // 같은 포인터가 모르는 표면에서 끝났으면 기존 계약대로 조작만 거둔다.
+            // 그 좌표로 drop·클릭을 만들지는 않는다. 살아 있는 다른 표면의 뗌은 삼킨다.
+            if (surface_tree(event.surface) == nullptr)
+                cancel_pointer_gesture();
+            return {};
+        }
+        pointer_contact_.reset();
 
         // tree가 없어도 **거두기까지는 반드시 닿는다.**
         // 뗌은 잡은 것을 놓는 유일한 계기인데, 표면이 사라진 뒤의 합성 뗌
@@ -1014,7 +1037,7 @@ namespace luil {
     bool interaction_controller::pointer_gesture_active() const noexcept
     {
         const bool internal_drag { snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() };
-        return pressed_id_ != ui_element_id {} || text_drag_id_ != ui_element_id {} || pointer_drag_id_ != ui_element_id {} || internal_drag;
+        return pointer_contact_.has_value() || pressed_id_ != ui_element_id {} || text_drag_id_ != ui_element_id {} || pointer_drag_id_ != ui_element_id {} || internal_drag;
     }
 
     std::optional<pan_target> interaction_controller::resolve_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
@@ -1046,14 +1069,13 @@ namespace luil {
         contact.last_y = event.y;
         // 흘릴 후보가 어느 축에도 없으면 시간 창 동안 끌기를 보류할 까닭이 없다.
         //  - 클릭 대상이 없는 여백·일반 글 위에서도 후보는 선다 (휠과 같은 탐색이다).
-        contact.pan_open = contact.config.pan_enabled
-            && (resolve_pan(*tree, event.x, event.y, scroll_axis::vertical).has_value() || resolve_pan(*tree, event.x, event.y, scroll_axis::horizontal).has_value());
+        contact.pan_open
+            = contact.config.pan_enabled && (resolve_pan(*tree, event.x, event.y, scroll_axis::vertical).has_value() || resolve_pan(*tree, event.x, event.y, scroll_axis::horizontal).has_value());
 
         // 초점은 아직 옮기지 않는다. 스크롤이 될 접촉이 칸의 초점과 IME를 빼앗으면
         // 안 된다 — 탭이 확정되는 뗌에서 옮긴다.
         const ui_element* const hit { tree->hit_test(event.x, event.y) };
         pressed_surface_ = event.surface;
-        pressed_device_ = pointer_device::touch;
         if (hit == nullptr || hit->enabled() == false)
         {
             touch_ = std::move(contact);
@@ -1113,10 +1135,15 @@ namespace luil {
         switch (contact.phase)
         {
         case touch_phase::handle: {
-            const ui_element* const target { tree != nullptr ? tree->find(pointer_drag_id_) : nullptr };
+            const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
             const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
-            if (handler == nullptr || handler->on_move == nullptr)
+            if (handler == nullptr)
+            {
+                cancel_touch();
                 return {};
+            }
+            if (handler->on_move == nullptr)
+                break;
             const ui_action_context previous { pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, false };
             const ui_action_context current { pointer_drag_id_, event.x, event.y, false };
             pointer_drag_x_ = event.x;
@@ -1127,7 +1154,12 @@ namespace luil {
             break;
         }
         case touch_phase::dragging:
-            if (tree != nullptr && snapshot_.drag.has_value())
+            if (tree == nullptr || live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) == nullptr)
+            {
+                cancel_touch();
+                return {};
+            }
+            if (snapshot_.drag.has_value())
                 update_drag(*tree, event.x, event.y);
             break;
         case touch_phase::panning: {
@@ -1177,8 +1209,13 @@ namespace luil {
             // 스크롤이고, 오래 잡았다가 옮기는 것이 끌기다.
             if (contact.pan_open == false && travel >= contact.config.press_move_tolerance && contact.target != ui_element_id {} && tree != nullptr)
             {
-                const ui_element* const source { tree->find(contact.target) };
-                if (source != nullptr && source->enabled() && source->drag() != nullptr && source->drag()->make_payload)
+                const ui_element* const source { live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) };
+                if (source == nullptr)
+                {
+                    cancel_touch();
+                    return {};
+                }
+                if (source->drag() != nullptr && source->drag()->make_payload)
                 {
                     const ui_action_context context { contact.target, contact.start_x, contact.start_y, false };
                     snapshot_.drag = drag_visual { source->drag()->make_payload(context), event.x, event.y, {}, contact.surface };
@@ -1216,6 +1253,12 @@ namespace luil {
             return pan_step(*pan, contact.last_x, contact.last_y, event.x, event.y);
         }
         case touch_phase::dragging:
+            if (tree == nullptr || live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) == nullptr)
+            {
+                snapshot_.drag.reset();
+                clear_press();
+                return {};
+            }
             if (snapshot_.drag.has_value())
                 return finish_drag(tree, event.x, event.y);
             clear_press();
@@ -1316,18 +1359,25 @@ namespace luil {
     {
         if (event.device == pointer_device::touch)
         {
-            if (touch_.has_value() && touch_->id == event.pointer_id)
+            if (touch_.has_value() && touch_->id == event.pointer_id && touch_->surface == event.surface)
                 cancel_touch();
             return {};
         }
-        // 마우스·펜은 그 장치가 쥔 몸짓만 거둔다. 터치가 쥐고 있으면 남의 것이다.
-        if (touch_.has_value() || pressed_device_ != event.device)
+        // 장치만 같아도 다른 포인터·표면의 취소일 수 있다.
+        if (touch_.has_value() || pointer_contact_.has_value() == false || pointer_contact_->device != event.device || pointer_contact_->id != event.pointer_id
+            || pointer_contact_->surface != event.surface)
             return {};
+        cancel_pointer_gesture();
+        return {};
+    }
+
+    void interaction_controller::cancel_pointer_gesture() noexcept
+    {
+        pointer_contact_.reset();
         text_drag_id_ = {};
         if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty())
             snapshot_.drag.reset();
         clear_press();
-        return {};
     }
 
     void interaction_controller::cancel_touch() noexcept
@@ -1348,6 +1398,10 @@ namespace luil {
             const touch_phase phase { touch_->phase };
             const bool pan_off { touch_->config.pan_enabled && config.pan_enabled == false && (phase == touch_phase::pending || phase == touch_phase::panning) };
             const bool long_press_off { touch_->config.long_press_enabled && config.long_press_enabled == false && phase == touch_phase::pending };
+            // 손잡이 조작은 계속하지만 그 접촉의 메뉴 후보는 즉시 끈다.
+            // 다시 켜도 이미 내려가 있는 손가락에 메뉴 자격을 새로 주지 않는다.
+            if (phase == touch_phase::handle && config.long_press_enabled == false)
+                touch_->config.long_press_enabled = false;
             if (pan_off || long_press_off)
                 cancel_touch();
         }
@@ -1865,9 +1919,7 @@ namespace luil {
 
         // 화살표는 축으로 갈린다. Page·Home·End에는 방향이 없어 축을 걸지 않는다 —
         // 가릴 것이 없는 키다 (묶음의 Home/End와 같은 판단이다).
-        const auto axis_takes = [axis = target->axis](const bool horizontal) {
-            return axis == focus_axis::both || (horizontal ? axis == focus_axis::horizontal : axis == focus_axis::vertical);
-        };
+        const auto axis_takes = [axis = target->axis](const bool horizontal) { return axis == focus_axis::both || (horizontal ? axis == focus_axis::horizontal : axis == focus_axis::vertical); };
         std::optional<value_step> step {};
         switch (event.key)
         {
@@ -1926,7 +1978,8 @@ namespace luil {
             return std::nullopt;
         const focus_group_scope scope { tree->focus_group_of(snapshot_.focused) };
         // 방향이 맞지 않는 화살표는 묶음의 것이 아니다 — 그대로 앱으로 흐른다.
-        const bool mine { jump ? scope.axis != focus_axis::none : (scope.axis == focus_axis::both || (horizontal && scope.axis == focus_axis::horizontal) || (vertical && scope.axis == focus_axis::vertical)) };
+        const bool matching_axis { scope.axis == focus_axis::both || (horizontal && scope.axis == focus_axis::horizontal) || (vertical && scope.axis == focus_axis::vertical) };
+        const bool mine { jump ? scope.axis != focus_axis::none : matching_axis };
         if (mine == false)
             return std::nullopt;
 
@@ -2086,6 +2139,7 @@ namespace luil {
     {
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
+        pointer_contact_.reset();
         clear_press();
         text_drag_id_ = {};
         snapshot_.drag.reset();

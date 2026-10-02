@@ -203,8 +203,8 @@ namespace luil::win32 {
         accessibility_dispatch(std::move(actions));
     }
 
-    std::optional<RECT> window_surface::accessibility_text_span(const ui_element_id& id, const std::u8string_view document, const std::size_t caret, const std::size_t begin,
-        const std::size_t end) const
+    std::optional<RECT> window_surface::accessibility_text_span(
+        const ui_element_id& id, const std::u8string_view document, const std::size_t caret, const std::size_t begin, const std::size_t end) const
     {
         if (tree_ == nullptr || window_ == nullptr)
             return std::nullopt;
@@ -422,9 +422,7 @@ namespace luil::win32 {
         // CPU로 고정된 표면(popup)과 Direct3D 렌더러를 뺀 빌드는 device를 묻지 않는다 —
         // 만들 이유가 없고, 물으면 그 표면 때문에 프로세스에 device가 생긴다.
         IDCompositionDevice* composition { nullptr };
-        if (mode != renderer_mode::cpu
-            && fault.at_creation == false
-            && direct3d_renderer_built())
+        if (mode != renderer_mode::cpu && fault.at_creation == false && direct3d_renderer_built())
         {
             std::u8string composition_error {};
             composition = context_.composition_device(composition_error);
@@ -466,8 +464,11 @@ namespace luil::win32 {
             //    늦게 온 UP은 임자 없는 비접촉 메시지라 아무것도 내지 않는다.
             {
                 const std::uint32_t pointer_id { GET_POINTERID_WPARAM(word_parameter) };
+                const bool owned { std::any_of(pointer_owners_.begin(), pointer_owners_.end(), [pointer_id](const auto& value) { return value.first == pointer_id; }) };
                 cancel_pointer_contact(pointer_id);
                 std::erase_if(pointer_owners_, [pointer_id](const auto& value) { return value.first == pointer_id; });
+                if (owned)
+                    return LRESULT { 0 };
             }
             return std::nullopt;
         case WM_MOUSEMOVE:
@@ -597,8 +598,7 @@ namespace luil::win32 {
             // 이 저장소에는 웹뷰 말고 자식 창이 없으므로 "자식이 가져갔는가"가 곧
             // 그 판정이다. 창은 여전히 활성이라 popup도 살아 있어야 하고, TSF
             // composition도 끝내지 않는다 — 끝내면 캐럿이 영영 사라진다.
-            if (const HWND taker { reinterpret_cast<HWND>(word_parameter) };
-                window_ != nullptr && taker != nullptr && IsChild(window_, taker) != FALSE)
+            if (const HWND taker { reinterpret_cast<HWND>(word_parameter) }; window_ != nullptr && taker != nullptr && IsChild(window_, taker) != FALSE)
             {
                 webview_focused_ = true;
                 return LRESULT { 0 };
@@ -1075,6 +1075,7 @@ namespace luil::win32 {
         sample.canceled = (input.info.pointerFlags & POINTER_FLAG_CANCELED) != 0;
         sample.barrel = type == PT_PEN && (input.pen.penFlags & PEN_FLAG_BARREL) != 0;
         sample.eraser = type == PT_PEN && (input.pen.penFlags & (PEN_FLAG_ERASER | PEN_FLAG_INVERTED)) != 0;
+        sample.shift = (input.info.dwKeyStates & POINTER_MOD_SHIFT) != 0;
         sample.x = static_cast<float>(client.x);
         sample.y = static_cast<float>(client.y);
         sample.scale = static_cast<float>(dpi_) / 96.0F;

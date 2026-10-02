@@ -98,6 +98,9 @@ namespace {
         float scale { 1.0f };
         bool draggable { false };
         bool handle { false };
+        bool visible { true };
+        bool enabled { true };
+        bool covered { false };
     };
 
     // 흘리는 창 안에 클릭·우클릭·더블 클릭을 단 카드 하나를 둔다.
@@ -114,6 +117,8 @@ namespace {
         card->set_action(luil::ui_trigger::left_click, message_action(u8"click"));
         card->set_action(luil::ui_trigger::right_click, message_action(u8"menu"));
         card->set_action(luil::ui_trigger::double_click, message_action(u8"double"));
+        card->set_visible(options.visible);
+        card->set_enabled(options.enabled);
         if (options.draggable)
             card->set_drag_source(luil::drag_source { [](const luil::ui_action_context& context) { return luil::drag_payload { context.element, u8"card" }; } });
         if (options.handle)
@@ -138,6 +143,13 @@ namespace {
             root->add(std::move(bin));
         }
         root->add(std::move(area));
+        if (options.covered)
+        {
+            auto scrim { std::make_unique<test_panel>(luil::ui_element_id { kind_scrim, u8"scrim" }) };
+            scrim->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, options.scale });
+            scrim->set_hit_opaque(true);
+            root->add(std::move(scrim));
+        }
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
 
@@ -772,4 +784,133 @@ TEST_CASE("A contact on a surface that goes away is cancelled", "[ui][interactio
     // 쥔 접촉이 남지 않았으므로 주 창의 새 접촉이 곧바로 선다.
     static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 1000, 2)));
     REQUIRE(names_of(controller.process(touch_release(60.0f, 120.0f, 1050, 2))) == std::vector<std::u8string> { u8"click" });
+}
+
+TEST_CASE("Mouse handles reject pen hover and unrelated releases", "[ui][interaction][pen]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled, { .handle = true }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(0) }));
+    REQUIRE(controller.process(as_pen(luil::pointer_moved_event { 60.0f, 90.0f, at(20) })).empty());
+    REQUIRE(controller.process(as_pen(luil::pointer_released_event { 60.0f, 90.0f, luil::pointer_button::left, at(30) })).empty());
+    REQUIRE(controller.process(luil::pointer_released_event { 60.0f, 90.0f, luil::pointer_button::right, at(40) }).empty());
+    luil::pointer_moved_event elsewhere { 60.0f, 80.0f, at(50) };
+    elsewhere.surface = u8"other";
+    REQUIRE(controller.process(elsewhere).empty());
+    REQUIRE(names_of(controller.process(luil::pointer_moved_event { 60.0f, 90.0f, at(60) })) == std::vector<std::u8string> { u8"move" });
+    static_cast<void>(controller.process(luil::pointer_released_event { 60.0f, 90.0f, luil::pointer_button::left, at(70) }));
+    REQUIRE(controller.process(luil::pointer_moved_event { 60.0f, 80.0f, at(80) }).empty());
+}
+
+TEST_CASE("A pen owns its drag until the matching pointer ends it", "[ui][interaction][pen]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled, { .draggable = true }));
+    controller.set_surface_trees({ { u8"other", card_tree(&scrolled, { .draggable = true }) } });
+    static_cast<void>(controller.process(as_pen(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(0) })));
+    static_cast<void>(controller.process(luil::pointer_moved_event { 60.0f, 340.0f, at(20) }));
+    REQUIRE(controller.snapshot().drag.has_value() == false);
+    auto other { as_pen(luil::pointer_moved_event { 60.0f, 340.0f, at(30) }) };
+    other.pointer_id = 10;
+    static_cast<void>(controller.process(other));
+    REQUIRE(controller.snapshot().drag.has_value() == false);
+    static_cast<void>(controller.process(as_pen(luil::pointer_moved_event { 60.0f, 340.0f, at(40) })));
+    REQUIRE(controller.snapshot().drag.has_value());
+    REQUIRE(controller.process(luil::pointer_released_event { 60.0f, 340.0f, luil::pointer_button::left, at(50) }).empty());
+    auto other_release { as_pen(luil::pointer_released_event { 60.0f, 340.0f, luil::pointer_button::left, at(55) }) };
+    other_release.surface = u8"other";
+    REQUIRE(controller.process(other_release).empty());
+    static_cast<void>(controller.process(luil::pointer_cancelled_event { luil::pointer_device::pen, 10, {}, at(60) }));
+    static_cast<void>(controller.process(luil::pointer_cancelled_event { luil::pointer_device::pen, 9, u8"other", at(70) }));
+    REQUIRE(controller.snapshot().drag.has_value());
+    REQUIRE(names_of(controller.process(as_pen(luil::pointer_released_event { 60.0f, 340.0f, luil::pointer_button::left, at(80) }))) == std::vector<std::u8string> { u8"drop" });
+}
+
+TEST_CASE("A new device press cancels the old handle before taking over", "[ui][interaction][pen]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled, { .handle = true }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(as_pen(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::right, at(20) })));
+    REQUIRE(controller.process(luil::pointer_released_event { 60.0f, 120.0f, luil::pointer_button::left, at(30) }).empty());
+    REQUIRE(controller.process(as_pen(luil::pointer_moved_event { 60.0f, 90.0f, at(40) })).empty());
+    REQUIRE(names_of(controller.process(as_pen(luil::pointer_released_event { 60.0f, 90.0f, luil::pointer_button::right, at(50) }))) == std::vector<std::u8string> { u8"menu" });
+}
+
+TEST_CASE("Touch handles stop when hidden disabled or covered", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled, { .handle = true }));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    card_options changed { .handle = true };
+    SECTION("hidden")
+    {
+        changed.visible = false;
+    }
+    SECTION("disabled")
+    {
+        changed.enabled = false;
+    }
+    SECTION("modal")
+    {
+        changed.covered = true;
+    }
+    controller.set_tree(card_tree(&scrolled, changed));
+    REQUIRE(controller.process(touch_move(60.0f, 90.0f, 40)).empty());
+    // 같은 id가 돌아와도 취소된 접촉을 되살리지 않는다.
+    controller.set_tree(card_tree(&scrolled, { .handle = true }));
+    REQUIRE(controller.process(touch_move(60.0f, 90.0f, 80)).empty());
+    REQUIRE(controller.process(touch_release(60.0f, 90.0f, 700)).empty());
+}
+
+TEST_CASE("A hidden touch drag source cannot start or drop", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled, { .draggable = true }));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    SECTION("before drag")
+    {
+        controller.set_tree(card_tree(&scrolled, { .draggable = true, .visible = false }));
+        static_cast<void>(controller.process(touch_move(60.0f, 340.0f, 500)));
+        REQUIRE(controller.snapshot().drag.has_value() == false);
+        controller.set_tree(card_tree(&scrolled, { .draggable = true }));
+        static_cast<void>(controller.process(touch_move(60.0f, 340.0f, 550)));
+        REQUIRE(controller.snapshot().drag.has_value() == false);
+    }
+    SECTION("during drag")
+    {
+        static_cast<void>(controller.process(touch_move(60.0f, 340.0f, 500)));
+        REQUIRE(controller.snapshot().drag.has_value());
+        controller.set_tree(card_tree(&scrolled, { .draggable = true, .visible = false }));
+    }
+    REQUIRE(controller.process(touch_release(60.0f, 340.0f, 600)).empty());
+    REQUIRE(controller.snapshot().drag.has_value() == false);
+}
+
+TEST_CASE("Disabling a handle long press preserves dragging but removes the menu", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled, { .handle = true }));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    luil::touch_gesture_config off {};
+    off.long_press_enabled = false;
+    REQUIRE(controller.set_touch_config(off));
+    SECTION("still held after reenabling")
+    {
+        REQUIRE(controller.set_touch_config({}));
+        REQUIRE(controller.process(touch_release(60.0f, 120.0f, 700)).empty());
+        static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 1000)));
+        REQUIRE(names_of(controller.process(touch_release(60.0f, 120.0f, 1700))) == std::vector<std::u8string> { u8"menu" });
+    }
+    SECTION("continue dragging")
+    {
+        REQUIRE(names_of(controller.process(touch_move(60.0f, 90.0f, 40))) == std::vector<std::u8string> { u8"move" });
+        REQUIRE(controller.process(touch_release(60.0f, 90.0f, 700)).empty());
+    }
 }

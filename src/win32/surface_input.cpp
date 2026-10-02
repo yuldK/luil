@@ -63,6 +63,7 @@ namespace luil::win32 {
             pressed.y = sample.y;
             pressed.button = button;
             pressed.time = sample.time;
+            pressed.shift = sample.shift;
             pressed.surface = sample.surface;
             pressed.device = sample.device;
             pressed.pointer_id = sample.pointer_id;

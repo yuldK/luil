@@ -137,6 +137,9 @@ namespace luil::win32 {
         struct entry;
         struct environment;
 
+        // 취소는 감춰진 뒤에도 전송해야 하므로 hit test·가시성 라우팅과 분리한다.
+        void send_pointer_input(entry& target, const webview_pointer_input& input, UINT event_kind);
+
         [[nodiscard]] environment* acquire_environment(const std::u8string& user_data_folder);
         void begin_controller(entry& target, HWND window);
         // 기억해 둔 명령 중 아직 실행하지 않은 것을 실행한다.

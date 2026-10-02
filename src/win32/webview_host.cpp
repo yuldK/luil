@@ -291,8 +291,7 @@ namespace luil::win32 {
             return false;
         // 방향을 그대로 넘긴다 — 앞으로 들어가면 페이지의 첫 자리, 뒤로 들어가면
         // 마지막 자리다.
-        return SUCCEEDED(target->controller->MoveFocus(
-            backward ? COREWEBVIEW2_MOVE_FOCUS_REASON_PREVIOUS : COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT));
+        return SUCCEEDED(target->controller->MoveFocus(backward ? COREWEBVIEW2_MOVE_FOCUS_REASON_PREVIOUS : COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT));
     }
 
     void webview_host::signal_focus(const entry& source, const webview_focus_signal signal)
@@ -429,14 +428,12 @@ namespace luil::win32 {
         const std::u8string key { user_data_folder };
         const HRESULT begun {
             CreateCoreWebView2EnvironmentWithOptions(nullptr, folder.value->c_str(), nullptr,
-                Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-                    [alive, self, key](const HRESULT result, ICoreWebView2Environment* const created_environment) -> HRESULT {
-                        if (*alive == false)
-                            return S_OK;
-                        self->finish_environment(key, result, created_environment);
+                Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>([alive, self, key](const HRESULT result, ICoreWebView2Environment* const created_environment) -> HRESULT {
+                    if (*alive == false)
                         return S_OK;
-                    })
-                    .Get()),
+                    self->finish_environment(key, result, created_environment);
+                    return S_OK;
+                }).Get()),
         };
         if (FAILED(begun))
             slot->state = creation_state::failed;
@@ -507,17 +504,16 @@ namespace luil::win32 {
 
         const HRESULT begun {
             environment3->CreateCoreWebView2CompositionController(window,
-                Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>(
-                    [alive, self, id, serial](const HRESULT result, ICoreWebView2CompositionController* const created) -> HRESULT {
-                        if (*alive == false)
-                        {
-                            close_orphan(created);
-                            return S_OK;
-                        }
-                        self->finish_controller(id, serial, result, created);
+                Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>([alive, self, id, serial](
+                                                                                                   const HRESULT result, ICoreWebView2CompositionController* const created) -> HRESULT {
+                    if (*alive == false)
+                    {
+                        close_orphan(created);
                         return S_OK;
-                    })
-                    .Get()),
+                    }
+                    self->finish_controller(id, serial, result, created);
+                    return S_OK;
+                }).Get()),
         };
         if (FAILED(begun))
             fail(id, make_hresult_error(u8"Failed to start the WebView2 controller", begun));
@@ -599,44 +595,41 @@ namespace luil::win32 {
         const std::u8string key { id };
         EventRegistrationToken token {};
         static_cast<void>(target->view->add_NavigationCompleted(
-            Callback<ICoreWebView2NavigationCompletedEventHandler>(
-                [alive, self, key](ICoreWebView2* const source, ICoreWebView2NavigationCompletedEventArgs* const args) -> HRESULT {
-                    if (*alive == false)
-                        return S_OK;
-                    entry* const target_entry { self->find(key) };
-                    if (target_entry == nullptr)
-                        return S_OK;
-                    // 우리가 막은 항해의 끝은 알리지 않는다 — 막았다고 이미 알렸다.
-                    // 막힌 페이지는 그려지지 않았으므로 `painted`도 그대로 둔다.
-                    UINT64 navigation { 0 };
-                    if (args != nullptr && SUCCEEDED(args->get_NavigationId(&navigation)) && std::erase(target_entry->cancelled_navigations, navigation) > 0)
-                        return S_OK;
-                    BOOL succeeded { FALSE };
-                    if (args != nullptr)
-                        static_cast<void>(args->get_IsSuccess(&succeeded));
-                    std::u8string url {};
-                    if (source != nullptr)
-                    {
-                        wil_string_scope current {};
-                        if (SUCCEEDED(source->get_Source(&current.value)) && current.value != nullptr)
-                            if (const auto text { utf16_to_utf8(current.value) }; text.value.has_value())
-                                url = *text.value;
-                    }
-                    std::u8string reason {};
-                    if (succeeded == FALSE && args != nullptr)
-                    {
-                        COREWEBVIEW2_WEB_ERROR_STATUS status { COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN };
-                        static_cast<void>(args->get_WebErrorStatus(&status));
-                        reason = u8"web error status ";
-                        for (const char digit : std::to_string(static_cast<int>(status)))
-                            reason.push_back(static_cast<char8_t>(digit));
-                    }
-                    target_entry->painted = true;
-                    self->report(*target_entry, succeeded != FALSE ? webview_event_kind::navigation_completed : webview_event_kind::navigation_failed, std::move(url),
-                        std::move(reason));
+            Callback<ICoreWebView2NavigationCompletedEventHandler>([alive, self, key](ICoreWebView2* const source, ICoreWebView2NavigationCompletedEventArgs* const args) -> HRESULT {
+                if (*alive == false)
                     return S_OK;
-                })
-                .Get(),
+                entry* const target_entry { self->find(key) };
+                if (target_entry == nullptr)
+                    return S_OK;
+                // 우리가 막은 항해의 끝은 알리지 않는다 — 막았다고 이미 알렸다.
+                // 막힌 페이지는 그려지지 않았으므로 `painted`도 그대로 둔다.
+                UINT64 navigation { 0 };
+                if (args != nullptr && SUCCEEDED(args->get_NavigationId(&navigation)) && std::erase(target_entry->cancelled_navigations, navigation) > 0)
+                    return S_OK;
+                BOOL succeeded { FALSE };
+                if (args != nullptr)
+                    static_cast<void>(args->get_IsSuccess(&succeeded));
+                std::u8string url {};
+                if (source != nullptr)
+                {
+                    wil_string_scope current {};
+                    if (SUCCEEDED(source->get_Source(&current.value)) && current.value != nullptr)
+                        if (const auto text { utf16_to_utf8(current.value) }; text.value.has_value())
+                            url = *text.value;
+                }
+                std::u8string reason {};
+                if (succeeded == FALSE && args != nullptr)
+                {
+                    COREWEBVIEW2_WEB_ERROR_STATUS status { COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN };
+                    static_cast<void>(args->get_WebErrorStatus(&status));
+                    reason = u8"web error status ";
+                    for (const char digit : std::to_string(static_cast<int>(status)))
+                        reason.push_back(static_cast<char8_t>(digit));
+                }
+                target_entry->painted = true;
+                self->report(*target_entry, succeeded != FALSE ? webview_event_kind::navigation_completed : webview_event_kind::navigation_failed, std::move(url), std::move(reason));
+                return S_OK;
+            }).Get(),
             &token));
 
         // --- 정책 ---
@@ -717,8 +710,7 @@ namespace luil::win32 {
                     ComPtr<ICoreWebView2FrameInfo> frame {};
                     ComPtr<ICoreWebView2FrameInfo2> frame2 {};
                     COREWEBVIEW2_FRAME_KIND frame_kind { COREWEBVIEW2_FRAME_KIND_UNKNOWN };
-                    if (SUCCEEDED(args3->get_OriginalSourceFrameInfo(&frame)) && frame != nullptr && SUCCEEDED(frame.As(&frame2)) && frame2 != nullptr
-                        && SUCCEEDED(frame2->get_FrameKind(&frame_kind)))
+                    if (SUCCEEDED(args3->get_OriginalSourceFrameInfo(&frame)) && frame != nullptr && SUCCEEDED(frame.As(&frame2)) && frame2 != nullptr && SUCCEEDED(frame2->get_FrameKind(&frame_kind)))
                         from_main_frame = frame_kind == COREWEBVIEW2_FRAME_KIND_MAIN_FRAME;
                 }
                 if (user_initiated == FALSE || from_main_frame == false)
@@ -765,8 +757,8 @@ namespace luil::win32 {
         // 취소하면 저장 대화상자도 뜨지 않는다.
         ComPtr<ICoreWebView2_4> view4 {};
         if (SUCCEEDED(target->view.As(&view4)) && view4 != nullptr)
-            static_cast<void>(view4->add_DownloadStarting(
-                Callback<ICoreWebView2DownloadStartingEventHandler>([alive, self, key](ICoreWebView2*, ICoreWebView2DownloadStartingEventArgs* const args) -> HRESULT {
+            static_cast<void>(
+                view4->add_DownloadStarting(Callback<ICoreWebView2DownloadStartingEventHandler>([alive, self, key](ICoreWebView2*, ICoreWebView2DownloadStartingEventArgs* const args) -> HRESULT {
                     if (*alive == false || args == nullptr)
                         return S_OK;
                     static_cast<void>(args->put_Cancel(TRUE));
@@ -781,7 +773,7 @@ namespace luil::win32 {
                     self->report(*target_entry, webview_event_kind::download_blocked, to_utf8(uri), u8"downloads are not accepted");
                     return S_OK;
                 }).Get(),
-                &token));
+                    &token));
 
         // 페이지가 `window.chrome.webview.postMessage`로 보낸 것이다. 다리는 이것
         // 하나다 (호스트 객체는 닫혀 있다 — `apply_settings`).
@@ -873,79 +865,72 @@ namespace luil::win32 {
         // NEXT는 첫 칸으로 PREVIOUS는 마지막 칸으로 돈다 —
         // `PROGRAMMATIC`으로는 되돌아가지 않는다.
         static_cast<void>(target->controller->add_MoveFocusRequested(
-            Callback<ICoreWebView2MoveFocusRequestedEventHandler>(
-                [alive, self, key](ICoreWebView2Controller* const source, ICoreWebView2MoveFocusRequestedEventArgs* const args) -> HRESULT {
-                    if (*alive == false || source == nullptr || args == nullptr)
-                        return S_OK;
-                    COREWEBVIEW2_MOVE_FOCUS_REASON reason { COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT };
-                    static_cast<void>(args->get_Reason(&reason));
-                    static_cast<void>(args->put_Handled(TRUE));
-                    static_cast<void>(source->MoveFocus(reason == COREWEBVIEW2_MOVE_FOCUS_REASON_PREVIOUS ? COREWEBVIEW2_MOVE_FOCUS_REASON_PREVIOUS
-                                                                                                          : COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT));
+            Callback<ICoreWebView2MoveFocusRequestedEventHandler>([alive, self, key](ICoreWebView2Controller* const source, ICoreWebView2MoveFocusRequestedEventArgs* const args) -> HRESULT {
+                if (*alive == false || source == nullptr || args == nullptr)
                     return S_OK;
-                })
-                .Get(),
+                COREWEBVIEW2_MOVE_FOCUS_REASON reason { COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT };
+                static_cast<void>(args->get_Reason(&reason));
+                static_cast<void>(args->put_Handled(TRUE));
+                static_cast<void>(source->MoveFocus(reason == COREWEBVIEW2_MOVE_FOCUS_REASON_PREVIOUS ? COREWEBVIEW2_MOVE_FOCUS_REASON_PREVIOUS : COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT));
+                return S_OK;
+            }).Get(),
             &token));
 
         // 논리 초점을 맞춘다. 클릭 진입은 raw input이 우리에게 오지 않으므로
         // 이것을 하지 않으면 초점 테가 이전 자리에 남는다.
-        static_cast<void>(target->controller->add_GotFocus(
-            Callback<ICoreWebView2FocusChangedEventHandler>([alive, self, key](ICoreWebView2Controller*, IUnknown*) -> HRESULT {
-                if (*alive == false)
-                    return S_OK;
-                if (const entry* const source { self->find(key) }; source != nullptr)
-                    self->signal_focus(*source, webview_focus_signal::entered);
+        static_cast<void>(target->controller->add_GotFocus(Callback<ICoreWebView2FocusChangedEventHandler>([alive, self, key](ICoreWebView2Controller*, IUnknown*) -> HRESULT {
+            if (*alive == false)
                 return S_OK;
-            }).Get(),
+            if (const entry* const source { self->find(key) }; source != nullptr)
+                self->signal_focus(*source, webview_focus_signal::entered);
+            return S_OK;
+        }).Get(),
             &token));
-        static_cast<void>(target->controller->add_LostFocus(
-            Callback<ICoreWebView2FocusChangedEventHandler>([alive, self, key](ICoreWebView2Controller*, IUnknown*) -> HRESULT {
-                if (*alive == false)
-                    return S_OK;
-                if (const entry* const source { self->find(key) }; source != nullptr)
-                    self->signal_focus(*source, webview_focus_signal::left);
+        static_cast<void>(target->controller->add_LostFocus(Callback<ICoreWebView2FocusChangedEventHandler>([alive, self, key](ICoreWebView2Controller*, IUnknown*) -> HRESULT {
+            if (*alive == false)
                 return S_OK;
-            }).Get(),
+            if (const entry* const source { self->find(key) }; source != nullptr)
+                self->signal_focus(*source, webview_focus_signal::left);
+            return S_OK;
+        }).Get(),
             &token));
 
         // **웹뷰가 초점을 쥔 동안 우리에게 오는 유일한 키 통로다.**
         // 평범한 글자·Tab·Enter·Space는 아예 오지 않으므로 이 이벤트는 시끄럽지 않다
         static_cast<void>(target->controller->add_AcceleratorKeyPressed(
-            Callback<ICoreWebView2AcceleratorKeyPressedEventHandler>(
-                [alive, self, key](ICoreWebView2Controller*, ICoreWebView2AcceleratorKeyPressedEventArgs* const args) -> HRESULT {
-                    if (*alive == false || args == nullptr)
-                        return S_OK;
-                    COREWEBVIEW2_KEY_EVENT_KIND kind { COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN };
-                    UINT virtual_key { 0 };
-                    static_cast<void>(args->get_KeyEventKind(&kind));
-                    static_cast<void>(args->get_VirtualKey(&virtual_key));
-                    // **누름만 처리한다.** 뗌까지 처리하면 한 번 누른 키가 두 번 먹힌다.
-                    if (kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN)
-                        return S_OK;
-                    // 이벤트 인자에 없는 수식키 상태는 GetKeyState로 읽는다.
-                    const bool control { (GetKeyState(VK_CONTROL) & 0x8000) != 0 };
-                    const bool shift { (GetKeyState(VK_SHIFT) & 0x8000) != 0 };
-                    const entry* const source { self->find(key) };
-                    if (source == nullptr)
-                        return S_OK;
-
-                    if (virtual_key == VK_TAB && control)
-                    {
-                        // **삼키면 페이지는 이 키를 한 건도 받지 않는다.** 그래서
-                        // 여기서 우리가 처리하지 않으면 아무 일도 일어나지 않는다.
-                        static_cast<void>(args->put_Handled(TRUE));
-                        self->signal_focus(*source, shift ? webview_focus_signal::leave_backward : webview_focus_signal::leave_forward);
-                        return S_OK;
-                    }
-                    if (virtual_key == VK_ESCAPE)
-                    {
-                        static_cast<void>(args->put_Handled(TRUE));
-                        self->signal_focus(*source, webview_focus_signal::dismiss);
-                    }
-                    // Alt+F4는 소비하지 않아 WM_SYSCOMMAND·WM_CLOSE가 창에 전달되게 한다.
+            Callback<ICoreWebView2AcceleratorKeyPressedEventHandler>([alive, self, key](ICoreWebView2Controller*, ICoreWebView2AcceleratorKeyPressedEventArgs* const args) -> HRESULT {
+                if (*alive == false || args == nullptr)
                     return S_OK;
-                })
-                .Get(),
+                COREWEBVIEW2_KEY_EVENT_KIND kind { COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN };
+                UINT virtual_key { 0 };
+                static_cast<void>(args->get_KeyEventKind(&kind));
+                static_cast<void>(args->get_VirtualKey(&virtual_key));
+                // **누름만 처리한다.** 뗌까지 처리하면 한 번 누른 키가 두 번 먹힌다.
+                if (kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN)
+                    return S_OK;
+                // 이벤트 인자에 없는 수식키 상태는 GetKeyState로 읽는다.
+                const bool control { (GetKeyState(VK_CONTROL) & 0x8000) != 0 };
+                const bool shift { (GetKeyState(VK_SHIFT) & 0x8000) != 0 };
+                const entry* const source { self->find(key) };
+                if (source == nullptr)
+                    return S_OK;
+
+                if (virtual_key == VK_TAB && control)
+                {
+                    // **삼키면 페이지는 이 키를 한 건도 받지 않는다.** 그래서
+                    // 여기서 우리가 처리하지 않으면 아무 일도 일어나지 않는다.
+                    static_cast<void>(args->put_Handled(TRUE));
+                    self->signal_focus(*source, shift ? webview_focus_signal::leave_backward : webview_focus_signal::leave_forward);
+                    return S_OK;
+                }
+                if (virtual_key == VK_ESCAPE)
+                {
+                    static_cast<void>(args->put_Handled(TRUE));
+                    self->signal_focus(*source, webview_focus_signal::dismiss);
+                }
+                // Alt+F4는 소비하지 않아 WM_SYSCOMMAND·WM_CLOSE가 창에 전달되게 한다.
+                return S_OK;
+            }).Get(),
             &token));
 
         // 서기 전에 온 명령을 이제 흘려보낸다.
@@ -1106,6 +1091,11 @@ namespace luil::win32 {
         const bool showing { layout.visible() && underlay != nullptr && target->visual != nullptr };
         if ((showing == false || layout.punch_hole == false) && target->pressed_buttons != 0)
             cancel_pointer(target->anchor);
+        // 브라우저가 DOWN만 받은 채 감춰지지 않도록 먼저 접촉을 끝낸다.
+        // 표면은 남은 시퀀스를 계속 소유하므로 뒤의 luil UI에 누름이 새지 않는다.
+        if (showing == false || layout.punch_hole == false)
+            while (target->pointer_contacts.empty() == false)
+                cancel_pointer_input(target->anchor, target->pointer_contacts.back().first);
         if (showing == false)
         {
             // **떼지 않는다.** 보이지 않는 visual은 아무것도 그리지 않으므로 떼어 둘
@@ -1282,13 +1272,16 @@ namespace luil::win32 {
 
     void webview_host::cancel_pointer(const std::u8string& anchor)
     {
+        const std::pair<UINT, COREWEBVIEW2_MOUSE_EVENT_KIND> buttons[] {
+            { MK_LBUTTON, COREWEBVIEW2_MOUSE_EVENT_KIND_LEFT_BUTTON_UP },
+            { MK_RBUTTON, COREWEBVIEW2_MOUSE_EVENT_KIND_RIGHT_BUTTON_UP },
+            { MK_MBUTTON, COREWEBVIEW2_MOUSE_EVENT_KIND_MIDDLE_BUTTON_UP },
+        };
         for (const std::unique_ptr<entry>& candidate : entries_)
         {
             if (candidate->anchor != anchor || candidate->composition_controller == nullptr)
                 continue;
-            for (const auto [button, kind] : { std::pair { UINT { MK_LBUTTON }, COREWEBVIEW2_MOUSE_EVENT_KIND_LEFT_BUTTON_UP },
-                     std::pair { UINT { MK_RBUTTON }, COREWEBVIEW2_MOUSE_EVENT_KIND_RIGHT_BUTTON_UP }, std::pair { UINT { MK_MBUTTON }, COREWEBVIEW2_MOUSE_EVENT_KIND_MIDDLE_BUTTON_UP }
-                 })
+            for (const auto [button, kind] : buttons)
                 if ((candidate->pressed_buttons & button) != 0)
                     static_cast<void>(candidate->composition_controller->SendMouseInput(kind, COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS_NONE, 0, POINT { -10000, -10000 }));
             candidate->pressed_buttons = 0;
@@ -1337,6 +1330,58 @@ namespace luil::win32 {
         }
     } // namespace
 
+    void webview_host::send_pointer_input(entry& target, const webview_pointer_input& input, const UINT event_kind)
+    {
+        if (target.composition_controller == nullptr)
+            return;
+
+        ComPtr<ICoreWebView2Environment3> environment3 {};
+        for (const std::unique_ptr<environment>& candidate : environments_)
+            if (candidate->user_data_folder == target.user_data_folder && candidate->value != nullptr)
+                static_cast<void>(candidate->value.As(&environment3));
+        ComPtr<ICoreWebView2PointerInfo> info {};
+        if (environment3 == nullptr || FAILED(environment3->CreateCoreWebView2PointerInfo(&info)) || info == nullptr)
+            return;
+        // 종료는 modal 차단·감춤 뒤에도 원래 웹뷰 기준 좌표로 보낸다.
+        // 가시성용 translate_webview_pointer는 여기서 쓰지 않는다.
+        const POINT offset { input.screen_to_client.x - target.applied.x, input.screen_to_client.y - target.applied.y };
+        static_cast<void>(info->put_PointerKind(input.info.pointerType));
+        static_cast<void>(info->put_PointerId(input.info.pointerId));
+        static_cast<void>(info->put_FrameId(input.info.frameId));
+        static_cast<void>(info->put_PointerFlags(input.info.pointerFlags));
+        static_cast<void>(info->put_PointerDeviceRect(input.device_rect));
+        static_cast<void>(info->put_DisplayRect(input.display_rect));
+        static_cast<void>(info->put_PixelLocation(moved_by(input.info.ptPixelLocation, offset)));
+        static_cast<void>(info->put_HimetricLocation(input.info.ptHimetricLocation));
+        static_cast<void>(info->put_PixelLocationRaw(moved_by(input.info.ptPixelLocationRaw, offset)));
+        static_cast<void>(info->put_HimetricLocationRaw(input.info.ptHimetricLocationRaw));
+        static_cast<void>(info->put_Time(input.info.dwTime));
+        static_cast<void>(info->put_HistoryCount(input.info.historyCount));
+        static_cast<void>(info->put_InputData(input.info.InputData));
+        static_cast<void>(info->put_KeyStates(input.info.dwKeyStates));
+        static_cast<void>(info->put_PerformanceCount(input.info.PerformanceCount));
+        static_cast<void>(info->put_ButtonChangeKind(static_cast<INT32>(input.info.ButtonChangeType)));
+        if (input.info.pointerType == PT_PEN)
+        {
+            static_cast<void>(info->put_PenFlags(input.pen.penFlags));
+            static_cast<void>(info->put_PenMask(input.pen.penMask));
+            static_cast<void>(info->put_PenPressure(input.pen.pressure));
+            static_cast<void>(info->put_PenRotation(input.pen.rotation));
+            static_cast<void>(info->put_PenTiltX(input.pen.tiltX));
+            static_cast<void>(info->put_PenTiltY(input.pen.tiltY));
+        }
+        else if (input.info.pointerType == PT_TOUCH)
+        {
+            static_cast<void>(info->put_TouchFlags(input.touch.touchFlags));
+            static_cast<void>(info->put_TouchMask(input.touch.touchMask));
+            static_cast<void>(info->put_TouchContact(moved_by(input.touch.rcContact, offset)));
+            static_cast<void>(info->put_TouchContactRaw(moved_by(input.touch.rcContactRaw, offset)));
+            static_cast<void>(info->put_TouchOrientation(input.touch.orientation));
+            static_cast<void>(info->put_TouchPressure(input.touch.pressure));
+        }
+        static_cast<void>(target.composition_controller->SendPointerInput(static_cast<COREWEBVIEW2_POINTER_EVENT_KIND>(event_kind), info.Get()));
+    }
+
     bool webview_host::relay_pointer_input(const std::u8string& anchor, const webview_pointer_input& input)
     {
         const std::optional<COREWEBVIEW2_POINTER_EVENT_KIND> kind { pointer_event_kind(input.message) };
@@ -1344,58 +1389,12 @@ namespace luil::win32 {
             return false;
         const UINT32 pointer_id { input.info.pointerId };
         const auto usable = [&anchor](const entry& candidate) {
-            return candidate.anchor == anchor && candidate.state == creation_state::ready && candidate.composition_controller != nullptr && candidate.attached_to != nullptr
-                && candidate.shown;
+            return candidate.anchor == anchor && candidate.state == creation_state::ready && candidate.composition_controller != nullptr && candidate.attached_to != nullptr && candidate.shown;
         };
         // 원본을 그 웹뷰 기준으로 옮겨 보낸다.
         //  - 픽셀 자리와 접촉 사각형은 화면 좌표라 client로, 다시 웹뷰 왼쪽 위 기준으로
         //    옮긴다. himetric과 장치 사각형은 장치 단위라 그대로 둔다.
-        const auto send = [this, &input](entry& target, const COREWEBVIEW2_POINTER_EVENT_KIND event_kind) {
-            ComPtr<ICoreWebView2Environment3> environment3 {};
-            for (const std::unique_ptr<environment>& candidate : environments_)
-                if (candidate->user_data_folder == target.user_data_folder && candidate->value != nullptr)
-                    static_cast<void>(candidate->value.As(&environment3));
-            ComPtr<ICoreWebView2PointerInfo> info {};
-            if (environment3 == nullptr || FAILED(environment3->CreateCoreWebView2PointerInfo(&info)) || info == nullptr)
-                return;
-            const webview_pointer local { translate_webview_pointer(target.applied, input.client.x, input.client.y, true) };
-            const POINT offset { input.screen_to_client.x + local.x - input.client.x, input.screen_to_client.y + local.y - input.client.y };
-            static_cast<void>(info->put_PointerKind(input.info.pointerType));
-            static_cast<void>(info->put_PointerId(input.info.pointerId));
-            static_cast<void>(info->put_FrameId(input.info.frameId));
-            static_cast<void>(info->put_PointerFlags(input.info.pointerFlags));
-            static_cast<void>(info->put_PointerDeviceRect(input.device_rect));
-            static_cast<void>(info->put_DisplayRect(input.display_rect));
-            static_cast<void>(info->put_PixelLocation(moved_by(input.info.ptPixelLocation, offset)));
-            static_cast<void>(info->put_HimetricLocation(input.info.ptHimetricLocation));
-            static_cast<void>(info->put_PixelLocationRaw(moved_by(input.info.ptPixelLocationRaw, offset)));
-            static_cast<void>(info->put_HimetricLocationRaw(input.info.ptHimetricLocationRaw));
-            static_cast<void>(info->put_Time(input.info.dwTime));
-            static_cast<void>(info->put_HistoryCount(input.info.historyCount));
-            static_cast<void>(info->put_InputData(input.info.InputData));
-            static_cast<void>(info->put_KeyStates(input.info.dwKeyStates));
-            static_cast<void>(info->put_PerformanceCount(input.info.PerformanceCount));
-            static_cast<void>(info->put_ButtonChangeKind(static_cast<INT32>(input.info.ButtonChangeType)));
-            if (input.info.pointerType == PT_PEN)
-            {
-                static_cast<void>(info->put_PenFlags(input.pen.penFlags));
-                static_cast<void>(info->put_PenMask(input.pen.penMask));
-                static_cast<void>(info->put_PenPressure(input.pen.pressure));
-                static_cast<void>(info->put_PenRotation(input.pen.rotation));
-                static_cast<void>(info->put_PenTiltX(input.pen.tiltX));
-                static_cast<void>(info->put_PenTiltY(input.pen.tiltY));
-            }
-            else if (input.info.pointerType == PT_TOUCH)
-            {
-                static_cast<void>(info->put_TouchFlags(input.touch.touchFlags));
-                static_cast<void>(info->put_TouchMask(input.touch.touchMask));
-                static_cast<void>(info->put_TouchContact(moved_by(input.touch.rcContact, offset)));
-                static_cast<void>(info->put_TouchContactRaw(moved_by(input.touch.rcContactRaw, offset)));
-                static_cast<void>(info->put_TouchOrientation(input.touch.orientation));
-                static_cast<void>(info->put_TouchPressure(input.touch.pressure));
-            }
-            static_cast<void>(target.composition_controller->SendPointerInput(event_kind, info.Get()));
-        };
+        const auto send = [this, &input](entry& target, const COREWEBVIEW2_POINTER_EVENT_KIND event_kind) { send_pointer_input(target, input, static_cast<UINT>(event_kind)); };
 
         // 접촉을 쥔 웹뷰가 끝까지 받는다. 보낼 수 없게 됐어도(감춤) 삼킨다 —
         // 그 접촉을 뒤의 우리 tree가 새 누름으로 받으면 안 된다.
@@ -1469,7 +1468,7 @@ namespace luil::win32 {
             if (found == candidate->pointer_contacts.end())
                 continue;
             // 원본이 더 없으므로 취소 표식만 실은 뗌을 보낸다. 자리는 화면 밖이다.
-            // 쥔 웹뷰를 찾고 접촉을 지우는 것은 통상 경로가 한다.
+            // 가시성 라우팅을 거치지 않는다. 이미 감춘 웹뷰도 종료를 받아야 한다.
             webview_pointer_input cancelled {};
             cancelled.message = WM_POINTERUP;
             cancelled.info.pointerType = found->second;
@@ -1478,7 +1477,8 @@ namespace luil::win32 {
             cancelled.info.ptPixelLocation = POINT { -10000, -10000 };
             cancelled.info.ptPixelLocationRaw = POINT { -10000, -10000 };
             cancelled.client = POINT { -10000, -10000 };
-            static_cast<void>(relay_pointer_input(anchor, cancelled));
+            send_pointer_input(*candidate, cancelled, static_cast<UINT>(COREWEBVIEW2_POINTER_EVENT_KIND_UP));
+            std::erase_if(candidate->pointer_contacts, [pointer_id](const auto& value) { return value.first == pointer_id; });
             return;
         }
     }

@@ -50,6 +50,8 @@ namespace luil::win32 {
         bool barrel { false };
         // 펜의 지우개 끝이다. 일반 컨트롤을 실행하지 않는다.
         bool eraser { false };
+        // 누름이 발생한 순간의 POINTER_MOD_SHIFT다. 펜도 Shift+선택을 지원한다.
+        bool shift { false };
         float x { 0.0f };
         float y { 0.0f };
         // 표면의 물리 / 논리 배율이다.
