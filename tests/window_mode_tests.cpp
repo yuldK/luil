@@ -238,11 +238,11 @@ TEST_CASE("Fullscreen targets the whole monitor", "[win32][window-mode]")
 TEST_CASE("Entering fullscreen does not destroy the normal placement", "[win32][window-mode]")
 {
     // 사용자가 쓰던 창이다.
-    const luil::win32::window_placement normal { 120, 80, 1280, 800, false, false };
+    const luil::window_placement normal { 120, 80, 1280, 800, false, false };
 
     SECTION("전체 화면이 아니면 관측값이 그대로 답이다")
     {
-        const luil::win32::window_placement reported { luil::win32::placement_to_report(normal, std::nullopt) };
+        const luil::window_placement reported { luil::win32::placement_to_report(normal, std::nullopt) };
         REQUIRE(reported == normal);
         REQUIRE(reported.fullscreen == false);
     }
@@ -251,8 +251,8 @@ TEST_CASE("Entering fullscreen does not destroy the normal placement", "[win32][
     {
         // 들어갈 때의 SetWindowPos가 rcNormalPosition을 모니터 사각형으로 덮어쓴다.
         // 그대로 저장하면 "나오면 모니터를 덮는 창"이 되어 돌아갈 자리가 사라진다.
-        const luil::win32::window_placement observed { 0, 0, 1920, 1080, false, false };
-        const luil::win32::window_placement reported { luil::win32::placement_to_report(observed, normal) };
+        const luil::window_placement observed { 0, 0, 1920, 1080, false, false };
+        const luil::window_placement reported { luil::win32::placement_to_report(observed, normal) };
         REQUIRE(reported.x == normal.x);
         REQUIRE(reported.y == normal.y);
         REQUIRE(reported.width == normal.width);
@@ -264,9 +264,9 @@ TEST_CASE("Entering fullscreen does not destroy the normal placement", "[win32][
     {
         // 같은 순간의 WM_SIZE는 SIZE_RESTORED로 와서 관측된 최대화 표식을 지운다.
         // 그것을 믿으면 나왔을 때 창이 복원 크기로 앉는다.
-        const luil::win32::window_placement restore { 120, 80, 1280, 800, true, false };
-        const luil::win32::window_placement observed { 0, 0, 1920, 1080, false, false };
-        const luil::win32::window_placement reported { luil::win32::placement_to_report(observed, restore) };
+        const luil::window_placement restore { 120, 80, 1280, 800, true, false };
+        const luil::window_placement observed { 0, 0, 1920, 1080, false, false };
+        const luil::window_placement reported { luil::win32::placement_to_report(observed, restore) };
         REQUIRE(reported.maximized);
         REQUIRE(reported.fullscreen);
     }
@@ -274,18 +274,18 @@ TEST_CASE("Entering fullscreen does not destroy the normal placement", "[win32][
     SECTION("저장했다가 그대로 넣으면 전체 화면과 돌아갈 자리가 함께 산다")
     {
         // 저장 → 복원 → 다시 보고의 왕복이다.
-        const luil::win32::window_placement saved { luil::win32::placement_to_report(luil::win32::window_placement { 0, 0, 1920, 1080 }, normal) };
+        const luil::window_placement saved { luil::win32::placement_to_report(luil::window_placement { 0, 0, 1920, 1080 }, normal) };
         REQUIRE(saved.fullscreen);
         // 복원은 saved의 자리·크기로 정상 배치를 놓고 전체 화면에 들어간다 —
         // 그러면 갈무리되는 것이 다시 saved의 자리다.
-        const luil::win32::window_placement again { luil::win32::placement_to_report(luil::win32::window_placement { 0, 0, 1920, 1080 }, saved) };
+        const luil::window_placement again { luil::win32::placement_to_report(luil::window_placement { 0, 0, 1920, 1080 }, saved) };
         REQUIRE(again == saved);
     }
 
     SECTION("관측값에 실려 온 전체 화면 표식은 믿지 않는다")
     {
         // OS는 전체 화면을 알지 못한다 — 참이 실려 있다면 어디선가 흘러든 값이다.
-        const luil::win32::window_placement stale { 120, 80, 1280, 800, false, true };
+        const luil::window_placement stale { 120, 80, 1280, 800, false, true };
         REQUIRE(luil::win32::placement_to_report(stale, std::nullopt).fullscreen == false);
     }
 }

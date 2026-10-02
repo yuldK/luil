@@ -4,11 +4,13 @@
 
 | 구현 | 실행 위치 | 책임 |
 | --- | --- | --- |
-| `luil::win32::logic_driver` | 주로 logic | 메시지 처리, 불변 `ui_frame` 생성, 종료와 시간에 따른 상태 변경 |
+| `luil::logic_driver` | 주로 logic | 메시지 처리, 불변 `ui_frame` 생성, 종료와 시간에 따른 상태 변경 |
 | `luil::interaction_policy` | 주로 input | 텍스트 대상 식별, 편집·조합 메시지 변환, 휠·키·초점 이동 라우팅 |
 | `luil::win32::window_delegate` | UI | 앱 UI 명령, 창 배치·크기 통지, 파일 드롭 |
 
 `app_host`가 input·logic 스레드와 채널을 조립하고, `run_application_window()`의 호출자가 UI 스레드를 맡는다. driver와 policy는 사용 중에 살아 있어야 한다. driver의 `cancel()`, `make_close_message()`, `shutdown_completed()`는 UI에서도 호출되므로 스레드 안전해야 한다. policy의 TSF·클립보드 변환 경로와 게시된 tree의 액션도 UI에서 실행될 수 있다. 메시지 변환은 앱의 mutable 상태를 직접 수정하지 않도록 작성한다.
+
+host API(`app_host`, `logic_driver`, `ui_frame`, `ui_popup`, `ui_window`, `window_placement`, 웹뷰 값)는 플랫폼을 가리지 않으므로 [`luil/app/`](../../include/luil/app/)에 있고 네임스페이스는 `luil`이다. 옛 경로 `luil/win32/app_host.h`·`webview.h`·`renderer_policy.h`와 옛 이름 `luil::win32::logic_driver` 등은 한 판 동안 별칭으로 남는다. 별칭은 새 타입 자체를 가리키므로 기존 코드는 고치지 않고 빌드된다. 깨지는 것은 `namespace luil::win32 { class logic_driver; }` 같은 전방 선언뿐이다. 새 코드는 새 경로와 이름을 쓴다.
 
 앱별 element kind는 `application_element_kind(index)`로 정의한다. 액션은 `make_message_action(intent)` 또는 `make_app_action(intent)`로 앱 메시지를 반환한다. input controller가 클릭을 확정하면 `logic_driver::handle(app_message)`가 상태를 바꾸고 `make_frame()`이 새 frame을 만든다. logic이 게시한 frame을 UI가 받아 다시 그린다.
 
@@ -41,6 +43,6 @@ target_link_libraries(my_app PRIVATE luil::luil)
 
 WebView2 SDK와 별개로 소비자는 Evergreen Runtime의 설치·배포를 준비한다. DirectComposition을 제공하지 않는 CPU backend, 필요한 런타임 인터페이스의 부재, 생성 실패에서는 placeholder가 남는다. 키보드와 IME는 WebView2가 처리하며 포인터와 휠은 luil이 중계한다.
 
-[`webview_policy`](../../include/luil/win32/webview.h)의 기본 허용 스킴은 HTTPS다. 검사 대상은 앱의 주소 요청·주 문서의 탐색·새 창 요청이며 iframe 내부 탐색까지 제한하는 정책은 아니다. `open_new_windows_here`를 켜면 주 문서의 사용자 동작으로 발생한 허용 주소를 같은 웹뷰에서 연다. 권한 요청과 다운로드는 항상 거절하고 호스트 객체를 제공하지 않는다. 이를 여는 policy 스위치는 없다.
+[`webview_policy`](../../include/luil/app/webview.h)의 기본 허용 스킴은 HTTPS다. 검사 대상은 앱의 주소 요청·주 문서의 탐색·새 창 요청이며 iframe 내부 탐색까지 제한하는 정책은 아니다. `open_new_windows_here`를 켜면 주 문서의 사용자 동작으로 발생한 허용 주소를 같은 웹뷰에서 연다. 권한 요청과 다운로드는 항상 거절하고 호스트 객체를 제공하지 않는다. 이를 여는 policy 스위치는 없다.
 
-페이지 이벤트는 사후 통지다. `web_message_received`를 처리할 때 앱은 보낸 문서의 `url`을 확인해야 한다. 메시지 크기와 이벤트 빈도에는 상한이 있으며 버림은 `events_dropped`로 통지한다. 세부 설정과 프로세스 실패 동작은 [`webview.h`](../../include/luil/win32/webview.h)를 따른다.
+페이지 이벤트는 사후 통지다. `web_message_received`를 처리할 때 앱은 보낸 문서의 `url`을 확인해야 한다. 메시지 크기와 이벤트 빈도에는 상한이 있으며 버림은 `events_dropped`로 통지한다. 세부 설정과 프로세스 실패 동작은 [`webview.h`](../../include/luil/app/webview.h)를 따른다.

@@ -45,10 +45,10 @@
 | 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
 | 이미지 파일·바이트 디코딩 | `load_image_file`, `decode_image_bytes`, `decode_animated_image_bytes` | [ui/image_decode.h](../include/luil/ui/image_decode.h) | [설명](image-decode-design.md) |
 | Windows 창과 실행 | `win32::run_application_window` | [win32/win32_window.h](../include/luil/win32/win32_window.h) | [설명](concepts/window.md) |
-| 렌더러 선택 | `renderer_mode` | [win32/renderer_policy.h](../include/luil/win32/renderer_policy.h) | [설명](concepts/rendering.md) |
+| 렌더러 선택 | `renderer_mode` | [app/renderer_policy.h](../include/luil/app/renderer_policy.h) | [설명](concepts/rendering.md) |
 | 비동기 HTTP | `net::http_client` | [net/http_client.h](../include/luil/net/http_client.h) | [설명](http-client-design.md) |
 | 웹 콘텐츠 자리와 접근성 | `webview_element` | [ui/webview_element.h](../include/luil/ui/webview_element.h) | [설명](webview-composition-design.md) |
-| 웹뷰 구성·정책·명령 | `win32::ui_webview`, `win32::webview_policy` | [win32/webview.h](../include/luil/win32/webview.h) | [설명](webview-composition-design.md) |
+| 웹뷰 구성·정책·명령 | `ui_webview`, `webview_policy` | [app/webview.h](../include/luil/app/webview.h) | [설명](webview-composition-design.md) |
 
 ## UI 구성 규칙
 

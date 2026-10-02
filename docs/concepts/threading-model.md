@@ -1,6 +1,6 @@
 # 스레드 모델
 
-luil은 [`app_host`](../../include/luil/win32/app_host.h)를 통해 UI, input, logic 세 실행 맥락을 분리한다.
+luil은 [`app_host`](../../include/luil/app/app_host.h)를 통해 UI, input, logic 세 실행 맥락을 분리한다.
 
 | 스레드 | 소유 |
 | --- | --- |

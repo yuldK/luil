@@ -67,7 +67,7 @@ Custom caption의 비클라이언트 hit test는 다음 우선순위를 사용�
 ## 구성 예
 
 ```cpp
-luil::win32::ui_window inspector {
+luil::ui_window inspector {
     .id = u8"inspector",
     .caption = {
         .title = u8"Inspector",

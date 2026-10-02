@@ -210,11 +210,21 @@ luil_add_source_filter(luil_core_files "ui/caption"
     "${public_headers}/ui/caption_element.h"
     "${public_headers}/ui/caption_metrics.h")
 
+# app: 플랫폼을 가리지 않는 앱 계약이다 (스레드 조립, frame, 렌더러 정책, 웹뷰 값).
+# app_host의 구현은 아직 win32 묶음에 있다 (docs/android-port-plan.md 1단계).
+luil_add_source_filter(luil_core_files "app"
+    "${public_headers}/app/app_host.h"
+    host/renderer_policy.cpp
+    "${public_headers}/app/renderer_policy.h"
+    "${public_headers}/app/webview.h")
+
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
-# (popup·웹뷰 자리 대조, 다시 그릴 표면과 timer 계획, GPU fence 대기 예산).
+# (한 frame 그리기, popup·웹뷰 자리 대조, 다시 그릴 표면과 timer 계획, GPU fence 대기 예산).
 luil_add_source_filter(luil_core_files "host"
     host/fence_wait.h
+    host/frame_state.cpp
+    host/frame_state.h
     host/popup_reconcile.cpp
     host/popup_reconcile.h
     host/surface_invalidate.cpp
@@ -228,11 +238,11 @@ luil_add_source_filter(luil_files "umbrella"
 # 여기 남은 header는 비공개 구현 세부이고, 묶음은 계층 안의 관심사로 나눈다.
 
 # 앱 runtime과 창 하나의 수명, 그리고 한 frame이 나르는 것이다.
+# 옛 경로의 app_host·renderer_policy·webview 헤더는 `luil/app/`을 가리키는 별칭이다.
 luil_add_source_filter(luil_files "win32/host"
     win32/app_host.cpp
     "${public_headers}/win32/app_host.h"
-    win32/frame_state.cpp
-    win32/frame_state.h
+    "${public_headers}/win32/renderer_policy.h"
     win32/win32_window.cpp
     "${public_headers}/win32/win32_window.h"
     "${public_headers}/win32/webview.h")
@@ -251,8 +261,6 @@ luil_add_source_filter(luil_files "win32/renderer"
     win32/composition_device.h
     win32/cpu_skia_renderer.cpp
     "${luil_direct3d_renderer_source}"
-    win32/renderer_policy.cpp
-    "${public_headers}/win32/renderer_policy.h"
     win32/skia_renderer.cpp
     win32/skia_renderer.h)
 

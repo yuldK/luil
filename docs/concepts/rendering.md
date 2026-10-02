@@ -1,14 +1,14 @@
 # 렌더링
 
-UI 스레드는 logic이 게시한 `ui_frame`과 input의 `interaction_snapshot`을 표면의 크기·DPI·창 상태와 결합한다. 내부 [`frame_state`](../../src/win32/frame_state.h)는 물리 픽셀 크기, `dpi_scale`, backend 정보, 테마·accent·고대비 색, 앱이 실은 스타일 포인터, maximized 상태, interaction, tree와 글꼴 포인터, 웹뷰 영역인 `holes`를 담는다. tree·스타일·글꼴 포인터는 렌더 호출 동안 유효해야 한다.
+UI 스레드는 logic이 게시한 `ui_frame`과 input의 `interaction_snapshot`을 표면의 크기·DPI·창 상태와 결합한다. 내부 [`frame_state`](../../src/host/frame_state.h)는 물리 픽셀 크기, `dpi_scale`, backend 정보, 테마·accent·고대비 색, 앱이 실은 스타일 포인터, maximized 상태, interaction, tree와 글꼴 포인터, 웹뷰 영역인 `holes`를 담는다. tree·스타일·글꼴 포인터는 렌더 호출 동안 유효해야 한다.
 
-`frame_palette()`가 스타일·테마·accent에서 팔레트 하나를 만든다. [`draw_frame()`](../../src/win32/frame_state.cpp)이 그것과 스타일의 치수로 `draw_context`를 구성하고, 창은 같은 팔레트로 DWM 테두리와 웹뷰의 바닥색을 정한다. tree가 없으면 배경만 그린다. tree가 있으면 element와 초점 테·tooltip·drag 표시를 그린 뒤 `holes`의 물리 픽셀 사각형을 알파 0으로 비운다.
+`frame_palette()`가 스타일·테마·accent에서 팔레트 하나를 만든다. [`draw_frame()`](../../src/host/frame_state.cpp)이 그것과 스타일의 치수로 `draw_context`를 구성하고, 창은 같은 팔레트로 DWM 테두리와 웹뷰의 바닥색을 정한다. tree가 없으면 배경만 그린다. tree가 있으면 element와 초점 테·tooltip·drag 표시를 그린 뒤 `holes`의 물리 픽셀 사각형을 알파 0으로 비운다.
 
 ## Backend와 실패 처리
 
 내부 [`skia_renderer`](../../src/win32/skia_renderer.h)의 가상 함수는 `backend()`, `resize()`, `render()`, `underlay()`다. 제시는 각 backend의 `render()` 안에서 처리한다. CPU backend는 Skia raster 결과를 GDI로 제시하고, Direct3D backend는 D3D12와 Skia Ganesh로 그린 swap chain을 DirectComposition에 붙인다.
 
-`renderer_host`의 정책은 [`renderer_mode`](../../include/luil/win32/renderer_policy.h)로 정한다.
+`renderer_host`의 정책은 [`renderer_mode`](../../include/luil/app/renderer_policy.h)로 정한다.
 
 | 모드 | 동작 |
 | --- | --- |

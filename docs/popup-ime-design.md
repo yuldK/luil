@@ -2,7 +2,7 @@
 
 Popup은 `WS_EX_NOACTIVATE`이므로 독립적인 keyboard focus와 TSF session을 만들지 않는다. Popup 안 텍스트 element의 논리 초점은 popup tree에 두고, 앵커 최상위 표면의 TSF host가 그 popup을 대신 연결한다.
 
-공개 입력 상태는 [ui_interaction.h](../include/luil/ui/ui_interaction.h), popup 선언은 [app_host.h](../include/luil/win32/app_host.h)에 있다. 플랫폼 연결은 [window_surface.h](../src/win32/window_surface.h)의 `surface_tsf_host`가 맡는다.
+공개 입력 상태는 [ui_interaction.h](../include/luil/ui/ui_interaction.h), popup 선언은 [app_host.h](../include/luil/app/app_host.h)에 있다. 플랫폼 연결은 [window_surface.h](../src/win32/window_surface.h)의 `surface_tsf_host`가 맡는다.
 
 ## 초점 모델
 

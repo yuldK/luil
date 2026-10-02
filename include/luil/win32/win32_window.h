@@ -1,10 +1,12 @@
 #pragma once
 
+#include "luil/app/renderer_policy.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
+// 이 헤더만 include한 소비자가 `luil::win32::app_host` 같은 옛 이름을 그대로 쓰도록
+// 별칭 헤더를 들인다 (luil/win32/app_host.h).
 #include "luil/win32/app_host.h"
-#include "luil/win32/renderer_policy.h"
 
 #include <functional>
 #include <optional>

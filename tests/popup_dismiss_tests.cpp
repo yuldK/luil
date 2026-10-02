@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace {
-    using luil::win32::popup_dismiss_reason;
+    using luil::popup_dismiss_reason;
     using luil::win32::take_popup_dismiss_action;
 
     // 앱이 logic inbox로 나르는 메시지의 대역이다.

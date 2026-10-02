@@ -1,4 +1,4 @@
-#include "luil/win32/renderer_policy.h"
+#include "luil/app/renderer_policy.h"
 
 namespace luil {
     std::optional<renderer_mode> parse_renderer_mode(const std::u8string_view value) noexcept

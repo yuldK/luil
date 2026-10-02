@@ -2,14 +2,14 @@
 
 `ui_popup`은 주 창이나 보조 창 위에 떠야 하는 메뉴, dropdown, 긴 tooltip을 별도 Win32 popup surface로 표현한다. Popup은 독립 tree와 렌더러를 가지지만 활성화되지 않으며 frame의 선언으로 수명이 결정된다.
 
-공개 형식은 [app_host.h](../include/luil/win32/app_host.h)에 있다. 플랫폼 표면은 [popup_surface.h](../src/win32/popup_surface.h)에 정의된다.
+공개 형식은 [app_host.h](../include/luil/app/app_host.h)에 있다. 플랫폼 표면은 [popup_surface.h](../src/win32/popup_surface.h)에 정의된다.
 
 ## Frame 선언 모델
 
 앱의 logic thread는 `ui_frame::popups`에 원하는 popup 전체를 싣는다.
 
 ```cpp
-frame->popups.push_back(luil::win32::ui_popup {
+frame->popups.push_back(luil::ui_popup {
     .id = u8"account-menu",
     .anchor = {},
     .x = button_left,

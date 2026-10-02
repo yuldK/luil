@@ -69,7 +69,13 @@
 #include "luil/ui/wrap_element.h"
 #include "luil/ui/zoom_view_element.h"
 
-// Win32 platform 조립이다 (창 실행, 앱 계약).
+// 플랫폼을 가리지 않는 앱 계약이다 (스레드 조립, frame, 렌더러 정책, 웹뷰 값).
+#include "luil/app/app_host.h"
+#include "luil/app/renderer_policy.h"
+#include "luil/app/webview.h"
+
+// Win32 platform 조립이다 (창 실행).
+// app_host·renderer_policy·webview는 옛 경로의 별칭 헤더다 (한 판 동안 둔다).
 #include "luil/win32/app_host.h"
 #include "luil/win32/renderer_policy.h"
 #include "luil/win32/webview.h"

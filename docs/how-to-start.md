@@ -41,7 +41,7 @@ Visual Studio 2022에서는 `vs2022-examples`와 `vs2022-examples-debug`를 사�
 
 | 구성 요소 | 주 실행 스레드 | 책임 |
 | --- | --- | --- |
-| `luil::win32::logic_driver` | logic | 앱 상태, 메시지 처리, 불변 tree를 담은 frame 구성, 시간 갱신과 종료 처리 |
+| `luil::logic_driver` | logic | 앱 상태, 메시지 처리, 불변 tree를 담은 frame 구성, 시간 갱신과 종료 처리 |
 | `luil::interaction_policy` | input | 앱 element 종류와 텍스트 대상 매핑, 휠·키·편집 요청의 해석 |
 | `luil::win32::window_delegate` | UI | 창 배치 보고, 앱 UI 명령과 파일 드롭 등 플랫폼 연동 |
 

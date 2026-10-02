@@ -1,7 +1,7 @@
 #pragma once
 
-#include "luil/win32/renderer_policy.h"
-#include "win32/frame_state.h"
+#include "host/frame_state.h"
+#include "luil/app/renderer_policy.h"
 
 #include <windows.h>
 

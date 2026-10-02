@@ -1,4 +1,4 @@
-#include "luil/win32/app_host.h"
+#include "luil/app/app_host.h"
 
 #include "luil/ui/draw_primitives.h"
 #include "win32/win32_fonts.h"
@@ -13,7 +13,7 @@
 #include <thread>
 #include <utility>
 
-namespace luil::win32 {
+namespace luil {
     namespace {
         void input_thread_main(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
             messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
@@ -30,7 +30,7 @@ namespace luil::win32 {
                 // 그리기와 같은 글꼴이라야 caret 자리와 글자 그림이 어긋나지 않는다.
                 if (config.measure_text == nullptr)
                     config.measure_text = [](const std::u8string_view text, const float pixel_size) {
-                        const SkFont font { configured_ui_typeface(), pixel_size };
+                        const SkFont font { win32::configured_ui_typeface(), pixel_size };
                         return measure_text(text, font);
                     };
                 run_ui_input_pump(
@@ -503,4 +503,4 @@ namespace luil::win32 {
             next_tick = driver_.next_tick();
         }
     }
-} // namespace luil::win32
+} // namespace luil

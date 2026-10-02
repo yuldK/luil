@@ -2,12 +2,12 @@
 
 Application은 `ui_frame::windows`에 secondary top-level window를 publish한다. 각 `ui_window`는 자체 tree, custom caption, renderer, DPI, input state, text-input session을 가진 owned tool 또는 document window를 설명한다.
 
-공개 frame 계약은 [`include/luil/win32/app_host.h`](../include/luil/win32/app_host.h)에 있다. Platform 동작은 [`src/win32/secondary_surface.h`](../src/win32/secondary_surface.h)와 [`src/win32/win32_window.cpp`](../src/win32/win32_window.cpp)의 reconciliation code에 구현되어 있다.
+공개 frame 계약은 [`include/luil/app/app_host.h`](../include/luil/app/app_host.h)에 있다. Platform 동작은 [`src/win32/secondary_surface.h`](../src/win32/secondary_surface.h)와 [`src/win32/win32_window.cpp`](../src/win32/win32_window.cpp)의 reconciliation code에 구현되어 있다.
 
 ## Window publish
 
 ```cpp
-luil::win32::ui_window tools {};
+luil::ui_window tools {};
 tools.id = u8"tools";
 tools.caption.title = u8"Tools";
 tools.x = 40.0f;

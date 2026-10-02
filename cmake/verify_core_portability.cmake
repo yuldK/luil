@@ -17,6 +17,7 @@ set(core_directories
     "${SOURCE_DIRECTORY}/text"
     "${SOURCE_DIRECTORY}/theme"
     "${SOURCE_DIRECTORY}/ui"
+    "${INCLUDE_DIRECTORY}/luil/app"
     "${INCLUDE_DIRECTORY}/luil/messaging"
     "${INCLUDE_DIRECTORY}/luil/text"
     "${INCLUDE_DIRECTORY}/luil/theme"

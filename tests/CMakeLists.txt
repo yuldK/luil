@@ -41,6 +41,8 @@ add_executable(luil_core_tests
     panel_element_tests.cpp
     popup_reconcile_tests.cpp
     progress_element_tests.cpp
+    raster_draw_tests.cpp
+    renderer_policy_tests.cpp
     scroll_area_element_tests.cpp
     scroll_view_element_tests.cpp
     scrollbar_element_tests.cpp
@@ -59,6 +61,7 @@ add_executable(luil_core_tests
     transition_tests.cpp
     ui_element_tests.cpp
     ui_interaction_tests.cpp
+    ui_style_tests.cpp
     ui_theme_tests.cpp
     virtual_list_element_tests.cpp
     webview_element_tests.cpp
@@ -99,12 +102,9 @@ add_executable(luil_tests
     loopback_http_server_tests.cpp
     popup_dismiss_tests.cpp
     raster_probe.cpp
-    raster_draw_tests.cpp
     secondary_surface_tests.cpp
     surface_input_tests.cpp
-    renderer_policy_tests.cpp
     tsf_input_tests.cpp
-    ui_style_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp
     webview_layout_tests.cpp

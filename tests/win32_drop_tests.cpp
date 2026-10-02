@@ -206,7 +206,7 @@ namespace {
         std::vector<luil::input_action> dispatched {};
         std::vector<std::vector<std::u8string>> fallbacks {};
 
-        [[nodiscard]] luil::win32::app_host* host() noexcept override
+        [[nodiscard]] luil::app_host* host() noexcept override
         {
             return nullptr;
         }
@@ -246,12 +246,12 @@ namespace {
         void cancel_webview_pointer(const std::u8string&) override
         {}
 
-        [[nodiscard]] sk_sp<SkTypeface> apply_frame_appearance(luil::frame_state&, const luil::win32::ui_frame*) override
+        [[nodiscard]] sk_sp<SkTypeface> apply_frame_appearance(luil::frame_state&, const luil::ui_frame*) override
         {
             return nullptr;
         }
 
-        bool dismiss_popups(luil::win32::popup_dismiss_reason) override
+        bool dismiss_popups(luil::popup_dismiss_reason) override
         {
             return false;
         }

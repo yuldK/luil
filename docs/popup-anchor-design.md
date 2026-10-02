@@ -2,12 +2,12 @@
 
 `ui_popup::anchor`는 popup의 위치, 소유 관계, DPI, 활성 수명을 결정하는 최상위 표면 id다. 빈 문자열은 주 창이며 값이 있으면 `ui_window::id`가 가리키는 보조 창이다.
 
-공개 형식은 [app_host.h](../include/luil/win32/app_host.h)의 `ui_popup`, `ui_window`, `ui_frame`에 있다.
+공개 형식은 [app_host.h](../include/luil/app/app_host.h)의 `ui_popup`, `ui_window`, `ui_frame`에 있다.
 
 ## Popup 선언
 
 ```cpp
-luil::win32::ui_popup popup {
+luil::ui_popup popup {
     .id = u8"font-menu",
     .anchor = u8"inspector",
     .x = menu_x,
