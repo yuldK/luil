@@ -18,7 +18,8 @@ namespace luil::win32 {
         void input_thread_main(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
             messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
             const std::function<void(ui_command)> wake_ui_command, interaction_policy* const policy, interaction_config config,
-            const std::function<void(app_ui_command)> execute_app_ui_command, const std::function<void(clipboard_request)> execute_clipboard, std::atomic<bool>& faulted)
+            const std::function<void(app_ui_command)> execute_app_ui_command, const std::function<void(clipboard_request)> execute_clipboard,
+            messaging::latest_slot<touch_gesture_config>& touch_slot, std::atomic<bool>& faulted)
         {
             // policy·wake callback의 예외는 계약 밖 입력이다.
             // 스레드 진입 함수를 벗어난 예외는 곧 terminate라, 여기서 삼키고
@@ -38,7 +39,7 @@ namespace luil::win32 {
                         if (wake_ui_command != nullptr)
                             wake_ui_command(command);
                     },
-                    policy, std::move(config), execute_app_ui_command, execute_clipboard);
+                    policy, std::move(config), execute_app_ui_command, execute_clipboard, &touch_slot);
             }
             catch (...)
             {
@@ -82,6 +83,8 @@ namespace luil::win32 {
         // 주 tree처럼 신호 없이 게시하고 input thread가 처리 직전에 받는다.
         messaging::latest_slot<surface_tree_list> surface_tree_slot {};
         messaging::latest_slot<interaction_snapshot> interaction_slot {};
+        // 실행 중 바꾼 터치 설정이다. 최신 값 하나만 의미가 있다.
+        messaging::latest_slot<touch_gesture_config> touch_slot {};
 
         // 창 명령 큐다.
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
@@ -186,6 +189,7 @@ namespace luil::win32 {
                 std::move(configuration.interaction),
                 std::move(execute_app_ui_command),
                 std::move(execute_clipboard),
+                std::ref(parts.touch_slot),
                 std::ref(parts.faulted),
             };
         }
@@ -332,6 +336,21 @@ namespace luil::win32 {
         }
         catch (...)
         {}
+    }
+
+    bool app_host::set_touch_gesture_config(const touch_gesture_config& config) noexcept
+    {
+        if (valid_touch_gesture_config(config) == false)
+            return false;
+        try
+        {
+            static_cast<void>(assembly_->touch_slot.publish(config));
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     void app_host::post_app_message(app_message message) noexcept

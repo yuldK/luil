@@ -18,20 +18,38 @@ namespace luil {
         right,
     };
 
+    // 포인터를 낸 장치다 (touch-pen-input-design.md).
+    // 끌어 스크롤하기와 길게 누르기는 터치에만 붙는다 — 장치를 추측하지 않으므로
+    // 원격 연결이 터치를 마우스로 바꿔 보내면 그것은 마우스다.
+    enum class pointer_device
+    {
+        mouse,
+        touch,
+        pen,
+    };
+
     // Win32 메시지의 최소 복사다.
     // `HWND`와 lparam 원문은 담지 않는다.
-    // time은 UI thread가 게시 시점에 기록하며 더블 클릭·tooltip 판정의 기준이다.
+    // time은 UI thread가 기록하며 더블 클릭·tooltip·길게 누르기 판정의 기준이다.
     // interaction controller는 이 값만 읽고 시계를 직접 조회하지 않아 test가 결정적이다.
     //
     // 포인터 이벤트의 surface는 이벤트가 난 표면이다.
     // 비어 있으면 주 창이고, 값은 popup id다 (`ui_popup::id`).
     // 좌표는 그 표면의 client 좌표라 표면의 tree에 그대로 hit한다.
+    //
+    // 장치 정보는 뒤에 둔다. 앞 필드만 채운 기존 초기화가 그대로 마우스를 뜻한다.
+    //  - `pointer_id`는 접촉 하나의 수명 동안만 안정적이다. 마우스는 0이다.
     struct pointer_moved_event
     {
         float x { 0.0f };
         float y { 0.0f };
         std::chrono::steady_clock::time_point time {};
         std::u8string surface {};
+        pointer_device device { pointer_device::mouse };
+        std::uint32_t pointer_id { 0 };
+        // 펜촉·손가락이 닿아 있는가. 펜의 비접촉 이동(hover)을 접촉과 가른다.
+        // 마우스는 버튼 상태를 싣지 않으므로 늘 거짓이다.
+        bool in_contact { false };
     };
 
     struct pointer_pressed_event
@@ -43,6 +61,11 @@ namespace luil {
         // Shift+클릭은 텍스트 박스에서 선택을 그 자리까지 늘린다.
         bool shift { false };
         std::u8string surface {};
+        pointer_device device { pointer_device::mouse };
+        std::uint32_t pointer_id { 0 };
+        // 누른 표면의 물리 픽셀 / 논리 픽셀 배율이다.
+        // 터치 판정 거리는 논리 픽셀이라 이 값으로 나눠 잰다. 누른 동안 고정된다.
+        float scale { 1.0f };
     };
 
     struct pointer_released_event
@@ -52,6 +75,19 @@ namespace luil {
         pointer_button button { pointer_button::left };
         std::chrono::steady_clock::time_point time {};
         std::u8string surface {};
+        pointer_device device { pointer_device::mouse };
+        std::uint32_t pointer_id { 0 };
+    };
+
+    // 터치·펜 접촉이 정상적인 뗌 없이 끝났다 (캡처 상실·OS 취소·접촉 중 버튼 전환).
+    // **뗌이 아니다.** 클릭·우클릭·drop을 실행하지 않고 그 접촉의 몸짓만 거둔다.
+    //  - 마우스는 지금처럼 화면 밖 합성 뗌으로 거둔다 — 그 경로를 바꾸지 않는다.
+    struct pointer_cancelled_event
+    {
+        pointer_device device { pointer_device::touch };
+        std::uint32_t pointer_id { 0 };
+        std::u8string surface {};
+        std::chrono::steady_clock::time_point time {};
     };
 
     // 포인터가 이 표면의 창을 벗어났다.
@@ -65,6 +101,7 @@ namespace luil {
     struct pointer_left_event
     {
         std::u8string surface {};
+        pointer_device device { pointer_device::mouse };
     };
 
     // keyboard focus가 이 표면의 창을 떠났다.
@@ -362,7 +399,7 @@ namespace luil {
     };
 
     using raw_input_event = std::variant<pointer_moved_event, pointer_pressed_event, pointer_released_event, pointer_left_event, surface_focus_lost_event, surface_focus_gained_event,
-        mouse_wheel_event, file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event>;
+        mouse_wheel_event, file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event, pointer_cancelled_event>;
 
     // UI thread에서만 실행할 수 있는 창 명령이다.
     // 창 조작은 앱 상태가 아니므로 logic을 거치지 않는다.

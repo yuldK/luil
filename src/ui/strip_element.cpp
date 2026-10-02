@@ -5,7 +5,7 @@
 namespace luil {
     strip_element::strip_element(const ui_element_id id, strip_config config)
         : ui_element { id }
-        , config_ { config }
+        , config_ { std::move(config) }
     {
         // 넘치는 내용이 띠 밖으로 새지 않게 한다.
         // 그리기와 hit test가 함께 잘리므로 보이지 않는 자식은 눌리지도 않는다.
@@ -50,6 +50,21 @@ namespace luil {
         const float viewport_width { context.slot.width / scale };
         maximum_scroll_ = clamp_scroll(config_.content_width, viewport_width, config_.content_width);
         config_.scroll_offset = clamp_scroll(config_.content_width, viewport_width, config_.scroll_offset);
+
+        // 흘릴 것이 있으면 이 띠가 가로 창이다 (`list_element`와 같은 판정).
+        if (config_.scroll != nullptr)
+        {
+            if (maximum_scroll_ > 0.0f)
+            {
+                scroll_source source {};
+                source.scroll = config_.scroll;
+                source.scale = scale;
+                source.axis = scroll_axis::horizontal;
+                set_scroll_source(std::move(source));
+            }
+            else
+                set_scroll_source(std::nullopt);
+        }
 
         if (content_ == nullptr)
             return;

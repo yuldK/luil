@@ -8,6 +8,8 @@ input 스레드의 [`interaction_controller`](../../include/luil/ui/ui_interacti
 
 일반 drag source는 `interaction_config::drag_start_distance`를 넘어서 움직여야 drag가 시작된다. `pointer_drag_target`은 별도로 누르는 순간 `on_press`를 실행하며 포인터가 element 밖에 나가도 `on_move`를 받는다. 텍스트 선택 drag와 OS 파일 drag도 별도 경로다. OS 파일 drop의 수락과 실행은 UI가 tree에 동기적으로 묻고 input controller는 target 강조를 게시한다.
 
+포인터 이벤트는 장치(`pointer_device`)를 싣는다. 마우스와 펜은 위 경로를 그대로 쓰고, 펜의 배럴 버튼 접촉은 우클릭이다. 끌어 스크롤하기와 길게 누르기는 터치에만 붙는다. 터치는 한 접촉이 한 조작을 하며, 누른 뒤 시간 창 안의 빠른 쓸기는 그 축으로 흐르는 가장 안쪽 컨테이너(`interaction_policy::pan_target_at`, 기본은 `route_pan`)를 흘리고, 오래 잡았다 옮기면 일반 drag가 된다. 움직이지 않고 오래 눌렀다 떼면 우클릭 액션을 실행한다. 터치 탭의 초점과 caret은 탭이 확정된 뗌에서 옮긴다. 정상적인 뗌 없이 끝난 터치·펜 접촉은 `pointer_cancelled_event`로 액션 없이 거둔다. `interaction_policy::on_press`는 활성 element를 누른 순간의 관찰 hook이다. 세부 계약과 런타임 설정은 [터치 제스처와 펜 입력](../touch-pen-input-design.md)에 있다.
+
 포인터는 이벤트의 surface id로 tree를 선택한다. key는 논리 초점이 있으면 `focused_surface`를 사용하고, 없으면 키 이벤트가 온 표면을 Tab·기본 버튼·modal dismiss의 시작점으로 사용한다. popup은 OS 초점을 받지 않으므로 anchor 창이 전달한 키가 popup의 논리 초점으로 갈 수 있다.
 
 ## 키 라우팅
@@ -38,4 +40,4 @@ Tab의 기본 순서는 보이는 tree의 그리기 순서이며 `order_focus()`
 
 `set_focus_trap()`은 같은 표면의 초점을 trap 안으로 제한하고, 포인터 차단은 scrim의 `hit_opaque`가 맡는다. `focus_entry`를 지정하면 trap 진입 시 초점을 세울 수 있고, 유효하지 않은 entry는 trap의 첫 초점 자리로 물러선다. `focus_return`은 trap이 사라졌을 때 되돌릴 id다. tree 갱신에 따른 진입과 복귀는 활성 표면을 기준으로 판정한다.
 
-상태 기계는 이벤트 timestamp를 사용한다. 새 tree를 받으면 마지막 포인터 좌표로 hover를 재판정하며, 표면이 사라지면 그곳에서 시작한 press·drag를 거둔다. input 큐의 sequence가 건너뛰면 유실된 뗌 이벤트에 대비해 `cancel_dropped_gestures()`로 진행 중인 몸짓을 취소한다.
+상태 기계는 이벤트 timestamp를 사용한다. 새 tree를 받으면 마지막 포인터 좌표로 hover를 재판정하며, 표면이 사라지면 그곳에서 시작한 press·drag를 거둔다. input 큐의 sequence가 건너뛰면 유실된 뗌 이벤트에 대비해 `cancel_dropped_gestures()`로 진행 중인 몸짓과 터치 접촉을 취소한다.

@@ -85,6 +85,19 @@ namespace luil::win32 {
         static_cast<void>(anchor);
     }
 
+    bool webview_host::relay_pointer_input(const std::u8string& anchor, const webview_pointer_input& input)
+    {
+        static_cast<void>(anchor);
+        static_cast<void>(input);
+        return false;
+    }
+
+    void webview_host::cancel_pointer_input(const std::u8string& anchor, const std::uint32_t pointer_id)
+    {
+        static_cast<void>(anchor);
+        static_cast<void>(pointer_id);
+    }
+
     void webview_host::shutdown() noexcept
     {
     }

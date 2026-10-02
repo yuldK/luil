@@ -51,6 +51,11 @@ namespace luil {
         // accessibility-action-design.md). caption 버튼의 tooltip과 같은
         // 자리·같은 이유다: 그 말은 앱의 것이라 라이브러리가 정할 수 없다.
         std::u8string overflow_tooltip {};
+        // 가로 스크롤 값을 이만큼 옮기자는 메시지다 (논리 픽셀).
+        // 있으면 넘칠 때 탭 레인이 가로 흘림의 임자로 선다 — 터치로 쓸어 넘기고,
+        // 표 없는 휠·초점 되살리기도 레인을 흘린다. 휠을 막대 전체로 받으려면
+        // 지금처럼 앱의 표가 이름 댄다.
+        std::function<input_action(float delta)> scroll {};
     };
 
     // 넘침 메뉴 버튼의 폭이다 (논리 픽셀).

@@ -379,6 +379,16 @@ namespace luil::win32 {
                 webviews_.cancel_pointer(surface);
             }
 
+            [[nodiscard]] bool relay_webview_pointer_input(const std::u8string& surface, const webview_pointer_input& input) override
+            {
+                return webviews_.relay_pointer_input(surface, input);
+            }
+
+            void cancel_webview_pointer_input(const std::u8string& surface, const std::uint32_t pointer_id) override
+            {
+                webviews_.cancel_pointer_input(surface, pointer_id);
+            }
+
             [[nodiscard]] std::span<const pixel_rect> apply_webviews(
                 const std::u8string& surface, const ui_tree* const tree, IDCompositionVisual* const underlay, const int client_width, const int client_height) override
             {
@@ -470,6 +480,13 @@ namespace luil::win32 {
 
             [[nodiscard]] bool create(std::u8string& error)
             {
+                // 잘못된 터치 설정은 시작 실패다. 조용히 기본값으로 물러서면 앱이
+                // 준 값이 쓰이는 줄 안다.
+                if (valid_touch_gesture_config(config_.touch) == false)
+                {
+                    error = u8"The touch gesture configuration is invalid.";
+                    return false;
+                }
                 WNDCLASSEXW window_class {};
                 window_class.cbSize = sizeof(window_class);
                 window_class.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
@@ -560,6 +577,7 @@ namespace luil::win32 {
                     host_config.wake.clipboard = [wake_window] { PostMessageW(wake_window, clipboard_request_message, 0, 0); };
                     // 더블 클릭 임계는 사용자의 시스템 설정을 따른다.
                     host_config.interaction.double_click_time = std::chrono::milliseconds { GetDoubleClickTime() };
+                    host_config.interaction.touch = config_.touch;
                     // 포인터 x를 글 안의 offset으로 옮기려면 글자 폭을 재야 한다.
                     // input thread에서 불리지만 글꼴 registry는 그리기와 같은 값을 주므로
                     // caret이 꽂히는 자리와 화면의 글자가 어긋나지 않는다.

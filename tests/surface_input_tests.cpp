@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <variant>
 
 namespace {
@@ -130,4 +131,135 @@ TEST_CASE("Insert keeps its legacy clipboard meaning", "[surface-input]")
 {
     // Ctrl+Insert·Shift+Insert는 수정자 없이도 같은 키다.
     REQUIRE(modified_key_from_virtual(VK_INSERT, false, false, false) == key_code::insert);
+}
+
+namespace {
+    [[nodiscard]] pointer_sample make_sample(const UINT message, const pointer_device device, const bool in_contact, const float x = 30.0f)
+    {
+        pointer_sample sample {};
+        sample.message = message;
+        sample.device = device;
+        sample.pointer_id = 7;
+        sample.in_contact = in_contact;
+        sample.x = x;
+        sample.y = 40.0f;
+        sample.scale = 1.5f;
+        sample.time = std::chrono::steady_clock::time_point { std::chrono::milliseconds { 100 } };
+        sample.surface = u8"tools";
+        return sample;
+    }
+} // namespace
+
+TEST_CASE("A touch contact becomes a press, moves and a release with its id and scale", "[surface-input][touch]")
+{
+    pointer_sequence_tracker tracker {};
+    auto events { tracker.accept(make_sample(WM_POINTERDOWN, pointer_device::touch, true)) };
+    REQUIRE(events.size() == 1u);
+    const auto* const pressed { std::get_if<pointer_pressed_event>(&events[0]) };
+    REQUIRE(pressed != nullptr);
+    REQUIRE(pressed->device == pointer_device::touch);
+    REQUIRE(pressed->pointer_id == 7u);
+    REQUIRE(pressed->scale == 1.5f);
+    REQUIRE(pressed->surface == u8"tools");
+    REQUIRE(tracker.in_contact(7));
+
+    events = tracker.accept(make_sample(WM_POINTERUPDATE, pointer_device::touch, true, 50.0f));
+    REQUIRE(events.size() == 1u);
+    const auto* const moved { std::get_if<pointer_moved_event>(&events[0]) };
+    REQUIRE(moved != nullptr);
+    REQUIRE(moved->in_contact);
+    REQUIRE(moved->x == 50.0f);
+
+    events = tracker.accept(make_sample(WM_POINTERUP, pointer_device::touch, false, 50.0f));
+    REQUIRE(events.size() == 1u);
+    REQUIRE(std::get_if<pointer_released_event>(&events[0])->pointer_id == 7u);
+    REQUIRE(tracker.in_contact(7) == false);
+}
+
+TEST_CASE("Touch has no hover and leaving is not a release", "[surface-input][touch]")
+{
+    pointer_sequence_tracker tracker {};
+    REQUIRE(tracker.accept(make_sample(WM_POINTERUPDATE, pointer_device::touch, false)).empty());
+    static_cast<void>(tracker.accept(make_sample(WM_POINTERDOWN, pointer_device::touch, true)));
+    // 접촉 중의 이탈은 경계 통과다. 뗌을 합성하지 않는다.
+    REQUIRE(tracker.accept(make_sample(WM_POINTERLEAVE, pointer_device::touch, true)).empty());
+    REQUIRE(tracker.in_contact(7));
+    // 시작을 보지 못한 접촉의 이동·뗌은 삼킨다.
+    pointer_sequence_tracker other {};
+    REQUIRE(other.accept(make_sample(WM_POINTERUPDATE, pointer_device::touch, true)).empty());
+    REQUIRE(other.accept(make_sample(WM_POINTERUP, pointer_device::touch, false)).empty());
+}
+
+TEST_CASE("A cancelled or capture lost contact is a cancel, not a release", "[surface-input][touch]")
+{
+    pointer_sequence_tracker tracker {};
+    static_cast<void>(tracker.accept(make_sample(WM_POINTERDOWN, pointer_device::touch, true)));
+    pointer_sample cancelled { make_sample(WM_POINTERUP, pointer_device::touch, false) };
+    cancelled.canceled = true;
+    auto events { tracker.accept(cancelled) };
+    REQUIRE(events.size() == 1u);
+    REQUIRE(std::get_if<pointer_cancelled_event>(&events[0]) != nullptr);
+
+    static_cast<void>(tracker.accept(make_sample(WM_POINTERDOWN, pointer_device::touch, true)));
+    events = tracker.cancel(7, {}, u8"tools");
+    REQUIRE(events.size() == 1u);
+    REQUIRE(std::get_if<pointer_cancelled_event>(&events[0])->surface == u8"tools");
+    // 남은 시퀀스는 삼킨다.
+    REQUIRE(tracker.accept(make_sample(WM_POINTERUP, pointer_device::touch, false)).empty());
+    REQUIRE(tracker.cancel(7, {}, u8"tools").empty());
+}
+
+TEST_CASE("A pen barrel switch cancels the old button before pressing the new one", "[surface-input][pen]")
+{
+    pointer_sequence_tracker tracker {};
+    static_cast<void>(tracker.accept(make_sample(WM_POINTERDOWN, pointer_device::pen, true)));
+    pointer_sample barrel { make_sample(WM_POINTERUPDATE, pointer_device::pen, true) };
+    barrel.barrel = true;
+    auto events { tracker.accept(barrel) };
+    REQUIRE(events.size() == 3u);
+    REQUIRE(std::get_if<pointer_cancelled_event>(&events[0])->device == pointer_device::pen);
+    REQUIRE(std::get_if<pointer_pressed_event>(&events[1])->button == pointer_button::right);
+    REQUIRE(std::get_if<pointer_moved_event>(&events[2]) != nullptr);
+    pointer_sample up { make_sample(WM_POINTERUP, pointer_device::pen, false) };
+    up.barrel = true;
+    events = tracker.accept(up);
+    REQUIRE(std::get_if<pointer_released_event>(&events[0])->button == pointer_button::right);
+}
+
+TEST_CASE("Pen hover moves without contact and leaves on exit", "[surface-input][pen]")
+{
+    pointer_sequence_tracker tracker {};
+    auto events { tracker.accept(make_sample(WM_POINTERUPDATE, pointer_device::pen, false)) };
+    REQUIRE(events.size() == 1u);
+    REQUIRE(std::get_if<pointer_moved_event>(&events[0])->in_contact == false);
+    events = tracker.accept(make_sample(WM_POINTERLEAVE, pointer_device::pen, false));
+    REQUIRE(events.size() == 1u);
+    REQUIRE(std::get_if<pointer_left_event>(&events[0])->device == pointer_device::pen);
+}
+
+TEST_CASE("The eraser end runs no control", "[surface-input][pen]")
+{
+    pointer_sequence_tracker tracker {};
+    pointer_sample down { make_sample(WM_POINTERDOWN, pointer_device::pen, true) };
+    down.eraser = true;
+    REQUIRE(tracker.accept(down).empty());
+    REQUIRE(tracker.accept(make_sample(WM_POINTERUPDATE, pointer_device::pen, true)).empty());
+    REQUIRE(tracker.accept(make_sample(WM_POINTERUP, pointer_device::pen, false)).empty());
+}
+
+TEST_CASE("Pointer times move onto the steady clock", "[surface-input][touch]")
+{
+    const std::chrono::steady_clock::time_point now { std::chrono::seconds { 100 } };
+    // 성능 카운터: 주파수 1000에서 250 차이는 250ms 전이다.
+    REQUIRE(pointer_counter_time(9'750, 10'000, 1'000, now) == now - std::chrono::milliseconds { 250 });
+    // 값이 없거나 지금보다 뒤면 지금이다.
+    REQUIRE(pointer_counter_time(0, 10'000, 1'000, now) == now);
+    REQUIRE(pointer_counter_time(10'500, 10'000, 1'000, now) == now);
+    // 큰 카운터도 넘치지 않는다.
+    REQUIRE(pointer_counter_time(0xFFFF'FFFF'0000'0000ull, 0xFFFF'FFFF'0098'9680ull, 10'000'000ull, now) == now - std::chrono::seconds { 1 });
+
+    // tick은 한 바퀴 돈 경계에서도 나이를 옳게 잰다.
+    REQUIRE(pointer_tick_time(0xFFFF'FFF0u, 0x0000'0010u, now) == now - std::chrono::milliseconds { 32 });
+    REQUIRE(pointer_tick_time(1'000u, 1'200u, now) == now - std::chrono::milliseconds { 200 });
+    REQUIRE(pointer_tick_time(1'300u, 1'200u, now) == now);
 }

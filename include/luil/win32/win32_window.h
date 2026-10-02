@@ -143,6 +143,10 @@ namespace luil::win32 {
         // (`load_system_cursor`·`load_cursor_resource`로 얻는다).
         //  - 빈 핸들을 돌려주면 그 값도 기본 매핑으로 물러선다.
         std::function<cursor_handle(ui_cursor)> resolve_cursor {};
+        // 터치 몸짓의 시작 설정이다 (touch-pen-input-design.md).
+        // 잘못된 값(`valid_touch_gesture_config`)이면 창이 시작하지 않고 시작 실패로 알린다.
+        // 실행 중에는 `app_host::set_touch_gesture_config`로 바꾼다.
+        touch_gesture_config touch {};
     };
 
     // 앱이 UI thread에 꽂는 훅이다.

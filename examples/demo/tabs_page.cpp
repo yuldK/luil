@@ -104,6 +104,8 @@ namespace demo {
         bar_config.reorder = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(tab_reorder_intent { moved, target }); };
         bar_config.overflow = luil::make_message_action(tab_overflow_intent { true });
         bar_config.overflow_tooltip = u8"넘친 탭 보기";
+        // 넘친 레인을 손가락으로 옆으로 쓸어 넘긴다. 휠과 같은 메시지다.
+        bar_config.scroll = [](const float value) { return luil::make_app_action(tab_scroll_intent { value }); };
         auto bar { std::make_unique<luil::tab_bar_element>(std::move(bar_config)) };
         bar_ = bar.get();
 

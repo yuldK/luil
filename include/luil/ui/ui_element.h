@@ -218,14 +218,26 @@ namespace luil {
     // 질문이 같은 답을 본다 (`route_wheel`·`route_reveal`의 표 없는 짝).
     //  - `drag_source`·`drop_target`·`key_step_target`과 같은 자리·같은 규약이다.
     //    비어 있으면 그 역할이 없는 것이라 아무도 이 컨테이너를 흘리지 않는다.
+    // 흘리는 컨테이너의 축이다.
+    // 터치 끌기는 손가락이 움직인 축과 같은 컨테이너만 흘린다.
+    enum class scroll_axis
+    {
+        vertical,
+        horizontal,
+    };
+
     struct scroll_source
     {
         // 스크롤 위치를 이만큼 옮기자는 메시지다 (delta는 논리 픽셀).
-        // 부호는 휠과 같다: 양수 = offset 증가 = 내용이 위로 올라간다.
+        // 부호는 휠과 같다: 양수 = offset 증가 = 내용이 위로(가로면 왼쪽으로) 간다.
         std::function<input_action(float delta)> scroll {};
         // 논리 스크롤 변화량을 배치의 물리 좌표로 옮기는 배율이다.
         // arrange에서 실제 배율을 넣는다. 중첩 reveal이 이동 후 위치를 계산한다.
         float scale { 1.0f };
+        // 기존 초기화가 세로를 뜻하도록 뒤에 둔다.
+        // 휠은 축을 묻지 않는다 — 가로 띠 위에서 굴린 휠이 그 띠를 흘리는 것이
+        // 앱이 표로 지어 오던 동작이다.
+        scroll_axis axis { scroll_axis::vertical };
         // 절대 자리(`scroll_to`)는 여기 두지 않는다. 휠도 되살리기도 변화량으로만
         // 말하고, 절대 자리를 읽는 것은 보조 기술뿐이라 그 값은 그것을 실제로
         // 내주는 자리(`scrollbar_config::scroll_to`)에 있다 — 아무도 읽지 않는

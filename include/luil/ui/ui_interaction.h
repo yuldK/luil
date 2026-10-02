@@ -117,6 +117,59 @@ namespace luil {
     [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, float x, float y, float delta);
     [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target);
 
+    // 터치 끌기가 흘릴 컨테이너다 (touch-pen-input-design.md).
+    // 휠의 `scroll_route`와 달리 축과 배율을 함께 든다 — 손가락의 물리 이동을
+    // 그 컨테이너의 논리 변화량으로 옮기려면 둘 다 있어야 하고, 모르는 값을
+    // 세로·배율 1로 추측하면 가로 띠가 세로 손짓에 흐른다.
+    struct pan_target
+    {
+        ui_element_id id {};
+        scroll_axis axis { scroll_axis::vertical };
+        // 물리 픽셀 / 논리 픽셀이다 (`scroll_source::scale`과 같은 값).
+        float scale { 1.0f };
+        std::function<input_action(float delta)> scroll {};
+    };
+
+    // 표로 끌기를 이름 대는 앱의 한 줄이다.
+    // 탐색 규칙(가시성·활성·clip·`hit_opaque` 방벽)은 표 없는 짝과 같다.
+    struct pan_route
+    {
+        ui_element_id id {};
+        scroll_axis axis { scroll_axis::vertical };
+        float scale { 1.0f };
+        std::function<input_action(float delta)> scroll {};
+    };
+
+    // (x, y)를 덮고 `axis`로 흐르는 가장 안쪽·가장 위의 컨테이너다.
+    // 축이 다른 컨테이너는 지나쳐 바깥을 본다 — 세로 화면 안의 가로 탭 막대
+    // 위를 세로로 쓸면 화면이 흐른다. 흘리지 않고 포인터를 막는 것
+    // (`hit_opaque`)이 먼저 걸리면 없다.
+    [[nodiscard]] std::optional<pan_target> route_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
+    [[nodiscard]] std::optional<pan_target> route_pan(const ui_tree& tree, float x, float y, scroll_axis axis, std::span<const pan_route> routes);
+
+    // 터치 몸짓의 설정이다. 마우스·펜·키보드에는 몸짓을 켜는 설정이 없다.
+    //  - 끄는 것은 bool이다. 거리·시간 0을 "끔"으로 읽는 중의적 계약을 두지 않는다.
+    //  - 거리는 논리 픽셀이다 (누른 표면의 배율로 나눠 잰다).
+    struct touch_gesture_config
+    {
+        // 축에 맞는 빠른 쓸기가 스크롤한다.
+        bool pan_enabled { true };
+        // 움직이지 않고 오래 눌렀다 떼면 우클릭이다.
+        bool long_press_enabled { true };
+        float pan_start_distance { 12.0f };
+        // 이 시간 안에 시작 거리를 넘어야 스크롤이다. 넘긴 뒤의 이동은 일반 끌기다.
+        std::chrono::milliseconds pan_start_time { 400 };
+        // 탭·길게 누르기의 최대 이동 허용치이자 터치 일반 끌기의 시작 거리다.
+        // 연속 탭의 거리 한계로도 쓴다 — 마우스의 4px로는 두 번 탭이 서지 않는다.
+        float press_move_tolerance { 12.0f };
+        std::chrono::milliseconds long_press_time { 600 };
+
+        [[nodiscard]] bool operator==(const touch_gesture_config&) const noexcept = default;
+    };
+
+    // 거리는 유한한 양수, 시간은 양수, 그리고 스크롤 시간 창이 길게 누르기보다 짧아야 한다.
+    [[nodiscard]] bool valid_touch_gesture_config(const touch_gesture_config& config) noexcept;
+
     // 컨텍스트 메뉴의 키보드 탐색에 필요한 kind 짝이다.
     // container가 tree에 있으면 메뉴가 열린 것으로 보고 ↑/↓/Enter/Esc를 메뉴가 가져간다.
     //  - owner는 보지 않는다. `menu_config::owner`로 구분한 메뉴도 같은 kind면 찾는다.
@@ -233,9 +286,38 @@ namespace luil {
 
         // 클릭이 확정된 직후다 (액션 실행 전).
         // 키보드 탐색 초점 등 앱 쪽 입력 상태를 잇는 데 쓴다.
+        //  - 터치 탭·터치 길게 누르기·펜 클릭도 같은 자리에서 부른다.
+        //    스크롤로 끝난 접촉에는 부르지 않는다.
         virtual void on_click(const ui_element& element)
         {
             static_cast<void>(element);
+        }
+
+        // 활성 element를 왼쪽 버튼(터치 접촉·펜촉)으로 누른 순간이다 (클릭이 확정되기 전).
+        // 어느 판을 만졌는가로 화면을 바꾸는 앱이 쓴다 — 판 안의 무엇을 눌렀든 같은
+        // 답이어야 해서 element마다 액션을 다는 대신 `ui_tree::within`으로 묻는다.
+        //  - 돌려준 액션은 그 누름의 다른 액션(끌기 손잡이의 누름)보다 앞선다.
+        //  - **관찰 hook이다.** 이 누름이 탭·스크롤·길게 누르기 중 무엇이 될지는
+        //    아직 모른다. 장치는 `event.device`로 본다. 앱이 여기서 화면을 바꾸면
+        //    이후의 몸짓은 다음 tree에서 임자를 다시 확인한다.
+        //  - 클릭 대상이 없는 여백(흘리는 창의 빈 곳)에서는 부르지 않는다.
+        //  - 기본이 빈 목록인 것이 계약이다.
+        [[nodiscard]] virtual std::vector<input_action> on_press(const ui_tree& tree, const ui_element& element, const pointer_pressed_event& event)
+        {
+            static_cast<void>(tree);
+            static_cast<void>(element);
+            static_cast<void>(event);
+            return {};
+        }
+
+        // 터치 끌기가 흘릴 컨테이너다.
+        // 기본은 표 없는 탐색(`route_pan`)이다. 표로만 흘리는 컨테이너는
+        // `route_pan(tree, x, y, axis, 표)`로 답한다.
+        //  - 끄는 동안 매 이동마다 새 tree로 다시 묻는다. 같은 id와 축이 답할 때만
+        //    이어 흘리고, 아니면 그 접촉을 취소한다.
+        [[nodiscard]] virtual std::optional<pan_target> pan_target_at(const ui_tree& tree, float x, float y, scroll_axis axis)
+        {
+            return route_pan(tree, x, y, axis);
         }
     };
 
@@ -254,6 +336,8 @@ namespace luil {
         // 앱은 내장 글꼴로 만들고 test는 고정 폭 가짜를 넣는다.
         // 비어 있으면 caret이 글 끝으로 간다.
         text_measurer measure_text {};
+        // 터치 몸짓이다. 실행 중 변경은 `interaction_controller::set_touch_config`가 받는다.
+        touch_gesture_config touch {};
     };
 
     // 주 창 밖 표면(popup·보조 창)들의 tree다.
@@ -294,9 +378,74 @@ namespace luil {
         // 확장·유령 drop이 되고, 거둬서 틀리면 다음 누름이 다시 시작할 뿐이다.
         // 초점은 건드리지 않는다 — 다음 focus 이벤트가 바로잡는다.
         void cancel_dropped_gestures() noexcept;
+        // 실행 중 터치 설정을 바꾼다. 잘못된 값이면 거짓이고 직전 값이 남는다.
+        //  - 진행 중 접촉의 거리·시간은 누를 때의 값 그대로다.
+        //  - 끈 몸짓이 진행 중이면(스크롤을 끄면 대기·스크롤, 길게 누르기를 끄면 대기)
+        //    그 접촉을 취소하고 남은 이벤트를 삼킨다. 다시 켜도 아직 닿아 있는
+        //    손가락이 새 접촉이 되지 않는다.
+        bool set_touch_config(const touch_gesture_config& config) noexcept;
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
     private:
+        // 터치 접촉 하나의 판정 단계다.
+        enum class touch_phase
+        {
+            // 탭·길게 누르기·스크롤·끌기 중 무엇이 될지 아직 모른다.
+            pending,
+            panning,
+            // 일반 drag & drop이다 (`snapshot_.drag`가 선다).
+            dragging,
+            // 누르는 즉시 시작하는 전용 조작이다 (`pointer_drag_target`).
+            handle,
+        };
+
+        // 컨트롤 조작을 소유한 터치 접촉이다. 한 번에 하나다.
+        //  - 다른 id의 이동·뗌·취소는 이것을 바꾸지 않는다. 추가 손가락은 무시되고,
+        //    첫 손가락을 뗀 뒤에도 남은 손가락이 새 누름으로 승격되지 않는다.
+        //  - `clear_press`가 지우지 않는다. 누름이 스크롤로 바뀌어도 접촉은 남는다.
+        struct touch_contact
+        {
+            std::uint32_t id { 0 };
+            std::u8string surface {};
+            // 누를 때의 값이다. 진행 중에 설정이 바뀌어도 판정 기준은 그대로다.
+            touch_gesture_config config {};
+            float scale { 1.0f };
+            std::chrono::steady_clock::time_point pressed_at {};
+            float start_x { 0.0f };
+            float start_y { 0.0f };
+            float last_x { 0.0f };
+            float last_y { 0.0f };
+            // 누른 자리에서 가장 멀리 간 거리(논리 픽셀)다.
+            // 돌아와도 줄지 않는다 — 한 번 허용치를 넘은 접촉은 탭도 길게 누르기도 아니다.
+            float max_distance { 0.0f };
+            touch_phase phase { touch_phase::pending };
+            // 아직 스크롤로 바뀔 수 있는가. 시간 창이 지났거나 축에 맞는 후보가
+            // 없다고 판정되면 닫힌다.
+            bool pan_open { false };
+            // 전용 조작이 실제 이동 액션을 냈다. 그 뒤로는 길게 누르기가 아니다.
+            bool moved_action { false };
+            std::optional<pan_target> pan {};
+            // 누른 자리의 활성 element다. 없으면 빈 곳(또는 비활성)을 누른 것이다.
+            ui_element_id target {};
+        };
+
+        [[nodiscard]] std::vector<input_action> process_touch_press(const pointer_pressed_event& event);
+        [[nodiscard]] std::vector<input_action> process_touch_move(const pointer_moved_event& event);
+        [[nodiscard]] std::vector<input_action> process_touch_release(const pointer_released_event& event);
+        [[nodiscard]] std::vector<input_action> process_cancel(const pointer_cancelled_event& event);
+        // 탭으로 확정된 뗌이다 (클릭·더블 탭·caret·길게 누르기).
+        [[nodiscard]] std::vector<input_action> finish_touch_tap(const touch_contact& contact, const pointer_released_event& event);
+        [[nodiscard]] std::optional<pan_target> resolve_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
+        // 진행 중인 터치 접촉을 액션 없이 거둔다.
+        void cancel_touch() noexcept;
+        // 마우스·펜의 진행 중 몸짓이 있는가 (누름·텍스트 끌기·전용 조작·내부 끌기).
+        [[nodiscard]] bool pointer_gesture_active() const noexcept;
+        // 누른 element로 초점을 옮기거나 거둔다 (마우스는 누를 때, 터치는 탭이 확정될 때).
+        void apply_press_focus(const ui_tree& tree, const ui_element* hit, const std::u8string& surface, std::chrono::steady_clock::time_point time);
+        // 끌리는 그림의 자리와 수락 중인 drop 대상을 갱신한다.
+        void update_drag(const ui_tree& tree, float x, float y);
+        // 끌기를 놓는다. 수락하는 대상 위에서만 drop 액션이 나간다.
+        [[nodiscard]] std::vector<input_action> finish_drag(const ui_tree* tree, float x, float y);
         [[nodiscard]] std::optional<text_input_target> text_target(ui_element_kind kind) const;
         [[nodiscard]] input_action text_edit_action(text_input_target target, text::text_edit_command command, bool extend = false) const;
         [[nodiscard]] std::vector<input_action> process_move(const pointer_moved_event& event);
@@ -449,6 +598,10 @@ namespace luil {
         float pressed_x_ { 0.0f };
         float pressed_y_ { 0.0f };
         bool drag_candidate_ { false };
+        // 마우스·펜 누름을 낸 장치다. 같은 장치의 취소만 그 누름을 거둔다.
+        pointer_device pressed_device_ { pointer_device::mouse };
+
+        std::optional<touch_contact> touch_ {};
 
         // 더블 클릭 판정: 직전 클릭의 대상·표면·시각·위치다.
         // `click_streak_`은 같은 자리를 연달아 누른 횟수로,
@@ -457,8 +610,11 @@ namespace luil {
         //    안에서만 안정적이라, 표면을 빼면 A창을 누른 직후 B창의 같은 id를 같은
         //    자리에서 누르는 것이 연타가 된다 — 각 창은 한 번씩 눌렸는데
         //    더블 클릭이 돈다 (multi-window-design.md).
+        //  - **장치도 함께 본다.** 마우스 클릭과 터치 탭, 펜 접촉은 서로 합쳐
+        //    더블 클릭이 되지 않는다. 터치 포인터 id는 접촉마다 달라 보지 않는다.
         std::size_t click_streak_ { 0 };
         ui_element_id last_click_id_ {};
+        pointer_device last_click_device_ { pointer_device::mouse };
         std::u8string last_click_surface_ {};
         std::chrono::steady_clock::time_point last_click_time_ {};
         float last_click_x_ { 0.0f };
@@ -492,8 +648,10 @@ namespace luil {
     // tree는 처리 직전에 최신 것으로 갱신하고, interaction snapshot은 바뀔 때만 게시한다.
     // 앱 메시지는 app inbox로 가고,
     // `ui_command`·`app_ui_command`·클립보드 요청은 UI thread 전용이라 callback으로 넘긴다.
+    // `touch_slot`이 있으면 실행 중 바뀐 터치 설정을 다음 이벤트 처리 전에 적용한다.
     void run_ui_input_pump(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
         messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* policy = nullptr, interaction_config config = {},
-        const std::function<void(app_ui_command)>& execute_app_ui_command = {}, const std::function<void(clipboard_request)>& execute_clipboard = {});
+        const std::function<void(app_ui_command)>& execute_app_ui_command = {}, const std::function<void(clipboard_request)>& execute_clipboard = {},
+        messaging::latest_slot<touch_gesture_config>* touch_slot = nullptr);
 } // namespace luil

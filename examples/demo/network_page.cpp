@@ -738,6 +738,8 @@ namespace demo {
         luil::strip_config strip_config {};
         strip_config.content_width = content_width;
         strip_config.scroll_offset = strip_scroll_;
+        // 손가락으로 옆으로 쓸어 흘린다. 휠 표와 같은 메시지다.
+        strip_config.scroll = [](const float value) { return luil::make_app_action(network_strip_scroll_intent { value }); };
         auto strip { std::make_unique<luil::strip_element>(luil::ui_element_id { kind_network_preview, u8"strip" }, strip_config) };
         strip->set_content(std::move(lane));
         return strip;

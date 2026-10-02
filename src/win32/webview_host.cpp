@@ -234,6 +234,11 @@ namespace luil::win32 {
         // 걸어야 하고 그때 페이지가 빈다.
         bool shown { false };
         UINT pressed_buttons { 0 };
+        // 이 웹뷰가 쥔 터치·펜 접촉이다 (DOWN을 받은 웹뷰가 끝까지 갖는다).
+        // 종류를 함께 든다 — 취소를 보낼 때는 그 접촉의 원본이 더 없다.
+        std::vector<std::pair<UINT32, POINTER_INPUT_TYPE>> pointer_contacts {};
+        // 이 웹뷰 위에 떠 있는 펜이다. 떠나면 LEAVE를 준다.
+        std::vector<UINT32> pointer_hovers {};
         // 한 번이라도 그렸는가.
         //
         // 만들고 보이게 한 직후의 visual은 **비어 있다.** 그때 자리를 비우면 그 아래에
@@ -1287,6 +1292,194 @@ namespace luil::win32 {
                 if ((candidate->pressed_buttons & button) != 0)
                     static_cast<void>(candidate->composition_controller->SendMouseInput(kind, COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS_NONE, 0, POINT { -10000, -10000 }));
             candidate->pressed_buttons = 0;
+        }
+    }
+
+    namespace {
+        [[nodiscard]] std::optional<COREWEBVIEW2_POINTER_EVENT_KIND> pointer_event_kind(const UINT message) noexcept
+        {
+            switch (message)
+            {
+            case WM_POINTERDOWN:
+                return COREWEBVIEW2_POINTER_EVENT_KIND_DOWN;
+            case WM_POINTERUPDATE:
+                return COREWEBVIEW2_POINTER_EVENT_KIND_UPDATE;
+            case WM_POINTERUP:
+                return COREWEBVIEW2_POINTER_EVENT_KIND_UP;
+            case WM_POINTERENTER:
+                return COREWEBVIEW2_POINTER_EVENT_KIND_ENTER;
+            case WM_POINTERLEAVE:
+                return COREWEBVIEW2_POINTER_EVENT_KIND_LEAVE;
+            default:
+                return std::nullopt;
+            }
+        }
+
+        [[nodiscard]] POINT moved_by(const POINT point, const POINT offset) noexcept
+        {
+            return { point.x + offset.x, point.y + offset.y };
+        }
+
+        [[nodiscard]] RECT moved_by(const RECT rect, const POINT offset) noexcept
+        {
+            return { rect.left + offset.x, rect.top + offset.y, rect.right + offset.x, rect.bottom + offset.y };
+        }
+
+        template<typename container_type>
+        [[nodiscard]] bool holds_pointer(const container_type& values, const UINT32 pointer_id) noexcept
+        {
+            return std::any_of(values.begin(), values.end(), [pointer_id](const auto& value) {
+                if constexpr (std::is_same_v<std::decay_t<decltype(value)>, UINT32>)
+                    return value == pointer_id;
+                else
+                    return value.first == pointer_id;
+            });
+        }
+    } // namespace
+
+    bool webview_host::relay_pointer_input(const std::u8string& anchor, const webview_pointer_input& input)
+    {
+        const std::optional<COREWEBVIEW2_POINTER_EVENT_KIND> kind { pointer_event_kind(input.message) };
+        if (kind.has_value() == false)
+            return false;
+        const UINT32 pointer_id { input.info.pointerId };
+        const auto usable = [&anchor](const entry& candidate) {
+            return candidate.anchor == anchor && candidate.state == creation_state::ready && candidate.composition_controller != nullptr && candidate.attached_to != nullptr
+                && candidate.shown;
+        };
+        // 원본을 그 웹뷰 기준으로 옮겨 보낸다.
+        //  - 픽셀 자리와 접촉 사각형은 화면 좌표라 client로, 다시 웹뷰 왼쪽 위 기준으로
+        //    옮긴다. himetric과 장치 사각형은 장치 단위라 그대로 둔다.
+        const auto send = [this, &input](entry& target, const COREWEBVIEW2_POINTER_EVENT_KIND event_kind) {
+            ComPtr<ICoreWebView2Environment3> environment3 {};
+            for (const std::unique_ptr<environment>& candidate : environments_)
+                if (candidate->user_data_folder == target.user_data_folder && candidate->value != nullptr)
+                    static_cast<void>(candidate->value.As(&environment3));
+            ComPtr<ICoreWebView2PointerInfo> info {};
+            if (environment3 == nullptr || FAILED(environment3->CreateCoreWebView2PointerInfo(&info)) || info == nullptr)
+                return;
+            const webview_pointer local { translate_webview_pointer(target.applied, input.client.x, input.client.y, true) };
+            const POINT offset { input.screen_to_client.x + local.x - input.client.x, input.screen_to_client.y + local.y - input.client.y };
+            static_cast<void>(info->put_PointerKind(input.info.pointerType));
+            static_cast<void>(info->put_PointerId(input.info.pointerId));
+            static_cast<void>(info->put_FrameId(input.info.frameId));
+            static_cast<void>(info->put_PointerFlags(input.info.pointerFlags));
+            static_cast<void>(info->put_PointerDeviceRect(input.device_rect));
+            static_cast<void>(info->put_DisplayRect(input.display_rect));
+            static_cast<void>(info->put_PixelLocation(moved_by(input.info.ptPixelLocation, offset)));
+            static_cast<void>(info->put_HimetricLocation(input.info.ptHimetricLocation));
+            static_cast<void>(info->put_PixelLocationRaw(moved_by(input.info.ptPixelLocationRaw, offset)));
+            static_cast<void>(info->put_HimetricLocationRaw(input.info.ptHimetricLocationRaw));
+            static_cast<void>(info->put_Time(input.info.dwTime));
+            static_cast<void>(info->put_HistoryCount(input.info.historyCount));
+            static_cast<void>(info->put_InputData(input.info.InputData));
+            static_cast<void>(info->put_KeyStates(input.info.dwKeyStates));
+            static_cast<void>(info->put_PerformanceCount(input.info.PerformanceCount));
+            static_cast<void>(info->put_ButtonChangeKind(static_cast<INT32>(input.info.ButtonChangeType)));
+            if (input.info.pointerType == PT_PEN)
+            {
+                static_cast<void>(info->put_PenFlags(input.pen.penFlags));
+                static_cast<void>(info->put_PenMask(input.pen.penMask));
+                static_cast<void>(info->put_PenPressure(input.pen.pressure));
+                static_cast<void>(info->put_PenRotation(input.pen.rotation));
+                static_cast<void>(info->put_PenTiltX(input.pen.tiltX));
+                static_cast<void>(info->put_PenTiltY(input.pen.tiltY));
+            }
+            else if (input.info.pointerType == PT_TOUCH)
+            {
+                static_cast<void>(info->put_TouchFlags(input.touch.touchFlags));
+                static_cast<void>(info->put_TouchMask(input.touch.touchMask));
+                static_cast<void>(info->put_TouchContact(moved_by(input.touch.rcContact, offset)));
+                static_cast<void>(info->put_TouchContactRaw(moved_by(input.touch.rcContactRaw, offset)));
+                static_cast<void>(info->put_TouchOrientation(input.touch.orientation));
+                static_cast<void>(info->put_TouchPressure(input.touch.pressure));
+            }
+            static_cast<void>(target.composition_controller->SendPointerInput(event_kind, info.Get()));
+        };
+
+        // 접촉을 쥔 웹뷰가 끝까지 받는다. 보낼 수 없게 됐어도(감춤) 삼킨다 —
+        // 그 접촉을 뒤의 우리 tree가 새 누름으로 받으면 안 된다.
+        const bool ends { input.message == WM_POINTERUP || (input.info.pointerFlags & POINTER_FLAG_CANCELED) != 0 };
+        for (const std::unique_ptr<entry>& candidate : entries_)
+            if (candidate->anchor == anchor && holds_pointer(candidate->pointer_contacts, pointer_id))
+            {
+                if (usable(*candidate))
+                    send(*candidate, *kind);
+                if (ends)
+                    std::erase_if(candidate->pointer_contacts, [pointer_id](const auto& value) { return value.first == pointer_id; });
+                return true;
+            }
+
+        // 떠나는 펜은 그 위에 떠 있던 웹뷰에 알린다.
+        if (input.message == WM_POINTERLEAVE)
+        {
+            bool relayed { false };
+            for (const std::unique_ptr<entry>& candidate : entries_)
+                if (candidate->anchor == anchor && holds_pointer(candidate->pointer_hovers, pointer_id))
+                {
+                    if (usable(*candidate))
+                        send(*candidate, *kind);
+                    std::erase(candidate->pointer_hovers, pointer_id);
+                    relayed = true;
+                }
+            return relayed;
+        }
+
+        // 우리가 시작을 보지 못한 접촉의 나머지는 웹뷰의 것이 아니다.
+        const bool contact { (input.info.pointerFlags & POINTER_FLAG_INCONTACT) != 0 };
+        if (input.message != WM_POINTERDOWN && (contact || input.message == WM_POINTERUP))
+            return false;
+
+        entry* picked { nullptr };
+        for (const std::unique_ptr<entry>& candidate : entries_)
+            if (usable(*candidate) && translate_webview_pointer(candidate->applied, input.client.x, input.client.y).inside)
+            {
+                picked = candidate.get();
+                break;
+            }
+        // hover가 다른 자리로 옮겨 갔으면 떠난 웹뷰에 LEAVE를 준다.
+        for (const std::unique_ptr<entry>& candidate : entries_)
+            if (candidate.get() != picked && candidate->anchor == anchor && holds_pointer(candidate->pointer_hovers, pointer_id))
+            {
+                if (usable(*candidate))
+                    send(*candidate, COREWEBVIEW2_POINTER_EVENT_KIND_LEAVE);
+                std::erase(candidate->pointer_hovers, pointer_id);
+            }
+        if (picked == nullptr)
+            return false;
+
+        send(*picked, *kind);
+        if (input.message == WM_POINTERDOWN)
+        {
+            std::erase(picked->pointer_hovers, pointer_id);
+            picked->pointer_contacts.emplace_back(pointer_id, input.info.pointerType);
+        }
+        else if (holds_pointer(picked->pointer_hovers, pointer_id) == false)
+            picked->pointer_hovers.push_back(pointer_id);
+        return true;
+    }
+
+    void webview_host::cancel_pointer_input(const std::u8string& anchor, const std::uint32_t pointer_id)
+    {
+        for (const std::unique_ptr<entry>& candidate : entries_)
+        {
+            if (candidate->anchor != anchor)
+                continue;
+            const auto found { std::find_if(candidate->pointer_contacts.begin(), candidate->pointer_contacts.end(), [pointer_id](const auto& value) { return value.first == pointer_id; }) };
+            if (found == candidate->pointer_contacts.end())
+                continue;
+            // 원본이 더 없으므로 취소 표식만 실은 뗌을 보낸다. 자리는 화면 밖이다.
+            // 쥔 웹뷰를 찾고 접촉을 지우는 것은 통상 경로가 한다.
+            webview_pointer_input cancelled {};
+            cancelled.message = WM_POINTERUP;
+            cancelled.info.pointerType = found->second;
+            cancelled.info.pointerId = pointer_id;
+            cancelled.info.pointerFlags = POINTER_FLAG_UP | POINTER_FLAG_CANCELED;
+            cancelled.info.ptPixelLocation = POINT { -10000, -10000 };
+            cancelled.info.ptPixelLocationRaw = POINT { -10000, -10000 };
+            cancelled.client = POINT { -10000, -10000 };
+            static_cast<void>(relay_pointer_input(anchor, cancelled));
+            return;
         }
     }
 

@@ -314,6 +314,14 @@ namespace luil::win32 {
         //  - 포화하면 조용히 버려진다 (reject_newest). 유실 여부는
         //    `app_inbox_statistics`가 답한다.
         void post_app_message(app_message message) noexcept;
+        // 실행 중 터치 몸짓 설정을 바꾼다. **어느 thread에서 불러도 된다.**
+        // 잘못된 값이면 거짓이고 직전 설정이 남는다.
+        //  - 참은 **게시**의 성공이지 적용 완료가 아니다. input thread가 다음 이벤트를
+        //    처리하기 전(또는 받기 대기의 시간 만료)에 최신 값을 읽은 시점부터 쓴다.
+        //    이미 접수된 입력 큐와의 순서를 묶어 주지 않는다.
+        //  - 진행 중 접촉은 누를 때의 거리·시간을 그대로 쓴다. 끈 몸짓이 진행 중이면
+        //    그 접촉을 취소한다 (`interaction_controller::set_touch_config`).
+        bool set_touch_gesture_config(const touch_gesture_config& config) noexcept;
         // 아래 셋도 UI thread 전용이다 — 마지막으로 본 판을 멤버에 들고 있어서다.
         // 마지막으로 게시된 frame이다.
         // 새 것이 없으면 이전 값이다.

@@ -2,6 +2,7 @@
 
 #include "luil/theme/ui_theme.h"
 #include "luil/win32/webview.h"
+#include "win32/surface_input.h"
 #include "win32/webview_layout.h"
 
 #include <windows.h>
@@ -118,6 +119,16 @@ namespace luil::win32 {
         // 이 표면의 웹뷰들에 포인터가 떠났음을 알린다.
         void relay_pointer_left(const std::u8string& anchor);
         void cancel_pointer(const std::u8string& anchor);
+
+        // 터치·펜 원본을 이 표면의 웹뷰에 넘긴다 (`SendPointerInput`). 넘겼으면 참이다.
+        //  - **접촉은 시작한 자리가 임자다.** DOWN을 받은 웹뷰가 그 포인터의 이동·뗌을
+        //    끝까지 갖는다. 영역 밖으로 나가도, 감춰져 보낼 수 없어도 우리 tree로
+        //    넘기지 않는다 — 웹뷰에서 시작한 쓸기가 뒤의 목록 몸짓이 되지 않는다.
+        //  - 비접촉(펜 hover)은 매번 자리로 고르고, 떠난 웹뷰에는 LEAVE를 준다.
+        //  - 다중 접촉을 웹뷰가 그대로 받는다. luil tree의 한 접촉 제한은 여기 닿지 않는다.
+        [[nodiscard]] bool relay_pointer_input(const std::u8string& anchor, const webview_pointer_input& input);
+        // 웹뷰가 쥔 그 포인터의 접촉을 취소로 끝낸다 (캡처 상실·조회 실패).
+        void cancel_pointer_input(const std::u8string& anchor, std::uint32_t pointer_id);
 
         // 모두 없앤다. 창이 사라지기 전에 UI thread가 부른다.
         void shutdown() noexcept;

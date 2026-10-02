@@ -451,7 +451,28 @@ namespace luil::win32 {
     {
         switch (message)
         {
+        case WM_POINTERDOWN:
+        case WM_POINTERUPDATE:
+        case WM_POINTERUP:
+        case WM_POINTERENTER:
+        case WM_POINTERLEAVE:
+            if (handle_pointer_message(message, word_parameter))
+                return LRESULT { 0 };
+            return std::nullopt;
+        case WM_POINTERCAPTURECHANGED:
+            // 캡처 상실은 뗌이 아니다. 그 접촉을 취소한다.
+            //  - 기록은 지운다. 캡처가 넘어간 뒤로는 UP이 우리에게 오지 않을 수 있고,
+            //    남은 기록은 마우스 호환 메시지의 중복 거름을 그 id가 재사용될 때까지 켜 둔다.
+            //    늦게 온 UP은 임자 없는 비접촉 메시지라 아무것도 내지 않는다.
+            {
+                const std::uint32_t pointer_id { GET_POINTERID_WPARAM(word_parameter) };
+                cancel_pointer_contact(pointer_id);
+                std::erase_if(pointer_owners_, [pointer_id](const auto& value) { return value.first == pointer_id; });
+            }
+            return std::nullopt;
         case WM_MOUSEMOVE:
+            if (duplicate_pointer_mouse_message())
+                return LRESULT { 0 };
             track_mouse_leave();
             if (post_pointer_message(message, word_parameter, long_parameter))
                 return LRESULT { 0 };
@@ -469,6 +490,8 @@ namespace luil::win32 {
         case WM_RBUTTONDBLCLK:
         case WM_MBUTTONDOWN:
         case WM_MBUTTONDBLCLK:
+            if (duplicate_pointer_mouse_message())
+                return LRESULT { 0 };
             // 이 표면 위의 누름은 popup 밖 클릭이다.
             // 닫자는 메시지를 내고 클릭 자체는 그대로 진행한다.
             if (input_dismisses_popups())
@@ -480,6 +503,8 @@ namespace luil::win32 {
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
         case WM_MBUTTONUP:
+            if (duplicate_pointer_mouse_message())
+                return LRESULT { 0 };
             if ((word_parameter & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
                 release_pointer_capture();
             if (post_pointer_message(message, word_parameter, long_parameter))
@@ -929,6 +954,166 @@ namespace luil::win32 {
         event.time = std::chrono::steady_clock::now();
         event.surface = id_;
         host->post_raw_input(std::move(event));
+    }
+
+    bool window_surface::handle_pointer_message(const UINT message, const WPARAM word_parameter)
+    {
+        const std::uint32_t pointer_id { GET_POINTERID_WPARAM(word_parameter) };
+        // 새 접촉은 언제나 새 시퀀스다. 캡처를 잃고 UP을 받지 못한 옛 기록을 지운다.
+        if (message == WM_POINTERDOWN)
+            std::erase_if(pointer_owners_, [pointer_id](const auto& value) { return value.first == pointer_id; });
+        const auto owner_it { std::find_if(pointer_owners_.begin(), pointer_owners_.end(), [pointer_id](const auto& value) { return value.first == pointer_id; }) };
+        const std::optional<pointer_owner> owner { owner_it != pointer_owners_.end() ? std::optional<pointer_owner> { owner_it->second } : std::nullopt };
+        const auto forget = [this, pointer_id] { std::erase_if(pointer_owners_, [pointer_id](const auto& value) { return value.first == pointer_id; }); };
+
+        // 이 값들은 받은 thread와 지금 메시지에만 매인다 — 받는 즉시 복사한다.
+        // 조회가 접촉 도중 실패하면 그 접촉을 취소하고 남은 시퀀스를 삼킨다.
+        // 처음부터 읽을 수 없는 것은 기본 처리에 맡긴다.
+        POINTER_INPUT_TYPE type {};
+        webview_pointer_input input {};
+        input.message = message;
+        bool read { GetPointerType(pointer_id, &type) != FALSE };
+        if (read && type == PT_PEN)
+        {
+            read = GetPointerPenInfo(pointer_id, &input.pen) != FALSE;
+            input.info = input.pen.pointerInfo;
+        }
+        else if (read && type == PT_TOUCH)
+        {
+            read = GetPointerTouchInfo(pointer_id, &input.touch) != FALSE;
+            input.info = input.touch.pointerInfo;
+        }
+        else if (read)
+        {
+            // 마우스·터치패드는 지금의 마우스 메시지 경로가 받는다.
+            return owner.has_value();
+        }
+        POINT client { input.info.ptPixelLocation };
+        if (read == false || ScreenToClient(window_, &client) == FALSE)
+        {
+            if (owner.has_value() && *owner != pointer_owner::discarded)
+                cancel_pointer_contact(pointer_id);
+            if (owner.has_value() && message == WM_POINTERUP)
+                forget();
+            return owner.has_value();
+        }
+        input.client = client;
+        input.screen_to_client = POINT { client.x - input.info.ptPixelLocation.x, client.y - input.info.ptPixelLocation.y };
+        static_cast<void>(GetPointerDeviceRects(input.info.sourceDevice, &input.device_rect, &input.display_rect));
+        const bool contact { (input.info.pointerFlags & POINTER_FLAG_INCONTACT) != 0 };
+        const bool ends { message == WM_POINTERUP || (input.info.pointerFlags & POINTER_FLAG_CANCELED) != 0 };
+
+        app_host* const host { context_.host() };
+        // 이미 임자가 선 접촉은 끝까지 그 임자의 것이다.
+        if (owner == pointer_owner::discarded || owner == pointer_owner::webview)
+        {
+            if (owner == pointer_owner::webview)
+                static_cast<void>(context_.relay_webview_pointer_input(id_, input));
+            if (ends)
+                forget();
+            return true;
+        }
+        if (owner.has_value() == false)
+        {
+            if (message == WM_POINTERDOWN)
+            {
+                // 이 표면 위의 누름은 popup 밖 누름이다 (마우스 누름과 같은 규칙).
+                if (input_dismisses_popups())
+                    static_cast<void>(context_.dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+                // 접촉이 시작될 때 웹뷰와 luil UI 중 임자를 하나 고른다.
+                if (context_.relay_webview_pointer_input(id_, input))
+                {
+                    pointer_owners_.emplace_back(pointer_id, pointer_owner::webview);
+                    return true;
+                }
+                if (host == nullptr)
+                    return false;
+                pointer_owners_.emplace_back(pointer_id, pointer_owner::luil);
+            }
+            else if (contact)
+            {
+                // 시작을 보지 못한 접촉이다. 우리 것이 아니다.
+                return false;
+            }
+            else
+            {
+                // 비접촉(펜 hover)·이탈은 자리로 매번 고른다. 웹뷰로 넘어가는
+                // 순간 우리 hover를 한 번 거둔다.
+                const bool on_webview { context_.relay_webview_pointer_input(id_, input) };
+                const bool was_on_webview { std::find(webview_pen_hovers_.begin(), webview_pen_hovers_.end(), pointer_id) != webview_pen_hovers_.end() };
+                if (on_webview && was_on_webview == false)
+                {
+                    webview_pen_hovers_.push_back(pointer_id);
+                    if (host != nullptr)
+                        host->post_raw_input(pointer_left_event { id_, pointer_device::pen });
+                }
+                if (on_webview == false || message == WM_POINTERLEAVE)
+                    std::erase(webview_pen_hovers_, pointer_id);
+                if (on_webview)
+                    return true;
+                if (host == nullptr)
+                    return false;
+            }
+        }
+
+        // 시각은 OS가 기록한 값을 공통 단조 시계로 옮긴다 — 큐에서 기다린 시간을
+        // 접촉 시간으로 오인하면 빠른 쓸기가 길게 누르기가 된다.
+        const std::chrono::steady_clock::time_point now { std::chrono::steady_clock::now() };
+        LARGE_INTEGER now_count {};
+        LARGE_INTEGER frequency {};
+        std::chrono::steady_clock::time_point time { now };
+        if (input.info.PerformanceCount != 0u && QueryPerformanceCounter(&now_count) != FALSE && QueryPerformanceFrequency(&frequency) != FALSE)
+            time = pointer_counter_time(input.info.PerformanceCount, static_cast<std::uint64_t>(now_count.QuadPart), static_cast<std::uint64_t>(frequency.QuadPart), now);
+        else
+            time = pointer_tick_time(input.info.dwTime, GetTickCount(), now);
+
+        pointer_sample sample {};
+        sample.message = message;
+        sample.device = type == PT_PEN ? pointer_device::pen : pointer_device::touch;
+        sample.pointer_id = pointer_id;
+        sample.in_contact = contact;
+        sample.canceled = (input.info.pointerFlags & POINTER_FLAG_CANCELED) != 0;
+        sample.barrel = type == PT_PEN && (input.pen.penFlags & PEN_FLAG_BARREL) != 0;
+        sample.eraser = type == PT_PEN && (input.pen.penFlags & (PEN_FLAG_ERASER | PEN_FLAG_INVERTED)) != 0;
+        sample.x = static_cast<float>(client.x);
+        sample.y = static_cast<float>(client.y);
+        sample.scale = static_cast<float>(dpi_) / 96.0F;
+        sample.time = time;
+        sample.surface = id_;
+        if (host != nullptr)
+            for (raw_input_event& event : pointer_tracker_.accept(sample))
+                host->post_raw_input(std::move(event));
+        if (ends)
+            forget();
+        // 펜은 메시지를 소비하므로 마우스 변환이 없다 — 커서를 여기서 맞춘다.
+        if (type == PT_PEN && message == WM_POINTERUPDATE)
+            apply_cursor();
+        return true;
+    }
+
+    void window_surface::cancel_pointer_contact(const std::uint32_t pointer_id)
+    {
+        const auto found { std::find_if(pointer_owners_.begin(), pointer_owners_.end(), [pointer_id](const auto& value) { return value.first == pointer_id; }) };
+        if (found == pointer_owners_.end() || found->second == pointer_owner::discarded)
+            return;
+        if (found->second == pointer_owner::webview)
+            context_.cancel_webview_pointer_input(id_, pointer_id);
+        else if (app_host* const host { context_.host() }; host != nullptr)
+            for (raw_input_event& event : pointer_tracker_.cancel(pointer_id, std::chrono::steady_clock::now(), id_))
+                host->post_raw_input(std::move(event));
+        else
+            static_cast<void>(pointer_tracker_.cancel(pointer_id, std::chrono::steady_clock::now(), id_));
+        found->second = pointer_owner::discarded;
+    }
+
+    bool window_surface::duplicate_pointer_mouse_message() const noexcept
+    {
+        // OS가 터치·펜에서 만든 마우스 메시지는 표식을 단다 (MI_WP_SIGNATURE).
+        // 우리가 소비 중인 시퀀스가 있을 때의 것만 버린다 — 정상 마우스 입력과
+        // 우리가 기본 처리에 맡긴 시퀀스의 변환은 그대로 받는다.
+        constexpr LPARAM signature_mask { static_cast<LPARAM>(0xFFFFFF00) };
+        constexpr LPARAM signature { static_cast<LPARAM>(0xFF515700) };
+        return pointer_owners_.empty() == false && (GetMessageExtraInfo() & signature_mask) == signature;
     }
 
     bool window_surface::post_key_event(const WPARAM virtual_key, const LPARAM long_parameter)

@@ -245,6 +245,7 @@ namespace luil {
         strip_config strip {};
         strip.content_width = static_cast<float>(config_.items.size()) * config_.tab_width;
         strip.scroll_offset = config_.scroll_offset;
+        strip.scroll = config_.scroll;
         auto lane_strip { std::make_unique<strip_element>(ui_element_id { ui_element_kind::tab_strip, config_.owner }, strip) };
         lane_strip->set_content(std::move(lane));
         strip_ = lane_strip.get();

@@ -3,6 +3,7 @@
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/ui_element.h"
 
+#include <functional>
 #include <memory>
 
 namespace luil {
@@ -15,6 +16,10 @@ namespace luil {
         // 지금 흘러간 양이다 (논리 픽셀).
         // 범위 밖 값은 arrange가 다듬는다.
         float scroll_offset { 0.0f };
+        // 스크롤 값을 이만큼 옮기자는 메시지다 (논리 픽셀, 양수 = 내용이 왼쪽으로).
+        // 있으면 넘칠 때 이 띠가 가로 흘림의 임자로 선다 (`scroll_source`) —
+        // 터치 끌기·표 없는 휠·초점 되살리기가 이 메시지로 띠를 흘린다.
+        std::function<input_action(float delta)> scroll {};
     };
 
     // 내용을 가로로 흘려 보여 주는 띠다.

@@ -6,6 +6,7 @@
 #include "luil/win32/win32_window.h"
 #include "win32/frame_state.h"
 #include "win32/skia_renderer.h"
+#include "win32/surface_input.h"
 #include "win32/uia_provider.h"
 #include "win32/win32_drop.h"
 #include "win32/win32_tsf_input.h"
@@ -96,6 +97,20 @@ namespace luil::win32 {
         // 포인터가 이 표면을 떠났다.
         virtual void webview_pointer_left(const std::u8string& surface) = 0;
         virtual void cancel_webview_pointer(const std::u8string& surface) = 0;
+        // 터치·펜 원본을 이 표면의 웹뷰에 넘긴다. 받았으면 참이다.
+        // 접촉은 DOWN을 받은 웹뷰가 끝까지 갖는다 (`webview_host::relay_pointer_input`).
+        //  - 기본은 웹뷰가 없는 것이다 — 웹뷰를 모르는 test 대역이 그대로 선다.
+        [[nodiscard]] virtual bool relay_webview_pointer_input(const std::u8string& surface, const webview_pointer_input& input)
+        {
+            static_cast<void>(surface);
+            static_cast<void>(input);
+            return false;
+        }
+        virtual void cancel_webview_pointer_input(const std::u8string& surface, std::uint32_t pointer_id)
+        {
+            static_cast<void>(surface);
+            static_cast<void>(pointer_id);
+        }
 
         // frame의 외양 선호를 `frame_state`로 옮긴다 (테마·고대비·글꼴).
         // 돌려준 typeface는 그 frame을 그리는 동안 살아 있어야 한다.
@@ -377,6 +392,14 @@ namespace luil::win32 {
         // 먼 좌표의 왼쪽 뗌을 합성해 press·끌기를 전부 푼다 —
         // hit가 없는 뗌은 클릭이 되지 않고 상태만 정리된다.
         void cancel_pointer_press();
+        // 터치·펜 `WM_POINTER*` 메시지다. 소비했으면 참이고, 아니면 기본 처리에 맡긴다.
+        //  - 소비하기로 한 시퀀스는 처음부터 끝까지 이 길로 간다. 일부만 기본 처리에
+        //    넘겨 OS의 제스처·마우스 변환을 섞지 않는다.
+        [[nodiscard]] bool handle_pointer_message(UINT message, WPARAM word_parameter);
+        // 그 포인터의 접촉을 정상적인 뗌 없이 끝내고 남은 시퀀스를 삼킨다.
+        void cancel_pointer_contact(std::uint32_t pointer_id);
+        // 터치·펜에서 OS가 만든 마우스 호환 메시지인가 (우리가 소비 중인 시퀀스의 것).
+        [[nodiscard]] bool duplicate_pointer_mouse_message() const noexcept;
 
         // 눌린 키를 이벤트로 만들어 input thread에 보낸다.
         // 이벤트가 됐으면 참이라 호출자가 메시지를 삼킨다.
@@ -477,5 +500,19 @@ namespace luil::win32 {
         std::optional<char16_t> pending_high_surrogate_ {};
         std::shared_ptr<const ui_tree> tree_ {};
         bool tracking_mouse_ { false };
+
+        // 이 표면이 소비 중인 터치·펜 시퀀스의 임자다. 접촉의 DOWN에서 정하고
+        // 그 접촉의 UP까지 바꾸지 않는다.
+        //  - `discarded`는 취소된 접촉이다. 남은 메시지를 삼키기만 한다.
+        enum class pointer_owner
+        {
+            luil,
+            webview,
+            discarded,
+        };
+        std::vector<std::pair<std::uint32_t, pointer_owner>> pointer_owners_ {};
+        pointer_sequence_tracker pointer_tracker_ {};
+        // 웹뷰 위에 떠 있는 펜이다. 그리로 넘어갈 때 우리 hover를 한 번 거둔다.
+        std::vector<std::uint32_t> webview_pen_hovers_ {};
     };
 } // namespace luil::win32
