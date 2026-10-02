@@ -187,8 +187,11 @@ namespace luil {
 
         const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
         ui_color label_color { context.palette.primary_foreground };
-        // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다.
-        if (accent || solid)
+        // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다. 채운 강조와 옅은 강조는 바탕의 밝기가
+        // 달라 글자 역할도 다르다.
+        if (solid)
+            label_color = context.palette.accent_foreground;
+        else if (accent)
             label_color = context.palette.accent_emphasis_foreground;
         else if (danger)
             // 옅은 바탕이라 뜻을 나르는 것은 글자다 — 오류색 그대로 쓴다.

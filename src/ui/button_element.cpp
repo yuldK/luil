@@ -37,11 +37,10 @@ namespace luil {
             break;
         case button_visual_role::danger:
             // 쉬는 동안에도 오류색 글리프다 — 무엇이 사라지는지는 누르기 전에 말해야 한다.
-            // 채운 바탕 위의 글자는 그 바탕을 위해 만든 역할 하나뿐이라 강조 전경색을 쓴다.
-            // 고대비는 오류색을 창 전경색으로 접고 그 짝을 highlight 전경색으로 접어 대비가 남는다.
+            // 채운 오류색 위의 글자는 그 바탕을 위해 만든 역할(`error_foreground`)이다.
             colors.foreground = palette.error_accent;
             colors.hover_background = palette.error_accent;
-            colors.hover_foreground = palette.accent_emphasis_foreground;
+            colors.hover_foreground = palette.error_foreground;
             colors.pressed_background = palette.error_accent;
             break;
         case button_visual_role::toolbar:

@@ -35,7 +35,7 @@ set(LUIL_DEFAULT_ACCENT_ID "brand" CACHE STRING "Default accent")
 add_subdirectory(luil)
 ```
 
-각 항목에는 `id`, `label`, `swatch`, `dark`, `light`가 필요하다. 두 테마 각각 `accent`, `accentHover`, `accentSoft`, `accentEmphasisFg`를 `#rrggbb`로 지정한다. 기본 파일을 복사해 수정하면 된다. 알 수 없는 id의 fallback과 `appearance_settings`의 초기값에 같은 기본 id를 사용한다. 표시 이름에는 UTF-8과 따옴표·줄바꿈·역슬래시를 사용할 수 있다.
+각 항목에는 `id`, `label`, `swatch`, `dark`, `light`가 필요하다. 두 테마 각각 `accent`, `accentHover`, `accentSoft`, `accentEmphasisFg`를 `#rrggbb`로 지정한다. `accentEmphasisFg`는 옅은 강조 바탕(고른 토글, 옅은 강조 단추) 위의 글자다. 채운 강조 바탕(기본 단추, 체크 표시, 강조 배지) 위의 글자는 표에 두지 않고 `accent`에 대고 대비가 큰 흰색이나 검정을 팔레트가 고른다 (`accent_foreground`). 기본 파일을 복사해 수정하면 된다. 알 수 없는 id의 fallback과 `appearance_settings`의 초기값에 같은 기본 id를 사용한다. 표시 이름에는 UTF-8과 따옴표·줄바꿈·역슬래시를 사용할 수 있다.
 
 카탈로그는 빌드 시 내장된다. JSON 변경 후 라이브러리를 다시 빌드해야 하며 설치된 바이너리의 JSON을 실행 중 읽는 기능은 아니다.
 

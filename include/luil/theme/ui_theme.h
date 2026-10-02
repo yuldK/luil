@@ -219,8 +219,15 @@ namespace luil {
         ui_color accent { 0 };
         ui_color accent_hover { 0 };
         ui_color accent_soft { 0 };
+        // 옅은 강조 바탕(고른 토글, 옅은 강조 단추) 위의 글자다.
         ui_color accent_emphasis_foreground { 0 };
         // --- accent에서 파생한 역할이다 (`accent_tones`가 양을 정한다) ---
+        // 채운 강조 바탕(`accent`) 위의 글자와 기호다 (기본 단추, 체크 표시, 켜진 스위치 손잡이, 강조 배지).
+        // 바탕에 대고 대비가 큰 쪽(흰색이나 거의 검정)을 고른다. 옅은 바탕의 글자(`accent_emphasis_foreground`)와
+        // 따로인 이유는 밝은 테마에서 두 바탕의 밝기가 반대쪽이라 한 색으로 둘 다 읽히게 할 수 없어서다.
+        ui_color accent_foreground { 0 };
+        // 채운 오류색 바탕(`error_accent`) 위의 글자다 (위험 단추의 hover). 고르는 규칙은 `accent_foreground`와 같다.
+        ui_color error_foreground { 0 };
         // 채운 강조 버튼을 누르는 동안의 바탕이다.
         ui_color accent_pressed { 0 };
         // 옅은 강조 버튼의 쉼과 hover 바탕이다.
@@ -286,6 +293,10 @@ namespace luil {
     // 시스템 색으로 고대비 팔레트를 합성한다.
     // 키 컬러도 앱의 중립 색도 쓰지 않고, 강조·선택은 시스템의 hotlight·highlight가 맡는다.
     [[nodiscard]] ui_color_palette high_contrast_palette_for(const high_contrast_colors& colors) noexcept;
+
+    // 채운 바탕 위의 글자색이다. 흰색과 거의 검정 가운데 그 바탕에 대고 대비가 큰 쪽이다
+    // (`is_dark_background`의 경계). `compose_palette`가 채운 강조·오류 바탕의 글자를 이것으로 짓는다.
+    [[nodiscard]] ui_color foreground_on(ui_color background) noexcept;
 
     // 중립 색 위에 accent 4역할을 얹고 tone으로 파생 역할을 만든다.
     // **동적 합성의 진입점이다.** 테마 이름을 묻지 않는다 — 어떤 중립 색과 어떤 accent를

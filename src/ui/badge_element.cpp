@@ -44,7 +44,8 @@ namespace luil {
             switch (tone)
             {
             case badge_tone::accent:
-                return palette.accent_emphasis_foreground;
+                // 강조 배지만 채운 바탕이다.
+                return palette.accent_foreground;
             case badge_tone::neutral:
                 return palette.secondary_foreground;
             case badge_tone::warning:

@@ -56,9 +56,8 @@ TEST_CASE("An icon button reads every colour from a palette role", "[ui][button]
         // 그래서 캡션의 닫기와 달리 글리프가 먼저 붉다.
         REQUIRE(colors.foreground == dark.error_accent);
         REQUIRE(colors.hover_background == dark.error_accent);
-        // 채운 바탕 위의 글자를 위해 만든 역할은 하나뿐이라 그것을 쓴다.
-        // 고대비는 오류색을 창 전경색으로, 이 색을 highlight 전경색으로 접어 대비가 남는다.
-        REQUIRE(colors.hover_foreground == dark.accent_emphasis_foreground);
+        // 채운 오류색 위의 글자는 그 바탕을 위해 만든 역할이다.
+        REQUIRE(colors.hover_foreground == dark.error_foreground);
         REQUIRE(colors.pressed_background == dark.error_accent);
         // 붉은 것은 색이지 바탕이 아니다 — 쉬는 동안 깔리는 판은 여전히 없다.
         REQUIRE(colors.rest_background == 0u);

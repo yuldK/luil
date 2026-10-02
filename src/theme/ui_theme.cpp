@@ -160,6 +160,12 @@ namespace luil {
         return relative_luminance(color) <= 0.179f;
     }
 
+    ui_color foreground_on(const ui_color background) noexcept
+    {
+        // 검정을 조금이라도 띄우면 중간 밝기 바탕에서 대비가 크게 준다 (20/255만 띄워도 4.9:1이 4.3:1이 된다).
+        return is_dark_background(background) ? make_ui_color(255, 255, 255) : make_ui_color(0, 0, 0);
+    }
+
     ui_color_palette compose_palette(const neutral_color_palette& neutral, const accent_color_set& accent, const accent_tones& tones) noexcept
     {
         return ui_color_palette {
@@ -177,6 +183,8 @@ namespace luil {
             .accent_hover = accent.hover,
             .accent_soft = accent.soft,
             .accent_emphasis_foreground = accent.emphasis_foreground,
+            .accent_foreground = foreground_on(accent.accent),
+            .error_foreground = foreground_on(neutral.error_accent),
             // 파생 역할은 accent 위에 tone을 얹은 것이다.
             // 어느 역할에 얹는지는 여기가 정하고, 양은 tone이 정한다.
             .accent_pressed = with_alpha(accent.accent, tones.pressed),
@@ -227,6 +235,9 @@ namespace luil {
             .accent_hover = colors.emphasis,
             .accent_soft = colors.highlight_background,
             .accent_emphasis_foreground = colors.highlight_foreground,
+            // 채운 강조색(hotlight)과 오류색(창 전경색) 위의 글자는 창 바탕색이다.
+            .accent_foreground = colors.window_background,
+            .error_foreground = colors.window_background,
             // 파생 역할도 알파 없이 highlight 짝으로 접는다.
             // 옅은 강조 버튼(고른 토글, 대화 상자의 강조 단추)도 highlight 짝이다. 그 글자는
             // `accent_emphasis_foreground`라 버튼 표면에 깔면 바탕과 글자가 같은 색이 되기도 한다.

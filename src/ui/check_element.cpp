@@ -81,7 +81,8 @@ namespace luil {
             {
                 context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), solid);
                 // 채운 네모 위의 체크 표시다.
-                SkPaint tick { solid_paint(context.palette.accent_emphasis_foreground) };
+                // 꺼진 칸은 회색 채움 위에 바탕색으로 판 표시다.
+                SkPaint tick { solid_paint(enabled() ? context.palette.accent_foreground : context.palette.window_background) };
                 tick.setStyle(SkPaint::kStroke_Style);
                 tick.setStrokeWidth(1.8f * scale);
                 tick.setAntiAlias(true);
@@ -122,7 +123,7 @@ namespace luil {
             const float knob { mark.height - 5.0f * scale };
             const float slack { (mark.height - knob) / 2.0f };
             const float knob_x { config_.checked ? mark.x + mark.width - knob - slack : mark.x + slack };
-            SkPaint handle { solid_paint(config_.checked ? context.palette.accent_emphasis_foreground : line) };
+            SkPaint handle { solid_paint(config_.checked ? (enabled() ? context.palette.accent_foreground : context.palette.window_background) : line) };
             handle.setAntiAlias(true);
             context.canvas.drawOval(SkRect::MakeXYWH(knob_x, mark.y + slack, knob, knob), handle);
             break;

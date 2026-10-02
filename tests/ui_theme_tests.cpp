@@ -2,11 +2,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace {
     // 불투명(알파 255)인지다.
@@ -47,6 +49,35 @@ namespace {
         }
     };
 } // namespace
+
+namespace {
+    [[nodiscard]] float contrast_ratio(const luil::ui_color first, const luil::ui_color second) noexcept
+    {
+        const float a { luil::relative_luminance(first) };
+        const float b { luil::relative_luminance(second) };
+        return (std::max(a, b) + 0.05f) / (std::min(a, b) + 0.05f);
+    }
+} // namespace
+
+TEST_CASE("Text on a filled accent or error keeps WCAG AA contrast in every accent and theme", "[theme]")
+{
+    // 기본 단추의 글자, 체크 표시, 켜진 스위치의 손잡이, 강조 배지의 글자가 채운 강조색 위에 선다.
+    // 밝은 테마에서 옅은 바탕용 글자색을 그 자리에 쓰면 1.5:1이라 읽히지 않았다.
+    std::vector<luil::accent_definition> accents { luil::accent_catalog().begin(), luil::accent_catalog().end() };
+    for (const luil::ui_color key : { luil::make_ui_color(0x00, 0x78, 0xd4), luil::make_ui_color(0xe8, 0x11, 0x23), luil::make_ui_color(0xff, 0xb9, 0x00) })
+        accents.push_back(luil::make_system_accent(key));
+    for (const luil::accent_definition& accent : accents)
+    {
+        for (const luil::color_theme theme : { luil::color_theme::light, luil::color_theme::dark })
+        {
+            const luil::ui_color_palette palette { luil::color_palette_for(theme, accent) };
+            const std::string name { reinterpret_cast<const char*>(accent.id.data()), accent.id.size() };
+            INFO(name << (theme == luil::color_theme::light ? " light" : " dark"));
+            REQUIRE(contrast_ratio(palette.accent_foreground, palette.accent) >= 4.5f);
+            REQUIRE(contrast_ratio(palette.error_foreground, palette.error_accent) >= 4.5f);
+        }
+    }
+}
 
 TEST_CASE("A soft accent button keeps its label readable in high contrast", "[theme]")
 {
