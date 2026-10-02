@@ -101,6 +101,12 @@ namespace luil {
         virtual_list_lane,
         // 앱이 정의하는 kind는 이 값부터다.
         // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
+        zoom_view,
+        zoom_controls,
+        zoom_decrease,
+        zoom_label,
+        zoom_increase,
+        zoom_fit,
         first_application_kind = 64,
     };
 

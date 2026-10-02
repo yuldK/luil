@@ -77,6 +77,7 @@ add_executable(luil_tests
     text_edit_tests.cpp
     toast_element_tests.cpp
     touch_input_tests.cpp
+    zoom_view_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
     virtual_list_element_tests.cpp

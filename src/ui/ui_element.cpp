@@ -128,6 +128,16 @@ namespace luil {
         return key_step_target_.has_value() ? &*key_step_target_ : nullptr;
     }
 
+    const zoom_source* ui_element::zoom() const noexcept
+    {
+        return zoom_source_.has_value() ? &*zoom_source_ : nullptr;
+    }
+
+    void ui_element::set_zoom_source(std::optional<zoom_source> source)
+    {
+        zoom_source_ = std::move(source);
+    }
+
     const scroll_source* ui_element::scroll() const noexcept
     {
         return scroll_source_.has_value() ? &*scroll_source_ : nullptr;

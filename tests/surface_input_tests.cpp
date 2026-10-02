@@ -22,6 +22,19 @@ namespace {
     }
 } // namespace
 
+TEST_CASE("Wheel messages preserve control shift and horizontal direction", "[surface-input][zoom]")
+{
+    const auto translated { translate_pointer_message(make_message(WM_MOUSEHWHEEL, MAKEWPARAM(MK_CONTROL | MK_SHIFT, 120))) };
+    REQUIRE(translated.has_value());
+    const auto& wheel { std::get<mouse_wheel_event>(*translated) };
+    REQUIRE(wheel.horizontal);
+    REQUIRE(wheel.control);
+    REQUIRE(wheel.shift);
+    REQUIRE(wheel.delta == 120.0f);
+    REQUIRE(wheel.x == 12.0f);
+    REQUIRE(wheel.surface == u8"tools");
+}
+
 TEST_CASE("Pointer messages keep the surface tag and client coordinates", "[surface-input]")
 {
     const auto moved { translate_pointer_message(make_message(WM_MOUSEMOVE)) };

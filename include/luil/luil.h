@@ -12,8 +12,8 @@
 #include "luil/messaging/latest_slot.h"
 
 // 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 한 줄 편집 상태 기계).
-#include "luil/text/text_edit.h"
 #include "luil/text/fonts.h"
+#include "luil/text/text_edit.h"
 #include "luil/text/utf8_text.h"
 
 // 색·글꼴 선호 값과 팔레트 합성이다.
@@ -33,12 +33,12 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/dropdown_element.h"
+#include "luil/ui/glyph_element.h"
 #include "luil/ui/group_element.h"
 #include "luil/ui/grouped_list_element.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/label_element.h"
-#include "luil/ui/glyph_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_element.h"
@@ -67,6 +67,7 @@
 #include "luil/ui/virtual_list_element.h"
 #include "luil/ui/webview_element.h"
 #include "luil/ui/wrap_element.h"
+#include "luil/ui/zoom_view_element.h"
 
 // Win32 platform 조립이다 (창 실행, 앱 계약).
 #include "luil/win32/app_host.h"

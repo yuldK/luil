@@ -226,6 +226,29 @@ namespace luil {
         horizontal,
     };
 
+    struct zoom_point
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+        [[nodiscard]] bool operator==(const zoom_point&) const noexcept = default;
+    };
+
+    enum class zoom_wheel_mode
+    {
+        zoom,
+        pan,
+    };
+
+    // 상태는 앱이 소유한다. 콜백은 최신 tree의 메시지 factory다.
+    struct zoom_source
+    {
+        std::function<input_action(float factor, zoom_point anchor)> zoom_by {};
+        std::function<input_action(zoom_point delta)> pan_by {};
+        float scale { 1.0f };
+        zoom_wheel_mode wheel { zoom_wheel_mode::zoom };
+        std::function<std::optional<std::vector<input_action>>(const key_pressed_event&)> on_key {};
+    };
+
     struct scroll_source
     {
         // 스크롤 위치를 이만큼 옮기자는 메시지다 (delta는 논리 픽셀).
@@ -488,6 +511,7 @@ namespace luil {
         // 이 컨테이너를 흘리는 메시지다. 없으면 nullptr다.
         // 휠과 초점 되살리기가 표 없이 이 값으로 임자를 찾는다.
         [[nodiscard]] const scroll_source* scroll() const noexcept;
+        [[nodiscard]] const zoom_source* zoom() const noexcept;
         // 초점을 가진 채 글자로 자기 모델을 찾는 역할이다. 없으면 nullptr다.
         [[nodiscard]] const key_search_target* key_search() const noexcept;
         // 앱이 지정한 포인터 모양이다.
@@ -588,6 +612,7 @@ namespace luil {
         // 세우면 휠과 초점 되살리기가 표 없이 이 컨테이너를 찾아 쓴다 —
         // `scroll_delta_to_reveal`을 재정의한 컨테이너와 짝이 되는 값이다.
         void set_scroll_source(std::optional<scroll_source> source);
+        void set_zoom_source(std::optional<zoom_source> source);
         // 글자 탐색이 이 element의 모델을 묻게 한다 (가상 목록).
         void set_key_search_target(std::optional<key_search_target> target);
         void set_clip_children(bool value) noexcept;
@@ -735,6 +760,7 @@ namespace luil {
         std::optional<pointer_drag_target> pointer_drag_target_ {};
         std::optional<key_step_target> key_step_target_ {};
         std::optional<scroll_source> scroll_source_ {};
+        std::optional<zoom_source> zoom_source_ {};
         std::optional<key_search_target> key_search_target_ {};
         bool clip_children_ { false };
         bool hit_opaque_ { false };

@@ -45,6 +45,19 @@ namespace luil::testing {
         {
             text_edit_request request {};
         };
+        struct zoom_intent
+        {
+            float factor { 1.0f };
+            zoom_point anchor {};
+        };
+        struct pan_intent
+        {
+            zoom_point delta {};
+        };
+        struct zoom_to_intent
+        {
+            float value { 1.0f };
+        };
         struct command_intent
         {
             std::u8string command {};
@@ -122,6 +135,12 @@ send();
                     scroll_ = std::clamp(scroll->absolute ? scroll->value : scroll_ + scroll->value, 0.0f, 840.0f);
                 else if (const auto* edit { message.get<edit_intent>() })
                     apply_text_edit(text_, edit->request);
+                else if (const auto* zoom { message.get<zoom_intent>() })
+                    zoom_ = zoom_about(zoom_config(), { 630.0f, 310.0f }, zoom->factor, zoom->anchor);
+                else if (const auto* pan { message.get<pan_intent>() })
+                    zoom_ = pan_by(zoom_config(), { 630.0f, 310.0f }, pan->delta);
+                else if (const auto* value { message.get<zoom_to_intent>() })
+                    zoom_ = zoom_about(zoom_config(), { 630.0f, 310.0f }, value->value / zoom_.zoom, {});
                 else if (const auto* command { message.get<command_intent>() })
                 {
                     if (command->command == u8"pan")
@@ -132,6 +151,8 @@ send();
                         enabled_ = !enabled_;
                     else if (command->command == u8"web-visible")
                         web_visible_ = !web_visible_;
+                    else if (command->command == u8"zoom-visible")
+                        zoom_visible_ = !zoom_visible_;
                     else if (command->command == u8"modal")
                         modal_ = !modal_;
 
@@ -207,6 +228,12 @@ send();
                 web_slot->arrange({ { 16.0f * scale, 320.0f * scale, 630.0f * scale, 130.0f * scale }, scale });
                 root->add(std::move(web_slot));
 
+                auto zoom { std::make_unique<zoom_view_element>(zoom_config()) };
+                zoom->set_access_name(u8"Native zoom target");
+                zoom->set_visible(zoom_visible_);
+                zoom->arrange({ { 16.0f * scale, 140.0f * scale, 630.0f * scale, 310.0f * scale }, scale });
+                root->add(std::move(zoom));
+
                 if (modal_)
                 {
                     auto scrim { std::make_unique<panel_element>(ui_element_id { modal_kind, u8"modal-scrim" }, panel_config {}) };
@@ -217,7 +244,13 @@ send();
                 }
                 add_button(u8"modal", u8"Toggle modal blocker", 16.0f, 520.0f, make_message_action(command_intent { u8"modal" }));
 
+                add_button(u8"zoom-visible", u8"Toggle zoom target", 176.0f, 520.0f, make_message_action(command_intent { u8"zoom-visible" }));
+
                 nlohmann::json status {};
+                status["zoom_visible"] = zoom_visible_;
+                status["zoom"] = zoom_.zoom;
+                status["zoom_x"] = zoom_.origin.x;
+                status["zoom_y"] = zoom_.origin.y;
                 status["left"] = left_;
                 status["right"] = right_;
                 status["scroll"] = scroll_;
@@ -283,6 +316,18 @@ send();
             }
 
         private:
+            [[nodiscard]] zoom_view_config zoom_config() const
+            {
+                return {
+                    .owner = u8"zoom",
+                    .zoom = zoom_.zoom,
+                    .origin = zoom_.origin,
+                    .zoom_by = [](const float factor, const zoom_point anchor) { return make_app_action(zoom_intent { factor, anchor }); },
+                    .pan_by = [](const zoom_point delta) { return make_app_action(pan_intent { delta }); },
+                    .zoom_to = [](const float value) { return make_app_action(zoom_to_intent { value }); },
+                };
+            }
+            zoom_view_state zoom_ {};
             std::atomic<win32::app_host*> host_ { nullptr };
             std::atomic<bool> closed_ { false };
             metrics_intent metrics_ {};
@@ -292,6 +337,7 @@ send();
             bool enabled_ { true };
             bool web_visible_ { true };
             bool modal_ { false };
+            bool zoom_visible_ { false };
             bool config_ok_ { true };
             int config_revision_ { 0 };
             touch_gesture_config touch_ {};

@@ -115,6 +115,8 @@ namespace luil {
     //    한 줄로 끝난다.
     //  - 전부 이미 보이면 빈 목록이다 (delta 0의 방벽과 같은 자리).
     [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, float x, float y, float delta);
+    [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, const mouse_wheel_event& event, float scroll_delta);
+    [[nodiscard]] const ui_element* zoom_owner_at(const ui_tree& tree, float x, float y);
     [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target);
 
     // 터치 끌기가 흘릴 컨테이너다 (touch-pen-input-design.md).
@@ -163,6 +165,10 @@ namespace luil {
         // 연속 탭의 거리 한계로도 쓴다 — 마우스의 4px로는 두 번 탭이 서지 않는다.
         float press_move_tolerance { 12.0f };
         std::chrono::milliseconds long_press_time { 600 };
+        // 같은 확대 보기의 두 접촉만 핀치로 잇는다. 원시 웹뷰 입력과는 별개다.
+        bool pinch_enabled { true };
+        // 이전·현재 간격이 모두 이 거리 이상일 때만 비율을 만든다.
+        float minimum_pinch_distance { 24.0f };
 
         [[nodiscard]] bool operator==(const touch_gesture_config&) const noexcept = default;
     };
@@ -394,15 +400,17 @@ namespace luil {
             // 탭·길게 누르기·스크롤·끌기 중 무엇이 될지 아직 모른다.
             pending,
             panning,
+            view_pan,
+            pinching,
             // 일반 drag & drop이다 (`snapshot_.drag`가 선다).
             dragging,
             // 누르는 즉시 시작하는 전용 조작이다 (`pointer_drag_target`).
             handle,
         };
 
-        // 컨트롤 조작을 소유한 터치 접촉이다. 한 번에 하나다.
-        //  - 다른 id의 이동·뗌·취소는 이것을 바꾸지 않는다. 추가 손가락은 무시되고,
-        //    첫 손가락을 뗀 뒤에도 남은 손가락이 새 누름으로 승격되지 않는다.
+        // 보통 조작은 한 접촉이다. 같은 확대 보기의 핀치만 둘째 접촉을 품는다.
+        //  - 쥐지 않은 id의 이동·뗌·취소는 무시한다. 핀치 뒤 남은 접촉은
+        //    이동만 잇고 새 누름·탭으로 승격하지 않는다.
         //  - `clear_press`가 지우지 않는다. 누름이 스크롤로 바뀌어도 접촉은 남는다.
         struct touch_contact
         {
@@ -426,6 +434,14 @@ namespace luil {
             // 전용 조작이 실제 이동 액션을 냈다. 그 뒤로는 길게 누르기가 아니다.
             bool moved_action { false };
             std::optional<pan_target> pan {};
+            ui_element_id view {};
+            struct second_contact
+            {
+                std::uint32_t id { 0 };
+                float x { 0.0f };
+                float y { 0.0f };
+            };
+            std::optional<second_contact> second {};
             // 누른 자리의 활성 element다. 없으면 빈 곳(또는 비활성)을 누른 것이다.
             ui_element_id target {};
         };
@@ -613,6 +629,15 @@ namespace luil {
         std::optional<pointer_contact> pointer_contact_ {};
 
         std::optional<touch_contact> touch_ {};
+        struct view_drag
+        {
+            ui_element_id id {};
+            float start_x { 0.0f };
+            float start_y { 0.0f };
+            float x { 0.0f };
+            float y { 0.0f };
+        };
+        std::optional<view_drag> view_drag_ {};
 
         // 더블 클릭 판정: 직전 클릭의 대상·표면·시각·위치다.
         // `click_streak_`은 같은 자리를 연달아 누른 횟수로,

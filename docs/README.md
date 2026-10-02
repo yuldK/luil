@@ -35,6 +35,7 @@
 - [Stack, strip, wrap 배치](stack-expressiveness-design.md)
 - [목록과 tree view](list-view-design.md)
 - [스크롤 영역과 막대 합성](scroll-area-design.md)
+- [확대·축소하는 보기](zoom-view-design.md)
 - [가상 목록](virtual-list-design.md)
 - [키보드 초점과 Tab 순회](keyboard-focus-design.md)
 - [Focus group과 Tab 순서](focus-group-design.md)

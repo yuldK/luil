@@ -7,10 +7,11 @@
 #include "luil/ui/group_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
-#include "luil/ui/text_input_state.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/zoom_view_element.h"
 
 #include <uiautomation.h>
 
@@ -97,8 +98,8 @@ namespace {
             edits.push_back(std::move(request));
         }
 
-        [[nodiscard]] std::optional<RECT> accessibility_text_span(const luil::ui_element_id&, const std::u8string_view document, std::size_t, const std::size_t begin,
-            const std::size_t end) const override
+        [[nodiscard]] std::optional<RECT> accessibility_text_span(
+            const luil::ui_element_id&, const std::u8string_view document, std::size_t, const std::size_t begin, const std::size_t end) const override
         {
             spanned_document = std::u8string { document };
             spanned_begin = begin;
@@ -233,8 +234,7 @@ namespace {
         luil::label_config note {};
         note.text = u8"안내";
         root->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"hint" }, std::move(note)));
-        root->add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_item, u8"volume" },
-            luil::slider_config { .minimum = 0.0f, .maximum = 10.0f, .value = slider_value }));
+        root->add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_item, u8"volume" }, luil::slider_config { .minimum = 0.0f, .maximum = 10.0f, .value = slider_value }));
         root->add(std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"confirm" }, luil::text_button_config { .text = u8"확인" }));
         return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
     }
@@ -616,10 +616,9 @@ TEST_CASE("Selecting through UIA leaves an already selected item alone", "[win32
 {
     fake_uia_host host {};
     auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
-    page->add(std::make_unique<luil::check_element>(
-        luil::check_config { .owner = u8"latte", .style = luil::check_style::radio, .label = u8"라떼", .checked = true, .toggle = tagged_action(u8"latte") }));
-    page->add(std::make_unique<luil::check_element>(
-        luil::check_config { .owner = u8"mocha", .style = luil::check_style::radio, .label = u8"모카", .toggle = tagged_action(u8"mocha") }));
+    page->add(
+        std::make_unique<luil::check_element>(luil::check_config { .owner = u8"latte", .style = luil::check_style::radio, .label = u8"라떼", .checked = true, .toggle = tagged_action(u8"latte") }));
+    page->add(std::make_unique<luil::check_element>(luil::check_config { .owner = u8"mocha", .style = luil::check_style::radio, .label = u8"모카", .toggle = tagged_action(u8"mocha") }));
     host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
     auto* const root { new luil::win32::uia_root_provider { host } };
 
@@ -711,8 +710,8 @@ TEST_CASE("A lone radio has no selection container and a list starts unselected"
 {
     fake_uia_host host {};
     auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
-    page->add(std::make_unique<luil::check_element>(
-        luil::check_config { .owner = u8"pick", .style = luil::check_style::radio, .label = u8"하나", .checked = true, .toggle = tagged_action(u8"pick") }));
+    page->add(
+        std::make_unique<luil::check_element>(luil::check_config { .owner = u8"pick", .style = luil::check_style::radio, .label = u8"하나", .checked = true, .toggle = tagged_action(u8"pick") }));
     luil::list_config files {};
     files.owner = u8"files";
     files.items = { { .key = u8"a", .label = u8"가" } };
@@ -841,6 +840,44 @@ TEST_CASE("Setting a slider value through UIA carries the absolute target", "[wi
     REQUIRE(host.dispatched.empty());
 
     slider->Release();
+    root->Release();
+}
+
+TEST_CASE("Zoom pane exposes RangeValue and carries absolute SetValue", "[win32][uia][zoom]")
+{
+    fake_uia_host host {};
+    luil::zoom_view_config config {};
+    config.owner = u8"canvas";
+    config.zoom = 2.0f;
+    config.zoom_to = [](const float value) { return luil::make_app_action(probe_value_intent { value }); };
+    auto view { std::make_unique<luil::zoom_view_element>(config) };
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(view), { 0.0f, 0.0f, 400.0f, 300.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const pane { root->make_element_provider({ luil::ui_element_kind::zoom_view, u8"canvas" }) };
+    VARIANT type {};
+    REQUIRE(pane->GetPropertyValue(UIA_ControlTypePropertyId, &type) == S_OK);
+    REQUIRE(type.lVal == UIA_PaneControlTypeId);
+    VariantClear(&type);
+    IUnknown* pattern { nullptr };
+    REQUIRE(pane->GetPatternProvider(UIA_RangeValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    pattern->Release();
+    double value { 0.0 };
+    REQUIRE(pane->get_Value(&value) == S_OK);
+    REQUIRE(value == 2.0);
+    BOOL read_only { TRUE };
+    REQUIRE(pane->get_IsReadOnly(&read_only) == S_OK);
+    REQUIRE(read_only == FALSE);
+    REQUIRE(pane->SetValue(3.0) == S_OK);
+    REQUIRE(dispatched_value(host) == 3.0f);
+    host.dispatched.clear();
+    REQUIRE(pane->SetValue(3.0) == S_OK);
+    REQUIRE(dispatched_value(host) == 3.0f);
+    REQUIRE(pane->SetValue(100.0) == E_INVALIDARG);
+    IUnknown* transform { nullptr };
+    REQUIRE(pane->GetPatternProvider(UIA_TransformPatternId, &transform) == S_OK);
+    REQUIRE(transform == nullptr);
+    pane->Release();
     root->Release();
 }
 
@@ -1191,8 +1228,7 @@ TEST_CASE("Each state change raises exactly one UIA event with the right word", 
             .checked = checked,
             .toggle = [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; },
         }));
-        root->add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_item, u8"volume" },
-            luil::slider_config { .minimum = 0.0f, .maximum = 10.0f, .value = volume }));
+        root->add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_item, u8"volume" }, luil::slider_config { .minimum = 0.0f, .maximum = 10.0f, .value = volume }));
         root->add(std::make_unique<luil::group_element>(luil::group_config { .owner = u8"advanced", .title = u8"고급", .collapsed = collapsed, .toggle = tagged_action(u8"advanced") }));
         root->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"hint" }, luil::label_config { .text = std::u8string { note } }));
         luil::list_config files {};
@@ -1256,8 +1292,8 @@ TEST_CASE("Structure changes and focus reach the UIA sink once each", "[win32][u
         if (with_extra)
             root->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"extra" }, luil::label_config { .text = u8"둘" }));
         luil::group_config section { .owner = u8"advanced", .title = u8"고급", .collapsed = collapsed, .toggle = tagged_action(u8"advanced"), .content_height = 20.0f };
-        root->add(std::make_unique<luil::group_element>(std::move(section),
-            std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"nested" }, luil::label_config { .text = u8"안쪽" })));
+        root->add(
+            std::make_unique<luil::group_element>(std::move(section), std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"nested" }, luil::label_config { .text = u8"안쪽" })));
         return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f));
     };
 

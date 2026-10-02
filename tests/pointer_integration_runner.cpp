@@ -526,7 +526,7 @@ namespace luil::testing {
                 ++passed;
                 std::cout << "PASS " << name << '\n';
             };
-            auto skip = [&](const char* message) {
+            auto skip = [&](const std::string& message) {
                 ++skipped;
                 std::cout << "SKIP " << message << '\n';
             };
@@ -584,6 +584,55 @@ namespace luil::testing {
                 static_cast<void>(uia.wait([](const json& state) { return state["scroll"] > 20.0f; }, "Touch pan"));
                 no_change(before, false);
             });
+            {
+                const auto before { uia.status() };
+                uia.invoke(L"zoom-visible");
+                static_cast<void>(uia.wait([](const json& state) { return state["zoom_visible"] == true; }, "Show zoom target"));
+                const POINT first { uia.point(L"zoom", 0.25) };
+                const POINT second { uia.point(L"zoom", 0.75) };
+                touch.down(first);
+                static_cast<void>(uia.wait([&](const json& state) { return state["touch_down"] > before["touch_down"]; }, "First zoom contact"));
+                touch.down(second, PEN_FLAG_NONE, 1);
+                const auto deadline { clock::now() + std::chrono::seconds { 1 } };
+                json during {};
+                do
+                {
+                    during = uia.status();
+                    if (during["touch_down"] >= before["touch_down"].get<int>() + 2)
+                        break;
+                    touch.move(second, 1);
+                } while (clock::now() < deadline);
+                if (during["touch_down"] != before["touch_down"].get<int>() + 2 || during["native_touch_frame"].size() != 2)
+                {
+                    touch.up(first);
+                    touch.up(second, PEN_FLAG_NONE, 1);
+                    skip("Zoom pinch: injection did not reach host as two native contacts; down=" + during["touch_down"].dump() + ", before=" + before["touch_down"].dump()
+                        + ", frame=" + during["native_touch_frame"].dump() + ", trace=" + during["native_trace"].dump());
+                }
+                else
+                    test("zoom pinch / expand contract / remaining finger pan", [&] {
+                        const POINT outer_first { uia.point(L"zoom", 0.1) };
+                        const POINT outer_second { uia.point(L"zoom", 0.9) };
+                        touch.move(outer_first);
+                        touch.move(outer_second, 1);
+                        const auto expanded { uia.wait([&](const json& state) { return state["zoom"].get<float>() > before["zoom"].get<float>() * 1.3f; }, "Pinch expand") };
+                        const POINT inner_first { uia.point(L"zoom", 0.3) };
+                        const POINT inner_second { uia.point(L"zoom", 0.7) };
+                        touch.move(inner_first);
+                        touch.move(inner_second, 1);
+                        const auto contracted { uia.wait([&](const json& state) { return state["zoom"].get<float>() < expanded["zoom"].get<float>() * 0.8f; }, "Pinch contract") };
+                        touch.up(inner_first);
+                        POINT moved { inner_second };
+                        moved.y += 24;
+                        touch.move(moved, 1);
+                        const auto panned { uia.wait([&](const json& state) { return state["zoom_y"].get<float>() > contracted["zoom_y"].get<float>() + 8.0f; }, "Remaining finger pan") };
+                        touch.up(moved, PEN_FLAG_NONE, 1);
+                        require(panned["zoom"] == contracted["zoom"], "Remaining finger changed zoom");
+                        no_change(before, true);
+                    });
+                uia.invoke(L"zoom-visible");
+                static_cast<void>(uia.wait([](const json& state) { return state["zoom_visible"] == false; }, "Hide zoom target"));
+            }
             test("runtime pan disabled during contact", [&] {
                 reset_scroll();
                 touch.down(pan_start);

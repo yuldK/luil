@@ -124,6 +124,8 @@ luil_add_source_filter(luil_files "ui/layout"
     "${public_headers}/ui/root_element.h"
     ui/scroll_area_element.cpp
     "${public_headers}/ui/scroll_area_element.h"
+    ui/zoom_view_element.cpp
+    "${public_headers}/ui/zoom_view_element.h"
     ui/scroll_view_element.cpp
     "${public_headers}/ui/scroll_view_element.h"
     ui/scrollbar_element.cpp

@@ -515,6 +515,7 @@ namespace luil::win32 {
             if (post_pointer_message(message, word_parameter, long_parameter))
                 return LRESULT { 0 };
             return std::nullopt;
+        case WM_MOUSEHWHEEL:
         case WM_MOUSEWHEEL:
             // popup의 자리는 이번 frame element의 자리에서 왔다.
             // 내용이 스크롤되면 닻이 움직이므로 popup도 닫는 계기다 —
@@ -901,7 +902,7 @@ namespace luil::win32 {
         POINT point { GET_X_LPARAM(long_parameter), GET_Y_LPARAM(long_parameter) };
         // 휠의 lparam만 화면 좌표다.
         // 나머지는 이미 그 표면의 client 좌표다.
-        if (message == WM_MOUSEWHEEL && ScreenToClient(window_, &point) == FALSE)
+        if ((message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL) && ScreenToClient(window_, &point) == FALSE)
             return false;
 
         // **웹뷰가 먼저다.** 그 자리의 포인터는 웹 콘텐츠의 것이고, 같은 포인터를

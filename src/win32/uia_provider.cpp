@@ -1,8 +1,8 @@
 #include "win32/uia_provider.h"
 
 #include "luil/text/text_edit.h"
-#include "luil/ui/ui_interaction.h"
 #include "luil/text/utf8_text.h"
+#include "luil/ui/ui_interaction.h"
 #include "win32/utf8.h"
 
 #include <uiautomation.h>
@@ -70,6 +70,8 @@ namespace luil::win32 {
                 return UIA_MenuControlTypeId;
             case access_role::menu_item:
                 return UIA_MenuItemControlTypeId;
+            case access_role::pane:
+                return UIA_PaneControlTypeId;
             case access_role::group:
                 return UIA_GroupControlTypeId;
             case access_role::title_bar:
@@ -372,14 +374,13 @@ namespace luil::win32 {
             if (before.expanded != after.expanded)
             {
                 const auto state { [](const std::optional<bool>& expanded) { return expanded == true ? ExpandCollapseState_Expanded : ExpandCollapseState_Collapsed; } };
-                raise_property(*events_, *provider, UIA_ExpandCollapseExpandCollapseStatePropertyId, variant_from_int(state(before.expanded)),
-                    variant_from_int(state(after.expanded)));
+                raise_property(*events_, *provider, UIA_ExpandCollapseExpandCollapseStatePropertyId, variant_from_int(state(before.expanded)), variant_from_int(state(after.expanded)));
             }
             // 범위는 값의 변화만 알린다 — 경계(minimum·maximum)가 흔들리는
             // frame은 구조가 아니라 표시의 사정이고, 보조 기술이 듣는 것은 값이다.
             if (before.range.has_value() && after.range.has_value() && before.range->value != after.range->value)
-                raise_property(*events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(static_cast<double>(before.range->value)),
-                    variant_from_double(static_cast<double>(after.range->value)));
+                raise_property(
+                    *events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(static_cast<double>(before.range->value)), variant_from_double(static_cast<double>(after.range->value)));
             provider->Release();
         }
     }
@@ -1457,10 +1458,8 @@ namespace luil::win32 {
         {
             std::u8string lowered { text };
             for (char8_t& character : lowered)
-            {
                 if (character >= u8'A' && character <= u8'Z')
                     character = static_cast<char8_t>(character + (u8'a' - u8'A'));
-            }
             return lowered;
         }
     } // namespace

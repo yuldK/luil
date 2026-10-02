@@ -41,6 +41,7 @@ namespace luil::win32 {
             released.surface = message.surface;
             return raw_input_event { std::move(released) };
         }
+        case WM_MOUSEHWHEEL:
         case WM_MOUSEWHEEL: {
             mouse_wheel_event wheel {};
             wheel.x = message.x;
@@ -48,6 +49,9 @@ namespace luil::win32 {
             wheel.delta = static_cast<float>(GET_WHEEL_DELTA_WPARAM(message.word_parameter));
             wheel.time = message.time;
             wheel.surface = message.surface;
+            wheel.control = (message.word_parameter & MK_CONTROL) != 0;
+            wheel.shift = (message.word_parameter & MK_SHIFT) != 0;
+            wheel.horizontal = message.message == WM_MOUSEHWHEEL;
             return raw_input_event { std::move(wheel) };
         }
         default:

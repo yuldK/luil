@@ -13,6 +13,37 @@
 
 namespace luil {
     namespace {
+        [[nodiscard]] float positive_scale(const float scale) noexcept
+        {
+            return std::isfinite(scale) && scale > 0.0f ? scale : 1.0f;
+        }
+
+        [[nodiscard]] const ui_element* wheel_owner_at(const ui_element& element, float x, float y);
+
+        [[nodiscard]] const ui_element* live_zoom_view(const ui_tree& tree, const ui_element_id& id, const float x, const float y)
+        {
+            const ui_element* const view { tree.find(id) };
+            if (view == nullptr || view->zoom() == nullptr || tree.within_focus_trap(id) == false)
+                return nullptr;
+            const ui_element* const over { tree.root() != nullptr ? wheel_owner_at(*tree.root(), x, y) : nullptr };
+            if (over == nullptr)
+                return nullptr;
+            // 내용이 이동해 안쪽 창이 누른 자리 밑으로 와도 잡은 보기는 바뀌지 않는다.
+            // 그 밖의 방벽·다른 가지가 덮었으면 끝낸다.
+            return over->id() == id || (tree.within(id, over->id()) && (over->zoom() != nullptr || over->scroll() != nullptr)) ? view : nullptr;
+        }
+
+        [[nodiscard]] bool within_zoom_view(const ui_element& element, const ui_element_id& id, bool inside = false)
+        {
+            inside = inside || element.zoom() != nullptr;
+            if (element.id() == id)
+                return inside;
+            for (const std::unique_ptr<ui_element>& child : element.children())
+                if (within_zoom_view(*child, id, inside))
+                    return true;
+            return false;
+        }
+
         void post_with_retry(messaging::channel<app_message>& inbox, const app_message& message)
         {
             // 앱 메시지는 버리지 않는다.
@@ -66,6 +97,7 @@ namespace luil {
     void interaction_controller::set_tree(std::shared_ptr<const ui_tree> tree) noexcept
     {
         tree_ = std::move(tree);
+        clear_gone_surface_gestures();
 
         // 사라진 element를 가리키는 초점·강조는 새 tree를 받는 즉시 거둔다.
         // snapshot을 곧바로 읽는 렌더러가 없어진 텍스트 박스의 caret을 기다리지 않게 한다.
@@ -104,7 +136,7 @@ namespace luil {
         // 이후의 이동을 전부 조기 반환으로 삼킨다.
         //  - 주 창(빈 id)은 표면 목록의 임자가 아니라 여기서 보지 않는다.
         //  - 터치 접촉은 누름보다 오래 산다 (스크롤로 바뀐 뒤에도). 따로 거둔다.
-        if (touch_.has_value() && touch_->surface.empty() == false && surface_tree(touch_->surface) == nullptr)
+        if (touch_.has_value() && surface_tree(touch_->surface) == nullptr)
             cancel_touch();
         if (pointer_contact_.has_value() && surface_tree(pointer_contact_->surface) == nullptr)
             cancel_pointer_gesture();
@@ -227,9 +259,14 @@ namespace luil {
                     // popup 위의 휠은 그 popup의 tree로 판단한다.
                     const float delta { -(value.delta / 120.0f) * input_wheel_scroll_step };
                     const ui_tree* const tree { surface_tree(value.surface) };
-                    if (policy_ == nullptr || tree == nullptr)
+                    if (tree == nullptr)
                         return {};
-                    return policy_->on_wheel(*tree, value, delta);
+                    const ui_element* const owner { tree->root() != nullptr ? wheel_owner_at(*tree->root(), value.x, value.y) : nullptr };
+                    // 보기 안의 스크롤도 공통 라우팅을 탄다. 텍스트 정책만 가진 앱이
+                    // 빈 on_wheel 기본값 때문에 안쪽 창의 휠을 잃으면 안 된다.
+                    if (owner != nullptr && within_zoom_view(*tree->root(), owner->id()))
+                        return route_wheel(*tree, value, delta);
+                    return policy_ != nullptr ? policy_->on_wheel(*tree, value, delta) : route_wheel(*tree, value, delta);
                 }
                 else if constexpr (std::is_same_v<value_type, key_pressed_event>)
                     return process_key(value);
@@ -245,7 +282,23 @@ namespace luil {
                     // 텍스트 박스가 없으면 그 글자는 **묶음 안에서 항목을 찾는** 데 쓴다.
                     // 순서가 이 자리에 이미 서 있다 — 칸이 먼저이고, 글자 탐색은 그 다음이다.
                     if (target.has_value() == false)
+                    {
+                        const ui_tree* const tree { surface_tree(snapshot_.focused_surface) };
+                        const ui_element* const focused { tree != nullptr ? tree->find(snapshot_.focused) : nullptr };
+                        const zoom_source* const source { focused != nullptr && focused->focusable() ? focused->zoom() : nullptr };
+                        if (source != nullptr && source->on_key)
+                        {
+                            key_pressed_event key {};
+                            key.key = value.character == U'+' || value.character == U'=' ? key_code::zoom_in
+                                : value.character == U'-'                                ? key_code::zoom_out
+                                : value.character == U'0'                                ? key_code::key_0
+                                                                                         : key_code::none;
+                            if (key.key != key_code::none)
+                                if (auto actions { source->on_key(key) }; actions.has_value())
+                                    return std::move(*actions);
+                        }
                         return process_typeahead(value);
+                    }
                     if (value.character == U'\b')
                         return { text_edit_action(*target, text::text_edit_command::backspace) };
                     // Ctrl+Backspace는 WM_CHAR가 U+007F로 준다.
@@ -310,6 +363,21 @@ namespace luil {
         // 잡은 대상은 누름이 시작된 표면에서 다시 찾는다.
         // 캡처 중에는 이벤트도 같은 표면에서 온다.
         const ui_tree* const pressed_tree { surface_tree(pressed_surface_) };
+
+        if (view_drag_.has_value())
+        {
+            const view_drag previous { *view_drag_ };
+            const ui_element* const owner { pressed_tree != nullptr ? live_zoom_view(*pressed_tree, previous.id, previous.start_x, previous.start_y) : nullptr };
+            if (owner == nullptr || owner->id() != previous.id || owner->zoom()->pan_by == nullptr)
+            {
+                cancel_pointer_gesture();
+                return {};
+            }
+            view_drag_->x = event.x;
+            view_drag_->y = event.y;
+            const zoom_point delta { (event.x - previous.x) / positive_scale(owner->zoom()->scale), (event.y - previous.y) / positive_scale(owner->zoom()->scale) };
+            return delta != zoom_point {} ? std::vector<input_action> { owner->zoom()->pan_by(delta) } : std::vector<input_action> {};
+        }
 
         // 텍스트 박스를 잡고 있으면 이동이 선택 범위를 늘린다.
         // 포인터가 칸을 벗어나도 이어진다.
@@ -498,7 +566,7 @@ namespace luil {
             if (element.bounds().contains(x, y) == false)
                 return nullptr;
             const scroll_source* const source { element.scroll() };
-            if ((source != nullptr && source->scroll != nullptr) || element.hit_opaque())
+            if ((source != nullptr && source->scroll != nullptr) || element.zoom() != nullptr || element.hit_opaque())
                 return &element;
             return nullptr;
         }
@@ -524,11 +592,6 @@ namespace luil {
             if (accepts(element) || element.hit_opaque())
                 return &element;
             return nullptr;
-        }
-
-        [[nodiscard]] float positive_scale(const float scale) noexcept
-        {
-            return std::isfinite(scale) && scale > 0.0f ? scale : 1.0f;
         }
 
         // 뿌리에서 `id`까지의 길이다 (뿌리가 앞, 대상이 뒤).
@@ -588,6 +651,38 @@ namespace luil {
         return { source->scroll(delta) };
     }
 
+    const ui_element* zoom_owner_at(const ui_tree& tree, const float x, const float y)
+    {
+        const ui_element* const owner { tree.root() != nullptr ? wheel_owner_at(*tree.root(), x, y) : nullptr };
+        return owner != nullptr && owner->zoom() != nullptr ? owner : nullptr;
+    }
+
+    std::vector<input_action> route_wheel(const ui_tree& tree, const mouse_wheel_event& event, const float scroll_delta)
+    {
+        const ui_element* const owner { tree.root() != nullptr ? wheel_owner_at(*tree.root(), event.x, event.y) : nullptr };
+        if (owner == nullptr)
+            return {};
+        if (const zoom_source* const source { owner->zoom() }; source != nullptr)
+        {
+            const float scale { positive_scale(source->scale) };
+            if (event.control || (source->wheel == zoom_wheel_mode::zoom && event.horizontal == false))
+            {
+                if (source->zoom_by == nullptr || event.delta == 0.0f)
+                    return {};
+                const rect_f& box { owner->bounds() };
+                const zoom_point anchor { (event.x - box.x - box.width / 2.0f) / scale, (event.y - box.y - box.height / 2.0f) / scale };
+                return { source->zoom_by(std::pow(1.2f, std::clamp(event.delta / 120.0f, -64.0f, 64.0f)), anchor) };
+            }
+            if (source->pan_by == nullptr || scroll_delta == 0.0f)
+                return {};
+            // 가로 휠 양수는 오른쪽이다. 세로 양수는 위쪽이라 내용 이동 부호가 갈린다.
+            const float delta { event.horizontal ? scroll_delta : -scroll_delta };
+            return { source->pan_by(event.horizontal || event.shift ? zoom_point { delta, 0.0f } : zoom_point { 0.0f, delta }) };
+        }
+        const scroll_source* const source { owner->scroll() };
+        return source != nullptr && source->scroll ? std::vector<input_action> { source->scroll(scroll_delta) } : std::vector<input_action> {};
+    }
+
     std::optional<pan_target> route_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
     {
         const ui_element* const root { tree.root() };
@@ -626,8 +721,8 @@ namespace luil {
     bool valid_touch_gesture_config(const touch_gesture_config& config) noexcept
     {
         const auto distance = [](const float value) { return std::isfinite(value) && value > 0.0f; };
-        return distance(config.pan_start_distance) && distance(config.press_move_tolerance) && config.pan_start_time.count() > 0 && config.long_press_time.count() > 0
-            && config.pan_start_time < config.long_press_time;
+        return distance(config.minimum_pinch_distance) && distance(config.pan_start_distance) && distance(config.press_move_tolerance) && config.pan_start_time.count() > 0
+            && config.long_press_time.count() > 0 && config.pan_start_time < config.long_press_time;
     }
 
     std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target)
@@ -806,6 +901,13 @@ namespace luil {
         };
 
         apply_press_focus(*tree, hit, event.surface, event.time);
+        const ui_element* const view { zoom_owner_at(*tree, event.x, event.y) };
+        // 마우스·펜은 빈 곳만 이동한다. 내용의 클릭·선택·항목 끌기는 그대로 둔다.
+        if (event.button == pointer_button::left && view != nullptr && hit->id() == view->id() && view->zoom()->pan_by)
+        {
+            view_drag_ = view_drag { view->id(), event.x, event.y, event.x, event.y };
+            return actions;
+        }
 
         // 텍스트 박스는 누른 자리로 caret이 가고, 누른 채 끌면 범위가 잡힌다.
         // 임계 시간·거리 안의 두 번째 누름은 그 자리의 낱말을 고른다.
@@ -925,6 +1027,19 @@ namespace luil {
             return {};
         }
         pointer_contact_.reset();
+        if (view_drag_.has_value())
+        {
+            const view_drag previous { *view_drag_ };
+            view_drag_.reset();
+            clear_press();
+            const ui_tree* const tree { surface_tree(event.surface) };
+            const ui_element* const owner { tree != nullptr ? live_zoom_view(*tree, previous.id, previous.start_x, previous.start_y) : nullptr };
+            if (owner == nullptr || owner->id() != previous.id || owner->zoom()->pan_by == nullptr)
+                return {};
+            const float scale { positive_scale(owner->zoom()->scale) };
+            const zoom_point delta { (event.x - previous.x) / scale, (event.y - previous.y) / scale };
+            return delta != zoom_point {} ? std::vector<input_action> { owner->zoom()->pan_by(delta) } : std::vector<input_action> {};
+        }
 
         // tree가 없어도 **거두기까지는 반드시 닿는다.**
         // 뗌은 잡은 것을 놓는 유일한 계기인데, 표면이 사라진 뒤의 합성 뗌
@@ -1049,6 +1164,23 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_touch_press(const pointer_pressed_event& event)
     {
+        if (touch_.has_value())
+        {
+            touch_contact& contact { *touch_ };
+            if (contact.id == event.pointer_id || contact.surface != event.surface || contact.view == ui_element_id {} || contact.second.has_value() || contact.config.pinch_enabled == false
+                || (contact.phase != touch_phase::pending && contact.phase != touch_phase::view_pan))
+                return {};
+            const ui_tree* const tree { surface_tree(contact.surface) };
+            const ui_element* const owner { tree != nullptr ? live_zoom_view(*tree, contact.view, contact.start_x, contact.start_y) : nullptr };
+            const ui_element* const second { tree != nullptr ? zoom_owner_at(*tree, event.x, event.y) : nullptr };
+            if (owner == nullptr || second == nullptr || owner->id() != contact.view || second->id() != contact.view || owner->zoom()->zoom_by == nullptr || owner->zoom()->pan_by == nullptr)
+                return {};
+            contact.second = touch_contact::second_contact { event.pointer_id, event.x, event.y };
+            contact.phase = touch_phase::pinching;
+            contact.moved_action = true;
+            clear_press();
+            return {};
+        }
         // 컨트롤 조작은 한 접촉이 한다. 이미 쥔 접촉이 있으면 추가 손가락이고,
         // 마우스·펜이 조작 중이면 그쪽이 임자다. 둘 다 삼킨다.
         if (touch_.has_value() || pointer_gesture_active())
@@ -1075,6 +1207,15 @@ namespace luil {
         // 초점은 아직 옮기지 않는다. 스크롤이 될 접촉이 칸의 초점과 IME를 빼앗으면
         // 안 된다 — 탭이 확정되는 뗌에서 옮긴다.
         const ui_element* const hit { tree->hit_test(event.x, event.y) };
+        const ui_element* const view { zoom_owner_at(*tree, event.x, event.y) };
+        if (view != nullptr && (hit == nullptr || (hit->enabled() && hit->pointer_drag() == nullptr && hit->drag() == nullptr)) && view->zoom()->pan_by)
+        {
+            contact.view = view->id();
+            contact.scale = positive_scale(view->zoom()->scale);
+            contact.pan_open = false;
+            if (hit == nullptr || hit->id() == view->id())
+                contact.phase = touch_phase::view_pan;
+        }
         pressed_surface_ = event.surface;
         if (hit == nullptr || hit->enabled() == false)
         {
@@ -1122,7 +1263,7 @@ namespace luil {
     std::vector<input_action> interaction_controller::process_touch_move(const pointer_moved_event& event)
     {
         // 쥔 접촉의 것만 본다. 추가 손가락·취소된 접촉의 이동은 삼킨다.
-        if (touch_.has_value() == false || touch_->id != event.pointer_id || touch_->surface != event.surface)
+        if (touch_.has_value() == false || touch_->surface != event.surface || (touch_->id != event.pointer_id && (touch_->second.has_value() == false || touch_->second->id != event.pointer_id)))
             return {};
         touch_contact& contact { *touch_ };
         const ui_tree* const tree { surface_tree(contact.surface) };
@@ -1134,6 +1275,57 @@ namespace luil {
         std::vector<input_action> actions {};
         switch (contact.phase)
         {
+        case touch_phase::view_pan:
+        case touch_phase::pinching: {
+            const ui_element* const owner { tree != nullptr ? live_zoom_view(*tree, contact.view, contact.start_x, contact.start_y) : nullptr };
+            if (owner == nullptr || owner->id() != contact.view || owner->zoom()->pan_by == nullptr || (contact.second.has_value() && owner->zoom()->zoom_by == nullptr))
+            {
+                cancel_touch();
+                return {};
+            }
+            const zoom_source& source { *owner->zoom() };
+            const float scale { positive_scale(source.scale) };
+            if (contact.second.has_value())
+            {
+                const float old_x { (contact.last_x + contact.second->x) / 2.0f };
+                const float old_y { (contact.last_y + contact.second->y) / 2.0f };
+                const float old_distance { distance_between(contact.last_x, contact.last_y, contact.second->x, contact.second->y) / scale };
+                if (event.pointer_id == contact.id)
+                {
+                    contact.last_x = event.x;
+                    contact.last_y = event.y;
+                }
+                else
+                {
+                    contact.second->x = event.x;
+                    contact.second->y = event.y;
+                }
+                const float x { (contact.last_x + contact.second->x) / 2.0f };
+                const float y { (contact.last_y + contact.second->y) / 2.0f };
+                const float distance { distance_between(contact.last_x, contact.last_y, contact.second->x, contact.second->y) / scale };
+                const zoom_point delta { (x - old_x) / scale, (y - old_y) / scale };
+                if (delta != zoom_point {})
+                    actions.push_back(source.pan_by(delta));
+                // 서로 거의 겹친 접촉은 이동만 한다. 떨어진 뒤의 첫 이동에서 새 기준이 선다.
+                if (old_distance >= contact.config.minimum_pinch_distance && distance >= contact.config.minimum_pinch_distance && distance != old_distance)
+                {
+                    const rect_f& box { owner->bounds() };
+                    const zoom_point anchor { (x - box.x - box.width / 2.0f) / scale, (y - box.y - box.height / 2.0f) / scale };
+                    actions.push_back(source.zoom_by(distance / old_distance, anchor));
+                }
+            }
+            else
+            {
+                const zoom_point delta { (event.x - contact.last_x) / scale, (event.y - contact.last_y) / scale };
+                if (delta != zoom_point {})
+                    actions.push_back(source.pan_by(delta));
+                contact.last_x = event.x;
+                contact.last_y = event.y;
+            }
+            if (actions.empty() == false)
+                contact.moved_action = true;
+            return actions;
+        }
         case touch_phase::handle: {
             const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
             const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
@@ -1178,6 +1370,13 @@ namespace luil {
             break;
         }
         case touch_phase::pending: {
+            if (contact.view != ui_element_id {} && travel >= contact.config.press_move_tolerance)
+            {
+                contact.phase = touch_phase::view_pan;
+                clear_press();
+                // 시간 창 없이 누른 자리부터의 이동을 한 번에 보낸다.
+                return process_touch_move(event);
+            }
             if (contact.max_distance > contact.config.press_move_tolerance)
             {
                 // 허용치를 넘은 접촉은 더 이상 클릭이 아니다. 누름 표시를 거둔다.
@@ -1234,8 +1433,46 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_touch_release(const pointer_released_event& event)
     {
-        if (touch_.has_value() == false || touch_->id != event.pointer_id || touch_->surface != event.surface)
+        if (touch_.has_value() == false || touch_->surface != event.surface || (touch_->id != event.pointer_id && (touch_->second.has_value() == false || touch_->second->id != event.pointer_id)))
             return {};
+        if (touch_->phase == touch_phase::view_pan || touch_->phase == touch_phase::pinching)
+        {
+            const pointer_moved_event moved {
+                .x = event.x,
+                .y = event.y,
+                .time = event.time,
+                .surface = event.surface,
+                .device = pointer_device::touch,
+                .pointer_id = event.pointer_id,
+                .in_contact = true,
+            };
+            std::vector<input_action> actions { process_touch_move(moved) };
+            if (touch_.has_value() == false)
+                return actions;
+            if (touch_->second.has_value())
+            {
+                if (touch_->id == event.pointer_id)
+                {
+                    touch_->id = touch_->second->id;
+                    touch_->last_x = touch_->second->x;
+                    touch_->last_y = touch_->second->y;
+                }
+                touch_->second.reset();
+                touch_->phase = touch_phase::view_pan;
+            }
+            else
+            {
+                if (touch_->moved_action == false)
+                {
+                    const ui_tree* const tree { surface_tree(event.surface) };
+                    const ui_element* const view { tree != nullptr ? zoom_owner_at(*tree, touch_->start_x, touch_->start_y) : nullptr };
+                    if (view != nullptr && view->id() == touch_->view)
+                        apply_press_focus(*tree, view, event.surface, event.time);
+                }
+                cancel_touch();
+            }
+            return actions;
+        }
         touch_contact contact { std::move(*touch_) };
         touch_.reset();
         const ui_tree* const tree { surface_tree(contact.surface) };
@@ -1277,6 +1514,9 @@ namespace luil {
                 policy_->on_click(*target);
             return run_trigger(*target, ui_trigger::right_click, event.x, event.y, false);
         }
+        case touch_phase::view_pan:
+        case touch_phase::pinching:
+            return {};
         case touch_phase::pending:
             clear_press();
             // 허용치를 넘었지만 스크롤도 끌기도 되지 않은 접촉은 클릭으로 되돌리지 않는다.
@@ -1359,7 +1599,7 @@ namespace luil {
     {
         if (event.device == pointer_device::touch)
         {
-            if (touch_.has_value() && touch_->id == event.pointer_id && touch_->surface == event.surface)
+            if (touch_.has_value() && touch_->surface == event.surface && (touch_->id == event.pointer_id || (touch_->second.has_value() && touch_->second->id == event.pointer_id)))
                 cancel_touch();
             return {};
         }
@@ -1373,6 +1613,7 @@ namespace luil {
 
     void interaction_controller::cancel_pointer_gesture() noexcept
     {
+        view_drag_.reset();
         pointer_contact_.reset();
         text_drag_id_ = {};
         if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty())
@@ -1396,13 +1637,16 @@ namespace luil {
         if (touch_.has_value())
         {
             const touch_phase phase { touch_->phase };
-            const bool pan_off { touch_->config.pan_enabled && config.pan_enabled == false && (phase == touch_phase::pending || phase == touch_phase::panning) };
+            const bool pan_off { touch_->view == ui_element_id {} && touch_->config.pan_enabled && config.pan_enabled == false && (phase == touch_phase::pending || phase == touch_phase::panning) };
             const bool long_press_off { touch_->config.long_press_enabled && config.long_press_enabled == false && phase == touch_phase::pending };
             // 손잡이 조작은 계속하지만 그 접촉의 메뉴 후보는 즉시 끈다.
             // 다시 켜도 이미 내려가 있는 손가락에 메뉴 자격을 새로 주지 않는다.
             if (phase == touch_phase::handle && config.long_press_enabled == false)
                 touch_->config.long_press_enabled = false;
-            if (pan_off || long_press_off)
+            const bool pinch_off { touch_->config.pinch_enabled && config.pinch_enabled == false && phase == touch_phase::pinching };
+            if (config.pinch_enabled == false)
+                touch_->config.pinch_enabled = false;
+            if (pan_off || long_press_off || pinch_off)
                 cancel_touch();
         }
         return true;
@@ -1545,6 +1789,13 @@ namespace luil {
         // 초점이 값을 가진 element면 화살표·Page·Home/End는 **그 값의 것**이다.
         // **묶음보다 앞이다** — 값은 초점이 선 자리에서 바뀌고 묶음은 초점을 옮긴다.
         // 텍스트 박스 다음인 것은 묶음과 같은 이유다 (칸 안의 ←/→는 caret의 것이다).
+        const ui_tree* const zoom_tree { surface_tree(snapshot_.focused_surface) };
+        const ui_element* const zoom_focus { zoom_tree != nullptr ? zoom_tree->find(snapshot_.focused) : nullptr };
+        const zoom_source* const zoom { zoom_focus != nullptr && zoom_focus->focusable() ? zoom_focus->zoom() : nullptr };
+        if (zoom != nullptr && zoom->on_key)
+            if (auto actions { zoom->on_key(event) }; actions.has_value())
+                return std::move(*actions);
+
         if (std::optional<std::vector<input_action>> stepped { process_step_key(event) }; stepped.has_value())
             return std::move(*stepped);
 
@@ -2139,6 +2390,7 @@ namespace luil {
     {
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
+        view_drag_.reset();
         pointer_contact_.reset();
         clear_press();
         text_drag_id_ = {};

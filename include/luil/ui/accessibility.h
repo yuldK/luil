@@ -49,6 +49,7 @@ namespace luil {
         dialog,
         alert,
         static_text,
+        pane,
     };
 
     // 범위 값이다 (막대·스크롤 막대·진행률).

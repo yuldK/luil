@@ -19,7 +19,7 @@
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|tabs|groups|toasts|popups|windows|images|network|webview|theme
+//       --page=basics|lists|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
@@ -36,6 +36,7 @@
 #include "demo/toasts_page.h"
 #include "demo/webview_page.h"
 #include "demo/windows_page.h"
+#include "demo/zoom_page.h"
 
 #include "luil/net/http_client.h"
 #include "luil/ui/caption_element.h"
@@ -340,7 +341,7 @@ namespace demo {
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message)
-                    || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message) || theme_.handle(message))
+                    || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message) || zoom_.handle(message) || theme_.handle(message))
                     return;
             }
 
@@ -582,6 +583,7 @@ namespace demo {
                 add_page(page_images, u8"이미지");
                 add_page(page_network, u8"네트워크");
                 add_page(page_webview, u8"웹뷰");
+                add_page(page_zoom, u8"확대 보기");
                 add_page(page_theme, u8"테마");
                 navigation.selected = page_;
                 navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
@@ -614,6 +616,8 @@ namespace demo {
                     return network_.build(width, height, scale);
                 if (page_ == page_webview)
                     return webview_.build(width, height, scale);
+                if (page_ == page_zoom)
+                    return zoom_.build(width, height, scale);
                 if (page_ == page_theme)
                     return theme_.build(width, height, scale);
                 return basics_.build(width, height, scale);
@@ -628,6 +632,7 @@ namespace demo {
             windows_page windows_ {};
             images_page images_ {};
             network_page network_ {};
+            zoom_page zoom_ {};
             theme_page theme_ {};
             webview_page webview_ {};
 
@@ -751,7 +756,6 @@ namespace demo {
             // Esc는 modal host의 dismiss 액션이 처리하고 Enter는 default button이 처리한다.
             // 나머지 키는 앱 단축키를 위해 policy hook으로 전달할 수 있다.
         };
-
 
         // 그림 하나를 고르는 파일 dialog다.
         //

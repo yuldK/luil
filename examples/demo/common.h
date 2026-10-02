@@ -107,6 +107,7 @@ namespace demo {
     inline constexpr std::u8string_view page_images { u8"images" };
     inline constexpr std::u8string_view page_network { u8"network" };
     inline constexpr std::u8string_view page_webview { u8"webview" };
+    inline constexpr std::u8string_view page_zoom { u8"zoom" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
 
     // --- 셸 수준 메시지 ---

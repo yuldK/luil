@@ -134,6 +134,9 @@ namespace luil {
         // 스크롤로 내용이 흐른 뒤 hover를 다시 판정할 때의 기준 시각이다.
         std::chrono::steady_clock::time_point time {};
         std::u8string surface {};
+        bool control { false };
+        bool shift { false };
+        bool horizontal { false };
     };
 
     // OS 파일 끌기가 이 표면에 들어왔다 (os-dragdrop-design.md).
@@ -244,6 +247,8 @@ namespace luil {
         // platform 가상 키(Win32 VK_*)를 이 값 위에 얹어 나른다 —
         // 이름 키에 없는 플랫폼 고유 단축키를 앱이 받는 경로다.
         // 문자를 만드는 키는 글자 키와 같은 규칙(단축키 수정자가 있을 때)으로 온다.
+        zoom_in,
+        zoom_out,
         first_platform_key = 0x1000,
     };
 
