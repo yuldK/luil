@@ -96,7 +96,7 @@ namespace luil {
         }
 
         // 실패 하나를 짓는 자리다 (`make_http_error`가 이미 선 그 모양이다 —
-        // src/net/winhttp_error.cpp:29-37). 갈래와 글이 **언제나 함께** 서므로
+        // src/net/winhttp/winhttp_error.cpp:29-37). 갈래와 글이 **언제나 함께** 서므로
         // 갈래만 바꾸고 글을 두고 오는 자리가 생기지 않는다.
         [[nodiscard]] image_decode_error make_error(const image_decode_error_kind kind, std::u8string message)
         {

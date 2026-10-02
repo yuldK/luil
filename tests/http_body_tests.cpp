@@ -1,10 +1,10 @@
 #include "luil/net/http_body.h"
 
-#include "net/http_text_transcode.h"
-#include "sample_image_bytes.h"
 #include "luil/net/http_media_type.h"
 #include "luil/net/http_message.h"
 #include "luil/text/utf8_text.h"
+#include "net/winhttp/http_text_transcode.h"
+#include "sample_image_bytes.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>

@@ -1,6 +1,6 @@
-#include "net/http_url.h"
+#include "net/winhttp/http_url.h"
 
-#include "net/winhttp_error.h"
+#include "net/winhttp/winhttp_error.h"
 #include "win32/utf8.h"
 
 #include <windows.h>

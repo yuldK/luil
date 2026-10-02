@@ -358,27 +358,31 @@ luil_add_source_filter(luil_files "win32/support"
 
 # net: HTTP 요청과 답이다.
 # 어휘와 몸 판정은 창도 소켓도 모르는 값·순수 함수라 test가 서버 없이 규약 전부를
-# 잠그고, 그 뒤의 WinHTTP 조립이 같은 묶음에 있다.
+# 잠근다. 전송은 OS 백엔드가 맡는다 (net/winhttp).
 #  - `win32` 안이 아닌 이유는 그 계층의 정체가 **창**이어서다 (HWND·메시지 루프·
 #    COM STA·렌더러·IME 어느 것도 HTTP에 없다). `win32` **위**인 이유는 의존
-#    방향이다 — utf8 변환과 오류 글을 그 계층에서 가져다 쓴다.
+#    방향이다 — WinHTTP 백엔드가 utf8 변환과 오류 글을 그 계층에서 가져다 쓴다.
 luil_add_source_filter(luil_files "net"
     net/http_body.cpp
     "${public_headers}/net/http_body.h"
-    net/http_client.cpp
     "${public_headers}/net/http_client.h"
     net/http_media_type.cpp
     "${public_headers}/net/http_media_type.h"
     net/http_message.cpp
-    "${public_headers}/net/http_message.h"
-    net/http_request_context.cpp
-    net/http_request_context.h
-    net/http_text_transcode.cpp
-    net/http_text_transcode.h
-    net/http_url.cpp
-    net/http_url.h
-    net/winhttp_error.cpp
-    net/winhttp_error.h)
+    "${public_headers}/net/http_message.h")
+
+# net/winhttp: WinHTTP 비동기 세션 위의 `http_client`다.
+# URL 가르기, 오류 코드 옮기기, 코드 페이지 변환도 WinHTTP·Win32에 기대므로 여기 있다.
+luil_add_source_filter(luil_files "net/winhttp"
+    net/winhttp/http_request_context.cpp
+    net/winhttp/http_request_context.h
+    net/winhttp/http_text_transcode.cpp
+    net/winhttp/http_text_transcode.h
+    net/winhttp/http_url.cpp
+    net/winhttp/http_url.h
+    net/winhttp/winhttp_client.cpp
+    net/winhttp/winhttp_error.cpp
+    net/winhttp/winhttp_error.h)
 
 # 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
 # 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만

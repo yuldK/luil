@@ -1,6 +1,6 @@
-#include "net/http_request_context.h"
+#include "net/winhttp/http_request_context.h"
 
-#include "net/winhttp_error.h"
+#include "net/winhttp/winhttp_error.h"
 #include "win32/utf8.h"
 
 #include <algorithm>
