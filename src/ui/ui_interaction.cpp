@@ -108,7 +108,7 @@ namespace luil {
         // tooltip이 이전 대상을 따라 쓸려 다니지 않게 한다.
         // 끌기 중에는 hover가 잡은 대상에 남아야 하므로 건드리지 않는다.
         if (pointer_inside_ && pointer_drag_id_ == ui_element_id {} && snapshot_.drag.has_value() == false)
-            update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_);
+            update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_, false);
     }
 
     void interaction_controller::set_surface_trees(surface_tree_list surfaces) noexcept
@@ -126,7 +126,7 @@ namespace luil {
         // 표면 내용이 바뀌었으면 그 위에 머문 포인터의 hover도 다시 판정한다.
         // 주 tree를 받을 때와 같은 규칙이다.
         if (pointer_inside_ && last_pointer_surface_.empty() == false && pointer_drag_id_ == ui_element_id {} && snapshot_.drag.has_value() == false)
-            update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_);
+            update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_, false);
     }
 
     void interaction_controller::clear_gone_surface_gestures() noexcept
@@ -340,6 +340,9 @@ namespace luil {
         if (event.device == pointer_device::touch)
             return process_touch_move(event);
 
+        // **포인터가 실제로 움직였는가.** Win32는 창이 바뀌거나 눌린 뒤에 같은 자리의 이동
+        // 메시지를 다시 보낸다. 그 메시지로 tooltip 시계를 세우면 손대지 않은 자리에 tooltip이 선다.
+        const bool moved { pointer_inside_ == false || event.x != last_pointer_x_ || event.y != last_pointer_y_ || event.surface != last_pointer_surface_ };
         pointer_inside_ = true;
         last_pointer_x_ = event.x;
         last_pointer_y_ = event.y;
@@ -350,13 +353,13 @@ namespace luil {
         // 잡은 전용 조작(스크롤 막대)을 다른 장치가 끌면 안 된다.
         if (touch_.has_value())
         {
-            update_hover(event.x, event.y, event.time);
+            update_hover(event.x, event.y, event.time, moved);
             return {};
         }
 
         if (pointer_contact_.has_value() && (pointer_contact_->device != event.device || pointer_contact_->id != event.pointer_id || pointer_contact_->surface != event.surface))
         {
-            update_hover(event.x, event.y, event.time);
+            update_hover(event.x, event.y, event.time, moved);
             return {};
         }
 
@@ -409,7 +412,7 @@ namespace luil {
         const ui_tree* const tree { surface_tree(event.surface) };
         if (tree == nullptr)
         {
-            update_hover(event.x, event.y, event.time);
+            update_hover(event.x, event.y, event.time, moved);
             return {};
         }
 
@@ -418,7 +421,7 @@ namespace luil {
         if (snapshot_.drag.has_value())
         {
             update_drag(*tree, event.x, event.y);
-            update_hover(event.x, event.y, event.time);
+            update_hover(event.x, event.y, event.time, moved);
             return {};
         }
 
@@ -438,7 +441,7 @@ namespace luil {
             drag_candidate_ = false;
         }
 
-        update_hover(event.x, event.y, event.time);
+        update_hover(event.x, event.y, event.time, moved);
         return {};
     }
 
@@ -1959,7 +1962,7 @@ namespace luil {
         return (*action)(ui_action_context { element.id(), x, y, control });
     }
 
-    void interaction_controller::update_hover(const float x, const float y, const std::chrono::steady_clock::time_point time)
+    void interaction_controller::update_hover(const float x, const float y, const std::chrono::steady_clock::time_point time, const bool moved)
     {
         // hover는 포인터가 마지막으로 있던 표면의 tree로 판정한다.
         const ui_tree* const tree { surface_tree(last_pointer_surface_) };
@@ -1970,7 +1973,13 @@ namespace luil {
         // 옮겨 간 것을 "그대로"로 읽어 표식만 낡는다.
         const bool none { hovered == ui_element_id {} };
         if (hovered == snapshot_.hovered && (none || last_pointer_surface_ == snapshot_.hovered_surface))
+        {
+            // 내용이 바뀌어 포인터 밑에 온 element는 시계 없이 서 있다. 그 위에서 포인터를
+            // 움직이면 그때부터 잰다 — 사람이 그 자리를 가리켰다는 첫 증거다.
+            if (moved && none == false && snapshot_.hover_started_at.has_value() == false)
+                snapshot_.hover_started_at = time;
             return;
+        }
         snapshot_.hovered = hovered;
         if (none)
         {
@@ -1980,7 +1989,14 @@ namespace luil {
         else
         {
             snapshot_.hovered_surface = last_pointer_surface_;
-            snapshot_.hover_started_at = time;
+            // **tooltip의 시계는 포인터가 움직여 들어왔을 때만 선다.** 포인터가 머문 채
+            // 화면이 다시 지어져(스크롤·클릭 뒤의 배치 변화) 밑의 element가 바뀐 것은 hover
+            // 강조만 옮긴다. 마지막 이동의 옛 시각으로 시계를 세우면 지연이 이미 지나 있어,
+            // 가리키지도 않은 element의 tooltip이 곧바로 선다.
+            if (moved)
+                snapshot_.hover_started_at = time;
+            else
+                snapshot_.hover_started_at.reset();
         }
     }
 

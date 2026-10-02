@@ -250,6 +250,11 @@ TEST_CASE("Hover starts the tooltip clock and leaves with the pointer", "[ui][in
     REQUIRE(controller.snapshot().hovered == luil::ui_element_id { kind_button, u8"one" });
     REQUIRE(controller.snapshot().hover_started_at == at(100));
 
+    // 같은 대상의 발행본 교체와 같은 자리 메시지는 원래 지연을 보존한다.
+    controller.set_tree(single_button_tree());
+    static_cast<void>(controller.process(luil::pointer_moved_event { 20.0f, 15.0f, at(200) }));
+    REQUIRE(controller.snapshot().hover_started_at == at(100));
+
     static_cast<void>(controller.process(luil::pointer_left_event {}));
     REQUIRE(controller.snapshot().hovered == luil::ui_element_id {});
     REQUIRE(controller.snapshot().hover_started_at.has_value() == false);
@@ -500,8 +505,8 @@ TEST_CASE("Menu keys highlight items and escape asks the policy to close", "[ui]
     {
         auto item { std::make_unique<test_panel>(luil::ui_element_id { kind_menu_item, name }) };
         item->arrange({ { 10.0f, name == std::u8string_view { u8"first" } ? 10.0f : 40.0f, 100.0f, 20.0f }, 1.0f });
-        item->set_action(luil::ui_trigger::left_click,
-            [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"item" } } } }; });
+        item->set_action(
+            luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"item" } } } }; });
         item->set_enabled(enabled);
         menu->add(std::move(item));
     }
@@ -546,9 +551,8 @@ TEST_CASE("Dragging past the threshold starts a drag and dropping runs the targe
     target->arrange({ { 100.0f, 100.0f, 50.0f, 50.0f }, 1.0f });
     luil::drop_target drop {};
     drop.accepts = [](const luil::drag_payload& payload) { return payload.dragged_owner == u8"dragme"; };
-    drop.on_drop = [](const luil::drag_payload&, const luil::ui_action_context&) -> std::vector<luil::input_action> {
-        return { luil::input_action { luil::app_message { fake_intent { u8"dropped" } } } };
-    };
+    drop.on_drop
+        = [](const luil::drag_payload&, const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"dropped" } } } }; };
     target->set_drop_target(std::move(drop));
 
     root->add(std::move(source));
@@ -1004,9 +1008,8 @@ namespace {
         // 누를 것이다.
         auto button { std::make_unique<test_panel>(luil::ui_element_id { kind_button, u8"tool-button" }) };
         button->arrange({ { 100.0f, 0.0f, 60.0f, 30.0f }, 1.0f });
-        button->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> {
-            return { luil::input_action { luil::app_message { fake_intent { u8"tool-click" } } } };
-        });
+        button->set_action(luil::ui_trigger::left_click,
+            [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"tool-click" } } } }; });
         root->add(std::move(button));
 
         // 잡을 글이다.
@@ -2665,8 +2668,7 @@ TEST_CASE("Enter and Escape from a secondary window do not reach the main window
     auto trap { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"modal" }) };
     trap->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
     trap->set_focus_trap(true);
-    trap->set_dismiss_action(
-        [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"close-dialog" } } } }; });
+    trap->set_dismiss_action([](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"close-dialog" } } } }; });
     // 가둠은 자리를 이름 짓지 않는다 — 자동 초점이 서면 "초점 없음"의 길을
     // 재지 못한다 (focus-entry-design.md).
     auto confirm { std::make_unique<test_panel>(luil::ui_element_id { kind_button, u8"confirm" }) };
@@ -2931,9 +2933,8 @@ TEST_CASE("Typing letters walks a focus group by label", "[ui][interaction][focu
     controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
 
     const auto focused = [&controller] { return controller.snapshot().focused; };
-    const auto type = [&controller](const char32_t character, const std::chrono::milliseconds when) {
-        return controller.process(luil::character_typed_event { character, at(static_cast<int>(when.count())) });
-    };
+    const auto type
+        = [&controller](const char32_t character, const std::chrono::milliseconds when) { return controller.process(luil::character_typed_event { character, at(static_cast<int>(when.count())) }); };
 
     static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::tab, false, false, false, false, at(0) }));
     REQUIRE(focused() == luil::ui_element_id { kind_button, u8"apple" });
@@ -3352,9 +3353,7 @@ TEST_CASE("A sequence gap in the raw input queue cancels the in-flight press", "
     recording_policy policy {};
     REQUIRE(tree_slot.publish(single_button_tree()) == 1u);
 
-    const auto pump_main = [&] {
-        luil::run_ui_input_pump(input_inbox, tree_slot, surface_tree_slot, app_inbox, interaction_slot, {}, &policy);
-    };
+    const auto pump_main = [&] { luil::run_ui_input_pump(input_inbox, tree_slot, surface_tree_slot, app_inbox, interaction_slot, {}, &policy); };
     std::thread pump { pump_main };
 
     const auto wait_until = [](const auto& condition) {
@@ -3407,4 +3406,57 @@ TEST_CASE("A sequence gap in the raw input queue cancels the in-flight press", "
 
     input_inbox.close();
     pump.join();
+}
+
+TEST_CASE("A tooltip clock starts only when the pointer really moves onto an element", "[ui][interaction][hover]")
+{
+    // 같은 자리에 다른 버튼이 선 tree다. 클릭이나 스크롤 뒤 배치가 바뀌어 포인터 밑의 element가 바뀐 것과 같다.
+    const auto other_button_tree = [] {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        auto button { std::make_unique<test_panel>(luil::ui_element_id { kind_button, u8"two" }) };
+        button->arrange({ { 10.0f, 10.0f, 40.0f, 20.0f }, 1.0f });
+        button->set_tooltip(u8"two");
+        root->add(std::move(button));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    };
+    luil::interaction_controller controller {};
+    controller.set_tree(single_button_tree());
+    static_cast<void>(controller.process(luil::pointer_moved_event { 20.0f, 15.0f, at(100) }));
+    REQUIRE(controller.snapshot().hover_started_at == at(100));
+
+    // 포인터가 머문 채 밑의 element가 바뀌면 hover만 옮기고 시계는 세우지 않는다.
+    // 옛 이동 시각으로 세우면 지연이 이미 지나 가리키지 않은 tooltip이 곧바로 선다.
+    controller.set_tree(other_button_tree());
+    REQUIRE(controller.snapshot().hovered == luil::ui_element_id { kind_button, u8"two" });
+    REQUIRE(controller.snapshot().hover_started_at.has_value() == false);
+
+    // 같은 자리로 되풀이된 이동 메시지는 움직임이 아니다.
+    static_cast<void>(controller.process(luil::pointer_moved_event { 20.0f, 15.0f, at(5000) }));
+    REQUIRE(controller.snapshot().hover_started_at.has_value() == false);
+
+    // 그 위에서 실제로 움직이면 그때부터 잰다.
+    static_cast<void>(controller.process(luil::pointer_moved_event { 22.0f, 15.0f, at(6000) }));
+    REQUIRE(controller.snapshot().hover_started_at == at(6000));
+
+    // 같은 대상 안의 이동은 지연을 다시 세우지 않는다. 떠났다가 같은 자리로 들어오면 새 지연이다.
+    static_cast<void>(controller.process(luil::pointer_moved_event { 23.0f, 15.0f, at(7000) }));
+    REQUIRE(controller.snapshot().hover_started_at == at(6000));
+    static_cast<void>(controller.process(luil::pointer_left_event {}));
+    REQUIRE(controller.snapshot().hover_started_at.has_value() == false);
+    static_cast<void>(controller.process(luil::pointer_moved_event { 23.0f, 15.0f, at(8000) }));
+    REQUIRE(controller.snapshot().hover_started_at == at(8000));
+
+    // 좌표가 같아도 표면을 옮기면 새 진입이다. 보조 표면의 tree 교체도 주 창과 같은 규칙이다.
+    controller.set_surface_trees({ { u8"floating", single_button_tree() } });
+    static_cast<void>(controller.process(luil::pointer_moved_event { .x = 23.0f, .y = 15.0f, .time = at(9000), .surface = u8"floating" }));
+    REQUIRE(controller.snapshot().hover_started_at == at(9000));
+    controller.set_surface_trees({ { u8"floating", other_button_tree() } });
+    REQUIRE(controller.snapshot().hovered == luil::ui_element_id { kind_button, u8"two" });
+    REQUIRE(controller.snapshot().hovered_surface == u8"floating");
+    REQUIRE(controller.snapshot().hover_started_at.has_value() == false);
+    static_cast<void>(controller.process(luil::pointer_moved_event { .x = 23.0f, .y = 15.0f, .time = at(10000), .surface = u8"floating", .device = luil::pointer_device::pen }));
+    REQUIRE(controller.snapshot().hover_started_at.has_value() == false);
+    static_cast<void>(controller.process(luil::pointer_moved_event { .x = 24.0f, .y = 15.0f, .time = at(11000), .surface = u8"floating", .device = luil::pointer_device::pen }));
+    REQUIRE(controller.snapshot().hover_started_at == at(11000));
 }

@@ -514,7 +514,9 @@ namespace luil {
         // surface가 가리키는 tree다.
         // 비어 있으면 주 tree고, 모르는 표면 id면 nullptr다.
         [[nodiscard]] const ui_tree* surface_tree(const std::u8string& surface) const noexcept;
-        void update_hover(float x, float y, std::chrono::steady_clock::time_point time);
+        // `moved`는 포인터가 실제로 움직였는가다. 거짓이면(tree 재판정) hover만 옮기고
+        // tooltip 시계는 세우지 않는다.
+        void update_hover(float x, float y, std::chrono::steady_clock::time_point time, bool moved);
         void clear_press() noexcept;
         // 사라진 표면에서 시작한 누름·끌기를 거둔다.
         // 표면 목록을 받은 **직후**에 부른다 — 그 표면에서 시작한 몸짓은 끝낼
