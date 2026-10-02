@@ -403,8 +403,19 @@ namespace luil {
         std::chrono::steady_clock::time_point time {};
     };
 
-    using raw_input_event = std::variant<pointer_moved_event, pointer_pressed_event, pointer_released_event, pointer_left_event, surface_focus_lost_event, surface_focus_gained_event,
-        mouse_wheel_event, file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event, pointer_cancelled_event>;
+    // 표면에서 보이는 자리가 줄었다 (휴대폰의 소프트 키보드가 올라왔다).
+    // 초점이 그 표면에 있으면 다시 드러내 달라는 뜻이다 — 키보드로 옮긴 초점의 자동 스크롤
+    // (`interaction_policy::on_focus_moved`)과 같은 길을 탄다. 눌러서 잡은 초점도 드러낸다.
+    // 눌렀을 때는 보이던 칸이 키보드 밑으로 들어갔을 수 있어서다.
+    //  - 플랫폼은 줄어든 크기로 다시 지은 frame이 온 뒤에 보낸다. 그래야 줄어든 창으로 잰다.
+    struct focus_reveal_event
+    {
+        std::u8string surface {};
+    };
+
+    using raw_input_event
+        = std::variant<pointer_moved_event, pointer_pressed_event, pointer_released_event, pointer_left_event, surface_focus_lost_event, surface_focus_gained_event, mouse_wheel_event,
+            file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event, pointer_cancelled_event, focus_reveal_event>;
 
     // UI thread에서만 실행할 수 있는 창 명령이다.
     // 창 조작은 앱 상태가 아니므로 logic을 거치지 않는다.

@@ -3080,6 +3080,30 @@ TEST_CASE("Moving the focus by keyboard asks the policy to reveal it", "[ui][int
     REQUIRE(policy.calls == 1);
 }
 
+TEST_CASE("A shrunken surface asks to reveal the focus it holds", "[ui][interaction][focus]")
+{
+    revealing_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(single_button_tree());
+
+    // 초점이 없으면 드러낼 것이 없다.
+    REQUIRE(controller.process(luil::focus_reveal_event {}).empty());
+    REQUIRE(policy.calls == 0);
+
+    // 초점이 서면 그 초점을 드러내 달라고 묻는다 (옮겨진 것이 아니어도).
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::tab, false, false, false, false, at(0) }));
+    REQUIRE(policy.calls == 1);
+    const auto actions { controller.process(luil::focus_reveal_event {}) };
+    REQUIRE(policy.calls == 2);
+    REQUIRE(policy.last_focused == luil::ui_element_id { kind_button, u8"one" });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"reveal");
+
+    // 다른 표면이 줄어든 것은 이 초점과 상관없다.
+    REQUIRE(controller.process(luil::focus_reveal_event { u8"popup" }).empty());
+    REQUIRE(policy.calls == 2);
+}
+
 TEST_CASE("An access focus request stands the focus and asks to reveal it", "[ui][interaction][focus][access]")
 {
     revealing_policy policy {};

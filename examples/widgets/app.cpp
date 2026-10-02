@@ -247,6 +247,12 @@ namespace widgets {
         return luil::make_app_action(composition_intent { event });
     }
 
+    std::vector<luil::input_action> widgets_policy::on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused)
+    {
+        // 섹션 창이 자기 스크롤 메시지를 들고 있어(`scroll_source`) 표가 필요 없다.
+        return luil::route_reveal(tree, focused);
+    }
+
     luil::app_message widgets_delegate::make_window_metrics_message(const float width, const float height, const float scale)
     {
         return luil::app_message { metrics_intent { width, height, scale } };

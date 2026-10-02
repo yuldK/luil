@@ -275,6 +275,15 @@ namespace luil {
                     return process_access_focus(value);
                 else if constexpr (std::is_same_v<value_type, pointer_cancelled_event>)
                     return process_cancel(value);
+                else if constexpr (std::is_same_v<value_type, focus_reveal_event>)
+                {
+                    // 초점이 그 표면에 있을 때만이다. 초점이 옮겨 간 것은 아니라 아래의 전후
+                    // 비교로는 서지 않으므로 여기서 직접 묻는다.
+                    const ui_tree* const tree { surface_tree(value.surface) };
+                    if (policy_ == nullptr || tree == nullptr || snapshot_.focused == ui_element_id {} || snapshot_.focused_surface != value.surface)
+                        return {};
+                    return policy_->on_focus_moved(*tree, snapshot_.focused);
+                }
                 else if constexpr (std::is_same_v<value_type, character_typed_event>)
                 {
                     // 문자 입력은 초점을 가진 텍스트 박스로만 간다.

@@ -209,6 +209,8 @@ namespace widgets {
         // 라이브러리가 만든 편집·조합 요청을 앱 메시지 봉투에 담는다.
         [[nodiscard]] luil::input_action make_text_edit_action(const luil::text_edit_request& request) const override;
         [[nodiscard]] luil::input_action make_text_composition_action(const luil::text_composition_event& event) const override;
+        // 초점이 섹션 창 밖에 있으면 창을 흘려 드러낸다 (Tab, 휴대폰의 소프트 키보드).
+        [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override;
     };
 
     // --- UI thread ---
