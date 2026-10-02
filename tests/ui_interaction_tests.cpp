@@ -199,6 +199,43 @@ namespace {
     {
         return std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { milliseconds };
     }
+
+    // 흘리는 창(배율 2) 안에 클릭과 우클릭을 단 카드 하나를 둔다.
+    // 창의 스크롤은 받은 델타를 이름에 싣는다 — test가 부호와 크기를 읽는다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> scrolling_card_tree(std::vector<float>* const scrolled, const bool horizontal = false)
+    {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 2.0f });
+        auto area { std::make_unique<test_panel>(luil::ui_element_id { kind_menu, u8"area" }) };
+        area->arrange({ { 0.0f, 0.0f, 400.0f, 300.0f }, 2.0f });
+        area->set_scroll_source(luil::scroll_source {
+            [scrolled](const float delta) {
+                scrolled->push_back(delta);
+                return luil::make_app_action(fake_intent { u8"scroll" });
+            },
+            2.0f,
+            horizontal,
+        });
+        auto card { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"card" }) };
+        card->arrange({ { 20.0f, 20.0f, 100.0f, 140.0f }, 2.0f });
+        card->set_action(
+            luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"click" } } } }; });
+        card->set_action(
+            luil::ui_trigger::right_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"menu" } } } }; });
+        area->add(std::move(card));
+        root->add(std::move(area));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    }
+
+    // 누름을 듣는 policy다. 누른 element의 owner를 이름에 싣는다.
+    class press_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::vector<luil::input_action> on_press(const luil::ui_tree&, const luil::ui_element& element, const luil::pointer_pressed_event&) override
+        {
+            return { luil::input_action { luil::app_message { fake_intent { u8"press:" + element.id().owner } } } };
+        }
+    };
 } // namespace
 
 TEST_CASE("app_message round trips a typed value and rejects other types", "[ui][message]")
@@ -3329,4 +3366,149 @@ TEST_CASE("A sequence gap in the raw input queue cancels the in-flight press", "
 
     input_inbox.close();
     pump.join();
+}
+
+TEST_CASE("A quick vertical swipe scrolls the area under the press instead of clicking", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(scrolling_card_tree(&scrolled));
+
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(0) }));
+    // 임계 안의 떨림은 아무것도 흘리지 않는다.
+    REQUIRE(controller.process(luil::pointer_moved_event { 60.0f, 114.0f, at(40) }).empty());
+    // 손가락을 올리면 내용이 따라 올라간다 — 물리 20픽셀은 배율 2에서 논리 10이다.
+    auto actions { controller.process(luil::pointer_moved_event { 60.0f, 100.0f, at(80) }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"scroll");
+    REQUIRE(scrolled == std::vector<float> { 10.0f });
+    REQUIRE(controller.snapshot().pressed == luil::ui_element_id {});
+    // 이어지는 이동은 지난 자리와의 차이만 흘린다. 내리면 거꾸로다.
+    static_cast<void>(controller.process(luil::pointer_moved_event { 70.0f, 140.0f, at(120) }));
+    REQUIRE(scrolled.back() == -20.0f);
+    // 떼는 것은 클릭이 아니다.
+    REQUIRE(controller.process(luil::pointer_released_event { 70.0f, 140.0f, luil::pointer_button::left, at(160) }).empty());
+
+    // 흘리기가 끝난 뒤의 짧은 누름은 다시 클릭이다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(400) }));
+    actions = controller.process(luil::pointer_released_event { 61.0f, 121.0f, luil::pointer_button::left, at(450) });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"click");
+}
+
+TEST_CASE("A late or sideways drag is not a scroll", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(scrolling_card_tree(&scrolled));
+
+    // 잠시 잡고 있다 끈 것은 손짓이 아니다. 같은 카드 위에서 떼면 지금까지처럼 클릭이다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(0) }));
+    REQUIRE(controller.process(luil::pointer_moved_event { 60.0f, 90.0f, at(450) }).empty());
+    auto actions { controller.process(luil::pointer_released_event { 60.0f, 90.0f, luil::pointer_button::left, at(500) }) };
+    REQUIRE(scrolled.empty());
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"click");
+
+    // 세로 창을 옆으로 쓸면 흘리지 않는다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(1000) }));
+    REQUIRE(controller.process(luil::pointer_moved_event { 90.0f, 110.0f, at(1050) }).empty());
+    REQUIRE(scrolled.empty());
+}
+
+TEST_CASE("A horizontal strip follows a sideways swipe", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(scrolling_card_tree(&scrolled, true));
+
+    // 가로 창을 위로 쓸면 흘리지 않는다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(0) }));
+    REQUIRE(controller.process(luil::pointer_moved_event { 62.0f, 90.0f, at(50) }).empty());
+    static_cast<void>(controller.process(luil::pointer_released_event { 62.0f, 90.0f, luil::pointer_button::left, at(100) }));
+    REQUIRE(scrolled.empty());
+
+    // 왼쪽으로 밀면 내용이 따라가 오른쪽의 카드가 들어온다 — 아래로 굴린 휠과 같은 쪽이다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 80.0f, 120.0f, luil::pointer_button::left, at(1000) }));
+    const auto actions { controller.process(luil::pointer_moved_event { 50.0f, 124.0f, at(1050) }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(scrolled == std::vector<float> { 15.0f });
+    REQUIRE(controller.process(luil::pointer_released_event { 50.0f, 124.0f, luil::pointer_button::left, at(1100) }).empty());
+}
+
+TEST_CASE("A long press runs the right click action and a short one clicks", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(scrolling_card_tree(&scrolled));
+
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(0) }));
+    // 손가락의 떨림은 봐준다.
+    static_cast<void>(controller.process(luil::pointer_moved_event { 64.0f, 123.0f, at(300) }));
+    auto actions { controller.process(luil::pointer_released_event { 64.0f, 123.0f, luil::pointer_button::left, at(700) }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"menu");
+
+    // 메뉴를 연 누름은 연타의 첫 번째가 아니다. 다음 짧은 누름은 그냥 클릭이다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(800) }));
+    actions = controller.process(luil::pointer_released_event { 60.0f, 120.0f, luil::pointer_button::left, at(850) });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"click");
+
+    // 우클릭 액션이 없는 element를 길게 누르면 늦게 뗀 클릭이다.
+    controller.set_tree(single_button_tree());
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 15.0f, luil::pointer_button::left, at(2000) }));
+    actions = controller.process(luil::pointer_released_event { 20.0f, 15.0f, luil::pointer_button::left, at(3000) });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"click");
+}
+
+TEST_CASE("The policy hears which element a left press landed on before the click", "[ui][interaction][policy]")
+{
+    press_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(single_button_tree());
+
+    auto actions { controller.process(luil::pointer_pressed_event { 20.0f, 15.0f, luil::pointer_button::left, at(0) }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"press:one");
+    actions = controller.process(luil::pointer_released_event { 20.0f, 15.0f, luil::pointer_button::left, at(50) });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"click");
+
+    // 우클릭 누름은 듣지 않는다.
+    REQUIRE(controller.process(luil::pointer_pressed_event { 20.0f, 15.0f, luil::pointer_button::right, at(100) }).empty());
+}
+
+TEST_CASE("A long press on a drag handle still opens its menu", "[ui][interaction][touch]")
+{
+    // 지도 위 장소 그림처럼 누른 순간부터 제 끌기인 element다. 우클릭 액션을 함께 단다.
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto tile { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"tile" }) };
+    tile->arrange({ { 10.0f, 10.0f, 100.0f, 100.0f }, 1.0f });
+    luil::pointer_drag_target drag {};
+    drag.on_move
+        = [](const luil::ui_action_context&, const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"move" } } } }; };
+    tile->set_pointer_drag_target(std::move(drag));
+    tile->set_action(
+        luil::ui_trigger::right_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"menu" } } } }; });
+    root->add(std::move(tile));
+    luil::interaction_controller controller {};
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+
+    // 짧게 누르는 것은 지금처럼 아무 일도 없다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, 50.0f, luil::pointer_button::left, at(0) }));
+    REQUIRE(controller.process(luil::pointer_released_event { 50.0f, 50.0f, luil::pointer_button::left, at(100) }).empty());
+
+    // 끌지 않고 오래 누르면 메뉴다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, 50.0f, luil::pointer_button::left, at(1000) }));
+    auto actions { controller.process(luil::pointer_released_event { 52.0f, 51.0f, luil::pointer_button::left, at(1700) }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"menu");
+
+    // 끌어 옮긴 뒤 오래 있다 떼는 것은 끌기의 끝이다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, 50.0f, luil::pointer_button::left, at(3000) }));
+    static_cast<void>(controller.process(luil::pointer_moved_event { 80.0f, 50.0f, at(3100) }));
+    REQUIRE(controller.process(luil::pointer_released_event { 80.0f, 50.0f, luil::pointer_button::left, at(4000) }).empty());
 }

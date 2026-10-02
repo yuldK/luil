@@ -237,6 +237,19 @@ namespace luil {
         {
             static_cast<void>(element);
         }
+
+        // 활성 element를 왼쪽 버튼으로 누른 순간이다 (클릭이 확정되기 전).
+        // 어느 판을 만졌는가로 화면을 바꾸는 앱이 쓴다 — 판 안의 무엇을 눌렀든 같은
+        // 답이어야 해서 element마다 액션을 다는 대신 `ui_tree::within`으로 묻는다.
+        //  - 돌려준 액션은 그 누름의 다른 액션(끌기 손잡이의 누름)보다 앞선다.
+        //  - 기본이 빈 목록인 것이 계약이다 (touch-gesture-design.md).
+        [[nodiscard]] virtual std::vector<input_action> on_press(const ui_tree& tree, const ui_element& element, const pointer_pressed_event& event)
+        {
+            static_cast<void>(tree);
+            static_cast<void>(element);
+            static_cast<void>(event);
+            return {};
+        }
     };
 
     struct interaction_config
@@ -247,6 +260,15 @@ namespace luil {
         float double_click_distance { 4.0f };
         // 이 거리(논리 픽셀 × scale 없이 창 좌표)만큼 끌면 클릭 대신 drag다.
         float drag_start_distance { 6.0f };
+        // 누른 뒤 **짧은 시간 안에** 이 거리만큼 세로로 끌면 클릭 대신 그 자리의 흘리는 창을
+        // 끌어 흘린다 — 휠이 없는 손가락·원격 화면의 스크롤이다 (touch-gesture-design.md).
+        //  - 늦게 끌기 시작하면 지금까지처럼 drag·클릭으로 간다. 시간이 손짓과 잡기를 가른다.
+        //  - 거리가 0이면 끈다. drag보다 넉넉한 것은 손가락이 누르는 동안 떨리기 때문이다.
+        float pan_start_distance { 12.0f };
+        std::chrono::milliseconds pan_start_time { 400 };
+        // 움직이지 않고 이만큼 눌렀다 떼면 우클릭이다 (우클릭 단추가 없는 손가락).
+        // 우클릭 액션이 없는 element는 그대로 클릭이다. 0이면 끈다.
+        std::chrono::milliseconds long_press_time { 600 };
         // 연달아 친 글자를 한 질의로 묶는 한계다 (묶음 안 글자 탐색).
         // 이 시간이 지나 다시 치면 앞의 글자는 잊고 새 질의가 시작된다.
         std::chrono::milliseconds typeahead_reset_time { 1000 };
@@ -302,6 +324,12 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> process_move(const pointer_moved_event& event);
         [[nodiscard]] std::vector<input_action> process_press(const pointer_pressed_event& event);
         [[nodiscard]] std::vector<input_action> process_release(const pointer_released_event& event);
+        // 흘리는 중의 이동이다. 마지막 자리와의 차이를 그 창의 스크롤로 낸다.
+        [[nodiscard]] std::vector<input_action> process_pan(const pointer_moved_event& event);
+        // 누름이 흘리기로 바뀌는가를 본다. 바뀌면 누름을 거두고 첫 스크롤을 낸다.
+        [[nodiscard]] std::optional<std::vector<input_action>> start_pan(const pointer_moved_event& event);
+        // 이 뗌이 길게 누르기(우클릭)인가. 누름을 거두기 전에 묻는다 — 누른 자리·시각을 읽는다.
+        [[nodiscard]] bool long_press(const pointer_released_event& event) const noexcept;
         void process_file_drag_entered(const file_drag_entered_event& event);
         void process_file_drag_moved(const file_drag_moved_event& event);
         [[nodiscard]] std::vector<input_action> process_key(const key_pressed_event& event);
@@ -412,6 +440,17 @@ namespace luil {
         float pointer_drag_x_ { 0.0f };
         float pointer_drag_y_ { 0.0f };
 
+        // 손가락으로 끌어 흘리는 창이다 (`interaction_config::pan_start_distance`).
+        // 값이 있으면 포인터 이동이 그 창의 스크롤이 되고, 뗌은 클릭이 아니다.
+        //  - 누름(`pressed_id_`)은 흘리기가 서는 순간 거둔다. 그래서 표면도 따로 든다.
+        //  - 자리는 창의 축(가로면 x, 세로면 y)으로 마지막에 흘린 곳이다. 이동마다 그 차이만큼 흘린다.
+        ui_element_id pan_id_ {};
+        std::u8string pan_surface_ {};
+        bool pan_horizontal_ { false };
+        float pan_position_ { 0.0f };
+        // 누름이 흘리기가 될 수 있는가. 끌기 손잡이를 누른 것이 아니고, 아직 임계를 넘지 않았다.
+        bool pan_candidate_ { false };
+
         // 누름이 시작된 표면이다.
         // 잡은 대상을 tree가 다시 빌드된 뒤에도 같은 표면에서 찾는다.
         std::u8string pressed_surface_ {};
@@ -448,6 +487,8 @@ namespace luil {
         pointer_button pressed_button_ { pointer_button::none };
         float pressed_x_ { 0.0f };
         float pressed_y_ { 0.0f };
+        // 누른 시각이다. 흘리기의 시간 창과 길게 누르기를 잰다.
+        std::chrono::steady_clock::time_point pressed_time_ {};
         bool drag_candidate_ { false };
 
         // 더블 클릭 판정: 직전 클릭의 대상·표면·시각·위치다.

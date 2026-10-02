@@ -27,6 +27,9 @@ namespace luil {
             }
         }
 
+        // 좌표를 덮는 흘리는 창이다 (휠의 임자 찾기, 아래에 정의).
+        [[nodiscard]] const ui_element* wheel_owner_at(const ui_element& element, float x, float y);
+
         [[nodiscard]] float distance_between(const float from_x, const float from_y, const float to_x, const float to_y) noexcept
         {
             const float delta_x { to_x - from_x };
@@ -102,6 +105,12 @@ namespace luil {
         {
             text_drag_id_ = {};
             clear_press();
+        }
+        // 흘리던 창도 그 표면의 것이다. 누름을 거둔 뒤라 표면을 따로 들고 있다.
+        if (pan_id_ != ui_element_id {} && pan_surface_.empty() == false && surface_tree(pan_surface_) == nullptr)
+        {
+            pan_id_ = {};
+            pan_surface_.clear();
         }
 
         // 끌기의 표식은 `snapshot_.drag` 안에 있어 함께 사라진다 —
@@ -277,6 +286,10 @@ namespace luil {
         last_pointer_time_ = event.time;
         last_pointer_surface_ = event.surface;
 
+        // 손가락으로 끌어 흘리는 중이면 이동은 전부 그 창의 스크롤이다.
+        if (pan_id_ != ui_element_id {})
+            return process_pan(event);
+
         // 잡은 대상은 누름이 시작된 표면에서 다시 찾는다.
         // 캡처 중에는 이벤트도 같은 표면에서 온다.
         const ui_tree* const pressed_tree { surface_tree(pressed_surface_) };
@@ -329,6 +342,10 @@ namespace luil {
             return {};
         }
 
+        // 누르자마자 세로로 끌면 클릭도 drag도 아닌 스크롤이다.
+        if (std::optional<std::vector<input_action>> panned { start_pan(event) }; panned.has_value())
+            return std::move(*panned);
+
         // 눌린 채 임계 거리를 넘으면 클릭 대신 drag가 시작된다.
         if (drag_candidate_ && pressed_button_ == pointer_button::left && distance_between(pressed_x_, pressed_y_, event.x, event.y) >= config_.drag_start_distance)
         {
@@ -347,6 +364,65 @@ namespace luil {
 
         update_hover(event.x, event.y, event.time);
         return {};
+    }
+
+    std::optional<std::vector<input_action>> interaction_controller::start_pan(const pointer_moved_event& event)
+    {
+        if (pan_candidate_ == false || pressed_button_ != pointer_button::left)
+            return std::nullopt;
+        const float dx { event.x - pressed_x_ };
+        const float dy { event.y - pressed_y_ };
+        if (distance_between(pressed_x_, pressed_y_, event.x, event.y) < config_.pan_start_distance)
+            return std::nullopt;
+        // 임계를 넘는 순간 한 번만 묻는다. 그때가 늦었거나 창의 축과 어긋났으면 이 누름은 끝까지 흘리기가 아니다.
+        //  - 시간이 손짓과 잡기를 가른다. 카드를 잡고 잠시 있다 끄는 것은 drag이고,
+        //    누르자마자 쓸어 올리는 것은 스크롤이다 (touch-gesture-design.md).
+        //  - 축은 창이 말한다 (`scroll_source::horizontal`). 세로 목록을 옆으로 쓸면 흘리지 않는다.
+        pan_candidate_ = false;
+        if (event.time - pressed_time_ > config_.pan_start_time)
+            return std::nullopt;
+        const ui_tree* const tree { surface_tree(pressed_surface_) };
+        const ui_element* const root { tree != nullptr ? tree->root() : nullptr };
+        const ui_element* const owner { root != nullptr ? wheel_owner_at(*root, pressed_x_, pressed_y_) : nullptr };
+        // 휠을 삼키기만 하는 것(scrim·메뉴)이 걸렸으면 흘릴 창이 없다. 누름은 그대로 둔다.
+        if (owner == nullptr || owner->scroll() == nullptr || owner->scroll()->scroll == nullptr)
+            return std::nullopt;
+        const bool horizontal { owner->scroll()->horizontal };
+        if (horizontal ? std::abs(dx) < std::abs(dy) : std::abs(dy) < std::abs(dx))
+            return std::nullopt;
+        pan_id_ = owner->id();
+        pan_surface_ = pressed_surface_;
+        pan_horizontal_ = horizontal;
+        pan_position_ = horizontal ? pressed_x_ : pressed_y_;
+        // 누름을 거둬 뗌이 클릭이 되지 않게 한다. drag 후보도 함께 거둔다.
+        clear_press();
+        return process_pan(event);
+    }
+
+    bool interaction_controller::long_press(const pointer_released_event& event) const noexcept
+    {
+        // 누른 자리에서 거의 움직이지 않고 떼야 한다. 손가락의 떨림을 흘리기의 임계만큼 봐준다.
+        if (config_.long_press_time <= std::chrono::milliseconds { 0 } || event.time - pressed_time_ < config_.long_press_time)
+            return false;
+        return distance_between(pressed_x_, pressed_y_, event.x, event.y) < std::max(config_.pan_start_distance, config_.drag_start_distance);
+    }
+
+    std::vector<input_action> interaction_controller::process_pan(const pointer_moved_event& event)
+    {
+        const ui_tree* const tree { surface_tree(pan_surface_) };
+        const ui_element* const owner { tree != nullptr ? tree->find(pan_id_) : nullptr };
+        const scroll_source* const source { owner != nullptr ? owner->scroll() : nullptr };
+        if (source == nullptr || source->scroll == nullptr)
+            return {};
+        // 손가락을 올리면(가로 창은 왼쪽으로 밀면) 내용이 따라간다 — 아래로 굴린 휠과 같은 쪽이다.
+        // 휠처럼 논리 픽셀로 낸다. 창의 배율이 물리 픽셀을 논리로 바꾼다.
+        const float scale { source->scale > 0.0f ? source->scale : 1.0f };
+        const float position { pan_horizontal_ ? event.x : event.y };
+        const float delta { (pan_position_ - position) / scale };
+        pan_position_ = position;
+        if (delta == 0.0f)
+            return {};
+        return { source->scroll(delta) };
     }
 
     // OS 파일 끌기의 표시 상태다 (os-dragdrop-design.md).
@@ -656,6 +732,16 @@ namespace luil {
             return {};
         }
         pressed_surface_ = event.surface;
+        pressed_time_ = event.time;
+        // 앱이 「어느 판을 만졌는가」를 듣는다. 이 누름의 다른 액션보다 앞선다.
+        std::vector<input_action> actions {};
+        if (policy_ != nullptr && event.button == pointer_button::left)
+            actions = policy_->on_press(*tree, *hit, event);
+        const auto with_press = [&actions](std::vector<input_action> more) {
+            for (input_action& action : more)
+                actions.push_back(std::move(action));
+            return std::move(actions);
+        };
 
         // 자리인 element를 누르면 초점을 주고, 아니면 거둔다.
         // 초점 시각은 caret 깜빡임의 위상 기준이고, 눌린 표면이 초점의 표면이다.
@@ -704,6 +790,8 @@ namespace luil {
             pressed_x_ = event.x;
             pressed_y_ = event.y;
             drag_candidate_ = false;
+            // 텍스트 칸 안의 끌기는 범위 선택이다. 흘리지 않는다.
+            pan_candidate_ = false;
             snapshot_.pressed = hit->id();
             snapshot_.pressed_surface = event.surface;
             // 두 번째 누름은 낱말, 세 번째부터는 전부다.
@@ -711,11 +799,11 @@ namespace luil {
             if (click_streak_ >= 3)
             {
                 text_drag_id_ = {};
-                return { text_edit_action(*hit_target, text::text_edit_command::select_all) };
+                return with_press({ text_edit_action(*hit_target, text::text_edit_command::select_all) });
             }
             const bool word { click_streak_ == 2 };
             text_drag_id_ = word ? ui_element_id {} : hit->id();
-            return place_text_caret(*hit, event.x, word == false && event.shift, word);
+            return with_press(place_text_caret(*hit, event.x, word == false && event.shift, word));
         }
 
         pressed_id_ = hit->id();
@@ -732,15 +820,17 @@ namespace luil {
         // 스크롤 막대는 누른 순간부터 끌기가 시작된다.
         // 임계 거리를 두지 않는다.
         const pointer_drag_target* const handler { hit->pointer_drag() };
+        // 끌기 손잡이(막대·판 옮기기)는 누른 순간부터 제 끌기라 흘리기가 되지 않는다.
+        pan_candidate_ = event.button == pointer_button::left && handler == nullptr && config_.pan_start_distance > 0.0f;
         if (event.button == pointer_button::left && handler != nullptr)
         {
             pointer_drag_id_ = hit->id();
             pointer_drag_x_ = event.x;
             pointer_drag_y_ = event.y;
             if (handler->on_press)
-                return handler->on_press(ui_action_context { pointer_drag_id_, event.x, event.y, false });
+                return with_press(handler->on_press(ui_action_context { pointer_drag_id_, event.x, event.y, false }));
         }
-        return {};
+        return actions;
     }
 
     std::vector<input_action> interaction_controller::process_release(const pointer_released_event& event)
@@ -751,6 +841,15 @@ namespace luil {
         // 먼저 돌아서면 남은 `text_drag_id_`가 그 다음 포인터 이동을 통째로
         // 삼킨다 (multi-window-design.md).
         const ui_tree* const tree { surface_tree(event.surface) };
+
+        // 끌어 흘린 손을 떼는 것은 클릭이 아니다. 누름은 흘리기가 설 때 이미 거뒀다.
+        if (pan_id_ != ui_element_id {} && event.button == pointer_button::left)
+        {
+            pan_id_ = {};
+            pan_surface_.clear();
+            clear_press();
+            return {};
+        }
 
         // 텍스트 범위 선택을 놓는 것은 클릭이 아니다.
         // 선택은 이미 잡혀 있다.
@@ -763,11 +862,18 @@ namespace luil {
 
         // 스크롤 막대를 놓는 것은 클릭이 아니다.
         // 끌기만 끝낸다.
+        //  - 길게 누르기만은 우클릭이다. 끌 수 있는 그림(지도 위 장소)도 손가락으로 메뉴를 열어야 한다.
+        //    끌지 않고 오래 누른 것이라 끌기와 헷갈리지 않는다.
         if (pointer_drag_id_ != ui_element_id {} && event.button == pointer_button::left)
         {
+            const ui_element_id dragged { pointer_drag_id_ };
+            const bool held { long_press(event) };
             pointer_drag_id_ = {};
             clear_press();
-            return {};
+            const ui_element* const hit { held && tree != nullptr ? tree->hit_test(event.x, event.y) : nullptr };
+            if (hit == nullptr || hit->enabled() == false || hit->id() != dragged || hit->action(ui_trigger::right_click) == nullptr)
+                return {};
+            return run_trigger(*hit, ui_trigger::right_click, event.x, event.y, false);
         }
 
         // drag를 끝낸다.
@@ -800,6 +906,7 @@ namespace luil {
         const ui_element* const hit { tree->hit_test(event.x, event.y) };
         const ui_element_id pressed { pressed_id_ };
         const pointer_button pressed_button { pressed_button_ };
+        const bool held { long_press(event) };
         clear_press();
 
         // 클릭은 같은 대상 위에서의 누름과 뗌이다.
@@ -818,6 +925,14 @@ namespace luil {
         //    자기 client 기준이라, 표면을 빼면 A창을 누른 직후 B창의 같은 id를 같은
         //    자리에서 누르는 것이 연타가 된다 (multi-window-design.md).
         ui_trigger trigger { event.button == pointer_button::right ? ui_trigger::right_click : ui_trigger::left_click };
+        // 길게 누르기는 우클릭이다. 우클릭 액션이 있는 element만이다 — 없으면 늦게 뗀 클릭일 뿐이다.
+        //  - 연타 판정에 끼지 않는다. 메뉴를 연 누름이 다음 클릭의 첫 번째가 되면 안 된다.
+        if (trigger == ui_trigger::left_click && held && hit->action(ui_trigger::right_click) != nullptr)
+        {
+            last_click_id_ = {};
+            last_click_surface_.clear();
+            return run_trigger(*hit, ui_trigger::right_click, event.x, event.y, false);
+        }
         if (trigger == ui_trigger::left_click && hit->id() == last_click_id_ && event.surface == last_click_surface_ && event.time - last_click_time_ <= config_.double_click_time
             && distance_between(last_click_x_, last_click_y_, event.x, event.y) <= config_.double_click_distance && hit->action(ui_trigger::double_click) != nullptr)
         {
@@ -1558,6 +1673,7 @@ namespace luil {
         pressed_button_ = pointer_button::none;
         pressed_surface_.clear();
         drag_candidate_ = false;
+        pan_candidate_ = false;
         snapshot_.pressed = {};
         snapshot_.pressed_surface.clear();
     }
@@ -1565,6 +1681,8 @@ namespace luil {
     void interaction_controller::cancel_dropped_gestures() noexcept
     {
         clear_press();
+        pan_id_ = {};
+        pan_surface_.clear();
         text_drag_id_ = {};
         snapshot_.drag.reset();
     }
