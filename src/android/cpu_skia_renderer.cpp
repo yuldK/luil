@@ -53,15 +53,29 @@ namespace luil::android {
                     error = u8"Failed to set the native window buffer format.";
                     return false;
                 }
+                format_set_ = true;
                 return true;
             }
 
             [[nodiscard]] bool render(const frame_state& state, std::u8string& error) override
             {
+                // `resize` 없이 먼저 불릴 수 있다. 그리다 Vulkan에서 물러서면 이 렌더러가 곧바로
+                // 그 frame을 그린다 (`renderer_host::render`). 형식을 정하지 않은 창은 다른
+                // 형식(RGB 565 등)의 버퍼를 줄 수 있다.
+                if (format_set_ == false && resize(state.width, state.height, error) == false)
+                    return false;
+
                 ANativeWindow_Buffer buffer {};
                 if (ANativeWindow_lock(window_, &buffer, nullptr) != 0)
                 {
                     error = u8"Failed to lock the native window buffer.";
+                    return false;
+                }
+                // 아래는 픽셀 하나를 4바이트로 쓴다. 다른 형식이면 버퍼 끝을 넘어 쓰게 되므로 그리지 않는다.
+                if (buffer.format != AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM && buffer.format != AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM)
+                {
+                    ANativeWindow_unlockAndPost(window_);
+                    error = u8"The native window buffer is not RGBA.";
                     return false;
                 }
 
@@ -94,6 +108,8 @@ namespace luil::android {
         private:
             ANativeWindow* window_ { nullptr };
             sk_sp<SkTypeface> codicon_typeface_ {};
+            // 창 버퍼의 형식을 RGBA로 정했는가.
+            bool format_set_ { false };
         };
     } // namespace
 
