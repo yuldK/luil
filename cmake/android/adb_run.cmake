@@ -9,6 +9,11 @@
 #  - 기기 쪽 표준 출력과 오류, 종료 코드를 그대로 돌려준다. Catch2의 발견은 그 출력을
 #    읽고, CTest는 종료 코드로 성패를 가른다.
 #  - 기기는 adb가 고른다. 여럿이면 ANDROID_SERIAL 환경 변수로 정한다.
+#  - `-DJVM_DEX=<dex>`를 주면 실행 파일 자리에 공유 라이브러리를 받아 JVM 안에서 돌린다.
+#    dex의 `luil.testing.JvmTestMain`이 라이브러리를 읽고 그 진입점을 부른다
+#    (tests/android/JvmTestMain.java). JNI로 Java를 부르는 test(HTTP client)의 자리다 —
+#    셸의 실행 파일에는 JVM이 없다. `app_process`는 셸 권한으로 돌아 매니페스트 권한이 없어도
+#    소켓을 연다.
 if(NOT DEFINED ADB OR NOT DEFINED DEVICE_DIRECTORY)
     message(FATAL_ERROR "ADB and DEVICE_DIRECTORY are required.")
 endif()
@@ -49,6 +54,17 @@ execute_process(
 if(NOT push_result EQUAL 0)
     message(FATAL_ERROR "Could not push ${executable} (exit ${push_result}).")
 endif()
+if(DEFINED JVM_DEX)
+    get_filename_component(dex_name "${JVM_DEX}" NAME)
+    set(device_dex "${DEVICE_DIRECTORY}/${dex_name}")
+    execute_process(
+        COMMAND "${ADB}" push --sync "${JVM_DEX}" "${device_dex}"
+        RESULT_VARIABLE dex_result
+        OUTPUT_QUIET)
+    if(NOT dex_result EQUAL 0)
+        message(FATAL_ERROR "Could not push ${JVM_DEX} (exit ${dex_result}).")
+    endif()
+endif()
 
 # 기기의 sh가 받을 한 줄을 만든다. 인자마다 작은따옴표로 감싸고, 안의 작은따옴표는
 # 닫고-이스케이프-다시 열기로 옮긴다. Catch2 test 이름에는 공백·괄호·따옴표가 있다.
@@ -56,7 +72,11 @@ endif()
 # 결과를 파일로 쓰라는 인자(`--out <path>`, `-o <path>`, `--out=<path>`)는 호스트
 # 경로라 기기가 쓸 수 없다. 기기 쪽 파일로 바꿔 실행하고 끝나면 호스트로 당겨 온다 —
 # Catch2의 test 발견이 목록을 그렇게 받는다.
-set(command_line "cd '${DEVICE_DIRECTORY}' && chmod 755 './${executable_name}' && './${executable_name}'")
+if(DEFINED JVM_DEX)
+    set(command_line "cd '${DEVICE_DIRECTORY}' && CLASSPATH='${device_dex}' app_process '${DEVICE_DIRECTORY}' luil.testing.JvmTestMain '${device_executable}'")
+else()
+    set(command_line "cd '${DEVICE_DIRECTORY}' && chmod 755 './${executable_name}' && './${executable_name}'")
+endif()
 set(host_output "")
 set(device_output "${DEVICE_DIRECTORY}/${executable_name}.out")
 set(next_is_output FALSE)

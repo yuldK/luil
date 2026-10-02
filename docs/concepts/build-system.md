@@ -86,4 +86,6 @@ adb shell am start -n io.github.yuldk.luil.hello/com.google.androidgamesdk.GameA
 
 test는 기기에서 돈다. `luil_core_tests`의 `CROSSCOMPILING_EMULATOR`가 [`adb_run.cmake`](../../cmake/android/adb_run.cmake)이고, CTest와 Catch2의 test 발견이 실행 파일을 부를 때마다 이 script가 실행 파일을 `/data/local/tmp/luil/<구성>`에 올려(`adb push --sync`, 바뀌었을 때만) 기기 셸에서 실행한다. Catch2가 목록을 쓰라고 준 호스트 경로(`--out`)는 기기 쪽 파일로 바꿔 실행하고 끝나면 당겨 온다. test 발견은 test 시점으로 미루므로(`DISCOVERY_MODE PRE_TEST`) 빌드할 때 기기가 꽂혀 있지 않아도 된다.
 
+HTTP test(`luil_net_tests`)는 JNI로 `java.net`을 부르므로 JVM 안에서 돈다. 공유 라이브러리로 세우고, 같은 script가 `JVM_DEX`를 받으면 라이브러리와 dex를 함께 올려 `app_process`로 띄운다. dex는 [`JvmTestMain.java`](../../tests/android/JvmTestMain.java)를 Android Studio의 JBR `javac`(`JAVA_HOME`, 없으면 Android Studio 자리)로 옮기고 SDK build-tools의 `d8`로 짓는다. 그래서 Android test 구성에는 JBR과 build-tools가 있어야 한다.
+
 core test 실행 파일은 플랫폼 계층을 링크하지 않는다. core가 링크로 묶어 부르는 두 hook(`platform_font_source()`, `platform_fail_fast()`)은 [`core_platform_stub.cpp`](../../tests/core_platform_stub.cpp)가 test용으로 정의한다 (빈 글꼴 관리자, `abort`). 그래서 Windows와 Android가 같은 test를 같은 수만큼 돌린다.

@@ -95,7 +95,80 @@ if(LUIL_PLATFORM STREQUAL "android")
             android_input_tests.cpp
             android_text_input_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
-    luil_set_ide_folder("Tests" luil_core_tests)
+
+    # HTTP client는 JNI로 java.net을 부르므로 JVM 안에서만 돈다. 셸에서 띄운 실행 파일에는 JVM이
+    # 없어, test를 공유 라이브러리로 세우고 app_process가 띄운 JVM이 읽게 한다
+    # (cmake/android/adb_run.cmake의 JVM_DEX). 라이브러리(luil)는 GameActivity 진입점을 붙잡으므로
+    # 링크하지 않고 HTTP 소스를 직접 넣는다.
+    add_library(luil_net_tests SHARED
+        "${LUIL_SOURCE_DIRECTORY}/android/java_vm.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/android/android_http_client.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/android/android_text_transcode.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/http_body.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/http_media_type.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/http_message.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/http_request_rules.cpp"
+        android_jvm_test_main.cpp
+        http_body_tests.cpp
+        http_client_tests.cpp
+        http_media_type_tests.cpp
+        loopback_http_server.cpp
+        loopback_http_server_tests.cpp
+        loopback_socket_posix.cpp)
+    target_include_directories(luil_net_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}"
+            "${LUIL_TEST_DIRECTORY}")
+    target_link_libraries(luil_net_tests
+        PRIVATE
+            luil::luil_core
+            luil_nlohmann_json
+            luil_options
+            Catch2::Catch2
+            log)
+
+    # JVM 쪽 진입점을 dex로 짓는다. javac는 Android Studio의 JBR, d8은 SDK build-tools의 것이다.
+    # 시스템의 JAVA_HOME은 바꾸지 않는다 (docs/concepts/build-system.md).
+    get_filename_component(luil_android_sdk "${LUIL_ADB_EXECUTABLE}" DIRECTORY)
+    get_filename_component(luil_android_sdk "${luil_android_sdk}" DIRECTORY)
+    find_program(LUIL_JAVAC_EXECUTABLE
+        NAMES javac
+        HINTS
+            "$ENV{JAVA_HOME}/bin"
+            "$ENV{ProgramFiles}/Android/Android Studio/jbr/bin"
+        REQUIRED)
+    get_filename_component(luil_java_bin "${LUIL_JAVAC_EXECUTABLE}" DIRECTORY)
+    find_program(LUIL_JAVA_EXECUTABLE NAMES java HINTS "${luil_java_bin}" REQUIRED NO_DEFAULT_PATH)
+    file(GLOB luil_d8_jars "${luil_android_sdk}/build-tools/*/lib/d8.jar")
+    file(GLOB luil_android_jars "${luil_android_sdk}/platforms/android-*/android.jar")
+    if(NOT luil_d8_jars OR NOT luil_android_jars)
+        message(FATAL_ERROR "The Android SDK at ${luil_android_sdk} needs build-tools (d8) and a platform (android.jar).")
+    endif()
+    list(SORT luil_d8_jars COMPARE NATURAL ORDER DESCENDING)
+    list(SORT luil_android_jars COMPARE NATURAL ORDER DESCENDING)
+    list(GET luil_d8_jars 0 luil_d8_jar)
+    list(GET luil_android_jars 0 luil_android_jar)
+
+    set(luil_jvm_runner_directory "${CMAKE_CURRENT_BINARY_DIR}/jvm_test_main")
+    set(luil_jvm_runner_dex "${luil_jvm_runner_directory}/classes.dex")
+    add_custom_command(
+        OUTPUT "${luil_jvm_runner_dex}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${luil_jvm_runner_directory}/classes"
+        COMMAND "${LUIL_JAVAC_EXECUTABLE}" -encoding UTF-8 --release 8 -nowarn
+            -d "${luil_jvm_runner_directory}/classes" "${CMAKE_CURRENT_SOURCE_DIR}/android/JvmTestMain.java"
+        COMMAND "${LUIL_JAVA_EXECUTABLE}" -cp "${luil_d8_jar}" com.android.tools.r8.D8
+            --min-api 26 --lib "${luil_android_jar}" --output "${luil_jvm_runner_directory}"
+            "${luil_jvm_runner_directory}/classes/luil/testing/JvmTestMain.class"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/android/JvmTestMain.java"
+        COMMENT "Building the JVM test entry point"
+        VERBATIM)
+    add_custom_target(luil_jvm_test_main DEPENDS "${luil_jvm_runner_dex}")
+    add_dependencies(luil_net_tests luil_jvm_test_main)
+    set_target_properties(luil_net_tests PROPERTIES
+        CROSSCOMPILING_EMULATOR
+            "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-DJVM_DEX=${luil_jvm_runner_dex};-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
+    catch_discover_tests(luil_net_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+    luil_set_ide_folder("Tests" luil_core_tests luil_net_tests luil_jvm_test_main)
     # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.
     return()
 endif()
@@ -134,6 +207,7 @@ add_executable(luil_tests
     http_body_tests.cpp
     http_client_tests.cpp
     http_media_type_tests.cpp
+    http_text_transcode_tests.cpp
     image_decode_tests.cpp
     loopback_http_server.cpp
     loopback_http_server_tests.cpp

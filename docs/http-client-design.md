@@ -139,6 +139,24 @@ Destructor는 `stop()`을 호출한다. `deliver`가 참조하는 resource를 �
 
 HTTPS는 지원되는 환경에서 TLS 1.2 또는 1.3을 사용하고 WinHTTP certificate validation을 유지한다. Certificate error 무시와 HTTPS-to-HTTP redirect 허용 API는 없다. Proxy 사용은 configuration에서 명시하며, system proxy 비활성화는 통제된 loopback test에 유용하다. `use_system_proxy = false`는 session뿐 아니라 request handle마다 `WINHTTP_OPTION_PROXY`로 직접 연결을 지정한다. Session만 `NO_PROXY`로 열면 WinHTTP가 요청마다 process 밖 proxy 해석 RPC를 띄우기 때문이다.
 
+## Android 백엔드
+
+Android의 `http_client`는 JNI로 `java.net.HttpURLConnection`을 부른다 ([`android_http_client.cpp`](../src/net/android/android_http_client.cpp)). 공개 헤더와 계약은 같다: 받은 표마다 답 하나, processing thread 하나에서 차례로 배달, `max_in_flight` admission, 취소, `stop_budget`. 위 절의 WinHTTP 설명은 Windows 백엔드의 것이다 ([`net/winhttp`](../src/net/winhttp)).
+
+- **Thread.** 받아들인 요청마다 worker thread 하나가 막히는 호출로 끝까지 몬다. 동시 수는 `max_in_flight`가 받기 전에 막으므로 pool을 두지 않는다. Processing thread는 Windows와 같은 일(body parsing, `deliver`, 전체 마감, heartbeat)을 한다. 두 thread 모두 JVM에 붙는다.
+- **JavaVM.** 앱 host가 `run_application` 첫머리, 앱의 `on_started`보다 먼저 프로세스의 JavaVM을 적는다 ([`java_vm.h`](../src/android/java_vm.h)). 없으면 `create`가 실패한다.
+- **취소와 정지.** 결말을 걸쇠에 먼저 적고 `disconnect()`로 막힌 호출을 푼다. 연결이 서기 직전의 `disconnect()`는 아무 일도 하지 않으므로, 걸쇠만 적히고 끝나지 않은 요청은 processing thread가 50 ms마다 다시 끊고 `stop()`도 기다리는 동안 다시 끊는다.
+- **Redirect.** 플랫폼의 자동 재지정을 끄고 직접 따라간다. 규칙(`max_redirects`, body 있는 요청은 따르지 않음, 다른 출처로 갈 때 헤더 지움, https에서 http로 내려가지 않음)은 Windows와 같다.
+- **압축.** `decompress`가 참이면 플랫폼이 gzip을 청하고 몰래 푼다. 그때 답의 `Content-Encoding`과 `Content-Length` 헤더는 지워진 채로 온다. 거짓이면 `Accept-Encoding: identity`를 보낸다. deflate는 풀지 않는다.
+- **Timeout.** `connect_timeout`과 `receive_timeout`은 연결·읽기 상한이 된다. `send_timeout`에 해당하는 것이 없어 몸 보내기는 `total_timeout`만 막는다.
+- **헤더.** 플랫폼이 지어 붙이는 `X-Android-*` 헤더는 답에서 뺀다.
+- **Charset.** utf-8과 utf-16만 옮긴다. 그 밖의 charset은 `parse_error`에 "Unsupported charset"이 남고 바이트는 그대로다. bionic의 `iconv`가 API 28부터라 minSdk 26에서 쓸 수 없다.
+- **TLS.** 플랫폼 기본값과 인증서 검증을 그대로 쓴다. TLS 1.2·1.3만으로 묶으려면 직접 만든 `SSLSocketFactory`가 필요해 두지 않았다 (Android 9 이하는 1.0·1.1도 받을 수 있다).
+- **오류.** `native_error`는 0이고 `message`가 Java 예외의 클래스 이름과 글이다. 앱의 network security config가 평문 http를 막으면 `secure_failure`다.
+- **앱 권한.** 앱의 매니페스트에 `android.permission.INTERNET`이 있어야 한다. targetSdk 28 이상에서 평문 http를 쓰려면 network security config도 필요하다.
+
 ## 검증
 
-[`tests/http_media_type_tests.cpp`](../tests/http_media_type_tests.cpp)는 media parsing, classification, conservative sniffing을 검증한다. [`tests/http_body_tests.cpp`](../tests/http_body_tests.cpp)는 JSON 제한, charset 변환, HTML, image, raw byte 보존, parse 실패를 검증한다. [`tests/http_client_tests.cpp`](../tests/http_client_tests.cpp)는 [`tests/loopback_http_server.cpp`](../tests/loopback_http_server.cpp)를 사용해 method, header, body, redirect, 제한, timeout, cancellation, heartbeat sequencing, admission backpressure, callback thread, concurrent send, shutdown 보장을 반복 검증한다.
+[`tests/http_media_type_tests.cpp`](../tests/http_media_type_tests.cpp)는 media parsing, classification, conservative sniffing을 검증한다. [`tests/http_body_tests.cpp`](../tests/http_body_tests.cpp)는 JSON 제한, utf-16 변환, HTML, image, raw byte 보존, parse 실패를, [`tests/http_text_transcode_tests.cpp`](../tests/http_text_transcode_tests.cpp)는 Windows의 코드 페이지 변환을 검증한다. [`tests/http_client_tests.cpp`](../tests/http_client_tests.cpp)는 [`tests/loopback_http_server.cpp`](../tests/loopback_http_server.cpp)를 사용해 method, header, body, redirect, 제한, timeout, cancellation, heartbeat sequencing, admission backpressure, callback thread, concurrent send, shutdown 보장을 반복 검증한다.
+
+Android에서는 같은 test를 기기에서 돌린다. Loopback 서버가 POSIX 소켓으로 서고 ([`loopback_socket_posix.cpp`](../tests/loopback_socket_posix.cpp)), test는 공유 라이브러리로 세워 adb 셸의 `app_process`가 띄운 JVM 안에서 돈다 ([`adb_run.cmake`](../cmake/android/adb_run.cmake)의 `JVM_DEX`). 셸 권한으로 돌아 매니페스트 권한과 평문 정책이 끼지 않는다.
