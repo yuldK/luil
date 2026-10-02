@@ -22,6 +22,7 @@ endif()
 # 실행 파일 resource가 필요한 test는 아래 luil_tests에 둔다.
 add_executable(luil_core_tests
     accessibility_tests.cpp
+    app_host_tests.cpp
     badge_element_tests.cpp
     button_element_tests.cpp
     check_element_tests.cpp
@@ -69,6 +70,8 @@ add_executable(luil_core_tests
     webview_element_tests.cpp
     wrap_element_tests.cpp
     zoom_view_tests.cpp
+    # core가 링크로 묶어 부르는 플랫폼 hook의 test용 정의다 (파일에 이유가 있다).
+    core_platform_stub.cpp
     raster_probe.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
@@ -90,7 +93,6 @@ luil_configure_resource_script("${luil_tests_resource}" "${luil_tests_notices}")
 
 add_executable(luil_tests
     "${luil_tests_resource}"
-    app_host_tests.cpp
     caption_layout_tests.cpp
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp
