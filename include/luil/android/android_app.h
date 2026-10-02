@@ -60,8 +60,13 @@ namespace luil::android {
     //    매니페스트에 INTERNET 권한이 있어야 한다 (http-client-design.md).
     //  - frame의 popup은 주 표면 위에 겹쳐 그린다 (popup-overlay-design.md). popup이 떠 있는
     //    동안 뒤로 가기는 Esc처럼 popup을 닫는다. 보조 창(`ui_frame::windows`)은 무시한다.
-    //  - 뒤로 가기는 Activity가 처리해 앱을 끝낸다. 끝날 때 `app_host::shutdown()`이
-    //    종료 신호와 종료 저장을 돌린다.
+    //  - 뒤로 가기는 열린 popup을 먼저 닫고, frame이 `ui_frame::back`을 실었으면 그 동작을 낸다.
+    //    둘 다 없으면 Activity가 처리해 앱을 끝낸다. 끝날 때 `app_host::shutdown()`이 종료 신호와
+    //    종료 저장을 돌린다. Android 16의 targetSdk 36 이상에서 뒤로 가기 키를 받으려면 매니페스트에
+    //    `android:enableOnBackInvokedCallback="false"`가 있어야 한다.
+    //  - 시스템의 밝은 모드, 동적 색(Android 12, `system_accent()`), 대비 설정(Android 14)을 따른다.
+    //    상태 표시줄·내비게이션 막대의 아이콘은 그린 바탕에 맞춘다. 창 장식은 Java 메인 thread에서만
+    //    바꿀 수 있어 luil이 링크의 `--wrap`으로 `GameActivity_onCreate`를 먼저 받는다.
     // 반환값은 0이면 정상 종료, 아니면 시작에 실패한 것이다.
     int run_application(android_app* app, const application_config& config, const application_environment& environment);
 } // namespace luil::android

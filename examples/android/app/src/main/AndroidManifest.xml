@@ -6,7 +6,12 @@
     android_main이 앱이다 (docs/android-port-plan.md).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        뒤로 가기는 키 이벤트로 받는다. Android 16부터 targetSdk 36 이상은 이것이 없으면 뒤로 가기 키가
+        오지 않는다 (예측 뒤로 가기). 앱이 뒤로 가기를 받는 길은 `ui_frame::back`이다.
+    -->
     <application
+        android:enableOnBackInvokedCallback="false"
         android:label="${label}"
         android:theme="@style/Theme.Luil">
         <!--

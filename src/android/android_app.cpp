@@ -160,9 +160,10 @@ namespace luil::android {
             return (GameActivity_getUIMode(activity) & night_mask) != night_yes;
         }
 
-        // popup이 떠 있는가다. 떠 있으면 뒤로 가기를 Activity에 넘기지 않고 받아 popup을 닫는다.
-        // 키 필터는 glue가 Java thread에서 부르므로 원자로 둔다.
+        // popup이 떠 있는가, 앱이 뒤로 가기를 받겠다고 했는가(`ui_frame::back`)다. 어느 쪽이든
+        // 뒤로 가기를 Activity에 넘기지 않고 받는다. 키 필터는 glue가 Java thread에서 부르므로 원자로 둔다.
         std::atomic<bool> popups_visible { false };
+        std::atomic<bool> back_claimed { false };
 
         // 시스템이 맡는 키는 Activity에 남긴다. 거짓을 돌려주면 Activity의 기본 처리를 받는다.
         //  - 뒤로 가기: 앱 끝내기와 예측 뒤로 가기 애니메이션. 끝날 때 `app_host::shutdown()`이 돈다.
@@ -173,8 +174,8 @@ namespace luil::android {
             switch (event->keyCode)
             {
             case AKEYCODE_BACK:
-                // popup이 떠 있으면 뒤로 가기는 Esc처럼 popup을 닫는다.
-                return popups_visible.load();
+                // popup이 떠 있으면 뒤로 가기는 Esc처럼 popup을 닫고, 앱이 받겠다고 했으면 앱에 간다.
+                return popups_visible.load() || back_claimed.load();
             case AKEYCODE_HOME:
             case AKEYCODE_VOLUME_UP:
             case AKEYCODE_VOLUME_DOWN:
@@ -749,6 +750,17 @@ namespace luil::android {
                     system_bars_light_ = light;
             }
 
+            // 앱이 실은 뒤로 가기 동작을 낸다. 없으면 Activity를 끝낸다.
+            void navigate_back()
+            {
+                if (overlay_frame_ != nullptr && overlay_frame_->back != nullptr)
+                {
+                    dispatch(overlay_frame_->back());
+                    return;
+                }
+                finish();
+            }
+
             void post_lifecycle(const app_lifecycle lifecycle)
             {
                 if (environment_.delegate == nullptr)
@@ -813,12 +825,13 @@ namespace luil::android {
                 for (std::uint64_t index { 0 }; index < inputs->keyEventsCount; ++index)
                 {
                     const GameActivityKeyEvent& key { inputs->keyEvents[index] };
-                    // 뒤로 가기는 popup이 떠 있을 때만 여기로 온다 (`key_event_filter`). 떼는 순간
-                    // Esc처럼 popup을 닫는다. 아무 popup도 닫지 않으면 뒤로 가기의 기본 동작을 한다.
+                    // 뒤로 가기는 popup이 떠 있거나 앱이 받겠다고 했을 때만 여기로 온다
+                    // (`key_event_filter`). 떼는 순간 Esc처럼 popup을 닫고, 닫을 popup이 없으면 앱의
+                    // 뒤로 가기 동작을, 그것도 없으면 뒤로 가기의 기본 동작을 한다.
                     if (key.keyCode == AKEYCODE_BACK)
                     {
                         if (key.action == AKEY_EVENT_ACTION_UP && dismiss_popups(popup_dismiss_reason::escape_key) == false)
-                            finish();
+                            navigate_back();
                         continue;
                     }
                     // Esc가 popup을 닫았으면 키를 삼킨다 (Win32와 같다).
@@ -888,6 +901,7 @@ namespace luil::android {
                 }
                 router_.set_areas(std::move(areas));
                 popups_visible.store(overlays_.empty() == false);
+                back_claimed.store(frame != nullptr && frame->back != nullptr);
                 dirty_ = true;
             }
 

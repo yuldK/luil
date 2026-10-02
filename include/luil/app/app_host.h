@@ -177,6 +177,12 @@ namespace luil {
         // revision이 바뀐 경우에만 UI thread가 적용한다.
         std::uint64_t window_placement_revision { 0 };
         std::optional<window_placement> window_placement_request {};
+        // 뒤로 가기(Android의 뒤로 가기 단추·몸짓)에서 낼 동작이다.
+        // 앱이 안쪽 화면(목록에서 들어간 페이지 등)에 있을 때 싣고, 맨 앞 화면이면 비운다.
+        //  - 비어 있으면 플랫폼의 기본 동작이다 (Android는 Activity를 끝낸다).
+        //  - popup이 떠 있으면 popup을 닫는 것이 먼저다. 그때는 이것을 부르지 않는다.
+        //  - 데스크톱 창(Win32)은 지금 이것을 부르지 않는다. 앱 바의 뒤로 단추가 같은 일을 한다.
+        std::function<input_action()> back {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };
