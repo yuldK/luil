@@ -80,7 +80,9 @@ luil_add_source_filter(luil_demo_files "pages"
 #    언젠가 한쪽만 고쳐지고, 그 순간 예제와 test가 다른 서버를 말하게 된다.
 luil_add_source_filter(luil_demo_files "loopback"
     "${LUIL_TEST_DIRECTORY}/loopback_http_server.cpp"
-    "${LUIL_TEST_DIRECTORY}/loopback_http_server.h")
+    "${LUIL_TEST_DIRECTORY}/loopback_http_server.h"
+    "${LUIL_TEST_DIRECTORY}/loopback_socket.h"
+    "${LUIL_TEST_DIRECTORY}/loopback_socket_win32.cpp")
 add_executable(luil_demo WIN32
     ${luil_example_resource}
     ${luil_demo_files})

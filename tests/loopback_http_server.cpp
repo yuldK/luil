@@ -1,13 +1,5 @@
 #include "loopback_http_server.h"
 
-// winsock2.h는 언제나 windows.h보다 먼저다. 늦게 들어가면 windows.h가 이미 끌어온
-// winsock 1과 이름이 겹쳐 수백 줄짜리 재정의 오류가 난다 — 그래서 이 파일이 winsock
-// 헤더를 아는 유일한 자리이고, 여기서도 맨 앞이다.
-#include <winsock2.h>
-
-#include <windows.h>
-#include <ws2tcpip.h>
-
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -24,9 +16,9 @@ namespace luil::testing {
         constexpr std::size_t max_body_bytes { 16 * 1024 * 1024 };
         // recv가 막히는 길이의 상한이다. stop()은 shutdown으로 곧바로 깨우지만,
         // 아무것도 보내지 않는 상대에 걸린 연결이 이 간격마다 stop 깃발을 다시 본다.
-        constexpr int receive_timeout_ms { 50 };
+        constexpr std::chrono::milliseconds receive_timeout { 50 };
         // 받아들이는 thread가 stop 깃발을 다시 보는 간격이다.
-        constexpr long accept_poll_us { 50 * 1000 };
+        constexpr std::chrono::microseconds accept_poll { 50 * 1000 };
         constexpr std::size_t transfer_block_bytes { 64 * 1024 };
 
         [[nodiscard]] char lowered(const char character) noexcept
@@ -123,14 +115,14 @@ namespace luil::testing {
         }
 
         // 다 보내거나 실패할 때까지 민다. send는 청한 만큼을 다 받아 주지 않는다.
-        [[nodiscard]] bool send_all(const SOCKET client, const void* data, const std::size_t size) noexcept
+        [[nodiscard]] bool send_all(const std::uintptr_t client, const void* data, const std::size_t size) noexcept
         {
             const char* cursor { static_cast<const char*>(data) };
             std::size_t remaining { size };
             while (remaining > 0)
             {
-                const int block { static_cast<int>(std::min<std::size_t>(remaining, transfer_block_bytes)) };
-                const int sent { send(client, cursor, block, 0) };
+                const std::size_t block { std::min<std::size_t>(remaining, transfer_block_bytes) };
+                const int sent { loopback_socket::send(client, cursor, block) };
                 if (sent <= 0)
                     return false;
                 cursor += sent;
@@ -139,31 +131,27 @@ namespace luil::testing {
             return true;
         }
 
-        [[nodiscard]] bool send_text(const SOCKET client, const std::string_view text) noexcept
+        [[nodiscard]] bool send_text(const std::uintptr_t client, const std::string_view text) noexcept
         {
             return send_all(client, text.data(), text.size());
         }
 
         // 흔한 끝맺음이다. 보낸 것을 마저 흘려보내고 닫는다.
-        void close_gracefully(const SOCKET client) noexcept
+        void close_gracefully(const std::uintptr_t client) noexcept
         {
-            shutdown(client, SD_SEND);
-            closesocket(client);
+            loopback_socket::shutdown_send(client);
+            loopback_socket::close(client);
         }
 
         // 거친 끝맺음이다. RST를 던져 상대가 **끊겼다**를 알게 한다.
         //
-        // SO_LINGER를 {켬, 0초}로 두면 closesocket이 정상 종료 절차를 건너뛰고
-        // 곧바로 RST를 보낸다. 이것이 요점이다 — 그냥 닫으면 상대는 깨끗한 EOF를
-        // 보고 "몸통이 여기서 끝났다"로 읽어, close_delimited로 온전히 받은 것과
-        // 구별하지 못한다. 몸통 중간에 끊기는 자리를 흉내 내려면 오류여야 한다.
-        void close_abortively(const SOCKET client) noexcept
+        // SO_LINGER를 {켬, 0초}로 두면 닫기가 정상 종료 절차를 건너뛰고 곧바로 RST를
+        // 보낸다. 이것이 요점이다 — 그냥 닫으면 상대는 깨끗한 EOF를 보고 "몸통이 여기서
+        // 끝났다"로 읽어, close_delimited로 온전히 받은 것과 구별하지 못한다. 몸통 중간에
+        // 끊기는 자리를 흉내 내려면 오류여야 한다.
+        void close_abortively(const std::uintptr_t client) noexcept
         {
-            linger option {};
-            option.l_onoff = static_cast<u_short>(1);
-            option.l_linger = static_cast<u_short>(0);
-            setsockopt(client, SOL_SOCKET, SO_LINGER, reinterpret_cast<const char*>(&option), static_cast<int>(sizeof(option)));
-            closesocket(client);
+            loopback_socket::close_abortively(client);
         }
 
         // "http://127.0.0.1:<port>" 뒤에 받은 글을 그대로 붙인다. 서 있는 서버와
@@ -207,39 +195,17 @@ namespace luil::testing {
     {
         handler_ = [](const loopback_request&) { return not_found_response(); };
 
-        WSADATA winsock {};
-        if (WSAStartup(MAKEWORD(2, 2), &winsock) != 0)
+        if (loopback_socket::startup() == false)
             return;
-        winsock_ready_ = true;
+        sockets_ready_ = true;
 
-        const SOCKET listener { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) };
-        if (listener == INVALID_SOCKET)
+        std::uint16_t port { 0 };
+        const std::uintptr_t listener { loopback_socket::bind_loopback(true, port) };
+        if (listener == loopback_no_socket)
             return;
 
-        sockaddr_in address {};
-        address.sin_family = AF_INET;
-        // 포트 0은 "빈 것을 아무거나"라는 뜻이다. 실제로 무엇을 잡았는지는
-        // getsockname으로 되묻는다.
-        address.sin_port = 0;
-        // inet_addr가 아니라 inet_pton이다 — 앞엣것은 폐기 표시가 붙어 /WX에서 오류다.
-        if (inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) != 1
-            || bind(listener, reinterpret_cast<const sockaddr*>(&address), static_cast<int>(sizeof(address))) != 0
-            || listen(listener, SOMAXCONN) != 0)
-        {
-            closesocket(listener);
-            return;
-        }
-
-        sockaddr_in bound {};
-        int bound_size { static_cast<int>(sizeof(bound)) };
-        if (getsockname(listener, reinterpret_cast<sockaddr*>(&bound), &bound_size) != 0)
-        {
-            closesocket(listener);
-            return;
-        }
-
-        port_ = ntohs(bound.sin_port);
-        listen_socket_ = static_cast<std::uintptr_t>(listener);
+        port_ = port;
+        listen_socket_ = listener;
         accept_thread_ = std::thread { [this] { accept_loop(); } };
     }
 
@@ -306,12 +272,12 @@ namespace luil::testing {
                 std::lock_guard<std::mutex> lock { connections_mutex_ };
                 for (const auto& record : connections_)
                 {
-                    // closesocket이 아니라 shutdown이다. 손잡이는 그 연결의
+                    // 닫기가 아니라 shutdown이다. 손잡이는 그 연결의
                     // thread만 닫는다 — 남이 닫으면 그 사이 recv에 들어간 thread가
                     // **재활용된 다른 손잡이**를 만질 수 있다. shutdown은 손잡이를
                     // 살려 둔 채 막힌 recv·send만 푼다.
                     if (record->socket != loopback_no_socket)
-                        shutdown(static_cast<SOCKET>(record->socket), SD_BOTH);
+                        loopback_socket::shutdown_both(record->socket);
                 }
                 pending.swap(connections_);
             }
@@ -331,47 +297,42 @@ namespace luil::testing {
 
         if (listen_socket_ != loopback_no_socket)
         {
-            closesocket(static_cast<SOCKET>(listen_socket_));
+            loopback_socket::close(listen_socket_);
             listen_socket_ = loopback_no_socket;
         }
-        if (winsock_ready_)
+        if (sockets_ready_)
         {
-            WSACleanup();
-            winsock_ready_ = false;
+            loopback_socket::cleanup();
+            sockets_ready_ = false;
         }
     }
 
     void loopback_http_server::accept_loop()
     {
-        const SOCKET listener { static_cast<SOCKET>(listen_socket_) };
+        const std::uintptr_t listener { listen_socket_ };
         while (!stopping())
         {
-            // select로 기다리는 이유는 accept가 막히면 stop 깃발을 다시 볼 수
-            // 없기 때문이다. 듣는 손잡이를 밖에서 닫아 깨우는 길도 있지만, 그러면
+            // 기다렸다 받는 이유는 accept가 막히면 stop 깃발을 다시 볼 수 없기
+            // 때문이다. 듣는 손잡이를 밖에서 닫아 깨우는 길도 있지만, 그러면
             // 여기서 이미 accept 안에 들어간 손잡이가 사라진다.
-            fd_set readable {};
-            FD_ZERO(&readable);
-            FD_SET(listener, &readable);
-            timeval timeout {};
-            timeout.tv_sec = 0;
-            timeout.tv_usec = accept_poll_us;
-            const int ready { select(0, &readable, nullptr, nullptr, &timeout) };
-            if (ready < 0)
-                return;
-            if (ready == 0)
-                continue;
-
-            const SOCKET client { accept(listener, nullptr, nullptr) };
-            if (client == INVALID_SOCKET)
+            bool failed { false };
+            if (loopback_socket::wait_readable(listener, accept_poll, failed) == false)
             {
-                const int error { WSAGetLastError() };
-                if (error == WSAEWOULDBLOCK || error == WSAECONNRESET || error == WSAEINTR)
+                if (failed)
+                    return;
+                continue;
+            }
+
+            bool transient { false };
+            const std::uintptr_t client { loopback_socket::accept(listener, transient) };
+            if (client == loopback_no_socket)
+            {
+                if (transient)
                     continue;
                 return;
             }
 
-            DWORD receive_timeout { static_cast<DWORD>(receive_timeout_ms) };
-            setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&receive_timeout), static_cast<int>(sizeof(receive_timeout)));
+            loopback_socket::set_receive_timeout(client, receive_timeout);
 
             std::lock_guard<std::mutex> lock { connections_mutex_ };
             // 끝난 연결을 여기서 거둔다. 안 그러면 요청 수만큼 thread 객체가 쌓인다
@@ -379,7 +340,7 @@ namespace luil::testing {
             reap_finished_connections();
             connections_.push_back(std::make_unique<connection>());
             connection& record { *connections_.back() };
-            record.socket = static_cast<std::uintptr_t>(client);
+            record.socket = client;
             live_connections_.fetch_add(1, std::memory_order_release);
             record.worker = std::thread { [this, &record] { serve_and_finish(record); } };
         }
@@ -402,9 +363,9 @@ namespace luil::testing {
         if (owned != loopback_no_socket)
         {
             if (hard_close)
-                close_abortively(static_cast<SOCKET>(owned));
+                close_abortively(owned);
             else
-                close_gracefully(static_cast<SOCKET>(owned));
+                close_gracefully(owned);
         }
 
         live_connections_.fetch_sub(1, std::memory_order_release);
@@ -414,8 +375,6 @@ namespace luil::testing {
 
     bool loopback_http_server::serve_connection(const std::uintptr_t client)
     {
-        const SOCKET socket_handle { static_cast<SOCKET>(client) };
-
         std::string buffer {};
         std::size_t header_end { std::string::npos };
         while (true)
@@ -434,14 +393,14 @@ namespace luil::testing {
                 return false;
 
             std::array<char, 4096> block {};
-            const int received { recv(socket_handle, block.data(), static_cast<int>(block.size()), 0) };
-            if (received > 0)
+            const loopback_socket::receive_result received { loopback_socket::receive(client, block.data(), block.size()) };
+            if (received.status == loopback_socket::receive_status::data)
             {
-                buffer.append(block.data(), static_cast<std::size_t>(received));
+                buffer.append(block.data(), received.size);
                 continue;
             }
-            // 0은 상대가 곱게 닫은 것이고, 음수 중 시간 초과만 다시 돌아본다.
-            if (received == 0 || WSAGetLastError() != WSAETIMEDOUT)
+            // 시간 초과만 다시 돌아본다. 곱게 닫힌 것도 끊긴 것도 끝이다.
+            if (received.status != loopback_socket::receive_status::timed_out)
                 return false;
         }
 
@@ -505,7 +464,7 @@ namespace luil::testing {
         // 않으면 몸통이 오지 않아 요청 전체가 시간 초과로 끝난다.
         if (const std::optional<std::string> expectation { request.header("expect") }; expectation.has_value() && contains_token(*expectation, "100-continue"))
         {
-            if (!send_text(socket_handle, "HTTP/1.1 100 Continue\r\n\r\n"))
+            if (!send_text(client, "HTTP/1.1 100 Continue\r\n\r\n"))
                 return false;
         }
 
@@ -518,14 +477,14 @@ namespace luil::testing {
                 return false;
             std::array<char, 4096> block {};
             const std::size_t wanted { std::min<std::size_t>(block.size(), content_length - request.body.size()) };
-            const int received { recv(socket_handle, block.data(), static_cast<int>(wanted), 0) };
-            if (received > 0)
+            const loopback_socket::receive_result received { loopback_socket::receive(client, block.data(), wanted) };
+            if (received.status == loopback_socket::receive_status::data)
             {
                 const auto* first { reinterpret_cast<const std::uint8_t*>(block.data()) };
-                request.body.insert(request.body.end(), first, first + received);
+                request.body.insert(request.body.end(), first, first + received.size);
                 continue;
             }
-            if (received == 0 || WSAGetLastError() != WSAETIMEDOUT)
+            if (received.status != loopback_socket::receive_status::timed_out)
                 return false;
         }
 
@@ -556,7 +515,6 @@ namespace luil::testing {
 
     bool loopback_http_server::write_response(const std::uintptr_t client, const loopback_response& response)
     {
-        const SOCKET socket_handle { static_cast<SOCKET>(client) };
         if (response.delay_before_headers.count() > 0 && wait_for_stop(response.delay_before_headers))
             return false;
 
@@ -588,7 +546,7 @@ namespace luil::testing {
         }
         // 한 연결에 요청 하나다 — 언제나 알린다.
         head += "Connection: close\r\n\r\n";
-        if (!send_text(socket_handle, head))
+        if (!send_text(client, head))
             return false;
 
         const std::size_t budget { response.truncate_body_after.value_or(response.body.size()) };
@@ -597,7 +555,7 @@ namespace luil::testing {
         if (response.framing != loopback_framing::chunked)
         {
             const std::size_t count { std::min(budget, response.body.size()) };
-            if (count > 0 && !send_all(socket_handle, response.body.data(), count))
+            if (count > 0 && !send_all(client, response.body.data(), count))
                 return false;
             return truncating;
         }
@@ -613,7 +571,7 @@ namespace luil::testing {
                 break;
             std::string chunk_head { hex_of(size) };
             chunk_head += "\r\n";
-            if (!send_text(socket_handle, chunk_head) || !send_all(socket_handle, response.body.data() + sent, size) || !send_text(socket_handle, "\r\n"))
+            if (!send_text(client, chunk_head) || !send_all(client, response.body.data() + sent, size) || !send_text(client, "\r\n"))
                 return false;
             sent += size;
         }
@@ -622,7 +580,7 @@ namespace luil::testing {
             return true;
         // 끝 표시를 보내고 곱게 닫는다. 못 보냈다면 상대가 이미 사라진 것이라
         // 역시 할 일이 없다.
-        static_cast<void>(send_text(socket_handle, "0\r\n\r\n"));
+        static_cast<void>(send_text(client, "0\r\n\r\n"));
         return false;
     }
 
@@ -671,50 +629,32 @@ namespace luil::testing {
 
     loopback_dead_port::loopback_dead_port()
     {
-        WSADATA winsock {};
-        if (WSAStartup(MAKEWORD(2, 2), &winsock) != 0)
+        if (loopback_socket::startup() == false)
             return;
-        winsock_ready_ = true;
+        sockets_ready_ = true;
 
-        const SOCKET held { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) };
-        if (held == INVALID_SOCKET)
-            return;
-
-        sockaddr_in address {};
-        address.sin_family = AF_INET;
-        // 포트 0은 "빈 것을 아무거나"다. 무엇을 잡았는지는 getsockname으로 되묻는다.
-        address.sin_port = 0;
         // **listen을 부르지 않는 것이 이 클래스의 전부다.** 듣는 자리가 없는 포트는
         // 연결을 RST로 거절한다.
-        if (inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) != 1 || bind(held, reinterpret_cast<const sockaddr*>(&address), static_cast<int>(sizeof(address))) != 0)
-        {
-            closesocket(held);
+        std::uint16_t port { 0 };
+        const std::uintptr_t held { loopback_socket::bind_loopback(false, port) };
+        if (held == loopback_no_socket)
             return;
-        }
 
-        sockaddr_in bound {};
-        int bound_size { static_cast<int>(sizeof(bound)) };
-        if (getsockname(held, reinterpret_cast<sockaddr*>(&bound), &bound_size) != 0)
-        {
-            closesocket(held);
-            return;
-        }
-
-        port_ = ntohs(bound.sin_port);
-        socket_ = static_cast<std::uintptr_t>(held);
+        port_ = port;
+        socket_ = held;
     }
 
     loopback_dead_port::~loopback_dead_port()
     {
         if (socket_ != loopback_no_socket)
         {
-            closesocket(static_cast<SOCKET>(socket_));
+            loopback_socket::close(socket_);
             socket_ = loopback_no_socket;
         }
-        if (winsock_ready_)
+        if (sockets_ready_)
         {
-            WSACleanup();
-            winsock_ready_ = false;
+            loopback_socket::cleanup();
+            sockets_ready_ = false;
         }
     }
 

@@ -137,6 +137,7 @@ add_executable(luil_tests
     image_decode_tests.cpp
     loopback_http_server.cpp
     loopback_http_server_tests.cpp
+    loopback_socket_win32.cpp
     raster_probe.cpp
     secondary_surface_tests.cpp
     surface_input_tests.cpp
@@ -159,7 +160,7 @@ target_link_libraries(luil_tests
     PRIVATE
         luil::luil
         luil_options
-        # loopback_http_server가 raw Winsock으로 서므로 test 실행 파일만 이것을 건다.
+        # loopback_http_server가 raw Winsock으로 서므로 test 실행 파일만 이것을 건다 (loopback_socket_win32.cpp).
         ws2_32
         Catch2::Catch2WithMain)
 # test는 win32 내부의 순수 계산(caption_layout·popup_reconcile 등)도 검증하므로
@@ -282,7 +283,8 @@ if(LUIL_BUILD_POINTER_INTEGRATION_TESTS)
         "${luil_tests_resource}"
         pointer_integration_fixture.cpp
         pointer_integration_runner.cpp
-        loopback_http_server.cpp)
+        loopback_http_server.cpp
+        loopback_socket_win32.cpp)
     target_link_libraries(luil_pointer_integration PRIVATE luil::luil luil_options uiautomationcore comctl32 ws2_32)
     luil_disable_automatic_windows_manifest(luil_pointer_integration)
     target_compile_definitions(luil_pointer_integration PRIVATE LUIL_POINTER_TEST_WEBVIEW=$<BOOL:${LUIL_ENABLE_WEBVIEW}>)

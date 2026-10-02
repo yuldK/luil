@@ -1,11 +1,5 @@
 #include "loopback_http_server.h"
 
-// winsock2.h는 언제나 windows.h보다 먼저다 (도우미의 .cpp와 같은 이유다).
-#include <winsock2.h>
-
-#include <windows.h>
-#include <ws2tcpip.h>
-
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -30,33 +24,33 @@ namespace {
     using luil::testing::loopback_bytes;
     using luil::testing::loopback_framing;
     using luil::testing::loopback_http_server;
+    using luil::testing::loopback_no_socket;
     using luil::testing::loopback_request;
     using luil::testing::loopback_response;
+    namespace loopback_socket = luil::testing::loopback_socket;
 
     // **HTTP 클라이언트를 하나도 쓰지 않고** 서버를 몬다.
     //
-    // 이 축이 잠그려는 것은 "서버가 바이트를 옳게 낸다"이다. WinHTTP로 몰면
-    // 서버가 틀린 프레이밍을 내도 WinHTTP가 너그럽게 받아 주는 만큼 test가
-    // 눈을 감고, 나중에 그 서버로 WinHTTP를 검증하면 두 잘못이 서로를 가린다.
+    // 이 축이 잠그려는 것은 "서버가 바이트를 옳게 낸다"이다. HTTP 클라이언트로 몰면
+    // 서버가 틀린 프레이밍을 내도 클라이언트가 너그럽게 받아 주는 만큼 test가
+    // 눈을 감고, 나중에 그 서버로 클라이언트를 검증하면 두 잘못이 서로를 가린다.
     // 그래서 여기서는 바이트를 손으로 보내고 손으로 읽는다.
-    class winsock_scope
+    class socket_scope
     {
     public:
-        winsock_scope() noexcept
-        {
-            WSADATA winsock {};
-            ready_ = WSAStartup(MAKEWORD(2, 2), &winsock) == 0;
-        }
+        socket_scope() noexcept
+            : ready_ { loopback_socket::startup() }
+        {}
 
-        winsock_scope(const winsock_scope&) = delete;
-        winsock_scope(winsock_scope&&) = delete;
-        winsock_scope& operator=(const winsock_scope&) = delete;
-        winsock_scope& operator=(winsock_scope&&) = delete;
+        socket_scope(const socket_scope&) = delete;
+        socket_scope(socket_scope&&) = delete;
+        socket_scope& operator=(const socket_scope&) = delete;
+        socket_scope& operator=(socket_scope&&) = delete;
 
-        ~winsock_scope()
+        ~socket_scope()
         {
             if (ready_)
-                WSACleanup();
+                loopback_socket::cleanup();
         }
 
     private:
@@ -67,23 +61,12 @@ namespace {
     {
     public:
         explicit raw_client(const std::uint16_t port)
+            : socket_ { loopback_socket::connect_loopback(port) }
         {
-            socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-            if (socket_ == INVALID_SOCKET)
-                return;
             // 서버가 답하지 못하는 결함이 생기면 test가 영영 매달리는 대신 여기서
             // 끝난다 (Catch2의 120초 timeout보다 훨씬 먼저다).
-            DWORD receive_timeout { 5000 };
-            setsockopt(socket_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&receive_timeout), static_cast<int>(sizeof(receive_timeout)));
-
-            sockaddr_in address {};
-            address.sin_family = AF_INET;
-            address.sin_port = htons(port);
-            if (inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) != 1 || connect(socket_, reinterpret_cast<const sockaddr*>(&address), static_cast<int>(sizeof(address))) != 0)
-            {
-                closesocket(socket_);
-                socket_ = INVALID_SOCKET;
-            }
+            if (socket_ != loopback_no_socket)
+                loopback_socket::set_receive_timeout(socket_, 5000ms);
         }
 
         raw_client(const raw_client&) = delete;
@@ -93,24 +76,24 @@ namespace {
 
         ~raw_client()
         {
-            if (socket_ != INVALID_SOCKET)
-                closesocket(socket_);
+            if (socket_ != loopback_no_socket)
+                loopback_socket::close(socket_);
         }
 
         [[nodiscard]] bool connected() const noexcept
         {
-            return socket_ != INVALID_SOCKET;
+            return socket_ != loopback_no_socket;
         }
 
         bool write(const std::string_view bytes)
         {
-            if (socket_ == INVALID_SOCKET)
+            if (socket_ == loopback_no_socket)
                 return false;
             std::size_t remaining { bytes.size() };
             const char* cursor { bytes.data() };
             while (remaining > 0)
             {
-                const int sent { send(socket_, cursor, static_cast<int>(remaining), 0) };
+                const int sent { loopback_socket::send(socket_, cursor, remaining) };
                 if (sent <= 0)
                     return false;
                 cursor += sent;
@@ -151,26 +134,23 @@ namespace {
     private:
         bool pump()
         {
-            if (socket_ == INVALID_SOCKET || closed_)
+            if (socket_ == loopback_no_socket || closed_)
                 return false;
             std::array<char, 4096> block {};
-            const int received { recv(socket_, block.data(), static_cast<int>(block.size()), 0) };
-            if (received > 0)
+            const loopback_socket::receive_result received { loopback_socket::receive(socket_, block.data(), block.size()) };
+            if (received.status == loopback_socket::receive_status::data)
             {
-                received_.append(block.data(), static_cast<std::size_t>(received));
+                received_.append(block.data(), received.size);
                 return true;
             }
             closed_ = true;
-            if (received < 0)
-            {
-                const int error { WSAGetLastError() };
-                aborted_ = error == WSAECONNRESET || error == WSAECONNABORTED;
-            }
+            aborted_ = received.status == loopback_socket::receive_status::reset;
             return false;
         }
 
-        winsock_scope scope_ {};
-        SOCKET socket_ { INVALID_SOCKET };
+        // 소켓보다 먼저 서고 나중에 진다 (멤버는 적은 차례로 선다).
+        socket_scope scope_ {};
+        std::uintptr_t socket_ { loopback_no_socket };
         std::string received_ {};
         bool aborted_ { false };
         bool closed_ { false };

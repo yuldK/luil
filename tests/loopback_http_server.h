@@ -1,5 +1,7 @@
 #pragma once
 
+#include "loopback_socket.h"
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -16,14 +18,6 @@
 #include <vector>
 
 namespace luil::testing {
-    // socket 손잡이가 없다는 표시다 (winsock의 INVALID_SOCKET과 같은 값이다).
-    //
-    // 이 헤더는 winsock2.h를 들이지 않는다. winsock2.h는 반드시 windows.h보다
-    // 먼저 들어가야 하는데, 이 도우미를 쓰는 test가 어떤 순서로 무엇을 include할지
-    // 여기서 정할 수 없다 — 손잡이는 폭이 같은 정수로 들고 다니고 winsock 헤더는
-    // .cpp 하나에 가둔다 (`SOCKET`은 `UINT_PTR`이다).
-    inline constexpr std::uintptr_t loopback_no_socket { static_cast<std::uintptr_t>(-1) };
-
     // 서버가 받은 요청 하나다.
     struct loopback_request
     {
@@ -89,7 +83,7 @@ namespace luil::testing {
     // 네트워크 test가 인터넷에 기대면 CI가 오프라인일 때 죽고, 이어지더라도 상대
     // 서버의 사정에 따라 답이 달라져 결정적이지 않다. 그래서 답을 test가 적어 두고
     // 그것만 내주는 서버를 같은 프로세스 안에 세운다.
-    //  - **Winsock 위에 직접 쓴다.** 검증 대상이 HTTP 클라이언트이므로 서버를 같은
+    //  - **소켓 위에 직접 쓴다** (Winsock과 POSIX, loopback_socket.h). 검증 대상이 HTTP 클라이언트이므로 서버를 같은
     //    라이브러리로 세우면 둘이 함께 틀려도 test는 통과한다 — 서로 다른 층이어야
     //    한쪽의 잘못이 드러난다.
     //  - **한 연결에 요청 하나다.** 언제나 "Connection: close"를 붙이고 답한 뒤
@@ -103,7 +97,7 @@ namespace luil::testing {
     class loopback_http_server
     {
     public:
-        // WSAStartup부터 listen까지 하고 받아들이는 thread를 띄운다.
+        // 소켓 층을 열고 listen까지 하고 받아들이는 thread를 띄운다.
         // 어디서든 실패하면 조용히 선 채로 아무것도 하지 않는다 — `port()`가 0이다.
         loopback_http_server();
         loopback_http_server(const loopback_http_server&) = delete;
@@ -159,7 +153,7 @@ namespace luil::testing {
 
         std::uintptr_t listen_socket_ { loopback_no_socket };
         std::uint16_t port_ { 0 };
-        bool winsock_ready_ { false };
+        bool sockets_ready_ { false };
         std::atomic<bool> stopping_ { false };
         std::atomic<bool> stopped_ { false };
         std::atomic<std::size_t> request_count_ { 0 };
@@ -203,6 +197,6 @@ namespace luil::testing {
     private:
         std::uintptr_t socket_ { loopback_no_socket };
         std::uint16_t port_ { 0 };
-        bool winsock_ready_ { false };
+        bool sockets_ready_ { false };
     };
 } // namespace luil::testing
