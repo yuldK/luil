@@ -1,5 +1,6 @@
 #include "luil/app/app_host.h"
 
+#include "host/fail_fast.h"
 #include "host/font_registry.h"
 #include "luil/ui/draw_primitives.h"
 
@@ -8,7 +9,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <intrin.h>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -270,11 +270,7 @@ namespace luil {
         {
             wait_for_logic_exit();
             if (assembly_->logic_thread_exited.load() == false)
-            {
-                // winnt.h의 FAST_FAIL_FATAL_APP_EXIT다. windows.h 없이 값만 쓴다.
-                constexpr unsigned int fast_fail_fatal_app_exit { 7 };
-                __fastfail(fast_fail_fatal_app_exit);
-            }
+                platform_fail_fast();
             assembly_->logic_thread.join();
         }
 
