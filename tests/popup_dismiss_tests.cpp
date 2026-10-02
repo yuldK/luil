@@ -1,4 +1,4 @@
-#include "win32/popup_dismiss.h"
+#include "host/popup_dismiss.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -9,7 +9,7 @@
 
 namespace {
     using luil::popup_dismiss_reason;
-    using luil::win32::take_popup_dismiss_action;
+    using luil::take_popup_dismiss_action;
 
     // 앱이 logic inbox로 나르는 메시지의 대역이다.
     struct fake_intent

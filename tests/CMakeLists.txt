@@ -24,8 +24,10 @@ add_executable(luil_core_tests
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp
+    overlay_input_tests.cpp
     panel_element_tests.cpp
     pointer_sequence_tests.cpp
+    popup_dismiss_tests.cpp
     popup_reconcile_tests.cpp
     progress_element_tests.cpp
     raster_draw_tests.cpp
@@ -135,7 +137,6 @@ add_executable(luil_tests
     image_decode_tests.cpp
     loopback_http_server.cpp
     loopback_http_server_tests.cpp
-    popup_dismiss_tests.cpp
     raster_probe.cpp
     secondary_surface_tests.cpp
     surface_input_tests.cpp

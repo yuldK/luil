@@ -242,7 +242,11 @@ luil_add_source_filter(luil_core_files "host"
     host/frame_state.cpp
     host/frame_state.h
     host/pointer_sequence.cpp
+    host/overlay_input.cpp
+    host/overlay_input.h
     host/pointer_sequence.h
+    host/popup_dismiss.cpp
+    host/popup_dismiss.h
     host/popup_reconcile.cpp
     host/popup_reconcile.h
     host/skia_renderer.cpp
@@ -318,8 +322,6 @@ luil_add_source_filter(luil_files "win32/caption"
 
 # 떠 있는 창의 자리·대조·닫힘이다 (메뉴·드롭다운).
 luil_add_source_filter(luil_files "win32/popup"
-    win32/popup_dismiss.cpp
-    win32/popup_dismiss.h
     win32/popup_surface.cpp
     win32/popup_surface.h)
 

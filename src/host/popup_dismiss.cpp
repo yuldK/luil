@@ -1,8 +1,8 @@
-#include "win32/popup_dismiss.h"
+#include "host/popup_dismiss.h"
 
 #include <variant>
 
-namespace luil::win32 {
+namespace luil {
     std::optional<input_action> take_popup_dismiss_action(const std::function<input_action(popup_dismiss_reason)>& dismiss, bool& requested, const popup_dismiss_reason reason)
     {
         if (dismiss == nullptr || requested)
@@ -16,4 +16,4 @@ namespace luil::win32 {
         requested = true;
         return action;
     }
-} // namespace luil::win32
+} // namespace luil
