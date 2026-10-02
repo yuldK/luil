@@ -1032,3 +1032,57 @@ security config가 필요하고, 막히면 답이 `secure_failure`다. 예제 �
 **검증 (7단계 마지막 트리).** Windows Release 855개, Debug 836개, CPU 전용 Release 853개 CTest와 기기 test Release 673개,
 Debug 673개(core 571, HTTP 102)가 통과한다. 중간 커밋 하나하나는 다시 빌드하지 않았고, WinHTTP 백엔드를 옮긴 두 커밋은
 각각 Windows HTTP test로 확인했다.
+
+## 8단계 진행 — 테마와 mobile demo
+
+2026-10-03. 사용자가 8단계의 방향을 정했다.
+
+- 예제의 패키징은 지금처럼 luil의 CMake가 네이티브를 세우고 Gradle은 싸기만 한다 (AGP `externalNativeBuild`가 아니다).
+  나중에 다시 묻는다고 했다.
+- 데스크톱 demo는 여러 창을 띄우는 데스크톱 앱의 시연이라 휴대폰에 옮기지 않고, 모바일 전용 예제(mobile demo)를
+  새로 만든다. 되돌이 HTTP, 별도 창, 웹뷰, 그림 끌어 놓기처럼 모바일 앱의 UI와 맞지 않는 것은 뺀다.
+- CI에 Android를 넣을 계획은 없다.
+- 테마 일을 하고, 글꼴·IME·텍스트 처리는 미룬다.
+
+| 커밋 | 내용 |
+| --- | --- |
+| `b7eff91` | 고대비에서 고른 토글과 옅은 강조 단추의 글자가 사라지던 팔레트 버그 (Windows도 같다) |
+| `f0756f3` | 상태 표시줄·내비게이션 막대 아이콘, 동적 색, 대비 설정, 실행 중 어두운 모드 전환 |
+| `7b84ef4` | 앱이 뒤로 가기를 받는 `ui_frame::back` |
+| `847fd4c` | mobile demo 예제 (Windows에서도 선다) |
+
+**정한 것.**
+
+- **메인 thread 다리.** 창 장식은 Java 메인 thread에서만 바꿀 수 있다. GameActivity 4.4.2의 Java 쪽은 매니페스트의
+  `android.app.func_name`을 읽지 않아(헤더 주석은 NativeActivity에서 남은 것이다), 링크의 `--wrap=GameActivity_onCreate`로
+  생성 함수를 luil이 먼저 받고 메인 looper에 깨우기 fd를 건다. 소비자는 할 일이 없다 (`luil::luil`을 링크하면 따라온다).
+- **어두운 모드.** glue의 `AConfiguration`은 앱이 도는 중에 어두운 모드를 바꾸면 옛 값을 준다. GameActivity가 Java
+  구성에서 받아 둔 `uiMode`를 읽는다. 3단계 이래 실행 중 전환은 확인하지 않았고 이번에 고쳤다.
+- **동적 색.** Android 12의 `system_accent1_500`을 시스템 accent로 세운다. 밝기는 `make_system_accent`가 정하므로 색상과
+  채도만 쓰인다.
+- **고대비.** Android 14의 대비 설정이 높음이면 고대비 팔레트다. 시스템 고대비 색이 없어 밝은 모드면 흰 바탕, 어두우면
+  검정 바탕의 기본 색이다. 삼성 기기는 이 설정 화면을 숨겨 `settings put secure contrast_level 1.0`으로 확인했다.
+- **뒤로 가기.** popup 닫기가 먼저, 그다음 frame의 `back`, 둘 다 없으면 Activity를 끝낸다. Android 16의 targetSdk 36
+  이상에서도 키가 오도록 매니페스트에 `enableOnBackInvokedCallback="false"`를 둔다.
+- **mobile demo의 꼴.** 600dp부터 두 판이다. 라이브러리의 label이 한 줄이라 설명을 짧은 줄로 나눴다 (텍스트 처리는
+  미뤘다).
+
+**기기 검증.** Galaxy S22 Ultra(Android 14)에서 확인했다.
+
+- widgets: 밝은·어두운 모드를 실행 중에 바꾸면 내용과 막대 아이콘이 함께 바뀐다. 대비 높음에서 흰 바탕 고대비와
+  어두운 아이콘이 나온다.
+- mobile demo: 여덟 페이지를 열어 본다. dialog가 열린 페이지의 뒤로 가기가 dialog를 닫고, 다음이 목록으로, 그다음이
+  앱을 떠난다. 드롭다운이 열린 동안의 뒤로 가기는 popup만 닫는다. 길게 누르면 카드 메뉴가 뜬다. 테마의 "어둡게"를 고르면
+  시스템이 밝아도 막대 아이콘이 희어지고, 동적 색이 "시스템" 키 컬러로 선다. 화면 크기를 태블릿(1440×2304, 280dpi)으로
+  바꾸면 두 판이 서고 고른 칸이 보인다.
+
+**발견했지만 고치지 않은 것.**
+
+- 밝은 테마에서 채운 강조 단추(dialog의 기본 단추, "새것" 배지)의 글자가 바탕과 대비가 낮다. 내장 accent 표의 밝은 쪽
+  `accentEmphasisFg`가 채움보다 어두운 같은 색이라서다. Windows도 같고 색 설계의 문제라 사용자에게 묻는다.
+- modal의 scrim이 상태 표시줄 자리는 덮지 않는다 (tree가 안전 영역에만 그려진다).
+
+**남은 8단계 일.** Android smoke test(CTest `android` 라벨), 소비자 계약의 Android 절, 배포 서명(apksigner) 문서.
+미룬 것: 글꼴(언어 바꿈 뒤 대체 글꼴), popup 안 텍스트 칸 IME 확인, 텍스트 칸의 복사·붙여넣기 메뉴, 여러 줄 label.
+
+**검증 (이 트리).** Windows Release 856개, Debug 837개, CPU 전용 Release 854개 CTest와 기기 test Release 674개가 통과한다.
