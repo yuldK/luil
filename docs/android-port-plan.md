@@ -936,3 +936,39 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 **검증 (5·6단계 마지막 트리).** Windows Release 848개, Debug 829개(asan 19개 제외), CPU 전용 Release 846개 CTest와
 기기 core test Release 559개, Debug 559개가 통과한다. Windows의 `tsf_input_tests`는 고치지 않고 통과한다.
 중간 커밋 하나하나는 다시 빌드하지 않았다.
+
+## 7단계 결과 — popup
+
+2026-10-02에 popup 절반을 끝냈다. 네트워크층은 아래에 따로 적는다.
+
+| 커밋 | 내용 |
+| --- | --- |
+| `2cf63d3` | `frame_state::overlays`: 주 tree 뒤에 popup layer를 그림자·배경·tree·테두리 순으로 겹쳐 그린다 |
+| `3227383` | `overlay_input_router`: 포인터를 layer로 보내고 바깥 누름·휠을 알린다. 닫힘 한 번 내기 규칙을 core로 옮김 |
+| `1ae778a` | widgets: 정렬 드롭다운과 카드의 컨텍스트 메뉴, 섹션 휠 스크롤 수정 |
+| `2f37f71` | Android host: popup layer, 닫힘 계기, popup이 떠 있는 동안 뒤로 가기, popup 안 IME 자리 |
+
+**기기 검증.** Galaxy S22 Ultra의 widgets에서 adb 주입으로 확인했다.
+
+- 드롭다운을 누르면 목록이 칸 아래에 화면 안으로 들어와 서고, "날짜순"을 고르면 칸이 바뀌고 닫힌다.
+- 카드를 길게 누르면 손을 떼기 전에 메뉴가 서고, "경로 복사"를 누르면 토스트 "메뉴: 복사"가 뜬다.
+- 뒤로 가기, 바깥 누름, Esc, 회전이 popup을 닫는다. 뒤로 가기로 닫을 때 앱은 그대로 있다. popup이 없을 때 뒤로
+  가기는 앱을 떠난다.
+- Windows에서는 UI Automation으로 드롭다운을 펼쳐 popup 창(세 항목)이 서고 접으면 사라짐을 확인했다.
+
+**계획과 달라진 것.**
+
+- 그리기 순서. 계획은 주 tree, popup들, tooltip·끌기 순이었다. 주 tree의 tooltip·끌기 표시는 주 tree가 그리므로
+  popup이 그 위를 덮는다. 터치 화면에는 hover tooltip이 서지 않아 겹칠 일이 드물어 그대로 두었다.
+- `0820f9b`가 섹션을 휠로 흘린다고 적었지만, 정책에 `on_wheel`이 없어 휠이 아무 일도 하지 않았다. `1ae778a`에서
+  고쳤다.
+- "빼는 것" 표의 행(WebView2·UI Automation·DirectComposition·파일 끌어 놓기 빌드 제외, caption 없음, 커서 무시)은
+  2·3단계에서 이미 그렇게 됐다. 보조 창은 이번에 한 번 경고하고 무시하게 했다.
+
+**확인하지 못한 것.**
+
+- popup 안 텍스트 칸의 IME. 글자 자리를 popup 원점으로 옮기는 코드는 넣었지만 widgets에 그런 popup이 없다.
+- 텍스트 칸을 길게 눌러 여는 복사·붙여넣기 메뉴는 아직 없다. popup은 이제 서므로 앱이나 텍스트 칸이 열 수 있다.
+
+**검증.** Windows Release 855개, Debug 836개, CPU 전용 Release 853개 CTest와 기기 core test Release 571개가
+통과한다 (adb 연결이 끊겨 실패한 1개는 다시 돌려 통과).
