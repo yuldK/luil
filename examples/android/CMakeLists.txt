@@ -35,4 +35,12 @@ luil_add_android_example(widgets
         ../widgets/status_section.cpp
         ../widgets/toasts_section.cpp)
 
-luil_set_ide_folder("Examples" luil_hello luil_widgets)
+# mobile demo — 휴대폰·태블릿용 demo다. 페이지와 셸은 Windows와 같은 파일이다.
+include("${CMAKE_CURRENT_SOURCE_DIR}/../mobile_demo/mobile_demo.cmake")
+luil_mobile_demo_sources(luil_mobile_demo_files)
+luil_add_android_example(mobile_demo
+    SOURCES
+        ../mobile_demo/android_main.cpp
+        ${luil_mobile_demo_files})
+
+luil_set_ide_folder("Examples" luil_hello luil_mobile_demo luil_widgets)

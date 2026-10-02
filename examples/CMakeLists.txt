@@ -115,4 +115,14 @@ add_custom_command(TARGET luil_demo POST_BUILD
     COMMENT "Copying the demo sample images"
     VERBATIM)
 
-luil_set_ide_folder("Examples" luil_demo luil_hello luil_widgets)
+# mobile demo — 휴대폰·태블릿의 꼴로 짠 demo다. Windows에서도 세워 창 폭으로 두 꼴을 본다.
+include("${CMAKE_CURRENT_SOURCE_DIR}/mobile_demo/mobile_demo.cmake")
+luil_mobile_demo_sources(luil_mobile_demo_files)
+add_executable(luil_mobile_demo WIN32
+    ${luil_example_resource}
+    ${luil_mobile_demo_files}
+    mobile_demo/main.cpp)
+target_include_directories(luil_mobile_demo PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(luil_mobile_demo PRIVATE luil::luil luil_options)
+
+luil_set_ide_folder("Examples" luil_demo luil_hello luil_mobile_demo luil_widgets)

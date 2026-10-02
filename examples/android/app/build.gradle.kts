@@ -25,6 +25,7 @@ val vulkanLayerDirectory = providers.gradleProperty("luil.vulkanLayerDirectory")
 val examples = mapOf(
     "hello" to "luil hello",
     "widgets" to "luil widgets",
+    "mobile_demo" to "luil mobile demo",
 )
 
 android {
