@@ -16,5 +16,9 @@ extern "C" void android_main(android_app* app)
     luil::android::application_environment environment {};
     environment.driver = &driver;
     environment.delegate = &delegate;
-    static_cast<void>(luil::android::run_application(app, luil::android::application_config {}, environment));
+    // 렌더러는 Vulkan이 먼저다. `adb shell setprop debug.luil.renderer cpu`처럼 시스템 속성으로
+    // 바꿔 띄울 수 있다 (apply_debug_properties).
+    luil::android::application_config config {};
+    luil::android::apply_debug_properties(config);
+    static_cast<void>(luil::android::run_application(app, config, environment));
 }

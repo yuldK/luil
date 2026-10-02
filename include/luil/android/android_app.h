@@ -13,9 +13,16 @@ namespace luil::android {
     // Android 앱 하나의 설정이다.
     struct application_config
     {
-        // 렌더러다. Android의 GPU 경로(Vulkan)는 아직 없으므로 CPU로 그린다
-        // (docs/android-port-plan.md 4단계). `automatic`이면 GPU 없이 물러선 것으로 기록된다.
-        renderer_mode renderer { renderer_mode::cpu };
+        // 렌더러다. `automatic`은 Vulkan을 먼저 쓰고, 만들거나 그리다 실패하면 CPU로
+        // 물러선다. 한 번 물러서면 그 Activity가 끝날 때까지 Vulkan을 다시 쓰지 않는다
+        // (창이 다시 생겨도 CPU다). `gpu`는 Vulkan을 세우지 못하면 Activity를 끝낸다.
+        renderer_mode renderer { renderer_mode::automatic };
+        // Vulkan 렌더러를 **만들 때** 실패시킨다 (smoke test). Windows `window_config`의
+        // `simulate_direct3d_failure`와 같은 자리다.
+        bool simulate_gpu_failure { false };
+        // Vulkan으로 이만큼 그린 뒤 다음 frame을 실패시킨다 (0이면 하지 않는다).
+        // `simulate_direct3d_loss_after_frames`와 같다.
+        int simulate_gpu_loss_after_frames { 0 };
         // 터치 몸짓의 시작 설정이다 (touch-pen-input-design.md).
         touch_gesture_config touch {};
     };
@@ -27,6 +34,14 @@ namespace luil::android {
         interaction_policy* policy { nullptr };
         app_delegate* delegate { nullptr };
     };
+
+    // 시스템 속성으로 렌더러 설정을 덮는다. 앱이 명령줄 없이 렌더러 경로를 재현하는 길이다.
+    //  - `debug.luil.renderer` — `auto`, `cpu`, `gpu` (`parse_renderer_mode`의 값)
+    //  - `debug.luil.simulate_gpu_failure` — `1`이면 Vulkan 생성을 실패시킨다
+    //  - `debug.luil.simulate_gpu_loss_after_frames` — 이만큼 그린 뒤 Vulkan 손실을 주입한다
+    // `adb shell setprop`으로 정하고 앱을 다시 띄우면 읽힌다. 정하지 않았거나 읽지 못한
+    // 값은 그대로 둔다. `debug.` 속성은 셸만 쓸 수 있으므로 배포본에 남겨도 사용자가 바꾸지 못한다.
+    void apply_debug_properties(application_config& config);
 
     // GameActivity 앱을 돌린다. 앱의 `android_main`에서 부르고, Activity가 끝날 때 돌아온다.
     //

@@ -476,7 +476,7 @@ if(LUIL_PLATFORM STREQUAL "android")
         VERBATIM)
 
     # android: GameActivity 위의 앱 host다.
-    # 이벤트 루프·수명 주기·안전 영역·한 frame 조립, CPU 렌더러, 글꼴 자원과 내장 codicon이다.
+    # 이벤트 루프·수명 주기·안전 영역·한 frame 조립, Vulkan·CPU 렌더러, 글꼴 자원과 내장 codicon이다.
     set(luil_android_files)
     luil_add_source_filter(luil_android_files "android"
         "${public_headers}/android/android_app.h"
@@ -487,6 +487,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/cpu_skia_renderer.cpp
         android/cpu_skia_renderer.h
         android/fail_fast.cpp
+        android/vulkan_device.cpp
+        android/vulkan_device.h
+        android/vulkan_memory_allocator.h
+        android/vulkan_skia_renderer.cpp
+        android/vulkan_skia_renderer.h
         "${luil_codicon_source}")
 
     add_library(luil STATIC ${luil_android_files})

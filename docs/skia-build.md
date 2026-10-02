@@ -130,7 +130,7 @@ configure는 패키지가 적어 둔 파일을 읽을 뿐 컴파일러를 찾지
 - `-landroid -llog`를 링크한다. 그 밖의 시스템 라이브러리는 libc·libm·libdl뿐이다.
 - 최저 API 수준은 26이다 (8.4). C++ 런타임은 NDK의 `c++_static`이다. skia-prep의 기기 검증(`tools/android_probe.cpp`)이 그 조합이었다.
 - FreeType은 FTL로 고른다. 앱 문서에 FreeType을 밝힌다 (8.5).
-- Vulkan 메모리 할당기는 소비자가 넘긴다. 렌더러 단계에서 다룬다 (8.5).
+- Vulkan 메모리 할당기는 소비자가 넘긴다 (8.5). 만드는 함수 `skgpu::VulkanMemoryAllocators::Make`가 Skia 내부 헤더에만 있어, luil은 같은 서명을 비공개 헤더 [`vulkan_memory_allocator.h`](../src/android/vulkan_memory_allocator.h)에 선언해 쓴다. 내부 API이므로 Skia milestone을 올릴 때마다 두 구성의 `libskia.a`에 그 기호가 있는지 다시 확인한다 (M152에서 확인했다).
 
 ## 직접 빌드한 Skia 사용
 

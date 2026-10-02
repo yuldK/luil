@@ -2,6 +2,8 @@
 
 #include "android/android_fonts.h"
 #include "android/cpu_skia_renderer.h"
+#include "android/vulkan_device.h"
+#include "android/vulkan_skia_renderer.h"
 #include "host/font_registry.h"
 #include "host/frame_state.h"
 #include "host/skia_renderer.h"
@@ -21,9 +23,11 @@
 #include <android/native_window.h>
 
 #include <sys/eventfd.h>
+#include <sys/system_properties.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -46,6 +50,14 @@ namespace luil::android {
         void log_error(const std::u8string& message)
         {
             __android_log_print(ANDROID_LOG_ERROR, log_tag, "%.*s", static_cast<int>(message.size()), reinterpret_cast<const char*>(message.data()));
+        }
+
+        // 시스템 속성 하나를 읽는다. 없거나 비었으면 빈 문자열이다.
+        [[nodiscard]] std::string read_property(const char* const name)
+        {
+            char value[PROP_VALUE_MAX] {};
+            const int length { __system_property_get(name, value) };
+            return std::string { value, static_cast<std::size_t>(std::max(0, length)) };
         }
 
         // 표면 가장자리 중 시스템이 덮는 몫이다 (물리 픽셀).
@@ -150,8 +162,10 @@ namespace luil::android {
 
             ~application()
             {
-                // 렌더러가 창보다 먼저 사라진다. 창은 glue가 쥐고 있다.
+                // 렌더러가 창보다, 그리고 그것이 빌려 쓰는 Vulkan 장치보다 먼저 사라진다.
+                // 창은 glue가 쥐고 있다.
                 renderer_.reset();
+                vulkan_.reset();
                 if (wake_fd_ >= 0)
                 {
                     ALooper_removeFd(app_->looper, wake_fd_);
@@ -278,6 +292,10 @@ namespace luil::android {
                     // glue는 이 알림이 끝날 때까지 창을 쥐고 있다가 놓는다.
                     // 그 안에서 렌더러를 버려야 놓인 창을 붙잡은 채로 남지 않는다.
                     renderer_.reset();
+                    // 장치는 남긴다. 창이 다시 생기면 스왑체인만 새로 선다. 그릴 표면이 없는
+                    // 동안 GPU 메모리는 돌려준다.
+                    if (vulkan_ != nullptr)
+                        vulkan_->release_resources();
                     window_width_ = 0;
                     window_height_ = 0;
                     break;
@@ -320,15 +338,64 @@ namespace luil::android {
                 ANativeWindow* const window { app_->window };
                 renderer_factories factories {};
                 factories.gpu_name = u8"Vulkan";
-                // GPU(Vulkan) 렌더러는 4단계다. 생성 함수가 없으면 GPU가 없는 것이다.
+                // 한 번 물러선 Activity는 Vulkan을 다시 시도하지 않는다. 생성 함수가 없으면
+                // `automatic`은 처음부터 CPU다 (물러선 것으로 기록된다).
+                if (gpu_abandoned_ == false)
+                    factories.create_gpu = [this, window] { return create_gpu_renderer(window); };
                 factories.create_cpu = [window] { return create_cpu_skia_renderer(window); };
+                // 생성 시점 실패는 위의 생성 함수가 낸다 (`create_gpu_renderer`).
+                const renderer_fault_injection fault { .at_creation = false, .after_frames = config_.simulate_gpu_loss_after_frames };
                 std::u8string error {};
-                renderer_ = renderer_host::create(config_.renderer, {}, std::move(factories), error);
+                renderer_ = renderer_host::create(config_.renderer, fault, std::move(factories), error);
                 if (renderer_ == nullptr)
                 {
                     log_error(error);
                     finish();
+                    return;
                 }
+
+                const renderer_backend backend { renderer_->backend() };
+                const std::u8string_view name { renderer_backend_name(backend) };
+                const bool vulkan { backend == renderer_backend::vulkan };
+                __android_log_print(ANDROID_LOG_INFO, log_tag, "renderer %.*s%s%s%s", static_cast<int>(name.size()), reinterpret_cast<const char*>(name.data()), vulkan ? " on " : "",
+                    vulkan ? vulkan_->name() : "", renderer_->used_fallback() ? " (fallback)" : "");
+                settle_gpu_state();
+            }
+
+            // Vulkan 렌더러를 만든다. 장치는 처음 한 번만 세우고 창마다 다시 쓴다.
+            [[nodiscard]] renderer_factory_result create_gpu_renderer(ANativeWindow* const window)
+            {
+                renderer_factory_result result {};
+                if (config_.simulate_gpu_failure)
+                    result.error = u8"The smoke test injected a Vulkan creation failure.";
+                else
+                {
+                    if (vulkan_ == nullptr)
+                    {
+                        vulkan_ = vulkan_device::create(result.error);
+                        if (vulkan_ != nullptr)
+                            __android_log_print(ANDROID_LOG_INFO, log_tag, "vulkan device created: %s", vulkan_->name());
+                    }
+                    if (vulkan_ != nullptr)
+                        result = create_vulkan_skia_renderer(*vulkan_, window);
+                }
+                // `automatic`의 물러섬은 이 이유를 버리므로 여기서 남긴다.
+                if (result.renderer == nullptr)
+                    log_error(u8"Vulkan renderer: " + result.error);
+                return result;
+            }
+
+            // CPU로 물러섰으면 그 Activity에서는 Vulkan을 다시 쓰지 않고 장치를 놓는다.
+            // 물러선 렌더러는 이미 사라졌으므로(`renderer_host::switch_to_cpu`) 장치를 빌려 쓰는
+            // 것이 남아 있지 않다.
+            void settle_gpu_state()
+            {
+                if (renderer_ == nullptr || renderer_->backend() != renderer_backend::cpu || renderer_->used_fallback() == false)
+                    return;
+                if (gpu_abandoned_ == false)
+                    __android_log_print(ANDROID_LOG_WARN, log_tag, "renderer fell back to cpu for the rest of this activity");
+                gpu_abandoned_ = true;
+                vulkan_.reset();
             }
 
             // 창 크기·안전 영역·배율을 다시 읽어 렌더러와 앱에 알린다.
@@ -349,6 +416,7 @@ namespace luil::android {
                     std::u8string error {};
                     if (renderer_->resize(window_width_, window_height_, error) == false)
                         log_error(error);
+                    settle_gpu_state();
                 }
                 dirty_ = true;
                 post_metrics();
@@ -468,7 +536,18 @@ namespace luil::android {
 
                 std::u8string error {};
                 if (renderer_->render(state, error) == false)
+                {
                     log_error(error);
+                    // GPU를 요구한 모드는 물러서지 않는다. 그릴 길이 없으므로 끝낸다.
+                    if (renderer_mode_requires_gpu(config_.renderer))
+                        finish();
+                }
+                else if (error.empty() == false)
+                {
+                    // CPU로 물러서며 그린 frame이다. 물러선 이유가 여기 남는다.
+                    log_error(error);
+                }
+                settle_gpu_state();
                 dirty_ = false;
 
                 // 시간이 흘러야 바뀌는 그림(애니메이션·tooltip 지연)의 다음 시각이다.
@@ -484,6 +563,10 @@ namespace luil::android {
             int wake_fd_ { -1 };
             std::unique_ptr<app_host> host_ {};
             std::unique_ptr<renderer_host> renderer_ {};
+            // Activity 하나의 Vulkan 장치다. 창이 사라져도 남고, CPU로 물러서면 놓는다.
+            std::unique_ptr<vulkan_device> vulkan_ {};
+            // CPU로 물러선 뒤다. 다시 생긴 창도 CPU로 그린다.
+            bool gpu_abandoned_ { false };
             registry_font_resolver font_resolver_ {};
             int window_width_ { 0 };
             int window_height_ { 0 };
@@ -499,6 +582,18 @@ namespace luil::android {
             float reported_scale_ { -1.0f };
         };
     } // namespace
+
+    void apply_debug_properties(application_config& config)
+    {
+        const std::string renderer { read_property("debug.luil.renderer") };
+        if (const auto mode { parse_renderer_mode(std::u8string_view { reinterpret_cast<const char8_t*>(renderer.data()), renderer.size() }) }; mode.has_value())
+            config.renderer = *mode;
+        if (const std::string failure { read_property("debug.luil.simulate_gpu_failure") }; failure.empty() == false)
+            config.simulate_gpu_failure = failure == "1" || failure == "true";
+        const std::string loss { read_property("debug.luil.simulate_gpu_loss_after_frames") };
+        if (int frames { 0 }; std::from_chars(loss.data(), loss.data() + loss.size(), frames).ec == std::errc {} && frames >= 0)
+            config.simulate_gpu_loss_after_frames = frames;
+    }
 
     int run_application(android_app* const app, const application_config& config, const application_environment& environment)
     {
