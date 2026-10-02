@@ -35,6 +35,7 @@ luil_add_source_filter(luil_widgets_files "sections"
     widgets/choices_section.cpp
     widgets/controls_section.cpp
     widgets/inputs_section.cpp
+    widgets/popups_section.cpp
     widgets/status_section.cpp
     widgets/toasts_section.cpp)
 add_executable(luil_widgets WIN32

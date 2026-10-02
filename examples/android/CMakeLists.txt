@@ -31,6 +31,7 @@ luil_add_android_example(widgets
         ../widgets/choices_section.cpp
         ../widgets/controls_section.cpp
         ../widgets/inputs_section.cpp
+        ../widgets/popups_section.cpp
         ../widgets/status_section.cpp
         ../widgets/toasts_section.cpp)
 

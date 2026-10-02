@@ -9,6 +9,7 @@
 //   choices_section.cpp  — 라디오·토글 묶음, 낱개 컨트롤(체크박스·라디오·스위치), 접이식 그룹
 //   status_section.cpp   — 진행률 막대, 상태 배지
 //   toasts_section.cpp   — 토스트 알림과 시간 만료(tick)
+//   popups_section.cpp   — 드롭다운과 컨텍스트 메뉴 (popup)
 //
 // 구조는 hello와 같다: driver가 상태를 소유하고, element는 상태를 설정으로
 // 받아 그리며, 상호작용은 "바꾸자"는 메시지(intent)로만 돌아온다.
@@ -40,6 +41,7 @@ namespace widgets {
     constexpr luil::ui_element_kind kind_slider { luil::application_element_kind(11) };
     constexpr luil::ui_element_kind kind_capture_button { luil::application_element_kind(12) };
     constexpr luil::ui_element_kind kind_record_button { luil::application_element_kind(13) };
+    constexpr luil::ui_element_kind kind_card { luil::application_element_kind(14) };
 
     // --- 텍스트 입력 대상 ---
     // 텍스트 박스마다 대상 id를 하나 정한다.
@@ -112,6 +114,35 @@ namespace widgets {
         float value { 0.0f };
     };
 
+    // popups: 정렬 드롭다운을 여닫는다 (이 상태로 하라는 절대 메시지).
+    struct sort_open_intent
+    {
+        bool open { false };
+    };
+
+    // popups: 정렬 값을 고른다. 고르면 목록도 닫는다.
+    struct sort_select_intent
+    {
+        std::u8string value {};
+    };
+
+    // popups: 카드를 우클릭했다 (터치는 길게 눌렀다). 자리는 주 tree 좌표의 물리 픽셀이다.
+    struct card_menu_intent
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
+    // popups: 카드 메뉴에서 골랐다.
+    struct card_menu_select_intent
+    {
+        std::u8string key {};
+    };
+
+    // popups: 떠 있는 popup을 모두 닫는다 (바깥 누름·Esc·뒤로 가기 등).
+    struct popup_close_intent
+    {};
+
     // 섹션 전체를 담은 창을 이만큼 흘린다 (논리 픽셀, +가 아래로).
     // 휠과 터치 쓸기가 같은 메시지로 온다 — 창이 `scroll_source`를 세운다.
     struct shell_scroll_intent
@@ -159,6 +190,12 @@ namespace widgets {
         int next_toast_id { 0 };
         // 섹션 창이 흘러간 양이다 (논리 픽셀). 범위는 frame을 지을 때 다듬는다.
         float scroll { 0.0f };
+        // popup은 앱 상태다: 열려 있으면 frame에 싣고, 닫으면 뺀다.
+        std::u8string sort { u8"이름순" };
+        bool sort_open { false };
+        bool card_menu_open { false };
+        float card_menu_x { 0.0f };
+        float card_menu_y { 0.0f };
     };
 
     // --- 섹션 빌더의 공통 반환형 ---
@@ -176,6 +213,11 @@ namespace widgets {
     [[nodiscard]] section build_choices_section(const app_state& state);
     [[nodiscard]] section build_status_section(const app_state& state);
     [[nodiscard]] section build_toasts_section(const app_state& state);
+    // 드롭다운 칸의 element를 `dropdown`에 남긴다. 목록 popup을 그 칸 바로 아래에 붙이려면
+    // 배치된 자리가 필요하다.
+    [[nodiscard]] section build_popups_section(const app_state& state, const luil::ui_element** dropdown);
+    // 열려 있는 popup들이다. 자리는 배치가 끝난 tree에서 잰다.
+    [[nodiscard]] std::vector<luil::ui_popup> build_popups(const app_state& state, const luil::ui_element* dropdown, float scale);
     // 토스트 오버레이는 섹션이 아니라 창 전체 위에 얹는다.
     [[nodiscard]] std::unique_ptr<luil::ui_element> build_toast_overlay(const app_state& state);
 
@@ -211,6 +253,11 @@ namespace widgets {
         [[nodiscard]] luil::input_action make_text_composition_action(const luil::text_composition_event& event) const override;
         // 초점이 섹션 창 밖에 있으면 창을 흘려 드러낸다 (Tab, 휴대폰의 소프트 키보드).
         [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override;
+        // 휠은 포인터 아래의 흘리는 창이 받는다 (섹션 창이 `scroll_source`를 든다).
+        [[nodiscard]] std::vector<luil::input_action> on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, float scroll_delta) override;
+        // popup의 메뉴가 이 kind 짝을 쓴다. 열려 있으면 ↑/↓/Enter/Esc가 메뉴 탐색이 된다.
+        [[nodiscard]] std::optional<luil::menu_kinds> menu() const override;
+        [[nodiscard]] std::vector<luil::input_action> close_menu() const override;
     };
 
     // --- UI thread ---

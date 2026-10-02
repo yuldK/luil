@@ -116,6 +116,39 @@ namespace widgets {
             state_.scroll += scroll->delta;
             return;
         }
+        if (const auto* const open { message.get<sort_open_intent>() }; open != nullptr)
+        {
+            state_.sort_open = open->open;
+            state_.card_menu_open = false;
+            return;
+        }
+        if (const auto* const select { message.get<sort_select_intent>() }; select != nullptr)
+        {
+            state_.sort = select->value;
+            state_.sort_open = false;
+            return;
+        }
+        if (const auto* const card { message.get<card_menu_intent>() }; card != nullptr)
+        {
+            state_.card_menu_open = true;
+            state_.card_menu_x = card->x;
+            state_.card_menu_y = card->y;
+            state_.sort_open = false;
+            return;
+        }
+        if (const auto* const choice { message.get<card_menu_select_intent>() }; choice != nullptr)
+        {
+            // 선택이 메뉴를 닫는 것도 앱 몫이다. 고른 것은 토스트로 알린다.
+            state_.card_menu_open = false;
+            handle(luil::app_message { toast_intent { u8"메뉴: " + choice->key, luil::toast_severity::info } });
+            return;
+        }
+        if (message.get<popup_close_intent>() != nullptr)
+        {
+            state_.sort_open = false;
+            state_.card_menu_open = false;
+            return;
+        }
         if (const auto* const toast { message.get<toast_intent>() }; toast != nullptr)
         {
             app_state::toast_entry entry {};
@@ -166,13 +199,15 @@ namespace widgets {
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, column_config) };
         float content_height { column_config.padding.top + column_config.padding.bottom };
         bool first { true };
-        for (section (*build)(const app_state&) : { &build_controls_section, &build_inputs_section, &build_choices_section, &build_status_section, &build_toasts_section })
-        {
-            section built { build(state_) };
+        const auto add_section = [&](section built) {
             content_height += built.height + (first ? 0.0f : column_config.spacing);
             first = false;
             column->add(std::move(built.element), built.height);
-        }
+        };
+        for (section (*build)(const app_state&) : { &build_controls_section, &build_inputs_section, &build_choices_section, &build_status_section, &build_toasts_section })
+            add_section(build(state_));
+        const luil::ui_element* dropdown { nullptr };
+        add_section(build_popups_section(state_, &dropdown));
 
         // 섹션이 창보다 길면(낮은 창, 가로로 돌린 휴대폰) 흘려 본다. 휠과 터치 쓸기가
         // 같은 `scroll_source`를 찾는다.
@@ -193,6 +228,8 @@ namespace widgets {
 
         auto frame { std::make_shared<luil::win32::ui_frame>() };
         frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
+        // popup의 자리는 배치가 끝난 tree에서 잰다. tree가 frame에 담긴 뒤에도 element는 그대로다.
+        frame->popups = build_popups(state_, dropdown, scale);
         return frame;
     }
 
@@ -251,6 +288,21 @@ namespace widgets {
     {
         // 섹션 창이 자기 스크롤 메시지를 들고 있어(`scroll_source`) 표가 필요 없다.
         return luil::route_reveal(tree, focused);
+    }
+
+    std::vector<luil::input_action> widgets_policy::on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta)
+    {
+        return luil::route_wheel(tree, event.x, event.y, scroll_delta);
+    }
+
+    std::optional<luil::menu_kinds> widgets_policy::menu() const
+    {
+        return luil::menu_kinds { luil::ui_element_kind::menu, luil::ui_element_kind::menu_item };
+    }
+
+    std::vector<luil::input_action> widgets_policy::close_menu() const
+    {
+        return { luil::make_app_action(popup_close_intent {}) };
     }
 
     luil::app_message widgets_delegate::make_window_metrics_message(const float width, const float height, const float scale)
