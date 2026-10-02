@@ -99,18 +99,18 @@ namespace luil {
         virtual_list_row,
         // 목록이 스스로 조립하는 부품이다 (행을 늘어놓는 레인).
         virtual_list_lane,
-        // 모바일 화면 맨 위의 앱 바와 그 아이콘 버튼이다.
-        // 버튼은 "navigation"과 "action:<순번>"을 owner로 쓴다.
-        app_bar,
-        app_bar_button,
-        // 앱이 정의하는 kind는 이 값부터다.
-        // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         zoom_view,
         zoom_controls,
         zoom_decrease,
         zoom_label,
         zoom_increase,
         zoom_fit,
+        // 모바일 화면 맨 위의 앱 바와 그 아이콘 버튼이다.
+        // 버튼은 "navigation"과 "action:<순번>"을 owner로 쓴다.
+        app_bar,
+        app_bar_button,
+        // 앱이 정의하는 kind는 이 값부터다.
+        // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         first_application_kind = 64,
     };
 
