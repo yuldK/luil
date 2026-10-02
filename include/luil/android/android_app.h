@@ -52,6 +52,10 @@ namespace luil::android {
     //    배율은 `density / 160`이라 논리 픽셀 1이 1dp다.
     //  - 보이고 사라질 때 `app_delegate::make_lifecycle_message`를 게시한다. 사라질 때가
     //    저장할 마지막 기회일 수 있다.
+    //  - 터치·펜·마우스·키보드 입력을 옮긴다 (touch-pen-input-design.md). 텍스트 칸에 초점이
+    //    서면 IME(GameTextInput)를 붙이고 소프트 키보드를 띄운다. 키보드가 올라오면 안전 영역이
+    //    그만큼 줄고, policy의 `on_focus_moved`로 초점 칸을 다시 드러낸다
+    //    (docs/concepts/text-input.md). 클립보드는 JNI로 다룬다.
     //  - 뒤로 가기는 Activity가 처리해 앱을 끝낸다. 끝날 때 `app_host::shutdown()`이
     //    종료 신호와 종료 저장을 돌린다.
     // 반환값은 0이면 정상 종료, 아니면 시작에 실패한 것이다.

@@ -1,7 +1,9 @@
 #include "luil/android/android_app.h"
 
+#include "android/android_clipboard.h"
 #include "android/android_fonts.h"
 #include "android/android_input.h"
+#include "android/android_text_input.h"
 #include "android/cpu_skia_renderer.h"
 #include "android/vulkan_device.h"
 #include "android/vulkan_skia_renderer.h"
@@ -12,10 +14,12 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/ui_platform.h"
 
+#include "include/core/SkFont.h"
 #include "include/core/SkTypeface.h"
 
 #include <game-activity/GameActivity.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <game-text-input/gametextinput.h>
 
 #include <android/configuration.h>
 #include <android/keycodes.h>
@@ -28,8 +32,10 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -72,21 +78,42 @@ namespace luil::android {
             [[nodiscard]] bool operator==(const edge_insets&) const noexcept = default;
         };
 
-        // 시스템 막대와 디스플레이 컷아웃이 덮는 가장자리다. 가장자리마다 큰 쪽을 비킨다.
+        // 시스템 막대·디스플레이 컷아웃·소프트 키보드가 덮는 가장자리다. 가장자리마다 큰 쪽을 비킨다.
         // targetSdk 35부터 창은 화면 끝까지 그려지므로(edge-to-edge) 이것을 비키지 않으면
-        // 내용이 상태 표시줄과 제스처 막대 밑에 깔린다.
+        // 내용이 상태 표시줄과 제스처 막대 밑에 깔린다. 키보드가 올라오면 아래 가장자리가 그만큼
+        // 커져 앱이 줄어든 크기로 다시 배치한다.
         [[nodiscard]] edge_insets read_safe_insets(GameActivity* const activity)
         {
             ARect bars {};
             GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_SYSTEM_BARS, &bars);
             ARect cutout {};
             GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_DISPLAY_CUTOUT, &cutout);
+            ARect keyboard {};
+            GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_IME, &keyboard);
             return edge_insets {
                 .left = std::max(bars.left, cutout.left),
                 .top = std::max(bars.top, cutout.top),
                 .right = std::max(bars.right, cutout.right),
-                .bottom = std::max(bars.bottom, cutout.bottom),
+                .bottom = std::max({ bars.bottom, cutout.bottom, keyboard.bottom }),
             };
+        }
+
+        // glue가 GameActivity의 IME 알림에 단 처리기와 UI thread를 깨울 eventfd다.
+        // glue는 IME 상태가 바뀌면 표시만 세우고 looper를 깨우지 않는다. 우리는 이벤트가
+        // 없으면 잠들어 있으므로, 알림을 가로채 glue의 처리기를 부른 뒤 깨운다.
+        //  - 알림은 Java 메인 thread에서 온다. 그래서 값을 원자로 둔다.
+        std::atomic<void (*)(GameActivity*, const GameTextInputState*)> glue_text_input_handler { nullptr };
+        std::atomic<int> text_input_wake_fd { -1 };
+
+        void on_text_input_event(GameActivity* const activity, const GameTextInputState* const state)
+        {
+            if (auto* const glue { glue_text_input_handler.load() }; glue != nullptr)
+                glue(activity, state);
+            if (const int wake_fd { text_input_wake_fd.load() }; wake_fd >= 0)
+            {
+                const std::uint64_t one { 1 };
+                static_cast<void>(write(wake_fd, &one, sizeof(one)));
+            }
         }
 
         // 화면 밀도를 배율로 옮긴다 (160 → 1.0, 480 → 3.0).
@@ -231,7 +258,8 @@ namespace luil::android {
 
         // GameActivity Activity 하나의 수명이다.
         // native_app_glue의 `android_main` thread에서만 산다 — 그 thread가 luil의 UI thread다.
-        class application final
+        //  - IME가 묻는 창구(`text_input_host`)도 맡는다. 초점을 가진 텍스트 칸을 tree에서 찾는다.
+        class application final : public text_input_host
         {
         public:
             application(android_app* const app, const application_config& config, const application_environment& environment)
@@ -245,8 +273,13 @@ namespace luil::android {
             application& operator=(const application&) = delete;
             application& operator=(application&&) = delete;
 
-            ~application()
+            ~application() override
             {
+                // IME 알림이 더는 이 객체를 깨우지 않게 먼저 떼어 낸다.
+                text_input_wake_fd.store(-1);
+                if (auto* const glue { glue_text_input_handler.exchange(nullptr) }; glue != nullptr)
+                    app_->activity->callbacks->onTextInputEvent = glue;
+                ime_.reset();
                 // 렌더러가 창보다, 그리고 그것이 빌려 쓰는 Vulkan 장치보다 먼저 사라진다.
                 // 창은 glue가 쥐고 있다.
                 renderer_.reset();
@@ -259,6 +292,63 @@ namespace luil::android {
                 set_font_fallback(nullptr);
                 app_->userData = nullptr;
                 app_->onAppCmd = nullptr;
+                if (jni_attached_)
+                    app_->activity->vm->DetachCurrentThread();
+            }
+
+            // --- text_input_host ---
+
+            [[nodiscard]] std::optional<text_input_target> focused_text_target() const override
+            {
+                if (host_ == nullptr || environment_.policy == nullptr)
+                    return std::nullopt;
+                const interaction_snapshot interaction { host_->acquire_interaction() };
+                // popup은 아직 없다 (7단계). 주 표면의 초점만 본다.
+                if (interaction.focused_surface.empty() == false)
+                    return std::nullopt;
+                return environment_.policy->text_target_of(interaction.focused_input.kind);
+            }
+
+            [[nodiscard]] text_input_document committed_document() const override
+            {
+                const std::shared_ptr<const ui_tree> tree { host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
+                const ui_element* const element { focused_text_element(tree.get()) };
+                const std::optional<text_input_snapshot> value { element != nullptr ? element->text_input() : std::nullopt };
+                if (value.has_value() == false)
+                    return {};
+                return { std::u8string { value->text }, value->caret, value->anchor };
+            }
+
+            [[nodiscard]] std::optional<rect_f> text_rect(const text_input_document& document, const std::size_t begin, const std::size_t end) const override
+            {
+                const std::shared_ptr<const ui_tree> tree { host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
+                const ui_element* const element { focused_text_element(tree.get()) };
+                if (element == nullptr)
+                    return std::nullopt;
+                const text_measurer measure = [](const std::u8string_view text, const float pixel_size) {
+                    const SkFont font { configured_ui_typeface(), pixel_size };
+                    return measure_text(text, font);
+                };
+                std::optional<rect_f> span { element->text_span_bounds(text_span_query { document.text, document.caret, begin, end }, measure) };
+                // tree는 안전 영역에서 그려진다. 표면 좌표로 옮긴다.
+                if (span.has_value())
+                {
+                    span->x += static_cast<float>(insets_.left);
+                    span->y += static_cast<float>(insets_.top);
+                }
+                return span;
+            }
+
+            void post_composition(text_composition_event event) override
+            {
+                if (environment_.policy != nullptr)
+                    dispatch(environment_.policy->make_text_composition_action(event));
+            }
+
+            void post_edit(text_edit_request request) override
+            {
+                if (environment_.policy != nullptr)
+                    dispatch(environment_.policy->make_text_edit_action(request));
             }
 
             [[nodiscard]] int run()
@@ -284,6 +374,7 @@ namespace luil::android {
                     }
 
                     process_input();
+                    process_text_input();
 
                     if (host_->faulted() && finishing_ == false)
                     {
@@ -341,6 +432,34 @@ namespace luil::android {
                 host_config.interaction.touch = config_.touch;
                 host_ = std::make_unique<app_host>(std::move(host_config), *environment_.driver, environment_.policy);
 
+                // 클립보드는 JNI로 다룬다. glue는 이 thread를 JVM에 붙이지 않으므로 여기서 붙인다.
+                JavaVM* const vm { app_->activity->vm };
+                if (vm->GetEnv(reinterpret_cast<void**>(&jni_), JNI_VERSION_1_6) == JNI_EDETACHED)
+                {
+                    jni_attached_ = vm->AttachCurrentThread(&jni_, nullptr) == JNI_OK;
+                    if (jni_attached_ == false)
+                        jni_ = nullptr;
+                }
+
+                // IME다. 상태를 넘기고 키보드를 띄우는 일만 GameActivity에 맡긴다.
+                ime_ = std::make_unique<ime_session>(*this,
+                    ime_session::platform {
+                        .set_state = [this](const ime_state& state) { set_ime_state(state); },
+                        .show_keyboard =
+                            [this](const bool show) {
+                                if (show)
+                                    GameActivity_showSoftInput(app_->activity, 0);
+                                else
+                                    GameActivity_hideSoftInput(app_->activity, 0);
+                            },
+                    });
+                // 한 줄 칸이다. 가로 화면에서 키보드가 칸을 가린 전체 화면 편집기로 바뀌지 않게 한다.
+                // 완료 동작은 Enter로 보낸다 (APP_CMD_EDITOR_ACTION).
+                GameActivity_setImeEditorInfo(app_->activity, TYPE_CLASS_TEXT, IME_ACTION_DONE, static_cast<GameTextInputImeOptions>(IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI));
+                glue_text_input_handler.store(app_->activity->callbacks->onTextInputEvent);
+                text_input_wake_fd.store(wake_fd_);
+                app_->activity->callbacks->onTextInputEvent = &on_text_input_event;
+
                 app_->userData = this;
                 app_->onAppCmd = &application::on_app_command;
                 android_app_set_key_event_filter(app_, &key_event_filter);
@@ -377,8 +496,10 @@ namespace luil::android {
                     refresh_metrics();
                     break;
                 case APP_CMD_TERM_WINDOW:
-                    // 창이 사라지면 그 위의 접촉은 뗌 없이 끝난다.
+                    // 창이 사라지면 그 위의 접촉은 뗌 없이 끝난다. 조합 중이면 확정하고 키보드를
+                    // 내린다. 창이 다시 생기면 초점 칸을 IME에 다시 붙인다.
                     post_events(input_.cancel_all(std::chrono::steady_clock::now()));
+                    ime_->detach();
                     // glue는 이 알림이 끝날 때까지 창을 쥐고 있다가 놓는다.
                     // 그 안에서 렌더러를 버려야 놓인 창을 붙잡은 채로 남지 않는다.
                     renderer_.reset();
@@ -400,6 +521,15 @@ namespace luil::android {
                     prefers_light_ = read_prefers_light(app_->config);
                     scale_ = read_scale(app_->config);
                     refresh_metrics();
+                    break;
+                case APP_CMD_SOFTWARE_KB_VIS_CHANGED:
+                    // 사용자가 내린 키보드다 (뒤로 가기, 키보드의 내리기 단추). 같은 칸을 다시
+                    // 누르면 다시 띄운다.
+                    ime_->set_keyboard_visible(app_->softwareKeyboardVisible);
+                    break;
+                case APP_CMD_EDITOR_ACTION:
+                    // 키보드의 완료 단추는 Enter다 (기본 단추 실행, 한 줄 칸의 확정).
+                    host_->post_raw_input(key_pressed_event { key_code::enter, false, false, false, false, std::chrono::steady_clock::now() });
                     break;
                 case APP_CMD_WINDOW_REDRAW_NEEDED:
                     dirty_ = true;
@@ -496,7 +626,14 @@ namespace luil::android {
                     window_width_ = ANativeWindow_getWidth(app_->window);
                     window_height_ = ANativeWindow_getHeight(app_->window);
                 }
+                const int previous_bottom { insets_.bottom };
                 insets_ = read_safe_insets(app_->activity);
+                // 키보드가 올라와 아래가 줄었다. 줄어든 크기로 다시 지은 frame이 오면 초점 칸을
+                // 다시 드러내 달라고 보낸다 (`render`).
+                if (insets_.bottom > previous_bottom && ime_ != nullptr && ime_->target().has_value())
+                    reveal_pending_ = true;
+                else if (insets_.bottom < previous_bottom)
+                    reveal_pending_ = false;
                 // 표면과 안전 영역이 바뀔 때만 한 줄 남긴다. 기기마다 다른 막대·컷아웃 배치를
                 // logcat에서 바로 맞대 보는 자리다.
                 __android_log_print(ANDROID_LOG_INFO, log_tag, "surface %dx%d, safe insets %d,%d,%d,%d, scale %.2f", window_width_, window_height_, insets_.left, insets_.top, insets_.right,
@@ -585,8 +722,8 @@ namespace luil::android {
                 for (const app_ui_command& command : host_->take_app_ui_commands())
                     if (environment_.delegate != nullptr)
                         environment_.delegate->execute_app_ui_command(*host_, command);
-                // 클립보드는 6단계다. 요청은 쌓이지 않게 비운다.
-                static_cast<void>(host_->take_clipboard_requests());
+                for (const clipboard_request& request : host_->take_clipboard_requests())
+                    execute_clipboard(request);
             }
 
             // glue가 모아 둔 입력을 luil 입력 이벤트로 옮겨 input thread에 보낸다.
@@ -608,7 +745,95 @@ namespace luil::android {
             void post_events(std::vector<raw_input_event> events)
             {
                 for (raw_input_event& event : events)
+                {
+                    // 키보드를 내린 뒤 초점을 가진 텍스트 칸을 다시 누르면 키보드를 다시 띄운다.
+                    if (const auto* const released { std::get_if<pointer_released_event>(&event) }; released != nullptr && released->device != pointer_device::mouse)
+                        request_keyboard_at(released->x, released->y);
                     host_->post_raw_input(std::move(event));
+                }
+            }
+
+            void request_keyboard_at(const float x, const float y)
+            {
+                if (ime_ == nullptr || ime_->target().has_value() == false)
+                    return;
+                const std::shared_ptr<const ui_tree> tree { host_->acquire_ui_tree() };
+                const ui_element* const focused { focused_text_element(tree.get()) };
+                if (focused != nullptr && tree->hit_test(x, y) == focused)
+                    ime_->request_keyboard();
+            }
+
+            // IME가 고친 상태를 받고, 앱의 초점·글이 바뀌었으면 IME에 넘긴다.
+            void process_text_input()
+            {
+                // 표시는 glue가 Java thread에서 세운다. 읽는 쪽은 이 thread 하나다.
+                if (app_->textInputState != 0)
+                {
+                    app_->textInputState = 0;
+                    GameActivity_getTextInputState(
+                        app_->activity, [](void* const context, const GameTextInputState* const state) { static_cast<application*>(context)->accept_ime_state(*state); }, this);
+                }
+                ime_->synchronize();
+            }
+
+            void accept_ime_state(const GameTextInputState& state)
+            {
+                ime_state value {};
+                // Java의 글은 modified UTF-8로 온다.
+                value.text = utf8_from_modified_utf8(std::string_view { state.text_UTF8, static_cast<std::size_t>(std::max(0, state.text_length)) });
+                value.selection = { state.selection.start, state.selection.end };
+                value.composing = { state.composingRegion.start, state.composingRegion.end };
+                ime_->accept(value);
+            }
+
+            void set_ime_state(const ime_state& state)
+            {
+                const std::string text { modified_utf8_from_utf8(state.text) };
+                GameTextInputState value {};
+                value.text_UTF8 = text.c_str();
+                value.text_length = static_cast<std::int32_t>(text.size());
+                value.selection = { state.selection.start, state.selection.end };
+                value.composingRegion = { state.composing.start, state.composing.end };
+                GameActivity_setTextInputState(app_->activity, &value);
+            }
+
+            // 초점을 가진 텍스트 칸이다. popup은 아직 없으므로 주 tree에서만 찾는다.
+            [[nodiscard]] const ui_element* focused_text_element(const ui_tree* const tree) const
+            {
+                if (tree == nullptr || focused_text_target().has_value() == false)
+                    return nullptr;
+                return tree->find(host_->acquire_interaction().focused_input);
+            }
+
+            void dispatch(input_action action)
+            {
+                if (auto* const message { std::get_if<app_message>(&action) }; message != nullptr && message->empty() == false)
+                    host_->post_app_message(std::move(*message));
+            }
+
+            // 클립보드 요청이다. 붙여넣기는 그 칸의 insert 편집으로 앱에 보낸다 (Win32와 같다).
+            void execute_clipboard(const clipboard_request& request)
+            {
+                if (jni_ == nullptr)
+                    return;
+                const jobject context { app_->activity->javaGameActivity };
+                if (const auto* const copy { std::get_if<clipboard_copy_request>(&request) }; copy != nullptr)
+                {
+                    if (copy_text_to_clipboard(*jni_, context, copy->text) == false)
+                        log_error(u8"Failed to copy the text to the clipboard.");
+                    return;
+                }
+                const auto* const paste { std::get_if<clipboard_paste_request>(&request) };
+                if (paste == nullptr || environment_.policy == nullptr)
+                    return;
+                std::optional<std::u8string> text { read_text_from_clipboard(*jni_, context) };
+                if (text.has_value() == false || text->empty())
+                    return;
+                text_edit_request edit {};
+                edit.target = paste->target;
+                edit.command = text::text_edit_command::insert;
+                edit.text = std::move(*text);
+                dispatch(environment_.policy->make_text_edit_action(edit));
             }
 
             void render()
@@ -636,6 +861,12 @@ namespace luil::android {
 
                 const std::shared_ptr<const ui_tree> tree { host_->acquire_ui_tree() };
                 state.tree = tree.get();
+                // 키보드가 올라온 뒤 줄어든 크기로 지은 frame이다. 초점 칸을 드러내 달라고 보낸다.
+                if (reveal_pending_ && tree != nullptr && tree->root() != nullptr && std::abs(tree->root()->bounds().height - static_cast<float>(content_height())) < 1.0f)
+                {
+                    reveal_pending_ = false;
+                    host_->post_raw_input(focus_reveal_event {});
+                }
 
                 std::u8string error {};
                 if (renderer_->render(state, error) == false)
@@ -667,6 +898,12 @@ namespace luil::android {
             std::unique_ptr<app_host> host_ {};
             std::unique_ptr<renderer_host> renderer_ {};
             input_translator input_ {};
+            std::unique_ptr<ime_session> ime_ {};
+            // 키보드가 올라와 줄어든 frame이 오면 초점 칸을 드러내 달라고 보낸다.
+            bool reveal_pending_ { false };
+            // 이 thread의 JNI 환경이다. 우리가 붙였으면 끝날 때 뗀다.
+            JNIEnv* jni_ { nullptr };
+            bool jni_attached_ { false };
             // Activity 하나의 Vulkan 장치다. 창이 사라져도 남고, CPU로 물러서면 놓는다.
             std::unique_ptr<vulkan_device> vulkan_ {};
             // CPU로 물러선 뒤다. 다시 생긴 창도 CPU로 그린다.

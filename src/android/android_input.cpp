@@ -354,6 +354,30 @@ namespace luil::android {
         const bool backspace { input.key_code == AKEYCODE_DEL };
         const bool character_key { backspace || input.unicode_char != 0 };
 
+        // 편집 전용 키(복사·붙여넣기·잘라내기)는 Ctrl 단축키로 옮긴다. 이런 키가 있는 키보드에서
+        // 텍스트 칸이 같은 명령을 받는다.
+        const auto edit_key = [](const std::int32_t code) {
+            switch (code)
+            {
+            case AKEYCODE_COPY:
+                return key_code::key_c;
+            case AKEYCODE_PASTE:
+                return key_code::key_v;
+            case AKEYCODE_CUT:
+                return key_code::key_x;
+            default:
+                return key_code::none;
+            }
+        };
+        if (const key_code edit { edit_key(input.key_code) }; edit != key_code::none)
+        {
+            key_pressed_event event { edit, true, shift, false, input.repeat_count > 0, time };
+            event.primary_shortcut = true;
+            event.word_navigation = control;
+            events.push_back(raw_input_event { std::move(event) });
+            return events;
+        }
+
         key_code key { named_key(input.key_code) };
         if (key == key_code::none)
             key = modified_key(input.key_code, shortcut, character_key);

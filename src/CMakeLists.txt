@@ -483,10 +483,14 @@ if(LUIL_PLATFORM STREQUAL "android")
         "${public_headers}/android/android_app.h"
         android/android_app.cpp
         android/android_assets.cpp
+        android/android_clipboard.cpp
+        android/android_clipboard.h
         android/android_fonts.cpp
         android/android_fonts.h
         android/android_input.cpp
         android/android_input.h
+        android/android_text_input.cpp
+        android/android_text_input.h
         android/cpu_skia_renderer.cpp
         android/cpu_skia_renderer.h
         android/fail_fast.cpp

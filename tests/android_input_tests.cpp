@@ -243,6 +243,14 @@ TEST_CASE("Android keys follow the Windows key and character split", "[android][
     REQUIRE(as<luil::key_pressed_event>(events[0]).key == luil::key_code::space);
     REQUIRE(as<luil::character_typed_event>(events[1]).character == U' ');
 
+    // 편집 전용 키는 Ctrl 단축키다.
+    events = translator.translate(key(AKEYCODE_PASTE));
+    REQUIRE(events.size() == 1u);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).key == luil::key_code::key_v);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).primary_shortcut_down());
+    REQUIRE(as<luil::key_pressed_event>(translator.translate(key(AKEYCODE_COPY))[0]).key == luil::key_code::key_c);
+    REQUIRE(as<luil::key_pressed_event>(translator.translate(key(AKEYCODE_CUT))[0]).key == luil::key_code::key_x);
+
     // 수정자 키 자체와 뗌은 이벤트가 아니다. 자동 반복은 표시한다.
     REQUIRE(translator.translate(key(AKEYCODE_SHIFT_LEFT, AMETA_SHIFT_ON)).empty());
     luil::android::key_input released { key(AKEYCODE_DPAD_DOWN) };
