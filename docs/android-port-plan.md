@@ -118,10 +118,10 @@ popup마다 HWND를 쓴다. 모바일은 표면 하나에 수명 주기 이벤�
 | --- | --- | --- | --- | --- |
 | 실행 루프와 깨우기 | `app_host::wake_signals`(std::function), Win32는 `PostMessageW` | 그대로 | 3 | `CFRunLoopSource` |
 | 창과 표면 | `window_surface`(HWND) | 플랫폼 내부. 공유 코드는 `frame_state` 조립 | 3 | `UIView` |
-| 렌더러 | `skia_renderer`(HWND, `IDCompositionVisual*`가 서명에 있음) | 인터페이스는 `backend/resize/render`만 남긴다. 네이티브 핸들은 플랫폼별 생성 함수만 받는다. `underlay`는 Win32 확장으로 옮긴다. | 1, 3, 4 | `CAMetalLayer` + Ganesh Metal |
-| 글꼴 공급 | `win32_fonts.cpp`의 free function, `registry_font_resolver` | `font_source` 인터페이스(관리자 생성, UI 서체 해석, 문자별 fallback, 사용자 언어). 캐시와 mutex는 core에 둔다. | 1, 3 | `SkFontMgr_New_CoreText` |
-| 자산 읽기 | `FindResourceW` (codicon, 고지) | `asset_reader`. 바이트 배열을 돌려준다. | 1, 3 | `NSBundle` |
-| 시스템 외양 | `win32_window.cpp`가 읽고 팔레트까지 고른다 | `system_appearance` 값(밝은 모드 선호, 고대비와 그 색, accent, 텍스트 품질). 해석은 core로 옮긴다. | 1 | `UITraitCollection` |
+| 렌더러 | `skia_renderer`(HWND, `IDCompositionVisual*`가 서명에 있음) | **1단계에서 세움.** core의 `skia_renderer`(`backend/resize/render`)와 `renderer_host`. 플랫폼은 `renderer_factories`로 생성 함수만 넘긴다. `underlay`는 Win32 확장 `composition_renderer`다. | 1, 3, 4 | `CAMetalLayer` + Ganesh Metal |
+| 글꼴 공급 | `win32_fonts.cpp`의 free function, `registry_font_resolver` | **1단계에서 세움.** core의 글꼴 registry와 `font_source`(시스템 관리자, 새로 만드는 관리자, 기본 UI 가족, 사용자 언어). 플랫폼이 `platform_font_source()`를 하나 정의한다. | 1, 3 | `SkFontMgr_New_CoreText` |
+| 자산 읽기 | `FindResourceW` (codicon, 고지) | **interface를 만들지 않았다.** 공개 `load_codicon_typeface()`가 경계이고 플랫폼마다 구현한다. Android는 3단계에서 바이트 배열로 구현한다. | 3 | 같은 방식 |
+| 시스템 외양 | `win32_window.cpp`가 읽고 팔레트까지 고른다 | **interface를 만들지 않았다.** 해석(`resolve_color_theme`, `frame_palette`)은 이미 core에 있고, OS 값은 기존 setter(`set_system_accent`, `set_text_render_quality`)와 `frame_state` 필드로 넣는다. 플랫폼은 값을 읽기만 한다. | 3 | `UITraitCollection` |
 | 더블클릭 시간 | `interaction_config::double_click_time` | 그대로 | 3 | 상수 |
 | 배율 | `dpi / 96` | 플랫폼이 정한다. Android는 `density / 160`이라 논리 픽셀 1이 1dp다. | 3 | `contentScaleFactor` |
 | 타이머 | `next_update`·`next_tick` 계약, Win32는 `SetTimer` | 계약 그대로. Android는 `ALooper_pollOnce`의 시간 제한으로 건다. | 3 | `CADisplayLink`, 타이머 |
@@ -138,7 +138,9 @@ popup마다 HWND를 쓴다. 모바일은 표면 하나에 수명 주기 이벤�
 - Android는 `AKEYCODE_*`를 이름 있는 키로 먼저 옮기고, 나머지를 `first_platform_key + AKEYCODE`로
   보낸다.
 - 공개 헤더의 `alphanumeric_key_code(vk)`와 `platform_key_code(vk)`는 VK가 ASCII라는 가정을 담고
-  있다. 이 둘은 Win32 변환 쪽으로 옮기고, 공개 헤더에는 플랫폼 중립 생성 함수만 남긴다.
+  있다. **옮기지 않고 Win32 호환 함수로 남긴다** (1단계에서 정함). 앱이 `platform_key_code('S')`처럼
+  부르는 기존 경로이고 [상호작용](concepts/interaction.md)도 그렇게 적고 있어, 옮기면 깨는 변경이
+  된다. Android 입력은 자기 키 코드를 이름 키로 직접 옮긴다.
 - Backspace는 Win32와 같게 `character_typed_event{0x08}`로 보낸다. `key_code::backspace`는 더하지
   않는다. 더하면 Windows 동작이 바뀐다.
 
@@ -629,29 +631,52 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 | (a) `gpu`를 더한다 (추천) | "플랫폼의 GPU 경로"라는 뜻이다. `direct3d`는 Windows에서 `gpu`와 같은 뜻으로 남는다. 파서는 `gpu`를 받는다. |
 | (b) 플랫폼별 값을 더한다 | `vulkan`, `metal`. 다른 플랫폼에서 고르면 오류다. |
 
-## 착수 준비 — 1단계
+## 1단계 결과
 
-### 기준선
+2026-10-02에 끝냈다. 브랜치는 `android-port`이고 커밋은 로컬에만 있다.
 
-위 "기준선" 표의 값이다. Release는 799개, Debug는 780개(asan 19개 제외)가 모두 통과했다.
-smoke 5개는 두 구성 모두에서 통과했다. CPU 전용 빌드(`LUIL_ENABLE_DIRECT3D=OFF`)의 기준선은
-1단계의 첫 커밋 전에 따로 잰다. 지금 그 구성을 담은 preset이 없어서다.
+| 커밋 | 내용 |
+| --- | --- |
+| `2ee3a1b` | `luil_core` 대상, `luil_core_tests`, core 이식성 검사 test |
+| `09c3243` | popup·웹뷰 자리 대조, 다시 그리기 계획, fence 대기 예산을 core로 |
+| `ec9edce` | host API를 `luil/app/`과 `luil`로. 옛 경로는 별칭 헤더. frame 그리기와 렌더러 정책을 core로 |
+| `da5820d` | 줄 끝 정리 스크립트가 worktree를 건너뛴다 (작업 중 다른 세션의 자산을 건드린 것을 고침) |
+| `625983d` | 글꼴 registry를 core로. OS 글꼴 자원은 `platform_font_source()` |
+| `9ac1a1c` | `app_host`를 core로. 즉시 종료는 `platform_fail_fast()` |
+| `7a8473c` | 렌더러 interface와 실패 물러섬을 core로. `renderer_mode::gpu` |
+| `4d0a55e` | 터치·펜 접촉 추적을 core로. 접촉 단계 `pointer_phase` |
 
-### 작업 순서
+**검증.** 커밋마다 Release, Debug, CPU 전용 Release의 CTest 전부를 돌렸다 (smoke 포함).
 
-1단계를 아래 커밋들로 나눈다. 커밋마다 공통 조건을 돌린다. 3번은 결정 1의 (a)대로 옛 경로를 전달
-헤더로 남기고, 6번은 결정 6의 (a)대로 `renderer_mode::gpu`를 더한다. `gpu`는 Windows에서
-`direct3d`와 같은 동작이고, `renderer_policy_tests`의 "vulkan 거부" 확인은 그대로 둔다.
+| 구성 | 기준선 | 1단계 끝 |
+| --- | --- | --- |
+| Release | 799 | 811 |
+| Debug (asan 19개 제외) | 780 | 792 |
+| CPU 전용 Release | 797 (direct3d smoke는 설계대로 건너뜀) | 809 |
 
-1. `build: 이식 가능한 층을 별도 대상으로 세운다` — `luil_core`, `luil_core_tests`, core 소스 검사
-   테스트를 더한다.
-2. `refactor: 순수 계산 파일을 host 묶음으로 옮긴다` — 파일마다 Win32 의존을 다시 확인한 뒤 옮긴다.
-3. `refactor: host API를 플랫폼 중립 경로로 옮긴다` — 결정 1에 따른다.
-4. `refactor: app_host가 Win32 글꼴과 MSVC 내장 함수에 기대지 않는다`
-5. `refactor: 글꼴·자산·시스템 외양을 플랫폼이 공급한다` — 테마 해석을 core로 옮긴다.
-6. `refactor: 렌더러 인터페이스에서 창 핸들을 뺀다` — 결정 6에 따른다.
-7. `refactor: 포인터 시퀀스 추적을 Win32 메시지 값에서 뗀다`
-8. `docs: 플랫폼 경계를 개념 문서에 적는다`
+늘어난 12개는 core 이식성 검사 1, `gpu` 모드 선택 1, 렌더러 물러섬 9, 메시지→접촉 단계 1이다.
+옮긴 test는 실행 파일만 바뀌었고 수는 그대로다. 예제, 설치본 소비자 test, `app_host_tests`는 옛
+이름(`luil::win32::app_host` 등)을 그대로 두어 소스 호환을 확인했다.
+
+**계획과 달라진 것.**
+
+- `system_appearance`와 `asset_reader`는 만들지 않았다. 위 "플랫폼 경계" 표에 이유를 적었다.
+- 플랫폼 hook 둘(`platform_font_source()`, `platform_fail_fast()`)은 등록 함수가 아니라 플랫폼
+  계층이 하나씩 정의하는 링크 결합으로 했다. 창 없는 test와 input thread가 시작 순서와 무관하게
+  같은 자원을 보게 하려는 것이다.
+- `alphanumeric_key_code`와 `platform_key_code`는 공개 Win32 호환 함수로 남겼다 (위 "키 코드").
+- `dpi_scale.h`(96 DPI 기준), `caption_layout`·`window_mode`(데스크톱 창), `webview_layout`·
+  `webview_message_gate`(WebView2)는 Win32에 남겼다. 다른 플랫폼이 쓸 일이 없다.
+
+**2단계로 넘기는 것.**
+
+- `app_host_tests`는 `luil_tests`에 남아 있다. `app_host`가 두 플랫폼 hook을 부르므로, core
+  test 실행 파일에서 돌리려면 test용 hook 구현(빈 글꼴 관리자, `abort`)을 붙여야 한다. 2단계에서
+  Android 기기 test에 넣을지와 함께 정한다.
+- 작업 중 HTTP client test 두 개가 한 번씩 실패했다 ("survives stop with requests in flight"는
+  `0xC0020043`, "cancelling a heartbeat mid round yields exactly one final response"는 단언 실패).
+  각각 20회·30회 다시 돌려 모두 통과했고 `src/net`은 이 단계에서 바뀌지 않았다. 원인 조사는 별도
+  작업으로 돌렸다.
 
 ### 확인한 환경
 

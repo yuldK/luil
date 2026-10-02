@@ -27,3 +27,15 @@ input은 interaction snapshot을 값으로 게시하고 UI는 자신의 표면 i
 `app_host`의 wake callback은 비어 있을 수 있다. 따라서 logic/input/channel/slot 조립과 종료·메시지 처리는 HWND 없이도 테스트할 수 있으며, Win32 callback은 host를 사용하는 애플리케이션이 주입한다.
 
 driver와 input 처리에서 예외가 스레드 진입 경계까지 전파되면 host는 fault를 기록하고 처리를 멈춘다. 앱 오류는 메시지나 frame의 상태 값으로 전달하고, UI는 `faulted()`를 확인해 종료할 수 있다.
+
+## 플랫폼 host
+
+`app_host`·글꼴 registry·렌더러 실패 물러섬·터치 접촉 추적은 플랫폼을 모르는 `luil_core`에 있다. 플랫폼 host가 맡는 것은 다음이다.
+
+- 진입점을 부른 thread가 UI thread다. host는 그 thread에서 이벤트 루프를 돌리고 `wake_signals`를 자기 루프에 맞게 구현한다 (Win32는 `PostMessageW`).
+- OS 입력을 `raw_input_event`로 옮겨 `post_raw_input`에 넣는다. 터치·펜은 `pointer_sample`의 접촉 단계로 옮겨 공용 추적기에 넣는다.
+- `take_ui_commands`·`take_app_ui_commands`·`take_clipboard_requests`가 꺼낸 명령을 UI thread에서 실행한다.
+- 링크로 묶이는 두 함수를 하나씩 정의한다. 글꼴 자원을 주는 `platform_font_source()`와 회복할 수 없는 종료인 `platform_fail_fast()`다. 등록 순서가 없어 창 없는 test와 input thread도 같은 자원을 본다.
+- 표면마다 GPU·CPU 렌더러 생성 함수를 `renderer_factories`로 넘겨 `renderer_host`를 세운다.
+
+Win32 host는 [`win32_window.h`](../../include/luil/win32/win32_window.h)의 `run_application_window()`이고, 다른 플랫폼이 같은 자리에 들어오는 순서는 [Android 이식 계획](../android-port-plan.md)에 있다.
