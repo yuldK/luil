@@ -1,0 +1,21 @@
+{
+    "schema": 1,
+    "source": "https://developer.android.com/games/agdk/game-activity",
+    "version": "4.4.2",
+    "target": "android-arm64",
+    "asset_base_url": "https://dl.google.com/android/maven2/androidx/games/games-activity/4.4.2",
+    "asset": {
+        "file": "games-activity-4.4.2.aar",
+        "size": 1845126,
+        "sha256": "16069bb61a34e9cc7a4f6b4cef0ddb9e2f3f61fe781b282787f574f8880ba38e"
+    },
+    "install": {
+        "prefab/modules/game-activity_static/include/common/gamesdk_common.h": "include/common/gamesdk_common.h",
+        "prefab/modules/game-activity_static/include/game-activity/GameActivity.h": "include/game-activity/GameActivity.h",
+        "prefab/modules/game-activity_static/include/game-activity/GameActivityEvents.h": "include/game-activity/GameActivityEvents.h",
+        "prefab/modules/game-activity_static/include/game-activity/GameActivityLog.h": "include/game-activity/GameActivityLog.h",
+        "prefab/modules/game-activity_static/include/game-activity/native_app_glue/android_native_app_glue.h": "include/game-activity/native_app_glue/android_native_app_glue.h",
+        "prefab/modules/game-activity_static/include/game-text-input/gametextinput.h": "include/game-text-input/gametextinput.h",
+        "prefab/modules/game-activity_static/libs/android.arm64-v8a/libgame-activity_static.a": "lib/libgame-activity_static.a"
+    }
+}

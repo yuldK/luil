@@ -103,6 +103,10 @@ set(LUIL_NLOHMANN_JSON_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/nlohmann_json")
 # scripts/fetch_webview2.ps1로 헤더와 정적 로더를 준비한다.
 set(LUIL_WEBVIEW2_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/webview2-prep"
     CACHE PATH "WebView2 SDK package that provides the headers and the static loader.")
+# Android 앱 host의 GameActivity 네이티브 절반이다.
+# scripts/fetch_game_activity.ps1로 헤더와 정적 라이브러리를 준비한다.
+set(LUIL_GAME_ACTIVITY_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/game-activity-prep"
+    CACHE PATH "GameActivity native package that provides the headers and the static library.")
 
 # Skia 패키지의 대상이다. fetch_skia.ps1의 -Target과 같은 이름이다.
 if(LUIL_PLATFORM STREQUAL "windows")

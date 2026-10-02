@@ -11,6 +11,10 @@
 # 판번은 third_party/webview2-prep.json이 고정한다.
 /third_party/webview2-prep/
 /third_party/webview2-prep-archives/
+# scripts/fetch_game_activity.ps1이 내려받아 푸는 자리다 (같은 규칙).
+# 판번은 third_party/game-activity-prep.json이 고정한다.
+/third_party/game-activity-prep/
+/third_party/game-activity-prep-archives/
 # 도구가 쓰는 로컬 설정이다. 저장소의 것이 아니라 스타일 검사도 건너뛴다
 # (scripts/check_source_style.ps1).
 /.claude/settings.local.json

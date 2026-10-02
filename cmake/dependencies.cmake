@@ -11,6 +11,7 @@ include("${LUIL_DEPENDENCIES_DIRECTORY}/skia.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/nlohmann_json.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/webview2.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/catch2.cmake")
+include("${LUIL_DEPENDENCIES_DIRECTORY}/game_activity.cmake")
 
 function(luil_find_dependencies)
     cmake_parse_arguments(PARSE_ARGV 0 arguments "" "BUILD_TESTS;ENABLE_WEBVIEW" "")
@@ -28,6 +29,11 @@ function(luil_find_dependencies)
     # (CMakeLists.txt의 LUIL_WEBVIEW2_ROOT).
     if(NOT DEFINED arguments_ENABLE_WEBVIEW OR arguments_ENABLE_WEBVIEW)
         luil_find_webview2()
+    endif()
+
+    # Android 앱 host가 GameActivity 위에 선다.
+    if(LUIL_PLATFORM STREQUAL "android")
+        luil_find_game_activity()
     endif()
 
     # Catch2는 test 구성에서만 요구한다.
