@@ -1078,11 +1078,17 @@ Debug 673개(core 571, HTTP 102)가 통과한다. 중간 커밋 하나하나는 
 
 **발견했지만 고치지 않은 것.**
 
-- 밝은 테마에서 채운 강조 단추(dialog의 기본 단추, "새것" 배지)의 글자가 바탕과 대비가 낮다. 내장 accent 표의 밝은 쪽
-  `accentEmphasisFg`가 채움보다 어두운 같은 색이라서다. Windows도 같고 색 설계의 문제라 사용자에게 묻는다.
 - modal의 scrim이 상태 표시줄 자리는 덮지 않는다 (tree가 안전 영역에만 그려진다).
 
-**남은 8단계 일.** Android smoke test(CTest `android` 라벨), 소비자 계약의 Android 절, 배포 서명(apksigner) 문서.
-미룬 것: 글꼴(언어 바꿈 뒤 대체 글꼴), popup 안 텍스트 칸 IME 확인, 텍스트 칸의 복사·붙여넣기 메뉴, 여러 줄 label.
+**그 뒤 사용자의 요청으로 고친 것.**
 
-**검증 (이 트리).** Windows Release 856개, Debug 837개, CPU 전용 Release 854개 CTest와 기기 test Release 674개가 통과한다.
+- `39e160d` 채운 강조 바탕(기본 단추, 체크 표시, 켜진 스위치, 강조 배지) 위의 글자가 옅은 바탕용 글자색이라 밝은 테마
+  1.5:1, 어두운 테마 3.1:1이었다. 채운 바탕용 역할(`accent_foreground`, `error_foreground`)을 더해 대비가 큰 흰색이나
+  검정을 고른다. 내장 accent 25개와 시스템 accent가 두 테마에서 4.5:1을 넘는 것을 test가 잠근다. Windows에서도 바뀐다.
+- `6b879ea` popup 안 검색 칸을 누르면 키보드가 안전 영역을 줄여 popup이 닫혔다. 창 자체가 바뀔 때만 닫는다. 가로 화면의
+  기기에서 popup 안 IME 조합과 목록 좁히기를 확인했다.
+
+**남은 8단계 일.** Android smoke test(CTest `android` 라벨), 소비자 계약의 Android 절, 배포 서명(apksigner) 문서.
+미룬 것: 글꼴(언어 바꿈 뒤 대체 글꼴), 텍스트 칸의 복사·붙여넣기 메뉴, 여러 줄 label.
+
+**검증 (이 트리).** Windows Release 857개, Debug 838개, CPU 전용 Release 855개 CTest와 기기 test Release 675개가 통과한다.
