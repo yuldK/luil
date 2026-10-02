@@ -12,9 +12,9 @@ function(luil_install_rules)
     # Debug 산출물에는 접미사 d를 붙인다.
     # 한 설치 prefix의 lib/에 Debug·Release가 서로 덮어쓰지 않고 공존해야
     # 구성별 소비자가 각각 맞는 CRT의 라이브러리에 링크된다.
-    set_target_properties(luil PROPERTIES DEBUG_POSTFIX "d")
+    set_target_properties(luil luil_core PROPERTIES DEBUG_POSTFIX "d")
 
-    install(TARGETS luil luil_usage luil_options
+    install(TARGETS luil luil_core luil_usage luil_options
         EXPORT luil-targets
         ARCHIVE DESTINATION lib)
     # 공개 헤더와 생성 헤더(codicons·accents·version)를 한 include 루트로 합친다.

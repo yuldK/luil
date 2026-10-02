@@ -19,7 +19,11 @@ Skia 위치는 `LUIL_SKIA_ROOT`, Debug·Release 산출물 위치는 `LUIL_SKIA_B
 
 ## 타깃과 옵션 전파
 
-공개 라이브러리는 `luil`이며 `luil::luil` alias를 제공한다. `luil_usage`는 소비자가 공개 헤더를 컴파일하는 데 필요한 C++20과 MSVC `/utf-8`을 전파한다. 경고 수준·`/WX`·분석·Windows 매크로 설정을 담은 `luil_options`는 라이브러리와 저장소의 테스트·예제가 PRIVATE로 사용한다. 소비자가 `luil::luil`을 링크한다고 이 내부 경고 정책을 받지는 않는다.
+공개 라이브러리는 `luil`이며 `luil::luil` alias를 제공한다. 소비자는 이것 하나만 링크한다.
+
+라이브러리는 두 static library로 나뉜다. `luil_core`(`luil::luil_core`)는 플랫폼을 모르는 층(messaging·text·theme·ui)이고, `luil`은 그 위의 플랫폼 조립(win32·net)이며 `luil_core`를 PUBLIC으로 링크한다. 경계를 target으로 긋는 이유는 다른 플랫폼에서 core만 세워 검증하기 위해서다 ([Android 이식 계획](../android-port-plan.md)). core의 test는 `luil_core_tests`라는 별도 실행 파일이고 core만 링크한다. core 소스가 플랫폼 헤더나 상위 계층(win32·net)을 include하지 않았는지는 `luil_core_portability` test가 include 줄을 읽어 확인한다. Windows에서는 그런 include가 있어도 빌드되기 때문이다.
+
+`luil_usage`는 소비자가 공개 헤더를 컴파일하는 데 필요한 C++20과 MSVC `/utf-8`을 전파한다. 경고 수준·`/WX`·분석·Windows 매크로 설정을 담은 `luil_options`는 라이브러리와 저장소의 테스트·예제가 PRIVATE로 사용한다. 소비자가 `luil::luil`을 링크한다고 이 내부 경고 정책을 받지는 않는다.
 
 최상위 빌드는 Skia의 `/MT`·`/MTd`와 맞는 정적 CRT를 설정한다. `add_subdirectory`로 포함되면 소비자의 CRT 설정을 유지하므로 소비자가 Skia와 일치시켜야 한다.
 

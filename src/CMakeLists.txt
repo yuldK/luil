@@ -47,29 +47,35 @@ add_custom_command(
 # 적은 것에 지나지 않아 아무것도 줄여 주지 않는다.
 # 한 묶음 안에는 구현(.cpp)과 그 header(.h)를 함께 둔다 — 공개 헤더가 include/에,
 # 구현이 src/에 있어 디렉터리로는 갈라지지만, 고칠 때 여는 파일은 한자리에 모인다.
+#
+# 소스는 두 target으로 나뉜다. `luil_core`는 플랫폼을 모르는 층(messaging·text·
+# theme·ui)이고, `luil`은 그 위의 플랫폼 조립(win32·net)이다. 경계를 target으로
+# 긋는 이유는 다른 플랫폼에서 core만 세워 검증하기 위해서다
+# (docs/android-port-plan.md). core에 Win32 헤더가 들어오지 않았는지는
+# `luil_core_portability` test가 본다.
 set(public_headers "${LUIL_INCLUDE_DIRECTORY}/luil")
+set(luil_core_files)
 set(luil_files)
 
 # 생성 파일이다. source tree 밖에 있어 어느 계층에도 속하지 않는다.
-luil_add_source_filter(luil_files "generated"
+luil_add_source_filter(luil_core_files "generated"
     "${LUIL_GENERATED_CODICONS}"
     "${LUIL_GENERATED_ACCENTS}"
     "${LUIL_GENERATED_STYLE}")
 
-# core: 소비자가 처음 여는 우산 헤더와 판번이다.
-luil_add_source_filter(luil_files "core"
+# core: 판번이다.
+luil_add_source_filter(luil_core_files "core"
     luil/version.cpp
-    "${public_headers}/luil.h"
     "${public_headers}/version.h")
 
 # messaging: thread 사이로 값을 나르는 통로다 (header-only).
-luil_add_source_filter(luil_files "messaging"
+luil_add_source_filter(luil_core_files "messaging"
     "${public_headers}/messaging/channel.h"
     "${public_headers}/messaging/envelope.h"
     "${public_headers}/messaging/latest_slot.h")
 
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
-luil_add_source_filter(luil_files "text"
+luil_add_source_filter(luil_core_files "text"
     text/text_edit.cpp
     "${public_headers}/text/fonts.h"
     "${public_headers}/text/text_edit.h"
@@ -77,7 +83,7 @@ luil_add_source_filter(luil_files "text"
     "${public_headers}/text/utf8_text.h")
 
 # theme: 색·글꼴 선호 값과 팔레트 합성이다.
-luil_add_source_filter(luil_files "theme"
+luil_add_source_filter(luil_core_files "theme"
     theme/appearance.cpp
     "${public_headers}/theme/appearance.h"
     theme/ui_style.cpp
@@ -89,7 +95,7 @@ luil_add_source_filter(luil_files "theme"
 # 불변 tree와 그 위에 얹히는 element를, 하는 일에 따라 나눈다.
 
 # tree 자체와 그 정체성이다. 앱으로 나가는 메시지와 보조 기술이 읽는 역할도 여기 있다.
-luil_add_source_filter(luil_files "ui/foundation"
+luil_add_source_filter(luil_core_files "ui/foundation"
     ui/accessibility.cpp
     "${public_headers}/ui/accessibility.h"
     "${public_headers}/ui/app_message.h"
@@ -100,7 +106,7 @@ luil_add_source_filter(luil_files "ui/foundation"
     "${public_headers}/ui/ui_tree.h")
 
 # 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
-luil_add_source_filter(luil_files "ui/interaction"
+luil_add_source_filter(luil_core_files "ui/interaction"
     "${public_headers}/ui/text_input_state.h"
     "${public_headers}/ui/ui_cursor.h"
     "${public_headers}/ui/ui_events.h"
@@ -108,14 +114,14 @@ luil_add_source_filter(luil_files "ui/interaction"
     "${public_headers}/ui/ui_interaction.h")
 
 # element가 공유하는 그리기 조각과 배치 값이다.
-luil_add_source_filter(luil_files "ui/drawing"
+luil_add_source_filter(luil_core_files "ui/drawing"
     ui/draw_primitives.cpp
     "${public_headers}/ui/draw_primitives.h"
     "${public_headers}/ui/layout_metrics.h"
     "${public_headers}/ui/transition.h")
 
 # 자식을 담고 자리를 정하는 element다.
-luil_add_source_filter(luil_files "ui/layout"
+luil_add_source_filter(luil_core_files "ui/layout"
     ui/group_element.cpp
     "${public_headers}/ui/group_element.h"
     ui/panel_element.cpp
@@ -142,7 +148,7 @@ luil_add_source_filter(luil_files "ui/layout"
     "${public_headers}/ui/wrap_element.h")
 
 # 사용자가 값을 바꾸는 element다.
-luil_add_source_filter(luil_files "ui/controls"
+luil_add_source_filter(luil_core_files "ui/controls"
     ui/button_element.cpp
     "${public_headers}/ui/button_element.h"
     ui/check_element.cpp
@@ -155,7 +161,7 @@ luil_add_source_filter(luil_files "ui/controls"
     "${public_headers}/ui/slider_element.h")
 
 # 보여 주기만 하는 element다 (글·그림·상태 표시).
-luil_add_source_filter(luil_files "ui/content"
+luil_add_source_filter(luil_core_files "ui/content"
     ui/glyph_element.cpp
     "${public_headers}/ui/glyph_element.h"
     ui/badge_element.cpp
@@ -171,12 +177,12 @@ luil_add_source_filter(luil_files "ui/content"
 
 # 이미지 파일과 바이트를 픽셀로 읽는다 (Skia 코덱 — png·jpeg·webp·gif).
 # element가 아니라 값을 만드는 자리라 `ui/content`와 나눈다.
-luil_add_source_filter(luil_files "ui/image"
+luil_add_source_filter(luil_core_files "ui/image"
     ui/image_decode.cpp
     "${public_headers}/ui/image_decode.h")
 
 # 항목을 늘어놓고 그중 하나를 고르는 element다.
-luil_add_source_filter(luil_files "ui/lists"
+luil_add_source_filter(luil_core_files "ui/lists"
     ui/grouped_list_element.cpp
     "${public_headers}/ui/grouped_list_element.h"
     ui/list_element.cpp
@@ -188,7 +194,7 @@ luil_add_source_filter(luil_files "ui/lists"
     "${public_headers}/ui/virtual_list_element.h")
 
 # 다른 것 위에 떠서 잠깐 사는 element다.
-luil_add_source_filter(luil_files "ui/overlays"
+luil_add_source_filter(luil_core_files "ui/overlays"
     ui/dialog_elements.cpp
     "${public_headers}/ui/dialog_elements.h"
     ui/menu_element.cpp
@@ -199,10 +205,14 @@ luil_add_source_filter(luil_files "ui/overlays"
     "${public_headers}/ui/toast_element.h")
 
 # 직접 그리는 창 캡션이다. 치수는 win32의 비클라이언트 hit test와 나눠 쓴다.
-luil_add_source_filter(luil_files "ui/caption"
+luil_add_source_filter(luil_core_files "ui/caption"
     ui/caption_element.cpp
     "${public_headers}/ui/caption_element.h"
     "${public_headers}/ui/caption_metrics.h")
+
+# 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.
+luil_add_source_filter(luil_files "umbrella"
+    "${public_headers}/luil.h")
 
 # win32: Win32와 Skia 조립이다.
 # 여기 남은 header는 비공개 구현 세부이고, 묶음은 계층 안의 관심사로 나눈다.
@@ -335,19 +345,19 @@ luil_add_source_filter(luil_files "net"
     net/winhttp_error.cpp
     net/winhttp_error.h)
 
-# 라이브러리 전체가 하나의 static library다.
-# 계층(messaging → text → theme → ui → win32 → net)은 디렉터리
-# 구조와 코드 리뷰로 지키며, target 경계로는 나누지 않는다.
-add_library(luil STATIC ${luil_files})
-add_library(luil::luil ALIAS luil)
-target_include_directories(luil
+# 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
+# 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만
+# target으로 긋는다.
+add_library(luil_core STATIC ${luil_core_files})
+add_library(luil::luil_core ALIAS luil_core)
+target_include_directories(luil_core
     PUBLIC
         "$<BUILD_INTERFACE:${LUIL_INCLUDE_DIRECTORY}>"
         "$<BUILD_INTERFACE:${LUIL_GENERATED_INCLUDE_DIRECTORY}>"
         "$<INSTALL_INTERFACE:include>"
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}")
-target_link_libraries(luil
+target_link_libraries(luil_core
     PUBLIC
         # 소비자 요건(C++20·/utf-8)만 전파한다.
         # /W4 /WX 같은 내부 규율은 PRIVATE의 luil_options에 있다.
@@ -355,6 +365,31 @@ target_link_libraries(luil
         # Skia는 imported target이라 export할 수 없다.
         # 빌드 트리에서만 여기서 잇고, 설치본은 package config가
         # 같은 검사(cmake/dependencies/skia.cmake)로 다시 만들어 잇는다.
+        "$<BUILD_INTERFACE:luil_skia>"
+    PRIVATE
+        luil_options)
+
+# 자산 checksum 검증은 빌드마다 한 번 실행한다.
+# 별도 target 대신 라이브러리의 빌드 전 단계에 붙여 솔루션 구성 요소를 늘리지 않는다.
+# codicon 매핑을 쓰는 것이 core라 이쪽에 붙인다.
+add_custom_command(TARGET luil_core PRE_BUILD
+    COMMAND "${CMAKE_COMMAND}"
+        "-DASSET_DIRECTORY=${LUIL_ASSET_DIRECTORY}"
+        -P "${LUIL_CMAKE_DIRECTORY}/verify_codicons.cmake"
+    COMMENT "Verifying Codicons checksums"
+    VERBATIM)
+
+# core 위의 플랫폼 조립이다 (win32 → net).
+# 소비자가 링크하는 이름은 지금처럼 `luil::luil` 하나이고, core는 PUBLIC으로 따라온다.
+add_library(luil STATIC ${luil_files})
+add_library(luil::luil ALIAS luil)
+target_include_directories(luil
+    PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}")
+target_link_libraries(luil
+    PUBLIC
+        luil_core
+        luil_usage
         "$<BUILD_INTERFACE:luil_skia>"
         # JSON 본문 타입이다 (header-only). Skia와 같은 이유로 빌드 트리에서만
         # 여기서 잇고, 설치본은 헤더 사본을 include/에 함께 둔다 (cmake/install.cmake).
@@ -386,12 +421,3 @@ target_link_libraries(luil
         winhttp
     PRIVATE
         luil_options)
-
-# 자산 checksum 검증은 빌드마다 한 번 실행한다.
-# 별도 target 대신 라이브러리의 빌드 전 단계에 붙여 솔루션 구성 요소를 늘리지 않는다.
-add_custom_command(TARGET luil PRE_BUILD
-    COMMAND "${CMAKE_COMMAND}"
-        "-DASSET_DIRECTORY=${LUIL_ASSET_DIRECTORY}"
-        -P "${LUIL_CMAKE_DIRECTORY}/verify_codicons.cmake"
-    COMMENT "Verifying Codicons checksums"
-    VERBATIM)

@@ -303,4 +303,4 @@ if(LUIL_BUILD_TOOLING)
     endif()
 endif()
 
-luil_set_ide_folder("Libraries" luil)
+luil_set_ide_folder("Libraries" luil luil_core)

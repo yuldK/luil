@@ -73,6 +73,8 @@ unset(_luil_configuration)
 unset(_luil_flavor)
 
 # 빌드 트리에서는 $<BUILD_INTERFACE>로 잇던 것들을 설치본에서 다시 잇는다.
+# Skia는 core와 플랫폼 조립이 함께 쓰므로 둘 다에 잇는다.
+set_property(TARGET luil::luil_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_skia)
 set_property(TARGET luil::luil APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_skia)
 if(LUIL_ENABLE_WEBVIEW)
     set_property(TARGET luil::luil APPEND PROPERTY INTERFACE_LINK_LIBRARIES luil_webview2)
