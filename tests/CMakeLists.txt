@@ -72,7 +72,15 @@ if(LUIL_PLATFORM STREQUAL "android")
     # 기기의 셸에서 실행한다 (cmake/android/adb_run.cmake).
     #  - 발견을 test 시점으로 미룬다. 빌드할 때 기기가 꽂혀 있지 않아도 된다.
     #  - 기기는 adb가 고른다. 여럿이면 ANDROID_SERIAL로 정한다.
-    find_program(LUIL_ADB_EXECUTABLE NAMES adb REQUIRED)
+    # Android SDK(Android Studio가 까는 자리)의 adb를 PATH보다 먼저 본다. 기기와 붙는
+    # adb 서버는 하나라, 버전이 다른 adb가 둘이면 서로의 서버를 끊고 다시 띄운다.
+    find_program(LUIL_ADB_EXECUTABLE
+        NAMES adb
+        HINTS
+            "$ENV{ANDROID_HOME}/platform-tools"
+            "$ENV{ANDROID_SDK_ROOT}/platform-tools"
+            "$ENV{LOCALAPPDATA}/Android/Sdk/platform-tools"
+        REQUIRED)
     set_target_properties(luil_core_tests PROPERTIES
         CROSSCOMPILING_EMULATOR
             "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")

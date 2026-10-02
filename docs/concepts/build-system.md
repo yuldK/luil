@@ -54,7 +54,7 @@ Android는 지금 플랫폼을 모르는 층(`luil_core`)과 그 test(`luil_core
 | NDK | r27d (`27.3.13750724`). preset이 `ANDROID_NDK_HOME`의 `build/cmake/android.toolchain.cmake`를 쓴다 |
 | Ninja | PATH에 없으면 `CMAKE_MAKE_PROGRAM`으로 준다. Visual Studio에 딸린 것을 써도 된다 |
 | Skia | `scripts\fetch_skia.ps1 -Target android-arm64`가 `third_party/skia-prep-android-arm64`에 푼다 |
-| 기기 | adb로 연결한다. 여럿이면 `ANDROID_SERIAL`로 정한다 |
+| 기기 | adb로 연결한다. Android SDK(`ANDROID_HOME`, 없으면 `%LOCALAPPDATA%\Android\Sdk`)의 `platform-tools`를 PATH보다 먼저 찾는다. 여럿이면 `ANDROID_SERIAL`로 정한다 |
 
 ```powershell
 $env:ANDROID_NDK_HOME = "C:\Users\<user>\AppData\Local\Android\ndk\27.3.13750724"
