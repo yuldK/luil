@@ -33,7 +33,7 @@ skia-prep 세션에서 정리한 사실과 이 저장소의 조사 결과를 코
 | --- | --- |
 | `android-arm64` r1, Skia 152 `0873ec164a06`, rust png, NDK r27d, `ndk_api = 26` | 맞다. NDK는 `27.3.13750724`다. |
 | 릴리스 태그 `skia-152-0873ec164a06-android-arm64-r1` | 맞다. 이미 공개되었고, 자산 두 개의 sha256·크기가 핀 초안과 같다. |
-| 핀 초안은 `target`과 `toolchain`만 다르다 | 형식(schema 2, 키 순서)은 같다. 값은 `tag`, `asset_base_url`, `package_revision`(1), 자산의 `file`·`size`·`sha256`도 다르다. 초안은 스크립트가 아니라 손으로 쓴 것이다. |
+| 핀 초안은 `target`과 `toolchain`만 다르다 | 형식(schema 2, 키 순서)은 같다. 값은 `tag`, `asset_base_url`, `package_revision`(1), 자산의 `file`·`size`·`sha256`도 다르다. skia-prep의 스크립트에서 이 초안 파일을 만드는 곳은 찾지 못했다. |
 | 패키지 배치 | 맞다. `LICENSE`와 `licenses/rust/`가 더 있다. |
 | `.a` 15개 | 맞다. 이름도 같다. |
 | Android args | 맞다. Ganesh는 명시하지 않았고 Skia 기본값으로 켜진다. |
@@ -476,7 +476,22 @@ Windows는 지금의 HWND 방식 그대로다. 이 일은 core의 hit test 경�
 | 보조 창 `ui_window` | 지원하지 않는다. frame에 있으면 무시하고 한 번 경고를 남긴다. | 전체 화면 layer로 보여 줄지 검토한다. |
 | 파일 끌어 놓기 | 빌드하지 않는다. | — |
 | 커서 | 무시한다. | 마우스·스타일러스 포인터 아이콘 (Java `PointerIcon`) |
-| 네트워크 | 결정 3 | |
+| 네트워크 | 아래 "네트워크층" | iOS는 `NSURLSession`으로 같은 자리에 들어온다. |
+
+**네트워크층** (결정 3). Android 구현은 JNI로 `HttpURLConnection`을 부른다. 공개 헤더
+(`include/luil/net/*`)와 계약(받은 표마다 답 하나, client thread에서 차례로 전달, 동시 요청 상한,
+취소, `stop()` 예산)은 그대로다.
+
+- `src/net`을 이식 가능한 부분과 OS 백엔드로 나눈다. 이식 가능한 부분은 `http_body`,
+  `http_media_type`, URL·헤더 다루기다. 백엔드는 WinHTTP와 Android다.
+- `http_url`과 `http_request_context`의 `std::wstring`은 WinHTTP 백엔드 안으로 들인다.
+- Java 쪽은 요청 하나를 받는 얇은 클래스로 두고, 몸 해석과 전달은 지금처럼 C++ client thread가
+  맡는다.
+- 코드 페이지 변환은 Windows 전용으로 남긴다. Android는 UTF-8만 받는다 (bionic의 `iconv`는 API 28부터다).
+- 테스트는 지금의 loopback 서버(winsock)를 POSIX 소켓으로도 세워 기기에서 돌린다.
+
+이 일은 2단계의 core 분리와 별도로 진행할 수 있다. 다만 Java 쪽은 GameActivity의 Gradle
+프로젝트가 선 뒤(3단계 이후)에 붙인다.
 
 ### 8단계 — 예제, 패키징 마무리, 서명
 
@@ -543,7 +558,16 @@ Windows는 지금의 HWND 방식 그대로다. 이 일은 core의 hit test 경�
 
 ## 결정할 것
 
-각 항목에 추천을 적었지만 정하지 않았다. 답에 따라 해당 단계의 내용이 바뀐다.
+2026-10-02에 다음과 같이 정했다. 아래 표들은 고를 때 본 선택지를 기록으로 남긴 것이다.
+
+| 결정 | 고른 것 |
+| --- | --- |
+| 1. 공개 host API | (a) `luil/app/`, 네임스페이스 `luil`로 옮기고, 옛 경로는 전달 헤더와 `using` 별칭으로 한 판 유지한다 |
+| 2. 앱 호스트·IME·패키징 | (a) GameActivity, GameTextInput, Gradle |
+| 3. 네트워크층 | (b) OS 스택을 JNI로 (`HttpURLConnection`) |
+| 4. 도구 설치 | (a) Windows에 설치. 받기 전에 크기를 알리고 다시 묻는다 |
+| 5. 기기 테스트 | (a) CTest + adb 래퍼 |
+| 6. `renderer_mode` | (a) `gpu`를 더한다 |
 
 **결정 1 — 공개 host API의 경로와 네임스페이스** (1단계)
 
@@ -607,8 +631,9 @@ smoke 5개는 두 구성 모두에서 통과했다. CPU 전용 빌드(`LUIL_ENAB
 
 ### 작업 순서
 
-1단계를 아래 커밋들로 나눈다. 커밋마다 공통 조건을 돌린다. 결정 1과 6의 답이 3번과 6번 커밋의
-모양을 정한다.
+1단계를 아래 커밋들로 나눈다. 커밋마다 공통 조건을 돌린다. 3번은 결정 1의 (a)대로 옛 경로를 전달
+헤더로 남기고, 6번은 결정 6의 (a)대로 `renderer_mode::gpu`를 더한다. `gpu`는 Windows에서
+`direct3d`와 같은 동작이고, `renderer_policy_tests`의 "vulkan 거부" 확인은 그대로 둔다.
 
 1. `build: 이식 가능한 층을 별도 대상으로 세운다` — `luil_core`, `luil_core_tests`, core 소스 검사
    테스트를 더한다.
