@@ -1419,6 +1419,33 @@ TEST_CASE("http client survives stop with requests in flight", "[net][client]")
     }
 }
 
+TEST_CASE("http client survives stop right after send without a proxy", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request&) {
+        loopback_response response { canned("text/plain", "slow") };
+        response.delay_before_headers = 300ms;
+        return response;
+    });
+
+    // 요청이 아직 WinHTTP의 proxy 해석 RPC 안에 있을 때 닫는 자리다. 직접 연결을
+    // 요청마다 못박지 않으면 WinHTTP가 그 RPC를 취소하다 RPCRT4 안에서 프로세스가
+    // 끝난다. 확률로 걸리는 축이라 한 번의 통과가 증명은 아니다 — 고치기 전에는
+    // 이 1000회가 병렬 부하 아래서 여덟 번에 한 번꼴로 죽었다. 의심되면
+    // `ctest -R "survives stop right after send" --repeat until-fail:200`으로 되풀이한다.
+    for (int round { 0 }; round < 1000; ++round)
+    {
+        collector sink {};
+        std::unique_ptr<http_client> client { make_client(sink) };
+        for (int index { 0 }; index < 8; ++index)
+            static_cast<void>(send_to(*client, server.url("/stop")));
+
+        client->stop();
+        client.reset();
+    }
+}
+
 TEST_CASE("stop answers in-flight requests as stopped", "[net][client]")
 {
     loopback_http_server server {};

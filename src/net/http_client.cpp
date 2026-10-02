@@ -864,6 +864,18 @@ namespace luil::net {
             DWORD automatic_redirects { static_cast<DWORD>(std::max(context->request.max_redirects, 0) + 1) };
             static_cast<void>(WinHttpSetOption(handle, WINHTTP_OPTION_MAX_HTTP_AUTOMATIC_REDIRECTS, &automatic_redirects, static_cast<DWORD>(sizeof(automatic_redirects))));
 
+            // proxy를 쓰지 않는 client는 요청마다 직접 연결을 다시 못박는다. 세션을
+            // `NO_PROXY`로 열어도 WinHTTP는 요청마다 프로세스 밖 proxy 해석 RPC를
+            // 띄우고, 그 RPC가 아직 바인딩 중일 때 손잡이를 닫으면 WinHTTP의 취소
+            // 경로가 RPCRT4 안에서 접근 위반이나 `RPC_NT_INTERNAL_ERROR`로 프로세스를
+            // 끝낸다. `send` 직후의 `cancel`·`stop`은 정상적인 사용이라 피할 수 없고,
+            // 요청 손잡이에 적은 직접 연결은 그 해석 자체를 건너뛴다.
+            if (configuration_.use_system_proxy == false)
+            {
+                WINHTTP_PROXY_INFO direct { WINHTTP_ACCESS_TYPE_NO_PROXY, nullptr, nullptr };
+                static_cast<void>(WinHttpSetOption(handle, WINHTTP_OPTION_PROXY, &direct, static_cast<DWORD>(sizeof(direct))));
+            }
+
             if (context->request.decompress)
             {
                 // OS가 지원하지 않으면 조용히 꺼지고 요청은 그대로 성공한다.

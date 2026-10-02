@@ -129,13 +129,15 @@ Transport error와 HTTP error status는 recovery 관측을 위해 heartbeat를 �
 
 `stop()` 반환 뒤에는 `deliver`가 다시 호출되지 않는다. Shutdown으로 종료된 request의 관측된 response는 `stopped`지만, internal channel에서 기다리던 completion은 process shutdown 중 비싼 parsing을 피하려고 폐기될 수 있다. 따라서 outstanding request마다 최종 callback을 보장하지 않는다.
 
+WinHTTP는 request의 proxy 해석 RPC가 아직 binding 중일 때 handle이 닫히면 그 RPC를 취소하는데, 이 취소가 handle close callback 뒤에도 WinHTTP thread pool에서 이어지다 RPCRT4 안에서 접근 위반이나 `RPC_NT_INTERNAL_ERROR`(0xC0020043)로 process를 끝낼 수 있다. Session을 닫는 시점과는 관계없으며, `send` 직후의 `stop`만으로 들어간다. 같은 방식으로 handle을 닫는 `cancel`도 같은 경로에 들어갈 수 있다. 직접 연결 client는 위의 request별 proxy 지정으로 그 RPC 자체를 건너뛴다. System proxy를 쓰는 client에서는 같은 반복 부하로 재현되지 않았지만 PAC나 WPAD 환경에서는 확인하지 않았다.
+
 WinHTTP가 budget 안에 모든 handle을 해제하지 않으면 작은 engine과 session allocation을 의도적으로 남긴다. Callback이 볼 수 있는 상태를 해제하면 use-after-free 위험이 있으므로 이미 종료 중인 process의 shutdown 시간을 제한하는 선택이다.
 
 Destructor는 `stop()`을 호출한다. `deliver`가 참조하는 resource를 소유한 application은 그 resource보다 먼저 `stop()`을 명시적으로 호출해야 한다. 표준 host lifecycle에서는 `logic_driver::cancel()`에서 `cancel_all()`, `logic_driver::stop_workers()`에서 `stop()`을 호출한다.
 
 ## TLS와 trust boundary
 
-HTTPS는 지원되는 환경에서 TLS 1.2 또는 1.3을 사용하고 WinHTTP certificate validation을 유지한다. Certificate error 무시와 HTTPS-to-HTTP redirect 허용 API는 없다. Proxy 사용은 configuration에서 명시하며, system proxy 비활성화는 통제된 loopback test에 유용하다.
+HTTPS는 지원되는 환경에서 TLS 1.2 또는 1.3을 사용하고 WinHTTP certificate validation을 유지한다. Certificate error 무시와 HTTPS-to-HTTP redirect 허용 API는 없다. Proxy 사용은 configuration에서 명시하며, system proxy 비활성화는 통제된 loopback test에 유용하다. `use_system_proxy = false`는 session뿐 아니라 request handle마다 `WINHTTP_OPTION_PROXY`로 직접 연결을 지정한다. Session만 `NO_PROXY`로 열면 WinHTTP가 요청마다 process 밖 proxy 해석 RPC를 띄우기 때문이다.
 
 ## 검증
 
