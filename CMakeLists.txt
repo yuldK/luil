@@ -8,7 +8,22 @@ if(NOT DEFINED PROJECT_NAME)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(luil VERSION 0.1.0 LANGUAGES CXX RC)
+project(luil VERSION 0.1.0 LANGUAGES CXX)
+
+# 대상 플랫폼이다. 플랫폼을 모르는 층(luil_core)은 어디서나 같고, 그 위의 조립과
+# 검사·Skia 계약이 여기서 갈린다 (docs/android-port-plan.md).
+#  - Android는 지금 core와 그 test만 세운다 (2단계). 창·입력·렌더러는 다음 단계다.
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    set(LUIL_PLATFORM "android")
+elseif(WIN32)
+    set(LUIL_PLATFORM "windows")
+    # 실행 파일 resource(.rc)는 Windows에만 있다.
+    enable_language(RC)
+else()
+    message(FATAL_ERROR
+        "luil supports Windows 11 x64 and Android arm64. "
+        "${CMAKE_SYSTEM_NAME} is not supported.")
+endif()
 
 # Catch2 등 외부 target을 라이브러리와 같은 CRT로 맞출 때 쓴다.
 set(LUIL_MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}")
@@ -66,7 +81,10 @@ set(LUIL_SOURCE_STYLE_SCRIPT "${PROJECT_SOURCE_DIR}/scripts/check_source_style.p
 # 기본값은 fetch_skia.ps1의 설치 디렉터리이며 직접 빌드한 트리도 지정할 수 있다.
 # skia-prep에 헤더가 없고 third_party/skia에 있으면 해당 소스 트리를 사용한다.
 # 검사에는 패키지와 소스 트리에 같은 규칙을 적용한다.
-if(EXISTS "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep/include/core/SkCanvas.h"
+# 패키지는 대상마다 따로 설치된다 (scripts/fetch_skia.ps1 -Target).
+if(LUIL_PLATFORM STREQUAL "android")
+    set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep-android-arm64")
+elseif(EXISTS "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep/include/core/SkCanvas.h"
     OR NOT EXISTS "${LUIL_THIRD_PARTY_DIRECTORY}/skia/include/core/SkCanvas.h")
     set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep")
 else()
@@ -86,53 +104,103 @@ set(LUIL_NLOHMANN_JSON_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/nlohmann_json")
 set(LUIL_WEBVIEW2_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/webview2-prep"
     CACHE PATH "WebView2 SDK package that provides the headers and the static loader.")
 
-# Skia 빌드가 내는 라이브러리다.
-# 직접 빌드에서는 external별로 나오므로 모두 링크한다.
-# 이름은 파일 이름 그대로다 — png는 rust 코덱으로 세우고 그것은 bazel 산출물(.a)이라
-# 확장자가 하나로 정해지지 않는다.
-#  - jpeg가 셋인 것은 libjpeg-turbo 3.x가 정밀도(8·12·16bit)별로 같은 소스를
-#    다시 컴파일하기 때문이고, webp가 둘인 것은 SSE4.1 조각이 따로 나기 때문이다.
-set(LUIL_SKIA_COMPONENTS
-    skia.lib
-    skcms.lib
-    spirv_cross.lib
-    d3d12allocator.lib
-    libjpeg.lib
-    libjpeg12.lib
-    libjpeg16.lib
-    libwebp.lib
-    libwebp_sse41.lib
-    wuffs.lib
-    librust_png_ffi_rs.a
-    libcxx_cc.a)
+# Skia 패키지의 대상이다. fetch_skia.ps1의 -Target과 같은 이름이다.
+if(LUIL_PLATFORM STREQUAL "windows")
+    set(LUIL_SKIA_TARGET "win-x64")
+    # Skia 빌드가 내는 라이브러리다.
+    # 직접 빌드에서는 external별로 나오므로 모두 링크한다.
+    # 이름은 파일 이름 그대로다 — png는 rust 코덱으로 세우고 그것은 bazel 산출물(.a)이라
+    # 확장자가 하나로 정해지지 않는다.
+    #  - jpeg가 셋인 것은 libjpeg-turbo 3.x가 정밀도(8·12·16bit)별로 같은 소스를
+    #    다시 컴파일하기 때문이고, webp가 둘인 것은 SSE4.1 조각이 따로 나기 때문이다.
+    set(LUIL_SKIA_COMPONENTS
+        skia.lib
+        skcms.lib
+        spirv_cross.lib
+        d3d12allocator.lib
+        libjpeg.lib
+        libjpeg12.lib
+        libjpeg16.lib
+        libwebp.lib
+        libwebp_sse41.lib
+        wuffs.lib
+        librust_png_ffi_rs.a
+        libcxx_cc.a)
 
-# Rust PNG 정적 아카이브가 요구하는 Windows 시스템 라이브러리다.
-# Rust의 `#[link]` 지시가 CMake의 정적 링크에 전파되지 않아 명시적으로 연결한다.
-# 소켓 함수는 ws2_32, GetUserProfileDirectoryW는 userenv,
-# NtReadFile·RtlNtStatusToDosError는 ntdll이 제공한다.
-set(LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES
-    ws2_32
-    userenv
-    ntdll)
+    # Rust PNG 정적 아카이브가 요구하는 Windows 시스템 라이브러리다.
+    # Rust의 `#[link]` 지시가 CMake의 정적 링크에 전파되지 않아 명시적으로 연결한다.
+    # 소켓 함수는 ws2_32, GetUserProfileDirectoryW는 userenv,
+    # NtReadFile·RtlNtStatusToDosError는 ntdll이 제공한다.
+    set(LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES
+        ws2_32
+        userenv
+        ntdll)
 
-# 라이브러리가 요구하는 Skia GN 설정이다. configure에서 일치 여부를 검사한다.
-# PNG는 APNG를 지원하는 Rust 코덱을 사용한다.
-set(LUIL_SKIA_REQUIRED_ARGUMENTS
-    "skia_use_direct3d=true"
-    "skia_use_libjpeg_turbo_decode=true"
-    "skia_use_libwebp_decode=true"
-    "skia_use_wuffs=true"
-    "skia_use_rust_png_decode=true")
+    # 라이브러리가 요구하는 Skia GN 설정이다. configure에서 일치 여부를 검사한다.
+    # PNG는 APNG를 지원하는 Rust 코덱을 사용한다.
+    set(LUIL_SKIA_REQUIRED_ARGUMENTS
+        "skia_use_direct3d=true"
+        "skia_use_libjpeg_turbo_decode=true"
+        "skia_use_libwebp_decode=true"
+        "skia_use_wuffs=true"
+        "skia_use_rust_png_decode=true")
 
-# Skia 자신을 컴파일한 도구사슬이다.
-# 바뀌는 것은 Skia를 컴파일한 컴파일러 하나이며 luil와 소비자는 그대로 MSVC다 —
-# Skia의 GN이 MSVC의 헤더와 CRT를 가리키므로 나오는 아카이브의 C++ ABI도 MSVC의
-# 것이다. 그런데도 이것을 요구하는 이유는 성능이다: SkRasterPipeline의 벡터 형이
-# clang·gcc의 확장이라 MSVC로 세운 Skia는 CPU 래스터를 픽셀 하나씩 처리한다.
-#
-# 검사는 패키지가 적어 둔 toolchain.json을 읽는 것이다 (cmake/dependencies/skia.cmake).
-# configure는 컴파일러를 찾지도 부르지도 않으므로 소비자에게 clang 설치가 필요 없다.
-set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang-cl")
+    # Skia 자신을 컴파일한 도구사슬이다.
+    # 바뀌는 것은 Skia를 컴파일한 컴파일러 하나이며 luil와 소비자는 그대로 MSVC다 —
+    # Skia의 GN이 MSVC의 헤더와 CRT를 가리키므로 나오는 아카이브의 C++ ABI도 MSVC의
+    # 것이다. 그런데도 이것을 요구하는 이유는 성능이다: SkRasterPipeline의 벡터 형이
+    # clang·gcc의 확장이라 MSVC로 세운 Skia는 CPU 래스터를 픽셀 하나씩 처리한다.
+    #
+    # 검사는 패키지가 적어 둔 toolchain.json을 읽는 것이다 (cmake/dependencies/skia.cmake).
+    # configure는 컴파일러를 찾지도 부르지도 않으므로 소비자에게 clang 설치가 필요 없다.
+    set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang-cl")
+
+    # Skia가 더 요구하는 Windows 시스템 라이브러리다.
+    set(LUIL_SKIA_SYSTEM_LIBRARIES
+        d3dcompiler
+        FontSub
+        Usp10)
+else()
+    set(LUIL_SKIA_TARGET "android-arm64")
+    # android-arm64 패키지의 정적 아카이브다 (skia-prep docs/skia-build.md 8.4).
+    #  - 맨 앞의 libskia.a가 계약이다. rust png 아카이브가 Skia 오브젝트를 함께 담아
+    #    같은 심볼이 겹치는데, 먼저 나온 정의가 이긴다 (8.5). skia.cmake가 이 순서
+    #    그대로 링크 묶음을 만든다.
+    #  - 글꼴은 FreeType과 expat으로 읽는다 (SkFontMgr_android).
+    set(LUIL_SKIA_COMPONENTS
+        libskia.a
+        libskcms.a
+        libjpeg.a
+        libjpeg12.a
+        libjpeg16.a
+        libwebp.a
+        libwebp_sse41.a
+        libwuffs.a
+        libfreetype2.a
+        libexpat.a
+        libpng.a
+        libzlib.a
+        libcpu-features.a
+        librust_png_ffi_rs.a
+        libcxx_cc.a)
+    # rust png 아카이브는 libc·libm·libdl 밖의 것을 요구하지 않는다.
+    set(LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES "")
+    # AHardwareBuffer(Vulkan)는 libandroid, Skia의 로그는 liblog다 (8.5).
+    set(LUIL_SKIA_SYSTEM_LIBRARIES
+        android
+        log)
+    # GPU는 Vulkan(Ganesh)이고 글꼴은 FreeType·expat이다. 코덱은 Windows와 같다.
+    set(LUIL_SKIA_REQUIRED_ARGUMENTS
+        "skia_use_vulkan=true"
+        "skia_use_freetype=true"
+        "skia_use_expat=true"
+        "skia_use_libjpeg_turbo_decode=true"
+        "skia_use_libwebp_decode=true"
+        "skia_use_wuffs=true"
+        "skia_use_rust_png_decode=true")
+    # NDK의 clang이다. luil도 같은 NDK의 clang으로 컴파일한다.
+    set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang")
+endif()
 
 if(PROJECT_IS_TOP_LEVEL)
     set(CMAKE_CXX_STANDARD ${LUIL_CXX_STANDARD})
@@ -144,6 +212,15 @@ endif()
 # test와 개발 도구 target은 명시적으로 켤 때만 만들어진다.
 #   cmake --preset vs2026-tests     → test target과 CTest 등록 포함
 #   -DLUIL_BUILD_TOOLING=ON      → clang-format·style 검사 target 포함
+# Android는 지금 core와 그 test만 세운다. 예제·설치·Direct3D·웹뷰는 Windows의 것이라
+# 일반 변수로 먼저 꺼 두면 아래 option이 그 값을 따른다 (CMP0077).
+if(LUIL_PLATFORM STREQUAL "android")
+    set(LUIL_BUILD_EXAMPLES OFF)
+    set(LUIL_ENABLE_DIRECT3D OFF)
+    set(LUIL_ENABLE_WEBVIEW OFF)
+    set(LUIL_ENABLE_MSVC_ANALYZE OFF)
+    set(LUIL_INSTALL OFF)
+endif()
 option(LUIL_BUILD_TESTS "Build the luil test targets." OFF)
 option(LUIL_BUILD_POINTER_INTEGRATION_TESTS "Build the opt-in interactive touch/pen integration runner (requires LUIL_BUILD_TESTS)." OFF)
 if(LUIL_BUILD_POINTER_INTEGRATION_TESTS AND NOT LUIL_BUILD_TESTS)
@@ -190,28 +267,47 @@ option(LUIL_WARNINGS_AS_ERRORS "Treat luil's own compiler warnings as errors." O
 option(LUIL_INSTALL "Generate install and find_package rules." ${PROJECT_IS_TOP_LEVEL})
 
 include("${LUIL_CMAKE_DIRECTORY}/macro.cmake")
-include("${LUIL_CMAKE_DIRECTORY}/compiler/msvc.cmake")
-include("${LUIL_CMAKE_DIRECTORY}/platform/windows.cmake")
+if(LUIL_PLATFORM STREQUAL "windows")
+    include("${LUIL_CMAKE_DIRECTORY}/compiler/msvc.cmake")
+    include("${LUIL_CMAKE_DIRECTORY}/platform/windows.cmake")
 
-luil_validate_windows_platform(
-    ARCHITECTURE "${LUIL_TARGET_ARCHITECTURE}"
-    MINIMUM_SDK_VERSION "${LUIL_MINIMUM_WINDOWS_SDK_VERSION}"
-    SUPPORTED_GENERATORS ${LUIL_SUPPORTED_GENERATORS}
-)
-luil_validate_msvc(MINIMUM_VERSION "${LUIL_MINIMUM_MSVC_VERSION}")
-luil_configure_msvc_link_directories()
+    luil_validate_windows_platform(
+        ARCHITECTURE "${LUIL_TARGET_ARCHITECTURE}"
+        MINIMUM_SDK_VERSION "${LUIL_MINIMUM_WINDOWS_SDK_VERSION}"
+        SUPPORTED_GENERATORS ${LUIL_SUPPORTED_GENERATORS}
+    )
+    luil_validate_msvc(MINIMUM_VERSION "${LUIL_MINIMUM_MSVC_VERSION}")
+    luil_configure_msvc_link_directories()
+else()
+    include("${LUIL_CMAKE_DIRECTORY}/compiler/clang.cmake")
+    include("${LUIL_CMAKE_DIRECTORY}/platform/android.cmake")
 
-# 내부 규율(경고 수준·/WX·분석)이다.
+    # Skia 패키지와 같은 조합이다 (skia-prep docs/skia-build.md 8.4).
+    luil_validate_android_platform(
+        ABI "arm64-v8a"
+        MINIMUM_API_LEVEL 26
+        STL "c++_static"
+    )
+endif()
+
+# 내부 규율(경고 수준·경고를 오류로·분석)이다.
 # 라이브러리·test·예제가 PRIVATE로 쓰고 소비자에게는 전파하지 않는다 —
 # 라이브러리의 경고 정책이 소비자 앱의 빌드를 깨면 안 된다.
 add_library(luil_options INTERFACE)
 target_compile_features(luil_options INTERFACE cxx_std_${LUIL_CXX_STANDARD})
-luil_apply_windows_options(luil_options)
-luil_apply_msvc_options(
-    luil_options
-    ENABLE_ANALYZE "${LUIL_ENABLE_MSVC_ANALYZE}"
-    WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
-)
+if(LUIL_PLATFORM STREQUAL "windows")
+    luil_apply_windows_options(luil_options)
+    luil_apply_msvc_options(
+        luil_options
+        ENABLE_ANALYZE "${LUIL_ENABLE_MSVC_ANALYZE}"
+        WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
+    )
+else()
+    luil_apply_clang_options(
+        luil_options
+        WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
+    )
+endif()
 
 # 소비자에게 전파되는 사용 요건이다.
 # 공개 헤더를 컴파일하는 데 실제로 필요한 것만 담는다:
@@ -245,7 +341,8 @@ if(LUIL_INSTALL)
     luil_install_rules()
 endif()
 # smoke test가 예제 실행 파일을 쓰므로 test 구성은 예제를 함께 만든다.
-if(LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS)
+# 예제는 Windows 앱이다 (Android 예제는 3단계).
+if(LUIL_PLATFORM STREQUAL "windows" AND (LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS))
     add_subdirectory(examples)
 endif()
 if(LUIL_BUILD_TESTS)
@@ -303,4 +400,8 @@ if(LUIL_BUILD_TOOLING)
     endif()
 endif()
 
-luil_set_ide_folder("Libraries" luil luil_core)
+if(TARGET luil)
+    luil_set_ide_folder("Libraries" luil luil_core)
+else()
+    luil_set_ide_folder("Libraries" luil_core)
+endif()

@@ -87,6 +87,21 @@
             "cacheVariables": {
                 "LUIL_ENABLE_MSVC_ANALYZE": "ON"
             }
+        },
+        {
+            "name": "android-arm64-core",
+            "displayName": "Android arm64 core library and device tests",
+            "description": "Needs ANDROID_NDK_HOME (NDK r27d) and Ninja. Tests run on the adb device.",
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake",
+            "cacheVariables": {
+                "ANDROID_ABI": "arm64-v8a",
+                "ANDROID_PLATFORM": "android-26",
+                "ANDROID_STL": "c++_static",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+                "LUIL_BUILD_TESTS": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -159,6 +174,16 @@
             "name": "vs2026-tests-release",
             "configurePreset": "vs2026-tests",
             "configuration": "Release"
+        },
+        {
+            "name": "android-arm64-core-debug",
+            "configurePreset": "android-arm64-core",
+            "configuration": "Debug"
+        },
+        {
+            "name": "android-arm64-core-release",
+            "configurePreset": "android-arm64-core",
+            "configuration": "Release"
         }
     ],
     "testPresets": [
@@ -198,6 +223,28 @@
         {
             "name": "vs2026-tests-release",
             "configurePreset": "vs2026-tests",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "android-arm64-core-debug",
+            "configurePreset": "android-arm64-core",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "android-arm64-core-release",
+            "configurePreset": "android-arm64-core",
             "configuration": "Release",
             "output": {
                 "outputOnFailure": true

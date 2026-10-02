@@ -103,6 +103,12 @@ function(luil_check_skia_abi flavor build_directory arguments_text)
             "rebuild Skia with the argument file in third_party/skia-args.")
     endif()
 
+    # Android에는 MSVC CRT가 없다. 대신 패키지가 기대하는 최저 API 수준을 본다.
+    if(NOT LUIL_SKIA_TARGET STREQUAL "win-x64")
+        luil_check_skia_android_api("${build_directory}" "${arguments_text}")
+        return()
+    endif()
+
     if(flavor STREQUAL "Debug")
         set(expected_runtime "/MTd")
         set(other_runtime "/MT")
@@ -128,6 +134,25 @@ function(luil_check_skia_abi flavor build_directory arguments_text)
             "reason.\n"
             "Fetch the pinned package for this configuration: "
             "scripts/fetch_skia.ps1 -Configuration ${flavor} -Force")
+    endif()
+endfunction()
+
+# Android 패키지가 세워진 API 수준(`ndk_api`)이 이 구성의 API 수준 이하인지 본다.
+# 패키지가 쓰는 함수가 그 수준부터 있으므로, 더 낮은 구성은 링크가 되어도 그보다
+# 오래된 기기에서 기호를 찾지 못한다 (skia-prep docs/skia-build.md 8.4).
+function(luil_check_skia_android_api build_directory arguments_text)
+    if(NOT arguments_text MATCHES "ndk_api[ \t]*=[ \t]*([0-9]+)")
+        message(FATAL_ERROR
+            "Skia's args.gn does not record ndk_api.\n"
+            "Build directory: ${build_directory}\n"
+            "Fetch the pinned package: scripts/fetch_skia.ps1 -Target ${LUIL_SKIA_TARGET} -Force")
+    endif()
+    set(package_api "${CMAKE_MATCH_1}")
+    if(ANDROID_PLATFORM_LEVEL LESS package_api)
+        message(FATAL_ERROR
+            "The Skia package needs Android API ${package_api} or newer, "
+            "but this configure targets ${ANDROID_PLATFORM_LEVEL}.\n"
+            "Raise ANDROID_PLATFORM to android-${package_api}.")
     endif()
 endfunction()
 
@@ -191,8 +216,8 @@ function(luil_find_skia)
         OR NOT EXISTS "${LUIL_SKIA_ROOT}/include/core/SkCanvas.h")
         message(FATAL_ERROR
             "The Skia package was not found: ${LUIL_SKIA_ROOT}\n"
-            "Fetch it: scripts/fetch_skia.ps1\n"
-            "It downloads the package pinned by third_party/skia-prep.json - "
+            "Fetch it: scripts/fetch_skia.ps1 -Target ${LUIL_SKIA_TARGET}\n"
+            "It downloads the package pinned by third_party/skia-prep*.json - "
             "headers, static libraries and notices, nothing else.\n"
             "See docs/skia-build.md. To use a Skia tree you built by hand "
             "instead, point LUIL_SKIA_ROOT at it.")
@@ -249,14 +274,26 @@ function(luil_find_skia)
 
     add_library(luil_skia INTERFACE)
     target_include_directories(luil_skia SYSTEM INTERFACE "${LUIL_SKIA_ROOT}")
+    if(LUIL_SKIA_TARGET STREQUAL "win-x64")
+        set(component_link_items ${component_targets})
+    else()
+        # Android 소비자의 링크 계약이다 (skia-prep docs/skia-build.md 8.5).
+        #  - rust png 아카이브가 Skia 오브젝트를 함께 담아 같은 심볼이 겹친다. lld는
+        #    그것을 오류로 보므로 중복 정의를 허용하고, 먼저 나온 정의가 이기도록
+        #    libskia.a를 맨 앞에 둔다. 목록의 순서가 곧 그 순서다 (CMakeLists.txt).
+        #  - 아카이브끼리 서로 기호를 주고받으므로 한 묶음으로 다시 훑는다. 묶음은
+        #    목록 순서를 지킨다 — target_link_libraries의 순서만으로는 CMake가
+        #    imported target을 다시 늘어놓을 수 있다.
+        string(JOIN "," component_group ${component_targets})
+        set(component_link_items "$<LINK_GROUP:RESCAN,${component_group}>")
+        target_link_options(luil_skia INTERFACE "LINKER:--allow-multiple-definition")
+    endif()
     target_link_libraries(luil_skia
         INTERFACE
-            ${component_targets}
-            # Skia가 요구하는 Windows 시스템 라이브러리다.
+            ${component_link_items}
+            # Skia가 요구하는 시스템 라이브러리다 (대상마다 CMakeLists.txt에 있다).
             # luil가 직접 쓰는 것은 src/CMakeLists.txt에 따로 있다.
-            d3dcompiler
-            FontSub
-            Usp10
+            ${LUIL_SKIA_SYSTEM_LIBRARIES}
             # rust png 코덱이 더 요구하는 것이다 (CMakeLists.txt에 이유가 있다).
             ${LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES})
     # APNG(움직이는 png)를 읽는다. rust 코덱을 요구 인자에 두었으므로 늘 그렇다.
@@ -277,5 +314,5 @@ function(luil_find_skia)
     string(REPLACE ";" ", " validated_flavors_text "${validated_flavors}")
     message(STATUS
         "Skia: ${LUIL_SKIA_ROOT} "
-        "(${validated_flavors_text}; ${LUIL_SKIA_REQUIRED_TOOLCHAIN})")
+        "(${LUIL_SKIA_TARGET}; ${validated_flavors_text}; ${LUIL_SKIA_REQUIRED_TOOLCHAIN})")
 endfunction()

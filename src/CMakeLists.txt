@@ -405,45 +405,49 @@ add_custom_command(TARGET luil_core PRE_BUILD
     COMMENT "Verifying Codicons checksums"
     VERBATIM)
 
-# core 위의 플랫폼 조립이다 (win32 → net).
-# 소비자가 링크하는 이름은 지금처럼 `luil::luil` 하나이고, core는 PUBLIC으로 따라온다.
-add_library(luil STATIC ${luil_files})
-add_library(luil::luil ALIAS luil)
-target_include_directories(luil
-    PRIVATE
-        "${LUIL_SOURCE_DIRECTORY}")
-target_link_libraries(luil
-    PUBLIC
-        luil_core
-        luil_usage
-        "$<BUILD_INTERFACE:luil_skia>"
-        # JSON 본문 타입이다 (header-only). Skia와 같은 이유로 빌드 트리에서만
-        # 여기서 잇고, 설치본은 헤더 사본을 include/에 함께 둔다 (cmake/install.cmake).
-        "$<BUILD_INTERFACE:luil_nlohmann_json>"
-        # 웹뷰가 붙는 SDK다 (헤더 둘 + 정적 로더). Skia와 같은 이유로 빌드
-        # 트리에서만 여기서 잇는다 — 감싸지 않으면 install(EXPORT)가 "export set에
-        # 없는 target"으로 세운다. include 경로는 그 target 안에만 있어야 한다:
-        # luil에 직접 걸면 **경고 하나 없이** 설치본에 빌드 트리 절대 경로가 박힌다.
-        # 웹뷰를 끈 구성에는 그 target이 없다 (LUIL_ENABLE_WEBVIEW).
-        "$<$<BOOL:${LUIL_ENABLE_WEBVIEW}>:$<BUILD_INTERFACE:luil_webview2>>"
-        # win32 계층이 쓰는 Windows 시스템 라이브러리다.
-        # static library라 최종 링크는 소비자 몫이므로 PUBLIC으로 나른다.
-        # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.
-        d3d12
-        # Direct3D 제시가 창이 아니라 합성에 붙는다
-        # (webview-composition-design.md).
-        dcomp
-        dwrite
-        dwmapi
-        dxgi
-        gdi32
-        imm32
-        ole32
-        oleaut32
-        shell32
-        uiautomationcore
-        user32
-        # net 계층의 HTTP client다.
-        winhttp
-    PRIVATE
-        luil_options)
+# core 위의 플랫폼 조립은 지금 Windows에만 있다. Android는 core와 그 test만 세운다
+# (docs/android-port-plan.md 2단계).
+if(LUIL_PLATFORM STREQUAL "windows")
+    # core 위의 플랫폼 조립이다 (win32 → net).
+    # 소비자가 링크하는 이름은 지금처럼 `luil::luil` 하나이고, core는 PUBLIC으로 따라온다.
+    add_library(luil STATIC ${luil_files})
+    add_library(luil::luil ALIAS luil)
+    target_include_directories(luil
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}")
+    target_link_libraries(luil
+        PUBLIC
+            luil_core
+            luil_usage
+            "$<BUILD_INTERFACE:luil_skia>"
+            # JSON 본문 타입이다 (header-only). Skia와 같은 이유로 빌드 트리에서만
+            # 여기서 잇고, 설치본은 헤더 사본을 include/에 함께 둔다 (cmake/install.cmake).
+            "$<BUILD_INTERFACE:luil_nlohmann_json>"
+            # 웹뷰가 붙는 SDK다 (헤더 둘 + 정적 로더). Skia와 같은 이유로 빌드
+            # 트리에서만 여기서 잇는다 — 감싸지 않으면 install(EXPORT)가 "export set에
+            # 없는 target"으로 세운다. include 경로는 그 target 안에만 있어야 한다:
+            # luil에 직접 걸면 **경고 하나 없이** 설치본에 빌드 트리 절대 경로가 박힌다.
+            # 웹뷰를 끈 구성에는 그 target이 없다 (LUIL_ENABLE_WEBVIEW).
+            "$<$<BOOL:${LUIL_ENABLE_WEBVIEW}>:$<BUILD_INTERFACE:luil_webview2>>"
+            # win32 계층이 쓰는 Windows 시스템 라이브러리다.
+            # static library라 최종 링크는 소비자 몫이므로 PUBLIC으로 나른다.
+            # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.
+            d3d12
+            # Direct3D 제시가 창이 아니라 합성에 붙는다
+            # (webview-composition-design.md).
+            dcomp
+            dwrite
+            dwmapi
+            dxgi
+            gdi32
+            imm32
+            ole32
+            oleaut32
+            shell32
+            uiautomationcore
+            user32
+            # net 계층의 HTTP client다.
+            winhttp
+        PRIVATE
+            luil_options)
+endif()

@@ -1,21 +1,5 @@
 include(Catch)
 
-add_test(NAME luil_accent_catalog
-    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/accent_catalog_tests.cmake")
-add_test(NAME luil_style
-    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/style_tests.cmake")
-
-if(LUIL_INSTALL)
-    add_test(NAME luil_installed_consumer
-        COMMAND "${CMAKE_COMMAND}" "-DBINARY_DIR=${PROJECT_BINARY_DIR}"
-            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DCONFIG=$<CONFIG>"
-            "-DGENERATOR=${CMAKE_GENERATOR}" "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/install_consumer.cmake")
-    set_tests_properties(luil_installed_consumer PROPERTIES TIMEOUT 120 LABELS "package")
-endif()
-
 # 플랫폼을 모르는 층(luil_core)의 test다.
 # core만 링크하므로 Win32 없이도 세울 수 있어야 하고, 다른 플랫폼에서도 이 실행
 # 파일을 그대로 돌린다 (docs/android-port-plan.md). Win32 계층의 비공개 header나
@@ -82,7 +66,38 @@ target_link_libraries(luil_core_tests
         luil::luil_core
         luil_options
         Catch2::Catch2WithMain)
+
+if(LUIL_PLATFORM STREQUAL "android")
+    # 기기에서 돌린다. CTest와 Catch2의 발견이 실행 파일을 부를 때마다 adb로 올리고
+    # 기기의 셸에서 실행한다 (cmake/android/adb_run.cmake).
+    #  - 발견을 test 시점으로 미룬다. 빌드할 때 기기가 꽂혀 있지 않아도 된다.
+    #  - 기기는 adb가 고른다. 여럿이면 ANDROID_SERIAL로 정한다.
+    find_program(LUIL_ADB_EXECUTABLE NAMES adb REQUIRED)
+    set_target_properties(luil_core_tests PROPERTIES
+        CROSSCOMPILING_EMULATOR
+            "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
+    catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+    luil_set_ide_folder("Tests" luil_core_tests)
+    # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.
+    return()
+endif()
 luil_disable_automatic_windows_manifest(luil_core_tests)
+
+add_test(NAME luil_accent_catalog
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/accent_catalog_tests.cmake")
+add_test(NAME luil_style
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/style_tests.cmake")
+
+if(LUIL_INSTALL)
+    add_test(NAME luil_installed_consumer
+        COMMAND "${CMAKE_COMMAND}" "-DBINARY_DIR=${PROJECT_BINARY_DIR}"
+            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DCONFIG=$<CONFIG>"
+            "-DGENERATOR=${CMAKE_GENERATOR}" "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/install_consumer.cmake")
+    set_tests_properties(luil_installed_consumer PROPERTIES TIMEOUT 120 LABELS "package")
+endif()
 
 # test 실행 파일도 라이브러리 resource(코디콘 폰트·라이선스·고지)를
 # 내장해야 embedded assets 경로가 실제와 같은 방식으로 검증된다.
