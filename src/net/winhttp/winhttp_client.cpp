@@ -1,6 +1,7 @@
 #include "luil/net/http_client.h"
 
 #include "luil/messaging/channel.h"
+#include "net/http_request_rules.h"
 #include "net/winhttp/http_request_context.h"
 #include "net/winhttp/http_url.h"
 #include "net/winhttp/winhttp_error.h"
@@ -48,32 +49,6 @@ namespace luil::net {
             return request_counter.fetch_add(1, std::memory_order_relaxed) + 1;
         }
 
-        [[nodiscard]] bool header_text_is_safe(const std::u8string_view text) noexcept
-        {
-            for (const char8_t character : text)
-                if (character == u8'\r' || character == u8'\n' || character == 0)
-                    return false;
-            return true;
-        }
-
-        // 헤더 이름은 토큰 문자만이다 (RFC 9110). 밖에서 온 값이 그대로 실리는 앱이
-        // 부르는 사고가 헤더 주입이라, 선을 건드리기 전에 여기서 막는다.
-        [[nodiscard]] bool header_name_is_token(const std::u8string_view name) noexcept
-        {
-            if (name.empty())
-                return false;
-
-            constexpr std::u8string_view punctuation { u8"!#$%&'*+-.^_`|~" };
-            for (const char8_t character : name)
-            {
-                const bool letter { (character >= u8'a' && character <= u8'z') || (character >= u8'A' && character <= u8'Z') };
-                const bool digit { character >= u8'0' && character <= u8'9' };
-                if (letter == false && digit == false && punctuation.find(character) == std::u8string_view::npos)
-                    return false;
-            }
-            return true;
-        }
-
         [[nodiscard]] std::wstring method_text(const http_method method)
         {
             // 동사는 ASCII뿐이라 코드 단위를 그대로 넓힌다 (변환기를 부를 일이 아니다).
@@ -83,27 +58,6 @@ namespace luil::net {
             for (const char8_t character : name)
                 wide.push_back(static_cast<wchar_t>(character));
             return wide;
-        }
-
-        [[nodiscard]] std::u8string count_text(const std::size_t value)
-        {
-            if (value == 0)
-                return std::u8string { u8"0" };
-
-            std::u8string text {};
-            std::size_t rest { value };
-            while (rest != 0)
-            {
-                text.insert(text.begin(), static_cast<char8_t>(static_cast<std::size_t>(u8'0') + rest % 10u));
-                rest /= 10u;
-            }
-            return text;
-        }
-
-        // 되풀이를 그만두게 하는 오류인가 (영원히 같은 답이 올 것들이다).
-        [[nodiscard]] bool failure_is_permanent(const http_error_kind kind) noexcept
-        {
-            return kind == http_error_kind::invalid_url || kind == http_error_kind::unsupported_scheme || kind == http_error_kind::invalid_header;
         }
 
         [[nodiscard]] bool redirect_has_same_origin(const request_context& current, const wchar_t* url, std::size_t length) noexcept
@@ -642,35 +596,16 @@ namespace luil::net {
 
         [[nodiscard]] static bool build_request_headers(const http_request& request, std::wstring& block, http_error& failure)
         {
+            std::vector<http_header> headers {};
+            if (collect_request_headers(request, headers, failure) == false)
+                return false;
+
             std::u8string text {};
-            for (const http_header& header : request.headers)
+            for (const http_header& header : headers)
             {
-                if (header_name_is_token(header.name) == false || header_text_is_safe(header.value) == false)
-                {
-                    failure = make_http_error(http_error_kind::invalid_header, u8"A request header name or value is not allowed.", 0);
-                    return false;
-                }
                 text += header.name;
                 text += u8": ";
                 text += header.value;
-                text += u8"\r\n";
-            }
-
-            // 몸의 형식은 `content_type`이 말하고, 비어 있으면 앱이 `headers`에 직접
-            // 적은 Content-Type을 존중한다. 둘 다 없을 때만 기본값이다 — 앱이 적은
-            // 줄을 기본값으로 덮으면 앱은 그 사실을 알 길이 없다.
-            if (request.body.empty() == false && (request.content_type.empty() == false || find_header(request.headers, u8"content-type").empty()))
-            {
-                std::u8string_view content_type { request.content_type };
-                if (content_type.empty())
-                    content_type = u8"application/octet-stream";
-                if (header_text_is_safe(content_type) == false)
-                {
-                    failure = make_http_error(http_error_kind::invalid_header, u8"The request content type is not allowed.", 0);
-                    return false;
-                }
-                text += u8"Content-Type: ";
-                text += content_type;
                 text += u8"\r\n";
             }
 

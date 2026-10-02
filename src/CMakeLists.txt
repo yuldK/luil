@@ -369,7 +369,9 @@ luil_add_source_filter(luil_files "net"
     net/http_media_type.cpp
     "${public_headers}/net/http_media_type.h"
     net/http_message.cpp
-    "${public_headers}/net/http_message.h")
+    "${public_headers}/net/http_message.h"
+    net/http_request_rules.cpp
+    net/http_request_rules.h)
 
 # net/winhttp: WinHTTP 비동기 세션 위의 `http_client`다.
 # URL 가르기, 오류 코드 옮기기, 코드 페이지 변환도 WinHTTP·Win32에 기대므로 여기 있다.
