@@ -10,9 +10,18 @@ CMake configure는 준비된 파일을 검사하고 연결한다.
 
 ```powershell
 scripts\fetch_skia.ps1 -Configuration Debug,Release
+scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
 ```
 
-기본 설치 위치는 `third_party/skia-prep`이고 아카이브 캐시는
+패키지는 대상마다 핀 하나와 설치 자리 하나를 갖는다. `-Target`의 기본값은 `win-x64`다.
+
+| 대상 | 핀 | 설치 자리 |
+| --- | --- | --- |
+| `win-x64` | [`third_party/skia-prep.json`](../third_party/skia-prep.json) | `third_party/skia-prep` |
+| `android-arm64` | [`third_party/skia-prep-android-arm64.json`](../third_party/skia-prep-android-arm64.json) | `third_party/skia-prep-android-arm64` |
+
+핀의 `target`이 고른 대상과 다르면 받거나 지우기 전에 멈춘다.
+기본 설치 위치(win-x64)는 `third_party/skia-prep`이고 아카이브 캐시는
 `third_party/skia-prep-archives`다. 이 디렉터리들은 Git으로 추적하지 않는다.
 필요한 구성만 선택하려면 `-Configuration Release` 또는 `-Configuration Debug`를 사용한다.
 다중 구성 preset이 Debug와 Release를 모두 검사한다면 두 패키지를 준비한다.
@@ -39,6 +48,7 @@ Skia commit만으로는 판정하지 않는다. **같은 소스 commit을 다시
 | 옵션 | 용도 |
 | --- | --- |
 | `-Configuration` | 설치할 Debug·Release 구성 |
+| `-Target` | 패키지 대상 (`win-x64` 기본, `android-arm64`) |
 | `-Destination` | 패키지를 풀 디렉터리 |
 | `-ArchiveDirectory` | 아카이브 캐시 디렉터리 |
 | `-PinFile` | 버전과 다운로드 정보를 담은 설정 파일 |
@@ -102,6 +112,25 @@ configure는 패키지가 적어 둔 파일을 읽을 뿐 컴파일러를 찾지
 전달 방식이 바뀐다. 같은 헤더를 MSVC로 컴파일하는 luil과 소비자에게는 그 속성이 없어
 같은 형이 서로 다른 ABI가 되고, 링크가 성립한 채 런타임에 깨진다. MSVC로 세우던
 동안에는 값이 무엇이든 무해했으므로 계약이 아니었다.
+
+## Android 패키지와 링크 계약
+
+`android-arm64` 패키지는 NDK r27d의 clang으로 세운 정적 아카이브 15개다. GPU는 Vulkan(Ganesh)이고 글꼴은 FreeType·expat으로 읽으며 코덱은 Windows와 같다. configure는 Windows와 같은 방식으로 `args.gn`과 `toolchain.json`을 읽되, 대상에 맞는 값을 본다.
+
+| 검사 | win-x64 | android-arm64 |
+| --- | --- | --- |
+| 필수 인자 | Direct3D, 코덱 | Vulkan, FreeType, expat, 코덱 |
+| 컴파일러 (`toolchain.json`의 `compiler`) | `clang-cl` | `clang` |
+| ABI | `is_trivial_abi = false` | 같다 |
+| 런타임 | Debug `/MTd`, 그 밖 `/MT` | `args.gn`의 `ndk_api`가 구성의 API 수준 이하 |
+
+소비자 링크 계약은 skia-prep `docs/skia-build.md` 8.4·8.5를 따르고, [Skia 의존성 모듈](../cmake/dependencies/skia.cmake)이 그대로 만든다.
+
+- rust png 아카이브가 Skia 오브젝트를 함께 담아 같은 심볼이 겹친다. 중복 정의를 허용하고(`--allow-multiple-definition`), 먼저 나온 정의가 이기도록 `libskia.a`를 맨 앞에 둔 한 묶음(`--start-group`)으로 링크한다. CMake가 imported target의 순서를 바꾸지 못하도록 `$<LINK_GROUP:RESCAN,...>`을 쓴다.
+- `-landroid -llog`를 링크한다. 그 밖의 시스템 라이브러리는 libc·libm·libdl뿐이다.
+- 최저 API 수준은 26이다 (8.4). C++ 런타임은 NDK의 `c++_static`이다. skia-prep의 기기 검증(`tools/android_probe.cpp`)이 그 조합이었다.
+- FreeType은 FTL로 고른다. 앱 문서에 FreeType을 밝힌다 (8.5).
+- Vulkan 메모리 할당기는 소비자가 넘긴다. 렌더러 단계에서 다룬다 (8.5).
 
 ## 직접 빌드한 Skia 사용
 

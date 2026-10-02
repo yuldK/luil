@@ -683,3 +683,37 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 - CMake 4.2.0, Visual Studio 2026(18)과 2022가 있다. Ninja는 두 VS에 딸려 있다.
 - `third_party/skia-prep`에 win-x64 r2가 설치되어 있다.
 - adb에 기기가 연결되어 있다 (2단계부터 쓴다).
+
+## 2단계 결과
+
+2026-10-02에 끝냈다. 브랜치는 `android-port`이고 커밋은 로컬에만 있다.
+
+| 커밋 | 내용 |
+| --- | --- |
+| `228c5fc` | core test용 플랫폼 hook 정의. `app_host_tests`를 core test로 옮김 |
+| `6c820c3` | `fetch_skia.ps1 -Target`과 android-arm64 r1 핀 |
+| `24aa9dc` | clang이 막은 쓰지 않는 람다 캡처 하나 (core 전체에서 clang 오류는 이것뿐이었다) |
+| `17c8f58` | CMake 플랫폼 분리, Android 검사·clang 옵션·Skia 링크 계약, adb test 실행, preset |
+
+**기기 검증.** Galaxy S22 Ultra(Android 14)에서 `ctest --preset android-arm64-core-release`와
+`-debug`가 각각 509개 모두 통과했다 (약 2분 20초·2분 40초). Windows의 `luil_core_tests`도 509개라 기기에서
+뺀 test는 없다. 링크 명령에 `libskia.a`가 묶음 맨 앞에 오고 `--allow-multiple-definition`, `-landroid -llog`,
+`-static-libstdc++`가 들어간 것을 확인했다.
+
+**Windows 검증.** Release 811, Debug 792 (asan 19개 제외), CPU 전용 Release 809개가 모두 통과했다
+(smoke·설치본 소비자 포함). 1단계 끝과 같은 수다 — `app_host_tests` 9개는 실행 파일만 바뀌었다.
+
+**정한 것.**
+
+- 생성기는 Ninja Multi-Config로 했다. Skia 검사와 기기 test가 Debug·Release를 한 빌드 디렉터리에서 다룬다.
+- NDK 경로와 Ninja 위치는 저장소 preset에 넣지 않고 `ANDROID_NDK_HOME`과 `CMAKE_MAKE_PROGRAM`으로 받는다.
+- 기기 실행 래퍼는 pwsh가 아니라 CMake script다. Android 구성에서 Windows 도구를 요구하지 않는다.
+- Android 패키지는 skia-prep 빌드 폴더의 같은 sha256 zip으로 `-Offline` 설치했다. 내려받지 않았다.
+- NDK r27d(Windows)는 승인을 받아 `%LOCALAPPDATA%\Android\ndk\27.3.13750724`에 설치했다.
+  받은 zip의 SHA-1은 Google 저장소 목록의 값(`56607cbc…f426`)과 같았다.
+
+**3단계로 넘기는 것.**
+
+- Android SDK command-line tools, platform `android-35`, build-tools, JDK 17이 필요하다 (결정 4). 받기 전에 묻는다.
+- Android 구성은 아직 `luil` 플랫폼 대상을 세우지 않는다. 3단계에서 `src/android/`가 그 자리에 들어온다.
+

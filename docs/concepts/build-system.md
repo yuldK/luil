@@ -4,14 +4,14 @@ luil의 [CMake 구성](../../CMakeLists.txt)은 준비된 의존성을 검사하
 
 ## 요구 환경과 의존성
 
-| 항목 | 요구 사항 |
-| --- | --- |
-| CMake | 4.2.0 이상 |
-| 플랫폼 | Windows x64 |
-| 생성기 | Visual Studio 17 2022 또는 Visual Studio 18 2026 |
-| 컴파일러 | MSVC 19.40 이상 |
-| Windows SDK | 10.0.22621.0 이상 |
-| 언어 | C++20 |
+| 항목 | Windows | Android (core만) |
+| --- | --- | --- |
+| CMake | 4.2.0 이상 | 4.2.0 이상 |
+| 플랫폼 | Windows x64 | arm64-v8a, API 26 이상 |
+| 생성기 | Visual Studio 17 2022 또는 Visual Studio 18 2026 | Ninja Multi-Config |
+| 컴파일러 | MSVC 19.40 이상 | NDK r27d의 clang |
+| SDK·런타임 | Windows SDK 10.0.22621.0 이상 | NDK libc++ 정적판(`c++_static`) |
+| 언어 | C++20 | C++20 |
 
 [`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. 이 옵션의 기본값은 `LUIL_ENABLE_DIRECT3D`를 따른다. Catch2는 테스트를 켰을 때 필요하다.
 
@@ -44,3 +44,28 @@ cmake --preset vs2026-analysis
 ```
 
 tooling을 요청해도 clang-format 또는 PowerShell이 없으면 관련 형식 검사 타깃을 경고와 함께 생략한다. 라이브러리·테스트·예제의 구성은 계속된다. 실행 파일의 리소스 통합은 [소비자 계약](consumer-contract.md)을 따른다.
+
+## Android
+
+Android는 지금 플랫폼을 모르는 층(`luil_core`)과 그 test(`luil_core_tests`)만 세운다. 창·입력·렌더러는 다음 단계다 ([Android 이식 계획](../android-port-plan.md)). 같은 CMake가 대상 플랫폼을 보고 갈린다. Windows에서는 RC 언어·Windows 검사·MSVC 옵션을, Android에서는 [`platform/android.cmake`](../../cmake/platform/android.cmake)의 검사와 [`compiler/clang.cmake`](../../cmake/compiler/clang.cmake)의 `-Wall -Wextra -Werror`를 쓴다. 예제·설치·Direct3D·웹뷰는 Android 구성에서 꺼진다.
+
+| 준비 | 값 |
+| --- | --- |
+| NDK | r27d (`27.3.13750724`). preset이 `ANDROID_NDK_HOME`의 `build/cmake/android.toolchain.cmake`를 쓴다 |
+| Ninja | PATH에 없으면 `CMAKE_MAKE_PROGRAM`으로 준다. Visual Studio에 딸린 것을 써도 된다 |
+| Skia | `scripts\fetch_skia.ps1 -Target android-arm64`가 `third_party/skia-prep-android-arm64`에 푼다 |
+| 기기 | adb로 연결한다. 여럿이면 `ANDROID_SERIAL`로 정한다 |
+
+```powershell
+$env:ANDROID_NDK_HOME = "C:\Users\<user>\AppData\Local\Android\ndk\27.3.13750724"
+cmake --preset android-arm64-core -DCMAKE_MAKE_PROGRAM="<ninja.exe>"
+cmake --build --preset android-arm64-core-debug
+ctest --preset android-arm64-core-debug
+```
+
+NDK 경로와 Ninja 위치는 사람마다 다르므로 저장소의 preset에 넣지 않는다. 자주 쓰면 Git에서 빠지는 `CMakeUserPresets.json`에 `environment`와 `cacheVariables`로 적어 둔다.
+
+test는 기기에서 돈다. `luil_core_tests`의 `CROSSCOMPILING_EMULATOR`가 [`adb_run.cmake`](../../cmake/android/adb_run.cmake)이고, CTest와 Catch2의 test 발견이 실행 파일을 부를 때마다 이 script가 실행 파일을 `/data/local/tmp/luil/<구성>`에 올려(`adb push --sync`, 바뀌었을 때만) 기기 셸에서 실행한다. Catch2가 목록을 쓰라고 준 호스트 경로(`--out`)는 기기 쪽 파일로 바꿔 실행하고 끝나면 당겨 온다. test 발견은 test 시점으로 미루므로(`DISCOVERY_MODE PRE_TEST`) 빌드할 때 기기가 꽂혀 있지 않아도 된다.
+
+core test 실행 파일은 플랫폼 계층을 링크하지 않는다. core가 링크로 묶어 부르는 두 hook(`platform_font_source()`, `platform_fail_fast()`)은 [`core_platform_stub.cpp`](../../tests/core_platform_stub.cpp)가 test용으로 정의한다 (빈 글꼴 관리자, `abort`). 그래서 Windows와 Android가 같은 test를 같은 수만큼 돌린다.
+
