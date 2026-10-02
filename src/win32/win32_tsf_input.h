@@ -1,5 +1,6 @@
 #pragma once
 
+#include "host/text_input_host.h"
 #include "luil/ui/ui_interaction.h"
 
 #include <textstor.h>
@@ -12,23 +13,10 @@
 #include <string_view>
 
 namespace luil::win32 {
-    // TSF가 동기로 읽고 쓰는 그림자 문서다.
-    //
-    // TSF는 `GetText`·`GetSelection`·`SetText`를 **그 자리에서** 처리하기를
-    // 요구하는데 글 상태는 logic thread 소유이고 UI thread에는 snapshot으로만 온다.
-    // 그래서 초점을 가진 박스 **하나**의 사본을 UI thread가 갖는다.
-    // 확정된 글의 진실은 언제나 logic에 있고,
-    // 이것은 `interaction_snapshot`과 같은 "입력 정규화 상태"다.
-    struct shadow_document
-    {
-        std::u8string text {};
-        // UTF-8 byte offset이다.
-        // TSF가 쓰는 ACP(UTF-16)와는 단위가 다르다.
-        std::size_t caret { 0 };
-        std::size_t anchor { 0 };
-
-        [[nodiscard]] bool operator==(const shadow_document&) const = default;
-    };
+    // TSF가 동기로 읽고 쓰는 그림자 문서다. 플랫폼을 가리지 않는 문서와 같다
+    // (`text_input_document`, host/text_input_host.h). TSF는 `GetText`·`GetSelection`·`SetText`를
+    // **그 자리에서** 처리하기를 요구한다. offset은 UTF-8 byte라 TSF의 ACP(UTF-16)와 다르다.
+    using shadow_document = text_input_document;
 
     // ACP는 **UTF-16 코드 단위** 개수다.
     // 그림자는 UTF-8이라 경계를 옮겨 주지 않으면 조합이 엉뚱한 자리에 들어간다.
@@ -37,31 +25,25 @@ namespace luil::win32 {
     [[nodiscard]] long acp_from_utf8(std::u8string_view text, std::size_t byte_offset) noexcept;
     [[nodiscard]] std::size_t utf8_from_acp(std::u8string_view text, long acp) noexcept;
 
-    // TSF session이 앱에 묻고 알리는 창구다.
-    // `application_window`가 구현한다.
-    // 모두 UI thread에서만 불린다.
-    struct tsf_host
+    // TSF session이 앱에 묻고 알리는 창구다. 플랫폼을 가리지 않는 창구(`text_input_host`)에
+    // TSF가 쓰는 화면 좌표를 더한다. `surface_tsf_host`가 구현하고 UI thread에서만 불린다.
+    struct tsf_host : text_input_host
     {
-        tsf_host() = default;
-        tsf_host(const tsf_host&) = delete;
-        tsf_host(tsf_host&&) = delete;
-        tsf_host& operator=(const tsf_host&) = delete;
-        tsf_host& operator=(tsf_host&&) = delete;
-        virtual ~tsf_host() = default;
-
-        // 지금 초점을 가진 텍스트 박스와 그 확정된 글이다.
-        // 초점이 없으면 nullopt다.
-        [[nodiscard]] virtual std::optional<text_input_target> focused_text_target() const = 0;
-        [[nodiscard]] virtual shadow_document committed_document() const = 0;
         // 그림자 문서의 byte 구간이 화면(스크린 좌표)에서 차지하는 자리다.
         // 후보 창이 조합 글자 밑에 붙는 근거다.
         // offset은 넘긴 document 기준이다 — 조합 중에는 문서가 element의
         // 확정 글보다 길어서, 문서를 함께 넘기지 않으면 잴 수 없다.
         // 알 수 없으면 nullopt다.
         [[nodiscard]] virtual std::optional<RECT> text_screen_rect(const shadow_document& document, std::size_t begin, std::size_t end) const = 0;
-        // logic으로 보낸다.
-        virtual void post_composition(text_composition_event intent) = 0;
-        virtual void post_edit(text_edit_request intent) = 0;
+
+        // TSF는 화면 좌표만 쓴다. 표면 좌표를 아는 host는 이것도 낸다.
+        [[nodiscard]] std::optional<rect_f> text_rect(const shadow_document& document, std::size_t begin, std::size_t end) const override
+        {
+            static_cast<void>(document);
+            static_cast<void>(begin);
+            static_cast<void>(end);
+            return std::nullopt;
+        }
     };
 
     // 창 하나가 갖는 TSF 연결이다.

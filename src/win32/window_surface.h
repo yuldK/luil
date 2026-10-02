@@ -191,6 +191,7 @@ namespace luil::win32 {
         [[nodiscard]] std::optional<text_input_target> focused_text_target() const override;
         [[nodiscard]] shadow_document committed_document() const override;
         [[nodiscard]] std::optional<RECT> text_screen_rect(const shadow_document& document, std::size_t begin, std::size_t end) const override;
+        [[nodiscard]] std::optional<rect_f> text_rect(const shadow_document& document, std::size_t begin, std::size_t end) const override;
         void post_composition(text_composition_event event) override;
         void post_edit(text_edit_request request) override;
 

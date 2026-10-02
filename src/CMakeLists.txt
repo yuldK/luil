@@ -248,7 +248,8 @@ luil_add_source_filter(luil_core_files "host"
     host/skia_renderer.cpp
     host/skia_renderer.h
     host/surface_invalidate.cpp
-    host/surface_invalidate.h)
+    host/surface_invalidate.h
+    host/text_input_host.h)
 
 # 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.
 luil_add_source_filter(luil_files "umbrella"

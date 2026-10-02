@@ -1235,15 +1235,11 @@ namespace luil::win32 {
         return { std::u8string { value->text }, value->caret, value->anchor };
     }
 
-    // 그림자 문서의 byte 구간이 화면에서 차지하는 자리다.
+    // 그림자 문서의 byte 구간이 그 element가 사는 표면에서 차지하는 자리다.
     // 글꼴 크기·안쪽 여백·가로 스크롤은 element가 계산한다
     // (`ui_element::text_span_bounds`) — 여기서 상수를 다시 들면
     // element가 값을 바꿀 때 후보 창 자리만 조용히 틀어진다.
-    //
-    // 화면으로 옮기는 창은 **그 element가 사는 표면**의 창이다.
-    // element가 재는 것은 자기 tree의 좌표라, popup에 초점이 있는데 앵커 창으로
-    // 옮기면 후보 창이 popup 자리만큼 어긋난다 (popup-ime-design.md).
-    std::optional<RECT> surface_tsf_host::text_screen_rect(const shadow_document& document, const std::size_t begin, const std::size_t end) const
+    std::optional<rect_f> surface_tsf_host::text_rect(const shadow_document& document, const std::size_t begin, const std::size_t end) const
     {
         const window_surface* const surface { text_surface() };
         const ui_element* const element { surface != nullptr ? focused_element(*surface) : nullptr };
@@ -1255,8 +1251,17 @@ namespace luil::win32 {
             const SkFont font { configured_ui_typeface(), pixel_size };
             return measure_text(text, font);
         };
-        const std::optional<rect_f> span { element->text_span_bounds(text_span_query { document.text, document.caret, begin, end }, measure) };
-        if (span.has_value() == false)
+        return element->text_span_bounds(text_span_query { document.text, document.caret, begin, end }, measure);
+    }
+
+    // 화면으로 옮기는 창은 **그 element가 사는 표면**의 창이다.
+    // element가 재는 것은 자기 tree의 좌표라, popup에 초점이 있는데 앵커 창으로
+    // 옮기면 후보 창이 popup 자리만큼 어긋난다 (popup-ime-design.md).
+    std::optional<RECT> surface_tsf_host::text_screen_rect(const shadow_document& document, const std::size_t begin, const std::size_t end) const
+    {
+        const window_surface* const surface { text_surface() };
+        const std::optional<rect_f> span { text_rect(document, begin, end) };
+        if (surface == nullptr || span.has_value() == false)
             return std::nullopt;
 
         POINT top_left { static_cast<LONG>(span->x), static_cast<LONG>(span->y) };
