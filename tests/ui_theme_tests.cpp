@@ -48,6 +48,25 @@ namespace {
     };
 } // namespace
 
+TEST_CASE("A soft accent button keeps its label readable in high contrast", "[theme]")
+{
+    // 고른 토글과 대화 상자의 강조 단추가 옅은 강조 버튼이다. 검정 바탕과 흰 바탕 고대비 모두에서
+    // 글자가 바탕과 같은 색이면 버튼이 통째로 사라진다.
+    luil::high_contrast_colors white {};
+    white.window_background = luil::make_ui_color(255, 255, 255);
+    white.window_foreground = luil::make_ui_color(0, 0, 0);
+    white.highlight_background = luil::make_ui_color(0, 0, 0);
+    white.highlight_foreground = luil::make_ui_color(255, 255, 255);
+    white.button_background = luil::make_ui_color(255, 255, 255);
+    white.button_foreground = luil::make_ui_color(0, 0, 0);
+    for (const luil::high_contrast_colors& colors : { luil::high_contrast_colors {}, white })
+    {
+        const luil::ui_color_palette palette { luil::high_contrast_palette_for(colors) };
+        REQUIRE(palette.soft_button_background != palette.accent_emphasis_foreground);
+        REQUIRE(palette.soft_button_hover_background != palette.accent_emphasis_foreground);
+    }
+}
+
 TEST_CASE("UI color themes provide semantic caption colors", "[theme]")
 {
     const auto dark { luil::color_palette_for(luil::color_theme::dark) };
@@ -249,7 +268,8 @@ TEST_CASE("High contrast palettes carry the chosen system colors verbatim", "[th
     REQUIRE(palette.group_border == white.window_foreground);
     // 파생 역할은 알파 없이 highlight 짝으로 접힌다.
     REQUIRE(palette.accent_pressed == white.highlight_background);
-    REQUIRE(palette.soft_button_background == white.button_background);
+    // 옅은 강조 버튼의 글자가 highlight 글자이므로 바탕도 highlight다.
+    REQUIRE(palette.soft_button_background == white.highlight_background);
     REQUIRE(palette.soft_button_hover_background == white.highlight_background);
     REQUIRE(palette.active_toggle_background == white.highlight_background);
     REQUIRE(palette.selection_background == white.highlight_background);

@@ -228,9 +228,10 @@ namespace luil {
             .accent_soft = colors.highlight_background,
             .accent_emphasis_foreground = colors.highlight_foreground,
             // 파생 역할도 알파 없이 highlight 짝으로 접는다.
-            // 옅은 버튼의 쉼은 버튼 표면이고, 누르거나 고른 자리는 highlight다.
+            // 옅은 강조 버튼(고른 토글, 대화 상자의 강조 단추)도 highlight 짝이다. 그 글자는
+            // `accent_emphasis_foreground`라 버튼 표면에 깔면 바탕과 글자가 같은 색이 되기도 한다.
             .accent_pressed = colors.highlight_background,
-            .soft_button_background = colors.button_background,
+            .soft_button_background = colors.highlight_background,
             .soft_button_hover_background = colors.highlight_background,
             .active_toggle_background = colors.highlight_background,
             .selection_background = colors.highlight_background,
