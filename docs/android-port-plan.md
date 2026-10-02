@@ -485,13 +485,14 @@ Windows는 지금의 HWND 방식 그대로다. 이 일은 core의 hit test 경�
 - `src/net`을 이식 가능한 부분과 OS 백엔드로 나눈다. 이식 가능한 부분은 `http_body`,
   `http_media_type`, URL·헤더 다루기다. 백엔드는 WinHTTP와 Android다.
 - `http_url`과 `http_request_context`의 `std::wstring`은 WinHTTP 백엔드 안으로 들인다.
-- Java 쪽은 요청 하나를 받는 얇은 클래스로 두고, 몸 해석과 전달은 지금처럼 C++ client thread가
-  맡는다.
+- Java 클래스를 두지 않는다. C++가 JNI로 `java.net.URL`과 `HttpURLConnection`을 바로 부르고, 몸
+  해석과 전달은 지금처럼 C++ client thread가 맡는다. 요청을 보내는 thread는 JVM에 붙인다
+  (`AttachCurrentThread`).
 - 코드 페이지 변환은 Windows 전용으로 남긴다. Android는 UTF-8만 받는다 (bionic의 `iconv`는 API 28부터다).
 - 테스트는 지금의 loopback 서버(winsock)를 POSIX 소켓으로도 세워 기기에서 돌린다.
 
-이 일은 2단계의 core 분리와 별도로 진행할 수 있다. 다만 Java 쪽은 GameActivity의 Gradle
-프로젝트가 선 뒤(3단계 이후)에 붙인다.
+이 일은 2단계의 core 분리와 별도로 진행할 수 있다. 다만 JNI가 쓸 `JavaVM`은 Activity가 있어야
+얻으므로, 기기 검증은 3단계 이후에 한다.
 
 ### 8단계 — 예제, 패키징 마무리, 서명
 
@@ -568,6 +569,13 @@ Windows는 지금의 HWND 방식 그대로다. 이 일은 core의 hit test 경�
 | 4. 도구 설치 | (a) Windows에 설치. 받기 전에 크기를 알리고 다시 묻는다 |
 | 5. 기기 테스트 | (a) CTest + adb 래퍼 |
 | 6. `renderer_mode` | (a) `gpu`를 더한다 |
+
+**Java 소스 방침.** luil이 들고 있는 Java 소스는 0줄로 한다. 클립보드, HTTP, 소프트 키보드 띄우기,
+inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래스를 바로 부른다. Java 소스가 꼭 필요한
+곳은 IME 하나다. 조합 입력을 받으려면 `View.onCreateInputConnection`을 재정의해야 하는데, 클래스를
+재정의하는 일은 JNI로 할 수 없다. 그 부분은 GameActivity와 GameTextInput이 이미 컴파일된 AAR로
+준다. 그래서 APK에는 AGDK의 Java 코드가 들어가고, Gradle도 그 AAR 때문에 필요하다. Java가 전혀
+없는 길은 NativeActivity뿐이고, 그러면 한글 조합을 받을 수 없다.
 
 **결정 1 — 공개 host API의 경로와 네임스페이스** (1단계)
 
