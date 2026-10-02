@@ -1,0 +1,24 @@
+{
+    "schema": 2,
+    "source": "https://github.com/yuldK/skia-prep",
+    "tag": "skia-152-0873ec164a06-android-arm64-r1",
+    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-152-0873ec164a06-android-arm64-r1",
+    "target": "android-arm64",
+    "png_codec": "rust",
+    "skia_commit": "0873ec164a06966b90ae0d43ef783cfb180084ae",
+    "skia_milestone": "152",
+    "package_revision": 1,
+    "toolchain": "clang",
+    "assets": {
+        "Release": {
+            "file": "skia-prep-0873ec164a06-r1-android-arm64-release.zip",
+            "size": 17086033,
+            "sha256": "f351c167666ff80b6a745981ee4867d029254fe0fcdd044a3eeaa4e665f36ddd"
+        },
+        "Debug": {
+            "file": "skia-prep-0873ec164a06-r1-android-arm64-debug.zip",
+            "size": 50385469,
+            "sha256": "b1343022772c18dcf58d064d5e8ae60036fd1c0df6dff6e4c8d50f6ccc513103"
+        }
+    }
+}

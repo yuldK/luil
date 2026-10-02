@@ -4,8 +4,13 @@
 # submodule도, gn·ninja·bazelisk도 필요 없다 — 패키지가 헤더와 정적 라이브러리와
 # 고지를 이미 담고 있다 (skia-prep의 pack_skia.ps1이 만든다).
 #
-# 받을 것은 third_party/skia-prep.json이 정한다. 그 파일이 판번을 고정하는
+# 받을 것은 대상마다 핀 파일 하나가 정한다. 그 파일이 판번을 고정하는
 # 자리이며, 자산마다 SHA-256을 함께 담는다 — 값이 다르면 설치하지 않는다.
+#
+# 대상은 -Target이 고른다. 기본값은 win-x64이고, 핀과 설치 자리도 지금까지와 같다.
+#   win-x64       third_party/skia-prep.json → third_party/skia-prep
+#   android-arm64 third_party/skia-prep-android-arm64.json → third_party/skia-prep-android-arm64
+# 대상마다 설치 자리가 따로라 한 저장소에서 두 대상을 함께 빌드할 수 있다.
 #
 # 판번은 Skia commit 하나가 아니다. 같은 commit을 다른 도구사슬로 다시 패키징한
 # 것이 따로 있으므로(clang-cl로 세운 r2가 그것이다), 핀은 패키지 판번과 도구사슬을
@@ -22,6 +27,9 @@
 param(
     [ValidateSet('Debug', 'Release')]
     [string[]]$Configuration = @('Release'),
+    # 받을 패키지의 대상이다. 핀의 target과 같아야 한다.
+    [ValidateSet('win-x64', 'android-arm64')]
+    [string]$Target = 'win-x64',
     [string]$Destination,
     [string]$PinFile,
     [string]$ArchiveDirectory,
@@ -37,14 +45,20 @@ Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
 
 $repository_root = Split-Path -Parent $PSScriptRoot
+# win-x64는 대상 이름이 없는 옛 경로를 그대로 쓴다. CI와 기존 소비자가 그 경로를 본다.
+if ($Target -eq 'win-x64') {
+    $target_suffix = ''
+} else {
+    $target_suffix = "-$Target"
+}
 if (-not $PinFile) {
-    $PinFile = Join-Path $repository_root 'third_party\skia-prep.json'
+    $PinFile = Join-Path $repository_root "third_party\skia-prep$target_suffix.json"
 }
 if (-not (Test-Path -LiteralPath $PinFile -PathType Leaf)) {
     throw "The Skia package pin file was not found: $PinFile"
 }
 if (-not $Destination) {
-    $Destination = Join-Path $repository_root 'third_party\skia-prep'
+    $Destination = Join-Path $repository_root "third_party\skia-prep$target_suffix"
 }
 if (-not $ArchiveDirectory) {
     $ArchiveDirectory = Join-Path $repository_root 'third_party\skia-prep-archives'
@@ -85,6 +99,15 @@ A pin has to name the package revision and the toolchain, not just the Skia
 commit - the same commit gets packaged more than once. See docs/skia-build.md.
 "@
     }
+}
+
+# 핀이 다른 대상의 것이면 받지 않는다. 다른 대상의 패키지를 설치 자리에 풀면
+# configure의 검사가 잡기는 하지만, 그 전에 수백 MB를 받고 기존 설치를 지운다.
+if ($pin.target -ne $Target) {
+    throw @"
+The pin file is for $($pin.target), not $($Target): $PinFile
+Pass -Target $($pin.target), or point -PinFile at the $Target pin.
+"@
 }
 
 foreach ($name in $configurations) {
@@ -393,4 +416,8 @@ $size = (Get-ChildItem -LiteralPath $Destination -Recurse -File | Measure-Object
 Write-Output ''
 Write-Output ('Skia package ready: {0} ({1:N1} MB)' -f $Destination, ($size / 1MB))
 Write-Output 'Configure luil next - it checks the package on its own:'
-Write-Output '  cmake --preset vs2026-tests'
+if ($Target -eq 'win-x64') {
+    Write-Output '  cmake --preset vs2026-tests'
+} else {
+    Write-Output "  cmake --preset $Target-core"
+}
