@@ -145,6 +145,10 @@ endif()
 #   cmake --preset vs2026-tests     → test target과 CTest 등록 포함
 #   -DLUIL_BUILD_TOOLING=ON      → clang-format·style 검사 target 포함
 option(LUIL_BUILD_TESTS "Build the luil test targets." OFF)
+option(LUIL_BUILD_POINTER_INTEGRATION_TESTS "Build the opt-in interactive touch/pen integration runner (requires LUIL_BUILD_TESTS)." OFF)
+if(LUIL_BUILD_POINTER_INTEGRATION_TESTS AND NOT LUIL_BUILD_TESTS)
+    message(FATAL_ERROR "LUIL_BUILD_POINTER_INTEGRATION_TESTS requires LUIL_BUILD_TESTS=ON.")
+endif()
 option(LUIL_BUILD_EXAMPLES "Build the luil example targets." OFF)
 option(LUIL_BUILD_TOOLING "Build the clang-format and source style targets." OFF)
 option(LUIL_ENABLE_MSVC_ANALYZE "Enable MSVC /analyze for library sources." OFF)

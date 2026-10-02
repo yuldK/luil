@@ -988,6 +988,15 @@ namespace luil::win32 {
             // 마우스·터치패드는 지금의 마우스 메시지 경로가 받는다.
             return owner.has_value();
         }
+        // 합성 포인터에서는 dwKeyStates가 0일 수 있다. 이 메시지가 꺼내진 시점의
+        // 큐에 동기화된 키 상태를 함께 복사한다 (GetAsyncKeyState의 현재 상태가 아니다).
+        if (read)
+        {
+            if ((GetKeyState(VK_SHIFT) & 0x8000) != 0)
+                input.info.dwKeyStates |= POINTER_MOD_SHIFT;
+            if ((GetKeyState(VK_CONTROL) & 0x8000) != 0)
+                input.info.dwKeyStates |= POINTER_MOD_CTRL;
+        }
         POINT client { input.info.ptPixelLocation };
         if (read == false || ScreenToClient(window_, &client) == FALSE)
         {

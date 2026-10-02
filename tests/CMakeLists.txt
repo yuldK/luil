@@ -210,3 +210,17 @@ set_tests_properties(${luil_smoke_tests} PROPERTIES TIMEOUT 30 LABELS "smoke")
 luil_set_ide_folder("Tests"
     luil_messaging_asan_tests
     luil_tests)
+
+# 실제 입력 데스크톱을 쓰므로 일반 ctest에 등록하지 않는다.
+# --interactive를 준 전용 대화형 검증 환경에서만 입력을 주입한다.
+if(LUIL_BUILD_POINTER_INTEGRATION_TESTS)
+    add_executable(luil_pointer_integration
+        "${luil_tests_resource}"
+        pointer_integration_fixture.cpp
+        pointer_integration_runner.cpp
+        loopback_http_server.cpp)
+    target_link_libraries(luil_pointer_integration PRIVATE luil::luil luil_options uiautomationcore comctl32 ws2_32)
+    luil_disable_automatic_windows_manifest(luil_pointer_integration)
+    target_compile_definitions(luil_pointer_integration PRIVATE LUIL_POINTER_TEST_WEBVIEW=$<BOOL:${LUIL_ENABLE_WEBVIEW}>)
+    luil_set_ide_folder("Tests" luil_pointer_integration)
+endif()

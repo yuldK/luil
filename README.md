@@ -87,6 +87,10 @@ Release 테스트에는 messaging의 AddressSanitizer 검증이 포함된다.
 `package` 레이블은 설치 위치를 옮긴 뒤 외부 소비자 프로젝트를 빌드한다.
 소스 형식은 `scripts\check_source_style.ps1`로 검사한다.
 
+터치·펜의 실제 Win32 입력 경로는 선택적으로 빌드하는 `luil_pointer_integration`으로
+검증한다. 일반 `ctest`에는 포함하지 않으며, 전용 대화형 Windows 환경에서 명시적으로
+실행한다. 빌드·실행 방법과 검증 범위는 [터치·펜 입력 설계](docs/touch-pen-input-design.md#uia와-네이티브-입력-자동화의-역할)를 참조한다.
+
 ## 문서
 
 - [문서 안내](docs/README.md): 기능별 사용법과 설계 문서

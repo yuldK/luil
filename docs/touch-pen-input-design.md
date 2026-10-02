@@ -99,6 +99,9 @@ OS가 마우스 호환 메시지로 바꾸지 않는다. 그래도 남는 합성
 - 마우스·펜 조작도 장치·포인터 id·표면·버튼으로 누름의 소유권을 유지한다. 다른 장치의
   hover나 늦은 뗌·취소가 선택·손잡이·drop을 바꾸지 않는다. 새 누름은 옛 조작을 취소하고
   시작한다. 펜 누름에는 Shift 상태도 전달해 마우스처럼 선택을 확장한다.
+  합성 포인터가 `dwKeyStates`를 채우지 않는 경우도 있으므로 네이티브 수신 시
+  메시지 큐에 동기화된 `GetKeyState`의 Shift·Ctrl 상태를 함께 복사한다. 현재 물리 키
+  상태를 읽는 `GetAsyncKeyState`로 뒤에 온 키 변경을 섞지 않는다.
   같은 장치·포인터·버튼의 뗌이 알 수 없는 표면에서 오면 기존 계약대로 조작만 거두고
   drop·클릭을 실행하지 않는다. 살아 있는 다른 표면에서 온 뗌은 활성 조작을 끝내지 않는다.
 - 웹뷰에서 시작한 접촉들은 별도로 중계하며 웹뷰의 다중 접촉을 이 제한으로 막지 않는다.
@@ -284,8 +287,35 @@ Win32 통합 테스트에는 [`CreateSyntheticPointerDevice`](https://learn.micr
 웹뷰는 페이지가 기록한 `pointerType`과 DOWN 뒤 UP/CANCEL의 짝도 확인한다. UIA Invoke나
 RangeValue로 동일한 화면 결과를 만들었다는 사실만으로 네이티브 입력 검증을 통과시키지 않는다.
 
-이번 회귀 테스트는 첫 번째 계층을 자동화한다. UIA와 네이티브 포인터 주입을 결합한
-통합 테스트 러너는 후속 작업이며, 실제 터치·펜 검증을 대신한 것으로 보고하지 않는다.
+`luil_pointer_integration`은 UIA 클라이언트와 별도 프로세스의 luil 테스트 창을 함께 제공한다.
+외부 UIA 스크립트 없이 Win32 합성 터치·펜 장치를 사용한다. 테스트 창은 수신한 네이티브
+메시지 수와 앱 결과를 UIA 라벨로 공개하며, 텍스트 선택은 Text 패턴으로도 읽는다.
+WebView 페이지는 `pointerType`, DOWN·UP·CANCEL과 짝 없는 종료를 호스트에 보낸다.
+스크롤 초기화와 옵션 변경만 UIA 패턴으로 수행한다.
+
+전용 대화형 Windows 테스트 환경에서 다음처럼 빌드·실행한다.
+
+```powershell
+cmake --preset vs2026-tests -DLUIL_BUILD_POINTER_INTEGRATION_TESTS=ON -DLUIL_ENABLE_WEBVIEW=ON
+cmake --build --preset vs2026-tests-debug --target luil_pointer_integration
+./build/vs2026-tests/tests/Debug/luil_pointer_integration.exe --interactive
+```
+
+빌드 옵션은 기본 OFF이고 `LUIL_BUILD_TESTS=ON`이 필요하다. 일반 `ctest`에는 등록하지
+않는다. 실행 인자 없이 시작하면 입력을 주입하지 않고 건너뜀 코드 77로 끝난다.
+`--interactive` 실행 중에는 실제 입력 데스크톱, 대상의 가려짐과 포그라운드를 확인한다.
+장치 생성·주입·UIA 조회·assertion 실패는 코드 1이며 오류와 마지막 관측 상태를 남긴다.
+WebView를 켠 빌드에서는 SDK뿐 아니라 런타임·Direct3D와 로컬 페이지 로딩도 성공해야 한다.
+WebView를 끈 빌드는 해당 시나리오를 SKIP으로 표시한다.
+
+자동화 범위는 터치 탭·길게 누르기·팬, 진행 중 팬·길게 누르기 비활성화와 대상
+비활성화, 펜촉·배럴·호버·긴 누름·끌기·지우개·Shift 선택, 마우스 긴 누름·끌기,
+WebView 터치·펜 시퀀스와 접촉 중 숨김 뒤 late UP 억제다. 실패에서도 접촉·Shift·마우스
+버튼을 해제하고 테스트 창·프로세스·임시 웹 프로필을 정리한다.
+
+추가 손가락, 마우스·펜의 접촉 중 교차 입력, 취소 표식·실제 OS 캡처 강탈과 modal 차단은 순수 회귀
+테스트가 담당하며 네이티브 러너의 추가 범위로 남는다. 합성 입력의 통과는 실제 장치의
+드라이버·필압·팜 리젝션 검증을 대신하지 않는다.
 
 순수 변환과 컨트롤러 동작은 [touch_input_tests.cpp](../tests/touch_input_tests.cpp)와
 [surface_input_tests.cpp](../tests/surface_input_tests.cpp)가 확인한다.
