@@ -432,13 +432,13 @@ namespace luil::win32 {
             composition = context_.composition_device(composition_error);
             // device가 없으면 Direct3D를 못 세운다. 그 판단(물러설 것인가 멈출
             // 것인가)은 mode를 아는 renderer_host의 몫이라 여기서는 넘기기만 한다.
-            if (composition == nullptr && mode == renderer_mode::direct3d)
+            if (composition == nullptr && renderer_mode_requires_gpu(mode))
             {
                 error = std::move(composition_error);
                 return false;
             }
         }
-        renderer_ = renderer_host::create(window_, mode, fault, composition, error);
+        renderer_ = create_renderer_host(window_, mode, fault, composition, error);
         return renderer_ != nullptr && renderer_->resize(std::max(1, width), std::max(1, height), error);
     }
 
@@ -714,7 +714,7 @@ namespace luil::win32 {
         // 웹뷰를 자리에 앉히고 비울 자리를 받는다. **`prepare_frame` 뒤라야 한다** —
         // 주 표면은 자기 tree를 거기서 집으므로, 앞에 두면 한 frame 낡은 tree에서
         // 자리표를 찾게 된다.
-        state.holes = context_.apply_webviews(id_, state.tree, renderer_->underlay(), state.width, state.height);
+        state.holes = context_.apply_webviews(id_, state.tree, renderer_underlay(*renderer_), state.width, state.height);
         // 값·상태·구조 변경을 prepare_frame 뒤에 직전 접근성 발행본과 비교한다.
         // prepare_frame 전에 비교하면 주 표면이 이전 tree를 사용해 변경 알림을 놓친다.
         announce_accessibility_changes();

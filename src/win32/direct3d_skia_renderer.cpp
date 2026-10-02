@@ -47,7 +47,7 @@ namespace luil::win32 {
             return nullptr;
         }
 
-        class direct3d_skia_renderer final : public skia_renderer
+        class direct3d_skia_renderer final : public composition_renderer
         {
         public:
             direct3d_skia_renderer(const HWND window, IDCompositionDevice& composition)

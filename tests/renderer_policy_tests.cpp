@@ -7,7 +7,21 @@ TEST_CASE("Renderer strings map to fixed modes", "[renderer]")
     REQUIRE(luil::parse_renderer_mode(u8"auto") == luil::renderer_mode::automatic);
     REQUIRE(luil::parse_renderer_mode(u8"direct3d") == luil::renderer_mode::direct3d);
     REQUIRE(luil::parse_renderer_mode(u8"cpu") == luil::renderer_mode::cpu);
+    REQUIRE(luil::parse_renderer_mode(u8"gpu") == luil::renderer_mode::gpu);
     REQUIRE_FALSE(luil::parse_renderer_mode(u8"vulkan").has_value());
+    REQUIRE(luil::renderer_mode_name(luil::renderer_mode::gpu) == u8"gpu");
+}
+
+TEST_CASE("The platform GPU mode selects like Direct3D", "[renderer]")
+{
+    const auto gpu = luil::select_renderer_backend(luil::renderer_mode::gpu, true);
+    REQUIRE(gpu.status == luil::renderer_selection_status::selected);
+    REQUIRE(gpu.backend == luil::renderer_backend::direct3d);
+    REQUIRE_FALSE(gpu.used_fallback);
+
+    const auto unavailable = luil::select_renderer_backend(luil::renderer_mode::gpu, false);
+    REQUIRE(unavailable.status == luil::renderer_selection_status::unavailable);
+    REQUIRE_FALSE(unavailable.used_fallback);
 }
 
 TEST_CASE("Auto renderer tries Direct3D before CPU fallback", "[renderer]")

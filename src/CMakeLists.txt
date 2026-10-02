@@ -222,7 +222,8 @@ luil_add_source_filter(luil_core_files "app"
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
-# (한 frame 그리기, popup·웹뷰 자리 대조, 다시 그릴 표면과 timer 계획, GPU fence 대기 예산).
+# (한 frame 그리기, 렌더러 실패 물러섬, popup·웹뷰 자리 대조, 다시 그릴 표면과 timer 계획,
+# GPU fence 대기 예산).
 # host/fonts: 글꼴 registry다 (설정된 글꼴, 가족 cache, 글자별 대체, 파일·바이트 로딩).
 # OS 글꼴 관리자와 사용자 언어는 플랫폼이 `platform_font_source()`로 공급한다.
 luil_add_source_filter(luil_core_files "host/fonts"
@@ -236,6 +237,8 @@ luil_add_source_filter(luil_core_files "host"
     host/frame_state.h
     host/popup_reconcile.cpp
     host/popup_reconcile.h
+    host/skia_renderer.cpp
+    host/skia_renderer.h
     host/surface_invalidate.cpp
     host/surface_invalidate.h)
 
@@ -270,7 +273,7 @@ luil_add_source_filter(luil_files "win32/renderer"
     win32/composition_device.h
     win32/cpu_skia_renderer.cpp
     "${luil_direct3d_renderer_source}"
-    win32/skia_renderer.cpp
+    win32/renderer_factory.cpp
     win32/skia_renderer.h)
 
 # 웹뷰 host다. 웹뷰를 끈 구성은 같은 인터페이스의 stub을 대신 컴파일한다 —

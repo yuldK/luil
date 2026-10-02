@@ -9,6 +9,8 @@ namespace luil {
             return renderer_mode::direct3d;
         if (value == u8"cpu")
             return renderer_mode::cpu;
+        if (value == u8"gpu")
+            return renderer_mode::gpu;
         return std::nullopt;
     }
 
@@ -22,6 +24,8 @@ namespace luil {
             return u8"direct3d";
         case renderer_mode::cpu:
             return u8"cpu";
+        case renderer_mode::gpu:
+            return u8"gpu";
         }
         return u8"unknown";
     }

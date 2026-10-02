@@ -42,6 +42,7 @@ add_executable(luil_core_tests
     popup_reconcile_tests.cpp
     progress_element_tests.cpp
     raster_draw_tests.cpp
+    renderer_host_tests.cpp
     renderer_policy_tests.cpp
     scroll_area_element_tests.cpp
     scroll_view_element_tests.cpp

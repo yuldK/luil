@@ -6,7 +6,7 @@ UI 스레드는 logic이 게시한 `ui_frame`과 input의 `interaction_snapshot`
 
 ## Backend와 실패 처리
 
-내부 [`skia_renderer`](../../src/win32/skia_renderer.h)의 가상 함수는 `backend()`, `resize()`, `render()`, `underlay()`다. 제시는 각 backend의 `render()` 안에서 처리한다. CPU backend는 Skia raster 결과를 GDI로 제시하고, Direct3D backend는 D3D12와 Skia Ganesh로 그린 swap chain을 DirectComposition에 붙인다.
+내부 [`skia_renderer`](../../src/host/skia_renderer.h)의 가상 함수는 `backend()`, `resize()`, `render()`다. 제시는 각 backend의 `render()` 안에서 처리한다. 이 interface와 실패 물러섬 정책인 `renderer_host`는 플랫폼을 모른다. 플랫폼은 GPU·CPU 렌더러를 만드는 함수와 오류 글에 쓸 GPU 이름을 `renderer_factories`로 넘긴다. Win32에서 CPU backend는 Skia raster 결과를 GDI로 제시하고, Direct3D backend는 D3D12와 Skia Ganesh로 그린 swap chain을 DirectComposition에 붙인다. 웹뷰가 놓이는 합성 자리(`underlay()`)는 Win32 확장인 [`composition_renderer`](../../src/win32/skia_renderer.h)가 낸다.
 
 `renderer_host`의 정책은 [`renderer_mode`](../../include/luil/app/renderer_policy.h)로 정한다.
 
@@ -14,6 +14,7 @@ UI 스레드는 logic이 게시한 `ui_frame`과 input의 `interaction_snapshot`
 | --- | --- |
 | `cpu` | CPU renderer만 생성한다. |
 | `direct3d` | Direct3D 생성·resize·render 실패를 호출자에게 반환한다. |
+| `gpu` | 이 플랫폼의 GPU 경로다. Windows에서는 `direct3d`와 같다. 앱이 플랫폼마다 다른 값을 쓰지 않도록 둔다. |
 | `automatic` | Direct3D를 우선하며 생성·resize·render 실패 시 CPU로 전환한다. |
 
 CPU 전환도 실패하면 오류를 반환한다. CPU로 전환한 host가 다음 frame에서 자동으로 Direct3D를 다시 시도하지는 않는다. 전환 시 이전 DirectComposition target을 해제해야 GDI 결과가 화면에 드러난다.

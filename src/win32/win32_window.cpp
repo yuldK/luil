@@ -2247,7 +2247,7 @@ namespace luil::win32 {
         if (window.create(error) == false)
         {
             show_startup_error(error, config);
-            if (config.smoke_test && config.renderer == renderer_mode::direct3d)
+            if (config.smoke_test && renderer_mode_requires_gpu(config.renderer))
                 return direct3d_unavailable_exit_code;
             return 1;
         }
