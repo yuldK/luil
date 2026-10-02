@@ -22,6 +22,8 @@ namespace luil {
     {
         direct3d,
         cpu,
+        // Android의 GPU 경로다. 기존 값의 수를 바꾸지 않으려고 끝에 둔다.
+        vulkan,
     };
 
     enum class renderer_selection_status

@@ -38,6 +38,8 @@ namespace luil {
             return u8"direct3d";
         case renderer_backend::cpu:
             return u8"cpu";
+        case renderer_backend::vulkan:
+            return u8"vulkan";
         }
         return u8"unknown";
     }
