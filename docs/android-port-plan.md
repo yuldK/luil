@@ -741,7 +741,7 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 - 기기 core test가 Release·Debug 각 510개(앱 바 커밋 뒤 514개) 통과한다.
 - logcat의 오류는 홈으로 나갈 때마다 시스템이 남기는 `BufferQueueProducer ... disconnect: not
   connected (req=2)` 한 줄뿐이다. CPU로 잠갔던 표면을 시스템이 거둘 때의 순서에서 나오는 것으로
-  보이며 동작에는 영향이 없다. 4단계에서 Vulkan 경로와 함께 다시 본다.
+  보이며 동작에는 영향이 없다. 4단계에서 Vulkan 경로와 함께 다시 본다. (4단계: Vulkan 경로에서는 나오지 않는다.)
 
 **정한 것.**
 
@@ -786,3 +786,68 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 옮긴 뒤 Windows Release 841개, Debug 822개(asan 19개 제외), CPU 전용 Release 839개 CTest와 기기 core
 test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 바와 함께 뜨는 것을 확인했다.
 중간 커밋 하나하나는 다시 빌드하지 않았고 마지막 트리를 검증했다.
+
+## 4단계 결과
+
+2026-10-02에 끝냈다. 브랜치는 `android-port`이고 커밋은 로컬에만 있다.
+
+| 커밋 | 내용 |
+| --- | --- |
+| `a532507` | `renderer_backend::vulkan`과 그 이름 |
+| `3924901` | Android CPU 렌더러가 `resize` 없이 먼저 불려도 창 버퍼 형식을 정하고, RGBA가 아닌 버퍼에는 쓰지 않음 |
+| `20e661e` | Android codicon typeface를 프로세스에 하나만 만듦 |
+| `3cd3e27` | Gradle 모듈을 `app` 하나와 예제별 flavor로. debug APK에 검증 레이어를 싸는 속성 |
+| `11f2072` | Vulkan 장치·렌더러, 앱 host의 기본 모드 `automatic`과 Activity 단위 물러섬, 시스템 속성으로 고르는 렌더러와 실패 주입 |
+| `410b18e` | widgets를 Android APK로 |
+
+**기기 검증.** Galaxy S22 Ultra(Android 14, Adreno 730)에서 확인했다.
+
+- hello와 widgets가 Vulkan으로 그려진다 (logcat `renderer vulkan on Adreno (TM) 730`). CPU로 그린
+  화면과 비교하면 상태 표시줄 아래 화소의 1%가 채널값 4 이내로만 다르다 (안티에일리어싱).
+- 홈으로 나갔다 돌아오기와 회전을 한 번씩 묶어 hello 20회, widgets 20회에 이어 60회를 되풀이했다.
+  장치는 Activity를 띄울 때 한 번만 만들어지고(`vulkan device created`) 렌더러만 창마다 섰다.
+  오류는 없었다.
+- 메모리(`dumpsys meminfo`): 그리는 동안 Graphics 약 118MB, 백그라운드에서 약 24MB. 되풀이하는
+  동안 Native Heap이 한 번에 약 160KB씩 늘던 것을 찾아 고쳤다. 렌더러마다 codicon typeface를 글꼴
+  바이트(149KB)를 복사해 새로 만들고 있었다(3단계의 CPU 경로도 같았다). 고친 뒤 widgets로 40회 되풀이하는
+  동안 Native Heap이 21.6MB에서 21.9MB로 거의 그대로다. Graphics는 되풀이 한 번에 수 KB씩 는다
+  (60회에 약 0.2MB, 드라이버 몫으로 보인다).
+- 실패 주입: 생성 실패와 세 frame 뒤 손실에서 CPU로 물러서 그리고, 창을 새로 받아도 CPU로 남는다.
+  세 경우(처음부터 CPU, 생성 실패, 손실 뒤 전환)의 화면은 픽셀까지 같다. `gpu` 모드의 생성 실패는
+  Activity를 끝낸다. 손실 주입을 처음 돌렸을 때 CPU로 넘어간 첫 frame에서 SIGSEGV로 죽었다. CPU
+  렌더러가 창 버퍼 형식을 정하지 않은 채 4바이트 픽셀로 써서 버퍼 끝을 넘은 것이라 고쳤다 (`3924901`).
+- 검증 레이어: Khronos 1.4.363.0을 debug APK에 싸고 동기화 검증까지 켰다. 정보 수준 출력으로
+  레이어가 logcat에 쓰는 것을 먼저 확인했다. 처음에는 새 스왑체인 이미지마다 한 번
+  `SYNC-HAZARD-WRITE-AFTER-READ`가 나왔다. Skia의 UNDEFINED 전환 장벽이 이미지 받기 semaphore와
+  이어지지 않아서였다. 처음 쓰는 이미지는 fence로 받아 CPU에서 기다리게 고친 뒤 hello·widgets의
+  회전·홈·물러섬 경로에서 오류가 없다. identity 전변환을 알리는 성능 경고만 남는다.
+- 회전: 가로에서 스왑체인을 한 번만 다시 세운다. identity 전변환의 레이어를 HWC가 `ROT_90`으로
+  직접 합성한다(`DEVICE`). GPU 합성 비용이 없어 전변환 맞추기는 하지 않았다.
+- 기기 core test Release·Debug 각 538개, Windows Release 843개, Debug 824개(asan 19개 제외),
+  CPU 전용 Release 841개 CTest가 통과한다. Windows는 fence 고침과 codicon 고침 전 트리에서 돌렸고,
+  그 뒤 바뀐 파일은 Android 전용이다. 중간 커밋 하나하나는 다시 빌드하지 않았고 마지막 트리를
+  다시 세워 hello·widgets를 기기에서 띄웠다.
+
+**정한 것.**
+
+- 장치(`vulkan_device`)와 창 하나의 스왑체인(`vulkan_skia_renderer`)을 나눴다. 계획의
+  `android_surface.cpp`는 따로 두지 않았다. 표면 생성은 렌더러 안의 몇 줄이다.
+- 한 번 물러서면 그 **Activity**가 끝날 때까지 Vulkan을 다시 쓰지 않는다. Windows는 창 하나가
+  물러서지만, Android는 창이 수시로 다시 생기므로 창 단위로 두면 손실 뒤에도 매번 다시 시도한다.
+- GPU 대기는 빈 제출에 fence를 걸어 `fence_wait.h`의 예산만큼 쪼개 기다린다. 이미지 받기도 같다.
+- 렌더러 경로는 명령줄 대신 `debug.luil.*` 시스템 속성으로 고른다 (`apply_debug_properties`,
+  앱이 부를 때만). `debug.` 속성은 셸만 쓸 수 있다.
+- 할당기 선언(`vulkan_memory_allocator.h`)은 M152의 두 `libskia.a`에서 기호를 확인했다
+  ([Skia 빌드 준비](skia-build.md#android-패키지와-링크-계약)).
+- 결정 6의 `parse_renderer_mode`는 그대로 `vulkan`을 받지 않는다. backend 이름(`renderer_backend_name`)만
+  `vulkan`이다.
+
+**다음 단계로 넘기는 것.**
+
+- HWC가 회전을 못 하는 기기에서는 identity 전변환이 GPU 합성으로 내려간다. 그런 기기를 만나면
+  전변환을 맞추고 캔버스를 돌려 그린다.
+- 장치 손실의 실제 경로(드라이버가 `VK_ERROR_DEVICE_LOST`를 내는 경우)는 주입으로만 확인했다.
+- 입력은 아직 비우기만 한다 (5단계). widgets는 보기만 하고, 레이아웃이 화면 폭보다 넓어 오른쪽이
+  잘린다 (Windows용 최소 폭을 전제로 한 예제다. 8단계에서 본다).
+- 기기에 남긴 것: `debug.luil.*`·`debug.vulkan.*` 속성은 빈 값으로 지웠다(재부팅하면 사라진다).
+  검증 레이어(`build/vulkan-validation-layers`, Git에서 빠진다)는 다시 쓰려고 남겨 두었다.
