@@ -1,10 +1,9 @@
 #include "luil/text/fonts.h"
 
-#include "win32/embedded_assets.h"
+#include "host/font_registry.h"
 
 #include "include/core/SkData.h"
 #include "include/core/SkFontMgr.h"
-#include "include/ports/SkTypeface_win.h"
 
 #include <fstream>
 #include <limits>
@@ -17,7 +16,7 @@ namespace luil {
         {
             if (data == nullptr || data->isEmpty() || face_index < 0)
                 return nullptr;
-            const sk_sp<SkFontMgr> manager { SkFontMgr_New_DirectWrite() };
+            const sk_sp<SkFontMgr> manager { platform_font_source().make_uncached_manager() };
             return manager != nullptr ? manager->makeFromData(std::move(data), face_index) : nullptr;
         }
     } // namespace
@@ -46,10 +45,5 @@ namespace luil {
         if (data == nullptr || file.read(static_cast<char*>(data->writable_data()), static_cast<std::streamsize>(size)).fail())
             return nullptr;
         return typeface_from_data(std::move(data), face_index);
-    }
-
-    sk_sp<SkTypeface> load_codicon_typeface()
-    {
-        return win32::load_codicon_typeface();
     }
 } // namespace luil

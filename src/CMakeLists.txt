@@ -221,6 +221,13 @@ luil_add_source_filter(luil_core_files "app"
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
 # (한 frame 그리기, popup·웹뷰 자리 대조, 다시 그릴 표면과 timer 계획, GPU fence 대기 예산).
+# host/fonts: 글꼴 registry다 (설정된 글꼴, 가족 cache, 글자별 대체, 파일·바이트 로딩).
+# OS 글꼴 관리자와 사용자 언어는 플랫폼이 `platform_font_source()`로 공급한다.
+luil_add_source_filter(luil_core_files "host/fonts"
+    host/font_registry.cpp
+    host/font_registry.h
+    host/typeface_loading.cpp)
+
 luil_add_source_filter(luil_core_files "host"
     host/fence_wait.h
     host/frame_state.cpp
@@ -313,14 +320,13 @@ luil_add_source_filter(luil_files "win32/input"
     win32/win32_tsf_input.cpp
     win32/win32_tsf_input.h)
 
-# 글꼴이다. 시스템 글꼴 열거, 파일·바이트 로딩, 실행 파일 resource에 박힌 codicon 폰트·고지다.
+# 글꼴이다. DirectWrite 글꼴 자원과 실행 파일 resource에 박힌 codicon 폰트·고지다.
+# cache·설정·대체 규칙은 core의 host/fonts에 있고, 여기는 OS 자원만 공급한다.
 luil_add_source_filter(luil_files "win32/fonts"
     win32/embedded_assets.cpp
     win32/embedded_assets.h
     win32/resource_ids.h
-    win32/typeface_loading.cpp
-    win32/win32_fonts.cpp
-    win32/win32_fonts.h)
+    win32/win32_fonts.cpp)
 
 # 보조 기술이 읽는 UIA provider다.
 luil_add_source_filter(luil_files "win32/accessibility"

@@ -1,9 +1,9 @@
 #include "win32/skia_renderer.h"
 
 #include "host/fence_wait.h"
+#include "host/font_registry.h"
 #include "win32/embedded_assets.h"
 #include "win32/win32_error.h"
-#include "win32/win32_fonts.h"
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkSurface.h"

@@ -1,4 +1,4 @@
-#include "win32/win32_fonts.h"
+#include "host/font_registry.h"
 #include "luil/text/fonts.h"
 
 #include "luil/text/utf8_text.h"
@@ -21,7 +21,7 @@ namespace {
     public:
         [[nodiscard]] sk_sp<SkTypeface> for_codepoint(const char32_t codepoint) const override
         {
-            return luil::win32::fallback_typeface(codepoint);
+            return luil::fallback_typeface(codepoint);
         }
     };
 
@@ -72,7 +72,7 @@ TEST_CASE("Installed font family names are valid UTF-8", "[win32][fonts]")
 // 한자는 한국어·일본어·중국어에서 자형이 달라, 이 값이 없으면 시스템이 임의로 고른다.
 TEST_CASE("The user UI language is read as a BCP-47 tag", "[win32][fonts]")
 {
-    const std::string_view language { luil::win32::user_ui_language() };
+    const std::string_view language { luil::user_ui_language() };
     // 이름을 읽지 못하는 환경도 있다 — 그때는 지금까지처럼 언어 없이 고른다.
     if (language.empty())
         SKIP("The OS did not report a user locale name.");
@@ -84,24 +84,24 @@ TEST_CASE("The user UI language is read as a BCP-47 tag", "[win32][fonts]")
         REQUIRE(static_cast<unsigned char>(character) < 0x80u);
 
     // 두 번 물어도 같은 값이다 (한 번만 읽는다).
-    REQUIRE(luil::win32::user_ui_language() == language);
+    REQUIRE(luil::user_ui_language() == language);
 }
 
 // 대체가 실제로 해석되는지다.
 // GDI font manager는 이 진입점이 언제나 nullptr라 `Cascadia Code`에서 한글이 빈 네모가 되었다.
 TEST_CASE("The system resolves a fallback typeface for Hangul and emoji", "[win32][fonts]")
 {
-    const sk_sp<SkTypeface> hangul { luil::win32::fallback_typeface(U'한') };
+    const sk_sp<SkTypeface> hangul { luil::fallback_typeface(U'한') };
     REQUIRE(hangul != nullptr);
     REQUIRE(hangul->unicharToGlyph(U'한') != 0);
 
-    const sk_sp<SkTypeface> emoji { luil::win32::fallback_typeface(U'\U0001F600') };
+    const sk_sp<SkTypeface> emoji { luil::fallback_typeface(U'\U0001F600') };
     REQUIRE(emoji != nullptr);
     REQUIRE(emoji->unicharToGlyph(static_cast<SkUnichar>(U'\U0001F600')) != 0);
 
     // 두 번째 조회는 cache에서 온다.
     //  - 같은 객체여야 한다.
-    REQUIRE(luil::win32::fallback_typeface(U'한').get() == hangul.get());
+    REQUIRE(luil::fallback_typeface(U'한').get() == hangul.get());
 }
 
 // cache가 무한히 자라지 않고, 글꼴이 바뀌면 비워지는지다.
@@ -109,18 +109,18 @@ TEST_CASE("The system resolves a fallback typeface for Hangul and emoji", "[win3
 // 상한도 무효화도 둘 수 없다.
 TEST_CASE("The fallback cache is bounded and can be cleared", "[win32][fonts]")
 {
-    luil::win32::clear_font_caches();
-    REQUIRE(luil::win32::fallback_cache_size() == 0u);
+    luil::clear_font_caches();
+    REQUIRE(luil::fallback_cache_size() == 0u);
 
     // 찾지 못한 글자도 자리를 차지한다 (같은 글자를 매 frame 다시 뒤지지 않으려는 것이다).
-    const sk_sp<SkTypeface> hangul { luil::win32::fallback_typeface(U'한') };
-    REQUIRE(luil::win32::fallback_cache_size() == 1u);
-    static_cast<void>(luil::win32::fallback_typeface(U'한'));
-    REQUIRE(luil::win32::fallback_cache_size() == 1u);
+    const sk_sp<SkTypeface> hangul { luil::fallback_typeface(U'한') };
+    REQUIRE(luil::fallback_cache_size() == 1u);
+    static_cast<void>(luil::fallback_typeface(U'한'));
+    REQUIRE(luil::fallback_cache_size() == 1u);
 
     // 비워도 이미 받아 둔 것은 쓸 수 있다.
-    luil::win32::clear_font_caches();
-    REQUIRE(luil::win32::fallback_cache_size() == 0u);
+    luil::clear_font_caches();
+    REQUIRE(luil::fallback_cache_size() == 0u);
     if (hangul != nullptr)
         REQUIRE(hangul->unicharToGlyph(U'한') != 0);
 
@@ -128,20 +128,20 @@ TEST_CASE("The fallback cache is bounded and can be cleared", "[win32][fonts]")
     // 무효화가 관리자까지 놓으므로 다음 조회가 새로 만든다 — 그 자리에서 낡은 typeface가
     // 함께 무너지면 그리기 thread가 이미 들고 있는 글꼴이 죽는다.
     // DirectWrite typeface는 관리자로 되돌아가는 참조를 들지 않아 안전하다.
-    const std::size_t generation { luil::win32::font_manager_generation() };
-    static_cast<void>(luil::win32::fallback_typeface(U'글'));
-    REQUIRE(luil::win32::font_manager_generation() > generation);
+    const std::size_t generation { luil::font_manager_generation() };
+    static_cast<void>(luil::fallback_typeface(U'글'));
+    REQUIRE(luil::font_manager_generation() > generation);
     if (hangul != nullptr)
         REQUIRE(hangul->unicharToGlyph(U'한') != 0);
 
     // 상한을 넘기면 통째로 비우고 새 항목부터 다시 담는다.
     // 사용하지 않는 사적 사용 영역(U+E000~)으로 채워 시스템 조회를 가볍게 한다.
-    for (std::size_t index = 0; index <= luil::win32::fallback_cache_limit; ++index)
-        static_cast<void>(luil::win32::fallback_typeface(static_cast<char32_t>(0xE000u + index)));
-    REQUIRE(luil::win32::fallback_cache_size() <= luil::win32::fallback_cache_limit);
-    REQUIRE(luil::win32::fallback_cache_size() > 0u);
+    for (std::size_t index = 0; index <= luil::fallback_cache_limit; ++index)
+        static_cast<void>(luil::fallback_typeface(static_cast<char32_t>(0xE000u + index)));
+    REQUIRE(luil::fallback_cache_size() <= luil::fallback_cache_limit);
+    REQUIRE(luil::fallback_cache_size() > 0u);
 
-    luil::win32::clear_font_caches();
+    luil::clear_font_caches();
 }
 
 // 무효화가 cache만이 아니라 글꼴 관리자까지 놓는지다.
@@ -151,64 +151,64 @@ TEST_CASE("The fallback cache is bounded and can be cleared", "[win32][fonts]")
 TEST_CASE("Clearing the font caches drops the font manager", "[win32][fonts]")
 {
     // 앞선 test가 남긴 상태와 무관하게 시작한다.
-    luil::win32::clear_font_caches();
+    luil::clear_font_caches();
     // 이름이 비어 있지 않으면 해석이 관리자를 거친다.
     //  - 그 이름이 실제로 설치돼 있는지는 상관없다. 여기서 재는 것은 관리자다.
-    static_cast<void>(luil::win32::family_typeface(u8"Cascadia Code"));
-    const std::size_t created { luil::win32::font_manager_generation() };
+    static_cast<void>(luil::family_typeface(u8"Cascadia Code"));
+    const std::size_t created { luil::font_manager_generation() };
     REQUIRE(created > 0u);
 
     // 비우는 것만으로는 아직 만들지 않는다.
     // 목록을 새로 읽는 데 수백 ms까지 걸려 `WM_FONTCHANGE` 처리 안에서 치를 수 없다.
-    luil::win32::clear_font_caches();
-    REQUIRE(luil::win32::font_manager_generation() == created);
+    luil::clear_font_caches();
+    REQUIRE(luil::font_manager_generation() == created);
 
     // 다음 조회가 새 관리자를 만든다.
-    static_cast<void>(luil::win32::family_typeface(u8"Cascadia Code"));
-    REQUIRE(luil::win32::font_manager_generation() == created + 1u);
+    static_cast<void>(luil::family_typeface(u8"Cascadia Code"));
+    REQUIRE(luil::font_manager_generation() == created + 1u);
 }
 
 // 관리자를 다시 만든 뒤에도 설정한 가족이 그 글꼴로 해석되는지다.
 // `WM_FONTCHANGE` 한 번에 화면 글꼴이 내장 글꼴로 주저앉으면 무효화가 고침이 아니라 손해다.
 TEST_CASE("A rebuilt manager still resolves the configured family", "[win32][fonts]")
 {
-    const sk_sp<SkTypeface> code { luil::win32::family_typeface(u8"Cascadia Code") };
+    const sk_sp<SkTypeface> code { luil::family_typeface(u8"Cascadia Code") };
     if (code == nullptr)
         SKIP("Cascadia Code is not installed on this machine.");
 
     // UI는 빈 이름(내장 글꼴)으로 남긴다.
     // 다른 test가 `configured_ui_typeface`를 보고 있어 흔들지 않는다.
-    luil::win32::set_configured_fonts(u8"", u8"Cascadia Code");
-    const sk_sp<SkTypeface> before { luil::win32::configured_code_typeface() };
+    luil::set_configured_fonts(u8"", u8"Cascadia Code");
+    const sk_sp<SkTypeface> before { luil::configured_code_typeface() };
     REQUIRE(before != nullptr);
     REQUIRE(before->unicharToGlyph(U'A') != 0);
 
     // `WM_FONTCHANGE`가 하는 일이다: cache도 관리자도 놓는다.
-    luil::win32::clear_font_caches();
-    const std::size_t dropped { luil::win32::font_manager_generation() };
+    luil::clear_font_caches();
+    const std::size_t dropped { luil::font_manager_generation() };
 
     // platform은 앱이 고른 **같은 이름**을 다시 세운다.
-    luil::win32::set_configured_fonts(u8"", u8"Cascadia Code");
+    luil::set_configured_fonts(u8"", u8"Cascadia Code");
     // 새 관리자로 해석해야 한다 — 낡은 것을 그대로 썼다면 계수기가 늘지 않는다.
-    REQUIRE(luil::win32::font_manager_generation() > dropped);
+    REQUIRE(luil::font_manager_generation() > dropped);
 
-    const sk_sp<SkTypeface> after { luil::win32::configured_code_typeface() };
+    const sk_sp<SkTypeface> after { luil::configured_code_typeface() };
     REQUIRE(after != nullptr);
     REQUIRE(after->unicharToGlyph(U'A') != 0);
     // 해석에 실패하면 조용히 내장 글꼴로 되돌아가므로 그것과 갈라야 한다.
     // 같은 이름의 조회와 **같은 객체**여야 한다 — 둘 다 같은 cache 항목에서 온다.
-    REQUIRE(after.get() == luil::win32::family_typeface(u8"Cascadia Code").get());
+    REQUIRE(after.get() == luil::family_typeface(u8"Cascadia Code").get());
 
     // 설정을 뒤따르는 test에 남기지 않는다.
-    luil::win32::set_configured_fonts(u8"", u8"");
-    luil::win32::clear_font_caches();
+    luil::set_configured_fonts(u8"", u8"");
+    luil::clear_font_caches();
 }
 
 // 대체가 붙은 뒤 실제로 폭이 달라지는지다.
 // 한글이 `.notdef`로 그려지고 있다면 폭이 그대로였을 것이다.
 TEST_CASE("A code font without Hangul still measures Hangul through fallback", "[win32][fonts]")
 {
-    const sk_sp<SkTypeface> code { luil::win32::family_typeface(u8"Cascadia Code") };
+    const sk_sp<SkTypeface> code { luil::family_typeface(u8"Cascadia Code") };
     if (code == nullptr)
         SKIP("Cascadia Code is not installed on this machine.");
 

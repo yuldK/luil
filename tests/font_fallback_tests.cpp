@@ -1,7 +1,7 @@
 #include "luil/ui/draw_primitives.h"
 
+#include "host/font_registry.h"
 #include "win32/embedded_assets.h"
-#include "win32/win32_fonts.h"
 
 #include "include/core/SkFont.h"
 #include "include/core/SkTypeface.h"
@@ -84,7 +84,7 @@ TEST_CASE("Text runs split only where the chosen font has no glyph", "[ui][fonts
     const SkFont font { codicons, 12.0f };
     REQUIRE(font.unicharToGlyph(U'한') == 0);
 
-    const sk_sp<SkTypeface> substitute { luil::win32::configured_ui_typeface() };
+    const sk_sp<SkTypeface> substitute { luil::configured_ui_typeface() };
     REQUIRE(substitute != nullptr);
 
     // `한`만 대체가 있고 `A`는 없다.
@@ -109,7 +109,7 @@ TEST_CASE("Text runs cover the input exactly", "[ui][fonts]")
 {
     const sk_sp<SkTypeface> codicons { luil::win32::load_codicon_typeface() };
     REQUIRE(codicons != nullptr);
-    const sk_sp<SkTypeface> substitute { luil::win32::configured_ui_typeface() };
+    const sk_sp<SkTypeface> substitute { luil::configured_ui_typeface() };
     REQUIRE(substitute != nullptr);
 
     const SkFont font { codicons, 12.0f };
@@ -131,7 +131,7 @@ TEST_CASE("Measuring adds up the run widths", "[ui][fonts]")
 {
     const sk_sp<SkTypeface> codicons { luil::win32::load_codicon_typeface() };
     REQUIRE(codicons != nullptr);
-    const sk_sp<SkTypeface> substitute { luil::win32::configured_ui_typeface() };
+    const sk_sp<SkTypeface> substitute { luil::configured_ui_typeface() };
     REQUIRE(substitute != nullptr);
 
     const SkFont font { codicons, 12.0f };

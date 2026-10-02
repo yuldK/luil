@@ -1,12 +1,12 @@
 #include "win32/embedded_assets.h"
 #include "win32/resource_ids.h"
 
+#include "host/font_registry.h"
 #include "luil/generated/codicons.h"
 #include "luil/text/fonts.h"
-#include "win32/win32_fonts.h"
 
-#include "include/core/SkTypeface.h"
 #include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -20,10 +20,10 @@ TEST_CASE("Public UI font preferences skip missing families and refresh cached d
     {
         ~restore_preferences() { luil::set_ui_typeface_families({}); }
     } restore {};
-    const auto expected { luil::win32::family_typeface(u8"Arial") };
+    const auto expected { luil::family_typeface(u8"Arial") };
     REQUIRE(expected != nullptr);
     luil::set_ui_typeface_families({ u8"", u8"luil-missing-font-family", u8"Arial", u8"Segoe UI" });
-    const auto actual { luil::win32::configured_ui_typeface() };
+    const auto actual { luil::configured_ui_typeface() };
     REQUIRE(actual != nullptr);
     SkString expected_name {};
     SkString actual_name {};
@@ -31,7 +31,7 @@ TEST_CASE("Public UI font preferences skip missing families and refresh cached d
     actual->getFamilyName(&actual_name);
     REQUIRE(actual_name == expected_name);
     luil::set_ui_typeface_families({});
-    REQUIRE(luil::win32::configured_ui_typeface() != nullptr);
+    REQUIRE(luil::configured_ui_typeface() != nullptr);
 }
 
 TEST_CASE("Executable resources contain the Codicons font and licenses", "[assets]")

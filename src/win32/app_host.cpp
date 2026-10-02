@@ -1,7 +1,7 @@
 #include "luil/app/app_host.h"
 
+#include "host/font_registry.h"
 #include "luil/ui/draw_primitives.h"
-#include "win32/win32_fonts.h"
 
 #include "include/core/SkFont.h"
 #include "include/core/SkTypeface.h"
@@ -30,7 +30,7 @@ namespace luil {
                 // 그리기와 같은 글꼴이라야 caret 자리와 글자 그림이 어긋나지 않는다.
                 if (config.measure_text == nullptr)
                     config.measure_text = [](const std::u8string_view text, const float pixel_size) {
-                        const SkFont font { win32::configured_ui_typeface(), pixel_size };
+                        const SkFont font { configured_ui_typeface(), pixel_size };
                         return measure_text(text, font);
                     };
                 run_ui_input_pump(

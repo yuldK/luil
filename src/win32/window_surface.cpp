@@ -1,11 +1,11 @@
 #include "win32/window_surface.h"
 
+#include "host/font_registry.h"
 #include "luil/ui/draw_primitives.h"
 #include "win32/embedded_assets.h"
 #include "win32/surface_input.h"
 #include "win32/utf8.h"
 #include "win32/win32_error.h"
-#include "win32/win32_fonts.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"

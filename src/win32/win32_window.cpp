@@ -1,5 +1,6 @@
 #include "luil/win32/win32_window.h"
 
+#include "host/font_registry.h"
 #include "host/popup_reconcile.h"
 #include "host/surface_invalidate.h"
 #include "luil/ui/draw_primitives.h"
@@ -18,7 +19,6 @@
 #include "win32/win32_clipboard.h"
 #include "win32/win32_drop.h"
 #include "win32/win32_error.h"
-#include "win32/win32_fonts.h"
 #include "win32/window_mode.h"
 #include "win32/window_surface.h"
 
