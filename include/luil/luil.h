@@ -82,6 +82,10 @@
 #include "luil/win32/webview.h"
 #include "luil/win32/win32_window.h"
 
+// Android platform 조립이다 (GameActivity 앱 실행).
+// 선언만 담은 헤더라 다른 플랫폼에서 include해도 컴파일된다.
+#include "luil/android/android_app.h"
+
 // HTTP 요청·답이다 (값과 몸 판정, 그리고 WinHTTP 위의 비동기 client).
 #include "luil/net/http_body.h"
 #include "luil/net/http_client.h"

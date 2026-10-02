@@ -46,8 +46,14 @@ namespace luil {
         // tree가 화면 전체를 그린다 (caption 포함).
         // 없으면 배경만 칠한다.
         canvas.clear(colors.window_background);
+        // 내용은 안전 영역의 원점에서 시작한다. 배경은 위에서 표면 전체에 칠했다.
+        //  - 옮긴 원점은 tree에만 쓴다. 아래의 테두리와 웹뷰 구멍은 표면 좌표다.
         if (state.tree != nullptr)
+        {
+            SkAutoCanvasRestore restore_origin { &canvas, true };
+            canvas.translate(static_cast<float>(state.origin_x), static_cast<float>(state.origin_y));
             state.tree->draw(context, state.interaction);
+        }
 
         // popup의 테두리다. tree 위에 긋는다 — 가장자리까지 채운 내용에도 경계가 남는다.
         // 획의 중심을 반 픽셀 안으로 들여 획 전체가 창 안에 든다.

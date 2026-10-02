@@ -30,6 +30,11 @@ namespace luil {
         int width { 0 };
         int height { 0 };
         float dpi_scale { 1.0F };
+        // 표면 안에서 내용이 시작하는 자리다 (물리 픽셀). `width`·`height`는 이 자리부터 잰다.
+        // 모바일 창은 화면 끝까지 그려져 시스템 막대·컷아웃이 가장자리를 덮으므로 그만큼
+        // 비킨다. 배경은 표면 전체에 칠한다. 데스크톱 창은 0이다.
+        int origin_x { 0 };
+        int origin_y { 0 };
         renderer_backend backend { renderer_backend::cpu };
         bool used_fallback { false };
         color_theme theme { color_theme::dark };

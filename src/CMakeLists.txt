@@ -406,8 +406,8 @@ add_custom_command(TARGET luil_core PRE_BUILD
     COMMENT "Verifying Codicons checksums"
     VERBATIM)
 
-# core 위의 플랫폼 조립은 지금 Windows에만 있다. Android는 core와 그 test만 세운다
-# (docs/android-port-plan.md 2단계).
+# core 위의 플랫폼 조립이다. 플랫폼마다 소스가 다르고, 소비자가 링크하는 이름은
+# 어디서나 `luil::luil`이다.
 if(LUIL_PLATFORM STREQUAL "windows")
     # core 위의 플랫폼 조립이다 (win32 → net).
     # 소비자가 링크하는 이름은 지금처럼 `luil::luil` 하나이고, core는 PUBLIC으로 따라온다.
@@ -449,6 +449,58 @@ if(LUIL_PLATFORM STREQUAL "windows")
             user32
             # net 계층의 HTTP client다.
             winhttp
+        PRIVATE
+            luil_options)
+endif()
+
+if(LUIL_PLATFORM STREQUAL "android")
+    # codicon 글꼴을 라이브러리 안에 싣는다. Android에는 실행 파일 resource가 없고,
+    # 앱이 APK assets에 따로 넣는 단계를 만들지 않으려는 것이다 (docs/android-port-plan.md).
+    set(luil_codicon_source "${LUIL_GENERATED_DIRECTORY}/codicon_font.cpp")
+    add_custom_command(
+        OUTPUT "${luil_codicon_source}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "-DOUTPUT_FILE=${luil_codicon_source}"
+            "-DSYMBOL=luil_codicon_font"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS
+            "${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding the Codicons font"
+        VERBATIM)
+
+    # android: GameActivity 위의 앱 host다.
+    # 이벤트 루프·수명 주기·안전 영역·한 frame 조립, CPU 렌더러, 글꼴 자원과 내장 codicon이다.
+    set(luil_android_files)
+    luil_add_source_filter(luil_android_files "android"
+        "${public_headers}/android/android_app.h"
+        android/android_app.cpp
+        android/android_assets.cpp
+        android/android_fonts.cpp
+        android/android_fonts.h
+        android/cpu_skia_renderer.cpp
+        android/cpu_skia_renderer.h
+        android/fail_fast.cpp
+        "${luil_codicon_source}")
+
+    add_library(luil STATIC ${luil_android_files})
+    add_library(luil::luil ALIAS luil)
+    target_include_directories(luil
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}")
+    target_link_libraries(luil
+        PUBLIC
+            luil_core
+            luil_usage
+            "$<BUILD_INTERFACE:luil_skia>"
+            # 우산 헤더가 HTTP 값 헤더를 들이고 그것이 JSON 타입을 쓴다.
+            "$<BUILD_INTERFACE:luil_nlohmann_json>"
+            # 앱 host가 GameActivity의 native_app_glue 위에 선다.
+            # JNI 진입점을 붙잡는 링크 옵션도 이 target이 함께 나른다.
+            "$<BUILD_INTERFACE:luil_game_activity>"
+            android
+            log
         PRIVATE
             luil_options)
 endif()

@@ -15,6 +15,8 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -501,4 +503,66 @@ TEST_CASE("A popup frame strokes its border over the whole surface", "[win32][ra
         REQUIRE(pixel_at(0, 30) == palette.window_background);
         REQUIRE(pixel_at(50, 59) == palette.window_background);
     }
+}
+
+namespace {
+    // 자기 자리를 한 색으로 채우는 element다. 원점이 옮겨졌는지를 그 색의 자리로 본다.
+    class fill_element final : public luil::ui_element
+    {
+    public:
+        fill_element(const luil::ui_element_id& id, const luil::ui_color color)
+            : ui_element { id }
+            , color_ { color }
+        {}
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+        {
+            static_cast<void>(interaction);
+            SkPaint paint {};
+            paint.setColor(static_cast<SkColor>(color_));
+            const luil::rect_f box { bounds() };
+            context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), paint);
+        }
+
+    private:
+        luil::ui_color color_;
+    };
+} // namespace
+
+TEST_CASE("Content starts at the frame origin while the background fills the surface", "[ui][raster][frame]")
+{
+    // 모바일 창은 화면 끝까지 그려져 시스템 막대가 가장자리를 덮는다. 앱 host는 그 몫을
+    // 원점으로 비키고(`frame_state::origin_x`·`origin_y`), 배경만 표면 전체에 칠한다.
+    constexpr luil::ui_color fill { 0xFF2080C0u };
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    SkBitmap pixels {};
+    pixels.allocN32Pixels(100, 60);
+    SkCanvas canvas { pixels };
+    auto root { std::make_unique<fill_element>(luil::ui_element_id { luil::ui_element_kind::root }, fill) };
+    root->arrange({ { 0.0f, 0.0f, 80.0f, 40.0f }, 1.0f });
+    const luil::ui_tree tree { std::move(root) };
+    luil::frame_state state {};
+    state.width = 80;
+    state.height = 40;
+    state.origin_x = 10;
+    state.origin_y = 15;
+    state.theme = luil::color_theme::dark;
+    state.tree = &tree;
+    const auto pixel_at = [&pixels](const int x, const int y) { return static_cast<luil::ui_color>(pixels.getColor(x, y)); };
+
+    luil::draw_frame(canvas, nullptr, nullptr, state);
+
+    // 비킨 가장자리는 배경이다.
+    REQUIRE(pixel_at(5, 30) == palette.window_background);
+    REQUIRE(pixel_at(50, 5) == palette.window_background);
+    // 내용은 원점부터 크기만큼이다.
+    REQUIRE(pixel_at(10, 15) == fill);
+    REQUIRE(pixel_at(89, 54) == fill);
+    REQUIRE(pixel_at(90, 30) == palette.window_background);
+    REQUIRE(pixel_at(50, 55) == palette.window_background);
 }
