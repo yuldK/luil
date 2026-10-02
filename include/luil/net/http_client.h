@@ -49,8 +49,8 @@ namespace luil::net {
         std::size_t max_in_flight { 32 };
 
         // UTF-8이 아닌 charset을 옮기는 갈고리다.
-        // 비어 있으면 `codepage_text_transcoder()`를 쓴다 — 앱은 아무것도 하지
-        // 않아도 euc-kr이 읽힌다.
+        // 비어 있으면 `codepage_text_transcoder()`를 쓴다 — Windows에서는 앱이 아무것도
+        // 하지 않아도 euc-kr이 읽힌다. Android의 기본값은 utf-16만 옮긴다.
         http_text_transcoder transcode {};
 
         // `stop()`이 남은 손잡이가 닫히기를 기다릴 상한이다.
@@ -65,7 +65,8 @@ namespace luil::net {
         std::size_t max_pending_responses { 128 };
     };
 
-    // WinHTTP 위에 선 비동기 HTTP client다.
+    // OS의 HTTP API(Windows는 WinHTTP, Android는 JNI의 HttpURLConnection) 위에 선 비동기
+    // HTTP client다 (http-client-design.md).
     //
     // **thread를 하나 소유한다.** threading-model.md절은 일반 worker pool을 앱
     // 정책이라 했고 그 판단은 그대로다 — 이것은 pool이 아니라 **OS의 HTTP API를

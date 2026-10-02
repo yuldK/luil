@@ -56,6 +56,8 @@ namespace luil::android {
     //    서면 IME(GameTextInput)를 붙이고 소프트 키보드를 띄운다. 키보드가 올라오면 안전 영역이
     //    그만큼 줄고, policy의 `on_focus_moved`로 초점 칸을 다시 드러낸다
     //    (docs/concepts/text-input.md). 클립보드는 JNI로 다룬다.
+    //  - 시작하자마자 프로세스의 JavaVM을 적어 `net::http_client`가 JNI를 쓸 수 있게 한다. 앱의
+    //    매니페스트에 INTERNET 권한이 있어야 한다 (http-client-design.md).
     //  - frame의 popup은 주 표면 위에 겹쳐 그린다 (popup-overlay-design.md). popup이 떠 있는
     //    동안 뒤로 가기는 Esc처럼 popup을 닫는다. 보조 창(`ui_frame::windows`)은 무시한다.
     //  - 뒤로 가기는 Activity가 처리해 앱을 끝낸다. 끝날 때 `app_host::shutdown()`이

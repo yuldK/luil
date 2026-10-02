@@ -5,6 +5,7 @@
 #include "android/android_input.h"
 #include "android/android_text_input.h"
 #include "android/cpu_skia_renderer.h"
+#include "android/java_vm.h"
 #include "android/vulkan_device.h"
 #include "android/vulkan_skia_renderer.h"
 #include "host/font_registry.h"
@@ -1103,6 +1104,9 @@ namespace luil::android {
     {
         if (app == nullptr)
             return 1;
+        // JNI를 쓰는 층(HTTP client)이 Activity 없이 JavaVM을 얻는 자리다. 앱이 `on_started`에서
+        // client를 세울 수 있도록 무엇보다 먼저 적는다.
+        set_java_vm(app->activity->vm);
         application instance { app, config, environment };
         return instance.run();
     }

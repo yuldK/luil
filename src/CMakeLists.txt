@@ -509,6 +509,23 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/vulkan_skia_renderer.h
         "${luil_codicon_source}")
 
+    # net: HTTP 값과 JNI의 HttpURLConnection 위에 선 `http_client`다.
+    # JavaVM은 앱 host가 시작할 때 적는다 (android/java_vm.h). charset은 utf-8과 utf-16만 옮긴다.
+    luil_add_source_filter(luil_android_files "net"
+        android/java_vm.cpp
+        android/java_vm.h
+        net/android/android_http_client.cpp
+        net/android/android_text_transcode.cpp
+        net/http_body.cpp
+        "${public_headers}/net/http_body.h"
+        "${public_headers}/net/http_client.h"
+        net/http_media_type.cpp
+        "${public_headers}/net/http_media_type.h"
+        net/http_message.cpp
+        "${public_headers}/net/http_message.h"
+        net/http_request_rules.cpp
+        net/http_request_rules.h)
+
     add_library(luil STATIC ${luil_android_files})
     add_library(luil::luil ALIAS luil)
     target_include_directories(luil
@@ -519,7 +536,7 @@ if(LUIL_PLATFORM STREQUAL "android")
             luil_core
             luil_usage
             "$<BUILD_INTERFACE:luil_skia>"
-            # 우산 헤더가 HTTP 값 헤더를 들이고 그것이 JSON 타입을 쓴다.
+            # HTTP 값 헤더가 JSON 타입을 쓴다.
             "$<BUILD_INTERFACE:luil_nlohmann_json>"
             # 앱 host가 GameActivity의 native_app_glue 위에 선다.
             # JNI 진입점을 붙잡는 링크 옵션도 이 target이 함께 나른다.
