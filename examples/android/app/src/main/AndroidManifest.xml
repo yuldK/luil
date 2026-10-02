@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    luil hello의 Android 매니페스트다.
-    Activity는 GameActivity 그대로다. 앱 쪽 Java 코드가 없고, 네이티브 라이브러리(luil_hello)의
+    luil 예제의 Android 매니페스트다. 예제(flavor)마다 이름과 네이티브 라이브러리만 다르다
+    (build.gradle.kts의 manifestPlaceholders).
+    Activity는 GameActivity 그대로다. 앱 쪽 Java 코드가 없고, 네이티브 라이브러리(luil_hello 등)의
     android_main이 앱이다 (docs/android-port-plan.md).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="luil hello"
+        android:label="${label}"
         android:theme="@style/Theme.Luil">
         <!--
             회전·크기·밀도·어두운 모드는 Activity를 다시 만들지 않고 네이티브 쪽이 받는다
@@ -18,7 +19,7 @@
             android:exported="true">
             <meta-data
                 android:name="android.app.lib_name"
-                android:value="luil_hello" />
+                android:value="${libraryName}" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

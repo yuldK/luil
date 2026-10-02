@@ -18,4 +18,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "luil-examples"
-include(":hello")
+include(":app")
