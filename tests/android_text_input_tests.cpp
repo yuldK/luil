@@ -199,6 +199,27 @@ TEST_CASE("Moving the focus mid composition commits it to the old box", "[androi
     REQUIRE(platform.keyboard == std::vector<bool> { true });
 }
 
+TEST_CASE("A newline from the IME becomes Enter in a single line box", "[android][ime]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    int submitted { 0 };
+    luil::android::ime_session::platform hooks { platform.hooks() };
+    hooks.submit = [&submitted] { ++submitted; };
+    luil::android::ime_session session { host, std::move(hooks) };
+    host.target = note;
+    host.committed = { u8"한글", 6, 6 };
+    session.synchronize();
+
+    // 키보드의 Enter가 줄바꿈을 글로 넣었다. 칸에는 들이지 않고 Enter로 보낸다.
+    session.accept({ u8"한글\n", { 3, 3 }, {} });
+    REQUIRE(submitted == 1);
+    REQUIRE(host.edits.empty());
+    // IME의 글에서도 걷어 낸다.
+    REQUIRE(platform.sent.back().text == u8"한글");
+    REQUIRE(platform.sent.back().selection == luil::android::ime_span { 2, 2 });
+}
+
 TEST_CASE("A dismissed keyboard comes back when the box is pressed again", "[android][ime]")
 {
     fake_host host {};

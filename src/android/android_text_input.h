@@ -61,6 +61,8 @@ namespace luil::android {
             std::function<void(const ime_state&)> set_state {};
             // 소프트 키보드를 띄우거나 내린다.
             std::function<void(bool)> show_keyboard {};
+            // 한 줄 칸에서 IME가 줄을 바꿨다 (Enter). 칸은 줄바꿈을 받지 않고 이 동작으로 바꾼다.
+            std::function<void()> submit {};
         };
 
         ime_session(text_input_host& host, platform platform);
@@ -82,6 +84,9 @@ namespace luil::android {
         [[nodiscard]] std::optional<text_input_target> target() const noexcept;
 
     private:
+        void accept_clean(const ime_state& state);
+        // 줄바꿈을 글과 범위에서 걷어 낸다. 걷어 낸 것이 있으면 참이다.
+        [[nodiscard]] static bool strip_newlines(ime_state& state);
         // 조합을 지금 글로 확정하고 조합 표시를 거둔다.
         void finish_composition();
         void send(const text_input_document& document);

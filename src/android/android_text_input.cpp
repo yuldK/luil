@@ -206,10 +206,26 @@ namespace luil::android {
         send(document_);
     }
 
-    void ime_session::accept(const ime_state& state)
+    void ime_session::accept(const ime_state& original)
     {
         if (target_.has_value() == false)
             return;
+        // 한 줄 칸이다. IME가 완료 동작 대신 줄바꿈을 글로 넣으면(키보드의 Enter) 그 글자를
+        // 걷어 내고 Enter로 보낸다. 안드로이드의 한 줄 EditText가 하는 일과 같다.
+        ime_state state { original };
+        const bool newline { strip_newlines(state) };
+        accept_clean(state);
+        if (newline)
+        {
+            // IME의 글에서도 걷어 낸다. 다음 동기화가 같은 글이라 넘기지 않으므로 여기서 넘긴다.
+            send(composing_ ? composed_ : document_);
+            if (platform_.submit)
+                platform_.submit();
+        }
+    }
+
+    void ime_session::accept_clean(const ime_state& state)
+    {
         const std::size_t caret { utf8_offset_from_utf16(state.text, state.selection.end) };
         const std::size_t anchor { utf8_offset_from_utf16(state.text, state.selection.start) };
         if (state.composing.defined() && state.composing.start != state.composing.end)
@@ -248,6 +264,33 @@ namespace luil::android {
             clear.composing = false;
             host_->post_composition(std::move(clear));
         }
+    }
+
+    bool ime_session::strip_newlines(ime_state& state)
+    {
+        if (state.text.find(u8'\n') == std::u8string::npos && state.text.find(u8'\r') == std::u8string::npos)
+            return false;
+        // 범위는 UTF-16 단위다. 줄바꿈 글자는 하나가 한 단위라, 그 앞에서 걷어 낸 수만큼 당긴다.
+        const auto shift = [&](const std::int32_t index) {
+            if (index < 0)
+                return index;
+            std::int32_t removed { 0 };
+            std::int32_t units { 0 };
+            for (std::size_t offset { 0 }; offset < state.text.size() && units < index; ++offset)
+            {
+                const auto byte { static_cast<unsigned char>(state.text[offset]) };
+                if ((byte & 0xC0u) == 0x80u)
+                    continue;
+                if (byte == '\n' || byte == '\r')
+                    ++removed;
+                units += byte >= 0xF0u ? 2 : 1;
+            }
+            return index - removed;
+        };
+        state.selection = { shift(state.selection.start), shift(state.selection.end) };
+        state.composing = state.composing.defined() ? ime_span { shift(state.composing.start), shift(state.composing.end) } : ime_span {};
+        std::erase_if(state.text, [](const char8_t value) { return value == u8'\n' || value == u8'\r'; });
+        return true;
     }
 
     void ime_session::detach()

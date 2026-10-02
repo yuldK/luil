@@ -448,14 +448,20 @@ namespace luil::android {
                         .show_keyboard =
                             [this](const bool show) {
                                 if (show)
+                                {
+                                    // 한 줄 칸이다. 가로 화면에서 키보드가 칸을 가린 전체 화면 편집기로 바뀌지
+                                    // 않게 하고, 완료 동작은 Enter로 보낸다 (APP_CMD_EDITOR_ACTION). IME 연결을
+                                    // 다시 세워야 값이 적용된다.
+                                    GameActivity_setImeEditorInfo(
+                                        app_->activity, TYPE_CLASS_TEXT, IME_ACTION_DONE, static_cast<GameTextInputImeOptions>(IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI));
+                                    GameActivity_restartInput(app_->activity);
                                     GameActivity_showSoftInput(app_->activity, 0);
+                                }
                                 else
                                     GameActivity_hideSoftInput(app_->activity, 0);
                             },
+                        .submit = [this] { post_enter(); },
                     });
-                // 한 줄 칸이다. 가로 화면에서 키보드가 칸을 가린 전체 화면 편집기로 바뀌지 않게 한다.
-                // 완료 동작은 Enter로 보낸다 (APP_CMD_EDITOR_ACTION).
-                GameActivity_setImeEditorInfo(app_->activity, TYPE_CLASS_TEXT, IME_ACTION_DONE, static_cast<GameTextInputImeOptions>(IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI));
                 glue_text_input_handler.store(app_->activity->callbacks->onTextInputEvent);
                 text_input_wake_fd.store(wake_fd_);
                 app_->activity->callbacks->onTextInputEvent = &on_text_input_event;
@@ -529,7 +535,7 @@ namespace luil::android {
                     break;
                 case APP_CMD_EDITOR_ACTION:
                     // 키보드의 완료 단추는 Enter다 (기본 단추 실행, 한 줄 칸의 확정).
-                    host_->post_raw_input(key_pressed_event { key_code::enter, false, false, false, false, std::chrono::steady_clock::now() });
+                    post_enter();
                     break;
                 case APP_CMD_WINDOW_REDRAW_NEEDED:
                     dirty_ = true;
@@ -751,6 +757,11 @@ namespace luil::android {
                         request_keyboard_at(released->x, released->y);
                     host_->post_raw_input(std::move(event));
                 }
+            }
+
+            void post_enter()
+            {
+                host_->post_raw_input(key_pressed_event { key_code::enter, false, false, false, false, std::chrono::steady_clock::now() });
             }
 
             void request_keyboard_at(const float x, const float y)
