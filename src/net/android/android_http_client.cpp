@@ -87,15 +87,19 @@ namespace luil::net {
             jclass port_unreachable { nullptr };
             jclass socket_timeout { nullptr };
             jclass ssl_failure { nullptr };
-            jclass unknown_service { nullptr };
+            jclass security_policy { nullptr };
             jclass illegal_argument { nullptr };
             jobject no_proxy { nullptr };
+            // 앱의 network security config다. 평문 http를 보내도 되는지 묻는다.
+            jobject cleartext_policy { nullptr };
 
             jmethodID url_new { nullptr };
             jmethodID url_new_relative { nullptr };
             jmethodID url_open { nullptr };
             jmethodID url_open_proxy { nullptr };
             jmethodID url_to_string { nullptr };
+            jmethodID url_get_host { nullptr };
+            jmethodID cleartext_permitted { nullptr };
 
             jmethodID set_request_method { nullptr };
             jmethodID set_follow_redirects { nullptr };
@@ -182,7 +186,7 @@ namespace luil::net {
                 class_slot { "java/net/PortUnreachableException", &api.port_unreachable },
                 class_slot { "java/net/SocketTimeoutException", &api.socket_timeout },
                 class_slot { "javax/net/ssl/SSLException", &api.ssl_failure },
-                class_slot { "java/net/UnknownServiceException", &api.unknown_service },
+                class_slot { "android/security/NetworkSecurityPolicy", &api.security_policy },
                 class_slot { "java/lang/IllegalArgumentException", &api.illegal_argument },
             };
             for (const class_slot& entry : classes)
@@ -195,6 +199,8 @@ namespace luil::net {
                 method_slot { &api.url, "openConnection", "()Ljava/net/URLConnection;", &api.url_open },
                 method_slot { &api.url, "openConnection", "(Ljava/net/Proxy;)Ljava/net/URLConnection;", &api.url_open_proxy },
                 method_slot { &api.url, "toString", "()Ljava/lang/String;", &api.url_to_string },
+                method_slot { &api.url, "getHost", "()Ljava/lang/String;", &api.url_get_host },
+                method_slot { &api.security_policy, "isCleartextTrafficPermitted", "(Ljava/lang/String;)Z", &api.cleartext_permitted },
                 method_slot { &api.http_connection, "setRequestMethod", "(Ljava/lang/String;)V", &api.set_request_method },
                 method_slot { &api.http_connection, "setInstanceFollowRedirects", "(Z)V", &api.set_follow_redirects },
                 method_slot { &api.http_connection, "setConnectTimeout", "(I)V", &api.set_connect_timeout },
@@ -235,7 +241,25 @@ namespace luil::net {
             const jobject no_proxy { env->GetStaticObjectField(proxy, no_proxy_field) };
             api.no_proxy = no_proxy == nullptr ? nullptr : env->NewGlobalRef(no_proxy);
             env->DeleteLocalRef(no_proxy);
-            return api.no_proxy != nullptr;
+            if (api.no_proxy == nullptr)
+                return false;
+
+            // 정책은 앱이 시작할 때 서고 바뀌지 않는다 (네이티브 라이브러리가 열리기 전이다).
+            const jmethodID get_instance { env->GetStaticMethodID(api.security_policy, "getInstance", "()Landroid/security/NetworkSecurityPolicy;") };
+            if (get_instance == nullptr || env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return false;
+            }
+            const jobject policy { env->CallStaticObjectMethod(api.security_policy, get_instance) };
+            if (policy == nullptr || env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return false;
+            }
+            api.cleartext_policy = env->NewGlobalRef(policy);
+            env->DeleteLocalRef(policy);
+            return api.cleartext_policy != nullptr;
         }
 
         // 한 번 잡은 것은 프로세스가 끝날 때까지 둔다. 반쯤 잡다 실패하면 다음 `create`가 다시 한다.
@@ -546,9 +570,7 @@ namespace luil::net {
                 kind = http_error_kind::name_not_resolved;
             else if (env->IsInstanceOf(thrown, api.connect_failure) || env->IsInstanceOf(thrown, api.no_route) || env->IsInstanceOf(thrown, api.port_unreachable))
                 kind = http_error_kind::cannot_connect;
-            // 앱의 network security config가 평문 http를 막으면 UnknownServiceException이 온다.
-            // 보안 정책이 요청을 거절한 것이라 TLS 실패와 같은 갈래로 둔다.
-            else if (env->IsInstanceOf(thrown, api.ssl_failure) || env->IsInstanceOf(thrown, api.unknown_service))
+            else if (env->IsInstanceOf(thrown, api.ssl_failure))
                 kind = http_error_kind::secure_failure;
             else if (env->IsInstanceOf(thrown, api.illegal_argument))
                 kind = before_response ? http_error_kind::invalid_header : http_error_kind::system_error;
@@ -627,7 +649,7 @@ namespace luil::net {
                 while (true)
                 {
                     http_error failure {};
-                    if (open_connection(url, headers, failure) == false)
+                    if (open_connection(url, current_origin.secure, headers, failure) == false)
                         return failure;
                     if (exchange_head(failure) == false)
                         return failure;
@@ -685,8 +707,9 @@ namespace luil::net {
                 }
 
                 http_error failure {};
-                const bool read { read_body(failure) };
-                release_connection(read == false);
+                static_cast<void>(read_body(failure));
+                // 끝까지 읽고 닫은 연결만 연결 풀로 돌려보낸다. 몸 없는 답과 실패한 답은 끊는다.
+                release_connection(body_drained_ == false);
                 return failure;
             }
 
@@ -714,8 +737,30 @@ namespace luil::net {
                 return check_call(failure, true);
             }
 
-            [[nodiscard]] bool open_connection(const jobject url, const std::vector<http_header>& headers, http_error& failure)
+            // 앱의 network security config가 이 host로 평문 http를 막는지 본다. 막히면 플랫폼이 뜻이
+            // 드러나지 않는 IOException을 던지므로, 선을 건드리기 전에 물어 보안 정책의 거절로 답한다.
+            [[nodiscard]] bool cleartext_permitted(const jobject url, http_error& failure)
             {
+                const auto host { static_cast<jstring>(env_->CallObjectMethod(url, api_.url_get_host)) };
+                if (check_call(failure, true) == false)
+                    return false;
+                const jboolean permitted { env_->CallBooleanMethod(api_.cleartext_policy, api_.cleartext_permitted, host) };
+                if (check_call(failure, true) == false)
+                    return false;
+                if (permitted == JNI_TRUE)
+                    return true;
+
+                std::u8string message { u8"Cleartext HTTP traffic to " };
+                message += from_java(env_, host);
+                message += u8" is not permitted by the app's network security config.";
+                failure = make_http_error(http_error_kind::secure_failure, message);
+                return false;
+            }
+
+            [[nodiscard]] bool open_connection(const jobject url, const bool secure, const std::vector<http_header>& headers, http_error& failure)
+            {
+                if (secure == false && cleartext_permitted(url, failure) == false)
+                    return false;
                 const jobject opened { configuration_.use_system_proxy ? env_->CallObjectMethod(url, api_.url_open) : env_->CallObjectMethod(url, api_.url_open_proxy, api_.no_proxy) };
                 if (check_call(failure, true) == false)
                     return false;
@@ -884,6 +929,7 @@ namespace luil::net {
                     result_.body.insert(result_.body.end(), first, first + count);
                 }
                 env_->CallVoidMethod(input, api_.input_close);
+                body_drained_ = env_->ExceptionCheck() == false;
                 env_->ExceptionClear();
                 return true;
             }
@@ -912,6 +958,7 @@ namespace luil::net {
             const http_client_config& configuration_;
             completion& result_;
             jobject connection_ { nullptr };
+            bool body_drained_ { false };
         };
     } // namespace
 

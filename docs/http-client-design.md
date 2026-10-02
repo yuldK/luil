@@ -152,7 +152,8 @@ Android의 `http_client`는 JNI로 `java.net.HttpURLConnection`을 부른다 ([`
 - **헤더.** 플랫폼이 지어 붙이는 `X-Android-*` 헤더는 답에서 뺀다.
 - **Charset.** utf-8과 utf-16만 옮긴다. 그 밖의 charset은 `parse_error`에 "Unsupported charset"이 남고 바이트는 그대로다. bionic의 `iconv`가 API 28부터라 minSdk 26에서 쓸 수 없다.
 - **TLS.** 플랫폼 기본값과 인증서 검증을 그대로 쓴다. TLS 1.2·1.3만으로 묶으려면 직접 만든 `SSLSocketFactory`가 필요해 두지 않았다 (Android 9 이하는 1.0·1.1도 받을 수 있다).
-- **오류.** `native_error`는 0이고 `message`가 Java 예외의 클래스 이름과 글이다. 앱의 network security config가 평문 http를 막으면 `secure_failure`다.
+- **오류.** `native_error`는 0이고 `message`가 Java 예외의 클래스 이름과 글이다. 앱의 network security config가 그 host로 평문 http를 막으면 선을 건드리기 전에 `secure_failure`로 답한다 (`NetworkSecurityPolicy`에 묻는다. 플랫폼은 뜻이 드러나지 않는 `IOException`을 던진다).
+- **몸과 동사.** 플랫폼은 몸 있는 GET을 POST로 바꾸고 몸 있는 DELETE를 거절한다 (`connection_lost`). WinHTTP는 그대로 보낸다. 몸을 끝까지 읽고 닫은 연결만 연결 풀로 돌아가고, 몸 없는 답(HEAD·204·304)과 실패한 답의 연결은 끊는다.
 - **앱 권한.** 앱의 매니페스트에 `android.permission.INTERNET`이 있어야 한다. targetSdk 28 이상에서 평문 http를 쓰려면 network security config도 필요하다.
 
 ## 검증
