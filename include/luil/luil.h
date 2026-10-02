@@ -70,6 +70,7 @@
 #include "luil/ui/zoom_view_element.h"
 
 // 플랫폼을 가리지 않는 앱 계약이다 (스레드 조립, frame, 렌더러 정책, 웹뷰 값).
+#include "luil/app/app_delegate.h"
 #include "luil/app/app_host.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/app/webview.h"

@@ -213,6 +213,7 @@ luil_add_source_filter(luil_core_files "ui/caption"
 # app: 플랫폼을 가리지 않는 앱 계약이다 (스레드 조립, frame, 렌더러 정책, 웹뷰 값).
 # 회복할 수 없는 종료(`platform_fail_fast`)와 글꼴 자원은 플랫폼 계층이 정의한다.
 luil_add_source_filter(luil_core_files "app"
+    "${public_headers}/app/app_delegate.h"
     host/app_host.cpp
     "${public_headers}/app/app_host.h"
     host/fail_fast.h

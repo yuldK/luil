@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/app/app_delegate.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/ui_events.h"
@@ -152,42 +153,13 @@ namespace luil::win32 {
     };
 
     // 앱이 UI thread에 꽂는 훅이다.
+    // 플랫폼을 가리지 않는 훅(시작, 앱 UI 명령, 크기·배율, 수명 주기)은 `app_delegate`에 있고,
+    // 여기는 데스크톱 창만 갖는 것(배치, 파일 드롭)을 더한다. Android host는 `app_delegate`를
+    // 받으므로, 이것을 구현한 앱 delegate를 그대로 넘길 수 있다.
     // 모든 메서드는 UI thread에서 불리고 기본 구현은 "아무 일도 하지 않음"이다.
-    class window_delegate
+    class window_delegate : public app_delegate
     {
     public:
-        window_delegate() = default;
-        window_delegate(const window_delegate&) = delete;
-        window_delegate(window_delegate&&) = delete;
-        window_delegate& operator=(const window_delegate&) = delete;
-        window_delegate& operator=(window_delegate&&) = delete;
-        virtual ~window_delegate() = default;
-
-        // 창과 host가 준비된 직후다 (메시지 루프 전).
-        // 시작 메시지(글꼴 목록, 시작 문서 열기 등)를 여기서 게시한다.
-        virtual void on_started(app_host& host)
-        {
-            static_cast<void>(host);
-        }
-
-        // input thread가 요청한 앱 UI 명령이다 (파일 dialog, shell 실행 등).
-        virtual void execute_app_ui_command(app_host& host, const app_ui_command& command)
-        {
-            static_cast<void>(host);
-            static_cast<void>(command);
-        }
-
-        // 창 크기·DPI가 바뀌었다.
-        // 반환 메시지는 app inbox로 간다.
-        // 빈 메시지는 게시하지 않는다.
-        [[nodiscard]] virtual app_message make_window_metrics_message(float width, float height, float scale)
-        {
-            static_cast<void>(width);
-            static_cast<void>(height);
-            static_cast<void>(scale);
-            return {};
-        }
-
         // 창 배치를 보고한다 (이동·크기 조절 끝, 최대화 전환, 종료 직전).
         // 빈 메시지는 게시하지 않는다.
         [[nodiscard]] virtual app_message make_window_placement_message(const window_placement& placement)
