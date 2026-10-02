@@ -972,3 +972,63 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 
 **검증.** Windows Release 855개, Debug 836개, CPU 전용 Release 853개 CTest와 기기 core test Release 571개가
 통과한다 (adb 연결이 끊겨 실패한 1개는 다시 돌려 통과).
+
+## 7단계 결과 — 네트워크층
+
+2026-10-03에 끝냈다.
+
+| 커밋 | 내용 |
+| --- | --- |
+| `f223c00` | WinHTTP 백엔드와 그것에만 기대는 파일을 `src/net/winhttp`로 옮김 (동작 그대로) |
+| `78b1b4e` | 요청 헤더 규칙(헤더 검사, Content-Type 기본값)을 두 백엔드가 같이 쓰게 함 |
+| `712c79e` | test의 되돌이 HTTP 서버가 POSIX 소켓으로도 선다 |
+| `94254c8` | Android 백엔드: JNI의 `HttpURLConnection`, 앱 host가 JavaVM을 적음 |
+| `d46a30b` | 기기에서 HTTP test를 JVM 안에서 돌리는 진입점(`app_process`) |
+| `0cf698c` | 앱이 막은 평문 http를 보안 정책의 거절로 답함, 몸 없는 답의 연결을 끊음 |
+
+**계획과 달라진 것.**
+
+- **scheduler를 하나로 묶지 않았다.** 표·배달·되풀이·마감 규칙은 Android 백엔드가 Windows 백엔드의 것을 그대로
+  옮겨 따로 든다. WinHTTP의 콜백·손잡이 수명과 막히는 Java 호출은 취소·정지의 모양이 달라, 묶으면 두 쪽의 불변식이
+  한 파일에서 엉킨다. 같은 test 102개가 두 플랫폼에서 같은 계약을 잠근다.
+- **요청마다 thread 하나다.** 막히는 `HttpURLConnection`을 쓰므로 받아들인 요청마다 worker가 끝까지 몬다. 동시 수는
+  `max_in_flight`가 받기 전에 막아 pool을 두지 않았다 (숨은 큐는 `in_flight()`의 뜻을 바꾼다).
+- **test는 APK가 아니라 `app_process`에서 돈다.** 계획은 loopback 서버를 POSIX로 세워 기기에서 돌린다고만 했다. JNI가
+  부를 JVM이 셸 실행 파일에는 없어, test를 공유 라이브러리로 세우고 adb 셸의 `app_process`가 띄운 JVM이 읽게 했다.
+  지금의 CTest 모양(test마다 한 항목, Catch2 발견, `--repeat`)이 그대로다. 그 대가로 Android test 구성에 JBR(`javac`)과
+  build-tools(`d8`)가 필요하다. 셸 권한이라 INTERNET 권한과 평문 정책은 이 test가 확인하지 않는다.
+- **연결이 서기 직전의 취소.** `disconnect()`는 연결이 서기 전에는 아무 일도 하지 않는다. 그 틈에 걸린 취소는 pump가
+  50 ms마다, `stop()`이 기다리는 동안 다시 끊는다.
+- charset은 계획대로 utf-8과 utf-16만 옮긴다. JNI가 있으므로 Java의 `Charset`으로 euc-kr 등을 옮기는 길이 열려 있다.
+- TLS 1.2·1.3만으로 묶지 않았다 (플랫폼 기본값). `send_timeout`에 해당하는 것이 없다. 그 밖의 대응은
+  [http-client-design.md](http-client-design.md)의 "Android 백엔드"에 있다.
+
+**기기 검증.**
+
+- HTTP client·몸·미디어 타입·loopback test 102개가 기기의 JVM 안에서 통과한다 (Windows와 같은 test다).
+- 정지·취소 test 8개(보낸 직후 정지 1000번 되풀이 포함)를 `--repeat until-fail:30`으로 돌려 실패가 없었다.
+- widgets 앱에 임시로 요청을 넣어 앱 프로세스(GameActivity) 안에서 확인하고 되돌렸다.
+
+  | 요청 | 답 |
+  | --- | --- |
+  | `https://example.com/` | 200, 713 바이트 |
+  | `http://example.com/` (평문, 앱 정책이 막음) | `secure_failure` |
+  | `https://127.0.0.1:1/` | `cannot_connect` |
+  | 만료된 인증서 (`expired.badssl.com`) | `secure_failure` (`SSLHandshakeException`) |
+  | https에서 http로 가는 302 | 따라가지 않고 302가 답 |
+  | https에서 https로 가는 302 | 따라가 `final_url`이 바뀜 |
+
+  처음에는 평문 거절이 `connection_lost`로 왔다. 플랫폼이 뜻이 드러나지 않는 `IOException`을 던져서다.
+  `NetworkSecurityPolicy`에 미리 물어 `secure_failure`로 답하게 고쳤다 (`0cf698c`).
+
+**앱이 할 일.** 매니페스트에 `android.permission.INTERNET`을 넣는다. targetSdk 28 이상에서 평문 http를 쓰려면 network
+security config가 필요하고, 막히면 답이 `secure_failure`다. 예제 앱은 네트워크를 쓰지 않아 권한을 넣지 않았다.
+
+**확인하지 못한 것.**
+
+- 연결이 서기 직전의 취소 경로는 반복 test로만 확인했다 (그 틈을 일부러 만드는 test는 없다).
+- system proxy를 쓰는 환경과 Android 9 이하 기기.
+
+**검증 (7단계 마지막 트리).** Windows Release 855개, Debug 836개, CPU 전용 Release 853개 CTest와 기기 test Release 673개,
+Debug 673개(core 571, HTTP 102)가 통과한다. 중간 커밋 하나하나는 다시 빌드하지 않았고, WinHTTP 백엔드를 옮긴 두 커밋은
+각각 Windows HTTP test로 확인했다.
