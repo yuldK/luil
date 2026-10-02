@@ -434,6 +434,102 @@ TEST_CASE("A touch on a drag handle starts at once and long presses only in plac
     REQUIRE(names_of(controller.process(touch_release(62.0f, 121.0f, 3700))) == std::vector<std::u8string> { u8"menu" });
 }
 
+TEST_CASE("A held touch opens the menu before the finger lifts", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    touch_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(card_tree(&scrolled));
+
+    // 누르면 길게 누르기 시각을 알린다. 그 전에 깨워도 아무 일이 없다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    REQUIRE(controller.next_deadline() == at(600));
+    REQUIRE(controller.advance(at(599)).empty());
+    // 떨림은 봐준다. 시각이 차면 손을 떼기 전에 메뉴가 열린다.
+    static_cast<void>(controller.process(touch_move(66.0f, 125.0f, 300)));
+    REQUIRE(names_of(controller.advance(at(600))) == std::vector<std::u8string> { u8"menu" });
+    REQUIRE(policy.clicked.size() == 1u);
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(controller.snapshot().pressed == luil::ui_element_id {});
+
+    // 메뉴를 연 접촉은 그 뒤 쓸어도 스크롤이 아니고, 떼어도 클릭이 아니다.
+    REQUIRE(controller.process(touch_move(66.0f, 60.0f, 700)).empty());
+    REQUIRE(scrolled.empty());
+    REQUIRE(controller.process(touch_release(66.0f, 60.0f, 900)).empty());
+    REQUIRE(policy.clicked.size() == 1u);
+
+    // 메뉴를 연 누름은 연속 탭의 첫 번째가 아니다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 1000, 2)));
+    REQUIRE(names_of(controller.process(touch_release(60.0f, 120.0f, 1050, 2))) == std::vector<std::u8string> { u8"click" });
+}
+
+TEST_CASE("Holding a target without a right click action waits for the tap", "[ui][interaction][touch]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto button { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"one" }) };
+    button->arrange({ { 10.0f, 10.0f, 80.0f, 40.0f }, 1.0f });
+    button->set_action(luil::ui_trigger::left_click, message_action(u8"click"));
+    root->add(std::move(button));
+    luil::interaction_controller controller {};
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+
+    static_cast<void>(controller.process(touch_press(30.0f, 20.0f, 0)));
+    REQUIRE(controller.advance(at(700)).empty());
+    // 한 번 물었으면 다시 깨우지 않는다. 뗌은 그냥 탭이다.
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(names_of(controller.process(touch_release(30.0f, 20.0f, 1000))) == std::vector<std::u8string> { u8"click" });
+}
+
+TEST_CASE("Only a still contact on a target waits for a long press", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled));
+
+    // 허용치를 넘은 접촉은 길게 누르기를 기다리지 않는다. 돌아와도 되살리지 않는다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    static_cast<void>(controller.process(touch_move(100.0f, 120.0f, 500)));
+    static_cast<void>(controller.process(touch_move(60.0f, 120.0f, 550)));
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(controller.advance(at(900)).empty());
+    static_cast<void>(controller.process(touch_release(60.0f, 120.0f, 950)));
+
+    // 빈 곳에는 메뉴를 열 대상이 없다.
+    static_cast<void>(controller.process(touch_press(350.0f, 150.0f, 1000)));
+    REQUIRE(controller.next_deadline().has_value() == false);
+    static_cast<void>(controller.process(touch_release(350.0f, 150.0f, 1100)));
+
+    // 길게 누르기를 끄면 기다리지 않는다. 마우스는 처음부터 몸짓이 없다.
+    luil::touch_gesture_config config {};
+    config.long_press_enabled = false;
+    REQUIRE(controller.set_touch_config(config));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 2000)));
+    REQUIRE(controller.next_deadline().has_value() == false);
+    static_cast<void>(controller.process(touch_release(60.0f, 120.0f, 2100)));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::left, at(3000) }));
+    REQUIRE(controller.next_deadline().has_value() == false);
+}
+
+TEST_CASE("A held drag handle opens the menu in place and stops moving", "[ui][interaction][touch]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled, { .handle = true }));
+
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    REQUIRE(names_of(controller.advance(at(600))) == std::vector<std::u8string> { u8"menu" });
+    // 메뉴를 연 손잡이는 끌어도 움직이지 않는다.
+    REQUIRE(controller.process(touch_move(60.0f, 80.0f, 700)).empty());
+    REQUIRE(controller.process(touch_release(60.0f, 80.0f, 800)).empty());
+
+    // 실제로 옮긴 손잡이는 기다리지 않는다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 1000)));
+    static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 1040)));
+    static_cast<void>(controller.process(touch_move(60.0f, 120.0f, 1080)));
+    REQUIRE(controller.next_deadline().has_value() == false);
+}
+
 TEST_CASE("A held touch drags and drops after the pan window closes", "[ui][interaction][touch]")
 {
     std::vector<float> scrolled {};

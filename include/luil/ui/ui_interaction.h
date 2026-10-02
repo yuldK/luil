@@ -156,7 +156,7 @@ namespace luil {
     {
         // 축에 맞는 빠른 쓸기가 스크롤한다.
         bool pan_enabled { true };
-        // 움직이지 않고 오래 눌렀다 떼면 우클릭이다.
+        // 움직이지 않고 오래 누르고 있으면 손을 떼기 전에 우클릭이다.
         bool long_press_enabled { true };
         float pan_start_distance { 12.0f };
         // 이 시간 안에 시작 거리를 넘어야 스크롤이다. 넘긴 뒤의 이동은 일반 끌기다.
@@ -391,6 +391,14 @@ namespace luil {
         //    손가락이 새 접촉이 되지 않는다.
         //  - 손잡이 조작에서 길게 누르기를 끄면 조작은 이어가고 메뉴 후보만 거둔다.
         bool set_touch_config(const touch_gesture_config& config) noexcept;
+        // 이벤트 없이 시간이 흘러야 일어날 다음 판정의 시각이다 (지금은 터치 길게 누르기뿐이다).
+        // 없으면 기다릴 것이 없다.
+        //  - controller는 시계를 조회하지 않는다. 입력 pump가 이 시각까지만 기다렸다가
+        //    `advance`로 지금 시각을 알린다 — test는 시각을 손으로 정한다.
+        [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_deadline() const noexcept;
+        // 지금 시각까지 흘러 생긴 판정을 실행한다. 길게 누르기가 차면 손을 떼기 전에
+        // 우클릭 액션을 낸다.
+        [[nodiscard]] std::vector<input_action> advance(std::chrono::steady_clock::time_point now);
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
     private:
@@ -406,6 +414,17 @@ namespace luil {
             dragging,
             // 누르는 즉시 시작하는 전용 조작이다 (`pointer_drag_target`).
             handle,
+        };
+
+        // 터치 접촉 하나의 길게 누르기다.
+        enum class long_press_state
+        {
+            // 아직 시간이 차지 않았다.
+            waiting,
+            // 누르고 있는 동안 우클릭을 냈다. 그 뒤의 이동·뗌은 삼킨다.
+            fired,
+            // 시간이 찼지만 대상에 우클릭 액션이 없었다. 뗌은 그냥 탭이다.
+            unavailable,
         };
 
         // 보통 조작은 한 접촉이다. 같은 확대 보기의 핀치만 둘째 접촉을 품는다.
@@ -433,6 +452,7 @@ namespace luil {
             bool pan_open { false };
             // 전용 조작이 실제 이동 액션을 냈다. 그 뒤로는 길게 누르기가 아니다.
             bool moved_action { false };
+            long_press_state long_press { long_press_state::waiting };
             std::optional<pan_target> pan {};
             ui_element_id view {};
             struct second_contact

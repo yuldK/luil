@@ -3,6 +3,7 @@
 #include "luil/messaging/envelope.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -1269,6 +1270,9 @@ namespace luil {
         if (touch_.has_value() == false || touch_->surface != event.surface || (touch_->id != event.pointer_id && (touch_->second.has_value() == false || touch_->second->id != event.pointer_id)))
             return {};
         touch_contact& contact { *touch_ };
+        // 길게 누르기로 메뉴를 연 접촉이다. 손을 뗄 때까지 스크롤·끌기로 바뀌지 않는다.
+        if (contact.long_press == long_press_state::fired)
+            return {};
         const ui_tree* const tree { surface_tree(contact.surface) };
         // 거리는 누른 표면의 배율로 나눈 논리 픽셀이다.
         // 가장 먼 거리를 남기므로 이동 이벤트를 몇 번에 나눠 받았는지가 판정을 바꾸지 않는다.
@@ -1478,6 +1482,12 @@ namespace luil {
         }
         touch_contact contact { std::move(*touch_) };
         touch_.reset();
+        // 누르고 있는 동안 이미 우클릭을 냈다. 뗌은 클릭도 탭도 아니다.
+        if (contact.long_press == long_press_state::fired)
+        {
+            clear_press();
+            return {};
+        }
         const ui_tree* const tree { surface_tree(contact.surface) };
         contact.max_distance = std::max(contact.max_distance, distance_between(contact.start_x, contact.start_y, event.x, event.y) / contact.scale);
         const bool still { contact.max_distance <= contact.config.press_move_tolerance };
@@ -1510,8 +1520,10 @@ namespace luil {
             if (still == false || contact.moved_action || tree == nullptr)
                 return {};
             const ui_element* const target { live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) };
-            if (target == nullptr || contact.config.long_press_enabled == false || event.time - contact.pressed_at < contact.config.long_press_time
-                || target->action(ui_trigger::right_click) == nullptr)
+            // 보통은 누르고 있는 동안 `advance`가 이미 냈다. 여기는 pump가 그 시각에
+            // 깨기 전에 뗌이 먼저 온 경우다.
+            if (target == nullptr || contact.config.long_press_enabled == false || contact.long_press == long_press_state::unavailable
+                || event.time - contact.pressed_at < contact.config.long_press_time || target->action(ui_trigger::right_click) == nullptr)
                 return {};
             if (policy_ != nullptr)
                 policy_->on_click(*target);
@@ -1530,6 +1542,51 @@ namespace luil {
         return {};
     }
 
+    std::optional<std::chrono::steady_clock::time_point> interaction_controller::next_deadline() const noexcept
+    {
+        if (touch_.has_value() == false)
+            return std::nullopt;
+        const touch_contact& contact { *touch_ };
+        // 움직이지 않은 대기 접촉과 아직 이동 액션을 내지 않은 손잡이만 길게 누를 수 있다.
+        // 빈 곳에는 우클릭할 대상이 없다.
+        const bool eligible_phase { contact.phase == touch_phase::pending || (contact.phase == touch_phase::handle && contact.moved_action == false) };
+        if (eligible_phase == false || contact.long_press != long_press_state::waiting || contact.config.long_press_enabled == false || contact.target == ui_element_id {}
+            || contact.max_distance > contact.config.press_move_tolerance)
+            return std::nullopt;
+        return contact.pressed_at + contact.config.long_press_time;
+    }
+
+    std::vector<input_action> interaction_controller::advance(const std::chrono::steady_clock::time_point now)
+    {
+        const std::optional<std::chrono::steady_clock::time_point> deadline { next_deadline() };
+        if (deadline.has_value() == false || now < *deadline)
+            return {};
+        touch_contact& contact { *touch_ };
+        const ui_tree* const tree { surface_tree(contact.surface) };
+        const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
+        // 대상이 사라졌거나 가려졌으면 뗌의 탭 판정도 같은 이유로 액션이 없다. 우클릭이
+        // 없는 대상은 길게 눌러도 그냥 탭이다 — 뗌이 정한다.
+        if (target == nullptr || target->action(ui_trigger::right_click) == nullptr)
+        {
+            contact.long_press = long_press_state::unavailable;
+            return {};
+        }
+        contact.long_press = long_press_state::fired;
+        // 메뉴가 열리면 누름 표시는 거둔다. 접촉은 뗄 때까지 쥐고 있는다.
+        clear_press();
+        // 탭처럼 초점부터 옮긴다 (텍스트 칸이면 그 칸이 메뉴의 대상이다). 손잡이는
+        // 누를 때 이미 옮겼다.
+        if (contact.phase == touch_phase::pending)
+            apply_press_focus(*tree, target, contact.surface, now);
+        // 우클릭이 된 접촉은 연속 탭의 기록에서도 빠진다.
+        last_click_id_ = {};
+        last_click_surface_.clear();
+        click_streak_ = 0;
+        if (policy_ != nullptr)
+            policy_->on_click(*target);
+        return run_trigger(*target, ui_trigger::right_click, contact.last_x, contact.last_y, false);
+    }
+
     std::vector<input_action> interaction_controller::finish_touch_tap(const touch_contact& contact, const pointer_released_event& event)
     {
         const ui_tree* const tree { surface_tree(contact.surface) };
@@ -1546,9 +1603,11 @@ namespace luil {
             return {};
         apply_press_focus(*tree, target, contact.surface, event.time);
 
-        // 길게 누르기는 이벤트 시각으로만 잰다 — 누르고 있는 동안 메뉴를 여는
-        // 타이머는 없다. 우클릭 액션이 없으면 그냥 탭이다.
-        if (contact.config.long_press_enabled && event.time - contact.pressed_at >= contact.config.long_press_time && target->action(ui_trigger::right_click) != nullptr)
+        // 길게 누르기는 보통 누르고 있는 동안 `advance`가 낸다. 여기는 pump가 그 시각에
+        // 깨기 전에 뗌이 먼저 온 경우다 — 같은 판정을 뗌의 시각으로 한다.
+        // 우클릭 액션이 없으면 그냥 탭이다.
+        if (contact.config.long_press_enabled && contact.long_press == long_press_state::waiting && event.time - contact.pressed_at >= contact.config.long_press_time
+            && target->action(ui_trigger::right_click) != nullptr)
         {
             // 우클릭이 된 접촉은 연속 탭의 기록에서도 빠진다.
             last_click_id_ = {};
@@ -2425,9 +2484,32 @@ namespace luil {
         interaction_snapshot published {};
         messaging::envelope<raw_input_event> received {};
         std::uint64_t next_sequence { 0 };
+        const auto dispatch = [&](std::vector<input_action> actions) {
+            for (input_action& action : actions)
+                if (const auto* const message { std::get_if<app_message>(&action) }; message != nullptr)
+                {
+                    if (message->empty() == false)
+                        post_with_retry(app_inbox, *message);
+                }
+                else if (const auto* const command { std::get_if<ui_command>(&action) }; command != nullptr && execute_ui_command)
+                    execute_ui_command(*command);
+                else if (auto* const app_command { std::get_if<app_ui_command>(&action) }; app_command != nullptr && execute_app_ui_command)
+                    execute_app_ui_command(std::move(*app_command));
+                else if (auto* const copy { std::get_if<clipboard_copy_request>(&action) }; copy != nullptr && execute_clipboard)
+                    execute_clipboard(clipboard_request { std::move(*copy) });
+                else if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr && execute_clipboard)
+                    execute_clipboard(clipboard_request { *paste });
+        };
         while (true)
         {
-            const messaging::receive_status status { input_inbox.receive_wait(received, std::chrono::milliseconds { 250 }) };
+            // 시간이 흘러야 일어날 판정(길게 누르기)이 있으면 그 시각까지만 기다린다.
+            std::chrono::milliseconds wait { 250 };
+            if (const auto deadline { controller.next_deadline() }; deadline.has_value())
+            {
+                const auto remaining { std::chrono::ceil<std::chrono::milliseconds>(*deadline - std::chrono::steady_clock::now()) };
+                wait = std::clamp(remaining, std::chrono::milliseconds { 0 }, wait);
+            }
+            const messaging::receive_status status { input_inbox.receive_wait(received, wait) };
             if (status == messaging::receive_status::closed)
                 return;
 
@@ -2460,21 +2542,10 @@ namespace luil {
                     controller.cancel_dropped_gestures();
                 next_sequence = received.sequence + 1;
 
-                for (input_action& action : controller.process(received.payload))
-                    if (const auto* const message { std::get_if<app_message>(&action) }; message != nullptr)
-                    {
-                        if (message->empty() == false)
-                            post_with_retry(app_inbox, *message);
-                    }
-                    else if (const auto* const command { std::get_if<ui_command>(&action) }; command != nullptr && execute_ui_command)
-                        execute_ui_command(*command);
-                    else if (auto* const app_command { std::get_if<app_ui_command>(&action) }; app_command != nullptr && execute_app_ui_command)
-                        execute_app_ui_command(std::move(*app_command));
-                    else if (auto* const copy { std::get_if<clipboard_copy_request>(&action) }; copy != nullptr && execute_clipboard)
-                        execute_clipboard(clipboard_request { std::move(*copy) });
-                    else if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr && execute_clipboard)
-                        execute_clipboard(clipboard_request { *paste });
+                dispatch(controller.process(received.payload));
             }
+            // 이벤트가 왔든 시간이 다 됐든 지금 시각까지의 판정을 실행한다.
+            dispatch(controller.advance(std::chrono::steady_clock::now()));
 
             if ((controller.snapshot() == published) == false)
             {
