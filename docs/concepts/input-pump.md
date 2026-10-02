@@ -3,9 +3,10 @@
 [`run_ui_input_pump`](../../include/luil/ui/ui_interaction.h)는 input 스레드에서 raw 입력을 소비하고, 현재 tree로 정규화한 뒤 액션을 목적지별로 보낸다.
 
 ```text
-input_inbox.receive_wait(250ms)
+input_inbox.receive_wait(min(250ms, next_deadline - 지금))
     → tree_slot / surface_tree_slot.take_newer()
     → interaction_controller.process(event)
+    → interaction_controller.advance(지금)
     → app_message       → logic inbox
     → ui_command        → UI callback
     → app_ui_command    → UI callback
@@ -14,6 +15,8 @@ input_inbox.receive_wait(250ms)
 ```
 
 250ms 대기는 이벤트가 없어도 새 tree를 받게 한다. 마지막 휠 뒤 새 tree가 게시되면 다음 대기에서 hover를 새 tree로 재판정한다.
+
+이벤트 없이 시간이 흘러야 일어나는 판정도 있다. 지금은 터치 길게 누르기 하나다. controller는 시계를 조회하지 않으므로 다음 판정 시각(`next_deadline`)만 알린다. pump는 받기 대기를 그 시각까지로 줄이고, 깰 때마다(이벤트가 왔든 시간이 다 됐든) `advance(지금)`을 불러 그 판정을 실행한다. 그래서 손을 떼기 전에 메뉴가 열린다 ([터치 제스처와 펜 입력](../touch-pen-input-design.md)). test는 `advance`에 시각을 손으로 준다.
 
 앱 메시지는 `reject_newest` 채널이 가득 찰 때 닫힌 채널만 조용히 포기하고, input pump 경로에서는 여유가 생길 때까지 짧게 재시도한다. `app_host::post_app_message`는 반환값을 관찰하지 않으므로 포화 시 게시가 거절될 수 있으며 `app_inbox_statistics()`로 확인한다. 종료 신호는 종료 예산 안에서 재시도한다.
 

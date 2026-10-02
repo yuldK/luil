@@ -73,6 +73,17 @@ OS가 마우스 호환 메시지로 바꾸지 않는다. 그래도 남는 합성
 터치·펜의 DOWN도 마우스 누름처럼 popup 밖 누름(`pointer_press_outside`)으로 popup을
 닫는다. 펜 hover는 메시지를 소비하므로 마우스 변환이 없다. 커서는 그 경로에서 직접 맞춘다.
 
+## Android 입력 수신
+
+Android 앱 host는 GameActivity가 모아 준 움직임·키 이벤트를 [`input_translator`](../src/android/android_input.h)로 옮긴다. GameActivity의 구조체는 받는 즉시 변환층의 값으로 복사한다.
+
+- 손가락·펜은 Win32와 같은 `pointer_sequence_tracker`를 거친다. 도구 종류가 장치다 (`TOOL_TYPE_FINGER`·`STYLUS`·`ERASER`·`MOUSE`). 한 이벤트의 여러 포인터 중 번호가 가리키는 것만 누름·뗌이고 나머지는 이동이다. 묶여 온 과거 표본은 오래된 것부터 넣는다. `ACTION_CANCEL`(시스템 뒤로 가기 제스처 등)은 모든 접촉의 취소다.
+- 펜 배럴 버튼은 `BUTTON_STYLUS_PRIMARY`(일부 펜은 `SECONDARY`)다. 호버는 `ACTION_HOVER_*`다.
+- 마우스는 DOWN과 버튼 동작(`ACTION_BUTTON_PRESS`) 중 먼저 온 쪽이 누름이다. 실제 마우스는 둘 다 보내고 주입된 마우스는 DOWN만 보낸다. 휠은 `AXIS_VSCROLL`·`HSCROLL`의 한 눈금을 120으로 옮긴다.
+- 좌표는 안전 영역의 원점만큼 빼 tree 좌표로 옮기고, 배율은 `density / 160`이다.
+- **시각의 단위가 섞여 있다.** 움직임 이벤트의 현재 시각은 Java `MotionEvent`처럼 밀리초이고 과거 표본과 키 이벤트는 나노초다. 기기에서 `CLOCK_MONOTONIC`과 맞대 확인했다. libc++의 `steady_clock`은 `CLOCK_MONOTONIC`이라 값을 옮기기만 한다 (기기 test가 고정한다).
+- 시스템 키(뒤로·볼륨·카메라·전원·미디어)는 Activity에 남긴다. 키와 글자는 Win32와 같은 어휘로 나눈다 (Backspace는 U+0008, Ctrl+Backspace는 U+007F).
+
 ## 내부 이벤트와 접촉 소유권
 
 [ui_events.h](../include/luil/ui/ui_events.h)의 이동·누름·뗌·이탈 이벤트에 장치 정보를
