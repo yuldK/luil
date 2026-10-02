@@ -13,6 +13,14 @@ CMakeLists.txt text eol=crlf
 .clang-tidy text eol=crlf
 .gitignore text eol=crlf
 
+# Gradle 예제 프로젝트다. gradlew는 Unix 셸이 읽으므로 LF여야 하고, wrapper jar는 공식
+# 배포본의 checksum을 보존한다.
+gradlew text eol=lf
+*.bat text eol=crlf
+*.kts text eol=crlf
+*.properties text eol=crlf
+*.jar binary
+
 # 공식 배포본의 checksum을 보존해야 하는 vendored 자산이다.
 /assets/codicons/** -text
 *.ttf binary

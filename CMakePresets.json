@@ -102,6 +102,17 @@
                 "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
                 "LUIL_BUILD_TESTS": "ON"
             }
+        },
+        {
+            "name": "android-arm64",
+            "displayName": "Android arm64 library, examples and device tests",
+            "description": "Needs ANDROID_NDK_HOME (NDK r27d) and Ninja. Examples are packaged by examples/android (Gradle).",
+            "inherits": "android-arm64-core",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "LUIL_BUILD_EXAMPLES": "ON",
+                "ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -184,6 +195,16 @@
             "name": "android-arm64-core-release",
             "configurePreset": "android-arm64-core",
             "configuration": "Release"
+        },
+        {
+            "name": "android-arm64-debug",
+            "configurePreset": "android-arm64",
+            "configuration": "Debug"
+        },
+        {
+            "name": "android-arm64-release",
+            "configurePreset": "android-arm64",
+            "configuration": "Release"
         }
     ],
     "testPresets": [
@@ -245,6 +266,28 @@
         {
             "name": "android-arm64-core-release",
             "configurePreset": "android-arm64-core",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "android-arm64-debug",
+            "configurePreset": "android-arm64",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "android-arm64-release",
+            "configurePreset": "android-arm64",
             "configuration": "Release",
             "output": {
                 "outputOnFailure": true

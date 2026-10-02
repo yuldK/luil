@@ -216,10 +216,9 @@ endif()
 # test와 개발 도구 target은 명시적으로 켤 때만 만들어진다.
 #   cmake --preset vs2026-tests     → test target과 CTest 등록 포함
 #   -DLUIL_BUILD_TOOLING=ON      → clang-format·style 검사 target 포함
-# Android는 지금 core와 그 test만 세운다. 예제·설치·Direct3D·웹뷰는 Windows의 것이라
-# 일반 변수로 먼저 꺼 두면 아래 option이 그 값을 따른다 (CMP0077).
+# 설치·Direct3D·웹뷰는 Windows의 것이라 Android에서는 일반 변수로 먼저 꺼 둔다.
+# 아래 option이 그 값을 따른다 (CMP0077).
 if(LUIL_PLATFORM STREQUAL "android")
-    set(LUIL_BUILD_EXAMPLES OFF)
     set(LUIL_ENABLE_DIRECT3D OFF)
     set(LUIL_ENABLE_WEBVIEW OFF)
     set(LUIL_ENABLE_MSVC_ANALYZE OFF)
@@ -345,9 +344,11 @@ if(LUIL_INSTALL)
     luil_install_rules()
 endif()
 # smoke test가 예제 실행 파일을 쓰므로 test 구성은 예제를 함께 만든다.
-# 예제는 Windows 앱이다 (Android 예제는 3단계).
+# Android 예제는 공유 라이브러리이고 APK 포장은 examples/android의 Gradle이 한다.
 if(LUIL_PLATFORM STREQUAL "windows" AND (LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS))
     add_subdirectory(examples)
+elseif(LUIL_PLATFORM STREQUAL "android" AND LUIL_BUILD_EXAMPLES)
+    add_subdirectory(examples/android)
 endif()
 if(LUIL_BUILD_TESTS)
     add_subdirectory(tests)

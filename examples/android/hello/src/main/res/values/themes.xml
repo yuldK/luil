@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    luil 앱의 창 테마다.
+    GameActivity가 AppCompatActivity라 AppCompat 테마를 바탕으로 한다. luil이 창 전체를 그리고
+    안전 영역은 네이티브 쪽이 비키므로(시스템 막대·컷아웃), 시스템 막대의 배경은 투명으로 두어
+    앱의 배경이 그 밑까지 이어지게 한다.
+-->
+<resources>
+    <style name="Theme.Luil" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
+    </style>
+</resources>

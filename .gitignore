@@ -15,6 +15,12 @@
 # 판번은 third_party/game-activity-prep.json이 고정한다.
 /third_party/game-activity-prep/
 /third_party/game-activity-prep-archives/
+# Gradle 예제 프로젝트의 빌드 산출물과 기계별 설정(sdk.dir)이다.
+/examples/android/.gradle/
+/examples/android/.kotlin/
+/examples/android/build/
+/examples/android/*/build/
+/examples/android/local.properties
 # 도구가 쓰는 로컬 설정이다. 저장소의 것이 아니라 스타일 검사도 건너뛴다
 # (scripts/check_source_style.ps1).
 /.claude/settings.local.json
