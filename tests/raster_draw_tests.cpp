@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -565,4 +566,40 @@ TEST_CASE("Content starts at the frame origin while the background fills the sur
     REQUIRE(pixel_at(89, 54) == fill);
     REQUIRE(pixel_at(90, 30) == palette.window_background);
     REQUIRE(pixel_at(50, 55) == palette.window_background);
+}
+
+TEST_CASE("An overlay popup paints over the main tree inside its bounds", "[ui][raster][popup]")
+{
+    // 창이 하나뿐인 플랫폼은 popup을 주 tree 위의 layer로 그린다 (`frame_state::overlays`).
+    // layer 자리 밖은 주 tree 그대로이고, 안은 popup tree가 layer 원점에서 시작하며, 둘레에
+    // 테두리가 선다.
+    constexpr luil::ui_color main_fill { 0xFF2080C0u };
+    constexpr luil::ui_color popup_fill { 0xFFC08020u };
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    SkBitmap pixels {};
+    pixels.allocN32Pixels(100, 100);
+    SkCanvas canvas { pixels };
+    auto main_root { std::make_unique<fill_element>(luil::ui_element_id { luil::ui_element_kind::root }, main_fill) };
+    main_root->arrange({ { 0.0f, 0.0f, 100.0f, 100.0f }, 1.0f });
+    const luil::ui_tree main_tree { std::move(main_root) };
+    // popup tree는 왼쪽 위 10x10만 칠한다. 나머지는 layer 배경이다.
+    auto popup_root { std::make_unique<fill_element>(luil::ui_element_id { luil::ui_element_kind::root }, popup_fill) };
+    popup_root->arrange({ { 0.0f, 0.0f, 10.0f, 10.0f }, 1.0f });
+    const luil::ui_tree popup_tree { std::move(popup_root) };
+    const luil::overlay_layer layer { &popup_tree, { 40, 30, 40, 40 }, true, {} };
+    luil::frame_state state {};
+    state.width = 100;
+    state.height = 100;
+    state.theme = luil::color_theme::dark;
+    state.tree = &main_tree;
+    state.overlays = std::span<const luil::overlay_layer> { &layer, 1 };
+    const auto pixel_at = [&pixels](const int x, const int y) { return static_cast<luil::ui_color>(pixels.getColor(x, y)); };
+
+    luil::draw_frame(canvas, nullptr, nullptr, state);
+
+    REQUIRE(pixel_at(10, 10) == main_fill);
+    REQUIRE(pixel_at(45, 35) == popup_fill);
+    REQUIRE(pixel_at(60, 50) == palette.window_background);
+    REQUIRE(pixel_at(40, 50) == palette.tooltip_border);
+    REQUIRE(pixel_at(79, 50) == palette.tooltip_border);
 }

@@ -4,7 +4,9 @@
 #include "luil/theme/ui_theme.h"
 
 #include "include/core/SkBlendMode.h"
+#include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkMaskFilter.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
 
@@ -24,6 +26,48 @@ namespace luil {
             return high_contrast_palette_for(state.high_contrast);
         return color_palette_for(frame_style(state), state.theme, accent_for(state.accent_id));
     }
+
+    namespace {
+        // 표면 둘레에 1px 테두리를 긋는다. 획의 중심을 반 픽셀 안으로 들여 획 전체가 자리 안에 든다.
+        void draw_border(SkCanvas& canvas, const ui_color_palette& colors, const float scale, const SkRect& bounds)
+        {
+            SkPaint border {};
+            border.setColor(colors.tooltip_border);
+            border.setStyle(SkPaint::kStroke_Style);
+            border.setStrokeWidth(scale);
+            const float inset { scale / 2.0f };
+            canvas.drawRect(bounds.makeInset(inset, inset), border);
+        }
+
+        // popup 하나를 주 tree 위에 겹쳐 그린다.
+        // 데스크톱은 popup이 자기 창이라 창의 배경·OS 그림자가 경계를 세운다. 여기서는 표면이
+        // 그 셋을 대신한다: 아래로 번지는 그림자, 창 배경, 그리고 tree와 테두리다.
+        void draw_overlay(SkCanvas& canvas, draw_context& context, const ui_color_palette& colors, const float scale, const overlay_layer& layer)
+        {
+            if (layer.bounds.width <= 0 || layer.bounds.height <= 0)
+                return;
+            const pixel_rect& area { layer.bounds };
+            const SkRect bounds { SkRect::MakeXYWH(static_cast<float>(area.x), static_cast<float>(area.y), static_cast<float>(area.width), static_cast<float>(area.height)) };
+            SkPaint shadow {};
+            shadow.setColor(SkColorSetARGB(96, 0, 0, 0));
+            shadow.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 6.0f * scale));
+            canvas.drawRect(bounds.makeOffset(0.0f, 3.0f * scale), shadow);
+
+            SkAutoCanvasRestore restore { &canvas, true };
+            canvas.clipRect(bounds);
+            SkPaint background {};
+            background.setColor(colors.window_background);
+            canvas.drawRect(bounds, background);
+            if (layer.tree != nullptr)
+            {
+                SkAutoCanvasRestore restore_origin { &canvas, true };
+                canvas.translate(bounds.x(), bounds.y());
+                layer.tree->draw(context, layer.interaction);
+            }
+            if (layer.border)
+                draw_border(canvas, colors, scale, bounds);
+        }
+    } // namespace
 
     void draw_frame(SkCanvas& canvas, SkTypeface* const codicon_typeface, SkTypeface* const ui_typeface, const frame_state& state)
     {
@@ -55,17 +99,15 @@ namespace luil {
             state.tree->draw(context, state.interaction);
         }
 
+        // 주 tree 위의 popup이다 (모바일). 뒤의 것이 위다.
+        //  - 주 tree의 tooltip·끌기 표시는 위에서 이미 그렸으므로 popup이 그 위를 덮는다. 터치
+        //    화면에는 주 tree의 hover tooltip이 서지 않아 겹칠 일이 드물다.
+        for (const overlay_layer& layer : state.overlays)
+            draw_overlay(canvas, context, colors, scale, layer);
+
         // popup의 테두리다. tree 위에 긋는다 — 가장자리까지 채운 내용에도 경계가 남는다.
-        // 획의 중심을 반 픽셀 안으로 들여 획 전체가 창 안에 든다.
         if (state.border)
-        {
-            SkPaint border {};
-            border.setColor(colors.tooltip_border);
-            border.setStyle(SkPaint::kStroke_Style);
-            border.setStrokeWidth(scale);
-            const float inset { scale / 2.0f };
-            canvas.drawRect(SkRect::MakeXYWH(inset, inset, static_cast<float>(state.width) - scale, static_cast<float>(state.height) - scale), border);
-        }
+            draw_border(canvas, colors, scale, SkRect::MakeWH(static_cast<float>(state.width), static_cast<float>(state.height)));
 
         // 웹뷰가 드러날 자리를 비운다.
         //

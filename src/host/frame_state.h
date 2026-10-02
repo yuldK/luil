@@ -22,6 +22,21 @@ namespace luil {
         [[nodiscard]] bool operator==(const pixel_rect&) const noexcept = default;
     };
 
+    // 주 tree 위에 겹쳐 그리는 popup 하나다 (모바일).
+    // 데스크톱은 popup마다 창이 따로 있어 쓰지 않는다 (popup-overlay-design.md). 창이 하나뿐인
+    // 플랫폼은 같은 `ui_popup`을 주 표면 안의 layer로 그린다.
+    struct overlay_layer
+    {
+        // popup의 분리 tree다. layer 원점 (0, 0)에서 시작한다. 렌더 호출 동안만 유효하면 된다.
+        const ui_tree* tree { nullptr };
+        // 표면 안의 자리다 (물리 픽셀, 표면 좌표).
+        pixel_rect bounds {};
+        // 둘레에 1px 테두리를 긋는가다 (`ui_popup::border`).
+        bool border { true };
+        // 이 popup 표면의 상호작용 상태다 (`interaction_for_surface`).
+        interaction_snapshot interaction {};
+    };
+
     // 렌더러가 한 frame을 그리는 데 필요한 전부다.
     // UI thread가 매 frame 채우고,
     // 값의 근원은 logic이 게시한 tree·외양 선호와 input thread의 상호작용 발행본이다.
@@ -83,6 +98,9 @@ namespace luil {
         //    말지는 `plan_webview_layout`이 판정한다.
         //  - 비어 있는 것이 보통이다. 웹뷰를 싣지 않은 앱은 이 경로를 지나지 않는다.
         std::span<const pixel_rect> holes {};
+
+        // 주 tree 위에 차례로 겹쳐 그릴 popup이다 (뒤의 것이 위). 모바일만 채운다.
+        std::span<const overlay_layer> overlays {};
     };
 
     // frame이 쓸 스타일이다 — 실린 것이 없으면 내장 스타일이다.
