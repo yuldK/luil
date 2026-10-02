@@ -44,7 +44,8 @@ namespace luil::win32 {
     // 없거나 빈 핸들을 돌려주면 라이브러리의 기본 매핑으로 물러선다.
     //  - `surface`는 그 표면의 id다 (주 창은 빈 문자열). 상호작용 발행본을
     //    그리기와 같은 규칙으로 걸러 묻는다 (`interaction_for_surface`).
-    void apply_surface_cursor(HWND window, const ui_tree* tree, app_host* host, const window_config& config, const std::u8string& surface);
+    //  - `client_position`은 펜 메시지의 물리 client 좌표다. 없으면 마우스 위치로 묻는다.
+    void apply_surface_cursor(HWND window, const ui_tree* tree, app_host* host, const window_config& config, const std::u8string& surface, std::optional<POINT> client_position = std::nullopt);
 
     class window_surface;
 
@@ -86,9 +87,7 @@ namespace luil::win32 {
         //    웹뷰가 설 자리가 없어 아무것도 앉히지 않고 빈 span을 답한다.
         //  - 돌려준 span은 **다음 호출까지만** 유효하다. 표면 하나를 그리는 동안만
         //    쓰이고, 그리기가 끝나면 다음 표면이 같은 자리를 다시 채운다.
-        [[nodiscard]] virtual std::span<const pixel_rect> apply_webviews(
-            const std::u8string& surface, const ui_tree* tree, IDCompositionVisual* underlay, int client_width, int client_height)
-            = 0;
+        [[nodiscard]] virtual std::span<const pixel_rect> apply_webviews(const std::u8string& surface, const ui_tree* tree, IDCompositionVisual* underlay, int client_width, int client_height) = 0;
 
         // 이 표면의 웹뷰가 이 포인터를 가져갔는가.
         // 참이면 우리 tree는 그것을 보지 않는다 — 같은 포인터를 양쪽에 주면 웹뷰
@@ -368,7 +367,6 @@ namespace luil::win32 {
         std::vector<recorded_frame> recorded_ {};
 
     protected:
-
         // 그리기가 실패했다.
         // 기본은 알리기만 하고, 주 창은 프로세스를 끝낸다.
         virtual void on_render_failed(const std::u8string& error);
@@ -409,7 +407,7 @@ namespace luil::win32 {
         // 지금 포인터 자리의 모양을 이 창에 적용한다.
         // 어느 모양인지는 이 표면의 tree가 정하고, 실제 커서로 옮기는 것은
         // 소비자가 준 해석기(없으면 기본 매핑)다.
-        void apply_cursor();
+        void apply_cursor(std::optional<POINT> client_position = std::nullopt);
 
     private:
         // --- uia_surface_host ---
@@ -425,8 +423,7 @@ namespace luil::win32 {
         // 쓰는 그 함수다.
         [[nodiscard]] std::optional<text_input_target> accessibility_text_target(ui_element_kind kind) const override;
         void accessibility_text_edit(text_edit_request request) override;
-        [[nodiscard]] std::optional<RECT> accessibility_text_span(const ui_element_id& id, std::u8string_view document, std::size_t caret, std::size_t begin,
-            std::size_t end) const override;
+        [[nodiscard]] std::optional<RECT> accessibility_text_span(const ui_element_id& id, std::u8string_view document, std::size_t caret, std::size_t begin, std::size_t end) const override;
         [[nodiscard]] std::optional<std::size_t> accessibility_text_offset(const ui_element_id& id, float screen_x, float screen_y) const override;
 
         // 이 표면으로 걸러진 초점이 바뀌었으면 UIA에 알린다.

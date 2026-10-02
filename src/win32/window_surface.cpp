@@ -104,14 +104,18 @@ namespace luil::win32 {
         }
     } // namespace
 
-    void apply_surface_cursor(const HWND window, const ui_tree* const tree, app_host* const host, const window_config& config, const std::u8string& surface)
+    void apply_surface_cursor(const HWND window, const ui_tree* const tree, app_host* const host, const window_config& config, const std::u8string& surface, const std::optional<POINT> client_position)
     {
         ui_cursor cursor { ui_cursor::inherit };
         POINT position {};
         // 그리기와 같은 필터를 지난 것으로 묻는다 — `cursor_at`은 끌기와 눌림을
         // 보고 모양을 정하므로, 거르지 않으면 A창에서 끄는 동안 B창 위의 포인터가
         // 함께 "잡은 모양"이 된다 (multi-window-design.md).
-        if (tree != nullptr && host != nullptr && GetCursorPos(&position) != FALSE && ScreenToClient(window, &position) != FALSE)
+        // 소비한 펜 입력은 마우스 위치를 갱신하지 않을 수 있으므로 원본 좌표로 묻는다.
+        const bool positioned { client_position.has_value() || (GetCursorPos(&position) != FALSE && ScreenToClient(window, &position) != FALSE) };
+        if (client_position.has_value())
+            position = *client_position;
+        if (tree != nullptr && host != nullptr && positioned)
             cursor = tree->cursor_at(static_cast<float>(position.x), static_cast<float>(position.y), interaction_for_surface(host->acquire_interaction(), surface));
 
         HCURSOR handle { nullptr };
@@ -1097,7 +1101,12 @@ namespace luil::win32 {
             forget();
         // 펜은 메시지를 소비하므로 마우스 변환이 없다 — 커서를 여기서 맞춘다.
         if (type == PT_PEN && message == WM_POINTERUPDATE)
-            apply_cursor();
+        {
+            if ((input.info.pointerFlags & POINTER_FLAG_INRANGE) != 0)
+                apply_cursor(client);
+            else
+                apply_cursor();
+        }
         return true;
     }
 
@@ -1169,9 +1178,9 @@ namespace luil::win32 {
         tracking_mouse_ = TrackMouseEvent(&tracking) != FALSE;
     }
 
-    void window_surface::apply_cursor()
+    void window_surface::apply_cursor(const std::optional<POINT> client_position)
     {
-        apply_surface_cursor(window_, tree_.get(), context_.host(), context_.config(), id_);
+        apply_surface_cursor(window_, tree_.get(), context_.host(), context_.config(), id_, client_position);
     }
 
     surface_tsf_host::surface_tsf_host(surface_context& context, const window_surface& surface) noexcept

@@ -8,8 +8,10 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <filesystem>
+#include <mutex>
 #include <string>
 
 namespace luil::testing {
@@ -17,6 +19,7 @@ namespace luil::testing {
         constexpr ui_element_kind label_kind { application_element_kind(0) };
         constexpr ui_element_kind button_kind { application_element_kind(1) };
         constexpr ui_element_kind text_kind { application_element_kind(2) };
+        constexpr ui_element_kind modal_kind { application_element_kind(3) };
         constexpr text_input_target text_target { static_cast<text_input_target>(1) };
 
         struct metrics_intent
@@ -51,9 +54,13 @@ namespace luil::testing {
         struct native_counts
         {
             std::atomic<int> touch_down { 0 };
+            std::atomic<int> touch_up { 0 };
+            std::atomic<int> touch_up_at_mouse_down { 0 };
+            std::atomic<int> touch_up_at_pen_down { 0 };
             std::atomic<int> pen_down { 0 };
             std::atomic<int> pen_hover { 0 };
             std::atomic<int> mouse_down { 0 };
+            std::atomic<int> set_cursor { 0 };
             std::atomic<int> capture_changed { 0 };
             std::atomic<int> touch_canceled { 0 };
             std::atomic<UINT32> touch_up_flags { 0 };
@@ -61,6 +68,9 @@ namespace luil::testing {
             std::atomic<int> canceled_message { 0 };
             std::atomic<bool> observer_ready { false };
             std::atomic<int> pointer_down { 0 };
+            std::mutex trace_mutex {};
+            nlohmann::json trace = nlohmann::json::array();
+            nlohmann::json touch_frame = nlohmann::json::array();
         };
 
         [[nodiscard]] std::u8string utf8(const std::string& value)
@@ -122,6 +132,8 @@ send();
                         enabled_ = !enabled_;
                     else if (command->command == u8"web-visible")
                         web_visible_ = !web_visible_;
+                    else if (command->command == u8"modal")
+                        modal_ = !modal_;
 
                     if (command->command == u8"pan" || command->command == u8"hold")
                     {
@@ -195,6 +207,16 @@ send();
                 web_slot->arrange({ { 16.0f * scale, 320.0f * scale, 630.0f * scale, 130.0f * scale }, scale });
                 root->add(std::move(web_slot));
 
+                if (modal_)
+                {
+                    auto scrim { std::make_unique<panel_element>(ui_element_id { modal_kind, u8"modal-scrim" }, panel_config {}) };
+                    scrim->set_hit_opaque(true);
+                    scrim->set_focus_trap(true);
+                    scrim->arrange({ { 0.0f, 80.0f * scale, metrics_.width, 380.0f * scale }, scale });
+                    root->add(std::move(scrim));
+                }
+                add_button(u8"modal", u8"Toggle modal blocker", 16.0f, 520.0f, make_message_action(command_intent { u8"modal" }));
+
                 nlohmann::json status {};
                 status["left"] = left_;
                 status["right"] = right_;
@@ -207,12 +229,17 @@ send();
                 status["config_revision"] = config_revision_;
                 status["enabled"] = enabled_;
                 status["web_visible"] = web_visible_;
+                status["modal"] = modal_;
                 status["web"] = web_;
                 status["web_error"] = std::string { web_error_.begin(), web_error_.end() };
                 status["touch_down"] = native.touch_down.load();
+                status["touch_up"] = native.touch_up.load();
+                status["touch_up_at_mouse_down"] = native.touch_up_at_mouse_down.load();
+                status["touch_up_at_pen_down"] = native.touch_up_at_pen_down.load();
                 status["pen_down"] = native.pen_down.load();
                 status["pen_hover"] = native.pen_hover.load();
                 status["mouse_down"] = native.mouse_down.load();
+                status["set_cursor"] = native.set_cursor.load();
                 status["capture_changed"] = native.capture_changed.load();
                 status["touch_canceled"] = native.touch_canceled.load();
                 status["touch_up_flags"] = native.touch_up_flags.load();
@@ -220,6 +247,11 @@ send();
                 status["canceled_message"] = native.canceled_message.load();
                 status["observer_ready"] = native.observer_ready.load();
                 status["pointer_down"] = native.pointer_down.load();
+                {
+                    const std::lock_guard lock { native.trace_mutex };
+                    status["native_trace"] = native.trace;
+                    status["native_touch_frame"] = native.touch_frame;
+                }
                 label_config status_config {};
                 status_config.text = utf8(status.dump());
                 auto status_label { std::make_unique<label_element>(ui_element_id { label_kind, u8"status" }, status_config) };
@@ -259,6 +291,7 @@ send();
             float scroll_ { 0.0f };
             bool enabled_ { true };
             bool web_visible_ { true };
+            bool modal_ { false };
             bool config_ok_ { true };
             int config_revision_ { 0 };
             touch_gesture_config touch_ {};
@@ -316,18 +349,53 @@ send();
             {
                 auto* self { reinterpret_cast<fixture_delegate*>(context) };
                 bool changed { false };
+                if (message == WM_SETCURSOR)
+                {
+                    ++self->driver_.native.set_cursor;
+                    changed = true;
+                }
                 if (message == WM_POINTERDOWN)
                     ++self->driver_.native.pointer_down;
                 if ((message == WM_POINTERUP || message == WM_POINTERUPDATE) && IS_POINTER_CANCELED_WPARAM(wparam))
+                {
                     ++self->driver_.native.canceled_message;
+                    changed = true;
+                }
                 POINTER_INPUT_TYPE type {};
                 const UINT32 pointer_id { GET_POINTERID_WPARAM(wparam) };
+                if ((message >= WM_POINTERUPDATE && message <= WM_POINTERCAPTURECHANGED) || message == WM_LBUTTONDOWN || message == WM_LBUTTONUP || message == WM_CAPTURECHANGED)
+                {
+                    changed = true;
+                    POINTER_INFO info {};
+                    if (message >= WM_POINTERUPDATE && message <= WM_POINTERCAPTURECHANGED)
+                        static_cast<void>(GetPointerInfo(pointer_id, &info));
+                    const std::lock_guard lock { self->driver_.native.trace_mutex };
+                    auto& trace { self->driver_.native.trace };
+                    trace.push_back({ message, info.pointerId, info.pointerType, info.pointerFlags, GetMessageExtraInfo(), HIWORD(wparam), info.frameId });
+                    if ((message == WM_POINTERDOWN || message == WM_POINTERUPDATE) && info.pointerType == PT_TOUCH)
+                    {
+                        std::array<POINTER_TOUCH_INFO, 2> contacts {};
+                        UINT32 count { 2 };
+                        if (GetPointerFrameTouchInfo(pointer_id, &count, contacts.data()))
+                        {
+                            auto& frame { self->driver_.native.touch_frame };
+                            frame = nlohmann::json::array();
+                            for (UINT32 index { 0 }; index < count; ++index)
+                                frame.push_back({ contacts[index].pointerInfo.pointerId, contacts[index].pointerInfo.pointerFlags });
+                        }
+                    }
+                    if (trace.size() > 24)
+                        trace.erase(trace.begin());
+                }
                 if (message == WM_POINTERDOWN && GetPointerType(pointer_id, &type))
                 {
                     if (type == PT_TOUCH)
                         ++self->driver_.native.touch_down;
                     else if (type == PT_PEN)
+                    {
                         ++self->driver_.native.pen_down;
+                        self->driver_.native.touch_up_at_pen_down.store(self->driver_.native.touch_up.load());
+                    }
                     changed = true;
                 }
                 else if (message == WM_POINTERUPDATE && GetPointerType(pointer_id, &type) && type == PT_PEN)
@@ -342,6 +410,7 @@ send();
                 else if (message == WM_LBUTTONDOWN)
                 {
                     ++self->driver_.native.mouse_down;
+                    self->driver_.native.touch_up_at_mouse_down.store(self->driver_.native.touch_up.load());
                     changed = true;
                 }
                 else if (message == WM_POINTERCAPTURECHANGED)
@@ -351,6 +420,7 @@ send();
                 }
                 if (message == WM_POINTERUP && GetPointerType(pointer_id, &type) && type == PT_TOUCH)
                 {
+                    ++self->driver_.native.touch_up;
                     POINTER_INFO info {};
                     if (GetPointerInfo(pointer_id, &info))
                     {

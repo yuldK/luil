@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -217,6 +218,11 @@ namespace luil::testing {
                 check(pattern->Invoke(), "UIA Invoke");
             }
 
+            void activate()
+            {
+                check(element(L"click")->SetFocus(), "UIA fixture focus");
+            }
+
             [[nodiscard]] RECT bounds(const std::wstring& owner)
             {
                 RECT rectangle {};
@@ -265,13 +271,32 @@ namespace luil::testing {
             require(GetAncestor(hit, GA_ROOT) == window, "Input target is obscured at " + std::to_string(point.x) + "," + std::to_string(point.y) + " by " + utf8(class_name));
         }
 
+        void activate_window(const HWND window)
+        {
+            SetLastError(0);
+            const BOOL requested { SetForegroundWindow(window) };
+            const DWORD error { GetLastError() };
+            DWORD_PTR result {};
+            require(SendMessageTimeoutW(window, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 1000, &result) != 0, "Fixture stopped processing activation messages");
+            if (GetForegroundWindow() == window)
+                return;
+            const HWND foreground { GetForegroundWindow() };
+            wchar_t class_name[256] {};
+            GetClassNameW(foreground, class_name, static_cast<int>(std::size(class_name)));
+            wchar_t target_class[256] {};
+            GetClassNameW(window, target_class, static_cast<int>(std::size(target_class)));
+            require(foreground == window,
+                "Windows refused fixture activation: target=" + utf8(target_class) + ", foreground=" + utf8(class_name) + ", requested=" + std::to_string(requested)
+                    + ", enabled=" + std::to_string(IsWindowEnabled(window)) + ", visible=" + std::to_string(IsWindowVisible(window)) + ", error=" + std::to_string(error));
+        }
+
         class synthetic_device
         {
         public:
             synthetic_device(const POINTER_INPUT_TYPE type, const HWND window)
                 : type_ { type }
                 , window_ { window }
-                , device_ { CreateSyntheticPointerDevice(type, 1, POINTER_FEEDBACK_NONE) }
+                , device_ { CreateSyntheticPointerDevice(type, type == PT_TOUCH ? 2 : 1, POINTER_FEEDBACK_NONE) }
             {
                 require(device_ != nullptr, "CreateSyntheticPointerDevice failed: " + std::to_string(GetLastError()));
             }
@@ -280,11 +305,18 @@ namespace luil::testing {
             ~synthetic_device()
             {
                 // 중간 assertion 실패에서도 접촉을 끝낸 뒤 장치를 없앤다.
-                if (active_)
+                std::array<POINTER_TYPE_INFO, 2> endings {};
+                UINT32 count { 0 };
+                for (std::size_t index { 0 }; index < active_.size(); ++index)
                 {
-                    sample_.touchInfo.pointerInfo.pointerFlags = POINTER_FLAG_UP | POINTER_FLAG_CANCELED;
-                    InjectSyntheticPointerInput(device_, &sample_, 1);
+                    if (active_[index])
+                    {
+                        endings[count] = samples_[index];
+                        endings[count++].touchInfo.pointerInfo.pointerFlags = POINTER_FLAG_UP | POINTER_FLAG_CANCELED;
+                    }
                 }
+                if (count != 0)
+                    InjectSyntheticPointerInput(device_, endings.data(), count);
                 if (device_ != nullptr)
                     DestroySyntheticPointerDevice(device_);
             }
@@ -293,45 +325,60 @@ namespace luil::testing {
             {
                 DestroySyntheticPointerDevice(device_);
                 device_ = nullptr;
-                active_ = false;
+                active_ = {};
             }
 
-            void send(const POINT point, const POINTER_FLAGS flags, const PEN_FLAGS pen_flags = PEN_FLAG_NONE)
+            void send(const POINT point, const POINTER_FLAGS flags, const PEN_FLAGS pen_flags = PEN_FLAG_NONE, const std::size_t index = 0)
             {
                 target_window(window_, point);
+                require(index < (type_ == PT_TOUCH ? 2u : 1u), "Invalid synthetic pointer index");
                 if (device_ == nullptr)
                 {
-                    device_ = CreateSyntheticPointerDevice(type_, 1, POINTER_FEEDBACK_NONE);
+                    device_ = CreateSyntheticPointerDevice(type_, type_ == PT_TOUCH ? 2 : 1, POINTER_FEEDBACK_NONE);
                     require(device_ != nullptr, "Cannot recreate synthetic pointer device");
                 }
-                sample_ = {};
-                sample_.type = type_;
-                auto& info { type_ == PT_TOUCH ? sample_.touchInfo.pointerInfo : sample_.penInfo.pointerInfo };
+                auto& sample { samples_[index] };
+                sample = {};
+                sample.type = type_;
+                auto& info { type_ == PT_TOUCH ? sample.touchInfo.pointerInfo : sample.penInfo.pointerInfo };
                 info.pointerType = type_;
-                info.pointerId = 1;
+                info.pointerId = static_cast<UINT32>(index + 1);
                 info.ptPixelLocation = point;
                 info.pointerFlags = flags;
                 info.dwKeyStates = ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? POINTER_MOD_SHIFT : 0) | ((GetAsyncKeyState(VK_CONTROL) & 0x8000) ? POINTER_MOD_CTRL : 0);
                 if (type_ == PT_TOUCH)
                 {
-                    sample_.touchInfo.touchMask = TOUCH_MASK_CONTACTAREA | TOUCH_MASK_PRESSURE | TOUCH_MASK_ORIENTATION;
-                    sample_.touchInfo.rcContact = { point.x - 2, point.y - 2, point.x + 2, point.y + 2 };
-                    sample_.touchInfo.pressure = 512;
-                    sample_.touchInfo.orientation = 90;
+                    sample.touchInfo.touchMask = TOUCH_MASK_CONTACTAREA | TOUCH_MASK_PRESSURE | TOUCH_MASK_ORIENTATION;
+                    sample.touchInfo.rcContact = { point.x - 2, point.y - 2, point.x + 2, point.y + 2 };
+                    sample.touchInfo.pressure = 512;
+                    sample.touchInfo.orientation = 90;
                 }
                 else
                 {
-                    sample_.penInfo.penFlags = pen_flags;
-                    sample_.penInfo.penMask = PEN_MASK_PRESSURE | PEN_MASK_TILT_X | PEN_MASK_TILT_Y;
-                    sample_.penInfo.pressure = flags & POINTER_FLAG_INCONTACT ? 512 : 0;
-                    sample_.penInfo.tiltX = 10;
-                    sample_.penInfo.tiltY = -10;
+                    sample.penInfo.penFlags = pen_flags;
+                    sample.penInfo.penMask = PEN_MASK_PRESSURE | PEN_MASK_TILT_X | PEN_MASK_TILT_Y;
+                    sample.penInfo.pressure = flags & POINTER_FLAG_INCONTACT ? 512 : 0;
+                    sample.penInfo.tiltX = 10;
+                    sample.penInfo.tiltY = -10;
+                }
+                // 같은 장치의 다른 접촉도 매 프레임에 실어 OS의 접촉 수명을 유지한다.
+                std::array<POINTER_TYPE_INFO, 2> frame {};
+                UINT32 count { 0 };
+                for (std::size_t contact { 0 }; contact < samples_.size(); ++contact)
+                {
+                    if (contact == index)
+                        frame[count++] = sample;
+                    else if (active_[contact])
+                    {
+                        frame[count] = samples_[contact];
+                        frame[count++].touchInfo.pointerInfo.pointerFlags = POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT;
+                    }
                 }
                 for (int attempt { 0 }; attempt < 5; ++attempt)
                 {
-                    if (InjectSyntheticPointerInput(device_, &sample_, 1))
+                    if (InjectSyntheticPointerInput(device_, frame.data(), count))
                     {
-                        active_ = (flags & POINTER_FLAG_INCONTACT) != 0;
+                        active_[index] = (flags & POINTER_FLAG_INCONTACT) != 0;
                         std::this_thread::sleep_for(std::chrono::milliseconds { 8 });
                         return;
                     }
@@ -342,17 +389,17 @@ namespace luil::testing {
                 throw std::runtime_error { "InjectSyntheticPointerInput remained NOT_READY" };
             }
 
-            void down(const POINT point, const PEN_FLAGS flags = PEN_FLAG_NONE)
+            void down(const POINT point, const PEN_FLAGS flags = PEN_FLAG_NONE, const std::size_t index = 0)
             {
-                send(point, POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT, flags);
+                send(point, POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT, flags, index);
             }
-            void move(const POINT point)
+            void move(const POINT point, const std::size_t index = 0, const PEN_FLAGS flags = PEN_FLAG_NONE)
             {
-                send(point, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT);
+                send(point, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT, flags, index);
             }
-            void up(const POINT point, const PEN_FLAGS flags = PEN_FLAG_NONE)
+            void up(const POINT point, const PEN_FLAGS flags = PEN_FLAG_NONE, const std::size_t index = 0)
             {
-                send(point, POINTER_FLAG_UP | (type_ == PT_PEN ? POINTER_FLAG_INRANGE : POINTER_FLAG_NONE), flags);
+                send(point, POINTER_FLAG_UP | (type_ == PT_PEN ? POINTER_FLAG_INRANGE : POINTER_FLAG_NONE), flags, index);
                 if (type_ == PT_PEN)
                     send(point, POINTER_FLAG_UPDATE, flags);
             }
@@ -361,8 +408,8 @@ namespace luil::testing {
             POINTER_INPUT_TYPE type_;
             HWND window_;
             HSYNTHETICPOINTERDEVICE device_;
-            POINTER_TYPE_INFO sample_ {};
-            bool active_ { false };
+            std::array<POINTER_TYPE_INFO, 2> samples_ {};
+            std::array<bool, 2> active_ {};
         };
 
         class input_restore
@@ -466,14 +513,22 @@ namespace luil::testing {
 #if LUIL_POINTER_TEST_WEBVIEW
             static_cast<void>(uia.wait([](const json& state) { return state["web"].value("ready", false); }, "WebView runtime/page readiness", std::chrono::seconds { 20 }));
 #endif
-            require(SetForegroundWindow(window), "Windows refused fixture activation");
+            uia.activate();
+            activate_window(window);
+            std::cout << "ENV window DPI=" << GetDpiForWindow(window) << ", virtual screen=" << GetSystemMetrics(SM_XVIRTUALSCREEN) << ',' << GetSystemMetrics(SM_YVIRTUALSCREEN) << ' '
+                      << GetSystemMetrics(SM_CXVIRTUALSCREEN) << 'x' << GetSystemMetrics(SM_CYVIRTUALSCREEN) << '\n';
             synthetic_device touch { PT_TOUCH, window };
             synthetic_device pen { PT_PEN, window };
             int passed { 0 };
+            int skipped { 0 };
             auto test = [&](const char* name, const std::function<void()>& action) {
                 action();
                 ++passed;
                 std::cout << "PASS " << name << '\n';
+            };
+            auto skip = [&](const char* message) {
+                ++skipped;
+                std::cout << "SKIP " << message << '\n';
             };
             auto click = [&](synthetic_device& device, const POINT point, const PEN_FLAGS flags = PEN_FLAG_NONE) {
                 device.down(point, flags);
@@ -564,6 +619,86 @@ namespace luil::testing {
                 uia.invoke(L"target");
                 static_cast<void>(uia.wait([](const json& state) { return state["enabled"] == true; }, "Restore target"));
             });
+            test("second finger released first / only owner clicks", [&] {
+                reset_scroll();
+                const auto before { uia.status() };
+                touch.down(button);
+                touch.down(pan_start, PEN_FLAG_NONE, 1);
+                touch.move(pan_end, 1);
+                touch.up(pan_end, PEN_FLAG_NONE, 1);
+                no_change(before, true);
+                touch.up(button);
+                const auto after { uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Owner finger click") };
+                require(after["touch_down"] == before["touch_down"].get<int>() + 2, "Second native contact did not arrive");
+                require(after["right"] == before["right"] && after["scroll"] == before["scroll"], "Second contact took over controls");
+            });
+            test("owner released first / remaining finger never takes over", [&] {
+                reset_scroll();
+                const auto before { uia.status() };
+                touch.down(button);
+                touch.down(pan_start, PEN_FLAG_NONE, 1);
+                touch.up(button);
+                const auto released { uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "First finger release") };
+                touch.move(pan_end, 1);
+                touch.up(pan_end, PEN_FLAG_NONE, 1);
+                no_change(released, true);
+            });
+            {
+                const auto before { uia.status() };
+                touch.down(button);
+                static_cast<void>(uia.wait([&](const json& state) { return state["touch_down"] > before["touch_down"]; }, "Touch before mouse takeover"));
+                restore.mouse(window, button, MOUSEEVENTF_LEFTDOWN);
+                restore.mouse(window, button, MOUSEEVENTF_LEFTUP);
+                const auto taken { uia.wait([&](const json& state) { return state["mouse_down"] > before["mouse_down"] && state["left"] > before["left"]; }, "Mouse after touch") };
+                touch.up(button);
+                if (taken["touch_up_at_mouse_down"] > before["touch_up"] && taken["touch_canceled"] == before["touch_canceled"])
+                    skip("touch/mouse overlap: Windows ended synthetic touch normally before delivering mouse DOWN");
+                else
+                    test("touch contact then mouse / touch late UP swallowed", [&] {
+                        no_change(taken, false);
+                        require(taken["left"] == before["left"].get<int>() + 1, "Mouse takeover did not produce exactly one click");
+                    });
+            }
+            {
+                const auto before { uia.status() };
+                touch.down(button);
+                static_cast<void>(uia.wait([&](const json& state) { return state["touch_down"] > before["touch_down"]; }, "Touch before pen takeover"));
+                click(pen, button);
+                const auto taken { uia.wait([&](const json& state) { return state["pen_down"] > before["pen_down"] && state["left"] > before["left"]; }, "Pen after touch") };
+                touch.up(button);
+                if (taken["touch_up_at_pen_down"] > before["touch_up"] && taken["touch_canceled"] == before["touch_canceled"])
+                    skip("touch/pen overlap: Windows ended synthetic touch normally before delivering pen DOWN");
+                else
+                    test("touch contact then pen / only pen clicks", [&] {
+                        no_change(taken, false);
+                        require(taken["left"] == before["left"].get<int>() + 1, "Pen takeover did not produce exactly one click");
+                    });
+            }
+            test("modal covers pending touch / no click or context action", [&] {
+                const auto before { uia.status() };
+                touch.down(button);
+                uia.invoke(L"modal");
+                static_cast<void>(uia.wait([](const json& state) { return state["modal"] == true; }, "Modal appeared"));
+                touch.up(button);
+                no_change(before, false);
+                uia.invoke(L"modal");
+                static_cast<void>(uia.wait([](const json& state) { return state["modal"] == false; }, "Modal dismissed"));
+                click(touch, button);
+                static_cast<void>(uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Touch after modal"));
+            });
+            test("modal covers active touch pan / remaining moves swallowed", [&] {
+                reset_scroll();
+                touch.down(pan_start);
+                touch.move(pan_end);
+                static_cast<void>(uia.wait([](const json& state) { return state["scroll"] > 20.0f; }, "Pan before modal"));
+                uia.invoke(L"modal");
+                const auto blocked { uia.wait([](const json& state) { return state["modal"] == true; }, "Pan modal appeared") };
+                touch.move(pan_start);
+                touch.up(pan_start);
+                no_change(blocked, true);
+                uia.invoke(L"modal");
+                static_cast<void>(uia.wait([](const json& state) { return state["modal"] == false; }, "Pan modal dismissed"));
+            });
             test("pen tip click / native WM_POINTER", [&] {
                 const auto before { uia.status() };
                 click(pen, button);
@@ -577,11 +712,32 @@ namespace luil::testing {
                 const auto after { uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Pen barrel") };
                 require(after["left"] == before["left"], "Barrel also left clicked");
             });
+            test("pen barrel changes during contact / right click only", [&] {
+                const auto before { uia.status() };
+                pen.down(button);
+                pen.move(button, 0, PEN_FLAG_BARREL);
+                pen.up(button, PEN_FLAG_BARREL);
+                const auto after { uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Pen barrel switch") };
+                require(after["left"] == before["left"], "Barrel switch completed old left click");
+            });
             test("pen hover / no action", [&] {
                 const auto before { uia.status() };
                 pen.send(button, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE);
                 static_cast<void>(uia.wait([&](const json& state) { return state["pen_hover"] > before["pen_hover"]; }, "Pen hover delivered"));
                 no_change(before, false);
+            });
+            test("pen hover over text / I-beam without WM_SETCURSOR", [&] {
+                const auto before { uia.status() };
+                const POINT text_point { uia.point(L"text", 0.3) };
+                pen.send(text_point, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE);
+                static_cast<void>(uia.wait([&](const json& state) { return state["pen_hover"] > before["pen_hover"]; }, "Pen hover over text"));
+                settle();
+                CURSORINFO cursor { sizeof(CURSORINFO) };
+                require(GetCursorInfo(&cursor), "Cannot inspect pen hover cursor");
+                require(cursor.hCursor == LoadCursorW(nullptr, IDC_IBEAM),
+                    "Pen hover did not select text cursor at " + std::to_string(text_point.x) + "," + std::to_string(text_point.y) + "; system cursor=" + std::to_string(cursor.ptScreenPos.x) + ","
+                        + std::to_string(cursor.ptScreenPos.y));
+                require(uia.status()["set_cursor"] == before["set_cursor"], "Pen cursor test received WM_SETCURSOR");
             });
             test("pen long hold / ordinary left click", [&] {
                 const auto before { uia.status() };
@@ -632,6 +788,49 @@ namespace luil::testing {
                 restore.mouse(window, pan_end, MOUSEEVENTF_LEFTUP);
                 no_change(before, true);
             });
+            {
+                const auto before { uia.status() };
+                touch.down(button);
+                static_cast<void>(uia.wait([&](const json& state) { return state["touch_down"] > before["touch_down"]; }, "Contact before minimize"));
+                ShowWindow(window, SW_MINIMIZE);
+                require(IsIconic(window), "Fixture did not minimize");
+                settle();
+                ShowWindow(window, SW_RESTORE);
+                uia.activate();
+                activate_window(window);
+                settle();
+                const auto restored { uia.status() };
+                touch.up(button);
+                if (restored["capture_changed"] > before["capture_changed"])
+                {
+                    test("OS pointer capture lost on minimize / late UP swallowed", [&] { no_change(before, false); });
+                    const auto ended { uia.status() };
+                    test("fresh contact after OS capture loss", [&] {
+                        click(touch, button);
+                        static_cast<void>(uia.wait([&](const json& state) { return state["left"] == ended["left"].get<int>() + 1; }, "Touch after capture loss"));
+                    });
+                }
+                else
+                {
+                    ++skipped;
+                    std::cout << "SKIP OS pointer capture loss: minimizing did not generate WM_POINTERCAPTURECHANGED\n";
+                }
+            }
+            {
+                const auto before { uia.status() };
+                touch.down(button);
+                touch.send(button, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT | POINTER_FLAG_CANCELED);
+                touch.up(button);
+                settle();
+                const auto after { uia.status() };
+                if (after["canceled_message"] > before["canceled_message"] || after["touch_canceled"] > before["touch_canceled"])
+                    test("native canceled touch / no click or context action", [&] { no_change(before, false); });
+                else
+                {
+                    ++skipped;
+                    std::cout << "SKIP native cancellation: Windows did not forward the injected CANCELED flag\n";
+                }
+            }
 #if LUIL_POINTER_TEST_WEBVIEW
             static_cast<void>(uia.wait([](const json& state) { return state["web"].value("ready", false); }, "WebView runtime/page readiness", std::chrono::seconds { 20 }));
             const POINT web_point { uia.point(L"web") };
@@ -646,6 +845,25 @@ namespace luil::testing {
             };
             test("WebView touch pointerType / paired down-up", [&] { web_click(touch, "touch"); });
             test("WebView pen pointerType / paired down-up", [&] { web_click(pen, "pen"); });
+            test("WebView modal during touch / terminal event / late UP swallowed", [&] {
+                const auto before { uia.status() };
+                touch.down(web_point);
+                static_cast<void>(uia.wait([&](const json& state) { return state["web"].value("down", 0) == before["web"]["down"].get<int>() + 1; }, "Web contact before modal"));
+                uia.invoke(L"modal");
+                json blocked {};
+                blocked = uia.wait(
+                    [&](const json& state) {
+                        return state["modal"] == true && state["web"].value("up", 0) + state["web"].value("cancel", 0) == before["web"]["up"].get<int>() + before["web"]["cancel"].get<int>() + 1;
+                    },
+                    "Modal terminated WebView contact");
+                touch.up(web_point);
+                settle();
+                require(uia.status()["web"] == blocked["web"], "Late UP leaked into modal-blocked WebView");
+                no_change(before, false);
+                uia.invoke(L"modal");
+                static_cast<void>(uia.wait([](const json& state) { return state["modal"] == false; }, "Dismiss web modal"));
+                web_click(touch, "touch");
+            });
             test("WebView hide during touch / terminal event / late UP swallowed", [&] {
                 const auto before { uia.status() };
                 touch.down(web_point);
@@ -666,10 +884,41 @@ namespace luil::testing {
                 static_cast<void>(uia.wait([](const json& state) { return state["web_visible"] == true; }, "Restore WebView"));
                 web_click(touch, "touch");
             });
+            {
+                const auto before { uia.status() };
+                const POINT first { uia.point(L"web", 0.25) };
+                const POINT second { uia.point(L"web", 0.75) };
+                touch.down(first);
+                touch.down(second, PEN_FLAG_NONE, 1);
+                const auto deadline { clock::now() + std::chrono::seconds { 1 } };
+                json during {};
+                do
+                {
+                    during = uia.status();
+                    if (during["touch_down"] >= before["touch_down"].get<int>() + 2)
+                        break;
+                    touch.move(second, 1);
+                } while (clock::now() < deadline);
+                touch.up(first);
+                touch.up(second, PEN_FLAG_NONE, 1);
+                if (during["touch_down"] != before["touch_down"].get<int>() + 2 || during["native_touch_frame"].size() != 2)
+                    skip("WebView multi-touch: injection did not reach host as exactly two native DOWNs; verify with physical fingers");
+                else
+                    test("WebView two simultaneous contacts / paired terminal events", [&] {
+                        json after {};
+                        after = uia.wait(
+                            [&](const json& state) {
+                                return state["web"].value("down", 0) == before["web"]["down"].get<int>() + 2
+                                    && state["web"].value("up", 0) + state["web"].value("cancel", 0) == before["web"]["up"].get<int>() + before["web"]["cancel"].get<int>() + 2;
+                            },
+                            "Web multi-touch");
+                        require(after["web"]["orphan"] == 0 && after["web"]["type"] == "touch", "Web multi-touch identity/sequence mismatch");
+                    });
+            }
 #else
             std::cout << "SKIP WebView coverage: LUIL_ENABLE_WEBVIEW=OFF\n";
 #endif
-            std::cout << passed << " native pointer integration scenarios passed\n";
+            std::cout << passed << " native pointer integration scenarios passed; " << skipped << " native probes skipped\n";
             return 0;
         }
     } // namespace
