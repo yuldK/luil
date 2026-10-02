@@ -3,6 +3,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/ui_platform.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -125,6 +126,9 @@ namespace luil {
     {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
+        // 창 caption이 없는 플랫폼에서는 높이가 0이다. 그리지 않는다.
+        if (box.height <= 0.0f)
+            return;
         const SkPaint fill { solid_paint(context.palette.caption.background) };
         context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), fill);
 
@@ -149,8 +153,12 @@ namespace luil {
         draw_children(context, interaction);
     }
 
+    // 창 caption이 없는 플랫폼(모바일)에서는 0이다. 앱이 caption을 넣어도 자리를 차지하지 않고,
+    // 버튼도 크기 0으로 놓여 눌리지 않는다. 모바일의 맨 위는 앱 바(app_bar_element)의 자리다.
     float caption_element::height_for(const caption_config& config) noexcept
     {
+        if (current_ui_platform().window_caption == false)
+            return 0.0f;
         return static_cast<float>(config.metrics.height);
     }
 

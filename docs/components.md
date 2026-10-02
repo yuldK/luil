@@ -41,6 +41,8 @@
 | 드롭다운 | `dropdown_element` | [ui/dropdown_element.h](../include/luil/ui/dropdown_element.h) | [설명](popup-overlay-design.md) |
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |
 | 창 캡션 | `caption_element` | [ui/caption_element.h](../include/luil/ui/caption_element.h) | [설명](caption-button-design.md) |
+| 모바일 앱 바 | `app_bar_element` | [ui/app_bar_element.h](../include/luil/ui/app_bar_element.h) | [설명](app-bar-design.md) |
+| 플랫폼 성질 | `ui_platform`, `current_ui_platform` | [ui/ui_platform.h](../include/luil/ui/ui_platform.h) | [설명](app-bar-design.md) |
 | 알림과 만료 | `toast_stack_element` | [ui/toast_element.h](../include/luil/ui/toast_element.h) | [설명](concepts/ui-element.md) |
 | 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
 | 이미지 파일·바이트 디코딩 | `load_image_file`, `decode_image_bytes`, `decode_animated_image_bytes` | [ui/image_decode.h](../include/luil/ui/image_decode.h) | [설명](image-decode-design.md) |

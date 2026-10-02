@@ -102,6 +102,8 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/ui_element.cpp
     "${public_headers}/ui/ui_element.h"
     "${public_headers}/ui/ui_element_id.h"
+    ui/ui_platform.cpp
+    "${public_headers}/ui/ui_platform.h"
     ui/ui_tree.cpp
     "${public_headers}/ui/ui_tree.h")
 
@@ -204,8 +206,11 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     ui/toast_element.cpp
     "${public_headers}/ui/toast_element.h")
 
-# 직접 그리는 창 캡션이다. 치수는 win32의 비클라이언트 hit test와 나눠 쓴다.
+# 화면 맨 위의 막대다. 데스크톱은 직접 그리는 창 캡션(치수는 win32의 비클라이언트
+# hit test와 나눠 쓴다), 모바일은 앱 바다.
 luil_add_source_filter(luil_core_files "ui/caption"
+    ui/app_bar_element.cpp
+    "${public_headers}/ui/app_bar_element.h"
     ui/caption_element.cpp
     "${public_headers}/ui/caption_element.h"
     "${public_headers}/ui/caption_metrics.h")

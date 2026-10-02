@@ -23,6 +23,7 @@
 
 // view 무관 UI element 계층이다.
 #include "luil/ui/accessibility.h"
+#include "luil/ui/app_bar_element.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/badge_element.h"
 #include "luil/ui/button_element.h"
@@ -63,6 +64,7 @@
 #include "luil/ui/ui_element_id.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/ui/virtual_list_element.h"
 #include "luil/ui/webview_element.h"

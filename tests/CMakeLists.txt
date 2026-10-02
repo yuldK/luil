@@ -6,6 +6,7 @@ include(Catch)
 # 실행 파일 resource가 필요한 test는 아래 luil_tests에 둔다.
 add_executable(luil_core_tests
     accessibility_tests.cpp
+    app_bar_element_tests.cpp
     app_host_tests.cpp
     badge_element_tests.cpp
     button_element_tests.cpp

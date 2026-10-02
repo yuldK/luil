@@ -7,6 +7,7 @@
 #include "host/skia_renderer.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/ui_platform.h"
 
 #include "include/core/SkTypeface.h"
 
@@ -212,6 +213,9 @@ namespace luil::android {
 
                 // 글꼴 registry가 첫 조회 때 한 번 읽는다. 무엇보다 먼저 넣는다.
                 set_user_language(read_language(app_->config));
+                // 휴대폰·태블릿이다. 창 caption이 없고 맨 위는 앱 바의 자리다.
+                // logic thread가 첫 frame을 짓기 전에 정한다.
+                set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false });
                 prefers_light_ = read_prefers_light(app_->config);
                 scale_ = read_scale(app_->config);
                 set_font_fallback(&font_resolver_);

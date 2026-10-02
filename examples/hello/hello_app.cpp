@@ -60,12 +60,25 @@ namespace hello {
         auto root { std::make_unique<luil::root_element>() };
         root->arrange({ { 0.0f, 0.0f, width, height }, scale });
 
-        // 2) custom caption. 높이는 height_for가 알려 준다 (논리 픽셀 → 배율 곱).
+        // 2) 맨 위 막대. 데스크톱은 custom caption, 모바일은 앱 바다.
+        //    어느 쪽인지는 플랫폼이 알려 준다. 높이는 height_for가 알려 준다 (논리 픽셀 → 배율 곱).
         const luil::caption_config caption_config { make_caption() };
-        const float caption_height { luil::caption_element::height_for(caption_config) * scale };
-        auto caption { std::make_unique<luil::caption_element>(caption_config) };
-        caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
-        root->add(std::move(caption));
+        float caption_height { 0.0f };
+        if (luil::current_ui_platform().window_caption)
+        {
+            caption_height = luil::caption_element::height_for(caption_config) * scale;
+            auto caption { std::make_unique<luil::caption_element>(caption_config) };
+            caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+            root->add(std::move(caption));
+        }
+        else
+        {
+            const luil::app_bar_config app_bar_config { .title = caption_config.title };
+            caption_height = luil::app_bar_element::height_for(app_bar_config) * scale;
+            auto app_bar { std::make_unique<luil::app_bar_element>(app_bar_config) };
+            app_bar->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+            root->add(std::move(app_bar));
+        }
 
         // 3) 내용: 세로 stack에 라벨과 버튼을 쌓는다.
         //    stack의 길이 인자는 논리 픽셀이고 배율은 stack의 arrange가 곱한다.

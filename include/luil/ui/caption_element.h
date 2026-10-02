@@ -40,6 +40,7 @@ namespace luil {
         [[nodiscard]] access_info accessibility() const override;
 
         // 이 설정으로 캡션이 차지할 높이다 (논리 픽셀).
+        // 창 caption이 없는 플랫폼(`current_ui_platform().window_caption`이 거짓)에서는 0이다.
         // 캡션 아래 배치를 계산하는 호출자가 쓴다 — 높이를 알아내려고
         // 캡션을 미리 arrange해 보는 우회가 필요 없다.
         [[nodiscard]] static float height_for(const caption_config& config) noexcept;
