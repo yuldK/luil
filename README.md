@@ -91,16 +91,17 @@ Release 테스트에는 messaging의 AddressSanitizer 검증이 포함된다.
 검증한다. 일반 `ctest`에는 포함하지 않으며, 전용 대화형 Windows 환경에서 명시적으로
 실행한다. 빌드·실행 방법과 검증 범위는 [터치·펜 입력 설계](docs/touch-pen-input-design.md#uia와-네이티브-입력-자동화의-역할)를 참조한다.
 
-플랫폼을 모르는 층(`luil_core`)은 Android arm64에서도 세우고, 그 test를 adb로
-연결한 기기에서 돌린다. NDK r27d와 Ninja가 필요하다
+Android arm64에서도 세운다. core test는 adb로 연결한 기기에서 돌고, 예제는 Gradle이
+APK로 싼다. Android Studio(SDK·JBR), NDK r27d, Ninja가 필요하다
 ([빌드 체계](docs/concepts/build-system.md#android)).
 
 ```powershell
 scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
-$env:ANDROID_NDK_HOME = "<NDK r27d 경로>"
-cmake --preset android-arm64-core -DCMAKE_MAKE_PROGRAM="<ninja.exe 경로>"
-cmake --build --preset android-arm64-core-release
-ctest --preset android-arm64-core-release
+scripts\fetch_game_activity.ps1
+$env:ANDROID_NDK_HOME = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.3.13750724"
+cmake --preset android-arm64 -DCMAKE_MAKE_PROGRAM="<ninja.exe 경로>"
+cmake --build --preset android-arm64-release
+ctest --preset android-arm64-release
 ```
 
 ## 문서

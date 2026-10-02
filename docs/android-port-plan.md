@@ -568,7 +568,7 @@ Windows는 지금의 HWND 방식 그대로다. 이 일은 core의 hit test 경�
 | 1. 공개 host API | (a) `luil/app/`, 네임스페이스 `luil`로 옮기고, 옛 경로는 전달 헤더와 `using` 별칭으로 한 판 유지한다 |
 | 2. 앱 호스트·IME·패키징 | (a) GameActivity, GameTextInput, Gradle |
 | 3. 네트워크층 | (b) OS 스택을 JNI로 (`HttpURLConnection`) |
-| 4. 도구 설치 | (a) Windows에 설치. 받기 전에 크기를 알리고 다시 묻는다 |
+| 4. 도구 설치 | (a) Windows에 설치. 받기 전에 크기를 알리고 다시 묻는다. 3단계에서 고쳤다: JDK를 따로 설치하지 않고 Android Studio를 설치해 그 SDK와 JBR을 쓴다 |
 | 5. 기기 테스트 | (a) CTest + adb 래퍼 |
 | 6. `renderer_mode` | (a) `gpu`를 더한다 |
 
@@ -613,7 +613,7 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 
 | 선택지 | 받을 것 |
 | --- | --- |
-| (a) Windows에 설치 (추천) | 2단계: Windows용 NDK r27d (풀면 수 GB. 정확한 크기는 받기 전에 확인해 알린다). 3단계부터: Android SDK command-line tools, platform `android-35`, build-tools, JDK 17. Gradle은 wrapper가 받는다. Ninja는 Visual Studio에 딸린 것을 쓰거나 따로 받는다. |
+| (a) Windows에 설치 (추천) | 2단계: Windows용 NDK r27d (풀면 수 GB. 정확한 크기는 받기 전에 확인해 알린다). 3단계부터: Android SDK command-line tools, platform `android-37`, build-tools, JDK 17 (3단계에서 JDK 대신 Android Studio의 JBR로 바꿨다). Gradle은 wrapper가 받는다. Ninja는 Visual Studio에 딸린 것을 쓰거나 따로 받는다. |
 | (b) WSL에서 빌드 | NDK는 이미 있다. WSL에 cmake 4.2와 ninja를 설치한다. pwsh 스크립트(`fetch_skia.ps1`, 스타일 검사)를 WSL에서 부르려면 pwsh도 필요하다. adb는 Windows 것을 부른다. |
 
 **결정 5 — 기기에서 테스트 돌리는 방식** (2단계)
@@ -710,10 +710,63 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 - 기기 실행 래퍼는 pwsh가 아니라 CMake script다. Android 구성에서 Windows 도구를 요구하지 않는다.
 - Android 패키지는 skia-prep 빌드 폴더의 같은 sha256 zip으로 `-Offline` 설치했다. 내려받지 않았다.
 - NDK r27d(Windows)는 승인을 받아 `%LOCALAPPDATA%\Android\ndk\27.3.13750724`에 설치했다.
+  3단계에서 Android Studio의 SDK 아래(`Sdk\ndk\27.3.13750724`)로 옮겼다. Gradle이 `ndkVersion`으로 찾는 자리다.
   받은 zip의 SHA-1은 Google 저장소 목록의 값(`56607cbc…f426`)과 같았다.
 
 **3단계로 넘기는 것.**
 
-- Android SDK command-line tools, platform `android-35`, build-tools, JDK 17이 필요하다 (결정 4). 받기 전에 묻는다.
+- Android SDK command-line tools, platform, build-tools, JDK가 필요하다 (결정 4). 받기 전에 묻는다.
+  (3단계에서 Android Studio로 정했고 platform은 `android-37`이다. 아래 "3단계 결과".)
 - Android 구성은 아직 `luil` 플랫폼 대상을 세우지 않는다. 3단계에서 `src/android/`가 그 자리에 들어온다.
 
+## 3단계 결과
+
+2026-10-02에 끝냈다. 브랜치는 `android-port`이고 커밋은 로컬에만 있다.
+
+| 커밋 | 내용 |
+| --- | --- |
+| `35daf83` | GameActivity 4.4.2 핀과 `fetch_game_activity.ps1`, CMake의 `luil::game_activity` |
+| `e11955d` | 앱 delegate의 플랫폼 중립 부분을 `app_delegate`로. `win32::window_delegate`가 상속하고 수명 주기 메시지를 더함 |
+| `e7d00e5` | Android 앱 host(`luil::android::run_application`), CPU 렌더러, Android 글꼴, 내장 codicon, `frame_state`의 원점 |
+| `c311dcf` | hello를 Android APK로 (CMake 공유 라이브러리 + Gradle 포장) |
+| `5b1dd20` | 모바일 앱 바와 플랫폼 성질 (`app_bar_element`, `ui_platform`). 데스크톱 caption은 모바일에서 자리를 차지하지 않음 |
+
+**기기 검증.** Galaxy S22 Ultra(Android 14)에서 확인했다.
+
+- hello가 한글, codicon, 어두운 테마로 그려지고, 내용은 시스템 막대·컷아웃을 뺀 안전 영역에서
+  시작한다. 막대 밑까지 앱 배경색이다 (스크린샷 픽셀로 확인).
+- 회전 10회, 홈으로 나갔다 돌아오기 10회, 화면 끄고 켜기를 같은 프로세스로 견딘다. 가로에서는
+  컷아웃 쪽 inset이 왼쪽으로 옮겨 온다.
+- 뒤로 가기로 끝내면 `shutdown()`이 1ms에 끝나고, 같은 프로세스에서 다시 띄워도 바로 선다.
+- 기기 core test가 Release·Debug 각 510개(앱 바 커밋 뒤 514개) 통과한다.
+- logcat의 오류는 홈으로 나갈 때마다 시스템이 남기는 `BufferQueueProducer ... disconnect: not
+  connected (req=2)` 한 줄뿐이다. CPU로 잠갔던 표면을 시스템이 거둘 때의 순서에서 나오는 것으로
+  보이며 동작에는 영향이 없다. 4단계에서 Vulkan 경로와 함께 다시 본다.
+
+**정한 것.**
+
+- 도구: JDK를 따로 설치하지 않고 Android Studio의 SDK와 JBR을 쓴다. Gradle은 그 JBR로 돌리고
+  시스템 `JAVA_HOME`은 바꾸지 않는다. `compileSdk`·`targetSdk`는 37, `minSdk`는 26이다.
+- GameActivity의 네이티브 절반은 AAR의 미리 빌드된 정적 라이브러리를 luil의 CMake가 직접 링크한다.
+  `abi.json`은 c++_shared·NDK 23으로 적혀 있지만, c++_static·r27d로 링크해 미해결 기호와
+  `libc++_shared.so` 의존이 없는 것을 먼저 확인했다. Java 절반은 같은 핀에서 판번을 읽는다.
+- APK는 Gradle(AGP 9.4.1, Gradle 9.8.0)이 싸지만 네이티브 라이브러리는 luil의 CMake가 세운다.
+  luil 라이브러리는 Gradle 없이 CMake만으로 선다.
+- codicon 글꼴은 빌드가 바이트 배열로 만들어 라이브러리에 싣는다. 소비자가 APK assets에 넣는
+  단계가 없다.
+- 안전 영역은 host가 비킨다. 앱에는 안전 영역의 크기를 알리고, `frame_state`의 원점으로 tree를
+  옮겨 그리며, 배경은 표면 전체에 칠한다. 테마가 시스템 막대 배경을 투명으로 둔다.
+- 모바일에는 데스크톱 caption이 맞지 않는다는 의견을 받아, 플랫폼 성질(`ui_platform`)과 모바일
+  앱 바(`app_bar_element`)를 더했다 ([모바일 앱 바](app-bar-design.md)).
+
+**다음 단계로 넘기는 것.**
+
+- 밝은 테마에서 상태 표시줄 아이콘을 어둡게 바꾸는 일(`WindowInsetsController`, JNI)은 아직 없다.
+  지금은 어두운 테마에서만 막대 아이콘이 맞는 색이다.
+- 고대비와 시스템 accent(Android 12의 동적 색)는 읽지 않는다.
+- 언어를 바꾸면 Activity가 다시 만들어진다(`locale`을 `configChanges`에 넣지 않았다). 글꼴
+  registry의 언어는 프로세스에서 한 번만 읽으므로, 같은 프로세스에서 언어를 바꾸면 대체 글꼴이
+  옛 언어로 골린다.
+- 입력은 비우기만 한다 (5단계). 뒤로 가기만 Activity에 남겨 앱을 끝낸다.
+- 예제의 서명은 Gradle의 debug keystore(`%USERPROFILE%\.android\debug.keystore`, 첫 빌드가 만든다)다.
+  배포 서명은 8단계다.
