@@ -110,7 +110,7 @@ namespace luil {
 
         const float button_width { static_cast<float>(config_.metrics.button_width) * scale };
         float edge { context.slot.x + context.slot.width };
-        const auto place = [&edge, &context, button_width, caption_height, scale](ui_element* const button) {
+        const auto place = [&edge, &context, button_width, caption_height](ui_element* const button) {
             if (button == nullptr)
                 return;
             edge -= button_width;
