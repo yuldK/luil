@@ -22,4 +22,16 @@ luil_add_android_example(hello
         ../hello/hello_app.cpp
         ../hello/hello_app.h)
 
-luil_set_ide_folder("Examples" luil_hello)
+# widgets — 섹션 파일과 앱 골격은 Windows와 같은 파일이다.
+luil_add_android_example(widgets
+    SOURCES
+        ../widgets/android_main.cpp
+        ../widgets/app.cpp
+        ../widgets/app.h
+        ../widgets/choices_section.cpp
+        ../widgets/controls_section.cpp
+        ../widgets/inputs_section.cpp
+        ../widgets/status_section.cpp
+        ../widgets/toasts_section.cpp)
+
+luil_set_ide_folder("Examples" luil_hello luil_widgets)

@@ -71,11 +71,11 @@ NDK 경로와 Ninja 위치는 사람마다 다르므로 저장소의 preset에 �
 
 ### 예제 APK
 
-예제의 네이티브 절반은 luil의 CMake가 공유 라이브러리(`luil_<예제>`)로 세워 `<빌드>/jniLibs/<예제>/<구성>/arm64-v8a`에 둔다. [`examples/android`](../../examples/android/)의 Gradle 프로젝트는 그것을 GameActivity의 Java 절반과 함께 APK로 싸고 서명만 한다. 앱 쪽 Java 코드는 없다. 예제끼리는 이름과 네이티브 라이브러리만 다르므로 `app` 모듈 하나에 예제마다 flavor(`hello`)를 둔다. Gradle은 Android Studio의 JBR로 돌리며, 시스템의 `JAVA_HOME`을 바꿀 필요는 없다. `examples/android/local.properties`(Git에서 빠진다)에 `sdk.dir`을 적는다.
+예제의 네이티브 절반은 luil의 CMake가 공유 라이브러리(`luil_<예제>`)로 세워 `<빌드>/jniLibs/<예제>/<구성>/arm64-v8a`에 둔다. [`examples/android`](../../examples/android/)의 Gradle 프로젝트는 그것을 GameActivity의 Java 절반과 함께 APK로 싸고 서명만 한다. 앱 쪽 Java 코드는 없다. 예제끼리는 이름과 네이티브 라이브러리만 다르므로 `app` 모듈 하나에 예제마다 flavor(`hello`, `widgets`)를 둔다. Gradle은 Android Studio의 JBR로 돌리며, 시스템의 `JAVA_HOME`을 바꿀 필요는 없다. `examples/android/local.properties`(Git에서 빠진다)에 `sdk.dir`을 적는다.
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-examples\android\gradlew.bat -p examples\android :app:assembleHelloDebug
+examples\android\gradlew.bat -p examples\android :app:assembleHelloDebug :app:assembleWidgetsDebug
 adb install -r examples\android\app\build\outputs\apk\hello\debug\app-hello-debug.apk
 adb shell am start -n io.github.yuldk.luil.hello/com.google.androidgamesdk.GameActivity
 ```

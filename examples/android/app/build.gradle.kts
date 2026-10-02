@@ -24,6 +24,7 @@ val vulkanLayerDirectory = providers.gradleProperty("luil.vulkanLayerDirectory")
 // target 이름이다 (examples/android/CMakeLists.txt).
 val examples = mapOf(
     "hello" to "luil hello",
+    "widgets" to "luil widgets",
 )
 
 android {
