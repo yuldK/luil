@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace luil::win32 {
+namespace luil {
     // popup 하나의 자리다 (물리 픽셀, 앵커 표면 client 기준).
     struct popup_placement
     {
@@ -98,4 +98,4 @@ namespace luil::win32 {
     // popup 왼쪽 위 좌표를 영역 안으로 민다.
     // popup이 영역보다 크면 왼쪽 위를 맞춰 시작 부분이 보이게 한다.
     [[nodiscard]] std::pair<int, int> clamp_popup_position(int x, int y, int width, int height, const screen_area& area) noexcept;
-} // namespace luil::win32
+} // namespace luil

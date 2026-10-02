@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace luil::win32 {
+namespace luil {
     // 표면 하나가 지금 그리고 있는 그림과 새 frame이 그 표면에 실은 그림이다.
     //
     // tree를 **주소로만** 잡는 이유는 게시된 tree가 불변이기 때문이다. 같은
@@ -76,4 +76,4 @@ namespace luil::win32 {
     // 시각은 그 시각을 확실히 지나도록 살짝 늦춘다. 상한이 지연을 줄이더라도
     // 가장 이른 예고를 답한 표면은 반드시 든다.
     [[nodiscard]] update_timer_plan plan_update_timer(std::span<const surface_update_deadline> deadlines, std::chrono::steady_clock::time_point now, std::chrono::milliseconds repaint_interval);
-} // namespace luil::win32
+} // namespace luil

@@ -12,6 +12,7 @@ endif()
 
 # core를 이루는 디렉터리다. src/CMakeLists.txt의 luil_core_files와 같은 범위다.
 set(core_directories
+    "${SOURCE_DIRECTORY}/host"
     "${SOURCE_DIRECTORY}/luil"
     "${SOURCE_DIRECTORY}/text"
     "${SOURCE_DIRECTORY}/theme"

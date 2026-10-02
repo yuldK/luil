@@ -1,6 +1,6 @@
-#include "win32/popup_reconcile.h"
+#include "host/popup_reconcile.h"
 
-namespace luil::win32 {
+namespace luil {
     namespace {
         [[nodiscard]] const popup_placement* find_by_id(const std::span<const popup_placement> placements, const std::u8string& id)
         {
@@ -105,4 +105,4 @@ namespace luil::win32 {
             y = area.top;
         return { x, y };
     }
-} // namespace luil::win32
+} // namespace luil

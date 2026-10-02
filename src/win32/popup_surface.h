@@ -1,7 +1,7 @@
 #pragma once
 
+#include "host/popup_reconcile.h"
 #include "win32/popup_dismiss.h"
-#include "win32/popup_reconcile.h"
 #include "win32/window_surface.h"
 
 #include <functional>

@@ -210,6 +210,16 @@ luil_add_source_filter(luil_core_files "ui/caption"
     "${public_headers}/ui/caption_element.h"
     "${public_headers}/ui/caption_metrics.h")
 
+# host: 플랫폼 host가 함께 쓰는 순수 계산이다.
+# 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
+# (popup·웹뷰 자리 대조, 다시 그릴 표면과 timer 계획, GPU fence 대기 예산).
+luil_add_source_filter(luil_core_files "host"
+    host/fence_wait.h
+    host/popup_reconcile.cpp
+    host/popup_reconcile.h
+    host/surface_invalidate.cpp
+    host/surface_invalidate.h)
+
 # 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.
 luil_add_source_filter(luil_files "umbrella"
     "${public_headers}/luil.h")
@@ -241,7 +251,6 @@ luil_add_source_filter(luil_files "win32/renderer"
     win32/composition_device.h
     win32/cpu_skia_renderer.cpp
     "${luil_direct3d_renderer_source}"
-    win32/fence_wait.h
     win32/renderer_policy.cpp
     "${public_headers}/win32/renderer_policy.h"
     win32/skia_renderer.cpp
@@ -260,8 +269,6 @@ luil_add_source_filter(luil_files "win32/surface"
     win32/dpi_scale.h
     win32/secondary_surface.cpp
     win32/secondary_surface.h
-    win32/surface_invalidate.cpp
-    win32/surface_invalidate.h
     "${luil_webview_host_source}"
     win32/webview_host.h
     win32/webview_layout.cpp
@@ -284,8 +291,6 @@ luil_add_source_filter(luil_files "win32/caption"
 luil_add_source_filter(luil_files "win32/popup"
     win32/popup_dismiss.cpp
     win32/popup_dismiss.h
-    win32/popup_reconcile.cpp
-    win32/popup_reconcile.h
     win32/popup_surface.cpp
     win32/popup_surface.h)
 

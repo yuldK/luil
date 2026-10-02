@@ -1,8 +1,8 @@
-#include "win32/surface_invalidate.h"
+#include "host/surface_invalidate.h"
 
 #include <algorithm>
 
-namespace luil::win32 {
+namespace luil {
     namespace {
         // 예고한 시각을 확실히 지나 있도록 더하는 여유다.
         // timer는 밀리초 단위로 잘려 오므로, 여유 없이 깨우면 element가
@@ -50,4 +50,4 @@ namespace luil::win32 {
                 plan.wake.push_back(deadline.surface);
         return plan;
     }
-} // namespace luil::win32
+} // namespace luil

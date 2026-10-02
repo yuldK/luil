@@ -86,4 +86,4 @@ Popup은 앵커의 활성화 상태를 공유하지만 닫힘 여부는 `dismiss
 
 [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 생성, 이동, 파괴, anchor 변경, 0 크기를 검증한다. [window_position_tests.cpp](../tests/window_position_tests.cpp)와 Win32 surface test는 DPI 변환과 작업 영역 조정을 확인한다.
 
-Reconcile 구현은 [popup_reconcile.cpp](../src/win32/popup_reconcile.cpp), 실제 표면은 [popup_surface.cpp](../src/win32/popup_surface.cpp), frame 조립은 [win32_window.cpp](../src/win32/win32_window.cpp)에 있다.
+Reconcile 구현은 [popup_reconcile.cpp](../src/host/popup_reconcile.cpp), 실제 표면은 [popup_surface.cpp](../src/win32/popup_surface.cpp), frame 조립은 [win32_window.cpp](../src/win32/win32_window.cpp)에 있다.

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace luil::win32 {
+namespace luil {
     // GPU fence 대기의 시간 계획이다 (밀리초).
     //
     // 무기한 대기는 render의 모든 오류 처리보다 앞에 선 단일 관문이라, driver가
@@ -28,4 +28,4 @@ namespace luil::win32 {
             return 0;
         return std::min(slice_ms, budget_ms - waited_ms);
     }
-} // namespace luil::win32
+} // namespace luil

@@ -225,13 +225,13 @@ TEST_CASE("The frame decorations follow the window mode", "[win32][window-mode]"
 TEST_CASE("Fullscreen targets the whole monitor", "[win32][window-mode]")
 {
     // 작업 표시줄을 뺀 rcWork가 아니라 rcMonitor 전체다.
-    const luil::win32::screen_area monitor { -1920, 0, 0, 1080 };
+    const luil::screen_area monitor { -1920, 0, 0, 1080 };
     const luil::win32::window_bounds bounds { luil::win32::fullscreen_bounds_for(monitor) };
     // 괄호 한 겹은 전처리기의 몫이다 — 중괄호 안의 쉼표는 매크로 인자를 가르지 못한다.
     REQUIRE((bounds == luil::win32::window_bounds { -1920, 0, 1920, 1080 }));
 
     // 뒤집힌 사각형은 크기 0으로 접는다 (창을 만들 수 없는 값을 넘기지 않는다).
-    const luil::win32::window_bounds folded { luil::win32::fullscreen_bounds_for(luil::win32::screen_area { 10, 10, 0, 0 }) };
+    const luil::win32::window_bounds folded { luil::win32::fullscreen_bounds_for(luil::screen_area { 10, 10, 0, 0 }) };
     REQUIRE((folded == luil::win32::window_bounds { 10, 10, 0, 0 }));
 }
 

@@ -1,4 +1,4 @@
-#include "win32/surface_invalidate.h"
+#include "host/surface_invalidate.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -8,8 +8,8 @@
 #include <vector>
 
 namespace {
-    using luil::win32::surface_content;
-    using luil::win32::surface_update_deadline;
+    using luil::surface_content;
+    using luil::surface_update_deadline;
 
     // 시계를 읽지 않고 세운 기준 시각이다.
     // 예고를 앞뒤로 옮겨도 음수가 되지 않게 넉넉히 잡는다.
@@ -31,7 +31,7 @@ TEST_CASE("A surface that keeps the same tree is not repainted", "[win32][render
     const std::vector<surface_content> surfaces {
         { u8"tools", &first_tree, &first_tree },
     };
-    REQUIRE(luil::win32::surfaces_to_repaint(surfaces, false).empty());
+    REQUIRE(luil::surfaces_to_repaint(surfaces, false).empty());
 }
 
 TEST_CASE("Only the surface whose tree changed is repainted", "[win32][render]")
@@ -42,7 +42,7 @@ TEST_CASE("Only the surface whose tree changed is repainted", "[win32][render]")
         { u8"tools", &second_tree, &third_tree },
         { u8"log", &third_tree, &third_tree },
     };
-    REQUIRE(luil::win32::surfaces_to_repaint(surfaces, false) == std::vector<std::u8string> { u8"tools" });
+    REQUIRE(luil::surfaces_to_repaint(surfaces, false) == std::vector<std::u8string> { u8"tools" });
 }
 
 TEST_CASE("A surface that has nothing yet is repainted", "[win32][render]")
@@ -52,7 +52,7 @@ TEST_CASE("A surface that has nothing yet is repainted", "[win32][render]")
     const std::vector<surface_content> surfaces {
         { u8"tools", nullptr, &first_tree },
     };
-    REQUIRE(luil::win32::surfaces_to_repaint(surfaces, false) == std::vector<std::u8string> { u8"tools" });
+    REQUIRE(luil::surfaces_to_repaint(surfaces, false) == std::vector<std::u8string> { u8"tools" });
 }
 
 TEST_CASE("A surface that lost its tree is repainted", "[win32][render]")
@@ -62,7 +62,7 @@ TEST_CASE("A surface that lost its tree is repainted", "[win32][render]")
     const std::vector<surface_content> surfaces {
         { u8"tools", &first_tree, nullptr },
     };
-    REQUIRE(luil::win32::surfaces_to_repaint(surfaces, false) == std::vector<std::u8string> { u8"tools" });
+    REQUIRE(luil::surfaces_to_repaint(surfaces, false) == std::vector<std::u8string> { u8"tools" });
 }
 
 TEST_CASE("An interaction change repaints every surface", "[win32][render]")
@@ -77,10 +77,10 @@ TEST_CASE("An interaction change repaints every surface", "[win32][render]")
         { u8"tools", &second_tree, &second_tree },
         { u8"menu", &third_tree, &third_tree },
     };
-    REQUIRE(luil::win32::surfaces_to_repaint(surfaces, false).empty());
+    REQUIRE(luil::surfaces_to_repaint(surfaces, false).empty());
 
     const std::vector<std::u8string> everything { std::u8string {}, u8"tools", u8"menu" };
-    REQUIRE(luil::win32::surfaces_to_repaint(surfaces, true) == everything);
+    REQUIRE(luil::surfaces_to_repaint(surfaces, true) == everything);
 }
 
 TEST_CASE("Only the surfaces that answered next_update are woken", "[win32][render]")
@@ -93,7 +93,7 @@ TEST_CASE("Only the surfaces that answered next_update are woken", "[win32][rend
         { u8"log", std::nullopt },
     };
 
-    const auto plan { luil::win32::plan_update_timer(deadlines, base, continuous) };
+    const auto plan { luil::plan_update_timer(deadlines, base, continuous) };
     REQUIRE(plan.armed);
     // "지금 이하"의 예고는 연속 애니메이션이라 짧은 주기로 잇는다.
     REQUIRE(plan.delay_milliseconds == 33u);
@@ -109,7 +109,7 @@ TEST_CASE("A surface whose moment is still far off is left asleep", "[win32][ren
         { u8"tools", base },
     };
 
-    const auto plan { luil::win32::plan_update_timer(deadlines, base, continuous) };
+    const auto plan { luil::plan_update_timer(deadlines, base, continuous) };
     REQUIRE(plan.delay_milliseconds == 33u);
     REQUIRE(plan.wake == std::vector<std::u8string> { u8"tools" });
 }
@@ -123,7 +123,7 @@ TEST_CASE("Surfaces that come due within the same tick wake together", "[win32][
         { u8"tools", base },
     };
 
-    const auto plan { luil::win32::plan_update_timer(deadlines, base, continuous) };
+    const auto plan { luil::plan_update_timer(deadlines, base, continuous) };
     REQUIRE(plan.delay_milliseconds == 33u);
 
     const std::vector<std::u8string> both { std::u8string {}, u8"tools" };
@@ -136,7 +136,7 @@ TEST_CASE("A future moment is announced with slack past it", "[win32][render]")
         { u8"tools", base + std::chrono::milliseconds { 500 } },
     };
 
-    const auto plan { luil::win32::plan_update_timer(deadlines, base, continuous) };
+    const auto plan { luil::plan_update_timer(deadlines, base, continuous) };
     REQUIRE(plan.armed);
     // 그 시각을 확실히 지나도록 살짝 늦춘다.
     // 여유 없이 깨우면 element가 "아직 아니다"라며 같은 시각을 다시 예고한다.
@@ -152,7 +152,7 @@ TEST_CASE("A moment that already passed still wakes its surface", "[win32][rende
         { u8"tools", base - std::chrono::milliseconds { 200 } },
     };
 
-    const auto plan { luil::win32::plan_update_timer(deadlines, base, continuous) };
+    const auto plan { luil::plan_update_timer(deadlines, base, continuous) };
     REQUIRE(plan.delay_milliseconds == 33u);
     REQUIRE(plan.wake == std::vector<std::u8string> { u8"tools" });
 }
@@ -166,9 +166,9 @@ TEST_CASE("A very distant moment is capped and still wakes its surface", "[win32
         { u8"tools", base + std::chrono::hours { 24 * 365 } },
     };
 
-    const auto plan { luil::win32::plan_update_timer(deadlines, base, continuous) };
+    const auto plan { luil::plan_update_timer(deadlines, base, continuous) };
     REQUIRE(plan.armed);
-    REQUIRE(plan.delay_milliseconds == luil::win32::maximum_update_timer_delay);
+    REQUIRE(plan.delay_milliseconds == luil::maximum_update_timer_delay);
     REQUIRE(plan.wake == std::vector<std::u8string> { u8"tools" });
 }
 
@@ -180,8 +180,8 @@ TEST_CASE("No announced moment disarms the timer", "[win32][render]")
         { u8"tools", std::nullopt },
     };
 
-    const auto plan { luil::win32::plan_update_timer(deadlines, base, continuous) };
+    const auto plan { luil::plan_update_timer(deadlines, base, continuous) };
     REQUIRE(plan.armed == false);
     REQUIRE(plan.wake.empty());
-    REQUIRE(luil::win32::plan_update_timer({}, base, continuous).armed == false);
+    REQUIRE(luil::plan_update_timer({}, base, continuous).armed == false);
 }
