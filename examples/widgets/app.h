@@ -112,6 +112,13 @@ namespace widgets {
         float value { 0.0f };
     };
 
+    // 섹션 전체를 담은 창을 이만큼 흘린다 (논리 픽셀, +가 아래로).
+    // 휠과 터치 쓸기가 같은 메시지로 온다 — 창이 `scroll_source`를 세운다.
+    struct shell_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
     // toasts: 알림 요청.
     struct toast_intent
     {
@@ -150,6 +157,8 @@ namespace widgets {
         };
         std::vector<toast_entry> toasts {};
         int next_toast_id { 0 };
+        // 섹션 창이 흘러간 양이다 (논리 픽셀). 범위는 frame을 지을 때 다듬는다.
+        float scroll { 0.0f };
     };
 
     // --- 섹션 빌더의 공통 반환형 ---

@@ -25,7 +25,7 @@ namespace widgets {
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"toasts" }, column_config) };
 
         luil::label_config title {};
-        title.text = u8"토스트 — 누르면 오른쪽 아래에 3초 동안 뜬다";
+        title.text = u8"토스트 — 누르면 오른쪽 아래에 3초 동안 뜬다 (우클릭·길게 누르기도)";
         title.font_size = 13.0f;
         title.color = luil::label_color_role::primary;
         const float title_height { luil::label_element::height_for(title) };
@@ -39,7 +39,10 @@ namespace widgets {
         const auto add_trigger = [&row](std::u8string owner, std::u8string label, std::u8string text, const luil::toast_severity severity) {
             auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_toast_button, std::move(owner) }, luil::text_button_config { .text = std::move(label) }) };
             button->set_cursor(luil::ui_cursor::hand);
-            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(toast_intent { std::move(text), severity }));
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(toast_intent { text, severity }));
+            // 우클릭은 터치에서 길게 누르기다. 누르고 있는 동안 토스트가 떠서 손을 떼기
+            // 전에 그것을 볼 수 있다 (touch-pen-input-design.md).
+            button->set_action(luil::ui_trigger::right_click, luil::make_message_action(toast_intent { u8"우클릭: " + text, severity }));
             row->add(std::move(button), { .length = 88.0f });
         };
         add_trigger(u8"info", u8"info", u8"새 소식이 있다.", luil::toast_severity::info);

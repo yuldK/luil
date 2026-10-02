@@ -111,6 +111,11 @@ namespace widgets {
                 state_.progress = 1.0f;
             return;
         }
+        if (const auto* const scroll { message.get<shell_scroll_intent>() }; scroll != nullptr)
+        {
+            state_.scroll += scroll->delta;
+            return;
+        }
         if (const auto* const toast { message.get<toast_intent>() }; toast != nullptr)
         {
             app_state::toast_entry entry {};
@@ -132,25 +137,52 @@ namespace widgets {
         auto root { std::make_unique<luil::root_element>() };
         root->arrange({ { 0.0f, 0.0f, width, height }, scale });
 
+        // 맨 위 막대는 데스크톱이면 custom caption, 모바일이면 앱 바다 (hello와 같다).
         const luil::caption_config caption_config { make_caption() };
-        const float caption_height { luil::caption_element::height_for(caption_config) * scale };
-        auto caption { std::make_unique<luil::caption_element>(caption_config) };
-        caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
-        root->add(std::move(caption));
+        const bool mobile { luil::current_ui_platform().form_factor == luil::ui_form_factor::mobile };
+        float caption_height { 0.0f };
+        if (luil::current_ui_platform().window_caption)
+        {
+            caption_height = luil::caption_element::height_for(caption_config) * scale;
+            auto caption { std::make_unique<luil::caption_element>(caption_config) };
+            caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+            root->add(std::move(caption));
+        }
+        else
+        {
+            const luil::app_bar_config app_bar_config { .title = caption_config.title };
+            caption_height = luil::app_bar_element::height_for(app_bar_config) * scale;
+            auto app_bar { std::make_unique<luil::app_bar_element>(app_bar_config) };
+            app_bar->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+            root->add(std::move(app_bar));
+        }
 
         // 섹션들을 세로로 쌓는다.
         // stack은 측정 단계가 없어 각 섹션이 자기 높이를 함께 돌려준다.
+        //  - 휴대폰은 화면이 좁아 가장자리 여백을 줄인다.
         luil::stack_config column_config {};
-        column_config.padding = luil::edge_insets::all(24.0f);
+        column_config.padding = luil::edge_insets::all(mobile ? 16.0f : 24.0f);
         column_config.spacing = 20.0f;
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, column_config) };
+        float content_height { column_config.padding.top + column_config.padding.bottom };
+        bool first { true };
         for (section (*build)(const app_state&) : { &build_controls_section, &build_inputs_section, &build_choices_section, &build_status_section, &build_toasts_section })
         {
             section built { build(state_) };
+            content_height += built.height + (first ? 0.0f : column_config.spacing);
+            first = false;
             column->add(std::move(built.element), built.height);
         }
-        column->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
-        root->add(std::move(column));
+
+        // 섹션이 창보다 길면(낮은 창, 가로로 돌린 휴대폰) 흘려 본다. 휠과 터치 쓸기가
+        // 같은 `scroll_source`를 찾는다.
+        const float viewport_height { (height - caption_height) / scale };
+        state_.scroll = luil::clamp_scroll(content_height, viewport_height, state_.scroll);
+        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { kind_layout, u8"shell-view" }, luil::scroll_view_config { content_height, state_.scroll }) };
+        view->set_content(std::move(column));
+        view->set_scroll_source(luil::scroll_source { .scroll = [](const float delta) { return luil::make_app_action(shell_scroll_intent { delta }); }, .scale = scale });
+        view->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
+        root->add(std::move(view));
 
         // 토스트 오버레이는 섹션 위가 아니라 창 전체 위에 얹는다.
         if (auto overlay { build_toast_overlay(state_) }; overlay != nullptr)
