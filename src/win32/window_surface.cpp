@@ -1081,8 +1081,10 @@ namespace luil::win32 {
         else
             time = pointer_tick_time(input.info.dwTime, GetTickCount(), now);
 
+        // 추적기가 쓰지 않는 메시지(ENTER)는 시퀀스를 소비만 하고 이벤트를 내지 않는다.
+        const std::optional<pointer_phase> phase { pointer_phase_of(message) };
         pointer_sample sample {};
-        sample.message = message;
+        sample.phase = phase.value_or(pointer_phase::update);
         sample.device = type == PT_PEN ? pointer_device::pen : pointer_device::touch;
         sample.pointer_id = pointer_id;
         sample.in_contact = contact;
@@ -1095,7 +1097,7 @@ namespace luil::win32 {
         sample.scale = static_cast<float>(dpi_) / 96.0F;
         sample.time = time;
         sample.surface = id_;
-        if (host != nullptr)
+        if (host != nullptr && phase.has_value())
             for (raw_input_event& event : pointer_tracker_.accept(sample))
                 host->post_raw_input(std::move(event));
         if (ends)

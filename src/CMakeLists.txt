@@ -222,8 +222,8 @@ luil_add_source_filter(luil_core_files "app"
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
-# (한 frame 그리기, 렌더러 실패 물러섬, popup·웹뷰 자리 대조, 다시 그릴 표면과 timer 계획,
-# GPU fence 대기 예산).
+# (한 frame 그리기, 렌더러 실패 물러섬, 터치·펜 접촉 추적, popup·웹뷰 자리 대조,
+# 다시 그릴 표면과 timer 계획, GPU fence 대기 예산).
 # host/fonts: 글꼴 registry다 (설정된 글꼴, 가족 cache, 글자별 대체, 파일·바이트 로딩).
 # OS 글꼴 관리자와 사용자 언어는 플랫폼이 `platform_font_source()`로 공급한다.
 luil_add_source_filter(luil_core_files "host/fonts"
@@ -235,6 +235,8 @@ luil_add_source_filter(luil_core_files "host"
     host/fence_wait.h
     host/frame_state.cpp
     host/frame_state.h
+    host/pointer_sequence.cpp
+    host/pointer_sequence.h
     host/popup_reconcile.cpp
     host/popup_reconcile.h
     host/skia_renderer.cpp

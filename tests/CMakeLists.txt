@@ -39,6 +39,7 @@ add_executable(luil_core_tests
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp
     panel_element_tests.cpp
+    pointer_sequence_tests.cpp
     popup_reconcile_tests.cpp
     progress_element_tests.cpp
     raster_draw_tests.cpp

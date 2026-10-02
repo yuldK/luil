@@ -39,8 +39,9 @@ UI 스레드는 메시지를 받는 즉시 `GetPointerType`과 `GetPointerTouchI
 
 복사한 값은 Win32 구조체를 담지 않는 `pointer_sample`로 옮기고,
 `pointer_sequence_tracker`가 접촉별 상태를 들고 입력 이벤트로 바꾼다
-([surface_input.h](../src/win32/surface_input.h)). 이 계층은 창도 시계도 모르므로
-변환을 결정적으로 테스트할 수 있다.
+([pointer_sequence.h](../src/host/pointer_sequence.h)). 메시지 종류는 플랫폼을 가리지 않는
+접촉 단계(`pointer_phase`)로 옮겨 넣으므로 다른 플랫폼도 같은 추적기를 쓴다. 이 계층은 창도
+시계도 모르므로 변환을 결정적으로 테스트할 수 있다.
 
 - 좌표는 화면 물리 픽셀이라 수신한 표면의 client 좌표로 옮긴다. 공개 UI 이벤트의 좌표
   계약은 그대로다.
