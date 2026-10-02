@@ -2,7 +2,6 @@
 //
 // GameActivity가 네이티브 라이브러리를 열고 별도 thread에서 android_main을 부른다.
 // 그 thread가 luil의 UI thread가 되고, run_application이 Activity가 끝날 때까지 돈다.
-// 입력은 아직 옮기지 않았으므로(docs/android-port-plan.md 5단계) 화면은 보기만 한다.
 
 #include "widgets/app.h"
 
