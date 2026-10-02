@@ -484,6 +484,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_assets.cpp
         android/android_fonts.cpp
         android/android_fonts.h
+        android/android_input.cpp
+        android/android_input.h
         android/cpu_skia_renderer.cpp
         android/cpu_skia_renderer.h
         android/fail_fast.cpp

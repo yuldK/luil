@@ -85,6 +85,11 @@ if(LUIL_PLATFORM STREQUAL "android")
     set_target_properties(luil_core_tests PROPERTIES
         CROSSCOMPILING_EMULATOR
             "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
+    # Android 입력 변환은 GameActivity를 모르는 순수 층이라 core test에 함께 넣어 기기에서 돌린다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_input.cpp"
+            android_input_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
     luil_set_ide_folder("Tests" luil_core_tests)
     # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.

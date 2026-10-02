@@ -1,6 +1,7 @@
 #include "luil/android/android_app.h"
 
 #include "android/android_fonts.h"
+#include "android/android_input.h"
 #include "android/cpu_skia_renderer.h"
 #include "android/vulkan_device.h"
 #include "android/vulkan_skia_renderer.h"
@@ -122,11 +123,95 @@ namespace luil::android {
             return AConfiguration_getUiModeNight(configuration) != ACONFIGURATION_UI_MODE_NIGHT_YES;
         }
 
-        // 뒤로 가기는 Activity에 남긴다. Activity의 기본 처리(앱 끝내기, 예측 뒤로 가기
-        // 애니메이션)를 그대로 받고, 끝날 때 `app_host::shutdown()`이 돈다.
+        // 시스템이 맡는 키는 Activity에 남긴다. 거짓을 돌려주면 Activity의 기본 처리를 받는다.
+        //  - 뒤로 가기: 앱 끝내기와 예측 뒤로 가기 애니메이션. 끝날 때 `app_host::shutdown()`이 돈다.
+        //  - 볼륨·카메라·전원·미디어 키: 앱이 먹으면 소리 크기도 못 바꾼다. GameActivity의
+        //    기본 필터가 거르던 것을 그대로 거른다.
         bool key_event_filter(const GameActivityKeyEvent* const event)
         {
-            return event->keyCode != AKEYCODE_BACK;
+            switch (event->keyCode)
+            {
+            case AKEYCODE_BACK:
+            case AKEYCODE_HOME:
+            case AKEYCODE_VOLUME_UP:
+            case AKEYCODE_VOLUME_DOWN:
+            case AKEYCODE_VOLUME_MUTE:
+            case AKEYCODE_MUTE:
+            case AKEYCODE_CAMERA:
+            case AKEYCODE_FOCUS:
+            case AKEYCODE_POWER:
+            case AKEYCODE_APP_SWITCH:
+            case AKEYCODE_MEDIA_PLAY_PAUSE:
+            case AKEYCODE_MEDIA_PLAY:
+            case AKEYCODE_MEDIA_PAUSE:
+            case AKEYCODE_MEDIA_STOP:
+            case AKEYCODE_MEDIA_NEXT:
+            case AKEYCODE_MEDIA_PREVIOUS:
+            case AKEYCODE_HEADSETHOOK:
+                return false;
+            default:
+                return true;
+            }
+        }
+
+        constexpr std::int64_t nanoseconds_per_millisecond { 1'000'000 };
+
+        // 손가락·펜·마우스(포인터 계열)를 받는다. GameActivity의 기본 필터는 터치스크린만
+        // 받아 펜 호버와 마우스가 오지 않는다.
+        bool motion_event_filter(const GameActivityMotionEvent* const event)
+        {
+            return (event->source & AINPUT_SOURCE_CLASS_MASK) == AINPUT_SOURCE_CLASS_POINTER;
+        }
+
+        // GameActivity의 움직임 이벤트를 변환층의 값으로 옮긴다. 구조체는 이 호출 동안만 유효하다.
+        [[nodiscard]] motion_input copy_motion(const GameActivityMotionEvent& event)
+        {
+            motion_input input {};
+            input.source = event.source;
+            input.action = event.action;
+            input.action_button = event.actionButton;
+            input.button_state = event.buttonState;
+            input.meta_state = event.metaState;
+            // 현재 표본의 시각은 Java `MotionEvent.getEventTime`과 같은 밀리초다. 과거 표본은
+            // 나노초 배열로 온다 (기기에서 `CLOCK_MONOTONIC`과 맞대 확인했다). 키 이벤트의 시각은
+            // 나노초라 단위가 서로 다르다.
+            input.current.time_ns = event.eventTime * nanoseconds_per_millisecond;
+            for (std::uint32_t index { 0 }; index < event.pointerCount; ++index)
+            {
+                const GameActivityPointerAxes& axes { event.pointers[index] };
+                input.current.pointers.push_back({ axes.id, axes.toolType, GameActivityPointerAxes_getX(&axes), GameActivityPointerAxes_getY(&axes) });
+            }
+            if (event.pointerCount > 0)
+            {
+                input.vertical_scroll = GameActivityPointerAxes_getAxisValue(&event.pointers[0], AMOTION_EVENT_AXIS_VSCROLL);
+                input.horizontal_scroll = GameActivityPointerAxes_getAxisValue(&event.pointers[0], AMOTION_EVENT_AXIS_HSCROLL);
+            }
+            for (int position { 0 }; position < event.historySize; ++position)
+            {
+                motion_frame frame {};
+                frame.time_ns = event.historicalEventTimesNanos[position];
+                for (std::uint32_t index { 0 }; index < event.pointerCount; ++index)
+                {
+                    const int pointer { static_cast<int>(index) };
+                    const float x { GameActivityMotionEvent_getHistoricalX(&event, pointer, position) };
+                    const float y { GameActivityMotionEvent_getHistoricalY(&event, pointer, position) };
+                    frame.pointers.push_back({ event.pointers[index].id, event.pointers[index].toolType, x, y });
+                }
+                input.history.push_back(std::move(frame));
+            }
+            return input;
+        }
+
+        [[nodiscard]] key_input copy_key(const GameActivityKeyEvent& event)
+        {
+            return key_input {
+                .action = event.action,
+                .key_code = event.keyCode,
+                .meta_state = event.metaState,
+                .repeat_count = event.repeatCount,
+                .unicode_char = event.unicodeChar,
+                .time_ns = event.eventTime,
+            };
         }
 
         // 가족 이름 → typeface(글꼴 미리 보기)와 글자 → 대체 typeface를 함께 맡는다.
@@ -198,8 +283,7 @@ namespace luil::android {
                         dirty_ = true;
                     }
 
-                    // 입력은 5단계에서 옮긴다. 지금은 쌓이지 않게 비우기만 한다.
-                    drain_input();
+                    process_input();
 
                     if (host_->faulted() && finishing_ == false)
                     {
@@ -260,6 +344,10 @@ namespace luil::android {
                 app_->userData = this;
                 app_->onAppCmd = &application::on_app_command;
                 android_app_set_key_event_filter(app_, &key_event_filter);
+                android_app_set_motion_event_filter(app_, &motion_event_filter);
+                // 휠 값은 켠 축만 GameActivity가 옮겨 준다.
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_VSCROLL);
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HSCROLL);
 
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);
@@ -289,6 +377,8 @@ namespace luil::android {
                     refresh_metrics();
                     break;
                 case APP_CMD_TERM_WINDOW:
+                    // 창이 사라지면 그 위의 접촉은 뗌 없이 끝난다.
+                    post_events(input_.cancel_all(std::chrono::steady_clock::now()));
                     // glue는 이 알림이 끝날 때까지 창을 쥐고 있다가 놓는다.
                     // 그 안에서 렌더러를 버려야 놓인 창을 붙잡은 채로 남지 않는다.
                     renderer_.reset();
@@ -499,13 +589,26 @@ namespace luil::android {
                 static_cast<void>(host_->take_clipboard_requests());
             }
 
-            void drain_input()
+            // glue가 모아 둔 입력을 luil 입력 이벤트로 옮겨 input thread에 보낸다.
+            void process_input()
             {
-                if (android_input_buffer* const inputs { android_app_swap_input_buffers(app_) }; inputs != nullptr)
-                {
-                    android_app_clear_motion_events(inputs);
-                    android_app_clear_key_events(inputs);
-                }
+                android_input_buffer* const inputs { android_app_swap_input_buffers(app_) };
+                if (inputs == nullptr)
+                    return;
+                // tree는 안전 영역에서 그려지므로 창 좌표에서 그 원점을 뺀다.
+                const surface_mapping mapping { static_cast<float>(insets_.left), static_cast<float>(insets_.top), scale_ };
+                for (std::uint64_t index { 0 }; index < inputs->motionEventsCount; ++index)
+                    post_events(input_.translate(copy_motion(inputs->motionEvents[index]), mapping));
+                for (std::uint64_t index { 0 }; index < inputs->keyEventsCount; ++index)
+                    post_events(input_.translate(copy_key(inputs->keyEvents[index])));
+                android_app_clear_motion_events(inputs);
+                android_app_clear_key_events(inputs);
+            }
+
+            void post_events(std::vector<raw_input_event> events)
+            {
+                for (raw_input_event& event : events)
+                    host_->post_raw_input(std::move(event));
             }
 
             void render()
@@ -563,6 +666,7 @@ namespace luil::android {
             int wake_fd_ { -1 };
             std::unique_ptr<app_host> host_ {};
             std::unique_ptr<renderer_host> renderer_ {};
+            input_translator input_ {};
             // Activity 하나의 Vulkan 장치다. 창이 사라져도 남고, CPU로 물러서면 놓는다.
             std::unique_ptr<vulkan_device> vulkan_ {};
             // CPU로 물러선 뒤다. 다시 생긴 창도 CPU로 그린다.
