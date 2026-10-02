@@ -90,6 +90,28 @@ Popup 좌표와 크기는 앵커 client 기준 논리 픽셀이다. UI thread는
 
 앵커 이동과 DPI 변화는 popup placement를 다시 계산한다. 앵커 선택과 재생성 규칙은 [popup-anchor-design.md](popup-anchor-design.md)를 따른다.
 
+## 창이 하나뿐인 플랫폼 (Android)
+
+Android에는 popup마다 띄울 창이 없다. 같은 `ui_popup` 선언을 주 표면 안의 layer로 그린다. 데이터 모델(앵커 기준 논리 좌표, 분리 tree, `surface_tree_list`, 닫힘 factory)은 그대로이고 앱 코드도 같다.
+
+- **그리기.** 앱 host가 frame이 바뀔 때마다 popup의 자리를 물리 픽셀로 옮기고 내용 영역 안으로 들인다(앱 모델의 자리는 바꾸지 않는다). [`draw_frame`](../src/host/frame_state.cpp)이 주 tree를 그린 뒤 `frame_state::overlays`를 차례로 겹친다: 아래로 번지는 그림자, 창 배경, popup tree, 테두리. 창의 OS 그림자를 표면이 대신 그리는 것이다. 표면마다 `interaction_for_surface`로 자기 상호작용만 남긴다.
+- **순서.** 주 tree의 tooltip·끌기 표시는 주 tree가 그리므로 popup이 그 위를 덮는다 (계획은 tooltip·끌기를 맨 위에 두려 했다). 터치 화면에는 주 tree의 hover tooltip이 서지 않아 겹칠 일이 드물다.
+- **입력.** [`overlay_input_router`](../src/host/overlay_input.h)가 포인터 이벤트를 layer로 보낸다. 누름은 그 자리의 맨 위 layer로 가고 이벤트에 popup id와 popup 좌표가 실린다. 그 접촉의 이동·뗌·취소는 밖으로 나가도 같은 layer로 간다 (Win32의 암묵적 캡처와 같다). 마우스·펜 호버가 layer를 옮기면 앞 layer에 이탈을 낸다. 키는 지나가고 논리 초점이 라우팅한다.
+- **닫힘 계기.**
+
+  | 계기 | Android |
+  | --- | --- |
+  | `pointer_press_outside` | 어느 popup도 아닌 곳의 누름. 누름 자체는 주 tree로 간다 |
+  | `wheel_scrolled` | 어느 popup도 아닌 곳의 휠 |
+  | `escape_key` | Esc 키, 그리고 뒤로 가기. popup이 떠 있는 동안 뒤로 가기는 Activity가 아니라 앱이 받고, 아무 popup도 닫지 않으면 기본 동작(Activity 끝내기)을 한다 |
+  | `surface_resized` | 내용 크기가 바뀜 (회전, 소프트 키보드) |
+  | `activation_changed` | 창이 초점을 잃음 (알림 창, 다른 앱) |
+  | `surface_moved` | 없다 (창이 움직이지 않는다) |
+
+  한 번 내기 규칙은 Win32와 같은 [`take_popup_dismiss_action`](../src/host/popup_dismiss.h)이고, 새 frame이 오면 표식을 푼다.
+- 주 표면에 앵커된 popup만 그린다. 보조 창(`ui_frame::windows`)은 지원하지 않아 한 번 경고하고 무시한다.
+- popup 안 텍스트 칸에 초점이 서면 IME가 그 칸에 붙는다. 글자 자리는 popup의 표면 원점으로 옮긴다.
+
 ## 반드시 유지할 불변식
 
 - Popup 수명은 `ui_frame::popups`가 소유한다.
@@ -102,6 +124,6 @@ Popup 좌표와 크기는 앵커 client 기준 논리 픽셀이다. UI thread는
 
 ## 검증 지침
 
-[popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을 픽셀로 확인한다.
+[overlay_input_tests.cpp](../tests/overlay_input_tests.cpp)는 layer 라우팅(맨 위 layer, 접촉의 캡처, 호버 이탈, 바깥 누름·휠)을, [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 layer가 자리 안에만 그려지는 것을 확인한다. [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을 픽셀로 확인한다.
 
 전체 조립은 [win32_window.cpp](../src/win32/win32_window.cpp), popup 메시지 처리는 [popup_surface.cpp](../src/win32/popup_surface.cpp)에 있다.

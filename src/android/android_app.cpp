@@ -9,6 +9,8 @@
 #include "android/vulkan_skia_renderer.h"
 #include "host/font_registry.h"
 #include "host/frame_state.h"
+#include "host/overlay_input.h"
+#include "host/popup_dismiss.h"
 #include "host/skia_renderer.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/draw_primitives.h"
@@ -150,6 +152,10 @@ namespace luil::android {
             return AConfiguration_getUiModeNight(configuration) != ACONFIGURATION_UI_MODE_NIGHT_YES;
         }
 
+        // popup이 떠 있는가다. 떠 있으면 뒤로 가기를 Activity에 넘기지 않고 받아 popup을 닫는다.
+        // 키 필터는 glue가 Java thread에서 부르므로 원자로 둔다.
+        std::atomic<bool> popups_visible { false };
+
         // 시스템이 맡는 키는 Activity에 남긴다. 거짓을 돌려주면 Activity의 기본 처리를 받는다.
         //  - 뒤로 가기: 앱 끝내기와 예측 뒤로 가기 애니메이션. 끝날 때 `app_host::shutdown()`이 돈다.
         //  - 볼륨·카메라·전원·미디어 키: 앱이 먹으면 소리 크기도 못 바꾼다. GameActivity의
@@ -159,6 +165,8 @@ namespace luil::android {
             switch (event->keyCode)
             {
             case AKEYCODE_BACK:
+                // popup이 떠 있으면 뒤로 가기는 Esc처럼 popup을 닫는다.
+                return popups_visible.load();
             case AKEYCODE_HOME:
             case AKEYCODE_VOLUME_UP:
             case AKEYCODE_VOLUME_DOWN:
@@ -261,6 +269,19 @@ namespace luil::android {
         //  - IME가 묻는 창구(`text_input_host`)도 맡는다. 초점을 가진 텍스트 칸을 tree에서 찾는다.
         class application final : public text_input_host
         {
+            // 주 표면 위에 겹쳐 그리는 popup 하나다.
+            struct overlay_entry
+            {
+                std::u8string id {};
+                std::shared_ptr<const ui_tree> tree {};
+                // 표면 좌표다 (물리 픽셀).
+                pixel_rect bounds {};
+                bool border { true };
+                std::function<input_action(popup_dismiss_reason)> dismiss {};
+                // 이 frame에서 이미 닫자고 했다 (`take_popup_dismiss_action`).
+                bool requested { false };
+            };
+
         public:
             application(android_app* const app, const application_config& config, const application_environment& environment)
                 : app_ { app }
@@ -303,17 +324,16 @@ namespace luil::android {
                 if (host_ == nullptr || environment_.policy == nullptr)
                     return std::nullopt;
                 const interaction_snapshot interaction { host_->acquire_interaction() };
-                // popup은 아직 없다 (7단계). 주 표면의 초점만 본다.
-                if (interaction.focused_surface.empty() == false)
+                // 주 표면이거나 겹쳐 그린 popup의 초점이다. 그 밖의 표면(보조 창)은 없다.
+                if (interaction.focused_surface.empty() == false && find_overlay(interaction.focused_surface) == nullptr)
                     return std::nullopt;
                 return environment_.policy->text_target_of(interaction.focused_input.kind);
             }
 
             [[nodiscard]] text_input_document committed_document() const override
             {
-                const std::shared_ptr<const ui_tree> tree { host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
-                const ui_element* const element { focused_text_element(tree.get()) };
-                const std::optional<text_input_snapshot> value { element != nullptr ? element->text_input() : std::nullopt };
+                const text_location location { focused_text_location() };
+                const std::optional<text_input_snapshot> value { location.element != nullptr ? location.element->text_input() : std::nullopt };
                 if (value.has_value() == false)
                     return {};
                 return { std::u8string { value->text }, value->caret, value->anchor };
@@ -321,20 +341,19 @@ namespace luil::android {
 
             [[nodiscard]] std::optional<rect_f> text_rect(const text_input_document& document, const std::size_t begin, const std::size_t end) const override
             {
-                const std::shared_ptr<const ui_tree> tree { host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
-                const ui_element* const element { focused_text_element(tree.get()) };
-                if (element == nullptr)
+                const text_location location { focused_text_location() };
+                if (location.element == nullptr)
                     return std::nullopt;
                 const text_measurer measure = [](const std::u8string_view text, const float pixel_size) {
                     const SkFont font { configured_ui_typeface(), pixel_size };
                     return measure_text(text, font);
                 };
-                std::optional<rect_f> span { element->text_span_bounds(text_span_query { document.text, document.caret, begin, end }, measure) };
-                // tree는 안전 영역에서 그려진다. 표면 좌표로 옮긴다.
+                std::optional<rect_f> span { location.element->text_span_bounds(text_span_query { document.text, document.caret, begin, end }, measure) };
+                // 칸이 사는 tree의 원점(안전 영역이나 popup 자리)만큼 옮겨 표면 좌표로 낸다.
                 if (span.has_value())
                 {
-                    span->x += static_cast<float>(insets_.left);
-                    span->y += static_cast<float>(insets_.top);
+                    span->x += location.origin_x;
+                    span->y += location.origin_y;
                 }
                 return span;
             }
@@ -373,6 +392,7 @@ namespace luil::android {
                         dirty_ = true;
                     }
 
+                    update_overlays();
                     process_input();
                     process_text_input();
 
@@ -552,6 +572,10 @@ namespace luil::android {
                 case APP_CMD_GAINED_FOCUS:
                     dirty_ = true;
                     break;
+                case APP_CMD_LOST_FOCUS:
+                    // 다른 창(알림 창, 다른 앱)으로 초점이 갔다.
+                    static_cast<void>(dismiss_popups(popup_dismiss_reason::activation_changed));
+                    break;
                 default:
                     break;
                 }
@@ -633,7 +657,16 @@ namespace luil::android {
                     window_height_ = ANativeWindow_getHeight(app_->window);
                 }
                 const int previous_bottom { insets_.bottom };
+                const int previous_width { content_width() };
+                const int previous_height { content_height() };
                 insets_ = read_safe_insets(app_->activity);
+                // 회전·키보드로 내용 크기가 바뀌었다. popup의 닻이 움직이므로 닫는 계기이고, 남는
+                // popup은 새 크기로 다시 자리 잡는다.
+                if (content_width() != previous_width || content_height() != previous_height)
+                {
+                    static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
+                    overlay_frame_.reset();
+                }
                 // 키보드가 올라와 아래가 줄었다. 줄어든 크기로 다시 지은 frame이 오면 초점 칸을
                 // 다시 드러내 달라고 보낸다 (`render`).
                 if (insets_.bottom > previous_bottom && ime_ != nullptr && ime_->target().has_value())
@@ -743,7 +776,21 @@ namespace luil::android {
                 for (std::uint64_t index { 0 }; index < inputs->motionEventsCount; ++index)
                     post_events(input_.translate(copy_motion(inputs->motionEvents[index]), mapping));
                 for (std::uint64_t index { 0 }; index < inputs->keyEventsCount; ++index)
-                    post_events(input_.translate(copy_key(inputs->keyEvents[index])));
+                {
+                    const GameActivityKeyEvent& key { inputs->keyEvents[index] };
+                    // 뒤로 가기는 popup이 떠 있을 때만 여기로 온다 (`key_event_filter`). 떼는 순간
+                    // Esc처럼 popup을 닫는다. 아무 popup도 닫지 않으면 뒤로 가기의 기본 동작을 한다.
+                    if (key.keyCode == AKEYCODE_BACK)
+                    {
+                        if (key.action == AKEY_EVENT_ACTION_UP && dismiss_popups(popup_dismiss_reason::escape_key) == false)
+                            finish();
+                        continue;
+                    }
+                    // Esc가 popup을 닫았으면 키를 삼킨다 (Win32와 같다).
+                    if (key.keyCode == AKEYCODE_ESCAPE && key.action == AKEY_EVENT_ACTION_DOWN && dismiss_popups(popup_dismiss_reason::escape_key))
+                        continue;
+                    post_events(input_.translate(copy_key(key)));
+                }
                 android_app_clear_motion_events(inputs);
                 android_app_clear_key_events(inputs);
             }
@@ -752,11 +799,80 @@ namespace luil::android {
             {
                 for (raw_input_event& event : events)
                 {
-                    // 키보드를 내린 뒤 초점을 가진 텍스트 칸을 다시 누르면 키보드를 다시 띄운다.
-                    if (const auto* const released { std::get_if<pointer_released_event>(&event) }; released != nullptr && released->device != pointer_device::mouse)
-                        request_keyboard_at(released->x, released->y);
-                    host_->post_raw_input(std::move(event));
+                    // 겹쳐 그린 popup의 자리면 그 표면 id와 popup 좌표를 싣는다.
+                    routed_input routed { router_.route(std::move(event)) };
+                    // popup 밖의 누름·휠은 닫는 계기다. 누름·휠 자체는 그대로 간다 (Win32와 같다).
+                    if (routed.pressed_outside)
+                        static_cast<void>(dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+                    if (routed.wheel_outside)
+                        static_cast<void>(dismiss_popups(popup_dismiss_reason::wheel_scrolled));
+                    for (raw_input_event& value : routed.events)
+                    {
+                        // 키보드를 내린 뒤 초점을 가진 텍스트 칸을 다시 누르면 키보드를 다시 띄운다.
+                        if (const auto* const released { std::get_if<pointer_released_event>(&value) }; released != nullptr && released->device != pointer_device::mouse)
+                            request_keyboard_at(released->surface, released->x, released->y);
+                        host_->post_raw_input(std::move(value));
+                    }
                 }
+            }
+
+            // frame의 popup을 주 표면 위의 layer로 세운다. frame이 바뀔 때만 다시 세운다.
+            //  - 자리는 앵커 기준 논리 픽셀이다. 주 표면(앵커가 빈 것)의 popup만 그린다 — 보조 창이
+            //    없으니 다른 앵커는 붙을 곳이 없다.
+            //  - 화면 밖으로 나가면 안으로 들인다. 앱 모델의 자리는 바꾸지 않는다.
+            //  - 새 frame이 같은 popup을 실으면 닫자고 한 표식을 푼다 (Win32 `popup_surface::adopt`와 같다).
+            void update_overlays()
+            {
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == overlay_frame_ && frame != nullptr)
+                    return;
+                overlay_frame_ = frame;
+                overlays_.clear();
+                std::vector<overlay_area> areas {};
+                if (frame != nullptr)
+                {
+                    const float scale { scale_ };
+                    const int limit_width { content_width() };
+                    const int limit_height { content_height() };
+                    for (const ui_popup& popup : frame->popups)
+                    {
+                        if (popup.id.empty() || popup.anchor.empty() == false || popup.tree == nullptr || popup.width <= 0.0f || popup.height <= 0.0f)
+                            continue;
+                        const int width { std::min(limit_width, static_cast<int>(std::lround(popup.width * scale))) };
+                        const int height { std::min(limit_height, static_cast<int>(std::lround(popup.height * scale))) };
+                        const int x { std::clamp(static_cast<int>(std::lround(popup.x * scale)), 0, limit_width - width) };
+                        const int y { std::clamp(static_cast<int>(std::lround(popup.y * scale)), 0, limit_height - height) };
+                        overlays_.push_back(overlay_entry { popup.id, popup.tree, { insets_.left + x, insets_.top + y, width, height }, popup.border, popup.dismiss, false });
+                        areas.push_back(overlay_area { popup.id, { static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height) } });
+                    }
+                    if (frame->windows.empty() == false && warned_windows_ == false)
+                    {
+                        warned_windows_ = true;
+                        log_error(u8"Secondary windows (ui_frame::windows) are not supported on Android and are ignored.");
+                    }
+                }
+                router_.set_areas(std::move(areas));
+                popups_visible.store(overlays_.empty() == false);
+                dirty_ = true;
+            }
+
+            [[nodiscard]] const overlay_entry* find_overlay(const std::u8string& id) const
+            {
+                const auto found { std::ranges::find_if(overlays_, [&id](const overlay_entry& entry) { return entry.id == id; }) };
+                return found != overlays_.end() ? &*found : nullptr;
+            }
+
+            // 닫힘 계기 하나를 popup들에 묻는다. 하나라도 닫자는 메시지를 냈으면 참이다.
+            bool dismiss_popups(const popup_dismiss_reason reason)
+            {
+                bool dismissed { false };
+                for (overlay_entry& entry : overlays_)
+                    if (std::optional<input_action> action { take_popup_dismiss_action(entry.dismiss, entry.requested, reason) }; action.has_value())
+                    {
+                        dispatch(std::move(*action));
+                        dismissed = true;
+                    }
+                return dismissed;
             }
 
             void post_enter()
@@ -764,13 +880,12 @@ namespace luil::android {
                 host_->post_raw_input(key_pressed_event { key_code::enter, false, false, false, false, std::chrono::steady_clock::now() });
             }
 
-            void request_keyboard_at(const float x, const float y)
+            void request_keyboard_at(const std::u8string& surface, const float x, const float y)
             {
-                if (ime_ == nullptr || ime_->target().has_value() == false)
+                if (ime_ == nullptr || ime_->target().has_value() == false || host_->acquire_interaction().focused_surface != surface)
                     return;
-                const std::shared_ptr<const ui_tree> tree { host_->acquire_ui_tree() };
-                const ui_element* const focused { focused_text_element(tree.get()) };
-                if (focused != nullptr && tree->hit_test(x, y) == focused)
+                const text_location location { focused_text_location() };
+                if (location.element != nullptr && location.tree->hit_test(x, y) == location.element)
                     ime_->request_keyboard();
             }
 
@@ -808,12 +923,36 @@ namespace luil::android {
                 GameActivity_setTextInputState(app_->activity, &value);
             }
 
-            // 초점을 가진 텍스트 칸이다. popup은 아직 없으므로 주 tree에서만 찾는다.
-            [[nodiscard]] const ui_element* focused_text_element(const ui_tree* const tree) const
+            // 초점을 가진 텍스트 칸과 그것이 사는 tree, 그 tree의 표면 원점이다 (물리 픽셀).
+            struct text_location
             {
-                if (tree == nullptr || focused_text_target().has_value() == false)
-                    return nullptr;
-                return tree->find(host_->acquire_interaction().focused_input);
+                std::shared_ptr<const ui_tree> tree {};
+                const ui_element* element { nullptr };
+                float origin_x { 0.0f };
+                float origin_y { 0.0f };
+            };
+
+            [[nodiscard]] text_location focused_text_location() const
+            {
+                text_location location {};
+                if (host_ == nullptr || focused_text_target().has_value() == false)
+                    return location;
+                const interaction_snapshot interaction { host_->acquire_interaction() };
+                if (interaction.focused_surface.empty())
+                {
+                    location.tree = host_->acquire_ui_tree();
+                    location.origin_x = static_cast<float>(insets_.left);
+                    location.origin_y = static_cast<float>(insets_.top);
+                }
+                else if (const overlay_entry* const overlay { find_overlay(interaction.focused_surface) }; overlay != nullptr)
+                {
+                    location.tree = overlay->tree;
+                    location.origin_x = static_cast<float>(overlay->bounds.x);
+                    location.origin_y = static_cast<float>(overlay->bounds.y);
+                }
+                if (location.tree != nullptr)
+                    location.element = location.tree->find(interaction.focused_input);
+                return location;
             }
 
             void dispatch(input_action action)
@@ -857,7 +996,15 @@ namespace luil::android {
                 state.dpi_scale = scale_;
 
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
-                state.interaction = interaction_for_surface(host_->acquire_interaction(), std::u8string {});
+                const interaction_snapshot interaction { host_->acquire_interaction() };
+                state.interaction = interaction_for_surface(interaction, std::u8string {});
+                // popup은 주 표면 위의 layer다. 표면마다 자기 상호작용만 남겨 그린다.
+                update_overlays();
+                std::vector<overlay_layer> layers {};
+                layers.reserve(overlays_.size());
+                for (const overlay_entry& entry : overlays_)
+                    layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id) });
+                state.overlays = layers;
                 const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
                 // 고대비는 아직 읽지 않는다 (접근성 단계). 밝은 모드만 시스템을 따른다.
                 state.theme = resolve_color_theme(appearance.theme, false, prefers_light_);
@@ -909,6 +1056,11 @@ namespace luil::android {
             std::unique_ptr<app_host> host_ {};
             std::unique_ptr<renderer_host> renderer_ {};
             input_translator input_ {};
+            std::vector<overlay_entry> overlays_ {};
+            // layer를 세운 frame이다. 바뀌면 다시 세운다.
+            std::shared_ptr<const ui_frame> overlay_frame_ {};
+            overlay_input_router router_ {};
+            bool warned_windows_ { false };
             std::unique_ptr<ime_session> ime_ {};
             // 키보드가 올라와 줄어든 frame이 오면 초점 칸을 드러내 달라고 보낸다.
             bool reveal_pending_ { false };
