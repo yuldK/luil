@@ -1,6 +1,7 @@
 #include "luil/ui/dialog_elements.h"
 
 #include "luil/generated/codicons.h"
+#include "luil/theme/ui_theme.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
 
@@ -18,6 +19,19 @@
 #include <vector>
 
 namespace luil {
+    namespace {
+        // 꺼진 글자가 이 바탕 위에서 읽히지 않는가. 알파로 얹은 바탕은 표면이 비쳐 판정하지 않는다.
+        //  - 3:1은 WCAG의 큰 글자·그래픽 기준이다. 꺼진 글자는 대비 기준에서 빠지지만 읽혀야 한다.
+        [[nodiscard]] bool disabled_label_unreadable_on(const ui_color background, const ui_color label) noexcept
+        {
+            if ((background >> 24U) != 0xFFU)
+                return false;
+            const float first { relative_luminance(background) };
+            const float second { relative_luminance(label) };
+            return (std::max(first, second) + 0.05f) / (std::min(first, second) + 0.05f) < 3.0f;
+        }
+    } // namespace
+
     dialog_caption_element::dialog_caption_element(dialog_caption_config config)
         : ui_element { ui_element_id { ui_element_kind::dialog_caption, config.owner } }
         , config_ { std::move(config) }
@@ -170,7 +184,13 @@ namespace luil {
             if (solid)
                 background = down ? context.palette.accent_pressed : (over ? context.palette.accent_hover : context.palette.accent);
             else if (fill == text_button_fill::soft_accent)
+            {
                 background = down ? context.palette.button_pressed_background : (over ? context.palette.soft_button_hover_background : context.palette.soft_button_background);
+                // 꺼진 글자(`disabled_foreground`)는 옅은 강조 바탕을 위해 만든 색이 아니다. 고대비는 이 바탕을
+                // 불투명한 highlight로 접어 GrayText가 사라지므로, 꺼진 글자와 짝인 입력 표면에 깐다.
+                if (enabled() == false && disabled_label_unreadable_on(background, context.palette.disabled_foreground))
+                    background = context.palette.input_background;
+            }
             else if (fill == text_button_fill::soft_danger)
                 // 오류색에는 강조색과 달리 hover·soft 짝이 없다.
                 // 팔레트가 역할 하나에 tone을 층 지어 같은 자리를 만든다 — 색을 새로 정하지 않는다.

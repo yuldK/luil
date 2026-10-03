@@ -177,6 +177,40 @@ TEST_CASE("The default button is painted as a fill and the focus ring as a ring"
     }
 }
 
+TEST_CASE("A disabled accent button keeps GrayText readable in high contrast", "[ui][raster][draw]")
+{
+    // Windows 고대비 Night sky의 짝이다. GrayText(#A6A6A6)를 highlight(#D6B4FD)에 깔면 1.4:1이라 글자가 사라진다.
+    luil::high_contrast_colors colors {};
+    colors.window_background = luil::make_ui_color(0, 0, 0);
+    colors.window_foreground = luil::make_ui_color(255, 255, 255);
+    colors.highlight_background = luil::make_ui_color(0xD6, 0xB4, 0xFD);
+    colors.highlight_foreground = luil::make_ui_color(0, 0, 0);
+    colors.button_background = luil::make_ui_color(0, 0, 0);
+    colors.button_foreground = luil::make_ui_color(255, 255, 255);
+    colors.disabled_foreground = luil::make_ui_color(0xA6, 0xA6, 0xA6);
+    const luil::ui_color_palette palette { luil::high_contrast_palette_for(colors) };
+    const luil::ui_element_id enabled_id { luil::application_element_kind(1), u8"enabled" };
+    const luil::ui_element_id disabled_id { luil::application_element_kind(1), u8"disabled" };
+
+    auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 400.0f, 120.0f }, raster_scale });
+    for (const auto& [id, x] : { std::pair { enabled_id, 20.0f }, std::pair { disabled_id, 220.0f } })
+    {
+        auto button { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .visual = luil::text_button_visual::accent }) };
+        button->arrange({ { x, 20.0f, 160.0f, 40.0f }, raster_scale });
+        button->set_enabled(id == enabled_id);
+        root->add(std::move(button));
+    }
+    const luil::ui_tree tree { std::move(root) };
+    luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+
+    // 켜진 단추는 highlight 짝 그대로다 (고른 토글이 읽히는 자리).
+    REQUIRE(frame.pixel_at(100, 40) == palette.soft_button_background);
+    // 꺼진 단추는 GrayText와 짝인 표면에 깐다.
+    REQUIRE(frame.pixel_at(300, 40) == palette.input_background);
+}
+
 TEST_CASE("A custom-visual drag still paints the drop target highlight", "[ui][raster][drag]")
 {
     // custom_visual이 있어도 외부 파일 드롭 대상의 강조가 그려져야 한다.
