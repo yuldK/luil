@@ -191,7 +191,7 @@ namespace luil::android {
                     const GrBackendSemaphore wait_semaphore { GrBackendSemaphores::MakeVk(acquired) };
                     if (surface.wait(1, &wait_semaphore) == false)
                     {
-                        functions_->destroy_semaphore(device_->device(), acquired, nullptr);
+                        discard_acquire_semaphore(acquired);
                         error = u8"Skia could not wait for the acquired Vulkan image.";
                         return false;
                     }
@@ -218,6 +218,30 @@ namespace luil::android {
             }
 
         private:
+            // 받기의 신호가 아직 오지 않았을 수 있는 semaphore는 곧바로 지울 수 없다. 빈 제출이 그
+            // 신호를 기다리게 하고, GPU가 그 제출까지 끝낸 뒤에 지운다. 장치를 잃었으면 기다릴 것이 없다.
+            void discard_acquire_semaphore(const VkSemaphore semaphore) noexcept
+            {
+                if (device_->lost() == false)
+                {
+                    const VkPipelineStageFlags stage { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT };
+                    VkSubmitInfo submit {};
+                    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                    submit.waitSemaphoreCount = 1;
+                    submit.pWaitSemaphores = &semaphore;
+                    submit.pWaitDstStageMask = &stage;
+                    const VkResult result { functions_->queue_submit(device_->queue(), 1, &submit, VK_NULL_HANDLE) };
+                    if (result == VK_ERROR_DEVICE_LOST)
+                        device_->mark_lost();
+                    // 제출하지 못했거나 그 제출의 끝을 확인하지 못했으면 아직 쓰는 중일 수 있다.
+                    // 하나를 남기는 편이 잘못된 해제보다 낫다.
+                    const bool finished { result == VK_SUCCESS && device_->wait_idle() };
+                    if (finished == false && device_->lost() == false)
+                        return;
+                }
+                functions_->destroy_semaphore(device_->device(), semaphore, nullptr);
+            }
+
             [[nodiscard]] bool create_swapchain(std::u8string& error)
             {
                 VkSurfaceCapabilitiesKHR capabilities {};
@@ -280,7 +304,6 @@ namespace luil::android {
                 }
                 swapchain_ = created;
                 extent_ = extent;
-                needs_rebuild_ = false;
                 suboptimal_checked_ = false;
 
                 // 스왑체인이 설 때만 한 줄 남긴다. 기기마다 다른 이미지 수와 전변환을 logcat에서
@@ -367,7 +390,13 @@ namespace luil::android {
                     return false;
                 }
                 release_images(true);
-                return create_swapchain(error);
+                // 이미지까지 다 감쌀 때까지 낡은 것으로 둔다. 도중에 실패하면 스왑체인이 없거나 이미지가
+                // 덜 감싸여 있어, 다음 frame이 그대로 받으면 null 스왑체인이나 빈 배열을 쓴다.
+                needs_rebuild_ = true;
+                if (create_swapchain(error) == false)
+                    return false;
+                needs_rebuild_ = false;
+                return true;
             }
 
             // 스왑체인 이미지 하나를 받는다. `semaphore`는 그 이미지를 표시 엔진이 놓을 때 신호를
