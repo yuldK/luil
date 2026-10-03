@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <array>
@@ -567,6 +568,7 @@ TEST_CASE("http client refuses a response longer than the body limit", "[net][cl
 
 TEST_CASE("http client applies the body limit to decompressed bytes", "[net][client]")
 {
+    const bool explicit_encoding { GENERATE(false, true) };
     loopback_http_server server {};
     REQUIRE(server.port() != 0);
     server.set_handler([](const loopback_request& request) {
@@ -585,6 +587,8 @@ TEST_CASE("http client applies the body limit to decompressed bytes", "[net][cli
 
     http_request small {};
     small.url = server.url("/small");
+    if (explicit_encoding)
+        small.headers.push_back({ u8"Accept-Encoding", u8"gzip" });
     small.max_body_bytes = 2;
     std::u8string error {};
     REQUIRE(static_cast<bool>(client->send(std::move(small), error)));
@@ -594,6 +598,8 @@ TEST_CASE("http client applies the body limit to decompressed bytes", "[net][cli
 
     http_request expanded {};
     expanded.url = server.url("/expanded");
+    if (explicit_encoding)
+        expanded.headers.push_back({ u8"Accept-Encoding", u8"gzip" });
     expanded.max_body_bytes = 32;
     REQUIRE(static_cast<bool>(client->send(std::move(expanded), error)));
     REQUIRE(sink.wait_for(2, 10s));
@@ -601,11 +607,22 @@ TEST_CASE("http client applies the body limit to decompressed bytes", "[net][cli
 
     http_request encoded {};
     encoded.url = server.url("/small");
+    encoded.headers.push_back({ u8"Accept-Encoding", u8"gzip" });
     encoded.decompress = false;
     encoded.max_body_bytes = 2;
     REQUIRE(static_cast<bool>(client->send(std::move(encoded), error)));
     REQUIRE(sink.wait_for(3, 10s));
     CHECK(sink.at(2).error.kind == http_error_kind::body_too_large);
+
+    http_request raw {};
+    raw.url = server.url("/small");
+    raw.headers.push_back({ u8"Accept-Encoding", u8"gzip" });
+    raw.decompress = false;
+    raw.parse.assume_kind = http_body_kind::bytes;
+    REQUIRE(static_cast<bool>(client->send(std::move(raw), error)));
+    REQUIRE(sink.wait_for(4, 10s));
+    CHECK(sink.at(3).error.empty());
+    CHECK(std::ranges::equal(sink.at(3).body.data(), gzip_ok));
 }
 
 TEST_CASE("http client refuses a streamed body that crosses the limit", "[net][client]")

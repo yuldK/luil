@@ -77,6 +77,7 @@ namespace luil::net {
             jclass url { nullptr };
             jclass http_connection { nullptr };
             jclass input_stream { nullptr };
+            jclass gzip_stream { nullptr };
             jclass output_stream { nullptr };
             jclass object { nullptr };
             jclass klass { nullptr };
@@ -119,6 +120,7 @@ namespace luil::net {
             jmethodID disconnect { nullptr };
 
             jmethodID input_read { nullptr };
+            jmethodID gzip_new { nullptr };
             jmethodID input_close { nullptr };
             jmethodID output_write { nullptr };
             jmethodID output_close { nullptr };
@@ -176,6 +178,7 @@ namespace luil::net {
                 class_slot { "java/net/URL", &api.url },
                 class_slot { "java/net/HttpURLConnection", &api.http_connection },
                 class_slot { "java/io/InputStream", &api.input_stream },
+                class_slot { "java/util/zip/GZIPInputStream", &api.gzip_stream },
                 class_slot { "java/io/OutputStream", &api.output_stream },
                 class_slot { "java/lang/Object", &api.object },
                 class_slot { "java/lang/Class", &api.klass },
@@ -218,6 +221,7 @@ namespace luil::net {
                 method_slot { &api.http_connection, "getErrorStream", "()Ljava/io/InputStream;", &api.get_error_stream },
                 method_slot { &api.http_connection, "disconnect", "()V", &api.disconnect },
                 method_slot { &api.input_stream, "read", "([BII)I", &api.input_read },
+                method_slot { &api.gzip_stream, "<init>", "(Ljava/io/InputStream;)V", &api.gzip_new },
                 method_slot { &api.input_stream, "close", "()V", &api.input_close },
                 method_slot { &api.output_stream, "write", "([BII)V", &api.output_write },
                 method_slot { &api.output_stream, "close", "()V", &api.output_close },
@@ -901,11 +905,21 @@ namespace luil::net {
                     result_.body.reserve(std::min(content_length, body_reserve_limit_bytes));
 
                 // 4xx·5xx의 몸은 오류 흐름에 있다. 몸이 없으면 nullptr이다.
-                const jobject input { status >= 400 ? env_->CallObjectMethod(connection_, api_.get_error_stream) : env_->CallObjectMethod(connection_, api_.get_input_stream) };
+                jobject input { status >= 400 ? env_->CallObjectMethod(connection_, api_.get_error_stream) : env_->CallObjectMethod(connection_, api_.get_input_stream) };
                 if (check_call(failure, false) == false)
                     return false;
                 if (input == nullptr)
                     return true;
+
+                // Accept-Encoding을 직접 주면 플랫폼의 자동 gzip 해제가 꺼진다. 그때만 직접 푼다.
+                const std::u8string_view encoding { find_header(result_.headers, u8"content-encoding") };
+                if (state_.request.decompress && (same_ascii_ci(encoding, u8"gzip") || same_ascii_ci(encoding, u8"x-gzip")))
+                {
+                    input = env_->NewObject(api_.gzip_stream, api_.gzip_new, input);
+                    if (check_call(failure, false) == false || input == nullptr)
+                        return false;
+                    std::erase_if(result_.headers, [](const http_header& header) { return same_ascii_ci(header.name, u8"content-encoding") || same_ascii_ci(header.name, u8"content-length"); });
+                }
 
                 const jbyteArray block { env_->NewByteArray(read_chunk_bytes) };
                 if (block == nullptr || check_call(failure, false) == false)
