@@ -591,6 +591,11 @@ namespace luil::android {
                     break;
                 case APP_CMD_EDITOR_ACTION:
                     // 키보드의 완료 단추는 Enter다 (기본 단추 실행, 한 줄 칸의 확정).
+                    //  - IME는 조합을 확정한 **뒤** 완료 동작을 보내지만, 확정은 깨우기 fd로, 완료는
+                    //    명령 pipe로 와서 looper가 완료를 먼저 꺼낼 수 있다. 확정을 먼저 초안으로
+                    //    보내야 앱이 마지막 글자가 빠진 글로 제출·검색하지 않는다. 편집은 곧바로
+                    //    logic으로 가고 Enter는 입력 thread를 거치므로 이 순서가 그대로 이어진다.
+                    process_text_input();
                     post_enter();
                     break;
                 case APP_CMD_WINDOW_REDRAW_NEEDED:
