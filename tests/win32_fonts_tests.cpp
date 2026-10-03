@@ -72,7 +72,7 @@ TEST_CASE("Installed font family names are valid UTF-8", "[win32][fonts]")
 // 한자는 한국어·일본어·중국어에서 자형이 달라, 이 값이 없으면 시스템이 임의로 고른다.
 TEST_CASE("The user UI language is read as a BCP-47 tag", "[win32][fonts]")
 {
-    const std::string_view language { luil::user_ui_language() };
+    const std::string language { luil::user_ui_language() };
     // 이름을 읽지 못하는 환경도 있다 — 그때는 지금까지처럼 언어 없이 고른다.
     if (language.empty())
         SKIP("The OS did not report a user locale name.");
@@ -84,6 +84,18 @@ TEST_CASE("The user UI language is read as a BCP-47 tag", "[win32][fonts]")
         REQUIRE(static_cast<unsigned char>(character) < 0x80u);
 
     // 두 번 물어도 같은 값이다 (한 번만 읽는다).
+    REQUIRE(luil::user_ui_language() == language);
+}
+
+// 언어를 다시 읽으면 그 언어로 고른 대체 글꼴도 낡는다 (Android는 Activity만 다시 선다).
+TEST_CASE("Refreshing the user language drops the language chosen fallbacks", "[win32][fonts]")
+{
+    luil::clear_font_caches();
+    static_cast<void>(luil::fallback_typeface(U'直'));
+    REQUIRE(luil::fallback_cache_size() == 1u);
+    const std::string language { luil::user_ui_language() };
+    luil::refresh_user_ui_language();
+    REQUIRE(luil::fallback_cache_size() == 0u);
     REQUIRE(luil::user_ui_language() == language);
 }
 

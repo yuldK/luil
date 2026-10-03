@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -57,6 +58,20 @@ namespace luil {
         ui_typeface_preference& preference()
         {
             static ui_typeface_preference instance {};
+            return instance;
+        }
+
+        // 대체 글꼴을 고를 사용자 언어다. 비어 있으면 아직 읽지 않았다.
+        //  - registry가 자물쇠를 쥔 채 읽으므로 순서는 언제나 registry → 언어다.
+        struct user_language_cache
+        {
+            std::mutex mutex {};
+            std::optional<std::string> language {};
+        };
+
+        user_language_cache& language_cache()
+        {
+            static user_language_cache instance {};
             return instance;
         }
 
@@ -175,12 +190,28 @@ namespace luil {
         return match_family(*font_manager, source.default_ui_family());
     }
 
-    std::string_view user_ui_language()
+    std::string user_ui_language()
     {
-        // 한 번만 읽는다. OS 설정이라 프로세스가 도는 동안 바뀌지 않고, 바꾸면
-        // 앱을 다시 켜는 것이 OS의 규칙이다.
-        static const std::string language { platform_font_source().read_user_language() };
-        return language;
+        // 한 번 읽어 둔다. Windows는 언어를 바꾸면 앱을 다시 켜는 것이 OS의 규칙이다.
+        // Android는 프로세스를 남긴 채 Activity만 다시 세우므로 host가 `refresh_user_ui_language`로 거둔다.
+        user_language_cache& cache { language_cache() };
+        const std::lock_guard<std::mutex> lock { cache.mutex };
+        if (cache.language.has_value() == false)
+            cache.language = platform_font_source().read_user_language();
+        return *cache.language;
+    }
+
+    void refresh_user_ui_language()
+    {
+        {
+            user_language_cache& cache { language_cache() };
+            const std::lock_guard<std::mutex> lock { cache.mutex };
+            cache.language.reset();
+        }
+        // 대체 글꼴은 언어로 고른 것이라 함께 낡는다.
+        font_registry& state { registry() };
+        const std::lock_guard<std::mutex> lock { state.mutex };
+        state.fallback_cache.clear();
     }
 
     void set_configured_fonts(const std::u8string_view ui_family, const std::u8string_view code_family)

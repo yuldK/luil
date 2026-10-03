@@ -432,7 +432,10 @@ namespace luil::android {
                 }
 
                 // 글꼴 registry가 첫 조회 때 한 번 읽는다. 무엇보다 먼저 넣는다.
+                //  - 시스템 언어를 바꾸면 프로세스는 남고 Activity만 다시 선다. 앞 Activity에서
+                //    읽어 둔 언어와 그 언어로 고른 대체 글꼴을 거둔다.
                 set_user_language(read_language(app_->config));
+                refresh_user_ui_language();
                 // 휴대폰·태블릿이다. 창 caption이 없고 맨 위는 앱 바의 자리다.
                 // logic thread가 첫 frame을 짓기 전에 정한다.
                 set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false });

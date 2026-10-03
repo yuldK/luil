@@ -103,8 +103,11 @@ namespace luil {
     //
     // 대체 글꼴을 고를 때 **자형을 가르는 값**이라 여기 있다 — 한자는 한국어·
     // 일본어·중국어에서 모양이 다르고, 언어를 주지 않으면 시스템이 임의로 고른다.
-    // OS 설정이라 프로세스가 도는 동안 바뀌지 않아 한 번만 읽는다.
-    [[nodiscard]] std::string_view user_ui_language();
+    // 한 번 읽어 두고, host가 언어가 바뀌었다고 알릴 때만 다시 읽는다.
+    [[nodiscard]] std::string user_ui_language();
+    // 읽어 둔 언어와 그 언어로 고른 대체 글꼴을 거둔다. 다음 조회가 다시 읽는다.
+    //  - Android는 시스템 언어가 바뀌면 프로세스를 남긴 채 Activity만 다시 세운다.
+    void refresh_user_ui_language();
 
     // 고른 글꼴에 없는 글자를 대신 그릴 typeface다.
     // `Cascadia Code`에 한글이 없고 어느 코드 글꼴에도 이모지가
