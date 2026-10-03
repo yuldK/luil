@@ -835,6 +835,8 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 - 한 번 물러서면 그 **Activity**가 끝날 때까지 Vulkan을 다시 쓰지 않는다. Windows는 창 하나가
   물러서지만, Android는 창이 수시로 다시 생기므로 창 단위로 두면 손실 뒤에도 매번 다시 시도한다.
 - GPU 대기는 빈 제출에 fence를 걸어 `fence_wait.h`의 예산만큼 쪼개 기다린다. 이미지 받기도 같다.
+  대기 실패를 장치 손실로 간주하지 않는다. 장치가 살아 있으면서 종료 대기가 실패하면 실행 중인
+  자원을 해제하거나 CPU로 전환할 수 없으므로 오류를 기록하고 `platform_fail_fast`로 끝낸다.
 - 렌더러 경로는 명령줄 대신 `debug.luil.*` 시스템 속성으로 고른다 (`apply_debug_properties`,
   앱이 부를 때만). `debug.` 속성은 셸만 쓸 수 있다.
 - 할당기 선언(`vulkan_memory_allocator.h`)은 M152의 두 `libskia.a`에서 기호를 확인했다

@@ -1,6 +1,7 @@
 #include "android/vulkan_device.h"
 
 #include "android/vulkan_memory_allocator.h"
+#include "host/fail_fast.h"
 #include "host/fence_wait.h"
 
 #include "include/gpu/ganesh/GrDirectContext.h"
@@ -8,6 +9,7 @@
 #include "include/gpu/vk/VulkanBackendContext.h"
 #include "include/gpu/vk/VulkanMemoryAllocator.h"
 
+#include <android/log.h>
 #include <dlfcn.h>
 
 #include <algorithm>
@@ -62,9 +64,13 @@ namespace luil::android {
     {
         if (context_ != nullptr)
         {
-            // 대기가 실패해도(예산 소진·장치 손실) 그대로 진행한다. 잃은 장치에는 abandon만
-            // 하고, 아니면 Skia가 쥔 자원을 먼저 놓은 뒤 장치를 부순다.
-            if (lost() == false && wait_idle())
+            const bool idle { lost() == false && wait_idle() };
+            if (idle == false && lost() == false)
+            {
+                __android_log_print(ANDROID_LOG_ERROR, "luil", "Vulkan device shutdown timed out; pending resources cannot be destroyed safely");
+                platform_fail_fast();
+            }
+            if (idle)
                 context_->releaseResourcesAndAbandonContext();
             else
                 context_->abandonContext();
@@ -374,10 +380,14 @@ namespace luil::android {
         }
 
         const VkResult result { wait_fence(fence) };
-        // 예산을 다 쓴 fence는 아직 queue가 쥐고 있을 수 있어 부수지 않는다.
-        // 여기에 닿은 것이 이미 비정상이고, 하나를 남기는 편이 잘못된 해제보다 낫다.
-        if (result != VK_TIMEOUT)
-            functions_.destroy_fence(device_, fence, nullptr);
+        // 실패한 대기는 fence와 앞선 제출의 완료를 증명하지 못한다. 장치가 살아 있으면
+        // 재시도로 돌아가 자원을 버리는 길도 끊는다.
+        if (result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST)
+        {
+            __android_log_print(ANDROID_LOG_ERROR, "luil", "Vulkan shutdown wait failed (%d); pending resources cannot be destroyed safely", static_cast<int>(result));
+            platform_fail_fast();
+        }
+        functions_.destroy_fence(device_, fence, nullptr);
         return result == VK_SUCCESS;
     }
 

@@ -1,6 +1,7 @@
 #include "android/vulkan_skia_renderer.h"
 
 #include "android/vulkan_device.h"
+#include "host/fail_fast.h"
 #include "host/fence_wait.h"
 #include "host/font_registry.h"
 #include "luil/text/fonts.h"
@@ -84,9 +85,14 @@ namespace luil::android {
 
             ~vulkan_skia_renderer() override
             {
-                // 대기가 실패해도(예산 소진·장치 손실) 그대로 진행한다. 창과의 연결을 끊는 것이
-                // CPU 물러섬의 전제라 여기서 멈출 수 없다.
-                release_images(device_->lost() == false && device_->wait_idle());
+                const bool idle { device_->lost() == false && device_->wait_idle() };
+                // 시간 초과는 장치 손실이 아니다. 실행 중인 자원을 부수거나 창을 CPU에 넘길 수 없다.
+                if (idle == false && device_->lost() == false)
+                {
+                    __android_log_print(ANDROID_LOG_ERROR, "luil", "Vulkan shutdown timed out; pending resources cannot be destroyed safely");
+                    platform_fail_fast();
+                }
+                release_images(idle);
                 if (acquire_fence_ != VK_NULL_HANDLE)
                     functions_->destroy_fence(device_->device(), acquire_fence_, nullptr);
                 if (swapchain_ != VK_NULL_HANDLE)
@@ -449,9 +455,12 @@ namespace luil::android {
                     functions_->reset_fences(device_->device(), 1, &acquire_fence_);
                     return true;
                 }
-                // 예산을 다 쓴 fence는 표시 엔진이 아직 쥐고 있을 수 있어 부수지 않고 놓는다.
-                if (result == VK_TIMEOUT)
-                    acquire_fence_ = VK_NULL_HANDLE;
+                // 이 fence는 표시 엔진의 일이다. queue의 빈 제출을 기다려도 완료를 증명할 수 없다.
+                if (device_->lost() == false)
+                {
+                    __android_log_print(ANDROID_LOG_ERROR, "luil", "Vulkan image acquisition did not complete; the swapchain cannot be destroyed safely");
+                    platform_fail_fast();
+                }
                 error = result == VK_TIMEOUT ? u8"Timed out waiting for a Vulkan swapchain image." : u8"Failed to wait for a Vulkan swapchain image.";
                 return false;
             }
