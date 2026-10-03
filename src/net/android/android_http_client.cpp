@@ -848,10 +848,12 @@ namespace luil::net {
                 for (const http_header& header : headers)
                     if (set_property(header.name, header.value, failure) == false)
                         return false;
-                // 풀지 않을 답이면 압축을 청하지 않는다고 적는다. 적지 않으면 플랫폼이 gzip을
-                // 청하고 몰래 풀어, 앱이 받는 바이트와 상한이 견주는 바이트가 달라진다.
-                if (state_.request.decompress == false && find_header(headers, u8"accept-encoding").empty())
-                    if (set_property(u8"Accept-Encoding", u8"identity", failure) == false)
+                // 압축을 청하는 일은 늘 우리가 한다. 적지 않으면 플랫폼이 gzip을 청하고 몰래 푸는데,
+                // 빈 gzip 몸에서 EOF로 실패하고 deflate는 풀지 않는다. 직접 청하면 그 해제가 꺼지고
+                // `wrap_decoder`가 푼다 (WinHTTP가 청하는 것과 같은 두 가지다).
+                //  - 풀지 않을 답이면 압축을 청하지 않는다고 적는다. 앱이 받는 바이트가 선의 바이트다.
+                if (find_header(headers, u8"accept-encoding").empty())
+                    if (set_property(u8"Accept-Encoding", state_.request.decompress ? u8"gzip, deflate" : u8"identity", failure) == false)
                         return false;
 
                 if (state_.request.body.empty())
@@ -939,8 +941,8 @@ namespace luil::net {
                 if (state_.request.method == http_method::head || status == 204 || status == 304 || informational)
                     return true;
 
-                // 압축되지 않은 답의 길이가 상한을 넘으면 한 바이트도 읽지 않는다. 플랫폼이 몰래
-                // 푼 답은 길이와 Content-Encoding을 지운 채로 오므로 여기에 걸리지 않는다.
+                // 압축되지 않은 답의 길이가 상한을 넘으면 한 바이트도 읽지 않는다. 압축된 답의 길이는
+                // 푼 크기가 아니라 여기서 견주지 않고, 읽는 동안 푼 바이트로 잰다.
                 const bool content_encoded { state_.request.decompress && find_header(result_.headers, u8"content-encoding").empty() == false };
                 const std::size_t content_length { parse_content_length(find_header(result_.headers, u8"content-length")) };
                 if (content_encoded == false && content_length > state_.request.max_body_bytes)
@@ -958,7 +960,7 @@ namespace luil::net {
                 if (input == nullptr)
                     return true;
 
-                // Accept-Encoding을 직접 주면 플랫폼의 자동 gzip 해제가 꺼진다. 그때만 직접 푼다.
+                // Accept-Encoding을 늘 직접 주므로 플랫폼의 자동 gzip 해제는 꺼져 있다. 여기서 푼다.
                 jobject inflater { nullptr };
                 if (state_.request.decompress && wrap_decoder(input, inflater, failure) == false)
                     return false;
