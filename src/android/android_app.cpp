@@ -562,6 +562,8 @@ namespace luil::android {
                     // glue는 이 알림이 끝날 때까지 창을 쥐고 있다가 놓는다.
                     // 그 안에서 렌더러를 버려야 놓인 창을 붙잡은 채로 남지 않는다.
                     renderer_.reset();
+                    update_deadline_.reset();
+                    reveal_pending_ = false;
                     // 장치는 남긴다. 창이 다시 생기면 스왑체인만 새로 선다. 그릴 표면이 없는
                     // 동안 GPU 메모리는 돌려준다.
                     if (vulkan_ != nullptr)
@@ -804,6 +806,8 @@ namespace luil::android {
 
             [[nodiscard]] int poll_timeout() const
             {
+                if (renderer_ == nullptr)
+                    return -1;
                 if (dirty_ && renderer_ != nullptr)
                     return 0;
                 if (update_deadline_.has_value() == false)
@@ -966,6 +970,12 @@ namespace luil::android {
             // IME가 고친 상태를 받고, 앱의 초점·글이 바뀌었으면 IME에 넘긴다.
             void process_text_input()
             {
+                // TERM_WINDOW에서 떼어 낸 IME를 표면 없는 동안 다시 붙이지 않는다.
+                if (renderer_ == nullptr)
+                {
+                    app_->textInputState = 0;
+                    return;
+                }
                 // 표시는 glue가 Java thread에서 세운다. 읽는 쪽은 이 thread 하나다.
                 if (app_->textInputState != 0)
                 {
@@ -1100,7 +1110,7 @@ namespace luil::android {
                 if (reveal_pending_ && tree != nullptr && tree->root() != nullptr && std::abs(tree->root()->bounds().height - static_cast<float>(content_height())) < 1.0f)
                 {
                     reveal_pending_ = false;
-                    host_->post_raw_input(focus_reveal_event {});
+                    host_->post_raw_input(focus_reveal_event { interaction.focused_surface });
                 }
 
                 std::u8string error {};
@@ -1122,6 +1132,11 @@ namespace luil::android {
                 // 시간이 흘러야 바뀌는 그림(애니메이션·tooltip 지연)의 다음 시각이다.
                 const auto now { std::chrono::steady_clock::now() };
                 update_deadline_ = tree != nullptr ? tree->next_update(update_context { now }, state.interaction) : std::nullopt;
+                for (const overlay_layer& layer : layers)
+                    if (layer.tree != nullptr)
+                        if (const auto next { layer.tree->next_update(update_context { now }, layer.interaction) }; next.has_value())
+                            if (update_deadline_.has_value() == false || *next < *update_deadline_)
+                                update_deadline_ = next;
                 if (update_deadline_.has_value() && *update_deadline_ <= now)
                     update_deadline_ = now + continuous_repaint_interval;
             }
