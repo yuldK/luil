@@ -60,6 +60,10 @@ add_executable(luil_core_tests
     # core가 링크로 묶어 부르는 플랫폼 hook의 test용 정의다 (파일에 이유가 있다).
     core_platform_stub.cpp
     raster_probe.cpp)
+# IME 연결은 OS 헤더를 쓰지 않아 Windows에서도 지연·선택 회귀를 실행할 수 있다.
+target_sources(luil_core_tests PRIVATE
+    "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
+    android_text_input_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
@@ -91,9 +95,7 @@ if(LUIL_PLATFORM STREQUAL "android")
     target_sources(luil_core_tests
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/android_input.cpp"
-            "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
-            android_input_tests.cpp
-            android_text_input_tests.cpp)
+            android_input_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
 
     # HTTP client는 JNI로 java.net을 부르므로 JVM 안에서만 돈다. 셸에서 띄운 실행 파일에는 JVM이

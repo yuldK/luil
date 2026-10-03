@@ -1,10 +1,13 @@
 #include "android/android_text_input.h"
 
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 namespace luil::android {
     namespace {
+        // 초점이나 Activity를 다시 붙여도 옛 편집의 완료와 겹치지 않는다.
+        std::atomic<std::uint64_t> edit_sequence { 0 };
         // UTF-8 글자 하나의 길이다 (첫 바이트로 안다). 잘못된 바이트는 한 바이트로 넘긴다.
         [[nodiscard]] std::size_t sequence_length(const unsigned char lead) noexcept
         {
@@ -176,6 +179,7 @@ namespace luil::android {
             // 초점이 옮겨 간다. 조합 중이었으면 옛 칸에 확정한다.
             finish_composition();
             target_ = target;
+            pending_sequence_ = 0;
             if (target_.has_value())
             {
                 observed_ = host_->committed_document();
@@ -197,7 +201,11 @@ namespace luil::android {
         //  - 돌아온 글이 IME의 것과 같으면 넘길 것이 없다. 다르면 앱이 따로 바꾼 것이다
         //    (하드웨어 키, 붙여넣기, 앱의 입력 거르기).
         const text_input_document committed { host_->committed_document() };
-        if (committed == observed_)
+        if (pending_sequence_ != 0 && committed.applied_sequence < pending_sequence_)
+            return;
+        const bool acknowledged { pending_sequence_ != 0 };
+        pending_sequence_ = 0;
+        if (committed == observed_ && acknowledged == false)
             return;
         observed_ = committed;
         if (committed == document_)
@@ -250,12 +258,7 @@ namespace luil::android {
         {
             document_ = document;
             // 조합 없이 IME가 곧바로 쓴 글이거나 조합이 끝난 글이다. 확정된 글이므로 초안으로 보낸다.
-            text_edit_request edit {};
-            edit.target = *target_;
-            edit.command = text::text_edit_command::replace_all;
-            edit.text = document.text;
-            edit.offset = document.caret;
-            host_->post_edit(std::move(edit));
+            post_document(document);
         }
         if (was_composing)
         {
@@ -336,16 +339,24 @@ namespace luil::android {
         composing_ = false;
         // 조합 중이던 글을 그대로 확정한다 (TSF가 초점 상실에서 하는 것과 같다).
         document_ = composed_;
-        text_edit_request edit {};
-        edit.target = *target_;
-        edit.command = text::text_edit_command::replace_all;
-        edit.text = composed_.text;
-        edit.offset = composed_.caret;
-        host_->post_edit(std::move(edit));
+        post_document(composed_);
         text_composition_event clear {};
         clear.target = *target_;
         clear.composing = false;
         host_->post_composition(std::move(clear));
+    }
+
+    void ime_session::post_document(const text_input_document& document)
+    {
+        text_edit_request edit {};
+        edit.target = *target_;
+        edit.command = text::text_edit_command::replace_all;
+        edit.text = document.text;
+        edit.offset = document.caret;
+        edit.anchor = document.anchor;
+        edit.sequence = edit_sequence.fetch_add(1, std::memory_order_relaxed) + 1;
+        pending_sequence_ = edit.sequence;
+        host_->post_edit(std::move(edit));
     }
 
     void ime_session::send(const text_input_document& document)

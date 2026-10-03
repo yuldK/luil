@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -25,6 +26,8 @@ namespace luil {
         // `composition_text` 안에서 밑줄을 긋는 구간이다 (UTF-8 byte offset).
         std::size_t composing_begin { 0 };
         std::size_t composing_end { 0 };
+        // 마지막으로 적용된 비동기 편집 번호다. make_text_input_view가 초안에서 옮긴다.
+        std::uint64_t applied_sequence { 0 };
 
         // 지금 화면에 보이는 글이다 (조합 중이면 조합 글이 섞인 쪽).
         // element가 그리는 글과 같은 것이라, 점진 검색처럼 **보이는 대로**

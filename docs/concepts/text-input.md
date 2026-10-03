@@ -20,6 +20,7 @@ struct text_input_view
     bool composing;
     std::u8string composition_text;
     std::size_t composition_caret, composing_begin, composing_end;
+    std::uint64_t applied_sequence;
 };
 ```
 
@@ -28,6 +29,12 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 앱은 `make_text_input_view(state, composition, target)`로 확정 초안과 해당 target의 조합 표시를 합칠 수 있다. `text_input_view::displayed_text()`는 조합 중 화면에 보이는 전체 문자열을 반환한다. 점진 검색은 `search_query(view, any_match)`를 사용하면 표시 문자열이 아무 결과도 맞히지 못하는 조합 단계에서 비어 있지 않은 확정 문자열로 물러설 수 있다. 확정 문자열이 비어 있으면 표시 문자열을 그대로 쓴다.
 
 ## Android IME
+
+IME의 `replace_all`에는 caret과 anchor 및 `text_edit_request::sequence`가 함께 온다. 앱은
+`apply_text_edit`로 처리하고 `make_text_input_view`로 snapshot을 만들면 처리 번호가 자동으로
+왕복한다. 편집이나 view를 직접 구현하는 앱은 거른 입력을 포함해 처리 완료 번호를
+`text_edit_state::applied_sequence`에서 `text_input_view::applied_sequence`로 보존해야 한다.
+IME는 최신 번호가 돌아오기 전의 중간 snapshot을 무시하므로 빠른 타이핑이 되돌아가지 않는다.
 
 Android에서는 GameActivity가 주는 GameTextInput이 IME(`InputConnection`)를 맡는다. 앱 쪽 Java 코드는 없다. [`ime_session`](../../src/android/android_text_input.h)이 TSF의 shadow document와 같은 원리로 IME와 초점 칸을 잇는다.
 

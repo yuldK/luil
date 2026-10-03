@@ -90,6 +90,7 @@ namespace luil::android {
         // 조합을 지금 글로 확정하고 조합 표시를 거둔다.
         void finish_composition();
         void send(const text_input_document& document);
+        void post_document(const text_input_document& document);
 
         text_input_host* host_;
         platform platform_ {};
@@ -100,6 +101,8 @@ namespace luil::android {
         text_input_document observed_ {};
         // 조합 중인 글 전체다. 초점이 옮겨 가면 이것으로 확정한다.
         text_input_document composed_ {};
+        // 이 번호가 돌아오기 전의 snapshot은 이전 편집의 중간 결과다.
+        std::uint64_t pending_sequence_ { 0 };
         bool composing_ { false };
         bool keyboard_shown_ { false };
     };

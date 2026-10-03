@@ -4,6 +4,7 @@
 #include "luil/ui/ui_interaction.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -19,8 +20,13 @@ namespace luil {
         // UTF-8 byte offset이다. 플랫폼마다 단위가 다르다 (TSF는 UTF-16 ACP).
         std::size_t caret { 0 };
         std::size_t anchor { 0 };
+        std::uint64_t applied_sequence { 0 };
 
-        [[nodiscard]] bool operator==(const text_input_document&) const = default;
+        // 번호는 처리 완료 표식이고 문서의 내용은 아니다.
+        [[nodiscard]] bool operator==(const text_input_document& other) const
+        {
+            return text == other.text && caret == other.caret && anchor == other.anchor;
+        }
     };
 
     // 플랫폼 IME가 앱에 묻고 알리는 창구다 (TSF, Android). UI thread에서만 불린다.

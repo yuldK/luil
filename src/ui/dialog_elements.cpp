@@ -349,7 +349,7 @@ namespace luil {
 
     std::optional<text_input_snapshot> text_input_element::text_input() const
     {
-        return text_input_snapshot { value_.text, value_.caret, value_.anchor, value_.composing, value_.composition_text, value_.composition_caret };
+        return text_input_snapshot { value_.text, value_.caret, value_.anchor, value_.composing, value_.composition_text, value_.composition_caret, value_.applied_sequence };
     }
 
     std::optional<rect_f> text_input_element::text_span_bounds(const text_span_query& query, const text_measurer& measurer) const
@@ -406,7 +406,8 @@ namespace luil {
         if (target - measure(text.substr(0, before)) < after_width - target)
             return before;
         // 폭이 없는 결합 문자도 포함해, 같은 거리에 있는 마지막 경계를 고른다.
-        const auto last_equal { std::upper_bound(after + 1, boundaries.end(), after_width, [&](const float position, const std::size_t offset) { return position < measure(text.substr(0, offset)); }) };
+        const auto narrower = [&](const float position, const std::size_t offset) { return position < measure(text.substr(0, offset)); };
+        const auto last_equal { std::upper_bound(after + 1, boundaries.end(), after_width, narrower) };
         return *(last_equal - 1);
     }
 

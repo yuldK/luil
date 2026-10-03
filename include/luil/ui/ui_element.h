@@ -97,6 +97,7 @@ namespace luil {
         bool composing { false };
         std::u8string_view composition_text {};
         std::size_t composition_caret { 0 };
+        std::uint64_t applied_sequence { 0 };
     };
 
     // 액션은 상태를 바꾸지 않고 후속 메시지를 반환한다.

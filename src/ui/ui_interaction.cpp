@@ -782,6 +782,8 @@ namespace luil {
 
     void apply_text_edit(text::text_edit_state& state, const text_edit_request& request, const text_insert_filter& filter)
     {
+        if (request.sequence != 0)
+            state.applied_sequence = request.sequence;
         const auto filtered { [&filter](const std::u8string& value) { return filter != nullptr ? filter(value) : value; } };
         switch (request.command)
         {
@@ -838,6 +840,8 @@ namespace luil {
             return;
         case text::text_edit_command::replace_all:
             text::text_edit_replace_all(state, filtered(request.text), request.offset);
+            if (request.anchor.has_value())
+                state.anchor = text::text_edit_clamp_offset(state.text, *request.anchor);
             return;
         case text::text_edit_command::place_caret:
             text::text_edit_place_caret(state, request.offset, request.extend);
@@ -851,6 +855,7 @@ namespace luil {
         view.text = state.text;
         view.caret = state.caret;
         view.anchor = state.anchor;
+        view.applied_sequence = state.applied_sequence;
         if (composition.has_value() == false || composition->target != target)
             return view;
 

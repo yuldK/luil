@@ -346,7 +346,7 @@ namespace luil::android {
                 const std::optional<text_input_snapshot> value { location.element != nullptr ? location.element->text_input() : std::nullopt };
                 if (value.has_value() == false)
                     return {};
-                return { std::u8string { value->text }, value->caret, value->anchor };
+                return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence };
             }
 
             [[nodiscard]] std::optional<rect_f> text_rect(const text_input_document& document, const std::size_t begin, const std::size_t end) const override

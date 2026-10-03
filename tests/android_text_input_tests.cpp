@@ -1,4 +1,5 @@
 #include "android/android_text_input.h"
+#include "luil/ui/dialog_elements.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -166,6 +167,7 @@ TEST_CASE("The IME is not rewound while its edit travels through logic", "[andro
 
     // 앱이 받아들인 글이 돌아오면 넘길 것이 없다.
     host.committed = { u8"abc", 3, 3 };
+    host.committed.applied_sequence = host.edits.back().sequence;
     session.synchronize();
     REQUIRE(platform.sent.size() == 1u);
 
@@ -175,6 +177,76 @@ TEST_CASE("The IME is not rewound while its edit travels through logic", "[andro
     REQUIRE(platform.sent.size() == 2u);
     REQUIRE(platform.sent[1].text == u8"abcd");
     REQUIRE(platform.sent[1].selection == luil::android::ime_span { 4, 4 });
+}
+
+TEST_CASE("Intermediate IME acknowledgements do not overwrite newer edits", "[android][ime]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    host.committed = { u8"ab", 2, 2 };
+    session.synchronize();
+    session.accept({ u8"abc", { 3, 3 }, {} });
+    session.accept({ u8"abcd", { 4, 4 }, {} });
+    REQUIRE(host.edits.size() == 2u);
+    REQUIRE(host.edits[0].sequence < host.edits[1].sequence);
+
+    // 첫 편집을 필터가 고친 경우도 중간 결과다.
+    host.committed = { u8"ABC", 3, 3, host.edits[0].sequence };
+    session.synchronize();
+    REQUIRE(platform.sent.size() == 1u);
+    host.committed = { u8"ABCD", 4, 4, host.edits[1].sequence };
+    session.synchronize();
+    REQUIRE(platform.sent.size() == 2u);
+    REQUIRE(platform.sent.back().text == u8"ABCD");
+    session.synchronize();
+    REQUIRE(platform.sent.size() == 2u);
+}
+
+TEST_CASE("IME selections preserve their anchor across logic and snapshots", "[android][ime]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    host.committed = { u8"a한b", 5, 5 };
+    session.synchronize();
+    session.accept({ u8"a한b", { 2, 1 }, {} });
+    REQUIRE(host.edits.size() == 1u);
+    REQUIRE(host.edits.back().anchor == 4u);
+    REQUIRE(host.edits.back().offset == 1u);
+
+    luil::text::text_edit_state state {};
+    luil::apply_text_edit(state, host.edits.back());
+    const auto view { luil::make_text_input_view(state, std::nullopt, note) };
+    REQUIRE(view.anchor == 4u);
+    REQUIRE(view.caret == 1u);
+    REQUIRE(view.applied_sequence == host.edits.back().sequence);
+    luil::text_input_element element { { luil::application_element_kind(0), u8"note" }, view, luil::text_input_config {} };
+    REQUIRE(element.text_input()->applied_sequence == view.applied_sequence);
+    host.committed = { state.text, state.caret, state.anchor, view.applied_sequence };
+    session.synchronize();
+    REQUIRE(platform.sent.size() == 1u);
+    // 앱에서 선택을 바꾸면 그 방향도 IME로 돌아온다.
+    host.committed.anchor = 0;
+    session.synchronize();
+    REQUIRE(platform.sent.back().selection == luil::android::ime_span { 0, 1 });
+}
+
+TEST_CASE("An acknowledged rejected edit restores the unchanged app document", "[android][ime]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    host.committed = { u8"ab", 2, 2 };
+    session.synchronize();
+    session.accept({ u8"abc", { 3, 3 }, {} });
+    host.committed.applied_sequence = host.edits.back().sequence;
+    session.synchronize();
+    REQUIRE(platform.sent.size() == 2u);
+    REQUIRE(platform.sent.back().text == u8"ab");
 }
 
 TEST_CASE("Moving the focus mid composition commits it to the old box", "[android][ime]")

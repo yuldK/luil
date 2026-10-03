@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,6 +51,8 @@ namespace luil::text {
         // 마지막 편집이 끝난 caret 자리다.
         // 여기서 이어지는 같은 종류의 편집만 묶는다.
         std::size_t group_caret { 0 };
+        // 비동기 IME 편집이 어디까지 적용됐는지 snapshot으로 되돌린다. undo 대상은 아니다.
+        std::uint64_t applied_sequence { 0 };
     };
 
     enum class text_edit_motion

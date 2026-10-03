@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -26,6 +27,10 @@ namespace luil {
         bool extend { false };
         std::size_t offset { 0 };
         std::u8string text {};
+        // replace_all의 선택 시작점이다. 비어 있으면 caret으로 접는다.
+        std::optional<std::size_t> anchor {};
+        // IME가 발번한다. apply_text_edit와 make_text_input_view가 처리 완료 번호를 되돌린다.
+        std::uint64_t sequence { 0 };
     };
 
     // IME 조합의 표시 상태다.
