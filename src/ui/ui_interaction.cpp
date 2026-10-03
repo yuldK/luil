@@ -2556,10 +2556,21 @@ namespace luil {
                     controller.cancel_dropped_gestures();
                 next_sequence = received.sequence + 1;
 
+                // 큐가 밀렸으면 뒤에 더 이른 뗌·취소가 남아 있다. 벽시계가 아니라 입력 시각까지
+                // 진행해야 짧은 탭이 길게 누르기로 바뀌지 않는다.
+                const auto time_of = [](const auto& value) -> std::optional<std::chrono::steady_clock::time_point> {
+                    if constexpr (requires { value.time; })
+                        return value.time;
+                    else
+                        return std::nullopt;
+                };
+                const auto time { std::visit(time_of, received.payload) };
                 dispatch(controller.process(received.payload));
+                if (time.has_value())
+                    dispatch(controller.advance(*time));
             }
-            // 이벤트가 왔든 시간이 다 됐든 지금 시각까지의 판정을 실행한다.
-            dispatch(controller.advance(std::chrono::steady_clock::now()));
+            else
+                dispatch(controller.advance(std::chrono::steady_clock::now()));
 
             if ((controller.snapshot() == published) == false)
             {
