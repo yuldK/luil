@@ -98,6 +98,61 @@ TEST_CASE("Only the indexed pointer goes down or up", "[android][input]")
     REQUIRE(as<luil::pointer_moved_event>(events[1]).pointer_id == 5u);
 }
 
+TEST_CASE("Palm rejection cancels only the lifted contact", "[android][input]")
+{
+    luil::android::input_translator translator {};
+    static_cast<void>(translator.translate(motion(AMOTION_EVENT_ACTION_DOWN, 0, { finger(0, 10.0f, 110.0f) }), phone));
+    static_cast<void>(translator.translate(motion(pointer_action(AMOTION_EVENT_ACTION_POINTER_DOWN, 1), 10, { finger(0, 10.0f, 110.0f), finger(5, 50.0f, 150.0f) }), phone));
+    auto canceled { motion(pointer_action(AMOTION_EVENT_ACTION_POINTER_UP, 1), 20, { finger(0, 10.0f, 110.0f), finger(5, 50.0f, 150.0f) }) };
+    canceled.flags = 0x20; // MotionEvent.FLAG_CANCELED
+    const auto events { translator.translate(canceled, phone) };
+    REQUIRE(events.size() == 2u);
+    REQUIRE(as<luil::pointer_moved_event>(events[0]).pointer_id == 0u);
+    REQUIRE(as<luil::pointer_cancelled_event>(events[1]).pointer_id == 5u);
+    REQUIRE(translator.cancel_all(luil::android::event_time(30)).size() == 1u);
+}
+
+TEST_CASE("A canceled mouse can press the same button again", "[android][input]")
+{
+    luil::android::input_translator translator {};
+    const auto mouse = [](const std::int32_t action) { return motion(action, 0, { { 0, AMOTION_EVENT_TOOL_TYPE_MOUSE, 60.0f, 160.0f } }); };
+    REQUIRE(translator.translate(mouse(AMOTION_EVENT_ACTION_DOWN), phone).size() == 1u);
+    const auto canceled { translator.translate(mouse(AMOTION_EVENT_ACTION_CANCEL), phone) };
+    REQUIRE(canceled.size() == 1u);
+    REQUIRE(as<luil::pointer_cancelled_event>(canceled[0]).device == luil::pointer_device::mouse);
+    REQUIRE(translator.translate(mouse(AMOTION_EVENT_ACTION_UP), phone).empty());
+    const auto pressed { translator.translate(mouse(AMOTION_EVENT_ACTION_DOWN), phone) };
+    REQUIRE(pressed.size() == 1u);
+    REQUIRE(as<luil::pointer_pressed_event>(pressed[0]).button == luil::pointer_button::left);
+}
+
+TEST_CASE("Hardware dead keys compose or fall back to separate characters", "[android][input]")
+{
+    luil::android::input_translator translator {};
+    translator.set_dead_key_combiner([](const char32_t accent, const char32_t character) {
+        if (accent == U'´' && character == U'e')
+            return U'é';
+        if (accent == character)
+            return accent;
+        return char32_t {};
+    });
+    const auto dead { key(AKEYCODE_APOSTROPHE, 0, static_cast<std::int32_t>(0x80000000u | U'´')) };
+    REQUIRE(translator.translate(dead).empty());
+    const auto composed { translator.translate(key(AKEYCODE_E, 0, U'e')) };
+    REQUIRE(composed.size() == 1u);
+    REQUIRE(as<luil::character_typed_event>(composed[0]).character == U'é');
+    REQUIRE(translator.translate(dead).empty());
+    const auto separate { translator.translate(key(AKEYCODE_X, 0, U'x')) };
+    REQUIRE(separate.size() == 2u);
+    REQUIRE(as<luil::character_typed_event>(separate[0]).character == U'´');
+    REQUIRE(as<luil::character_typed_event>(separate[1]).character == U'x');
+    REQUIRE(translator.translate(dead).empty());
+    static_cast<void>(translator.cancel_all(luil::android::event_time(10)));
+    const auto unaccented { translator.translate(key(AKEYCODE_E, 0, U'e')) };
+    REQUIRE(unaccented.size() == 1u);
+    REQUIRE(as<luil::character_typed_event>(unaccented[0]).character == U'e');
+}
+
 TEST_CASE("Batched history arrives oldest first before the current sample", "[android][input]")
 {
     luil::android::input_translator translator {};
@@ -210,7 +265,7 @@ TEST_CASE("Leaving the window cancels a held touch", "[android][input]")
 
 TEST_CASE("Android keys follow the Windows key and character split", "[android][input]")
 {
-    const luil::android::input_translator translator {};
+    luil::android::input_translator translator {};
     // 이름 있는 키는 키다.
     auto events { translator.translate(key(AKEYCODE_DPAD_DOWN)) };
     REQUIRE(events.size() == 1u);

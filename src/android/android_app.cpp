@@ -213,6 +213,7 @@ namespace luil::android {
             motion_input input {};
             input.source = event.source;
             input.action = event.action;
+            input.flags = event.flags;
             input.action_button = event.actionButton;
             input.button_state = event.buttonState;
             input.meta_state = event.metaState;
@@ -449,6 +450,26 @@ namespace luil::android {
                         jni_ = nullptr;
                 }
                 refresh_system_theme();
+                input_.set_dead_key_combiner([this](const char32_t accent, const char32_t character) {
+                    if (jni_ == nullptr)
+                        return char32_t {};
+                    const jclass klass { jni_->FindClass("android/view/KeyCharacterMap") };
+                    char32_t combined {};
+                    if (klass != nullptr && jni_->ExceptionCheck() == false)
+                    {
+                        const jmethodID method { jni_->GetStaticMethodID(klass, "getDeadChar", "(II)I") };
+                        if (method != nullptr && jni_->ExceptionCheck() == false)
+                            combined = static_cast<char32_t>(jni_->CallStaticIntMethod(klass, method, static_cast<jint>(accent), static_cast<jint>(character)));
+                    }
+                    if (jni_->ExceptionCheck())
+                    {
+                        jni_->ExceptionClear();
+                        combined = {};
+                    }
+                    if (klass != nullptr)
+                        jni_->DeleteLocalRef(klass);
+                    return combined;
+                });
 
                 // UI thread를 깨우는 길이다. 다른 thread가 eventfd에 쓰면 looper가 깨어
                 // 그 큐를 비운다. Win32의 PostMessageW에 해당한다.

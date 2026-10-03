@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace luil::android {
@@ -34,6 +35,7 @@ namespace luil::android {
         std::int32_t source { 0 };
         // `AMOTION_EVENT_ACTION_*`와 포인터 번호를 그대로 담는다.
         std::int32_t action { 0 };
+        std::int32_t flags { 0 };
         // `ACTION_BUTTON_PRESS`·`RELEASE`에서 바뀐 버튼이다 (`AMOTION_EVENT_BUTTON_*`).
         std::int32_t action_button { 0 };
         std::int32_t button_state { 0 };
@@ -86,7 +88,9 @@ namespace luil::android {
     {
     public:
         [[nodiscard]] std::vector<raw_input_event> translate(const motion_input& input, const surface_mapping& mapping);
-        [[nodiscard]] std::vector<raw_input_event> translate(const key_input& input) const;
+        [[nodiscard]] std::vector<raw_input_event> translate(const key_input& input);
+        using dead_key_combiner = std::function<char32_t(char32_t, char32_t)>;
+        void set_dead_key_combiner(dead_key_combiner combine);
         // 창이 사라진다. 진행 중인 접촉을 정상적인 뗌 없이 끝내고 마우스 hover를 거둔다.
         [[nodiscard]] std::vector<raw_input_event> cancel_all(std::chrono::steady_clock::time_point time);
 
@@ -101,5 +105,7 @@ namespace luil::android {
         bool mouse_left_ { false };
         bool mouse_right_ { false };
         bool mouse_inside_ { false };
+        char32_t pending_accent_ {};
+        dead_key_combiner combine_dead_key_ {};
     };
 } // namespace luil::android

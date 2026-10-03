@@ -10,6 +10,9 @@ namespace luil::android {
     namespace {
         // Win32의 WHEEL_DELTA다. 휠 한 눈금이 이만큼이다.
         constexpr float wheel_detent { 120.0f };
+        // MotionEvent.FLAG_CANCELED는 Java API 33부터다. NDK input.h에는 아직 이름이 없다.
+        constexpr std::int32_t motion_flag_canceled { 0x20 };
+        constexpr std::uint32_t combining_accent { 0x80000000u };
 
         [[nodiscard]] bool has_meta(const std::int32_t meta_state, const std::int32_t flag) noexcept
         {
@@ -191,9 +194,12 @@ namespace luil::android {
                 accept(sample_of(frame, pointer, pointer_phase::update, true), events);
                 break;
             case AMOTION_EVENT_ACTION_UP:
-            case AMOTION_EVENT_ACTION_POINTER_UP:
-                accept(sample_of(frame, pointer, indexed ? pointer_phase::up : pointer_phase::update, indexed == false), events);
+            case AMOTION_EVENT_ACTION_POINTER_UP: {
+                pointer_sample sample { sample_of(frame, pointer, indexed ? pointer_phase::up : pointer_phase::update, indexed == false) };
+                sample.canceled = indexed && (input.flags & motion_flag_canceled) != 0;
+                accept(sample, events);
                 break;
+            }
             case AMOTION_EVENT_ACTION_CANCEL: {
                 // 시스템이 몸짓을 가져갔다 (뒤로 가기 제스처 등). 모든 접촉이 정상적인 뗌 없이 끝난다.
                 pointer_sample sample { sample_of(frame, pointer, pointer_phase::up, false) };
@@ -247,6 +253,15 @@ namespace luil::android {
 
         switch (input.action & AMOTION_EVENT_ACTION_MASK)
         {
+        case AMOTION_EVENT_ACTION_CANCEL:
+            if (mouse_left_ || mouse_right_)
+                events.push_back(raw_input_event { pointer_cancelled_event { pointer_device::mouse, 0, {}, time } });
+            mouse_left_ = false;
+            mouse_right_ = false;
+            if (mouse_inside_)
+                events.push_back(raw_input_event { pointer_left_event { {}, pointer_device::mouse } });
+            mouse_inside_ = false;
+            return;
         case AMOTION_EVENT_ACTION_HOVER_ENTER:
         case AMOTION_EVENT_ACTION_HOVER_MOVE:
         case AMOTION_EVENT_ACTION_MOVE:
@@ -338,7 +353,12 @@ namespace luil::android {
         }
     }
 
-    std::vector<raw_input_event> input_translator::translate(const key_input& input) const
+    void input_translator::set_dead_key_combiner(dead_key_combiner combine)
+    {
+        combine_dead_key_ = std::move(combine);
+    }
+
+    std::vector<raw_input_event> input_translator::translate(const key_input& input)
     {
         std::vector<raw_input_event> events {};
         // 누름만 본다. 자동 반복은 반복 횟수로 온다.
@@ -371,6 +391,7 @@ namespace luil::android {
         };
         if (const key_code edit { edit_key(input.key_code) }; edit != key_code::none)
         {
+            pending_accent_ = {};
             key_pressed_event event { edit, true, shift, false, input.repeat_count > 0, time };
             event.primary_shortcut = true;
             event.word_navigation = control;
@@ -381,6 +402,8 @@ namespace luil::android {
         key_code key { named_key(input.key_code) };
         if (key == key_code::none)
             key = modified_key(input.key_code, shortcut, character_key);
+        if (shortcut || backspace || named_key(input.key_code) != key_code::none)
+            pending_accent_ = {};
         if (key != key_code::none)
         {
             key_pressed_event event { key, control, shift, alt, input.repeat_count > 0, time };
@@ -396,13 +419,33 @@ namespace luil::android {
             return events;
         if (backspace)
             events.push_back(raw_input_event { character_typed_event { control ? char32_t { 0x7F } : U'\b', time } });
-        else if (input.unicode_char > 0 && control == false)
-            events.push_back(raw_input_event { character_typed_event { static_cast<char32_t>(input.unicode_char), time } });
+        else if (input.unicode_char != 0 && control == false)
+        {
+            const auto unicode { static_cast<std::uint32_t>(input.unicode_char) };
+            const char32_t character { static_cast<char32_t>(unicode & ~combining_accent) };
+            const char32_t combined { pending_accent_ != 0 && combine_dead_key_ ? combine_dead_key_(pending_accent_, character) : char32_t {} };
+            if (combined != 0)
+            {
+                pending_accent_ = {};
+                events.push_back(raw_input_event { character_typed_event { combined, time } });
+            }
+            else
+            {
+                if (pending_accent_ != 0)
+                    events.push_back(raw_input_event { character_typed_event { pending_accent_, time } });
+                pending_accent_ = {};
+                if ((unicode & combining_accent) != 0)
+                    pending_accent_ = character;
+                else
+                    events.push_back(raw_input_event { character_typed_event { character, time } });
+            }
+        }
         return events;
     }
 
     std::vector<raw_input_event> input_translator::cancel_all(const std::chrono::steady_clock::time_point time)
     {
+        pending_accent_ = {};
         std::vector<raw_input_event> events {};
         for (const std::uint32_t id : contacts_)
             for (raw_input_event& event : tracker_.cancel(id, time, {}))
