@@ -2558,16 +2558,17 @@ namespace luil {
 
                 // 큐가 밀렸으면 뒤에 더 이른 뗌·취소가 남아 있다. 벽시계가 아니라 입력 시각까지
                 // 진행해야 짧은 탭이 길게 누르기로 바뀌지 않는다.
+                //  - 판정을 이벤트보다 **먼저** 한다. 기한이 지난 뒤 온 이동이 먼저 처리되면 끌기나
+                //    흘려보기로 바뀌어, 그 전에 열렸어야 할 메뉴가 사라진다.
                 const auto time_of = [](const auto& value) -> std::optional<std::chrono::steady_clock::time_point> {
                     if constexpr (requires { value.time; })
                         return value.time;
                     else
                         return std::nullopt;
                 };
-                const auto time { std::visit(time_of, received.payload) };
-                dispatch(controller.process(received.payload));
-                if (time.has_value())
+                if (const auto time { std::visit(time_of, received.payload) }; time.has_value())
                     dispatch(controller.advance(*time));
+                dispatch(controller.process(received.payload));
             }
             else
                 dispatch(controller.advance(std::chrono::steady_clock::now()));

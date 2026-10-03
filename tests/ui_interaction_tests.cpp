@@ -3395,6 +3395,43 @@ TEST_CASE("A queued quick tap is not promoted to a long press by the wall clock"
     REQUIRE(app_inbox.try_receive(received) != messaging::receive_status::received);
 }
 
+TEST_CASE("A queued move after the long press deadline does not swallow the menu", "[ui][interaction][pump]")
+{
+    messaging::channel<luil::raw_input_event> input_inbox { messaging::channel_options { 8, messaging::overflow_policy::drop_oldest, {} } };
+    messaging::channel<luil::app_message> app_inbox { messaging::channel_options { 8, messaging::overflow_policy::reject_newest, {} } };
+    messaging::latest_slot<std::shared_ptr<const luil::ui_tree>> tree_slot {};
+    messaging::latest_slot<luil::surface_tree_list> surface_tree_slot {};
+    messaging::latest_slot<luil::interaction_snapshot> interaction_slot {};
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto button { std::make_unique<test_panel>(luil::ui_element_id { kind_button, u8"one" }) };
+    button->arrange({ { 10.0f, 10.0f, 40.0f, 20.0f }, 1.0f });
+    for (const auto trigger : { luil::ui_trigger::left_click, luil::ui_trigger::right_click })
+        button->set_action(trigger, [trigger](const luil::ui_action_context&) -> std::vector<luil::input_action> {
+            return { luil::make_app_action(fake_intent { trigger == luil::ui_trigger::left_click ? u8"tap" : u8"long" }) };
+        });
+    root->add(std::move(button));
+    static_cast<void>(tree_slot.publish(std::make_shared<const luil::ui_tree>(std::move(root))));
+    // 손가락은 기한 안에 움직이지 않았다. 이동은 기한이 지난 뒤에야 큐에서 나온다.
+    const auto time { std::chrono::steady_clock::now() - 2s };
+    luil::pointer_pressed_event down { 20.0f, 15.0f, luil::pointer_button::left, time };
+    down.device = luil::pointer_device::touch;
+    luil::pointer_moved_event moved { 120.0f, 15.0f, time + 650ms };
+    moved.device = luil::pointer_device::touch;
+    moved.in_contact = true;
+    luil::pointer_released_event up { 120.0f, 15.0f, luil::pointer_button::left, time + 700ms };
+    up.device = luil::pointer_device::touch;
+    REQUIRE(input_inbox.post(down) == messaging::post_result::posted);
+    REQUIRE(input_inbox.post(moved) == messaging::post_result::posted);
+    REQUIRE(input_inbox.post(up) == messaging::post_result::posted);
+    input_inbox.close();
+    luil::run_ui_input_pump(input_inbox, tree_slot, surface_tree_slot, app_inbox, interaction_slot, {});
+    messaging::envelope<luil::app_message> received {};
+    REQUIRE(app_inbox.try_receive(received) == messaging::receive_status::received);
+    REQUIRE(received.payload.get<fake_intent>()->name == u8"long");
+    REQUIRE(app_inbox.try_receive(received) != messaging::receive_status::received);
+}
+
 TEST_CASE("A sequence gap in the raw input queue cancels the in-flight press", "[ui][interaction][pump]")
 {
     // press는 소비됐고 release가 drop_oldest에 잘려 나간 상황을 결정적으로 만든다:
