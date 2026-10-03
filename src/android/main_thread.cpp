@@ -114,23 +114,20 @@ namespace luil::android {
 
     bool post_to_main_thread(main_thread_work work)
     {
-        int wake_fd { -1 };
         {
+            // 쓰기까지 잠금 안에서 한다. 놓고 쓰면 그 사이 `detach_bridge`가 fd를 닫고, 그 번호를
+            // 다른 thread가 다시 받아 엉뚱한 파일·소켓에 쓸 수 있다. eventfd는 non-blocking이다.
             std::lock_guard lock { bridge.mutex };
             if (bridge.activity != nullptr && bridge.wake_fd >= 0)
             {
                 bridge.pending.push_back(std::move(work));
-                wake_fd = bridge.wake_fd;
+                const std::uint64_t one { 1 };
+                return write(bridge.wake_fd, &one, sizeof(one)) == static_cast<ssize_t>(sizeof(one));
             }
         }
-        if (wake_fd < 0)
-        {
-            if (warned_missing.exchange(true) == false)
-                __android_log_print(ANDROID_LOG_WARN, "luil", "The main thread bridge is not set up; the app must link luil::luil, which wraps GameActivity_onCreate.");
-            return false;
-        }
-        const std::uint64_t one { 1 };
-        return write(wake_fd, &one, sizeof(one)) == static_cast<ssize_t>(sizeof(one));
+        if (warned_missing.exchange(true) == false)
+            __android_log_print(ANDROID_LOG_WARN, "luil", "The main thread bridge is not set up; the app must link luil::luil, which wraps GameActivity_onCreate.");
+        return false;
     }
 } // namespace luil::android
 
