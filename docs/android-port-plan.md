@@ -376,7 +376,7 @@ skia-prep의 `android_probe`와 같은 방식이다.
 
 - 할당기 선언은 Skia 내부 API다. Skia milestone을 올릴 때마다 서명을 다시 확인해야 한다. 핀의
   `skia_milestone`과 함께 문서에 적는다.
-- Adreno 드라이버마다 동작이 다를 수 있다. 검증 기기는 Adreno 730 하나다.
+- GPU 제조사와 드라이버 판마다 동작이 다를 수 있다. 확인한 기기 밖의 드라이버는 따로 검증해야 한다.
 - 스왑체인 다시 만들기와 수명 주기 경합으로 표면이 이미 사라진 뒤 그리기를 시도할 수 있다.
 
 ### 5단계 — 터치·펜·키보드·마우스 입력
@@ -408,7 +408,7 @@ skia-prep의 `android_probe`와 같은 방식이다.
 **완료 판정.**
 
 - widgets에서 탭, 더블 탭, 쓸어 스크롤, 오래 잡고 끌기, 길게 눌러 메뉴가 문서의 표대로 동작한다.
-- S Pen으로 호버 툴팁, 배럴 버튼 우클릭, 텍스트 선택이 된다. 검증 기기 S22 Ultra에는 S Pen이 있다.
+- 스타일러스(S Pen 등)로 호버 툴팁, 배럴 버튼 우클릭, 텍스트 선택이 된다. 스타일러스가 있는 기기에서 확인한다.
 - 블루투스 키보드나 `adb shell input keyevent`로 단축키와 Tab 초점 이동이 된다.
 - 변환 단위 테스트가 기기에서 통과한다.
 
@@ -637,14 +637,14 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 
 | 커밋 | 내용 |
 | --- | --- |
-| `7bcfb24` | `luil_core` 대상, `luil_core_tests`, core 이식성 검사 test |
-| `9feee30` | popup·웹뷰 자리 대조, 다시 그리기 계획, fence 대기 예산을 core로 |
-| `3ec69ae` | host API를 `luil/app/`과 `luil`로. 옛 경로는 별칭 헤더. frame 그리기와 렌더러 정책을 core로 |
-| `669b142` | 줄 끝 정리 스크립트가 worktree를 건너뛴다 (작업 중 다른 세션의 자산을 건드린 것을 고침) |
-| `d39eb00` | 글꼴 registry를 core로. OS 글꼴 자원은 `platform_font_source()` |
-| `6f9ec19` | `app_host`를 core로. 즉시 종료는 `platform_fail_fast()` |
-| `5e42000` | 렌더러 interface와 실패 물러섬을 core로. `renderer_mode::gpu` |
-| `7795050` | 터치·펜 접촉 추적을 core로. 접촉 단계 `pointer_phase` |
+| `9293554` | `luil_core` 대상, `luil_core_tests`, core 이식성 검사 test |
+| `d7f4df7` | popup·웹뷰 자리 대조, 다시 그리기 계획, fence 대기 예산을 core로 |
+| `7edcd70` | host API를 `luil/app/`과 `luil`로. 옛 경로는 별칭 헤더. frame 그리기와 렌더러 정책을 core로 |
+| `37a5833` | 줄 끝 정리 스크립트가 worktree를 건너뛴다 (작업 중 다른 세션의 자산을 건드린 것을 고침) |
+| `1cb6dd4` | 글꼴 registry를 core로. OS 글꼴 자원은 `platform_font_source()` |
+| `f8d27fb` | `app_host`를 core로. 즉시 종료는 `platform_fail_fast()` |
+| `d2bf3a4` | 렌더러 interface와 실패 물러섬을 core로. `renderer_mode::gpu` |
+| `f823361` | 터치·펜 접촉 추적을 core로. 접촉 단계 `pointer_phase` |
 
 **검증.** 커밋마다 Release, Debug, CPU 전용 Release의 CTest 전부를 돌렸다 (smoke 포함).
 
@@ -690,12 +690,12 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 
 | 커밋 | 내용 |
 | --- | --- |
-| `095c121` | core test용 플랫폼 hook 정의. `app_host_tests`를 core test로 옮김 |
-| `838b29a` | `fetch_skia.ps1 -Target`과 android-arm64 r1 핀 |
-| `992f345` | clang이 막은 쓰지 않는 람다 캡처 하나 (core 전체에서 clang 오류는 이것뿐이었다) |
-| `ae36130` | CMake 플랫폼 분리, Android 검사·clang 옵션·Skia 링크 계약, adb test 실행, preset |
+| `679cd19` | core test용 플랫폼 hook 정의. `app_host_tests`를 core test로 옮김 |
+| `66aa5ce` | `fetch_skia.ps1 -Target`과 android-arm64 r1 핀 |
+| `9d1d601` | clang이 막은 쓰지 않는 람다 캡처 하나 (core 전체에서 clang 오류는 이것뿐이었다) |
+| `253a40b` | CMake 플랫폼 분리, Android 검사·clang 옵션·Skia 링크 계약, adb test 실행, preset |
 
-**기기 검증.** Galaxy S22 Ultra(Android 14)에서 `ctest --preset android-arm64-core-release`와
+**기기 검증.** 실기기에서 `ctest --preset android-arm64-core-release`와
 `-debug`가 각각 509개 모두 통과했다 (약 2분 20초·2분 40초). Windows의 `luil_core_tests`도 509개라 기기에서
 뺀 test는 없다. 링크 명령에 `libskia.a`가 묶음 맨 앞에 오고 `--allow-multiple-definition`, `-landroid -llog`,
 `-static-libstdc++`가 들어간 것을 확인했다.
@@ -725,13 +725,13 @@ inset 같은 프레임워크 기능은 C++에서 JNI로 프레임워크 클래�
 
 | 커밋 | 내용 |
 | --- | --- |
-| `44b2c29` | GameActivity 4.4.2 핀과 `fetch_game_activity.ps1`, CMake의 `luil::game_activity` |
-| `a251b80` | 앱 delegate의 플랫폼 중립 부분을 `app_delegate`로. `win32::window_delegate`가 상속하고 수명 주기 메시지를 더함 |
-| `9e95341` | Android 앱 host(`luil::android::run_application`), CPU 렌더러, Android 글꼴, 내장 codicon, `frame_state`의 원점 |
-| `eb6f935` | hello를 Android APK로 (CMake 공유 라이브러리 + Gradle 포장) |
-| `2f71a33` | 모바일 앱 바와 플랫폼 성질 (`app_bar_element`, `ui_platform`). 데스크톱 caption은 모바일에서 자리를 차지하지 않음 |
+| `e503d1f` | GameActivity 4.4.2 핀과 `fetch_game_activity.ps1`, CMake의 `luil::game_activity` |
+| `b72fd91` | 앱 delegate의 플랫폼 중립 부분을 `app_delegate`로. `win32::window_delegate`가 상속하고 수명 주기 메시지를 더함 |
+| `810e4e8` | Android 앱 host(`luil::android::run_application`), CPU 렌더러, Android 글꼴, 내장 codicon, `frame_state`의 원점 |
+| `f3bc90e` | hello를 Android APK로 (CMake 공유 라이브러리 + Gradle 포장) |
+| `c8799ef` | 모바일 앱 바와 플랫폼 성질 (`app_bar_element`, `ui_platform`). 데스크톱 caption은 모바일에서 자리를 차지하지 않음 |
 
-**기기 검증.** Galaxy S22 Ultra(Android 14)에서 확인했다.
+**기기 검증.** 실기기에서 확인했다.
 
 - hello가 한글, codicon, 어두운 테마로 그려지고, 내용은 시스템 막대·컷아웃을 뺀 안전 영역에서
   시작한다. 막대 밑까지 앱 배경색이다 (스크린샷 픽셀로 확인).
@@ -793,16 +793,16 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 
 | 커밋 | 내용 |
 | --- | --- |
-| `a532507` | `renderer_backend::vulkan`과 그 이름 |
-| `3924901` | Android CPU 렌더러가 `resize` 없이 먼저 불려도 창 버퍼 형식을 정하고, RGBA가 아닌 버퍼에는 쓰지 않음 |
-| `20e661e` | Android codicon typeface를 프로세스에 하나만 만듦 |
-| `3cd3e27` | Gradle 모듈을 `app` 하나와 예제별 flavor로. debug APK에 검증 레이어를 싸는 속성 |
-| `11f2072` | Vulkan 장치·렌더러, 앱 host의 기본 모드 `automatic`과 Activity 단위 물러섬, 시스템 속성으로 고르는 렌더러와 실패 주입 |
-| `410b18e` | widgets를 Android APK로 |
+| `3b40bac` | `renderer_backend::vulkan`과 그 이름 |
+| `8f16940` | Android CPU 렌더러가 `resize` 없이 먼저 불려도 창 버퍼 형식을 정하고, RGBA가 아닌 버퍼에는 쓰지 않음 |
+| `22f38f0` | Android codicon typeface를 프로세스에 하나만 만듦 |
+| `0205f4a` | Gradle 모듈을 `app` 하나와 예제별 flavor로. debug APK에 검증 레이어를 싸는 속성 |
+| `9b1adfc` | Vulkan 장치·렌더러, 앱 host의 기본 모드 `automatic`과 Activity 단위 물러섬, 시스템 속성으로 고르는 렌더러와 실패 주입 |
+| `e8af079` | widgets를 Android APK로 |
 
-**기기 검증.** Galaxy S22 Ultra(Android 14, Adreno 730)에서 확인했다.
+**기기 검증.** 실기기에서 확인했다.
 
-- hello와 widgets가 Vulkan으로 그려진다 (logcat `renderer vulkan on Adreno (TM) 730`). CPU로 그린
+- hello와 widgets가 Vulkan으로 그려진다 (logcat의 `renderer vulkan on …`). CPU로 그린
   화면과 비교하면 상태 표시줄 아래 화소의 1%가 채널값 4 이내로만 다르다 (안티에일리어싱).
 - 홈으로 나갔다 돌아오기와 회전을 한 번씩 묶어 hello 20회, widgets 20회에 이어 60회를 되풀이했다.
   장치는 Activity를 띄울 때 한 번만 만들어지고(`vulkan device created`) 렌더러만 창마다 섰다.
@@ -815,7 +815,7 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 - 실패 주입: 생성 실패와 세 frame 뒤 손실에서 CPU로 물러서 그리고, 창을 새로 받아도 CPU로 남는다.
   세 경우(처음부터 CPU, 생성 실패, 손실 뒤 전환)의 화면은 픽셀까지 같다. `gpu` 모드의 생성 실패는
   Activity를 끝낸다. 손실 주입을 처음 돌렸을 때 CPU로 넘어간 첫 frame에서 SIGSEGV로 죽었다. CPU
-  렌더러가 창 버퍼 형식을 정하지 않은 채 4바이트 픽셀로 써서 버퍼 끝을 넘은 것이라 고쳤다 (`3924901`).
+  렌더러가 창 버퍼 형식을 정하지 않은 채 4바이트 픽셀로 써서 버퍼 끝을 넘은 것이라 고쳤다 (`8f16940`).
 - 검증 레이어: Khronos 1.4.363.0을 debug APK에 싸고 동기화 검증까지 켰다. 정보 수준 출력으로
   레이어가 logcat에 쓰는 것을 먼저 확인했다. 처음에는 새 스왑체인 이미지마다 한 번
   `SYNC-HAZARD-WRITE-AFTER-READ`가 나왔다. Skia의 UNDEFINED 전환 장벽이 이미지 받기 semaphore와
@@ -860,11 +860,11 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 
 | 커밋 | 내용 |
 | --- | --- |
-| `aaa565f` | 터치 길게 누르기를 누르고 있는 동안 판정한다 (Windows·Android 공통). controller의 `next_deadline`·`advance`와 pump의 대기 |
-| `0820f9b` | widgets: 섹션을 scroll_view에 담음, 토스트 버튼의 우클릭, 모바일 앱 바와 좁은 여백 |
-| `6bbb4d9` | Android 입력 변환층(`input_translator`)과 host 연결. 키 필터 수정 |
+| `12e1e56` | 터치 길게 누르기를 누르고 있는 동안 판정한다 (Windows·Android 공통). controller의 `next_deadline`·`advance`와 pump의 대기 |
+| `43e8522` | widgets: 섹션을 scroll_view에 담음, 토스트 버튼의 우클릭, 모바일 앱 바와 좁은 여백 |
+| `d241a36` | Android 입력 변환층(`input_translator`)과 host 연결. 키 필터 수정 |
 
-**기기 검증.** Galaxy S22 Ultra에서 adb 주입으로 확인했다.
+**기기 검증.** 실기기에서 adb 주입으로 확인했다.
 
 - 탭(체크박스·라디오), 길게 누르기(0.45초에는 열리지 않고 0.6초가 지나면 손을 떼기 전에 우클릭 토스트가 뜸,
   뗀 뒤 클릭이 따로 나가지 않음), 가로 화면 쓸기 스크롤, 슬라이더 끌기(30% → 85%).
@@ -900,9 +900,9 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 
 | 커밋 | 내용 |
 | --- | --- |
-| `46fff30` | `text_input_host`: TSF와 Android가 같은 텍스트 입력 창구를 쓴다 |
-| `fb4651e` | `focus_reveal_event`: 보이는 자리가 줄면 초점 칸을 다시 드러낸다 |
-| `007814f` | Android IME(GameTextInput)와 클립보드(JNI) |
+| `1f70456` | `text_input_host`: TSF와 Android가 같은 텍스트 입력 창구를 쓴다 |
+| `77ef825` | `focus_reveal_event`: 보이는 자리가 줄면 초점 칸을 다시 드러낸다 |
+| `88173a8` | Android IME(GameTextInput)와 클립보드(JNI) |
 
 **기기 검증.**
 
@@ -945,12 +945,12 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 
 | 커밋 | 내용 |
 | --- | --- |
-| `2cf63d3` | `frame_state::overlays`: 주 tree 뒤에 popup layer를 그림자·배경·tree·테두리 순으로 겹쳐 그린다 |
-| `3227383` | `overlay_input_router`: 포인터를 layer로 보내고 바깥 누름·휠을 알린다. 닫힘 한 번 내기 규칙을 core로 옮김 |
-| `1ae778a` | widgets: 정렬 드롭다운과 카드의 컨텍스트 메뉴, 섹션 휠 스크롤 수정 |
-| `2f37f71` | Android host: popup layer, 닫힘 계기, popup이 떠 있는 동안 뒤로 가기, popup 안 IME 자리 |
+| `2fc7a79` | `frame_state::overlays`: 주 tree 뒤에 popup layer를 그림자·배경·tree·테두리 순으로 겹쳐 그린다 |
+| `e6a719d` | `overlay_input_router`: 포인터를 layer로 보내고 바깥 누름·휠을 알린다. 닫힘 한 번 내기 규칙을 core로 옮김 |
+| `7b9456d` | widgets: 정렬 드롭다운과 카드의 컨텍스트 메뉴, 섹션 휠 스크롤 수정 |
+| `aba0f44` | Android host: popup layer, 닫힘 계기, popup이 떠 있는 동안 뒤로 가기, popup 안 IME 자리 |
 
-**기기 검증.** Galaxy S22 Ultra의 widgets에서 adb 주입으로 확인했다.
+**기기 검증.** 실기기의 widgets에서 adb 주입으로 확인했다.
 
 - 드롭다운을 누르면 목록이 칸 아래에 화면 안으로 들어와 서고, "날짜순"을 고르면 칸이 바뀌고 닫힌다.
 - 카드를 길게 누르면 손을 떼기 전에 메뉴가 서고, "경로 복사"를 누르면 토스트 "메뉴: 복사"가 뜬다.
@@ -962,7 +962,7 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 
 - 그리기 순서. 계획은 주 tree, popup들, tooltip·끌기 순이었다. 주 tree의 tooltip·끌기 표시는 주 tree가 그리므로
   popup이 그 위를 덮는다. 터치 화면에는 hover tooltip이 서지 않아 겹칠 일이 드물어 그대로 두었다.
-- `0820f9b`가 섹션을 휠로 흘린다고 적었지만, 정책에 `on_wheel`이 없어 휠이 아무 일도 하지 않았다. `1ae778a`에서
+- `43e8522`가 섹션을 휠로 흘린다고 적었지만, 정책에 `on_wheel`이 없어 휠이 아무 일도 하지 않았다. `7b9456d`에서
   고쳤다.
 - "빼는 것" 표의 행(WebView2·UI Automation·DirectComposition·파일 끌어 놓기 빌드 제외, caption 없음, 커서 무시)은
   2·3단계에서 이미 그렇게 됐다. 보조 창은 이번에 한 번 경고하고 무시하게 했다.
@@ -981,12 +981,12 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
 
 | 커밋 | 내용 |
 | --- | --- |
-| `f223c00` | WinHTTP 백엔드와 그것에만 기대는 파일을 `src/net/winhttp`로 옮김 (동작 그대로) |
-| `78b1b4e` | 요청 헤더 규칙(헤더 검사, Content-Type 기본값)을 두 백엔드가 같이 쓰게 함 |
-| `712c79e` | test의 되돌이 HTTP 서버가 POSIX 소켓으로도 선다 |
-| `94254c8` | Android 백엔드: JNI의 `HttpURLConnection`, 앱 host가 JavaVM을 적음 |
-| `d46a30b` | 기기에서 HTTP test를 JVM 안에서 돌리는 진입점(`app_process`) |
-| `0cf698c` | 앱이 막은 평문 http를 보안 정책의 거절로 답함, 몸 없는 답의 연결을 끊음 |
+| `6311d4c` | WinHTTP 백엔드와 그것에만 기대는 파일을 `src/net/winhttp`로 옮김 (동작 그대로) |
+| `e00c509` | 요청 헤더 규칙(헤더 검사, Content-Type 기본값)을 두 백엔드가 같이 쓰게 함 |
+| `db2088c` | test의 되돌이 HTTP 서버가 POSIX 소켓으로도 선다 |
+| `27e0081` | Android 백엔드: JNI의 `HttpURLConnection`, 앱 host가 JavaVM을 적음 |
+| `88fd4d5` | 기기에서 HTTP test를 JVM 안에서 돌리는 진입점(`app_process`) |
+| `7750f67` | 앱이 막은 평문 http를 보안 정책의 거절로 답함, 몸 없는 답의 연결을 끊음 |
 
 **계획과 달라진 것.**
 
@@ -1021,7 +1021,7 @@ test Release·Debug 각 537개가 통과했고, hello APK가 기기에서 앱 �
   | https에서 https로 가는 302 | 따라가 `final_url`이 바뀜 |
 
   처음에는 평문 거절이 `connection_lost`로 왔다. 플랫폼이 뜻이 드러나지 않는 `IOException`을 던져서다.
-  `NetworkSecurityPolicy`에 미리 물어 `secure_failure`로 답하게 고쳤다 (`0cf698c`).
+  `NetworkSecurityPolicy`에 미리 물어 `secure_failure`로 답하게 고쳤다 (`7750f67`).
 
 **앱이 할 일.** 매니페스트에 `android.permission.INTERNET`을 넣는다. targetSdk 28 이상에서 평문 http를 쓰려면 network
 security config가 필요하고, 막히면 답이 `secure_failure`다. 예제 앱은 네트워크를 쓰지 않아 권한을 넣지 않았다.
@@ -1048,10 +1048,10 @@ Debug 673개(core 571, HTTP 102)가 통과한다. 중간 커밋 하나하나는 
 
 | 커밋 | 내용 |
 | --- | --- |
-| `b7eff91` | 고대비에서 고른 토글과 옅은 강조 단추의 글자가 사라지던 팔레트 버그 (Windows도 같다) |
-| `f0756f3` | 상태 표시줄·내비게이션 막대 아이콘, 동적 색, 대비 설정, 실행 중 어두운 모드 전환 |
-| `7b84ef4` | 앱이 뒤로 가기를 받는 `ui_frame::back` |
-| `847fd4c` | mobile demo 예제 (Windows에서도 선다) |
+| `420989d` | 고대비에서 고른 토글과 옅은 강조 단추의 글자가 사라지던 팔레트 버그 (Windows도 같다) |
+| `2dcae37` | 상태 표시줄·내비게이션 막대 아이콘, 동적 색, 대비 설정, 실행 중 어두운 모드 전환 |
+| `765b2fd` | 앱이 뒤로 가기를 받는 `ui_frame::back` |
+| `b89f92a` | mobile demo 예제 (Windows에서도 선다) |
 
 **정한 것.**
 
@@ -1069,7 +1069,7 @@ Debug 673개(core 571, HTTP 102)가 통과한다. 중간 커밋 하나하나는 
 - **mobile demo의 꼴.** 600dp부터 두 판이다. 라이브러리의 label이 한 줄이라 설명을 짧은 줄로 나눴다 (텍스트 처리는
   미뤘다).
 
-**기기 검증.** Galaxy S22 Ultra(Android 14)에서 확인했다.
+**기기 검증.** 실기기에서 확인했다.
 
 - widgets: 밝은·어두운 모드를 실행 중에 바꾸면 내용과 막대 아이콘이 함께 바뀐다. 대비 높음에서 흰 바탕 고대비와
   어두운 아이콘이 나온다.
@@ -1084,10 +1084,10 @@ Debug 673개(core 571, HTTP 102)가 통과한다. 중간 커밋 하나하나는 
 
 **그 뒤 사용자의 요청으로 고친 것.**
 
-- `39e160d` 채운 강조 바탕(기본 단추, 체크 표시, 켜진 스위치, 강조 배지) 위의 글자가 옅은 바탕용 글자색이라 밝은 테마
+- `5f6c51a` 채운 강조 바탕(기본 단추, 체크 표시, 켜진 스위치, 강조 배지) 위의 글자가 옅은 바탕용 글자색이라 밝은 테마
   1.5:1, 어두운 테마 3.1:1이었다. 채운 바탕용 역할(`accent_foreground`, `error_foreground`)을 더해 대비가 큰 흰색이나
   검정을 고른다. 내장 accent 25개와 시스템 accent가 두 테마에서 4.5:1을 넘는 것을 test가 잠근다. Windows에서도 바뀐다.
-- `6b879ea` popup 안 검색 칸을 누르면 키보드가 안전 영역을 줄여 popup이 닫혔다. 창 자체가 바뀔 때만 닫는다. 가로 화면의
+- `13203bd` popup 안 검색 칸을 누르면 키보드가 안전 영역을 줄여 popup이 닫혔다. 창 자체가 바뀔 때만 닫는다. 가로 화면의
   기기에서 popup 안 IME 조합과 목록 좁히기를 확인했다.
 
 **남은 8단계 일.** Android smoke test(CTest `android` 라벨), 소비자 계약의 Android 절, 배포 서명(apksigner) 문서.

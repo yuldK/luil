@@ -59,4 +59,4 @@ Android에서는 앱 바를 그린다.
 
 [`app_bar_element_tests.cpp`](../tests/app_bar_element_tests.cpp)가 플랫폼 기본값, 모바일에서
 높이 0이 되는 caption, 버튼 배치, 접근성 역할을 확인한다. core test라 Windows와 기기에서 같이
-돈다. Galaxy S22 Ultra에서 hello가 caption 대신 앱 바를 그리는 것을 화면으로 확인했다.
+돈다. 실기기에서 hello가 caption 대신 앱 바를 그리는 것을 화면으로 확인했다.

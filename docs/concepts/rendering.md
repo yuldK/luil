@@ -49,10 +49,10 @@ Android 앱 host([`android_app.h`](../../include/luil/android/android_app.h))의
 
 **장치와 스왑체인의 수명이 다르다.** 창은 회전이 아닌 일(홈, 화면 끄기, 다른 앱)마다 사라졌다 다시 생긴다. [`vulkan_device`](../../src/android/vulkan_device.h)(인스턴스, 장치, queue, Skia context)는 Activity가 사는 동안 하나로 남고, 창마다 [`vulkan_skia_renderer`](../../src/android/vulkan_skia_renderer.h)가 `VkSurfaceKHR`과 스왑체인만 새로 세운다. 창이 사라지면 Skia가 쥔 GPU 자원을 돌려준다(`freeGpuResources`).
 
-- 스왑체인은 FIFO(수직 동기)이고 이미지 수는 표면의 최소값이다(Adreno 730에서 셋). 형식은 CPU 경로와 같은 RGBA다.
+- 스왑체인은 FIFO(수직 동기)이고 이미지 수는 표면의 최소값이다(확인한 기기에서는 셋). 형식은 CPU 경로와 같은 RGBA다.
 - 이미지를 받을 때 새 semaphore로 기다리고, 다 그리면 이미지마다 하나인 semaphore에 신호한 뒤 표시한다. 낡은 스왑체인(`VK_ERROR_OUT_OF_DATE_KHR`)은 다시 세운다.
 - 아직 한 번도 그리지 않은 이미지가 남아 있는 동안은 semaphore 대신 fence로 받아 CPU에서 기다린다. 새 이미지는 레이아웃이 UNDEFINED이고 Skia가 그 전환 장벽을 TOP_OF_PIPE에서 시작해, semaphore를 기다리는 단계와 이어지지 않기 때문이다(동기화 검증의 `SYNC-HAZARD-WRITE-AFTER-READ`). 스왑체인이 설 때 처음 몇 frame만 해당한다.
-- 전변환은 identity다. 회전은 컴포지터가 한다. 회전된 표면에 identity를 쓰면 Android는 표시할 때마다 `VK_SUBOPTIMAL_KHR`을 돌려주므로, 그 까닭이면 다시 세우지 않는다. Galaxy S22 Ultra에서 가로 화면의 레이어는 HWC가 `ROT_90`으로 직접 합성해(`DEVICE`) GPU 합성 비용이 없었다. HWC가 회전을 못 하는 기기에서는 GPU 합성으로 내려가므로, 그때는 표면의 `currentTransform`에 맞춰 캔버스를 돌려 그리는 쪽을 다시 본다.
+- 전변환은 identity다. 회전은 컴포지터가 한다. 회전된 표면에 identity를 쓰면 Android는 표시할 때마다 `VK_SUBOPTIMAL_KHR`을 돌려주므로, 그 까닭이면 다시 세우지 않는다. 확인한 기기에서는 가로 화면의 레이어를 HWC가 `ROT_90`으로 직접 합성해(`DEVICE`) GPU 합성 비용이 없었다. HWC가 회전을 못 하는 기기에서는 GPU 합성으로 내려가므로, 그때는 표면의 `currentTransform`에 맞춰 캔버스를 돌려 그리는 쪽을 다시 본다.
 - GPU 대기(스왑체인을 다시 세우거나 버리기 전, 이미지 받기)는 상한이 있다. 빈 제출에 fence를 걸어 [`fence_wait.h`](../../src/host/fence_wait.h)의 예산만큼 쪼개 기다리고, 넘기면 실패로 돌려 물러섬에 맡긴다.
 - 장치를 잃거나 그리다 실패하면 CPU로 물러선다. Windows는 표면 하나가 물러서지만 Android는 **Activity 전체**가 물러선다. 창이 다시 생겨도 CPU로 그리고 장치를 놓는다. 물러설 때는 Vulkan 렌더러가 먼저 사라져 창과의 연결을 끊는다. 창은 생산자를 하나만 받으므로 그래야 CPU 렌더러가 버퍼를 잠글 수 있다.
 
@@ -76,7 +76,7 @@ adb shell setprop debug.vulkan.khronos_validation.validate_sync true
 adb shell setprop debug.vulkan.layers "''"                     # 끝나면 지운다
 ```
 
-**메모리.** Galaxy S22 Ultra(1440x3088)의 hello에서 `dumpsys meminfo`의 Graphics는 그리는 동안 약 118MB(스왑체인 이미지 셋이 약 53MB), 백그라운드에서 약 24MB다.
+**메모리.** 1440x3088 화면의 기기에서 hello의 `dumpsys meminfo` Graphics는 그리는 동안 약 118MB(스왑체인 이미지 셋이 약 53MB), 백그라운드에서 약 24MB다.
 
 ## 다시 그리기
 
