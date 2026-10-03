@@ -625,6 +625,106 @@ TEST_CASE("http client applies the body limit to decompressed bytes", "[net][cli
     CHECK(std::ranges::equal(sink.at(3).body.data(), gzip_ok));
 }
 
+// 빈 gzip 몸은 빈 몸이다 (머리를 읽다 EOF로 실패하지 않는다). deflate는 머리 없이 보내는 서버가 흔해 그것을 푼다.
+//  - RFC 9110의 deflate는 zlib 머리가 있는 것이다. Android는 둘 다 풀지만 WinHTTP는 머리 없는 것만 풀어
+//    (zlib 머리가 있으면 E_ABORT로 실패한다) 그 확인은 Android에서만 한다.
+TEST_CASE("http client decodes an empty gzip body and both deflate forms", "[net][client]")
+{
+    // "ok"를 zlib 머리와 함께, 그리고 머리 없이 deflate한 것이다.
+    constexpr std::array<std::uint8_t, 10> zlib_ok { 0x78, 0x9c, 0xcb, 0xcf, 0x06, 0x00, 0x01, 0x4b, 0x00, 0xdb };
+    constexpr std::array<std::uint8_t, 4> raw_deflate_ok { 0xcb, 0xcf, 0x06, 0x00 };
+    const bool explicit_encoding { GENERATE(false, true) };
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([&](const loopback_request& request) {
+        loopback_response response {};
+        response.headers.emplace_back("Content-Type", "text/plain; charset=utf-8");
+        if (request.target == "/empty")
+            response.headers.emplace_back("Content-Encoding", "gzip");
+        else
+        {
+            response.headers.emplace_back("Content-Encoding", "deflate");
+            if (request.target == "/zlib")
+                response.body.assign(zlib_ok.begin(), zlib_ok.end());
+            else
+                response.body.assign(raw_deflate_ok.begin(), raw_deflate_ok.end());
+        }
+        return response;
+    });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    std::u8string error {};
+#if defined(__ANDROID__)
+    const std::vector<const char*> targets { "/empty", "/raw", "/zlib" };
+#else
+    const std::vector<const char*> targets { "/empty", "/raw" };
+#endif
+    for (const char* const target : targets)
+    {
+        http_request request {};
+        request.url = server.url(target);
+        if (explicit_encoding)
+            request.headers.push_back({ u8"Accept-Encoding", u8"gzip, deflate" });
+        REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    }
+    REQUIRE(sink.wait_for(targets.size(), 10s));
+    for (std::size_t index { 0 }; index < targets.size(); ++index)
+    {
+        const http_response response { sink.at(index) };
+        CHECK(response.error.empty());
+        if (response.final_url.ends_with(u8"/empty"))
+            CHECK(response.body.data().empty());
+        else
+            CHECK(response.body.as_text() == u8"ok");
+    }
+}
+
+// 303은 GET으로 묻고, 301·302는 POST만 GET으로 바꾼다. HEAD는 언제나 HEAD다.
+TEST_CASE("http client changes the method of a followed redirect like a browser", "[net][client]")
+{
+    struct redirect_case
+    {
+        http_method method;
+        int status;
+        std::string expected;
+    };
+    const redirect_case value {
+        GENERATE(redirect_case { http_method::remove, 303, "GET" }, redirect_case { http_method::post, 303, "GET" }, redirect_case { http_method::head, 303, "HEAD" },
+            redirect_case { http_method::post, 302, "GET" }, redirect_case { http_method::post, 301, "GET" }, redirect_case { http_method::put, 302, "PUT" },
+            redirect_case { http_method::post, 307, "POST" }),
+    };
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    std::mutex guard {};
+    std::string arrived {};
+    server.set_handler([&](const loopback_request& request) {
+        if (request.target == "/start")
+        {
+            loopback_response response {};
+            response.status = value.status;
+            const std::u8string target { server.url("/final") };
+            response.headers.push_back(std::pair<std::string, std::string> { "Location", std::string { reinterpret_cast<const char*>(target.c_str()) } });
+            return response;
+        }
+        const std::lock_guard lock { guard };
+        arrived = request.method;
+        return canned("text/plain", "arrived");
+    });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    http_request request {};
+    request.url = server.url("/start");
+    request.method = value.method;
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+    CHECK(sink.at(0).status_code == 200);
+    const std::lock_guard lock { guard };
+    CHECK(arrived == value.expected);
+}
+
 TEST_CASE("http client refuses a streamed body that crosses the limit", "[net][client]")
 {
     loopback_http_server server {};
@@ -714,6 +814,37 @@ TEST_CASE("http client reports a closed port as a failed connection", "[net][cli
 
     CHECK(sink.at(0).error.kind == http_error_kind::cannot_connect);
 }
+
+#if defined(__ANDROID__)
+// HttpURLConnection은 몸 있는 GET을 POST로 바꾼다. 다른 동사가 서버에 닿지 않게 미리 거절한다.
+TEST_CASE("Android refuses a body on GET or HEAD before touching the wire", "[net][client][android]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request&) { return canned("text/plain", "ok"); });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    for (const http_method method : { http_method::get, http_method::head })
+    {
+        http_request request {};
+        request.url = server.url("/search");
+        request.method = method;
+        request.body = luil::net::http_text_body(u8"{}");
+        std::u8string error {};
+        CHECK(static_cast<bool>(client->send(std::move(request), error)) == false);
+        CHECK(error.empty() == false);
+    }
+    // 되풀이 요청도 표를 받기 전에 거절한다. 받고 나면 회차마다 같은 실패가 끝없이 온다.
+    http_request repeated {};
+    repeated.url = server.url("/search");
+    repeated.body = luil::net::http_text_body(u8"{}");
+    std::u8string error {};
+    CHECK(static_cast<bool>(client->start_heartbeat(std::move(repeated), http_heartbeat {}, error)) == false);
+    CHECK(error.empty() == false);
+    CHECK(server.request_count() == 0);
+}
+#endif
 
 TEST_CASE("http client refuses a malformed url before touching the wire", "[net][client]")
 {

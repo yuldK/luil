@@ -78,6 +78,9 @@ namespace luil::net {
             jclass http_connection { nullptr };
             jclass input_stream { nullptr };
             jclass gzip_stream { nullptr };
+            jclass inflater_stream { nullptr };
+            jclass inflater { nullptr };
+            jclass pushback_stream { nullptr };
             jclass output_stream { nullptr };
             jclass object { nullptr };
             jclass klass { nullptr };
@@ -121,6 +124,12 @@ namespace luil::net {
 
             jmethodID input_read { nullptr };
             jmethodID gzip_new { nullptr };
+            jmethodID inflater_stream_new { nullptr };
+            jmethodID inflater_new { nullptr };
+            jmethodID inflater_end { nullptr };
+            jmethodID pushback_new { nullptr };
+            jmethodID pushback_read { nullptr };
+            jmethodID pushback_unread { nullptr };
             jmethodID input_close { nullptr };
             jmethodID output_write { nullptr };
             jmethodID output_close { nullptr };
@@ -179,6 +188,9 @@ namespace luil::net {
                 class_slot { "java/net/HttpURLConnection", &api.http_connection },
                 class_slot { "java/io/InputStream", &api.input_stream },
                 class_slot { "java/util/zip/GZIPInputStream", &api.gzip_stream },
+                class_slot { "java/util/zip/InflaterInputStream", &api.inflater_stream },
+                class_slot { "java/util/zip/Inflater", &api.inflater },
+                class_slot { "java/io/PushbackInputStream", &api.pushback_stream },
                 class_slot { "java/io/OutputStream", &api.output_stream },
                 class_slot { "java/lang/Object", &api.object },
                 class_slot { "java/lang/Class", &api.klass },
@@ -222,6 +234,12 @@ namespace luil::net {
                 method_slot { &api.http_connection, "disconnect", "()V", &api.disconnect },
                 method_slot { &api.input_stream, "read", "([BII)I", &api.input_read },
                 method_slot { &api.gzip_stream, "<init>", "(Ljava/io/InputStream;)V", &api.gzip_new },
+                method_slot { &api.inflater_stream, "<init>", "(Ljava/io/InputStream;Ljava/util/zip/Inflater;)V", &api.inflater_stream_new },
+                method_slot { &api.inflater, "<init>", "(Z)V", &api.inflater_new },
+                method_slot { &api.inflater, "end", "()V", &api.inflater_end },
+                method_slot { &api.pushback_stream, "<init>", "(Ljava/io/InputStream;I)V", &api.pushback_new },
+                method_slot { &api.pushback_stream, "read", "()I", &api.pushback_read },
+                method_slot { &api.pushback_stream, "unread", "(I)V", &api.pushback_unread },
                 method_slot { &api.input_stream, "close", "()V", &api.input_close },
                 method_slot { &api.output_stream, "write", "([BII)V", &api.output_write },
                 method_slot { &api.output_stream, "close", "()V", &api.output_close },
@@ -582,6 +600,16 @@ namespace luil::net {
             return make_http_error(kind, message);
         }
 
+        // HttpURLConnection은 몸을 실으면 GET을 몰래 POST로 바꾸고 HEAD는 예외로 거절한다.
+        // 앱이 고른 것과 다른 동사가 서버에 닿지 않게 선을 건드리기 전에 거절한다.
+        [[nodiscard]] bool body_fits_method(const http_request& request, http_error& failure)
+        {
+            if (request.body.empty() || (request.method != http_method::get && request.method != http_method::head))
+                return true;
+            failure = make_http_error(http_error_kind::system_error, u8"Android's HttpURLConnection cannot send a body with GET or HEAD.");
+            return false;
+        }
+
         // 지역 참조 틀 하나다. 요청 하나가 쓰는 지역 참조를 한 번에 놓는다.
         class local_frame
         {
@@ -635,6 +663,7 @@ namespace luil::net {
                 int redirects { 0 };
                 std::u8string current_url { state_.request.url };
                 url_origin current_origin { state_.origin };
+                http_method method { state_.request.method };
                 result_.final_url = current_url;
 
                 jobject url { nullptr };
@@ -653,7 +682,7 @@ namespace luil::net {
                 while (true)
                 {
                     http_error failure {};
-                    if (open_connection(url, current_origin.secure, headers, failure) == false)
+                    if (open_connection(url, method, current_origin.secure, headers, failure) == false)
                         return failure;
                     if (exchange_head(failure) == false)
                         return failure;
@@ -669,6 +698,7 @@ namespace luil::net {
                     if (location_text == nullptr)
                         break;
                     const jobject next { env_->NewObject(api_.url, api_.url_new_relative, url, location_text) };
+                    env_->DeleteLocalRef(location_text);
                     if (env_->ExceptionCheck() || next == nullptr)
                     {
                         env_->ExceptionClear();
@@ -681,6 +711,7 @@ namespace luil::net {
                         break;
                     }
                     std::u8string next_url { from_java(env_, next_text) };
+                    env_->DeleteLocalRef(next_text);
                     http_error ignored {};
                     const url_origin next_origin { parse_origin(next_url, ignored) };
                     // https에서 http로 내려가는 걸음과 http·https가 아닌 곳은 따라가지 않는다. 그 3xx가 답이다.
@@ -700,7 +731,15 @@ namespace luil::net {
                         headers_cleared = true;
                     }
 
+                    // 303은 GET으로 바꾼다 (RFC 9110 15.4.4). 301·302의 POST도 브라우저·WinHTTP처럼
+                    // GET으로 바꾼다. 몸 있는 요청은 여기에 닿지 않으므로 바꿀 동사만 남는다.
+                    if ((status == 303 && method != http_method::head) || ((status == 301 || status == 302) && method == http_method::post))
+                        method = http_method::get;
+
+                    // 걸음마다 지역 참조를 놓는다. 요청 하나의 틀은 끝에서야 비므로, 재지정이 길면
+                    // 지역 참조 표가 넘친다.
                     release_connection(true);
+                    env_->DeleteLocalRef(url);
                     url = next;
                     current_url = std::move(next_url);
                     current_origin = parse_origin(current_url, ignored);
@@ -750,18 +789,25 @@ namespace luil::net {
                     return false;
                 const jboolean permitted { env_->CallBooleanMethod(api_.cleartext_policy, api_.cleartext_permitted, host) };
                 if (check_call(failure, true) == false)
+                {
+                    env_->DeleteLocalRef(host);
                     return false;
+                }
                 if (permitted == JNI_TRUE)
+                {
+                    env_->DeleteLocalRef(host);
                     return true;
+                }
 
                 std::u8string message { u8"Cleartext HTTP traffic to " };
                 message += from_java(env_, host);
+                env_->DeleteLocalRef(host);
                 message += u8" is not permitted by the app's network security config.";
                 failure = make_http_error(http_error_kind::secure_failure, message);
                 return false;
             }
 
-            [[nodiscard]] bool open_connection(const jobject url, const bool secure, const std::vector<http_header>& headers, http_error& failure)
+            [[nodiscard]] bool open_connection(const jobject url, const http_method method, const bool secure, const std::vector<http_header>& headers, http_error& failure)
             {
                 if (secure == false && cleartext_permitted(url, failure) == false)
                     return false;
@@ -791,8 +837,9 @@ namespace luil::net {
                 if (check_call(failure, true) == false)
                     return false;
 
-                const jstring verb { to_java(env_, http_method_name(state_.request.method)) };
+                const jstring verb { to_java(env_, http_method_name(method)) };
                 env_->CallVoidMethod(connection_, api_.set_request_method, verb);
+                env_->DeleteLocalRef(verb);
                 if (check_call(failure, true) == false)
                     return false;
 
@@ -912,14 +959,9 @@ namespace luil::net {
                     return true;
 
                 // Accept-Encoding을 직접 주면 플랫폼의 자동 gzip 해제가 꺼진다. 그때만 직접 푼다.
-                const std::u8string_view encoding { find_header(result_.headers, u8"content-encoding") };
-                if (state_.request.decompress && (same_ascii_ci(encoding, u8"gzip") || same_ascii_ci(encoding, u8"x-gzip")))
-                {
-                    input = env_->NewObject(api_.gzip_stream, api_.gzip_new, input);
-                    if (check_call(failure, false) == false || input == nullptr)
-                        return false;
-                    std::erase_if(result_.headers, [](const http_header& header) { return same_ascii_ci(header.name, u8"content-encoding") || same_ascii_ci(header.name, u8"content-length"); });
-                }
+                jobject inflater { nullptr };
+                if (state_.request.decompress && wrap_decoder(input, inflater, failure) == false)
+                    return false;
 
                 const jbyteArray block { env_->NewByteArray(read_chunk_bytes) };
                 if (block == nullptr || check_call(failure, false) == false)
@@ -945,6 +987,65 @@ namespace luil::net {
                 env_->CallVoidMethod(input, api_.input_close);
                 body_drained_ = env_->ExceptionCheck() == false;
                 env_->ExceptionClear();
+                // 직접 준 Inflater는 스트림이 닫아 주지 않는다. 네이티브 메모리를 GC에 맡기지 않는다.
+                if (inflater != nullptr)
+                {
+                    env_->CallVoidMethod(inflater, api_.inflater_end);
+                    env_->ExceptionClear();
+                }
+                return true;
+            }
+
+            // 답이 아직 압축된 채로 왔으면(gzip·deflate) 푸는 스트림으로 감싼다.
+            //  - 앞의 두 바이트를 엿본다. 몸이 비었으면 GZIPInputStream이 머리를 읽다 EOF로
+            //    던지므로 감싸지 않는다. deflate는 RFC 9110대로 zlib 머리가 있으면 그것으로, 없으면
+            //    머리 없는 deflate로 푼다 (머리 없이 보내는 서버가 흔하다).
+            [[nodiscard]] bool wrap_decoder(jobject& input, jobject& inflater, http_error& failure)
+            {
+                const std::u8string_view encoding { find_header(result_.headers, u8"content-encoding") };
+                const bool gzip { same_ascii_ci(encoding, u8"gzip") || same_ascii_ci(encoding, u8"x-gzip") };
+                const bool deflate { same_ascii_ci(encoding, u8"deflate") };
+                if (gzip == false && deflate == false)
+                    return true;
+
+                const jobject peekable { env_->NewObject(api_.pushback_stream, api_.pushback_new, input, jint { 2 }) };
+                if (check_call(failure, false) == false || peekable == nullptr)
+                    return false;
+                input = peekable;
+                const jint first { env_->CallIntMethod(input, api_.pushback_read) };
+                if (check_call(failure, false) == false)
+                    return false;
+                const jint second { first >= 0 ? env_->CallIntMethod(input, api_.pushback_read) : jint { -1 } };
+                if (check_call(failure, false) == false)
+                    return false;
+                if (second >= 0)
+                    env_->CallVoidMethod(input, api_.pushback_unread, second);
+                if (check_call(failure, false) == false)
+                    return false;
+                if (first >= 0)
+                    env_->CallVoidMethod(input, api_.pushback_unread, first);
+                if (check_call(failure, false) == false)
+                    return false;
+
+                if (first >= 0)
+                {
+                    jobject decoder { nullptr };
+                    if (gzip)
+                        decoder = env_->NewObject(api_.gzip_stream, api_.gzip_new, input);
+                    else
+                    {
+                        const bool zlib { second >= 0 && (first & 0x0F) == 8 && ((first << 8) | second) % 31 == 0 };
+                        inflater = env_->NewObject(api_.inflater, api_.inflater_new, zlib ? JNI_FALSE : JNI_TRUE);
+                        if (check_call(failure, false) == false || inflater == nullptr)
+                            return false;
+                        decoder = env_->NewObject(api_.inflater_stream, api_.inflater_stream_new, input, inflater);
+                    }
+                    if (check_call(failure, false) == false || decoder == nullptr)
+                        return false;
+                    input = decoder;
+                }
+                // 앱이 받는 바이트는 푼 것이다. 압축된 길이와 부호화 표시는 남기지 않는다.
+                std::erase_if(result_.headers, [](const http_header& header) { return same_ascii_ci(header.name, u8"content-encoding") || same_ascii_ci(header.name, u8"content-length"); });
                 return true;
             }
 
@@ -963,6 +1064,8 @@ namespace luil::net {
                     env_->DeleteGlobalRef(state_.connection);
                     state_.connection = nullptr;
                 }
+                if (connection_ != nullptr)
+                    env_->DeleteLocalRef(connection_);
                 connection_ = nullptr;
             }
 
@@ -1086,7 +1189,7 @@ namespace luil::net {
             // URL·헤더는 **먼저** 본다 — 잘못된 요청은 표를 받지 못한다.
             http_error failure {};
             std::vector<http_header> headers {};
-            if (parse_origin(request.url, failure).valid == false || collect_request_headers(request, headers, failure) == false)
+            if (parse_origin(request.url, failure).valid == false || collect_request_headers(request, headers, failure) == false || body_fits_method(request, failure) == false)
             {
                 error = failure.message;
                 return {};
@@ -1327,6 +1430,8 @@ namespace luil::net {
 
             auto state { std::make_shared<request_state>() };
             if (collect_request_headers(request, state->headers, failure) == false)
+                return false;
+            if (body_fits_method(request, failure) == false)
                 return false;
 
             state->id = id;

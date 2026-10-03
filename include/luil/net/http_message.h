@@ -88,6 +88,8 @@ namespace luil::net {
         //    이기지 못한다.
         std::vector<http_header> headers {};
         // 보낼 몸이다. 비어 있으면 몸 없는 요청이다.
+        //  - Android는 GET·HEAD에 몸을 실을 수 없어 그 요청을 선을 건드리기 전에 거절한다
+        //    (`system_error`). 플랫폼이 몸 있는 GET을 몰래 POST로 바꾸기 때문이다.
         std::vector<std::uint8_t> body {};
         // 몸의 Content-Type이다. 몸이 있는데 비어 있으면
         // `application/octet-stream`으로 나간다.
@@ -107,6 +109,7 @@ namespace luil::net {
         // 307·308을 따라가면 몸 없는 요청이 조용히 대신 나간다 — POST가 200을
         // 받았는데 아무것도 안 만들어지는 종류의 버그다. 그래서 그 자리는 앱에게
         // 돌려준다: 3xx를 답으로 받아 `Location`을 보고 다시 보낸다.
+        //  - 따라간 303은 GET으로 묻는다 (HEAD는 그대로). 301·302의 POST도 GET이 된다.
         http_redirect_policy redirects { http_redirect_policy::follow };
         // 따라갈 재지정의 최대 횟수다.
         int max_redirects { 10 };
