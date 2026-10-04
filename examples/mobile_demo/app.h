@@ -91,6 +91,6 @@ namespace mobile_demo {
     };
 
     // --- UI thread ---
-    // 화면 크기와 배율을 앱 메시지로 옮긴다. 플랫폼마다 넓힌 delegate가 이것을 부른다.
-    [[nodiscard]] luil::app_message make_metrics_message(float width, float height, float scale);
+    // 화면 크기·배율·폭 등급을 앱 메시지로 옮긴다. 플랫폼마다 넓힌 delegate가 이것을 부른다.
+    [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics);
 } // namespace mobile_demo

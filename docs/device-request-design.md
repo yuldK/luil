@@ -157,6 +157,26 @@ frame은 그 셋을 이미 다 한다.
   이것만 다른 이유는 진동이 없는 것이 그 플랫폼의 관례를 어기는 쪽이기 때문이다. 앱이 끄려면
   `application_config::touch.long_press_haptic`을 거짓으로 둔다.
 
+## 창 폭 등급
+
+배치를 기기 방향이 아니라 창 폭으로 고르면 휴대폰 가로, 화면 분할, 자유 창, 접는 기기, 태블릿, 데스크톱 창을 한
+규칙으로 다룬다. [`classify_window_width`](../include/luil/ui/layout_metrics.h)는 논리 폭(Android의 dp)을 등급으로
+옮기는 순수 함수다.
+
+| 등급 | 기본 경계 | 흔한 자리 |
+| --- | --- | --- |
+| `compact` | 600 미만 | 휴대폰 세로, 좁게 나눈 화면 |
+| `medium` | 600 이상 840 미만 | 휴대폰 가로, 펼친 접는 기기, 작은 태블릿 |
+| `expanded` | 840 이상 | 태블릿 가로, 데스크톱 창 |
+
+- 경계는 인자(`window_width_breakpoints`)로 바꾼다. 폭이 유한하지 않으면 compact이고, 경계가 뒤집히면 expanded는
+  서지 않는다.
+- **창 metrics에 싣는다.** host는 `app_delegate::make_metrics_message(const window_metrics&)`를 부르고, 그
+  `width_class`는 앱이 배치할 폭(Android는 안전 영역)을 배율로 나눈 논리 폭의 등급이다. 기본 구현은 기존의 세
+  값짜리 `make_window_metrics_message`를 불러 그것만 넓힌 앱은 그대로 돈다. 이름을 달리한 것은 같은 이름의 가상
+  함수 하나만 넓히면 나머지가 가려지기 때문이다 (clang의 `-Woverloaded-virtual`도 그 자리를 잡는다).
+- Windows에서도 같다. 창 client 폭을 DPI 배율로 나눈 논리 폭이다. 플래그가 필요 없다.
+
 ## 검증
 
 | 대상 | 확인 |
@@ -166,6 +186,7 @@ frame은 그 셋을 이미 다 한다.
 | frame 기본값 | `ui_frame::device`의 기본이 "시스템을 따름", 막대 보임, 컷아웃 비킴, 볼륨 키는 시스템 (core test) |
 | 키 필터 | 받겠다는 값마다 뒤로 가기·볼륨·시스템 키의 결과, 볼륨 키의 이름과 반복, 뗌 (기기 test) |
 | 길게 누르기 햅틱 | 메뉴가 열리는 세 자리에서 한 번, 짧은 탭·우클릭 없는 대상·빈 우클릭·자격 잃은 접촉·꺼진 설정·마우스에서는 없음 (controller test) |
+| 창 폭 등급 | 600·840 경계의 양쪽, 바꾼 경계, 뒤집힌 경계, 유한하지 않은 폭, 물리 폭과 배율로 지은 metrics, 세 값짜리만 넓힌 delegate로 이어지는 기본 구현 (core test) |
 | 햅틱 출력 | 다른 thread의 `perform_haptic`과 input thread의 `haptic_request`가 출력에 닿고 앱 inbox에는 가지 않음, 출력이 없으면 아무 일도 없음 (host test). 뜻별 상수와 API 수준별 물러섬 (core test) |
 
 기기 확인은 [Android 이식 계획](android-port-plan.md)의 "기기 요청" 절에 적는다.

@@ -1201,7 +1201,7 @@ namespace luil::win32 {
                 // delegate는 noexcept가 아니다 (`post_window_placement`와 같은 이유).
                 try
                 {
-                    if (app_message message { environment_.delegate->make_window_metrics_message(width, height, scale) }; message.empty() == false)
+                    if (app_message message { environment_.delegate->make_metrics_message(make_window_metrics(width, height, scale)) }; message.empty() == false)
                         host_->post_app_message(std::move(message));
                 }
                 catch (...)

@@ -12,6 +12,7 @@
 #include "luil/text/text_edit.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/label_element.h"
+#include "luil/ui/layout_metrics.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/root_element.h"
@@ -91,6 +92,8 @@ namespace mobile_demo {
         float width { 0.0f };
         float height { 0.0f };
         float scale { 1.0f };
+        // 논리 폭의 등급이다. 셸이 한 판과 두 판을 이것으로 고른다.
+        luil::window_width_class width_class { luil::window_width_class::compact };
     };
 
     // 페이지를 연다. 좁은 화면에서는 목록 위로 페이지가 들어서고, 넓은 화면에서는 오른쪽 판이 바뀐다.

@@ -34,6 +34,20 @@ namespace mobile_demo {
             haptic_choice { luil::haptic_feedback::reject, u8"reject", u8"거절" },
         };
 
+        [[nodiscard]] std::u8string_view width_class_name(const luil::window_width_class value) noexcept
+        {
+            switch (value)
+            {
+            case luil::window_width_class::compact:
+                return u8"compact";
+            case luil::window_width_class::medium:
+                return u8"medium";
+            case luil::window_width_class::expanded:
+                return u8"expanded";
+            }
+            return u8"compact";
+        }
+
         constexpr std::array<orientation_choice, 4> orientation_choices {
             orientation_choice { luil::screen_orientation::system, u8"system", u8"시스템" },
             orientation_choice { luil::screen_orientation::portrait, u8"portrait", u8"세로" },
@@ -74,13 +88,19 @@ namespace mobile_demo {
         return false;
     }
 
-    page_content device_page::build(const float width, const float scale)
+    page_content device_page::build(const float width, const float scale, const window_metrics_intent& window)
     {
         static_cast<void>(scale);
         const luil::ui_platform_capabilities capabilities { luil::current_ui_platform().capabilities };
         const float choice_width { std::min(width - 2.0f * page_padding, 360.0f) };
 
         page_column column { u8"device" };
+        // 창 폭 등급은 모든 플랫폼에서 같은 함수다. 화면 분할·창 크기를 바꾸면 이 줄과 셸의 판 수가 함께 바뀐다.
+        const float logical_width { window.scale > 0.0f ? window.width / window.scale : 0.0f };
+        column.heading(u8"window-heading", u8"창 폭");
+        column.body(u8"window-class", to_u8(static_cast<int>(logical_width)) + u8"dp · " + std::u8string { width_class_name(window.width_class) });
+        column.note(u8"window-note", u8"600dp부터 두 판, 840dp부터 넓은 판이다.");
+        column.gap(20.0f);
         column.heading(u8"orientation-heading", u8"화면 방향");
         if (capabilities.screen_orientation == false)
             column.note(u8"orientation-none", u8"이 플랫폼은 화면 방향을 요청할 수 없다.");

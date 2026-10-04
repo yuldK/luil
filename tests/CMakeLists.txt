@@ -55,6 +55,7 @@ add_executable(luil_core_tests
     ui_theme_tests.cpp
     virtual_list_element_tests.cpp
     webview_element_tests.cpp
+    window_metrics_tests.cpp
     wrap_element_tests.cpp
     zoom_view_tests.cpp
     # core가 링크로 묶어 부르는 플랫폼 hook의 test용 정의다 (파일에 이유가 있다).

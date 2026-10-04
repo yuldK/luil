@@ -7,6 +7,39 @@ namespace luil {
     // **여럿이 같은 식을 써야 하는 것**만 온다 — 식이 두 벌이 되면 그 둘은
     // 반드시 어긋난다.
 
+    // 창 폭의 등급이다 (Material의 창 크기 구간, device-request-design.md의 창 폭 등급).
+    // 배치를 기기 방향이 아니라 창 폭으로 고르면 화면 분할·접는 기기·태블릿·데스크톱 창을 한 규칙으로 다룬다.
+    enum class window_width_class
+    {
+        // 휴대폰 세로, 좁게 나눈 화면이다. 한 판씩 보인다.
+        compact,
+        // 휴대폰 가로, 접는 기기를 편 것, 작은 태블릿이다. 두 판이 들어간다.
+        medium,
+        // 태블릿 가로, 데스크톱 창이다. 옆 판·옆 시트가 늘 설 자리가 있다.
+        expanded,
+    };
+
+    // 등급의 경계다 (논리 픽셀, Android의 dp). 이 폭부터 그 등급이다.
+    struct window_width_breakpoints
+    {
+        float medium { 600.0f };
+        float expanded { 840.0f };
+
+        [[nodiscard]] bool operator==(const window_width_breakpoints&) const noexcept = default;
+    };
+
+    // 논리 폭을 등급으로 옮긴다.
+    //  - 폭이 유한하지 않으면 compact다.
+    //  - `expanded`가 `medium`보다 작으면 expanded는 서지 않는다 (경계가 뒤집힌 설정을 추측해 고치지 않는다).
+    [[nodiscard]] constexpr window_width_class classify_window_width(const float width, const window_width_breakpoints breakpoints = {}) noexcept
+    {
+        if (width >= breakpoints.expanded && breakpoints.expanded >= breakpoints.medium)
+            return window_width_class::expanded;
+        if (width >= breakpoints.medium)
+            return window_width_class::medium;
+        return window_width_class::compact;
+    }
+
     // 네 변의 여백이다 (논리 픽셀).
     struct edge_insets
     {

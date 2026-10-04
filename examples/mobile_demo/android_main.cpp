@@ -8,13 +8,13 @@
 #include "luil/android/android_app.h"
 
 namespace {
-    // 화면 크기와 배율을 앱에 알린다. 그 밖의 훅은 기본값이다.
+    // 화면 크기·배율·폭 등급을 앱에 알린다. 그 밖의 훅은 기본값이다.
     class mobile_delegate final : public luil::app_delegate
     {
     public:
-        [[nodiscard]] luil::app_message make_window_metrics_message(const float width, const float height, const float scale) override
+        [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
         {
-            return mobile_demo::make_metrics_message(width, height, scale);
+            return mobile_demo::make_metrics_message(metrics);
         }
     };
 } // namespace

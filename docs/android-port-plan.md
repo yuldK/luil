@@ -1176,3 +1176,29 @@ mobile demo의 확대 보기 페이지(쪽 다섯 장, `contain`)에서 adb `inp
 
 - 맞춤(32%)에서 두 번 탭하면 64%가 되고 탭한 자리(오른쪽)가 손가락 밑에 남는다. 다시 두 번 탭하면 32% 맞춤이다.
 - 0.8초 사이의 두 탭은 아무 일도 없다 (Android의 두 번 탭 시간 300ms).
+
+### 화면 분할과 자유 창
+
+화면 분할은 SystemUI WMShell의 `splitscreen moveToSideStage <task> 1`로 들어가고 `exitSplitScreen`으로 나왔다. 짝은
+hello 예제다. 비율은 가운데 구분선을 adb `input swipe`로 끌어 바꿨다. 자유 창은
+`am start --windowingMode 5`로 띄우고 `am task resize`로 크기를 바꿨다. Activity 재생성은 pid와 `dumpsys activity`의
+ActivityRecord로, 크기는 logcat의 `surface` 줄로 봤다.
+
+| 바꾼 것 | 재생성 | 표면 | 안전 영역 | 논리 폭 · 등급 | popup |
+| --- | --- | --- | --- | --- | --- |
+| 분할 진입 (아래 칸) | 없음 | 1080×2316 → 1080×1130 | 0,0,0,42 (위가 상태 표시줄에 닿지 않는다) | 384dp · compact | 드롭다운이 `surface_resized`로 닫힘 |
+| 구분선 끌기 | 없음 | 1080×1130 → 1080×1599, 1080×1599 → 1080×1305 | 그대로 | 384dp · compact | 아래를 고치기 전에는 남았다 |
+| 자유 창 | 없음 | 1158×873 | 0,45,0,0 (창 손잡이) | 412dp · compact | — |
+| 자유 창 넓히기 | 없음 | 1600×855 → 2150×855 | 그대로 | 569dp · compact → 765dp · medium (두 판) | — |
+
+크기 변경마다 스왑체인을 한 번 다시 만들고 `surface_resized`를 한 번 판정한다. 밀도는 내내 450(배율 2.81)이었다.
+
+**고친 것.** 구분선을 끌면 안전 영역은 그대로이고 창만 바뀌는데, `refresh_metrics`가 이전 내용 크기를 창 크기를 다시
+읽은 **뒤에** 재어 "바뀌지 않음"으로 보았다. 그래서 열린 드롭다운이 닫히지도 새 크기로 다시 자리 잡지도 않았다. 분할
+진입·회전은 안전 영역도 함께 바뀌어 드러나지 않았던 것이다. 이전 크기를 먼저 재게 고친 뒤 구분선 끌기에서 드롭다운이
+`surface_resized`로 닫힌다.
+
+**확인하지 못한 것.** 접는 기기의 펼침·접힘은 에뮬레이터(SDK의 emulator와 접는 기기 system image)가 이 기계에 없어
+보지 못했다. 매니페스트의 `configChanges`에 `screenSize|smallestScreenSize|screenLayout`이 있어 같은 길(Activity 유지,
+`APP_CMD_WINDOW_RESIZED`·`CONFIG_CHANGED`)로 올 것으로 보지만 확인한 사실은 아니다. 분할 비율의 최소 크기 선언
+(`minWidth`·`minHeight`)은 더하지 않았다. 이번 확인에서 그것이 필요한 문제는 보지 못했다.

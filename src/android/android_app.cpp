@@ -703,16 +703,18 @@ namespace luil::android {
             // 창 크기·안전 영역·배율을 다시 읽어 렌더러와 앱에 알린다.
             void refresh_metrics()
             {
+                // 이전 내용 크기는 창 크기를 다시 읽기 **전에** 잰다. 뒤에 재면 안전 영역은 그대로이고 창만 바뀐
+                // 크기 변경(화면 분할의 비율 조절)이 "바뀌지 않음"으로 보여 popup이 닫히지도 다시 자리 잡지도 않는다.
                 const int previous_window_width { window_width_ };
                 const int previous_window_height { window_height_ };
+                const int previous_bottom { insets_.bottom };
+                const int previous_width { content_width() };
+                const int previous_height { content_height() };
                 if (app_->window != nullptr)
                 {
                     window_width_ = ANativeWindow_getWidth(app_->window);
                     window_height_ = ANativeWindow_getHeight(app_->window);
                 }
-                const int previous_bottom { insets_.bottom };
-                const int previous_width { content_width() };
-                const int previous_height { content_height() };
                 insets_ = read_safe_insets(app_->activity, applied_device_.system_bars == system_bars_mode::immersive, applied_device_.draw_under_cutout);
                 // 내용 크기가 바뀌면 popup은 새 크기로 다시 자리 잡는다. 닫는 계기는 창 자체가 바뀐
                 // 때(회전, 화면 나누기)뿐이다. 키보드는 창이 아니라 안전 영역만 줄인다 — popup 안 검색
@@ -766,7 +768,7 @@ namespace luil::android {
                 reported_width_ = width;
                 reported_height_ = height;
                 reported_scale_ = scale_;
-                if (app_message message { environment_.delegate->make_window_metrics_message(width, height, scale_) }; message.empty() == false)
+                if (app_message message { environment_.delegate->make_metrics_message(make_window_metrics(width, height, scale_)) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
             }
 

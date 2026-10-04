@@ -14,9 +14,6 @@
 
 namespace mobile_demo {
     namespace {
-        // 이 폭부터 목록과 페이지를 나란히 둔다 (논리 픽셀). Material의 "펼친" 창 크기 구간이 시작하는
-        // 자리다 — 휴대폰 가로와 태블릿이 여기 든다.
-        constexpr float two_pane_width { 600.0f };
         // 넓은 화면에서 왼쪽 목록의 폭이다.
         constexpr float navigation_width { 260.0f };
         // 목록 한 칸의 높이다. 제목과 설명 두 줄에 손가락이 넉넉히 닿는다.
@@ -39,7 +36,7 @@ namespace mobile_demo {
             page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 길게 눌러 메뉴", luil::codicons::icon_menu },
             page_entry { page_zoom, u8"확대 보기", u8"두 손가락 확대와 이동", luil::codicons::icon_zoom_in },
             page_entry { page_theme, u8"테마", u8"밝기, 키 컬러, 시스템 색", luil::codicons::icon_symbol_color },
-            page_entry { page_device, u8"기기", u8"화면 방향, 시스템 막대, 볼륨 키, 햅틱", luil::codicons::icon_device_mobile },
+            page_entry { page_device, u8"기기", u8"방향, 막대, 볼륨 키, 햅틱, 창 폭", luil::codicons::icon_device_mobile },
         };
 
         [[nodiscard]] std::u8string page_title(const std::u8string_view page)
@@ -146,7 +143,9 @@ namespace mobile_demo {
         const float scale { metrics_.scale > 0.0f ? metrics_.scale : 1.0f };
         const float width { metrics_.width > 0.0f ? metrics_.width : 480.0f };
         const float height { metrics_.height > 0.0f ? metrics_.height : 800.0f };
-        const bool wide { width / scale >= two_pane_width };
+        // 폭 등급이 compact를 넘으면(600dp부터) 목록과 페이지를 나란히 둔다. 기기 방향이 아니라 창 폭으로 고르므로
+        // 휴대폰 가로·화면 분할·접는 기기·태블릿이 한 규칙이다.
+        const bool wide { metrics_.width_class != luil::window_width_class::compact };
         // 좁은 화면에서 페이지를 열었으면 뒤로 갈 자리가 있다.
         const bool nested { wide == false && page_.empty() == false };
         const std::u8string shown { page_.empty() && wide ? std::u8string { page_basics } : page_ };
@@ -263,7 +262,7 @@ namespace mobile_demo {
         if (page == page_theme)
             return wrap_scroll(page, theme_.build(width, scale), height, scale);
         if (page == page_device)
-            return wrap_scroll(page, device_.build(width, scale), height, scale);
+            return wrap_scroll(page, device_.build(width, scale, metrics_), height, scale);
         return wrap_scroll(page, basics_.build(width, scale), height, scale);
     }
 
@@ -362,8 +361,8 @@ namespace mobile_demo {
         return {};
     }
 
-    luil::app_message make_metrics_message(const float width, const float height, const float scale)
+    luil::app_message make_metrics_message(const luil::window_metrics& metrics)
     {
-        return luil::app_message { window_metrics_intent { width, height, scale } };
+        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class } };
     }
 } // namespace mobile_demo

@@ -50,8 +50,9 @@ namespace luil::android {
     // 부른 thread(native_app_glue의 `android_main` thread)가 luil의 UI thread다. input과
     // logic thread는 `app_host`가 세운다 (docs/concepts/threading-model.md).
     //  - 표면은 하나다. 크기와 배율은 시스템 막대·컷아웃을 뺀 안전 영역의 것을
-    //    `app_delegate::make_window_metrics_message`로 알리고, 그 자리에서 그린다.
-    //    배율은 `density / 160`이라 논리 픽셀 1이 1dp다.
+    //    `app_delegate::make_metrics_message`(폭 등급 포함)로 알리고, 그 자리에서 그린다.
+    //    배율은 `density / 160`이라 논리 픽셀 1이 1dp다. 화면 분할·접는 기기의 크기 변경도 Activity를
+    //    다시 만들지 않고 같은 길로 온다 (매니페스트의 `configChanges`).
     //  - 보이고 사라질 때 `app_delegate::make_lifecycle_message`를 게시한다. 사라질 때가
     //    저장할 마지막 기회일 수 있다.
     //  - 터치·펜·마우스·키보드 입력을 옮긴다 (touch-pen-input-design.md). 텍스트 칸에 초점이

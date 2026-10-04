@@ -19,9 +19,9 @@ namespace {
     class desktop_delegate final : public luil::win32::window_delegate
     {
     public:
-        [[nodiscard]] luil::app_message make_window_metrics_message(const float width, const float height, const float scale) override
+        [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
         {
-            return mobile_demo::make_metrics_message(width, height, scale);
+            return mobile_demo::make_metrics_message(metrics);
         }
     };
 } // namespace
