@@ -87,6 +87,8 @@ namespace luil {
             {
                 set_bounds(context.slot);
                 host_ = host;
+                screen_ = context.knows_surface() ? context.surface : rect_f {};
+                paint_ = sheet_background_bounds(context.slot, host, screen_);
                 kind_ = kind;
                 scale_ = positive_scale(context.scale);
                 const rect_f box { context.slot };
@@ -106,11 +108,13 @@ namespace luil {
             void arrange(const arrange_context& context) override
             {
                 set_bounds(context.slot);
+                screen_ = {};
+                paint_ = context.slot;
             }
 
             void draw(draw_context& context, const interaction_snapshot& interaction) const override
             {
-                const rect_f box { bounds() };
+                const rect_f box { paint_ };
                 if (box.width > 0.0f && box.height > 0.0f)
                 {
                     // 화면 가장자리에 붙은 쪽은 각지고, 화면 안쪽을 향한 모서리만 둥글다.
@@ -127,9 +131,10 @@ namespace luil {
                         radii[1] = radii[2] = round;
                     SkRRect shape {};
                     shape.setRectRadii(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), radii);
-                    // 그림자는 host의 자리 안에만 드리운다. 화면 가장자리에 붙은 쪽 너머(제스처 막대 자리)로 비치지 않게.
+                    // 그림자는 표면(모르면 host의 자리) 안에만 드리운다. 화면 가장자리에 붙은 쪽 너머로 비치지 않게.
+                    const rect_f clip { screen_.width > 0.0f && screen_.height > 0.0f ? screen_ : host_ };
                     context.canvas.save();
-                    context.canvas.clipRect(SkRect::MakeXYWH(host_.x, host_.y, host_.width, host_.height));
+                    context.canvas.clipRect(SkRect::MakeXYWH(clip.x, clip.y, clip.width, clip.height));
                     draw_surface_shadow(context, box, radius, 0.25f);
                     context.canvas.restore();
                     context.canvas.drawRRect(shape, solid_paint(context.palette.surface_background));
@@ -140,8 +145,12 @@ namespace luil {
         private:
             sheet_kind kind_ { sheet_kind::bottom };
             float scale_ { 1.0f };
-            // host가 받은 자리다. 그림자를 이 안으로 자른다.
+            // host가 받은 자리다. 표면을 모르면 그림자를 이 안으로 자른다.
             rect_f host_ {};
+            // 표면 전체다 (모르면 비었다).
+            rect_f screen_ {};
+            // 바탕을 칠할 자리다. 자리 가장자리에 닿은 변은 표면 끝까지 늘었다.
+            rect_f paint_ {};
         };
 
         // 놓은 자리에서 낼 메시지다. 닫는 쪽이 가까우면 닫힘, 아니면 가장 가까운 멈춤점이다.
@@ -208,6 +217,27 @@ namespace luil {
         return { to_full < to_half ? sheet_detent::full : sheet_detent::half, false };
     }
 
+    rect_f sheet_background_bounds(const rect_f& sheet, const rect_f& slot, const rect_f& surface) noexcept
+    {
+        if (surface.width <= 0.0f || surface.height <= 0.0f || sheet.width <= 0.0f || sheet.height <= 0.0f)
+            return sheet;
+        // 닿았는지는 반 픽셀 안에서 본다. 배율을 곱한 자리가 소수로 떨어진다.
+        constexpr float touch { 0.5f };
+        float left { sheet.x };
+        float top { sheet.y };
+        float right { sheet.x + sheet.width };
+        float bottom { sheet.y + sheet.height };
+        if (std::abs(left - slot.x) <= touch)
+            left = std::min(left, surface.x);
+        if (std::abs(top - slot.y) <= touch)
+            top = std::min(top, surface.y);
+        if (std::abs(right - (slot.x + slot.width)) <= touch)
+            right = std::max(right, surface.x + surface.width);
+        if (std::abs(bottom - (slot.y + slot.height)) <= touch)
+            bottom = std::max(bottom, surface.y + surface.height);
+        return { left, top, right - left, bottom - top };
+    }
+
     rect_f sheet_surface_bounds(const sheet_host_config& config, const rect_f& slot, const float scale) noexcept
     {
         const float factor { positive_scale(scale) };
@@ -272,6 +302,7 @@ namespace luil {
         set_bounds(context.slot);
         const float scale { positive_scale(context.scale) };
         kind_ = resolve_sheet_kind(config_, context.slot.width / scale);
+        screen_ = context.knows_surface() ? context.surface : rect_f {};
         if (scrim_ != nullptr)
             scrim_->arrange(context);
         static_cast<sheet_surface_element*>(surface_)->place(context.for_child(sheet_surface_bounds(config_, context.slot, scale)), context.slot, handle_, content_, kind_);
@@ -301,6 +332,13 @@ namespace luil {
 
     void sheet_host_element::draw(draw_context& context, const interaction_snapshot& interaction) const
     {
+        // modal이면 자리 밖의 띠도 같은 scrim 색으로 칠한다. 누르기는 자리 안의 scrim만 받는다.
+        if (scrim_ != nullptr && screen_.width > 0.0f && screen_.height > 0.0f)
+        {
+            const SkPaint paint { solid_paint(with_alpha(context.palette.content_shadow, config_.scrim_opacity)) };
+            for (const rect_f& band : bands_outside(screen_, bounds()))
+                context.canvas.drawRect(SkRect::MakeXYWH(band.x, band.y, band.width, band.height), paint);
+        }
         // scrim이 먼저, 시트가 그 위다 (자식 순서 그대로).
         draw_children(context, interaction);
     }

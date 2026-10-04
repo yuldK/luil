@@ -250,5 +250,6 @@ namespace luil {
     //  - `root_element`처럼 호출자가 caption과 내용을 **각자** 배치해 담는
     //    tree는 지금처럼 생성자를 그대로 쓴다. 조립 방식이 실제로 다르고,
     //    빠뜨린 배치는 어느 쪽이든 `unarranged()`가 드러낸다.
-    [[nodiscard]] ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, float scale);
+    //  - `surface`는 그릴 수 있는 표면 전체다 (`arrange_context::surface`). 비우면 자리 밖을 모른다.
+    [[nodiscard]] ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, float scale, const rect_f& surface = {});
 } // namespace luil

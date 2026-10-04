@@ -49,6 +49,10 @@ modal.scrim_background = [](const luil::ui_color_palette& palette) { return luil
 
 선택자를 주면 `scrim_opacity`는 쓰이지 않는다. 알파까지 정해진 색이 돌아오는데 그 위에 진하기를 다시 곱하면 앱이 적은 값과 화면의 값이 갈리기 때문이다. 진하기가 필요하면 선택자 안에서 `with_alpha()`로 적는다.
 
+**안전 영역 밖.** 배치 문맥에 `surface`(그릴 수 있는 표면 전체)가 있으면 scrim 색을 자리 밖의 띠까지 칠한다 — Android에서
+상태 표시줄·제스처 막대·컷아웃 자리다. 누르기는 자리 안의 scrim만 받는다. 앱이 `surface`를 넘기지 않으면 지금과 같다
+([기기 요청](device-request-design.md#안전-영역-밖)).
+
 구체 색이 아니라 선택자를 받는 이유는 라이브러리의 다른 자리와 같다. 색을 그대로 받으면 테마 전환과 고대비를 따라오지 못한다 ([concepts/theming.md](concepts/theming.md)).
 
 ## 배치
@@ -111,6 +115,7 @@ Modal host는 자신이 속한 한 표면의 입력만 가둔다. 활성 보조 
 ## 반드시 유지할 불변식
 
 - Scrim은 투명해도 포인터를 차단한다.
+- 자리 밖의 scrim 띠는 그리기만 한다. 포인터 차단과 `outside` action은 자리 안의 scrim이다.
 - `scrim_background`가 있으면 `scrim_opacity`는 쓰이지 않는다.
 - Content의 빈 영역은 outside click으로 취급되지 않는다. 표면이 있어도 흡수는 content가 한다.
 - `surface`가 비어 있으면 표면 element를 만들지 않고 배치도 달라지지 않는다.

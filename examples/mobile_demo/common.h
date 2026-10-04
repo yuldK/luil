@@ -95,6 +95,8 @@ namespace mobile_demo {
         float scale { 1.0f };
         // 논리 폭의 등급이다. 셸이 한 판과 두 판을 이것으로 고른다.
         luil::window_width_class width_class { luil::window_width_class::compact };
+        // 그릴 수 있는 표면 전체다 (tree 좌표). 시트·dialog의 scrim과 시트 바탕이 안전 영역 밖까지 닿는다.
+        luil::rect_f surface {};
     };
 
     // 페이지를 연다. 좁은 화면에서는 목록 위로 페이지가 들어서고, 넓은 화면에서는 오른쪽 판이 바뀐다.

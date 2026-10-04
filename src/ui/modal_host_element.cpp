@@ -3,6 +3,10 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/panel_element.h"
 
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+
 #include <utility>
 
 namespace luil {
@@ -71,8 +75,9 @@ namespace luil {
     void modal_host_element::arrange(const arrange_context& context)
     {
         set_bounds(context.slot);
+        screen_ = context.knows_surface() ? context.surface : rect_f {};
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-        // scrim은 준 자리를 그대로 덮는다.
+        // scrim은 준 자리를 그대로 덮는다. 자리 밖(안전 영역 밖)은 그리기만 한다 — `draw`.
         scrim_->arrange(context);
         if (content_ == nullptr)
             return;
@@ -88,6 +93,13 @@ namespace luil {
 
     void modal_host_element::draw(draw_context& context, const interaction_snapshot& interaction) const
     {
+        // 자리 밖의 띠를 같은 scrim 색으로 칠한다. 누르기는 자리 안의 scrim만 받는다.
+        if (screen_.width > 0.0f && screen_.height > 0.0f)
+        {
+            const ui_color color { config_.scrim_background ? config_.scrim_background(context.palette) : with_alpha(context.palette.content_shadow, config_.scrim_opacity) };
+            for (const rect_f& band : bands_outside(screen_, bounds()))
+                context.canvas.drawRect(SkRect::MakeXYWH(band.x, band.y, band.width, band.height), solid_paint(color));
+        }
         // scrim이 먼저, 내용이 그 위다 (자식 순서 그대로).
         draw_children(context, interaction);
     }

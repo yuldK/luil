@@ -113,6 +113,11 @@ namespace luil {
     // 시트 표면의 자리다 (`slot` 안, 물리 픽셀). `scale`은 물리 / 논리 배율이다.
     [[nodiscard]] rect_f sheet_surface_bounds(const sheet_host_config& config, const rect_f& slot, float scale) noexcept;
 
+    // 시트 바탕을 칠할 자리다. `sheet`가 `slot`의 가장자리에 닿은 변만 `surface`(표면 전체)의 끝까지 늘린다 — 아래
+    // 시트는 아래(폭이 꽉 차면 좌우도), 옆 시트는 위·아래·오른쪽, 서랍은 위·아래·왼쪽이다. `surface`가 비면 `sheet`
+    // 그대로다. 손잡이·내용의 자리와 누르는 자리는 `sheet`다.
+    [[nodiscard]] rect_f sheet_background_bounds(const rect_f& sheet, const rect_f& slot, const rect_f& surface) noexcept;
+
     // 같은 표면 안에서 화면 위에 겹치는 시트·서랍이다 (아래 시트, 오른쪽 옆 시트, 왼쪽 서랍).
     //  - 자리를 통째로 받아 그 안에 선다. modal이면 자리 전체를 scrim이 덮는다.
     //  - 아래 시트는 위에 끌기 손잡이가 선다. 손잡이와 시트 몸의 끌기가 `drag`를, 놓으면 `settle`이나 `dismiss(drag)`를
@@ -142,5 +147,7 @@ namespace luil {
         ui_element* handle_ { nullptr };
         ui_element* content_ { nullptr };
         sheet_kind kind_ { sheet_kind::bottom };
+        // 배치에서 받은 표면 전체다. modal이면 자리 밖의 띠에도 scrim을 칠한다 (비면 자리 안만).
+        rect_f screen_ {};
     };
 } // namespace luil

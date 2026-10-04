@@ -3,6 +3,7 @@
 #include "luil/app/app_host.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/layout_metrics.h"
+#include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
 
 namespace luil {
@@ -27,12 +28,19 @@ namespace luil {
         float scale { 1.0f };
         // 논리 폭(`width / scale`)의 등급이다 (기본 경계 600·840).
         window_width_class width_class { window_width_class::compact };
+        // 앱의 자리에서 표면 끝까지의 거리다 (물리 픽셀). Android는 안전 영역 밖(상태 표시줄·제스처 막대·컷아웃)이고
+        // Windows는 0이다. scrim·시트 바탕을 화면 끝까지 칠할 때 쓴다 (`window_surface`).
+        edge_insets outside {};
 
         [[nodiscard]] bool operator==(const window_metrics&) const noexcept = default;
     };
 
     // 크기와 배율로 metrics를 짓는다. 폭 등급은 기본 경계로 매긴다. 배율이 0 이하면 1로 본다.
     [[nodiscard]] window_metrics make_window_metrics(float width, float height, float scale) noexcept;
+
+    // root를 (0, 0)에서 `width × height`로 배치할 때, 그릴 수 있는 표면 전체를 tree 좌표로 본 사각형이다. 배치 문맥의
+    // `surface`로 넘기면 scrim과 시트 바탕이 안전 영역 밖까지 칠해진다. `outside`가 0이면 root 자리와 같다.
+    [[nodiscard]] rect_f window_surface(const window_metrics& metrics) noexcept;
 
     // 앱이 UI thread에 꽂는 훅이다. 플랫폼을 가리지 않는 부분이다.
     // 모든 메서드는 UI thread에서 불리고 기본 구현은 "아무 일도 하지 않음"이다.

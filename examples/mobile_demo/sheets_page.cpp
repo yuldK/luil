@@ -156,7 +156,7 @@ namespace mobile_demo {
         return luil::make_app_action(sheet_dismiss_intent { luil::sheet_dismiss_reason::back });
     }
 
-    void sheets_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale)
+    void sheets_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale, const luil::rect_f& surface)
     {
         if (open_.has_value() == false)
             return;
@@ -204,7 +204,7 @@ namespace mobile_demo {
 
         auto host { std::make_unique<luil::sheet_host_element>(sheet) };
         host->set_content(std::move(content));
-        host->arrange({ { 0.0f, 0.0f, width, height }, scale });
+        host->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .surface = surface });
         root.add(std::move(host));
     }
 } // namespace mobile_demo

@@ -57,6 +57,8 @@ namespace luil {
         {
             return { horizontal, vertical, horizontal, vertical };
         }
+
+        [[nodiscard]] bool operator==(const edge_insets&) const noexcept = default;
     };
 
     // 흘리는 창의 위·아래 가장자리 표시다.

@@ -59,7 +59,8 @@ namespace mobile_demo {
 
         // dialog가 열려 있으면 창 전체를 덮는 modal host를 root에 얹는다.
         // 어느 페이지가 보이든 dialog는 창 전체를 덮는다.
-        void add_overlay(luil::root_element& root, float width, float height, float scale);
+        // `surface`는 그릴 수 있는 표면 전체다. scrim이 안전 영역 밖까지 닿는다.
+        void add_overlay(luil::root_element& root, float width, float height, float scale, const luil::rect_f& surface);
 
         [[nodiscard]] bool dialog_open() const noexcept
         {

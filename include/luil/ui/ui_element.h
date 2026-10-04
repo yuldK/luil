@@ -33,6 +33,10 @@ namespace luil {
         [[nodiscard]] bool contains(float point_x, float point_y) const noexcept;
     };
 
+    // `outer`에서 `inner`를 뺀 띠들이다 (위·아래·왼쪽·오른쪽 차례, 넓이가 없는 띠는 뺀다). 왼쪽·오른쪽 띠는 `inner`의
+    // 높이만큼이라 띠끼리 겹치지 않는다. `inner`가 `outer` 밖으로 나간 몫은 잘라서 본다.
+    [[nodiscard]] std::vector<rect_f> bands_outside(const rect_f& outer, const rect_f& inner);
+
     // 묶음 안을 도는 방향이다.
     // 묶음은 Tab 순회에서 **한 자리**이고 그 안은 화살표로 돈다
     // (focus-group-design.md).
@@ -387,6 +391,12 @@ namespace luil {
         rect_f slot {};
         float scale { 1.0f };
         float scroll_offset { 0.0f };
+        // 그릴 수 있는 표면 전체다 (tree 좌표, 물리 픽셀). 앱의 자리가 안전 영역이면 그 밖(상태 표시줄·제스처 막대·
+        // 컷아웃 자리)까지 닿는다 — root 자리가 (0, 0)에서 시작하므로 왼쪽·위 몫은 음수다 (`window_surface`).
+        //  - 비어 있으면 자리 밖을 모른다는 뜻이고 지금까지처럼 자리 안에만 그린다. 앱이 넘길 때만 쓰인다.
+        //  - scrim과 시트 바탕처럼 화면 끝까지 칠해야 하는 것만 쓴다. 누르기는 지금처럼 자리 안에서만 받는다.
+        //  - 자식 문맥이 그대로 잇는다. 자르는 부모(흘리는 창·확대 보기) 안에서는 그 부모가 자른다.
+        rect_f surface {};
 
         // 같은 배율·scroll_offset으로 자식에게 줄 문맥이다.
         // 자리만 새로 준다 — 자식 문맥을 손으로 지으면 뒤의 값을 빠뜨리기 쉽고,
@@ -395,7 +405,13 @@ namespace luil {
         //  - 문맥에 새 값이 생겨도 모든 부모가 저절로 잇는다.
         [[nodiscard]] arrange_context for_child(const rect_f& child_slot) const noexcept
         {
-            return { child_slot, scale, scroll_offset };
+            return { child_slot, scale, scroll_offset, surface };
+        }
+
+        // 표면 전체를 아는가다 (넓이가 있는 `surface`).
+        [[nodiscard]] bool knows_surface() const noexcept
+        {
+            return surface.width > 0.0f && surface.height > 0.0f;
         }
     };
 

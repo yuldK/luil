@@ -100,7 +100,7 @@ namespace {
 
     // 뒤 화면(누르면 "behind")과 400×800 자리의 시트를 짓는다.
     [[nodiscard]] std::shared_ptr<const luil::ui_tree> sheet_tree(
-        const luil::sheet_host_config& config, std::unique_ptr<luil::ui_element> content = {}, const float width = 400.0f, const float height = 800.0f)
+        const luil::sheet_host_config& config, std::unique_ptr<luil::ui_element> content = {}, const float width = 400.0f, const float height = 800.0f, const luil::rect_f& surface = {})
     {
         auto shell { std::make_unique<test_shell>(luil::ui_element_id { luil::ui_element_kind::root }) };
         auto behind { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_test, u8"behind" }, luil::panel_config {}) };
@@ -111,7 +111,7 @@ namespace {
         if (content != nullptr)
             host->set_content(std::move(content));
         shell->add(std::move(host));
-        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(shell), { 0.0f, 0.0f, width, height }, 1.0f));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(shell), { 0.0f, 0.0f, width, height }, 1.0f, surface));
     }
 
     [[nodiscard]] const luil::sheet_host_element& host_of(const luil::ui_tree& tree)
@@ -524,4 +524,40 @@ TEST_CASE("A handle on another surface hears its release", "[ui][sheet]")
     const auto events { events_in(controller.process(luil::pointer_released_event { .x = 200.0f, .y = 310.0f, .time = at(40), .surface = u8"popup" })) };
     REQUIRE(events.size() == 1u);
     REQUIRE(events[0].settle == luil::sheet_detent::half);
+}
+
+TEST_CASE("A sheet background reaches the surface edges it touches", "[ui][sheet]")
+{
+    // 세로 Android: 자리는 400×800, 표면은 위 30·아래 20만큼 더 크다.
+    const luil::rect_f slot { 0.0f, 0.0f, 400.0f, 800.0f };
+    const luil::rect_f surface { 0.0f, -30.0f, 400.0f, 850.0f };
+    // 아래 시트는 아래와 좌우에 닿는다. 위(안쪽)는 그대로다.
+    REQUIRE(same(luil::sheet_background_bounds({ 0.0f, 400.0f, 400.0f, 400.0f }, slot, surface), luil::rect_f { 0.0f, 400.0f, 400.0f, 420.0f }));
+    // 넓은 자리의 가운데 아래 시트는 아래만 늘린다.
+    const luil::rect_f wide { 0.0f, 0.0f, 1000.0f, 800.0f };
+    REQUIRE(same(luil::sheet_background_bounds({ 180.0f, 400.0f, 640.0f, 400.0f }, wide, { -60.0f, -30.0f, 1060.0f, 850.0f }), luil::rect_f { 180.0f, 400.0f, 640.0f, 420.0f }));
+    // 옆 시트는 위·아래·오른쪽, 서랍은 위·아래·왼쪽이다 (가로의 왼쪽 컷아웃 60).
+    REQUIRE(same(luil::sheet_background_bounds({ 640.0f, 0.0f, 360.0f, 800.0f }, wide, { -60.0f, -30.0f, 1060.0f, 850.0f }), luil::rect_f { 640.0f, -30.0f, 360.0f, 850.0f }));
+    REQUIRE(same(luil::sheet_background_bounds({ 0.0f, 0.0f, 360.0f, 800.0f }, wide, { -60.0f, -30.0f, 1060.0f, 850.0f }), luil::rect_f { -60.0f, -30.0f, 420.0f, 850.0f }));
+    // 표면을 모르면 그대로다.
+    REQUIRE(same(luil::sheet_background_bounds({ 0.0f, 400.0f, 400.0f, 400.0f }, slot, {}), luil::rect_f { 0.0f, 400.0f, 400.0f, 400.0f }));
+}
+
+TEST_CASE("A sheet that knows the surface keeps its place and its taps in the safe area", "[ui][sheet]")
+{
+    const luil::rect_f surface { 0.0f, -30.0f, 400.0f, 850.0f };
+    const auto plain { sheet_tree(sheet_config()) };
+    const auto edge_to_edge { sheet_tree(sheet_config(), {}, 400.0f, 800.0f, surface) };
+    // 시트 표면의 자리(손잡이·내용·누르기)는 표면을 알아도 같다.
+    REQUIRE(same(host_of(*edge_to_edge).surface_bounds(), host_of(*plain).surface_bounds()));
+    luil::interaction_controller controller {};
+    controller.set_tree(edge_to_edge);
+    // 상태 표시줄 자리(자리 밖)를 누른 것은 scrim이 받지 않는다.
+    static_cast<void>(controller.process(touch_press(200.0f, -10.0f, 0)));
+    REQUIRE(events_in(controller.process(touch_release(200.0f, -10.0f, 40))).empty());
+    // 자리 안의 scrim은 지금처럼 닫는다.
+    static_cast<void>(controller.process(touch_press(200.0f, 100.0f, 1000)));
+    const auto events { events_in(controller.process(touch_release(200.0f, 100.0f, 1040))) };
+    REQUIRE(events.size() == 1u);
+    REQUIRE(events[0].dismiss == luil::sheet_dismiss_reason::scrim);
 }

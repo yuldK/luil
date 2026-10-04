@@ -3,6 +3,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkRect.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace luil {
@@ -14,6 +15,26 @@ namespace luil {
     bool rect_f::contains(const float point_x, const float point_y) const noexcept
     {
         return point_x >= x && point_x < x + width && point_y >= y && point_y < y + height;
+    }
+
+    std::vector<rect_f> bands_outside(const rect_f& outer, const rect_f& inner)
+    {
+        const float outer_right { outer.x + outer.width };
+        const float outer_bottom { outer.y + outer.height };
+        const float left { std::clamp(inner.x, outer.x, outer_right) };
+        const float right { std::clamp(inner.x + inner.width, left, outer_right) };
+        const float top { std::clamp(inner.y, outer.y, outer_bottom) };
+        const float bottom { std::clamp(inner.y + inner.height, top, outer_bottom) };
+        std::vector<rect_f> bands {};
+        const auto keep = [&bands](const rect_f& band) {
+            if (band.width > 0.0f && band.height > 0.0f)
+                bands.push_back(band);
+        };
+        keep({ outer.x, outer.y, outer.width, top - outer.y });
+        keep({ outer.x, bottom, outer.width, outer_bottom - bottom });
+        keep({ outer.x, top, left - outer.x, bottom - top });
+        keep({ right, top, outer_right - right, bottom - top });
+        return bands;
     }
 
     interaction_snapshot interaction_for_surface(interaction_snapshot view, const std::u8string& surface)

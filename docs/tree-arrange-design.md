@@ -6,17 +6,20 @@
 
 ## Arrange 문맥
 
-`arrange_context`는 세 값을 담는다.
+`arrange_context`는 네 값을 담는다.
 
 ```cpp
 struct arrange_context {
     rect_f slot;
     float scale;
     float scroll_offset;
+    rect_f surface;
 };
 ```
 
 `slot`은 물리 픽셀 좌표와 크기다. `scale`은 논리 길이를 물리 픽셀로 바꾸는 배율이다. `scroll_offset`은 세로 스크롤과 sticky 배치가 공유하는 논리 픽셀 값이다.
+
+`surface`는 그릴 수 있는 표면 전체를 tree 좌표로 본 사각형이다. 앱의 자리가 Android의 안전 영역이면 상태 표시줄·제스처 막대·컷아웃 자리까지 닿고, root가 (0, 0)에서 시작하므로 왼쪽·위 몫은 음수다. 비어 있으면 자리 밖을 모른다는 뜻이고 지금까지처럼 자리 안에만 그린다. 앱이 넘길 때만 쓰이며(`window_surface`), scrim과 시트 바탕처럼 화면 끝까지 칠해야 하는 것만 본다. 누르기는 자리 안 그대로다. 자르는 부모(흘리는 창·확대 보기) 안에서는 그 부모가 자른다 ([기기 요청](device-request-design.md#안전-영역-밖)).
 
 부모가 자식 slot만 바꿀 때는 `context.for_child(child_slot)`을 사용한다.
 
@@ -24,7 +27,7 @@ struct arrange_context {
 child->arrange(context.for_child({ x, y, width, height }));
 ```
 
-이 함수는 scale과 scroll offset을 그대로 이어 준다. 문맥에 필드가 추가되어도 모든 컨테이너가 새 값을 자동으로 전달할 수 있다.
+이 함수는 scale, scroll offset, surface를 그대로 이어 준다. 문맥에 필드가 추가되어도 모든 컨테이너가 새 값을 자동으로 전달할 수 있다.
 
 세로 `scroll_view_element`처럼 문맥의 의미를 바꾸는 컨테이너만 의도적으로 새 `scroll_offset`을 구성한다. 가로 `strip_element`는 축 없는 scroll offset을 재사용하지 않고 기존 값을 자식에게 전달한다.
 

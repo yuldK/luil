@@ -119,6 +119,8 @@ namespace luil {
     private:
         modal_host_config config_ {};
         ui_element* scrim_ { nullptr };
+        // 배치에서 받은 표면 전체다. 자리 밖의 띠에도 scrim을 칠한다 (비면 자리 안만).
+        rect_f screen_ {};
         // 가운데 자리를 받는 자식이다.
         // 표면이 있으면 그 표면이고, 없으면 내용 자체다 — 어느 쪽이든 자리를 받는 것은
         // 하나뿐이라 arrange가 갈리지 않는다.

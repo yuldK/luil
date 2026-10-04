@@ -770,12 +770,17 @@ namespace luil::android {
                     return;
                 const float width { static_cast<float>(content_width()) };
                 const float height { static_cast<float>(content_height()) };
-                if (width == reported_width_ && height == reported_height_ && scale_ == reported_scale_)
+                // 안전 영역 밖의 거리다. 크기가 같아도 이것이 바뀌면 다시 알린다 (막대를 숨김, 돌림).
+                const luil::edge_insets outside { static_cast<float>(insets_.left), static_cast<float>(insets_.top), static_cast<float>(insets_.right), static_cast<float>(insets_.bottom) };
+                if (width == reported_width_ && height == reported_height_ && scale_ == reported_scale_ && outside == reported_outside_)
                     return;
                 reported_width_ = width;
                 reported_height_ = height;
                 reported_scale_ = scale_;
-                if (app_message message { environment_.delegate->make_metrics_message(make_window_metrics(width, height, scale_)) }; message.empty() == false)
+                reported_outside_ = outside;
+                window_metrics metrics { make_window_metrics(width, height, scale_) };
+                metrics.outside = outside;
+                if (app_message message { environment_.delegate->make_metrics_message(metrics) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
             }
 
@@ -1260,6 +1265,7 @@ namespace luil::android {
             float reported_width_ { -1.0f };
             float reported_height_ { -1.0f };
             float reported_scale_ { -1.0f };
+            luil::edge_insets reported_outside_ {};
         };
     } // namespace
 

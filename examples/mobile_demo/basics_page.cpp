@@ -320,7 +320,7 @@ namespace mobile_demo {
         return column;
     }
 
-    void basics_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale)
+    void basics_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale, const luil::rect_f& surface)
     {
         if (dialog_open_ == false)
             return;
@@ -382,7 +382,7 @@ namespace mobile_demo {
         modal.offset_y = dialog_y_;
         auto host { std::make_unique<luil::modal_host_element>(std::move(modal)) };
         host->set_content(std::move(dialog));
-        host->arrange({ { 0.0f, 0.0f, width, height }, scale });
+        host->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .surface = surface });
         root.add(std::move(host));
     }
 

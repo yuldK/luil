@@ -204,11 +204,12 @@ namespace mobile_demo {
         root->add(std::move(body));
 
         // 오버레이들: dialog는 화면을 덮고 토스트는 아래쪽에 쌓인다.
+        //  - scrim과 시트 바탕은 안전 영역 밖(상태 표시줄·제스처 막대 자리)까지 칠한다.
         if (shown == page_basics)
-            basics_.add_overlay(*root, width, height, scale);
+            basics_.add_overlay(*root, width, height, scale, metrics_.surface);
         // 시트는 창 전체에 겹친다. 열림은 페이지의 상태라 회전·화면 분할 뒤에도 다시 선다.
         if (shown == page_sheets)
-            sheets_.add_overlay(*root, width, height, scale);
+            sheets_.add_overlay(*root, width, height, scale, metrics_.surface);
         if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
         {
             toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
@@ -371,6 +372,6 @@ namespace mobile_demo {
 
     luil::app_message make_metrics_message(const luil::window_metrics& metrics)
     {
-        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class } };
+        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class, luil::window_surface(metrics) } };
     }
 } // namespace mobile_demo

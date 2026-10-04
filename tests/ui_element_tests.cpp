@@ -804,3 +804,33 @@ TEST_CASE("A surface filter keeps only the interaction that happened on that sur
         REQUIRE(luil::interaction_for_surface(view, u8"tool") == view);
     }
 }
+
+TEST_CASE("A child context carries the drawable surface", "[ui][arrange]")
+{
+    // 표면은 자식에게 그대로 간다. 자리만 새로 받는다.
+    luil::arrange_context parent { { 0.0f, 0.0f, 300.0f, 400.0f }, 2.0f };
+    REQUIRE(parent.knows_surface() == false);
+    parent.surface = { 0.0f, -40.0f, 300.0f, 480.0f };
+    const luil::arrange_context child { parent.for_child({ 10.0f, 300.0f, 100.0f, 100.0f }) };
+    REQUIRE(child.knows_surface());
+    REQUIRE(child.surface.y == -40.0f);
+    REQUIRE(child.surface.height == 480.0f);
+}
+
+TEST_CASE("Bands outside a rectangle cover the rest without overlapping", "[ui][arrange]")
+{
+    // 위·아래는 바깥 폭 전체, 왼쪽·오른쪽은 안쪽 높이만큼이다.
+    const auto bands { luil::bands_outside({ 0.0f, -75.0f, 1080.0f, 2316.0f }, { 75.0f, 0.0f, 1005.0f, 2199.0f }) };
+    REQUIRE(bands.size() == 3u);
+    REQUIRE(bands[0].y == -75.0f);
+    REQUIRE(bands[0].height == 75.0f);
+    REQUIRE(bands[0].width == 1080.0f);
+    REQUIRE(bands[1].y == 2199.0f);
+    REQUIRE(bands[1].height == 42.0f);
+    REQUIRE(bands[2].x == 0.0f);
+    REQUIRE(bands[2].width == 75.0f);
+    REQUIRE(bands[2].height == 2199.0f);
+    // 같은 사각형이면 띠가 없고, 안쪽이 바깥을 넘은 몫은 잘라서 본다.
+    REQUIRE(luil::bands_outside({ 0.0f, 0.0f, 100.0f, 100.0f }, { 0.0f, 0.0f, 100.0f, 100.0f }).empty());
+    REQUIRE(luil::bands_outside({ 0.0f, 0.0f, 100.0f, 100.0f }, { -20.0f, -20.0f, 200.0f, 200.0f }).empty());
+}

@@ -48,8 +48,9 @@ namespace mobile_demo {
         bool handle(const luil::app_message& message);
         [[nodiscard]] page_content build(float width, float scale);
 
-        // 시트가 열려 있으면 창 전체에 시트 host를 얹는다.
-        void add_overlay(luil::root_element& root, float width, float height, float scale);
+        // 시트가 열려 있으면 창 전체에 시트 host를 얹는다. `surface`는 그릴 수 있는 표면 전체다 — scrim과 시트 바탕이
+        // 안전 영역 밖까지 닿는다.
+        void add_overlay(luil::root_element& root, float width, float height, float scale, const luil::rect_f& surface);
 
         [[nodiscard]] bool sheet_open() const noexcept
         {

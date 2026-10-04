@@ -5,7 +5,9 @@
 #include "luil/ui/image_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/modal_host_element.h"
 #include "luil/ui/scroll_area_element.h"
+#include "luil/ui/sheet_host_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
@@ -636,4 +638,53 @@ TEST_CASE("An overlay popup paints over the main tree inside its bounds", "[ui][
     REQUIRE(pixel_at(60, 50) == palette.window_background);
     REQUIRE(pixel_at(40, 50) == palette.tooltip_border);
     REQUIRE(pixel_at(79, 50) == palette.tooltip_border);
+}
+
+TEST_CASE("A modal scrim and a sheet background paint out to the surface", "[ui][raster][sheet]")
+{
+    // 물리 200×260 그림에서 안전 영역은 y 20~240이다. 위 20(상태 표시줄)과 아래 20(제스처 막대)이 자리 밖이다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::light) };
+    const luil::rect_f slot { 0.0f, 20.0f, 200.0f, 220.0f };
+    const luil::rect_f surface { 0.0f, 0.0f, 200.0f, 260.0f };
+    const auto draw = [&palette](std::unique_ptr<luil::ui_element> host, const luil::rect_f& host_slot, const luil::rect_f& host_surface) {
+        host->arrange({ .slot = host_slot, .scale = raster_scale, .surface = host_surface });
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 260.0f }, raster_scale });
+        root->add(std::move(host));
+        const luil::ui_tree tree { std::move(root) };
+        luil::testing::raster_frame frame { 200, 260, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    };
+
+    SECTION("modal 아래 시트")
+    {
+        luil::sheet_host_config config {};
+        config.owner = u8"sheet";
+        const auto edge { draw(std::make_unique<luil::sheet_host_element>(config), slot, surface) };
+        // 위 띠는 자리 안의 scrim과 같은 색이다.
+        REQUIRE(edge.pixel_at(100, 10) != palette.window_background);
+        REQUIRE(edge.pixel_at(100, 10) == edge.pixel_at(100, 60));
+        // 시트(반 높이, y 130~240)의 바탕이 아래 띠까지 이어진다.
+        REQUIRE(edge.pixel_at(100, 200) == palette.surface_background);
+        REQUIRE(edge.pixel_at(100, 250) == palette.surface_background);
+        // 표면을 모르면 두 띠는 창 바탕으로 남는다.
+        const auto plain { draw(std::make_unique<luil::sheet_host_element>(config), slot, {}) };
+        REQUIRE(plain.pixel_at(100, 10) == palette.window_background);
+        REQUIRE(plain.pixel_at(100, 250) == palette.window_background);
+        REQUIRE(plain.pixel_at(100, 60) == edge.pixel_at(100, 60));
+    }
+
+    SECTION("modal dialog")
+    {
+        luil::modal_host_config config {};
+        config.owner = u8"dialog";
+        const auto edge { draw(std::make_unique<luil::modal_host_element>(config), slot, surface) };
+        REQUIRE(edge.pixel_at(100, 10) != palette.window_background);
+        REQUIRE(edge.pixel_at(100, 10) == edge.pixel_at(100, 60));
+        REQUIRE(edge.pixel_at(100, 250) == edge.pixel_at(100, 60));
+        const auto plain { draw(std::make_unique<luil::modal_host_element>(config), slot, {}) };
+        REQUIRE(plain.pixel_at(100, 10) == palette.window_background);
+        REQUIRE(plain.pixel_at(100, 60) == edge.pixel_at(100, 60));
+    }
 }

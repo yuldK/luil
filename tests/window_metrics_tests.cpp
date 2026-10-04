@@ -101,3 +101,28 @@ TEST_CASE("Delegates written for three values keep working with the class hook",
     luil::app_delegate quiet {};
     REQUIRE(quiet.make_metrics_message(metrics).empty());
 }
+
+TEST_CASE("The window surface reaches past the safe area", "[app][metrics]")
+{
+    // 안전 영역 밖이 없으면 root 자리 그대로다 (Windows).
+    luil::window_metrics metrics { luil::make_window_metrics(1080.0f, 2199.0f, 2.81f) };
+    REQUIRE(metrics.outside == luil::edge_insets {});
+    luil::rect_f surface { luil::window_surface(metrics) };
+    REQUIRE(surface.x == 0.0f);
+    REQUIRE(surface.y == 0.0f);
+    REQUIRE(surface.width == 1080.0f);
+    REQUIRE(surface.height == 2199.0f);
+    // 세로 Android: 위 75, 아래 42. root가 (0, 0)에서 시작하므로 위 몫은 음수다.
+    metrics.outside = { 0.0f, 75.0f, 0.0f, 42.0f };
+    surface = luil::window_surface(metrics);
+    REQUIRE(surface.y == -75.0f);
+    REQUIRE(surface.height == 2316.0f);
+    // 가로: 왼쪽 컷아웃 75, 위 84, 아래 42.
+    metrics = luil::make_window_metrics(2241.0f, 954.0f, 2.81f);
+    metrics.outside = { 75.0f, 84.0f, 0.0f, 42.0f };
+    surface = luil::window_surface(metrics);
+    REQUIRE(surface.x == -75.0f);
+    REQUIRE(surface.y == -84.0f);
+    REQUIRE(surface.width == 2316.0f);
+    REQUIRE(surface.height == 1080.0f);
+}
