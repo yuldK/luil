@@ -567,6 +567,8 @@ namespace luil::android {
                     // 동안 GPU 메모리는 돌려준다.
                     if (vulkan_ != nullptr)
                         vulkan_->release_resources();
+                    lost_window_width_ = window_width_;
+                    lost_window_height_ = window_height_;
                     window_width_ = 0;
                     window_height_ = 0;
                     break;
@@ -721,7 +723,12 @@ namespace luil::android {
                 // 칸을 누르면 키보드가 뜨는데, 그것으로 popup이 닫히면 칠 수가 없다.
                 if (content_width() != previous_width || content_height() != previous_height)
                 {
-                    if (window_width_ != previous_window_width || window_height_ != previous_window_height)
+                    // 창이 사라졌다 다시 생긴 것(홈에서 돌아옴, 화면을 켬)은 사라지기 전 크기와 견준다. 같으면 크기 변경이
+                    // 아니고, 뒤에 있는 동안 크기가 바뀌었으면(자유형 창으로 돌아옴) 크기 변경이다.
+                    const int before_width { previous_window_width > 0 ? previous_window_width : lost_window_width_ };
+                    const int before_height { previous_window_height > 0 ? previous_window_height : lost_window_height_ };
+                    const bool window_existed { before_width > 0 && before_height > 0 };
+                    if (window_existed && (window_width_ != before_width || window_height_ != before_height))
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
                     overlay_frame_.reset();
                 }
@@ -1231,6 +1238,9 @@ namespace luil::android {
             registry_font_resolver font_resolver_ {};
             int window_width_ { 0 };
             int window_height_ { 0 };
+            // 마지막으로 사라진 창의 크기다. 다시 생긴 창이 크기 변경인지 견주는 데 쓴다 (`refresh_metrics`).
+            int lost_window_width_ { 0 };
+            int lost_window_height_ { 0 };
             edge_insets insets_ {};
             float scale_ { 1.0f };
             bool prefers_light_ { false };
