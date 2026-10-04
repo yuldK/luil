@@ -1,0 +1,119 @@
+#include "net/smb_rules.h"
+
+#include "luil/net/smb_client.h"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <cerrno>
+#include <string>
+#include <vector>
+
+namespace {
+    [[nodiscard]] luil::net::smb_request list_request()
+    {
+        luil::net::smb_request request {};
+        request.location.server = u8"192.168.0.10";
+        request.location.share = u8"photos";
+        request.location.user = u8"reader";
+        request.location.password = u8"secret";
+        request.path = u8"2026/summer";
+        return request;
+    }
+
+    [[nodiscard]] bool refused(const luil::net::smb_request& request, const std::size_t max_read = 1024)
+    {
+        luil::net::smb_error failure {};
+        return luil::net::check_smb_request(request, max_read, failure) == false && failure.kind == luil::net::smb_error_kind::invalid_request
+            && failure.message.find(u8"secret") == std::u8string::npos;
+    }
+} // namespace
+
+TEST_CASE("An SMB request names a server and a share and reads a bounded range", "[net][smb]")
+{
+    luil::net::smb_error failure {};
+    luil::net::smb_request request { list_request() };
+    REQUIRE(luil::net::check_smb_request(request, 1024, failure));
+    // 포트와 IPv6 꼴의 서버도 받는다. 비운 경로는 공유의 맨 위다.
+    request.location.server = u8"[fe80::1]:4445";
+    request.path.clear();
+    REQUIRE(luil::net::check_smb_request(request, 1024, failure));
+
+    // 서버·공유가 비었거나 공백·구분자·제어 문자가 있으면 거절한다.
+    for (const std::u8string server : { u8"", u8"nas box", u8"nas/share", u8"nas\\share", u8"nas\r\n" })
+    {
+        request = list_request();
+        request.location.server = server;
+        CHECK(refused(request));
+    }
+    for (const std::u8string& share : std::vector<std::u8string> { u8"", u8"a/b", u8"a\\b", std::u8string(81, u8'x') })
+    {
+        request = list_request();
+        request.location.share = share;
+        CHECK(refused(request));
+    }
+    // 경로는 `/`로 나눈다. 백슬래시와 제어 문자는 받지 않는다.
+    request = list_request();
+    request.path = u8"2026\\summer";
+    CHECK(refused(request));
+    request.path = u8"2026/\tsummer";
+    CHECK(refused(request));
+    request = list_request();
+    request.location.user = u8"reader\n";
+    CHECK(refused(request));
+
+    // 읽기의 길이는 1 이상 상한 이하이고, 시작 자리와 더해 넘치지 않는다.
+    request = list_request();
+    request.operation = luil::net::smb_operation::read;
+    request.length = 0;
+    CHECK(refused(request));
+    request.length = 1025;
+    CHECK(refused(request));
+    request.length = 1024;
+    REQUIRE(luil::net::check_smb_request(request, 1024, failure));
+    request.offset = ~std::uint64_t { 0 };
+    CHECK(refused(request));
+    request = list_request();
+    request.timeout = std::chrono::milliseconds { -1 };
+    CHECK(refused(request));
+}
+
+TEST_CASE("An SMB path is trimmed into the form libsmb2 takes", "[net][smb]")
+{
+    CHECK(luil::net::smb_share_path(u8"") == "");
+    CHECK(luil::net::smb_share_path(u8"/") == "");
+    CHECK(luil::net::smb_share_path(u8"/2026//summer/") == "2026/summer");
+    CHECK(luil::net::smb_share_path(u8"사진/여름.jpg") == std::string { reinterpret_cast<const char*>(u8"사진/여름.jpg") });
+    CHECK(luil::net::smb_last_component(u8"/2026/summer/a.jpg") == u8"a.jpg");
+    CHECK(luil::net::smb_last_component(u8"a.jpg/") == u8"a.jpg");
+    CHECK(luil::net::smb_last_component(u8"") == u8"");
+}
+
+TEST_CASE("SMB failures are sorted by their NT status first and errno next", "[net][smb]")
+{
+    using luil::net::smb_error_kind;
+    using luil::net::smb_error_kind_for;
+    // 로그온 실패는 연결 단계든 아니든 같다.
+    CHECK(smb_error_kind_for(-ECONNREFUSED, luil::net::smb_status_logon_failure, true) == smb_error_kind::logon_failure);
+    CHECK(smb_error_kind_for(-EINVAL, luil::net::smb_status_wrong_password, true) == smb_error_kind::logon_failure);
+    CHECK(smb_error_kind_for(-EINVAL, luil::net::smb_status_access_denied, false) == smb_error_kind::access_denied);
+    // 없는 공유와 없는 경로는 not_found다.
+    CHECK(smb_error_kind_for(-EINVAL, luil::net::smb_status_bad_network_name, true) == smb_error_kind::not_found);
+    CHECK(smb_error_kind_for(-EINVAL, luil::net::smb_status_object_name_not_found, false) == smb_error_kind::not_found);
+    // NT 상태가 없으면 errno다.
+    CHECK(smb_error_kind_for(-ECONNREFUSED, 0, true) == smb_error_kind::cannot_connect);
+    CHECK(smb_error_kind_for(-EHOSTUNREACH, 0, false) == smb_error_kind::cannot_connect);
+    CHECK(smb_error_kind_for(-ENOENT, 0, false) == smb_error_kind::not_found);
+    CHECK(smb_error_kind_for(-EACCES, 0, false) == smb_error_kind::access_denied);
+    // 갈래 없는 실패는 연결 단계면 닿지 못한 것, 그 뒤면 그 밖의 실패다.
+    CHECK(smb_error_kind_for(-EINVAL, 0, true) == smb_error_kind::cannot_connect);
+    CHECK(smb_error_kind_for(-EINVAL, 0, false) == smb_error_kind::failed);
+}
+
+TEST_CASE("A build without SMB answers that it is not supported", "[net][smb]")
+{
+    // core test는 libsmb2 없이 "지원 안 함" client를 링크한다 (Windows, LUIL_ENABLE_SMB를 끈 Android와 같다).
+    REQUIRE(luil::net::smb_client::supported() == false);
+    std::u8string error {};
+    REQUIRE(luil::net::smb_client::create(luil::net::smb_client_config {}, error) == nullptr);
+    REQUIRE(error.empty() == false);
+}

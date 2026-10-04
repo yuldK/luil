@@ -69,6 +69,11 @@ target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/android/device_request.cpp"
     android_text_input_tests.cpp
     device_request_tests.cpp)
+# SMB client의 순수 규칙과 "지원 안 함" client다. libsmb2 없이 어느 플랫폼에서나 돈다.
+target_sources(luil_core_tests PRIVATE
+    "${LUIL_SOURCE_DIRECTORY}/net/smb_client_unsupported.cpp"
+    "${LUIL_SOURCE_DIRECTORY}/net/smb_rules.cpp"
+    smb_rules_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
@@ -176,6 +181,33 @@ if(LUIL_PLATFORM STREQUAL "android")
             "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-DJVM_DEX=${luil_jvm_runner_dex};-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
     catch_discover_tests(luil_net_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
     luil_set_ide_folder("Tests" luil_core_tests luil_net_tests luil_jvm_test_main)
+
+    # SMB client는 LUIL_ENABLE_SMB를 켠 구성에서 기기의 셸로 돈다 (JVM이 필요 없다). libsmb2.so를 실행 파일 옆에
+    # 두고 함께 올린다 (adb_run.cmake의 LIBRARIES). 서버 없이 볼 수 있는 것(거절, 닫힌 포트, 답하지 않는 서버의
+    # 시간 상한·취소·정지)을 본다. 실제 서버와의 왕복은 사람 손으로 확인한다 (docs/smb-client-design.md).
+    if(TARGET luil_smb2)
+        add_executable(luil_smb_tests
+            "${LUIL_SOURCE_DIRECTORY}/net/smb_client_libsmb2.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/smb_rules.cpp"
+            smb_client_tests.cpp)
+        target_include_directories(luil_smb_tests
+            PRIVATE
+                "${LUIL_SOURCE_DIRECTORY}"
+                "${LUIL_INCLUDE_DIRECTORY}")
+        target_link_libraries(luil_smb_tests
+            PRIVATE
+                luil_smb2
+                luil_options
+                Catch2::Catch2WithMain)
+        add_custom_command(TARGET luil_smb_tests POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:luil_smb2>" "$<TARGET_FILE_DIR:luil_smb_tests>"
+            VERBATIM)
+        set_target_properties(luil_smb_tests PROPERTIES
+            CROSSCOMPILING_EMULATOR
+                "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-DLIBRARIES=libsmb2.so;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
+        catch_discover_tests(luil_smb_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+        luil_set_ide_folder("Tests" luil_smb_tests)
+    endif()
     # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.
     return()
 endif()

@@ -14,6 +14,8 @@
 #    (tests/android/JvmTestMain.java). JNI로 Java를 부르는 test(HTTP client)의 자리다 —
 #    셸의 실행 파일에는 JVM이 없다. `app_process`는 셸 권한으로 돌아 매니페스트 권한이 없어도
 #    소켓을 연다.
+#  - `-DLIBRARIES=<이름;이름>`을 주면 실행 파일 옆(같은 빌드 디렉터리)의 그 공유 라이브러리도 함께 올리고
+#    `LD_LIBRARY_PATH`로 그 자리를 알려 준다. 따로 싼 libsmb2.so를 쓰는 SMB test의 자리다.
 if(NOT DEFINED ADB OR NOT DEFINED DEVICE_DIRECTORY)
     message(FATAL_ERROR "ADB and DEVICE_DIRECTORY are required.")
 endif()
@@ -54,6 +56,17 @@ execute_process(
 if(NOT push_result EQUAL 0)
     message(FATAL_ERROR "Could not push ${executable} (exit ${push_result}).")
 endif()
+if(DEFINED LIBRARIES)
+    foreach(library IN LISTS LIBRARIES)
+        execute_process(
+            COMMAND "${ADB}" push --sync "${executable_directory}/${library}" "${DEVICE_DIRECTORY}/${library}"
+            RESULT_VARIABLE library_result
+            OUTPUT_QUIET)
+        if(NOT library_result EQUAL 0)
+            message(FATAL_ERROR "Could not push ${executable_directory}/${library} (exit ${library_result}).")
+        endif()
+    endforeach()
+endif()
 if(DEFINED JVM_DEX)
     get_filename_component(dex_name "${JVM_DEX}" NAME)
     set(device_dex "${DEVICE_DIRECTORY}/${dex_name}")
@@ -75,7 +88,11 @@ endif()
 if(DEFINED JVM_DEX)
     set(command_line "cd '${DEVICE_DIRECTORY}' && CLASSPATH='${device_dex}' app_process '${DEVICE_DIRECTORY}' luil.testing.JvmTestMain '${device_executable}'")
 else()
-    set(command_line "cd '${DEVICE_DIRECTORY}' && chmod 755 './${executable_name}' && './${executable_name}'")
+    set(command_line "cd '${DEVICE_DIRECTORY}' && chmod 755 './${executable_name}' && ")
+    if(DEFINED LIBRARIES)
+        string(APPEND command_line "LD_LIBRARY_PATH='${DEVICE_DIRECTORY}' ")
+    endif()
+    string(APPEND command_line "'./${executable_name}'")
 endif()
 set(host_output "")
 set(device_output "${DEVICE_DIRECTORY}/${executable_name}.out")

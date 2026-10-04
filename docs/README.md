@@ -67,5 +67,6 @@
 - [이미지 디코딩](image-decode-design.md)
 - [움직이는 이미지](image-anim-design.md)
 - [HTTP client](http-client-design.md)
+- [SMB client](smb-client-design.md) — Android 전용, `LUIL_ENABLE_SMB`
 - [WebView2 composition hosting](webview-composition-design.md)
 - [Raster 그리기 test](raster-test-design.md)

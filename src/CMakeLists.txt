@@ -374,7 +374,12 @@ luil_add_source_filter(luil_files "net"
     net/http_message.cpp
     "${public_headers}/net/http_message.h"
     net/http_request_rules.cpp
-    net/http_request_rules.h)
+    net/http_request_rules.h
+    # SMB client는 Android 전용이다. Windows는 운영체제의 SMB가 있어 `create`가 "지원 안 함"으로 답한다.
+    "${public_headers}/net/smb_client.h"
+    net/smb_client_unsupported.cpp
+    net/smb_rules.cpp
+    net/smb_rules.h)
 
 # net/winhttp: WinHTTP 비동기 세션 위의 `http_client`다.
 # URL 가르기, 오류 코드 옮기기, 코드 페이지 변환도 WinHTTP·Win32에 기대므로 여기 있다.
@@ -535,7 +540,16 @@ if(LUIL_PLATFORM STREQUAL "android")
         net/http_message.cpp
         "${public_headers}/net/http_message.h"
         net/http_request_rules.cpp
-        net/http_request_rules.h)
+        net/http_request_rules.h
+        "${public_headers}/net/smb_client.h"
+        net/smb_rules.cpp
+        net/smb_rules.h)
+    # SMB client다. LUIL_ENABLE_SMB를 켠 구성은 libsmb2(따로 싼 libsmb2.so) 위에 서고, 끈 구성은 "지원 안 함"으로 답한다.
+    if(LUIL_ENABLE_SMB)
+        luil_add_source_filter(luil_android_files "net" net/smb_client_libsmb2.cpp)
+    else()
+        luil_add_source_filter(luil_android_files "net" net/smb_client_unsupported.cpp)
+    endif()
 
     add_library(luil STATIC ${luil_android_files})
     add_library(luil::luil ALIAS luil)
@@ -559,4 +573,7 @@ if(LUIL_PLATFORM STREQUAL "android")
     # GameActivity가 메인 thread에서 부르는 생성 함수를 luil이 먼저 받는다 (android/main_thread.h).
     # GameActivity의 Java 쪽은 이름을 바꿀 길을 주지 않아 링크에서 돌린다.
     target_link_options(luil INTERFACE "LINKER:--wrap=GameActivity_onCreate")
+    if(LUIL_ENABLE_SMB)
+        target_link_libraries(luil PRIVATE luil_smb2)
+    endif()
 endif()

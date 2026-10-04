@@ -94,3 +94,4 @@
 #include "luil/net/http_client.h"
 #include "luil/net/http_media_type.h"
 #include "luil/net/http_message.h"
+#include "luil/net/smb_client.h"
