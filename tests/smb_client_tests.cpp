@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -187,6 +188,33 @@ TEST_CASE("Cancelling a waiting request answers it once as cancelled", "[net][sm
     // 모르는 표의 취소는 아무 일도 없다.
     client->cancel(luil::net::smb_ticket { 999 });
     CHECK_FALSE(sink.wait_for(2, 300ms));
+}
+
+TEST_CASE("Overlapping requests create and tear down their contexts safely", "[net][smb][android]")
+{
+    // 닫힌 포트는 연결이 바로 실패해, worker들이 libsmb2 문맥을 겹쳐 만들고 거둔다 (전역 문맥 목록의 경합 자리).
+    constexpr std::size_t requests { 200 };
+    constexpr std::size_t width { 8 };
+    collector sink {};
+    const auto client { make_client(sink, width) };
+    const std::u8string server { closed_server() };
+    std::size_t sent { 0 };
+    const auto deadline { std::chrono::steady_clock::now() + 60s };
+    while (sent < requests && std::chrono::steady_clock::now() < deadline)
+    {
+        std::u8string error {};
+        if (static_cast<bool>(client->send(list_on(server, 5s), error)))
+        {
+            ++sent;
+            continue;
+        }
+        // 포화다. 숨은 줄이 없으므로 자리가 날 때까지 기다린다.
+        std::this_thread::sleep_for(1ms);
+    }
+    REQUIRE(sent == requests);
+    REQUIRE(sink.wait_for(requests, 60s));
+    for (const smb_response& response : sink.snapshot())
+        CHECK(response.error.kind == smb_error_kind::cannot_connect);
 }
 
 TEST_CASE("Stopping answers nothing more and returns within its budget", "[net][smb][android]")

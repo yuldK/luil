@@ -82,12 +82,29 @@ namespace luil::net {
             return entry;
         }
 
+        // libsmb2는 만든 문맥을 모두 잠금 없는 전역 목록(서버 쪽이 도는 `active_contexts`)에 넣고 빼고, 만들 때
+        // `srandom`의 씨앗 셈도 전역이다. worker들이 문맥을 함께 만들고 거두면 그 목록이 깨지므로 둘을 한 잠금으로
+        // 줄 세운다. 거둘 때 부르는 콜백(`on_done`)은 잠금을 잡지 않는다.
+        std::mutex context_list_mutex {};
+
+        [[nodiscard]] smb2_context* create_context() noexcept
+        {
+            const std::lock_guard lock { context_list_mutex };
+            return smb2_init_context();
+        }
+
+        void destroy_context(smb2_context* const context) noexcept
+        {
+            const std::lock_guard lock { context_list_mutex };
+            smb2_destroy_context(context);
+        }
+
         // 문맥 하나를 쥐고 끝에 거둔다.
         class context_guard
         {
         public:
             context_guard() noexcept
-                : context_ { smb2_init_context() }
+                : context_ { create_context() }
             {}
 
             context_guard(const context_guard&) = delete;
@@ -98,7 +115,7 @@ namespace luil::net {
             ~context_guard()
             {
                 if (context_ != nullptr)
-                    smb2_destroy_context(context_);
+                    destroy_context(context_);
             }
 
             [[nodiscard]] smb2_context* get() const noexcept
