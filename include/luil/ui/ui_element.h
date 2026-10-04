@@ -240,6 +240,38 @@ namespace luil {
         pan,
     };
 
+    // 확대 보기에서 터치·펜 접촉 하나가 경계에 막힌 쓸기다 (zoom-view-design.md의 경계 쓸기).
+    // 접촉이 끝날 때 판정 기준을 넘은 축이 하나라도 있으면 보기가 이 값을 실은 메시지를 낸다. 실제로 옮겨진
+    // 몫은 이미 `pan_by`로 나갔고, 여기는 막혀 버려진 몫만 다룬다.
+    //  - 값은 보기의 논리 픽셀이고 부호는 손가락 방향이다 (`pan_by`의 이동량과 같다). 왼쪽으로 쓸다 오른쪽
+    //    끝에 막혔으면 `blocked.x`가 음수이고 `horizontal`이 -1이다 — 왼쪽에서 오른쪽으로 읽는 쪽 보기라면
+    //    다음 쪽이다.
+    struct zoom_edge_swipe
+    {
+        // 그 접촉 동안 경계에 막혀 버려진 이동량이다.
+        zoom_point blocked {};
+        // 뗄 때의 손가락 속도다 (논리 픽셀/초).
+        zoom_point velocity {};
+        // 판정 기준을 넘은 축의 손가락 방향이다. -1은 왼쪽·위, 1은 오른쪽·아래, 0은 그 축의 쓸기가 아니다.
+        int horizontal { 0 };
+        int vertical { 0 };
+
+        [[nodiscard]] bool operator==(const zoom_edge_swipe&) const noexcept = default;
+    };
+
+    // 경계 쓸기의 판정 기준이다. 한 축이 쓸기가 되려면 셋을 모두 넘어야 한다.
+    //  - 그 축으로 `minimum_distance` 이상 막혔다 (손가락 떨림이 아니다).
+    //  - 그 축으로 `minimum_distance`보다 적게 옮겨졌다 — 이미 끝에 있던 축이다. 확대한 상태에서 끝까지 끈
+    //    접촉은 쓸기가 아니고, 끝에 닿은 뒤 한 번 더 쓸어야 한다.
+    //  - 뗄 때 막힌 쪽으로 `minimum_velocity` 이상 빨랐다 — 끌다 멈춰 뗀 것(마음을 바꾼 것)은 쓸기가 아니다.
+    struct zoom_edge_swipe_config
+    {
+        float minimum_distance { 32.0f };
+        float minimum_velocity { 300.0f };
+
+        [[nodiscard]] bool operator==(const zoom_edge_swipe_config&) const noexcept = default;
+    };
+
     // 상태는 앱이 소유한다. 콜백은 최신 tree의 메시지 factory다.
     struct zoom_source
     {
@@ -248,6 +280,13 @@ namespace luil {
         float scale { 1.0f };
         zoom_wheel_mode wheel { zoom_wheel_mode::zoom };
         std::function<std::optional<std::vector<input_action>>(const key_pressed_event&)> on_key {};
+        // 발행된 상태에서 `offset`만큼 옮겨 간 뒤 `delta`를 더 옮기면 실제로 옮겨지는 몫이다 (경계 다듬기).
+        // controller는 누를 때 이것을 쥐고 접촉 동안 보낸 이동을 차례로 견줘 막힌 몫을 잰다 — 발행본이 몇 frame
+        // 늦어도 앱이 같은 식으로 다듬은 결과와 같다.
+        std::function<zoom_point(zoom_point offset, zoom_point delta)> pan_room {};
+        // 경계 쓸기의 메시지다. 비어 있으면 재지도 알리지도 않는다.
+        std::function<input_action(const zoom_edge_swipe&)> edge_swipe {};
+        zoom_edge_swipe_config edge_swipe_config {};
     };
 
     struct scroll_source

@@ -6,8 +6,11 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <limits>
+#include <memory>
 #include <utility>
+#include <vector>
 
 namespace {
     struct request
@@ -432,4 +435,174 @@ TEST_CASE("Zoom controls fit and keyboard zero send ordered current-state reques
     REQUIRE(read(reset[0]).factor == 2.0f);
     controls.arrange({ { 0.0f, 0.0f, 30.0f, 32.0f }, 2.0f });
     REQUIRE(controls.children().back()->bounds().x + controls.children().back()->bounds().width <= Catch::Approx(30.0f));
+}
+
+namespace {
+    // 경계 쓸기를 알리는 쪽 보기다: 100×100 쪽이 400×400 창의 가운데에 맞춰 있다.
+    luil::zoom_view_config page_config(const float zoom = 1.0f, const luil::zoom_point origin = {})
+    {
+        auto settings { config() };
+        settings.zoom = zoom;
+        settings.origin = origin;
+        settings.content_bounds = luil::rect_f { -50.0f, -50.0f, 100.0f, 100.0f };
+        settings.bounds = luil::zoom_bounds::contain;
+        settings.edge_swipe = [](const luil::zoom_edge_swipe& swipe) { return luil::make_app_action(swipe); };
+        return settings;
+    }
+
+    std::shared_ptr<const luil::ui_tree> page_tree(const luil::zoom_view_config& settings)
+    {
+        auto view { std::make_unique<luil::zoom_view_element>(settings) };
+        view->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 1.0f });
+        return std::make_shared<const luil::ui_tree>(std::move(view));
+    }
+
+    std::chrono::steady_clock::time_point at(const int milliseconds)
+    {
+        return std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { milliseconds };
+    }
+
+    // 손가락 하나로 (x0, 200)에서 (x1, 200)까지 고르게 쓸고 마지막 자리에서 뗀다. 처음부터 끝까지 `duration`이다.
+    std::vector<luil::input_action> swipe(
+        luil::interaction_controller& controller, const float from, const float to, const int duration, const luil::pointer_device device = luil::pointer_device::touch, const int pause = 0)
+    {
+        std::vector<luil::input_action> actions {};
+        const auto keep = [&actions](std::vector<luil::input_action> more) {
+            for (luil::input_action& action : more)
+                actions.push_back(std::move(action));
+        };
+        luil::pointer_pressed_event down { .x = from, .y = 200.0f, .time = at(0), .device = device, .pointer_id = 1 };
+        keep(controller.process(down));
+        for (int step { 1 }; step <= 4; ++step)
+        {
+            const float x { from + (to - from) * static_cast<float>(step) / 4.0f };
+            keep(controller.process(luil::pointer_moved_event { .x = x, .y = 200.0f, .time = at(duration * step / 4), .device = device, .pointer_id = 1, .in_contact = true }));
+        }
+        keep(controller.process(luil::pointer_released_event { .x = to, .y = 200.0f, .time = at(duration + pause), .device = device, .pointer_id = 1 }));
+        return actions;
+    }
+
+    std::vector<luil::zoom_edge_swipe> swipes_in(const std::vector<luil::input_action>& actions)
+    {
+        std::vector<luil::zoom_edge_swipe> found {};
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                if (const auto* const value { message->get<luil::zoom_edge_swipe>() }; value != nullptr)
+                    found.push_back(*value);
+        return found;
+    }
+} // namespace
+
+TEST_CASE("Contain bounds center a small page and hide empty space around a large one", "[zoom][edge]")
+{
+    const luil::zoom_point viewport { 400.0f, 400.0f };
+    // 창보다 작은 쪽은 어디로 끌어도 가운데에 있다. 끈 만큼이 전부 막힌다.
+    REQUIRE(luil::pan_by(page_config(), viewport, { 80.0f, -30.0f }).origin == luil::zoom_point {});
+    REQUIRE(luil::pan_blocked(page_config(), viewport, { 80.0f, -30.0f }) == luil::zoom_point { 80.0f, -30.0f });
+    // 여덟 배로 키우면 800×800이다. 빈 곳이 보이지 않는 데까지만 옮긴다.
+    REQUIRE(luil::pan_by(page_config(8.0f), viewport, { 900.0f, -900.0f }).origin == luil::zoom_point { 200.0f, -200.0f });
+    // 맞춤도 가운데다. 겹침 방식의 기존 다듬기는 그대로다.
+    REQUIRE(luil::zoom_to_fit(page_config(), viewport).origin == luil::zoom_point {});
+    auto overlap { page_config() };
+    overlap.bounds = luil::zoom_bounds::overlap;
+    REQUIRE(luil::pan_blocked(overlap, viewport, { 80.0f, -30.0f }) == luil::zoom_point {});
+}
+
+TEST_CASE("Only the movement past an edge is blocked and each axis is apart", "[zoom][edge]")
+{
+    const luil::zoom_point viewport { 400.0f, 400.0f };
+    // 여덟 배로 키워 오른쪽 끝을 보고 있다 (쪽의 오른쪽 끝이 창의 오른쪽 끝이다).
+    const auto right_edge { page_config(8.0f, { -200.0f, 0.0f }) };
+    // 왼쪽으로 더 밀면 전부 막히고, 오른쪽으로는 전부 옮겨진다.
+    REQUIRE(luil::pan_blocked(right_edge, viewport, { -50.0f, 0.0f }) == luil::zoom_point { -50.0f, 0.0f });
+    REQUIRE(luil::pan_blocked(right_edge, viewport, { 30.0f, 0.0f }) == luil::zoom_point {});
+    // 끝까지 20 남았으면 넘친 몫만 막힌다.
+    REQUIRE(luil::pan_blocked(page_config(8.0f, { -180.0f, 0.0f }), viewport, { -50.0f, 0.0f }) == luil::zoom_point { -30.0f, 0.0f });
+
+    // 가로로 긴 쪽은 가로로 흐르고 세로는 가운데에 묶인다. 막힌 것은 세로뿐이다.
+    auto wide { page_config() };
+    wide.content_bounds = luil::rect_f { -500.0f, -50.0f, 1000.0f, 100.0f };
+    REQUIRE(luil::pan_blocked(wide, viewport, { -40.0f, 25.0f }) == luil::zoom_point { 0.0f, 25.0f });
+}
+
+TEST_CASE("An edge swipe needs distance, an axis that stayed put and speed", "[zoom][edge]")
+{
+    const luil::zoom_edge_swipe_config rule {};
+    REQUIRE(rule.minimum_distance == 32.0f);
+    REQUIRE(rule.minimum_velocity == 300.0f);
+    // 왼쪽으로 빠르게 쓸어 오른쪽 끝에 막혔다.
+    const auto left { luil::judge_edge_swipe(rule, {}, { -120.0f, 3.0f }, { -900.0f, 10.0f }) };
+    REQUIRE(left.horizontal == -1);
+    REQUIRE(left.vertical == 0);
+    REQUIRE(left.blocked == luil::zoom_point { -120.0f, 3.0f });
+    // 아래로 쓸어 위 끝에 막혔다 — 세로만이다.
+    REQUIRE(luil::judge_edge_swipe(rule, {}, { 0.0f, 80.0f }, { 0.0f, 600.0f }).vertical == 1);
+    // 덜 막혔다, 그 축이 이미 많이 옮겨졌다(끝까지 끈 접촉), 느렸다, 반대쪽으로 튕겼다.
+    REQUIRE(luil::judge_edge_swipe(rule, {}, { -20.0f, 0.0f }, { -900.0f, 0.0f }).horizontal == 0);
+    REQUIRE(luil::judge_edge_swipe(rule, { -150.0f, 0.0f }, { -120.0f, 0.0f }, { -900.0f, 0.0f }).horizontal == 0);
+    REQUIRE(luil::judge_edge_swipe(rule, {}, { -120.0f, 0.0f }, { -100.0f, 0.0f }).horizontal == 0);
+    REQUIRE(luil::judge_edge_swipe(rule, {}, { -120.0f, 0.0f }, { 900.0f, 0.0f }).horizontal == 0);
+    // 조금 옮겨진 뒤 막힌 것은 끝에 거의 닿아 있던 것이라 쓸기다.
+    REQUIRE(luil::judge_edge_swipe(rule, { -10.0f, 0.0f }, { -120.0f, 0.0f }, { -900.0f, 0.0f }).horizontal == -1);
+}
+
+TEST_CASE("A fitted page reports a quick touch swipe against its edge once", "[zoom][edge]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(page_tree(page_config()));
+    // 왼쪽으로 120을 0.1초에 쓴다. 가운데에 묶인 쪽이라 전부 막힌다. 이동 메시지는 그대로 나가고 앱이 다듬는다.
+    const auto actions { swipe(controller, 260.0f, 140.0f, 100) };
+    const auto found { swipes_in(actions) };
+    REQUIRE(found.size() == 1u);
+    REQUIRE(found[0].horizontal == -1);
+    REQUIRE(found[0].vertical == 0);
+    REQUIRE(found[0].blocked.x == Catch::Approx(-120.0f));
+    REQUIRE(found[0].velocity.x == Catch::Approx(-1200.0f));
+    // 끌다 멈춘 뒤 뗀 것은 쓸기가 아니다 (마지막 0.1초에 움직임이 없다).
+    REQUIRE(swipes_in(swipe(controller, 260.0f, 140.0f, 100, luil::pointer_device::touch, 300)).empty());
+    // 펜도 같다. 마우스 끌기는 알리지 않는다.
+    REQUIRE(swipes_in(swipe(controller, 260.0f, 140.0f, 100, luil::pointer_device::pen)).size() == 1u);
+    REQUIRE(swipes_in(swipe(controller, 260.0f, 140.0f, 100, luil::pointer_device::mouse)).empty());
+}
+
+TEST_CASE("A zoomed page reports only the swipe that starts at its edge", "[zoom][edge]")
+{
+    luil::interaction_controller controller {};
+    // 여덟 배로 키워 가운데를 보고 있다. 왼쪽으로 300을 쓸면 200은 옮겨지고 100이 막힌다 — 끝에 닿은 쓸기는
+    // 쪽을 넘기지 않는다.
+    controller.set_tree(page_tree(page_config(8.0f)));
+    REQUIRE(swipes_in(swipe(controller, 350.0f, 50.0f, 100)).empty());
+    // 앱이 다듬어 오른쪽 끝에 선 상태에서 한 번 더 쓸면 알린다.
+    controller.set_tree(page_tree(page_config(8.0f, { -200.0f, 0.0f })));
+    const auto found { swipes_in(swipe(controller, 300.0f, 200.0f, 100)) };
+    REQUIRE(found.size() == 1u);
+    REQUIRE(found[0].horizontal == -1);
+    // 반대쪽으로는 옮겨지므로 알리지 않는다.
+    REQUIRE(swipes_in(swipe(controller, 200.0f, 300.0f, 100)).empty());
+}
+
+TEST_CASE("A contact that pinched never reports an edge swipe", "[zoom][edge][pinch]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(page_tree(page_config()));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 260.0f, .y = 200.0f, .time = at(0), .device = luil::pointer_device::touch, .pointer_id = 1 }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 100.0f, .y = 200.0f, .time = at(10), .device = luil::pointer_device::touch, .pointer_id = 2 }));
+    static_cast<void>(controller.process(luil::pointer_moved_event { .x = 200.0f, .y = 200.0f, .time = at(40), .device = luil::pointer_device::touch, .pointer_id = 1, .in_contact = true }));
+    REQUIRE(swipes_in(controller.process(luil::pointer_released_event { .x = 100.0f, .y = 200.0f, .time = at(50), .device = luil::pointer_device::touch, .pointer_id = 2 })).empty());
+    // 남은 손가락이 빠르게 쓸고 떼어도 핀치가 섞인 접촉이다.
+    static_cast<void>(controller.process(luil::pointer_moved_event { .x = 120.0f, .y = 200.0f, .time = at(80), .device = luil::pointer_device::touch, .pointer_id = 1, .in_contact = true }));
+    REQUIRE(swipes_in(controller.process(luil::pointer_released_event { .x = 60.0f, .y = 200.0f, .time = at(100), .device = luil::pointer_device::touch, .pointer_id = 1 })).empty());
+}
+
+TEST_CASE("A view without an edge swipe message measures nothing", "[zoom][edge]")
+{
+    auto settings { page_config() };
+    settings.edge_swipe = {};
+    luil::interaction_controller controller {};
+    controller.set_tree(page_tree(settings));
+    const auto actions { swipe(controller, 260.0f, 140.0f, 100) };
+    REQUIRE(swipes_in(actions).empty());
+    // 이동 메시지는 지금과 같다.
+    REQUIRE(actions.size() == 4u);
+    REQUIRE(controller.next_deadline().has_value() == false);
 }

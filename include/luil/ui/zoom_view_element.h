@@ -9,6 +9,16 @@ namespace luil {
         zoom_point origin {};
     };
 
+    // 내용 경계(`content_bounds`)로 위치를 다듬는 방식이다.
+    enum class zoom_bounds
+    {
+        // 내용과 창의 겹침을 축마다 최소 1 논리 픽셀 남긴다. 큰 도면의 가장자리를 창 가운데로 옮길 수 있다.
+        overlap,
+        // 창보다 작은 축은 가운데에 고정하고, 큰 축은 빈 곳이 보이지 않게 한다. 쪽·사진 한 장 보기의 방식이다 —
+        // 맞춤 상태에서는 옮길 여지가 없어 쓸기가 전부 경계에 막힌다.
+        contain,
+    };
+
     // 원점·기준점·이동량은 창 가운데 기준 논리 픽셀이다. 내용 경계만 내용 좌표다.
     struct zoom_view_config
     {
@@ -22,11 +32,20 @@ namespace luil {
         std::function<input_action(zoom_point delta)> pan_by {};
         std::function<input_action(float value)> zoom_to {};
         zoom_wheel_mode wheel { zoom_wheel_mode::zoom };
+        zoom_bounds bounds { zoom_bounds::overlap };
+        // 터치·펜 접촉이 끝날 때 경계에 막힌 쓸기를 알리는 메시지다 (`zoom_edge_swipe`). 비어 있으면 끈다.
+        //  - 핀치가 섞인 접촉과 마우스 끌기는 알리지 않는다.
+        std::function<input_action(const zoom_edge_swipe&)> edge_swipe {};
+        zoom_edge_swipe_config edge_swipe_config {};
     };
 
     [[nodiscard]] zoom_view_state zoom_about(const zoom_view_config& config, zoom_point viewport, float factor, zoom_point anchor) noexcept;
     [[nodiscard]] zoom_view_state pan_by(const zoom_view_config& config, zoom_point viewport, zoom_point delta) noexcept;
     [[nodiscard]] zoom_view_state zoom_to_fit(const zoom_view_config& config, zoom_point viewport, float margin = 16.0f, float maximum_fit_zoom = 1.0f) noexcept;
+    // `pan_by`가 경계 다듬기로 버리는 몫이다 (`delta` − 실제로 옮겨진 몫). 축마다 따로다.
+    [[nodiscard]] zoom_point pan_blocked(const zoom_view_config& config, zoom_point viewport, zoom_point delta) noexcept;
+    // 접촉 하나의 옮겨진 몫·막힌 몫·뗄 때의 속도로 경계 쓸기를 판정한다 (`zoom_edge_swipe_config`의 세 기준).
+    [[nodiscard]] zoom_edge_swipe judge_edge_swipe(const zoom_edge_swipe_config& config, zoom_point moved, zoom_point blocked, zoom_point velocity) noexcept;
 
     // 내용은 하나다. 배치 배율을 바꾸므로 그림과 hit test가 같은 물리 좌표를 쓴다.
     class zoom_view_element final : public ui_element
@@ -42,6 +61,8 @@ namespace luil {
 
     private:
         [[nodiscard]] std::optional<std::vector<input_action>> keys(const key_pressed_event& event) const;
+        // 배치한 상태와 창 크기로 컨트롤러에 내놓을 확대 원천이다.
+        [[nodiscard]] zoom_source make_source(zoom_point viewport) const;
         zoom_view_config config_ {};
         float scale_ { 1.0f };
         ui_element* content_ { nullptr };

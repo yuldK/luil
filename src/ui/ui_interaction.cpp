@@ -1,6 +1,7 @@
 #include "luil/ui/ui_interaction.h"
 
 #include "luil/messaging/envelope.h"
+#include "luil/ui/zoom_view_element.h"
 
 #include <algorithm>
 #include <chrono>
@@ -389,6 +390,8 @@ namespace luil {
             view_drag_->x = event.x;
             view_drag_->y = event.y;
             const zoom_point delta { (event.x - previous.x) / positive_scale(owner->zoom()->scale), (event.y - previous.y) / positive_scale(owner->zoom()->scale) };
+            if (view_drag_->edge.has_value())
+                record_view_pan(*view_drag_->edge, delta, event.time, event.x, event.y);
             return delta != zoom_point {} ? std::vector<input_action> { owner->zoom()->pan_by(delta) } : std::vector<input_action> {};
         }
 
@@ -923,7 +926,10 @@ namespace luil {
         // 마우스·펜은 빈 곳만 이동한다. 내용의 클릭·선택·항목 끌기는 그대로 둔다.
         if (event.button == pointer_button::left && view != nullptr && hit->id() == view->id() && view->zoom()->pan_by)
         {
-            view_drag_ = view_drag { view->id(), event.x, event.y, event.x, event.y };
+            view_drag_ = view_drag { view->id(), event.x, event.y, event.x, event.y, std::nullopt };
+            // 펜만 경계 쓸기를 잰다. 마우스 끌기는 쪽을 넘기는 몸짓이 아니다.
+            if (event.device == pointer_device::pen && view->zoom()->edge_swipe && view->zoom()->pan_room)
+                view_drag_->edge = view_edge_track { view->zoom()->pan_room, {}, {}, { { event.time, event.x, event.y } }, false };
             return actions;
         }
 
@@ -1056,7 +1062,17 @@ namespace luil {
                 return {};
             const float scale { positive_scale(owner->zoom()->scale) };
             const zoom_point delta { (event.x - previous.x) / scale, (event.y - previous.y) / scale };
-            return delta != zoom_point {} ? std::vector<input_action> { owner->zoom()->pan_by(delta) } : std::vector<input_action> {};
+            std::vector<input_action> actions {};
+            if (delta != zoom_point {})
+                actions.push_back(owner->zoom()->pan_by(delta));
+            if (previous.edge.has_value())
+            {
+                view_edge_track edge { *previous.edge };
+                record_view_pan(edge, delta, event.time, event.x, event.y);
+                if (std::optional<input_action> swipe { finish_view_edge(edge, *owner) }; swipe.has_value())
+                    actions.push_back(std::move(*swipe));
+            }
+            return actions;
         }
 
         // tree가 없어도 **거두기까지는 반드시 닿는다.**
@@ -1195,6 +1211,8 @@ namespace luil {
                 return {};
             contact.second = touch_contact::second_contact { event.pointer_id, event.x, event.y };
             contact.phase = touch_phase::pinching;
+            if (contact.edge.has_value())
+                contact.edge->pinched = true;
             contact.moved_action = true;
             clear_press();
             return {};
@@ -1231,6 +1249,9 @@ namespace luil {
             contact.view = view->id();
             contact.scale = positive_scale(view->zoom()->scale);
             contact.pan_open = false;
+            // 경계 쓸기를 알리는 보기만 잰다. 기준은 누를 때의 상태다.
+            if (view->zoom()->edge_swipe && view->zoom()->pan_room)
+                contact.edge = view_edge_track { view->zoom()->pan_room, {}, {}, { { event.time, event.x, event.y } }, false };
             if (hit == nullptr || hit->id() == view->id())
                 contact.phase = touch_phase::view_pan;
         }
@@ -1340,6 +1361,8 @@ namespace luil {
                 const zoom_point delta { (event.x - contact.last_x) / scale, (event.y - contact.last_y) / scale };
                 if (delta != zoom_point {})
                     actions.push_back(source.pan_by(delta));
+                if (contact.edge.has_value())
+                    record_view_pan(*contact.edge, delta, event.time, event.x, event.y);
                 contact.last_x = event.x;
                 contact.last_y = event.y;
             }
@@ -1483,13 +1506,18 @@ namespace luil {
             }
             else
             {
+                const ui_tree* const tree { surface_tree(event.surface) };
                 if (touch_->moved_action == false)
                 {
-                    const ui_tree* const tree { surface_tree(event.surface) };
                     const ui_element* const view { tree != nullptr ? zoom_owner_at(*tree, touch_->start_x, touch_->start_y) : nullptr };
                     if (view != nullptr && view->id() == touch_->view)
                         apply_press_focus(*tree, view, event.surface, event.time);
                 }
+                // 핀치가 섞이지 않은 한 접촉만 경계 쓸기를 알린다. 보기는 최신 tree에서 다시 찾는다.
+                if (touch_->edge.has_value() && touch_->edge->pinched == false && tree != nullptr)
+                    if (const ui_element* const owner { live_zoom_view(*tree, touch_->view, touch_->start_x, touch_->start_y) }; owner != nullptr)
+                        if (std::optional<input_action> swipe { finish_view_edge(*touch_->edge, *owner) }; swipe.has_value())
+                            actions.push_back(std::move(*swipe));
                 cancel_touch();
             }
             return actions;
@@ -1704,6 +1732,44 @@ namespace luil {
         if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty())
             snapshot_.drag.reset();
         clear_press();
+    }
+
+    void interaction_controller::record_view_pan(view_edge_track& edge, const zoom_point delta, const std::chrono::steady_clock::time_point time, const float x, const float y)
+    {
+        if (delta != zoom_point {} && edge.pan_room)
+        {
+            // 앱이 이동을 하나씩 다듬는 것과 같은 차례로 견준다. 합을 한 번에 견주면 끝에 막혔다 돌아온 접촉이
+            // 막힌 몫을 잃는다.
+            const zoom_point room { edge.pan_room(edge.moved, delta) };
+            edge.moved = { edge.moved.x + room.x, edge.moved.y + room.y };
+            edge.blocked = { edge.blocked.x + delta.x - room.x, edge.blocked.y + delta.y - room.y };
+        }
+        edge.samples.push_back({ time, x, y });
+        // 속도는 마지막 100ms로 잰다. 그보다 오래된 표본은 버린다.
+        constexpr std::chrono::milliseconds window { 100 };
+        const auto stale { std::ranges::find_if(edge.samples, [time, window](const view_edge_track::sample& sample) { return time - sample.time <= window; }) };
+        edge.samples.erase(edge.samples.begin(), stale);
+    }
+
+    std::optional<input_action> interaction_controller::finish_view_edge(const view_edge_track& edge, const ui_element& owner)
+    {
+        const zoom_source* const source { owner.zoom() };
+        if (source == nullptr || source->edge_swipe == nullptr || edge.samples.empty())
+            return std::nullopt;
+        // 남은 표본의 처음과 끝으로 잰 속도다. 뗌 직전에 멈췄다면 표본이 하나만 남아 0이다.
+        zoom_point velocity {};
+        const view_edge_track::sample& first { edge.samples.front() };
+        const view_edge_track::sample& last { edge.samples.back() };
+        const float seconds { std::chrono::duration<float>(last.time - first.time).count() };
+        if (seconds > 0.0f)
+        {
+            const float scale { positive_scale(source->scale) };
+            velocity = { (last.x - first.x) / scale / seconds, (last.y - first.y) / scale / seconds };
+        }
+        const zoom_edge_swipe swipe { judge_edge_swipe(source->edge_swipe_config, edge.moved, edge.blocked, velocity) };
+        if (swipe.horizontal == 0 && swipe.vertical == 0)
+            return std::nullopt;
+        return source->edge_swipe(swipe);
     }
 
     void interaction_controller::cancel_touch() noexcept

@@ -437,6 +437,25 @@ namespace luil {
             unavailable,
         };
 
+        // 확대 보기를 끄는 접촉 하나의 경계 기록이다 (경계 쓸기).
+        //  - 누를 때 보기가 준 `pan_room`으로 보낸 이동을 차례로 견줘 옮겨진 몫과 막힌 몫을 쌓는다.
+        //  - 최근 표본으로 뗄 때의 속도를 잰다. 시각은 이벤트의 것이다 (controller는 시계를 보지 않는다).
+        struct view_edge_track
+        {
+            std::function<zoom_point(zoom_point offset, zoom_point delta)> pan_room {};
+            zoom_point moved {};
+            zoom_point blocked {};
+            struct sample
+            {
+                std::chrono::steady_clock::time_point time {};
+                float x { 0.0f };
+                float y { 0.0f };
+            };
+            std::vector<sample> samples {};
+            // 핀치가 한 번이라도 섞였다. 그 접촉은 알리지 않는다.
+            bool pinched { false };
+        };
+
         // 보통 조작은 한 접촉이다. 같은 확대 보기의 핀치만 둘째 접촉을 품는다.
         //  - 쥐지 않은 id의 이동·뗌·취소는 무시한다. 핀치 뒤 남은 접촉은
         //    이동만 잇고 새 누름·탭으로 승격하지 않는다.
@@ -474,6 +493,8 @@ namespace luil {
             std::optional<second_contact> second {};
             // 누른 자리의 활성 element다. 없으면 빈 곳(또는 비활성)을 누른 것이다.
             ui_element_id target {};
+            // 경계 쓸기를 알리는 확대 보기 위의 접촉이면 그 기록이다.
+            std::optional<view_edge_track> edge {};
         };
 
         [[nodiscard]] std::vector<input_action> process_touch_press(const pointer_pressed_event& event);
@@ -489,6 +510,10 @@ namespace luil {
         [[nodiscard]] std::optional<pan_target> resolve_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
         // 진행 중인 터치 접촉을 액션 없이 거둔다.
         void cancel_touch() noexcept;
+        // 보기에 보낸 이동 하나와 그 시각의 자리를 경계 기록에 더한다.
+        static void record_view_pan(view_edge_track& edge, zoom_point delta, std::chrono::steady_clock::time_point time, float x, float y);
+        // 접촉이 끝났다. 경계 쓸기의 기준을 넘었으면 보기의 메시지를 돌려준다.
+        [[nodiscard]] static std::optional<input_action> finish_view_edge(const view_edge_track& edge, const ui_element& owner);
         // 마우스·펜 조작을 액션 없이 거둔다. OS 파일 끌기는 별도 소유권이다.
         void cancel_pointer_gesture() noexcept;
         // 마우스·펜의 진행 중 몸짓이 있는가 (누름·텍스트 끌기·전용 조작·내부 끌기).
@@ -672,6 +697,8 @@ namespace luil {
             float start_y { 0.0f };
             float x { 0.0f };
             float y { 0.0f };
+            // 펜이 경계 쓸기를 알리는 보기를 끌면 그 기록이다. 마우스 끌기는 알리지 않는다.
+            std::optional<view_edge_track> edge {};
         };
         std::optional<view_drag> view_drag_ {};
 

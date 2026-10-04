@@ -38,9 +38,19 @@ namespace luil {
             if (config.content_bounds.has_value() == false || finite_point(viewport) == false || viewport.x <= 0.0f || viewport.y <= 0.0f)
                 return value;
             const rect_f& box { *config.content_bounds };
-            const auto clamp_axis = [zoom = value.zoom](const float origin, const float extent, const float start, const float length) {
+            const auto clamp_axis = [zoom = value.zoom, contain = config.bounds == zoom_bounds::contain](const float origin, const float extent, const float start, const float length) {
+                const double size { static_cast<double>(length) * zoom };
+                if (contain)
+                {
+                    // 창보다 작으면 가운데, 크면 빈 곳이 보이지 않는 범위다.
+                    if (size <= extent)
+                        return static_cast<float>(-(static_cast<double>(start) + length / 2.0) * zoom);
+                    const double low { extent / 2.0 - (static_cast<double>(start) + length) * zoom };
+                    const double high { -extent / 2.0 - static_cast<double>(start) * zoom };
+                    return static_cast<float>(std::clamp(static_cast<double>(origin), low, high));
+                }
                 // 1 논리 픽셀을 남긴다. 아주 작은 내용·창에서는 그 작은 쪽 전부다.
-                const double overlap { std::min({ 1.0, static_cast<double>(extent), static_cast<double>(length) * zoom }) };
+                const double overlap { std::min({ 1.0, static_cast<double>(extent), size }) };
                 const double low { -extent / 2.0 - (static_cast<double>(start) + length) * zoom + overlap };
                 const double high { extent / 2.0 - static_cast<double>(start) * zoom - overlap };
                 return static_cast<float>(std::clamp(static_cast<double>(origin), low, high));
@@ -96,6 +106,32 @@ namespace luil {
         return clamp_state(config, viewport, current);
     }
 
+    zoom_point pan_blocked(const zoom_view_config& config, const zoom_point viewport, const zoom_point delta) noexcept
+    {
+        if (finite_point(delta) == false)
+            return {};
+        const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
+        const zoom_view_state next { pan_by(config, viewport, delta) };
+        return { delta.x - (next.origin.x - current.origin.x), delta.y - (next.origin.y - current.origin.y) };
+    }
+
+    zoom_edge_swipe judge_edge_swipe(const zoom_edge_swipe_config& config, const zoom_point moved, const zoom_point blocked, const zoom_point velocity) noexcept
+    {
+        zoom_edge_swipe result { blocked, velocity, 0, 0 };
+        if (finite_point(moved) == false || finite_point(blocked) == false || finite_point(velocity) == false)
+            return result;
+        // 막힌 쪽(손가락 방향)으로 충분히 막혔고, 그 축은 거의 옮겨지지 않았고(이미 끝이었다), 그쪽으로 빨랐다.
+        const auto judge = [&config](const float axis_moved, const float axis_blocked, const float axis_velocity) {
+            const float direction { axis_blocked < 0.0f ? -1.0f : 1.0f };
+            if (std::abs(axis_blocked) < config.minimum_distance || std::abs(axis_moved) >= config.minimum_distance || axis_velocity * direction < config.minimum_velocity)
+                return 0;
+            return axis_blocked < 0.0f ? -1 : 1;
+        };
+        result.horizontal = judge(moved.x, blocked.x, velocity.x);
+        result.vertical = judge(moved.y, blocked.y, velocity.y);
+        return result;
+    }
+
     zoom_view_state zoom_to_fit(const zoom_view_config& config, const zoom_point viewport, const float margin, const float maximum_fit_zoom) noexcept
     {
         const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
@@ -119,6 +155,24 @@ namespace luil {
         set_zoom_source(zoom_source { config_.zoom_by, config_.pan_by, 1.0f, config_.wheel, [this](const key_pressed_event& event) { return keys(event); } });
     }
 
+    zoom_source zoom_view_element::make_source(const zoom_point viewport) const
+    {
+        zoom_source source { config_.zoom_by, config_.pan_by, scale_, config_.wheel, [this](const key_pressed_event& event) { return keys(event); } };
+        if (config_.edge_swipe)
+        {
+            // 배치한 상태의 사본으로 잰다. 그 뒤 앱이 상태를 바꿔도 이 접촉의 기준은 누를 때의 것이다.
+            source.pan_room = [config = config_, viewport](const zoom_point offset, const zoom_point delta) {
+                zoom_view_config moved { config };
+                moved.origin = { config.origin.x + offset.x, config.origin.y + offset.y };
+                const zoom_point blocked { pan_blocked(moved, viewport, delta) };
+                return zoom_point { delta.x - blocked.x, delta.y - blocked.y };
+            };
+            source.edge_swipe = config_.edge_swipe;
+            source.edge_swipe_config = config_.edge_swipe_config;
+        }
+        return source;
+    }
+
     void zoom_view_element::set_content(std::unique_ptr<ui_element> content)
     {
         if (content_ != nullptr)
@@ -137,7 +191,7 @@ namespace luil {
         const zoom_view_state value { zoom_about(config_, viewport, 1.0f, {}) };
         config_.zoom = value.zoom;
         config_.origin = value.origin;
-        set_zoom_source(zoom_source { config_.zoom_by, config_.pan_by, scale_, config_.wheel, [this](const key_pressed_event& event) { return keys(event); } });
+        set_zoom_source(make_source(viewport));
         if (content_ == nullptr)
             return;
         const rect_f content { config_.content_bounds.value_or(rect_f { 0.0f, 0.0f, viewport.x / value.zoom, viewport.y / value.zoom }) };
