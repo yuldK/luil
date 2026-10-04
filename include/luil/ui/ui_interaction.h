@@ -446,11 +446,9 @@ namespace luil {
         // 확대 보기를 끄는 접촉 하나의 경계 기록이다 (경계 쓸기).
         //  - 누를 때 보기가 준 `pan_room`으로 보낸 이동을 차례로 견줘 옮겨진 몫과 막힌 몫을 쌓는다.
         //  - 최근 표본으로 뗄 때의 속도를 잰다. 시각은 이벤트의 것이다 (controller는 시계를 보지 않는다).
-        struct view_edge_track
+        // 접촉이 지나온 이동이다. 놓는 순간의 속도를 잰다 — 마지막 100ms의 표본만 남긴다.
+        struct motion_track
         {
-            std::function<zoom_point(zoom_point offset, zoom_point delta)> pan_room {};
-            zoom_point moved {};
-            zoom_point blocked {};
             struct sample
             {
                 std::chrono::steady_clock::time_point time {};
@@ -458,6 +456,19 @@ namespace luil {
                 float y { 0.0f };
             };
             std::vector<sample> samples {};
+
+            // 이동 하나를 더하고 그 시각에서 100ms보다 오래된 표본을 버린다.
+            void add(std::chrono::steady_clock::time_point time, float x, float y);
+            // `time`에서 100ms 안에 남은 표본의 처음과 끝으로 잰 속도다 (초당 물리 픽셀). 둘보다 적으면 0이다.
+            [[nodiscard]] drag_velocity velocity_at(std::chrono::steady_clock::time_point time) const noexcept;
+        };
+
+        struct view_edge_track
+        {
+            std::function<zoom_point(zoom_point offset, zoom_point delta)> pan_room {};
+            zoom_point moved {};
+            zoom_point blocked {};
+            motion_track motion {};
             // 핀치가 한 번이라도 섞였다. 그 접촉은 알리지 않는다.
             bool pinched { false };
         };
@@ -489,6 +500,8 @@ namespace luil {
             float start_y { 0.0f };
             float last_x { 0.0f };
             float last_y { 0.0f };
+            // 이 접촉의 이동이다. 손잡이·넘겨받은 끌기를 놓을 때 속도를 잰다.
+            motion_track motion {};
             // 누른 자리에서 가장 멀리 간 거리(논리 픽셀)다.
             // 돌아와도 줄지 않는다 — 한 번 허용치를 넘은 접촉은 탭도 길게 누르기도 아니다.
             float max_distance { 0.0f };
@@ -533,10 +546,11 @@ namespace luil {
         // 진행 중인 터치 접촉을 액션 없이 거둔다.
         void cancel_touch() noexcept;
         // 끌기를 쥔 터치 접촉이 끝난다 (뗌·취소). 넘겨받은 컨테이너의 `release`, 손잡이의 `on_release`다.
-        [[nodiscard]] std::vector<input_action> end_touch_drag(const touch_contact& contact, float x, float y);
+        //  - `velocity`는 놓은 순간의 속도다. 취소·유실이면 0을 넘긴다.
+        [[nodiscard]] std::vector<input_action> end_touch_drag(const touch_contact& contact, float x, float y, drag_velocity velocity);
         // 마우스·펜이 쥔 손잡이 끌기가 끝난다 (뗌·취소·입력 큐 유실). 손잡이의 `on_release`다. 끝 상태를 지우기 전에
         // 부른다 — 누른 표면으로 손잡이를 찾는다.
-        [[nodiscard]] std::vector<input_action> end_pointer_drag(float x, float y) const;
+        [[nodiscard]] std::vector<input_action> end_pointer_drag(float x, float y, drag_velocity velocity) const;
         // 보기에 보낸 이동 하나와 그 시각의 자리를 경계 기록에 더한다.
         static void record_view_pan(view_edge_track& edge, zoom_point delta, std::chrono::steady_clock::time_point time, float x, float y);
         // 접촉이 끝났다. 경계 쓸기의 기준을 넘었으면 보기의 메시지를 돌려준다.
@@ -668,6 +682,8 @@ namespace luil {
         // 값이 있으면 포인터 이동이 클릭· drag 대신 이 element로 간다.
         // 좌표는 마지막으로 보낸 위치다.
         ui_element_id pointer_drag_id_ {};
+        // 마우스·펜 손잡이 끌기의 이동이다 (터치는 접촉이 들고 있다).
+        motion_track pointer_drag_motion_ {};
         float pointer_drag_x_ { 0.0f };
         float pointer_drag_y_ { 0.0f };
 

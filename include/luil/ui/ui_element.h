@@ -165,6 +165,18 @@ namespace luil {
         bool blocked { false };
     };
 
+    // 끌기를 놓은 순간의 속도다 (초당 물리 픽셀, 오른쪽·아래가 양수).
+    //  - 놓기 전 100ms 동안의 이동으로 잰다. 그 사이 이동이 둘보다 적으면(멈췄다 놓았다, 누르고 바로 뗐다) 0이다.
+    //  - 놓은 자리는 넣지 않는다. 마우스는 capture를 잃으면 화면 밖 자리의 합성 뗌으로 끝난다.
+    //  - 시스템의 접촉 취소·입력 큐 유실로 끝난 끌기는 0이다.
+    struct drag_velocity
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+
+        [[nodiscard]] bool operator==(const drag_velocity&) const noexcept = default;
+    };
+
     // 누른 채 끄는 동안 연속으로 반응하는 element다 (스크롤 막대).
     // 일반적인 drag & drop과 달리 ghost도 drop 대상도 없고, 포인터 이동을 그때그때 메시지로 바꾼다.
     // 눌린 동안에는 포인터가 element를 벗어나도 계속 호출된다.
@@ -176,11 +188,11 @@ namespace luil {
         // 직전 위치와 현재 위치를 받는다.
         // 상대 변화량만 쓰므로 tree가 다시 빌드되어도 이어서 끌 수 있다.
         std::function<std::vector<input_action>(const ui_action_context& previous, const ui_action_context& current)> on_move {};
-        // 끌기가 끝났다 (뗌, 시스템의 접촉 취소, 입력 큐 유실로 거둔 몸짓). 마지막 자리를 받는다.
-        // 끄는 동안의 상태를 앱이 들고 있다가 여기서 멈출 자리를 정한다 (시트의 멈춤점).
+        // 끌기가 끝났다 (뗌, 시스템의 접촉 취소, 입력 큐 유실로 거둔 몸짓). 마지막 자리와 놓은 순간의 속도를 받는다.
+        // 끄는 동안의 상태를 앱이 들고 있다가 여기서 멈출 자리를 정한다 (시트의 멈춤점, 튕김).
         //  - 비어 있으면 끝을 알리지 않는다 — 지금까지의 손잡이가 그 경우다.
         //  - 누른 element가 사라졌거나 가려진 뒤의 뗌에는 부르지 않는다.
-        std::function<std::vector<input_action>(const ui_action_context&)> on_release {};
+        std::function<std::vector<input_action>(const ui_action_context&, drag_velocity)> on_release {};
         // 손잡이가 손가락을 따라 자리를 옮긴다 (시트의 끌기 손잡이). 참이면 터치 접촉 동안 이 손잡이가 살아 있는지를
         // 누른 자리의 hit이 아니라 id·가시성·가둠으로 본다 — 손잡이가 내려가면 누른 자리는 곧 다른 것(scrim)에 덮인다.
         //  - 기본은 거짓이다. 제자리의 손잡이(막대·나눔 손잡이)는 지금처럼 누른 자리를 덮은 것을 끊는다.
@@ -335,8 +347,9 @@ namespace luil {
         float scale { 1.0f };
         // 끈 만큼이다 (논리 픽셀, 손가락 방향 — 아래·오른쪽이 양수).
         std::function<input_action(float delta)> drag {};
-        // 손을 뗐거나 접촉이 취소됐다.
-        std::function<input_action()> release {};
+        // 손을 뗐거나 접촉이 취소됐다. 놓은 순간 축 방향의 속도를 받는다 (초당 논리 픽셀, `drag`와 같은 방향이
+        // 양수). 취소·입력 큐 유실이면 0이다 (`drag_velocity`).
+        std::function<input_action(float velocity)> release {};
     };
 
     // 초점을 가진 채 글자로 **자기 모델 안**을 찾는 element다 (가상 목록).

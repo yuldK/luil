@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <span>
 #include <thread>
@@ -15,6 +16,9 @@
 
 namespace luil {
     namespace {
+        // 놓는 순간의 속도를 재는 창이다. 이보다 오래된 이동은 속도에 넣지 않는다.
+        constexpr std::chrono::milliseconds motion_window { 100 };
+
         [[nodiscard]] float positive_scale(const float scale) noexcept
         {
             return std::isfinite(scale) && scale > 0.0f ? scale : 1.0f;
@@ -419,6 +423,7 @@ namespace luil {
             const ui_action_context current { pointer_drag_id_, event.x, event.y, false };
             pointer_drag_x_ = event.x;
             pointer_drag_y_ = event.y;
+            pointer_drag_motion_.add(event.time, event.x, event.y);
             return handler->on_move(previous, current);
         }
 
@@ -930,7 +935,7 @@ namespace luil {
             view_drag_ = view_drag { view->id(), event.x, event.y, event.x, event.y, std::nullopt };
             // 펜만 경계 쓸기를 잰다. 마우스 끌기는 쪽을 넘기는 몸짓이 아니다.
             if (event.device == pointer_device::pen && view->zoom()->edge_swipe && view->zoom()->pan_room)
-                view_drag_->edge = view_edge_track { view->zoom()->pan_room, {}, {}, { { event.time, event.x, event.y } }, false };
+                view_drag_->edge = view_edge_track { view->zoom()->pan_room, {}, {}, motion_track { { { event.time, event.x, event.y } } }, false };
             return actions;
         }
 
@@ -990,6 +995,7 @@ namespace luil {
             pointer_drag_id_ = hit->id();
             pointer_drag_x_ = event.x;
             pointer_drag_y_ = event.y;
+            pointer_drag_motion_ = {};
             if (handler->on_press)
                 return with_press(handler->on_press(ui_action_context { pointer_drag_id_, event.x, event.y, false }));
         }
@@ -1097,7 +1103,7 @@ namespace luil {
         if (pointer_drag_id_ != ui_element_id {} && event.button == pointer_button::left)
         {
             // 끝을 듣는 손잡이에는 끝을 알린다 (시트의 멈춤점).
-            std::vector<input_action> actions { end_pointer_drag(event.x, event.y) };
+            std::vector<input_action> actions { end_pointer_drag(event.x, event.y, pointer_drag_motion_.velocity_at(event.time)) };
             pointer_drag_id_ = {};
             clear_press();
             return actions;
@@ -1294,7 +1300,7 @@ namespace luil {
             contact.pan_open = false;
             // 경계 쓸기를 알리는 보기만 잰다. 기준은 누를 때의 상태다.
             if (view->zoom()->edge_swipe && view->zoom()->pan_room)
-                contact.edge = view_edge_track { view->zoom()->pan_room, {}, {}, { { event.time, event.x, event.y } }, false };
+                contact.edge = view_edge_track { view->zoom()->pan_room, {}, {}, motion_track { { { event.time, event.x, event.y } } }, false };
             if (hit == nullptr || hit->id() == view->id())
                 contact.phase = touch_phase::view_pan;
         }
@@ -1543,6 +1549,7 @@ namespace luil {
             break;
         }
         }
+        contact.motion.add(event.time, event.x, event.y);
         contact.last_x = event.x;
         contact.last_y = event.y;
         return actions;
@@ -1651,7 +1658,7 @@ namespace luil {
             const float along { contact.handoff_axis == scroll_axis::horizontal ? event.x - contact.last_x : event.y - contact.last_y };
             if (along != 0.0f)
                 actions.push_back(target->drag(along / positive_scale(target->scale)));
-            for (input_action& action : end_touch_drag(contact, event.x, event.y))
+            for (input_action& action : end_touch_drag(contact, event.x, event.y, contact.motion.velocity_at(event.time)))
                 actions.push_back(std::move(action));
             return actions;
         }
@@ -1659,7 +1666,7 @@ namespace luil {
             // 손잡이를 놓는 것은 클릭이 아니다 (마우스와 같다). 움직이지 않고
             // 오래 눌렀으면 길게 누르기만 남는다. 끝을 듣는 손잡이에는 먼저 끝을 알린다.
             clear_press();
-            std::vector<input_action> actions { tree != nullptr ? end_touch_drag(contact, event.x, event.y) : std::vector<input_action> {} };
+            std::vector<input_action> actions { tree != nullptr ? end_touch_drag(contact, event.x, event.y, contact.motion.velocity_at(event.time)) : std::vector<input_action> {} };
             if (still == false || contact.moved_action || tree == nullptr)
                 return actions;
             const ui_element* const target { live_touch_handle(*tree, contact.target, contact.start_x, contact.start_y) };
@@ -1838,7 +1845,7 @@ namespace luil {
             if (touch_.has_value() && touch_->surface == event.surface && (touch_->id == event.pointer_id || (touch_->second.has_value() && touch_->second->id == event.pointer_id)))
             {
                 // 끌기를 쥔 접촉이면 끝을 알린다. 시트가 끄던 자리에 남지 않고 멈춤점으로 돌아간다.
-                std::vector<input_action> actions { end_touch_drag(*touch_, touch_->last_x, touch_->last_y) };
+                std::vector<input_action> actions { end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {}) };
                 cancel_touch();
                 last_view_tap_.reset();
                 return actions;
@@ -1850,7 +1857,7 @@ namespace luil {
             || pointer_contact_->surface != event.surface)
             return {};
         // 손잡이를 쥐고 있었으면 끝을 알린다 (터치 취소와 같다).
-        std::vector<input_action> actions { end_pointer_drag(pointer_drag_x_, pointer_drag_y_) };
+        std::vector<input_action> actions { end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}) };
         cancel_pointer_gesture();
         return actions;
     }
@@ -1889,7 +1896,7 @@ namespace luil {
         return owner->zoom()->double_tap({ (event.x - box.x - box.width / 2.0f) / scale, (event.y - box.y - box.height / 2.0f) / scale });
     }
 
-    std::vector<input_action> interaction_controller::end_touch_drag(const touch_contact& contact, const float x, const float y)
+    std::vector<input_action> interaction_controller::end_touch_drag(const touch_contact& contact, const float x, const float y, const drag_velocity velocity)
     {
         const ui_tree* const tree { surface_tree(contact.surface) };
         if (tree == nullptr)
@@ -1899,7 +1906,8 @@ namespace luil {
             const pan_handoff_target* const target { live_handoff(*tree, contact.handoff, contact.handoff_axis) };
             if (target == nullptr || target->release == nullptr)
                 return {};
-            return { target->release() };
+            const float along { contact.handoff_axis == scroll_axis::horizontal ? velocity.x : velocity.y };
+            return { target->release(along / positive_scale(target->scale)) };
         }
         if (contact.phase != touch_phase::handle)
             return {};
@@ -1907,10 +1915,10 @@ namespace luil {
         const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
         if (handler == nullptr || handler->on_release == nullptr)
             return {};
-        return handler->on_release(ui_action_context { contact.target, x, y, false });
+        return handler->on_release(ui_action_context { contact.target, x, y, false }, velocity);
     }
 
-    std::vector<input_action> interaction_controller::end_pointer_drag(const float x, const float y) const
+    std::vector<input_action> interaction_controller::end_pointer_drag(const float x, const float y, const drag_velocity velocity) const
     {
         if (pointer_drag_id_ == ui_element_id {})
             return {};
@@ -1919,7 +1927,7 @@ namespace luil {
         const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
         if (handler == nullptr || handler->on_release == nullptr)
             return {};
-        return handler->on_release(ui_action_context { pointer_drag_id_, x, y, false });
+        return handler->on_release(ui_action_context { pointer_drag_id_, x, y, false }, velocity);
     }
 
     void interaction_controller::record_view_pan(view_edge_track& edge, const zoom_point delta, const std::chrono::steady_clock::time_point time, const float x, const float y)
@@ -1932,28 +1940,39 @@ namespace luil {
             edge.moved = { edge.moved.x + room.x, edge.moved.y + room.y };
             edge.blocked = { edge.blocked.x + delta.x - room.x, edge.blocked.y + delta.y - room.y };
         }
-        edge.samples.push_back({ time, x, y });
-        // 속도는 마지막 100ms로 잰다. 그보다 오래된 표본은 버린다.
-        constexpr std::chrono::milliseconds window { 100 };
-        const auto stale { std::ranges::find_if(edge.samples, [time, window](const view_edge_track::sample& sample) { return time - sample.time <= window; }) };
-        edge.samples.erase(edge.samples.begin(), stale);
+        edge.motion.add(time, x, y);
+    }
+
+    void interaction_controller::motion_track::add(const std::chrono::steady_clock::time_point time, const float x, const float y)
+    {
+        samples.push_back({ time, x, y });
+        const auto stale { std::ranges::find_if(samples, [time](const sample& value) { return time - value.time <= motion_window; }) };
+        samples.erase(samples.begin(), stale);
+    }
+
+    drag_velocity interaction_controller::motion_track::velocity_at(const std::chrono::steady_clock::time_point time) const noexcept
+    {
+        // 놓은 시각에서 100ms 안의 표본만 본다. 멈췄다 놓았으면 남는 것이 없어 0이다.
+        const auto fresh { std::ranges::find_if(samples, [time](const sample& value) { return time - value.time <= motion_window; }) };
+        if (std::distance(fresh, samples.end()) < 2)
+            return {};
+        const sample& first { *fresh };
+        const sample& last { samples.back() };
+        const float seconds { std::chrono::duration<float>(last.time - first.time).count() };
+        if (seconds <= 0.0f)
+            return {};
+        return { (last.x - first.x) / seconds, (last.y - first.y) / seconds };
     }
 
     std::optional<input_action> interaction_controller::finish_view_edge(const view_edge_track& edge, const ui_element& owner)
     {
         const zoom_source* const source { owner.zoom() };
-        if (source == nullptr || source->edge_swipe == nullptr || edge.samples.empty())
+        if (source == nullptr || source->edge_swipe == nullptr || edge.motion.samples.empty())
             return std::nullopt;
-        // 남은 표본의 처음과 끝으로 잰 속도다. 뗌 직전에 멈췄다면 표본이 하나만 남아 0이다.
-        zoom_point velocity {};
-        const view_edge_track::sample& first { edge.samples.front() };
-        const view_edge_track::sample& last { edge.samples.back() };
-        const float seconds { std::chrono::duration<float>(last.time - first.time).count() };
-        if (seconds > 0.0f)
-        {
-            const float scale { positive_scale(source->scale) };
-            velocity = { (last.x - first.x) / scale / seconds, (last.y - first.y) / scale / seconds };
-        }
+        // 남은 표본의 처음과 끝으로 잰 속도다. 뗌도 표본으로 들어가므로 뗌 직전에 멈췄다면 표본이 하나만 남아 0이다.
+        const drag_velocity measured { edge.motion.velocity_at(edge.motion.samples.back().time) };
+        const float scale { positive_scale(source->scale) };
+        const zoom_point velocity { measured.x / scale, measured.y / scale };
         const zoom_edge_swipe swipe { judge_edge_swipe(source->edge_swipe_config, edge.moved, edge.blocked, velocity) };
         if (swipe.horizontal == 0 && swipe.vertical == 0)
             return std::nullopt;
@@ -2742,7 +2761,7 @@ namespace luil {
     {
         // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
         // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.
-        std::vector<input_action> actions { touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y) : end_pointer_drag(pointer_drag_x_, pointer_drag_y_) };
+        std::vector<input_action> actions { touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {}) : end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}) };
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
         last_view_tap_.reset();

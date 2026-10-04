@@ -76,9 +76,13 @@ namespace luil {
         std::function<input_action(sheet_dismiss_reason)> dismiss {};
         // 아래 시트를 끈 만큼이다 (논리 픽셀, 아래가 양수). 앱은 `drag_offset`에 더한다.
         std::function<input_action(float delta)> drag {};
-        // 끌기를 놓았고 가장 가까운 멈춤점이 이것이다. 앱은 `detent`에 넣고 `drag_offset`을 0으로 되돌린다.
-        // 닫는 쪽이 가까우면 이것 대신 `dismiss(drag)`가 나간다.
+        // 끌기를 놓았고 멈출 자리가 이것이다 (`settle_sheet`). 앱은 `detent`에 넣고 `drag_offset`을 0으로 되돌린다.
+        // 닫는 쪽으로 정해지면 이것 대신 `dismiss(drag)`가 나간다.
         std::function<input_action(sheet_detent)> settle {};
+        // 튕김으로 보는 속도다 (초당 논리 픽셀). 놓는 순간 이보다 빠르면 가장 가까운 자리 대신 그 방향의 다음 자리로
+        // 간다 — 아래로 튕기면 지금 높이보다 낮은 첫 자리(없으면 닫힘), 위로 튕기면 높은 첫 자리(없으면 전체)다.
+        // 0 이하면 속도를 보지 않는다.
+        float fling_velocity { 300.0f };
         // modal 시트가 뜨는 순간 초점이 설 자리와 닫힌 뒤 돌아갈 바깥 자리다 (`modal_host_config`와 같다).
         ui_element_id focus_entry {};
         ui_element_id focus_return {};
@@ -101,9 +105,10 @@ namespace luil {
         [[nodiscard]] bool operator==(const sheet_settle&) const noexcept = default;
     };
 
-    // 놓은 자리에서 가장 가까운 멈춤점이다 — 닫힘(0)·반·전체 중에서 지금 보이는 높이와 가장 가까운 것이다.
-    // 속도는 보지 않는다.
-    [[nodiscard]] sheet_settle settle_sheet(const sheet_host_config& config, float height) noexcept;
+    // 놓은 자리와 속도로 멈출 자리를 정한다. `velocity`는 놓은 순간의 속도다 (초당 논리 픽셀, 아래가 양수).
+    //  - `fling_velocity` 이상이면 지금 보이는 높이에서 그 방향의 다음 자리다 (닫힘(0)·반·전체).
+    //  - 아니면 지금 보이는 높이와 가장 가까운 자리다.
+    [[nodiscard]] sheet_settle settle_sheet(const sheet_host_config& config, float height, float velocity = 0.0f) noexcept;
 
     // 시트 표면의 자리다 (`slot` 안, 물리 픽셀). `scale`은 물리 / 논리 배율이다.
     [[nodiscard]] rect_f sheet_surface_bounds(const sheet_host_config& config, const rect_f& slot, float scale) noexcept;

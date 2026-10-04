@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -193,6 +194,117 @@ TEST_CASE("Letting go settles on the nearest stop or closes", "[ui][sheet]")
     REQUIRE(settle_at(luil::sheet_detent::full, 300.0f) == luil::sheet_settle { luil::sheet_detent::half, false });
     // 닫힘과 반 사이 한가운데는 닫지 않는다.
     REQUIRE(settle_at(luil::sheet_detent::half, 200.0f).dismiss == false);
+}
+
+TEST_CASE("A fling moves one stop in its direction", "[ui][sheet]")
+{
+    auto config { sheet_config() };
+    const auto settle_at = [&config](const luil::sheet_detent detent, const float offset, const float velocity) {
+        config.detent = detent;
+        config.drag_offset = offset;
+        return luil::settle_sheet(config, 800.0f, velocity);
+    };
+    // 기준(300)보다 빠르면 지금 높이에서 그 방향의 다음 자리다. 끈 양이 tree에 실리지 않아 멈춤점 높이 그대로여도 한 칸 간다.
+    REQUIRE(settle_at(luil::sheet_detent::full, 0.0f, 500.0f) == luil::sheet_settle { luil::sheet_detent::half, false });
+    REQUIRE(settle_at(luil::sheet_detent::half, 0.0f, 500.0f).dismiss);
+    REQUIRE(settle_at(luil::sheet_detent::half, 0.0f, -500.0f) == luil::sheet_settle { luil::sheet_detent::full, false });
+    REQUIRE(settle_at(luil::sheet_detent::full, 0.0f, -500.0f) == luil::sheet_settle { luil::sheet_detent::full, false });
+    // 반보다 위로 끌어 놓고 아래로 튕기면 반이고, 반보다 아래에서 위로 튕기면 반이다.
+    REQUIRE(settle_at(luil::sheet_detent::half, -60.0f, 500.0f) == luil::sheet_settle { luil::sheet_detent::half, false });
+    REQUIRE(settle_at(luil::sheet_detent::half, 60.0f, -500.0f) == luil::sheet_settle { luil::sheet_detent::half, false });
+    // 기준보다 느리면 가장 가까운 자리다. 반에서 조금 내린 시트는 반으로 돌아온다.
+    REQUIRE(settle_at(luil::sheet_detent::half, 100.0f, 200.0f) == luil::sheet_settle { luil::sheet_detent::half, false });
+    // 기준이 0이면 속도를 보지 않는다. 값이 아닌 속도도 보지 않는다.
+    config.fling_velocity = 0.0f;
+    REQUIRE(settle_at(luil::sheet_detent::half, 0.0f, 5000.0f) == luil::sheet_settle { luil::sheet_detent::half, false });
+    config.fling_velocity = 300.0f;
+    REQUIRE(settle_at(luil::sheet_detent::half, 0.0f, std::numeric_limits<float>::quiet_NaN()) == luil::sheet_settle { luil::sheet_detent::half, false });
+}
+
+TEST_CASE("Flinging the handle or the sheet body steps the sheet", "[ui][sheet]")
+{
+    const auto config { sheet_config() };
+    // 손잡이를 아래로 빠르게 튕기면 반 높이 시트가 닫힌다 (앱이 아직 tree를 다시 짓지 않았어도).
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 410.0f + 25.0f * static_cast<float>(step), 10 * step)));
+        const auto events { events_in(controller.process(touch_release(200.0f, 510.0f, 50))) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].dismiss == luil::sheet_dismiss_reason::drag);
+    }
+    // 목록 없는 시트 몸을 위로 튕기면 전체 높이다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 600.0f, 0)));
+        for (int step { 1 }; step <= 5; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 600.0f - 20.0f * static_cast<float>(step), 10 * step)));
+        const auto events { events_in(controller.process(touch_release(200.0f, 500.0f, 60))) };
+        REQUIRE(events.back().settle == luil::sheet_detent::full);
+    }
+    // 마우스로 손잡이를 위로 튕겨도 같다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 200.0f, 410.0f, luil::pointer_button::left, at(0) }));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(luil::pointer_moved_event { 200.0f, 410.0f - 20.0f * static_cast<float>(step), at(10 * step) }));
+        const auto events { events_in(controller.process(luil::pointer_released_event { 200.0f, 330.0f, luil::pointer_button::left, at(50) })) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle == luil::sheet_detent::full);
+    }
+}
+
+TEST_CASE("A sheet does not fling on a pause, a jitter or a far away release", "[ui][sheet]")
+{
+    const auto config { sheet_config() };
+    // 빠르게 끌다 멈추고 200ms 뒤에 놓으면 튕김이 아니다. 가장 가까운 자리(반)다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 410.0f + 25.0f * static_cast<float>(step), 10 * step)));
+        const auto events { events_in(controller.process(touch_release(200.0f, 510.0f, 240))) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle == luil::sheet_detent::half);
+    }
+    // 손잡이를 눌렀다 떼는 동안 손가락이 조금 흔들린 것은 튕김이 아니다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        static_cast<void>(controller.process(touch_move(200.0f, 413.0f, 16)));
+        static_cast<void>(controller.process(touch_move(200.0f, 410.0f, 32)));
+        const auto events { events_in(controller.process(touch_release(200.0f, 410.0f, 40))) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle == luil::sheet_detent::half);
+    }
+    // 마우스가 capture를 잃으면 화면 밖 자리의 합성 뗌이 온다. 그 자리는 속도에 넣지 않는다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 200.0f, 410.0f, luil::pointer_button::left, at(0) }));
+        static_cast<void>(controller.process(luil::pointer_moved_event { 200.0f, 405.0f, at(40) }));
+        static_cast<void>(controller.process(luil::pointer_moved_event { 200.0f, 400.0f, at(80) }));
+        const auto events { events_in(controller.process(luil::pointer_released_event { -32000.0f, -32000.0f, luil::pointer_button::left, at(90) })) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle == luil::sheet_detent::half);
+    }
+    // 시스템이 접촉을 거두면 속도는 0이다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 410.0f + 25.0f * static_cast<float>(step), 10 * step)));
+        const auto events { events_in(controller.process(luil::pointer_cancelled_event { luil::pointer_device::touch, 1, {}, at(50) })) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle == luil::sheet_detent::half);
+    }
 }
 
 TEST_CASE("Dragging the handle down past half closes the sheet", "[ui][sheet]")

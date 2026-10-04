@@ -145,9 +145,9 @@ namespace luil {
         };
 
         // 놓은 자리에서 낼 메시지다. 닫는 쪽이 가까우면 닫힘, 아니면 가장 가까운 멈춤점이다.
-        [[nodiscard]] input_action release_action(const sheet_host_config& config, const float height)
+        [[nodiscard]] input_action release_action(const sheet_host_config& config, const float height, const float velocity)
         {
-            const sheet_settle settle { settle_sheet(config, height) };
+            const sheet_settle settle { settle_sheet(config, height, velocity) };
             if (settle.dismiss && config.dismiss)
                 return config.dismiss(sheet_dismiss_reason::drag);
             if (config.settle)
@@ -185,11 +185,20 @@ namespace luil {
         return std::clamp(base - finite_or(config.drag_offset, 0.0f), 0.0f, full);
     }
 
-    sheet_settle settle_sheet(const sheet_host_config& config, const float height) noexcept
+    sheet_settle settle_sheet(const sheet_host_config& config, const float height, const float velocity) noexcept
     {
         const float visible { sheet_visible_height(config, height) };
         const float half { sheet_detent_height(config, sheet_detent::half, height) };
         const float full { sheet_detent_height(config, sheet_detent::full, height) };
+        // 튕겼으면 지금 높이에서 그 방향의 다음 자리다. 높이가 아니라 방향으로 정하므로, 끈 양이 아직 tree에 실리지
+        // 않아 멈춤점 높이 그대로 보여도 한 칸은 옮긴다.
+        const float fling { finite_or(config.fling_velocity, 0.0f) };
+        if (fling > 0.0f && std::isfinite(velocity) && std::abs(velocity) >= fling)
+        {
+            if (velocity > 0.0f)
+                return visible > half ? sheet_settle { sheet_detent::half, false } : sheet_settle { sheet_detent::half, true };
+            return visible < half ? sheet_settle { sheet_detent::half, false } : sheet_settle { sheet_detent::full, false };
+        }
         // 닫힘·반·전체 중 가장 가까운 자리다. 같은 거리면 닫지 않는 쪽, 그다음 반을 고른다.
         const float to_closed { visible };
         const float to_half { std::abs(visible - half) };
@@ -275,7 +284,7 @@ namespace luil {
             return;
         }
         const float height { context.slot.height / scale };
-        auto release = [config = config_, height] { return release_action(config, height); };
+        auto release = [config = config_, height](const float velocity) { return release_action(config, height, velocity); };
         pointer_drag_target handle {};
         handle.on_move = [drag = config_.drag, scale](const ui_action_context& previous, const ui_action_context& current) -> std::vector<input_action> {
             const float delta { (current.y - previous.y) / scale };
@@ -283,7 +292,7 @@ namespace luil {
                 return {};
             return { drag(delta) };
         };
-        handle.on_release = [release](const ui_action_context&) { return as_list(release()); };
+        handle.on_release = [release, scale](const ui_action_context&, const drag_velocity velocity) { return as_list(release(velocity.y / scale)); };
         // 손잡이는 손가락을 따라 내려간다. 누른 자리가 곧 scrim에 덮여도 끌기가 이어진다.
         handle.follows_pointer = true;
         handle_->set_pointer_drag_target(std::move(handle));
