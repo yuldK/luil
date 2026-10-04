@@ -39,7 +39,7 @@ namespace mobile_demo {
             page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 길게 눌러 메뉴", luil::codicons::icon_menu },
             page_entry { page_zoom, u8"확대 보기", u8"두 손가락 확대와 이동", luil::codicons::icon_zoom_in },
             page_entry { page_theme, u8"테마", u8"밝기, 키 컬러, 시스템 색", luil::codicons::icon_symbol_color },
-            page_entry { page_device, u8"기기", u8"화면 방향, 시스템 막대, 볼륨 키", luil::codicons::icon_device_mobile },
+            page_entry { page_device, u8"기기", u8"화면 방향, 시스템 막대, 볼륨 키, 햅틱", luil::codicons::icon_device_mobile },
         };
 
         [[nodiscard]] std::u8string page_title(const std::u8string_view page)

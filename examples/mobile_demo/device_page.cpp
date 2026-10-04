@@ -2,7 +2,9 @@
 
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/ui_platform.h"
+#include "luil/ui/wrap_element.h"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +17,21 @@ namespace mobile_demo {
             luil::screen_orientation value {};
             std::u8string_view key {};
             std::u8string_view label {};
+        };
+
+        struct haptic_choice
+        {
+            luil::haptic_feedback feedback {};
+            std::u8string_view key {};
+            std::u8string_view label {};
+        };
+
+        constexpr std::array<haptic_choice, 5> haptic_choices {
+            haptic_choice { luil::haptic_feedback::long_press, u8"long-press", u8"길게 누름" },
+            haptic_choice { luil::haptic_feedback::drag_start, u8"drag-start", u8"끌기 시작" },
+            haptic_choice { luil::haptic_feedback::tick, u8"tick", u8"눈금" },
+            haptic_choice { luil::haptic_feedback::confirm, u8"confirm", u8"확인" },
+            haptic_choice { luil::haptic_feedback::reject, u8"reject", u8"거절" },
         };
 
         constexpr std::array<orientation_choice, 4> orientation_choices {
@@ -141,6 +158,33 @@ namespace mobile_demo {
             column.add(std::make_unique<luil::check_element>(std::move(volume)), std::max(volume_height, touch_height), choice_width);
             column.body(u8"volume-count", u8"받은 키: 올림 " + to_u8(volume_up_count_) + u8" · 내림 " + to_u8(volume_down_count_) + u8" · 반복 " + to_u8(volume_repeat_count_));
             column.note(u8"volume-note", u8"끄면 시스템이 소리 크기를 바꾼다.");
+        }
+
+        column.gap(20.0f);
+        column.heading(u8"haptic-heading", u8"햅틱");
+        if (capabilities.haptics == false)
+            column.note(u8"haptic-none", u8"이 플랫폼에는 햅틱이 없다.");
+        else
+        {
+            column.note(u8"haptic-note-1", u8"메뉴·팝업 페이지의 카드를 길게 누르면 울린다.");
+            column.note(u8"haptic-note-2", u8"단추는 액션으로 햅틱을 직접 낸다.");
+            column.gap(8.0f);
+            // 단추의 액션이 햅틱 요청을 그대로 돌려준다. 앱 상태가 아니라 logic을 거치지 않는다.
+            luil::wrap_config grid_config {};
+            grid_config.item_width = 104.0f;
+            grid_config.item_height = touch_height;
+            grid_config.spacing = 8.0f;
+            grid_config.line_spacing = 8.0f;
+            auto grid { std::make_unique<luil::wrap_element>(luil::ui_element_id { kind_layout, u8"haptics" }, grid_config) };
+            for (const haptic_choice& choice : haptic_choices)
+            {
+                const luil::ui_element_id id { kind_layout, u8"haptic-" + std::u8string { choice.key } };
+                auto button { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .text = std::u8string { choice.label } }) };
+                button->set_action(luil::ui_trigger::left_click,
+                    [feedback = choice.feedback](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::haptic_request { feedback } } }; });
+                grid->add(std::move(button));
+            }
+            column.add(std::move(grid), luil::wrap_height_for(grid_config, width - 2.0f * page_padding, haptic_choices.size()));
         }
         return column.finish();
     }

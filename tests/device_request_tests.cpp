@@ -37,6 +37,7 @@ TEST_CASE("A platform does no device requests unless its host says it can", "[ui
     REQUIRE(luil::current_ui_platform().capabilities.screen_orientation == false);
     REQUIRE(luil::current_ui_platform().capabilities.system_bars == false);
     REQUIRE(luil::current_ui_platform().capabilities.volume_keys == false);
+    REQUIRE(luil::current_ui_platform().capabilities.haptics == false);
 
     const luil::ui_platform mobile {
         .form_factor = luil::ui_form_factor::mobile,
@@ -93,6 +94,27 @@ TEST_CASE("Locking to the current orientation fixes the way a landscape tablet i
     REQUIRE(activity_orientation(current, rotation_90, false) == luil::android::activity_orientation_reverse_portrait);
     REQUIRE(activity_orientation(current, rotation_180, true) == luil::android::activity_orientation_reverse_landscape);
     REQUIRE(activity_orientation(current, rotation_270, false) == luil::android::activity_orientation_portrait);
+}
+
+TEST_CASE("Haptic meanings use the newest constant the device knows", "[android][device][haptic]")
+{
+    using luil::haptic_feedback;
+    using luil::android::haptic_feedback_constant;
+    // 길게 누르기는 처음부터 있던 상수다.
+    REQUIRE(haptic_feedback_constant(haptic_feedback::long_press, 26) == luil::android::haptic_constant_long_press);
+    REQUIRE(haptic_feedback_constant(haptic_feedback::long_press, 36) == luil::android::haptic_constant_long_press);
+    // 끌기 시작은 34의 DRAG_START, 30의 GESTURE_START, 그 아래 LONG_PRESS다.
+    REQUIRE(haptic_feedback_constant(haptic_feedback::drag_start, 36) == luil::android::haptic_constant_drag_start);
+    REQUIRE(haptic_feedback_constant(haptic_feedback::drag_start, 33) == luil::android::haptic_constant_gesture_start);
+    REQUIRE(haptic_feedback_constant(haptic_feedback::drag_start, 29) == luil::android::haptic_constant_long_press);
+    // 눈금은 34의 SEGMENT_TICK, 그 아래 CLOCK_TICK이다.
+    REQUIRE(haptic_feedback_constant(haptic_feedback::tick, 34) == luil::android::haptic_constant_segment_tick);
+    REQUIRE(haptic_feedback_constant(haptic_feedback::tick, 33) == luil::android::haptic_constant_clock_tick);
+    // 확인·거절은 30부터다.
+    REQUIRE(haptic_feedback_constant(haptic_feedback::confirm, 30) == luil::android::haptic_constant_confirm);
+    REQUIRE(haptic_feedback_constant(haptic_feedback::confirm, 29) == luil::android::haptic_constant_virtual_key);
+    REQUIRE(haptic_feedback_constant(haptic_feedback::reject, 30) == luil::android::haptic_constant_reject);
+    REQUIRE(haptic_feedback_constant(haptic_feedback::reject, 29) == luil::android::haptic_constant_long_press);
 }
 
 TEST_CASE("An unknown rotation falls back to the system's lock on the current rotation", "[android][device][orientation]")

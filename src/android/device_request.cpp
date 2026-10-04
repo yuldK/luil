@@ -23,4 +23,24 @@ namespace luil::android {
             return rotation <= 1 ? activity_orientation_landscape : activity_orientation_reverse_landscape;
         return rotation == 0 || rotation == 3 ? activity_orientation_portrait : activity_orientation_reverse_portrait;
     }
+
+    int haptic_feedback_constant(const haptic_feedback feedback, const int api_level) noexcept
+    {
+        switch (feedback)
+        {
+        case haptic_feedback::long_press:
+            return haptic_constant_long_press;
+        case haptic_feedback::drag_start:
+            if (api_level >= 34)
+                return haptic_constant_drag_start;
+            return api_level >= 30 ? haptic_constant_gesture_start : haptic_constant_long_press;
+        case haptic_feedback::tick:
+            return api_level >= 34 ? haptic_constant_segment_tick : haptic_constant_clock_tick;
+        case haptic_feedback::confirm:
+            return api_level >= 30 ? haptic_constant_confirm : haptic_constant_virtual_key;
+        case haptic_feedback::reject:
+            return api_level >= 30 ? haptic_constant_reject : haptic_constant_long_press;
+        }
+        return haptic_constant_long_press;
+    }
 } // namespace luil::android

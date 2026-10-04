@@ -1146,3 +1146,15 @@ adb의 탭 주입으로 기기 페이지의 방향을 바꾸며 logcat의 `reque
 | 끔 | 내림 한 번 | 없음 | 6 → 5, 시스템 볼륨 창이 뜨고 `adjustSuggestedStreamVolume(ADJUST_LOWER)` 기록 |
 
 끈 상태에서 올림 한 번으로 소리를 6으로 되돌렸다. 무음 모드는 내내 그대로였다.
+
+### 햅틱
+
+검증 기기는 시스템의 터치 피드백이 꺼져 있었다 (`settings get system haptic_feedback_enabled`가 0). 설정은 바꾸지 않고
+호출 경로를 logcat의 `haptic feedback <상수> performed <답>` 줄과 `dumpsys vibrator_manager`의 최근 진동 기록으로
+확인했다. 진동의 느낌은 사람 손으로 확인할 일이다.
+
+- 메뉴·팝업 페이지의 카드를 길게 누르면(adb `input swipe`로 같은 자리 1초) 메뉴가 열리며 상수 0(`LONG_PRESS`)이 한 번
+  나가고, 시스템 기록에 `performHapticFeedback(constant=0)`이 `ignored_for_settings`로 남는다 — 사용자가 끈 설정을 따른다.
+  짧은 탭에는 아무것도 없다.
+- 기기 페이지의 단추 다섯은 액션이 돌려준 `haptic_request`로 상수 0·25·26·16·17(API 34 이상의 `LONG_PRESS`, `DRAG_START`,
+  `SEGMENT_TICK`, `CONFIRM`, `REJECT`)을 낸다.

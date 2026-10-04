@@ -383,6 +383,131 @@ TEST_CASE("A long touch press opens the menu and a short one clicks", "[ui][inte
     REQUIRE(names_of(controller.process(touch_release(60.0f, 120.0f, 4000))) == std::vector<std::u8string> { u8"click" });
 }
 
+namespace {
+    [[nodiscard]] std::size_t haptics_in(const std::vector<luil::input_action>& actions)
+    {
+        std::size_t count { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const haptic { std::get_if<luil::haptic_request>(&action) }; haptic != nullptr)
+            {
+                REQUIRE(haptic->feedback == luil::haptic_feedback::long_press);
+                ++count;
+            }
+        return count;
+    }
+
+    [[nodiscard]] luil::interaction_config haptic_config()
+    {
+        luil::interaction_config config {};
+        config.touch.long_press_haptic = true;
+        return config;
+    }
+} // namespace
+
+TEST_CASE("A long press that opens the menu asks for one haptic", "[ui][interaction][touch][haptic]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller { nullptr, haptic_config() };
+    controller.set_tree(card_tree(&scrolled));
+
+    // 누르고 있는 동안 메뉴가 열리는 순간 햅틱이 메뉴보다 먼저 한 번 나간다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    const auto opened { controller.advance(at(600)) };
+    REQUIRE(haptics_in(opened) == 1u);
+    REQUIRE(std::holds_alternative<luil::haptic_request>(opened.front()));
+    REQUIRE(names_of(opened) == std::vector<std::u8string> { u8"menu" });
+    // 그 뒤의 이동·뗌은 다시 울리지 않는다.
+    REQUIRE(haptics_in(controller.process(touch_move(66.0f, 60.0f, 700))) == 0u);
+    REQUIRE(haptics_in(controller.process(touch_release(66.0f, 60.0f, 900))) == 0u);
+
+    // pump가 그 시각에 깨기 전에 뗌이 먼저 와도 한 번이다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 1000, 2)));
+    const auto released { controller.process(touch_release(60.0f, 120.0f, 1700, 2)) };
+    REQUIRE(haptics_in(released) == 1u);
+    REQUIRE(names_of(released) == std::vector<std::u8string> { u8"menu" });
+
+    // 짧은 탭은 울리지 않는다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 3000, 3)));
+    REQUIRE(haptics_in(controller.process(touch_release(60.0f, 120.0f, 3050, 3))) == 0u);
+}
+
+TEST_CASE("A held drag handle asks for the haptic only when its menu opens", "[ui][interaction][touch][haptic]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller { nullptr, haptic_config() };
+    controller.set_tree(card_tree(&scrolled, { .handle = true }));
+
+    // 움직이지 않고 오래 누른 손잡이의 뗌이 메뉴다 (pump보다 뗌이 먼저 온 자리).
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    REQUIRE(haptics_in(controller.process(touch_release(62.0f, 121.0f, 700))) == 1u);
+    // 실제로 옮긴 손잡이는 메뉴도 햅틱도 없다.
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 1000)));
+    REQUIRE(haptics_in(controller.process(touch_move(60.0f, 90.0f, 1040))) == 0u);
+    REQUIRE(haptics_in(controller.process(touch_release(60.0f, 90.0f, 2000))) == 0u);
+}
+
+TEST_CASE("No haptic without a menu to open", "[ui][interaction][touch][haptic]")
+{
+    // 우클릭 액션이 없는 대상은 길게 눌러도 탭이고 울리지 않는다.
+    {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        auto button { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"one" }) };
+        button->arrange({ { 10.0f, 10.0f, 80.0f, 40.0f }, 1.0f });
+        button->set_action(luil::ui_trigger::left_click, message_action(u8"click"));
+        // 우클릭 액션은 있지만 아무것도 내지 않는 대상이다. 열리는 것이 없으니 울리지 않는다.
+        auto quiet { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"quiet" }) };
+        quiet->arrange({ { 10.0f, 100.0f, 80.0f, 40.0f }, 1.0f });
+        quiet->set_action(luil::ui_trigger::right_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; });
+        root->add(std::move(button));
+        root->add(std::move(quiet));
+        luil::interaction_controller controller { nullptr, haptic_config() };
+        controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+
+        static_cast<void>(controller.process(touch_press(30.0f, 20.0f, 0)));
+        REQUIRE(haptics_in(controller.advance(at(700))) == 0u);
+        const auto tap { controller.process(touch_release(30.0f, 20.0f, 1000)) };
+        REQUIRE(haptics_in(tap) == 0u);
+        REQUIRE(names_of(tap) == std::vector<std::u8string> { u8"click" });
+
+        static_cast<void>(controller.process(touch_press(30.0f, 120.0f, 2000, 2)));
+        REQUIRE(haptics_in(controller.advance(at(2700))) == 0u);
+        REQUIRE(haptics_in(controller.process(touch_release(30.0f, 120.0f, 2800, 2))) == 0u);
+    }
+
+    // 허용치를 넘어 자격을 잃은 접촉은 돌아와도 울리지 않는다.
+    {
+        std::vector<float> scrolled {};
+        luil::interaction_controller controller { nullptr, haptic_config() };
+        controller.set_tree(card_tree(&scrolled));
+        static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+        static_cast<void>(controller.process(touch_move(100.0f, 120.0f, 500)));
+        static_cast<void>(controller.process(touch_move(60.0f, 120.0f, 550)));
+        REQUIRE(haptics_in(controller.advance(at(900))) == 0u);
+        REQUIRE(haptics_in(controller.process(touch_release(60.0f, 120.0f, 950))) == 0u);
+    }
+
+    // 설정이 꺼져 있으면(기본값) 메뉴는 열리고 햅틱은 없다.
+    {
+        std::vector<float> scrolled {};
+        luil::interaction_controller controller {};
+        controller.set_tree(card_tree(&scrolled));
+        static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+        const auto opened { controller.advance(at(600)) };
+        REQUIRE(names_of(opened) == std::vector<std::u8string> { u8"menu" });
+        REQUIRE(haptics_in(opened) == 0u);
+    }
+
+    // 마우스의 우클릭은 몸짓이 아니라 울리지 않는다.
+    {
+        std::vector<float> scrolled {};
+        luil::interaction_controller controller { nullptr, haptic_config() };
+        controller.set_tree(card_tree(&scrolled));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 120.0f, luil::pointer_button::right, at(0) }));
+        REQUIRE(haptics_in(controller.process(luil::pointer_released_event { 60.0f, 120.0f, luil::pointer_button::right, at(900) })) == 0u);
+    }
+}
+
 TEST_CASE("A long press without a right click action is a tap", "[ui][interaction][touch]")
 {
     auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };

@@ -22,6 +22,9 @@ namespace luil {
         bool system_bars { false };
         // 볼륨 키를 앱이 받을 수 있다 (`device_request::volume_keys`).
         bool volume_keys { false };
+        // 햅틱을 낼 수 있다 (`haptic_request`, `app_host::perform_haptic`). 기기에 진동 장치가 없거나 사용자가
+        // 껐으면 요청해도 조용하다.
+        bool haptics { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

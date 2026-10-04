@@ -174,6 +174,11 @@ namespace luil {
         bool pinch_enabled { true };
         // 이전·현재 간격이 모두 이 거리 이상일 때만 비율을 만든다.
         float minimum_pinch_distance { 24.0f };
+        // 길게 누르기로 우클릭 액션이 실제로 나갈 때 햅틱(`haptic_feedback::long_press`)을 한 번 낸다.
+        //  - 대상에 우클릭 액션이 없거나 그 액션이 아무것도 내지 않으면 내지 않는다.
+        //  - 기본은 끔이다. 플랫폼 host가 자기 관례대로 켠다 — Android의 `application_config::touch`는 켜고,
+        //    햅틱이 없는 Windows는 끈 채다.
+        bool long_press_haptic { false };
 
         [[nodiscard]] bool operator==(const touch_gesture_config&) const noexcept = default;
     };
@@ -477,6 +482,10 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> process_cancel(const pointer_cancelled_event& event);
         // 탭으로 확정된 뗌이다 (클릭·더블 탭·caret·길게 누르기).
         [[nodiscard]] std::vector<input_action> finish_touch_tap(const touch_contact& contact, const pointer_released_event& event);
+        // 길게 누르기의 우클릭을 실행한다. 액션이 나가면 그 접촉의 설정대로 햅틱을 앞에 붙인다.
+        //  - 누르고 있는 동안(`advance`)과 pump보다 뗌이 먼저 온 두 자리(탭, 손잡이)가 함께 쓴다 — 셋 중 하나에서
+        //    햅틱을 잊으면 같은 몸짓이 입력 큐의 사정에 따라 울리기도 하고 안 울리기도 한다.
+        [[nodiscard]] std::vector<input_action> run_long_press(const touch_contact& contact, const ui_element& target, float x, float y);
         [[nodiscard]] std::optional<pan_target> resolve_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
         // 진행 중인 터치 접촉을 액션 없이 거둔다.
         void cancel_touch() noexcept;
@@ -711,10 +720,11 @@ namespace luil {
     // tree는 처리 직전에 최신 것으로 갱신하고, interaction snapshot은 바뀔 때만 게시한다.
     // 앱 메시지는 app inbox로 가고,
     // `ui_command`·`app_ui_command`·클립보드 요청은 UI thread 전용이라 callback으로 넘긴다.
+    // 햅틱은 `execute_haptic`으로 곧장 넘긴다 (플랫폼의 출력이 thread를 가린다).
     // `touch_slot`이 있으면 실행 중 바뀐 터치 설정을 다음 이벤트 처리 전에 적용한다.
     void run_ui_input_pump(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
         messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* policy = nullptr, interaction_config config = {},
         const std::function<void(app_ui_command)>& execute_app_ui_command = {}, const std::function<void(clipboard_request)>& execute_clipboard = {},
-        messaging::latest_slot<touch_gesture_config>* touch_slot = nullptr);
+        messaging::latest_slot<touch_gesture_config>* touch_slot = nullptr, const std::function<void(haptic_feedback)>& execute_haptic = {});
 } // namespace luil

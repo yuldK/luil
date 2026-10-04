@@ -25,4 +25,21 @@ namespace luil::android {
     //    기기의 자연 방향(휴대폰은 세로, 태블릿은 흔히 가로)에 따라 다른 방향이라 회전만으로는 고를 수 없다.
     //    회전을 읽지 못했으면(범위 밖) 시스템의 "지금 회전에 고정"(`LOCKED`)으로 물러선다.
     [[nodiscard]] std::optional<int> activity_orientation(screen_orientation request, int rotation, bool landscape) noexcept;
+
+    // `HapticFeedbackConstants.*`다.
+    inline constexpr int haptic_constant_long_press { 0 };
+    inline constexpr int haptic_constant_virtual_key { 1 };
+    inline constexpr int haptic_constant_clock_tick { 4 };
+    inline constexpr int haptic_constant_gesture_start { 12 };
+    inline constexpr int haptic_constant_confirm { 16 };
+    inline constexpr int haptic_constant_reject { 17 };
+    inline constexpr int haptic_constant_drag_start { 25 };
+    inline constexpr int haptic_constant_segment_tick { 26 };
+
+    // 햅틱의 뜻을 `View.performHapticFeedback`의 상수로 옮긴다. 상수는 판마다 늘었으므로 기기의 API 수준을
+    // 받아, 그 판에 없는 것은 가장 가까운 옛 상수로 물러선다.
+    //  - 끌기 시작: 34부터 `DRAG_START`, 30부터 `GESTURE_START`, 그 아래 `LONG_PRESS`
+    //  - 눈금: 34부터 `SEGMENT_TICK`, 그 아래 `CLOCK_TICK`
+    //  - 확인·거절: 30부터 `CONFIRM`·`REJECT`, 그 아래 `VIRTUAL_KEY`·`LONG_PRESS`
+    [[nodiscard]] int haptic_feedback_constant(haptic_feedback feedback, int api_level) noexcept;
 } // namespace luil::android

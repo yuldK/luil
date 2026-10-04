@@ -33,6 +33,7 @@ frame은 그 셋을 이미 다 한다.
 | `screen_orientation` | 화면 방향 요청을 옮긴다 | 거짓 | 참 |
 | `system_bars` | 시스템 막대를 숨기고 컷아웃 밑까지 그린다 | 거짓 | 참 |
 | `volume_keys` | 볼륨 올림·내림을 앱에 준다 | 거짓 | 참 |
+| `haptics` | 햅틱을 낸다 | 거짓 | 참 |
 
 하지 못하는 플랫폼도 요청을 **받는다.** 받고 아무 일도 하지 않는다. 그래서 앱은 플랫폼마다 frame을 다르게
 지을 필요가 없고, 설정 화면에 그 항목을 둘지만 플래그로 고른다 (mobile demo의 기기 페이지).
@@ -122,6 +123,40 @@ frame은 그 셋을 이미 다 한다.
   함수(`app_takes_key`)라 기기 test가 받겠다는 값마다 결과를 확인한다.
 - Windows는 하지 않는다. 능력 플래그가 거짓이고 키보드의 볼륨 키 동작은 그대로다.
 
+## 햅틱
+
+햅틱은 요청이 아니라 사건이라 frame에 싣지 않는다. 뜻(`haptic_feedback`)만 말하고 진동의 모양은 플랫폼이 고른다.
+
+| 뜻 | 쓰는 때 | Android 상수 (API 34 이상 / 30 이상 / 그 아래) |
+| --- | --- | --- |
+| `long_press` | 길게 눌러 메뉴가 열렸다 | `LONG_PRESS` |
+| `drag_start` | 끌기를 시작했다 | `DRAG_START` / `GESTURE_START` / `LONG_PRESS` |
+| `tick` | 경계·눈금에 닿았다 | `SEGMENT_TICK` / `CLOCK_TICK` / `CLOCK_TICK` |
+| `confirm` | 동작이 받아들여졌다 | `CONFIRM` / `CONFIRM` / `VIRTUAL_KEY` |
+| `reject` | 동작이 거절됐다 | `REJECT` / `REJECT` / `LONG_PRESS` |
+
+- **출력은 host가 꽂는다.** `app_host::config::haptic`은 thread 안전한 함수다. Android host는 기기의 API 수준에
+  맞는 상수를 골라 메인 thread에서 decor view의 `performHapticFeedback(상수)`를 부른다. 플래그를 주지 않아
+  사용자의 터치 피드백·진동 설정을 따른다 — 껐으면 시스템이 `ignored_for_settings`로 버린다. Windows는 출력이
+  없다.
+- **두 길로 낸다.** element 액션은 `haptic_request`를 다른 액션과 함께 돌려준다 (input thread가 출력으로 바로
+  넘기고 앱 inbox에는 넣지 않는다). logic thread나 그 밖의 thread는 `app_host::perform_haptic`을 부른다 (쪽이
+  넘어감, 끌어 놓기 완료처럼 앱 상태에서 정해지는 순간).
+- **길게 누르기는 controller가 낸다.** 길게 누르기로 우클릭 액션이 실제로 나가는 세 자리 — 누르고 있는 동안
+  (`advance`), pump보다 뗌이 먼저 온 탭과 손잡이 — 가 같은 함수(`run_long_press`)를 써서, 우클릭이 무언가를
+  냈을 때만 그 앞에 햅틱을 하나 붙인다. 대상에 우클릭 액션이 없거나, 허용치를 넘어 자격을 잃었거나, 우클릭이
+  아무것도 내지 않으면 울리지 않는다. 마우스·펜의 우클릭은 몸짓이 아니라 울리지 않는다.
+- **끄는 설정은 `touch_gesture_config::long_press_haptic`이다.** 기본값은 플랫폼마다 다르다.
+
+  | 플랫폼 | 기본 | 까닭 |
+  | --- | --- | --- |
+  | core·Windows (`interaction_config`, `window_config`) | 끔 | Windows에는 햅틱 출력이 없다. 켜도 아무 일이 없지만 controller의 액션 목록을 바꾸지 않는다 |
+  | Android (`application_config::touch`) | 켬 | 길게 눌러 메뉴가 열릴 때의 짧은 진동은 Android의 관례다. 사용자가 시스템에서 터치 피드백을 끄면 울리지 않는다 |
+
+  Android에서는 새 기능을 쓰지 않는 앱도 길게 누르기에 진동이 생긴다. 다른 기본값은 모두 "지금과 같음"인데
+  이것만 다른 이유는 진동이 없는 것이 그 플랫폼의 관례를 어기는 쪽이기 때문이다. 앱이 끄려면
+  `application_config::touch.long_press_haptic`을 거짓으로 둔다.
+
 ## 검증
 
 | 대상 | 확인 |
@@ -130,5 +165,7 @@ frame은 그 셋을 이미 다 한다.
 | 방향 값 변환 | 시스템은 되돌림, 세로·가로는 사용자 설정을 따르는 값, 휴대폰과 가로 태블릿의 네 회전, 읽지 못한 회전 (core test) |
 | frame 기본값 | `ui_frame::device`의 기본이 "시스템을 따름", 막대 보임, 컷아웃 비킴, 볼륨 키는 시스템 (core test) |
 | 키 필터 | 받겠다는 값마다 뒤로 가기·볼륨·시스템 키의 결과, 볼륨 키의 이름과 반복, 뗌 (기기 test) |
+| 길게 누르기 햅틱 | 메뉴가 열리는 세 자리에서 한 번, 짧은 탭·우클릭 없는 대상·빈 우클릭·자격 잃은 접촉·꺼진 설정·마우스에서는 없음 (controller test) |
+| 햅틱 출력 | 다른 thread의 `perform_haptic`과 input thread의 `haptic_request`가 출력에 닿고 앱 inbox에는 가지 않음, 출력이 없으면 아무 일도 없음 (host test). 뜻별 상수와 API 수준별 물러섬 (core test) |
 
 기기 확인은 [Android 이식 계획](android-port-plan.md)의 "기기 요청" 절에 적는다.

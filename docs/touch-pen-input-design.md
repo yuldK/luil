@@ -257,6 +257,7 @@ hover는 매 메시지 자리로 고르고, 웹뷰로 넘어가는 순간 luil h
 | `long_press_time` | 600ms | 길게 누르기 시간 |
 | `pinch_enabled` | true | 확대 보기의 두 접촉 핀치 활성화 |
 | `minimum_pinch_distance` | 24 논리 픽셀 | 핀치 거리 비율을 잴 최소 간격 |
+| `long_press_haptic` | false (Android 앱은 true) | 길게 누르기로 우클릭 액션이 나갈 때 햅틱 한 번 ([기기 요청](device-request-design.md#햅틱)) |
 
 끄는 것은 bool이다. 거리·시간 0을 "끔"으로 읽는 중의적 계약을 두지 않는다. 거리는
 유한한 양수, 시간은 양수이며, `pan_start_time < long_press_time`이어야 한다

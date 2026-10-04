@@ -24,7 +24,9 @@ namespace luil::android {
         // `simulate_direct3d_loss_after_frames`와 같다.
         int simulate_gpu_loss_after_frames { 0 };
         // 터치 몸짓의 시작 설정이다 (touch-pen-input-design.md).
-        touch_gesture_config touch {};
+        //  - 길게 눌러 메뉴가 열릴 때의 햅틱은 Android의 관례라 켜서 시작한다 (`long_press_haptic`). 사용자가 시스템에서
+        //    터치 피드백을 껐으면 울리지 않는다. 앱이 끄려면 이 값을 거짓으로 둔다.
+        touch_gesture_config touch { .long_press_haptic = true };
     };
 
     // 앱이 꽂는 세 조각이다. 셋 다 `run_application`이 돌아올 때까지 살아 있어야 한다.
@@ -70,6 +72,8 @@ namespace luil::android {
     //  - frame의 기기 요청(`ui_frame::device`)을 바뀐 것만 Activity에 옮긴다 — 화면 방향, 시스템 막대
     //    숨김(몰입 모드)과 컷아웃, 볼륨 키 (device-request-design.md). 몰입 중에는 막대를 안전 영역에 세지
     //    않는다. 볼륨 키는 앱이 받겠다고 했고 보이는 동안만 앱에 간다.
+    //  - 햅틱(`haptic_request`, `app_host::perform_haptic`)은 메인 thread에서 `performHapticFeedback`으로 낸다.
+    //    사용자의 터치 피드백 설정을 따른다.
     // 반환값은 0이면 정상 종료, 아니면 시작에 실패한 것이다.
     int run_application(android_app* app, const application_config& config, const application_environment& environment);
 } // namespace luil::android

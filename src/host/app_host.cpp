@@ -17,9 +17,9 @@ namespace luil {
     namespace {
         void input_thread_main(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
             messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
-            const std::function<void(ui_command)> wake_ui_command, interaction_policy* const policy, interaction_config config,
-            const std::function<void(app_ui_command)> execute_app_ui_command, const std::function<void(clipboard_request)> execute_clipboard,
-            messaging::latest_slot<touch_gesture_config>& touch_slot, std::atomic<bool>& faulted)
+            const std::function<void(ui_command)> wake_ui_command, interaction_policy* const policy, interaction_config config, const std::function<void(app_ui_command)> execute_app_ui_command,
+            const std::function<void(clipboard_request)> execute_clipboard, messaging::latest_slot<touch_gesture_config>& touch_slot, const std::function<void(haptic_feedback)> haptic,
+            std::atomic<bool>& faulted)
         {
             // policy·wake callback의 예외는 계약 밖 입력이다.
             // 스레드 진입 함수를 벗어난 예외는 곧 terminate라, 여기서 삼키고
@@ -39,7 +39,7 @@ namespace luil {
                         if (wake_ui_command != nullptr)
                             wake_ui_command(command);
                     },
-                    policy, std::move(config), execute_app_ui_command, execute_clipboard, &touch_slot);
+                    policy, std::move(config), execute_app_ui_command, execute_clipboard, &touch_slot, haptic);
             }
             catch (...)
             {
@@ -85,6 +85,8 @@ namespace luil {
         messaging::latest_slot<interaction_snapshot> interaction_slot {};
         // 실행 중 바꾼 터치 설정이다. 최신 값 하나만 의미가 있다.
         messaging::latest_slot<touch_gesture_config> touch_slot {};
+        // 플랫폼의 햅틱 출력이다. 만든 뒤로 바뀌지 않아 여러 thread가 그대로 부른다.
+        std::function<void(haptic_feedback)> haptic {};
 
         // 창 명령 큐다.
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
@@ -135,6 +137,16 @@ namespace luil {
         }
 
         assembly& parts { *assembly_ };
+        // 플랫폼 출력의 예외는 진동 하나를 잃는 것으로 끝낸다. 부른 thread(input·logic)를 멈출 일이 아니다.
+        if (configuration.haptic != nullptr)
+            parts.haptic = [output = std::move(configuration.haptic)](const haptic_feedback feedback) noexcept {
+                try
+                {
+                    output(feedback);
+                }
+                catch (...)
+                {}
+            };
         // 요청 내용은 큐로 나르고 wake는 신호만 전한다.
         // 종료 시 input join이 이 callback보다 늦게 오므로 assembly 수명은 안전하다.
         std::function<void(ui_command)> forward_ui_command {};
@@ -190,6 +202,7 @@ namespace luil {
                 std::move(execute_app_ui_command),
                 std::move(execute_clipboard),
                 std::ref(parts.touch_slot),
+                parts.haptic,
                 std::ref(parts.faulted),
             };
         }
@@ -332,6 +345,12 @@ namespace luil {
         }
         catch (...)
         {}
+    }
+
+    void app_host::perform_haptic(const haptic_feedback feedback) const noexcept
+    {
+        if (assembly_->haptic != nullptr)
+            assembly_->haptic(feedback);
     }
 
     bool app_host::set_touch_gesture_config(const touch_gesture_config& config) noexcept

@@ -1541,7 +1541,7 @@ namespace luil {
                 return {};
             if (policy_ != nullptr)
                 policy_->on_click(*target);
-            return run_trigger(*target, ui_trigger::right_click, event.x, event.y, false);
+            return run_long_press(contact, *target, event.x, event.y);
         }
         case touch_phase::view_pan:
         case touch_phase::pinching:
@@ -1598,7 +1598,16 @@ namespace luil {
         click_streak_ = 0;
         if (policy_ != nullptr)
             policy_->on_click(*target);
-        return run_trigger(*target, ui_trigger::right_click, contact.last_x, contact.last_y, false);
+        return run_long_press(contact, *target, contact.last_x, contact.last_y);
+    }
+
+    std::vector<input_action> interaction_controller::run_long_press(const touch_contact& contact, const ui_element& target, const float x, const float y)
+    {
+        std::vector<input_action> actions { run_trigger(target, ui_trigger::right_click, x, y, false) };
+        // 메뉴가 실제로 열리는 순간이다. 아무것도 내지 않은 우클릭에는 울리지 않는다.
+        if (contact.config.long_press_haptic && actions.empty() == false)
+            actions.insert(actions.begin(), input_action { haptic_request { haptic_feedback::long_press } });
+        return actions;
     }
 
     std::vector<input_action> interaction_controller::finish_touch_tap(const touch_contact& contact, const pointer_released_event& event)
@@ -1629,7 +1638,7 @@ namespace luil {
             click_streak_ = 0;
             if (policy_ != nullptr)
                 policy_->on_click(*target);
-            return run_trigger(*target, ui_trigger::right_click, event.x, event.y, false);
+            return run_long_press(contact, *target, event.x, event.y);
         }
 
         // 연속 탭은 대상·표면·장치로 잇는다. 접촉마다 바뀌는 포인터 id는 보지 않는다.
@@ -2489,7 +2498,7 @@ namespace luil {
     void run_ui_input_pump(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
         messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* const policy, interaction_config config, const std::function<void(app_ui_command)>& execute_app_ui_command,
-        const std::function<void(clipboard_request)>& execute_clipboard, messaging::latest_slot<touch_gesture_config>* const touch_slot)
+        const std::function<void(clipboard_request)>& execute_clipboard, messaging::latest_slot<touch_gesture_config>* const touch_slot, const std::function<void(haptic_feedback)>& execute_haptic)
     {
         interaction_controller controller { policy, std::move(config) };
         std::uint64_t tree_version { 0 };
@@ -2513,6 +2522,8 @@ namespace luil {
                     execute_clipboard(clipboard_request { std::move(*copy) });
                 else if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr && execute_clipboard)
                     execute_clipboard(clipboard_request { *paste });
+                else if (const auto* const haptic { std::get_if<haptic_request>(&action) }; haptic != nullptr && execute_haptic)
+                    execute_haptic(haptic->feedback);
         };
         while (true)
         {

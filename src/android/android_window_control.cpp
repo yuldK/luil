@@ -136,6 +136,27 @@ namespace luil::android {
         __android_log_print(ANDROID_LOG_INFO, "luil", "requested orientation %d (rotation %d, landscape %d)", value, static_cast<int>(rotation), landscape ? 1 : 0);
     }
 
+    void perform_haptic_feedback(JNIEnv& env, const jobject activity, const int constant)
+    {
+        const local_frame frame { env };
+        if (frame.pushed() == false)
+            return;
+        const jobject decor { call_object(env, call_object(env, activity, "getWindow", "()Landroid/view/Window;"), "getDecorView", "()Landroid/view/View;") };
+        if (decor == nullptr)
+            return;
+        const jclass view_type { env.FindClass("android/view/View") };
+        if (view_type == nullptr || failed(env))
+            return;
+        const jmethodID perform { env.GetMethodID(view_type, "performHapticFeedback", "(I)Z") };
+        if (perform == nullptr || failed(env))
+            return;
+        const jboolean performed { env.CallBooleanMethod(decor, perform, static_cast<jint>(constant)) };
+        if (failed(env))
+            return;
+        // 사용자가 터치 피드백을 껐으면 시스템이 거절한다. 울리지 않은 까닭을 logcat에서 가른다.
+        __android_log_print(ANDROID_LOG_DEBUG, "luil", "haptic feedback %d performed %d", constant, performed ? 1 : 0);
+    }
+
     void apply_system_bars(JNIEnv& env, const jobject activity, const system_bars_mode mode)
     {
         const local_frame frame { env };

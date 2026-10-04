@@ -522,10 +522,38 @@ namespace luil {
         [[nodiscard]] bool operator==(const record_request&) const noexcept = default;
     };
 
+    // 플랫폼 햅틱(짧은 진동) 하나의 뜻이다 (device-request-design.md).
+    // 진동의 모양은 플랫폼이 고른다. 사용자가 시스템에서 진동·터치 피드백을 껐으면 조용하다.
+    enum class haptic_feedback
+    {
+        // 길게 눌러 메뉴가 열렸다.
+        long_press,
+        // 끌기를 시작했다.
+        drag_start,
+        // 경계·눈금에 닿았다 (끝에 닿음, 값이 한 칸 넘어감, 쪽이 넘어감).
+        tick,
+        // 동작이 받아들여졌다.
+        confirm,
+        // 동작이 거절됐다.
+        reject,
+    };
+
+    // 햅틱을 한 번 낸다.
+    // 앱 상태가 아니고 UI thread의 일도 아니라 logic을 거치지 않는다 — 플랫폼 host가 꽂은 출력
+    // (`app_host::config::haptic`)으로 곧장 간다. 출력이 없는 플랫폼(Windows)에서는 아무 일도 없다.
+    //  - element 액션이 다른 액션과 함께 돌려줄 수 있다 (끌기 손잡이가 눈금을 넘을 때 등).
+    //  - logic thread나 그 밖의 thread에서는 `app_host::perform_haptic`을 부른다.
+    struct haptic_request
+    {
+        haptic_feedback feedback { haptic_feedback::long_press };
+
+        [[nodiscard]] bool operator==(const haptic_request&) const noexcept = default;
+    };
+
     // element 액션과 interaction controller가 돌려주는 후속 조치다.
     // 액션은 상태를 직접 바꾸지 않고 이 메시지를 반환만 한다.
     // 앱 메시지는 `app_message`에 담겨 다니고 앱이 경계에서 복원한다.
-    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request, record_request>;
+    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request, record_request, haptic_request>;
 
     // intent 하나를 액션 값으로 싸는 도우미다.
     // `input_action { app_message { intent {} } }` 3중 중첩을 대신한다.

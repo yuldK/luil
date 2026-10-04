@@ -21,4 +21,8 @@ namespace luil::android {
     //  - 시스템이 다른 창(알림 창, 다른 앱)에 다녀오며 막대를 다시 보일 수 있어, host는 초점을 되찾을 때마다
     //    다시 부른다. 같은 값을 거듭 불러도 해가 없다.
     void apply_system_bars(JNIEnv& env, jobject activity, system_bars_mode mode);
+
+    // 창의 decor view로 햅틱을 낸다 (`View.performHapticFeedback`, 상수는 `haptic_feedback_constant`).
+    // 플래그 없이 불러 사용자의 시스템 진동·터치 피드백 설정을 따른다 — 사용자가 껐으면 조용하다.
+    void perform_haptic_feedback(JNIEnv& env, jobject activity, int constant);
 } // namespace luil::android

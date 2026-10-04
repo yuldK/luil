@@ -7,6 +7,7 @@
 #include "android/android_text_input.h"
 #include "android/android_window_control.h"
 #include "android/cpu_skia_renderer.h"
+#include "android/device_request.h"
 #include "android/java_vm.h"
 #include "android/main_thread.h"
 #include "android/vulkan_device.h"
@@ -27,6 +28,7 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <game-text-input/gametextinput.h>
 
+#include <android/api-level.h>
 #include <android/configuration.h>
 #include <android/keycodes.h>
 #include <android/log.h>
@@ -425,7 +427,7 @@ namespace luil::android {
                 set_ui_platform({
                     .form_factor = ui_form_factor::mobile,
                     .window_caption = false,
-                    .capabilities = { .screen_orientation = true, .system_bars = true, .volume_keys = true },
+                    .capabilities = { .screen_orientation = true, .system_bars = true, .volume_keys = true, .haptics = true },
                 });
                 prefers_light_ = read_prefers_light(app_->activity);
                 scale_ = read_scale(app_->config);
@@ -483,6 +485,11 @@ namespace luil::android {
                 host_config.wake.clipboard = [signal] { static_cast<void>(signal()); };
                 host_config.interaction.double_click_time = double_tap_timeout;
                 host_config.interaction.touch = config_.touch;
+                // 햅틱은 View의 일이라 메인 thread로 넘긴다. 다리는 thread를 가리지 않는다.
+                host_config.haptic = [api_level = android_get_device_api_level()](const haptic_feedback feedback) {
+                    const int constant { haptic_feedback_constant(feedback, api_level) };
+                    static_cast<void>(post_to_main_thread([constant](JNIEnv& env, const jobject activity) { perform_haptic_feedback(env, activity, constant); }));
+                };
                 host_ = std::make_unique<app_host>(std::move(host_config), *environment_.driver, environment_.policy);
 
                 // IME다. 상태를 넘기고 키보드를 띄우는 일만 GameActivity에 맡긴다.

@@ -341,6 +341,10 @@ namespace luil {
         {
             wake_signals wake {};
             interaction_config interaction {};
+            // 플랫폼의 햅틱 출력이다 (device-request-design.md). 비어 있으면 햅틱이 없는 플랫폼이다.
+            // input thread(길게 누르기, element 액션)와 `perform_haptic`을 부른 아무 thread에서 불리므로
+            // 구현은 thread-safe해야 하고 오래 붙잡지 않는다 (Android는 메인 thread로 넘기기만 한다).
+            std::function<void(haptic_feedback)> haptic {};
         };
 
         app_host(config configuration, logic_driver& driver, interaction_policy* policy);
@@ -381,6 +385,11 @@ namespace luil {
         //  - 진행 중 접촉은 누를 때의 거리·시간을 그대로 쓴다. 끈 몸짓이 진행 중이면
         //    그 접촉을 취소한다 (`interaction_controller::set_touch_config`).
         bool set_touch_gesture_config(const touch_gesture_config& config) noexcept;
+        // 햅틱을 한 번 낸다. **어느 thread에서 불러도 된다.** logic thread가 앱 상태에서 정한 순간(쪽이
+        // 넘어감, 끌어 놓기 완료 등)에 쓴다. element 액션은 `haptic_request`를 돌려주면 같은 출력으로 간다.
+        //  - 플랫폼에 출력이 없으면(`config::haptic`이 비었다) 아무 일도 없다. 사용자가 시스템에서 진동을
+        //    껐으면 플랫폼이 조용히 둔다.
+        void perform_haptic(haptic_feedback feedback) const noexcept;
         // 아래 셋도 UI thread 전용이다 — 마지막으로 본 판을 멤버에 들고 있어서다.
         // 마지막으로 게시된 frame이다.
         // 새 것이 없으면 이전 값이다.

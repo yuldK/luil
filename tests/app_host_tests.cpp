@@ -8,6 +8,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -526,6 +527,52 @@ TEST_CASE("Cancel frees a stalled driver within the shutdown budget", "[win32][h
     REQUIRE(driver.cancelled.load());
     REQUIRE(driver.closed.load());
     REQUIRE(elapsed < 2500ms);
+}
+
+namespace {
+    // 키 하나에 햅틱을 돌려주는 정책이다. element 액션이 햅틱을 나르는 길을 대신한다.
+    class haptic_key_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree*, const luil::key_pressed_event&, const luil::interaction_snapshot&) override
+        {
+            return { luil::input_action { luil::haptic_request { luil::haptic_feedback::confirm } } };
+        }
+    };
+} // namespace
+
+TEST_CASE("Haptics reach the platform output from any thread and from input actions", "[win32][host][haptic]")
+{
+    counting_driver driver {};
+    haptic_key_policy policy {};
+    std::mutex mutex {};
+    std::vector<luil::haptic_feedback> played {};
+    luil::win32::app_host::config config {};
+    config.haptic = [&](const luil::haptic_feedback feedback) {
+        const std::lock_guard lock { mutex };
+        played.push_back(feedback);
+    };
+    const auto played_count = [&] {
+        const std::lock_guard lock { mutex };
+        return played.size();
+    };
+    {
+        luil::win32::app_host host { std::move(config), driver, &policy };
+        // logic이 아닌 아무 thread에서나 부른다.
+        std::thread stranger { [&host] { host.perform_haptic(luil::haptic_feedback::tick); } };
+        stranger.join();
+        REQUIRE(played_count() == 1u);
+        // input thread가 정책의 햅틱 액션을 앱 inbox가 아니라 출력으로 넘긴다.
+        host.post_raw_input(luil::key_pressed_event { luil::key_code::f5 });
+        REQUIRE(wait_until([&] { return played_count() >= 2u; }));
+    }
+    REQUIRE(played == std::vector<luil::haptic_feedback> { luil::haptic_feedback::tick, luil::haptic_feedback::confirm });
+    REQUIRE(driver.pings.load() == 0);
+
+    // 출력이 없는 플랫폼에서는 아무 일도 없다.
+    counting_driver quiet {};
+    luil::win32::app_host host { luil::win32::app_host::config {}, quiet, nullptr };
+    host.perform_haptic(luil::haptic_feedback::reject);
 }
 
 TEST_CASE("An app message posted from a foreign thread reaches the driver", "[win32][host]")
