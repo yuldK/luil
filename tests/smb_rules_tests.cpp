@@ -117,3 +117,26 @@ TEST_CASE("A build without SMB answers that it is not supported", "[net][smb]")
     REQUIRE(luil::net::smb_client::create(luil::net::smb_client_config {}, error) == nullptr);
     REQUIRE(error.empty() == false);
 }
+
+TEST_CASE("Only a broken transport or a lost session counts as a dropped connection", "[net][smb]")
+{
+    using luil::net::smb_connection_lost;
+    // 전송이 끊겼다 — 다시 쓴 연결이면 새 연결로 한 번 다시 한다.
+    CHECK(smb_connection_lost(-ECONNRESET, 0));
+    CHECK(smb_connection_lost(-EPIPE, 0));
+    CHECK(smb_connection_lost(-ENOTCONN, 0));
+    CHECK(smb_connection_lost(-ECONNABORTED, 0));
+    CHECK(smb_connection_lost(-ENETUNREACH, 0));
+    CHECK(smb_connection_lost(-ETIMEDOUT, 0));
+    // 서버가 세션·트리를 잃었다.
+    CHECK(smb_connection_lost(-EIO, luil::net::smb_status_user_session_deleted));
+    CHECK(smb_connection_lost(-EIO, luil::net::smb_status_network_name_deleted));
+    CHECK(smb_connection_lost(-EIO, luil::net::smb_status_network_session_expired));
+    // 서버가 요청에 답한 실패는 끊김이 아니다. 로그온 실패는 다시 해도 같다.
+    CHECK_FALSE(smb_connection_lost(-EACCES, luil::net::smb_status_logon_failure));
+    CHECK_FALSE(smb_connection_lost(-EACCES, luil::net::smb_status_access_denied));
+    CHECK_FALSE(smb_connection_lost(-ENOENT, luil::net::smb_status_object_name_not_found));
+    CHECK_FALSE(smb_connection_lost(-ECONNRESET, luil::net::smb_status_wrong_password));
+    CHECK_FALSE(smb_connection_lost(-EINVAL, 0));
+    CHECK_FALSE(smb_connection_lost(0, 0));
+}

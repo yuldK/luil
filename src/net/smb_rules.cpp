@@ -150,4 +150,39 @@ namespace luil::net {
         }
         return connecting ? smb_error_kind::cannot_connect : smb_error_kind::failed;
     }
+
+    bool smb_connection_lost(const int status, const std::uint32_t nt_status) noexcept
+    {
+        switch (nt_status)
+        {
+        case smb_status_network_name_deleted:
+        case smb_status_local_disconnect:
+        case smb_status_remote_disconnect:
+        case smb_status_user_session_deleted:
+        case smb_status_connection_disconnected:
+        case smb_status_connection_reset:
+        case smb_status_connection_aborted:
+        case smb_status_network_session_expired:
+            return true;
+        default:
+            break;
+        }
+        // 서버가 답한 실패면 전송은 살아 있다.
+        if (smb_error_kind_for(0, nt_status, false) != smb_error_kind::failed)
+            return false;
+        switch (-status)
+        {
+        case ECONNRESET:
+        case ECONNABORTED:
+        case EPIPE:
+        case ENOTCONN:
+        case ENETDOWN:
+        case ENETUNREACH:
+        case EHOSTUNREACH:
+        case ETIMEDOUT:
+            return true;
+        default:
+            return false;
+        }
+    }
 } // namespace luil::net

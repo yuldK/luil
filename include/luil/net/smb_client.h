@@ -14,7 +14,8 @@
 // 선다. 그 밖의 구성(Windows, 끈 Android)에서는 `create`가 nullptr로 답한다 — Windows는 운영체제의 SMB가 있다.
 //
 // 계약은 `http_client`와 같은 모양이다: 받은 요청마다 표 하나와 답 하나, 답은 client의 thread 하나에서 차례로
-// 배달, 취소, `stop`. 같은 네트워크의 NAS에 붙는 Android 17 앱은 먼저 로컬 네트워크 권한을 받아야 한다
+// 배달, 취소, `stop`. 같은 서버·공유·계정의 연결은 잠시 쉬게 두었다 다시 쓴다 (`smb_client_config::idle_timeout`).
+// 같은 네트워크의 NAS에 붙는 Android 17 앱은 먼저 로컬 네트워크 권한을 받아야 한다
 // (`app_host::request_permission(app_permission::local_network)`). 없으면 연결이 시간 상한까지 기다리다 실패한다.
 namespace luil::net {
     // SMB 공유 하나에 붙는 정보다.
@@ -126,6 +127,19 @@ namespace luil::net {
         [[nodiscard]] bool operator==(const smb_ticket&) const noexcept = default;
     };
 
+    // 답이 쓴 연결이다 (진단·측정용).
+    enum class smb_connection_use
+    {
+        // 서버에 닿기 전에 끝났다 (연결을 기다리다 취소·정지·시간 상한).
+        none,
+        // 새로 열었다.
+        opened,
+        // 쉬던 연결을 다시 썼다. 연결·로그온·공유 연결을 건너뛰었다.
+        reused,
+        // 다시 쓰려던 연결이 끊겨 있어 새로 열었다 (쉬는 동안 끊긴 것을 보았거나, 쓰다가 끊겨 한 번 다시 했다).
+        reopened,
+    };
+
     // 답 하나다. 받아들인 요청 하나에 정확히 하나가 온다 (`stop` 뒤는 제외).
     struct smb_response
     {
@@ -140,6 +154,8 @@ namespace luil::net {
         std::vector<std::uint8_t> data {};
         // 요청을 낸 때부터 답을 다 받은 때까지다.
         std::chrono::milliseconds elapsed { 0 };
+        // 이 답이 쓴 연결이다.
+        smb_connection_use connection { smb_connection_use::none };
 
         [[nodiscard]] bool ok() const noexcept
         {
@@ -158,6 +174,12 @@ namespace luil::net {
         std::size_t max_read_bytes { 16u * 1024u * 1024u };
         // `stop`이 진행 중인 요청을 기다리는 상한이다.
         std::chrono::milliseconds stop_budget { 1000 };
+        // 쉬는 연결을 닫기까지의 시간이다 (연결 다시 쓰기). 같은 서버·공유·도메인·사용자·암호·암호화 요구의 요청이 이 안에
+        // 다시 오면 연결·로그온·공유 연결을 건너뛴다. 0이면 다시 쓰지 않고 요청마다 닫는다 (다시 쓰기 전의 동작).
+        std::chrono::milliseconds idle_timeout { 30000 };
+        // 서버(호스트와 포트) 하나에 동시에 두는 연결(쓰는 중·쉬는 중)의 상한이다. 모두 쓰는 중이면 요청이 하나가 돌아올
+        // 때까지 기다리고, 그 시간도 `timeout`에 든다. 기본값은 기본 `max_in_flight`와 같아 줄이지 않으면 기다릴 일이 없다.
+        std::size_t max_connections_per_server { 4 };
     };
 
     class smb_client
@@ -187,6 +209,9 @@ namespace luil::net {
         void stop() noexcept;
         // 받았지만 답의 배달이 끝나지 않은 요청의 수다.
         [[nodiscard]] std::size_t in_flight() const noexcept;
+        // 쉬는 연결을 모두 닫고, 쓰는 중인 연결은 그 요청이 끝나면 닫는다. 앱이 뒤로 가거나 네트워크가 바뀔 때 부른다.
+        // 어느 thread에서 불러도 된다.
+        void close_idle() noexcept;
 
     private:
         struct engine;

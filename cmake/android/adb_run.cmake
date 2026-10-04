@@ -14,8 +14,9 @@
 #    (tests/android/JvmTestMain.java). JNI로 Java를 부르는 test(HTTP client)의 자리다 —
 #    셸의 실행 파일에는 JVM이 없다. `app_process`는 셸 권한으로 돌아 매니페스트 권한이 없어도
 #    소켓을 연다.
-#  - `-DLIBRARIES=<이름;이름>`을 주면 실행 파일 옆(같은 빌드 디렉터리)의 그 공유 라이브러리도 함께 올리고
-#    `LD_LIBRARY_PATH`로 그 자리를 알려 준다. 따로 싼 libsmb2.so를 쓰는 SMB test의 자리다.
+#  - `-DLIBRARIES=<이름,이름>`을 주면 실행 파일 옆(같은 빌드 디렉터리)의 그 파일도 함께 올리고
+#    `LD_LIBRARY_PATH`로 그 자리를 알려 준다. 따로 싼 libsmb2.so와 시험 서버를 쓰는 SMB test의 자리다.
+#    쉼표로 나누는 것은 test의 실행기(`CROSSCOMPILING_EMULATOR`)가 쌍반점으로 나뉜 목록이라서다.
 if(NOT DEFINED ADB OR NOT DEFINED DEVICE_DIRECTORY)
     message(FATAL_ERROR "ADB and DEVICE_DIRECTORY are required.")
 endif()
@@ -57,6 +58,7 @@ if(NOT push_result EQUAL 0)
     message(FATAL_ERROR "Could not push ${executable} (exit ${push_result}).")
 endif()
 if(DEFINED LIBRARIES)
+    string(REPLACE "," ";" LIBRARIES "${LIBRARIES}")
     foreach(library IN LISTS LIBRARIES)
         execute_process(
             COMMAND "${ADB}" push --sync "${executable_directory}/${library}" "${DEVICE_DIRECTORY}/${library}"

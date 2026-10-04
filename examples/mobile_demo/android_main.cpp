@@ -35,6 +35,14 @@ namespace {
                 host.post_app_message(luil::app_message { mobile_demo::local_network_intent { host.permission(luil::app_permission::local_network) } });
         }
 
+        // 앱이 뒤로 가면 SMB의 쉬는 연결을 닫는다. 돌아와서 망이 바뀌었어도 끊긴 연결을 다시 쓰지 않는다.
+        [[nodiscard]] luil::app_message make_lifecycle_message(const luil::app_lifecycle lifecycle) override
+        {
+            if (lifecycle != luil::app_lifecycle::background)
+                return {};
+            return luil::app_message { mobile_demo::smb_close_idle_intent {} };
+        }
+
         [[nodiscard]] luil::app_message make_permission_message(const luil::app_permission permission, const luil::permission_state state) override
         {
             if (permission != luil::app_permission::local_network)

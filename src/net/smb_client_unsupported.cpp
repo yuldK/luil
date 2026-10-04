@@ -51,4 +51,7 @@ namespace luil::net {
     {
         return 0;
     }
+
+    void smb_client::close_idle() noexcept
+    {}
 } // namespace luil::net

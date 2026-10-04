@@ -20,6 +20,15 @@ namespace luil::net {
     inline constexpr std::uint32_t smb_status_password_expired { 0xC0000071 };
     inline constexpr std::uint32_t smb_status_account_disabled { 0xC0000072 };
     inline constexpr std::uint32_t smb_status_bad_network_name { 0xC00000CC };
+    // 서버가 세션·트리·연결을 잃은 상태다. 다시 쓴 연결이 끊겨 있었다는 뜻이다.
+    inline constexpr std::uint32_t smb_status_network_name_deleted { 0xC00000C9 };
+    inline constexpr std::uint32_t smb_status_local_disconnect { 0xC000013B };
+    inline constexpr std::uint32_t smb_status_remote_disconnect { 0xC000013C };
+    inline constexpr std::uint32_t smb_status_user_session_deleted { 0xC0000203 };
+    inline constexpr std::uint32_t smb_status_connection_disconnected { 0xC000020C };
+    inline constexpr std::uint32_t smb_status_connection_reset { 0xC000020D };
+    inline constexpr std::uint32_t smb_status_connection_aborted { 0xC0000241 };
+    inline constexpr std::uint32_t smb_status_network_session_expired { 0xC000035C };
 
     // 요청을 본다. 어기면 `invalid_request`이고 아무것도 보내지 않는다.
     //  - 서버·공유는 비지 않고, 제어 문자·공백·`/`·`\`가 없다. 공유 이름은 80자 이하다.
@@ -37,4 +46,9 @@ namespace luil::net {
     // libsmb2의 결과(-errno)와 NT 상태로 오류 갈래를 정한다. `connecting`은 연결·로그온·공유 연결 단계의 실패다 —
     // 그 단계의 갈래 없는 실패는 서버에 닿지 못한 것으로 본다.
     [[nodiscard]] smb_error_kind smb_error_kind_for(int status, std::uint32_t nt_status, bool connecting) noexcept;
+
+    // 다시 쓴 연결에서 난 실패가 "연결이 끊겨 있었다"는 뜻인가 — 새 연결로 한 번 다시 해 볼 만한가. 전송이 끊겼거나
+    // (-errno: 연결 재설정·끊긴 파이프·닿지 않는 망 등) 서버가 세션·트리를 잃었다(NT 상태). 로그온 실패·접근 거부·없는
+    // 경로처럼 서버가 요청에 답한 실패는 아니다.
+    [[nodiscard]] bool smb_connection_lost(int status, std::uint32_t nt_status) noexcept;
 } // namespace luil::net

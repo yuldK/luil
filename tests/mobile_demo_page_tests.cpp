@@ -147,6 +147,32 @@ TEST_CASE("SMB successful navigation binds the new rows to the new folder", "[sm
     REQUIRE(fixture.cancelled.back() == luil::net::smb_ticket { 3 });
 }
 
+TEST_CASE("SMB file reading continues range by range until the end", "[smb][mobile-demo]")
+{
+    smb_fixture fixture {};
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"old.txt", false });
+    REQUIRE(fixture.requests.back().operation == luil::net::smb_operation::read);
+    REQUIRE(fixture.requests.back().offset == 0u);
+    const std::size_t preview { fixture.requests.back().length };
+    luil::net::smb_response first { .ticket = { fixture.next_ticket }, .operation = luil::net::smb_operation::read };
+    first.data.resize(preview);
+    deliver(fixture.page, mobile_demo::smb_result_intent { std::move(first) });
+
+    // 미리 보기가 꽉 찼다. 다음 구간은 그 끝에서 시작한다.
+    deliver(fixture.page, mobile_demo::smb_next_range_intent {});
+    REQUIRE(fixture.requests.back().path == u8"old.txt");
+    REQUIRE(fixture.requests.back().offset == preview);
+    const std::size_t range { fixture.requests.back().length };
+    luil::net::smb_response last { .ticket = { fixture.next_ticket }, .operation = luil::net::smb_operation::read };
+    last.data.resize(range / 2u);
+    deliver(fixture.page, mobile_demo::smb_result_intent { std::move(last) });
+
+    // 짧게 왔다 — 파일 끝이다. 더 보내지 않는다.
+    const std::size_t sent { fixture.requests.size() };
+    deliver(fixture.page, mobile_demo::smb_next_range_intent {});
+    CHECK(fixture.requests.size() == sent);
+}
+
 TEST_CASE("SMB rejected and replaced requests cannot revive an old listing", "[smb][mobile-demo]")
 {
     smb_fixture fixture {};

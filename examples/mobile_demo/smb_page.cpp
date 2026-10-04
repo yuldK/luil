@@ -14,6 +14,8 @@ namespace mobile_demo {
         constexpr float entry_row_height { 44.0f };
         // 파일을 누르면 앞에서 이만큼만 읽는다 (바이트).
         constexpr std::size_t preview_bytes { 4096 };
+        // "다음 구간"이 한 번에 읽는 길이다. 큰 파일을 구간으로 나눠 읽을 때 두 번째부터 연결을 다시 쓰는 것이 보인다.
+        constexpr std::size_t range_bytes { 1024u * 1024u };
         // 미리 보기로 적는 글자 수다.
         constexpr std::size_t preview_characters { 160 };
         // 여러 줄로 나눠 적는 글의 한 줄 폭과 줄 수 상한이다. 폭은 ASCII 한 자를 1, 그 밖(한글 등)을 2로 센 어림이고,
@@ -49,6 +51,22 @@ namespace mobile_demo {
                 return u8"실패";
             }
             return u8"실패";
+        }
+
+        [[nodiscard]] std::u8string connection_text(const luil::net::smb_connection_use use)
+        {
+            switch (use)
+            {
+            case luil::net::smb_connection_use::none:
+                return {};
+            case luil::net::smb_connection_use::opened:
+                return u8" · 새 연결";
+            case luil::net::smb_connection_use::reused:
+                return u8" · 다시 씀";
+            case luil::net::smb_connection_use::reopened:
+                return u8" · 끊겨 다시 엶";
+            }
+            return {};
         }
 
         [[nodiscard]] std::u8string number_text(const std::uint64_t value)
@@ -183,6 +201,7 @@ namespace mobile_demo {
                 transport_.send = [client](luil::net::smb_request request, std::u8string& error) { return client->send(std::move(request), error); };
                 transport_.cancel = [client](const luil::net::smb_ticket ticket) { client->cancel(ticket); };
                 transport_.stop = [client] { client->stop(); };
+                transport_.close_idle = [client] { client->close_idle(); };
             }
             return true;
         }
@@ -210,7 +229,7 @@ namespace mobile_demo {
             if (entry->directory)
                 send(luil::net::smb_operation::list, joined(folder_, entry->name));
             else
-                send(luil::net::smb_operation::read, joined(folder_, entry->name));
+                send(luil::net::smb_operation::read, joined(folder_, entry->name), 0, preview_bytes);
             return true;
         }
         if (const auto* const encrypt { message.get<smb_encrypt_intent>() }; encrypt != nullptr)
@@ -223,13 +242,30 @@ namespace mobile_demo {
             reveal_ = reveal->reveal;
             return true;
         }
+        if (message.get<smb_next_range_intent>() != nullptr)
+        {
+            if (file_.empty() == false && more_)
+                send(luil::net::smb_operation::read, file_, next_offset_, range_bytes);
+            return true;
+        }
+        if (message.get<smb_close_idle_intent>() != nullptr)
+        {
+            if (transport_.close_idle != nullptr)
+            {
+                transport_.close_idle();
+                status_ = u8"쉬는 연결을 닫았다.";
+                detail_ = u8"다음 요청은 연결을 새로 연다.";
+            }
+            return true;
+        }
         if (const auto* const result { message.get<smb_result_intent>() }; result != nullptr)
         {
             const luil::net::smb_response& response { result->response };
             if (pending_ == luil::net::smb_ticket {} || response.ticket != pending_)
                 return true;
             pending_ = {};
-            const std::u8string elapsed { u8" (" + number_text(static_cast<std::uint64_t>(response.elapsed.count())) + u8" ms)" };
+            // 걸린 시간과 쓴 연결이다. 같은 서버를 다시 부르면 두 번째부터 "다시 씀"과 짧아진 시간이 보인다.
+            const std::u8string elapsed { u8" (" + number_text(static_cast<std::uint64_t>(response.elapsed.count())) + u8" ms" + connection_text(response.connection) + u8")" };
             if (response.ok() == false)
             {
                 // libsmb2의 글을 그대로 적는다. 서버가 없는 쪽에서 사람이 알려 줄 수 있는 단서가 이것이다.
@@ -240,6 +276,8 @@ namespace mobile_demo {
             if (response.operation == luil::net::smb_operation::list)
             {
                 folder_ = pending_path_;
+                file_.clear();
+                more_ = false;
                 entries_ = response.entries;
                 std::ranges::sort(
                     entries_, [](const luil::net::smb_entry& left, const luil::net::smb_entry& right) { return left.directory != right.directory ? left.directory : left.name < right.name; });
@@ -248,8 +286,19 @@ namespace mobile_demo {
             }
             else if (response.operation == luil::net::smb_operation::read)
             {
-                status_ = u8"앞 " + size_text(response.data.size()) + u8" 읽음" + elapsed;
-                detail_ = pending_path_ + u8": " + preview_of(response.data);
+                file_ = pending_path_;
+                next_offset_ = pending_offset_ + response.data.size();
+                more_ = response.data.size() == pending_length_;
+                if (pending_offset_ == 0)
+                {
+                    status_ = u8"앞 " + size_text(response.data.size()) + u8" 읽음" + elapsed;
+                    detail_ = pending_path_ + u8": " + preview_of(response.data);
+                }
+                else
+                {
+                    status_ = size_text(pending_offset_) + u8"부터 " + size_text(response.data.size()) + u8" 읽음" + elapsed;
+                    detail_ = more_ ? pending_path_ + u8" — 다음 구간을 누르면 이어 읽는다." : pending_path_ + u8" — 파일 끝이다.";
+                }
             }
             return true;
         }
@@ -310,7 +359,7 @@ namespace mobile_demo {
         pending_ = {};
     }
 
-    void smb_page::send(const luil::net::smb_operation operation, std::u8string path)
+    void smb_page::send(const luil::net::smb_operation operation, std::u8string path, const std::uint64_t offset, const std::size_t length)
     {
         cancel_pending();
         // 응답 대기·실패 중에 이전 폴더의 행을 새 경로로 열지 않는다.
@@ -329,12 +378,14 @@ namespace mobile_demo {
         request.location = *where;
         request.operation = operation;
         request.path = path;
-        if (operation == luil::net::smb_operation::read)
-            request.length = preview_bytes;
+        request.offset = offset;
+        request.length = length;
         std::u8string error {};
         pending_ = transport_.send(std::move(request), error);
         pending_operation_ = operation;
         pending_path_ = std::move(path);
+        pending_offset_ = offset;
+        pending_length_ = length;
         status_ = pending_ ? std::u8string { u8"기다리는 중…" } : std::u8string { u8"보내지 못함" };
         detail_ = pending_ ? std::u8string {} : error;
     }
@@ -381,7 +432,14 @@ namespace mobile_demo {
         auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"smb-actions" }, row_config) };
         row->add(make_button(u8"open", u8"열기", luil::make_message_action(smb_open_intent {})), 96.0f);
         row->add(make_button(u8"up", u8"위로", luil::make_message_action(smb_up_intent {})), 96.0f);
+        row->add(make_button(u8"close-idle", u8"연결 닫기", luil::make_message_action(smb_close_idle_intent {})), 120.0f);
         column.add(std::move(row), touch_height);
+        // 읽던 파일이 더 있으면 다음 구간을 읽는다.
+        if (file_.empty() == false && more_)
+        {
+            column.gap(8.0f);
+            column.add(make_button(u8"next-range", u8"다음 구간 (1 MB)", luil::make_message_action(smb_next_range_intent {})), touch_height, field_width);
+        }
         column.gap(12.0f);
         column.body(u8"smb-status", status_);
         const std::vector<std::u8string> detail { wrap_lines(detail_) };
