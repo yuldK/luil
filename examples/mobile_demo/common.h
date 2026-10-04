@@ -57,6 +57,11 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_dropdown_search_input { luil::application_element_kind(26) };
     // 목록 페이지의 두 판을 나눈 자리다.
     constexpr luil::ui_element_kind kind_list_split { luil::application_element_kind(28) };
+    // SMB 페이지의 글 칸(주소·사용자·암호)과 열거한 항목이다.
+    constexpr luil::ui_element_kind kind_smb_address_input { luil::application_element_kind(31) };
+    constexpr luil::ui_element_kind kind_smb_user_input { luil::application_element_kind(32) };
+    constexpr luil::ui_element_kind kind_smb_password_input { luil::application_element_kind(33) };
+    constexpr luil::ui_element_kind kind_smb_entry { luil::application_element_kind(34) };
     // 기본 페이지의 이미지 견본이다 (fit별로 owner가 갈린다).
     constexpr luil::ui_element_kind kind_picture { luil::application_element_kind(29) };
     // 셸의 페이지 목록 항목이다 (owner가 페이지 키다).
@@ -71,6 +76,9 @@ namespace mobile_demo {
     constexpr luil::text_input_target target_number { static_cast<luil::text_input_target>(1) };
     constexpr luil::text_input_target target_note { static_cast<luil::text_input_target>(2) };
     constexpr luil::text_input_target target_dropdown_search { static_cast<luil::text_input_target>(4) };
+    constexpr luil::text_input_target target_smb_address { static_cast<luil::text_input_target>(10) };
+    constexpr luil::text_input_target target_smb_user { static_cast<luil::text_input_target>(11) };
+    constexpr luil::text_input_target target_smb_password { static_cast<luil::text_input_target>(12) };
 
     // --- 페이지 키 ---
     inline constexpr std::u8string_view page_basics { u8"basics" };
@@ -83,6 +91,7 @@ namespace mobile_demo {
     inline constexpr std::u8string_view page_theme { u8"theme" };
     inline constexpr std::u8string_view page_device { u8"device" };
     inline constexpr std::u8string_view page_sheets { u8"sheets" };
+    inline constexpr std::u8string_view page_smb { u8"smb" };
 
     // --- 셸 수준 메시지 ---
     struct close_intent

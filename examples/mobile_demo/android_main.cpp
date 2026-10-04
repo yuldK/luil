@@ -9,14 +9,21 @@
 #include "luil/android/android_app.h"
 
 namespace {
-    // 화면 크기·배율·폭 등급과 로컬 네트워크 권한을 앱에 알린다. 그 밖의 훅은 기본값이다.
+    // 화면 크기·배율·폭 등급과 로컬 네트워크 권한을 앱에 알리고, SMB client를 세운다. 그 밖의 훅은 기본값이다.
     class mobile_delegate final : public luil::app_delegate
     {
     public:
-        // 시작할 때 권한의 지금 상태를 알린다 (기기 페이지가 보인다).
+        // 시작할 때 권한의 지금 상태를 알리고, SMB가 있는 구성이면 client를 세워 logic에 넘긴다. 답은 client의 배달
+        // thread에서 앱 메시지가 된다. client는 logic이 `stop_workers`에서 멈추고, delegate가 host보다 오래 살며 쥔다.
         void on_started(luil::app_host& host) override
         {
             host.post_app_message(luil::app_message { mobile_demo::local_network_intent { host.permission(luil::app_permission::local_network) } });
+            luil::net::smb_client_config config {};
+            config.deliver = [&host](luil::net::smb_response response) { host.post_app_message(luil::app_message { mobile_demo::smb_result_intent { std::move(response) } }); };
+            std::u8string error {};
+            smb_ = luil::net::smb_client::create(std::move(config), error);
+            if (smb_ != nullptr)
+                host.post_app_message(luil::app_message { mobile_demo::smb_client_intent { smb_.get() } });
         }
 
         // 기기 페이지의 "묻기"다. 묻지 않았으면(필요 없음·이미 받음) 지금 상태를 그대로 알린다.
@@ -39,6 +46,9 @@ namespace {
         {
             return mobile_demo::make_metrics_message(metrics);
         }
+
+    private:
+        std::unique_ptr<luil::net::smb_client> smb_ {};
     };
 } // namespace
 

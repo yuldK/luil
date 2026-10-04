@@ -9,4 +9,6 @@
         주소로 연결할 수 없다. 그 아래 판의 기기는 모르는 이름이라 무시한다 (docs/device-request-design.md).
     -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- SMB 페이지가 NAS에 붙는다 (LUIL_ENABLE_SMB를 켠 구성). -->
+    <uses-permission android:name="android.permission.INTERNET" />
 </manifest>
