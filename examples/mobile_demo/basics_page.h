@@ -1,6 +1,6 @@
 #pragma once
 
-// 기본 페이지다: 버튼·카운터, 텍스트 입력 두 칸(숫자 전용·자유 입력),
+// 기본 페이지다: 버튼·카운터, 텍스트 입력 세 칸(숫자 전용·자유 입력·암호),
 // 앱에 실린 그림(정지 한 장과 움직이는 둘), 화면을 덮는 확인 dialog
 // (캡션을 잡아 옮긴다).
 
@@ -48,6 +48,12 @@ namespace mobile_demo {
     struct playback_toggle_intent
     {};
 
+    // 암호 칸의 글을 보이거나 가린다.
+    struct secret_reveal_intent
+    {
+        bool reveal { false };
+    };
+
     class basics_page
     {
     public:
@@ -82,7 +88,7 @@ namespace mobile_demo {
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_film(std::u8string owner, std::u8string label, const luil::ui_animated_image& film, std::u8string description) const;
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_playback_button() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_input(
-            std::u8string owner, std::u8string label, luil::ui_element_kind input_kind, luil::text_input_view view, std::u8string placeholder) const;
+            std::u8string owner, std::u8string label, luil::ui_element_kind input_kind, luil::text_input_view view, luil::text_input_config input) const;
         [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_body();
         [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_buttons();
 
@@ -112,6 +118,8 @@ namespace mobile_demo {
         luil::image_playback playback_ {};
         luil::text::text_edit_state number_ {};
         luil::text::text_edit_state note_ {};
+        luil::text::text_edit_state secret_ {};
+        bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
         bool dialog_open_ { false };

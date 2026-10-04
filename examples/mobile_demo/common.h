@@ -11,6 +11,7 @@
 #include "luil/app/app_host.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/app_message.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/menu_element.h"
@@ -62,6 +63,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_smb_user_input { luil::application_element_kind(32) };
     constexpr luil::ui_element_kind kind_smb_password_input { luil::application_element_kind(33) };
     constexpr luil::ui_element_kind kind_smb_entry { luil::application_element_kind(34) };
+    // 기본 페이지의 암호 칸이다.
+    constexpr luil::ui_element_kind kind_secret_input { luil::application_element_kind(35) };
     // 기본 페이지의 이미지 견본이다 (fit별로 owner가 갈린다).
     constexpr luil::ui_element_kind kind_picture { luil::application_element_kind(29) };
     // 셸의 페이지 목록 항목이다 (owner가 페이지 키다).
@@ -76,6 +79,7 @@ namespace mobile_demo {
     constexpr luil::text_input_target target_number { static_cast<luil::text_input_target>(1) };
     constexpr luil::text_input_target target_note { static_cast<luil::text_input_target>(2) };
     constexpr luil::text_input_target target_dropdown_search { static_cast<luil::text_input_target>(4) };
+    constexpr luil::text_input_target target_secret { static_cast<luil::text_input_target>(5) };
     constexpr luil::text_input_target target_smb_address { static_cast<luil::text_input_target>(10) };
     constexpr luil::text_input_target target_smb_user { static_cast<luil::text_input_target>(11) };
     constexpr luil::text_input_target target_smb_password { static_cast<luil::text_input_target>(12) };
@@ -148,6 +152,9 @@ namespace mobile_demo {
     [[nodiscard]] std::u8string to_u8(int value);
 
     [[nodiscard]] std::unique_ptr<luil::label_element> make_label(luil::ui_element_id id, std::u8string text, float font_size, luil::label_color_role color);
+
+    // 암호 칸의 설정이다. 칸 오른쪽의 눈 단추가 보이기를 켜고 끈다 (누르면 `toggle`).
+    [[nodiscard]] luil::text_input_config make_secret_input_config(std::u8string placeholder, bool reveal, luil::ui_action toggle);
 
     // 페이지 글의 크기와 그 줄의 높이다 (논리 픽셀). 손가락이 가리는 화면이라 데스크톱 demo보다 한
     // 단계 크게 쓴다. 라이브러리의 label은 한 줄이라 좁은 화면의 설명은 짧게 끊어 여러 줄로 쓴다.

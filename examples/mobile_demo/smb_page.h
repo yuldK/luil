@@ -36,6 +36,12 @@ namespace mobile_demo {
         bool encrypt { false };
     };
 
+    // 암호 칸의 글을 보이거나 가린다.
+    struct smb_reveal_intent
+    {
+        bool reveal { false };
+    };
+
     // delegate가 앱 host가 선 뒤 세운 client다. logic thread가 이미 돌고 있어 직접 걸지 않고 메시지로 넘긴다.
     struct smb_client_intent
     {
@@ -75,6 +81,7 @@ namespace mobile_demo {
         luil::text::text_edit_state password_ {};
         std::optional<luil::text_composition_event> composition_ {};
         bool encrypt_ { false };
+        bool reveal_ { false };
         // 지금 보는 폴더다 (공유 안의 경로).
         std::u8string folder_ {};
         // 보낸 요청과 그 경로다. 늦게 온 답이 지금 화면을 덮지 않게 표로 맞춘다.

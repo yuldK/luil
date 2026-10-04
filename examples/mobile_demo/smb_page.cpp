@@ -206,6 +206,11 @@ namespace mobile_demo {
             encrypt_ = encrypt->encrypt;
             return true;
         }
+        if (const auto* const reveal { message.get<smb_reveal_intent>() }; reveal != nullptr)
+        {
+            reveal_ = reveal->reveal;
+            return true;
+        }
         if (const auto* const result { message.get<smb_result_intent>() }; result != nullptr)
         {
             const luil::net::smb_response& response { result->response };
@@ -319,18 +324,16 @@ namespace mobile_demo {
         column.note(u8"smb-help-2", u8"Android 17은 기기 페이지에서 권한부터 받는다.");
         column.gap(8.0f);
 
-        const auto input = [this, &column, field_width](const luil::ui_element_kind kind, const luil::text::text_edit_state& state, const luil::text_input_target target, std::u8string placeholder) {
-            luil::text_input_view view { luil::make_text_input_view(state, composition_, target) };
-            luil::text_input_config config { .placeholder = std::move(placeholder) };
-            auto element { std::make_unique<luil::text_input_element>(luil::ui_element_id { kind }, std::move(view), std::move(config)) };
-            column.add(std::move(element), field_height, field_width);
-            column.gap(8.0f);
-        };
-        input(kind_smb_address_input, address_, target_smb_address, u8"192.168.0.10/photos");
-        input(kind_smb_user_input, user_, target_smb_user, u8"사용자 (비우면 guest)");
-        input(kind_smb_password_input, password_, target_smb_password, u8"암호");
-        // luil의 글 칸에는 아직 가림 표시가 없다. 데모라 적은 암호가 보인다.
-        column.note(u8"smb-password-note", u8"데모의 암호 칸은 글자를 가리지 않는다.");
+        const auto input
+            = [this, &column, field_width](const luil::ui_element_kind kind, const luil::text::text_edit_state& state, const luil::text_input_target target, luil::text_input_config config) {
+                  luil::text_input_view view { luil::make_text_input_view(state, composition_, target) };
+                  auto element { std::make_unique<luil::text_input_element>(luil::ui_element_id { kind }, std::move(view), std::move(config)) };
+                  column.add(std::move(element), field_height, field_width);
+                  column.gap(8.0f);
+              };
+        input(kind_smb_address_input, address_, target_smb_address, { .placeholder = u8"192.168.0.10/photos" });
+        input(kind_smb_user_input, user_, target_smb_user, { .placeholder = u8"사용자 (비우면 guest)" });
+        input(kind_smb_password_input, password_, target_smb_password, make_secret_input_config(u8"암호", reveal_, luil::make_message_action(smb_reveal_intent { reveal_ == false })));
 
         luil::check_config encrypt {};
         encrypt.owner = u8"smb-encrypt";

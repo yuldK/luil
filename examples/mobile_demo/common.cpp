@@ -1,5 +1,6 @@
 #include "mobile_demo/common.h"
 
+#include "luil/generated/codicons.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/stack_element.h"
@@ -15,6 +16,18 @@ namespace mobile_demo {
     {
         const std::string digits { std::to_string(value) };
         return std::u8string { reinterpret_cast<const char8_t*>(digits.c_str()) };
+    }
+
+    luil::text_input_config make_secret_input_config(std::u8string placeholder, const bool reveal, luil::ui_action toggle)
+    {
+        // 단추의 글리프는 누르면 무엇이 되는지를 말한다 — 보이는 중이면 감은 눈이다.
+        luil::text_input_config config { .placeholder = std::move(placeholder) };
+        config.secret = true;
+        config.reveal = reveal;
+        config.clear = std::move(toggle);
+        config.clear_glyph = reveal ? luil::codicons::icon_eye_closed : luil::codicons::icon_eye;
+        config.clear_tooltip = reveal ? u8"암호 가리기" : u8"암호 보이기";
+        return config;
     }
 
     bool search_popup_stays(const luil::popup_dismiss_reason reason) noexcept
