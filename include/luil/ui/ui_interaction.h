@@ -456,6 +456,17 @@ namespace luil {
             bool pinched { false };
         };
 
+        // 확대 보기에서 탭으로 끝난 접촉 하나다. 다음 탭이 이것과 짝을 이루면 두 번 탭 확대다.
+        struct view_tap
+        {
+            ui_element_id view {};
+            std::u8string surface {};
+            // 뗀 시각과 자리다. 다음 탭의 누름이 이 시각부터 더블 클릭 시간 안이어야 한다.
+            std::chrono::steady_clock::time_point time {};
+            float x { 0.0f };
+            float y { 0.0f };
+        };
+
         // 보통 조작은 한 접촉이다. 같은 확대 보기의 핀치만 둘째 접촉을 품는다.
         //  - 쥐지 않은 id의 이동·뗌·취소는 무시한다. 핀치 뒤 남은 접촉은
         //    이동만 잇고 새 누름·탭으로 승격하지 않는다.
@@ -495,6 +506,8 @@ namespace luil {
             ui_element_id target {};
             // 경계 쓸기를 알리는 확대 보기 위의 접촉이면 그 기록이다.
             std::optional<view_edge_track> edge {};
+            // 둘째 손가락이 한 번이라도 합류했다. 핀치가 섞인 접촉은 탭이 아니다.
+            bool pinched { false };
         };
 
         [[nodiscard]] std::vector<input_action> process_touch_press(const pointer_pressed_event& event);
@@ -514,6 +527,9 @@ namespace luil {
         static void record_view_pan(view_edge_track& edge, zoom_point delta, std::chrono::steady_clock::time_point time, float x, float y);
         // 접촉이 끝났다. 경계 쓸기의 기준을 넘었으면 보기의 메시지를 돌려준다.
         [[nodiscard]] static std::optional<input_action> finish_view_edge(const view_edge_track& edge, const ui_element& owner);
+        // 확대 보기 위에서 탭으로 끝난 접촉이다. 앞의 탭과 짝을 이루면 보기의 두 번 탭 액션이고, 아니면 이 탭을 첫
+        // 탭으로 적고 nullopt다. 보기가 두 번 탭 확대를 켜지 않았으면 적지도 않는다.
+        [[nodiscard]] std::optional<std::vector<input_action>> view_double_tap(const touch_contact& contact, const pointer_released_event& event);
         // 마우스·펜 조작을 액션 없이 거둔다. OS 파일 끌기는 별도 소유권이다.
         void cancel_pointer_gesture() noexcept;
         // 마우스·펜의 진행 중 몸짓이 있는가 (누름·텍스트 끌기·전용 조작·내부 끌기).
@@ -701,6 +717,8 @@ namespace luil {
             std::optional<view_edge_track> edge {};
         };
         std::optional<view_drag> view_drag_ {};
+        // 확대 보기의 직전 탭이다 (두 번 탭 확대). 탭이 아닌 접촉·다른 장치의 누름·취소가 지운다.
+        std::optional<view_tap> last_view_tap_ {};
 
         // 더블 클릭 판정: 직전 클릭의 대상·표면·시각·위치다.
         // `click_streak_`은 같은 자리를 연달아 누른 횟수로,

@@ -21,6 +21,11 @@ namespace luil {
             if (std::isfinite(config.zoom) == false || config.zoom <= 0.0f || finite_point(config.origin) == false || std::isfinite(config.minimum_zoom) == false || config.minimum_zoom <= 0.0f
                 || std::isfinite(config.maximum_zoom) == false || config.maximum_zoom < config.minimum_zoom)
                 return false;
+            const zoom_double_tap& tap { config.double_tap };
+            if (tap.enabled
+                && (std::isfinite(tap.factor) == false || tap.factor <= 0.0f || std::isfinite(tap.fit_margin) == false || tap.fit_margin < 0.0f || std::isfinite(tap.maximum_fit_zoom) == false
+                    || tap.maximum_fit_zoom <= 0.0f))
+                return false;
             if (config.content_bounds.has_value() == false)
                 return true;
             const rect_f& box { *config.content_bounds };
@@ -132,6 +137,27 @@ namespace luil {
         return result;
     }
 
+    std::vector<input_action> double_tap_zoom(const zoom_view_config& config, const zoom_point viewport, const zoom_point anchor)
+    {
+        if (config.zoom_by == nullptr || valid_config(config) == false)
+            return {};
+        const zoom_double_tap& tap { config.double_tap };
+        const zoom_view_state current { zoom_about(config, viewport, 1.0f, {}) };
+        const bool fit { config.content_bounds.has_value() };
+        const float base { fit ? zoom_to_fit(config, viewport, tap.fit_margin, tap.maximum_fit_zoom).zoom : 1.0f };
+        // 손가락 두 개로 조금 움직였어도 기준이라고 본다. 1%보다 작은 차이는 눈에 보이지 않는다.
+        if (std::abs(current.zoom - base) <= base * 0.01f)
+        {
+            const float target { std::clamp(base * tap.factor, config.minimum_zoom, config.maximum_zoom) };
+            if (target == current.zoom || finite_point(anchor) == false)
+                return {};
+            return { config.zoom_by(target / current.zoom, anchor) };
+        }
+        if (fit)
+            return fit_actions(config, viewport, tap.fit_margin, tap.maximum_fit_zoom);
+        return { config.zoom_by(1.0f / current.zoom, {}) };
+    }
+
     zoom_view_state zoom_to_fit(const zoom_view_config& config, const zoom_point viewport, const float margin, const float maximum_fit_zoom) noexcept
     {
         const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
@@ -170,6 +196,8 @@ namespace luil {
             source.edge_swipe = config_.edge_swipe;
             source.edge_swipe_config = config_.edge_swipe_config;
         }
+        if (config_.double_tap.enabled && config_.zoom_by && config_.pan_by)
+            source.double_tap = [config = config_, viewport](const zoom_point anchor) { return double_tap_zoom(config, viewport, anchor); };
         return source;
     }
 

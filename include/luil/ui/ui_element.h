@@ -287,6 +287,9 @@ namespace luil {
         // 경계 쓸기의 메시지다. 비어 있으면 재지도 알리지도 않는다.
         std::function<input_action(const zoom_edge_swipe&)> edge_swipe {};
         zoom_edge_swipe_config edge_swipe_config {};
+        // 두 번 탭 확대의 액션이다. 기준점은 둘째 탭의 자리다 (보기 가운데 기준 논리 픽셀). 비어 있으면 두 번 탭은
+        // 확대가 아니다.
+        std::function<std::vector<input_action>(zoom_point anchor)> double_tap {};
     };
 
     struct scroll_source

@@ -98,6 +98,8 @@ namespace mobile_demo {
             // 쪽 보기라 맞춤 상태에서는 옮길 여지가 없다. 그래서 쓸기가 전부 경계에 막혀 쪽 넘기기가 된다.
             .bounds = luil::zoom_bounds::contain,
             .edge_swipe = [](const luil::zoom_edge_swipe& swipe) { return luil::make_app_action(edge_swipe_intent { swipe }); },
+            // 도면에는 탭 동작이 없어 두 번 탭을 확대에 쓴다.
+            .double_tap = { .enabled = true },
         };
     }
 
@@ -138,7 +140,7 @@ namespace mobile_demo {
         state_ = luil::zoom_about(config(), viewport_, 1.0f, {});
         const luil::stack_config column_config { .spacing = row_spacing, .padding = luil::edge_insets::all(page_padding) };
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-page" }, column_config) };
-        column->add(make_label({ kind_text, u8"zoom-help" }, u8"두 손가락으로 벌리고, 끝에서 가로로 쓸면 넘긴다.", note_text_size, luil::label_color_role::dim), note_line_height);
+        column->add(make_label({ kind_text, u8"zoom-help" }, u8"두 번 탭·두 손가락으로 키우고, 끝에서 쓸면 넘긴다.", note_text_size, luil::label_color_role::dim), note_line_height);
         column->add(make_label({ kind_text, u8"zoom-page-number" }, u8"쪽 " + to_u8(page_) + u8" / " + to_u8(page_count), body_text_size, luil::label_color_role::primary), body_line_height);
         column->add(
             make_label({ kind_text, u8"zoom-edge-swipe" }, last_swipe_.has_value() ? describe(*last_swipe_) : std::u8string { u8"경계 쓸기: 아직 없음" }, note_text_size, luil::label_color_role::dim),

@@ -891,6 +891,7 @@ namespace luil {
         // 취소된 접촉의 나머지 이벤트는 id가 맞는 접촉이 없어 삼켜진다.
         if (touch_.has_value())
             cancel_touch();
+        last_view_tap_.reset();
         // 새 누름은 기존 조작을 인계받는다. 옛 선택·손잡이·drop 후보를 섞지 않는다.
         cancel_pointer_gesture();
 
@@ -1211,8 +1212,11 @@ namespace luil {
                 return {};
             contact.second = touch_contact::second_contact { event.pointer_id, event.x, event.y };
             contact.phase = touch_phase::pinching;
+            contact.pinched = true;
             if (contact.edge.has_value())
                 contact.edge->pinched = true;
+            // 핀치 앞의 탭과 핀치 뒤의 탭은 짝이 아니다.
+            last_view_tap_.reset();
             contact.moved_action = true;
             clear_press();
             return {};
@@ -1518,12 +1522,25 @@ namespace luil {
                     if (const ui_element* const owner { live_zoom_view(*tree, touch_->view, touch_->start_x, touch_->start_y) }; owner != nullptr)
                         if (std::optional<input_action> swipe { finish_view_edge(*touch_->edge, *owner) }; swipe.has_value())
                             actions.push_back(std::move(*swipe));
+                // 빈 곳을 움직이지 않고 뗀 것은 탭이다. 빈 곳의 이동은 떨림에도 곧장 나가므로 이동 액션이 아니라
+                // 허용치로 가른다.
+                if (touch_->pinched == false && touch_->max_distance <= touch_->config.press_move_tolerance)
+                {
+                    if (std::optional<std::vector<input_action>> zoom { view_double_tap(*touch_, event) }; zoom.has_value())
+                        for (input_action& action : *zoom)
+                            actions.push_back(std::move(action));
+                }
+                else
+                    last_view_tap_.reset();
                 cancel_touch();
             }
             return actions;
         }
         touch_contact contact { std::move(*touch_) };
         touch_.reset();
+        // 확대 보기 안의 탭만 두 번 탭의 짝을 잇는다. 스크롤·끌기·손잡이·메뉴와 보기 밖의 탭은 짝을 끊는다.
+        if (contact.phase != touch_phase::pending || contact.view == ui_element_id {} || contact.long_press == long_press_state::fired)
+            last_view_tap_.reset();
         // 누르고 있는 동안 이미 우클릭을 냈다. 뗌은 클릭도 탭도 아니다.
         if (contact.long_press == long_press_state::fired)
         {
@@ -1578,7 +1595,10 @@ namespace luil {
             clear_press();
             // 허용치를 넘었지만 스크롤도 끌기도 되지 않은 접촉은 클릭으로 되돌리지 않는다.
             if (still == false)
+            {
+                last_view_tap_.reset();
                 return {};
+            }
             return finish_touch_tap(contact, event);
         }
         return {};
@@ -1687,11 +1707,28 @@ namespace luil {
         // 마우스처럼 칸의 누름은 클릭 액션이 아니다.
         if (const std::optional<text_input_target> text { text_target(target->id().kind) }; text.has_value())
         {
+            // 텍스트 칸의 두 번 탭은 낱말 고르기다. 보기의 확대와 짝을 이루지 않는다.
+            last_view_tap_.reset();
             click_streak_ = repeat ? click_streak_ + 1 : 1;
             remember();
             if (click_streak_ >= 3)
                 return { text_edit_action(*text, text::text_edit_command::select_all) };
             return place_text_caret(*target, event.x, false, click_streak_ == 2);
+        }
+
+        // 확대 보기 안의 탭이다. 내용의 더블 클릭이 먼저이고, 그것이 없으면 짝을 이룬 둘째 탭이 보기의 확대다.
+        // 첫 탭은 늦추지 않고 아래에서 그대로 클릭으로 나간다.
+        if (contact.view != ui_element_id {})
+        {
+            if (repeat && target->action(ui_trigger::double_click) != nullptr)
+                last_view_tap_.reset();
+            else if (std::optional<std::vector<input_action>> zoom { view_double_tap(contact, event) }; zoom.has_value())
+            {
+                last_click_id_ = {};
+                last_click_surface_.clear();
+                click_streak_ = 0;
+                return std::move(*zoom);
+            }
         }
 
         if (policy_ != nullptr)
@@ -1713,7 +1750,10 @@ namespace luil {
         if (event.device == pointer_device::touch)
         {
             if (touch_.has_value() && touch_->surface == event.surface && (touch_->id == event.pointer_id || (touch_->second.has_value() && touch_->second->id == event.pointer_id)))
+            {
                 cancel_touch();
+                last_view_tap_.reset();
+            }
             return {};
         }
         // 장치만 같아도 다른 포인터·표면의 취소일 수 있다.
@@ -1732,6 +1772,30 @@ namespace luil {
         if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty())
             snapshot_.drag.reset();
         clear_press();
+    }
+
+    std::optional<std::vector<input_action>> interaction_controller::view_double_tap(const touch_contact& contact, const pointer_released_event& event)
+    {
+        const ui_tree* const tree { surface_tree(contact.surface) };
+        const ui_element* const owner { tree != nullptr ? live_zoom_view(*tree, contact.view, contact.start_x, contact.start_y) : nullptr };
+        if (owner == nullptr || owner->id() != contact.view || owner->zoom()->double_tap == nullptr)
+        {
+            last_view_tap_.reset();
+            return std::nullopt;
+        }
+        // 같은 보기·표면에서, 앞 탭을 뗀 뒤 더블 클릭 시간 안에 눌렀고, 터치 허용치 안의 자리다 (연속 탭과 같은 한계).
+        const bool same_view { last_view_tap_.has_value() && last_view_tap_->view == contact.view && last_view_tap_->surface == contact.surface };
+        const bool soon { same_view && contact.pressed_at >= last_view_tap_->time && contact.pressed_at - last_view_tap_->time <= config_.double_click_time };
+        const bool near { soon && distance_between(last_view_tap_->x, last_view_tap_->y, event.x, event.y) <= contact.config.press_move_tolerance * contact.scale };
+        if (near == false)
+        {
+            last_view_tap_ = view_tap { contact.view, contact.surface, event.time, event.x, event.y };
+            return std::nullopt;
+        }
+        last_view_tap_.reset();
+        const float scale { positive_scale(owner->zoom()->scale) };
+        const rect_f& box { owner->bounds() };
+        return owner->zoom()->double_tap({ (event.x - box.x - box.width / 2.0f) / scale, (event.y - box.y - box.height / 2.0f) / scale });
     }
 
     void interaction_controller::record_view_pan(view_edge_track& edge, const zoom_point delta, const std::chrono::steady_clock::time_point time, const float x, const float y)
@@ -2554,6 +2618,7 @@ namespace luil {
     {
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
+        last_view_tap_.reset();
         view_drag_.reset();
         pointer_contact_.reset();
         clear_press();

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -605,4 +606,181 @@ TEST_CASE("A view without an edge swipe message measures nothing", "[zoom][edge]
     // 이동 메시지는 지금과 같다.
     REQUIRE(actions.size() == 4u);
     REQUIRE(controller.next_deadline().has_value() == false);
+}
+
+namespace {
+    // 두 번 탭 확대를 켠 쪽 보기다. 100×100 쪽은 맞춤 상한 1에서 100%가 맞춤이다.
+    luil::zoom_view_config tap_config(const float zoom = 1.0f)
+    {
+        auto settings { page_config(zoom) };
+        settings.edge_swipe = {};
+        settings.bounds = luil::zoom_bounds::overlap;
+        settings.double_tap.enabled = true;
+        return settings;
+    }
+
+    // 쪽 안에 클릭(값 7)이나 클릭·더블 클릭(값 7·8)이 있는 내용을 담는다.
+    std::shared_ptr<const luil::ui_tree> tap_tree(const luil::zoom_view_config& settings, const bool clickable = false, const bool double_click = false)
+    {
+        auto view { std::make_unique<luil::zoom_view_element>(settings) };
+        if (clickable)
+        {
+            auto item { std::make_unique<content>() };
+            item->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) { return std::vector<luil::input_action> { luil::make_app_action(request { .value = 7.0f }) }; });
+            if (double_click)
+                item->set_action(luil::ui_trigger::double_click, [](const luil::ui_action_context&) { return std::vector<luil::input_action> { luil::make_app_action(request { .value = 8.0f }) }; });
+            view->set_content(std::move(item));
+        }
+        view->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 1.0f });
+        return std::make_shared<const luil::ui_tree>(std::move(view));
+    }
+
+    // (x, y)를 `start`에 눌러 30ms 뒤 뗀다.
+    std::vector<luil::input_action> tap(
+        luil::interaction_controller& controller, const float x, const float y, const int start, const std::uint32_t id = 1, const luil::pointer_device device = luil::pointer_device::touch)
+    {
+        std::vector<luil::input_action> actions { controller.process(luil::pointer_pressed_event { .x = x, .y = y, .time = at(start), .device = device, .pointer_id = id }) };
+        for (luil::input_action& action : controller.process(luil::pointer_released_event { .x = x, .y = y, .time = at(start + 30), .device = device, .pointer_id = id }))
+            actions.push_back(std::move(action));
+        return actions;
+    }
+
+    std::vector<request> requests_in(const std::vector<luil::input_action>& actions)
+    {
+        std::vector<request> found {};
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                if (const auto* const value { message->get<request>() }; value != nullptr)
+                    found.push_back(*value);
+        return found;
+    }
+} // namespace
+
+TEST_CASE("Double tap zoom stays off unless the view asks for it", "[zoom][double_tap]")
+{
+    auto settings { tap_config() };
+    settings.double_tap.enabled = false;
+    luil::interaction_controller controller {};
+    controller.set_tree(tap_tree(settings));
+    REQUIRE(tap(controller, 250.0f, 220.0f, 0).empty());
+    REQUIRE(tap(controller, 250.0f, 220.0f, 100).empty());
+}
+
+TEST_CASE("Two taps zoom about the tapped point and two more go back to fit", "[zoom][double_tap]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(tap_tree(tap_config()));
+    // 첫 탭은 아무것도 내지 않는다. 둘째 탭이 탭한 자리를 기준으로 두 배로 키운다.
+    REQUIRE(tap(controller, 250.0f, 220.0f, 0).empty());
+    const auto zoomed { requests_in(tap(controller, 252.0f, 221.0f, 150)) };
+    REQUIRE(zoomed.size() == 1u);
+    REQUIRE(zoomed[0].factor == 2.0f);
+    REQUIRE(zoomed[0].anchor == luil::zoom_point { 52.0f, 21.0f });
+
+    // 확대 상태에서 두 번 탭하면 맞춤으로 돌아간다 (가운데 기준 비율 뒤 위치 이동 — 맞춤 단추와 같은 메시지).
+    controller.set_tree(tap_tree(tap_config(2.0f)));
+    REQUIRE(tap(controller, 100.0f, 100.0f, 1000).empty());
+    const auto fitted { requests_in(tap(controller, 100.0f, 100.0f, 1100)) };
+    REQUIRE(fitted.empty() == false);
+    REQUIRE(fitted[0].factor == 0.5f);
+    // 셋째 탭은 새 짝의 첫 탭이다.
+    REQUIRE(tap(controller, 100.0f, 100.0f, 1200).empty());
+}
+
+TEST_CASE("The second tap must land near the first and soon after it", "[zoom][double_tap]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(tap_tree(tap_config()));
+    // 허용치(12)보다 멀다. 둘째 탭이 새 첫 탭이 되고, 그 곁의 셋째 탭이 짝이다.
+    REQUIRE(tap(controller, 200.0f, 200.0f, 0).empty());
+    REQUIRE(tap(controller, 220.0f, 200.0f, 100).empty());
+    REQUIRE(requests_in(tap(controller, 230.0f, 200.0f, 200)).size() == 1u);
+
+    // 앞 탭을 뗀 뒤 더블 클릭 시간(500ms)을 넘겨 눌렀다.
+    REQUIRE(tap(controller, 200.0f, 200.0f, 1000).empty());
+    REQUIRE(tap(controller, 200.0f, 200.0f, 1531).empty());
+    // 시간 안이면 짝이다.
+    REQUIRE(requests_in(tap(controller, 200.0f, 200.0f, 2000)).size() == 1u);
+}
+
+TEST_CASE("A pinch or a moving contact is not the first tap", "[zoom][double_tap][pinch]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(tap_tree(tap_config()));
+    // 두 손가락이 닿았다 떨어졌다 (움직이지 않은 핀치). 그 뒤의 탭은 첫 탭이다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 150.0f, .y = 200.0f, .time = at(0), .device = luil::pointer_device::touch, .pointer_id = 1 }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 250.0f, .y = 200.0f, .time = at(10), .device = luil::pointer_device::touch, .pointer_id = 2 }));
+    static_cast<void>(controller.process(luil::pointer_released_event { .x = 250.0f, .y = 200.0f, .time = at(40), .device = luil::pointer_device::touch, .pointer_id = 2 }));
+    REQUIRE(requests_in(controller.process(luil::pointer_released_event { .x = 150.0f, .y = 200.0f, .time = at(50), .device = luil::pointer_device::touch, .pointer_id = 1 })).empty());
+    REQUIRE(tap(controller, 150.0f, 200.0f, 100).empty());
+    REQUIRE(requests_in(tap(controller, 150.0f, 200.0f, 200)).size() == 1u);
+
+    // 탭과 탭 사이에 핀치가 들면 짝이 끊긴다.
+    REQUIRE(tap(controller, 150.0f, 200.0f, 1000).empty());
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 150.0f, .y = 200.0f, .time = at(1100), .device = luil::pointer_device::touch, .pointer_id = 3 }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 250.0f, .y = 200.0f, .time = at(1110), .device = luil::pointer_device::touch, .pointer_id = 4 }));
+    static_cast<void>(controller.process(luil::pointer_released_event { .x = 250.0f, .y = 200.0f, .time = at(1140), .device = luil::pointer_device::touch, .pointer_id = 4 }));
+    static_cast<void>(controller.process(luil::pointer_released_event { .x = 150.0f, .y = 200.0f, .time = at(1150), .device = luil::pointer_device::touch, .pointer_id = 3 }));
+    REQUIRE(tap(controller, 150.0f, 200.0f, 1200).empty());
+
+    // 끈 접촉(허용치를 넘겨 옮긴 것)도 첫 탭이 아니다.
+    REQUIRE(tap(controller, 150.0f, 200.0f, 3000).empty());
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 150.0f, .y = 200.0f, .time = at(3100), .device = luil::pointer_device::touch, .pointer_id = 5 }));
+    static_cast<void>(controller.process(luil::pointer_moved_event { .x = 190.0f, .y = 200.0f, .time = at(3120), .device = luil::pointer_device::touch, .pointer_id = 5, .in_contact = true }));
+    static_cast<void>(controller.process(luil::pointer_released_event { .x = 190.0f, .y = 200.0f, .time = at(3130), .device = luil::pointer_device::touch, .pointer_id = 5 }));
+    REQUIRE(tap(controller, 150.0f, 200.0f, 3200).empty());
+}
+
+TEST_CASE("The first tap still clicks content and its double click comes first", "[zoom][double_tap]")
+{
+    luil::interaction_controller controller {};
+    // 내용(쪽 자리 150~250)의 클릭은 늦추지 않는다. 둘째 탭은 클릭이 아니라 확대다.
+    controller.set_tree(tap_tree(tap_config(), true));
+    const auto first { requests_in(tap(controller, 200.0f, 200.0f, 0)) };
+    REQUIRE(first.size() == 1u);
+    REQUIRE(first[0].value == 7.0f);
+    const auto second { requests_in(tap(controller, 200.0f, 200.0f, 100)) };
+    REQUIRE(second.size() == 1u);
+    REQUIRE(second[0].factor == 2.0f);
+
+    // 내용에 더블 클릭이 있으면 그것이 이긴다.
+    controller.set_tree(tap_tree(tap_config(), true, true));
+    REQUIRE(requests_in(tap(controller, 200.0f, 200.0f, 1000))[0].value == 7.0f);
+    const auto double_clicked { requests_in(tap(controller, 200.0f, 200.0f, 1100)) };
+    REQUIRE(double_clicked.size() == 1u);
+    REQUIRE(double_clicked[0].value == 8.0f);
+}
+
+TEST_CASE("A pen keeps its double click and does not zoom", "[zoom][double_tap][pen]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(tap_tree(tap_config()));
+    REQUIRE(tap(controller, 200.0f, 200.0f, 0, 9, luil::pointer_device::pen).empty());
+    REQUIRE(tap(controller, 200.0f, 200.0f, 100, 9, luil::pointer_device::pen).empty());
+    // 펜 사이에 낀 터치 탭도 짝을 잇지 않는다.
+    REQUIRE(tap(controller, 200.0f, 200.0f, 1000).empty());
+    REQUIRE(tap(controller, 200.0f, 200.0f, 1100, 9, luil::pointer_device::pen).empty());
+    REQUIRE(tap(controller, 200.0f, 200.0f, 1200).empty());
+}
+
+TEST_CASE("Double tap helper zooms from the base and returns to it", "[zoom][double_tap]")
+{
+    const luil::zoom_point viewport { 400.0f, 400.0f };
+    auto settings { tap_config() };
+    settings.double_tap.factor = 3.0f;
+    settings.maximum_zoom = 2.5f;
+    // 기준(맞춤 100%)에서 세 배를 청해도 상한 2.5에서 멈춘다.
+    const auto up { requests_in(luil::double_tap_zoom(settings, viewport, { 10.0f, 20.0f })) };
+    REQUIRE(up.size() == 1u);
+    REQUIRE(up[0].factor == 2.5f);
+    REQUIRE(up[0].anchor == luil::zoom_point { 10.0f, 20.0f });
+    // 내용 경계가 없으면 기준은 100%다. 다른 배율에서는 100%로 돌아간다.
+    settings.content_bounds.reset();
+    settings.zoom = 2.0f;
+    const auto back { requests_in(luil::double_tap_zoom(settings, viewport, { 10.0f, 20.0f })) };
+    REQUIRE(back.size() == 1u);
+    REQUIRE(back[0].factor == 0.5f);
+    // 잘못된 배수는 보기가 받지 않는다.
+    settings.double_tap.factor = 0.0f;
+    REQUIRE_THROWS_AS(luil::zoom_view_element { settings }, std::invalid_argument);
 }

@@ -25,7 +25,7 @@ namespace mobile_demo {
         luil::zoom_edge_swipe swipe {};
     };
     // 쪽 보기다: 도면 한 장이 한 쪽이고, 맞춤 상태에서 가로로 쓸거나 확대한 채 끝에 닿은 뒤 한 번 더 쓸면 다음
-    // 쪽으로 간다. 받은 경계 쓸기를 화면에 적는다.
+    // 쪽으로 간다. 받은 경계 쓸기를 화면에 적는다. 두 번 탭은 맞춤과 두 배를 오간다.
     class zoom_page
     {
     public:
