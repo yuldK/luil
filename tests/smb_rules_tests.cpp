@@ -140,3 +140,59 @@ TEST_CASE("Only a broken transport or a lost session counts as a dropped connect
     CHECK_FALSE(smb_connection_lost(-EINVAL, 0));
     CHECK_FALSE(smb_connection_lost(0, 0));
 }
+
+TEST_CASE("A share list needs only a server and connects to IPC$", "[net][smb][shares]")
+{
+    luil::net::smb_request request { list_request() };
+    request.operation = luil::net::smb_operation::shares;
+    request.location.share.clear();
+    // 공유·경로는 보지 않는다.
+    request.path = u8"ignored\\path";
+    luil::net::smb_error failure {};
+    CHECK(luil::net::check_smb_request(request, 1024, failure));
+    CHECK(luil::net::smb_connection_share(request) == u8"IPC$");
+
+    // 서버는 여전히 있어야 한다.
+    request.location.server.clear();
+    CHECK(refused(request));
+
+    // 그 밖의 갈래는 공유가 있어야 한다.
+    for (const auto operation : { luil::net::smb_operation::list, luil::net::smb_operation::stat, luil::net::smb_operation::read })
+    {
+        luil::net::smb_request other { list_request() };
+        other.operation = operation;
+        other.length = 16;
+        CHECK(luil::net::smb_connection_share(other) == u8"photos");
+        other.location.share.clear();
+        CHECK(refused(other));
+    }
+}
+
+TEST_CASE("A share keeps its kind and flags from the srvsvc type", "[net][smb][shares]")
+{
+    using luil::net::smb_share_kind;
+    const luil::net::smb_share disk { luil::net::make_smb_share(u8"photos", 0x0u, u8"Family photos") };
+    CHECK(disk.name == u8"photos");
+    CHECK(disk.kind == smb_share_kind::disk);
+    CHECK(disk.comment == u8"Family photos");
+    CHECK_FALSE(disk.special);
+    CHECK_FALSE(disk.temporary);
+
+    CHECK(luil::net::make_smb_share(u8"printer", 0x1u, {}).kind == smb_share_kind::printer);
+    CHECK(luil::net::make_smb_share(u8"COM1", 0x2u, {}).kind == smb_share_kind::device);
+    const luil::net::smb_share ipc { luil::net::make_smb_share(u8"IPC$", 0x80000003u, u8"IPC Service") };
+    CHECK(ipc.kind == smb_share_kind::ipc);
+    CHECK(ipc.special);
+    CHECK(ipc.native_type == 0x80000003u);
+    const luil::net::smb_share admin { luil::net::make_smb_share(u8"C$", 0x80000000u, {}) };
+    CHECK(admin.kind == smb_share_kind::disk);
+    CHECK(admin.special);
+    CHECK(luil::net::make_smb_share(u8"scratch", 0x40000000u, {}).temporary);
+}
+
+TEST_CASE("A refused share list is sorted by its Win32 error", "[net][smb][shares]")
+{
+    CHECK(luil::net::smb_error_kind_for_win32(5u) == luil::net::smb_error_kind::access_denied);
+    CHECK(luil::net::smb_error_kind_for_win32(53u) == luil::net::smb_error_kind::failed);
+    CHECK(luil::net::smb_error_kind_for_win32(124u) == luil::net::smb_error_kind::failed);
+}

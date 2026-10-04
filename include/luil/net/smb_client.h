@@ -25,7 +25,7 @@ namespace luil::net {
         // "[fe80::1]:445"). 기본 포트는 445다.
         //  - Android의 이름 풀기는 `.local`(mDNS) 이름을 풀지 않는다. 집 안 NAS는 IP 주소로 적는다.
         std::u8string server {};
-        // 공유 이름이다 ("photos"). 슬래시를 넣지 않는다.
+        // 공유 이름이다 ("photos"). 슬래시를 넣지 않는다. 공유 목록(`smb_operation::shares`)은 이것을 보지 않는다.
         std::u8string share {};
         // 도메인(작업 그룹)이다. 비면 서버가 정한다.
         std::u8string domain {};
@@ -45,6 +45,9 @@ namespace luil::net {
         stat,
         // 파일의 한 구간을 읽는다 (`offset`부터 `length`까지).
         read,
+        // 서버의 공유 목록을 읽는다 (srvsvc `NetShareEnumAll`). 위치에는 서버와 계정만 있으면 되고 공유·경로는 보지 않는다.
+        // 같은 계정의 `IPC$` 연결로 하고, 그 연결도 다시 쓴다.
+        shares,
     };
 
     // 요청 하나다. 값이고, client에 넘기면 복사되어 client가 든다.
@@ -71,6 +74,30 @@ namespace luil::net {
         std::uint64_t size { 0 };
         // 마지막으로 고친 시각이다.
         std::chrono::system_clock::time_point modified {};
+    };
+
+    // 공유의 종류다 (srvsvc 종류 값의 아래 두 비트).
+    enum class smb_share_kind
+    {
+        disk,
+        printer,
+        device,
+        ipc,
+    };
+
+    // 공유 하나다. 숨은 공유(이름이 `$`로 끝난다)와 디스크가 아닌 공유를 앱이 거를 수 있게 서버가 준 대로 싣는다.
+    struct smb_share
+    {
+        std::u8string name {};
+        smb_share_kind kind { smb_share_kind::disk };
+        // 관리용 공유다 (`C$`·`ADMIN$`·`IPC$` 같은 것, STYPE_SPECIAL).
+        bool special { false };
+        // 임시 공유다 (STYPE_TEMPORARY).
+        bool temporary { false };
+        // 서버가 적은 설명이다.
+        std::u8string comment {};
+        // srvsvc가 준 종류 값 그대로다.
+        std::uint32_t native_type { 0 };
     };
 
     enum class smb_error_kind
@@ -105,7 +132,7 @@ namespace luil::net {
         smb_error_kind kind { smb_error_kind::none };
         // 개발자가 읽을 진단 영문이다 (libsmb2의 `smb2_get_error` 그대로). 암호는 들어가지 않는다.
         std::u8string message {};
-        // libsmb2가 돌려준 값이다 (-errno). 0이면 없다.
+        // libsmb2가 돌려준 값이다 (-errno). 0이면 없다. 공유 목록을 서버가 거절하면 srvsvc의 Win32 오류 번호(양수)다.
         int native_error { 0 };
 
         [[nodiscard]] bool empty() const noexcept
@@ -130,9 +157,9 @@ namespace luil::net {
     // 답이 쓴 연결이다 (진단·측정용).
     enum class smb_connection_use
     {
-        // 서버에 닿기 전에 끝났다 (연결을 기다리다 취소·정지·시간 상한).
+        // 연결을 빌리기 전에 끝났다 (연결을 기다리다 취소·정지·시간 상한).
         none,
-        // 새로 열었다.
+        // 새로 열었다. 열지 못한 시도(닿지 못함, 로그온 실패)도 여기다.
         opened,
         // 쉬던 연결을 다시 썼다. 연결·로그온·공유 연결을 건너뛰었다.
         reused,
@@ -156,6 +183,8 @@ namespace luil::net {
         std::chrono::milliseconds elapsed { 0 };
         // 이 답이 쓴 연결이다.
         smb_connection_use connection { smb_connection_use::none };
+        // `shares`의 공유다 (서버가 준 차례).
+        std::vector<smb_share> shares {};
 
         [[nodiscard]] bool ok() const noexcept
         {

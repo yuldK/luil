@@ -173,6 +173,44 @@ TEST_CASE("SMB file reading continues range by range until the end", "[smb][mobi
     CHECK(fixture.requests.size() == sent);
 }
 
+TEST_CASE("SMB with only a server lists its visible shares and opens the chosen one", "[smb][mobile-demo]")
+{
+    smb_fixture fixture {};
+    fixture.address(u8"nas");
+    deliver(fixture.page, mobile_demo::smb_open_intent {});
+    REQUIRE(fixture.requests.back().operation == luil::net::smb_operation::shares);
+    REQUIRE(fixture.requests.back().location.server == u8"nas");
+    luil::net::smb_response response { .ticket = { fixture.next_ticket }, .operation = luil::net::smb_operation::shares };
+    using luil::net::smb_share_kind;
+    response.shares = {
+        { .name = u8"photos", .kind = smb_share_kind::disk, .comment = u8"Family" },
+        { .name = u8"IPC$", .kind = smb_share_kind::ipc, .special = true },
+        { .name = u8"C$", .kind = smb_share_kind::disk, .special = true },
+        { .name = u8"backup$", .kind = smb_share_kind::disk },
+        { .name = u8"printer", .kind = smb_share_kind::printer },
+    };
+    deliver(fixture.page, mobile_demo::smb_result_intent { std::move(response) });
+    // 디스크이고 숨지 않은 공유만 보인다.
+    auto content { fixture.page.build(400.0f, 1.0f) };
+    const auto tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, content.height }, 1.0f) };
+    CHECK(tree.find({ mobile_demo::kind_smb_entry, u8"smb-share-photos" }) != nullptr);
+    CHECK(tree.find({ mobile_demo::kind_smb_entry, u8"smb-share-C$" }) == nullptr);
+    CHECK(tree.find({ mobile_demo::kind_smb_entry, u8"smb-share-backup$" }) == nullptr);
+    CHECK(tree.find({ mobile_demo::kind_smb_entry, u8"smb-share-printer" }) == nullptr);
+
+    // 목록에 없는 공유는 열지 않는다.
+    const std::size_t sent { fixture.requests.size() };
+    deliver(fixture.page, mobile_demo::smb_share_intent { u8"C$" });
+    CHECK(fixture.requests.size() == sent);
+    // 고른 공유는 주소를 바꾸고 그 맨 위를 연다.
+    deliver(fixture.page, mobile_demo::smb_share_intent { u8"photos" });
+    REQUIRE(fixture.requests.size() == sent + 1u);
+    CHECK(fixture.requests.back().operation == luil::net::smb_operation::list);
+    CHECK(fixture.requests.back().location.server == u8"nas");
+    CHECK(fixture.requests.back().location.share == u8"photos");
+    CHECK(fixture.requests.back().path.empty());
+}
+
 TEST_CASE("SMB rejected and replaced requests cannot revive an old listing", "[smb][mobile-demo]")
 {
     smb_fixture fixture {};

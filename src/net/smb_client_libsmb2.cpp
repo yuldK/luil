@@ -8,6 +8,9 @@
 
 #include <smb2/libsmb2.h>
 
+// 공유 목록의 답(`srvsvc_NetrShareEnum_rep`)을 놓는 `smb2_free_data`가 여기 있다.
+#include <smb2/libsmb2-raw.h>
+
 #include <fcntl.h>
 #include <poll.h>
 
@@ -68,6 +71,12 @@ namespace luil::net {
         [[nodiscard]] std::string to_c(const std::u8string_view text)
         {
             return std::string { reinterpret_cast<const char*>(text.data()), text.size() };
+        }
+
+        [[nodiscard]] std::u8string to_u8(const std::uint32_t value)
+        {
+            const std::string digits { std::to_string(value) };
+            return std::u8string { reinterpret_cast<const char8_t*>(digits.data()), digits.size() };
         }
 
         [[nodiscard]] std::chrono::system_clock::time_point to_time(const std::uint64_t seconds, const std::uint64_t nanoseconds)
@@ -478,6 +487,45 @@ namespace luil::net {
                 const bool closed { smb2_close_async(context, file, on_done, &call) == 0 && pump(context, call, work, deadline, false, ignored) == pump_outcome::done };
                 return attempt { pump_outcome::done, closed };
             }
+            case smb_operation::shares: {
+                call = {};
+                if (const int started { smb2_share_enum_async(context, SHARE_INFO_1, on_done, &call) }; started != 0)
+                {
+                    refuse_start(context, started, false, response.error);
+                    return attempt { pump_outcome::refused, false };
+                }
+                const pump_outcome outcome { pump(context, call, work, deadline, false, response.error) };
+                auto* const reply { static_cast<srvsvc_NetrShareEnum_rep*>(call.data) };
+                if (outcome == pump_outcome::done && call.status == 0 && reply != nullptr)
+                {
+                    const srvsvc_SHARE_INFO_1_carray* const items { reply->ses.ShareInfo.Level1.Buffer };
+                    const std::uint32_t count { items != nullptr ? reply->ses.ShareInfo.Level1.EntriesRead : 0u };
+                    for (std::uint32_t index { 0 }; index < count; ++index)
+                    {
+                        const srvsvc_SHARE_INFO_1& item { items->share_info_1[index] };
+                        response.shares.push_back(make_smb_share(from_c(item.netname.utf8), item.type, from_c(item.remark.utf8)));
+                    }
+                }
+                else if (outcome == pump_outcome::done)
+                {
+                    // srvsvc가 Win32 오류 번호(양수)로 거절했다. 전송과 세션은 살아 있다.
+                    const auto code { static_cast<std::uint32_t>(call.status) };
+                    response.error = smb_error { smb_error_kind_for_win32(code), u8"NetShareEnumAll was refused (Win32 error " + to_u8(code) + u8").", call.status };
+                }
+                else if (outcome == pump_outcome::refused && (static_cast<std::uint32_t>(call.status) & 0xC0000000u) == 0xC0000000u)
+                {
+                    // 파이프를 열거나 묶다가 NT 상태로 실패했다. 그 상태로 갈래를 다시 본다.
+                    response.error.kind = smb_error_kind_for(0, static_cast<std::uint32_t>(call.status), false);
+                }
+                // 답은 성공이든 거절이든 libsmb2가 지은 것이라 놓는다.
+                if (reply != nullptr)
+                    smb2_free_data(context, reply);
+                if (outcome == pump_outcome::done && response.error.empty() == false)
+                    return attempt { pump_outcome::refused, response.error.kind == smb_error_kind::access_denied };
+                if (outcome != pump_outcome::done)
+                    return answered(outcome);
+                return attempt { pump_outcome::done, true };
+            }
             }
             response.error = smb_error { smb_error_kind::invalid_request, u8"The operation is not known.", 0 };
             return attempt { pump_outcome::refused, true };
@@ -549,7 +597,8 @@ namespace luil::net {
         {
             const smb_request& request { work.request };
             const std::optional<std::chrono::steady_clock::time_point> deadline { request.timeout.count() > 0 ? std::optional { std::chrono::steady_clock::now() + request.timeout } : std::nullopt };
-            const smb_connection_key key { make_smb_connection_key(request.location, request.location.share) };
+            const std::u8string_view share { smb_connection_share(request) };
+            const smb_connection_key key { make_smb_connection_key(request.location, share) };
             // 콜백이 쓰는 자리는 어느 문맥보다 먼저 세운다. 문맥을 거두면 libsmb2가 남은 호출의 콜백을
             // `SMB2_STATUS_SHUTDOWN`으로 부르므로, 문맥을 거두는 모든 자리(이 함수와 그 아래)보다 오래 산다.
             call_state call {};
@@ -573,7 +622,7 @@ namespace luil::net {
                 }
                 if (context == nullptr)
                 {
-                    context = open(request.location, request.location.share, work, deadline, call, response.error);
+                    context = open(request.location, share, work, deadline, call, response.error);
                     response.connection = reopened ? smb_connection_use::reopened : smb_connection_use::opened;
                     if (context == nullptr)
                     {
@@ -595,6 +644,7 @@ namespace luil::net {
                 response.error = {};
                 response.entries.clear();
                 response.data.clear();
+                response.shares.clear();
                 response.entry = {};
                 reopened = true;
             }

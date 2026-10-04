@@ -210,7 +210,29 @@ namespace mobile_demo {
             const std::u8string address { address_.text };
             const std::size_t first { address.find(u8'/') };
             const std::size_t second { first == std::u8string::npos ? std::u8string::npos : address.find(u8'/', first + 1) };
-            send(luil::net::smb_operation::list, second == std::u8string::npos ? std::u8string {} : address.substr(second + 1));
+            // 공유 없이 서버만 적었으면 공유 목록을 연다.
+            const bool server_only { first == std::u8string::npos || first + 1 == address.size() };
+            if (server_only)
+                send(luil::net::smb_operation::shares, {});
+            else
+                send(luil::net::smb_operation::list, second == std::u8string::npos ? std::u8string {} : address.substr(second + 1));
+            return true;
+        }
+        if (const auto* const chosen { message.get<smb_share_intent>() }; chosen != nullptr)
+        {
+            // 새 tree가 오기 전에 이전 목록의 클릭이 와도 지금 목록에 없는 공유는 열지 않는다.
+            if (std::ranges::none_of(shares_, [chosen](const luil::net::smb_share& share) { return share.name == chosen->name; }))
+                return true;
+            const std::optional<luil::net::smb_location> where { location() };
+            if (where.has_value() == false)
+                return true;
+            luil::text_edit_request rename {};
+            rename.target = target_smb_address;
+            rename.command = luil::text::text_edit_command::replace_all;
+            rename.text = where->server + u8"/" + chosen->name;
+            luil::apply_text_edit(address_, rename);
+            shares_.clear();
+            send(luil::net::smb_operation::list, {});
             return true;
         }
         if (message.get<smb_up_intent>() != nullptr)
@@ -273,8 +295,24 @@ namespace mobile_demo {
                 detail_ = response.error.message;
                 return true;
             }
-            if (response.operation == luil::net::smb_operation::list)
+            if (response.operation == luil::net::smb_operation::shares)
             {
+                // 디스크이고 숨지 않은 공유만 보인다. 관리용·`$`로 끝나는 공유와 프린터·파이프는 센다.
+                shares_.clear();
+                for (const luil::net::smb_share& share : response.shares)
+                    if (share.kind == luil::net::smb_share_kind::disk && share.special == false && share.name.ends_with(u8'$') == false)
+                        shares_.push_back(share);
+                hidden_shares_ = response.shares.size() - shares_.size();
+                entries_.clear();
+                folder_.clear();
+                file_.clear();
+                more_ = false;
+                detail_.clear();
+                status_ = u8"공유 " + number_text(shares_.size()) + u8"개, 숨김 " + number_text(hidden_shares_) + u8"개" + elapsed;
+            }
+            else if (response.operation == luil::net::smb_operation::list)
+            {
+                shares_.clear();
                 folder_ = pending_path_;
                 file_.clear();
                 more_ = false;
@@ -338,14 +376,15 @@ namespace mobile_demo {
     {
         const std::u8string& address { address_.text };
         const std::size_t first { address.find(u8'/') };
-        if (first == std::u8string::npos || first == 0)
+        if (address.empty() || first == 0)
             return std::nullopt;
-        const std::size_t second { address.find(u8'/', first + 1) };
         luil::net::smb_location location {};
         location.server = address.substr(0, first);
-        location.share = address.substr(first + 1, second == std::u8string::npos ? std::u8string::npos : second - first - 1);
-        if (location.share.empty())
-            return std::nullopt;
+        if (first != std::u8string::npos)
+        {
+            const std::size_t second { address.find(u8'/', first + 1) };
+            location.share = address.substr(first + 1, second == std::u8string::npos ? std::u8string::npos : second - first - 1);
+        }
         location.user = user_.text;
         location.password = password_.text;
         location.encrypt = encrypt_;
@@ -368,10 +407,10 @@ namespace mobile_demo {
         if (transport_.send == nullptr)
             return;
         const std::optional<luil::net::smb_location> where { location() };
-        if (where.has_value() == false)
+        if (where.has_value() == false || (operation != luil::net::smb_operation::shares && where->share.empty()))
         {
             status_ = u8"주소를 \"서버/공유\"로 적는다.";
-            detail_ = u8"예: 192.168.0.10/photos";
+            detail_ = u8"예: 192.168.0.10/photos (서버만 적으면 공유 목록)";
             return;
         }
         luil::net::smb_request request {};
@@ -402,7 +441,8 @@ namespace mobile_demo {
             column.note(u8"smb-none-why", u8"Android에서 LUIL_ENABLE_SMB를 켜고 세운다.");
             return column.finish();
         }
-        column.note(u8"smb-help-1", u8"주소는 \"서버/공유\"다. 집 안 NAS는 IP 주소로 적는다.");
+        column.note(u8"smb-help-1", u8"주소는 \"서버/공유\"다. 서버만 적으면 공유 목록이다.");
+        column.note(u8"smb-help-ip", u8"집 안 NAS는 IP 주소로 적는다.");
         column.note(u8"smb-help-2", u8"Android 17은 기기 페이지에서 권한부터 받는다.");
         column.gap(8.0f);
 
@@ -446,6 +486,16 @@ namespace mobile_demo {
         for (std::size_t index { 0 }; index < detail.size(); ++index)
             column.note(u8"smb-detail-" + number_text(index), detail[index]);
         column.gap(8.0f);
+
+        // 공유 목록이다. 누르면 그 공유를 연다.
+        for (const luil::net::smb_share& share : shares_)
+        {
+            const std::u8string label { share.comment.empty() ? share.name : share.name + u8"  ·  " + share.comment };
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_smb_entry, u8"smb-share-" + share.name }, luil::text_button_config { .text = label }) };
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(smb_share_intent { share.name }));
+            column.add(std::move(button), entry_row_height, field_width);
+            column.gap(4.0f);
+        }
 
         // 폴더가 먼저, 이름 차례다. 폴더를 누르면 들어가고 파일을 누르면 앞부분을 읽는다.
         for (std::size_t index { 0 }; index < entries_.size(); ++index)

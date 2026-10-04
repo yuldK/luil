@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -165,6 +166,8 @@ namespace {
             process_ = ::fork();
             if (process_ == 0)
             {
+                // test 프로세스가 거두지 못하고 죽어도(중단, 파이프 끊김) 서버가 남지 않게 함께 끝낸다.
+                ::prctl(PR_SET_PDEATHSIG, SIGKILL);
                 ::execve(program.c_str(), arguments, environ);
                 ::_exit(127);
             }
@@ -466,6 +469,29 @@ TEST_CASE("Stopping with resting connections returns within its budget", "[net][
     CHECK(client->in_flight() == 0u);
 }
 
+TEST_CASE("A share list on a server without srvsvc fails cleanly and leaves the server usable", "[net][smb][android][server][shares]")
+{
+    // 시험 서버는 srvsvc 파이프를 내주지 않는다 (공유 목록의 실제 왕복은 사람이 NAS로 확인한다). 실패가 값으로 오고,
+    // IPC$ 연결은 디스크 공유의 연결과 따로이며, 서버는 그대로 쓸 수 있어야 한다.
+    test_server server {};
+    collector sink {};
+    const auto client { make_client(sink) };
+    smb_request shares { list_on(server.server(), 10s) };
+    shares.operation = luil::net::smb_operation::shares;
+    shares.location.share.clear();
+    const smb_response refused { exchange(*client, sink, shares, 0) };
+    INFO(describe(refused));
+    CHECK(refused.ok() == false);
+    CHECK(refused.error.kind != smb_error_kind::invalid_request);
+    CHECK(refused.connection == smb_connection_use::opened);
+    CHECK(refused.shares.empty());
+    CHECK(server.alive());
+    const smb_response listed { exchange(*client, sink, list_on(server.server(), 10s), 1) };
+    INFO(describe(listed));
+    CHECK(listed.ok());
+    CHECK(listed.connection == smb_connection_use::opened);
+}
+
 TEST_CASE("The Android SMB build is supported and refuses a bad request before the wire", "[net][smb][android]")
 {
     REQUIRE(smb_client::supported());
@@ -489,6 +515,8 @@ TEST_CASE("A closed port answers cannot_connect", "[net][smb][android]")
     const smb_response response { sink.snapshot().at(0) };
     CHECK(response.ticket == ticket);
     CHECK(response.error.kind == smb_error_kind::cannot_connect);
+    // 열지 못한 시도도 새로 연 것으로 센다.
+    CHECK(response.connection == luil::net::smb_connection_use::opened);
     // 오류 글에 암호가 들어가지 않는다.
     CHECK(response.error.message.find(u8"secret") == std::u8string::npos);
 }

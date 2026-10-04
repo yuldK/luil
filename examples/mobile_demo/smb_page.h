@@ -3,7 +3,8 @@
 // SMB 페이지다: 같은 네트워크의 NAS·Windows 공유에 붙어 폴더를 열거하고 파일을 앞부분부터 구간으로 읽는다. 답마다 걸린
 // 시간과 연결을 새로 열었는지 다시 썼는지를 적어, 연결 다시 쓰기의 효과를 사람이 볼 수 있다.
 // Android에서 LUIL_ENABLE_SMB를 켠 구성만 client가 있다. 그 밖의 구성에서는 없다는 사실만 적는다.
-// 서버·공유·계정은 사람이 적는다 — 이 페이지는 실제 서버에 붙어 보는 사람 손 확인의 자리다.
+// 서버·계정은 사람이 적는다 — 이 페이지는 실제 서버에 붙어 보는 사람 손 확인의 자리다. 서버만 적으면 공유 목록을 보이고,
+// 공유를 누르면 그 공유를 연다.
 
 #include "luil/net/smb_client.h"
 #include "luil/text/text_edit.h"
@@ -48,6 +49,12 @@ namespace mobile_demo {
     struct smb_next_range_intent
     {};
 
+    // 공유 목록에서 공유 하나를 눌렀다. 주소를 "서버/공유"로 바꾸고 연다.
+    struct smb_share_intent
+    {
+        std::u8string name {};
+    };
+
     // 쉬는 연결을 닫는다 (단추, 그리고 앱이 뒤로 갈 때 delegate가 보낸다).
     struct smb_close_idle_intent
     {};
@@ -90,7 +97,7 @@ namespace mobile_demo {
     private:
         void apply_edit(const luil::text_edit_request& request);
         void apply_composition(const luil::text_composition_event& event);
-        // 적은 주소("서버/공유/폴더")를 연결 정보와 첫 폴더로 가른다. 서버·공유가 없으면 nullopt다.
+        // 적은 주소("서버/공유/폴더")를 연결 정보로 가른다. 공유는 빌 수 있다(서버만 적으면 공유 목록). 서버가 없으면 nullopt다.
         [[nodiscard]] std::optional<luil::net::smb_location> location() const;
         void cancel_pending();
         void send(luil::net::smb_operation operation, std::u8string path, std::uint64_t offset = 0, std::size_t length = 0);
@@ -116,6 +123,9 @@ namespace mobile_demo {
         std::uint64_t next_offset_ { 0 };
         bool more_ { false };
         std::vector<luil::net::smb_entry> entries_ {};
+        // 보이는 공유(디스크이고 숨지 않은 것)와 걸러 낸 공유의 수다.
+        std::vector<luil::net::smb_share> shares_ {};
+        std::size_t hidden_shares_ { 0 };
         // 상태 한 줄과 그 아래 여러 줄로 나눠 적을 글(libsmb2의 오류 글, 파일 앞부분)이다. luil의 라벨은 한 줄이라
         // 긴 글은 페이지가 줄을 나눈다.
         std::u8string status_ { u8"주소를 적고 열기를 누른다." };

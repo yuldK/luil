@@ -31,7 +31,7 @@ namespace luil::net {
     inline constexpr std::uint32_t smb_status_network_session_expired { 0xC000035C };
 
     // 요청을 본다. 어기면 `invalid_request`이고 아무것도 보내지 않는다.
-    //  - 서버·공유는 비지 않고, 제어 문자·공백·`/`·`\`가 없다. 공유 이름은 80자 이하다.
+    //  - 서버·공유는 비지 않고, 제어 문자·공백·`/`·`\`가 없다. 공유 이름은 80자 이하다. 공유 목록은 공유를 보지 않는다.
     //  - 경로·도메인·사용자 이름에 제어 문자가 없고, 경로는 `\` 대신 `/`로 나눈다.
     //  - `read`의 길이는 1 이상 `max_read_bytes` 이하이고, 시작 자리와 더해 넘치지 않는다.
     //  - 시간 상한은 음수가 아니다.
@@ -51,4 +51,13 @@ namespace luil::net {
     // (-errno: 연결 재설정·끊긴 파이프·닿지 않는 망 등) 서버가 세션·트리를 잃었다(NT 상태). 로그온 실패·접근 거부·없는
     // 경로처럼 서버가 요청에 답한 실패는 아니다.
     [[nodiscard]] bool smb_connection_lost(int status, std::uint32_t nt_status) noexcept;
+
+    // 요청이 붙을 공유다. 공유 목록은 같은 계정의 `IPC$`에 붙는다 (연결의 열쇠와 여는 공유가 같은 값을 쓴다).
+    [[nodiscard]] std::u8string_view smb_connection_share(const smb_request& request) noexcept;
+
+    // srvsvc가 준 공유 하나를 옮긴다. 종류 값의 아래 두 비트가 갈래, 0x80000000이 관리용, 0x40000000이 임시다.
+    [[nodiscard]] smb_share make_smb_share(std::u8string name, std::uint32_t type, std::u8string comment);
+
+    // 공유 목록을 서버가 거절한 Win32 오류 번호의 갈래다. 접근 거부(5)만 갈래가 있고 그 밖은 `failed`다.
+    [[nodiscard]] smb_error_kind smb_error_kind_for_win32(std::uint32_t code) noexcept;
 } // namespace luil::net
