@@ -713,7 +713,7 @@ namespace luil {
         if (owner == nullptr || accepts(*owner) == false)
             return std::nullopt;
         const scroll_source& source { *owner->scroll() };
-        return pan_target { owner->id(), axis, positive_scale(source.scale), source.scroll };
+        return pan_target { owner->id(), axis, positive_scale(source.scale), source.scroll, source.at_start };
     }
 
     std::optional<pan_target> route_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis, const std::span<const pan_route> routes)
@@ -1096,9 +1096,16 @@ namespace luil {
         // 끌기만 끝낸다.
         if (pointer_drag_id_ != ui_element_id {} && event.button == pointer_button::left)
         {
+            const ui_element_id released { pointer_drag_id_ };
             pointer_drag_id_ = {};
             clear_press();
-            return {};
+            // 끝을 듣는 손잡이에는 끝을 알린다 (시트의 멈춤점).
+            const ui_tree* const pressed_tree { surface_tree(pressed_surface_) };
+            const ui_element* const target { pressed_tree != nullptr ? pressed_tree->find(released) : nullptr };
+            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+            if (handler == nullptr || handler->on_release == nullptr)
+                return {};
+            return handler->on_release(ui_action_context { released, event.x, event.y, false });
         }
 
         // drag를 끝낸다.
@@ -1172,6 +1179,41 @@ namespace luil {
             return hit != nullptr && hit->id() == id ? target : nullptr;
         }
 
+        // 누른 손잡이가 아직 살아 있는가다. 손가락을 따라 자리를 옮기는 손잡이(`follows_pointer`)는 누른 자리가 아니라
+        // id·가시성·가둠으로 본다. 그 밖의 손잡이는 누른 자리를 덮은 것이 끊는다 (`live_touch_target`).
+        [[nodiscard]] const ui_element* live_touch_handle(const ui_tree& tree, const ui_element_id& id, const float x, const float y)
+        {
+            const ui_element* const target { tree.find(id) };
+            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+            if (handler != nullptr && handler->follows_pointer)
+                return target->enabled() && tree.visibly_contains(id) && tree.within_focus_trap(id) ? target : nullptr;
+            return live_touch_target(tree, id, x, y);
+        }
+
+        // (x, y)를 덮고 `axis`로 끌기를 넘겨받는 가장 안쪽 컨테이너다. 막기만 하는 것이 먼저 걸리면 없다.
+        [[nodiscard]] const ui_element* handoff_owner_at(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
+        {
+            const ui_element* const root { tree.root() };
+            if (root == nullptr)
+                return nullptr;
+            const auto accepts = [axis](const ui_element& element) {
+                const pan_handoff_target* const target { element.pan_handoff() };
+                return target != nullptr && target->drag != nullptr && target->axis == axis;
+            };
+            const ui_element* const owner { pan_owner_at(*root, x, y, accepts) };
+            return owner != nullptr && accepts(*owner) ? owner : nullptr;
+        }
+
+        // 넘겨받은 컨테이너가 아직 살아 있는가다. 시트는 손가락을 따라 내려가 누른 자리를 떠나므로 id로 찾는다.
+        [[nodiscard]] const pan_handoff_target* live_handoff(const ui_tree& tree, const ui_element_id& id, const scroll_axis axis)
+        {
+            const ui_element* const owner { tree.find(id) };
+            const pan_handoff_target* const target { owner != nullptr ? owner->pan_handoff() : nullptr };
+            if (target == nullptr || target->drag == nullptr || target->axis != axis || owner->enabled() == false || tree.visibly_contains(id) == false || tree.within_focus_trap(id) == false)
+                return nullptr;
+            return target;
+        }
+
         // 손가락이 축 방향으로 움직인 만큼 그 컨테이너를 흘린다.
         // 손가락을 위로 올리면 내용도 따라 올라간다 — offset 증가다 (휠의 양수와 같다).
         [[nodiscard]] std::vector<input_action> pan_step(const pan_target& pan, const float from_x, const float from_y, const float to_x, const float to_y)
@@ -1241,8 +1283,10 @@ namespace luil {
         contact.last_y = event.y;
         // 흘릴 후보가 어느 축에도 없으면 시간 창 동안 끌기를 보류할 까닭이 없다.
         //  - 클릭 대상이 없는 여백·일반 글 위에서도 후보는 선다 (휠과 같은 탐색이다).
-        contact.pan_open
-            = contact.config.pan_enabled && (resolve_pan(*tree, event.x, event.y, scroll_axis::vertical).has_value() || resolve_pan(*tree, event.x, event.y, scroll_axis::horizontal).has_value());
+        //  - 끌기를 넘겨받는 컨테이너(시트)도 후보다. 안에 흘리는 창이 없는 짧은 시트도 끌어 내린다.
+        const auto pan_candidate
+            = [this, tree, &event](const scroll_axis axis) { return resolve_pan(*tree, event.x, event.y, axis).has_value() || handoff_owner_at(*tree, event.x, event.y, axis) != nullptr; };
+        contact.pan_open = contact.config.pan_enabled && (pan_candidate(scroll_axis::vertical) || pan_candidate(scroll_axis::horizontal));
 
         // 초점은 아직 옮기지 않는다. 스크롤이 될 접촉이 칸의 초점과 IME를 빼앗으면
         // 안 된다 — 탭이 확정되는 뗌에서 옮긴다.
@@ -1374,8 +1418,20 @@ namespace luil {
                 contact.moved_action = true;
             return actions;
         }
+        case touch_phase::handoff: {
+            const pan_handoff_target* const target { tree != nullptr ? live_handoff(*tree, contact.handoff, contact.handoff_axis) : nullptr };
+            if (target == nullptr)
+            {
+                cancel_touch();
+                return {};
+            }
+            const float along { contact.handoff_axis == scroll_axis::horizontal ? event.x - contact.last_x : event.y - contact.last_y };
+            if (along != 0.0f)
+                actions.push_back(target->drag(along / positive_scale(target->scale)));
+            break;
+        }
         case touch_phase::handle: {
-            const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
+            const ui_element* const target { tree != nullptr ? live_touch_handle(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
             const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
             if (handler == nullptr)
             {
@@ -1440,7 +1496,25 @@ namespace luil {
                 const float delta_x { event.x - contact.start_x };
                 const float delta_y { event.y - contact.start_y };
                 const scroll_axis axis { std::abs(delta_x) > std::abs(delta_y) ? scroll_axis::horizontal : scroll_axis::vertical };
-                if (std::optional<pan_target> pan { resolve_pan(*tree, contact.start_x, contact.start_y, axis) }; pan.has_value())
+                std::optional<pan_target> pan { resolve_pan(*tree, contact.start_x, contact.start_y, axis) };
+                // 바깥 컨테이너(시트)가 넘겨받는 것은 이 순간 한 번만 정한다. 안쪽 창이 없거나, 처음에 있는 창을
+                // 처음 쪽(손가락이 아래·오른쪽)으로 끄는 때다. 안쪽 창이 그 컨테이너 밖이면 컨테이너의 일이 아니다.
+                const ui_element* handoff { handoff_owner_at(*tree, contact.start_x, contact.start_y, axis) };
+                if (handoff != nullptr && pan.has_value() && tree->within(handoff->id(), pan->id) == false)
+                    handoff = nullptr;
+                const float toward { axis == scroll_axis::horizontal ? delta_x : delta_y };
+                if (handoff != nullptr && (pan.has_value() == false || (pan->at_start && toward > 0.0f)))
+                {
+                    contact.phase = touch_phase::handoff;
+                    contact.handoff = handoff->id();
+                    contact.handoff_axis = axis;
+                    clear_press();
+                    // 누른 자리부터 쌓인 이동을 한 번에 넘긴다 (스크롤의 시작과 같다).
+                    const pan_handoff_target& target { *handoff->pan_handoff() };
+                    actions.push_back(target.drag(toward / positive_scale(target.scale)));
+                    break;
+                }
+                if (pan.has_value())
                 {
                     contact.phase = touch_phase::panning;
                     contact.pan = std::move(pan);
@@ -1572,21 +1646,38 @@ namespace luil {
                 return finish_drag(tree, event.x, event.y);
             clear_press();
             return {};
+        case touch_phase::handoff: {
+            // 마지막 좌표 변화를 넘기고 끝을 알린다.
+            clear_press();
+            const pan_handoff_target* const target { tree != nullptr ? live_handoff(*tree, contact.handoff, contact.handoff_axis) : nullptr };
+            if (target == nullptr)
+                return {};
+            std::vector<input_action> actions {};
+            const float along { contact.handoff_axis == scroll_axis::horizontal ? event.x - contact.last_x : event.y - contact.last_y };
+            if (along != 0.0f)
+                actions.push_back(target->drag(along / positive_scale(target->scale)));
+            for (input_action& action : end_touch_drag(contact, event.x, event.y))
+                actions.push_back(std::move(action));
+            return actions;
+        }
         case touch_phase::handle: {
             // 손잡이를 놓는 것은 클릭이 아니다 (마우스와 같다). 움직이지 않고
-            // 오래 눌렀으면 길게 누르기만 남는다.
+            // 오래 눌렀으면 길게 누르기만 남는다. 끝을 듣는 손잡이에는 먼저 끝을 알린다.
             clear_press();
+            std::vector<input_action> actions { tree != nullptr ? end_touch_drag(contact, event.x, event.y) : std::vector<input_action> {} };
             if (still == false || contact.moved_action || tree == nullptr)
-                return {};
-            const ui_element* const target { live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) };
+                return actions;
+            const ui_element* const target { live_touch_handle(*tree, contact.target, contact.start_x, contact.start_y) };
             // 보통은 누르고 있는 동안 `advance`가 이미 냈다. 여기는 pump가 그 시각에
             // 깨기 전에 뗌이 먼저 온 경우다.
             if (target == nullptr || contact.config.long_press_enabled == false || contact.long_press == long_press_state::unavailable
                 || event.time - contact.pressed_at < contact.config.long_press_time || target->action(ui_trigger::right_click) == nullptr)
-                return {};
+                return actions;
             if (policy_ != nullptr)
                 policy_->on_click(*target);
-            return run_long_press(contact, *target, event.x, event.y);
+            for (input_action& action : run_long_press(contact, *target, event.x, event.y))
+                actions.push_back(std::move(action));
+            return actions;
         }
         case touch_phase::view_pan:
         case touch_phase::pinching:
@@ -1751,8 +1842,11 @@ namespace luil {
         {
             if (touch_.has_value() && touch_->surface == event.surface && (touch_->id == event.pointer_id || (touch_->second.has_value() && touch_->second->id == event.pointer_id)))
             {
+                // 끌기를 쥔 접촉이면 끝을 알린다. 시트가 끄던 자리에 남지 않고 멈춤점으로 돌아간다.
+                std::vector<input_action> actions { end_touch_drag(*touch_, touch_->last_x, touch_->last_y) };
                 cancel_touch();
                 last_view_tap_.reset();
+                return actions;
             }
             return {};
         }
@@ -1796,6 +1890,27 @@ namespace luil {
         const float scale { positive_scale(owner->zoom()->scale) };
         const rect_f& box { owner->bounds() };
         return owner->zoom()->double_tap({ (event.x - box.x - box.width / 2.0f) / scale, (event.y - box.y - box.height / 2.0f) / scale });
+    }
+
+    std::vector<input_action> interaction_controller::end_touch_drag(const touch_contact& contact, const float x, const float y)
+    {
+        const ui_tree* const tree { surface_tree(contact.surface) };
+        if (tree == nullptr)
+            return {};
+        if (contact.phase == touch_phase::handoff)
+        {
+            const pan_handoff_target* const target { live_handoff(*tree, contact.handoff, contact.handoff_axis) };
+            if (target == nullptr || target->release == nullptr)
+                return {};
+            return { target->release() };
+        }
+        if (contact.phase != touch_phase::handle)
+            return {};
+        const ui_element* const target { live_touch_handle(*tree, contact.target, contact.start_x, contact.start_y) };
+        const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+        if (handler == nullptr || handler->on_release == nullptr)
+            return {};
+        return handler->on_release(ui_action_context { contact.target, x, y, false });
     }
 
     void interaction_controller::record_view_pan(view_edge_track& edge, const zoom_point delta, const std::chrono::steady_clock::time_point time, const float x, const float y)

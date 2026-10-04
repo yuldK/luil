@@ -36,6 +36,7 @@ add_executable(luil_core_tests
     scroll_area_element_tests.cpp
     scroll_view_element_tests.cpp
     scrollbar_element_tests.cpp
+    sheet_host_element_tests.cpp
     sidebar_element_tests.cpp
     slider_element_tests.cpp
     split_handle_element_tests.cpp

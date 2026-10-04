@@ -176,6 +176,15 @@ namespace luil {
         // 직전 위치와 현재 위치를 받는다.
         // 상대 변화량만 쓰므로 tree가 다시 빌드되어도 이어서 끌 수 있다.
         std::function<std::vector<input_action>(const ui_action_context& previous, const ui_action_context& current)> on_move {};
+        // 끌기가 끝났다 (뗌, 또는 시스템의 접촉 취소). 마지막 자리를 받는다.
+        // 끄는 동안의 상태를 앱이 들고 있다가 여기서 멈출 자리를 정한다 (시트의 멈춤점).
+        //  - 비어 있으면 끝을 알리지 않는다 — 지금까지의 손잡이가 그 경우다.
+        //  - 누른 element가 사라졌거나 가려진 뒤의 뗌에는 부르지 않는다.
+        std::function<std::vector<input_action>(const ui_action_context&)> on_release {};
+        // 손잡이가 손가락을 따라 자리를 옮긴다 (시트의 끌기 손잡이). 참이면 터치 접촉 동안 이 손잡이가 살아 있는지를
+        // 누른 자리의 hit이 아니라 id·가시성·가둠으로 본다 — 손잡이가 내려가면 누른 자리는 곧 다른 것(scrim)에 덮인다.
+        //  - 기본은 거짓이다. 제자리의 손잡이(막대·나눔 손잡이)는 지금처럼 누른 자리를 덮은 것을 끊는다.
+        bool follows_pointer { false };
     };
 
     // 키가 값을 한 칸 옮기는 방향이다.
@@ -304,10 +313,30 @@ namespace luil {
         // 휠은 축을 묻지 않는다 — 가로 띠 위에서 굴린 휠이 그 띠를 흘리는 것이
         // 앱이 표로 지어 오던 동작이다.
         scroll_axis axis { scroll_axis::vertical };
+        // 내용이 처음(맨 위·맨 왼쪽)에 있다. 앱이 위치를 들고 있으므로 앱이 싣는다.
+        //  - 바깥의 `pan_handoff_target`(시트)이 이 값을 보고, 처음에 있는 창을 처음 쪽으로 끄는 터치를 넘겨받는다.
+        //    기본은 거짓이라 넘겨받지 않는다 — 지금까지의 창이 그 경우다.
+        bool at_start { false };
         // 절대 자리(`scroll_to`)는 여기 두지 않는다. 휠도 되살리기도 변화량으로만
         // 말하고, 절대 자리를 읽는 것은 보조 기술뿐이라 그 값은 그것을 실제로
         // 내주는 자리(`scrollbar_config::scroll_to`)에 있다 — 아무도 읽지 않는
         // 칸을 두면 채운 앱이 켜졌다고 믿는다.
+    };
+
+    // 안쪽 흘리는 창이 처음에 있을 때 처음 쪽으로의 터치 끌기를 넘겨받는 컨테이너다 (아래 시트를 끌어 내리기).
+    //  - 터치가 그 축으로 흐르기 시작하는 순간(축 판정) 한 번 정한다. 누른 자리에 이 컨테이너 안의 흘리는 창이
+    //    없거나, 있어도 처음(`scroll_source::at_start`)에 있고 손가락이 처음 쪽(아래·오른쪽)으로 움직이면 이
+    //    컨테이너가 받는다. 그 밖에는 지금처럼 안쪽 창이 흐른다. 접촉 도중에는 넘기지 않는다.
+    //  - 마우스·펜에는 몸짓이 없다. 끄는 손잡이(`pointer_drag_target`)가 따로 있다.
+    struct pan_handoff_target
+    {
+        scroll_axis axis { scroll_axis::vertical };
+        // 물리 픽셀 / 논리 픽셀이다.
+        float scale { 1.0f };
+        // 끈 만큼이다 (논리 픽셀, 손가락 방향 — 아래·오른쪽이 양수).
+        std::function<input_action(float delta)> drag {};
+        // 손을 뗐거나 접촉이 취소됐다.
+        std::function<input_action()> release {};
     };
 
     // 초점을 가진 채 글자로 **자기 모델 안**을 찾는 element다 (가상 목록).
@@ -555,6 +584,8 @@ namespace luil {
         // 휠과 초점 되살리기가 표 없이 이 값으로 임자를 찾는다.
         [[nodiscard]] const scroll_source* scroll() const noexcept;
         [[nodiscard]] const zoom_source* zoom() const noexcept;
+        // 안쪽 창의 끝에서 터치 끌기를 넘겨받는 역할이다. 없으면 nullptr다.
+        [[nodiscard]] const pan_handoff_target* pan_handoff() const noexcept;
         // 초점을 가진 채 글자로 자기 모델을 찾는 역할이다. 없으면 nullptr다.
         [[nodiscard]] const key_search_target* key_search() const noexcept;
         // 앱이 지정한 포인터 모양이다.
@@ -656,6 +687,7 @@ namespace luil {
         // `scroll_delta_to_reveal`을 재정의한 컨테이너와 짝이 되는 값이다.
         void set_scroll_source(std::optional<scroll_source> source);
         void set_zoom_source(std::optional<zoom_source> source);
+        void set_pan_handoff(std::optional<pan_handoff_target> target);
         // 글자 탐색이 이 element의 모델을 묻게 한다 (가상 목록).
         void set_key_search_target(std::optional<key_search_target> target);
         void set_clip_children(bool value) noexcept;
@@ -804,6 +836,7 @@ namespace luil {
         std::optional<key_step_target> key_step_target_ {};
         std::optional<scroll_source> scroll_source_ {};
         std::optional<zoom_source> zoom_source_ {};
+        std::optional<pan_handoff_target> pan_handoff_ {};
         std::optional<key_search_target> key_search_target_ {};
         bool clip_children_ { false };
         bool hit_opaque_ { false };

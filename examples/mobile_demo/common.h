@@ -82,6 +82,7 @@ namespace mobile_demo {
     inline constexpr std::u8string_view page_zoom { u8"zoom" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
     inline constexpr std::u8string_view page_device { u8"device" };
+    inline constexpr std::u8string_view page_sheets { u8"sheets" };
 
     // --- 셸 수준 메시지 ---
     struct close_intent

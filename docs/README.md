@@ -47,6 +47,7 @@
 - [키 이벤트의 표면 라우팅](key-surface-routing-design.md)
 - [터치 제스처와 펜 입력](touch-pen-input-design.md)
 - [Modal dialog host](modal-dialog-design.md)
+- [시트와 서랍](sheet-design.md)
 - [Caption 버튼 구성](caption-button-design.md)
 - [모바일 앱 바](app-bar-design.md)
 

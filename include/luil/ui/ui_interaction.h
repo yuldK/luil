@@ -135,6 +135,8 @@ namespace luil {
         // 물리 픽셀 / 논리 픽셀이다 (`scroll_source::scale`과 같은 값).
         float scale { 1.0f };
         std::function<input_action(float delta)> scroll {};
+        // 내용이 처음에 있다 (`scroll_source::at_start`). 바깥 시트가 끌기를 넘겨받는 판정에 쓴다.
+        bool at_start { false };
     };
 
     // 표로 끌기를 이름 대는 앱의 한 줄이다.
@@ -424,6 +426,8 @@ namespace luil {
             dragging,
             // 누르는 즉시 시작하는 전용 조작이다 (`pointer_drag_target`).
             handle,
+            // 안쪽 창의 끝에서 바깥 컨테이너(시트)가 넘겨받은 끌기다 (`pan_handoff_target`).
+            handoff,
         };
 
         // 터치 접촉 하나의 길게 누르기다.
@@ -508,6 +512,9 @@ namespace luil {
             std::optional<view_edge_track> edge {};
             // 둘째 손가락이 한 번이라도 합류했다. 핀치가 섞인 접촉은 탭이 아니다.
             bool pinched { false };
+            // 끌기를 넘겨받은 컨테이너와 그 축이다 (`touch_phase::handoff`).
+            ui_element_id handoff {};
+            scroll_axis handoff_axis { scroll_axis::vertical };
         };
 
         [[nodiscard]] std::vector<input_action> process_touch_press(const pointer_pressed_event& event);
@@ -523,6 +530,8 @@ namespace luil {
         [[nodiscard]] std::optional<pan_target> resolve_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
         // 진행 중인 터치 접촉을 액션 없이 거둔다.
         void cancel_touch() noexcept;
+        // 끌기를 쥔 터치 접촉이 끝난다 (뗌·취소). 넘겨받은 컨테이너의 `release`, 손잡이의 `on_release`다.
+        [[nodiscard]] std::vector<input_action> end_touch_drag(const touch_contact& contact, float x, float y);
         // 보기에 보낸 이동 하나와 그 시각의 자리를 경계 기록에 더한다.
         static void record_view_pan(view_edge_track& edge, zoom_point delta, std::chrono::steady_clock::time_point time, float x, float y);
         // 접촉이 끝났다. 경계 쓸기의 기준을 넘었으면 보기의 메시지를 돌려준다.

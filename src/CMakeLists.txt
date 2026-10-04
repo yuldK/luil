@@ -203,6 +203,8 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     "${public_headers}/ui/menu_element.h"
     ui/modal_host_element.cpp
     "${public_headers}/ui/modal_host_element.h"
+    ui/sheet_host_element.cpp
+    "${public_headers}/ui/sheet_host_element.h"
     ui/toast_element.cpp
     "${public_headers}/ui/toast_element.h")
 

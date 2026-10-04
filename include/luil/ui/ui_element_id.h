@@ -109,6 +109,11 @@ namespace luil {
         // 버튼은 "navigation"과 "action:<순번>"을 owner로 쓴다.
         app_bar,
         app_bar_button,
+        // 같은 표면 안에 겹쳐 그리는 시트·서랍과 그 scrim, 끌기 손잡이다 (sheet-design.md).
+        // 여럿이 겹칠 수 있어 owner로 구분한다.
+        sheet_host,
+        sheet_scrim,
+        sheet_handle,
         // 앱이 정의하는 kind는 이 값부터다.
         // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         first_application_kind = 64,

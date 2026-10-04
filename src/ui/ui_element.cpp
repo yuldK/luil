@@ -143,6 +143,16 @@ namespace luil {
         return scroll_source_.has_value() ? &*scroll_source_ : nullptr;
     }
 
+    const pan_handoff_target* ui_element::pan_handoff() const noexcept
+    {
+        return pan_handoff_.has_value() ? &*pan_handoff_ : nullptr;
+    }
+
+    void ui_element::set_pan_handoff(std::optional<pan_handoff_target> target)
+    {
+        pan_handoff_ = std::move(target);
+    }
+
     const key_search_target* ui_element::key_search() const noexcept
     {
         return key_search_target_.has_value() ? &*key_search_target_ : nullptr;

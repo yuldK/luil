@@ -25,6 +25,8 @@ function(luil_mobile_demo_sources out_var)
         "${directory}/lists_page.h"
         "${directory}/popups_page.cpp"
         "${directory}/popups_page.h"
+        "${directory}/sheets_page.cpp"
+        "${directory}/sheets_page.h"
         "${directory}/tabs_page.cpp"
         "${directory}/tabs_page.h"
         "${directory}/theme_page.cpp"
