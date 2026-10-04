@@ -60,7 +60,7 @@ Android에서는 GameActivity가 주는 GameTextInput이 IME(`InputConnection`)�
 | 클립보드 | 복사·잘라내기(Ctrl+C·X, Shift+Delete, Ctrl+Insert, Android 키보드의 복사 키)를 하지 않는다. 보이기를 켜도 같다. 붙여넣기는 된다 — 암호 관리자에서 붙여 넣는다 |
 | 낱말 단위 | Ctrl+←·→는 칸 끝으로, Ctrl+Backspace·Delete는 고른 구간 또는 그쪽 끝까지, 더블 클릭은 칸 전체다. 낱말 경계가 공백 자리를 알리기 때문이다 |
 | Android 키보드 | `TYPE_TEXT_VARIATION_PASSWORD`와 `IME_FLAG_NO_PERSONALIZED_LEARNING`으로 띄워 키보드가 추천 줄에 글을 띄우지 않고 배우지 않는다. 키보드가 떠 있는 채로 일반 칸과 암호 칸 사이를 옮기면 키보드를 다시 세운다. 보이기는 다시 세우지 않는다 |
-| Windows IME | TSF에 문서를 넘기지 않는다. 초점이 없을 때처럼 빈 document가 초점을 받아 IME가 조합하지 않고, 키는 `WM_CHAR`로 칸에 바로 간다. Windows 표준 암호 칸처럼 한글 조합이 꺼진다 |
+| Windows IME | TSF에 문서를 넘기지 않고(초점이 없을 때처럼 빈 document가 초점을 받는다) 창의 IME 문맥도 떼어 낸다 (`ImmAssociateContextEx`). 빈 document만으로는 한글 모드의 IME가 IMM 호환 층으로 자기 조합 창을 띄운다. 그래서 한글 모드여도 IME 창이 뜨지 않고 키는 영문 그대로 `WM_CHAR`로 칸에 간다. 칸을 떠나거나 창이 초점을 잃으면 기본 문맥으로 되돌려 사용자의 한/영 상태가 그대로다 |
 | 보조 기술 | 값은 화면과 같은 점이고 UIA `IsPassword`가 참이다. Text pattern은 내주지 않는다 |
 
 - 결합 문자도 점 하나로 세어, 점이 보이는 글자보다 많을 수 있다.

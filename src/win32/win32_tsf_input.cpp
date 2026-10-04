@@ -3,6 +3,7 @@
 #include "luil/text/utf8_text.h"
 #include "win32/utf8.h"
 
+#include <imm.h>
 #include <msctf.h>
 #include <olectl.h>
 #include <textstor.h>
@@ -747,7 +748,7 @@ namespace luil::win32 {
     public:
         implementation(HWND window, tsf_host& host) noexcept
             : host_ { &host }
-            // HWND가 없는 session은 COM 수명 test용이라 focus가 있다고 본다.
+            , window_ { window } // HWND가 없는 session은 COM 수명 test용이라 focus가 있다고 본다.
             , window_focused_ { window == nullptr || GetFocus() == window }
         {}
 
@@ -758,6 +759,7 @@ namespace luil::win32 {
 
         ~implementation()
         {
+            set_ime_detached(false);
             finish_composition();
             if (thread_manager_ != nullptr)
             {
@@ -813,10 +815,12 @@ namespace luil::win32 {
             // element의 논리 focus와 HWND의 keyboard focus가 모두 있어야
             // 이 문서가 TIP의 입력 대상이다. HWND focus 상실은 target을 즉시
             // 비우고, 논리 focus도 별도 raw input으로 뒤이어 해제된다.
-            // 암호 칸은 TIP에 넘기지 않는다 — 초점이 없을 때처럼 빈 document가 초점을 받아 IME가 조합하지
-            // 않고, 키는 WM_CHAR로 바로 칸에 간다 (Windows 표준 암호 칸이 IME를 끄는 것과 같다).
+            // 암호 칸은 TIP에 넘기지 않는다 — 초점이 없을 때처럼 빈 document가 초점을 받고, 창의 IME 문맥도
+            // 떼어 낸다. 키는 한글 모드여도 영문 그대로 WM_CHAR로 칸에 간다 (Windows 표준 암호 칸과 같다).
             std::optional<text_input_target> target { window_focused_ ? host_->focused_text_target() : std::nullopt };
-            if (target.has_value() && host_->committed_document().secret)
+            const bool secret { target.has_value() && host_->committed_document().secret };
+            set_ime_detached(secret);
+            if (secret)
                 target.reset();
             if (target != store_->target())
             {
@@ -914,6 +918,17 @@ namespace luil::win32 {
                 store_->finish_composition();
         }
 
+        // 창의 IME 문맥을 떼거나 되돌린다. 빈 document만 초점에 두면 TSF의 TIP은 조합하지 않지만, 한글 모드의
+        // IME가 IMM 호환 층으로 자기 조합 창을 띄운다. WPF의 PasswordBox처럼 IMM 문맥까지 떼어야 IME가 뜨지
+        // 않는다. 되돌릴 때는 창의 기본 문맥이라 사용자가 두었던 한/영 상태가 그대로 돌아온다.
+        void set_ime_detached(const bool detached) noexcept
+        {
+            if (window_ == nullptr || detached == ime_detached_)
+                return;
+            ime_detached_ = detached;
+            static_cast<void>(ImmAssociateContextEx(window_, nullptr, detached ? 0 : IACE_DEFAULT));
+        }
+
         void acquire_thread_focus() noexcept
         {
             if (owns_tsf_focus() == false)
@@ -935,7 +950,10 @@ namespace luil::win32 {
         }
 
         tsf_host* host_ { nullptr };
+        HWND window_ { nullptr };
         bool window_focused_ { false };
+        // 암호 칸 때문에 창의 IME 문맥을 떼어 둔 동안 참이다.
+        bool ime_detached_ { false };
         ITfThreadMgr2* thread_manager_ { nullptr };
         ITfKeystrokeMgr* keystroke_manager_ { nullptr };
         ITfDocumentMgr* inactive_document_manager_ { nullptr };

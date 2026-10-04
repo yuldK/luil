@@ -1,5 +1,6 @@
 #include "win32/win32_tsf_input.h"
 
+#include <imm.h>
 #include <objbase.h>
 #include <olectl.h>
 #include <textstor.h>
@@ -138,6 +139,42 @@ namespace {
     private:
         HRESULT result_ { S_OK };
     };
+
+    // 띄우지 않는 창이다. 보이지도 활성화되지도 않아 사용자의 초점을 건드리지 않는다.
+    class hidden_window
+    {
+    public:
+        hidden_window() noexcept
+            : window_ { CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr) }
+        {}
+
+        hidden_window(const hidden_window&) = delete;
+        hidden_window(hidden_window&&) = delete;
+        hidden_window& operator=(const hidden_window&) = delete;
+        hidden_window& operator=(hidden_window&&) = delete;
+
+        ~hidden_window()
+        {
+            if (window_ != nullptr)
+                DestroyWindow(window_);
+        }
+
+        [[nodiscard]] HWND get() const noexcept
+        {
+            return window_;
+        }
+
+    private:
+        HWND window_ { nullptr };
+    };
+
+    [[nodiscard]] bool has_ime_context(const HWND window) noexcept
+    {
+        const HIMC context { ImmGetContext(window) };
+        if (context != nullptr)
+            ImmReleaseContext(window, context);
+        return context != nullptr;
+    }
 
     // sink 계약 검증용 최소 sink다. 어떤 알림이 왔는지만 센다.
     // test scope 밖으로 참조가 남지 않으므로 스스로 지우지 않는다.
@@ -290,6 +327,62 @@ TEST_CASE("A TSF session activates and tears down cleanly", "[win32][tsf]")
         session->synchronize();
         REQUIRE(session->owns_tsf_focus());
     }
+}
+
+// 암호 칸에 초점이 있는 동안 창의 IME 문맥을 떼어 한글 모드의 IME 조합 창이 뜨지 않게 한다.
+TEST_CASE("A password box detaches the window's IME context while it has focus", "[win32][tsf][secret]")
+{
+    const com_scope com {};
+    if (com.ready() == false)
+        SKIP("COM apartment initialization failed.");
+    const hidden_window window {};
+    REQUIRE(window.get() != nullptr);
+    if (has_ime_context(window.get()) == false)
+        SKIP("This machine gives windows no IME context.");
+
+    stub_host host {};
+    {
+        const std::unique_ptr<luil::win32::tsf_input_session> session {
+            luil::win32::tsf_input_session::create(window.get(), host),
+        };
+        if (session == nullptr)
+            SKIP("Text Services Framework is not available on this machine.");
+        session->set_window_focused(true);
+
+        // 일반 칸은 문맥을 그대로 둔다.
+        host.focused = luil::text_input_target { 1 };
+        host.document = { u8"main", 4u, 4u };
+        session->synchronize();
+        REQUIRE(has_ime_context(window.get()));
+
+        // 암호 칸에 서면 뗀다.
+        host.focused = luil::text_input_target { 2 };
+        host.document = { u8"", 0u, 0u };
+        host.document.secret = true;
+        session->synchronize();
+        REQUIRE(has_ime_context(window.get()) == false);
+        REQUIRE(session->owns_tsf_focus() == false);
+
+        // 창이 초점을 잃으면 되돌리고, 돌아오면 다시 뗀다.
+        session->set_window_focused(false);
+        REQUIRE(has_ime_context(window.get()));
+        session->set_window_focused(true);
+        REQUIRE(has_ime_context(window.get()) == false);
+
+        // 일반 칸으로 돌아오면 되돌린다.
+        host.focused = luil::text_input_target { 1 };
+        host.document = { u8"main", 4u, 4u };
+        session->synchronize();
+        REQUIRE(has_ime_context(window.get()));
+
+        // 암호 칸에 선 채로 session이 사라져도 되돌린다.
+        host.focused = luil::text_input_target { 2 };
+        host.document = { u8"", 0u, 0u };
+        host.document.secret = true;
+        session->synchronize();
+        REQUIRE(has_ime_context(window.get()) == false);
+    }
+    REQUIRE(has_ime_context(window.get()));
 }
 
 // `ITextStoreACP2` 계약: sink는 하나만 살고, 같은 COM identity의
