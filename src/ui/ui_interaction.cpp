@@ -25,6 +25,7 @@ namespace luil {
         }
 
         [[nodiscard]] const ui_element* wheel_owner_at(const ui_element& element, float x, float y);
+        [[nodiscard]] const ui_element* live_touch_handle(const ui_tree& tree, const ui_element_id& id, float x, float y);
 
         [[nodiscard]] const ui_element* live_zoom_view(const ui_tree& tree, const ui_element_id& id, const float x, const float y)
         {
@@ -414,9 +415,14 @@ namespace luil {
         // tree가 다시 빌드되어도 같은 id로 찾아 이어서 끈다.
         if (pointer_drag_id_ != ui_element_id {})
         {
-            const ui_element* const target { pressed_tree != nullptr ? pressed_tree->find(pointer_drag_id_) : nullptr };
+            const ui_element* const target { pressed_tree != nullptr ? live_touch_handle(*pressed_tree, pointer_drag_id_, pressed_x_, pressed_y_) : nullptr };
             const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
-            if (handler == nullptr || handler->on_move == nullptr)
+            if (handler == nullptr)
+            {
+                cancel_pointer_gesture();
+                return {};
+            }
+            if (handler->on_move == nullptr)
                 return {};
 
             const ui_action_context previous { pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, false };
@@ -1658,7 +1664,7 @@ namespace luil {
             const float along { contact.handoff_axis == scroll_axis::horizontal ? event.x - contact.last_x : event.y - contact.last_y };
             if (along != 0.0f)
                 actions.push_back(target->drag(along / positive_scale(target->scale)));
-            for (input_action& action : end_touch_drag(contact, event.x, event.y, contact.motion.velocity_at(event.time)))
+            for (input_action& action : end_touch_drag(contact, event.x, event.y, contact.motion.velocity_at(event.time), along))
                 actions.push_back(std::move(action));
             return actions;
         }
@@ -1896,7 +1902,7 @@ namespace luil {
         return owner->zoom()->double_tap({ (event.x - box.x - box.width / 2.0f) / scale, (event.y - box.y - box.height / 2.0f) / scale });
     }
 
-    std::vector<input_action> interaction_controller::end_touch_drag(const touch_contact& contact, const float x, const float y, const drag_velocity velocity)
+    std::vector<input_action> interaction_controller::end_touch_drag(const touch_contact& contact, const float x, const float y, const drag_velocity velocity, const float final_delta)
     {
         const ui_tree* const tree { surface_tree(contact.surface) };
         if (tree == nullptr)
@@ -1907,7 +1913,8 @@ namespace luil {
             if (target == nullptr || target->release == nullptr)
                 return {};
             const float along { contact.handoff_axis == scroll_axis::horizontal ? velocity.x : velocity.y };
-            return { target->release(along / positive_scale(target->scale)) };
+            const float scale { positive_scale(target->scale) };
+            return { target->release(final_delta / scale, along / scale) };
         }
         if (contact.phase != touch_phase::handle)
             return {};
@@ -1923,7 +1930,7 @@ namespace luil {
         if (pointer_drag_id_ == ui_element_id {})
             return {};
         const ui_tree* const tree { surface_tree(pressed_surface_) };
-        const ui_element* const target { tree != nullptr ? tree->find(pointer_drag_id_) : nullptr };
+        const ui_element* const target { tree != nullptr ? live_touch_handle(*tree, pointer_drag_id_, pressed_x_, pressed_y_) : nullptr };
         const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
         if (handler == nullptr || handler->on_release == nullptr)
             return {};

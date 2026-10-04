@@ -152,6 +152,10 @@ namespace mobile_demo {
         }
     } // namespace
 
+    smb_page::smb_page(smb_page_transport transport)
+        : transport_ { std::move(transport) }
+    {}
+
     bool smb_page::handle(const luil::app_message& message)
     {
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
@@ -171,7 +175,15 @@ namespace mobile_demo {
         }
         if (const auto* const attach { message.get<smb_client_intent>() }; attach != nullptr)
         {
-            client_ = attach->client;
+            if (attach->client == nullptr)
+                transport_ = {};
+            else
+            {
+                luil::net::smb_client* const client { attach->client };
+                transport_.send = [client](luil::net::smb_request request, std::u8string& error) { return client->send(std::move(request), error); };
+                transport_.cancel = [client](const luil::net::smb_ticket ticket) { client->cancel(ticket); };
+                transport_.stop = [client] { client->stop(); };
+            }
             return true;
         }
         if (message.get<smb_open_intent>() != nullptr)
@@ -179,24 +191,24 @@ namespace mobile_demo {
             const std::u8string address { address_.text };
             const std::size_t first { address.find(u8'/') };
             const std::size_t second { first == std::u8string::npos ? std::u8string::npos : address.find(u8'/', first + 1) };
-            folder_ = second == std::u8string::npos ? std::u8string {} : address.substr(second + 1);
-            send(luil::net::smb_operation::list, folder_);
+            send(luil::net::smb_operation::list, second == std::u8string::npos ? std::u8string {} : address.substr(second + 1));
             return true;
         }
         if (message.get<smb_up_intent>() != nullptr)
         {
+            if (pending_ && pending_operation_ == luil::net::smb_operation::list)
+                return true;
             const std::size_t slash { folder_.rfind(u8'/') };
-            folder_ = slash == std::u8string::npos ? std::u8string {} : folder_.substr(0, slash);
-            send(luil::net::smb_operation::list, folder_);
+            send(luil::net::smb_operation::list, slash == std::u8string::npos ? std::u8string {} : folder_.substr(0, slash));
             return true;
         }
         if (const auto* const entry { message.get<smb_entry_intent>() }; entry != nullptr)
         {
+            // 새 tree가 오기 전에 이전 행의 클릭이 도착해도 지금 목록에 없는 항목은 열지 않는다.
+            if (std::ranges::none_of(entries_, [entry](const luil::net::smb_entry& item) { return item.name == entry->name && item.directory == entry->directory; }))
+                return true;
             if (entry->directory)
-            {
-                folder_ = joined(folder_, entry->name);
-                send(luil::net::smb_operation::list, folder_);
-            }
+                send(luil::net::smb_operation::list, joined(folder_, entry->name));
             else
                 send(luil::net::smb_operation::read, joined(folder_, entry->name));
             return true;
@@ -214,7 +226,7 @@ namespace mobile_demo {
         if (const auto* const result { message.get<smb_result_intent>() }; result != nullptr)
         {
             const luil::net::smb_response& response { result->response };
-            if (response.ticket != pending_)
+            if (pending_ == luil::net::smb_ticket {} || response.ticket != pending_)
                 return true;
             pending_ = {};
             const std::u8string elapsed { u8" (" + number_text(static_cast<std::uint64_t>(response.elapsed.count())) + u8" ms)" };
@@ -227,6 +239,7 @@ namespace mobile_demo {
             }
             if (response.operation == luil::net::smb_operation::list)
             {
+                folder_ = pending_path_;
                 entries_ = response.entries;
                 std::ranges::sort(
                     entries_, [](const luil::net::smb_entry& left, const luil::net::smb_entry& right) { return left.directory != right.directory ? left.directory : left.name < right.name; });
@@ -246,7 +259,16 @@ namespace mobile_demo {
     void smb_page::apply_edit(const luil::text_edit_request& request)
     {
         if (request.target == target_smb_address)
+        {
+            const std::u8string before { address_.text };
             luil::apply_text_edit(address_, request);
+            if (address_.text != before)
+            {
+                cancel_pending();
+                entries_.clear();
+                folder_.clear();
+            }
+        }
         else if (request.target == target_smb_user)
             luil::apply_text_edit(user_, request);
         else if (request.target == target_smb_password)
@@ -281,9 +303,20 @@ namespace mobile_demo {
         return location;
     }
 
+    void smb_page::cancel_pending()
+    {
+        if (pending_ && transport_.cancel != nullptr)
+            transport_.cancel(pending_);
+        pending_ = {};
+    }
+
     void smb_page::send(const luil::net::smb_operation operation, std::u8string path)
     {
-        if (client_ == nullptr)
+        cancel_pending();
+        // 응답 대기·실패 중에 이전 폴더의 행을 새 경로로 열지 않는다.
+        if (operation == luil::net::smb_operation::list)
+            entries_.clear();
+        if (transport_.send == nullptr)
             return;
         const std::optional<luil::net::smb_location> where { location() };
         if (where.has_value() == false)
@@ -292,9 +325,6 @@ namespace mobile_demo {
             detail_ = u8"예: 192.168.0.10/photos";
             return;
         }
-        // 앞선 요청은 끊는다. 늦게 온 답은 표가 달라 버린다.
-        if (pending_)
-            client_->cancel(pending_);
         luil::net::smb_request request {};
         request.location = *where;
         request.operation = operation;
@@ -302,7 +332,8 @@ namespace mobile_demo {
         if (operation == luil::net::smb_operation::read)
             request.length = preview_bytes;
         std::u8string error {};
-        pending_ = client_->send(std::move(request), error);
+        pending_ = transport_.send(std::move(request), error);
+        pending_operation_ = operation;
         pending_path_ = std::move(path);
         status_ = pending_ ? std::u8string { u8"기다리는 중…" } : std::u8string { u8"보내지 못함" };
         detail_ = pending_ ? std::u8string {} : error;
@@ -314,7 +345,7 @@ namespace mobile_demo {
         const float field_width { std::min(width - 2.0f * page_padding, 420.0f) };
         page_column column { u8"smb" };
         column.heading(u8"smb-heading", u8"SMB 공유");
-        if (client_ == nullptr)
+        if (transport_.send == nullptr)
         {
             column.note(u8"smb-none", u8"이 구성에는 SMB가 없다.");
             column.note(u8"smb-none-why", u8"Android에서 LUIL_ENABLE_SMB를 켜고 세운다.");

@@ -315,7 +315,11 @@ namespace luil {
             return;
         }
         const float height { context.slot.height / scale };
-        auto release = [config = config_, height](const float velocity) { return release_action(config, height, velocity); };
+        auto release = [config = config_, height](const float final_delta, const float velocity) {
+            sheet_host_config current { config };
+            current.drag_offset += final_delta;
+            return release_action(current, height, velocity);
+        };
         pointer_drag_target handle {};
         handle.on_move = [drag = config_.drag, scale](const ui_action_context& previous, const ui_action_context& current) -> std::vector<input_action> {
             const float delta { (current.y - previous.y) / scale };
@@ -323,7 +327,7 @@ namespace luil {
                 return {};
             return { drag(delta) };
         };
-        handle.on_release = [release, scale](const ui_action_context&, const drag_velocity velocity) { return as_list(release(velocity.y / scale)); };
+        handle.on_release = [release, scale](const ui_action_context&, const drag_velocity velocity) { return as_list(release(0.0f, velocity.y / scale)); };
         // 손잡이는 손가락을 따라 내려간다. 누른 자리가 곧 scrim에 덮여도 끌기가 이어진다.
         handle.follows_pointer = true;
         handle_->set_pointer_drag_target(std::move(handle));

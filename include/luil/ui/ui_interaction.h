@@ -547,7 +547,7 @@ namespace luil {
         void cancel_touch() noexcept;
         // 끌기를 쥔 터치 접촉이 끝난다 (뗌·취소). 넘겨받은 컨테이너의 `release`, 손잡이의 `on_release`다.
         //  - `velocity`는 놓은 순간의 속도다. 취소·유실이면 0을 넘긴다.
-        [[nodiscard]] std::vector<input_action> end_touch_drag(const touch_contact& contact, float x, float y, drag_velocity velocity);
+        [[nodiscard]] std::vector<input_action> end_touch_drag(const touch_contact& contact, float x, float y, drag_velocity velocity, float final_delta = 0.0f);
         // 마우스·펜이 쥔 손잡이 끌기가 끝난다 (뗌·취소·입력 큐 유실). 손잡이의 `on_release`다. 끝 상태를 지우기 전에
         // 부른다 — 누른 표면으로 손잡이를 찾는다.
         [[nodiscard]] std::vector<input_action> end_pointer_drag(float x, float y, drag_velocity velocity) const;

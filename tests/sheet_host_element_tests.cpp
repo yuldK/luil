@@ -99,8 +99,8 @@ namespace {
     };
 
     // 뒤 화면(누르면 "behind")과 400×800 자리의 시트를 짓는다.
-    [[nodiscard]] std::shared_ptr<const luil::ui_tree> sheet_tree(
-        const luil::sheet_host_config& config, std::unique_ptr<luil::ui_element> content = {}, const float width = 400.0f, const float height = 800.0f, const luil::rect_f& surface = {})
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> sheet_tree(const luil::sheet_host_config& config, std::unique_ptr<luil::ui_element> content = {}, const float width = 400.0f,
+        const float height = 800.0f, const luil::rect_f& surface = {}, const float scale = 1.0f, const int unavailable = 0)
     {
         auto shell { std::make_unique<test_shell>(luil::ui_element_id { luil::ui_element_kind::root }) };
         auto behind { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_test, u8"behind" }, luil::panel_config {}) };
@@ -108,10 +108,22 @@ namespace {
             [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(sheet_event { .click = std::u8string { u8"behind" } }) }; });
         shell->add(std::move(behind));
         auto host { std::make_unique<luil::sheet_host_element>(config) };
+        host->set_visible(unavailable != 1);
+        if (unavailable == 2)
+            for (const auto& child : host->children())
+                for (const auto& grandchild : child->children())
+                    grandchild->set_enabled(false);
         if (content != nullptr)
             host->set_content(std::move(content));
         shell->add(std::move(host));
-        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(shell), { 0.0f, 0.0f, width, height }, 1.0f, surface));
+        if (unavailable == 3)
+        {
+            auto cover { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_test, u8"cover" }, luil::panel_config {}) };
+            cover->set_focus_trap(true);
+            cover->set_hit_opaque(true);
+            shell->add(std::move(cover));
+        }
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(shell), { 0.0f, 0.0f, width, height }, scale, surface));
     }
 
     [[nodiscard]] const luil::sheet_host_element& host_of(const luil::ui_tree& tree)
@@ -342,6 +354,65 @@ TEST_CASE("A mouse can drag the handle and letting go settles", "[ui][sheet]")
     const auto events { events_in(controller.process(luil::pointer_released_event { 200.0f, 310.0f, luil::pointer_button::left, at(40) })) };
     REQUIRE(events.size() == 1u);
     REQUIRE(events[0].settle == luil::sheet_detent::half);
+}
+
+TEST_CASE("A sheet body includes the last release delta when choosing its stop", "[ui][sheet][touch]")
+{
+    for (const float scale : { 1.0f, 2.0f })
+        for (const bool upward : { false, true })
+        {
+            CAPTURE(scale, upward);
+            auto config { sheet_config() };
+            luil::interaction_controller controller {};
+            const auto publish = [&] { controller.set_tree(sheet_tree(config, {}, 400.0f * scale, 800.0f * scale, {}, scale)); };
+            publish();
+            const float start { upward ? 600.0f : 500.0f };
+            const float direction { upward ? -1.0f : 1.0f };
+            static_cast<void>(controller.process(touch_press(200.0f * scale, start * scale, 0)));
+            REQUIRE(dragged(events_in(controller.process(touch_move(200.0f * scale, (start + direction * 20.0f) * scale, 40)))) == direction * 20.0f);
+            config.drag_offset = direction * 20.0f;
+            publish();
+            const float offset { upward ? -178.0f : 190.0f };
+            REQUIRE(dragged(events_in(controller.process(touch_move(200.0f * scale, (start + offset) * scale, 900)))) == offset - config.drag_offset);
+            config.drag_offset = offset;
+            publish();
+            // 멈춤 경계를 마지막 뗌에서 넘는다. 느린 손짓이라 속도 대신 최종 높이가 결정을 내려야 한다.
+            const auto events { events_in(controller.process(touch_release(200.0f * scale, (start + offset + direction * 20.0f) * scale, 1200))) };
+            REQUIRE(events.size() == 2u);
+            REQUIRE(events[0].drag == direction * 20.0f);
+            if (upward)
+                REQUIRE(events[1].settle == luil::sheet_detent::full);
+            else
+                REQUIRE(events[1].dismiss == luil::sheet_dismiss_reason::drag);
+        }
+}
+
+TEST_CASE("An unavailable mouse or pen handle stops receiving drag and end callbacks", "[ui][sheet]")
+{
+    for (const auto device : { luil::pointer_device::mouse, luil::pointer_device::pen })
+        for (int unavailable { 1 }; unavailable <= 3; ++unavailable)
+            for (int finish { 0 }; finish < 4; ++finish)
+            {
+                CAPTURE(device, unavailable, finish);
+                auto config { sheet_config() };
+                luil::interaction_controller controller {};
+                controller.set_tree(sheet_tree(config));
+                static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 200.0f, .y = 410.0f, .time = at(0), .device = device, .pointer_id = 2 }));
+                REQUIRE(dragged(events_in(controller.process(luil::pointer_moved_event { .x = 200.0f, .y = 440.0f, .time = at(40), .device = device, .pointer_id = 2, .in_contact = true }))) == 30.0f);
+                config.drag_offset = 30.0f;
+                controller.set_tree(sheet_tree(config, {}, 400.0f, 800.0f, {}, 1.0f, unavailable));
+                if (finish == 0)
+                    REQUIRE(events_in(controller.process(luil::pointer_released_event { .x = 200.0f, .y = 440.0f, .time = at(80), .device = device, .pointer_id = 2 })).empty());
+                else if (finish == 1)
+                    REQUIRE(events_in(controller.process(luil::pointer_cancelled_event { device, 2, {}, at(80) })).empty());
+                else if (finish == 2)
+                    REQUIRE(events_in(controller.cancel_dropped_gestures()).empty());
+                else
+                {
+                    REQUIRE(events_in(controller.process(luil::pointer_moved_event { .x = 200.0f, .y = 460.0f, .time = at(80), .device = device, .pointer_id = 2, .in_contact = true })).empty());
+                    REQUIRE(events_in(controller.process(luil::pointer_released_event { .x = 200.0f, .y = 460.0f, .time = at(100), .device = device, .pointer_id = 2 })).empty());
+                }
+            }
 }
 
 TEST_CASE("A sheet keeps its stop through a rotation and turns into a side sheet when wide", "[ui][sheet]")

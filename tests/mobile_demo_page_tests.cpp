@@ -1,0 +1,172 @@
+#include "mobile_demo/sheets_page.h"
+#include "mobile_demo/smb_page.h"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <memory>
+#include <utility>
+#include <vector>
+
+namespace {
+    template<typename Message, typename Page>
+    void deliver(Page& page, Message message)
+    {
+        REQUIRE(page.handle(luil::app_message { std::move(message) }));
+    }
+
+    [[nodiscard]] luil::ui_tree sheet_tree(mobile_demo::sheets_page& page, const float width, const float height)
+    {
+        auto root { std::make_unique<luil::root_element>() };
+        page.add_overlay(*root, width, height, 1.0f, {});
+        return luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, width, height }, 1.0f);
+    }
+
+    // 요청을 기록하고 사람이 고른 차례로 답한다. 실제 페이지의 send·cancel·응답 처리 경로를 그대로 쓴다.
+    struct smb_fixture
+    {
+        std::vector<luil::net::smb_request> requests {};
+        std::vector<luil::net::smb_ticket> cancelled {};
+        std::uint64_t next_ticket { 0 };
+        bool reject { false };
+        mobile_demo::smb_page page { transport() };
+
+        [[nodiscard]] mobile_demo::smb_page_transport transport()
+        {
+            return {
+                .send =
+                    [this](luil::net::smb_request request, std::u8string& error) {
+                        requests.push_back(std::move(request));
+                        if (reject)
+                        {
+                            error = u8"busy";
+                            return luil::net::smb_ticket {};
+                        }
+                        return luil::net::smb_ticket { ++next_ticket };
+                    },
+                .cancel = [this](const luil::net::smb_ticket ticket) { cancelled.push_back(ticket); },
+            };
+        }
+
+        smb_fixture()
+        {
+            address(u8"nas/share");
+            deliver(page, mobile_demo::smb_open_intent {});
+            luil::net::smb_response response {
+                .ticket = { next_ticket },
+                .entries = { { .name = u8"photos", .directory = true }, { .name = u8"old.txt" } },
+            };
+            deliver(page, mobile_demo::smb_result_intent { std::move(response) });
+        }
+
+        void address(std::u8string value)
+        {
+            deliver(page,
+                mobile_demo::edit_intent { luil::text_edit_request { .target = mobile_demo::target_smb_address, .command = luil::text::text_edit_command::replace_all, .text = std::move(value) } });
+        }
+
+        [[nodiscard]] bool has_entry(const std::u8string& name)
+        {
+            auto content { page.build(400.0f, 1.0f) };
+            const auto tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, content.height }, 1.0f) };
+            return tree.find({ mobile_demo::kind_smb_entry, u8"smb-entry-" + name }) != nullptr;
+        }
+    };
+} // namespace
+
+TEST_CASE("The demo clears an interrupted adaptive sheet drag while preserving its stop and list", "[ui][sheet][mobile-demo]")
+{
+    for (const auto detent : { luil::sheet_detent::half, luil::sheet_detent::full })
+    {
+        CAPTURE(detent);
+        mobile_demo::sheets_page page {};
+        deliver(page, mobile_demo::sheet_open_intent {});
+        deliver(page, mobile_demo::sheet_settle_intent { detent });
+        deliver(page, mobile_demo::sheet_scroll_intent { 150.0f });
+        deliver(page, mobile_demo::sheet_drag_intent { 20.0f });
+        const float height { detent == luil::sheet_detent::half ? 400.0f : 776.0f };
+        const luil::ui_element_id id { luil::ui_element_kind::sheet_host, u8"demo-sheet" };
+        auto portrait { sheet_tree(page, 400.0f, 800.0f) };
+        REQUIRE(static_cast<const luil::sheet_host_element*>(portrait.find(id))->surface_bounds().height == height - 20.0f);
+        const auto landscape { sheet_tree(page, 800.0f, 400.0f) };
+        REQUIRE(static_cast<const luil::sheet_host_element*>(landscape.find(id))->kind() == luil::sheet_kind::end);
+        portrait = sheet_tree(page, 400.0f, 800.0f);
+        REQUIRE(page.sheet_open());
+        REQUIRE(static_cast<const luil::sheet_host_element*>(portrait.find(id))->surface_bounds().height == height);
+        const auto* const list { portrait.find({ mobile_demo::kind_page_scroll, u8"sheet-list" }) };
+        REQUIRE(list != nullptr);
+        REQUIRE(list->scroll()->at_start == false);
+    }
+}
+
+TEST_CASE("SMB navigation removes stale rows while pending or failed and keeps the confirmed folder", "[smb][mobile-demo]")
+{
+    smb_fixture fixture {};
+    REQUIRE(fixture.has_entry(u8"old.txt"));
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"photos", true });
+    REQUIRE(fixture.requests.back().path == u8"photos");
+    REQUIRE(fixture.has_entry(u8"old.txt") == false);
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"old.txt", false });
+    deliver(fixture.page, mobile_demo::smb_up_intent {});
+    REQUIRE(fixture.requests.size() == 2u);
+    deliver(fixture.page, mobile_demo::smb_result_intent { luil::net::smb_response { .ticket = { fixture.next_ticket }, .error = { .kind = luil::net::smb_error_kind::access_denied } } });
+    REQUIRE(fixture.has_entry(u8"old.txt") == false);
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"old.txt", false });
+    REQUIRE(fixture.requests.size() == 2u);
+    deliver(fixture.page, mobile_demo::smb_up_intent {});
+    REQUIRE(fixture.requests.back().path.empty());
+
+    // 두 단계 아래로 가다 실패해도 마지막으로 확인된 photos의 위는 공유 루트다.
+    for (const bool reject : { false, true })
+    {
+        CAPTURE(reject);
+        smb_fixture nested {};
+        deliver(nested.page, mobile_demo::smb_entry_intent { u8"photos", true });
+        deliver(nested.page, mobile_demo::smb_result_intent { luil::net::smb_response { .ticket = { nested.next_ticket }, .entries = { { .name = u8"albums", .directory = true } } } });
+        nested.reject = reject;
+        deliver(nested.page, mobile_demo::smb_entry_intent { u8"albums", true });
+        REQUIRE(nested.requests.back().path == u8"photos/albums");
+        if (reject == false)
+            deliver(nested.page, mobile_demo::smb_result_intent { luil::net::smb_response { .ticket = { nested.next_ticket }, .error = { .kind = luil::net::smb_error_kind::access_denied } } });
+        nested.reject = false;
+        deliver(nested.page, mobile_demo::smb_up_intent {});
+        REQUIRE(nested.requests.back().path.empty());
+    }
+}
+
+TEST_CASE("SMB successful navigation binds the new rows to the new folder", "[smb][mobile-demo]")
+{
+    smb_fixture fixture {};
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"photos", true });
+    deliver(fixture.page, mobile_demo::smb_result_intent { luil::net::smb_response { .ticket = { fixture.next_ticket }, .entries = { { .name = u8"new.txt" } } } });
+    REQUIRE(fixture.has_entry(u8"new.txt"));
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"new.txt", false });
+    REQUIRE(fixture.requests.back().operation == luil::net::smb_operation::read);
+    REQUIRE(fixture.requests.back().path == u8"photos/new.txt");
+    deliver(fixture.page, mobile_demo::smb_up_intent {});
+    REQUIRE(fixture.requests.back().path.empty());
+    REQUIRE(fixture.cancelled.back() == luil::net::smb_ticket { 3 });
+}
+
+TEST_CASE("SMB rejected and replaced requests cannot revive an old listing", "[smb][mobile-demo]")
+{
+    smb_fixture fixture {};
+    fixture.reject = true;
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"photos", true });
+    REQUIRE(fixture.has_entry(u8"old.txt") == false);
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"old.txt", false });
+    REQUIRE(fixture.requests.size() == 2u);
+    fixture.reject = false;
+    deliver(fixture.page, mobile_demo::smb_open_intent {});
+    const auto replaced { fixture.next_ticket };
+    deliver(fixture.page, mobile_demo::smb_open_intent {});
+    REQUIRE(fixture.cancelled.back() == luil::net::smb_ticket { replaced });
+    deliver(fixture.page, mobile_demo::smb_result_intent { luil::net::smb_response { .ticket = { replaced }, .entries = { { .name = u8"late.txt" } } } });
+    REQUIRE(fixture.has_entry(u8"late.txt") == false);
+    const auto edited { fixture.next_ticket };
+    fixture.address(u8"other/share");
+    REQUIRE(fixture.cancelled.back() == luil::net::smb_ticket { edited });
+    deliver(fixture.page, mobile_demo::smb_result_intent { luil::net::smb_response { .ticket = { edited }, .entries = { { .name = u8"late.txt" } } } });
+    REQUIRE(fixture.has_entry(u8"late.txt") == false);
+    deliver(fixture.page, mobile_demo::smb_entry_intent { u8"late.txt", false });
+    REQUIRE(fixture.requests.size() == 4u);
+}

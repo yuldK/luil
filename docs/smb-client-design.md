@@ -88,6 +88,7 @@ Android 17부터 targetSdk 37 이상인 앱은 같은 네트워크의 주소로 
 | 규칙 | 서버·공유·경로·계정의 거절, 포트·IPv6 꼴의 서버, 읽기 길이의 범위와 넘침, 음수 상한, 경로 다듬기와 마지막 조각, NT 상태·errno의 오류 갈래, SMB를 세우지 않은 구성의 "지원 안 함" (core test, Windows와 기기) |
 | client | 거절한 요청은 표가 없음, 닫힌 포트는 `cannot_connect`이고 오류 글에 암호가 없음, 답하지 않는 서버의 시간 상한, 기다리는 요청의 취소와 `max_in_flight` 거절, 정지 뒤 배달 없음과 상한 안의 정지 (기기 test, [`smb_client_tests.cpp`](../tests/smb_client_tests.cpp)) |
 | 실제 서버 | 서버가 없어 자동 test가 없다. mobile demo의 SMB 페이지로 사람이 NAS에 붙어 열거·읽기·틀린 암호·없는 공유를 확인한다 ([Android 이식 계획](android-port-plan.md)) |
+| demo 상태 | 목록 요청 중·실패·거절 시 이전 행을 제거하고, 성공한 목록 응답에서만 폴더를 확정한다. 이전 행의 늦은 클릭과 교체·주소 수정 뒤의 늦은 답은 무시한다 (서버 없는 core test) |
 
 기기 test는 `LUIL_ENABLE_SMB`를 켠 구성에서 `luil_smb_tests`로 돈다. 셸에서 도는 실행 파일이라 JVM이 필요 없고,
 [`adb_run.cmake`](../cmake/android/adb_run.cmake)가 실행 파일 옆의 `libsmb2.so`를 함께 올린다 (`LIBRARIES`).

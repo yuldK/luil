@@ -74,9 +74,16 @@ target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/net/smb_client_unsupported.cpp"
     "${LUIL_SOURCE_DIRECTORY}/net/smb_rules.cpp"
     smb_rules_tests.cpp)
+# 모바일 demo의 적응형 시트와 비동기 SMB 목록 상태도 서버 없이 검증한다.
+target_sources(luil_core_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
+    mobile_demo_page_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
+        "${PROJECT_SOURCE_DIR}/examples"
         "${LUIL_TEST_DIRECTORY}")
 target_link_libraries(luil_core_tests
     PRIVATE

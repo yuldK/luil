@@ -11,6 +11,7 @@
 #include "mobile_demo/common.h"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -54,17 +55,26 @@ namespace mobile_demo {
         luil::net::smb_response response {};
     };
 
+    // 페이지 상태와 비동기 전송을 잇는 다리다. 실제 client와 서버 없는 상태 시험이 같은 요청·답 경로를 쓴다.
+    struct smb_page_transport
+    {
+        std::function<luil::net::smb_ticket(luil::net::smb_request, std::u8string&)> send {};
+        std::function<void(luil::net::smb_ticket)> cancel {};
+        std::function<void()> stop {};
+    };
+
     class smb_page
     {
     public:
+        explicit smb_page(smb_page_transport transport = {});
         bool handle(const luil::app_message& message);
         [[nodiscard]] page_content build(float width, float scale);
 
         // client를 멈춘다. 답이 앱 host를 거쳐 오므로 host보다 먼저 부른다 (`stop_workers`).
         void stop()
         {
-            if (client_ != nullptr)
-                client_->stop();
+            if (transport_.stop != nullptr)
+                transport_.stop();
         }
 
     private:
@@ -72,10 +82,11 @@ namespace mobile_demo {
         void apply_composition(const luil::text_composition_event& event);
         // 적은 주소("서버/공유/폴더")를 연결 정보와 첫 폴더로 가른다. 서버·공유가 없으면 nullopt다.
         [[nodiscard]] std::optional<luil::net::smb_location> location() const;
+        void cancel_pending();
         void send(luil::net::smb_operation operation, std::u8string path);
 
         // 없으면(Windows, SMB를 끈 구성) 페이지가 그 사실만 적는다.
-        luil::net::smb_client* client_ { nullptr };
+        smb_page_transport transport_ {};
         luil::text::text_edit_state address_ {};
         luil::text::text_edit_state user_ {};
         luil::text::text_edit_state password_ {};
@@ -86,6 +97,7 @@ namespace mobile_demo {
         std::u8string folder_ {};
         // 보낸 요청과 그 경로다. 늦게 온 답이 지금 화면을 덮지 않게 표로 맞춘다.
         luil::net::smb_ticket pending_ {};
+        luil::net::smb_operation pending_operation_ { luil::net::smb_operation::list };
         std::u8string pending_path_ {};
         std::vector<luil::net::smb_entry> entries_ {};
         // 상태 한 줄과 그 아래 여러 줄로 나눠 적을 글(libsmb2의 오류 글, 파일 앞부분)이다. luil의 라벨은 한 줄이라

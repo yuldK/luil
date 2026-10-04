@@ -354,9 +354,10 @@ namespace luil {
         float scale { 1.0f };
         // 끈 만큼이다 (논리 픽셀, 손가락 방향 — 아래·오른쪽이 양수).
         std::function<input_action(float delta)> drag {};
-        // 손을 뗐거나 접촉이 취소됐다. 놓은 순간 축 방향의 속도를 받는다 (초당 논리 픽셀, `drag`와 같은 방향이
-        // 양수). 취소·입력 큐 유실이면 0이다 (`drag_velocity`).
-        std::function<input_action(float velocity)> release {};
+        // 손을 뗐거나 접촉이 취소됐다. 뗌 이벤트의 마지막 이동과 놓은 순간 축 방향의 속도를 받는다 (논리 픽셀과
+        // 초당 논리 픽셀, `drag`와 같은 방향이 양수). 마지막 이동의 `drag` 메시지는 먼저 나가지만 아직 tree에
+        // 반영되지 않았으므로 정착 계산에 더한다. 취소·입력 큐 유실이면 둘 다 0이다 (`drag_velocity`).
+        std::function<input_action(float final_delta, float velocity)> release {};
     };
 
     // 초점을 가진 채 글자로 **자기 모델 안**을 찾는 element다 (가상 목록).

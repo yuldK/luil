@@ -163,6 +163,9 @@ namespace mobile_demo {
         const luil::sheet_host_config sheet { config() };
         const float logical_height { height / scale };
         const luil::sheet_kind kind { luil::resolve_sheet_kind(sheet, width / scale) };
+        // 옆 시트에는 끌기 종료 콜백이 없다. 아래 시트에서 끄던 양은 여기서 거두고 멈춤점과 목록 위치는 지킨다.
+        if (kind != luil::sheet_kind::bottom)
+            drag_offset_ = 0.0f;
         // 시트 안 자리의 높이다. 아래 시트는 지금 보이는 높이에서 손잡이(24)를 뺀다.
         const float inner_height { kind == luil::sheet_kind::bottom ? std::max(0.0f, luil::sheet_visible_height(sheet, logical_height) - 24.0f) : logical_height };
 
