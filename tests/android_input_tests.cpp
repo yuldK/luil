@@ -263,6 +263,56 @@ TEST_CASE("Leaving the window cancels a held touch", "[android][input]")
     REQUIRE(translator.cancel_all(luil::android::event_time(20)).empty());
 }
 
+TEST_CASE("The system keeps its keys unless the app claims back or the volume keys", "[android][input][keys]")
+{
+    using luil::android::app_takes_key;
+    const luil::android::key_claims none {};
+    // 앱이 받겠다고 하지 않으면 뒤로 가기와 볼륨 키는 시스템의 것이다.
+    REQUIRE(app_takes_key(AKEYCODE_BACK, none) == false);
+    REQUIRE(app_takes_key(AKEYCODE_VOLUME_UP, none) == false);
+    REQUIRE(app_takes_key(AKEYCODE_VOLUME_DOWN, none) == false);
+    REQUIRE(app_takes_key(AKEYCODE_DPAD_DOWN, none));
+    REQUIRE(app_takes_key(AKEYCODE_A, none));
+
+    // 볼륨 키를 받겠다고 하면 올림·내림만 앱의 것이다. 뒤로 가기는 그대로다.
+    const luil::android::key_claims volume { .volume_keys_claimed = true };
+    REQUIRE(app_takes_key(AKEYCODE_VOLUME_UP, volume));
+    REQUIRE(app_takes_key(AKEYCODE_VOLUME_DOWN, volume));
+    REQUIRE(app_takes_key(AKEYCODE_BACK, volume) == false);
+
+    // popup이 떠 있거나 앱이 뒤로 가기를 받겠다고 했으면 뒤로 가기는 앱의 것이다. 볼륨은 그대로다.
+    REQUIRE(app_takes_key(AKEYCODE_BACK, { .popups_visible = true }));
+    REQUIRE(app_takes_key(AKEYCODE_BACK, { .back_claimed = true }));
+    REQUIRE(app_takes_key(AKEYCODE_VOLUME_UP, { .popups_visible = true, .back_claimed = true }) == false);
+
+    // 음소거·미디어·카메라·전원·홈은 무엇을 받겠다고 해도 시스템의 것이다.
+    const luil::android::key_claims all { true, true, true };
+    for (const std::int32_t code : { AKEYCODE_VOLUME_MUTE, AKEYCODE_MUTE, AKEYCODE_MEDIA_PLAY_PAUSE, AKEYCODE_MEDIA_NEXT, AKEYCODE_HEADSETHOOK, AKEYCODE_CAMERA, AKEYCODE_FOCUS, AKEYCODE_POWER,
+             AKEYCODE_HOME, AKEYCODE_APP_SWITCH })
+        REQUIRE(app_takes_key(code, all) == false);
+}
+
+TEST_CASE("Claimed volume keys arrive as named keys and repeat while held", "[android][input][keys]")
+{
+    luil::android::input_translator translator {};
+    auto events { translator.translate(key(AKEYCODE_VOLUME_UP)) };
+    REQUIRE(events.size() == 1u);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).key == luil::key_code::volume_up);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).repeat == false);
+    REQUIRE(as<luil::key_pressed_event>(translator.translate(key(AKEYCODE_VOLUME_DOWN))[0]).key == luil::key_code::volume_down);
+
+    // 누르고 있으면 반복이 이어 온다. 뗌은 이벤트가 아니다 (luil에는 키 뗌이 없다).
+    luil::android::key_input held { key(AKEYCODE_VOLUME_DOWN) };
+    held.repeat_count = 3;
+    events = translator.translate(held);
+    REQUIRE(events.size() == 1u);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).key == luil::key_code::volume_down);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).repeat);
+    luil::android::key_input released { key(AKEYCODE_VOLUME_DOWN) };
+    released.action = AKEY_EVENT_ACTION_UP;
+    REQUIRE(translator.translate(released).empty());
+}
+
 TEST_CASE("Android keys follow the Windows key and character split", "[android][input]")
 {
     luil::android::input_translator translator {};

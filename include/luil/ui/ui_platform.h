@@ -20,6 +20,8 @@ namespace luil {
         bool screen_orientation { false };
         // 시스템 막대를 숨기고 컷아웃 밑까지 그릴 수 있다 (`device_request::system_bars`, `draw_under_cutout`).
         bool system_bars { false };
+        // 볼륨 키를 앱이 받을 수 있다 (`device_request::volume_keys`).
+        bool volume_keys { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

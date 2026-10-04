@@ -82,7 +82,7 @@ Android 앱 host는 GameActivity가 모아 준 움직임·키 이벤트를 [`inp
 - 마우스는 DOWN과 버튼 동작(`ACTION_BUTTON_PRESS`) 중 먼저 온 쪽이 누름이다. 실제 마우스는 둘 다 보내고 주입된 마우스는 DOWN만 보낸다. 휠은 `AXIS_VSCROLL`·`HSCROLL`의 한 눈금을 120으로 옮긴다.
 - 좌표는 안전 영역의 원점만큼 빼 tree 좌표로 옮기고, 배율은 `density / 160`이다.
 - **시각의 단위가 섞여 있다.** 움직임 이벤트의 현재 시각은 Java `MotionEvent`처럼 밀리초이고 과거 표본과 키 이벤트는 나노초다. 기기에서 `CLOCK_MONOTONIC`과 맞대 확인했다. libc++의 `steady_clock`은 `CLOCK_MONOTONIC`이라 값을 옮기기만 한다 (기기 test가 고정한다).
-- 시스템 키(뒤로·볼륨·카메라·전원·미디어)는 Activity에 남긴다. 키와 글자는 Win32와 같은 어휘로 나눈다 (Backspace는 U+0008, Ctrl+Backspace는 U+007F).
+- 시스템 키(뒤로·볼륨·카메라·전원·미디어)는 Activity에 남긴다. 뒤로 가기와 볼륨 올림·내림만 앱이 받겠다고 했을 때 앱에 간다 ([기기 요청](device-request-design.md#볼륨-키)). 키와 글자는 Win32와 같은 어휘로 나눈다 (Backspace는 U+0008, Ctrl+Backspace는 U+007F).
 
 ## 내부 이벤트와 접촉 소유권
 

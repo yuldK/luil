@@ -167,42 +167,17 @@ namespace luil::android {
             return (GameActivity_getUIMode(activity) & night_mask) != night_yes;
         }
 
-        // popup이 떠 있는가, 앱이 뒤로 가기를 받겠다고 했는가(`ui_frame::back`)다. 어느 쪽이든
-        // 뒤로 가기를 Activity에 넘기지 않고 받는다. 키 필터는 glue가 Java thread에서 부르므로 원자로 둔다.
+        // popup이 떠 있는가, 앱이 뒤로 가기를 받겠다고 했는가(`ui_frame::back`), 볼륨 키를 받겠다고 했는가
+        // (`device_request::volume_keys`)다. 키 필터는 glue가 Java thread에서 부르므로 원자로 둔다.
         std::atomic<bool> popups_visible { false };
         std::atomic<bool> back_claimed { false };
+        std::atomic<bool> volume_keys_claimed { false };
 
-        // 시스템이 맡는 키는 Activity에 남긴다. 거짓을 돌려주면 Activity의 기본 처리를 받는다.
-        //  - 뒤로 가기: 앱 끝내기와 예측 뒤로 가기 애니메이션. 끝날 때 `app_host::shutdown()`이 돈다.
-        //  - 볼륨·카메라·전원·미디어 키: 앱이 먹으면 소리 크기도 못 바꾼다. GameActivity의
-        //    기본 필터가 거르던 것을 그대로 거른다.
+        // 시스템이 맡는 키는 Activity에 남긴다. 거짓을 돌려주면 Activity의 기본 처리를 받는다
+        // (`app_takes_key`). 뒤로 가기를 남기면 Activity가 앱을 끝내고 `app_host::shutdown()`이 돈다.
         bool key_event_filter(const GameActivityKeyEvent* const event)
         {
-            switch (event->keyCode)
-            {
-            case AKEYCODE_BACK:
-                // popup이 떠 있으면 뒤로 가기는 Esc처럼 popup을 닫고, 앱이 받겠다고 했으면 앱에 간다.
-                return popups_visible.load() || back_claimed.load();
-            case AKEYCODE_HOME:
-            case AKEYCODE_VOLUME_UP:
-            case AKEYCODE_VOLUME_DOWN:
-            case AKEYCODE_VOLUME_MUTE:
-            case AKEYCODE_MUTE:
-            case AKEYCODE_CAMERA:
-            case AKEYCODE_FOCUS:
-            case AKEYCODE_POWER:
-            case AKEYCODE_APP_SWITCH:
-            case AKEYCODE_MEDIA_PLAY_PAUSE:
-            case AKEYCODE_MEDIA_PLAY:
-            case AKEYCODE_MEDIA_PAUSE:
-            case AKEYCODE_MEDIA_STOP:
-            case AKEYCODE_MEDIA_NEXT:
-            case AKEYCODE_MEDIA_PREVIOUS:
-            case AKEYCODE_HEADSETHOOK:
-                return false;
-            default:
-                return true;
-            }
+            return app_takes_key(event->keyCode, key_claims { popups_visible.load(), back_claimed.load(), volume_keys_claimed.load() });
         }
 
         constexpr std::int64_t nanoseconds_per_millisecond { 1'000'000 };
@@ -315,6 +290,8 @@ namespace luil::android {
             {
                 // IME 알림이 더는 이 객체를 깨우지 않게 먼저 떼어 낸다.
                 text_input_wake_fd.store(-1);
+                // 다음 Activity가 볼륨 키를 처음부터 시스템에 두고 시작한다.
+                volume_keys_claimed.store(false);
                 if (auto* const glue { glue_text_input_handler.exchange(nullptr) }; glue != nullptr)
                     app_->activity->callbacks->onTextInputEvent = glue;
                 ime_.reset();
@@ -445,7 +422,11 @@ namespace luil::android {
                 refresh_user_ui_language();
                 // 휴대폰·태블릿이다. 창 caption이 없고 맨 위는 앱 바의 자리다.
                 // logic thread가 첫 frame을 짓기 전에 정한다.
-                set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false, .capabilities = { .screen_orientation = true, .system_bars = true } });
+                set_ui_platform({
+                    .form_factor = ui_form_factor::mobile,
+                    .window_caption = false,
+                    .capabilities = { .screen_orientation = true, .system_bars = true, .volume_keys = true },
+                });
                 prefers_light_ = read_prefers_light(app_->activity);
                 scale_ = read_scale(app_->config);
                 set_font_fallback(&font_resolver_);
@@ -615,9 +596,14 @@ namespace luil::android {
                         render();
                     break;
                 case APP_CMD_START:
+                    visible_ = true;
+                    update_volume_keys();
                     post_lifecycle(app_lifecycle::foreground);
                     break;
                 case APP_CMD_STOP:
+                    // 보이지 않는 동안 볼륨 키는 시스템의 것이다. 돌아오면 앱의 요청대로 다시 받는다.
+                    visible_ = false;
+                    update_volume_keys();
                     post_lifecycle(app_lifecycle::background);
                     break;
                 case APP_CMD_RESUME:
@@ -984,6 +970,17 @@ namespace luil::android {
                 }
                 if (remeasure)
                     refresh_metrics();
+                if (request.volume_keys != applied_device_.volume_keys)
+                {
+                    applied_device_.volume_keys = request.volume_keys;
+                    update_volume_keys();
+                }
+            }
+
+            // 키 필터가 볼륨 키를 앱에 줄지를 정한다. 앱이 받겠다고 했고 보이는 동안만이다.
+            void update_volume_keys() const
+            {
+                volume_keys_claimed.store(applied_device_.volume_keys && visible_);
             }
 
             // 몰입 모드를 다시 건다. 시스템이 다시 보인 막대를 앱의 요청대로 되돌린다.
@@ -1237,6 +1234,8 @@ namespace luil::android {
             std::shared_ptr<std::optional<int>> original_orientation_ { std::make_shared<std::optional<int>>() };
             bool dirty_ { false };
             bool finishing_ { false };
+            // Activity가 보이는 중이다 (`APP_CMD_START`부터 `APP_CMD_STOP`까지).
+            bool visible_ { false };
             std::optional<std::chrono::steady_clock::time_point> update_deadline_ {};
             // 마지막으로 앱에 알린 크기와 배율이다.
             float reported_width_ { -1.0f };

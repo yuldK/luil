@@ -24,6 +24,18 @@ namespace mobile_demo {
         bool draw_under { false };
     };
 
+    struct volume_keys_intent
+    {
+        bool claim { false };
+    };
+
+    // 앱이 받은 볼륨 키다 (policy가 키를 이 메시지로 옮긴다).
+    struct volume_key_intent
+    {
+        bool up { true };
+        bool repeat { false };
+    };
+
     class device_page
     {
     public:
@@ -38,5 +50,9 @@ namespace mobile_demo {
 
     private:
         luil::device_request request_ {};
+        // 받은 볼륨 키의 수다. 누르고 있어 이어 온 반복도 센다.
+        int volume_up_count_ { 0 };
+        int volume_down_count_ { 0 };
+        int volume_repeat_count_ { 0 };
     };
 } // namespace mobile_demo

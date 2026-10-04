@@ -188,6 +188,13 @@ namespace luil {
         //  - 막대와 따로 정한다. 몰입 모드에서도 거짓이면 컷아웃 자리는 비어 있고, 가로 화면에서는 막대가
         //    보여도 참이면 옆의 컷아웃 밑까지 그린다.
         bool draw_under_cutout { false };
+        // 볼륨 올림·내림 키를 앱이 받는다 (`key_code::volume_up`·`volume_down`). 거짓이면 시스템이 소리 크기를
+        // 바꾼다.
+        //  - 뒤로 가기(`ui_frame::back`)처럼 받을 화면(쪽을 넘기는 콘텐츠)에 있는 동안만 싣는다.
+        //  - 누르고 있으면 자동 반복(`key_pressed_event::repeat`)으로 이어 온다. luil에는 키 뗌 이벤트가 없어
+        //    뗌은 앱에 가지 않고 시스템에도 가지 않는다.
+        //  - 음소거·미디어·카메라·전원 키는 늘 시스템의 것이다. 앱이 보이지 않게 되면 저절로 시스템에 돌아간다.
+        bool volume_keys { false };
 
         [[nodiscard]] bool operator==(const device_request&) const noexcept = default;
     };

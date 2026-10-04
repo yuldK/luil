@@ -86,6 +86,8 @@ namespace mobile_demo {
         [[nodiscard]] std::vector<luil::input_action> close_menu() const override;
         [[nodiscard]] std::vector<luil::input_action> on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, float scroll_delta) override;
         [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override;
+        // 앱이 받겠다고 한 볼륨 키를 기기 페이지에 알린다.
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override;
     };
 
     // --- UI thread ---

@@ -249,6 +249,11 @@ namespace luil {
         // 문자를 만드는 키는 글자 키와 같은 규칙(단축키 수정자가 있을 때)으로 온다.
         zoom_in,
         zoom_out,
+        // 휴대폰의 볼륨 키다. 앱이 받겠다고 했을 때만 온다 (`device_request::volume_keys`).
+        //  - Windows 키보드의 볼륨 키는 지금처럼 플랫폼 대역(`platform_key_code`)으로 온다. 이 이름으로 바꾸면
+        //    그 키를 이미 받고 있는 앱이 보는 값이 달라진다.
+        volume_up,
+        volume_down,
         first_platform_key = 0x1000,
     };
 

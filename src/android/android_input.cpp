@@ -39,6 +39,11 @@ namespace luil::android {
         {
             switch (key)
             {
+            // 앱이 받겠다고 했을 때만 키 필터를 지나 여기 온다 (`app_takes_key`).
+            case AKEYCODE_VOLUME_UP:
+                return key_code::volume_up;
+            case AKEYCODE_VOLUME_DOWN:
+                return key_code::volume_down;
             case AKEYCODE_DPAD_UP:
                 return key_code::arrow_up;
             case AKEYCODE_DPAD_DOWN:
@@ -350,6 +355,35 @@ namespace luil::android {
         }
         default:
             return;
+        }
+    }
+
+    bool app_takes_key(const std::int32_t key_code, const key_claims& claims) noexcept
+    {
+        switch (key_code)
+        {
+        case AKEYCODE_BACK:
+            return claims.popups_visible || claims.back_claimed;
+        case AKEYCODE_VOLUME_UP:
+        case AKEYCODE_VOLUME_DOWN:
+            return claims.volume_keys_claimed;
+        case AKEYCODE_HOME:
+        case AKEYCODE_VOLUME_MUTE:
+        case AKEYCODE_MUTE:
+        case AKEYCODE_CAMERA:
+        case AKEYCODE_FOCUS:
+        case AKEYCODE_POWER:
+        case AKEYCODE_APP_SWITCH:
+        case AKEYCODE_MEDIA_PLAY_PAUSE:
+        case AKEYCODE_MEDIA_PLAY:
+        case AKEYCODE_MEDIA_PAUSE:
+        case AKEYCODE_MEDIA_STOP:
+        case AKEYCODE_MEDIA_NEXT:
+        case AKEYCODE_MEDIA_PREVIOUS:
+        case AKEYCODE_HEADSETHOOK:
+            return false;
+        default:
+            return true;
         }
     }
 

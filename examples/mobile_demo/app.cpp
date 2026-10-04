@@ -39,7 +39,7 @@ namespace mobile_demo {
             page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 길게 눌러 메뉴", luil::codicons::icon_menu },
             page_entry { page_zoom, u8"확대 보기", u8"두 손가락 확대와 이동", luil::codicons::icon_zoom_in },
             page_entry { page_theme, u8"테마", u8"밝기, 키 컬러, 시스템 색", luil::codicons::icon_symbol_color },
-            page_entry { page_device, u8"기기", u8"화면 방향", luil::codicons::icon_device_mobile },
+            page_entry { page_device, u8"기기", u8"화면 방향, 시스템 막대, 볼륨 키", luil::codicons::icon_device_mobile },
         };
 
         [[nodiscard]] std::u8string page_title(const std::u8string_view page)
@@ -353,6 +353,13 @@ namespace mobile_demo {
         if (auto actions { tabs_page::route_reveal(tree, focused) }; actions.empty() == false)
             return actions;
         return luil::route_reveal(tree, focused);
+    }
+
+    std::vector<luil::input_action> mobile_policy::on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot&)
+    {
+        if (event.key == luil::key_code::volume_up || event.key == luil::key_code::volume_down)
+            return { luil::make_app_action(volume_key_intent { event.key == luil::key_code::volume_up, event.repeat }) };
+        return {};
     }
 
     luil::app_message make_metrics_message(const float width, const float height, const float scale)

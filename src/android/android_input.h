@@ -73,6 +73,24 @@ namespace luil::android {
         float scale { 1.0f };
     };
 
+    // 앱이 지금 시스템에게서 가져오기로 한 키다. 키 필터가 Java thread에서 읽는 값이다.
+    struct key_claims
+    {
+        // popup이 떠 있다 — 뒤로 가기가 Esc처럼 popup을 닫는다.
+        bool popups_visible { false };
+        // 앱이 뒤로 가기를 받겠다고 했다 (`ui_frame::back`).
+        bool back_claimed { false };
+        // 앱이 볼륨 올림·내림을 받겠다고 했고 보이는 중이다 (`device_request::volume_keys`).
+        bool volume_keys_claimed { false };
+    };
+
+    // 키 하나를 앱이 받을지(참), Activity의 기본 처리에 남길지(거짓)다 (GameActivity의 키 필터).
+    //  - 뒤로 가기: popup이 떠 있거나 앱이 받겠다고 했을 때만 앱의 것이다. 아니면 Activity가 앱을 끝낸다.
+    //  - 볼륨 올림·내림: 앱이 받겠다고 했을 때만 앱의 것이다. 아니면 시스템이 소리 크기를 바꾼다.
+    //  - 홈·음소거·카메라·전원·앱 전환·미디어 키는 언제나 시스템의 것이다. 앱이 먹으면 소리도 못 끈다.
+    //  - 그 밖의 키는 앱의 것이다.
+    [[nodiscard]] bool app_takes_key(std::int32_t key_code, const key_claims& claims) noexcept;
+
     // Android 이벤트 시각을 공통 단조 시계로 옮긴다.
     // libc++의 `steady_clock`은 `CLOCK_MONOTONIC`이라 값을 그대로 옮긴다
     // (기기 test가 이 사실을 고정한다).

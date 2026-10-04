@@ -36,6 +36,7 @@ TEST_CASE("A platform does no device requests unless its host says it can", "[ui
     REQUIRE(luil::current_ui_platform().capabilities == luil::ui_platform_capabilities {});
     REQUIRE(luil::current_ui_platform().capabilities.screen_orientation == false);
     REQUIRE(luil::current_ui_platform().capabilities.system_bars == false);
+    REQUIRE(luil::current_ui_platform().capabilities.volume_keys == false);
 
     const luil::ui_platform mobile {
         .form_factor = luil::ui_form_factor::mobile,
@@ -57,6 +58,7 @@ TEST_CASE("A frame leaves the device to the platform by default", "[app][device]
     REQUIRE(frame.device.orientation == luil::screen_orientation::system);
     REQUIRE(frame.device.system_bars == luil::system_bars_mode::visible);
     REQUIRE(frame.device.draw_under_cutout == false);
+    REQUIRE(frame.device.volume_keys == false);
 }
 
 TEST_CASE("Following the system restores the activity's own orientation", "[android][device][orientation]")

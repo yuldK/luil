@@ -42,6 +42,18 @@ namespace mobile_demo {
             request_.draw_under_cutout = cutout->draw_under;
             return true;
         }
+        if (const auto* const volume { message.get<volume_keys_intent>() }; volume != nullptr)
+        {
+            request_.volume_keys = volume->claim;
+            return true;
+        }
+        if (const auto* const key { message.get<volume_key_intent>() }; key != nullptr)
+        {
+            ++(key->up ? volume_up_count_ : volume_down_count_);
+            if (key->repeat)
+                ++volume_repeat_count_;
+            return true;
+        }
         return false;
     }
 
@@ -110,6 +122,25 @@ namespace mobile_demo {
             const float cutout_height { luil::check_element::height_for(cutout) };
             column.gap(10.0f);
             column.add(std::make_unique<luil::check_element>(std::move(cutout)), std::max(cutout_height, touch_height), choice_width);
+        }
+
+        column.gap(20.0f);
+        column.heading(u8"volume-heading", u8"볼륨 키");
+        if (capabilities.volume_keys == false)
+            column.note(u8"volume-none", u8"이 플랫폼은 볼륨 키를 앱에 주지 않는다.");
+        else
+        {
+            luil::check_config volume {};
+            volume.owner = u8"volume-keys";
+            volume.style = luil::check_style::toggle_switch;
+            volume.label = u8"볼륨 키로 쪽 넘기기";
+            volume.checked = request_.volume_keys;
+            volume.toggle = luil::make_message_action(volume_keys_intent { request_.volume_keys == false });
+            const float volume_height { luil::check_element::height_for(volume) };
+            column.gap(6.0f);
+            column.add(std::make_unique<luil::check_element>(std::move(volume)), std::max(volume_height, touch_height), choice_width);
+            column.body(u8"volume-count", u8"받은 키: 올림 " + to_u8(volume_up_count_) + u8" · 내림 " + to_u8(volume_down_count_) + u8" · 반복 " + to_u8(volume_repeat_count_));
+            column.note(u8"volume-note", u8"끄면 시스템이 소리 크기를 바꾼다.");
         }
         return column.finish();
     }
