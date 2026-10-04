@@ -13,6 +13,16 @@ function(luil_add_android_example example)
             "$<TARGET_FILE:${target}>"
             "${CMAKE_BINARY_DIR}/jniLibs/${example}/$<CONFIG>/${ANDROID_ABI}/$<TARGET_FILE_NAME:${target}>"
         VERBATIM)
+    # SMB를 켠 구성은 libsmb2.so를 따로 싼다. 앱 라이브러리에 섞지 않은 공유 라이브러리라야 LGPL-2.1의
+    # "바꿔 끼울 수 있다"가 선다 (docs/smb-client-design.md).
+    if(TARGET luil_smb2)
+        add_dependencies(${target} luil_smb2)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:luil_smb2>"
+                "${CMAKE_BINARY_DIR}/jniLibs/${example}/$<CONFIG>/${ANDROID_ABI}/$<TARGET_FILE_NAME:luil_smb2>"
+            VERBATIM)
+    endif()
 endfunction()
 
 # hello — 앱 쪽 절반(hello_app)은 Windows와 같은 파일이다.

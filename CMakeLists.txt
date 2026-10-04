@@ -99,6 +99,8 @@ set(LUIL_SKIA_BUILD_RELEASE "${LUIL_SKIA_ROOT}/out/skia-ui-release"
 set(LUIL_CATCH2_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/catch2")
 # HTTP 응답의 JSON 본문 타입이다 (header-only submodule, 라이브러리 구성마다 필요).
 set(LUIL_NLOHMANN_JSON_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/nlohmann_json")
+# SMB client의 전송이다 (LGPL-2.1 submodule, LUIL_ENABLE_SMB를 켠 Android 구성에서만 세운다).
+set(LUIL_LIBSMB2_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/libsmb2")
 # WebView2 SDK는 LUIL_ENABLE_WEBVIEW가 켜진 라이브러리 구성에서 필요하다.
 # scripts/fetch_webview2.ps1로 헤더와 정적 로더를 준비한다.
 set(LUIL_WEBVIEW2_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/webview2-prep"
@@ -254,6 +256,18 @@ else()
 endif()
 option(LUIL_ENABLE_WEBVIEW "Host web content with WebView2 (requires the SDK package)." ${luil_webview_default})
 unset(luil_webview_default)
+# SMB client(`luil::net::smb_client`)를 libsmb2 위에 세운다. **Android 전용이고 기본은 끈다.** libsmb2는
+# LGPL-2.1이라 켠 앱만 `libsmb2.so`와 그 고지를 싣는다. 끈 구성의 `smb_client::create`는 "지원 안 함"으로
+# 답한다 (docs/smb-client-design.md).
+option(LUIL_ENABLE_SMB "Build the SMB client on libsmb2 (LGPL-2.1, Android only)." OFF)
+if(LUIL_ENABLE_SMB AND NOT LUIL_PLATFORM STREQUAL "android")
+    message(FATAL_ERROR
+        "LUIL_ENABLE_SMB is Android only. Windows reaches SMB shares through the OS.")
+endif()
+# libsmb2는 C다. 켠 구성에서만 C를 쓴다 (enable_language는 함수 안에서 부를 수 없다).
+if(LUIL_ENABLE_SMB)
+    enable_language(C)
+endif()
 if(LUIL_ENABLE_WEBVIEW AND NOT LUIL_ENABLE_DIRECT3D)
     message(WARNING
         "LUIL_ENABLE_WEBVIEW is ON while LUIL_ENABLE_DIRECT3D is OFF.\n"

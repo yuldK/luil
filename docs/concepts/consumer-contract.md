@@ -35,6 +35,15 @@ target_link_libraries(my_app PRIVATE luil::luil)
 
 모든 라이브러리 구성에 Skia와 nlohmann/json이 필요하다. Skia는 clang-cl로 컴파일된 것이어야 하며 configure가 패키지의 `toolchain.json`으로 확인한다. 소비자 자신의 컴파일러는 MSVC 그대로이고 clang 설치는 필요하지 않다 ([Skia 빌드 준비](../skia-build.md)). WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`를 켠 구성에 필요하며, 끈 구성은 SDK 없이 빌드되고 웹뷰는 placeholder로 남는다. `LUIL_ENABLE_DIRECT3D=OFF`(CPU 전용) 구성은 웹뷰도 기본으로 끈다. 설치본의 `luil-config.cmake`는 두 값을 `LUIL_ENABLE_DIRECT3D`, `LUIL_ENABLE_WEBVIEW`로 알린다. 고지 생성기는 Skia 패키지의 `NOTICE.md`를 우선 사용한다. 직접 빌드한 Skia 소스 트리에는 Bazel 캐시의 Rust PNG crate 고지가 없으므로 생성기가 불완전한 고지를 경고한다. 배포용 고지는 이를 포함하는 패키지에서 생성한다.
 
+## SMB
+
+`LUIL_ENABLE_SMB`(Android 전용, 기본 끔)를 켠 앱은 libsmb2(LGPL-2.1)를 함께 배포한다. 그 조건은 앱이 지킨다.
+
+- `libsmb2.so`를 앱의 네이티브 라이브러리와 **따로** APK의 `jniLibs`에 싼다. luil의 Android 예제는 CMake가 `<빌드>/jniLibs/<예제>/<구성>/<abi>`에 함께 놓는다. 앱 라이브러리에 정적으로 섞지 않는 것이 LGPL-2.1의 "사용자가 라이브러리를 바꿔 끼울 수 있다"를 지키는 길이다.
+- 앱의 고지(설정의 오픈 소스 라이선스 화면 등)에 LGPL-2.1 전문(`third_party/libsmb2/LICENCE-LGPL-2.1.txt`)과 쓴 판(`libsmb2-6.2`)·소스 위치(https://github.com/sahlberg/libsmb2)를 싣는다. luil의 고지 생성기는 Windows 실행 파일 리소스용이라 Android에서는 앱이 직접 싣는다.
+- luil은 libsmb2를 고치지 않고 쓴다. 고쳐 쓰려면 고친 소스도 LGPL로 공개해야 한다.
+- 같은 저장소의 libdcerpc 부분은 BSD-2 라이선스다.
+
 ## HTTP와 웹뷰
 
 `luil::net::http_client`의 사용 여부는 앱이 정하지만 별도 선택 빌드 기능은 아니다. 응답을 앱 메시지로 옮겨 `app_host::post_app_message()`에 전달할 수 있다. 이 게시 함수는 어느 스레드에서든 호출 가능하며 포화 시 거절된 메시지는 `app_inbox_statistics()`로 관찰한다. 앱이 소유한 클라이언트는 host가 사라지기 전에 `stop()`으로 중지한다.

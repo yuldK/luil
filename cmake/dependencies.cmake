@@ -12,6 +12,7 @@ include("${LUIL_DEPENDENCIES_DIRECTORY}/nlohmann_json.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/webview2.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/catch2.cmake")
 include("${LUIL_DEPENDENCIES_DIRECTORY}/game_activity.cmake")
+include("${LUIL_DEPENDENCIES_DIRECTORY}/libsmb2.cmake")
 
 function(luil_find_dependencies)
     cmake_parse_arguments(PARSE_ARGV 0 arguments "" "BUILD_TESTS;ENABLE_WEBVIEW" "")
@@ -34,6 +35,11 @@ function(luil_find_dependencies)
     # Android 앱 host가 GameActivity 위에 선다.
     if(LUIL_PLATFORM STREQUAL "android")
         luil_find_game_activity()
+    endif()
+
+    # SMB client를 켠 Android 구성만 libsmb2를 세운다 (LGPL-2.1, 공유 라이브러리).
+    if(LUIL_ENABLE_SMB)
+        luil_find_libsmb2()
     endif()
 
     # Catch2는 test 구성에서만 요구한다.

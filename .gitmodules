@@ -5,3 +5,7 @@
 	path = third_party/nlohmann_json
 	url = https://github.com/nlohmann/json.git
 	shallow = true
+[submodule "third_party/libsmb2"]
+	path = third_party/libsmb2
+	url = https://github.com/sahlberg/libsmb2.git
+	shallow = true
