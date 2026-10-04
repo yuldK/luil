@@ -3355,7 +3355,7 @@ TEST_CASE("Cancelling dropped gestures clears the press and the text drag", "[ui
     REQUIRE(edits_before_cancel >= 2);
 
     // 뗌이 유실된 것으로 판정되면 몸짓이 거둬진다.
-    controller.cancel_dropped_gestures();
+    static_cast<void>(controller.cancel_dropped_gestures());
     REQUIRE(controller.snapshot().pressed == luil::ui_element_id {});
 
     // 거둔 뒤의 이동은 더 이상 유령 선택 확장을 만들지 않는다.

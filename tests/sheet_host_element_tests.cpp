@@ -344,3 +344,72 @@ TEST_CASE("A sheet without a list takes the swipe and a cancelled swipe settles"
     static_cast<void>(controller.process(luil::pointer_pressed_event { 200.0f, 600.0f, luil::pointer_button::left, at(1000) }));
     REQUIRE(events_in(controller.process(luil::pointer_moved_event { 200.0f, 700.0f, at(1020) })).empty());
 }
+
+TEST_CASE("Losing input in the middle of a drag still settles the sheet", "[ui][sheet]")
+{
+    const auto config { sheet_config() };
+    // 입력 큐가 넘쳐 몸짓을 거두면 터치 손잡이는 끝을 알린다. 늦게 온 뗌은 아무것도 내지 않는다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        REQUIRE(dragged(events_in(controller.process(touch_move(200.0f, 440.0f, 40)))) == 30.0f);
+        const auto events { events_in(controller.cancel_dropped_gestures()) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle == luil::sheet_detent::half);
+        REQUIRE(events_in(controller.process(touch_release(200.0f, 440.0f, 80))).empty());
+    }
+    // 넘겨받은 시트 몸도 같다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 600.0f, 0)));
+        REQUIRE(dragged(events_in(controller.process(touch_move(200.0f, 560.0f, 40)))) == -40.0f);
+        const auto events { events_in(controller.cancel_dropped_gestures()) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle.has_value());
+    }
+    // 마우스 손잡이도 같다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 200.0f, 410.0f, luil::pointer_button::left, at(0) }));
+        REQUIRE(dragged(events_in(controller.process(luil::pointer_moved_event { 200.0f, 310.0f, at(20) }))) == -100.0f);
+        const auto events { events_in(controller.cancel_dropped_gestures()) };
+        REQUIRE(events.size() == 1u);
+        REQUIRE(events[0].settle == luil::sheet_detent::half);
+        REQUIRE(events_in(controller.process(luil::pointer_released_event { 200.0f, 310.0f, luil::pointer_button::left, at(40) })).empty());
+    }
+    // 끄던 것이 없으면 아무것도 내지 않는다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        REQUIRE(controller.cancel_dropped_gestures().empty());
+    }
+}
+
+TEST_CASE("A pen dragging the handle settles when the system cancels it", "[ui][sheet]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(sheet_tree(sheet_config()));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 200.0f, .y = 410.0f, .time = at(0), .device = luil::pointer_device::pen, .pointer_id = 2 }));
+    const luil::pointer_moved_event move { .x = 200.0f, .y = 600.0f, .time = at(20), .device = luil::pointer_device::pen, .pointer_id = 2, .in_contact = true };
+    REQUIRE(dragged(events_in(controller.process(move))) == 190.0f);
+    // 다른 펜의 취소는 이 끌기와 상관없다.
+    REQUIRE(events_in(controller.process(luil::pointer_cancelled_event { luil::pointer_device::pen, 3, {}, at(30) })).empty());
+    const auto events { events_in(controller.process(luil::pointer_cancelled_event { luil::pointer_device::pen, 2, {}, at(40) })) };
+    REQUIRE(events.size() == 1u);
+    REQUIRE(events[0].settle == luil::sheet_detent::half);
+}
+
+TEST_CASE("A handle on another surface hears its release", "[ui][sheet]")
+{
+    // 끝 알림은 누른 표면의 손잡이로 간다 (popup 같은 다른 표면).
+    luil::interaction_controller controller {};
+    controller.set_surface_trees({ { u8"popup", sheet_tree(sheet_config()) } });
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 200.0f, .y = 410.0f, .time = at(0), .surface = u8"popup" }));
+    REQUIRE(dragged(events_in(controller.process(luil::pointer_moved_event { .x = 200.0f, .y = 310.0f, .time = at(20), .surface = u8"popup" }))) == -100.0f);
+    const auto events { events_in(controller.process(luil::pointer_released_event { .x = 200.0f, .y = 310.0f, .time = at(40), .surface = u8"popup" })) };
+    REQUIRE(events.size() == 1u);
+    REQUIRE(events[0].settle == luil::sheet_detent::half);
+}

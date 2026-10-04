@@ -395,7 +395,9 @@ namespace luil {
         // 몸짓(누름·텍스트 끌기·drag)을 거둔다 — 남긴 채 틀리면 유령 선택
         // 확장·유령 drop이 되고, 거둬서 틀리면 다음 누름이 다시 시작할 뿐이다.
         // 초점은 건드리지 않는다 — 다음 focus 이벤트가 바로잡는다.
-        void cancel_dropped_gestures() noexcept;
+        // 끌기를 쥔 손잡이·넘겨받은 컨테이너에는 끝을 알린다 (시트가 끄던 자리에 남지 않고 멈춤점으로 간다).
+        // 돌려준 액션은 `process`의 것처럼 내보낸다.
+        [[nodiscard]] std::vector<input_action> cancel_dropped_gestures();
         // 실행 중 터치 설정을 바꾼다. 잘못된 값이면 거짓이고 직전 값이 남는다.
         //  - 진행 중 접촉의 거리·시간은 누를 때의 값 그대로다.
         //  - 끈 몸짓이 진행 중이면(스크롤을 끄면 대기·스크롤, 길게 누르기를 끄면 대기)
@@ -532,6 +534,9 @@ namespace luil {
         void cancel_touch() noexcept;
         // 끌기를 쥔 터치 접촉이 끝난다 (뗌·취소). 넘겨받은 컨테이너의 `release`, 손잡이의 `on_release`다.
         [[nodiscard]] std::vector<input_action> end_touch_drag(const touch_contact& contact, float x, float y);
+        // 마우스·펜이 쥔 손잡이 끌기가 끝난다 (뗌·취소·입력 큐 유실). 손잡이의 `on_release`다. 끝 상태를 지우기 전에
+        // 부른다 — 누른 표면으로 손잡이를 찾는다.
+        [[nodiscard]] std::vector<input_action> end_pointer_drag(float x, float y) const;
         // 보기에 보낸 이동 하나와 그 시각의 자리를 경계 기록에 더한다.
         static void record_view_pan(view_edge_track& edge, zoom_point delta, std::chrono::steady_clock::time_point time, float x, float y);
         // 접촉이 끝났다. 경계 쓸기의 기준을 넘었으면 보기의 메시지를 돌려준다.

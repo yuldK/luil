@@ -1096,16 +1096,11 @@ namespace luil {
         // 끌기만 끝낸다.
         if (pointer_drag_id_ != ui_element_id {} && event.button == pointer_button::left)
         {
-            const ui_element_id released { pointer_drag_id_ };
+            // 끝을 듣는 손잡이에는 끝을 알린다 (시트의 멈춤점).
+            std::vector<input_action> actions { end_pointer_drag(event.x, event.y) };
             pointer_drag_id_ = {};
             clear_press();
-            // 끝을 듣는 손잡이에는 끝을 알린다 (시트의 멈춤점).
-            const ui_tree* const pressed_tree { surface_tree(pressed_surface_) };
-            const ui_element* const target { pressed_tree != nullptr ? pressed_tree->find(released) : nullptr };
-            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
-            if (handler == nullptr || handler->on_release == nullptr)
-                return {};
-            return handler->on_release(ui_action_context { released, event.x, event.y, false });
+            return actions;
         }
 
         // drag를 끝낸다.
@@ -1854,8 +1849,10 @@ namespace luil {
         if (touch_.has_value() || pointer_contact_.has_value() == false || pointer_contact_->device != event.device || pointer_contact_->id != event.pointer_id
             || pointer_contact_->surface != event.surface)
             return {};
+        // 손잡이를 쥐고 있었으면 끝을 알린다 (터치 취소와 같다).
+        std::vector<input_action> actions { end_pointer_drag(pointer_drag_x_, pointer_drag_y_) };
         cancel_pointer_gesture();
-        return {};
+        return actions;
     }
 
     void interaction_controller::cancel_pointer_gesture() noexcept
@@ -1911,6 +1908,18 @@ namespace luil {
         if (handler == nullptr || handler->on_release == nullptr)
             return {};
         return handler->on_release(ui_action_context { contact.target, x, y, false });
+    }
+
+    std::vector<input_action> interaction_controller::end_pointer_drag(const float x, const float y) const
+    {
+        if (pointer_drag_id_ == ui_element_id {})
+            return {};
+        const ui_tree* const tree { surface_tree(pressed_surface_) };
+        const ui_element* const target { tree != nullptr ? tree->find(pointer_drag_id_) : nullptr };
+        const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+        if (handler == nullptr || handler->on_release == nullptr)
+            return {};
+        return handler->on_release(ui_action_context { pointer_drag_id_, x, y, false });
     }
 
     void interaction_controller::record_view_pan(view_edge_track& edge, const zoom_point delta, const std::chrono::steady_clock::time_point time, const float x, const float y)
@@ -2729,8 +2738,11 @@ namespace luil {
         snapshot_.pressed_surface.clear();
     }
 
-    void interaction_controller::cancel_dropped_gestures() noexcept
+    std::vector<input_action> interaction_controller::cancel_dropped_gestures()
     {
+        // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
+        // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.
+        std::vector<input_action> actions { touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y) : end_pointer_drag(pointer_drag_x_, pointer_drag_y_) };
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
         last_view_tap_.reset();
@@ -2739,6 +2751,7 @@ namespace luil {
         clear_press();
         text_drag_id_ = {};
         snapshot_.drag.reset();
+        return actions;
     }
 
     void run_ui_input_pump(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
@@ -2810,7 +2823,7 @@ namespace luil {
                 // drop_oldest 큐는 포화에서 앞을 버린다 — 접수 번호의 건너뜀이 그 흔적이다.
                 // 유실분에 뗌·이탈 같은 상태 전이가 있었을 수 있으므로 몸짓부터 거둔다.
                 if (received.sequence != next_sequence)
-                    controller.cancel_dropped_gestures();
+                    dispatch(controller.cancel_dropped_gestures());
                 next_sequence = received.sequence + 1;
 
                 // 큐가 밀렸으면 뒤에 더 이른 뗌·취소가 남아 있다. 벽시계가 아니라 입력 시각까지

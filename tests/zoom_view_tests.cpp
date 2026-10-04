@@ -189,7 +189,7 @@ TEST_CASE("Zoom empty drag is immediate for touch mouse and pen", "[zoom]")
         const auto actions { controller.process(move(1, 101.0f, 100.0f, device)) };
         REQUIRE(actions.size() == 1);
         REQUIRE(read(actions[0]).delta.x == 1.0f);
-        controller.cancel_dropped_gestures();
+        static_cast<void>(controller.cancel_dropped_gestures());
         REQUIRE(controller.process(move(1, 150.0f, 100.0f, device)).empty());
     }
 }
@@ -258,7 +258,7 @@ TEST_CASE("Pinch ignores close contacts different owners and cancels both", "[zo
     actions = controller.process(move(1, 110.0f));
     REQUIRE(actions.size() == 1);
     REQUIRE(read(actions[0]).delta.x == 10.0f);
-    controller.cancel_dropped_gestures();
+    static_cast<void>(controller.cancel_dropped_gestures());
     static_cast<void>(controller.process(press(1, 100.0f)));
     static_cast<void>(controller.process(press(2, 200.0f)));
     luil::touch_gesture_config touch {};
@@ -351,7 +351,7 @@ TEST_CASE("Pinch cancellation covers queue loss surface removal and other device
         static_cast<void>(controller.process(press(1, 100.0f)));
         static_cast<void>(controller.process(press(2, 200.0f)));
         if (cause == 0)
-            controller.cancel_dropped_gestures();
+            static_cast<void>(controller.cancel_dropped_gestures());
         else if (cause == 1)
         {
             controller.set_tree(nullptr);
@@ -390,7 +390,7 @@ TEST_CASE("Touch item drag has priority and mouse click never becomes view pan",
     controller.set_tree(tree(luil::zoom_wheel_mode::zoom, true));
     static_cast<void>(controller.process(press(0, 240.0f, 240.0f, luil::pointer_device::mouse)));
     REQUIRE(controller.process(move(0, 275.0f, 240.0f, luil::pointer_device::mouse)).empty());
-    controller.cancel_dropped_gestures();
+    static_cast<void>(controller.cancel_dropped_gestures());
     auto view { std::make_unique<luil::zoom_view_element>(config()) };
     auto item { std::make_unique<content>() };
     item->set_drag_source(luil::drag_source { .make_payload = [](const luil::ui_action_context&) { return luil::drag_payload {}; } });

@@ -900,7 +900,7 @@ TEST_CASE("A gap in the input queue drops the touch contact", "[ui][interaction]
     controller.set_tree(card_tree(&scrolled));
 
     static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
-    controller.cancel_dropped_gestures();
+    static_cast<void>(controller.cancel_dropped_gestures());
     REQUIRE(controller.process(touch_move(60.0f, 80.0f, 40)).empty());
     REQUIRE(controller.process(touch_release(60.0f, 80.0f, 80)).empty());
     REQUIRE(scrolled.empty());

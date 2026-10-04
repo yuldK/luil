@@ -176,7 +176,7 @@ namespace luil {
         // 직전 위치와 현재 위치를 받는다.
         // 상대 변화량만 쓰므로 tree가 다시 빌드되어도 이어서 끌 수 있다.
         std::function<std::vector<input_action>(const ui_action_context& previous, const ui_action_context& current)> on_move {};
-        // 끌기가 끝났다 (뗌, 또는 시스템의 접촉 취소). 마지막 자리를 받는다.
+        // 끌기가 끝났다 (뗌, 시스템의 접촉 취소, 입력 큐 유실로 거둔 몸짓). 마지막 자리를 받는다.
         // 끄는 동안의 상태를 앱이 들고 있다가 여기서 멈출 자리를 정한다 (시트의 멈춤점).
         //  - 비어 있으면 끝을 알리지 않는다 — 지금까지의 손잡이가 그 경우다.
         //  - 누른 element가 사라졌거나 가려진 뒤의 뗌에는 부르지 않는다.
