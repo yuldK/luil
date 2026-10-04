@@ -196,3 +196,53 @@ TEST_CASE("A refused share list is sorted by its Win32 error", "[net][smb][share
     CHECK(luil::net::smb_error_kind_for_win32(53u) == luil::net::smb_error_kind::failed);
     CHECK(luil::net::smb_error_kind_for_win32(124u) == luil::net::smb_error_kind::failed);
 }
+
+TEST_CASE("A server string splits into host and port and joins back", "[net][smb][mdns]")
+{
+    using luil::net::split_smb_server;
+    CHECK(split_smb_server(u8"nas.local").host == u8"nas.local");
+    CHECK(split_smb_server(u8"nas.local").port == 445);
+    CHECK(split_smb_server(u8"nas.local:4445").host == u8"nas.local");
+    CHECK(split_smb_server(u8"nas.local:4445").port == 4445);
+    CHECK(split_smb_server(u8"[fe80::1%wlan0]:4445").host == u8"fe80::1%wlan0");
+    CHECK(split_smb_server(u8"[fe80::1]").port == 445);
+    // 괄호 없는 IPv6와 숫자가 아닌 포트는 통째로 호스트다.
+    CHECK(split_smb_server(u8"fe80::1").host == u8"fe80::1");
+    CHECK(split_smb_server(u8"nas:http").host == u8"nas:http");
+    CHECK(split_smb_server(u8"nas:70000").host == u8"nas:70000");
+
+    using luil::net::join_smb_server;
+    CHECK(join_smb_server(u8"192.168.0.10", 445) == u8"192.168.0.10");
+    CHECK(join_smb_server(u8"192.168.0.10", 4445) == u8"192.168.0.10:4445");
+    CHECK(join_smb_server(u8"fe80::1%wlan0", 445) == u8"[fe80::1%wlan0]");
+    CHECK(join_smb_server(u8"fe80::1%wlan0", 4445) == u8"[fe80::1%wlan0]:4445");
+}
+
+TEST_CASE("Only .local hosts are resolved through mDNS", "[net][smb][mdns]")
+{
+    CHECK(luil::net::is_mdns_host(u8"nas.local"));
+    CHECK(luil::net::is_mdns_host(u8"NAS.LOCAL"));
+    CHECK_FALSE(luil::net::is_mdns_host(u8".local"));
+    CHECK_FALSE(luil::net::is_mdns_host(u8"nas.example"));
+    CHECK_FALSE(luil::net::is_mdns_host(u8"192.168.0.10"));
+    CHECK_FALSE(luil::net::is_mdns_host(u8"nas.localhost"));
+}
+
+TEST_CASE("A found server gives a server string ready for a location", "[net][smb][mdns]")
+{
+    luil::net::smb_server_found found {};
+    found.host = u8"nas.local";
+    CHECK(found.server() == u8"nas.local");
+    found.addresses = { u8"fe80::1%wlan0" };
+    CHECK(found.server() == u8"[fe80::1%wlan0]");
+    found.addresses.insert(found.addresses.begin(), u8"192.168.0.10");
+    found.port = 4445;
+    CHECK(found.server() == u8"192.168.0.10:4445");
+}
+
+TEST_CASE("Discovery is not a request that send accepts", "[net][smb][mdns]")
+{
+    luil::net::smb_request request { list_request() };
+    request.operation = luil::net::smb_operation::discover;
+    CHECK(refused(request));
+}

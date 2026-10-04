@@ -60,4 +60,19 @@ namespace luil::net {
 
     // 공유 목록을 서버가 거절한 Win32 오류 번호의 갈래다. 접근 거부(5)만 갈래가 있고 그 밖은 `failed`다.
     [[nodiscard]] smb_error_kind smb_error_kind_for_win32(std::uint32_t code) noexcept;
+
+    // 서버 글을 호스트와 포트로 가른다 ("nas.local:4445" → "nas.local"·4445, "[fe80::1]" → "fe80::1"·445). 포트가 숫자가
+    // 아니거나 범위 밖이면 글 전체가 호스트이고 포트는 445다.
+    struct smb_server_parts
+    {
+        std::u8string host {};
+        std::uint16_t port { 445 };
+    };
+    [[nodiscard]] smb_server_parts split_smb_server(std::u8string_view server);
+
+    // 주소와 포트로 서버 글을 짓는다. IPv6 주소(콜론이 있다)는 괄호를 치고, 포트가 445면 붙이지 않는다.
+    [[nodiscard]] std::u8string join_smb_server(std::u8string_view address, std::uint16_t port);
+
+    // mDNS로 풀 이름(`.local`로 끝난다)인가. ASCII 대소문자를 접는다.
+    [[nodiscard]] bool is_mdns_host(std::u8string_view host) noexcept;
 } // namespace luil::net

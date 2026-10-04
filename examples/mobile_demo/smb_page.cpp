@@ -5,6 +5,7 @@
 #include "luil/ui/stack_element.h"
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <utility>
 
@@ -16,6 +17,8 @@ namespace mobile_demo {
         constexpr std::size_t preview_bytes { 4096 };
         // "다음 구간"이 한 번에 읽는 길이다. 큰 파일을 구간으로 나눠 읽을 때 두 번째부터 연결을 다시 쓰는 것이 보인다.
         constexpr std::size_t range_bytes { 1024u * 1024u };
+        // 찾기가 답을 모으는 시간이다.
+        constexpr std::chrono::milliseconds discovery_window { 3000 };
         // 미리 보기로 적는 글자 수다.
         constexpr std::size_t preview_characters { 160 };
         // 여러 줄로 나눠 적는 글의 한 줄 폭과 줄 수 상한이다. 폭은 ASCII 한 자를 1, 그 밖(한글 등)을 2로 센 어림이고,
@@ -202,6 +205,7 @@ namespace mobile_demo {
                 transport_.cancel = [client](const luil::net::smb_ticket ticket) { client->cancel(ticket); };
                 transport_.stop = [client] { client->stop(); };
                 transport_.close_idle = [client] { client->close_idle(); };
+                transport_.discover = [client](const luil::net::smb_discovery_request request, std::u8string& error) { return client->discover(request, error); };
             }
             return true;
         }
@@ -216,6 +220,33 @@ namespace mobile_demo {
                 send(luil::net::smb_operation::shares, {});
             else
                 send(luil::net::smb_operation::list, second == std::u8string::npos ? std::u8string {} : address.substr(second + 1));
+            return true;
+        }
+        if (message.get<smb_discover_intent>() != nullptr)
+        {
+            cancel_pending();
+            servers_.clear();
+            if (transport_.discover == nullptr)
+                return true;
+            std::u8string error {};
+            pending_ = transport_.discover(luil::net::smb_discovery_request { discovery_window }, error);
+            pending_operation_ = luil::net::smb_operation::discover;
+            status_ = pending_ ? std::u8string { u8"같은 네트워크에서 찾는 중… (3초)" } : std::u8string { u8"찾지 못함" };
+            detail_ = pending_ ? std::u8string {} : error;
+            return true;
+        }
+        if (const auto* const picked { message.get<smb_server_intent>() }; picked != nullptr)
+        {
+            // 새 tree가 오기 전에 이전 목록의 클릭이 와도 지금 목록에 없는 서버는 열지 않는다.
+            if (std::ranges::none_of(servers_, [picked](const luil::net::smb_server_found& found) { return found.server() == picked->server; }))
+                return true;
+            luil::text_edit_request rename {};
+            rename.target = target_smb_address;
+            rename.command = luil::text::text_edit_command::replace_all;
+            rename.text = picked->server;
+            luil::apply_text_edit(address_, rename);
+            servers_.clear();
+            send(luil::net::smb_operation::shares, {});
             return true;
         }
         if (const auto* const chosen { message.get<smb_share_intent>() }; chosen != nullptr)
@@ -295,7 +326,13 @@ namespace mobile_demo {
                 detail_ = response.error.message;
                 return true;
             }
-            if (response.operation == luil::net::smb_operation::shares)
+            if (response.operation == luil::net::smb_operation::discover)
+            {
+                servers_ = response.servers;
+                status_ = u8"서버 " + number_text(servers_.size()) + u8"개" + elapsed;
+                detail_ = servers_.empty() ? std::u8string { u8"같은 네트워크에서 답한 SMB 서버가 없다." } : std::u8string {};
+            }
+            else if (response.operation == luil::net::smb_operation::shares)
             {
                 // 디스크이고 숨지 않은 공유만 보인다. 관리용·`$`로 끝나는 공유와 프린터·파이프는 센다.
                 shares_.clear();
@@ -442,7 +479,7 @@ namespace mobile_demo {
             return column.finish();
         }
         column.note(u8"smb-help-1", u8"주소는 \"서버/공유\"다. 서버만 적으면 공유 목록이다.");
-        column.note(u8"smb-help-ip", u8"집 안 NAS는 IP 주소로 적는다.");
+        column.note(u8"smb-help-find", u8"NAS는 찾기로 고르거나 IP·.local 이름으로 적는다.");
         column.note(u8"smb-help-2", u8"Android 17은 기기 페이지에서 권한부터 받는다.");
         column.gap(8.0f);
 
@@ -472,8 +509,10 @@ namespace mobile_demo {
         auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"smb-actions" }, row_config) };
         row->add(make_button(u8"open", u8"열기", luil::make_message_action(smb_open_intent {})), 96.0f);
         row->add(make_button(u8"up", u8"위로", luil::make_message_action(smb_up_intent {})), 96.0f);
-        row->add(make_button(u8"close-idle", u8"연결 닫기", luil::make_message_action(smb_close_idle_intent {})), 120.0f);
+        row->add(make_button(u8"discover", u8"찾기", luil::make_message_action(smb_discover_intent {})), 96.0f);
         column.add(std::move(row), touch_height);
+        column.gap(8.0f);
+        column.add(make_button(u8"close-idle", u8"연결 닫기", luil::make_message_action(smb_close_idle_intent {})), touch_height, 120.0f);
         // 읽던 파일이 더 있으면 다음 구간을 읽는다.
         if (file_.empty() == false && more_)
         {
@@ -486,6 +525,17 @@ namespace mobile_demo {
         for (std::size_t index { 0 }; index < detail.size(); ++index)
             column.note(u8"smb-detail-" + number_text(index), detail[index]);
         column.gap(8.0f);
+
+        // 찾은 서버다. 누르면 그 서버의 공유 목록을 연다.
+        for (const luil::net::smb_server_found& found : servers_)
+        {
+            const std::u8string where { found.addresses.empty() ? found.host : found.addresses.front() };
+            const std::u8string label { found.name + u8"  ·  " + where };
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_smb_entry, u8"smb-server-" + found.name }, luil::text_button_config { .text = label }) };
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(smb_server_intent { found.server() }));
+            column.add(std::move(button), entry_row_height, field_width);
+            column.gap(4.0f);
+        }
 
         // 공유 목록이다. 누르면 그 공유를 연다.
         for (const luil::net::smb_share& share : shares_)

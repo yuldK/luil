@@ -376,6 +376,8 @@ luil_add_source_filter(luil_files "net"
     net/http_request_rules.cpp
     net/http_request_rules.h
     # SMB client는 Android 전용이다. Windows는 운영체제의 SMB가 있어 `create`가 "지원 안 함"으로 답한다.
+    net/dns_message.cpp
+    net/dns_message.h
     "${public_headers}/net/smb_client.h"
     net/smb_client_unsupported.cpp
     net/smb_pool.cpp
@@ -543,6 +545,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         "${public_headers}/net/http_message.h"
         net/http_request_rules.cpp
         net/http_request_rules.h
+        net/dns_message.cpp
+        net/dns_message.h
         "${public_headers}/net/smb_client.h"
         net/smb_pool.cpp
         net/smb_pool.h
@@ -550,7 +554,7 @@ if(LUIL_PLATFORM STREQUAL "android")
         net/smb_rules.h)
     # SMB client다. LUIL_ENABLE_SMB를 켠 구성은 libsmb2(따로 싼 libsmb2.so) 위에 서고, 끈 구성은 "지원 안 함"으로 답한다.
     if(LUIL_ENABLE_SMB)
-        luil_add_source_filter(luil_android_files "net" net/smb_client_libsmb2.cpp)
+        luil_add_source_filter(luil_android_files "net" net/mdns_query.cpp net/mdns_query.h net/smb_client_libsmb2.cpp)
     else()
         luil_add_source_filter(luil_android_files "net" net/smb_client_unsupported.cpp)
     endif()

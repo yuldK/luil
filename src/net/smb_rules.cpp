@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <limits>
+#include <string>
 #include <utility>
 
 namespace luil::net {
@@ -69,6 +70,9 @@ namespace luil::net {
         case smb_operation::stat:
         case smb_operation::shares:
             return true;
+        case smb_operation::discover:
+            failure = invalid(u8"Use smb_client::discover to find servers.");
+            return false;
         case smb_operation::read:
             if (request.length == 0 || request.length > max_read_bytes)
             {
@@ -151,6 +155,87 @@ namespace luil::net {
             break;
         }
         return connecting ? smb_error_kind::cannot_connect : smb_error_kind::failed;
+    }
+
+    std::u8string smb_server_found::server() const
+    {
+        if (addresses.empty())
+            return join_smb_server(host, port);
+        return join_smb_server(addresses.front(), port);
+    }
+
+    smb_server_parts split_smb_server(const std::u8string_view server)
+    {
+        const auto whole = [server] { return smb_server_parts { std::u8string { server }, 445 }; };
+        std::u8string_view host { server };
+        std::u8string_view port {};
+        if (server.starts_with(u8'['))
+        {
+            const std::size_t close { server.find(u8']') };
+            if (close == std::u8string_view::npos)
+                return whole();
+            host = server.substr(1, close - 1);
+            const std::u8string_view rest { server.substr(close + 1) };
+            if (rest.empty() == false)
+            {
+                if (rest.front() != u8':')
+                    return whole();
+                port = rest.substr(1);
+            }
+        }
+        else if (const std::size_t colon { server.find(u8':') }; colon != std::u8string_view::npos)
+        {
+            // 콜론이 둘 이상이면 괄호 없는 IPv6 주소다. 포트를 붙일 수 없다.
+            if (server.find(u8':', colon + 1) != std::u8string_view::npos)
+                return whole();
+            host = server.substr(0, colon);
+            port = server.substr(colon + 1);
+        }
+        smb_server_parts parts { std::u8string { host }, 445 };
+        if (port.empty() == false)
+        {
+            std::uint32_t value { 0 };
+            for (const char8_t digit : port)
+            {
+                if (digit < u8'0' || digit > u8'9' || value > 65535u)
+                    return whole();
+                value = value * 10u + static_cast<std::uint32_t>(digit - u8'0');
+            }
+            if (value == 0 || value > 65535u)
+                return whole();
+            parts.port = static_cast<std::uint16_t>(value);
+        }
+        return parts;
+    }
+
+    std::u8string join_smb_server(const std::u8string_view address, const std::uint16_t port)
+    {
+        const bool version6 { address.find(u8':') != std::u8string_view::npos };
+        std::u8string text { version6 ? u8"[" + std::u8string { address } + u8"]" : std::u8string { address } };
+        if (port != 445)
+        {
+            const std::string digits { std::to_string(port) };
+            text += u8":";
+            text.append(reinterpret_cast<const char8_t*>(digits.data()), digits.size());
+        }
+        return text;
+    }
+
+    bool is_mdns_host(const std::u8string_view host) noexcept
+    {
+        constexpr std::u8string_view suffix { u8".local" };
+        if (host.size() <= suffix.size())
+            return false;
+        const std::u8string_view tail { host.substr(host.size() - suffix.size()) };
+        for (std::size_t index { 0 }; index < suffix.size(); ++index)
+        {
+            char8_t character { tail[index] };
+            if (character >= u8'A' && character <= u8'Z')
+                character = static_cast<char8_t>(character - u8'A' + u8'a');
+            if (character != suffix[index])
+                return false;
+        }
+        return true;
     }
 
     std::u8string_view smb_connection_share(const smb_request& request) noexcept

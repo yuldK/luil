@@ -36,6 +36,13 @@ namespace luil::net {
         return {};
     }
 
+    smb_ticket smb_client::discover(const smb_discovery_request request, std::u8string& error)
+    {
+        static_cast<void>(request);
+        error = unsupported_message;
+        return {};
+    }
+
     void smb_client::cancel(const smb_ticket ticket) noexcept
     {
         static_cast<void>(ticket);

@@ -27,6 +27,7 @@ namespace {
         std::vector<luil::net::smb_request> requests {};
         std::vector<luil::net::smb_ticket> cancelled {};
         std::uint64_t next_ticket { 0 };
+        int discoveries { 0 };
         bool reject { false };
         mobile_demo::smb_page page { transport() };
 
@@ -44,6 +45,11 @@ namespace {
                         return luil::net::smb_ticket { ++next_ticket };
                     },
                 .cancel = [this](const luil::net::smb_ticket ticket) { cancelled.push_back(ticket); },
+                .discover =
+                    [this](const luil::net::smb_discovery_request, std::u8string&) {
+                        ++discoveries;
+                        return luil::net::smb_ticket { ++next_ticket };
+                    },
             };
         }
 
@@ -209,6 +215,29 @@ TEST_CASE("SMB with only a server lists its visible shares and opens the chosen 
     CHECK(fixture.requests.back().location.server == u8"nas");
     CHECK(fixture.requests.back().location.share == u8"photos");
     CHECK(fixture.requests.back().path.empty());
+}
+
+TEST_CASE("SMB discovery lists found servers and opens the share list of the chosen one", "[smb][mobile-demo]")
+{
+    smb_fixture fixture {};
+    deliver(fixture.page, mobile_demo::smb_discover_intent {});
+    REQUIRE(fixture.discoveries == 1);
+    luil::net::smb_response found { .ticket = { fixture.next_ticket }, .operation = luil::net::smb_operation::discover };
+    found.servers = { { .name = u8"Living Room NAS", .host = u8"nas.local", .addresses = { u8"192.168.0.10" }, .port = 445 } };
+    deliver(fixture.page, mobile_demo::smb_result_intent { std::move(found) });
+    auto content { fixture.page.build(400.0f, 1.0f) };
+    const auto tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, content.height }, 1.0f) };
+    CHECK(tree.find({ mobile_demo::kind_smb_entry, u8"smb-server-Living Room NAS" }) != nullptr);
+
+    // 찾지 않은 서버는 열지 않는다.
+    const std::size_t sent { fixture.requests.size() };
+    deliver(fixture.page, mobile_demo::smb_server_intent { u8"10.0.0.9" });
+    CHECK(fixture.requests.size() == sent);
+    // 찾은 서버를 누르면 그 서버의 공유 목록을 묻는다.
+    deliver(fixture.page, mobile_demo::smb_server_intent { u8"192.168.0.10" });
+    REQUIRE(fixture.requests.size() == sent + 1u);
+    CHECK(fixture.requests.back().operation == luil::net::smb_operation::shares);
+    CHECK(fixture.requests.back().location.server == u8"192.168.0.10");
 }
 
 TEST_CASE("SMB rejected and replaced requests cannot revive an old listing", "[smb][mobile-demo]")

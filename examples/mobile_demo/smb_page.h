@@ -3,8 +3,8 @@
 // SMB 페이지다: 같은 네트워크의 NAS·Windows 공유에 붙어 폴더를 열거하고 파일을 앞부분부터 구간으로 읽는다. 답마다 걸린
 // 시간과 연결을 새로 열었는지 다시 썼는지를 적어, 연결 다시 쓰기의 효과를 사람이 볼 수 있다.
 // Android에서 LUIL_ENABLE_SMB를 켠 구성만 client가 있다. 그 밖의 구성에서는 없다는 사실만 적는다.
-// 서버·계정은 사람이 적는다 — 이 페이지는 실제 서버에 붙어 보는 사람 손 확인의 자리다. 서버만 적으면 공유 목록을 보이고,
-// 공유를 누르면 그 공유를 연다.
+// 서버·계정은 사람이 적는다 — 이 페이지는 실제 서버에 붙어 보는 사람 손 확인의 자리다. "찾기"는 같은 네트워크의 SMB
+// 서버를 보이고, 서버를 누르거나 서버만 적으면 공유 목록을 보이며, 공유를 누르면 그 공유를 연다.
 
 #include "luil/net/smb_client.h"
 #include "luil/text/text_edit.h"
@@ -55,6 +55,16 @@ namespace mobile_demo {
         std::u8string name {};
     };
 
+    // 같은 네트워크의 SMB 서버를 찾는다.
+    struct smb_discover_intent
+    {};
+
+    // 찾은 서버 하나를 눌렀다. 주소를 그 서버로 바꾸고 공유 목록을 연다.
+    struct smb_server_intent
+    {
+        std::u8string server {};
+    };
+
     // 쉬는 연결을 닫는다 (단추, 그리고 앱이 뒤로 갈 때 delegate가 보낸다).
     struct smb_close_idle_intent
     {};
@@ -78,6 +88,7 @@ namespace mobile_demo {
         std::function<void(luil::net::smb_ticket)> cancel {};
         std::function<void()> stop {};
         std::function<void()> close_idle {};
+        std::function<luil::net::smb_ticket(luil::net::smb_discovery_request, std::u8string&)> discover {};
     };
 
     class smb_page
@@ -126,6 +137,8 @@ namespace mobile_demo {
         // 보이는 공유(디스크이고 숨지 않은 것)와 걸러 낸 공유의 수다.
         std::vector<luil::net::smb_share> shares_ {};
         std::size_t hidden_shares_ { 0 };
+        // 찾기로 찾은 서버다.
+        std::vector<luil::net::smb_server_found> servers_ {};
         // 상태 한 줄과 그 아래 여러 줄로 나눠 적을 글(libsmb2의 오류 글, 파일 앞부분)이다. luil의 라벨은 한 줄이라
         // 긴 글은 페이지가 줄을 나눈다.
         std::u8string status_ { u8"주소를 적고 열기를 누른다." };

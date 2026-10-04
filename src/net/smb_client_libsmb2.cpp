@@ -1,5 +1,7 @@
 #include "luil/net/smb_client.h"
 
+#include "net/dns_message.h"
+#include "net/mdns_query.h"
 #include "net/smb_pool.h"
 #include "net/smb_rules.h"
 
@@ -15,6 +17,7 @@
 #include <poll.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cerrno>
 #include <condition_variable>
@@ -43,6 +46,14 @@ namespace luil::net {
         constexpr std::size_t max_connecting_fds { 8 };
         // 다시 쓰지 않는 연결을 닫기 전에 공유를 놓아 보는 상한이다.
         constexpr std::chrono::milliseconds polite_disconnect { 500 };
+        // `.local` 이름을 같은 네트워크에 물어 기다리는 상한이다 (요청의 시간 상한이 더 짧으면 그것).
+        constexpr std::chrono::milliseconds local_name_budget { 1500 };
+        // 찾기 창의 상한과 하한이다.
+        constexpr std::chrono::milliseconds min_discovery_window { 100 };
+        constexpr std::chrono::milliseconds max_discovery_window { 60000 };
+
+        // mDNS 질의의 번호다. 한 번 질의의 응답은 질의 번호를 되돌려 주지만, 답은 번호와 상관없이 모은다.
+        std::atomic<std::uint16_t> next_query_id { 1 };
 
         // libsmb2 호출 하나의 결과를 받는 자리다.
         struct call_state
@@ -77,6 +88,11 @@ namespace luil::net {
         {
             const std::string digits { std::to_string(value) };
             return std::u8string { reinterpret_cast<const char8_t*>(digits.data()), digits.size() };
+        }
+
+        [[nodiscard]] std::u8string to_u8(const std::string_view text)
+        {
+            return std::u8string { reinterpret_cast<const char8_t*>(text.data()), text.size() };
         }
 
         [[nodiscard]] std::chrono::system_clock::time_point to_time(const std::uint64_t seconds, const std::uint64_t nanoseconds)
@@ -161,6 +177,9 @@ namespace luil::net {
             smb_request request {};
             smb_ticket ticket {};
             std::atomic<smb_error_kind> abort { smb_error_kind::none };
+            // 찾기면 참이고 `window`가 답을 모으는 시간이다 (`request`는 갈래만 든다).
+            bool discovery { false };
+            std::chrono::milliseconds window { 0 };
         };
 
         // worker와 배달 thread가 함께 드는 상태다. worker는 이것을 shared_ptr로 들어, `stop`이 상한에서 돌아온 뒤에도
@@ -526,6 +545,9 @@ namespace luil::net {
                     return answered(outcome);
                 return attempt { pump_outcome::done, true };
             }
+            case smb_operation::discover:
+                // 찾기는 연결을 빌리지 않는다 (`find_servers`). 여기 오지 않는다.
+                break;
             }
             response.error = smb_error { smb_error_kind::invalid_request, u8"The operation is not known.", 0 };
             return attempt { pump_outcome::refused, true };
@@ -592,13 +614,84 @@ namespace luil::net {
             }
         }
 
+        // `.local` 이름을 같은 네트워크에 물어 주소로 바꾼다. libsmb2는 이름을 `getaddrinfo`로 푸는데, 그것은 끊을 수 없게
+        // 막히고 Android는 `.local`을 풀지 않는다. 풀지 못하면 서버 글을 그대로 돌려준다 (운영체제에 맡긴다).
+        [[nodiscard]] static std::u8string resolve_local(const std::u8string& server, const job& work, const std::optional<std::chrono::steady_clock::time_point> deadline)
+        {
+            const smb_server_parts parts { split_smb_server(server) };
+            if (is_mdns_host(parts.host) == false)
+                return server;
+            const dns_name name { make_dns_name(to_c(parts.host)) };
+            const std::array<dns_question, 2> questions { dns_question { name, dns_type_a }, dns_question { name, dns_type_aaaa } };
+            const std::vector<std::uint8_t> query { make_dns_query(next_query_id.fetch_add(1), questions) };
+            auto until { std::chrono::steady_clock::now() + local_name_budget };
+            if (deadline.has_value() && *deadline < until)
+                until = *deadline;
+            // IPv4 주소가 오면 바로 끝낸다. IPv6만 있는 서버는 상한까지 기다린다.
+            const auto stop = [&work, &name](const std::vector<dns_record>& records) {
+                return work.abort.load() != smb_error_kind::none
+                    || std::ranges::any_of(records, [&name](const dns_record& record) { return record.type == dns_type_a && same_dns_name(record.name, name); });
+            };
+            std::vector<dns_record> records {};
+            std::string error {};
+            static_cast<void>(mdns_exchange(query, mdns_destinations(), until, stop, records, error));
+            for (const std::uint16_t type : { dns_type_a, dns_type_aaaa })
+                for (const dns_record& record : records)
+                {
+                    if (record.type != type || same_dns_name(record.name, name) == false)
+                        continue;
+                    const std::string address { dns_address_text(record) };
+                    if (address.empty() == false)
+                        return join_smb_server(to_u8(address), parts.port);
+                }
+            return server;
+        }
+
+        // 같은 네트워크의 SMB 서버를 찾는다. 첫 걸음(창의 2/3)은 서비스의 인스턴스를 묻고 — 응답자는 SRV와 주소를 추가 칸에
+        // 함께 싣는 것이 보통이다 — 둘째 걸음(창의 끝까지)은 빠진 SRV와 주소를 묻는다. 빠진 것이 없으면 첫 질의를 한 번 더
+        // 보낸다 (mDNS는 질의를 되풀이한다). 첫 질의를 놓친 응답자도 이때 답한다.
+        static void find_servers(const job& work, smb_response& response)
+        {
+            const auto started { std::chrono::steady_clock::now() };
+            const std::vector<mdns_destination> destinations { mdns_destinations() };
+            const auto stop = [&work](const std::vector<dns_record>&) { return work.abort.load() != smb_error_kind::none; };
+            std::vector<dns_record> records {};
+            std::string error {};
+            const std::array<dns_question, 1> browse { dns_question { smb_service_name(), dns_type_ptr } };
+            if (mdns_exchange(make_dns_query(next_query_id.fetch_add(1), browse), destinations, started + work.window * 2 / 3, stop, records, error) == false)
+            {
+                response.error = smb_error { smb_error_kind::failed, to_u8(error), 0 };
+                return;
+            }
+            const std::vector<dns_question> missing { missing_smb_questions(records) };
+            const std::span<const dns_question> questions { missing.empty() ? std::span<const dns_question> { browse } : std::span<const dns_question> { missing } };
+            const std::vector<std::uint8_t> follow_up { make_dns_query(next_query_id.fetch_add(1), questions) };
+            if (work.abort.load() == smb_error_kind::none)
+                static_cast<void>(mdns_exchange(follow_up, destinations, started + work.window, stop, records, error));
+            if (const smb_error_kind abort { work.abort.load() }; abort != smb_error_kind::none)
+            {
+                response.error = smb_error { abort, abort == smb_error_kind::cancelled ? u8"The request was cancelled." : u8"The client stopped.", 0 };
+                return;
+            }
+            response.servers = collect_smb_servers(records);
+        }
+
         // 요청 하나를 처음부터 끝까지 몬다.
         static void perform(state& shared, const job& work, smb_response& response)
         {
+            if (work.discovery)
+            {
+                find_servers(work, response);
+                return;
+            }
             const smb_request& request { work.request };
             const std::optional<std::chrono::steady_clock::time_point> deadline { request.timeout.count() > 0 ? std::optional { std::chrono::steady_clock::now() + request.timeout } : std::nullopt };
             const std::u8string_view share { smb_connection_share(request) };
+            // 연결의 열쇠는 적은 이름이고, 붙는 곳은 푼 주소다. 주소는 새로 열 때만 한 번 푼다 — 쉬던 연결은 풀지 않고
+            // 다시 쓴다.
             const smb_connection_key key { make_smb_connection_key(request.location, share) };
+            smb_location target { request.location };
+            bool resolved { false };
             // 콜백이 쓰는 자리는 어느 문맥보다 먼저 세운다. 문맥을 거두면 libsmb2가 남은 호출의 콜백을
             // `SMB2_STATUS_SHUTDOWN`으로 부르므로, 문맥을 거두는 모든 자리(이 함수와 그 아래)보다 오래 산다.
             call_state call {};
@@ -622,7 +715,12 @@ namespace luil::net {
                 }
                 if (context == nullptr)
                 {
-                    context = open(request.location, share, work, deadline, call, response.error);
+                    if (resolved == false)
+                    {
+                        target.server = resolve_local(request.location.server, work, deadline);
+                        resolved = true;
+                    }
+                    context = open(target, share, work, deadline, call, response.error);
                     response.connection = reopened ? smb_connection_use::reopened : smb_connection_use::opened;
                     if (context == nullptr)
                     {
@@ -648,6 +746,40 @@ namespace luil::net {
                 response.entry = {};
                 reopened = true;
             }
+        }
+
+        // 받은 일 하나에 표를 주고 worker를 띄운다. 정지했거나 `max_in_flight`가 찼으면 숨은 줄 없이 거절한다.
+        [[nodiscard]] static smb_ticket admit(const std::shared_ptr<state>& shared, std::shared_ptr<job> work, std::u8string& error)
+        {
+            {
+                const std::lock_guard lock { shared->mutex };
+                if (shared->stopping)
+                {
+                    error = u8"client stopped";
+                    return {};
+                }
+                if (shared->jobs.size() >= shared->config.max_in_flight)
+                {
+                    error = u8"Too many SMB requests in flight.";
+                    return {};
+                }
+                work->ticket = smb_ticket { ++shared->next_ticket };
+                shared->jobs.emplace(work->ticket.value, work);
+                ++shared->workers;
+            }
+            try
+            {
+                std::thread { &engine::run_job, shared, work }.detach();
+            }
+            catch (const std::system_error&)
+            {
+                const std::lock_guard lock { shared->mutex };
+                shared->jobs.erase(work->ticket.value);
+                --shared->workers;
+                error = u8"Could not start an SMB worker thread.";
+                return {};
+            }
+            return work->ticket;
         }
 
         // worker thread다.
@@ -732,35 +864,21 @@ namespace luil::net {
         }
         auto work { std::make_shared<engine::job>() };
         work->request = std::move(request);
+        return engine::admit(engine_->shared, std::move(work), error);
+    }
+
+    smb_ticket smb_client::discover(const smb_discovery_request request, std::u8string& error)
+    {
+        if (request.window < min_discovery_window || request.window > max_discovery_window)
         {
-            const std::lock_guard lock { shared.mutex };
-            if (shared.stopping)
-            {
-                error = u8"client stopped";
-                return {};
-            }
-            if (shared.jobs.size() >= shared.config.max_in_flight)
-            {
-                error = u8"Too many SMB requests in flight.";
-                return {};
-            }
-            work->ticket = smb_ticket { ++shared.next_ticket };
-            shared.jobs.emplace(work->ticket.value, work);
-            ++shared.workers;
-        }
-        try
-        {
-            std::thread { &engine::run_job, engine_->shared, work }.detach();
-        }
-        catch (const std::system_error&)
-        {
-            const std::lock_guard lock { shared.mutex };
-            shared.jobs.erase(work->ticket.value);
-            --shared.workers;
-            error = u8"Could not start an SMB worker thread.";
+            error = u8"The discovery window must be between 100 ms and 60 s.";
             return {};
         }
-        return work->ticket;
+        auto work { std::make_shared<engine::job>() };
+        work->request.operation = smb_operation::discover;
+        work->discovery = true;
+        work->window = request.window;
+        return engine::admit(engine_->shared, std::move(work), error);
     }
 
     void smb_client::cancel(const smb_ticket ticket) noexcept

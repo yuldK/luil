@@ -69,11 +69,13 @@ target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/android/device_request.cpp"
     android_text_input_tests.cpp
     device_request_tests.cpp)
-# SMB client의 순수 규칙, 연결 장부, "지원 안 함" client다. libsmb2 없이 어느 플랫폼에서나 돈다.
+# SMB client의 순수 규칙, 연결 장부, DNS 메시지(서버 찾기), "지원 안 함" client다. libsmb2 없이 어느 플랫폼에서나 돈다.
 target_sources(luil_core_tests PRIVATE
+    "${LUIL_SOURCE_DIRECTORY}/net/dns_message.cpp"
     "${LUIL_SOURCE_DIRECTORY}/net/smb_client_unsupported.cpp"
     "${LUIL_SOURCE_DIRECTORY}/net/smb_pool.cpp"
     "${LUIL_SOURCE_DIRECTORY}/net/smb_rules.cpp"
+    dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
 # 모바일 demo의 적응형 시트와 비동기 SMB 목록 상태도 서버 없이 검증한다.
@@ -204,9 +206,12 @@ if(LUIL_PLATFORM STREQUAL "android")
                 luil_smb2
                 luil_options)
         add_executable(luil_smb_tests
+            "${LUIL_SOURCE_DIRECTORY}/net/dns_message.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/mdns_query.cpp"
             "${LUIL_SOURCE_DIRECTORY}/net/smb_client_libsmb2.cpp"
             "${LUIL_SOURCE_DIRECTORY}/net/smb_pool.cpp"
             "${LUIL_SOURCE_DIRECTORY}/net/smb_rules.cpp"
+            mdns_query_tests.cpp
             smb_client_tests.cpp)
         target_include_directories(luil_smb_tests
             PRIVATE

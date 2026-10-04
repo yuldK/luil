@@ -23,7 +23,8 @@ namespace luil::net {
     {
         // 서버다. IP 주소나 DNS 이름이고 포트를 붙일 수 있다 ("192.168.0.10", "nas.example:4445",
         // "[fe80::1]:445"). 기본 포트는 445다.
-        //  - Android의 이름 풀기는 `.local`(mDNS) 이름을 풀지 않는다. 집 안 NAS는 IP 주소로 적는다.
+        //  - `.local` 이름(mDNS)은 client가 먼저 같은 네트워크에 물어 푼다 (Android의 이름 풀기는 풀지 않는다). 풀지
+        //    못하면 그 이름 그대로 운영체제에 맡긴다.
         std::u8string server {};
         // 공유 이름이다 ("photos"). 슬래시를 넣지 않는다. 공유 목록(`smb_operation::shares`)은 이것을 보지 않는다.
         std::u8string share {};
@@ -48,6 +49,8 @@ namespace luil::net {
         // 서버의 공유 목록을 읽는다 (srvsvc `NetShareEnumAll`). 위치에는 서버와 계정만 있으면 되고 공유·경로는 보지 않는다.
         // 같은 계정의 `IPC$` 연결로 하고, 그 연결도 다시 쓴다.
         shares,
+        // 같은 네트워크의 SMB 서버를 찾는다. `send`로는 보내지 않는다 — `smb_client::discover`가 내는 답의 갈래다.
+        discover,
     };
 
     // 요청 하나다. 값이고, client에 넘기면 복사되어 client가 든다.
@@ -98,6 +101,29 @@ namespace luil::net {
         std::u8string comment {};
         // srvsvc가 준 종류 값 그대로다.
         std::uint32_t native_type { 0 };
+    };
+
+    // 같은 네트워크에서 찾은 SMB 서버다 (`smb_client::discover`, DNS-SD `_smb._tcp.local`).
+    struct smb_server_found
+    {
+        // 표시 이름이다 (DNS-SD 인스턴스 이름, "Living room NAS").
+        std::u8string name {};
+        // 호스트 이름이다 ("nas.local").
+        std::u8string host {};
+        // 주소다. IPv4가 먼저이고, 링크 로컬 IPv6는 받은 인터페이스를 붙인다 ("fe80::1%wlan0").
+        std::vector<std::u8string> addresses {};
+        std::uint16_t port { 445 };
+
+        // `smb_location::server`에 바로 넣을 꼴이다. 첫 주소(IPv6는 괄호를 친다)이고 포트가 445가 아니면 붙인다. 주소가
+        // 없으면 호스트 이름이다.
+        [[nodiscard]] std::u8string server() const;
+    };
+
+    // 찾기 하나다.
+    struct smb_discovery_request
+    {
+        // 답을 모으는 시간이다. 이 시간이 지나면 찾은 서버를 한 번에 답한다 (오류가 아니다). 100 ms 이상 60초 이하다.
+        std::chrono::milliseconds window { 3000 };
     };
 
     enum class smb_error_kind
@@ -185,6 +211,8 @@ namespace luil::net {
         smb_connection_use connection { smb_connection_use::none };
         // `shares`의 공유다 (서버가 준 차례).
         std::vector<smb_share> shares {};
+        // `discover`가 찾은 서버다 (이름 차례).
+        std::vector<smb_server_found> servers {};
 
         [[nodiscard]] bool ok() const noexcept
         {
@@ -230,6 +258,10 @@ namespace luil::net {
         // 요청을 받는다. 0이면 받지 않았고(`error`에 이유) 답도 오지 않는다 — 규칙에 맞지 않는 요청, 정지한 client,
         // `max_in_flight` 포화다. **어느 thread에서 불러도 된다.**
         [[nodiscard]] smb_ticket send(smb_request request, std::u8string& error);
+        // 같은 네트워크의 SMB 서버를 찾는다 (mDNS·DNS-SD, docs/smb-client-design.md의 "같은 네트워크의 서버 찾기"). 표와
+        // 답의 계약은 `send`와 같고 `max_in_flight`에도 든다. 답의 `operation`은 `discover`, 서버는 `servers`다.
+        // 0이면 받지 않았다 (`error`에 이유). 어느 thread에서 불러도 된다.
+        [[nodiscard]] smb_ticket discover(smb_discovery_request request, std::u8string& error);
         // 진행 중인 요청을 끊는다. 그 요청의 답은 `cancelled`로 하나 온다. 모르는·끝난 표는 아무 일도 없다.
         void cancel(smb_ticket ticket) noexcept;
         void cancel_all() noexcept;

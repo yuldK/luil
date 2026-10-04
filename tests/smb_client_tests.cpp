@@ -1,5 +1,7 @@
 #include "luil/net/smb_client.h"
 
+#include "net/mdns_query.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <arpa/inet.h>
@@ -490,6 +492,46 @@ TEST_CASE("A share list on a server without srvsvc fails cleanly and leaves the 
     INFO(describe(listed));
     CHECK(listed.ok());
     CHECK(listed.connection == smb_connection_use::opened);
+}
+
+TEST_CASE("Discovery answers once at the end of its window", "[net][smb][android][mdns]")
+{
+    // 같은 네트워크에 실제로 질의를 보낸다. 찾은 서버의 수는 네트워크마다 달라 보지 않고, 창 끝에 한 번 답하는 것만 본다.
+    collector sink {};
+    const auto client { make_client(sink) };
+    std::u8string error {};
+    CHECK_FALSE(static_cast<bool>(client->discover(luil::net::smb_discovery_request { 50ms }, error)));
+    CHECK(error.empty() == false);
+    const auto started { std::chrono::steady_clock::now() };
+    const luil::net::smb_ticket ticket { client->discover(luil::net::smb_discovery_request { 600ms }, error) };
+    REQUIRE(static_cast<bool>(ticket));
+    REQUIRE(sink.wait_for(1, 5s));
+    const smb_response found { sink.snapshot().at(0) };
+    INFO(describe(found));
+    CHECK(found.ticket == ticket);
+    CHECK(found.operation == luil::net::smb_operation::discover);
+    CHECK(found.connection == smb_connection_use::none);
+    const auto elapsed { std::chrono::steady_clock::now() - started };
+    CHECK(elapsed >= 550ms);
+    CHECK(elapsed < 3s);
+    // 와이파이가 꺼져 내보낼 곳이 없으면 그 사실이 오류로 온다. 그 밖에는 성공이다.
+    if (luil::net::mdns_destinations().empty() == false)
+        CHECK(found.ok());
+}
+
+TEST_CASE("A cancelled discovery answers at once as cancelled", "[net][smb][android][mdns]")
+{
+    collector sink {};
+    const auto client { make_client(sink) };
+    std::u8string error {};
+    const luil::net::smb_ticket ticket { client->discover(luil::net::smb_discovery_request { 10s }, error) };
+    REQUIRE(static_cast<bool>(ticket));
+    std::this_thread::sleep_for(200ms);
+    const auto cancelled_at { std::chrono::steady_clock::now() };
+    client->cancel(ticket);
+    REQUIRE(sink.wait_for(1, 3s));
+    CHECK(sink.snapshot().at(0).error.kind == smb_error_kind::cancelled);
+    CHECK(std::chrono::steady_clock::now() - cancelled_at < 1s);
 }
 
 TEST_CASE("The Android SMB build is supported and refuses a bad request before the wire", "[net][smb][android]")
