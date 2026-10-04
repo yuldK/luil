@@ -26,6 +26,15 @@ namespace luil::android {
     //    회전을 읽지 못했으면(범위 밖) 시스템의 "지금 회전에 고정"(`LOCKED`)으로 물러선다.
     [[nodiscard]] std::optional<int> activity_orientation(screen_orientation request, int rotation, bool landscape) noexcept;
 
+    // 로컬 네트워크 권한이 생긴 판이다 (Android 17). 이 판 아래와 targetSdk가 이보다 낮은 앱은 묻지 않는다.
+    inline constexpr int api_level_local_network_permission { 37 };
+
+    // 권한을 Android의 이름으로 옮긴다. 묻지 않아도 되면(`not_required`) nullptr다.
+    //  - `local_network`는 기기와 앱의 targetSdk가 둘 다 37 이상일 때 `ACCESS_LOCAL_NETWORK`다. 그 아래에서는
+    //    `INTERNET`이 로컬 주소까지 열어 준다. Android 16의 시험용 강제(`RESTRICT_LOCAL_NETWORK`)는 다른 권한
+    //    (`NEARBY_WIFI_DEVICES`)을 보므로 따르지 않는다 — 실제 기기의 동작이 아니다.
+    [[nodiscard]] const char* android_permission_name(app_permission permission, int api_level, int target_sdk) noexcept;
+
     // `HapticFeedbackConstants.*`다.
     inline constexpr int haptic_constant_long_press { 0 };
     inline constexpr int haptic_constant_virtual_key { 1 };

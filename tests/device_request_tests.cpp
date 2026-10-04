@@ -4,6 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string_view>
+
 namespace {
     // 시험이 바꾼 플랫폼 성질을 데스크톱 기본값으로 되돌린다. 성질은 프로세스 전역이다.
     struct platform_scope
@@ -122,4 +124,23 @@ TEST_CASE("An unknown rotation falls back to the system's lock on the current ro
     using luil::android::activity_orientation;
     REQUIRE(activity_orientation(luil::screen_orientation::current, -1, false) == luil::android::activity_orientation_locked);
     REQUIRE(activity_orientation(luil::screen_orientation::current, 4, true) == luil::android::activity_orientation_locked);
+}
+
+TEST_CASE("The local network permission is asked only on Android 17 for apps targeting 37", "[android][device][permission]")
+{
+    // 이름이 없으면(nullptr) 빈 글로 본다. 실패한 단언이 비교 중에 넘어지지 않게 한다.
+    const auto android_permission_name = [](const luil::app_permission permission, const int api_level, const int target_sdk) {
+        const char* const text { luil::android::android_permission_name(permission, api_level, target_sdk) };
+        return text != nullptr ? std::string_view { text } : std::string_view {};
+    };
+    const std::string_view name { "android.permission.ACCESS_LOCAL_NETWORK" };
+    // 기기와 앱이 둘 다 37 이상일 때만 묻는다.
+    REQUIRE(android_permission_name(luil::app_permission::local_network, 37, 37) == name);
+    REQUIRE(android_permission_name(luil::app_permission::local_network, 38, 40) == name);
+    // 그 아래는 INTERNET이 로컬 주소까지 연다. Android 16 기기는 targetSdk가 37이어도 묻지 않는다.
+    REQUIRE(android_permission_name(luil::app_permission::local_network, 36, 37) == std::string_view {});
+    REQUIRE(android_permission_name(luil::app_permission::local_network, 37, 36) == std::string_view {});
+    REQUIRE(android_permission_name(luil::app_permission::local_network, 26, 26) == std::string_view {});
+    // targetSdk를 읽지 못했으면(0) 묻지 않는다.
+    REQUIRE(android_permission_name(luil::app_permission::local_network, 37, 0) == std::string_view {});
 }

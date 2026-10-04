@@ -202,6 +202,24 @@ namespace luil {
     // logic thread가 게시하고 UI thread가 읽는 한 frame의 상태다.
     // 프레임워크가 아는 값만 담으며, tree 밖의 앱 데이터는 여기에 싣지 않는다.
     //  - 필요하면 앱이 driver 구현에서 따로 공유한다.
+    // 앱이 쓰기 전에 사용자에게 물어야 하는 권한이다 (device-request-design.md).
+    enum class app_permission
+    {
+        // 같은 네트워크(LAN)의 기기에 연결한다 — 집 안 NAS의 SMB나 http. Android 17부터 targetSdk 37 이상인
+        // 앱은 이것 없이 로컬 주소로 가는 연결이 막힌다 (`ACCESS_LOCAL_NETWORK`).
+        local_network,
+    };
+
+    // 권한의 지금 상태다.
+    enum class permission_state
+    {
+        // 이 플랫폼·이 앱에서는 묻지 않아도 된다 (Windows, Android 16 이하, targetSdk 36 이하).
+        not_required,
+        granted,
+        // 아직 받지 못했다 (묻지 않았거나 거절됐다).
+        denied,
+    };
+
     struct ui_frame
     {
         std::shared_ptr<const ui_tree> tree {};
@@ -345,6 +363,11 @@ namespace luil {
             // input thread(길게 누르기, element 액션)와 `perform_haptic`을 부른 아무 thread에서 불리므로
             // 구현은 thread-safe해야 하고 오래 붙잡지 않는다 (Android는 메인 thread로 넘기기만 한다).
             std::function<void(haptic_feedback)> haptic {};
+            // 플랫폼의 권한 조회와 묻기다. 비어 있으면 묻는 권한이 없는 플랫폼이라 늘 `not_required`다.
+            // 아무 thread에서 불리므로 thread-safe해야 한다. 묻기는 사용자의 답을 기다리지 않고 돌아오며, 답은 플랫폼이
+            // `app_delegate::make_permission_message`로 앱에 알린다.
+            std::function<permission_state(app_permission)> permission {};
+            std::function<bool(app_permission)> request_permission {};
         };
 
         app_host(config configuration, logic_driver& driver, interaction_policy* policy);
@@ -390,6 +413,12 @@ namespace luil {
         //  - 플랫폼에 출력이 없으면(`config::haptic`이 비었다) 아무 일도 없다. 사용자가 시스템에서 진동을
         //    껐으면 플랫폼이 조용히 둔다.
         void perform_haptic(haptic_feedback feedback) const noexcept;
+        // 권한의 지금 상태다. **어느 thread에서 불러도 된다.**
+        [[nodiscard]] permission_state permission(app_permission permission) const noexcept;
+        // 사용자에게 권한을 묻는다. **어느 thread에서 불러도 된다.**
+        //  - 참이면 물었고, 사용자의 답은 앱 메시지로 온다 (`app_delegate::make_permission_message`).
+        //  - 거짓이면 묻지 않았다. 필요 없거나(`not_required`) 이미 받았거나 묻는 길이 없다 — 메시지도 오지 않는다.
+        bool request_permission(app_permission permission) const noexcept;
         // 아래 셋도 UI thread 전용이다 — 마지막으로 본 판을 멤버에 들고 있어서다.
         // 마지막으로 게시된 frame이다.
         // 새 것이 없으면 이전 값이다.

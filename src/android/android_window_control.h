@@ -25,4 +25,13 @@ namespace luil::android {
     // 창의 decor view로 햅틱을 낸다 (`View.performHapticFeedback`, 상수는 `haptic_feedback_constant`).
     // 플래그 없이 불러 사용자의 시스템 진동·터치 피드백 설정을 따른다 — 사용자가 껐으면 조용하다.
     void perform_haptic_feedback(JNIEnv& env, jobject activity, int constant);
+
+    // 앱의 targetSdkVersion이다 (`getApplicationInfo().targetSdkVersion`). 읽지 못하면 0이다.
+    // View를 만지지 않아 아무 thread(JNI가 붙은)에서 부를 수 있다.
+    [[nodiscard]] int read_target_sdk(JNIEnv& env, jobject activity);
+    // 권한을 가졌는가 (`Context.checkSelfPermission`). 아무 thread(JNI가 붙은)에서 부를 수 있다.
+    [[nodiscard]] bool has_permission(JNIEnv& env, jobject activity, const char* permission);
+    // 권한을 묻는다 (`Activity.requestPermissions`). 답은 Activity의 콜백으로 오는데 그것을 받으려면 Java가 있어야
+    // 하므로, host가 초점을 되찾을 때 `has_permission`으로 다시 읽는다. 메인 thread에서 부른다.
+    void request_permission(JNIEnv& env, jobject activity, const char* permission);
 } // namespace luil::android

@@ -195,6 +195,32 @@ Android에서 앱은 안전 영역(상태 표시줄·제스처 막대·컷아웃
   어두운 아이콘과의 대비는 약 7 : 1이다. 시트를 열고 닫을 때마다 아이콘 색이 바뀌는 깜빡임도 생기지 않는다.
 - 앱 바(위 막대)를 상태 표시줄 밑까지 칠하는 데에도 같은 값을 쓸 수 있지만, 이번에는 열어 두기만 했다.
 
+## 권한
+
+같은 네트워크(LAN)의 기기 — 집 안 NAS의 SMB나 http — 에 붙는 앱은 Android 17부터 사용자에게 권한을 받아야 한다.
+targetSdk 37 이상인 앱은 이것 없이 로컬 주소로 가는 TCP 연결이 막히고, 막힌 연결은 시간 상한까지 기다리다
+실패한다. 프레임 요청과 달리 사용자의 답을 기다리는 한 번의 일이라 `app_host`의 함수로 둔다.
+
+- **묻기와 조회.** `app_host::request_permission(app_permission::local_network)`이 묻고,
+  `app_host::permission(...)`이 지금 상태(`not_required`·`granted`·`denied`)를 답한다. 둘 다 아무 thread에서 부를
+  수 있다. 묻기는 답을 기다리지 않고 돌아온다. 참이면 물었고 답은 `app_delegate::make_permission_message`로 앱
+  메시지가 되어 온다. 거짓이면 묻지 않았다 — 필요 없거나 이미 받았거나 묻는 길이 없다.
+- **언제 묻나.** 기기와 앱의 targetSdk가 둘 다 37 이상일 때만 `ACCESS_LOCAL_NETWORK`를 묻는다
+  (`android_permission_name`). 그 아래는 `INTERNET`이 로컬 주소까지 열어 주므로 `not_required`다. Windows는 늘
+  `not_required`다. 앱의 매니페스트에 `<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />`가
+  있어야 한다 (mobile demo는 flavor 매니페스트에 둔다). 그 아래 판의 기기는 모르는 이름이라 무시한다.
+- **Java 없이 답을 받는다.** 묻기는 JNI로 `Activity.requestPermissions`를 부른다. 답은 Activity의
+  `onRequestPermissionsResult`로 오는데 그것을 받으려면 Java 클래스가 있어야 하므로 받지 않는다. 대신 host가
+  상태를 다시 읽는다.
+  - 대화상자가 뜨면 창이 초점을 잃는다. 사용자가 답해 초점을 되찾는 순간(`APP_CMD_GAINED_FOCUS`) 다시 읽은
+    상태가 답이다.
+  - 이미 "다시 묻지 않음"으로 거절한 권한처럼 시스템이 대화상자 없이 답하면 초점을 잃지 않는다. 물은 뒤 1초가
+    지나도록 초점이 그대로면 그때 다시 읽은 상태를 답으로 알린다.
+  - 설정 앱에서 권한을 바꾸고 돌아오면(`APP_CMD_RESUME`) 상태를 다시 읽는다. 묻는 중이 아니었으면 메시지는 없다.
+- **Android 16의 시험 스위치는 따르지 않는다.** Android 16은 `adb shell am compat enable RESTRICT_LOCAL_NETWORK
+  <패키지>`(재부팅 필요)로 같은 차단을 시험할 수 있지만, 그때 보는 권한은 `NEARBY_WIFI_DEVICES`라 실제 기기의
+  동작과 다르다. 그래서 Android 16 기기에서는 `not_required`로 답한다.
+
 ## 검증
 
 | 대상 | 확인 |
@@ -206,6 +232,7 @@ Android에서 앱은 안전 영역(상태 표시줄·제스처 막대·컷아웃
 | 길게 누르기 햅틱 | 메뉴가 열리는 세 자리에서 한 번, 짧은 탭·우클릭 없는 대상·빈 우클릭·자격 잃은 접촉·꺼진 설정·마우스에서는 없음 (controller test) |
 | 창 폭 등급 | 600·840 경계의 양쪽, 바꾼 경계, 뒤집힌 경계, 유한하지 않은 폭, 물리 폭과 배율로 지은 metrics, 세 값짜리만 넓힌 delegate로 이어지는 기본 구현 (core test) |
 | 안전 영역 밖 | 자식 문맥이 표면을 잇는다, 바깥 띠의 모양, 세로·가로 Android와 Windows의 표면 사각형 (core test). scrim 띠와 늘린 시트 바탕의 픽셀, 표면을 모를 때의 창 바탕 (raster test) |
+| 권한 | 기기·targetSdk 판에 따른 권한 이름(37·37만 묻는다, 읽지 못한 targetSdk), 묻는 길이 없으면 `not_required`·묻지 않음, 플랫폼 조회·묻기를 아무 thread에서, 플랫폼 예외는 `denied`·묻지 않음 (core·host test) |
 | 햅틱 출력 | 다른 thread의 `perform_haptic`과 input thread의 `haptic_request`가 출력에 닿고 앱 inbox에는 가지 않음, 출력이 없으면 아무 일도 없음 (host test). 뜻별 상수와 API 수준별 물러섬 (core test) |
 
 기기 확인은 [Android 이식 계획](android-port-plan.md)의 "기기 요청" 절에 적는다.

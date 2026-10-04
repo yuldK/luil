@@ -400,6 +400,10 @@ namespace luil::android {
                     }
                     if (update_deadline_.has_value() && std::chrono::steady_clock::now() >= *update_deadline_)
                         dirty_ = true;
+                    // 물은 뒤 1초가 지나도록 초점을 잃지 않았으면 시스템이 대화상자 없이 답한 것이다 (이미 거절해
+                    // "다시 묻지 않음"인 권한 등).
+                    if (const auto recheck { permission_recheck() }; recheck.has_value() && std::chrono::steady_clock::now() >= *recheck)
+                        refresh_permissions(true);
                     if (dirty_ && renderer_ != nullptr)
                         render();
                 }
@@ -485,6 +489,22 @@ namespace luil::android {
                 host_config.wake.clipboard = [signal] { static_cast<void>(signal()); };
                 host_config.interaction.double_click_time = double_tap_timeout;
                 host_config.interaction.touch = config_.touch;
+                // 권한이다. 상태는 이 thread가 갱신하고(시작·초점을 되찾음·물은 뒤 1초), 앱은 아무 thread에서 읽는다.
+                target_sdk_ = jni_ != nullptr ? read_target_sdk(*jni_, app_->activity->javaGameActivity) : 0;
+                refresh_permissions(false);
+                host_config.permission = [permissions = permissions_](const app_permission permission) { return permissions->state(permission).load(); };
+                host_config.request_permission = [permissions = permissions_, api_level = android_get_device_api_level(), target_sdk = target_sdk_, signal](const app_permission permission) {
+                    const char* const name { android_permission_name(permission, api_level, target_sdk) };
+                    if (name == nullptr || permissions->state(permission).load() == permission_state::granted)
+                        return false;
+                    if (post_to_main_thread([name](JNIEnv& env, const jobject activity) { request_permission(env, activity, name); }) == false)
+                        return false;
+                    permissions->pending.store(permission);
+                    permissions->asked_at.store(std::chrono::steady_clock::now().time_since_epoch().count());
+                    // 이 thread의 대기 시간을 다시 계산하게 깨운다 (`poll_timeout`의 다시 보기).
+                    static_cast<void>(signal());
+                    return true;
+                };
                 // 햅틱은 View의 일이라 메인 thread로 넘긴다. 다리는 thread를 가리지 않는다.
                 host_config.haptic = [api_level = android_get_device_api_level()](const haptic_feedback feedback) {
                     const int constant { haptic_feedback_constant(feedback, api_level) };
@@ -619,15 +639,21 @@ namespace luil::android {
                     // 대비 설정은 구성 변경으로 오지 않는다. 설정 앱에서 돌아올 때 다시 읽는다.
                     refresh_system_theme();
                     restore_system_bars();
+                    // 설정 앱에서 권한을 바꾸고 돌아왔을 수 있다. 묻는 중이었으면 답은 초점을 되찾을 때 알린다.
+                    refresh_permissions(false);
                     dirty_ = true;
                     break;
                 case APP_CMD_GAINED_FOCUS:
                     // 알림 창·다른 앱에 다녀오면 시스템이 숨긴 막대를 다시 보일 수 있다.
                     restore_system_bars();
+                    focused_ = true;
+                    // 권한 대화상자에서 돌아왔다. 묻는 중이었으면 지금 상태가 답이다.
+                    refresh_permissions(true);
                     dirty_ = true;
                     break;
                 case APP_CMD_LOST_FOCUS:
-                    // 다른 창(알림 창, 다른 앱)으로 초점이 갔다.
+                    // 다른 창(알림 창, 다른 앱, 권한 대화상자)으로 초점이 갔다.
+                    focused_ = false;
                     static_cast<void>(dismiss_popups(popup_dismiss_reason::activation_changed));
                     break;
                 default:
@@ -830,7 +856,49 @@ namespace luil::android {
                 GameActivity_finish(app_->activity);
             }
 
+            // 물은 권한을 다시 볼 시각이다. 묻는 중이 아니거나 대화상자가 떠 초점을 잃었으면 없다.
+            [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> permission_recheck() const
+            {
+                if (permissions_->pending.load().has_value() == false || focused_ == false)
+                    return std::nullopt;
+                const std::chrono::steady_clock::time_point asked { std::chrono::steady_clock::duration { permissions_->asked_at.load() } };
+                return asked + std::chrono::seconds { 1 };
+            }
+
+            // 권한의 상태를 다시 읽는다. `deliver`이고 묻는 중이었으면 그 답을 앱에 알리고 묻기를 끝낸다.
+            void refresh_permissions(const bool deliver)
+            {
+                const int api_level { android_get_device_api_level() };
+                for (const app_permission permission : { app_permission::local_network })
+                {
+                    const char* const name { android_permission_name(permission, api_level, target_sdk_) };
+                    permission_state state { permission_state::not_required };
+                    if (name != nullptr)
+                        state = jni_ != nullptr && has_permission(*jni_, app_->activity->javaGameActivity, name) ? permission_state::granted : permission_state::denied;
+                    permissions_->state(permission).store(state);
+                    if (deliver == false || permissions_->pending.load() != permission)
+                        continue;
+                    permissions_->pending.store(std::nullopt);
+                    if (environment_.delegate != nullptr && host_ != nullptr)
+                        if (app_message message { environment_.delegate->make_permission_message(permission, state) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
+                }
+            }
+
             [[nodiscard]] int poll_timeout() const
+            {
+                // 물은 권한을 다시 볼 때까지만 잔다.
+                if (const auto recheck { permission_recheck() }; recheck.has_value())
+                {
+                    const auto remaining { std::chrono::duration_cast<std::chrono::milliseconds>(*recheck - std::chrono::steady_clock::now()) };
+                    const int limit { static_cast<int>(std::clamp<std::chrono::milliseconds::rep>(remaining.count(), 0, 1000)) };
+                    const int rest { poll_timeout_without_permissions() };
+                    return rest < 0 ? limit : std::min(rest, limit);
+                }
+                return poll_timeout_without_permissions();
+            }
+
+            [[nodiscard]] int poll_timeout_without_permissions() const
             {
                 if (renderer_ == nullptr)
                     return -1;
@@ -1260,6 +1328,28 @@ namespace luil::android {
             bool finishing_ { false };
             // Activity가 보이는 중이다 (`APP_CMD_START`부터 `APP_CMD_STOP`까지).
             bool visible_ { false };
+            // 창이 초점을 가졌다. 권한 대화상자가 뜨면 잃는다.
+            bool focused_ { false };
+            // 권한의 상태와 묻는 중인 권한이다. 앱 host의 조회·묻기(아무 thread)와 이 thread(갱신)가 함께 든다.
+            struct permission_book
+            {
+                std::atomic<permission_state> local_network { permission_state::not_required };
+                std::atomic<std::optional<app_permission>> pending {};
+                // 물은 시각이다 (`steady_clock`의 눈금).
+                std::atomic<std::chrono::steady_clock::rep> asked_at { 0 };
+
+                [[nodiscard]] std::atomic<permission_state>& state(const app_permission permission) noexcept
+                {
+                    switch (permission)
+                    {
+                    case app_permission::local_network:
+                        return local_network;
+                    }
+                    return local_network;
+                }
+            };
+            std::shared_ptr<permission_book> permissions_ { std::make_shared<permission_book>() };
+            int target_sdk_ { 0 };
             std::optional<std::chrono::steady_clock::time_point> update_deadline_ {};
             // 마지막으로 앱에 알린 크기와 배율이다.
             float reported_width_ { -1.0f };

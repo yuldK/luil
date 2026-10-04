@@ -87,6 +87,9 @@ namespace luil {
         messaging::latest_slot<touch_gesture_config> touch_slot {};
         // 플랫폼의 햅틱 출력이다. 만든 뒤로 바뀌지 않아 여러 thread가 그대로 부른다.
         std::function<void(haptic_feedback)> haptic {};
+        // 플랫폼의 권한 조회와 묻기다. 햅틱과 같이 만든 뒤로 바뀌지 않는다.
+        std::function<permission_state(app_permission)> permission {};
+        std::function<bool(app_permission)> request_permission {};
 
         // 창 명령 큐다.
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
@@ -147,6 +150,8 @@ namespace luil {
                 catch (...)
                 {}
             };
+        parts.permission = std::move(configuration.permission);
+        parts.request_permission = std::move(configuration.request_permission);
         // 요청 내용은 큐로 나르고 wake는 신호만 전한다.
         // 종료 시 input join이 이 callback보다 늦게 오므로 assembly 수명은 안전하다.
         std::function<void(ui_command)> forward_ui_command {};
@@ -351,6 +356,35 @@ namespace luil {
     {
         if (assembly_->haptic != nullptr)
             assembly_->haptic(feedback);
+    }
+
+    permission_state app_host::permission(const app_permission permission) const noexcept
+    {
+        if (assembly_->permission == nullptr)
+            return permission_state::not_required;
+        // 플랫폼 조회의 예외는 "아직 받지 못했다"로 본다. 받았다고 잘못 답하면 앱이 막힌 연결을 연다.
+        try
+        {
+            return assembly_->permission(permission);
+        }
+        catch (...)
+        {
+            return permission_state::denied;
+        }
+    }
+
+    bool app_host::request_permission(const app_permission permission) const noexcept
+    {
+        if (assembly_->request_permission == nullptr)
+            return false;
+        try
+        {
+            return assembly_->request_permission(permission);
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     bool app_host::set_touch_gesture_config(const touch_gesture_config& config) noexcept

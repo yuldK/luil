@@ -207,4 +207,56 @@ namespace luil::android {
         env.CallVoidMethod(decor, set_flags, hide ? (*flags | immersive_flags) : (*flags & ~immersive_flags));
         static_cast<void>(failed(env));
     }
+    int read_target_sdk(JNIEnv& env, const jobject activity)
+    {
+        local_frame frame { env };
+        if (frame.pushed() == false)
+            return 0;
+        const jobject info { call_object(env, activity, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;") };
+        if (info == nullptr)
+            return 0;
+        const jfieldID field { env.GetFieldID(env.GetObjectClass(info), "targetSdkVersion", "I") };
+        if (field == nullptr || failed(env))
+            return 0;
+        const jint value { env.GetIntField(info, field) };
+        return failed(env) ? 0 : static_cast<int>(value);
+    }
+
+    bool has_permission(JNIEnv& env, const jobject activity, const char* const permission)
+    {
+        local_frame frame { env };
+        if (frame.pushed() == false || activity == nullptr || permission == nullptr)
+            return false;
+        const jclass type { env.GetObjectClass(activity) };
+        const jmethodID check { env.GetMethodID(type, "checkSelfPermission", "(Ljava/lang/String;)I") };
+        if (check == nullptr || failed(env))
+            return false;
+        const jstring name { env.NewStringUTF(permission) };
+        if (name == nullptr || failed(env))
+            return false;
+        // `PackageManager.PERMISSION_GRANTED`는 0이다.
+        const jint result { env.CallIntMethod(activity, check, name) };
+        return failed(env) == false && result == 0;
+    }
+
+    void request_permission(JNIEnv& env, const jobject activity, const char* const permission)
+    {
+        local_frame frame { env };
+        if (frame.pushed() == false || activity == nullptr || permission == nullptr)
+            return;
+        const jclass type { env.GetObjectClass(activity) };
+        const jmethodID request { env.GetMethodID(type, "requestPermissions", "([Ljava/lang/String;I)V") };
+        const jclass string_type { env.FindClass("java/lang/String") };
+        if (request == nullptr || string_type == nullptr || failed(env))
+            return;
+        const jstring name { env.NewStringUTF(permission) };
+        const jobjectArray names { name != nullptr ? env.NewObjectArray(1, string_type, name) : nullptr };
+        if (names == nullptr || failed(env))
+            return;
+        // 요청 번호는 결과 콜백이 쓰는 것이라 우리에게는 뜻이 없다. 하위 16비트 안의 값이면 된다.
+        constexpr jint request_code { 0x4c4e };
+        env.CallVoidMethod(activity, request, names, request_code);
+        if (failed(env))
+            __android_log_print(ANDROID_LOG_WARN, "luil", "requestPermissions failed for %s", permission);
+    }
 } // namespace luil::android

@@ -7,6 +7,8 @@
 #include "luil/app/app_host.h"
 #include "mobile_demo/common.h"
 
+#include <cstdint>
+
 namespace mobile_demo {
     // --- 이 페이지의 메시지 ---
     struct orientation_intent
@@ -36,6 +38,16 @@ namespace mobile_demo {
         bool repeat { false };
     };
 
+    // 로컬 네트워크 권한의 상태다. delegate가 시작할 때(`answered`가 거짓)와 사용자가 답했을 때 알린다.
+    struct local_network_intent
+    {
+        luil::permission_state state { luil::permission_state::not_required };
+        bool answered { false };
+    };
+
+    // 로컬 네트워크 권한을 묻는 앱 UI 명령이다. delegate가 받아 `app_host::request_permission`을 부른다.
+    inline constexpr std::uint32_t command_request_local_network { 0x6c6e };
+
     class device_page
     {
     public:
@@ -55,5 +67,8 @@ namespace mobile_demo {
         int volume_up_count_ { 0 };
         int volume_down_count_ { 0 };
         int volume_repeat_count_ { 0 };
+        // 로컬 네트워크 권한의 마지막 상태와, 사용자가 답한 적이 있는가다.
+        luil::permission_state local_network_ { luil::permission_state::not_required };
+        bool local_network_answered_ { false };
     };
 } // namespace mobile_demo

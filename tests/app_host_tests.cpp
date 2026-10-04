@@ -592,3 +592,45 @@ TEST_CASE("An app message posted from a foreign thread reaches the driver", "[wi
     }
     REQUIRE(driver.closed.load());
 }
+
+TEST_CASE("Permissions pass through to the platform and default to not required", "[win32][host][permission]")
+{
+    // 묻는 길이 없는 플랫폼(Windows)은 늘 필요 없음이고 묻지 않는다.
+    {
+        counting_driver driver {};
+        luil::win32::app_host host { luil::win32::app_host::config {}, driver, nullptr };
+        REQUIRE(host.permission(luil::app_permission::local_network) == luil::permission_state::not_required);
+        REQUIRE(host.request_permission(luil::app_permission::local_network) == false);
+    }
+    // 플랫폼의 조회와 묻기를 아무 thread에서 그대로 부른다.
+    counting_driver driver {};
+    std::atomic<int> asked { 0 };
+    luil::win32::app_host::config config {};
+    config.permission = [](const luil::app_permission) { return luil::permission_state::denied; };
+    config.request_permission = [&asked](const luil::app_permission) {
+        ++asked;
+        return true;
+    };
+    {
+        luil::win32::app_host host { std::move(config), driver, nullptr };
+        bool requested { false };
+        luil::permission_state state { luil::permission_state::not_required };
+        const auto from_another_thread = [&] {
+            state = host.permission(luil::app_permission::local_network);
+            requested = host.request_permission(luil::app_permission::local_network);
+        };
+        std::thread stranger { from_another_thread };
+        stranger.join();
+        REQUIRE(state == luil::permission_state::denied);
+        REQUIRE(requested);
+        REQUIRE(asked.load() == 1);
+    }
+    // 플랫폼의 예외는 "받지 못함"과 "묻지 않음"으로 끝난다. 받았다고 잘못 답하지 않는다.
+    counting_driver throwing_driver {};
+    luil::win32::app_host::config throwing {};
+    throwing.permission = [](const luil::app_permission) -> luil::permission_state { throw std::runtime_error { "platform" }; };
+    throwing.request_permission = [](const luil::app_permission) -> bool { throw std::runtime_error { "platform" }; };
+    luil::win32::app_host host { std::move(throwing), throwing_driver, nullptr };
+    REQUIRE(host.permission(luil::app_permission::local_network) == luil::permission_state::denied);
+    REQUIRE(host.request_permission(luil::app_permission::local_network) == false);
+}

@@ -97,5 +97,14 @@ namespace luil {
             static_cast<void>(lifecycle);
             return {};
         }
+
+        // 물은 권한에 사용자가 답했다 (`app_host::request_permission`). 반환 메시지는 app inbox로 간다.
+        // 빈 메시지는 게시하지 않는다. 거절도 답이다 — `denied`로 온다.
+        [[nodiscard]] virtual app_message make_permission_message(app_permission permission, permission_state state)
+        {
+            static_cast<void>(permission);
+            static_cast<void>(state);
+            return {};
+        }
     };
 } // namespace luil

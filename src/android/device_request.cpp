@@ -43,4 +43,15 @@ namespace luil::android {
         }
         return haptic_constant_long_press;
     }
+    const char* android_permission_name(const app_permission permission, const int api_level, const int target_sdk) noexcept
+    {
+        switch (permission)
+        {
+        case app_permission::local_network:
+            if (api_level >= api_level_local_network_permission && target_sdk >= api_level_local_network_permission)
+                return "android.permission.ACCESS_LOCAL_NETWORK";
+            return nullptr;
+        }
+        return nullptr;
+    }
 } // namespace luil::android

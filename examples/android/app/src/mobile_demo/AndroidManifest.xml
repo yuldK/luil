@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    mobile demo만 더하는 매니페스트다. Gradle이 flavor(mobile_demo)의 이것을 main 매니페스트에 합친다.
+    다른 예제는 같은 네트워크의 기기에 붙지 않으므로 이 권한을 싣지 않는다.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        기기 페이지가 묻는 로컬 네트워크 권한이다. Android 17부터 targetSdk 37 이상 앱은 이것 없이 같은 네트워크의
+        주소로 연결할 수 없다. 그 아래 판의 기기는 모르는 이름이라 무시한다 (docs/device-request-design.md).
+    -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+</manifest>

@@ -85,6 +85,12 @@ namespace mobile_demo {
                 ++volume_repeat_count_;
             return true;
         }
+        if (const auto* const local { message.get<local_network_intent>() }; local != nullptr)
+        {
+            local_network_ = local->state;
+            local_network_answered_ = local_network_answered_ || local->answered;
+            return true;
+        }
         return false;
     }
 
@@ -205,6 +211,29 @@ namespace mobile_demo {
                 grid->add(std::move(button));
             }
             column.add(std::move(grid), luil::wrap_height_for(grid_config, width - 2.0f * page_padding, haptic_choices.size()));
+        }
+
+        // 집 안 NAS 같은 같은 네트워크의 기기에 붙으려면 Android 17부터 이 권한이 있어야 한다.
+        column.gap(20.0f);
+        column.heading(u8"local-network-heading", u8"로컬 네트워크 권한");
+        switch (local_network_)
+        {
+        case luil::permission_state::not_required:
+            column.note(u8"local-network-state", u8"묻지 않아도 된다.");
+            column.note(u8"local-network-when", u8"Android 17부터 targetSdk 37 이상인 앱만 묻는다.");
+            break;
+        case luil::permission_state::granted:
+            column.note(u8"local-network-state", local_network_answered_ ? u8"받았다 (방금 허락)." : u8"받았다.");
+            break;
+        case luil::permission_state::denied:
+            column.note(u8"local-network-state", local_network_answered_ ? u8"받지 못했다 (거절)." : u8"아직 받지 못했다.");
+            column.gap(8.0f);
+            // 묻기는 UI thread의 일이라 앱 UI 명령으로 delegate에 넘긴다.
+            auto ask { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"local-network-ask" }, luil::text_button_config { .text = u8"묻기" }) };
+            ask->set_action(luil::ui_trigger::left_click,
+                [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_request_local_network } } }; });
+            column.add(std::move(ask), touch_height);
+            break;
         }
         return column.finish();
     }
