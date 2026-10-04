@@ -49,10 +49,11 @@ namespace luil::net {
             return request_counter.fetch_add(1, std::memory_order_relaxed) + 1;
         }
 
-        [[nodiscard]] std::wstring method_text(const http_method method)
+        [[nodiscard]] std::wstring method_text(const http_request& request)
         {
-            // 동사는 ASCII뿐이라 코드 단위를 그대로 넓힌다 (변환기를 부를 일이 아니다).
-            const std::u8string_view name { http_method_name(method) };
+            // 동사는 ASCII 토큰뿐이라 코드 단위를 그대로 넓힌다 (변환기를 부를 일이 아니다). 확장 메서드는
+            // 받을 때 토큰인지 보았다 (`check_request_method`).
+            const std::u8string_view name { http_method_name(request) };
             std::wstring wide {};
             wide.reserve(name.size());
             for (const char8_t character : name)
@@ -199,6 +200,25 @@ namespace luil::net {
                 return;
             }
             case WINHTTP_CALLBACK_STATUS_REDIRECT: {
+                // 확장 메서드는 303을 따라가지 않는다 (`redirected_method`). WinHTTP는 따라가며 GET으로 바꾸므로
+                // 여기서 그 3xx를 답으로 잡고 닫는다 — 몸 없이 상태 줄과 헤더가 답이 된다.
+                if (current.request.method == http_method::extension)
+                {
+                    const std::u8string redirected_from { current.final_url };
+                    http_error failure {};
+                    if (capture_response_head(current, failure) == false)
+                    {
+                        finish_and_close(current, failure);
+                        return;
+                    }
+                    current.final_url = redirected_from;
+                    if (redirected_method(http_method::extension, current.status_code).has_value() == false)
+                    {
+                        current.body.clear();
+                        finish_and_close(current, http_error {});
+                        return;
+                    }
+                }
                 ++current.redirects;
                 if (current.redirects > current.request.max_redirects)
                 {
@@ -387,7 +407,7 @@ namespace luil::net {
             // URL·헤더는 **먼저** 본다 — 잘못된 요청은 표를 받지 못한다.
             http_error failure {};
             std::wstring headers {};
-            if (parse_http_url(request.url, failure).has_value() == false || build_request_headers(request, headers, failure) == false)
+            if (parse_http_url(request.url, failure).has_value() == false || check_request_method(request, failure) == false || build_request_headers(request, headers, failure) == false)
             {
                 error = failure.message;
                 return {};
@@ -677,7 +697,7 @@ namespace luil::net {
         [[nodiscard]] bool start_request(http_request request, const http_ticket ticket, const std::uint64_t sequence, const std::uint64_t id, http_error& failure)
         {
             const auto target { parse_http_url(request.url, failure) };
-            if (target.has_value() == false)
+            if (target.has_value() == false || check_request_method(request, failure) == false)
                 return false;
 
             std::wstring header_block {};
@@ -749,7 +769,7 @@ namespace luil::net {
                 return false;
             }
 
-            const std::wstring verb { method_text(context->request.method) };
+            const std::wstring verb { method_text(context->request) };
             const DWORD open_flags { target->secure ? static_cast<DWORD>(WINHTTP_FLAG_SECURE) : 0u };
             const HINTERNET handle { WinHttpOpenRequest(connection, verb.c_str(), target->target.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, open_flags) };
             if (handle == nullptr)

@@ -106,6 +106,10 @@ namespace luil::net {
             jmethodID cleartext_permitted { nullptr };
 
             jmethodID set_request_method { nullptr };
+            jmethodID get_request_method { nullptr };
+            // `HttpURLConnection.method`다 (SDK의 protected 필드). `setRequestMethod`가 표준 동사만 받아
+            // 확장 메서드는 이 필드에 직접 적는다.
+            jfieldID request_method_field { nullptr };
             jmethodID set_follow_redirects { nullptr };
             jmethodID set_connect_timeout { nullptr };
             jmethodID set_read_timeout { nullptr };
@@ -217,6 +221,7 @@ namespace luil::net {
                 method_slot { &api.url, "getHost", "()Ljava/lang/String;", &api.url_get_host },
                 method_slot { &api.security_policy, "isCleartextTrafficPermitted", "(Ljava/lang/String;)Z", &api.cleartext_permitted },
                 method_slot { &api.http_connection, "setRequestMethod", "(Ljava/lang/String;)V", &api.set_request_method },
+                method_slot { &api.http_connection, "getRequestMethod", "()Ljava/lang/String;", &api.get_request_method },
                 method_slot { &api.http_connection, "setInstanceFollowRedirects", "(Z)V", &api.set_follow_redirects },
                 method_slot { &api.http_connection, "setConnectTimeout", "(I)V", &api.set_connect_timeout },
                 method_slot { &api.http_connection, "setReadTimeout", "(I)V", &api.set_read_timeout },
@@ -250,6 +255,12 @@ namespace luil::net {
             for (const method_slot& entry : methods)
                 if (method(env, *entry.owner, entry.name, entry.signature, *entry.slot) == false)
                     return false;
+            api.request_method_field = env->GetFieldID(api.http_connection, "method", "Ljava/lang/String;");
+            if (api.request_method_field == nullptr || env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return false;
+            }
 
             jclass proxy { nullptr };
             if (global_class(env, "java/net/Proxy", proxy) == false)
@@ -732,9 +743,15 @@ namespace luil::net {
                     }
 
                     // 303은 GET으로 바꾼다 (RFC 9110 15.4.4). 301·302의 POST도 브라우저·WinHTTP처럼
-                    // GET으로 바꾼다. 몸 있는 요청은 여기에 닿지 않으므로 바꿀 동사만 남는다.
-                    if ((status == 303 && method != http_method::head) || ((status == 301 || status == 302) && method == http_method::post))
-                        method = http_method::get;
+                    // GET으로 바꾼다. 확장 메서드는 바꾸지 않고, 303이면 따라가지 않는다 (`redirected_method`).
+                    // 몸 있는 요청은 여기에 닿지 않으므로 바꿀 동사만 남는다.
+                    const std::optional<http_method> next_method { redirected_method(method, status) };
+                    if (next_method.has_value() == false)
+                    {
+                        env_->DeleteLocalRef(next);
+                        break;
+                    }
+                    method = *next_method;
 
                     // 걸음마다 지역 참조를 놓는다. 요청 하나의 틀은 끝에서야 비므로, 재지정이 길면
                     // 지역 참조 표가 넘친다.
@@ -807,6 +824,37 @@ namespace luil::net {
                 return false;
             }
 
+            // 동사를 연결에 적는다. 표준 동사는 `setRequestMethod`, 확장 메서드는 `method` 필드에 직접 적는다.
+            //  - https 연결은 다른 연결에 맡기는 껍데기라 필드가 닿지 않는다. 적은 뒤 되읽어 다르면 선을 건드리기
+            //    전에 거절한다 — 엉뚱한 동사(GET)가 서버에 닿지 않게.
+            [[nodiscard]] bool set_method(const http_method method, http_error& failure)
+            {
+                const std::u8string_view name { method == http_method::extension ? std::u8string_view { state_.request.method_name } : http_method_name(method) };
+                const jstring verb { to_java(env_, name) };
+                if (verb == nullptr)
+                {
+                    failure = make_http_error(http_error_kind::invalid_method, u8"The method name is not valid UTF-8.");
+                    return false;
+                }
+                if (method != http_method::extension)
+                {
+                    env_->CallVoidMethod(connection_, api_.set_request_method, verb);
+                    env_->DeleteLocalRef(verb);
+                    return check_call(failure, true);
+                }
+                env_->SetObjectField(connection_, api_.request_method_field, verb);
+                env_->DeleteLocalRef(verb);
+                const auto written { static_cast<jstring>(env_->CallObjectMethod(connection_, api_.get_request_method)) };
+                if (check_call(failure, true) == false)
+                    return false;
+                const std::u8string read_back { from_java(env_, written) };
+                env_->DeleteLocalRef(written);
+                if (read_back == name)
+                    return true;
+                failure = make_http_error(http_error_kind::system_error, u8"Android's HttpURLConnection cannot send an extension method on this connection (https).");
+                return false;
+            }
+
             [[nodiscard]] bool open_connection(const jobject url, const http_method method, const bool secure, const std::vector<http_header>& headers, http_error& failure)
             {
                 if (secure == false && cleartext_permitted(url, failure) == false)
@@ -837,10 +885,7 @@ namespace luil::net {
                 if (check_call(failure, true) == false)
                     return false;
 
-                const jstring verb { to_java(env_, http_method_name(method)) };
-                env_->CallVoidMethod(connection_, api_.set_request_method, verb);
-                env_->DeleteLocalRef(verb);
-                if (check_call(failure, true) == false)
+                if (set_method(method, failure) == false)
                     return false;
 
                 if (set_property(u8"User-Agent", configuration_.user_agent, failure) == false)
@@ -865,7 +910,12 @@ namespace luil::net {
                     return false;
                 const jobject output { env_->CallObjectMethod(connection_, api_.get_output_stream) };
                 if (check_call(failure, true) == false)
+                {
+                    // 플랫폼이 몸을 받지 않는 확장 메서드다 (`ProtocolException`). 끊긴 것이 아니라 거절이다.
+                    if (method == http_method::extension)
+                        failure.kind = http_error_kind::system_error;
                     return false;
+                }
 
                 const std::size_t block_size { std::min<std::size_t>(state_.request.body.size(), static_cast<std::size_t>(read_chunk_bytes)) };
                 const jbyteArray block { env_->NewByteArray(static_cast<jsize>(block_size)) };
@@ -1191,7 +1241,8 @@ namespace luil::net {
             // URL·헤더는 **먼저** 본다 — 잘못된 요청은 표를 받지 못한다.
             http_error failure {};
             std::vector<http_header> headers {};
-            if (parse_origin(request.url, failure).valid == false || collect_request_headers(request, headers, failure) == false || body_fits_method(request, failure) == false)
+            if (parse_origin(request.url, failure).valid == false || check_request_method(request, failure) == false || collect_request_headers(request, headers, failure) == false
+                || body_fits_method(request, failure) == false)
             {
                 error = failure.message;
                 return {};
@@ -1427,7 +1478,7 @@ namespace luil::net {
         [[nodiscard]] bool start_request(http_request request, const http_ticket ticket, const std::uint64_t sequence, const std::uint64_t id, http_error& failure)
         {
             const url_origin origin { parse_origin(request.url, failure) };
-            if (origin.valid == false)
+            if (origin.valid == false || check_request_method(request, failure) == false)
                 return false;
 
             auto state { std::make_shared<request_state>() };

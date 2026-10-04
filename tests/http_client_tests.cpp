@@ -4,6 +4,7 @@
 #include "luil/net/http_body.h"
 #include "luil/net/http_media_type.h"
 #include "luil/net/http_message.h"
+#include "net/http_request_rules.h"
 #include "sample_image_bytes.h"
 
 #include <nlohmann/json.hpp>
@@ -843,6 +844,23 @@ TEST_CASE("Android refuses a body on GET or HEAD before touching the wire", "[ne
     CHECK(static_cast<bool>(client->start_heartbeat(std::move(repeated), http_heartbeat {}, error)) == false);
     CHECK(error.empty() == false);
     CHECK(server.request_count() == 0);
+}
+
+// https 연결은 다른 연결에 맡기는 껍데기라 확장 메서드의 이름이 그 안까지 닿지 않는다. 엉뚱한 동사(GET)가 나가지 않게
+// 선을 건드리기 전에 거절한다.
+TEST_CASE("Android refuses an extension method over https before touching the wire", "[net][client][android]")
+{
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    http_request request {};
+    // 닿지 않는 이름이다 (.invalid). 거절하지 않았다면 이름 풀기에서 실패한다.
+    request.url = u8"https://luil.invalid/dav/";
+    request.method = http_method::extension;
+    request.method_name = u8"PROPFIND";
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+    CHECK(sink.at(0).error.kind == http_error_kind::system_error);
 }
 #endif
 
@@ -1834,4 +1852,252 @@ TEST_CASE("Idle heartbeats share the pending response limit", "[net][client]")
         CHECK(response.last);
         CHECK(response.error.kind == http_error_kind::cancelled);
     }
+}
+
+TEST_CASE("Method names follow the RFC 9110 token rule", "[net][message]")
+{
+    CHECK(luil::net::is_http_token(u8"PROPFIND"));
+    CHECK(luil::net::is_http_token(u8"M-SEARCH"));
+    CHECK(luil::net::is_http_token(u8"version-control"));
+    CHECK(luil::net::is_http_token(u8"!#$%&'*+-.^_`|~09azAZ"));
+    CHECK_FALSE(luil::net::is_http_token(u8""));
+    CHECK_FALSE(luil::net::is_http_token(u8"PROP FIND"));
+    CHECK_FALSE(luil::net::is_http_token(u8"GET\r\nX: y"));
+    CHECK_FALSE(luil::net::is_http_token(u8"(PROPFIND)"));
+    CHECK_FALSE(luil::net::is_http_token(u8"a/b"));
+    CHECK_FALSE(luil::net::is_http_token(u8"a,b"));
+    CHECK_FALSE(luil::net::is_http_token(u8"동사"));
+}
+
+TEST_CASE("An extension method carries its own name and nothing else does", "[net][message]")
+{
+    http_request request {};
+    luil::net::http_error failure {};
+    // 표준 동사는 지금처럼 값이 이름이다.
+    request.method = http_method::remove;
+    CHECK(luil::net::http_method_name(request) == u8"DELETE");
+    CHECK(luil::net::check_request_method(request, failure));
+    // 확장 메서드는 적은 이름 그대로다 (대소문자도).
+    request.method = http_method::extension;
+    request.method_name = u8"PROPFIND";
+    CHECK(luil::net::http_method_name(request) == u8"PROPFIND");
+    CHECK(luil::net::check_request_method(request, failure));
+    request.method_name = u8"propfind";
+    CHECK(luil::net::http_method_name(request) == u8"propfind");
+    CHECK(luil::net::check_request_method(request, failure));
+    CHECK(luil::net::http_method_name(http_method::extension).empty());
+
+    const auto refused = [&request](const std::u8string_view name, const http_method method) {
+        request.method = method;
+        request.method_name = std::u8string { name };
+        luil::net::http_error error {};
+        return luil::net::check_request_method(request, error) == false && error.kind == http_error_kind::invalid_method;
+    };
+    // 이름이 없거나 토큰이 아니면 거절한다.
+    CHECK(refused(u8"", http_method::extension));
+    CHECK(refused(u8"PROP FIND", http_method::extension));
+    CHECK(refused(u8"MOVE\r\nHost: other", http_method::extension));
+    // 표준 동사와 CONNECT는 이름으로 적지 않는다. 확장이 아닌데 이름이 있으면 어긋난 것이다.
+    CHECK(refused(u8"GET", http_method::extension));
+    CHECK(refused(u8"DELETE", http_method::extension));
+    CHECK(refused(u8"CONNECT", http_method::extension));
+    CHECK(refused(u8"PROPFIND", http_method::get));
+    CHECK(luil::net::failure_is_permanent(http_error_kind::invalid_method));
+}
+
+TEST_CASE("A followed redirect keeps an extension method and stops at 303", "[net][message]")
+{
+    using luil::net::redirected_method;
+    // 표준 동사는 지금 규칙 그대로다.
+    CHECK(redirected_method(http_method::post, 301) == http_method::get);
+    CHECK(redirected_method(http_method::post, 302) == http_method::get);
+    CHECK(redirected_method(http_method::post, 307) == http_method::post);
+    CHECK(redirected_method(http_method::put, 302) == http_method::put);
+    CHECK(redirected_method(http_method::remove, 303) == http_method::get);
+    CHECK(redirected_method(http_method::head, 303) == http_method::head);
+    // 확장 메서드는 바꾸지 않는다. 303은 GET으로 다시 물으라는 뜻이라 따라가지 않는다.
+    for (const int status : { 301, 302, 307, 308 })
+        CHECK(redirected_method(http_method::extension, status) == http_method::extension);
+    CHECK(redirected_method(http_method::extension, 303).has_value() == false);
+}
+
+TEST_CASE("A refused method name never reaches the wire", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request&) { return canned("text/plain", "ok"); });
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+
+    http_request request {};
+    request.url = server.url("/dav/");
+    request.method = http_method::extension;
+    request.method_name = u8"PROP FIND";
+    std::u8string error {};
+    CHECK_FALSE(static_cast<bool>(client->send(request, error)));
+    CHECK_FALSE(error.empty());
+    error.clear();
+    CHECK_FALSE(static_cast<bool>(client->start_heartbeat(request, http_heartbeat {}, error)));
+    CHECK_FALSE(error.empty());
+    CHECK(server.request_count() == 0);
+}
+
+TEST_CASE("PROPFIND with Depth 1 and an XML body comes back as 207 Multi-Status", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    constexpr std::string_view multistatus {
+        R"(<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>)"
+    };
+    server.set_handler([multistatus](const loopback_request&) {
+        loopback_response response { canned("application/xml; charset=utf-8", multistatus) };
+        response.status = 207;
+        response.reason = "Multi-Status";
+        return response;
+    });
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+
+    constexpr std::string_view query { R"(<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>)" };
+    http_request request {};
+    request.url = server.url("/dav/");
+    request.method = http_method::extension;
+    request.method_name = u8"PROPFIND";
+    request.headers.push_back({ u8"Depth", u8"1" });
+    request.content_type = u8"application/xml; charset=utf-8";
+    request.body = request_bytes(query);
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+
+    // 선에는 적은 이름과 헤더와 몸이 그대로 실렸다.
+    const std::vector<loopback_request> seen { server.requests() };
+    REQUIRE(seen.size() == 1u);
+    CHECK(seen[0].method == "PROPFIND");
+    CHECK(seen[0].header("depth") == std::optional<std::string> { "1" });
+    CHECK(std::string { seen[0].body.begin(), seen[0].body.end() } == query);
+    // 207은 다른 2xx처럼 받는다. XML 몸은 글이다.
+    const http_response response { sink.at(0) };
+    CHECK(response.error.empty());
+    CHECK(response.status_code == 207);
+    CHECK(response.ok());
+    CHECK(response.body.kind == http_body_kind::text);
+    CHECK(response.body.as_text().find(u8"multistatus") != std::u8string_view::npos);
+}
+
+TEST_CASE("Extension methods keep their name on the wire, case included", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request&) { return canned("text/plain", "ok"); });
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+
+    const std::vector<std::string> names { "MKCOL", "MOVE", "COPY", "REPORT", "LOCK", "propfind" };
+    for (const std::string& name : names)
+    {
+        http_request request {};
+        request.url = server.url("/dav/item");
+        request.method = http_method::extension;
+        request.method_name = std::u8string { reinterpret_cast<const char8_t*>(name.data()), name.size() };
+        // REPORT는 몸이 있어야 하는 메서드다. 나머지는 몸 없이 보낸다.
+        if (name == "REPORT")
+        {
+            request.content_type = u8"application/xml";
+            request.body = request_bytes("<report/>");
+        }
+        if (name == "MOVE" || name == "COPY")
+            request.headers.push_back({ u8"Destination", server.url("/dav/other") });
+        std::u8string error {};
+        REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    }
+    REQUIRE(sink.wait_for(names.size(), 10s));
+    for (const http_response& response : sink.snapshot())
+        CHECK(response.status_code == 200);
+
+    std::set<std::string> seen {};
+    for (const loopback_request& request : server.requests())
+        seen.insert(request.method);
+    for (const std::string& name : names)
+        CHECK(seen.count(name) == 1);
+}
+
+TEST_CASE("A redirected extension method keeps its name and does not follow 303", "[net][client]")
+{
+    const int status { GENERATE(301, 302, 303, 307, 308) };
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    std::mutex guard {};
+    std::string arrived {};
+    server.set_handler([&](const loopback_request& request) {
+        if (request.target == "/dav/folder")
+        {
+            loopback_response response {};
+            response.status = status;
+            response.headers.push_back(std::pair<std::string, std::string> { "Location", url_text(server.url("/dav/folder/")) });
+            return response;
+        }
+        const std::lock_guard lock { guard };
+        arrived = request.method;
+        loopback_response response { canned("application/xml", "<d:multistatus xmlns:d=\"DAV:\"/>") };
+        response.status = 207;
+        return response;
+    });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    http_request request {};
+    request.url = server.url("/dav/folder");
+    request.method = http_method::extension;
+    request.method_name = u8"PROPFIND";
+    request.headers.push_back({ u8"Depth", u8"1" });
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+    const http_response response { sink.at(0) };
+    CHECK(response.error.empty());
+    if (status == 303)
+    {
+        // 303은 따라가지 않는다. 그 303이 답이고 Location이 헤더에 있다.
+        CHECK(response.status_code == 303);
+        CHECK(response.header(u8"location") == server.url("/dav/folder/"));
+        CHECK(response.final_url == server.url("/dav/folder"));
+        CHECK(server.request_count() == 1);
+        return;
+    }
+    // 그 밖의 재지정은 같은 이름과 Depth로 따라간다.
+    CHECK(response.status_code == 207);
+    CHECK(response.final_url == server.url("/dav/folder/"));
+    const std::lock_guard lock { guard };
+    CHECK(arrived == "PROPFIND");
+    const std::vector<loopback_request> seen { server.requests() };
+    REQUIRE(seen.size() == 2u);
+    CHECK(seen[1].header("depth") == std::optional<std::string> { "1" });
+}
+
+TEST_CASE("An extension method with a body does not follow a redirect", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([&server](const loopback_request&) {
+        loopback_response response {};
+        response.status = 307;
+        response.headers.push_back(std::pair<std::string, std::string> { "Location", url_text(server.url("/dav/final/")) });
+        return response;
+    });
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    http_request request {};
+    request.url = server.url("/dav/start");
+    request.method = http_method::extension;
+    request.method_name = u8"PROPFIND";
+    request.content_type = u8"application/xml";
+    request.body = request_bytes("<d:propfind xmlns:d=\"DAV:\"><d:allprop/></d:propfind>");
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+    // 전송이 몸을 다시 실어 주지 않으므로 앱이 같은 동사와 몸으로 다시 보낸다.
+    CHECK(sink.at(0).status_code == 307);
+    CHECK(server.request_count() == 1);
 }

@@ -32,7 +32,7 @@ auto client = luil::net::http_client::create(std::move(config), error);
 
 ## Request 전송과 backpressure
 
-`http_request`는 client가 복사하는 value다. 절대 `http` 또는 `https` URL, 고정 method enum, header, 선택적 body와 content type, parsing option, body 제한, redirect policy, decompression 설정, timeout을 포함한다.
+`http_request`는 client가 복사하는 value다. 절대 `http` 또는 `https` URL, method enum(목록 밖은 확장 메서드 이름), header, 선택적 body와 content type, parsing option, body 제한, redirect policy, decompression 설정, timeout을 포함한다.
 
 ```cpp
 luil::net::http_request request {};
@@ -46,7 +46,7 @@ std::u8string error;
 luil::net::http_ticket ticket = client->send(std::move(request), error);
 ```
 
-0이 아닌 ticket은 request가 accepted되었으며 shutdown이 delivery를 이미 비활성화하지 않았다면 정확히 하나의 response가 `deliver`에 제공된다는 뜻이다. 0은 synchronous admission 실패이며 이후 response가 없다. 잘못된 URL, scheme, header, 정지된 client, active transport 포화, pending response 포화가 이에 해당한다. Acceptance 이전 실패는 `send`가 반환하고, 이후 완료와 transport 실패는 `http_response::error`로 전달한다.
+0이 아닌 ticket은 request가 accepted되었으며 shutdown이 delivery를 이미 비활성화하지 않았다면 정확히 하나의 response가 `deliver`에 제공된다는 뜻이다. 0은 synchronous admission 실패이며 이후 response가 없다. 잘못된 URL, scheme, method 이름, header, 정지된 client, active transport 포화, pending response 포화가 이에 해당한다. Acceptance 이전 실패는 `send`가 반환하고, 이후 완료와 transport 실패는 `http_response::error`로 전달한다.
 
 `max_in_flight`는 숨은 queue를 만들지 않는다. Active handle 제한을 넘는 send는 즉시 거부된다. `max_pending_responses`는 accepted one-shot request 또는 heartbeat 전체마다 최종 delivery가 반환될 때까지 slot을 예약한다. 느린 `deliver`는 완료 값을 무제한 쌓는 대신 새 admission에 backpressure를 건다. Idle heartbeat도 미래의 최종 response를 약속하므로 slot을 유지한다.
 
@@ -55,6 +55,25 @@ luil::net::http_ticket ticket = client->send(std::move(request), error);
 ## Method, header, upload body
 
 GET, HEAD, POST, PUT, PATCH, DELETE(`http_method::remove`), OPTIONS를 지원한다. `http_method_name`은 wire format 이름을 반환한다.
+
+### 확장 메서드
+
+목록 밖의 메서드(WebDAV의 PROPFIND·MKCOL·MOVE·COPY·LOCK, REPORT 같은 것)는 `http_method::extension`과 `method_name`으로 보낸다. 기존 값과 동작은 그대로다.
+
+```cpp
+luil::net::http_request request {};
+request.url = u8"https://dav.example.test/files/";
+request.method = luil::net::http_method::extension;
+request.method_name = u8"PROPFIND";
+request.headers.push_back({ u8"Depth", u8"1" });
+request.content_type = u8"application/xml; charset=utf-8";
+request.body = luil::net::http_text_body(u8R"(<d:propfind xmlns:d="DAV:"><d:allprop/></d:propfind>)");
+```
+
+- **이름은 RFC 9110의 token이다** (`is_http_token`, 영문자·숫자와 ``!#$%&'*+-.^_`|~``). 대소문자를 그대로 선에 싣는다 — 메서드 이름은 대소문자를 가린다. 공백·줄바꿈·괄호·쉼표·비ASCII가 있으면 요청 전체를 `invalid_method`로 거절하고 선을 건드리지 않는다. `send`는 0 ticket과 진단을, heartbeat는 같은 거절을 낸다. `invalid_method`는 heartbeat를 멈추는 영구 오류다.
+- **한 가지를 두 길로 적지 않는다.** `method_name`은 `extension`일 때만 쓴다. `extension`이 아닌데 이름이 있거나, 표준 동사(GET·HEAD·POST·PUT·PATCH·DELETE·OPTIONS)를 이름으로 적으면 거절한다 — 두 길이 서면 몸·재지정 규칙이 갈린다. CONNECT는 전송(proxy 터널)의 몫이라 받지 않는다.
+- **헤더와 몸은 막지 않는다.** `Depth`·`Destination`·`Overwrite`·`If`·`Lock-Token`은 모두 token 이름이라 지금 규칙을 지난다. 몸(PROPFIND의 XML)과 Content-Type도 다른 메서드와 같다. 다른 출처로 옮기는 재지정에서도 `Depth`는 남긴다 — 빠지면 PROPFIND가 무한 깊이로 바뀌는, `Range`처럼 요청의 뜻을 정하는 헤더다.
+- **207 Multi-Status는 다른 2xx와 같다.** `ok()`가 참이고, XML 몸은 글로 풀린다.
 
 Header 이름은 유효한 HTTP token character만 포함해야 한다. 이름이나 값에 CR, LF, NUL이 있거나 header text가 올바른 UTF-8이 아니면 network 동작 전에 거부한다. User header는 같은 이름의 기존 값을 대체한다.
 
@@ -69,6 +88,16 @@ Total deadline은 단일 processing thread가 검사하므로 긴 parsing이나 
 Body 없는 request는 기본적으로 `max_redirects`까지 redirect를 따른다. HTTPS에서 HTTP로의 downgrade는 따르지 않는다. `http_redirect_policy::none`은 `Location` header를 포함한 3xx response를 반환한다.
 
 Upload body가 하나라도 있으면 policy와 관계없이 redirect를 따르지 않는다. WinHTTP가 redirect request에 body를 신뢰성 있게 재전송하지 못하므로 application이 3xx와 `Location`을 확인해 새 request 여부를 결정해야 한다.
+
+따라간 재지정의 동사는 다음과 같다 (`redirected_method`, 두 백엔드가 같다).
+
+| 상태 | 표준 동사 | 확장 메서드 (몸 없음) |
+| --- | --- | --- |
+| 301·302 | POST만 GET, 나머지는 그대로 | 그대로 따라간다 |
+| 303 | GET (HEAD는 그대로) | **따라가지 않는다.** 303이 답이고 `Location`이 헤더에 있다 |
+| 307·308 | 그대로 | 그대로 따라간다 |
+
+303은 다른 자원을 GET으로 다시 물으라는 뜻이라, 따라가면 PROPFIND가 조용히 GET이 되어 207 대신 엉뚱한 200이 온다. 그래서 확장 메서드는 그 걸음을 앱에 돌려준다. 몸 있는 확장 메서드는 위 규칙대로 어떤 3xx도 따라가지 않으므로, 307·308을 받으면 앱이 같은 동사와 몸으로 `Location`에 다시 보낸다 — 라이브러리가 동사를 바꾸거나 몸을 떨어뜨리는 일은 없다. Windows는 WinHTTP의 자동 재지정 알림(`WINHTTP_CALLBACK_STATUS_REDIRECT`)에서 그 303의 상태 줄과 헤더를 답으로 잡고 닫는다.
 
 `decompress`는 OS가 지원할 때 WinHTTP gzip과 deflate decoding을 켠다. 자동 decompression 미지원은 request 실패가 아니다.
 
@@ -153,11 +182,12 @@ Android의 `http_client`는 JNI로 `java.net.HttpURLConnection`을 부른다 ([`
 - **Charset.** utf-8과 utf-16만 옮긴다. 그 밖의 charset은 `parse_error`에 "Unsupported charset"이 남고 바이트는 그대로다. bionic의 `iconv`가 API 28부터라 minSdk 26에서 쓸 수 없다.
 - **TLS.** 플랫폼 기본값과 인증서 검증을 그대로 쓴다. TLS 1.2·1.3만으로 묶으려면 직접 만든 `SSLSocketFactory`가 필요해 두지 않았다 (Android 9 이하는 1.0·1.1도 받을 수 있다).
 - **오류.** `native_error`는 0이고 `message`가 Java 예외의 클래스 이름과 글이다. 앱의 network security config가 그 host로 평문 http를 막으면 선을 건드리기 전에 `secure_failure`로 답한다 (`NetworkSecurityPolicy`에 묻는다. 플랫폼은 뜻이 드러나지 않는 `IOException`을 던진다).
-- **몸과 동사.** 플랫폼은 몸 있는 GET을 POST로 바꾸고 몸 있는 DELETE를 거절한다 (`connection_lost`). WinHTTP는 그대로 보낸다. 몸을 끝까지 읽고 닫은 연결만 연결 풀로 돌아가고, 몸 없는 답(HEAD·204·304)과 실패한 답의 연결은 끊는다.
+- **몸과 동사.** 플랫폼은 몸 있는 GET을 POST로 바꾸고 몸 있는 DELETE를 거절한다 (`connection_lost`). WinHTTP는 그대로 보낸다.
+- **확장 메서드.** `setRequestMethod`는 표준 동사만 받으므로, 확장 메서드는 SDK의 protected 필드 `HttpURLConnection.method`에 JNI로 직접 적고 `getRequestMethod()`로 되읽어 확인한다 (비공개 API가 아니다). http 연결은 이것으로 선에 그대로 실린다. **https 연결은 다른 연결에 맡기는 껍데기라 그 필드가 닿지 않는다** — 되읽은 값이 다르면 선을 건드리기 전에 `system_error`로 거절한다. 엉뚱한 동사(GET)가 서버에 닿는 것보다 낫다. 그 껍데기 안의 연결은 비공개 클래스라 손대지 않았다. 어떤 확장 메서드에 몸을 실을 수 있는지는 기기의 `HttpURLConnection` 구현이 정한다. 플랫폼이 몸을 받지 않으면 끊긴 것이 아니라 거절이라 `system_error`로 답한다. 몸을 끝까지 읽고 닫은 연결만 연결 풀로 돌아가고, 몸 없는 답(HEAD·204·304)과 실패한 답의 연결은 끊는다.
 - **앱 권한.** 앱의 매니페스트에 `android.permission.INTERNET`이 있어야 한다. targetSdk 28 이상에서 평문 http를 쓰려면 network security config도 필요하다.
 
 ## 검증
 
-[`tests/http_media_type_tests.cpp`](../tests/http_media_type_tests.cpp)는 media parsing, classification, conservative sniffing을 검증한다. [`tests/http_body_tests.cpp`](../tests/http_body_tests.cpp)는 JSON 제한, utf-16 변환, HTML, image, raw byte 보존, parse 실패를, [`tests/http_text_transcode_tests.cpp`](../tests/http_text_transcode_tests.cpp)는 Windows의 코드 페이지 변환을 검증한다. [`tests/http_client_tests.cpp`](../tests/http_client_tests.cpp)는 [`tests/loopback_http_server.cpp`](../tests/loopback_http_server.cpp)를 사용해 method, header, body, redirect, 제한, timeout, cancellation, heartbeat sequencing, admission backpressure, callback thread, concurrent send, shutdown 보장을 반복 검증한다.
+[`tests/http_media_type_tests.cpp`](../tests/http_media_type_tests.cpp)는 media parsing, classification, conservative sniffing을 검증한다. [`tests/http_body_tests.cpp`](../tests/http_body_tests.cpp)는 JSON 제한, utf-16 변환, HTML, image, raw byte 보존, parse 실패를, [`tests/http_text_transcode_tests.cpp`](../tests/http_text_transcode_tests.cpp)는 Windows의 코드 페이지 변환을 검증한다. [`tests/http_client_tests.cpp`](../tests/http_client_tests.cpp)는 [`tests/loopback_http_server.cpp`](../tests/loopback_http_server.cpp)를 사용해 method, header, body, redirect, 제한, timeout, cancellation, heartbeat sequencing, admission backpressure, callback thread, concurrent send, shutdown 보장을 반복 검증한다. 확장 메서드는 token 규칙, 이름과 값의 짝, 재지정 표(단위), 선에 실린 이름(대소문자 포함), PROPFIND(`Depth: 1`, XML 몸)와 207 왕복, 301·302·307·308을 같은 동사와 `Depth`로 따라가고 303은 답으로 돌려주는 것, 몸 있는 확장 메서드의 3xx, 거절된 이름이 선에 닿지 않는 것, Android에서 https의 확장 메서드 거절을 본다.
 
 Android에서는 같은 test를 기기에서 돌린다. Loopback 서버가 POSIX 소켓으로 서고 ([`loopback_socket_posix.cpp`](../tests/loopback_socket_posix.cpp)), test는 공유 라이브러리로 세워 adb 셸의 `app_process`가 띄운 JVM 안에서 돈다 ([`adb_run.cmake`](../cmake/android/adb_run.cmake)의 `JVM_DEX`). 셸 권한으로 돌아 매니페스트 권한과 평문 정책이 끼지 않는다.

@@ -21,13 +21,21 @@ namespace luil::net {
         // `delete`가 예약어라 이 이름이다. 선으로 나가는 동사는 `DELETE`다.
         remove,
         options,
+        // 위 목록 밖의 메서드다 (WebDAV의 PROPFIND·MKCOL·MOVE·COPY, REPORT 같은 것). 이름은
+        // `http_request::method_name`에 적는다.
+        extension,
     };
 
-    // 선으로 나가는 동사다 (`http_method::remove`는 `DELETE`).
+    // 선으로 나가는 동사다 (`http_method::remove`는 `DELETE`). `extension`은 이름이 요청에 있어 빈 view다
+    // (`http_method_name(const http_request&)`).
     // 전송이 쓰는 것이자 test가 어긋난 이름 하나를 잡는 자리다.
-    //  - 글로 된 동사 칸을 따로 두지 않는다. 두 자리가 같은 것을 말하면 어긋났을
-    //    때 어느 쪽이 이기는지 아무도 기억하지 못한다 — 필요하면 값을 는다.
+    //  - 표준 동사를 글로 적는 칸을 따로 두지 않는다. 두 자리가 같은 것을 말하면 어긋났을
+    //    때 어느 쪽이 이기는지 아무도 기억하지 못한다 — 그래서 `method_name`은 `extension`일
+    //    때만 쓰이고, 표준 동사의 이름을 적으면 거절된다.
     [[nodiscard]] std::u8string_view http_method_name(http_method method) noexcept;
+
+    // RFC 9110의 token인가 (`1*tchar`, 영문자·숫자와 `!#$%&'*+-.^_`|~`). 메서드 이름과 헤더 이름의 규칙이다.
+    [[nodiscard]] bool is_http_token(std::u8string_view text) noexcept;
 
     struct http_header
     {
@@ -43,7 +51,8 @@ namespace luil::net {
 
     // 재지정이 다른 출처로 옮길 때도 따라가는 요청 헤더인가 (`http_redirect_policy::follow`).
     // `Accept`·`Accept-Language`·`Cache-Control`·`Range`·`If-Range`·`If-None-Match`·
-    // `If-Modified-Since`만 참이다. 그 밖의 이름은 비밀을 담을 수 있다고 보고 지운다.
+    // `If-Modified-Since`·`Depth`만 참이다. 그 밖의 이름은 비밀을 담을 수 있다고 보고 지운다.
+    //  - `Depth`(WebDAV)가 빠지면 PROPFIND가 무한 깊이로 바뀐다 — `Range`처럼 요청의 뜻이다.
     [[nodiscard]] bool http_header_crosses_origins(std::u8string_view name) noexcept;
 
     // 글 하나를 요청 몸의 바이트로 옮긴다 (UTF-8 그대로, 변환 없음).
@@ -81,6 +90,12 @@ namespace luil::net {
         // 절대 URL이다 (http·https만). 다른 scheme은 선을 건드리지 않고 거절된다.
         std::u8string url {};
         http_method method { http_method::get };
+        // 확장 메서드의 이름이다. `method`가 `extension`일 때만 쓰고, 대소문자를 그대로 선에 싣는다
+        // (메서드 이름은 대소문자를 가린다).
+        //  - RFC 9110의 token이어야 한다 (`is_http_token`). 아니면 요청 전체가 거절된다 (`invalid_method`).
+        //  - `extension`이 아닌데 비어 있지 않거나, 표준 동사(GET·HEAD·POST·PUT·PATCH·DELETE·OPTIONS)나
+        //    CONNECT를 적어도 거절된다. 표준 동사는 `method`의 값으로 적고, CONNECT는 전송의 몫이다.
+        std::u8string method_name {};
         // 더 붙일 헤더다. 같은 이름이 있으면 갈아 끼운다.
         //  - 이름·값에 CR·LF·NUL이 있으면 요청 전체가 거절된다 (`invalid_header`).
         //    헤더 주입은 밖에서 온 값이 그대로 실리는 앱이 부르는 사고다.
@@ -110,6 +125,9 @@ namespace luil::net {
         // 받았는데 아무것도 안 만들어지는 종류의 버그다. 그래서 그 자리는 앱에게
         // 돌려준다: 3xx를 답으로 받아 `Location`을 보고 다시 보낸다.
         //  - 따라간 303은 GET으로 묻는다 (HEAD는 그대로). 301·302의 POST도 GET이 된다.
+        //  - **확장 메서드는 동사를 바꾸지 않는다.** 301·302·307·308은 같은 동사로 따라가고, 303은
+        //    따라가지 않는다 — 303은 GET으로 다시 물으라는 뜻이라, 따라가면 PROPFIND가 조용히 GET이
+        //    된다. 그 303이 그대로 답이다 (`Location`은 헤더에 있다).
         http_redirect_policy redirects { http_redirect_policy::follow };
         // 따라갈 재지정의 최대 횟수다.
         int max_redirects { 10 };
@@ -143,6 +161,8 @@ namespace luil::net {
         unsupported_scheme,
         // 헤더 이름·값이 규칙에 맞지 않는다 (선을 건드리지 않았다).
         invalid_header,
+        // 확장 메서드의 이름이 token이 아니거나 `method`와 어긋난다 (선을 건드리지 않았다).
+        invalid_method,
         // 이름을 풀지 못했다.
         name_not_resolved,
         // 연결하지 못했다 (거절·닿지 않음).
@@ -274,6 +294,9 @@ namespace luil::net {
         // 헤더 하나의 값이다 (대소문자를 가리지 않는다). 없으면 빈 view다.
         [[nodiscard]] std::u8string_view header(std::u8string_view name) const noexcept;
     };
+
+    // 선에 실을 동사다. `extension`이면 `method_name` 그대로, 아니면 `http_method_name(method)`다.
+    [[nodiscard]] std::u8string_view http_method_name(const http_request& request) noexcept;
 
     [[nodiscard]] constexpr bool http_status_is_success(const int status_code) noexcept
     {

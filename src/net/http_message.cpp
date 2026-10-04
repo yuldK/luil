@@ -40,10 +40,35 @@ namespace luil::net {
             return u8"DELETE";
         case http_method::options:
             return u8"OPTIONS";
+        case http_method::extension:
+            return {};
         }
         // default를 두지 않는 것은 값이 는 날 컴파일러가 빠진 갈래를 잡게 하려는
         // 것이다 (`renderer_mode_name`과 같은 모양이다).
         return u8"GET";
+    }
+
+    std::u8string_view http_method_name(const http_request& request) noexcept
+    {
+        if (request.method == http_method::extension)
+            return request.method_name;
+        return http_method_name(request.method);
+    }
+
+    bool is_http_token(const std::u8string_view text) noexcept
+    {
+        if (text.empty())
+            return false;
+
+        constexpr std::u8string_view punctuation { u8"!#$%&'*+-.^_`|~" };
+        for (const char8_t character : text)
+        {
+            const bool letter { (character >= u8'a' && character <= u8'z') || (character >= u8'A' && character <= u8'Z') };
+            const bool digit { character >= u8'0' && character <= u8'9' };
+            if (letter == false && digit == false && punctuation.find(character) == std::u8string_view::npos)
+                return false;
+        }
+        return true;
     }
 
     std::u8string_view find_header(const std::span<const http_header> headers, const std::u8string_view name) noexcept
@@ -66,6 +91,7 @@ namespace luil::net {
             u8"if-range",
             u8"if-none-match",
             u8"if-modified-since",
+            u8"depth",
         };
         for (const std::u8string_view safe : kept)
             if (same_header_name(name, safe))
