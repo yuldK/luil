@@ -61,9 +61,12 @@ add_executable(luil_core_tests
     core_platform_stub.cpp
     raster_probe.cpp)
 # IME 연결은 OS 헤더를 쓰지 않아 Windows에서도 지연·선택 회귀를 실행할 수 있다.
+# 기기 요청의 값 변환도 같다 (Java 상수를 옮길 뿐이다).
 target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
-    android_text_input_tests.cpp)
+    "${LUIL_SOURCE_DIRECTORY}/android/device_request.cpp"
+    android_text_input_tests.cpp
+    device_request_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"

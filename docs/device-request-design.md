@@ -1,0 +1,84 @@
+# 기기 요청과 플랫폼 능력
+
+앱이 휴대폰·태블릿에 바라는 것(화면 방향 등)을 플랫폼을 가리지 않는 값으로 말하는 계약이다.
+요청은 [`ui_frame::device`](../include/luil/app/app_host.h)의 `device_request`에 싣고, 플랫폼이 그중
+무엇을 실제로 하는지는 [`ui_platform::capabilities`](../include/luil/ui/ui_platform.h)가 답한다.
+
+## 공통 계약
+
+### 요청은 frame의 앱 상태다
+
+`device_request`는 frame마다 실리는 값이다. 앱은 자기 모델에 "지금 바라는 것"을 두고 매 frame 그대로
+싣는다. UI thread는 직전에 플랫폼에 옮긴 값과 견줘 **바뀐 것만** 옮긴다.
+
+- **기본값은 전부 "플랫폼에 맡긴다"다.** 이 값을 건드리지 않는 앱은 동작이 같다. Android host는 기본값에서
+  시작하므로, 아무것도 싣지 않은 앱의 매니페스트 방향·막대·키 처리를 건드리지 않는다.
+- **마지막 frame이 이긴다.** 요청이 여러 번 바뀌어도 UI thread가 보는 것은 최신 frame 하나다.
+- **어느 thread에서든 바꿀 수 있다.** frame은 logic thread가 짓지만, 다른 thread는
+  `app_host::post_app_message`(thread 안전)로 상태를 바꾸는 메시지를 보낸다. 실제 플랫폼 호출은 UI thread가
+  하고, Android의 창 조작은 그 thread가 다시 Java 메인 thread로 넘긴다 (`post_to_main_thread`).
+- **상태라서 저절로 다시 선다.** 홈에 갔다 오거나 회전해도 다음 frame이 같은 값을 다시 싣는다. Activity가
+  다시 만들어지면(언어 바꿈 등) 새 host가 기본값에서 시작해 첫 frame의 요청을 처음부터 옮긴다.
+
+`app_host`에 setter를 두지 않은 이유는 셋이다. 뒤로 가기(`ui_frame::back`)가 이미 frame에서 오고, setter로
+두면 Activity가 다시 설 때 앱이 다시 불러야 하며, "마지막 요청만 유효"를 위해 별도의 최신 값 slot이 필요하다.
+frame은 그 셋을 이미 다 한다.
+
+### 능력 플래그
+
+`ui_platform::capabilities`는 host가 시작할 때 한 번 정한다. 기본값은 전부 거짓이다.
+
+| 플래그 | 뜻 | Windows | Android |
+| --- | --- | --- | --- |
+| `screen_orientation` | 화면 방향 요청을 옮긴다 | 거짓 | 참 |
+
+하지 못하는 플랫폼도 요청을 **받는다.** 받고 아무 일도 하지 않는다. 그래서 앱은 플랫폼마다 frame을 다르게
+지을 필요가 없고, 설정 화면에 그 항목을 둘지만 플래그로 고른다 (mobile demo의 기기 페이지).
+
+## 화면 방향
+
+`device_request::orientation`은 `screen_orientation`이다.
+
+| 값 | 뜻 | Android `setRequestedOrientation` |
+| --- | --- | --- |
+| `system` (기본) | 시스템을 따른다 | Activity가 처음 가졌던 값 (매니페스트) |
+| `portrait` | 세로 | `USER_PORTRAIT` (12) |
+| `landscape` | 가로 | `USER_LANDSCAPE` (11) |
+| `current` | 요청이 처음 실린 순간의 방향에 고정 | 지금 회전으로 고른 고정 값 |
+
+- **`system`은 미지정(-1)이 아니다.** 앱이 매니페스트에 `screenOrientation`을 두었으면 그것으로 되돌린다.
+  처음 바꾸기 직전에 `getRequestedOrientation()`을 읽어 둔다.
+- **세로·가로는 사용자 회전 설정을 따른다** (`USER_*`). 자동 회전이 켜져 있으면 반대쪽으로도 돌고, 꺼져
+  있으면 기본 쪽에 선다. 사용자가 자동 회전을 끈 까닭을 앱이 덮지 않는다.
+- **`current`는 회전을 읽어 고정 값으로 바꾼다.** `Display.getRotation()`(0°·90°·180°·270°)과 지금 구성이
+  가로인지를 함께 본다. 같은 회전이 자연 방향(휴대폰은 세로, 태블릿은 흔히 가로)에 따라 다른 방향이라서다.
+
+  | 구성 | 0° | 90° | 180° | 270° |
+  | --- | --- | --- | --- | --- |
+  | 가로 | `LANDSCAPE` | `LANDSCAPE` | `REVERSE_LANDSCAPE` | `REVERSE_LANDSCAPE` |
+  | 세로 | `PORTRAIT` | `REVERSE_PORTRAIT` | `REVERSE_PORTRAIT` | `PORTRAIT` |
+
+  자연 방향이 세로인 휴대폰에서는 90°가 가로(`LANDSCAPE`), 자연 방향이 가로인 태블릿에서는 90°가
+  세로(`REVERSE_PORTRAIT`)가 되는데 표 하나가 둘 다 맞힌다. 회전을 읽지 못하면 시스템의 "지금 회전에
+  고정"(`LOCKED`, 14)으로 물러선다. `LOCKED`를 처음부터 쓰지 않은 이유는 그것이 값이 아니라 "디스플레이의
+  마지막 회전"이라서다. 다른 앱이 화면을 가로로 돌려 놓은 뒤 돌아오면 그 회전에 다시 묶인다. 고른 방향을
+  값으로 들고 있어야 돌아왔을 때도 같은 방향이다.
+- **고정한 방향은 요청이 이어지는 동안 그대로다.** 다른 값을 실었다가 다시 `current`를 실으면 그때의 방향을
+  새로 읽는다. 창이 다시 생기거나 초점을 되찾는 것으로는 다시 읽지 않는다.
+- 호출은 메인 thread에서 한다 ([android_window_control.cpp](../src/android/android_window_control.cpp)).
+  값 변환은 JNI 없는 순수 함수라 Windows의 core test도 돌린다
+  ([device_request.cpp](../src/android/device_request.cpp)).
+- Windows는 하지 않는다. 데스크톱 창에는 기기 방향이 없다.
+
+방향이 바뀌면 표면 크기가 바뀌고, 그것은 기존 경로(`APP_CMD_CONFIG_CHANGED` → 창 metrics 메시지)로 앱에
+간다. 매니페스트의 `configChanges`에 `orientation|screenSize`가 있어 Activity는 다시 만들어지지 않는다.
+
+## 검증
+
+| 대상 | 확인 |
+| --- | --- |
+| 능력 플래그 | 기본값이 전부 거짓, host가 정한 값의 왕복 (core test) |
+| 방향 값 변환 | 시스템은 되돌림, 세로·가로는 사용자 설정을 따르는 값, 휴대폰과 가로 태블릿의 네 회전, 읽지 못한 회전 (core test) |
+| frame 기본값 | `ui_frame::device`의 기본이 "시스템을 따름" (core test) |
+
+기기 확인은 [Android 이식 계획](android-port-plan.md)의 "기기 요청" 절에 적는다.

@@ -148,6 +148,34 @@ namespace luil {
         std::function<input_action()> close {};
     };
 
+    // 앱이 바라는 화면 방향이다 (device-request-design.md).
+    enum class screen_orientation
+    {
+        // 시스템을 따른다 — 사용자의 자동 회전 설정과 앱 매니페스트가 정한다.
+        system,
+        // 세로다. 사용자가 자동 회전을 켰으면 거꾸로 든 세로로도 돈다.
+        portrait,
+        // 가로다. 사용자가 자동 회전을 켰으면 반대쪽 가로로도 돈다.
+        landscape,
+        // 이 요청이 처음 실린 순간의 방향에 고정한다. 기기를 돌려도 그대로다.
+        //  - 고정한 방향은 요청이 이어지는 동안 그대로다. 다른 값을 실었다가 다시 실으면 그때의
+        //    방향을 새로 읽는다.
+        current,
+    };
+
+    // 앱이 기기의 화면·키에 바라는 것이다 (device-request-design.md).
+    // 모든 값의 기본은 "플랫폼에 맡긴다"라서, 이 값을 건드리지 않는 앱은 동작이 같다.
+    //  - 하지 못하는 플랫폼은 받고 무시한다. 무엇을 하는지는 `ui_platform::capabilities`가 말한다.
+    //  - 앱 상태다. 매 frame 지금 바라는 값을 싣고, UI thread가 바뀐 것만 플랫폼에 옮긴다. 마지막
+    //    frame의 값이 이긴다. 다른 thread가 바꾸려면 앱 메시지(`app_host::post_app_message`)로 상태를
+    //    바꾼다.
+    struct device_request
+    {
+        screen_orientation orientation { screen_orientation::system };
+
+        [[nodiscard]] bool operator==(const device_request&) const noexcept = default;
+    };
+
     // logic thread가 게시하고 UI thread가 읽는 한 frame의 상태다.
     // 프레임워크가 아는 값만 담으며, tree 밖의 앱 데이터는 여기에 싣지 않는다.
     //  - 필요하면 앱이 driver 구현에서 따로 공유한다.
@@ -183,6 +211,8 @@ namespace luil {
         //  - popup이 떠 있으면 popup을 닫는 것이 먼저다. 그때는 이것을 부르지 않는다.
         //  - 데스크톱 창(Win32)은 지금 이것을 부르지 않는다. 앱 바의 뒤로 단추가 같은 일을 한다.
         std::function<input_action()> back {};
+        // 화면 방향 등 기기에 바라는 것이다. 기본값이면 플랫폼에 맡긴다.
+        device_request device {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };

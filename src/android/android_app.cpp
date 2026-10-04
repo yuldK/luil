@@ -5,6 +5,7 @@
 #include "android/android_input.h"
 #include "android/android_system_theme.h"
 #include "android/android_text_input.h"
+#include "android/android_window_control.h"
 #include "android/cpu_skia_renderer.h"
 #include "android/java_vm.h"
 #include "android/main_thread.h"
@@ -438,7 +439,7 @@ namespace luil::android {
                 refresh_user_ui_language();
                 // 휴대폰·태블릿이다. 창 caption이 없고 맨 위는 앱 바의 자리다.
                 // logic thread가 첫 frame을 짓기 전에 정한다.
-                set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false });
+                set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false, .capabilities = { .screen_orientation = true } });
                 prefers_light_ = read_prefers_light(app_->activity);
                 scale_ = read_scale(app_->config);
                 set_font_fallback(&font_resolver_);
@@ -939,7 +940,22 @@ namespace luil::android {
                 router_.set_areas(std::move(areas));
                 popups_visible.store(overlays_.empty() == false);
                 back_claimed.store(frame != nullptr && frame->back != nullptr);
+                apply_device_request(frame != nullptr ? frame->device : device_request {});
                 dirty_ = true;
+            }
+
+            // 앱이 기기에 바라는 것 중 바뀐 것만 플랫폼에 옮긴다 (device-request-design.md).
+            //  - "시스템을 따름"에서 시작한다. 앱이 아무것도 싣지 않으면 매니페스트가 정한 방향을 건드리지 않는다.
+            void apply_device_request(const device_request& request)
+            {
+                if (request.orientation != applied_device_.orientation)
+                {
+                    // 매니페스트의 방향은 메인 thread에서 처음 바꿀 때 읽어 둔다. 메인 thread의 일은 차례로
+                    // 돌아 그 칸을 엇갈려 쓰지 않는다.
+                    if (post_to_main_thread(
+                            [request = request.orientation, original = original_orientation_](JNIEnv& env, const jobject activity) { apply_screen_orientation(env, activity, request, *original); }))
+                        applied_device_.orientation = request.orientation;
+                }
             }
 
             [[nodiscard]] const overlay_entry* find_overlay(const std::u8string& id) const
@@ -1180,6 +1196,10 @@ namespace luil::android {
             bool high_contrast_ { false };
             // 마지막으로 맞춘 막대 아이콘이다 (밝은 바탕이면 참).
             std::optional<bool> system_bars_light_ {};
+            // 마지막으로 플랫폼에 옮긴 기기 요청이다.
+            device_request applied_device_ {};
+            // Activity가 처음 가졌던 방향 요청이다. 메인 thread의 일만 읽고 쓴다.
+            std::shared_ptr<std::optional<int>> original_orientation_ { std::make_shared<std::optional<int>>() };
             bool dirty_ { false };
             bool finishing_ { false };
             std::optional<std::chrono::steady_clock::time_point> update_deadline_ {};

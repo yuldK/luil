@@ -30,7 +30,7 @@ namespace mobile_demo {
             char32_t icon { 0 };
         };
 
-        constexpr std::array<page_entry, 8> page_entries {
+        constexpr std::array<page_entry, 9> page_entries {
             page_entry { page_basics, u8"기본", u8"단추, 글 칸, 그림, dialog", luil::codicons::icon_home },
             page_entry { page_lists, u8"목록", u8"순서 바꾸기, tree, 가상 목록", luil::codicons::icon_list_unordered },
             page_entry { page_tabs, u8"탭", u8"쓸어 넘기기, 넘침 메뉴", luil::codicons::icon_files },
@@ -39,6 +39,7 @@ namespace mobile_demo {
             page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 길게 눌러 메뉴", luil::codicons::icon_menu },
             page_entry { page_zoom, u8"확대 보기", u8"두 손가락 확대와 이동", luil::codicons::icon_zoom_in },
             page_entry { page_theme, u8"테마", u8"밝기, 키 컬러, 시스템 색", luil::codicons::icon_symbol_color },
+            page_entry { page_device, u8"기기", u8"화면 방향", luil::codicons::icon_device_mobile },
         };
 
         [[nodiscard]] std::u8string page_title(const std::u8string_view page)
@@ -130,7 +131,7 @@ namespace mobile_demo {
         // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다. 편집 메시지만 타입이 같고
         // target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
         if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message)
-            || theme_.handle(message))
+            || theme_.handle(message) || device_.handle(message))
             return;
     }
 
@@ -214,6 +215,8 @@ namespace mobile_demo {
         auto frame { std::make_shared<luil::ui_frame>() };
         frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
         frame->appearance = theme_.appearance();
+        // 기기 요청은 앱 상태라 어느 페이지를 보든 실린다.
+        frame->device = device_.request();
         // popup은 이번 frame에서 배치된 element의 자리를 쓴다. 보이는 페이지의 것만 단다.
         if (shown == page_tabs)
             frame->popups = tabs_.make_popups(scale);
@@ -259,6 +262,8 @@ namespace mobile_demo {
             return wrap_scroll(page, popups_.build(width, scale), height, scale);
         if (page == page_theme)
             return wrap_scroll(page, theme_.build(width, scale), height, scale);
+        if (page == page_device)
+            return wrap_scroll(page, device_.build(width, scale), height, scale);
         return wrap_scroll(page, basics_.build(width, scale), height, scale);
     }
 

@@ -67,6 +67,8 @@ namespace luil::android {
     //  - 시스템의 밝은 모드, 동적 색(Android 12, `system_accent()`), 대비 설정(Android 14)을 따른다.
     //    상태 표시줄·내비게이션 막대의 아이콘은 그린 바탕에 맞춘다. 창 장식은 Java 메인 thread에서만
     //    바꿀 수 있어 luil이 링크의 `--wrap`으로 `GameActivity_onCreate`를 먼저 받는다.
+    //  - frame의 기기 요청(`ui_frame::device`)을 바뀐 것만 Activity에 옮긴다 — 화면 방향
+    //    (device-request-design.md).
     // 반환값은 0이면 정상 종료, 아니면 시작에 실패한 것이다.
     int run_application(android_app* app, const application_config& config, const application_environment& environment);
 } // namespace luil::android

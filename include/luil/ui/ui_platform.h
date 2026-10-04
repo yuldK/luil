@@ -10,6 +10,18 @@ namespace luil {
         mobile,
     };
 
+    // 플랫폼이 실제로 해 주는 기기 기능이다 (device-request-design.md).
+    // 앱의 요청(`ui_frame::device`)은 어느 플랫폼에서나 실을 수 있고, 하지 못하는 플랫폼은 받기만 하고
+    // 아무 일도 하지 않는다. 앱은 이것으로 그 기능의 설정 항목을 화면에 둘지 고른다.
+    //  - 기본값이 전부 거짓이다. 플랫폼 host가 할 수 있는 것만 켠다.
+    struct ui_platform_capabilities
+    {
+        // 화면 방향을 요청할 수 있다 (`device_request::orientation`).
+        bool screen_orientation { false };
+
+        [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
+    };
+
     // 플랫폼이 UI에 알리는 성질이다.
     // 앱 host가 시작할 때 한 번 정하고, element와 앱이 읽는다. 앱은 이것으로 화면의 모양을
     // 고른다 — 데스크톱은 caption, 모바일은 앱 바 (app_bar_element).
@@ -20,6 +32,7 @@ namespace luil {
         // 거짓이면 시스템이 상태 표시줄을 그리고 창 버튼이 없다. 그때 `caption_element`는
         // 자리를 차지하지 않는다 — 앱이 잊고 넣어도 모바일 화면에 데스크톱 chrome이 서지 않는다.
         bool window_caption { true };
+        ui_platform_capabilities capabilities {};
 
         [[nodiscard]] bool operator==(const ui_platform&) const noexcept = default;
     };

@@ -17,6 +17,8 @@ function(luil_mobile_demo_sources out_var)
         "${directory}/basics_page.h"
         "${directory}/common.cpp"
         "${directory}/common.h"
+        "${directory}/device_page.cpp"
+        "${directory}/device_page.h"
         "${directory}/groups_page.cpp"
         "${directory}/groups_page.h"
         "${directory}/lists_page.cpp"

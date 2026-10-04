@@ -501,8 +501,12 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_system_theme.h
         android/android_text_input.cpp
         android/android_text_input.h
+        android/android_window_control.cpp
+        android/android_window_control.h
         android/cpu_skia_renderer.cpp
         android/cpu_skia_renderer.h
+        android/device_request.cpp
+        android/device_request.h
         android/fail_fast.cpp
         android/main_thread.cpp
         android/main_thread.h

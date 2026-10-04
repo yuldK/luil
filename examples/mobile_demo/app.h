@@ -10,6 +10,7 @@
 
 #include "mobile_demo/basics_page.h"
 #include "mobile_demo/common.h"
+#include "mobile_demo/device_page.h"
 #include "mobile_demo/groups_page.h"
 #include "mobile_demo/lists_page.h"
 #include "mobile_demo/popups_page.h"
@@ -64,6 +65,7 @@ namespace mobile_demo {
         popups_page popups_ {};
         zoom_page zoom_ {};
         theme_page theme_ {};
+        device_page device_ {};
 
         // 좁은 화면에서 열어 둔 페이지다. 비어 있으면 목록이다. 넓은 화면은 비어 있으면 첫 페이지를 보인다.
         std::u8string page_ {};
