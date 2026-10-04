@@ -48,6 +48,10 @@ namespace luil::android {
 
         // `Configuration.ORIENTATION_LANDSCAPE`다.
         constexpr jint configuration_landscape { 2 };
+        // `WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`(API 30)다.
+        constexpr jint transient_bars_by_swipe { 2 };
+        // `View.SYSTEM_UI_FLAG_HIDE_NAVIGATION`·`FULLSCREEN`·`IMMERSIVE_STICKY`다 (API 30 아래).
+        constexpr jint immersive_flags { 0x2 | 0x4 | 0x1000 };
 
         // 객체의 인자 없는 메서드 하나를 불러 객체를 받는다. 실패하면 nullptr다.
         [[nodiscard]] jobject call_object(JNIEnv& env, const jobject target, const char* const name, const char* const signature)
@@ -130,5 +134,56 @@ namespace luil::android {
             return;
         // 기기마다 다른 회전과 고른 값을 logcat에서 바로 맞대 보는 자리다.
         __android_log_print(ANDROID_LOG_INFO, "luil", "requested orientation %d (rotation %d, landscape %d)", value, static_cast<int>(rotation), landscape ? 1 : 0);
+    }
+
+    void apply_system_bars(JNIEnv& env, const jobject activity, const system_bars_mode mode)
+    {
+        const local_frame frame { env };
+        if (frame.pushed() == false)
+            return;
+        const bool hide { mode == system_bars_mode::immersive };
+        const jobject window { call_object(env, activity, "getWindow", "()Landroid/view/Window;") };
+        if (window == nullptr)
+            return;
+
+        if (android_get_device_api_level() >= 30)
+        {
+            const jobject controller { call_object(env, window, "getInsetsController", "()Landroid/view/WindowInsetsController;") };
+            const jclass types { env.FindClass("android/view/WindowInsets$Type") };
+            const jclass controller_type { env.FindClass("android/view/WindowInsetsController") };
+            if (controller == nullptr || types == nullptr || controller_type == nullptr || failed(env))
+                return;
+            const jmethodID system_bars { env.GetStaticMethodID(types, "systemBars", "()I") };
+            const jmethodID set_behavior { env.GetMethodID(controller_type, "setSystemBarsBehavior", "(I)V") };
+            const jmethodID change { env.GetMethodID(controller_type, hide ? "hide" : "show", "(I)V") };
+            if (system_bars == nullptr || set_behavior == nullptr || change == nullptr || failed(env))
+                return;
+            const jint bars { env.CallStaticIntMethod(types, system_bars) };
+            if (failed(env))
+                return;
+            // 쓸어 꺼낸 막대가 잠시 뒤 다시 숨는 몰입 모드다. 보일 때도 행동을 그대로 두어 다음 숨김이 같다.
+            if (hide)
+            {
+                env.CallVoidMethod(controller, set_behavior, transient_bars_by_swipe);
+                if (failed(env))
+                    return;
+            }
+            env.CallVoidMethod(controller, change, bars);
+            static_cast<void>(failed(env));
+            return;
+        }
+
+        // API 30 아래는 decor view의 표시 플래그다. 막대 아이콘 색의 플래그(`apply_system_bar_icons`)와 같은
+        // 칸을 나눠 쓰므로 읽어서 몰입 플래그만 바꾼다.
+        const jobject decor { call_object(env, window, "getDecorView", "()Landroid/view/View;") };
+        const std::optional<jint> flags { call_int(env, decor, "getSystemUiVisibility") };
+        if (flags.has_value() == false)
+            return;
+        const jclass view_type { env.GetObjectClass(decor) };
+        const jmethodID set_flags { env.GetMethodID(view_type, "setSystemUiVisibility", "(I)V") };
+        if (set_flags == nullptr || failed(env))
+            return;
+        env.CallVoidMethod(decor, set_flags, hide ? (*flags | immersive_flags) : (*flags & ~immersive_flags));
+        static_cast<void>(failed(env));
     }
 } // namespace luil::android

@@ -18,6 +18,8 @@ namespace luil {
     {
         // 화면 방향을 요청할 수 있다 (`device_request::orientation`).
         bool screen_orientation { false };
+        // 시스템 막대를 숨기고 컷아웃 밑까지 그릴 수 있다 (`device_request::system_bars`, `draw_under_cutout`).
+        bool system_bars { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

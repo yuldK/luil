@@ -31,6 +31,7 @@ frame은 그 셋을 이미 다 한다.
 | 플래그 | 뜻 | Windows | Android |
 | --- | --- | --- | --- |
 | `screen_orientation` | 화면 방향 요청을 옮긴다 | 거짓 | 참 |
+| `system_bars` | 시스템 막대를 숨기고 컷아웃 밑까지 그린다 | 거짓 | 참 |
 
 하지 못하는 플랫폼도 요청을 **받는다.** 받고 아무 일도 하지 않는다. 그래서 앱은 플랫폼마다 frame을 다르게
 지을 필요가 없고, 설정 화면에 그 항목을 둘지만 플래그로 고른다 (mobile demo의 기기 페이지).
@@ -73,12 +74,39 @@ frame은 그 셋을 이미 다 한다.
 방향이 바뀌면 표면 크기가 바뀌고, 그것은 기존 경로(`APP_CMD_CONFIG_CHANGED` → 창 metrics 메시지)로 앱에
 간다. 매니페스트의 `configChanges`에 `orientation|screenSize`가 있어 Activity는 다시 만들어지지 않는다.
 
+## 시스템 막대와 컷아웃
+
+`device_request::system_bars`는 `system_bars_mode`, `draw_under_cutout`은 bool이다.
+
+| 값 | 뜻 |
+| --- | --- |
+| `visible` (기본) | 막대가 보이고 안전 영역이 막대를 비킨다 |
+| `immersive` | 막대를 숨긴다. 가장자리에서 쓸면 막대가 내용 위에 잠시 나타났다가 다시 숨는다 |
+| `draw_under_cutout` 참 | 디스플레이 컷아웃(카메라 구멍)이 덮는 가장자리까지 그린다 (기본은 비킨다) |
+
+- Android 11부터 `WindowInsetsController.hide(systemBars())`와
+  `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`, 그 아래(minSdk 26~29)는 `SYSTEM_UI_FLAG_IMMERSIVE_STICKY`와
+  `HIDE_NAVIGATION`·`FULLSCREEN`이다. 아래쪽 경로는 막대 아이콘 색의 플래그와 같은 칸이라 몰입 플래그만 바꾼다.
+- **숨긴 막대는 안전 영역에서 뺀다.** 요청이 바뀌는 순간 다시 재어 기존 창 metrics 메시지로 알린다. 다시 보인
+  막대는 시스템이 알려 오는 inset 그대로 센다.
+- **몰입을 요청한 동안에는 막대 inset을 아예 세지 않는다.** 쓸어 꺼낸 막대는 원래 inset이 0이지만, 화면을
+  켜거나 알림 창에서 돌아오는 순간 시스템이 막대를 실제로 잠깐(실기기에서 20~120ms) 다시 보였다가 host가 도로
+  숨기는 일이 있다. 시스템이 알려 오는 대로 세면 그때마다 내용이 한 번 튄다. 컷아웃과 키보드는 그대로 비킨다.
+- **다시 숨긴다.** 시스템이 다른 창에 다녀오며 막대를 다시 보일 수 있어 창이 생길 때(`INIT_WINDOW`),
+  돌아올 때(`RESUME`), 초점을 되찾을 때(`GAINED_FOCUS`) 몰입을 다시 건다. 같은 값을 거듭 걸어도 해가 없다.
+- **컷아웃은 창 장식이 아니라 안전 영역의 셈이다.** 참이면 컷아웃 inset을 비키지 않는다. 창이 컷아웃까지
+  펼쳐져 있어야 뜻이 있다. 예제 테마는 `windowLayoutInDisplayCutoutMode=always`이고, targetSdk 35부터는
+  시스템이 창을 화면 끝까지 편다. 막대와 따로 정하는 이유는 가로 화면의 옆 컷아웃이 막대가 보일 때도 비어 있기
+  때문이다.
+- 뒤로 가기·IME·popup은 그대로다. 몰입 중에도 키보드가 올라오면 아래 가장자리가 키보드만큼 준다.
+- Windows는 하지 않는다. 데스크톱의 전체 화면 창(`ui_command::window_toggle_fullscreen`)과는 별개다.
+
 ## 검증
 
 | 대상 | 확인 |
 | --- | --- |
 | 능력 플래그 | 기본값이 전부 거짓, host가 정한 값의 왕복 (core test) |
 | 방향 값 변환 | 시스템은 되돌림, 세로·가로는 사용자 설정을 따르는 값, 휴대폰과 가로 태블릿의 네 회전, 읽지 못한 회전 (core test) |
-| frame 기본값 | `ui_frame::device`의 기본이 "시스템을 따름" (core test) |
+| frame 기본값 | `ui_frame::device`의 기본이 "시스템을 따름", 막대 보임, 컷아웃 비킴 (core test) |
 
 기기 확인은 [Android 이식 계획](android-port-plan.md)의 "기기 요청" 절에 적는다.

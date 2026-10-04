@@ -14,6 +14,16 @@ namespace mobile_demo {
         luil::screen_orientation orientation { luil::screen_orientation::system };
     };
 
+    struct system_bars_intent
+    {
+        luil::system_bars_mode mode { luil::system_bars_mode::visible };
+    };
+
+    struct cutout_intent
+    {
+        bool draw_under { false };
+    };
+
     class device_page
     {
     public:

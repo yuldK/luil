@@ -163,6 +163,17 @@ namespace luil {
         current,
     };
 
+    // 시스템 막대(상태 표시줄·내비게이션 막대)의 표시다 (device-request-design.md).
+    enum class system_bars_mode
+    {
+        // 보인다. 안전 영역이 막대를 비킨다.
+        visible,
+        // 숨긴다 (몰입 모드). 화면 가장자리에서 쓸면 막대가 내용 위에 잠시 나타났다가 다시 숨는다.
+        //  - 숨기면 안전 영역이 막대만큼 넓어지고 창 metrics 메시지가 다시 간다. 잠시 나타난 막대는
+        //    안전 영역을 바꾸지 않는다 — 쓸 때마다 내용이 튀지 않게.
+        immersive,
+    };
+
     // 앱이 기기의 화면·키에 바라는 것이다 (device-request-design.md).
     // 모든 값의 기본은 "플랫폼에 맡긴다"라서, 이 값을 건드리지 않는 앱은 동작이 같다.
     //  - 하지 못하는 플랫폼은 받고 무시한다. 무엇을 하는지는 `ui_platform::capabilities`가 말한다.
@@ -172,6 +183,11 @@ namespace luil {
     struct device_request
     {
         screen_orientation orientation { screen_orientation::system };
+        system_bars_mode system_bars { system_bars_mode::visible };
+        // 디스플레이 컷아웃(카메라 구멍)이 덮는 가장자리까지 그린다. 거짓이면 그 자리를 비킨다.
+        //  - 막대와 따로 정한다. 몰입 모드에서도 거짓이면 컷아웃 자리는 비어 있고, 가로 화면에서는 막대가
+        //    보여도 참이면 옆의 컷아웃 밑까지 그린다.
+        bool draw_under_cutout { false };
 
         [[nodiscard]] bool operator==(const device_request&) const noexcept = default;
     };
@@ -211,7 +227,7 @@ namespace luil {
         //  - popup이 떠 있으면 popup을 닫는 것이 먼저다. 그때는 이것을 부르지 않는다.
         //  - 데스크톱 창(Win32)은 지금 이것을 부르지 않는다. 앱 바의 뒤로 단추가 같은 일을 한다.
         std::function<input_action()> back {};
-        // 화면 방향 등 기기에 바라는 것이다. 기본값이면 플랫폼에 맡긴다.
+        // 화면 방향·시스템 막대 등 기기에 바라는 것이다. 기본값이면 플랫폼에 맡긴다.
         device_request device {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.

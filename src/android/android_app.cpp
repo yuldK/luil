@@ -88,12 +88,18 @@ namespace luil::android {
         // targetSdk 35부터 창은 화면 끝까지 그려지므로(edge-to-edge) 이것을 비키지 않으면
         // 내용이 상태 표시줄과 제스처 막대 밑에 깔린다. 키보드가 올라오면 아래 가장자리가 그만큼
         // 커져 앱이 줄어든 크기로 다시 배치한다.
-        [[nodiscard]] edge_insets read_safe_insets(GameActivity* const activity)
+        //  - 앱이 막대를 숨겼으면(몰입 모드) 막대는 세지 않는다. 쓸어 꺼낸 막대는 원래 내용 위에 겹치고,
+        //    화면을 켜거나 다른 창에서 돌아오는 순간 시스템이 막대를 잠깐 다시 보였다가 host가 도로 숨길 때도
+        //    내용이 튀지 않는다. 컷아웃과 키보드는 그대로 비킨다.
+        //  - 앱이 컷아웃 밑까지 그리겠다고 했으면 컷아웃은 비키지 않는다 (`device_request::draw_under_cutout`).
+        [[nodiscard]] edge_insets read_safe_insets(GameActivity* const activity, const bool bars_hidden, const bool draw_under_cutout)
         {
             ARect bars {};
-            GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_SYSTEM_BARS, &bars);
+            if (bars_hidden == false)
+                GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_SYSTEM_BARS, &bars);
             ARect cutout {};
-            GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_DISPLAY_CUTOUT, &cutout);
+            if (draw_under_cutout == false)
+                GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_DISPLAY_CUTOUT, &cutout);
             ARect keyboard {};
             GameActivity_getWindowInsets(activity, GAMECOMMON_INSETS_TYPE_IME, &keyboard);
             return edge_insets {
@@ -439,7 +445,7 @@ namespace luil::android {
                 refresh_user_ui_language();
                 // 휴대폰·태블릿이다. 창 caption이 없고 맨 위는 앱 바의 자리다.
                 // logic thread가 첫 frame을 짓기 전에 정한다.
-                set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false, .capabilities = { .screen_orientation = true } });
+                set_ui_platform({ .form_factor = ui_form_factor::mobile, .window_caption = false, .capabilities = { .screen_orientation = true, .system_bars = true } });
                 prefers_light_ = read_prefers_light(app_->activity);
                 scale_ = read_scale(app_->config);
                 set_font_fallback(&font_resolver_);
@@ -557,6 +563,7 @@ namespace luil::android {
                 case APP_CMD_INIT_WINDOW:
                     create_renderer();
                     refresh_metrics();
+                    restore_system_bars();
                     break;
                 case APP_CMD_TERM_WINDOW:
                     // 창이 사라지면 그 위의 접촉은 뗌 없이 끝난다. 조합 중이면 확정하고 키보드를
@@ -616,9 +623,12 @@ namespace luil::android {
                 case APP_CMD_RESUME:
                     // 대비 설정은 구성 변경으로 오지 않는다. 설정 앱에서 돌아올 때 다시 읽는다.
                     refresh_system_theme();
+                    restore_system_bars();
                     dirty_ = true;
                     break;
                 case APP_CMD_GAINED_FOCUS:
+                    // 알림 창·다른 앱에 다녀오면 시스템이 숨긴 막대를 다시 보일 수 있다.
+                    restore_system_bars();
                     dirty_ = true;
                     break;
                 case APP_CMD_LOST_FOCUS:
@@ -710,7 +720,7 @@ namespace luil::android {
                 const int previous_bottom { insets_.bottom };
                 const int previous_width { content_width() };
                 const int previous_height { content_height() };
-                insets_ = read_safe_insets(app_->activity);
+                insets_ = read_safe_insets(app_->activity, applied_device_.system_bars == system_bars_mode::immersive, applied_device_.draw_under_cutout);
                 // 내용 크기가 바뀌면 popup은 새 크기로 다시 자리 잡는다. 닫는 계기는 창 자체가 바뀐
                 // 때(회전, 화면 나누기)뿐이다. 키보드는 창이 아니라 안전 영역만 줄인다 — popup 안 검색
                 // 칸을 누르면 키보드가 뜨는데, 그것으로 popup이 닫히면 칠 수가 없다.
@@ -956,6 +966,31 @@ namespace luil::android {
                             [request = request.orientation, original = original_orientation_](JNIEnv& env, const jobject activity) { apply_screen_orientation(env, activity, request, *original); }))
                         applied_device_.orientation = request.orientation;
                 }
+                // 막대와 컷아웃은 안전 영역의 셈에도 든다. 바뀌면 다시 재어 앱에 알린다. 숨긴 막대는 요청한
+                // 순간부터 세지 않고, 다시 보인 막대는 시스템이 알려 오는 대로 센다.
+                bool remeasure { false };
+                if (request.system_bars != applied_device_.system_bars)
+                {
+                    if (post_to_main_thread([mode = request.system_bars](JNIEnv& env, const jobject activity) { apply_system_bars(env, activity, mode); }))
+                    {
+                        applied_device_.system_bars = request.system_bars;
+                        remeasure = true;
+                    }
+                }
+                if (request.draw_under_cutout != applied_device_.draw_under_cutout)
+                {
+                    applied_device_.draw_under_cutout = request.draw_under_cutout;
+                    remeasure = true;
+                }
+                if (remeasure)
+                    refresh_metrics();
+            }
+
+            // 몰입 모드를 다시 건다. 시스템이 다시 보인 막대를 앱의 요청대로 되돌린다.
+            void restore_system_bars()
+            {
+                if (applied_device_.system_bars == system_bars_mode::immersive)
+                    static_cast<void>(post_to_main_thread([](JNIEnv& env, const jobject activity) { apply_system_bars(env, activity, system_bars_mode::immersive); }));
             }
 
             [[nodiscard]] const overlay_entry* find_overlay(const std::u8string& id) const

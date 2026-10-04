@@ -1,5 +1,6 @@
 #include "mobile_demo/device_page.h"
 
+#include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/ui_platform.h"
 
@@ -29,6 +30,16 @@ namespace mobile_demo {
         if (const auto* const orientation { message.get<orientation_intent>() }; orientation != nullptr)
         {
             request_.orientation = orientation->orientation;
+            return true;
+        }
+        if (const auto* const bars { message.get<system_bars_intent>() }; bars != nullptr)
+        {
+            request_.system_bars = bars->mode;
+            return true;
+        }
+        if (const auto* const cutout { message.get<cutout_intent>() }; cutout != nullptr)
+        {
+            request_.draw_under_cutout = cutout->draw_under;
             return true;
         }
         return false;
@@ -68,6 +79,37 @@ namespace mobile_demo {
             column.gap(6.0f);
             column.note(u8"orientation-note-1", u8"지금 고정은 고른 순간의 방향에 묶는다.");
             column.note(u8"orientation-note-2", u8"다른 페이지로 가도 요청은 그대로다.");
+        }
+
+        column.gap(20.0f);
+        column.heading(u8"bars-heading", u8"시스템 막대");
+        if (capabilities.system_bars == false)
+            column.note(u8"bars-none", u8"이 플랫폼은 시스템 막대를 숨길 수 없다.");
+        else
+        {
+            luil::choice_group_config bars {};
+            bars.owner = u8"system-bars";
+            bars.style = luil::choice_style::toggle;
+            bars.name = u8"시스템 막대";
+            bars.items = { { u8"visible", u8"보임" }, { u8"immersive", u8"몰입" } };
+            bars.selected = request_.system_bars == luil::system_bars_mode::immersive ? u8"immersive" : u8"visible";
+            bars.select
+                = [](const std::u8string& key) { return luil::make_app_action(system_bars_intent { key == u8"immersive" ? luil::system_bars_mode::immersive : luil::system_bars_mode::visible }); };
+            const float bars_height { luil::choice_group_element::height_for(bars) };
+            column.gap(6.0f);
+            column.add(std::make_unique<luil::choice_group_element>(std::move(bars)), bars_height, std::min(choice_width, 240.0f));
+            column.gap(6.0f);
+            column.note(u8"bars-note", u8"몰입이면 가장자리에서 쓸 때만 잠시 보인다.");
+
+            luil::check_config cutout {};
+            cutout.owner = u8"cutout";
+            cutout.style = luil::check_style::toggle_switch;
+            cutout.label = u8"컷아웃 밑까지 그리기";
+            cutout.checked = request_.draw_under_cutout;
+            cutout.toggle = luil::make_message_action(cutout_intent { request_.draw_under_cutout == false });
+            const float cutout_height { luil::check_element::height_for(cutout) };
+            column.gap(10.0f);
+            column.add(std::make_unique<luil::check_element>(std::move(cutout)), std::max(cutout_height, touch_height), choice_width);
         }
         return column.finish();
     }
