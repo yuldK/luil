@@ -66,6 +66,14 @@ Android host에서 popup(`ui_popup`)은 뒤로 가기·바깥 누름·Esc·표�
 방식). 시트가 열려 있는 동안 앱이 `back`에 `dismiss(sheet_dismiss_reason::back)`과 같은 메시지를 싣는다. mobile demo의 시트
 페이지가 그렇게 한다.
 
+## 남은 것
+
+- 입력 큐가 넘쳐 몸짓을 통째로 거둔 때(`interaction_controller::cancel_dropped_gestures`)는 끝 알림이 나가지 않는다. 끄던 시트는
+  다음 끌기를 놓을 때까지 그 자리에 남는다. 시스템이 접촉을 거둔 취소(`pointer_cancelled_event`)는 끝을 알린다.
+- 놓을 때 속도를 보지 않아 튕겨 닫기가 없다. 서랍을 가장자리에서 끌어 여는 몸짓도 없다.
+- Android에서 아래 시트는 안전 영역 안에 서서 제스처 막대 자리까지 내려가지 않고, scrim은 상태 표시줄 자리를 덮지 않는다
+  ([modal dialog](modal-dialog-design.md)와 같다).
+
 ## 검증
 
 순수·controller test는 [sheet_host_element_tests.cpp](../tests/sheet_host_element_tests.cpp)에 있다.
