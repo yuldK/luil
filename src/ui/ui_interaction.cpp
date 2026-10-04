@@ -318,7 +318,7 @@ namespace luil {
                         return { text_edit_action(*target, text::text_edit_command::backspace) };
                     // Ctrl+Backspace는 WM_CHAR가 U+007F로 준다.
                     if (value.character == 0x7Fu)
-                        return { text_edit_action(*target, text::text_edit_command::delete_word_left) };
+                        return delete_word(*target, true);
                     // 나머지 제어 문자는 키 경로(Ctrl+C 등)가 이미 다뤘다.
                     if (value.character < U' ')
                         return {};
@@ -2019,22 +2019,32 @@ namespace luil {
         if (offset.has_value() == false)
             return {};
 
+        // 암호 칸의 낱말 고르기는 칸 전체다. 낱말 경계가 공백 자리를 알린다.
+        const std::optional<text_input_snapshot> value { element.text_input() };
+        const bool whole { select_word && value.has_value() && value->secret };
         text_edit_request request {};
         request.target = *target;
-        request.command = select_word ? text::text_edit_command::select_word : text::text_edit_command::place_caret;
+        request.command = whole ? text::text_edit_command::select_all : select_word ? text::text_edit_command::select_word : text::text_edit_command::place_caret;
         request.offset = *offset;
         request.extend = extend;
         return { policy_->make_text_edit_action(request) };
     }
 
-    std::vector<input_action> interaction_controller::copy_focused_selection(const text_input_target target, const bool erase) const
+    std::optional<text_input_snapshot> interaction_controller::focused_text_input() const
     {
-        // 복사할 글은 초점 표면의 tree가 들고 있다.
-        // 선택이 없으면 아무 일도 하지 않는다.
+        // 초점 표면의 tree가 들고 있다.
         const ui_tree* const focused_tree { surface_tree(snapshot_.focused_surface) };
         const ui_element* const element { focused_tree != nullptr ? focused_tree->find(snapshot_.focused_input) : nullptr };
-        const std::optional<text_input_snapshot> value { element != nullptr ? element->text_input() : std::nullopt };
-        if (value.has_value() == false || value->caret == value->anchor)
+        return element != nullptr ? element->text_input() : std::nullopt;
+    }
+
+    std::vector<input_action> interaction_controller::copy_focused_selection(const text_input_target target, const bool erase) const
+    {
+        // 선택이 없으면 아무 일도 하지 않는다.
+        // 암호 칸은 복사도 잘라내기도 하지 않는다 — 클립보드는 다른 앱과 클립보드 기록이 읽는다. 복사 없이
+        // 지우기만 하는 잘라내기는 사용자가 기대한 일이 아니라 그것도 하지 않는다.
+        const std::optional<text_input_snapshot> value { focused_text_input() };
+        if (value.has_value() == false || value->secret || value->caret == value->anchor)
             return {};
 
         const std::size_t begin { value->caret < value->anchor ? value->caret : value->anchor };
@@ -2046,6 +2056,18 @@ namespace luil {
         return actions;
     }
 
+    std::vector<input_action> interaction_controller::delete_word(const text_input_target target, const bool left) const
+    {
+        const std::optional<text_input_snapshot> value { focused_text_input() };
+        if (value.has_value() == false || value->secret == false)
+            return { text_edit_action(target, left ? text::text_edit_command::delete_word_left : text::text_edit_command::delete_word_right) };
+        // 암호 칸은 낱말 경계를 쓰지 않는다. 고른 구간이 있으면 그것만, 없으면 그쪽 끝까지 지운다.
+        const text::text_edit_command erase { left ? text::text_edit_command::backspace : text::text_edit_command::delete_forward };
+        if (value->caret != value->anchor)
+            return { text_edit_action(target, erase) };
+        return { text_edit_action(target, left ? text::text_edit_command::move_line_start : text::text_edit_command::move_line_end, true), text_edit_action(target, erase) };
+    }
+
     std::optional<std::vector<input_action>> interaction_controller::process_text_input_key(const key_pressed_event& event)
     {
         const std::optional<text_input_target> focused { text_target(snapshot_.focused_input.kind) };
@@ -2054,12 +2076,18 @@ namespace luil {
         const text_input_target target { *focused };
         const bool primary_shortcut { event.primary_shortcut_down() };
         const bool word_navigation { event.word_navigation_down() };
+        // 암호 칸의 낱말 이동은 칸 끝으로 간다. 낱말 경계가 공백 자리를 알린다.
+        const bool whole_line { word_navigation && focused_text_input().value_or(text_input_snapshot {}).secret };
 
         switch (event.key)
         {
         case key_code::arrow_left:
+            if (whole_line)
+                return std::vector<input_action> { text_edit_action(target, text::text_edit_command::move_line_start, event.shift) };
             return std::vector<input_action> { text_edit_action(target, word_navigation ? text::text_edit_command::move_word_left : text::text_edit_command::move_left, event.shift) };
         case key_code::arrow_right:
+            if (whole_line)
+                return std::vector<input_action> { text_edit_action(target, text::text_edit_command::move_line_end, event.shift) };
             return std::vector<input_action> { text_edit_action(target, word_navigation ? text::text_edit_command::move_word_right : text::text_edit_command::move_right, event.shift) };
         case key_code::home:
             return std::vector<input_action> { text_edit_action(target, text::text_edit_command::move_line_start, event.shift) };
@@ -2069,7 +2097,9 @@ namespace luil {
             // Shift+Delete는 선택 영역을 잘라내고, Ctrl+Delete는 오른쪽 낱말을 지운다.
             if (event.shift && event.control == false)
                 return copy_focused_selection(target, true);
-            return std::vector<input_action> { text_edit_action(target, word_navigation ? text::text_edit_command::delete_word_right : text::text_edit_command::delete_forward) };
+            if (word_navigation)
+                return delete_word(target, false);
+            return std::vector<input_action> { text_edit_action(target, text::text_edit_command::delete_forward) };
         case key_code::insert:
             // Ctrl+Insert는 복사, Shift+Insert는 붙여넣기다.
             if (event.control)

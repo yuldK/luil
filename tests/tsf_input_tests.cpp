@@ -274,6 +274,22 @@ TEST_CASE("A TSF session activates and tears down cleanly", "[win32][tsf]")
         REQUIRE(host.edits.empty());
         REQUIRE(host.compositions.empty());
     }
+
+    SECTION("A password box takes no document so the IME does not compose into it")
+    {
+        // 암호 칸은 TIP에 넘기지 않는다. 초점이 없을 때처럼 빈 document가 초점을 받는다.
+        host.focused = luil::text_input_target { 2 };
+        host.document = { u8"", 0u, 0u };
+        host.document.secret = true;
+        session->synchronize();
+        REQUIRE(session->owns_tsf_focus() == false);
+
+        // 일반 칸으로 돌아오면 다시 문서를 넘긴다.
+        host.focused = luil::text_input_target { 1 };
+        host.document = { u8"main", 4u, 4u };
+        session->synchronize();
+        REQUIRE(session->owns_tsf_focus());
+    }
 }
 
 // `ITextStoreACP2` 계약: sink는 하나만 살고, 같은 COM identity의

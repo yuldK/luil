@@ -240,3 +240,54 @@ TEST_CASE("Text hit testing keeps zero-width marks with the chosen boundary", "[
     input.arrange({ { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f });
     REQUIRE(input.offset_at(7.0f + 1.6f, measure) == 3u);
 }
+
+TEST_CASE("A password box draws a dot per character and maps positions back to the text", "[ui][dialog][secret]")
+{
+    // byte 하나가 10px인 가짜 측정기다. 점(U+25CF)은 3바이트라 30px이다.
+    const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; } };
+    luil::text_input_view value {};
+    value.text = u8"a한b";
+    luil::text_input_config config {};
+    config.secret = true;
+    luil::text_input_element input { { luil::application_element_kind(0), u8"password" }, value, config };
+    input.arrange({ { 100.0f, 10.0f, 214.0f, 20.0f }, 1.0f });
+
+    // 점 경계는 0, 30, 60, 90px이다. 35px은 첫 점 뒤이고 원래 글에서는 'a' 뒤(1)다.
+    REQUIRE(input.offset_at(100.0f + 7.0f + 35.0f, measure) == 1u);
+    // 50px은 둘째 점 뒤이고 원래 글에서는 '한' 뒤(4)다 — 한글의 바이트 폭과 상관없다.
+    REQUIRE(input.offset_at(100.0f + 7.0f + 50.0f, measure) == 4u);
+    REQUIRE(input.offset_at(100.0f + 7.0f + 200.0f, measure) == 5u);
+
+    // IME 질의도 점으로 잰다. 원래 글의 [1, 4)는 둘째 점 하나다.
+    const auto span { input.text_span_bounds({ value.text, 5u, 1u, 4u }, measure) };
+    REQUIRE(span.has_value());
+    REQUIRE(span->x == 100.0f + 7.0f + 30.0f);
+    REQUIRE(span->width == 30.0f);
+
+    // 보조 기술은 점을 받고, 플랫폼은 진짜 글과 암호 칸 표식을 받는다.
+    REQUIRE(input.accessibility().value == u8"●●●");
+    REQUIRE(input.accessibility().secret);
+    const auto snapshot { input.text_input() };
+    REQUIRE(snapshot.has_value());
+    REQUIRE(snapshot->text == u8"a한b");
+    REQUIRE(snapshot->secret);
+}
+
+TEST_CASE("Revealing a password box shows the text but keeps it a password box", "[ui][dialog][secret]")
+{
+    const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; } };
+    luil::text_input_view value {};
+    value.text = u8"a한b";
+    luil::text_input_config config {};
+    config.secret = true;
+    config.reveal = true;
+    luil::text_input_element input { { luil::application_element_kind(0), u8"password" }, value, config };
+    input.arrange({ { 100.0f, 10.0f, 214.0f, 20.0f }, 1.0f });
+
+    // 그대로 그리므로 원래 글의 경계로 잰다 (0, 10, 40, 50px).
+    REQUIRE(input.offset_at(100.0f + 7.0f + 35.0f, measure) == 4u);
+    REQUIRE(input.accessibility().value == u8"a한b");
+    // 복사 막기·키보드 종류는 그대로다.
+    REQUIRE(input.accessibility().secret);
+    REQUIRE(input.text_input()->secret);
+}

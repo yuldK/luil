@@ -130,10 +130,11 @@ namespace luil::win32 {
             bool composing { false };
         };
 
+        // 암호 칸은 문서를 내주지 않는다 — Text pattern 없이 가린 값(Value)과 IsPassword만 알린다.
         [[nodiscard]] std::optional<access_text_document> text_document_of(const ui_element& element)
         {
             const std::optional<text_input_snapshot> snapshot { element.text_input() };
-            if (snapshot.has_value() == false)
+            if (snapshot.has_value() == false || snapshot->secret)
                 return std::nullopt;
             if (snapshot->composing)
                 return access_text_document { snapshot->composition_text, snapshot->composition_caret, snapshot->composition_caret, true };
@@ -756,7 +757,7 @@ namespace luil::win32 {
             case UIA_TextPatternId:
                 // 문서를 내주는 텍스트 칸만이다 — caret·선택·구간 질의가 전부
                 // 그 문서 위에서 선다.
-                if (info.role == access_role::edit && element->text_input().has_value())
+                if (info.role == access_role::edit && text_document_of(*element).has_value())
                     *result = static_cast<ITextProvider*>(this);
                 break;
             default:
@@ -812,6 +813,9 @@ namespace luil::win32 {
             case UIA_IsControlElementPropertyId:
             case UIA_IsContentElementPropertyId:
                 set_bool(*result, true);
+                break;
+            case UIA_IsPasswordPropertyId:
+                set_bool(*result, element->accessibility().secret);
                 break;
             default:
                 break;

@@ -1232,7 +1232,9 @@ namespace luil::win32 {
         const std::optional<text_input_snapshot> value { element->text_input() };
         if (value.has_value() == false)
             return {};
-        return { std::u8string { value->text }, value->caret, value->anchor };
+        shadow_document document { std::u8string { value->text }, value->caret, value->anchor };
+        document.secret = value->secret;
+        return document;
     }
 
     // 그림자 문서의 byte 구간이 그 element가 사는 표면에서 차지하는 자리다.

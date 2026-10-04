@@ -59,8 +59,9 @@ namespace luil::android {
         {
             // IME의 편집 상태를 이 값으로 바꾼다.
             std::function<void(const ime_state&)> set_state {};
-            // 소프트 키보드를 띄우거나 내린다.
-            std::function<void(bool)> show_keyboard {};
+            // 소프트 키보드를 띄우거나 내린다. `secret`이면 암호 칸의 키보드다 (추천·학습 없음).
+            // 키보드의 종류는 띄울 때 정해지므로, 띄운 채로 칸의 종류가 바뀌면 다시 불러 세운다.
+            std::function<void(bool show, bool secret)> show_keyboard {};
             // 한 줄 칸에서 IME가 줄을 바꿨다 (Enter). 칸은 줄바꿈을 받지 않고 이 동작으로 바꾼다.
             std::function<void()> submit {};
         };
@@ -85,6 +86,8 @@ namespace luil::android {
 
     private:
         void accept_clean(const ime_state& state);
+        // 키보드를 이 상태로 둔다. 이미 그 상태면(띄운 것이면 종류까지 같으면) 부르지 않는다.
+        void update_keyboard(bool show);
         // 줄바꿈을 글과 범위에서 걷어 낸다. 걷어 낸 것이 있으면 참이다.
         [[nodiscard]] static bool strip_newlines(ime_state& state);
         // 조합을 지금 글로 확정하고 조합 표시를 거둔다.
@@ -105,5 +108,8 @@ namespace luil::android {
         std::uint64_t pending_sequence_ { 0 };
         bool composing_ { false };
         bool keyboard_shown_ { false };
+        // 초점을 가진 칸이 암호 칸인가, 그리고 지금 키보드가 어느 종류로 섰는가다.
+        bool secret_ { false };
+        bool keyboard_secret_ { false };
     };
 } // namespace luil::android

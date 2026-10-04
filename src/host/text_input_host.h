@@ -21,8 +21,10 @@ namespace luil {
         std::size_t caret { 0 };
         std::size_t anchor { 0 };
         std::uint64_t applied_sequence { 0 };
+        // 암호 칸의 문서다. Android는 암호 키보드를 띄우고, TSF에는 이 문서를 넘기지 않는다.
+        bool secret { false };
 
-        // 번호는 처리 완료 표식이고 문서의 내용은 아니다.
+        // 번호와 암호 칸 표식은 문서의 내용이 아니다.
         [[nodiscard]] bool operator==(const text_input_document& other) const
         {
             return text == other.text && caret == other.caret && anchor == other.anchor;

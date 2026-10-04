@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -29,6 +30,48 @@ namespace luil {
             const float first { relative_luminance(background) };
             const float second { relative_luminance(label) };
             return (std::max(first, second) + 0.05f) / (std::min(first, second) + 0.05f) < 3.0f;
+        }
+
+        // 암호 칸이 글자 대신 그리는 점이다 (U+25CF). Windows 암호 칸의 점이고, 작은 글자 크기에서도 •(U+2022)보다
+        // 잘 보인다. 글꼴에 없으면 대체 글꼴이 그리고, 재는 쪽도 같은 길을 탄다.
+        constexpr std::u8string_view secret_mark { u8"\u25CF" };
+
+        [[nodiscard]] bool utf8_lead(const char8_t value) noexcept
+        {
+            return (static_cast<unsigned int>(value) & 0xC0u) != 0x80u;
+        }
+
+        // offset 앞의 code point 수다. 가린 글에서는 그만큼의 점이 그 앞에 선다.
+        [[nodiscard]] std::size_t code_points_before(const std::u8string_view text, const std::size_t offset) noexcept
+        {
+            const std::size_t end { offset < text.size() ? offset : text.size() };
+            return static_cast<std::size_t>(std::count_if(text.begin(), text.begin() + static_cast<std::ptrdiff_t>(end), utf8_lead));
+        }
+
+        // code point마다 점 하나인 가린 글이다. 결합 문자도 하나로 세어, 점이 보이는 글자보다 많을 수 있다.
+        [[nodiscard]] std::u8string masked_text(const std::u8string_view text)
+        {
+            const std::size_t count { code_points_before(text, text.size()) };
+            std::u8string masked {};
+            masked.reserve(count * secret_mark.size());
+            for (std::size_t index { 0 }; index < count; ++index)
+                masked.append(secret_mark);
+            return masked;
+        }
+
+        // 가린 글의 offset(점 경계)을 원래 글의 offset으로 돌린다.
+        [[nodiscard]] std::size_t unmasked_offset(const std::u8string_view text, const std::size_t masked_offset) noexcept
+        {
+            std::size_t remaining { masked_offset / secret_mark.size() };
+            for (std::size_t offset { 0 }; offset < text.size(); ++offset)
+            {
+                if (utf8_lead(text[offset]) == false)
+                    continue;
+                if (remaining == 0)
+                    return offset;
+                --remaining;
+            }
+            return text.size();
         }
     } // namespace
 
@@ -252,6 +295,9 @@ namespace luil {
         , value_ { std::move(value) }
         , config_ { std::move(config) }
     {
+        if (masked())
+            masked_ = masked_text(value_.displayed_text());
+
         // 누름·끌기·더블 클릭은 interaction controller가 직접 다룬다.
         //  - 포인터 x를 offset으로 옮기려면 측정 함수가 필요한데 그것은 입력 thread가 가진다.
         //    여기서는 클릭을 흡수해 hit test 대상이 되게만 한다.
@@ -313,19 +359,32 @@ namespace luil {
         return width > 0.0f ? width : 0.0f;
     }
 
+    bool text_input_element::masked() const noexcept
+    {
+        return config_.secret && config_.reveal == false;
+    }
+
+    std::size_t text_input_element::shown_offset(const std::u8string_view text, const std::size_t offset) const noexcept
+    {
+        return masked() ? code_points_before(text, offset) * secret_mark.size() : offset;
+    }
+
     std::u8string_view text_input_element::displayed_text() const noexcept
     {
         // 조합 중에는 조합 글이 섞인 쪽을 그린다.
         // 확정된 글은 그 동안 logic의 초안에 그대로 남아 있다.
         // 규칙은 view가 갖는다 — 앱이 검색에 쓰는 글과 그리는 글이 같아야 한다.
+        // 가린 칸은 그 글을 가린 점들이다.
+        if (masked())
+            return masked_;
         return value_.displayed_text();
     }
 
     std::size_t text_input_element::displayed_caret() const noexcept
     {
-        const std::u8string_view text { displayed_text() };
+        const std::u8string_view text { value_.displayed_text() };
         const std::size_t caret { value_.composing ? value_.composition_caret : value_.caret };
-        return caret < text.size() ? caret : text.size();
+        return shown_offset(text, caret < text.size() ? caret : text.size());
     }
 
     float text_input_element::scroll_for(const std::function<float(std::u8string_view)>& measure) const
@@ -369,7 +428,7 @@ namespace luil {
 
     std::optional<text_input_snapshot> text_input_element::text_input() const
     {
-        return text_input_snapshot { value_.text, value_.caret, value_.anchor, value_.composing, value_.composition_text, value_.composition_caret, value_.applied_sequence };
+        return text_input_snapshot { value_.text, value_.caret, value_.anchor, value_.composing, value_.composition_text, value_.composition_caret, value_.applied_sequence, config_.secret };
     }
 
     std::optional<rect_f> text_input_element::text_span_bounds(const text_span_query& query, const text_measurer& measurer) const
@@ -381,14 +440,18 @@ namespace luil {
         //  - 확정 글로 재면 조합이 시작되는 순간 offset이 문서 길이를 넘어
         //    구간이 칸 왼쪽 끝으로 무너진다.
         // 스크롤도 같은 문서로 계산해 화면에 그려진 글자와 어긋나지 않는다.
+        // 가린 칸은 그 문서를 가린 점들로 잰다.
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
-        const std::u8string_view text { query.text };
-        const std::size_t begin { query.begin < text.size() ? query.begin : text.size() };
-        const std::size_t clamped_end { query.end < text.size() ? query.end : text.size() };
+        const std::u8string dots { masked() ? masked_text(query.text) : std::u8string {} };
+        const std::u8string_view text { masked() ? std::u8string_view { dots } : query.text };
+        const std::size_t shown_begin { shown_offset(query.text, query.begin) };
+        const std::size_t shown_end { shown_offset(query.text, query.end) };
+        const std::size_t begin { shown_begin < text.size() ? shown_begin : text.size() };
+        const std::size_t clamped_end { shown_end < text.size() ? shown_end : text.size() };
         const std::size_t end { clamped_end > begin ? clamped_end : begin };
 
-        const float left { text_left() - scroll_for(measure, text, query.caret) };
+        const float left { text_left() - scroll_for(measure, text, shown_offset(query.text, query.caret)) };
         const float from { left + measure(text.substr(0, begin)) };
         const float to { left + measure(text.substr(0, end)) };
         return rect_f { from, bounds().y, to - from, bounds().height };
@@ -398,9 +461,12 @@ namespace luil {
     {
         // 조합 중에는 포인터로 caret을 옮기지 않는다.
         //  - 조합은 IME가 소유한다.
-        const std::u8string_view text { value_.text };
+        // 가린 칸은 그려진 점들 위에서 경계를 찾고 원래 글의 경계로 돌린다.
+        const std::u8string dots { masked() ? masked_text(value_.text) : std::u8string {} };
+        const std::u8string_view text { masked() ? std::u8string_view { dots } : std::u8string_view { value_.text } };
+        const auto original = [this](const std::size_t offset) { return masked() ? unmasked_offset(value_.text, offset) : offset; };
         if (measurer == nullptr)
-            return text.size();
+            return value_.text.size();
 
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
@@ -418,17 +484,17 @@ namespace luil {
             boundaries.push_back(text.size());
         const auto after { std::upper_bound(boundaries.begin(), boundaries.end(), target, [&](const float position, const std::size_t offset) { return position < measure(text.substr(0, offset)); }) };
         if (after == boundaries.end())
-            return text.size();
+            return value_.text.size();
         if (after == boundaries.begin())
-            return *after;
+            return original(*after);
         const std::size_t before { *(after - 1) };
         const float after_width { measure(text.substr(0, *after)) };
         if (target - measure(text.substr(0, before)) < after_width - target)
-            return before;
+            return original(before);
         // 폭이 없는 결합 문자도 포함해, 같은 거리에 있는 마지막 경계를 고른다.
         const auto narrower = [&](const float position, const std::size_t offset) { return position < measure(text.substr(0, offset)); };
         const auto last_equal { std::upper_bound(after + 1, boundaries.end(), after_width, narrower) };
-        return *(last_equal - 1);
+        return original(*(last_equal - 1));
     }
 
     void text_input_element::draw(draw_context& context, const interaction_snapshot& interaction) const
@@ -478,8 +544,8 @@ namespace luil {
         const float scroll { scroll_for(measure) };
         // 조합 중에는 선택 대신 조합 구간에 밑줄을 긋는다.
         //  - 그 동안 선택은 IME의 것이다.
-        const std::size_t selection_begin { value_.composing ? 0u : (value_.caret < value_.anchor ? value_.caret : value_.anchor) };
-        const std::size_t selection_end { value_.composing ? 0u : (value_.caret < value_.anchor ? value_.anchor : value_.caret) };
+        const std::size_t selection_begin { value_.composing ? 0u : shown_offset(value_.text, value_.caret < value_.anchor ? value_.caret : value_.anchor) };
+        const std::size_t selection_end { value_.composing ? 0u : shown_offset(value_.text, value_.caret < value_.anchor ? value_.anchor : value_.caret) };
         const float caret_x { left - scroll + measure(text.substr(0, displayed_caret())) };
 
         context.canvas.save();
@@ -511,8 +577,10 @@ namespace luil {
         // 아직 확정되지 않은 글이라는 뜻이다.
         if (value_.composing && value_.composing_end > value_.composing_begin)
         {
-            const std::size_t underline_begin { value_.composing_begin < text.size() ? value_.composing_begin : text.size() };
-            const std::size_t underline_end { value_.composing_end < text.size() ? value_.composing_end : text.size() };
+            const std::size_t shown_begin { shown_offset(value_.composition_text, value_.composing_begin) };
+            const std::size_t shown_end { shown_offset(value_.composition_text, value_.composing_end) };
+            const std::size_t underline_begin { shown_begin < text.size() ? shown_begin : text.size() };
+            const std::size_t underline_end { shown_end < text.size() ? shown_end : text.size() };
             const float from { left - scroll + measure(text.substr(0, underline_begin)) };
             const float to { left - scroll + measure(text.substr(0, underline_end)) };
             const float underline_top { baseline + 2.0f * scale };
@@ -548,6 +616,7 @@ namespace luil {
     {
         // 값은 확정 글이다 — 조합 글은 아직 사용자의 글이 아니라 싣지 않는다
         // (`text_input_view::text`가 같은 판단으로 조합 글을 밖에 둔다).
-        return { .role = access_role::edit, .name = config_.placeholder, .value = value_.text };
+        // 가린 칸은 화면처럼 점이다. 보조 기술이 글자 수는 알되 글은 읽지 못한다.
+        return { .role = access_role::edit, .name = config_.placeholder, .value = masked() ? masked_text(value_.text) : value_.text, .secret = config_.secret };
     }
 } // namespace luil

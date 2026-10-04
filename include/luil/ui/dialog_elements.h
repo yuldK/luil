@@ -214,6 +214,16 @@ namespace luil {
         // 앱이 그 자리를 다른 뜻으로 쓸 때(검색·화살표) 바꾼다 — 무엇을 하는지는
         // 위의 `clear`가 정하므로 글리프만 따라가면 된다.
         char32_t clear_glyph { 0 };
+        // 암호 칸이다 (docs/concepts/text-input.md의 "암호 칸").
+        //  - 글자마다 점(●)으로 그린다. 보조 기술에 넘기는 값도 같은 점이다.
+        //  - 복사·잘라내기를 하지 않고, 낱말 단위 이동·지우기·고르기는 칸 끝·칸 전체로 바꾼다 —
+        //    낱말 경계가 공백 자리를 알린다.
+        //  - 플랫폼에 암호 칸으로 알린다. Android 키보드는 추천·학습을 끄고, Windows는 IME 조합을
+        //    붙이지 않는다.
+        bool secret { false };
+        // 암호 칸의 글을 그대로 그린다 (앱의 "보이기" 단추). 그리기와 보조 기술의 값만 바뀌고 나머지 암호 칸의
+        // 규칙은 그대로다 — 키보드를 다시 세우지 않고 켜고 끌 수 있다.
+        bool reveal { false };
     };
 
     // 앞 글리프와 지우기 버튼의 크기, 그리고 글과의 간격이다 (논리 픽셀).
@@ -271,9 +281,15 @@ namespace luil {
         // 같은 식을 쓰기 위한 것이다.
         [[nodiscard]] float scroll_for(const std::function<float(std::u8string_view)>& measure) const;
         [[nodiscard]] float scroll_for(const std::function<float(std::u8string_view)>& measure, std::u8string_view text, std::size_t caret) const;
+        // 글자 대신 점을 그리는가 (암호 칸이고 보이기가 꺼졌다).
+        [[nodiscard]] bool masked() const noexcept;
+        // 글 `text`의 offset이 그려진 글에서 서는 자리다. 가리지 않으면 그대로다.
+        [[nodiscard]] std::size_t shown_offset(std::u8string_view text, std::size_t offset) const noexcept;
 
         text_input_view value_ {};
         text_input_config config_ {};
+        // 가린 칸이 그리는 점들이다 (보이는 글을 가린 것). 값이 element의 수명 동안 그대로라 한 번 짓는다.
+        std::u8string masked_ {};
         // 지우기 액션이 없으면 nullptr다.
         ui_element* clear_ { nullptr };
         float scale_ { 1.0f };

@@ -48,3 +48,23 @@ Android에서는 GameActivity가 주는 GameTextInput이 IME(`InputConnection`)�
 - glue는 IME 상태가 바뀌어도 looper를 깨우지 않는다. host가 GameActivity의 IME 알림을 가로채 UI thread를 깨운다.
 
 클립보드는 UI thread가 JNI로 `ClipboardManager`를 부른다 ([`android_clipboard.h`](../../src/android/android_clipboard.h)). 붙여넣기는 Windows처럼 그 칸의 `insert` 편집으로 앱에 보낸다. 키보드의 복사·붙여넣기·잘라내기 전용 키(`KEYCODE_COPY` 등)는 Ctrl+C·V·X로 옮긴다.
+
+## 암호 칸
+
+`text_input_config::secret`을 켠 칸이다. 글은 앱의 초안에 그대로 있고, 가리는 일은 element와 플랫폼 층이 한다.
+
+| 자리 | 하는 일 |
+| --- | --- |
+| 그리기 | code point마다 점(●, U+25CF) 하나를 그린다. caret·선택·포인터 위치·후보 창 자리를 모두 점들 위에서 재고 원래 글의 offset으로 돌린다 |
+| 보이기 | `reveal`을 켜면 글을 그대로 그린다. 앱이 칸 오른쪽 단추(`clear` 자리, 글리프는 앱이 고른다)로 켜고 끈다. 나머지 규칙은 그대로다 |
+| 클립보드 | 복사·잘라내기(Ctrl+C·X, Shift+Delete, Ctrl+Insert, Android 키보드의 복사 키)를 하지 않는다. 보이기를 켜도 같다. 붙여넣기는 된다 — 암호 관리자에서 붙여 넣는다 |
+| 낱말 단위 | Ctrl+←·→는 칸 끝으로, Ctrl+Backspace·Delete는 고른 구간 또는 그쪽 끝까지, 더블 클릭은 칸 전체다. 낱말 경계가 공백 자리를 알리기 때문이다 |
+| Android 키보드 | `TYPE_TEXT_VARIATION_PASSWORD`와 `IME_FLAG_NO_PERSONALIZED_LEARNING`으로 띄워 키보드가 추천 줄에 글을 띄우지 않고 배우지 않는다. 키보드가 떠 있는 채로 일반 칸과 암호 칸 사이를 옮기면 키보드를 다시 세운다. 보이기는 다시 세우지 않는다 |
+| Windows IME | TSF에 문서를 넘기지 않는다. 초점이 없을 때처럼 빈 document가 초점을 받아 IME가 조합하지 않고, 키는 `WM_CHAR`로 칸에 바로 간다. Windows 표준 암호 칸처럼 한글 조합이 꺼진다 |
+| 보조 기술 | 값은 화면과 같은 점이고 UIA `IsPassword`가 참이다. Text pattern은 내주지 않는다 |
+
+- 결합 문자도 점 하나로 세어, 점이 보이는 글자보다 많을 수 있다.
+- IME는 진짜 글을 받는다. 편집하려면 있어야 한다.
+- 화면 캡처 막기(`FLAG_SECURE`)는 창 전체의 일이라 앱이 정한다.
+- 암호를 담은 문자열은 logic의 초안, snapshot, IME 사본으로 여러 thread를 지나므로 메모리에서 지운다고 보장하지 않는다.
+- Android의 "비밀번호 표시"(입력한 글자를 잠깐 보이기) 설정은 따르지 않는다. 늘 가린다.

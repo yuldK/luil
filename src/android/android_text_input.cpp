@@ -186,15 +186,19 @@ namespace luil::android {
                 document_ = observed_;
                 send(document_);
             }
-            if (target_.has_value() != keyboard_shown_)
-            {
-                keyboard_shown_ = target_.has_value();
-                if (platform_.show_keyboard)
-                    platform_.show_keyboard(keyboard_shown_);
-            }
+            secret_ = target_.has_value() && observed_.secret;
+            update_keyboard(target_.has_value());
             return;
         }
-        if (target_.has_value() == false || composing_)
+        if (target_.has_value() == false)
+            return;
+        // 같은 칸이 암호 칸이 되거나 풀렸다 (앱이 설정을 바꿨다). 키보드가 떠 있으면 다시 세운다.
+        if (const bool secret { host_->committed_document().secret }; secret != secret_)
+        {
+            secret_ = secret;
+            update_keyboard(keyboard_shown_);
+        }
+        if (composing_)
             return;
         // **앱 쪽 글이 바뀌었을 때만** IME에 넘긴다. IME가 고친 글은 logic을 거쳐 돌아오는
         // 동안 앱의 글이 아직 옛것이다 — 그 사이에 옛 글을 넘기면 IME가 되돌아간다.
@@ -300,12 +304,7 @@ namespace luil::android {
     {
         finish_composition();
         target_.reset();
-        if (keyboard_shown_)
-        {
-            keyboard_shown_ = false;
-            if (platform_.show_keyboard)
-                platform_.show_keyboard(false);
-        }
+        update_keyboard(false);
     }
 
     void ime_session::set_keyboard_visible(const bool visible) noexcept
@@ -317,9 +316,17 @@ namespace luil::android {
     {
         if (target_.has_value() == false || keyboard_shown_)
             return;
-        keyboard_shown_ = true;
+        update_keyboard(true);
+    }
+
+    void ime_session::update_keyboard(const bool show)
+    {
+        if (show == keyboard_shown_ && (show == false || secret_ == keyboard_secret_))
+            return;
+        keyboard_shown_ = show;
+        keyboard_secret_ = secret_;
         if (platform_.show_keyboard)
-            platform_.show_keyboard(true);
+            platform_.show_keyboard(show, secret_);
     }
 
     bool ime_session::composing() const noexcept

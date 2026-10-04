@@ -49,11 +49,20 @@ namespace {
     {
         [[nodiscard]] luil::android::ime_session::platform hooks()
         {
-            return { .set_state = [this](const luil::android::ime_state& state) { sent.push_back(state); }, .show_keyboard = [this](const bool show) { keyboard.push_back(show); } };
+            return {
+                .set_state = [this](const luil::android::ime_state& state) { sent.push_back(state); },
+                .show_keyboard =
+                    [this](const bool show, const bool secret) {
+                        keyboard.push_back(show);
+                        secret_keyboard.push_back(secret);
+                    },
+            };
         }
 
         std::vector<luil::android::ime_state> sent {};
         std::vector<bool> keyboard {};
+        // 키보드를 부를 때마다 암호 칸이었는가다 (`keyboard`와 같은 차례).
+        std::vector<bool> secret_keyboard {};
     };
 } // namespace
 
@@ -311,5 +320,68 @@ TEST_CASE("A dismissed keyboard comes back when the box is pressed again", "[and
     session.detach();
     REQUIRE(platform.keyboard.back() == false);
     session.synchronize();
+    REQUIRE(platform.keyboard.back());
+}
+
+TEST_CASE("Moving into a password box with the keyboard up rebuilds it as a password keyboard", "[android][ime][secret]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    host.committed = { u8"user", 4, 4 };
+    session.synchronize();
+    REQUIRE(platform.keyboard == std::vector<bool> { true });
+    REQUIRE(platform.secret_keyboard == std::vector<bool> { false });
+
+    // 일반 칸에서 일반 칸으로는 다시 세우지 않는다 (지금처럼).
+    host.target = luil::text_input_target { 8 };
+    host.committed = { u8"host", 4, 4 };
+    session.synchronize();
+    REQUIRE(platform.keyboard.size() == 1u);
+
+    // 키보드가 떠 있는 채로 암호 칸에 서면 암호 키보드로 다시 세운다.
+    host.target = luil::text_input_target { 9 };
+    host.committed = { u8"", 0, 0 };
+    host.committed.secret = true;
+    session.synchronize();
+    REQUIRE(platform.keyboard == std::vector<bool> { true, true });
+    REQUIRE(platform.secret_keyboard == std::vector<bool> { false, true });
+    // IME는 진짜 글을 받는다 — 가리는 것은 그리기의 일이다.
+    REQUIRE(platform.sent.back().text.empty());
+
+    // 같은 칸에서 다시 맞춰도 더 부르지 않는다.
+    session.synchronize();
+    REQUIRE(platform.keyboard.size() == 2u);
+
+    // 일반 칸으로 돌아오면 일반 키보드로 다시 세운다.
+    host.target = note;
+    host.committed = { u8"user", 4, 4 };
+    session.synchronize();
+    REQUIRE(platform.secret_keyboard == std::vector<bool> { false, true, false });
+}
+
+TEST_CASE("A dismissed keyboard on a password box comes back as a password keyboard", "[android][ime][secret]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    host.committed.secret = true;
+    session.synchronize();
+    REQUIRE(platform.secret_keyboard == std::vector<bool> { true });
+
+    // 사용자가 내린 동안 칸이 풀려도 부르지 않고, 다시 띄울 때 지금 종류로 띄운다.
+    session.set_keyboard_visible(false);
+    host.committed.secret = false;
+    session.synchronize();
+    REQUIRE(platform.keyboard.size() == 1u);
+    session.request_keyboard();
+    REQUIRE(platform.secret_keyboard == std::vector<bool> { true, false });
+
+    // 떠 있는 채로 같은 칸이 암호 칸이 되면 다시 세운다.
+    host.committed.secret = true;
+    session.synchronize();
+    REQUIRE(platform.secret_keyboard == std::vector<bool> { true, false, true });
     REQUIRE(platform.keyboard.back());
 }

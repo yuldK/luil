@@ -813,7 +813,11 @@ namespace luil::win32 {
             // element의 논리 focus와 HWND의 keyboard focus가 모두 있어야
             // 이 문서가 TIP의 입력 대상이다. HWND focus 상실은 target을 즉시
             // 비우고, 논리 focus도 별도 raw input으로 뒤이어 해제된다.
-            const std::optional<text_input_target> target { window_focused_ ? host_->focused_text_target() : std::nullopt };
+            // 암호 칸은 TIP에 넘기지 않는다 — 초점이 없을 때처럼 빈 document가 초점을 받아 IME가 조합하지
+            // 않고, 키는 WM_CHAR로 바로 칸에 간다 (Windows 표준 암호 칸이 IME를 끄는 것과 같다).
+            std::optional<text_input_target> target { window_focused_ ? host_->focused_text_target() : std::nullopt };
+            if (target.has_value() && host_->committed_document().secret)
+                target.reset();
             if (target != store_->target())
             {
                 // 초점이 옮겨 간다.

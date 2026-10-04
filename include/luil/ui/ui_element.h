@@ -102,6 +102,9 @@ namespace luil {
         std::u8string_view composition_text {};
         std::size_t composition_caret { 0 };
         std::uint64_t applied_sequence { 0 };
+        // 암호 칸이다 (`text_input_config::secret`). 복사와 낱말 단위 편집을 막고 플랫폼 IME·보조 기술에 암호
+        // 칸으로 알리는 근거다. 위의 글은 가리지 않은 진짜 글이다 — IME가 편집하려면 있어야 한다.
+        bool secret { false };
     };
 
     // 액션은 상태를 바꾸지 않고 후속 메시지를 반환한다.

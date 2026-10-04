@@ -63,11 +63,12 @@ namespace {
     class test_text_input final : public luil::ui_element
     {
     public:
-        test_text_input(luil::ui_element_id id, std::u8string text, const std::size_t caret, const std::size_t anchor)
+        test_text_input(luil::ui_element_id id, std::u8string text, const std::size_t caret, const std::size_t anchor, const bool secret = false)
             : ui_element { std::move(id) }
             , text_ { std::move(text) }
             , caret_ { caret }
             , anchor_ { anchor }
+            , secret_ { secret }
         {
             set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; });
         }
@@ -97,13 +98,16 @@ namespace {
 
         [[nodiscard]] std::optional<luil::text_input_snapshot> text_input() const override
         {
-            return luil::text_input_snapshot { text_, caret_, anchor_ };
+            luil::text_input_snapshot snapshot { text_, caret_, anchor_ };
+            snapshot.secret = secret_;
+            return snapshot;
         }
 
     private:
         std::u8string text_ {};
         std::size_t caret_ { 0 };
         std::size_t anchor_ { 0 };
+        bool secret_ { false };
     };
 
     // 라우팅 호출을 기록하는 policy다.
@@ -423,6 +427,68 @@ TEST_CASE("Text editing separates primary shortcuts from word navigation", "[ui]
     const auto uncopied { controller.process(control_copy) };
     for (const luil::input_action& action : uncopied)
         REQUIRE(std::get_if<luil::clipboard_copy_request>(&action) == nullptr);
+}
+
+TEST_CASE("A password box never copies and edits whole instead of by word", "[ui][interaction][text][secret]")
+{
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    const auto focus_box = [&](const std::size_t caret, const std::size_t anchor) {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        auto input { std::make_unique<test_text_input>(luil::ui_element_id { kind_query_input }, u8"my pass word", caret, anchor, true) };
+        input->arrange({ { 0.0f, 0.0f, 150.0f, 20.0f }, 1.0f });
+        root->add(std::move(input));
+        controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    };
+    const auto commands_of = [&policy, &controller](const luil::raw_input_event& event) {
+        const int before { policy.edit_count };
+        const std::vector<luil::input_action> actions { controller.process(event) };
+        for (const luil::input_action& action : actions)
+            REQUIRE(std::holds_alternative<luil::clipboard_copy_request>(action) == false);
+        return std::pair { actions.size(), policy.edit_count - before };
+    };
+
+    // 고른 구간이 있어도 클립보드로 가는 것은 없다 (Ctrl+C, Ctrl+X, Shift+Delete, Ctrl+Insert).
+    focus_box(2u, 7u);
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 30.0f, 10.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(luil::pointer_released_event { 30.0f, 10.0f, luil::pointer_button::left, at(20) }));
+    REQUIRE(controller.snapshot().focused_input == luil::ui_element_id { kind_query_input });
+    REQUIRE(commands_of(luil::key_pressed_event { luil::key_code::key_c, true, false }) == std::pair<std::size_t, int> { 0u, 0 });
+    REQUIRE(commands_of(luil::key_pressed_event { luil::key_code::key_x, true, false }) == std::pair<std::size_t, int> { 0u, 0 });
+    REQUIRE(commands_of(luil::key_pressed_event { luil::key_code::delete_forward, false, true }) == std::pair<std::size_t, int> { 0u, 0 });
+    REQUIRE(commands_of(luil::key_pressed_event { luil::key_code::insert, true, false }) == std::pair<std::size_t, int> { 0u, 0 });
+    // 붙여넣기는 그대로다 — 암호 관리자에서 붙여 넣는다.
+    const std::vector<luil::input_action> pasted { controller.process(luil::key_pressed_event { luil::key_code::key_v, true, false }) };
+    REQUIRE(pasted.size() == 1u);
+    REQUIRE(std::get_if<luil::clipboard_paste_request>(&pasted[0]) != nullptr);
+
+    // 낱말 이동은 칸 끝으로 간다.
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::arrow_left, true, false }));
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::move_line_start);
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::arrow_right, true, true }));
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::move_line_end);
+    REQUIRE(policy.last_edit.extend);
+    // 낱말 없는 이동은 그대로 한 글자다.
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::arrow_left }));
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::move_left);
+
+    // 고른 구간이 있으면 Ctrl+Backspace는 그것만 지운다.
+    REQUIRE(commands_of(luil::character_typed_event { char32_t { 0x7F } }) == std::pair<std::size_t, int> { 1u, 1 });
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::backspace);
+
+    // 고른 구간이 없으면 그쪽 끝까지 골라 지운다.
+    focus_box(7u, 7u);
+    REQUIRE(commands_of(luil::character_typed_event { char32_t { 0x7F } }) == std::pair<std::size_t, int> { 2u, 2 });
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::backspace);
+    REQUIRE(commands_of(luil::key_pressed_event { luil::key_code::delete_forward, true, false }) == std::pair<std::size_t, int> { 2u, 2 });
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::delete_forward);
+
+    // 두 번 누르면 낱말 대신 칸 전체를 고른다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 30.0f, 10.0f, luil::pointer_button::left, at(1000) }));
+    static_cast<void>(controller.process(luil::pointer_released_event { 30.0f, 10.0f, luil::pointer_button::left, at(1020) }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 30.0f, 10.0f, luil::pointer_button::left, at(1100) }));
+    REQUIRE(policy.last_edit.command == luil::text::text_edit_command::select_all);
 }
 
 TEST_CASE("Pressing elsewhere or losing the window releases the text focus", "[ui][interaction][policy]")

@@ -612,6 +612,10 @@ namespace luil {
         // `erase`면 지우기까지 함께 낸다 (잘라내기).
         // 선택이 없으면 빈 목록이다.
         [[nodiscard]] std::vector<input_action> copy_focused_selection(text_input_target target, bool erase) const;
+        // 초점을 가진 텍스트 박스의 글이다. 없으면 nullopt다.
+        [[nodiscard]] std::optional<text_input_snapshot> focused_text_input() const;
+        // 초점을 가진 박스에서 낱말 하나를 지운다 (Ctrl+Backspace·Ctrl+Delete). 암호 칸은 그쪽 끝까지다.
+        [[nodiscard]] std::vector<input_action> delete_word(text_input_target target, bool left) const;
         // 포인터 x를 그 텍스트 박스의 caret 자리로 옮기는 편집 동작이다.
         [[nodiscard]] std::vector<input_action> place_text_caret(const ui_element& element, float x, bool extend, bool select_word) const;
         // surface가 가리키는 tree다.

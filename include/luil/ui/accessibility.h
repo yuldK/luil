@@ -75,6 +75,8 @@ namespace luil {
         std::optional<access_range> range {};
         // 텍스트 칸의 글, 드롭다운의 현재 선택 같은 "지금 값"이다.
         std::u8string value {};
+        // 암호 칸이다. 값은 화면처럼 가린 점이고, 보조 기술에 암호 칸으로 알린다 (UIA IsPassword).
+        bool secret { false };
 
         [[nodiscard]] bool operator==(const access_info&) const = default;
     };

@@ -333,7 +333,7 @@ namespace luil::android {
                 const std::optional<text_input_snapshot> value { location.element != nullptr ? location.element->text_input() : std::nullopt };
                 if (value.has_value() == false)
                     return {};
-                return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence };
+                return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence, value->secret };
             }
 
             [[nodiscard]] std::optional<rect_f> text_rect(const text_input_document& document, const std::size_t begin, const std::size_t end) const override
@@ -517,14 +517,16 @@ namespace luil::android {
                     ime_session::platform {
                         .set_state = [this](const ime_state& state) { set_ime_state(state); },
                         .show_keyboard =
-                            [this](const bool show) {
+                            [this](const bool show, const bool secret) {
                                 if (show)
                                 {
                                     // 한 줄 칸이다. 가로 화면에서 키보드가 칸을 가린 전체 화면 편집기로 바뀌지
                                     // 않게 하고, 완료 동작은 Enter로 보낸다 (APP_CMD_EDITOR_ACTION). IME 연결을
                                     // 다시 세워야 값이 적용된다.
-                                    GameActivity_setImeEditorInfo(
-                                        app_->activity, TYPE_CLASS_TEXT, IME_ACTION_DONE, static_cast<GameTextInputImeOptions>(IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI));
+                                    // 암호 칸은 암호 키보드다. 추천 줄에 글을 띄우지 않고 쓴 글을 배우지 않는다.
+                                    const std::uint32_t type { secret ? TYPE_CLASS_TEXT | TYPE_TEXT_VARIATION_PASSWORD : TYPE_CLASS_TEXT };
+                                    const std::uint32_t options { IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI | (secret ? IME_FLAG_NO_PERSONALIZED_LEARNING : 0u) };
+                                    GameActivity_setImeEditorInfo(app_->activity, static_cast<GameTextInputType>(type), IME_ACTION_DONE, static_cast<GameTextInputImeOptions>(options));
                                     GameActivity_restartInput(app_->activity);
                                     GameActivity_showSoftInput(app_->activity, 0);
                                 }
