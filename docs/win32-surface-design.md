@@ -41,6 +41,10 @@ Application-window 구현이 process 또는 window-set concern을 소유하므�
 
 반환값은 optional `LRESULT`다. 값이 있으면 공통 계층이 처리했으며 `nullopt`이면 concrete surface가 main-window, caption, popup, sizing 또는 lifecycle 동작을 계속 처리한다.
 
+Custom caption을 가진 main·secondary surface는 `caption_surface::handle_caption_message`에서 `WM_NCACTIVATE`를 함께 처리한다. 최소화되지 않은 창은 `DefWindowProcW(hwnd, WM_NCACTIVATE, wParam, -1)`에 맡겨 활성 상태 전환을 유지하면서 기본 비클라이언트 재그리기만 억제한다. 반환값도 그대로 전달한다. 비활성 요청에 무조건 0을 반환하면 전환을 거부하므로 사용하지 않는다. 최소화된 창은 원래 `lParam`으로 기본 처리한다 ([Microsoft 문서](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-ncactivate)).
+
+`WM_NCPAINT`, `WM_NCMOUSELEAVE`, `WM_SETTEXT`, `WM_SETICON`은 이 억제 대상에 넣지 않는다. DWM 프레임과 제목·아이콘 갱신, hover 정리와 시스템 메뉴의 기존 경로를 유지한다.
+
 Pointer coordinate는 physical client pixel이다. Wheel의 screen coordinate는 수신 surface의 client coordinate로 바꾼다. Double-click message는 일반 두 번째 press가 되며 click count 해석은 interaction controller가 맡는다. Modifier 없는 printable character는 `WM_CHAR`로, named key와 modifier가 있는 character key는 공통 key vocabulary로 전달한다.
 
 Pointer capture는 `surface_context`가 관리하는 process-global state다. `SetCapture`가 실제로 성공했을 때만 cancellation을 준비한다. 자체 `ReleaseCapture` 전에 해제 상태로 바꾸는데, Win32가 `WM_CAPTURECHANGED`를 동기적으로 보내기 때문이다. 다른 window가 capture를 가져가면 tree 밖 release를 합성해 click 없이 press와 drag state를 정리한다.
@@ -113,3 +117,7 @@ Main application window는 `window_surface`에 `app_host`, popup과 secondary su
 ## 검증
 
 [`tests/surface_input_tests.cpp`](../tests/surface_input_tests.cpp)는 message 변환과 surface tag를 검증하고 [`tests/surface_invalidate_tests.cpp`](../tests/surface_invalidate_tests.cpp)는 repaint 판단을 검증하며 [`tests/window_mode_tests.cpp`](../tests/window_mode_tests.cpp)는 창 모드의 style·hit·목표 사각형·보고 배치를 검증한다. Secondary, popup, accessibility, renderer, text-input, WebView, OLE test는 공통 surface 경계에 붙은 service를 반복 검증한다.
+
+[`tests/secondary_surface_tests.cpp`](../tests/secondary_surface_tests.cpp)는 공통 캡션과 보조 창의 실제 message 경로에서 활성·비활성 전환 허용, 전체 버튼·닫기 전용 구성, 96·144·192 DPI, 최소화 분기와 OS 제목·아이콘·스타일·시스템 메뉴 보존을 검증한다.
+
+덧그리기 검증은 `PrintWindow`가 캡션을 다시 그려 문제를 가릴 수 있으므로, 활성 전환 직후의 실제 창 표면을 화면에서 읽어 판정한다. 2026-10-06에 Release CPU·Direct3D와 Debug CPU 데모에서 전체 버튼의 주 창과 닫기 전용 보조 창의 활성 전환을 반복하고, 비클라이언트 활성·그리기·커서 이탈 메시지 직후 캡션 픽셀이 유지되는 것을 확인했다. 이동·크기 변경, 최소화·최대화·복원·닫기와 시스템 메뉴도 확인했다. 연결된 세 모니터의 실제 DPI는 모두 144였으므로, 96·192 DPI는 `WM_DPICHANGED`와 이에 따른 실제 tree 재배치로 보완했다. 물리 모니터의 서로 다른 DPI 간 이동 검증은 포함하지 않는다.

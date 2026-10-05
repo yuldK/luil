@@ -17,8 +17,7 @@ namespace luil::win32 {
         }
     } // namespace
 
-    LRESULT caption_hit_test(
-        const HWND window, const LPARAM long_parameter, const std::uint32_t dpi, const caption_config& caption, const window_config& config, const window_display_mode mode)
+    LRESULT caption_hit_test(const HWND window, const LPARAM long_parameter, const std::uint32_t dpi, const caption_config& caption, const window_config& config, const window_display_mode mode)
     {
         // 전체 화면에서는 DWM에게도 묻지 않는다.
         // 시스템 캡션 버튼을 대신 판정해 주는 자리라 `HTMAXBUTTON`을 돌려줄 수 있고,
@@ -39,8 +38,8 @@ namespace luil::win32 {
             config.resize_corner_thickness,
         };
         const window_hit hit {
-            hit_test_window(metrics, mode, window_rectangle.right - window_rectangle.left, window_rectangle.bottom - window_rectangle.top, dpi,
-                GET_X_LPARAM(long_parameter) - window_rectangle.left, GET_Y_LPARAM(long_parameter) - window_rectangle.top),
+            hit_test_window(metrics, mode, window_rectangle.right - window_rectangle.left, window_rectangle.bottom - window_rectangle.top, dpi, GET_X_LPARAM(long_parameter) - window_rectangle.left,
+                GET_Y_LPARAM(long_parameter) - window_rectangle.top),
         };
         switch (hit)
         {
@@ -297,6 +296,11 @@ namespace luil::win32 {
     {
         switch (message)
         {
+        case WM_NCACTIVATE:
+            // -1은 기본 비클라이언트 재그리기만 막는다. 비활성 전환의 허용 여부는
+            // DefWindowProc의 반환값을 유지한다 (0을 돌리면 전환을 거부한다).
+            // 최소화된 창은 문서의 지침대로 원래 인자로 기본 처리한다.
+            return DefWindowProcW(window_, message, word_parameter, IsIconic(window_) != FALSE ? long_parameter : LPARAM { -1 });
         case WM_NCCALCSIZE:
             // 비클라이언트를 0으로 만든다 (client == window rect).
             if (word_parameter != 0)
