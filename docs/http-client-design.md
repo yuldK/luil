@@ -179,7 +179,7 @@ Android의 `http_client`는 JNI로 `java.net.HttpURLConnection`을 부른다 ([`
 - **압축.** `decompress`가 참이면 플랫폼이 gzip을 청하고 몰래 푼다. 그때 답의 `Content-Encoding`과 `Content-Length` 헤더는 지워진 채로 온다. 거짓이면 `Accept-Encoding: identity`를 보낸다. deflate는 풀지 않는다.
 - **Timeout.** `connect_timeout`과 `receive_timeout`은 연결·읽기 상한이 된다. `send_timeout`에 해당하는 것이 없어 몸 보내기는 `total_timeout`만 막는다.
 - **헤더.** 플랫폼이 지어 붙이는 `X-Android-*` 헤더는 답에서 뺀다.
-- **Charset.** utf-8과 utf-16만 옮긴다. 그 밖의 charset은 `parse_error`에 "Unsupported charset"이 남고 바이트는 그대로다. bionic의 `iconv`가 API 28부터라 minSdk 26에서 쓸 수 없다.
+- **Charset.** UTF-8은 기존 판정, UTF-16은 엄격한 C++ 변환을 유지한다. 나머지는 C++ JNI에서 Android `CharsetDecoder`를 호출한다. EUC-KR·CP949는 확장 한글을 포함하는 windows-949, Shift_JIS·CP932는 windows-31j, Latin-1은 기존 Windows 해석과 같은 windows-1252로 읽는다. 그 밖의 이름은 Android가 지원하는 Charset에 맡긴다. 잘린 바이트와 지원하지 않는 이름은 `parse_error`이고 원본 바이트는 보존한다. 새 Java 소스나 추가 변환 라이브러리가 필요 없다.
 - **TLS.** 플랫폼 기본값과 인증서 검증을 그대로 쓴다. TLS 1.2·1.3만으로 묶으려면 직접 만든 `SSLSocketFactory`가 필요해 두지 않았다 (Android 9 이하는 1.0·1.1도 받을 수 있다).
 - **오류.** `native_error`는 0이고 `message`가 Java 예외의 클래스 이름과 글이다. 앱의 network security config가 그 host로 평문 http를 막으면 선을 건드리기 전에 `secure_failure`로 답한다 (`NetworkSecurityPolicy`에 묻는다. 플랫폼은 뜻이 드러나지 않는 `IOException`을 던진다).
 - **몸과 동사.** 플랫폼은 몸 있는 GET을 POST로 바꾸고 몸 있는 DELETE를 거절한다 (`connection_lost`). WinHTTP는 그대로 보낸다.

@@ -53,7 +53,7 @@ namespace luil {
         if (config_.placeholder.empty() || config_.placeholder_font_size <= 0.0f)
             return;
 
-        const SkFont font { sk_ref_sp(context.ui_typeface), config_.placeholder_font_size * scale_ };
+        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(config_.placeholder_font_size, scale_) };
         SkFontMetrics metrics {};
         font.getMetrics(&metrics);
         // 글자의 시각적 가운데는 상자의 가운데에서 ascent·descent의 절반만큼 내려간다.

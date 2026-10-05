@@ -31,6 +31,9 @@ namespace luil {
         // 앱의 자리에서 표면 끝까지의 거리다 (물리 픽셀). Android는 안전 영역 밖(상태 표시줄·제스처 막대·컷아웃)이고
         // Windows는 0이다. scrim·시트 바탕을 화면 끝까지 칠할 때 쓴다 (`window_surface`).
         edge_insets outside {};
+        // 시스템이 키운 12sp 글자의 dp / 12다. Android 비선형 변환의 대표값이다.
+        // 실제 크기는 scaled_font_size로 조회한다. 글자 설정만 바뀌어도 metrics를 다시 보낸다.
+        float text_scale { 1.0f };
 
         [[nodiscard]] bool operator==(const window_metrics&) const noexcept = default;
     };

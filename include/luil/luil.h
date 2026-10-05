@@ -1,5 +1,7 @@
 #pragma once
 
+#include "luil/ui/font_scale.h"
+
 // 라이브러리 공개 API 전체를 한 번에 들이는 umbrella header다.
 // 빌드 시간을 아끼려면 필요한 header만 골라 include해도 된다 —
 // 어느 쪽이든 경로는 항상 `luil/` 접두로 시작한다.
@@ -57,6 +59,7 @@
 #include "luil/ui/stack_element.h"
 #include "luil/ui/strip_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/text_input_options.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/toast_element.h"
 #include "luil/ui/transition.h"

@@ -174,6 +174,16 @@ namespace luil::android {
     void ime_session::synchronize()
     {
         const std::optional<text_input_target> target { host_->focused_text_target() };
+        if (target.has_value() && (target != target_ || composing_ == false))
+        {
+            const text_input_options options { host_->input_options() };
+            if (options_ != options)
+            {
+                options_ = options;
+                if (platform_.configure)
+                    platform_.configure(options);
+            }
+        }
         if (target != target_)
         {
             // 초점이 옮겨 간다. 조합 중이었으면 옛 칸에 확정한다.
@@ -351,6 +361,14 @@ namespace luil::android {
         clear.target = *target_;
         clear.composing = false;
         host_->post_composition(std::move(clear));
+    }
+
+    void ime_session::commit_composition()
+    {
+        if (composing_ == false)
+            return;
+        finish_composition();
+        send(document_);
     }
 
     void ime_session::post_document(const text_input_document& document)

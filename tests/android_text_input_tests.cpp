@@ -24,6 +24,11 @@ namespace {
             return committed;
         }
 
+        [[nodiscard]] luil::text_input_options input_options() const override
+        {
+            return options;
+        }
+
         [[nodiscard]] std::optional<luil::rect_f> text_rect(const luil::text_input_document&, std::size_t, std::size_t) const override
         {
             return std::nullopt;
@@ -41,6 +46,7 @@ namespace {
 
         std::optional<luil::text_input_target> target {};
         luil::text_input_document committed {};
+        luil::text_input_options options {};
         std::vector<luil::text_composition_event> compositions {};
         std::vector<luil::text_edit_request> edits {};
     };
@@ -56,6 +62,7 @@ namespace {
                         keyboard.push_back(show);
                         secret_keyboard.push_back(secret);
                     },
+                .configure = [this](const luil::text_input_options& options) { configured.push_back(options); },
             };
         }
 
@@ -63,8 +70,38 @@ namespace {
         std::vector<bool> keyboard {};
         // 키보드를 부를 때마다 암호 칸이었는가다 (`keyboard`와 같은 차례).
         std::vector<bool> secret_keyboard {};
+        std::vector<luil::text_input_options> configured {};
     };
 } // namespace
+
+TEST_CASE("Keyboard options change without replacing the focused document or its composition", "[android][ime]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    session.synchronize();
+    REQUIRE(platform.configured.size() == 1u);
+    const std::size_t documents { platform.sent.size() };
+    host.options = { .kind = luil::text_input_kind::decimal, .action = luil::text_input_action::next, .signed_number = true };
+    session.synchronize();
+    REQUIRE(platform.configured.back() == host.options);
+    REQUIRE(platform.sent.size() == documents);
+    session.synchronize();
+    REQUIRE(platform.configured.size() == 2u);
+    session.accept({ .text = u8"12", .selection = { 2, 2 }, .composing = { 0, 2 } });
+    host.options.action = luil::text_input_action::done;
+    session.synchronize();
+    REQUIRE(session.composing());
+    REQUIRE(platform.configured.back().action == luil::text_input_action::next);
+    REQUIRE(platform.sent.size() == documents);
+    session.commit_composition();
+    REQUIRE(session.composing() == false);
+    REQUIRE(platform.sent.back().text == u8"12");
+    REQUIRE(platform.sent.back().composing.defined() == false);
+    session.synchronize();
+    REQUIRE(platform.configured.back().action == luil::text_input_action::done);
+}
 
 TEST_CASE("UTF-16 indexes and UTF-8 offsets meet at character boundaries", "[android][ime]")
 {

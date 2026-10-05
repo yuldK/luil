@@ -49,6 +49,16 @@ Android에서는 GameActivity가 주는 GameTextInput이 IME(`InputConnection`)�
 
 클립보드는 UI thread가 JNI로 `ClipboardManager`를 부른다 ([`android_clipboard.h`](../../src/android/android_clipboard.h)). 붙여넣기는 Windows처럼 그 칸의 `insert` 편집으로 앱에 보낸다. 키보드의 복사·붙여넣기·잘라내기 전용 키(`KEYCODE_COPY` 등)는 Ctrl+C·V·X로 옮긴다.
 
+## Android 키보드 종류와 터치 편집
+
+`text_input_config::input`으로 `text`, `number`, `decimal`, `phone`, `email`, `url` 키보드를 고른다. 숫자의 부호는 `signed_number`로 요청한다. 키보드에 주는 힌트이므로 붙여넣기와 하드웨어 키 입력의 검증은 앱이 맡는다. 암호 칸은 이 종류보다 암호 키보드가 우선한다.
+
+`input.action`은 `done`, `search`, `go`, `send`, `next`, `previous`, `none`이다. `submit`이 있으면 소프트 키보드의 확정 단추에서 실행한다. 비어 있으면 앞의 네 동작은 기존 Enter 처리, `next`와 `previous`는 Tab과 Shift+Tab, `none`은 아무 동작도 하지 않는다. IME가 넣은 줄바꿈도 같은 경로로 온다. 종류가 바뀌어도 글과 선택은 유지하며, 조합 중의 종류 변경은 조합이 끝난 뒤 적용한다. Windows의 Enter 동작은 바꾸지 않는다.
+
+Android host는 우클릭 동작이 없는 텍스트 칸을 길게 누르면 낱말을 고르고 C++ 편집 메뉴를 연다. 복사·잘라내기·붙여넣기·전체 선택이 있으며 텍스트 초점과 키보드는 유지한다. 조합 중에 열면 먼저 확정하고 전체를 선택한다. 전체 선택 후 메뉴가 남아 복사나 잘라내기를 이어서 할 수 있다. 암호 칸은 복사와 잘라내기가 비활성이고, 복사 실패 시 잘라내지도 않는다. 앱이 우클릭 동작을 정했으면 그 동작이 우선한다. 밖을 누르거나 뒤로 가기·Esc·초점 상실로 닫는다. 선택 범위를 끄는 손잡이는 아직 없다.
+
+메뉴, 키보드 종류, 클립보드는 새 Java 소스 없이 기존 Android API를 C++ JNI로 호출한다. 후보 창을 caret에 붙이는 `CursorAnchorInfo`와 IME의 `requestCursorUpdates` 처리는 아직 제공하지 않는다. 현재 GameActivity의 InputConnection을 확장하는 Java 연결이 필요해 별도 항목으로 남긴다.
+
 ## 암호 칸
 
 `text_input_config::secret`을 켠 칸이다. 글은 앱의 초안에 그대로 있고, 가리는 일은 element와 플랫폼 층이 한다.

@@ -3,6 +3,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/app_bar_element.h"
 #include "luil/ui/caption_element.h"
+#include "luil/ui/font_scale.h"
 #include "luil/ui/glyph_element.h"
 #include "luil/ui/scroll_view_element.h"
 #include "luil/ui/stack_element.h"
@@ -18,6 +19,11 @@ namespace mobile_demo {
         constexpr float navigation_width { 260.0f };
         // 목록 한 칸의 높이다. 제목과 설명 두 줄에 손가락이 넉넉히 닿는다.
         constexpr float entry_height { 64.0f };
+
+        [[nodiscard]] float entry_line_height(const float font_size, const float height)
+        {
+            return luil::text_line_height(font_size, height - font_size);
+        }
 
         struct page_entry
         {
@@ -72,8 +78,10 @@ namespace mobile_demo {
 
             luil::stack_config text_config {};
             auto text { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"entry-text-" + key }, text_config) };
-            text->add(make_label(luil::ui_element_id { kind_text, u8"entry-title-" + key }, std::u8string { entry.title }, body_text_size, luil::label_color_role::primary), body_line_height);
-            text->add(make_label(luil::ui_element_id { kind_text, u8"entry-summary-" + key }, std::u8string { entry.summary }, note_text_size, luil::label_color_role::dim), note_line_height);
+            text->add(make_label(luil::ui_element_id { kind_text, u8"entry-title-" + key }, std::u8string { entry.title }, body_text_size, luil::label_color_role::primary),
+                entry_line_height(body_text_size, body_line_height));
+            text->add(make_label(luil::ui_element_id { kind_text, u8"entry-summary-" + key }, std::u8string { entry.summary }, note_text_size, luil::label_color_role::dim),
+                entry_line_height(note_text_size, note_line_height));
             row->add_flexible(std::move(text));
             // 좁은 화면에서는 누르면 다음 장으로 넘어간다는 표시를 둔다.
             if (chevron)
@@ -247,10 +255,11 @@ namespace mobile_demo {
     {
         page_column column { u8"navigation", 0.0f };
         column.gap(8.0f);
+        const float row_height { entry_height + entry_line_height(body_text_size, body_line_height) - body_line_height + entry_line_height(note_text_size, note_line_height) - note_line_height };
         for (const page_entry& entry : page_entries)
         {
             const bool selected { highlight && (page_.empty() ? entry.key == page_basics : entry.key == page_) };
-            column.add(make_entry(entry, selected, highlight == false), entry_height, width);
+            column.add(make_entry(entry, selected, highlight == false), row_height, width);
         }
         column.gap(8.0f);
         return wrap_scroll(u8"navigation", column.finish(), height, scale);

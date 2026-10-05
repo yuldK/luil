@@ -154,7 +154,7 @@ namespace luil {
                 const float text_width { box.x + box.width - reserved - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
                     SkPaint foreground { solid_paint(context.palette.primary_foreground) };
                     if (selected_ == false)
                         foreground.setAlphaf(0.75f);

@@ -44,7 +44,7 @@ namespace luil {
         if (config_.text.empty())
             return;
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-        const SkFont font { sk_ref_sp(context.ui_typeface), config_.font_size * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(config_.font_size, scale) };
         const SkPaint paint { label_paint(context.palette, config_.color) };
         const rect_f box { bounds() };
 
@@ -64,7 +64,7 @@ namespace luil {
     {
         // 글자 크기 + 위아래 여백이다.
         // 11px 글에서 18px 줄이 되는, 데모가 손으로 쓰던 그 간격이다.
-        return config.font_size + 7.0f;
+        return text_line_height(config.font_size, 7.0f);
     }
     access_info label_element::accessibility() const
     {

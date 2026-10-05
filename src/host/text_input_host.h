@@ -49,6 +49,11 @@ namespace luil {
         [[nodiscard]] virtual std::optional<text_input_target> focused_text_target() const = 0;
         // 그 칸의 확정된 글이다.
         [[nodiscard]] virtual text_input_document committed_document() const = 0;
+        // 키보드 설정은 문서와 별도로 동기화한다. 기존 Windows host는 기본값을 쓴다.
+        [[nodiscard]] virtual text_input_options input_options() const
+        {
+            return {};
+        }
         // 문서의 byte 구간이 그 칸이 사는 표면에서 차지하는 자리다 (물리 픽셀, 표면 좌표).
         // 후보 창이 조합 글자 밑에 붙는 근거다. offset은 넘긴 문서 기준이다 — 조합 중에는
         // 문서가 칸의 확정 글보다 길다. 알 수 없으면 nullopt다.

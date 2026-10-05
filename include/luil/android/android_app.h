@@ -27,6 +27,8 @@ namespace luil::android {
         //  - 길게 눌러 메뉴가 열릴 때의 햅틱은 Android의 관례라 켜서 시작한다 (`long_press_haptic`). 사용자가 시스템에서
         //    터치 피드백을 껐으면 울리지 않는다. 앱이 끄려면 이 값을 거짓으로 둔다.
         touch_gesture_config touch { .long_press_haptic = true };
+        // 길게 누름·이동 허용 거리는 시스템 설정으로 덮는다. 앱이 위 값을 직접 정하려면 끈다.
+        bool use_system_touch_settings { true };
     };
 
     // 앱이 꽂는 세 조각이다. 셋 다 `run_application`이 돌아올 때까지 살아 있어야 한다.

@@ -99,7 +99,7 @@ namespace luil {
         if (config_.text.empty() && shows_glyph(config_.tone) == false)
             return;
 
-        const SkFont font { sk_ref_sp(context.ui_typeface), config_.font_size * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(config_.font_size, scale) };
         const SkPaint foreground { solid_paint(tone_foreground(context.palette, config_.tone)) };
         const float padding { badge_padding * scale };
         float text_left { box.x + padding };

@@ -15,6 +15,7 @@ add_executable(luil_core_tests
     dialog_elements_tests.cpp
     dropdown_element_tests.cpp
     fence_wait_tests.cpp
+    font_scale_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp
     image_animation_tests.cpp
@@ -46,6 +47,7 @@ add_executable(luil_core_tests
     surface_invalidate_tests.cpp
     tab_bar_element_tests.cpp
     text_button_element_tests.cpp
+    text_edit_menu_tests.cpp
     text_edit_tests.cpp
     toast_element_tests.cpp
     touch_input_tests.cpp
@@ -132,6 +134,7 @@ if(LUIL_PLATFORM STREQUAL "android")
         "${LUIL_SOURCE_DIRECTORY}/net/http_message.cpp"
         "${LUIL_SOURCE_DIRECTORY}/net/http_request_rules.cpp"
         android_jvm_test_main.cpp
+        android_charset_tests.cpp
         http_body_tests.cpp
         http_client_tests.cpp
         http_media_type_tests.cpp

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "luil/ui/font_scale.h"
+#include "luil/ui/text_input_options.h"
+
 #include "luil/theme/ui_style.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/accessibility.h"
@@ -105,6 +108,8 @@ namespace luil {
         // 암호 칸이다 (`text_input_config::secret`). 복사와 낱말 단위 편집을 막고 플랫폼 IME·보조 기술에 암호
         // 칸으로 알리는 근거다. 위의 글은 가리지 않은 진짜 글이다 — IME가 편집하려면 있어야 한다.
         bool secret { false };
+        // Android가 키보드를 고를 때 사용한다. Windows의 키·IME 동작은 바꾸지 않는다.
+        text_input_options options {};
     };
 
     // 액션은 상태를 바꾸지 않고 후속 메시지를 반환한다.

@@ -480,7 +480,7 @@ namespace luil {
             return;
 
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.small_font_size * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
         const std::u8string& text { hovered->tooltip() };
         const float text_width { measure_text(text, font) };
         const float padding { 5.0f * scale };
@@ -553,7 +553,7 @@ namespace luil {
         border.setStrokeWidth(1.0f * scale);
         context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), border);
 
-        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.small_font_size * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
         const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
         const std::u8string& ghost_text { drag.payload.label.empty() ? drag.payload.dragged_owner : drag.payload.label };
         draw_text(context.canvas, ghost_text, ghost.left() + 7.0f * scale, ghost.top() + centered_text_baseline(font, ghost.height()), font, foreground);

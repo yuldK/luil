@@ -21,7 +21,15 @@ namespace mobile_demo {
         constexpr float picture_height { 90.0f };
         constexpr float film_height { 120.0f };
         constexpr float input_height { 40.0f };
-        constexpr float input_block_height { note_line_height + 4.0f + input_height };
+        [[nodiscard]] float scaled_input_height() noexcept
+        {
+            return luil::text_line_height(11.0f, input_height - 11.0f);
+        }
+
+        [[nodiscard]] float input_block_height() noexcept
+        {
+            return luil::text_line_height(note_text_size, note_line_height - note_text_size) + 4.0f + scaled_input_height();
+        }
 
         // 숫자 칸에 들어갈 수 있는 글자만 남긴다.
         // 붙여넣기와 IME 확정도 이 관문을 지난다.
@@ -200,15 +208,19 @@ namespace mobile_demo {
         column.gap(20.0f);
 
         // 텍스트 칸 셋이다. 휴대폰은 좁아 위아래로 쌓는다.
-        column.add(make_labeled_input(u8"number", u8"숫자만 받는 칸", kind_number_input, make_input_view(number_, target_number), { .placeholder = u8"0-9" }), input_block_height);
+        column.add(make_labeled_input(u8"number", u8"숫자만 받는 칸", kind_number_input, make_input_view(number_, target_number),
+                       { .placeholder = u8"0-9", .input = { .kind = luil::text_input_kind::number, .action = luil::text_input_action::next } }),
+            input_block_height());
         column.gap(12.0f);
-        column.add(make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME·붙여넣기)", kind_note_input, make_input_view(note_, target_note), { .placeholder = u8"메모" }), input_block_height);
+        column.add(make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME·붙여넣기)", kind_note_input, make_input_view(note_, target_note),
+                       { .placeholder = u8"메모", .input = { .action = luil::text_input_action::next } }),
+            input_block_height());
         column.gap(12.0f);
         // 암호 칸이다. 점으로 그리고 복사하지 않으며, 키보드가 배우지 않는다. 눈 단추로 보인다.
         const luil::ui_action reveal { luil::make_message_action(secret_reveal_intent { secret_reveal_ == false }) };
         column.add(make_labeled_input(
                        u8"secret", u8"암호 칸 (가림·복사 막기·암호 키보드)", kind_secret_input, make_input_view(secret_, target_secret), make_secret_input_config(u8"암호", secret_reveal_, reveal)),
-            input_block_height);
+            input_block_height());
         column.gap(24.0f);
 
         // 그림 둘을 나란히 둔다. 칸은 폭의 절반씩이다.
@@ -327,9 +339,10 @@ namespace mobile_demo {
     {
         luil::stack_config config {};
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"input-" + owner }, config) };
-        column->add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(label), note_text_size, luil::label_color_role::dim), note_line_height);
+        column->add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(label), note_text_size, luil::label_color_role::dim),
+            luil::text_line_height(note_text_size, note_line_height - note_text_size));
         column->add_gap(4.0f);
-        column->add(std::make_unique<luil::text_input_element>(luil::ui_element_id { input_kind }, std::move(view), std::move(input)), input_height);
+        column->add(std::make_unique<luil::text_input_element>(luil::ui_element_id { input_kind }, std::move(view), std::move(input)), scaled_input_height());
         return column;
     }
 

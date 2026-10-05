@@ -1283,3 +1283,15 @@ Android 전용으로 더했다 ([SMB client](smb-client-design.md)). 같은 네�
 2. 서버를 누르면 주소가 그 서버로 바뀌고 공유 목록이 나온다.
 3. 주소 칸에 NAS의 `.local` 이름과 공유(`nas.local/photos`)를 적고 "열기"를 누르면 IP 주소를 적은 것과 같이 열려야 한다.
 4. NAS가 나오지 않으면 상태 줄과 그 아래 글을 알려 준다.
+
+## C++ 입력·시스템 설정 보강 (2026-10-05)
+
+새 Java/Kotlin 소스 없이 터치 텍스트 편집 메뉴, 입력 종류별 키보드와 IME 확정 동작, 시스템 글자 크기와 터치 설정, HTTP 추가 문자 인코딩 변환을 연결했다. 구현과 계약은 [텍스트 입력](concepts/text-input.md), [시스템 글자 크기](concepts/theming.md), [HTTP](http-client-design.md)의 Android 절에 있다.
+
+`ViewConfiguration`에서 두 번 탭 간격, 길게 누름 시간, 이동 허용 거리를 읽는다. 거리는 물리 픽셀에서 dp로 바꾼다. 시작과 설정 복귀·구성 변경에서 다시 읽고, 이미 진행 중인 접촉은 기존 설정을 유지한다. `application_config::use_system_touch_settings`를 끄면 앱이 지정한 `touch`를 유지한다. 두 번 탭 간격은 host 시작 때 적용한다. 햅틱은 기존처럼 시스템의 터치 피드백 설정을 따른다.
+
+공통 입력의 편집 메뉴는 기본으로 꺼져 있고 Android host만 켠다. Windows의 키보드 종류·Enter·터치 설정은 그대로다. 시스템 글자 크기도 Windows에서는 기존 배율이다. 새 API는 기존 필드 뒤에 추가했다.
+
+Android 실기기에서 공통 C++ 테스트 689개와 JVM의 HTTP·문자 변환 테스트 117개가 통과했다. 숫자 키보드·다음 칸 이동, 일반 칸의 복사·잘라내기·붙여넣기, 암호 칸의 복사 제한을 확인했다. 글자 크기를 2.0으로 바꾸면 데모의 글·입력 칸·탐색 행이 커지고, 길게 누름을 2초로 바꾸면 700ms에는 메뉴가 열리지 않고 2.3초에는 열렸다. 시험 뒤 기기 설정은 원래 값으로 복원했다. Windows Debug·Release는 각각 활성 테스트 969개가 통과했다.
+
+Android WebView 호스트와 IME 후보·커서 위치 전달은 보류다. 현재 GameActivity의 Java InputConnection 및 WebView의 Java callback 클래스를 확장해야 하므로 이번 C++ 범위에 넣지 않았다. 접근성은 제외하며 마우스·펜 커서도 별도 논의 사항이다.

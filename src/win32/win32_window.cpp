@@ -1037,15 +1037,11 @@ namespace luil::win32 {
                 if (surface.empty() || surface == main_.id())
                     return &main_;
                 for (const std::unique_ptr<secondary_surface>& window : windows_)
-                {
                     if (window->id() == surface)
                         return window.get();
-                }
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
-                {
                     if (popup->id() == surface)
                         return popup.get();
-                }
                 return nullptr;
             }
 
@@ -1071,6 +1067,8 @@ namespace luil::win32 {
                     return;
                 case ui_command::window_close:
                     PostMessageW(window_, WM_CLOSE, 0, 0);
+                    return;
+                case ui_command::text_edit_menu:
                     return;
                 }
             }

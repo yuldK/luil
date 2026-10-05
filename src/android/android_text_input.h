@@ -64,6 +64,8 @@ namespace luil::android {
             std::function<void(bool show, bool secret)> show_keyboard {};
             // 한 줄 칸에서 IME가 줄을 바꿨다 (Enter). 칸은 줄바꿈을 받지 않고 이 동작으로 바꾼다.
             std::function<void()> submit {};
+            // 설정이 바뀌면 키보드가 떠 있는 중에도 적용하고 연결을 다시 세운다.
+            std::function<void(const text_input_options&)> configure {};
         };
 
         ime_session(text_input_host& host, platform platform);
@@ -80,6 +82,8 @@ namespace luil::android {
         void set_keyboard_visible(bool visible) noexcept;
         // 초점을 가진 칸을 다시 눌렀다. 키보드가 내려가 있으면 다시 띄운다.
         void request_keyboard();
+        // 편집 메뉴로 넘어간다. 조합을 확정하고 IME의 조합 표시도 거둔다. 키보드는 유지한다.
+        void commit_composition();
 
         [[nodiscard]] bool composing() const noexcept;
         [[nodiscard]] std::optional<text_input_target> target() const noexcept;
@@ -111,5 +115,6 @@ namespace luil::android {
         // 초점을 가진 칸이 암호 칸인가, 그리고 지금 키보드가 어느 종류로 섰는가다.
         bool secret_ { false };
         bool keyboard_secret_ { false };
+        std::optional<text_input_options> options_ {};
     };
 } // namespace luil::android

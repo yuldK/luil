@@ -133,7 +133,7 @@ namespace luil {
         context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), fill);
 
         const SkPaint foreground { solid_paint(context.palette.caption.foreground) };
-        const SkFont title_font { sk_ref_sp(context.ui_typeface), static_cast<float>(config_.metrics.title_font_size) * scale };
+        const SkFont title_font { sk_ref_sp(context.ui_typeface), scaled_font_size(static_cast<float>(config_.metrics.title_font_size), scale) };
 
         float title_left { box.x + static_cast<float>(config_.metrics.title_left_padding) * scale };
         if (context.codicon_typeface != nullptr && config_.application_icon != 0)

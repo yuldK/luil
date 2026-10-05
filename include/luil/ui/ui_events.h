@@ -436,6 +436,8 @@ namespace luil {
         //  - 주 창에만 듣는다. 보조 창은 배치 저장과 마찬가지로 대상이 아니다.
         window_toggle_fullscreen,
         window_close,
+        // 초점 텍스트 칸의 터치 편집 메뉴다. 지원하는 host만 실행한다 (Android).
+        text_edit_menu,
     };
 
     // UI thread에서 실행해야 하는 **앱 정의** 명령이다 (파일 dialog, 클립보드 밖의 shell 실행 등).

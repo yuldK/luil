@@ -64,17 +64,20 @@ namespace mobile_demo {
 
     void page_column::note(std::u8string owner, std::u8string text)
     {
-        add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), note_text_size, luil::label_color_role::dim), note_line_height);
+        add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), note_text_size, luil::label_color_role::dim),
+            luil::text_line_height(note_text_size, note_line_height - note_text_size));
     }
 
     void page_column::body(std::u8string owner, std::u8string text)
     {
-        add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), body_text_size, luil::label_color_role::primary), body_line_height);
+        add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), body_text_size, luil::label_color_role::primary),
+            luil::text_line_height(body_text_size, body_line_height - body_text_size));
     }
 
     void page_column::heading(std::u8string owner, std::u8string text)
     {
-        add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), heading_text_size, luil::label_color_role::primary), heading_line_height);
+        add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), heading_text_size, luil::label_color_role::primary),
+            luil::text_line_height(heading_text_size, heading_line_height - heading_text_size));
     }
 
     page_content page_column::finish()

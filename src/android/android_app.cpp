@@ -3,6 +3,7 @@
 #include "android/android_clipboard.h"
 #include "android/android_fonts.h"
 #include "android/android_input.h"
+#include "android/android_settings.h"
 #include "android/android_system_theme.h"
 #include "android/android_text_input.h"
 #include "android/android_window_control.h"
@@ -17,7 +18,9 @@
 #include "host/overlay_input.h"
 #include "host/popup_dismiss.h"
 #include "host/skia_renderer.h"
+#include "host/text_edit_menu.h"
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/ui_platform.h"
 
@@ -54,8 +57,6 @@
 namespace luil::android {
     namespace {
         constexpr const char* log_tag { "luil" };
-        // 두 번 탭의 판정 간격이다. Android ViewConfiguration의 기본값이다.
-        constexpr std::chrono::milliseconds double_tap_timeout { 300 };
         // 연속 애니메이션(next_update가 "지금"을 답하는 것)의 다시 그리기 간격이다.
         // Win32와 같은 30fps다.
         constexpr std::chrono::milliseconds continuous_repaint_interval { 33 };
@@ -336,6 +337,90 @@ namespace luil::android {
                 return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence, value->secret };
             }
 
+            [[nodiscard]] text_input_options input_options() const override
+            {
+                const text_location location { focused_text_location() };
+                const auto value { location.element != nullptr ? location.element->text_input() : std::nullopt };
+                return value.has_value() ? value->options : text_input_options {};
+            }
+
+            void configure_keyboard(const bool secret)
+            {
+                const text_input_options input { input_options() };
+                std::uint32_t type { TYPE_CLASS_TEXT };
+                if (secret)
+                    type |= TYPE_TEXT_VARIATION_PASSWORD;
+                else
+                    switch (input.kind)
+                    {
+                    case text_input_kind::number:
+                    case text_input_kind::decimal:
+                        type = TYPE_CLASS_NUMBER;
+                        if (input.kind == text_input_kind::decimal)
+                            type |= TYPE_NUMBER_FLAG_DECIMAL;
+                        if (input.signed_number)
+                            type |= TYPE_NUMBER_FLAG_SIGNED;
+                        break;
+                    case text_input_kind::phone:
+                        type = TYPE_CLASS_PHONE;
+                        break;
+                    case text_input_kind::email:
+                        type |= TYPE_TEXT_VARIATION_EMAIL_ADDRESS;
+                        break;
+                    case text_input_kind::url:
+                        type |= TYPE_TEXT_VARIATION_URI;
+                        break;
+                    default:
+                        break;
+                    }
+                int action { IME_ACTION_DONE };
+                switch (input.action)
+                {
+                case text_input_action::search:
+                    action = IME_ACTION_SEARCH;
+                    break;
+                case text_input_action::go:
+                    action = IME_ACTION_GO;
+                    break;
+                case text_input_action::send:
+                    action = IME_ACTION_SEND;
+                    break;
+                case text_input_action::next:
+                    action = IME_ACTION_NEXT;
+                    break;
+                case text_input_action::previous:
+                    action = IME_ACTION_PREVIOUS;
+                    break;
+                case text_input_action::none:
+                    action = IME_ACTION_NONE;
+                    break;
+                default:
+                    break;
+                }
+                // actionId와 imeOptions의 하위 action 비트는 별개다. 둘 다 있어야 IME가 검색·다음 단추를 그린다.
+                const std::uint32_t options { IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI | static_cast<std::uint32_t>(action) | (secret ? IME_FLAG_NO_PERSONALIZED_LEARNING : 0u) };
+                GameActivity_setImeEditorInfo(app_->activity, static_cast<GameTextInputType>(type), static_cast<GameTextInputActionType>(action), static_cast<GameTextInputImeOptions>(options));
+                GameActivity_restartInput(app_->activity);
+            }
+
+            void submit_text()
+            {
+                const text_location location { focused_text_location() };
+                if (const auto* const element { dynamic_cast<const text_input_element*>(location.element) }; element != nullptr && element->config().submit)
+                {
+                    for (input_action& action : element->config().submit(ui_action_context { element->id() }))
+                        dispatch(std::move(action));
+                    return;
+                }
+                const text_input_action action { input_options().action };
+                if (action == text_input_action::none)
+                    return;
+                if (action == text_input_action::next || action == text_input_action::previous)
+                    host_->post_raw_input(key_pressed_event { .key = key_code::tab, .shift = action == text_input_action::previous, .time = std::chrono::steady_clock::now() });
+                else
+                    post_enter();
+            }
+
             [[nodiscard]] std::optional<rect_f> text_rect(const text_input_document& document, const std::size_t begin, const std::size_t end) const override
             {
                 const text_location location { focused_text_location() };
@@ -447,6 +532,7 @@ namespace luil::android {
                         jni_ = nullptr;
                 }
                 refresh_system_theme();
+                refresh_system_settings();
                 input_.set_dead_key_combiner([this](const char32_t accent, const char32_t character) {
                     if (jni_ == nullptr)
                         return char32_t {};
@@ -487,8 +573,9 @@ namespace luil::android {
                 host_config.wake.ui_command = [signal] { static_cast<void>(signal()); };
                 host_config.wake.app_ui_command = [signal] { static_cast<void>(signal()); };
                 host_config.wake.clipboard = [signal] { static_cast<void>(signal()); };
-                host_config.interaction.double_click_time = double_tap_timeout;
-                host_config.interaction.touch = config_.touch;
+                host_config.interaction.double_click_time = system_input_.double_tap_time;
+                host_config.interaction.touch = config_.use_system_touch_settings ? apply_system_input_settings(config_.touch, system_input_) : config_.touch;
+                host_config.interaction.text_edit_menu = true;
                 // 권한이다. 상태는 이 thread가 갱신하고(시작·초점을 되찾음·물은 뒤 1초), 앱은 아무 thread에서 읽는다.
                 target_sdk_ = jni_ != nullptr ? read_target_sdk(*jni_, app_->activity->javaGameActivity) : 0;
                 refresh_permissions(false);
@@ -521,19 +608,17 @@ namespace luil::android {
                                 if (show)
                                 {
                                     // 한 줄 칸이다. 가로 화면에서 키보드가 칸을 가린 전체 화면 편집기로 바뀌지
-                                    // 않게 하고, 완료 동작은 Enter로 보낸다 (APP_CMD_EDITOR_ACTION). IME 연결을
+                                    // 않게 하고, 확정 단추는 칸의 동작으로 보낸다 (APP_CMD_EDITOR_ACTION). IME 연결을
                                     // 다시 세워야 값이 적용된다.
                                     // 암호 칸은 암호 키보드다. 추천 줄에 글을 띄우지 않고 쓴 글을 배우지 않는다.
-                                    const std::uint32_t type { secret ? TYPE_CLASS_TEXT | TYPE_TEXT_VARIATION_PASSWORD : TYPE_CLASS_TEXT };
-                                    const std::uint32_t options { IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI | (secret ? IME_FLAG_NO_PERSONALIZED_LEARNING : 0u) };
-                                    GameActivity_setImeEditorInfo(app_->activity, static_cast<GameTextInputType>(type), IME_ACTION_DONE, static_cast<GameTextInputImeOptions>(options));
-                                    GameActivity_restartInput(app_->activity);
+                                    configure_keyboard(secret);
                                     GameActivity_showSoftInput(app_->activity, 0);
                                 }
                                 else
                                     GameActivity_hideSoftInput(app_->activity, 0);
                             },
-                        .submit = [this] { post_enter(); },
+                        .submit = [this] { submit_text(); },
+                        .configure = [this](const text_input_options&) { configure_keyboard(committed_document().secret); },
                     });
                 glue_text_input_handler.store(app_->activity->callbacks->onTextInputEvent);
                 text_input_wake_fd.store(wake_fd_);
@@ -578,6 +663,7 @@ namespace luil::android {
                 case APP_CMD_TERM_WINDOW:
                     // 창이 사라지면 그 위의 접촉은 뗌 없이 끝난다. 조합 중이면 확정하고 키보드를
                     // 내린다. 창이 다시 생기면 초점 칸을 IME에 다시 붙인다.
+                    close_edit_menu();
                     post_events(input_.cancel_all(std::chrono::steady_clock::now()));
                     ime_->detach();
                     // glue는 이 알림이 끝날 때까지 창을 쥐고 있다가 놓는다.
@@ -605,6 +691,7 @@ namespace luil::android {
                     prefers_light_ = read_prefers_light(app_->activity);
                     scale_ = read_scale(app_->config);
                     refresh_system_theme();
+                    refresh_system_settings();
                     refresh_metrics();
                     break;
                 case APP_CMD_SOFTWARE_KB_VIS_CHANGED:
@@ -619,7 +706,7 @@ namespace luil::android {
                     //    보내야 앱이 마지막 글자가 빠진 글로 제출·검색하지 않는다. 편집은 곧바로
                     //    logic으로 가고 Enter는 입력 thread를 거치므로 이 순서가 그대로 이어진다.
                     process_text_input();
-                    post_enter();
+                    submit_text();
                     break;
                 case APP_CMD_WINDOW_REDRAW_NEEDED:
                     dirty_ = true;
@@ -640,6 +727,8 @@ namespace luil::android {
                 case APP_CMD_RESUME:
                     // 대비 설정은 구성 변경으로 오지 않는다. 설정 앱에서 돌아올 때 다시 읽는다.
                     refresh_system_theme();
+                    refresh_system_settings();
+                    post_metrics();
                     restore_system_bars();
                     // 설정 앱에서 권한을 바꾸고 돌아왔을 수 있다. 묻는 중이었으면 답은 초점을 되찾을 때 알린다.
                     refresh_permissions(false);
@@ -808,8 +897,27 @@ namespace luil::android {
                 reported_outside_ = outside;
                 window_metrics metrics { make_window_metrics(width, height, scale_) };
                 metrics.outside = outside;
+                metrics.text_scale = scaled_font_size(12.0f) / 12.0f;
                 if (app_message message { environment_.delegate->make_metrics_message(metrics) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
+            }
+
+            void refresh_system_settings()
+            {
+                if (jni_ == nullptr)
+                    return;
+                const jobject context { app_->activity->javaGameActivity };
+                if (auto sizes { read_system_font_sizes(*jni_, context, scale_) }; sizes.has_value() && *sizes != system_font_sizes_)
+                {
+                    system_font_sizes_ = std::move(*sizes);
+                    static_cast<void>(set_system_font_sizes(system_font_sizes_));
+                    reported_width_ = -1.0f;
+                    dirty_ = true;
+                }
+                if (const auto settings { read_system_input_settings(*jni_, context, scale_) }; settings.has_value())
+                    system_input_ = *settings;
+                if (host_ != nullptr && config_.use_system_touch_settings)
+                    static_cast<void>(host_->set_touch_gesture_config(apply_system_input_settings(config_.touch, system_input_)));
             }
 
             // 시스템의 동적 색과 대비 설정을 읽는다. accent는 앱이 테마 목록에 보일 수 있게 프로세스에 세운다.
@@ -929,6 +1037,8 @@ namespace luil::android {
                     // 닫기는 Activity를 끝낸다.
                     if (command == ui_command::window_close)
                         finish();
+                    else if (command == ui_command::text_edit_menu)
+                        open_edit_menu();
                 }
                 for (const app_ui_command& command : host_->take_app_ui_commands())
                     if (environment_.delegate != nullptr)
@@ -972,6 +1082,8 @@ namespace luil::android {
             {
                 for (raw_input_event& event : events)
                 {
+                    if (route_edit_menu(event))
+                        continue;
                     // 겹쳐 그린 popup의 자리면 그 표면 id와 popup 좌표를 싣는다.
                     routed_input routed { router_.route(std::move(event)) };
                     // popup 밖의 누름·휠은 닫는 계기다. 누름·휠 자체는 그대로 간다 (Win32와 같다).
@@ -987,6 +1099,140 @@ namespace luil::android {
                         host_->post_raw_input(std::move(value));
                     }
                 }
+            }
+
+            void close_edit_menu()
+            {
+                edit_menu_.reset();
+                popups_visible.store(overlays_.empty() == false);
+                dirty_ = true;
+            }
+
+            void open_edit_menu()
+            {
+                const interaction_snapshot interaction { host_->acquire_interaction() };
+                if (focused_text_target().has_value() == false)
+                    return;
+                // 조합 중이면 먼저 확정한다. 그 뒤 전체 선택을 같은 앱 inbox에 넣는다.
+                if (ime_->composing())
+                {
+                    ime_->commit_composition();
+                    if (environment_.policy != nullptr)
+                        dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *focused_text_target(), .command = text::text_edit_command::select_all }));
+                }
+                edit_menu_ = edit_menu_state { .target = interaction.focused_input, .surface = interaction.focused_surface };
+                update_edit_menu();
+                dirty_ = true;
+            }
+
+            void update_edit_menu()
+            {
+                if (edit_menu_.has_value() == false)
+                    return;
+                const interaction_snapshot interaction { host_->acquire_interaction() };
+                const text_location location { focused_text_location() };
+                const auto value { location.element != nullptr ? location.element->text_input() : std::nullopt };
+                if (interaction.focused_input != edit_menu_->target || interaction.focused_surface != edit_menu_->surface || value.has_value() == false || location.element->focusable() == false)
+                {
+                    close_edit_menu();
+                    return;
+                }
+                const int width { std::min(content_width(), static_cast<int>(std::ceil(288.0f * scale_))) };
+                const int height { std::min(content_height(), static_cast<int>(std::ceil(text_edit_menu_height() * scale_))) };
+                edit_menu_->tree = make_text_edit_menu(*value, user_ui_language().starts_with("ko"), static_cast<float>(width), static_cast<float>(height), scale_);
+                const rect_f anchor { location.element->bounds() };
+                const int left { static_cast<int>(std::lround(location.origin_x + anchor.x + (anchor.width - static_cast<float>(width)) / 2.0f)) };
+                const int below { static_cast<int>(std::lround(location.origin_y + anchor.y + anchor.height + 4.0f * scale_)) };
+                const int above { static_cast<int>(std::lround(location.origin_y + anchor.y - static_cast<float>(height) - 4.0f * scale_)) };
+                edit_menu_->bounds = { std::clamp(left, insets_.left, insets_.left + content_width() - width),
+                    std::clamp(below + height <= insets_.top + content_height() ? below : above, insets_.top, insets_.top + content_height() - height), width, height };
+                popups_visible.store(true);
+            }
+
+            void execute_edit_menu(const std::u8string& key)
+            {
+                const auto target { focused_text_target() };
+                const text_location location { focused_text_location() };
+                const auto value { location.element != nullptr ? location.element->text_input() : std::nullopt };
+                if (target.has_value() == false || value.has_value() == false || value->composing || environment_.policy == nullptr)
+                    return;
+                if (key == u8"copy" || key == u8"cut")
+                {
+                    if (value->secret || value->caret == value->anchor || jni_ == nullptr)
+                        return;
+                    const std::size_t begin { std::min({ value->caret, value->anchor, value->text.size() }) };
+                    const std::size_t end { std::min(std::max(value->caret, value->anchor), value->text.size()) };
+                    // 복사에 실패하면 잘라내기도 하지 않는다.
+                    if (copy_text_to_clipboard(*jni_, app_->activity->javaGameActivity, value->text.substr(begin, end - begin)) == false)
+                        return;
+                    if (key == u8"cut")
+                        dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *target, .command = text::text_edit_command::cut }));
+                }
+                else if (key == u8"paste")
+                    execute_clipboard(clipboard_paste_request { *target });
+                else if (key == u8"all")
+                {
+                    dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *target, .command = text::text_edit_command::select_all }));
+                    dirty_ = true;
+                    return;
+                }
+                close_edit_menu();
+            }
+
+            // 메뉴는 텍스트 초점을 옮기지 않는다. 메뉴 안에서 새로 시작한 접촉만 잡는다.
+            bool route_edit_menu(const raw_input_event& event)
+            {
+                if (edit_menu_.has_value() == false)
+                    return false;
+                update_edit_menu();
+                if (edit_menu_.has_value() == false)
+                    return false;
+                const auto hit = [this](const float x, const float y) -> ui_element_id {
+                    const pixel_rect bounds { edit_menu_->bounds };
+                    const ui_element* const element { edit_menu_->tree->hit_test(x + static_cast<float>(insets_.left - bounds.x), y + static_cast<float>(insets_.top - bounds.y)) };
+                    return element != nullptr && element->enabled() && element->id().kind == ui_element_kind::menu_item ? element->id() : ui_element_id {};
+                };
+                if (const auto* const press { std::get_if<pointer_pressed_event>(&event) }; press != nullptr)
+                {
+                    const pixel_rect bounds { edit_menu_->bounds };
+                    const float x { press->x + static_cast<float>(insets_.left) };
+                    const float y { press->y + static_cast<float>(insets_.top) };
+                    if (x < bounds.x || y < bounds.y || x >= bounds.x + bounds.width || y >= bounds.y + bounds.height)
+                    {
+                        close_edit_menu();
+                        return false;
+                    }
+                    edit_menu_->pressed = hit(press->x, press->y);
+                    edit_menu_->capture = { { press->device, press->pointer_id } };
+                    dirty_ = true;
+                    return true;
+                }
+                if (const auto* const move { std::get_if<pointer_moved_event>(&event) }; move != nullptr && edit_menu_->capture == std::pair { move->device, move->pointer_id })
+                {
+                    if (hit(move->x, move->y) != edit_menu_->pressed)
+                        edit_menu_->pressed = {};
+                    dirty_ = true;
+                    return true;
+                }
+                if (const auto* const release { std::get_if<pointer_released_event>(&event) }; release != nullptr && edit_menu_->capture == std::pair { release->device, release->pointer_id })
+                {
+                    const ui_element_id pressed { edit_menu_->pressed };
+                    const bool activate { pressed != ui_element_id {} && hit(release->x, release->y) == pressed };
+                    edit_menu_->capture.reset();
+                    edit_menu_->pressed = {};
+                    dirty_ = true;
+                    if (activate)
+                        execute_edit_menu(pressed.owner);
+                    return true;
+                }
+                if (const auto* const cancel { std::get_if<pointer_cancelled_event>(&event) }; cancel != nullptr && edit_menu_->capture == std::pair { cancel->device, cancel->pointer_id })
+                {
+                    close_edit_menu();
+                    return true;
+                }
+                if (std::holds_alternative<key_pressed_event>(event) || std::holds_alternative<character_typed_event>(event) || std::holds_alternative<mouse_wheel_event>(event))
+                    close_edit_menu();
+                return false;
             }
 
             // frame의 popup을 주 표면 위의 layer로 세운다. frame이 바뀔 때만 다시 세운다.
@@ -1025,7 +1271,7 @@ namespace luil::android {
                     }
                 }
                 router_.set_areas(std::move(areas));
-                popups_visible.store(overlays_.empty() == false);
+                popups_visible.store(overlays_.empty() == false || edit_menu_.has_value());
                 back_claimed.store(frame != nullptr && frame->back != nullptr);
                 apply_device_request(frame != nullptr ? frame->device : device_request {});
                 dirty_ = true;
@@ -1090,7 +1336,13 @@ namespace luil::android {
             // 닫힘 계기 하나를 popup들에 묻는다. 하나라도 닫자는 메시지를 냈으면 참이다.
             bool dismiss_popups(const popup_dismiss_reason reason)
             {
-                bool dismissed { false };
+                bool dismissed { edit_menu_.has_value() };
+                if (edit_menu_.has_value())
+                {
+                    close_edit_menu();
+                    if (reason == popup_dismiss_reason::escape_key)
+                        return true;
+                }
                 for (overlay_entry& entry : overlays_)
                     if (std::optional<input_action> action { take_popup_dismiss_action(entry.dismiss, entry.requested, reason) }; action.has_value())
                     {
@@ -1190,6 +1442,16 @@ namespace luil::android {
             {
                 if (auto* const message { std::get_if<app_message>(&action) }; message != nullptr && message->empty() == false)
                     host_->post_app_message(std::move(*message));
+                else if (const auto* const command { std::get_if<ui_command>(&action) }; command != nullptr && *command == ui_command::window_close)
+                    finish();
+                else if (const auto* const command { std::get_if<app_ui_command>(&action) }; command != nullptr && environment_.delegate != nullptr)
+                    environment_.delegate->execute_app_ui_command(*host_, *command);
+                else if (const auto* const copy { std::get_if<clipboard_copy_request>(&action) }; copy != nullptr)
+                    execute_clipboard(*copy);
+                else if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr)
+                    execute_clipboard(*paste);
+                else if (const auto* const haptic { std::get_if<haptic_request>(&action) }; haptic != nullptr)
+                    host_->perform_haptic(haptic->feedback);
             }
 
             // 클립보드 요청이다. 붙여넣기는 그 칸의 insert 편집으로 앱에 보낸다 (Win32와 같다).
@@ -1235,6 +1497,13 @@ namespace luil::android {
                 layers.reserve(overlays_.size());
                 for (const overlay_entry& entry : overlays_)
                     layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id) });
+                update_edit_menu();
+                if (edit_menu_.has_value())
+                {
+                    interaction_snapshot menu_interaction {};
+                    menu_interaction.pressed = edit_menu_->pressed;
+                    layers.push_back(overlay_layer { edit_menu_->tree.get(), edit_menu_->bounds, true, std::move(menu_interaction) });
+                }
                 state.overlays = layers;
                 const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
                 // 고대비는 시스템 대비 설정이 높음일 때다. Android는 시스템 고대비 색을 주지 않아 밝은
@@ -1296,6 +1565,16 @@ namespace luil::android {
             std::unique_ptr<renderer_host> renderer_ {};
             input_translator input_ {};
             std::vector<overlay_entry> overlays_ {};
+            struct edit_menu_state
+            {
+                ui_element_id target {};
+                std::u8string surface {};
+                std::shared_ptr<const ui_tree> tree {};
+                pixel_rect bounds {};
+                ui_element_id pressed {};
+                std::optional<std::pair<pointer_device, std::uint32_t>> capture {};
+            };
+            std::optional<edit_menu_state> edit_menu_ {};
             // layer를 세운 frame이다. 바뀌면 다시 세운다.
             std::shared_ptr<const ui_frame> overlay_frame_ {};
             overlay_input_router router_ {};
@@ -1318,6 +1597,8 @@ namespace luil::android {
             int lost_window_height_ { 0 };
             edge_insets insets_ {};
             float scale_ { 1.0f };
+            system_input_settings system_input_ {};
+            std::vector<float> system_font_sizes_ {};
             bool prefers_light_ { false };
             bool high_contrast_ { false };
             // 마지막으로 맞춘 막대 아이콘이다 (밝은 바탕이면 참).

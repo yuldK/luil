@@ -224,7 +224,7 @@ namespace luil {
                 const float text_width { box.x + box.width - 8.0f * scale - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
+                    const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
                     static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }
                 draw_children(context, interaction);

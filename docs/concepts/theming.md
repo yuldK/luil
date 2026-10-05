@@ -90,3 +90,11 @@ element가 `ui_color`를 앱에서 받는 자리는 라이브러리 어디에도
 공개 `font_resolver::family(name)`는 글꼴 가족 이름을 미리 보기용 `SkTypeface*`로 바꾸는 인터페이스다. 빈 이름은 기본 글꼴이며 찾지 못한 이름은 null을 반환한다. draw 호출 동안 포인터가 유효하도록 구현이 수명을 유지해야 한다.
 
 내부 [글꼴 registry](../../src/host/font_registry.h)는 설정된 UI·코드 글꼴과 글리프 fallback을 관리한다. 그리기와 입력 측정이 같은 글꼴을 사용하도록 registry를 공유한다. registry 자체는 플랫폼을 모르고, 시스템 글꼴 관리자·기본 UI 가족·사용자 언어만 플랫폼이 `font_source`로 공급한다(Win32는 DirectWrite와 Segoe UI). `fallback_typeface(codepoint)`는 사용자 UI 언어를 사용해 시스템 글꼴 관리자에 대체 글꼴을 요청하고 `sk_sp<SkTypeface>`를 반환한다. code point별 cache는 4096개 상한에 닿으면 비운다. `WM_FONTCHANGE`에서는 글꼴 cache와 관리자를 무효화하고 다음 조회에서 다시 만든다. 이미 반환한 `sk_sp`의 typeface는 계속 살아 있다.
+
+## 시스템 글자 크기
+
+Android host는 시작·구성 변경·설정 앱에서 복귀할 때 `TypedValue.applyDimension(COMPLEX_UNIT_SP)`를 C++ JNI로 호출해 글자 크기 변환 표를 읽는다. Android 14 이후의 비선형 확대를 보존한다. 내장 element의 UI 글자는 이 표로 그리며 아이콘과 여백은 기존 dp 배율을 유지한다. Windows는 기본 변환이 기존의 `font_size * scale`이다.
+
+커스텀 element는 `scaled_font_size(logical_size, display_scale)`로 글자 크기를 구한다. 글과 고정 여백으로 행을 만들면 `text_line_height(logical_size, padding)`를 쓰고, label은 `label_element::height_for`를 쓴다. luil은 측정 단계가 없으므로 앱이 직접 정한 고정 행 높이는 자동으로 늘어나지 않는다. 글 크기를 키우는 행은 이 함수로 높이와 스크롤 콘텐츠 높이도 함께 정해야 한다. mobile demo의 기본 입력 칸·탐색 목록·페이지 글은 이 방식이다.
+
+글자 설정만 바뀌어도 `app_delegate::make_metrics_message`를 다시 부른다. `window_metrics::text_scale`은 12sp의 대표 배율이며, 비선형 변환의 실제 크기는 위 함수로 조회한다. 텍스트 칸은 배치할 때 크기를 저장해 그리기·hit test·IME 범위 측정이 같은 크기를 쓰게 한다.

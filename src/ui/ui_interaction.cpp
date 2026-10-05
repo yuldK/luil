@@ -1679,7 +1679,7 @@ namespace luil {
             // 보통은 누르고 있는 동안 `advance`가 이미 냈다. 여기는 pump가 그 시각에
             // 깨기 전에 뗌이 먼저 온 경우다.
             if (target == nullptr || contact.config.long_press_enabled == false || contact.long_press == long_press_state::unavailable
-                || event.time - contact.pressed_at < contact.config.long_press_time || target->action(ui_trigger::right_click) == nullptr)
+                || event.time - contact.pressed_at < contact.config.long_press_time || has_long_press_action(*target) == false)
                 return actions;
             if (policy_ != nullptr)
                 policy_->on_click(*target);
@@ -1727,7 +1727,7 @@ namespace luil {
         const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
         // 대상이 사라졌거나 가려졌으면 뗌의 탭 판정도 같은 이유로 액션이 없다. 우클릭이
         // 없는 대상은 길게 눌러도 그냥 탭이다 — 뗌이 정한다.
-        if (target == nullptr || target->action(ui_trigger::right_click) == nullptr)
+        if (target == nullptr || has_long_press_action(*target) == false)
         {
             contact.long_press = long_press_state::unavailable;
             return {};
@@ -1751,10 +1751,21 @@ namespace luil {
     std::vector<input_action> interaction_controller::run_long_press(const touch_contact& contact, const ui_element& target, const float x, const float y)
     {
         std::vector<input_action> actions { run_trigger(target, ui_trigger::right_click, x, y, false) };
+        if (target.action(ui_trigger::right_click) == nullptr && config_.text_edit_menu && text_target(target.id().kind).has_value() && target.text_input().has_value())
+        {
+            if (target.text_input()->composing == false)
+                actions = place_text_caret(target, x, false, true);
+            actions.emplace_back(ui_command::text_edit_menu);
+        }
         // 메뉴가 실제로 열리는 순간이다. 아무것도 내지 않은 우클릭에는 울리지 않는다.
         if (contact.config.long_press_haptic && actions.empty() == false)
             actions.insert(actions.begin(), input_action { haptic_request { haptic_feedback::long_press } });
         return actions;
+    }
+
+    bool interaction_controller::has_long_press_action(const ui_element& target) const
+    {
+        return target.action(ui_trigger::right_click) != nullptr || (config_.text_edit_menu && text_target(target.id().kind).has_value() && target.text_input().has_value());
     }
 
     std::vector<input_action> interaction_controller::finish_touch_tap(const touch_contact& contact, const pointer_released_event& event)
@@ -1776,8 +1787,7 @@ namespace luil {
         // 길게 누르기는 보통 누르고 있는 동안 `advance`가 낸다. 여기는 pump가 그 시각에
         // 깨기 전에 뗌이 먼저 온 경우다 — 같은 판정을 뗌의 시각으로 한다.
         // 우클릭 액션이 없으면 그냥 탭이다.
-        if (contact.config.long_press_enabled && contact.long_press == long_press_state::waiting && event.time - contact.pressed_at >= contact.config.long_press_time
-            && target->action(ui_trigger::right_click) != nullptr)
+        if (contact.config.long_press_enabled && contact.long_press == long_press_state::waiting && event.time - contact.pressed_at >= contact.config.long_press_time && has_long_press_action(*target))
         {
             // 우클릭이 된 접촉은 연속 탭의 기록에서도 빠진다.
             last_click_id_ = {};
@@ -2830,7 +2840,15 @@ namespace luil {
                         post_with_retry(app_inbox, *message);
                 }
                 else if (const auto* const command { std::get_if<ui_command>(&action) }; command != nullptr && execute_ui_command)
+                {
+                    // 편집 메뉴는 UI thread가 초점 snapshot에서 대상을 찾는다. 명령의 wake보다 먼저 게시한다.
+                    if (*command == ui_command::text_edit_menu)
+                    {
+                        published = controller.snapshot();
+                        static_cast<void>(interaction_slot.publish(published));
+                    }
                     execute_ui_command(*command);
+                }
                 else if (auto* const app_command { std::get_if<app_ui_command>(&action) }; app_command != nullptr && execute_app_ui_command)
                     execute_app_ui_command(std::move(*app_command));
                 else if (auto* const copy { std::get_if<clipboard_copy_request>(&action) }; copy != nullptr && execute_clipboard)

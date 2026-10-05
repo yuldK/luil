@@ -104,12 +104,15 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     "${public_headers}/ui/ui_element_id.h"
     ui/ui_platform.cpp
     "${public_headers}/ui/ui_platform.h"
+    ui/font_scale.cpp
+    "${public_headers}/ui/font_scale.h"
     ui/ui_tree.cpp
     "${public_headers}/ui/ui_tree.h")
 
 # 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
 luil_add_source_filter(luil_core_files "ui/interaction"
     "${public_headers}/ui/text_input_state.h"
+    "${public_headers}/ui/text_input_options.h"
     "${public_headers}/ui/ui_cursor.h"
     "${public_headers}/ui/ui_events.h"
     ui/ui_interaction.cpp
@@ -247,6 +250,8 @@ luil_add_source_filter(luil_core_files "host"
     host/pointer_sequence.cpp
     host/overlay_input.cpp
     host/overlay_input.h
+    host/text_edit_menu.cpp
+    host/text_edit_menu.h
     host/pointer_sequence.h
     host/popup_dismiss.cpp
     host/popup_dismiss.h
@@ -511,6 +516,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_input.h
         android/android_system_theme.cpp
         android/android_system_theme.h
+        android/android_settings.cpp
+        android/android_settings.h
         android/android_text_input.cpp
         android/android_text_input.h
         android/android_window_control.cpp

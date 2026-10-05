@@ -1,6 +1,7 @@
 #include "luil/ui/ui_interaction.h"
 
 #include "luil/ui/app_message.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/strip_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
@@ -220,6 +221,101 @@ namespace {
         std::vector<luil::ui_element_id> clicked {};
     };
 } // namespace
+
+TEST_CASE("Touch text editing menus are opt in and preserve custom context actions", "[ui][interaction][touch][text-menu]")
+{
+    touch_policy policy {};
+    const auto make_tree = [](const bool secret, const bool composing, const bool custom) {
+        luil::text_input_view view { .text = u8"one two", .caret = 7, .anchor = 7 };
+        view.composing = composing;
+        view.composition_text = u8"one two";
+        const luil::ui_element_id id { kind_input, u8"query" };
+        auto input { std::make_unique<luil::text_input_element>(id, std::move(view), luil::text_input_config { .secret = secret }) };
+        if (custom)
+            input->set_action(luil::ui_trigger::right_click, message_action(u8"custom"));
+        input->arrange({ { 0.0f, 0.0f, 200.0f, 48.0f }, 1.0f });
+        return std::make_shared<const luil::ui_tree>(std::move(input));
+    };
+    luil::interaction_config config {};
+    config.measure_text = [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; };
+    SECTION("The desktop default does not request a menu")
+    {
+        luil::interaction_controller controller { &policy, config };
+        controller.set_tree(make_tree(false, false, false));
+        static_cast<void>(controller.process(touch_press(25.0f, 24.0f, 0)));
+        REQUIRE(controller.advance(at(600)).empty());
+    }
+    SECTION("The Android setting selects the pressed word and requests the menu once")
+    {
+        config.text_edit_menu = true;
+        luil::interaction_controller controller { &policy, config };
+        controller.set_tree(make_tree(false, false, false));
+        static_cast<void>(controller.process(touch_press(25.0f, 24.0f, 0)));
+        const auto actions { controller.advance(at(600)) };
+        REQUIRE(policy.edits.back().command == luil::text::text_edit_command::select_word);
+        REQUIRE(std::get<luil::ui_command>(actions.back()) == luil::ui_command::text_edit_menu);
+        REQUIRE(controller.advance(at(700)).empty());
+        REQUIRE(controller.process(touch_release(25.0f, 24.0f, 710)).empty());
+    }
+    SECTION("Password words are selected as a whole field")
+    {
+        config.text_edit_menu = true;
+        luil::interaction_controller controller { &policy, config };
+        controller.set_tree(make_tree(true, false, false));
+        static_cast<void>(controller.process(touch_press(25.0f, 24.0f, 0)));
+        const auto actions { controller.advance(at(600)) };
+        REQUIRE(policy.edits.back().command == luil::text::text_edit_command::select_all);
+        REQUIRE(std::get<luil::ui_command>(actions.back()) == luil::ui_command::text_edit_menu);
+    }
+    SECTION("The host commits composition before selecting text")
+    {
+        config.text_edit_menu = true;
+        luil::interaction_controller controller { &policy, config };
+        controller.set_tree(make_tree(false, true, false));
+        static_cast<void>(controller.process(touch_press(25.0f, 24.0f, 0)));
+        const auto actions { controller.advance(at(600)) };
+        REQUIRE(policy.edits.empty());
+        REQUIRE(std::get<luil::ui_command>(actions.back()) == luil::ui_command::text_edit_menu);
+    }
+    SECTION("An application context action remains in charge")
+    {
+        config.text_edit_menu = true;
+        luil::interaction_controller controller { &policy, config };
+        controller.set_tree(make_tree(false, false, true));
+        static_cast<void>(controller.process(touch_press(25.0f, 24.0f, 0)));
+        REQUIRE(names_of(controller.advance(at(600))) == std::vector<std::u8string> { u8"custom" });
+        REQUIRE(policy.edits.empty());
+    }
+}
+
+TEST_CASE("A text menu command can read its focused input before the UI wake", "[ui][interaction][pump][text-menu]")
+{
+    messaging::channel<luil::raw_input_event> input_inbox { messaging::channel_options { 8, messaging::overflow_policy::drop_oldest, {} } };
+    messaging::channel<luil::app_message> app_inbox { messaging::channel_options { 8, messaging::overflow_policy::reject_newest, {} } };
+    messaging::latest_slot<std::shared_ptr<const luil::ui_tree>> tree_slot {};
+    messaging::latest_slot<luil::surface_tree_list> surface_tree_slot {};
+    messaging::latest_slot<luil::interaction_snapshot> interaction_slot {};
+    const luil::ui_element_id id { kind_input, u8"query" };
+    auto input { std::make_unique<luil::text_input_element>(id, luil::text_input_view { .text = u8"abc" }, luil::text_input_config {}) };
+    input->arrange({ { 0.0f, 0.0f, 200.0f, 48.0f }, 1.0f });
+    static_cast<void>(tree_slot.publish(std::make_shared<const luil::ui_tree>(std::move(input))));
+    REQUIRE(input_inbox.post(touch_press(25.0f, 24.0f, 0)) == messaging::post_result::posted);
+    REQUIRE(input_inbox.post(touch_release(25.0f, 24.0f, 700)) == messaging::post_result::posted);
+    input_inbox.close();
+    touch_policy policy {};
+    luil::interaction_config config {};
+    config.text_edit_menu = true;
+    bool requested { false };
+    const auto execute = [&](const luil::ui_command command) {
+        REQUIRE(command == luil::ui_command::text_edit_menu);
+        const auto snapshot { interaction_slot.take_newer(0) };
+        REQUIRE(snapshot.has_value());
+        REQUIRE(snapshot->value.focused_input == id);
+        requested = true;
+    };
+    luil::run_ui_input_pump(input_inbox, tree_slot, surface_tree_slot, app_inbox, interaction_slot, execute, &policy, config);
+    REQUIRE(requested);
+}
 
 TEST_CASE("Only touch turns a quick swipe into a scroll", "[ui][interaction][touch]")
 {

@@ -141,7 +141,7 @@ namespace luil {
         {
             // 닫기 버튼과 겹치지 않도록 오른쪽을 비운다.
             const float reserved { close_ != nullptr ? 40.0f * scale : inset };
-            const SkFont font { sk_ref_sp(context.ui_typeface), config_.title_font_size * scale };
+            const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(config_.title_font_size, scale) };
             const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
             static_cast<void>(draw_text_within(context.canvas, config_.title, box.x + inset, box.y + centered_text_baseline(font, box.height), box.width - inset - reserved, font, foreground));
         }
@@ -248,7 +248,7 @@ namespace luil {
             context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(background));
         }
 
-        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
         ui_color label_color { context.palette.primary_foreground };
         // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다. 채운 강조와 옅은 강조는 바탕의 밝기가
         // 달라 글자 역할도 다르다.
@@ -343,7 +343,7 @@ namespace luil {
 
     float text_input_element::font_size() const noexcept
     {
-        return 11.0f * scale_;
+        return font_size_;
     }
 
     float text_input_element::text_left() const noexcept
@@ -417,6 +417,7 @@ namespace luil {
     {
         set_bounds(context.slot);
         scale_ = context.scale > 0.0f ? context.scale : 1.0f;
+        font_size_ = scaled_font_size(11.0f, scale_);
         if (clear_ == nullptr)
             return;
 
@@ -428,7 +429,17 @@ namespace luil {
 
     std::optional<text_input_snapshot> text_input_element::text_input() const
     {
-        return text_input_snapshot { value_.text, value_.caret, value_.anchor, value_.composing, value_.composition_text, value_.composition_caret, value_.applied_sequence, config_.secret };
+        return text_input_snapshot {
+            value_.text,
+            value_.caret,
+            value_.anchor,
+            value_.composing,
+            value_.composition_text,
+            value_.composition_caret,
+            value_.applied_sequence,
+            config_.secret,
+            config_.input,
+        };
     }
 
     std::optional<rect_f> text_input_element::text_span_bounds(const text_span_query& query, const text_measurer& measurer) const

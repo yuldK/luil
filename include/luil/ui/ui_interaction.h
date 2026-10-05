@@ -356,6 +356,8 @@ namespace luil {
         text_measurer measure_text {};
         // 터치 몸짓이다. 실행 중 변경은 `interaction_controller::set_touch_config`가 받는다.
         touch_gesture_config touch {};
+        // 우클릭 동작이 없는 텍스트 칸의 길게 누름에 편집 메뉴를 연다. Android host만 켠다.
+        bool text_edit_menu { false };
     };
 
     // 주 창 밖 표면(popup·보조 창)들의 tree다.
@@ -542,6 +544,7 @@ namespace luil {
         //  - 누르고 있는 동안(`advance`)과 pump보다 뗌이 먼저 온 두 자리(탭, 손잡이)가 함께 쓴다 — 셋 중 하나에서
         //    햅틱을 잊으면 같은 몸짓이 입력 큐의 사정에 따라 울리기도 하고 안 울리기도 한다.
         [[nodiscard]] std::vector<input_action> run_long_press(const touch_contact& contact, const ui_element& target, float x, float y);
+        [[nodiscard]] bool has_long_press_action(const ui_element& target) const;
         [[nodiscard]] std::optional<pan_target> resolve_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
         // 진행 중인 터치 접촉을 액션 없이 거둔다.
         void cancel_touch() noexcept;

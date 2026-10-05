@@ -1,7 +1,7 @@
 #pragma once
 
-#include "luil/ui/ui_element.h"
 #include "luil/ui/text_input_state.h"
+#include "luil/ui/ui_element.h"
 
 #include <chrono>
 #include <cstddef>
@@ -224,6 +224,11 @@ namespace luil {
         // 암호 칸의 글을 그대로 그린다 (앱의 "보이기" 단추). 그리기와 보조 기술의 값만 바뀌고 나머지 암호 칸의
         // 규칙은 그대로다 — 키보드를 다시 세우지 않고 켜고 끌 수 있다.
         bool reveal { false };
+        // 기본은 기존의 일반/암호 키보드와 완료(Enter)다.
+        text_input_options input {};
+        // Android 소프트 키보드의 확정 단추를 눌렀다. 비어 있으면 done/search/go/send는
+        // Enter, next/previous는 초점 이동이다. Windows의 Enter는 종전 경로를 유지한다.
+        ui_action submit {};
     };
 
     // 앞 글리프와 지우기 버튼의 크기, 그리고 글과의 간격이다 (논리 픽셀).
@@ -246,6 +251,11 @@ namespace luil {
     {
     public:
         text_input_element(ui_element_id id, text_input_view value, text_input_config config);
+
+        [[nodiscard]] const text_input_config& config() const noexcept
+        {
+            return config_;
+        }
 
         // 글의 왼쪽·오른쪽에서 아이콘이 가져가는 폭이다 (논리 픽셀).
         // 담는 쪽이 칸 폭을 정할 때 쓴다 — 측정 단계가 없으므로 그쪽이 더해 잡는다.
@@ -288,6 +298,7 @@ namespace luil {
 
         text_input_view value_ {};
         text_input_config config_ {};
+        float font_size_ { 11.0f };
         // 가린 칸이 그리는 점들이다 (보이는 글을 가린 것). 값이 element의 수명 동안 그대로라 한 번 짓는다.
         std::u8string masked_ {};
         // 지우기 액션이 없으면 nullptr다.

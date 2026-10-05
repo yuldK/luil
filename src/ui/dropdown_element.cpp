@@ -75,15 +75,14 @@ namespace luil {
         const float arrow_width { 18.0f * scale };
         const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), 12.0f * scale };
         const SkPaint glyph { solid_paint(enabled() ? context.palette.secondary_foreground : context.palette.disabled_foreground) };
-        draw_centered_glyph(
-            context.canvas, config_.open ? codicons::icon_chevron_up : codicons::icon_chevron_down, { box.x + box.width - arrow_width - 4.0f * scale, box.y, arrow_width, box.height },
+        draw_centered_glyph(context.canvas, config_.open ? codicons::icon_chevron_up : codicons::icon_chevron_down, { box.x + box.width - arrow_width - 4.0f * scale, box.y, arrow_width, box.height },
             glyph_font, glyph);
 
         const float inset { 8.0f * scale };
         const float text_width { box.width - inset - arrow_width - 8.0f * scale };
         if (text_width <= 0.0f)
             return;
-        const SkFont font { sk_ref_sp(context.ui_typeface), context.metrics.body_font_size * scale };
+        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
         const bool empty { config_.text.empty() };
         if (empty && config_.placeholder.empty())
             return;
@@ -93,8 +92,7 @@ namespace luil {
         else if (enabled() == false)
             text_color = context.palette.disabled_foreground;
         const SkPaint foreground { solid_paint(text_color) };
-        static_cast<void>(
-            draw_text_within(context.canvas, empty ? config_.placeholder : config_.text, box.x + inset, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
+        static_cast<void>(draw_text_within(context.canvas, empty ? config_.placeholder : config_.text, box.x + inset, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
     }
     access_info dropdown_element::accessibility() const
     {
