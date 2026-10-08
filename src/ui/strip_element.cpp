@@ -60,6 +60,8 @@ namespace luil {
                 source.scroll = config_.scroll;
                 source.scale = scale;
                 source.axis = scroll_axis::horizontal;
+                source.at_start = config_.scroll_offset <= 0.0f;
+                source.at_end = config_.scroll_offset >= maximum_scroll_;
                 set_scroll_source(std::move(source));
             }
             else

@@ -2,16 +2,20 @@
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/dialog_elements.h"
+#include "luil/ui/list_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/strip_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <utility>
@@ -102,6 +106,9 @@ namespace {
         bool visible { true };
         bool enabled { true };
         bool covered { false };
+        bool at_start { false };
+        bool at_end { false };
+        bool area_enabled { true };
     };
 
     // 흘리는 창 안에 클릭·우클릭·더블 클릭을 단 카드 하나를 둔다.
@@ -112,7 +119,11 @@ namespace {
         root->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, options.scale });
         auto area { std::make_unique<test_panel>(luil::ui_element_id { kind_area, u8"area" }) };
         area->arrange({ { 0.0f, 0.0f, 400.0f, 300.0f }, options.scale });
-        area->set_scroll_source(recording_source(scrolled, u8"scroll", options.scale, options.axis));
+        auto source { recording_source(scrolled, u8"scroll", options.scale, options.axis) };
+        source.at_start = options.at_start;
+        source.at_end = options.at_end;
+        area->set_scroll_source(std::move(source));
+        area->set_enabled(options.area_enabled);
         auto card { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"card" }) };
         card->arrange({ { 20.0f, 20.0f, 200.0f, 200.0f }, options.scale });
         card->set_action(luil::ui_trigger::left_click, message_action(u8"click"));
@@ -383,6 +394,357 @@ TEST_CASE("How a swipe was sampled does not change whether it scrolls", "[ui][in
 
     REQUIRE(stepped == std::vector<float> { 20.0f });
     REQUIRE(single == stepped);
+}
+
+TEST_CASE("A released swipe coasts smoothly and stops without further input", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> scrolled {};
+    touch_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(card_tree(&scrolled));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 30)));
+    REQUIRE(names_of(controller.process(touch_release(60.0f, 80.0f, 40))) == std::vector<std::u8string> { u8"scroll" });
+    REQUIRE(scrolled == std::vector<float> { 30.0f, 10.0f });
+    REQUIRE(controller.next_deadline() == at(56));
+    REQUIRE(controller.advance(at(55)).empty());
+    REQUIRE(names_of(controller.advance(at(56))) == std::vector<std::u8string> { u8"scroll" });
+    const float first { scrolled.back() };
+    REQUIRE(first > 0.0f);
+    static_cast<void>(controller.advance(at(72)));
+    REQUIRE(scrolled.back() > 0.0f);
+    REQUIRE(scrolled.back() < first);
+    static_cast<void>(controller.advance(at(2000)));
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(controller.advance(at(2100)).empty());
+    REQUIRE(policy.clicked.empty());
+    REQUIRE(controller.snapshot().pressed == luil::ui_element_id {});
+}
+
+TEST_CASE("Coasting distance is independent of sampling and timer frequency", "[ui][interaction][touch][inertia]")
+{
+    const auto coast = [](const bool stepped) {
+        std::vector<float> scrolled {};
+        luil::interaction_controller controller {};
+        controller.set_tree(card_tree(&scrolled));
+        static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+        if (stepped)
+            static_cast<void>(controller.process(touch_move(60.0f, 110.0f, 10)));
+        static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 30)));
+        static_cast<void>(controller.process(touch_release(60.0f, 80.0f, 40)));
+        if (stepped)
+            for (int time { 56 }; time < 2000; time += 16)
+                static_cast<void>(controller.advance(at(time)));
+        else
+            static_cast<void>(controller.advance(at(2000)));
+        REQUIRE(controller.next_deadline().has_value() == false);
+        return std::accumulate(scrolled.begin(), scrolled.end(), 0.0f);
+    };
+    REQUIRE(coast(true) == Catch::Approx(coast(false)).margin(0.01f));
+}
+
+TEST_CASE("Coasting follows the scroll axis and logical scale", "[ui][interaction][touch][inertia]")
+{
+    const auto coast = [](const float scale, const luil::scroll_axis axis, const float direction) {
+        std::vector<float> scrolled {};
+        luil::interaction_controller controller {};
+        controller.set_tree(card_tree(&scrolled, { .axis = axis, .scale = scale }));
+        const bool horizontal { axis == luil::scroll_axis::horizontal };
+        static_cast<void>(controller.process(touch_press(120.0f, 120.0f, 0, 1, scale)));
+        const float end { 120.0f - direction * 40.0f * scale };
+        static_cast<void>(controller.process(touch_move(horizontal ? end : 120.0f, horizontal ? 120.0f : end, 40)));
+        static_cast<void>(controller.process(touch_release(horizontal ? end : 120.0f, horizontal ? 120.0f : end, 40)));
+        REQUIRE(controller.next_deadline().has_value());
+        scrolled.clear();
+        static_cast<void>(controller.advance(at(56)));
+        REQUIRE(scrolled.size() == 1u);
+        return scrolled.back();
+    };
+    const float vertical { coast(1.0f, luil::scroll_axis::vertical, 1.0f) };
+    REQUIRE(vertical > 0.0f);
+    REQUIRE(coast(2.0f, luil::scroll_axis::vertical, 1.0f) == Catch::Approx(vertical));
+    REQUIRE(coast(1.0f, luil::scroll_axis::horizontal, 1.0f) == Catch::Approx(vertical));
+    REQUIRE(coast(1.0f, luil::scroll_axis::vertical, -1.0f) == Catch::Approx(-vertical));
+}
+
+TEST_CASE("Paused slow and cancelled swipes do not coast", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    SECTION("Paused before release")
+    {
+        static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 40)));
+        static_cast<void>(controller.process(touch_release(60.0f, 90.0f, 200)));
+    }
+    SECTION("Slow at release")
+    {
+        static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 40)));
+        static_cast<void>(controller.process(touch_move(60.0f, 89.0f, 140)));
+        static_cast<void>(controller.process(touch_release(60.0f, 88.0f, 180)));
+    }
+    SECTION("Capture cancelled")
+    {
+        static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 40)));
+        static_cast<void>(controller.process(luil::pointer_cancelled_event { luil::pointer_device::touch, 1, {}, at(50) }));
+        REQUIRE(controller.process(touch_release(60.0f, 80.0f, 60)).empty());
+    }
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(controller.advance(at(2000)).empty());
+}
+
+TEST_CASE("New interactions and runtime settings stop coasting", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 30)));
+    static_cast<void>(controller.process(touch_release(60.0f, 80.0f, 40)));
+    REQUIRE(controller.next_deadline().has_value());
+    SECTION("Touch press")
+    {
+        static_cast<void>(controller.process(touch_press(60.0f, 80.0f, 50, 2)));
+        REQUIRE(controller.next_deadline() == at(650));
+    }
+    SECTION("Mouse press")
+    {
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 60.0f, 80.0f, luil::pointer_button::left, at(50) }));
+    }
+    SECTION("Pen press")
+    {
+        static_cast<void>(controller.process(as_pen(luil::pointer_pressed_event { 60.0f, 80.0f, luil::pointer_button::left, at(50) })));
+    }
+    SECTION("Wheel")
+    {
+        luil::mouse_wheel_event wheel {};
+        wheel.x = 60.0f;
+        wheel.y = 80.0f;
+        wheel.delta = 120.0f;
+        static_cast<void>(controller.process(wheel));
+    }
+    SECTION("Keyboard")
+    {
+        static_cast<void>(controller.process(luil::key_pressed_event {}));
+    }
+    SECTION("Surface focus lost")
+    {
+        static_cast<void>(controller.process(luil::surface_focus_lost_event {}));
+    }
+    SECTION("Input queue loss")
+    {
+        static_cast<void>(controller.cancel_dropped_gestures());
+    }
+    SECTION("Disable inertia")
+    {
+        luil::touch_gesture_config config {};
+        config.inertia_enabled = false;
+        REQUIRE(controller.set_touch_config(config));
+    }
+    SECTION("Disable panning")
+    {
+        luil::touch_gesture_config config {};
+        config.pan_enabled = false;
+        REQUIRE(controller.set_touch_config(config));
+    }
+    scrolled.clear();
+    REQUIRE(controller.advance(at(56)).empty());
+    REQUIRE(scrolled.empty());
+}
+
+TEST_CASE("Coasting resolves fresh callbacks and stops when its owner changes", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> old_scrolled {};
+    std::vector<float> new_scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&old_scrolled));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 30)));
+    static_cast<void>(controller.process(touch_release(60.0f, 80.0f, 40)));
+    old_scrolled.clear();
+    SECTION("Fresh callback")
+    {
+        controller.set_tree(card_tree(&new_scrolled));
+        REQUIRE(names_of(controller.advance(at(56))) == std::vector<std::u8string> { u8"scroll" });
+        REQUIRE(new_scrolled.size() == 1u);
+        REQUIRE(old_scrolled.empty());
+        return;
+    }
+    SECTION("Covered")
+    {
+        controller.set_tree(card_tree(&new_scrolled, { .covered = true }));
+    }
+    SECTION("Disabled")
+    {
+        controller.set_tree(card_tree(&new_scrolled, { .area_enabled = false }));
+    }
+    SECTION("Axis changed")
+    {
+        controller.set_tree(card_tree(&new_scrolled, { .axis = luil::scroll_axis::horizontal }));
+    }
+    SECTION("Tree removed")
+    {
+        controller.set_tree(nullptr);
+    }
+    REQUIRE(controller.advance(at(56)).empty());
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(old_scrolled.empty());
+    REQUIRE(new_scrolled.empty());
+}
+
+TEST_CASE("Coasting stops at the scroll boundary without handing off", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    SECTION("End boundary")
+    {
+        static_cast<void>(controller.process(touch_move(60.0f, 90.0f, 30)));
+        static_cast<void>(controller.process(touch_release(60.0f, 80.0f, 40)));
+        controller.set_tree(card_tree(&scrolled, { .at_end = true }));
+    }
+    SECTION("Start boundary")
+    {
+        static_cast<void>(controller.process(touch_move(60.0f, 150.0f, 30)));
+        static_cast<void>(controller.process(touch_release(60.0f, 160.0f, 40)));
+        controller.set_tree(card_tree(&scrolled, { .at_start = true }));
+    }
+    scrolled.clear();
+    REQUIRE(controller.advance(at(56)).empty());
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(scrolled.empty());
+}
+
+TEST_CASE("Disabling inertia during a swipe preserves direct scrolling", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled));
+    luil::touch_gesture_config config {};
+    SECTION("Disabled before contact")
+    {
+        config.inertia_enabled = false;
+        REQUIRE(controller.set_touch_config(config));
+        static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    }
+    SECTION("Disabled during contact and reenabled")
+    {
+        static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+        config.inertia_enabled = false;
+        REQUIRE(controller.set_touch_config(config));
+        config.inertia_enabled = true;
+        REQUIRE(controller.set_touch_config(config));
+    }
+    REQUIRE(names_of(controller.process(touch_move(60.0f, 90.0f, 30))) == std::vector<std::u8string> { u8"scroll" });
+    REQUIRE(names_of(controller.process(touch_release(60.0f, 80.0f, 40))) == std::vector<std::u8string> { u8"scroll" });
+    REQUIRE(controller.next_deadline().has_value() == false);
+    REQUIRE(controller.advance(at(56)).empty());
+    REQUIRE(scrolled == std::vector<float> { 30.0f, 10.0f });
+}
+
+TEST_CASE("Coasting remains bound to its surface", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled));
+    controller.set_surface_trees({ { u8"window", card_tree(&scrolled) } });
+    auto press { touch_press(60.0f, 120.0f, 0) };
+    press.surface = u8"window";
+    auto move { touch_move(60.0f, 90.0f, 30) };
+    move.surface = u8"window";
+    auto release { touch_release(60.0f, 80.0f, 40) };
+    release.surface = u8"window";
+    static_cast<void>(controller.process(press));
+    static_cast<void>(controller.process(move));
+    static_cast<void>(controller.process(release));
+    REQUIRE(controller.next_deadline().has_value());
+    scrolled.clear();
+    SECTION("Other surface loses focus")
+    {
+        static_cast<void>(controller.process(luil::surface_focus_lost_event {}));
+        REQUIRE(names_of(controller.advance(at(56))) == std::vector<std::u8string> { u8"scroll" });
+        REQUIRE(scrolled.size() == 1u);
+    }
+    SECTION("Own surface removed")
+    {
+        controller.set_surface_trees({});
+        REQUIRE(controller.next_deadline().has_value() == false);
+        REQUIRE(controller.advance(at(56)).empty());
+        REQUIRE(scrolled.empty());
+    }
+}
+
+TEST_CASE("Extremely fast swipes have bounded coasting distance", "[ui][interaction][touch][inertia]")
+{
+    std::vector<float> scrolled {};
+    luil::interaction_controller controller {};
+    controller.set_tree(card_tree(&scrolled));
+    static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
+    static_cast<void>(controller.process(touch_move(60.0f, 80.0f, 1)));
+    static_cast<void>(controller.process(touch_release(60.0f, 80.0f, 1)));
+    REQUIRE(controller.next_deadline().has_value());
+    scrolled.clear();
+    static_cast<void>(controller.advance(at(2000)));
+    REQUIRE(scrolled.size() == 1u);
+    REQUIRE(scrolled.back() > 0.0f);
+    REQUIRE(scrolled.back() <= 1200.0f);
+    REQUIRE(controller.next_deadline().has_value() == false);
+}
+
+TEST_CASE("Built in scroll owners publish clamped boundaries for coasting", "[ui][interaction][touch][inertia]")
+{
+    int kind { 0 };
+    SECTION("List")
+    {
+        kind = 0;
+    }
+    SECTION("Scroll area")
+    {
+        kind = 1;
+    }
+    SECTION("Horizontal strip")
+    {
+        kind = 2;
+    }
+    for (const float offset : { -10.0f, 50.0f, 500.0f })
+    {
+        std::unique_ptr<luil::ui_element> owner {};
+        const auto scroll = [](float) { return luil::make_app_action(fake_intent { u8"scroll" }); };
+        if (kind == 0)
+        {
+            luil::list_config config {};
+            config.items = { { u8"one", u8"One" }, { u8"two", u8"Two" } };
+            config.row_height = 100.0f;
+            config.scroll_offset = offset;
+            config.scroll = scroll;
+            owner = std::make_unique<luil::list_element>(std::move(config));
+        }
+        else if (kind == 1)
+        {
+            luil::scroll_area_config config {};
+            config.content_height = 200.0f;
+            config.scroll_offset = offset;
+            config.scroll = scroll;
+            owner = std::make_unique<luil::scroll_area_element>(std::move(config));
+        }
+        else
+        {
+            owner = std::make_unique<luil::strip_element>(luil::ui_element_id { kind_area, u8"strip" }, luil::strip_config { 200.0f, offset, scroll });
+        }
+        REQUIRE(owner != nullptr);
+        owner->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 2.0f });
+        REQUIRE(owner->scroll() != nullptr);
+        REQUIRE(owner->scroll()->at_start == (offset <= 0.0f));
+        REQUIRE(owner->scroll()->at_end == (offset >= 100.0f));
+        const luil::scroll_axis axis { owner->scroll()->axis };
+        const luil::ui_tree tree { std::move(owner) };
+        const auto pan { luil::route_pan(tree, 50.0f, 50.0f, axis) };
+        REQUIRE(pan.has_value());
+        REQUIRE(pan->at_start == (offset <= 0.0f));
+        REQUIRE(pan->at_end == (offset >= 100.0f));
+    }
 }
 
 TEST_CASE("A late or sideways touch drag neither scrolls nor clicks", "[ui][interaction][touch]")

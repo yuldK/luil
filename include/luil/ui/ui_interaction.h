@@ -137,6 +137,8 @@ namespace luil {
         std::function<input_action(float delta)> scroll {};
         // 내용이 처음에 있다 (`scroll_source::at_start`). 바깥 시트가 끌기를 넘겨받는 판정에 쓴다.
         bool at_start { false };
+        // 내용이 끝에 있다. 관성이 경계 밖으로 메시지를 계속 보내지 않게 한다.
+        bool at_end { false };
     };
 
     // 표로 끌기를 이름 대는 앱의 한 줄이다.
@@ -147,6 +149,9 @@ namespace luil {
         scroll_axis axis { scroll_axis::vertical };
         float scale { 1.0f };
         std::function<input_action(float delta)> scroll {};
+        // 앱 상태에서 읽은 양 끝이다 (`scroll_source`와 같은 뜻).
+        bool at_start { false };
+        bool at_end { false };
     };
 
     // (x, y)를 덮고 `axis`로 흐르는 가장 안쪽·가장 위의 컨테이너다.
@@ -181,6 +186,8 @@ namespace luil {
         //  - 기본은 끔이다. 플랫폼 host가 자기 관례대로 켠다 — Android의 `application_config::touch`는 켜고,
         //    햅틱이 없는 Windows는 끈 채다.
         bool long_press_haptic { false };
+        // 빠르게 쓸고 놓으면 최근 속도로 스크롤을 잇고 서서히 멈춘다.
+        bool inertia_enabled { true };
 
         [[nodiscard]] bool operator==(const touch_gesture_config&) const noexcept = default;
     };
@@ -406,14 +413,15 @@ namespace luil {
         //    그 접촉을 취소하고 남은 이벤트를 삼킨다. 다시 켜도 아직 닿아 있는
         //    손가락이 새 접촉이 되지 않는다.
         //  - 손잡이 조작에서 길게 누르기를 끄면 조작은 이어가고 메뉴 후보만 거둔다.
+        //  - 스크롤·관성을 끄면 진행 중 관성을 멈춘다. 관성만 끄면 직접 스크롤은 이어간다.
         bool set_touch_config(const touch_gesture_config& config) noexcept;
-        // 이벤트 없이 시간이 흘러야 일어날 다음 판정의 시각이다 (지금은 터치 길게 누르기뿐이다).
+        // 이벤트 없이 시간이 흘러야 일어날 다음 판정의 시각이다 (터치 길게 누르기·관성 스크롤).
         // 없으면 기다릴 것이 없다.
         //  - controller는 시계를 조회하지 않는다. 입력 pump가 이 시각까지만 기다렸다가
         //    `advance`로 지금 시각을 알린다 — test는 시각을 손으로 정한다.
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_deadline() const noexcept;
         // 지금 시각까지 흘러 생긴 판정을 실행한다. 길게 누르기가 차면 손을 떼기 전에
-        // 우클릭 액션을 낸다.
+        // 우클릭 액션을 내고, 손을 뗀 뒤에는 관성 스크롤의 변화량을 낸다.
         [[nodiscard]] std::vector<input_action> advance(std::chrono::steady_clock::time_point now);
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
@@ -502,7 +510,7 @@ namespace luil {
             float start_y { 0.0f };
             float last_x { 0.0f };
             float last_y { 0.0f };
-            // 이 접촉의 이동이다. 손잡이·넘겨받은 끌기를 놓을 때 속도를 잰다.
+            // 이 접촉의 이동이다. 스크롤·손잡이·넘겨받은 끌기를 놓을 때 속도를 잰다.
             motion_track motion {};
             // 누른 자리에서 가장 멀리 간 거리(논리 픽셀)다.
             // 돌아와도 줄지 않는다 — 한 번 허용치를 넘은 접촉은 탭도 길게 누르기도 아니다.
@@ -534,6 +542,20 @@ namespace luil {
             scroll_axis handoff_axis { scroll_axis::vertical };
         };
 
+        // 접촉을 놓은 뒤에도 스크롤의 임자와 누른 자리는 그대로다.
+        // 콜백은 저장하지 않고 매 갱신에서 최신 tree로 다시 찾는다.
+        struct inertial_pan
+        {
+            ui_element_id id {};
+            std::u8string surface {};
+            scroll_axis axis { scroll_axis::vertical };
+            float x { 0.0f };
+            float y { 0.0f };
+            float velocity { 0.0f };
+            std::chrono::steady_clock::time_point updated_at {};
+        };
+
+        [[nodiscard]] std::vector<input_action> advance_inertia(std::chrono::steady_clock::time_point now);
         [[nodiscard]] std::vector<input_action> process_touch_press(const pointer_pressed_event& event);
         [[nodiscard]] std::vector<input_action> process_touch_move(const pointer_moved_event& event);
         [[nodiscard]] std::vector<input_action> process_touch_release(const pointer_released_event& event);
@@ -743,6 +765,7 @@ namespace luil {
         std::optional<pointer_contact> pointer_contact_ {};
 
         std::optional<touch_contact> touch_ {};
+        std::optional<inertial_pan> inertia_ {};
         struct view_drag
         {
             ui_element_id id {};

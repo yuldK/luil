@@ -104,6 +104,8 @@ namespace luil {
                 scroll_source source {};
                 source.scroll = config_.scroll;
                 source.scale = scale;
+                source.at_start = metrics_.scroll_offset <= 0.0f;
+                source.at_end = metrics_.scroll_offset >= metrics_.maximum_scroll;
                 set_scroll_source(std::move(source));
             }
             else

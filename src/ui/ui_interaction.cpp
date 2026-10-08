@@ -18,6 +18,12 @@ namespace luil {
     namespace {
         // 놓는 순간의 속도를 재는 창이다. 이보다 오래된 이동은 속도에 넣지 않는다.
         constexpr std::chrono::milliseconds motion_window { 100 };
+        constexpr std::chrono::milliseconds inertia_interval { 16 };
+        constexpr float inertia_minimum_velocity { 80.0f };
+        constexpr float inertia_maximum_velocity { 6000.0f };
+        constexpr float inertia_stop_velocity { 20.0f };
+        // 실제 경과 시간으로 감쇠해 입력 빈도나 갱신 횟수가 이동 거리를 바꾸지 않는다.
+        constexpr float inertia_decay { 5.0f };
 
         [[nodiscard]] float positive_scale(const float scale) noexcept
         {
@@ -145,6 +151,8 @@ namespace luil {
         //  - 터치 접촉은 누름보다 오래 산다 (스크롤로 바뀐 뒤에도). 따로 거둔다.
         if (touch_.has_value() && surface_tree(touch_->surface) == nullptr)
             cancel_touch();
+        if (inertia_.has_value() && surface_tree(inertia_->surface) == nullptr)
+            inertia_.reset();
         if (pointer_contact_.has_value() && surface_tree(pointer_contact_->surface) == nullptr)
             cancel_pointer_gesture();
         if (pressed_surface_.empty() == false && surface_tree(pressed_surface_) == nullptr)
@@ -216,6 +224,8 @@ namespace luil {
                 }
                 else if constexpr (std::is_same_v<value_type, surface_focus_lost_event>)
                 {
+                    if (inertia_.has_value() && inertia_->surface == value.surface)
+                        inertia_.reset();
                     // 주 창과 보조 창의 focus 메시지는 연달아 올 수 있다.
                     // 떠난 표면이 지금 초점을 가진 표면일 때만 거둬, 늦은
                     // 메시지가 새 창에서 막 얻은 텍스트 초점을 지우지 않는다.
@@ -236,6 +246,7 @@ namespace luil {
                 }
                 else if constexpr (std::is_same_v<value_type, file_drag_entered_event>)
                 {
+                    inertia_.reset();
                     process_file_drag_entered(value);
                     return {};
                 }
@@ -254,6 +265,7 @@ namespace luil {
                 }
                 else if constexpr (std::is_same_v<value_type, mouse_wheel_event>)
                 {
+                    inertia_.reset();
                     // 스크롤 뒤 tree가 다시 오면 이 자리로 hover를 재판정한다.
                     pointer_inside_ = true;
                     last_pointer_x_ = value.x;
@@ -276,9 +288,15 @@ namespace luil {
                     return policy_ != nullptr ? policy_->on_wheel(*tree, value, delta) : route_wheel(*tree, value, delta);
                 }
                 else if constexpr (std::is_same_v<value_type, key_pressed_event>)
+                {
+                    inertia_.reset();
                     return process_key(value);
+                }
                 else if constexpr (std::is_same_v<value_type, access_focus_event>)
+                {
+                    inertia_.reset();
                     return process_access_focus(value);
+                }
                 else if constexpr (std::is_same_v<value_type, pointer_cancelled_event>)
                     return process_cancel(value);
                 else if constexpr (std::is_same_v<value_type, focus_reveal_event>)
@@ -724,7 +742,7 @@ namespace luil {
         if (owner == nullptr || accepts(*owner) == false)
             return std::nullopt;
         const scroll_source& source { *owner->scroll() };
-        return pan_target { owner->id(), axis, positive_scale(source.scale), source.scroll, source.at_start };
+        return pan_target { owner->id(), axis, positive_scale(source.scale), source.scroll, source.at_start, source.at_end };
     }
 
     std::optional<pan_target> route_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis, const std::span<const pan_route> routes)
@@ -742,7 +760,7 @@ namespace luil {
         const pan_route* const route { owner != nullptr ? route_of(*owner) : nullptr };
         if (route == nullptr)
             return std::nullopt;
-        return pan_target { route->id, axis, positive_scale(route->scale), route->scroll };
+        return pan_target { route->id, axis, positive_scale(route->scale), route->scroll, route->at_start, route->at_end };
     }
 
     bool valid_touch_gesture_config(const touch_gesture_config& config) noexcept
@@ -896,6 +914,7 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_press(const pointer_pressed_event& event)
     {
+        inertia_.reset();
         if (event.device == pointer_device::touch)
             return process_touch_press(event);
         // 실제 마우스·펜의 새 누름은 진행 중인 터치 조작을 취소하고 시작한다.
@@ -1525,6 +1544,8 @@ namespace luil {
                 {
                     contact.phase = touch_phase::panning;
                     contact.pan = std::move(pan);
+                    // 첫 이동만 받고 놓아도 누른 자리부터 속도를 잴 수 있어야 한다.
+                    contact.motion.samples.insert(contact.motion.samples.begin(), { contact.pressed_at, contact.start_x, contact.start_y });
                     // 스크롤이 된 접촉은 클릭이 아니다. 누름은 거두되 접촉은 남는다.
                     clear_press();
                     // 시작할 때는 누른 자리부터 쌓인 이동을 한 번에 반영한다.
@@ -1641,7 +1662,15 @@ namespace luil {
             const std::optional<pan_target> pan { tree != nullptr ? resolve_pan(*tree, contact.start_x, contact.start_y, contact.pan->axis) : std::nullopt };
             if (pan.has_value() == false || pan->id != contact.pan->id)
                 return {};
-            return pan_step(*pan, contact.last_x, contact.last_y, event.x, event.y);
+            std::vector<input_action> actions { pan_step(*pan, contact.last_x, contact.last_y, event.x, event.y) };
+            contact.motion.add(event.time, event.x, event.y);
+            const drag_velocity measured { contact.motion.velocity_at(event.time) };
+            const float velocity { -(pan->axis == scroll_axis::horizontal ? measured.x : measured.y) / positive_scale(pan->scale) };
+            if (contact.config.inertia_enabled && config_.touch.inertia_enabled && std::isfinite(velocity) && std::abs(velocity) >= inertia_minimum_velocity
+                && (velocity > 0.0f ? pan->at_end == false : pan->at_start == false))
+                inertia_
+                    = inertial_pan { pan->id, contact.surface, pan->axis, contact.start_x, contact.start_y, std::clamp(velocity, -inertia_maximum_velocity, inertia_maximum_velocity), event.time };
+            return actions;
         }
         case touch_phase::dragging:
             if (tree == nullptr || live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) == nullptr)
@@ -1705,6 +1734,8 @@ namespace luil {
 
     std::optional<std::chrono::steady_clock::time_point> interaction_controller::next_deadline() const noexcept
     {
+        if (inertia_.has_value())
+            return inertia_->updated_at + inertia_interval;
         if (touch_.has_value() == false)
             return std::nullopt;
         const touch_contact& contact { *touch_ };
@@ -1722,6 +1753,8 @@ namespace luil {
         const std::optional<std::chrono::steady_clock::time_point> deadline { next_deadline() };
         if (deadline.has_value() == false || now < *deadline)
             return {};
+        if (inertia_.has_value())
+            return advance_inertia(now);
         touch_contact& contact { *touch_ };
         const ui_tree* const tree { surface_tree(contact.surface) };
         const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
@@ -1746,6 +1779,29 @@ namespace luil {
         if (policy_ != nullptr)
             policy_->on_click(*target);
         return run_long_press(contact, *target, contact.last_x, contact.last_y);
+    }
+
+    std::vector<input_action> interaction_controller::advance_inertia(const std::chrono::steady_clock::time_point now)
+    {
+        inertial_pan& motion { *inertia_ };
+        const ui_tree* const tree { surface_tree(motion.surface) };
+        const std::optional<pan_target> pan { tree != nullptr ? resolve_pan(*tree, motion.x, motion.y, motion.axis) : std::nullopt };
+        if (pan.has_value() == false || pan->id != motion.id || pan->axis != motion.axis || pan->scroll == nullptr || (motion.velocity > 0.0f ? pan->at_end : pan->at_start))
+        {
+            inertia_.reset();
+            return {};
+        }
+        // 감쇠 곡선을 적분해 늦게 깨어나도 한 번의 갱신으로 같은 거리를 보낸다.
+        const float until_stop { std::log(std::abs(motion.velocity) / inertia_stop_velocity) / inertia_decay };
+        const float elapsed { std::chrono::duration<float>(now - motion.updated_at).count() };
+        const float seconds { std::min(elapsed, until_stop) };
+        const float next_velocity { motion.velocity * std::exp(-inertia_decay * seconds) };
+        const float delta { (motion.velocity - next_velocity) / inertia_decay };
+        motion.velocity = next_velocity;
+        motion.updated_at = now;
+        if (elapsed >= until_stop)
+            inertia_.reset();
+        return { pan->scroll(delta) };
     }
 
     std::vector<input_action> interaction_controller::run_long_press(const touch_contact& contact, const ui_element& target, const float x, const float y)
@@ -2009,8 +2065,12 @@ namespace luil {
         if (valid_touch_gesture_config(config) == false)
             return false;
         config_.touch = config;
+        if (config.pan_enabled == false || config.inertia_enabled == false)
+            inertia_.reset();
         if (touch_.has_value())
         {
+            if (config.inertia_enabled == false)
+                touch_->config.inertia_enabled = false;
             const touch_phase phase { touch_->phase };
             const bool pan_off { touch_->view == ui_element_id {} && touch_->config.pan_enabled && config.pan_enabled == false && (phase == touch_phase::pending || phase == touch_phase::panning) };
             const bool long_press_off { touch_->config.long_press_enabled && config.long_press_enabled == false && phase == touch_phase::pending };
@@ -2806,6 +2866,7 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::cancel_dropped_gestures()
     {
+        inertia_.reset();
         // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
         // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.
         std::vector<input_action> actions { touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {}) : end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}) };
@@ -2860,7 +2921,7 @@ namespace luil {
         };
         while (true)
         {
-            // 시간이 흘러야 일어날 판정(길게 누르기)이 있으면 그 시각까지만 기다린다.
+            // 시간이 흘러야 일어날 판정(길게 누르기·관성 스크롤)이 있으면 그 시각까지만 기다린다.
             std::chrono::milliseconds wait { 250 };
             if (const auto deadline { controller.next_deadline() }; deadline.has_value())
             {
