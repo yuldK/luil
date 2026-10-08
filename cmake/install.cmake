@@ -25,6 +25,10 @@ function(luil_install_rules)
     # (Skia와 같은 갈래 — imported target은 export되지 않는다).
     install(DIRECTORY "${LUIL_NLOHMANN_JSON_ROOT}/single_include/" DESTINATION include)
 
+    # Codicons의 LICENSE와 이름이 겹치므로 luil 자체 원문은 별도 이름으로 설치한다.
+    install(FILES "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../LICENSE"
+        DESTINATION share/luil
+        RENAME LICENSE.luil)
     install(FILES
         "${LUIL_NLOHMANN_JSON_ROOT}/LICENSE.MIT"
         "${LUIL_ASSET_DIRECTORY}/codicon.ttf"

@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
-# 실행 파일 resource에 넣을 제3자 고지를 만든다.
-# 원문은 Skia 쪽과 자산 디렉터리에서 직접 읽는다.
+# 실행 파일 resource에 넣을 luil 라이선스와 제3자 고지를 만든다.
+# 원문은 luil과 각 의존성의 소스 트리나 패키지에서 직접 읽는다.
 #
 # Skia 쪽 원문을 읽는 자리는 두 갈래다.
 #   1. 패키지  : `NOTICE.md` 한 장이 Skia와 그 external, rust crate까지 전부
@@ -18,10 +18,12 @@ include_guard(GLOBAL)
 function(luil_generate_third_party_notices output_file)
     # 설치본도 같은 생성기를 쓴다. 소비자가 선택한 Skia·WebView2의 고지를
     # 읽고, 라이브러리에 함께 설치된 폰트·JSON 고지는 패키지에서 읽는다.
+    set(luil_license_file "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../LICENSE")
     set(installed_resources "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../../share/luil")
     if(EXISTS "${installed_resources}/luil_resources.rc.in")
         set(LUIL_ASSET_DIRECTORY "${installed_resources}")
         set(LUIL_NLOHMANN_JSON_ROOT "${installed_resources}")
+        set(luil_license_file "${installed_resources}/LICENSE.luil")
     endif()
     if(NOT DEFINED LUIL_SKIA_ROOT)
         message(FATAL_ERROR "LUIL_SKIA_ROOT is required to generate notices.")
@@ -38,6 +40,7 @@ function(luil_generate_third_party_notices output_file)
 
     # luil 자신이 싣는 것이다. 어느 갈래에서나 같다.
     set(luil_notice_entries
+        "luil|${luil_license_file}"
         # HTTP 응답의 JSON 본문 타입이다. header-only라 실행 파일에 그대로 실린다.
         "nlohmann/json|${LUIL_NLOHMANN_JSON_ROOT}/LICENSE.MIT")
     if(LUIL_ENABLE_WEBVIEW)
@@ -87,10 +90,10 @@ function(luil_generate_third_party_notices output_file)
     # `set`에 인자를 여럿 주면 list가 되어 줄 사이에 `;`가 박혀 파일에 그대로 나간다.
     # 한 문자열로 이어 붙인다.
     string(CONCAT notice_text
-        "luil 제3자 소프트웨어 고지\n"
+        "luil 라이선스 및 제3자 소프트웨어 고지\n"
         "================================\n\n"
-        "이 파일은 실행 파일에 포함되는 제3자 구성 요소의 라이선스 원문을 모아\n"
-        "생성합니다. 원문은 Skia 소스 트리와 자산 디렉터리에서 직접 읽습니다.\n")
+        "이 파일은 luil과 실행 파일에 포함되는 제3자 구성 요소의 라이선스 원문을\n"
+        "모아 생성합니다. 원문은 각 구성 요소의 소스 트리나 패키지에서 읽습니다.\n")
 
     foreach(entry IN LISTS notice_entries)
         string(FIND "${entry}" "|" separator_index)
@@ -103,10 +106,9 @@ function(luil_generate_third_party_notices output_file)
 
         if(NOT EXISTS "${license_file}")
             message(FATAL_ERROR
-                "A third-party license file is missing: ${license_file}\n"
+                "A license file is missing: ${license_file}\n"
                 "Component: ${component_name}\n"
-                "This Skia tree has no third_party/externals, so its licences "
-                "cannot be read. Use a package instead: scripts/fetch_skia.ps1")
+                "Restore this component's license file before generating notices.")
         endif()
 
         file(READ "${license_file}" license_text)

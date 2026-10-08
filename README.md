@@ -5,6 +5,12 @@ luil은 Windows용 C++20 애플리케이션 프레임워크다. Skia로 UI를 �
 CPU·Direct3D 렌더링, 여러 창과 팝업, 텍스트 입력, 접근성, 이미지,
 비동기 HTTP와 WebView2 웹 콘텐츠를 제공한다.
 
+## 라이선스
+
+luil 자체 소스와 문서는 [MIT 라이선스](LICENSE)를 따른다.
+third_party 의존성과 Codicons 자산에는 각 원본의 라이선스와 고지가 적용된다.
+실행 파일 고지 생성기는 luil의 MIT 원문과 포함된 의존성의 고지를 함께 수집한다.
+
 ## 빌드 환경
 
 - Windows 11 x64

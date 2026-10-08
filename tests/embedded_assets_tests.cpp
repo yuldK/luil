@@ -18,7 +18,10 @@ TEST_CASE("Public UI font preferences skip missing families and refresh cached d
 {
     struct restore_preferences
     {
-        ~restore_preferences() { luil::set_ui_typeface_families({}); }
+        ~restore_preferences()
+        {
+            luil::set_ui_typeface_families({});
+        }
     } restore {};
     const auto expected { luil::family_typeface(u8"Arial") };
     REQUIRE(expected != nullptr);
@@ -54,6 +57,10 @@ TEST_CASE("Executable resources contain the Codicons font and licenses", "[asset
     const auto notice = luil::win32::find_embedded_resource(IDR_THIRD_PARTY_NOTICES);
     REQUIRE(notice.data != nullptr);
     const std::string_view notice_text(static_cast<const char*>(notice.data), notice.size);
+    REQUIRE(notice_text.find("Component: luil") != std::string_view::npos);
+    REQUIRE(notice_text.find("Copyright (c) 2026 yuldk") != std::string_view::npos);
+    REQUIRE(notice_text.find("Permission is hereby granted, free of charge") != std::string_view::npos);
+    REQUIRE(notice_text.find("OUT OF OR IN CONNECTION WITH THE SOFTWARE") != std::string_view::npos);
     // 고지는 실행 파일에 실제로 포함되는 구성 요소만 담는다
     // Catch2는 test 실행 파일에만 링크되므로 대상이 아니다.
     REQUIRE(notice_text.find("Component: Skia") != std::string_view::npos);
