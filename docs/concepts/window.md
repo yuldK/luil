@@ -33,6 +33,21 @@ caption button은 `caption_config::buttons`, `caption_layout`, `window_style_for
 
 창 배치는 `WM_EXITSIZEMOVE`, maximized/restored 전환, 전체 화면 전환, `WM_CLOSE`에서 delegate에 보고한다. 앱이 복원할 배치는 `window_placement_revision`이 새로울 때만 적용한다. 창 또는 renderer 생성이 실패하면 `show_startup_error`가 디버그 출력과 메시지 상자를 내며 smoke 모드에서는 상자를 생략한다. 상자의 제목과 앞글은 `window_config::startup_error`로 앱이 정한다.
 
+## 초기 배치
+
+저장한 [`window_placement`](../../include/luil/app/app_host.h)를 `window_config::initial_placement`에 넣으면 창 생성 단계에서 복원한다. `initial_position`과 논리 크기 `initial_width`·`initial_height`보다 우선한다.
+
+```cpp
+luil::win32::window_config config {};
+config.initial_placement = saved_placement;
+```
+
+위치 값은 배치 보고의 `GetWindowPlacement` 작업 영역 좌표이고, 크기는 **물리 픽셀**이다. 대상 모니터의 DPI를 생성 전에 구하고, 저장 크기에 배율을 다시 곱하지 않는다. 최대화도 숨은 창에서 확정하며 renderer와 host는 최종 client 크기를 본다. delegate의 크기·DPI와 초기 배치 메시지는 `driver.start()` 뒤, 첫 `make_frame()` 전에 처리하므로 최초 tree부터 복원된 배치로 레이아웃한다. `fullscreen`도 첫 표시 전에 적용하며 정상 배치를 돌아갈 자리로 보존한다.
+
+양수가 아닌 크기, 대상 모니터의 DPI로 계산한 최소 크기 미만, 좌표 덧셈 오버플로, 연결된 모니터와 겹치지 않는 배치는 **전체를 무시**한다. 이때 `initial_position`·`initial_width`·`initial_height`를 사용한다. 초기 배치를 생략한 경우도 같은 기본 배치다. 실행 중 frame의 복원 요청은 기존 `window_placement_revision` 경로를 사용한다.
+
+저장 상태를 첫 표시부터 유지하되 `STARTUPINFO`의 비활성·최소화·숨김 정책을 함께 따른다. `SW_SHOWNOACTIVATE`와 `SW_SHOWMINNOACTIVE` 실행은 초점을 가져오지 않는다. 초기 배치가 없으면 기존 `SW_SHOWDEFAULT` 표시 경로를 사용한다.
+
 ## 전체 화면
 
 전체 화면은 **테두리 없는 창**이다. 제시가 DirectComposition 합성 swap chain을 지나므로 독점 전체 화면(exclusive fullscreen)은 설 수 없다 — 합성 swap chain은 `SetFullscreenState`를 받지 못한다. 그래서 유일하게 가능한 길인 "`MONITORINFO::rcMonitor`를 그대로 덮는 창"을 구현한다. rcWork를 쓰는 다른 계산(최대화 한계, popup 다듬기, 보조 창 초기 배치)과 달리 여기만 rcMonitor를 목표로 삼는다.

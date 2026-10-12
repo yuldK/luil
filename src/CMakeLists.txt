@@ -476,6 +476,7 @@ if(LUIL_PLATFORM STREQUAL "windows")
             ole32
             oleaut32
             shell32
+            shcore
             uiautomationcore
             user32
             # net 계층의 HTTP client다.

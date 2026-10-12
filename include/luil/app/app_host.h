@@ -368,6 +368,9 @@ namespace luil {
             // `app_delegate::make_permission_message`로 앱에 알린다.
             std::function<permission_state(app_permission)> permission {};
             std::function<bool(app_permission)> request_permission {};
+            // driver.start() 뒤, 최초 make_frame() 전에 순서대로 처리한다.
+            // 플랫폼이 창을 확정한 크기·배율을 첫 레이아웃부터 쓰게 하는 시작 메시지다.
+            std::vector<app_message> initial_messages {};
         };
 
         app_host(config configuration, logic_driver& driver, interaction_policy* policy);

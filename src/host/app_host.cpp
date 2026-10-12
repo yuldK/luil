@@ -77,6 +77,7 @@ namespace luil {
     {
         messaging::channel<raw_input_event> input_inbox { messaging::channel_options { 4096, messaging::overflow_policy::drop_oldest, {} } };
         messaging::channel<app_message> app_inbox { messaging::channel_options { 1024, messaging::overflow_policy::reject_newest, {} } };
+        std::vector<app_message> initial_messages {};
         messaging::latest_slot<std::shared_ptr<const ui_frame>> frame_slot {};
         messaging::latest_slot<std::shared_ptr<const ui_tree>> tree_slot {};
         // 주 창 밖 표면(popup·보조 창)의 tree들이다.
@@ -190,6 +191,7 @@ namespace luil {
             };
         }
 
+        parts.initial_messages = std::move(configuration.initial_messages);
         assembly_->logic_thread = std::thread { &app_host::logic_thread_main, this };
 
         try
@@ -501,6 +503,10 @@ namespace luil {
     void app_host::logic_loop()
     {
         driver_.start();
+        for (app_message& message : assembly_->initial_messages)
+            if (message.empty() == false)
+                driver_.handle(std::move(message));
+        assembly_->initial_messages.clear();
         publish_frame();
         std::optional<std::chrono::steady_clock::time_point> next_tick { driver_.next_tick() };
         std::vector<messaging::envelope<app_message>> batch {};

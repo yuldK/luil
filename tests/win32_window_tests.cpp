@@ -3,9 +3,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <shellscalingapi.h>
 #include <windows.h>
 
+#include <atomic>
 #include <cwchar>
+#include <limits>
+#include <memory>
+#include <optional>
+#include <vector>
 
 namespace {
     // 두 test가 함께 쓰는 창 클래스 이름이다.
@@ -96,7 +102,345 @@ namespace {
         config.accept_file_drop = true;
         return config;
     }
+
+    constexpr const wchar_t* placement_class_name { L"Luil.Test.InitialPlacement" };
+
+    struct placement_probe
+    {
+        RECT before_show {};
+        RECT first_show {};
+        WINDOWPLACEMENT saved {};
+        std::optional<luil::window_placement> reported_placement {};
+        luil::window_metrics metrics {};
+        bool hidden { false };
+        bool maximized { false };
+        bool shown { false };
+        bool activated { false };
+        bool activated_before_start { false };
+        UINT dpi { 0 };
+    };
+
+    placement_probe* active_probe { nullptr };
+
+    LRESULT CALLBACK observe_placement(const int code, const WPARAM word_parameter, const LPARAM long_parameter)
+    {
+        if (code >= 0 && active_probe != nullptr)
+        {
+            const auto* message { reinterpret_cast<const CWPSTRUCT*>(long_parameter) };
+            wchar_t name[class_name_capacity] {};
+            if (GetClassNameW(message->hwnd, name, class_name_capacity) > 0 && std::wcscmp(name, placement_class_name) == 0)
+            {
+                if (message->message == WM_WINDOWPOSCHANGED && active_probe->shown == false)
+                {
+                    const auto* position { reinterpret_cast<const WINDOWPOS*>(message->lParam) };
+                    if ((position->flags & SWP_SHOWWINDOW) != 0)
+                    {
+                        GetWindowRect(message->hwnd, &active_probe->first_show);
+                        active_probe->shown = true;
+                    }
+                }
+                if (message->message == WM_ACTIVATE && LOWORD(message->wParam) != WA_INACTIVE)
+                    active_probe->activated = true;
+            }
+        }
+        return CallNextHookEx(nullptr, code, word_parameter, long_parameter);
+    }
+
+    BOOL CALLBACK find_placement_window(const HWND window, const LPARAM parameter)
+    {
+        wchar_t name[class_name_capacity] {};
+        if (GetClassNameW(window, name, class_name_capacity) > 0 && std::wcscmp(name, placement_class_name) == 0)
+        {
+            *reinterpret_cast<HWND*>(parameter) = window;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    class placement_driver final : public luil::logic_driver
+    {
+    public:
+        void handle(luil::app_message message) override
+        {
+            if (const auto* metrics { message.get<luil::window_metrics>() }; metrics != nullptr)
+                current_metrics = *metrics;
+            if (message.get<bool>() != nullptr)
+                closed.store(true);
+        }
+        [[nodiscard]] std::shared_ptr<const luil::ui_frame> make_frame() override
+        {
+            if (first_metrics.has_value() == false)
+                first_metrics = current_metrics;
+            return std::make_shared<luil::ui_frame>();
+        }
+        [[nodiscard]] luil::app_message make_close_message() override
+        {
+            return luil::app_message { true };
+        }
+        [[nodiscard]] bool shutdown_completed() const override
+        {
+            return closed.load();
+        }
+        luil::window_metrics current_metrics {};
+        std::optional<luil::window_metrics> first_metrics {};
+        std::atomic<bool> closed { false };
+    };
+
+    class placement_delegate final : public luil::win32::window_delegate
+    {
+    public:
+        explicit placement_delegate(placement_probe& probe)
+            : probe_ { probe }
+        {}
+        [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
+        {
+            probe_.metrics = metrics;
+            return luil::app_message { metrics };
+        }
+        [[nodiscard]] luil::app_message make_window_placement_message(const luil::window_placement& placement) override
+        {
+            if (probe_.reported_placement.has_value() == false)
+                probe_.reported_placement = placement;
+            return {};
+        }
+        void on_started(luil::app_host&) override
+        {
+            HWND window { nullptr };
+            EnumThreadWindows(GetCurrentThreadId(), &find_placement_window, reinterpret_cast<LPARAM>(&window));
+            if (window == nullptr)
+                return;
+            GetWindowRect(window, &probe_.before_show);
+            probe_.saved.length = sizeof(probe_.saved);
+            GetWindowPlacement(window, &probe_.saved);
+            probe_.dpi = GetDpiForWindow(window);
+            probe_.hidden = IsWindowVisible(window) == FALSE;
+            probe_.maximized = IsZoomed(window) != FALSE;
+            probe_.activated_before_start = probe_.activated;
+            PostMessageW(window, WM_CLOSE, 0, 0);
+        }
+
+    private:
+        placement_probe& probe_;
+    };
+
+    [[nodiscard]] MONITORINFO test_monitor()
+    {
+        luil::win32::enable_per_monitor_dpi_awareness();
+        MONITORINFO information {};
+        information.cbSize = sizeof(information);
+        const POINT origin {};
+        GetMonitorInfoW(MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY), &information);
+        return information;
+    }
+
+    [[nodiscard]] luil::window_placement saved_test_placement(const MONITORINFO& monitor)
+    {
+        return { monitor.rcMonitor.left + 60, monitor.rcMonitor.top + 70, 960, 640 };
+    }
+
+    BOOL CALLBACK collect_monitors(const HMONITOR monitor, HDC, LPRECT, const LPARAM parameter)
+    {
+        reinterpret_cast<std::vector<HMONITOR>*>(parameter)->push_back(monitor);
+        return TRUE;
+    }
+
+    [[nodiscard]] placement_probe run_placement_probe(luil::win32::window_config config)
+    {
+        luil::win32::enable_per_monitor_dpi_awareness();
+        const luil::win32::com_sta_scope com {};
+        placement_probe probe {};
+        placement_driver driver {};
+        placement_delegate delegate { probe };
+        config.class_name = placement_class_name;
+        config.caption.title = u8"initial placement";
+        config.renderer = luil::renderer_mode::cpu;
+        active_probe = &probe;
+        const HHOOK hook { SetWindowsHookExW(WH_CALLWNDPROC, &observe_placement, nullptr, GetCurrentThreadId()) };
+        const int result { luil::win32::run_application_window(config, { &driver, nullptr, &delegate }) };
+        UnhookWindowsHookEx(hook);
+        active_probe = nullptr;
+        drain_quit_message();
+        REQUIRE(result == 0);
+        REQUIRE(probe.hidden);
+        REQUIRE(driver.first_metrics.has_value());
+        REQUIRE(driver.first_metrics->width == static_cast<float>(probe.before_show.right - probe.before_show.left));
+        REQUIRE(driver.first_metrics->height == static_cast<float>(probe.before_show.bottom - probe.before_show.top));
+        REQUIRE(driver.first_metrics->scale == static_cast<float>(probe.dpi) / 96.0f);
+        return probe;
+    }
 } // namespace
+
+TEST_CASE("Initial placement is physical and precedes first layout and display", "[win32][window]")
+{
+    const MONITORINFO monitor { test_monitor() };
+    const luil::window_placement saved { saved_test_placement(monitor) };
+    luil::win32::window_config config {};
+    config.initial_position = luil::win32::window_position { 10, 20 };
+    config.initial_width = 700;
+    config.initial_height = 500;
+    config.initial_placement = saved;
+    const placement_probe probe { run_placement_probe(config) };
+    REQUIRE(probe.maximized == false);
+    REQUIRE(probe.saved.rcNormalPosition.left == saved.x);
+    REQUIRE(probe.saved.rcNormalPosition.top == saved.y);
+    REQUIRE(probe.before_show.right - probe.before_show.left == saved.width);
+    REQUIRE(probe.before_show.bottom - probe.before_show.top == saved.height);
+    REQUIRE(probe.shown);
+    REQUIRE(EqualRect(&probe.before_show, &probe.first_show));
+}
+
+TEST_CASE("Initial maximization keeps the restore rectangle before layout", "[win32][window]")
+{
+    const MONITORINFO monitor { test_monitor() };
+    luil::window_placement saved { saved_test_placement(monitor) };
+    saved.maximized = true;
+    luil::win32::window_config config {};
+    config.initial_placement = saved;
+    const placement_probe probe { run_placement_probe(config) };
+    REQUIRE(probe.maximized);
+    INFO("window: " << probe.before_show.left << ',' << probe.before_show.top << ',' << probe.before_show.right << ',' << probe.before_show.bottom);
+    INFO("work: " << monitor.rcWork.left << ',' << monitor.rcWork.top << ',' << monitor.rcWork.right << ',' << monitor.rcWork.bottom);
+    REQUIRE(EqualRect(&probe.before_show, &monitor.rcWork));
+    REQUIRE(probe.saved.rcNormalPosition.left == saved.x);
+    REQUIRE(probe.saved.rcNormalPosition.top == saved.y);
+    REQUIRE(probe.saved.rcNormalPosition.right - probe.saved.rcNormalPosition.left == saved.width);
+    REQUIRE(probe.saved.rcNormalPosition.bottom - probe.saved.rcNormalPosition.top == saved.height);
+    REQUIRE(probe.shown);
+    REQUIRE(EqualRect(&probe.before_show, &probe.first_show));
+}
+
+TEST_CASE("Initial placement uses the target monitor DPI and its minimum size", "[win32][window]")
+{
+    luil::win32::enable_per_monitor_dpi_awareness();
+    std::vector<HMONITOR> monitors {};
+    REQUIRE(EnumDisplayMonitors(nullptr, nullptr, &collect_monitors, reinterpret_cast<LPARAM>(&monitors)) != FALSE);
+    for (const HMONITOR monitor : monitors)
+    {
+        MONITORINFO information {};
+        information.cbSize = sizeof(information);
+        REQUIRE(GetMonitorInfoW(monitor, &information) != FALSE);
+        UINT dpi_x { 96 };
+        UINT dpi_y { 96 };
+        REQUIRE(SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y)));
+        luil::win32::window_config config {};
+        config.minimum_client_width = 600;
+        config.minimum_client_height = 400;
+        config.initial_position = luil::win32::window_position { information.rcWork.left + 100, information.rcWork.top + 100 };
+        luil::window_placement saved { saved_test_placement(information) };
+        saved.width = MulDiv(config.minimum_client_width, static_cast<int>(dpi_x), 96);
+        saved.height = MulDiv(config.minimum_client_height, static_cast<int>(dpi_x), 96);
+        config.initial_placement = saved;
+        const placement_probe accepted { run_placement_probe(config) };
+        REQUIRE(accepted.dpi == dpi_x);
+        REQUIRE(accepted.before_show.right - accepted.before_show.left == saved.width);
+        REQUIRE(accepted.before_show.bottom - accepted.before_show.top == saved.height);
+        REQUIRE(accepted.saved.rcNormalPosition.left == saved.x);
+        REQUIRE(accepted.saved.rcNormalPosition.top == saved.y);
+        config.initial_placement->maximized = true;
+        const placement_probe maximized { run_placement_probe(config) };
+        REQUIRE(maximized.maximized);
+        REQUIRE(EqualRect(&maximized.before_show, &information.rcWork));
+        REQUIRE(maximized.saved.rcNormalPosition.right - maximized.saved.rcNormalPosition.left == saved.width);
+        REQUIRE(maximized.saved.rcNormalPosition.bottom - maximized.saved.rcNormalPosition.top == saved.height);
+        --config.initial_placement->width;
+        config.initial_placement->maximized = true;
+        const placement_probe rejected { run_placement_probe(config) };
+        REQUIRE(rejected.maximized == false);
+        REQUIRE(rejected.before_show.left == config.initial_position->x);
+        REQUIRE(rejected.before_show.top == config.initial_position->y);
+    }
+}
+
+TEST_CASE("Initial fullscreen keeps its normal placement before first display", "[win32][window]")
+{
+    const MONITORINFO monitor { test_monitor() };
+    for (const bool maximized : { false, true })
+    {
+        luil::win32::window_config config {};
+        config.initial_placement = saved_test_placement(monitor);
+        config.initial_placement->maximized = maximized;
+        config.initial_placement->fullscreen = true;
+        const placement_probe probe { run_placement_probe(config) };
+        REQUIRE(EqualRect(&probe.before_show, &monitor.rcMonitor));
+        REQUIRE(EqualRect(&probe.first_show, &monitor.rcMonitor));
+        REQUIRE(probe.reported_placement == config.initial_placement);
+    }
+}
+
+TEST_CASE("Invalid initial placements use the complete default placement", "[win32][window]")
+{
+    const MONITORINFO monitor { test_monitor() };
+    const std::vector<luil::window_placement> invalid {
+        { 0, 0, 0, 600, true },
+        { 0, 0, -1, 600, true },
+        { 0, 0, 10, 10, true },
+        { std::numeric_limits<int>::max(), 0, 960, 640, true },
+        { 1'000'000, 1'000'000, 960, 640, true },
+    };
+    for (const luil::window_placement& saved : invalid)
+    {
+        luil::win32::window_config config {};
+        config.initial_position = luil::win32::window_position { monitor.rcWork.left + 100, monitor.rcWork.top + 100 };
+        config.initial_width = 700;
+        config.initial_height = 500;
+        config.initial_placement = saved;
+        const placement_probe probe { run_placement_probe(config) };
+        REQUIRE(probe.maximized == false);
+        REQUIRE(probe.before_show.left == config.initial_position->x);
+        REQUIRE(probe.before_show.top == config.initial_position->y);
+        REQUIRE(probe.before_show.right - probe.before_show.left == MulDiv(config.initial_width, static_cast<int>(probe.dpi), 96));
+        REQUIRE(probe.before_show.bottom - probe.before_show.top == MulDiv(config.initial_height, static_cast<int>(probe.dpi), 96));
+    }
+}
+
+TEST_CASE("Initial placement respects inactive startup policies", "[win32][window]")
+{
+    wchar_t executable[32768] {};
+    REQUIRE(GetModuleFileNameW(nullptr, executable, 32768) > 0);
+    for (const int show : { SW_SHOWNOACTIVATE, SW_SHOWMINNOACTIVE, SW_HIDE })
+    {
+        std::wstring command { L"\"" };
+        command += executable;
+        command += L"\" \"Initial placement startup probe\" --reporter compact";
+        STARTUPINFOW startup {};
+        startup.cb = sizeof(startup);
+        startup.dwFlags = STARTF_USESHOWWINDOW;
+        startup.wShowWindow = static_cast<WORD>(show);
+        PROCESS_INFORMATION process {};
+        REQUIRE(CreateProcessW(executable, command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process) != FALSE);
+        CloseHandle(process.hThread);
+        const DWORD waited { WaitForSingleObject(process.hProcess, 30000) };
+        DWORD exit_code { 1 };
+        GetExitCodeProcess(process.hProcess, &exit_code);
+        CloseHandle(process.hProcess);
+        INFO("startup show command: " << show);
+        REQUIRE(waited == WAIT_OBJECT_0);
+        REQUIRE(exit_code == 0);
+    }
+}
+
+TEST_CASE("Initial placement startup probe", "[.][win32][window]")
+{
+    STARTUPINFOW startup {};
+    startup.cb = sizeof(startup);
+    GetStartupInfoW(&startup);
+    if ((startup.dwFlags & STARTF_USESHOWWINDOW) == 0 || (startup.wShowWindow != SW_SHOWNOACTIVATE && startup.wShowWindow != SW_SHOWMINNOACTIVE && startup.wShowWindow != SW_HIDE))
+        SKIP("This probe runs in the inactive startup policy subprocess.");
+    const MONITORINFO monitor { test_monitor() };
+    for (const bool maximized : { false, true })
+    {
+        luil::win32::window_config config {};
+        config.initial_placement = saved_test_placement(monitor);
+        config.initial_placement->maximized = maximized;
+        const placement_probe probe { run_placement_probe(config) };
+        INFO("maximized: " << maximized << ", activated before start: " << probe.activated_before_start);
+        REQUIRE(probe.maximized == maximized);
+        REQUIRE(probe.activated == false);
+        REQUIRE(probe.shown == (startup.wShowWindow != SW_HIDE));
+        if (startup.wShowWindow == SW_SHOWNOACTIVATE)
+            REQUIRE(EqualRect(&probe.before_show, &probe.first_show));
+    }
+}
 
 TEST_CASE("A fullscreen window has no non-client area at all", "[win32][window]")
 {

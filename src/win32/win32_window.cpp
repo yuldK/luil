@@ -30,6 +30,7 @@
 #include <dwmapi.h>
 #include <objbase.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <chrono>
@@ -88,6 +89,45 @@ namespace luil::win32 {
     }
 
     namespace {
+        struct initial_window_placement
+        {
+            window_placement placement {};
+            RECT screen_bounds {};
+            std::uint32_t dpi { 96 };
+        };
+
+        [[nodiscard]] std::optional<initial_window_placement> resolve_initial_placement(const window_config& config) noexcept
+        {
+            if (config.initial_placement.has_value() == false)
+                return std::nullopt;
+            const window_placement& placement { *config.initial_placement };
+            if (placement.valid() == false || placement_in_screen_range(placement) == false)
+                return std::nullopt;
+            RECT bounds { placement.x, placement.y, placement.x + placement.width, placement.y + placement.height };
+            const HMONITOR monitor { MonitorFromRect(&bounds, MONITOR_DEFAULTTONULL) };
+            MONITORINFO information {};
+            information.cbSize = sizeof(information);
+            UINT dpi_x { 96 };
+            UINT dpi_y { 96 };
+            if (monitor == nullptr || GetMonitorInfoW(monitor, &information) == FALSE || FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y)))
+                return std::nullopt;
+            if (placement.width < MulDiv(config.minimum_client_width, static_cast<int>(dpi_x), 96) || placement.height < MulDiv(config.minimum_client_height, static_cast<int>(dpi_x), 96))
+                return std::nullopt;
+
+            // WINDOWPLACEMENT는 작업 영역 좌표지만 CreateWindowEx는 화면 좌표다.
+            // 작업 표시줄이 왼쪽·위에 있어도 저장한 자리로 돌아가도록 한 번만 옮긴다.
+            const long long screen_x { static_cast<long long>(placement.x) + information.rcWork.left - information.rcMonitor.left };
+            const long long screen_y { static_cast<long long>(placement.y) + information.rcWork.top - information.rcMonitor.top };
+            constexpr long long minimum { std::numeric_limits<int>::min() };
+            constexpr long long maximum { std::numeric_limits<int>::max() };
+            if (screen_x < minimum || screen_y < minimum || screen_x + placement.width > maximum || screen_y + placement.height > maximum)
+                return std::nullopt;
+            bounds = { static_cast<LONG>(screen_x), static_cast<LONG>(screen_y), static_cast<LONG>(screen_x + placement.width), static_cast<LONG>(screen_y + placement.height) };
+            if (MonitorFromRect(&bounds, MONITOR_DEFAULTTONULL) != monitor)
+                return std::nullopt;
+            return initial_window_placement { placement, bounds, dpi_x };
+        }
+
         constexpr int direct3d_unavailable_exit_code { 77 };
         // wake 신호다.
         // frame slot과 interaction slot의 signal callback이 게시한다.
@@ -515,13 +555,20 @@ namespace luil::win32 {
                 main_.set_minimum_client_size(static_cast<float>(config_.minimum_client_width), static_cast<float>(config_.minimum_client_height));
                 // 자리를 정하지 않았으면 OS에 맡긴다.
                 // 정했으면 그 값은 이미 물리 픽셀이라 배율을 곱하지 않는다.
-                const int initial_x { config_.initial_position.has_value() ? config_.initial_position->x : CW_USEDEFAULT };
-                const int initial_y { config_.initial_position.has_value() ? config_.initial_position->y : CW_USEDEFAULT };
-                // 창은 통상 모습으로 선다.
-                // 저장된 배치가 전체 화면이더라도 그것은 창이 보인 **뒤에** 들어가는
-                // 상태다 (`apply_requested_window_placement`).
-                window_ = CreateWindowExW(WS_EX_APPWINDOW, config_.class_name.c_str(), title.c_str(), window_style_for(config_.caption.buttons, window_display_mode::normal), initial_x, initial_y,
-                    config_.initial_width, config_.initial_height, nullptr, nullptr, instance_, this);
+                initial_placement_ = resolve_initial_placement(config_);
+                const int initial_x { initial_placement_.has_value() ? initial_placement_->screen_bounds.left : config_.initial_position.has_value() ? config_.initial_position->x : CW_USEDEFAULT };
+                const int initial_y { initial_placement_.has_value() ? initial_placement_->screen_bounds.top : config_.initial_position.has_value() ? config_.initial_position->y : CW_USEDEFAULT };
+                const int initial_width { initial_placement_.has_value() ? initial_placement_->placement.width : config_.initial_width };
+                const int initial_height { initial_placement_.has_value() ? initial_placement_->placement.height : config_.initial_height };
+                DWORD style { window_style_for(config_.caption.buttons, window_display_mode::normal) };
+                if (initial_placement_.has_value())
+                {
+                    set_dpi(initial_placement_->dpi);
+                    // WS_VISIBLE 없이 최대화해 최초 metrics도 최종 client 크기를 보게 한다.
+                    if (initial_placement_->placement.maximized)
+                        style |= WS_MAXIMIZE;
+                }
+                window_ = CreateWindowExW(WS_EX_APPWINDOW, config_.class_name.c_str(), title.c_str(), style, initial_x, initial_y, initial_width, initial_height, nullptr, nullptr, instance_, this);
 
                 if (window_ == nullptr)
                 {
@@ -541,8 +588,22 @@ namespace luil::win32 {
                 // 창이 어느 모니터에 뜰지는 만들어 봐야 알므로, 만든 뒤 그 모니터의
                 // 배율을 곱해 다시 잡는다 — 안 하면 150% 모니터에서 창이 2/3 크기로 뜬다.
                 // client == window rect(WM_NCCALCSIZE가 0을 돌려준다)라 프레임 보정은 없다.
-                if (dpi_ != 96)
+                if (initial_placement_.has_value() == false && dpi_ != 96)
                     SetWindowPos(window_, nullptr, 0, 0, scale_for_dpi(config_.initial_width), scale_for_dpi(config_.initial_height), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+                if (initial_placement_.has_value() && initial_placement_->placement.maximized)
+                {
+                    // 생성 중 WM_GETMINMAXINFO는 WM_NCCREATE보다 먼저 올 수 있어
+                    // 아직 우리 custom frame 한계를 보지 못한다. 숨은 상태에서 확정한다.
+                    MONITORINFO information {};
+                    information.cbSize = sizeof(information);
+                    if (GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &information) != FALSE)
+                    {
+                        const RECT& work { information.rcWork };
+                        SetWindowPos(window_, nullptr, work.left, work.top, work.right - work.left, work.bottom - work.top, SWP_NOZORDER | SWP_NOACTIVATE);
+                    }
+                }
+                if (initial_placement_.has_value() && initial_placement_->placement.fullscreen)
+                    static_cast<void>(main_.set_fullscreen(true));
                 RECT client {};
                 GetClientRect(window_, &client);
                 const renderer_fault_injection fault {
@@ -585,6 +646,21 @@ namespace luil::win32 {
                         const SkFont font { configured_ui_typeface(), pixel_size };
                         return measure_text(text, font);
                     };
+                    if (environment_.delegate != nullptr)
+                    {
+                        host_config.initial_messages.push_back(make_window_metrics_message());
+                        if (initial_placement_.has_value())
+                        {
+                            try
+                            {
+                                host_config.initial_messages.push_back(environment_.delegate->make_window_placement_message(initial_placement_->placement));
+                            }
+                            catch (...)
+                            {
+                                report_runtime_error(u8"The window placement delegate threw an exception.");
+                            }
+                        }
+                    }
                     host_ = std::make_unique<app_host>(std::move(host_config), *environment_.driver, environment_.policy);
 
                     // IME 조합을 박스 안에서 하려면 문서를 OS에 열어 줘야 한다.
@@ -616,16 +692,37 @@ namespace luil::win32 {
                     return 0;
                 }
 
-                post_window_metrics();
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);
 
-                // 어떻게 보일지는 **띄우는 쪽이** 정한다.
-                // `SW_SHOWDEFAULT`는 STARTUPINFO의 `wShowWindow`를 그대로 따르므로,
-                // 자동화가 `SW_SHOWNOACTIVATE`로 실행하면 창이 사람의 포커스를 뺏지
-                // 않고 뜬다 (accessibility-design.md). 여기를 고정 값으로 바꾸면
-                // 그 길이 조용히 막힌다 — 창은 그대로 뜨고 포커스만 넘어간다.
-                ShowWindow(window_, SW_SHOWDEFAULT);
+                // 초기 배치가 없으면 SW_SHOWDEFAULT로 실행한 쪽의 표시 명령을 따른다.
+                // 초기 배치가 있으면 저장 상태를 표시하면서 STARTUPINFO의
+                // 비활성·최소화·숨김 정책을 함께 지킨다 (accessibility-design.md).
+                if (initial_placement_.has_value())
+                {
+                    STARTUPINFOW startup {};
+                    startup.cb = sizeof(startup);
+                    GetStartupInfoW(&startup);
+                    const int show { (startup.dwFlags & STARTF_USESHOWWINDOW) != 0 ? startup.wShowWindow : SW_SHOWNORMAL };
+                    const bool inactive { show == SW_SHOWNOACTIVATE || show == SW_SHOWMINNOACTIVE || show == SW_SHOWNA };
+                    const LONG_PTR extended_style { GetWindowLongPtrW(window_, GWL_EXSTYLE) };
+                    // 최대화된 숨은 창을 최소화할 때도 활성화가 끼어들지 않게 한다.
+                    // 첫 표시 뒤에는 일반 창의 클릭·초점 정책으로 돌아간다.
+                    if (inactive)
+                        SetWindowLongPtrW(window_, GWL_EXSTYLE, extended_style | WS_EX_NOACTIVATE);
+                    if (show == SW_HIDE || show == SW_SHOWMINIMIZED || show == SW_MINIMIZE || show == SW_SHOWMINNOACTIVE)
+                        ShowWindow(window_, show);
+                    else
+                    {
+                        // ShowWindow의 복원 명령은 숨은 창의 최대화·전체 화면을 풀 수 있다.
+                        // 최종 상태를 그대로 표시하되 실행한 쪽의 비활성 정책은 보존한다.
+                        SetWindowPos(window_, nullptr, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | (inactive ? SWP_NOACTIVATE : 0));
+                    }
+                    if (inactive)
+                        SetWindowLongPtrW(window_, GWL_EXSTYLE, extended_style);
+                }
+                else
+                    ShowWindow(window_, SW_SHOWDEFAULT);
                 UpdateWindow(window_);
                 MSG message {};
                 BOOL received {};
@@ -1186,26 +1283,34 @@ namespace luil::win32 {
                     post_window_placement();
             }
 
-            void post_window_metrics() noexcept
+            [[nodiscard]] app_message make_window_metrics_message() noexcept
             {
-                if (host_ == nullptr || environment_.delegate == nullptr)
-                    return;
+                if (environment_.delegate == nullptr)
+                    return {};
                 RECT client_rectangle {};
                 if (GetClientRect(window_, &client_rectangle) == FALSE)
-                    return;
+                    return {};
                 const float width { static_cast<float>(client_rectangle.right - client_rectangle.left) };
                 const float height { static_cast<float>(client_rectangle.bottom - client_rectangle.top) };
                 const float scale { static_cast<float>(dpi_) / 96.0f };
                 // delegate는 noexcept가 아니다 (`post_window_placement`와 같은 이유).
                 try
                 {
-                    if (app_message message { environment_.delegate->make_metrics_message(make_window_metrics(width, height, scale)) }; message.empty() == false)
-                        host_->post_app_message(std::move(message));
+                    return environment_.delegate->make_metrics_message(make_window_metrics(width, height, scale));
                 }
                 catch (...)
                 {
                     report_runtime_error(u8"The window metrics delegate threw an exception.");
                 }
+                return {};
+            }
+
+            void post_window_metrics() noexcept
+            {
+                if (host_ == nullptr)
+                    return;
+                if (app_message message { make_window_metrics_message() }; message.empty() == false)
+                    host_->post_app_message(std::move(message));
             }
 
             // 클립보드 요청을 실행한다.
@@ -2041,6 +2146,7 @@ namespace luil::win32 {
             window_environment environment_ {};
             HWND window_ { nullptr };
             std::uint32_t dpi_ { 96 };
+            std::optional<initial_window_placement> initial_placement_ {};
             // 마지막으로 적용한 창 배치 게시 번호다.
             // 0은 아직 적용한 적이 없다는 뜻이다.
             std::uint64_t applied_window_placement_revision_ { 0 };

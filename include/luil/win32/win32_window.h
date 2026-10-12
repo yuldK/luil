@@ -93,7 +93,7 @@ namespace luil::win32 {
     };
 
     // 창의 겉모습과 정책이다.
-    // 값만 바꾸면 되도록 한곳에 모아 둔다 (논리 96 DPI 기준 px).
+    // 값만 바꾸면 되도록 한곳에 모아 둔다 (단위를 별도로 적지 않은 크기는 논리 96 DPI 기준 px).
     struct window_config
     {
         std::wstring class_name { L"Luil.Window" };
@@ -150,6 +150,12 @@ namespace luil::win32 {
         // 잘못된 값(`valid_touch_gesture_config`)이면 창이 시작하지 않고 시작 실패로 알린다.
         // 실행 중에는 `app_host::set_touch_gesture_config`로 바꾼다.
         touch_gesture_config touch {};
+        // 저장 배치를 첫 표시·첫 frame 전에 적용한다. initial_position과 초기 논리 크기보다 우선한다.
+        // x·y는 GetWindowPlacement로 보고한 작업 영역 좌표, 크기는 물리 픽셀이다.
+        // 대상 모니터의 DPI로 최소 크기를 검사하며, 잘못된 값·화면 밖 배치는 전체를 무시한다.
+        // 비어 있거나 무시된 배치는 기존 initial_position·initial_width·initial_height를 따른다.
+        // STARTUPINFO의 비활성·최소화·숨김 실행 정책은 유지한다.
+        std::optional<window_placement> initial_placement {};
     };
 
     // 앱이 UI thread에 꽂는 훅이다.

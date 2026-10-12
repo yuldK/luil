@@ -49,6 +49,8 @@ namespace {
 
         [[nodiscard]] std::shared_ptr<const luil::win32::ui_frame> make_frame() override
         {
+            int unset { -1 };
+            first_frame_pings.compare_exchange_strong(unset, pings.load());
             auto frame { std::make_shared<luil::win32::ui_frame>() };
             frame->window_placement_revision = static_cast<std::uint64_t>(pings.load());
             return frame;
@@ -73,6 +75,7 @@ namespace {
         std::atomic<bool> closed { false };
         std::atomic<bool> workers_stopped { false };
         std::atomic<int> pings { 0 };
+        std::atomic<int> first_frame_pings { -1 };
     };
 
     // f5를 앱 메시지로 바꾸는 정책이다.
@@ -99,6 +102,21 @@ namespace {
         return condition();
     }
 } // namespace
+
+TEST_CASE("Initial app messages are handled before the first frame", "[win32][host]")
+{
+    counting_driver driver {};
+    luil::app_host::config config {};
+    config.initial_messages.push_back(luil::app_message { ping_intent { u8"first" } });
+    config.initial_messages.push_back({});
+    config.initial_messages.push_back(luil::app_message { ping_intent { u8"second" } });
+    {
+        luil::app_host host { std::move(config), driver, nullptr };
+        REQUIRE(wait_until([&] { return driver.first_frame_pings.load() >= 0; }));
+        REQUIRE(driver.first_frame_pings.load() == 2);
+    }
+    REQUIRE(driver.closed.load());
+}
 
 TEST_CASE("The app host runs the driver on the logic thread and publishes frames", "[win32][host]")
 {
@@ -381,10 +399,22 @@ TEST_CASE("A driver exception faults the host instead of terminating the process
         // 파괴(=shutdown)가 terminate·hang 없이 여기까지 온 것 자체가 검증이다.
     };
 
-    SECTION("start") { verify_fault(throwing_driver::throw_point::start, false); }
-    SECTION("make_frame") { verify_fault(throwing_driver::throw_point::make_frame, false); }
-    SECTION("handle") { verify_fault(throwing_driver::throw_point::handle, true); }
-    SECTION("tick") { verify_fault(throwing_driver::throw_point::tick, false); }
+    SECTION("start")
+    {
+        verify_fault(throwing_driver::throw_point::start, false);
+    }
+    SECTION("make_frame")
+    {
+        verify_fault(throwing_driver::throw_point::make_frame, false);
+    }
+    SECTION("handle")
+    {
+        verify_fault(throwing_driver::throw_point::handle, true);
+    }
+    SECTION("tick")
+    {
+        verify_fault(throwing_driver::throw_point::tick, false);
+    }
 }
 
 TEST_CASE("A policy exception faults the host instead of terminating the process", "[win32][host][fault]")
@@ -508,8 +538,14 @@ TEST_CASE("Shutdown finishes cleanup even when driver callbacks throw", "[win32]
         REQUIRE(elapsed < 2500ms);
     };
 
-    SECTION("make_close_message") { verify_cleanup(throwing_shutdown_driver::throw_point::close_message); }
-    SECTION("stop_workers") { verify_cleanup(throwing_shutdown_driver::throw_point::stop_workers); }
+    SECTION("make_close_message")
+    {
+        verify_cleanup(throwing_shutdown_driver::throw_point::close_message);
+    }
+    SECTION("stop_workers")
+    {
+        verify_cleanup(throwing_shutdown_driver::throw_point::stop_workers);
+    }
 }
 
 TEST_CASE("Cancel frees a stalled driver within the shutdown budget", "[win32][host][shutdown]")

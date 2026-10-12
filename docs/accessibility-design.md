@@ -106,7 +106,7 @@ Win32 root는 이 변경을 UIA property, element-selected, structure event로 �
 
 Automation client가 상태를 바꾸는 pattern을 호출하면 UIA 계층이 대상 window를 foreground로 세울 수 있다. Provider가 막을 수 있는 지점이 아니다. Automation 코드가 전혀 없는 표준 Win32 app에서도 같은 일이 일어나며 더 자주 일어난다. 읽기 전용 조회는 foreground를 바꾸지 않는다.
 
-Library가 보장하는 것은 시작 시점이다. 주 window는 `SW_SHOWDEFAULT`로 표시하므로 표시 방식은 process를 시작한 쪽이 `STARTUPINFO.wShowWindow`로 정한다. Automation harness는 `SW_SHOWNOACTIVATE`나 `SW_SHOWMINNOACTIVE`로 실행해 사람의 focus를 건드리지 않고 app을 띄울 수 있고, 두 경우 모두 접근성 tree를 완전하게 제공한다. 이 계약에 의존하는 호출자가 있으므로 표시 명령을 고정 값으로 바꾸지 않는다.
+Library가 보장하는 것은 시작 시점이다. 주 window는 초기 배치가 없으면 `SW_SHOWDEFAULT`로 표시하므로 표시 방식은 process를 시작한 쪽이 `STARTUPINFO.wShowWindow`로 정한다. `window_config::initial_placement`가 있으면 저장 상태를 첫 표시부터 유지하면서 `STARTUPINFO`의 비활성·최소화·숨김 정책도 적용한다. Automation harness는 `SW_SHOWNOACTIVATE`나 `SW_SHOWMINNOACTIVE`로 실행해 사람의 focus를 건드리지 않고 app을 띄울 수 있고, 두 경우 모두 접근성 tree를 완전하게 제공한다. 이 계약에 의존하는 호출자가 있으므로 표시 명령을 고정 값으로 바꾸지 않는다.
 
 접근성 tree는 published frame에서 만들어지고 published frame은 surface가 그릴 때 만들어진다. 따라서 **그린 적이 없는 window에는 tree가 없다.** `SW_HIDE`로 시작한 window는 element를 제공하지 않는다. 최소화로 시작한 window는 첫 표시에서 이미 그렸으므로 tree를 그대로 제공한다.
 
