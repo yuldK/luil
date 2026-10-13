@@ -483,17 +483,20 @@ TEST_CASE("Deep variable height rows retain their exact spans with an offscreen 
 
         REQUIRE(view->realized().begin > 8900u);
         const luil::ui_element& lane { virtual_lane(*view) };
+        // 행은 모델 차례로 선다 — 창 앞의 커서 행은 창의 행들보다 앞이다.
+        const bool cursor_before { cursor_index < view->realized().begin };
+        const std::size_t first_window_child { cursor_before ? 1u : 0u };
         for (std::size_t index = view->realized().begin; index < view->realized().end; ++index)
         {
             const luil::virtual_list_span span { luil::virtual_list_row_span(items, 20.0f, index) };
-            const luil::ui_element& row { row_at(*view, index - view->realized().begin) };
+            const luil::ui_element& row { row_at(*view, first_window_child + index - view->realized().begin) };
             REQUIRE(row.id() == row_id(item_key(index)));
             REQUIRE(row.bounds().y == lane.bounds().y + span.begin);
             REQUIRE(row.bounds().height == span.length);
         }
 
         const luil::virtual_list_span cursor_span { luil::virtual_list_row_span(items, 20.0f, cursor_index) };
-        const luil::ui_element& cursor_row { row_at(*view, view->realized().end - view->realized().begin) };
+        const luil::ui_element& cursor_row { row_at(*view, cursor_before ? 0u : view->realized().end - view->realized().begin) };
         REQUIRE(cursor_row.id() == row_id(item_key(cursor_index)));
         REQUIRE(cursor_row.bounds().y == lane.bounds().y + cursor_span.begin);
         REQUIRE(cursor_row.bounds().height == cursor_span.length);

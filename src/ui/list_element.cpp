@@ -92,6 +92,7 @@ namespace luil {
                 , selected_ { selected }
                 , reserve_expander_ { reserve_expander }
                 , handle_ { config.reorder != nullptr }
+                , list_ { ui_element_kind::list, config.owner }
             {
                 const list_message_factory& select { config.select };
                 set_enabled(item_.enabled);
@@ -112,7 +113,7 @@ namespace luil {
                     std::u8string label { item_.label };
                     const list_reorder_message_factory& reorder { config.reorder };
                     // 이 행이 속한 목록이다. 놓는 쪽이 같은 목록인지를 이것으로 가른다.
-                    const ui_element_id container { ui_element_kind::list, config.owner };
+                    const ui_element_id container { list_ };
                     drag_source source {};
                     source.make_payload = [self, key, label, container](const ui_action_context& context) {
                         drag_payload payload {};
@@ -160,8 +161,8 @@ namespace luil {
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const rect_f box { bounds() };
                 const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
-                // 여러 항목을 함께 끌면 그 항목들이 모두 흐리게 남는다.
-                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(item_.key) };
+                // 여러 항목을 함께 끌면 그 항목들이 모두 흐리게 남는다. 키는 목록 안에서만 유일하므로 출발 목록까지 견준다.
+                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(list_, item_.key) };
                 const bool drop_here { interaction.drag.has_value() && interaction.drag->payload.suppress_drop_highlight == false && interaction.drag->hovered_drop_target == id() };
 
                 // 놓을 자리 · 고른 행 · 눌린 행 · hover의 순서다.
@@ -267,6 +268,8 @@ namespace luil {
             bool selected_ { false };
             bool reserve_expander_ { false };
             bool handle_ { false };
+            // 이 행이 속한 목록이다 (끌기 payload의 `container`).
+            ui_element_id list_ {};
             // 잎이거나 목록이 접힘을 쓰지 않으면 nullptr다.
             ui_element* expander_ { nullptr };
         };

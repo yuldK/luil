@@ -185,6 +185,12 @@ namespace luil {
 
         // 이 끌기가 그 키의 항목을 싣고 있는가 (`dragged_owner` 또는 `dragged_owners`).
         [[nodiscard]] bool carries(std::u8string_view owner) const noexcept;
+        // `from` 목록의 그 키 항목을 싣고 있는가다. 키는 목록 안에서만 유일하므로, 두 목록 사이에서 끌 때 받는
+        // 목록의 같은 키 행을 끌리는 것으로 오인하지 않게 출발 목록(`container`)까지 견준다.
+        //  - `container`가 비어 있으면(앱이 직접 지은 payload) 키만 견준다 — 지금까지의 `carries`다.
+        //  - 목록(`list_element`·`virtual_list_element`)은 행의 payload에 자기 id를 `container`로 채운다. 받는
+        //    목록의 `accepts_drop`이 자기 자신 위의 놓기를 거를 때 이것을 쓴다.
+        [[nodiscard]] bool carries(const ui_element_id& from, std::u8string_view owner) const noexcept;
         // 끌리는 항목 수다. `dragged_owners`가 비어 있으면 `dragged_owner`가 있을 때 1이다.
         [[nodiscard]] std::size_t dragged_count() const noexcept;
 

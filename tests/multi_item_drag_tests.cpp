@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -72,13 +73,15 @@ namespace {
         return 20.0f * static_cast<float>(index) + 10.0f;
     }
 
-    [[nodiscard]] const dropped_intent* dropped_of(const std::vector<luil::input_action>& actions)
+    // 놓기의 앱 메시지를 **값으로** 꺼낸다. 메시지 몸은 액션 목록이 쥐고 있어서, `process`가 돌려준 임시 목록에서
+    // 포인터를 받으면 그 문장이 끝나는 순간 해제된 자리를 가리킨다.
+    [[nodiscard]] std::optional<dropped_intent> dropped_of(const std::vector<luil::input_action>& actions)
     {
         for (const luil::input_action& action : actions)
             if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
                 if (const auto* const intent { message->get<dropped_intent>() }; intent != nullptr)
-                    return intent;
-        return nullptr;
+                    return *intent;
+        return std::nullopt;
     }
 } // namespace
 
@@ -97,6 +100,31 @@ TEST_CASE("A payload counts the items it carries", "[ui][drag][multi-drag]")
     many.dragged_owners = { u8"a", u8"b", u8"c" };
     REQUIRE(many.dragged_count() == 3u);
     REQUIRE(many.carries(u8"c"));
+}
+
+TEST_CASE("A payload tells rows of another list apart by its container", "[ui][drag][multi-drag]")
+{
+    const luil::ui_element_id left { luil::ui_element_kind::virtual_list, u8"left" };
+    const luil::ui_element_id right { luil::ui_element_kind::virtual_list, u8"right" };
+    luil::drag_payload payload {};
+    payload.dragged_owner = u8"a";
+    payload.container = left;
+    REQUIRE(payload.carries(left, u8"a"));
+    // 다른 목록의 같은 키 행은 끌리는 것이 아니다.
+    REQUIRE_FALSE(payload.carries(right, u8"a"));
+    // 출발 목록을 모르면(앱이 지은 payload) 키만 견준다.
+    payload.container = {};
+    REQUIRE(payload.carries(right, u8"a"));
+}
+
+TEST_CASE("A virtual list row drag names its list as the container", "[ui][interaction][multi-drag]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(make_tree());
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, row_y(2), luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(2) + 10.0f, at(10) }));
+    REQUIRE(controller.snapshot().drag.has_value());
+    REQUIRE(controller.snapshot().drag->payload.container == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
 }
 
 TEST_CASE("The default ghost names the lead item and counts the rest", "[ui][drag][multi-drag]")
@@ -147,8 +175,8 @@ TEST_CASE("Dragging a selected row carries the whole selection to a folder row",
 
     // 놓으면 셋이 함께 그 폴더로 간다. Ctrl 없이 놓으면 옮기기다.
     const std::vector<luil::input_action> actions { controller.process(luil::pointer_released_event { 50.0f, row_y(0), luil::pointer_button::left, at(40) }) };
-    const dropped_intent* const dropped { dropped_of(actions) };
-    REQUIRE(dropped != nullptr);
+    const std::optional<dropped_intent> dropped { dropped_of(actions) };
+    REQUIRE(dropped.has_value());
     REQUIRE(dropped->folder == u8"docs");
     REQUIRE(dropped->items == std::vector<std::u8string> { u8"a", u8"b", u8"c" });
     REQUIRE(dropped->copy == false);
@@ -163,8 +191,8 @@ TEST_CASE("Holding Ctrl when releasing copies instead of moving", "[ui][interact
     static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(4), at(20) }));
     luil::pointer_released_event release { 50.0f, row_y(4), luil::pointer_button::left, at(30) };
     release.control = true;
-    const dropped_intent* const dropped { dropped_of(controller.process(release)) };
-    REQUIRE(dropped != nullptr);
+    const std::optional<dropped_intent> dropped { dropped_of(controller.process(release)) };
+    REQUIRE(dropped.has_value());
     REQUIRE(dropped->folder == u8"pics");
     REQUIRE(dropped->items.size() == 3u);
     REQUIRE(dropped->copy);
@@ -185,8 +213,8 @@ TEST_CASE("A row outside the selection drags alone and a folder refuses itself",
     REQUIRE(tree->cursor_at(50.0f, row_y(4), controller.snapshot()) == luil::ui_cursor::not_allowed);
     // 다른 폴더 위에 놓으면 그것 하나가 간다.
     static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(0), at(20) }));
-    const dropped_intent* const dropped { dropped_of(controller.process(luil::pointer_released_event { 50.0f, row_y(0), luil::pointer_button::left, at(30) })) };
-    REQUIRE(dropped != nullptr);
+    const std::optional<dropped_intent> dropped { dropped_of(controller.process(luil::pointer_released_event { 50.0f, row_y(0), luil::pointer_button::left, at(30) })) };
+    REQUIRE(dropped.has_value());
     REQUIRE(dropped->items == std::vector<std::u8string> { u8"pics" });
 }
 

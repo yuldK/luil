@@ -1202,13 +1202,14 @@ namespace luil::win32 {
         // 항목을 감싼 container가 여러 항목을 함께 고르는지를 실어 보낸다 — 고르기의 "이미 골라짐"이 그것에
         // 따라 갈린다 (`access_request::multiple_selection`).
         bool multiple { false };
-        const HRESULT read { guarded([&]() -> HRESULT {
+        const auto read_multiple = [&]() -> HRESULT {
             const ui_tree* tree { nullptr };
             if (resolve(&tree) == nullptr || tree == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
             multiple = access_multiple_selection(*tree, id_);
             return S_OK;
-        }) };
+        };
+        const HRESULT read { guarded(read_multiple) };
         if (FAILED(read))
             return read;
         access_request request { command };
