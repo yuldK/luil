@@ -56,3 +56,5 @@ Tab의 기본 순서는 보이는 tree의 그리기 순서이며 `order_focus()`
 `set_focus_trap()`은 같은 표면의 초점을 trap 안으로 제한하고, 포인터 차단은 scrim의 `hit_opaque`가 맡는다. `focus_entry`를 지정하면 trap 진입 시 초점을 세울 수 있고, 유효하지 않은 entry는 trap의 첫 초점 자리로 물러선다. `focus_return`은 trap이 사라졌을 때 되돌릴 id다. tree 갱신에 따른 진입과 복귀는 활성 표면을 기준으로 판정한다.
 
 상태 기계는 이벤트 timestamp를 사용한다. 새 tree를 받으면 마지막 포인터 좌표로 hover를 재판정하며, 표면이 사라지면 그곳에서 시작한 press·drag를 거둔다. input 큐의 sequence가 건너뛰면 유실된 뗌 이벤트에 대비해 `cancel_dropped_gestures()`로 진행 중인 몸짓과 터치 접촉을 취소한다. 끝을 듣는 손잡이(`pointer_drag_target::on_release`)와 넘겨받은 컨테이너에는 끝을 알리고, 그 액션은 pump가 앱에 보낸다.
+
+drag & drop과 `auto_scroll`을 켠 끌기 손잡이는 흘리는 창의 가장자리에서 그 창을 흘린다. 흐름은 터치 길게 누르기·관성과 같이 `next_deadline`·`advance`로 시간을 받고, 휠과 같은 `scroll_source::scroll` 메시지로 나간다. 계약은 [끄는 동안의 가장자리 자동 스크롤](../drag-auto-scroll-design.md)에 있다.

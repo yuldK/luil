@@ -122,6 +122,12 @@ namespace luil {
         // 끌기 중에는 hover가 잡은 대상에 남아야 하므로 건드리지 않는다.
         if (pointer_inside_ && pointer_drag_id_ == ui_element_id {} && snapshot_.drag.has_value() == false)
             update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_, false);
+
+        // 끄는 동안 내용이 흘렀으면(가장자리 자동 스크롤) 포인터 밑의 놓을 자리도 바뀐다. 포인터가 멈춰 있어도
+        // 강조가 새 내용을 따라가게 한다.
+        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface.empty() && tree_ != nullptr)
+            update_drag(*tree_, snapshot_.drag->x, snapshot_.drag->y);
+        settle_auto_scroll();
     }
 
     void interaction_controller::set_surface_trees(surface_tree_list surfaces) noexcept
@@ -140,6 +146,12 @@ namespace luil {
         // 주 tree를 받을 때와 같은 규칙이다.
         if (pointer_inside_ && last_pointer_surface_.empty() == false && pointer_drag_id_ == ui_element_id {} && snapshot_.drag.has_value() == false)
             update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_, false);
+
+        // 주 tree를 받을 때와 같이 흐른 내용 위의 놓을 자리를 다시 찾는다.
+        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface.empty() == false)
+            if (const ui_tree* const tree { surface_tree(snapshot_.drag->surface) }; tree != nullptr)
+                update_drag(*tree, snapshot_.drag->x, snapshot_.drag->y);
+        settle_auto_scroll();
     }
 
     void interaction_controller::clear_gone_surface_gestures() noexcept
@@ -360,6 +372,8 @@ namespace luil {
             if (const ui_tree* const tree { surface_tree(snapshot_.focused_surface) }; tree != nullptr)
                 for (input_action& action : policy_->on_focus_moved(*tree, snapshot_.focused))
                     actions.push_back(std::move(action));
+        // 끌기가 끝났으면(뗌·취소·Esc) 가장자리 흐름도 멈춘다.
+        settle_auto_scroll();
         return actions;
     }
 
@@ -441,7 +455,10 @@ namespace luil {
                 return {};
             }
             if (handler->on_move == nullptr)
+            {
+                track_auto_scroll(pressed_surface_, event.x, event.y, event.time);
                 return {};
+            }
 
             const ui_action_context previous { action_context(pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, pointer_drag_modifiers_) };
             const ui_action_context current { action_context(pointer_drag_id_, event.x, event.y, modifiers_of(event)) };
@@ -449,7 +466,9 @@ namespace luil {
             pointer_drag_y_ = event.y;
             pointer_drag_modifiers_ = modifiers_of(event);
             pointer_drag_motion_.add(event.time, event.x, event.y);
-            return handler->on_move(previous, current);
+            std::vector<input_action> actions { handler->on_move(previous, current) };
+            track_auto_scroll(pressed_surface_, event.x, event.y, event.time);
+            return actions;
         }
 
         const ui_tree* const tree { surface_tree(event.surface) };
@@ -465,6 +484,7 @@ namespace luil {
         {
             update_drag(*tree, event.x, event.y);
             update_hover(event.x, event.y, event.time, moved);
+            track_auto_scroll(event.surface, event.x, event.y, event.time);
             return {};
         }
 
@@ -512,6 +532,7 @@ namespace luil {
                 // (multi-window-design.md).
                 snapshot_.drag = drag_visual { source->drag()->make_payload(context), event.x, event.y, {}, event.surface };
                 clear_press();
+                track_auto_scroll(event.surface, event.x, event.y, event.time);
             }
             drag_candidate_ = false;
         }
@@ -1524,6 +1545,7 @@ namespace luil {
             actions = handler->on_move(previous, current);
             if (actions.empty() == false)
                 contact.moved_action = true;
+            track_auto_scroll(contact.surface, event.x, event.y, event.time);
             break;
         }
         case touch_phase::dragging:
@@ -1533,7 +1555,10 @@ namespace luil {
                 return {};
             }
             if (snapshot_.drag.has_value())
+            {
                 update_drag(*tree, event.x, event.y);
+                track_auto_scroll(contact.surface, event.x, event.y, event.time);
+            }
             break;
         case touch_phase::panning: {
             // 매 이동마다 새 tree에서 같은 자리를 다시 묻는다. 같은 임자·같은 축이
@@ -1640,6 +1665,7 @@ namespace luil {
                         for (input_action& action : handler->on_move(previous, current))
                             actions.push_back(std::move(action));
                     }
+                    track_auto_scroll(contact.surface, event.x, event.y, event.time);
                 }
                 else if (source->drag() != nullptr && source->drag()->make_payload)
                 {
@@ -1648,6 +1674,7 @@ namespace luil {
                     clear_press();
                     contact.phase = touch_phase::dragging;
                     update_drag(*tree, event.x, event.y);
+                    track_auto_scroll(contact.surface, event.x, event.y, event.time);
                 }
             }
             break;
@@ -1812,6 +1839,15 @@ namespace luil {
 
     std::optional<std::chrono::steady_clock::time_point> interaction_controller::next_deadline() const noexcept
     {
+        const std::optional<std::chrono::steady_clock::time_point> gesture { gesture_deadline() };
+        const std::optional<std::chrono::steady_clock::time_point> flow { auto_scroll_deadline() };
+        if (gesture.has_value() && flow.has_value())
+            return std::min(*gesture, *flow);
+        return gesture.has_value() ? gesture : flow;
+    }
+
+    std::optional<std::chrono::steady_clock::time_point> interaction_controller::gesture_deadline() const noexcept
+    {
         if (inertia_.has_value())
             return inertia_->updated_at + inertia_interval;
         if (touch_.has_value() == false)
@@ -1828,11 +1864,18 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::advance(const std::chrono::steady_clock::time_point now)
     {
-        const std::optional<std::chrono::steady_clock::time_point> deadline { next_deadline() };
+        // 가장자리 흐름은 터치 판정과 따로 간다 (손가락으로 끄는 동안에도 흐른다).
+        std::vector<input_action> actions { advance_auto_scroll(now) };
+        const auto with_flow = [&actions](std::vector<input_action> more) {
+            for (input_action& action : more)
+                actions.push_back(std::move(action));
+            return std::move(actions);
+        };
+        const std::optional<std::chrono::steady_clock::time_point> deadline { gesture_deadline() };
         if (deadline.has_value() == false || now < *deadline)
-            return {};
+            return actions;
         if (inertia_.has_value())
-            return advance_inertia(now);
+            return with_flow(advance_inertia(now));
         touch_contact& contact { *touch_ };
         const ui_tree* const tree { surface_tree(contact.surface) };
         const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
@@ -1841,7 +1884,7 @@ namespace luil {
         if (target == nullptr || has_long_press_action(*target) == false)
         {
             contact.long_press = long_press_state::unavailable;
-            return {};
+            return actions;
         }
         contact.long_press = long_press_state::fired;
         // 메뉴가 열리면 누름 표시는 거둔다. 접촉은 뗄 때까지 쥐고 있는다.
@@ -1856,7 +1899,7 @@ namespace luil {
         click_streak_ = 0;
         if (policy_ != nullptr)
             policy_->on_click(*target);
-        return run_long_press(contact, *target, contact.last_x, contact.last_y);
+        return with_flow(run_long_press(contact, *target, contact.last_x, contact.last_y));
     }
 
     std::vector<input_action> interaction_controller::advance_inertia(const std::chrono::steady_clock::time_point now)
@@ -1880,6 +1923,179 @@ namespace luil {
         if (elapsed >= until_stop)
             inertia_.reset();
         return { pan->scroll(delta) };
+    }
+
+    float drag_auto_scroll_speed(const float position, const float start, const float end, const float scale, const drag_auto_scroll_config& config) noexcept
+    {
+        // 창이 띠 둘보다 좁으면 반씩 나눈다 — 가운데에서는 어느 쪽으로도 흐르지 않는다.
+        const float band { std::min(config.edge_band * positive_scale(scale), (end - start) / 2.0f) };
+        if (std::isfinite(position) == false || std::isfinite(band) == false || band <= 0.0f || std::isfinite(config.maximum_speed) == false || config.maximum_speed <= 0.0f)
+            return 0.0f;
+        // 띠의 안쪽 끝에서 0, 창 가장자리에서 절반, 가장자리 밖으로 띠 폭만큼 나가면 최대다.
+        constexpr float full_depth { 2.0f };
+        if (position < start + band)
+            return -config.maximum_speed * std::min((start + band - position) / band, full_depth) / full_depth;
+        if (position > end - band)
+            return config.maximum_speed * std::min((position - (end - band)) / band, full_depth) / full_depth;
+        return 0.0f;
+    }
+
+    namespace {
+        // 흘릴 창 하나와 그 속도다 (논리 픽셀/초).
+        struct auto_scroll_flow
+        {
+            const ui_element* window { nullptr };
+            float speed { 0.0f };
+        };
+
+        // `anchor`를 감싼 흘리는 창 가운데 축마다 지금 흘러야 할 가장 안쪽 창이다.
+        //  - 안쪽 창이 그쪽 끝에 닿았거나 포인터가 그 창의 띠 밖이면 바깥 창을 본다 — 목록이 끝에 닿은 뒤에는
+        //    목록을 품은 판이 흐른다.
+        //  - 끝은 발행본이 알린다 (`scroll_source::at_start`·`at_end`). 앱이 다듬은 끝이 다음 tree로 오면 멈춘다.
+        [[nodiscard]] std::vector<auto_scroll_flow> auto_scroll_flows(const ui_tree& tree, const ui_element_id& anchor, const float x, const float y, const drag_auto_scroll_config& config)
+        {
+            std::vector<auto_scroll_flow> flows {};
+            const ui_element* const root { tree.root() };
+            std::vector<const ui_element*> path {};
+            if (root == nullptr || anchor == ui_element_id {} || collect_ancestry(*root, anchor, path) == false)
+                return flows;
+            bool decided[2] { false, false };
+            for (auto it { path.rbegin() }; it != path.rend(); ++it)
+            {
+                const ui_element& window { **it };
+                const scroll_source* const source { window.scroll() };
+                if (source == nullptr || source->scroll == nullptr || window.visible() == false || window.enabled() == false)
+                    continue;
+                const bool horizontal { source->axis == scroll_axis::horizontal };
+                if (decided[horizontal ? 1 : 0])
+                    continue;
+                const rect_f& box { window.bounds() };
+                const float speed { horizontal ? drag_auto_scroll_speed(x, box.x, box.x + box.width, source->scale, config)
+                                               : drag_auto_scroll_speed(y, box.y, box.y + box.height, source->scale, config) };
+                if (speed == 0.0f || (speed < 0.0f ? source->at_start : source->at_end))
+                    continue;
+                decided[horizontal ? 1 : 0] = true;
+                flows.push_back({ &window, speed });
+            }
+            return flows;
+        }
+
+        // (x, y)를 덮는 가장 안쪽의 흘리는 창이다. 막기만 하는 것이 먼저 걸리면 없다.
+        [[nodiscard]] const ui_element* scroll_window_at(const ui_tree& tree, const float x, const float y)
+        {
+            const ui_element* const root { tree.root() };
+            if (root == nullptr)
+                return nullptr;
+            const auto accepts = [](const ui_element& element) {
+                const scroll_source* const source { element.scroll() };
+                return source != nullptr && source->scroll != nullptr;
+            };
+            const ui_element* const owner { pan_owner_at(*root, x, y, accepts) };
+            return owner != nullptr && accepts(*owner) ? owner : nullptr;
+        }
+    } // namespace
+
+    void interaction_controller::track_auto_scroll(const std::u8string& surface, const float x, const float y, const std::chrono::steady_clock::time_point time)
+    {
+        const ui_tree* const tree { surface_tree(surface) };
+        if (tree == nullptr)
+        {
+            auto_scroll_.reset();
+            return;
+        }
+        auto_scroll_state next {};
+        next.surface = surface;
+        next.x = x;
+        next.y = y;
+        if (pointer_drag_id_ != ui_element_id {})
+        {
+            // 손잡이는 켠 것만 흐른다.
+            const ui_element* const handle { tree->find(pointer_drag_id_) };
+            const pointer_drag_target* const handler { handle != nullptr ? handle->pointer_drag() : nullptr };
+            if (handler == nullptr || handler->auto_scroll == false)
+            {
+                auto_scroll_.reset();
+                return;
+            }
+            next.anchor = pointer_drag_id_;
+            next.handle = true;
+        }
+        else if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && config_.auto_scroll.drag_and_drop)
+        {
+            // 포인터 밑의 흘리는 창이 기준이다. 창 밖이면 직전 창(처음에는 끌기를 시작한 자리)이 이어진다 —
+            // 목록 위로 끌고 나가도 그 목록이 위로 흐른다.
+            if (const ui_element* const window { scroll_window_at(*tree, x, y) }; window != nullptr)
+                next.anchor = window->id();
+            else if (auto_scroll_.has_value() && auto_scroll_->handle == false && auto_scroll_->surface == surface)
+                next.anchor = auto_scroll_->anchor;
+            else
+                next.anchor = snapshot_.drag->payload.source;
+        }
+        else
+        {
+            auto_scroll_.reset();
+            return;
+        }
+        next.flowing = auto_scroll_flows(*tree, next.anchor, x, y, config_.auto_scroll).empty() == false;
+        // 흐르던 중이면 시계를 잇는다. 새로 흐르기 시작하면 이 이벤트의 시각부터 잰다.
+        next.updated_at = next.flowing && auto_scroll_.has_value() && auto_scroll_->flowing ? auto_scroll_->updated_at : time;
+        auto_scroll_ = std::move(next);
+    }
+
+    std::optional<std::chrono::steady_clock::time_point> interaction_controller::auto_scroll_deadline() const noexcept
+    {
+        if (auto_scroll_.has_value() == false || auto_scroll_->flowing == false)
+            return std::nullopt;
+        const std::chrono::milliseconds interval { config_.auto_scroll.interval.count() > 0 ? config_.auto_scroll.interval : std::chrono::milliseconds { 16 } };
+        return auto_scroll_->updated_at + interval;
+    }
+
+    std::vector<input_action> interaction_controller::advance_auto_scroll(const std::chrono::steady_clock::time_point now)
+    {
+        const std::optional<std::chrono::steady_clock::time_point> deadline { auto_scroll_deadline() };
+        if (deadline.has_value() == false || now < *deadline)
+            return {};
+        auto_scroll_state& state { *auto_scroll_ };
+        const float seconds { std::chrono::duration<float>(now - state.updated_at).count() };
+        state.updated_at = now;
+        const ui_tree* const tree { surface_tree(state.surface) };
+        std::vector<input_action> actions {};
+        if (tree != nullptr)
+            for (const auto_scroll_flow& flow : auto_scroll_flows(*tree, state.anchor, state.x, state.y, config_.auto_scroll))
+                if (const float delta { flow.speed * seconds }; delta != 0.0f)
+                    actions.push_back(flow.window->scroll()->scroll(delta));
+        if (actions.empty())
+        {
+            state.flowing = false;
+            return actions;
+        }
+        // 내용이 흘렀으니 포인터가 멈춰 있어도 손잡이에 같은 자리의 이동을 알린다. 좌표는 표면 좌표다 — 스크롤
+        // 메시지가 먼저 나가므로 앱이 자기 스크롤 위치로 옮기면 흐른 만큼 늘어난 자리가 된다.
+        if (state.handle && pointer_drag_id_ == state.anchor && tree != nullptr)
+        {
+            const ui_element* const target { live_touch_handle(*tree, pointer_drag_id_, pressed_x_, pressed_y_) };
+            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+            if (handler != nullptr && handler->on_move != nullptr)
+            {
+                const ui_action_context previous { action_context(pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, pointer_drag_modifiers_) };
+                const ui_action_context current { action_context(pointer_drag_id_, state.x, state.y, pointer_drag_modifiers_) };
+                pointer_drag_x_ = state.x;
+                pointer_drag_y_ = state.y;
+                for (input_action& action : handler->on_move(previous, current))
+                    actions.push_back(std::move(action));
+            }
+        }
+        return actions;
+    }
+
+    void interaction_controller::settle_auto_scroll() noexcept
+    {
+        if (auto_scroll_.has_value() == false)
+            return;
+        const bool alive { auto_scroll_->handle ? pointer_drag_id_ == auto_scroll_->anchor
+                                                : snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface == auto_scroll_->surface };
+        if (alive == false)
+            auto_scroll_.reset();
     }
 
     std::vector<input_action> interaction_controller::run_long_press(const touch_contact& contact, const ui_element& target, const float x, const float y)
@@ -2963,6 +3179,7 @@ namespace luil {
         clear_press();
         text_drag_id_ = {};
         snapshot_.drag.reset();
+        auto_scroll_.reset();
         return actions;
     }
 
