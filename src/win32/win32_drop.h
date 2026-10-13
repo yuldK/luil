@@ -46,7 +46,9 @@ namespace luil::win32 {
         [[nodiscard]] virtual bool file_drag_entered(float x, float y, std::vector<std::u8string> files) = 0;
         [[nodiscard]] virtual bool file_drag_moved(float x, float y) = 0;
         virtual void file_drag_left() = 0;
-        [[nodiscard]] virtual bool file_drag_dropped(float x, float y, const std::vector<std::u8string>& files) = 0;
+        // `key_state`는 OLE가 `Drop`에 실은 그 순간의 키 상태다 (`MK_CONTROL`·`MK_SHIFT`·`MK_ALT`). 다른 프로그램에서
+        // 끌어오는 동안 키보드 입력은 그쪽에 있어 이 thread의 `GetKeyState`는 낡은 값이다.
+        [[nodiscard]] virtual bool file_drag_dropped(float x, float y, const std::vector<std::u8string>& files, DWORD key_state) = 0;
     };
 
     // 창 하나의 IDropTarget이다.

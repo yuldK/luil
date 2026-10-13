@@ -814,6 +814,10 @@ namespace luil::win32 {
                     //    있다. 그러면 이번 게시의 테마 변화를 이 wake가 놓친다.
                     const bool every_surface { posting_changes_every_surface() };
                     invalidate_surfaces(surfaces_to_repaint(contents, every_surface));
+                    // 끄는 동안의 커서 모양은 상호작용 발행본이 정한다. 마우스를 잡은 창에는 `WM_SETCURSOR`가 오지
+                    // 않으므로 발행본이 바뀔 때 잡은 창이 스스로 맞춘다.
+                    if (every_surface)
+                        refresh_captured_cursors();
                     // **예고가 꺼져 있으면 여기서 켠다.** 표면을 골라 깨우는 순간
                     // "게시마다 주 창이 그려지며 다시 건다"는 전제가 무너졌다 —
                     // popup은 자기 render에서 예고를 걸지 않으므로(5.2), popup의
@@ -1146,6 +1150,16 @@ namespace luil::win32 {
             }
 
             // 빈 표식은 주 창이다. 보조 창과 popup은 자기 id로 찾는다.
+            // 마우스를 잡은 표면(있으면 하나)의 커서를 지금 상호작용으로 맞춘다.
+            void refresh_captured_cursors()
+            {
+                main_.refresh_captured_cursor();
+                for (const std::unique_ptr<secondary_surface>& window : windows_)
+                    window->refresh_captured_cursor();
+                for (const std::unique_ptr<popup_surface>& popup : popups_)
+                    popup->refresh_captured_cursor();
+            }
+
             [[nodiscard]] window_surface* surface_for_capture(const std::u8string& surface)
             {
                 if (surface.empty() || surface == main_.id())

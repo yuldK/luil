@@ -366,7 +366,7 @@ namespace luil::win32 {
             host->post_raw_input(file_drag_left_event { id_ });
     }
 
-    bool window_surface::file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files)
+    bool window_surface::file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files, const DWORD key_state)
     {
         // 답과 실행은 이 표면의 tree에 직접 묻는다 (os-dragdrop-design.md).
         // caption 버튼이 tree의 액션을 동기로 실행하는 것과 같은 자리다.
@@ -379,10 +379,11 @@ namespace luil::win32 {
         {
             // 놓는 순간의 수식 키다 (내부 끌기의 놓기와 같은 규약). OLE에 답하는 효과는 그대로 복사다
             // (win32_drop.cpp) — 앱이 이 값으로 무엇을 하든 원본은 탐색기가 지우지 않는다.
+            //  - OLE가 실은 키 상태로 읽는다. 끌어오는 동안 키보드 입력은 끄는 쪽 프로그램에 있다.
             ui_action_context context { over->id(), x, y };
-            context.control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            context.shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            context.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            context.control = (key_state & MK_CONTROL) != 0;
+            context.shift = (key_state & MK_SHIFT) != 0;
+            context.alt = (key_state & MK_ALT) != 0;
             for (input_action& action : over->drop()->on_drop(payload, context))
                 context_.dispatch_action(std::move(action));
         }
@@ -1177,6 +1178,12 @@ namespace luil::win32 {
         event.meta = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
         host->post_raw_input(std::move(event));
         return true;
+    }
+
+    void window_surface::refresh_captured_cursor()
+    {
+        if (window_ != nullptr && GetCapture() == window_)
+            apply_cursor();
     }
 
     void window_surface::track_mouse_leave() noexcept
