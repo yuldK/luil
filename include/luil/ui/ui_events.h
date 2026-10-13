@@ -94,6 +94,11 @@ namespace luil {
         bool control { false };
         bool shift { false };
         bool alt { false };
+        // 떼지 않았는데 포인터를 잃었다 (Win32 마우스 캡처를 다른 창이 가져갔다).
+        //  - 좌표와 수식 키는 뜻이 없다. 클릭도 놓기도 되지 않는다.
+        //  - 끝을 듣는 손잡이(`pointer_drag_target::on_release`)는 마지막 이동의 자리와 수식 키를 받는다 — 취소의 끝은
+        //    마지막 이벤트의 값이라는 규약이다 (터치·펜의 `pointer_cancelled_event`와 같다).
+        bool cancelled { false };
     };
 
     // 터치·펜 접촉이 정상적인 뗌 없이 끝났다 (캡처 상실·OS 취소·접촉 중 버튼 전환).

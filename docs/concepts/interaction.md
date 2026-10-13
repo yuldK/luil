@@ -18,7 +18,7 @@ input 스레드의 [`interaction_controller`](../../include/luil/ui/ui_interacti
 | 터치 길게 누르기의 `right_click` | 시간이 찬 순간까지의 마지막 이벤트 |
 | `pointer_drag_target::on_press` | 누른 순간 |
 | `pointer_drag_target::on_move` | 그 이동의 순간 (앞 문맥은 앞 순간) |
-| `pointer_drag_target::on_release` | 뗀 순간, 취소면 마지막 이벤트 |
+| `pointer_drag_target::on_release` | 뗀 순간, 취소면 마지막 이벤트 (Win32 마우스 캡처를 잃은 끝 `pointer_released_event::cancelled`도 취소다) |
 | `drag_source::make_payload` | 끌기가 시작되는 이동의 순간 (자리는 누른 자리) |
 | `drop_target::on_drop` | 놓는 순간 |
 | Space·Enter의 실행 | 그 키의 수식 키 (Ctrl·Alt는 앱 단축키라 실제로는 Shift뿐) |

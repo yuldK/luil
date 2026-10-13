@@ -218,6 +218,20 @@ TEST_CASE("A row outside the selection drags alone and a folder refuses itself",
     REQUIRE(dropped->items == std::vector<std::u8string> { u8"pics" });
 }
 
+TEST_CASE("Losing the mouse capture over a folder drops nothing", "[ui][interaction][multi-drag]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(make_tree());
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, row_y(2), luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(2) + 10.0f, at(5) }));
+    static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(0), at(10) }));
+    REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id { luil::ui_element_kind::virtual_list_row, u8"docs" });
+    luil::pointer_released_event lost { -10000.0f, -10000.0f, luil::pointer_button::left, at(20) };
+    lost.cancelled = true;
+    REQUIRE(dropped_of(controller.process(lost)).has_value() == false);
+    REQUIRE(controller.snapshot().drag.has_value() == false);
+}
+
 TEST_CASE("A drag without a rejected cursor keeps the grabbing cursor everywhere", "[ui][interaction][multi-drag]")
 {
     const std::shared_ptr<const luil::ui_tree> tree { make_tree() };

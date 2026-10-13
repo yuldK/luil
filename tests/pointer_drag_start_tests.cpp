@@ -256,6 +256,34 @@ TEST_CASE("A drag between two clicks breaks the click streak", "[ui][interaction
     REQUIRE(names(calls) == std::vector<std::u8string> { u8"click" });
 }
 
+TEST_CASE("Losing the mouse capture ends a handle drag with its last place and keys", "[ui][interaction][pointer-drag]")
+{
+    // 다른 창이 캡처를 가져가면 Win32는 떼지 않은 뗌(`cancelled`)을 보낸다. 좌표도 수식 키도 뜻이 없으므로 손잡이는
+    // 마지막 이동의 값으로 끝을 듣는다.
+    std::vector<call> calls {};
+    luil::interaction_controller controller {};
+    controller.set_tree(make_tree(calls));
+    static_cast<void>(controller.process(press(20.0f, 20.0f, 0)));
+    luil::pointer_moved_event drag { move(40.0f, 22.0f, 10) };
+    drag.control = true;
+    static_cast<void>(controller.process(drag));
+    luil::pointer_released_event lost { release(-10000.0f, -10000.0f, 20) };
+    lost.cancelled = true;
+    static_cast<void>(controller.process(lost));
+    REQUIRE(names(calls) == std::vector<std::u8string> { u8"press", u8"move", u8"release" });
+    REQUIRE(calls.back().context.x == 40.0f);
+    REQUIRE(calls.back().context.y == 22.0f);
+    REQUIRE(calls.back().context.control);
+
+    // 시작 거리 안의 누름이 캡처를 잃어도 클릭이 아니다.
+    calls.clear();
+    static_cast<void>(controller.process(press(20.0f, 20.0f, 100)));
+    luil::pointer_released_event lost_press { release(20.0f, 20.0f, 110) };
+    lost_press.cancelled = true;
+    static_cast<void>(controller.process(lost_press));
+    REQUIRE(calls.empty());
+}
+
 TEST_CASE("Pens use the same start distance as the mouse", "[ui][interaction][pointer-drag][pen]")
 {
     std::vector<call> calls {};
