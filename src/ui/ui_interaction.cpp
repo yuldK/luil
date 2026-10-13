@@ -447,8 +447,7 @@ namespace luil {
         // tree가 다시 빌드되어도 같은 id로 찾아 이어서 끈다.
         if (pointer_drag_id_ != ui_element_id {})
         {
-            const ui_element* const target { pressed_tree != nullptr ? live_touch_handle(*pressed_tree, pointer_drag_id_, pressed_x_, pressed_y_) : nullptr };
-            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+            const pointer_drag_target* const handler { live_drag_handler(pressed_tree, pointer_drag_id_, pressed_x_, pressed_y_) };
             if (handler == nullptr)
             {
                 cancel_pointer_gesture();
@@ -500,10 +499,15 @@ namespace luil {
             {
                 pointer_drag_pending_ = false;
                 pointer_drag_id_ = pressed_id_;
+                pointer_drag_held_ = *handler;
                 pointer_drag_x_ = pressed_x_;
                 pointer_drag_y_ = pressed_y_;
                 pointer_drag_modifiers_ = pressed_modifiers_;
                 pointer_drag_motion_ = {};
+                // 끌기는 클릭이 아니다. 앞 클릭의 연타 기록을 지워 끌기 뒤의 클릭이 그것과 더블 클릭으로 묶이지 않게 한다.
+                last_click_id_ = {};
+                last_click_surface_.clear();
+                click_streak_ = 0;
                 // 누름은 누른 자리와 누른 순간의 수식 키다. 넘은 이동 자체도 끌기라 이어서 그 이동을 보낸다.
                 std::vector<input_action> actions {};
                 if (handler->on_press)
@@ -1081,6 +1085,7 @@ namespace luil {
         if (event.button == pointer_button::left && handler != nullptr)
         {
             pointer_drag_id_ = hit->id();
+            pointer_drag_held_ = *handler;
             pointer_drag_x_ = event.x;
             pointer_drag_y_ = event.y;
             pointer_drag_modifiers_ = modifiers_of(event);
@@ -1426,6 +1431,7 @@ namespace luil {
         contact.pan_open = false;
         touch_ = std::move(contact);
         pointer_drag_id_ = hit->id();
+        pointer_drag_held_ = *handler;
         pointer_drag_x_ = event.x;
         pointer_drag_y_ = event.y;
         pointer_drag_modifiers_ = modifiers_of(event);
@@ -1528,8 +1534,7 @@ namespace luil {
             break;
         }
         case touch_phase::handle: {
-            const ui_element* const target { tree != nullptr ? live_touch_handle(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
-            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+            const pointer_drag_target* const handler { live_drag_handler(tree, contact.target, contact.start_x, contact.start_y) };
             if (handler == nullptr)
             {
                 cancel_touch();
@@ -1646,9 +1651,14 @@ namespace luil {
                     contact.phase = touch_phase::handle;
                     contact.moved_action = true;
                     pointer_drag_id_ = contact.target;
+                    pointer_drag_held_ = *handler;
                     pointer_drag_x_ = contact.start_x;
                     pointer_drag_y_ = contact.start_y;
                     pointer_drag_modifiers_ = pressed_modifiers_;
+                    // 끌기는 탭이 아니다. 앞 탭의 연타 기록을 지운다 (마우스와 같다).
+                    last_click_id_ = {};
+                    last_click_surface_.clear();
+                    click_streak_ = 0;
                     snapshot_.pressed = contact.target;
                     snapshot_.pressed_surface = contact.surface;
                     // 조작이 시작됐으므로 초점은 지금 옮긴다 (누르는 즉시 시작하는 손잡이는 누를 때 옮긴다).
@@ -1805,8 +1815,10 @@ namespace luil {
         case touch_phase::handle: {
             // 손잡이를 놓는 것은 클릭이 아니다 (마우스와 같다). 움직이지 않고
             // 오래 눌렀으면 길게 누르기만 남는다. 끝을 듣는 손잡이에는 먼저 끝을 알린다.
-            clear_press();
+            //  - 끝을 알린 뒤에 누름을 거둔다. 창 밖으로 흘러 지어지지 않은 손잡이는 쥐어 둔 handler로 끝을 듣는데,
+            //    `clear_press`가 그것을 함께 지운다.
             std::vector<input_action> actions { tree != nullptr ? end_touch_drag(contact, event.x, event.y, contact.motion.velocity_at(event.time)) : std::vector<input_action> {} };
+            clear_press();
             if (still == false || contact.moved_action || tree == nullptr)
                 return actions;
             const ui_element* const target { live_touch_handle(*tree, contact.target, contact.start_x, contact.start_y) };
@@ -1970,8 +1982,9 @@ namespace luil {
                 if (decided[horizontal ? 1 : 0])
                     continue;
                 const rect_f& box { window.bounds() };
-                const float speed { horizontal ? drag_auto_scroll_speed(x, box.x, box.x + box.width, source->scale, config)
-                                               : drag_auto_scroll_speed(y, box.y, box.y + box.height, source->scale, config) };
+                const float start { horizontal ? box.x : box.y };
+                const float length { horizontal ? box.width : box.height };
+                const float speed { drag_auto_scroll_speed(horizontal ? x : y, start, start + length, source->scale, config) };
                 if (speed == 0.0f || (speed < 0.0f ? source->at_start : source->at_end))
                     continue;
                 decided[horizontal ? 1 : 0] = true;
@@ -1993,7 +2006,52 @@ namespace luil {
             const ui_element* const owner { pan_owner_at(*root, x, y, accepts) };
             return owner != nullptr && accepts(*owner) ? owner : nullptr;
         }
+
+        // `id`를 감싼 가장 안쪽의 흘리는 창이다 (`id` 자신도 창이면 그것이다).
+        [[nodiscard]] const ui_element* scroll_window_around(const ui_tree& tree, const ui_element_id& id)
+        {
+            const ui_element* const root { tree.root() };
+            std::vector<const ui_element*> path {};
+            if (root == nullptr || collect_ancestry(*root, id, path) == false)
+                return nullptr;
+            for (auto it { path.rbegin() }; it != path.rend(); ++it)
+                if (const scroll_source* const source { (*it)->scroll() }; source != nullptr && source->scroll != nullptr)
+                    return *it;
+            return nullptr;
+        }
+
+        // `outer`가 `inner`를 감싸는가 (같으면 참이다).
+        [[nodiscard]] bool encloses(const ui_tree& tree, const ui_element_id& outer, const ui_element_id& inner)
+        {
+            const ui_element* const root { tree.root() };
+            std::vector<const ui_element*> path {};
+            if (root == nullptr || collect_ancestry(*root, inner, path) == false)
+                return false;
+            return std::ranges::any_of(path, [&outer](const ui_element* const element) { return element->id() == outer; });
+        }
     } // namespace
+
+    const pointer_drag_target* interaction_controller::live_drag_handler(const ui_tree* const tree, const ui_element_id& id, const float x, const float y) const
+    {
+        if (tree == nullptr || id == ui_element_id {})
+            return nullptr;
+        if (const ui_element* const target { live_touch_handle(*tree, id, x, y) }; target != nullptr && target->pointer_drag() != nullptr)
+            return target->pointer_drag();
+        // 자동 스크롤을 켠 손잡이는 흘리는 창 안에 있어 내용이 흐르면 누른 자리를 떠난다. 누른 자리를 덮은 것으로
+        // 보면 한 행만 흘러도 끌기가 끊긴다.
+        if (pointer_drag_held_.has_value() == false || pointer_drag_held_->auto_scroll == false)
+            return nullptr;
+        if (const ui_element* const moved { tree->find(id) }; moved != nullptr)
+        {
+            if (moved->enabled() == false || tree->within_focus_trap(id) == false)
+                return nullptr;
+            return moved->pointer_drag();
+        }
+        // 창 밖으로 흘러 지어지지 않았다 (가상 목록). 흘리던 창이 남아 있으면 쥐어 둔 handler로 잇는다 — 창까지
+        // 사라졌으면 화면이 바뀐 것이라 끊는다.
+        const bool window_alive { auto_scroll_.has_value() && auto_scroll_->handle && auto_scroll_->handle_id == id && tree->find(auto_scroll_->anchor) != nullptr };
+        return window_alive ? &*pointer_drag_held_ : nullptr;
+    }
 
     void interaction_controller::track_auto_scroll(const std::u8string& surface, const float x, const float y, const std::chrono::steady_clock::time_point time)
     {
@@ -2010,23 +2068,36 @@ namespace luil {
         if (pointer_drag_id_ != ui_element_id {})
         {
             // 손잡이는 켠 것만 흐른다.
-            const ui_element* const handle { tree->find(pointer_drag_id_) };
-            const pointer_drag_target* const handler { handle != nullptr ? handle->pointer_drag() : nullptr };
+            const pointer_drag_target* const handler { live_drag_handler(tree, pointer_drag_id_, pressed_x_, pressed_y_) };
             if (handler == nullptr || handler->auto_scroll == false)
             {
                 auto_scroll_.reset();
                 return;
             }
-            next.anchor = pointer_drag_id_;
             next.handle = true;
+            next.handle_id = pointer_drag_id_;
+            // 흘릴 창은 손잡이를 감싼 창이다. 손잡이는 내용과 함께 흘러 창 밖에서 지어지지 않을 수 있으므로(가상 목록)
+            // 지어져 있을 때 찾은 창을 이어 쓴다.
+            const bool continuing { auto_scroll_.has_value() && auto_scroll_->handle && auto_scroll_->handle_id == pointer_drag_id_ && auto_scroll_->surface == surface };
+            if (const ui_element* const window { scroll_window_around(*tree, pointer_drag_id_) }; window != nullptr)
+                next.anchor = window->id();
+            else if (continuing)
+                next.anchor = auto_scroll_->anchor;
+            else
+                next.anchor = pointer_drag_id_;
         }
         else if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && config_.auto_scroll.drag_and_drop)
         {
             // 포인터 밑의 흘리는 창이 기준이다. 창 밖이면 직전 창(처음에는 끌기를 시작한 자리)이 이어진다 —
             // 목록 위로 끌고 나가도 그 목록이 위로 흐른다.
-            if (const ui_element* const window { scroll_window_at(*tree, x, y) }; window != nullptr)
+            //  - 포인터가 직전 창을 감싼 바깥 창(목록을 품은 판) 위로 나간 것도 그 창 밖이다. 바깥 창으로 갈아타면
+            //    목록 위로 끌고 나간 순간 목록은 멈추고 판이 받는다.
+            //  - 직전 창과 남남인 창(옆 목록)에 들어가면 그 창으로 옮겨 간다.
+            const bool continuing { auto_scroll_.has_value() && auto_scroll_->handle == false && auto_scroll_->surface == surface };
+            const ui_element* const window { scroll_window_at(*tree, x, y) };
+            if (window != nullptr && (continuing == false || encloses(*tree, window->id(), auto_scroll_->anchor) == false))
                 next.anchor = window->id();
-            else if (auto_scroll_.has_value() && auto_scroll_->handle == false && auto_scroll_->surface == surface)
+            else if (continuing)
                 next.anchor = auto_scroll_->anchor;
             else
                 next.anchor = snapshot_.drag->payload.source;
@@ -2071,10 +2142,9 @@ namespace luil {
         }
         // 내용이 흘렀으니 포인터가 멈춰 있어도 손잡이에 같은 자리의 이동을 알린다. 좌표는 표면 좌표다 — 스크롤
         // 메시지가 먼저 나가므로 앱이 자기 스크롤 위치로 옮기면 흐른 만큼 늘어난 자리가 된다.
-        if (state.handle && pointer_drag_id_ == state.anchor && tree != nullptr)
+        if (state.handle && pointer_drag_id_ == state.handle_id)
         {
-            const ui_element* const target { live_touch_handle(*tree, pointer_drag_id_, pressed_x_, pressed_y_) };
-            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+            const pointer_drag_target* const handler { live_drag_handler(tree, pointer_drag_id_, pressed_x_, pressed_y_) };
             if (handler != nullptr && handler->on_move != nullptr)
             {
                 const ui_action_context previous { action_context(pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, pointer_drag_modifiers_) };
@@ -2092,8 +2162,11 @@ namespace luil {
     {
         if (auto_scroll_.has_value() == false)
             return;
-        const bool alive { auto_scroll_->handle ? pointer_drag_id_ == auto_scroll_->anchor
-                                                : snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface == auto_scroll_->surface };
+        bool alive { false };
+        if (auto_scroll_->handle)
+            alive = pointer_drag_id_ == auto_scroll_->handle_id;
+        else
+            alive = snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface == auto_scroll_->surface;
         if (alive == false)
             auto_scroll_.reset();
     }
@@ -2278,8 +2351,7 @@ namespace luil {
         }
         if (contact.phase != touch_phase::handle)
             return {};
-        const ui_element* const target { live_touch_handle(*tree, contact.target, contact.start_x, contact.start_y) };
-        const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+        const pointer_drag_target* const handler { live_drag_handler(tree, contact.target, contact.start_x, contact.start_y) };
         if (handler == nullptr || handler->on_release == nullptr)
             return {};
         return handler->on_release(action_context(contact.target, x, y, contact.modifiers), velocity);
@@ -2289,9 +2361,7 @@ namespace luil {
     {
         if (pointer_drag_id_ == ui_element_id {})
             return {};
-        const ui_tree* const tree { surface_tree(pressed_surface_) };
-        const ui_element* const target { tree != nullptr ? live_touch_handle(*tree, pointer_drag_id_, pressed_x_, pressed_y_) : nullptr };
-        const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+        const pointer_drag_target* const handler { live_drag_handler(surface_tree(pressed_surface_), pointer_drag_id_, pressed_x_, pressed_y_) };
         if (handler == nullptr || handler->on_release == nullptr)
             return {};
         return handler->on_release(action_context(pointer_drag_id_, x, y, modifiers), velocity);
@@ -2679,6 +2749,9 @@ namespace luil {
             return std::vector<input_action> {};
         }
         case key_code::enter: {
+            // Ctrl·Alt가 눌린 Enter는 앱 단축키다 — 실행 키가 되는 것은 Shift뿐이다 (Space·Enter 실행과 같은 규약).
+            if (event.shortcut_modifier_down())
+                return std::nullopt;
             if (snapshot_.menu_highlight == ui_element_id {})
                 return std::vector<input_action> {};
             const ui_element* const item { tree.find(snapshot_.menu_highlight) };
@@ -3155,6 +3228,7 @@ namespace luil {
     void interaction_controller::clear_press() noexcept
     {
         pointer_drag_id_ = {};
+        pointer_drag_held_.reset();
         pointer_drag_pending_ = false;
         pressed_id_ = {};
         pressed_button_ = pointer_button::none;
@@ -3169,8 +3243,11 @@ namespace luil {
         inertia_.reset();
         // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
         // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.
-        std::vector<input_action> actions { touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {})
-                                                               : end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_) };
+        std::vector<input_action> actions {};
+        if (touch_.has_value())
+            actions = end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {});
+        else
+            actions = end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_);
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
         last_view_tap_.reset();

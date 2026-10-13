@@ -618,6 +618,10 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> advance_auto_scroll(std::chrono::steady_clock::time_point now);
         // 자동 스크롤이 매인 끌기가 끝났으면 거둔다.
         void settle_auto_scroll() noexcept;
+        // 끄고 있는 손잡이의 handler다. 손잡이가 사라졌거나 덮였으면 없다 (그 끌기는 끊긴다).
+        //  - 자동 스크롤을 켠 손잡이는 내용과 함께 흐르므로 누른 자리가 아니라 id·사용 가능·가둠으로 본다. 창 밖으로
+        //    흘러 지어지지 않았으면(가상 목록) 흘리던 창이 남아 있는 동안 끌기를 시작할 때 쥐어 둔 handler로 잇는다.
+        [[nodiscard]] const pointer_drag_target* live_drag_handler(const ui_tree* tree, const ui_element_id& id, float x, float y) const;
         [[nodiscard]] std::vector<input_action> process_touch_press(const pointer_pressed_event& event);
         [[nodiscard]] std::vector<input_action> process_touch_move(const pointer_moved_event& event);
         [[nodiscard]] std::vector<input_action> process_touch_release(const pointer_released_event& event);
@@ -773,6 +777,10 @@ namespace luil {
         // 값이 있으면 포인터 이동이 클릭· drag 대신 이 element로 간다.
         // 좌표는 마지막으로 보낸 위치다.
         ui_element_id pointer_drag_id_ {};
+        // 끌기가 시작될 때 쥐어 둔 그 손잡이의 handler다. `clear_press`가 id와 함께 지운다.
+        //  - 자동 스크롤을 켠 손잡이가 창 밖으로 흘러 tree에서 빠진 동안만 쓴다 (`live_drag_handler`). 콜백은 값으로
+        //    담긴 factory라 element보다 오래 살아도 된다.
+        std::optional<pointer_drag_target> pointer_drag_held_ {};
         // 마우스·펜 손잡이 끌기의 이동이다 (터치는 접촉이 들고 있다).
         motion_track pointer_drag_motion_ {};
         float pointer_drag_x_ { 0.0f };
@@ -840,11 +848,16 @@ namespace luil {
         struct auto_scroll_state
         {
             std::u8string surface {};
-            // 흘릴 창을 찾는 기준 element다. 손잡이면 그 손잡이, drag & drop이면 포인터 밑의 흘리는 창이고
-            // 그것이 없으면 직전 값(처음에는 끌기의 출발)이다 — 목록 위로 끌고 나가도 그 목록이 흐른다.
+            // 흘릴 창을 찾는 기준 element다.
+            //  - 손잡이면 그 손잡이를 감싼 가장 안쪽의 흘리는 창이다. 손잡이 자신은 내용과 함께 흘러 창 밖에서
+            //    지어지지 않을 수 있지만 창은 남는다.
+            //  - drag & drop이면 포인터 밑의 흘리는 창이다. 포인터가 직전 창을 벗어나 그 창을 감싼 바깥 창으로 갔거나
+            //    창 밖이면 직전 값(처음에는 끌기의 출발)이 이어진다 — 목록 위로 끌고 나가도 그 목록이 흐른다.
             ui_element_id anchor {};
             // 끌기 손잡이의 흐름인가 (아니면 drag & drop이다).
             bool handle { false };
+            // 손잡이 흐름의 그 손잡이다.
+            ui_element_id handle_id {};
             float x { 0.0f };
             float y { 0.0f };
             // 지금 흘릴 창이 있다. 없으면 기다릴 시각도 없다.

@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -137,6 +138,60 @@ namespace {
     {
         const auto* const message { std::get_if<luil::app_message>(&action) };
         return message != nullptr ? message->get<moved>() : nullptr;
+    }
+
+    // 손잡이가 끝을 들었다.
+    struct released
+    {
+        float y { 0.0f };
+    };
+
+    [[nodiscard]] const released* release_of(const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        return message != nullptr ? message->get<released>() : nullptr;
+    }
+
+    [[nodiscard]] std::unique_ptr<panel> make_window(const luil::ui_element_id& id, const luil::rect_f& box)
+    {
+        auto window { std::make_unique<panel>(id) };
+        window->arrange({ box, 1.0f });
+        luil::scroll_source source {};
+        source.scroll = [id](const float delta) { return luil::make_app_action(scrolled { id, delta }); };
+        window->set_scroll_source(std::move(source));
+        return window;
+    }
+
+    // 목록 (0,100)–(200,300) 안의 손잡이 행이 내용과 함께 흐른 자리다. `top`이 없으면 창 밖으로 흘러 지어지지 않았다
+    // (가상 목록). 누른 자리 (20,160)에는 그 사이 다른 행이 와 있다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_flowing_tree(const std::optional<float> top)
+    {
+        auto root { std::make_unique<panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 1.0f });
+        auto list { make_window({ kind_list, u8"left" }, { 0.0f, 100.0f, 200.0f, 200.0f }) };
+        if (top.has_value())
+        {
+            auto handle_row { std::make_unique<panel>(luil::ui_element_id { kind_row, u8"handle" }) };
+            handle_row->arrange({ { 10.0f, *top, 180.0f, 30.0f }, 1.0f });
+            luil::pointer_drag_target target {};
+            target.auto_scroll = true;
+            target.on_move = [](const luil::ui_action_context& previous, const luil::ui_action_context& current) -> std::vector<luil::input_action> {
+                return { luil::make_app_action(moved { previous.x, previous.y, current.x, current.y }) };
+            };
+            target.on_release = [](const luil::ui_action_context& context, const luil::drag_velocity&) -> std::vector<luil::input_action> { return { luil::make_app_action(released { context.y }) }; };
+            handle_row->set_pointer_drag_target(std::move(target));
+            list->add(std::move(handle_row));
+        }
+        // 흐른 내용의 다른 행이다. 누르면 고르는 행이라 손잡이가 떠난 누른 자리를 덮는다.
+        if (top != 150.0f)
+        {
+            auto other_row { std::make_unique<panel>(luil::ui_element_id { kind_row, u8"other" }) };
+            other_row->arrange({ { 10.0f, 150.0f, 180.0f, 30.0f }, 1.0f });
+            other_row->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; });
+            list->add(std::move(other_row));
+        }
+        root->add(std::move(list));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
     }
 
     // 손잡이 행을 누르고 (x, y)로 옮긴다 (시각 0과 10).
@@ -347,4 +402,101 @@ TEST_CASE("A touch handle drag scrolls at the edge as well", "[ui][interaction][
     REQUIRE(actions.size() == 2u);
     REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(2.5f));
     REQUIRE(move_of(actions[1])->y == 290.0f);
+}
+
+TEST_CASE("A handle keeps flowing after its content scrolls away from the pressed point", "[ui][interaction][auto-scroll]")
+{
+    // 흘리는 창 안의 손잡이는 내용과 함께 흐른다. 누른 자리를 덮은 것으로 손잡이의 생사를 보면 한 행만 흘러도
+    // 끌기가 끊긴다.
+    luil::interaction_controller controller { nullptr, config() };
+    controller.set_tree(make_flowing_tree(150.0f));
+    grab_handle(controller, 20.0f, 290.0f);
+    auto actions { controller.advance(at(20)) };
+    REQUIRE(actions.size() == 2u);
+    REQUIRE(scroll_of(actions[0]) != nullptr);
+    REQUIRE(move_of(actions[1]) != nullptr);
+
+    // 한 행 넘게 흘렀다. 누른 자리에는 다른 행이 있다.
+    controller.set_tree(make_flowing_tree(100.0f));
+    actions = controller.advance(at(30));
+    REQUIRE(actions.size() == 2u);
+    REQUIRE(scroll_of(actions[0])->window == luil::ui_element_id { kind_list, u8"left" });
+    REQUIRE(move_of(actions[1])->y == 290.0f);
+    // 포인터를 움직여도 끊기지 않는다.
+    actions = controller.process(move(20.0f, 295.0f, 35));
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(move_of(actions[0])->y == 295.0f);
+
+    // 창 밖으로 흘러 지어지지 않았다. 창이 남아 있으므로 끌기를 시작할 때 쥔 handler로 잇는다.
+    controller.set_tree(make_flowing_tree(std::nullopt));
+    actions = controller.advance(at(45));
+    REQUIRE(actions.size() == 2u);
+    REQUIRE(scroll_of(actions[0])->window == luil::ui_element_id { kind_list, u8"left" });
+    REQUIRE(move_of(actions[1])->y == 295.0f);
+    actions = controller.process(move(20.0f, 298.0f, 50));
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(move_of(actions[0])->y == 298.0f);
+
+    // 놓으면 끝을 듣는다 — 앱의 범위 상태가 끝난 줄 안다.
+    actions = controller.process(luil::pointer_released_event { 20.0f, 298.0f, luil::pointer_button::left, at(55) });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(release_of(actions[0]) != nullptr);
+    REQUIRE(release_of(actions[0])->y == 298.0f);
+    REQUIRE(controller.next_deadline().has_value() == false);
+}
+
+TEST_CASE("A handle without auto scroll still ends when the pressed point is covered", "[ui][interaction][auto-scroll]")
+{
+    // 제자리의 손잡이(막대·나눔 손잡이)는 지금처럼 누른 자리를 덮은 것이 끊는다.
+    luil::interaction_controller controller { nullptr, config() };
+    list_state state {};
+    state.auto_scroll = false;
+    controller.set_tree(make_tree(state));
+    grab_handle(controller, 20.0f, 250.0f);
+    controller.set_tree(make_flowing_tree(100.0f));
+    REQUIRE(controller.process(move(20.0f, 255.0f, 20)).empty());
+    REQUIRE(controller.process(move(20.0f, 260.0f, 30)).empty());
+}
+
+TEST_CASE("Dragging out of a list into the page that holds it keeps the list flowing", "[ui][interaction][auto-scroll]")
+{
+    // 판(0,0)–(400,400)이 흐르는 창이고 그 안에 목록 둘이 있다. 목록 위로 끌고 나가 판 안에 머물러도 목록이 흐른다.
+    auto root { std::make_unique<panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 1.0f });
+    auto page { make_window({ kind_list, u8"page" }, { 0.0f, 0.0f, 400.0f, 400.0f }) };
+    auto inner { make_window({ kind_list, u8"inner" }, { 0.0f, 100.0f, 200.0f, 200.0f }) };
+    auto item_row { std::make_unique<panel>(luil::ui_element_id { kind_row, u8"item" }) };
+    item_row->arrange({ { 10.0f, 200.0f, 180.0f, 30.0f }, 1.0f });
+    luil::drag_source source {};
+    source.make_payload = [](const luil::ui_action_context& context) {
+        luil::drag_payload payload {};
+        payload.source = context.element;
+        payload.dragged_owner = u8"item";
+        return payload;
+    };
+    item_row->set_drag_source(std::move(source));
+    inner->add(std::move(item_row));
+    page->add(std::move(inner));
+    page->add(make_window({ kind_list, u8"right" }, { 250.0f, 100.0f, 100.0f, 200.0f }));
+    root->add(std::move(page));
+
+    luil::interaction_controller controller { nullptr, config() };
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 210.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(move(20.0f, 230.0f, 10)));
+    REQUIRE(controller.snapshot().drag.has_value());
+
+    // 목록 위쪽(판 안, 판의 띠 밖)이다. 목록이 위로 흐른다.
+    static_cast<void>(controller.process(move(20.0f, 60.0f, 20)));
+    auto actions { controller.advance(at(30)) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(scroll_of(actions[0])->window == luil::ui_element_id { kind_list, u8"inner" });
+    REQUIRE(scroll_of(actions[0])->delta < 0.0f);
+
+    // 판과 남남인 옆 목록에 들어가면 그 목록으로 옮겨 간다.
+    static_cast<void>(controller.process(move(300.0f, 290.0f, 35)));
+    actions = controller.advance(at(40));
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(scroll_of(actions[0])->window == luil::ui_element_id { kind_list, u8"right" });
+    REQUIRE(scroll_of(actions[0])->delta > 0.0f);
 }

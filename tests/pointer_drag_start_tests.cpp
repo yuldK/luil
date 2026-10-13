@@ -233,6 +233,29 @@ TEST_CASE("A drag that returns to its start and releases is still not a click", 
     REQUIRE(names(calls) == std::vector<std::u8string> { u8"click" });
 }
 
+TEST_CASE("A drag between two clicks breaks the click streak", "[ui][interaction][pointer-drag]")
+{
+    // 클릭 → 끌기 → 같은 자리 클릭이 더블 클릭 시간 안에 와도 끌기가 앞 클릭의 연타 기록을 지운다.
+    std::vector<call> calls {};
+    luil::interaction_controller controller {};
+    controller.set_tree(make_tree(calls));
+
+    static_cast<void>(controller.process(press(20.0f, 20.0f, 0)));
+    static_cast<void>(controller.process(release(20.0f, 20.0f, 10)));
+    REQUIRE(names(calls) == std::vector<std::u8string> { u8"click" });
+
+    calls.clear();
+    static_cast<void>(controller.process(press(20.0f, 20.0f, 100)));
+    static_cast<void>(controller.process(move(40.0f, 20.0f, 110)));
+    static_cast<void>(controller.process(release(40.0f, 20.0f, 200)));
+    REQUIRE(names(calls) == std::vector<std::u8string> { u8"press", u8"move", u8"release" });
+
+    calls.clear();
+    static_cast<void>(controller.process(press(20.0f, 20.0f, 300)));
+    static_cast<void>(controller.process(release(20.0f, 20.0f, 310)));
+    REQUIRE(names(calls) == std::vector<std::u8string> { u8"click" });
+}
+
 TEST_CASE("Pens use the same start distance as the mouse", "[ui][interaction][pointer-drag][pen]")
 {
     std::vector<call> calls {};
