@@ -146,6 +146,33 @@ TEST_CASE("Adding and removing a row reach the app as its own commands", "[ui][a
     REQUIRE(nothing_to_do(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::select, false))));
 }
 
+TEST_CASE("Without add or remove messages a row adds and removes through a Ctrl pick", "[ui][accessibility][multi-select]")
+{
+    // 더하기·빼기 메시지를 주지 않은 목록은 포인터 사용자의 Ctrl+누름과 같은 길로 받는다. 그냥 누름(이것 하나만)이
+    // 아니다.
+    luil::virtual_list_config config {};
+    config.owner = u8"files";
+    config.row_height = 20.0f;
+    config.items = items(3u);
+    config.multiple_selection = true;
+    config.selection = { u8"a" };
+    config.pick = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(pick_intent { key, context.control, context.shift }); };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f) };
+
+    const auto added { intent_of<pick_intent>(luil::plan_access_request(row(tree, u8"b"), request(luil::access_command::add_to_selection))) };
+    REQUIRE(added.has_value());
+    REQUIRE(added->key == u8"b");
+    REQUIRE(added->control);
+    REQUIRE(added->shift == false);
+    const auto removed { intent_of<pick_intent>(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::remove_from_selection))) };
+    REQUIRE(removed.has_value());
+    REQUIRE(removed->key == u8"a");
+    REQUIRE(removed->control);
+    // 이미 그 상태면 뒤집기가 끼어들 틈 없이 할 일이 없다.
+    REQUIRE(nothing_to_do(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::add_to_selection))));
+    REQUIRE(nothing_to_do(luil::plan_access_request(row(tree, u8"b"), request(luil::access_command::remove_from_selection))));
+}
+
 TEST_CASE("Rows without app handlers cannot be added or removed", "[ui][accessibility][multi-select]")
 {
     // 받는 앱이 없으면 클릭(뒤집기)으로 대신하지 않는다 — 할 수 없는 일이다.

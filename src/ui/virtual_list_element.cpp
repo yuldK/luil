@@ -653,15 +653,30 @@ namespace luil {
                     [key = item.key, drop = config_.drop](const drag_payload& payload, const ui_action_context& context) -> std::vector<input_action> { return { drop(key, payload, context) }; },
                 });
             // 다중 선택의 더하기·빼기는 앱의 메시지다. 고르기는 행의 누름(기본 실행)이 맡는다.
-            if (config_.multiple_selection && item.enabled && (config_.add_to_selection != nullptr || config_.remove_from_selection != nullptr))
-                row->set_access_handler(
-                    [key = item.key, add = config_.add_to_selection, remove = config_.remove_from_selection](const access_request& request) -> std::optional<std::vector<input_action>> {
-                        if (request.command == access_command::add_to_selection && add != nullptr)
-                            return std::vector<input_action> { add(key) };
-                        if (request.command == access_command::remove_from_selection && remove != nullptr)
-                            return std::vector<input_action> { remove(key) };
+            //  - 앱이 그 메시지를 주지 않았으면 `pick`의 Ctrl+누름으로 대신한다. 포인터로 하나 더 고르거나 빼는 몸짓이
+            //    그것이라, 보조 기술도 같은 길을 탄다. 그냥 누름(이것 하나만)으로는 대신하지 않는다.
+            //  - 이미 그 상태인 명령은 `plan_access_request`가 먼저 거르므로 Ctrl+누름의 뒤집기가 목표 상태와 어긋나지
+            //    않는다 — 고르지 않은 행에만 더하기가, 고른 행에만 빼기가 온다.
+            //  - 둘 다 없으면 지금처럼 무효다.
+            const virtual_list_message_factory add { config_.add_to_selection };
+            const virtual_list_message_factory remove { config_.remove_from_selection };
+            const virtual_list_pick_factory pick { config_.pick };
+            if (config_.multiple_selection && item.enabled && (add != nullptr || remove != nullptr || pick != nullptr))
+                row->set_access_handler([key = item.key, row_id = row->id(), add, remove, pick](const access_request& request) -> std::optional<std::vector<input_action>> {
+                    const bool adding { request.command == access_command::add_to_selection };
+                    if (adding == false && request.command != access_command::remove_from_selection)
                         return std::nullopt;
-                    });
+                    if (adding && add != nullptr)
+                        return std::vector<input_action> { add(key) };
+                    if (adding == false && remove != nullptr)
+                        return std::vector<input_action> { remove(key) };
+                    if (pick == nullptr)
+                        return std::nullopt;
+                    // 보조 기술이 시킨 것이라 좌표는 없다.
+                    ui_action_context context { row_id };
+                    context.control = true;
+                    return std::vector<input_action> { pick(key, context) };
+                });
             // 기본 행의 글은 행이 **직접** 그린다.
             // `label_element`를 자식으로 두면 그 자식에게도 자리표가 필요한데, 항목
             // 키로 지으면 같은 키를 보여 주는 두 목록에서 겹치고(`duplicate_ids`),
