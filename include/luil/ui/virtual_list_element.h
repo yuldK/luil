@@ -124,6 +124,18 @@ namespace luil {
         // `multiple_selection`일 때만 쓴다. 없으면 그 명령은 할 수 없다. 고르기(Select)는 행의 누름과 같다.
         virtual_list_message_factory add_to_selection {};
         virtual_list_message_factory remove_from_selection {};
+        // 행을 끌어 옮기는 drag & drop이다. 누른 행의 키와 끌기가 시작되는 순간의 문맥(수식 키)으로 payload를 짓는다.
+        //  - 고른 항목들을 함께 끌려면 `dragged_owners`에 그 키들을 담는다 (기본 ghost가 `+N`을 보인다). 함께 끌리는 행은
+        //    제자리에 흐리게 남는다.
+        //  - `source`를 비워 두면 그 행이다. 놓을 수 없는 행 위의 금지 모양은 `rejected_cursor`로 청한다.
+        //  - 비어 있으면 행을 끌 수 없다. 끌기는 누른 채 `interaction_config::drag_start_distance`를 넘겨야 서므로 클릭과 함께 산다.
+        std::function<drag_payload(const std::u8string& key, const ui_action_context& context)> drag {};
+        // 이 행에 놓을 수 있는가다 (폴더 같은 container 행). 받는 행 위에 머물면 그 행이 놓을 자리로 강조된다.
+        //  - 끌리는 항목 자신(`drag_payload::carries`)에 놓지 못하게 하는 것도 여기서 답한다.
+        //  - `drop`과 함께 있어야 행이 놓을 자리가 된다.
+        std::function<bool(const std::u8string& key, const drag_payload& payload)> accepts_drop {};
+        // 이 행에 놓았다. 놓는 순간의 문맥을 받는다 — Ctrl(`control`)로 복사·옮기기를 가른다.
+        std::function<input_action(const std::u8string& key, const drag_payload& payload, const ui_action_context& context)> drop {};
         // 스크롤 위치를 옮기자는 메시지다 (delta는 논리 픽셀).
         // 휠·막대·키보드 되살리기가 전부 이 하나를 쓴다 (`scroll_area_config`와 같다).
         std::function<input_action(float delta)> scroll {};

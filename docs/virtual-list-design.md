@@ -177,6 +177,22 @@ controller는 초점을 가진 element에게 **묶음보다 먼저** 묻는다. 
 
 앱은 frame을 만들기 전에 `clamp_scroll()`로 스크롤 상태를 **자기 손으로** 다듬는다. 그러면 창·막대·실현 범위가 같은 값을 보고, 키가 내는 스크롤 변화량도 앱이 들고 있는 값과 같은 기준에서 나온다 — 목록이 재는 자리는 다듬은 값이고 앱이 델타를 더하는 자리는 앱이 든 값이라, 그 둘이 어긋나 있으면 되살리기가 한 번에 닿지 못한다.
 
+## 여러 항목 고르기와 끌어 옮기기
+
+파일 목록처럼 여러 항목을 함께 고르고 끌어 옮기는 목록은 아래 값을 채운다. 전부 앱 상태이거나 앱의 factory다 — 무엇을 고르고 어디로 옮길지는 목록이 정하지 않는다.
+
+| 값 | 뜻 |
+| --- | --- |
+| `multiple_selection`·`selection` | 켜면 `selection`의 키들(과 `selected`)이 고른 행으로 그려지고 보조 기술은 다중 선택 목록으로 읽는다 |
+| `pick(key, context)` | 행의 누름이다. `context`의 `control`·`shift`로 Ctrl+클릭(더하기)과 Shift+클릭(범위)을 가른다. 있으면 `select` 대신 쓴다 |
+| `add_to_selection`·`remove_from_selection` | 보조 기술의 더하기·빼기(UIA `AddToSelection`·`RemoveFromSelection`)다 |
+| `drag(key, context)` | 행을 끄는 payload다. 고른 항목을 누르고 끌면 그 키들을 `dragged_owners`에 담는다 |
+| `accepts_drop(key, payload)`·`drop(key, payload, context)` | 폴더 같은 행에 놓기다. 놓는 순간의 `context.control`로 복사·옮기기를 가른다 |
+
+끌기는 누른 채 `drag_start_distance`를 넘겨야 서므로 행의 클릭과 함께 산다. 함께 끌리는 행은 제자리에 흐리게 남고, 받는 행 위에 머물면 그 행이 놓을 자리 색으로 칠해진다. payload의 `rejected_cursor`를 `not_allowed`로 두면 놓을 수 없는 행 위에서 금지 모양이다. 기본 ghost는 대표 항목의 이름과 나머지 개수(`+N`)를 보인다. 끄는 동안 목록의 위·아래 가장자리에 머물면 목록이 흐른다 ([끄는 동안의 가장자리 자동 스크롤](drag-auto-scroll-design.md)).
+
+다른 목록에 놓으려면 그 목록의 행이나 목록을 감싼 element에 `drop_target`을 단다. payload는 표면 안의 어느 놓을 자리로도 간다 — 받는 쪽이 `source.owner`·`dragged_owners`로 무엇이 왔는지 본다.
+
 ## 접근성
 
 목록은 list 역할로 읽히고, 커서가 선 항목의 이름을 목록의 "지금 값"으로 답한다. 행은 list_item이고 선택 상태를 함께 낸다.
