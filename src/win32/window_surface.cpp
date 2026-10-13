@@ -967,6 +967,7 @@ namespace luil::win32 {
         event.button = pointer_button::left;
         event.time = std::chrono::steady_clock::now();
         event.surface = id_;
+        event.cancelled = true;
         host->post_raw_input(std::move(event));
     }
 

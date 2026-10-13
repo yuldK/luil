@@ -1197,7 +1197,12 @@ namespace luil {
         if (pointer_drag_id_ != ui_element_id {} && event.button == pointer_button::left)
         {
             // 끝을 듣는 손잡이에는 끝을 알린다 (시트의 멈춤점).
-            std::vector<input_action> actions { end_pointer_drag(event.x, event.y, pointer_drag_motion_.velocity_at(event.time), modifiers_of(event)) };
+            //  - 포인터를 잃은 끝(`cancelled`)에는 뗀 자리도 수식 키도 없다. 마지막 이동의 값으로 알린다.
+            std::vector<input_action> actions {};
+            if (event.cancelled)
+                actions = end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_);
+            else
+                actions = end_pointer_drag(event.x, event.y, pointer_drag_motion_.velocity_at(event.time), modifiers_of(event));
             pointer_drag_id_ = {};
             clear_press();
             return actions;
@@ -1207,8 +1212,21 @@ namespace luil {
         // 수락하는 대상 위에서만 drop 액션이 실행된다.
         if (snapshot_.drag.has_value())
         {
+            // 포인터를 잃었으면 놓은 것이 아니다. 끌기만 거둔다.
+            if (event.cancelled)
+            {
+                cancel_pointer_gesture();
+                return {};
+            }
             if (event.button == pointer_button::left)
                 return finish_drag(tree, event.x, event.y, modifiers_of(event));
+            return {};
+        }
+
+        // 포인터를 잃은 끝은 클릭이 아니다.
+        if (event.cancelled)
+        {
+            clear_press();
             return {};
         }
 
