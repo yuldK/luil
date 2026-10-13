@@ -11,6 +11,7 @@
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/virtual_list_element.h"
 #include "luil/ui/zoom_view_element.h"
 
 #include <uiautomation.h>
@@ -366,6 +367,21 @@ namespace {
         void element_selected(luil::win32::uia_element_provider& provider) override
         {
             records.push_back({ .kind = u8"selected", .owner = provider.element_id().owner });
+        }
+
+        void element_added_to_selection(luil::win32::uia_element_provider& provider) override
+        {
+            records.push_back({ .kind = u8"added", .owner = provider.element_id().owner });
+        }
+
+        void element_removed_from_selection(luil::win32::uia_element_provider& provider) override
+        {
+            records.push_back({ .kind = u8"removed", .owner = provider.element_id().owner });
+        }
+
+        void selection_invalidated(luil::win32::uia_element_provider& provider) override
+        {
+            records.push_back({ .kind = u8"invalidated", .owner = provider.element_id().owner });
         }
 
         void structure_changed(IRawElementProviderSimple& provider) override
@@ -1620,5 +1636,173 @@ TEST_CASE("A detached UIA provider answers that elements are gone", "[win32][uia
     REQUIRE(root->GetFocus(&fragment) == static_cast<HRESULT>(UIA_E_ELEMENTNOTAVAILABLE));
 
     button->Release();
+    root->Release();
+}
+
+namespace {
+    // 다중 선택 목록이 앱에 보낸 선택 명령이다.
+    struct selection_intent
+    {
+        std::u8string command {};
+        std::u8string key {};
+    };
+
+    // 여섯 줄짜리 다중 선택 가상 목록이다. 고른 키들은 앱 상태라 test가 명령을 받아 다시 짓는다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_multiple_selection_tree(std::vector<std::u8string> selection)
+    {
+        luil::virtual_list_config config {};
+        config.owner = u8"files";
+        config.row_height = 20.0f;
+        for (const char8_t* const key : { u8"a", u8"b", u8"c", u8"d", u8"e", u8"f" })
+            config.items.push_back({ key, key });
+        config.multiple_selection = true;
+        config.selection = std::move(selection);
+        config.select = [](const std::u8string& key) { return luil::make_app_action(selection_intent { u8"select", key }); };
+        config.add_to_selection = [](const std::u8string& key) { return luil::make_app_action(selection_intent { u8"add", key }); };
+        config.remove_from_selection = [](const std::u8string& key) { return luil::make_app_action(selection_intent { u8"remove", key }); };
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f));
+    }
+
+    // 표면이 받은 선택 명령들을 앱처럼 고른 키들에 적용한다.
+    void apply_selection(fake_uia_host& host, std::vector<std::u8string>& selection)
+    {
+        for (const luil::input_action& action : host.dispatched)
+        {
+            const auto* const message { std::get_if<luil::app_message>(&action) };
+            REQUIRE(message != nullptr);
+            const auto* const intent { message->get<selection_intent>() };
+            REQUIRE(intent != nullptr);
+            if (intent->command == u8"select")
+                selection = { intent->key };
+            else if (intent->command == u8"add")
+                selection.push_back(intent->key);
+            else
+                std::erase(selection, intent->key);
+        }
+        host.dispatched.clear();
+        host.tree = make_multiple_selection_tree(selection);
+    }
+
+    [[nodiscard]] std::vector<std::u8string> read_selection(luil::win32::uia_element_provider& list)
+    {
+        SAFEARRAY* array { nullptr };
+        REQUIRE(list.GetSelection(&array) == S_OK);
+        REQUIRE(array != nullptr);
+        LONG lower { 0 };
+        LONG upper { -1 };
+        REQUIRE(SafeArrayGetLBound(array, 1, &lower) == S_OK);
+        REQUIRE(SafeArrayGetUBound(array, 1, &upper) == S_OK);
+        std::vector<std::u8string> owners {};
+        for (LONG index = lower; index <= upper; ++index)
+        {
+            IUnknown* item { nullptr };
+            REQUIRE(SafeArrayGetElement(array, &index, &item) == S_OK);
+            owners.push_back(static_cast<luil::win32::uia_element_provider*>(static_cast<IRawElementProviderSimple*>(item))->element_id().owner);
+            item->Release();
+        }
+        static_cast<void>(SafeArrayDestroy(array));
+        return owners;
+    }
+} // namespace
+
+TEST_CASE("A multiple selection list adds three rows, removes one and reads the rest back", "[win32][uia][multi-select]")
+{
+    fake_uia_host host {};
+    std::vector<std::u8string> selection {};
+    host.tree = make_multiple_selection_tree(selection);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    recording_event_sink sink {};
+    sink.root = root;
+    root->set_event_sink_for_test(sink);
+
+    luil::win32::uia_element_provider* const list { root->make_element_provider({ luil::ui_element_kind::virtual_list, u8"files" }) };
+    BOOL multiple { FALSE };
+    REQUIRE(list->get_CanSelectMultiple(&multiple) == S_OK);
+    REQUIRE(multiple == TRUE);
+    BOOL required { TRUE };
+    REQUIRE(list->get_IsSelectionRequired(&required) == S_OK);
+    REQUIRE(required == FALSE);
+    REQUIRE(read_selection(*list).empty());
+
+    // 셋을 더한다. 각 더하기가 앱의 명령으로 간다.
+    const auto row = [root](const char8_t* const key) { return root->make_element_provider({ luil::ui_element_kind::virtual_list_row, key }); };
+    for (const char8_t* const key : { u8"b", u8"d", u8"e" })
+    {
+        luil::win32::uia_element_provider* const item { row(key) };
+        REQUIRE(item->AddToSelection() == S_OK);
+        item->Release();
+    }
+    REQUIRE(host.dispatched.size() == 3u);
+    luil::access_snapshot before { luil::make_access_snapshot(*host.tree) };
+    apply_selection(host, selection);
+    root->announce_changes(luil::diff_access_snapshots(before, luil::make_access_snapshot(*host.tree)));
+    REQUIRE(read_selection(*list) == std::vector<std::u8string> { u8"b", u8"d", u8"e" });
+    REQUIRE(sink.records.size() == 3u);
+    for (const recording_event_sink::record& record : sink.records)
+        REQUIRE(record.kind == u8"added");
+    sink.records.clear();
+
+    // 이미 골라진 것을 더하는 것은 할 일이 없다 (명령이 나가지 않는다).
+    luil::win32::uia_element_provider* const d { row(u8"d") };
+    REQUIRE(d->AddToSelection() == S_OK);
+    REQUIRE(host.dispatched.empty());
+    BOOL selected { FALSE };
+    REQUIRE(d->get_IsSelected(&selected) == S_OK);
+    REQUIRE(selected == TRUE);
+
+    // 하나를 뺀다.
+    REQUIRE(d->RemoveFromSelection() == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    before = luil::make_access_snapshot(*host.tree);
+    apply_selection(host, selection);
+    root->announce_changes(luil::diff_access_snapshots(before, luil::make_access_snapshot(*host.tree)));
+    REQUIRE(read_selection(*list) == std::vector<std::u8string> { u8"b", u8"e" });
+    REQUIRE(sink.records.size() == 1u);
+    REQUIRE(sink.records[0].kind == u8"removed");
+    REQUIRE(sink.records[0].owner == u8"d");
+    sink.records.clear();
+    // 골라지지 않은 것을 빼는 것은 할 일이 없다.
+    REQUIRE(d->RemoveFromSelection() == S_OK);
+    REQUIRE(host.dispatched.empty());
+    d->Release();
+
+    // 이미 골라진 것을 Select하면 "이것 하나만"이라 앱에 간다.
+    luil::win32::uia_element_provider* const e { row(u8"e") };
+    REQUIRE(e->Select() == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    before = luil::make_access_snapshot(*host.tree);
+    apply_selection(host, selection);
+    root->announce_changes(luil::diff_access_snapshots(before, luil::make_access_snapshot(*host.tree)));
+    REQUIRE(read_selection(*list) == std::vector<std::u8string> { u8"e" });
+    REQUIRE(sink.records.size() == 1u);
+    REQUIRE(sink.records[0].kind == u8"selected");
+    REQUIRE(sink.records[0].owner == u8"e");
+    e->Release();
+
+    list->Release();
+    root->Release();
+}
+
+TEST_CASE("Rows of a multiple selection list without add or remove messages refuse them", "[win32][uia][multi-select]")
+{
+    fake_uia_host host {};
+    luil::virtual_list_config config {};
+    config.owner = u8"files";
+    config.items = { { u8"a", u8"a" }, { u8"b", u8"b" } };
+    config.multiple_selection = true;
+    config.selection = { u8"a" };
+    config.select = [](const std::u8string& key) { return luil::make_app_action(selection_intent { u8"select", key }); };
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+
+    luil::win32::uia_element_provider* const a { root->make_element_provider({ luil::ui_element_kind::virtual_list_row, u8"a" }) };
+    luil::win32::uia_element_provider* const b { root->make_element_provider({ luil::ui_element_kind::virtual_list_row, u8"b" }) };
+    // 앱이 받지 않는 명령은 지금처럼 무효다. 클릭(뒤집기)으로 대신하지 않는다.
+    REQUIRE(b->AddToSelection() == static_cast<HRESULT>(UIA_E_INVALIDOPERATION));
+    REQUIRE(a->RemoveFromSelection() == static_cast<HRESULT>(UIA_E_INVALIDOPERATION));
+    REQUIRE(host.dispatched.empty());
+
+    b->Release();
+    a->Release();
     root->Release();
 }

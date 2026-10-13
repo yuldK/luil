@@ -5,6 +5,7 @@ include(Catch)
 # 파일을 그대로 돌린다 (docs/android-port-plan.md). Win32 계층의 비공개 header나
 # 실행 파일 resource가 필요한 test는 아래 luil_tests에 둔다.
 add_executable(luil_core_tests
+    access_multiple_selection_tests.cpp
     accessibility_tests.cpp
     app_bar_element_tests.cpp
     app_host_tests.cpp

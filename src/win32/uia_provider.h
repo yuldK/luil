@@ -95,8 +95,13 @@ namespace luil::win32 {
         // 이 요소의 property 하나가 old → new로 바뀌었다.
         // VARIANT의 소유는 부르는 쪽에 남는다 (BSTR도 그쪽이 지운다).
         virtual void property_changed(uia_element_provider& provider, PROPERTYID property, const VARIANT& old_value, const VARIANT& new_value) = 0;
-        // 이 항목이 골라졌다 (단일 선택의 ElementSelected).
+        // 이 항목이 골라졌다 (단일 선택의 ElementSelected — 다중 선택에서는 이것 하나만 골라진 상태가 됐다).
         virtual void element_selected(uia_element_provider& provider) = 0;
+        // 다중 선택 container의 이 항목이 고른 것에 더해졌다 / 빠졌다 (ElementAddedToSelection·ElementRemovedFromSelection).
+        virtual void element_added_to_selection(uia_element_provider& provider) = 0;
+        virtual void element_removed_from_selection(uia_element_provider& provider) = 0;
+        // 이 다중 선택 container의 선택이 한꺼번에 많이 바뀌었다 (Selection_Invalidated).
+        virtual void selection_invalidated(uia_element_provider& provider) = 0;
         // 이 요소(요소 provider 또는 표면 root)의 자식 구성이 바뀌었다.
         virtual void structure_changed(IRawElementProviderSimple& provider) = 0;
     };
@@ -317,6 +322,9 @@ namespace luil::win32 {
         // 비활성이거나 손이 닿지 않으면 `UIA_E_ELEMENTNOTENABLED`, 이 자리에서
         // 할 수 없는 일이면 `UIA_E_INVALIDOPERATION`이다.
         [[nodiscard]] HRESULT perform(const access_request& request);
+        // 선택 명령(Select·AddToSelection·RemoveFromSelection)이다. 항목의 container가 다중 선택인지 실어
+        // `perform`으로 넘긴다.
+        [[nodiscard]] HRESULT perform_selection(access_command command);
 
         uia_root_provider* root_ { nullptr };
         ui_element_id id_ {};

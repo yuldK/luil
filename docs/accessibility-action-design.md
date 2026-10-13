@@ -38,7 +38,21 @@ Element는 `access_actions(request)`를 override하고 일반 입력과 같은 c
 
 상태를 공개하는 것만으로 쓰기가 허용되지는 않는다. Progress bar는 range를 공개하면서 set-value 동작을 반환하지 않아 읽기 전용일 수 있다. Dropdown은 일반 toggle click과 별도로 절대 open/close 동작을 제공해야 신뢰할 수 있는 Expand와 Collapse를 공개할 수 있다.
 
-Radio button과 list 또는 tab item은 toggle이 아니라 selection 의미를 사용한다. 이를 포함하는 list, tab list, radio group은 Selection을 제공한다. Luil은 단일 선택만 지원한다. `CanSelectMultiple`은 false이고, 선택 항목 제거와 현재 선택을 대체하지 않는 항목 추가는 유효하지 않다.
+Radio button과 list 또는 tab item은 toggle이 아니라 selection 의미를 사용한다. 이를 포함하는 list, tab list, radio group은 Selection을 제공한다. 기본은 단일 선택이다. `CanSelectMultiple`은 false이고, 선택 항목 제거와 현재 선택을 대체하지 않는 항목 추가는 유효하지 않다.
+
+### 다중 선택
+
+container가 `access_info::multiple_selection`을 알리면 여러 항목을 함께 고르는 container다. `CanSelectMultiple`은 true, `IsSelectionRequired`는 false이고 `GetSelection`은 골라진 항목 모두를 낸다. `virtual_list_config::multiple_selection`이 이 값을 켜고 `selection`의 키들을 고른 행으로 그린다.
+
+그런 container의 항목에서 UIA 명령은 각각 접근 명령으로 요소에 온다. Provider가 container에 물어 `access_request::multiple_selection`을 싣는다.
+
+| UIA | 접근 명령 | 이미 그 상태면 | 요소가 답하지 않으면 |
+| --- | --- | --- | --- |
+| `Select` | `select` ("이것 하나만") | 다중 선택에서는 그래도 요소에 간다 | 기본 실행(클릭) |
+| `AddToSelection` | `add_to_selection` | 할 일 없음 (S_OK) | `UIA_E_INVALIDOPERATION` |
+| `RemoveFromSelection` | `remove_from_selection` | 할 일 없음 (S_OK) | `UIA_E_INVALIDOPERATION` |
+
+더하기·빼기는 목표 상태를 나르는 절대 명령이라 클릭(뒤집기)으로 대신하지 않는다. 요소는 `ui_element::set_access_handler`로 명령을 앱 메시지로 옮긴다. 가상 목록은 `add_to_selection`·`remove_from_selection` factory가 그 자리다. 앱이 처리하지 않으면 지금처럼 무효다. 단일 선택 container의 항목도 같은 길을 타지만 받는 앱이 없으므로 결과는 이전과 같다 — 골라진 것을 더하면 할 일이 없고, 그 밖은 무효다.
 
 ## UIA pattern 계약
 

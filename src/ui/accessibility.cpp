@@ -80,7 +80,16 @@ namespace luil {
                 return std::nullopt;
             // 이미 골라져 있으면 할 일이 없다. 실행은 클릭 하나라 뒤집기이므로
             // 그대로 흘리면 도리어 고름이 풀리는 자리가 있다.
-            if (*info.selected)
+            //  - 다중 선택에서는 "이것 하나만"이라 다른 항목이 함께 골라져 있을 수 있다. 그것을 아는 앱에 맡긴다.
+            if (*info.selected && request.multiple_selection == false)
+                return std::vector<input_action> {};
+            break;
+        case access_command::add_to_selection:
+        case access_command::remove_from_selection:
+            if (info.selected.has_value() == false)
+                return std::nullopt;
+            // 목표 상태를 나르는 명령이다 — 이미 그 상태면 할 일이 없다.
+            if (*info.selected == (request.command == access_command::add_to_selection))
                 return std::vector<input_action> {};
             break;
         case access_command::expand:
@@ -203,6 +212,12 @@ namespace luil {
         return nullptr;
     }
 
+    bool access_multiple_selection(const ui_tree& tree, const ui_element_id& id)
+    {
+        const ui_element* const container { access_selection_container_of(tree, id) };
+        return container != nullptr && container->accessibility().multiple_selection;
+    }
+
     std::vector<const ui_element*> access_selected_items(const ui_element& container)
     {
         std::vector<const ui_element*> selected {};
@@ -269,6 +284,33 @@ namespace luil {
         previous_by_id.reserve(previous.entries.size());
         for (const access_snapshot_entry& entry : previous.entries)
             previous_by_id.emplace(entry.id, &entry);
+        std::unordered_map<ui_element_id, const access_snapshot_entry*, access_id_hash> current_by_id {};
+        current_by_id.reserve(current.entries.size());
+        for (const access_snapshot_entry& entry : current.entries)
+            current_by_id.emplace(entry.id, &entry);
+
+        // 그 항목을 감싼 가장 안쪽 선택 container다 (`access_selection_container_of`의 발행본 판).
+        const auto container_of = [&current_by_id](const access_snapshot_entry& entry) -> const access_snapshot_entry* {
+            for (ui_element_id parent { entry.parent }; parent != ui_element_id {};)
+            {
+                const auto found { current_by_id.find(parent) };
+                if (found == current_by_id.end())
+                    return nullptr;
+                if (access_selection_container(found->second->info.role))
+                    return found->second;
+                parent = found->second->parent;
+            }
+            return nullptr;
+        };
+
+        // 다중 선택 container마다 골라짐이 바뀐 항목들이다 (처음 나타난 차례).
+        struct selection_delta
+        {
+            const access_snapshot_entry* container { nullptr };
+            std::vector<ui_element_id> added {};
+            std::vector<ui_element_id> removed {};
+        };
+        std::vector<selection_delta> selections {};
 
         for (const access_snapshot_entry& entry : current.entries)
         {
@@ -286,10 +328,21 @@ namespace luil {
                 changes.push_back({ access_change_kind::structure, entry.parent, {}, {} });
                 continue;
             }
-            // 새로 골라진 항목은 선택 알림이다 — 단일 선택이라 풀린 쪽은 이
-            // 알림이 곧 말한다.
-            if (before.selected != entry.info.selected && entry.info.selected == true)
-                changes.push_back({ access_change_kind::selected, entry.id, {}, {} });
+            if (before.selected != entry.info.selected)
+            {
+                // 다중 선택 container의 항목은 container마다 모아 뒤에서 알린다.
+                if (const access_snapshot_entry* const container { container_of(entry) }; container != nullptr && container->info.multiple_selection)
+                {
+                    auto delta { std::find_if(selections.begin(), selections.end(), [container](const selection_delta& value) { return value.container == container; }) };
+                    if (delta == selections.end())
+                        delta = selections.insert(selections.end(), selection_delta { container, {}, {} });
+                    (entry.info.selected == true ? delta->added : delta->removed).push_back(entry.id);
+                }
+                // 새로 골라진 항목은 선택 알림이다 — 단일 선택이라 풀린 쪽은 이
+                // 알림이 곧 말한다.
+                else if (entry.info.selected == true)
+                    changes.push_back({ access_change_kind::selected, entry.id, {}, {} });
+            }
             // 선택 밖의 정보가 하나라도 바뀌었으면 property 하나로 알린다.
             // 어느 낱말들이 바뀌었는지는 받는 쪽이 이 짝에서 편다.
             access_info before_rest { before };
@@ -298,6 +351,38 @@ namespace luil {
             current_rest.selected.reset();
             if (before_rest != current_rest)
                 changes.push_back({ access_change_kind::property, entry.id, before, entry.info });
+        }
+
+        for (const selection_delta& delta : selections)
+        {
+            // 한꺼번에 많이 바뀌었으면(전부 고르기) 항목마다 알리지 않고 다시 읽으라고 한다.
+            if (delta.added.size() + delta.removed.size() > access_selection_burst)
+            {
+                changes.push_back({ access_change_kind::selection_invalidated, delta.container->id, {}, {} });
+                continue;
+            }
+            // 바뀐 끝에 하나만 골라진 상태가 됐으면 ElementSelected의 뜻이다 (클릭으로 하나만 고르기 — 나머지가
+            // 풀린 것을 함께 말한다). 지금 골라진 것을 센다. 원래 골라져 있던 것이 함께 남았으면 더하기·빼기다.
+            if (delta.added.size() <= 1u)
+            {
+                std::size_t selected_now { 0 };
+                const access_snapshot_entry* only { nullptr };
+                for (const access_snapshot_entry& entry : current.entries)
+                    if (entry.info.selected == true && container_of(entry) == delta.container)
+                    {
+                        ++selected_now;
+                        only = &entry;
+                    }
+                if (selected_now == 1u && (delta.added.empty() || delta.added.front() == only->id))
+                {
+                    changes.push_back({ access_change_kind::selected, only->id, {}, {} });
+                    continue;
+                }
+            }
+            for (const ui_element_id& id : delta.added)
+                changes.push_back({ access_change_kind::added_to_selection, id, {}, {} });
+            for (const ui_element_id& id : delta.removed)
+                changes.push_back({ access_change_kind::removed_from_selection, id, {}, {} });
         }
 
         // 자식 목록(순서 포함)이 달라진 부모마다 structure 하나다.
