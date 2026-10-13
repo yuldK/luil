@@ -52,6 +52,8 @@ luil_add_source_filter(luil_demo_files "app"
 luil_add_source_filter(luil_demo_files "pages"
     demo/basics_page.cpp
     demo/basics_page.h
+    demo/files_page.cpp
+    demo/files_page.h
     demo/groups_page.cpp
     demo/groups_page.h
     demo/images_page.cpp
