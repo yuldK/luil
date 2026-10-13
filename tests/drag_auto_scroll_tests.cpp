@@ -10,6 +10,7 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -499,4 +500,70 @@ TEST_CASE("Dragging out of a list into the page that holds it keeps the list flo
     REQUIRE(actions.size() == 1u);
     REQUIRE(scroll_of(actions[0])->window == luil::ui_element_id { kind_list, u8"right" });
     REQUIRE(scroll_of(actions[0])->delta > 0.0f);
+}
+
+TEST_CASE("A flow that stopped at the end resumes when a new tree moves the end", "[ui][interaction][auto-scroll]")
+{
+    luil::interaction_controller controller { nullptr, config() };
+    controller.set_tree(make_tree());
+    grab_handle(controller, 20.0f, 290.0f);
+    REQUIRE(scroll_of(controller.advance(at(20))[0]) != nullptr);
+
+    // 끝에 닿았다고 알린 tree가 오면 멈춘다.
+    list_state end {};
+    end.at_end = true;
+    controller.set_tree(make_tree(end));
+    REQUIRE(controller.advance(at(30)).empty());
+    REQUIRE(controller.next_deadline().has_value() == false);
+
+    // 앱이 항목을 덧붙여 끝이 물러났다. 포인터가 멈춰 있어도 다시 흐른다.
+    controller.set_tree(make_tree());
+    REQUIRE(controller.next_deadline().has_value());
+    // 다시 선 첫 판정은 시계만 맞춘다 — 멈춰 있던 1초를 흐른 시간으로 셈해 한 번에 뛰지 않는다.
+    REQUIRE(controller.advance(at(1030)).empty());
+    REQUIRE(controller.next_deadline() == at(1040));
+    const auto actions { controller.advance(at(1040)) };
+    REQUIRE(actions.size() == 2u);
+    REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(2.5f));
+}
+
+TEST_CASE("An app drop callback that throws while a new tree arrives leaves through set_tree", "[ui][interaction][auto-scroll]")
+{
+    // 새 tree를 받으며 끄는 동안의 놓을 자리를 다시 찾는다. 그때 부르는 앱의 `accepts`가 던지면 noexcept가 아니라서
+    // 프로세스를 끝내지 않고 그대로 나간다 — 입력 pump를 감싼 host가 받아 faulted로 알린다.
+    const auto make = [](const bool throwing) {
+        auto root { std::make_unique<panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 1.0f });
+        auto item { std::make_unique<panel>(luil::ui_element_id { kind_row, u8"item" }) };
+        item->arrange({ { 10.0f, 10.0f, 100.0f, 30.0f }, 1.0f });
+        luil::drag_source source {};
+        source.make_payload = [](const luil::ui_action_context& context) {
+            luil::drag_payload payload {};
+            payload.source = context.element;
+            payload.dragged_owner = u8"item";
+            return payload;
+        };
+        item->set_drag_source(std::move(source));
+        root->add(std::move(item));
+        auto target { std::make_unique<panel>(luil::ui_element_id { kind_row, u8"target" }) };
+        target->arrange({ { 10.0f, 200.0f, 100.0f, 30.0f }, 1.0f });
+        luil::drop_target drop {};
+        drop.accepts = [throwing](const luil::drag_payload&) -> bool {
+            if (throwing)
+                throw std::runtime_error { "accepts failed" };
+            return true;
+        };
+        drop.on_drop = [](const luil::drag_payload&, const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; };
+        target->set_drop_target(std::move(drop));
+        root->add(std::move(target));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    };
+    luil::interaction_controller controller { nullptr, config() };
+    controller.set_tree(make(false));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 20.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(move(20.0f, 30.0f, 5)));
+    static_cast<void>(controller.process(move(20.0f, 210.0f, 10)));
+    REQUIRE(controller.snapshot().drag.has_value());
+    REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id { kind_row, u8"target" });
+    REQUIRE_THROWS_AS(controller.set_tree(make(true)), std::runtime_error);
 }
