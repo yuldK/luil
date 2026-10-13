@@ -5,6 +5,7 @@
 // 화면은 접이식 사이드바로 오가는 페이지들이고, 각 페이지가 element 하나씩을 다룬다.
 //  - 기본: 버튼·카운터, 텍스트 입력, 확인 dialog          (demo/basics_page)
 //  - 목록: drag 순서 바꾸기, tree, 만 줄짜리 가상 목록, sticky 머리행 (demo/lists_page)
+//  - 파일: 여럿 고르기, 고른 것 끌어 폴더에 놓기, 끌어서 범위 고르기, 파일 클립보드 (demo/files_page)
 //  - 탭: 선택·닫기·순서·가로 스크롤·넘침 메뉴 popup        (demo/tabs_page)
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
 //  - 토스트: 심각도별 알림과 실행 취소 토스트               (demo/toasts_page)
@@ -19,13 +20,14 @@
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme
+//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
 
 #include "demo/basics_page.h"
 #include "demo/common.h"
+#include "demo/files_page.h"
 #include "demo/groups_page.h"
 #include "demo/images_page.h"
 #include "demo/lists_page.h"
@@ -340,8 +342,9 @@ namespace demo {
 
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
-                if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message)
-                    || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message) || zoom_.handle(message) || theme_.handle(message))
+                if (basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message)
+                    || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message) || zoom_.handle(message)
+                    || theme_.handle(message))
                     return;
             }
 
@@ -575,6 +578,7 @@ namespace demo {
                 const auto add_page = [&navigation](const std::u8string_view key, std::u8string label) { navigation.items.push_back({ std::u8string { key }, std::move(label) }); };
                 add_page(page_basics, u8"기본");
                 add_page(page_lists, u8"목록");
+                add_page(page_files, u8"파일");
                 add_page(page_tabs, u8"탭");
                 add_page(page_groups, u8"그룹");
                 add_page(page_toasts, u8"토스트");
@@ -600,6 +604,8 @@ namespace demo {
             {
                 if (page_ == page_lists)
                     return lists_.build(width, height, scale);
+                if (page_ == page_files)
+                    return files_.build(width, height, scale);
                 if (page_ == page_tabs)
                     return tabs_.build(width, height, scale);
                 if (page_ == page_groups)
@@ -625,6 +631,7 @@ namespace demo {
 
             basics_page basics_ {};
             lists_page lists_ {};
+            files_page files_ {};
             tabs_page tabs_ {};
             groups_page groups_ {};
             toasts_page toasts_ {};
@@ -836,6 +843,17 @@ namespace demo {
             [[nodiscard]] luil::app_message make_window_placement_message(const luil::win32::window_placement& placement) override
             {
                 return luil::app_message { placement_intent { placement } };
+            }
+
+            // 파일 클립보드의 답과 변화다. 파일 페이지가 받는다.
+            [[nodiscard]] luil::app_message make_file_clipboard_message(const luil::file_clipboard_content& content) override
+            {
+                return luil::app_message { files_clipboard_read_intent { content } };
+            }
+
+            [[nodiscard]] luil::app_message make_clipboard_changed_message(const luil::clipboard_change& change) override
+            {
+                return luil::app_message { files_clipboard_changed_intent { change } };
             }
 
             // 받는 칸이 아닌 곳에 놓인 파일의 물러섬이다.
