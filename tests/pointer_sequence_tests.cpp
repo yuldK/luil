@@ -133,3 +133,30 @@ TEST_CASE("Pen presses retain Shift through a barrel switch", "[pointer-sequence
     events = tracker.accept(sample);
     REQUIRE(std::get<pointer_pressed_event>(events[1]).shift);
 }
+
+TEST_CASE("Touch and pen events carry the keyboard modifiers of their moment", "[pointer-sequence][modifiers]")
+{
+    pointer_sequence_tracker tracker {};
+    pointer_sample sample { make_sample(pointer_phase::down, pointer_device::touch, true) };
+    sample.control = true;
+    auto events { tracker.accept(sample) };
+    REQUIRE(std::get<pointer_pressed_event>(events.front()).control);
+    REQUIRE(std::get<pointer_pressed_event>(events.front()).alt == false);
+
+    sample.phase = pointer_phase::update;
+    sample.control = false;
+    sample.alt = true;
+    events = tracker.accept(sample);
+    const auto& moved { std::get<pointer_moved_event>(events.front()) };
+    REQUIRE(moved.control == false);
+    REQUIRE(moved.alt);
+
+    sample.phase = pointer_phase::up;
+    sample.in_contact = false;
+    sample.shift = true;
+    events = tracker.accept(sample);
+    const auto& released { std::get<pointer_released_event>(events.front()) };
+    REQUIRE(released.shift);
+    REQUIRE(released.alt);
+    REQUIRE(released.control == false);
+}

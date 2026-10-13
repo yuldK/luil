@@ -365,3 +365,30 @@ TEST_CASE("Android keys follow the Windows key and character split", "[android][
     repeated.repeat_count = 2;
     REQUIRE(as<luil::key_pressed_event>(translator.translate(repeated)[0]).repeat);
 }
+
+TEST_CASE("A hardware keyboard's meta state rides on pointer events", "[android][input][modifiers]")
+{
+    luil::android::input_translator translator {};
+    luil::android::motion_input down { motion(AMOTION_EVENT_ACTION_DOWN, 0, { finger(0, 10.0f, 110.0f) }) };
+    down.meta_state = AMETA_CTRL_ON | AMETA_CTRL_LEFT_ON;
+    auto events { translator.translate(down, phone) };
+    REQUIRE(as<luil::pointer_pressed_event>(events[0]).control);
+    REQUIRE(as<luil::pointer_pressed_event>(events[0]).alt == false);
+
+    luil::android::motion_input up { motion(AMOTION_EVENT_ACTION_UP, 1'000'000, { finger(0, 10.0f, 110.0f) }) };
+    up.meta_state = AMETA_SHIFT_ON | AMETA_ALT_ON;
+    events = translator.translate(up, phone);
+    REQUIRE(as<luil::pointer_released_event>(events[0]).shift);
+    REQUIRE(as<luil::pointer_released_event>(events[0]).alt);
+    REQUIRE(as<luil::pointer_released_event>(events[0]).control == false);
+
+    // 키보드가 없으면 meta state가 비어 모두 거짓이다.
+    luil::android::motion_input mouse { motion(AMOTION_EVENT_ACTION_DOWN, 2'000'000, { { 0, AMOTION_EVENT_TOOL_TYPE_MOUSE, 60.0f, 160.0f } }) };
+    mouse.source = AINPUT_SOURCE_MOUSE;
+    mouse.button_state = AMOTION_EVENT_BUTTON_PRIMARY;
+    events = translator.translate(mouse, phone);
+    const auto& pressed { as<luil::pointer_pressed_event>(events[0]) };
+    REQUIRE(pressed.control == false);
+    REQUIRE(pressed.shift == false);
+    REQUIRE(pressed.alt == false);
+}

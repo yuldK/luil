@@ -42,6 +42,10 @@ namespace luil {
         // 누름이 발생한 순간 Shift가 눌려 있었는가다 (Win32는 POINTER_MOD_SHIFT).
         // 펜도 Shift+선택을 지원한다.
         bool shift { false };
+        // 같은 순간의 Ctrl·Alt다 (Win32는 POINTER_MOD_CTRL과 `GetKeyState(VK_MENU)`, Android는 meta state).
+        // 하드웨어 키보드가 없으면 거짓이다. 누름·이동·뗌이 모두 싣는다 (`ui_action_context`).
+        bool control { false };
+        bool alt { false };
         float x { 0.0f };
         float y { 0.0f };
         // 표면의 물리 / 논리 배율이다.

@@ -27,6 +27,7 @@ add_executable(luil_core_tests
     modal_host_element_tests.cpp
     overlay_input_tests.cpp
     panel_element_tests.cpp
+    pointer_modifier_tests.cpp
     pointer_sequence_tests.cpp
     popup_dismiss_tests.cpp
     popup_reconcile_tests.cpp

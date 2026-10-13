@@ -443,10 +443,11 @@ namespace luil {
             if (handler->on_move == nullptr)
                 return {};
 
-            const ui_action_context previous { pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, false };
-            const ui_action_context current { pointer_drag_id_, event.x, event.y, false };
+            const ui_action_context previous { action_context(pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, pointer_drag_modifiers_) };
+            const ui_action_context current { action_context(pointer_drag_id_, event.x, event.y, modifiers_of(event)) };
             pointer_drag_x_ = event.x;
             pointer_drag_y_ = event.y;
+            pointer_drag_modifiers_ = modifiers_of(event);
             pointer_drag_motion_.add(event.time, event.x, event.y);
             return handler->on_move(previous, current);
         }
@@ -473,7 +474,8 @@ namespace luil {
             const ui_element* const source { pressed_tree != nullptr ? pressed_tree->find(pressed_id_) : nullptr };
             if (source != nullptr && source->enabled() && source->drag() != nullptr && source->drag()->make_payload)
             {
-                const ui_action_context context { pressed_id_, pressed_x_, pressed_y_, false };
+                // 자리는 누른 자리이고 수식 키는 끌기가 시작되는 이 이동의 순간이다.
+                const ui_action_context context { action_context(pressed_id_, pressed_x_, pressed_y_, modifiers_of(event)) };
                 // 끌기는 지금 이벤트가 난 표면에서 선다 — 캡처 중이라 누른 표면과 같다.
                 // 그 표면이 사라지면 끌기도 죽고, 표시도 그 표면에만 선다
                 // (multi-window-design.md).
@@ -496,7 +498,7 @@ namespace luil {
             snapshot_.drag->hovered_drop_target = over->id();
     }
 
-    std::vector<input_action> interaction_controller::finish_drag(const ui_tree* const tree, const float x, const float y)
+    std::vector<input_action> interaction_controller::finish_drag(const ui_tree* const tree, const float x, const float y, const modifier_keys modifiers)
     {
         std::vector<input_action> actions {};
         const drag_visual drag { *snapshot_.drag };
@@ -504,7 +506,7 @@ namespace luil {
         // 거두기만 한다 — 그 표면에는 이제 아무것도 없다.
         const ui_element* const over { tree != nullptr ? tree->find_drop_target(x, y, drag.payload) : nullptr };
         if (over != nullptr && over->drop()->on_drop)
-            actions = over->drop()->on_drop(drag.payload, ui_action_context { over->id(), x, y, false });
+            actions = over->drop()->on_drop(drag.payload, action_context(over->id(), x, y, modifiers));
         snapshot_.drag.reset();
         clear_press();
         return actions;
@@ -1020,9 +1022,10 @@ namespace luil {
             pointer_drag_id_ = hit->id();
             pointer_drag_x_ = event.x;
             pointer_drag_y_ = event.y;
+            pointer_drag_modifiers_ = modifiers_of(event);
             pointer_drag_motion_ = {};
             if (handler->on_press)
-                return with_press(handler->on_press(ui_action_context { pointer_drag_id_, event.x, event.y, false }));
+                return with_press(handler->on_press(action_context(pointer_drag_id_, event.x, event.y, pointer_drag_modifiers_)));
         }
         return actions;
     }
@@ -1128,7 +1131,7 @@ namespace luil {
         if (pointer_drag_id_ != ui_element_id {} && event.button == pointer_button::left)
         {
             // 끝을 듣는 손잡이에는 끝을 알린다 (시트의 멈춤점).
-            std::vector<input_action> actions { end_pointer_drag(event.x, event.y, pointer_drag_motion_.velocity_at(event.time)) };
+            std::vector<input_action> actions { end_pointer_drag(event.x, event.y, pointer_drag_motion_.velocity_at(event.time), modifiers_of(event)) };
             pointer_drag_id_ = {};
             clear_press();
             return actions;
@@ -1139,7 +1142,7 @@ namespace luil {
         if (snapshot_.drag.has_value())
         {
             if (event.button == pointer_button::left)
-                return finish_drag(tree, event.x, event.y);
+                return finish_drag(tree, event.x, event.y, modifiers_of(event));
             return {};
         }
 
@@ -1189,7 +1192,7 @@ namespace luil {
             last_click_x_ = event.x;
             last_click_y_ = event.y;
         }
-        return run_trigger(*hit, trigger, event.x, event.y, false);
+        return run_trigger(*hit, trigger, event.x, event.y, modifiers_of(event));
     }
 
     namespace {
@@ -1307,6 +1310,7 @@ namespace luil {
         contact.start_y = event.y;
         contact.last_x = event.x;
         contact.last_y = event.y;
+        contact.modifiers = modifiers_of(event);
         // 흘릴 후보가 어느 축에도 없으면 시간 창 동안 끌기를 보류할 까닭이 없다.
         //  - 클릭 대상이 없는 여백·일반 글 위에서도 후보는 선다 (휠과 같은 탐색이다).
         //  - 끌기를 넘겨받는 컨테이너(시트)도 후보다. 안에 흘리는 창이 없는 짧은 시트도 끌어 내린다.
@@ -1360,11 +1364,12 @@ namespace luil {
         pointer_drag_id_ = hit->id();
         pointer_drag_x_ = event.x;
         pointer_drag_y_ = event.y;
+        pointer_drag_modifiers_ = modifiers_of(event);
         // 조작이 이미 시작됐으므로 초점은 마우스처럼 누를 때 옮긴다.
         apply_press_focus(*tree, hit, event.surface, event.time);
         if (handler->on_press == nullptr)
             return actions;
-        std::vector<input_action> moved { handler->on_press(ui_action_context { pointer_drag_id_, event.x, event.y, false }) };
+        std::vector<input_action> moved { handler->on_press(action_context(pointer_drag_id_, event.x, event.y, pointer_drag_modifiers_)) };
         // 누른 자리로 뛰는 것도 실제 이동이다. 그 뒤로는 길게 누르기가 아니다.
         if (moved.empty() == false)
             touch_->moved_action = true;
@@ -1382,6 +1387,8 @@ namespace luil {
         // 길게 누르기로 메뉴를 연 접촉이다. 손을 뗄 때까지 스크롤·끌기로 바뀌지 않는다.
         if (contact.long_press == long_press_state::fired)
             return {};
+        // 둘째 손가락의 이동도 같은 키보드의 상태다.
+        contact.modifiers = modifiers_of(event);
         const ui_tree* const tree { surface_tree(contact.surface) };
         // 거리는 누른 표면의 배율로 나눈 논리 픽셀이다.
         // 가장 먼 거리를 남기므로 이동 이벤트를 몇 번에 나눠 받았는지가 판정을 바꾸지 않는다.
@@ -1466,10 +1473,11 @@ namespace luil {
             }
             if (handler->on_move == nullptr)
                 break;
-            const ui_action_context previous { pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, false };
-            const ui_action_context current { pointer_drag_id_, event.x, event.y, false };
+            const ui_action_context previous { action_context(pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, pointer_drag_modifiers_) };
+            const ui_action_context current { action_context(pointer_drag_id_, event.x, event.y, contact.modifiers) };
             pointer_drag_x_ = event.x;
             pointer_drag_y_ = event.y;
+            pointer_drag_modifiers_ = contact.modifiers;
             actions = handler->on_move(previous, current);
             if (actions.empty() == false)
                 contact.moved_action = true;
@@ -1566,7 +1574,7 @@ namespace luil {
                 }
                 if (source->drag() != nullptr && source->drag()->make_payload)
                 {
-                    const ui_action_context context { contact.target, contact.start_x, contact.start_y, false };
+                    const ui_action_context context { action_context(contact.target, contact.start_x, contact.start_y, contact.modifiers) };
                     snapshot_.drag = drag_visual { source->drag()->make_payload(context), event.x, event.y, {}, contact.surface };
                     clear_press();
                     contact.phase = touch_phase::dragging;
@@ -1641,6 +1649,7 @@ namespace luil {
         }
         touch_contact contact { std::move(*touch_) };
         touch_.reset();
+        contact.modifiers = modifiers_of(event);
         // 확대 보기 안의 탭만 두 번 탭의 짝을 잇는다. 스크롤·끌기·손잡이·메뉴와 보기 밖의 탭은 짝을 끊는다.
         if (contact.phase != touch_phase::pending || contact.view == ui_element_id {} || contact.long_press == long_press_state::fired)
             last_view_tap_.reset();
@@ -1680,7 +1689,7 @@ namespace luil {
                 return {};
             }
             if (snapshot_.drag.has_value())
-                return finish_drag(tree, event.x, event.y);
+                return finish_drag(tree, event.x, event.y, contact.modifiers);
             clear_press();
             return {};
         case touch_phase::handoff: {
@@ -1806,7 +1815,7 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::run_long_press(const touch_contact& contact, const ui_element& target, const float x, const float y)
     {
-        std::vector<input_action> actions { run_trigger(target, ui_trigger::right_click, x, y, false) };
+        std::vector<input_action> actions { run_trigger(target, ui_trigger::right_click, x, y, contact.modifiers) };
         if (target.action(ui_trigger::right_click) == nullptr && config_.text_edit_menu && text_target(target.id().kind).has_value() && target.text_input().has_value())
         {
             if (target.text_input()->composing == false)
@@ -1907,7 +1916,7 @@ namespace luil {
         }
         else
             remember();
-        return run_trigger(*target, trigger, event.x, event.y, false);
+        return run_trigger(*target, trigger, event.x, event.y, modifiers_of(event));
     }
 
     std::vector<input_action> interaction_controller::process_cancel(const pointer_cancelled_event& event)
@@ -1929,7 +1938,7 @@ namespace luil {
             || pointer_contact_->surface != event.surface)
             return {};
         // 손잡이를 쥐고 있었으면 끝을 알린다 (터치 취소와 같다).
-        std::vector<input_action> actions { end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}) };
+        std::vector<input_action> actions { end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_) };
         cancel_pointer_gesture();
         return actions;
     }
@@ -1988,10 +1997,10 @@ namespace luil {
         const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
         if (handler == nullptr || handler->on_release == nullptr)
             return {};
-        return handler->on_release(ui_action_context { contact.target, x, y, false }, velocity);
+        return handler->on_release(action_context(contact.target, x, y, contact.modifiers), velocity);
     }
 
-    std::vector<input_action> interaction_controller::end_pointer_drag(const float x, const float y, const drag_velocity velocity) const
+    std::vector<input_action> interaction_controller::end_pointer_drag(const float x, const float y, const drag_velocity velocity, const modifier_keys modifiers) const
     {
         if (pointer_drag_id_ == ui_element_id {})
             return {};
@@ -2000,7 +2009,7 @@ namespace luil {
         const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
         if (handler == nullptr || handler->on_release == nullptr)
             return {};
-        return handler->on_release(ui_action_context { pointer_drag_id_, x, y, false }, velocity);
+        return handler->on_release(action_context(pointer_drag_id_, x, y, modifiers), velocity);
     }
 
     void interaction_controller::record_view_pan(view_edge_track& edge, const zoom_point delta, const std::chrono::steady_clock::time_point time, const float x, const float y)
@@ -2313,7 +2322,7 @@ namespace luil {
         const rect_f box { button->bounds() };
         if (policy_ != nullptr)
             policy_->on_click(*button);
-        return run_trigger(*button, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, false);
+        return run_trigger(*button, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, modifiers_of(event));
     }
 
     std::optional<std::vector<input_action>> interaction_controller::process_dismiss_key(const key_pressed_event& event)
@@ -2333,7 +2342,7 @@ namespace luil {
 
         // 좌표는 가둠의 한가운데다 (포인터가 관여하지 않았다 — Space와 같은 규칙).
         const rect_f box { trap->bounds() };
-        return (*dismiss)(ui_action_context { trap->id(), box.x + box.width / 2.0f, box.y + box.height / 2.0f, false });
+        return (*dismiss)(ui_action_context { trap->id(), box.x + box.width / 2.0f, box.y + box.height / 2.0f });
     }
 
     std::optional<std::vector<input_action>> interaction_controller::process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host)
@@ -2391,7 +2400,7 @@ namespace luil {
             if (item == nullptr || item->enabled() == false)
                 return std::vector<input_action> {};
             const rect_f box { item->bounds() };
-            return run_trigger(*item, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, false);
+            return run_trigger(*item, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, modifiers_of(event));
         }
         case key_code::escape:
             return policy_ != nullptr ? policy_->close_menu() : std::vector<input_action> {};
@@ -2416,12 +2425,17 @@ namespace luil {
         return {};
     }
 
-    std::vector<input_action> interaction_controller::run_trigger(const ui_element& element, const ui_trigger trigger, const float x, const float y, const bool control)
+    std::vector<input_action> interaction_controller::run_trigger(const ui_element& element, const ui_trigger trigger, const float x, const float y, const modifier_keys modifiers)
     {
         const ui_action* const action { element.action(trigger) };
         if (action == nullptr)
             return {};
-        return (*action)(ui_action_context { element.id(), x, y, control });
+        return (*action)(action_context(element.id(), x, y, modifiers));
+    }
+
+    ui_action_context interaction_controller::action_context(const ui_element_id& element, const float x, const float y, const modifier_keys modifiers)
+    {
+        return ui_action_context { element, x, y, modifiers.control, modifiers.shift, modifiers.alt };
     }
 
     void interaction_controller::update_hover(const float x, const float y, const std::chrono::steady_clock::time_point time, const bool moved)
@@ -2490,7 +2504,7 @@ namespace luil {
         const rect_f box { element->bounds() };
         if (policy_ != nullptr)
             policy_->on_click(*element);
-        return run_trigger(*element, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, false);
+        return run_trigger(*element, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, modifiers_of(event));
     }
 
     std::vector<input_action> interaction_controller::process_access_focus(const access_focus_event& event)
@@ -2869,7 +2883,8 @@ namespace luil {
         inertia_.reset();
         // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
         // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.
-        std::vector<input_action> actions { touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {}) : end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}) };
+        std::vector<input_action> actions { touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {})
+                                                               : end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_) };
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
         last_view_tap_.reset();

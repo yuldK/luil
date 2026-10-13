@@ -173,3 +173,31 @@ TEST_CASE("Pointer times move onto the steady clock", "[surface-input][touch]")
     REQUIRE(pointer_tick_time(1'000u, 1'200u, now) == now - std::chrono::milliseconds { 200 });
     REQUIRE(pointer_tick_time(1'300u, 1'200u, now) == now);
 }
+
+TEST_CASE("Mouse presses, moves and releases carry Ctrl, Shift and Alt", "[surface-input][modifiers]")
+{
+    // Ctrl·Shift는 wparam이, Alt는 창이 조회해 넣은 값이 싣는다.
+    pointer_message press { make_message(WM_LBUTTONDOWN, MK_CONTROL) };
+    press.alt = true;
+    const auto pressed { translate_pointer_message(press) };
+    REQUIRE(pressed.has_value());
+    const auto& down { std::get<pointer_pressed_event>(*pressed) };
+    REQUIRE(down.control);
+    REQUIRE(down.shift == false);
+    REQUIRE(down.alt);
+
+    const auto moved { translate_pointer_message(make_message(WM_MOUSEMOVE, MK_LBUTTON | MK_SHIFT)) };
+    REQUIRE(moved.has_value());
+    const auto& move { std::get<pointer_moved_event>(*moved) };
+    REQUIRE(move.control == false);
+    REQUIRE(move.shift);
+    REQUIRE(move.alt == false);
+
+    // 클릭은 뗀 순간의 값으로 실행한다 — 누른 뒤 바꾼 수식 키가 뗌에 실린다.
+    const auto released { translate_pointer_message(make_message(WM_LBUTTONUP, MK_CONTROL | MK_SHIFT)) };
+    REQUIRE(released.has_value());
+    const auto& up { std::get<pointer_released_event>(*released) };
+    REQUIRE(up.control);
+    REQUIRE(up.shift);
+    REQUIRE(up.alt == false);
+}

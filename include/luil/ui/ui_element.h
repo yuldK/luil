@@ -63,12 +63,24 @@ namespace luil {
 
     // 액션 실행 시점의 문맥이다.
     // 좌표는 물리 픽셀(창 좌표)이다.
+    //
+    // 수식 키는 그 동작이 일어난 순간에 눌려 있던 것이다 — 앱이 Ctrl+클릭(하나 더 고르기)과
+    // Shift+클릭(범위 고르기), 놓는 순간의 Ctrl(복사·이동)을 가르는 근거다.
+    //  - 클릭·더블 클릭·우클릭은 **뗀** 순간이다. 터치의 길게 누르기는 시간이 찬 순간(마지막 이동)의 값이다.
+    //  - `pointer_drag_target`의 `on_press`는 누른 순간, `on_move`는 그 이동의 순간(앞 문맥은 앞 이동의 순간),
+    //    `on_release`는 뗀 순간이다.
+    //  - `drag_source::make_payload`는 끌기가 시작되는 이동의 순간, `drop_target::on_drop`은 놓는 순간이다.
+    //  - Space·Enter로 실행한 것은 그 키의 수식 키다. Ctrl·Alt가 눌린 키는 앱 단축키라 실행 키가 되지
+    //    않으므로 실제로 서는 것은 Shift뿐이다 (Shift+Space의 범위 고르기).
+    //  - 보조 기술이 시킨 실행과 Esc의 닫기에는 수식 키가 없다.
     struct ui_action_context
     {
         ui_element_id element {};
         float x { 0.0f };
         float y { 0.0f };
         bool control { false };
+        bool shift { false };
+        bool alt { false };
     };
 
     // 글자 폭을 재는 함수다.

@@ -16,6 +16,8 @@ namespace luil {
             pressed.device = sample.device;
             pressed.pointer_id = sample.pointer_id;
             pressed.scale = sample.scale;
+            pressed.control = sample.control;
+            pressed.alt = sample.alt;
             return raw_input_event { std::move(pressed) };
         }
 
@@ -56,6 +58,9 @@ namespace luil {
                 moved.surface = sample.surface;
                 moved.device = sample.device;
                 moved.pointer_id = sample.pointer_id;
+                moved.control = sample.control;
+                moved.shift = sample.shift;
+                moved.alt = sample.alt;
                 events.push_back(raw_input_event { std::move(moved) });
                 return events;
             }
@@ -84,6 +89,9 @@ namespace luil {
             moved.device = sample.device;
             moved.pointer_id = sample.pointer_id;
             moved.in_contact = true;
+            moved.control = sample.control;
+            moved.shift = sample.shift;
+            moved.alt = sample.alt;
             events.push_back(raw_input_event { std::move(moved) });
             return events;
         }
@@ -107,6 +115,9 @@ namespace luil {
             released.surface = sample.surface;
             released.device = held.device;
             released.pointer_id = held.pointer_id;
+            released.control = sample.control;
+            released.shift = sample.shift;
+            released.alt = sample.alt;
             events.push_back(raw_input_event { std::move(released) });
             return events;
         }
