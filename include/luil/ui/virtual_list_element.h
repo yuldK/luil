@@ -132,7 +132,10 @@ namespace luil {
         //  - 커서를 함께 옮기는 것(`move`)은 `select`와 같다.
         virtual_list_pick_factory pick {};
         // 보조 기술이 이 항목을 고른 것에 더하라·빼라고 했다 (UIA AddToSelection·RemoveFromSelection).
-        // `multiple_selection`일 때만 쓴다. 없으면 그 명령은 할 수 없다. 고르기(Select)는 행의 누름과 같다.
+        // `multiple_selection`일 때만 쓴다. 고르기(Select)는 행의 누름과 같다.
+        //  - 없으면 `pick`을 Ctrl+누름의 문맥(`control` 참, 좌표 없음)으로 부른다 — 포인터로 하나 더 고르거나 빼는 몸짓과
+        //    같은 길이다. 이미 그 상태인 명령은 먼저 걸러지므로 고르지 않은 행에만 더하기가, 고른 행에만 빼기가 온다.
+        //  - `pick`도 없으면 그 명령은 할 수 없다.
         virtual_list_message_factory add_to_selection {};
         virtual_list_message_factory remove_from_selection {};
         // 행을 끌어 옮기는 drag & drop이다. 누른 행의 키와 끌기가 시작되는 순간의 문맥(수식 키)으로 payload를 짓는다.

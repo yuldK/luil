@@ -52,7 +52,7 @@ container가 `access_info::multiple_selection`을 알리면 여러 항목을 함
 | `AddToSelection` | `add_to_selection` | 할 일 없음 (S_OK) | `UIA_E_INVALIDOPERATION` |
 | `RemoveFromSelection` | `remove_from_selection` | 할 일 없음 (S_OK) | `UIA_E_INVALIDOPERATION` |
 
-더하기·빼기는 목표 상태를 나르는 절대 명령이라 클릭(뒤집기)으로 대신하지 않는다. 요소는 `ui_element::set_access_handler`로 명령을 앱 메시지로 옮긴다. 가상 목록은 `add_to_selection`·`remove_from_selection` factory가 그 자리다. 앱이 처리하지 않으면 지금처럼 무효다. 단일 선택 container의 항목도 같은 길을 타지만 받는 앱이 없으므로 결과는 이전과 같다 — 골라진 것을 더하면 할 일이 없고, 그 밖은 무효다.
+더하기·빼기는 목표 상태를 나르는 절대 명령이라 클릭(뒤집기)으로 대신하지 않는다. 요소는 `ui_element::set_access_handler`로 명령을 앱 메시지로 옮긴다. 가상 목록은 `add_to_selection`·`remove_from_selection` factory가 그 자리다. 그 factory가 없으면 가상 목록은 `pick`을 Ctrl+누름의 문맥으로 부른다 — 포인터 사용자가 하나 더 고르거나 빼는 몸짓이 그것이고, 이미 그 상태인 명령은 계획이 먼저 거르므로 Ctrl+누름의 뒤집기가 목표 상태와 어긋나지 않는다. 그냥 누름(이것 하나만)으로는 대신하지 않는다. 다중 선택을 알리는 목록이 더하기를 받지 못해 보조 기술이 매번 실패하는 일을 막는다. 앱이 어느 쪽도 처리하지 않으면 지금처럼 무효다. 단일 선택 container의 항목도 같은 길을 타지만 받는 앱이 없으므로 결과는 이전과 같다 — 골라진 것을 더하면 할 일이 없고, 그 밖은 무효다.
 
 ## UIA pattern 계약
 

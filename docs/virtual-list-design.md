@@ -190,7 +190,7 @@ controller는 초점을 가진 element에게 **묶음보다 먼저** 묻는다. 
 | --- | --- |
 | `multiple_selection`·`selection` | 켜면 `selection`의 키들(과 `selected`)이 고른 행으로 그려지고 보조 기술은 다중 선택 목록으로 읽는다 |
 | `pick(key, context)` | 행의 누름이다. `context`의 `control`·`shift`로 Ctrl+클릭(더하기)과 Shift+클릭(범위)을 가른다. 있으면 `select` 대신 쓴다 |
-| `add_to_selection`·`remove_from_selection` | 보조 기술의 더하기·빼기(UIA `AddToSelection`·`RemoveFromSelection`)다 |
+| `add_to_selection`·`remove_from_selection` | 보조 기술의 더하기·빼기(UIA `AddToSelection`·`RemoveFromSelection`)다. 없으면 `pick`을 Ctrl+누름의 문맥으로 부른다 |
 | `drag(key, context)` | 행을 끄는 payload다. 고른 항목을 누르고 끌면 그 키들을 `dragged_owners`에 담는다 |
 | `accepts_drop(key, payload)`·`drop(key, payload, context)` | 폴더 같은 행에 놓기다. 놓는 순간의 `context.control`로 복사·옮기기를 가른다 |
 
