@@ -25,6 +25,9 @@ namespace luil::win32 {
         // 이벤트가 난 표면이다.
         // 주 창은 비어 있고 값은 popup·보조 창 id다.
         std::u8string surface {};
+        // 그 메시지를 꺼낸 순간 Alt가 눌려 있었는가다 (`GetKeyState(VK_MENU)`).
+        // Ctrl·Shift는 wparam(`MK_CONTROL`·`MK_SHIFT`)이 싣지만 Alt는 싣지 않아 창이 조회해 넣는다.
+        bool alt { false };
     };
 
     // 포인터·휠 메시지를 입력 이벤트로 옮긴다.

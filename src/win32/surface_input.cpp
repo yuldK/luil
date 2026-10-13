@@ -15,6 +15,10 @@ namespace luil::win32 {
             moved.y = message.y;
             moved.time = message.time;
             moved.surface = message.surface;
+            // 끄는 동안의 콜백과 끌기의 시작이 이 순간의 수식 키를 받는다.
+            moved.control = (message.word_parameter & MK_CONTROL) != 0;
+            moved.shift = (message.word_parameter & MK_SHIFT) != 0;
+            moved.alt = message.alt;
             return raw_input_event { std::move(moved) };
         }
         case WM_LBUTTONDOWN:
@@ -29,6 +33,8 @@ namespace luil::win32 {
             // Shift+클릭은 텍스트 박스에서 선택을 그 자리까지 늘린다.
             pressed.shift = (message.word_parameter & MK_SHIFT) != 0;
             pressed.surface = message.surface;
+            pressed.control = (message.word_parameter & MK_CONTROL) != 0;
+            pressed.alt = message.alt;
             return raw_input_event { std::move(pressed) };
         }
         case WM_LBUTTONUP:
@@ -39,6 +45,10 @@ namespace luil::win32 {
             released.button = pointer_button_of(message.message);
             released.time = message.time;
             released.surface = message.surface;
+            // 클릭은 뗀 순간의 수식 키로 실행한다.
+            released.control = (message.word_parameter & MK_CONTROL) != 0;
+            released.shift = (message.word_parameter & MK_SHIFT) != 0;
+            released.alt = message.alt;
             return raw_input_event { std::move(released) };
         }
         case WM_MOUSEHWHEEL:

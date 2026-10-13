@@ -10,6 +10,21 @@ input 스레드의 [`interaction_controller`](../../include/luil/ui/ui_interacti
 
 포인터 이벤트는 장치(`pointer_device`)를 싣는다. 마우스와 펜은 위 경로를 그대로 쓰고, 펜의 배럴 버튼 접촉은 우클릭이다. 끌어 스크롤하기와 길게 누르기는 터치에만 붙는다. 터치는 한 접촉이 한 조작을 하며, 누른 뒤 시간 창 안의 빠른 쓸기는 그 축으로 흐르는 가장 안쪽 컨테이너(`interaction_policy::pan_target_at`, 기본은 `route_pan`)를 흘리고, 오래 잡았다 옮기면 일반 drag가 된다. 움직이지 않고 오래 눌렀다 떼면 우클릭 액션을 실행한다. 터치 탭의 초점과 caret은 탭이 확정된 뗌에서 옮긴다. 정상적인 뗌 없이 끝난 터치·펜 접촉은 `pointer_cancelled_event`로 액션 없이 거둔다. `interaction_policy::on_press`는 활성 element를 누른 순간의 관찰 hook이다. 세부 계약과 런타임 설정은 [터치 제스처와 펜 입력](../touch-pen-input-design.md)에 있다.
 
+포인터 동작은 그 순간에 눌려 있던 수식 키(`ui_action_context`의 `control`·`shift`·`alt`)를 액션에 싣는다. 앱은 이 값으로 Ctrl+클릭(하나 더 고르기), Shift+클릭(범위 고르기), 놓는 순간의 Ctrl(복사·이동)을 가른다. 값을 읽는 순간은 콜백마다 다음과 같다.
+
+| 콜백 | 수식 키의 순간 |
+| --- | --- |
+| `left_click`·`double_click`·`right_click` | 뗀 순간 (`pointer_released_event`) |
+| 터치 길게 누르기의 `right_click` | 시간이 찬 순간까지의 마지막 이벤트 |
+| `pointer_drag_target::on_press` | 누른 순간 |
+| `pointer_drag_target::on_move` | 그 이동의 순간 (앞 문맥은 앞 순간) |
+| `pointer_drag_target::on_release` | 뗀 순간, 취소면 마지막 이벤트 |
+| `drag_source::make_payload` | 끌기가 시작되는 이동의 순간 (자리는 누른 자리) |
+| `drop_target::on_drop` | 놓는 순간 |
+| Space·Enter의 실행 | 그 키의 수식 키 (Ctrl·Alt는 앱 단축키라 실제로는 Shift뿐) |
+
+플랫폼은 누름·이동·뗌 이벤트에 수식 키를 싣는다. Win32 마우스는 wparam의 `MK_CONTROL`·`MK_SHIFT`와 `GetKeyState(VK_MENU)`, 터치·펜은 `POINTER_MOD_CTRL`·`POINTER_MOD_SHIFT`와 `GetKeyState(VK_MENU)`, Android는 하드웨어 키보드의 meta state를 쓰고 키보드가 없으면 모두 거짓이다. 텍스트 칸의 Shift+클릭 선택 확장은 지금처럼 누른 순간의 `shift`로 정한다. OS 파일 drop의 `on_drop`도 놓는 순간의 키 상태를 받지만 OLE에 답하는 효과는 그대로 복사다.
+
 포인터는 이벤트의 surface id로 tree를 선택한다. key는 논리 초점이 있으면 `focused_surface`를 사용하고, 없으면 키 이벤트가 온 표면을 Tab·기본 버튼·modal dismiss의 시작점으로 사용한다. popup은 OS 초점을 받지 않으므로 anchor 창이 전달한 키가 popup의 논리 초점으로 갈 수 있다.
 
 ## 키 라우팅

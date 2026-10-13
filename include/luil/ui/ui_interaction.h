@@ -426,6 +426,23 @@ namespace luil {
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
     private:
+        // 포인터 동작의 순간에 눌려 있던 수식 키다 (`ui_action_context`의 control·shift·alt).
+        // 이벤트에서 꺼내 문맥으로 옮기기까지 셋을 함께 나른다.
+        struct modifier_keys
+        {
+            bool control { false };
+            bool shift { false };
+            bool alt { false };
+        };
+
+        template<typename event_type>
+        [[nodiscard]] static modifier_keys modifiers_of(const event_type& event) noexcept
+        {
+            return { event.control, event.shift, event.alt };
+        }
+
+        [[nodiscard]] static ui_action_context action_context(const ui_element_id& element, float x, float y, modifier_keys modifiers);
+
         // 터치 접촉 하나의 판정 단계다.
         enum class touch_phase
         {
@@ -540,6 +557,8 @@ namespace luil {
             // 끌기를 넘겨받은 컨테이너와 그 축이다 (`touch_phase::handoff`).
             ui_element_id handoff {};
             scroll_axis handoff_axis { scroll_axis::vertical };
+            // 마지막 이벤트(누름·이동·뗌)의 수식 키다. 이벤트 없이 시간이 차는 길게 누르기와 취소가 이 값을 쓴다.
+            modifier_keys modifiers {};
         };
 
         // 접촉을 놓은 뒤에도 스크롤의 임자와 누른 자리는 그대로다.
@@ -575,7 +594,7 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> end_touch_drag(const touch_contact& contact, float x, float y, drag_velocity velocity, float final_delta = 0.0f);
         // 마우스·펜이 쥔 손잡이 끌기가 끝난다 (뗌·취소·입력 큐 유실). 손잡이의 `on_release`다. 끝 상태를 지우기 전에
         // 부른다 — 누른 표면으로 손잡이를 찾는다.
-        [[nodiscard]] std::vector<input_action> end_pointer_drag(float x, float y, drag_velocity velocity) const;
+        [[nodiscard]] std::vector<input_action> end_pointer_drag(float x, float y, drag_velocity velocity, modifier_keys modifiers) const;
         // 보기에 보낸 이동 하나와 그 시각의 자리를 경계 기록에 더한다.
         static void record_view_pan(view_edge_track& edge, zoom_point delta, std::chrono::steady_clock::time_point time, float x, float y);
         // 접촉이 끝났다. 경계 쓸기의 기준을 넘었으면 보기의 메시지를 돌려준다.
@@ -592,7 +611,7 @@ namespace luil {
         // 끌리는 그림의 자리와 수락 중인 drop 대상을 갱신한다.
         void update_drag(const ui_tree& tree, float x, float y);
         // 끌기를 놓는다. 수락하는 대상 위에서만 drop 액션이 나간다.
-        [[nodiscard]] std::vector<input_action> finish_drag(const ui_tree* tree, float x, float y);
+        [[nodiscard]] std::vector<input_action> finish_drag(const ui_tree* tree, float x, float y, modifier_keys modifiers);
         [[nodiscard]] std::optional<text_input_target> text_target(ui_element_kind kind) const;
         [[nodiscard]] input_action text_edit_action(text_input_target target, text::text_edit_command command, bool extend = false) const;
         [[nodiscard]] std::vector<input_action> process_move(const pointer_moved_event& event);
@@ -629,7 +648,7 @@ namespace luil {
         // 메뉴 container가 있는 자리다.
         // 주 tree와 popup tree를 차례로 보고 없으면 tree가 nullptr다 (메뉴가 닫혀 있다).
         [[nodiscard]] menu_location find_menu(const menu_kinds& kinds) const;
-        [[nodiscard]] std::vector<input_action> run_trigger(const ui_element& element, ui_trigger trigger, float x, float y, bool control);
+        [[nodiscard]] std::vector<input_action> run_trigger(const ui_element& element, ui_trigger trigger, float x, float y, modifier_keys modifiers);
         // 초점을 가진 텍스트 박스의 키 처리다.
         // 그 박스가 소비한 키만 값을 돌려주고, 아니면 nullopt라 기존 키 경로가 이어진다.
         [[nodiscard]] std::optional<std::vector<input_action>> process_text_input_key(const key_pressed_event& event);
@@ -715,6 +734,8 @@ namespace luil {
         motion_track pointer_drag_motion_ {};
         float pointer_drag_x_ { 0.0f };
         float pointer_drag_y_ { 0.0f };
+        // 마지막으로 보낸 위치의 수식 키다. 다음 `on_move`의 앞 문맥과 취소의 `on_release`가 쓴다.
+        modifier_keys pointer_drag_modifiers_ {};
 
         // 누름이 시작된 표면이다.
         // 잡은 대상을 tree가 다시 빌드된 뒤에도 같은 표면에서 찾는다.

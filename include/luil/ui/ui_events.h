@@ -50,6 +50,12 @@ namespace luil {
         // 펜촉·손가락이 닿아 있는가. 펜의 비접촉 이동(hover)을 접촉과 가른다.
         // 마우스는 버튼 상태를 싣지 않으므로 늘 거짓이다.
         bool in_contact { false };
+        // 이 이동의 순간에 눌려 있던 수식 키다 (아래 누름·뗌과 같은 규약).
+        // 끄는 동안의 콜백(`pointer_drag_target::on_move`)과 끌기가 시작되는 순간
+        // (`drag_source::make_payload`)이 이 값을 받는다.
+        bool control { false };
+        bool shift { false };
+        bool alt { false };
     };
 
     struct pointer_pressed_event
@@ -66,6 +72,11 @@ namespace luil {
         // 누른 표면의 물리 픽셀 / 논리 픽셀 배율이다.
         // 터치 판정 거리는 논리 픽셀이라 이 값으로 나눠 잰다. 누른 동안 고정된다.
         float scale { 1.0f };
+        // 누른 순간에 눌려 있던 Ctrl·Alt다 (Shift는 위의 `shift`).
+        //  - 수식 키는 키보드의 것이다. 터치·펜도 하드웨어 키보드가 있으면 싣고, 모르면 거짓이다.
+        //  - 뒤에 두는 까닭은 장치 정보와 같다 — 앞 필드만 채운 기존 초기화가 그대로 "수식 키 없음"이다.
+        bool control { false };
+        bool alt { false };
     };
 
     struct pointer_released_event
@@ -77,6 +88,12 @@ namespace luil {
         std::u8string surface {};
         pointer_device device { pointer_device::mouse };
         std::uint32_t pointer_id { 0 };
+        // 뗀 순간에 눌려 있던 수식 키다.
+        // **클릭은 뗀 순간의 값으로 실행한다** — 누른 뒤에 Ctrl을 더 누르고 떼어도 Ctrl+클릭이고, 놓기(drop)가
+        // 놓는 순간의 Ctrl로 복사·이동을 가르는 것과 같은 규칙이다.
+        bool control { false };
+        bool shift { false };
+        bool alt { false };
     };
 
     // 터치·펜 접촉이 정상적인 뗌 없이 끝났다 (캡처 상실·OS 취소·접촉 중 버튼 전환).

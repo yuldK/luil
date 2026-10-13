@@ -377,7 +377,13 @@ namespace luil::win32 {
         const ui_element* const over { hit.target };
         if (over != nullptr && over->drop()->on_drop)
         {
-            for (input_action& action : over->drop()->on_drop(payload, ui_action_context { over->id(), x, y, false }))
+            // 놓는 순간의 수식 키다 (내부 끌기의 놓기와 같은 규약). OLE에 답하는 효과는 그대로 복사다
+            // (win32_drop.cpp) — 앱이 이 값으로 무엇을 하든 원본은 탐색기가 지우지 않는다.
+            ui_action_context context { over->id(), x, y };
+            context.control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            context.shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            context.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            for (input_action& action : over->drop()->on_drop(payload, context))
                 context_.dispatch_action(std::move(action));
         }
         else if (hit.blocked == false)
@@ -919,6 +925,8 @@ namespace luil::win32 {
         translated.y = static_cast<float>(point.y);
         translated.time = std::chrono::steady_clock::now();
         translated.surface = id_;
+        // 이 메시지가 꺼내진 시점의 큐에 동기화된 상태다 (펜의 키 상태와 같은 규칙).
+        translated.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
         std::optional<raw_input_event> event { translate_pointer_message(translated) };
         if (event.has_value() == false)
             return false;
@@ -1092,6 +1100,9 @@ namespace luil::win32 {
         sample.barrel = type == PT_PEN && (input.pen.penFlags & PEN_FLAG_BARREL) != 0;
         sample.eraser = type == PT_PEN && (input.pen.penFlags & (PEN_FLAG_ERASER | PEN_FLAG_INVERTED)) != 0;
         sample.shift = (input.info.dwKeyStates & POINTER_MOD_SHIFT) != 0;
+        sample.control = (input.info.dwKeyStates & POINTER_MOD_CTRL) != 0;
+        // 포인터 메시지는 Alt를 싣지 않는다 (POINTER_MOD_*에 없다).
+        sample.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
         sample.x = static_cast<float>(client.x);
         sample.y = static_cast<float>(client.y);
         sample.scale = static_cast<float>(dpi_) / 96.0F;

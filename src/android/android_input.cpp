@@ -159,7 +159,10 @@ namespace luil::android {
         const std::size_t action_index { static_cast<std::size_t>((input.action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT) };
         // S Pen의 옆 버튼은 STYLUS_PRIMARY로 온다. 일부 펜은 SECONDARY로 보낸다.
         const bool barrel { (input.button_state & (AMOTION_EVENT_BUTTON_STYLUS_PRIMARY | AMOTION_EVENT_BUTTON_SECONDARY)) != 0 };
+        // 하드웨어 키보드의 수식 키다. 키보드가 없으면 meta state가 비어 거짓이다.
         const bool shift { has_meta(input.meta_state, AMETA_SHIFT_ON) };
+        const bool control { has_meta(input.meta_state, AMETA_CTRL_ON) };
+        const bool alt { has_meta(input.meta_state, AMETA_ALT_ON) };
         const auto sample_of = [&](const motion_frame& frame, const motion_pointer& pointer, const pointer_phase phase, const bool in_contact) {
             pointer_sample sample {};
             sample.phase = phase;
@@ -169,6 +172,8 @@ namespace luil::android {
             sample.barrel = barrel;
             sample.eraser = pointer.tool_type == AMOTION_EVENT_TOOL_TYPE_ERASER;
             sample.shift = shift;
+            sample.control = control;
+            sample.alt = alt;
             sample.x = pointer.x - mapping.origin_x;
             sample.y = pointer.y - mapping.origin_y;
             sample.scale = mapping.scale;
@@ -247,12 +252,16 @@ namespace luil::android {
         const std::chrono::steady_clock::time_point time { event_time(input.current.time_ns) };
         const bool shift { has_meta(input.meta_state, AMETA_SHIFT_ON) };
         const bool control { has_meta(input.meta_state, AMETA_CTRL_ON) };
+        const bool alt { has_meta(input.meta_state, AMETA_ALT_ON) };
         const auto moved = [&] {
             pointer_moved_event event {};
             event.x = x;
             event.y = y;
             event.time = time;
             event.device = pointer_device::mouse;
+            event.control = control;
+            event.shift = shift;
+            event.alt = alt;
             return raw_input_event { event };
         };
 
@@ -322,6 +331,8 @@ namespace luil::android {
                 event.shift = shift;
                 event.device = pointer_device::mouse;
                 event.scale = mapping.scale;
+                event.control = control;
+                event.alt = alt;
                 events.push_back(raw_input_event { std::move(event) });
                 return;
             }
@@ -331,6 +342,9 @@ namespace luil::android {
             event.button = button;
             event.time = time;
             event.device = pointer_device::mouse;
+            event.control = control;
+            event.shift = shift;
+            event.alt = alt;
             events.push_back(raw_input_event { std::move(event) });
             return;
         }
