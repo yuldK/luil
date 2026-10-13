@@ -20,7 +20,7 @@ constexpr auto kind_button = luil::application_element_kind(3);
 
 ## Drag와 draw
 
-`drag_source`/`drop_target`은 항목 이동용 ghost와 수락 여부를 제공하고, `pointer_drag_target`은 scroll bar처럼 포인터가 element 밖으로 나가도 누른 동안 연속 이동을 받는다. `on_move`에는 이전·현재 좌표가 모두 있다. OS 파일 drag는 `drag_payload::files`를 사용하며 파일을 받는 target은 `accepts`로 판정한다.
+`drag_source`/`drop_target`은 항목 이동용 ghost와 수락 여부를 제공하고, `pointer_drag_target`은 scroll bar처럼 포인터가 element 밖으로 나가도 누른 동안 연속 이동을 받는다. `on_move`에는 이전·현재 좌표가 모두 있다. OS 파일 drag는 `drag_payload::files`를 사용하며 파일을 받는 target은 `accepts`로 판정한다. 여러 항목을 함께 끄는 payload는 `dragged_owners`에 키들을 담고(`dragged_owner`는 대표 항목), 기본 ghost가 대표 이름과 나머지 개수(`+N`)를 보인다. `rejected_cursor`를 주면 받는 target이 없는 자리 위의 포인터 모양이 그것이다.
 
 ```cpp
 struct draw_context

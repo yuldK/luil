@@ -407,6 +407,20 @@ namespace luil {
         return nullptr;
     }
 
+    bool drag_payload::carries(const std::u8string_view owner) const noexcept
+    {
+        if (owner.empty())
+            return false;
+        return dragged_owner == owner || std::find(dragged_owners.begin(), dragged_owners.end(), owner) != dragged_owners.end();
+    }
+
+    std::size_t drag_payload::dragged_count() const noexcept
+    {
+        if (dragged_owners.empty() == false)
+            return dragged_owners.size();
+        return dragged_owner.empty() ? 0u : 1u;
+    }
+
     const ui_element* ui_element::find_drop_target(const float x, const float y, const drag_payload& payload) const
     {
         return drop_hit_test(x, y, payload).target;

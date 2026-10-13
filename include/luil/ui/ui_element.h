@@ -144,6 +144,7 @@ namespace luil {
     {
         ui_element_id source {};
         // 끌리는 대상의 앱 정의 키다 (ui_element_id::owner와 같은 규약).
+        // 여러 항목을 함께 끌면 대표 항목(통상 누른 항목)이다. 모두는 `dragged_owners`에 있다.
         std::u8string dragged_owner {};
         // drag ghost에 표시할 이름이다.
         // 비어 있으면 dragged_owner를 대신 쓴다.
@@ -168,6 +169,24 @@ namespace luil {
 
         // 기본 drop 강조(테두리와 목록·탭 배경)만 끈다. 수락과 drop 동작은 유지한다.
         bool suppress_drop_highlight { false };
+
+        // 함께 끌리는 항목들의 앱 정의 키다 (앱이 고른 여러 항목을 한 번에 끈다).
+        //  - 비어 있으면 `dragged_owner` 하나를 끄는 것이다 — 지금까지의 끌기 그대로다.
+        //  - 채울 때는 `dragged_owner`도 그 안에 넣는다. 기본 ghost는 대표 항목의 이름과 나머지 개수(`+N`)를
+        //    보인다 (`drag_ghost_label_of`).
+        //  - 받는 쪽(`drop_target`)은 이 목록으로 무엇이 왔는지 알고, 놓는 순간의 수식 키(`ui_action_context`의
+        //    `control`)로 옮기기·복사를 가른다.
+        std::vector<std::u8string> dragged_owners {};
+        // 놓을 자리가 없는 곳 위의 포인터 모양이다.
+        //  - `inherit`(기본)이면 지금처럼 끄는 동안 잡은 쪽의 모양이 이어진다.
+        //  - `not_allowed`를 주면 받는 대상이 없는 자리(놓을 수 없는 행·빈 곳) 위에서 금지 모양이다. 받는 대상 위에서는
+        //    잡은 쪽의 모양이다.
+        ui_cursor rejected_cursor { ui_cursor::inherit };
+
+        // 이 끌기가 그 키의 항목을 싣고 있는가 (`dragged_owner` 또는 `dragged_owners`).
+        [[nodiscard]] bool carries(std::u8string_view owner) const noexcept;
+        // 끌리는 항목 수다. `dragged_owners`가 비어 있으면 `dragged_owner`가 있을 때 1이다.
+        [[nodiscard]] std::size_t dragged_count() const noexcept;
 
         [[nodiscard]] bool operator==(const drag_payload&) const = default;
     };

@@ -160,7 +160,8 @@ namespace luil {
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const rect_f box { bounds() };
                 const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
-                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.dragged_owner == item_.key };
+                // 여러 항목을 함께 끌면 그 항목들이 모두 흐리게 남는다.
+                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(item_.key) };
                 const bool drop_here { interaction.drag.has_value() && interaction.drag->payload.suppress_drop_highlight == false && interaction.drag->hovered_drop_target == id() };
 
                 // 놓을 자리 · 고른 행 · 눌린 행 · hover의 순서다.

@@ -122,15 +122,29 @@ namespace luil {
             {
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const rect_f box { bounds() };
+                const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
+                // 함께 끌리는 행과 놓을 자리다 (`list_element`와 같은 규칙).
+                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(id().owner) };
+                const bool drop_here { interaction.drag.has_value() && interaction.drag->payload.suppress_drop_highlight == false && interaction.drag->hovered_drop_target == id() };
 
-                // 고른 행 · 눌린 행 · hover의 순서다 (`list_element`와 같은 규칙).
-                // 고름은 앱 상태라 포인터 상태보다 오래간다.
+                // 놓을 자리 · 고른 행 · 눌린 행 · hover의 순서다 (`list_element`와 같은 규칙).
+                // 고름은 앱 상태라 포인터 상태보다 오래가고, 놓을 자리는 지금 끄는 손이 묻는 것이라 그보다도 앞선다.
                 ui_color background { 0 };
                 bool fill { false };
-                if (selected_)
+                if (drop_here)
+                {
+                    background = context.palette.drop_target_background;
+                    fill = true;
+                }
+                else if (selected_)
                 {
                     // 고른 행의 모양은 `list_element`와 같은 primitive 하나다.
+                    // 끌려 나간 행은 제자리에 흐리게 남는다.
+                    if (dragged)
+                        context.canvas.saveLayerAlphaf(&shape, 0.35f);
                     draw_row_selection(context, box);
+                    if (dragged)
+                        context.canvas.restore();
                 }
                 else if (enabled() && interaction.pressed == id())
                 {
@@ -610,6 +624,19 @@ namespace luil {
                         return actions;
                     });
             }
+            // 행을 끌고 행에 놓는 것은 앱의 factory다 (여러 항목을 함께 끄는 drag & drop).
+            if (config_.drag != nullptr && item.enabled)
+                row->set_drag_source(drag_source { [key = item.key, drag = config_.drag](const ui_action_context& context) {
+                    drag_payload payload { drag(key, context) };
+                    if (payload.source == ui_element_id {})
+                        payload.source = context.element;
+                    return payload;
+                } });
+            if (config_.accepts_drop != nullptr && config_.drop != nullptr && item.enabled)
+                row->set_drop_target(drop_target {
+                    [key = item.key, accepts = config_.accepts_drop](const drag_payload& payload) { return accepts(key, payload); },
+                    [key = item.key, drop = config_.drop](const drag_payload& payload, const ui_action_context& context) -> std::vector<input_action> { return { drop(key, payload, context) }; },
+                });
             // 다중 선택의 더하기·빼기는 앱의 메시지다. 고르기는 행의 누름(기본 실행)이 맡는다.
             if (config_.multiple_selection && item.enabled && (config_.add_to_selection != nullptr || config_.remove_from_selection != nullptr))
                 row->set_access_handler(

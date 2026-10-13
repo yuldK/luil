@@ -32,6 +32,17 @@ namespace luil {
     // 렌더러와 테스트가 같은 payload 규칙을 사용하도록 그리기 단계와 분리한다.
     [[nodiscard]] drag_overlay_plan plan_drag_overlay(const drag_payload& payload) noexcept;
 
+    // 기본 ghost에 쓰는 글이다.
+    // `text`는 `label` → `dragged_owner` → `dragged_owners`의 첫 키 순서로 고른 이름이고, `more`는 그 밖에 함께
+    // 끌리는 항목 수다 (ghost가 `+N`으로 보인다 — 말이 아니라 수라 어느 언어의 앱에도 맞는다).
+    struct drag_ghost_label
+    {
+        std::u8string_view text {};
+        std::size_t more { 0 };
+    };
+
+    [[nodiscard]] drag_ghost_label drag_ghost_label_of(const drag_payload& payload) noexcept;
+
     // 배치가 끝난 element tree다.
     // 게시 후 불변이며 UI thread(그리기), input thread(hit test),
     // UI thread의 동기 조회(caption NC 클릭)가 공유한다.

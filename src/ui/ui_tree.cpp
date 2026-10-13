@@ -10,6 +10,8 @@
 #include "include/core/SkTypeface.h"
 
 #include <algorithm>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace luil {
@@ -79,7 +81,11 @@ namespace luil {
         //  - 놓을 자리를 찾아 헤매는 동안 모양이 깜빡이지 않는다.
         if (interaction.drag.has_value())
         {
-            const ui_element* const source { find(interaction.drag->payload.source) };
+            // 끄는 쪽이 금지 모양을 청했으면 받는 대상이 없는 자리에서 그것이다 (`drag_payload::rejected_cursor`).
+            const drag_payload& payload { interaction.drag->payload };
+            if (payload.rejected_cursor != ui_cursor::inherit && interaction.drag->hovered_drop_target == ui_element_id {})
+                return payload.rejected_cursor;
+            const ui_element* const source { find(payload.source) };
             return source != nullptr ? source->cursor_at(x, y, interaction) : ui_cursor::grabbing;
         }
 
@@ -515,6 +521,17 @@ namespace luil {
         return drag_overlay_plan { payload.suppress_drop_highlight == false, payload.custom_visual == false };
     }
 
+    drag_ghost_label drag_ghost_label_of(const drag_payload& payload) noexcept
+    {
+        const std::size_t count { payload.dragged_count() };
+        std::u8string_view text { payload.label };
+        if (text.empty())
+            text = payload.dragged_owner.empty() == false ? std::u8string_view { payload.dragged_owner }
+                : payload.dragged_owners.empty() == false ? std::u8string_view { payload.dragged_owners.front() }
+                                                          : std::u8string_view {};
+        return { text, count > 1u ? count - 1u : 0u };
+    }
+
     void ui_tree::draw_drag_visual(draw_context& context, const drag_visual& drag) const
     {
         const drag_overlay_plan plan { plan_drag_overlay(drag.payload) };
@@ -555,7 +572,22 @@ namespace luil {
 
         const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
         const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
-        const std::u8string& ghost_text { drag.payload.label.empty() ? drag.payload.dragged_owner : drag.payload.label };
-        draw_text(context.canvas, ghost_text, ghost.left() + 7.0f * scale, ghost.top() + centered_text_baseline(font, ghost.height()), font, foreground);
+        const drag_ghost_label label { drag_ghost_label_of(drag.payload) };
+        // 여러 항목이면 오른쪽에 나머지 개수(`+N`)의 알약을 얹는다. 이름은 그 앞까지만 그린다.
+        float text_right { ghost.right() - 7.0f * scale };
+        if (label.more > 0u)
+        {
+            const std::string digits { std::to_string(label.more) };
+            const std::u8string count { u8"+" + std::u8string { digits.begin(), digits.end() } };
+            const float count_width { measure_text(count, font) };
+            const float pill_height { ghost.height() - 8.0f * scale };
+            const SkRect pill { SkRect::MakeXYWH(ghost.right() - 4.0f * scale - count_width - 10.0f * scale, ghost.top() + 4.0f * scale, count_width + 10.0f * scale, pill_height) };
+            context.canvas.drawRRect(SkRRect::MakeRectXY(pill, pill_height / 2.0f, pill_height / 2.0f), solid_paint(context.palette.accent));
+            draw_text(context.canvas, count, pill.left() + 5.0f * scale, ghost.top() + centered_text_baseline(font, ghost.height()), font, solid_paint(context.palette.accent_foreground));
+            text_right = pill.left() - 4.0f * scale;
+        }
+        const float text_left { ghost.left() + 7.0f * scale };
+        if (text_right > text_left)
+            static_cast<void>(draw_text_within(context.canvas, label.text, text_left, ghost.top() + centered_text_baseline(font, ghost.height()), text_right - text_left, font, foreground));
     }
 } // namespace luil
