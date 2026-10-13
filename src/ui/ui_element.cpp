@@ -414,6 +414,13 @@ namespace luil {
         return dragged_owner == owner || std::find(dragged_owners.begin(), dragged_owners.end(), owner) != dragged_owners.end();
     }
 
+    bool drag_payload::carries(const ui_element_id& from, const std::u8string_view owner) const noexcept
+    {
+        if (container != ui_element_id {} && container != from)
+            return false;
+        return carries(owner);
+    }
+
     std::size_t drag_payload::dragged_count() const noexcept
     {
         if (dragged_owners.empty() == false)

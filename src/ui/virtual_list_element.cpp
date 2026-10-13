@@ -8,9 +8,11 @@
 #include "include/core/SkRect.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace luil {
     namespace {
@@ -123,8 +125,8 @@ namespace luil {
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const rect_f box { bounds() };
                 const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
-                // 함께 끌리는 행과 놓을 자리다 (`list_element`와 같은 규칙).
-                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(id().owner) };
+                // 함께 끌리는 행과 놓을 자리다 (`list_element`와 같은 규칙). 키는 목록 안에서만 유일하므로 출발 목록까지 견준다.
+                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(list_, id().owner) };
                 const bool drop_here { interaction.drag.has_value() && interaction.drag->payload.suppress_drop_highlight == false && interaction.drag->hovered_drop_target == id() };
 
                 // 놓을 자리 · 고른 행 · 눌린 행 · hover의 순서다 (`list_element`와 같은 규칙).
@@ -157,7 +159,13 @@ namespace luil {
                     fill = true;
                 }
                 if (fill)
-                    context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), solid_paint(background));
+                {
+                    SkPaint paint { solid_paint(background) };
+                    // 고르지 않은 행 하나를 끌어도 제자리에 흐리게 남는다 (끄는 동안 hover가 그 행에 머문다).
+                    if (dragged && drop_here == false)
+                        paint.setAlphaf(0.35f);
+                    context.canvas.drawRect(shape, paint);
+                }
 
                 // 커서는 **초점이 목록에 있을 때만** 보인다.
                 // 초점 테는 `ui_tree`가 목록 전체에 두르므로, 그 안의 어느 행에
@@ -626,12 +634,19 @@ namespace luil {
             }
             // 행을 끌고 행에 놓는 것은 앱의 factory다 (여러 항목을 함께 끄는 drag & drop).
             if (config_.drag != nullptr && item.enabled)
-                row->set_drag_source(drag_source { [key = item.key, drag = config_.drag](const ui_action_context& context) {
+            {
+                drag_source source {};
+                source.make_payload = [key = item.key, list = id(), drag = config_.drag](const ui_action_context& context) {
                     drag_payload payload { drag(key, context) };
                     if (payload.source == ui_element_id {})
                         payload.source = context.element;
+                    // 출발 목록이다. 받는 쪽이 같은 키의 다른 목록 행과 가른다 (`drag_payload::carries`).
+                    if (payload.container == ui_element_id {})
+                        payload.container = list;
                     return payload;
-                } });
+                };
+                row->set_drag_source(std::move(source));
+            }
             if (config_.accepts_drop != nullptr && config_.drop != nullptr && item.enabled)
                 row->set_drop_target(drop_target {
                     [key = item.key, accepts = config_.accepts_drop](const drag_payload& payload) { return accepts(key, payload); },
@@ -658,33 +673,53 @@ namespace luil {
             lane->add_row(std::move(row), { begin, item_height(item, config_.row_height) });
         };
 
-        // 앞부분은 한 번만 더하고, 보이는 행들은 같은 합을 이어 쓴다.
-        // 매 행마다 0부터 더하면 목록 끝의 수십 행을 짓는 비용이 제곱으로 는다.
-        // 창 앞에 선 커서 행의 자리는 그 합을 지나며 적어 둔다.
-        const bool cursor_before { cursor_.has_value() && *cursor_ < realized_.begin };
-        float cursor_begin { 0.0f };
+        // 창에 걸치지 않아도 짓는 행이다.
+        //  - 커서 행: 보조 기술이 "지금 어디에 서 있는가"를 물었을 때 답할 자리가 있어야 하고, 커스텀 행 안의
+        //    컨트롤이 스크롤 한 번에 사라지지 않는다.
+        //  - 고른 행: 보조 기술의 선택 읽기(`GetSelection`)와 선택 알림은 tree에 선 행만 본다. 창 밖의 고른 행이
+        //    없으면 고른 것을 셋 두고 흘린 순간 하나만 골라진 목록으로 읽힌다. 창에 가까운 것부터
+        //    `virtual_list_offscreen_selection_limit`개까지다 — 모두 고르기에 행이 모델만큼 지어지지 않게 한다.
+        const bool outside_window_cursor { cursor_.has_value() && (*cursor_ < realized_.begin || *cursor_ >= realized_.end) };
+        std::vector<std::size_t> offscreen {};
+        if (outside_window_cursor)
+            offscreen.push_back(*cursor_);
+        if (config_.selected.empty() == false || chosen.empty() == false)
+        {
+            std::vector<std::size_t> selected {};
+            for (std::size_t index = 0; index < config_.items.size(); ++index)
+            {
+                if (index >= realized_.begin && index < realized_.end)
+                    continue;
+                if (outside_window_cursor && index == *cursor_)
+                    continue;
+                const virtual_list_item& item { config_.items[index] };
+                if (item.enabled && (item.key == config_.selected || chosen.contains(item.key)))
+                    selected.push_back(index);
+            }
+            if (selected.size() > virtual_list_offscreen_selection_limit)
+            {
+                const auto distance = [this](const std::size_t index) { return index < realized_.begin ? realized_.begin - index : index + 1u - realized_.end; };
+                const auto nearer = [&distance](const std::size_t left, const std::size_t right) { return distance(left) < distance(right); };
+                std::nth_element(selected.begin(), selected.begin() + static_cast<std::ptrdiff_t>(virtual_list_offscreen_selection_limit), selected.end(), nearer);
+                selected.resize(virtual_list_offscreen_selection_limit);
+            }
+            offscreen.insert(offscreen.end(), selected.begin(), selected.end());
+        }
+        std::sort(offscreen.begin(), offscreen.end());
+
+        // 행은 모델 차례로 짓는다 — 보조 기술이 형제를 따라 읽는 차례가 화면의 차례와 같다.
+        // 앞부분의 합은 한 번만 더한다. 매 행마다 0부터 더하면 목록 끝의 수십 행을 짓는 비용이 제곱으로 는다.
+        const std::size_t last { std::max(realized_.end, offscreen.empty() ? std::size_t { 0 } : offscreen.back() + 1u) };
+        auto next_offscreen { offscreen.begin() };
         float begin { 0.0f };
-        for (std::size_t index = 0; index < realized_.begin; ++index)
+        for (std::size_t index = 0; index < last; ++index)
         {
-            if (cursor_before && index == *cursor_)
-                cursor_begin = begin;
+            const bool in_window { index >= realized_.begin && index < realized_.end };
+            if (in_window || (next_offscreen != offscreen.end() && *next_offscreen == index))
+                realize(index, begin);
+            if (next_offscreen != offscreen.end() && *next_offscreen == index)
+                ++next_offscreen;
             begin += item_height(config_.items[index], config_.row_height);
-        }
-        for (std::size_t index = realized_.begin; index < realized_.end; ++index)
-        {
-            realize(index, begin);
-            begin += item_height(config_.items[index], config_.row_height);
-        }
-        // 커서 행은 창에 걸치지 않아도 짓는다.
-        // 보조 기술이 "지금 어디에 서 있는가"를 물었을 때 답할 자리가 있어야
-        // 하고, 커스텀 행 안의 컨트롤이 스크롤 한 번에 사라지지 않는다.
-        if (cursor_before)
-            realize(*cursor_, cursor_begin);
-        else if (cursor_.has_value() && *cursor_ >= realized_.end)
-        {
-            for (std::size_t index = realized_.end; index < *cursor_; ++index)
-                begin += item_height(config_.items[index], config_.row_height);
-            realize(*cursor_, begin);
         }
     }
 

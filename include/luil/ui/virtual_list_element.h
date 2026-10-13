@@ -54,6 +54,16 @@ namespace luil {
     // 누른 행의 키와 그 누름의 문맥이다 (수식 키 — Ctrl+클릭 더하기, Shift+클릭 범위 고르기).
     using virtual_list_pick_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
 
+    // 창에 걸치지 않아도 짓는 고른 행의 최대 수다 (창에 가까운 것부터).
+    //  - 보조 기술은 tree에 선 행만 읽는다. 창 밖의 고른 행을 짓지 않으면 고른 것을 흘려 보낸 순간 선택 읽기
+    //    (UIA `GetSelection`)와 선택 알림에서 빠진다.
+    //  - 상한이 있는 것은 모두 고르기 때문이다. 십만 줄을 고르면 행이 모델만큼 지어진다. 상한을 넘는 선택은 한꺼번
+    //    변화라 보조 기술에 다시 읽으라고 알린다(`access_selection_burst`). 그래도 넘친 행은 선택 읽기에서 빠진다 —
+    //    상한 없이 다 답하는 길은 행을 짓지 않고 답하는 UIA `ItemContainer`·`VirtualizedItem` 패턴이다.
+    //  - 창 밖의 고른 행을 고름에서 빼면 그 행은 tree에서 빠질 뿐 "골라지지 않음"으로 바뀌지 않는다. 그래서
+    //    그 행의 빠짐 알림(`ElementRemovedFromSelection`)은 나지 않는다.
+    inline constexpr std::size_t virtual_list_offscreen_selection_limit { 64 };
+
     struct virtual_list_config
     {
         // 같은 화면에 목록이 여럿일 때 구분하는 키다.
@@ -72,6 +82,7 @@ namespace luil {
         // 그려지고, 보조 기술은 다중 선택 목록으로 읽는다 (`access_info::multiple_selection`).
         //  - 어떻게 더하고 빼는지는 앱이 정한다 — 행의 누름은 `pick`이 수식 키와 함께 받는다.
         //  - 꺼져 있으면 `selection`은 읽지 않는다. 지금까지의 단일 선택 목록 그대로다.
+        //  - 고른 행은 창 밖에서도 지어진다 (`virtual_list_offscreen_selection_limit`). `selected`도 같다.
         bool multiple_selection { false };
         std::vector<std::u8string> selection {};
         // 키보드 커서가 선 항목의 키다 (앱 상태).
@@ -127,11 +138,13 @@ namespace luil {
         // 행을 끌어 옮기는 drag & drop이다. 누른 행의 키와 끌기가 시작되는 순간의 문맥(수식 키)으로 payload를 짓는다.
         //  - 고른 항목들을 함께 끌려면 `dragged_owners`에 그 키들을 담는다 (기본 ghost가 `+N`을 보인다). 함께 끌리는 행은
         //    제자리에 흐리게 남는다.
-        //  - `source`를 비워 두면 그 행이다. 놓을 수 없는 행 위의 금지 모양은 `rejected_cursor`로 청한다.
+        //  - `source`를 비워 두면 그 행이고, `container`를 비워 두면 이 목록이다. 놓을 수 없는 행 위의 금지 모양은
+        //    `rejected_cursor`로 청한다.
         //  - 비어 있으면 행을 끌 수 없다. 끌기는 누른 채 `interaction_config::drag_start_distance`를 넘겨야 서므로 클릭과 함께 산다.
         std::function<drag_payload(const std::u8string& key, const ui_action_context& context)> drag {};
         // 이 행에 놓을 수 있는가다 (폴더 같은 container 행). 받는 행 위에 머물면 그 행이 놓을 자리로 강조된다.
-        //  - 끌리는 항목 자신(`drag_payload::carries`)에 놓지 못하게 하는 것도 여기서 답한다.
+        //  - 끌리는 항목 자신에 놓지 못하게 하는 것도 여기서 답한다. 키는 목록 안에서만 유일하므로 출발 목록까지
+        //    견주는 `drag_payload::carries(목록 id, 키)`로 묻는다 — 키만 견주면 다른 목록에서 온 같은 키의 행을 거절한다.
         //  - `drop`과 함께 있어야 행이 놓을 자리가 된다.
         std::function<bool(const std::u8string& key, const drag_payload& payload)> accepts_drop {};
         // 이 행에 놓았다. 놓는 순간의 문맥을 받는다 — Ctrl(`control`)로 복사·옮기기를 가른다.

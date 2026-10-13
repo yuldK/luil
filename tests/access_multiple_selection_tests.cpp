@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -68,14 +69,17 @@ namespace {
         return *found;
     }
 
+    // 계획 하나의 앱 메시지를 **값으로** 꺼낸다. 메시지 몸은 계획이 쥐고 있어서, 임시 계획에서 포인터를 받으면
+    // 그 문장이 끝나는 순간 해제된 자리를 가리킨다.
     template<typename intent_type>
-    [[nodiscard]] const intent_type* intent_of(const std::optional<std::vector<luil::input_action>>& actions)
+    [[nodiscard]] std::optional<intent_type> intent_of(const std::optional<std::vector<luil::input_action>>& actions)
     {
         REQUIRE(actions.has_value());
         REQUIRE(actions->size() == 1u);
         const auto* const message { std::get_if<luil::app_message>(&actions->front()) };
         REQUIRE(message != nullptr);
-        return message->get<intent_type>();
+        const intent_type* const intent { message->get<intent_type>() };
+        return intent != nullptr ? std::optional<intent_type> { *intent } : std::nullopt;
     }
 
     // 내 것이지만 할 일이 없다 (빈 계획).
@@ -123,19 +127,19 @@ TEST_CASE("Adding and removing a row reach the app as its own commands", "[ui][a
     const luil::ui_tree tree { make_tree({ u8"a" }) };
 
     // 고르지 않은 행의 더하기는 앱의 더하기다. 이미 골라진 행의 더하기는 할 일이 없다.
-    const auto* const added { intent_of<add_intent>(luil::plan_access_request(row(tree, u8"b"), request(luil::access_command::add_to_selection))) };
-    REQUIRE(added != nullptr);
+    const auto added { intent_of<add_intent>(luil::plan_access_request(row(tree, u8"b"), request(luil::access_command::add_to_selection))) };
+    REQUIRE(added.has_value());
     REQUIRE(added->key == u8"b");
     REQUIRE(nothing_to_do(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::add_to_selection))));
 
-    const auto* const removed { intent_of<remove_intent>(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::remove_from_selection))) };
-    REQUIRE(removed != nullptr);
+    const auto removed { intent_of<remove_intent>(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::remove_from_selection))) };
+    REQUIRE(removed.has_value());
     REQUIRE(removed->key == u8"a");
     REQUIRE(nothing_to_do(luil::plan_access_request(row(tree, u8"b"), request(luil::access_command::remove_from_selection))));
 
     // 다중 선택의 고르기는 "이것 하나만"이라 이미 골라진 행도 앱에 간다 (행의 누름, 수식 키 없음).
-    const auto* const picked { intent_of<pick_intent>(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::select))) };
-    REQUIRE(picked != nullptr);
+    const auto picked { intent_of<pick_intent>(luil::plan_access_request(row(tree, u8"a"), request(luil::access_command::select))) };
+    REQUIRE(picked.has_value());
     REQUIRE(picked->key == u8"a");
     REQUIRE(picked->control == false);
     // 단일 선택으로 물으면 이미 골라진 것은 할 일이 없다.
@@ -202,6 +206,66 @@ TEST_CASE("A pressed row hands its modifiers to the pick factory", "[ui][accessi
     REQUIRE(picked != nullptr);
     REQUIRE(picked->key == u8"c");
     REQUIRE(picked->control);
+}
+
+TEST_CASE("Selected rows outside the viewport stay readable by assistive technology", "[ui][accessibility][multi-select]")
+{
+    // 200줄(20px) 목록의 창은 100px이다. 창 밖의 고른 행도 지어져 선택 읽기에 남는다.
+    const auto make = [](std::vector<std::u8string> selection, const float scroll) {
+        luil::virtual_list_config config {};
+        config.owner = u8"files";
+        config.row_height = 20.0f;
+        for (int index = 0; index < 200; ++index)
+        {
+            const std::string digits { std::to_string(index) };
+            const std::u8string key { u8"k" + std::u8string { digits.begin(), digits.end() } };
+            config.items.push_back({ key, key });
+        }
+        config.multiple_selection = true;
+        config.selection = std::move(selection);
+        config.scroll_offset = scroll;
+        config.scroll = [](const float) { return luil::input_action {}; };
+        config.pick = [](const std::u8string& key, const luil::ui_action_context&) { return luil::make_app_action(pick_intent { key }); };
+        return luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f);
+    };
+    const auto selected_keys = [](const luil::ui_tree& tree) {
+        std::vector<std::u8string> keys {};
+        for (const luil::ui_element* const item : luil::access_selected_items(*tree.find({ luil::ui_element_kind::virtual_list, u8"files" })))
+            keys.push_back(item->id().owner);
+        return keys;
+    };
+
+    // 맨 위에서는 k1이 창 안이고 k50·k199는 창 밖이다. 모델 차례로 읽힌다.
+    const luil::ui_tree top { make({ u8"k199", u8"k1", u8"k50" }, 0.0f) };
+    REQUIRE(selected_keys(top) == std::vector<std::u8string> { u8"k1", u8"k50", u8"k199" });
+    REQUIRE(top.duplicate_ids().empty());
+
+    // 끝으로 흘리면 k1·k50이 창 밖이다. 그래도 셋이다.
+    const luil::ui_tree bottom { make({ u8"k199", u8"k1", u8"k50" }, 4000.0f) };
+    REQUIRE(selected_keys(bottom) == std::vector<std::u8string> { u8"k1", u8"k50", u8"k199" });
+
+    // 흘리기만 하면 선택 알림이 없다 — 골라진 것이 그대로다.
+    for (const luil::access_change& change : luil::diff_access_snapshots(luil::make_access_snapshot(top), luil::make_access_snapshot(bottom)))
+    {
+        REQUIRE(change.kind != luil::access_change_kind::added_to_selection);
+        REQUIRE(change.kind != luil::access_change_kind::removed_from_selection);
+        REQUIRE(change.kind != luil::access_change_kind::selected);
+        REQUIRE(change.kind != luil::access_change_kind::selection_invalidated);
+    }
+
+    // 모두 고르면 창 밖은 창에 가까운 것부터 상한까지만 짓는다.
+    std::vector<std::u8string> everything {};
+    for (int index = 0; index < 200; ++index)
+    {
+        const std::string digits { std::to_string(index) };
+        everything.push_back(u8"k" + std::u8string { digits.begin(), digits.end() });
+    }
+    const luil::ui_tree all { make(everything, 0.0f) };
+    const std::vector<std::u8string> read { selected_keys(all) };
+    REQUIRE(read.size() > luil::virtual_list_offscreen_selection_limit);
+    REQUIRE(read.size() <= luil::virtual_list_offscreen_selection_limit + 10u);
+    REQUIRE(read.front() == u8"k0");
+    REQUIRE(std::find(read.begin(), read.end(), u8"k199") == read.end());
 }
 
 TEST_CASE("Selection changes in a multiple selection list are announced per item", "[ui][accessibility][multi-select]")
