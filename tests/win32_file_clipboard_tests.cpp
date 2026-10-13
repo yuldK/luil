@@ -5,6 +5,7 @@
 
 #include <shlobj.h>
 
+#include <cstdint>
 #include <cstring>
 #include <optional>
 #include <string>
@@ -57,7 +58,15 @@ namespace {
         std::memcpy(memory + sizeof(DROPFILES), list.data(), list.size() * sizeof(wchar_t));
         GlobalUnlock(files);
 
-        REQUIRE(OpenClipboard(owner) != FALSE);
+        // 클립보드가 바뀌면 다른 프로세스(클립보드 기록 등)가 잠깐 열어 읽는다. 라이브러리처럼 물러났다 다시 잡는다.
+        bool opened { false };
+        for (int attempt = 0; attempt < 40 && opened == false; ++attempt)
+        {
+            opened = OpenClipboard(owner) != FALSE;
+            if (opened == false)
+                Sleep(25);
+        }
+        REQUIRE(opened);
         EmptyClipboard();
         REQUIRE(SetClipboardData(CF_HDROP, files) != nullptr);
         if (effect.has_value())
@@ -78,6 +87,11 @@ TEST_CASE("Clipboard paths must be absolute drive or UNC paths", "[win32][clipbo
     REQUIRE(luil::win32::absolute_clipboard_path(u8"d:/work"));
     REQUIRE(luil::win32::absolute_clipboard_path(u8"\\\\server\\share\\file"));
     REQUIRE(luil::win32::absolute_clipboard_path(u8"\\\\?\\C:\\very\\long"));
+    REQUIRE(luil::win32::absolute_clipboard_path(u8"\\\\?\\UNC\\server\\share\\file"));
+    // 장치 경로와 드라이브·UNC가 아닌 긴 경로는 셸 붙여넣기가 파일로 읽지 못한다.
+    REQUIRE_FALSE(luil::win32::absolute_clipboard_path(u8"\\\\.\\COM1"));
+    REQUIRE_FALSE(luil::win32::absolute_clipboard_path(u8"\\\\.\\C:\\a.txt"));
+    REQUIRE_FALSE(luil::win32::absolute_clipboard_path(u8"\\\\?\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\a.txt"));
     REQUIRE_FALSE(luil::win32::absolute_clipboard_path(u8""));
     REQUIRE_FALSE(luil::win32::absolute_clipboard_path(u8"work\\a.txt"));
     REQUIRE_FALSE(luil::win32::absolute_clipboard_path(u8"C:a.txt"));
@@ -102,6 +116,19 @@ TEST_CASE("A file drop block lists wide paths and refuses relative ones", "[win3
 
     const std::vector<std::u8string> mixed { u8"C:\\a", u8"relative\\b" };
     REQUIRE(luil::win32::file_drop_block(mixed).has_value() == false);
+}
+
+TEST_CASE("A file drop block strips long path prefixes the way Explorer lists paths", "[win32][clipboard][files]")
+{
+    const std::vector<std::u8string> paths { u8"\\\\?\\C:\\long\\a.txt", u8"\\\\?\\UNC\\nas\\share\\b", u8"//?/D:/c" };
+    const std::optional<std::vector<std::byte>> block { luil::win32::file_drop_block(paths) };
+    REQUIRE(block.has_value());
+    const std::wstring expected { std::wstring { L"C:\\long\\a.txt" } + L'\0' + L"\\\\nas\\share\\b" + L'\0' + L"D:\\c" + L'\0' + L'\0' };
+    REQUIRE(block->size() == sizeof(DROPFILES) + expected.size() * sizeof(wchar_t));
+    REQUIRE(std::memcmp(block->data() + sizeof(DROPFILES), expected.data(), expected.size() * sizeof(wchar_t)) == 0);
+
+    const std::vector<std::u8string> device { u8"C:\\a", u8"\\\\.\\PhysicalDrive0" };
+    REQUIRE(luil::win32::file_drop_block(device).has_value() == false);
 }
 
 TEST_CASE("The preferred drop effect becomes cut only for a pure move", "[win32][clipboard][files]")
@@ -142,6 +169,29 @@ TEST_CASE("Files written to the clipboard read back with their intent", "[win32]
     REQUIRE(luil::win32::copy_files_to_clipboard(window.handle(), {}, luil::file_clipboard_intent::copy));
     REQUIRE(IsClipboardFormatAvailable(CF_HDROP) == FALSE);
     REQUIRE(luil::win32::read_files_from_clipboard(window.handle()).paths.empty());
+}
+
+TEST_CASE("Clearing after a move only clears the clipboard that was read", "[win32][clipboard][files][system]")
+{
+    const clipboard_window window {};
+    const std::vector<std::u8string> paths { u8"C:\\자료\\보고서.txt" };
+    put_explorer_files(window.handle(), std::wstring { L"C:\\자료\\보고서.txt" } + L'\0' + L'\0', DROPEFFECT_MOVE);
+
+    // 읽은 순간의 번호가 답에 실린다.
+    const luil::file_clipboard_content read { luil::win32::read_files_from_clipboard(window.handle()) };
+    REQUIRE(read.paths == paths);
+    REQUIRE(read.sequence == static_cast<std::uint32_t>(GetClipboardSequenceNumber()));
+
+    // 옮기는 사이 사용자가 글을 복사했다. 그 번호가 아니므로 비우지 않는다.
+    REQUIRE(luil::win32::copy_text_to_clipboard(window.handle(), u8"copied meanwhile"));
+    REQUIRE_FALSE(luil::win32::copy_files_to_clipboard(window.handle(), {}, luil::file_clipboard_intent::copy, read.sequence));
+    REQUIRE(luil::win32::read_text_from_clipboard(window.handle()) == u8"copied meanwhile");
+
+    // 바뀌지 않았으면 비운다.
+    put_explorer_files(window.handle(), std::wstring { L"C:\\자료\\보고서.txt" } + L'\0' + L'\0', DROPEFFECT_MOVE);
+    const luil::file_clipboard_content again { luil::win32::read_files_from_clipboard(window.handle()) };
+    REQUIRE(luil::win32::copy_files_to_clipboard(window.handle(), {}, luil::file_clipboard_intent::copy, again.sequence));
+    REQUIRE(IsClipboardFormatAvailable(CF_HDROP) == FALSE);
 }
 
 TEST_CASE("Files put on the clipboard the way Explorer does are read", "[win32][clipboard][files][system]")

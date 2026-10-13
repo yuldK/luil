@@ -194,15 +194,48 @@ namespace luil::win32 {
         }
     }
 
+    namespace {
+        [[nodiscard]] bool path_separator(const char8_t value) noexcept
+        {
+            return value == u8'\\' || value == u8'/';
+        }
+
+        // 드라이브 절대 경로다 (`C:\`). `C:name`은 그 드라이브의 현재 폴더 기준이라 아니다.
+        [[nodiscard]] bool drive_absolute_path(const std::u8string_view path) noexcept
+        {
+            const auto letter = [](const char8_t value) { return (value >= u8'A' && value <= u8'Z') || (value >= u8'a' && value <= u8'z'); };
+            return path.size() >= 3u && letter(path[0]) && path[1] == u8':' && path_separator(path[2]);
+        }
+
+        // `\\?\`·`\\.\` 꼴의 접두어(구분자 둘, 표식 하나, 구분자 하나)인가.
+        [[nodiscard]] bool namespace_prefix(const std::u8string_view path, const char8_t mark) noexcept
+        {
+            return path.size() >= 4u && path_separator(path[0]) && path_separator(path[1]) && path[2] == mark && path_separator(path[3]);
+        }
+
+        // 긴 경로 접두어의 UNC 표식이다 (`\\?\UNC\server\share`).
+        [[nodiscard]] bool long_unc_path(const std::u8string_view rest) noexcept
+        {
+            const auto upper = [](const char8_t value) { return value >= u8'a' && value <= u8'z' ? static_cast<char8_t>(value - (u8'a' - u8'A')) : value; };
+            return rest.size() >= 5u && upper(rest[0]) == u8'U' && upper(rest[1]) == u8'N' && upper(rest[2]) == u8'C' && path_separator(rest[3]) && path_separator(rest[4]) == false;
+        }
+    } // namespace
+
     bool absolute_clipboard_path(const std::u8string_view path) noexcept
     {
-        const auto separator = [](const char8_t value) { return value == u8'\\' || value == u8'/'; };
-        // UNC다 (`\\server\share`, `\\?\C:\…`).
-        if (path.size() >= 3u && separator(path[0]) && separator(path[1]))
+        // 장치 경로(`\\.\…`)는 파일이 아니다.
+        if (namespace_prefix(path, u8'.'))
+            return false;
+        // 긴 경로 접두어는 그 뒤가 드라이브 절대 경로나 UNC일 때만이다 (`\\?\Volume{…}`은 셸이 읽지 못한다).
+        if (namespace_prefix(path, u8'?'))
+        {
+            const std::u8string_view rest { path.substr(4u) };
+            return drive_absolute_path(rest) || long_unc_path(rest);
+        }
+        // UNC다 (`\\server\share`).
+        if (path.size() >= 3u && path_separator(path[0]) && path_separator(path[1]))
             return true;
-        // 드라이브 절대 경로다 (`C:\`). `C:name`은 그 드라이브의 현재 폴더 기준이라 아니다.
-        const auto letter = [](const char8_t value) { return (value >= u8'A' && value <= u8'Z') || (value >= u8'a' && value <= u8'z'); };
-        return path.size() >= 3u && letter(path[0]) && path[1] == u8':' && separator(path[2]);
+        return drive_absolute_path(path);
     }
 
     std::optional<std::vector<std::byte>> file_drop_block(const std::span<const std::u8string> paths)
@@ -215,10 +248,20 @@ namespace luil::win32 {
             utf_conversion_result<std::wstring> converted { utf8_to_utf16(path) };
             if (converted.value.has_value() == false)
                 return std::nullopt;
-            for (wchar_t& value : *converted.value)
+            std::wstring& wide { *converted.value };
+            for (wchar_t& value : wide)
                 if (value == L'/')
                     value = L'\\';
-            list += *converted.value;
+            // 긴 경로 접두어를 벗긴다. 탐색기가 넣는 목록에는 없는 꼴이라 셸 붙여넣기가 `?`라는 서버로 읽는다.
+            //  - `\\?\UNC\server\share` → `\\server\share`, `\\?\C:\a` → `C:\a`
+            if (wide.starts_with(L"\\\\?\\"))
+            {
+                if (wide.size() >= 8u && (wide[4] == L'U' || wide[4] == L'u') && (wide[5] == L'N' || wide[5] == L'n') && (wide[6] == L'C' || wide[6] == L'c') && wide[7] == L'\\')
+                    wide = L"\\\\" + wide.substr(8u);
+                else
+                    wide.erase(0u, 4u);
+            }
+            list += wide;
             list.push_back(L'\0');
         }
         // 목록의 끝은 빈 경로 하나다 (NUL 둘).
@@ -242,15 +285,17 @@ namespace luil::win32 {
         return file_clipboard_intent::copy;
     }
 
-    bool copy_files_to_clipboard(const HWND owner, const std::span<const std::u8string> paths, const file_clipboard_intent intent) noexcept
+    bool copy_files_to_clipboard(const HWND owner, const std::span<const std::u8string> paths, const file_clipboard_intent intent, const std::optional<std::uint32_t> expected_sequence) noexcept
     {
+        // 연 뒤에 번호를 본다 — 연 동안에는 아무도 바꾸지 못하므로 보고 쓰는 사이에 끼어들 틈이 없다.
+        const auto expected = [expected_sequence]() { return expected_sequence.has_value() == false || static_cast<std::uint32_t>(GetClipboardSequenceNumber()) == *expected_sequence; };
         try
         {
             // 빈 목록은 비우기다 (잘라 둔 항목을 붙여 넣은 뒤).
             if (paths.empty())
             {
                 const scoped_clipboard clipboard { owner };
-                return clipboard.open && EmptyClipboard() != FALSE;
+                return clipboard.open && expected() && EmptyClipboard() != FALSE;
             }
 
             const std::optional<std::vector<std::byte>> block { file_drop_block(paths) };
@@ -268,7 +313,7 @@ namespace luil::win32 {
             }
 
             const scoped_clipboard clipboard { owner };
-            if (clipboard.open == false)
+            if (clipboard.open == false || expected() == false)
             {
                 GlobalFree(files);
                 GlobalFree(effect_block);
@@ -300,6 +345,7 @@ namespace luil::win32 {
     file_clipboard_content read_files_from_clipboard(const HWND owner) noexcept
     {
         file_clipboard_content content {};
+        content.sequence = static_cast<std::uint32_t>(GetClipboardSequenceNumber());
         try
         {
             if (IsClipboardFormatAvailable(CF_HDROP) == FALSE)
@@ -307,6 +353,8 @@ namespace luil::win32 {
             const scoped_clipboard clipboard { owner };
             if (clipboard.open == false)
                 return content;
+            // 연 동안에는 바뀌지 않으므로 읽는 내용과 짝이 맞는 번호다.
+            content.sequence = static_cast<std::uint32_t>(GetClipboardSequenceNumber());
             if (const HANDLE handle { GetClipboardData(CF_HDROP) }; handle != nullptr)
                 content.paths = dropped_file_paths(static_cast<HDROP>(handle));
 
@@ -328,7 +376,9 @@ namespace luil::win32 {
         }
         catch (...)
         {
-            return {};
+            content.paths.clear();
+            content.intent = file_clipboard_intent::copy;
+            return content;
         }
     }
 } // namespace luil::win32

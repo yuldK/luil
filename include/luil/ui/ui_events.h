@@ -514,6 +514,11 @@ namespace luil {
     {
         std::vector<std::u8string> paths {};
         file_clipboard_intent intent { file_clipboard_intent::copy };
+        // 클립보드가 이 번호일 때만 쓴다 (`file_clipboard_content::sequence`·`clipboard_change::sequence`).
+        //  - 잘라 온 것을 옮긴 뒤 비울 때 쓴다. 옮기는 사이 사용자가 다른 것을 복사했으면 번호가 달라져 그것을 지우지
+        //    않는다.
+        //  - 비어 있으면 언제나 쓴다.
+        std::optional<std::uint32_t> expected_sequence {};
 
         [[nodiscard]] bool operator==(const clipboard_files_copy_request&) const noexcept = default;
     };
@@ -539,6 +544,9 @@ namespace luil {
         bool supported { true };
         // 요청의 표식이다.
         std::uint32_t tag { 0 };
+        // 읽은 순간의 클립보드 번호다 (Win32 `GetClipboardSequenceNumber`). 붙여 넣어 옮긴 뒤 클립보드를 비울 때
+        // `clipboard_files_copy_request::expected_sequence`로 돌려준다. 지원하지 않는 플랫폼은 0이다.
+        std::uint32_t sequence { 0 };
 
         [[nodiscard]] bool operator==(const file_clipboard_content&) const noexcept = default;
     };
@@ -551,6 +559,10 @@ namespace luil {
         bool owned { false };
         // 클립보드가 바뀔 때마다 느는 번호다 (Win32 `GetClipboardSequenceNumber`). 앞뒤 알림을 가른다.
         std::uint32_t sequence { 0 };
+        // 지금 클립보드에 파일 목록이 있는가 (Win32 `CF_HDROP`).
+        //  - `owned`만으로는 잘라 둔 파일이 남았는지 모른다. 같은 앱이 글을 복사하거나 클립보드를 비워도 임자는 이
+        //    앱이다. 잘라 둔 표시는 `owned && has_files`이고 번호가 자기가 넣은 뒤의 것일 때만 남긴다.
+        bool has_files { false };
 
         [[nodiscard]] bool operator==(const clipboard_change&) const noexcept = default;
     };
