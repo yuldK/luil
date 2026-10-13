@@ -154,7 +154,7 @@ namespace luil::win32 {
         return S_OK;
     }
 
-    HRESULT surface_drop_target::Drop(IDataObject*, DWORD, const POINTL point, DWORD* const effect)
+    HRESULT surface_drop_target::Drop(IDataObject*, const DWORD key_state, const POINTL point, DWORD* const effect)
     {
         // 여기서도 허락 집합을 먼저 읽는다 — 거절이면 놓았다고 알리지 않는다.
         // NONE은 **아무도 받지 않았을 때만** 답한다. 소비자가 이미 파일을 처리한 뒤에
@@ -165,7 +165,7 @@ namespace luil::win32 {
         if (chosen != DROPEFFECT_NONE)
         {
             const POINT client { client_point(point) };
-            if (host_->file_drag_dropped(static_cast<float>(client.x), static_cast<float>(client.y), files_) == false && effect != nullptr)
+            if (host_->file_drag_dropped(static_cast<float>(client.x), static_cast<float>(client.y), files_, key_state) == false && effect != nullptr)
                 *effect = DROPEFFECT_NONE;
         }
         files_.clear();

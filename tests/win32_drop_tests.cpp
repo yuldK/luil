@@ -191,7 +191,7 @@ namespace {
             events.push_back({ u8"left", 0.0f, 0.0f, {} });
         }
 
-        bool file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files) override
+        bool file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files, const DWORD) override
         {
             events.push_back({ u8"dropped", x, y, files });
             return open;
@@ -321,6 +321,14 @@ namespace {
     struct drop_intent
     {
         std::u8string path {};
+    };
+
+    // 놓는 순간의 수식 키다.
+    struct drop_keys_intent
+    {
+        bool control { false };
+        bool shift { false };
+        bool alt { false };
     };
 } // namespace
 
@@ -509,7 +517,7 @@ TEST_CASE("A dropped file runs the accepting element or falls back", "[win32][dr
     const std::vector<std::u8string> files { u8"C:\\a.txt" };
 
     // 수락 element 위 — on_drop의 액션이 통상 규칙으로 배분된다.
-    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, files));
+    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, files, 0));
     REQUIRE(context.dispatched.size() == 1u);
     REQUIRE(context.fallbacks.empty());
     const auto* const message { std::get_if<luil::app_message>(&context.dispatched[0]) };
@@ -518,10 +526,45 @@ TEST_CASE("A dropped file runs the accepting element or falls back", "[win32][dr
     REQUIRE(message->get<drop_intent>()->path == u8"C:\\a.txt");
 
     // 수락 element 밖 — delegate 물러섬이다.
-    REQUIRE(drops.file_drag_dropped(10.0f, 10.0f, files));
+    REQUIRE(drops.file_drag_dropped(10.0f, 10.0f, files, 0));
     REQUIRE(context.dispatched.size() == 1u);
     REQUIRE(context.fallbacks.size() == 1u);
     REQUIRE(context.fallbacks[0] == files);
+}
+
+TEST_CASE("A file dropped from another program carries the key state OLE reports", "[win32][drop]")
+{
+    // 끌어오는 동안 키보드 입력은 끄는 쪽 프로그램에 있다. 이 thread의 키 상태가 아니라 `Drop`의 키 상태가 답이다.
+    fake_surface_context context {};
+    luil::win32::window_surface surface { context };
+    auto root { std::make_unique<drop_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto target { std::make_unique<drop_panel>(luil::ui_element_id { luil::application_element_kind(0), u8"files" }) };
+    target->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    luil::drop_target accepting {};
+    accepting.accepts = [](const luil::drag_payload& payload) { return payload.files.empty() == false; };
+    accepting.on_drop = [](const luil::drag_payload&, const luil::ui_action_context& keys) -> std::vector<luil::input_action> {
+        return { luil::make_app_action(drop_keys_intent { keys.control, keys.shift, keys.alt }) };
+    };
+    target->set_drop_target(std::move(accepting));
+    root->add(std::move(target));
+    static_cast<void>(surface.set_tree(std::make_shared<const luil::ui_tree>(std::move(root))));
+
+    luil::win32::drop_target_host& drops { surface };
+    const auto keys_of = [&context](const std::size_t index) {
+        const auto* const message { std::get_if<luil::app_message>(&context.dispatched.at(index)) };
+        REQUIRE(message != nullptr);
+        REQUIRE(message->get<drop_keys_intent>() != nullptr);
+        return *message->get<drop_keys_intent>();
+    };
+    REQUIRE(drops.file_drag_dropped(20.0f, 20.0f, { u8"C:\\a.txt" }, MK_LBUTTON | MK_CONTROL));
+    REQUIRE(keys_of(0).control);
+    REQUIRE(keys_of(0).shift == false);
+    REQUIRE(keys_of(0).alt == false);
+    REQUIRE(drops.file_drag_dropped(20.0f, 20.0f, { u8"C:\\a.txt" }, MK_LBUTTON | MK_SHIFT | MK_ALT));
+    REQUIRE(keys_of(1).control == false);
+    REQUIRE(keys_of(1).shift);
+    REQUIRE(keys_of(1).alt);
 }
 
 TEST_CASE("An opaque overlay prevents a file drop from reaching the window fallback", "[win32][drop]")
@@ -550,7 +593,7 @@ TEST_CASE("An opaque overlay prevents a file drop from reaching the window fallb
     // 끄는 동안에도 같은 답이라 커서가 "받음"을 보이지 않는다.
     REQUIRE(drops.file_drag_entered(120.0f, 120.0f, { u8"C:\\a.txt" }) == false);
     REQUIRE(drops.file_drag_moved(10.0f, 10.0f) == false);
-    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, { u8"C:\\a.txt" }) == false);
+    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, { u8"C:\\a.txt" }, 0) == false);
     REQUIRE(context.dispatched.empty());
     REQUIRE(context.fallbacks.empty());
 }

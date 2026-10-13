@@ -50,7 +50,7 @@ OLE의 `DragEnter`, `DragOver`, `DragLeave`, `Drop`은 UI STA에서 동기로 �
 - clip과 visibility를 따른다.
 - 완전한 payload로 `accepts`를 부른다.
 
-대상을 찾으면 `on_drop`을 element id와 물리 client 좌표로 부른다. 결과 `input_action`은 보통의 action dispatch를 거치므로 app message, UI command, clipboard action의 thread 규칙이 유지된다.
+대상을 찾으면 `on_drop`을 element id와 물리 client 좌표로 부른다. 문맥의 수식 키(`control`·`shift`·`alt`)는 OLE가 `Drop`에 실은 키 상태(`MK_CONTROL`·`MK_SHIFT`·`MK_ALT`)다 — 다른 프로그램에서 끌어오는 동안 키보드 입력은 그쪽에 있어서, 이 thread의 `GetKeyState`는 낡은 값이다. 결과 `input_action`은 보통의 action dispatch를 거치므로 app message, UI command, clipboard action의 thread 규칙이 유지된다.
 
 `Drop` 뒤에는 hover와 drag 상태를 지우는 떠남 event도 게시한다.
 

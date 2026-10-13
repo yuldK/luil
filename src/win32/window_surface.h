@@ -232,6 +232,11 @@ namespace luil::win32 {
             return id_;
         }
 
+        // 이 창이 마우스를 잡고 있으면(누른 채 끄는 중) 커서 모양을 지금 상호작용으로 다시 맞춘다.
+        // 잡은 동안에는 `WM_SETCURSOR`가 오지 않아, 끄는 동안 바뀐 모양(잡은 모양·놓을 수 없는 자리의 금지 모양)이
+        // 누를 때의 모양에 묶인다. 새 상호작용 발행본이 올 때 부른다.
+        void refresh_captured_cursor();
+
         // 창이 아직 살아 있는지다.
         // `WM_DESTROY`가 오면 거짓이 되고 소유자가 목록에서 걷어낸다.
         // 이 표면의 웹뷰가 Win32 초점을 쥐고 있는가 (TSF 양보의 판정).
@@ -467,7 +472,7 @@ namespace luil::win32 {
         bool file_drag_entered(float x, float y, std::vector<std::u8string> files) override;
         bool file_drag_moved(float x, float y) override;
         void file_drag_left() override;
-        bool file_drag_dropped(float x, float y, const std::vector<std::u8string>& files) override;
+        bool file_drag_dropped(float x, float y, const std::vector<std::u8string>& files, DWORD key_state) override;
         // 불투명 표면이 그 자리를 가리지 않았는가 (진입·이동의 답).
         [[nodiscard]] bool file_drop_open(float x, float y) const;
         // 지금 끄는 파일이다. 이동마다 목록을 다시 받지 않으려고 진입 때 쥔다.
