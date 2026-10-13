@@ -195,6 +195,35 @@ namespace luil {
     // 거리는 유한한 양수, 시간은 양수, 그리고 스크롤 시간 창이 길게 누르기보다 짧아야 한다.
     [[nodiscard]] bool valid_touch_gesture_config(const touch_gesture_config& config) noexcept;
 
+    // 끄는 동안의 가장자리 자동 스크롤이다 (drag-auto-scroll-design.md).
+    //
+    // 끄는 포인터가 흘리는 창(`scroll_source`를 세운 컨테이너 — `scroll_area_element`·`virtual_list_element`·
+    // `list_element`·`strip_element`)의 가장자리 띠 안이나 그 밖에 있으면 그 창이 스스로 흐른다.
+    //  - 켜지는 끌기는 둘이다. drag & drop(`drag_and_drop`)과, 켠 끌기 손잡이(`pointer_drag_target::auto_scroll`)다.
+    //  - 흐름은 휠·막대와 **같은 메시지**(`scroll_source::scroll`)로 나간다. 스크롤 위치는 앱 상태다.
+    //  - 시계는 보지 않는다. 입력 pump가 `next_deadline`까지 기다렸다 `advance`로 지금 시각을 알리면 그 사이에
+    //    흐른 시간만큼 낸다 — test는 시각을 손으로 정한다.
+    struct drag_auto_scroll_config
+    {
+        // 흘리기 시작하는 가장자리 띠의 폭이다 (논리 픽셀, 창 안쪽). 창이 띠 둘보다 좁으면 반씩 나눈다.
+        float edge_band { 32.0f };
+        // 가장 빠른 속도다 (논리 픽셀/초).
+        // 띠의 안쪽 끝에서 0이고 창 가장자리에서 절반, 가장자리 밖으로 띠 폭만큼 나가면 이 값이다. 그보다 멀어도
+        // 이 값이다.
+        float maximum_speed { 1500.0f };
+        // 흐름을 내는 간격이다. 늦게 깨어나도 흐른 시간만큼 한 번에 낸다.
+        std::chrono::milliseconds interval { 16 };
+        // drag & drop 동안 켠다. 끌기 손잡이는 손잡이마다 켠다.
+        bool drag_and_drop { true };
+
+        [[nodiscard]] bool operator==(const drag_auto_scroll_config&) const noexcept = default;
+    };
+
+    // 위치 하나가 그 창의 가장자리 띠에서 내는 속도다 (논리 픽셀/초, 처음 쪽이 음수).
+    //  - `start`·`end`는 창의 그 축 양 끝(물리 픽셀), `scale`은 물리 / 논리 배율이다.
+    //  - 띠 밖(창 안쪽)이면 0이다. 창 밖으로 나가도 그쪽 끝의 속도가 이어진다.
+    [[nodiscard]] float drag_auto_scroll_speed(float position, float start, float end, float scale, const drag_auto_scroll_config& config) noexcept;
+
     // 컨텍스트 메뉴의 키보드 탐색에 필요한 kind 짝이다.
     // container가 tree에 있으면 메뉴가 열린 것으로 보고 ↑/↓/Enter/Esc를 메뉴가 가져간다.
     //  - owner는 보지 않는다. `menu_config::owner`로 구분한 메뉴도 같은 kind면 찾는다.
@@ -365,6 +394,8 @@ namespace luil {
         touch_gesture_config touch {};
         // 우클릭 동작이 없는 텍스트 칸의 길게 누름에 편집 메뉴를 연다. Android host만 켠다.
         bool text_edit_menu { false };
+        // 끄는 동안의 가장자리 자동 스크롤이다.
+        drag_auto_scroll_config auto_scroll {};
     };
 
     // 주 창 밖 표면(popup·보조 창)들의 tree다.
@@ -415,13 +446,15 @@ namespace luil {
         //  - 손잡이 조작에서 길게 누르기를 끄면 조작은 이어가고 메뉴 후보만 거둔다.
         //  - 스크롤·관성을 끄면 진행 중 관성을 멈춘다. 관성만 끄면 직접 스크롤은 이어간다.
         bool set_touch_config(const touch_gesture_config& config) noexcept;
-        // 이벤트 없이 시간이 흘러야 일어날 다음 판정의 시각이다 (터치 길게 누르기·관성 스크롤).
+        // 이벤트 없이 시간이 흘러야 일어날 다음 판정의 시각이다 (터치 길게 누르기·관성 스크롤·끄는 동안의
+        // 가장자리 자동 스크롤).
         // 없으면 기다릴 것이 없다.
         //  - controller는 시계를 조회하지 않는다. 입력 pump가 이 시각까지만 기다렸다가
         //    `advance`로 지금 시각을 알린다 — test는 시각을 손으로 정한다.
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_deadline() const noexcept;
         // 지금 시각까지 흘러 생긴 판정을 실행한다. 길게 누르기가 차면 손을 떼기 전에
-        // 우클릭 액션을 내고, 손을 뗀 뒤에는 관성 스크롤의 변화량을 낸다.
+        // 우클릭 액션을 내고, 손을 뗀 뒤에는 관성 스크롤의 변화량을 낸다. 끄는 동안 가장자리에
+        // 머물면 그 창의 스크롤과 (손잡이면) 같은 자리의 `on_move`를 낸다.
         [[nodiscard]] std::vector<input_action> advance(std::chrono::steady_clock::time_point now);
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
@@ -575,6 +608,16 @@ namespace luil {
         };
 
         [[nodiscard]] std::vector<input_action> advance_inertia(std::chrono::steady_clock::time_point now);
+        // 터치 길게 누르기·관성의 다음 판정 시각이다 (자동 스크롤을 뺀 `next_deadline`).
+        [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> gesture_deadline() const noexcept;
+        // 자동 스크롤의 다음 흐름 시각이다. 흘릴 창이 없으면 없다.
+        [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> auto_scroll_deadline() const noexcept;
+        // 끄는 포인터의 자리가 바뀌었다 (이동·끌기의 시작). 흘릴 창을 다시 정한다.
+        void track_auto_scroll(const std::u8string& surface, float x, float y, std::chrono::steady_clock::time_point time);
+        // 흐를 시각이 지났으면 흐른 시간만큼 창을 흘리고, 손잡이면 같은 자리의 `on_move`를 다시 부른다.
+        [[nodiscard]] std::vector<input_action> advance_auto_scroll(std::chrono::steady_clock::time_point now);
+        // 자동 스크롤이 매인 끌기가 끝났으면 거둔다.
+        void settle_auto_scroll() noexcept;
         [[nodiscard]] std::vector<input_action> process_touch_press(const pointer_pressed_event& event);
         [[nodiscard]] std::vector<input_action> process_touch_move(const pointer_moved_event& event);
         [[nodiscard]] std::vector<input_action> process_touch_release(const pointer_released_event& event);
@@ -792,6 +835,23 @@ namespace luil {
 
         std::optional<touch_contact> touch_ {};
         std::optional<inertial_pan> inertia_ {};
+        // 끄는 동안의 가장자리 자동 스크롤이다.
+        //  - 흘릴 창은 매 흐름마다 최신 tree에서 다시 찾는다 (관성과 같은 규칙 — 콜백을 쥐지 않는다).
+        struct auto_scroll_state
+        {
+            std::u8string surface {};
+            // 흘릴 창을 찾는 기준 element다. 손잡이면 그 손잡이, drag & drop이면 포인터 밑의 흘리는 창이고
+            // 그것이 없으면 직전 값(처음에는 끌기의 출발)이다 — 목록 위로 끌고 나가도 그 목록이 흐른다.
+            ui_element_id anchor {};
+            // 끌기 손잡이의 흐름인가 (아니면 drag & drop이다).
+            bool handle { false };
+            float x { 0.0f };
+            float y { 0.0f };
+            // 지금 흘릴 창이 있다. 없으면 기다릴 시각도 없다.
+            bool flowing { false };
+            std::chrono::steady_clock::time_point updated_at {};
+        };
+        std::optional<auto_scroll_state> auto_scroll_ {};
         struct view_drag
         {
             ui_element_id id {};
