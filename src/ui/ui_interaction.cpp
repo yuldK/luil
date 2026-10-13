@@ -468,6 +468,37 @@ namespace luil {
             return {};
         }
 
+        // 시작 거리를 둔 손잡이는 그 거리를 넘는 순간 끌기가 된다. 그 전에 떼면 클릭이다.
+        if (pointer_drag_pending_)
+        {
+            const ui_element* const target { pressed_tree != nullptr ? live_touch_handle(*pressed_tree, pressed_id_, pressed_x_, pressed_y_) : nullptr };
+            const pointer_drag_target* const handler { target != nullptr ? target->pointer_drag() : nullptr };
+            if (handler == nullptr || (handler->start_distance > 0.0f) == false)
+                // 손잡이가 사라졌다. 남은 것은 보통 누름이다 (뗌의 클릭 판정이 대상을 다시 본다).
+                pointer_drag_pending_ = false;
+            else if (distance_between(pressed_x_, pressed_y_, event.x, event.y) >= handler->start_distance)
+            {
+                pointer_drag_pending_ = false;
+                pointer_drag_id_ = pressed_id_;
+                pointer_drag_x_ = pressed_x_;
+                pointer_drag_y_ = pressed_y_;
+                pointer_drag_modifiers_ = pressed_modifiers_;
+                pointer_drag_motion_ = {};
+                // 누름은 누른 자리와 누른 순간의 수식 키다. 넘은 이동 자체도 끌기라 이어서 그 이동을 보낸다.
+                std::vector<input_action> actions {};
+                if (handler->on_press)
+                    actions = handler->on_press(action_context(pointer_drag_id_, pressed_x_, pressed_y_, pressed_modifiers_));
+                for (input_action& action : process_move(event))
+                    actions.push_back(std::move(action));
+                return actions;
+            }
+            else
+            {
+                update_hover(event.x, event.y, event.time, moved);
+                return {};
+            }
+        }
+
         // 눌린 채 임계 거리를 넘으면 클릭 대신 drag가 시작된다.
         if (drag_candidate_ && pressed_button_ == pointer_button::left && distance_between(pressed_x_, pressed_y_, event.x, event.y) >= config_.drag_start_distance)
         {
@@ -942,6 +973,7 @@ namespace luil {
             return {};
         }
         pressed_surface_ = event.surface;
+        pressed_modifiers_ = modifiers_of(event);
         pointer_contact_ = pointer_contact { event.device, event.pointer_id, event.surface, event.button };
 
         // 앱이 「어느 판을 만졌는가」를 듣는다. 이 누름의 다른 액션보다 앞선다.
@@ -1017,6 +1049,14 @@ namespace luil {
         // 스크롤 막대는 누른 순간부터 끌기가 시작된다.
         // 임계 거리를 두지 않는다.
         const pointer_drag_target* const handler { hit->pointer_drag() };
+        if (event.button == pointer_button::left && handler != nullptr && handler->start_distance > 0.0f)
+        {
+            // 시작 거리를 둔 손잡이는 그 거리를 넘을 때까지 보통 누름이다 — 떼면 클릭이다.
+            // 끌기가 이기므로 같은 element의 drag & drop 후보는 세우지 않는다.
+            pointer_drag_pending_ = true;
+            drag_candidate_ = false;
+            return actions;
+        }
         if (event.button == pointer_button::left && handler != nullptr)
         {
             pointer_drag_id_ = hit->id();
@@ -1340,6 +1380,7 @@ namespace luil {
             return {};
         }
         contact.target = hit->id();
+        pressed_modifiers_ = contact.modifiers;
         // 누름 관찰은 터치도 누르는 순간이다. 탭이 될지 스크롤이 될지는 아직 모른다.
         std::vector<input_action> actions {};
         if (policy_ != nullptr)
@@ -1352,7 +1393,9 @@ namespace luil {
         snapshot_.pressed_surface = event.surface;
 
         const pointer_drag_target* const handler { hit->pointer_drag() };
-        if (handler == nullptr)
+        // 시작 거리를 둔 손잡이는 터치 몸짓의 규칙을 따른다 — 탭·스크롤·길게 누르기가 먼저이고, 스크롤이 될 수
+        // 없게 된 뒤 허용치를 넘기면 끌기가 선다 (대기 단계의 일반 끌기 자리).
+        if (handler == nullptr || handler->start_distance > 0.0f)
         {
             touch_ = std::move(contact);
             return actions;
@@ -1572,7 +1615,33 @@ namespace luil {
                     cancel_touch();
                     return {};
                 }
-                if (source->drag() != nullptr && source->drag()->make_payload)
+                if (const pointer_drag_target* const handler { source->pointer_drag() }; handler != nullptr && handler->start_distance > 0.0f)
+                {
+                    // 시작 거리를 둔 손잡이다. 마우스처럼 누른 자리의 누름과 넘은 이동을 잇달아 보낸다.
+                    contact.phase = touch_phase::handle;
+                    contact.moved_action = true;
+                    pointer_drag_id_ = contact.target;
+                    pointer_drag_x_ = contact.start_x;
+                    pointer_drag_y_ = contact.start_y;
+                    pointer_drag_modifiers_ = pressed_modifiers_;
+                    snapshot_.pressed = contact.target;
+                    snapshot_.pressed_surface = contact.surface;
+                    // 조작이 시작됐으므로 초점은 지금 옮긴다 (누르는 즉시 시작하는 손잡이는 누를 때 옮긴다).
+                    apply_press_focus(*tree, source, contact.surface, event.time);
+                    if (handler->on_press)
+                        actions = handler->on_press(action_context(pointer_drag_id_, contact.start_x, contact.start_y, pressed_modifiers_));
+                    if (handler->on_move)
+                    {
+                        const ui_action_context previous { action_context(pointer_drag_id_, pointer_drag_x_, pointer_drag_y_, pointer_drag_modifiers_) };
+                        const ui_action_context current { action_context(pointer_drag_id_, event.x, event.y, contact.modifiers) };
+                        pointer_drag_x_ = event.x;
+                        pointer_drag_y_ = event.y;
+                        pointer_drag_modifiers_ = contact.modifiers;
+                        for (input_action& action : handler->on_move(previous, current))
+                            actions.push_back(std::move(action));
+                    }
+                }
+                else if (source->drag() != nullptr && source->drag()->make_payload)
                 {
                     const ui_action_context context { action_context(contact.target, contact.start_x, contact.start_y, contact.modifiers) };
                     snapshot_.drag = drag_visual { source->drag()->make_payload(context), event.x, event.y, {}, contact.surface };
@@ -2870,6 +2939,7 @@ namespace luil {
     void interaction_controller::clear_press() noexcept
     {
         pointer_drag_id_ = {};
+        pointer_drag_pending_ = false;
         pressed_id_ = {};
         pressed_button_ = pointer_button::none;
         pressed_surface_.clear();
