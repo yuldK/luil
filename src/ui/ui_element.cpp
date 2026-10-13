@@ -271,6 +271,11 @@ namespace luil {
         key_search_target_ = std::move(target);
     }
 
+    void ui_element::set_access_handler(access_handler handler)
+    {
+        access_handler_ = std::move(handler);
+    }
+
     bool ui_element::clip_children() const noexcept
     {
         return clip_children_;
@@ -476,11 +481,18 @@ namespace luil {
 
     std::optional<std::vector<input_action>> ui_element::access_actions(const access_request& request) const
     {
+        // 앱이 받겠다고 한 명령이 먼저다. 답하지 않으면 아래의 기본으로 물러선다.
+        if (access_handler_ != nullptr)
+            if (std::optional<std::vector<input_action>> handled { access_handler_(request) }; handled.has_value())
+                return handled;
+        // 고른 것에 더하기·빼기는 목표 상태를 나르는 명령이라 클릭(뒤집기)으로 대신하지 않는다. 받는 앱이 없으면
+        // 할 수 없는 일이다.
         // 값 정하기와 펼치기·접기는 **절대 명령**이라 기본이 없다. 클릭은
         // 뒤집기라, 오래된 발행본을 보고 흘리면 같은 명령 둘이 두 번 뒤집는다 —
         // 목표 상태를 나르는 factory를 가진 요소만 재정의로 답한다
         // (accessibility-action-design.md).
-        if (request.command == access_command::set_value || request.command == access_command::expand || request.command == access_command::collapse)
+        if (request.command == access_command::set_value || request.command == access_command::expand || request.command == access_command::collapse
+            || request.command == access_command::add_to_selection || request.command == access_command::remove_from_selection)
             return std::nullopt;
         const ui_action* const pressed { action(ui_trigger::left_click) };
         if (pressed == nullptr)

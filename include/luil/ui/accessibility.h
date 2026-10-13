@@ -2,6 +2,7 @@
 
 #include "luil/ui/ui_events.h"
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -77,6 +78,12 @@ namespace luil {
         std::u8string value {};
         // 암호 칸이다. 값은 화면처럼 가린 점이고, 보조 기술에 암호 칸으로 알린다 (UIA IsPassword).
         bool secret { false };
+        // 선택 container(`access_selection_container`)가 여러 항목을 함께 고른다.
+        //  - 켜진 container는 골라진 항목 모두를 내주고(UIA `GetSelection`), 비워 둘 수 있다 (`IsSelectionRequired`
+        //    거짓). 그 항목의 더하기·빼기·고르기가 각각 `access_command::add_to_selection`·`remove_from_selection`·
+        //    `select`로 요소에 온다 (`access_request::multiple_selection`이 참).
+        //  - 항목에는 뜻이 없다. 항목은 지금처럼 `selected`만 답한다.
+        bool multiple_selection { false };
 
         [[nodiscard]] bool operator==(const access_info&) const = default;
     };
@@ -98,6 +105,11 @@ namespace luil {
         collapse,
         // 값을 이것으로 하라.
         set_value,
+        // 이 항목을 고른 것에 더하라 / 고른 것에서 빼라 (다중 선택 container의 항목).
+        // 목표 상태를 나르는 절대 명령이다 — 이미 그 상태면 할 일이 없다. 기본 실행(클릭)이 없어 요소가
+        // 답하지 않으면 할 수 없는 일이다 (`ui_element::set_access_handler`).
+        add_to_selection,
+        remove_from_selection,
     };
 
     struct access_request
@@ -105,6 +117,11 @@ namespace luil {
         access_command command { access_command::invoke };
         // `set_value`일 때의 목표 값이다. 그 밖의 명령에는 뜻이 없다.
         float value { 0.0f };
+        // 선택 명령(`select`·`add_to_selection`·`remove_from_selection`)의 항목을 감싼 container가 여러 항목을
+        // 함께 고른다 (`access_info::multiple_selection`). 부르는 쪽(provider)이 container에 물어 싣는다.
+        //  - 참이면 `select`는 "이것 **하나만** 골라라"라 이미 골라져 있어도 요소에 간다 — 다른 항목이 함께
+        //    골라져 있을 수 있고, 그것을 아는 것은 앱이다.
+        bool multiple_selection { false };
 
         [[nodiscard]] bool operator==(const access_request&) const = default;
     };
@@ -184,9 +201,12 @@ namespace luil {
     [[nodiscard]] const ui_element* access_selection_container_of(const ui_tree& tree, const ui_element_id& id);
 
     // container의 접근 자식 중 지금 골라진 항목들이다 (발행 순서 그대로).
-    // 이 저장소의 선택은 어디서나 하나뿐이라 통상 0개 또는 1개다 — 그래도
-    // 목록으로 답하는 것은 UIA GetSelection의 모양이 그것이라서다.
+    // 단일 선택 container는 0개 또는 1개이고, 다중 선택 container(`access_info::multiple_selection`)는 골라진 것
+    // 모두다.
     [[nodiscard]] std::vector<const ui_element*> access_selected_items(const ui_element& container);
+
+    // 그 항목을 감싼 선택 container가 여러 항목을 함께 고르는가다. container가 없으면 거짓이다.
+    [[nodiscard]] bool access_multiple_selection(const ui_tree& tree, const ui_element_id& id);
 
     // 접근 tree의 발행본 하나를 편 것이다 — 접기(none)와 숨김을 지난 요소들이
     // 게시 순서(pre-order)로 늘어선다. tree는 frame마다 통째로 새로 지어지므로,
@@ -216,12 +236,22 @@ namespace luil {
     {
         // 같은 요소의 정보(이름·값·켬끔·펼침·범위 값)가 바뀌었다.
         property,
-        // 이 항목이 골라졌다. 선택이 풀리는 쪽은 알리지 않는다 — 이 저장소의
-        // 선택은 하나뿐이라 새로 골라진 항목의 알림이 곧 그 사건이다.
+        // 이 항목이 골라졌다 — 단일 선택 container에서는 새로 골라진 항목이다 (풀린 쪽은 이 알림이 말한다).
+        // 다중 선택 container에서는 이 항목 **하나만** 골라진 상태가 됐다 (UIA ElementSelected의 뜻).
         selected,
         // 이 요소(빈 id면 표면 root)의 접근 자식 구성이 바뀌었다.
         structure,
+        // 다중 선택 container의 이 항목이 고른 것에 더해졌다 / 빠졌다.
+        added_to_selection,
+        removed_from_selection,
+        // 이 다중 선택 container의 선택이 한꺼번에 많이 바뀌었다 (`access_selection_burst`보다 많이).
+        // 항목마다 알리지 않고 다시 읽으라고 한다 (UIA Selection_Invalidated).
+        selection_invalidated,
     };
+
+    // 다중 선택 container 하나의 선택 변화를 항목마다 알리는 한계다. 넘으면 `selection_invalidated` 하나다.
+    // UIA가 권하는 값(MaxSelectionChanges)과 같다.
+    inline constexpr std::size_t access_selection_burst { 20 };
 
     struct access_change
     {
@@ -237,7 +267,11 @@ namespace luil {
     };
 
     // 이전/현재 접근 발행본을 견줘 알릴 변화를 편다.
-    // 순서는 property·selected(현재 발행본의 게시 순서) 뒤에 structure다.
+    // 순서는 property·selected(현재 발행본의 게시 순서) 뒤에 다중 선택(container 차례), 그 뒤에 structure다.
+    //  - 다중 선택 container의 항목은 골라짐이 바뀐 것을 container마다 모은다. 바뀐 것이 `access_selection_burst`
+    //    보다 많으면 container의 `selection_invalidated` 하나, 지금 골라진 것이 바뀐 항목 하나뿐이고 그것이
+    //    새로 골라졌으면 그 항목의 `selected` 하나, 그 밖에는 항목마다 `added_to_selection`·`removed_from_selection`
+    //    이다. 두 발행본 모두에 있는 항목만 본다 — 들고 나는 항목은 structure가 말한다.
     //  - 역할(role)이 바뀐 요소는 다른 요소가 된 것이다 — property가 아니라
     //    부모의 structure 변화로 접는다.
     //  - 새로 나타나거나 사라진 요소도 부모의 structure 변화 하나로 접는다.

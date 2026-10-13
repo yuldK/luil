@@ -51,6 +51,8 @@ namespace luil {
 
     // 항목 키 하나를 담은 메시지다 (선택·커서 이동).
     using virtual_list_message_factory = std::function<input_action(const std::u8string& key)>;
+    // 누른 행의 키와 그 누름의 문맥이다 (수식 키 — Ctrl+클릭 더하기, Shift+클릭 범위 고르기).
+    using virtual_list_pick_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
 
     struct virtual_list_config
     {
@@ -66,6 +68,12 @@ namespace luil {
         std::vector<virtual_list_item> items {};
         // 고른 항목의 키다 (앱 상태).
         std::u8string selected {};
+        // 여러 항목을 함께 고르는 목록이다 (앱 상태). 켜면 `selection`의 키들(과 `selected`)이 고른 행으로
+        // 그려지고, 보조 기술은 다중 선택 목록으로 읽는다 (`access_info::multiple_selection`).
+        //  - 어떻게 더하고 빼는지는 앱이 정한다 — 행의 누름은 `pick`이 수식 키와 함께 받는다.
+        //  - 꺼져 있으면 `selection`은 읽지 않는다. 지금까지의 단일 선택 목록 그대로다.
+        bool multiple_selection { false };
+        std::vector<std::u8string> selection {};
         // 키보드 커서가 선 항목의 키다 (앱 상태).
         //
         // **선택과 갈라 둔다.** 화살표로 훑다가 Enter로 고르는 것과, 화살표가
@@ -109,6 +117,13 @@ namespace luil {
         //    않는다 — 목록의 빈 자리를 눌러 커서 행이 실행되는 일은 없다
         //    (`hit_test`가 목록 자신을 답하지 않는다).
         virtual_list_message_factory activate {};
+        // 행을 눌렀을 때 그 누름의 문맥까지 받는다. 있으면 `select` 대신 쓴다 (다중 선택 목록의 Ctrl·Shift+클릭).
+        //  - 커서를 함께 옮기는 것(`move`)은 `select`와 같다.
+        virtual_list_pick_factory pick {};
+        // 보조 기술이 이 항목을 고른 것에 더하라·빼라고 했다 (UIA AddToSelection·RemoveFromSelection).
+        // `multiple_selection`일 때만 쓴다. 없으면 그 명령은 할 수 없다. 고르기(Select)는 행의 누름과 같다.
+        virtual_list_message_factory add_to_selection {};
+        virtual_list_message_factory remove_from_selection {};
         // 스크롤 위치를 옮기자는 메시지다 (delta는 논리 픽셀).
         // 휠·막대·키보드 되살리기가 전부 이 하나를 쓴다 (`scroll_area_config`와 같다).
         std::function<input_action(float delta)> scroll {};

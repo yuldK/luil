@@ -8,6 +8,8 @@
 #include "include/core/SkRect.h"
 
 #include <algorithm>
+#include <string_view>
+#include <unordered_set>
 #include <utility>
 
 namespace luil {
@@ -573,12 +575,16 @@ namespace luil {
     void virtual_list_element::build_rows()
     {
         auto* const lane { static_cast<virtual_lane_element*>(lane_) };
-        const auto realize = [this, lane](const std::size_t index, const float begin) {
+        // 다중 선택의 키들이다. 모델 전체가 골라져 있어도 지어지는 행만 묻는다.
+        std::unordered_set<std::u8string_view> chosen {};
+        if (config_.multiple_selection)
+            chosen.insert(config_.selection.begin(), config_.selection.end());
+        const auto realize = [this, lane, &chosen](const std::size_t index, const float begin) {
             const virtual_list_item& item { config_.items[index] };
-            const bool selected { item.enabled && item.key == config_.selected };
+            const bool selected { item.enabled && (item.key == config_.selected || chosen.contains(item.key)) };
             const bool at_cursor { cursor_.has_value() && *cursor_ == index };
             auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor) };
-            if ((config_.select != nullptr || config_.move != nullptr) && item.enabled)
+            if ((config_.select != nullptr || config_.pick != nullptr || config_.move != nullptr) && item.enabled)
             {
                 // 누른 행은 **고르는 것이자 커서가 서는 곳**이다.
                 //
@@ -592,15 +598,28 @@ namespace luil {
                 //    액션이 실행되고(행은 tree가 사는 동안 산다), 목록을 가리키는 `this`를
                 //    잡으면 행이 목록보다 오래 살 수 없다는 사실에 기대게 된다.
                 row->set_action(ui_trigger::left_click,
-                    [key = item.key, select = config_.select, move = at_cursor ? virtual_list_message_factory {} : config_.move](const ui_action_context&) -> std::vector<input_action> {
+                    [key = item.key, select = config_.select, pick = config_.pick, move = at_cursor ? virtual_list_message_factory {} : config_.move](
+                        const ui_action_context& context) -> std::vector<input_action> {
                         std::vector<input_action> actions {};
-                        if (select != nullptr)
+                        if (pick != nullptr)
+                            actions.push_back(pick(key, context));
+                        else if (select != nullptr)
                             actions.push_back(select(key));
                         if (move != nullptr)
                             actions.push_back(move(key));
                         return actions;
                     });
             }
+            // 다중 선택의 더하기·빼기는 앱의 메시지다. 고르기는 행의 누름(기본 실행)이 맡는다.
+            if (config_.multiple_selection && item.enabled && (config_.add_to_selection != nullptr || config_.remove_from_selection != nullptr))
+                row->set_access_handler(
+                    [key = item.key, add = config_.add_to_selection, remove = config_.remove_from_selection](const access_request& request) -> std::optional<std::vector<input_action>> {
+                        if (request.command == access_command::add_to_selection && add != nullptr)
+                            return std::vector<input_action> { add(key) };
+                        if (request.command == access_command::remove_from_selection && remove != nullptr)
+                            return std::vector<input_action> { remove(key) };
+                        return std::nullopt;
+                    });
             // 기본 행의 글은 행이 **직접** 그린다.
             // `label_element`를 자식으로 두면 그 자식에게도 자리표가 필요한데, 항목
             // 키로 지으면 같은 키를 보여 주는 두 목록에서 겹치고(`duplicate_ids`),
@@ -652,6 +671,7 @@ namespace luil {
     access_info virtual_list_element::accessibility() const
     {
         access_info info { .role = access_role::list, .name = access_name() };
+        info.multiple_selection = config_.multiple_selection;
         // 커서가 선 항목의 이름을 목록의 "지금 값"으로 답한다.
         // 형제 순회는 지어진 행 안이라, 창 밖의 항목은 그 순회로 닿지 않는다 —
         // 그래서 지금 어디에 서 있는지는 목록 자신이 말해야 한다.

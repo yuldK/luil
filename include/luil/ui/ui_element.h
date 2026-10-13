@@ -136,6 +136,10 @@ namespace luil {
         return [intent = std::move(intent)](const ui_action_context&) -> std::vector<input_action> { return { make_app_action(intent) }; };
     }
 
+    // 보조 기술이 시킨 실행 하나를 이 요소의 메시지로 옮긴다 (`ui_element::set_access_handler`).
+    // 답의 규약은 `ui_element::access_actions`와 같다 — 없으면(nullopt) 기본 실행에 맡기고, 빈 목록이면 할 일이 없다.
+    using access_handler = std::function<std::optional<std::vector<input_action>>(const access_request& request)>;
+
     struct drag_payload
     {
         ui_element_id source {};
@@ -764,6 +768,11 @@ namespace luil {
         void set_pan_handoff(std::optional<pan_handoff_target> target);
         // 글자 탐색이 이 element의 모델을 묻게 한다 (가상 목록).
         void set_key_search_target(std::optional<key_search_target> target);
+        // 보조 기술이 시킨 실행을 앱 메시지로 받는다 (다중 선택 항목의 더하기·빼기·고르기 등).
+        // 기본 `access_actions`가 먼저 이것에 묻고, 답이 없으면(nullopt) 지금까지의 기본(클릭)으로 물러선다.
+        //  - `access_actions`를 재정의한 element도 처리하지 않는 명령을 기본 구현으로 넘기면 이것이 답한다.
+        //  - 할 수 있는지는 여전히 `plan_access_request`가 먼저 거른다 — 이미 그 상태인 명령은 여기 오지 않는다.
+        void set_access_handler(access_handler handler);
         void set_clip_children(bool value) noexcept;
         void set_hit_opaque(bool value) noexcept;
         // 자손들을 Tab의 한 자리로 묶는다 (탭 막대·라디오 묶음·목록).
@@ -912,6 +921,7 @@ namespace luil {
         std::optional<zoom_source> zoom_source_ {};
         std::optional<pan_handoff_target> pan_handoff_ {};
         std::optional<key_search_target> key_search_target_ {};
+        access_handler access_handler_ {};
         bool clip_children_ { false };
         bool hit_opaque_ { false };
         // 비어 있으면 액션 유무에서 판정한다 (`tab_stop`).

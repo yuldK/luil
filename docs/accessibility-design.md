@@ -96,11 +96,12 @@ Surface는 직전 published tree의 접근성 snapshot을 보관한다. `make_ac
 
 - semantic value가 바뀌면 property change
 - 항목이 새로 선택되면 selected event 하나
+- 다중 선택 container의 항목은 container마다 모아 added-to-selection·removed-from-selection event. 바뀐 끝에 하나만 골라졌으면 그 항목의 selected event 하나, 한꺼번에 `access_selection_burst`(20)보다 많이 바뀌었으면 container의 selection-invalidated event 하나
 - 구조가 바뀌면 가장 가까운 affected accessible parent의 structure change
 
-Role 변경은 structure event를 통한 교체로 취급한다. Element 추가와 제거도 parent structure event가 된다. 단일 선택의 새 selected item이 이미 상태 전환을 표현하면 별도 deselection property event를 중복 발생시키지 않는다.
+Role 변경은 structure event를 통한 교체로 취급한다. Element 추가와 제거도 parent structure event가 된다. 단일 선택의 새 selected item이 이미 상태 전환을 표현하면 별도 deselection property event를 중복 발생시키지 않는다. 두 발행본에 모두 있는 항목만 선택 event로 알린다 — 새로 지어진 가상 목록 행은 structure가 말한다.
 
-Win32 root는 이 변경을 UIA property, element-selected, structure event로 변환한다. Invoke는 snapshot으로 보이는 상태가 아닌 event이므로 해당 동작을 dispatch할 때 발생한다.
+Win32 root는 이 변경을 UIA property, element-selected, `ElementAddedToSelection`·`ElementRemovedFromSelection`·`Selection_Invalidated`, structure event로 변환한다. Invoke는 snapshot으로 보이는 상태가 아닌 event이므로 해당 동작을 dispatch할 때 발생한다.
 
 ## Foreground와 자동화 실행
 

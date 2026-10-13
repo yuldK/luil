@@ -218,6 +218,27 @@ namespace luil::win32 {
                 static_cast<void>(UiaRaiseAutomationEvent(&provider, UIA_SelectionItem_ElementSelectedEventId));
             }
 
+            void element_added_to_selection(uia_element_provider& provider) override
+            {
+                if (UiaClientsAreListening() == FALSE)
+                    return;
+                static_cast<void>(UiaRaiseAutomationEvent(&provider, UIA_SelectionItem_ElementAddedToSelectionEventId));
+            }
+
+            void element_removed_from_selection(uia_element_provider& provider) override
+            {
+                if (UiaClientsAreListening() == FALSE)
+                    return;
+                static_cast<void>(UiaRaiseAutomationEvent(&provider, UIA_SelectionItem_ElementRemovedFromSelectionEventId));
+            }
+
+            void selection_invalidated(uia_element_provider& provider) override
+            {
+                if (UiaClientsAreListening() == FALSE)
+                    return;
+                static_cast<void>(UiaRaiseAutomationEvent(&provider, UIA_Selection_InvalidatedEventId));
+            }
+
             void structure_changed(IRawElementProviderSimple& provider) override
             {
                 if (UiaClientsAreListening() == FALSE)
@@ -356,6 +377,18 @@ namespace luil::win32 {
             if (change.kind == access_change_kind::selected)
             {
                 events_->element_selected(*provider);
+                provider->Release();
+                continue;
+            }
+            // 다중 선택의 변화다 — 더하기·빼기는 항목, 한꺼번의 변화는 container가 쏜다.
+            if (change.kind == access_change_kind::added_to_selection || change.kind == access_change_kind::removed_from_selection || change.kind == access_change_kind::selection_invalidated)
+            {
+                if (change.kind == access_change_kind::added_to_selection)
+                    events_->element_added_to_selection(*provider);
+                else if (change.kind == access_change_kind::removed_from_selection)
+                    events_->element_removed_from_selection(*provider);
+                else
+                    events_->selection_invalidated(*provider);
                 provider->Release();
                 continue;
             }
@@ -1147,27 +1180,40 @@ namespace luil::win32 {
 
     HRESULT uia_element_provider::Select()
     {
-        return perform(access_request { access_command::select });
+        return perform_selection(access_command::select);
     }
 
     HRESULT uia_element_provider::AddToSelection()
     {
-        // 이 저장소의 선택은 어디서나 하나뿐이다 (라디오·탭·목록 행).
-        // 이미 골라진 것을 다시 더하는 것만 뜻이 통하고, 그 밖은 무효다 —
-        // 다중 선택 어휘가 서기 전에는 UIA도 그렇게 말한다.
-        BOOL selected { FALSE };
-        if (const HRESULT read { get_IsSelected(&selected) }; FAILED(read))
-            return read;
-        return selected != FALSE ? S_OK : UIA_E_INVALIDOPERATION;
+        // 다중 선택 container의 항목이면 앱이 받는 더하기 명령이다. 단일 선택에서는 이미 골라진 것을
+        // 다시 더하는 것만 뜻이 통하고(할 일 없음), 그 밖은 받는 앱이 없어 무효다.
+        return perform_selection(access_command::add_to_selection);
     }
 
     HRESULT uia_element_provider::RemoveFromSelection()
     {
-        // 고름을 비울 수는 없다 — 하나는 늘 골라져 있는 묶음이다.
-        BOOL selected { FALSE };
-        if (const HRESULT read { get_IsSelected(&selected) }; FAILED(read))
+        // 단일 선택은 고름을 비울 수 없다 — 골라진 것을 빼는 명령은 받는 앱이 없어 무효이고, 골라지지 않은 것을
+        // 빼는 것은 할 일이 없다. 다중 선택이면 앱이 받는 빼기 명령이다.
+        return perform_selection(access_command::remove_from_selection);
+    }
+
+    HRESULT uia_element_provider::perform_selection(const access_command command)
+    {
+        // 항목을 감싼 container가 여러 항목을 함께 고르는지를 실어 보낸다 — 고르기의 "이미 골라짐"이 그것에
+        // 따라 갈린다 (`access_request::multiple_selection`).
+        bool multiple { false };
+        const HRESULT read { guarded([&]() -> HRESULT {
+            const ui_tree* tree { nullptr };
+            if (resolve(&tree) == nullptr || tree == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            multiple = access_multiple_selection(*tree, id_);
+            return S_OK;
+        }) };
+        if (FAILED(read))
             return read;
-        return selected != FALSE ? UIA_E_INVALIDOPERATION : S_OK;
+        access_request request { command };
+        request.multiple_selection = multiple;
+        return perform(request);
     }
 
     HRESULT uia_element_provider::get_IsSelected(BOOL* result)
@@ -1355,9 +1401,14 @@ namespace luil::win32 {
         return guarded([&]() -> HRESULT {
             if (result == nullptr)
                 return E_POINTER;
-            // 이 저장소의 선택은 어디서나 하나뿐이다 (라디오·탭·목록 행).
+            // container가 다중 선택을 알렸을 때만 참이다 (`access_info::multiple_selection`).
+            // 라디오 묶음·탭 막대·보통 목록은 하나뿐이다.
             *result = FALSE;
-            return resolve() != nullptr ? S_OK : UIA_E_ELEMENTNOTAVAILABLE;
+            const ui_element* const element { resolve() };
+            if (element == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            *result = element->accessibility().multiple_selection ? TRUE : FALSE;
+            return S_OK;
         });
     }
 
@@ -1370,8 +1421,12 @@ namespace luil::win32 {
             const ui_element* const element { resolve() };
             if (element == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
-            if (access_selection_container(element->accessibility().role) == false)
+            const access_info info { element->accessibility() };
+            if (access_selection_container(info.role) == false)
                 return UIA_E_INVALIDOPERATION;
+            // 다중 선택은 모두 빼서 비울 수 있다.
+            if (info.multiple_selection)
+                return S_OK;
             // 이 저장소의 선택은 비울 수 없다 — 골라진 것을 다시 골라도 아무 일도
             // 없고 `RemoveFromSelection`은 무효다. 그래서 지금 하나가 골라져
             // 있으면 앞으로도 언제나 하나다. 아직 아무것도 고르지 않은 묶음만
