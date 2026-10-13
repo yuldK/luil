@@ -425,10 +425,13 @@ namespace luil {
     public:
         explicit interaction_controller(interaction_policy* policy = nullptr, interaction_config config = {}) noexcept;
 
-        void set_tree(std::shared_ptr<const ui_tree> tree) noexcept;
+        // 새 tree를 받는다. 마지막 포인터 자리로 hover와 끄는 동안의 놓을 자리를 다시 찾는다.
+        //  - 놓을 자리를 찾으며 앱의 콜백(`drop_target::accepts`, 가상 목록의 `accepts_drop`)을 부른다. 그것이 던지면
+        //    그대로 나간다 — 입력 pump를 감싼 host가 받아 faulted로 알린다 (`process`와 같은 길이다).
+        void set_tree(std::shared_ptr<const ui_tree> tree);
         // 주 창 밖 표면의 tree들을 통째로 바꾼다.
-        // 이벤트의 surface가 여기 없는 id면 그 이벤트는 아무것도 맞히지 않는다.
-        void set_surface_trees(surface_tree_list surfaces) noexcept;
+        // 이벤트의 surface가 여기 없는 id면 그 이벤트는 아무것도 맞히지 않는다. 예외는 `set_tree`와 같다.
+        void set_surface_trees(surface_tree_list surfaces);
         [[nodiscard]] std::vector<input_action> process(const raw_input_event& event);
         // raw 입력 큐가 넘쳐 이벤트가 잘려 나간 뒤에 부른다 (envelope.sequence의 건너뜀).
         // 유실분에 뗌·이탈 같은 상태 전이가 있었을 수 있으므로 진행 중이던
@@ -618,6 +621,8 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> advance_auto_scroll(std::chrono::steady_clock::time_point now);
         // 자동 스크롤이 매인 끌기가 끝났으면 거둔다.
         void settle_auto_scroll() noexcept;
+        // 끝에 닿아 멈춘 흐름을 새 tree로 다시 본다. 앱이 항목을 덧붙여 끝이 물러났으면 포인터가 멈춰 있어도 다시 흐른다.
+        void resume_auto_scroll();
         // 끄고 있는 손잡이의 handler다. 손잡이가 사라졌거나 덮였으면 없다 (그 끌기는 끊긴다).
         //  - 자동 스크롤을 켠 손잡이는 내용과 함께 흐르므로 누른 자리가 아니라 id·사용 가능·가둠으로 본다. 창 밖으로
         //    흘러 지어지지 않았으면(가상 목록) 흘리던 창이 남아 있는 동안 끌기를 시작할 때 쥐어 둔 handler로 잇는다.
@@ -862,6 +867,9 @@ namespace luil {
             float y { 0.0f };
             // 지금 흘릴 창이 있다. 없으면 기다릴 시각도 없다.
             bool flowing { false };
+            // 멈췄던 흐름이 새 tree로 다시 섰다. 다음 `advance`는 시계만 맞추고 흘리지 않는다 — 멈춰 있던 시간을
+            // 흐른 시간으로 셈해 한 번에 뛰지 않게 한다.
+            bool resuming { false };
             std::chrono::steady_clock::time_point updated_at {};
         };
         std::optional<auto_scroll_state> auto_scroll_ {};

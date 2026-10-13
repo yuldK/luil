@@ -107,7 +107,7 @@ namespace luil {
         return policy_->make_text_edit_action(request);
     }
 
-    void interaction_controller::set_tree(std::shared_ptr<const ui_tree> tree) noexcept
+    void interaction_controller::set_tree(std::shared_ptr<const ui_tree> tree)
     {
         tree_ = std::move(tree);
         clear_gone_surface_gestures();
@@ -128,9 +128,10 @@ namespace luil {
         if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface.empty() && tree_ != nullptr)
             update_drag(*tree_, snapshot_.drag->x, snapshot_.drag->y);
         settle_auto_scroll();
+        resume_auto_scroll();
     }
 
-    void interaction_controller::set_surface_trees(surface_tree_list surfaces) noexcept
+    void interaction_controller::set_surface_trees(surface_tree_list surfaces)
     {
         surface_trees_ = std::move(surfaces);
 
@@ -152,6 +153,7 @@ namespace luil {
             if (const ui_tree* const tree { surface_tree(snapshot_.drag->surface) }; tree != nullptr)
                 update_drag(*tree, snapshot_.drag->x, snapshot_.drag->y);
         settle_auto_scroll();
+        resume_auto_scroll();
     }
 
     void interaction_controller::clear_gone_surface_gestures() noexcept
@@ -2145,6 +2147,12 @@ namespace luil {
         if (deadline.has_value() == false || now < *deadline)
             return {};
         auto_scroll_state& state { *auto_scroll_ };
+        if (state.resuming)
+        {
+            state.resuming = false;
+            state.updated_at = now;
+            return {};
+        }
         const float seconds { std::chrono::duration<float>(now - state.updated_at).count() };
         state.updated_at = now;
         const ui_tree* const tree { surface_tree(state.surface) };
@@ -2187,6 +2195,17 @@ namespace luil {
             alive = snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface == auto_scroll_->surface;
         if (alive == false)
             auto_scroll_.reset();
+    }
+
+    void interaction_controller::resume_auto_scroll()
+    {
+        if (auto_scroll_.has_value() == false || auto_scroll_->flowing)
+            return;
+        const ui_tree* const tree { surface_tree(auto_scroll_->surface) };
+        if (tree == nullptr || auto_scroll_flows(*tree, auto_scroll_->anchor, auto_scroll_->x, auto_scroll_->y, config_.auto_scroll).empty())
+            return;
+        auto_scroll_->flowing = true;
+        auto_scroll_->resuming = true;
     }
 
     std::vector<input_action> interaction_controller::run_long_press(const touch_contact& contact, const ui_element& target, const float x, const float y)
