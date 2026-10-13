@@ -62,6 +62,7 @@
 - [Popup 앵커 표면](popup-anchor-design.md)
 - [Popup 안의 텍스트 입력과 IME](popup-ime-design.md)
 - [OS 파일 drag & drop](os-dragdrop-design.md)
+- [파일 목록 클립보드](file-clipboard-design.md)
 - [UI Automation 접근성](accessibility-design.md)
 - [접근성 동작](accessibility-action-design.md)
 - [이미지](image-design.md)

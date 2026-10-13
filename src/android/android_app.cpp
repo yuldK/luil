@@ -1450,6 +1450,10 @@ namespace luil::android {
                     execute_clipboard(*copy);
                 else if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr)
                     execute_clipboard(*paste);
+                else if (auto* const files { std::get_if<clipboard_files_copy_request>(&action) }; files != nullptr)
+                    execute_clipboard(std::move(*files));
+                else if (const auto* const read { std::get_if<clipboard_files_paste_request>(&action) }; read != nullptr)
+                    execute_clipboard(*read);
                 else if (const auto* const haptic { std::get_if<haptic_request>(&action) }; haptic != nullptr)
                     host_->perform_haptic(haptic->feedback);
             }
@@ -1457,6 +1461,21 @@ namespace luil::android {
             // 클립보드 요청이다. 붙여넣기는 그 칸의 insert 편집으로 앱에 보낸다 (Win32와 같다).
             void execute_clipboard(const clipboard_request& request)
             {
+                // 파일 목록 클립보드는 다루지 않는다 (file-clipboard-design.md). 넣기는 아무 일도 없고, 읽기는 "지원 안 함"과
+                // 빈 목록으로 답한다 — 앱이 답을 기다리다 멈추지 않게 한다.
+                if (std::holds_alternative<clipboard_files_copy_request>(request))
+                    return;
+                if (const auto* const read { std::get_if<clipboard_files_paste_request>(&request) }; read != nullptr)
+                {
+                    if (environment_.delegate == nullptr)
+                        return;
+                    file_clipboard_content content {};
+                    content.supported = false;
+                    content.tag = read->tag;
+                    if (app_message message { environment_.delegate->make_file_clipboard_message(content) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                    return;
+                }
                 if (jni_ == nullptr)
                     return;
                 const jobject context { app_->activity->javaGameActivity };

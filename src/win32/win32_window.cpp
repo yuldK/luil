@@ -694,6 +694,9 @@ namespace luil::win32 {
 
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);
+                // 클립보드가 바뀌면 앱에 알린다 (잘라 둔 항목의 표시를 거둘 때를 안다).
+                // 실패해도 알림만 없을 뿐 클립보드 읽기·쓰기는 그대로다.
+                static_cast<void>(AddClipboardFormatListener(window_));
 
                 // 초기 배치가 없으면 SW_SHOWDEFAULT로 실행한 쪽의 표시 명령을 따른다.
                 // 초기 배치가 있으면 저장 상태를 표시하면서 STARTUPINFO의
@@ -1003,7 +1006,11 @@ namespace luil::win32 {
                     set_system_accent(read_system_accent_color());
                     invalidate_all_surfaces();
                     return 0;
+                case WM_CLIPBOARDUPDATE:
+                    post_clipboard_change();
+                    return 0;
                 case WM_DESTROY:
+                    static_cast<void>(RemoveClipboardFormatListener(window_));
                     // **웹뷰가 가장 먼저다.** 웹뷰는 표면 렌더러가 소유한 visual에
                     // 붙어 있고 배출구가 `app_host`를 잡고 있어, 그 둘보다 늦게
                     // 정리되면 이미 놓인 것을 만진다.
@@ -1088,6 +1095,16 @@ namespace luil::win32 {
                 if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr)
                 {
                     execute_clipboard_request(clipboard_request { *paste });
+                    return;
+                }
+                if (auto* const files { std::get_if<clipboard_files_copy_request>(&action) }; files != nullptr)
+                {
+                    execute_clipboard_request(clipboard_request { std::move(*files) });
+                    return;
+                }
+                if (const auto* const read { std::get_if<clipboard_files_paste_request>(&action) }; read != nullptr)
+                {
+                    execute_clipboard_request(clipboard_request { *read });
                     return;
                 }
                 if (const auto* const shot { std::get_if<capture_request>(&action) }; shot != nullptr)
@@ -1323,6 +1340,29 @@ namespace luil::win32 {
                     static_cast<void>(copy_text_to_clipboard(window_, copy->text));
                     return;
                 }
+                if (const auto* const files { std::get_if<clipboard_files_copy_request>(&request) }; files != nullptr)
+                {
+                    static_cast<void>(copy_files_to_clipboard(window_, files->paths, files->intent));
+                    return;
+                }
+                if (const auto* const read { std::get_if<clipboard_files_paste_request>(&request) }; read != nullptr)
+                {
+                    // 파일이 없어도 답은 간다 — 앱은 빈 목록으로 "붙일 것이 없다"를 안다.
+                    if (host_ == nullptr || environment_.delegate == nullptr)
+                        return;
+                    file_clipboard_content content { read_files_from_clipboard(window_) };
+                    content.tag = read->tag;
+                    try
+                    {
+                        if (app_message message { environment_.delegate->make_file_clipboard_message(content) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
+                    }
+                    catch (...)
+                    {
+                        report_runtime_error(u8"The file clipboard delegate threw an exception.");
+                    }
+                    return;
+                }
                 const auto* const paste { std::get_if<clipboard_paste_request>(&request) };
                 if (paste == nullptr || host_ == nullptr || environment_.policy == nullptr)
                     return;
@@ -1342,6 +1382,23 @@ namespace luil::win32 {
                 catch (...)
                 {
                     report_runtime_error(u8"The text edit policy threw an exception.");
+                }
+            }
+
+            // 클립보드가 바뀌었다 (`WM_CLIPBOARDUPDATE`). 지금 임자가 이 창인지와 바뀐 번호를 앱에 알린다.
+            void post_clipboard_change() noexcept
+            {
+                if (host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                const clipboard_change change { GetClipboardOwner() == window_, static_cast<std::uint32_t>(GetClipboardSequenceNumber()) };
+                try
+                {
+                    if (app_message message { environment_.delegate->make_clipboard_changed_message(change) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The clipboard change delegate threw an exception.");
                 }
             }
 
