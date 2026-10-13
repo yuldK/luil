@@ -736,6 +736,11 @@ namespace luil {
         float pointer_drag_y_ { 0.0f };
         // 마지막으로 보낸 위치의 수식 키다. 다음 `on_move`의 앞 문맥과 취소의 `on_release`가 쓴다.
         modifier_keys pointer_drag_modifiers_ {};
+        // 시작 거리를 둔 끌기 손잡이(`pointer_drag_target::start_distance`)를 마우스·펜으로 눌렀고 아직 그 거리를
+        // 넘지 않았다. 대상은 `pressed_id_`다. 그 사이는 보통 누름이라 떼면 클릭이다. `clear_press`가 함께 지운다.
+        bool pointer_drag_pending_ { false };
+        // 누른 순간의 수식 키다. 시작 거리를 넘는 순간의 `on_press`가 이 값을 받는다.
+        modifier_keys pressed_modifiers_ {};
 
         // 누름이 시작된 표면이다.
         // 잡은 대상을 tree가 다시 빌드된 뒤에도 같은 표면에서 찾는다.

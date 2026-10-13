@@ -6,7 +6,7 @@ input 스레드의 [`interaction_controller`](../../include/luil/ui/ui_interacti
 
 클릭은 같은 대상·표면에서 누르고 떼는 동작이다. 비활성 element는 누름부터 제외한다. double-click은 이전 클릭의 대상·표면·시간·거리와 해당 액션을 확인한다. 텍스트 칸의 연속 클릭은 두 번이면 낱말, 세 번 이상이면 전체 선택으로 연결된다.
 
-일반 drag source는 `interaction_config::drag_start_distance`를 넘어서 움직여야 drag가 시작된다. `pointer_drag_target`은 별도로 누르는 순간 `on_press`를 실행하며 포인터가 element 밖에 나가도 `on_move`를 받는다. 텍스트 선택 drag와 OS 파일 drag도 별도 경로다. OS 파일 drop의 수락과 실행은 UI가 tree에 동기적으로 묻고 input controller는 target 강조를 게시한다.
+일반 drag source는 `interaction_config::drag_start_distance`를 넘어서 움직여야 drag가 시작된다. `pointer_drag_target`은 별도로 누르는 순간 `on_press`를 실행하며 포인터가 element 밖에 나가도 `on_move`를 받는다. `start_distance`를 두면 손잡이가 클릭과 함께 산다. 마우스·펜은 누른 자리에서 그 거리를 넘기 전에 떼면 보통 클릭·더블 클릭이고, 넘는 순간 누른 자리의 `on_press`와 넘은 이동의 `on_move`를 잇달아 받는다. 끌기가 선 뒤에는 시작 자리로 돌아와 떼도 클릭이 아니다. 터치는 탭·스크롤·길게 누르기가 먼저이고 스크롤이 될 수 없게 된 뒤에 끌기가 선다 ([터치 제스처와 펜 입력](../touch-pen-input-design.md)). 텍스트 선택 drag와 OS 파일 drag도 별도 경로다. OS 파일 drop의 수락과 실행은 UI가 tree에 동기적으로 묻고 input controller는 target 강조를 게시한다.
 
 포인터 이벤트는 장치(`pointer_device`)를 싣는다. 마우스와 펜은 위 경로를 그대로 쓰고, 펜의 배럴 버튼 접촉은 우클릭이다. 끌어 스크롤하기와 길게 누르기는 터치에만 붙는다. 터치는 한 접촉이 한 조작을 하며, 누른 뒤 시간 창 안의 빠른 쓸기는 그 축으로 흐르는 가장 안쪽 컨테이너(`interaction_policy::pan_target_at`, 기본은 `route_pan`)를 흘리고, 오래 잡았다 옮기면 일반 drag가 된다. 움직이지 않고 오래 눌렀다 떼면 우클릭 액션을 실행한다. 터치 탭의 초점과 caret은 탭이 확정된 뗌에서 옮긴다. 정상적인 뗌 없이 끝난 터치·펜 접촉은 `pointer_cancelled_event`로 액션 없이 거둔다. `interaction_policy::on_press`는 활성 element를 누른 순간의 관찰 hook이다. 세부 계약과 런타임 설정은 [터치 제스처와 펜 입력](../touch-pen-input-design.md)에 있다.
 
