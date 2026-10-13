@@ -3,6 +3,8 @@
 #include "win32/utf8.h"
 #include "win32/win32_drop.h"
 
+#include <shlobj.h>
+
 #include <cstring>
 #include <cwchar>
 #include <string>
@@ -61,6 +63,23 @@ namespace luil::win32 {
             HANDLE handle { nullptr };
             const void* memory { nullptr };
         };
+
+        // 바이트를 담은 이동 가능 블록이다. 실패하면 nullptr다.
+        [[nodiscard]] HGLOBAL global_from_bytes(const void* const data, const std::size_t bytes) noexcept
+        {
+            const HGLOBAL storage { GlobalAlloc(GMEM_MOVEABLE, bytes) };
+            if (storage == nullptr)
+                return nullptr;
+            void* const memory { GlobalLock(storage) };
+            if (memory == nullptr)
+            {
+                GlobalFree(storage);
+                return nullptr;
+            }
+            std::memcpy(memory, data, bytes);
+            GlobalUnlock(storage);
+            return storage;
+        }
     } // namespace
 
     bool copy_text_to_clipboard(const HWND owner, const std::u8string_view text) noexcept
@@ -168,6 +187,144 @@ namespace luil::win32 {
                     result = std::move(paths.front());
             }
             return first_clipboard_line(std::move(result));
+        }
+        catch (...)
+        {
+            return {};
+        }
+    }
+
+    bool absolute_clipboard_path(const std::u8string_view path) noexcept
+    {
+        const auto separator = [](const char8_t value) { return value == u8'\\' || value == u8'/'; };
+        // UNC다 (`\\server\share`, `\\?\C:\…`).
+        if (path.size() >= 3u && separator(path[0]) && separator(path[1]))
+            return true;
+        // 드라이브 절대 경로다 (`C:\`). `C:name`은 그 드라이브의 현재 폴더 기준이라 아니다.
+        const auto letter = [](const char8_t value) { return (value >= u8'A' && value <= u8'Z') || (value >= u8'a' && value <= u8'z'); };
+        return path.size() >= 3u && letter(path[0]) && path[1] == u8':' && separator(path[2]);
+    }
+
+    std::optional<std::vector<std::byte>> file_drop_block(const std::span<const std::u8string> paths)
+    {
+        std::wstring list {};
+        for (const std::u8string& path : paths)
+        {
+            if (absolute_clipboard_path(path) == false || path.find(u8'\0') != std::u8string::npos)
+                return std::nullopt;
+            utf_conversion_result<std::wstring> converted { utf8_to_utf16(path) };
+            if (converted.value.has_value() == false)
+                return std::nullopt;
+            for (wchar_t& value : *converted.value)
+                if (value == L'/')
+                    value = L'\\';
+            list += *converted.value;
+            list.push_back(L'\0');
+        }
+        // 목록의 끝은 빈 경로 하나다 (NUL 둘).
+        list.push_back(L'\0');
+
+        DROPFILES header {};
+        header.pFiles = sizeof(DROPFILES);
+        header.fWide = TRUE;
+        std::vector<std::byte> block(sizeof(DROPFILES) + list.size() * sizeof(wchar_t));
+        std::memcpy(block.data(), &header, sizeof(DROPFILES));
+        std::memcpy(block.data() + sizeof(DROPFILES), list.data(), list.size() * sizeof(wchar_t));
+        return block;
+    }
+
+    file_clipboard_intent file_clipboard_intent_of(const std::optional<DWORD> effect) noexcept
+    {
+        // 탐색기의 잘라내기는 이동만(`DROPEFFECT_MOVE`), 복사는 복사+링크다. 둘 다 허락하면 받는 쪽이 고를 수 있는
+        // 복사로 본다 — 원본을 옮겨 버리는 쪽으로 추측하지 않는다.
+        if (effect.has_value() && (*effect & DROPEFFECT_MOVE) != 0u && (*effect & DROPEFFECT_COPY) == 0u)
+            return file_clipboard_intent::cut;
+        return file_clipboard_intent::copy;
+    }
+
+    bool copy_files_to_clipboard(const HWND owner, const std::span<const std::u8string> paths, const file_clipboard_intent intent) noexcept
+    {
+        try
+        {
+            // 빈 목록은 비우기다 (잘라 둔 항목을 붙여 넣은 뒤).
+            if (paths.empty())
+            {
+                const scoped_clipboard clipboard { owner };
+                return clipboard.open && EmptyClipboard() != FALSE;
+            }
+
+            const std::optional<std::vector<std::byte>> block { file_drop_block(paths) };
+            const UINT effect_format { RegisterClipboardFormatW(preferred_drop_effect_format) };
+            if (block.has_value() == false || effect_format == 0)
+                return false;
+            const DWORD effect { intent == file_clipboard_intent::cut ? static_cast<DWORD>(DROPEFFECT_MOVE) : static_cast<DWORD>(DROPEFFECT_COPY) };
+            const HGLOBAL files { global_from_bytes(block->data(), block->size()) };
+            const HGLOBAL effect_block { files != nullptr ? global_from_bytes(&effect, sizeof(effect)) : nullptr };
+            if (effect_block == nullptr)
+            {
+                if (files != nullptr)
+                    GlobalFree(files);
+                return false;
+            }
+
+            const scoped_clipboard clipboard { owner };
+            if (clipboard.open == false)
+            {
+                GlobalFree(files);
+                GlobalFree(effect_block);
+                return false;
+            }
+            EmptyClipboard();
+            // 성공한 블록은 소유권이 시스템으로 넘어가므로 해제하지 않는다.
+            if (SetClipboardData(CF_HDROP, files) == nullptr)
+            {
+                GlobalFree(files);
+                GlobalFree(effect_block);
+                return false;
+            }
+            // 뜻이 빠지면 잘라내기가 복사로 읽힌다 — 반쪽을 남기지 않고 비운다.
+            if (SetClipboardData(effect_format, effect_block) == nullptr)
+            {
+                GlobalFree(effect_block);
+                EmptyClipboard();
+                return false;
+            }
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    file_clipboard_content read_files_from_clipboard(const HWND owner) noexcept
+    {
+        file_clipboard_content content {};
+        try
+        {
+            if (IsClipboardFormatAvailable(CF_HDROP) == FALSE)
+                return content;
+            const scoped_clipboard clipboard { owner };
+            if (clipboard.open == false)
+                return content;
+            if (const HANDLE handle { GetClipboardData(CF_HDROP) }; handle != nullptr)
+                content.paths = dropped_file_paths(static_cast<HDROP>(handle));
+
+            std::optional<DWORD> effect {};
+            if (const UINT format { RegisterClipboardFormatW(preferred_drop_effect_format) }; format != 0 && IsClipboardFormatAvailable(format) != FALSE)
+                if (const HANDLE handle { GetClipboardData(format) }; handle != nullptr)
+                {
+                    // 다른 프로세스가 만든 블록이다 — 크기를 보고 읽는다.
+                    const scoped_global_lock lock { handle };
+                    if (lock.memory != nullptr && GlobalSize(handle) >= sizeof(DWORD))
+                    {
+                        DWORD value { 0 };
+                        std::memcpy(&value, lock.memory, sizeof(DWORD));
+                        effect = value;
+                    }
+                }
+            content.intent = file_clipboard_intent_of(effect);
+            return content;
         }
         catch (...)
         {

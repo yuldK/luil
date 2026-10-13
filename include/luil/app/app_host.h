@@ -416,6 +416,10 @@ namespace luil {
         //  - 플랫폼에 출력이 없으면(`config::haptic`이 비었다) 아무 일도 없다. 사용자가 시스템에서 진동을
         //    껐으면 플랫폼이 조용히 둔다.
         void perform_haptic(haptic_feedback feedback) const noexcept;
+        // 클립보드 요청을 UI thread에 넘긴다. **어느 thread에서 불러도 된다.** logic thread가 앱 상태에서 정한
+        // 순간(골라 둔 파일의 잘라내기·복사)에 쓴다. element 액션은 같은 요청을 돌려주면 같은 길로 간다.
+        //  - 플랫폼이 클립보드 길을 꽂지 않았으면(`wake_signals::clipboard`가 비었다) 아무 일도 없다.
+        void post_clipboard_request(clipboard_request request) noexcept;
         // 권한의 지금 상태다. **어느 thread에서 불러도 된다.**
         [[nodiscard]] permission_state permission(app_permission permission) const noexcept;
         // 사용자에게 권한을 묻는다. **어느 thread에서 불러도 된다.**

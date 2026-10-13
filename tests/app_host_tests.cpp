@@ -13,6 +13,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -669,4 +670,58 @@ TEST_CASE("Permissions pass through to the platform and default to not required"
     luil::win32::app_host host { std::move(throwing), throwing_driver, nullptr };
     REQUIRE(host.permission(luil::app_permission::local_network) == luil::permission_state::denied);
     REQUIRE(host.request_permission(luil::app_permission::local_network) == false);
+}
+
+namespace {
+    // F6에 파일을 잘라내고 F7에 붙여 넣기를 청하는 정책이다.
+    class file_clipboard_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot&) override
+        {
+            if (event.key == luil::key_code::f6)
+                return { luil::input_action { luil::clipboard_files_copy_request { { u8"C:\\work\\a.txt" }, luil::file_clipboard_intent::cut } } };
+            if (event.key == luil::key_code::f7)
+                return { luil::input_action { luil::clipboard_files_paste_request { 7u } } };
+            return {};
+        }
+    };
+} // namespace
+
+TEST_CASE("File clipboard requests reach the UI thread from input actions and from any thread", "[win32][host][clipboard]")
+{
+    counting_driver driver {};
+    file_clipboard_policy policy {};
+    std::atomic<int> wakes { 0 };
+    luil::win32::app_host::config config {};
+    config.wake.clipboard = [&wakes] { wakes.fetch_add(1); };
+    {
+        luil::win32::app_host host { std::move(config), driver, &policy };
+        // input thread가 정책의 요청을 앱 inbox가 아니라 클립보드 큐로 넘긴다.
+        host.post_raw_input(luil::key_pressed_event { luil::key_code::f6 });
+        host.post_raw_input(luil::key_pressed_event { luil::key_code::f7 });
+        REQUIRE(wait_until([&] { return wakes.load() >= 2; }));
+        // logic이 아닌 아무 thread에서나 넣는다 (골라 둔 파일의 복사를 logic이 정한 순간).
+        std::thread stranger { [&host] { host.post_clipboard_request(luil::clipboard_files_copy_request { { u8"D:\\b" }, luil::file_clipboard_intent::copy }); } };
+        stranger.join();
+        REQUIRE(wakes.load() == 3);
+
+        const std::vector<luil::clipboard_request> requests { host.take_clipboard_requests() };
+        REQUIRE(requests.size() == 3u);
+        const auto* const cut { std::get_if<luil::clipboard_files_copy_request>(&requests[0]) };
+        REQUIRE(cut != nullptr);
+        REQUIRE(cut->intent == luil::file_clipboard_intent::cut);
+        REQUIRE(cut->paths == std::vector<std::u8string> { u8"C:\\work\\a.txt" });
+        const auto* const paste { std::get_if<luil::clipboard_files_paste_request>(&requests[1]) };
+        REQUIRE(paste != nullptr);
+        REQUIRE(paste->tag == 7u);
+        REQUIRE(std::get<luil::clipboard_files_copy_request>(requests[2]).intent == luil::file_clipboard_intent::copy);
+    }
+    REQUIRE(driver.pings.load() == 0);
+
+    // 클립보드 길이 없는 플랫폼에서는 아무 일도 없다.
+    counting_driver quiet {};
+    luil::win32::app_host host { luil::win32::app_host::config {}, quiet, nullptr };
+    host.post_clipboard_request(luil::clipboard_files_paste_request {});
+    REQUIRE(host.take_clipboard_requests().empty());
 }

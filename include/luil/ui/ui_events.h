@@ -495,8 +495,68 @@ namespace luil {
         [[nodiscard]] bool operator==(const clipboard_paste_request&) const noexcept = default;
     };
 
+    // 파일 목록을 클립보드에 넣는 뜻이다 (탐색기의 잘라내기·복사와 같은 규약).
+    enum class file_clipboard_intent
+    {
+        copy,
+        cut,
+    };
+
+    // 파일·폴더 절대 경로 목록을 클립보드에 넣는다 (OS 파일 관리자와 주고받는 잘라내기·복사).
+    // 실제 클립보드 접근은 UI thread의 몫이다 — 이 요청을 액션으로 돌려주거나 logic thread에서
+    // `app_host::post_clipboard_request`로 넣는다 (file-clipboard-design.md).
+    //  - 경로는 UTF-8 절대 경로다. 하나라도 절대 경로가 아니면 아무것도 넣지 않는다.
+    //  - **빈 목록은 클립보드를 비운다.** 잘라 둔 항목을 붙여 넣어 옮긴 뒤 같은 항목이 다시 붙지 않게 하는
+    //    자리다 (탐색기도 잘라내기를 붙여 넣으면 클립보드를 비운다).
+    //  - 파일을 옮기거나 지우지 않는다. 잘라내기는 받는 쪽에 "옮겨 달라"는 뜻만 싣는다.
+    //  - 지원하지 않는 플랫폼(Android)에서는 아무 일도 없다.
+    struct clipboard_files_copy_request
+    {
+        std::vector<std::u8string> paths {};
+        file_clipboard_intent intent { file_clipboard_intent::copy };
+
+        [[nodiscard]] bool operator==(const clipboard_files_copy_request&) const noexcept = default;
+    };
+
+    // 클립보드의 파일 목록을 읽어 앱 메시지로 돌려 달라는 요청이다.
+    // UI thread가 읽어 `app_delegate::make_file_clipboard_message`로 지은 메시지를 app inbox에 넣는다.
+    struct clipboard_files_paste_request
+    {
+        // 요청을 가르는 앱 정의 표식이다 (어느 폴더에 붙여 넣으려던 것인가). 답에 그대로 실린다.
+        std::uint32_t tag { 0 };
+
+        [[nodiscard]] bool operator==(const clipboard_files_paste_request&) const noexcept = default;
+    };
+
+    // 클립보드에서 읽은 파일 목록이다 (`clipboard_files_paste_request`의 답).
+    struct file_clipboard_content
+    {
+        // UTF-8 절대 경로다. 파일 목록이 없거나(글만 든 클립보드) 읽지 못하면 비어 있다.
+        std::vector<std::u8string> paths {};
+        // 넣은 쪽의 뜻이다. 뜻이 실려 있지 않으면 복사로 본다 (Win32 `Preferred DropEffect`가 없을 때).
+        file_clipboard_intent intent { file_clipboard_intent::copy };
+        // 이 플랫폼이 파일 클립보드를 다루는가. 거짓이면 `paths`는 늘 비어 있다 (Android).
+        bool supported { true };
+        // 요청의 표식이다.
+        std::uint32_t tag { 0 };
+
+        [[nodiscard]] bool operator==(const file_clipboard_content&) const noexcept = default;
+    };
+
+    // 클립보드의 내용이 바뀌었다 (이 앱이 넣은 것도 포함, `app_delegate::make_clipboard_changed_message`).
+    // 앱이 잘라 둔 항목의 표시를 거둘 때를 아는 근거다 — 다른 프로그램이 클립보드를 가져갔으면 `owned`가 거짓이다.
+    struct clipboard_change
+    {
+        // 지금 클립보드의 임자가 이 앱의 창인가 (Win32 `GetClipboardOwner`).
+        bool owned { false };
+        // 클립보드가 바뀔 때마다 느는 번호다 (Win32 `GetClipboardSequenceNumber`). 앞뒤 알림을 가른다.
+        std::uint32_t sequence { 0 };
+
+        [[nodiscard]] bool operator==(const clipboard_change&) const noexcept = default;
+    };
+
     // UI thread만 다룰 수 있는 클립보드 요청이다.
-    using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_request>;
+    using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_request, clipboard_files_copy_request, clipboard_files_paste_request>;
 
     // 지금 화면을 파일로 남긴다 (무손실 WebP).
     //
@@ -572,7 +632,8 @@ namespace luil {
     // element 액션과 interaction controller가 돌려주는 후속 조치다.
     // 액션은 상태를 직접 바꾸지 않고 이 메시지를 반환만 한다.
     // 앱 메시지는 `app_message`에 담겨 다니고 앱이 경계에서 복원한다.
-    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request, record_request, haptic_request>;
+    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request, record_request, haptic_request,
+        clipboard_files_copy_request, clipboard_files_paste_request>;
 
     // intent 하나를 액션 값으로 싸는 도우미다.
     // `input_action { app_message { intent {} } }` 3중 중첩을 대신한다.

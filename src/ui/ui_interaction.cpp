@@ -3218,6 +3218,10 @@ namespace luil {
                     execute_clipboard(clipboard_request { std::move(*copy) });
                 else if (const auto* const paste { std::get_if<clipboard_paste_request>(&action) }; paste != nullptr && execute_clipboard)
                     execute_clipboard(clipboard_request { *paste });
+                else if (auto* const files { std::get_if<clipboard_files_copy_request>(&action) }; files != nullptr && execute_clipboard)
+                    execute_clipboard(clipboard_request { std::move(*files) });
+                else if (const auto* const read { std::get_if<clipboard_files_paste_request>(&action) }; read != nullptr && execute_clipboard)
+                    execute_clipboard(clipboard_request { *read });
                 else if (const auto* const haptic { std::get_if<haptic_request>(&action) }; haptic != nullptr && execute_haptic)
                     execute_haptic(haptic->feedback);
         };

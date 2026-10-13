@@ -108,6 +108,8 @@ namespace luil {
         // 앱 UI 명령과 같은 방식으로 나른다.
         std::mutex clipboard_mutex {};
         std::vector<clipboard_request> clipboard_requests {};
+        // 큐에 넣고 UI thread를 깨우는 길이다. input thread와 `post_clipboard_request`가 함께 쓴다.
+        std::function<void(clipboard_request)> execute_clipboard {};
 
         // shutdown()이 정한 종료 예산의 마감시각이다.
         // 종료 신호 게시와 logic 처리 대기가 이 하나를 나눠 본다.
@@ -190,6 +192,7 @@ namespace luil {
                 wake();
             };
         }
+        parts.execute_clipboard = execute_clipboard;
 
         parts.initial_messages = std::move(configuration.initial_messages);
         assembly_->logic_thread = std::thread { &app_host::logic_thread_main, this };
@@ -358,6 +361,18 @@ namespace luil {
     {
         if (assembly_->haptic != nullptr)
             assembly_->haptic(feedback);
+    }
+
+    void app_host::post_clipboard_request(clipboard_request request) noexcept
+    {
+        if (assembly_->execute_clipboard == nullptr)
+            return;
+        try
+        {
+            assembly_->execute_clipboard(std::move(request));
+        }
+        catch (...)
+        {}
     }
 
     permission_state app_host::permission(const app_permission permission) const noexcept

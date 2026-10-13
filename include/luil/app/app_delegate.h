@@ -101,6 +101,22 @@ namespace luil {
             return {};
         }
 
+        // 클립보드의 파일 목록을 읽었다 (`clipboard_files_paste_request`의 답). 반환 메시지는 app inbox로 간다.
+        // 빈 메시지는 게시하지 않는다. 파일이 없거나 플랫폼이 다루지 않아도(`supported` 거짓) 답은 온다.
+        [[nodiscard]] virtual app_message make_file_clipboard_message(const file_clipboard_content& content)
+        {
+            static_cast<void>(content);
+            return {};
+        }
+
+        // 클립보드의 내용이 바뀌었다 (이 앱이 넣은 것도 포함). 반환 메시지는 app inbox로 간다.
+        // 빈 메시지는 게시하지 않는다. 지금은 Win32만 알린다 (`WM_CLIPBOARDUPDATE`).
+        [[nodiscard]] virtual app_message make_clipboard_changed_message(const clipboard_change& change)
+        {
+            static_cast<void>(change);
+            return {};
+        }
+
         // 물은 권한에 사용자가 답했다 (`app_host::request_permission`). 반환 메시지는 app inbox로 간다.
         // 빈 메시지는 게시하지 않는다. 거절도 답이다 — `denied`로 온다.
         [[nodiscard]] virtual app_message make_permission_message(app_permission permission, permission_state state)

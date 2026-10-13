@@ -1,12 +1,16 @@
 #pragma once
 
+#include "luil/ui/ui_events.h"
 #include "win32/utf8.h"
 
 #include <windows.h>
 
 #include <cstddef>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace luil::win32 {
     // 클립보드를 잡아 보는 횟수와 사이의 대기다.
@@ -54,4 +58,28 @@ namespace luil::win32 {
     //  - 여러 개를 복사했어도 **첫 경로 하나**다. 한 줄 칸이라 나머지를 담을 자리가
     //    없고, 여럿을 어떻게 잇는지(줄바꿈·쉼표·따옴표)는 앱마다 다른 정책이다.
     [[nodiscard]] std::u8string read_text_from_clipboard(HWND owner) noexcept;
+
+    // 파일 목록의 뜻을 싣는 셸 클립보드 형식의 이름이다 (`CFSTR_PREFERREDDROPEFFECT`).
+    // 잘라내기는 `DROPEFFECT_MOVE`, 복사는 `DROPEFFECT_COPY`다 (file-clipboard-design.md).
+    inline constexpr wchar_t preferred_drop_effect_format[] { L"Preferred DropEffect" };
+
+    // 클립보드에 넣을 수 있는 절대 경로인가 — 드라이브(`C:\`)나 UNC(`\\server\share`, `\\?\`)다.
+    // `/`도 구분자로 본다. 상대 경로·드라이브 상대(`C:name`)·빈 값은 아니다.
+    [[nodiscard]] bool absolute_clipboard_path(std::u8string_view path) noexcept;
+
+    // 파일 목록(`CF_HDROP`)의 블록이다 — `DROPFILES` 머리(유니코드) 뒤에 UTF-16 경로들이 NUL로 나뉘고 NUL 둘로 끝난다.
+    // 경로의 `/`는 `\`로 바꾼다. 하나라도 절대 경로가 아니거나 NUL을 담았거나 UTF-16으로 옮길 수 없으면 nullopt다.
+    //  - 순수 계산이라 test가 직접 확인한다.
+    [[nodiscard]] std::optional<std::vector<std::byte>> file_drop_block(std::span<const std::u8string> paths);
+
+    // `Preferred DropEffect` 값을 뜻으로 옮긴다. 이동만 있으면 잘라내기, 그 밖(값 없음·복사·복사+링크)은 복사다.
+    [[nodiscard]] file_clipboard_intent file_clipboard_intent_of(std::optional<DWORD> effect) noexcept;
+
+    // 파일·폴더 절대 경로 목록과 뜻을 클립보드에 넣는다 (`CF_HDROP` + `Preferred DropEffect`).
+    // 빈 목록은 클립보드를 비운다. UI thread 전용이며 성공 여부만 돌려준다.
+    [[nodiscard]] bool copy_files_to_clipboard(HWND owner, std::span<const std::u8string> paths, file_clipboard_intent intent) noexcept;
+
+    // 클립보드의 파일 목록과 뜻이다. 파일 목록이 없거나 읽지 못하면 빈 목록이고, 뜻이 없으면 복사다.
+    // 목록은 `max_dropped_paths`까지 읽는다 (파일 끌기와 같은 상한).
+    [[nodiscard]] file_clipboard_content read_files_from_clipboard(HWND owner) noexcept;
 } // namespace luil::win32
