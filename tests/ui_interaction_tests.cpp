@@ -589,6 +589,17 @@ TEST_CASE("Menu keys highlight items and escape asks the policy to close", "[ui]
     REQUIRE(actions.size() == 1u);
     REQUIRE(intent_of(actions[0])->name == u8"item");
 
+    // Ctrl·Alt가 눌린 Enter는 앱 단축키다 — 항목을 실행하지 않는다 (실행 키가 되는 것은 Shift뿐이다).
+    for (const luil::key_pressed_event& chord : { luil::key_pressed_event { luil::key_code::enter, true }, luil::key_pressed_event { luil::key_code::enter, false, false, true } })
+    {
+        actions = controller.process(chord);
+        for (const luil::input_action& action : actions)
+            REQUIRE((intent_of(action) == nullptr || intent_of(action)->name != u8"item"));
+    }
+    actions = controller.process(luil::key_pressed_event { luil::key_code::enter, false, true });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"item");
+
     // Esc는 policy의 닫기 메시지다.
     actions = controller.process(luil::key_pressed_event { luil::key_code::escape });
     REQUIRE(actions.size() == 1u);
