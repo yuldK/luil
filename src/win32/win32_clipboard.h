@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -63,12 +64,17 @@ namespace luil::win32 {
     // 잘라내기는 `DROPEFFECT_MOVE`, 복사는 `DROPEFFECT_COPY`다 (file-clipboard-design.md).
     inline constexpr wchar_t preferred_drop_effect_format[] { L"Preferred DropEffect" };
 
-    // 클립보드에 넣을 수 있는 절대 경로인가 — 드라이브(`C:\`)나 UNC(`\\server\share`, `\\?\`)다.
+    // 클립보드에 넣을 수 있는 절대 경로인가 — 드라이브(`C:\`)나 UNC(`\\server\share`)다.
     // `/`도 구분자로 본다. 상대 경로·드라이브 상대(`C:name`)·빈 값은 아니다.
+    //  - 긴 경로 접두어(`\\?\C:\…`, `\\?\UNC\server\…`)는 받는다. 블록에 넣을 때 접두어를 벗긴다
+    //    (`file_drop_block`).
+    //  - 장치 경로(`\\.\…`)와 드라이브·UNC가 아닌 긴 경로(`\\?\Volume{…}`)는 아니다. 셸 붙여넣기가 파일로 읽지
+    //    못한다.
     [[nodiscard]] bool absolute_clipboard_path(std::u8string_view path) noexcept;
 
     // 파일 목록(`CF_HDROP`)의 블록이다 — `DROPFILES` 머리(유니코드) 뒤에 UTF-16 경로들이 NUL로 나뉘고 NUL 둘로 끝난다.
-    // 경로의 `/`는 `\`로 바꾼다. 하나라도 절대 경로가 아니거나 NUL을 담았거나 UTF-16으로 옮길 수 없으면 nullopt다.
+    // 경로의 `/`는 `\`로 바꾸고 긴 경로 접두어를 벗긴다 (`\\?\C:\a` → `C:\a`, `\\?\UNC\s\a` → `\\s\a`) — 탐색기가
+    // 넣는 꼴이다. 하나라도 절대 경로가 아니거나 NUL을 담았거나 UTF-16으로 옮길 수 없으면 nullopt다.
     //  - 순수 계산이라 test가 직접 확인한다.
     [[nodiscard]] std::optional<std::vector<std::byte>> file_drop_block(std::span<const std::u8string> paths);
 
@@ -77,9 +83,10 @@ namespace luil::win32 {
 
     // 파일·폴더 절대 경로 목록과 뜻을 클립보드에 넣는다 (`CF_HDROP` + `Preferred DropEffect`).
     // 빈 목록은 클립보드를 비운다. UI thread 전용이며 성공 여부만 돌려준다.
-    [[nodiscard]] bool copy_files_to_clipboard(HWND owner, std::span<const std::u8string> paths, file_clipboard_intent intent) noexcept;
+    //  - `expected_sequence`가 있으면 클립보드를 연 뒤 번호가 그것일 때만 쓴다. 다르면 아무것도 하지 않고 거짓이다.
+    [[nodiscard]] bool copy_files_to_clipboard(HWND owner, std::span<const std::u8string> paths, file_clipboard_intent intent, std::optional<std::uint32_t> expected_sequence = std::nullopt) noexcept;
 
-    // 클립보드의 파일 목록과 뜻이다. 파일 목록이 없거나 읽지 못하면 빈 목록이고, 뜻이 없으면 복사다.
+    // 클립보드의 파일 목록과 뜻, 읽은 순간의 번호다. 파일 목록이 없거나 읽지 못하면 빈 목록이고, 뜻이 없으면 복사다.
     // 목록은 `max_dropped_paths`까지 읽는다 (파일 끌기와 같은 상한).
     [[nodiscard]] file_clipboard_content read_files_from_clipboard(HWND owner) noexcept;
 } // namespace luil::win32

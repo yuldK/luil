@@ -1342,7 +1342,7 @@ namespace luil::win32 {
                 }
                 if (const auto* const files { std::get_if<clipboard_files_copy_request>(&request) }; files != nullptr)
                 {
-                    static_cast<void>(copy_files_to_clipboard(window_, files->paths, files->intent));
+                    static_cast<void>(copy_files_to_clipboard(window_, files->paths, files->intent, files->expected_sequence));
                     return;
                 }
                 if (const auto* const read { std::get_if<clipboard_files_paste_request>(&request) }; read != nullptr)
@@ -1390,7 +1390,7 @@ namespace luil::win32 {
             {
                 if (host_ == nullptr || environment_.delegate == nullptr)
                     return;
-                const clipboard_change change { GetClipboardOwner() == window_, static_cast<std::uint32_t>(GetClipboardSequenceNumber()) };
+                const clipboard_change change { GetClipboardOwner() == window_, static_cast<std::uint32_t>(GetClipboardSequenceNumber()), IsClipboardFormatAvailable(CF_HDROP) != FALSE };
                 try
                 {
                     if (app_message message { environment_.delegate->make_clipboard_changed_message(change) }; message.empty() == false)
