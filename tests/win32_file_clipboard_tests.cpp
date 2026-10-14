@@ -100,6 +100,66 @@ TEST_CASE("Clipboard paths must be absolute drive or UNC paths", "[win32][clipbo
     REQUIRE(std::wstring { luil::win32::preferred_drop_effect_format } == std::wstring { CFSTR_PREFERREDDROPEFFECT });
 }
 
+TEST_CASE("Clipboard UNC paths require a server and share", "[win32][clipboard][files]")
+{
+    const std::vector<std::u8string> valid {
+        u8"\\\\server\\share",
+        u8"\\\\server\\share\\",
+        u8"//server/share",
+        u8"//server/share/file",
+        u8"\\\\?\\UNC\\server\\share",
+        u8"\\\\?\\UNC\\server\\share\\",
+        u8"//?/unc/server/share",
+        u8"//?/UNC/server/share/file",
+        u8"\\\\server/share\\file",
+        u8"\\\\?\\UnC/server\\share/file",
+        u8"C:\\",
+        u8"d:/",
+        u8"\\\\?\\C:\\",
+        u8"//?/D:/",
+    };
+    for (const std::u8string& path : valid)
+    {
+        CAPTURE(path);
+        REQUIRE(luil::win32::absolute_clipboard_path(path));
+        REQUIRE(luil::win32::file_drop_block(std::vector<std::u8string> { path }).has_value());
+    }
+
+    // 서버명 누락, 공유명 누락, 두 이름 사이의 빈 구성 요소다.
+    // 긴 경로에서도 같은 규칙이며, 하나라도 잘못되면 목록 전체를 거절한다.
+    const std::vector<std::u8string> invalid {
+        u8"\\\\",
+        u8"\\\\server",
+        u8"\\\\server\\",
+        u8"\\\\\\share",
+        u8"\\\\server\\\\share",
+        u8"//",
+        u8"//server",
+        u8"//server/",
+        u8"///share",
+        u8"//server//share",
+        u8"\\\\?\\UNC\\",
+        u8"\\\\?\\UNC\\server",
+        u8"\\\\?\\UNC\\server\\",
+        u8"\\\\?\\UNC\\\\share",
+        u8"\\\\?\\UNC\\server\\\\share",
+        u8"//?/UNC/",
+        u8"//?/UNC/server",
+        u8"//?/UNC/server/",
+        u8"//?/UNC//share",
+        u8"//?/UNC/server//share",
+        u8"\\\\server\\/share",
+        u8"\\\\?\\UNC\\server/\\share",
+    };
+    for (const std::u8string& path : invalid)
+    {
+        CAPTURE(path);
+        REQUIRE_FALSE(luil::win32::absolute_clipboard_path(path));
+        REQUIRE_FALSE(luil::win32::file_drop_block(std::vector<std::u8string> { path }).has_value());
+        REQUIRE_FALSE(luil::win32::file_drop_block(std::vector<std::u8string> { u8"C:\\valid.txt", path }).has_value());
+    }
+}
+
 TEST_CASE("A file drop block lists wide paths and refuses relative ones", "[win32][clipboard][files]")
 {
     const std::vector<std::u8string> paths { u8"C:\\자료\\보고서.txt", u8"D:/work/folder" };

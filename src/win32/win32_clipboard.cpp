@@ -213,11 +213,18 @@ namespace luil::win32 {
             return path.size() >= 4u && path_separator(path[0]) && path_separator(path[1]) && path[2] == mark && path_separator(path[3]);
         }
 
+        // UNC의 서버명과 공유명은 둘 다 비어 있지 않아야 한다. 공유 폴더 루트도 받는다.
+        [[nodiscard]] bool unc_path(const std::u8string_view rest) noexcept
+        {
+            const std::size_t server_end { rest.find_first_of(u8"\\/") };
+            return server_end != std::u8string_view::npos && server_end != 0u && server_end + 1u < rest.size() && path_separator(rest[server_end + 1u]) == false;
+        }
+
         // 긴 경로 접두어의 UNC 표식이다 (`\\?\UNC\server\share`).
         [[nodiscard]] bool long_unc_path(const std::u8string_view rest) noexcept
         {
             const auto upper = [](const char8_t value) { return value >= u8'a' && value <= u8'z' ? static_cast<char8_t>(value - (u8'a' - u8'A')) : value; };
-            return rest.size() >= 5u && upper(rest[0]) == u8'U' && upper(rest[1]) == u8'N' && upper(rest[2]) == u8'C' && path_separator(rest[3]) && path_separator(rest[4]) == false;
+            return rest.size() >= 4u && upper(rest[0]) == u8'U' && upper(rest[1]) == u8'N' && upper(rest[2]) == u8'C' && path_separator(rest[3]) && unc_path(rest.substr(4u));
         }
     } // namespace
 
@@ -233,8 +240,8 @@ namespace luil::win32 {
             return drive_absolute_path(rest) || long_unc_path(rest);
         }
         // UNC다 (`\\server\share`).
-        if (path.size() >= 3u && path_separator(path[0]) && path_separator(path[1]))
-            return true;
+        if (path.size() >= 2u && path_separator(path[0]) && path_separator(path[1]))
+            return unc_path(path.substr(2u));
         return drive_absolute_path(path);
     }
 
