@@ -145,7 +145,17 @@ Shutdown은 future callback을 먼저 무효화하고 event delivery function을
 
 ## 접근성
 
-Slot은 Luil UI Automation tree에서 이름 있는 group으로 나타나고 일반 focus traversal에 참여한다. Page의 접근성 subtree는 WebView2가 hosted content로 공개하며 Luil은 DOM node나 page text를 `access_info`로 복제하지 않는다.
+Slot은 Luil UI Automation tree에서 이름 있는 group으로 나타나고 일반 focus traversal에 참여한다. Luil은 DOM node나 page text를 `access_info`로 복제하지 않는다.
+
+**지금은 page의 접근성 subtree가 창의 UIA tree에 없다.** Composition hosting에서는 WebView2가 page를 창에 저절로 붙이지 않는다. Host가 `ICoreWebView2CompositionController2::get_AutomationProvider`로 얻은 provider를 자기 tree에 이어야 한다. WebView2가 provider의 host로 내세우는 숨은 자식 창(`Chrome_WidgetWin_0`)은 크기가 0이라 UIA가 창의 자식으로 훑지 않는다. 그래서 `ICoreWebView2Environment4::GetAutomationProviderForWindow`를 쓰는 `IRawElementProviderHwndOverride`만으로는 아무것도 드러나지 않는다.
+
+이 연결을 시도하고 demo에서 잰 결과는 다음과 같다(runtime 155.0.4283.62, UIA client는 System.Windows.Automation).
+
+- slot의 첫 자식으로 provider를 이으면 UIA가 그것을 자식 창의 Pane으로 합친다. Provider가 `Navigate(Parent)`와 형제를 비워 두므로 UIA가 HWND 순서로 물러선다. 그 Pane의 부모는 창 root이고 다음 형제는 창의 첫 자식이다. 그래서 slot 아래를 재귀로 훑으면 창 전체가 끝없이 되풀이된다. 이 상태는 보조 기술을 멈추게 할 수 있어 싣지 않았다.
+- Provider 자신은 `Navigate(FirstChild)`가 비어 있고 `ElementProviderFromPoint`도 답하지 않는다. Microsoft sample처럼 창의 `WM_GETOBJECT`가 이 provider를 root로 돌려줘도 자식이 없다. 격리 데스크톱과 일반 데스크톱 모두 같고, 명령줄에 `--force-renderer-accessibility`가 실린 것을 확인한 뒤에도 같다.
+- Page 내용이 provider에 실리는 조건(화면 낭독기 신호, Narrator 같은 UIA3 client의 접근 방식 등)은 아직 확인하지 못했다. Machine 전체 설정인 `SPI_SETSCREENREADER`를 바꾸는 실험은 하지 않았다.
+
+내용이 실리는 조건을 찾으면 다음 모양으로 잇는다. Provider를 얇은 fragment로 감싸 `Navigate(Parent)`는 slot, 형제는 없음, 자식·property·pattern·자리는 provider에 위임한다. 이 감싼 fragment를 slot의 `Navigate(FirstChild)`·`GetEmbeddedFragmentRoots`와 HWND override 양쪽에서 같은 것으로 돌려준다. 창 root의 `ElementProviderFromPoint`와 `GetFocus`는 slot에 닿으면 provider에 넘긴다.
 
 ## 검증
 
