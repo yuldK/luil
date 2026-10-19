@@ -4,7 +4,7 @@ Luil은 WebView2 composition controller를 Skia가 그리는 tree의 한 slot에
 
 공개 계약은 [`include/luil/app/app_host.h`](../include/luil/app/app_host.h)와 [`include/luil/ui/webview_element.h`](../include/luil/ui/webview_element.h)에 있다. Hosting은 [`src/win32/webview_host.h`](../src/win32/webview_host.h)와 [`src/win32/webview_host.cpp`](../src/win32/webview_host.cpp), layout 판단은 [`src/win32/webview_layout.h`](../src/win32/webview_layout.h)에 구현되어 있다.
 
-WebView 기능을 사용하려면 WebView2 SDK로 build해야 하며 runtime에는 Evergreen WebView2 Runtime build 2210 이상이 필요하다. Runtime이나 필요한 interface가 없으면 slot은 placeholder를 유지하고 application에 failure event를 보낸다.
+WebView 기능을 사용하려면 WebView2 SDK로 build해야 하며 runtime에는 Evergreen WebView2 Runtime build 2210 이상이 필요하다. Runtime이나 필요한 interface가 없으면 slot은 placeholder를 유지하고 application에 `creation_failed` event를 보낸다.
 
 ## Frame 계약과 reconciliation
 
@@ -97,7 +97,21 @@ Page-to-host message는 `window.chrome.webview.postMessage`에서 JSON으로 온
 
 `on_event`는 `webview_event`를 `app_message`로 바꿔 logic thread에 post한다. Event는 platform decision 뒤의 알림이다. Navigation, permission, new-window 판단은 WebView2 callback 안에서 동기적으로 해야 하므로 application policy를 미리 publish한다.
 
-Event는 navigation 시작·완료·실패·차단, 거부된 permission, 차단된 download, 수신 message, dropped event, renderer 또는 browser process failure를 포함한다.
+Event는 navigation 시작·완료·실패·차단, 거부된 permission, 차단된 download, 수신 message, dropped event, renderer 또는 browser process failure, 생성 실패를 포함한다.
+
+## 생성 실패
+
+WebView를 세우지 못하면 `creation_failed`를 WebView마다 한 번 보낸다. Application이 runtime 설치 여부와 version을 따로 조회하지 않고도 사용자에게 설치나 갱신을 안내할 수 있게 하려는 것이다. `failure`가 갈래를, `hresult`가 원인 HRESULT를, `error`가 사람이 읽는 설명을 담는다.
+
+| `failure` | 판정 | `hresult` |
+|---|---|---|
+| `runtime_missing` | Environment 생성이 `HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)`를 돌려준다. Static loader가 runtime을 찾지 못한 경우다. | 그 값 |
+| `runtime_too_old` | Browser version의 세 번째 수가 2210보다 작거나 composition controller interface가 없다. `error`에 찾은 version과 필요한 build가 있다. | 0 |
+| `environment_failed` | 그 밖의 environment 생성 실패다. User data folder에 쓸 수 없거나, 같은 folder를 다른 option의 environment가 쓰고 있는 경우가 흔하다. | 그 값, 없으면 0 |
+| `controller_failed` | Environment는 섰지만 composition controller나 core view를 얻지 못했다. | 그 값, 없으면 0 |
+| `not_built` | `LUIL_ENABLE_WEBVIEW=OFF` build의 stub host다. | 0 |
+
+Environment 생성이 동기적으로 실패하면 실패 원인을 environment에 남겨, 같은 frame에서 그 folder를 쓰는 WebView도 같은 원인을 받는다. 알림은 생성 중이던 항목이 실패로 바뀔 때만 나간다. 이미 선 WebView의 browser process가 죽은 경우는 `browser_process_failed`가 알리므로 `creation_failed`를 다시 보내지 않는다. 이 event는 page가 일으킨 것이 아니므로 rate limit을 지나지 않는다. Application이 id를 목록에서 뺐다가 다시 publish하면 다시 시도하고, 또 실패하면 또 알린다.
 
 ## Policy와 trust boundary
 
@@ -135,4 +149,4 @@ Slot은 Luil UI Automation tree에서 이름 있는 group으로 나타나고 일
 
 ## 검증
 
-[`tests/webview_element_tests.cpp`](../tests/webview_element_tests.cpp)는 slot layout, scale 보존, hit opacity, tab 동작, 접근성을 검증한다. [`tests/webview_layout_tests.cpp`](../tests/webview_layout_tests.cpp)는 clipping, occlusion, rounding, half-open pointer bounds, capture, scale을 검증한다. [`tests/webview_message_gate_tests.cpp`](../tests/webview_message_gate_tests.cpp)는 message size와 rate limit, notice 억제, zero limit, clock window를 검증한다. Runtime integration에서는 creation, navigation policy, input, IME, focus exit, monitor 간 DPI 이동, process failure, Evergreen runtime 부재도 확인해야 한다.
+[`tests/webview_element_tests.cpp`](../tests/webview_element_tests.cpp)는 slot layout, scale 보존, hit opacity, tab 동작, 접근성을 검증한다. [`tests/webview_layout_tests.cpp`](../tests/webview_layout_tests.cpp)는 clipping, occlusion, rounding, half-open pointer bounds, capture, scale을 검증한다. [`tests/webview_message_gate_tests.cpp`](../tests/webview_message_gate_tests.cpp)는 message size와 rate limit, notice 억제, zero limit, clock window를 검증한다. [`tests/webview_failure_tests.cpp`](../tests/webview_failure_tests.cpp)는 생성 실패의 갈래 판정과 runtime build 번호 읽기를 검증한다. Runtime integration에서는 creation, navigation policy, input, IME, focus exit, monitor 간 DPI 이동, process failure, Evergreen runtime 부재도 확인해야 한다.

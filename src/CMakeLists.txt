@@ -311,6 +311,8 @@ luil_add_source_filter(luil_files "win32/surface"
     win32/secondary_surface.cpp
     win32/secondary_surface.h
     "${luil_webview_host_source}"
+    win32/webview_failure.cpp
+    win32/webview_failure.h
     win32/webview_host.h
     win32/webview_layout.cpp
     win32/webview_layout.h

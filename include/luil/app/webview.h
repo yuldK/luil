@@ -62,6 +62,32 @@ namespace luil {
         // 앱이 목록에서 뺐다가 다시 실어야 새로 선다. 그동안 자리표의 placeholder가
         // 그 자리를 지킨다.
         browser_process_failed,
+        // 웹뷰를 세우지 못했다. `failure`가 갈래이고 `hresult`가 까닭, `error`가 설명이다.
+        //  - 앱이 사용자에게 런타임 설치나 갱신을 안내하는 근거다. 런타임이 있는지, 판이
+        //    무엇인지를 앱이 따로 물을 필요가 없다.
+        //  - 웹뷰마다 한 번이다. 앱이 목록에서 뺐다가 다시 실으면 다시 시도하고, 또 실패하면
+        //    또 알린다. 그동안 자리표의 placeholder가 그 자리를 지킨다.
+        //  - 상한(`maximum_events_per_second`)을 지나지 않는다 — 페이지가 일으킨 사건이 아니다.
+        creation_failed,
+    };
+
+    // 웹뷰를 세우지 못한 갈래다 (`creation_failed`).
+    enum class webview_creation_failure
+    {
+        // 실패가 아니다. `creation_failed`가 아닌 사건은 모두 이것이다.
+        none,
+        // WebView2 런타임이 설치되어 있지 않다.
+        runtime_missing,
+        // 런타임은 있지만 정책을 집행할 인터페이스가 없는 오래된 판이다
+        // (Chromium 120, SDK 1.0.2210 이전 — `webview_policy`). `error`에 찾은 판과 필요한 판이 있다.
+        runtime_too_old,
+        // 런타임은 있지만 환경을 만들지 못했다. 프로필 자리에 쓸 수 없거나 같은 자리를 다른
+        // 설정의 환경이 이미 쓰는 것이 흔한 까닭이다. `hresult`가 있으면 그것이 까닭이다.
+        environment_failed,
+        // 환경은 섰지만 이 웹뷰의 컨트롤러를 만들지 못했다.
+        controller_failed,
+        // 웹뷰를 뺀 구성(`LUIL_ENABLE_WEBVIEW=OFF`)으로 build했다. 이 실행 파일에서는 서지 않는다.
+        not_built,
     };
 
     // 사건 하나다.
@@ -78,6 +104,12 @@ namespace luil {
         std::u8string message {};
         // 실패·차단의 까닭이다. 성공한 사건에서는 비어 있다.
         std::u8string error {};
+        // 세우지 못한 갈래다 (`creation_failed`). 그 밖에는 `none`이다.
+        webview_creation_failure failure { webview_creation_failure::none };
+        // 세우지 못한 까닭의 HRESULT다 (`creation_failed`).
+        //  - 0이면 HRESULT가 없는 실패다 — 판이 낮음, 인터페이스 없음, build에 없음이 그렇다.
+        //    그 경우의 까닭은 `failure`와 `error`가 말한다.
+        std::int32_t hresult { 0 };
     };
 
     // 앱이 정하는 웹뷰 정책이다.

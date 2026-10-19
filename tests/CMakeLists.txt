@@ -290,6 +290,7 @@ add_executable(luil_tests
     tsf_input_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp
+    webview_failure_tests.cpp
     webview_layout_tests.cpp
     webview_message_gate_tests.cpp
     win32_clipboard_tests.cpp

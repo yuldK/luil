@@ -2,6 +2,7 @@
 
 #include "host/popup_reconcile.h"
 #include "win32/utf8.h"
+#include "win32/webview_failure.h"
 #include "win32/webview_message_gate.h"
 #include "win32/win32_error.h"
 
@@ -68,40 +69,6 @@ namespace luil::win32 {
             if (allowed.empty())
                 return scheme == u8"https";
             return std::find(allowed.begin(), allowed.end(), scheme) != allowed.end();
-        }
-
-        // 이 라이브러리가 기대는 가장 새 인터페이스의 런타임 판번이다 (SDK 1.0.NNNN 축).
-        //
-        // 정책을 집행하는 인터페이스가 없는 런타임은 **조용히 열린 채**로 돈다 —
-        // `ICoreWebView2_4`가 없으면 내려받기가 대화상자와 함께 진행되고,
-        // `PermissionRequestedEventArgs3`가 없으면 거절이 프로필에 남고,
-        // `NewWindowRequestedEventArgs3`가 없으면 요청이 어느 frame에서 왔는지 모른다.
-        // 그래서 그보다 오래된 런타임에서는 웹뷰를 세우지 않는다 (placeholder가 남는다).
-        // 2210은 `NewWindowRequestedEventArgs3`(SDK 1.0.2210.55, Chromium 120)이다.
-        constexpr unsigned minimum_runtime_build { 2210 };
-
-        // 브라우저 판번("152.0.4191.62")의 세 번째 수다 — SDK 판번의 세 번째 수와 같은
-        // 축이라 "1.0.NNNN의 인터페이스가 있는가"를 이것으로 판정한다. 읽지 못하면 0이다.
-        [[nodiscard]] unsigned runtime_build_number(const wil_string_scope& version) noexcept
-        {
-            if (version.value == nullptr)
-                return 0;
-            unsigned component { 0 };
-            unsigned value { 0 };
-            for (const wchar_t* cursor { version.value };; ++cursor)
-            {
-                if (*cursor >= L'0' && *cursor <= L'9')
-                {
-                    value = value * 10 + static_cast<unsigned>(*cursor - L'0');
-                    continue;
-                }
-                if (component == 2)
-                    return value;
-                if (*cursor != L'.')
-                    return 0;
-                ++component;
-                value = 0;
-            }
         }
 
         // 임자 없는 컨트롤러를 닫는다 (완료가 왔는데 항목이 없거나 다른 시작의 것일 때).
@@ -195,6 +162,11 @@ namespace luil::win32 {
         std::u8string user_data_folder {};
         creation_state state { creation_state::pending };
         ComPtr<ICoreWebView2Environment> value {};
+        // 실패했으면 그 까닭이다. 만들기가 곧바로 실패하면 그 폴더의 웹뷰는 이것을
+        // 받아 알린다 — 알릴 자리(항목)는 실패를 안 뒤에 생긴다.
+        webview_creation_failure failure { webview_creation_failure::none };
+        HRESULT result { S_OK };
+        std::u8string reason {};
     };
 
     // 살아 있는 웹뷰 하나다.
@@ -307,7 +279,9 @@ namespace luil::win32 {
         event.id = source.id;
         // 페이지가 일으킬 수 있는 사건만 상한을 지난다 (헤더의 이유).
         const bool process_failure { event.kind == webview_event_kind::render_process_failed || event.kind == webview_event_kind::browser_process_failed };
-        const bool gated { event.kind != webview_event_kind::events_dropped && process_failure == false };
+        // 세우지 못한 것은 웹뷰마다 한 번이고 페이지가 일으킨 것이 아니다.
+        const bool creation_failure { event.kind == webview_event_kind::creation_failed };
+        const bool gated { event.kind != webview_event_kind::events_dropped && process_failure == false && creation_failure == false };
         if (gated)
         {
             const webview_message_decision decision {
@@ -383,15 +357,27 @@ namespace luil::win32 {
             static_cast<void>(target.controller->Close());
     }
 
-    void webview_host::fail(const std::u8string& id, std::u8string reason)
+    void webview_host::fail(const std::u8string& id, const webview_creation_failure failure, const HRESULT result, std::u8string reason)
     {
-        static_cast<void>(reason);
         if (std::find(failed_.begin(), failed_.end(), id) == failed_.end())
             failed_.push_back(id);
         // 없애지 않는다 — 다음 대조가 없앤다 (헤더의 이유). 실패한 항목은 더는 자리를
         // 받지도 포인터를 갖지도 않는다 (`state`를 보는 자리들).
-        if (entry* const target { find(id) }; target != nullptr)
-            target->state = creation_state::failed;
+        entry* const target { find(id) };
+        if (target == nullptr)
+            return;
+        // 서는 중에 실패한 것만 알린다. 이미 섰다가 무너진 것(브라우저 프로세스)은
+        // 그 자리에서 제 사건으로 알렸고, 같은 id의 두 번째 실패는 이미 알린 것이다.
+        const bool announce { target->state == creation_state::pending && failure != webview_creation_failure::none };
+        target->state = creation_state::failed;
+        if (announce == false)
+            return;
+        webview_event event {};
+        event.kind = webview_event_kind::creation_failed;
+        event.error = std::move(reason);
+        event.failure = failure;
+        event.hresult = static_cast<std::int32_t>(result);
+        report(*target, std::move(event), 0);
     }
 
     webview_host::environment* webview_host::acquire_environment(const std::u8string& user_data_folder)
@@ -418,6 +404,8 @@ namespace luil::win32 {
         if (folder.value.has_value() == false)
         {
             slot->state = creation_state::failed;
+            slot->failure = webview_creation_failure::environment_failed;
+            slot->reason = u8"The WebView2 user data folder is not valid UTF-8.";
             return slot;
         }
 
@@ -436,7 +424,13 @@ namespace luil::win32 {
                 }).Get()),
         };
         if (FAILED(begun))
+        {
+            // 런타임이 없으면 여기서 곧바로 돌아온다 (로더가 런타임을 찾지 못한다).
             slot->state = creation_state::failed;
+            slot->failure = webview_environment_failure_for(begun);
+            slot->result = begun;
+            slot->reason = webview_environment_failure_message(begun);
+        }
         return slot;
     }
 
@@ -449,24 +443,29 @@ namespace luil::win32 {
         if (slot == nullptr)
             return;
 
-        // 이 폴더를 쓰던 것은 전부 못 선다.
-        const auto fail_all = [this, &user_data_folder, slot](std::u8string reason) {
+        // 이 폴더를 쓰던 것은 전부 못 선다. 까닭은 환경에 남겨 이 뒤에 실리는 것도 받는다.
+        const auto fail_all = [this, &user_data_folder, slot](const webview_creation_failure failure, const HRESULT failed_result, std::u8string reason) {
             slot->state = creation_state::failed;
+            slot->failure = failure;
+            slot->result = failed_result;
+            slot->reason = std::move(reason);
             for (const std::unique_ptr<entry>& candidate : entries_)
                 if (candidate->user_data_folder == user_data_folder && candidate->state == creation_state::pending)
-                    fail(candidate->id, reason);
+                    fail(candidate->id, slot->failure, slot->result, slot->reason);
         };
         if (FAILED(result) || created == nullptr)
         {
-            fail_all(make_hresult_error(u8"Failed to create the WebView2 environment", result));
+            // 성공을 돌려주고 환경을 주지 않은 것도 실패다. 그때 HRESULT는 까닭이 아니다.
+            const HRESULT failed_result { FAILED(result) ? result : E_UNEXPECTED };
+            fail_all(webview_environment_failure_for(failed_result), failed_result, webview_environment_failure_message(failed_result));
             return;
         }
-        // 정책을 집행할 인터페이스가 없는 런타임에서는 세우지 않는다 (`minimum_runtime_build`).
+        // 정책을 집행할 인터페이스가 없는 런타임에서는 세우지 않는다 (`minimum_webview_runtime_build`).
         wil_string_scope version {};
         static_cast<void>(created->get_BrowserVersionString(&version.value));
-        if (runtime_build_number(version) < minimum_runtime_build)
+        if (webview_runtime_build_number(version.value) < minimum_webview_runtime_build)
         {
-            fail_all(u8"The WebView2 runtime is too old to enforce the webview policy.");
+            fail_all(webview_creation_failure::runtime_too_old, S_OK, webview_runtime_too_old_message(version.value));
             return;
         }
 
@@ -498,7 +497,7 @@ namespace luil::win32 {
         ComPtr<ICoreWebView2Environment3> environment3 {};
         if (FAILED(slot->value.As(&environment3)) || environment3 == nullptr)
         {
-            fail(id, u8"This WebView2 runtime has no composition controller.");
+            fail(id, webview_creation_failure::runtime_too_old, S_OK, u8"This WebView2 runtime has no composition controller.");
             return;
         }
 
@@ -516,7 +515,7 @@ namespace luil::win32 {
                 }).Get()),
         };
         if (FAILED(begun))
-            fail(id, make_hresult_error(u8"Failed to start the WebView2 controller", begun));
+            fail(id, webview_creation_failure::controller_failed, begun, make_hresult_error(u8"Failed to start the WebView2 controller", begun));
     }
 
     void webview_host::finish_controller(const std::u8string& id, const std::uint64_t serial, const HRESULT result, ICoreWebView2CompositionController* const created)
@@ -533,7 +532,7 @@ namespace luil::win32 {
         target->starting = false;
         if (FAILED(result) || created == nullptr)
         {
-            fail(id, make_hresult_error(u8"Failed to create the WebView2 controller", result));
+            fail(id, webview_creation_failure::controller_failed, result, make_hresult_error(u8"Failed to create the WebView2 controller", result));
             return;
         }
         // 늦게 온 두 번째 완료는 버린다 (번호가 같을 수는 없지만, 안전망은 남긴다).
@@ -546,12 +545,12 @@ namespace luil::win32 {
         target->composition_controller = created;
         if (FAILED(created->QueryInterface(IID_PPV_ARGS(&target->controller))) || target->controller == nullptr)
         {
-            fail(id, u8"The WebView2 composition controller has no controller interface.");
+            fail(id, webview_creation_failure::controller_failed, S_OK, u8"The WebView2 composition controller has no controller interface.");
             return;
         }
         if (FAILED(target->controller->get_CoreWebView2(&target->view)) || target->view == nullptr)
         {
-            fail(id, u8"The WebView2 controller has no core view.");
+            fail(id, webview_creation_failure::controller_failed, S_OK, u8"The WebView2 controller has no core view.");
             return;
         }
 
@@ -851,7 +850,7 @@ namespace luil::win32 {
                     // 같은 환경에서 새 웹뷰를 만들면 새 브라우저 프로세스가 선다).
                     // 없애는 것은 다음 대조다 — 이 콜백을 부른 객체를 여기서 놓지 않는다.
                     self->report(*target_entry, webview_event_kind::browser_process_failed, {}, u8"browser process exited");
-                    self->fail(key, u8"The WebView2 browser process exited.");
+                    self->fail(key, webview_creation_failure::none, S_OK, u8"The WebView2 browser process exited.");
                 }
                 return S_OK;
             }).Get(),
@@ -1012,6 +1011,8 @@ namespace luil::win32 {
             created->user_data_folder = want.user_data_folder;
             created->policy = want.policy;
             created->window = sources[index].window;
+            // 아래 대조 끝에서도 다시 받지만, 환경이 곧바로 실패하면 그 전에 알려야 한다.
+            created->on_event = want.on_event;
             if (composition != nullptr)
                 static_cast<void>(composition->CreateVisual(&created->visual));
             entry* const slot { created.get() };
@@ -1020,7 +1021,7 @@ namespace luil::win32 {
             const environment* const owner { acquire_environment(want.user_data_folder) };
             if (owner != nullptr && owner->state == creation_state::failed)
             {
-                fail(want.id, u8"The WebView2 environment is unavailable.");
+                fail(want.id, owner->failure, owner->result, owner->reason);
                 continue;
             }
             begin_controller(*slot, sources[index].window);
