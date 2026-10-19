@@ -6,6 +6,7 @@
 
 namespace luil::win32 {
     using luil::ui_webview;
+    using luil::webview_creation_failure;
     using luil::webview_event;
     using luil::webview_event_kind;
     using luil::webview_policy;

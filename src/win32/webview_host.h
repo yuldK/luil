@@ -163,7 +163,9 @@ namespace luil::win32 {
         // `entries_`를 줄이면 콜백을 부른 객체와 돌고 있는 순회를 발밑에서 빼는
         // 일이다. 다음 `synchronize`가 실패한 항목을 대조로 없앤다.
         //  - 앱이 목록에서 뺄 때까지 다시 만들지 않는다 (`synchronize`).
-        void fail(const std::u8string& id, std::u8string reason);
+        //  - 서는 중이던 항목이면 `creation_failed`로 알린다. `failure`가 `none`이면
+        //    알리지 않는다 — 이미 선 것이 무너진 일은 그 자리의 사건이 알린다.
+        void fail(const std::u8string& id, webview_creation_failure failure, HRESULT result, std::u8string reason);
         // 비동기 만들기의 완료 자리다. 메시지 pump가 이 thread로 돌려준다.
         void finish_environment(const std::u8string& user_data_folder, HRESULT result, ICoreWebView2Environment* created);
         // `serial`은 이 완료가 답하는 시작의 번호다. 시작과 완료 사이에 같은 id가
@@ -190,7 +192,7 @@ namespace luil::win32 {
         // 컨트롤러 만들기의 시작 번호다 (`finish_controller`의 `serial`).
         std::uint64_t creation_serial_ { 0 };
         // 만들다 실패한 id다. 목록에 남아 있는 한 매 frame 생성→실패가 반복되므로
-        // 기억해 건너뛴다 (popup·보조 창과 같은 규칙).
+        // 기억해 건너뛴다 (popup·보조 창과 같은 규칙). stub에서는 알린 id다.
         std::vector<std::u8string> failed_ {};
     };
 } // namespace luil::win32

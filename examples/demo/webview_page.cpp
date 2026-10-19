@@ -67,6 +67,8 @@ namespace demo {
                 return u8"렌더러 죽음";
             case webview_event_kind::browser_process_failed:
                 return u8"브라우저 죽음";
+            case webview_event_kind::creation_failed:
+                return u8"세우지 못함";
             }
             return u8"?";
         }
