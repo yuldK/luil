@@ -60,7 +60,7 @@ namespace {
     };
 
     // offset_at·text_input을 내주는 최소 텍스트 박스다.
-    class test_text_input final : public luil::ui_element
+    class test_text_input : public luil::ui_element
     {
     public:
         test_text_input(luil::ui_element_id id, std::u8string text, const std::size_t caret, const std::size_t anchor, const bool secret = false)
@@ -108,6 +108,27 @@ namespace {
         std::size_t caret_ { 0 };
         std::size_t anchor_ { 0 };
         bool secret_ { false };
+    };
+
+    class test_multiline_text_input final : public test_text_input
+    {
+    public:
+        explicit test_multiline_text_input(luil::ui_element_id id)
+            : test_text_input { std::move(id), u8"abcdef\nghijkl", 0u, 0u }
+        {}
+
+        [[nodiscard]] std::optional<std::size_t> offset_at_point(const float x, const float y, const luil::text_measurer& measurer) const override
+        {
+            const std::size_t column { std::min(*offset_at(x, measurer), std::size_t { 6 }) };
+            return (y < bounds().y + 20.0f ? 0u : 7u) + column;
+        }
+
+        [[nodiscard]] std::optional<luil::text_input_snapshot> text_input() const override
+        {
+            auto snapshot { test_text_input::text_input() };
+            snapshot->multiline = true;
+            return snapshot;
+        }
     };
 
     // 라우팅 호출을 기록하는 policy다.
@@ -381,6 +402,90 @@ TEST_CASE("A focused text input consumes characters and editing keys through the
     const auto* const paste { std::get_if<luil::clipboard_paste_request>(&actions[0]) };
     REQUIRE(paste != nullptr);
     REQUIRE(paste->target == query_target);
+    REQUIRE(paste->multiline == false);
+
+    actions = controller.process(luil::key_pressed_event { luil::key_code::insert, false, true });
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(std::get<luil::clipboard_paste_request>(actions[0]) == luil::clipboard_paste_request { query_target });
+}
+
+TEST_CASE("Multiline caret placement uses both pointer coordinates", "[ui][interaction][text][multiline]")
+{
+    recording_policy policy {};
+    luil::interaction_config config {};
+    config.text_edit_menu = true;
+    luil::interaction_controller controller { &policy, config };
+    auto input { std::make_unique<test_multiline_text_input>(luil::ui_element_id { kind_query_input }) };
+    input->arrange({ { 20.0f, 40.0f, 160.0f, 40.0f }, 1.0f });
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(input)));
+
+    SECTION("A mouse press and selection drag reach different lines at the same x")
+    {
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, 50.0f, luil::pointer_button::left, at(0) }));
+        REQUIRE(policy.last_edit.command == luil::text::text_edit_command::place_caret);
+        REQUIRE(policy.last_edit.offset == 3u);
+        REQUIRE(policy.last_edit.extend == false);
+        static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, 70.0f, at(20) }));
+        REQUIRE(policy.last_edit.offset == 10u);
+        REQUIRE(policy.last_edit.extend);
+        static_cast<void>(controller.process(luil::pointer_released_event { 50.0f, 70.0f, luil::pointer_button::left, at(40) }));
+
+        luil::pointer_pressed_event shift_press { 50.0f, 50.0f, luil::pointer_button::left, at(1000) };
+        shift_press.shift = true;
+        static_cast<void>(controller.process(shift_press));
+        REQUIRE(policy.last_edit.offset == 3u);
+        REQUIRE(policy.last_edit.extend);
+    }
+    SECTION("A double click selects a word on the clicked line")
+    {
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, 70.0f, luil::pointer_button::left, at(0) }));
+        static_cast<void>(controller.process(luil::pointer_released_event { 50.0f, 70.0f, luil::pointer_button::left, at(20) }));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, 70.0f, luil::pointer_button::left, at(100) }));
+        REQUIRE(policy.last_edit.command == luil::text::text_edit_command::select_word);
+        REQUIRE(policy.last_edit.offset == 10u);
+    }
+    SECTION("A touch tap places the caret on the released line")
+    {
+        luil::pointer_pressed_event press { 50.0f, 70.0f, luil::pointer_button::left, at(0) };
+        press.device = luil::pointer_device::touch;
+        static_cast<void>(controller.process(press));
+        REQUIRE(policy.edit_count == 0);
+        luil::pointer_released_event release { 50.0f, 70.0f, luil::pointer_button::left, at(20) };
+        release.device = luil::pointer_device::touch;
+        static_cast<void>(controller.process(release));
+        REQUIRE(policy.last_edit.command == luil::text::text_edit_command::place_caret);
+        REQUIRE(policy.last_edit.offset == 10u);
+    }
+    SECTION("A long press selects a word on the pressed line")
+    {
+        luil::pointer_pressed_event press { 50.0f, 70.0f, luil::pointer_button::left, at(0) };
+        press.device = luil::pointer_device::touch;
+        static_cast<void>(controller.process(press));
+        const auto actions { controller.advance(at(600)) };
+        REQUIRE(policy.last_edit.command == luil::text::text_edit_command::select_word);
+        REQUIRE(policy.last_edit.offset == 10u);
+        REQUIRE(std::get<luil::ui_command>(actions.back()) == luil::ui_command::text_edit_menu);
+    }
+}
+
+TEST_CASE("Multiline text inputs pass their paste policy to clipboard requests", "[ui][interaction][text][multiline]")
+{
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    auto input { std::make_unique<test_multiline_text_input>(luil::ui_element_id { kind_query_input }) };
+    input->arrange({ { 20.0f, 40.0f, 160.0f, 40.0f }, 1.0f });
+    controller.set_surface_trees({ { u8"editor", std::make_shared<const luil::ui_tree>(std::move(input)) } });
+    luil::pointer_pressed_event press { 50.0f, 70.0f, luil::pointer_button::left, at(0) };
+    press.surface = u8"editor";
+    static_cast<void>(controller.process(press));
+    REQUIRE(controller.snapshot().focused_surface == u8"editor");
+
+    for (const auto& key : { luil::key_pressed_event { luil::key_code::key_v, true }, luil::key_pressed_event { luil::key_code::insert, false, true } })
+    {
+        const auto actions { controller.process(key) };
+        REQUIRE(actions.size() == 1u);
+        REQUIRE(std::get<luil::clipboard_paste_request>(actions[0]) == luil::clipboard_paste_request { query_target, true });
+    }
 }
 
 TEST_CASE("Text editing separates primary shortcuts from word navigation", "[ui][interaction][text][events]")

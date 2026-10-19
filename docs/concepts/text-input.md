@@ -12,6 +12,10 @@
 
 포인터 x를 UTF-8 byte offset으로 바꾸는 `offset_at()`은 배치에 사용한 글꼴과 측정기, 가로 스크롤을 동일하게 사용해야 한다. `text_measurer`만 주입받으므로 입력 controller도 픽셀 계산을 공유할 수 있다. `scroll_for()`는 caret이 보이는 최소 이동량을 순수 함수로 계산한다.
 
+여러 줄을 그리는 커스텀 element는 `offset_at_point(x, y, measurer)`를 재정의해 줄 높이와 세로 스크롤까지 반영한 UTF-8 byte offset을 반환한다. 좌표는 element가 속한 창의 물리 픽셀이다. 클릭·드래그 선택·터치 탭·길게 누르기는 이 함수를 사용하며, 기본 구현은 y를 무시하고 기존 `offset_at(x, measurer)`를 호출한다.
+
+여러 줄 붙여넣기를 허용하는 element는 `text_input()`이 반환하는 `text_input_snapshot::multiline`을 참으로 둔다. Ctrl+V·Shift+Insert와 Android 편집 메뉴는 이 값을 `clipboard_paste_request::multiline`로 전달한다. 직접 붙여넣기 요청을 만드는 앱도 이 플래그를 지정할 수 있다. Windows는 참일 때 줄바꿈과 탭을 보존하고, 기본값인 거짓일 때는 기존처럼 첫 줄바꿈이나 탭 앞까지만 넣는다. Android 클립보드 읽기는 기존처럼 원문을 보존한다. 이 플래그는 IME의 줄바꿈 처리나 기본 `text_input_element`의 그리기를 바꾸지 않는다.
+
 ```cpp
 struct text_input_view
 {

@@ -470,6 +470,11 @@ namespace luil {
         return std::nullopt;
     }
 
+    std::optional<std::size_t> ui_element::offset_at_point(const float x, float, const text_measurer& measurer) const
+    {
+        return offset_at(x, measurer);
+    }
+
     std::optional<text_input_snapshot> ui_element::text_input() const
     {
         return std::nullopt;

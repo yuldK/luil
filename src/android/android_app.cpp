@@ -1169,7 +1169,7 @@ namespace luil::android {
                         dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *target, .command = text::text_edit_command::cut }));
                 }
                 else if (key == u8"paste")
-                    execute_clipboard(clipboard_paste_request { *target });
+                    execute_clipboard(clipboard_paste_request { *target, value->multiline });
                 else if (key == u8"all")
                 {
                     dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *target, .command = text::text_edit_command::select_all }));

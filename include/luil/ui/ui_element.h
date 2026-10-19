@@ -122,6 +122,8 @@ namespace luil {
         bool secret { false };
         // Android가 키보드를 고를 때 사용한다. Windows의 키·IME 동작은 바꾸지 않는다.
         text_input_options options {};
+        // 여러 줄 붙여넣기를 허용한다. 거짓이면 기존 한 줄 붙여넣기 동작을 따른다.
+        bool multiline { false };
     };
 
     // 액션은 상태를 바꾸지 않고 후속 메시지를 반환한다.
@@ -865,6 +867,9 @@ namespace luil {
         // 창 좌표 x를 글 안의 byte offset으로 옮긴다.
         // 글꼴 크기와 가로 스크롤은 element가 알고 있어 그리기와 같은 값을 쓴다.
         [[nodiscard]] virtual std::optional<std::size_t> offset_at(float x, const text_measurer& measurer) const;
+        // 여러 줄 텍스트 박스가 창 좌표 (x, y)를 글 안의 byte offset으로 옮긴다.
+        // 기본 구현은 y를 쓰지 않고 offset_at(x, measurer)에 맡긴다.
+        [[nodiscard]] virtual std::optional<std::size_t> offset_at_point(float x, float y, const text_measurer& measurer) const;
         // 텍스트 박스만 구현한다.
         // 글과 선택 범위를 그대로 내준다.
         [[nodiscard]] virtual std::optional<text_input_snapshot> text_input() const;
