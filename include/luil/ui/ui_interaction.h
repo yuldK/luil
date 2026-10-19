@@ -712,8 +712,8 @@ namespace luil {
         [[nodiscard]] std::optional<text_input_snapshot> focused_text_input() const;
         // 초점을 가진 박스에서 낱말 하나를 지운다 (Ctrl+Backspace·Ctrl+Delete). 암호 칸은 그쪽 끝까지다.
         [[nodiscard]] std::vector<input_action> delete_word(text_input_target target, bool left) const;
-        // 포인터 x를 그 텍스트 박스의 caret 자리로 옮기는 편집 동작이다.
-        [[nodiscard]] std::vector<input_action> place_text_caret(const ui_element& element, float x, bool extend, bool select_word) const;
+        // 포인터 (x, y)를 그 텍스트 박스의 caret 자리로 옮기는 편집 동작이다.
+        [[nodiscard]] std::vector<input_action> place_text_caret(const ui_element& element, float x, float y, bool extend, bool select_word) const;
         // surface가 가리키는 tree다.
         // 비어 있으면 주 tree고, 모르는 표면 id면 nullptr다.
         [[nodiscard]] const ui_tree* surface_tree(const std::u8string& surface) const noexcept;

@@ -26,8 +26,8 @@ namespace luil::win32 {
 
     // 한 번에 읽을 클립보드 텍스트의 상한이다 (UTF-16 코드 단위 수).
     // 블록 크기는 다른 프로세스가 정한다 — 상한이 없으면 붙여넣기 한 번이 변환
-    // 중간 버퍼로 그 몇 배를 UI thread에서 잡는다. 소비자(한 줄 칸)가 첫 줄만
-    // 쓰므로 `max_dropped_paths`처럼 앞에서부터 이만큼만 읽고 나머지는 버린다.
+    // 중간 버퍼로 그 몇 배를 UI thread에서 잡는다. `max_dropped_paths`처럼
+    // 앞에서부터 이만큼만 읽고 나머지는 버린다.
     // 가장 긴 합법 경로(약 32K자)도 여유 있게 들어오는 크기다.
     inline constexpr std::size_t max_clipboard_text_chars { 64u * 1024u };
 
@@ -51,14 +51,15 @@ namespace luil::win32 {
     [[nodiscard]] utf_conversion_result<std::u8string> text_from_utf16_block(const void* data, std::size_t bytes) noexcept;
 
     // 클립보드의 UTF-8 텍스트다.
-    // 텍스트가 없거나 읽지 못하면 빈 값이고, 한 줄 칸에 넣을 값이라 첫 줄만 돌려준다.
+    // 텍스트가 없거나 읽지 못하면 빈 값이다. multiline이 거짓이면 첫 줄만 돌려준다.
+    // 참이면 줄바꿈과 탭을 그대로 보존한다.
     //
     // **글이 없으면 파일 목록(`CF_HDROP`)을 본다.** 탐색기에서 복사한 파일을 칸에
     // 붙여넣으면 그 **경로**가 들어오는 것이 관례이고, 그러지 않으면 붙여넣기가
     // 조용히 아무 일도 하지 않는다.
-    //  - 여러 개를 복사했어도 **첫 경로 하나**다. 한 줄 칸이라 나머지를 담을 자리가
-    //    없고, 여럿을 어떻게 잇는지(줄바꿈·쉼표·따옴표)는 앱마다 다른 정책이다.
-    [[nodiscard]] std::u8string read_text_from_clipboard(HWND owner) noexcept;
+    //  - 여러 개를 복사했어도 **첫 경로 하나**다. 여럿을 어떻게 잇는지
+    //    (줄바꿈·쉼표·따옴표)는 앱마다 다른 정책이다.
+    [[nodiscard]] std::u8string read_text_from_clipboard(HWND owner, bool multiline = false) noexcept;
 
     // 파일 목록의 뜻을 싣는 셸 클립보드 형식의 이름이다 (`CFSTR_PREFERREDDROPEFFECT`).
     // 잘라내기는 `DROPEFFECT_MOVE`, 복사는 `DROPEFFECT_COPY`다 (file-clipboard-design.md).

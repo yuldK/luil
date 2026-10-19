@@ -496,6 +496,8 @@ namespace luil {
     struct clipboard_paste_request
     {
         text_input_target target { text_input_target::none };
+        // 참이면 줄바꿈과 탭을 포함한 글을 자르지 않는다.
+        bool multiline { false };
 
         [[nodiscard]] bool operator==(const clipboard_paste_request&) const noexcept = default;
     };

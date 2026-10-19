@@ -442,7 +442,7 @@ namespace luil {
             const ui_element* const target { pressed_tree != nullptr ? pressed_tree->find(text_drag_id_) : nullptr };
             if (target == nullptr)
                 return {};
-            return place_text_caret(*target, event.x, true, false);
+            return place_text_caret(*target, event.x, event.y, true, false);
         }
 
         // 스크롤 막대를 잡고 있으면 이동은 전부 그 element의 몫이다.
@@ -1059,7 +1059,7 @@ namespace luil {
             }
             const bool word { click_streak_ == 2 };
             text_drag_id_ = word ? ui_element_id {} : hit->id();
-            return with_press(place_text_caret(*hit, event.x, word == false && event.shift, word));
+            return with_press(place_text_caret(*hit, event.x, event.y, word == false && event.shift, word));
         }
 
         pressed_id_ = hit->id();
@@ -2214,7 +2214,7 @@ namespace luil {
         if (target.action(ui_trigger::right_click) == nullptr && config_.text_edit_menu && text_target(target.id().kind).has_value() && target.text_input().has_value())
         {
             if (target.text_input()->composing == false)
-                actions = place_text_caret(target, x, false, true);
+                actions = place_text_caret(target, x, y, false, true);
             actions.emplace_back(ui_command::text_edit_menu);
         }
         // 메뉴가 실제로 열리는 순간이다. 아무것도 내지 않은 우클릭에는 울리지 않는다.
@@ -2282,7 +2282,7 @@ namespace luil {
             remember();
             if (click_streak_ >= 3)
                 return { text_edit_action(*text, text::text_edit_command::select_all) };
-            return place_text_caret(*target, event.x, false, click_streak_ == 2);
+            return place_text_caret(*target, event.x, event.y, false, click_streak_ == 2);
         }
 
         // 확대 보기 안의 탭이다. 내용의 더블 클릭이 먼저이고, 그것이 없으면 짝을 이룬 둘째 탭이 보기의 확대다.
@@ -2488,12 +2488,12 @@ namespace luil {
         return true;
     }
 
-    std::vector<input_action> interaction_controller::place_text_caret(const ui_element& element, const float x, const bool extend, const bool select_word) const
+    std::vector<input_action> interaction_controller::place_text_caret(const ui_element& element, const float x, const float y, const bool extend, const bool select_word) const
     {
         const std::optional<text_input_target> target { text_target(element.id().kind) };
         if (target.has_value() == false || policy_ == nullptr)
             return {};
-        const std::optional<std::size_t> offset { element.offset_at(x, config_.measure_text) };
+        const std::optional<std::size_t> offset { element.offset_at_point(x, y, config_.measure_text) };
         if (offset.has_value() == false)
             return {};
 
@@ -2554,8 +2554,9 @@ namespace luil {
         const text_input_target target { *focused };
         const bool primary_shortcut { event.primary_shortcut_down() };
         const bool word_navigation { event.word_navigation_down() };
+        const text_input_snapshot value { focused_text_input().value_or(text_input_snapshot {}) };
         // 암호 칸의 낱말 이동은 칸 끝으로 간다. 낱말 경계가 공백 자리를 알린다.
-        const bool whole_line { word_navigation && focused_text_input().value_or(text_input_snapshot {}).secret };
+        const bool whole_line { word_navigation && value.secret };
 
         switch (event.key)
         {
@@ -2583,7 +2584,7 @@ namespace luil {
             if (event.control)
                 return copy_focused_selection(target, false);
             if (event.shift)
-                return std::vector<input_action> { input_action { clipboard_paste_request { target } } };
+                return std::vector<input_action> { input_action { clipboard_paste_request { target, value.multiline } } };
             return std::nullopt;
         case key_code::key_z:
             if (primary_shortcut)
@@ -2604,7 +2605,7 @@ namespace luil {
             return copy_focused_selection(target, event.key == key_code::key_x);
         case key_code::key_v:
             if (primary_shortcut)
-                return std::vector<input_action> { input_action { clipboard_paste_request { target } } };
+                return std::vector<input_action> { input_action { clipboard_paste_request { target, value.multiline } } };
             return std::nullopt;
         default:
             break;

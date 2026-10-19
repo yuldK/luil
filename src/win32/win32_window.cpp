@@ -1380,7 +1380,7 @@ namespace luil::win32 {
                 const auto* const paste { std::get_if<clipboard_paste_request>(&request) };
                 if (paste == nullptr || host_ == nullptr || environment_.policy == nullptr)
                     return;
-                std::u8string text { read_text_from_clipboard(window_) };
+                std::u8string text { read_text_from_clipboard(window_, paste->multiline) };
                 if (text.empty())
                     return;
 

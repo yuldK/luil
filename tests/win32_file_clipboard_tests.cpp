@@ -283,3 +283,16 @@ TEST_CASE("A text-only clipboard has no files", "[win32][clipboard][files][syste
     // 글은 그대로 글로 읽힌다.
     REQUIRE(luil::win32::read_text_from_clipboard(window.handle()) == u8"C:\\looks\\like\\a\\path.txt");
 }
+
+TEST_CASE("Multiline clipboard reads preserve line breaks and tabs when requested", "[win32][clipboard][system][multiline]")
+{
+    const clipboard_window window {};
+    for (const auto text : { u8"첫 줄\r\n둘째 줄\t끝\n", u8"\n둘째 줄", u8"\t첫 칸" })
+    {
+        REQUIRE(luil::win32::copy_text_to_clipboard(window.handle(), text));
+        REQUIRE(luil::win32::read_text_from_clipboard(window.handle(), true) == text);
+        const std::u8string first { luil::win32::first_clipboard_line(text) };
+        REQUIRE(luil::win32::read_text_from_clipboard(window.handle()) == first);
+        REQUIRE(luil::win32::read_text_from_clipboard(window.handle(), false) == first);
+    }
+}

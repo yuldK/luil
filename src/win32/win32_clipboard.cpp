@@ -153,7 +153,7 @@ namespace luil::win32 {
         return utf16_to_utf8(std::wstring_view { chars, length });
     }
 
-    std::u8string read_text_from_clipboard(const HWND owner) noexcept
+    std::u8string read_text_from_clipboard(const HWND owner, const bool multiline) noexcept
     {
         try
         {
@@ -182,11 +182,11 @@ namespace luil::win32 {
             }
             else if (const HANDLE handle { GetClipboardData(CF_HDROP) }; handle != nullptr)
             {
-                // 여러 개를 복사했어도 첫 경로 하나다 (한 줄 칸이다).
+                // 파일 목록을 글로 붙일 때는 첫 경로 하나를 쓴다.
                 if (std::vector<std::u8string> paths { dropped_file_paths(static_cast<HDROP>(handle)) }; paths.empty() == false)
                     result = std::move(paths.front());
             }
-            return first_clipboard_line(std::move(result));
+            return multiline ? std::move(result) : first_clipboard_line(std::move(result));
         }
         catch (...)
         {
