@@ -26,6 +26,9 @@ namespace luil {
         set_cursor(config_.axis == split_axis::horizontal ? ui_cursor::resize_horizontal : ui_cursor::resize_vertical);
         // 좌표 변화량만 메시지로 바꾸므로 tree가 다시 빌드되어도 끌기가 이어진다.
         pointer_drag_target target {};
+        // 손잡이는 판의 경계에 서므로 길이가 바뀌면 포인터를 따라 옮겨 간다. 누른 자리는 곧 판이 덮는다 —
+        // 그 자리로 살아 있음을 보면 손잡이가 잡는 두께의 절반을 넘게 움직인 순간 끌기가 끊긴다.
+        target.follows_pointer = true;
         target.on_move = [this](const ui_action_context& previous, const ui_action_context& current) -> std::vector<input_action> {
             const float moved { config_.axis == split_axis::horizontal ? current.x - previous.x : current.y - previous.y };
             const float delta { (config_.grows == split_grows::toward_end ? moved : -moved) / scale_ };

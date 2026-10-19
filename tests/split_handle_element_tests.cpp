@@ -2,9 +2,12 @@
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element.h"
+#include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_tree.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <variant>
@@ -52,7 +55,98 @@ namespace {
         REQUIRE(intent != nullptr);
         REQUIRE(intent->delta == expected);
     }
+
+    constexpr luil::ui_element_kind kind_pane { luil::application_element_kind(1) };
+
+    // 눌러지는 판이다. 손잡이가 떠난 자리를 덮는 것이 무엇인지가 이 test의 쟁점이다.
+    class pane final : public luil::ui_element
+    {
+    public:
+        using ui_element::ui_element;
+
+        void add(std::unique_ptr<ui_element> child)
+        {
+            add_child(std::move(child));
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+    };
+
+    // 앞 판(길이 `width`)·손잡이(두께 8)·뒤 판이 가로로 선 화면이다.
+    // 손잡이는 앞 판의 끝에 서므로 길이가 바뀌면 손잡이도 옮겨 간다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_split_tree(const float width)
+    {
+        auto root { std::make_unique<pane>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f });
+
+        auto front { std::make_unique<pane>(luil::ui_element_id { kind_pane, u8"front" }) };
+        front->arrange({ { 0.0f, 0.0f, width, 600.0f }, 1.0f });
+        front->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; });
+        root->add(std::move(front));
+
+        luil::split_handle_config config {};
+        config.resize = make_resize_factory();
+        auto handle { std::make_unique<luil::split_handle_element>(luil::ui_element_id { kind_handle }, config) };
+        handle->arrange({ { width, 0.0f, 8.0f, 600.0f }, 1.0f });
+        root->add(std::move(handle));
+
+        auto back { std::make_unique<pane>(luil::ui_element_id { kind_pane, u8"back" }) };
+        back->arrange({ { width + 8.0f, 0.0f, 800.0f - width - 8.0f, 600.0f }, 1.0f });
+        back->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; });
+        root->add(std::move(back));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    }
+
+    [[nodiscard]] std::chrono::steady_clock::time_point at(const int milliseconds)
+    {
+        return std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { milliseconds };
+    }
+
+    // 액션 중 길이 변화의 합이다. 없으면 0이다.
+    [[nodiscard]] float total_delta(const std::vector<luil::input_action>& actions)
+    {
+        float total { 0.0f };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                if (const auto* const intent { message->get<length_intent>() }; intent != nullptr)
+                    total += intent->delta;
+        return total;
+    }
 } // namespace
+
+TEST_CASE("A split handle keeps dragging after the pane it resizes moves it away from the press", "[ui][split][interaction]")
+{
+    // 앱이 길이를 받아 tree를 다시 지으면 손잡이가 경계를 따라 옮겨 간다. 누른 자리는 곧 앞 판이 덮는다.
+    // 누른 자리를 덮은 것으로 끌기를 끊으면 첫 이동 하나만 듣고 끝난다.
+    float width { 100.0f };
+    luil::interaction_controller controller {};
+    controller.set_tree(make_split_tree(width));
+
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 104.0f, 300.0f, luil::pointer_button::left, at(0) }));
+
+    const float first { total_delta(controller.process(luil::pointer_moved_event { 124.0f, 300.0f, at(16) })) };
+    REQUIRE(first == 20.0f);
+    width += first;
+    controller.set_tree(make_split_tree(width));
+
+    const float second { total_delta(controller.process(luil::pointer_moved_event { 144.0f, 300.0f, at(32) })) };
+    REQUIRE(second == 20.0f);
+    width += second;
+    controller.set_tree(make_split_tree(width));
+
+    // 되돌아와도 같은 손잡이가 듣는다.
+    const float back { total_delta(controller.process(luil::pointer_moved_event { 134.0f, 300.0f, at(48) })) };
+    REQUIRE(back == -10.0f);
+
+    static_cast<void>(controller.process(luil::pointer_released_event { 134.0f, 300.0f, luil::pointer_button::left, at(64) }));
+}
 
 TEST_CASE("A split handle turns a drag into logical length deltas", "[ui][split]")
 {
