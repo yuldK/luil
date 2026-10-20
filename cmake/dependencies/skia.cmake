@@ -299,6 +299,19 @@ function(luil_find_skia)
     # APNG(움직이는 png)를 읽는다. rust 코덱을 요구 인자에 두었으므로 늘 그렇다.
     # 매크로를 남겨 두는 것은 소비자가 이미 이것으로 가드한 코드를 쓸 수 있어서다.
     target_compile_definitions(luil_skia INTERFACE LUIL_ANIMATED_PNG=1)
+    # 텍스트 기능의 소비자 정의다 (skia-prep docs/skia-build.md 6.1). skshaper·skunicode의
+    # public_config가 붙이는 것과 같고, `SkShaper.h`·`FactoryHelpers.h`가 이것으로
+    # 선언을 가른다. 클래스 배치는 바꾸지 않으므로 텍스트를 끈 구성에는 주지 않는다.
+    #  - `SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS`는 주지 않는다. SkShaper의 순수 가상
+    #    함수를 없애 vtable이 패키지와 어긋난다.
+    if("text" IN_LIST LUIL_SKIA_FEATURES)
+        target_compile_definitions(luil_skia INTERFACE
+            SK_SHAPER_PRIMITIVE_AVAILABLE
+            SK_SHAPER_HARFBUZZ_AVAILABLE
+            SK_SHAPER_UNICODE_AVAILABLE
+            SK_UNICODE_AVAILABLE
+            SK_UNICODE_ICU_IMPLEMENTATION)
+    endif()
     # 소비자가 쓰는 공개 이름이다.
     # 다른 Skia 패키지의 별칭 (unofficial::skia::skia 등)과 충돌하지 않도록 하나만 정의한다.
     add_library(luil::skia ALIAS luil_skia)
@@ -312,7 +325,13 @@ function(luil_find_skia)
     set(LUIL_SKIA_NEEDS_RELEASE "${LUIL_SKIA_NEEDS_RELEASE}" PARENT_SCOPE)
 
     string(REPLACE ";" ", " validated_flavors_text "${validated_flavors}")
+    if(LUIL_SKIA_FEATURES)
+        string(REPLACE ";" ", " features_text "${LUIL_SKIA_FEATURES}")
+    else()
+        set(features_text "core only")
+    endif()
     message(STATUS
         "Skia: ${LUIL_SKIA_ROOT} "
-        "(${LUIL_SKIA_TARGET}; ${validated_flavors_text}; ${LUIL_SKIA_REQUIRED_TOOLCHAIN})")
+        "(${LUIL_SKIA_TARGET}; ${validated_flavors_text}; ${LUIL_SKIA_REQUIRED_TOOLCHAIN}; "
+        "features: ${features_text})")
 endfunction()

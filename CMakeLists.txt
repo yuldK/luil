@@ -166,6 +166,15 @@ if(LUIL_PLATFORM STREQUAL "windows")
         d3dcompiler
         FontSub
         Usp10)
+
+    # 기능별 아카이브다 (skia-prep docs/skia-build.md 6.1). 켠 기능의 것만 더한다.
+    # 셋 다 시스템 라이브러리를 더 요구하지 않는다 — 텍스트의 ICU는 실행 시점에 연다.
+    set(LUIL_SKIA_SVG_COMPONENTS svg.lib skshaper.lib skresources.lib)
+    set(LUIL_SKIA_TEXT_COMPONENTS
+        skparagraph.lib skshaper.lib skunicode_icu.lib skunicode_core.lib harfbuzz.lib)
+    set(LUIL_SKIA_LOTTIE_COMPONENTS
+        skottie.lib sksg.lib jsonreader.lib skresources.lib skshaper.lib)
+    set(LUIL_SKIA_AVIF_COMPONENTS avif_decoder.lib libavif.lib libgav1.lib libyuv.lib)
 else()
     set(LUIL_SKIA_TARGET "android-arm64")
     # android-arm64 패키지의 정적 아카이브다 (skia-prep docs/skia-build.md 8.4).
@@ -206,6 +215,16 @@ else()
         "skia_use_rust_png_decode=true")
     # NDK의 clang이다. luil도 같은 NDK의 clang으로 컴파일한다.
     set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang")
+
+    # 기능별 아카이브다 (skia-prep docs/skia-build.md 6.1·6.2).
+    # 다른 아카이브와 겹치는 정의가 없어 libskia.a 뒤 어디든 되지만, 실측한 순서인
+    # rust 아카이브 둘 앞에 끼운다 (아래 기능 옵션).
+    set(LUIL_SKIA_SVG_COMPONENTS libsvg.a libskshaper.a libskresources.a)
+    set(LUIL_SKIA_TEXT_COMPONENTS
+        libskparagraph.a libskshaper.a libskunicode_icu.a libskunicode_core.a libharfbuzz.a)
+    set(LUIL_SKIA_LOTTIE_COMPONENTS
+        libskottie.a libsksg.a libjsonreader.a libskresources.a libskshaper.a)
+    set(LUIL_SKIA_AVIF_COMPONENTS libavif_decoder.a libavif.a libgav1.a libyuv.a)
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)
@@ -268,6 +287,66 @@ endif()
 if(LUIL_ENABLE_SMB)
     enable_language(C)
 endif()
+# Skia 패키지의 기능별 아카이브를 쓰는 기능이다. **모두 기본은 끈다.**
+# 끈 기능은 그 아카이브를 링크하지도, 그 고지를 싣지도 않고, 공개 API는 그대로
+# 남아 "지원 안 함"으로 답한다 (SMB와 같은 규칙). 켠 기능도 앱이 그 API를 부르지
+# 않으면 실행 파일에 들어오지 않는다 — 기능 코드가 따로 떨어진 파일에 있어서다.
+# AVIF만 예외다: 켜면 디코더가 등록되어 이미지를 읽는 앱이면 들어온다.
+#  - SVG: `decode_svg_bytes`·`load_svg_file`이 SVG를 벡터 그림(ui_image)으로 읽는다.
+#  - 텍스트 모양 잡기: HarfBuzz와 플랫폼 ICU(Windows 10 1903+, Android 12+)로 글자를
+#    모양 잡는다. 지금은 SVG의 `<text>`와 Lottie의 글자 레이어가 쓴다.
+#  - AVIF: 이미지 디코더가 AVIF(정지·움직임)를 읽는다.
+#  - Lottie: `decode_lottie_bytes`·`load_lottie_file`이 Lottie JSON을 읽는다.
+option(LUIL_ENABLE_SVG "Read SVG as vector images (Skia SVG module)." OFF)
+option(LUIL_ENABLE_TEXT_SHAPING "Shape text with HarfBuzz and the platform ICU (SVG text, Lottie text layers)." OFF)
+option(LUIL_ENABLE_AVIF "Decode AVIF images (libavif + libgav1)." OFF)
+option(LUIL_ENABLE_LOTTIE "Play Lottie animations (Skia Skottie module)." OFF)
+
+# 켠 기능의 아카이브를 Skia 링크 목록에 더한다. svg·텍스트·Lottie가 공유하는
+# skshaper·skresources는 한 번만 넣는다. 자리는 rust 아카이브 둘 앞이다 — Android의
+# 링크 순서 계약(libskia.a 맨 앞)을 지키는 실측 순서이고, Windows는 순서를 보지 않는다.
+# 고지 생성기와 설치 config는 `LUIL_SKIA_FEATURES`로 켠 기능을 안다 (이름은 패키지의
+# NOTICE.json이 쓰는 것이다). 기능마다 요구 인자도 더한다 — 기능별 아카이브가 없던
+# 앞 판번(win-x64 r2, android-arm64 r1)을 "파일이 없다"가 아니라 원인으로 잡는다.
+set(LUIL_SKIA_FEATURES "")
+set(luil_skia_feature_components "")
+if(LUIL_ENABLE_SVG)
+    list(APPEND LUIL_SKIA_FEATURES svg)
+    list(APPEND luil_skia_feature_components ${LUIL_SKIA_SVG_COMPONENTS})
+    list(APPEND LUIL_SKIA_REQUIRED_ARGUMENTS "skia_enable_svg=true")
+endif()
+if(LUIL_ENABLE_TEXT_SHAPING)
+    list(APPEND LUIL_SKIA_FEATURES text)
+    list(APPEND luil_skia_feature_components ${LUIL_SKIA_TEXT_COMPONENTS})
+    # ICU를 싣지 않고 실행 시점에 플랫폼의 것을 여는 구성이어야 한다.
+    list(APPEND LUIL_SKIA_REQUIRED_ARGUMENTS
+        "skia_use_harfbuzz=true"
+        "skia_use_runtime_icu=true")
+endif()
+if(LUIL_ENABLE_LOTTIE)
+    list(APPEND LUIL_SKIA_FEATURES skottie)
+    list(APPEND luil_skia_feature_components ${LUIL_SKIA_LOTTIE_COMPONENTS})
+    list(APPEND LUIL_SKIA_REQUIRED_ARGUMENTS "skia_enable_skottie=true")
+endif()
+if(LUIL_ENABLE_AVIF)
+    list(APPEND LUIL_SKIA_FEATURES avif)
+    list(APPEND luil_skia_feature_components ${LUIL_SKIA_AVIF_COMPONENTS})
+    # AVIF가 기본 디코더 목록 밖의 따로 선 아카이브여야 한다. skia_use_libavif로
+    # 세운 Skia는 AVIF를 쓰지 않는 앱에도 그 라이브러리를 요구한다 (6.3).
+    list(APPEND LUIL_SKIA_REQUIRED_ARGUMENTS "skia_prep_avif_archive=true")
+endif()
+if(luil_skia_feature_components)
+    list(REMOVE_DUPLICATES luil_skia_feature_components)
+    list(FIND LUIL_SKIA_COMPONENTS librust_png_ffi_rs.a luil_rust_png_index)
+    if(luil_rust_png_index EQUAL -1)
+        list(APPEND LUIL_SKIA_COMPONENTS ${luil_skia_feature_components})
+    else()
+        list(INSERT LUIL_SKIA_COMPONENTS ${luil_rust_png_index} ${luil_skia_feature_components})
+    endif()
+    unset(luil_rust_png_index)
+endif()
+unset(luil_skia_feature_components)
+
 if(LUIL_ENABLE_WEBVIEW AND NOT LUIL_ENABLE_DIRECT3D)
     message(WARNING
         "LUIL_ENABLE_WEBVIEW is ON while LUIL_ENABLE_DIRECT3D is OFF.\n"

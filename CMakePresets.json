@@ -39,7 +39,11 @@
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
                 "LUIL_BUILD_TESTS": "ON",
-                "LUIL_BUILD_TOOLING": "ON"
+                "LUIL_BUILD_TOOLING": "ON",
+                "LUIL_ENABLE_SVG": "ON",
+                "LUIL_ENABLE_TEXT_SHAPING": "ON",
+                "LUIL_ENABLE_AVIF": "ON",
+                "LUIL_ENABLE_LOTTIE": "ON"
             }
         },
         {
@@ -49,7 +53,11 @@
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
                 "LUIL_BUILD_TESTS": "ON",
-                "LUIL_BUILD_TOOLING": "ON"
+                "LUIL_BUILD_TOOLING": "ON",
+                "LUIL_ENABLE_SVG": "ON",
+                "LUIL_ENABLE_TEXT_SHAPING": "ON",
+                "LUIL_ENABLE_AVIF": "ON",
+                "LUIL_ENABLE_LOTTIE": "ON"
             }
         },
         {
@@ -58,7 +66,11 @@
             "inherits": "vs2022",
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
-                "LUIL_BUILD_EXAMPLES": "ON"
+                "LUIL_BUILD_EXAMPLES": "ON",
+                "LUIL_ENABLE_SVG": "ON",
+                "LUIL_ENABLE_TEXT_SHAPING": "ON",
+                "LUIL_ENABLE_AVIF": "ON",
+                "LUIL_ENABLE_LOTTIE": "ON"
             }
         },
         {
@@ -67,7 +79,11 @@
             "inherits": "vs2026",
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
-                "LUIL_BUILD_EXAMPLES": "ON"
+                "LUIL_BUILD_EXAMPLES": "ON",
+                "LUIL_ENABLE_SVG": "ON",
+                "LUIL_ENABLE_TEXT_SHAPING": "ON",
+                "LUIL_ENABLE_AVIF": "ON",
+                "LUIL_ENABLE_LOTTIE": "ON"
             }
         },
         {
@@ -100,7 +116,11 @@
                 "ANDROID_PLATFORM": "android-26",
                 "ANDROID_STL": "c++_static",
                 "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
-                "LUIL_BUILD_TESTS": "ON"
+                "LUIL_BUILD_TESTS": "ON",
+                "LUIL_ENABLE_SVG": "ON",
+                "LUIL_ENABLE_TEXT_SHAPING": "ON",
+                "LUIL_ENABLE_AVIF": "ON",
+                "LUIL_ENABLE_LOTTIE": "ON"
             }
         },
         {
