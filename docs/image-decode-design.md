@@ -6,7 +6,9 @@ API는 [`include/luil/ui/image_decode.h`](../include/luil/ui/image_decode.h)에 
 
 ## 지원 형식과 진입점
 
-현재 Skia 구성은 PNG, JPEG, WebP, GIF, BMP, WBMP를 읽는다. PNG에는 APNG 애니메이션 지원이 포함된다. ICO, TIFF, DDS, HEIF, SVG는 이 API로 디코딩하지 않는다.
+현재 Skia 구성은 PNG, JPEG, WebP, GIF, BMP, WBMP를 읽는다. PNG에는 APNG 애니메이션 지원이 포함된다. `LUIL_ENABLE_AVIF`를 켠 구성은 AVIF(정지·애니메이션)도 읽는다. ICO, TIFF, DDS, HEIF는 이 API로 디코딩하지 않는다. SVG와 Lottie는 래스터 코덱이 아니라 따로 선 진입점이 읽는다 ([SVG와 Lottie](vector-image-design.md)).
+
+AVIF 디코더(libavif + libgav1 + libyuv)는 Skia 패키지의 기본 디코더 목록에 없다. 거기 있으면 AVIF를 쓰지 않는 앱도 그 라이브러리를 링크해야 해서 skia-prep이 따로 떼어 냈다. 켠 구성은 첫 디코드 때 `SkCodecs::Register`로 한 번 올린다(`src/ui/image_codecs_avif.cpp`). 진입점이 `SelectionPolicy`를 받는 낡은 `SkCodec::MakeFromStream`이라 전역 목록에 올리는 길을 쓰고, 등록은 thread-safe가 아니므로 모든 디코드가 지나가는 자리의 함수 안 static에서 부른다. 끈 구성은 등록하는 파일을 컴파일하지 않으므로 AVIF 입력은 `unsupported_format`이다. 켜면 이미지를 읽는 앱에는 AVIF 디코더가 들어온다(Release 실행 파일 기준 win-x64 약 2.0 MB, android-arm64 약 2.4 MB — skia-prep docs/skia-build.md 6.6).
 
 `load_image_file`은 UTF-8 경로를 읽는다. `decode_image_bytes`는 실행 파일 resource나 HTTP 응답처럼 이미 메모리에 있는 인코딩된 파일 바이트를 읽는다. byte span은 호출이 끝날 때까지만 유효하면 된다.
 

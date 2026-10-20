@@ -183,11 +183,22 @@ luil_add_source_filter(luil_core_files "ui/content"
     ui/progress_element.cpp
     "${public_headers}/ui/progress_element.h")
 
-# 이미지 파일과 바이트를 픽셀로 읽는다 (Skia 코덱 — png·jpeg·webp·gif).
+# 이미지 파일과 바이트를 픽셀로 읽는다 (Skia 코덱 — png·jpeg·webp·gif, 켜면 avif).
 # element가 아니라 값을 만드는 자리라 `ui/content`와 나눈다.
+#  - AVIF를 끈 구성은 아무것도 등록하지 않는 파일을 대신 컴파일한다. 등록하는 파일이
+#    libavif를 부르는 유일한 자리라, 빠지면 링크할 것도 없다.
+if(LUIL_ENABLE_AVIF)
+    set(luil_image_codecs_source ui/image_codecs_avif.cpp)
+else()
+    set(luil_image_codecs_source ui/image_codecs_default.cpp)
+endif()
 luil_add_source_filter(luil_core_files "ui/image"
     ui/image_decode.cpp
-    "${public_headers}/ui/image_decode.h")
+    "${public_headers}/ui/image_decode.h"
+    ui/image_source.cpp
+    ui/image_source.h
+    ui/image_codecs.h
+    "${luil_image_codecs_source}")
 
 # 항목을 늘어놓고 그중 하나를 고르는 element다.
 luil_add_source_filter(luil_core_files "ui/lists"
