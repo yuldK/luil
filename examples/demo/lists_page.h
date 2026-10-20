@@ -73,6 +73,12 @@ namespace demo {
         std::u8string key {};
     };
 
+    // 행을 두 번 눌러 "연" 줄이다 (`virtual_list_config::double_click`).
+    struct log_open_intent
+    {
+        std::u8string key {};
+    };
+
     struct log_cursor_intent
     {
         std::u8string key {};
@@ -135,6 +141,7 @@ namespace demo {
         //    이 벡터를 element로 들고 있으면 그 순간 element가 만 개다.
         std::vector<luil::virtual_list_item> log_items_ {};
         std::u8string log_selected_ {};
+        std::u8string log_opened_ {};
         std::u8string log_cursor_ {};
         float log_scroll_ { 0.0f };
         float grouped_scroll_ { 0.0f };

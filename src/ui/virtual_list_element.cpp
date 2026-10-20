@@ -632,6 +632,11 @@ namespace luil {
                         return actions;
                     });
             }
+            // 두 번 누름은 그 행의 키로 앱에 간다. 누름과 같은 까닭으로 factory를 값으로 담는다.
+            if (config_.double_click != nullptr && item.enabled)
+                row->set_action(ui_trigger::double_click, [key = item.key, double_click = config_.double_click](const ui_action_context&) -> std::vector<input_action> {
+                    return { double_click(key) };
+                });
             // 행을 끌고 행에 놓는 것은 앱의 factory다 (여러 항목을 함께 끄는 drag & drop).
             if (config_.drag != nullptr && item.enabled)
             {

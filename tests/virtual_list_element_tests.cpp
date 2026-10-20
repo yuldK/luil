@@ -1053,3 +1053,62 @@ TEST_CASE("A zero height arrange does not freeze the list empty", "[ui][list]")
     REQUIRE(list.realized() == luil::virtual_list_range { 0u, 4u });
     REQUIRE(virtual_lane(list).children().size() == 4u);
 }
+
+TEST_CASE("A second press on the same row sends its key to the double click factory", "[ui][list][interaction]")
+{
+    struct double_click_intent
+    {
+        std::u8string key {};
+    };
+
+    luil::virtual_list_config config { make_config(8) };
+    config.move = move_factory();
+    config.select = select_factory();
+    config.double_click = [](const std::u8string& key) { return luil::input_action { luil::app_message { double_click_intent { key } } }; };
+    luil::interaction_controller controller {};
+    controller.set_tree(published(config, 100.0f));
+
+    // 첫 누름은 평소처럼 고른다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 100.0f, 70.0f, luil::pointer_button::left, at(0) }));
+    const auto first { controller.process(luil::pointer_released_event { 100.0f, 70.0f, luil::pointer_button::left, at(10) }) };
+    REQUIRE(message_at<select_intent>(first, 0) != nullptr);
+    REQUIRE(message_at<double_click_intent>(first, 0) == nullptr);
+
+    // 앱이 고른 것을 싣고 다시 지은 tree에서도 같은 행의 두 번째 누름이다.
+    config.cursor = item_key(3);
+    config.selected = item_key(3);
+    controller.set_tree(published(config, 100.0f));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 100.0f, 70.0f, luil::pointer_button::left, at(120) }));
+    const auto second { controller.process(luil::pointer_released_event { 100.0f, 70.0f, luil::pointer_button::left, at(130) }) };
+    REQUIRE(second.size() == 1u);
+    REQUIRE(message_at<double_click_intent>(second, 0) != nullptr);
+    REQUIRE(message_at<double_click_intent>(second, 0)->key == item_key(3));
+}
+
+TEST_CASE("Without a double click factory a second press is an ordinary press", "[ui][list][interaction]")
+{
+    luil::virtual_list_config config { make_config(8) };
+    config.select = select_factory();
+    luil::interaction_controller controller {};
+    controller.set_tree(published(config, 100.0f));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 100.0f, 70.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(luil::pointer_released_event { 100.0f, 70.0f, luil::pointer_button::left, at(10) }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 100.0f, 70.0f, luil::pointer_button::left, at(120) }));
+    const auto second { controller.process(luil::pointer_released_event { 100.0f, 70.0f, luil::pointer_button::left, at(130) }) };
+    REQUIRE(message_at<select_intent>(second, 0) != nullptr);
+    REQUIRE(message_at<select_intent>(second, 0)->key == item_key(3));
+}
+
+TEST_CASE("A disabled row does not hear a double click", "[ui][list]")
+{
+    luil::virtual_list_config config { make_config(4) };
+    config.items[1].enabled = false;
+    config.double_click = [](const std::u8string& key) { return luil::input_action { luil::app_message { select_intent { key } } }; };
+    const auto tree { published(config, 100.0f) };
+    const luil::ui_element* const enabled { tree->find(row_id(item_key(0))) };
+    const luil::ui_element* const disabled { tree->find(row_id(item_key(1))) };
+    REQUIRE(enabled != nullptr);
+    REQUIRE(disabled != nullptr);
+    REQUIRE(enabled->action(luil::ui_trigger::double_click) != nullptr);
+    REQUIRE(disabled->action(luil::ui_trigger::double_click) == nullptr);
+}
