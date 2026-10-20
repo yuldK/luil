@@ -171,6 +171,8 @@ luil_add_source_filter(luil_core_files "ui/content"
     "${public_headers}/ui/glyph_element.h"
     ui/badge_element.cpp
     "${public_headers}/ui/badge_element.h"
+    ui/badge_paint.cpp
+    ui/badge_paint.h
     ui/image_element.cpp
     "${public_headers}/ui/image_element.h"
     ui/label_element.cpp

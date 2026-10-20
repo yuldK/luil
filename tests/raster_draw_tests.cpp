@@ -8,6 +8,7 @@
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
+#include "luil/ui/tab_bar_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
@@ -687,4 +688,30 @@ TEST_CASE("A modal scrim and a sheet background paint out to the surface", "[ui]
         REQUIRE(plain.pixel_at(100, 10) == palette.window_background);
         REQUIRE(plain.pixel_at(100, 60) == edge.pixel_at(100, 60));
     }
+}
+
+TEST_CASE("A tab badge sits before the close slot and keeps its tone", "[ui][raster][tab]")
+{
+    // slot은 물리 픽셀이다. 탭 폭 160·높이 32 논리 픽셀, 배율 2다. 닫기가 없는 탭은 오른쪽 10을 비우므로 배지는 물리 x 300에서 끝난다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::tab_bar_config config {};
+    config.owner = u8"tabs";
+    config.tab_width = 160.0f;
+    for (const char8_t* key : { u8"dot", u8"count", u8"error", u8"plain" })
+        config.items.push_back(luil::tab_item { .key = key });
+    config.items[0].badge = luil::tab_badge {};
+    config.items[1].badge = luil::tab_badge { .text = u8"3" };
+    config.items[2].badge = luil::tab_badge { .tone = luil::badge_tone::error };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::tab_bar_element>(std::move(config)), { 0.0f, 0.0f, 1280.0f, 64.0f }, raster_scale) };
+    luil::testing::raster_frame frame { 1280, 64, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+
+    // 상태 점: 반지름 3.5라 중심이 물리 x 293이다.
+    REQUIRE(frame.pixel_at(293, 32) == palette.accent);
+    // 개수 알약: 강조 배지는 채운 바탕이다. 글이 없는 test 글꼴에서도 원보다 좁아지지 않는다 (높이 17 → 34).
+    REQUIRE(frame.count_color({ 320.0f + 266.0f, 20.0f, 34.0f, 24.0f }, palette.accent) > 100);
+    // 심각도 알약은 오류색 테를 두른다 — 색과 함께 글리프 자리도 잡는다.
+    REQUIRE(frame.contains_color({ 640.0f + 200.0f, 0.0f, 120.0f, 64.0f }, palette.error_accent));
+    // 배지가 없는 탭의 같은 자리는 비어 있다.
+    REQUIRE(frame.pixel_at(960 + 293, 32) == palette.window_background);
 }
