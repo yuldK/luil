@@ -55,6 +55,17 @@ namespace demo {
     struct playback_toggle_intent
     {};
 
+    // 여러 줄 메모 칸의 세로 스크롤이다 (논리 픽셀). 위치는 앱 상태다.
+    struct memo_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct memo_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+
     class basics_page
     {
     public:
@@ -84,6 +95,7 @@ namespace demo {
         [[nodiscard]] luil::text_input_view make_input_view(const luil::text::text_edit_state& state, luil::text_input_target target) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_counter_row() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_input_row() const;
+        [[nodiscard]] std::unique_ptr<luil::stack_element> make_memo() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_image_row() const;
         [[nodiscard]] std::unique_ptr<luil::label_element> make_picture_status() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_picture(std::u8string owner, std::u8string label, luil::image_fit fit, std::u8string description) const;
@@ -122,6 +134,9 @@ namespace demo {
         luil::image_playback playback_ {};
         luil::text::text_edit_state number_ {};
         luil::text::text_edit_state note_ {};
+        // 여러 줄 메모의 글과 세로 스크롤이다. 스크롤은 휠·막대·caret 따라가기가 같은 메시지로 옮긴다.
+        luil::text::text_edit_state memo_ {};
+        float memo_scroll_ { 0.0f };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
         bool dialog_open_ { false };

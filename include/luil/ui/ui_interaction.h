@@ -459,9 +459,24 @@ namespace luil {
         // 우클릭 액션을 내고, 손을 뗀 뒤에는 관성 스크롤의 변화량을 낸다. 끄는 동안 가장자리에
         // 머물면 그 창의 스크롤과 (손잡이면) 같은 자리의 `on_move`를 낸다.
         [[nodiscard]] std::vector<input_action> advance(std::chrono::steady_clock::time_point now);
+        // 새 tree를 받은 뒤에 부른다. 초점을 가진 여러 줄 칸의 caret이나 글이 **바뀌었으면** caret이 선 줄을
+        // 그 칸의 흘리는 창 안으로 들이는 스크롤 메시지를 낸다 (`text_area_element`).
+        //  - 편집은 logic이 적용한 뒤에야 caret 자리가 정해지므로 그 결과가 실린 tree에서 한다.
+        //  - 바뀌지 않았으면 아무것도 내지 않는다. 휠로 caret에서 멀리 흘린 frame이 되돌아가지 않는 것이 그래서다.
+        //  - 돌려준 액션은 `process`의 것처럼 내보낸다. 입력 pump가 tree를 받을 때마다 부른다.
+        [[nodiscard]] std::vector<input_action> follow_text_caret();
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
     private:
+        // `follow_text_caret`이 마지막으로 본 caret이다. 같은 칸·같은 글·같은 caret이면 다시 들이지 않는다.
+        struct followed_caret
+        {
+            ui_element_id input {};
+            std::size_t caret { 0 };
+            std::size_t text_hash { 0 };
+
+            [[nodiscard]] bool operator==(const followed_caret&) const = default;
+        };
         // 포인터 동작의 순간에 눌려 있던 수식 키다 (`ui_action_context`의 control·shift·alt).
         // 이벤트에서 꺼내 문맥으로 옮기기까지 셋을 함께 나른다.
         struct modifier_keys
@@ -714,6 +729,11 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> delete_word(text_input_target target, bool left) const;
         // 포인터 (x, y)를 그 텍스트 박스의 caret 자리로 옮기는 편집 동작이다.
         [[nodiscard]] std::vector<input_action> place_text_caret(const ui_element& element, float x, float y, bool extend, bool select_word) const;
+        // 초점을 가진 텍스트 박스의 element다. 없으면 nullptr다.
+        [[nodiscard]] const ui_element* focused_text_element() const;
+        // 여러 줄 칸의 caret을 줄 단위로 옮긴다 (↑·↓·Page Up·Page Down·Home·End).
+        //  - `rows`는 옮길 줄 수다 (위가 음수). 0이면 caret이 선 줄 안에서 `to_line_end`쪽 끝으로 간다.
+        [[nodiscard]] std::vector<input_action> move_text_caret_by_lines(const text_input_snapshot& value, float rows, bool to_line_end, bool extend) const;
         // surface가 가리키는 tree다.
         // 비어 있으면 주 tree고, 모르는 표면 id면 nullptr다.
         [[nodiscard]] const ui_tree* surface_tree(const std::u8string& surface) const noexcept;
@@ -886,6 +906,7 @@ namespace luil {
         std::optional<view_drag> view_drag_ {};
         // 확대 보기의 직전 탭이다 (두 번 탭 확대). 탭이 아닌 접촉·다른 장치의 누름·취소가 지운다.
         std::optional<view_tap> last_view_tap_ {};
+        std::optional<followed_caret> followed_caret_ {};
 
         // 더블 클릭 판정: 직전 클릭의 대상·표면·시각·위치다.
         // `click_streak_`은 같은 자리를 연달아 누른 횟수로,

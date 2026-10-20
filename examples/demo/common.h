@@ -77,6 +77,8 @@ namespace demo {
     constexpr luil::ui_element_kind kind_network_beat { luil::application_element_kind(36) };
     // 결과 칸이다 (띠·흘리는 창·그림이 owner로 갈린다).
     constexpr luil::ui_element_kind kind_network_preview { luil::application_element_kind(37) };
+    // 여러 줄 메모 칸이다 (`text_area_element`).
+    constexpr luil::ui_element_kind kind_memo_input { luil::application_element_kind(38) };
 
     // --- UI thread에서 실행해야 하는 앱 명령 ---
     // 라이브러리는 이 번호를 해석하지 않고 셸의 delegate에 그대로 넘긴다
@@ -94,6 +96,7 @@ namespace demo {
     constexpr luil::text_input_target target_dropdown_search { static_cast<luil::text_input_target>(4) };
     constexpr luil::text_input_target target_tool_menu_search { static_cast<luil::text_input_target>(5) };
     constexpr luil::text_input_target target_network_url { static_cast<luil::text_input_target>(6) };
+    constexpr luil::text_input_target target_memo { static_cast<luil::text_input_target>(7) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.
