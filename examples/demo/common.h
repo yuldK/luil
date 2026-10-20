@@ -142,6 +142,10 @@ namespace demo {
         float delta { 0.0f };
     };
 
+    // 손잡이 조절이 끝났다 (뗌·키 한 번). 끝난 폭을 저장할 자리다.
+    struct sidebar_resize_finish_intent
+    {};
+
     // 떠 있는 popup(드롭다운·컨텍스트 메뉴·탭 넘침)을 모두 닫자는 요청이다.
     // popup을 소유한 페이지들이 각자 자기 열림 상태를 지운다.
     struct popup_close_intent

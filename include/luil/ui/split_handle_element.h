@@ -29,6 +29,8 @@ namespace luil {
     // 손잡이를 끈 만큼의 길이 변화를 앱 메시지로 바꾼다.
     // delta는 논리 픽셀이고 +가 넓어지는 쪽이다.
     using split_resize_message_factory = std::function<input_action(float delta)>;
+    // 길이 바꾸기 한 번이 끝났다는 메시지다. 앱이 끝난 길이를 저장하는 자리다.
+    using split_finish_message_factory = std::function<input_action()>;
 
     // 키 한 번이 옮기는 거리다 (논리 픽셀).
     // 손잡이는 자기 범위를 모르므로 Home/End에 답할 값이 없다 — 그 둘은 키를
@@ -43,6 +45,14 @@ namespace luil {
         // 없으면 끌기 대상도 커서 주인도 되지 않는다 — 없는 것은 두지 않는다.
         // 길이의 범위 다듬기는 그 길이를 가진 쪽의 몫이다.
         split_resize_message_factory resize {};
+        // 길이 바꾸기가 끝났을 때 한 번 낸다. 비어 있으면 알리지 않는다.
+        //  - 끌기는 포인터를 뗄 때다. 시스템이 접촉을 취소했거나 입력을 잃어 거둔 끌기도 끝이다 —
+        //    그때까지 보낸 변화량이 그대로 남는다. 움직이지 않고 뗀 누름에도 낸다.
+        //  - 끄는 도중 손잡이가 tree에서 사라졌거나 가려진 뒤의 뗌에는 내지 않는다 (`pointer_drag_target::on_release`).
+        //  - 키는 한 번이 곧 한 번의 바꾸기라 그 키의 `resize` 바로 뒤에 낸다. 눌러 두어 되풀이되는 키도
+        //    되풀이마다 낸다 — 길이를 저장하는 쪽이 잦은 호출을 견뎌야 한다.
+        //  - `resize`가 없으면 끌 수도 키로 옮길 수도 없으므로 이것도 듣지 않는다.
+        split_finish_message_factory finish {};
     };
 
     // 끌어서 옆 판의 길이를 바꾸는 손잡이다.

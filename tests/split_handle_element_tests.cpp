@@ -27,6 +27,25 @@ namespace {
         return [](const float delta) { return luil::input_action { luil::app_message { length_intent { delta } } }; };
     }
 
+    // 길이 바꾸기가 끝났다는 메시지의 앱 쪽 정의다.
+    struct finish_intent
+    {
+    };
+
+    [[nodiscard]] luil::split_finish_message_factory make_finish_factory()
+    {
+        return []() { return luil::input_action { luil::app_message { finish_intent {} } }; };
+    }
+
+    [[nodiscard]] std::size_t count_finish(const std::vector<luil::input_action>& actions)
+    {
+        std::size_t count { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr && message->get<finish_intent>() != nullptr)
+                ++count;
+        return count;
+    }
+
     // 배치는 담는 쪽의 몫이라 아무 자리나 준다 — 손잡이는 그것을 그대로 쓴다.
     [[nodiscard]] std::unique_ptr<luil::split_handle_element> make_handle(const luil::split_axis axis, const luil::split_grows grows, const float scale)
     {
@@ -81,7 +100,7 @@ namespace {
 
     // 앞 판(길이 `width`)·손잡이(두께 8)·뒤 판이 가로로 선 화면이다.
     // 손잡이는 앞 판의 끝에 서므로 길이가 바뀌면 손잡이도 옮겨 간다.
-    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_split_tree(const float width)
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_split_tree(const float width, const bool with_finish = false)
     {
         auto root { std::make_unique<pane>(luil::ui_element_id { luil::ui_element_kind::root }) };
         root->arrange({ { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f });
@@ -93,6 +112,8 @@ namespace {
 
         luil::split_handle_config config {};
         config.resize = make_resize_factory();
+        if (with_finish)
+            config.finish = make_finish_factory();
         auto handle { std::make_unique<luil::split_handle_element>(luil::ui_element_id { kind_handle }, config) };
         handle->arrange({ { width, 0.0f, 8.0f, 600.0f }, 1.0f });
         root->add(std::move(handle));
@@ -146,6 +167,62 @@ TEST_CASE("A split handle keeps dragging after the pane it resizes moves it away
     REQUIRE(back == -10.0f);
 
     static_cast<void>(controller.process(luil::pointer_released_event { 134.0f, 300.0f, luil::pointer_button::left, at(64) }));
+}
+
+TEST_CASE("A split handle announces the end of a drag once when the pointer lets go", "[ui][split][interaction]")
+{
+    // 끄는 동안은 변화량만 온다. 끝난 길이를 저장할 때를 앱이 타이머로 짐작하지 않게, 뗄 때 한 번 알린다.
+    float width { 100.0f };
+    luil::interaction_controller controller {};
+    controller.set_tree(make_split_tree(width, true));
+
+    REQUIRE(count_finish(controller.process(luil::pointer_pressed_event { 104.0f, 300.0f, luil::pointer_button::left, at(0) })) == 0u);
+    const std::vector<luil::input_action> moved { controller.process(luil::pointer_moved_event { 124.0f, 300.0f, at(16) }) };
+    REQUIRE(count_finish(moved) == 0u);
+    width += total_delta(moved);
+    controller.set_tree(make_split_tree(width, true));
+    REQUIRE(count_finish(controller.process(luil::pointer_moved_event { 140.0f, 300.0f, at(32) })) == 0u);
+
+    REQUIRE(count_finish(controller.process(luil::pointer_released_event { 140.0f, 300.0f, luil::pointer_button::left, at(48) })) == 1u);
+    // 뗀 뒤의 이동은 끌기가 아니다.
+    REQUIRE(count_finish(controller.process(luil::pointer_moved_event { 160.0f, 300.0f, at(64) })) == 0u);
+}
+
+TEST_CASE("A split handle without a finish factory stays silent at the end", "[ui][split]")
+{
+    // 없는 것은 두지 않는다: 알릴 곳이 없으면 끝도 듣지 않는다.
+    const auto handle { make_handle(luil::split_axis::horizontal, luil::split_grows::toward_end, 1.0f) };
+    REQUIRE(handle->pointer_drag()->on_release == nullptr);
+    const std::optional<std::vector<luil::input_action>> stepped { handle->key_step()->on_step(luil::value_step::increase) };
+    REQUIRE(stepped.has_value());
+    REQUIRE(count_finish(*stepped) == 0u);
+}
+
+TEST_CASE("A split handle key step is a whole resize that ends at once", "[ui][split][focus]")
+{
+    // 키 한 번이 곧 한 번의 바꾸기다 — 변화량 바로 뒤에 끝이 온다.
+    luil::split_handle_config config {};
+    config.resize = make_resize_factory();
+    config.finish = make_finish_factory();
+    const luil::split_handle_element handle { luil::ui_element_id { kind_handle }, config };
+    const std::optional<std::vector<luil::input_action>> stepped { handle.key_step()->on_step(luil::value_step::increase_page) };
+    REQUIRE(stepped.has_value());
+    REQUIRE(stepped->size() == 2u);
+    REQUIRE(total_delta(*stepped) == luil::split_handle_key_page_step);
+    REQUIRE(count_finish(*stepped) == 1u);
+    REQUIRE(std::get<luil::app_message>((*stepped)[1]).get<finish_intent>() != nullptr);
+
+    // Home·End는 여전히 내 것이 아니다 — 끝도 내지 않는다.
+    REQUIRE(handle.key_step()->on_step(luil::value_step::minimum).has_value() == false);
+}
+
+TEST_CASE("A split handle without a resize factory ignores its finish factory", "[ui][split]")
+{
+    luil::split_handle_config config {};
+    config.finish = make_finish_factory();
+    const luil::split_handle_element handle { luil::ui_element_id { kind_handle }, config };
+    REQUIRE(handle.pointer_drag() == nullptr);
+    REQUIRE(handle.key_step() == nullptr);
 }
 
 TEST_CASE("A split handle turns a drag into logical length deltas", "[ui][split]")
