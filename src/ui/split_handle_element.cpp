@@ -36,6 +36,9 @@ namespace luil {
                 return {};
             return { config_.resize(delta) };
         };
+        // 손잡이는 길이를 담지 않으므로 "끝난 길이"는 앱이 안다. 여기서는 끝났다는 사실만 나른다.
+        if (config_.finish != nullptr)
+            target.on_release = [this](const ui_action_context&, drag_velocity) -> std::vector<input_action> { return { config_.finish() }; };
         set_pointer_drag_target(std::move(target));
 
         set_tab_stop(true);
@@ -65,7 +68,11 @@ namespace luil {
                 return std::nullopt;
             }
             // 끌기와 같은 부호 규약이다 — 앱은 언제나 "+ = 그 판이 넓어진다"만 안다.
-            return std::vector<input_action> { config_.resize(config_.grows == split_grows::toward_end ? moved : -moved) };
+            std::vector<input_action> actions { config_.resize(config_.grows == split_grows::toward_end ? moved : -moved) };
+            // 키 한 번이 곧 한 번의 바꾸기다.
+            if (config_.finish != nullptr)
+                actions.push_back(config_.finish());
+            return actions;
         };
         set_key_step_target(std::move(steps));
     }

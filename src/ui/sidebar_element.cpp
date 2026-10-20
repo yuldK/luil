@@ -50,6 +50,7 @@ namespace luil {
             handle_config.axis = split_axis::horizontal;
             handle_config.grows = config_.side == sidebar_side::left ? split_grows::toward_end : split_grows::toward_start;
             handle_config.resize = config_.resize;
+            handle_config.finish = config_.resize_finish;
             auto handle { std::make_unique<split_handle_element>(ui_element_id { ui_element_kind::sidebar_handle, config_.owner }, handle_config) };
             handle_ = handle.get();
             add_child(std::move(handle));

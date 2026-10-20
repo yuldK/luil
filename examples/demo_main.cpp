@@ -59,6 +59,7 @@
 #include <array>
 #include <atomic>
 #include <charconv>
+#include <cmath>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -316,6 +317,13 @@ namespace demo {
                     sidebar_motion_ = luil::transition { sidebar_width_, sidebar_width_, {}, std::chrono::milliseconds { 0 } };
                     return;
                 }
+                if (message.get<sidebar_resize_finish_intent>() != nullptr)
+                {
+                    // 끄는 동안은 저장하지 않는다 — 끝났다는 알림이 올 때 한 번이다.
+                    saved_sidebar_width_ = sidebar_width_;
+                    ++sidebar_resize_finishes_;
+                    return;
+                }
                 if (message.get<popup_close_intent>() != nullptr)
                 {
                     tabs_.close_popups();
@@ -565,6 +573,7 @@ namespace demo {
                 config.toggle_tooltip = sidebar_collapsed_ ? u8"펼친다" : u8"접는다";
                 config.toggle = luil::make_message_action(sidebar_toggle_intent {});
                 config.resize = [](const float delta) { return luil::make_app_action(sidebar_resize_intent { delta }); };
+                config.resize_finish = []() { return luil::make_app_action(sidebar_resize_finish_intent {}); };
                 return config;
             }
 
@@ -597,6 +606,19 @@ namespace demo {
                 config.padding = luil::edge_insets::symmetric(8.0f, 4.0f);
                 auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"navigation" }, config) };
                 column->add(std::make_unique<luil::choice_group_element>(std::move(navigation)), navigation_height);
+                // 손잡이를 놓을 때 저장한 폭이다. 끄는 동안에는 바뀌지 않고 놓아야 따라온다.
+                if (sidebar_resize_finishes_ > 0)
+                {
+                    std::u8string saved { u8"놓은 폭 " };
+                    for (const char digit : std::to_string(static_cast<int>(std::lround(saved_sidebar_width_))))
+                        saved.push_back(static_cast<char8_t>(digit));
+                    saved += u8" · ";
+                    for (const char digit : std::to_string(sidebar_resize_finishes_))
+                        saved.push_back(static_cast<char8_t>(digit));
+                    saved += u8"번";
+                    column->add_gap(8.0f);
+                    column->add(make_label(luil::ui_element_id { kind_text, u8"sidebar-saved-width" }, std::move(saved), 11.0f, luil::label_color_role::dim), 16.0f);
+                }
                 return column;
             }
 
@@ -668,6 +690,9 @@ namespace demo {
             std::u8string page_ {};
             bool sidebar_collapsed_ { false };
             float sidebar_width_ { sidebar_default_width };
+            // 손잡이를 놓았을 때 저장한 폭과 그 횟수다 (`sidebar_config::resize_finish`의 시연).
+            float saved_sidebar_width_ { sidebar_default_width };
+            int sidebar_resize_finishes_ { 0 };
             // 접힘 전환이다 (앱 상태).
             // 라이브러리는 이것을 들고 있지 않고, 지금 폭만 물어 사이드바에 넘긴다.
             luil::transition sidebar_motion_ { sidebar_default_width, sidebar_default_width, {}, std::chrono::milliseconds { 0 } };

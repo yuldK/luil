@@ -42,6 +42,8 @@ namespace luil {
         // `split_handle_element`가 부호를 맞춘다.
         // 폭의 범위 다듬기는 폭을 소유한 앱의 몫이다.
         split_resize_message_factory resize {};
+        // 폭 조절이 끝났을 때 한 번 낸다 — 끝난 폭을 저장하는 자리다 (`split_handle_config::finish`).
+        split_finish_message_factory resize_finish {};
     };
 
     // 토글 버튼이 있을 때 내용 위에 남겨 두는 머리 높이와 손잡이의 hit 폭이다 (논리 픽셀).

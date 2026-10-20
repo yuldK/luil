@@ -210,3 +210,32 @@ TEST_CASE("A sidebar handle turns a drag into width deltas toward wider", "[ui][
     REQUIRE(mirrored_message != nullptr);
     REQUIRE(mirrored_message->get<width_intent>()->delta == 5.0f);
 }
+
+TEST_CASE("A sidebar hands the end of a resize to its handle", "[ui][sidebar]")
+{
+    // 끝난 폭을 저장할 때를 앱이 짐작하지 않게, 손잡이가 놓일 때 한 번 알린다.
+    struct finish_intent
+    {
+    };
+
+    luil::sidebar_config config {};
+    config.resize = make_resize_factory();
+    config.resize_finish = []() { return luil::input_action { luil::app_message { finish_intent {} } }; };
+    luil::sidebar_element sidebar { config };
+    sidebar.arrange({ { 0.0f, 0.0f, 1000.0f, 600.0f }, 1.0f });
+    const luil::ui_element* const handle { sidebar.children()[0].get() };
+    REQUIRE(handle->pointer_drag() != nullptr);
+    REQUIRE(handle->pointer_drag()->on_release != nullptr);
+    const std::vector<luil::input_action> released { handle->pointer_drag()->on_release({ handle->id(), 200.0f, 300.0f }, {}) };
+    REQUIRE(released.size() == 1);
+    const auto* const message { std::get_if<luil::app_message>(&released[0]) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<finish_intent>() != nullptr);
+
+    // 알릴 곳이 없으면 끝도 듣지 않는다.
+    luil::sidebar_config silent {};
+    silent.resize = make_resize_factory();
+    luil::sidebar_element quiet { silent };
+    quiet.arrange({ { 0.0f, 0.0f, 1000.0f, 600.0f }, 1.0f });
+    REQUIRE(quiet.children()[0]->pointer_drag()->on_release == nullptr);
+}
