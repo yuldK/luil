@@ -202,6 +202,11 @@ namespace demo {
                 tree_expanded_.erase(found);
             return true;
         }
+        if (const auto* const open { message.get<log_open_intent>() }; open != nullptr)
+        {
+            log_opened_ = open->key;
+            return true;
+        }
         if (const auto* const select { message.get<log_select_intent>() }; select != nullptr)
         {
             // 고르는 것이 커서도 함께 옮긴다. 목록은 누름에 `select`만 내므로,
@@ -445,6 +450,7 @@ namespace demo {
         // 여기서 짓는다 (그 둘 말고는 전부 목록이 쥔다).
         config.build_row = make_log_row;
         config.select = [](const std::u8string& key) { return luil::make_app_action(log_select_intent { key }); };
+        config.double_click = [](const std::u8string& key) { return luil::make_app_action(log_open_intent { key }); };
         // `move`가 없으면 목록은 Tab의 자리조차 아니다 — 커서가 앱 상태라
         // 라이브러리가 고칠 수 없고, 옮길 길이 없는 화살표는 아무 일도 하지 않는다.
         config.move = [](const std::u8string& key) { return luil::make_app_action(log_cursor_intent { key }); };
@@ -458,7 +464,10 @@ namespace demo {
         column->add_gap(log_footer_gap);
         // 커서와 고른 항목을 함께 적는다. 화살표로 훑기만 하면 앞의 값만 움직이고,
         // 눌러야 뒤의 값이 따라온다 — 둘을 가른 이유가 이 한 줄에서 보인다.
-        const std::u8string footer { u8"커서 " + log_label_of(log_items_, log_cursor_) + u8"  ·  고른 것 " + log_label_of(log_items_, log_selected_) };
+        std::u8string footer { u8"커서 " + log_label_of(log_items_, log_cursor_) + u8"  ·  고른 것 " + log_label_of(log_items_, log_selected_) };
+        // 두 번 누른 줄이다. 한 번 누름은 고르기만 하므로 이 값은 따라오지 않는다.
+        if (log_opened_.empty() == false)
+            footer += u8"  ·  연 것 " + log_label_of(log_items_, log_opened_);
         column->add(make_label(luil::ui_element_id { kind_text, u8"log-footer" }, footer, 10.0f, luil::label_color_role::dim), log_footer_height);
 
         luil::panel_config surface_panel {};

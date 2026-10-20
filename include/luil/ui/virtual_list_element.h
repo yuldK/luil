@@ -128,6 +128,12 @@ namespace luil {
         //    않는다 — 목록의 빈 자리를 눌러 커서 행이 실행되는 일은 없다
         //    (`hit_test`가 목록 자신을 답하지 않는다).
         virtual_list_message_factory activate {};
+        // 행을 두 번 눌렀을 때다 (마우스 더블 클릭·두 번 탭). 그 행의 키를 받는다.
+        //  - 첫 누름은 평소처럼 `select`·`pick`이다. 같은 자리의 두 번째 누름이 이것이 되고, 그 누름은 다시 고르지
+        //    않는다 — 이미 첫 누름이 골랐다.
+        //  - 포인터만의 문이다. 키보드의 짝은 `activate`다 (Enter가 "열기"인 목록은 둘에 같은 메시지를 준다).
+        //  - 비어 있으면 두 번째 누름도 평소의 누름이다.
+        virtual_list_message_factory double_click {};
         // 행을 눌렀을 때 그 누름의 문맥까지 받는다. 있으면 `select` 대신 쓴다 (다중 선택 목록의 Ctrl·Shift+클릭).
         //  - 커서를 함께 옮기는 것(`move`)은 `select`와 같다.
         virtual_list_pick_factory pick {};
