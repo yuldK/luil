@@ -20,13 +20,14 @@ struct text_edit_state
 {
     std::u8string text;
     std::size_t caret, anchor;
+    bool caret_upstream;
     std::vector<text_edit_revision> undo, redo;
     text_edit_group group;
     std::size_t group_caret;
 };
 ```
 
-편집 함수는 `text_edit_state&`를 받고 픽셀 좌표를 다루지 않는다. 같은 종류의 삽입 또는 삭제가 caret을 이어 가는 동안 하나의 undo 그룹이 된다. caret을 옮기거나 선택하면 `none`으로 시작한다. 선택 대체와 붙여넣기는 `replace` 그룹이며 묶지 않는다. IME는 조합 중간 상태를 기록하지 않고 확정 결과를 하나의 `replace_all` 명령으로 적용한다. undo 기록은 100개로 제한한다.
+편집 함수는 `text_edit_state&`를 받고 픽셀 좌표를 다루지 않는다. `caret_upstream`은 caret이 앞 글자 쪽에 붙는다는 표시(affinity)다. 여러 줄 칸에서 넘겨 접은 자리의 caret을 윗줄 끝에 그릴 때만 뜻이 있다. `apply_text_edit`가 `place_caret`에서만 세우고 다른 모든 명령에서 지운다 ([자동 줄 넘김](../text-area-wrap-design.md#접은-자리의-caret-affinity)). 같은 종류의 삽입 또는 삭제가 caret을 이어 가는 동안 하나의 undo 그룹이 된다. caret을 옮기거나 선택하면 `none`으로 시작한다. 선택 대체와 붙여넣기는 `replace` 그룹이며 묶지 않는다. IME는 조합 중간 상태를 기록하지 않고 확정 결과를 하나의 `replace_all` 명령으로 적용한다. undo 기록은 100개로 제한한다.
 
 `text_edit_command`는 insert, backspace, 단어 이동·선택, undo, redo, caret 배치 등의 동작을 표현한다. input 스레드는 `text_edit_request`를 만들고 policy가 이를 앱 메시지로 변환한다. 앱 logic은 [`ui_interaction.h`](../../include/luil/ui/ui_interaction.h)의 `luil::apply_text_edit(state, request, filter)`로 초안을 갱신한다. 선택적인 `text_insert_filter`는 insert·replace 전에 숫자 제한이나 길이 제한처럼 앱별 입력 규칙을 적용한다.
 

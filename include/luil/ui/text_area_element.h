@@ -46,7 +46,8 @@ namespace luil {
     // 줄을 접어 내용 높이를 정하고, 그리기·포인터 판정·IME 질의가 그 접은 줄을 그대로 쓴다.
     //  - 낱말 사이(공백 뒤)에서 접는다. 한 낱말이 칸보다 길면 글자 사이에서 접는다. 공백은 윗줄 끝에 매달린다.
     //  - 접는 폭은 흘리는 칸이면 막대 자리를 늘 뺀 폭이다. 막대가 서는 순간 글 전체가 다시 접히지 않는다.
-    //  - 접은 자리의 offset은 아랫줄의 처음이다. 그래서 접은 줄의 End는 매달린 공백(또는 마지막 글자) 앞에 선다.
+    //  - 접은 자리의 offset은 윗줄의 끝이자 아랫줄의 처음이다. 기본은 아랫줄이고, 접은 줄의 End나 그 줄 끝을
+    //    누르면 caret이 윗줄 끝에 붙는다 (`text_edit_state::caret_upstream`, `caret_at_point`).
     //
     // 세로 스크롤은 앱 상태다 (`scroll_offset`·`scroll`). 휠로 caret에서 멀리 흘려도 되돌아가지 않는다.
     // caret이나 글이 바뀐 frame에서만 controller가 caret 줄을 창 안으로 들인다
@@ -89,6 +90,8 @@ namespace luil {
         [[nodiscard]] std::optional<std::size_t> offset_at(float x, const text_measurer& measurer) const override;
         // 창 좌표 (x, y)를 글의 offset으로 옮긴다. 첫 줄 위는 글의 처음, 마지막 줄 아래는 글의 끝이다.
         [[nodiscard]] std::optional<std::size_t> offset_at_point(float x, float y, const text_measurer& measurer) const override;
+        // 누른 화면 줄이 접은 줄이고 답한 offset이 그 줄의 끝이면 윗줄 쪽(`upstream`)이다.
+        [[nodiscard]] std::optional<text_caret_position> caret_at_point(float x, float y, const text_measurer& measurer) const override;
         [[nodiscard]] std::optional<text_input_snapshot> text_input() const override;
         // 구간이 시작하는 줄에서의 자리다. 여러 줄에 걸치면 그 줄의 끝까지다 — IME 후보 창이 조합 글자 밑에 앉는다.
         [[nodiscard]] std::optional<rect_f> text_span_bounds(const text_span_query& query, const text_measurer& measurer) const override;

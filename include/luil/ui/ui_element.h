@@ -127,6 +127,17 @@ namespace luil {
         text_input_options options {};
         // 여러 줄 붙여넣기를 허용한다. 거짓이면 기존 한 줄 붙여넣기 동작을 따른다.
         bool multiline { false };
+        // caret이 앞 글자 쪽에 붙는다 (`text_edit_state::caret_upstream`). 넘겨 접은 자리에서만 뜻이 있다.
+        bool caret_upstream { false };
+    };
+
+    // 포인터 자리에 놓을 caret이다. `upstream`이면 그 offset의 앞 글자 쪽(넘겨 접은 윗줄의 끝)에 붙는다.
+    struct text_caret_position
+    {
+        std::size_t offset { 0 };
+        bool upstream { false };
+
+        [[nodiscard]] bool operator==(const text_caret_position&) const noexcept = default;
     };
 
     // 액션은 상태를 바꾸지 않고 후속 메시지를 반환한다.
@@ -883,6 +894,9 @@ namespace luil {
         // 여러 줄 텍스트 박스가 창 좌표 (x, y)를 글 안의 byte offset으로 옮긴다.
         // 기본 구현은 y를 쓰지 않고 offset_at(x, measurer)에 맡긴다.
         [[nodiscard]] virtual std::optional<std::size_t> offset_at_point(float x, float y, const text_measurer& measurer) const;
+        // 창 좌표 (x, y)에 놓을 caret이다 — offset과, 넘겨 접은 자리면 어느 줄에 붙는가다.
+        // 기본 구현은 offset_at_point를 감싸 언제나 아랫줄 쪽(`upstream == false`)이다.
+        [[nodiscard]] virtual std::optional<text_caret_position> caret_at_point(float x, float y, const text_measurer& measurer) const;
         // 텍스트 박스만 구현한다.
         // 글과 선택 범위를 그대로 내준다.
         [[nodiscard]] virtual std::optional<text_input_snapshot> text_input() const;

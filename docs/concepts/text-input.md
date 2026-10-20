@@ -46,7 +46,7 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 | Ctrl+Enter, Alt+Enter | 칸이 받지 않는다. 앱 단축키로 흐른다 |
 | ↑, ↓ | 같은 가로 자리의 위아래 화면 줄로 간다. 접은 줄도 한 줄이다. 첫 줄의 ↑는 글의 처음, 마지막 줄의 ↓는 글의 끝이다 |
 | Page Up, Page Down | 창에 드는 줄 수에서 한 줄을 남긴 만큼 간다 |
-| Home, End | caret이 선 화면 줄의 처음과 끝이다. 접은 줄의 End는 매달린 공백(없으면 마지막 글자) 앞이다 |
+| Home, End | caret이 선 화면 줄의 처음과 끝이다. 접은 줄의 End는 접은 자리에 서고 caret이 그 줄 끝에 붙는다(`caret_upstream`) |
 | Ctrl+Home, Ctrl+End | 글의 처음과 끝이다 (`move_line_start`·`move_line_end`) |
 | Tab | 칸을 떠난다. 탭 문자를 넣지 않는다 |
 

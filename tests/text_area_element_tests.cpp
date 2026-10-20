@@ -203,8 +203,13 @@ TEST_CASE("A wrapped text area places points and spans on screen lines", "[ui][t
     // 둘째 화면 줄 "dddd eeee"는 offset 15에서 시작한다.
     REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(1), fixed_width) == 17u);
     REQUIRE(memo.offset_at_point(-50.0f, row_middle(1), fixed_width) == 15u);
-    // 접은 줄의 오른쪽 끝은 매달린 공백 앞이다 — 접은 자리(15)는 아랫줄의 처음이다.
-    REQUIRE(memo.offset_at_point(7.0f + 5000.0f, row_middle(0), fixed_width) == 14u);
+    // 접은 줄의 오른쪽 끝은 접은 자리(15)이고, 누른 윗줄에 붙는다. 아랫줄의 처음도 같은 offset이지만 아랫줄 쪽이다.
+    REQUIRE(memo.caret_at_point(7.0f + 5000.0f, row_middle(0), fixed_width) == luil::text_caret_position { 15, true });
+    REQUIRE(memo.caret_at_point(-50.0f, row_middle(1), fixed_width) == luil::text_caret_position { 15, false });
+    REQUIRE(memo.offset_at_point(7.0f + 5000.0f, row_middle(0), fixed_width) == 15u);
+    // 접지 않은 줄의 끝은 아랫줄 쪽이 따로 없다.
+    REQUIRE(memo.caret_at_point(7.0f + 5000.0f, row_middle(1), fixed_width) == luil::text_caret_position { 24, false });
+    // affinity가 없는 caret은 접은 자리에서 아랫줄의 처음이다.
     const auto at_break { memo.text_span_bounds({ text, 15, 15, 15 }, fixed_width) };
     REQUIRE(at_break->x == 7.0f);
     REQUIRE(at_break->y == 5.0f + 18.0f);
@@ -246,8 +251,12 @@ TEST_CASE("Line keys follow the screen lines of a wrapped text area", "[ui][text
     controller.set_tree(wrapped_tree(view_of(text, 2)));
     // ↓는 같은 줄 바꿈 안의 다음 화면 줄로 간다.
     REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_down)))->offset == 17u);
-    // End는 caret이 선 화면 줄의 끝이다.
-    REQUIRE(edit_in(controller.process(key(luil::key_code::end)))->offset == 14u);
+    // End는 caret이 선 화면 줄의 끝이다. 접은 자리라 윗줄에 붙는다.
+    const auto end { edit_in(controller.process(key(luil::key_code::end))) };
+    REQUIRE(end->offset == 15u);
+    REQUIRE(end->upstream);
+    // ↓·↑는 caret을 놓되 접은 자리가 아니면 붙지 않는다.
+    REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_down)))->upstream == false);
 
     controller.set_tree(wrapped_tree(view_of(text, 20)));
     REQUIRE(edit_in(controller.process(key(luil::key_code::home)))->offset == 15u);
@@ -411,4 +420,53 @@ TEST_CASE("A text area without a scroll factory does not follow its caret", "[ui
     focus(controller);
     controller.set_tree(memo_tree(view_of(text, text.size())));
     REQUIRE(controller.follow_text_caret().empty());
+}
+
+TEST_CASE("A caret held at a wrap point stays on the upper line until another edit moves it", "[ui][text-area][interaction]")
+{
+    const std::u8string text { u8"aaaa bbbb cccc dddd eeee" };
+    // 편집 상태: place_caret만 affinity를 세우고, 다른 명령은 지운다.
+    luil::text::text_edit_state state { .text = text, .caret = 2, .anchor = 2 };
+    luil::text_edit_request place {};
+    place.command = luil::text::text_edit_command::place_caret;
+    place.offset = 15;
+    place.upstream = true;
+    luil::apply_text_edit(state, place);
+    REQUIRE(state.caret == 15u);
+    REQUIRE(state.caret_upstream);
+    luil::text_edit_request left {};
+    left.command = luil::text::text_edit_command::move_left;
+    luil::apply_text_edit(state, left);
+    REQUIRE(state.caret_upstream == false);
+    luil::apply_text_edit(state, place);
+    luil::text_edit_request insert {};
+    insert.command = luil::text::text_edit_command::insert;
+    insert.text = u8"#";
+    luil::apply_text_edit(state, insert);
+    REQUIRE(state.caret_upstream == false);
+    // 다듬어져 다른 자리에 놓인 caret은 붙지 않는다.
+    place.offset = 999;
+    luil::apply_text_edit(state, place);
+    REQUIRE(state.caret_upstream == false);
+
+    // 칸: 붙은 caret은 윗줄 끝에 서고, 그 자리를 묻는 질의(IME 후보 창·보조 기술)도 윗줄을 답한다.
+    luil::text_input_view held { view_of(text, 15) };
+    held.caret_upstream = true;
+    const auto tree { wrapped_tree(held) };
+    const luil::text_area_element& memo { memo_of(*tree) };
+    REQUIRE(memo.text_input()->caret_upstream);
+    const auto caret { memo.text_span_bounds({ text, 15, 15, 15 }, fixed_width) };
+    REQUIRE(caret->x == 7.0f + 150.0f);
+    REQUIRE(caret->y == 5.0f);
+    // 같은 offset의 다른 질의(caret이 아닌 자리)는 아랫줄의 처음이다.
+    REQUIRE(memo.text_span_bounds({ text, 0, 15, 15 }, fixed_width)->y == 5.0f + 18.0f);
+
+    // 붙은 caret에서 Home은 윗줄의 처음, ↓는 같은 가로 자리의 아랫줄(그 줄의 끝)이다.
+    memo_policy policy {};
+    luil::interaction_controller controller { &policy, fixed_config() };
+    controller.set_tree(tree);
+    focus(controller);
+    controller.set_tree(wrapped_tree(held));
+    REQUIRE(edit_in(controller.process(key(luil::key_code::home)))->offset == 0u);
+    REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_down)))->offset == 24u);
 }

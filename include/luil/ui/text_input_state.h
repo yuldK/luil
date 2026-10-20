@@ -15,6 +15,8 @@ namespace luil {
         std::u8string text {};
         std::size_t caret { 0 };
         std::size_t anchor { 0 };
+        // caret이 앞 글자 쪽에 붙는다 (`text_edit_state::caret_upstream`). 여러 줄 칸만 쓴다.
+        bool caret_upstream { false };
 
         // IME 조합 중이다.
         // 조합 글은 아직 사용자의 글이 아니므로 `text`에 넣지 않는다.
