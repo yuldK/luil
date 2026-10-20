@@ -1,12 +1,12 @@
 #include "luil/ui/image_encode.h"
 
-#include "raster_probe.h"
-#include "ui/image_backing.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
+#include "ui/image_backing.h"
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -1,10 +1,10 @@
 #include "luil/ui/image_decode.h"
 
-#include "raster_probe.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -87,6 +87,29 @@ TEST_CASE("An svg decodes into a vector image drawn sharply at any size", "[ui][
     REQUIRE(frame.count_color({ 16.0f, 0.0f, 16.0f, 32.0f }, colour_blue) == 16 * 32);
 }
 
+#if LUIL_TESTS_AVIF
+TEST_CASE("An svg decodes an embedded avif before any raster decode", "[ui][image][svg][avif][raster]")
+{
+    // image_decode_tests의 빨간 4×4 AVIF다. SVG만 읽는 앱도 선택 디코더를 먼저 등록해야 한다.
+    constexpr std::string_view embedded {
+        R"(<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="4" height="4"><image width="4" height="4" xlink:href="data:image/avif;base64,)"
+        "AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUEAAADrbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAAAAAAAOcGl0bQAAAAAAAQAAAB5pbG9jAAAAAEQAAAEAAQAAAAEAAAETAAAAIAAAAChpaW5mAAAAAAABAAAAGmluZm"
+        "UCAAAAAAEAAGF2MDFDb2xvcgAAAABqaXBycAAAAEtpcGNvAAAAFGlzcGUAAAAAAAAABAAAAAQAAAAQcGl4aQAAAAADCAgIAAAADGF2MUOBIAAAAAAAE2NvbHJuY2x4AAEADQAGgAAAABdpcG1hAAAAAAAAAAEAAQQBAoMEAAAAKG1kYXQSAAoIOAR9hAQ0"
+        "GkAyEhAAAAAP+kBFObHqTAw0p7NlCw=="
+        R"("/></svg>)",
+    };
+    luil::image_decode_error error {};
+    luil::image_config config {};
+    config.image = luil::decode_svg_bytes(bytes_of(embedded), error);
+    REQUIRE(config.image.valid());
+    const auto frame { draw_config(config, 4) };
+    const auto pixel { static_cast<std::uint32_t>(frame.pixel_at(2, 2)) };
+    REQUIRE(((pixel >> 16) & 0xFFu) > 180u);
+    REQUIRE(((pixel >> 8) & 0xFFu) < 90u);
+    REQUIRE((pixel & 0xFFu) < 90u);
+}
+#endif
+
 TEST_CASE("An svg takes its size from width and height before the viewBox", "[ui][image][svg]")
 {
     luil::image_decode_error error {};
@@ -163,6 +186,14 @@ TEST_CASE("Bytes that are not a Lottie fail by name", "[ui][image][lottie]")
     luil::image_decode_error error {};
     REQUIRE(luil::decode_lottie_bytes(bytes_of("{\"not\":\"lottie\"}"), error).valid() == false);
     REQUIRE(error.kind == luil::image_decode_error_kind::unsupported_format);
+}
+
+TEST_CASE("A Lottie duration must fit the playback clock", "[ui][image][lottie]")
+{
+    constexpr std::string_view too_long { R"({"v":"5.7.0","fr":1,"ip":0,"op":1e20,"w":4,"h":4,"layers":[]})" };
+    luil::image_decode_error error {};
+    REQUIRE(luil::decode_lottie_bytes(bytes_of(too_long), error).valid() == false);
+    REQUIRE(error.kind == luil::image_decode_error_kind::no_pixels);
 }
 #else
 TEST_CASE("A Lottie is refused by name when the build leaves it out", "[ui][image][lottie]")

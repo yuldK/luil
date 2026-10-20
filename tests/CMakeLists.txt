@@ -106,6 +106,7 @@ target_link_libraries(luil_core_tests
         Catch2::Catch2WithMain)
 # SVG·Lottie 진입점은 켠 구성에서 실제 모듈로 읽어 그리고, 끈 구성에서 "지원 안 함"으로 답한다.
 target_compile_definitions(luil_core_tests PRIVATE
+    "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"
     "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
     "LUIL_TESTS_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
 

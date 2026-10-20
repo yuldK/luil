@@ -147,9 +147,12 @@ if(LUIL_PLATFORM STREQUAL "windows")
     set(LUIL_SKIA_REQUIRED_ARGUMENTS
         "skia_use_direct3d=true"
         "skia_use_libjpeg_turbo_decode=true"
+        "skia_use_libjpeg_turbo_encode=true"
         "skia_use_libwebp_decode=true"
+        "skia_use_libwebp_encode=true"
         "skia_use_wuffs=true"
-        "skia_use_rust_png_decode=true")
+        "skia_use_rust_png_decode=true"
+        "skia_use_rust_png_encode=true")
 
     # Skia 자신을 컴파일한 도구사슬이다.
     # 바뀌는 것은 Skia를 컴파일한 컴파일러 하나이며 luil와 소비자는 그대로 MSVC다 —
@@ -210,9 +213,12 @@ else()
         "skia_use_freetype=true"
         "skia_use_expat=true"
         "skia_use_libjpeg_turbo_decode=true"
+        "skia_use_libjpeg_turbo_encode=true"
         "skia_use_libwebp_decode=true"
+        "skia_use_libwebp_encode=true"
         "skia_use_wuffs=true"
-        "skia_use_rust_png_decode=true")
+        "skia_use_rust_png_decode=true"
+        "skia_use_rust_png_encode=true")
     # NDK의 clang이다. luil도 같은 NDK의 clang으로 컴파일한다.
     set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang")
 

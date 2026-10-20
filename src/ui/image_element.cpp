@@ -271,34 +271,42 @@ namespace luil {
             return {};
         // 한 장의 길이다. 1 ns보다 짧은 장은 뜻이 없어(그런 장 빠르기는 파일의 잘못이다)
         // 장면 하나로 본다.
-        const double period_nanoseconds { 1'000'000'000.0 / frame_rate };
-        if (period_nanoseconds < 1.0 || period_nanoseconds >= static_cast<double>(std::numeric_limits<clock_rep>::max()))
+        const long double period_nanoseconds { 1'000'000'000.0L / static_cast<long double>(frame_rate) };
+        if (std::isfinite(period_nanoseconds) == false || period_nanoseconds < 1.0L)
             return {};
-        const clock_rep period { static_cast<clock_rep>(std::llround(period_nanoseconds)) };
-        // 한 바퀴의 장 수다. 끝이 장 중간에 걸리면 그 장까지 센다.
-        const clock_rep frames { duration.count() / period + (duration.count() % period != 0 ? 1 : 0) };
-        if (frames <= 1)
+        const clock_rep cycle { duration.count() };
+        const long double last_index { std::floor(static_cast<long double>(cycle - 1) / period_nanoseconds) };
+        if (last_index <= 0.0L)
             return {};
 
-        const clock_rep measured { elapsed > std::chrono::nanoseconds { 0 } ? elapsed.count() : 0 };
-        const clock_rep index { measured / period };
-
-        // 바퀴 수를 장 수로 옮긴다. 곱셈이 넘치면 사실상 끝없이 도는 것이라 그렇게 본다
-        // (`animation_frame_at`과 같은 판단이다).
-        bool forever { play_count < 0 };
-        const clock_rep passes { play_count > 1 ? static_cast<clock_rep>(play_count) : 1 };
-        if (forever == false && passes > std::numeric_limits<clock_rep>::max() / frames)
-            forever = true;
-        // 다 돌면 마지막 장에 선다. 마지막 장에 들어선 뒤로는 예고하지 않는다 — 그 다음
-        // 경계에 깨어나도 그림이 그대로다.
-        if (forever == false && index >= frames * passes - 1)
-            return { std::chrono::nanoseconds { (frames - 1) * period }, std::nullopt };
-
-        // 다음 장의 시각이 넘치면(수백 년 돈 재생) 예고하지 않는다.
-        const std::optional<std::chrono::nanoseconds> next {
-            index < std::numeric_limits<clock_rep>::max() / period - 1 ? std::optional<std::chrono::nanoseconds> { std::chrono::nanoseconds { (index + 1) * period } } : std::nullopt,
+        // 장의 간격을 먼저 반올림해 누적하면 30 fps가 한 바퀴에 서른한 장이 된다.
+        // 장의 경계마다 올림하고, 되풀이의 경계는 파일의 길이 그대로 둔다.
+        const auto frame_time = [cycle, period_nanoseconds](const long double index) {
+            const long double boundary { std::ceil(index * period_nanoseconds) };
+            return std::chrono::nanoseconds { boundary >= static_cast<long double>(cycle) ? cycle - 1 : static_cast<clock_rep>(boundary) };
         };
-        return { std::chrono::nanoseconds { (index % frames) * period }, next };
+        const clock_rep measured { elapsed > std::chrono::nanoseconds { 0 } ? elapsed.count() : 0 };
+        const clock_rep completed { measured / cycle };
+        const bool forever { play_count < 0 };
+        const clock_rep passes { play_count > 1 ? static_cast<clock_rep>(play_count) : 1 };
+        // 나눗셈으로 바퀴 수를 비교한다. 길이와 바퀴 수를 곱해 넘칠 자리가 없다.
+        if (forever == false && completed >= passes)
+            return { frame_time(last_index), std::nullopt };
+
+        const clock_rep phase { measured % cycle };
+        const long double index { std::floor(static_cast<long double>(phase) / period_nanoseconds) };
+        const std::chrono::nanoseconds time { frame_time(index) };
+        if (forever == false && completed == passes - 1 && index >= last_index)
+            return { time, std::nullopt };
+
+        const long double next_boundary { std::ceil((index + 1.0L) * period_nanoseconds) };
+        const clock_rep boundary { next_boundary >= static_cast<long double>(cycle) ? cycle : static_cast<clock_rep>(next_boundary) };
+        // 아주 긴 재생에서도 예고는 반드시 지금 뒤이고, clock의 표현 범위를 넘지 않는다.
+        const clock_rep offset { boundary > phase ? boundary : phase + 1 };
+        const clock_rep base { measured - phase };
+        if (base > std::numeric_limits<clock_rep>::max() - offset)
+            return { time, std::nullopt };
+        return { time, std::chrono::nanoseconds { base + offset } };
     }
 
     bool ui_lottie::valid() const noexcept

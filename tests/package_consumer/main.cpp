@@ -1,9 +1,15 @@
 #include "luil/generated/codicons.h"
 #include "luil/net/http_client.h"
 #include "luil/ui/glyph_element.h"
+#include "luil/ui/image_decode.h"
+#include "luil/ui/image_encode.h"
 
 #include <windows.h>
 
+#include <array>
+#include <cstdint>
+#include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -33,6 +39,23 @@ int main()
     };
     if (icon.accessibility().name != u8"검색")
         return 4;
+
+    // 설치본의 공개 헤더와 기능별 아카이브도 소비자가 실제로 부를 수 있어야 한다.
+    constexpr std::array<std::uint8_t, 4> red { 255, 0, 0, 255 };
+    const auto image { luil::make_rgba_image(1, 1, red) };
+    std::u8string encode_error {};
+    if (luil::encode_png(image, encode_error).empty() || luil::encode_jpeg(image, 90, encode_error).empty() || luil::encode_webp(image, 90, encode_error).empty()
+        || luil::encode_webp_lossless(image, encode_error).empty())
+        return 7;
+    const auto bytes_of = [](const std::string_view text) { return std::span<const std::uint8_t> { reinterpret_cast<const std::uint8_t*>(text.data()), text.size() }; };
+    luil::image_decode_error decode_error {};
+    constexpr std::string_view svg { R"(<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2"/></svg>)" };
+    if (luil::decode_svg_bytes(bytes_of(svg), decode_error).valid() != (LUIL_CONSUMER_SVG != 0))
+        return 8;
+    constexpr std::string_view lottie { R"({"v":"5.7.0","fr":10,"ip":0,"op":10,"w":4,"h":4,"layers":[]})" };
+    if (luil::decode_lottie_bytes(bytes_of(lottie), decode_error).valid() != (LUIL_CONSUMER_LOTTIE != 0))
+        return 9;
+
     luil::net::http_client_config config {};
     config.deliver = [](luil::net::http_response) {};
     std::u8string error {};

@@ -1,11 +1,11 @@
 #include "luil/ui/image_decode.h"
 
-#include "raster_probe.h"
-#include "sample_image_bytes.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
+#include "sample_image_bytes.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -35,6 +35,8 @@ namespace {
     //  - 움직이는 견본들이 무엇을 내는지는 전부 이 빌드의 Skia에 실제로 물어
     //    받아 적은 값이다. 형식 문서에서 옮긴 값이 아니다.
 
+    // 바이너리 견본은 바이트를 한 줄씩 비교할 수 있도록 원래 묶음을 유지한다.
+    // clang-format off
     // 2×2 png (RGB). 윗줄: 빨강·초록, 아랫줄: 파랑·흰색.
     constexpr std::array<std::uint8_t, 75> quadrant_png {
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
@@ -461,6 +463,7 @@ namespace {
     // 0 byte짜리 파일의 내용이다.
     // MSVC의 `std::array<T, 0>`은 크기가 0이어도 `data()`가 null이 아닌 자리를
     // 답하므로, 빈 span을 만드는 데 특별한 자리가 필요 없다.
+    // clang-format on
     constexpr std::array<std::uint8_t, 0> empty_file {};
 
     [[nodiscard]] std::span<const std::uint8_t> bytes_of(const auto& fixture) noexcept
@@ -527,8 +530,7 @@ namespace {
     {
         const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
         auto picture {
-            std::make_unique<luil::image_element>(luil::ui_element_id { luil::ui_element_kind::root },
-                luil::image_config { .image = image, .fit = luil::image_fit::fill }),
+            std::make_unique<luil::image_element>(luil::ui_element_id { luil::ui_element_kind::root }, luil::image_config { .image = image, .fit = luil::image_fit::fill }),
         };
         picture->arrange({ { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height) }, 1.0f });
         const luil::ui_tree tree { std::move(picture) };
@@ -683,9 +685,7 @@ TEST_CASE("A png decodes into the pixels it encodes", "[ui][image][decode][raste
     // 사분면 색이 제자리에 선다 — 채널 뒤바뀜(RGB↔BGR)과 상하 뒤집힘이 여기 걸린다.
     constexpr int size { 40 };
     const std::vector<luil::ui_color> pixels { raster_pixels(decoded, size, size) };
-    const auto at = [&pixels](const int x, const int y) {
-        return pixels[static_cast<std::size_t>(y) * size + static_cast<std::size_t>(x)];
-    };
+    const auto at = [&pixels](const int x, const int y) { return pixels[static_cast<std::size_t>(y) * size + static_cast<std::size_t>(x)]; };
     REQUIRE(at(2, 2) == luil::ui_color { 0xFFFF0000 });
     REQUIRE(at(37, 2) == luil::ui_color { 0xFF00FF00 });
     REQUIRE(at(2, 37) == luil::ui_color { 0xFF0000FF });

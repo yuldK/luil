@@ -1,10 +1,10 @@
 #include "luil/ui/image_element.h"
 
-#include "raster_probe.h"
-#include "ui/image_backing.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
+#include "ui/image_backing.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -661,6 +661,25 @@ TEST_CASE("A finite Lottie holds on its last frame and stops asking", "[ui][imag
     REQUIRE(luil::lottie_frame_at(second, 10.0, 0, after(950)).next_at.has_value() == false);
     // 끝이 장 중간에 걸리면(1.05초) 그 장까지 한 바퀴다 — 마지막 장은 1000 ms다.
     REQUIRE(luil::lottie_frame_at(std::chrono::milliseconds { 1050 }, 10.0, 1, after(1020)).time == after(1000));
+}
+
+TEST_CASE("A Lottie keeps its cycle length when frames do not divide it exactly", "[ui][image][lottie]")
+{
+    // 30 fps의 1/30초를 ns로 반올림해 누적하면 1초에 서른한 장이 되어 한 바퀴가 늘어난다.
+    const luil::lottie_frame last { luil::lottie_frame_at(1s, 30.0, luil::image_plays_forever, 999ms) };
+    REQUIRE(last.time == 966666667ns);
+    REQUIRE(last.next_at == 1s);
+    const luil::lottie_frame restarted { luil::lottie_frame_at(1s, 30.0, luil::image_plays_forever, 1s) };
+    REQUIRE(restarted.time == 0ns);
+    REQUIRE(restarted.next_at == 1033333334ns);
+    REQUIRE(luil::lottie_frame_at(1s, 30.0, 1, 1s).time == last.time);
+
+    // 마지막 장이 짧은 파일도 길이 그대로 되풀이한다. 1.05초를 1.1초로 늘리지 않는다.
+    const luil::lottie_frame partial { luil::lottie_frame_at(1050ms, 10.0, luil::image_plays_forever, 1020ms) };
+    REQUIRE(partial.time == 1s);
+    REQUIRE(partial.next_at == 1050ms);
+    REQUIRE(luil::lottie_frame_at(1050ms, 10.0, luil::image_plays_forever, 1050ms).time == 0ns);
+    REQUIRE(luil::lottie_frame_at(1050ms, 10.0, 2, 2050ms).next_at.has_value() == false);
 }
 
 TEST_CASE("A Lottie without length or rate never moves", "[ui][image][lottie]")

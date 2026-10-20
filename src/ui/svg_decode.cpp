@@ -2,6 +2,7 @@
 
 #include "host/font_registry.h"
 #include "ui/image_backing.h"
+#include "ui/image_codecs.h"
 #include "ui/image_source.h"
 #include "ui/text_shaping.h"
 
@@ -51,7 +52,12 @@ namespace luil {
         [[nodiscard]] SkSize intrinsic_svg_size(const SkSVGSVG& root)
         {
             const SkSVGLengthContext lengths { SkSize::Make(0.0f, 0.0f) };
-            SkSize size { root.intrinsicSize(lengths) };
+            // intrinsicSize는 한 변만 적혀도 viewBox 전체를 답해 명시한 변을 잃는다.
+            // 두 속성을 각각 풀어야 빠진 변만 viewBox의 비율로 채울 수 있다.
+            SkSize size {
+                lengths.resolve(root.getWidth(), SkSVGLengthContext::LengthType::kHorizontal),
+                lengths.resolve(root.getHeight(), SkSVGLengthContext::LengthType::kVertical),
+            };
             const std::optional<SkRect>& view_box { root.getViewBox() };
             if (view_box.has_value() == false || view_box->width() <= 0.0f || view_box->height() <= 0.0f)
                 return size;
@@ -82,6 +88,7 @@ namespace luil {
         //    끈 구성은 모듈의 기본(primitive)이다 (`text_shaping.h`).
         [[nodiscard]] ui_image decode_svg(sk_sp<SkData> data, const image_decode_options& options, image_decode_error& error)
         {
+            register_optional_image_decoders();
             const sk_sp<SkFontMgr> fonts { platform_font_source().make_uncached_manager() };
             SkSVGDOM::Builder builder {};
             builder.setFontManager(fonts);
