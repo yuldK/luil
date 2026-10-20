@@ -7,7 +7,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <span>
 #include <thread>
@@ -2508,6 +2510,71 @@ namespace luil {
         return { policy_->make_text_edit_action(request) };
     }
 
+    const ui_element* interaction_controller::focused_text_element() const
+    {
+        const ui_tree* const focused_tree { surface_tree(snapshot_.focused_surface) };
+        return focused_tree != nullptr ? focused_tree->find(snapshot_.focused_input) : nullptr;
+    }
+
+    std::vector<input_action> interaction_controller::move_text_caret_by_lines(const text_input_snapshot& value, const float rows, const bool to_line_end, const bool extend) const
+    {
+        // 지금 caret의 자리를 칸에 묻고, 그 줄에서 위아래로 옮긴 자리를 포인터처럼 다시 묻는다.
+        // 줄과 글자의 자리를 아는 것은 칸뿐이라 판정이 클릭과 한 길이다 (`offset_at_point`).
+        //  - 줄을 오가는 동안 짧은 줄을 지나도 처음의 가로 자리를 기억하지 않는다. 그 자리는 앱 상태에 없다.
+        const ui_element* const element { focused_text_element() };
+        if (element == nullptr)
+            return {};
+        const std::optional<rect_f> caret { element->text_span_bounds({ value.text, value.caret, value.caret, value.caret }, config_.measure_text) };
+        if (caret.has_value() == false)
+            return {};
+        const float middle { caret->y + caret->height / 2.0f };
+        if (rows == 0.0f)
+            return place_text_caret(*element, to_line_end ? std::numeric_limits<float>::max() : std::numeric_limits<float>::lowest(), middle, extend, false);
+        return place_text_caret(*element, caret->x, middle + rows * caret->height, extend, false);
+    }
+
+    std::vector<input_action> interaction_controller::follow_text_caret()
+    {
+        const ui_element* const element { focused_text_element() };
+        const std::optional<text_input_snapshot> value { element != nullptr ? element->text_input() : std::nullopt };
+        if (value.has_value() == false || value->multiline == false)
+        {
+            followed_caret_.reset();
+            return {};
+        }
+        // 조합 중에는 조합 글이 섞인 표시 문서와 그 caret이다 — 그려지는 줄이 그것이다.
+        const std::u8string_view document { value->composing ? value->composition_text : value->text };
+        const std::size_t caret { value->composing ? value->composition_caret : value->caret };
+        const followed_caret now { snapshot_.focused_input, caret, std::hash<std::u8string_view> {}(document) };
+        if (followed_caret_ == now)
+            return {};
+        followed_caret_ = now;
+
+        // 칸 안의 흘리는 창이 들인다. 흘릴 것이 없는 창은 scroll source를 세우지 않으므로 할 일도 없다.
+        const ui_element* window { nullptr };
+        const std::function<void(const ui_element&)> find_window = [&window, &find_window](const ui_element& node) {
+            for (const std::unique_ptr<ui_element>& child : node.children())
+            {
+                if (window != nullptr)
+                    return;
+                if (child->scroll() != nullptr && child->scroll()->scroll != nullptr)
+                    window = child.get();
+                else
+                    find_window(*child);
+            }
+        };
+        find_window(*element);
+        if (window == nullptr)
+            return {};
+        const std::optional<rect_f> line { element->text_span_bounds({ document, caret, caret, caret }, config_.measure_text) };
+        if (line.has_value() == false)
+            return {};
+        const float delta { window->scroll_delta_to_reveal(*line) };
+        if (delta == 0.0f)
+            return {};
+        return { window->scroll()->scroll(delta) };
+    }
+
     std::optional<text_input_snapshot> interaction_controller::focused_text_input() const
     {
         // 초점 표면의 tree가 들고 있다.
@@ -2557,6 +2624,44 @@ namespace luil {
         const text_input_snapshot value { focused_text_input().value_or(text_input_snapshot {}) };
         // 암호 칸의 낱말 이동은 칸 끝으로 간다. 낱말 경계가 공백 자리를 알린다.
         const bool whole_line { word_navigation && value.secret };
+
+        // 여러 줄 칸에서는 줄을 다루는 키의 뜻이 바뀐다 (`text_area_element`). 나머지 키는 한 줄 칸과 같다.
+        if (value.multiline)
+            switch (event.key)
+            {
+            case key_code::enter: {
+                // 줄 바꿈이다. 기본 버튼으로 가지 않는다 — 여러 줄 칸의 Enter는 글자의 자리다.
+                //  - Ctrl·Alt를 함께 누른 Enter는 앱 단축키로 흐른다 (보내기·확인을 거기 두는 앱이 흔하다).
+                if (event.shortcut_modifier_down() || policy_ == nullptr)
+                    return std::nullopt;
+                text_edit_request request {};
+                request.target = target;
+                request.command = text::text_edit_command::insert;
+                request.text = u8"\n";
+                return std::vector<input_action> { policy_->make_text_edit_action(request) };
+            }
+            case key_code::arrow_up:
+            case key_code::arrow_down:
+                return move_text_caret_by_lines(value, event.key == key_code::arrow_up ? -1.0f : 1.0f, false, event.shift);
+            case key_code::page_up:
+            case key_code::page_down: {
+                // 한 쪽은 창에 드는 줄 수에서 한 줄을 남긴 만큼이다 — 넘긴 뒤에도 앞 쪽의 끝 줄이 보인다.
+                const ui_element* const element { focused_text_element() };
+                const std::optional<rect_f> caret { element != nullptr ? element->text_span_bounds({ value.text, value.caret, value.caret, value.caret }, config_.measure_text) : std::nullopt };
+                if (caret.has_value() == false || caret->height <= 0.0f)
+                    return std::vector<input_action> {};
+                const float rows { std::max(1.0f, std::floor(element->bounds().height / caret->height) - 1.0f) };
+                return move_text_caret_by_lines(value, event.key == key_code::page_up ? -rows : rows, false, event.shift);
+            }
+            case key_code::home:
+            case key_code::end:
+                // Ctrl+Home·End는 글의 처음과 끝이다 — 아래의 한 줄 칸 경로가 곧 그것이다.
+                if (primary_shortcut)
+                    break;
+                return move_text_caret_by_lines(value, 0.0f, event.key == key_code::end, event.shift);
+            default:
+                break;
+            }
 
         switch (event.key)
         {
@@ -3366,6 +3471,8 @@ namespace luil {
                 surface_version = surfaces->version;
                 controller.set_surface_trees(std::move(surfaces->value));
             }
+            // 편집이 적용된 tree가 왔으면 여러 줄 칸의 caret 줄을 들인다. 바뀐 것이 없으면 아무것도 내지 않는다.
+            dispatch(controller.follow_text_caret());
             // 게시자가 이미 검증했다. 그래도 잘못된 값이면 controller가 거절하고 직전 값이 남는다.
             if (touch_slot != nullptr)
                 if (const auto touch { touch_slot->take_newer(touch_version) }; touch.has_value())

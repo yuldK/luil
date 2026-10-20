@@ -6,9 +6,11 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/modal_host_element.h"
+#include "luil/ui/text_area_element.h"
 
 #include <windows.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <filesystem>
@@ -104,6 +106,17 @@ namespace demo {
             clicks_ = 0;
             return true;
         }
+        if (const auto* const scroll { message.get<memo_scroll_intent>() }; scroll != nullptr)
+        {
+            // 범위 다듬기는 칸이 한다 — 다음 frame의 칸이 내용 높이로 다시 다듬는다. 아래로 넘친 값만 0으로 막는다.
+            memo_scroll_ = std::max(0.0f, memo_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<memo_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            memo_scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
         if (message.get<playback_toggle_intent>() != nullptr)
         {
             toggle_playback();
@@ -113,14 +126,14 @@ namespace demo {
         {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
-            if (edit->request.target != target_number && edit->request.target != target_note)
+            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_memo)
                 return false;
             apply_edit(edit->request);
             return true;
         }
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
-            if (composition->event.target != target_number && composition->event.target != target_note)
+            if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_memo)
                 return false;
             apply_composition(composition->event);
             return true;
@@ -158,6 +171,8 @@ namespace demo {
             luil::apply_text_edit(number_, request, keep_digits);
         else if (request.target == target_note)
             luil::apply_text_edit(note_, request);
+        else if (request.target == target_memo)
+            luil::apply_text_edit(memo_, request);
     }
 
     void basics_page::apply_composition(const luil::text_composition_event& event)
@@ -240,6 +255,8 @@ namespace demo {
         column->add(make_counter_row(), 32.0f);
         column->add_gap(16.0f);
         column->add(make_input_row(), 50.0f);
+        column->add_gap(16.0f);
+        column->add(make_memo(), 118.0f);
         column->add_gap(22.0f);
         column->add(make_image_row(), 78.0f);
         column->add_gap(4.0f);
@@ -401,6 +418,22 @@ namespace demo {
         row->add(make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME 조합·붙여넣기·파일 드롭)", kind_note_input, make_input_view(note_, target_note), u8"메모", std::move(note_drop)),
             { .weight = 1.0f, .minimum = 160.0f });
         return row;
+    }
+
+    std::unique_ptr<luil::stack_element> basics_page::make_memo() const
+    {
+        // 줄 바꿈·세로 스크롤·여러 줄 붙여넣기를 받는 칸이다. 글과 스크롤은 앱 상태이고 편집은 한 줄 칸과 같은 길이다.
+        luil::stack_config config {};
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"input-memo" }, config) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"memo" }, u8"여러 줄 메모 (Enter 줄 바꿈 · ↑↓ 줄 이동 · 휠 스크롤)", 11.0f, luil::label_color_role::primary), 18.0f);
+        column->add_gap(4.0f);
+        luil::text_area_config memo {};
+        memo.placeholder = u8"여러 줄 메모";
+        memo.scroll_offset = memo_scroll_;
+        memo.scroll = [](const float delta) { return luil::make_app_action(memo_scroll_intent { delta }); };
+        memo.scroll_to = [](const float offset) { return luil::make_app_action(memo_scroll_to_intent { offset }); };
+        column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo_input }, make_input_view(memo_, target_memo), std::move(memo)), 96.0f);
+        return column;
     }
 
     std::unique_ptr<luil::stack_element> basics_page::make_labeled_input(

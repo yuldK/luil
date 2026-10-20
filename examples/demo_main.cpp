@@ -719,6 +719,8 @@ namespace demo {
                     return target_number;
                 if (kind == kind_note_input)
                     return target_note;
+                if (kind == kind_memo_input)
+                    return target_memo;
                 if (kind == kind_tool_note_input)
                     return target_tool_note;
                 // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다.
