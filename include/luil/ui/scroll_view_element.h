@@ -32,6 +32,9 @@ namespace luil {
         scroll_view_element(ui_element_id id, scroll_view_config config);
 
         void set_content(std::unique_ptr<ui_element> content);
+        // 내용 높이를 다시 정한다 (논리 픽셀). 배치에서 높이가 정해지는 내용(폭으로 줄을 접는 글)이
+        // 자기 `arrange`에서, 이 창을 배치하기 전에 부른다.
+        void set_content_height(float content_height) noexcept;
 
         // 내용이 보이는 자리다 (물리 픽셀).
         // arrange 뒤에 유효하다.

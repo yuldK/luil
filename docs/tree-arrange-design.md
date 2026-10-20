@@ -6,7 +6,7 @@
 
 ## Arrange 문맥
 
-`arrange_context`는 네 값을 담는다.
+`arrange_context`는 다섯 값을 담는다.
 
 ```cpp
 struct arrange_context {
@@ -14,6 +14,7 @@ struct arrange_context {
     float scale;
     float scroll_offset;
     rect_f surface;
+    const text_measurer* measurer;
 };
 ```
 
@@ -21,15 +22,17 @@ struct arrange_context {
 
 `surface`는 그릴 수 있는 표면 전체를 tree 좌표로 본 사각형이다. 앱의 자리가 Android의 안전 영역이면 상태 표시줄·제스처 막대·컷아웃 자리까지 닿고, root가 (0, 0)에서 시작하므로 왼쪽·위 몫은 음수다. 비어 있으면 자리 밖을 모른다는 뜻이고 지금까지처럼 자리 안에만 그린다. 앱이 넘길 때만 쓰이며(`window_surface`), scrim과 시트 바탕처럼 화면 끝까지 칠해야 하는 것만 본다. 누르기는 자리 안 그대로다. 자르는 부모(흘리는 창·확대 보기) 안에서는 그 부모가 자른다 ([기기 요청](device-request-design.md#안전-영역-밖)).
 
+`measurer`는 배치에서 글 폭을 재는 함수다. 비어 있으면 `measure_text()`가 그리기와 같은 UI 글꼴의 기본 측정기(`default_text_measurer()`)를 돌려준다. 그래서 `make_arranged_tree`도, 배치를 손으로 짜는 조립도 따로 넘길 것이 없다. 글 폭에 따라 줄 수가 바뀌는 요소(여러 줄 칸의 [자동 줄 넘김](text-area-wrap-design.md))만 쓰고, 잰 값은 배치 결과에 남긴다. 포인터는 배치 동안만 유효하다. Test는 고정 폭 가짜를 넣는다. Core test의 글꼴 관리자는 비어 있어 기본 측정기가 폭 0을 재기 때문이다.
+
 부모가 자식 slot만 바꿀 때는 `context.for_child(child_slot)`을 사용한다.
 
 ```cpp
 child->arrange(context.for_child({ x, y, width, height }));
 ```
 
-이 함수는 scale, scroll offset, surface를 그대로 이어 준다. 문맥에 필드가 추가되어도 모든 컨테이너가 새 값을 자동으로 전달할 수 있다.
+이 함수는 scale, scroll offset, surface, measurer를 그대로 이어 준다. 문맥에 필드가 추가되어도 모든 컨테이너가 새 값을 자동으로 전달할 수 있다.
 
-세로 `scroll_view_element`처럼 문맥의 의미를 바꾸는 컨테이너만 의도적으로 새 `scroll_offset`을 구성한다. 가로 `strip_element`는 축 없는 scroll offset을 재사용하지 않고 기존 값을 자식에게 전달한다.
+세로 `scroll_view_element`처럼 문맥의 의미를 바꾸는 컨테이너만 의도적으로 새 `scroll_offset`을 구성한다. 그때도 측정기는 잇는다. 가로 `strip_element`는 축 없는 scroll offset을 재사용하지 않고 기존 값을 자식에게 전달한다.
 
 ## Element의 arranged 상태
 

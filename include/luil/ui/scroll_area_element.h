@@ -126,6 +126,9 @@ namespace luil {
         // 창 폭은 막대가 가져간 만큼 좁아진 값이라, 내용의 글이 막대 밑을
         // 지나지 않는다.
         void set_content(std::unique_ptr<ui_element> content);
+        // 내용 높이를 다시 정한다 (논리 픽셀). `content_height`를 짓는 때에 알 수 없는 담는 쪽
+        // (폭으로 줄을 접는 여러 줄 칸)이 자기 `arrange`에서, 이 영역을 배치하기 전에 부른다.
+        void set_content_height(float content_height) noexcept;
 
         // `arrange` 뒤에 유효한 이 창의 치수다.
         [[nodiscard]] const scroll_metrics& metrics() const noexcept;
