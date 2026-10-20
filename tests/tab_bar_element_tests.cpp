@@ -287,3 +287,21 @@ TEST_CASE("A scaled tab bar keeps its lane and maximum in logical pixels", "[ui]
     REQUIRE(bar.maximum_scroll() == 800.0f + luil::tab_overflow_width);
     REQUIRE(bar.scroll_offset() == 800.0f + luil::tab_overflow_width);
 }
+
+TEST_CASE("A tab badge speaks after the tab name", "[ui][tab][accessibility]")
+{
+    // 개수가 바뀌면 이름이 바뀌어 보조 기술이 그 변화를 듣는다.
+    luil::tab_bar_config config { make_config(4) };
+    config.items[0].badge = luil::tab_badge { .text = u8"3", .description = u8"읽지 않음 3개" };
+    config.items[1].badge = luil::tab_badge { .text = u8"12" };
+    config.items[2].badge = luil::tab_badge {};
+    const luil::tab_bar_element bar { std::move(config) };
+
+    REQUIRE(tab_at(bar, 0).accessibility().name == u8"tab-a, 읽지 않음 3개");
+    REQUIRE(tab_at(bar, 1).accessibility().name == u8"tab-b, 12");
+    // 글도 설명도 없는 상태 점은 읽을 말이 없다 — 이름만 남는다.
+    REQUIRE(tab_at(bar, 2).accessibility().name == u8"tab-c");
+    REQUIRE(tab_at(bar, 3).accessibility().name == u8"tab-d");
+    // 글자 탐색은 탭에 적힌 이름만 본다.
+    REQUIRE(tab_at(bar, 0).search_label() == u8"tab-a");
+}

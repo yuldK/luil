@@ -1,5 +1,6 @@
 #include "luil/ui/tab_bar_element.h"
 
+#include "ui/badge_paint.h"
 #include "ui/reorder_drop.h"
 
 #include "luil/generated/codicons.h"
@@ -13,11 +14,17 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkTypeface.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 namespace luil {
     namespace {
+        // 탭 배지의 글자 크기, 상태 점의 반지름, 이름과의 사이다 (논리 픽셀).
+        constexpr float tab_badge_font_size { 10.0f };
+        constexpr float tab_badge_dot_radius { 3.5f };
+        constexpr float tab_badge_gap { 6.0f };
+
         // 탭 한 개다.
         // 누르면 선택 메시지를 내고, 끌어 놓으면 순서 변경 메시지를 낸다.
         class tab_element final : public ui_element
@@ -151,7 +158,11 @@ namespace luil {
 
                 // 닫기 버튼 자리와 겹치지 않게 오른쪽을 비운다.
                 const float reserved { close_ != nullptr ? 28.0f * scale : 10.0f * scale };
-                const float text_width { box.x + box.width - reserved - text_left };
+                float text_right { box.x + box.width - reserved };
+                // 배지가 이름보다 먼저 자리를 갖는다 — 잘린 개수는 틀린 개수로 읽힌다.
+                if (item_.badge.has_value() && text_right > text_left)
+                    text_right = draw_badge(context, text_left, text_right, box, scale) - tab_badge_gap * scale;
+                const float text_width { text_right - text_left };
                 if (text_width > 0.0f)
                 {
                     const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
@@ -165,10 +176,39 @@ namespace luil {
 
             [[nodiscard]] access_info accessibility() const override
             {
-                return { .role = access_role::tab, .name = item_.label, .selected = selected_ };
+                return { .role = access_role::tab, .name = access_label(), .selected = selected_ };
             }
 
         private:
+            // 보조 기술이 읽는 이름이다. 배지의 말이 이름 뒤에 붙는다 — 개수가 바뀌면 이름이 바뀌어
+            // 보조 기술이 그 변화를 듣는다.
+            [[nodiscard]] std::u8string access_label() const
+            {
+                if (item_.badge.has_value() == false)
+                    return item_.label;
+                const std::u8string& spoken { item_.badge->description.empty() ? item_.badge->text : item_.badge->description };
+                if (spoken.empty())
+                    return item_.label;
+                return item_.label + u8", " + spoken;
+            }
+
+            // 배지를 `right`에 붙여 그리고, 그 왼쪽 끝을 답한다 (물리 픽셀).
+            //  - `left`보다 왼쪽으로는 나가지 않는다. 그만큼도 없으면 배지가 잘린다.
+            [[nodiscard]] float draw_badge(draw_context& context, const float left, const float right, const rect_f& box, const float scale) const
+            {
+                const tab_badge& badge { *item_.badge };
+                if (badge.text.empty() && badge_element::shows_glyph(badge.tone) == false)
+                {
+                    const float radius { tab_badge_dot_radius * scale };
+                    draw_badge_dot(context, right - radius, box.y + box.height / 2.0f, radius, badge.tone);
+                    return right - 2.0f * radius;
+                }
+                const float height { badge_element::height_for({ .font_size = tab_badge_font_size }) * scale };
+                const float width { std::min(badge_pill_width(context, badge.text, badge.tone, tab_badge_font_size), right - left) };
+                draw_badge_pill(context, { right - width, box.y + (box.height - height) / 2.0f, width, height }, badge.text, badge.tone, tab_badge_font_size);
+                return right - width;
+            }
+
             tab_item item_ {};
             bool selected_ { false };
             ui_element* close_ { nullptr };

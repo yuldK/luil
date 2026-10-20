@@ -87,13 +87,30 @@ namespace demo {
 
         luil::tab_bar_config bar_config {};
         bar_config.owner = std::u8string { bar_owner };
-        for (const tab_entry& tab : tabs_)
+        for (std::size_t index = 0; index < tabs_.size(); ++index)
         {
+            const tab_entry& tab { tabs_[index] };
             luil::tab_item item {};
             item.key = tab.key;
             item.label = tab.label;
             item.icon = luil::codicons::icon_file;
             item.closable = true;
+            // 배지의 세 모양을 차례로 보인다 — 개수, 상태 점, 심각도. 넷째마다 없다.
+            //  - 점의 뜻은 앱만 알아 설명이 없으면 보조 기술에 읽히지 않는다. 그래서 적는다.
+            switch (index % 4)
+            {
+            case 0:
+                item.badge = luil::tab_badge { .text = u8"3", .description = u8"바뀐 곳 3개" };
+                break;
+            case 1:
+                item.badge = luil::tab_badge { .tone = luil::badge_tone::neutral, .description = u8"저장하지 않음" };
+                break;
+            case 2:
+                item.badge = luil::tab_badge { .tone = luil::badge_tone::error, .description = u8"오류 있음" };
+                break;
+            default:
+                break;
+            }
             bar_config.items.push_back(std::move(item));
         }
         bar_config.selected = selected_;

@@ -1,13 +1,34 @@
 #pragma once
 
+#include "luil/ui/badge_element.h"
 #include "luil/ui/strip_element.h"
 #include "luil/ui/ui_element.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace luil {
+    // 탭 이름 뒤에 붙는 작은 표시다.
+    //
+    // 그림은 `badge_element`와 한 벌이다 — 테와 심각도 글리프가 고대비에서도 뜻을 남긴다.
+    //  - 탭 폭은 고정(`tab_bar_config::tab_width`)이라 배지가 자리를 먼저 갖고 이름이 남는 자리에서 잘린다.
+    //    배지까지 잘리면 개수가 틀린 값으로 읽히므로 이름 쪽을 줄인다.
+    struct tab_badge
+    {
+        // 적을 글이다 ("3", "99+" 같은 것).
+        //  - 비어 있으면 글 없는 상태 점이다. 심각도(`warning`·`error`)는 점 대신 글리프만 든 알약이다.
+        std::u8string text {};
+        badge_tone tone { badge_tone::accent };
+        // 보조 기술이 읽을 말이다 ("읽지 않음 3개"). 탭 이름 뒤에 붙어 읽힌다.
+        //  - 비어 있으면 `text`를 읽는다. 그것도 비면(상태 점) 읽을 말이 없다 — 점의 뜻은 앱만 알므로,
+        //    보조 기술에 알리려면 여기에 적는다.
+        std::u8string description {};
+
+        [[nodiscard]] bool operator==(const tab_badge&) const = default;
+    };
+
     // 탭 하나의 설정이다.
     struct tab_item
     {
@@ -18,6 +39,8 @@ namespace luil {
         char32_t icon { 0 };
         // 닫기 버튼은 이 값과 close factory가 모두 있어야 생긴다.
         bool closable { false };
+        // 이름 뒤의 배지다 (개수·상태 점). 없으면 배지가 없다.
+        std::optional<tab_badge> badge {};
     };
 
     // 탭 키 하나를 담은 메시지다 (선택·닫기).
