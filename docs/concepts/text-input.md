@@ -58,6 +58,8 @@ IME 후보 창과 보조 기술의 글 자리는 `text_span_bounds`가 답한다
 
 Android에서는 IME에 넘기는 문서가 여러 줄 칸임을 함께 싣는다(`text_input_document::multiline`). 키보드는 `TYPE_TEXT_FLAG_MULTI_LINE`과 `IME_FLAG_NO_ENTER_ACTION`으로 띄운다. 그래서 Enter 자리가 확정 단추가 아니라 줄 바꿈 단추로 그려지고, IME가 넣은 줄 바꿈은 걷어 내지 않고 글로 둔다. 설정이 같아도 한 줄 칸과 여러 줄 칸 사이를 오가면 키보드를 다시 세운다. Enter 단추의 뜻이 바뀌기 때문이다. 실기기의 Gboard에서 소프트 키보드의 Enter로 줄이 나뉘는 것, 한 줄 칸으로 옮기면 Enter 자리가 다시 "다음" 단추가 되는 것을 확인했다.
 
+자동 줄 넘김은 Android에서도 같다(배치가 접는다). 실기기에서 긴 문단이 낱말 사이에서 접히고, ↑·↓가 화면 줄을 오가는 것을 확인했다. **Home·End는 화면 줄이 아니라 글의 처음과 끝으로 간다.** 하드웨어 키도 IME가 먼저 받는데, `KEYCODE_MOVE_HOME`·`MOVE_END`는 IME 쪽(GameTextInput 연결)이 선택을 글의 양 끝으로 옮겨 버려 luil의 키 경로로 오지 않는다. 키보드를 내린 뒤에도 같다. 줄 넘김과 상관없는, 줄 바꿈으로 나뉜 줄에서도 같은 한계다. 바꾸려면 IME 연결을 가로채는 Java 코드가 필요해 두지 않는다(앱 쪽 Java 0줄).
+
 ## Android IME
 
 IME의 `replace_all`에는 caret과 anchor 및 `text_edit_request::sequence`가 함께 온다. 앱은
