@@ -8,10 +8,12 @@
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_interaction.h"
 #include "mobile_demo/common.h"
 
+#include <memory>
 #include <optional>
 
 namespace mobile_demo {
@@ -133,6 +135,8 @@ namespace mobile_demo {
         // 여러 줄 메모의 글과 세로 스크롤이다.
         luil::text::text_edit_state memo_ {};
         float memo_scroll_ { 0.0f };
+        // 메모 칸이 접은 자리를 frame 사이에 쥔다. 바뀐 문단만 다시 잰다 (`text_area_wrap_cache`).
+        std::shared_ptr<luil::text_area_wrap_cache> memo_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };

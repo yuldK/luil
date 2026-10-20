@@ -246,6 +246,7 @@ namespace mobile_demo {
         memo.scroll_offset = memo_scroll_;
         memo.scroll = [](const float delta) { return luil::make_app_action(memo_scroll_intent { delta }); };
         memo.scroll_to = [](const float offset) { return luil::make_app_action(memo_scroll_to_intent { offset }); };
+        memo.wrap_cache = memo_wrap_;
         column.add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo_input }, make_input_view(memo_, target_memo), std::move(memo)), 96.0f);
         column.gap(24.0f);
 
