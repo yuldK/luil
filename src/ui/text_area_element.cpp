@@ -250,6 +250,15 @@ namespace luil {
         return rect_f { from, top, to - from, line_height };
     }
 
+    std::vector<std::size_t> text_area_element::text_line_starts() const
+    {
+        std::vector<std::size_t> starts {};
+        starts.reserve(lines_.size());
+        for (const line& row : lines_)
+            starts.push_back(row.begin);
+        return starts;
+    }
+
     std::optional<std::size_t> text_area_element::offset_at_point(const float x, const float y, const text_measurer& measurer) const
     {
         const std::u8string_view text { value_.text };

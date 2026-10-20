@@ -485,6 +485,11 @@ namespace luil {
         return std::nullopt;
     }
 
+    std::vector<std::size_t> ui_element::text_line_starts() const
+    {
+        return {};
+    }
+
     float ui_element::scroll_delta_to_reveal(const rect_f&) const
     {
         // 기본은 "나는 흘리지 않는다"다.

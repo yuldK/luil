@@ -90,7 +90,7 @@ Clip되거나 hidden인 element의 rectangle은 비어 있다. Scroll viewport �
 
 Provider는 Name, ControlType, AutomationId, IsEnabled, IsKeyboardFocusable, HasKeyboardFocus, IsControlElement, IsContentElement를 제공한다. 상태별 값은 해당 UIA pattern을 통해 제공한다.
 
-Text-input document가 있는 editable text element는 Value와 Text pattern을 제공한다. Text range는 내부에서 UTF-8 byte offset을 쓰고 COM 경계에서 UTF-16으로 변환한다. Document와 selection range, text 읽기, character 또는 document 단위 endpoint 이동, point-to-range 조회, screen rectangle을 지원한다. 단일 행 편집 모델이므로 line, paragraph, page 단위는 document 전체로 축약된다.
+Text-input document가 있는 editable text element는 Value와 Text pattern을 제공한다. Text range는 내부에서 UTF-8 byte offset을 쓰고 COM 경계에서 UTF-16으로 변환한다. Document와 selection range, text 읽기, character·line·paragraph·document 단위의 넓히기와 이동, point-to-range 조회, screen rectangle을 지원한다. Line은 요소가 내주는 화면 줄이다(`ui_element::text_line_starts`) — 여러 줄 칸은 넘겨 접은 줄도 한 줄로 내주고, 한 줄 칸은 답하지 않아 문서 하나가 한 줄이다. Paragraph는 줄 바꿈 뒤에서 시작한다. 지원하지 않는 단위는 다음 큰 단위로 물러선다: format·word는 line으로, page는 document로 간다. `Move`는 품은 단위의 처음에서 옮기고 그 단위로 넓힌다. 뒤로 옮길 때 단위 가운데에 있었으면 그 처음까지가 한 걸음이다.
 
 Surface는 직전 published tree의 접근성 snapshot을 보관한다. `make_access_snapshot`은 accessible element를 preorder로 기록하고 `diff_access_snapshots`은 다음 변경을 만든다.
 

@@ -92,6 +92,8 @@ namespace luil {
         [[nodiscard]] std::optional<text_input_snapshot> text_input() const override;
         // 구간이 시작하는 줄에서의 자리다. 여러 줄에 걸치면 그 줄의 끝까지다 — IME 후보 창이 조합 글자 밑에 앉는다.
         [[nodiscard]] std::optional<rect_f> text_span_bounds(const text_span_query& query, const text_measurer& measurer) const override;
+        // 배치가 접은 화면 줄(`lines()`)의 시작이다.
+        [[nodiscard]] std::vector<std::size_t> text_line_starts() const override;
         [[nodiscard]] access_info accessibility() const override;
 
     private:

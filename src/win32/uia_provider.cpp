@@ -1564,6 +1564,62 @@ namespace luil::win32 {
             return tree->find(id);
         }
 
+        // 문자 아닌 단위를 이 저장소가 아는 단위로 모은다. 모르는 단위는 다음 큰 단위로 물러선다 (UIA의 규칙):
+        // 서식·낱말은 줄로, 쪽은 문서로 간다.
+        enum class text_unit_kind
+        {
+            line,
+            paragraph,
+            document,
+        };
+
+        [[nodiscard]] text_unit_kind text_unit_of(const TextUnit unit) noexcept
+        {
+            switch (unit)
+            {
+            case TextUnit_Format:
+            case TextUnit_Word:
+            case TextUnit_Line:
+                return text_unit_kind::line;
+            case TextUnit_Paragraph:
+                return text_unit_kind::paragraph;
+            default:
+                return text_unit_kind::document;
+            }
+        }
+
+        // 그 단위가 시작하는 offset이다 (첫 값은 0, 오름차순).
+        //  - 줄은 요소가 답한다 — 넘겨 접은 화면 줄을 아는 것은 칸뿐이다. 답이 없으면 문서가 한 줄이다.
+        //  - 문단은 줄 바꿈 뒤에서 시작한다. 한 줄 칸에는 줄 바꿈이 없어 문서 하나다.
+        [[nodiscard]] std::vector<std::size_t> text_unit_starts(const ui_element& element, const std::u8string_view text, const text_unit_kind unit)
+        {
+            std::vector<std::size_t> starts { 0 };
+            if (unit == text_unit_kind::line)
+            {
+                for (const std::size_t start : element.text_line_starts())
+                    if (start > starts.back() && start <= text.size())
+                        starts.push_back(start);
+            }
+            else if (unit == text_unit_kind::paragraph)
+            {
+                for (std::size_t offset = 0; offset < text.size(); ++offset)
+                    if (text[offset] == u8'\n')
+                        starts.push_back(offset + 1);
+            }
+            return starts;
+        }
+
+        // offset을 품은 단위의 차례다. 단위가 시작하는 자리는 그 단위의 것이다.
+        [[nodiscard]] std::size_t enclosing_text_unit(const std::vector<std::size_t>& starts, const std::size_t offset) noexcept
+        {
+            return static_cast<std::size_t>(std::upper_bound(starts.begin(), starts.end(), offset) - starts.begin()) - 1u;
+        }
+
+        [[nodiscard]] std::size_t text_unit_end(const std::vector<std::size_t>& starts, const std::size_t index, const std::u8string_view text) noexcept
+        {
+            return index + 1u < starts.size() ? starts[index + 1u] : text.size();
+        }
+
         // ASCII만 접는 소문자화다 — FindText의 ignore_case가 이 범위다.
         // 유니코드 대소문자 접기는 이 한 줄 칸의 쓰임보다 큰 계약이다.
         [[nodiscard]] std::u8string ascii_lowered(const std::u8string_view text)
@@ -1675,10 +1731,11 @@ namespace luil::win32 {
                 end_ = step_character_forward(text, begin_);
                 return S_OK;
             }
-            // 한 줄 칸이라 낱말·줄·문단·쪽이 곧 문서다 — 지원하지 않는 단위는
-            // 다음 큰 단위로 물러선다 (UIA의 규칙 그대로다).
-            begin_ = 0;
-            end_ = text.size();
+            // 줄·문단은 그것을 품은 단위로, 문서는 문서 전체로 넓힌다. 한 줄 칸은 줄·문단도 곧 문서다.
+            const std::vector<std::size_t> starts { text_unit_starts(*element, text, text_unit_of(unit)) };
+            const std::size_t index { enclosing_text_unit(starts, begin_) };
+            begin_ = starts[index];
+            end_ = text_unit_end(starts, index, text);
             return S_OK;
         });
     }
@@ -1858,10 +1915,31 @@ namespace luil::win32 {
             const bool degenerate { position == text::text_edit_clamp_offset(text, end_) };
             if (unit != TextUnit_Character)
             {
-                // 문서가 하나뿐이라 문서 단위로는 옮길 곳이 없다 (낱말·줄도 그
-                // 단위로 물러선 문서다).
-                begin_ = position;
-                end_ = degenerate ? position : text.size();
+                // 품은 단위의 처음에서 단위만큼 옮기고 그 단위로 넓힌다 (빈 구간은 빈 채로 둔다).
+                //  - 뒤로 옮길 때 단위 가운데에 있었으면 그 단위의 처음까지가 한 걸음이다.
+                //  - 문서는 하나뿐이라 옮길 곳이 없다.
+                const std::vector<std::size_t> starts { text_unit_starts(*element, text, text_unit_of(unit)) };
+                std::size_t index { enclosing_text_unit(starts, position) };
+                int steps { 0 };
+                if (count > 0)
+                    while (steps < count && index + 1u < starts.size())
+                    {
+                        ++index;
+                        ++steps;
+                    }
+                else if (count < 0)
+                {
+                    if (position > starts[index])
+                        ++steps;
+                    while (steps < -count && index > 0)
+                    {
+                        --index;
+                        ++steps;
+                    }
+                }
+                begin_ = starts[index];
+                end_ = degenerate ? begin_ : text_unit_end(starts, index, text);
+                *moved = count >= 0 ? steps : -steps;
                 return S_OK;
             }
             int steps { 0 };
@@ -1909,9 +1987,21 @@ namespace luil::win32 {
             }
             else if (count != 0)
             {
-                const std::size_t target { count > 0 ? text.size() : std::size_t { 0 } };
-                *moved = target != position ? (count > 0 ? 1 : -1) : 0;
-                position = target;
+                // 단위의 경계(시작들과 문서의 끝)를 하나씩 넘는다. 문서 단위의 경계는 처음과 끝뿐이다.
+                std::vector<std::size_t> boundaries { text_unit_starts(*element, text, text_unit_of(unit)) };
+                if (boundaries.back() != text.size())
+                    boundaries.push_back(text.size());
+                int steps { 0 };
+                while (steps < (count >= 0 ? count : -count))
+                {
+                    const auto after { std::upper_bound(boundaries.begin(), boundaries.end(), position) };
+                    const auto before { std::lower_bound(boundaries.begin(), boundaries.end(), position) };
+                    if (count > 0 ? after == boundaries.end() : before == boundaries.begin())
+                        break;
+                    position = count > 0 ? *after : *(before - 1);
+                    ++steps;
+                }
+                *moved = count >= 0 ? steps : -steps;
             }
             if (endpoint == TextPatternRangeEndpoint_Start)
             {
