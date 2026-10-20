@@ -55,6 +55,6 @@ A를 골랐고, 형태는 이렇다.
 
 ## 남은 것
 
-- UIA Text pattern의 줄 단위(`TextUnit_Line`)는 아직 문서 전체로 물러선다. 같은 접은 줄로 열 수 있다.
+- (완료) UIA Text pattern의 줄 단위(`TextUnit_Line`)는 같은 접은 줄이다. 칸이 `text_line_starts()`로 화면 줄의 시작을 내주고, 문단 단위는 줄 바꿈으로 나뉜다.
 - 접은 자리의 affinity(위 "접은 자리의 caret").
 - 큰 글의 캐시(위 "비용").

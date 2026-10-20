@@ -8,6 +8,7 @@
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
@@ -1382,6 +1383,23 @@ namespace {
         return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
     }
 
+    // 글자 하나가 10 픽셀인 측정기다. 여러 줄 칸이 이것으로 접는다 (200 폭, 여백 7·7이면 한 줄에 18글자).
+    [[nodiscard]] float fixed_glyph_width(const std::u8string_view text, float)
+    {
+        float width { 0.0f };
+        for (const char8_t unit : text)
+            if ((static_cast<unsigned int>(unit) & 0xC0u) != 0x80u)
+                width += 10.0f;
+        return width;
+    }
+
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_memo_tree(luil::text_input_view value)
+    {
+        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_item, u8"memo" }, std::move(value), luil::text_area_config { .placeholder = u8"메모" }) };
+        const luil::text_measurer measurer { fixed_glyph_width };
+        memo->arrange({ .slot = { 0.0f, 0.0f, 200.0f, 100.0f }, .scale = 1.0f, .measurer = &measurer });
+        return std::make_shared<const luil::ui_tree>(std::move(memo));
+    }
     [[nodiscard]] std::wstring range_text(ITextRangeProvider& range, const int maximum_length = -1)
     {
         BSTR text { nullptr };
@@ -1868,4 +1886,61 @@ TEST_CASE("An element standing in for a child window hosts it and overrides it",
     slot->Release();
     root->Release();
     DestroyWindow(window);
+}
+
+TEST_CASE("Text ranges of a text area walk its wrapped screen lines and its paragraphs", "[win32][uia]")
+{
+    // 화면 줄은 "aaaa bbbb cccc "(넘겨 접음) · "dddd eeee\n" · "ff"이고, 문단은 줄 바꿈으로만 나뉜다.
+    fake_uia_host host {};
+    host.tree = make_memo_tree({ .text = u8"aaaa bbbb cccc dddd eeee\nff", .caret = 0, .anchor = 0 });
+    host.text_target = static_cast<luil::text_input_target>(7);
+    host.text_offset = 17;
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const memo { root->make_element_provider({ kind_item, u8"memo" }) };
+
+    ITextRangeProvider* range { nullptr };
+    REQUIRE(memo->RangeFromPoint(UiaPoint { 0.0, 0.0 }, &range) == S_OK);
+    auto* const walker { static_cast<luil::win32::uia_text_range_provider*>(range) };
+
+    // 줄 단위는 넘겨 접은 화면 줄이다. 줄 바꿈은 그 줄의 끝에 붙는다.
+    REQUIRE(range->ExpandToEnclosingUnit(TextUnit_Line) == S_OK);
+    REQUIRE(walker->begin_offset() == 15u);
+    REQUIRE(walker->end_offset() == 25u);
+    REQUIRE(range_text(*range) == L"dddd eeee\n");
+    int moved { 0 };
+    REQUIRE(range->Move(TextUnit_Line, -1, &moved) == S_OK);
+    REQUIRE(moved == -1);
+    REQUIRE(range_text(*range) == L"aaaa bbbb cccc ");
+    // 끝을 넘겨 옮기면 마지막 줄에 멈추고, 옮긴 만큼만 답한다.
+    REQUIRE(range->Move(TextUnit_Line, 5, &moved) == S_OK);
+    REQUIRE(moved == 2);
+    REQUIRE(range_text(*range) == L"ff");
+
+    // 낱말은 지원하지 않아 다음 큰 단위인 줄로 물러선다.
+    REQUIRE(range->Move(TextUnit_Line, -2, &moved) == S_OK);
+    REQUIRE(range->ExpandToEnclosingUnit(TextUnit_Word) == S_OK);
+    REQUIRE(range_text(*range) == L"aaaa bbbb cccc ");
+
+    // 문단은 줄 바꿈으로 나뉜다 — 접은 두 화면 줄이 한 문단이다.
+    REQUIRE(range->ExpandToEnclosingUnit(TextUnit_Paragraph) == S_OK);
+    REQUIRE(range_text(*range) == L"aaaa bbbb cccc dddd eeee\n");
+    REQUIRE(range->Move(TextUnit_Paragraph, 1, &moved) == S_OK);
+    REQUIRE(moved == 1);
+    REQUIRE(range_text(*range) == L"ff");
+
+    // 끝점을 줄 경계 하나씩 옮긴다.
+    ITextRangeProvider* caret { nullptr };
+    host.text_offset = 3;
+    REQUIRE(memo->RangeFromPoint(UiaPoint { 0.0, 0.0 }, &caret) == S_OK);
+    REQUIRE(caret->MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Line, 2, &moved) == S_OK);
+    REQUIRE(moved == 2);
+    REQUIRE(range_text(*caret) == L"a bbbb cccc dddd eeee\n");
+    REQUIRE(caret->MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Line, -1, &moved) == S_OK);
+    REQUIRE(moved == -1);
+    REQUIRE(range_text(*caret) == L"aaaa bbbb cccc dddd eeee\n");
+
+    caret->Release();
+    range->Release();
+    memo->Release();
+    root->Release();
 }
