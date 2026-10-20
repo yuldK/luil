@@ -85,9 +85,10 @@ namespace luil::net {
     //  - `application/json`·`text/json`과 **`+json`으로 끝나는 모든 것**
     //    (`application/problem+json`·`application/ld+json`)이 json이다. 접미사를
     //    보지 않으면 요즘 API의 오류 응답이 통째로 `bytes`가 된다.
-    //  - `image/*`가 image다. **`image/svg+xml`만 뺀다** — 이 빌드에 svg 코덱이
-    //    없어 image라 부르면 모든 svg가 디코드 실패로 오고, 그것은 서버 잘못이
-    //    아니다.
+    //  - `image/*`가 image다. **`image/svg+xml`만 뺀다** — image 갈래는 래스터
+    //    디코더(`decode_animated_image_bytes`)가 푸는 몸이라, image라 부르면 모든
+    //    svg가 디코드 실패로 오고 그것은 서버 잘못이 아니다. svg는 bytes로 받아
+    //    앱이 `decode_svg_bytes`로 연다 (`LUIL_ENABLE_SVG`를 켠 구성).
     //  - `text/html`·`application/xhtml+xml`이 html이다.
     //  - 나머지 `text/*`와 `application/xml`·`+xml`·`application/javascript`·
     //    `application/x-www-form-urlencoded`가 text다.

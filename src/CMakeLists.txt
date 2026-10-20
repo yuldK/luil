@@ -192,13 +192,36 @@ if(LUIL_ENABLE_AVIF)
 else()
     set(luil_image_codecs_source ui/image_codecs_default.cpp)
 endif()
+# SVG·Lottie도 같은 규칙이다. 끈 구성은 "지원 안 함"으로 답하는 파일을 컴파일하고, 켠 구성도
+# 그 진입점을 부르는 앱만 그 파일과 모듈을 링크한다 (docs/vector-image-design.md).
+# 텍스트 모양 잡기는 둘이 함께 부르는 공장이다.
+if(LUIL_ENABLE_SVG)
+    set(luil_svg_decode_source ui/svg_decode.cpp)
+else()
+    set(luil_svg_decode_source ui/svg_decode_unsupported.cpp)
+endif()
+if(LUIL_ENABLE_LOTTIE)
+    set(luil_lottie_decode_source ui/lottie_decode.cpp)
+else()
+    set(luil_lottie_decode_source ui/lottie_decode_unsupported.cpp)
+endif()
+if(LUIL_ENABLE_TEXT_SHAPING)
+    set(luil_text_shaping_source ui/text_shaping_harfbuzz.cpp)
+else()
+    set(luil_text_shaping_source ui/text_shaping_default.cpp)
+endif()
 luil_add_source_filter(luil_core_files "ui/image"
     ui/image_decode.cpp
     "${public_headers}/ui/image_decode.h"
+    ui/image_backing.h
     ui/image_source.cpp
     ui/image_source.h
     ui/image_codecs.h
-    "${luil_image_codecs_source}")
+    "${luil_image_codecs_source}"
+    "${luil_svg_decode_source}"
+    "${luil_lottie_decode_source}"
+    ui/text_shaping.h
+    "${luil_text_shaping_source}")
 
 # 항목을 늘어놓고 그중 하나를 고르는 element다.
 luil_add_source_filter(luil_core_files "ui/lists"

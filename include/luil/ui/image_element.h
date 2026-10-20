@@ -11,14 +11,19 @@
 #include <string>
 
 namespace luil {
-    // Skia 포장의 실체다 (`image_element.cpp`에만 산다).
+    // Skia 포장의 실체다 (`src/ui/image_backing.h`에만 산다).
     // 공개 API는 Skia 타입을 더 늘리지 않는다.
     struct image_backing;
     // 움직이는 그림의 장 목록과 시간표다 (같은 자리, 같은 이유).
     struct image_frame_list;
+    // Lottie 한 편의 실체다 (같은 자리, 같은 이유 — 구현은 Skottie를 든다).
+    struct lottie_backing;
+    // 라이브러리 안의 디코더가 값을 짓는 문이다 (SVG·Lottie).
+    struct image_access;
 
     class ui_image;
     class ui_animated_image;
+    class ui_lottie;
 
     // straight alpha RGBA 8888 픽셀로 이미지를 만든다 (행은 빈틈없이 width×4 byte).
     // premul 변환과 Skia 포장을 여기서 한 번 마친다 — 그리기는 매번 값을 다듬지
@@ -32,6 +37,10 @@ namespace luil {
     // 만들어진 뒤 바뀌지 않아 logic thread가 만들고 UI thread가 그려도 새
     // 동기화가 없다 (게시된 tree와 같은 계약). 복사는 참조 공유라 싸다 —
     // frame마다 config에 실린다.
+    //  - **SVG에서 온 값은 벡터다** (`decode_svg_bytes`). 픽셀 대신 기록한 그림을 들고
+    //    그릴 때마다 화면 배율대로 다시 그려, 확대해도 선이 날카롭다. 크기·칸 맞추기·
+    //    조각(`image_config::source`)의 뜻은 래스터와 같다 — `width`·`height`가 그림
+    //    자신의 좌표계의 크기다.
     class ui_image
     {
     public:
@@ -47,6 +56,7 @@ namespace luil {
 
     private:
         friend ui_image make_rgba_image(int width, int height, std::span<const std::uint8_t> pixels);
+        friend struct image_access;
 
         std::shared_ptr<const image_backing> backing_ {};
         int width_ { 0 };
@@ -145,6 +155,47 @@ namespace luil {
         int play_count_ { 1 };
     };
 
+    // Lottie 애니메이션 한 편이다 (`decode_lottie_bytes`·`load_lottie_file`).
+    //
+    // **장 목록이 아니라 시간의 함수다.** 벡터 장면을 그 시각으로 옮겨 그리므로 장 수만큼
+    // 픽셀을 들지 않고, 확대해도 날카롭다. 재생은 `ui_animated_image`와 같은 시계
+    // (`image_playback`)로 돌고, 어느 시각의 장면인지는 `lottie_frame_at`이 정한다.
+    // `ui_image`와 같은 계약으로 만들어진 뒤 바뀌지 않고, 복사는 참조 공유 하나다.
+    //  - 파일은 바퀴 수를 나르지 않는다. 기본은 끝없이 돌고(`image_plays_forever`), 앱이
+    //    `with_play_count`로 바꾼다.
+    class ui_lottie
+    {
+    public:
+        ui_lottie() = default;
+
+        [[nodiscard]] bool valid() const noexcept;
+        // 그림 자신의 크기다 (Lottie의 `w`·`h`, 화면 배율과 무관하다). 칸을 잡을 때 쓴다.
+        [[nodiscard]] int width() const noexcept;
+        [[nodiscard]] int height() const noexcept;
+        // 한 바퀴의 길이다 (`op - ip`를 장 빠르기로 나눈 값).
+        [[nodiscard]] std::chrono::nanoseconds duration() const noexcept;
+        // 초당 장 수다 (Lottie의 `fr`). 다시 그리는 간격이 이것으로 정해진다.
+        [[nodiscard]] double frame_rate() const noexcept;
+        // 몇 바퀴 도는가. `image_plays_forever`면 끝없이 돈다.
+        [[nodiscard]] int play_count() const noexcept;
+        // 같은 장면을 다른 바퀴 수로 도는 값이다. 장면은 참조 공유라 다시 읽지 않는다.
+        // 1보다 작은 값은 (`image_plays_forever`가 아닌 한) 1로 본다 —
+        // `make_animated_image`와 같은 규칙이다.
+        [[nodiscard]] ui_lottie with_play_count(int play_count) const;
+        // 라이브러리 그리기가 읽는 손잡이다 — 앱이 쓸 일은 없다.
+        [[nodiscard]] const lottie_backing* backing() const noexcept;
+
+    private:
+        friend struct image_access;
+
+        std::shared_ptr<const lottie_backing> backing_ {};
+        int width_ { 0 };
+        int height_ { 0 };
+        std::chrono::nanoseconds duration_ { 0 };
+        double frame_rate_ { 0.0 };
+        int play_count_ { image_plays_forever };
+    };
+
     // 재생 시계다.
     //
     // **앱이 든다.** 라이브러리는 시계도 frame 루프도 갖지 않는다 — `transition`이
@@ -236,6 +287,31 @@ namespace luil {
     //    "아직 안 끝났다"로 읽으면 창이 영원히 깨어난다.
     //  - `elapsed`가 0 이하면 0번이다.
     [[nodiscard]] animation_frame animation_frame_at(std::span<const std::chrono::milliseconds> frame_durations, int play_count, std::chrono::nanoseconds elapsed) noexcept;
+
+    // 지금 그릴 Lottie 장면의 시각과, 다음 장면이 서는 시각이다.
+    struct lottie_frame
+    {
+        // 한 바퀴 안의 시각이다 (장의 경계에 맞춘 값 — 장 사이를 보간하지 않는다).
+        std::chrono::nanoseconds time { 0 };
+        // **다른 장면이 서는 가장 이른 시각이다** (재생을 시작한 시각으로부터).
+        // 비어 있으면 시간이 흘러도 그림이 그대로다 (`animation_frame::next_at`과 같다).
+        std::optional<std::chrono::nanoseconds> next_at {};
+    };
+
+    // 재생을 시작하고 `elapsed`가 지났을 때 그릴 Lottie 장면이다.
+    //
+    // `animation_frame_at`의 짝이다. 그리기와 `next_update`가 이 한 함수를 불러, 깨운
+    // 시각에는 반드시 다른 장면이 선다.
+    //  - 시간을 `1 / frame_rate` 간격의 장으로 자른다. Lottie는 장 사이도 보간해 그릴 수
+    //    있지만, 그러면 다음 경계가 "지금"이 되어 창이 쉬지 않는다. 파일이 적은 장
+    //    빠르기가 저작 도구가 본 그림이다.
+    //  - 한 바퀴의 장 수는 `ceil(duration * frame_rate)`다. 마지막 장은 길이의 끝 바로
+    //    앞이다 — 길이의 끝 시각에는 레이어가 이미 끝나 빈 그림일 수 있다.
+    //  - `play_count`가 양수면 그만큼 돈 뒤 **마지막 장에 선다** (`animation_frame_at`과
+    //    같은 규칙이다). 음수면 끝없이 돈다. 0은 1로 본다.
+    //  - 길이나 장 빠르기가 양수가 아니거나, 한 바퀴가 한 장이거나, `elapsed`가 0
+    //    이하이면서 장이 하나뿐이면 언제나 0이고 `next_at`이 비어 있다.
+    [[nodiscard]] lottie_frame lottie_frame_at(std::chrono::nanoseconds duration, double frame_rate, int play_count, std::chrono::nanoseconds elapsed) noexcept;
 
     // 이미지를 칸에 맞추는 방식이다.
     enum class image_fit
@@ -336,6 +412,14 @@ namespace luil {
         rect_f source {};
         // 픽셀을 뽑는 방식이다 (`image_sampling`).
         image_sampling sampling { image_sampling::smooth };
+        // Lottie 애니메이션이다 (`decode_lottie_bytes`).
+        //
+        // **유효하면 이쪽이 그려지고 `image`·`animation`은 보지 않는다.** 재생 시계는
+        // `playback`을 함께 쓴다 — 한 칸에 서는 그림은 하나라 시계도 하나다.
+        //  - 칸 맞추기(`fit`)와 조각(`source`)은 그림 자신의 크기(`width`·`height`)로
+        //    계산한다. `sampling`은 벡터라 뜻이 없다.
+        //  - **꼬리에 둔다** — 위의 `animation`·`source`와 같은 이유다.
+        ui_lottie lottie {};
     };
 
     // 이미지가 칸 안에 놓일 자리다 (좌표는 칸과 같은 단위 — 물리 픽셀).
@@ -362,7 +446,9 @@ namespace luil {
     //    답을 "전체"로 적을 수는 없다.
     [[nodiscard]] rect_f image_source_rect(const rect_f& source, int width, int height) noexcept;
 
-    // 픽셀 이미지 한 장, 또는 움직이는 그림 한 편이다.
+    // 픽셀 이미지 한 장, 움직이는 그림 한 편, 또는 Lottie 한 편이다.
+    // SVG에서 온 `ui_image`와 Lottie는 벡터라 칸의 배율대로 다시 그린다
+    // (docs/vector-image-design.md).
     //
     // 표시 전용이라 액션도 커서도 갖지 않는다 — 누르는 이미지는 담는 쪽이
     // `set_action`으로 만들고, 그러면 기본 규칙("누를 수 있으면 자리다")을

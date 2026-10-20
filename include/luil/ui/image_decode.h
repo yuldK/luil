@@ -288,4 +288,54 @@ namespace luil {
     // `decode_image_bytes`와 같다.
     [[nodiscard]] ui_animated_image decode_animated_image_bytes(std::span<const std::uint8_t> bytes, image_decode_error& error);
     [[nodiscard]] ui_animated_image decode_animated_image_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
+
+    // SVG 파일을 읽어 **벡터** `ui_image`로 만든다 (docs/vector-image-design.md).
+    //
+    // 픽셀로 펴지 않고 한 번 기록한 그림을 들어, 그릴 때마다 화면 배율대로 다시 그린다 —
+    // 아이콘을 높은 배율의 창이나 `zoom_view`에서 키워도 선이 날카롭다. 값은 여느
+    // `ui_image`처럼 `image_config::image`에 놓는다.
+    //  - **`LUIL_ENABLE_SVG`를 켠 구성에서만 읽는다.** 끈 구성은 언제나 빈 값과
+    //    `unsupported_format`이다 (SVG 모듈을 링크하지 않는다).
+    //  - 크기(`width`·`height`)는 뿌리 `<svg>`의 고유 크기다. `width`·`height`가 절대
+    //    단위면 그것이고, 퍼센트이거나 없으면 `viewBox`의 비율로 채운다. 둘 다 없으면
+    //    `no_pixels`다.
+    //  - `image_decode_options`에서 보는 것은 셋이다. `max_width`·`max_height`는 그 크기를
+    //    비율대로 줄이고(벡터라 픽셀을 아끼는 값이 아니라 칸 맞추기와 조각의 좌표계다),
+    //    `cancelled`는 읽는 중과 문서를 푼 뒤에 묻는다. 픽셀 상한(`max_source_pixels`)과
+    //    `incomplete`는 뜻이 없다 — 잘린 XML은 문서가 아니라 `unsupported_format`이다.
+    //  - **밖의 자원을 열지 않는다.** `<image href>`의 파일·네트워크 경로는 그리지 않고,
+    //    `data:` URI만 디코딩 때 미리 풀어 담는다. SVG 하나를 여는 일이 디스크와
+    //    네트워크를 건드리는 길이 되지 않게 하는 규칙이다.
+    //  - `<text>`는 시스템 글꼴로 그린다. 아랍어 이어 쓰기·bidi·결합 문자는
+    //    `LUIL_ENABLE_TEXT_SHAPING`을 켠 구성에서만 모양 잡힌다.
+    //  - Skia SVG 모듈의 범위를 따른다: `<style>`의 CSS, SMIL 애니메이션, 스크립트는 없다.
+    // 실패·thread 규칙은 `load_image_file`과 같다 (파일 I/O와 문서 풀기는 호출 thread를
+    // 막는다).
+    [[nodiscard]] ui_image load_svg_file(std::u8string_view path, image_decode_error& error);
+    [[nodiscard]] ui_image load_svg_file(std::u8string_view path, const image_decode_options& options, image_decode_error& error);
+
+    // SVG 바이트를 벡터 `ui_image`로 만든다. 계약은 `load_svg_file`과 같고, 바이트의 수명
+    // 규칙은 `decode_image_bytes`와 같다.
+    [[nodiscard]] ui_image decode_svg_bytes(std::span<const std::uint8_t> bytes, image_decode_error& error);
+    [[nodiscard]] ui_image decode_svg_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
+
+    // Lottie(Bodymovin JSON) 파일을 읽어 `ui_lottie`로 만든다 (docs/vector-image-design.md).
+    //
+    // 장면을 장 목록으로 펴지 않고 시간의 함수로 든다 — 그릴 때 그 시각의 장면을 화면
+    // 배율대로 그린다. 값은 `image_config::lottie`에 놓고 재생은 `image_config::playback`이
+    // 정한다 (`ui_animated_image`와 같은 시계).
+    //  - **`LUIL_ENABLE_LOTTIE`를 켠 구성에서만 읽는다.** 끈 구성은 언제나 빈 값과
+    //    `unsupported_format`이다.
+    //  - 크기는 Lottie의 `w`·`h`이고 `max_width`·`max_height`가 그것을 비율대로 줄인다
+    //    (`load_svg_file`과 같은 뜻이다). `cancelled`는 읽는 중과 장면을 지은 뒤에 묻는다.
+    //  - 길이나 장 빠르기가 없는 파일은 `no_pixels`다.
+    //  - 밖의 자원 규칙과 글자 레이어의 모양 잡기는 `load_svg_file`과 같다.
+    //  - 표현식(expressions)과 Skottie가 지원하지 않는 효과는 그리지 않는다.
+    [[nodiscard]] ui_lottie load_lottie_file(std::u8string_view path, image_decode_error& error);
+    [[nodiscard]] ui_lottie load_lottie_file(std::u8string_view path, const image_decode_options& options, image_decode_error& error);
+
+    // Lottie 바이트를 `ui_lottie`로 만든다. 계약은 `load_lottie_file`과 같고, 바이트의 수명
+    // 규칙은 `decode_image_bytes`와 같다 (장면은 바이트를 복사하지 않고 다 지은 뒤에 놓는다).
+    [[nodiscard]] ui_lottie decode_lottie_bytes(std::span<const std::uint8_t> bytes, image_decode_error& error);
+    [[nodiscard]] ui_lottie decode_lottie_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
 } // namespace luil

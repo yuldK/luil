@@ -73,4 +73,22 @@ TEST_CASE("Executable resources contain the Codicons font and licenses", "[asset
 #else
     REQUIRE(notice_text.find("Component: Microsoft Edge WebView2 SDK") == std::string_view::npos);
 #endif
+    // Skia의 기능별 아카이브도 같은 규칙이다 — 고지는 켠 기능의 것만 싣는다 (NOTICE.json).
+    // Windows의 Expat은 SVG의 XML 파서로만 들어온다.
+#if LUIL_TESTS_SVG
+    REQUIRE(notice_text.find("Component: Expat") != std::string_view::npos);
+#else
+    REQUIRE(notice_text.find("Component: Expat") == std::string_view::npos);
+#endif
+#if LUIL_TESTS_TEXT_SHAPING
+    REQUIRE(notice_text.find("Component: HarfBuzz") != std::string_view::npos);
+#else
+    REQUIRE(notice_text.find("Component: HarfBuzz") == std::string_view::npos);
+#endif
+#if LUIL_TESTS_AVIF
+    REQUIRE(notice_text.find("Component: libavif") != std::string_view::npos);
+    REQUIRE(notice_text.find("Component: libgav1") != std::string_view::npos);
+#else
+    REQUIRE(notice_text.find("Component: libavif") == std::string_view::npos);
+#endif
 }

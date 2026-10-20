@@ -1,11 +1,19 @@
 #include "luil/ui/image_element.h"
 
 #include "raster_probe.h"
+#include "ui/image_backing.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
 
 #include <catch2/catch_test_macros.hpp>
+
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkRect.h"
 
 #include <array>
 #include <chrono>
@@ -124,6 +132,41 @@ namespace {
         const std::array<luil::ui_image, 3> frames { make_solid_image(1, 1, 255, 0, 0), make_solid_image(1, 1, 0, 255, 0), make_solid_image(1, 1, 0, 0, 255) };
         constexpr std::array<std::chrono::milliseconds, 3> durations { 100ms, 100ms, 100ms };
         return luil::make_animated_image(frames, durations, play_count);
+    }
+
+    // Lottie 장면 대신 서는 가짜 장면이다.
+    //
+    // **Skottie가 없다.** 재생 시계·시각 고르기·칸 맞추기는 장면을 무엇이 그리든 같은
+    // 계약이라, 받은 시각에 따라 칸을 한 색으로 칠하는 것으로 충분하다 — 0.5초 앞은
+    // 빨강, 뒤는 초록이다. 그러면 이 축은 Lottie를 켠 구성에 매이지 않고 어디서나 돈다.
+    class painted_scene final : public luil::lottie_backing
+    {
+    public:
+        void draw(SkCanvas& canvas, const double seconds, const SkRect& bounds) const override
+        {
+            SkPaint paint {};
+            paint.setColor(seconds < 0.5 ? SK_ColorRED : SK_ColorGREEN);
+            canvas.drawRect(bounds, paint);
+        }
+    };
+
+    // 1초짜리, 초당 10장인 장면이다 (장 하나가 100 ms).
+    [[nodiscard]] luil::ui_lottie make_painted_lottie(const int width = 4, const int height = 4)
+    {
+        return luil::image_access::lottie(std::make_shared<const painted_scene>(), width, height, std::chrono::seconds { 1 }, 10.0);
+    }
+
+    // 왼쪽 절반이 빨강, 오른쪽 절반이 파랑인 2×2 **벡터** 그림이다 (SVG가 내는 값과 같은 모양).
+    [[nodiscard]] luil::ui_image make_split_picture()
+    {
+        SkPictureRecorder recorder {};
+        SkCanvas* const canvas { recorder.beginRecording(SkRect::MakeWH(2.0f, 2.0f)) };
+        SkPaint paint {};
+        paint.setColor(SK_ColorRED);
+        canvas->drawRect(SkRect::MakeWH(1.0f, 2.0f), paint);
+        paint.setColor(SK_ColorBLUE);
+        canvas->drawRect(SkRect::MakeXYWH(1.0f, 0.0f, 1.0f, 2.0f), paint);
+        return luil::image_access::picture_image(recorder.finishRecordingAsPicture(), 2, 2);
     }
 
     [[nodiscard]] luil::ui_tree build_tree(const luil::image_config& config, const luil::rect_f& slot)
@@ -584,4 +627,160 @@ TEST_CASE("The animated element draws through the same fit as a still image", "[
     REQUIRE(different == 0);
     // 그리고 실제로 무엇인가 그려졌다 — 둘 다 배경뿐이면 위의 단언이 거저 지나간다.
     REQUIRE(moving_frame.count_color(tall, palette.window_background) == 0);
+}
+
+TEST_CASE("A Lottie scene follows the elapsed time in whole frames", "[ui][image][lottie]")
+{
+    constexpr std::chrono::nanoseconds second { std::chrono::seconds { 1 } };
+    const auto scene_at = [second](const int play_count, const int milliseconds) { return luil::lottie_frame_at(second, 10.0, play_count, after(milliseconds)); };
+
+    // 장의 경계에 맞춘 시각이다 — 150 ms는 둘째 장(100 ms)이고, 다음 장은 200 ms에 선다.
+    REQUIRE(scene_at(luil::image_plays_forever, 0).time == after(0));
+    REQUIRE(scene_at(luil::image_plays_forever, 0).next_at == after(100));
+    REQUIRE(scene_at(luil::image_plays_forever, 150).time == after(100));
+    REQUIRE(scene_at(luil::image_plays_forever, 150).next_at == after(200));
+    // 끝없이 돌면 한 바퀴 뒤에 처음으로 돌아오고, 예고는 재생 시작으로부터의 시각이다.
+    REQUIRE(scene_at(luil::image_plays_forever, 1050).time == after(0));
+    REQUIRE(scene_at(luil::image_plays_forever, 1050).next_at == after(1100));
+    // 시작 시각이 아직 오지 않았으면 첫 장이다.
+    REQUIRE(scene_at(luil::image_plays_forever, -40).time == after(0));
+}
+
+TEST_CASE("A finite Lottie holds on its last frame and stops asking", "[ui][image][lottie]")
+{
+    constexpr std::chrono::nanoseconds second { std::chrono::seconds { 1 } };
+    // 두 바퀴다. 마지막 장(900 ms)에 들어선 뒤로는 예고가 없다 — 그 경계에 깨어나도
+    // 그림이 그대로다.
+    REQUIRE(luil::lottie_frame_at(second, 10.0, 2, after(1850)).time == after(800));
+    REQUIRE(luil::lottie_frame_at(second, 10.0, 2, after(1850)).next_at == after(1900));
+    REQUIRE(luil::lottie_frame_at(second, 10.0, 2, after(1900)).time == after(900));
+    REQUIRE(luil::lottie_frame_at(second, 10.0, 2, after(1900)).next_at.has_value() == false);
+    REQUIRE(luil::lottie_frame_at(second, 10.0, 2, after(9000)).time == after(900));
+    // 0바퀴는 한 바퀴다 — "그릴 것이 없다"와 갈리지 않는다.
+    REQUIRE(luil::lottie_frame_at(second, 10.0, 0, after(950)).time == after(900));
+    REQUIRE(luil::lottie_frame_at(second, 10.0, 0, after(950)).next_at.has_value() == false);
+    // 끝이 장 중간에 걸리면(1.05초) 그 장까지 한 바퀴다 — 마지막 장은 1000 ms다.
+    REQUIRE(luil::lottie_frame_at(std::chrono::milliseconds { 1050 }, 10.0, 1, after(1020)).time == after(1000));
+}
+
+TEST_CASE("A Lottie without length or rate never moves", "[ui][image][lottie]")
+{
+    for (const luil::lottie_frame frame : {
+             luil::lottie_frame_at(std::chrono::nanoseconds { 0 }, 10.0, luil::image_plays_forever, after(500)),
+             luil::lottie_frame_at(std::chrono::seconds { 1 }, 0.0, luil::image_plays_forever, after(500)),
+             luil::lottie_frame_at(std::chrono::seconds { 1 }, -30.0, luil::image_plays_forever, after(500)),
+             // 한 바퀴가 한 장이면 시간이 흘러도 그림이 그대로다.
+             luil::lottie_frame_at(std::chrono::milliseconds { 50 }, 10.0, luil::image_plays_forever, after(500)),
+         })
+    {
+        REQUIRE(frame.time == after(0));
+        REQUIRE(frame.next_at.has_value() == false);
+    }
+}
+
+TEST_CASE("A Lottie value carries its size, timing and play count", "[ui][image][lottie]")
+{
+    const luil::ui_lottie scene { make_painted_lottie(30, 20) };
+    REQUIRE(scene.valid());
+    REQUIRE(scene.width() == 30);
+    REQUIRE(scene.height() == 20);
+    REQUIRE(scene.duration() == std::chrono::seconds { 1 });
+    REQUIRE(scene.frame_rate() == 10.0);
+    REQUIRE(scene.play_count() == luil::image_plays_forever);
+    REQUIRE(scene.with_play_count(3).play_count() == 3);
+    REQUIRE(scene.with_play_count(0).play_count() == 1);
+    REQUIRE(scene.with_play_count(-5).play_count() == 1);
+    REQUIRE(scene.with_play_count(luil::image_plays_forever).play_count() == luil::image_plays_forever);
+    // 바퀴 수만 갈린 값이다. 장면은 나눠 든다.
+    REQUIRE(scene.with_play_count(3).backing() == scene.backing());
+    // 크기나 시간이 없는 장면은 값이 아니다.
+    REQUIRE(luil::image_access::lottie(std::make_shared<const painted_scene>(), 0, 4, std::chrono::seconds { 1 }, 10.0).valid() == false);
+    REQUIRE(luil::image_access::lottie(std::make_shared<const painted_scene>(), 4, 4, std::chrono::nanoseconds { 0 }, 10.0).valid() == false);
+    REQUIRE(luil::image_access::lottie(std::make_shared<const painted_scene>(), 4, 4, std::chrono::seconds { 1 }, 0.0).valid() == false);
+}
+
+TEST_CASE("The element draws the Lottie scene of the moment over everything else", "[ui][image][lottie][raster]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::image_config config {};
+    config.fit = luil::image_fit::fill;
+    // 셋 다 실어 둔다 — Lottie가 이겨야 한다.
+    config.image = make_solid_image(1, 1, 0, 0, 255);
+    config.animation = make_traffic_film();
+    config.lottie = make_painted_lottie();
+    config.playback.started = at(0);
+    const luil::ui_tree tree { build_tree(config, film_slot) };
+
+    const auto count_at = [&tree, &palette](const int milliseconds, const luil::ui_color colour) {
+        luil::testing::raster_frame frame { film_frame_size, film_frame_size, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {}, at(milliseconds));
+        return frame.count_color(film_inner, colour);
+    };
+
+    REQUIRE(count_at(100, colour_red) == film_inner_pixels);
+    REQUIRE(count_at(600, colour_green) == film_inner_pixels);
+    // 끝없이 돌아 한 바퀴 뒤에는 다시 앞의 장면이다.
+    REQUIRE(count_at(1100, colour_red) == film_inner_pixels);
+    REQUIRE(count_at(600, colour_blue) == 0);
+}
+
+TEST_CASE("The element wakes at the next Lottie frame and sleeps when it stops", "[ui][image][lottie][update]")
+{
+    luil::image_config config {};
+    config.lottie = make_painted_lottie().with_play_count(1);
+    config.playback.started = at(1000);
+    const luil::image_element picture { luil::ui_element_id { kind_picture, u8"scene" }, config };
+    REQUIRE(picture.next_update({ at(1000) }, {}) == at(1100));
+    REQUIRE(picture.next_update({ at(1150) }, {}) == at(1200));
+    // 한 바퀴를 다 돌면 마지막 장면에 서고 창이 잠잔다.
+    REQUIRE(picture.next_update({ at(1950) }, {}).has_value() == false);
+    REQUIRE(picture.next_update({ at(5000) }, {}).has_value() == false);
+
+    luil::image_config paused { config };
+    paused.playback.paused_at = at(1200);
+    const luil::image_element frozen { luil::ui_element_id { kind_picture, u8"frozen" }, paused };
+    REQUIRE(frozen.next_update({ at(1300) }, {}).has_value() == false);
+
+    luil::image_config waiting { config };
+    waiting.playback.started.reset();
+    const luil::image_element idle { luil::ui_element_id { kind_picture, u8"idle" }, waiting };
+    REQUIRE(idle.next_update({ at(1300) }, {}).has_value() == false);
+}
+
+TEST_CASE("A vector image is redrawn at the slot's size instead of stretching pixels", "[ui][image][vector][raster]")
+{
+    // 2×2 그림을 24×24 칸에 채운다. 래스터라면 가운데 줄이 빨강과 파랑을 섞어 보라가
+    // 되지만, 벡터는 그 배율로 다시 그려 경계가 칸의 한가운데(x = 20)에 날카롭게 선다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::image_config config {};
+    config.fit = luil::image_fit::fill;
+    config.image = make_split_picture();
+    REQUIRE(config.image.valid());
+    REQUIRE(config.image.width() == 2);
+    REQUIRE(config.image.height() == 2);
+    const luil::ui_tree tree { build_tree(config, film_slot) };
+    luil::testing::raster_frame frame { film_frame_size, film_frame_size, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+
+    REQUIRE(frame.count_color({ 8.0f, 8.0f, 12.0f, 24.0f }, colour_red) == 12 * 24);
+    REQUIRE(frame.count_color({ 20.0f, 8.0f, 12.0f, 24.0f }, colour_blue) == 12 * 24);
+    // 칸 밖에는 그리지 않는다.
+    REQUIRE(frame.count_color({ 0.0f, 0.0f, 8.0f, 40.0f }, colour_red) == 0);
+}
+
+TEST_CASE("A slice of a vector image draws only that slice", "[ui][image][vector][raster]")
+{
+    // 오른쪽 절반(파랑)만 잘라 칸 전체에 채운다. 조각 밖을 자르지 않으면 빨강이 칸 왼쪽
+    // 밖으로가 아니라 칸 안에 그려진다 — 벡터에는 표본 제약이 없어 자르는 것이 그 몫이다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::image_config config {};
+    config.fit = luil::image_fit::fill;
+    config.image = make_split_picture();
+    config.source = { 1.0f, 0.0f, 1.0f, 2.0f };
+    const luil::ui_tree tree { build_tree(config, film_slot) };
+    luil::testing::raster_frame frame { film_frame_size, film_frame_size, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+
+    REQUIRE(frame.count_color(film_inner, colour_blue) == film_inner_pixels);
+    REQUIRE(frame.count_color({ 0.0f, 0.0f, 40.0f, 40.0f }, colour_red) == 0);
 }

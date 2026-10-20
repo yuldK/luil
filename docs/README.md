@@ -69,6 +69,7 @@
 - [이미지](image-design.md)
 - [이미지 디코딩](image-decode-design.md)
 - [움직이는 이미지](image-anim-design.md)
+- [SVG와 Lottie](vector-image-design.md) — `LUIL_ENABLE_SVG`·`LUIL_ENABLE_LOTTIE`
 - [HTTP client](http-client-design.md)
 - [SMB client](smb-client-design.md) — Android 전용, `LUIL_ENABLE_SMB`
 - [WebView2 composition hosting](webview-composition-design.md)
