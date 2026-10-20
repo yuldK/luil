@@ -88,6 +88,7 @@ namespace luil {
     //  - Enter는 줄 바꿈을 넣는다. 기본 버튼으로 가지 않는다. Ctrl+Enter는 앱 단축키로 흐른다.
     //  - ↑·↓·Page Up·Page Down은 화면의 줄을 오가고, Home·End는 caret이 선 화면 줄의 처음과 끝이다.
     //    Ctrl+Home·End가 글의 처음과 끝이다.
+    //    Android에서는 Home·End를 IME가 먼저 받아 글의 처음과 끝으로 간다 (docs/concepts/text-input.md).
     //  - Tab은 칸을 떠난다 (탭 문자를 넣지 않는다).
     //
     // **줄은 칸 폭에서 넘겨 접는다** (docs/text-area-wrap-design.md). 배치가 `arrange_context::measure_text`로
