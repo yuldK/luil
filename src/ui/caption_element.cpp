@@ -60,6 +60,22 @@ namespace luil {
             .role = button_visual_role::caption,
         };
 
+        // 앱 단추가 창 버튼보다 먼저 담긴다 — 화면에서 왼쪽에 서므로 보조 기술이 형제를 읽는 차례도
+        // 화면의 차례와 같아야 한다.
+        for (const caption_app_button& app : config_.app_buttons)
+        {
+            if (app.action == nullptr)
+                continue;
+            button_config app_config { window_button };
+            app_config.glyph = app.glyph;
+            auto button { std::make_unique<button_element>(ui_element_id { ui_element_kind::caption_app_button, app.key }, app_config) };
+            button->set_action(ui_trigger::left_click, app.action);
+            button->set_tooltip(app.tooltip);
+            button->set_enabled(app.enabled);
+            app_buttons_.push_back(button.get());
+            add_child(std::move(button));
+        }
+
         // 설정에서 빠진 버튼은 아예 만들지 않는다.
         // 자리도 차지하지 않고 그 창 스타일도 함께 빠진다
         // (caption-button-design.md).
@@ -92,10 +108,12 @@ namespace luil {
         }
     }
 
-    // 오른쪽 끝에서 닫기 → 최대화 → 최소화 순으로 쌓는다.
+    // 오른쪽 끝에서 닫기 → 최대화 → 최소화 → 앱 단추 순으로 쌓는다.
     // 빠진 버튼은 자리를 차지하지 않아 남은 버튼이 오른쪽으로 당겨진다.
     const ui_element* caption_element::leftmost_button() const noexcept
     {
+        if (app_buttons_.empty() == false)
+            return app_buttons_.front();
         if (minimize_ != nullptr)
             return minimize_;
         if (maximize_ != nullptr)
@@ -120,6 +138,9 @@ namespace luil {
         place(close_);
         place(maximize_);
         place(minimize_);
+        // 앱 단추는 목록 차례대로 왼쪽에서 오른쪽이다. 오른쪽부터 놓으므로 거꾸로 돈다.
+        for (auto app { app_buttons_.rbegin() }; app != app_buttons_.rend(); ++app)
+            place(*app);
     }
 
     void caption_element::draw(draw_context& context, const interaction_snapshot& interaction) const

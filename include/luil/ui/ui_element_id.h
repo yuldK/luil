@@ -22,6 +22,9 @@ namespace luil {
         caption_minimize,
         caption_maximize,
         caption_close,
+        // caption 안에 앱이 둔 단추다 (`caption_config::app_buttons`, owner가 그 key다).
+        // 비클라이언트 판정이 이 자리를 끌기가 아니라 client로 답한다.
+        caption_app_button,
         // in-app dialog의 캡션 바와 그 닫기 버튼이다.
         // 창 caption과 달리 여럿이 동시에 있을 수 있어 owner로 구분한다.
         dialog_caption,

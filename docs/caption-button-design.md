@@ -36,10 +36,21 @@ Custom caption의 비클라이언트 hit test는 다음 우선순위를 사용�
 1. 크기 조절 테두리와 모서리
 2. 시스템 메뉴 아이콘 영역
 3. 존재하는 caption 버튼
-4. caption 끌기 영역
-5. 일반 client 영역
+4. 앱 단추 (`HTCLIENT`)
+5. caption 끌기 영역
+6. 일반 client 영역
 
 버튼 hit는 각각 Win32의 최소화, 최대화, 닫기 hit code로 변환된다. 존재하지 않는 버튼의 영역은 caption 끌기 영역으로 취급된다.
+
+## 앱 단추
+
+`caption_config::app_buttons`는 창 버튼 바로 왼쪽에 앱의 단추(설정 같은 창 전체의 명령)를 세운다. 목록 차례대로 왼쪽에서 오른쪽으로 서고 폭은 창 버튼과 같다. 제목은 가장 왼쪽 앱 단추 앞에서 잘린다. 액션이 없는 항목은 단추를 만들지 않는다.
+
+앱 단추의 자리는 끌기 자리가 아니라 client다. 비클라이언트 판정은 먼저 위 순서대로 계산한다. 그 결과가 끌기(`HTCAPTION`)인 자리에 **게시된 tree**의 앱 단추(`ui_element_kind::caption_app_button`)가 서 있으면 `HTCLIENT`로 답한다(`caption_app_button_at`). 그래서 그 자리의 누름·hover·tooltip은 평소의 단추처럼 tree가 받는다. 비활성 단추 위도 끌기가 아니다. 눌러도 아무 일이 없는 단추를 잡고 창이 딸려 가면 안 되기 때문이다.
+
+판정을 창 버튼처럼 metrics만으로 계산하지 않는 이유가 있다. 주 창의 비클라이언트 판정은 창을 만들 때의 `window_config::caption`을 쓴다. 단추의 개수를 그 값에 묶으면, 앱이 frame마다 다시 짓는 caption에서 단추를 더하거나 빼거나 숨기는 순간 판정과 그림이 갈린다. 단추를 그리고 누르는 tree에 판정도 물으면 두 쪽이 언제나 같은 tree 하나를 본다.
+
+창 버튼과 달리 앱 단추는 Tab의 자리다. 창 버튼은 Alt+Space의 시스템 메뉴가 키보드의 길이지만, 앱 단추에는 다른 길이 없다. 보조 기술에는 title bar 아래의 단추로 보이고 이름은 tooltip이다. 앱 단추가 창 버튼보다 먼저 담기므로 형제를 읽는 차례가 화면의 차례와 같다.
 
 `window_style_for()`는 `minimize`가 꺼지면 `WS_MINIMIZEBOX`를, `maximize`가 꺼지면 `WS_MAXIMIZEBOX`를 제거한다. 크기 조절과 시스템 메뉴에 필요한 스타일은 유지한다.
 
@@ -89,9 +100,10 @@ luil::ui_window inspector {
 - caption 설정 갱신은 OS 제목과 창 스타일에도 반영된다.
 - 전체 화면 창의 caption은 그려지더라도 hit되지 않는다.
 - 버튼 집합과 창 모드는 같은 스타일 계산의 인자이며 서로를 덮어쓰지 않는다.
+- 앱 단추의 자리는 끌기가 아니라 client이고, 그 판정은 단추를 그린 tree에서 나온다.
 
 ## 검증 지침
 
-[caption_layout_tests.cpp](../tests/caption_layout_tests.cpp)는 전체 버튼, 일부 버튼, 버튼 없음의 경계와 hit 결과를 검증한다. 또한 `caption_element` bounds와 `make_caption_layout()`의 일치, 버튼 opt-out과 창 style의 일치, caption 자리 계산이 비클라이언트 판정과 하나임을 확인한다. 모드별 스타일과 hit 결과는 [window_mode_tests.cpp](../tests/window_mode_tests.cpp)가 창 없이 검증한다.
+[caption_layout_tests.cpp](../tests/caption_layout_tests.cpp)는 전체 버튼, 일부 버튼, 버튼 없음의 경계와 hit 결과를 검증한다. 또한 `caption_element` bounds와 `make_caption_layout()`의 일치, 버튼 opt-out과 창 style의 일치, caption 자리 계산이 비클라이언트 판정과 하나임을 확인한다. 앱 단추가 창 버튼 왼쪽에 목록 차례로 서는 것과, 그 자리가 비활성이어도 끌기가 아니라 client로 답해지는 것도 확인한다. 모드별 스타일과 hit 결과는 [window_mode_tests.cpp](../tests/window_mode_tests.cpp)가 창 없이 검증한다.
 
 Win32 구현 경계는 [caption_layout.cpp](../src/win32/caption_layout.cpp), [caption_surface.cpp](../src/win32/caption_surface.cpp), [caption_surface.h](../src/win32/caption_surface.h), [window_mode.h](../src/win32/window_mode.h)에 있다.
