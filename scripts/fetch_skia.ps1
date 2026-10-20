@@ -22,6 +22,10 @@
 # 이미 내려받아 둔 zip이 있으면 -ArchiveDirectory로 가리킨다. 그때는 네트워크를
 # 전혀 쓰지 않는다. -Offline을 주면 zip이 없어도 받으러 가지 않고 실패한다 —
 # 시도 자체가 허용되지 않는 환경을 위한 스위치다.
+#
+# -Symbols는 Release 구성을 심볼 자산(핀의 ReleaseSymbols)으로 받는다. 같은 코드를
+# /Z7로 세운 아카이브라 앱을 /DEBUG로 링크하면 Skia의 심볼이 PDB에 들어가고,
+# /DEBUG 없이 링크한 실행 파일은 기본 자산과 같다. win-x64에만 있다.
 
 [CmdletBinding()]
 param(
@@ -36,7 +40,9 @@ param(
     [switch]$Force,
     # 네트워크를 쓰지 않는다. 아카이브가 없거나 해시가 다르면 받지 않고
     # 어디에 두어야 하는지만 말하고 실패한다.
-    [switch]$Offline
+    [switch]$Offline,
+    # Release 구성을 디버그 정보가 든 심볼 자산으로 받는다.
+    [switch]$Symbols
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,6 +72,19 @@ if (-not $ArchiveDirectory) {
 
 $pin = Get-Content -Raw -LiteralPath $PinFile | ConvertFrom-Json
 $configurations = @($Configuration | Sort-Object -Unique)
+
+# 구성이 받을 핀의 자산 이름이다. 심볼 자산은 Release와 같은 구성을 담는다 —
+# 설치 자리(out/skia-ui-release)도 VERSION.json의 구성 이름도 같고, 자산만 다르다.
+# 설치본이 적는 archive_sha256이 자산의 것이므로, -Symbols를 켜고 끄면 설치 생략
+# 판정이 어긋나 다시 설치한다.
+function Get-AssetName {
+    param([string]$name)
+
+    if ($Symbols -and $name -eq 'Release') {
+        return 'ReleaseSymbols'
+    }
+    return $name
+}
 
 function Get-FileHashText {
     param([string]$path)
@@ -111,9 +130,10 @@ Pass -Target $($pin.target), or point -PinFile at the $Target pin.
 }
 
 foreach ($name in $configurations) {
-    if (@($pin.assets.PSObject.Properties.Name) -notcontains $name) {
+    $asset_name = Get-AssetName -name $name
+    if (@($pin.assets.PSObject.Properties.Name) -notcontains $asset_name) {
         throw @"
-The pin file has no $name asset: $PinFile
+The pin file has no $asset_name asset: $PinFile
 Available: $($pin.assets.PSObject.Properties.Name -join ', ')
 "@
     }
@@ -179,7 +199,7 @@ function Test-Installed {
             return $false
         }
         if ((Get-ManifestValue -manifest $record -path 'archive_sha256') -ne
-            $pin.assets.$name.sha256.ToLowerInvariant()) {
+            $pin.assets.(Get-AssetName -name $name).sha256.ToLowerInvariant()) {
             return $false
         }
 
@@ -225,7 +245,7 @@ if ((Test-Installed) -and -not $Force) {
 function Resolve-Asset {
     param([string]$name)
 
-    $asset = $pin.assets.$name
+    $asset = $pin.assets.(Get-AssetName -name $name)
     New-Item -ItemType Directory -Force -Path $ArchiveDirectory | Out-Null
     $path = Join-Path $ArchiveDirectory $asset.file
 
@@ -322,6 +342,9 @@ Write-Output "skia           : $($pin.skia_commit)"
 Write-Output "package        : r$($pin.package_revision) ($($pin.toolchain))"
 Write-Output "png codec      : $($pin.png_codec)"
 Write-Output "Configurations : $($configurations -join ', ')"
+if ($Symbols) {
+    Write-Output 'Release        : with debug info (symbols asset)'
+}
 Write-Output "Destination    : $Destination"
 
 # 아카이브를 먼저 모두 확보한다.
@@ -378,9 +401,10 @@ foreach ($name in $configurations) {
     # 이 구성을 어느 아카이브가 설치했는지 함께 적는다.
     # 다음 실행의 설치 생략 판정이 그 값을 핀과 맞댄다. Resolve-Asset이 이미
     # 그 해시로 아카이브를 검사했으므로 다시 재지 않는다.
+    $asset = $pin.assets.(Get-AssetName -name $name)
     $record = [ordered]@{
-        archive        = $pin.assets.$name.file
-        archive_sha256 = $pin.assets.$name.sha256.ToLowerInvariant()
+        archive        = $asset.file
+        archive_sha256 = $asset.sha256.ToLowerInvariant()
     }
     foreach ($entry in $version.configurations.$name.PSObject.Properties) {
         $record[$entry.Name] = $entry.Value

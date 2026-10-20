@@ -1,24 +1,29 @@
 {
     "schema": 2,
     "source": "https://github.com/yuldK/skia-prep",
-    "tag": "skia-152-0873ec164a06-r2",
-    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-152-0873ec164a06-r2",
+    "tag": "skia-152-0873ec164a06-r3",
+    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-152-0873ec164a06-r3",
     "target": "win-x64",
     "png_codec": "rust",
     "skia_commit": "0873ec164a06966b90ae0d43ef783cfb180084ae",
     "skia_milestone": "152",
-    "package_revision": 2,
+    "package_revision": 3,
     "toolchain": "clang-cl",
     "assets": {
         "Release": {
-            "file": "skia-prep-0873ec164a06-r2-win-x64-release.zip",
-            "size": 21485418,
-            "sha256": "4e944162ee1fd7b419bf16af3c760f70b496695fcdaebd9ceb96d4c258ac7f7e"
+            "file": "skia-prep-0873ec164a06-r3-win-x64-release.zip",
+            "size": 25963635,
+            "sha256": "5614b2ffee4725a98c38582069c7fa4d749c294f667c62dbea095ed9563fd847"
         },
         "Debug": {
-            "file": "skia-prep-0873ec164a06-r2-win-x64-debug.zip",
-            "size": 142808948,
-            "sha256": "1a221b21b05408e793093b0b76934808ebc1b4f62834c8ac0419cb591cb25b67"
+            "file": "skia-prep-0873ec164a06-r3-win-x64-debug.zip",
+            "size": 165561908,
+            "sha256": "3300e462592393bf8999076ebe5cc2a2887a68a2a1092173de7370ce384498c7"
+        },
+        "ReleaseSymbols": {
+            "file": "skia-prep-0873ec164a06-r3-win-x64-release-symbols.zip",
+            "size": 92106403,
+            "sha256": "dbb1191bd93e5c35adbbce6b83a7e8713db2886e09dfb9c5d54762ecfacc5a97"
         }
     }
 }
