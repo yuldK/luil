@@ -1,6 +1,6 @@
 # 가상 목록
 
-`virtual_list_element`는 **창에 걸치는 행만 tree에 세우는** 목록이다. 모델 전체는 값으로 들고 있고 키보드 탐색과 글자 탐색은 그 모델 위에서 돈다. 십만 줄짜리 화면이 element 십만 개가 되지 않게 하는 것이 이 컴포넌트가 하는 일의 전부다.
+`virtual_list_element`는 **창에 걸치는 행만 tree에 세우는** 목록이다. 모델 전체는 값으로(큰 목록은 공유하는 불변 vector로) 들고 있고 키보드 탐색과 글자 탐색은 그 모델 위에서 돈다. 십만 줄짜리 화면이 element 십만 개가 되지 않게 하는 것이 이 컴포넌트가 하는 일의 전부다.
 
 공개 API는 [virtual_list_element.h](../include/luil/ui/virtual_list_element.h)에 있다. 공통 입력 의미는 [interaction.md](concepts/interaction.md)와 [ui-element.md](concepts/ui-element.md)를 따르고, 스크롤·막대·치수 조립은 [scroll_area_element.h](../include/luil/ui/scroll_area_element.h)가 그대로 맡는다.
 
@@ -27,11 +27,20 @@
 | 상태 | 형식 | 뜻 |
 | --- | --- | --- |
 | `items` | `std::vector<virtual_list_item>` | **모델 전체.** 창에 걸치지 않는 항목도 담는다 |
+| `shared_items` | `std::shared_ptr<const std::vector<virtual_list_item>>` | 공유하는 불변 모델. 있으면 `items` 대신 읽는다 |
 | `selected` | `std::u8string` | 고른 항목의 key |
 | `cursor` | `std::u8string` | 키보드 커서가 선 항목의 key |
 | `scroll_offset` | `float` | 세로 스크롤 위치 (논리 픽셀) |
 
-담기는 것은 값이지 element가 아니다. 십만 줄이 와도 `items`까지는 복사 한 번이고, tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
+담기는 것은 값이지 element가 아니다. Tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
+
+### 값으로 담는 모델과 공유하는 모델
+
+처음 결정은 모델을 **값으로만** 담는 것이었다. 그 근거는 "모델이 바뀌지 않는 frame에서는 `items = model_`이 memcpy 한 번"이라는 판단이었는데, 이것은 틀렸다. `virtual_list_item`은 키와 이름 문자열을 들고 있어, vector를 복사하면 항목마다 문자열을 새로 복사한다. 비용이 모델 크기에 비례하고, 이 복사가 frame마다 일어난다. Release에서 10만 항목을 frame마다 넘기는 비용을 재면 값으로는 약 2.1ms이고 공유로는 약 0.1ms다(`[.perf]` test, 0.1ms는 목록을 짓는 나머지 비용이다). 한 frame 예산의 큰 몫이다.
+
+그래서 `shared_items`를 더했다. 앱은 바뀌지 않는 모델을 `std::shared_ptr<const std::vector<...>>`로 한 번 만들어 두고 frame마다 그 포인터를 넘긴다. Frame마다 오르는 것은 참조 수 하나다. 이 길은 tree 불변의 규칙과 맞는다. 게시된 tree는 여러 thread가 읽지만 vector가 `const`이고, 모델을 바꿀 때는 새 vector를 만들어 갈아 끼우므로 앞 frame의 tree는 옛 vector를 쥔 채 끝까지 산다 ([immutable-tree.md](concepts/immutable-tree.md)).
+
+값으로 담는 `items`는 그대로 둔다. 작은 목록이나 frame마다 모델을 새로 짓는 앱에는 그쪽이 쉽다. 둘 다 주면 `shared_items`를 읽는다. 목록 안에서 모델을 읽는 자리는 전부 `model()` 하나를 지난다. 한 자리라도 `items`를 직접 읽으면, 공유 모델을 준 목록에서 그 자리만 빈 모델을 보기 때문이다.
 
 **커서를 선택과 갈라 둔 이유**는 그 둘이 앱마다 다르기 때문이다. 화살표로 훑다가 Enter로 고르는 목록과, 화살표가 곧 선택인 목록이 둘 다 흔하다. 커서를 옮기자는 `move` 메시지를 받은 앱이 커서만 옮길지 선택까지 옮길지 정하면 두 목록이 같은 element로 표현된다. 커서가 비어 있으면 `selected`가 커서이고, 그것도 비어 있으면 첫 활성 항목이다.
 

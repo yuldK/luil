@@ -142,19 +142,21 @@ namespace demo {
         tree_expanded_.emplace_back(u8"src");
         tree_expanded_.emplace_back(u8"docs");
 
-        // 만 줄이 넘는 모델을 **값으로** 한 번 짓는다.
-        // 여기까지는 복사 한 번이고, tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
-        log_items_.reserve(log_item_count);
+        // 만 줄이 넘는 모델을 **값으로** 한 번 짓고, 바뀌지 않는 채 공유한다.
+        // tree에 서는 것은 창에 걸치는 몇 줄뿐이고 frame마다 오르는 것은 참조 수 하나다.
+        std::vector<luil::virtual_list_item> log_items {};
+        log_items.reserve(log_item_count);
         for (std::size_t index = 0; index < log_item_count; ++index)
         {
             luil::virtual_list_item item {};
             item.key = log_key(index);
             item.label = std::u8string { log_levels[index % log_levels.size()] } + u8" " + log_number(index);
-            log_items_.push_back(std::move(item));
+            log_items.push_back(std::move(item));
         }
+        log_items_ = std::make_shared<const std::vector<luil::virtual_list_item>>(std::move(log_items));
         // 커서의 첫 자리를 앱이 적어 둔다. 비워 두면 목록은 첫 항목을 커서로 보는데
         // 앱 상태는 비어 있어, 같은 자리를 둘이 다르게 알고 아래 줄이 없는 것을 가리킨다.
-        log_cursor_ = log_items_.front().key;
+        log_cursor_ = log_items_->front().key;
     }
 
     bool lists_page::is_expanded(const std::u8string& key) const
@@ -431,7 +433,7 @@ namespace demo {
         // 다듬기의 기준이 실제 창 높이여야 하므로 여기서 미리 뺀다 — `add_flexible`이
         // 나눠 줄 값을 눈대중으로 적으면 앱과 목록이 다른 창을 재게 된다.
         const float list_height { viewport_height - log_footer_height - log_footer_gap };
-        const float content_height { luil::virtual_list_content_height(log_items_, log_row_height) };
+        const float content_height { luil::virtual_list_content_height(*log_items_, log_row_height) };
         // 다른 두 목록과 같은 자리에서 같은 식으로 다듬는다.
         // 앱이 든 값과 목록이 재는 값이 어긋나면 커서를 따라가는 스크롤이 한 번에
         // 닿지 못한다 — 목록은 다듬은 값에서, 앱은 원값에서 델타를 세기 때문이다.
@@ -441,7 +443,7 @@ namespace demo {
         config.owner = u8"log";
         // 모델 **전체**를 넘긴다. 창에 걸치지 않는 항목도 담아야 Home/End와 글자
         // 탐색이 화면이 아니라 모델의 끝까지 간다.
-        config.items = log_items_;
+        config.shared_items = log_items_;
         config.selected = log_selected_;
         config.cursor = log_cursor_;
         config.row_height = log_row_height;
@@ -464,10 +466,10 @@ namespace demo {
         column->add_gap(log_footer_gap);
         // 커서와 고른 항목을 함께 적는다. 화살표로 훑기만 하면 앞의 값만 움직이고,
         // 눌러야 뒤의 값이 따라온다 — 둘을 가른 이유가 이 한 줄에서 보인다.
-        std::u8string footer { u8"커서 " + log_label_of(log_items_, log_cursor_) + u8"  ·  고른 것 " + log_label_of(log_items_, log_selected_) };
+        std::u8string footer { u8"커서 " + log_label_of(*log_items_, log_cursor_) + u8"  ·  고른 것 " + log_label_of(*log_items_, log_selected_) };
         // 두 번 누른 줄이다. 한 번 누름은 고르기만 하므로 이 값은 따라오지 않는다.
         if (log_opened_.empty() == false)
-            footer += u8"  ·  연 것 " + log_label_of(log_items_, log_opened_);
+            footer += u8"  ·  연 것 " + log_label_of(*log_items_, log_opened_);
         column->add(make_label(luil::ui_element_id { kind_text, u8"log-footer" }, footer, 10.0f, luil::label_color_role::dim), log_footer_height);
 
         luil::panel_config surface_panel {};

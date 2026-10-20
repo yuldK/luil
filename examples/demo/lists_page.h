@@ -10,6 +10,7 @@
 #include "luil/ui/ui_tree.h"
 #include "luil/ui/virtual_list_element.h"
 
+#include <memory>
 #include <vector>
 
 namespace demo {
@@ -139,7 +140,9 @@ namespace demo {
         // 가상 목록의 앱 상태다: 모델 전체·고른 항목·커서·흘러간 양.
         //  - 모델은 **값**이라 만 줄이 넘어도 tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
         //    이 벡터를 element로 들고 있으면 그 순간 element가 만 개다.
-        std::vector<luil::virtual_list_item> log_items_ {};
+        //  - 바뀌지 않는 모델이라 공유해 넘긴다 (`virtual_list_config::shared_items`). frame마다 만 줄을
+        //    복사하지 않는다. 바꿀 일이 생기면 새 vector를 만들어 갈아 끼운다.
+        std::shared_ptr<const std::vector<luil::virtual_list_item>> log_items_ {};
         std::u8string log_selected_ {};
         std::u8string log_opened_ {};
         std::u8string log_cursor_ {};
