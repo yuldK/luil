@@ -54,6 +54,13 @@ Skia commit만으로는 판정하지 않는다. **같은 소스 commit을 다시
 | `-PinFile` | 버전과 다운로드 정보를 담은 설정 파일 |
 | `-Force` | 설치 상태와 관계없이 패키지 재설치 |
 | `-Offline` | 네트워크를 시도하지 않음. 아카이브가 없거나 체크섬이 다르면 안내만 내고 실패 |
+| `-Symbols` | Release 구성을 심볼 자산(핀의 `ReleaseSymbols`)으로 받음. win-x64만 있다 |
+
+`-Symbols`의 자산은 같은 코드를 `/Z7`로 세운 Release 아카이브다. 앱을 `/DEBUG`로
+링크하면 Skia의 심볼이 앱의 PDB에 들어가고, `/DEBUG` 없이 링크한 실행 파일은 기본
+자산과 같다 (skia-prep `docs/skia-build.md` 6.7). 설치 자리와 구성 이름은 같고 아카이브만
+달라, 켜고 끄면 설치 생략 판정이 어긋나 다시 설치한다. 기본 Release 자산은 약 26 MB,
+심볼 자산은 약 92 MB다.
 
 네트워크를 사용할 수 없는 환경에서는 설정 파일에 지정된 아카이브를
 캐시 디렉터리에 준비한다. 캐시 파일에도 같은 체크섬 검사가 적용된다.
@@ -65,8 +72,9 @@ Skia commit만으로는 판정하지 않는다. **같은 소스 commit을 다시
 - Skia 공개 헤더와 공개 헤더가 참조하는 보조 헤더
 - 구성별 정적 라이브러리와 `args.gn`
 - 구성별 `toolchain.json`
-- 라이선스·제3자 고지
+- 라이선스·제3자 고지 (`NOTICE.md`)와 기능마다 실을 고지를 적은 `NOTICE.json`
 - 판번·도구사슬·구성별 체크섬을 담은 `VERSION.json`
+- 기능별 아카이브와 그 공개 헤더(`modules/*/include/`) — 아래 [기능별 아카이브](#기능별-아카이브)
 
 `args.gn`은 어떤 기능으로 생성했는지를 적고, `toolchain.json`은 무엇이 그 라이브러리를
 컴파일했는지를 적는다. 둘은 다른 사실이라 파일도 따로다. `args.gn`은 `gn gen`에 준 값이며
@@ -85,6 +93,38 @@ Skia commit만으로는 판정하지 않는다. **같은 소스 commit을 다시
 패키지의 구성별 라이브러리 위치는 기본 CMake 설정이 선택한다.
 위치를 직접 지정할 때는 `LUIL_SKIA_BUILD_DEBUG`와 `LUIL_SKIA_BUILD_RELEASE`를 사용한다.
 소비자 프로젝트에서 사용할 라이브러리 디렉터리를 지정한다.
+
+## 기능별 아카이브
+
+win-x64 r3·android-arm64 r2부터 패키지에 기능이 넷 더 든다. 모두 기존 목록과 떨어진
+아카이브라, 기존 목록만 링크한 실행 파일은 앞 판번과 크기가 같다 (skia-prep
+`docs/skia-build.md` 6장). luil은 기능마다 옵션을 두고 **모두 기본은 끈다**.
+
+| 옵션 | 패키지 기능 | 아카이브 (win-x64) | 요구 인자 |
+| --- | --- | --- | --- |
+| `LUIL_ENABLE_SVG` | `svg` | `svg` `skshaper` `skresources` | `skia_enable_svg=true` |
+| `LUIL_ENABLE_TEXT_SHAPING` | `text` | `skparagraph` `skshaper` `skunicode_icu` `skunicode_core` `harfbuzz` | `skia_use_harfbuzz=true` `skia_use_runtime_icu=true` |
+| `LUIL_ENABLE_LOTTIE` | `skottie` | `skottie` `sksg` `jsonreader` `skresources` `skshaper` | `skia_enable_skottie=true` |
+| `LUIL_ENABLE_AVIF` | `avif` | `avif_decoder` `libavif` `libgav1` `libyuv` | `skia_prep_avif_archive=true` |
+
+- 켠 기능의 아카이브를 `LUIL_SKIA_COMPONENTS`에 더하고 요구 인자를
+  `LUIL_SKIA_REQUIRED_ARGUMENTS`에 더한다. 함께 쓰는 `skshaper`·`skresources`는 한 번만
+  넣는다. 자리는 rust 아카이브 둘 앞이다 — Android의 링크 순서 계약(`libskia.a` 맨 앞)을
+  지키는 실측 순서이고, Windows는 순서를 보지 않는다.
+- 기능별 아카이브가 없는 앞 판번에서 기능을 켜면 configure가 그 아카이브가 없다고
+  멈춘다. 핀을 올리고 다시 받는다.
+- 텍스트를 켜면 Skia 타깃이 skshaper·skunicode의 소비자 정의 다섯
+  (`SK_SHAPER_PRIMITIVE_AVAILABLE` 등)을 나른다. `SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS`는
+  주지 않는다 — SkShaper의 vtable이 패키지와 어긋난다.
+- 시스템 라이브러리는 새로 들지 않는다. 텍스트의 ICU는 실행 시점에 플랫폼의 것을 연다.
+- AVIF는 Skia의 기본 디코더 목록 밖이라 luil이 처음 디코드 때 등록한다
+  ([이미지 디코딩](image-decode-design.md)).
+
+PNG·JPEG 인코더는 기능별 아카이브가 아니라 core에 있다 (r2까지는 win-x64의 `skia.lib`에
+rust PNG 인코더가 빠져 있었다). 부르는 앱에만 링크된다 — [이미지 인코딩](image-encode-design.md).
+
+각 기능이 무엇을 하는지는 [SVG와 Lottie](vector-image-design.md)와
+[이미지 디코딩](image-decode-design.md)에 있다.
 
 ## 도구사슬·ABI·CRT 계약
 
@@ -196,6 +236,12 @@ Debug 산출물이 필요하지 않다. Visual Studio 같은 다중 구성 gener
 `cmake/generate_notices.cmake`는 Skia와 포함된 구성 요소의 고지를 읽어
 실행 파일 리소스에 넣을 문서를 생성한다. 패키지의 `NOTICE.md`는
 정적으로 포함된 구성 요소의 고지를 제공한다.
+
+패키지에 `NOTICE.json`이 있으면 **core와 켠 기능의 고지만** 골라 싣는다. `NOTICE.json`의
+`features.<기능>.notices`가 그 기능을 쓸 때 실행 파일에 들어오는 구성 요소의 id를, `notices`가
+id마다 `NOTICE.md`의 절 이름을 적는다. 끈 기능의 고지(HarfBuzz·ICU·libavif·libgav1·libyuv,
+Windows의 Expat)는 그 코드가 실행 파일에 없으므로 싣지 않는다. 절이 `NOTICE.md`에 없으면
+configure가 멈춘다. `NOTICE.json`이 없는 앞 판번은 전처럼 `NOTICE.md` 전체를 싣는다.
 
 직접 빌드한 소스 트리를 지정하면 고지를 개별 의존성 디렉터리에서 읽을 수 있다.
 이 경우 Rust 구성 요소의 고지가 완전하지 않을 수 있으며 configure가 경고한다.
