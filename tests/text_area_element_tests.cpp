@@ -215,6 +215,27 @@ TEST_CASE("A wrapped text area places points and spans on screen lines", "[ui][t
     REQUIRE(across->y == 5.0f);
 }
 
+TEST_CASE("A composing text area wraps the displayed text and rewraps the committed text", "[ui][text-area]")
+{
+    // 확정 글은 한 줄에 들지만, 조합 글이 섞인 표시 문서는 넘쳐 두 줄로 접힌다.
+    luil::text_input_view view { view_of(u8"aaaa bbbb cccc ", 15) };
+    view.composing = true;
+    view.composition_text = u8"aaaa bbbb cccc dddd eeee";
+    view.composition_caret = 20;
+    view.composing_begin = 15;
+    view.composing_end = 24;
+    const auto tree { wrapped_tree(view) };
+    const luil::text_area_element& memo { memo_of(*tree) };
+    REQUIRE(memo.lines().size() == 2u);
+
+    // IME는 표시 문서로 묻는다 — 배치가 접은 그 줄이다. offset 20은 둘째 화면 줄의 다섯 글자 뒤다.
+    const auto caret { memo.text_span_bounds({ view.composition_text, 20, 20, 20 }, fixed_width) };
+    REQUIRE(caret->x == 7.0f + 50.0f);
+    REQUIRE(caret->y == 5.0f + 18.0f);
+    // 포인터 판정은 확정 글로 한다. 그 글은 한 줄이라 둘째 줄 자리는 마지막 줄 아래, 곧 확정 글의 끝이다.
+    REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(1), fixed_width) == 15u);
+    REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(0), fixed_width) == 2u);
+}
 TEST_CASE("Line keys follow the screen lines of a wrapped text area", "[ui][text-area][interaction]")
 {
     memo_policy policy {};
