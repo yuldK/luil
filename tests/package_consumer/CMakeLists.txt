@@ -7,4 +7,6 @@ luil_configure_resource_script("${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
     "${CMAKE_CURRENT_BINARY_DIR}/notices.txt")
 add_executable(package_consumer main.cpp "${CMAKE_CURRENT_BINARY_DIR}/resources.rc")
 target_link_libraries(package_consumer PRIVATE luil::luil)
-target_compile_definitions(package_consumer PRIVATE UNICODE _UNICODE)
+target_compile_definitions(package_consumer PRIVATE UNICODE _UNICODE
+    "LUIL_CONSUMER_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
+    "LUIL_CONSUMER_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")

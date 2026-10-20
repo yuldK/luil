@@ -9,6 +9,7 @@ namespace luil {
     {
         // 정지 AVIF도 움직이는 AVIF도 이 디코더 하나가 읽는다 — 장 수와 시간은 SkCodec의
         // 여러 장 API(`getFrameCount`·`getFrameInfo`)로 나온다.
-        SkCodecs::Register(SkAvifDecoder::LibAvif::Decoder());
+        static const bool registered { (SkCodecs::Register(SkAvifDecoder::LibAvif::Decoder()), true) };
+        static_cast<void>(registered);
     }
 } // namespace luil

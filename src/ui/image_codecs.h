@@ -13,7 +13,7 @@ namespace luil {
     // 애니메이션을 가를 수 없다.
     //
     // `Register`는 thread-safe가 아니다. 그래서 이 함수는 첫 디코드 전에 한 번만, 모든
-    // 디코드가 지나가는 자리(`make_codec`)의 함수 안 static으로 부른다 — 그 초기화가
-    // 끝날 때까지 다른 thread의 디코드는 같은 자리에서 기다린다.
+    // 래스터·SVG·Lottie가 Skia 코덱을 열기 전에 이 함수를 부른다. 구현 안 static의
+    // 초기화가 끝날 때까지 다른 thread의 디코드도 기다린다.
     void register_optional_image_decoders();
 } // namespace luil

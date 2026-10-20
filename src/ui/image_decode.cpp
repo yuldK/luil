@@ -184,8 +184,7 @@ namespace luil {
         //    함수 안 static이라 그 초기화가 끝날 때까지 다른 thread의 디코드가 기다린다.
         [[nodiscard]] std::unique_ptr<SkCodec> make_codec(sk_sp<SkData> data, const SkCodec::SelectionPolicy policy, image_decode_error& error)
         {
-            static const bool optional_decoders_registered { (register_optional_image_decoders(), true) };
-            static_cast<void>(optional_decoders_registered);
+            register_optional_image_decoders();
             SkCodec::Result result { SkCodec::kInternalError };
             std::unique_ptr<SkCodec> codec { SkCodec::MakeFromStream(SkMemoryStream::Make(std::move(data)), &result, nullptr, policy) };
             if (codec == nullptr)
@@ -532,8 +531,7 @@ namespace luil {
             // 장 수만큼 곱해져 같은 폭탄이 된다.
             if (static_cast<std::uint64_t>(target.display.width) * static_cast<std::uint64_t>(target.display.height) * static_cast<std::uint64_t>(count) > maximum_animation_pixels)
             {
-                error = make_error(image_decode_error_kind::animation_too_large,
-                    u8"The animation needs more than the 64 megapixel decode limit; ask for a smaller size with max_width or max_height.");
+                error = make_error(image_decode_error_kind::animation_too_large, u8"The animation needs more than the 64 megapixel decode limit; ask for a smaller size with max_width or max_height.");
                 return {};
             }
 

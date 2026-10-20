@@ -2,6 +2,7 @@
 
 #include "host/font_registry.h"
 #include "ui/image_backing.h"
+#include "ui/image_codecs.h"
 #include "ui/image_source.h"
 #include "ui/text_shaping.h"
 
@@ -74,6 +75,7 @@ namespace luil {
         //    HarfBuzz다 (`text_shaping.h`).
         [[nodiscard]] ui_lottie decode_lottie(const sk_sp<SkData>& data, const image_decode_options& options, image_decode_error& error)
         {
+            register_optional_image_decoders();
             const sk_sp<SkFontMgr> fonts { platform_font_source().make_uncached_manager() };
             skottie::Animation::Builder builder {};
             builder.setFontManager(fonts);
@@ -102,7 +104,8 @@ namespace luil {
             }
             const double seconds { animation->duration() };
             const double frame_rate { animation->fps() };
-            if (std::isfinite(seconds) == false || seconds <= 0.0 || std::isfinite(frame_rate) == false || frame_rate <= 0.0)
+            const double maximum_seconds { std::chrono::duration<double> { std::chrono::nanoseconds::max() }.count() };
+            if (std::isfinite(seconds) == false || seconds <= 0.0 || seconds >= maximum_seconds || std::isfinite(frame_rate) == false || frame_rate <= 0.0)
             {
                 error = make_error(image_decode_error_kind::no_pixels, u8"The Lottie animation has no frames.");
                 return {};
