@@ -68,6 +68,25 @@ namespace luil::win32 {
             std::size_t end) const = 0;
         // 화면 좌표를 그 요소의 문서 byte offset으로 옮긴다. 모르면 nullopt다.
         [[nodiscard]] virtual std::optional<std::size_t> accessibility_text_offset(const ui_element_id& id, float screen_x, float screen_y) const = 0;
+
+        // 이 요소가 대신 서는 자식 창이다. 없으면 nullptr다.
+        //  - 웹뷰 자리표가 그 웹뷰의 접근성 창을 답한다. 합성 호스팅의 WebView2는 페이지의 UIA tree를 크기 0의
+        //    자식 창 가지로 내주는데, 그대로 두면 그 가지가 창의 첫 자식으로 서서 자리표와 따로 논다.
+        //  - 요소가 그 창의 host가 되고(`get_HostRawElementProvider`) 창 root가 그 창 자리에 요소를 내세운다
+        //    (`IRawElementProviderHwndOverride`). UIA가 둘을 한 요소로 합쳐, 페이지가 자리표의 자식으로 선다.
+        //  - 기본은 없다 — 웹뷰를 모르는 test 대역이 그대로 선다.
+        [[nodiscard]] virtual HWND accessibility_embedded_window(const ui_element& element) const
+        {
+            static_cast<void>(element);
+            return nullptr;
+        }
+        // 그 자식 창을 대신하는 요소의 id다 (`accessibility_embedded_window`의 역). 없으면 빈 id다.
+        //  - UIA는 창의 가지를 훑으며 자식 창마다 이것을 묻는다. 그래서 tree를 걷지 않고 답할 수 있어야 한다.
+        [[nodiscard]] virtual ui_element_id accessibility_window_element(HWND window) const
+        {
+            static_cast<void>(window);
+            return {};
+        }
     };
 
     class uia_element_provider;
@@ -111,7 +130,10 @@ namespace luil::win32 {
     // UI thread(STA) 전용이라 참조 수는 원자가 아니다 —
     // `ProviderOptions_UseComThreading`이 모든 호출을 창 thread로 모은다
     // (accessibility-design.md).
-    class uia_root_provider final : public IRawElementProviderSimple, public IRawElementProviderFragment, public IRawElementProviderFragmentRoot
+    class uia_root_provider final : public IRawElementProviderSimple,
+        public IRawElementProviderFragment,
+        public IRawElementProviderFragmentRoot,
+        public IRawElementProviderHwndOverride
     {
     public:
         explicit uia_root_provider(uia_surface_host& host) noexcept;
@@ -171,6 +193,13 @@ namespace luil::win32 {
         // IRawElementProviderFragmentRoot다.
         HRESULT STDMETHODCALLTYPE ElementProviderFromPoint(double x, double y, IRawElementProviderFragment** result) override;
         HRESULT STDMETHODCALLTYPE GetFocus(IRawElementProviderFragment** result) override;
+
+        // IRawElementProviderHwndOverride다.
+        // 자식 창 자리에 그 창을 대신하는 요소(웹뷰 자리표)를 내세운다 (`accessibility_embedded_window`).
+        HRESULT STDMETHODCALLTYPE GetOverrideProviderForHwnd(HWND window, IRawElementProviderSimple** result) override;
+
+        // 그 자식 창을 대신하는 요소다. 없으면 빈 id다.
+        [[nodiscard]] ui_element_id embedding_element(HWND window) const;
 
     private:
         struct id_hash

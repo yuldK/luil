@@ -429,6 +429,16 @@ namespace luil::win32 {
                 webviews_.cancel_pointer_input(surface, pointer_id);
             }
 
+            [[nodiscard]] HWND webview_automation_window(const std::u8string& surface, const std::u8string& id) override
+            {
+                return webviews_.automation_window(surface, id);
+            }
+
+            [[nodiscard]] std::u8string webview_of_automation_window(const std::u8string& surface, const HWND window) override
+            {
+                return webviews_.webview_of_automation_window(surface, window);
+            }
+
             [[nodiscard]] std::span<const pixel_rect> apply_webviews(
                 const std::u8string& surface, const ui_tree* const tree, IDCompositionVisual* const underlay, const int client_width, const int client_height) override
             {

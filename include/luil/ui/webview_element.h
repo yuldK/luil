@@ -13,9 +13,8 @@ namespace luil {
         std::u8string webview {};
         // 보조 기술이 읽을 이 영역의 이름이다.
         //  - **페이지 내용은 여기 없다.** 이 이름은 그 영역이 무엇인지를 말할 뿐이다.
-        //  - 합성 호스팅에서는 웹 콘텐츠가 창의 UIA tree에 저절로 들어오지 않고, 지금은
-        //    잇지 않았다 — 보조 기술은 이 자리를 이름 있는 group으로만 읽는다.
-        //    잰 것과 남은 조건은 webview-composition-design.md의 접근성 절에 있다.
+        //  - 페이지의 접근성 tree는 이 자리의 자식으로 선다. Windows에서는 창의 UIA root가 이 자리를
+        //    WebView2의 숨은 접근성 창의 대리로 세운다 (webview-composition-design.md의 접근성 절).
         std::u8string name {};
         // 웹뷰가 그 자리를 채우지 **못했을 때** 보이는 글이다.
         //

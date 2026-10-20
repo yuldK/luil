@@ -86,6 +86,20 @@ namespace luil::win32 {
         return false;
     }
 
+    HWND webview_host::automation_window(const std::u8string& anchor, const std::u8string& id) const
+    {
+        static_cast<void>(anchor);
+        static_cast<void>(id);
+        return nullptr;
+    }
+
+    std::u8string webview_host::webview_of_automation_window(const std::u8string& anchor, const HWND window) const
+    {
+        static_cast<void>(anchor);
+        static_cast<void>(window);
+        return {};
+    }
+
     bool webview_host::move_focus_in(const std::u8string& id, const bool backward)
     {
         static_cast<void>(id);

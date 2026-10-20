@@ -220,6 +220,11 @@ namespace luil::win32 {
         //  - 아무 데도 가지 않는 웹뷰는 영영 거짓이고, 그동안 자리표의 placeholder가
         //    그 자리를 지킨다 (webview_element.h).
         bool painted { false };
+        // 페이지의 UIA tree가 매달린 숨은 자식 창이다 (`automation_window`).
+        //  - **UIA 질의 밖에서 찾아 둔다.** 찾으려면 WebView2를 부르는데(브라우저 프로세스로 가는 COM), UIA가
+        //    그 창의 가지를 훑는 도중에 부르면 브라우저가 우리 UI thread에 되묻는 동안 서로를 기다린다.
+        //    자리를 앉히는 frame마다(`apply_layout`) 없거나 죽었으면 다시 찾는다.
+        HWND automation_window { nullptr };
         // 마지막으로 적용한 자리다. 같으면 다시 적용하지 않는다.
         webview_layout applied {};
         bool has_applied { false };
@@ -1087,6 +1092,9 @@ namespace luil::win32 {
         entry* const target { find(id) };
         if (target == nullptr || target->state != creation_state::ready || target->controller == nullptr)
             return;
+        // 접근성 창은 여기서 찾아 둔다 — UIA 질의 안에서는 WebView2를 부르지 않는다 (`entry::automation_window`).
+        if (target->painted && (target->automation_window == nullptr || IsWindow(target->automation_window) == FALSE))
+            target->automation_window = find_automation_window(*target);
 
         // 합성이 없으면(CPU 백엔드) 설 자리가 없다. 감추고 자리표에 맡긴다.
         const bool showing { layout.visible() && underlay != nullptr && target->visual != nullptr };
@@ -1490,6 +1498,57 @@ namespace luil::win32 {
         // **보이는 것까지 요구한다.** 붙어만 있고 감춰진 웹뷰의 자리를 비우면
         // 그 아래에 아무것도 없어 바탕 화면이 비친다.
         return target != nullptr && target->state == creation_state::ready && target->attached_to != nullptr && target->shown && target->painted;
+    }
+
+    HWND webview_host::automation_window(const std::u8string& anchor, const std::u8string& id) const
+    {
+        // 찾아 둔 값만 읽는다 — UIA 질의 안에서 WebView2를 부르지 않는다 (`entry::automation_window`).
+        const entry* const target { find(id) };
+        if (target == nullptr || target->anchor != anchor || standing(id) == false || target->automation_window == nullptr || IsWindow(target->automation_window) == FALSE)
+            return nullptr;
+        return target->automation_window;
+    }
+
+    std::u8string webview_host::webview_of_automation_window(const std::u8string& anchor, const HWND window) const
+    {
+        if (window == nullptr)
+            return {};
+        for (const std::unique_ptr<entry>& candidate : entries_)
+            if (candidate->anchor == anchor && candidate->automation_window == window && standing(candidate->id))
+                return candidate->id;
+        return {};
+    }
+
+    HWND webview_host::find_automation_window(const entry& target) const
+    {
+        if (target.composition_controller == nullptr || target.window == nullptr)
+            return nullptr;
+        ComPtr<ICoreWebView2CompositionController2> controller2 {};
+        ComPtr<IUnknown> wanted {};
+        if (FAILED(target.composition_controller.As(&controller2)) || controller2 == nullptr || FAILED(controller2->get_AutomationProvider(&wanted)) || wanted == nullptr)
+            return nullptr;
+        // provider는 COM 정체성으로 견준다 (IUnknown끼리). WinUI의 WebView2가 같은 자리에서 같은 판정을 한다.
+        ComPtr<IUnknown> wanted_identity {};
+        static_cast<void>(wanted.As(&wanted_identity));
+        for (const std::unique_ptr<environment>& candidate : environments_)
+        {
+            if (candidate->state != creation_state::ready || candidate->value == nullptr)
+                continue;
+            ComPtr<ICoreWebView2Environment4> environment4 {};
+            if (FAILED(candidate->value.As(&environment4)) || environment4 == nullptr)
+                continue;
+            for (HWND child { FindWindowExW(target.window, nullptr, L"Chrome_WidgetWin_0", nullptr) }; child != nullptr; child = FindWindowExW(target.window, child, L"Chrome_WidgetWin_0", nullptr))
+            {
+                ComPtr<IUnknown> provider {};
+                if (FAILED(environment4->GetAutomationProviderForWindow(child, &provider)) || provider == nullptr)
+                    continue;
+                ComPtr<IUnknown> identity {};
+                static_cast<void>(provider.As(&identity));
+                if (identity == wanted_identity)
+                    return child;
+            }
+        }
+        return nullptr;
     }
 
     void webview_host::shutdown() noexcept
