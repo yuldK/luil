@@ -54,6 +54,17 @@ namespace mobile_demo {
         bool reveal { false };
     };
 
+    // 여러 줄 메모 칸의 세로 스크롤이다 (논리 픽셀). 위치는 앱 상태다.
+    struct memo_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct memo_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+
     class basics_page
     {
     public:
@@ -119,6 +130,9 @@ namespace mobile_demo {
         luil::text::text_edit_state number_ {};
         luil::text::text_edit_state note_ {};
         luil::text::text_edit_state secret_ {};
+        // 여러 줄 메모의 글과 세로 스크롤이다.
+        luil::text::text_edit_state memo_ {};
+        float memo_scroll_ { 0.0f };
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };

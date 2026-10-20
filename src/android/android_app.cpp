@@ -334,7 +334,7 @@ namespace luil::android {
                 const std::optional<text_input_snapshot> value { location.element != nullptr ? location.element->text_input() : std::nullopt };
                 if (value.has_value() == false)
                     return {};
-                return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence, value->secret };
+                return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence, value->secret, value->multiline };
             }
 
             [[nodiscard]] text_input_options input_options() const override
@@ -347,9 +347,13 @@ namespace luil::android {
             void configure_keyboard(const bool secret)
             {
                 const text_input_options input { input_options() };
+                const bool multiline { committed_document().multiline };
                 std::uint32_t type { TYPE_CLASS_TEXT };
                 if (secret)
                     type |= TYPE_TEXT_VARIATION_PASSWORD;
+                else if (multiline)
+                    // 여러 줄 칸이다. 키보드의 Enter가 줄 바꿈이 되도록 아래에서 확정 동작도 떼어 낸다.
+                    type |= TYPE_TEXT_FLAG_MULTI_LINE;
                 else
                     switch (input.kind)
                     {
@@ -398,7 +402,10 @@ namespace luil::android {
                     break;
                 }
                 // actionId와 imeOptions의 하위 action 비트는 별개다. 둘 다 있어야 IME가 검색·다음 단추를 그린다.
-                const std::uint32_t options { IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI | static_cast<std::uint32_t>(action) | (secret ? IME_FLAG_NO_PERSONALIZED_LEARNING : 0u) };
+                //  - 여러 줄 칸은 `IME_FLAG_NO_ENTER_ACTION`으로 Enter를 확정 단추가 아닌 줄 바꿈 단추로 그리게 한다.
+                const std::uint32_t learning { secret ? IME_FLAG_NO_PERSONALIZED_LEARNING : 0u };
+                const std::uint32_t newline_enter { multiline && secret == false ? IME_FLAG_NO_ENTER_ACTION : 0u };
+                const std::uint32_t options { IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI | static_cast<std::uint32_t>(action) | learning | newline_enter };
                 GameActivity_setImeEditorInfo(app_->activity, static_cast<GameTextInputType>(type), static_cast<GameTextInputActionType>(action), static_cast<GameTextInputImeOptions>(options));
                 GameActivity_restartInput(app_->activity);
             }

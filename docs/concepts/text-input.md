@@ -56,7 +56,7 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 
 IME 후보 창과 보조 기술의 글 자리는 `text_span_bounds`가 답한다. 구간이 시작하는 줄에서의 자리이고, 여러 줄에 걸치면 그 줄의 끝까지다. UIA Text pattern의 줄 단위(`TextUnit_Line`)는 아직 한 줄 칸과 같이 문서 전체로 물러선다.
 
-Android IME는 아직 이 칸을 한 줄 칸처럼 다룬다. IME가 넣은 줄 바꿈을 걷어 내고 Enter로 보내므로(`ime_session::accept`), 소프트 키보드의 Enter로는 줄이 나뉘지 않는다. 하드웨어 키보드와 붙여넣기는 위 표대로다. 이 경로를 여는 것은 기기에서 확인해야 하는 별도 항목이다.
+Android에서는 IME에 넘기는 문서가 여러 줄 칸임을 함께 싣는다(`text_input_document::multiline`). 키보드는 `TYPE_TEXT_FLAG_MULTI_LINE`과 `IME_FLAG_NO_ENTER_ACTION`으로 띄운다. 그래서 Enter 자리가 확정 단추가 아니라 줄 바꿈 단추로 그려지고, IME가 넣은 줄 바꿈은 걷어 내지 않고 글로 둔다. 설정이 같아도 한 줄 칸과 여러 줄 칸 사이를 오가면 키보드를 다시 세운다. Enter 단추의 뜻이 바뀌기 때문이다. 실기기의 Gboard에서 소프트 키보드의 Enter로 줄이 나뉘는 것, 한 줄 칸으로 옮기면 Enter 자리가 다시 "다음" 단추가 되는 것을 확인했다.
 
 ## Android IME
 
@@ -73,7 +73,7 @@ Android에서는 GameActivity가 주는 GameTextInput이 IME(`InputConnection`)�
 - **앱 쪽 글이 바뀌었을 때만** IME에 넘긴다. IME가 고친 글이 logic을 거쳐 돌아오는 동안 앱의 글은 아직 옛것이라, 그 사이에 넘기면 IME가 되돌아간다. 돌아온 글이 IME의 것과 다르면(하드웨어 키, 붙여넣기, 앱의 입력 거르기) 그때 넘긴다.
 - GameTextInput의 선택·조합 범위는 **UTF-16 코드 단위**이고 글은 Java의 modified UTF-8이다 (기기에서 `'사'` 3바이트에 선택 1로 확인했다). 둘 다 UTF-8 byte offset으로 옮긴다.
 - 하드웨어 키보드의 글자도 IME가 먼저 받는다. Gboard 한국어 모드는 `a`·`b`를 두벌식 `ㅁ`·`ㅠ`로 조합해 IME 상태로 보내므로 키 경로와 겹치지 않는다. IME가 받지 않은 키만 키 이벤트로 온다.
-- 키보드의 완료 단추(`IME_ACTION_DONE`)는 Enter 키로 보낸다. 가로 화면에서 전체 화면 편집기로 바뀌지 않게 한다 (`IME_FLAG_NO_EXTRACT_UI`). 이 값은 키보드를 띄울 때마다 정하고 IME 연결을 다시 세운다 — 연결은 창이 초점을 얻을 때 이미 만들어져 있다. Gboard 한국어 자판은 이때도 단추를 "↵"로 그리지만 누르면 완료 동작이 온다. 그래도 IME가 줄바꿈을 글로 넣으면 한 줄 칸은 그것을 걷어 내고 Enter로 보낸다.
+- 키보드의 완료 단추(`IME_ACTION_DONE`)는 Enter 키로 보낸다. 가로 화면에서 전체 화면 편집기로 바뀌지 않게 한다 (`IME_FLAG_NO_EXTRACT_UI`). 이 값은 키보드를 띄울 때마다 정하고 IME 연결을 다시 세운다 — 연결은 창이 초점을 얻을 때 이미 만들어져 있다. Gboard 한국어 자판은 이때도 단추를 "↵"로 그리지만 누르면 완료 동작이 온다. 그래도 IME가 줄바꿈을 글로 넣으면 한 줄 칸은 그것을 걷어 내고 Enter로 보낸다. 여러 줄 칸은 그 줄바꿈이 곧 글이다 (위의 "여러 줄 칸").
 - 키보드가 올라오면 그 높이를 안전 영역의 아래 가장자리에 더해 앱이 줄어든 크기로 다시 배치한다. 줄어든 frame이 오면 host가 `focus_reveal_event`를 보내고, controller가 `interaction_policy::on_focus_moved`로 초점 칸을 다시 드러낸다. 그래서 키보드가 칸을 가리지 않는다 (policy가 `route_reveal`을 답해야 한다).
 - glue는 IME 상태가 바뀌어도 looper를 깨우지 않는다. host가 GameActivity의 IME 알림을 가로채 UI thread를 깨운다.
 
