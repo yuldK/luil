@@ -89,6 +89,9 @@ namespace luil {
     // 글꼴이 없는 thread에서도 부를 수 있어야 하므로 element 밖에서 주입한다.
     using text_measurer = std::function<float(std::u8string_view text, float pixel_size)>;
 
+    // 설정된 UI 글꼴(그리기가 쓰는 그 글꼴)로 재는 측정기다. 어느 thread에서나 부를 수 있다.
+    [[nodiscard]] const text_measurer& default_text_measurer();
+
     // 텍스트 박스가 내주는 편집 상태다.
     // 초점을 가진 박스의 선택 글을 클립보드로 복사할 때 입력 thread가 읽는다.
     // offset은 UTF-8 byte offset이다.
@@ -474,6 +477,15 @@ namespace luil {
         //  - scrim과 시트 바탕처럼 화면 끝까지 칠해야 하는 것만 쓴다. 누르기는 지금처럼 자리 안에서만 받는다.
         //  - 자식 문맥이 그대로 잇는다. 자르는 부모(흘리는 창·확대 보기) 안에서는 그 부모가 자른다.
         rect_f surface {};
+        // 배치에서 글 폭을 재는 함수다 (`text_measurer`). 비어 있으면 그리기와 같은 UI 글꼴로 잰다
+        // (`default_text_measurer`) — 배치를 손으로 짜는 조립도 따로 넘길 것이 없다.
+        //  - 글 폭에 따라 줄 수가 바뀌는 요소(여러 줄 칸의 자동 줄 넘김)만 쓴다. 잰 값은 배치 결과에 남기고
+        //    포인터를 붙잡아 두지 않는다 — 배치가 끝나면 이 문맥은 사라진다.
+        //  - Test는 고정 폭 가짜를 넣는다. Core test의 글꼴 관리자는 비어 있어 기본 측정기는 폭 0을 잰다.
+        const text_measurer* measurer { nullptr };
+
+        // 이 배치가 쓸 측정기다.
+        [[nodiscard]] const text_measurer& measure_text() const;
 
         // 같은 배율·scroll_offset으로 자식에게 줄 문맥이다.
         // 자리만 새로 준다 — 자식 문맥을 손으로 지으면 뒤의 값을 빠뜨리기 쉽고,
@@ -482,7 +494,7 @@ namespace luil {
         //  - 문맥에 새 값이 생겨도 모든 부모가 저절로 잇는다.
         [[nodiscard]] arrange_context for_child(const rect_f& child_slot) const noexcept
         {
-            return { child_slot, scale, scroll_offset, surface };
+            return { child_slot, scale, scroll_offset, surface, measurer };
         }
 
         // 표면 전체를 아는가다 (넓이가 있는 `surface`).

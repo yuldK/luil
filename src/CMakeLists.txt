@@ -101,6 +101,7 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     "${public_headers}/ui/app_message.h"
     ui/ui_element.cpp
     "${public_headers}/ui/ui_element.h"
+    ui/text_measurer.cpp
     "${public_headers}/ui/ui_element_id.h"
     ui/ui_platform.cpp
     "${public_headers}/ui/ui_platform.h"

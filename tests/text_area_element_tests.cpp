@@ -95,6 +95,16 @@ namespace {
             luil::make_arranged_tree(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, std::move(view), std::move(config)), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
     }
 
+    // 같은 칸을 고정 폭 측정기로 배치한다. 배치가 줄을 접는다 — core test의 기본 측정기는 폭 0을 재 접지 않는다.
+    //  - 흘리지 않는 칸이면 접는 폭은 200 - 7·2 = 186, 곧 한 줄에 18글자다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> wrapped_tree(luil::text_input_view view, luil::text_area_config config = {})
+    {
+        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, std::move(view), std::move(config)) };
+        const luil::text_measurer measurer { fixed_width };
+        memo->arrange({ .slot = { 0.0f, 0.0f, 200.0f, 100.0f }, .scale = 1.0f, .measurer = &measurer });
+        return std::make_shared<const luil::ui_tree>(std::move(memo));
+    }
+
     [[nodiscard]] const luil::text_area_element& memo_of(const luil::ui_tree& tree)
     {
         return static_cast<const luil::text_area_element&>(*tree.root());
@@ -155,14 +165,74 @@ namespace {
     }
 } // namespace
 
-TEST_CASE("A text area counts lines by line breaks only", "[ui][text-area]")
+TEST_CASE("A text area splits lines at line breaks", "[ui][text-area]")
 {
-    // 배치에는 글꼴이 없어 넘겨 접은 줄을 셀 수 없다 — 줄 수와 내용 높이는 글만의 함수다.
-    REQUIRE(luil::text_area_line_count(u8"") == 1u);
-    REQUIRE(luil::text_area_line_count(u8"one line, however long it is") == 1u);
-    REQUIRE(luil::text_area_line_count(u8"a\nb\n") == 3u);
-    REQUIRE(luil::text_area_content_height(u8"") == luil::text_area_line_height + 2.0f * luil::text_area_padding_y);
-    REQUIRE(luil::text_area_content_height(u8"a\nb\n") == 3.0f * luil::text_area_line_height + 2.0f * luil::text_area_padding_y);
+    // 빈 글도 한 줄이다. 줄 바꿈 하나가 줄 하나를 더한다.
+    using line = luil::text_area_element::line;
+    REQUIRE(memo_of(*wrapped_tree(view_of(u8"", 0))).lines() == std::vector<line> { { 0, 0, false } });
+    REQUIRE(memo_of(*wrapped_tree(view_of(u8"a\nb\n", 0))).lines() == std::vector<line> { { 0, 1, false }, { 2, 3, false }, { 4, 4, false } });
+    REQUIRE(memo_of(*wrapped_tree(view_of(u8"a\nb\n", 0))).area().metrics().content_height == 3.0f * luil::text_area_line_height + 2.0f * luil::text_area_padding_y);
+}
+
+TEST_CASE("A text area wraps long lines after a space at its width", "[ui][text-area]")
+{
+    using line = luil::text_area_element::line;
+    // 열여덟 글자가 드는 칸이다. "dddd"는 걸쳐 넘치므로 앞의 공백 뒤에서 접고, 공백은 윗줄에 매달린다.
+    const auto words { wrapped_tree(view_of(u8"aaaa bbbb cccc dddd eeee", 0)) };
+    REQUIRE(memo_of(*words).lines() == std::vector<line> { { 0, 15, true }, { 15, 24, false } });
+    REQUIRE(memo_of(*words).area().metrics().content_height == 2.0f * luil::text_area_line_height + 2.0f * luil::text_area_padding_y);
+
+    // 칸보다 긴 낱말은 글자 사이에서 접는다.
+    REQUIRE(memo_of(*wrapped_tree(view_of(u8"abcdefghijklmnopqrstuvwxyz", 0))).lines() == std::vector<line> { { 0, 18, true }, { 18, 26, false } });
+    // 바로 넘치는 자리가 공백이면 그 공백까지 윗줄이다. 접은 뒤의 줄 바꿈은 지금처럼 나눈다.
+    REQUIRE(memo_of(*wrapped_tree(view_of(u8"aaaaaaaaaaaaaaaaaa bb\ncc", 0))).lines() == std::vector<line> { { 0, 19, true }, { 19, 21, false }, { 22, 24, false } });
+    // 끝에 매달린 공백만으로는 줄을 더하지 않는다.
+    REQUIRE(memo_of(*wrapped_tree(view_of(u8"aaaaaaaaaaaaaaaaaa   ", 0))).lines() == std::vector<line> { { 0, 21, false } });
+
+    // 흘리는 칸은 막대 자리를 늘 빼고 접는다 — 넘치지 않아 막대가 없어도 같은 폭이다.
+    const auto scrolled { wrapped_tree(view_of(u8"aaaa bbbb cccc ddd", 0), scrolling_config()) };
+    REQUIRE(memo_of(*scrolled).area().metrics().overflowing() == false);
+    REQUIRE(memo_of(*scrolled).lines().size() == 2u);
+}
+
+TEST_CASE("A wrapped text area places points and spans on screen lines", "[ui][text-area]")
+{
+    const std::u8string text { u8"aaaa bbbb cccc dddd eeee" };
+    const auto tree { wrapped_tree(view_of(text, 0)) };
+    const luil::text_area_element& memo { memo_of(*tree) };
+    // 둘째 화면 줄 "dddd eeee"는 offset 15에서 시작한다.
+    REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(1), fixed_width) == 17u);
+    REQUIRE(memo.offset_at_point(-50.0f, row_middle(1), fixed_width) == 15u);
+    // 접은 줄의 오른쪽 끝은 매달린 공백 앞이다 — 접은 자리(15)는 아랫줄의 처음이다.
+    REQUIRE(memo.offset_at_point(7.0f + 5000.0f, row_middle(0), fixed_width) == 14u);
+    const auto at_break { memo.text_span_bounds({ text, 15, 15, 15 }, fixed_width) };
+    REQUIRE(at_break->x == 7.0f);
+    REQUIRE(at_break->y == 5.0f + 18.0f);
+    // 접은 자리를 넘는 구간은 시작한 화면 줄의 끝까지다.
+    const auto across { memo.text_span_bounds({ text, 12, 12, 17 }, fixed_width) };
+    REQUIRE(across->x == 7.0f + 120.0f);
+    REQUIRE(across->width == 30.0f);
+    REQUIRE(across->y == 5.0f);
+}
+
+TEST_CASE("Line keys follow the screen lines of a wrapped text area", "[ui][text-area][interaction]")
+{
+    memo_policy policy {};
+    luil::interaction_controller controller { &policy, fixed_config() };
+    const std::u8string text { u8"aaaa bbbb cccc dddd eeee" };
+    controller.set_tree(wrapped_tree(view_of(text, 2)));
+    focus(controller);
+    controller.set_tree(wrapped_tree(view_of(text, 2)));
+    // ↓는 같은 줄 바꿈 안의 다음 화면 줄로 간다.
+    REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_down)))->offset == 17u);
+    // End는 caret이 선 화면 줄의 끝이다.
+    REQUIRE(edit_in(controller.process(key(luil::key_code::end)))->offset == 14u);
+
+    controller.set_tree(wrapped_tree(view_of(text, 20)));
+    REQUIRE(edit_in(controller.process(key(luil::key_code::home)))->offset == 15u);
+    REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_up)))->offset == 5u);
+    // Ctrl+End는 글의 끝이다.
+    REQUIRE(edit_in(controller.process(key(luil::key_code::end, false, true)))->command == luil::text::text_edit_command::move_line_end);
 }
 
 TEST_CASE("A text area maps a point to the line and the column under it", "[ui][text-area]")

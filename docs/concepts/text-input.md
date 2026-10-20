@@ -36,7 +36,7 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 
 [`text_area_element`](../../include/luil/ui/text_area_element.h)는 줄 바꿈·세로 스크롤·여러 줄 붙여넣기를 받는 칸이다. 한 줄 칸과 같은 초안(`text_edit_state`), 같은 view(`text_input_view`), 같은 편집 명령을 쓴다. 앱은 `text_target_of`에 그 kind를 이름 대고 `apply_text_edit`로 적용하면 된다. `text_input()`이 `multiline`을 참으로 답하므로 붙여넣기는 줄 바꿈과 탭을 보존한다.
 
-**자동 줄 넘김은 하지 않는다.** 줄은 줄 바꿈(`\n`)으로만 나뉘고, 긴 줄은 caret이 선 줄을 따라 칸 전체를 가로로 민다(한 줄 칸의 `scroll_for`와 같은 식). 이유는 배치 단계에 글꼴이 없다는 것이다(`arrange_context`). 넘겨 접으면 줄 수가 글자 폭에 달려, 배치에서 내용 높이와 세로 스크롤의 범위를 정할 수 없다. 줄 바꿈으로만 나누면 내용 높이는 `text_area_content_height(text)`로 글만의 함수가 된다. 자동 줄 넘김을 하려면 배치에 측정기를 넣는 결정이 먼저 필요하다 ([검토 중인 선택지](../text-area-wrap-design.md)).
+**줄은 칸 폭에서 넘겨 접는다.** 배치가 `arrange_context::measure_text()`로 줄을 접어 내용 높이를 정하고, 그리기·포인터 판정·IME 질의는 그 접은 줄(`lines()`)을 그대로 쓴다. 낱말 사이(공백 뒤)에서 접고, 칸보다 긴 낱말은 글자 사이에서 접는다. 가로로 미는 일은 없다. 자세한 규칙과 비용은 [자동 줄 넘김](../text-area-wrap-design.md)에 있다.
 
 키의 뜻은 `text_input_snapshot::multiline`을 보고 controller가 가른다. 한 줄 칸의 경로는 그대로다.
 
@@ -44,9 +44,9 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 | --- | --- |
 | Enter, Shift+Enter | 줄 바꿈을 넣는다 (`insert "\n"`). 기본 버튼으로 가지 않는다 |
 | Ctrl+Enter, Alt+Enter | 칸이 받지 않는다. 앱 단축키로 흐른다 |
-| ↑, ↓ | 같은 가로 자리의 위아래 줄로 간다. 첫 줄의 ↑는 글의 처음, 마지막 줄의 ↓는 글의 끝이다 |
+| ↑, ↓ | 같은 가로 자리의 위아래 화면 줄로 간다. 접은 줄도 한 줄이다. 첫 줄의 ↑는 글의 처음, 마지막 줄의 ↓는 글의 끝이다 |
 | Page Up, Page Down | 창에 드는 줄 수에서 한 줄을 남긴 만큼 간다 |
-| Home, End | caret이 선 줄의 처음과 끝이다 |
+| Home, End | caret이 선 화면 줄의 처음과 끝이다. 접은 줄의 End는 매달린 공백(없으면 마지막 글자) 앞이다 |
 | Ctrl+Home, Ctrl+End | 글의 처음과 끝이다 (`move_line_start`·`move_line_end`) |
 | Tab | 칸을 떠난다. 탭 문자를 넣지 않는다 |
 
@@ -54,7 +54,7 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 
 세로 스크롤은 앱 상태다(`scroll_offset`·`scroll`·`scroll_to`). 칸 안의 `scroll_area_element`가 막대·휠·범위 다듬기를 맡는다. caret 따라가기는 controller가 한다. 입력 pump는 새 tree를 받을 때마다 `follow_text_caret()`을 부르고, 초점을 가진 여러 줄 칸의 **caret이나 글이 바뀌었을 때만** caret 줄을 창 안으로 들이는 스크롤 메시지를 낸다. 편집은 logic이 적용한 뒤에야 caret 자리가 정해지므로 그 결과가 실린 tree에서 하는 것이다. 휠로 caret에서 멀리 흘린 frame은 caret도 글도 그대로라 되돌아가지 않는다.
 
-IME 후보 창과 보조 기술의 글 자리는 `text_span_bounds`가 답한다. 구간이 시작하는 줄에서의 자리이고, 여러 줄에 걸치면 그 줄의 끝까지다. UIA Text pattern의 줄 단위(`TextUnit_Line`)는 아직 한 줄 칸과 같이 문서 전체로 물러선다.
+IME 후보 창과 보조 기술의 글 자리는 `text_span_bounds`가 답한다. 구간이 시작하는 화면 줄에서의 자리이고, 여러 줄에 걸치면 그 줄의 끝까지다. UIA Text pattern의 줄 단위(`TextUnit_Line`)는 아직 한 줄 칸과 같이 문서 전체로 물러선다.
 
 Android에서는 IME에 넘기는 문서가 여러 줄 칸임을 함께 싣는다(`text_input_document::multiline`). 키보드는 `TYPE_TEXT_FLAG_MULTI_LINE`과 `IME_FLAG_NO_ENTER_ACTION`으로 띄운다. 그래서 Enter 자리가 확정 단추가 아니라 줄 바꿈 단추로 그려지고, IME가 넣은 줄 바꿈은 걷어 내지 않고 글로 둔다. 설정이 같아도 한 줄 칸과 여러 줄 칸 사이를 오가면 키보드를 다시 세운다. Enter 단추의 뜻이 바뀌기 때문이다. 실기기의 Gboard에서 소프트 키보드의 Enter로 줄이 나뉘는 것, 한 줄 칸으로 옮기면 Enter 자리가 다시 "다음" 단추가 되는 것을 확인했다.
 

@@ -44,6 +44,12 @@ namespace luil {
         view_->set_content(std::move(content));
     }
 
+    void scroll_area_element::set_content_height(const float content_height) noexcept
+    {
+        config_.content_height = content_height;
+        view_->set_content_height(content_height);
+    }
+
     const scroll_metrics& scroll_area_element::metrics() const noexcept
     {
         return metrics_;
