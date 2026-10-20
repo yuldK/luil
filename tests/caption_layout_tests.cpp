@@ -114,3 +114,70 @@ TEST_CASE("The caption geometry is the same computation the window hit test uses
     // 빠진 최대화 버튼의 자리는 끌기다.
     REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, 930, 20) == luil::win32::window_hit::caption_drag);
 }
+
+namespace {
+    [[nodiscard]] luil::caption_app_button make_app_button(const char8_t* key, const bool enabled = true)
+    {
+        return luil::caption_app_button {
+            .key = key,
+            .glyph = 0xEB51,
+            .tooltip = key,
+            .action = [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; },
+            .enabled = enabled,
+        };
+    }
+} // namespace
+
+TEST_CASE("Caption app buttons stand left of the window buttons in their listed order", "[caption]")
+{
+    luil::caption_config config {};
+    config.app_buttons = { make_app_button(u8"search"), make_app_button(u8"settings") };
+    // 액션이 없는 단추는 만들지 않는다.
+    config.app_buttons.push_back(luil::caption_app_button { .key = u8"inert" });
+    auto tree = luil::make_caption_tree(1000.0f, 1.0f, config);
+
+    const auto layout = luil::win32::make_caption_layout(1000, 96, config.metrics, config.buttons);
+    const luil::ui_element* const search = tree.find(luil::ui_element_id { luil::ui_element_kind::caption_app_button, u8"search" });
+    const luil::ui_element* const settings = tree.find(luil::ui_element_id { luil::ui_element_kind::caption_app_button, u8"settings" });
+    REQUIRE(search != nullptr);
+    REQUIRE(settings != nullptr);
+    REQUIRE(tree.find(luil::ui_element_id { luil::ui_element_kind::caption_app_button, u8"inert" }) == nullptr);
+    // 창 버튼 바로 왼쪽부터 목록의 끝이 오른쪽이다. 창 버튼의 자리는 그대로다.
+    REQUIRE(static_cast<int>(settings->bounds().x) == layout.minimize_left - layout.button_width);
+    REQUIRE(static_cast<int>(search->bounds().x) == layout.minimize_left - 2 * layout.button_width);
+    const luil::ui_element* const minimize = tree.find(luil::ui_element_id { luil::ui_element_kind::caption_minimize });
+    REQUIRE(static_cast<int>(minimize->bounds().x) == layout.minimize_left);
+
+    // 보조 기술이 형제를 읽는 차례가 화면의 차례다 — 앱 단추가 창 버튼보다 앞이다.
+    const luil::ui_element& caption = *tree.root();
+    REQUIRE(caption.children()[0]->id().owner == u8"search");
+    REQUIRE(caption.children()[1]->id().owner == u8"settings");
+    // 창 버튼과 달리 Tab의 자리이고 이름은 tooltip이다.
+    REQUIRE(search->tab_stop());
+    REQUIRE(minimize->tab_stop() == false);
+    REQUIRE(search->tooltip() == u8"search");
+}
+
+TEST_CASE("The caption drag strip answers client over an app button", "[caption][window-mode]")
+{
+    luil::caption_config config {};
+    config.app_buttons = { make_app_button(u8"settings"), make_app_button(u8"off", false) };
+    const auto tree = luil::make_caption_tree(1000.0f, 1.0f, config);
+    const auto layout = luil::win32::make_caption_layout(1000, 96, config.metrics, config.buttons);
+    const int off_x { layout.minimize_left - layout.button_width / 2 };
+    const int settings_x { layout.minimize_left - layout.button_width - layout.button_width / 2 };
+
+    // 비클라이언트 판정 자체는 그 자리를 끌기로 본다 — 단추를 아는 것은 tree다.
+    REQUIRE(luil::win32::hit_test_caption(layout, settings_x, 18) == luil::win32::caption_hit::drag);
+    REQUIRE(luil::win32::caption_app_button_at(&tree, settings_x, 18));
+    // 비활성 단추 위도 끌기 자리가 아니다.
+    REQUIRE(luil::win32::caption_app_button_at(&tree, off_x, 18));
+    // 제목 자리와 caption 아래는 단추가 아니다.
+    REQUIRE(luil::win32::caption_app_button_at(&tree, 100, 18) == false);
+    REQUIRE(luil::win32::caption_app_button_at(&tree, settings_x, 60) == false);
+    REQUIRE(luil::win32::caption_app_button_at(nullptr, settings_x, 18) == false);
+
+    // 앱 단추가 없는 caption은 지금처럼 전부 끌기다.
+    const auto plain = luil::make_caption_tree(1000.0f, 1.0f, luil::caption_config {});
+    REQUIRE(luil::win32::caption_app_button_at(&plain, settings_x, 18) == false);
+}

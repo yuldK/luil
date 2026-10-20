@@ -179,6 +179,13 @@ namespace demo {
             caption.minimize_tooltip = u8"Minimize";
             caption.maximize_tooltip = u8"Maximize or restore";
             caption.close_tooltip = u8"Close";
+            // 창 전체의 명령을 caption에 둔다. 그 자리는 창을 끄는 자리가 아니라 눌리는 단추다.
+            caption.app_buttons.push_back(luil::caption_app_button {
+                .key = u8"settings",
+                .glyph = luil::codicons::icon_settings_gear,
+                .tooltip = u8"테마 설정",
+                .action = luil::make_message_action(navigate_intent { std::u8string { page_theme } }),
+            });
             return caption;
         }
 

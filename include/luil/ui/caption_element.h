@@ -5,9 +5,31 @@
 #include "luil/ui/ui_tree.h"
 
 #include <string>
+#include <vector>
 
 namespace luil {
     [[nodiscard]] ui_element_id caption_button_element_id(caption_button_hover hover) noexcept;
+
+    // caption 안에 앱이 두는 단추다 (설정 같은 창 전체의 명령).
+    //
+    // **끌기와 갈린다.** 창 버튼이 아닌 caption의 빈 자리는 창을 끄는 자리인데, 이 단추의 자리는
+    // 비클라이언트 판정이 client로 답해 평소의 단추처럼 눌린다 (caption-button-design.md).
+    //  - 판정은 게시된 tree의 이 단추를 본다. 그래서 단추를 더하거나 빼거나 비활성으로 두는 것이
+    //    다음 frame부터 그대로 판정에 든다 — 창을 만들 때의 설정에 묶이지 않는다.
+    //  - 창 버튼과 달리 Tab의 자리다. 창 버튼은 Alt+Space의 시스템 메뉴가 키보드의 길이지만 이 단추에는
+    //    다른 길이 없다.
+    struct caption_app_button
+    {
+        // 같은 caption 안에서 단추를 가르는 앱 정의 키다 (`ui_element_id::owner`).
+        std::u8string key {};
+        // codicon 코드포인트다.
+        char32_t glyph { 0 };
+        // tooltip이자 **보조 기술이 읽는 이름**이다. 글리프뿐인 단추라 이름의 원천이 이것뿐이다.
+        std::u8string tooltip {};
+        // 누르면 낼 액션이다. 없으면 단추를 만들지 않는다 — 없는 것은 두지 않는다.
+        ui_action action {};
+        bool enabled { true };
+    };
 
     // 앱이 정하는 caption의 겉모습이다.
     // 아이콘 글리프는 codicon 코드포인트이고 0이면 아이콘 없이 제목이 왼쪽 여백에서 시작한다.
@@ -23,6 +45,9 @@ namespace luil {
         // 둘 창 버튼이다. 없는 버튼은 만들지 않고 자리도 차지하지 않으며,
         // 그 창 스타일(`WS_MINIMIZEBOX`·`WS_MAXIMIZEBOX`)도 함께 빠진다.
         caption_buttons buttons { default_caption_buttons };
+        // 창 버튼 바로 왼쪽에 서는 앱 단추다. 목록 차례대로 왼쪽에서 오른쪽으로 서고,
+        // 폭은 창 버튼과 같다 (`caption_ui_metrics::button_width`). 제목은 그 앞에서 잘린다.
+        std::vector<caption_app_button> app_buttons {};
     };
 
     // custom caption 막대다.
@@ -55,6 +80,8 @@ namespace luil {
         ui_element* minimize_ { nullptr };
         ui_element* maximize_ { nullptr };
         ui_element* close_ { nullptr };
+        // 만든 앱 단추다 (설정 차례).
+        std::vector<ui_element*> app_buttons_ {};
     };
 
     // smoke 화면처럼 view snapshot 없이 caption만 그릴 때 쓰는 단독 tree다.

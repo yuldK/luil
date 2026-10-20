@@ -28,6 +28,12 @@ namespace luil::win32 {
     // 전체 화면이면 어디를 눌러도 `HTCLIENT`다 (window_mode.h).
     [[nodiscard]] LRESULT caption_hit_test(HWND window, LPARAM long_parameter, std::uint32_t dpi, const caption_config& caption, const window_config& config, window_display_mode mode);
 
+    // 게시된 tree에서 (x, y)(client 물리 픽셀)에 caption 앱 단추가 서 있는가.
+    //  - 끌기 자리로 판정된 곳이 이것이면 `HTCLIENT`로 답한다. 그 단추는 tree가 그리고 tree가 누르므로,
+    //    판정도 같은 tree에 물어야 단추를 더하고 빼는 것이 곧바로 판정에 든다 (`caption_app_button`).
+    //  - 비활성 단추도 끌기 자리가 아니다. 단추 위를 눌러 창이 딸려 가면 안 된다.
+    [[nodiscard]] bool caption_app_button_at(const ui_tree* tree, int x, int y) noexcept;
+
     // 최소 크기와 최대화 크기를 함께 정한다.
     // 최소 크기는 client 기준 값을 창 크기로 바꿔 넣는다 (프레임 두께 포함).
     //  - 최대화 크기를 작업 영역으로 자르는 것은 **전체 화면이 아닐 때만**이다.
