@@ -1112,3 +1112,91 @@ TEST_CASE("A disabled row does not hear a double click", "[ui][list]")
     REQUIRE(enabled->action(luil::ui_trigger::double_click) != nullptr);
     REQUIRE(disabled->action(luil::ui_trigger::double_click) == nullptr);
 }
+
+TEST_CASE("A shared model is read in place without a copy", "[ui][list]")
+{
+    // 큰 목록이 frame마다 하던 깊은 복사를 건너뛰는 길이다. 모델이 바뀌지 않는 frame에서는 참조 수만 오른다.
+    const auto model { std::make_shared<const std::vector<luil::virtual_list_item>>(make_items(100000)) };
+    luil::virtual_list_config config {};
+    config.owner = u8"files";
+    config.row_height = 20.0f;
+    config.shared_items = model;
+    const luil::virtual_list_element list { config };
+    REQUIRE(&list.model() == model.get());
+    REQUIRE(list.model().data() == model->data());
+    // 넘긴 config와 목록이 같은 vector를 쥔다 — 셋째 참조는 없다.
+    REQUIRE(model.use_count() == 3);
+}
+
+TEST_CASE("A shared model behaves the same as a model given by value", "[ui][list]")
+{
+    // 모델을 읽는 자리가 하나라도 `items`를 직접 읽으면 공유 모델을 준 목록에서 그 자리만 빈 모델을 본다.
+    // 높이·지어지는 행·커서·키보드·접근성 값이 두 길에서 같아야 한다.
+    luil::virtual_list_config by_value { make_config(500) };
+    by_value.cursor = item_key(40);
+    by_value.scroll_offset = 700.0f;
+    by_value.move = move_factory();
+    by_value.activate = activate_factory();
+    luil::virtual_list_config shared { by_value };
+    shared.shared_items = std::make_shared<const std::vector<luil::virtual_list_item>>(std::move(shared.items));
+    shared.items.clear();
+
+    const auto value_tree { published(by_value, 100.0f) };
+    const auto shared_tree { published(shared, 100.0f) };
+    const auto& value_list { static_cast<const luil::virtual_list_element&>(*value_tree->root()) };
+    const auto& shared_list { static_cast<const luil::virtual_list_element&>(*shared_tree->root()) };
+    REQUIRE(shared_list.content_height() == value_list.content_height());
+    REQUIRE(shared_list.realized().begin == value_list.realized().begin);
+    REQUIRE(shared_list.realized().end == value_list.realized().end);
+    REQUIRE(shared_list.cursor() == value_list.cursor());
+    REQUIRE(shared_list.accessibility().value == value_list.accessibility().value);
+    REQUIRE(shared_tree->find(row_id(item_key(36))) != nullptr);
+
+    REQUIRE(moved_key(press_key_on(shared, luil::key_code::arrow_down), 0) == item_key(41));
+    const auto activated { press_key_on(shared, luil::key_code::enter) };
+    REQUIRE(message_at<activate_intent>(activated, 0) != nullptr);
+    REQUIRE(message_at<activate_intent>(activated, 0)->key == item_key(40));
+}
+
+TEST_CASE("A published tree keeps the shared model it was built with", "[ui][list]")
+{
+    // 모델을 바꿀 때는 새 vector로 갈아 끼운다. 앞 frame의 tree는 옛 vector를 쥔 채 끝까지 산다.
+    auto first { std::make_shared<const std::vector<luil::virtual_list_item>>(make_items(3)) };
+    luil::virtual_list_config config { make_config(0) };
+    config.shared_items = first;
+    const auto old_tree { published(config, 100.0f) };
+
+    config.shared_items = std::make_shared<const std::vector<luil::virtual_list_item>>(make_items(5));
+    const std::weak_ptr<const std::vector<luil::virtual_list_item>> watched { first };
+    first.reset();
+    const auto new_tree { published(config, 100.0f) };
+
+    REQUIRE(watched.expired() == false);
+    REQUIRE(static_cast<const luil::virtual_list_element&>(*old_tree->root()).model().size() == 3u);
+    REQUIRE(static_cast<const luil::virtual_list_element&>(*new_tree->root()).model().size() == 5u);
+}
+
+TEST_CASE("Handing a large model to a virtual list each frame", "[.perf][ui][list]")
+{
+    // 기본 실행에서는 빠진다. Release로 `"[.perf]"`를 주어 돌린다.
+    // 앱이 frame마다 하는 일 — config를 채워 목록을 하나 짓는 것 — 을 두 길로 잰다.
+    constexpr int frames { 50 };
+    const std::vector<luil::virtual_list_item> items { make_items(100000) };
+    const auto shared { std::make_shared<const std::vector<luil::virtual_list_item>>(items) };
+    const auto measure = [](const auto& fill) {
+        const auto start { std::chrono::steady_clock::now() };
+        for (int frame = 0; frame < frames; ++frame)
+        {
+            luil::virtual_list_config config {};
+            config.owner = u8"files";
+            fill(config);
+            const luil::virtual_list_element list { std::move(config) };
+            REQUIRE(list.model().size() == 100000u);
+        }
+        return std::chrono::duration<double, std::milli> { std::chrono::steady_clock::now() - start }.count() / frames;
+    };
+    const double by_value { measure([&items](luil::virtual_list_config& config) { config.items = items; }) };
+    const double by_share { measure([&shared](luil::virtual_list_config& config) { config.shared_items = shared; }) };
+    WARN("100000 items per frame: by value " << by_value << " ms, shared " << by_share << " ms");
+    REQUIRE(by_share < by_value);
+}

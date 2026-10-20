@@ -69,13 +69,16 @@ namespace luil {
         // 같은 화면에 목록이 여럿일 때 구분하는 키다.
         std::u8string owner {};
         // **모델 전체**다. 화면에 걸치지 않는 항목도 전부 담는다.
-        //  - 담기는 것은 값이지 element가 아니다. 십만 줄이 와도 여기까지는
-        //    복사 한 번이고, tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
-        //  - 그 복사는 **frame마다 한 번**이다. 십만 줄을 frame마다 새로 지어 넣지
-        //    말고, 앱이 든 모델을 그대로 옮겨 담는다 (`items = model_`). 모델이
-        //    바뀌지 않는 frame에서는 그것이 memcpy 한 번이고, `std::u8string`의
-        //    짧은 이름은 그 안에서 함께 옮겨진다.
+        //  - 담기는 것은 값이지 element가 아니다. tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
+        //  - 이 vector는 **frame마다 깊은 복사**다. 항목마다 키와 이름 문자열을 새로 복사하므로
+        //    모델 크기에 비례한다 — 큰 목록은 `shared_items`로 넘긴다.
         std::vector<virtual_list_item> items {};
+        // 공유하는 불변 모델이다. 있으면 `items` 대신 이것을 읽고, `items`는 비워 둔다.
+        //  - 모델이 바뀌지 않는 frame에서는 참조 수 하나만 오른다. 큰 목록에서 frame마다 하던 복사가 사라진다.
+        //  - **넘긴 뒤에는 고치지 않는다.** 게시된 tree는 여러 thread가 읽으므로, 바꿀 때는 새 vector를 만들어
+        //    갈아 끼운다 (앞 frame의 tree는 옛 vector를 쥔 채 끝까지 산다).
+        //  - 키·선택·커서·스크롤 같은 나머지 값은 지금처럼 frame마다 준다.
+        std::shared_ptr<const std::vector<virtual_list_item>> shared_items {};
         // 고른 항목의 키다 (앱 상태).
         std::u8string selected {};
         // 여러 항목을 함께 고르는 목록이다 (앱 상태). 켜면 `selection`의 키들(과 `selected`)이 고른 행으로
@@ -271,6 +274,8 @@ namespace luil {
         [[nodiscard]] const virtual_list_range& realized() const noexcept;
         // 커서가 선 항목의 색인이다. 모델이 비었으면 빈 값이다.
         [[nodiscard]] const std::optional<std::size_t>& cursor() const noexcept;
+        // 이 목록이 읽는 모델이다 (`shared_items`가 있으면 그것, 없으면 `items`).
+        [[nodiscard]] const std::vector<virtual_list_item>& model() const noexcept;
 
         // 목록 자신은 hit의 답이 되지 않는다 — 답은 언제나 행이거나 없음이다.
         //

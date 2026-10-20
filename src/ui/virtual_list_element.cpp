@@ -361,21 +361,21 @@ namespace luil {
         : ui_element(ui_element_id { ui_element_kind::virtual_list, config.owner })
         , config_(std::move(config))
     {
-        content_height_ = virtual_list_content_height(config_.items, config_.row_height);
+        content_height_ = virtual_list_content_height(model(), config_.row_height);
 
         // 커서는 앱이 이름 댄 항목이고, 없으면 고른 항목이며, 그것도 없으면
         // 첫 활성 항목이다. 세 단계가 한곳에 있어야 키보드·그리기·접근성이
         // 같은 행을 가리킨다.
         const std::u8string& wanted { config_.cursor.empty() ? config_.selected : config_.cursor };
         if (wanted.empty() == false)
-            for (std::size_t index = 0; index < config_.items.size(); ++index)
-                if (config_.items[index].key == wanted)
+            for (std::size_t index = 0; index < model().size(); ++index)
+                if (model()[index].key == wanted)
                 {
                     cursor_ = index;
                     break;
                 }
         if (cursor_.has_value() == false)
-            cursor_ = edge_item(config_.items, true);
+            cursor_ = edge_item(model(), true);
 
         // 흘리기·막대·치수·휠은 영역이 한다.
         // 목록이 더하는 것은 **모델 위의 키보드**뿐이다.
@@ -409,9 +409,9 @@ namespace luil {
         // 포인터로는 닿지 않는다 — `hit_test`가 목록 자신을 답하지 않는다.
         if (config_.activate != nullptr)
             set_action(ui_trigger::left_click, [this](const ui_action_context&) -> std::vector<input_action> {
-                if (cursor_.has_value() == false || *cursor_ >= config_.items.size() || config_.items[*cursor_].enabled == false)
+                if (cursor_.has_value() == false || *cursor_ >= model().size() || model()[*cursor_].enabled == false)
                     return {};
-                return { config_.activate(config_.items[*cursor_].key) };
+                return { config_.activate(model()[*cursor_].key) };
             });
 
         if (config_.move == nullptr)
@@ -422,7 +422,7 @@ namespace luil {
         key_step_target steps {};
         steps.axis = focus_axis::vertical;
         steps.on_step = [this](const value_step step) -> std::optional<std::vector<input_action>> {
-            const std::optional<std::size_t> target { virtual_list_step_target(config_.items, cursor_, step, page_rows(step)) };
+            const std::optional<std::size_t> target { virtual_list_step_target(model(), cursor_, step, page_rows(step)) };
             if (target.has_value() == false)
                 return std::vector<input_action> {};
             return move_cursor(*target);
@@ -436,7 +436,7 @@ namespace luil {
         //    되고, 같은 글자를 거듭 쳐도 후보가 돌지 않는다.
         key_search_target search {};
         search.on_search = [this](const std::u8string_view query, const bool first) -> std::optional<std::vector<input_action>> {
-            const std::optional<std::size_t> target { virtual_list_search_target(config_.items, cursor_, query, first) };
+            const std::optional<std::size_t> target { virtual_list_search_target(model(), cursor_, query, first) };
             if (target.has_value() == false)
                 return std::nullopt;
             return move_cursor(*target);
@@ -453,7 +453,7 @@ namespace luil {
         // 건너뛴다 — 화면 하나만큼 움직인다는 Page의 뜻이 지켜지지 않는다.
         // 커서에서부터 실제 높이를 더해 가며 세면 뜻이 그대로 남는다.
         //  - 배치 전에는 창을 모르므로 한 줄로 본다. 키가 멈추지는 않는다.
-        if (viewport_height_ <= 0.0f || config_.items.empty() || (step != value_step::decrease_page && step != value_step::increase_page))
+        if (viewport_height_ <= 0.0f || model().empty() || (step != value_step::decrease_page && step != value_step::increase_page))
             return 1;
         float used { 0.0f };
         int rows { 0 };
@@ -467,19 +467,19 @@ namespace luil {
                 if (index == 0u)
                     break;
                 --index;
-                used += item_height(config_.items[index], config_.row_height);
+                used += item_height(model()[index], config_.row_height);
             }
             else
             {
-                if (index + 1u >= config_.items.size())
+                if (index + 1u >= model().size())
                     break;
-                used += item_height(config_.items[index], config_.row_height);
+                used += item_height(model()[index], config_.row_height);
                 ++index;
             }
             if (used > viewport_height_)
                 break;
             // stepped()도 활성 행만 이동 칸으로 센다. 높이는 모든 행이 차지한다.
-            if (config_.items[index].enabled)
+            if (model()[index].enabled)
                 ++rows;
         }
         return rows > 0 ? rows : 1;
@@ -487,7 +487,7 @@ namespace luil {
 
     std::vector<input_action> virtual_list_element::move_cursor(const std::size_t index) const
     {
-        if (config_.move == nullptr || index >= config_.items.size())
+        if (config_.move == nullptr || index >= model().size())
             return {};
         std::vector<input_action> actions {};
         // **이미 그 자리면 커서 메시지를 내지 않는다.** Home을 첫 항목에서 누르면
@@ -495,7 +495,7 @@ namespace luil {
         // 0 방벽과 같은 이유다. 다만 키는 여전히 목록이 가지고(빈 목록도 "삼켰다"이다),
         // **화면은 들인다** — 커서는 제자리여도 스크롤로 밀려 나가 있을 수 있다.
         if (cursor_.has_value() == false || *cursor_ != index)
-            actions.push_back(config_.move(config_.items[index].key));
+            actions.push_back(config_.move(model()[index].key));
 
         // 옮긴 자리를 함께 화면 안으로 들인다.
         //
@@ -505,7 +505,7 @@ namespace luil {
         // 것은 모델과 창 높이를 함께 쥔 이쪽뿐이다.
         if (config_.scroll == nullptr)
             return actions;
-        const virtual_list_span span { virtual_list_row_span(config_.items, config_.row_height, index) };
+        const virtual_list_span span { virtual_list_row_span(model(), config_.row_height, index) };
         // 지금 흘러간 자리는 **다듬은 값**이다. 앱이 준 원값으로 재면 범위를 벗어난
         // 상태에서 키를 눌렀을 때 화면에 보이는 것과 다른 자리를 기준으로 삼는다.
         const float offset { area_->metrics().scroll_offset };
@@ -535,6 +535,13 @@ namespace luil {
     const std::optional<std::size_t>& virtual_list_element::cursor() const noexcept
     {
         return cursor_;
+    }
+
+    const std::vector<virtual_list_item>& virtual_list_element::model() const noexcept
+    {
+        // 공유 모델이 있으면 그것이다. 모델을 읽는 자리는 전부 여기를 지난다 — 한 자리라도 `items`를 직접 읽으면
+        // 공유 모델을 준 목록에서 그 자리만 빈 모델을 본다.
+        return config_.shared_items != nullptr ? *config_.shared_items : config_.items;
     }
 
     float virtual_list_element::scroll_delta_to_reveal(const rect_f& target) const
@@ -586,7 +593,7 @@ namespace luil {
         {
             realized_built_ = true;
             const float offset { clamp_scroll(content_height_, viewport_height_, config_.scroll_offset) };
-            realized_ = virtual_list_visible_range(config_.items, config_.row_height, offset, viewport_height_, config_.overscan);
+            realized_ = virtual_list_visible_range(model(), config_.row_height, offset, viewport_height_, config_.overscan);
             build_rows();
         }
         // 이름은 안쪽 영역을 지나 막대까지 이어진다 (`list_element`와 같은 줄).
@@ -602,7 +609,7 @@ namespace luil {
         if (config_.multiple_selection)
             chosen.insert(config_.selection.begin(), config_.selection.end());
         const auto realize = [this, lane, &chosen](const std::size_t index, const float begin) {
-            const virtual_list_item& item { config_.items[index] };
+            const virtual_list_item& item { model()[index] };
             const bool selected { item.enabled && (item.key == config_.selected || chosen.contains(item.key)) };
             const bool at_cursor { cursor_.has_value() && *cursor_ == index };
             auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor) };
@@ -706,13 +713,13 @@ namespace luil {
         if (config_.selected.empty() == false || chosen.empty() == false)
         {
             std::vector<std::size_t> selected {};
-            for (std::size_t index = 0; index < config_.items.size(); ++index)
+            for (std::size_t index = 0; index < model().size(); ++index)
             {
                 if (index >= realized_.begin && index < realized_.end)
                     continue;
                 if (outside_window_cursor && index == *cursor_)
                     continue;
-                const virtual_list_item& item { config_.items[index] };
+                const virtual_list_item& item { model()[index] };
                 if (item.enabled && (item.key == config_.selected || chosen.contains(item.key)))
                     selected.push_back(index);
             }
@@ -739,7 +746,7 @@ namespace luil {
                 realize(index, begin);
             if (next_offscreen != offscreen.end() && *next_offscreen == index)
                 ++next_offscreen;
-            begin += item_height(config_.items[index], config_.row_height);
+            begin += item_height(model()[index], config_.row_height);
         }
     }
 
@@ -757,8 +764,8 @@ namespace luil {
         // 커서가 선 항목의 이름을 목록의 "지금 값"으로 답한다.
         // 형제 순회는 지어진 행 안이라, 창 밖의 항목은 그 순회로 닿지 않는다 —
         // 그래서 지금 어디에 서 있는지는 목록 자신이 말해야 한다.
-        if (cursor_.has_value() && *cursor_ < config_.items.size())
-            info.value = config_.items[*cursor_].label;
+        if (cursor_.has_value() && *cursor_ < model().size())
+            info.value = model()[*cursor_].label;
         return info;
     }
 } // namespace luil
