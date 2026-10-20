@@ -66,8 +66,10 @@ namespace luil::win32 {
         constexpr int default_frame_milliseconds { 16 };
 
         // **무손실이다.** 화면을 다시 볼 값이라 손실 압축은 글자 가장자리를 뭉갠다.
-        // PNG가 아닌 이유는 이 Skia 패키지에 png 인코더가 없기 때문이다
-        // (webp는 있다 — `skia_use_libwebp_encode`).
+        // PNG가 아닌 이유는 크기다. 이 파일은 창이 있는 모든 앱에 링크되므로, 여기서
+        // png 인코더를 부르면 캡처를 쓰지 않는 앱도 그 인코더를 싣는다. webp 인코더는
+        // 캡처가 처음부터 써 온 것이라 그대로 둔다. PNG가 필요한 앱은 캡처를 읽어
+        // `encode_png`로 다시 짓는다 (image_encode.h).
         [[nodiscard]] SkWebpEncoder::Options lossless_webp_options() noexcept
         {
             SkWebpEncoder::Options options {};
