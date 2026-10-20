@@ -278,15 +278,10 @@ function(luil_find_skia)
         set(component_link_items ${component_targets})
     else()
         # Android 소비자의 링크 계약이다 (skia-prep docs/skia-build.md 8.5).
-        #  - rust png 아카이브가 Skia 오브젝트를 함께 담아 같은 심볼이 겹친다. lld는
-        #    그것을 오류로 보므로 중복 정의를 허용하고, 먼저 나온 정의가 이기도록
-        #    libskia.a를 맨 앞에 둔다. 목록의 순서가 곧 그 순서다 (CMakeLists.txt).
-        #  - 아카이브끼리 서로 기호를 주고받으므로 한 묶음으로 다시 훑는다. 묶음은
-        #    목록 순서를 지킨다 — target_link_libraries의 순서만으로는 CMake가
-        #    imported target을 다시 늘어놓을 수 있다.
+        # 157 r1은 rust 아카이브의 중복 Skia 오브젝트를 걷었으므로 중복 정의를
+        # 허용하지 않는다. 아카이브끼리 서로 부르는 기호만 한 묶음으로 다시 훑어 푼다.
         string(JOIN "," component_group ${component_targets})
         set(component_link_items "$<LINK_GROUP:RESCAN,${component_group}>")
-        target_link_options(luil_skia INTERFACE "LINKER:--allow-multiple-definition")
     endif()
     target_link_libraries(luil_skia
         INTERFACE
@@ -311,6 +306,9 @@ function(luil_find_skia)
             SK_SHAPER_UNICODE_AVAILABLE
             SK_UNICODE_AVAILABLE
             SK_UNICODE_ICU_IMPLEMENTATION)
+    endif()
+    if("text_fallback" IN_LIST LUIL_SKIA_FEATURES)
+        target_compile_definitions(luil_skia INTERFACE SK_UNICODE_LIBGRAPHEME_IMPLEMENTATION)
     endif()
     # 소비자가 쓰는 공개 이름이다.
     # 다른 Skia 패키지의 별칭 (unofficial::skia::skia 등)과 충돌하지 않도록 하나만 정의한다.

@@ -4,6 +4,8 @@ luil은 Skia 헤더와 정적 라이브러리를 사용한다. 제공된 취득 
 패키지를 설치하거나, 요구 사항에 맞게 직접 빌드한 Skia를 지정할 수 있다.
 CMake configure는 준비된 파일을 검사하고 연결한다.
 
+현재 핀은 두 대상 모두 **Skia 157(`b94213a11b3a`), 패키지 r1**이다.
+
 ## 패키지 설치
 
 저장소 루트에서 실행한다.
@@ -32,6 +34,11 @@ scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
 같은 패키지가 이미 설치되어 있으면 재설치를 생략한다. `-Force`로 다시 설치한다.
 같은 패키지인지는 설치본의 `VERSION.json`이 스스로 적어 둔 값으로 판정한다.
 
+실제로 설치한 파일의 수정 시각은 설치 시각으로 갱신한다. 재현 가능한 아카이브는
+파일 시각이 패키지 빌드 시각으로 고정되어 있어, 소비자의 기존 산출물보다 오래될 수
+있다. 그대로 두면 Ninja가 갱신된 헤더·라이브러리로 다시 빌드하지 않는다. 설치를
+생략할 때는 수정 시각도 유지하여 불필요한 재빌드를 막는다.
+
 | 보는 것 | 무엇을 가르는가 |
 | --- | --- |
 | Skia commit·패키지 판번·PNG 코덱·대상·도구사슬 | 어느 패키지인가 |
@@ -59,8 +66,8 @@ Skia commit만으로는 판정하지 않는다. **같은 소스 commit을 다시
 `-Symbols`의 자산은 같은 코드를 `/Z7`로 세운 Release 아카이브다. 앱을 `/DEBUG`로
 링크하면 Skia의 심볼이 앱의 PDB에 들어가고, `/DEBUG` 없이 링크한 실행 파일은 기본
 자산과 같다 (skia-prep `docs/skia-build.md` 6.7). 설치 자리와 구성 이름은 같고 아카이브만
-달라, 켜고 끄면 설치 생략 판정이 어긋나 다시 설치한다. 기본 Release 자산은 약 26 MB,
-심볼 자산은 약 92 MB다.
+달라, 켜고 끄면 설치 생략 판정이 어긋나 다시 설치한다. 현재 Windows Release 자산은 약
+22 MB, 심볼 자산은 약 89 MB다.
 
 네트워크를 사용할 수 없는 환경에서는 설정 파일에 지정된 아카이브를
 캐시 디렉터리에 준비한다. 캐시 파일에도 같은 체크섬 검사가 적용된다.
@@ -96,27 +103,32 @@ Skia commit만으로는 판정하지 않는다. **같은 소스 commit을 다시
 
 ## 기능별 아카이브
 
-win-x64 r3·android-arm64 r2부터 패키지에 기능이 넷 더 든다. 모두 기존 목록과 떨어진
-아카이브라, 기존 목록만 링크한 실행 파일은 앞 판번과 크기가 같다 (skia-prep
+Skia 152의 win-x64 r3·android-arm64 r2부터 SVG·텍스트·Lottie·AVIF가 별도 아카이브로
+제공된다. 157 r1은 ICU가 없는 플랫폼의 텍스트 fallback을 더한다 (skia-prep
 `docs/skia-build.md` 6장). luil은 기능마다 옵션을 두고 **모두 기본은 끈다**.
 
 | 옵션 | 패키지 기능 | 아카이브 (win-x64) | 요구 인자 |
 | --- | --- | --- | --- |
 | `LUIL_ENABLE_SVG` | `svg` | `svg` `skshaper` `skresources` | `skia_enable_svg=true` |
 | `LUIL_ENABLE_TEXT_SHAPING` | `text` | `skparagraph` `skshaper` `skunicode_icu` `skunicode_core` `harfbuzz` | `skia_use_harfbuzz=true` `skia_use_runtime_icu=true` |
+| `LUIL_ENABLE_TEXT_SHAPING_FALLBACK` | `text_fallback` | `skunicode_libgrapheme` | `skia_use_libgrapheme=true`, 텍스트 옵션도 켜야 한다 |
 | `LUIL_ENABLE_LOTTIE` | `skottie` | `skottie` `sksg` `jsonreader` `skresources` `skshaper` | `skia_enable_skottie=true` |
 | `LUIL_ENABLE_AVIF` | `avif` | `avif_decoder` `libavif` `libgav1` `libyuv` | `skia_prep_avif_archive=true` |
 
 - 켠 기능의 아카이브를 `LUIL_SKIA_COMPONENTS`에 더하고 요구 인자를
   `LUIL_SKIA_REQUIRED_ARGUMENTS`에 더한다. 함께 쓰는 `skshaper`·`skresources`는 한 번만
-  넣는다. 자리는 rust 아카이브 둘 앞이다 — Android의 링크 순서 계약(`libskia.a` 맨 앞)을
-  지키는 실측 순서이고, Windows는 순서를 보지 않는다.
+  넣는다. 자리는 157 r1에서 실측한 순서인 rust 아카이브 둘 앞이고, Windows는 순서를
+  보지 않는다.
 - 기능별 아카이브가 없는 앞 판번에서 기능을 켜면 configure가 그 아카이브가 없다고
   멈춘다. 핀을 올리고 다시 받는다.
 - 텍스트를 켜면 Skia 타깃이 skshaper·skunicode의 소비자 정의 다섯
   (`SK_SHAPER_PRIMITIVE_AVAILABLE` 등)을 나른다. `SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS`는
-  주지 않는다 — SkShaper의 vtable이 패키지와 어긋난다.
+  주지 않는다 — SkShaper의 vtable이 패키지와 어긋난다. fallback을 켜면 여기에
+  `SK_UNICODE_LIBGRAPHEME_IMPLEMENTATION`과 해당 아카이브·고지가 더해진다.
 - 시스템 라이브러리는 새로 들지 않는다. 텍스트의 ICU는 실행 시점에 플랫폼의 것을 연다.
+- 플랫폼 ICU를 열지 못하면 fallback을 켠 구성은 libgrapheme과 컴파일된 ICU BiDi 조각을
+  쓴다. fallback을 끈 구성은 primitive 공장으로 내려간다. 테스트·예제 preset은
+  fallback도 켜서 검증한다.
 - AVIF는 Skia의 기본 디코더 목록 밖이라 luil이 처음 디코드 때 등록한다
   ([이미지 디코딩](image-decode-design.md)).
 
@@ -166,11 +178,11 @@ configure는 패키지가 적어 둔 파일을 읽을 뿐 컴파일러를 찾지
 
 소비자 링크 계약은 skia-prep `docs/skia-build.md` 8.4·8.5를 따르고, [Skia 의존성 모듈](../cmake/dependencies/skia.cmake)이 그대로 만든다.
 
-- rust png 아카이브가 Skia 오브젝트를 함께 담아 같은 심볼이 겹친다. 중복 정의를 허용하고(`--allow-multiple-definition`), 먼저 나온 정의가 이기도록 `libskia.a`를 맨 앞에 둔 한 묶음(`--start-group`)으로 링크한다. CMake가 imported target의 순서를 바꾸지 못하도록 `$<LINK_GROUP:RESCAN,...>`을 쓴다.
+- 157 r1은 rust 아카이브에 겹쳐 들었던 Skia 오브젝트를 패키징할 때 걷는다. `--allow-multiple-definition`은 사용하지 않으며 중복 정의가 생기면 링크가 실패한다. 아카이브끼리 서로 부르는 기호는 `$<LINK_GROUP:RESCAN,...>`의 재검색 묶음으로 푼다.
 - `-landroid -llog`를 링크한다. 그 밖의 시스템 라이브러리는 libc·libm·libdl뿐이다.
 - 최저 API 수준은 26이다 (8.4). C++ 런타임은 NDK의 `c++_static`이다. skia-prep의 기기 검증(`tools/android_probe.cpp`)이 그 조합이었다.
 - FreeType은 FTL로 고른다. 앱 문서에 FreeType을 밝힌다 (8.5).
-- Vulkan 메모리 할당기는 소비자가 넘긴다 (8.5). 만드는 함수 `skgpu::VulkanMemoryAllocators::Make`가 Skia 내부 헤더에만 있어, luil은 같은 서명을 비공개 헤더 [`vulkan_memory_allocator.h`](../src/android/vulkan_memory_allocator.h)에 선언해 쓴다. 내부 API이므로 Skia milestone을 올릴 때마다 두 구성의 `libskia.a`에 그 기호가 있는지 다시 확인한다 (M152에서 확인했다).
+- Vulkan 메모리 할당기는 소비자가 넘긴다 (8.5). 만드는 함수 `skgpu::VulkanMemoryAllocators::Make`가 Skia 내부 헤더에만 있어, luil은 같은 서명을 비공개 헤더 [`vulkan_memory_allocator.h`](../src/android/vulkan_memory_allocator.h)에 선언해 쓴다. 내부 API이므로 Skia milestone을 올릴 때마다 두 구성의 `libskia.a`에 그 기호가 있는지 다시 확인한다 (M157 r1의 Debug·Release에서 확인했다).
 
 ## 직접 빌드한 Skia 사용
 
@@ -193,7 +205,7 @@ configure는 패키지가 적어 둔 파일을 읽을 뿐 컴파일러를 찾지
 1. `LUIL_SKIA_COMPONENTS`의 정적 라이브러리 전부. Rust PNG 코덱을 쓰므로 bazel
    산출물(`librust_png_ffi_rs.a`, `libcxx_cc.a`)이 함께 있어야 한다.
 2. `args.gn`에 luil이 요구하는 GN 설정. Direct3D와 JPEG·WebP·Wuffs·Rust PNG
-   디코더다 (`LUIL_SKIA_REQUIRED_ARGUMENTS`).
+   디코더와 PNG·JPEG·WebP 인코더다 (`LUIL_SKIA_REQUIRED_ARGUMENTS`).
 3. `args.gn`에 `is_trivial_abi = false`. 값이 없으면 통과하지 않는다. GN 기본값도
    거짓이지만, 적지 않은 것과 정하고 적은 것은 다르다.
 4. `args.gn`의 `extra_cflags`에 구성에 맞는 CRT. Debug는 `/MTd`, 그 밖은 `/MT`다.
@@ -240,7 +252,7 @@ Debug 산출물이 필요하지 않다. Visual Studio 같은 다중 구성 gener
 패키지에 `NOTICE.json`이 있으면 **core와 켠 기능의 고지만** 골라 싣는다. `NOTICE.json`의
 `features.<기능>.notices`가 그 기능을 쓸 때 실행 파일에 들어오는 구성 요소의 id를, `notices`가
 id마다 `NOTICE.md`의 절 이름을 적는다. 끈 기능의 고지(HarfBuzz·ICU·libavif·libgav1·libyuv,
-Windows의 Expat)는 그 코드가 실행 파일에 없으므로 싣지 않는다. 절이 `NOTICE.md`에 없으면
+libgrapheme·Windows의 Expat)는 그 코드가 실행 파일에 없으므로 싣지 않는다. 절이 `NOTICE.md`에 없으면
 configure가 멈춘다. `NOTICE.json`이 없는 앞 판번은 전처럼 `NOTICE.md` 전체를 싣는다.
 
 직접 빌드한 소스 트리를 지정하면 고지를 개별 의존성 디렉터리에서 읽을 수 있다.

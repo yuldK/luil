@@ -175,15 +175,15 @@ if(LUIL_PLATFORM STREQUAL "windows")
     set(LUIL_SKIA_SVG_COMPONENTS svg.lib skshaper.lib skresources.lib)
     set(LUIL_SKIA_TEXT_COMPONENTS
         skparagraph.lib skshaper.lib skunicode_icu.lib skunicode_core.lib harfbuzz.lib)
+    set(LUIL_SKIA_TEXT_FALLBACK_COMPONENTS skunicode_libgrapheme.lib)
     set(LUIL_SKIA_LOTTIE_COMPONENTS
         skottie.lib sksg.lib jsonreader.lib skresources.lib skshaper.lib)
     set(LUIL_SKIA_AVIF_COMPONENTS avif_decoder.lib libavif.lib libgav1.lib libyuv.lib)
 else()
     set(LUIL_SKIA_TARGET "android-arm64")
     # android-arm64 패키지의 정적 아카이브다 (skia-prep docs/skia-build.md 8.4).
-    #  - 맨 앞의 libskia.a가 계약이다. rust png 아카이브가 Skia 오브젝트를 함께 담아
-    #    같은 심볼이 겹치는데, 먼저 나온 정의가 이긴다 (8.5). skia.cmake가 이 순서
-    #    그대로 링크 묶음을 만든다.
+    #  - 157 r1부터 rust 아카이브의 중복 Skia 오브젝트를 패키지에서 걷는다 (8.5).
+    #    아카이브끼리 서로 부르는 기호는 skia.cmake의 재검색 묶음으로 푼다.
     #  - 글꼴은 FreeType과 expat으로 읽는다 (SkFontMgr_android).
     set(LUIL_SKIA_COMPONENTS
         libskia.a
@@ -223,11 +223,11 @@ else()
     set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang")
 
     # 기능별 아카이브다 (skia-prep docs/skia-build.md 6.1·6.2).
-    # 다른 아카이브와 겹치는 정의가 없어 libskia.a 뒤 어디든 되지만, 실측한 순서인
-    # rust 아카이브 둘 앞에 끼운다 (아래 기능 옵션).
+    # 157 r1의 실측 순서대로 rust 아카이브 둘 앞에 끼운다 (아래 기능 옵션).
     set(LUIL_SKIA_SVG_COMPONENTS libsvg.a libskshaper.a libskresources.a)
     set(LUIL_SKIA_TEXT_COMPONENTS
         libskparagraph.a libskshaper.a libskunicode_icu.a libskunicode_core.a libharfbuzz.a)
+    set(LUIL_SKIA_TEXT_FALLBACK_COMPONENTS libskunicode_libgrapheme.a)
     set(LUIL_SKIA_LOTTIE_COMPONENTS
         libskottie.a libsksg.a libjsonreader.a libskresources.a libskshaper.a)
     set(LUIL_SKIA_AVIF_COMPONENTS libavif_decoder.a libavif.a libgav1.a libyuv.a)
@@ -301,16 +301,21 @@ endif()
 #  - SVG: `decode_svg_bytes`·`load_svg_file`이 SVG를 벡터 그림(ui_image)으로 읽는다.
 #  - 텍스트 모양 잡기: HarfBuzz와 플랫폼 ICU(Windows 10 1903+, Android 12+)로 글자를
 #    모양 잡는다. 지금은 SVG의 `<text>`와 Lottie의 글자 레이어가 쓴다.
+#    fallback을 함께 켜면 ICU가 없는 플랫폼에서도 libgrapheme으로 모양 잡는다.
 #  - AVIF: 이미지 디코더가 AVIF(정지·움직임)를 읽는다.
 #  - Lottie: `decode_lottie_bytes`·`load_lottie_file`이 Lottie JSON을 읽는다.
 option(LUIL_ENABLE_SVG "Read SVG as vector images (Skia SVG module)." OFF)
 option(LUIL_ENABLE_TEXT_SHAPING "Shape text with HarfBuzz and the platform ICU (SVG text, Lottie text layers)." OFF)
+option(LUIL_ENABLE_TEXT_SHAPING_FALLBACK "Keep HarfBuzz shaping without platform ICU using libgrapheme (requires text shaping)." OFF)
 option(LUIL_ENABLE_AVIF "Decode AVIF images (libavif + libgav1)." OFF)
 option(LUIL_ENABLE_LOTTIE "Play Lottie animations (Skia Skottie module)." OFF)
+if(LUIL_ENABLE_TEXT_SHAPING_FALLBACK AND NOT LUIL_ENABLE_TEXT_SHAPING)
+    message(FATAL_ERROR "LUIL_ENABLE_TEXT_SHAPING_FALLBACK requires LUIL_ENABLE_TEXT_SHAPING=ON.")
+endif()
 
 # 켠 기능의 아카이브를 Skia 링크 목록에 더한다. svg·텍스트·Lottie가 공유하는
 # skshaper·skresources는 한 번만 넣는다. 자리는 rust 아카이브 둘 앞이다 — Android의
-# 링크 순서 계약(libskia.a 맨 앞)을 지키는 실측 순서이고, Windows는 순서를 보지 않는다.
+# 실측 순서이고, Windows는 순서를 보지 않는다.
 # 고지 생성기와 설치 config는 `LUIL_SKIA_FEATURES`로 켠 기능을 안다 (이름은 패키지의
 # NOTICE.json이 쓰는 것이다). 기능마다 요구 인자도 더한다 — 기능별 아카이브가 없던
 # 앞 판번(win-x64 r2, android-arm64 r1)을 "파일이 없다"가 아니라 원인으로 잡는다.
@@ -328,6 +333,11 @@ if(LUIL_ENABLE_TEXT_SHAPING)
     list(APPEND LUIL_SKIA_REQUIRED_ARGUMENTS
         "skia_use_harfbuzz=true"
         "skia_use_runtime_icu=true")
+endif()
+if(LUIL_ENABLE_TEXT_SHAPING_FALLBACK)
+    list(APPEND LUIL_SKIA_FEATURES text_fallback)
+    list(APPEND luil_skia_feature_components ${LUIL_SKIA_TEXT_FALLBACK_COMPONENTS})
+    list(APPEND LUIL_SKIA_REQUIRED_ARGUMENTS "skia_use_libgrapheme=true")
 endif()
 if(LUIL_ENABLE_LOTTIE)
     list(APPEND LUIL_SKIA_FEATURES skottie)

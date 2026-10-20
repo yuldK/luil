@@ -110,6 +110,16 @@ target_compile_definitions(luil_core_tests PRIVATE
     "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
     "LUIL_TESTS_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
 
+# ICU가 없는 환경은 별도 프로세스에서 재현한다. Skia와 luil의 초기화 캐시를 공유하지 않는다.
+if(LUIL_ENABLE_TEXT_SHAPING)
+    add_executable(luil_text_shaping_tests text_shaping_tests.cpp)
+    target_include_directories(luil_text_shaping_tests PRIVATE "${LUIL_SOURCE_DIRECTORY}")
+    target_link_libraries(luil_text_shaping_tests PRIVATE luil::luil_core luil_options Catch2::Catch2WithMain)
+    target_compile_definitions(luil_text_shaping_tests PRIVATE
+        "LUIL_TESTS_TEXT_SHAPING_FALLBACK=$<BOOL:${LUIL_ENABLE_TEXT_SHAPING_FALLBACK}>")
+    luil_set_ide_folder("Tests" luil_text_shaping_tests)
+endif()
+
 if(LUIL_PLATFORM STREQUAL "android")
     # 기기에서 돌린다. CTest와 Catch2의 발견이 실행 파일을 부를 때마다 adb로 올리고
     # 기기의 셸에서 실행한다 (cmake/android/adb_run.cmake).
@@ -133,6 +143,12 @@ if(LUIL_PLATFORM STREQUAL "android")
             "${LUIL_SOURCE_DIRECTORY}/android/android_input.cpp"
             android_input_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+    if(LUIL_ENABLE_TEXT_SHAPING)
+        set_target_properties(luil_text_shaping_tests PROPERTIES
+            CROSSCOMPILING_EMULATOR
+                "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
+        catch_discover_tests(luil_text_shaping_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+    endif()
 
     # HTTP client는 JNI로 java.net을 부르므로 JVM 안에서만 돈다. 셸에서 띄운 실행 파일에는 JVM이
     # 없어, test를 공유 라이브러리로 세우고 app_process가 띄운 JVM이 읽게 한다
@@ -329,7 +345,8 @@ target_compile_definitions(luil_tests PRIVATE "LUIL_TESTS_WEBVIEW=$<BOOL:${LUIL_
 target_compile_definitions(luil_tests PRIVATE
     "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"
     "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
-    "LUIL_TESTS_TEXT_SHAPING=$<BOOL:${LUIL_ENABLE_TEXT_SHAPING}>")
+    "LUIL_TESTS_TEXT_SHAPING=$<BOOL:${LUIL_ENABLE_TEXT_SHAPING}>"
+    "LUIL_TESTS_TEXT_SHAPING_FALLBACK=$<BOOL:${LUIL_ENABLE_TEXT_SHAPING_FALLBACK}>")
 luil_disable_automatic_windows_manifest(luil_tests)
 
 # messaging의 ASan 검증이다.
@@ -373,6 +390,9 @@ endif ()
 catch_discover_tests(luil_messaging_asan_tests TEST_PREFIX "asan: " PROPERTIES TIMEOUT 120 LABELS "asan" DISABLED "$<CONFIG:Debug>")
 # hang 유형의 회귀가 무기한 대기 대신 실패로 드러나도록 모든 Catch2 test에 timeout을 부여한다.
 catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
+if(LUIL_ENABLE_TEXT_SHAPING)
+    catch_discover_tests(luil_text_shaping_tests PROPERTIES TIMEOUT 120)
+endif()
 catch_discover_tests(luil_tests PROPERTIES TIMEOUT 120)
 
 add_test(NAME luil_assets_checksum
