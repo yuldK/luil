@@ -470,3 +470,76 @@ TEST_CASE("A caret held at a wrap point stays on the upper line until another ed
     REQUIRE(edit_in(controller.process(key(luil::key_code::home)))->offset == 0u);
     REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_down)))->offset == 24u);
 }
+TEST_CASE("A wrap cache gives the same lines and measures only changed paragraphs", "[ui][text-area]")
+{
+    // 잰 횟수를 세는 고정 폭 측정기다.
+    std::size_t measured { 0 };
+    const auto count = [&measured](const std::u8string_view value, const float size) {
+        ++measured;
+        return fixed_width(value, size);
+    };
+    const luil::text_measurer counting { count };
+    const auto arrange = [&counting](const std::u8string& text, std::shared_ptr<luil::text_area_wrap_cache> cache, const float width = 200.0f) {
+        luil::text_area_config config {};
+        config.wrap_cache = std::move(cache);
+        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(text, 0), std::move(config)) };
+        memo->arrange({ .slot = { 0.0f, 0.0f, width, 100.0f }, .scale = 1.0f, .measurer = &counting });
+        return memo->lines();
+    };
+
+    // 캐시가 있든 없든 같은 줄이다 — 공백 뒤 접기, 매달린 공백, 긴 낱말, 한글, 빈 문단.
+    for (const std::u8string& text : {
+             std::u8string { u8"aaaa bbbb cccc dddd eeee" },
+             std::u8string { u8"aaaaaaaaaaaaaaaaaa   \nabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz" },
+             std::u8string { u8"한글 낱말은 사이에서 접히고 아주 긴 문장은 여러 줄이 된다\n\n끝" },
+         })
+        REQUIRE(arrange(text, std::make_shared<luil::text_area_wrap_cache>()) == arrange(text, nullptr));
+
+    const std::u8string first { u8"aaaa bbbb cccc dddd eeee\nffff gggg hhhh iiii jjjj\nkk" };
+    const auto cache { std::make_shared<luil::text_area_wrap_cache>() };
+    static_cast<void>(arrange(first, cache));
+    REQUIRE(cache->size() == 3u);
+    // 같은 글은 다시 재지 않는다 — 표본 글 하나만 잰다.
+    measured = 0;
+    static_cast<void>(arrange(first, cache));
+    REQUIRE(measured == 1u);
+
+    // 한 문단만 바꾸면 그 문단만 잰다. 쓰지 않게 된 문단은 버린다.
+    measured = 0;
+    static_cast<void>(arrange(u8"new paragraph here", nullptr));
+    const std::size_t new_paragraph_alone { measured };
+    const std::u8string edited { u8"aaaa bbbb cccc dddd eeee\nffff gggg hhhh iiii jjjj!\nkk" };
+    measured = 0;
+    REQUIRE(arrange(edited, cache) == arrange(edited, nullptr));
+    REQUIRE(cache->size() == 3u);
+    measured = 0;
+    static_cast<void>(arrange(u8"aaaa bbbb cccc dddd eeee\nffff gggg hhhh iiii jjjj!\nkk\nnew paragraph here", cache));
+    // 잰 것은 표본 글과 새 문단뿐이다.
+    REQUIRE(measured == new_paragraph_alone + 1u);
+    REQUIRE(cache->size() == 4u);
+    static_cast<void>(arrange(u8"kk", cache));
+    REQUIRE(cache->size() == 1u);
+
+    // 폭이 바뀌면 통째로 다시 잰다.
+    REQUIRE(arrange(first, cache, 120.0f) == arrange(first, nullptr, 120.0f));
+}
+
+TEST_CASE("A long paragraph wraps by measuring about one line at a time", "[ui][text-area]")
+{
+    // 줄 바꿈 없는 문단을 줄마다 남은 문단 전체로 재면 잰 글자 수가 문단 길이의 제곱으로 는다.
+    std::size_t measured_units { 0 };
+    const auto count = [&measured_units](const std::u8string_view value, const float size) {
+        measured_units += value.size();
+        return fixed_width(value, size);
+    };
+    const luil::text_measurer counting { count };
+    std::u8string text {};
+    for (int word = 0; word < 2000; ++word)
+        text += u8"word ";
+    auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(text, 0), luil::text_area_config {}) };
+    memo->arrange({ .slot = { 0.0f, 0.0f, 200.0f, 100.0f }, .scale = 1.0f, .measurer = &counting });
+    // 18글자 칸에 "word " 세 개(15글자)씩 접힌다.
+    REQUIRE(memo->lines().size() == 667u);
+    // 줄마다 그 줄의 몇 배만 잰다 — 문단 전체(10,000바이트)를 줄 수만큼 재면 수백만이다.
+    REQUIRE(measured_units < 50u * text.size());
+}

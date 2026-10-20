@@ -36,7 +36,7 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 
 [`text_area_element`](../../include/luil/ui/text_area_element.h)는 줄 바꿈·세로 스크롤·여러 줄 붙여넣기를 받는 칸이다. 한 줄 칸과 같은 초안(`text_edit_state`), 같은 view(`text_input_view`), 같은 편집 명령을 쓴다. 앱은 `text_target_of`에 그 kind를 이름 대고 `apply_text_edit`로 적용하면 된다. `text_input()`이 `multiline`을 참으로 답하므로 붙여넣기는 줄 바꿈과 탭을 보존한다.
 
-**줄은 칸 폭에서 넘겨 접는다.** 배치가 `arrange_context::measure_text()`로 줄을 접어 내용 높이를 정하고, 그리기·포인터 판정·IME 질의는 그 접은 줄(`lines()`)을 그대로 쓴다. 낱말 사이(공백 뒤)에서 접고, 칸보다 긴 낱말은 글자 사이에서 접는다. 가로로 미는 일은 없다. 자세한 규칙과 비용은 [자동 줄 넘김](../text-area-wrap-design.md)에 있다.
+**줄은 칸 폭에서 넘겨 접는다.** 배치가 `arrange_context::measure_text()`로 줄을 접어 내용 높이를 정하고, 그리기·포인터 판정·IME 질의는 그 접은 줄(`lines()`)을 그대로 쓴다. 낱말 사이(공백 뒤)에서 접고, 칸보다 긴 낱말은 글자 사이에서 접는다. 가로로 미는 일은 없다. 큰 글(수십만 바이트)을 받는 칸은 앱이 `text_area_wrap_cache`를 하나 쥐고 `text_area_config::wrap_cache`로 넘긴다. 그러면 frame마다 바뀐 문단만 다시 잰다. 자세한 규칙과 잰 비용은 [자동 줄 넘김](../text-area-wrap-design.md)에 있다.
 
 키의 뜻은 `text_input_snapshot::multiline`을 보고 controller가 가른다. 한 줄 칸의 경로는 그대로다.
 

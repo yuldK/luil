@@ -5,13 +5,58 @@
 #include "luil/ui/ui_element.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace luil {
+    class text_area_element;
+
+    // 여러 줄 칸이 문단(줄 바꿈으로 나뉜 줄)마다 접은 자리를 frame 사이에 쥐는 곳이다.
+    //
+    // 칸은 tree와 함께 frame마다 새로 지어져 스스로는 아무것도 기억하지 못한다. 그래서 배치는 frame마다 글 전체를
+    // 다시 접는다 — 수백 줄 메모에는 문제가 없지만 수십만 바이트 글에서는 키 하나에 한 frame을 넘긴다
+    // (docs/text-area-wrap-design.md "비용"). 앱이 이것을 하나 쥐고 같은 칸의 설정(`text_area_config::wrap_cache`)에
+    // frame마다 넘기면, 글이 같은 문단은 다시 재지 않는다.
+    //  - 접는 폭·글자 크기·글꼴(표본 글의 폭)이 바뀌면 통째로 비운다.
+    //  - 이번 배치에서 쓰지 않은 문단은 버린다. 지운 글이 쌓이지 않고, 쥔 양이 지금 글의 크기에 머문다.
+    //  - 배치(logic thread)에서만 쓴다. 안의 잠금이 한 번에 배치 하나만 들인다.
+    //  - 칸 하나에 하나다. 칸 둘이 나눠 쓰면 서로의 문단을 버린다.
+    class text_area_wrap_cache
+    {
+    public:
+        // 쥐고 있는 문단 수다 (test·진단용).
+        [[nodiscard]] std::size_t size() const;
+
+    private:
+        friend class text_area_element;
+
+        // 문단 처음 기준으로 넘겨 접은 자리다 (오름차순, 문단의 끝은 넣지 않는다).
+        struct entry
+        {
+            std::vector<std::size_t> cuts {};
+            std::uint64_t used { 0 };
+        };
+        struct key_hash
+        {
+            using is_transparent = void;
+            [[nodiscard]] std::size_t operator()(std::u8string_view key) const noexcept;
+        };
+
+        mutable std::mutex mutex_ {};
+        std::unordered_map<std::u8string, entry, key_hash, std::equal_to<>> entries_ {};
+        float width_ { 0.0f };
+        float font_size_ { 0.0f };
+        float sample_width_ { 0.0f };
+        std::uint64_t generation_ { 0 };
+    };
+
     // 여러 줄 텍스트 칸의 설정이다.
     struct text_area_config
     {
@@ -24,6 +69,9 @@ namespace luil {
         std::function<input_action(float delta)> scroll {};
         // 스크롤을 이 자리로 하라는 절대 메시지다 (보조 기술이 막대의 값을 정할 때).
         std::function<input_action(float offset)> scroll_to {};
+        // 접은 자리를 frame 사이에 쥐는 곳이다 (`text_area_wrap_cache`). 큰 글을 받는 칸만 넘긴다.
+        //  - 없으면 배치가 frame마다 글 전체를 접는다. 결과는 같다.
+        std::shared_ptr<text_area_wrap_cache> wrap_cache {};
     };
 
     // 글자 크기와 줄 높이, 안쪽 여백이다 (논리 픽셀).
@@ -105,7 +153,10 @@ namespace luil {
         [[nodiscard]] std::u8string_view displayed_text() const noexcept;
         [[nodiscard]] std::size_t displayed_caret() const noexcept;
         // 그 글의 화면 줄이다. 배치가 접은 표시 문서면 그 결과를, 아니면(조합 중에 확정 글을 물을 때) 같은 폭으로 다시 접는다.
-        [[nodiscard]] std::vector<line> lines_for(std::u8string_view text, const std::function<float(std::u8string_view)>& measure) const;
+        // 다시 접은 줄은 `storage`에 담아 돌려준다 — 칸은 여러 thread가 읽으므로 안에 담을 수 없다.
+        [[nodiscard]] const std::vector<line>& lines_for(std::u8string_view text, const std::function<float(std::u8string_view)>& measure, std::vector<line>& storage) const;
+        // 표시 문서를 접는다. 설정에 캐시가 있으면 바뀐 문단만 잰다.
+        [[nodiscard]] std::vector<line> wrap_displayed(const std::function<float(std::u8string_view)>& measure);
         // 글이 서는 왼쪽 끝과 첫 줄의 위다 (물리 픽셀).
         [[nodiscard]] float text_left() const noexcept;
         [[nodiscard]] float text_top() const noexcept;

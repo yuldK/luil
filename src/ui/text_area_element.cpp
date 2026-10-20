@@ -39,27 +39,70 @@ namespace luil {
             return boundaries;
         }
 
-        // 폭을 넘는 줄 조각에서 윗줄로 남길 길이다 (조각 안의 offset, 0보다 크다).
-        //  - 폭에 드는 가장 긴 앞부분을 경계 위의 이분 탐색으로 찾는다.
-        //  - 그 안의 마지막 공백 뒤에서 자른다. 넘치는 자리가 공백이면 이어진 공백을 모두 윗줄에 매단다.
-        //  - 공백이 없으면(칸보다 긴 낱말, 띄어 쓰지 않는 글) 글자 사이에서 자른다. 한 글자도 안 들면 한 글자는 둔다.
-        [[nodiscard]] std::size_t fitting_break(const std::u8string_view piece, const float width, const width_of& measure)
+        // 문단 하나(줄 바꿈이 없는 글)를 폭으로 접은 자리다. 문단 처음 기준 offset이고, 문단의 끝은 넣지 않는다.
+        //  - 줄마다 폭에 드는 가장 먼 문자 경계를 찾는다. 앞 줄의 글자 수에서 시작해 걸음을 두 배로 늘려 넘치는 자리를
+        //    잡고 그 사이를 이분 탐색한다 — 남은 문단 전체를 재지 않으므로 줄 바꿈 없는 긴 문단에서도 한 줄에 그 줄
+        //    길이의 몇 배만 잰다. 줄 길이는 대개 비슷해 첫 걸음이 거의 맞는다.
+        //  - 그 안의 마지막 공백 뒤에서 접는다. 넘치는 자리가 공백이면 이어진 공백을 모두 윗줄에 매단다. 공백만 남은
+        //    꼬리는 접지 않는다 — 빈 화면 줄이 생기지 않는다.
+        //  - 공백이 없으면(칸보다 긴 낱말, 띄어 쓰지 않는 글) 글자 사이에서 접는다. 한 글자도 안 들면 한 글자는 둔다.
+        [[nodiscard]] std::vector<std::size_t> wrap_paragraph(const std::u8string_view paragraph, const float width, const width_of& measure)
         {
-            const std::vector<std::size_t> boundaries { boundaries_of(piece) };
-            const auto wider = [&piece, &measure](const float limit, const std::size_t offset) { return limit < measure(piece.substr(0, offset)); };
-            const auto after { std::upper_bound(boundaries.begin() + 1, boundaries.end(), width, wider) };
-            const std::size_t fit { after == boundaries.begin() + 1 ? boundaries[1] : *(after - 1) };
-            std::size_t hanging { fit };
-            while (hanging < piece.size() && piece[hanging] == u8' ')
-                ++hanging;
-            if (hanging > fit)
-                return hanging;
-            const std::size_t space { piece.substr(0, fit).find_last_of(u8' ') };
-            return space != std::u8string_view::npos ? space + 1 : fit;
+            std::vector<std::size_t> cuts {};
+            if (width <= 0.0f || paragraph.empty())
+                return cuts;
+            const std::vector<std::size_t> boundaries { boundaries_of(paragraph) };
+            const std::size_t last { boundaries.size() - 1 };
+            std::size_t first { 0 };
+            std::size_t span { 1 };
+            while (first < last)
+            {
+                const std::size_t start { boundaries[first] };
+                const auto fits = [&](const std::size_t index) { return measure(paragraph.substr(start, boundaries[index] - start)) <= width; };
+                std::size_t good { first };
+                std::size_t bad { last };
+                for (std::size_t step = span;; step *= 2)
+                {
+                    const std::size_t probe { std::min(first + step, last) };
+                    if (fits(probe) == false)
+                    {
+                        bad = probe;
+                        break;
+                    }
+                    good = probe;
+                    if (probe == last)
+                        return cuts;
+                }
+                while (bad - good > 1)
+                {
+                    const std::size_t middle { good + (bad - good) / 2 };
+                    if (fits(middle))
+                        good = middle;
+                    else
+                        bad = middle;
+                }
+                span = std::max<std::size_t>(good - first, 1);
+                const std::size_t fit { boundaries[std::max(good, first + 1)] };
+                std::size_t cut { fit };
+                while (cut < paragraph.size() && paragraph[cut] == u8' ')
+                    ++cut;
+                if (cut == fit)
+                {
+                    const std::size_t space { paragraph.substr(start, fit - start).find_last_of(u8' ') };
+                    if (space != std::u8string_view::npos)
+                        cut = start + space + 1;
+                }
+                if (cut >= paragraph.size())
+                    return cuts;
+                cuts.push_back(cut);
+                first = static_cast<std::size_t>(std::lower_bound(boundaries.begin(), boundaries.end(), cut) - boundaries.begin());
+            }
+            return cuts;
         }
 
-        // 글을 화면의 줄로 나눈다. 줄 바꿈에서 나누고, 폭이 있으면 그 폭에서 넘겨 접는다.
-        [[nodiscard]] std::vector<text_line> wrap_lines(const std::u8string_view text, const float width, const width_of& measure)
+        // 글을 화면의 줄로 나눈다. 줄 바꿈에서 나누고, 문단마다 `cuts_of`가 답한 자리에서 넘겨 접는다.
+        template<typename cuts_function>
+        [[nodiscard]] std::vector<text_line> split_screen_lines(const std::u8string_view text, cuts_function&& cuts_of)
         {
             std::vector<text_line> lines {};
             std::size_t begin { 0 };
@@ -68,16 +111,11 @@ namespace luil {
                 const std::size_t newline { text.find(u8'\n', begin) };
                 const std::size_t end { newline != std::u8string_view::npos ? newline : text.size() };
                 std::size_t start { begin };
-                if (width > 0.0f)
-                    while (start < end && measure(text.substr(start, end - start)) > width)
-                    {
-                        const std::size_t cut { start + fitting_break(text.substr(start, end - start), width, measure) };
-                        // 공백만 남은 꼬리는 접지 않고 윗줄에 매단다 — 빈 화면 줄이 생기지 않는다.
-                        if (cut >= end)
-                            break;
-                        lines.push_back({ start, cut, true });
-                        start = cut;
-                    }
+                for (const std::size_t cut : cuts_of(text.substr(begin, end - begin)))
+                {
+                    lines.push_back({ start, begin + cut, true });
+                    start = begin + cut;
+                }
                 lines.push_back({ start, end, false });
                 if (newline == std::u8string_view::npos)
                     return lines;
@@ -85,15 +123,19 @@ namespace luil {
             }
         }
 
-        // offset이 선 화면 줄이다. 줄 바꿈 바로 뒤와 넘겨 접은 자리는 다음 줄의 처음이다.
-        [[nodiscard]] std::size_t line_of(const std::vector<text_line>& lines, const std::size_t offset) noexcept
+        [[nodiscard]] std::vector<text_line> wrap_lines(const std::u8string_view text, const float width, const width_of& measure)
         {
-            for (std::size_t index = 0; index < lines.size(); ++index)
-                if (offset < lines[index].end || (offset == lines[index].end && lines[index].wrapped == false))
-                    return index;
-            return lines.size() - 1;
+            return split_screen_lines(text, [width, &measure](const std::u8string_view paragraph) { return wrap_paragraph(paragraph, width, measure); });
         }
 
+        // offset이 선 화면 줄이다. 줄 바꿈 바로 뒤와 넘겨 접은 자리는 다음 줄의 처음이다.
+        //  - 줄의 끝은 오름차순이라 이분 탐색한다. 큰 글에서 caret을 물을 때마다 줄 전체를 훑지 않는다.
+        [[nodiscard]] std::size_t line_of(const std::vector<text_line>& lines, const std::size_t offset) noexcept
+        {
+            const auto before = [offset](const text_line& row) { return offset > row.end || (offset == row.end && row.wrapped); };
+            const auto found { std::partition_point(lines.begin(), lines.end(), before) };
+            return found != lines.end() ? static_cast<std::size_t>(found - lines.begin()) : lines.size() - 1;
+        }
         // caret이 서는 화면 줄이다. 앞 글자 쪽에 붙은 caret(affinity)이 넘겨 접은 자리에 있으면 윗줄이다.
         [[nodiscard]] std::size_t caret_line_of(const std::vector<text_line>& lines, const std::size_t offset, const bool upstream) noexcept
         {
@@ -186,11 +228,53 @@ namespace luil {
         return caret < text.size() ? caret : text.size();
     }
 
-    std::vector<text_area_element::line> text_area_element::lines_for(const std::u8string_view text, const width_of& measure) const
+    std::size_t text_area_wrap_cache::size() const
+    {
+        const std::scoped_lock lock { mutex_ };
+        return entries_.size();
+    }
+
+    std::size_t text_area_wrap_cache::key_hash::operator()(const std::u8string_view key) const noexcept
+    {
+        return std::hash<std::u8string_view> {}(key);
+    }
+
+    const std::vector<text_area_element::line>& text_area_element::lines_for(const std::u8string_view text, const width_of& measure, std::vector<line>& storage) const
     {
         if (text == displayed_text())
             return lines_;
-        return wrap_lines(text, wrap_width_, measure);
+        storage = wrap_lines(text, wrap_width_, measure);
+        return storage;
+    }
+
+    std::vector<text_area_element::line> text_area_element::wrap_displayed(const width_of& measure)
+    {
+        const std::u8string_view text { displayed_text() };
+        if (config_.wrap_cache == nullptr)
+            return wrap_lines(text, wrap_width_, measure);
+
+        text_area_wrap_cache& cache { *config_.wrap_cache };
+        const std::scoped_lock lock { cache.mutex_ };
+        // 글꼴이 바뀌었는지는 표본 글의 폭으로 안다 — 측정기는 비교할 수 있는 값이 아니다.
+        const float sample { measure(u8"Wg 0가") };
+        if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.sample_width_ != sample)
+        {
+            cache.entries_.clear();
+            cache.width_ = wrap_width_;
+            cache.font_size_ = font_size();
+            cache.sample_width_ = sample;
+        }
+        const std::uint64_t generation { ++cache.generation_ };
+        const auto cached_cuts = [&](const std::u8string_view paragraph) -> const std::vector<std::size_t>& {
+            auto found { cache.entries_.find(paragraph) };
+            if (found == cache.entries_.end())
+                found = cache.entries_.emplace(std::u8string { paragraph }, text_area_wrap_cache::entry { wrap_paragraph(paragraph, wrap_width_, measure), 0 }).first;
+            found->second.used = generation;
+            return found->second.cuts;
+        };
+        std::vector<line> lines { split_screen_lines(text, cached_cuts) };
+        std::erase_if(cache.entries_, [generation](const auto& item) { return item.second.used != generation; });
+        return lines;
     }
 
     float text_area_element::text_left() const noexcept
@@ -216,7 +300,7 @@ namespace luil {
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
         const float bar { config_.scroll != nullptr ? std::min(scroll_area_bar_width * scale_, context.slot.width) : 0.0f };
         wrap_width_ = context.slot.width - bar - 2.0f * text_area_padding_x * scale_;
-        lines_ = wrap_lines(displayed_text(), wrap_width_, measure);
+        lines_ = wrap_displayed(measure);
         area_->set_content_height(static_cast<float>(lines_.size()) * text_area_line_height + 2.0f * text_area_padding_y);
 
         // 흘리는 창이 칸 전체다. 여백은 몸통 안쪽의 글 자리가 진다 — 막대는 칸의 오른쪽 끝에 붙는다.
@@ -249,7 +333,8 @@ namespace luil {
         const std::u8string_view text { query.text };
         const std::size_t begin { std::min(query.begin, text.size()) };
         const std::size_t end { std::max(std::min(query.end, text.size()), begin) };
-        const std::vector<line> lines { lines_for(text, measure) };
+        std::vector<line> storage {};
+        const std::vector<line>& lines { lines_for(text, measure, storage) };
         // 발행된 caret 자리를 묻는 질의(빈 구간, 같은 글·같은 caret)에만 affinity를 쓴다 — IME 후보 창과 보조 기술이
         // 그려진 caret과 같은 줄을 가리킨다. 조합 중의 문서는 확정 글과 달라 여기에 걸리지 않는다.
         const bool published_caret { begin == end && begin == query.caret && query.caret == value_.caret && text == std::u8string_view { value_.text } && value_.composing == false };
@@ -285,7 +370,8 @@ namespace luil {
             return text_caret_position { text.size(), false };
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
-        const std::vector<line> lines { lines_for(text, measure) };
+        std::vector<line> storage {};
+        const std::vector<line>& lines { lines_for(text, measure, storage) };
         const float line_height { text_area_line_height * scale_ };
         const float top { text_top() };
         // 첫 줄 위는 글의 처음, 마지막 줄 아래는 글의 끝이다 — 첫 줄에서 ↑, 마지막 줄에서 ↓가 그 끝으로 간다.
@@ -308,7 +394,8 @@ namespace luil {
             return value_.text.size();
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
-        const std::size_t index { caret_line_of(lines_for(value_.text, measure), std::min(value_.caret, value_.text.size()), value_.caret_upstream) };
+        std::vector<line> storage {};
+        const std::size_t index { caret_line_of(lines_for(value_.text, measure, storage), std::min(value_.caret, value_.text.size()), value_.caret_upstream) };
         const float line_height { text_area_line_height * scale_ };
         return offset_at_point(x, text_top() + (static_cast<float>(index) + 0.5f) * line_height, measurer);
     }
