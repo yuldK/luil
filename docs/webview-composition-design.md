@@ -145,18 +145,28 @@ Shutdown은 future callback을 먼저 무효화하고 event delivery function을
 
 ## 접근성
 
-Slot은 Luil UI Automation tree에서 이름 있는 group으로 나타나고 일반 focus traversal에 참여한다. Luil은 DOM node나 page text를 `access_info`로 복제하지 않는다.
+Slot은 Luil UI Automation tree에서 이름 있는 group으로 나타나고 일반 focus traversal에 참여한다. Luil은 DOM node나 page text를 `access_info`로 복제하지 않는다. Page의 접근성 subtree는 slot의 자식으로 선다.
 
-**지금은 page의 접근성 subtree가 창의 UIA tree에 없다.** Composition hosting에서는 WebView2가 page를 창에 저절로 붙이지 않는다. Host가 `ICoreWebView2CompositionController2::get_AutomationProvider`로 얻은 provider를 자기 tree에 이어야 한다. WebView2가 provider의 host로 내세우는 숨은 자식 창(`Chrome_WidgetWin_0`)은 크기가 0이라 UIA가 창의 자식으로 훑지 않는다. 그래서 `ICoreWebView2Environment4::GetAutomationProviderForWindow`를 쓰는 `IRawElementProviderHwndOverride`만으로는 아무것도 드러나지 않는다.
+### Page가 slot 아래에 서는 방식
 
-이 연결을 시도하고 demo에서 잰 결과는 다음과 같다(runtime 155.0.4283.62, UIA client는 System.Windows.Automation).
+Composition hosting의 WebView2는 앵커 창 아래에 크기 0의 자식 창(`Chrome_WidgetWin_0`, WebView2 문서의 "input HWND")을 두고, page의 UIA tree를 그 창의 HWND 가지로 내준다. 아무것도 하지 않으면 UIA3 client(Narrator 등)에게 그 가지가 **창의 첫 자식**으로 선다. Page 내용은 읽히지만 slot과 따로 놀고, 화면 차례와 다른 자리에 선다. UIA2 관리 client(`System.Windows.Automation`)는 크기 0의 자식 창을 훑지 않아 page가 아예 보이지 않는다.
 
-- slot의 첫 자식으로 provider를 이으면 UIA가 그것을 자식 창의 Pane으로 합친다. Provider가 `Navigate(Parent)`와 형제를 비워 두므로 UIA가 HWND 순서로 물러선다. 그 Pane의 부모는 창 root이고 다음 형제는 창의 첫 자식이다. 그래서 slot 아래를 재귀로 훑으면 창 전체가 끝없이 되풀이된다. 이 상태는 보조 기술을 멈추게 할 수 있어 싣지 않았다.
-- Provider 자신은 `Navigate(FirstChild)`가 비어 있고 `ElementProviderFromPoint`도 답하지 않는다. Microsoft sample처럼 창의 `WM_GETOBJECT`가 이 provider를 root로 돌려줘도 자식이 없다. 격리 데스크톱과 일반 데스크톱 모두 같고, 명령줄에 `--force-renderer-accessibility`가 실린 것을 확인한 뒤에도 같다.
-- Page 내용이 provider에 실리는 조건(화면 낭독기 신호, Narrator 같은 UIA3 client의 접근 방식 등)은 아직 확인하지 못했다. Machine 전체 설정인 `SPI_SETSCREENREADER`를 바꾸는 실험은 하지 않았다.
+Luil은 slot 요소를 그 창의 **대리**로 세운다. WinUI의 WebView2가 컨트롤 자신의 provider로 하는 것과 같은 모양이다.
 
-내용이 실리는 조건을 찾으면 다음 모양으로 잇는다. Provider를 얇은 fragment로 감싸 `Navigate(Parent)`는 slot, 형제는 없음, 자식·property·pattern·자리는 provider에 위임한다. 이 감싼 fragment를 slot의 `Navigate(FirstChild)`·`GetEmbeddedFragmentRoots`와 HWND override 양쪽에서 같은 것으로 돌려준다. 창 root의 `ElementProviderFromPoint`와 `GetFocus`는 slot에 닿으면 provider에 넘긴다.
+- 앵커 창의 UIA root가 `IRawElementProviderHwndOverride`를 구현한다. 그 창을 물으면 slot 요소의 provider를 돌려준다.
+- Slot provider는 `get_HostRawElementProvider`로 그 창을 host로 답한다. UIA가 slot과 그 창을 한 요소로 합친다. 그래서 slot의 부모·형제는 Luil tree대로이고, 자식은 그 창의 HWND 가지(page)다.
+- Slot provider는 `ProviderOptions_OverrideProvider`를 함께 내세운다. 이것을 빼면 UIA3 client가 page 가지에서 바깥으로 나오는 길(다음 형제 찾기)에서 override → host → `Parent` → `FirstChild`를 끝없이 돈다. demo에서 그렇게 멈추는 것을 확인했다.
+- 따로 감싼 자식 provider를 slot 아래에 두는 길은 쓰지 않는다. 그 자식이 Luil fragment tree에 속하는지 그 창에 속하는지가 갈려 같은 순환이 난다.
+
+그 창은 WebView2가 정하므로 host가 찾는다. 앵커 창의 `Chrome_WidgetWin_0` 자식 가운데 `ICoreWebView2Environment4::GetAutomationProviderForWindow`가 이 웹뷰의 `ICoreWebView2CompositionController2::get_AutomationProvider`와 같은 COM 객체를 돌려주는 창이다. 이 판정은 **UIA 질의 밖**, 자리를 앉히는 `apply_layout`에서 하고 handle을 기억해 둔다. UIA가 page 가지를 훑는 도중에 WebView2를 부르면, 브라우저 프로세스가 우리 UI thread에 되묻는 동안 서로를 기다릴 수 있기 때문이다. 그려지지 않는 웹뷰는 대리를 세우지 않는다. 그동안 보이는 것은 placeholder이고 보조 기술도 그것을 읽는다.
+
+Demo에서 잰 결과는 다음과 같다(runtime 155.0.4283.62).
+
+- UIA3 client: slot이 `Chrome_WidgetWin_0`과 합쳐진 group으로 서고, 그 아래에 page의 Document와 글·링크·단추가 선다. 창의 첫 자식 자리의 중복은 없다. 부모는 창 root이고 앞뒤 형제는 화면 차례 그대로다. 끝까지 훑어도 멈추지 않는다. Slot 안의 점을 `ElementFromPoint`로 물으면 page의 Document가 답한다(page 위쪽 여백의 점은 slot이 답한다).
+- `ElementFromHandle`로 그 창을 잡은 요소와 tree를 따라 내려가 잡은 slot은 같은 요소다(`CompareElements`, runtime id `42.<hwnd>`).
+- UIA2 관리 client: slot이 group으로 서고 멈추지 않는다. Page 내용은 이 client가 원래 그 창을 훑지 않아 보이지 않는다.
+- Chromium은 접근성을 늦게 켠다. 처음 묻는 순간에는 Document가 비어 있을 수 있고, 다음 질의부터 내용이 찬다.
 
 ## 검증
 
-[`tests/webview_element_tests.cpp`](../tests/webview_element_tests.cpp)는 slot layout, scale 보존, hit opacity, tab 동작, 접근성을 검증한다. [`tests/webview_layout_tests.cpp`](../tests/webview_layout_tests.cpp)는 clipping, occlusion, rounding, half-open pointer bounds, capture, scale을 검증한다. [`tests/webview_message_gate_tests.cpp`](../tests/webview_message_gate_tests.cpp)는 message size와 rate limit, notice 억제, zero limit, clock window를 검증한다. [`tests/webview_failure_tests.cpp`](../tests/webview_failure_tests.cpp)는 생성 실패의 갈래 판정과 runtime build 번호 읽기를 검증한다. Runtime integration에서는 creation, navigation policy, input, IME, focus exit, monitor 간 DPI 이동, process failure, Evergreen runtime 부재도 확인해야 한다.
+[`tests/webview_element_tests.cpp`](../tests/webview_element_tests.cpp)는 slot layout, scale 보존, hit opacity, tab 동작, 접근성을 검증한다. [`tests/webview_layout_tests.cpp`](../tests/webview_layout_tests.cpp)는 clipping, occlusion, rounding, half-open pointer bounds, capture, scale을 검증한다. [`tests/webview_message_gate_tests.cpp`](../tests/webview_message_gate_tests.cpp)는 message size와 rate limit, notice 억제, zero limit, clock window를 검증한다. [`tests/webview_failure_tests.cpp`](../tests/webview_failure_tests.cpp)는 생성 실패의 갈래 판정과 runtime build 번호 읽기를 검증한다. [`tests/uia_provider_tests.cpp`](../tests/uia_provider_tests.cpp)는 자식 창을 대신하는 요소가 그 창을 host로 답하고 override 옵션을 내세우며, 창 root가 그 창 자리에 그 요소를 돌려주는 것을 검증한다. Runtime integration에서는 creation, navigation policy, input, IME, focus exit, monitor 간 DPI 이동, process failure, Evergreen runtime 부재도 확인해야 한다.

@@ -102,6 +102,17 @@ namespace luil::win32 {
         // 거짓이면 그 자리에 구멍을 뚫지 않는다 — 뚫으면 바탕 화면이 비친다.
         [[nodiscard]] bool standing(const std::u8string& id) const noexcept;
 
+        // 이 표면에 서 있는 이 웹뷰의 접근성 창이다 (페이지의 UIA tree가 매달린 숨은 자식 창).
+        //  - 합성 호스팅의 WebView2는 앵커 창 아래에 크기 0의 자식 창을 두고, 페이지의 UIA tree를 그 창의
+        //    HWND 가지로 내준다. 그대로 두면 보조 기술에는 그 가지가 창의 첫 자식으로 서고 자리표와 따로 논다.
+        //    창의 UIA root가 이 창을 자리표 아래로 옮긴다 (`uia_surface_host::accessibility_embedded_window`).
+        //  - 그 창은 WebView2가 정하므로 찾아서 답한다. 앵커 창의 자식 중 이 웹뷰의 provider와 같은 provider를
+        //    내주는 창이다 (`GetAutomationProviderForWindow` — 웹뷰가 여럿이어도 가른다).
+        //  - 그려지지 않는 웹뷰는 답하지 않는다. 그동안 보이는 것은 placeholder이고 보조 기술도 그것을 읽는다.
+        [[nodiscard]] HWND automation_window(const std::u8string& anchor, const std::u8string& id) const;
+        // 그 접근성 창을 가진, 이 표면에 서 있는 웹뷰의 id다. 없으면 빈 값이다 (`automation_window`의 역).
+        [[nodiscard]] std::u8string webview_of_automation_window(const std::u8string& anchor, HWND window) const;
+
         // 이 웹뷰로 키보드 초점을 넘긴다 (Tab이 자리표에 닿았을 때).
         // 넘겼으면 참이다.
         [[nodiscard]] bool move_focus_in(const std::u8string& id, bool backward);
@@ -155,6 +166,8 @@ namespace luil::win32 {
         void signal_focus(const entry& source, webview_focus_signal signal);
         [[nodiscard]] entry* find(const std::u8string& id) noexcept;
         [[nodiscard]] const entry* find(const std::u8string& id) const noexcept;
+        // 이 웹뷰의 접근성 창을 앵커 창의 자식에서 찾는다. WebView2를 부르므로 UIA 질의 밖에서만 부른다.
+        [[nodiscard]] HWND find_automation_window(const entry& target) const;
         // 항목 하나를 화면과 런타임에서 떼어 낸다 (visual을 떼고 컨트롤러를 닫는다).
         // 없애는 길 둘(대조·종료)이 전부 이것을 지난다.
         void tear_down(entry& target) noexcept;

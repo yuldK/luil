@@ -2,6 +2,7 @@
 
 #include "host/font_registry.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/webview_element.h"
 #include "win32/embedded_assets.h"
 #include "win32/surface_input.h"
 #include "win32/utf8.h"
@@ -250,6 +251,23 @@ namespace luil::win32 {
             return measure_text(text, font);
         };
         return element->offset_at(static_cast<float>(point.x), measure);
+    }
+
+    HWND window_surface::accessibility_embedded_window(const ui_element& element) const
+    {
+        // 자리를 칠하는 것과 같은 규칙이다 — 자리표만 웹뷰를 말하고, 그 id의 owner가 웹뷰 id다 (`apply_webviews`).
+        if (element.id().kind != ui_element_kind::webview || dynamic_cast<const webview_element*>(&element) == nullptr)
+            return nullptr;
+        return context_.webview_automation_window(id_, element.id().owner);
+    }
+
+    ui_element_id window_surface::accessibility_window_element(const HWND window) const
+    {
+        // 자리표의 id는 웹뷰 id를 owner로 갖는다 (`apply_webviews`와 같은 짝).
+        const std::u8string webview { context_.webview_of_automation_window(id_, window) };
+        if (webview.empty())
+            return {};
+        return ui_element_id { ui_element_kind::webview, webview };
     }
 
     void window_surface::announce_accessibility_focus(const ui_element_id& focused)

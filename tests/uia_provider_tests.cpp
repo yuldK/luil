@@ -113,6 +113,19 @@ namespace {
             return text_offset;
         }
 
+        // 자식 창을 대신하는 요소와 그 창이다 (웹뷰 자리표와 그 접근성 창).
+        [[nodiscard]] HWND accessibility_embedded_window(const luil::ui_element& element) const override
+        {
+            return element.id() == embedding ? embedded_window : nullptr;
+        }
+
+        [[nodiscard]] luil::ui_element_id accessibility_window_element(const HWND window) const override
+        {
+            return window != nullptr && window == embedded_window ? embedding : luil::ui_element_id {};
+        }
+
+        luil::ui_element_id embedding {};
+        HWND embedded_window { nullptr };
         std::vector<luil::input_action> dispatched {};
         luil::ui_element_id focus_requested {};
         std::optional<luil::text_input_target> text_target {};
@@ -1805,4 +1818,54 @@ TEST_CASE("Rows of a multiple selection list without add or remove messages refu
     b->Release();
     a->Release();
     root->Release();
+}
+
+TEST_CASE("An element standing in for a child window hosts it and overrides it", "[win32][uia][webview]")
+{
+    // 합성 호스팅의 WebView2는 페이지의 UIA tree를 크기 0의 자식 창 가지로 내준다. 자리표 요소가 그 창의 host가 되고
+    // 창 root가 그 창 자리에 자리표를 내세워야 페이지가 자리표의 자식으로 한 번만 선다.
+    // UIA가 host provider를 만들려면 실제 창이 있어야 한다 — 보이지 않는 message-only 창이면 된다.
+    const HWND window { CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr) };
+    REQUIRE(window != nullptr);
+    fake_uia_host host {};
+    host.tree = make_page_tree();
+    host.embedding = { kind_item, u8"confirm" };
+    host.embedded_window = window;
+    auto* const root { new luil::win32::uia_root_provider { host } };
+
+    luil::win32::uia_element_provider* const slot { root->make_element_provider(host.embedding) };
+    // 그 창의 기본 provider를 덮는다고 밝힌다. 밝히지 않으면 UIA3 client가 그 가지에서 나오는 길을 끝없이 돈다.
+    ProviderOptions options {};
+    REQUIRE(slot->get_ProviderOptions(&options) == S_OK);
+    REQUIRE((options & ProviderOptions_OverrideProvider) != 0);
+    IRawElementProviderSimple* hosted { nullptr };
+    REQUIRE(slot->get_HostRawElementProvider(&hosted) == S_OK);
+    REQUIRE(hosted != nullptr);
+    hosted->Release();
+
+    // 다른 요소는 지금처럼 host가 없고 덮지도 않는다.
+    luil::win32::uia_element_provider* const label { root->make_element_provider({ kind_item, u8"hint" }) };
+    REQUIRE(label->get_ProviderOptions(&options) == S_OK);
+    REQUIRE((options & ProviderOptions_OverrideProvider) == 0);
+    REQUIRE(label->get_HostRawElementProvider(&hosted) == S_OK);
+    REQUIRE(hosted == nullptr);
+
+    // 창 root는 그 창 자리에 자리표 자신을 내세운다.
+    IRawElementProviderSimple* overridden { nullptr };
+    REQUIRE(root->GetOverrideProviderForHwnd(window, &overridden) == S_OK);
+    REQUIRE(overridden != nullptr);
+    REQUIRE(static_cast<luil::win32::uia_element_provider*>(overridden)->element_id() == host.embedding);
+    overridden->Release();
+    // 모르는 창은 기본 provider대로 선다.
+    REQUIRE(root->GetOverrideProviderForHwnd(GetDesktopWindow(), &overridden) == S_OK);
+    REQUIRE(overridden == nullptr);
+    // 그 요소가 tree에 없으면 대신 서지 않는다.
+    host.embedding = { kind_item, u8"gone" };
+    REQUIRE(root->GetOverrideProviderForHwnd(window, &overridden) == S_OK);
+    REQUIRE(overridden == nullptr);
+
+    label->Release();
+    slot->Release();
+    root->Release();
+    DestroyWindow(window);
 }

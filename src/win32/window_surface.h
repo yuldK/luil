@@ -110,6 +110,21 @@ namespace luil::win32 {
             static_cast<void>(surface);
             static_cast<void>(pointer_id);
         }
+        // 이 표면에 서 있는 이 웹뷰의 접근성 창이다 (`webview_host::automation_window`).
+        //  - 기본은 없다 — 웹뷰를 모르는 test 대역이 그대로 선다.
+        [[nodiscard]] virtual HWND webview_automation_window(const std::u8string& surface, const std::u8string& id)
+        {
+            static_cast<void>(surface);
+            static_cast<void>(id);
+            return nullptr;
+        }
+        // 그 접근성 창을 가진 이 표면의 웹뷰 id다. 없으면 빈 값이다.
+        [[nodiscard]] virtual std::u8string webview_of_automation_window(const std::u8string& surface, HWND window)
+        {
+            static_cast<void>(surface);
+            static_cast<void>(window);
+            return {};
+        }
 
         // frame의 외양 선호를 `frame_state`로 옮긴다 (테마·고대비·글꼴).
         // 돌려준 typeface는 그 frame을 그리는 동안 살아 있어야 한다.
@@ -431,6 +446,9 @@ namespace luil::win32 {
         void accessibility_text_edit(text_edit_request request) override;
         [[nodiscard]] std::optional<RECT> accessibility_text_span(const ui_element_id& id, std::u8string_view document, std::size_t caret, std::size_t begin, std::size_t end) const override;
         [[nodiscard]] std::optional<std::size_t> accessibility_text_offset(const ui_element_id& id, float screen_x, float screen_y) const override;
+        // 웹뷰 자리표 아래로 그 웹뷰의 접근성 창을 옮긴다.
+        [[nodiscard]] HWND accessibility_embedded_window(const ui_element& element) const override;
+        [[nodiscard]] ui_element_id accessibility_window_element(HWND window) const override;
 
         // 이 표면으로 걸러진 초점이 바뀌었으면 UIA에 알린다.
         // 그리는 길에 얹는다 — 초점 변화는 언제나 발행본 게시로 오고 게시는 모든

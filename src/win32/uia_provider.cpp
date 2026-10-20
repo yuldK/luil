@@ -439,6 +439,8 @@ namespace luil::win32 {
             *object = static_cast<IRawElementProviderFragment*>(this);
         else if (riid == __uuidof(IRawElementProviderFragmentRoot))
             *object = static_cast<IRawElementProviderFragmentRoot*>(this);
+        else if (riid == __uuidof(IRawElementProviderHwndOverride))
+            *object = static_cast<IRawElementProviderHwndOverride*>(this);
         else
         {
             *object = nullptr;
@@ -446,6 +448,39 @@ namespace luil::win32 {
         }
         AddRef();
         return S_OK;
+    }
+
+    ui_element_id uia_root_provider::embedding_element(const HWND window) const
+    {
+        const ui_tree* const tree { host_ != nullptr ? host_->accessibility_tree() : nullptr };
+        if (tree == nullptr || window == nullptr)
+            return {};
+        // 표면이 답하고 tree가 확인한다. 지금 tree에 없는 요소는 대신 설 수 없다 (그 창은 기본 provider대로 선다).
+        const ui_element_id element { host_->accessibility_window_element(window) };
+        const ui_element* const found { element != ui_element_id {} ? tree->find(element) : nullptr };
+        if (found == nullptr || host_->accessibility_embedded_window(*found) != window)
+            return {};
+        return element;
+    }
+
+    HRESULT uia_root_provider::GetOverrideProviderForHwnd(const HWND window, IRawElementProviderSimple** result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            *result = nullptr;
+            if (host_ == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            // 대신하는 요소가 없으면 그 창은 기본 provider대로 선다.
+            //  - 대신하는 것은 **요소 자신**이다 (WinUI의 WebView2가 같은 자리에서 컨트롤 자신의 provider를 낸다).
+            //    따로 감싼 자식을 내세우면 그 자식이 우리 fragment tree에 속하는지 그 창에 속하는지가 갈려,
+            //    UIA가 그 창에서 나오는 길(형제 찾기)을 끝없이 돈다.
+            const ui_element_id element { embedding_element(window) };
+            if (element == ui_element_id {})
+                return S_OK;
+            *result = static_cast<IRawElementProviderSimple*>(make_element_provider(element));
+            return S_OK;
+        });
     }
 
     ULONG uia_root_provider::AddRef()
@@ -725,10 +760,18 @@ namespace luil::win32 {
 
     HRESULT uia_element_provider::get_ProviderOptions(ProviderOptions* options)
     {
-        if (options == nullptr)
-            return E_POINTER;
-        *options = static_cast<ProviderOptions>(ProviderOptions_ServerSideProvider | ProviderOptions_UseComThreading);
-        return S_OK;
+        return guarded([&]() -> HRESULT {
+            if (options == nullptr)
+                return E_POINTER;
+            *options = static_cast<ProviderOptions>(ProviderOptions_ServerSideProvider | ProviderOptions_UseComThreading);
+            // 자식 창을 대신하는 요소는 그 창의 기본 provider를 **덮는** provider라고 밝힌다. 밝히지 않으면 UIA가 그 창의
+            // 자리를 정하지 못해 그 가지에서 나오는 길(형제 찾기)을 끝없이 돈다 — demo에서 UIA3 client가 그렇게 멈췄다.
+            const ui_element* const element { resolve() };
+            const uia_surface_host* const host { root_->host() };
+            if (element != nullptr && host != nullptr && host->accessibility_embedded_window(*element) != nullptr)
+                *options = static_cast<ProviderOptions>(*options | ProviderOptions_OverrideProvider);
+            return S_OK;
+        });
     }
 
     HRESULT uia_element_provider::GetPatternProvider(const PATTERNID pattern, IUnknown** result)
@@ -859,11 +902,20 @@ namespace luil::win32 {
 
     HRESULT uia_element_provider::get_HostRawElementProvider(IRawElementProviderSimple** result)
     {
-        if (result == nullptr)
-            return E_POINTER;
-        // 요소는 자기 HWND가 없다 — host 창은 fragment root의 몫이다.
-        *result = nullptr;
-        return S_OK;
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            // 요소는 대개 자기 HWND가 없다 — host 창은 fragment root의 몫이다.
+            *result = nullptr;
+            // 자식 창을 대신하는 요소(웹뷰 자리표)는 그 창이 host다. UIA가 이 요소와 그 창을 한 요소로 합치고,
+            // 그 창의 HWND 가지(페이지의 tree)가 이 요소의 자식으로 선다.
+            const ui_element* const element { resolve() };
+            const uia_surface_host* const host { root_->host() };
+            const HWND window { element != nullptr && host != nullptr ? host->accessibility_embedded_window(*element) : nullptr };
+            if (window == nullptr || IsWindow(window) == FALSE)
+                return S_OK;
+            return UiaHostProviderFromHwnd(window, result);
+        });
     }
 
     HRESULT uia_element_provider::Navigate(const NavigateDirection direction, IRawElementProviderFragment** result)
