@@ -115,6 +115,10 @@ namespace luil::android {
         // 초점을 가진 칸이 암호 칸인가, 그리고 지금 키보드가 어느 종류로 섰는가다.
         bool secret_ { false };
         bool keyboard_secret_ { false };
+        // 초점 칸이 여러 줄 칸인가. 참이면 IME의 줄 바꿈을 걷어 내지 않는다.
+        bool multiline_ { false };
+        // 키보드를 마지막으로 세울 때의 그 값이다 (`configure`를 다시 부를 계기).
+        bool configured_multiline_ { false };
         std::optional<text_input_options> options_ {};
     };
 } // namespace luil::android

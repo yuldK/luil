@@ -422,3 +422,49 @@ TEST_CASE("A dismissed keyboard on a password box comes back as a password keybo
     REQUIRE(platform.secret_keyboard == std::vector<bool> { true, false, true });
     REQUIRE(platform.keyboard.back());
 }
+
+TEST_CASE("A newline from the IME stays text in a multiline box", "[android][ime][multiline]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    int submitted { 0 };
+    luil::android::ime_session::platform hooks { platform.hooks() };
+    hooks.submit = [&submitted] { ++submitted; };
+    luil::android::ime_session session { host, std::move(hooks) };
+    host.target = note;
+    host.committed = { u8"한글", 6, 6 };
+    host.committed.multiline = true;
+    session.synchronize();
+
+    // 여러 줄 칸의 Enter는 줄 바꿈이다. 걷어 내지도 Enter로 보내지도 않는다.
+    session.accept({ u8"한글\n", { 3, 3 }, {} });
+    REQUIRE(submitted == 0);
+    REQUIRE(host.edits.size() == 1u);
+    REQUIRE(host.edits.back().command == luil::text::text_edit_command::replace_all);
+    REQUIRE(host.edits.back().text == u8"한글\n");
+    REQUIRE(host.edits.back().offset == 7u);
+}
+
+TEST_CASE("Moving between a single line and a multiline box rebuilds the keyboard", "[android][ime][multiline]")
+{
+    // 설정이 같아도 Enter 단추의 뜻이 바뀌므로 다시 세운다.
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    session.synchronize();
+    const std::size_t configured { platform.configured.size() };
+
+    host.target = luil::text_input_target { 8 };
+    host.committed.multiline = true;
+    session.synchronize();
+    REQUIRE(platform.configured.size() == configured + 1u);
+    // 그대로면 다시 세우지 않는다.
+    session.synchronize();
+    REQUIRE(platform.configured.size() == configured + 1u);
+
+    host.target = note;
+    host.committed.multiline = false;
+    session.synchronize();
+    REQUIRE(platform.configured.size() == configured + 2u);
+}

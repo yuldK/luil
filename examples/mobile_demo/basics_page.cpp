@@ -6,8 +6,10 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/modal_host_element.h"
+#include "luil/ui/text_area_element.h"
 #include "mobile_demo/assets.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <span>
@@ -93,14 +95,15 @@ namespace mobile_demo {
         {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
-            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret)
+            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret && edit->request.target != target_memo)
                 return false;
             apply_edit(edit->request);
             return true;
         }
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
-            if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_secret)
+            if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_secret
+                && composition->event.target != target_memo)
                 return false;
             apply_composition(composition->event);
             return true;
@@ -121,6 +124,17 @@ namespace mobile_demo {
             secret_reveal_ = reveal->reveal;
             return true;
         }
+        if (const auto* const scroll { message.get<memo_scroll_intent>() }; scroll != nullptr)
+        {
+            // 범위 다듬기는 칸이 한다. 아래로 넘친 값만 0으로 막는다.
+            memo_scroll_ = std::max(0.0f, memo_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<memo_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            memo_scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
         return false;
     }
 
@@ -132,6 +146,8 @@ namespace mobile_demo {
             luil::apply_text_edit(note_, request);
         else if (request.target == target_secret)
             luil::apply_text_edit(secret_, request);
+        else if (request.target == target_memo)
+            luil::apply_text_edit(memo_, request);
     }
 
     void basics_page::apply_composition(const luil::text_composition_event& event)
@@ -221,6 +237,16 @@ namespace mobile_demo {
         column.add(make_labeled_input(
                        u8"secret", u8"암호 칸 (가림·복사 막기·암호 키보드)", kind_secret_input, make_input_view(secret_, target_secret), make_secret_input_config(u8"암호", secret_reveal_, reveal)),
             input_block_height());
+        column.gap(12.0f);
+        // 여러 줄 메모다. 소프트 키보드의 Enter가 줄을 나누고, 칸 안을 쓸어 넘기면 흐른다.
+        column.note(u8"memo", u8"여러 줄 메모 (Enter 줄 바꿈)");
+        column.gap(4.0f);
+        luil::text_area_config memo {};
+        memo.placeholder = u8"여러 줄 메모";
+        memo.scroll_offset = memo_scroll_;
+        memo.scroll = [](const float delta) { return luil::make_app_action(memo_scroll_intent { delta }); };
+        memo.scroll_to = [](const float offset) { return luil::make_app_action(memo_scroll_to_intent { offset }); };
+        column.add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo_input }, make_input_view(memo_, target_memo), std::move(memo)), 96.0f);
         column.gap(24.0f);
 
         // 그림 둘을 나란히 둔다. 칸은 폭의 절반씩이다.

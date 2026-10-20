@@ -41,6 +41,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_text { luil::application_element_kind(3) };
     constexpr luil::ui_element_kind kind_number_input { luil::application_element_kind(4) };
     constexpr luil::ui_element_kind kind_note_input { luil::application_element_kind(5) };
+    // 여러 줄 메모 칸이다 (`text_area_element`).
+    constexpr luil::ui_element_kind kind_memo_input { luil::application_element_kind(42) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     constexpr luil::ui_element_kind kind_dialog { luil::application_element_kind(12) };
@@ -80,6 +82,7 @@ namespace mobile_demo {
     constexpr luil::text_input_target target_note { static_cast<luil::text_input_target>(2) };
     constexpr luil::text_input_target target_dropdown_search { static_cast<luil::text_input_target>(4) };
     constexpr luil::text_input_target target_secret { static_cast<luil::text_input_target>(5) };
+    constexpr luil::text_input_target target_memo { static_cast<luil::text_input_target>(6) };
     constexpr luil::text_input_target target_smb_address { static_cast<luil::text_input_target>(10) };
     constexpr luil::text_input_target target_smb_user { static_cast<luil::text_input_target>(11) };
     constexpr luil::text_input_target target_smb_password { static_cast<luil::text_input_target>(12) };

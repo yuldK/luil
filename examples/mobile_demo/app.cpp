@@ -336,6 +336,8 @@ namespace mobile_demo {
             return target_note;
         if (kind == kind_secret_input)
             return target_secret;
+        if (kind == kind_memo_input)
+            return target_memo;
         // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다 (popup-ime-design.md).
         if (kind == kind_dropdown_search_input)
             return target_dropdown_search;

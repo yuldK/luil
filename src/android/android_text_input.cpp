@@ -177,9 +177,12 @@ namespace luil::android {
         if (target.has_value() && (target != target_ || composing_ == false))
         {
             const text_input_options options { host_->input_options() };
-            if (options_ != options)
+            // 설정이 같아도 한 줄 칸과 여러 줄 칸 사이를 오가면 키보드를 다시 세운다 — Enter 단추의 뜻이 바뀐다.
+            const bool multiline { host_->committed_document().multiline };
+            if (options_ != options || configured_multiline_ != multiline)
             {
                 options_ = options;
+                configured_multiline_ = multiline;
                 if (platform_.configure)
                     platform_.configure(options);
             }
@@ -197,11 +200,13 @@ namespace luil::android {
                 send(document_);
             }
             secret_ = target_.has_value() && observed_.secret;
+            multiline_ = target_.has_value() && observed_.multiline;
             update_keyboard(target_.has_value());
             return;
         }
         if (target_.has_value() == false)
             return;
+        multiline_ = host_->committed_document().multiline;
         // 같은 칸이 암호 칸이 되거나 풀렸다 (앱이 설정을 바꿨다). 키보드가 떠 있으면 다시 세운다.
         if (const bool secret { host_->committed_document().secret }; secret != secret_)
         {
@@ -232,6 +237,12 @@ namespace luil::android {
     {
         if (target_.has_value() == false)
             return;
+        // 여러 줄 칸은 IME가 넣은 줄 바꿈이 곧 글이다 (안드로이드의 여러 줄 EditText와 같다).
+        if (multiline_)
+        {
+            accept_clean(original);
+            return;
+        }
         // 한 줄 칸이다. IME가 완료 동작 대신 줄바꿈을 글로 넣으면(키보드의 Enter) 그 글자를
         // 걷어 내고 Enter로 보낸다. 안드로이드의 한 줄 EditText가 하는 일과 같다.
         ime_state state { original };
