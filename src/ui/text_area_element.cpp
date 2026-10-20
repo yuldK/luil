@@ -94,6 +94,15 @@ namespace luil {
             return lines.size() - 1;
         }
 
+        // caret이 서는 화면 줄이다. 앞 글자 쪽에 붙은 caret(affinity)이 넘겨 접은 자리에 있으면 윗줄이다.
+        [[nodiscard]] std::size_t caret_line_of(const std::vector<text_line>& lines, const std::size_t offset, const bool upstream) noexcept
+        {
+            const std::size_t index { line_of(lines, offset) };
+            if (upstream && index > 0 && lines[index - 1].wrapped && lines[index - 1].end == offset)
+                return index - 1;
+            return index;
+        }
+
         // 줄 안에서 `target`(그 줄의 왼쪽 끝 기준 픽셀)에 가장 가까운 문자 경계다 (줄 안의 offset).
         //  - 한 줄 칸(`text_input_element::offset_at`)과 같은 규칙이다: 경계를 모아 폭으로 이분 탐색하고,
         //    가운데에서 가까운 쪽을 고른다.
@@ -226,6 +235,7 @@ namespace luil {
             value_.applied_sequence,
         };
         snapshot.multiline = true;
+        snapshot.caret_upstream = value_.caret_upstream;
         return snapshot;
     }
 
@@ -240,7 +250,10 @@ namespace luil {
         const std::size_t begin { std::min(query.begin, text.size()) };
         const std::size_t end { std::max(std::min(query.end, text.size()), begin) };
         const std::vector<line> lines { lines_for(text, measure) };
-        const std::size_t index { line_of(lines, begin) };
+        // 발행된 caret 자리를 묻는 질의(빈 구간, 같은 글·같은 caret)에만 affinity를 쓴다 — IME 후보 창과 보조 기술이
+        // 그려진 caret과 같은 줄을 가리킨다. 조합 중의 문서는 확정 글과 달라 여기에 걸리지 않는다.
+        const bool published_caret { begin == end && begin == query.caret && query.caret == value_.caret && text == std::u8string_view { value_.text } && value_.composing == false };
+        const std::size_t index { caret_line_of(lines, begin, published_caret && value_.caret_upstream) };
         const line row { lines[index] };
         const float line_height { text_area_line_height * scale_ };
         const float top { text_top() + static_cast<float>(index) * line_height };
@@ -261,9 +274,15 @@ namespace luil {
 
     std::optional<std::size_t> text_area_element::offset_at_point(const float x, const float y, const text_measurer& measurer) const
     {
+        const std::optional<text_caret_position> position { caret_at_point(x, y, measurer) };
+        return position.has_value() ? std::optional<std::size_t> { position->offset } : std::nullopt;
+    }
+
+    std::optional<text_caret_position> text_area_element::caret_at_point(const float x, const float y, const text_measurer& measurer) const
+    {
         const std::u8string_view text { value_.text };
         if (measurer == nullptr)
-            return text.size();
+            return text_caret_position { text.size(), false };
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
         const std::vector<line> lines { lines_for(text, measure) };
@@ -271,22 +290,15 @@ namespace luil {
         const float top { text_top() };
         // 첫 줄 위는 글의 처음, 마지막 줄 아래는 글의 끝이다 — 첫 줄에서 ↑, 마지막 줄에서 ↓가 그 끝으로 간다.
         if (y < top)
-            return std::size_t { 0 };
+            return text_caret_position { 0, false };
         const float index { std::floor((y - top) / line_height) };
         if (index >= static_cast<float>(lines.size()))
-            return text.size();
+            return text_caret_position { text.size(), false };
         const line row { lines[static_cast<std::size_t>(index)] };
         const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
-        std::size_t offset { row.begin + nearest_boundary(content, x - text_left(), measure) };
-        // 접은 자리의 offset은 아랫줄의 처음이라, 접은 줄의 오른쪽 끝(End)은 마지막 글자 앞에 세운다 —
-        // 그러지 않으면 caret이 누른 줄이 아니라 아랫줄 처음에 선다.
-        if (row.wrapped && offset == row.end && row.end > row.begin)
-        {
-            --offset;
-            while (offset > row.begin && continuation_byte(text[offset]))
-                --offset;
-        }
-        return offset;
+        const std::size_t offset { row.begin + nearest_boundary(content, x - text_left(), measure) };
+        // 접은 줄의 끝은 아랫줄의 처음과 offset이 같다. 누른 줄이 윗줄이므로 caret을 그 줄에 붙인다.
+        return text_caret_position { offset, row.wrapped && offset == row.end };
     }
 
     std::optional<std::size_t> text_area_element::offset_at(const float x, const text_measurer& measurer) const
@@ -296,7 +308,7 @@ namespace luil {
             return value_.text.size();
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
-        const std::size_t index { line_of(lines_for(value_.text, measure), std::min(value_.caret, value_.text.size())) };
+        const std::size_t index { caret_line_of(lines_for(value_.text, measure), std::min(value_.caret, value_.text.size()), value_.caret_upstream) };
         const float line_height { text_area_line_height * scale_ };
         return offset_at_point(x, text_top() + (static_cast<float>(index) + 0.5f) * line_height, measurer);
     }
@@ -403,7 +415,7 @@ namespace luil {
         if (caret_on)
         {
             const std::size_t caret { displayed_caret() };
-            const std::size_t index { line_of(lines, caret) };
+            const std::size_t index { caret_line_of(lines, caret, value_.composing == false && value_.caret_upstream) };
             const line row { lines[index] };
             const float caret_x { left + measure(text.substr(row.begin, caret - row.begin)) };
             const float row_top { top + static_cast<float>(index) * line_height };

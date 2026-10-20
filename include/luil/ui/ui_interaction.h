@@ -29,6 +29,8 @@ namespace luil {
         std::u8string text {};
         // replace_all의 선택 시작점이다. 비어 있으면 caret으로 접는다.
         std::optional<std::size_t> anchor {};
+        // place_caret이 놓는 caret이 앞 글자 쪽에 붙는다 (`text_edit_state::caret_upstream`).
+        bool upstream { false };
         // IME가 발번한다. apply_text_edit와 make_text_input_view가 처리 완료 번호를 되돌린다.
         std::uint64_t sequence { 0 };
     };
@@ -473,6 +475,8 @@ namespace luil {
         {
             ui_element_id input {};
             std::size_t caret { 0 };
+            // 넘겨 접은 자리에서 윗줄 끝과 아랫줄 처음은 offset이 같다 — 둘 사이를 오가도 따라가게 함께 본다.
+            bool upstream { false };
             std::size_t text_hash { 0 };
 
             [[nodiscard]] bool operator==(const followed_caret&) const = default;

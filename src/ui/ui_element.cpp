@@ -475,6 +475,14 @@ namespace luil {
         return offset_at(x, measurer);
     }
 
+    std::optional<text_caret_position> ui_element::caret_at_point(const float x, const float y, const text_measurer& measurer) const
+    {
+        const std::optional<std::size_t> offset { offset_at_point(x, y, measurer) };
+        if (offset.has_value() == false)
+            return std::nullopt;
+        return text_caret_position { *offset, false };
+    }
+
     std::optional<text_input_snapshot> ui_element::text_input() const
     {
         return std::nullopt;

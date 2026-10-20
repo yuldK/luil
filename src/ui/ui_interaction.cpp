@@ -878,6 +878,8 @@ namespace luil {
     {
         if (request.sequence != 0)
             state.applied_sequence = request.sequence;
+        // affinity는 caret 놓기만 세운다. 글을 바꾸거나 caret을 글자·낱말로 옮기면 그 자리는 윗줄 끝이 아니다.
+        state.caret_upstream = false;
         const auto filtered { [&filter](const std::u8string& value) { return filter != nullptr ? filter(value) : value; } };
         switch (request.command)
         {
@@ -939,6 +941,7 @@ namespace luil {
             return;
         case text::text_edit_command::place_caret:
             text::text_edit_place_caret(state, request.offset, request.extend);
+            state.caret_upstream = request.upstream && state.caret == request.offset;
             return;
         }
     }
@@ -949,6 +952,7 @@ namespace luil {
         view.text = state.text;
         view.caret = state.caret;
         view.anchor = state.anchor;
+        view.caret_upstream = state.caret_upstream;
         view.applied_sequence = state.applied_sequence;
         if (composition.has_value() == false || composition->target != target)
             return view;
@@ -2495,8 +2499,8 @@ namespace luil {
         const std::optional<text_input_target> target { text_target(element.id().kind) };
         if (target.has_value() == false || policy_ == nullptr)
             return {};
-        const std::optional<std::size_t> offset { element.offset_at_point(x, y, config_.measure_text) };
-        if (offset.has_value() == false)
+        const std::optional<text_caret_position> position { element.caret_at_point(x, y, config_.measure_text) };
+        if (position.has_value() == false)
             return {};
 
         // 암호 칸의 낱말 고르기는 칸 전체다. 낱말 경계가 공백 자리를 알린다.
@@ -2505,8 +2509,10 @@ namespace luil {
         text_edit_request request {};
         request.target = *target;
         request.command = whole ? text::text_edit_command::select_all : select_word ? text::text_edit_command::select_word : text::text_edit_command::place_caret;
-        request.offset = *offset;
+        request.offset = position->offset;
         request.extend = extend;
+        // 넘겨 접은 줄의 끝을 누르면 caret이 그 줄에 붙는다 (낱말 고르기는 caret을 놓지 않는다).
+        request.upstream = request.command == text::text_edit_command::place_caret && position->upstream;
         return { policy_->make_text_edit_action(request) };
     }
 
@@ -2545,7 +2551,7 @@ namespace luil {
         // 조합 중에는 조합 글이 섞인 표시 문서와 그 caret이다 — 그려지는 줄이 그것이다.
         const std::u8string_view document { value->composing ? value->composition_text : value->text };
         const std::size_t caret { value->composing ? value->composition_caret : value->caret };
-        const followed_caret now { snapshot_.focused_input, caret, std::hash<std::u8string_view> {}(document) };
+        const followed_caret now { snapshot_.focused_input, caret, value->composing == false && value->caret_upstream, std::hash<std::u8string_view> {}(document) };
         if (followed_caret_ == now)
             return {};
         followed_caret_ = now;

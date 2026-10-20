@@ -42,6 +42,10 @@ namespace luil::text {
         std::u8string text {};
         std::size_t caret { 0 };
         std::size_t anchor { 0 };
+        // caret이 앞 글자 쪽에 붙는다 (affinity). 여러 줄 칸에서 넘겨 접은 자리의 caret을 윗줄 끝에 그린다.
+        //  - offset 하나는 윗줄의 끝이자 아랫줄의 처음이다. 거짓이면 아랫줄의 처음이다.
+        //  - `apply_text_edit`가 caret 놓기(`place_caret`)에서만 세우고 다른 모든 명령에서 지운다.
+        bool caret_upstream { false };
 
         // 실행 취소·복구 기록.
         // 편집이 새 덩어리를 열 때 이전 시점을 undo에 쌓고 redo를 비운다.
