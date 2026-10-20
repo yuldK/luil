@@ -223,6 +223,16 @@ luil_add_source_filter(luil_core_files "ui/image"
     ui/text_shaping.h
     "${luil_text_shaping_source}")
 
+# 이미지를 파일 바이트로 짓는다 (png·jpeg·webp). 형식마다 파일이 따로라 앱이 부른 형식의
+# 인코더만 링크된다 (docs/image-encode-design.md).
+luil_add_source_filter(luil_core_files "ui/image"
+    "${public_headers}/ui/image_encode.h"
+    ui/image_encode_jpeg.cpp
+    ui/image_encode_png.cpp
+    ui/image_encode_webp.cpp
+    ui/image_pixels.cpp
+    ui/image_pixels.h)
+
 # 항목을 늘어놓고 그중 하나를 고르는 element다.
 luil_add_source_filter(luil_core_files "ui/lists"
     ui/grouped_list_element.cpp

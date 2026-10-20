@@ -68,6 +68,7 @@
 - [접근성 동작](accessibility-action-design.md)
 - [이미지](image-design.md)
 - [이미지 디코딩](image-decode-design.md)
+- [이미지 인코딩](image-encode-design.md)
 - [움직이는 이미지](image-anim-design.md)
 - [SVG와 Lottie](vector-image-design.md) — `LUIL_ENABLE_SVG`·`LUIL_ENABLE_LOTTIE`
 - [HTTP client](http-client-design.md)
