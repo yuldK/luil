@@ -35,7 +35,9 @@ target_link_libraries(my_app PRIVATE luil::luil)
 
 모든 라이브러리 구성에 Skia와 nlohmann/json이 필요하다. Skia는 clang-cl로 컴파일된 것이어야 하며 configure가 패키지의 `toolchain.json`으로 확인한다. 소비자 자신의 컴파일러는 MSVC 그대로이고 clang 설치는 필요하지 않다 ([Skia 빌드 준비](../skia-build.md)). WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`를 켠 구성에 필요하며, 끈 구성은 SDK 없이 빌드되고 웹뷰는 placeholder로 남는다. `LUIL_ENABLE_DIRECT3D=OFF`(CPU 전용) 구성은 웹뷰도 기본으로 끈다. 설치본의 `luil-config.cmake`는 두 값을 `LUIL_ENABLE_DIRECT3D`, `LUIL_ENABLE_WEBVIEW`로 알린다.
 
-luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 고지 생성기는 소스 트리의 루트 LICENSE 또는 설치 패키지의 share/luil/LICENSE.luil에서 그 원문을 읽어 실행 파일 고지에 포함한다. Codicons와 의존성에는 각 원본의 라이선스가 적용된다. 고지 생성기는 Skia 패키지의 `NOTICE.md`를 우선 사용한다. 직접 빌드한 Skia 소스 트리에는 Bazel 캐시의 Rust PNG crate 고지가 없으므로 생성기가 불완전한 고지를 경고한다. 배포용 고지는 이를 포함하는 패키지에서 생성한다.
+Skia 패키지의 기능별 아카이브를 쓰는 기능은 넷이고 모두 기본은 끈다: `LUIL_ENABLE_SVG`, `LUIL_ENABLE_TEXT_SHAPING`, `LUIL_ENABLE_AVIF`, `LUIL_ENABLE_LOTTIE` ([Skia 빌드 준비](../skia-build.md#기능별-아카이브)). 끈 기능은 아카이브를 링크하지 않고 고지에도 싣지 않으며, 공개 API는 그대로 남아 `unsupported_format`으로 답한다. 켠 기능은 기능별 아카이브가 든 패키지(win-x64 r3, android-arm64 r2 이후)를 요구한다. 설치본의 `luil-config.cmake`는 네 값을 같은 이름으로, 켠 Skia 기능의 목록을 `LUIL_SKIA_FEATURES`로 알린다. 텍스트 모양 잡기는 실행 시점에 플랫폼 ICU(Windows 10 1903, Android 12)를 열고, 없으면 모양 잡기 없이 그린다 ([SVG와 Lottie](../vector-image-design.md)).
+
+luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 고지 생성기는 소스 트리의 루트 LICENSE 또는 설치 패키지의 share/luil/LICENSE.luil에서 그 원문을 읽어 실행 파일 고지에 포함한다. Codicons와 의존성에는 각 원본의 라이선스가 적용된다. 고지 생성기는 Skia 패키지의 `NOTICE.md`를 우선 사용하고, 패키지에 `NOTICE.json`이 있으면 core와 켠 기능의 고지만 골라 싣는다. 직접 빌드한 Skia 소스 트리에는 Bazel 캐시의 Rust PNG crate 고지가 없으므로 생성기가 불완전한 고지를 경고한다. 배포용 고지는 이를 포함하는 패키지에서 생성한다.
 
 ## SMB
 
