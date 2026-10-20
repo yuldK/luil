@@ -62,6 +62,7 @@ add_executable(luil_core_tests
     ui_interaction_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp
+    vector_image_tests.cpp
     virtual_list_element_tests.cpp
     webview_element_tests.cpp
     window_metrics_tests.cpp
@@ -102,6 +103,10 @@ target_link_libraries(luil_core_tests
         luil::luil_core
         luil_options
         Catch2::Catch2WithMain)
+# SVG·Lottie 진입점은 켠 구성에서 실제 모듈로 읽어 그리고, 끈 구성에서 "지원 안 함"으로 답한다.
+target_compile_definitions(luil_core_tests PRIVATE
+    "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
+    "LUIL_TESTS_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
 
 if(LUIL_PLATFORM STREQUAL "android")
     # 기기에서 돌린다. CTest와 Catch2의 발견이 실행 파일을 부를 때마다 adb로 올리고
@@ -320,7 +325,9 @@ target_compile_definitions(luil_tests PRIVATE "LUIL_TESTS_WEBVIEW=$<BOOL:${LUIL_
 # Skia 기능별 아카이브를 쓰는 기능도 같다 — 켠 구성은 그 기능이 서는지를, 끈 구성은
 # "지원 안 함"으로 답하고 고지에서도 빠지는지를 본다.
 target_compile_definitions(luil_tests PRIVATE
-    "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>")
+    "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"
+    "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
+    "LUIL_TESTS_TEXT_SHAPING=$<BOOL:${LUIL_ENABLE_TEXT_SHAPING}>")
 luil_disable_automatic_windows_manifest(luil_tests)
 
 # messaging의 ASan 검증이다.
