@@ -35,11 +35,13 @@ cmake --build --preset vs2026-release
 WebView2 Evergreen Runtime은 웹 콘텐츠 실행에 필요한 별도 구성 요소다.
 웹뷰를 쓰지 않는 앱은 `-DLUIL_ENABLE_WEBVIEW=OFF`로 SDK 준비를 생략할 수 있다.
 GPU가 필요 없는 작은 앱은 `-DLUIL_ENABLE_DIRECT3D=OFF`로 CPU 렌더러만 넣는다.
-SVG·Lottie·AVIF·텍스트 모양 잡기(HarfBuzz)는 `LUIL_ENABLE_SVG`·`LUIL_ENABLE_LOTTIE`·
-`LUIL_ENABLE_AVIF`·`LUIL_ENABLE_TEXT_SHAPING`으로 켠다. 모두 기본은 끄고, 끈 기능은
-링크하지도 고지에 싣지도 않는다 ([Skia 빌드 준비](docs/skia-build.md#기능별-아카이브)).
 이 구성은 D3D12 장치를 열지 않고 Skia의 GPU 코드를 링크하지 않으며, 웹뷰도
 기본으로 꺼진다. 자세한 내용은 [렌더링](docs/concepts/rendering.md)을 본다.
+
+SVG·Lottie·AVIF·텍스트 모양 잡기(HarfBuzz)는 `LUIL_ENABLE_SVG`·`LUIL_ENABLE_LOTTIE`·
+`LUIL_ENABLE_AVIF`·`LUIL_ENABLE_TEXT_SHAPING`으로 켠다. ICU가 없는 환경에서도 모양을
+잡으려면 `LUIL_ENABLE_TEXT_SHAPING_FALLBACK`을 함께 켠다. 모두 기본은 끄고, 끈 기능은
+링크하지도 고지에 싣지도 않는다 ([Skia 빌드 준비](docs/skia-build.md#기능별-아카이브)).
 
 ## 예제 실행
 

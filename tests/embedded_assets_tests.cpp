@@ -85,6 +85,11 @@ TEST_CASE("Executable resources contain the Codicons font and licenses", "[asset
 #else
     REQUIRE(notice_text.find("Component: HarfBuzz") == std::string_view::npos);
 #endif
+#if LUIL_TESTS_TEXT_SHAPING_FALLBACK
+    REQUIRE(notice_text.find("Component: libgrapheme") != std::string_view::npos);
+#else
+    REQUIRE(notice_text.find("Component: libgrapheme") == std::string_view::npos);
+#endif
 #if LUIL_TESTS_AVIF
     REQUIRE(notice_text.find("Component: libavif") != std::string_view::npos);
     REQUIRE(notice_text.find("Component: libgav1") != std::string_view::npos);

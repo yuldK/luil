@@ -100,8 +100,9 @@ SVG의 `<text>`와 Lottie의 글자 레이어는 공장(`SkShapers::Factory`)을
 `LUIL_ENABLE_TEXT_SHAPING`을 켠 구성은 `text_shaping_factory()`(`src/ui/text_shaping_harfbuzz.cpp`)가 HarfBuzz 공장을 넘긴다.
 
 - ICU는 링크하지 않고 실행 시점에 플랫폼의 것을 연다. Windows는 System32의 `icu.dll`(Windows 10 1903)이나 `icuuc.dll`(1703), Android는 NDK의 `libicu.so`(API 31, Android 12)다. ICU 데이터를 싣지 않아 패키지와 실행 파일이 수십 MB 늘지 않는다.
-- 열리지 않으면 primitive 공장이다. 글은 그려지고 위의 모양 잡기만 빠진다. Android의 minSdk는 26 그대로다 — `dlopen`이라 링크가 API 31을 요구하지 않는다.
-- 공장은 프로세스에 하나다. shaper를 부를 때마다 새로 짓고 ICU 래퍼만 나눠 쓰므로 여러 디코딩 thread가 함께 써도 된다.
+- ICU가 열리지 않을 때 `LUIL_ENABLE_TEXT_SHAPING_FALLBACK`을 함께 켠 구성은 libgrapheme으로 글자소·낱말·줄을 나누고, 패키지에 컴파일된 ICU BiDi 조각으로 방향을 정한다. 모양 잡기는 계속 HarfBuzz가 맡는다. fallback은 기본으로 끄며, 끈 구성은 primitive 공장으로 내려간다.
+- 두 옵션 모두 Android의 minSdk는 26 그대로다. ICU는 `dlopen`으로 열고 fallback은 데이터 파일 없이 링크된다. 텍스트 기능을 끈 상태에서 fallback만 켜면 configure가 원인을 알려 멈춘다.
+- 공장은 프로세스에 하나다. shaper를 부를 때마다 새로 짓고 Unicode 래퍼만 나눠 쓰므로 여러 디코딩 thread가 함께 써도 된다.
 
 지금 이 공장을 쓰는 것은 SVG와 Lottie뿐이다. luil 자신의 글자 그리기(label·입력 칸)는 여전히 글자마다 글리프 하나를 고르고 없는 글자를 대체 글꼴에서 찾는다 ([설치 글꼴 목록과 기본 UI 글꼴](concepts/fonts.md)). 그 경로를 HarfBuzz와 SkParagraph로 옮기는 것은 측정·caret·줄 넘김·편집 모델을 함께 바꾸는 일이라 따로 다룬다. 옵션은 그 일을 위해서도 미리 아카이브와 고지를 갖춰 둔다.
 
@@ -109,4 +110,5 @@ SVG의 `<text>`와 Lottie의 글자 레이어는 공장(`SkShapers::Factory`)을
 
 - [`tests/image_animation_tests.cpp`](../tests/image_animation_tests.cpp)는 `lottie_frame_at`의 장 고르기·예고·끝·빈 값을 순수 함수로 잠그고, Skottie 대신 시각으로 색을 고르는 가짜 장면(`painted_scene`)으로 그리기·우선순위·`next_update`를 잠근다. 손으로 기록한 `SkPicture`로 벡터 그림이 칸 배율로 다시 그려지는 것(경계가 섞이지 않는 것)과 조각 밖이 잘리는 것도 같은 파일에서 본다. 어느 구성에서나 돈다.
 - [`tests/vector_image_tests.cpp`](../tests/vector_image_tests.cpp)는 켠 구성에서 실제 SVG·Lottie 견본을 읽어 크기·실패 갈래·취소·그린 픽셀을 보고, 끈 구성에서 `unsupported_format`을 본다.
-- [`tests/embedded_assets_tests.cpp`](../tests/embedded_assets_tests.cpp)는 고지가 켠 기능의 구성요소(Expat·HarfBuzz·libavif)만 담는지를 본다.
+- [`tests/embedded_assets_tests.cpp`](../tests/embedded_assets_tests.cpp)는 고지가 켠 기능의 구성요소(Expat·HarfBuzz·libgrapheme·libavif)만 담는지를 본다.
+- [`tests/text_shaping_tests.cpp`](../tests/text_shaping_tests.cpp)는 별도 실행 파일에서 ICU를 끈 뒤 luil의 공장을 연다. fallback을 켜면 ZWJ 이모지의 글자소 경계와 아랍어의 RTL 방향이 유지되고, 끄면 primitive 공장인지 본다. Windows와 Android에서 같은 시험이 돈다.

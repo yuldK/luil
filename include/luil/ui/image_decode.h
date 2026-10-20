@@ -308,6 +308,7 @@ namespace luil {
     //    네트워크를 건드리는 길이 되지 않게 하는 규칙이다.
     //  - `<text>`는 시스템 글꼴로 그린다. 아랍어 이어 쓰기·bidi·결합 문자는
     //    `LUIL_ENABLE_TEXT_SHAPING`을 켠 구성에서만 모양 잡힌다.
+    //    플랫폼 ICU가 없는 환경은 `LUIL_ENABLE_TEXT_SHAPING_FALLBACK`도 켜야 한다.
     //  - Skia SVG 모듈의 범위를 따른다: `<style>`의 CSS, SMIL 애니메이션, 스크립트는 없다.
     // 실패·thread 규칙은 `load_image_file`과 같다 (파일 I/O와 문서 풀기는 호출 thread를
     // 막는다).

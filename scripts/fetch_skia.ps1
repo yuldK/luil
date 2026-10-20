@@ -436,7 +436,16 @@ Set-Content -LiteralPath (Join-Path $Destination 'VERSION.json') `
 
 Remove-Item -LiteralPath $staging_root -Recurse -Force
 
-$size = (Get-ChildItem -LiteralPath $Destination -Recurse -File | Measure-Object -Property Length -Sum).Sum
+# 재현 가능한 zip의 수정 시각은 패키지 빌드 시각으로 고정되어 있다. 그 시각이
+# 소비자의 기존 산출물보다 오래되면 Ninja가 바뀐 헤더·라이브러리를 다시 쓰지 않는다.
+# 실제 설치를 마친 파일만 지금 시각으로 갱신한다. 설치 생략 경로는 여기에 오지 않는다.
+$installed_files = @(Get-ChildItem -LiteralPath $Destination -Recurse -File)
+$installed_timestamp = [DateTime]::UtcNow
+foreach ($installed_file in $installed_files) {
+    $installed_file.LastWriteTimeUtc = $installed_timestamp
+}
+
+$size = ($installed_files | Measure-Object -Property Length -Sum).Sum
 Write-Output ''
 Write-Output ('Skia package ready: {0} ({1:N1} MB)' -f $Destination, ($size / 1MB))
 Write-Output 'Configure luil next - it checks the package on its own:'
