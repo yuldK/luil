@@ -209,7 +209,9 @@ namespace luil {
     };
 
     // 파일을 읽어 ui_image로 만든다. 코덱 지원은 Skia 빌드로 고정된다.
-    // PNG·JPEG·WebP·GIF와 Skia 기본 코덱인 BMP·WBMP를 읽는다.
+    // PNG·JPEG·WebP·GIF와 Skia 기본 코덱인 BMP·WBMP를 읽는다. `LUIL_ENABLE_AVIF`를 켠
+    // 구성은 AVIF도 읽는다 (끈 구성에서 AVIF는 `unsupported_format`이다).
+    // SVG와 Lottie는 이 문이 아니라 `decode_svg_bytes`·`decode_lottie_bytes`가 읽는다.
     // Rust PNG 코덱 구성에서는 APNG를 지원하며 ICO·TIFF·DDS·HEIF는 지원하지 않는다.
     // OS에 추가한 코덱은 지원 형식에 영향을 주지 않는다 (skia-build.md).
     //

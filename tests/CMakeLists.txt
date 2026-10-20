@@ -317,6 +317,10 @@ target_link_libraries(luil_tests
 target_include_directories(luil_tests PRIVATE "${LUIL_SOURCE_DIRECTORY}")
 # 고지 검사가 웹뷰 구성을 따라간다 — 끈 구성의 실행 파일에는 로더가 없다.
 target_compile_definitions(luil_tests PRIVATE "LUIL_TESTS_WEBVIEW=$<BOOL:${LUIL_ENABLE_WEBVIEW}>")
+# Skia 기능별 아카이브를 쓰는 기능도 같다 — 켠 구성은 그 기능이 서는지를, 끈 구성은
+# "지원 안 함"으로 답하고 고지에서도 빠지는지를 본다.
+target_compile_definitions(luil_tests PRIVATE
+    "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>")
 luil_disable_automatic_windows_manifest(luil_tests)
 
 # messaging의 ASan 검증이다.
