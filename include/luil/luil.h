@@ -15,6 +15,7 @@
 
 // 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 한 줄 편집 상태 기계).
 #include "luil/text/fonts.h"
+#include "luil/text/grapheme.h"
 #include "luil/text/text_edit.h"
 #include "luil/text/utf8_text.h"
 

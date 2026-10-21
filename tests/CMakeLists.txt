@@ -56,6 +56,7 @@ add_executable(luil_core_tests
     tab_bar_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
+    grapheme_tests.cpp
     text_edit_tests.cpp
     toast_element_tests.cpp
     touch_input_tests.cpp

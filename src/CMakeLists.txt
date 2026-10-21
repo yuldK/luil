@@ -76,6 +76,10 @@ luil_add_source_filter(luil_core_files "messaging"
 
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
 luil_add_source_filter(luil_core_files "text"
+    text/grapheme.cpp
+    text/grapheme_data.h
+    text/grapheme_internal.h
+    "${public_headers}/text/grapheme.h"
     text/text_edit.cpp
     "${public_headers}/text/fonts.h"
     "${public_headers}/text/text_edit.h"
@@ -460,6 +464,10 @@ luil_add_source_filter(luil_files "net/winhttp"
 # 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만
 # target으로 긋는다.
 add_library(luil_core STATIC ${luil_core_files})
+if(LUIL_ENABLE_TEXT_SHAPING)
+    target_sources(luil_core PRIVATE text/grapheme_skia.cpp)
+    target_compile_definitions(luil_core PRIVATE LUIL_GRAPHEME_SKIA)
+endif()
 add_library(luil::luil_core ALIAS luil_core)
 target_include_directories(luil_core
     PUBLIC
