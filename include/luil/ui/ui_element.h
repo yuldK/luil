@@ -316,6 +316,21 @@ namespace luil {
         maximum,
     };
 
+    // 단계 키에 함께 눌린 수식 키의 뜻이다 (`key_step_target::on_step_with`).
+    //
+    // 목록의 키보드 범위 선택이 이것으로 선다. Shift+↓와 ↓가 같은 `value_step`이라 걸음만으로는
+    // "커서를 옮겨라"와 "기준점부터 커서까지 골라라"를 가를 수 없다.
+    //  - `extend`는 Shift다. 기준점(anchor)을 둔 채 커서까지 고른 구간을 늘린다.
+    //  - `keep_selection`은 Ctrl이다. 고른 것을 그대로 두고 커서만 옮긴다 (그 자리에서 Ctrl+Space로 더하거나 뺀다).
+    //  - 둘 다 참이면 지금 고른 것에 기준점부터 커서까지를 **더한다**.
+    struct key_step_context
+    {
+        bool extend { false };
+        bool keep_selection { false };
+
+        [[nodiscard]] bool operator==(const key_step_context&) const = default;
+    };
+
     // 초점을 가진 채 키로 값을 바꾸는 element다 (막대·스크롤 막대·손잡이).
     //
     // **초점은 제자리에 남는다** — 묶음(`focus_axis`)이 항목 **사이로** 초점을
@@ -329,6 +344,12 @@ namespace luil {
         // 흐른다 — 자기 범위를 모르는 손잡이의 Home/End가 그렇다.
         // 빈 목록은 "내 것이고 삼켰다"이다 (controller의 `process_*`와 같은 규약).
         std::function<std::optional<std::vector<input_action>>(value_step step)> on_step {};
+        // 수식 키의 뜻까지 받는 짝이다. 있으면 `on_step` 대신 부른다.
+        //  - **Ctrl과 함께 누른 단계 키도 이 element의 것이 된다.** `on_step`만 든 element에서 Ctrl+화살표는
+        //    앱 단축키로 흐르지만, 이것을 든 element는 그것을 "선택을 두고 커서만 옮기기"로 쓴다.
+        //    Alt·Meta와 함께인 키는 여전히 앱 단축키다.
+        //  - `on_step`만 든 element에는 Shift가 지금처럼 보이지 않는다 (막대의 Shift+→는 그냥 →다).
+        std::function<std::optional<std::vector<input_action>>(value_step step, const key_step_context& context)> on_step_with {};
     };
 
     // 흘리는 컨테이너가 자기 스크롤을 청하는 메시지다.

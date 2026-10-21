@@ -240,6 +240,8 @@ luil_add_source_filter(luil_core_files "ui/lists"
     ui/list_element.cpp
     "${public_headers}/ui/list_element.h"
     ui/reorder_drop.h
+    ui/selection_model.cpp
+    "${public_headers}/ui/selection_model.h"
     ui/tab_bar_element.cpp
     "${public_headers}/ui/tab_bar_element.h"
     ui/virtual_list_element.cpp

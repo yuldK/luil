@@ -3203,15 +3203,20 @@ namespace luil {
 
     std::optional<std::vector<input_action>> interaction_controller::process_step_key(const key_pressed_event& event)
     {
-        // 수정자와 함께라면 앱 단축키다 (묶음과 같은 규칙).
-        if (event.shortcut_modifier_down() || snapshot_.focused == ui_element_id {})
+        if (snapshot_.focused == ui_element_id {})
             return std::nullopt;
         const ui_tree* const tree { surface_tree(snapshot_.focused_surface) };
         const ui_element* const element { tree != nullptr ? tree->find(snapshot_.focused) : nullptr };
         if (element == nullptr || element->enabled() == false)
             return std::nullopt;
         const key_step_target* const target { element->key_step() };
-        if (target == nullptr || target->on_step == nullptr)
+        if (target == nullptr || (target->on_step == nullptr && target->on_step_with == nullptr))
+            return std::nullopt;
+        // 수정자와 함께라면 앱 단축키다 (묶음과 같은 규칙).
+        //  - 예외는 수식 키의 뜻을 받는 element의 Ctrl이다 (`key_step_target::on_step_with`). 목록에서 Ctrl+↓는
+        //    "선택을 두고 커서만 옮기기"라 그 목록의 것이다. Alt·Meta는 그래도 앱의 것이다.
+        const bool with_context { target->on_step_with != nullptr };
+        if (with_context ? (event.alt || event.meta) : event.shortcut_modifier_down())
             return std::nullopt;
 
         // 화살표는 축으로 갈린다. Page·Home·End에는 방향이 없어 축을 걸지 않는다 —
@@ -3254,6 +3259,8 @@ namespace luil {
         if (step.has_value() == false)
             return std::nullopt;
         // element의 nullopt는 "그 걸음은 내 것이 아니다"라 키가 그대로 흐른다.
+        if (with_context)
+            return target->on_step_with(*step, key_step_context { event.shift, event.control });
         return target->on_step(*step);
     }
 

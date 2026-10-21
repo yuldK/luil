@@ -57,6 +57,12 @@ set_key_step_target(std::move(steps));
 
 Controller는 현재 `focused_surface`의 tree에서 `focused` element를 찾는다. Element가 활성이고 target과 callback이 있으면 key를 `value_step`으로 변환해 `on_step`을 호출한다.
 
+### 수식 키의 뜻 (`on_step_with`)
+
+`on_step`에는 수식 키가 오지 않는다. Shift를 뺀 수정자(Ctrl·Alt·Meta)가 눌린 단계 키는 앱 단축키로 흐르고, Shift는 보이지 않는다. 막대의 Shift+→는 그냥 →다.
+
+목록은 Shift+↓(범위 늘리기)와 Ctrl+↓(선택을 두고 커서만)를 갈라야 한다. 그런 element는 `on_step_with(step, key_step_context)`를 채운다. 있으면 `on_step` 대신 불리고, `extend`(Shift)와 `keep_selection`(Ctrl)이 함께 온다. Ctrl과 함께 누른 단계 키도 이 element의 것이 되고, Alt·Meta와 함께인 키는 여전히 앱 단축키다. 반환값의 세 상태는 `on_step`과 같다 ([키보드 선택 규칙](keyboard-selection-design.md)).
+
 값 step은 텍스트 편집 뒤, focus group 이동 앞에 처리된다. 따라서 text input의 Left/Right는 caret을 옮기고, group 안 slider의 Left/Right는 group 초점 대신 slider 값을 바꾼다.
 
 초점은 step 전후에 같은 element에 남는다. App action이 새 frame을 만들더라도 element id와 focusability가 유지되면 controller가 초점을 이어 간다.

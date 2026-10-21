@@ -209,6 +209,23 @@ controller는 초점을 가진 element에게 **묶음보다 먼저** 묻는다. 
 
 끌기는 누른 채 `drag_start_distance`를 넘겨야 서므로 행의 클릭과 함께 산다. 함께 끌리는 행은 제자리에 흐리게 남고, 받는 행 위에 머물면 그 행이 놓을 자리 색으로 칠해진다. payload의 `rejected_cursor`를 `not_allowed`로 두면 놓을 수 없는 행 위에서 금지 모양이다. 기본 ghost는 대표 항목의 이름과 나머지 개수(`+N`)를 보인다. 끄는 동안 목록의 위·아래 가장자리에 머물면 목록이 흐른다 ([끄는 동안의 가장자리 자동 스크롤](drag-auto-scroll-design.md)).
 
+### 키보드로 여러 항목 고르기
+
+키보드 범위 선택은 `move` 대신 `move_with`를 채우면 선다 ([키보드 선택 규칙](keyboard-selection-design.md)). `move`는 키만 받아 Shift+↓와 ↓를 가를 수 없다.
+
+| 키 | 목록이 내는 것 |
+| --- | --- |
+| ↑↓·Page·Home·End | `move_with(key, { step, extend = false, keep_selection = false })` |
+| Shift+ 같은 키 | `extend = true` — 기준점부터 커서까지 |
+| Ctrl+ 같은 키 | `keep_selection = true` — 선택을 두고 커서만 |
+| Ctrl+Shift+ 같은 키 | 둘 다 참 — 구간을 지금 선택에 더한다 |
+| Ctrl+Space | `toggle_at_cursor(커서 키)` |
+| Ctrl+A | `select_all()` — 초점이 행 안의 부품에 있어도 목록까지 올라온다 |
+| 행 누름 | `pick`(또는 `select`) 다음 `move_with(key, { 없음, false, true })` |
+| 글자 탐색 | `move_with(key, {})` |
+
+받은 앱은 `ui/selection_model.h`의 `selection_pick`·`selection_move`·`selection_toggle`·`selection_select_all`로 다음 선택을 계산하고, 모델이 바뀌면 `selection_reconcile`로 맞춘다. `move`만 든 목록은 지금과 같다 — Shift는 보이지 않고 Ctrl+화살표·Ctrl+A는 앱 정책으로 흐른다.
+
 다른 목록에 놓으려면 그 목록의 행이나 목록을 감싼 element에 `drop_target`을 단다. payload는 표면 안의 어느 놓을 자리로도 간다 — 받는 쪽이 `source.owner`·`dragged_owners`로 무엇이 왔는지 본다.
 
 ## 접근성

@@ -53,6 +53,7 @@
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scroll_view_element.h"
 #include "luil/ui/scrollbar_element.h"
+#include "luil/ui/selection_model.h"
 #include "luil/ui/sheet_host_element.h"
 #include "luil/ui/sidebar_element.h"
 #include "luil/ui/slider_element.h"
