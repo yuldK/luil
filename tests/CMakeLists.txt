@@ -56,6 +56,7 @@ add_executable(luil_core_tests
     style_raster_tests.cpp
     surface_invalidate_tests.cpp
     tab_bar_element_tests.cpp
+    table_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
     text_edit_tests.cpp

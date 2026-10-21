@@ -213,6 +213,12 @@ namespace luil {
         // 창의 위·아래 가장자리 표시다 (구분선과 흘린 쪽의 그림자).
         // 안의 영역에 그대로 이어진다 — `scroll_area_config::edges`와 같은 설정·같은 그림이다.
         scroll_edges edges {};
+        // 보조 기술이 이 목록과 그 행을 읽는 역할이다.
+        //  - 목록 위에 다른 뜻을 얹는 컴포넌트가 바꾼다. 표(`table_element`)의 본문은 표(DataGrid)와 행(DataItem)이다.
+        //  - 선택 container 규칙(`access_selection_container`)은 역할을 따르므로, 바꾼 역할도 선택 container여야
+        //    고른 행을 읽는다 (`list`·`tree`·`table`).
+        access_role role { access_role::list };
+        access_role row_role { access_role::list_item };
     };
 
     // 모델 안에서 키가 커서를 옮길 자리다.
