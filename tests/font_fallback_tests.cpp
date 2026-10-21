@@ -134,7 +134,7 @@ TEST_CASE("Measuring adds up the run widths", "[ui][fonts]")
     const sk_sp<SkTypeface> substitute { luil::configured_ui_typeface() };
     REQUIRE(substitute != nullptr);
 
-    // 대체 글꼴이 실제로 담은 글자여야 한다. Shaping 구성은 글자를 담지 못한 대체 글꼴로 바꾸지 않는다.
+    // 대체 글꼴이 실제로 담은 글자로 잰다. 담지 못한 글자의 빈 네모는 아래 시험이 본다.
     //  - UI 글꼴이 한글을 담는지는 시스템마다 다르다. 라틴 글자는 어느 UI 글꼴이나 담고 Codicons는 담지 않는다.
     const SkFont font { codicons, 12.0f };
     constexpr std::u8string_view text { u8"AB" };
@@ -149,6 +149,32 @@ TEST_CASE("Measuring adds up the run widths", "[ui][fonts]")
 
     // 대체 글꼴로 실제 글자를 그리므로 폭이 `.notdef` 두 개와 같을 수 없다.
     // 측정이 run을 따라가지 않으면 이 값이 그대로였을 것이고, caret 자리가 글자와 어긋났을 것이다.
+    REQUIRE(with_fallback > 0.0f);
+    REQUIRE(with_fallback != without_fallback);
+}
+
+TEST_CASE("A fallback without the glyph still draws its empty box", "[ui][fonts]")
+{
+    const sk_sp<SkTypeface> codicons { luil::win32::load_codicon_typeface() };
+    REQUIRE(codicons != nullptr);
+    const sk_sp<SkTypeface> substitute { luil::configured_ui_typeface() };
+    REQUIRE(substitute != nullptr);
+
+    // 보충 사용자 정의 영역의 글자는 Codicons(BMP 사용자 정의 영역)도 UI 글꼴도 담지 않는다.
+    constexpr char32_t missing { U'\U000F0000' };
+    constexpr std::u8string_view text { u8"\U000F0000\U000F0000" };
+    const SkFont font { codicons, 12.0f };
+    REQUIRE(font.unicharToGlyph(static_cast<SkUnichar>(missing)) == 0);
+    REQUIRE(SkFont { substitute, 12.0f }.unicharToGlyph(static_cast<SkUnichar>(missing)) == 0);
+
+    const float without_fallback { luil::measure_text(text, font) };
+
+    const scripted_fallback fallback { substitute.get(), { missing } };
+    const installed_fallback_scope scope { fallback };
+    const float with_fallback { luil::measure_text(text, font) };
+
+    // 다 담는 대체가 없어도 대체 글꼴의 빈 네모로 그린다.
+    //  - 아이콘 글꼴의 빈 글자는 폭이 없어 글이 사라진다. 빈 네모가 보이는 편이 침묵보다 낫다.
     REQUIRE(with_fallback > 0.0f);
     REQUIRE(with_fallback != without_fallback);
 }
