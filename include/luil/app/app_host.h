@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/app/webview.h"
+#include "luil/app/file_dialog.h"
 #include "luil/messaging/channel.h"
 #include "luil/messaging/latest_slot.h"
 #include "luil/theme/appearance.h"
@@ -256,6 +257,7 @@ namespace luil {
         std::function<input_action()> back {};
         // 화면 방향·시스템 막대 등 기기에 바라는 것이다. 기본값이면 플랫폼에 맡긴다.
         device_request device {};
+        std::optional<file_dialog_request> file_dialog {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };

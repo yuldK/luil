@@ -300,6 +300,8 @@ luil_add_source_filter(luil_core_files "app"
     host/app_delegate.cpp
     "${public_headers}/app/app_delegate.h"
     host/app_host.cpp
+    "${public_headers}/app/file_dialog.h"
+    host/file_dialog_gate.h
     "${public_headers}/app/app_host.h"
     host/fail_fast.h
     host/renderer_policy.cpp
@@ -347,6 +349,8 @@ luil_add_source_filter(luil_files "umbrella"
 # 앱 runtime과 창 하나의 수명, 그리고 한 frame이 나르는 것이다.
 # 옛 경로의 app_host·renderer_policy·webview 헤더는 `luil/app/`을 가리키는 별칭이다.
 luil_add_source_filter(luil_files "win32/host"
+    win32/file_dialog.cpp
+    win32/file_dialog.h
     win32/fail_fast.cpp
     "${public_headers}/win32/app_host.h"
     "${public_headers}/win32/renderer_policy.h"

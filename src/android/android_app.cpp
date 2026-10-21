@@ -18,6 +18,7 @@
 #include "host/overlay_input.h"
 #include "host/popup_dismiss.h"
 #include "host/popup_reconcile.h"
+#include "host/file_dialog_gate.h"
 #include "host/skia_renderer.h"
 #include "host/text_edit_menu.h"
 #include "luil/theme/ui_theme.h"
@@ -484,6 +485,7 @@ namespace luil::android {
                     }
 
                     update_overlays();
+                    process_file_dialog();
                     process_input();
                     process_text_input();
 
@@ -1249,6 +1251,20 @@ namespace luil::android {
             //    없으니 다른 앵커는 붙을 곳이 없다.
             //  - 화면 밖으로 나가면 안으로 들인다. 앱 모델의 자리는 바꾸지 않는다.
             //  - 새 frame이 같은 popup을 실으면 닫자고 한 표식을 푼다 (Win32 `popup_surface::adopt`와 같다).
+            void process_file_dialog()
+            {
+                if (host_ == nullptr)
+                    return;
+                const auto frame { host_->acquire_frame() };
+                if (frame == nullptr || frame->file_dialog.has_value() == false || file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
+                    return;
+                const file_dialog_result result { frame->file_dialog->id, file_dialog_status::unsupported };
+                file_dialog_gate_.finish();
+                if (environment_.delegate != nullptr)
+                    if (auto message { environment_.delegate->make_file_dialog_message(result) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+            }
+
             void update_overlays()
             {
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
@@ -1637,6 +1653,7 @@ namespace luil::android {
             std::optional<edit_menu_state> edit_menu_ {};
             // layer를 세운 frame이다. 바뀌면 다시 세운다.
             std::shared_ptr<const ui_frame> overlay_frame_ {};
+            file_dialog_gate file_dialog_gate_ {};
             overlay_input_router router_ {};
             bool warned_windows_ { false };
             std::unique_ptr<ime_session> ime_ {};
