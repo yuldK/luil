@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/ui/check_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/virtual_list_element.h"
 
@@ -88,6 +89,19 @@ namespace luil {
         // 열 경계를 끌었다. 끄는 동안 이어서 오고, 끝나면 `resize_column_end`가 한 번 온다.
         table_resize_message_factory resize_column {};
         table_column_message_factory resize_column_end {};
+        // 계층을 그리는 열이다 (열 키). 비어 있으면 표는 평평하다.
+        //  - 깊이와 펼침은 행 모델의 값(`virtual_list_item::depth`·`expansion`)이고, 펼치기는 `rows.set_expanded`다.
+        //  - 그 열의 칸 앞에 깊이만큼 들여쓰고 가지에는 삼각형을 세운다. ←·→는 본문 목록이 계층으로 쓰고
+        //    (접기·부모로·펴기·첫 자식으로), 갈 곳이 없을 때만 표의 가로 스크롤이 된다.
+        std::u8string tree_column {};
+        // 체크 칸을 둘 열이다 (열 키). 비어 있으면 체크 칸이 없다.
+        //  - 칸 앞에 체크박스가 서고, 상태는 `check_state_of`가 답한다. 폴더처럼 일부만 고른 행은 `mixed`다
+        //    (`aggregate_check`). 트리 열과 같은 열이면 삼각형 뒤에 선다.
+        //  - 누르거나, 본문이 Space를 쓰지 않을 때(`rows.activate`가 비었을 때) Space가 `toggle_check(행 키)`를 낸다.
+        //    다음 상태는 앱이 정한다.
+        std::u8string check_column {};
+        std::function<check_state(const virtual_list_item& row, std::size_t index)> check_state_of {};
+        std::function<input_action(const std::u8string& row)> toggle_check {};
     };
 
     // 열 하나가 차지하는 가로 자리다 (논리 픽셀, 가로 스크롤 전).
@@ -137,9 +151,12 @@ namespace luil {
         // 행 칸과 머리글이 배치에서 읽는다 (같은 tree 안의 부품이라 표가 먼저 배치된다).
         [[nodiscard]] const table_config& config() const noexcept;
         [[nodiscard]] const std::vector<table_column_span>& spans() const noexcept;
+        // 행 모델에서 옮겨 둔 펼침 메시지다 (`rows.set_expanded`). 트리 열의 삼각형이 쓴다.
+        [[nodiscard]] const std::function<input_action(const std::u8string& key, bool expanded)>& expand_message() const noexcept;
 
     private:
         table_config config_ {};
+        std::function<input_action(const std::u8string& key, bool expanded)> expand_ {};
         std::vector<table_column_span> spans_ {};
         ui_element* header_ { nullptr };
         virtual_list_element* body_ { nullptr };
