@@ -106,6 +106,11 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/ui_element.cpp
     "${public_headers}/ui/ui_element.h"
     ui/text_measurer.cpp
+    ui/text_layout.cpp
+    ui/text_layout_skia.cpp
+    ui/text_layout_internal.h
+    ui/text_layout_skia.h
+    "${public_headers}/ui/text_layout.h"
     "${public_headers}/ui/ui_element_id.h"
     ui/ui_platform.cpp
     "${public_headers}/ui/ui_platform.h"
@@ -477,7 +482,7 @@ luil_add_source_filter(luil_files "net/winhttp"
 add_library(luil_core STATIC ${luil_core_files})
 if(LUIL_ENABLE_TEXT_SHAPING)
     target_sources(luil_core PRIVATE text/grapheme_skia.cpp)
-    target_compile_definitions(luil_core PRIVATE LUIL_GRAPHEME_SKIA)
+    target_compile_definitions(luil_core PRIVATE LUIL_GRAPHEME_SKIA LUIL_UI_TEXT_LAYOUT)
 endif()
 add_library(luil::luil_core ALIAS luil_core)
 target_include_directories(luil_core

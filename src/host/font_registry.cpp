@@ -1,6 +1,7 @@
 #include "host/font_registry.h"
 
 #include "luil/text/fonts.h"
+#include "luil/ui/text_layout.h"
 #include "luil/text/utf8_text.h"
 
 #include "include/core/SkFontMgr.h"
@@ -212,12 +213,14 @@ namespace luil {
         font_registry& state { registry() };
         const std::lock_guard<std::mutex> lock { state.mutex };
         state.fallback_cache.clear();
+        invalidate_text_layouts();
     }
 
     void set_configured_fonts(const std::u8string_view ui_family, const std::u8string_view code_family)
     {
         font_registry& state { registry() };
         const std::lock_guard<std::mutex> lock { state.mutex };
+        const bool changed { state.ui_family != ui_family || state.code_family != code_family };
         if (state.ui_family != ui_family || state.ui_typeface == nullptr)
         {
             state.ui_family = ui_family;
@@ -234,6 +237,8 @@ namespace luil {
             if (state.code_typeface == nullptr)
                 state.code_typeface = load_ui_typeface();
         }
+        if (changed)
+            invalidate_text_layouts();
     }
 
     sk_sp<SkTypeface> configured_ui_typeface()
@@ -260,6 +265,7 @@ namespace luil {
 
     void clear_font_caches()
     {
+        invalidate_text_layouts();
         font_registry& state { registry() };
         const std::lock_guard<std::mutex> lock { state.mutex };
         state.cache.clear();

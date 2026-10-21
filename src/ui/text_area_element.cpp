@@ -1,6 +1,7 @@
 #include "luil/ui/text_area_element.h"
 #include "luil/text/grapheme.h"
 #include "luil/text/text_edit.h"
+#include "ui/text_layout_internal.h"
 
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
@@ -133,13 +134,13 @@ namespace luil {
 
         // 글을 화면의 줄로 나눈다. 줄 바꿈에서 나누고, 문단마다 `cuts_of`가 답한 자리에서 넘겨 접는다.
         template<typename cuts_function>
-        [[nodiscard]] std::vector<text_line> split_screen_lines(const std::u8string_view text, cuts_function&& cuts_of)
+        [[nodiscard]] std::vector<text_line> split_screen_lines(const std::u8string_view text, cuts_function&& cuts_of, const bool crlf = false)
         {
             std::vector<text_line> lines {};
             std::size_t begin { 0 };
             while (true)
             {
-                const std::size_t newline { text.find(u8'\n', begin) };
+                const std::size_t newline { crlf ? text.find_first_of(u8"\r\n", begin) : text.find(u8'\n', begin) };
                 const std::size_t end { newline != std::u8string_view::npos ? newline : text.size() };
                 std::size_t start { begin };
                 for (const std::size_t cut : cuts_of(text.substr(begin, end - begin)))
@@ -151,6 +152,8 @@ namespace luil {
                 if (newline == std::u8string_view::npos)
                     return lines;
                 begin = newline + 1;
+                if (crlf && text[newline] == u8'\r' && begin < text.size() && text[begin] == u8'\n')
+                    ++begin;
             }
         }
 
@@ -348,44 +351,127 @@ namespace luil {
     {
         if (text == displayed_text())
             return lines_;
+        if (native_layout_)
+        {
+            const auto layout { remake_text_layout(font_layout_, layout_request(text, 0, config_.wrap)) };
+            for (const auto& row : layout.lines())
+                storage.push_back({ row.begin, row.end, row.wrapped });
+            return storage;
+        }
         storage = wrap_lines(text, wrap_width_, measure);
         return storage;
+    }
+
+    std::vector<text_layout_style> text_area_element::metric_styles(const std::size_t begin, const std::size_t end) const
+    {
+        std::vector<text_layout_style> styles {};
+        if (config_.spans != nullptr)
+            for (const auto& span : text_spans_in_range(*config_.spans, begin, end))
+                if (span.bold)
+                {
+                    const auto from { std::max(span.begin, begin) - begin };
+                    const auto to { std::min(span.end, end) - begin };
+                    if (styles.empty() == false && styles.back().end == from)
+                        styles.back().end = to;
+                    else
+                        styles.push_back({ from, to, true });
+                }
+        return styles;
+    }
+
+    text_layout_request text_area_element::layout_request(const std::u8string_view text, const std::size_t begin, const bool wrap) const
+    {
+        text_layout_request request {};
+        request.text = text;
+        request.font_size = font_size();
+        request.face = config_.face == text_face::code ? text_layout_face::code : text_layout_face::ui;
+        request.width = wrap ? wrap_width_ : 0.0f;
+        request.wrap = wrap;
+        request.line_height = line_height_logical() * scale_;
+        request.styles = metric_styles(begin, begin + text.size());
+        return request;
+    }
+
+    text_layout text_area_element::row_layout(const std::u8string_view text, const line& row) const
+    {
+        if (native_layout_ == false)
+            return {};
+        const auto displayed { displayed_text() };
+        if ((text.data() == displayed.data() && text.size() == displayed.size()) || text == displayed)
+        {
+            const auto found { std::lower_bound(row_layouts_.begin(), row_layouts_.end(), row.begin,
+                [](const auto& item, const auto at) { return item.first < at; })
+            };
+            if (found != row_layouts_.end() && found->first == row.begin)
+                return found->second;
+        }
+        return remake_text_layout(font_layout_, layout_request(text.substr(row.begin, row.end - row.begin), row.begin, false));
     }
 
     std::vector<text_area_element::line> text_area_element::wrap_displayed(const width_of& measure)
     {
         const std::u8string_view text { displayed_text() };
+        const auto entry_for = [&](const std::u8string_view paragraph) {
+            text_area_wrap_cache::entry entry {};
+            if (native_layout_)
+            {
+                const auto begin { static_cast<std::size_t>(paragraph.data() - text.data()) };
+                auto request { layout_request(paragraph, begin, config_.wrap) };
+                entry.styles = request.styles;
+                const auto layout { remake_text_layout(font_layout_, std::move(request)) };
+                for (const auto& row : layout.lines())
+                    if (row.wrapped)
+                        entry.cuts.push_back(row.end);
+                entry.width = layout.size().width / scale_;
+            }
+            else
+            {
+                entry.cuts = wrap_paragraph(paragraph, wrap_width_, measure);
+                entry.width = config_.wrap ? 0.0f : measure(paragraph) / scale_;
+            }
+            return entry;
+        };
         if (config_.wrap_cache == nullptr)
         {
-            return split_screen_lines(text, [this, &measure](const std::u8string_view paragraph) {
-                if (config_.wrap == false)
-                    content_width_ = std::max(content_width_, measure(paragraph) / scale_);
-                return wrap_paragraph(paragraph, wrap_width_, measure);
-            });
+            return split_screen_lines(text, [&](const std::u8string_view paragraph) {
+                auto entry { entry_for(paragraph) };
+                content_width_ = std::max(content_width_, entry.width);
+                return entry.cuts;
+            }, native_layout_);
         }
-
         text_area_wrap_cache& cache { *config_.wrap_cache };
         const std::scoped_lock lock { cache.mutex_ };
-        // 글꼴이 바뀌었는지는 표본 글의 폭으로 안다 — 측정기는 비교할 수 있는 값이 아니다.
         const float sample { measure(u8"Wg 0가") };
-        if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.sample_width_ != sample || cache.wrap_ != config_.wrap)
+        const auto face { config_.face == text_face::code ? text_layout_face::code : text_layout_face::ui };
+        const auto revision { native_layout_ ? text_layout_revision() : 0 };
+        if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.sample_width_ != sample || cache.wrap_ != config_.wrap
+            || cache.native_ != native_layout_ || cache.face_ != face || cache.font_revision_ != revision)
         {
             cache.entries_.clear();
             cache.width_ = wrap_width_;
             cache.wrap_ = config_.wrap;
             cache.font_size_ = font_size();
             cache.sample_width_ = sample;
+            cache.native_ = native_layout_;
+            cache.face_ = face;
+            cache.font_revision_ = revision;
         }
         const std::uint64_t generation { ++cache.generation_ };
         const auto cached_cuts = [&](const std::u8string_view paragraph) -> const std::vector<std::size_t>& {
             auto found { cache.entries_.find(paragraph) };
             if (found == cache.entries_.end())
-                found = cache.entries_.emplace(std::u8string { paragraph }, text_area_wrap_cache::entry { wrap_paragraph(paragraph, wrap_width_, measure), 0, config_.wrap ? 0.0f : measure(paragraph) / scale_ }).first;
+                found = cache.entries_.emplace(std::u8string { paragraph }, entry_for(paragraph)).first;
+            else if (native_layout_)
+            {
+                const auto begin { static_cast<std::size_t>(paragraph.data() - text.data()) };
+                if (found->second.styles != metric_styles(begin, begin + paragraph.size()))
+                    found->second = entry_for(paragraph);
+            }
             content_width_ = std::max(content_width_, found->second.width);
             found->second.used = generation;
             return found->second.cuts;
         };
-        std::vector<line> lines { split_screen_lines(text, cached_cuts) };
+        std::vector<line> lines { split_screen_lines(text, cached_cuts, native_layout_) };
         std::erase_if(cache.entries_, [generation](const auto& item) { return item.second.used != generation; });
         return lines;
     }
@@ -408,6 +494,14 @@ namespace luil {
         // 줄은 여기서 접는다 — 접은 줄 수가 내용 높이고, 내용 높이가 흘리는 범위와 막대다.
         //  - 흘리는 칸은 막대 자리를 늘 뺀 폭으로 접는다. 막대는 넘칠 때만 서는데, 그 자리를 그때만 빼면 줄 하나가
         //    넘치는 순간 글 전체가 좁은 폭으로 다시 접히고, 지우면 다시 넓게 펴진다.
+        row_layouts_.clear();
+        native_layout_ = false;
+        font_layout_ = {};
+        if (ui_text_shaping_enabled() && context.measurer == nullptr)
+        {
+            font_layout_ = make_text_layout(layout_request({}, 0, false));
+            native_layout_ = font_layout_.backend() != text_layout_backend::unavailable;
+        }
         code_measurer_ = context.measurer != nullptr ? *context.measurer : default_code_text_measurer();
         const text_measurer& measurer { measure_with(context.measure_text()) };
         const float size { font_size() };
@@ -415,7 +509,19 @@ namespace luil {
         layout_measurer_ = measurer;
         gutter_widths_.clear();
         gutter_width_ = 0.0f;
-        const auto logical_count { config_.gutters.empty() ? std::size_t { 0 } : static_cast<std::size_t>(std::count(displayed_text().begin(), displayed_text().end(), u8'\n')) + 1 };
+        std::size_t logical_count { 0 };
+        if (config_.gutters.empty() == false)
+        {
+            logical_count = 1;
+            const auto text { displayed_text() };
+            for (std::size_t index { 0 }; index < text.size(); ++index)
+                if (text[index] == u8'\n' || (native_layout_ && text[index] == u8'\r'))
+                {
+                    ++logical_count;
+                    if (native_layout_ && text[index] == u8'\r' && index + 1 < text.size() && text[index + 1] == u8'\n')
+                        ++index;
+                }
+        }
         for (const auto& column : config_.gutters)
         {
             const float width { column.width > 0.0f ? column.width : (measure(line_number_text(logical_count)) / scale_ + 12.0f) };
@@ -451,6 +557,19 @@ namespace luil {
             set_scroll_source(scroll_source { config_.scroll_horizontal, scale_, scroll_axis::horizontal, horizontal_offset_ <= 0.0f, horizontal_offset_ >= content_width_ - viewport_width });
         else
             set_scroll_source(std::nullopt);
+        if (native_layout_)
+        {
+            const float height { line_height_logical() * scale_ };
+            const float first { std::floor((area_->viewport().y - text_top()) / height) };
+            const float last { std::ceil((area_->viewport().y + area_->viewport().height - text_top()) / height) };
+            const auto from { std::min(lines_.size(), first > 0.0f ? static_cast<std::size_t>(first) : 0u) };
+            const auto to { std::min(lines_.size(), last > 0.0f ? static_cast<std::size_t>(last) + 1 : 0u) };
+            for (std::size_t index { from }; index < to; ++index)
+            {
+                const auto row { lines_[index] };
+                row_layouts_.emplace_back(row.begin, remake_text_layout(font_layout_, layout_request(displayed_text().substr(row.begin, row.end - row.begin), row.begin, false)));
+            }
+        }
     }
 
     std::optional<text_input_snapshot> text_area_element::text_input() const
@@ -490,8 +609,10 @@ namespace luil {
         const float line_height { line_height_logical() * scale_ };
         const float top { text_top() + static_cast<float>(index) * line_height };
         const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
-        const float from { text_left() + measure(content.substr(0, begin - row.begin)) };
-        const float to { text_left() + measure(content.substr(0, std::min(end, row.end) - row.begin)) };
+        const auto layout { row_layout(text, row) };
+        const auto position { [&](const std::size_t at) { return layout.valid() ? layout.caret_rect(at).x : measure(content.substr(0, at)); } };
+        const float from { text_left() + position(begin - row.begin) };
+        const float to { text_left() + position(std::min(end, row.end) - row.begin) };
         return rect_f { from, top, to - from, line_height };
     }
 
@@ -529,7 +650,8 @@ namespace luil {
             return text_caret_position { text.size(), false };
         const line row { lines[static_cast<std::size_t>(index)] };
         const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
-        const std::size_t offset { row.begin + nearest_boundary(content, x - text_left(), measure) };
+        const auto layout { row_layout(text, row) };
+        const std::size_t offset { row.begin + (layout.valid() ? layout.hit_test({ x - text_left(), 0.0f }).offset : nearest_boundary(content, x - text_left(), measure)) };
         // 접은 줄의 끝은 아랫줄의 처음과 offset이 같다. 누른 줄이 윗줄이므로 caret을 그 줄에 붙인다.
         return text_caret_position { offset, row.wrapped && offset == row.end };
     }
@@ -570,7 +692,10 @@ namespace luil {
         const float line_height { line_height_logical() * scale };
         const float top { text_top() };
         const float left { text_left() };
-        const auto baseline_of = [&font, top, line_height](const std::size_t index) { return top + static_cast<float>(index) * line_height + centered_text_baseline(font, line_height); };
+        const auto baseline_of = [this, &font, &text, &lines, top, line_height](const std::size_t index) {
+            const auto layout { row_layout(text, lines[index]) };
+            return top + static_cast<float>(index) * line_height + (layout.valid() ? layout.lines().front().baseline : centered_text_baseline(font, line_height));
+        };
 
         context.canvas.save();
         context.canvas.clipRect(SkRect::MakeXYWH(viewport.x + gutter_width_ * scale, viewport.y, std::max(0.0f, viewport.width - gutter_width_ * scale), viewport.height));
@@ -600,6 +725,8 @@ namespace luil {
         {
             const line row { lines[index] };
             const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
+            const auto layout { row_layout(text, row) };
+            const auto position { [&](const std::size_t at) { return layout.valid() ? layout.caret_rect(at).x : measure(content.substr(0, at)); } };
             const float row_top { top + static_cast<float>(index) * line_height };
             const auto logical { logical_lines_[index] };
             if (config_.lines != nullptr)
@@ -615,8 +742,8 @@ namespace luil {
             const auto range_rect = [&](const std::size_t begin, const std::size_t end) {
                 const auto from { std::max(begin, row.begin) };
                 const auto to { std::min(end, row.end) };
-                const float x { left + measure(text.substr(row.begin, from - row.begin)) };
-                return SkRect::MakeXYWH(x, row_top, measure(text.substr(from, to - from)), line_height);
+                const float x { left + position(from - row.begin) };
+                return SkRect::MakeXYWH(x, row_top, position(to - row.begin) - position(from - row.begin), line_height);
             };
             for (const auto& span : styled)
                 if (span.background != text_background_role::none)
@@ -638,8 +765,8 @@ namespace luil {
             {
                 const std::size_t from_offset { std::max(selection_begin, row.begin) - row.begin };
                 const std::size_t to_offset { std::min(selection_end, row.end) - row.begin };
-                const float from { left + measure(content.substr(0, from_offset)) };
-                float to { left + measure(content.substr(0, to_offset)) };
+                const float from { left + position(from_offset) };
+                float to { left + position(to_offset) };
                 if (selection_end > row.end && row.wrapped == false)
                     to += newline_width;
                 selection = SkRect::MakeXYWH(from, row_top, to - from, line_height);
@@ -649,7 +776,11 @@ namespace luil {
             {
                 const auto draw_content = [&](const std::optional<ui_color> override_color) {
                     const auto draw_piece = [&](const std::size_t from, const std::size_t to, const SkFont& piece_font, const ui_color color) {
-                        if (from < to)
+                        if (from >= to)
+                            return;
+                        if (layout.valid())
+                            draw_text_layout(context.canvas, layout, { left, row_top }, solid_paint(override_color.value_or(color)), from - row.begin, to - row.begin);
+                        else
                             draw_text(context.canvas, text.substr(from, to - from), left + measure(text.substr(row.begin, from - row.begin)),
                                 baseline_of(index), piece_font, solid_paint(override_color.value_or(color)));
                     };
@@ -696,8 +827,10 @@ namespace luil {
                 if (touches(row, underline_begin, underline_end) == false)
                     continue;
                 const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
-                const float from { left + measure(content.substr(0, std::max(underline_begin, row.begin) - row.begin)) };
-                const float to { left + measure(content.substr(0, std::min(underline_end, row.end) - row.begin)) };
+                const auto layout { row_layout(text, row) };
+                const auto position { [&](const std::size_t at) { return layout.valid() ? layout.caret_rect(at).x : measure(content.substr(0, at)); } };
+                const float from { left + position(std::max(underline_begin, row.begin) - row.begin) };
+                const float to { left + position(std::min(underline_end, row.end) - row.begin) };
                 context.canvas.drawRect(SkRect::MakeXYWH(from, baseline_of(index) + 2.0f * scale, to - from, 1.0f * scale), solid_paint(context.palette.accent));
             }
         }
@@ -709,7 +842,8 @@ namespace luil {
             const std::size_t caret { displayed_caret() };
             const std::size_t index { caret_line_of(lines, caret, value_.composing == false && value_.caret_upstream) };
             const line row { lines[index] };
-            const float caret_x { left + measure(text.substr(row.begin, caret - row.begin)) };
+            const auto layout { row_layout(text, row) };
+            const float caret_x { left + (layout.valid() ? layout.caret_rect(caret - row.begin).x : measure(text.substr(row.begin, caret - row.begin))) };
             const float row_top { top + static_cast<float>(index) * line_height };
             context.canvas.drawRect(SkRect::MakeXYWH(caret_x, row_top + 2.0f * scale, 1.0f * scale, line_height - 4.0f * scale), solid_paint(context.palette.primary_foreground));
         }

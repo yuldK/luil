@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/ui/text_input_state.h"
+#include "luil/ui/text_layout.h"
 #include "luil/ui/ui_element.h"
 
 #include <chrono>
@@ -294,6 +295,8 @@ namespace luil {
         [[nodiscard]] float scroll_for(const std::function<float(std::u8string_view)>& measure) const;
         [[nodiscard]] float scroll_for(const std::function<float(std::u8string_view)>& measure, std::u8string_view text, std::size_t caret) const;
         // 글자 대신 점을 그리는가 (암호 칸이고 보이기가 꺼졌다).
+        [[nodiscard]] text_layout layout_for(std::u8string_view text) const;
+        [[nodiscard]] float scroll_for(const text_layout& layout, std::size_t caret) const;
         [[nodiscard]] bool masked() const noexcept;
         // 글 `text`의 offset이 그려진 글에서 서는 자리다. 가리지 않으면 그대로다.
         [[nodiscard]] std::size_t shown_offset(std::u8string_view text, std::size_t offset) const noexcept;
@@ -301,6 +304,8 @@ namespace luil {
         text_input_view value_ {};
         text_input_config config_ {};
         float font_size_ { 11.0f };
+        text_layout layout_ {};
+
         // 가린 칸이 그리는 점들이다 (보이는 글을 가린 것). 값이 element의 수명 동안 그대로라 한 번 짓는다.
         std::u8string masked_ {};
         // 지우기 액션이 없으면 nullptr다.

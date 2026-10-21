@@ -5,6 +5,7 @@
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
+#include "ui/text_layout_internal.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -414,11 +415,33 @@ namespace luil {
         return scroll;
     }
 
+    text_layout text_input_element::layout_for(const std::u8string_view text) const
+    {
+        if (layout_.valid() && layout_.text() == text)
+            return layout_;
+        if (layout_.valid() == false)
+            return {};
+        return remake_text_layout(layout_, { .text = std::u8string { text }, .font_size = font_size(), .line_height = bounds().height });
+    }
+
+    float text_input_element::scroll_for(const text_layout& layout, const std::size_t caret) const
+    {
+        const float maximum { std::max(0.0f, layout.size().width - inner_width()) };
+        return std::clamp(layout.caret_rect(caret).x - inner_width(), 0.0f, maximum);
+    }
+
     void text_input_element::arrange(const arrange_context& context)
     {
         set_bounds(context.slot);
         scale_ = context.scale > 0.0f ? context.scale : 1.0f;
         font_size_ = scaled_font_size(11.0f, scale_);
+        layout_ = {};
+        if (ui_text_shaping_enabled() && context.measurer == nullptr)
+        {
+            auto layout { make_text_layout({ .text = std::u8string { displayed_text() }, .font_size = font_size(), .line_height = context.slot.height }) };
+            if (layout.backend() != text_layout_backend::unavailable)
+                layout_ = std::move(layout);
+        }
         if (clear_ == nullptr)
             return;
 
@@ -465,6 +488,13 @@ namespace luil {
         const std::size_t clamped_end { shown_end < text.size() ? shown_end : text.size() };
         const std::size_t end { clamped_end > begin ? clamped_end : begin };
 
+        if (const auto layout { layout_for(text) }; layout.valid())
+        {
+            const float left { text_left() - scroll_for(layout, shown_offset(query.text, query.caret)) };
+            const float from { left + layout.caret_rect(begin).x };
+            const float to { left + layout.caret_rect(end).x };
+            return rect_f { std::min(from, to), bounds().y, std::abs(to - from), bounds().height };
+        }
         const float left { text_left() - scroll_for(measure, text, shown_offset(query.text, query.caret)) };
         const float from { left + measure(text.substr(0, begin)) };
         const float to { left + measure(text.substr(0, end)) };
@@ -484,6 +514,11 @@ namespace luil {
 
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
+        if (const auto layout { layout_for(text) }; layout.valid())
+        {
+            const auto caret { layout.hit_test({ x - text_left() + scroll_for(layout, displayed_caret()), 0.0f }) };
+            return original(caret.offset);
+        }
         const float target { x - text_left() + scroll_for(measure) };
         if (target <= 0.0f)
             return std::size_t { 0 };
@@ -535,7 +570,7 @@ namespace luil {
 
         const SkFont font { sk_ref_sp(context.ui_typeface), font_size() };
         const float left { text_left() };
-        const float baseline { box.y + centered_text_baseline(font, box.height) };
+        const float baseline { box.y + (layout_.valid() ? layout_.lines().front().baseline : centered_text_baseline(font, box.height)) };
         const float visible { inner_width() };
 
         const std::u8string_view text { displayed_text() };
@@ -554,34 +589,42 @@ namespace luil {
         // 글이 칸보다 길면 잘라 `…`를 붙이는 대신 clip + 가로 스크롤로 그린다.
         // 편집 중에는 잘린 표시보다 caret 주변이 보이는 것이 중요하다.
         const auto measure { [&font](const std::u8string_view value) { return measure_text(value, font); } };
-        const float scroll { scroll_for(measure) };
+        const auto layout { layout_for(text) };
+        const auto position { [&](const std::size_t at) { return layout.valid() ? layout.caret_rect(at).x : measure(text.substr(0, at)); } };
+        const float scroll { layout.valid() ? scroll_for(layout, displayed_caret()) : scroll_for(measure) };
         // 조합 중에는 선택 대신 조합 구간에 밑줄을 긋는다.
         //  - 그 동안 선택은 IME의 것이다.
         const std::size_t selection_begin { value_.composing ? 0u : shown_offset(value_.text, value_.caret < value_.anchor ? value_.caret : value_.anchor) };
         const std::size_t selection_end { value_.composing ? 0u : shown_offset(value_.text, value_.caret < value_.anchor ? value_.anchor : value_.caret) };
-        const float caret_x { left - scroll + measure(text.substr(0, displayed_caret())) };
+        const float caret_x { left - scroll + position(displayed_caret()) };
 
         context.canvas.save();
         context.canvas.clipRect(SkRect::MakeXYWH(left, box.y, visible, box.height));
         std::optional<SkRect> selection {};
         if (selection_begin != selection_end)
         {
-            const float from { left - scroll + measure(text.substr(0, selection_begin)) };
-            const float to { left - scroll + measure(text.substr(0, selection_end)) };
+            const float from { left - scroll + position(selection_begin) };
+            const float to { left - scroll + position(selection_end) };
             selection = SkRect::MakeXYWH(from, box.y + 3.0f * scale, to - from, box.height - 6.0f * scale);
             context.canvas.drawRect(*selection, solid_paint(context.palette.selection_background));
         }
         if (text.empty() == false)
         {
             const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
-            draw_text(context.canvas, text, left - scroll, baseline, font, foreground);
+            if (layout.valid())
+                draw_text_layout(context.canvas, layout, { left - scroll, box.y }, foreground);
+            else
+                draw_text(context.canvas, text, left - scroll, baseline, font, foreground);
             // 고른 구간의 글자는 그 바탕의 짝이다. 옅은 바탕에서는 본문 글자와 같은 값이라
             // 겹쳐 그려도 같은 그림이고, 고대비에서만 highlight 글자로 바뀐다.
             if (selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground)
             {
                 context.canvas.save();
                 context.canvas.clipRect(*selection);
-                draw_text(context.canvas, text, left - scroll, baseline, font, solid_paint(context.palette.selection_foreground));
+                if (layout.valid())
+                    draw_text_layout(context.canvas, layout, { left - scroll, box.y }, solid_paint(context.palette.selection_foreground));
+                else
+                    draw_text(context.canvas, text, left - scroll, baseline, font, solid_paint(context.palette.selection_foreground));
                 context.canvas.restore();
             }
         }
@@ -594,8 +637,8 @@ namespace luil {
             const std::size_t shown_end { shown_offset(value_.composition_text, value_.composing_end) };
             const std::size_t underline_begin { shown_begin < text.size() ? shown_begin : text.size() };
             const std::size_t underline_end { shown_end < text.size() ? shown_end : text.size() };
-            const float from { left - scroll + measure(text.substr(0, underline_begin)) };
-            const float to { left - scroll + measure(text.substr(0, underline_end)) };
+            const float from { left - scroll + position(underline_begin) };
+            const float to { left - scroll + position(underline_end) };
             const float underline_top { baseline + 2.0f * scale };
             context.canvas.drawRect(SkRect::MakeXYWH(from, underline_top, to - from, 1.0f * scale), solid_paint(context.palette.accent));
         }
