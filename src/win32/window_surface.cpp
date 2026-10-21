@@ -1273,6 +1273,8 @@ namespace luil::win32 {
             return {};
         shadow_document document { std::u8string { value->text }, value->caret, value->anchor };
         document.secret = value->secret;
+        document.multiline = value->multiline;
+        document.read_only = value->read_only;
         return document;
     }
 

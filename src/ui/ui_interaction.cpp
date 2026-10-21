@@ -349,6 +349,8 @@ namespace luil {
                         }
                         return process_typeahead(value);
                     }
+                    if (const auto document { focused_text_input() }; document.has_value() && document->read_only)
+                        return {};
                     if (value.character == U'\b')
                         return { text_edit_action(*target, text::text_edit_command::backspace) };
                     // Ctrl+Backspace는 WM_CHAR가 U+007F로 준다.
@@ -2576,15 +2578,23 @@ namespace luil {
             }
         };
         find_window(*element);
-        if (window == nullptr)
-            return {};
         const std::optional<rect_f> line { element->text_span_bounds({ document, caret, caret, caret }, config_.measure_text) };
         if (line.has_value() == false)
             return {};
-        const float delta { window->scroll_delta_to_reveal(*line) };
-        if (delta == 0.0f)
-            return {};
-        return { window->scroll()->scroll(delta) };
+        std::vector<input_action> actions {};
+        if (window != nullptr)
+        {
+            const float delta { window->scroll_delta_to_reveal(*line) };
+            if (delta != 0.0f)
+                actions.push_back(window->scroll()->scroll(delta));
+        }
+        if (element->scroll() != nullptr && element->scroll()->axis == scroll_axis::horizontal)
+        {
+            const float delta { element->scroll_delta_to_reveal(*line) };
+            if (delta != 0.0f)
+                actions.push_back(element->scroll()->scroll(delta));
+        }
+        return actions;
     }
 
     std::optional<text_input_snapshot> interaction_controller::focused_text_input() const
@@ -2634,6 +2644,15 @@ namespace luil {
         const bool primary_shortcut { event.primary_shortcut_down() };
         const bool word_navigation { event.word_navigation_down() };
         const text_input_snapshot value { focused_text_input().value_or(text_input_snapshot {}) };
+        if (value.read_only)
+        {
+            const bool edits { event.key == key_code::delete_forward
+                || (event.key == key_code::enter && event.shortcut_modifier_down() == false) || (event.key == key_code::insert && event.shift)
+                || (primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x
+                    || event.key == key_code::key_z || event.key == key_code::key_y)) };
+            if (edits)
+                return std::vector<input_action> {};
+        }
         // 암호 칸의 낱말 이동은 칸 끝으로 간다. 낱말 경계가 공백 자리를 알린다.
         const bool whole_line { word_navigation && value.secret };
 

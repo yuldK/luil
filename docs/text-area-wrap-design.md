@@ -80,3 +80,13 @@ A를 골랐고, 형태는 이렇다.
 - (완료) UIA Text pattern의 줄 단위(`TextUnit_Line`)는 같은 접은 줄이다. 칸이 `text_line_starts()`로 화면 줄의 시작을 내주고, 문단 단위는 줄 바꿈으로 나뉜다.
 - (완료) 접은 자리의 affinity(위 "접은 자리의 caret").
 - (완료) 큰 글의 캐시(위 "비용").
+
+## 문서 보기
+
+`read_only`는 선택·복사·이동을 남기고 편집 요청과 IME 쓰기를 막는다. TSF는 읽기 전용 상태와
+조합 거절을 내며, Android는 소프트 키보드를 열지 않는다. UIA는 Text를 계속 내고 읽기 전용을 알린다.
+
+`wrap=false`는 문단을 접지 않는다. `scroll_x`와 가로 스크롤 factory를 주면 수평 막대가 서고
+caret이 이동한 frame에서 가로 위치도 되살린다. 가로 휠이 세로 창을 건너뛰는 controller 수정은
+Claude 트랙 C0와 함께 합친다. `face=code`는 측정과 그리기에 같은 코드 글꼴을 사용한다.
+`font_size=0`은 기존 크기다. 양수 크기는 줄 높이도 같은 비율로 바꾼다.

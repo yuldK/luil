@@ -91,6 +91,7 @@ namespace luil {
 
     // 설정된 UI 글꼴(그리기가 쓰는 그 글꼴)로 재는 측정기다. 어느 thread에서나 부를 수 있다.
     [[nodiscard]] const text_measurer& default_text_measurer();
+    [[nodiscard]] const text_measurer& default_code_text_measurer();
 
     // 텍스트 박스가 내주는 편집 상태다.
     // 초점을 가진 박스의 선택 글을 클립보드로 복사할 때 입력 thread가 읽는다.
@@ -129,6 +130,7 @@ namespace luil {
         bool multiline { false };
         // caret이 앞 글자 쪽에 붙는다 (`text_edit_state::caret_upstream`). 넘겨 접은 자리에서만 뜻이 있다.
         bool caret_upstream { false };
+        bool read_only { false };
     };
 
     // 포인터 자리에 놓을 caret이다. `upstream`이면 그 offset의 앞 글자 쪽(넘겨 접은 윗줄의 끝)에 붙는다.
