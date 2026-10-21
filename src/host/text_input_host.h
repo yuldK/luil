@@ -26,11 +26,12 @@ namespace luil {
         // 여러 줄 칸의 문서다 (`text_input_snapshot::multiline`). Android는 여러 줄 키보드를 띄우고 IME가 넣은 줄 바꿈을
         // 글로 둔다 — 한 줄 칸은 그것을 걷어 내고 Enter로 보낸다.
         bool multiline { false };
+        bool read_only { false };
 
         // 번호와 칸 종류 표식은 문서의 내용이 아니다.
         [[nodiscard]] bool operator==(const text_input_document& other) const
         {
-            return text == other.text && caret == other.caret && anchor == other.anchor;
+            return text == other.text && caret == other.caret && anchor == other.anchor && read_only == other.read_only;
         }
     };
 

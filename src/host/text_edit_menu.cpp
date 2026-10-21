@@ -18,7 +18,7 @@ namespace luil {
         const bool selected { value.caret != value.anchor && value.composing == false };
         const std::u8string labels[] { korean ? u8"복사" : u8"Copy", korean ? u8"잘라내기" : u8"Cut", korean ? u8"붙여넣기" : u8"Paste", korean ? u8"전체 선택" : u8"Select all" };
         const std::u8string keys[] { u8"copy", u8"cut", u8"paste", u8"all" };
-        const bool enabled[] { selected && value.secret == false, selected && value.secret == false, value.composing == false, value.text.empty() == false && value.composing == false };
+        const bool enabled[] { selected && value.secret == false, selected && value.secret == false && value.read_only == false, value.composing == false && value.read_only == false, value.text.empty() == false && value.composing == false };
         auto column { std::make_unique<stack_element>(ui_element_id { ui_element_kind::menu }, stack_config { .padding = { 4.0f, 4.0f, 4.0f, 4.0f } }) };
         for (int row { 0 }; row < 2; ++row)
         {

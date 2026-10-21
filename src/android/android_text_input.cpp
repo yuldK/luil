@@ -206,6 +206,11 @@ namespace luil::android {
         }
         if (target_.has_value() == false)
             return;
+        if (host_->committed_document().read_only)
+        {
+            update_keyboard(false);
+            return;
+        }
         multiline_ = host_->committed_document().multiline;
         // 같은 칸이 암호 칸이 되거나 풀렸다 (앱이 설정을 바꿨다). 키보드가 떠 있으면 다시 세운다.
         if (const bool secret { host_->committed_document().secret }; secret != secret_)
@@ -235,6 +240,8 @@ namespace luil::android {
 
     void ime_session::accept(const ime_state& original)
     {
+        if (host_->committed_document().read_only)
+            return;
         if (target_.has_value() == false)
             return;
         // 여러 줄 칸은 IME가 넣은 줄 바꿈이 곧 글이다 (안드로이드의 여러 줄 EditText와 같다).
@@ -340,8 +347,9 @@ namespace luil::android {
         update_keyboard(true);
     }
 
-    void ime_session::update_keyboard(const bool show)
+    void ime_session::update_keyboard(const bool requested)
     {
+        const bool show { requested && host_->committed_document().read_only == false };
         if (show == keyboard_shown_ && (show == false || secret_ == keyboard_secret_))
             return;
         keyboard_shown_ = show;
@@ -384,6 +392,8 @@ namespace luil::android {
 
     void ime_session::post_document(const text_input_document& document)
     {
+        if (host_->committed_document().read_only)
+            return;
         text_edit_request edit {};
         edit.target = *target_;
         edit.command = text::text_edit_command::replace_all;
