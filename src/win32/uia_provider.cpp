@@ -807,7 +807,7 @@ namespace luil::win32 {
             case UIA_SelectionPatternId:
                 // 항목의 `get_SelectionContainer`와 같은 술어다 — 내주는 container가
                 // 곧 이 패턴을 내건다.
-                if (access_selection_container(info.role))
+                if (access_selection_container(info))
                     *result = static_cast<ISelectionProvider*>(this);
                 break;
             case UIA_ScrollItemPatternId:
@@ -1327,7 +1327,7 @@ namespace luil::win32 {
             // signature가 같은 두 interface(ISelectionProvider·ITextProvider)를
             // 하나가 답한다 — container면 골라진 항목들, 텍스트 칸이면 선택 구간.
             const access_info info { element->accessibility() };
-            if (access_selection_container(info.role))
+            if (access_selection_container(info))
             {
                 const std::vector<const ui_element*> selected { access_selected_items(*element) };
                 SAFEARRAY* const array { SafeArrayCreateVector(VT_UNKNOWN, 0, static_cast<ULONG>(selected.size())) };
@@ -1484,7 +1484,7 @@ namespace luil::win32 {
             if (element == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
             const access_info info { element->accessibility() };
-            if (access_selection_container(info.role) == false)
+            if (access_selection_container(info) == false)
                 return UIA_E_INVALIDOPERATION;
             // 다중 선택은 모두 빼서 비울 수 있다.
             if (info.multiple_selection)

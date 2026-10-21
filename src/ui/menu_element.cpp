@@ -1,6 +1,9 @@
 #include "luil/ui/menu_element.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "luil/generated/codicons.h"
+
+#include <algorithm>
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -54,16 +57,30 @@ namespace luil {
 
                 const float inset { 8.0f * scale };
                 float text_left { box.x + inset };
-                if (item_.icon != 0)
+                if (item_.kind == menu_item_kind::radio && item_.checked)
+                {
+                    context.canvas.drawCircle(text_left + 8.0f * scale, box.y + box.height * 0.5f, 3.0f * scale,
+                        solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground));
+                }
+                const char32_t icon { item_.kind == menu_item_kind::check
+                    ? (item_.checked ? codicons::icon_check : 0) : (item_.kind == menu_item_kind::radio ? 0 : item_.icon) };
+                if (icon != 0)
                 {
                     const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), 13.0f * scale };
                     const SkPaint glyph { solid_paint(enabled() ? context.palette.secondary_foreground : context.palette.disabled_foreground) };
-                    draw_centered_glyph(context.canvas, item_.icon, { text_left, box.y, 16.0f * scale, box.height }, glyph_font, glyph);
+                    draw_centered_glyph(context.canvas, icon, { text_left, box.y, 16.0f * scale, box.height }, glyph_font, glyph);
                 }
                 // 아이콘 유무와 무관하게 글자 시작을 맞춰 목록이 줄지어 보이게 한다.
                 text_left += 22.0f * scale;
 
-                const float text_width { box.x + box.width - inset - text_left };
+                const SkFont shortcut_font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                const float shortcut_width { measure_text(item_.shortcut_text, shortcut_font) };
+                const float shortcut_gap { item_.shortcut_text.empty() ? 0.0f : 16.0f * scale };
+                if (shortcut_width > 0.0f)
+                    draw_text(context.canvas, item_.shortcut_text, box.x + box.width - inset - shortcut_width,
+                        box.y + centered_text_baseline(shortcut_font, box.height), shortcut_font,
+                        solid_paint(enabled() ? context.palette.secondary_foreground : context.palette.disabled_foreground));
+                const float text_width { box.x + box.width - inset - text_left - shortcut_width - shortcut_gap };
                 if (text_width > 0.0f)
                 {
                     const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
@@ -74,7 +91,12 @@ namespace luil {
 
             [[nodiscard]] access_info accessibility() const override
             {
-                return { .role = access_role::menu_item, .name = item_.label };
+                access_info info { .role = access_role::menu_item, .name = item_.label };
+                if (item_.kind == menu_item_kind::check)
+                    info.checked = item_.checked;
+                if (item_.kind == menu_item_kind::radio)
+                    info.selected = item_.checked;
+                return info;
             }
 
         private:
@@ -103,6 +125,18 @@ namespace luil {
             height += menu_item_height;
         }
         return height;
+    }
+
+    float menu_element::width_for(const menu_config& config, const text_measurer& measurer, const float font_size)
+    {
+        float width { 0.0f };
+        const float size { scaled_font_size(font_size, 1.0f) };
+        for (const auto& item : config.items)
+        {
+            const float shortcut { item.shortcut_text.empty() ? 0.0f : 16.0f + measurer(item.shortcut_text, size) };
+            width = std::max(width, measurer(item.label, size) + shortcut);
+        }
+        return width + 2.0f * menu_padding + 16.0f + 22.0f;
     }
 
     void menu_element::arrange(const arrange_context& context)
@@ -145,6 +179,7 @@ namespace luil {
     }
     access_info menu_element::accessibility() const
     {
-        return { .role = access_role::menu, .name = tooltip() };
+        const bool radio { std::any_of(config_.items.begin(), config_.items.end(), [](const auto& item) { return item.kind == menu_item_kind::radio; }) };
+        return { .role = access_role::menu, .name = tooltip(), .selection_container = radio };
     }
 } // namespace luil
