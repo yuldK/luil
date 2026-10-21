@@ -523,3 +523,36 @@ TEST_CASE("An editor takes focus, commits on Enter, cancels on Escape and hands 
     REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
     REQUIRE(policy.keys == 0);
 }
+
+TEST_CASE("Dragging a header onto another asks the app to reorder the columns", "[ui][table][columns]")
+{
+    luil::table_config config { make_config() };
+    config.reorder_column = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(resize_intent { moved + u8">" + target, 0.0f }); };
+    config.column_menu = [](const std::u8string& column, const luil::ui_action_context&) { return luil::make_app_action(column_intent { column }); };
+    const std::shared_ptr<const luil::ui_tree> tree { published(std::move(config)) };
+    const luil::ui_element& name { find(*tree, { luil::ui_element_kind::table_header_cell, part(u8"name") }) };
+    const luil::ui_element& author { find(*tree, { luil::ui_element_kind::table_header_cell, part(u8"author") }) };
+
+    REQUIRE(author.drag() != nullptr);
+    const luil::drag_payload payload { author.drag()->make_payload({ author.id(), 170.0f, 10.0f }) };
+    REQUIRE(payload.dragged_owner == u8"author");
+    REQUIRE(payload.grab_offset_x == 10.0f);
+    // 자기 자리에는 놓지 않는다. 다른 표의 머리글 칸은 받지 않는다.
+    REQUIRE(author.drop()->accepts(payload) == false);
+    REQUIRE(name.drop()->accepts(payload));
+    luil::drag_payload foreign { payload };
+    foreign.container.owner = u8"other";
+    REQUIRE(name.drop()->accepts(foreign) == false);
+    const auto dropped { name.drop()->on_drop(payload, { name.id(), 0.0f, 0.0f }) };
+    REQUIRE(message_at<resize_intent>(dropped, 0) != nullptr);
+    REQUIRE(message_at<resize_intent>(dropped, 0)->column == u8"author>name");
+
+    // 정렬할 수 없는 열의 머리글도 끌고 메뉴를 열 수 있다.
+    const luil::ui_element& revision { find(*tree, { luil::ui_element_kind::table_header_cell, part(u8"revision") }) };
+    REQUIRE(revision.drag() != nullptr);
+    const luil::ui_action* const menu { revision.action(luil::ui_trigger::right_click) };
+    REQUIRE(menu != nullptr);
+    const auto opened { (*menu)({ revision.id(), 260.0f, 10.0f }) };
+    REQUIRE(message_at<column_intent>(opened, 0) != nullptr);
+    REQUIRE(message_at<column_intent>(opened, 0)->column == u8"revision");
+}

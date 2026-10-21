@@ -2,6 +2,7 @@
 
 #include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
+#include "ui/reorder_drop.h"
 #include "ui/tree_expander.h"
 
 #include "include/core/SkCanvas.h"
@@ -359,18 +360,47 @@ namespace luil {
         class table_header_cell_element final : public ui_element
         {
         public:
-            table_header_cell_element(ui_element_id id, const std::u8string& table, const table_column& column, const table_column_message_factory& sort_request)
+            table_header_cell_element(ui_element_id id, const table_config& config, const table_column& column)
                 : ui_element { std::move(id) }
-                , body_ { body_id(table) }
+                , body_ { body_id(config.owner) }
                 , header_ { column.header }
                 , align_ { column.align }
                 , sort_ { column.sort }
             {
                 set_tab_stop(false);
-                if (column.sortable == false || sort_request == nullptr)
+                const ui_element_id header { ui_element_kind::table_header, config.owner };
+                // 머리글 칸을 끌어 다른 칸에 놓으면 열 순서를 바꾸자는 메시지다. 규칙은 탭·목록 행과 한 벌이다
+                // (reorder_drop.h) — 같은 표의 머리글 칸만 받고, 자기 자리는 받지 않는다.
+                if (const auto& reorder { config.reorder_column }; reorder != nullptr)
+                {
+                    const ui_element* const self { this };
+                    drag_source source {};
+                    source.make_payload = [self, key = column.key, label = column.header, header](const ui_action_context& context) {
+                        drag_payload payload {};
+                        payload.source = context.element;
+                        payload.container = header;
+                        payload.dragged_owner = key;
+                        payload.label = label;
+                        payload.grab_offset_x = context.x - self->bounds().x;
+                        payload.grab_offset_y = context.y - self->bounds().y;
+                        return payload;
+                    };
+                    set_drag_source(std::move(source));
+                    drop_target drop {};
+                    drop.accepts = [key = column.key, header](const drag_payload& payload) { return accepts_reorder_drop(payload, ui_element_kind::table_header_cell, header, key); };
+                    drop.on_drop = [key = column.key, reorder](const drag_payload& payload, const ui_action_context&) -> std::vector<input_action> {
+                        return { reorder(payload.dragged_owner, key) };
+                    };
+                    set_drop_target(std::move(drop));
+                }
+                if (const auto& menu { config.column_menu }; menu != nullptr)
+                    set_action(ui_trigger::right_click,
+                        [key = column.key, menu](const ui_action_context& context) -> std::vector<input_action> { return { menu(key, context) }; });
+                if (column.sortable == false || config.sort_request == nullptr)
                     return;
                 set_cursor(ui_cursor::hand);
-                set_action(ui_trigger::left_click, [key = column.key, sort_request](const ui_action_context&) -> std::vector<input_action> { return { sort_request(key) }; });
+                set_action(ui_trigger::left_click,
+                    [key = column.key, sort_request = config.sort_request](const ui_action_context&) -> std::vector<input_action> { return { sort_request(key) }; });
             }
 
             [[nodiscard]] const ui_element_id& pointer_focus_target() const noexcept override
@@ -432,8 +462,7 @@ namespace luil {
                 set_clip_children(true);
                 const table_config& config { table.config() };
                 for (const table_column& column : config.columns)
-                    add_child(std::make_unique<table_header_cell_element>(
-                        ui_element_id { ui_element_kind::table_header_cell, part_owner(config.owner, column.key) }, config.owner, column, config.sort_request));
+                    add_child(std::make_unique<table_header_cell_element>(ui_element_id { ui_element_kind::table_header_cell, part_owner(config.owner, column.key) }, config, column));
                 // 손잡이는 칸 **뒤에** 담는다. 경계에 절반씩 걸쳐 다음 칸 위에도 서므로, 나중에 그려진 것이 hit에서 이긴다.
                 for (std::size_t index = 0; index < config.columns.size(); ++index)
                 {
