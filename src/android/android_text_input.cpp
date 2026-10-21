@@ -208,6 +208,15 @@ namespace luil::android {
             return;
         if (host_->committed_document().read_only)
         {
+            const bool was_composing { composing_ };
+            finish_composition();
+            const text_input_document committed { host_->committed_document() };
+            const bool changed { was_composing || document_ != committed };
+            observed_ = committed;
+            document_ = committed;
+            pending_sequence_ = 0;
+            if (changed)
+                send(document_);
             update_keyboard(false);
             return;
         }

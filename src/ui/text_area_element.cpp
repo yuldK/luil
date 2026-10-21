@@ -1,5 +1,6 @@
 #include "luil/ui/text_area_element.h"
 #include "luil/text/grapheme.h"
+#include "luil/text/text_edit.h"
 
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
@@ -275,7 +276,8 @@ namespace luil {
     float text_area_element::scroll_delta_to_reveal(const rect_f& target) const
     {
         const rect_f viewport { area_->viewport() };
-        return luil::scroll_delta_to_reveal(target.x, target.width, viewport.x, viewport.width) / scale_;
+        const float gutter { gutter_width_ * scale_ };
+        return luil::scroll_delta_to_reveal(target.x, target.width, viewport.x + gutter, std::max(0.0f, viewport.width - gutter)) / scale_;
     }
 
     std::optional<rect_f> text_area_element::line_rect(const std::size_t logical_line) const
@@ -286,7 +288,8 @@ namespace luil {
         const auto last { std::upper_bound(first, logical_lines_.end(), logical_line) };
         const float height { line_height_logical() * scale_ };
         return rect_f { text_left(), text_top() + static_cast<float>(first - logical_lines_.begin()) * height,
-            std::max(0.0f, area_->viewport().width - gutter_width_ * scale_), static_cast<float>(last - first) * height };
+            std::max(0.0f, area_->viewport().width - gutter_width_ * scale_), static_cast<float>(last - first) * height
+        };
     }
 
     std::optional<std::size_t> text_area_element::offset_at(const zoom_point point) const
@@ -299,7 +302,7 @@ namespace luil {
         std::vector<input_action> actions {};
         if (layout_measurer_ == nullptr)
             return actions;
-        const auto caret { std::min(offset, value_.text.size()) };
+        const auto caret { text::text_edit_clamp_offset(value_.text, offset) };
         const auto bounds { text_span_bounds({ value_.text, caret, caret, caret }, layout_measurer_) };
         if (bounds.has_value() == false)
             return actions;
@@ -365,10 +368,11 @@ namespace luil {
         const std::scoped_lock lock { cache.mutex_ };
         // 글꼴이 바뀌었는지는 표본 글의 폭으로 안다 — 측정기는 비교할 수 있는 값이 아니다.
         const float sample { measure(u8"Wg 0가") };
-        if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.sample_width_ != sample)
+        if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.sample_width_ != sample || cache.wrap_ != config_.wrap)
         {
             cache.entries_.clear();
             cache.width_ = wrap_width_;
+            cache.wrap_ = config_.wrap;
             cache.font_size_ = font_size();
             cache.sample_width_ = sample;
         }
@@ -601,7 +605,8 @@ namespace luil {
             if (config_.lines != nullptr)
             {
                 const auto found { std::lower_bound(config_.lines->begin(), config_.lines->end(), logical,
-                    [](const auto& item, const auto value) { return item.line < value; }) };
+                    [](const auto& item, const auto value) { return item.line < value; })
+                };
                 if (found != config_.lines->end() && found->line == logical)
                     context.canvas.drawRect(SkRect::MakeXYWH(viewport.x + gutter_width_ * scale, row_top, viewport.width - gutter_width_ * scale, line_height),
                         solid_paint(span_background(static_cast<text_background_role>(found->background), context.palette)));
@@ -642,29 +647,39 @@ namespace luil {
             }
             if (content.empty() == false)
             {
-                draw_text(context.canvas, content, left, baseline_of(index), font, foreground);
-                for (const auto& span : styled)
-                {
-                    const auto from { std::max(span.begin, row.begin) };
-                    const auto to { std::min(span.end, row.end) };
-                    SkFont styled_font { font };
-                    styled_font.setEmbolden(span.bold);
-                    draw_text(context.canvas, text.substr(from, to - from), left + measure(text.substr(row.begin, from - row.begin)), baseline_of(index),
-                        styled_font, solid_paint(enabled() ? span_foreground(span.color, context.palette) : context.palette.disabled_foreground));
-                }
+                const auto draw_content = [&](const std::optional<ui_color> override_color) {
+                    const auto draw_piece = [&](const std::size_t from, const std::size_t to, const SkFont& piece_font, const ui_color color) {
+                        if (from < to)
+                            draw_text(context.canvas, text.substr(from, to - from), left + measure(text.substr(row.begin, from - row.begin)),
+                                baseline_of(index), piece_font, solid_paint(override_color.value_or(color)));
+                    };
+                    std::size_t cursor { row.begin };
+                    for (const auto& span : styled)
+                    {
+                        const auto from { std::max(span.begin, row.begin) };
+                        const auto to { std::min(span.end, row.end) };
+                        draw_piece(cursor, from, font, foreground.getColor());
+                        SkFont styled_font { font };
+                        styled_font.setEmbolden(span.bold);
+                        draw_piece(from, to, styled_font, enabled() ? span_foreground(span.color, context.palette) : context.palette.disabled_foreground);
+                        cursor = to;
+                    }
+                    draw_piece(cursor, row.end, font, foreground.getColor());
+                };
+                draw_content(std::nullopt);
                 for (const auto& match : highlights)
                 {
                     context.canvas.save();
                     context.canvas.clipRect(range_rect(match.begin, match.end));
-                    draw_text(context.canvas, content, left, baseline_of(index), font, solid_paint(context.palette.document_search_foreground));
+                    draw_content(context.palette.document_search_foreground);
                     context.canvas.restore();
                 }
                 // 고른 구간의 글자는 그 바탕의 짝이다 (한 줄 칸과 같은 규칙 — 고대비에서만 바뀐다).
-                if (selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground)
+                if (selection.has_value() && enabled() && (styled.empty() == false || highlights.empty() == false || context.palette.selection_foreground != context.palette.primary_foreground))
                 {
                     context.canvas.save();
                     context.canvas.clipRect(*selection);
-                    draw_text(context.canvas, content, left, baseline_of(index), font, solid_paint(context.palette.selection_foreground));
+                    draw_content(context.palette.selection_foreground);
                     context.canvas.restore();
                 }
             }

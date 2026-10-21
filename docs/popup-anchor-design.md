@@ -1,6 +1,6 @@
 # Popup 앵커 표면
 
-`ui_popup::anchor`는 popup의 위치, 소유 관계, DPI, 활성 수명을 결정하는 최상위 표면 id다. 빈 문자열은 주 창이며 값이 있으면 `ui_window::id`가 가리키는 보조 창이다.
+`ui_popup::anchor`는 popup의 위치, 소유 관계, DPI, 활성 수명을 결정하는 앵커 표면 id다. 빈 문자열은 주 창이고 `ui_window::id` 또는 같은 frame의 다른 `ui_popup::id`를 가리킨다.
 
 공개 형식은 [app_host.h](../include/luil/app/app_host.h)의 `ui_popup`, `ui_window`, `ui_frame`에 있다.
 
@@ -41,7 +41,7 @@ UI thread는 앵커 표면을 찾아 다음 값을 사용한다.
 
 - 비어 있지 않고 고유한 `id`의 popup 선언이 frame에 있다.
 - `width`와 `height`가 모두 양수다.
-- `anchor`가 가리키는 최상위 표면이 존재한다.
+- `anchor`가 가리키는 표면이 존재하며 그 사슬이 주 창이나 보조 창에서 끝난다.
 
 앵커 보조 창과 popup이 같은 frame에 처음 나타나도 UI thread는 표면을 먼저 reconcile한 뒤 popup을 만들 수 있다. 앵커를 찾지 못한 frame에서는 popup을 건너뛰고 다음 frame에서 다시 평가한다.
 

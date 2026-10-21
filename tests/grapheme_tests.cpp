@@ -36,7 +36,8 @@ TEST_CASE("Backspace removes a combining mark but preserves emoji and Hangul uni
     REQUIRE(luil::text::text_edit_undo(state));
     REQUIRE(state.text == u8"e\u0301");
     for (const auto sample : { u8"\u1100\u1161\u11A8", u8"\U0001F1F0\U0001F1F7",
-        u8"\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466", u8"1\uFE0F\u20E3" })
+        u8"\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466", u8"1\uFE0F\u20E3"
+    })
     {
         luil::text::text_edit_set_text(state, sample, true);
         luil::text::text_edit_backspace(state);

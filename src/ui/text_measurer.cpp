@@ -30,7 +30,8 @@ namespace luil {
         static const text_measurer measurer { [](const std::u8string_view text, const float size) {
             const SkFont font { configured_code_typeface(), size };
             return measure_text(text, font);
-        } };
+        }
+        };
         return measurer;
     }
 

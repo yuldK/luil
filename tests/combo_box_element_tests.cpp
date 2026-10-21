@@ -17,6 +17,11 @@ TEST_CASE("Combo navigation and Escape use the candidate and editing state", "[u
     REQUIRE(last->size() == 1u);
     REQUIRE(*std::get<luil::app_message>(first->front()).get<std::u8string>() == u8"a");
     REQUIRE(*std::get<luil::app_message>(last->front()).get<std::u8string>() == u8"b");
+    config.suggestions.items = std::make_shared<const std::vector<luil::combo_suggestion>>(
+        std::vector<luil::combo_suggestion> { { u8"a", u8"Alpha" }, { u8"b", u8"Beta" }, { u8"c", u8"Disabled", false } });
+    luil::combo_box_element paged { { luil::application_element_kind(0), u8"paged" }, {}, config };
+    const auto page { paged.on_key({ luil::key_code::page_down }) };
+    REQUIRE(*std::get<luil::app_message>(page->front()).get<std::u8string>() == u8"b");
     const auto close { combo.on_key({ luil::key_code::escape }) };
     REQUIRE(*std::get<luil::app_message>(close->front()).get<bool>() == false);
     luil::text_input_view composing {};
