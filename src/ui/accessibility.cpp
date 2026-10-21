@@ -178,7 +178,7 @@ namespace luil {
 
     bool access_selection_container(const access_role role) noexcept
     {
-        return role == access_role::list || role == access_role::tab_list || role == access_role::radio_group;
+        return role == access_role::list || role == access_role::tab_list || role == access_role::radio_group || role == access_role::tree || role == access_role::table;
     }
 
     bool access_scroll_item(const ui_tree& tree, const ui_element_id& id)
