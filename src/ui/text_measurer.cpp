@@ -29,4 +29,23 @@ namespace luil {
     {
         return measurer != nullptr ? *measurer : default_text_measurer();
     }
+
+    const text_measurer& measure_context::measure_text() const
+    {
+        return measurer != nullptr ? *measurer : default_text_measurer();
+    }
+
+    const ui_metrics& measure_context::style_metrics() const noexcept
+    {
+        return metrics != nullptr ? *metrics : default_ui_style().metrics;
+    }
+
+    float measure_context::text_width(const std::u8string_view text, const float font_size) const
+    {
+        if (text.empty())
+            return 0.0f;
+        // 그리기와 같은 글자 크기다 — 시스템 글자 크기 설정(`scaled_font_size`)까지 같아야 잰 폭과 그린 글이 맞는다.
+        const float ratio { scale > 0.0f ? scale : 1.0f };
+        return measure_text()(text, scaled_font_size(font_size, ratio)) / ratio;
+    }
 } // namespace luil

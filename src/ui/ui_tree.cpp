@@ -68,10 +68,10 @@ namespace luil {
         return unarranged_;
     }
 
-    ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, const float scale, const rect_f& surface)
+    ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, const float scale, const rect_f& surface, const ui_metrics* const metrics)
     {
         if (root != nullptr)
-            root->arrange({ .slot = slot, .scale = scale, .surface = surface });
+            root->arrange({ .slot = slot, .scale = scale, .surface = surface, .metrics = metrics });
         return ui_tree { std::move(root) };
     }
 

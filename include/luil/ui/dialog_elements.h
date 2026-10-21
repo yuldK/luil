@@ -169,6 +169,11 @@ namespace luil {
     // 아이콘 칸의 폭과 글자 사이의 간격이다 (논리 픽셀).
     inline constexpr float text_button_icon_size { 14.0f };
     inline constexpr float text_button_icon_gap { 6.0f };
+    // 글자 버튼이 원하는 크기를 답할 때의 값이다 (논리 픽셀, `text_button_element::preferred_size`).
+    //  - 양옆 안쪽 여백, 상자가 있는 버튼의 최소 폭(짧은 글 "확인"·"취소"도 누를 만한 폭), 높이다.
+    inline constexpr float text_button_padding { 12.0f };
+    inline constexpr float text_button_minimum_width { 64.0f };
+    inline constexpr float text_button_height { 28.0f };
 
     // in-app dialog(update overlay, switch dialog)가 공유하는 글자 버튼이다.
     // 아이콘 전용 button_element와 달리 텍스트를 중앙에 그린다.
@@ -190,6 +195,10 @@ namespace luil {
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
+        // 아이콘과 글 한 덩어리에 양옆 여백을 더한 폭과 `text_button_height`다.
+        //  - 상자가 있는 버튼은 `text_button_minimum_width`보다 좁지 않다. link는 상자가 없어 여백도 최소 폭도 없다.
+        //  - 글은 스타일의 본문 글자로 잰다 (`measure_context::style_metrics`). 그리기와 같은 글꼴이다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
 
     private:
         text_button_config config_ {};
