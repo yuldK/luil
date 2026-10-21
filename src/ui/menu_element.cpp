@@ -22,7 +22,7 @@ namespace luil {
         class menu_item_element final : public ui_element
         {
         public:
-            menu_item_element(menu_item_config item, const menu_message_factory& select)
+            menu_item_element(menu_item_config item, const menu_config& config)
                 : ui_element { ui_element_id { ui_element_kind::menu_item, item.key } }
                 , item_ { std::move(item) }
             {
@@ -30,6 +30,7 @@ namespace luil {
                 // 메뉴가 열려 있으면 키보드는 메뉴의 것이다 (↑/↓/Enter/Esc).
                 // Tab이 항목에 서면 메뉴는 열린 채로 초점만 밖으로 달아난다.
                 set_tab_stop(false);
+                const auto& select { item_.children.empty() ? config.select : config.open_submenu };
                 if (select == nullptr)
                     return;
                 const std::u8string key { item_.key };
@@ -74,13 +75,18 @@ namespace luil {
                 text_left += 22.0f * scale;
 
                 const SkFont shortcut_font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                const float arrow_width { item_.children.empty() ? 0.0f : 18.0f * scale };
+                if (arrow_width > 0.0f)
+                    draw_centered_glyph(context.canvas, codicons::icon_chevron_right,
+                        { box.x + box.width - inset - arrow_width, box.y, arrow_width, box.height },
+                        SkFont { sk_ref_sp(context.codicon_typeface), 13.0f * scale }, solid_paint(context.palette.primary_foreground));
                 const float shortcut_width { measure_text(item_.shortcut_text, shortcut_font) };
                 const float shortcut_gap { item_.shortcut_text.empty() ? 0.0f : 16.0f * scale };
                 if (shortcut_width > 0.0f)
-                    draw_text(context.canvas, item_.shortcut_text, box.x + box.width - inset - shortcut_width,
+                    draw_text(context.canvas, item_.shortcut_text, box.x + box.width - inset - arrow_width - shortcut_width,
                         box.y + centered_text_baseline(shortcut_font, box.height), shortcut_font,
                         solid_paint(enabled() ? context.palette.secondary_foreground : context.palette.disabled_foreground));
-                const float text_width { box.x + box.width - inset - text_left - shortcut_width - shortcut_gap };
+                const float text_width { box.x + box.width - inset - text_left - shortcut_width - shortcut_gap - arrow_width };
                 if (text_width > 0.0f)
                 {
                     const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
@@ -112,7 +118,29 @@ namespace luil {
         // 항목 사이 여백·구분선을 눌러도 아래 element로 새지 않는다.
         set_hit_opaque(true);
         for (const menu_item_config& item : config_.items)
-            add_child(std::make_unique<menu_item_element>(item, config_.select));
+            add_child(std::make_unique<menu_item_element>(item, config_));
+    }
+
+    const menu_config& menu_element::config() const noexcept
+    {
+        return config_;
+    }
+
+    bool menu_element::has_submenu(const std::u8string_view key) const noexcept
+    {
+        for (const auto& item : config_.items)
+            if (item.key == key)
+                return item.enabled && item.children.empty() == false && config_.open_submenu != nullptr;
+        return false;
+    }
+
+    std::optional<std::vector<input_action>> menu_element::open_submenu(const std::u8string_view key) const
+    {
+        if (has_submenu(key) == false)
+            return std::nullopt;
+        if (config_.opened_key == key)
+            return std::vector<input_action> {};
+        return std::vector<input_action> { config_.open_submenu(std::u8string { key }) };
     }
 
     float menu_element::height_for(const menu_config& config) noexcept
@@ -134,7 +162,7 @@ namespace luil {
         for (const auto& item : config.items)
         {
             const float shortcut { item.shortcut_text.empty() ? 0.0f : 16.0f + measurer(item.shortcut_text, size) };
-            width = std::max(width, measurer(item.label, size) + shortcut);
+            width = std::max(width, measurer(item.label, size) + shortcut + (item.children.empty() ? 0.0f : 18.0f));
         }
         return width + 2.0f * menu_padding + 16.0f + 22.0f;
     }

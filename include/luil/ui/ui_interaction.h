@@ -18,6 +18,7 @@
 #include <vector>
 
 namespace luil {
+    class menu_element;
     // 텍스트 편집 한 동작이다.
     // controller가 만들고 policy가 앱 메시지로 바꾼다.
     struct text_edit_request
@@ -709,6 +710,11 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> process_access_focus(const access_focus_event& event);
         // 메뉴 container가 있는 표면과 그 tree다.
         // 메뉴가 닫혀 있으면 `tree`가 nullptr다.
+        [[nodiscard]] const menu_element* hovered_menu() const noexcept;
+        [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> submenu_deadline() const noexcept;
+        ui_element_id opened_hover_ {};
+        std::u8string opened_hover_surface_ {};
+        std::optional<std::chrono::steady_clock::time_point> opened_hover_at_ {};
         struct menu_location
         {
             const ui_tree* tree { nullptr };

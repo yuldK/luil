@@ -50,6 +50,7 @@
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/commands.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"
