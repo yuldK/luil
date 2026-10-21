@@ -65,6 +65,7 @@ add_executable(luil_core_tests
     ui_style_tests.cpp
     ui_theme_tests.cpp
     vector_image_tests.cpp
+    virtual_list_benchmark_tests.cpp
     virtual_list_element_tests.cpp
     webview_element_tests.cpp
     wheel_axis_tests.cpp
