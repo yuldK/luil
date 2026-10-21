@@ -24,7 +24,9 @@ namespace luil::win32 {
         case WM_LBUTTONDOWN:
         case WM_LBUTTONDBLCLK:
         case WM_RBUTTONDOWN:
-        case WM_RBUTTONDBLCLK: {
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONDBLCLK: {
             pointer_pressed_event pressed {};
             pressed.x = message.x;
             pressed.y = message.y;
@@ -38,7 +40,8 @@ namespace luil::win32 {
             return raw_input_event { std::move(pressed) };
         }
         case WM_LBUTTONUP:
-        case WM_RBUTTONUP: {
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP: {
             pointer_released_event released {};
             released.x = message.x;
             released.y = message.y;
@@ -111,6 +114,8 @@ namespace luil::win32 {
 
     pointer_button pointer_button_of(const UINT message) noexcept
     {
+        if (message == WM_MBUTTONDOWN || message == WM_MBUTTONDBLCLK || message == WM_MBUTTONUP)
+            return pointer_button::middle;
         switch (message)
         {
         case WM_LBUTTONDOWN:
