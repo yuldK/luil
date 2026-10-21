@@ -19,6 +19,8 @@ namespace luil {
 
     // 스크롤 막대의 설정이다.
     // 길이는 전부 논리 픽셀이고 배율은 arrange가 곱한다 (다른 element와 같은 규약).
+    enum class scrollbar_axis { vertical, horizontal };
+
     struct scrollbar_config
     {
         // 스크롤 위치를 바꾸자는 메시지를 만든다 (delta는 논리 픽셀).
@@ -33,6 +35,8 @@ namespace luil {
         float content_height { 0.0f };
         float viewport_height { 0.0f };
         float scroll_offset { 0.0f };
+        // 가로 축에서는 content_height와 viewport_height를 폭으로 읽는다.
+        scrollbar_axis axis { scrollbar_axis::vertical };
     };
 
     // 세로 스크롤 막대다.
@@ -64,6 +68,9 @@ namespace luil {
         // 배치 계산을 test가 고정하고, 겹쳐 그리는 앱이 읽는다.
         [[nodiscard]] float thumb_top() const noexcept;
         [[nodiscard]] float thumb_height() const noexcept;
+        // 축과 무관한 시작점과 길이다. 옛 세로 접근자도 같은 값을 돌려준다.
+        [[nodiscard]] float thumb_start() const noexcept;
+        [[nodiscard]] float thumb_length() const noexcept;
 
         // 끌 수 있는 여유가 없으면(내용이 화면보다 짧거나 thumb가
         // track을 다 채우면) 클릭과 끌기가 아무 일도 하지 않는다.

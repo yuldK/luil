@@ -1005,6 +1005,15 @@ namespace luil::win32 {
                 result->bstrVal = SysAllocStringLen(identifier.data(), static_cast<UINT>(identifier.size()));
                 break;
             }
+            case UIA_OrientationPropertyId: {
+                const std::optional<access_orientation> orientation { element->accessibility().orientation };
+                if (orientation.has_value())
+                {
+                    result->vt = VT_I4;
+                    result->lVal = *orientation == access_orientation::horizontal ? OrientationType_Horizontal : OrientationType_Vertical;
+                }
+                break;
+            }
             case UIA_IsEnabledPropertyId:
                 set_bool(*result, element->enabled());
                 break;

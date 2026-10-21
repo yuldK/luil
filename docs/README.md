@@ -8,6 +8,7 @@
 - [시작 가이드](how-to-start.md)
 - [Skia 빌드 준비](skia-build.md)
 - [컴포넌트 안내](components.md)
+- [공용 UI 보강](ui-foundation-design.md)
 
 ## 기본 개념
 

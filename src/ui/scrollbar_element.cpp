@@ -27,15 +27,16 @@ namespace luil {
         // 누른 지점이 thumb 밖이면 그 자리로 한 번 이동하고 이어서 끌린다.
         // thumb 안이면 잡기만 하고 움직이지 않는다.
         target.on_press = [this](const ui_action_context& context) -> std::vector<input_action> {
-            if (draggable() == false || (context.y >= thumb_top_ && context.y <= thumb_top_ + thumb_height_))
+            const float position { config_.axis == scrollbar_axis::horizontal ? context.x : context.y };
+            if (draggable() == false || (position >= thumb_top_ && position <= thumb_top_ + thumb_height_))
                 return {};
-            const float delta { scroll_delta_for(context.y - (thumb_top_ + thumb_height_ * 0.5f)) };
+            const float delta { scroll_delta_for(position - (thumb_top_ + thumb_height_ * 0.5f)) };
             return { config_.scroll(delta) };
         };
         target.on_move = [this](const ui_action_context& previous, const ui_action_context& current) -> std::vector<input_action> {
             if (draggable() == false)
                 return {};
-            const float delta { scroll_delta_for(current.y - previous.y) };
+            const float delta { scroll_delta_for(config_.axis == scrollbar_axis::horizontal ? current.x - previous.x : current.y - previous.y) };
             if (delta == 0.0f)
                 return {};
             return { config_.scroll(delta) };
@@ -47,7 +48,7 @@ namespace luil {
         //    (`list_element`) — 목록 자신이 ↑/↓·Home/End를 가진 묶음이다.
         set_tab_stop(true);
         key_step_target steps {};
-        steps.axis = focus_axis::vertical;
+        steps.axis = config_.axis == scrollbar_axis::horizontal ? focus_axis::horizontal : focus_axis::vertical;
         steps.on_step = [this](const value_step step) -> std::optional<std::vector<input_action>> {
             const float scrollable { config_.content_height - config_.viewport_height };
             float delta { 0.0f };
@@ -93,8 +94,8 @@ namespace luil {
         set_bounds(context.slot);
         scale_ = context.scale > 0.0f ? context.scale : 1.0f;
 
-        track_top_ = context.slot.y;
-        track_height_ = context.slot.height;
+        track_top_ = config_.axis == scrollbar_axis::horizontal ? context.slot.x : context.slot.y;
+        track_height_ = config_.axis == scrollbar_axis::horizontal ? context.slot.width : context.slot.height;
         const float scrollable { (config_.content_height - config_.viewport_height) * scale_ };
         if (scrollable <= 0.0f || track_height_ <= 0.0f)
         {
@@ -117,6 +118,16 @@ namespace luil {
     }
 
     float scrollbar_element::thumb_height() const noexcept
+    {
+        return thumb_height_;
+    }
+
+    float scrollbar_element::thumb_start() const noexcept
+    {
+        return thumb_top_;
+    }
+
+    float scrollbar_element::thumb_length() const noexcept
     {
         return thumb_height_;
     }
@@ -148,7 +159,9 @@ namespace luil {
         // hit 영역은 잡기 쉽도록 넓고, 보이는 막대는 그 안에서 오른쪽에 붙인다.
         const float width { scrollbar_visual_width * scale };
         const float left { box.x + box.width - width };
-        const SkRect shape { SkRect::MakeXYWH(left, thumb_top_, width, thumb_height_) };
+        const SkRect shape { config_.axis == scrollbar_axis::horizontal
+            ? SkRect::MakeXYWH(thumb_top_, box.y + box.height - width, thumb_height_, width)
+            : SkRect::MakeXYWH(left, thumb_top_, width, thumb_height_) };
         const float radius { width * 0.5f };
 
         float alpha { 0.28f };
@@ -166,7 +179,8 @@ namespace luil {
         const float clamped { config_.scroll_offset < 0.0f ? 0.0f : (config_.scroll_offset > maximum ? maximum : config_.scroll_offset) };
         // 이름은 `search_label` → 툴팁 순서다 (`ui_element::access_name`) —
         // 막대는 글을 세우지 않아 툴팁 말고 이름을 담을 자리가 필요하다.
-        return { .role = access_role::scroll_bar, .name = access_name(), .range = access_range { 0.0f, maximum, clamped } };
+        return { .role = access_role::scroll_bar, .name = access_name(), .range = access_range { 0.0f, maximum, clamped },
+            .orientation = config_.axis == scrollbar_axis::horizontal ? access_orientation::horizontal : access_orientation::vertical };
     }
 
     std::optional<std::vector<input_action>> scrollbar_element::access_actions(const access_request& request) const

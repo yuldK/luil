@@ -184,6 +184,8 @@ luil_add_source_filter(luil_core_files "ui/content"
     "${public_headers}/ui/label_element.h"
     ui/webview_element.cpp
     "${public_headers}/ui/webview_element.h"
+    ui/spinner_element.cpp
+    "${public_headers}/ui/spinner_element.h"
     ui/progress_element.cpp
     "${public_headers}/ui/progress_element.h")
 

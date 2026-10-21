@@ -16,6 +16,7 @@ namespace luil {
         none,
         left,
         right,
+        middle,
     };
 
     // 포인터를 낸 장치다 (touch-pen-input-design.md).
