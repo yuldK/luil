@@ -2790,6 +2790,14 @@ namespace luil {
             return {};
         }
 
+        // 위의 소비자들이 갖지 않은 키는 초점에서 root 쪽으로 흐른다 (key-propagation-design.md).
+        //  - **가장 작은 단위가 먼저다.** 행 안의 부품에 초점이 있어도 그 부품이 쓰지 않는 Ctrl+A는 목록이 받는다.
+        //  - **가둠의 Esc와 기본 버튼보다 앞이다.** dialog 안에서 목록을 연 콤보는 Esc로 목록만 닫아야 하고,
+        //    그것은 콤보가 소비하는 Esc다. 소비하지 않은 Esc만 dialog로 간다.
+        //  - 끌기 취소 Esc보다는 뒤다. 잡고 있는 손이 언제나 먼저다.
+        if (std::optional<std::vector<input_action>> handled { process_handler_key(event) }; handled.has_value())
+            return std::move(*handled);
+
         // 가둠(modal dialog)이 떠 있으면 Esc는 그 dialog의 것이다.
         // **메뉴와 끌기 다음이다** — dialog 안에서 연 드롭다운은 Esc로 메뉴만
         // 닫히고 dialog는 남아야 하고, 끌고 있는 손이 그보다 우선이다.
@@ -2805,6 +2813,28 @@ namespace luil {
         if (policy_ == nullptr)
             return {};
         return policy_->on_key(tree_.get(), event, snapshot_);
+    }
+
+    std::optional<std::vector<input_action>> interaction_controller::process_handler_key(const key_pressed_event& event)
+    {
+        if (snapshot_.focused == ui_element_id {})
+            return std::nullopt;
+        const ui_tree* const tree { surface_tree(snapshot_.focused_surface) };
+        if (tree == nullptr)
+            return std::nullopt;
+        for (const ui_element* const element : tree->ancestry_of(snapshot_.focused))
+        {
+            // 비활성 element는 묻지 않고 건너뛴다. 그 위는 여전히 묻는다 — 흐리게 그린 행 위의
+            // 목록은 살아 있다 (`process_step_key`가 초점 element만 거르는 것과 같은 판단이다).
+            if (element->enabled() == false)
+                continue;
+            const key_handler* const handler { element->key_handler_of() };
+            if (handler == nullptr)
+                continue;
+            if (std::optional<std::vector<input_action>> actions { (*handler)(event) }; actions.has_value())
+                return actions;
+        }
+        return std::nullopt;
     }
 
     std::optional<std::vector<input_action>> interaction_controller::process_default_key(const key_pressed_event& event)

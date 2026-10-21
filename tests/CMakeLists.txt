@@ -23,6 +23,7 @@ add_executable(luil_core_tests
     image_animation_tests.cpp
     image_element_tests.cpp
     image_encode_tests.cpp
+    key_propagation_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
     messaging_channel_tests.cpp

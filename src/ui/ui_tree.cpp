@@ -204,6 +204,16 @@ namespace luil {
         return root != nullptr && contains_id(*root, id);
     }
 
+    std::vector<const ui_element*> ui_tree::ancestry_of(const ui_element_id& id) const
+    {
+        std::vector<const ui_element*> path {};
+        if (root_ == nullptr || find_path(*root_, id, path) == false)
+            return {};
+        // 안쪽부터 묻는 길이라 자신이 맨 앞에 서게 뒤집는다.
+        std::reverse(path.begin(), path.end());
+        return path;
+    }
+
     const ui_element* ui_tree::default_button() const noexcept
     {
         return default_button_;
@@ -243,6 +253,21 @@ namespace luil {
         for (const std::unique_ptr<ui_element>& child : element.children())
             if (contains_id(*child, id))
                 return true;
+        return false;
+    }
+
+    bool ui_tree::find_path(const ui_element& element, const ui_element_id& id, std::vector<const ui_element*>& path)
+    {
+        // 보이지 않는 가지에는 초점이 설 수 없다 (`contains_id`와 같은 규칙).
+        if (element.visible() == false)
+            return false;
+        path.push_back(&element);
+        if (element.id() == id)
+            return true;
+        for (const std::unique_ptr<ui_element>& child : element.children())
+            if (find_path(*child, id, path))
+                return true;
+        path.pop_back();
         return false;
     }
 

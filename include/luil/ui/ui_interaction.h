@@ -770,6 +770,9 @@ namespace luil {
         //    목록이나 선택 묶음 안에 놓인 막대가 Home/End를 통째로 빼앗긴다
         //    (묶음은 축이 서 있기만 하면 Home/End를 자기 것으로 본다).
         [[nodiscard]] std::optional<std::vector<input_action>> process_step_key(const key_pressed_event& event);
+        // 더 안쪽이 소비하지 않은 키를 초점 element부터 root까지 차례로 묻는다 (`key_handler`).
+        // 처음 답한 처리기의 결과고, 아무도 답하지 않으면 nullopt라 키가 계속 흐른다.
+        [[nodiscard]] std::optional<std::vector<input_action>> process_handler_key(const key_pressed_event& event);
         // 가둠(modal)이 떠 있을 때의 Esc다.
         // 가둠의 dismiss 액션이 있으면 그 결과고, 없으면 nullopt라 키가 앱 정책으로 흐른다.
         [[nodiscard]] std::optional<std::vector<input_action>> process_dismiss_key(const key_pressed_event& event);

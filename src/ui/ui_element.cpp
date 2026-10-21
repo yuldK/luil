@@ -179,6 +179,11 @@ namespace luil {
         return key_search_target_.has_value() ? &*key_search_target_ : nullptr;
     }
 
+    const key_handler* ui_element::key_handler_of() const noexcept
+    {
+        return key_handler_ != nullptr ? &key_handler_ : nullptr;
+    }
+
     bool ui_element::interactive() const noexcept
     {
         if (tooltip_.empty() == false || cursor_ != ui_cursor::inherit || drag_source_.has_value() || drop_target_.has_value() || pointer_drag_target_.has_value())
@@ -274,6 +279,11 @@ namespace luil {
     void ui_element::set_access_handler(access_handler handler)
     {
         access_handler_ = std::move(handler);
+    }
+
+    void ui_element::set_key_handler(key_handler handler)
+    {
+        key_handler_ = std::move(handler);
     }
 
     bool ui_element::clip_children() const noexcept
