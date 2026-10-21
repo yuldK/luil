@@ -1734,20 +1734,29 @@ namespace luil::win32 {
                 std::vector<const ui_popup*> sources {};
                 if (frame != nullptr)
                 {
-                    wanted.reserve(frame->popups.size());
-                    for (const ui_popup& popup : frame->popups)
+                    std::vector<popup_placement> logical {};
+                    for (const auto& popup : frame->popups)
+                        logical.push_back({ popup.id, 0, 0, popup.width > 0.0f ? 1 : 0, popup.height > 0.0f ? 1 : 0, popup.anchor });
+                    std::vector<std::u8string> roots { u8"" };
+                    for (const auto& secondary : windows_)
+                        roots.push_back(secondary->id());
+                    for (const auto index : order_popup_placements(logical, roots))
                     {
-                        const window_surface* const anchor { anchor_surface(popup.anchor) };
+                        const ui_popup& popup { frame->popups[index] };
+                        std::u8string root { popup.anchor };
+                        for (std::size_t depth { 0 }; depth < logical.size(); ++depth)
+                        {
+                            const auto parent { std::find_if(logical.begin(), logical.end(), [&root](const auto& item) { return item.id == root; }) };
+                            if (parent == logical.end())
+                                break;
+                            root = parent->anchor;
+                        }
+                        const window_surface* const anchor { anchor_surface(root) };
                         if (anchor == nullptr)
                             continue;
                         const float scale { dpi_scale(anchor->dpi()) };
-                        popup_placement placement { popup.id };
-                        placement.anchor = popup.anchor;
-                        placement.x = scaled_pixels(popup.x, scale);
-                        placement.y = scaled_pixels(popup.y, scale);
-                        placement.width = scaled_pixels(popup.width, scale);
-                        placement.height = scaled_pixels(popup.height, scale);
-                        wanted.push_back(std::move(placement));
+                        wanted.push_back({ popup.id, scaled_pixels(popup.x, scale), scaled_pixels(popup.y, scale),
+                            scaled_pixels(popup.width, scale), scaled_pixels(popup.height, scale), popup.anchor });
                         sources.push_back(&popup);
                     }
                 }
@@ -1761,8 +1770,13 @@ namespace luil::win32 {
                 });
 
                 const popup_reconcile_result plan { reconcile_popups(alive, wanted) };
-                for (const std::u8string& id : plan.destroy)
-                    destroy_popup(id);
+                for (const auto& removed : plan.destroy)
+                    for (const auto& child : popups_)
+                        if (child->id() != removed && anchored_popup(removed, child->id()) != nullptr)
+                            if (auto action { child->take_dismiss_action(popup_dismiss_reason::anchor_closed) }; action.has_value())
+                                dispatch_action(std::move(*action));
+                for (auto position { plan.destroy.rbegin() }; position != plan.destroy.rend(); ++position)
+                    destroy_popup(*position);
                 for (const std::size_t index : plan.move)
                     move_popup(wanted[index]);
                 // 이번 대조에서 만들어진 popup이다.
@@ -1773,6 +1787,8 @@ namespace luil::win32 {
                 {
                     // 만들다 실패한 popup은 다시 시도하지 않는다.
                     if (std::find(failed_popups_.begin(), failed_popups_.end(), wanted[index].id) != failed_popups_.end())
+                        continue;
+                    if (anchor_surface(wanted[index].anchor) == nullptr)
                         continue;
                     create_popup(wanted[index], *sources[index]);
                     if (find_popup(wanted[index].id) != nullptr)
@@ -1806,6 +1822,8 @@ namespace luil::win32 {
             {
                 if (anchor.empty())
                     return &main_;
+                if (auto* const popup { find_popup(anchor) }; popup != nullptr)
+                    return popup;
                 return find_secondary(anchor);
             }
 
@@ -1830,7 +1848,7 @@ namespace luil::win32 {
                     return;
                 host_->post_raw_input(surface_focus_lost_event { surface });
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
-                    if (popup->anchor() == surface)
+                    if (anchored_popup(surface, popup->id()) != nullptr)
                         host_->post_raw_input(surface_focus_lost_event { popup->id() });
             }
 
@@ -1854,9 +1872,21 @@ namespace luil::win32 {
             {
                 if (id.empty())
                     return nullptr;
-                for (const std::unique_ptr<popup_surface>& popup : popups_)
-                    if (popup->id() == id && popup->anchor() == anchor)
-                        return popup.get();
+                for (const auto& popup : popups_)
+                {
+                    if (popup->id() != id)
+                        continue;
+                    const std::u8string* current { &popup->anchor() };
+                    for (std::size_t depth { 0 }; depth < popups_.size(); ++depth)
+                    {
+                        if (*current == anchor)
+                            return popup.get();
+                        const auto parent { std::find_if(popups_.begin(), popups_.end(), [current](const auto& item) { return item->id() == *current; }) };
+                        if (parent == popups_.end())
+                            break;
+                        current = &(*parent)->anchor();
+                    }
+                }
                 return nullptr;
             }
 
@@ -1877,6 +1907,8 @@ namespace luil::win32 {
                 if (GetMonitorInfoW(monitor, &information) != FALSE)
                 {
                     const screen_area work { information.rcWork.left, information.rcWork.top, information.rcWork.right, information.rcWork.bottom };
+                    if (find_popup(placement.anchor) != nullptr && x + placement.width > work.right)
+                        x = origin.x - placement.width;
                     const auto [clamped_x, clamped_y] { clamp_popup_position(x, y, placement.width, placement.height, work) };
                     x = clamped_x;
                     y = clamped_y;
@@ -1956,7 +1988,7 @@ namespace luil::win32 {
                 static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_moved));
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                 {
-                    if (popup->anchor() != anchor)
+                    if (anchored_popup(anchor, popup->id()) == nullptr)
                         continue;
                     const POINT screen { popup_screen_position(popup->placement()) };
                     SetWindowPos(popup->window(), nullptr, screen.x, screen.y, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
@@ -1965,6 +1997,10 @@ namespace luil::win32 {
 
             void destroy_popup(const std::u8string& id)
             {
+                for (const auto& child : popups_)
+                    if (child->id() != id && anchored_popup(id, child->id()) != nullptr)
+                        if (auto action { child->take_dismiss_action(popup_dismiss_reason::anchor_closed) }; action.has_value())
+                            dispatch_action(std::move(*action));
                 for (auto position = popups_.begin(); position != popups_.end(); ++position)
                 {
                     if ((*position)->id() != id)
@@ -1988,6 +2024,32 @@ namespace luil::win32 {
             // 무엇 하나라도 냈으면 참이다.
             bool dismiss_popups(const popup_dismiss_reason reason) override
             {
+                if (reason == popup_dismiss_reason::escape_key)
+                {
+                    popup_surface* deepest { nullptr };
+                    std::size_t maximum { 0 };
+                    for (const auto& popup : popups_)
+                    {
+                        std::size_t depth { 0 };
+                        for (const auto& ancestor : popups_)
+                            if (ancestor->id() != popup->id() && anchored_popup(ancestor->id(), popup->id()) != nullptr)
+                                ++depth;
+                        if (depth > maximum)
+                        {
+                            maximum = depth;
+                            deepest = popup.get();
+                        }
+                    }
+                    if (deepest != nullptr)
+                    {
+                        if (auto action { deepest->take_dismiss_action(reason) }; action.has_value())
+                        {
+                            dispatch_action(std::move(*action));
+                            return true;
+                        }
+                        return false;
+                    }
+                }
                 bool requested { false };
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                 {

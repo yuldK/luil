@@ -87,3 +87,22 @@ Popup은 앵커의 활성화 상태를 공유하지만 닫힘 여부는 `dismiss
 [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 생성, 이동, 파괴, anchor 변경, 0 크기를 검증한다. [window_position_tests.cpp](../tests/window_position_tests.cpp)와 Win32 surface test는 DPI 변환과 작업 영역 조정을 확인한다.
 
 Reconcile 구현은 [popup_reconcile.cpp](../src/host/popup_reconcile.cpp), 실제 표면은 [popup_surface.cpp](../src/win32/popup_surface.cpp), frame 조립은 [win32_window.cpp](../src/win32/win32_window.cpp)에 있다.
+
+## 팝업 사슬과 하위 메뉴
+
+`ui_popup::anchor`는 같은 frame의 다른 popup id도 받는다. 자리와 배율은 부모 기준이며,
+부모부터 만드는 순서는 라이브러리가 정한다. 없는 앵커·순환·중복 id는 만들지 않는다.
+부모를 다시 만들면 자식도 다시 만들고 부모가 사라질 때 자식에 `anchor_closed` 계기를 보낸다.
+자식 클릭은 바깥 클릭이 아니며, 오른쪽 공간이 부족하면 부모 왼쪽에 놓고 작업 영역 안으로 다듬는다.
+TSF는 최상위 창의 session이 사슬 끝의 문서를 읽는다. Android는 같은 사슬을 overlay로 편다.
+
+메뉴 항목의 `children`은 자식 항목이다. `open_submenu`·`close_submenu`는 앱의 열림 경로를
+바꾸는 메시지다. 자식 메뉴의 `depth`, `parent_surface`, `anchor_key`를 함께 넘긴다.
+오른쪽·Enter는 자식을 열고 왼쪽·Esc는 한 단계만 닫는다. 기존 메뉴의 깊이는 0이다.
+`opened_key`는 부모가 현재 연 항목이다. hover는 기본 300ms를 기다리며, 이미 열린 자식으로
+움직이는 동안에는 멎기 전까지 형제 메뉴로 바꾸지 않는다. 기본 입력 초점은 앵커 창에 남고
+메뉴 강조가 부모 항목으로 돌아간다.
+
+`commands.h`의 명령표는 순수 값이다. `match_command`는 앱의 마지막 `on_key` 단계에서 부르고,
+실행은 앱이 한다. focused는 window로 물러설 수 있고 modal은 window로 물러서지 않는다.
+`checkable`은 꺼진 체크 명령을 표시하는 데 필요하여 인계안의 `app_command` 끝에 추가했다.

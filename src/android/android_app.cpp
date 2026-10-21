@@ -17,6 +17,7 @@
 #include "host/frame_state.h"
 #include "host/overlay_input.h"
 #include "host/popup_dismiss.h"
+#include "host/popup_reconcile.h"
 #include "host/skia_renderer.h"
 #include "host/text_edit_menu.h"
 #include "luil/theme/ui_theme.h"
@@ -275,6 +276,7 @@ namespace luil::android {
                 std::function<input_action(popup_dismiss_reason)> dismiss {};
                 // 이 frame에서 이미 닫자고 했다 (`take_popup_dismiss_action`).
                 bool requested { false };
+                std::u8string anchor {};
             };
 
         public:
@@ -1253,6 +1255,7 @@ namespace luil::android {
                 if (frame == overlay_frame_ && frame != nullptr)
                     return;
                 overlay_frame_ = frame;
+                auto previous { std::move(overlays_) };
                 overlays_.clear();
                 std::vector<overlay_area> areas {};
                 if (frame != nullptr)
@@ -1260,15 +1263,31 @@ namespace luil::android {
                     const float scale { scale_ };
                     const int limit_width { content_width() };
                     const int limit_height { content_height() };
-                    for (const ui_popup& popup : frame->popups)
+                    std::vector<popup_placement> logical {};
+                    for (const auto& popup : frame->popups)
+                        logical.push_back({ popup.id, 0, 0, popup.tree != nullptr && popup.width > 0.0f ? 1 : 0, popup.height > 0.0f ? 1 : 0, popup.anchor });
+                    const std::vector<std::u8string> roots { u8"" };
+                    for (const auto index : order_popup_placements(logical, roots))
                     {
-                        if (popup.id.empty() || popup.anchor.empty() == false || popup.tree == nullptr || popup.width <= 0.0f || popup.height <= 0.0f)
-                            continue;
+                        const ui_popup& popup { frame->popups[index] };
                         const int width { std::min(limit_width, static_cast<int>(std::lround(popup.width * scale))) };
                         const int height { std::min(limit_height, static_cast<int>(std::lround(popup.height * scale))) };
-                        const int x { std::clamp(static_cast<int>(std::lround(popup.x * scale)), 0, limit_width - width) };
-                        const int y { std::clamp(static_cast<int>(std::lround(popup.y * scale)), 0, limit_height - height) };
-                        overlays_.push_back(overlay_entry { popup.id, popup.tree, { insets_.left + x, insets_.top + y, width, height }, popup.border, popup.dismiss, false });
+                        int origin_x { 0 };
+                        int origin_y { 0 };
+                        if (popup.anchor.empty() == false)
+                        {
+                            const auto parent { std::find_if(overlays_.begin(), overlays_.end(), [&popup](const auto& entry) { return entry.id == popup.anchor; }) };
+                            if (parent == overlays_.end())
+                                continue;
+                            origin_x = parent->bounds.x - insets_.left;
+                            origin_y = parent->bounds.y - insets_.top;
+                        }
+                        int desired_x { origin_x + static_cast<int>(std::lround(popup.x * scale)) };
+                        if (popup.anchor.empty() == false && desired_x + width > limit_width)
+                            desired_x = origin_x - width;
+                        const int x { std::clamp(desired_x, 0, limit_width - width) };
+                        const int y { std::clamp(origin_y + static_cast<int>(std::lround(popup.y * scale)), 0, limit_height - height) };
+                        overlays_.push_back(overlay_entry { popup.id, popup.tree, { insets_.left + x, insets_.top + y, width, height }, popup.border, popup.dismiss, false, popup.anchor });
                         areas.push_back(overlay_area { popup.id, { static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height) } });
                     }
                     if (frame->windows.empty() == false && warned_windows_ == false)
@@ -1277,6 +1296,10 @@ namespace luil::android {
                         log_error(u8"Secondary windows (ui_frame::windows) are not supported on Android and are ignored.");
                     }
                 }
+                for (auto& old : previous)
+                    if (old.anchor.empty() == false && std::none_of(overlays_.begin(), overlays_.end(), [&old](const auto& entry) { return entry.id == old.anchor; }))
+                        if (auto action { take_popup_dismiss_action(old.dismiss, old.requested, popup_dismiss_reason::anchor_closed) }; action.has_value())
+                            dispatch(std::move(*action));
                 router_.set_areas(std::move(areas));
                 popups_visible.store(overlays_.empty() == false || edit_menu_.has_value());
                 back_claimed.store(frame != nullptr && frame->back != nullptr);
@@ -1350,6 +1373,17 @@ namespace luil::android {
                     if (reason == popup_dismiss_reason::escape_key)
                         return true;
                 }
+                if (reason == popup_dismiss_reason::escape_key)
+                    for (auto position { overlays_.rbegin() }; position != overlays_.rend(); ++position)
+                        if (position->anchor.empty() == false)
+                        {
+                            if (auto action { take_popup_dismiss_action(position->dismiss, position->requested, reason) }; action.has_value())
+                            {
+                                dispatch(std::move(*action));
+                                return true;
+                            }
+                            return false;
+                        }
                 for (overlay_entry& entry : overlays_)
                     if (std::optional<input_action> action { take_popup_dismiss_action(entry.dismiss, entry.requested, reason) }; action.has_value())
                     {

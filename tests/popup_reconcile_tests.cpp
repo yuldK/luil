@@ -178,3 +178,29 @@ TEST_CASE("Webview reconciliation rebuilds a webview whose anchor changed", "[wi
     REQUIRE(plan.create == std::vector<std::size_t> { 0 });
     REQUIRE(plan.destroy == std::vector<std::u8string> { u8"docs" });
 }
+
+TEST_CASE("Popup chains are ordered before their children and reject broken topology", "[host][popup]")
+{
+    const std::vector<std::u8string> roots { u8"", u8"window" };
+    const std::vector<luil::popup_placement> wanted {
+        { u8"leaf", 0, 0, 100, 100, u8"child" }, { u8"parent", 0, 0, 100, 100, u8"window" },
+        { u8"child", 0, 0, 100, 100, u8"parent" }, { u8"cycle", 0, 0, 100, 100, u8"cycle" },
+        { u8"missing", 0, 0, 100, 100, u8"absent" }
+    };
+    REQUIRE(luil::order_popup_placements(wanted, roots) == std::vector<std::size_t> { 1, 2, 0 });
+    REQUIRE(luil::popup_is_descendant(wanted, u8"leaf", u8"window"));
+    REQUIRE(luil::popup_is_descendant(wanted, u8"parent", u8"leaf") == false);
+}
+
+TEST_CASE("Reparenting a popup recreates all of its owned descendants", "[host][popup]")
+{
+    std::vector<luil::popup_placement> before {
+        { u8"parent", 0, 0, 100, 100 }, { u8"child", 100, 0, 100, 100, u8"parent" }
+    };
+    auto after { before };
+    after[0].anchor = u8"other";
+    const auto result { luil::reconcile_popups(before, after) };
+    REQUIRE(result.destroy.size() == 2u);
+    REQUIRE(result.create == std::vector<std::size_t> { 0, 1 });
+    REQUIRE(result.move.empty());
+}

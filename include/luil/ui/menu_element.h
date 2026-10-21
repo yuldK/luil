@@ -25,6 +25,7 @@ namespace luil {
         bool checked { false };
         // 표시만 하는 열이다. 실행의 일치 판정은 명령표가 맡는다.
         std::u8string shortcut_text {};
+        std::vector<menu_item_config> children {};
     };
 
     // 고른 항목의 키를 담은 메시지다.
@@ -38,6 +39,14 @@ namespace luil {
         std::vector<menu_item_config> items {};
         // 없으면 항목이 눌리지 않는다.
         menu_message_factory select {};
+        // 열림 경로는 앱 상태다. 자식이 있는 항목만 이 메시지를 낸다.
+        menu_message_factory open_submenu {};
+        ui_action close_submenu {};
+        std::size_t depth { 0 };
+        std::u8string opened_key {};
+        std::u8string parent_surface {};
+        std::u8string anchor_key {};
+        std::chrono::milliseconds hover_delay { 300 };
     };
 
     // 항목 한 줄의 높이, 구분선 줄의 높이, 메뉴 둘레 여백이다 (논리 픽셀).
@@ -53,6 +62,9 @@ namespace luil {
     {
     public:
         explicit menu_element(menu_config config);
+        [[nodiscard]] const menu_config& config() const noexcept;
+        [[nodiscard]] bool has_submenu(std::u8string_view key) const noexcept;
+        [[nodiscard]] std::optional<std::vector<input_action>> open_submenu(std::u8string_view key) const;
 
         // 이 설정의 전체 높이다 (논리 픽셀).
         // 담는 쪽이 popup 크기에 같은 값을 쓴다.

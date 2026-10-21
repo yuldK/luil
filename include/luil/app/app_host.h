@@ -71,6 +71,8 @@ namespace luil {
         surface_resized,
         // 창 활성이 바뀌었다 (alt-tab, 다른 창 클릭).
         activation_changed,
+        // 앵커 popup이 사라졌다. 자식도 자기 닫힘 상태를 정리한다.
+        anchor_closed,
     };
 
     // 주 창 위에 띄우는 가벼운 popup 하나다 (메뉴·드롭다운·긴 tooltip).
@@ -83,7 +85,7 @@ namespace luil {
     {
         // 같은 frame의 popup을 구분하는 앱 정의 키다.
         std::u8string id {};
-        // 이 popup이 붙는 표면이다 (`ui_window::id`와 같은 이름 공간).
+        // 이 popup이 붙는 창 또는 popup id다. 같은 frame의 부모는 순서와 무관하게 먼저 만든다.
         // 비어 있으면 주 창이다.
         // 자리·소유자·배율이 전부 이 표면을 따르므로, 보조 창 안에서 연
         // 메뉴는 그 창 기준 자리에 그 창 위로 뜬다
