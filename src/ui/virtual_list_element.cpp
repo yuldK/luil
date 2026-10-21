@@ -400,7 +400,7 @@ namespace luil {
         // 목록이 Tab의 자리다 — 안의 행이 아니다.
         // `tab_stop`의 기본값("누를 수 있으면 자리")은 여기서 답이 될 수 없다.
         // 목록에는 누를 것이 없고, 누를 수 있는 행은 tree에서 나고 사라진다.
-        set_tab_stop(config_.move != nullptr || config_.activate != nullptr);
+        set_tab_stop(moves_cursor() || config_.activate != nullptr);
 
         // Space·Enter가 커서 행을 실행한다.
         //
@@ -414,19 +414,43 @@ namespace luil {
                 return { config_.activate(model()[*cursor_].key) };
             });
 
-        if (config_.move == nullptr)
+        // Ctrl+A와 Ctrl+Space다. 둘 다 **목록의 키**라 초점이 행 안의 부품에 있어도 그 부품이 쓰지 않으면
+        // 여기까지 올라온다 (key-propagation-design.md). 쓰지 않는 키는 nullopt로 흘린다.
+        if (config_.multiple_selection && (config_.select_all != nullptr || config_.toggle_at_cursor != nullptr))
+            set_key_handler([this](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
+                if (event.alt || event.meta)
+                    return std::nullopt;
+                if (event.key == key_code::key_a && event.primary_shortcut_down() && event.shift == false && config_.select_all != nullptr)
+                    return std::vector<input_action> { config_.select_all() };
+                if (event.key == key_code::space && event.control && event.shift == false && config_.toggle_at_cursor != nullptr)
+                {
+                    // 커서가 없거나 비활성 항목이면 삼키기만 한다 — 그 자리에서 앱 단축키가 대신 실행되면 안 된다.
+                    if (cursor_.has_value() == false || *cursor_ >= model().size() || model()[*cursor_].enabled == false)
+                        return std::vector<input_action> {};
+                    return std::vector<input_action> { config_.toggle_at_cursor(model()[*cursor_].key) };
+                }
+                return std::nullopt;
+            });
+
+        if (moves_cursor() == false)
             return;
 
         // 화살표·Page·Home/End다. 묶음보다 앞에 선 경로라 감싼 묶음이 있어도
         // 목록이 먼저 가진다 (`process_step_key`가 `process_group_key`보다 앞이다).
+        //  - `move_with`가 있으면 수식 키의 뜻까지 받는다. Ctrl+화살표도 이 목록의 키가 된다.
+        //  - `move`만 있으면 지금처럼 걸음만 받는다 (Shift는 보이지 않고 Ctrl+화살표는 앱 단축키다).
         key_step_target steps {};
         steps.axis = focus_axis::vertical;
-        steps.on_step = [this](const value_step step) -> std::optional<std::vector<input_action>> {
+        const auto step_to = [this](const value_step step, const virtual_list_move_context& context) -> std::optional<std::vector<input_action>> {
             const std::optional<std::size_t> target { virtual_list_step_target(model(), cursor_, step, page_rows(step)) };
             if (target.has_value() == false)
                 return std::vector<input_action> {};
-            return move_cursor(*target);
+            return move_cursor(*target, context);
         };
+        if (config_.move_with != nullptr)
+            steps.on_step_with = [step_to](const value_step step, const key_step_context& keys) { return step_to(step, { step, keys.extend, keys.keep_selection }); };
+        else
+            steps.on_step = [step_to](const value_step step) { return step_to(step, { step, false, false }); };
         set_key_step_target(std::move(steps));
 
         // 글자 탐색이다. 질의를 잇고 끊는 규칙은 controller가 쥐고, 모델에서
@@ -439,7 +463,7 @@ namespace luil {
             const std::optional<std::size_t> target { virtual_list_search_target(model(), cursor_, query, first) };
             if (target.has_value() == false)
                 return std::nullopt;
-            return move_cursor(*target);
+            return move_cursor(*target, {});
         };
         set_key_search_target(std::move(search));
     }
@@ -485,16 +509,29 @@ namespace luil {
         return rows > 0 ? rows : 1;
     }
 
-    std::vector<input_action> virtual_list_element::move_cursor(const std::size_t index) const
+    bool virtual_list_element::moves_cursor() const noexcept
     {
-        if (config_.move == nullptr || index >= model().size())
+        return config_.move != nullptr || config_.move_with != nullptr;
+    }
+
+    std::vector<input_action> virtual_list_element::move_cursor(const std::size_t index, const virtual_list_move_context& context) const
+    {
+        if (moves_cursor() == false || index >= model().size())
             return {};
         std::vector<input_action> actions {};
         // **이미 그 자리면 커서 메시지를 내지 않는다.** Home을 첫 항목에서 누르면
         // 옮길 것이 없는데도 앱이 깨어나 tree를 통째로 다시 짓는다 — 아래 스크롤의
         // 0 방벽과 같은 이유다. 다만 키는 여전히 목록이 가지고(빈 목록도 "삼켰다"이다),
         // **화면은 들인다** — 커서는 제자리여도 스크롤로 밀려 나가 있을 수 있다.
-        if (cursor_.has_value() == false || *cursor_ != index)
+        //  - `move_with`는 예외다. 커서가 제자리여도 고른 것이 바뀌는 걸음(그냥·Shift)이 있으므로 낸다. 커서만
+        //    옮기는 Ctrl 걸음만 제자리에서 멈춘다.
+        const bool moved { cursor_.has_value() == false || *cursor_ != index };
+        if (config_.move_with != nullptr)
+        {
+            if (moved || context.keep_selection == false || context.extend)
+                actions.push_back(config_.move_with(model()[index].key, context));
+        }
+        else if (moved)
             actions.push_back(config_.move(model()[index].key));
 
         // 옮긴 자리를 함께 화면 안으로 들인다.
@@ -613,7 +650,7 @@ namespace luil {
             const bool selected { item.enabled && (item.key == config_.selected || chosen.contains(item.key)) };
             const bool at_cursor { cursor_.has_value() && *cursor_ == index };
             auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor) };
-            if ((config_.select != nullptr || config_.pick != nullptr || config_.move != nullptr) && item.enabled)
+            if ((config_.select != nullptr || config_.pick != nullptr || moves_cursor()) && item.enabled)
             {
                 // 누른 행은 **고르는 것이자 커서가 서는 곳**이다.
                 //
@@ -626,8 +663,11 @@ namespace luil {
                 //  - **factory를 값으로 담는다.** 지역 참조를 잡으면 그 참조가 죽은 뒤에
                 //    액션이 실행되고(행은 tree가 사는 동안 산다), 목록을 가리키는 `this`를
                 //    잡으면 행이 목록보다 오래 살 수 없다는 사실에 기대게 된다.
+                //  - `move_with`만 든 목록은 커서만 옮기는 문맥(`keep_selection`)으로 낸다. 고르기는 위의 `pick`·`select`가
+                //    이미 정했다.
                 row->set_action(ui_trigger::left_click,
-                    [key = item.key, select = config_.select, pick = config_.pick, move = at_cursor ? virtual_list_message_factory {} : config_.move](
+                    [key = item.key, select = config_.select, pick = config_.pick, move = at_cursor ? virtual_list_message_factory {} : config_.move,
+                        move_with = at_cursor || config_.move != nullptr ? virtual_list_move_with_factory {} : config_.move_with](
                         const ui_action_context& context) -> std::vector<input_action> {
                         std::vector<input_action> actions {};
                         if (pick != nullptr)
@@ -636,6 +676,8 @@ namespace luil {
                             actions.push_back(select(key));
                         if (move != nullptr)
                             actions.push_back(move(key));
+                        else if (move_with != nullptr)
+                            actions.push_back(move_with(key, virtual_list_move_context { std::nullopt, false, true }));
                         return actions;
                     });
             }

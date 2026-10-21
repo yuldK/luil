@@ -36,6 +36,7 @@
 | 선택·계층·재정렬·컨텍스트 메뉴 목록 | `list_element` | [ui/list_element.h](../include/luil/ui/list_element.h) | [설명](list-view-design.md) |
 | 그룹 머리행 목록 | `grouped_list_element` | [ui/grouped_list_element.h](../include/luil/ui/grouped_list_element.h) | [설명](list-view-design.md) |
 | 아주 긴 목록 (가상화) | `virtual_list_element` | [ui/virtual_list_element.h](../include/luil/ui/virtual_list_element.h) | [설명](virtual-list-design.md) |
+| 여러 항목 선택 규칙(기준점·범위·토글) | `item_selection`, `selection_pick`, `selection_move` | [ui/selection_model.h](../include/luil/ui/selection_model.h) | [설명](keyboard-selection-design.md) |
 | 탭 선택·닫기·재정렬·컨텍스트 메뉴 | `tab_bar_element` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](focus-group-design.md) |
 | 선택 묶음 | `choice_group_element` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
 | 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | [설명](popup-overlay-design.md) |

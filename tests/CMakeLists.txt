@@ -24,6 +24,7 @@ add_executable(luil_core_tests
     image_element_tests.cpp
     image_encode_tests.cpp
     key_propagation_tests.cpp
+    keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
     messaging_channel_tests.cpp
@@ -44,6 +45,7 @@ add_executable(luil_core_tests
     scroll_area_element_tests.cpp
     scroll_view_element_tests.cpp
     scrollbar_element_tests.cpp
+    selection_model_tests.cpp
     sheet_host_element_tests.cpp
     sidebar_element_tests.cpp
     slider_element_tests.cpp
