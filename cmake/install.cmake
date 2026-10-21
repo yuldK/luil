@@ -29,6 +29,9 @@ function(luil_install_rules)
     install(FILES "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../LICENSE"
         DESTINATION share/luil
         RENAME LICENSE.luil)
+    install(FILES "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/unicode-LICENSE.txt"
+        DESTINATION share/luil
+        RENAME LICENSE.unicode)
     install(FILES
         "${LUIL_NLOHMANN_JSON_ROOT}/LICENSE.MIT"
         "${LUIL_ASSET_DIRECTORY}/codicon.ttf"

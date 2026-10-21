@@ -161,7 +161,8 @@ namespace luil {
         const float left { box.x + box.width - width };
         const SkRect shape { config_.axis == scrollbar_axis::horizontal
             ? SkRect::MakeXYWH(thumb_top_, box.y + box.height - width, thumb_height_, width)
-            : SkRect::MakeXYWH(left, thumb_top_, width, thumb_height_) };
+            : SkRect::MakeXYWH(left, thumb_top_, width, thumb_height_)
+        };
         const float radius { width * 0.5f };
 
         float alpha { 0.28f };
@@ -180,7 +181,8 @@ namespace luil {
         // 이름은 `search_label` → 툴팁 순서다 (`ui_element::access_name`) —
         // 막대는 글을 세우지 않아 툴팁 말고 이름을 담을 자리가 필요하다.
         return { .role = access_role::scroll_bar, .name = access_name(), .range = access_range { 0.0f, maximum, clamped },
-            .orientation = config_.axis == scrollbar_axis::horizontal ? access_orientation::horizontal : access_orientation::vertical };
+            .orientation = config_.axis == scrollbar_axis::horizontal ? access_orientation::horizontal : access_orientation::vertical
+        };
     }
 
     std::optional<std::vector<input_action>> scrollbar_element::access_actions(const access_request& request) const

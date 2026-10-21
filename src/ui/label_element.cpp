@@ -64,10 +64,12 @@ namespace luil {
             return;
         }
         const std::u8string drawn { config_.elide == text_elide::middle
-            ? elide_text_middle(config_.text, text_width, font) : elide_text(config_.text, text_width, font) };
+            ? elide_text_middle(config_.text, text_width, font) : elide_text(config_.text, text_width, font)
+        };
         const float width { measure_text(drawn, font) };
         const float offset { config_.align == text_align::end ? text_width - width
-            : (config_.align == text_align::center ? (text_width - width) * 0.5f : 0.0f) };
+            : (config_.align == text_align::center ? (text_width - width) * 0.5f : 0.0f)
+        };
         draw_text(context.canvas, drawn, box.x + padding + offset, box.y + centered_text_baseline(font, box.height), font, paint);
     }
 

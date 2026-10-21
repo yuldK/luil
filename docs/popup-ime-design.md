@@ -24,7 +24,7 @@ focused_surface = popup id
 2. `focused_surface`가 자기 표면에 앵커된 popup id면 그 popup surface를 사용한다.
 3. 그 밖의 표면이면 대상이 없다.
 
-`surface_context::anchored_popup(anchor, id)`는 두 번째 경우의 popup을 찾는다. Popup은 popup에 앵커할 수 없으므로 한 단계 조회로 끝난다.
+`surface_context::anchored_popup(anchor, id)`는 두 번째 경우의 popup을 찾는다. Popup의 앵커 사슬을 최상위 창까지 따라가므로 중첩 popup도 같은 TSF session에 연결된다.
 
 이 선택은 여러 최상위 창의 TSF host가 같은 논리 초점을 동시에 주장하지 않게 한다.
 

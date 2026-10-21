@@ -2682,7 +2682,8 @@ namespace luil {
             const bool edits { event.key == key_code::delete_forward
                 || (event.key == key_code::enter && event.shortcut_modifier_down() == false) || (event.key == key_code::insert && event.shift)
                 || (primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x
-                    || event.key == key_code::key_z || event.key == key_code::key_y)) };
+                    || event.key == key_code::key_z || event.key == key_code::key_y))
+            };
             if (edits)
                 return std::vector<input_action> {};
         }

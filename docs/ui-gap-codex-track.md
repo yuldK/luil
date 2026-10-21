@@ -560,3 +560,8 @@ Codex가 기다리거나 만나는 지점을 알기 위한 요약이다.
 - X4의 메뉴 구성은 `depth`, `parent_surface`, `anchor_key`, `opened_key`, `hover_delay`를 추가로 받는다.
 - X4의 `app_command::checkable`은 checked=false인 체크 명령을 action과 구별한다.
 - X6의 조상 키 handler는 C0가 없는 빌드에서는 연결되지 않는다. C0 계약과의 연동 여부를 공개 질의로 확인한다.
+
+- X6의 `text_input_config::navigation_keys_to_parent`는 열린 후보의 탐색 키를 C0 조상 handler로 넘긴다. 기본값은 거짓이다.
+- X6의 `ui_element::set_preserve_pointer_focus`는 후보 popup을 눌러도 입력 초점을 유지한다. 기본값은 거짓이다.
+- X5의 span·highlight는 정렬된 비중첩·비어 있지 않은 반열림 범위이며 UTF-8 글자소 경계를 앱이 제공한다.
+- X7의 ID 중복 억제는 앱 수명 전체에 적용한다. modal 재진입 중의 다른 요청은 겹쳐 열지 않고 최신 frame에서 다시 평가한다.

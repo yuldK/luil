@@ -36,7 +36,7 @@ namespace luil {
     };
 
     // 텍스트 한 줄이다.
-    // bounds 안에서 왼쪽 정렬, 세로 중앙 baseline으로 그린다.
+    // bounds 안에서 설정한 가로 정렬과 세로 중앙 baseline으로 그린다.
     class label_element final : public ui_element
     {
     public:
