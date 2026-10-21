@@ -104,6 +104,12 @@ namespace luil {
         // 열 경계를 끌었다. 끄는 동안 이어서 오고, 끝나면 `resize_column_end`가 한 번 온다.
         table_resize_message_factory resize_column {};
         table_column_message_factory resize_column_end {};
+        // 머리글 칸을 끌어 다른 머리글 칸에 놓았다. `moved` 열을 `target` 열 자리로 옮기자는 메시지다 (탭 재배치와 같은
+        // 규약). 끌기는 누른 채 시작 거리를 넘겨야 서므로 머리글 누름(정렬)과 함께 산다.
+        std::function<input_action(const std::u8string& moved, const std::u8string& target)> reorder_column {};
+        // 머리글을 우클릭했다. 열 숨김·보이기 같은 메뉴를 앱이 연다 — 문맥의 좌표가 메뉴 자리다.
+        //  - 숨긴 열은 앱이 `columns`에서 뺀다. 표는 받은 열만 그린다.
+        std::function<input_action(const std::u8string& column, const ui_action_context& context)> column_menu {};
         // 계층을 그리는 열이다 (열 키). 비어 있으면 표는 평평하다.
         //  - 깊이와 펼침은 행 모델의 값(`virtual_list_item::depth`·`expansion`)이고, 펼치기는 `rows.set_expanded`다.
         //  - 그 열의 칸 앞에 깊이만큼 들여쓰고 가지에는 삼각형을 세운다. ←·→는 본문 목록이 계층으로 쓰고
