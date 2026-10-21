@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/ui/dialog_elements.h"
+#include "luil/ui/text_document.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scrollbar_element.h"
 #include "luil/ui/ui_element.h"
@@ -84,6 +85,11 @@ namespace luil {
         float scroll_x { 0.0f };
         std::function<input_action(float delta)> scroll_horizontal {};
         std::function<input_action(float offset)> scroll_horizontal_to {};
+        // 구간은 begin 순서이고 겹치지 않는다. 공유한 vector는 게시 뒤 고치지 않는다.
+        std::shared_ptr<const std::vector<text_span>> spans {};
+        std::shared_ptr<const std::vector<line_decoration>> lines {};
+        std::vector<gutter_column> gutters {};
+        std::vector<text_highlight> highlights {};
     };
 
     // 글자 크기와 줄 높이, 안쪽 여백이다 (논리 픽셀).
@@ -145,6 +151,9 @@ namespace luil {
         }
 
         [[nodiscard]] float content_width() const noexcept;
+        [[nodiscard]] std::optional<rect_f> line_rect(std::size_t logical_line) const;
+        [[nodiscard]] std::optional<std::size_t> offset_at(zoom_point point) const;
+        [[nodiscard]] std::vector<input_action> scroll_to_offset(std::size_t offset) const;
         [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
@@ -191,5 +200,9 @@ namespace luil {
         float content_width_ { 0.0f };
         float horizontal_offset_ { 0.0f };
         text_measurer code_measurer_ {};
+        text_measurer layout_measurer_ {};
+        std::vector<std::size_t> logical_lines_ {};
+        std::vector<float> gutter_widths_ {};
+        float gutter_width_ { 0.0f };
     };
 } // namespace luil

@@ -264,6 +264,12 @@ namespace luil {
         ui_color notice_background { 0 };
         caption_color_palette caption {};
 
+        ui_color document_added_background { 0 };
+        ui_color document_removed_background { 0 };
+        ui_color document_changed_background { 0 };
+        ui_color document_search_background { 0 };
+        ui_color document_search_foreground { 0 };
+
         [[nodiscard]] bool operator==(const ui_color_palette&) const noexcept = default;
     };
 

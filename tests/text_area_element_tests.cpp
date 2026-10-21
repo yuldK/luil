@@ -581,3 +581,21 @@ TEST_CASE("Unwrapped documents measure the longest line and expose horizontal sc
     REQUIRE(memo.scroll()->axis == luil::scroll_axis::horizontal);
     REQUIRE(memo.area().metrics().content_height == 82.0f);
 }
+
+TEST_CASE("Document gutters stay outside text offsets and do not invalidate cached wrapping", "[ui][text-area][document]")
+{
+    auto config { scrolling_config() };
+    config.gutters.push_back({ luil::gutter_kind::line_number, {}, 40.0f });
+    config.wrap_cache = std::make_shared<luil::text_area_wrap_cache>();
+    const auto tree { wrapped_tree(view_of(u8"first\nsecond", 0), config) };
+    const auto& memo { memo_of(*tree) };
+    REQUIRE(memo.line_rect(0)->x == 47.0f);
+    REQUIRE(memo.line_rect(1)->y == 23.0f);
+    REQUIRE(memo.line_rect(2).has_value() == false);
+    REQUIRE(memo.offset_at(luil::zoom_point { 1.0f, 14.0f }) == 0u);
+    REQUIRE(memo.text_input()->text == u8"first\nsecond");
+    REQUIRE(config.wrap_cache->size() == 2u);
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 5, luil::text_color_role::accent } });
+    static_cast<void>(wrapped_tree(view_of(u8"first\nsecond", 0), config));
+    REQUIRE(config.wrap_cache->size() == 2u);
+}
