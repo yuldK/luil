@@ -8,6 +8,8 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkTypeface.h"
 
+#include <cmath>
+#include <optional>
 #include <utility>
 
 namespace luil {
@@ -69,5 +71,11 @@ namespace luil {
     access_info label_element::accessibility() const
     {
         return { .role = access_role::static_text, .name = config_.text };
+    }
+
+    std::optional<size_f> label_element::preferred_size(const measure_context& context, const float available_width) const
+    {
+        static_cast<void>(available_width);
+        return size_f { std::ceil(context.text_width(config_.text, config_.font_size)) + config_.padding * 2.0f, height_for(config_) };
     }
 } // namespace luil

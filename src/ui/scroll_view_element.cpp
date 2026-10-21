@@ -76,7 +76,7 @@ namespace luil {
         // 자식 문맥을 잇지 않고 **새로 정하는** 유일한 자리다.
         // 아래의 sticky 머리행은 자기를 감싼 가장 가까운 스크롤 창의 값을 봐야 한다.
         //  - 측정기는 잇는다. 흘리는 창 안의 글도 같은 글꼴로 잰다.
-        content_->arrange({ slot, scale, config_.scroll_offset, {}, context.measurer });
+        content_->arrange({ slot, scale, config_.scroll_offset, {}, context.measurer, context.metrics });
     }
 
     void scroll_view_element::draw(draw_context& context, const interaction_snapshot& interaction) const

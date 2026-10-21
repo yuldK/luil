@@ -78,6 +78,9 @@ namespace luil {
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
+        // 표시 부분과 라벨 한 줄을 그리는 그 자리 그대로 더한 폭(양옆 안쪽 여백 포함)과 `height_for` 높이다.
+        //  - 라벨 글은 스타일의 본문 글자로 잰다 (`measure_context::style_metrics`). 그리기와 같은 글꼴이다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
 
     private:
         // 표시 부분이 놓이는 자리다 (물리 픽셀).

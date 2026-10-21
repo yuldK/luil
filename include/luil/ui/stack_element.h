@@ -4,6 +4,7 @@
 #include "luil/ui/ui_element.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace luil {
@@ -81,9 +82,18 @@ namespace luil {
         //  - 재분배를 하지 않으므로 유연 길이의 합을 세지 않고, 그래서 부동소수
         //    잔차가 계약에 들어오지 않는다. 필요해지면 이 규칙만 바뀌고 이 필드의
         //    뜻은 그대로다.
-        //  - 상한은 두지 않는다. 상한이 남긴 자리의 임자를 정할 근거가 아직 코드에
-        //    없다 (stack-expressiveness-design.md).
         float minimum { 0.0f };
+        // 유연 항목이 넘지 않는 주축 길이다. 0이면 상한이 없다.
+        //  - 상한에 걸린 항목이 남긴 자리는 **아직 걸리지 않은 유연 항목이** 비율대로 나눠 갖는다. 모두 걸렸으면
+        //    남는 자리가 되어 `main_alignment`이 둔다 — 하한과 달리 상한은 넘침을 만들지 않으므로 그 자리의 임자를
+        //    정할 수 있다 (stack-expressiveness-design.md).
+        //  - 하한보다 작으면 하한이 이긴다 (하한은 상한 뒤에 민다).
+        float maximum { 0.0f };
+        // 주축 길이를 자식이 원하는 크기로 잰다 (`ui_element::preferred_size`). `length`와 `weight`는 쓰지 않는다.
+        //  - 가로 stack은 자식의 원하는 폭을, 세로 stack은 이 stack의 교차 폭에서 원하는 높이를 쓴다.
+        //  - 답하지 않는 자식은 0이다.
+        //  - `cross_length`가 0이고 교차축 정렬이 `stretch`가 아니면 교차축 길이도 원하는 크기다.
+        bool fit { false };
     };
 
     // 자식을 한 방향으로 쌓는 배치 컨테이너다.
@@ -91,6 +101,8 @@ namespace luil {
     // 길이는 담을 때 정한다.
     //  - 측정 단계를 두지 않으므로 element가 자기 크기를 알릴 필요가 없고,
     //    배치가 담는 쪽의 코드에 그대로 드러난다.
+    //  - 맞춤 항목(`add_fit`)만 자식에게 원하는 크기를 묻는다. 고정·유연 항목만 담은 stack의 배치는 묻지 않으므로
+    //    지금까지와 같다.
     // 남는 자리는 `add_flexible`이 비율대로 나눠 갖는다.
     class stack_element final : public ui_element
     {
@@ -113,6 +125,9 @@ namespace luil {
         // 고정 길이를 뺀 나머지를 `weight` 비율로 나눠 갖는다.
         // `weight`가 0 이하면 1.0으로 본다.
         void add_flexible(std::unique_ptr<ui_element> child, float weight = 1.0f);
+        // 주축 길이를 자식이 원하는 크기로 담는다 (`stack_item::fit`).
+        //  - 버튼 글·라벨처럼 언어와 글꼴에 따라 길이가 바뀌는 자식을 손으로 어림하지 않고 담는다.
+        void add_fit(std::unique_ptr<ui_element> child);
         // 자식 없이 자리만 비운다.
         // 빈 element를 tree에 넣지 않으므로 hit test와 그리기가 늘지 않는다.
         void add_gap(float length);
@@ -120,6 +135,11 @@ namespace luil {
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        // 자식들의 원하는 크기를 쌓은 크기다 (stack 안에 stack을 맞춤으로 담을 때).
+        //  - 주축은 고정 길이·맞춤 길이·유연 항목의 하한·간격·여백의 합이다. 유연 항목은 하한만큼 원한다.
+        //  - 교차축은 자식의 교차 길이(`cross_length`, 없으면 원하는 크기) 중 가장 긴 것과 여백이다.
+        //  - 자식이 하나도 답하지 않고 맞춤 항목도 없으면 답하지 않는다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
 
     private:
         struct entry

@@ -40,6 +40,9 @@ namespace luil {
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
+        // 글 한 줄의 폭(양옆 `padding` 포함)과 `height_for` 높이다. 폭은 올림한다 — 잰 폭에 꼭 맞춘 자리에서
+        // 부동소수 잔차로 말줄임이 서지 않게 한다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
 
         // 한 줄이 차지하는 자연 높이다 (논리 픽셀).
         // 글자 크기에 위아래 숨 쉴 여백을 더한 값이라 stack의 고정 길이로 바로 넣는다.

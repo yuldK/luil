@@ -630,4 +630,13 @@ namespace luil {
         // 가린 칸은 화면처럼 점이다. 보조 기술이 글자 수는 알되 글은 읽지 못한다.
         return { .role = access_role::edit, .name = config_.placeholder, .value = masked() ? masked_text(value_.text) : value_.text, .secret = config_.secret };
     }
+
+    std::optional<size_f> text_button_element::preferred_size(const measure_context& context, const float available_width) const
+    {
+        static_cast<void>(available_width);
+        const float content { icon_width_for(config_) + std::ceil(context.text_width(config_.text, context.style_metrics().body_font_size)) };
+        if (config_.visual == text_button_visual::link)
+            return size_f { content, text_button_height };
+        return size_f { std::max(text_button_minimum_width, content + text_button_padding * 2.0f), text_button_height };
+    }
 } // namespace luil

@@ -95,6 +95,6 @@ element가 `ui_color`를 앱에서 받는 자리는 라이브러리 어디에도
 
 Android host는 시작·구성 변경·설정 앱에서 복귀할 때 `TypedValue.applyDimension(COMPLEX_UNIT_SP)`를 C++ JNI로 호출해 글자 크기 변환 표를 읽는다. Android 14 이후의 비선형 확대를 보존한다. 내장 element의 UI 글자는 이 표로 그리며 아이콘과 여백은 기존 dp 배율을 유지한다. Windows는 기본 변환이 기존의 `font_size * scale`이다.
 
-커스텀 element는 `scaled_font_size(logical_size, display_scale)`로 글자 크기를 구한다. 글과 고정 여백으로 행을 만들면 `text_line_height(logical_size, padding)`를 쓰고, label은 `label_element::height_for`를 쓴다. luil은 측정 단계가 없으므로 앱이 직접 정한 고정 행 높이는 자동으로 늘어나지 않는다. 글 크기를 키우는 행은 이 함수로 높이와 스크롤 콘텐츠 높이도 함께 정해야 한다. mobile demo의 기본 입력 칸·탐색 목록·페이지 글은 이 방식이다.
+커스텀 element는 `scaled_font_size(logical_size, display_scale)`로 글자 크기를 구한다. 글과 고정 여백으로 행을 만들면 `text_line_height(logical_size, padding)`를 쓰고, label은 `label_element::height_for`를 쓴다. 앱이 직접 정한 고정 행 높이는 자동으로 늘어나지 않는다. 글이 든 element를 맞춤 항목(`stack_element::add_fit`, `grid_track::fit`)으로 담으면 같은 글자 크기로 잰 크기를 받는다 ([stack-expressiveness-design.md](../stack-expressiveness-design.md#내용-크기)). 글 크기를 키우는 행은 이 함수로 높이와 스크롤 콘텐츠 높이도 함께 정해야 한다. mobile demo의 기본 입력 칸·탐색 목록·페이지 글은 이 방식이다.
 
 글자 설정만 바뀌어도 `app_delegate::make_metrics_message`를 다시 부른다. `window_metrics::text_scale`은 12sp의 대표 배율이며, 비선형 변환의 실제 크기는 위 함수로 조회한다. 텍스트 칸은 배치할 때 크기를 저장해 그리기·hit test·IME 범위 측정이 같은 크기를 쓰게 한다.

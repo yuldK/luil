@@ -9,6 +9,8 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkTypeface.h"
 
+#include <cmath>
+#include <optional>
 #include <utility>
 
 namespace luil {
@@ -194,5 +196,15 @@ namespace luil {
             info.checked = config_.checked;
         info.mixed = config_.mixed && config_.style == check_style::checkbox;
         return info;
+    }
+
+    std::optional<size_f> check_element::preferred_size(const measure_context& context, const float available_width) const
+    {
+        static_cast<void>(available_width);
+        // 그리기의 자리와 같다 — 안쪽 여백, 표시 부분, 간격과 글, 오른쪽 안쪽 여백이다.
+        float width { check_inset + indicator_width_for(config_) + check_inset };
+        if (config_.label.empty() == false)
+            width += check_gap + std::ceil(context.text_width(config_.label, context.style_metrics().body_font_size));
+        return size_f { width, height_for(config_) };
     }
 } // namespace luil

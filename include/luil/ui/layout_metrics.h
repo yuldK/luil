@@ -61,6 +61,36 @@ namespace luil {
         [[nodiscard]] bool operator==(const edge_insets&) const noexcept = default;
     };
 
+    // 칸 안에서 자식을 어디에 둘지다 (한 축). 표 배치(`grid_element`)와 겹침 배치(`layer_element`)가 같은 값을 쓴다.
+    //  - `stretch`는 칸을 다 채운다. 나머지는 자식의 원하는 크기(`ui_element::preferred_size`)로 서고, 답이 없으면
+    //    칸을 다 채운다.
+    //  - stack의 교차축 정렬(`stack_alignment`)과 뜻이 같지만 그쪽은 그대로 둔다 (이미 쓰는 이름이다).
+    enum class layout_alignment
+    {
+        start,
+        center,
+        end,
+        stretch,
+    };
+
+    // 칸(`start`부터 `available`만큼) 안에 `length`를 정렬한 시작점이다. 같은 단위면 무엇이든 된다.
+    //  - `stretch`는 시작점이 칸의 처음이다 (길이는 부르는 쪽이 칸 전체로 잡는다).
+    //  - 길이가 칸보다 길면 가운데·끝은 칸 앞으로 넘친다. 자르지 않는다 (stack의 교차축과 같다).
+    [[nodiscard]] constexpr float align_within(const float start, const float available, const float length, const layout_alignment alignment) noexcept
+    {
+        switch (alignment)
+        {
+        case layout_alignment::center:
+            return start + (available - length) / 2.0f;
+        case layout_alignment::end:
+            return start + available - length;
+        case layout_alignment::start:
+        case layout_alignment::stretch:
+            break;
+        }
+        return start;
+    }
+
     // 흘리는 창의 위·아래 가장자리 표시다.
     //
     // 흘린 내용이 위로 지나갔으면 위에, 아래에 더 있으면 아래에 그림자를 드리워

@@ -29,6 +29,8 @@ namespace luil {
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
+        // 글리프 크기의 정사각형이다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
 
     private:
         glyph_config config_ {};
