@@ -156,6 +156,15 @@ namespace luil {
     // 답의 규약은 `ui_element::access_actions`와 같다 — 없으면(nullopt) 기본 실행에 맡기고, 빈 목록이면 할 일이 없다.
     using access_handler = std::function<std::optional<std::vector<input_action>>(const access_request& request)>;
 
+    // 더 안쪽이 소비하지 않은 키 하나를 받는다 (`ui_element::set_key_handler`, key-propagation-design.md).
+    //
+    // **가장 작은 단위가 먼저 받고, 소비하지 않은 키는 위로 흐른다.** 초점이 선 element부터 root까지
+    // 차례로 묻고 처음 답한 것에서 멈춘다. 아무도 답하지 않으면 앱 정책(`interaction_policy::on_key`)으로 간다.
+    //  - 답의 규약은 `key_step_target`과 같다. nullopt면 소비하지 않았다(위로 흐른다), 빈 목록이면
+    //    소비했고 낼 메시지가 없다.
+    //  - 텍스트 칸·값 단계·묶음이 먼저 가진 키는 오지 않는다. 그것들이 가장 안쪽의 소비자다.
+    using key_handler = std::function<std::optional<std::vector<input_action>>(const key_pressed_event& event)>;
+
     struct drag_payload
     {
         ui_element_id source {};
@@ -717,6 +726,8 @@ namespace luil {
         [[nodiscard]] const pan_handoff_target* pan_handoff() const noexcept;
         // 초점을 가진 채 글자로 자기 모델을 찾는 역할이다. 없으면 nullptr다.
         [[nodiscard]] const key_search_target* key_search() const noexcept;
+        // 더 안쪽이 소비하지 않은 키를 받는 처리기다. 없으면 nullptr다.
+        [[nodiscard]] const key_handler* key_handler_of() const noexcept;
         // 앱이 지정한 포인터 모양이다.
         // `inherit`이면 지정하지 않았다는 뜻이라 `cursor_at`이 역할에서 고른다.
         [[nodiscard]] ui_cursor cursor() const noexcept;
@@ -824,6 +835,10 @@ namespace luil {
         //  - `access_actions`를 재정의한 element도 처리하지 않는 명령을 기본 구현으로 넘기면 이것이 답한다.
         //  - 할 수 있는지는 여전히 `plan_access_request`가 먼저 거른다 — 이미 그 상태인 명령은 여기 오지 않는다.
         void set_access_handler(access_handler handler);
+        // 초점이 이 element이거나 그 자손일 때, 더 안쪽이 소비하지 않은 키를 받는다 (`key_handler`).
+        //  - 목록의 Ctrl+A처럼 **초점이 행 안의 부품에 있어도** 그 부품이 쓰지 않는 키를 목록이 받는 자리다.
+        //  - hit 대상을 넓히지 않는다 (`set_key_step_target`과 같은 이유). 키는 포인터가 아니라 초점을 따른다.
+        void set_key_handler(key_handler handler);
         void set_clip_children(bool value) noexcept;
         void set_hit_opaque(bool value) noexcept;
         // 자손들을 Tab의 한 자리로 묶는다 (탭 막대·라디오 묶음·목록).
@@ -984,6 +999,7 @@ namespace luil {
         std::optional<pan_handoff_target> pan_handoff_ {};
         std::optional<key_search_target> key_search_target_ {};
         access_handler access_handler_ {};
+        key_handler key_handler_ {};
         bool clip_children_ { false };
         bool hit_opaque_ { false };
         // 비어 있으면 액션 유무에서 판정한다 (`tab_stop`).

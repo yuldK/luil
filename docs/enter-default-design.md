@@ -35,9 +35,10 @@ save->set_action(
 1. 열린 메뉴의 Enter
 2. 초점 element의 activation
 3. 텍스트 편집, 값 step, focus group 이동
-4. modal dismiss 처리
-5. 기본 버튼
-6. `interaction_policy::on_key`
+4. 초점 element부터 root까지의 `key_handler` ([키 조상 전파](key-propagation-design.md))
+5. modal dismiss 처리
+6. 기본 버튼
+7. `interaction_policy::on_key`
 
 초점 element에 `left_click` 액션이 있으면 Enter와 Space가 그 액션을 실행한다. 키보드 실행의 좌표는 element bounds의 중심이며 `ui_action_context::control`도 전달된다. `interaction_policy::on_click()` 역시 포인터 클릭과 같은 시점에 호출된다.
 
