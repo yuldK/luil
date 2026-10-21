@@ -104,6 +104,14 @@ namespace luil::win32 {
             }
         }
 
+        // 체크의 세 상태를 UIA ToggleState로 옮긴다. 일부(`access_info::mixed`)가 켬·끔보다 앞선다.
+        [[nodiscard]] ToggleState toggle_state_of(const access_info& info) noexcept
+        {
+            if (info.mixed)
+                return ToggleState_Indeterminate;
+            return info.checked == true ? ToggleState_On : ToggleState_Off;
+        }
+
         // Invoke를 내걸 자리인가.
         // **상태를 가진 것은 Invoke가 아니다** — UIA는 체크박스·라디오·펼침을
         // 그 상태의 패턴으로 실행하게 한다. 역할로도 가리는 이유는 텍스트 칸이
@@ -417,10 +425,9 @@ namespace luil::win32 {
                 raise_property(*events_, *provider, UIA_NamePropertyId, variant_from_utf8(before.name), variant_from_utf8(after.name));
             if (before.value != after.value)
                 raise_property(*events_, *provider, UIA_ValueValuePropertyId, variant_from_utf8(before.value), variant_from_utf8(after.value));
-            if (before.checked != after.checked)
+            if (before.checked != after.checked || before.mixed != after.mixed)
             {
-                const auto state { [](const std::optional<bool>& checked) { return checked == true ? ToggleState_On : ToggleState_Off; } };
-                raise_property(*events_, *provider, UIA_ToggleToggleStatePropertyId, variant_from_int(state(before.checked)), variant_from_int(state(after.checked)));
+                raise_property(*events_, *provider, UIA_ToggleToggleStatePropertyId, variant_from_int(toggle_state_of(before)), variant_from_int(toggle_state_of(after)));
             }
             if (before.expanded != after.expanded)
             {
@@ -1242,7 +1249,7 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (info.checked.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            *result = *info.checked ? ToggleState_On : ToggleState_Off;
+            *result = toggle_state_of(info);
             return S_OK;
         });
     }
