@@ -33,6 +33,13 @@ namespace {
         float delta { 0.0f };
     };
 
+    struct menu_intent
+    {
+        std::u8string key {};
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
     [[nodiscard]] luil::list_config make_config(const std::size_t count)
     {
         luil::list_config config {};
@@ -114,6 +121,51 @@ TEST_CASE("A list row click asks for the selection and a disabled row does not",
 
     // 비활성 행도 액션은 갖지만 실행되지 않는다 (자리 판정이 `enabled`를 본다).
     REQUIRE(row_at(list, 2).enabled() == false);
+}
+
+TEST_CASE("A list row right click asks for its context menu at the pointer", "[ui][list]")
+{
+    luil::list_config config { make_config(3) };
+    config.items[0].expansion = luil::list_expansion::collapsed;
+    config.items[2].enabled = false;
+    config.toggle = [](const std::u8string& key) { return luil::input_action { luil::app_message { toggle_intent { key } } }; };
+    config.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::input_action { luil::app_message { menu_intent { key, context.x, context.y } } }; };
+    const luil::list_element list { std::move(config) };
+
+    // `select`가 없는 목록에도 선다. 그래도 Tab 자리가 되지는 않는다 — 자리는 좌클릭이 정한다.
+    const luil::ui_element& second { row_at(list, 1) };
+    const luil::ui_action* const menu { second.action(luil::ui_trigger::right_click) };
+    REQUIRE(menu != nullptr);
+    REQUIRE(second.tab_stop() == false);
+    auto opened { (*menu)({ second.id(), 40.0f, 30.0f }) };
+    const auto* const message { single_message<menu_intent>(opened) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->key == u8"item-b");
+    REQUIRE(message->x == 40.0f);
+    REQUIRE(message->y == 30.0f);
+
+    // 삼각형 위의 우클릭도 그 행의 메뉴다 — 우클릭은 부모로 올라가지 않는다.
+    const luil::ui_element* const expander { row_at(list, 0).children()[0].get() };
+    const luil::ui_action* const expander_menu { expander->action(luil::ui_trigger::right_click) };
+    REQUIRE(expander_menu != nullptr);
+    auto from_expander { (*expander_menu)({ expander->id(), 4.0f, 10.0f }) };
+    const auto* const expander_message { single_message<menu_intent>(from_expander) };
+    REQUIRE(expander_message != nullptr);
+    REQUIRE(expander_message->key == u8"item-a");
+
+    // 비활성 행은 클릭처럼 우클릭도 내지 않는다.
+    REQUIRE(row_at(list, 2).action(luil::ui_trigger::right_click) == nullptr);
+}
+
+TEST_CASE("A list without a context menu factory registers no right click", "[ui][list]")
+{
+    luil::list_config config { make_config(1) };
+    config.items[0].expansion = luil::list_expansion::collapsed;
+    config.toggle = [](const std::u8string& key) { return luil::input_action { luil::app_message { toggle_intent { key } } }; };
+    const luil::list_element list { std::move(config) };
+
+    REQUIRE(row_at(list, 0).action(luil::ui_trigger::right_click) == nullptr);
+    REQUIRE(row_at(list, 0).children()[0]->action(luil::ui_trigger::right_click) == nullptr);
 }
 
 TEST_CASE("A list is one Tab stop that enters at the selected row", "[ui][list]")

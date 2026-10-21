@@ -41,6 +41,10 @@ namespace luil {
     // 끌어 놓은 항목을 대상 항목 자리로 옮기자는 메시지다.
     // `tab_reorder_message_factory`와 같은 모양이라 새 개념이 아니다.
     using list_reorder_message_factory = std::function<input_action(const std::u8string& moved, const std::u8string& target)>;
+    // 항목에 컨텍스트 메뉴를 열자는 메시지다.
+    // `tab_context_message_factory`와 같은 모양이다 — 문맥의 좌표(물리 픽셀, 창 좌표)는 메뉴를 띄울 자리이고,
+    // 수식 키는 그 순간의 것이다.
+    using list_context_message_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
 
     struct list_config
     {
@@ -80,6 +84,12 @@ namespace luil {
         //  - 평평한 목록에서만 뜻이 하나다. tree에서 "저 자리로"는 앞·뒤·자식으로
         //    갈리므로 그 뜻은 앱이 정한다 (list-view-design.md).
         list_reorder_message_factory reorder {};
+        // 행을 우클릭하면 낸다. 터치의 길게 누르기·펜의 배럴 버튼도 우클릭이라 이 하나로 함께 선다.
+        //  - 펼침 삼각형 위에서 눌러도 그 행의 메뉴다 — 삼각형은 행의 일부로 보인다.
+        //  - 고르지 않는다. 우클릭한 행을 먼저 고를지는 앱이 정한다.
+        //  - 비활성 행에서는 나지 않는다 (클릭과 같다).
+        //  - Tab 자리를 바꾸지 않는다. 자리는 `select`(좌클릭)가 정한다.
+        list_context_message_factory context_menu {};
         // 행을 잡고 끄는 동안의 포인터 모양이다.
         // `inherit`이면 라이브러리가 drag 역할에서 고른다(`grabbing`).
         // `reorder`가 있을 때만 뜻이 있다 — 무엇이 자연스러운 모양인지는 목록이
