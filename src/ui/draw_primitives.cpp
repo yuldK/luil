@@ -249,6 +249,38 @@ namespace luil {
         return result;
     }
 
+    std::u8string elide_text_middle(const std::u8string_view text, const float max_width, const SkFont& font)
+    {
+        if (text.empty() || max_width <= 0.0f)
+            return {};
+        if (measure_text(text, font) <= max_width)
+            return std::u8string { text };
+        constexpr std::u8string_view ellipsis { u8"…" };
+        if (measure_text(ellipsis, font) > max_width)
+            return {};
+        const std::vector<std::size_t> boundaries { character_boundaries(text) };
+        const std::size_t count { boundaries.size() - 1 };
+        const auto candidate = [&](const std::size_t keep) {
+            const std::size_t front { (keep + 1) / 2 };
+            const std::size_t back { keep / 2 };
+            std::u8string result { text.substr(0, boundaries[front]) };
+            result.append(ellipsis);
+            result.append(text.substr(boundaries[count - back]));
+            return result;
+        };
+        std::size_t low { 0 };
+        std::size_t high { count };
+        while (low < high)
+        {
+            const std::size_t middle { low + (high - low + 1) / 2 };
+            if (measure_text(candidate(middle), font) <= max_width)
+                low = middle;
+            else
+                high = middle - 1;
+        }
+        return candidate(low);
+    }
+
     float draw_text_within(SkCanvas& canvas, const std::u8string_view text, const float x, const float y, const float max_width, const SkFont& font, const SkPaint& paint)
     {
         const std::u8string drawn { elide_text(text, max_width, font) };

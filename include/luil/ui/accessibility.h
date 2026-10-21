@@ -66,6 +66,8 @@ namespace luil {
     // 요소 하나가 보조 기술에 내주는 정보다.
     // 비활성·초점 가능 여부는 담지 않는다 — `enabled()`·`focusable()`이 이미
     // 공개라 같은 값을 두 곳에 두지 않는다.
+    enum class access_orientation { horizontal, vertical };
+
     struct access_info
     {
         access_role role { access_role::none };
@@ -84,6 +86,7 @@ namespace luil {
         //    `select`로 요소에 온다 (`access_request::multiple_selection`이 참).
         //  - 항목에는 뜻이 없다. 항목은 지금처럼 `selected`만 답한다.
         bool multiple_selection { false };
+        std::optional<access_orientation> orientation {};
 
         [[nodiscard]] bool operator==(const access_info&) const = default;
     };

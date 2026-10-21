@@ -980,6 +980,9 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_press(const pointer_pressed_event& event)
     {
+        // 가운데 버튼은 선택·초점·끌기 상태를 바꾸지 않는다.
+        if (event.button == pointer_button::middle)
+            return {};
         inertia_.reset();
         if (event.device == pointer_device::touch)
             return process_touch_press(event);
@@ -1142,6 +1145,9 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_release(const pointer_released_event& event)
     {
+        // 가운데 버튼은 선택·초점·끌기 상태를 바꾸지 않는다.
+        if (event.button == pointer_button::middle)
+            return {};
         if (event.device == pointer_device::touch)
             return process_touch_release(event);
         // 터치가 조작을 쥔 동안의 마우스·펜 뗌은 짝인 누름이 없다

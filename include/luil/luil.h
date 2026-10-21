@@ -49,6 +49,7 @@
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"
+#include "luil/ui/spinner_element.h"
 #include "luil/ui/root_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scroll_view_element.h"

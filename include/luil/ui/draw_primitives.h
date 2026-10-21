@@ -115,6 +115,9 @@ namespace luil {
     // 자르는 위치는 UTF-8 문자 경계다.
     [[nodiscard]] std::u8string elide_text(std::u8string_view text, float max_width, const SkFont& font);
 
+    // 경로처럼 끝이 중요한 글은 앞뒤를 남기고 가운데를 줄인다.
+    [[nodiscard]] std::u8string elide_text_middle(std::u8string_view text, float max_width, const SkFont& font);
+
     // `max_width` 안에서 잘라 그린다.
     // 좁은 창에서 글자가 옆 UI를 침범하지 않게 하는 공통 경로다.
     // 반환값은 실제로 그린 폭이다.
