@@ -378,7 +378,7 @@ namespace mobile_demo {
             return actions;
         if (auto actions { tabs_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
             return actions;
-        return luil::route_wheel(tree, event.x, event.y, scroll_delta);
+        return luil::route_wheel(tree, event, scroll_delta);
     }
 
     std::vector<luil::input_action> mobile_policy::on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused)

@@ -122,6 +122,12 @@ namespace luil {
     //    한 줄로 끝난다.
     //  - 전부 이미 보이면 빈 목록이다 (delta 0의 방벽과 같은 자리).
     [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, float x, float y, float delta);
+    // 이벤트를 받는 짝이다. 좌표만 받는 위의 짝에 두 가지를 더한다.
+    //  - 확대 보기(`zoom_source`)의 확대·이동.
+    //  - **휠의 축.** 가로 휠(`mouse_wheel_event::horizontal`)은 가로 창(`scroll_axis::horizontal`)과 확대 보기만
+    //    받는다. 축이 다른 세로 창은 지나쳐 그것을 감싼 가로 창으로 가고, 없으면 아무 일도 없다. 가로 휠의 양수
+    //    (오른쪽)는 offset을 늘린다. 세로 휠은 위의 짝처럼 축을 묻지 않는다.
+    //  policy의 몸통은 이 짝을 부르는 것이 낫다 — 위의 짝은 축을 모르므로 가로 휠을 세로 창에 보낸다.
     [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, const mouse_wheel_event& event, float scroll_delta);
     [[nodiscard]] const ui_element* zoom_owner_at(const ui_tree& tree, float x, float y);
     [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target);
