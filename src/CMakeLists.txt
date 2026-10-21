@@ -241,6 +241,8 @@ luil_add_source_filter(luil_core_files "ui/image"
 luil_add_source_filter(luil_core_files "ui/lists"
     ui/grouped_list_element.cpp
     "${public_headers}/ui/grouped_list_element.h"
+    ui/item_model.cpp
+    "${public_headers}/ui/item_model.h"
     ui/list_element.cpp
     "${public_headers}/ui/list_element.h"
     ui/reorder_drop.h
