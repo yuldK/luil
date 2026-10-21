@@ -11,7 +11,11 @@ namespace luil {
     // 두 자리가 따로 그리면 한쪽만 고대비 규칙(테·글리프)을 지키게 된다. 그래서 그림은 여기 하나다.
     //  - 좌표와 폭은 물리 픽셀이고 글자 크기는 논리 픽셀이다 (`draw_context::scale`로 곱한다).
 
-    // 그 글을 담는 알약의 폭이다. 글꼴이 그리기 시점에만 있으므로 그때 잰다.
+    // 글 폭에서 알약 폭이다 (둘 다 논리 픽셀). 그리기의 폭과 배치의 원하는 크기(`badge_element::preferred_size`)가 같은
+    // 식을 쓴다.
+    [[nodiscard]] float badge_pill_width_for(float text_width, bool has_text, badge_tone tone, float font_size) noexcept;
+
+    // 그 글을 담는 알약의 폭이다 (물리 픽셀). 그리기 시점의 글꼴로 잰다.
     [[nodiscard]] float badge_pill_width(const draw_context& context, std::u8string_view text, badge_tone tone, float font_size);
 
     // 그 자리에 알약을 그린다. 폭이 좁으면 글이 잘린다.

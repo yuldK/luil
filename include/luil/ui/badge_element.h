@@ -29,11 +29,8 @@ namespace luil {
 
     // 알약 모양의 작은 상태 표시다. 액션도 커서도 갖지 않는다.
     //
-    // **내용에 맞춰 줄어들지 않는다 — 폭은 담는 쪽이 준다.**
-    // 배치 시점에는 글꼴이 없어(`arrange_context`에 typeface가 없다) 글자 폭을 잴 수
-    // 없다. `wrap_element`가 항목을 전부 같은 크기로 못박은 것과 **같은 이유이자 같은
-    // 답**이다. 준 폭이 좁으면 글자가 잘린다(`draw_text_within`) — 배지가 옆 UI를
-    // 침범하지 않는다.
+    // **폭은 담는 쪽이 준다.** 준 폭이 좁으면 글자가 잘린다(`draw_text_within`) — 배지가 옆 UI를 침범하지 않는다.
+    //  - 글에 맞는 폭은 `preferred_size`가 답한다. 맞춤으로 담으면(`stack_element::add_fit`) 글이 잘리지 않는다.
     //
     // 어느 tone이든 **1px 테를 두른다.** 고대비는 바탕을 전부 창 배경으로 접으므로
     // 채우기만으로는 배지가 표면에서 사라진다. 테가 tone의 색을 나르고, 심각도는
@@ -58,6 +55,8 @@ namespace luil {
         }
 
         void arrange(const arrange_context& context) override;
+        // 글과 글리프를 담는 알약 폭(그리기와 같은 식)과 `height_for` 높이다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
 

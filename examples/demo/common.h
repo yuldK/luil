@@ -97,6 +97,7 @@ namespace demo {
     constexpr luil::text_input_target target_tool_menu_search { static_cast<luil::text_input_target>(5) };
     constexpr luil::text_input_target target_network_url { static_cast<luil::text_input_target>(6) };
     constexpr luil::text_input_target target_memo { static_cast<luil::text_input_target>(7) };
+    constexpr luil::text_input_target target_workbench_summary { static_cast<luil::text_input_target>(8) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.
@@ -112,6 +113,7 @@ namespace demo {
     inline constexpr std::u8string_view page_webview { u8"webview" };
     inline constexpr std::u8string_view page_zoom { u8"zoom" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
+    inline constexpr std::u8string_view page_workbench { u8"workbench" };
 
     // --- 셸 수준 메시지 ---
     struct close_intent

@@ -75,7 +75,9 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/webview_page.cpp
     demo/webview_page.h
     demo/windows_page.cpp
-    demo/windows_page.h)
+    demo/windows_page.h
+    demo/workbench_page.cpp
+    demo/workbench_page.h)
 # 데모가 자기 안에 세우는 되돌이 HTTP 서버다. 예제가 인터넷·회사 프록시·남의 API
 # 사정에 흔들리면 예제가 아니라서 있다.
 #  - test의 도우미를 **같은 파일 그대로** 컴파일한다. 데모용으로 한 벌 더 두면

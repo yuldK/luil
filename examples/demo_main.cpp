@@ -15,12 +15,13 @@
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
 //  - 테마: 테마 선호와 키 컬러                             (demo/theme_page)
+//  - 변경 작업대: 지연 로딩 계층·체크와 정렬이 있는 표·맞춤 양식, 커스텀 element 없이 (demo/workbench_page)
 // 이 파일은 셸이다: 사이드바 내비게이션, 페이지 전환, driver·policy·delegate 조립.
 //
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme
+//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme|workbench
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
@@ -38,6 +39,7 @@
 #include "demo/toasts_page.h"
 #include "demo/webview_page.h"
 #include "demo/windows_page.h"
+#include "demo/workbench_page.h"
 #include "demo/zoom_page.h"
 
 #include "luil/net/http_client.h"
@@ -301,6 +303,7 @@ namespace demo {
                     // 페이지를 떠나면 그 페이지의 popup도 닫는다.
                     tabs_.close_popups();
                     popups_.close_popups();
+                    workbench_.close_popups();
                     return;
                 }
                 if (message.get<sidebar_toggle_intent>() != nullptr)
@@ -336,6 +339,7 @@ namespace demo {
                     tabs_.close_popups();
                     popups_.close_popups();
                     windows_.close_popups();
+                    workbench_.close_popups();
                     return;
                 }
                 // 컨텍스트 메뉴 선택은 페이지가 메뉴를 닫고 셸이 토스트로 잇는다.
@@ -359,7 +363,7 @@ namespace demo {
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message)
                     || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message) || zoom_.handle(message)
-                    || theme_.handle(message))
+                    || theme_.handle(message) || workbench_.handle(message))
                     return;
             }
 
@@ -452,6 +456,8 @@ namespace demo {
                     frame->popups.push_back(std::move(popup));
                 for (luil::win32::ui_popup& popup : popups_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
+                for (luil::win32::ui_popup& popup : workbench_.make_popups(scale))
+                    frame->popups.push_back(std::move(popup));
                 // 도구 창은 페이지의 일부가 아니라 어느 페이지에서든 열려 있다.
                 for (luil::win32::ui_window& window : windows_.make_windows())
                     frame->windows.push_back(std::move(window));
@@ -477,21 +483,23 @@ namespace demo {
                 return closed_.load();
             }
 
-            // 시간이 지나야 바뀌는 것 둘이다: 토스트 만료와 사이드바 접힘 전환.
-            // 더 이른 쪽을 예고하면 메시지가 없어도 그 시각에 tick이 온다.
+            // 시간이 지나야 바뀌는 것 셋이다: 토스트 만료, 사이드바 접힘 전환, 변경 작업대의 흉내 낸 불러오기.
+            // 가장 이른 쪽을 예고하면 메시지가 없어도 그 시각에 tick이 온다.
             //  - 전환이 끝나면 그쪽이 nullopt를 답해 시간 경로가 다시 잠잔다.
             [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() override
             {
                 std::optional<std::chrono::steady_clock::time_point> next { toasts_.next_expiry() };
-                const std::optional<std::chrono::steady_clock::time_point> motion { luil::transition_next_update(sidebar_motion_, std::chrono::steady_clock::now()) };
-                if (motion.has_value() && (next.has_value() == false || *motion < *next))
-                    next = motion;
+                for (const std::optional<std::chrono::steady_clock::time_point> other :
+                    { luil::transition_next_update(sidebar_motion_, std::chrono::steady_clock::now()), workbench_.next_due() })
+                    if (other.has_value() && (next.has_value() == false || *other < *next))
+                        next = other;
                 return next;
             }
 
-            void tick(std::chrono::steady_clock::time_point) override
+            void tick(const std::chrono::steady_clock::time_point now) override
             {
                 toasts_.prune();
+                workbench_.tick(now);
             }
 
         private:
@@ -605,6 +613,7 @@ namespace demo {
                 add_page(page_webview, u8"웹뷰");
                 add_page(page_zoom, u8"확대 보기");
                 add_page(page_theme, u8"테마");
+                add_page(page_workbench, u8"변경 작업대");
                 navigation.selected = page_;
                 navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
                 const float navigation_height { luil::choice_group_element::height_for(navigation) };
@@ -655,6 +664,8 @@ namespace demo {
                     return zoom_.build(width, height, scale);
                 if (page_ == page_theme)
                     return theme_.build(width, height, scale);
+                if (page_ == page_workbench)
+                    return workbench_.build(width, height, scale);
                 return basics_.build(width, height, scale);
             }
 
@@ -671,6 +682,7 @@ namespace demo {
             zoom_page zoom_ {};
             theme_page theme_ {};
             webview_page webview_ {};
+            workbench_page workbench_ {};
 
             // --- 네트워크 페이지가 기대는 조각들 ---
             // 되돌이 서버와 client는 **셸이 든다.** 페이지는 메시지만 주고받는다.
@@ -731,6 +743,8 @@ namespace demo {
                     return target_tool_menu_search;
                 if (kind == kind_network_url_input)
                     return target_network_url;
+                if (kind == kind_workbench_summary_input)
+                    return target_workbench_summary;
                 return std::nullopt;
             }
 
