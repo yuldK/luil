@@ -12,7 +12,7 @@
 - [편집형 콤보](combo-box-design.md)
 - [파일 대화상자](file-dialog-design.md)
 - [명령표](popup-anchor-design.md)
-- [UI 텍스트 레이아웃 설계안](text-layout-design.md)
+- [공통 UI 텍스트 레이아웃](text-layout-design.md)
 - [Codex 트랙 진행·검증](ui-gap-codex-status.md)
 
 ## 기본 개념

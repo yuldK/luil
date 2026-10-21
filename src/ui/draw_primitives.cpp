@@ -1,5 +1,6 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/text/grapheme.h"
+#include "ui/text_layout_skia.h"
 
 #include "luil/text/utf8_text.h"
 
@@ -134,14 +135,24 @@ namespace luil {
         return runs;
     }
 
+    SkFont text_layout_font(const SkFont& font) { return quality_font(font); }
+
+    sk_sp<SkTypeface> text_layout_fallback(const char32_t codepoint)
+    {
+        const auto* const fallback { installed_fallback.load(std::memory_order_relaxed) };
+        return fallback != nullptr ? fallback->for_codepoint(codepoint) : nullptr;
+    }
+
     void set_font_fallback(const font_fallback* const fallback) noexcept
     {
-        installed_fallback.store(fallback, std::memory_order_relaxed);
+        if (installed_fallback.exchange(fallback, std::memory_order_relaxed) != fallback)
+            invalidate_text_layouts();
     }
 
     void set_text_render_quality(const text_render_quality quality) noexcept
     {
-        installed_quality.store(quality, std::memory_order_relaxed);
+        if (installed_quality.exchange(quality, std::memory_order_relaxed) != quality)
+            invalidate_text_layouts();
     }
 
     void draw_text(SkCanvas& canvas, const std::u8string_view text, const float x, const float y, const SkFont& font, const SkPaint& paint)
@@ -151,6 +162,12 @@ namespace luil {
         std::u8string storage {};
         const std::u8string_view drawable { drawable_text(text, storage) };
 
+        if (ui_text_shaping_enabled())
+        {
+            const auto layout { make_font_text_layout({ .text = std::u8string { drawable }, .font_size = font.getSize() }, font) };
+            draw_text_layout(canvas, layout, { x, y - layout.lines().front().baseline }, paint);
+            return;
+        }
         const SkFont adjusted { quality_font(font) };
         float pen { x };
         for (const text_run& run : split_text_runs(drawable, adjusted))
@@ -199,6 +216,8 @@ namespace luil {
         std::u8string storage {};
         const std::u8string_view drawable { drawable_text(text, storage) };
 
+        if (ui_text_shaping_enabled())
+            return make_font_text_layout({ .text = std::u8string { drawable }, .font_size = font.getSize() }, font).size().width;
         // 그리기와 같은 품질 설정으로 재야 caret 자리와 글자가 일치한다.
         const SkFont adjusted { quality_font(font) };
         float width { 0.0f };
@@ -238,7 +257,14 @@ namespace luil {
         while (low < high)
         {
             const std::size_t middle { low + (high - low + 1) / 2 };
-            if (measure_text(text.substr(0, boundaries[middle]), font) + ellipsis_width <= max_width)
+            std::u8string candidate {};
+            if (ui_text_shaping_enabled())
+            {
+                candidate = text.substr(0, boundaries[middle]);
+                candidate.append(ellipsis);
+            }
+            const float width { ui_text_shaping_enabled() ? measure_text(candidate, font) : measure_text(text.substr(0, boundaries[middle]), font) + ellipsis_width };
+            if (width <= max_width)
                 low = middle;
             else
                 high = middle - 1;

@@ -6,6 +6,25 @@
 #include <limits>
 
 namespace luil::text {
+    std::optional<std::vector<std::size_t>> platform_grapheme_boundaries(const std::u8string_view text)
+    {
+        if (text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+            return std::nullopt;
+        static const sk_sp<SkUnicode> unicode { SkShapers::BestAvailableUnicode() };
+        if (unicode == nullptr)
+            return std::nullopt;
+        auto iterator { unicode->makeBreakIterator(SkUnicode::BreakType::kGraphemes) };
+        if (iterator == nullptr || iterator->setText(reinterpret_cast<const char*>(text.data()), static_cast<int>(text.size())) == false)
+            return std::nullopt;
+        std::vector<std::size_t> boundaries { 0 };
+        for (int position { iterator->first() }; iterator->isDone() == false; position = iterator->next())
+            if (position > 0)
+                boundaries.push_back(static_cast<std::size_t>(position));
+        if (boundaries.back() != text.size())
+            boundaries.push_back(text.size());
+        return boundaries;
+    }
+
     std::optional<std::size_t> platform_grapheme_boundary(const std::u8string_view text, const std::size_t offset, const bool forward) noexcept
     {
         if (text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))

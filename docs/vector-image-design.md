@@ -104,7 +104,7 @@ SVG의 `<text>`와 Lottie의 글자 레이어는 공장(`SkShapers::Factory`)을
 - 두 옵션 모두 Android의 minSdk는 26 그대로다. ICU는 `dlopen`으로 열고 fallback은 데이터 파일 없이 링크된다. 텍스트 기능을 끈 상태에서 fallback만 켜면 configure가 원인을 알려 멈춘다.
 - 공장은 프로세스에 하나다. shaper를 부를 때마다 새로 짓고 Unicode 래퍼만 나눠 쓰므로 여러 디코딩 thread가 함께 써도 된다.
 
-지금 이 공장을 쓰는 것은 SVG와 Lottie뿐이다. luil 자신의 글자 그리기(label·입력 칸)는 여전히 글자마다 글리프 하나를 고르고 없는 글자를 대체 글꼴에서 찾는다 ([설치 글꼴 목록과 기본 UI 글꼴](concepts/fonts.md)). 그 경로를 HarfBuzz와 SkParagraph로 옮기는 것은 측정·caret·줄 넘김·편집 모델을 함께 바꾸는 일이라 따로 다룬다. 옵션은 그 일을 위해서도 미리 아카이브와 고지를 갖춰 둔다.
+같은 공장을 옵션 ON의 UI `text_layout`도 사용한다. 라벨·버튼의 측정/그리기와 입력 칸·문서 보기의 caret·선택·줄 넘김을 같은 glyph 결과에 연결한다 ([공통 텍스트 레이아웃](text-layout-design.md)). 옵션 OFF는 기존 UI 그리기 경로를 유지한다. UAX #14와 양방향 편집은 후속 단계다.
 
 ## 검증
 

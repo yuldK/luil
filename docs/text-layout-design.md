@@ -1,13 +1,13 @@
 # UI 텍스트 레이아웃 설계안
 
-상태: **사용자 검토 대기**. 이 문서는 X8의 설계이며 구현을 포함하지 않는다.
+상태: **사용자 승인 후 X8 구현 연결**. 아래 설계와 마지막 절의 실제 API·검증 범위를 함께 본다.
 [인계 문서 X8](ui-gap-codex-track.md#x8-ui-텍스트-shaping-장기)의 선행 검토 절차를 따른다.
 
 ## 문제와 목표
 
-현재 UI의 `draw_text`는 글꼴 fallback run을 `drawSimpleText`로 그리고,
-`measure_text`는 같은 글꼴의 `measureText`를 더한다. SVG·Lottie에 연결된
-`text_shaping_factory()`는 UI 컨트롤의 측정·caret 경로에 연결되어 있지 않다.
+도입 전 UI의 `draw_text`는 글꼴 fallback run을 `drawSimpleText`로 그리고,
+`measure_text`는 같은 글꼴의 `measureText`를 더했다. SVG·Lottie에 연결된
+`text_shaping_factory()`는 UI 컨트롤의 측정·caret 경로에 연결되어 있지 않았다.
 글자소 경계(X1)는 이모지·결합 부호 내부로 커서가 들어가지 않게 하지만
 합자·문맥형 글리프의 실제 폭과 caret 위치를 일치시키지는 못한다.
 
@@ -28,7 +28,7 @@ Skia 타입은 비공개 구현에 둔다. 다음 정보는 같은 결과에서 
 | 줄 | 원문 범위, run 목록, baseline, ascent/descent, 논리·잉크 bounds | 배치, 선택, 스크롤 |
 | caret stop | X1 글자소 경계, 위치와 upstream/downstream affinity | 입력·IME·UIA |
 
-초기 API 형태는 아래와 같다. 이름과 소유권을 검토하기 위한 것으로 아직 공개 헤더를 만들지 않는다.
+공개 API는 `include/luil/ui/text_layout.h`에 있다. 아래 형태를 구현하고 측정기 주입 overload를 함께 제공한다.
 
 ```cpp
 struct text_layout_request;
@@ -98,5 +98,56 @@ layout 캐시로 확장하고 X5의 가시 범위 구간 질의는 유지한다.
 Win32 TSF 후보 창·UIA 범위와 Android IME 좌표를 실제 플랫폼에서 확인한다.
 20MB 문서의 최초 배치와 문단 한 곳 수정·스크롤·caret 이동을 따로 계측한다.
 
-검토할 결정은 불변 값의 소유권, 합자 caret의 균등 분할 fallback,
-초기 LTR 범위 및 후속 UAX #14·양방향 편집 분리다. 검토가 끝나기 전 X8 코드를 추가하지 않는다.
+사용자가 승인한 불변 소유권, 합자 caret 균등 분할 fallback, 초기 LTR 범위와
+후속 UAX #14·양방향 편집 분리 기준으로 구현했다.
+
+## 구현된 API와 연결
+
+```cpp
+luil::text_layout_request request {};
+request.text = u8"office é";
+request.font_size = 16.0f; // 물리 픽셀이다.
+request.width = 240.0f;
+request.wrap = true;
+const auto layout = luil::make_text_layout(std::move(request));
+const auto caret = layout.caret_rect(6);
+const auto hit = layout.hit_test({ caret.x, caret.y + 1.0f });
+const auto selection = layout.selection_rects(0, 6);
+```
+
+값은 원문·줄·cluster·caret stop·run 정보를 읽기 전용으로 내준다. Glyph·위치·typeface는
+native 불변 payload에 있다. 줄은 baseline·ascent/descent·논리 크기·ink bounds를 가진다.
+`backend()`는 unavailable·measured·primitive·harfbuzz를 구별한다.
+`approximate_ligature_carets()`는 SkShaper가 OpenType ligature caret 표를 내주지 않아
+글자소 수로 분할한 경우를 알린다. UTF-8 byte offset과 soft-wrap affinity를 계속 쓴다.
+`draw_text_layout`의 구간도 유효한 글자소 경계다. 부분 합자는 같은 glyph의 해당 영역을 잘라 칠한다.
+
+옵션 ON의 공용 `measure_text`·`draw_text`는 같은 native cache를 사용하므로 라벨·버튼 등도
+shaping 결과의 폭과 glyph로 그린다. 입력 칸은 배치한 값을 그리기·hit test·선택·IME 범위에 공유한다.
+문서 보기는 문단의 접은 자리·폭·굵기 구간을 기존 cache에 보관하고, 가시 줄의 최종 glyph 값을
+배치 시점에 보유한다. 조회한 문서가 조합 문서와 달라도 같은 주 글꼴 참조로 다시 배치한다.
+사용자 측정기를 주입한 기존 컨트롤은 기존 경로를 유지한다. 공개 측정기 overload는 별도 기하 값만
+만들며 native glyph·전역 cache를 사용하지 않는다.
+
+색·검색·선택은 cache key에서 제외한다. 굵기는 key에 들어간다. Native cache는 프로세스당
+**16MiB·512항목 상한의 LRU**이며 `text_layout_cache_usage()`로 보유량·hit/miss를 본다.
+byte 수는 원문·기하·glyph buffer와 cache key의 보유량이며 Skia/OS의 공용 글꼴 cache는 제외한다.
+큰 항목은 LRU에 넣지 않는다. `text_area_wrap_cache`는 현재 문서의 접은 자리만 남기므로,
+큰 문단도 caret만 바뀌었다고 전체 문단을 다시 shape하지 않는다. 이 문단 cache를 앱이 유지해야 한다.
+`text_layout_revision()`은 글꼴·언어·fallback·그리기 품질 변경 때 증가한다.
+발행된 레이아웃의 글꼴·glyph는 계속 살아 있고 다음 배치부터 새 설정을 쓴다.
+
+새 `grapheme_boundaries()`는 전체 경계를 iterator 한 번으로 수집한다. 기존 단일 경계를 반복 조회해
+플랫폼 iterator가 긴 문단의 처음부터 다시 걷는 비용을 피한다. 기본 경계 표와 플랫폼 경계는 기존 규칙을 따른다.
+
+## 검증 범위
+
+`text_layout_tests.cpp`는 원문 소유권, 글자소 왕복, 합자 cluster의 caret 분할, 줄 경계 재배치,
+CRLF·빈 줄, 선택, 동일 x 경계와 동시 읽기를 확인한다. 합자 기하 시험의 입력은 합성 cluster이며
+실제 HarfBuzz 실행을 통과했다고 해석하지 않는다.
+
+`text_layout_native_tests.cpp`는 실제 글꼴·glyph 그리기, 공용 측정의 폭, 입력/문서 질의,
+cache 재사용·revision·상한과 발행된 글꼴 참조를 확인하는 Windows 실행 시험이다.
+Linux에서는 고정 Skia 헤더로 옵션 OFF/ON·fallback의 구문 컴파일과 플랫폼 독립 시험을 수행한다.
+실제 HarfBuzz/ICU 실행, native raster·TSF/Android IME 후보 창, DPI 변경과 20MB 문서의
+실제 배치·수정·스크롤 시간은 지원 플랫폼에서 확인해야 한다. 이번 원격 환경의 결과는 진행 기록에 적는다.

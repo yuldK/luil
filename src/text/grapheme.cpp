@@ -100,6 +100,26 @@ namespace luil::text {
         }
     } // namespace
 
+    std::vector<std::size_t> grapheme_boundaries(const std::u8string_view text)
+    {
+#if defined(LUIL_GRAPHEME_SKIA)
+        if (auto boundaries { platform_grapheme_boundaries(text) }; boundaries.has_value())
+            return std::move(*boundaries);
+#endif
+        std::vector<std::size_t> boundaries { 0 };
+        std::size_t regional_count { 0 };
+        for (std::size_t at { 0 }; at < text.size();)
+        {
+            const auto decoded { utf8_decode(text, at) };
+            regional_count = property(decoded.codepoint) == grapheme_property::regional_indicator ? regional_count + 1 : 0;
+            at += decoded.length;
+            const bool regional_pair { at < text.size() && regional_count > 0 && property(utf8_decode(text, at).codepoint) == grapheme_property::regional_indicator };
+            if (at == text.size() || (regional_pair ? regional_count % 2 == 0 : boundary_at(text, at)))
+                boundaries.push_back(at);
+        }
+        return boundaries;
+    }
+
     std::size_t grapheme_previous(const std::u8string_view text, std::size_t offset) noexcept
     {
         offset = std::min(offset, text.size());

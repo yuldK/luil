@@ -7,7 +7,7 @@ namespace SkShapers {
 } // namespace SkShapers
 
 namespace luil {
-    // SVG의 `<text>`와 Lottie의 글자 레이어에 넘길 모양 잡기 공장이다.
+    // UI text_layout·SVG의 `<text>`·Lottie 글자 레이어가 함께 쓰는 모양 잡기 공장이다.
     //
     // 두 모듈은 공장을 받지 않으면 primitive shaper(글자마다 cmap 글리프 하나)로 그린다 —
     // svg·skottie 아카이브가 HarfBuzz를 참조하지 않게 skia-prep이 그렇게 세웠다
