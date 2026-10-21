@@ -1,6 +1,7 @@
 #include "raster_probe.h"
 
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/check_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_element.h"
@@ -754,4 +755,34 @@ TEST_CASE("A tab badge sits before the close slot and keeps its tone", "[ui][ras
     REQUIRE(frame.contains_color({ 640.0f + 200.0f, 0.0f, 120.0f, 64.0f }, palette.error_accent));
     // 배지가 없는 탭의 같은 자리는 비어 있다.
     REQUIRE(frame.pixel_at(960 + 293, 32) == palette.window_background);
+}
+
+TEST_CASE("A mixed checkbox is a filled box with a dash, not a tick", "[ui][raster][check]")
+{
+    // 일부 상태는 켜짐과 같은 채움에 가운데 줄이다. 켜짐의 체크 표시와 갈리는 것은 한가운데 픽셀이다 —
+    // 줄은 그 자리를 지나고, 체크의 꺾인 선은 지나지 않는다.
+    //  - 배율 2에서 표시는 (8, 10)에서 28×28 물리 픽셀이고 한가운데는 (22, 24)다.
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const auto draw_box = [&palette](const bool checked, const bool mixed) {
+            luil::check_config config {};
+            config.owner = u8"folder";
+            config.checked = checked;
+            config.mixed = mixed;
+            const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::check_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 48.0f }, raster_scale) };
+            luil::testing::raster_frame frame { 200, 48, palette, raster_scale };
+            frame.draw(tree, luil::interaction_snapshot {});
+            return frame;
+        };
+
+        const luil::testing::raster_frame mixed { draw_box(false, true) };
+        REQUIRE(mixed.pixel_at(22, 24) == palette.accent_foreground);
+        // 줄 위아래는 채움이다.
+        REQUIRE(mixed.pixel_at(22, 15) == palette.accent);
+
+        const luil::testing::raster_frame checked { draw_box(true, false) };
+        REQUIRE(checked.pixel_at(22, 15) == palette.accent);
+        REQUIRE(checked.pixel_at(22, 24) != palette.accent_foreground);
+    }
 }

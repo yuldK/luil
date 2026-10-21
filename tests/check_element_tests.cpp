@@ -100,3 +100,46 @@ TEST_CASE("The indicator width follows the style", "[ui][check]")
     knob.style = luil::check_style::toggle_switch;
     REQUIRE(luil::check_element::indicator_width_for(knob) == luil::check_switch_width);
 }
+
+TEST_CASE("A mixed checkbox reads as partly checked and other styles ignore it", "[ui][check]")
+{
+    luil::check_config box {};
+    box.owner = u8"folder";
+    box.label = u8"src";
+    box.checked = false;
+    box.mixed = true;
+    const luil::access_info info { luil::check_element { box }.accessibility() };
+    REQUIRE(info.role == luil::access_role::check_box);
+    REQUIRE(info.mixed);
+    REQUIRE(info.checked == false);
+
+    // 라디오와 스위치에는 가운데 상태가 없다.
+    luil::check_config radio { box };
+    radio.style = luil::check_style::radio;
+    REQUIRE(luil::check_element { radio }.accessibility().mixed == false);
+    luil::check_config knob { box };
+    knob.style = luil::check_style::toggle_switch;
+    REQUIRE(luil::check_element { knob }.accessibility().mixed == false);
+
+    // 일부 상태여도 누름은 지금처럼 toggle 하나다. 다음 상태는 앱이 정한다.
+    box.toggle = make_toggle(u8"folder");
+    luil::check_element interactive { box };
+    REQUIRE(interactive.action(luil::ui_trigger::left_click) != nullptr);
+}
+
+TEST_CASE("A parent check aggregates its children", "[ui][check]")
+{
+    using luil::check_state;
+    REQUIRE(luil::aggregate_check({}) == check_state::unchecked);
+    const std::vector<check_state> all_on { check_state::checked, check_state::checked };
+    REQUIRE(luil::aggregate_check(all_on) == check_state::checked);
+    const std::vector<check_state> all_off { check_state::unchecked, check_state::unchecked };
+    REQUIRE(luil::aggregate_check(all_off) == check_state::unchecked);
+    const std::vector<check_state> some { check_state::checked, check_state::unchecked };
+    REQUIRE(luil::aggregate_check(some) == check_state::mixed);
+    // 일부 상태인 자식이 하나라도 있으면 부모도 일부다 (손주가 섞였다).
+    const std::vector<check_state> nested { check_state::checked, check_state::mixed };
+    REQUIRE(luil::aggregate_check(nested) == check_state::mixed);
+    const std::vector<check_state> lone_mixed { check_state::mixed };
+    REQUIRE(luil::aggregate_check(lone_mixed) == check_state::mixed);
+}

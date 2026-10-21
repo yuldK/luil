@@ -623,6 +623,36 @@ TEST_CASE("A toggle control serves its state", "[win32][uia]")
     root->Release();
 }
 
+TEST_CASE("A mixed checkbox serves the indeterminate toggle state", "[win32][uia]")
+{
+    fake_uia_host host {};
+    auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    page->add(std::make_unique<luil::check_element>(luil::check_config {
+        .owner = u8"folder",
+        .label = u8"src",
+        .checked = false,
+        .mixed = true,
+        .toggle = [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; },
+    }));
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const box { root->make_element_provider({ luil::ui_element_kind::check, u8"folder" }) };
+
+    IUnknown* pattern { nullptr };
+    REQUIRE(box->GetPatternProvider(UIA_TogglePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IToggleProvider* toggle { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IToggleProvider), reinterpret_cast<void**>(&toggle)) == S_OK);
+    ToggleState state { ToggleState_On };
+    REQUIRE(toggle->get_ToggleState(&state) == S_OK);
+    REQUIRE(state == ToggleState_Indeterminate);
+
+    toggle->Release();
+    pattern->Release();
+    box->Release();
+    root->Release();
+}
+
 TEST_CASE("Invoking through UIA runs the element's click", "[win32][uia]")
 {
     fake_uia_host host {};

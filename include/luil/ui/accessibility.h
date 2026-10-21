@@ -89,6 +89,9 @@ namespace luil {
         access_role role { access_role::none };
         std::u8string name {};
         std::optional<bool> checked {};
+        // 일부만 켜진 체크다 (삼상 체크박스의 가운데 상태). 참이면 `checked`의 값과 무관하게 일부 상태로 읽힌다
+        // (UIA ToggleState_Indeterminate). `checked`가 없는 요소에서는 뜻이 없다.
+        bool mixed { false };
         std::optional<bool> selected {};
         std::optional<bool> expanded {};
         std::optional<access_range> range {};

@@ -11,6 +11,7 @@ Luil은 각 Win32 surface를 UI Automation fragment로 공개한다. Element는 
 - `role`: element의 의미
 - `name`: 접근 가능한 label
 - `checked`, `selected`, `expanded`: 선택적 상태
+- `mixed`: 일부만 켜진 체크다. 참이면 `checked`의 값과 무관하게 UIA ToggleState_Indeterminate로 읽힌다 (삼상 체크박스, `check_config::mixed`)
 - `range`: 숫자 최솟값, 최댓값, 현재 값
 - `value`: 현재 text value
 
