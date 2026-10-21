@@ -1,4 +1,5 @@
 #include "luil/ui/dialog_elements.h"
+#include "luil/text/grapheme.h"
 
 #include "luil/generated/codicons.h"
 #include "luil/theme/ui_theme.h"
@@ -488,9 +489,8 @@ namespace luil {
         // UTF-8 경계를 한 번 모은 뒤 폭을 이분 탐색한다. 긴 입력에서도
         // 모든 접두사를 반복 측정하지 않는다.
         std::vector<std::size_t> boundaries { 0 };
-        for (std::size_t offset = 1; offset < text.size(); ++offset)
-            if ((static_cast<unsigned int>(text[offset]) & 0xC0u) != 0x80u)
-                boundaries.push_back(offset);
+        for (std::size_t offset { text::grapheme_next(text, 0) }; offset < text.size(); offset = text::grapheme_next(text, offset))
+            boundaries.push_back(offset);
         if (text.empty() == false)
             boundaries.push_back(text.size());
         const auto after { std::upper_bound(boundaries.begin(), boundaries.end(), target, [&](const float position, const std::size_t offset) { return position < measure(text.substr(0, offset)); }) };
