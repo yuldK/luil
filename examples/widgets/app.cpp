@@ -292,7 +292,7 @@ namespace widgets {
 
     std::vector<luil::input_action> widgets_policy::on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta)
     {
-        return luil::route_wheel(tree, event.x, event.y, scroll_delta);
+        return luil::route_wheel(tree, event, scroll_delta);
     }
 
     std::optional<luil::menu_kinds> widgets_policy::menu() const

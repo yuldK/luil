@@ -775,7 +775,7 @@ namespace demo {
                 // 표에 없는 것은 자기 메시지를 든 컨테이너다 (`scroll_source`).
                 // 네트워크 페이지의 결과 칸과 목록 페이지의 가상 목록이 여기서 잡힌다 —
                 // 페이지가 늘어도 이 줄은 그대로다.
-                return luil::route_wheel(tree, event.x, event.y, scroll_delta);
+                return luil::route_wheel(tree, event, scroll_delta);
             }
 
             [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override

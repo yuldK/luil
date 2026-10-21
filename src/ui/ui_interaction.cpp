@@ -766,7 +766,20 @@ namespace luil {
 
     std::vector<input_action> route_wheel(const ui_tree& tree, const mouse_wheel_event& event, const float scroll_delta)
     {
-        const ui_element* const owner { tree.root() != nullptr ? wheel_owner_at(*tree.root(), event.x, event.y) : nullptr };
+        const ui_element* const root { tree.root() };
+        if (root == nullptr)
+            return {};
+        // 가로 휠(틸트 휠·터치패드 가로 밀기)은 **가로 창의 것**이다. 세로 창을 흘리지 않는다.
+        //  - 축이 다른 흘리는 창은 방벽이 아니라 지나친다 — 세로 목록 안에 선 포인터의 가로 휠이 그 목록을
+        //    감싼 가로 띠에 간다 (터치 끌기의 `pan_owner_at`과 같은 규칙). `hit_opaque` 방벽은 그대로 막는다.
+        //  - 확대 보기는 두 축을 다 받는다.
+        //  - 세로 휠은 지금처럼 축을 묻지 않는다. 가로 띠 위에서 굴린 세로 휠이 그 띠를 흘리는 것이 앱이 표로
+        //    지어 오던 동작이다 (`scroll_source::axis`).
+        const auto takes_horizontal = [](const ui_element& element) {
+            const scroll_source* const source { element.scroll() };
+            return element.zoom() != nullptr || (source != nullptr && source->scroll != nullptr && source->axis == scroll_axis::horizontal);
+        };
+        const ui_element* const owner { event.horizontal ? pan_owner_at(*root, event.x, event.y, takes_horizontal) : wheel_owner_at(*root, event.x, event.y) };
         if (owner == nullptr)
             return {};
         if (const zoom_source* const source { owner->zoom() }; source != nullptr)
@@ -787,7 +800,11 @@ namespace luil {
             return { source->pan_by(event.horizontal || event.shift ? zoom_point { delta, 0.0f } : zoom_point { 0.0f, delta }) };
         }
         const scroll_source* const source { owner->scroll() };
-        return source != nullptr && source->scroll ? std::vector<input_action> { source->scroll(scroll_delta) } : std::vector<input_action> {};
+        if (source == nullptr || source->scroll == nullptr)
+            return {};
+        // 가로 휠 양수는 오른쪽으로 가자는 뜻이라 offset이 는다. `scroll_delta`는 세로 휠의 부호(위로 굴림 = 음수)로
+        // 온 값이므로 가로에서는 뒤집는다.
+        return { source->scroll(event.horizontal ? -scroll_delta : scroll_delta) };
     }
 
     std::optional<pan_target> route_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
