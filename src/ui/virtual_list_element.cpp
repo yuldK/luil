@@ -86,10 +86,11 @@ namespace luil {
         class virtual_row_element final : public ui_element
         {
         public:
-            virtual_row_element(ui_element_id id, ui_element_id list, std::u8string label, const bool enabled, const bool selected, const bool cursor)
+            virtual_row_element(ui_element_id id, ui_element_id list, std::u8string label, const bool enabled, const bool selected, const bool cursor, const access_role role)
                 : ui_element { std::move(id) }
                 , list_ { std::move(list) }
                 , label_ { std::move(label) }
+                , role_ { role }
                 , selected_ { selected }
                 , cursor_ { cursor }
             {
@@ -197,7 +198,7 @@ namespace luil {
 
             [[nodiscard]] access_info accessibility() const override
             {
-                return { .role = access_role::list_item, .name = label_, .selected = selected_ };
+                return { .role = role_, .name = label_, .selected = selected_ };
             }
 
         private:
@@ -206,6 +207,7 @@ namespace luil {
             // 놓인 다른 가상 목록의 커서까지 함께 그려진다 (자리표는 언제나 전부를 견준다).
             ui_element_id list_ {};
             std::u8string label_ {};
+            access_role role_ { access_role::list_item };
             bool selected_ { false };
             bool cursor_ { false };
         };
@@ -649,7 +651,7 @@ namespace luil {
             const virtual_list_item& item { model()[index] };
             const bool selected { item.enabled && (item.key == config_.selected || chosen.contains(item.key)) };
             const bool at_cursor { cursor_.has_value() && *cursor_ == index };
-            auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor) };
+            auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor, config_.row_role) };
             if ((config_.select != nullptr || config_.pick != nullptr || moves_cursor()) && item.enabled)
             {
                 // 누른 행은 **고르는 것이자 커서가 서는 곳**이다.
@@ -805,7 +807,7 @@ namespace luil {
 
     access_info virtual_list_element::accessibility() const
     {
-        access_info info { .role = access_role::list, .name = access_name() };
+        access_info info { .role = config_.role, .name = access_name() };
         info.multiple_selection = config_.multiple_selection;
         // 커서가 선 항목의 이름을 목록의 "지금 값"으로 답한다.
         // 형제 순회는 지어진 행 안이라, 창 밖의 항목은 그 순회로 닿지 않는다 —
