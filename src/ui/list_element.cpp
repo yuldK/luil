@@ -98,10 +98,24 @@ namespace luil {
                 set_enabled(item_.enabled);
                 // 묶음 안에서 글자로 찾을 때 보는 글이다 (행에 적힌 이름과 같은 것).
                 set_search_label(item_.label);
+                // 삼각형도 같은 동작을 받으므로 그것을 만들기 전에 한 번 짓는다.
+                //  - 비활성 행은 클릭처럼 우클릭도 내지 않는다. 행은 `enabled`가 막지만 삼각형은
+                //    제 상태가 따로라 여기서 거른다.
+                ui_action open_menu {};
+                if (const list_context_message_factory& context_menu { config.context_menu }; context_menu != nullptr && item_.enabled)
+                {
+                    const std::u8string key { item_.key };
+                    open_menu = [key, &context_menu](const ui_action_context& context) -> std::vector<input_action> { return { context_menu(key, context) }; };
+                    set_action(ui_trigger::right_click, open_menu);
+                }
                 // 삼각형은 가지에만 선다. 잎은 자리만 비운다.
                 if ((config.toggle != nullptr || config.set_expanded != nullptr) && item_.expansion != list_expansion::none)
                 {
                     auto expander { std::make_unique<list_expander_element>(item_.key, item_.expansion == list_expansion::expanded, config) };
+                    // 우클릭은 hit된 element의 것만 나가고 부모로 올라가지 않는다.
+                    // 삼각형 위의 우클릭도 그 행의 메뉴가 되도록 같은 동작을 단다 (탭의 닫기 버튼과 같다).
+                    if (open_menu != nullptr)
+                        expander->set_action(ui_trigger::right_click, std::move(open_menu));
                     expander_ = expander.get();
                     add_child(std::move(expander));
                 }

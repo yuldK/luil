@@ -53,6 +53,10 @@ namespace luil {
     using virtual_list_message_factory = std::function<input_action(const std::u8string& key)>;
     // 누른 행의 키와 그 누름의 문맥이다 (수식 키 — Ctrl+클릭 더하기, Shift+클릭 범위 고르기).
     using virtual_list_pick_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
+    // 항목에 컨텍스트 메뉴를 열자는 메시지다.
+    // `tab_context_message_factory`와 같은 모양이다 — 문맥의 좌표(물리 픽셀, 창 좌표)는 메뉴를 띄울 자리이고,
+    // 수식 키는 그 순간의 것이다.
+    using virtual_list_context_message_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
 
     // 창에 걸치지 않아도 짓는 고른 행의 최대 수다 (창에 가까운 것부터).
     //  - 보조 기술은 tree에 선 행만 읽는다. 창 밖의 고른 행을 짓지 않으면 고른 것을 흘려 보낸 순간 선택 읽기
@@ -140,6 +144,13 @@ namespace luil {
         // 행을 눌렀을 때 그 누름의 문맥까지 받는다. 있으면 `select` 대신 쓴다 (다중 선택 목록의 Ctrl·Shift+클릭).
         //  - 커서를 함께 옮기는 것(`move`)은 `select`와 같다.
         virtual_list_pick_factory pick {};
+        // 행을 우클릭하면 낸다. 터치의 길게 누르기·펜의 배럴 버튼도 우클릭이라 이 하나로 함께 선다.
+        //  - 고르지도 커서를 옮기지도 않는다. 다중 선택 목록에서 "고르지 않은 행을 우클릭하면 그 행만 고르고,
+        //    고른 행이면 선택을 둔 채 메뉴를 연다" 같은 규칙은 앱마다 다르므로 이 메시지를 받은 앱이 정한다.
+        //  - 비활성 행에서는 나지 않는다 (누름과 같다).
+        //  - `build_row`가 지은 내용 중 **누를 수 있는 것**(단추 같은 것) 위의 우클릭은 그것의 몫이다. 우클릭은
+        //    부모로 올라가지 않는다. 그 위에서도 행의 메뉴를 열려면 앱이 그 요소에 같은 우클릭 동작을 단다.
+        virtual_list_context_message_factory context_menu {};
         // 보조 기술이 이 항목을 고른 것에 더하라·빼라고 했다 (UIA AddToSelection·RemoveFromSelection).
         // `multiple_selection`일 때만 쓴다. 고르기(Select)는 행의 누름과 같다.
         //  - 없으면 `pick`을 Ctrl+누름의 문맥(`control` 참, 좌표 없음)으로 부른다 — 포인터로 하나 더 고르거나 빼는 몸짓과

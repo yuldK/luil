@@ -1113,6 +1113,47 @@ TEST_CASE("A disabled row does not hear a double click", "[ui][list]")
     REQUIRE(disabled->action(luil::ui_trigger::double_click) == nullptr);
 }
 
+TEST_CASE("A right click on a row asks for its context menu without selecting it", "[ui][list][interaction]")
+{
+    struct menu_intent
+    {
+        std::u8string key {};
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
+    luil::virtual_list_config config { make_config(8) };
+    config.items[1].enabled = false;
+    config.move = move_factory();
+    config.select = select_factory();
+    config.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::input_action { luil::app_message { menu_intent { key, context.x, context.y } } }; };
+    luil::interaction_controller controller {};
+    controller.set_tree(published(config, 100.0f));
+
+    // 고름도 커서 이동도 없이 메뉴 메시지 하나만 간다 — 우클릭한 행을 고를지는 앱이 정한다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 100.0f, 70.0f, luil::pointer_button::right, at(0) }));
+    const auto opened { controller.process(luil::pointer_released_event { 100.0f, 70.0f, luil::pointer_button::right, at(10) }) };
+    REQUIRE(opened.size() == 1u);
+    const menu_intent* const menu { message_at<menu_intent>(opened, 0) };
+    REQUIRE(menu != nullptr);
+    REQUIRE(menu->key == item_key(3));
+    REQUIRE(menu->x == 100.0f);
+    REQUIRE(menu->y == 70.0f);
+
+    // 비활성 행은 누름처럼 우클릭도 듣지 않는다.
+    const auto tree { published(config, 100.0f) };
+    REQUIRE(tree->find(row_id(item_key(0)))->action(luil::ui_trigger::right_click) != nullptr);
+    REQUIRE(tree->find(row_id(item_key(1)))->action(luil::ui_trigger::right_click) == nullptr);
+}
+
+TEST_CASE("Without a context menu factory a virtual list row has no right click", "[ui][list]")
+{
+    luil::virtual_list_config config { make_config(4) };
+    config.select = select_factory();
+    const auto tree { published(config, 100.0f) };
+    REQUIRE(tree->find(row_id(item_key(0)))->action(luil::ui_trigger::right_click) == nullptr);
+}
+
 TEST_CASE("A shared model is read in place without a copy", "[ui][list]")
 {
     // 큰 목록이 frame마다 하던 깊은 복사를 건너뛰는 길이다. 모델이 바뀌지 않는 frame에서는 참조 수만 오른다.
