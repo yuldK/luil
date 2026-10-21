@@ -117,6 +117,12 @@ namespace luil {
         sheet_host,
         sheet_scrim,
         sheet_handle,
+        // 표다 (`table_element`). 본문은 가상 목록(`virtual_list`)이고, 표가 더하는 것이 아래 넷이다.
+        table,
+        table_header,
+        table_header_cell,
+        table_column_grip,
+        table_row,
         // 앱이 정의하는 kind는 이 값부터다.
         // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         first_application_kind = 64,
