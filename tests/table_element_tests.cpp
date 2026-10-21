@@ -140,6 +140,89 @@ namespace {
         return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::make_unique<luil::table_element>(std::move(config)), { 0.0f, 0.0f, 200.0f * scale, 300.0f * scale }, scale));
     }
 
+    constexpr luil::ui_element_kind kind_editor { luil::application_element_kind(1) };
+
+    struct cell_intent
+    {
+        std::u8string verb {};
+        luil::table_cell_ref cell {};
+    };
+
+    struct column_intent
+    {
+        std::u8string column {};
+    };
+
+    // 칸 편집기다. 앱 정책이 텍스트 칸으로 알아본다.
+    class test_editor final : public luil::ui_element
+    {
+    public:
+        explicit test_editor(std::u8string owner)
+            : ui_element { luil::ui_element_id { kind_editor, std::move(owner) } }
+        {
+            set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; });
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {}
+
+        [[nodiscard]] std::optional<luil::text_input_snapshot> text_input() const override
+        {
+            return luil::text_input_snapshot { u8"row-b.name", 0u, 0u };
+        }
+    };
+
+    class editor_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+        {
+            return kind == kind_editor ? std::optional<luil::text_input_target> { luil::text_input_target { 1 } } : std::nullopt;
+        }
+
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree*, const luil::key_pressed_event&, const luil::interaction_snapshot&) override
+        {
+            ++keys;
+            return {};
+        }
+
+        int keys { 0 };
+    };
+
+    // 셀 탐색과 편집을 켠 표다. 이름·작성자 열을 편집할 수 있다.
+    [[nodiscard]] luil::table_config editable_config(const std::u8string& cell_column)
+    {
+        luil::table_config config { make_config() };
+        config.columns[0].editable = true;
+        config.columns[1].editable = true;
+        config.rows.cursor = u8"row-b";
+        config.cell_column = cell_column;
+        config.move_column = [](const std::u8string& column) { return luil::make_app_action(column_intent { column }); };
+        config.begin_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(cell_intent { u8"begin", cell }); };
+        config.commit_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(cell_intent { u8"commit", cell }); };
+        config.cancel_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(cell_intent { u8"cancel", cell }); };
+        config.build_editor = [](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) -> std::unique_ptr<luil::ui_element> {
+            return std::make_unique<test_editor>(row.key + u8"/" + column.key);
+        };
+        return config;
+    }
+
+    void focus_body(luil::interaction_controller& controller)
+    {
+        static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::tab, false, false, false, false, at(0) }));
+        REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
+    }
+
+    [[nodiscard]] luil::key_pressed_event press(const luil::key_code key, const int milliseconds)
+    {
+        return luil::key_pressed_event { key, false, false, false, false, at(milliseconds) };
+    }
+
     [[nodiscard]] const luil::ui_element& find(const luil::ui_tree& tree, const luil::ui_element_id& id)
     {
         const luil::ui_element* const element { tree.find(id) };
@@ -348,4 +431,95 @@ TEST_CASE("The check column shows each row's state and toggles without stealing 
     const auto spaced { controller.process(luil::key_pressed_event { luil::key_code::space, false, false, false, false, at(20) }) };
     REQUIRE(message_at<resize_end_intent>(spaced, 0) != nullptr);
     REQUIRE(message_at<resize_end_intent>(spaced, 0)->column == u8"row-c");
+}
+
+TEST_CASE("With cell navigation left and right move the cell cursor and reveal it", "[ui][table][cells]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(published(editable_config(u8"author")));
+    focus_body(controller);
+
+    const auto right { controller.process(press(luil::key_code::arrow_right, 10)) };
+    REQUIRE(message_at<column_intent>(right, 0) != nullptr);
+    REQUIRE(message_at<column_intent>(right, 0)->column == u8"revision");
+    // 리비전 열(250~320)은 창(0~200) 밖이라 끝을 맞춰 들인다.
+    REQUIRE(message_at<scroll_x_intent>(right, 1) != nullptr);
+    REQUIRE(message_at<scroll_x_intent>(right, 1)->delta == 120.0f);
+
+    const auto left { controller.process(press(luil::key_code::arrow_left, 20)) };
+    REQUIRE(message_at<column_intent>(left, 0) != nullptr);
+    REQUIRE(message_at<column_intent>(left, 0)->column == u8"name");
+    // 이미 보이는 열은 흘리지 않는다.
+    REQUIRE(left.size() == 1u);
+
+    // 끝 열에서 →는 키만 삼킨다.
+    controller.set_tree(published(editable_config(u8"revision")));
+    REQUIRE(controller.process(press(luil::key_code::arrow_right, 30)).empty());
+}
+
+TEST_CASE("A cell cursor in the tree column walks the hierarchy before it leaves the column", "[ui][table][cells][tree]")
+{
+    luil::table_config config { editable_config(u8"name") };
+    config.tree_column = u8"name";
+    config.rows.items[1].expansion = luil::list_expansion::expanded;
+    config.rows.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(cell_intent { expanded ? u8"expand" : u8"collapse", { key, {} } }); };
+    luil::interaction_controller controller {};
+    controller.set_tree(published(std::move(config)));
+    focus_body(controller);
+
+    const auto collapsed { controller.process(press(luil::key_code::arrow_left, 10)) };
+    REQUIRE(message_at<cell_intent>(collapsed, 0) != nullptr);
+    REQUIRE(message_at<cell_intent>(collapsed, 0)->verb == u8"collapse");
+    // 펼친 가지 위의 →는 첫 자식으로 가려 하지만 자식이 없어 키만 삼킨다 (계층 키가 이긴다).
+    REQUIRE(controller.process(press(luil::key_code::arrow_right, 20)).empty());
+}
+
+TEST_CASE("F2 starts editing an editable cell and nothing else", "[ui][table][edit]")
+{
+    editor_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(published(editable_config(u8"author")));
+    focus_body(controller);
+    const auto started { controller.process(press(luil::key_code::f2, 10)) };
+    REQUIRE(message_at<cell_intent>(started, 0) != nullptr);
+    REQUIRE(message_at<cell_intent>(started, 0)->verb == u8"begin");
+    REQUIRE(message_at<cell_intent>(started, 0)->cell == luil::table_cell_ref { u8"row-b", u8"author" });
+
+    // 편집할 수 없는 열에서 F2는 앱으로 흐른다.
+    controller.set_tree(published(editable_config(u8"revision")));
+    static_cast<void>(controller.process(press(luil::key_code::f2, 20)));
+    REQUIRE(policy.keys == 1);
+}
+
+TEST_CASE("An editor takes focus, commits on Enter, cancels on Escape and hands focus back", "[ui][table][edit]")
+{
+    editor_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(published(editable_config(u8"name")));
+    focus_body(controller);
+
+    luil::table_config editing { editable_config(u8"name") };
+    editing.editing = luil::table_cell_ref { u8"row-b", u8"name" };
+    const std::shared_ptr<const luil::ui_tree> with_editor { published(editing) };
+    REQUIRE(with_editor->duplicate_ids().empty());
+    controller.set_tree(with_editor);
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { kind_editor, u8"row-b/name" });
+    REQUIRE(controller.snapshot().focused_input == luil::ui_element_id { kind_editor, u8"row-b/name" });
+    // 편집기는 그 칸 자리에 선다.
+    REQUIRE(find(*with_editor, { kind_editor, u8"row-b/name" }).bounds().x == 0.0f);
+
+    const auto committed { controller.process(press(luil::key_code::enter, 10)) };
+    REQUIRE(message_at<cell_intent>(committed, 0) != nullptr);
+    REQUIRE(message_at<cell_intent>(committed, 0)->verb == u8"commit");
+    REQUIRE(message_at<cell_intent>(committed, 0)->cell == luil::table_cell_ref { u8"row-b", u8"name" });
+
+    const auto cancelled { controller.process(press(luil::key_code::escape, 20)) };
+    REQUIRE(cancelled.size() == 1u);
+    REQUIRE(message_at<cell_intent>(cancelled, 0) != nullptr);
+    REQUIRE(message_at<cell_intent>(cancelled, 0)->verb == u8"cancel");
+
+    // 앱이 편집을 끝내면 편집기가 사라지고 초점이 본문으로 돌아온다.
+    controller.set_tree(published(editable_config(u8"name")));
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
+    REQUIRE(policy.keys == 0);
 }

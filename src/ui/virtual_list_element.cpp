@@ -456,7 +456,7 @@ namespace luil {
                 if (event.alt || event.meta)
                     return std::nullopt;
                 if ((event.key == key_code::arrow_left || event.key == key_code::arrow_right) && event.control == false && event.shift == false)
-                    return tree_step(event.key == key_code::arrow_right);
+                    return config_.tree_keys ? step_tree(event.key == key_code::arrow_right) : std::nullopt;
                 if (config_.multiple_selection == false)
                     return std::nullopt;
                 if (event.key == key_code::key_a && event.primary_shortcut_down() && event.shift == false && config_.select_all != nullptr)
@@ -548,7 +548,7 @@ namespace luil {
         return rows > 0 ? rows : 1;
     }
 
-    std::optional<std::vector<input_action>> virtual_list_element::tree_step(const bool forward) const
+    std::optional<std::vector<input_action>> virtual_list_element::step_tree(const bool forward) const
     {
         if (config_.set_expanded == nullptr || cursor_.has_value() == false || *cursor_ >= model().size())
             return std::nullopt;
