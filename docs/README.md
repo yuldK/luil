@@ -75,3 +75,7 @@
 - [SMB client](smb-client-design.md) — Android 전용, `LUIL_ENABLE_SMB`
 - [WebView2 composition hosting](webview-composition-design.md)
 - [Raster 그리기 test](raster-test-design.md)
+
+## 작업 계획
+
+- [UI 공백 보강 구현 인계 (Codex 트랙)](ui-gap-handoff.md)
