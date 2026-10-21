@@ -2,6 +2,7 @@
 
 #include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
+#include "ui/tree_expander.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -10,6 +11,7 @@
 #include "include/core/SkTypeface.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <utility>
 
 namespace luil {
@@ -44,27 +46,63 @@ namespace luil {
             static_cast<void>(draw_text_within(canvas, text, left, cell.y + centered_text_baseline(font, cell.height), available, font, paint));
         }
 
+        // 체크 칸이 차지하는 폭이다 (논리 픽셀). 체크박스는 자기 bounds 안 4 들여서 그린다.
+        constexpr float check_slot_width { check_box_size + 8.0f };
+
         // 행 하나의 칸들이다. 가상 목록의 행이 이것을 내용으로 담는다.
         //
         // 칸을 앱이 지었으면(`build_cell`) 그 element를 열 자리에 앉히고, 아니면 글 한 줄을 직접 그린다 —
         // 칸마다 label element를 두면 칸마다 자리표가 필요하고, 그 수가 행 수 × 열 수다.
+        //  - 트리 열은 칸 앞에 깊이만큼 들여쓰고 삼각형을, 체크 열은 체크박스를 둔다. 글과 앱의 칸은 그 뒤에 선다.
         class table_row_element final : public ui_element
         {
         public:
             table_row_element(const table_element& table, const virtual_list_item& item, const std::size_t index, const bool selected)
                 : ui_element { ui_element_id { ui_element_kind::table_row, part_owner(table.config().owner, item.key) } }
                 , table_ { &table }
+                , depth_ { item.depth }
             {
                 set_clip_children(true);
                 const table_config& config { table.config() };
                 texts_.resize(config.columns.size());
+                leads_.resize(config.columns.size(), 0.0f);
+                const ui_element_id body { ui_element_kind::virtual_list, config.owner };
                 for (std::size_t column = 0; column < config.columns.size(); ++column)
                 {
-                    std::unique_ptr<ui_element> cell { config.build_cell != nullptr ? config.build_cell(item, index, config.columns[column], selected) : nullptr };
+                    const table_column& info { config.columns[column] };
+                    // 트리 열의 들여쓰기와 삼각형이다. 잎도 삼각형 자리를 비워 글이 줄을 맞춘다.
+                    if (config.tree_column.empty() == false && info.key == config.tree_column)
+                    {
+                        leads_[column] += static_cast<float>(item.depth) * list_indent_step + list_expander_width;
+                        if (item.expansion != list_expansion::none && table.expand_message() != nullptr)
+                            add_part(std::make_unique<tree_expander_element>(ui_element_id { ui_element_kind::table_expander, part_owner(config.owner, item.key) }, item.key,
+                                         item.expansion == list_expansion::expanded, table.expand_message(), body),
+                                column, part_kind::expander);
+                    }
+                    // 체크 칸이다. 눌러도 초점은 본문에 남는다 — 체크박스가 초점을 가져가면 그 뒤의 ↓가 표의 것이 아니다.
+                    if (config.check_column.empty() == false && info.key == config.check_column && config.check_state_of != nullptr)
+                    {
+                        const check_state state { config.check_state_of(item, index) };
+                        check_config check {};
+                        check.owner = part_owner(config.owner, item.key);
+                        check.checked = state == check_state::checked;
+                        check.mixed = state == check_state::mixed;
+                        // 라벨이 칸 밖(행)에 있으므로 보조 기술의 이름은 행 이름이다.
+                        check.tooltip = item.label;
+                        if (config.toggle_check != nullptr && item.enabled)
+                            check.toggle = [key = item.key, toggle = config.toggle_check](const ui_action_context&) -> std::vector<input_action> { return { toggle(key) }; };
+                        auto box { std::make_unique<check_element>(std::move(check)) };
+                        box->set_enabled(item.enabled);
+                        box->set_tab_stop(false);
+                        box->set_pointer_focus_target(body);
+                        check_lead_[column] = leads_[column];
+                        leads_[column] += check_slot_width;
+                        add_part(std::move(box), column, part_kind::check);
+                    }
+                    std::unique_ptr<ui_element> cell { config.build_cell != nullptr ? config.build_cell(item, index, info, selected) : nullptr };
                     if (cell != nullptr)
                     {
-                        cell_columns_.push_back(column);
-                        add_child(std::move(cell));
+                        add_part(std::move(cell), column, part_kind::cell);
                         continue;
                     }
                     if (config.cell_text != nullptr)
@@ -79,12 +117,36 @@ namespace luil {
             {
                 set_bounds(context.slot);
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-                const std::span<const std::unique_ptr<ui_element>> cells { children() };
+                const std::span<const std::unique_ptr<ui_element>> parts { children() };
                 const std::vector<table_column_span>& spans { table_->spans() };
-                for (std::size_t index = 0; index < cells.size(); ++index)
+                for (std::size_t index = 0; index < parts.size(); ++index)
                 {
-                    const std::size_t column { cell_columns_[index] };
-                    cells[index]->arrange(context.for_child(column < spans.size() ? column_rect(context.slot, spans[column], table_->scroll_x(), scale) : rect_f {}));
+                    const part_place& place { places_[index] };
+                    if (place.column >= spans.size())
+                    {
+                        parts[index]->arrange(context.for_child({}));
+                        continue;
+                    }
+                    const rect_f cell { column_rect(context.slot, spans[place.column], table_->scroll_x(), scale) };
+                    switch (place.kind)
+                    {
+                    case part_kind::expander:
+                        parts[index]->arrange(context.for_child(
+                            { cell.x + (table_cell_padding + static_cast<float>(depth_) * list_indent_step) * scale, cell.y, list_expander_width * scale, cell.height }));
+                        break;
+                    case part_kind::check: {
+                        // 체크박스는 자기 줄 높이를 정한다. 행 높이와 다르면 가운데에 앉힌다.
+                        const float height { check_element::height_for({}) * scale };
+                        const float left { cell.x + (table_cell_padding - 4.0f + check_lead_.at(place.column)) * scale };
+                        parts[index]->arrange(context.for_child({ left, cell.y + (cell.height - height) / 2.0f, check_slot_width * scale, height }));
+                        break;
+                    }
+                    case part_kind::cell: {
+                        const float lead { leads_[place.column] * scale };
+                        parts[index]->arrange(context.for_child({ cell.x + lead, cell.y, std::max(0.0f, cell.width - lead), cell.height }));
+                        break;
+                    }
+                    }
                 }
             }
 
@@ -99,7 +161,13 @@ namespace luil {
                 context.canvas.save();
                 context.canvas.clipRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height));
                 for (std::size_t column = 0; column < texts_.size() && column < spans.size(); ++column)
-                    draw_cell_text(context.canvas, texts_[column], column_rect(box, spans[column], table_->scroll_x(), scale), columns[column].align, scale, font, foreground);
+                {
+                    rect_f cell { column_rect(box, spans[column], table_->scroll_x(), scale) };
+                    const float lead { leads_[column] * scale };
+                    cell.x += lead;
+                    cell.width = std::max(0.0f, cell.width - lead);
+                    draw_cell_text(context.canvas, texts_[column], cell, columns[column].align, scale, font, foreground);
+                }
                 context.canvas.restore();
                 draw_children(context, interaction);
             }
@@ -111,10 +179,34 @@ namespace luil {
             }
 
         private:
+            enum class part_kind
+            {
+                cell,
+                expander,
+                check,
+            };
+
+            // 자식 하나가 선 열과 그 쓰임이다 (자식 순서 그대로).
+            struct part_place
+            {
+                std::size_t column { 0 };
+                part_kind kind { part_kind::cell };
+            };
+
+            void add_part(std::unique_ptr<ui_element> part, const std::size_t column, const part_kind kind)
+            {
+                places_.push_back({ column, kind });
+                add_child(std::move(part));
+            }
+
             const table_element* table_ { nullptr };
+            int depth_ { 0 };
             std::vector<std::u8string> texts_ {};
-            // 지은 칸(자식) 하나하나가 선 열이다 (자식 순서 그대로).
-            std::vector<std::size_t> cell_columns_ {};
+            // 열마다 글과 앱의 칸이 밀리는 거리다 (들여쓰기·삼각형·체크박스, 논리 픽셀).
+            std::vector<float> leads_ {};
+            // 체크박스가 서는 거리다 (트리 열과 겹치면 삼각형 뒤).
+            std::unordered_map<std::size_t, float> check_lead_ {};
+            std::vector<part_place> places_ {};
         };
 
         // 머리글의 부품을 누르면 초점이 본문 목록에 선다.
@@ -365,7 +457,10 @@ namespace luil {
         //  - 행 모델은 옮긴다. 표는 열만 읽고 행은 목록이 읽는다 — 두 벌로 두면 큰 모델이 frame마다 두 번 복사된다.
         virtual_list_config rows { std::move(config_.rows) };
         config_.rows = {};
+        expand_ = rows.set_expanded;
         rows.owner = config_.owner;
+        // 계층은 트리 열 안에 그린다. 행 앞에 따로 자리를 두지 않는다.
+        rows.tree_gutter = false;
         rows.role = access_role::table;
         rows.row_role = access_role::data_item;
         // 행 내용이 표의 열 자리를 읽는다. 표는 그 행들을 담은 본문을 소유하므로 행보다 먼저 사라지지 않는다.
@@ -376,12 +471,23 @@ namespace luil {
         body_ = body.get();
         add_child(std::move(body));
 
-        if (config_.scroll_horizontal == nullptr)
+        const bool checks { config_.check_column.empty() == false && config_.toggle_check != nullptr };
+        if (config_.scroll_horizontal == nullptr && checks == false)
             return;
-        // ←·→는 가로 스크롤이다. 본문 목록은 세로 키만 쓰므로 그것이 소비하지 않은 ←·→가 여기로 올라온다
-        // (key-propagation-design.md). 2단계의 셀 커서가 서면 ←·→는 셀 사이 이동이 된다.
+        // ←·→는 가로 스크롤이다. 본문 목록은 세로 키(계층 목록이면 갈 곳이 있는 ←·→까지)만 쓰므로 그것이 소비하지
+        // 않은 ←·→가 여기로 올라온다 (key-propagation-design.md).
+        //  - Space는 커서 행의 체크다. 본문이 Space를 실행 키로 쓰면(`rows.activate`) 여기까지 오지 않는다.
         set_key_handler([this](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
-            if ((event.key != key_code::arrow_left && event.key != key_code::arrow_right) || event.shortcut_modifier_down() || event.shift)
+            if (event.shortcut_modifier_down() || event.shift)
+                return std::nullopt;
+            if (event.key == key_code::space && config_.check_column.empty() == false && config_.toggle_check != nullptr)
+            {
+                const std::optional<std::size_t>& cursor { body_->cursor() };
+                if (cursor.has_value() == false || *cursor >= body_->model().size() || body_->model()[*cursor].enabled == false)
+                    return std::vector<input_action> {};
+                return std::vector<input_action> { config_.toggle_check(body_->model()[*cursor].key) };
+            }
+            if ((event.key != key_code::arrow_left && event.key != key_code::arrow_right) || config_.scroll_horizontal == nullptr)
                 return std::nullopt;
             const float step { event.key == key_code::arrow_left ? -table_key_scroll_step : table_key_scroll_step };
             const float delta { table_clamp_scroll(scroll_x_ + step, content_width_, viewport_width_) - scroll_x_ };
@@ -415,6 +521,11 @@ namespace luil {
     const std::vector<table_column_span>& table_element::spans() const noexcept
     {
         return spans_;
+    }
+
+    const std::function<input_action(const std::u8string& key, bool expanded)>& table_element::expand_message() const noexcept
+    {
+        return expand_;
     }
 
     void table_element::arrange(const arrange_context& context)

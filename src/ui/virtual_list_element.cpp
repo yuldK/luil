@@ -1,6 +1,7 @@
 #include "luil/ui/virtual_list_element.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "ui/tree_expander.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -106,7 +107,20 @@ namespace luil {
             {
                 if (content == nullptr)
                     return;
+                content_ = content.get();
                 add_child(std::move(content));
+            }
+
+            // 계층의 자리다. `indent`는 내용과 글이 밀리는 거리(깊이 × 들여쓰기 + 삼각형 폭, 논리 픽셀)다.
+            void set_tree(const float indent, const int depth, const list_expansion expansion, std::unique_ptr<ui_element> expander)
+            {
+                indent_ = indent;
+                depth_ = depth;
+                expansion_ = expansion;
+                if (expander == nullptr)
+                    return;
+                expander_ = expander.get();
+                add_child(std::move(expander));
             }
 
             [[nodiscard]] const ui_element_id& pointer_focus_target() const noexcept override
@@ -117,8 +131,15 @@ namespace luil {
             void arrange(const arrange_context& context) override
             {
                 set_bounds(context.slot);
-                for (const std::unique_ptr<ui_element>& child : children())
-                    child->arrange(context.for_child(context.slot));
+                const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+                const float indent { indent_ * scale };
+                if (content_ != nullptr)
+                    content_->arrange(context.for_child({ context.slot.x + indent, context.slot.y, std::max(0.0f, context.slot.width - indent), context.slot.height }));
+                if (expander_ == nullptr)
+                    return;
+                // 삼각형은 `list_element`의 행과 같은 자리다 (왼쪽 여백 + 깊이 × 들여쓰기).
+                const float expander_x { context.slot.x + (8.0f + static_cast<float>(depth_) * list_indent_step) * scale };
+                expander_->arrange(context.for_child({ expander_x, context.slot.y, list_expander_width * scale, context.slot.height }));
             }
 
             void draw(draw_context& context, const interaction_snapshot& interaction) const override
@@ -184,11 +205,11 @@ namespace luil {
                 // 앱이 내용을 짓지 않았으면 이름 한 줄이 기본 행이다.
                 // 안쪽 여백은 `list_row_element`의 글 자리와 같은 값이라, 두 목록을
                 // 나란히 놓아도 글의 왼쪽 끝이 맞는다.
-                if (children().empty())
+                if (content_ == nullptr)
                 {
                     const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
                     const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
-                    const float text_left { box.x + 8.0f * scale };
+                    const float text_left { box.x + (8.0f + indent_) * scale };
                     if (const float text_width { box.x + box.width - 8.0f * scale - text_left }; text_width > 0.0f)
                         static_cast<void>(draw_text_within(context.canvas, label_, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }
@@ -198,7 +219,11 @@ namespace luil {
 
             [[nodiscard]] access_info accessibility() const override
             {
-                return { .role = role_, .name = label_, .selected = selected_ };
+                access_info info { .role = role_, .name = label_, .selected = selected_ };
+                // 가지만 펼침 상태가 있다. 잎에 "접힘"을 알리면 화면 읽기가 펼칠 수 있는 것처럼 말한다.
+                if (expansion_ != list_expansion::none)
+                    info.expanded = expansion_ == list_expansion::expanded;
+                return info;
             }
 
         private:
@@ -210,6 +235,12 @@ namespace luil {
             access_role role_ { access_role::list_item };
             bool selected_ { false };
             bool cursor_ { false };
+            // 앱이 지은 내용과 삼각형이다 (없으면 nullptr).
+            ui_element* content_ { nullptr };
+            ui_element* expander_ { nullptr };
+            float indent_ { 0.0f };
+            int depth_ { 0 };
+            list_expansion expansion_ { list_expansion::none };
         };
 
         // 지어진 행들을 모델 자리에 그대로 앉히는 레인이다.
@@ -418,9 +449,15 @@ namespace luil {
 
         // Ctrl+A와 Ctrl+Space다. 둘 다 **목록의 키**라 초점이 행 안의 부품에 있어도 그 부품이 쓰지 않으면
         // 여기까지 올라온다 (key-propagation-design.md). 쓰지 않는 키는 nullopt로 흘린다.
-        if (config_.multiple_selection && (config_.select_all != nullptr || config_.toggle_at_cursor != nullptr))
+        //  - 계층 목록(`set_expanded`)의 ←·→도 여기다. 갈 곳이 없는 ←·→는 흘려서 감싼 표가 가로로 흐르게 한다.
+        const bool selection_keys { config_.multiple_selection && (config_.select_all != nullptr || config_.toggle_at_cursor != nullptr) };
+        if (selection_keys || config_.set_expanded != nullptr)
             set_key_handler([this](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
                 if (event.alt || event.meta)
+                    return std::nullopt;
+                if ((event.key == key_code::arrow_left || event.key == key_code::arrow_right) && event.control == false && event.shift == false)
+                    return tree_step(event.key == key_code::arrow_right);
+                if (config_.multiple_selection == false)
                     return std::nullopt;
                 if (event.key == key_code::key_a && event.primary_shortcut_down() && event.shift == false && config_.select_all != nullptr)
                     return std::vector<input_action> { config_.select_all() };
@@ -509,6 +546,34 @@ namespace luil {
                 ++rows;
         }
         return rows > 0 ? rows : 1;
+    }
+
+    std::optional<std::vector<input_action>> virtual_list_element::tree_step(const bool forward) const
+    {
+        if (config_.set_expanded == nullptr || cursor_.has_value() == false || *cursor_ >= model().size())
+            return std::nullopt;
+        const std::size_t index { *cursor_ };
+        const virtual_list_item& item { model()[index] };
+        if (forward)
+        {
+            if (item.expansion == list_expansion::collapsed)
+                return std::vector<input_action> { config_.set_expanded(item.key, true) };
+            if (item.expansion != list_expansion::expanded)
+                return std::nullopt;
+            // 펼친 가지의 첫 자식이다. 자식이 없는 펼친 가지(빈 폴더)에서는 키만 삼킨다 — 가지 위의 →가 표를 가로로
+            // 흘리면 같은 키가 줄마다 다른 일을 한다.
+            if (index + 1u < model().size() && model()[index + 1u].depth > item.depth && moves_cursor())
+                return move_cursor(index + 1u, {});
+            return std::vector<input_action> {};
+        }
+        if (item.expansion == list_expansion::expanded)
+            return std::vector<input_action> { config_.set_expanded(item.key, false) };
+        // 접혔거나 잎이면 부모로 간다. 부모는 앞쪽에서 처음 만나는 더 얕은 항목이다 (평탄화의 순서).
+        if (item.depth > 0 && moves_cursor())
+            for (std::size_t parent = index; parent > 0u; --parent)
+                if (model()[parent - 1u].depth < item.depth)
+                    return move_cursor(parent - 1u, {});
+        return std::nullopt;
     }
 
     bool virtual_list_element::moves_cursor() const noexcept
@@ -721,8 +786,21 @@ namespace luil {
             const virtual_list_message_factory add { config_.add_to_selection };
             const virtual_list_message_factory remove { config_.remove_from_selection };
             const virtual_list_pick_factory pick { config_.pick };
-            if (config_.multiple_selection && item.enabled && (add != nullptr || remove != nullptr || pick != nullptr))
-                row->set_access_handler([key = item.key, row_id = row->id(), add, remove, pick](const access_request& request) -> std::optional<std::vector<input_action>> {
+            //  - 가지의 펼치기·접기도 여기서 절대 메시지(`set_expanded`)로 간다.
+            const bool selection_access { config_.multiple_selection && item.enabled && (add != nullptr || remove != nullptr || pick != nullptr) };
+            const bool expand_access { config_.set_expanded != nullptr && item.expansion != list_expansion::none };
+            if (selection_access || expand_access)
+                row->set_access_handler([key = item.key, row_id = row->id(), add, remove, pick, selection_access,
+                                            set_expanded = expand_access ? config_.set_expanded : std::function<input_action(const std::u8string&, bool)> {}](
+                                            const access_request& request) -> std::optional<std::vector<input_action>> {
+                    if (request.command == access_command::expand || request.command == access_command::collapse)
+                    {
+                        if (set_expanded == nullptr)
+                            return std::nullopt;
+                        return std::vector<input_action> { set_expanded(key, request.command == access_command::expand) };
+                    }
+                    if (selection_access == false)
+                        return std::nullopt;
                     const bool adding { request.command == access_command::add_to_selection };
                     if (adding == false && request.command != access_command::remove_from_selection)
                         return std::nullopt;
@@ -745,6 +823,19 @@ namespace luil {
             // 글을 직접 그린다).
             if (config_.build_row != nullptr)
                 row->set_content(config_.build_row(item, index, selected));
+            // 계층의 들여쓰기와 삼각형이다. 삼각형은 내용 **뒤에** 담는다 — 내용과 겹치는 가장자리에서 삼각형이
+            // hit에서 이긴다. 잎도 삼각형 자리를 비워 글이 줄을 맞춘다 (`list_element`와 같은 규칙).
+            //  - `tree_gutter`를 끈 목록(표)은 자리를 두지 않고 펼침 상태만 행의 접근성에 싣는다.
+            if (config_.tree_gutter && config_.set_expanded != nullptr)
+            {
+                std::unique_ptr<ui_element> expander {};
+                if (item.expansion != list_expansion::none)
+                    expander = std::make_unique<tree_expander_element>(
+                        ui_element_id { ui_element_kind::virtual_list_expander, item.key }, item.key, item.expansion == list_expansion::expanded, config_.set_expanded, id());
+                row->set_tree(static_cast<float>(item.depth) * list_indent_step + list_expander_width, item.depth, item.expansion, std::move(expander));
+            }
+            else
+                row->set_tree(0.0f, item.depth, item.expansion, nullptr);
             lane->add_row(std::move(row), { begin, item_height(item, config_.row_height) });
         };
 
