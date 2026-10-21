@@ -1,6 +1,8 @@
 #include "luil/text/text_edit.h"
 
 #include "luil/text/utf8_text.h"
+#include "luil/text/grapheme.h"
+#include "text/grapheme_internal.h"
 
 #include <algorithm>
 #include <utility>
@@ -24,22 +26,12 @@ namespace luil::text {
 
         std::size_t previous_boundary(const std::u8string_view text, std::size_t offset) noexcept
         {
-            if (offset == 0)
-                return 0;
-            --offset;
-            while (offset > 0 && is_continuation(text[offset]))
-                --offset;
-            return offset;
+            return grapheme_previous(text, offset);
         }
 
-        std::size_t next_boundary(const std::u8string_view text, std::size_t offset) noexcept
+        std::size_t next_boundary(const std::u8string_view text, const std::size_t offset) noexcept
         {
-            if (offset >= text.size())
-                return text.size();
-            ++offset;
-            while (offset < text.size() && is_continuation(text[offset]))
-                ++offset;
-            return offset;
+            return grapheme_next(text, offset);
         }
 
         // 왼쪽으로: 구분자를 먼저 지나고 그다음 낱말을 지난다.
@@ -135,7 +127,8 @@ namespace luil::text {
         // 이어지는 바이트 한가운데를 가리키면 그 문자의 시작으로 되돌린다.
         while (offset > 0 && is_continuation(text[offset]))
             --offset;
-        return offset;
+        const std::size_t previous { grapheme_previous(text, offset) };
+        return grapheme_next(text, previous) == offset ? offset : previous;
     }
 
     bool text_edit_erase_selection(text_edit_state& state)
@@ -177,7 +170,7 @@ namespace luil::text {
         if (state.caret == 0)
             return;
         begin_edit(state, text_edit_group::erase);
-        const std::size_t begin { previous_boundary(state.text, state.caret) };
+        const std::size_t begin { grapheme_backspace_offset(state.text, state.caret) };
         state.text.erase(begin, state.caret - begin);
         state.caret = begin;
         state.anchor = begin;

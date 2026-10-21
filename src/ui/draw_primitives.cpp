@@ -1,4 +1,5 @@
 #include "luil/ui/draw_primitives.h"
+#include "luil/text/grapheme.h"
 
 #include "luil/text/utf8_text.h"
 
@@ -28,9 +29,8 @@ namespace luil {
         {
             std::vector<std::size_t> boundaries {};
             boundaries.reserve(text.size() + 1);
-            for (std::size_t index = 0; index < text.size(); ++index)
-                if ((static_cast<std::uint8_t>(text[index]) & 0xC0U) != 0x80U)
-                    boundaries.push_back(index);
+            for (std::size_t index { 0 }; index < text.size(); index = text::grapheme_next(text, index))
+                boundaries.push_back(index);
             boundaries.push_back(text.size());
             return boundaries;
         }

@@ -31,4 +31,15 @@ struct text_edit_state
 
 `text_edit_command`는 insert, backspace, 단어 이동·선택, undo, redo, caret 배치 등의 동작을 표현한다. input 스레드는 `text_edit_request`를 만들고 policy가 이를 앱 메시지로 변환한다. 앱 logic은 [`ui_interaction.h`](../../include/luil/ui/ui_interaction.h)의 `luil::apply_text_edit(state, request, filter)`로 초안을 갱신한다. 선택적인 `text_insert_filter`는 insert·replace 전에 숫자 제한이나 길이 제한처럼 앱별 입력 규칙을 적용한다.
 
-이 편집 모델의 문자 이동은 UTF-8 code point 경계를 사용하며 grapheme cluster 편집을 제공하는 계약은 아니다. 단어 이동에서 ASCII 영숫자와 비ASCII 바이트는 단어로, 나머지는 구분자로 취급한다. 경로의 `/`와 식별자의 `-` 등에서 멈춘다. 외부 값으로 글을 교체할 때는 `text_edit_set_text()`가 caret·anchor를 유효 범위로 맞추고 undo·redo를 비운다.
+이 편집 모델의 문자 이동은 아래의 글자소 경계를 따른다. 단어 이동에서 ASCII 영숫자와 비ASCII 바이트는 단어로, 나머지는 구분자로 취급한다. 경로의 `/`와 식별자의 `-` 등에서 멈춘다. 외부 값으로 글을 교체할 때는 `text_edit_set_text()`가 caret·anchor를 유효 범위로 맞추고 undo·redo를 비운다.
+
+## 글자소 편집 경계
+
+좌우 이동·Delete·caret 놓기·낱말 선택은 글자소 경계를 따른다. 내장 표는 Unicode 16.0.0의
+UAX #29 부분 집합이며 결합 부호·이체 선택자·이모지 수식자·ZWJ 이모지·국기 RI 쌍·한글 자모·CR LF를 묶는다.
+`LUIL_ENABLE_TEXT_SHAPING` 구성은 기존 SkUnicode 경로의 플랫폼 ICU 또는 libgrapheme을 먼저 쓰고,
+그 서비스를 열 수 없으면 내장 표로 물러선다. 글자소 표의 생성기는 `scripts/generate_grapheme_data.py`다.
+
+Backspace도 한 글자소를 지우되, 마지막 코드포인트가 Mn·Mc·Me 결합 부호인 일반 글은 그 부호만 벗긴다.
+`e`와 결합 악센트에서는 `e`가 남는다. ZWJ·이체 선택자·피부색·keycap·국기·한글 자모 시퀀스는
+통째로 지운다. IME 조합 중 caret과 삭제는 계속 IME가 정한다. 조합 표시 상태는 이 규칙으로 다시 맞추지 않는다.

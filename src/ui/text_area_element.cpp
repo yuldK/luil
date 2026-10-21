@@ -1,4 +1,5 @@
 #include "luil/ui/text_area_element.h"
+#include "luil/text/grapheme.h"
 
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
@@ -22,18 +23,12 @@ namespace luil {
         using text_line = text_area_element::line;
         using width_of = std::function<float(std::u8string_view)>;
 
-        [[nodiscard]] bool continuation_byte(const char8_t unit) noexcept
-        {
-            return (static_cast<unsigned int>(unit) & 0xC0u) == 0x80u;
-        }
-
-        // 줄 안의 문자 경계다 (0과 끝 포함).
+        // 줄 넘김과 hit test가 같은 글자소 경계를 쓴다.
         [[nodiscard]] std::vector<std::size_t> boundaries_of(const std::u8string_view line)
         {
             std::vector<std::size_t> boundaries { 0 };
-            for (std::size_t offset = 1; offset < line.size(); ++offset)
-                if (continuation_byte(line[offset]) == false)
-                    boundaries.push_back(offset);
+            for (std::size_t offset { text::grapheme_next(line, 0) }; offset < line.size(); offset = text::grapheme_next(line, offset))
+                boundaries.push_back(offset);
             if (line.empty() == false)
                 boundaries.push_back(line.size());
             return boundaries;
