@@ -430,7 +430,7 @@ namespace luil {
 
     std::optional<text_input_snapshot> text_input_element::text_input() const
     {
-        return text_input_snapshot {
+        text_input_snapshot snapshot {
             value_.text,
             value_.caret,
             value_.anchor,
@@ -441,6 +441,8 @@ namespace luil {
             config_.secret,
             config_.input,
         };
+        snapshot.navigation_keys_to_parent = config_.navigation_keys_to_parent;
+        return snapshot;
     }
 
     std::optional<rect_f> text_input_element::text_span_bounds(const text_span_query& query, const text_measurer& measurer) const

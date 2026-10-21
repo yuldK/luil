@@ -45,6 +45,7 @@
 | 선택 묶음 | `choice_group_element` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
 | 명령표·단축키 | `app_command`, `match_command` | [ui/commands.h](../include/luil/ui/commands.h) | [설명](popup-anchor-design.md) |
 | 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | [설명](popup-overlay-design.md) |
+| 편집형 콤보 | `combo_box_element` | [ui/combo_box_element.h](../include/luil/ui/combo_box_element.h) | [설명](combo-box-design.md) |
 | 드롭다운 | `dropdown_element` | [ui/dropdown_element.h](../include/luil/ui/dropdown_element.h) | [설명](popup-overlay-design.md) |
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |
 | 아래 시트·옆 시트·서랍 | `sheet_host_element` | [ui/sheet_host_element.h](../include/luil/ui/sheet_host_element.h) | [설명](sheet-design.md) |
