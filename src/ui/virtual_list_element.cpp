@@ -89,9 +89,11 @@ namespace luil {
         class virtual_row_element final : public ui_element
         {
         public:
-            virtual_row_element(ui_element_id id, ui_element_id list, std::u8string label, const bool enabled, const bool selected, const bool cursor, const access_role role)
+            virtual_row_element(ui_element_id id, ui_element_id list, std::u8string key, std::u8string label, const bool enabled, const bool selected, const bool cursor,
+                const access_role role)
                 : ui_element { std::move(id) }
                 , list_ { std::move(list) }
+                , key_ { std::move(key) }
                 , label_ { std::move(label) }
                 , role_ { role }
                 , selected_ { selected }
@@ -150,7 +152,7 @@ namespace luil {
                 const rect_f box { bounds() };
                 const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
                 // 함께 끌리는 행과 놓을 자리다 (`list_element`와 같은 규칙). 키는 목록 안에서만 유일하므로 출발 목록까지 견준다.
-                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(list_, id().owner) };
+                const bool dragged { interaction.drag.has_value() && interaction.drag->payload.carries(list_, key_) };
                 const bool drop_here { interaction.drag.has_value() && interaction.drag->payload.suppress_drop_highlight == false && interaction.drag->hovered_drop_target == id() };
 
                 // 놓을 자리 · 고른 행 · 눌린 행 · hover의 순서다 (`list_element`와 같은 규칙).
@@ -233,6 +235,8 @@ namespace luil {
             // 커서 표시는 **그 목록에 초점이 있을 때만** 선다 — kind만 견주면 한 화면에
             // 놓인 다른 가상 목록의 커서까지 함께 그려진다 (자리표는 언제나 전부를 견준다).
             ui_element_id list_ {};
+            // 항목 키다. 자리표의 owner는 목록 owner가 붙은 값이라 끌기 payload(키)와 견줄 때는 이것을 쓴다.
+            std::u8string key_ {};
             std::u8string label_ {};
             access_role role_ { access_role::list_item };
             bool selected_ { false };
@@ -292,6 +296,21 @@ namespace luil {
         for (const virtual_list_item& item : items)
             total += item_height(item, row_height);
         return total;
+    }
+
+    ui_element_id virtual_list_row_id(const std::u8string_view list_owner, const std::u8string_view key)
+    {
+        std::u8string owner { list_owner };
+        owner.push_back(u8'\u001f');
+        owner.append(key);
+        return { ui_element_kind::virtual_list_row, std::move(owner) };
+    }
+
+    ui_element_id virtual_list_expander_id(const std::u8string_view list_owner, const std::u8string_view key)
+    {
+        ui_element_id id { virtual_list_row_id(list_owner, key) };
+        id.kind = ui_element_kind::virtual_list_expander;
+        return id;
     }
 
     virtual_list_span virtual_list_row_span(const std::span<const virtual_list_item> items, const float row_height, const std::size_t index) noexcept
@@ -715,7 +734,7 @@ namespace luil {
     {
         const virtual_list_item& item { model()[index] };
         const bool at_cursor { cursor_.has_value() && *cursor_ == index };
-        auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor, config_.row_role) };
+        auto row { std::make_unique<virtual_row_element>(virtual_list_row_id(config_.owner, item.key), id(), item.key, item.label, item.enabled, selected, at_cursor, config_.row_role) };
         if ((config_.select != nullptr || config_.pick != nullptr || moves_cursor()) && item.enabled)
         {
             // 누른 행은 **고르는 것이자 커서가 서는 곳**이다.
@@ -830,7 +849,7 @@ namespace luil {
             std::unique_ptr<ui_element> expander {};
             if (with_content && item.expansion != list_expansion::none)
                 expander = std::make_unique<tree_expander_element>(
-                    ui_element_id { ui_element_kind::virtual_list_expander, item.key }, item.key, item.expansion == list_expansion::expanded, config_.set_expanded, id());
+                    virtual_list_expander_id(config_.owner, item.key), item.key, item.expansion == list_expansion::expanded, config_.set_expanded, id());
             row->set_tree(static_cast<float>(item.depth) * list_indent_step + list_expander_width, item.depth, item.expansion, std::move(expander));
         }
         else
@@ -934,16 +953,19 @@ namespace luil {
     {
         if (index >= model().size())
             return {};
-        return { ui_element_kind::virtual_list_row, model()[index].key };
+        return virtual_list_row_id(config_.owner, model()[index].key);
     }
 
     std::optional<std::size_t> virtual_list_element::access_item_index(const ui_element_id& id) const
     {
-        if (id.kind != ui_element_kind::virtual_list_row)
+        // 이 목록의 행 자리표여야 한다 — owner가 `목록 owner + U+001F`로 시작한다. 나머지가 키다.
+        if (id.kind != ui_element_kind::virtual_list_row || id.owner.size() <= config_.owner.size() || id.owner.starts_with(config_.owner) == false
+            || id.owner[config_.owner.size()] != u8'\u001f')
             return std::nullopt;
+        const std::u8string_view key { std::u8string_view { id.owner }.substr(config_.owner.size() + 1u) };
         // 모델은 키로 색인되지 않는다. 찾기 한 번이 모델 길이에 비례하지만 행을 짓지 않으므로 비교뿐이다.
         const std::vector<virtual_list_item>& items { model() };
-        const auto found { std::find_if(items.begin(), items.end(), [&id](const virtual_list_item& item) { return item.key == id.owner; }) };
+        const auto found { std::find_if(items.begin(), items.end(), [key](const virtual_list_item& item) { return item.key == key; }) };
         if (found == items.end())
             return std::nullopt;
         return static_cast<std::size_t>(found - items.begin());

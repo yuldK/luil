@@ -365,7 +365,7 @@ TEST_CASE("Assistive technology reads a data grid with header items and data ite
     REQUIRE(header.role == luil::access_role::header_item);
     REQUIRE(header.name == u8"작성자");
     REQUIRE(find(*tree, { luil::ui_element_kind::virtual_list, u8"files" }).accessibility().role == luil::access_role::table);
-    const luil::access_info row { find(*tree, { luil::ui_element_kind::virtual_list_row, u8"row-b" }).accessibility() };
+    const luil::access_info row { find(*tree, luil::virtual_list_row_id(u8"files", u8"row-b")).accessibility() };
     REQUIRE(row.role == luil::access_role::data_item);
     REQUIRE(row.selected == true);
 }
@@ -387,7 +387,7 @@ TEST_CASE("The tree column indents its cells and holds the triangles", "[ui][tab
     const luil::ui_element& child { find(*tree, { luil::ui_element_kind::table_expander, part(u8"row-b") }) };
     REQUIRE(top.bounds().x == luil::table_cell_padding);
     REQUIRE(child.bounds().x - top.bounds().x == luil::list_indent_step);
-    REQUIRE(tree->find({ luil::ui_element_kind::virtual_list_expander, u8"row-a" }) == nullptr);
+    REQUIRE(tree->find(luil::virtual_list_expander_id(u8"files", u8"row-a")) == nullptr);
     REQUIRE(tree->find({ luil::ui_element_kind::table_expander, part(u8"row-c") }) == nullptr);
 
     // 앱의 칸은 들여쓰기와 삼각형 뒤에 선다. 다른 열은 밀리지 않는다.
@@ -396,7 +396,7 @@ TEST_CASE("The tree column indents its cells and holds the triangles", "[ui][tab
     REQUIRE(find(*tree, { kind_cell, u8"row-c/author" }).bounds().x == 160.0f);
 
     // 펼침 상태는 행(DataItem)이 알린다.
-    REQUIRE(find(*tree, { luil::ui_element_kind::virtual_list_row, u8"row-b" }).accessibility().expanded == false);
+    REQUIRE(find(*tree, luil::virtual_list_row_id(u8"files", u8"row-b")).accessibility().expanded == false);
 }
 
 TEST_CASE("The check column shows each row's state and toggles without stealing focus", "[ui][table][check]")

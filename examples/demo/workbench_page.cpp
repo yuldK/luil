@@ -44,24 +44,23 @@ namespace demo {
             return folder(std::move(key), std::move(label));
         }
 
-        // 저장소 계층의 키는 `repo:` 뒤에 경로다.
-        //  - 가상 목록 행의 자리표는 (행 kind, 키)라 표면 안의 목록 전체에서 키가 유일해야 한다. 변경 표의 행 키가 경로라
-        //    같은 파일(trunk/CMakeLists.txt)이 두 목록에 서면 자리표가 겹친다 (`ui_tree::duplicate_ids`).
+        // 저장소 계층과 변경 표의 키는 둘 다 경로다. 같은 파일(trunk/CMakeLists.txt)이 두 목록에 서도 행 자리표에 목록
+        // owner가 들어 겹치지 않는다 (`virtual_list_row_id`).
 
         // 묻는 폴더마다 서버가 돌려줄 목록이다.
         [[nodiscard]] std::vector<luil::tree_node> children_for(const std::u8string_view key)
         {
-            if (key == u8"repo:trunk/src")
+            if (key == u8"trunk/src")
                 return {
-                    folder(u8"repo:trunk/src/ui", u8"ui", { file(u8"repo:trunk/src/ui/table.cpp", u8"table.cpp"), file(u8"repo:trunk/src/ui/list.cpp", u8"list.cpp") }),
-                    file(u8"repo:trunk/src/main.cpp", u8"main.cpp"),
+                    folder(u8"trunk/src/ui", u8"ui", { file(u8"trunk/src/ui/table.cpp", u8"table.cpp"), file(u8"trunk/src/ui/list.cpp", u8"list.cpp") }),
+                    file(u8"trunk/src/main.cpp", u8"main.cpp"),
                 };
-            if (key == u8"repo:branches")
-                return { file(u8"repo:branches/release-0.1", u8"release-0.1"), file(u8"repo:branches/release-0.2", u8"release-0.2"), file(u8"repo:branches/feature-table", u8"feature-table") };
-            if (key == u8"repo:tags")
-                return { file(u8"repo:tags/v0.1", u8"v0.1"), file(u8"repo:tags/v0.2", u8"v0.2") };
-            if (key == u8"repo:archive")
-                return { file(u8"repo:archive/old-trunk", u8"old-trunk") };
+            if (key == u8"branches")
+                return { file(u8"branches/release-0.1", u8"release-0.1"), file(u8"branches/release-0.2", u8"release-0.2"), file(u8"branches/feature-table", u8"feature-table") };
+            if (key == u8"tags")
+                return { file(u8"tags/v0.1", u8"v0.1"), file(u8"tags/v0.2", u8"v0.2") };
+            if (key == u8"archive")
+                return { file(u8"archive/old-trunk", u8"old-trunk") };
             return {};
         }
 
@@ -94,18 +93,18 @@ namespace demo {
     workbench_page::workbench_page()
     {
         repository_ = {
-            folder(u8"repo:trunk", u8"trunk",
+            folder(u8"trunk", u8"trunk",
                 {
-                    folder(u8"repo:trunk/src", u8"src", {}, luil::node_load::unloaded),
-                    folder(u8"repo:trunk/docs", u8"docs", { file(u8"repo:trunk/docs/README.md", u8"README.md"), file(u8"repo:trunk/docs/table.md", u8"table.md") }),
-                    file(u8"repo:trunk/CMakeLists.txt", u8"CMakeLists.txt"),
+                    folder(u8"trunk/src", u8"src", {}, luil::node_load::unloaded),
+                    folder(u8"trunk/docs", u8"docs", { file(u8"trunk/docs/README.md", u8"README.md"), file(u8"trunk/docs/table.md", u8"table.md") }),
+                    file(u8"trunk/CMakeLists.txt", u8"CMakeLists.txt"),
                 }),
-            folder(u8"repo:branches", u8"branches", {}, luil::node_load::unloaded),
-            folder(u8"repo:tags", u8"tags", {}, luil::node_load::unloaded),
-            folder(u8"repo:archive", u8"archive", {}, luil::node_load::unloaded),
+            folder(u8"branches", u8"branches", {}, luil::node_load::unloaded),
+            folder(u8"tags", u8"tags", {}, luil::node_load::unloaded),
+            folder(u8"archive", u8"archive", {}, luil::node_load::unloaded),
         };
-        expanded_ = { u8"repo:trunk" };
-        tree_cursor_ = u8"repo:trunk";
+        expanded_ = { u8"trunk" };
+        tree_cursor_ = u8"trunk";
 
         changes_ = {
             { u8"trunk/src/ui/table.cpp", u8"수정됨", 18432, true },
@@ -175,7 +174,7 @@ namespace demo {
             luil::tree_node* const node { find_node(load.key) };
             if (node == nullptr)
                 continue;
-            if (load.key == u8"repo:archive" && archive_attempts_++ == 0)
+            if (load.key == u8"archive" && archive_attempts_++ == 0)
             {
                 node->load = luil::node_load::failed;
                 continue;

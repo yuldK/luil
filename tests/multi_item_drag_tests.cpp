@@ -161,7 +161,7 @@ TEST_CASE("Dragging a selected row carries the whole selection to a folder row",
     const luil::drag_payload& payload { controller.snapshot().drag->payload };
     REQUIRE(payload.dragged_owner == u8"b");
     REQUIRE(payload.dragged_owners == std::vector<std::u8string> { u8"a", u8"b", u8"c" });
-    REQUIRE(payload.source == luil::ui_element_id { luil::ui_element_kind::virtual_list_row, u8"b" });
+    REQUIRE(payload.source == luil::virtual_list_row_id(u8"files", u8"b"));
 
     // 놓을 수 없는 행(파일 a) 위에서는 금지 모양이다.
     static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(1), at(20) }));
@@ -170,7 +170,7 @@ TEST_CASE("Dragging a selected row carries the whole selection to a folder row",
 
     // 폴더 행 위에서는 그 행이 놓을 자리로 서고 잡은 모양이다.
     static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(0), at(30) }));
-    REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id { luil::ui_element_kind::virtual_list_row, u8"docs" });
+    REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::virtual_list_row_id(u8"files", u8"docs"));
     REQUIRE(tree->cursor_at(50.0f, row_y(0), controller.snapshot()) == luil::ui_cursor::grabbing);
 
     // 놓으면 셋이 함께 그 폴더로 간다. Ctrl 없이 놓으면 옮기기다.
@@ -225,7 +225,7 @@ TEST_CASE("Losing the mouse capture over a folder drops nothing", "[ui][interact
     static_cast<void>(controller.process(luil::pointer_pressed_event { 50.0f, row_y(2), luil::pointer_button::left, at(0) }));
     static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(2) + 10.0f, at(5) }));
     static_cast<void>(controller.process(luil::pointer_moved_event { 50.0f, row_y(0), at(10) }));
-    REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id { luil::ui_element_kind::virtual_list_row, u8"docs" });
+    REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::virtual_list_row_id(u8"files", u8"docs"));
     luil::pointer_released_event lost { -10000.0f, -10000.0f, luil::pointer_button::left, at(20) };
     lost.cancelled = true;
     REQUIRE(dropped_of(controller.process(lost)).has_value() == false);
@@ -237,7 +237,7 @@ TEST_CASE("A drag without a rejected cursor keeps the grabbing cursor everywhere
     const std::shared_ptr<const luil::ui_tree> tree { make_tree() };
     luil::interaction_snapshot interaction {};
     interaction.drag = luil::drag_visual {};
-    interaction.drag->payload.source = { luil::ui_element_kind::virtual_list_row, u8"b" };
+    interaction.drag->payload.source = luil::virtual_list_row_id(u8"files", u8"b");
     interaction.drag->payload.dragged_owner = u8"b";
     REQUIRE(tree->cursor_at(50.0f, row_y(1), interaction) == luil::ui_cursor::grabbing);
 }

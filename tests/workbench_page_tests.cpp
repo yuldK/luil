@@ -78,7 +78,10 @@ TEST_CASE("The workbench assembles without duplicate or unarranged elements", "[
     const luil::ui_tree tree { published(page) };
     REQUIRE(tree.duplicate_ids().empty());
     REQUIRE(tree.unarranged().empty());
-    REQUIRE(shows(tree, u8"repo:trunk/src"));
+    REQUIRE(shows(tree, u8"trunk/src"));
+    // 같은 경로가 저장소 계층과 변경 표에 함께 선다. 행 자리표는 목록마다 다르다.
+    REQUIRE(tree.find(luil::virtual_list_row_id(u8"workbench-tree", u8"trunk/CMakeLists.txt")) != nullptr);
+    REQUIRE(tree.find(luil::virtual_list_row_id(u8"workbench-changes", u8"trunk/CMakeLists.txt")) != nullptr);
     REQUIRE(changes(tree).body().model().size() == 45u);
 }
 
@@ -86,20 +89,20 @@ TEST_CASE("Expanding a folder loads it later and drops a stale result", "[demo][
 {
     demo::workbench_page page {};
     REQUIRE(page.next_due().has_value() == false);
-    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"repo:branches", true } }));
-    REQUIRE(shows(published(page), loading(u8"repo:branches")));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"branches", true } }));
+    REQUIRE(shows(published(page), loading(u8"branches")));
     REQUIRE(page.next_due().has_value());
 
     // 묻는 중에 접었다 다시 펼치면 요청이 새로 나가고, 옛 요청의 결과는 버려진다.
-    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"repo:tags", true } }));
-    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"repo:tags", false } }));
-    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"repo:tags", true } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"tags", true } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"tags", false } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"tags", true } }));
 
     page.tick(later());
     const luil::ui_tree tree { published(page) };
-    REQUIRE(shows(tree, u8"repo:branches/release-0.1"));
-    REQUIRE(shows(tree, loading(u8"repo:branches")) == false);
-    REQUIRE(shows(tree, u8"repo:tags/v0.2"));
+    REQUIRE(shows(tree, u8"branches/release-0.1"));
+    REQUIRE(shows(tree, loading(u8"branches")) == false);
+    REQUIRE(shows(tree, u8"tags/v0.2"));
     REQUIRE(tree.duplicate_ids().empty());
     REQUIRE(page.next_due().has_value() == false);
 }
@@ -107,16 +110,16 @@ TEST_CASE("Expanding a folder loads it later and drops a stale result", "[demo][
 TEST_CASE("A failed folder offers a retry that loads it", "[demo][workbench]")
 {
     demo::workbench_page page {};
-    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"repo:archive", true } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_expand_intent { u8"archive", true } }));
     page.tick(later());
     const luil::ui_tree failed { published(page) };
-    REQUIRE(failed.find(workbench(u8"retry:repo:archive")) != nullptr);
-    REQUIRE(shows(failed, u8"repo:archive/old-trunk") == false);
+    REQUIRE(failed.find(workbench(u8"retry:archive")) != nullptr);
+    REQUIRE(shows(failed, u8"archive/old-trunk") == false);
 
-    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_retry_intent { u8"repo:archive" } }));
-    REQUIRE(shows(published(page), loading(u8"repo:archive")));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_tree_retry_intent { u8"archive" } }));
+    REQUIRE(shows(published(page), loading(u8"archive")));
     page.tick(later());
-    REQUIRE(shows(published(page), u8"repo:archive/old-trunk"));
+    REQUIRE(shows(published(page), u8"archive/old-trunk"));
 }
 
 TEST_CASE("The form's label column is as wide as its longest label", "[demo][workbench]")

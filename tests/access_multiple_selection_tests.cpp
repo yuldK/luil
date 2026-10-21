@@ -64,7 +64,7 @@ namespace {
 
     [[nodiscard]] const luil::ui_element& row(const luil::ui_tree& tree, const std::u8string& key)
     {
-        const luil::ui_element* const found { tree.find({ luil::ui_element_kind::virtual_list_row, key }) };
+        const luil::ui_element* const found { tree.find(luil::virtual_list_row_id(u8"files", key)) };
         REQUIRE(found != nullptr);
         return *found;
     }
@@ -110,15 +110,15 @@ TEST_CASE("A multiple selection list announces itself and selects every chosen r
 
     const std::vector<const luil::ui_element*> selected { luil::access_selected_items(list) };
     REQUIRE(selected.size() == 3u);
-    REQUIRE(selected[0]->id().owner == u8"a");
-    REQUIRE(selected[1]->id().owner == u8"c");
-    REQUIRE(selected[2]->id().owner == u8"d");
+    REQUIRE(selected[0]->id() == luil::virtual_list_row_id(u8"files", u8"a"));
+    REQUIRE(selected[1]->id() == luil::virtual_list_row_id(u8"files", u8"c"));
+    REQUIRE(selected[2]->id() == luil::virtual_list_row_id(u8"files", u8"d"));
     REQUIRE(row(tree, u8"b").accessibility().selected == false);
 
     // 꺼진 목록은 지금까지의 단일 선택이다 — `selection`을 읽지 않는다.
     const luil::ui_tree single { make_tree({ u8"a", u8"c" }, false) };
     REQUIRE(single.find({ luil::ui_element_kind::virtual_list, u8"files" })->accessibility().multiple_selection == false);
-    REQUIRE(luil::access_multiple_selection(single, { luil::ui_element_kind::virtual_list_row, u8"a" }) == false);
+    REQUIRE(luil::access_multiple_selection(single, luil::virtual_list_row_id(u8"files", u8"a")) == false);
     REQUIRE(luil::access_selected_items(*single.find({ luil::ui_element_kind::virtual_list, u8"files" })).empty());
 }
 
@@ -257,8 +257,9 @@ TEST_CASE("Selected rows outside the viewport stay readable by assistive technol
     };
     const auto selected_keys = [](const luil::ui_tree& tree) {
         std::vector<std::u8string> keys {};
+        // 행 자리표의 owner는 `목록 owner + U+001F + 키`다 (`virtual_list_row_id`). 키만 견준다.
         for (const luil::ui_element* const item : luil::access_selected_items(*tree.find({ luil::ui_element_kind::virtual_list, u8"files" })))
-            keys.push_back(item->id().owner);
+            keys.push_back(item->id().owner.substr(item->id().owner.find(u8'\u001f') + 1u));
         return keys;
     };
 
@@ -302,14 +303,14 @@ TEST_CASE("Selection changes in a multiple selection list are announced per item
     REQUIRE(changes.size() == 3u);
     for (const luil::access_change& change : changes)
         REQUIRE(change.kind == luil::access_change_kind::added_to_selection);
-    REQUIRE(changes[0].id.owner == u8"a");
-    REQUIRE(changes[2].id.owner == u8"c");
+    REQUIRE(changes[0].id == luil::virtual_list_row_id(u8"files", u8"a"));
+    REQUIRE(changes[2].id == luil::virtual_list_row_id(u8"files", u8"c"));
 
     // 하나를 빼면 빠짐 하나다.
     changes = diff({ u8"a", u8"b", u8"c" }, { u8"a", u8"c" });
     REQUIRE(changes.size() == 1u);
     REQUIRE(changes[0].kind == luil::access_change_kind::removed_from_selection);
-    REQUIRE(changes[0].id.owner == u8"b");
+    REQUIRE(changes[0].id == luil::virtual_list_row_id(u8"files", u8"b"));
 
     // 이미 골라진 것이 있는데 하나를 더하면 더해짐이다.
     changes = diff({ u8"a" }, { u8"a", u8"d" });
@@ -320,13 +321,13 @@ TEST_CASE("Selection changes in a multiple selection list are announced per item
     changes = diff({ u8"a", u8"c" }, { u8"e" });
     REQUIRE(changes.size() == 1u);
     REQUIRE(changes[0].kind == luil::access_change_kind::selected);
-    REQUIRE(changes[0].id.owner == u8"e");
+    REQUIRE(changes[0].id == luil::virtual_list_row_id(u8"files", u8"e"));
 
     // 골라져 있던 하나만 남기고 나머지를 풀어도 그 하나의 골라짐이다.
     changes = diff({ u8"b", u8"e" }, { u8"e" });
     REQUIRE(changes.size() == 1u);
     REQUIRE(changes[0].kind == luil::access_change_kind::selected);
-    REQUIRE(changes[0].id.owner == u8"e");
+    REQUIRE(changes[0].id == luil::virtual_list_row_id(u8"files", u8"e"));
 }
 
 TEST_CASE("Many selection changes at once invalidate the selection", "[ui][accessibility][multi-select]")
