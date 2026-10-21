@@ -18,6 +18,19 @@ namespace luil {
         constexpr float check_inset { 4.0f };
     } // namespace
 
+    check_state aggregate_check(const std::span<const check_state> children) noexcept
+    {
+        if (children.empty())
+            return check_state::unchecked;
+        const check_state first { children.front() };
+        if (first == check_state::mixed)
+            return check_state::mixed;
+        for (const check_state state : children)
+            if (state != first)
+                return check_state::mixed;
+        return first;
+    }
+
     check_element::check_element(check_config config)
         : ui_element { ui_element_id { ui_element_kind::check, config.owner } }
         , config_ { std::move(config) }
@@ -65,7 +78,9 @@ namespace luil {
         const ui_color line { enabled() ? context.palette.control_border : context.palette.disabled_foreground };
         const ui_color fill { enabled() ? context.palette.accent : context.palette.disabled_foreground };
         const rect_f mark { indicator_bounds(scale) };
-        SkPaint stroke { solid_paint(config_.checked ? fill : line) };
+        // 일부 상태는 체크박스에만 있다 (`check_config::mixed`).
+        const bool mixed { config_.mixed && config_.style == check_style::checkbox };
+        SkPaint stroke { solid_paint(config_.checked || mixed ? fill : line) };
         stroke.setStyle(SkPaint::kStroke_Style);
         stroke.setStrokeWidth(1.5f * scale);
         stroke.setAntiAlias(true);
@@ -77,7 +92,20 @@ namespace luil {
         case check_style::checkbox: {
             const SkRect shape { SkRect::MakeXYWH(mark.x, mark.y, mark.width, mark.height) };
             const float radius { context.metrics.control_corner_radius * scale };
-            if (config_.checked)
+            if (mixed)
+            {
+                // 채운 네모 위의 가운데 줄이다. 켜짐과 같은 채움이라 "무언가 켜져 있다"가 보이고, 표시가 달라
+                // 전부 켜진 것과 갈린다. 고대비에서도 채움과 줄이 팔레트의 짝(accent·accent_foreground)이라 대비가 산다.
+                context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), solid);
+                SkPaint dash { solid_paint(enabled() ? context.palette.accent_foreground : context.palette.window_background) };
+                dash.setStyle(SkPaint::kStroke_Style);
+                dash.setStrokeWidth(1.8f * scale);
+                dash.setAntiAlias(true);
+                dash.setStrokeCap(SkPaint::kRound_Cap);
+                const float middle_y { mark.y + mark.height / 2.0f };
+                context.canvas.drawLine(mark.x + mark.width * 0.26f, middle_y, mark.x + mark.width * 0.74f, middle_y, dash);
+            }
+            else if (config_.checked)
             {
                 context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), solid);
                 // 채운 네모 위의 체크 표시다.
@@ -164,6 +192,7 @@ namespace luil {
             info.selected = config_.checked;
         else
             info.checked = config_.checked;
+        info.mixed = config_.mixed && config_.style == check_style::checkbox;
         return info;
     }
 } // namespace luil

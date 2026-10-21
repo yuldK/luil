@@ -2,6 +2,7 @@
 
 #include "luil/ui/ui_element.h"
 
+#include <span>
 #include <string>
 
 namespace luil {
@@ -28,11 +29,30 @@ namespace luil {
         std::u8string label {};
         // 켜졌는지다 (앱 상태).
         bool checked { false };
+        // 일부만 켜졌다 (앱 상태). 폴더 안의 몇 항목만 고른 것, 고른 항목들의 값이 서로 다른 것이다.
+        //  - 참이면 `checked`보다 앞서 가운데 줄로 그리고, 보조 기술은 일부 상태(Indeterminate)로 읽는다.
+        //  - 체크박스만 뜻이 있다. 라디오와 스위치에는 가운데 상태가 없어 무시한다.
+        //  - 누름은 지금처럼 `toggle` 하나다. 일부 상태에서 무엇이 될지는 앱이 정한다 (보통은 켜짐 —
+        //    Windows 탐색기와 Qt의 기본이다). 자식들의 상태를 모아 이 값을 정하는 것은 `aggregate_check`다.
+        bool mixed { false };
         // 없으면 컨트롤이 눌리지 않는다.
         // 바꿀 수 없는 자리에 바꾸는 시늉을 두지 않는다.
         ui_action toggle {};
         std::u8string tooltip {};
     };
+
+    // 체크 하나의 세 상태다.
+    enum class check_state
+    {
+        unchecked,
+        checked,
+        mixed,
+    };
+
+    // 자식들의 상태를 모은 부모의 상태다 (폴더의 체크).
+    //  - 모두 켜졌으면 켜짐, 모두 꺼졌으면 꺼짐, 그 밖(섞였거나 일부 상태인 자식이 있다)은 일부다.
+    //  - 자식이 없으면 꺼짐이다.
+    [[nodiscard]] check_state aggregate_check(std::span<const check_state> children) noexcept;
 
     // 컨트롤 한 줄의 높이와 표시 부분의 크기다 (논리 픽셀).
     inline constexpr float check_row_height { 24.0f };
