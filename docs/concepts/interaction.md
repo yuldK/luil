@@ -39,9 +39,10 @@ input 스레드의 [`interaction_controller`](../../include/luil/ui/ui_interacti
 4. 초점 값 컨트롤의 화살표·Page·Home·End
 5. focus group 내부 탐색
 6. 진행 중인 drag의 Esc 취소
-7. focus trap의 Esc dismiss
-8. 기본 버튼의 Enter 실행
-9. 앱 정책의 `on_key()`
+7. 초점 element부터 root까지의 `key_handler` ([키 조상 전파](../key-propagation-design.md))
+8. focus trap의 Esc dismiss
+9. 기본 버튼의 Enter 실행
+10. 앱 정책의 `on_key()`
 
 텍스트 초점에서 Space 키 이벤트는 소비하고 실제 글자는 문자 이벤트로 받는다. Enter는 기본 버튼 경로까지 흐를 수 있다. Tab은 초점 element가 `takes_tab`을 선언하지 않았고 이동할 자리가 있을 때 이동으로 소비한다. 그렇지 않으면 뒤의 라우팅이 이어진다. Shift가 아닌 수정자를 동반한 Enter는 기본 버튼 실행 대상에서 제외한다.
 

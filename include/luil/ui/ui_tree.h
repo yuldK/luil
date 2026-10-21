@@ -169,6 +169,12 @@ namespace luil {
         // 어느 element가 **자기 안에 둔 부품**을 누른 것인지를 묻는 자리다
         // (텍스트 칸 안의 지우기 버튼). 가둠 판정과 같은 걸음을 쓴다.
         [[nodiscard]] bool within(const ui_element_id& ancestor, const ui_element_id& id) const;
+        // 그 id의 element부터 root까지다 (자신이 맨 앞, root가 맨 뒤).
+        // 소비하지 않은 키가 위로 흐르는 길이다 (`key_handler`, key-propagation-design.md).
+        //  - 보이지 않는 가지 위거나 tree에 없으면 비어 있다 — 초점이 설 수 없는 자리다.
+        //  - 같은 id가 여럿이면 그리기 순서의 첫 것이 임자다 (`find`와 같은 규칙).
+        //  - 부모를 담아 두지 않으므로 root에서 내려가며 찾는다. 키 하나에 한 번이라 색인을 두지 않는다.
+        [[nodiscard]] std::vector<const ui_element*> ancestry_of(const ui_element_id& id) const;
         // tree 전체에서 가장 이른 "다음 update 시각"이다.
         // element들의 답에 tree가 직접 그리는 tooltip(지연 경과)의 몫을 더한다.
         // nullopt면 시간이 흘러도 그대로라 platform이 timer를 걸지 않는다.
@@ -193,6 +199,8 @@ namespace luil {
         static void find_default_button(const ui_element& element, const ui_element*& button);
         // element 아래에 그 id가 있는가 (보이지 않는 가지는 세지 않는다).
         [[nodiscard]] static bool contains_id(const ui_element& element, const ui_element_id& id);
+        // element에서 그 id까지의 경로를 path에 쌓는다 (root 쪽이 앞). 찾지 못하면 path는 그대로다.
+        [[nodiscard]] static bool find_path(const ui_element& element, const ui_element_id& id, std::vector<const ui_element*>& path);
         void draw_focus_ring(draw_context& context, const interaction_snapshot& interaction) const;
         void draw_tooltip(draw_context& context, const interaction_snapshot& interaction) const;
         void draw_drag_visual(draw_context& context, const drag_visual& drag) const;
