@@ -77,14 +77,17 @@ TEST_CASE("A vertical wheel goes to the innermost scroll container whatever its 
 {
     const luil::ui_tree tree { strip_with_list() };
     const luil::mouse_wheel_event down { .x = 50.0f, .y = 50.0f, .delta = -120.0f };
-    const scroll_intent* const message { single_scroll(luil::route_wheel(tree, down, scroll_delta_of(down))) };
+    // 돌려받은 동작을 붙들어야 그 안을 가리키는 포인터가 산다.
+    const std::vector<luil::input_action> actions { luil::route_wheel(tree, down, scroll_delta_of(down)) };
+    const scroll_intent* const message { single_scroll(actions) };
     REQUIRE(message != nullptr);
     REQUIRE(message->owner == u8"list");
     REQUIRE(message->delta == luil::input_wheel_scroll_step);
 
     // 가로 띠뿐인 자리에서도 세로 휠은 그 띠를 흘린다 — 축을 묻지 않는 지금까지의 동작이다.
     const luil::ui_tree strip_only { luil::make_arranged_tree(std::make_unique<scroll_box>(u8"strip", luil::scroll_axis::horizontal), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
-    const scroll_intent* const strip { single_scroll(luil::route_wheel(strip_only, down, scroll_delta_of(down))) };
+    const std::vector<luil::input_action> strip_actions { luil::route_wheel(strip_only, down, scroll_delta_of(down)) };
+    const scroll_intent* const strip { single_scroll(strip_actions) };
     REQUIRE(strip != nullptr);
     REQUIRE(strip->owner == u8"strip");
 }
@@ -94,13 +97,15 @@ TEST_CASE("A horizontal wheel passes a vertical container and scrolls the horizo
     const luil::ui_tree tree { strip_with_list() };
     // 오른쪽으로 기울이면 offset이 는다 (내용이 왼쪽으로 간다).
     const luil::mouse_wheel_event right { .x = 50.0f, .y = 50.0f, .delta = 120.0f, .horizontal = true };
-    const scroll_intent* const message { single_scroll(luil::route_wheel(tree, right, scroll_delta_of(right))) };
+    const std::vector<luil::input_action> actions { luil::route_wheel(tree, right, scroll_delta_of(right)) };
+    const scroll_intent* const message { single_scroll(actions) };
     REQUIRE(message != nullptr);
     REQUIRE(message->owner == u8"strip");
     REQUIRE(message->delta == luil::input_wheel_scroll_step);
 
     const luil::mouse_wheel_event left { .x = 50.0f, .y = 50.0f, .delta = -120.0f, .horizontal = true };
-    const scroll_intent* const back { single_scroll(luil::route_wheel(tree, left, scroll_delta_of(left))) };
+    const std::vector<luil::input_action> back_actions { luil::route_wheel(tree, left, scroll_delta_of(left)) };
+    const scroll_intent* const back { single_scroll(back_actions) };
     REQUIRE(back != nullptr);
     REQUIRE(back->delta == -luil::input_wheel_scroll_step);
 }
