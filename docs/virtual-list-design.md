@@ -272,6 +272,23 @@ auto list { std::make_unique<luil::virtual_list_element>(std::move(config)) };
 - 행의 자리표·선택 표시·누름·글자 탐색 이름은 `build_row`가 무엇을 돌려주든 목록의 것이다.
 - 항목 key는 같은 표면의 목록 전체에서 유일하고 frame 간 안정적이다.
 
+## 모델 크기 계측
+
+걸치는 구간(`virtual_list_visible_range`)·행 자리(`virtual_list_row_span`)·내용 높이(`virtual_list_content_height`)는 앞에서부터 높이를 더해 답하므로 frame마다 **모델 크기에 비례**한다. 더하기뿐이라 행을 짓는 것보다 훨씬 싸지만, 수십만 줄이 넘는 모델에서 그 비례가 실제로 frame 예산을 먹는지는 재 본 적이 없다. 그래서 캐시를 먼저 넣지 않고 먼저 잰다.
+
+[virtual_list_benchmark_tests.cpp](../tests/virtual_list_benchmark_tests.cpp)가 10만·100만 줄(열 줄마다 두 배 높이)에서 세 함수와 "끝자락에서 frame 하나 짓고 배치하기"를 잰다. 기본 실행에서는 숨는 태그(`[.]`)라 Release 구성에서 따로 돌린다.
+
+```powershell
+build\vs2026-tests\tests\Release\luil_core_tests.exe "[benchmark][list]" --benchmark-samples 20
+```
+
+| 모델 | 내용 높이 | 끝자락 걸치는 구간 | 마지막 행 자리 | frame 하나 | 잰 날·기계 |
+| --- | --- | --- | --- | --- | --- |
+| 10만 줄 | 측정 전 | 측정 전 | 측정 전 | 측정 전 | |
+| 100만 줄 | 측정 전 | 측정 전 | 측정 전 | 측정 전 | |
+
+**판단 기준.** 100만 줄의 "frame 하나"가 Release에서 1ms를 넘으면 누적 높이 캐시를 넣는다. 캐시는 `shared_items`의 동일성(같은 `shared_ptr`)에 묶어 모델이 바뀌지 않는 frame에서 다시 더하지 않게 하고, 구간 찾기는 이진 탐색이 된다. 넘지 않으면 지금 구조를 둔다. 캐시가 frame 사이에 살 자리가 필요하므로 `text_area_wrap_cache`처럼 앱이 넘기는 값이 될 가능성이 크다.
+
 ## 검증 지침
 
 [virtual_list_element_tests.cpp](../tests/virtual_list_element_tests.cpp)는 다섯 순수 함수(내용 높이·행 자리·걸치는 구간·걸음·글자 탐색)를 창도 tree도 없이 검증하고, 그 위에서 만 줄 모델의 실현 범위, 창 밖 커서 행, 막대까지 뺀 단일 Tab 자리(`activate`만 든 목록이 자리인 것과 둘 다 없으면 자리가 아닌 것을 함께), 커스텀 행의 소유 경계, 방향키·Page·Home/End의 메시지 짝, Space·Enter가 내는 커서 행의 실행과 행 아래 빈 자리를 누른 것이 아무것도 내지 않는 것, 행 누름이 내는 `select`+`move` 짝, 모델 전체를 도는 글자 탐색과 한글 이름에서 같은 글자가 후보를 도는 것, 범위 밖 스크롤의 다듬기를 확인한다.
