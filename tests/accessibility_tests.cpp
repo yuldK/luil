@@ -371,6 +371,10 @@ TEST_CASE("A selection item finds its selection container, not just any parent",
     REQUIRE(luil::access_selection_container(luil::access_role::list));
     REQUIRE(luil::access_selection_container(luil::access_role::tab_list));
     REQUIRE(luil::access_selection_container(luil::access_role::radio_group));
+    // 계층과 표도 항목(tree_item·data_item)을 고르는 container다.
+    REQUIRE(luil::access_selection_container(luil::access_role::tree));
+    REQUIRE(luil::access_selection_container(luil::access_role::table));
+    REQUIRE(luil::access_selection_container(luil::access_role::tool_bar) == false);
     REQUIRE(luil::access_selection_container(luil::access_role::group) == false);
     REQUIRE(luil::access_selection_container(luil::access_role::list_item) == false);
 

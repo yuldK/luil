@@ -56,6 +56,32 @@ namespace {
 
     // 창 없이 만든다 — 화면 좌표 변환이 빠질 뿐 경로는 같다
     // (win32_drop_tests의 surface_drop_target과 같은 갈래).
+    // 역할 하나만 내주는 element다. 역할 → ControlType 표를 확인한다.
+    class role_probe final : public luil::ui_element
+    {
+    public:
+        role_probe(luil::ui_element_id id, const luil::access_role role)
+            : ui_element { std::move(id) }
+            , role_ { role }
+        {}
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {}
+
+        [[nodiscard]] luil::access_info accessibility() const override
+        {
+            return { .role = role_, .name = u8"probe" };
+        }
+
+    private:
+        luil::access_role role_ { luil::access_role::none };
+    };
+
     class fake_uia_host final : public luil::win32::uia_surface_host
     {
     public:
@@ -428,6 +454,40 @@ TEST_CASE("A UIA provider answers name and control type from the current tree", 
 
     button->Release();
     root->Release();
+}
+
+TEST_CASE("Tree, table, toolbar, separator and status bar roles map to their UIA control types", "[win32][uia]")
+{
+    struct expected_type
+    {
+        luil::access_role role { luil::access_role::none };
+        long control_type { 0 };
+    };
+    const std::vector<expected_type> expected {
+        { luil::access_role::tree, UIA_TreeControlTypeId },
+        { luil::access_role::tree_item, UIA_TreeItemControlTypeId },
+        { luil::access_role::table, UIA_DataGridControlTypeId },
+        { luil::access_role::data_item, UIA_DataItemControlTypeId },
+        { luil::access_role::header_item, UIA_HeaderItemControlTypeId },
+        { luil::access_role::tool_bar, UIA_ToolBarControlTypeId },
+        { luil::access_role::separator, UIA_SeparatorControlTypeId },
+        { luil::access_role::status_bar, UIA_StatusBarControlTypeId },
+    };
+    for (const expected_type& entry : expected)
+    {
+        fake_uia_host host {};
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        root->add(std::make_unique<role_probe>(luil::ui_element_id { kind_item, u8"probe" }, entry.role));
+        host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+        auto* const root_provider { new luil::win32::uia_root_provider { host } };
+        luil::win32::uia_element_provider* const probe { root_provider->make_element_provider({ kind_item, u8"probe" }) };
+        VARIANT type {};
+        REQUIRE(probe->GetPropertyValue(UIA_ControlTypePropertyId, &type) == S_OK);
+        REQUIRE(type.vt == VT_I4);
+        REQUIRE(type.lVal == entry.control_type);
+        probe->Release();
+        root_provider->Release();
+    }
 }
 
 TEST_CASE("UIA navigation walks the collapsed access tree", "[win32][uia]")
