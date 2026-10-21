@@ -2,6 +2,8 @@
 
 #include "ui/badge_paint.h"
 
+#include <cmath>
+#include <optional>
 #include <utility>
 
 namespace luil {
@@ -23,5 +25,12 @@ namespace luil {
     access_info badge_element::accessibility() const
     {
         return { .role = access_role::static_text, .name = config_.text };
+    }
+
+    std::optional<size_f> badge_element::preferred_size(const measure_context& context, const float available_width) const
+    {
+        static_cast<void>(available_width);
+        const float text_width { std::ceil(context.text_width(config_.text, config_.font_size)) };
+        return size_f { badge_pill_width_for(text_width, config_.text.empty() == false, config_.tone, config_.font_size), height_for(config_) };
     }
 } // namespace luil

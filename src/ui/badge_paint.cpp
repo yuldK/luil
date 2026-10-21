@@ -68,22 +68,32 @@ namespace luil {
         }
     } // namespace
 
+    float badge_pill_width_for(const float text_width, const bool has_text, const badge_tone tone, const float font_size) noexcept
+    {
+        float width { 2.0f * badge_padding };
+        const bool glyph { badge_element::shows_glyph(tone) };
+        if (glyph)
+            width += font_size;
+        if (has_text)
+        {
+            width += text_width;
+            if (glyph)
+                width += badge_glyph_gap;
+        }
+        // 알약이 원보다 좁아지지 않는다.
+        return std::max(width, badge_element::height_for({ .font_size = font_size }));
+    }
+
     float badge_pill_width(const draw_context& context, const std::u8string_view text, const badge_tone tone, const float font_size)
     {
         const float scale { positive_scale(context) };
-        float width { 2.0f * badge_padding * scale };
-        const bool glyph { badge_element::shows_glyph(tone) };
-        if (glyph)
-            width += font_size * scale;
+        float text_width { 0.0f };
         if (text.empty() == false)
         {
             const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(font_size, scale) };
-            width += measure_text(text, font);
-            if (glyph)
-                width += badge_glyph_gap * scale;
+            text_width = measure_text(text, font) / scale;
         }
-        // 알약이 원보다 좁아지지 않는다.
-        return std::max(width, badge_element::height_for({ .font_size = font_size }) * scale);
+        return badge_pill_width_for(text_width, text.empty() == false, tone, font_size) * scale;
     }
 
     void draw_badge_pill(draw_context& context, const rect_f& box, const std::u8string_view text, const badge_tone tone, const float font_size)
