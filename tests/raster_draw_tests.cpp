@@ -2,6 +2,7 @@
 
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/dialog_elements.h"
+#include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
@@ -26,6 +27,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <span>
 #include <utility>
@@ -452,6 +454,44 @@ TEST_CASE("Scroll edges shade only the side that has more to show", "[ui][raster
         frame.draw(build(0.0f, luil::scroll_edges { .top_rule = true }), luil::interaction_snapshot {});
         REQUIRE(frame.pixel_at(50, 1) == top);
         REQUIRE(frame.pixel_at(50, 2) == palette.window_background);
+    }
+
+    SECTION("흘리기 시작한 창의 그림자는 옅게 시작해 흘린 만큼 짙어진다")
+    {
+        // 반 픽셀을 넘자마자 다 짙은 그림자가 툭 켜지지 않는다. 짙기는 배경에서 멀어진 정도로 잰다.
+        const auto distance = [&palette](const luil::ui_color color) {
+            const auto channel = [](const luil::ui_color value, const int shift) { return static_cast<int>((value >> shift) & 0xFFu); };
+            int sum { 0 };
+            for (const int shift : { 0, 8, 16 })
+                sum += std::abs(channel(color, shift) - channel(palette.window_background, shift));
+            return sum;
+        };
+        const int early { distance(paint(6.0f, shadows)[0]) };
+        const int deeper { distance(paint(12.0f, shadows)[0]) };
+        const int full { distance(paint(150.0f, shadows)[0]) };
+        REQUIRE(early > 0);
+        REQUIRE(early < deeper);
+        REQUIRE(deeper < full);
+        // 다 짙어진 뒤로는 더 흘려도 같다.
+        REQUIRE(distance(paint(luil::scroll_edge_fade_distance, shadows)[0]) == full);
+        // 끝에 다가가는 아래쪽도 같은 곡선으로 옅어진다.
+        REQUIRE(distance(paint(294.0f, shadows)[1]) < distance(paint(150.0f, shadows)[1]));
+    }
+}
+
+TEST_CASE("Scroll edge strength rises smoothly over the fade distance", "[ui][scroll]")
+{
+    REQUIRE(luil::scroll_edge_strength(0.0f) == 0.0f);
+    REQUIRE(luil::scroll_edge_strength(0.5f) == 0.0f);
+    REQUIRE(luil::scroll_edge_strength(luil::scroll_edge_fade_distance / 2.0f) == 0.5f);
+    REQUIRE(luil::scroll_edge_strength(luil::scroll_edge_fade_distance) == 1.0f);
+    REQUIRE(luil::scroll_edge_strength(1000.0f) == 1.0f);
+    float previous { 0.0f };
+    for (float distance { 1.0f }; distance <= luil::scroll_edge_fade_distance; distance += 1.0f)
+    {
+        const float strength { luil::scroll_edge_strength(distance) };
+        REQUIRE(strength > previous);
+        previous = strength;
     }
 }
 
