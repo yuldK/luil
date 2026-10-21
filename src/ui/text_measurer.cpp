@@ -25,6 +25,15 @@ namespace luil {
         return measurer;
     }
 
+    const text_measurer& default_code_text_measurer()
+    {
+        static const text_measurer measurer { [](const std::u8string_view text, const float size) {
+            const SkFont font { configured_code_typeface(), size };
+            return measure_text(text, font);
+        } };
+        return measurer;
+    }
+
     const text_measurer& arrange_context::measure_text() const
     {
         return measurer != nullptr ? *measurer : default_text_measurer();

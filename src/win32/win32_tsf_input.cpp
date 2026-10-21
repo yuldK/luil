@@ -333,7 +333,7 @@ namespace luil::win32 {
             {
                 if (pdcs == nullptr)
                     return E_INVALIDARG;
-                pdcs->dwDynamicFlags = 0;
+                pdcs->dwDynamicFlags = document_.read_only ? TS_SD_READONLY : 0;
                 // 한 줄 평문이다.
                 // 숨은 글도 여러 선택도 없다.
                 pdcs->dwStaticFlags = TS_SS_NOHIDDENTEXT;
@@ -439,6 +439,8 @@ namespace luil::win32 {
 
             HRESULT STDMETHODCALLTYPE SetText(DWORD, const LONG acpStart, const LONG acpEnd, const WCHAR* pchText, const ULONG cch, TS_TEXTCHANGE* pChange) override
             {
+                if (document_.read_only)
+                    return TS_E_READONLY;
                 if (write_locked() == false)
                     return TS_E_NOLOCK;
                 if (pChange == nullptr)
@@ -465,6 +467,8 @@ namespace luil::win32 {
 
             HRESULT STDMETHODCALLTYPE InsertTextAtSelection(const DWORD dwFlags, const WCHAR* pchText, const ULONG cch, LONG* pacpStart, LONG* pacpEnd, TS_TEXTCHANGE* pChange) override
             {
+                if (document_.read_only && (dwFlags & TS_IAS_QUERYONLY) == 0)
+                    return TS_E_READONLY;
                 const LONG selection_begin { acp_from_utf8(document_.text, std::min(document_.caret, document_.anchor)) };
                 const LONG selection_end { acp_from_utf8(document_.text, std::max(document_.caret, document_.anchor)) };
 
@@ -635,7 +639,9 @@ namespace luil::win32 {
             HRESULT STDMETHODCALLTYPE OnStartComposition(ITfCompositionView* pComposition, BOOL* pfOk) override
             {
                 if (pfOk != nullptr)
-                    *pfOk = TRUE;
+                    *pfOk = document_.read_only ? FALSE : TRUE;
+                if (document_.read_only)
+                    return S_OK;
                 composing_ = true;
                 update_composing_range(pComposition);
                 return S_OK;

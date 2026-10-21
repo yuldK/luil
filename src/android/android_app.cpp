@@ -334,7 +334,7 @@ namespace luil::android {
                 const std::optional<text_input_snapshot> value { location.element != nullptr ? location.element->text_input() : std::nullopt };
                 if (value.has_value() == false)
                     return {};
-                return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence, value->secret, value->multiline };
+                return { std::u8string { value->text }, value->caret, value->anchor, value->applied_sequence, value->secret, value->multiline, value->read_only };
             }
 
             [[nodiscard]] text_input_options input_options() const override

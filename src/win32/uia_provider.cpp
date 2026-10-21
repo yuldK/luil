@@ -1311,7 +1311,7 @@ namespace luil::win32 {
             if (info.role == access_role::edit && element->text_input().has_value())
             {
                 const uia_surface_host* const host { root_->host() };
-                *result = host != nullptr && host->accessibility_text_target(id_.kind).has_value() ? FALSE : TRUE;
+                *result = element->text_input()->read_only == false && host != nullptr && host->accessibility_text_target(id_.kind).has_value() ? FALSE : TRUE;
                 return S_OK;
             }
             const float current { info.range.has_value() ? info.range->value : 0.0f };
@@ -1712,6 +1712,8 @@ namespace luil::win32 {
             // 그 밖의 값(드롭다운의 고른 라벨 등)은 여전히 읽기 전용이다.
             if (element->accessibility().role != access_role::edit || element->text_input().has_value() == false)
                 return E_ACCESSDENIED;
+            if (const auto snapshot { element->text_input() }; snapshot.has_value() && snapshot->read_only)
+                return E_ACCESSDENIED;
             const std::optional<text_input_target> target { host->accessibility_text_target(id_.kind) };
             if (target.has_value() == false)
                 return E_ACCESSDENIED;
@@ -2102,7 +2104,9 @@ namespace luil::win32 {
             {
                 const uia_surface_host* const host { root_->host() };
                 result->vt = VT_BOOL;
-                result->boolVal = host != nullptr && host->accessibility_text_target(id_.kind).has_value() ? VARIANT_FALSE : VARIANT_TRUE;
+                const ui_element* const element { resolve() };
+                const auto snapshot { element != nullptr ? element->text_input() : std::nullopt };
+                result->boolVal = snapshot.has_value() && snapshot->read_only == false && host != nullptr && host->accessibility_text_target(id_.kind).has_value() ? VARIANT_FALSE : VARIANT_TRUE;
                 return S_OK;
             }
             // 그 밖의 속성은 지원하지 않는다는 예약 값이다.

@@ -2,6 +2,7 @@
 
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/scroll_area_element.h"
+#include "luil/ui/scrollbar_element.h"
 #include "luil/ui/ui_element.h"
 
 #include <cstddef>
@@ -42,6 +43,7 @@ namespace luil {
         {
             std::vector<std::size_t> cuts {};
             std::uint64_t used { 0 };
+            float width { 0.0f };
         };
         struct key_hash
         {
@@ -58,6 +60,8 @@ namespace luil {
     };
 
     // 여러 줄 텍스트 칸의 설정이다.
+    enum class text_face { ui, code };
+
     struct text_area_config
     {
         // 비어 있고 초점이 없을 때만 그리는 흐린 안내 글이다. 보조 기술이 읽는 칸의 이름이기도 하다.
@@ -72,6 +76,14 @@ namespace luil {
         // 접은 자리를 frame 사이에 쥐는 곳이다 (`text_area_wrap_cache`). 큰 글을 받는 칸만 넘긴다.
         //  - 없으면 배치가 frame마다 글 전체를 접는다. 결과는 같다.
         std::shared_ptr<text_area_wrap_cache> wrap_cache {};
+        // 읽기 전용에서도 선택·복사와 caret은 남는다.
+        bool read_only { false };
+        bool wrap { true };
+        text_face face { text_face::ui };
+        float font_size { 0.0f };
+        float scroll_x { 0.0f };
+        std::function<input_action(float delta)> scroll_horizontal {};
+        std::function<input_action(float offset)> scroll_horizontal_to {};
     };
 
     // 글자 크기와 줄 높이, 안쪽 여백이다 (논리 픽셀).
@@ -132,6 +144,8 @@ namespace luil {
             return lines_;
         }
 
+        [[nodiscard]] float content_width() const noexcept;
+        [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_update(const update_context& context, const interaction_snapshot& interaction) const override;
@@ -151,6 +165,8 @@ namespace luil {
     private:
         [[nodiscard]] float scale() const noexcept;
         [[nodiscard]] float font_size() const noexcept;
+        [[nodiscard]] float line_height_logical() const noexcept;
+        [[nodiscard]] const text_measurer& measure_with(const text_measurer& fallback) const;
         [[nodiscard]] std::u8string_view displayed_text() const noexcept;
         [[nodiscard]] std::size_t displayed_caret() const noexcept;
         // 그 글의 화면 줄이다. 배치가 접은 표시 문서면 그 결과를, 아니면(조합 중에 확정 글을 물을 때) 같은 폭으로 다시 접는다.
@@ -171,5 +187,9 @@ namespace luil {
         // 줄을 접는 폭이다 (물리 픽셀). 0 이하면 접지 않는다.
         float wrap_width_ { 0.0f };
         std::vector<line> lines_ {};
+        scrollbar_element* horizontal_bar_ { nullptr };
+        float content_width_ { 0.0f };
+        float horizontal_offset_ { 0.0f };
+        text_measurer code_measurer_ {};
     };
 } // namespace luil

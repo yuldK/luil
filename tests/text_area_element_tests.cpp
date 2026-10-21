@@ -543,3 +543,41 @@ TEST_CASE("A long paragraph wraps by measuring about one line at a time", "[ui][
     // 줄마다 그 줄의 몇 배만 잰다 — 문단 전체(10,000바이트)를 줄 수만큼 재면 수백만이다.
     REQUIRE(measured_units < 50u * text.size());
 }
+TEST_CASE("Read only documents keep selection and copy while suppressing edits", "[ui][text-area][read-only]")
+{
+    memo_policy policy {};
+    luil::interaction_controller controller { &policy, fixed_config() };
+    auto view { view_of(u8"abc", 3) };
+    view.anchor = 0;
+    luil::text_area_config config {};
+    config.read_only = true;
+    const auto tree { wrapped_tree(view, config) };
+    controller.set_tree(tree);
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 20.0f, luil::pointer_button::left }));
+    static_cast<void>(controller.process(luil::pointer_released_event { 20.0f, 20.0f, luil::pointer_button::left }));
+    REQUIRE(memo_of(*tree).text_input()->read_only);
+    REQUIRE(controller.process(luil::character_typed_event { U'z' }).empty());
+    REQUIRE(controller.process(luil::character_typed_event { U'\b' }).empty());
+    for (const auto key : { luil::key_code::key_x, luil::key_code::key_v, luil::key_code::key_z, luil::key_code::key_y })
+        REQUIRE(controller.process(luil::key_pressed_event { key, true }).empty());
+    const auto copied { controller.process(luil::key_pressed_event { luil::key_code::key_c, true }) };
+    REQUIRE(copied.size() == 1u);
+    REQUIRE(std::get<luil::clipboard_copy_request>(copied.front()).text == u8"abc");
+    REQUIRE(controller.process(luil::key_pressed_event { luil::key_code::key_a, true }).size() == 1u);
+}
+
+TEST_CASE("Unwrapped documents measure the longest line and expose horizontal scrolling", "[ui][text-area]")
+{
+    auto config { scrolling_config() };
+    config.wrap = false;
+    config.scroll_x = 30.0f;
+    config.scroll_horizontal = config.scroll;
+    config.font_size = 22.0f;
+    const auto tree { wrapped_tree(view_of(u8"012345678901234567890123456789\nx", 0), config) };
+    const auto& memo { memo_of(*tree) };
+    REQUIRE(memo.lines().size() == 2u);
+    REQUIRE(memo.content_width() == 314.0f);
+    REQUIRE(memo.scroll() != nullptr);
+    REQUIRE(memo.scroll()->axis == luil::scroll_axis::horizontal);
+    REQUIRE(memo.area().metrics().content_height == 82.0f);
+}
