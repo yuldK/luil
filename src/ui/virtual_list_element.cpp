@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <memory>
+#include <optional>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
@@ -609,16 +611,20 @@ namespace luil {
         // 것은 모델과 창 높이를 함께 쥔 이쪽뿐이다.
         if (config_.scroll == nullptr)
             return actions;
+        // 이미 보이면 메시지를 내지 않는다 — 0짜리 스크롤이 logic을 깨워 tree를
+        // 통째로 다시 짓는다 (`route_reveal`의 방벽과 같은 자리).
+        if (const float delta { reveal_delta(index) }; delta != 0.0f)
+            actions.push_back(config_.scroll(delta));
+        return actions;
+    }
+
+    float virtual_list_element::reveal_delta(const std::size_t index) const
+    {
         const virtual_list_span span { virtual_list_row_span(model(), config_.row_height, index) };
         // 지금 흘러간 자리는 **다듬은 값**이다. 앱이 준 원값으로 재면 범위를 벗어난
         // 상태에서 키를 눌렀을 때 화면에 보이는 것과 다른 자리를 기준으로 삼는다.
         const float offset { area_->metrics().scroll_offset };
-        const float delta { luil::scroll_delta_to_reveal(span.begin, span.length, offset, viewport_height_) };
-        // 이미 보이면 메시지를 내지 않는다 — 0짜리 스크롤이 logic을 깨워 tree를
-        // 통째로 다시 짓는다 (`route_reveal`의 방벽과 같은 자리).
-        if (delta != 0.0f)
-            actions.push_back(config_.scroll(delta));
-        return actions;
+        return luil::scroll_delta_to_reveal(span.begin, span.length, offset, viewport_height_);
     }
 
     float virtual_list_element::content_height() const noexcept
@@ -705,6 +711,133 @@ namespace luil {
         area_->arrange(context.for_child(context.slot));
     }
 
+    std::unique_ptr<ui_element> virtual_list_element::make_row(const std::size_t index, const bool selected, const bool with_content) const
+    {
+        const virtual_list_item& item { model()[index] };
+        const bool at_cursor { cursor_.has_value() && *cursor_ == index };
+        auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor, config_.row_role) };
+        if ((config_.select != nullptr || config_.pick != nullptr || moves_cursor()) && item.enabled)
+        {
+            // 누른 행은 **고르는 것이자 커서가 서는 곳**이다.
+            //
+            // 커서를 함께 옮기지 않으면, 누른 다음 누른 화살표가 눌린 행이 아니라
+            // 커서가 있던 옛 자리에서 출발한다 — 화면에서는 "방금 누른 곳에서
+            // 한 칸"으로 보여야 하는 몸짓이 엉뚱한 데로 뛴다. 그것을 앱이 자기
+            // `select` 처리에서 챙기게 두면 반드시 한 앱이 빠뜨린다.
+            //  - 이미 커서가 선 행이면 커서 메시지를 내지 않는다 (`move_cursor`의
+            //    방벽과 같은 이유).
+            //  - **factory를 값으로 담는다.** 지역 참조를 잡으면 그 참조가 죽은 뒤에
+            //    액션이 실행되고(행은 tree가 사는 동안 산다), 목록을 가리키는 `this`를
+            //    잡으면 행이 목록보다 오래 살 수 없다는 사실에 기대게 된다.
+            //  - `move_with`만 든 목록은 커서만 옮기는 문맥(`keep_selection`)으로 낸다. 고르기는 위의 `pick`·`select`가
+            //    이미 정했다.
+            row->set_action(ui_trigger::left_click,
+                [key = item.key, select = config_.select, pick = config_.pick, move = at_cursor ? virtual_list_message_factory {} : config_.move,
+                    move_with = at_cursor || config_.move != nullptr ? virtual_list_move_with_factory {} : config_.move_with](
+                    const ui_action_context& context) -> std::vector<input_action> {
+                    std::vector<input_action> actions {};
+                    if (pick != nullptr)
+                        actions.push_back(pick(key, context));
+                    else if (select != nullptr)
+                        actions.push_back(select(key));
+                    if (move != nullptr)
+                        actions.push_back(move(key));
+                    else if (move_with != nullptr)
+                        actions.push_back(move_with(key, virtual_list_move_context { std::nullopt, false, true }));
+                    return actions;
+                });
+        }
+        // 두 번 누름은 그 행의 키로 앱에 간다. 누름과 같은 까닭으로 factory를 값으로 담는다.
+        if (config_.double_click != nullptr && item.enabled)
+            row->set_action(ui_trigger::double_click, [key = item.key, double_click = config_.double_click](const ui_action_context&) -> std::vector<input_action> {
+                return { double_click(key) };
+            });
+        // 우클릭은 그 행의 키와 문맥으로 앱에 간다. 누름과 같은 까닭으로 factory를 값으로 담는다.
+        if (config_.context_menu != nullptr && item.enabled)
+            row->set_action(ui_trigger::right_click,
+                [key = item.key, context_menu = config_.context_menu](const ui_action_context& context) -> std::vector<input_action> { return { context_menu(key, context) }; });
+        // 행을 끌고 행에 놓는 것은 앱의 factory다 (여러 항목을 함께 끄는 drag & drop).
+        if (config_.drag != nullptr && item.enabled)
+        {
+            drag_source source {};
+            source.make_payload = [key = item.key, list = id(), drag = config_.drag](const ui_action_context& context) {
+                drag_payload payload { drag(key, context) };
+                if (payload.source == ui_element_id {})
+                    payload.source = context.element;
+                // 출발 목록이다. 받는 쪽이 같은 키의 다른 목록 행과 가른다 (`drag_payload::carries`).
+                if (payload.container == ui_element_id {})
+                    payload.container = list;
+                return payload;
+            };
+            row->set_drag_source(std::move(source));
+        }
+        if (config_.accepts_drop != nullptr && config_.drop != nullptr && item.enabled)
+            row->set_drop_target(drop_target {
+                [key = item.key, accepts = config_.accepts_drop](const drag_payload& payload) { return accepts(key, payload); },
+                [key = item.key, drop = config_.drop](const drag_payload& payload, const ui_action_context& context) -> std::vector<input_action> { return { drop(key, payload, context) }; },
+            });
+        // 다중 선택의 더하기·빼기는 앱의 메시지다. 고르기는 행의 누름(기본 실행)이 맡는다.
+        //  - 앱이 그 메시지를 주지 않았으면 `pick`의 Ctrl+누름으로 대신한다. 포인터로 하나 더 고르거나 빼는 몸짓이
+        //    그것이라, 보조 기술도 같은 길을 탄다. 그냥 누름(이것 하나만)으로는 대신하지 않는다.
+        //  - 이미 그 상태인 명령은 `plan_access_request`가 먼저 거르므로 Ctrl+누름의 뒤집기가 목표 상태와 어긋나지
+        //    않는다 — 고르지 않은 행에만 더하기가, 고른 행에만 빼기가 온다.
+        //  - 둘 다 없으면 지금처럼 무효다.
+        const virtual_list_message_factory add { config_.add_to_selection };
+        const virtual_list_message_factory remove { config_.remove_from_selection };
+        const virtual_list_pick_factory pick { config_.pick };
+        //  - 가지의 펼치기·접기도 여기서 절대 메시지(`set_expanded`)로 간다.
+        const bool selection_access { config_.multiple_selection && item.enabled && (add != nullptr || remove != nullptr || pick != nullptr) };
+        const bool expand_access { config_.set_expanded != nullptr && item.expansion != list_expansion::none };
+        if (selection_access || expand_access)
+            row->set_access_handler([key = item.key, row_id = row->id(), add, remove, pick, selection_access,
+                                        set_expanded = expand_access ? config_.set_expanded : std::function<input_action(const std::u8string&, bool)> {}](
+                                        const access_request& request) -> std::optional<std::vector<input_action>> {
+                if (request.command == access_command::expand || request.command == access_command::collapse)
+                {
+                    if (set_expanded == nullptr)
+                        return std::nullopt;
+                    return std::vector<input_action> { set_expanded(key, request.command == access_command::expand) };
+                }
+                if (selection_access == false)
+                    return std::nullopt;
+                const bool adding { request.command == access_command::add_to_selection };
+                if (adding == false && request.command != access_command::remove_from_selection)
+                    return std::nullopt;
+                if (adding && add != nullptr)
+                    return std::vector<input_action> { add(key) };
+                if (adding == false && remove != nullptr)
+                    return std::vector<input_action> { remove(key) };
+                if (pick == nullptr)
+                    return std::nullopt;
+                // 보조 기술이 시킨 것이라 좌표는 없다.
+                ui_action_context context { row_id };
+                context.control = true;
+                return std::vector<input_action> { pick(key, context) };
+            });
+        // 기본 행의 글은 행이 **직접** 그린다.
+        // `label_element`를 자식으로 두면 그 자식에게도 자리표가 필요한데, 항목
+        // 키로 지으면 같은 키를 보여 주는 두 목록에서 겹치고(`duplicate_ids`),
+        // 비워 두면 모든 행의 글이 한 자리표를 나눠 갖는다. 글 한 줄을 그리려고
+        // 자리표 문제를 만들 이유가 없다 (`list_row_element`도 같은 자리에서
+        // 글을 직접 그린다).
+        if (with_content && config_.build_row != nullptr)
+            row->set_content(config_.build_row(item, index, selected));
+        // 계층의 들여쓰기와 삼각형이다. 삼각형은 내용 **뒤에** 담는다 — 내용과 겹치는 가장자리에서 삼각형이
+        // hit에서 이긴다. 잎도 삼각형 자리를 비워 글이 줄을 맞춘다 (`list_element`와 같은 규칙).
+        //  - `tree_gutter`를 끈 목록(표)은 자리를 두지 않고 펼침 상태만 행의 접근성에 싣는다.
+        if (config_.tree_gutter && config_.set_expanded != nullptr)
+        {
+            std::unique_ptr<ui_element> expander {};
+            if (with_content && item.expansion != list_expansion::none)
+                expander = std::make_unique<tree_expander_element>(
+                    ui_element_id { ui_element_kind::virtual_list_expander, item.key }, item.key, item.expansion == list_expansion::expanded, config_.set_expanded, id());
+            row->set_tree(static_cast<float>(item.depth) * list_indent_step + list_expander_width, item.depth, item.expansion, std::move(expander));
+        }
+        else
+            row->set_tree(0.0f, item.depth, item.expansion, nullptr);
+        return row;
+    }
+
     void virtual_list_element::build_rows()
     {
         auto* const lane { static_cast<virtual_lane_element*>(lane_) };
@@ -715,128 +848,7 @@ namespace luil {
         const auto realize = [this, lane, &chosen](const std::size_t index, const float begin) {
             const virtual_list_item& item { model()[index] };
             const bool selected { item.enabled && (item.key == config_.selected || chosen.contains(item.key)) };
-            const bool at_cursor { cursor_.has_value() && *cursor_ == index };
-            auto row { std::make_unique<virtual_row_element>(ui_element_id { ui_element_kind::virtual_list_row, item.key }, id(), item.label, item.enabled, selected, at_cursor, config_.row_role) };
-            if ((config_.select != nullptr || config_.pick != nullptr || moves_cursor()) && item.enabled)
-            {
-                // 누른 행은 **고르는 것이자 커서가 서는 곳**이다.
-                //
-                // 커서를 함께 옮기지 않으면, 누른 다음 누른 화살표가 눌린 행이 아니라
-                // 커서가 있던 옛 자리에서 출발한다 — 화면에서는 "방금 누른 곳에서
-                // 한 칸"으로 보여야 하는 몸짓이 엉뚱한 데로 뛴다. 그것을 앱이 자기
-                // `select` 처리에서 챙기게 두면 반드시 한 앱이 빠뜨린다.
-                //  - 이미 커서가 선 행이면 커서 메시지를 내지 않는다 (`move_cursor`의
-                //    방벽과 같은 이유).
-                //  - **factory를 값으로 담는다.** 지역 참조를 잡으면 그 참조가 죽은 뒤에
-                //    액션이 실행되고(행은 tree가 사는 동안 산다), 목록을 가리키는 `this`를
-                //    잡으면 행이 목록보다 오래 살 수 없다는 사실에 기대게 된다.
-                //  - `move_with`만 든 목록은 커서만 옮기는 문맥(`keep_selection`)으로 낸다. 고르기는 위의 `pick`·`select`가
-                //    이미 정했다.
-                row->set_action(ui_trigger::left_click,
-                    [key = item.key, select = config_.select, pick = config_.pick, move = at_cursor ? virtual_list_message_factory {} : config_.move,
-                        move_with = at_cursor || config_.move != nullptr ? virtual_list_move_with_factory {} : config_.move_with](
-                        const ui_action_context& context) -> std::vector<input_action> {
-                        std::vector<input_action> actions {};
-                        if (pick != nullptr)
-                            actions.push_back(pick(key, context));
-                        else if (select != nullptr)
-                            actions.push_back(select(key));
-                        if (move != nullptr)
-                            actions.push_back(move(key));
-                        else if (move_with != nullptr)
-                            actions.push_back(move_with(key, virtual_list_move_context { std::nullopt, false, true }));
-                        return actions;
-                    });
-            }
-            // 두 번 누름은 그 행의 키로 앱에 간다. 누름과 같은 까닭으로 factory를 값으로 담는다.
-            if (config_.double_click != nullptr && item.enabled)
-                row->set_action(ui_trigger::double_click, [key = item.key, double_click = config_.double_click](const ui_action_context&) -> std::vector<input_action> {
-                    return { double_click(key) };
-                });
-            // 우클릭은 그 행의 키와 문맥으로 앱에 간다. 누름과 같은 까닭으로 factory를 값으로 담는다.
-            if (config_.context_menu != nullptr && item.enabled)
-                row->set_action(ui_trigger::right_click,
-                    [key = item.key, context_menu = config_.context_menu](const ui_action_context& context) -> std::vector<input_action> { return { context_menu(key, context) }; });
-            // 행을 끌고 행에 놓는 것은 앱의 factory다 (여러 항목을 함께 끄는 drag & drop).
-            if (config_.drag != nullptr && item.enabled)
-            {
-                drag_source source {};
-                source.make_payload = [key = item.key, list = id(), drag = config_.drag](const ui_action_context& context) {
-                    drag_payload payload { drag(key, context) };
-                    if (payload.source == ui_element_id {})
-                        payload.source = context.element;
-                    // 출발 목록이다. 받는 쪽이 같은 키의 다른 목록 행과 가른다 (`drag_payload::carries`).
-                    if (payload.container == ui_element_id {})
-                        payload.container = list;
-                    return payload;
-                };
-                row->set_drag_source(std::move(source));
-            }
-            if (config_.accepts_drop != nullptr && config_.drop != nullptr && item.enabled)
-                row->set_drop_target(drop_target {
-                    [key = item.key, accepts = config_.accepts_drop](const drag_payload& payload) { return accepts(key, payload); },
-                    [key = item.key, drop = config_.drop](const drag_payload& payload, const ui_action_context& context) -> std::vector<input_action> { return { drop(key, payload, context) }; },
-                });
-            // 다중 선택의 더하기·빼기는 앱의 메시지다. 고르기는 행의 누름(기본 실행)이 맡는다.
-            //  - 앱이 그 메시지를 주지 않았으면 `pick`의 Ctrl+누름으로 대신한다. 포인터로 하나 더 고르거나 빼는 몸짓이
-            //    그것이라, 보조 기술도 같은 길을 탄다. 그냥 누름(이것 하나만)으로는 대신하지 않는다.
-            //  - 이미 그 상태인 명령은 `plan_access_request`가 먼저 거르므로 Ctrl+누름의 뒤집기가 목표 상태와 어긋나지
-            //    않는다 — 고르지 않은 행에만 더하기가, 고른 행에만 빼기가 온다.
-            //  - 둘 다 없으면 지금처럼 무효다.
-            const virtual_list_message_factory add { config_.add_to_selection };
-            const virtual_list_message_factory remove { config_.remove_from_selection };
-            const virtual_list_pick_factory pick { config_.pick };
-            //  - 가지의 펼치기·접기도 여기서 절대 메시지(`set_expanded`)로 간다.
-            const bool selection_access { config_.multiple_selection && item.enabled && (add != nullptr || remove != nullptr || pick != nullptr) };
-            const bool expand_access { config_.set_expanded != nullptr && item.expansion != list_expansion::none };
-            if (selection_access || expand_access)
-                row->set_access_handler([key = item.key, row_id = row->id(), add, remove, pick, selection_access,
-                                            set_expanded = expand_access ? config_.set_expanded : std::function<input_action(const std::u8string&, bool)> {}](
-                                            const access_request& request) -> std::optional<std::vector<input_action>> {
-                    if (request.command == access_command::expand || request.command == access_command::collapse)
-                    {
-                        if (set_expanded == nullptr)
-                            return std::nullopt;
-                        return std::vector<input_action> { set_expanded(key, request.command == access_command::expand) };
-                    }
-                    if (selection_access == false)
-                        return std::nullopt;
-                    const bool adding { request.command == access_command::add_to_selection };
-                    if (adding == false && request.command != access_command::remove_from_selection)
-                        return std::nullopt;
-                    if (adding && add != nullptr)
-                        return std::vector<input_action> { add(key) };
-                    if (adding == false && remove != nullptr)
-                        return std::vector<input_action> { remove(key) };
-                    if (pick == nullptr)
-                        return std::nullopt;
-                    // 보조 기술이 시킨 것이라 좌표는 없다.
-                    ui_action_context context { row_id };
-                    context.control = true;
-                    return std::vector<input_action> { pick(key, context) };
-                });
-            // 기본 행의 글은 행이 **직접** 그린다.
-            // `label_element`를 자식으로 두면 그 자식에게도 자리표가 필요한데, 항목
-            // 키로 지으면 같은 키를 보여 주는 두 목록에서 겹치고(`duplicate_ids`),
-            // 비워 두면 모든 행의 글이 한 자리표를 나눠 갖는다. 글 한 줄을 그리려고
-            // 자리표 문제를 만들 이유가 없다 (`list_row_element`도 같은 자리에서
-            // 글을 직접 그린다).
-            if (config_.build_row != nullptr)
-                row->set_content(config_.build_row(item, index, selected));
-            // 계층의 들여쓰기와 삼각형이다. 삼각형은 내용 **뒤에** 담는다 — 내용과 겹치는 가장자리에서 삼각형이
-            // hit에서 이긴다. 잎도 삼각형 자리를 비워 글이 줄을 맞춘다 (`list_element`와 같은 규칙).
-            //  - `tree_gutter`를 끈 목록(표)은 자리를 두지 않고 펼침 상태만 행의 접근성에 싣는다.
-            if (config_.tree_gutter && config_.set_expanded != nullptr)
-            {
-                std::unique_ptr<ui_element> expander {};
-                if (item.expansion != list_expansion::none)
-                    expander = std::make_unique<tree_expander_element>(
-                        ui_element_id { ui_element_kind::virtual_list_expander, item.key }, item.key, item.expansion == list_expansion::expanded, config_.set_expanded, id());
-                row->set_tree(static_cast<float>(item.depth) * list_indent_step + list_expander_width, item.depth, item.expansion, std::move(expander));
-            }
-            else
-                row->set_tree(0.0f, item.depth, item.expansion, nullptr);
-            lane->add_row(std::move(row), { begin, item_height(item, config_.row_height) });
+            lane->add_row(make_row(index, selected, true), { begin, item_height(item, config_.row_height) });
         };
 
         // 창에 걸치지 않아도 짓는 행이다.
@@ -906,5 +918,104 @@ namespace luil {
         if (cursor_.has_value() && *cursor_ < model().size())
             info.value = model()[*cursor_].label;
         return info;
+    }
+
+    const access_item_model* virtual_list_element::access_items() const noexcept
+    {
+        return this;
+    }
+
+    std::size_t virtual_list_element::access_item_count() const noexcept
+    {
+        return model().size();
+    }
+
+    ui_element_id virtual_list_element::access_item_id(const std::size_t index) const
+    {
+        if (index >= model().size())
+            return {};
+        return { ui_element_kind::virtual_list_row, model()[index].key };
+    }
+
+    std::optional<std::size_t> virtual_list_element::access_item_index(const ui_element_id& id) const
+    {
+        if (id.kind != ui_element_kind::virtual_list_row)
+            return std::nullopt;
+        // 모델은 키로 색인되지 않는다. 찾기 한 번이 모델 길이에 비례하지만 행을 짓지 않으므로 비교뿐이다.
+        const std::vector<virtual_list_item>& items { model() };
+        const auto found { std::find_if(items.begin(), items.end(), [&id](const virtual_list_item& item) { return item.key == id.owner; }) };
+        if (found == items.end())
+            return std::nullopt;
+        return static_cast<std::size_t>(found - items.begin());
+    }
+
+    std::u8string_view virtual_list_element::access_item_name(const std::size_t index) const
+    {
+        if (index >= model().size())
+            return {};
+        return model()[index].label;
+    }
+
+    std::vector<std::size_t> virtual_list_element::access_selected_indices() const
+    {
+        // 행을 지을 때와 같은 술어다 (`build_rows`) — 비활성 항목은 키가 있어도 골라진 것이 아니다.
+        std::unordered_set<std::u8string_view> chosen {};
+        if (config_.multiple_selection)
+            chosen.insert(config_.selection.begin(), config_.selection.end());
+        std::vector<std::size_t> selected {};
+        if (config_.selected.empty() && chosen.empty())
+            return selected;
+        const std::vector<virtual_list_item>& items { model() };
+        for (std::size_t index = 0; index < items.size(); ++index)
+        {
+            const virtual_list_item& item { items[index] };
+            if (item.enabled && (item.key == config_.selected || chosen.contains(item.key)))
+                selected.push_back(index);
+        }
+        return selected;
+    }
+
+    access_item_position virtual_list_element::access_item_position_of(const std::size_t index) const
+    {
+        const std::vector<virtual_list_item>& items { model() };
+        if (index >= items.size())
+            return {};
+        // 형제는 같은 부모 아래 같은 깊이의 줄이다. 평탄화한 모델에서 부모는 앞쪽의 더 얕은 첫 줄이고, 형제 범위는
+        // 다음의 더 얕은 줄 앞에서 끝난다 (`step_tree`가 부모를 찾는 것과 같은 규칙).
+        const int depth { items[index].depth };
+        std::size_t first { index };
+        while (first > 0u && items[first - 1u].depth >= depth)
+            --first;
+        access_item_position position { .depth = depth };
+        for (std::size_t at = first; at < items.size() && items[at].depth >= depth; ++at)
+        {
+            if (items[at].depth != depth)
+                continue;
+            ++position.size;
+            if (at <= index)
+                ++position.position;
+        }
+        return position;
+    }
+
+    std::unique_ptr<ui_element> virtual_list_element::access_item_probe(const std::size_t index) const
+    {
+        if (index >= model().size())
+            return nullptr;
+        const virtual_list_item& item { model()[index] };
+        bool selected { item.enabled && item.key == config_.selected };
+        if (item.enabled && selected == false && config_.multiple_selection)
+            selected = std::find(config_.selection.begin(), config_.selection.end(), item.key) != config_.selection.end();
+        return make_row(index, selected, false);
+    }
+
+    std::optional<std::vector<input_action>> virtual_list_element::access_realize(const std::size_t index) const
+    {
+        if (index >= model().size() || config_.scroll == nullptr)
+            return std::nullopt;
+        // 키보드 되살리기와 같은 계산이다 (`move_cursor`).
+        if (const float delta { reveal_delta(index) }; delta != 0.0f)
+            return std::vector<input_action> { config_.scroll(delta) };
+        return std::vector<input_action> {};
     }
 } // namespace luil

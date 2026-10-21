@@ -84,7 +84,8 @@
 - 표 자신은 구조(`none`)다. 그 자리로 머리글(Header)과 본문(DataGrid)이 올라온다.
 - 본문은 가상 목록의 역할 재지정(`virtual_list_config::role`·`row_role`)으로 DataGrid와 DataItem이 된다. `table`은 `list`처럼 선택 container라 고른 행을 읽는다.
 - 머리글 칸은 HeaderItem이고 이름은 열 머리글이다.
-- Grid·Table 패턴(행·열 위치, 열 머리글 연결)과 화면 밖 행의 탐색(ItemContainer)은 C5 단계에서 붙인다.
+- 화면 밖 행의 찾기·선택 읽기·위치·들이기는 본문 가상 목록이 모델로 답한다 (ItemContainer·VirtualizedItem, [virtual-list-design.md](virtual-list-design.md#모델로-답하는-접근성)). 지어지지 않은 행도 DataItem으로 읽힌다.
+- Grid·Table 패턴(행·열 좌표, 칸 단위 탐색, 열 머리글 연결)은 아직 없다. 칸이 element가 아니라 행이 그리는 글이라 칸 provider의 자리가 먼저 필요하다 (뒤로 미룬 확장).
 
 ## 범위
 
@@ -93,7 +94,7 @@
 - 키보드로 열 순서·폭 바꾸기와 정렬 (머리글 메뉴를 키보드로 여는 길, Codex 트랙의 하위 메뉴 이후)
 - 가로 스크롤 막대 (Codex 트랙의 X0 `scrollbar_axis::horizontal`이 들어온 뒤)
 - 가운데 말줄임(경로 열) (X0의 `elide_text_middle` 뒤)
-- 고정 열, 열 가상화, 셀 범위 선택 (뒤로 미룬 확장)
+- 고정 열, 열 가상화, 셀 범위 선택, Grid·Table 패턴 (뒤로 미룬 확장)
 
 ## 검증
 

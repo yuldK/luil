@@ -323,10 +323,11 @@ namespace luil {
     //    밖이면 함께 흘려 보내므로, 앱이 `on_focus_moved`에 되살리기를 적지
     //    않아도 커서가 화면에서 사라지지 않는다.
     //
-    // 접근성은 목록 하나와 **지금 지어진 행들**로 읽힌다. 전체 항목 수는 목록이
-    // 답하므로 "몇 개 중 몇 번째"는 옳게 들리지만, 보조 기술의 형제 순회는 창에
+    // 접근성은 목록 하나와 **지금 지어진 행들**로 읽힌다. 보조 기술의 형제 순회는 창에
     // 걸치는 범위 안이다 — 그것이 가상화의 값과 맞바꾼 것이다.
-    class virtual_list_element final : public ui_element
+    //  - 그 밖은 목록이 모델로 답한다 (`access_item_model`). 항목 찾기(UIA ItemContainer)·선택 읽기·
+    //    "몇 개 중 몇 번째"는 모델 전체를 보고, 찾은 항목은 들이기(Realize)로 창 안에 지어진다.
+    class virtual_list_element final : public ui_element, public access_item_model
     {
     public:
         explicit virtual_list_element(virtual_list_config config);
@@ -358,6 +359,17 @@ namespace luil {
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
+        [[nodiscard]] const access_item_model* access_items() const noexcept override;
+
+        // access_item_model이다. 항목의 id는 행의 자리표(`virtual_list_row`, 키)다.
+        [[nodiscard]] std::size_t access_item_count() const noexcept override;
+        [[nodiscard]] ui_element_id access_item_id(std::size_t index) const override;
+        [[nodiscard]] std::optional<std::size_t> access_item_index(const ui_element_id& id) const override;
+        [[nodiscard]] std::u8string_view access_item_name(std::size_t index) const override;
+        [[nodiscard]] std::vector<std::size_t> access_selected_indices() const override;
+        [[nodiscard]] access_item_position access_item_position_of(std::size_t index) const override;
+        [[nodiscard]] std::unique_ptr<ui_element> access_item_probe(std::size_t index) const override;
+        [[nodiscard]] std::optional<std::vector<input_action>> access_realize(std::size_t index) const override;
 
     private:
         // 커서를 `index`로 옮기고 그 행을 창 안으로 들이는 메시지들이다.
@@ -369,6 +381,11 @@ namespace luil {
         [[nodiscard]] int page_rows(value_step step) const noexcept;
         // 창에 걸치는 행과 커서 행을 실제로 짓는다 (`arrange`가 한 번만 부른다).
         void build_rows();
+        // `index`번 항목의 행이다. 자리표·고름 표시·누름·보조 기술 실행을 전부 단다.
+        //  - `with_content`가 거짓이면 앱 내용(`build_row`)과 삼각형을 짓지 않는다 (`access_item_probe`).
+        [[nodiscard]] std::unique_ptr<ui_element> make_row(std::size_t index, bool selected, bool with_content) const;
+        // `index`번 항목을 창 안으로 들이는 스크롤 변화량이다 (논리 픽셀). 이미 보이면 0이다.
+        [[nodiscard]] float reveal_delta(std::size_t index) const;
 
         virtual_list_config config_ {};
         scroll_area_element* area_ { nullptr };

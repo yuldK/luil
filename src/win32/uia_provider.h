@@ -14,6 +14,7 @@
 #include <uiautomationcore.h>
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
@@ -150,7 +151,8 @@ namespace luil::win32 {
         // (실행은 표면을 통해 나간다).
         [[nodiscard]] uia_surface_host* host() const noexcept;
         // id의 요소 provider를 만든다 (참조 수 1 — 부르는 쪽이 놓는다).
-        [[nodiscard]] uia_element_provider* make_element_provider(ui_element_id id);
+        // `container`는 그 id가 지어지지 않은 모델 항목일 때 답하는 모델 container다 (`access_item_model`).
+        [[nodiscard]] uia_element_provider* make_element_provider(ui_element_id id, ui_element_id container = {});
         // RuntimeId의 둘째 칸이다 (이 root 안에서 id마다 유일, **지금 tree에
         // 있는 동안** 안정). 동적 id가 갈릴 때마다 지도가 자라므로 문턱을 넘으면
         // 지금 tree에 없는 id의 key를 비운다 — 사라진 id가 되돌아오면 새 key를
@@ -247,10 +249,14 @@ namespace luil::win32 {
         public IExpandCollapseProvider,
         public IValueProvider,
         public ITextProvider,
-        public IScrollItemProvider
+        public IScrollItemProvider,
+        public IItemContainerProvider,
+        public IVirtualizedItemProvider
     {
     public:
-        uia_element_provider(uia_root_provider& root, ui_element_id id) noexcept;
+        // `container`가 있으면 이 provider는 모델 container의 항목이다. 그 행이 tree에 없어도 container의 모델이
+        // 답한다 (`access_item_model`). 행이 지어지면 tree의 행이 답한다 — id가 같아 같은 요소로 이어진다.
+        uia_element_provider(uia_root_provider& root, ui_element_id id, ui_element_id container = {}) noexcept;
         uia_element_provider(const uia_element_provider&) = delete;
         uia_element_provider(uia_element_provider&&) = delete;
         uia_element_provider& operator=(const uia_element_provider&) = delete;
@@ -343,9 +349,22 @@ namespace luil::win32 {
         HRESULT STDMETHODCALLTYPE get_DocumentRange(ITextRangeProvider** result) override;
         HRESULT STDMETHODCALLTYPE get_SupportedTextSelection(SupportedTextSelection* result) override;
 
+        // IItemContainerProvider다 (모델 container — 창 밖 항목까지 찾는다).
+        // 찾는 property는 없음(0, 다음 항목)·이름·골라짐·AutomationId다. 그 밖은 `E_INVALIDARG`다 (UIA 규약).
+        HRESULT STDMETHODCALLTYPE FindItemByProperty(IRawElementProviderSimple* start_after, PROPERTYID property, VARIANT value, IRawElementProviderSimple** result) override;
+
+        // IVirtualizedItemProvider다 (지어지지 않은 모델 항목 — 창 안으로 흘려 짓게 한다).
+        HRESULT STDMETHODCALLTYPE Realize() override;
+
     private:
         // 지금 tree에서 이 id를 다시 찾는다. 없으면 nullptr다.
         [[nodiscard]] const ui_element* resolve(const ui_tree** tree = nullptr) const;
+        // `resolve`에 모델 항목을 더한 것이다.
+        // tree에 없고 모델 container의 항목이면 그 모델이 따로 지은 행(`access_item_probe`)을 `probe`에 담아 낸다.
+        // 행 하나에 대한 질문(이름·상태·실행)은 이것으로 묻는다 — 지어진 행과 같은 코드가 답한다.
+        [[nodiscard]] const ui_element* resolve_item(const ui_tree** tree, std::unique_ptr<ui_element>& probe) const;
+        // 이 항목을 가진 모델 container와 그 안의 색인이다. 모델 항목이 아니면 container가 nullptr다.
+        [[nodiscard]] const ui_element* item_container(const ui_tree& tree, std::size_t* index) const;
         // 명령 하나를 지금 tree에 물어 표면으로 넘긴다.
         // 거절은 낱말을 가려 답한다: 사라졌으면 `UIA_E_ELEMENTNOTAVAILABLE`,
         // 비활성이거나 손이 닿지 않으면 `UIA_E_ELEMENTNOTENABLED`, 이 자리에서
@@ -357,6 +376,8 @@ namespace luil::win32 {
 
         uia_root_provider* root_ { nullptr };
         ui_element_id id_ {};
+        // 지어지지 않은 모델 항목일 때 답하는 container다. 빈 id면 tree의 요소만이다.
+        ui_element_id container_ {};
         ULONG references_ { 1 };
     };
 

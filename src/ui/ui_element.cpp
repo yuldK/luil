@@ -557,6 +557,11 @@ namespace luil {
         return (*pressed)(ui_action_context { id(), box.x + box.width / 2.0f, box.y + box.height / 2.0f, false });
     }
 
+    const access_item_model* ui_element::access_items() const noexcept
+    {
+        return nullptr;
+    }
+
     ui_cursor ui_element::cursor_at(const float x, const float y, const interaction_snapshot& interaction) const
     {
         static_cast<void>(x);
