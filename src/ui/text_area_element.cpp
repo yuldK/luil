@@ -23,6 +23,41 @@ namespace luil {
         using text_line = text_area_element::line;
         using width_of = std::function<float(std::u8string_view)>;
 
+        ui_color span_foreground(const text_color_role role, const ui_color_palette& palette) noexcept
+        {
+            switch (role)
+            {
+            case text_color_role::secondary: return palette.secondary_foreground;
+            case text_color_role::accent: return palette.accent;
+            case text_color_role::warning: return palette.warning_accent;
+            case text_color_role::error: return palette.error_accent;
+            default: return palette.primary_foreground;
+            }
+        }
+
+        ui_color span_background(const text_background_role role, const ui_color_palette& palette) noexcept
+        {
+            switch (role)
+            {
+            case text_background_role::added: return palette.document_added_background;
+            case text_background_role::removed: return palette.document_removed_background;
+            case text_background_role::changed: return palette.document_changed_background;
+            default: return 0;
+            }
+        }
+
+        std::u8string line_number_text(std::size_t number)
+        {
+            std::u8string result {};
+            do
+            {
+                result.push_back(static_cast<char8_t>(u8'0' + number % 10));
+                number /= 10;
+            } while (number != 0);
+            std::reverse(result.begin(), result.end());
+            return result;
+        }
+
         // 줄 넘김과 hit test가 같은 글자소 경계를 쓴다.
         [[nodiscard]] std::vector<std::size_t> boundaries_of(const std::u8string_view line)
         {
@@ -243,6 +278,46 @@ namespace luil {
         return luil::scroll_delta_to_reveal(target.x, target.width, viewport.x, viewport.width) / scale_;
     }
 
+    std::optional<rect_f> text_area_element::line_rect(const std::size_t logical_line) const
+    {
+        const auto first { std::lower_bound(logical_lines_.begin(), logical_lines_.end(), logical_line) };
+        if (first == logical_lines_.end() || *first != logical_line)
+            return std::nullopt;
+        const auto last { std::upper_bound(first, logical_lines_.end(), logical_line) };
+        const float height { line_height_logical() * scale_ };
+        return rect_f { text_left(), text_top() + static_cast<float>(first - logical_lines_.begin()) * height,
+            std::max(0.0f, area_->viewport().width - gutter_width_ * scale_), static_cast<float>(last - first) * height };
+    }
+
+    std::optional<std::size_t> text_area_element::offset_at(const zoom_point point) const
+    {
+        return layout_measurer_ ? offset_at_point(point.x, point.y, layout_measurer_) : std::nullopt;
+    }
+
+    std::vector<input_action> text_area_element::scroll_to_offset(const std::size_t offset) const
+    {
+        std::vector<input_action> actions {};
+        if (layout_measurer_ == nullptr)
+            return actions;
+        const auto caret { std::min(offset, value_.text.size()) };
+        const auto bounds { text_span_bounds({ value_.text, caret, caret, caret }, layout_measurer_) };
+        if (bounds.has_value() == false)
+            return actions;
+        if (config_.scroll != nullptr)
+        {
+            const float delta { area_->scroll_delta_to_reveal(*bounds) };
+            if (delta != 0.0f)
+                actions.push_back(config_.scroll(delta));
+        }
+        if (config_.wrap == false && config_.scroll_horizontal != nullptr)
+        {
+            const float delta { scroll_delta_to_reveal(*bounds) };
+            if (delta != 0.0f)
+                actions.push_back(config_.scroll_horizontal(delta));
+        }
+        return actions;
+    }
+
     std::u8string_view text_area_element::displayed_text() const noexcept
     {
         return value_.displayed_text();
@@ -313,7 +388,7 @@ namespace luil {
 
     float text_area_element::text_left() const noexcept
     {
-        return area_->viewport().x + text_area_padding_x * scale_ - horizontal_offset_ * scale_;
+        return area_->viewport().x + (text_area_padding_x + gutter_width_ - horizontal_offset_) * scale_;
     }
 
     float text_area_element::text_top() const noexcept
@@ -333,17 +408,35 @@ namespace luil {
         const text_measurer& measurer { measure_with(context.measure_text()) };
         const float size { font_size() };
         const auto measure { [this, &measurer, size](const std::u8string_view value) { return measure_with(measurer)(value, size); } };
+        layout_measurer_ = measurer;
+        gutter_widths_.clear();
+        gutter_width_ = 0.0f;
+        const auto logical_count { config_.gutters.empty() ? std::size_t { 0 } : static_cast<std::size_t>(std::count(displayed_text().begin(), displayed_text().end(), u8'\n')) + 1 };
+        for (const auto& column : config_.gutters)
+        {
+            const float width { column.width > 0.0f ? column.width : (measure(line_number_text(logical_count)) / scale_ + 12.0f) };
+            gutter_widths_.push_back(width);
+            gutter_width_ += width;
+        }
         const float bar { config_.scroll != nullptr ? std::min(scroll_area_bar_width * scale_, context.slot.width) : 0.0f };
-        wrap_width_ = config_.wrap ? context.slot.width - bar - 2.0f * text_area_padding_x * scale_ : 0.0f;
+        wrap_width_ = config_.wrap ? context.slot.width - bar - (2.0f * text_area_padding_x + gutter_width_) * scale_ : 0.0f;
         content_width_ = 0.0f;
         lines_ = wrap_displayed(measure);
+        logical_lines_.clear();
+        std::size_t logical { 0 };
+        for (const auto& row : lines_)
+        {
+            logical_lines_.push_back(logical);
+            if (row.wrapped == false)
+                ++logical;
+        }
         content_width_ += 2.0f * text_area_padding_x;
         area_->set_content_height(static_cast<float>(lines_.size()) * line_height_logical() + 2.0f * text_area_padding_y);
         const float horizontal_height { horizontal_bar_ != nullptr ? std::min(scrollbar_visual_width * scale_ + 8.0f * scale_, context.slot.height) : 0.0f };
         rect_f area_slot { context.slot };
         area_slot.height -= horizontal_height;
         area_->arrange(context.for_child(area_slot));
-        const float viewport_width { area_->viewport().width / scale_ };
+        const float viewport_width { std::max(0.0f, area_->viewport().width / scale_ - gutter_width_) };
         horizontal_offset_ = config_.wrap ? 0.0f : clamp_scroll(content_width_, viewport_width, config_.scroll_x);
         if (horizontal_bar_ != nullptr)
         {
@@ -476,7 +569,7 @@ namespace luil {
         const auto baseline_of = [&font, top, line_height](const std::size_t index) { return top + static_cast<float>(index) * line_height + centered_text_baseline(font, line_height); };
 
         context.canvas.save();
-        context.canvas.clipRect(SkRect::MakeXYWH(viewport.x, viewport.y, viewport.width, viewport.height));
+        context.canvas.clipRect(SkRect::MakeXYWH(viewport.x + gutter_width_ * scale, viewport.y, std::max(0.0f, viewport.width - gutter_width_ * scale), viewport.height));
 
         if (text.empty() && focused == false && config_.placeholder.empty() == false)
         {
@@ -504,6 +597,37 @@ namespace luil {
             const line row { lines[index] };
             const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
             const float row_top { top + static_cast<float>(index) * line_height };
+            const auto logical { logical_lines_[index] };
+            if (config_.lines != nullptr)
+            {
+                const auto found { std::lower_bound(config_.lines->begin(), config_.lines->end(), logical,
+                    [](const auto& item, const auto value) { return item.line < value; }) };
+                if (found != config_.lines->end() && found->line == logical)
+                    context.canvas.drawRect(SkRect::MakeXYWH(viewport.x + gutter_width_ * scale, row_top, viewport.width - gutter_width_ * scale, line_height),
+                        solid_paint(span_background(static_cast<text_background_role>(found->background), context.palette)));
+            }
+            const std::span<const text_span> styled { config_.spans != nullptr ? text_spans_in_range(*config_.spans, row.begin, row.end) : std::span<const text_span> {} };
+            const auto range_rect = [&](const std::size_t begin, const std::size_t end) {
+                const auto from { std::max(begin, row.begin) };
+                const auto to { std::min(end, row.end) };
+                const float x { left + measure(text.substr(row.begin, from - row.begin)) };
+                return SkRect::MakeXYWH(x, row_top, measure(text.substr(from, to - from)), line_height);
+            };
+            for (const auto& span : styled)
+                if (span.background != text_background_role::none)
+                    context.canvas.drawRect(range_rect(span.begin, span.end), solid_paint(span_background(span.background, context.palette)));
+            const auto highlights { text_highlights_in_range(config_.highlights, row.begin, row.end) };
+            for (const auto& match : highlights)
+            {
+                const auto box { range_rect(match.begin, match.end) };
+                context.canvas.drawRect(box, solid_paint(context.palette.document_search_background));
+                if (match.current)
+                {
+                    SkPaint border { solid_paint(context.palette.accent) };
+                    border.setStyle(SkPaint::kStroke_Style);
+                    context.canvas.drawRect(box, border);
+                }
+            }
             std::optional<SkRect> selection {};
             if (selection_begin != selection_end && touches(row, selection_begin, selection_end))
             {
@@ -519,6 +643,22 @@ namespace luil {
             if (content.empty() == false)
             {
                 draw_text(context.canvas, content, left, baseline_of(index), font, foreground);
+                for (const auto& span : styled)
+                {
+                    const auto from { std::max(span.begin, row.begin) };
+                    const auto to { std::min(span.end, row.end) };
+                    SkFont styled_font { font };
+                    styled_font.setEmbolden(span.bold);
+                    draw_text(context.canvas, text.substr(from, to - from), left + measure(text.substr(row.begin, from - row.begin)), baseline_of(index),
+                        styled_font, solid_paint(enabled() ? span_foreground(span.color, context.palette) : context.palette.disabled_foreground));
+                }
+                for (const auto& match : highlights)
+                {
+                    context.canvas.save();
+                    context.canvas.clipRect(range_rect(match.begin, match.end));
+                    draw_text(context.canvas, content, left, baseline_of(index), font, solid_paint(context.palette.document_search_foreground));
+                    context.canvas.restore();
+                }
                 // 고른 구간의 글자는 그 바탕의 짝이다 (한 줄 칸과 같은 규칙 — 고대비에서만 바뀐다).
                 if (selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground)
                 {
@@ -560,6 +700,35 @@ namespace luil {
         }
         context.canvas.restore();
 
+        if (gutter_width_ > 0.0f)
+        {
+            context.canvas.save();
+            context.canvas.clipRect(SkRect::MakeXYWH(viewport.x, viewport.y, std::min(viewport.width, gutter_width_ * scale), viewport.height));
+            context.canvas.drawRect(SkRect::MakeXYWH(viewport.x, viewport.y, gutter_width_ * scale, viewport.height), solid_paint(context.palette.input_background));
+            for (std::size_t index { first }; index < last; ++index)
+            {
+                const auto logical { logical_lines_[index] };
+                if (index > 0 && logical_lines_[index - 1] == logical)
+                    continue;
+                float x { viewport.x };
+                for (std::size_t column { 0 }; column < config_.gutters.size(); ++column)
+                {
+                    const auto& item { config_.gutters[column] };
+                    const std::u8string label { item.kind == gutter_kind::line_number ? line_number_text(logical + 1) : (item.text ? item.text(logical) : std::u8string {}) };
+                    const float width { gutter_widths_[column] * scale };
+                    draw_text(context.canvas, label, x + width - 6.0f * scale - measure(label), baseline_of(index), font, solid_paint(context.palette.secondary_foreground));
+                    x += width;
+                }
+                if (config_.lines != nullptr)
+                {
+                    const auto found { std::lower_bound(config_.lines->begin(), config_.lines->end(), logical, [](const auto& item, const auto value) { return item.line < value; }) };
+                    if (found != config_.lines->end() && found->line == logical && found->marker != 0)
+                        draw_centered_glyph(context.canvas, found->marker, { viewport.x, top + static_cast<float>(index) * line_height, 12.0f * scale, line_height },
+                            SkFont { sk_ref_sp(context.codicon_typeface), font_size() }, solid_paint(context.palette.accent));
+                }
+            }
+            context.canvas.restore();
+        }
         // 막대는 글 위에 선다.
         draw_children(context, interaction);
     }

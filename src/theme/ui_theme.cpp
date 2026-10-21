@@ -209,6 +209,11 @@ namespace luil {
             .content_shadow = neutral.content_shadow,
             .notice_background = neutral.notice_background,
             .caption = neutral.caption,
+            .document_added_background = with_alpha(accent.accent, 0.12f),
+            .document_removed_background = with_alpha(neutral.error_accent, 0.12f),
+            .document_changed_background = with_alpha(neutral.warning_accent, 0.12f),
+            .document_search_background = with_alpha(accent.soft, 0.35f),
+            .document_search_foreground = neutral.primary_foreground,
         };
     }
 
@@ -271,6 +276,11 @@ namespace luil {
                 .close_button_hover_background = colors.highlight_background,
                 .close_button_hover_foreground = colors.highlight_foreground,
             },
+            .document_added_background = colors.window_background,
+            .document_removed_background = colors.window_background,
+            .document_changed_background = colors.window_background,
+            .document_search_background = colors.highlight_background,
+            .document_search_foreground = colors.highlight_foreground,
         };
     }
 
