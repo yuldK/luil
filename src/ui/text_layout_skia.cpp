@@ -21,6 +21,7 @@
 #include <list>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -150,6 +151,10 @@ namespace luil {
                 if (covers(chosen, cluster) == false)
                 {
                     // 하나의 글자소를 지원하는 face를 먼저 고른다. ZWJ·결합 부호를 font run으로 쪼개지 않는다.
+                    //  - 다 담는 face가 없으면 처음 받은 대체 face로 그린다. 끈 구성과 같이 그 face의 빈 네모가 보인다.
+                    //    주 글꼴이 아이콘 글꼴이면 빈 글자의 폭이 0이라 글이 사라진다 — 빈 네모가 보이는 편이 침묵보다 낫다.
+                    std::optional<SkFont> uncovered {};
+                    bool found { false };
                     for (std::size_t cursor { at }; cursor < next;)
                     {
                         const auto point { text::utf8_decode(text, cursor) };
@@ -160,11 +165,16 @@ namespace luil {
                             if (covers(candidate, cluster))
                             {
                                 chosen = std::move(candidate);
+                                found = true;
                                 break;
                             }
+                            if (uncovered.has_value() == false)
+                                uncovered = std::move(candidate);
                         }
                         cursor += point.length;
                     }
+                    if (found == false && uncovered.has_value())
+                        chosen = std::move(*uncovered);
                 }
                 if (fonts.empty() == false && fonts.back().font == chosen)
                     fonts.back().end = next;
