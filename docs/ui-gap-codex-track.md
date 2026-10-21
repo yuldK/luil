@@ -565,3 +565,7 @@ Codex가 기다리거나 만나는 지점을 알기 위한 요약이다.
 - X6의 `ui_element::set_preserve_pointer_focus`는 후보 popup을 눌러도 입력 초점을 유지한다. 기본값은 거짓이다.
 - X5의 span·highlight는 정렬된 비중첩·비어 있지 않은 반열림 범위이며 UTF-8 글자소 경계를 앱이 제공한다.
 - X7의 ID 중복 억제는 앱 수명 전체에 적용한다. modal 재진입 중의 다른 요청은 겹쳐 열지 않고 최신 frame에서 다시 평가한다.
+
+- 사용자 승인 후 X8은 `text_layout.h`의 공유 불변 값과 기존 shaping 공장을 사용한다. 새 glyph cache는 16MiB·512항목 LRU다.
+- X8은 기본 native 측정기의 입력·문서 좌표를 배치한 glyph/cluster 결과에 연결한다. 사용자 측정기 주입 경로와 옵션 OFF는 보존한다.
+- 합자의 내부 caret은 SkShaper가 OpenType caret 표를 내주지 않으므로 균등 분할하고 진단값으로 구별한다. UAX #14·양방향 시각 편집은 후속 범위다.

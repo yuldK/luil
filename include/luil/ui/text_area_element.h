@@ -2,6 +2,7 @@
 
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/text_document.h"
+#include "luil/ui/text_layout.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scrollbar_element.h"
 #include "luil/ui/ui_element.h"
@@ -45,6 +46,7 @@ namespace luil {
             std::vector<std::size_t> cuts {};
             std::uint64_t used { 0 };
             float width { 0.0f };
+            std::vector<text_layout_style> styles {};
         };
         struct key_hash
         {
@@ -58,6 +60,9 @@ namespace luil {
         float font_size_ { 0.0f };
         float sample_width_ { 0.0f };
         bool wrap_ { true };
+        bool native_ { false };
+        text_layout_face face_ { text_layout_face::ui };
+        std::uint64_t font_revision_ { 0 };
         std::uint64_t generation_ { 0 };
     };
 
@@ -185,6 +190,9 @@ namespace luil {
         // 표시 문서를 접는다. 설정에 캐시가 있으면 바뀐 문단만 잰다.
         [[nodiscard]] std::vector<line> wrap_displayed(const std::function<float(std::u8string_view)>& measure);
         // 글이 서는 왼쪽 끝과 첫 줄의 위다 (물리 픽셀).
+        [[nodiscard]] std::vector<text_layout_style> metric_styles(std::size_t begin, std::size_t end) const;
+        [[nodiscard]] text_layout_request layout_request(std::u8string_view text, std::size_t begin, bool wrap) const;
+        [[nodiscard]] text_layout row_layout(std::u8string_view text, const line& row) const;
         [[nodiscard]] float text_left() const noexcept;
         [[nodiscard]] float text_top() const noexcept;
 
@@ -205,5 +213,9 @@ namespace luil {
         std::vector<std::size_t> logical_lines_ {};
         std::vector<float> gutter_widths_ {};
         float gutter_width_ { 0.0f };
+        bool native_layout_ { false };
+        text_layout font_layout_ {};
+        std::vector<std::pair<std::size_t, text_layout>> row_layouts_ {};
+
     };
 } // namespace luil

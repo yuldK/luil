@@ -43,3 +43,10 @@ UAX #29 부분 집합이며 결합 부호·이체 선택자·이모지 수식자
 Backspace도 한 글자소를 지우되, 마지막 코드포인트가 Mn·Mc·Me 결합 부호인 일반 글은 그 부호만 벗긴다.
 `e`와 결합 악센트에서는 `e`가 남는다. ZWJ·이체 선택자·피부색·keycap·국기·한글 자모 시퀀스는
 통째로 지운다. IME 조합 중 caret과 삭제는 계속 IME가 정한다. 조합 표시 상태는 이 규칙으로 다시 맞추지 않는다.
+
+## 배치된 글자와 편집 경계
+
+텍스트 모양 잡기를 켠 UI는 [text_layout](../text-layout-design.md)의 같은 glyph·cluster 값에서
+caret·hit test·선택·줄 넘김을 계산한다. 합자 하나가 글자소 여러 개를 덮으면 그 advance를
+글자소 수로 나눈다. 편집 상태의 offset과 IME 조합 필드는 계속 원문 UTF-8 byte다.
+일괄 경계가 필요한 배치는 `grapheme_boundaries()`를 쓴다. 양방향 시각 편집은 후속 범위다.

@@ -71,6 +71,7 @@
 #include "luil/ui/table_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_document.h"
+#include "luil/ui/text_layout.h"
 #include "luil/ui/text_input_options.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/toast_element.h"
