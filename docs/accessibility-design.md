@@ -66,13 +66,17 @@ UIA에는 toggle switch, radio group, alert 전용 control type이 없다. 이 �
 
 중복 id 자체는 여전히 application의 결함이다. `ui_tree::duplicate_ids`가 그대로 보고하며, 접기는 화면이 멈추는 대신 뒤쪽 element가 접근성 tree에서 자기 자리를 잃는 형태로 저하시킨다.
 
-Selection container는 반드시 element의 직접 parent일 필요가 없다. `access_selection_container_of`는 바깥쪽으로 가장 가까운 accessible list, tab list, radio group을 찾는다. `access_selected_items`는 선택된 accessible child를 publication 순서로 반환한다. Main window, secondary window, popup은 각각 자신의 `HWND`와 surface-local tree에 연결된 fragment root를 가진다.
+Selection container는 반드시 element의 직접 parent일 필요가 없다. `access_selection_container_of`는 바깥쪽으로 가장 가까운 accessible list, tab list, radio group을 찾는다. `access_selected_items`는 선택된 accessible child를 publication 순서로 반환한다.
+
+창에 걸치는 행만 짓는 container(가상 목록과 그 위의 표 본문)는 tree 밖의 항목을 model로 답한다 (`access_item_model`, `ui_element::access_items`). `access_selected_ids`는 그런 container면 model의 선택 전체를, 아니면 `access_selected_items`의 id를 반환한다. `access_item_container_of`는 지어진 행에서 그 model container를 찾는다. 자세한 규칙은 [virtual-list-design.md](virtual-list-design.md#모델로-답하는-접근성)에 있다. Main window, secondary window, popup은 각각 자신의 `HWND`와 surface-local tree에 연결된 fragment root를 가진다.
 
 ## Provider identity와 수명
 
 Element provider는 특정 frame의 element pointer 대신 fragment root와 `ui_element_id`를 보관한다. 모든 query는 surface의 현재 tree에서 id를 다시 찾는다. 이 방식은 immutable frame 모델과 맞으며 tree가 교체되어도 provider를 안전하게 유지한다.
 
 Id가 더 이상 없으면 동작 query는 `UIA_E_ELEMENTNOTAVAILABLE`을 반환한다. Surface detach는 root와 client가 보유한 모든 provider를 무효화한다.
+
+Model container의 항목 provider는 그 container의 id를 함께 보관한다. 현재 tree에 항목 id가 없으면 container의 model이 따로 지은 행(`access_item_probe`)으로 Name, ControlType, 선택·펼침 상태, 실행에 답하고, `IsOffscreen`은 참, rectangle은 비어 있으며, navigation은 parent(container)만 있다. 항목이 지어지면 같은 provider가 tree의 행으로 답한다. 항목 id가 행의 element id와 같기 때문이다.
 
 Element id가 root에 계속 존재하는 동안 runtime id는 안정적이다. Root map이 커지면 현재 tree에서 사라진 key를 정리해 일시적인 id가 메모리를 계속 차지하지 않게 한다. 사라졌다가 다시 나타난 id는 새 runtime key를 받을 수 있다.
 
@@ -94,7 +98,9 @@ Clip되거나 hidden인 element의 rectangle은 비어 있다. Scroll viewport �
 
 ## Property, text, change event
 
-Provider는 Name, ControlType, AutomationId, IsEnabled, IsKeyboardFocusable, HasKeyboardFocus, IsControlElement, IsContentElement를 제공한다. 상태별 값은 해당 UIA pattern을 통해 제공한다.
+Provider는 Name, ControlType, AutomationId, IsEnabled, IsKeyboardFocusable, HasKeyboardFocus, IsControlElement, IsContentElement를 제공한다. Model container의 항목은 PositionInSet, SizeOfSet을, 계층 항목은 Level도 제공한다. 상태별 값은 해당 UIA pattern을 통해 제공한다.
+
+Model container는 ItemContainer pattern을 제공한다. `FindItemByProperty`는 property 없음(다음 항목), Name, SelectionItemIsSelected, AutomationId로 model 전체를 찾고, 그 밖의 property는 `E_INVALIDARG`로 거절한다. 그 항목은 VirtualizedItem pattern을 제공하며 `Realize`는 그 행을 창 안으로 흘리는 scroll 동작을 dispatch한다. Container의 `GetSelection`은 model의 선택 전체를 반환한다. Grid·Table pattern(행·열 좌표와 열 머리글 연결)은 아직 없다.
 
 Text-input document가 있는 editable text element는 Value와 Text pattern을 제공한다. Text range는 내부에서 UTF-8 byte offset을 쓰고 COM 경계에서 UTF-16으로 변환한다. Document와 selection range, text 읽기, character·line·paragraph·document 단위의 넓히기와 이동, point-to-range 조회, screen rectangle을 지원한다. Line은 요소가 내주는 화면 줄이다(`ui_element::text_line_starts`) — 여러 줄 칸은 넘겨 접은 줄도 한 줄로 내주고, 한 줄 칸은 답하지 않아 문서 하나가 한 줄이다. Paragraph는 줄 바꿈 뒤에서 시작한다. 지원하지 않는 단위는 다음 큰 단위로 물러선다: format·word는 line으로, page는 document로 간다. `Move`는 품은 단위의 처음에서 옮기고 그 단위로 넓힌다. 뒤로 옮길 때 단위 가운데에 있었으면 그 처음까지가 한 걸음이다.
 
@@ -102,7 +108,7 @@ Surface는 직전 published tree의 접근성 snapshot을 보관한다. `make_ac
 
 - semantic value가 바뀌면 property change
 - 항목이 새로 선택되면 selected event 하나
-- 다중 선택 container의 항목은 container마다 모아 added-to-selection·removed-from-selection event. 바뀐 끝에 하나만 골라졌으면 그 항목의 selected event 하나, 한꺼번에 `access_selection_burst`(20)보다 많이 바뀌었으면 container의 selection-invalidated event 하나. 가상 목록은 창 밖의 고른 행도 상한(`virtual_list_offscreen_selection_limit`)까지 지어 두므로 흘려도 선택 읽기와 이 대조가 그 행들을 본다 ([virtual-list-design.md](virtual-list-design.md))
+- 다중 선택 container의 항목은 container마다 모아 added-to-selection·removed-from-selection event. 바뀐 끝에 하나만 골라졌으면 그 항목의 selected event 하나, 한꺼번에 `access_selection_burst`(20)보다 많이 바뀌었으면 container의 selection-invalidated event 하나. 가상 목록은 창 밖의 고른 행도 상한(`virtual_list_offscreen_selection_limit`)까지 지어 두므로 흘려도 이 대조가 그 행들을 본다. 선택 읽기는 상한 없이 model이 답한다 ([virtual-list-design.md](virtual-list-design.md))
 - 구조가 바뀌면 가장 가까운 affected accessible parent의 structure change
 
 Role 변경은 structure event를 통한 교체로 취급한다. Element 추가와 제거도 parent structure event가 된다. 단일 선택의 새 selected item이 이미 상태 전환을 표현하면 별도 deselection property event를 중복 발생시키지 않는다. 두 발행본에 모두 있는 항목만 선택 event로 알린다 — 새로 지어진 가상 목록 행은 structure가 말한다.

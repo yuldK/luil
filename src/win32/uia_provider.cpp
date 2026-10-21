@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <new>
 #include <optional>
 #include <string>
@@ -142,6 +143,35 @@ namespace luil::win32 {
         {
             variant.vt = VT_I4;
             variant.lVal = value;
+        }
+
+        // kind:owner — 자동화 script가 요소를 집는 손잡이다 (AutomationId).
+        [[nodiscard]] std::wstring automation_id_of(const ui_element_id& id)
+        {
+            std::wstring identifier { std::to_wstring(static_cast<std::uint32_t>(id.kind)) };
+            identifier.push_back(L':');
+            if (const utf_conversion_result<std::wstring> owner { utf8_to_utf16(id.owner) }; owner.value.has_value())
+                identifier.append(*owner.value);
+            return identifier;
+        }
+
+        // `automation_id_of`의 역이다. 모양이 맞지 않으면 nullopt다.
+        [[nodiscard]] std::optional<ui_element_id> id_from_automation_id(const std::wstring_view identifier)
+        {
+            const std::size_t colon { identifier.find(L':') };
+            if (colon == std::wstring_view::npos || colon == 0u)
+                return std::nullopt;
+            std::uint32_t kind { 0 };
+            for (const wchar_t digit : identifier.substr(0, colon))
+            {
+                if (digit < L'0' || digit > L'9')
+                    return std::nullopt;
+                kind = kind * 10u + static_cast<std::uint32_t>(digit - L'0');
+            }
+            const utf_conversion_result<std::u8string> owner { utf16_to_utf8(identifier.substr(colon + 1u)) };
+            if (owner.value.has_value() == false)
+                return std::nullopt;
+            return ui_element_id { static_cast<ui_element_kind>(kind), std::move(*owner.value) };
         }
 
         // 텍스트 칸의 표시 문서다 — 확정 글, 조합 중에는 조합 글 (caret은 그
@@ -298,9 +328,9 @@ namespace luil::win32 {
         return host_;
     }
 
-    uia_element_provider* uia_root_provider::make_element_provider(ui_element_id id)
+    uia_element_provider* uia_root_provider::make_element_provider(ui_element_id id, ui_element_id container)
     {
-        return new uia_element_provider { *this, std::move(id) };
+        return new uia_element_provider { *this, std::move(id), std::move(container) };
     }
 
     int uia_root_provider::runtime_key(const ui_element_id& id)
@@ -673,9 +703,10 @@ namespace luil::win32 {
 
     // --- uia_element_provider ---
 
-    uia_element_provider::uia_element_provider(uia_root_provider& root, ui_element_id id) noexcept
+    uia_element_provider::uia_element_provider(uia_root_provider& root, ui_element_id id, ui_element_id container) noexcept
         : root_ { &root }
         , id_ { std::move(id) }
+        , container_ { std::move(container) }
     {
         // root가 host·runtime 색인을 들고 있어 요소보다 오래 살아야 한다.
         root_->AddRef();
@@ -704,19 +735,63 @@ namespace luil::win32 {
         return current->find(id_);
     }
 
+    const ui_element* uia_element_provider::resolve_item(const ui_tree** tree, std::unique_ptr<ui_element>& probe) const
+    {
+        const ui_tree* current { nullptr };
+        if (const ui_element* const element { resolve(&current) }; element != nullptr || current == nullptr)
+        {
+            if (tree != nullptr)
+                *tree = current;
+            return element;
+        }
+        if (tree != nullptr)
+            *tree = current;
+        // 지어지지 않은 모델 항목이다. 숨은 container의 항목은 읽을 자리가 아니다 (`access_children`과 같은 답).
+        if (container_ == ui_element_id {} || current->visibly_contains(container_) == false)
+            return nullptr;
+        const ui_element* const container { current->find(container_) };
+        const access_item_model* const items { container != nullptr ? container->access_items() : nullptr };
+        if (items == nullptr)
+            return nullptr;
+        const std::optional<std::size_t> index { items->access_item_index(id_) };
+        if (index.has_value() == false)
+            return nullptr;
+        probe = items->access_item_probe(*index);
+        return probe.get();
+    }
+
+    const ui_element* uia_element_provider::item_container(const ui_tree& tree, std::size_t* index) const
+    {
+        // 지어진 행은 감싼 선택 container가, 지어지지 않은 항목은 쥔 container가 모델이다.
+        const ui_element* container { tree.find(id_) != nullptr ? access_item_container_of(tree, id_) : tree.find(container_) };
+        const access_item_model* const items { container != nullptr ? container->access_items() : nullptr };
+        if (items == nullptr)
+            return nullptr;
+        const std::optional<std::size_t> found { items->access_item_index(id_) };
+        if (found.has_value() == false)
+            return nullptr;
+        if (index != nullptr)
+            *index = *found;
+        return container;
+    }
+
     HRESULT uia_element_provider::perform(const access_request& request)
     {
         // Invoke·Toggle·Select·Expand/Collapse·SetValue가 전부 이 문을 지나므로
         // COM 경계 가드도 여기 하나다.
         return guarded([&]() -> HRESULT {
             const ui_tree* tree { nullptr };
-            const ui_element* const element { resolve(&tree) };
+            std::unique_ptr<ui_element> probe {};
+            const ui_element* const element { resolve_item(&tree, probe) };
             uia_surface_host* const host { root_->host() };
             if (element == nullptr || tree == nullptr || host == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
             // 비활성과 "손이 닿지 않는 자리"(가둠 뒤·숨은 것)는 클라이언트에게 같은
             // 말이다 — 지금은 안 된다.
-            if (element->enabled() == false || access_reachable(*tree, id_) == false)
+            //  - 지어지지 않은 항목은 화면에 없으므로 그 container가 손이 닿는지를 본다. 창 밖으로 밀려난 행이
+            //    키보드로 닿는 것과 같다.
+            const ui_element_id& reached { probe != nullptr ? container_ : id_ };
+            if (element->enabled() == false || access_reachable(*tree, reached) == false)
                 return UIA_E_ELEMENTNOTENABLED;
             std::optional<std::vector<input_action>> planned { plan_access_request(*element, request) };
             if (planned.has_value() == false)
@@ -760,6 +835,10 @@ namespace luil::win32 {
             *object = static_cast<ITextProvider*>(this);
         else if (riid == __uuidof(IScrollItemProvider))
             *object = static_cast<IScrollItemProvider*>(this);
+        else if (riid == __uuidof(IItemContainerProvider))
+            *object = static_cast<IItemContainerProvider*>(this);
+        else if (riid == __uuidof(IVirtualizedItemProvider))
+            *object = static_cast<IVirtualizedItemProvider*>(this);
         else
         {
             *object = nullptr;
@@ -805,7 +884,8 @@ namespace luil::win32 {
                 return E_POINTER;
             *result = nullptr;
             const ui_tree* tree { nullptr };
-            const ui_element* const element { resolve(&tree) };
+            std::unique_ptr<ui_element> probe {};
+            const ui_element* const element { resolve_item(&tree, probe) };
             if (element == nullptr)
                 return S_OK;
             // 값이 있는 것만 패턴이 된다 — "없는 것은 두지 않는다".
@@ -842,8 +922,20 @@ namespace luil::win32 {
                 //    세우는 손잡이라 배치로는 안에 있지만, 자기를 자기 안으로
                 //    들이라는 명령은 없는 일이다 ("상태와 기능은 서로 일치해야
                 //    한다"). 그 판정을 술어 하나가 쥔다 (`access_scroll_item`).
-                if (tree != nullptr && access_scroll_item(*tree, id_))
+                //  - 지어지지 않은 모델 항목은 모델이 흘릴 길을 답한다 (`access_realize`).
+                if (tree != nullptr && (probe != nullptr ? item_container(*tree, nullptr) != nullptr : access_scroll_item(*tree, id_)))
                     *result = static_cast<IScrollItemProvider*>(this);
+                break;
+            case UIA_ItemContainerPatternId:
+                // 창 밖 항목까지 찾는 container만이다 — tree의 자식이 전부인 container는 형제 순회로 충분하다.
+                if (probe == nullptr && element->access_items() != nullptr)
+                    *result = static_cast<IItemContainerProvider*>(this);
+                break;
+            case UIA_VirtualizedItemPatternId:
+                // 모델 container의 항목이다. 지어진 뒤에도 내건다 — 클라이언트가 쥔 패턴이 행이 지어졌다고 사라지지
+                // 않는다 (지어진 항목의 Realize는 창 안으로 들이기다).
+                if (tree != nullptr && item_container(*tree, nullptr) != nullptr)
+                    *result = static_cast<IVirtualizedItemProvider*>(this);
                 break;
             case UIA_ExpandCollapsePatternId:
                 if (info.expanded.has_value())
@@ -875,11 +967,31 @@ namespace luil::win32 {
             if (result == nullptr)
                 return E_POINTER;
             result->vt = VT_EMPTY;
-            const ui_element* const element { resolve() };
+            const ui_tree* tree { nullptr };
+            std::unique_ptr<ui_element> probe {};
+            const ui_element* const element { resolve_item(&tree, probe) };
             if (element == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
             switch (property)
             {
+            case UIA_PositionInSetPropertyId:
+            case UIA_SizeOfSetPropertyId:
+            case UIA_LevelPropertyId: {
+                // 모델 container의 항목은 모델 전체에서의 자리를 답한다. 지어진 행만 세면 "30개 중 3번째"가 된다.
+                std::size_t index { 0 };
+                const ui_element* const container { item_container(*tree, &index) };
+                if (container == nullptr)
+                    break;
+                const access_item_position position { container->access_items()->access_item_position_of(index) };
+                if (property == UIA_PositionInSetPropertyId)
+                    set_int(*result, static_cast<int>(position.position));
+                else if (property == UIA_SizeOfSetPropertyId)
+                    set_int(*result, static_cast<int>(position.size));
+                else if (position.depth > 0 || element->accessibility().expanded.has_value())
+                    // 깊이는 계층의 항목만 말한다 (UIA Level은 1부터). 평평한 목록의 행에 단계를 붙이지 않는다.
+                    set_int(*result, position.depth + 1);
+                break;
+            }
             case UIA_NamePropertyId:
                 result->vt = VT_BSTR;
                 result->bstrVal = bstr_from_utf8(element->accessibility().name);
@@ -888,11 +1000,7 @@ namespace luil::win32 {
                 set_int(*result, control_type_for(element->accessibility().role));
                 break;
             case UIA_AutomationIdPropertyId: {
-                // kind:owner — 자동화 script가 요소를 집는 손잡이다.
-                std::wstring identifier { std::to_wstring(static_cast<std::uint32_t>(id_.kind)) };
-                identifier.push_back(L':');
-                if (const utf_conversion_result<std::wstring> owner { utf8_to_utf16(id_.owner) }; owner.value.has_value())
-                    identifier.append(*owner.value);
+                const std::wstring identifier { automation_id_of(id_) };
                 result->vt = VT_BSTR;
                 result->bstrVal = SysAllocStringLen(identifier.data(), static_cast<UINT>(identifier.size()));
                 break;
@@ -910,6 +1018,11 @@ namespace luil::win32 {
                 set_bool(*result, host != nullptr && host->accessibility_focus() == id_);
                 break;
             }
+            case UIA_IsOffscreenPropertyId:
+                // 지어지지 않은 항목은 화면에 없다. 지어진 요소는 UIA가 사각형에서 정한다.
+                if (probe != nullptr)
+                    set_bool(*result, true);
+                break;
             case UIA_IsControlElementPropertyId:
             case UIA_IsContentElementPropertyId:
                 set_bool(*result, true);
@@ -949,9 +1062,18 @@ namespace luil::win32 {
                 return E_POINTER;
             *result = nullptr;
             const ui_tree* tree { nullptr };
-            const ui_element* const element { resolve(&tree) };
+            std::unique_ptr<ui_element> probe {};
+            const ui_element* const element { resolve_item(&tree, probe) };
             if (element == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
+            // 지어지지 않은 항목은 접근 tree에 서지 않는다. 부모만 있다 (그 container). 형제·자식 순회는 지어진
+            // 행끼리다 — 들이기(Realize) 뒤에 그 행이 형제 줄에 선다.
+            if (probe != nullptr)
+            {
+                if (direction == NavigateDirection_Parent)
+                    *result = root_->make_element_provider(container_);
+                return S_OK;
+            }
 
             switch (direction)
             {
@@ -1024,9 +1146,13 @@ namespace luil::win32 {
             return E_POINTER;
         *result = {};
         const ui_tree* tree { nullptr };
-        const ui_element* const element { resolve(&tree) };
+        std::unique_ptr<ui_element> probe {};
+        const ui_element* const element { resolve_item(&tree, probe) };
         if (element == nullptr)
             return UIA_E_ELEMENTNOTAVAILABLE;
+        // 지어지지 않은 항목은 자리가 없다 (빈 사각형 — 화면 밖).
+        if (probe != nullptr)
+            return S_OK;
         // 조상의 잘라내기를 거친 사각형이다 — 스크롤로 잘린 행이 화면 밖
         // 사각형을 내면 안 된다 (accessibility-design.md).
         const std::optional<rect_f> bounds { tree->visible_bounds(*element) };
@@ -1091,10 +1217,14 @@ namespace luil::win32 {
     {
         return guarded([&]() -> HRESULT {
             const ui_tree* tree { nullptr };
-            const ui_element* const element { resolve(&tree) };
+            std::unique_ptr<ui_element> probe {};
+            const ui_element* const element { resolve_item(&tree, probe) };
             uia_surface_host* const host { root_->host() };
             if (element == nullptr || tree == nullptr || host == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
+            // 지어지지 않은 항목은 들이기와 같다.
+            if (probe != nullptr)
+                return Realize();
             if (access_reachable(*tree, id_) == false)
                 return UIA_E_ELEMENTNOTENABLED;
             // 내걸 때와 같은 술어를 쓴다 — 패턴이 서지 않는 자리는 실행도 없다.
@@ -1280,9 +1410,16 @@ namespace luil::win32 {
         bool multiple { false };
         const auto read_multiple = [&]() -> HRESULT {
             const ui_tree* tree { nullptr };
-            if (resolve(&tree) == nullptr || tree == nullptr)
+            std::unique_ptr<ui_element> probe {};
+            if (resolve_item(&tree, probe) == nullptr || tree == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
-            multiple = access_multiple_selection(*tree, id_);
+            if (probe != nullptr)
+            {
+                const ui_element* const container { tree->find(container_) };
+                multiple = container != nullptr && container->accessibility().multiple_selection;
+            }
+            else
+                multiple = access_multiple_selection(*tree, id_);
             return S_OK;
         };
         const HRESULT read { guarded(read_multiple) };
@@ -1299,7 +1436,8 @@ namespace luil::win32 {
             if (result == nullptr)
                 return E_POINTER;
             *result = FALSE;
-            const ui_element* const element { resolve() };
+            std::unique_ptr<ui_element> probe {};
+            const ui_element* const element { resolve_item(nullptr, probe) };
             if (element == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
             const access_info info { element->accessibility() };
@@ -1317,8 +1455,15 @@ namespace luil::win32 {
                 return E_POINTER;
             *result = nullptr;
             const ui_tree* tree { nullptr };
-            if (resolve(&tree) == nullptr)
+            std::unique_ptr<ui_element> probe {};
+            if (resolve_item(&tree, probe) == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
+            // 지어지지 않은 항목은 쥔 container가 곧 선택 container다.
+            if (probe != nullptr)
+            {
+                *result = root_->make_element_provider(container_);
+                return S_OK;
+            }
             // 감싸는 가장 안쪽 **선택 container**다 — Selection 패턴을 내걸지 않는
             // 부모를 내주면 SelectionItem의 짝 계약이 깨진다. 묶음 밖의
             // 홀로 선 라디오는 container가 없다 (빈 답).
@@ -1344,13 +1489,18 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (access_selection_container(info.role))
             {
-                const std::vector<const ui_element*> selected { access_selected_items(*element) };
+                // 모델 container는 모델이 답한다 — 창 밖의 고른 항목까지 한계 없이 담긴다. 지어지지 않은 항목의
+                // provider는 이 container를 쥐고 모델로 답한다.
+                const std::vector<ui_element_id> selected { access_selected_ids(*element) };
+                const ui_tree* const tree { root_->host()->accessibility_tree() };
                 SAFEARRAY* const array { SafeArrayCreateVector(VT_UNKNOWN, 0, static_cast<ULONG>(selected.size())) };
                 if (array == nullptr)
                     return E_OUTOFMEMORY;
                 for (LONG index = 0; index < static_cast<LONG>(selected.size()); ++index)
                 {
-                    uia_element_provider* const provider { root_->make_element_provider(selected[static_cast<std::size_t>(index)]->id()) };
+                    const ui_element_id& item { selected[static_cast<std::size_t>(index)] };
+                    const bool built { tree != nullptr && tree->find(item) != nullptr };
+                    uia_element_provider* const provider { root_->make_element_provider(item, built ? ui_element_id {} : id_) };
                     const HRESULT put { SafeArrayPutElement(array, &index, static_cast<IRawElementProviderSimple*>(provider)) };
                     // SafeArray가 자기 참조를 쥐었다 (실패했으면 아무도 쥐지 않았다).
                     provider->Release();
@@ -1508,7 +1658,7 @@ namespace luil::win32 {
             // 없고 `RemoveFromSelection`은 무효다. 그래서 지금 하나가 골라져
             // 있으면 앞으로도 언제나 하나다. 아직 아무것도 고르지 않은 묶음만
             // 빈 채로 남을 수 있다.
-            *result = access_selected_items(*element).empty() ? FALSE : TRUE;
+            *result = access_selected_ids(*element).empty() ? FALSE : TRUE;
             return S_OK;
         });
     }
@@ -1529,7 +1679,8 @@ namespace luil::win32 {
             if (result == nullptr)
                 return E_POINTER;
             *result = ExpandCollapseState_Collapsed;
-            const ui_element* const element { resolve() };
+            std::unique_ptr<ui_element> probe {};
+            const ui_element* const element { resolve_item(nullptr, probe) };
             if (element == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
             const access_info info { element->accessibility() };
@@ -1569,6 +1720,126 @@ namespace luil::win32 {
             request.offset = converted.value->size();
             request.text = std::move(*converted.value);
             host->accessibility_text_edit(std::move(request));
+            return S_OK;
+        });
+    }
+
+    HRESULT uia_element_provider::FindItemByProperty(IRawElementProviderSimple* const start_after, const PROPERTYID property, const VARIANT value,
+        IRawElementProviderSimple** const result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            *result = nullptr;
+            const ui_element* const element { resolve() };
+            if (element == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            const access_item_model* const items { element->access_items() };
+            if (items == nullptr)
+                return UIA_E_INVALIDOPERATION;
+            const std::size_t count { items->access_item_count() };
+
+            // 찾기는 `start_after`의 **다음**부터다. 이 container의 항목이 아니면 잘못 준 값이다.
+            //  - 이 provider가 만든 요소만 돌아온다 — UIA는 남의 provider를 섞지 않는다 (`Compare`와 같은 가정).
+            std::size_t begin { 0 };
+            if (start_after != nullptr)
+            {
+                const auto* const after { static_cast<const uia_element_provider*>(start_after) };
+                const std::optional<std::size_t> index { items->access_item_index(after->id_) };
+                if (index.has_value() == false)
+                    return E_INVALIDARG;
+                begin = *index + 1u;
+            }
+
+            std::optional<std::size_t> found {};
+            switch (property)
+            {
+            case 0:
+                // property 없음은 "다음 항목"이다.
+                if (begin < count)
+                    found = begin;
+                break;
+            case UIA_NamePropertyId: {
+                if (value.vt != VT_BSTR)
+                    return E_INVALIDARG;
+                const utf_conversion_result<std::u8string> name { utf16_to_utf8(std::wstring_view { value.bstrVal, SysStringLen(value.bstrVal) }) };
+                if (name.value.has_value() == false)
+                    return E_INVALIDARG;
+                for (std::size_t index = begin; index < count && found.has_value() == false; ++index)
+                    if (items->access_item_name(index) == *name.value)
+                        found = index;
+                break;
+            }
+            case UIA_SelectionItemIsSelectedPropertyId: {
+                if (value.vt != VT_BOOL)
+                    return E_INVALIDARG;
+                // 골라짐은 모델 전체를 한 번 훑은 색인으로 답한다 — 항목마다 고름을 물으면 고른 수만큼 곱해진다.
+                const std::vector<std::size_t> selected { items->access_selected_indices() };
+                const auto first_selected { std::lower_bound(selected.begin(), selected.end(), begin) };
+                if (value.boolVal != VARIANT_FALSE)
+                {
+                    if (first_selected != selected.end())
+                        found = *first_selected;
+                    break;
+                }
+                auto next_selected { first_selected };
+                for (std::size_t index = begin; index < count; ++index)
+                {
+                    if (next_selected != selected.end() && *next_selected == index)
+                    {
+                        ++next_selected;
+                        continue;
+                    }
+                    found = index;
+                    break;
+                }
+                break;
+            }
+            case UIA_AutomationIdPropertyId: {
+                if (value.vt != VT_BSTR)
+                    return E_INVALIDARG;
+                const std::optional<ui_element_id> wanted { id_from_automation_id(std::wstring_view { value.bstrVal, SysStringLen(value.bstrVal) }) };
+                if (wanted.has_value() == false)
+                    break;
+                if (const std::optional<std::size_t> index { items->access_item_index(*wanted) }; index.has_value() && *index >= begin)
+                    found = index;
+                break;
+            }
+            default:
+                // 이 container가 모델로 답할 수 없는 property다 (UIA 규약의 거절).
+                return E_INVALIDARG;
+            }
+            if (found.has_value() == false)
+                return S_OK;
+            const ui_element_id item { items->access_item_id(*found) };
+            const ui_tree* const tree { root_->host()->accessibility_tree() };
+            const bool built { tree != nullptr && tree->find(item) != nullptr };
+            *result = root_->make_element_provider(item, built ? ui_element_id {} : id_);
+            return S_OK;
+        });
+    }
+
+    HRESULT uia_element_provider::Realize()
+    {
+        return guarded([&]() -> HRESULT {
+            const ui_tree* tree { nullptr };
+            std::unique_ptr<ui_element> probe {};
+            uia_surface_host* const host { root_->host() };
+            if (resolve_item(&tree, probe) == nullptr || tree == nullptr || host == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            std::size_t index { 0 };
+            const ui_element* const container { item_container(*tree, &index) };
+            if (container == nullptr)
+                return UIA_E_INVALIDOPERATION;
+            // 실행과 같은 거절이다 — 숨은 것·가둠 뒤의 container는 흘리지 않는다.
+            if (access_reachable(*tree, container->id()) == false)
+                return UIA_E_ELEMENTNOTENABLED;
+            std::optional<std::vector<input_action>> actions { container->access_items()->access_realize(index) };
+            if (actions.has_value() == false)
+                return UIA_E_INVALIDOPERATION;
+            // 이미 창 안이면 빈 목록이다. "이미 그 상태"는 S_OK다 (`ScrollIntoView`와 같은 규약).
+            if (actions->empty() == false)
+                host->accessibility_dispatch(std::move(*actions));
             return S_OK;
         });
     }

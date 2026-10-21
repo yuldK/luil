@@ -3,8 +3,10 @@
 #include "luil/ui/ui_events.h"
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace luil {
@@ -228,6 +230,70 @@ namespace luil {
 
     // 그 항목을 감싼 선택 container가 여러 항목을 함께 고르는가다. container가 없으면 거짓이다.
     [[nodiscard]] bool access_multiple_selection(const ui_tree& tree, const ui_element_id& id);
+
+    // 모델 안 항목의 자리다 (보조 기술의 "몇 개 중 몇 번째"와 깊이).
+    struct access_item_position
+    {
+        // 같은 부모 아래 형제 중 몇 번째인가 (1부터).
+        std::size_t position { 0 };
+        // 그 형제의 수다.
+        std::size_t size { 0 };
+        // 계층의 깊이다 (뿌리 줄이 0).
+        int depth { 0 };
+
+        [[nodiscard]] bool operator==(const access_item_position&) const = default;
+    };
+
+    // 화면 밖 항목까지 답하는 선택 container의 모델이다 (가상 목록·표 본문).
+    //
+    // tree에는 창에 걸치는 행만 선다. 그런데 보조 기술의 항목 찾기(ItemContainer)·선택 읽기·"n개 중 m번째"는
+    // 모델 전체를 봐야 옳다 — 지어진 행만 보면 고른 것 셋 중 창 밖의 둘이 빠지고, 찾기는 스크롤 자리에 따라 답이
+    // 갈린다. 그래서 행을 짓지 않고 모델에서 답하는 창구가 이것이다 (`ui_element::access_items`).
+    //  - **항목의 id는 행이 지어지면 서는 id와 같다.** 보조 기술이 쥔 자리표가 행이 지어진 뒤에도 같은 요소로
+    //    이어진다 (UIA RuntimeId가 id에서 난다).
+    //  - 행 하나에 대한 질문(이름·상태·실행)은 `access_item_probe`가 지은 행에 그대로 묻는다. 지어진 행과 같은
+    //    코드가 답하므로 둘의 답이 어긋날 수 없다.
+    //  - 게시된 tree의 element가 구현하므로 모든 메서드는 const이고 tree를 바꾸지 않는다.
+    class access_item_model
+    {
+    public:
+        access_item_model() = default;
+        access_item_model(const access_item_model&) = delete;
+        access_item_model(access_item_model&&) = delete;
+        access_item_model& operator=(const access_item_model&) = delete;
+        access_item_model& operator=(access_item_model&&) = delete;
+        virtual ~access_item_model() = default;
+
+        // 모델의 항목 수다.
+        [[nodiscard]] virtual std::size_t access_item_count() const noexcept = 0;
+        // `index`번 항목의 id다. 범위 밖이면 빈 id다.
+        [[nodiscard]] virtual ui_element_id access_item_id(std::size_t index) const = 0;
+        // 그 id가 모델의 몇 번째인가. 이 모델의 항목이 아니면 nullopt다.
+        [[nodiscard]] virtual std::optional<std::size_t> access_item_index(const ui_element_id& id) const = 0;
+        // `index`번 항목의 이름이다 (이름 찾기가 항목마다 행을 짓지 않게 따로 둔다).
+        [[nodiscard]] virtual std::u8string_view access_item_name(std::size_t index) const = 0;
+        // 지금 골라진 항목들이다 (모델 순서). 개수에 한계가 없다.
+        [[nodiscard]] virtual std::vector<std::size_t> access_selected_indices() const = 0;
+        // `index`번 항목의 형제 자리와 깊이다.
+        [[nodiscard]] virtual access_item_position access_item_position_of(std::size_t index) const = 0;
+        // `index`번 항목의 행을 tree 밖에 따로 짓는다. 부르는 쪽이 묻는 동안만 쥔다.
+        //  - 앱의 행 내용(`build_row`)은 짓지 않는다. 게시된 뒤에 앱 함수를 부르지 않는다는 약속을 지키고, 행 하나의
+        //    이름·상태·실행은 내용 없이도 행이 답한다.
+        //  - 범위 밖이면 nullptr다.
+        [[nodiscard]] virtual std::unique_ptr<ui_element> access_item_probe(std::size_t index) const = 0;
+        // `index`번 항목을 짓게 하는 메시지다 (창 안으로 흘리기 — UIA Realize·ScrollIntoView).
+        //  - 이미 창 안이면 빈 목록이다. 흘릴 길이 없으면 nullopt다.
+        //  - 메시지가 앱에 가 다음 frame의 tree에 그 행이 선다. 쓰기는 비동기다.
+        [[nodiscard]] virtual std::optional<std::vector<input_action>> access_realize(std::size_t index) const = 0;
+    };
+
+    // 그 id를 항목으로 가진 모델 container다 (`access_selection_container_of`가 `access_items`를 낼 때).
+    // 없으면 nullptr다 — 모델이 없는 container의 항목은 tree가 전부라 모델이 따로 답할 것이 없다.
+    [[nodiscard]] const ui_element* access_item_container_of(const ui_tree& tree, const ui_element_id& id);
+
+    // container의 골라진 항목 id다 (모델 순서).
+    // 모델 container면 모델이 답한다 — 창 밖의 고른 항목까지 한계 없이 담긴다. 아니면 `access_selected_items`다.
+    [[nodiscard]] std::vector<ui_element_id> access_selected_ids(const ui_element& container);
 
     // 접근 tree의 발행본 하나를 편 것이다 — 접기(none)와 숨김을 지난 요소들이
     // 게시 순서(pre-order)로 늘어선다. tree는 frame마다 통째로 새로 지어지므로,

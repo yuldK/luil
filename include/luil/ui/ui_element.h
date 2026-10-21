@@ -993,6 +993,12 @@ namespace luil {
         //    요소뿐이라 재정의가 자리다.
         [[nodiscard]] virtual std::optional<std::vector<input_action>> access_actions(const access_request& request) const;
 
+        // 화면 밖 항목까지 답하는 모델이다 (`access_item_model`). 기본은 없다(nullptr).
+        //  - 창에 걸치는 행만 짓는 container(가상 목록)가 재정의한다. 보조 기술의 항목 찾기·선택 읽기·위치가 tree가
+        //    아니라 이 모델을 본다.
+        //  - virtual인 이유는 `accessibility()`와 같다. 앱이 만든 가상 container도 답해야 한다.
+        [[nodiscard]] virtual const access_item_model* access_items() const noexcept;
+
         // 이 자리의 포인터 모양이다.
         // 좌표는 창 좌표이고 `interaction`으로 지금 잡고 끄는 중인지 판단한다.
         // 기본 구현의 우선순위는 다음과 같다.
