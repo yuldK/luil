@@ -751,13 +751,13 @@ namespace luil {
             const auto highlights { text_highlights_in_range(config_.highlights, row.begin, row.end) };
             for (const auto& match : highlights)
             {
-                const auto box { range_rect(match.begin, match.end) };
-                context.canvas.drawRect(box, solid_paint(context.palette.document_search_background));
+                const auto match_box { range_rect(match.begin, match.end) };
+                context.canvas.drawRect(match_box, solid_paint(context.palette.document_search_background));
                 if (match.current)
                 {
-                    SkPaint border { solid_paint(context.palette.accent) };
-                    border.setStyle(SkPaint::kStroke_Style);
-                    context.canvas.drawRect(box, border);
+                    SkPaint match_border { solid_paint(context.palette.accent) };
+                    match_border.setStyle(SkPaint::kStroke_Style);
+                    context.canvas.drawRect(match_box, match_border);
                 }
             }
             std::optional<SkRect> selection {};
