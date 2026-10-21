@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/ui/list_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/ui_element.h"
 
@@ -36,6 +37,11 @@ namespace luil {
         float height { 0.0f };
         // 거짓이면 흐리게 그리고 고를 수 없다 (키보드도 건너뛴다).
         bool enabled { true };
+        // 계층의 깊이다. 0이면 뿌리 줄이다 (`list_item::depth`와 같다).
+        // **앱이 평탄화해서 준다** — 접힌 가지의 자식은 모델에 담지 않는다 (list-view-design.md의 평탄화).
+        int depth { 0 };
+        // 잎·접힘·펼침이다. 삼각형과 ←·→, 보조 기술의 펼침 상태가 이 값을 읽는다.
+        list_expansion expansion { list_expansion::none };
     };
 
     // 행 하나를 앱이 짓는다.
@@ -219,6 +225,14 @@ namespace luil {
         //    고른 행을 읽는다 (`list`·`tree`·`table`).
         access_role role { access_role::list };
         access_role row_role { access_role::list_item };
+        // 가지를 이 상태로 하라는 절대 메시지다 (`list_config::set_expanded`와 같다). 있으면 목록이 계층이 된다.
+        //  - 행 앞에 깊이만큼 들여쓰고 가지에는 삼각형을 세운다. 잎도 삼각형 자리를 비워 글이 줄을 맞춘다.
+        //  - ←는 펼친 가지를 접고, 접혔거나 잎이면 부모로 간다. →는 접힌 가지를 펴고, 펼친 가지면 첫 자식으로 간다.
+        //    갈 곳이 없는 ←·→는 소비하지 않아 위로 흐른다 (표에서는 가로 스크롤이 된다).
+        //  - 보조 기술의 펼치기·접기도 이 메시지다. 행은 펼침 상태를 ExpandCollapse로 알린다.
+        std::function<input_action(const std::u8string& key, bool expanded)> set_expanded {};
+        // 행 앞에 들여쓰기와 삼각형 자리를 두는가. 계층을 다른 자리에 그리는 컴포넌트(표의 트리 열)가 끈다.
+        bool tree_gutter { true };
     };
 
     // 모델 안에서 키가 커서를 옮길 자리다.
@@ -345,6 +359,8 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> move_cursor(std::size_t index, const virtual_list_move_context& context) const;
         // 커서를 옮기는 메시지가 하나라도 있는가 (`move` 또는 `move_with`).
         [[nodiscard]] bool moves_cursor() const noexcept;
+        // 계층 목록의 ←(`forward` 거짓)·→다. 갈 곳이 없으면 nullopt라 키가 위로 흐른다.
+        [[nodiscard]] std::optional<std::vector<input_action>> tree_step(bool forward) const;
         // 한 번의 Page가 건너뛰는 행 수다.
         [[nodiscard]] int page_rows(value_step step) const noexcept;
         // 창에 걸치는 행과 커서 행을 실제로 짓는다 (`arrange`가 한 번만 부른다).

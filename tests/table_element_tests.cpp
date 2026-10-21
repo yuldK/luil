@@ -286,3 +286,66 @@ TEST_CASE("Assistive technology reads a data grid with header items and data ite
     REQUIRE(row.role == luil::access_role::data_item);
     REQUIRE(row.selected == true);
 }
+
+TEST_CASE("The tree column indents its cells and holds the triangles", "[ui][table][tree]")
+{
+    luil::table_config config { make_config(true) };
+    config.tree_column = u8"name";
+    config.rows.items[0].expansion = luil::list_expansion::expanded;
+    config.rows.items[1].depth = 1;
+    config.rows.items[1].expansion = luil::list_expansion::collapsed;
+    config.rows.items[2].depth = 2;
+    config.rows.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(sort_intent { key + (expanded ? u8"+" : u8"-") }); };
+    const std::shared_ptr<const luil::ui_tree> tree { published(std::move(config)) };
+    REQUIRE(tree->duplicate_ids().empty());
+
+    // 삼각형은 트리 열 안, 깊이만큼 들여 선다. 행 앞의 가상 목록 삼각형은 서지 않는다.
+    const luil::ui_element& top { find(*tree, { luil::ui_element_kind::table_expander, part(u8"row-a") }) };
+    const luil::ui_element& child { find(*tree, { luil::ui_element_kind::table_expander, part(u8"row-b") }) };
+    REQUIRE(top.bounds().x == luil::table_cell_padding);
+    REQUIRE(child.bounds().x - top.bounds().x == luil::list_indent_step);
+    REQUIRE(tree->find({ luil::ui_element_kind::virtual_list_expander, u8"row-a" }) == nullptr);
+    REQUIRE(tree->find({ luil::ui_element_kind::table_expander, part(u8"row-c") }) == nullptr);
+
+    // 앱의 칸은 들여쓰기와 삼각형 뒤에 선다. 다른 열은 밀리지 않는다.
+    const float lead { 2.0f * luil::list_indent_step + luil::list_expander_width };
+    REQUIRE(find(*tree, { kind_cell, u8"row-c/name" }).bounds().x == lead);
+    REQUIRE(find(*tree, { kind_cell, u8"row-c/author" }).bounds().x == 160.0f);
+
+    // 펼침 상태는 행(DataItem)이 알린다.
+    REQUIRE(find(*tree, { luil::ui_element_kind::virtual_list_row, u8"row-b" }).accessibility().expanded == false);
+}
+
+TEST_CASE("The check column shows each row's state and toggles without stealing focus", "[ui][table][check]")
+{
+    luil::table_config config { make_config() };
+    config.check_column = u8"name";
+    config.check_state_of = [](const luil::virtual_list_item& row, std::size_t) {
+        return row.key == u8"row-a" ? luil::check_state::mixed : row.key == u8"row-b" ? luil::check_state::checked : luil::check_state::unchecked;
+    };
+    config.toggle_check = [](const std::u8string& row) { return luil::make_app_action(resize_end_intent { row }); };
+    const std::shared_ptr<const luil::ui_tree> tree { published(config) };
+    REQUIRE(tree->duplicate_ids().empty());
+
+    const luil::ui_element& mixed { find(*tree, { luil::ui_element_kind::check, part(u8"row-a") }) };
+    REQUIRE(mixed.accessibility().mixed);
+    REQUIRE(mixed.accessibility().name == u8"row-a");
+    REQUIRE(find(*tree, { luil::ui_element_kind::check, part(u8"row-b") }).accessibility().checked == true);
+    REQUIRE(mixed.tab_stop() == false);
+
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    const luil::rect_f box { mixed.bounds() };
+    static_cast<void>(controller.process(luil::pointer_pressed_event { box.x + 10.0f, box.y + box.height / 2.0f, luil::pointer_button::left, at(0) }));
+    const auto clicked { controller.process(luil::pointer_released_event { box.x + 10.0f, box.y + box.height / 2.0f, luil::pointer_button::left, at(5) }) };
+    REQUIRE(message_at<resize_end_intent>(clicked, 0) != nullptr);
+    REQUIRE(message_at<resize_end_intent>(clicked, 0)->column == u8"row-a");
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
+
+    // 본문이 Space를 실행 키로 쓰지 않으므로 Space는 커서 행의 체크다.
+    config.rows.cursor = u8"row-c";
+    controller.set_tree(published(config));
+    const auto spaced { controller.process(luil::key_pressed_event { luil::key_code::space, false, false, false, false, at(20) }) };
+    REQUIRE(message_at<resize_end_intent>(spaced, 0) != nullptr);
+    REQUIRE(message_at<resize_end_intent>(spaced, 0)->column == u8"row-c");
+}

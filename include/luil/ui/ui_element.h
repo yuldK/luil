@@ -762,7 +762,7 @@ namespace luil {
         // 마우스로 누를 수 있는데 키보드로는 갈 수 없는 자리를 만들지 않는 것이
         // 이 기본값의 뜻이다 (keyboard-focus-design.md).
         [[nodiscard]] bool tab_stop() const noexcept;
-        // 포인터로 눌렀을 때 초점을 받을 대상이다. 기본은 자신이다.
+        // 포인터로 눌렀을 때 초점을 받을 대상이다. 기본은 자신이다 (`set_pointer_focus_target`으로 바꿀 수 있다).
         // 합성 컨트롤의 부품은 Tab 자리 없이도 컨트롤로 초점을 보낼 수 있다.
         [[nodiscard]] virtual const ui_element_id& pointer_focus_target() const noexcept;
         // 이 element의 자손들이 Tab 순회에서 한 자리인가 (묶음).
@@ -860,6 +860,11 @@ namespace luil {
         //  - 목록의 Ctrl+A처럼 **초점이 행 안의 부품에 있어도** 그 부품이 쓰지 않는 키를 목록이 받는 자리다.
         //  - hit 대상을 넓히지 않는다 (`set_key_step_target`과 같은 이유). 키는 포인터가 아니라 초점을 따른다.
         void set_key_handler(key_handler handler);
+        // 포인터로 누르면 초점이 갈 곳을 다른 element로 정한다 (`pointer_focus_target`).
+        //  - 합성 컨트롤이 **이미 있는 컨트롤**을 부품으로 담을 때 쓴다. 표의 체크 칸을 눌러도 초점은 표 본문에 남는다 —
+        //    체크박스가 초점을 가져가면 그 뒤의 ↓가 표가 아니라 체크박스의 것이 된다.
+        //  - 빈 id면 자신이다 (기본).
+        void set_pointer_focus_target(ui_element_id target);
         void set_clip_children(bool value) noexcept;
         void set_hit_opaque(bool value) noexcept;
         // 자손들을 Tab의 한 자리로 묶는다 (탭 막대·라디오 묶음·목록).
@@ -1021,6 +1026,7 @@ namespace luil {
         std::optional<key_search_target> key_search_target_ {};
         access_handler access_handler_ {};
         key_handler key_handler_ {};
+        ui_element_id pointer_focus_target_ {};
         bool clip_children_ { false };
         bool hit_opaque_ { false };
         // 비어 있으면 액션 유무에서 판정한다 (`tab_stop`).

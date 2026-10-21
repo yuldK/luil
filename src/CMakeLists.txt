@@ -246,6 +246,8 @@ luil_add_source_filter(luil_core_files "ui/lists"
     "${public_headers}/ui/tab_bar_element.h"
     ui/table_element.cpp
     "${public_headers}/ui/table_element.h"
+    ui/tree_expander.cpp
+    ui/tree_expander.h
     ui/virtual_list_element.cpp
     "${public_headers}/ui/virtual_list_element.h")
 

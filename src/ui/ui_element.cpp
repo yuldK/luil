@@ -9,7 +9,12 @@
 namespace luil {
     const ui_element_id& ui_element::pointer_focus_target() const noexcept
     {
-        return id();
+        return pointer_focus_target_ != ui_element_id {} ? pointer_focus_target_ : id();
+    }
+
+    void ui_element::set_pointer_focus_target(ui_element_id target)
+    {
+        pointer_focus_target_ = std::move(target);
     }
 
     bool rect_f::contains(const float point_x, const float point_y) const noexcept
