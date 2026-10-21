@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <new>
 #include <optional>
@@ -2032,5 +2033,215 @@ TEST_CASE("Text ranges of a text area walk its wrapped screen lines and its para
     caret->Release();
     range->Release();
     memo->Release();
+    root->Release();
+}
+
+namespace {
+    struct long_list_intent
+    {
+        std::u8string command {};
+        std::u8string key {};
+        float delta { 0.0f };
+    };
+
+    // 천 줄짜리 다중 선택 목록이다. 다섯 줄마다 하나가 골라져 있다 (모두 이백 줄 — 창 밖에 짓는 한계보다 많다).
+    // 창은 이백 픽셀이라 지어지는 행은 흘린 자리 근처의 열 줄 남짓과 창에 가까운 고른 행뿐이다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_long_list_tree(const float scroll_offset = 0.0f)
+    {
+        luil::virtual_list_config config {};
+        config.owner = u8"files";
+        config.row_height = 20.0f;
+        config.scroll_offset = scroll_offset;
+        for (std::size_t index = 0; index < 1000u; ++index)
+            config.items.push_back({ numbered_owner(u8"item", index), numbered_owner(u8"item", index) });
+        config.multiple_selection = true;
+        for (std::size_t index = 0; index < 1000u; index += 5u)
+            config.selection.push_back(numbered_owner(u8"item", index));
+        config.select = [](const std::u8string& key) { return luil::make_app_action(long_list_intent { u8"select", key }); };
+        config.add_to_selection = [](const std::u8string& key) { return luil::make_app_action(long_list_intent { u8"add", key }); };
+        config.scroll = [](const float delta) { return luil::make_app_action(long_list_intent { u8"scroll", {}, delta }); };
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f));
+    }
+
+    [[nodiscard]] const long_list_intent& dispatched_long_list(const fake_uia_host& host)
+    {
+        REQUIRE(host.dispatched.size() == 1u);
+        const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+        REQUIRE(message != nullptr);
+        const auto* const intent { message->get<long_list_intent>() };
+        REQUIRE(intent != nullptr);
+        return *intent;
+    }
+
+    // 목록의 ItemContainer로 찾은 항목이다. 없으면 nullptr다.
+    [[nodiscard]] luil::win32::uia_element_provider* find_item(
+        luil::win32::uia_element_provider& list, luil::win32::uia_element_provider* const after, const PROPERTYID property, const VARIANT& value)
+    {
+        IRawElementProviderSimple* found { nullptr };
+        REQUIRE(list.FindItemByProperty(after, property, value, &found) == S_OK);
+        return static_cast<luil::win32::uia_element_provider*>(found);
+    }
+
+    [[nodiscard]] VARIANT text_variant(const wchar_t* const text)
+    {
+        VARIANT value {};
+        value.vt = VT_BSTR;
+        value.bstrVal = SysAllocString(text);
+        return value;
+    }
+
+    [[nodiscard]] VARIANT bool_variant(const bool state)
+    {
+        VARIANT value {};
+        value.vt = VT_BOOL;
+        value.boolVal = state ? VARIANT_TRUE : VARIANT_FALSE;
+        return value;
+    }
+
+    [[nodiscard]] int read_int_property(luil::win32::uia_element_provider& provider, const PROPERTYID property)
+    {
+        VARIANT value {};
+        REQUIRE(provider.GetPropertyValue(property, &value) == S_OK);
+        REQUIRE(value.vt == VT_I4);
+        return static_cast<int>(value.lVal);
+    }
+
+    [[nodiscard]] bool serves_pattern(luil::win32::uia_element_provider& provider, const PATTERNID pattern)
+    {
+        IUnknown* served { nullptr };
+        REQUIRE(provider.GetPatternProvider(pattern, &served) == S_OK);
+        if (served == nullptr)
+            return false;
+        served->Release();
+        return true;
+    }
+} // namespace
+
+TEST_CASE("A long list finds a row it did not build and answers for it from the model", "[win32][uia][virtual]")
+{
+    fake_uia_host host {};
+    host.tree = make_long_list_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const list { root->make_element_provider({ luil::ui_element_kind::virtual_list, u8"files" }) };
+    REQUIRE(serves_pattern(*list, UIA_ItemContainerPatternId));
+
+    VARIANT name { text_variant(L"item503") };
+    luil::win32::uia_element_provider* const distant { find_item(*list, nullptr, UIA_NamePropertyId, name) };
+    static_cast<void>(VariantClear(&name));
+    REQUIRE(distant != nullptr);
+    REQUIRE(distant->element_id() == luil::ui_element_id { luil::ui_element_kind::virtual_list_row, u8"item503" });
+    REQUIRE(host.tree->find(distant->element_id()) == nullptr);
+
+    // 지어지지 않아도 지어진 행과 같은 것을 답한다.
+    REQUIRE(read_text_property(*distant, UIA_NamePropertyId) == L"item503");
+    REQUIRE(read_int_property(*distant, UIA_ControlTypePropertyId) == UIA_ListItemControlTypeId);
+    REQUIRE(read_int_property(*distant, UIA_PositionInSetPropertyId) == 504);
+    REQUIRE(read_int_property(*distant, UIA_SizeOfSetPropertyId) == 1000);
+    VARIANT offscreen {};
+    REQUIRE(distant->GetPropertyValue(UIA_IsOffscreenPropertyId, &offscreen) == S_OK);
+    REQUIRE(offscreen.vt == VT_BOOL);
+    REQUIRE(offscreen.boolVal == VARIANT_TRUE);
+    UiaRect box { 1.0, 1.0, 1.0, 1.0 };
+    REQUIRE(distant->get_BoundingRectangle(&box) == S_OK);
+    REQUIRE(box.width == 0.0);
+    IRawElementProviderFragment* parent { nullptr };
+    REQUIRE(distant->Navigate(NavigateDirection_Parent, &parent) == S_OK);
+    REQUIRE(parent != nullptr);
+    REQUIRE(static_cast<luil::win32::uia_element_provider*>(parent)->element_id().owner == u8"files");
+    parent->Release();
+    BOOL selected { TRUE };
+    REQUIRE(distant->get_IsSelected(&selected) == S_OK);
+    REQUIRE(selected == FALSE);
+
+    // 실행도 모델로 간다.
+    REQUIRE(distant->AddToSelection() == S_OK);
+    REQUIRE(dispatched_long_list(host).command == u8"add");
+    REQUIRE(dispatched_long_list(host).key == u8"item503");
+    host.dispatched.clear();
+
+    // 들이기는 그 행을 창 안으로 흘린다.
+    REQUIRE(serves_pattern(*distant, UIA_VirtualizedItemPatternId));
+    REQUIRE(distant->Realize() == S_OK);
+    REQUIRE(dispatched_long_list(host).command == u8"scroll");
+    const float delta { dispatched_long_list(host).delta };
+    REQUIRE(delta == 504.0f * 20.0f - 200.0f);
+    host.dispatched.clear();
+
+    // 앱이 흘려 행이 지어지면 같은 provider가 tree의 행으로 답한다 (id가 같다).
+    host.tree = make_long_list_tree(delta);
+    REQUIRE(host.tree->find(distant->element_id()) != nullptr);
+    REQUIRE(distant->get_BoundingRectangle(&box) == S_OK);
+    REQUIRE(box.width > 0.0);
+    // 이미 창 안이면 들이기는 할 일이 없다.
+    REQUIRE(distant->Realize() == S_OK);
+    REQUIRE(host.dispatched.empty());
+
+    distant->Release();
+    list->Release();
+    root->Release();
+}
+
+TEST_CASE("A long list reads every selected row back, not only the built ones", "[win32][uia][virtual]")
+{
+    fake_uia_host host {};
+    host.tree = make_long_list_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const list { root->make_element_provider({ luil::ui_element_kind::virtual_list, u8"files" }) };
+    const std::vector<std::u8string> selection { read_selection(*list) };
+    REQUIRE(selection.size() == 200u);
+    REQUIRE(selection.front() == u8"item0");
+    REQUIRE(selection.back() == u8"item995");
+    list->Release();
+    root->Release();
+}
+
+TEST_CASE("Finding items by selection, automation id and order walks the whole model", "[win32][uia][virtual]")
+{
+    fake_uia_host host {};
+    host.tree = make_long_list_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const list { root->make_element_provider({ luil::ui_element_kind::virtual_list, u8"files" }) };
+
+    const VARIANT chosen { bool_variant(true) };
+    luil::win32::uia_element_provider* const first { find_item(*list, nullptr, UIA_SelectionItemIsSelectedPropertyId, chosen) };
+    REQUIRE(first != nullptr);
+    REQUIRE(first->element_id().owner == u8"item0");
+    luil::win32::uia_element_provider* const second { find_item(*list, first, UIA_SelectionItemIsSelectedPropertyId, chosen) };
+    REQUIRE(second != nullptr);
+    REQUIRE(second->element_id().owner == u8"item5");
+    const VARIANT unchosen { bool_variant(false) };
+    luil::win32::uia_element_provider* const plain { find_item(*list, first, UIA_SelectionItemIsSelectedPropertyId, unchosen) };
+    REQUIRE(plain != nullptr);
+    REQUIRE(plain->element_id().owner == u8"item1");
+
+    // property 없음은 다음 항목이다. 끝 뒤에는 없다.
+    const VARIANT none {};
+    luil::win32::uia_element_provider* const next { find_item(*list, plain, 0, none) };
+    REQUIRE(next != nullptr);
+    REQUIRE(next->element_id().owner == u8"item2");
+
+    const std::wstring wanted { std::to_wstring(static_cast<std::uint32_t>(luil::ui_element_kind::virtual_list_row)) + L":item700" };
+    VARIANT automation { text_variant(wanted.c_str()) };
+    luil::win32::uia_element_provider* const by_id { find_item(*list, nullptr, UIA_AutomationIdPropertyId, automation) };
+    static_cast<void>(VariantClear(&automation));
+    REQUIRE(by_id != nullptr);
+    REQUIRE(by_id->element_id().owner == u8"item700");
+    REQUIRE(read_text_property(*by_id, UIA_AutomationIdPropertyId) == wanted);
+
+    VARIANT last_name { text_variant(L"item999") };
+    luil::win32::uia_element_provider* const last { find_item(*list, nullptr, UIA_NamePropertyId, last_name) };
+    static_cast<void>(VariantClear(&last_name));
+    REQUIRE(last != nullptr);
+    REQUIRE(find_item(*list, last, 0, none) == nullptr);
+
+    // 모델로 답할 수 없는 property는 UIA 규약대로 거절한다.
+    VARIANT help { text_variant(L"x") };
+    IRawElementProviderSimple* refused { nullptr };
+    REQUIRE(list->FindItemByProperty(nullptr, UIA_HelpTextPropertyId, help, &refused) == E_INVALIDARG);
+    static_cast<void>(VariantClear(&help));
+
+    for (luil::win32::uia_element_provider* const item : { first, second, plain, next, by_id, last })
+        item->Release();
+    list->Release();
     root->Release();
 }

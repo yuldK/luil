@@ -229,6 +229,32 @@ namespace luil {
         return selected;
     }
 
+    const ui_element* access_item_container_of(const ui_tree& tree, const ui_element_id& id)
+    {
+        const ui_element* const container { access_selection_container_of(tree, id) };
+        if (container == nullptr)
+            return nullptr;
+        const access_item_model* const items { container->access_items() };
+        // 감싼 container가 모델을 들어도 그 모델의 항목이 아닐 수 있다 (행 안의 체크박스처럼 행 속 부품).
+        if (items == nullptr || items->access_item_index(id).has_value() == false)
+            return nullptr;
+        return container;
+    }
+
+    std::vector<ui_element_id> access_selected_ids(const ui_element& container)
+    {
+        std::vector<ui_element_id> ids {};
+        if (const access_item_model* const items { container.access_items() }; items != nullptr)
+        {
+            for (const std::size_t index : items->access_selected_indices())
+                ids.push_back(items->access_item_id(index));
+            return ids;
+        }
+        for (const ui_element* const item : access_selected_items(container))
+            ids.push_back(item->id());
+        return ids;
+    }
+
     namespace {
         // `ui_tree`의 색인과 같은 섞음이다.
         struct access_id_hash
