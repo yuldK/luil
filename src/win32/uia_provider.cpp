@@ -82,6 +82,23 @@ namespace luil::win32 {
             case access_role::alert:
             case access_role::static_text:
                 return UIA_TextControlTypeId;
+            case access_role::tree:
+                return UIA_TreeControlTypeId;
+            case access_role::tree_item:
+                return UIA_TreeItemControlTypeId;
+            // 행을 고르는 표라 DataGrid다 (`access_role::table`).
+            case access_role::table:
+                return UIA_DataGridControlTypeId;
+            case access_role::data_item:
+                return UIA_DataItemControlTypeId;
+            case access_role::header_item:
+                return UIA_HeaderItemControlTypeId;
+            case access_role::tool_bar:
+                return UIA_ToolBarControlTypeId;
+            case access_role::separator:
+                return UIA_SeparatorControlTypeId;
+            case access_role::status_bar:
+                return UIA_StatusBarControlTypeId;
             default:
                 return UIA_PaneControlTypeId;
             }

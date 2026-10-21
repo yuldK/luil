@@ -39,8 +39,13 @@ Modal dialog(`modal_host_config::name`)와 선택 묶음(`choice_group_config::n
 | `menu`, `menu_item` | Menu, MenuItem |
 | `title_bar`, `dialog` | TitleBar, Window |
 | `alert`, `static_text` | Text |
+| `tree`, `tree_item` | Tree, TreeItem |
+| `table`, `data_item`, `header_item` | DataGrid, DataItem, HeaderItem |
+| `tool_bar`, `separator`, `status_bar` | ToolBar, Separator, StatusBar |
 
 선택 묶음(`choice_group_element`)은 그리는 style과 무관하게 `radio_group`이다. Radio 행이든 toggle 버튼이든 하는 일은 여럿 가운데 하나를 고르는 것이라, 항목은 `radio_button`으로 서고 묶음이 그 선택 container가 된다. Toggle 항목은 글자 버튼으로 그려지지만 `text_button_config::selected`로 자기 선택을 함께 싣는다 — 강조 채움은 "Enter가 여기로 간다"에도 쓰이는 그림이라 provider가 그림만 보고는 둘을 가를 수 없다. 상태를 실으면 실행 패턴도 함께 갈린다: 상태를 든 것은 그 상태의 패턴으로 실행하므로([접근성 동작](accessibility-action-design.md)의 `invokable`) toggle 항목의 자리는 Invoke가 아니라 Select다.
+
+`tree`와 `table`은 `list`처럼 항목의 선택 container다(`access_selection_container`). 표는 행을 고르는 컨트롤이라 읽기만 하는 정적 Table이 아니라 DataGrid로 선다. Grid·Table 패턴(행·열 위치)은 표 컴포넌트가 들어올 때 함께 붙는다.
 
 UIA에는 toggle switch, radio group, alert 전용 control type이 없다. 이 구분은 상태와 pattern 동작으로 표현한다. `AutomationId`는 element id에서 `kind:owner` 형식으로 만든다. Automation client, focus, frame 간 identity가 이 id에 의존하므로 application은 안정적이고 고유한 element id를 사용해야 한다.
 

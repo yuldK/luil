@@ -51,6 +51,24 @@ namespace luil {
         alert,
         static_text,
         pane,
+        // 펼치고 접는 계층이다. 항목(tree_item)의 선택 container다 (목록과 같은 Selection 패턴).
+        tree,
+        // 계층의 줄 하나다. 깊이와 펼침은 `access_info::expanded`가 알린다.
+        tree_item,
+        // 행과 열이 있는 표다. 행(data_item)의 선택 container다.
+        //  - UIA에서는 DataGrid다. 읽기만 하는 정적 표(Table)와 갈리는 자리는 행을 고를 수 있는가다 —
+        //    luil의 표는 행을 고르는 컨트롤이라 DataGrid 하나로 둔다.
+        table,
+        // 표의 행 하나다.
+        data_item,
+        // 머리글 줄(`header`) 안의 칸 하나다 (표의 열 머리글).
+        header_item,
+        // 도구 단추들의 줄이다.
+        tool_bar,
+        // 구분선이다. 이름이 없고 실행할 것도 없다 — 보조 기술이 묶음의 경계를 읽는 자리다.
+        separator,
+        // 창 아래의 상태 줄이다.
+        status_bar,
     };
 
     // 범위 값이다 (막대·스크롤 막대·진행률).
@@ -177,7 +195,7 @@ namespace luil {
     // 제곱이 된다.
     [[nodiscard]] const ui_element* access_sibling(const ui_tree& tree, const ui_element_id& id, bool forward);
 
-    // 이 역할이 선택 항목들을 담는 container인가 (목록·탭 막대·라디오 묶음).
+    // 이 역할이 선택 항목들을 담는 container인가 (목록·탭 막대·라디오 묶음·계층·표).
     // SelectionItem(`selected`)의 짝인 Selection 패턴이 서는 자리다 — 항목의
     // container 질의(`access_selection_container_of`)와 패턴 광고가 같은 술어를
     // 쓴다 (accessibility-action-design.md의 `ISelectionProvider`).
