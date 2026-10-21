@@ -277,6 +277,28 @@ namespace demo {
                     return;
                 }
 
+                if (message.get<image_pick_intent>() != nullptr)
+                {
+                    luil::file_dialog_request request {};
+                    request.id = ++file_dialog_revision_;
+                    request.title = u8"이미지 파일";
+                    luil::file_filter filter { u8"이미지 파일" };
+                    for (const auto extension : image_extensions)
+                        filter.extensions.emplace_back(extension);
+                    request.filters.push_back(std::move(filter));
+                    file_dialog_ = std::move(request);
+                    return;
+                }
+                if (const auto* result { message.get<luil::file_dialog_result>() }; result != nullptr)
+                {
+                    if (file_dialog_.has_value() && file_dialog_->id == result->id)
+                        file_dialog_.reset();
+                    if (result->status == luil::file_dialog_status::chosen && result->paths.empty() == false)
+                        static_cast<void>(images_.handle(luil::app_message { image_open_intent { result->paths.front() } }));
+                    if (result->status == luil::file_dialog_status::failed)
+                        static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { result->error, luil::toast_severity::error } }));
+                    return;
+                }
                 if (message.get<close_intent>() != nullptr)
                 {
                     // 종료 저장이다.
@@ -470,6 +492,7 @@ namespace demo {
                 // 창 tree를 만든 뒤라야 메뉴 버튼의 자리를 안다.
                 for (luil::win32::ui_popup& popup : windows_.make_popups())
                     frame->popups.push_back(std::move(popup));
+                frame->file_dialog = file_dialog_;
                 return frame;
             }
 
@@ -678,6 +701,8 @@ namespace demo {
             popups_page popups_ {};
             windows_page windows_ {};
             images_page images_ {};
+            std::optional<luil::file_dialog_request> file_dialog_ {};
+            std::uint64_t file_dialog_revision_ { 0 };
             network_page network_ {};
             zoom_page zoom_ {};
             theme_page theme_ {};
@@ -812,51 +837,6 @@ namespace demo {
             // 나머지 키는 앱 단축키를 위해 policy hook으로 전달할 수 있다.
         };
 
-        // 그림 하나를 고르는 파일 dialog다.
-        //
-        // **UI thread 전용이라 앱 메시지로는 열 수 없다.** modal dialog는 창을
-        // 가진 thread에서만 뜨므로, 이미지 페이지의 클릭은 `app_ui_command`를
-        // 내고(라이브러리는 그 번호를 해석하지 않는다) 여기서 열린다. 고른 경로는
-        // 여느 앱 메시지처럼 logic으로 가서 그쪽이 디코딩한다.
-        //  - 고르지 않고 닫으면 빈 값이다. 취소는 오류가 아니라 아무 일도 없는 것이다.
-        [[nodiscard]] std::optional<std::u8string> pick_image_file()
-        {
-            Microsoft::WRL::ComPtr<IFileOpenDialog> dialog {};
-            if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))))
-                return std::nullopt;
-
-            // 필터는 화면의 안내 줄·드롭 수락과 **같은 목록**에서 만든다
-            // (images_page.h). 확장자는 전부 ASCII라 글자를 그대로 넓힌다.
-            std::wstring pattern {};
-            for (const std::u8string_view extension : image_extensions)
-            {
-                if (pattern.empty() == false)
-                    pattern += L';';
-                pattern += L"*.";
-                for (const char8_t character : extension)
-                    pattern += static_cast<wchar_t>(character);
-            }
-            const COMDLG_FILTERSPEC filter { L"이미지 파일", pattern.c_str() };
-            if (FAILED(dialog->SetFileTypes(1, &filter)))
-                return std::nullopt;
-
-            // 소유자를 주지 않으면 dialog가 창 뒤로 숨을 수 있다.
-            // 이 함수는 UI thread에서만 불리므로 이 thread의 활성 창이 곧 우리
-            // 창이다 — 공개 API는 HWND를 드러내지 않는다.
-            if (dialog->Show(GetActiveWindow()) != S_OK)
-                return std::nullopt;
-
-            Microsoft::WRL::ComPtr<IShellItem> item {};
-            if (FAILED(dialog->GetResult(&item)))
-                return std::nullopt;
-            PWSTR selected { nullptr };
-            if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &selected)))
-                return std::nullopt;
-            const std::u8string path { std::filesystem::path { selected }.u8string() };
-            CoTaskMemFree(selected);
-            return path;
-        }
-
         class demo_delegate final : public luil::win32::window_delegate
         {
         public:
@@ -873,14 +853,9 @@ namespace demo {
                 driver_.bind_host(host);
             }
 
-            // 파일 dialog는 UI thread의 일이고, 고른 경로는 여느 앱 메시지다 —
-            // 드롭이 내는 것과 **같은 메시지**라 logic 쪽에 갈래가 늘지 않는다.
-            void execute_app_ui_command(luil::win32::app_host& host, const luil::app_ui_command& command) override
+            [[nodiscard]] luil::app_message make_file_dialog_message(const luil::file_dialog_result& result) override
             {
-                if (command.command != app_command_open_image)
-                    return;
-                if (const std::optional<std::u8string> path { pick_image_file() }; path.has_value())
-                    host.post_app_message(luil::app_message { image_open_intent { *path } });
+                return luil::app_message { result };
             }
 
             [[nodiscard]] luil::app_message make_window_metrics_message(const float width, const float height, const float scale) override

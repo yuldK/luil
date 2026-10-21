@@ -80,11 +80,8 @@ namespace demo {
     // 여러 줄 메모 칸이다 (`text_area_element`).
     constexpr luil::ui_element_kind kind_memo_input { luil::application_element_kind(38) };
 
-    // --- UI thread에서 실행해야 하는 앱 명령 ---
-    // 라이브러리는 이 번호를 해석하지 않고 셸의 delegate에 그대로 넘긴다
-    // (`app_ui_command` — ui_events.h). 파일 dialog가 그 자리다: 창을 가진
-    // thread에서만 modal로 뜨므로 logic을 거치는 앱 메시지로는 낼 수 없다.
-    inline constexpr std::uint32_t app_command_open_image { 1 };
+    // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
+    struct image_pick_intent {};
 
     // 앱이 정의하는 포인터 모양이다 (세로 목록의 순서 바꾸기).
     constexpr luil::ui_cursor cursor_reorder { luil::application_cursor(0) };

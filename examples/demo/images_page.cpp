@@ -242,7 +242,7 @@ namespace demo {
         // `app_ui_command`로 낸다. 라이브러리는 이 번호를 해석하지 않고 셸의
         // delegate에 그대로 넘긴다 (ui_events.h).
         zone->set_action(luil::ui_trigger::left_click,
-            [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::app_ui_command { app_command_open_image } }; });
+            [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::app_message { image_pick_intent {} } }; });
 
         // 밖에서 온 끌기 중 **읽을 수 있는 것만** 받는다.
         // 거절한 파일은 강조도 뜨지 않고 셸의 물러섬(토스트)이 받는다 —
