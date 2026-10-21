@@ -12,6 +12,7 @@ namespace mobile_demo {
     namespace {
         constexpr float tab_bar_height { 36.0f };
         constexpr float overflow_menu_width { 200.0f };
+        constexpr float tab_menu_width { 180.0f };
         constexpr std::u8string_view bar_owner { u8"demo-tabs" };
     } // namespace
 
@@ -33,16 +34,34 @@ namespace mobile_demo {
         }
         if (const auto* const close { message.get<tab_close_intent>() }; close != nullptr)
         {
-            for (auto position = tabs_.begin(); position != tabs_.end(); ++position)
+            close_tab(close->key);
+            return true;
+        }
+        if (const auto* const menu { message.get<tab_menu_intent>() }; menu != nullptr)
+        {
+            menu_key_ = menu->key;
+            menu_x_ = menu->x;
+            menu_y_ = menu->y;
+            overflow_open_ = false;
+            return true;
+        }
+        if (const auto* const command { message.get<tab_menu_command_intent>() }; command != nullptr)
+        {
+            const std::u8string key { std::move(menu_key_) };
+            menu_key_.clear();
+            if (command->command == u8"close")
+                close_tab(key);
+            if (command->command == u8"close-others")
             {
-                if (position->key != close->key)
-                    continue;
-                const bool was_selected { selected_ == position->key };
-                position = tabs_.erase(position);
-                if (was_selected && tabs_.empty() == false)
-                    selected_ = (position != tabs_.end() ? position : tabs_.end() - 1)->key;
-                break;
+                std::erase_if(tabs_, [&key](const tab_entry& tab) { return tab.key != key; });
+                if (tabs_.empty() == false)
+                    selected_ = key;
             }
+            return true;
+        }
+        if (message.get<tab_menu_close_intent>() != nullptr)
+        {
+            menu_key_.clear();
             return true;
         }
         if (const auto* const reorder { message.get<tab_reorder_intent>() }; reorder != nullptr)
@@ -103,6 +122,8 @@ namespace mobile_demo {
         bar_config.select = [](const std::u8string& key) { return luil::make_app_action(tab_select_intent { key }); };
         bar_config.close = [](const std::u8string& key) { return luil::make_app_action(tab_close_intent { key }); };
         bar_config.reorder = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(tab_reorder_intent { moved, target }); };
+        // 길게 누른 자리에 컨텍스트 메뉴를 띄운다 (마우스로는 우클릭이다).
+        bar_config.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(tab_menu_intent { key, context.x, context.y }); };
         bar_config.overflow = luil::make_message_action(tab_overflow_intent { true });
         bar_config.overflow_tooltip = u8"넘친 탭 보기";
         // 넘친 레인을 손가락으로 옆으로 쓸어 넘긴다. 휠과 같은 메시지다.
@@ -114,7 +135,8 @@ namespace mobile_demo {
         config.padding = luil::edge_insets::all(page_padding);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs" }, config) };
         column->add(make_label(luil::ui_element_id { kind_text, u8"tabs-hint" }, u8"옆으로 쓸어 넘기고 끌어서 옮긴다.", note_text_size, luil::label_color_role::dim), note_line_height);
-        column->add(make_label(luil::ui_element_id { kind_text, u8"tabs-hint-2" }, u8"넘치면 오른쪽 끝에 넘침 메뉴가 나온다.", note_text_size, luil::label_color_role::dim), note_line_height);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"tabs-hint-2" }, u8"길게 누르면 탭 메뉴가, 넘치면 오른쪽 끝에 넘침 메뉴가 나온다.", note_text_size, luil::label_color_role::dim),
+            note_line_height);
         column->add_gap(8.0f);
         column->add(std::move(bar), tab_bar_height);
         column->add_gap(16.0f);
@@ -137,8 +159,47 @@ namespace mobile_demo {
         return column;
     }
 
+    void tabs_page::close_tab(const std::u8string& key)
+    {
+        for (auto position = tabs_.begin(); position != tabs_.end(); ++position)
+        {
+            if (position->key != key)
+                continue;
+            const bool was_selected { selected_ == position->key };
+            position = tabs_.erase(position);
+            if (was_selected && tabs_.empty() == false)
+                selected_ = (position != tabs_.end() ? position : tabs_.end() - 1)->key;
+            break;
+        }
+    }
+
     std::vector<luil::ui_popup> tabs_page::make_popups(const float scale) const
     {
+        if (menu_key_.empty() == false)
+        {
+            // 길게 누른 탭의 메뉴다. 누른 자리에 왼쪽 위를 맞춘다.
+            luil::menu_config menu {};
+            menu.owner = u8"tab-menu";
+            menu.items.push_back({ u8"close", u8"닫기", luil::codicons::icon_close });
+            luil::menu_item_config others {};
+            others.key = u8"close-others";
+            others.label = u8"다른 탭 닫기";
+            others.enabled = tabs_.size() > 1;
+            menu.items.push_back(std::move(others));
+            menu.select = [](const std::u8string& command) { return luil::make_app_action(tab_menu_command_intent { command }); };
+
+            luil::ui_popup popup {};
+            popup.id = u8"tab-menu";
+            popup.width = tab_menu_width;
+            popup.height = luil::menu_element::height_for(menu);
+            popup.x = menu_x_ / scale;
+            popup.y = menu_y_ / scale;
+            auto root { std::make_unique<luil::menu_element>(std::move(menu)) };
+            popup.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
+            popup.dismiss = [](luil::popup_dismiss_reason) { return luil::make_app_action(tab_menu_close_intent {}); };
+            return { std::move(popup) };
+        }
+
         if (overflow_open_ == false || bar_ == nullptr || tabs_.empty())
             return {};
 

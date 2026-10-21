@@ -47,6 +47,9 @@ namespace luil {
     using tab_message_factory = std::function<input_action(const std::u8string& key)>;
     // 끌어 놓은 탭을 대상 탭 자리로 옮기자는 메시지다.
     using tab_reorder_message_factory = std::function<input_action(const std::u8string& moved, const std::u8string& target)>;
+    // 탭에 컨텍스트 메뉴를 열자는 메시지다.
+    //  - 문맥의 좌표(물리 픽셀, 창 좌표)는 메뉴를 띄울 자리이고, 수식 키는 그 순간의 것이다.
+    using tab_context_message_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
 
     struct tab_bar_config
     {
@@ -64,6 +67,10 @@ namespace luil {
         tab_message_factory select {};
         tab_message_factory close {};
         tab_reorder_message_factory reorder {};
+        // 탭을 우클릭하면 낸다. 터치의 길게 누르기도 우클릭이라 이 하나로 함께 선다.
+        //  - 탭의 닫기 버튼 위에서 눌러도 그 탭의 메뉴다 — 버튼은 탭의 일부로 보인다.
+        //  - 메뉴의 내용과 열림 상태는 앱 몫이다 (통상 menu_element를 popup으로 띄운다).
+        tab_context_message_factory context_menu {};
         // 탭이 넘칠 때 오른쪽 끝에 두는 넘침 메뉴 버튼의 액션이다
         // (통상 탭 목록 popup을 열자는 메시지 — 내용은 menu_element로 조립한다).
         // 없으면 버튼을 만들지 않고, 있어도 넘치지 않으면 보이지 않는다.
@@ -85,7 +92,7 @@ namespace luil {
     inline constexpr float tab_overflow_width { 28.0f };
 
     // 가로로 탭을 늘어놓는 막대다.
-    // 선택·닫기·순서는 앱 상태이고 element는 메시지만 낸다.
+    // 선택·닫기·순서·컨텍스트 메뉴는 앱 상태이고 element는 메시지만 낸다.
     // 넘치는 탭은 가로 스크롤로 가리고(잘린 탭은 눌리지도 않는다), 내용 영역은 앱 몫이다.
     //
     // 조립은 **가로 stack 두 칸**이다: 흘리는 띠(`strip_element`) + 넘침 버튼.

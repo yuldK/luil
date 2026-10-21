@@ -28,6 +28,13 @@ namespace {
         std::u8string target {};
     };
 
+    struct menu_intent
+    {
+        std::u8string key {};
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
     [[nodiscard]] luil::tab_bar_config make_config(std::size_t count)
     {
         luil::tab_bar_config config {};
@@ -112,6 +119,47 @@ TEST_CASE("A tab click and its close button produce the app messages", "[ui][tab
     const auto* const close_message { single_message<close_intent>(closed) };
     REQUIRE(close_message != nullptr);
     REQUIRE(close_message->key == u8"tab-b");
+}
+
+TEST_CASE("A tab right click asks for its context menu at the pointer", "[ui][tab]")
+{
+    luil::tab_bar_config config { make_config(2) };
+    config.items[1].closable = true;
+    config.close = [](const std::u8string& key) { return luil::input_action { luil::app_message { close_intent { key } } }; };
+    config.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::input_action { luil::app_message { menu_intent { key, context.x, context.y } } }; };
+    const luil::tab_bar_element bar { std::move(config) };
+
+    // 닫기 버튼이 없는 탭에도 선다.
+    const luil::ui_element& first { tab_at(bar, 0) };
+    const luil::ui_action* const first_menu { first.action(luil::ui_trigger::right_click) };
+    REQUIRE(first_menu != nullptr);
+    auto opened { (*first_menu)({ first.id(), 40.0f, 12.0f }) };
+    const auto* const message { single_message<menu_intent>(opened) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->key == u8"tab-a");
+    REQUIRE(message->x == 40.0f);
+    REQUIRE(message->y == 12.0f);
+
+    // 닫기 버튼 위의 우클릭도 그 탭의 메뉴다 — 우클릭은 부모로 올라가지 않는다.
+    const luil::ui_element* const close { tab_at(bar, 1).children()[0].get() };
+    const luil::ui_action* const close_menu { close->action(luil::ui_trigger::right_click) };
+    REQUIRE(close_menu != nullptr);
+    auto from_close { (*close_menu)({ close->id(), 300.0f, 10.0f }) };
+    const auto* const close_message { single_message<menu_intent>(from_close) };
+    REQUIRE(close_message != nullptr);
+    REQUIRE(close_message->key == u8"tab-b");
+}
+
+TEST_CASE("A tab bar without a context menu factory registers no right click", "[ui][tab]")
+{
+    luil::tab_bar_config config { make_config(1) };
+    config.items[0].closable = true;
+    config.close = [](const std::u8string& key) { return luil::input_action { luil::app_message { close_intent { key } } }; };
+    const luil::tab_bar_element bar { std::move(config) };
+
+    const luil::ui_element& tab { tab_at(bar, 0) };
+    REQUIRE(tab.action(luil::ui_trigger::right_click) == nullptr);
+    REQUIRE(tab.children()[0]->action(luil::ui_trigger::right_click) == nullptr);
 }
 
 TEST_CASE("A tab drag carries its key and dropping on another tab asks for a reorder", "[ui][tab]")

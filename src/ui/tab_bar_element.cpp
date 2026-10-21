@@ -30,8 +30,8 @@ namespace luil {
         class tab_element final : public ui_element
         {
         public:
-            tab_element(
-                tab_item item, const bool selected, const tab_message_factory& select, const tab_message_factory& close, const tab_reorder_message_factory& reorder, const ui_element_id& container)
+            tab_element(tab_item item, const bool selected, const tab_message_factory& select, const tab_message_factory& close, const tab_reorder_message_factory& reorder,
+                const tab_context_message_factory& context_menu, const ui_element_id& container)
                 : ui_element { ui_element_id { ui_element_kind::tab, item.key } }
                 , item_ { std::move(item) }
                 , selected_ { selected }
@@ -42,6 +42,15 @@ namespace luil {
                 {
                     const std::u8string key { item_.key };
                     set_action(ui_trigger::left_click, [key, &select](const ui_action_context&) -> std::vector<input_action> { return { select(key) }; });
+                }
+
+                // 닫기 버튼도 같은 동작을 받으므로 그 버튼을 만들기 전에 한 번 짓는다.
+                ui_action open_menu {};
+                if (context_menu != nullptr)
+                {
+                    const std::u8string key { item_.key };
+                    open_menu = [key, &context_menu](const ui_action_context& context) -> std::vector<input_action> { return { context_menu(key, context) }; };
+                    set_action(ui_trigger::right_click, open_menu);
                 }
 
                 if (reorder != nullptr)
@@ -88,6 +97,10 @@ namespace luil {
                 button->set_tab_stop(false);
                 button->set_cursor(ui_cursor::hand);
                 button->set_action(ui_trigger::left_click, [key, &close](const ui_action_context&) -> std::vector<input_action> { return { close(key) }; });
+                // 우클릭은 hit된 element의 것만 나가고 부모로 올라가지 않는다.
+                // 버튼 위의 우클릭도 그 탭의 메뉴가 되도록 같은 동작을 단다.
+                if (open_menu != nullptr)
+                    button->set_action(ui_trigger::right_click, std::move(open_menu));
                 close_ = button.get();
                 add_child(std::move(button));
             }
@@ -277,7 +290,7 @@ namespace luil {
         for (tab_item& item : config_.items)
         {
             const bool selected { item.key == config_.selected };
-            lane->add(std::make_unique<tab_element>(std::move(item), selected, config_.select, config_.close, config_.reorder, id()), config_.tab_width);
+            lane->add(std::make_unique<tab_element>(std::move(item), selected, config_.select, config_.close, config_.reorder, config_.context_menu, id()), config_.tab_width);
         }
 
         // 흘리기·잘라내기·다듬기는 띠의 몫이다.
