@@ -53,6 +53,19 @@ namespace luil {
     using virtual_list_message_factory = std::function<input_action(const std::u8string& key)>;
     // 누른 행의 키와 그 누름의 문맥이다 (수식 키 — Ctrl+클릭 더하기, Shift+클릭 범위 고르기).
     using virtual_list_pick_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
+    // 커서를 옮긴 걸음과 그때 눌린 수식 키의 뜻이다 (`virtual_list_config::move_with`, `selection_move`).
+    struct virtual_list_move_context
+    {
+        // 커서를 옮긴 키의 걸음이다. 걸음 없이 옮긴 것(행 누름·글자 탐색)은 비어 있다.
+        std::optional<value_step> step {};
+        // Shift다. 기준점을 둔 채 기준점부터 커서까지를 고른다.
+        bool extend { false };
+        // Ctrl이다. 고른 것을 두고 커서만 옮긴다. `extend`와 함께면 그 구간을 지금 고른 것에 더한다.
+        bool keep_selection { false };
+
+        [[nodiscard]] bool operator==(const virtual_list_move_context&) const = default;
+    };
+    using virtual_list_move_with_factory = std::function<input_action(const std::u8string& key, const virtual_list_move_context& context)>;
     // 항목에 컨텍스트 메뉴를 열자는 메시지다.
     // `tab_context_message_factory`와 같은 모양이다 — 문맥의 좌표(물리 픽셀, 창 좌표)는 메뉴를 띄울 자리이고,
     // 수식 키는 그 순간의 것이다.
@@ -123,6 +136,17 @@ namespace luil {
         // 고칠 수 없고, 옮길 길이 없는 화살표는 아무 일도 하지 않는 키가 된다
         // ("없는 것은 두지 않는다").
         virtual_list_message_factory move {};
+        // `move`에 걸음과 수식 키의 뜻을 더한 짝이다 (keyboard-selection-design.md). 있으면 `move` 대신 쓴다.
+        //
+        // 다중 선택 목록의 키보드 범위 선택이 여기서 선다. `move`는 키만 받아 Shift+↓와 ↓를 가를 수 없다.
+        //  - 화살표·Page·Home/End는 그 걸음과 Shift(`extend`)·Ctrl(`keep_selection`)을 싣는다. Ctrl+화살표도 이 목록의
+        //    키가 된다 (선택을 두고 커서만 옮기기). `move`만 든 목록에서 그 키는 지금처럼 앱 단축키로 흐른다.
+        //  - 글자 탐색은 걸음 없이 그냥 옮긴 것이다 (`step` 비어 있음, 수식 키 거짓).
+        //  - 행 누름은 고르기를 `pick`·`select`가 이미 정했으므로 커서만 옮긴다 (`keep_selection` 참).
+        //  - **제자리여도 낸다.** 커서는 그대로여도 고른 것이 바뀌는 걸음(첫 항목에서 Home을 누르면 선택이 그 하나로
+        //    접힌다)이 있어서다. 커서만 옮기는 Ctrl 걸음만 제자리에서 내지 않는다.
+        //  - 받은 앱은 `selection_move`(ui/selection_model.h)로 다음 선택을 계산하면 된다.
+        virtual_list_move_with_factory move_with {};
         // 커서가 선 항목을 **실행**하자는 메시지다 (Space·Enter).
         //
         // 커서와 선택을 갈라 둔 값이 여기서 나온다. 화살표로 훑고 Enter로 고르는
@@ -158,6 +182,14 @@ namespace luil {
         //  - `pick`도 없으면 그 명령은 할 수 없다.
         virtual_list_message_factory add_to_selection {};
         virtual_list_message_factory remove_from_selection {};
+        // Ctrl+Space다. 커서 항목을 고른 것에 더하거나 뺀다 (`multiple_selection`일 때만). 그 키를 받는다.
+        //  - 커서가 비활성 항목이면 키는 목록이 삼키고 아무것도 내지 않는다.
+        virtual_list_message_factory toggle_at_cursor {};
+        // Ctrl+A다. 모든 항목을 고르자는 메시지다 (`multiple_selection`일 때만).
+        //  - **목록의 키다.** 초점이 행 안의 부품에 있어도 그 부품이 쓰지 않으면 목록까지 올라온다
+        //    (key-propagation-design.md). 초점이 행 안의 텍스트 칸이면 칸의 전체 선택이 먼저다.
+        //  - 비어 있으면 Ctrl+A는 지금처럼 앱 정책으로 흐른다.
+        std::function<input_action()> select_all {};
         // 행을 끌어 옮기는 drag & drop이다. 누른 행의 키와 끌기가 시작되는 순간의 문맥(수식 키)으로 payload를 짓는다.
         //  - 고른 항목들을 함께 끌려면 `dragged_owners`에 그 키들을 담는다 (기본 ghost가 `+N`을 보인다). 함께 끌리는 행은
         //    제자리에 흐리게 남는다.
@@ -303,8 +335,10 @@ namespace luil {
 
     private:
         // 커서를 `index`로 옮기고 그 행을 창 안으로 들이는 메시지들이다.
-        // 옮길 자리가 없거나 `move`가 없으면 빈 목록이다.
-        [[nodiscard]] std::vector<input_action> move_cursor(std::size_t index) const;
+        // 옮길 자리가 없거나 `move`·`move_with`가 둘 다 없으면 빈 목록이다.
+        [[nodiscard]] std::vector<input_action> move_cursor(std::size_t index, const virtual_list_move_context& context) const;
+        // 커서를 옮기는 메시지가 하나라도 있는가 (`move` 또는 `move_with`).
+        [[nodiscard]] bool moves_cursor() const noexcept;
         // 한 번의 Page가 건너뛰는 행 수다.
         [[nodiscard]] int page_rows(value_step step) const noexcept;
         // 창에 걸치는 행과 커서 행을 실제로 짓는다 (`arrange`가 한 번만 부른다).
