@@ -24,6 +24,8 @@
 | 값 조절 | `slider_element` | [ui/slider_element.h](../include/luil/ui/slider_element.h) | [설명](value-step-design.md) |
 | 세로·가로 배치 | `stack_element` | [ui/stack_element.h](../include/luil/ui/stack_element.h) | [설명](stack-expressiveness-design.md) |
 | 줄바꿈 배치 | `wrap_element` | [ui/wrap_element.h](../include/luil/ui/wrap_element.h) | [설명](stack-expressiveness-design.md) |
+| 행·열 칸 배치 (폼) | `grid_element` | [ui/grid_element.h](../include/luil/ui/grid_element.h) | [설명](stack-expressiveness-design.md#grid) |
+| 겹침 배치 | `layer_element` | [ui/layer_element.h](../include/luil/ui/layer_element.h) | [설명](stack-expressiveness-design.md#layer) |
 | 가로 스크롤 배치 | `strip_element` | [ui/strip_element.h](../include/luil/ui/strip_element.h) | [설명](stack-expressiveness-design.md) |
 | 최상위 화면 | `root_element` | [ui/root_element.h](../include/luil/ui/root_element.h) | [설명](tree-arrange-design.md) |
 | 배경과 자식 컨테이너 | `panel_element` | [ui/panel_element.h](../include/luil/ui/panel_element.h) | [설명](tree-arrange-design.md) |

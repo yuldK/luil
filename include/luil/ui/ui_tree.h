@@ -270,5 +270,7 @@ namespace luil {
     //    tree는 지금처럼 생성자를 그대로 쓴다. 조립 방식이 실제로 다르고,
     //    빠뜨린 배치는 어느 쪽이든 `unarranged()`가 드러낸다.
     //  - `surface`는 그릴 수 있는 표면 전체다 (`arrange_context::surface`). 비우면 자리 밖을 모른다.
-    [[nodiscard]] ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, float scale, const rect_f& surface = {});
+    //  - `metrics`는 내용 크기를 재는 스타일 치수다 (`arrange_context::metrics`). 비우면 내장 스타일이다. 스타일을
+    //    바꾼 앱이 그리기와 같은 치수를 준다.
+    [[nodiscard]] ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, float scale, const rect_f& surface = {}, const ui_metrics* metrics = nullptr);
 } // namespace luil

@@ -8,6 +8,7 @@
 #include "include/core/SkRect.h"
 
 #include <cmath>
+#include <optional>
 #include <utility>
 
 namespace luil {
@@ -45,5 +46,12 @@ namespace luil {
         if (config_.description.empty())
             return {};
         return { .role = access_role::image, .name = config_.description };
+    }
+
+    std::optional<size_f> glyph_element::preferred_size(const measure_context& context, const float available_width) const
+    {
+        static_cast<void>(context);
+        static_cast<void>(available_width);
+        return size_f { config_.font_size, config_.font_size };
     }
 } // namespace luil

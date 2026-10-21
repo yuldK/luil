@@ -557,6 +557,13 @@ namespace luil {
         return (*pressed)(ui_action_context { id(), box.x + box.width / 2.0f, box.y + box.height / 2.0f, false });
     }
 
+    std::optional<size_f> ui_element::preferred_size(const measure_context& context, const float available_width) const
+    {
+        static_cast<void>(context);
+        static_cast<void>(available_width);
+        return std::nullopt;
+    }
+
     const access_item_model* ui_element::access_items() const noexcept
     {
         return nullptr;

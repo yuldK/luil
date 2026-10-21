@@ -36,6 +36,15 @@ namespace luil {
         [[nodiscard]] bool contains(float point_x, float point_y) const noexcept;
     };
 
+    // 폭과 높이다 (단위는 쓰는 자리가 정한다 — `preferred_size`는 논리 픽셀이다).
+    struct size_f
+    {
+        float width { 0.0f };
+        float height { 0.0f };
+
+        [[nodiscard]] bool operator==(const size_f&) const noexcept = default;
+    };
+
     // `outer`에서 `inner`를 뺀 띠들이다 (위·아래·왼쪽·오른쪽 차례, 넓이가 없는 띠는 뺀다). 왼쪽·오른쪽 띠는 `inner`의
     // 높이만큼이라 띠끼리 겹치지 않는다. `inner`가 `outer` 밖으로 나간 몫은 잘라서 본다.
     [[nodiscard]] std::vector<rect_f> bands_outside(const rect_f& outer, const rect_f& inner);
@@ -505,6 +514,25 @@ namespace luil {
         std::function<std::optional<std::vector<input_action>>(std::u8string_view query, bool first)> on_search {};
     };
 
+    // 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
+    //  - 배율은 글을 물리 크기로 재고 논리 픽셀로 되돌리는 데 쓴다. 글꼴의 힌팅이 크기마다 달라 논리 크기로 잰
+    //    폭은 그린 폭과 어긋날 수 있다.
+    //  - 측정기와 치수는 배치 문맥에서 온다 (`arrange_context::measure`). 비어 있으면 기본값이다.
+    struct measure_context
+    {
+        float scale { 1.0f };
+        const text_measurer* measurer { nullptr };
+        const ui_metrics* metrics { nullptr };
+
+        // 이 문맥이 쓸 측정기다 (비었으면 `default_text_measurer`).
+        [[nodiscard]] const text_measurer& measure_text() const;
+        // 이 문맥이 쓸 스타일 치수다 (비었으면 내장 스타일).
+        [[nodiscard]] const ui_metrics& style_metrics() const noexcept;
+        // `font_size`(논리 픽셀) 글 한 줄의 폭이다 (논리 픽셀). 그리기와 같은 물리 크기(`scaled_font_size`)로 재서
+        // 배율로 나눈다.
+        [[nodiscard]] float text_width(std::u8string_view text, float font_size) const;
+    };
+
     // 배치 문맥이다.
     // slot은 부모가 준 영역이고 scroll_offset은 논리 픽셀이다.
     struct arrange_context
@@ -525,8 +553,21 @@ namespace luil {
         //  - Test는 고정 폭 가짜를 넣는다. Core test의 글꼴 관리자는 비어 있어 기본 측정기는 폭 0을 잰다.
         const text_measurer* measurer { nullptr };
 
+        // 내용 크기를 재는 element가 글자 크기를 읽는 스타일 치수다 (`ui_style::metrics`).
+        //  - 비어 있으면 내장 스타일의 치수다 (`default_ui_style`). 그리기의 `draw_context::metrics`와 같은 값을
+        //    넘겨야 잰 폭과 그린 글이 맞는다 — 스타일을 바꾼 앱은 `make_arranged_tree`에 같은 치수를 준다.
+        //  - 포인터만 들고 배치가 끝나면 잊는다 (`measurer`와 같다).
+        const ui_metrics* metrics { nullptr };
+
         // 이 배치가 쓸 측정기다.
         [[nodiscard]] const text_measurer& measure_text() const;
+        // 이 배치로 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
+        //  - 머리글에 둔다. 묻기만 하는 컨테이너가 기본 측정기(글꼴 등록부)까지 링크로 끌어오지 않는다
+        //    (`text_measurer.cpp`의 경계).
+        [[nodiscard]] measure_context measure() const noexcept
+        {
+            return { scale, measurer, metrics };
+        }
 
         // 같은 배율·scroll_offset으로 자식에게 줄 문맥이다.
         // 자리만 새로 준다 — 자식 문맥을 손으로 지으면 뒤의 값을 빠뜨리기 쉽고,
@@ -535,7 +576,7 @@ namespace luil {
         //  - 문맥에 새 값이 생겨도 모든 부모가 저절로 잇는다.
         [[nodiscard]] arrange_context for_child(const rect_f& child_slot) const noexcept
         {
-            return { child_slot, scale, scroll_offset, surface, measurer };
+            return { child_slot, scale, scroll_offset, surface, measurer, metrics };
         }
 
         // 표면 전체를 아는가다 (넓이가 있는 `surface`).
@@ -907,6 +948,16 @@ namespace luil {
 
         // 부모가 준 slot 안에서 자기 bounds와 자식 배치를 확정한다.
         virtual void arrange(const arrange_context& context) = 0;
+        // 내용이 원하는 크기다 (논리 픽셀). 기본은 없음(nullopt) — "나는 크기를 말하지 않는다".
+        //
+        // 배치는 여전히 부모가 정한다. 이것은 **묻는 컨테이너만** 부르는 선택적 질문이다 (`stack_element::add_fit`,
+        // `grid_element`의 맞춤 열). 고정 길이로 담는 지금까지의 tree는 이것을 부르지 않아 배치가 바뀌지 않는다.
+        //  - `available_width`는 줄 수가 폭에 달린 내용(여러 줄 글)이 높이를 정하는 폭이다. 제한이 없으면
+        //    무한대다. 넓이는 그보다 좁게 답해도 되고, 한 줄 내용은 무시한다.
+        //  - 글이 든 element(label·글자 버튼·체크·글리프)와 배치 컨테이너가 답한다. 답이 없는 자식은 맞춤
+        //    컨테이너에서 0이다.
+        //  - arrange 전에 불린다. 배치 결과(bounds)를 읽지 않고 config만으로 답한다.
+        [[nodiscard]] virtual std::optional<size_f> preferred_size(const measure_context& context, float available_width) const;
         // 자신과 자식을 그린다.
         // hover·눌림 강조는 interaction으로 판정한다.
         virtual void draw(draw_context& context, const interaction_snapshot& interaction) const = 0;

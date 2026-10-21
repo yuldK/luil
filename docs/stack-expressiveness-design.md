@@ -1,14 +1,32 @@
-# Stack, strip, wrap 배치
+# Stack, grid, layer, strip, wrap 배치
 
-`luil`의 배치는 측정 단계 없이 부모가 자식의 slot을 정하는 모델이다. `stack_element`는 한 축의 고정 및 유연 배치, `strip_element`는 가로 스크롤 viewport, `wrap_element`는 같은 크기 항목의 줄바꿈을 맡는다.
+`luil`의 배치는 부모가 자식의 slot을 정하는 모델이다. 전면적인 측정 단계는 없고, 내용 크기가 필요한 컨테이너만 자식에게 원하는 크기를 묻는다(`preferred_size`). `stack_element`는 한 축의 고정·유연·맞춤 배치, `grid_element`는 행과 열의 칸, `layer_element`는 한 자리에 겹치기, `strip_element`는 가로 스크롤 viewport, `wrap_element`는 같은 크기 항목의 줄바꿈을 맡는다.
 
-공개 API는 [stack_element.h](../include/luil/ui/stack_element.h), [strip_element.h](../include/luil/ui/strip_element.h), [wrap_element.h](../include/luil/ui/wrap_element.h), [layout_metrics.h](../include/luil/ui/layout_metrics.h)에 있다.
+공개 API는 [stack_element.h](../include/luil/ui/stack_element.h), [grid_element.h](../include/luil/ui/grid_element.h), [layer_element.h](../include/luil/ui/layer_element.h), [strip_element.h](../include/luil/ui/strip_element.h), [wrap_element.h](../include/luil/ui/wrap_element.h), [layout_metrics.h](../include/luil/ui/layout_metrics.h)에 있다.
 
 ## 공통 단위와 원칙
 
 Config의 길이, 간격, padding, scroll offset은 논리 픽셀이다. `arrange_context::scale`을 적용해 물리 bounds를 만든다.
 
-부모는 자식의 원하는 크기를 묻지 않는다. 자식을 담는 코드가 길이를 명시하고, 내용 전체 크기가 필요한 스크롤 컨테이너는 config로 값을 받는다.
+부모는 기본적으로 자식의 원하는 크기를 묻지 않는다. 자식을 담는 코드가 길이를 명시하고, 내용 전체 크기가 필요한 스크롤 컨테이너는 config로 값을 받는다. 묻는 것은 맞춤 항목(`add_fit`, `grid_track::fit`, 정렬된 칸·겹침 자식)뿐이다. 고정·유연 길이만 쓰는 tree는 묻지 않으므로 배치 결과가 바뀌지 않는다.
+
+## 내용 크기
+
+`ui_element::preferred_size(measure_context, available_width)`는 내용이 원하는 크기를 논리 픽셀로 답한다. 기본은 답하지 않음(`nullopt`)이다.
+
+| element | 답 |
+| --- | --- |
+| `label_element` | 글 한 줄 폭(올림) + 양옆 `padding`, `height_for` |
+| `text_button_element` | 아이콘 + 글 + 양옆 `text_button_padding`(12), 최소 `text_button_minimum_width`(64), 높이 `text_button_height`(28). link는 여백·최소 폭이 없다 |
+| `check_element` | 안쪽 여백 + 표시 부분 + 간격 + 라벨 + 안쪽 여백, `height_for` |
+| `glyph_element` | 글리프 크기의 정사각형 |
+| `stack_element`·`grid_element`·`layer_element` | 자식의 원하는 크기를 쌓거나 겹친 크기 |
+
+- 측정은 그리기와 **같은 글자 크기**로 한다. `measure_context::text_width`가 `scaled_font_size`(시스템 글자 크기 설정 포함)와 배율로 물리 크기를 재서 논리로 되돌린다. 글꼴의 힌팅이 크기마다 달라 논리 크기로 재면 그린 폭과 어긋난다.
+- 버튼·체크 라벨처럼 스타일의 본문 글자로 그리는 element는 `measure_context::style_metrics()`로 잰다. 비어 있으면 내장 스타일이다. 스타일을 바꾼 앱은 `make_arranged_tree(..., &style.metrics)`로 그리기와 같은 치수를 넘긴다(`arrange_context::metrics`).
+- 측정기는 배치 문맥의 것이다(`arrange_context::measurer`, 비면 UI 글꼴의 기본 측정기). Test는 고정 폭 가짜를 넣는다.
+- `available_width`는 줄 수가 폭에 달린 내용이 높이를 정하는 폭이다. 한 줄 내용은 무시한다. 여러 줄 label은 Codex 트랙의 label 정렬·말줄임(X0) 위에 더한다.
+- arrange 전에 config만으로 답한다. 배치 결과(bounds)를 읽지 않는다.
 
 보이지 않는 자식도 배치 공간을 차지한다. `visible(false)`는 그리기와 hit test를 끄는 상태이며 layout collapse가 아니다. 조건부로 공간까지 제거하려면 그 frame의 tree에서 element를 빼거나 길이를 다르게 구성한다.
 
@@ -38,6 +56,8 @@ luil::stack_config config {
 | `weight` | 남은 주축 공간의 배분 비율 |
 | `cross_length` | 지정한 교차축 길이, `0` 이하면 전체 사용 |
 | `minimum` | 유연 항목이 받을 최소 주축 길이 |
+| `maximum` | 유연 항목이 넘지 않는 주축 길이, `0`이면 상한 없음 |
+| `fit` | 주축 길이를 자식이 원하는 크기로 잰다 (`add_fit`) |
 
 `weight > 0`이면 유연 항목이고 `length`는 사용하지 않는다. `weight <= 0`이면 고정 항목이다. `minimum`은 유연 항목에만 적용된다.
 
@@ -61,7 +81,15 @@ Stack은 내부 주축 길이에서 고정 길이와 모든 spacing을 뺀 값�
 
 유연 항목의 계산 길이가 `minimum`보다 작으면 minimum으로 올린다. 다른 유연 항목의 몫을 다시 줄이지 않으므로 전체가 stack bounds를 넘을 수 있다. Minimum은 overflow를 허용하는 하한이다.
 
-상한과 재분배는 제공하지 않는다. 남는 공간의 소유 관계가 필요한 배치는 더 작은 stack을 조합해 표현한다.
+상한(`maximum`)에 걸린 유연 항목은 상한에 서고, 남긴 자리는 아직 걸리지 않은 유연 항목이 비율대로 다시 나눈다. 한 걸음마다 그 걸음 처음의 몫으로 견주어 넘친 것을 모두 걸고, 새로 걸리는 것이 없을 때까지 되풀이한다. 모두 걸렸으면 남은 자리는 주축 정렬이 둔다. 상한은 하한과 달리 넘침을 만들지 않으므로 그 자리의 임자를 정할 수 있다. 하한은 상한 뒤에 밀어 하한이 이긴다.
+
+맞춤 항목(`fit`)은 고정 항목처럼 계산한다. 가로 stack은 자식이 제한 없는 폭에서 원하는 폭을, 세로 stack은 stack의 교차 폭에서 원하는 높이를 주축 길이로 쓴다. 답하지 않는 자식은 0이다. 교차축 길이를 정하지 않았고 교차축 정렬이 `stretch`가 아니면 교차축도 원하는 크기에 선다.
+
+```cpp
+row->add_fit(std::move(save));            // "저장" · "Save" · "Speichern" 어느 것이든 글이 잘리지 않는다
+row->add_flexible_gap();
+row->add(std::move(preview), luil::stack_item { .weight = 1.0f, .minimum = 120.0f, .maximum = 480.0f });
+```
 
 ## 주축 정렬
 
@@ -88,6 +116,41 @@ Stack은 내부 주축 길이에서 고정 길이와 모든 spacing을 뺀 값�
 `add_gap(length)`와 `add_flexible_gap(weight)`은 자식 없는 entry를 추가한다. Tree element가 아니므로 draw와 hit test 비용 없이 공간만 차지한다.
 
 Gap도 spacing 계산에 포함된다. 두 자식 사이에 고정 gap을 넣으면 `자식 - spacing - gap - spacing - 자식` 구조가 된다. 정확한 한 칸 간격만 필요하면 stack의 `spacing`을 사용한다.
+
+## Grid
+
+`grid_element`는 자식을 행과 열의 칸에 놓는다. 줄 규칙은 `grid_track`이다.
+
+| 규칙 | 길이 |
+| --- | --- |
+| `grid_track::fixed(length)` | 그 값 |
+| `grid_track::fit(minimum)` | 그 줄 하나에만 놓인 자식이 원하는 크기 중 가장 큰 것 (하한 이상) |
+| `grid_track::flexible(weight, minimum)` | 고정·맞춤 줄과 간격을 뺀 나머지를 비율로 (하한 이상, 넘침 허용) |
+
+- 열 폭을 먼저 정하고 행 높이를 나중에 정한다. 맞춤 행은 자식이 **자기 칸 폭에서** 원하는 높이다.
+- 여러 줄에 걸친 자식(`row_span`·`column_span`)은 맞춤 줄을 넓히지 않고 줄들이 정해진 자리를 받는다. 넓힐 몫을 어느 줄에 줄지가 규칙마다 달라 읽는 사람이 예측할 수 없기 때문이다.
+- 선언보다 뒤의 칸에 놓은 자식이 있으면 모자란 줄은 맞춤 줄이다.
+- 칸 안의 자리는 `layout_alignment`다. `stretch`(기본)는 칸을 채우고, 나머지는 원하는 크기(칸보다 크지 않게)에 선다.
+- 원하는 크기는 유연 줄도 잰 크기로 본 합이다.
+
+폼은 grid의 한 사용법이다.
+
+```cpp
+luil::grid_config config { .columns = { luil::grid_track::fit(), luil::grid_track::flexible() }, .column_spacing = 8.0f, .row_spacing = 6.0f };
+auto form { std::make_unique<luil::grid_element>(id, config) };
+form->add(std::move(name_label), { .row = 0, .column = 0, .vertical = luil::layout_alignment::center });
+form->add(std::move(name_input), { .row = 0, .column = 1 });
+```
+
+라벨 열은 가장 긴 라벨 폭이고, 언어가 바뀌어도 손으로 고칠 폭이 없다.
+
+## Layer
+
+`layer_element`는 자식들을 같은 자리에 겹친다(그림 위 배지, 빈 목록 위 안내 글, 떠 있는 버튼). 자식마다 `layer_item`으로 정렬·길이·여백을 따로 정한다.
+
+- 담은 순서가 그리는 순서이고, 뒤에 담은 것이 위에 그려지고 먼저 눌린다.
+- `stretch`가 아니고 길이를 정하지 않은 축은 원하는 크기에 선다(안쪽 영역보다 크지 않게). 답이 없으면 채운다.
+- 원하는 크기는 자식들의 원하는 크기(정한 길이와 여백 포함) 중 가장 큰 폭과 높이다.
 
 ## 가로 스크롤 strip
 
@@ -127,6 +190,10 @@ Wrap에는 항목별 크기, weight, 정렬, padding이 없다. 가변 크기나
 ## 반드시 유지할 불변식
 
 - 부모가 모든 자식 slot을 결정한다.
+- 원하는 크기는 맞춤 항목을 가진 컨테이너만 묻는다. 고정·유연 길이만 쓰는 tree의 배치는 바뀌지 않는다.
+- 측정은 그리기와 같은 글자 크기(`scaled_font_size`)와 같은 스타일 치수로 한다.
+- 상한에 걸린 유연 항목이 남긴 자리는 걸리지 않은 유연 항목이 나누고, 모두 걸렸으면 주축 정렬이 둔다.
+- Grid의 맞춤 줄은 그 줄 하나에만 놓인 자식만 잰다.
 - 항목 길이 설정은 논리 픽셀이다.
 - 유연 minimum은 다른 항목을 재분배하지 않고 overflow를 만든다.
 - `visible(false)`는 layout 공간을 유지한다.
@@ -136,4 +203,4 @@ Wrap에는 항목별 크기, weight, 정렬, padding이 없다. 가변 크기나
 
 ## 검증 지침
 
-[stack_element_tests.cpp](../tests/stack_element_tests.cpp)는 고정 및 유연 길이, minimum, 정렬, 교차축, gap, visibility를 검증한다. [strip_element_tests.cpp](../tests/strip_element_tests.cpp)와 [wrap_element_tests.cpp](../tests/wrap_element_tests.cpp)는 clamp, reveal, 열 수, 높이, overflow를 확인한다.
+[stack_element_tests.cpp](../tests/stack_element_tests.cpp)는 고정 및 유연 길이, minimum, 정렬, 교차축, gap, visibility를 검증한다. [content_layout_tests.cpp](../tests/content_layout_tests.cpp)는 label·버튼·체크·글리프의 원하는 크기(배율과 스타일 글자 크기 포함), stack의 맞춤 항목과 상한·재분배, 맞춤과 상한이 없는 stack의 기존 결과, 폼 grid의 라벨 열·칸 정렬·걸친 자식·모자란 줄, layer의 자리와 위쪽 hit을 고정 폭 측정기로 확인한다. [strip_element_tests.cpp](../tests/strip_element_tests.cpp)와 [wrap_element_tests.cpp](../tests/wrap_element_tests.cpp)는 clamp, reveal, 열 수, 높이, overflow를 확인한다.

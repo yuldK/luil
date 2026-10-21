@@ -142,6 +142,7 @@ void set_key_handler(key_handler handler);
 - 표(`table_element`)는 X0을 기다리지 않고 들어갔다. 칸 정렬은 표 자체의 `column_align`으로 그린다. X0이 들어오면 Claude가 표에 가로 막대(5.3절)와 가운데 말줄임(5.4절)을 붙인다. X0의 `text_align`과 이름이 겹치지 않게 표는 `column_align`을 쓴다.
 - `access_info`에 `mixed`가 생겼다. Codex의 메뉴 체크 항목(X3)이 Toggle을 낼 때 `toggle_state_of`(uia_provider.cpp)를 같이 쓰면 된다.
 - C4(셀 커서·편집·트리 열·체크 열·열 재배치·열 메뉴)와 C5(모델로 답하는 접근성)가 들어갔다. `ui_element::access_items`가 `access_item_model`을 내면 UIA의 ItemContainer·VirtualizedItem·상한 없는 선택 읽기·PositionInSet이 그 모델로 답한다. Codex가 창에 걸치는 것만 짓는 container를 새로 만들면 이 hook을 재정의한다. Grid·Table 패턴은 뒤로 미뤘다.
+- C6(내용 크기 배치)이 들어갔다. `ui_element::preferred_size`·`measure_context`, stack의 `add_fit`·`maximum`, `grid_element`, `layer_element`다. label·글자 버튼·체크·글리프가 원하는 크기를 답한다. Codex가 새로 만드는 글 있는 element도 `preferred_size`를 재정의하면 맞춤 배치에 들어간다. 여러 줄 label은 X0의 label 변경 뒤에 Claude가 더한다.
 
 ### 5.3 Codex → Claude: 가로 스크롤 막대 (X0)
 
