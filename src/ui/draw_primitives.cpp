@@ -333,6 +333,16 @@ namespace luil {
         }
     }
 
+    float scroll_edge_strength(const float distance) noexcept
+    {
+        // 반 픽셀 안쪽은 끝에 붙은 것으로 본다.
+        if (distance <= 0.5f)
+            return 0.0f;
+        const float linear { std::min(distance / scroll_edge_fade_distance, 1.0f) };
+        // smoothstep이라 오르기 시작할 때도, 다 짙어질 때도 꺾이지 않는다.
+        return linear * linear * (3.0f - 2.0f * linear);
+    }
+
     void draw_scroll_edges(draw_context& context, const rect_f& box, const float scroll_offset, const float maximum_scroll, const scroll_edges& edges)
     {
         if (box.width <= 0.0f || box.height <= 0.0f)
@@ -342,11 +352,14 @@ namespace luil {
         {
             // 그림자의 깊이다 (물리 픽셀). 창이 얕으면 절반까지다 — 위·아래가 겹치지 않는다.
             const float reach { std::min(10.0f * scale, box.height / 2.0f) };
-            // 반 픽셀 안쪽은 끝에 붙은 것으로 본다. 맨 위·맨 아래에 선 창은 깨끗하다.
-            if (scroll_offset > 0.5f)
-                draw_downward_shadow(context.canvas, { box.x, box.y, box.width, reach }, context.palette.content_shadow, 0.18f);
-            if (scroll_offset + 0.5f < maximum_scroll)
-                draw_upward_shadow(context.canvas, { box.x, box.y + box.height - reach, box.width, reach }, context.palette.content_shadow, 0.14f);
+            // 짙기는 끝에서 떨어진 거리로 정한다(`scroll_edge_strength`). 흘리기 시작한 순간 툭 켜지지 않고, 내용이 경계 밑으로
+            // 들어가는 만큼 서서히 선다. 맨 위·맨 아래에 선 창은 거리가 0이라 깨끗하다.
+            const float top { scroll_edge_strength(scroll_offset) };
+            const float bottom { scroll_edge_strength(maximum_scroll - scroll_offset) };
+            if (top > 0.0f)
+                draw_downward_shadow(context.canvas, { box.x, box.y, box.width, reach }, context.palette.content_shadow, 0.18f * top);
+            if (bottom > 0.0f)
+                draw_upward_shadow(context.canvas, { box.x, box.y + box.height - reach, box.width, reach }, context.palette.content_shadow, 0.14f * bottom);
         }
         if (edges.top_rule == false && edges.bottom_rule == false)
             return;

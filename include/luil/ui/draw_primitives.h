@@ -137,9 +137,18 @@ namespace luil {
     //  - 바깥에 그릴 자리가 있을 때만 뜻이 있다. 표면(창·popup)의 가장자리에 붙은 상자에서는 잘린다.
     void draw_surface_shadow(draw_context& context, const rect_f& box, float radius, float strength);
 
+    // 가장자리 그림자가 다 짙어지기까지 흘리는 거리다 (논리 픽셀).
+    inline constexpr float scroll_edge_fade_distance { 24.0f };
+
+    // 끝에서 `distance`(논리 픽셀)만큼 떨어진 가장자리 그림자의 짙기다 [0, 1].
+    // 반 픽셀 안쪽은 0, `scroll_edge_fade_distance`부터 1이고 그 사이는 smoothstep으로 오른다.
+    // 흘리기 시작한 순간 그림자가 툭 켜지지 않게 한다. 그림자를 손으로 그리는 앱(가로 띠 등)도 같은 곡선을 쓴다.
+    [[nodiscard]] float scroll_edge_strength(float distance) noexcept;
+
     // 흘리는 창의 위·아래 가장자리를 그린다 (`scroll_edges`의 규칙).
     // 흘린 내용이 위로 지나갔으면(`scroll_offset > 0`) 위에, 아래에 더 있으면
-    // (`scroll_offset < maximum_scroll`) 아래에 그림자를 드리운다. 구분선은 설정이 켠 쪽에 늘 긋는다.
+    // (`scroll_offset < maximum_scroll`) 아래에 그림자를 드리운다. 짙기는 끝에서 떨어진 거리를 따라
+    // `scroll_edge_strength`로 오른다. 구분선은 설정이 켠 쪽에 늘 긋는다.
     // 값은 전부 논리 픽셀이고 `box`는 물리 픽셀이다 (element의 bounds).
     //  - `scroll_area_element`·`list_element`가 부르고, 자기 창을 손으로 지은 앱도 같은 함수로
     //    같은 그림을 얻는다.
