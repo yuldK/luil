@@ -233,6 +233,9 @@ namespace luil {
         std::function<input_action(const std::u8string& key, bool expanded)> set_expanded {};
         // 행 앞에 들여쓰기와 삼각형 자리를 두는가. 계층을 다른 자리에 그리는 컴포넌트(표의 트리 열)가 끈다.
         bool tree_gutter { true };
+        // ←·→를 계층 키로 쓰는가. ←·→에 다른 뜻을 먼저 주는 컴포넌트(셀 커서가 있는 표)가 끄고, 계층 키가 필요한
+        // 자리에서 `step_tree`를 직접 부른다.
+        bool tree_keys { true };
     };
 
     // 모델 안에서 키가 커서를 옮길 자리다.
@@ -339,6 +342,9 @@ namespace luil {
         [[nodiscard]] const std::optional<std::size_t>& cursor() const noexcept;
         // 이 목록이 읽는 모델이다 (`shared_items`가 있으면 그것, 없으면 `items`).
         [[nodiscard]] const std::vector<virtual_list_item>& model() const noexcept;
+        // 계층 목록의 ←(`forward` 거짓)·→가 할 일이다 (`set_expanded`). 갈 곳이 없으면 nullopt다.
+        //  - 목록 자신의 ←·→가 이것이다. `tree_keys`를 끈 컴포넌트가 자기 규칙 안에서 같은 일을 시킬 때 부른다.
+        [[nodiscard]] std::optional<std::vector<input_action>> step_tree(bool forward) const;
 
         // 목록 자신은 hit의 답이 되지 않는다 — 답은 언제나 행이거나 없음이다.
         //
@@ -359,8 +365,6 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> move_cursor(std::size_t index, const virtual_list_move_context& context) const;
         // 커서를 옮기는 메시지가 하나라도 있는가 (`move` 또는 `move_with`).
         [[nodiscard]] bool moves_cursor() const noexcept;
-        // 계층 목록의 ←(`forward` 거짓)·→다. 갈 곳이 없으면 nullopt라 키가 위로 흐른다.
-        [[nodiscard]] std::optional<std::vector<input_action>> tree_step(bool forward) const;
         // 한 번의 Page가 건너뛰는 행 수다.
         [[nodiscard]] int page_rows(value_step step) const noexcept;
         // 창에 걸치는 행과 커서 행을 실제로 짓는다 (`arrange`가 한 번만 부른다).

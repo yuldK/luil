@@ -125,6 +125,8 @@ namespace luil {
         table_row,
         // 표의 트리 열에 선 펼침 단추다. owner는 표와 행 키를 함께 담는다.
         table_expander,
+        // 표에서 편집 중인 칸의 자리다. 편집기를 담고 초점을 가둔다. owner는 표와 행 키를 함께 담는다.
+        table_editor,
         // 가상 목록 행 앞에 선 펼침 단추다. owner는 항목 키다.
         virtual_list_expander,
         // 앱이 정의하는 kind는 이 값부터다.

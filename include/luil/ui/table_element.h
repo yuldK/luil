@@ -9,6 +9,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace luil {
@@ -45,6 +46,17 @@ namespace luil {
         bool resizable { true };
         // 거짓이면 머리글을 눌러도 정렬을 청하지 않는다.
         bool sortable { true };
+        // 참이면 F2로 이 열의 칸을 편집할 수 있다 (`table_config::begin_edit`).
+        bool editable { false };
+    };
+
+    // 칸 하나다. 행 키와 열 키다.
+    struct table_cell_ref
+    {
+        std::u8string row {};
+        std::u8string column {};
+
+        [[nodiscard]] bool operator==(const table_cell_ref&) const = default;
     };
 
     // 칸에 보일 글이다. 칸을 따로 짓지 않은 열(`build_cell`이 nullptr을 돌려준 열)은 표가 이 글을 한 줄로 그린다.
@@ -55,6 +67,9 @@ namespace luil {
     //  - tree를 짓는 동안 불린다 (`virtual_row_builder`와 같은 규약). 앱 상태를 바꾸지 않는 순수한 함수여야 한다.
     using table_cell_builder = std::function<std::unique_ptr<ui_element>(const virtual_list_item& row, std::size_t index, const table_column& column, bool selected)>;
     using table_column_message_factory = std::function<input_action(const std::u8string& column)>;
+    using table_cell_message_factory = std::function<input_action(const table_cell_ref& cell)>;
+    // 편집 중인 칸의 편집기를 앱이 짓는다 (보통 `text_input_element`). 자리표는 앱이 정하고 표 안에서 유일해야 한다.
+    using table_editor_builder = std::function<std::unique_ptr<ui_element>(const virtual_list_item& row, std::size_t index, const table_column& column)>;
     // 열 폭 변화량이다 (논리 픽셀, + = 넓어진다). 최소 폭 아래로 가는 몫은 표가 미리 잘라 낸다.
     using table_resize_message_factory = std::function<input_action(const std::u8string& column, float delta)>;
 
@@ -102,6 +117,29 @@ namespace luil {
         std::u8string check_column {};
         std::function<check_state(const virtual_list_item& row, std::size_t index)> check_state_of {};
         std::function<input_action(const std::u8string& row)> toggle_check {};
+
+        // 셀 커서가 선 열이다 (열 키, 앱 상태). 행은 본문의 커서(`rows.cursor`)다.
+        //  - 커서 칸에 초점 테가 선다 (초점이 키보드로 왔을 때만, 행의 커서 표시와 같은 규칙).
+        //  - 비어 있으면 F2는 첫 편집 가능 열을 편집한다.
+        std::u8string cell_column {};
+        // ←·→가 셀 커서를 옆 열로 옮기자는 메시지다. **있으면 셀 탐색이 켜진다.**
+        //  - ←·→는 가로 스크롤 대신 열 이동이 되고, 옮긴 칸이 창 밖이면 `scroll_horizontal`로 그 칸을 들인다.
+        //  - 셀 커서가 트리 열에 서 있으면 계층 키(접기·부모로·펴기·첫 자식으로)가 먼저다. 갈 곳이 없을 때만 열 이동이다.
+        //  - ↑↓·Page·Home·End는 지금처럼 행의 것이다.
+        table_column_message_factory move_column {};
+        // 편집 중인 칸이다 (앱 상태). 그 칸 자리에 `build_editor`의 편집기가 서고 초점이 그 안에 갇힌다.
+        //  - 편집기가 서면 초점이 편집기로 옮겨 가고, 편집이 끝나 편집기가 사라지면 본문으로 돌아온다
+        //    (가둠의 진입·복귀, focus-entry-design.md). 앱은 초점을 다루지 않는다.
+        //  - 편집 중의 Enter는 `commit_edit`, Esc는 `cancel_edit`다. IME 조합 중의 Enter·Esc는 조합의 것이다.
+        //  - 편집하는 행은 본문의 커서 행이어야 한다 — 커서 행은 창 밖에서도 지어져 흘려도 편집기가 남는다.
+        //  - 편집 중에 다른 행을 누르면 그 행의 고르기 메시지가 온다. 편집을 확정할지 버릴지는 그것을 받은 앱이 정한다.
+        std::optional<table_cell_ref> editing {};
+        // F2가 커서 칸의 편집을 시작하자는 메시지다. 편집할 수 있는 열(`table_column::editable`)에서만 낸다.
+        //  - 두 번 누름으로도 시작하려면 앱이 `rows.double_click`에서 같은 메시지를 낸다.
+        table_cell_message_factory begin_edit {};
+        table_cell_message_factory commit_edit {};
+        table_cell_message_factory cancel_edit {};
+        table_editor_builder build_editor {};
     };
 
     // 열 하나가 차지하는 가로 자리다 (논리 픽셀, 가로 스크롤 전).
@@ -153,11 +191,21 @@ namespace luil {
         [[nodiscard]] const std::vector<table_column_span>& spans() const noexcept;
         // 행 모델에서 옮겨 둔 펼침 메시지다 (`rows.set_expanded`). 트리 열의 삼각형이 쓴다.
         [[nodiscard]] const std::function<input_action(const std::u8string& key, bool expanded)>& expand_message() const noexcept;
+        // 본문 커서 행의 키다 (본문이 다듬은 커서, 배치 뒤에 유효하다). 셀 커서가 이 행에 선다.
+        [[nodiscard]] std::u8string_view cursor_key() const noexcept;
 
     private:
         table_config config_ {};
         std::function<input_action(const std::u8string& key, bool expanded)> expand_ {};
         std::vector<table_column_span> spans_ {};
+
+        // 키 처리기의 갈래들이다 (`set_key_handler`).
+        [[nodiscard]] std::optional<std::vector<input_action>> handle_key(const key_pressed_event& event) const;
+        [[nodiscard]] std::optional<std::vector<input_action>> move_cell(bool forward) const;
+        [[nodiscard]] std::optional<std::vector<input_action>> start_edit() const;
+        // 그 열을 창 안으로 들이는 가로 스크롤 변화량이다 (이미 보이면 0).
+        [[nodiscard]] float reveal_delta(std::size_t column) const noexcept;
+        [[nodiscard]] std::optional<std::size_t> column_index(std::u8string_view key) const noexcept;
         ui_element* header_ { nullptr };
         virtual_list_element* body_ { nullptr };
         float content_width_ { 0.0f };

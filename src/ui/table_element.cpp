@@ -46,6 +46,50 @@ namespace luil {
             static_cast<void>(draw_text_within(canvas, text, left, cell.y + centered_text_baseline(font, cell.height), available, font, paint));
         }
 
+        // 편집 중인 칸의 자리다. 앱의 편집기를 담고 초점을 그 안에 가둔다.
+        //
+        // 초점을 옮기는 길은 가둠의 진입·복귀다 (focus-entry-design.md). 편집기가 서면 controller가 본문에 있던
+        // 초점을 거두고 편집기에 세우며, 편집이 끝나 이 자리가 사라지면 본문으로 돌려보낸다 — 앱은 초점을 다루지
+        // 않는다. 같은 길을 dialog가 쓴다.
+        //  - Enter·Esc는 이 자리의 키다. 편집기(텍스트 칸)가 쓰지 않는 Enter가 여기로 올라와 확정이 되고, Esc는 취소다.
+        //    가둠의 Esc(`dismiss_action`)보다 키 처리기가 앞이라 Esc가 두 번 나지 않는다.
+        class table_editor_host_element final : public ui_element
+        {
+        public:
+            table_editor_host_element(ui_element_id id, std::unique_ptr<ui_element> editor, table_cell_ref cell, const table_cell_message_factory& commit,
+                const table_cell_message_factory& cancel, ui_element_id body)
+                : ui_element { std::move(id) }
+            {
+                set_focus_trap(true);
+                set_focus_entry(editor->id());
+                set_focus_return(std::move(body));
+                add_child(std::move(editor));
+                if (cancel != nullptr)
+                    set_dismiss_action([cell, cancel](const ui_action_context&) -> std::vector<input_action> { return { cancel(cell) }; });
+                set_key_handler([cell, commit, cancel](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
+                    if (event.shortcut_modifier_down() || event.shift)
+                        return std::nullopt;
+                    if (event.key == key_code::enter && commit != nullptr)
+                        return std::vector<input_action> { commit(cell) };
+                    if (event.key == key_code::escape && cancel != nullptr)
+                        return std::vector<input_action> { cancel(cell) };
+                    return std::nullopt;
+                });
+            }
+
+            void arrange(const arrange_context& context) override
+            {
+                set_bounds(context.slot);
+                for (const std::unique_ptr<ui_element>& child : children())
+                    child->arrange(context.for_child(context.slot));
+            }
+
+            void draw(draw_context& context, const interaction_snapshot& interaction) const override
+            {
+                draw_children(context, interaction);
+            }
+        };
+
         // 체크 칸이 차지하는 폭이다 (논리 픽셀). 체크박스는 자기 bounds 안 4 들여서 그린다.
         constexpr float check_slot_width { check_box_size + 8.0f };
 
@@ -60,6 +104,7 @@ namespace luil {
             table_row_element(const table_element& table, const virtual_list_item& item, const std::size_t index, const bool selected)
                 : ui_element { ui_element_id { ui_element_kind::table_row, part_owner(table.config().owner, item.key) } }
                 , table_ { &table }
+                , key_ { item.key }
                 , depth_ { item.depth }
             {
                 set_clip_children(true);
@@ -99,6 +144,15 @@ namespace luil {
                         leads_[column] += check_slot_width;
                         add_part(std::move(box), column, part_kind::check);
                     }
+                    // 편집 중인 칸이면 그 자리에 편집기가 선다. 글과 앱의 칸은 그리지 않는다.
+                    if (config.editing.has_value() && config.editing->row == item.key && config.editing->column == info.key && config.build_editor != nullptr)
+                        if (std::unique_ptr<ui_element> editor { config.build_editor(item, index, info) }; editor != nullptr)
+                        {
+                            add_part(std::make_unique<table_editor_host_element>(ui_element_id { ui_element_kind::table_editor, part_owner(config.owner, item.key) }, std::move(editor),
+                                         *config.editing, config.commit_edit, config.cancel_edit, body),
+                                column, part_kind::cell);
+                            continue;
+                        }
                     std::unique_ptr<ui_element> cell { config.build_cell != nullptr ? config.build_cell(item, index, info, selected) : nullptr };
                     if (cell != nullptr)
                     {
@@ -170,6 +224,7 @@ namespace luil {
                 }
                 context.canvas.restore();
                 draw_children(context, interaction);
+                draw_cell_cursor(context, interaction, scale);
             }
 
             [[nodiscard]] access_info accessibility() const override
@@ -193,6 +248,28 @@ namespace luil {
                 part_kind kind { part_kind::cell };
             };
 
+            // 셀 커서의 테다. 행의 커서 표시와 같은 규칙으로 **본문에 키보드 초점이 있을 때만** 선다.
+            void draw_cell_cursor(draw_context& context, const interaction_snapshot& interaction, const float scale) const
+            {
+                const table_config& config { table_->config() };
+                if (config.cell_column.empty() || key_ != table_->cursor_key() || interaction.focus_visible == false)
+                    return;
+                if (interaction.focused != ui_element_id { ui_element_kind::virtual_list, config.owner })
+                    return;
+                const std::vector<table_column_span>& spans { table_->spans() };
+                for (std::size_t column = 0; column < config.columns.size() && column < spans.size(); ++column)
+                {
+                    if (config.columns[column].key != config.cell_column)
+                        continue;
+                    const rect_f cell { column_rect(bounds(), spans[column], table_->scroll_x(), scale) };
+                    SkPaint outline { solid_paint(context.palette.accent) };
+                    outline.setStyle(SkPaint::kStroke_Style);
+                    outline.setStrokeWidth(2.0f * scale);
+                    context.canvas.drawRect(SkRect::MakeXYWH(cell.x + scale, cell.y + scale, cell.width - 2.0f * scale, cell.height - 2.0f * scale), outline);
+                    return;
+                }
+            }
+
             void add_part(std::unique_ptr<ui_element> part, const std::size_t column, const part_kind kind)
             {
                 places_.push_back({ column, kind });
@@ -200,6 +277,7 @@ namespace luil {
             }
 
             const table_element* table_ { nullptr };
+            std::u8string key_ {};
             int depth_ { 0 };
             std::vector<std::u8string> texts_ {};
             // 열마다 글과 앱의 칸이 밀리는 거리다 (들여쓰기·삼각형·체크박스, 논리 픽셀).
@@ -461,6 +539,8 @@ namespace luil {
         rows.owner = config_.owner;
         // 계층은 트리 열 안에 그린다. 행 앞에 따로 자리를 두지 않는다.
         rows.tree_gutter = false;
+        // 셀 탐색이 켜지면 ←·→는 표가 먼저 해석한다. 셀 커서가 트리 열에 있을 때만 계층 키로 넘긴다 (`move_cell`).
+        rows.tree_keys = config_.move_column == nullptr;
         rows.role = access_role::table;
         rows.row_role = access_role::data_item;
         // 행 내용이 표의 열 자리를 읽는다. 표는 그 행들을 담은 본문을 소유하므로 행보다 먼저 사라지지 않는다.
@@ -472,30 +552,121 @@ namespace luil {
         add_child(std::move(body));
 
         const bool checks { config_.check_column.empty() == false && config_.toggle_check != nullptr };
-        if (config_.scroll_horizontal == nullptr && checks == false)
-            return;
-        // ←·→는 가로 스크롤이다. 본문 목록은 세로 키(계층 목록이면 갈 곳이 있는 ←·→까지)만 쓰므로 그것이 소비하지
-        // 않은 ←·→가 여기로 올라온다 (key-propagation-design.md).
+        if (config_.scroll_horizontal != nullptr || checks || config_.move_column != nullptr || config_.begin_edit != nullptr)
+            set_key_handler([this](const key_pressed_event& event) { return handle_key(event); });
+    }
+
+    std::optional<std::vector<input_action>> table_element::handle_key(const key_pressed_event& event) const
+    {
+        // 본문 목록이 쓰지 않은 키가 여기로 올라온다 (key-propagation-design.md).
+        //  - ←·→는 셀 탐색이 켜졌으면 열 이동, 아니면 가로 스크롤이다. 계층 목록의 ←·→는 본문이 먼저 쓴다.
         //  - Space는 커서 행의 체크다. 본문이 Space를 실행 키로 쓰면(`rows.activate`) 여기까지 오지 않는다.
-        set_key_handler([this](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
-            if (event.shortcut_modifier_down() || event.shift)
-                return std::nullopt;
-            if (event.key == key_code::space && config_.check_column.empty() == false && config_.toggle_check != nullptr)
-            {
-                const std::optional<std::size_t>& cursor { body_->cursor() };
-                if (cursor.has_value() == false || *cursor >= body_->model().size() || body_->model()[*cursor].enabled == false)
-                    return std::vector<input_action> {};
-                return std::vector<input_action> { config_.toggle_check(body_->model()[*cursor].key) };
-            }
-            if ((event.key != key_code::arrow_left && event.key != key_code::arrow_right) || config_.scroll_horizontal == nullptr)
-                return std::nullopt;
-            const float step { event.key == key_code::arrow_left ? -table_key_scroll_step : table_key_scroll_step };
-            const float delta { table_clamp_scroll(scroll_x_ + step, content_width_, viewport_width_) - scroll_x_ };
-            // 끝에 닿았으면 키만 삼킨다 — 끝에서 →를 누를 때마다 앱 단축키가 터지지 않게 한다.
-            if (delta == 0.0f)
+        //  - F2는 커서 칸의 편집이다.
+        if (event.shortcut_modifier_down() || event.shift)
+            return std::nullopt;
+        if (event.key == key_code::f2)
+            return start_edit();
+        if (event.key == key_code::space && config_.check_column.empty() == false && config_.toggle_check != nullptr)
+        {
+            const std::optional<std::size_t>& cursor { body_->cursor() };
+            if (cursor.has_value() == false || *cursor >= body_->model().size() || body_->model()[*cursor].enabled == false)
                 return std::vector<input_action> {};
-            return std::vector<input_action> { config_.scroll_horizontal(delta) };
-        });
+            return std::vector<input_action> { config_.toggle_check(body_->model()[*cursor].key) };
+        }
+        if (event.key != key_code::arrow_left && event.key != key_code::arrow_right)
+            return std::nullopt;
+        const bool forward { event.key == key_code::arrow_right };
+        if (config_.move_column != nullptr)
+            return move_cell(forward);
+        if (config_.scroll_horizontal == nullptr)
+            return std::nullopt;
+        const float step { forward ? table_key_scroll_step : -table_key_scroll_step };
+        const float delta { table_clamp_scroll(scroll_x_ + step, content_width_, viewport_width_) - scroll_x_ };
+        // 끝에 닿았으면 키만 삼킨다 — 끝에서 →를 누를 때마다 앱 단축키가 터지지 않게 한다.
+        if (delta == 0.0f)
+            return std::vector<input_action> {};
+        return std::vector<input_action> { config_.scroll_horizontal(delta) };
+    }
+
+    std::optional<std::vector<input_action>> table_element::move_cell(const bool forward) const
+    {
+        const std::optional<std::size_t> current { column_index(config_.cell_column) };
+        // 트리 열에 선 셀 커서는 계층 키가 먼저다 (탐색기와 같다). 갈 곳이 없을 때만 옆 열로 간다.
+        if (current.has_value() && config_.tree_column.empty() == false && config_.columns[*current].key == config_.tree_column)
+            if (std::optional<std::vector<input_action>> tree { body_->step_tree(forward) }; tree.has_value())
+                return tree;
+        if (config_.columns.empty())
+            return std::nullopt;
+        std::size_t target { 0 };
+        if (current.has_value())
+        {
+            // 끝에서는 키만 삼킨다 (가로 스크롤 키와 같은 규약).
+            if ((forward && *current + 1u >= config_.columns.size()) || (forward == false && *current == 0u))
+                return std::vector<input_action> {};
+            target = forward ? *current + 1u : *current - 1u;
+        }
+        std::vector<input_action> actions { config_.move_column(config_.columns[target].key) };
+        // 옮긴 칸이 창 밖이면 들인다. 셀 커서는 앱 상태라 다음 frame에 선다 — 들이는 것은 지금 알고 있는 열 자리로 한다.
+        if (const float delta { reveal_delta(target) }; delta != 0.0f && config_.scroll_horizontal != nullptr)
+            actions.push_back(config_.scroll_horizontal(delta));
+        return actions;
+    }
+
+    std::optional<std::vector<input_action>> table_element::start_edit() const
+    {
+        if (config_.begin_edit == nullptr)
+            return std::nullopt;
+        const std::optional<std::size_t>& cursor { body_->cursor() };
+        if (cursor.has_value() == false || *cursor >= body_->model().size() || body_->model()[*cursor].enabled == false)
+            return std::nullopt;
+        // 셀 커서가 있으면 그 열, 없으면 첫 편집 가능 열이다.
+        std::optional<std::size_t> column { column_index(config_.cell_column) };
+        if (column.has_value() == false)
+            for (std::size_t index = 0; index < config_.columns.size(); ++index)
+                if (config_.columns[index].editable)
+                {
+                    column = index;
+                    break;
+                }
+        if (column.has_value() == false || config_.columns[*column].editable == false)
+            return std::nullopt;
+        std::vector<input_action> actions { config_.begin_edit({ body_->model()[*cursor].key, config_.columns[*column].key }) };
+        if (const float delta { reveal_delta(*column) }; delta != 0.0f && config_.scroll_horizontal != nullptr)
+            actions.push_back(config_.scroll_horizontal(delta));
+        return actions;
+    }
+
+    float table_element::reveal_delta(const std::size_t column) const noexcept
+    {
+        if (column >= spans_.size())
+            return 0.0f;
+        const float left { spans_[column].begin };
+        const float right { left + spans_[column].width };
+        if (left < scroll_x_)
+            return left - scroll_x_;
+        if (right > scroll_x_ + viewport_width_)
+            // 창보다 넓은 열은 시작을 맞춘다.
+            return std::min(left, right - viewport_width_) - scroll_x_;
+        return 0.0f;
+    }
+
+    std::optional<std::size_t> table_element::column_index(const std::u8string_view key) const noexcept
+    {
+        if (key.empty())
+            return std::nullopt;
+        for (std::size_t index = 0; index < config_.columns.size(); ++index)
+            if (config_.columns[index].key == key)
+                return index;
+        return std::nullopt;
+    }
+
+    std::u8string_view table_element::cursor_key() const noexcept
+    {
+        // 앱이 커서를 비워 두면 본문이 고른 행이나 첫 행으로 정한다. 그 다듬은 값을 따른다.
+        const std::optional<std::size_t>& cursor { body_->cursor() };
+        if (cursor.has_value() == false || *cursor >= body_->model().size())
+            return {};
+        return body_->model()[*cursor].key;
     }
 
     float table_element::scroll_x() const noexcept
