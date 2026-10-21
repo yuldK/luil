@@ -112,11 +112,10 @@ TEST_CASE("A text input measures IME span queries against the queried document",
 {
     constexpr luil::ui_element_kind kind_query { luil::application_element_kind(0) };
     // element는 확정 글이 비어 있다 — 조합이 막 시작된 상태다.
-    luil::text_input_element input { { kind_query, u8"query" }, luil::text_input_view {}, luil::text_input_config {} };
-    input.arrange({ { 100.0f, 10.0f, 214.0f, 20.0f }, 1.0f });
-
-    // byte 하나가 10px인 가짜 측정기다.
+    // byte 하나가 10px인 가짜 측정기다. 배치에도 넣어야 shaping 구성이 native 배치 대신 이 측정기를 쓴다.
     const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; } };
+    luil::text_input_element input { { kind_query, u8"query" }, luil::text_input_view {}, luil::text_input_config {} };
+    input.arrange({ .slot = { 100.0f, 10.0f, 214.0f, 20.0f }, .scale = 1.0f, .measurer = &measure });
 
     // 조합 문서 "abcdef"의 [2, 4) 구간 — 확정 글(0바이트)이 아니라
     // 질의한 문서로 재야 한다. 왼쪽 여백 7px + 2글자 = x 127.
@@ -196,21 +195,21 @@ TEST_CASE("A text input makes the clear button only when the app gives an action
 TEST_CASE("A leading glyph moves where the pointer lands in the text", "[ui][dialog]")
 {
     // 그리기·offset_at·IME 질의가 같은 inner_width를 쓰는지를 hit test 쪽에서 본다.
-    // byte 하나가 10px인 가짜 측정기다.
+    // byte 하나가 10px인 가짜 측정기다. 배치에도 넣어 shaping 구성에서도 이 측정기로 잰다.
     constexpr luil::ui_element_kind kind_query { luil::application_element_kind(0) };
     const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; } };
     luil::text_input_view value {};
     value.text = u8"abcdef";
 
     luil::text_input_element plain { { kind_query, u8"query" }, value, luil::text_input_config {} };
-    plain.arrange({ { 100.0f, 10.0f, 214.0f, 20.0f }, 1.0f });
+    plain.arrange({ .slot = { 100.0f, 10.0f, 214.0f, 20.0f }, .scale = 1.0f, .measurer = &measure });
     // 글 시작은 x + 7이고 거기서 25px 오른쪽은 두 경계 사이의 한가운데다.
     REQUIRE(plain.offset_at(100.0f + 7.0f + 25.0f, measure) == 3u);
 
     luil::text_input_config searchable {};
     searchable.leading_glyph = luil::codicons::icon_search;
     luil::text_input_element searched { { kind_query, u8"query" }, std::move(value), std::move(searchable) };
-    searched.arrange({ { 100.0f, 10.0f, 214.0f, 20.0f }, 1.0f });
+    searched.arrange({ .slot = { 100.0f, 10.0f, 214.0f, 20.0f }, .scale = 1.0f, .measurer = &measure });
     // 글이 글리프 칸(14 + 5)만큼 오른쪽으로 밀렸으므로 같은 좌표가 앞쪽 글자를 가리킨다.
     REQUIRE(searched.offset_at(100.0f + 7.0f + 25.0f, measure) == 1u);
 }
@@ -226,7 +225,7 @@ TEST_CASE("Long UTF-8 input hit testing measures logarithmically many prefixes",
     }
     };
     luil::text_input_element input { { luil::application_element_kind(0), u8"long" }, value, {} };
-    input.arrange({ { 0.0f, 0.0f, 20000.0f, 24.0f }, 1.0f });
+    input.arrange({ .slot = { 0.0f, 0.0f, 20000.0f, 24.0f }, .scale = 1.0f, .measurer = &measure });
     REQUIRE(input.offset_at(7.0f + 6001.0f, measure) == 6000u);
     REQUIRE(calls < 32u);
 }
@@ -237,7 +236,7 @@ TEST_CASE("Text hit testing keeps zero-width marks with the chosen boundary", "[
     value.text = u8"ab~c";
     const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size() - (text.find(u8'~') != std::u8string_view::npos ? 1 : 0)); } };
     luil::text_input_element input { { luil::application_element_kind(0), u8"marks" }, value, {} };
-    input.arrange({ { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f });
+    input.arrange({ .slot = { 0.0f, 0.0f, 200.0f, 24.0f }, .scale = 1.0f, .measurer = &measure });
     REQUIRE(input.offset_at(7.0f + 1.6f, measure) == 3u);
 }
 
@@ -250,7 +249,7 @@ TEST_CASE("A password box draws a dot per character and maps positions back to t
     luil::text_input_config config {};
     config.secret = true;
     luil::text_input_element input { { luil::application_element_kind(0), u8"password" }, value, config };
-    input.arrange({ { 100.0f, 10.0f, 214.0f, 20.0f }, 1.0f });
+    input.arrange({ .slot = { 100.0f, 10.0f, 214.0f, 20.0f }, .scale = 1.0f, .measurer = &measure });
 
     // 점 경계는 0, 30, 60, 90px이다. 35px은 첫 점 뒤이고 원래 글에서는 'a' 뒤(1)다.
     REQUIRE(input.offset_at(100.0f + 7.0f + 35.0f, measure) == 1u);
@@ -282,7 +281,7 @@ TEST_CASE("Revealing a password box shows the text but keeps it a password box",
     config.secret = true;
     config.reveal = true;
     luil::text_input_element input { { luil::application_element_kind(0), u8"password" }, value, config };
-    input.arrange({ { 100.0f, 10.0f, 214.0f, 20.0f }, 1.0f });
+    input.arrange({ .slot = { 100.0f, 10.0f, 214.0f, 20.0f }, .scale = 1.0f, .measurer = &measure });
 
     // 그대로 그리므로 원래 글의 경계로 잰다 (0, 10, 40, 50px).
     REQUIRE(input.offset_at(100.0f + 7.0f + 35.0f, measure) == 4u);

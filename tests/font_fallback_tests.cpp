@@ -134,12 +134,16 @@ TEST_CASE("Measuring adds up the run widths", "[ui][fonts]")
     const sk_sp<SkTypeface> substitute { luil::configured_ui_typeface() };
     REQUIRE(substitute != nullptr);
 
+    // 대체 글꼴이 실제로 담은 글자여야 한다. Shaping 구성은 글자를 담지 못한 대체 글꼴로 바꾸지 않는다.
+    //  - UI 글꼴이 한글을 담는지는 시스템마다 다르다. 라틴 글자는 어느 UI 글꼴이나 담고 Codicons는 담지 않는다.
     const SkFont font { codicons, 12.0f };
-    constexpr std::u8string_view text { u8"한글" };
+    constexpr std::u8string_view text { u8"AB" };
+    REQUIRE(font.unicharToGlyph(U'A') == 0);
+    REQUIRE(SkFont { substitute, 12.0f }.unicharToGlyph(U'A') != 0);
 
     const float without_fallback { luil::measure_text(text, font) };
 
-    const scripted_fallback fallback { substitute.get(), { U'한', U'글' } };
+    const scripted_fallback fallback { substitute.get(), { U'A', U'B' } };
     const installed_fallback_scope scope { fallback };
     const float with_fallback { luil::measure_text(text, font) };
 

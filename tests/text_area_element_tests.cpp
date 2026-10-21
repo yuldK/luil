@@ -89,6 +89,8 @@ namespace {
     }
 
     // 200×100 칸 하나다 (배율 1). 줄 높이 18, 위 여백 5, 왼쪽 여백 7이라 n번 줄의 가운데는 y = 5 + 18n + 9다.
+    //  - 측정기 없이 배치한다. Shaping 구성은 native 배치로 재고, core test에는 글꼴이 없어 글 폭이 0이다.
+    //    글 안의 x를 묻는 시험은 고정 폭 측정기로 배치하는 `wrapped_tree`를 쓴다.
     [[nodiscard]] std::shared_ptr<const luil::ui_tree> memo_tree(luil::text_input_view view, luil::text_area_config config = {})
     {
         return std::make_shared<const luil::ui_tree>(
@@ -267,7 +269,7 @@ TEST_CASE("Line keys follow the screen lines of a wrapped text area", "[ui][text
 
 TEST_CASE("A text area maps a point to the line and the column under it", "[ui][text-area]")
 {
-    const auto tree { memo_tree(view_of(u8"abc\ndefgh\nij", 0)) };
+    const auto tree { wrapped_tree(view_of(u8"abc\ndefgh\nij", 0)) };
     const luil::text_area_element& memo { memo_of(*tree) };
     // 둘째 줄 "defgh"는 offset 4에서 시작한다. x = 7 + 22는 두 글자 뒤가 가깝다.
     REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(1), fixed_width) == 6u);
@@ -281,7 +283,7 @@ TEST_CASE("A text area maps a point to the line and the column under it", "[ui][
 TEST_CASE("A text area answers the caret span on its own line", "[ui][text-area]")
 {
     const std::u8string text { u8"abc\ndefgh\nij" };
-    const auto tree { memo_tree(view_of(text, 7)) };
+    const auto tree { wrapped_tree(view_of(text, 7)) };
     const auto span { memo_of(*tree).text_span_bounds({ text, 7, 7, 7 }, fixed_width) };
     REQUIRE(span.has_value());
     // offset 7은 둘째 줄의 세 글자 뒤다.
@@ -345,9 +347,9 @@ TEST_CASE("Arrow keys move the caret between lines of a text area", "[ui][text-a
     memo_policy policy {};
     luil::interaction_controller controller { &policy, fixed_config() };
     // caret은 둘째 줄 "defgh"의 세 글자 뒤(offset 7)다.
-    controller.set_tree(memo_tree(view_of(u8"abc\ndefgh\nij", 7)));
+    controller.set_tree(wrapped_tree(view_of(u8"abc\ndefgh\nij", 7)));
     focus(controller);
-    controller.set_tree(memo_tree(view_of(u8"abc\ndefgh\nij", 7)));
+    controller.set_tree(wrapped_tree(view_of(u8"abc\ndefgh\nij", 7)));
 
     const auto up { edit_in(controller.process(key(luil::key_code::arrow_up))) };
     REQUIRE(up->command == luil::text::text_edit_command::place_caret);
@@ -365,9 +367,9 @@ TEST_CASE("Arrow keys move the caret between lines of a text area", "[ui][text-a
     REQUIRE(edit_in(controller.process(key(luil::key_code::end, false, true)))->command == luil::text::text_edit_command::move_line_end);
 
     // 첫 줄에서 ↑는 글의 처음, 마지막 줄에서 ↓는 글의 끝이다.
-    controller.set_tree(memo_tree(view_of(u8"abc\ndefgh\nij", 2)));
+    controller.set_tree(wrapped_tree(view_of(u8"abc\ndefgh\nij", 2)));
     REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_up)))->offset == 0u);
-    controller.set_tree(memo_tree(view_of(u8"abc\ndefgh\nij", 11)));
+    controller.set_tree(wrapped_tree(view_of(u8"abc\ndefgh\nij", 11)));
     REQUIRE(edit_in(controller.process(key(luil::key_code::arrow_down)))->offset == 12u);
 }
 
@@ -375,9 +377,9 @@ TEST_CASE("Page keys move a text area caret by a window of lines", "[ui][text-ar
 {
     memo_policy policy {};
     luil::interaction_controller controller { &policy, fixed_config() };
-    controller.set_tree(memo_tree(view_of(twenty_lines(), 0), scrolling_config()));
+    controller.set_tree(wrapped_tree(view_of(twenty_lines(), 0), scrolling_config()));
     focus(controller);
-    controller.set_tree(memo_tree(view_of(twenty_lines(), 0), scrolling_config()));
+    controller.set_tree(wrapped_tree(view_of(twenty_lines(), 0), scrolling_config()));
     // 높이 100에 줄 18이면 다섯 줄이 들고, 한 줄을 남겨 네 줄을 넘긴다. 줄은 "line" + 줄 바꿈이라 다섯 바이트씩이다.
     const auto paged { edit_in(controller.process(key(luil::key_code::page_down))) };
     REQUIRE(paged->command == luil::text::text_edit_command::place_caret);
