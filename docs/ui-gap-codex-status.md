@@ -48,5 +48,6 @@ X0–X7은 각각 별도 기능 커밋과 `codex/x0-shared-controls`부터 `code
 의존 단위를 먼저 병합한 뒤 각 커밋 차이로 리뷰한다. X8은 설계만 별도 커밋으로 둔다.
 
 GitHub API 읽기(`gh api repos/yuldK/luil`)는 프록시에서 Forbidden이었다.
-원격 PR은 생성하지 못했으며 로컬 브랜치·커밋을 원격 게시 완료로 표시하지 않는다.
+작업 브랜치의 `git push --set-upstream origin codex/ui-gap-codex-track`도 저장소 쓰기 권한 403으로 거절되었다.
+원격 브랜치·PR은 생성하지 못했으며 로컬 브랜치·커밋을 원격 게시 완료로 표시하지 않는다.
 공유 파일을 고친 이유는 [인계 계약](ui-gap-codex-track.md#구현-중-추가-계약)에 기록했다.
