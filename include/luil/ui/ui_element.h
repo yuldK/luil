@@ -131,6 +131,7 @@ namespace luil {
         // caret이 앞 글자 쪽에 붙는다 (`text_edit_state::caret_upstream`). 넘겨 접은 자리에서만 뜻이 있다.
         bool caret_upstream { false };
         bool read_only { false };
+        bool navigation_keys_to_parent { false };
     };
 
     // 포인터 자리에 놓을 caret이다. `upstream`이면 그 offset의 앞 글자 쪽(넘겨 접은 윗줄의 끝)에 붙는다.
@@ -799,6 +800,9 @@ namespace luil {
         void set_bounds(const rect_f& bounds) noexcept;
         void set_enabled(bool value) noexcept;
         void set_visible(bool value) noexcept;
+        // 후보 popup처럼 입력 칸의 논리 초점을 유지하는 표면에 쓴다.
+        void set_preserve_pointer_focus(bool preserve) noexcept { preserve_pointer_focus_ = preserve; }
+        [[nodiscard]] bool preserves_pointer_focus() const noexcept { return preserve_pointer_focus_; }
         void set_tooltip(std::u8string text);
         void set_search_label(std::u8string text);
         // 화면에 뜨지 않는, 보조 기술만 읽는 이름이다 (`access_name`).
@@ -974,6 +978,7 @@ namespace luil {
         bool visible_ { true };
         bool arranged_ { false };
         std::u8string tooltip_ {};
+        bool preserve_pointer_focus_ { false };
         std::u8string search_label_ {};
         std::u8string access_name_ {};
         std::array<ui_action, ui_trigger_count> actions_ {};

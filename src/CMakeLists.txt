@@ -165,6 +165,9 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/check_element.h"
     ui/choice_group_element.cpp
     "${public_headers}/ui/choice_group_element.h"
+    ui/combo_box_element.cpp
+    ui/combo_suggestions.cpp
+    "${public_headers}/ui/combo_box_element.h"
     ui/dropdown_element.cpp
     "${public_headers}/ui/dropdown_element.h"
     ui/slider_element.cpp

@@ -229,6 +229,8 @@ namespace luil {
         // Android 소프트 키보드의 확정 단추를 눌렀다. 비어 있으면 done/search/go/send는
         // Enter, next/previous는 초점 이동이다. Windows의 Enter는 종전 경로를 유지한다.
         ui_action submit {};
+        // 콤보의 열린 후보 탐색은 입력 칸 바깥의 키 handler가 맡는다.
+        bool navigation_keys_to_parent { false };
     };
 
     // 앞 글리프와 지우기 버튼의 크기, 그리고 글과의 간격이다 (논리 픽셀).

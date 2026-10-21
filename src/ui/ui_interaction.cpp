@@ -1126,6 +1126,8 @@ namespace luil {
 
     void interaction_controller::apply_press_focus(const ui_tree& tree, const ui_element* const hit, const std::u8string& surface, const std::chrono::steady_clock::time_point time)
     {
+        if ((hit != nullptr && hit->preserves_pointer_focus()) || (tree.root() != nullptr && tree.root()->preserves_pointer_focus()))
+            return;
         // 자리인 element를 누르면 초점을 주고, 아니면 거둔다.
         // 초점 시각은 caret 깜빡임의 위상 기준이고, 눌린 표면이 초점의 표면이다.
         //  - 텍스트 박스는 앱 정책이 정하므로(`text_target_of`) 자리 판정과 따로 묻는다.
@@ -2671,6 +2673,10 @@ namespace luil {
         const bool primary_shortcut { event.primary_shortcut_down() };
         const bool word_navigation { event.word_navigation_down() };
         const text_input_snapshot value { focused_text_input().value_or(text_input_snapshot {}) };
+        if (value.navigation_keys_to_parent && value.composing == false && event.shortcut_modifier_down() == false
+            && (event.key == key_code::arrow_up || event.key == key_code::arrow_down || event.key == key_code::page_up
+                || event.key == key_code::page_down || event.key == key_code::home || event.key == key_code::end || event.key == key_code::enter))
+            return std::nullopt;
         if (value.read_only)
         {
             const bool edits { event.key == key_code::delete_forward

@@ -1154,7 +1154,7 @@ namespace luil::win32 {
             //    질문을 여기 하나가 함께 답하고, 범위와 문서는 겹치지 않는다.
             //  - 비활성은 보지 않는다 — `IsEnabled`가 이미 답하는 다른 질문이다.
             const access_info info { element->accessibility() };
-            if (info.role == access_role::edit && element->text_input().has_value())
+            if ((info.role == access_role::edit || info.role == access_role::combo_box) && element->text_input().has_value())
             {
                 const uia_surface_host* const host { root_->host() };
                 *result = element->text_input()->read_only == false && host != nullptr && host->accessibility_text_target(id_.kind).has_value() ? FALSE : TRUE;
@@ -1535,7 +1535,7 @@ namespace luil::win32 {
                 return UIA_E_ELEMENTNOTAVAILABLE;
             // 글을 넣는 길은 편집 파이프라인에 이어진 텍스트 칸뿐이다.
             // 그 밖의 값(드롭다운의 고른 라벨 등)은 여전히 읽기 전용이다.
-            if (element->accessibility().role != access_role::edit || element->text_input().has_value() == false)
+            if ((element->accessibility().role != access_role::edit && element->accessibility().role != access_role::combo_box) || element->text_input().has_value() == false)
                 return E_ACCESSDENIED;
             if (const auto snapshot { element->text_input() }; snapshot.has_value() && snapshot->read_only)
                 return E_ACCESSDENIED;

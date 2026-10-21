@@ -37,6 +37,7 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/dropdown_element.h"
+#include "luil/ui/combo_box_element.h"
 #include "luil/ui/glyph_element.h"
 #include "luil/ui/group_element.h"
 #include "luil/ui/grouped_list_element.h"
