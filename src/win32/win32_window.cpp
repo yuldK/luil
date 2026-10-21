@@ -1,6 +1,8 @@
 #include "luil/win32/win32_window.h"
 
 #include "host/font_registry.h"
+#include "host/file_dialog_gate.h"
+#include "win32/file_dialog.h"
 #include "host/popup_reconcile.h"
 #include "host/surface_invalidate.h"
 #include "luil/ui/draw_primitives.h"
@@ -840,6 +842,7 @@ namespace luil::win32 {
                     //    늦어도 다음 tick에 사슬에 붙는다.
                     if (update_timer_armed_ == false)
                         arm_update_timer(nullptr, nullptr);
+                    synchronize_file_dialog();
                     return 0;
                 }
                 case ui_command_request_message:
@@ -1683,6 +1686,24 @@ namespace luil::win32 {
             //
             // **창 대조 뒤다.** 앵커 표면이 이미 있어야 그 창을 컨트롤러의
             // parentWindow로 줄 수 있다 (popup과 같은 순서다).
+            void synchronize_file_dialog()
+            {
+                if (host_ == nullptr)
+                    return;
+                const auto frame { host_->acquire_frame() };
+                if (frame == nullptr || frame->file_dialog.has_value() == false || file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
+                    return;
+                const auto* const owner { anchor_surface(frame->file_dialog->owner_surface) };
+                const file_dialog_result result { run_file_dialog(owner != nullptr ? owner->window() : nullptr, *frame->file_dialog) };
+                file_dialog_gate_.finish();
+                if (host_ != nullptr && environment_.delegate != nullptr)
+                    if (auto message { environment_.delegate->make_file_dialog_message(result) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                // modal loop가 새 frame의 wake를 이미 읽었을 수 있다.
+                if (window_ != nullptr)
+                    PostMessageW(window_, snapshot_wake_message, 0, 0);
+            }
+
             void synchronize_webviews()
             {
                 if (host_ == nullptr)
@@ -2389,6 +2410,7 @@ namespace luil::win32 {
             // 매 frame 넘기면 페이지 안에서 옮긴 초점이 첫 자리로 되돌아간다.
             ui_element_id last_focus_ {};
             // 마지막으로 본 게시본이다. 자리 계산이 그리기 시점에 목록을 다시 본다.
+            file_dialog_gate file_dialog_gate_ {};
             std::shared_ptr<const ui_frame> last_frame_ {};
             std::unique_ptr<app_host> host_ {};
             // 주 창의 표면이다.

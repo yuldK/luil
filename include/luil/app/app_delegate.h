@@ -65,6 +65,13 @@ namespace luil {
             static_cast<void>(host);
         }
 
+        // 파일·폴더 대화상자의 결과다. 취소·실패·미지원도 구별해 알린다.
+        [[nodiscard]] virtual app_message make_file_dialog_message(const file_dialog_result& result)
+        {
+            static_cast<void>(result);
+            return {};
+        }
+
         // input thread가 요청한 앱 UI 명령이다 (파일 dialog, shell 실행 등).
         virtual void execute_app_ui_command(app_host& host, const app_ui_command& command)
         {
