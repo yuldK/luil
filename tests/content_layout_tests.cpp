@@ -1,3 +1,4 @@
+#include "luil/ui/badge_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/glyph_element.h"
@@ -93,6 +94,14 @@ TEST_CASE("Text elements answer the size their content wants", "[ui][layout][mea
     REQUIRE(checked.has_value());
     REQUIRE(checked->width == 4.0f + luil::check_box_size + 8.0f + 24.0f + 4.0f);
     REQUIRE(checked->height == luil::check_row_height);
+
+    // 배지는 그리기와 같은 알약 식이다 — 양옆 6, 심각도는 글리프와 간격 4가 더해지고, 원보다 좁지 않다.
+    const luil::badge_element badge { named(u8"badge"), { .text = u8"new" } };
+    REQUIRE(badge.preferred_size(measuring(), infinite) == luil::size_f { 12.0f + 17.0f, luil::badge_element::height_for({}) });
+    const luil::badge_element warning { named(u8"warning"), { .text = u8"new", .tone = luil::badge_tone::warning } };
+    REQUIRE(warning.preferred_size(measuring(), infinite)->width == 12.0f + 11.0f + 4.0f + 17.0f);
+    const luil::badge_element dot { named(u8"dot"), {} };
+    REQUIRE(dot.preferred_size(measuring(), infinite)->width == luil::badge_element::height_for({}));
 
     const luil::glyph_element glyph { named(u8"glyph"), { .glyph = U'x', .font_size = 16.0f } };
     REQUIRE(glyph.preferred_size(measuring(), infinite) == luil::size_f { 16.0f, 16.0f });
