@@ -110,6 +110,8 @@ namespace luil {
         //  - 항목에는 뜻이 없다. 항목은 지금처럼 `selected`만 답한다.
         bool multiple_selection { false };
         std::optional<access_orientation> orientation {};
+        // 메뉴의 라디오 항목처럼 역할을 바꾸지 않고 선택 container를 알린다.
+        bool selection_container { false };
 
         [[nodiscard]] bool operator==(const access_info&) const = default;
     };
@@ -208,6 +210,7 @@ namespace luil {
     // container 질의(`access_selection_container_of`)와 패턴 광고가 같은 술어를
     // 쓴다 (accessibility-action-design.md의 `ISelectionProvider`).
     [[nodiscard]] bool access_selection_container(access_role role) noexcept;
+    [[nodiscard]] bool access_selection_container(const access_info& info) noexcept;
 
     // 이 자리를 흘리는 창 안으로 **들일 수 있는가** (`ui_tree::scroll_container_of`).
     // 감싸는 창이 없으면 들일 자리도 없다.

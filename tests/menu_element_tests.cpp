@@ -91,3 +91,30 @@ TEST_CASE("A menu without a select factory builds inert items", "[ui][menu]")
     REQUIRE(menu.children()[0]->action(luil::ui_trigger::left_click) == nullptr);
     REQUIRE(menu.children()[0]->interactive() == false);
 }
+
+TEST_CASE("Menu check and radio items expose actions with their own selection contracts", "[ui][menu][accessibility]")
+{
+    auto config { make_config() };
+    config.items[0].kind = luil::menu_item_kind::check;
+    config.items[0].checked = true;
+    config.items[1].kind = luil::menu_item_kind::radio;
+    config.items[1].checked = false;
+    luil::menu_element menu { config };
+    REQUIRE(menu.children()[0]->accessibility().checked == true);
+    REQUIRE(menu.children()[0]->accessibility().selected.has_value() == false);
+    REQUIRE(menu.children()[1]->accessibility().selected == false);
+    REQUIRE(menu.accessibility().selection_container);
+    REQUIRE(luil::plan_access_request(*menu.children()[0], { luil::access_command::toggle }).has_value());
+    REQUIRE(luil::plan_access_request(*menu.children()[1], { luil::access_command::select }).has_value());
+    const luil::menu_element plain { make_config() };
+    REQUIRE(plain.accessibility().selection_container == false);
+}
+
+TEST_CASE("Menu width reserves the longest label and shortcut on the same row", "[ui][menu]")
+{
+    luil::menu_config config {};
+    config.items.push_back({ .key = u8"a", .label = u8"Long label" });
+    config.items.push_back({ .key = u8"b", .label = u8"Open", .shortcut_text = u8"Ctrl+A" });
+    const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; } };
+    REQUIRE(luil::menu_element::width_for(config, measure) == 162.0f);
+}

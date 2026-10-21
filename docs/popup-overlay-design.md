@@ -127,3 +127,12 @@ Android에는 popup마다 띄울 창이 없다. 같은 `ui_popup` 선언을 주 
 [overlay_input_tests.cpp](../tests/overlay_input_tests.cpp)는 layer 라우팅(맨 위 layer, 접촉의 캡처, 호버 이탈, 바깥 누름·휠)을, [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 layer가 자리 안에만 그려지는 것을 확인한다. [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을 픽셀로 확인한다.
 
 전체 조립은 [win32_window.cpp](../src/win32/win32_window.cpp), popup 메시지 처리는 [popup_surface.cpp](../src/win32/popup_surface.cpp)에 있다.
+
+## 메뉴 항목의 종류
+
+`menu_item_config::kind`는 action·check·radio다. 체크와 라디오의 `checked`는 앱 상태이며,
+실행 메시지는 기존 `select`가 나른다. 체크는 Toggle, 라디오는 SelectionItem을 내고 둘 다
+MenuItem 역할을 유지한다. 라디오가 있는 메뉴만 명시적 선택 container가 된다.
+
+`shortcut_text`는 오른쪽 정렬된 표시 열이다. 실행 바인딩은 하지 않는다. `width_for`는
+한 행에서 필요한 라벨과 단축키 폭을 함께 재고 가장 긴 행의 폭을 돌려준다.

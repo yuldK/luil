@@ -181,6 +181,11 @@ namespace luil {
         return role == access_role::list || role == access_role::tab_list || role == access_role::radio_group || role == access_role::tree || role == access_role::table;
     }
 
+    bool access_selection_container(const access_info& info) noexcept
+    {
+        return info.selection_container || access_selection_container(info.role);
+    }
+
     bool access_scroll_item(const ui_tree& tree, const ui_element_id& id)
     {
         // 흘리는 창 **안**에 있을 때만 뜻이 있다. 창이 없으면 들일 자리가 없다.
@@ -206,7 +211,7 @@ namespace luil {
         // 요소가 끼는 조립(항목을 감싼 group 등)에서도 container를 찾는다.
         for (const ui_element* ancestor { access_parent(tree, id) }; ancestor != nullptr; ancestor = access_parent(tree, ancestor->id()))
         {
-            if (access_selection_container(ancestor->accessibility().role))
+            if (access_selection_container(ancestor->accessibility()))
                 return ancestor;
         }
         return nullptr;
@@ -322,7 +327,7 @@ namespace luil {
                 const auto found { current_by_id.find(parent) };
                 if (found == current_by_id.end())
                     return nullptr;
-                if (access_selection_container(found->second->info.role))
+                if (access_selection_container(found->second->info))
                     return found->second;
                 parent = found->second->parent;
             }
