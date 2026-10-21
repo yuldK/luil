@@ -18,7 +18,8 @@ namespace luil::text {
         const range* find_range(const range (&ranges)[size], const char32_t value) noexcept
         {
             const auto found { std::lower_bound(std::begin(ranges), std::end(ranges), value,
-                [](const range& item, const char32_t codepoint) { return item.end < codepoint; }) };
+                [](const range& item, const char32_t codepoint) { return item.end < codepoint; })
+            };
             return found != std::end(ranges) && found->begin <= value ? found : nullptr;
         }
 

@@ -2104,7 +2104,7 @@ namespace luil::win32 {
             {
                 const uia_surface_host* const host { root_->host() };
                 result->vt = VT_BOOL;
-                const ui_element* const element { resolve() };
+                const ui_element* const element { resolve_text_element(*root_, id_) };
                 const auto snapshot { element != nullptr ? element->text_input() : std::nullopt };
                 result->boolVal = snapshot.has_value() && snapshot->read_only == false && host != nullptr && host->accessibility_text_target(id_.kind).has_value() ? VARIANT_FALSE : VARIANT_TRUE;
                 return S_OK;

@@ -134,11 +134,13 @@ function(luil_generate_third_party_notices output_file)
     # 설치본도 같은 생성기를 쓴다. 소비자가 선택한 Skia·WebView2의 고지를
     # 읽고, 라이브러리에 함께 설치된 폰트·JSON 고지는 패키지에서 읽는다.
     set(luil_license_file "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../LICENSE")
+    set(unicode_license_file "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/unicode-LICENSE.txt")
     set(installed_resources "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../../share/luil")
     if(EXISTS "${installed_resources}/luil_resources.rc.in")
         set(LUIL_ASSET_DIRECTORY "${installed_resources}")
         set(LUIL_NLOHMANN_JSON_ROOT "${installed_resources}")
         set(luil_license_file "${installed_resources}/LICENSE.luil")
+        set(unicode_license_file "${installed_resources}/LICENSE.unicode")
     endif()
     if(NOT DEFINED LUIL_SKIA_ROOT)
         message(FATAL_ERROR "LUIL_SKIA_ROOT is required to generate notices.")
@@ -156,6 +158,7 @@ function(luil_generate_third_party_notices output_file)
     # luil 자신이 싣는 것이다. 어느 갈래에서나 같다.
     set(luil_notice_entries
         "luil|${luil_license_file}"
+        "Unicode Data Files|${unicode_license_file}"
         # HTTP 응답의 JSON 본문 타입이다. header-only라 실행 파일에 그대로 실린다.
         "nlohmann/json|${LUIL_NLOHMANN_JSON_ROOT}/LICENSE.MIT")
     if(LUIL_ENABLE_WEBVIEW)

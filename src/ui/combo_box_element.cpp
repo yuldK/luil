@@ -54,7 +54,8 @@ namespace luil {
         if (config_.validation_message.empty() == false)
         {
             auto label { std::make_unique<label_element>(ui_element_id { ui_element_kind::none, id.owner + u8":validation" },
-                label_config { .text = config_.validation_message, .color = label_color_role::error }) };
+                label_config { .text = config_.validation_message, .color = label_color_role::error })
+            };
             validation_ = label.get();
             add_child(std::move(label));
         }
@@ -84,7 +85,8 @@ namespace luil {
             return std::nullopt;
         }
         const bool navigation { event.key == key_code::arrow_down || event.key == key_code::arrow_up
-            || event.key == key_code::page_down || event.key == key_code::page_up || event.key == key_code::home || event.key == key_code::end };
+            || event.key == key_code::page_down || event.key == key_code::page_up || event.key == key_code::home || event.key == key_code::end
+        };
         const auto* const items { &visible_items_ };
         if (navigation)
         {
@@ -105,6 +107,7 @@ namespace luil {
             }
             if (index == -1 && forward == false)
                 index = static_cast<int>(items->size());
+            int enabled_index { index >= 0 && index < static_cast<int>(items->size()) && (*items)[static_cast<std::size_t>(index)].enabled ? index : -1 };
             for (int moved { 0 }; moved < count;)
             {
                 const int next { index + (forward ? 1 : -1) };
@@ -112,8 +115,12 @@ namespace luil {
                     break;
                 index = next;
                 if ((*items)[static_cast<std::size_t>(index)].enabled)
+                {
+                    enabled_index = index;
                     ++moved;
+                }
             }
+            index = enabled_index;
             if (index >= 0 && index < static_cast<int>(items->size()) && (*items)[static_cast<std::size_t>(index)].enabled)
             {
                 std::vector<input_action> actions { config_.move((*items)[static_cast<std::size_t>(index)].key) };

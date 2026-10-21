@@ -109,7 +109,7 @@ Android에는 popup마다 띄울 창이 없다. 같은 `ui_popup` 선언을 주 
   | `surface_moved` | 없다 (창이 움직이지 않는다) |
 
   한 번 내기 규칙은 Win32와 같은 [`take_popup_dismiss_action`](../src/host/popup_dismiss.h)이고, 새 frame이 오면 표식을 푼다.
-- 주 표면에 앵커된 popup만 그린다. 보조 창(`ui_frame::windows`)은 지원하지 않아 한 번 경고하고 무시한다.
+- 앵커 사슬이 주 표면에서 끝나는 popup을 부모부터 그린다. 보조 창(`ui_frame::windows`)은 지원하지 않아 한 번 경고하고 무시한다.
 - popup 안 텍스트 칸에 초점이 서면 IME가 그 칸에 붙는다. 글자 자리는 popup의 표면 원점으로 옮긴다.
 
 ## 반드시 유지할 불변식

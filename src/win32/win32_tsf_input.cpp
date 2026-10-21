@@ -144,12 +144,15 @@ namespace luil::win32 {
             void reset_document(const std::optional<text_input_target> target, shadow_document document)
             {
                 const long old_length { acp_length(document_.text) };
+                const bool status_changed { document_.read_only != document.read_only };
                 target_ = target;
                 document_ = std::move(document);
 
                 if (sink_ == nullptr)
                     return;
                 // sink가 mask로 청약한 알림만 보낸다.
+                if (status_changed && (sink_mask_ & TS_AS_STATUS_CHANGE) == TS_AS_STATUS_CHANGE)
+                    static_cast<void>(sink_->OnStatusChange(TS_SD_READONLY));
                 if ((sink_mask_ & TS_AS_TEXT_CHANGE) == TS_AS_TEXT_CHANGE)
                 {
                     TS_TEXTCHANGE change {};
@@ -167,7 +170,7 @@ namespace luil::win32 {
             // 편집 session이 끝날 때마다 결과를 logic에 보낸다.
             void publish()
             {
-                if (host_ == nullptr || target_.has_value() == false)
+                if (host_ == nullptr || target_.has_value() == false || document_.read_only)
                     return;
 
                 if (composing_)
@@ -649,6 +652,8 @@ namespace luil::win32 {
 
             HRESULT STDMETHODCALLTYPE OnUpdateComposition(ITfCompositionView* pComposition, ITfRange*) override
             {
+                if (document_.read_only)
+                    return S_OK;
                 // focus를 잃었다가 돌아오는 동안 TIP이 기존 composition을
                 // 갱신하는 구현도 있다. OnStart만 믿으면 이때 OS 조합 UI만
                 // 남고 custom 조합 표시는 다시 켜지지 않는다.
@@ -847,12 +852,19 @@ namespace luil::win32 {
             // target이 있으면 document manager를 되찾는다.
             acquire_thread_focus();
 
+            const shadow_document committed { host_->committed_document() };
+            if (committed.read_only && store_->composing())
+            {
+                // 먼저 쓰기를 막은 뒤 OS 조합을 끝내므로 조합 글이 새 초안으로 확정되지 않는다.
+                store_->reset_document(target, committed);
+                finish_composition();
+                return;
+            }
             // 조합 도중 글이 밑에서 바뀌면 TIP이 혼란에 빠진다.
             // 조합이 끝날 때까지 미룬다.
             if (store_->composing())
                 return;
 
-            const shadow_document committed { host_->committed_document() };
             if (committed == store_->document())
                 return;
             store_->reset_document(target, committed);

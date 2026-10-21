@@ -57,6 +57,7 @@ namespace luil {
         float width_ { 0.0f };
         float font_size_ { 0.0f };
         float sample_width_ { 0.0f };
+        bool wrap_ { true };
         std::uint64_t generation_ { 0 };
     };
 

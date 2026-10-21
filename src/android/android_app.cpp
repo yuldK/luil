@@ -1246,11 +1246,6 @@ namespace luil::android {
                 return false;
             }
 
-            // frame의 popup을 주 표면 위의 layer로 세운다. frame이 바뀔 때만 다시 세운다.
-            //  - 자리는 앵커 기준 논리 픽셀이다. 주 표면(앵커가 빈 것)의 popup만 그린다 — 보조 창이
-            //    없으니 다른 앵커는 붙을 곳이 없다.
-            //  - 화면 밖으로 나가면 안으로 들인다. 앱 모델의 자리는 바꾸지 않는다.
-            //  - 새 frame이 같은 popup을 실으면 닫자고 한 표식을 푼다 (Win32 `popup_surface::adopt`와 같다).
             void process_file_dialog()
             {
                 if (host_ == nullptr)
@@ -1265,6 +1260,11 @@ namespace luil::android {
                         host_->post_app_message(std::move(message));
             }
 
+            // frame의 popup을 주 표면 위의 layer로 세운다. frame이 바뀔 때만 다시 세운다.
+            //  - 자리는 앵커 기준 논리 픽셀이다. 앵커 사슬이 주 표면에서 끝나는 popup을 그린다 — 보조 창이
+            //    없으니 다른 앵커는 붙을 곳이 없다.
+            //  - 화면 밖으로 나가면 안으로 들인다. 앱 모델의 자리는 바꾸지 않는다.
+            //  - 새 frame이 같은 popup을 실으면 닫자고 한 표식을 푼다 (Win32 `popup_surface::adopt`와 같다).
             void update_overlays()
             {
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };

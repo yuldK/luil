@@ -1777,7 +1777,8 @@ namespace luil::win32 {
                             continue;
                         const float scale { dpi_scale(anchor->dpi()) };
                         wanted.push_back({ popup.id, scaled_pixels(popup.x, scale), scaled_pixels(popup.y, scale),
-                            scaled_pixels(popup.width, scale), scaled_pixels(popup.height, scale), popup.anchor });
+                            scaled_pixels(popup.width, scale), scaled_pixels(popup.height, scale), popup.anchor
+                        });
                         sources.push_back(&popup);
                     }
                 }

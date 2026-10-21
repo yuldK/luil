@@ -1324,6 +1324,8 @@ namespace luil::win32 {
 
     void surface_tsf_host::post_edit(text_edit_request request)
     {
+        if (focused_text_target() == request.target && committed_document().read_only)
+            return;
         if (context_->policy() != nullptr)
             context_->dispatch_action(context_->policy()->make_text_edit_action(std::move(request)));
     }

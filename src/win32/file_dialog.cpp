@@ -24,7 +24,8 @@ namespace luil::win32 {
             return fail(u8"The file dialog owner is unavailable", E_INVALIDARG);
         Microsoft::WRL::ComPtr<IFileDialog> dialog {};
         HRESULT code { CoCreateInstance(request.kind == file_dialog_kind::save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog,
-            nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)) };
+            nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))
+        };
         if (FAILED(code))
             return fail(u8"Cannot create the file dialog", code);
         FILEOPENDIALOGOPTIONS options {};

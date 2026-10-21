@@ -64,7 +64,8 @@ namespace luil {
                         solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground));
                 }
                 const char32_t icon { item_.kind == menu_item_kind::check
-                    ? (item_.checked ? codicons::icon_check : 0) : (item_.kind == menu_item_kind::radio ? 0 : item_.icon) };
+                    ? (item_.checked ? codicons::icon_check : 0) : (item_.kind == menu_item_kind::radio ? 0 : item_.icon)
+                };
                 if (icon != 0)
                 {
                     const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), 13.0f * scale };
