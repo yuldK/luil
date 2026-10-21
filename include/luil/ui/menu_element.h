@@ -8,6 +8,8 @@
 
 namespace luil {
     // 메뉴 항목 하나의 설정이다.
+    enum class menu_item_kind { action, check, radio };
+
     struct menu_item_config
     {
         // 항목을 가리키는 앱 정의 키다 (ui_element_id::owner 규약).
@@ -19,6 +21,10 @@ namespace luil {
         bool enabled { true };
         // 참이면 이 항목 위에 구분선을 긋는다.
         bool separator_above { false };
+        menu_item_kind kind { menu_item_kind::action };
+        bool checked { false };
+        // 표시만 하는 열이다. 실행의 일치 판정은 명령표가 맡는다.
+        std::u8string shortcut_text {};
     };
 
     // 고른 항목의 키를 담은 메시지다.
@@ -51,6 +57,7 @@ namespace luil {
         // 이 설정의 전체 높이다 (논리 픽셀).
         // 담는 쪽이 popup 크기에 같은 값을 쓴다.
         [[nodiscard]] static float height_for(const menu_config& config) noexcept;
+        [[nodiscard]] static float width_for(const menu_config& config, const text_measurer& measurer = default_text_measurer(), float font_size = 12.0f);
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
