@@ -39,6 +39,7 @@
 | 아주 긴 목록 (가상화) | `virtual_list_element` | [ui/virtual_list_element.h](../include/luil/ui/virtual_list_element.h) | [설명](virtual-list-design.md) |
 | 탭 선택·닫기·재정렬·컨텍스트 메뉴 | `tab_bar_element` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](focus-group-design.md) |
 | 선택 묶음 | `choice_group_element` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
+| 명령표·단축키 | `app_command`, `match_command` | [ui/commands.h](../include/luil/ui/commands.h) | [설명](popup-anchor-design.md) |
 | 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | [설명](popup-overlay-design.md) |
 | 드롭다운 | `dropdown_element` | [ui/dropdown_element.h](../include/luil/ui/dropdown_element.h) | [설명](popup-overlay-design.md) |
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |

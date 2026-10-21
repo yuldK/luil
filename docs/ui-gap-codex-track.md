@@ -553,3 +553,10 @@ Codex가 기다리거나 만나는 지점을 알기 위한 요약이다.
 | 예제의 파일 대화상자 | `examples/demo_main.cpp:801` |
 | 앱 UI 명령 확장 지점 | `include/luil/app/app_delegate.h:69` |
 | 드롭다운 설정 | `include/luil/ui/dropdown_element.h:11` |
+
+## 구현 중 추가 계약
+
+- X3의 `access_info::selection_container`는 메뉴의 라디오를 위한 명시적 선택 container다. 기존 role 기반 판정은 보존한다.
+- X4의 메뉴 구성은 `depth`, `parent_surface`, `anchor_key`, `opened_key`, `hover_delay`를 추가로 받는다.
+- X4의 `app_command::checkable`은 checked=false인 체크 명령을 action과 구별한다.
+- X6의 조상 키 handler는 C0가 없는 빌드에서는 연결되지 않는다. C0 계약과의 연동 여부를 공개 질의로 확인한다.

@@ -22,6 +22,10 @@ namespace luil {
         [[nodiscard]] bool operator==(const popup_placement&) const = default;
     };
 
+    // 부모가 먼저인 유효 popup 순서다. 없는 앵커·순환·중복 id는 내보내지 않는다.
+    [[nodiscard]] std::vector<std::size_t> order_popup_placements(std::span<const popup_placement> wanted, std::span<const std::u8string> roots);
+    [[nodiscard]] bool popup_is_descendant(std::span<const popup_placement> placements, const std::u8string& child, const std::u8string& ancestor) noexcept;
+
     // 살아 있는 popup 창과 frame이 원하는 popup을 id로 대조한 결과다.
     // create·move의 index는 원하는 목록(wanted)의 자리다.
     struct popup_reconcile_result

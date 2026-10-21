@@ -1,4 +1,5 @@
 #include "luil/ui/ui_interaction.h"
+#include "luil/ui/menu_element.h"
 
 #include "luil/messaging/envelope.h"
 #include "luil/ui/zoom_view_element.h"
@@ -17,6 +18,20 @@
 #include <variant>
 
 namespace luil {
+    namespace {
+        const menu_element* menu_in_element(const ui_element* element) noexcept
+        {
+            if (element == nullptr)
+                return nullptr;
+            if (const auto* menu { dynamic_cast<const menu_element*>(element) }; menu != nullptr)
+                return menu;
+            for (const auto& child : element->children())
+                if (const auto* menu { menu_in_element(child.get()) }; menu != nullptr)
+                    return menu;
+            return nullptr;
+        }
+    } // namespace
+
     namespace {
         // 놓는 순간의 속도를 재는 창이다. 이보다 오래된 이동은 속도에 넣지 않는다.
         constexpr std::chrono::milliseconds motion_window { 100 };
@@ -1887,9 +1902,11 @@ namespace luil {
     {
         const std::optional<std::chrono::steady_clock::time_point> gesture { gesture_deadline() };
         const std::optional<std::chrono::steady_clock::time_point> flow { auto_scroll_deadline() };
-        if (gesture.has_value() && flow.has_value())
-            return std::min(*gesture, *flow);
-        return gesture.has_value() ? gesture : flow;
+        std::optional<std::chrono::steady_clock::time_point> result { gesture };
+        for (const auto candidate : { flow, submenu_deadline() })
+            if (candidate.has_value() && (result.has_value() == false || *candidate < *result))
+                result = candidate;
+        return result;
     }
 
     std::optional<std::chrono::steady_clock::time_point> interaction_controller::gesture_deadline() const noexcept
@@ -1912,6 +1929,16 @@ namespace luil {
     {
         // 가장자리 흐름은 터치 판정과 따로 간다 (손가락으로 끄는 동안에도 흐른다).
         std::vector<input_action> actions { advance_auto_scroll(now) };
+        if (const auto deadline { submenu_deadline() }; deadline.has_value() && now >= *deadline)
+        {
+            opened_hover_ = snapshot_.hovered;
+            opened_hover_surface_ = snapshot_.hovered_surface;
+            opened_hover_at_ = snapshot_.hover_started_at;
+            if (const auto* menu { hovered_menu() }; menu != nullptr)
+                if (auto opened { menu->open_submenu(snapshot_.hovered.owner) }; opened.has_value())
+                    for (auto& action : *opened)
+                        actions.push_back(std::move(action));
+        }
         const auto with_flow = [&actions](std::vector<input_action> more) {
             for (input_action& action : more)
                 actions.push_back(std::move(action));
@@ -2874,9 +2901,48 @@ namespace luil {
         return (*dismiss)(ui_action_context { trap->id(), box.x + box.width / 2.0f, box.y + box.height / 2.0f });
     }
 
+    const menu_element* interaction_controller::hovered_menu() const noexcept
+    {
+        const ui_tree* const tree { surface_tree(snapshot_.hovered_surface) };
+        const auto* const menu { tree != nullptr ? menu_in_element(tree->root()) : nullptr };
+        return menu != nullptr && menu->enabled() && menu->has_submenu(snapshot_.hovered.owner) ? menu : nullptr;
+    }
+
+    std::optional<std::chrono::steady_clock::time_point> interaction_controller::submenu_deadline() const noexcept
+    {
+        const auto* const menu { hovered_menu() };
+        if (menu == nullptr || snapshot_.hover_started_at.has_value() == false
+            || (opened_hover_ == snapshot_.hovered && opened_hover_surface_ == snapshot_.hovered_surface && opened_hover_at_ == snapshot_.hover_started_at)
+            || menu->config().opened_key == snapshot_.hovered.owner)
+            return std::nullopt;
+        return *snapshot_.hover_started_at + menu->config().hover_delay;
+    }
+
     std::optional<std::vector<input_action>> interaction_controller::process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host)
     {
         const ui_tree& tree { *host.tree };
+        const menu_element* const menu { menu_in_element(tree.root()) };
+        if (menu != nullptr && menu->config().depth > 0 && snapshot_.menu_surface != host.surface)
+            for (const auto& item : menu->config().items)
+                if (item.enabled)
+                {
+                    snapshot_.menu_highlight = { kinds.item, item.key };
+                    snapshot_.menu_surface = host.surface;
+                    break;
+                }
+        if (menu != nullptr && event.shortcut_modifier_down() == false)
+        {
+            if (event.key == key_code::arrow_right || event.key == key_code::enter)
+                if (auto opened { menu->open_submenu(snapshot_.menu_highlight.owner) }; opened.has_value())
+                    return opened;
+            if ((event.key == key_code::arrow_left || event.key == key_code::escape) && menu->config().depth > 0)
+            {
+                snapshot_.menu_highlight = { kinds.item, menu->config().anchor_key };
+                snapshot_.menu_surface = menu->config().parent_surface;
+                const auto* const close { &menu->config().close_submenu };
+                return *close ? (*close)({ snapshot_.menu_highlight }) : std::vector<input_action> {};
+            }
+        }
         switch (event.key)
         {
         case key_code::arrow_down:
@@ -2949,12 +3015,23 @@ namespace luil {
         // `{ menu, owner }`라 owner 없는 id로는 닿지 않는다 — 정책이 주는 것은
         // kind 짝이지 owner가 아니므로, owner가 무엇이든 그 kind가 서 있으면 열린 것이다.
         const auto holds_menu = [&kinds](const ui_tree& tree) { return tree.ids_of_kind(kinds.container).empty() == false; };
-        if (tree_ != nullptr && holds_menu(*tree_))
-            return { tree_.get(), {} };
+        menu_location result {};
+        std::size_t depth { 0 };
+        const auto consider = [&](const ui_tree* tree, const std::u8string& surface) {
+            if (tree == nullptr || holds_menu(*tree) == false)
+                return;
+            const auto* const menu { menu_in_element(tree->root()) };
+            const std::size_t level { menu != nullptr ? menu->config().depth : 0 };
+            if (result.tree == nullptr || level > depth)
+            {
+                result = { tree, surface };
+                depth = level;
+            }
+        };
+        consider(tree_.get(), {});
         for (const auto& [id, tree] : surface_trees_)
-            if (tree != nullptr && holds_menu(*tree))
-                return { tree.get(), id };
-        return {};
+            consider(tree.get(), id);
+        return result;
     }
 
     std::vector<input_action> interaction_controller::run_trigger(const ui_element& element, const ui_trigger trigger, const float x, const float y, const modifier_keys modifiers)
@@ -2982,6 +3059,9 @@ namespace luil {
         const bool none { hovered == ui_element_id {} };
         if (hovered == snapshot_.hovered && (none || last_pointer_surface_ == snapshot_.hovered_surface))
         {
+            const auto* const menu { hovered_menu() };
+            if (moved && menu != nullptr && menu->config().opened_key.empty() == false && menu->config().opened_key != hovered.owner)
+                snapshot_.hover_started_at = time;
             // 내용이 바뀌어 포인터 밑에 온 element는 시계 없이 서 있다. 그 위에서 포인터를
             // 움직이면 그때부터 잰다 — 사람이 그 자리를 가리켰다는 첫 증거다.
             if (moved && none == false && snapshot_.hover_started_at.has_value() == false)

@@ -1,5 +1,7 @@
 #include "host/popup_reconcile.h"
 
+#include <algorithm>
+
 namespace luil {
     namespace {
         [[nodiscard]] const popup_placement* find_by_id(const std::span<const popup_placement> placements, const std::u8string& id)
@@ -15,6 +17,47 @@ namespace luil {
             return placement.width > 0 && placement.height > 0;
         }
     } // namespace
+
+    bool popup_is_descendant(const std::span<const popup_placement> placements, const std::u8string& child, const std::u8string& ancestor) noexcept
+    {
+        const popup_placement* current { find_by_id(placements, child) };
+        for (std::size_t depth { 0 }; current != nullptr && depth < placements.size(); ++depth)
+        {
+            if (current->anchor == ancestor)
+                return true;
+            current = find_by_id(placements, current->anchor);
+        }
+        return false;
+    }
+
+    std::vector<std::size_t> order_popup_placements(const std::span<const popup_placement> wanted, const std::span<const std::u8string> roots)
+    {
+        std::vector<std::size_t> result {};
+        std::vector<bool> added(wanted.size());
+        for (std::size_t pass { 0 }; pass < wanted.size(); ++pass)
+        {
+            bool changed { false };
+            for (std::size_t index { 0 }; index < wanted.size(); ++index)
+            {
+                const auto& item { wanted[index] };
+                if (added[index] || item.id.empty() || visible(item) == false
+                    || std::count_if(wanted.begin(), wanted.end(), [&item](const auto& other) { return other.id == item.id; }) != 1
+                    || std::find(roots.begin(), roots.end(), item.id) != roots.end())
+                    continue;
+                const bool root { std::find(roots.begin(), roots.end(), item.anchor) != roots.end() };
+                const bool parent { std::any_of(result.begin(), result.end(), [&](const auto previous) { return wanted[previous].id == item.anchor; }) };
+                if (root || parent)
+                {
+                    added[index] = true;
+                    result.push_back(index);
+                    changed = true;
+                }
+            }
+            if (changed == false)
+                break;
+        }
+        return result;
+    }
 
     popup_reconcile_result reconcile_popups(const std::span<const popup_placement> alive, const std::span<const popup_placement> wanted)
     {
@@ -43,6 +86,24 @@ namespace luil {
             if (still == nullptr || visible(*still) == false || still->anchor != current.anchor)
                 result.destroy.push_back(current.id);
         }
+        // 부모 창이 다시 만들어지면 그 소유 창인 자식도 다시 만든다.
+        for (std::size_t pass { 0 }; pass < alive.size(); ++pass)
+            for (const auto& current : alive)
+            {
+                if (std::find(result.destroy.begin(), result.destroy.end(), current.anchor) == result.destroy.end()
+                    || std::find(result.destroy.begin(), result.destroy.end(), current.id) != result.destroy.end())
+                    continue;
+                result.destroy.push_back(current.id);
+                const auto* const want { find_by_id(wanted, current.id) };
+                if (want != nullptr && visible(*want))
+                {
+                    const auto index { static_cast<std::size_t>(want - wanted.data()) };
+                    result.move.erase(std::remove(result.move.begin(), result.move.end(), index), result.move.end());
+                    if (std::find(result.create.begin(), result.create.end(), index) == result.create.end())
+                        result.create.push_back(index);
+                }
+            }
+        std::sort(result.create.begin(), result.create.end());
         return result;
     }
 
