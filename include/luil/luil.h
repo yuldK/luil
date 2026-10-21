@@ -43,6 +43,7 @@
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/image_encode.h"
+#include "luil/ui/item_model.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/layer_element.h"
 #include "luil/ui/layout_metrics.h"

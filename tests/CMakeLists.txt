@@ -24,6 +24,7 @@ add_executable(luil_core_tests
     image_animation_tests.cpp
     image_element_tests.cpp
     image_encode_tests.cpp
+    item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_selection_tests.cpp
     list_element_tests.cpp
