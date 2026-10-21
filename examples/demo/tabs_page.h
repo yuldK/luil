@@ -1,7 +1,8 @@
 #pragma once
 
 // 탭 페이지다: 선택·닫기·끌어서 순서 바꾸기·가로 스크롤과,
-// 넘칠 때 나타나는 넘침 메뉴 버튼(popup으로 탭 목록을 띄운다).
+// 넘칠 때 나타나는 넘침 메뉴 버튼(popup으로 탭 목록을 띄운다),
+// 우클릭으로 여는 탭 컨텍스트 메뉴.
 
 #include "demo/common.h"
 #include "luil/ui/ui_events.h"
@@ -38,6 +39,23 @@ namespace demo {
         bool open { false };
     };
 
+    // 탭을 우클릭했다. 좌표는 물리 픽셀(창 좌표)이다.
+    struct tab_menu_intent
+    {
+        std::u8string key {};
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
+    // 탭 컨텍스트 메뉴에서 고른 명령이다.
+    struct tab_menu_command_intent
+    {
+        std::u8string command {};
+    };
+
+    struct tab_menu_close_intent
+    {};
+
     class tabs_page
     {
     public:
@@ -54,6 +72,7 @@ namespace demo {
         void close_popups() noexcept
         {
             overflow_open_ = false;
+            menu_key_.clear();
         }
 
         [[nodiscard]] static std::vector<luil::input_action> route_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, float delta);
@@ -68,10 +87,17 @@ namespace demo {
             std::u8string label {};
         };
 
+        // 탭을 닫고, 고른 탭이었으면 이웃 탭을 고른다.
+        void close_tab(const std::u8string& key);
+
         std::vector<tab_entry> tabs_ {};
         std::u8string selected_ {};
         float scroll_ { 0.0f };
         bool overflow_open_ { false };
+        // 컨텍스트 메뉴를 연 탭이다. 비어 있으면 메뉴가 닫혀 있다.
+        std::u8string menu_key_ {};
+        float menu_x_ { 0.0f };
+        float menu_y_ { 0.0f };
         int next_tab_ { 0 };
         // 이번 build가 만든 탭 막대다.
         // popup의 자리 계산에만 쓰고 frame이 게시되기 전까지만 유효하다.
