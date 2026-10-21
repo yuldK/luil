@@ -1819,7 +1819,9 @@ namespace {
         {
             IUnknown* item { nullptr };
             REQUIRE(SafeArrayGetElement(array, &index, &item) == S_OK);
-            owners.push_back(static_cast<luil::win32::uia_element_provider*>(static_cast<IRawElementProviderSimple*>(item))->element_id().owner);
+            // 행 자리표의 owner는 `목록 owner + U+001F + 키`다 (`virtual_list_row_id`). 키만 읽는다.
+            const std::u8string& owner { static_cast<luil::win32::uia_element_provider*>(static_cast<IRawElementProviderSimple*>(item))->element_id().owner };
+            owners.push_back(owner.substr(owner.find(u8'\u001f') + 1u));
             item->Release();
         }
         static_cast<void>(SafeArrayDestroy(array));
@@ -1847,7 +1849,7 @@ TEST_CASE("A multiple selection list adds three rows, removes one and reads the 
     REQUIRE(read_selection(*list).empty());
 
     // 셋을 더한다. 각 더하기가 앱의 명령으로 간다.
-    const auto row = [root](const char8_t* const key) { return root->make_element_provider({ luil::ui_element_kind::virtual_list_row, key }); };
+    const auto row = [root](const char8_t* const key) { return root->make_element_provider(luil::virtual_list_row_id(u8"files", key)); };
     for (const char8_t* const key : { u8"b", u8"d", u8"e" })
     {
         luil::win32::uia_element_provider* const item { row(key) };
@@ -1881,7 +1883,7 @@ TEST_CASE("A multiple selection list adds three rows, removes one and reads the 
     REQUIRE(read_selection(*list) == std::vector<std::u8string> { u8"b", u8"e" });
     REQUIRE(sink.records.size() == 1u);
     REQUIRE(sink.records[0].kind == u8"removed");
-    REQUIRE(sink.records[0].owner == u8"d");
+    REQUIRE(sink.records[0].owner == luil::virtual_list_row_id(u8"files", u8"d").owner);
     sink.records.clear();
     // 골라지지 않은 것을 빼는 것은 할 일이 없다.
     REQUIRE(d->RemoveFromSelection() == S_OK);
@@ -1898,7 +1900,7 @@ TEST_CASE("A multiple selection list adds three rows, removes one and reads the 
     REQUIRE(read_selection(*list) == std::vector<std::u8string> { u8"e" });
     REQUIRE(sink.records.size() == 1u);
     REQUIRE(sink.records[0].kind == u8"selected");
-    REQUIRE(sink.records[0].owner == u8"e");
+    REQUIRE(sink.records[0].owner == luil::virtual_list_row_id(u8"files", u8"e").owner);
     e->Release();
 
     list->Release();
@@ -1917,8 +1919,8 @@ TEST_CASE("Rows of a multiple selection list without add or remove messages refu
     host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f));
     auto* const root { new luil::win32::uia_root_provider { host } };
 
-    luil::win32::uia_element_provider* const a { root->make_element_provider({ luil::ui_element_kind::virtual_list_row, u8"a" }) };
-    luil::win32::uia_element_provider* const b { root->make_element_provider({ luil::ui_element_kind::virtual_list_row, u8"b" }) };
+    luil::win32::uia_element_provider* const a { root->make_element_provider(luil::virtual_list_row_id(u8"files", u8"a")) };
+    luil::win32::uia_element_provider* const b { root->make_element_provider(luil::virtual_list_row_id(u8"files", u8"b")) };
     // 앱이 받지 않는 명령은 지금처럼 무효다. 클릭(뒤집기)으로 대신하지 않는다.
     REQUIRE(b->AddToSelection() == static_cast<HRESULT>(UIA_E_INVALIDOPERATION));
     REQUIRE(a->RemoveFromSelection() == static_cast<HRESULT>(UIA_E_INVALIDOPERATION));
@@ -2129,7 +2131,7 @@ TEST_CASE("A long list finds a row it did not build and answers for it from the 
     luil::win32::uia_element_provider* const distant { find_item(*list, nullptr, UIA_NamePropertyId, name) };
     static_cast<void>(VariantClear(&name));
     REQUIRE(distant != nullptr);
-    REQUIRE(distant->element_id() == luil::ui_element_id { luil::ui_element_kind::virtual_list_row, u8"item503" });
+    REQUIRE(distant->element_id() == luil::virtual_list_row_id(u8"files", u8"item503"));
     REQUIRE(host.tree->find(distant->element_id()) == nullptr);
 
     // 지어지지 않아도 지어진 행과 같은 것을 답한다.
@@ -2205,27 +2207,28 @@ TEST_CASE("Finding items by selection, automation id and order walks the whole m
     const VARIANT chosen { bool_variant(true) };
     luil::win32::uia_element_provider* const first { find_item(*list, nullptr, UIA_SelectionItemIsSelectedPropertyId, chosen) };
     REQUIRE(first != nullptr);
-    REQUIRE(first->element_id().owner == u8"item0");
+    REQUIRE(first->element_id() == luil::virtual_list_row_id(u8"files", u8"item0"));
     luil::win32::uia_element_provider* const second { find_item(*list, first, UIA_SelectionItemIsSelectedPropertyId, chosen) };
     REQUIRE(second != nullptr);
-    REQUIRE(second->element_id().owner == u8"item5");
+    REQUIRE(second->element_id() == luil::virtual_list_row_id(u8"files", u8"item5"));
     const VARIANT unchosen { bool_variant(false) };
     luil::win32::uia_element_provider* const plain { find_item(*list, first, UIA_SelectionItemIsSelectedPropertyId, unchosen) };
     REQUIRE(plain != nullptr);
-    REQUIRE(plain->element_id().owner == u8"item1");
+    REQUIRE(plain->element_id() == luil::virtual_list_row_id(u8"files", u8"item1"));
 
     // property 없음은 다음 항목이다. 끝 뒤에는 없다.
     const VARIANT none {};
     luil::win32::uia_element_provider* const next { find_item(*list, plain, 0, none) };
     REQUIRE(next != nullptr);
-    REQUIRE(next->element_id().owner == u8"item2");
+    REQUIRE(next->element_id() == luil::virtual_list_row_id(u8"files", u8"item2"));
 
-    const std::wstring wanted { std::to_wstring(static_cast<std::uint32_t>(luil::ui_element_kind::virtual_list_row)) + L":item700" };
+    // AutomationId는 `kind:owner`이고, 행의 owner는 목록 owner와 키 사이에 U+001F가 든 값이다.
+    const std::wstring wanted { std::to_wstring(static_cast<std::uint32_t>(luil::ui_element_kind::virtual_list_row)) + L":files\u001Fitem700" };
     VARIANT automation { text_variant(wanted.c_str()) };
     luil::win32::uia_element_provider* const by_id { find_item(*list, nullptr, UIA_AutomationIdPropertyId, automation) };
     static_cast<void>(VariantClear(&automation));
     REQUIRE(by_id != nullptr);
-    REQUIRE(by_id->element_id().owner == u8"item700");
+    REQUIRE(by_id->element_id() == luil::virtual_list_row_id(u8"files", u8"item700"));
     REQUIRE(read_text_property(*by_id, UIA_AutomationIdPropertyId) == wanted);
 
     VARIANT last_name { text_variant(L"item999") };

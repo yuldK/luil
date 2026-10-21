@@ -83,6 +83,7 @@
 
 - 표 자신은 구조(`none`)다. 그 자리로 머리글(Header)과 본문(DataGrid)이 올라온다.
 - 본문은 가상 목록의 역할 재지정(`virtual_list_config::role`·`row_role`)으로 DataGrid와 DataItem이 된다. `table`은 `list`처럼 선택 container라 고른 행을 읽는다.
+- 본문 행의 자리표는 `virtual_list_row_id(표 owner, 행 키)`다. 같은 화면의 다른 목록이 같은 키를 보여도 겹치지 않는다 ([행 자리표](virtual-list-design.md#행-자리표)).
 - 머리글 칸은 HeaderItem이고 이름은 열 머리글이다.
 - 화면 밖 행의 찾기·선택 읽기·위치·들이기는 본문 가상 목록이 모델로 답한다 (ItemContainer·VirtualizedItem, [virtual-list-design.md](virtual-list-design.md#모델로-답하는-접근성)). 지어지지 않은 행도 DataItem으로 읽힌다.
 - Grid·Table 패턴(행·열 좌표, 칸 단위 탐색, 열 머리글 연결)은 아직 없다. 칸이 element가 아니라 행이 그리는 글이라 칸 provider의 자리가 먼저 필요하다 (뒤로 미룬 확장).

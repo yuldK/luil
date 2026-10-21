@@ -277,6 +277,14 @@ namespace luil {
         [[nodiscard]] bool operator==(const virtual_list_span&) const noexcept = default;
     };
 
+    // 가상 목록 행의 자리표다. 목록 owner와 항목 키 사이에 단위 구분자(U+001F)를 둔다 (표 부품과 같은 규약).
+    //  - 키는 목록 **안에서만** 유일하면 된다. 저장소 계층과 변경 표가 같은 경로를 보여도 두 행의 자리표가 겹치지 않는다.
+    //  - 행을 자리표로 찾는 앱·test는 이 함수로 짓는다. 행 안에서 키가 필요하면 자리표를 쪼개지 말고 모델의 키를 쓴다.
+    //  - UIA AutomationId도 이 값에서 난다 (`kind:owner`).
+    [[nodiscard]] ui_element_id virtual_list_row_id(std::u8string_view list_owner, std::u8string_view key);
+    // 계층 목록 행의 삼각형 자리표다 (`virtual_list_row_id`와 같은 규약).
+    [[nodiscard]] ui_element_id virtual_list_expander_id(std::u8string_view list_owner, std::u8string_view key);
+
     // `index`번 행이 서는 자리다. 범위 밖이면 빈 값이다 (`{0, 0}`).
     [[nodiscard]] virtual_list_span virtual_list_row_span(std::span<const virtual_list_item> items, float row_height, std::size_t index) noexcept;
 
@@ -361,7 +369,7 @@ namespace luil {
         [[nodiscard]] access_info accessibility() const override;
         [[nodiscard]] const access_item_model* access_items() const noexcept override;
 
-        // access_item_model이다. 항목의 id는 행의 자리표(`virtual_list_row`, 키)다.
+        // access_item_model이다. 항목의 id는 행의 자리표(`virtual_list_row_id`)다.
         [[nodiscard]] std::size_t access_item_count() const noexcept override;
         [[nodiscard]] ui_element_id access_item_id(std::size_t index) const override;
         [[nodiscard]] std::optional<std::size_t> access_item_index(const ui_element_id& id) const override;

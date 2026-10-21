@@ -87,7 +87,7 @@ namespace {
 
     [[nodiscard]] luil::ui_element_id row_id(const std::u8string& key)
     {
-        return luil::ui_element_id { luil::ui_element_kind::virtual_list_row, key };
+        return luil::virtual_list_row_id(u8"files", key);
     }
 
     [[nodiscard]] luil::virtual_list_message_factory move_factory()

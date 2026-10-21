@@ -107,14 +107,14 @@ TEST_CASE("A tree list indents rows and puts a triangle only on branches", "[ui]
 {
     const std::shared_ptr<const luil::ui_tree> tree { published(make_config(u8"src")) };
     REQUIRE(tree->duplicate_ids().empty());
-    const luil::ui_element* const root_expander { tree->find({ luil::ui_element_kind::virtual_list_expander, u8"src" }) };
-    const luil::ui_element* const child_expander { tree->find({ luil::ui_element_kind::virtual_list_expander, u8"src/ui" }) };
+    const luil::ui_element* const root_expander { tree->find(luil::virtual_list_expander_id(u8"tree", u8"src")) };
+    const luil::ui_element* const child_expander { tree->find(luil::virtual_list_expander_id(u8"tree", u8"src/ui")) };
     REQUIRE(root_expander != nullptr);
     REQUIRE(child_expander != nullptr);
     // 깊이 하나가 한 칸 들여쓰기다.
     REQUIRE(child_expander->bounds().x - root_expander->bounds().x == luil::list_indent_step);
     // 잎에는 삼각형이 없다.
-    REQUIRE(tree->find({ luil::ui_element_kind::virtual_list_expander, u8"src/main.cpp" }) == nullptr);
+    REQUIRE(tree->find(luil::virtual_list_expander_id(u8"tree", u8"src/main.cpp")) == nullptr);
 }
 
 TEST_CASE("Pressing a triangle sends the absolute expansion and keeps focus on the list", "[ui][list][tree]")
@@ -122,7 +122,7 @@ TEST_CASE("Pressing a triangle sends the absolute expansion and keeps focus on t
     luil::interaction_controller controller {};
     const std::shared_ptr<const luil::ui_tree> tree { published(make_config(u8"src")) };
     controller.set_tree(tree);
-    const luil::rect_f box { tree->find({ luil::ui_element_kind::virtual_list_expander, u8"src/ui" })->bounds() };
+    const luil::rect_f box { tree->find(luil::virtual_list_expander_id(u8"tree", u8"src/ui"))->bounds() };
     const float x { box.x + box.width / 2.0f };
     const float y { box.y + box.height / 2.0f };
     static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, at(0) }));
@@ -182,8 +182,8 @@ TEST_CASE("Left and right walk the hierarchy", "[ui][list][tree][keys]")
 TEST_CASE("Rows report their expansion and expand through assistive technology", "[ui][list][tree][accessibility]")
 {
     const std::shared_ptr<const luil::ui_tree> tree { published(make_config(u8"src")) };
-    const luil::ui_element* const branch { tree->find({ luil::ui_element_kind::virtual_list_row, u8"src/ui" }) };
-    const luil::ui_element* const leaf { tree->find({ luil::ui_element_kind::virtual_list_row, u8"src/main.cpp" }) };
+    const luil::ui_element* const branch { tree->find(luil::virtual_list_row_id(u8"tree", u8"src/ui")) };
+    const luil::ui_element* const leaf { tree->find(luil::virtual_list_row_id(u8"tree", u8"src/main.cpp")) };
     REQUIRE(branch->accessibility().expanded == false);
     REQUIRE(leaf->accessibility().expanded.has_value() == false);
 
@@ -199,6 +199,6 @@ TEST_CASE("A list without the tree gutter keeps the state but draws no triangle"
     luil::virtual_list_config config { make_config(u8"src") };
     config.tree_gutter = false;
     const std::shared_ptr<const luil::ui_tree> tree { published(std::move(config)) };
-    REQUIRE(tree->find({ luil::ui_element_kind::virtual_list_expander, u8"src" }) == nullptr);
-    REQUIRE(tree->find({ luil::ui_element_kind::virtual_list_row, u8"src" })->accessibility().expanded == true);
+    REQUIRE(tree->find(luil::virtual_list_expander_id(u8"tree", u8"src")) == nullptr);
+    REQUIRE(tree->find(luil::virtual_list_row_id(u8"tree", u8"src"))->accessibility().expanded == true);
 }

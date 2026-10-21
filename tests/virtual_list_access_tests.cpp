@@ -2,6 +2,7 @@
 
 #include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
+#include "luil/ui/stack_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
 
@@ -101,13 +102,13 @@ TEST_CASE("A virtual list answers for rows it did not build", "[ui][list][access
     REQUIRE(items->access_item_count() == 1000u);
 
     // 503번은 창 밖이고 고르지 않았으므로 tree에 없다.
-    const luil::ui_element_id distant { luil::ui_element_kind::virtual_list_row, u8"item503" };
+    const luil::ui_element_id distant { luil::virtual_list_row_id(u8"files", u8"item503") };
     REQUIRE(tree->find(distant) == nullptr);
     REQUIRE(items->access_item_id(503u) == distant);
     REQUIRE(items->access_item_index(distant) == 503u);
     REQUIRE(items->access_item_name(503u) == u8"item503");
     // 다른 kind는 같은 키라도 항목이 아니다.
-    REQUIRE(items->access_item_index({ luil::ui_element_kind::virtual_list_expander, u8"item503" }).has_value() == false);
+    REQUIRE(items->access_item_index(luil::virtual_list_expander_id(u8"files", u8"item503")).has_value() == false);
     REQUIRE(items->access_item_id(1000u) == luil::ui_element_id {});
 }
 
@@ -120,8 +121,8 @@ TEST_CASE("Reading the selection from the model has no offscreen limit", "[ui][l
     // 모델은 모두를 모델 순서로 답한다.
     const std::vector<luil::ui_element_id> selected { luil::access_selected_ids(list) };
     REQUIRE(selected.size() == 200u);
-    REQUIRE(selected.front().owner == u8"item0");
-    REQUIRE(selected.back().owner == u8"item995");
+    REQUIRE(selected.front() == luil::virtual_list_row_id(u8"files", u8"item0"));
+    REQUIRE(selected.back() == luil::virtual_list_row_id(u8"files", u8"item995"));
 }
 
 TEST_CASE("A probe row answers like a built row without building the app content", "[ui][list][accessibility]")
@@ -204,9 +205,39 @@ TEST_CASE("Item positions count siblings across the whole model", "[ui][list][ac
 TEST_CASE("A built row finds its model container", "[ui][list][accessibility]")
 {
     const std::shared_ptr<const luil::ui_tree> tree { published(make_config()) };
-    const luil::ui_element_id close { luil::ui_element_kind::virtual_list_row, u8"item2" };
+    const luil::ui_element_id close { luil::virtual_list_row_id(u8"files", u8"item2") };
     REQUIRE(tree->find(close) != nullptr);
     REQUIRE(luil::access_item_container_of(*tree, close) == &list_of(*tree));
     // 모델이 없는 container의 항목은 모델 container가 없다.
     REQUIRE(luil::access_item_container_of(*tree, { luil::ui_element_kind::virtual_list, u8"files" }) == nullptr);
+}
+
+TEST_CASE("Two lists showing the same key on one surface keep distinct row ids", "[ui][list][accessibility]")
+{
+    // 저장소 계층과 변경 표처럼 두 목록이 같은 경로를 보인다.
+    const auto list = [](std::u8string owner) {
+        luil::virtual_list_config config {};
+        config.owner = std::move(owner);
+        config.items = { { u8"trunk/CMakeLists.txt", u8"CMakeLists.txt" }, { u8"README.md", u8"README.md" } };
+        return std::make_unique<luil::virtual_list_element>(std::move(config));
+    };
+    auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { luil::application_element_kind(70), u8"pair" }, luil::stack_config { .direction = luil::stack_direction::row }) };
+    row->add_flexible(list(u8"tree"));
+    row->add_flexible(list(u8"changes"));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(row), { 0.0f, 0.0f, 400.0f, 200.0f }, 1.0f) };
+
+    REQUIRE(tree.duplicate_ids().empty());
+    const luil::ui_element_id in_tree { luil::virtual_list_row_id(u8"tree", u8"trunk/CMakeLists.txt") };
+    const luil::ui_element_id in_changes { luil::virtual_list_row_id(u8"changes", u8"trunk/CMakeLists.txt") };
+    REQUIRE(in_tree != in_changes);
+    REQUIRE(tree.find(in_tree) != nullptr);
+    REQUIRE(tree.find(in_changes) != nullptr);
+
+    // 각 목록의 모델은 제 행만 제 항목으로 안다. 키가 같아도 다른 목록의 행은 아니다.
+    const luil::access_item_model& tree_items { *tree.find({ luil::ui_element_kind::virtual_list, u8"tree" })->access_items() };
+    REQUIRE(tree_items.access_item_index(in_tree) == 0u);
+    REQUIRE(tree_items.access_item_index(in_changes).has_value() == false);
+    REQUIRE(luil::access_item_container_of(tree, in_changes) == tree.find({ luil::ui_element_kind::virtual_list, u8"changes" }));
+    // 목록 owner가 다른 목록 owner의 앞부분이어도 갈린다 (`tree`와 `tree2`).
+    REQUIRE(tree_items.access_item_index(luil::virtual_list_row_id(u8"tree2", u8"README.md")).has_value() == false);
 }

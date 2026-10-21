@@ -63,7 +63,7 @@
 
 | 목록이 쥔다 | `build_row`가 쥔다 |
 | --- | --- |
-| 행의 자리표 (`virtual_list_row` + 항목 key) | 글·아이콘·안쪽 컨트롤 |
+| 행의 자리표 (`virtual_list_row_id`: 목록 owner + 항목 key) | 글·아이콘·안쪽 컨트롤 |
 | 선택 표시와 커서 표시 | 그 위에 얹을 앱만의 표시 |
 | 누름 액션 (`select`와 커서 따라가기 `move`), 두 번 누름 (`double_click`), 우클릭 (`context_menu`) | 안쪽 컨트롤 위의 우클릭 |
 | 글자 탐색 이름 (`search_label`) | — |
@@ -241,7 +241,7 @@ controller는 초점을 가진 element에게 **묶음보다 먼저** 묻는다. 
 
 받은 앱은 `ui/selection_model.h`의 `selection_pick`·`selection_move`·`selection_toggle`·`selection_select_all`로 다음 선택을 계산하고, 모델이 바뀌면 `selection_reconcile`로 맞춘다. `move`만 든 목록은 지금과 같다 — Shift는 보이지 않고 Ctrl+화살표·Ctrl+A는 앱 정책으로 흐른다.
 
-다른 목록에 놓으려면 그 목록의 행이나 목록을 감싼 element에 `drop_target`을 단다. payload는 표면 안의 어느 놓을 자리로도 간다 — 받는 쪽이 `source.owner`·`dragged_owners`로 무엇이 왔는지 본다.
+다른 목록에 놓으려면 그 목록의 행이나 목록을 감싼 element에 `drop_target`을 단다. payload는 표면 안의 어느 놓을 자리로도 간다 — 받는 쪽이 `dragged_owner`·`dragged_owners`(항목 키)와 `container`(출발 목록)로 무엇이 왔는지 본다. `source`는 눌린 행의 자리표라 그 owner는 키가 아니다 (아래 행 자리표).
 
 ## 접근성
 
@@ -261,7 +261,7 @@ controller는 초점을 가진 element에게 **묶음보다 먼저** 묻는다. 
 | 지어지지 않은 항목의 이름·상태·고르기·펼치기 | 그 항목의 행을 tree 밖에 따로 지어 묻는다 (`access_item_probe`) |
 | 들이기 (VirtualizedItem `Realize`·`ScrollIntoView`) | 그 행을 창 안으로 흘리는 `scroll` 메시지다. 이미 보이면 할 일이 없다 |
 
-- **항목의 id는 행이 지어지면 서는 자리표와 같다** (`virtual_list_row`, 키). 보조 기술이 찾아 쥔 항목이 들인 뒤에 tree의 행으로 이어진다. UIA RuntimeId도 같은 id에서 난다.
+- **항목의 id는 행이 지어지면 서는 자리표와 같다** (`virtual_list_row_id`). 보조 기술이 찾아 쥔 항목이 들인 뒤에 tree의 행으로 이어진다. UIA RuntimeId도 같은 id에서 난다.
 - 따로 짓는 행은 지어진 행과 **같은 코드**(`make_row`)다. 이름·고름·실행의 답이 어긋날 수 없다. 다만 앱의 행 내용(`build_row`)과 삼각형은 짓지 않는다. 게시된 뒤에는 앱 함수를 부르지 않는다는 `build_row`의 약속을 지키고, 행 하나의 이름·상태·실행은 내용 없이도 행이 답한다.
 - 지어지지 않은 항목은 화면 밖(`IsOffscreen`)이고 사각형이 비었다. 접근 tree의 형제 줄에도 서지 않는다 — 부모(목록)만 있다.
 - 실행의 거절은 지어진 행과 같다. 비활성 항목은 할 수 없고, 손이 닿는지는 목록이 답한다 (창 밖 행이 키보드로 닿는 것과 같다).
@@ -270,6 +270,15 @@ controller는 초점을 가진 element에게 **묶음보다 먼저** 묻는다. 
 몇백 줄짜리 화면이라면 이 맞바꿈을 하지 않는 쪽이 낫다. `list_element`는 모든 행을 tree에 남기므로 순회가 온전하다 ([list-view-design.md](list-view-design.md)).
 
 행 kind가 `list_row`와 갈리는 것도 접근성 때문이다. 가상 목록의 행은 스크롤할 때마다 tree에서 나고 사라지므로, 같은 kind로 두면 보조 기술이 두 목록의 행을 한 이름 공간에서 본다.
+
+### 행 자리표
+
+행의 자리표는 `virtual_list_row_id(목록 owner, 키)`이고, owner는 `목록 owner + U+001F + 키`다. 계층의 삼각형은 `virtual_list_expander_id`로 같은 규약이다. 표의 부품(`table_row`·`table_expander` 등)과 같은 구분자다.
+
+- **키는 목록 안에서만 유일하면 된다.** 버전 관리 도구의 저장소 계층과 변경 표처럼 두 목록이 같은 경로를 보여도 두 행의 자리표가 갈린다. 예전에는 자리표가 (행 kind, 키)라 같은 키가 두 목록에 서면 `ui_tree::duplicate_ids`에 걸렸고, 뒤의 행이 접근 tree에서 빠지고 hover·눌림이 두 목록 사이를 건넜다.
+- 행을 자리표로 찾는 앱·test는 이 함수로 짓는다. 자리표를 쪼개 키를 꺼내지 않는다 — 메시지(`select`·`pick`·`drop` 등)는 키를 그대로 싣는다.
+- UIA AutomationId(`kind:owner`)에도 목록 owner가 든다. 표 본문의 행은 표 owner가 목록 owner다.
+- 모델의 항목 찾기(`access_item_index`)는 제 목록의 자리표만 제 항목으로 안다. 키가 같아도 다른 목록의 행은 아니다.
 
 ## 사용 예
 
@@ -320,7 +329,7 @@ auto list { std::make_unique<luil::virtual_list_element>(std::move(config)) };
 - 행을 누르면 `select`가 나고, 그 행이 커서가 아니면 `move`가 함께 난다.
 - 글자 탐색의 `first`는 controller가 준다. 질의의 길이로 되짚지 않는다.
 - 행의 자리표·선택 표시·누름·글자 탐색 이름은 `build_row`가 무엇을 돌려주든 목록의 것이다.
-- 항목 key는 같은 표면의 목록 전체에서 유일하고 frame 간 안정적이다.
+- 항목 key는 목록 안에서 유일하고 frame 간 안정적이다. 행 자리표는 `virtual_list_row_id(목록 owner, 키)`라 다른 목록과 키가 겹쳐도 된다.
 - 보조 기술의 항목 찾기·선택 읽기·위치는 모델이 답하고, 그 항목의 id는 행이 지어지면 서는 자리표와 같다.
 - 게시된 뒤 모델로 답할 때는 `build_row`를 부르지 않는다.
 
@@ -345,7 +354,7 @@ build\vs2026-tests\tests\Release\luil_core_tests.exe "[benchmark][list]" --bench
 
 [virtual_list_element_tests.cpp](../tests/virtual_list_element_tests.cpp)는 다섯 순수 함수(내용 높이·행 자리·걸치는 구간·걸음·글자 탐색)를 창도 tree도 없이 검증하고, 그 위에서 만 줄 모델의 실현 범위, 창 밖 커서 행, 막대까지 뺀 단일 Tab 자리(`activate`만 든 목록이 자리인 것과 둘 다 없으면 자리가 아닌 것을 함께), 커스텀 행의 소유 경계, 방향키·Page·Home/End의 메시지 짝, Space·Enter가 내는 커서 행의 실행과 행 아래 빈 자리를 누른 것이 아무것도 내지 않는 것, 행 누름이 내는 `select`+`move` 짝, 모델 전체를 도는 글자 탐색과 한글 이름에서 같은 글자가 후보를 도는 것, 범위 밖 스크롤의 다듬기를 확인한다.
 
-[virtual_list_access_tests.cpp](../tests/virtual_list_access_tests.cpp)는 천 줄 모델에서 지어지지 않은 항목의 id·색인·이름, 창 밖 상한보다 많은 선택 읽기, 따로 지은 행의 상태·실행과 `build_row`를 부르지 않는 것, 들이기의 스크롤 양, 평평한 목록과 계층의 형제 자리를 확인한다. UIA 쪽(찾기·읽기·들이기와 들인 뒤 같은 provider가 tree의 행으로 답하는 것)은 [uia_provider_tests.cpp](../tests/uia_provider_tests.cpp)다.
+[virtual_list_access_tests.cpp](../tests/virtual_list_access_tests.cpp)는 천 줄 모델에서 지어지지 않은 항목의 id·색인·이름, 창 밖 상한보다 많은 선택 읽기, 따로 지은 행의 상태·실행과 `build_row`를 부르지 않는 것, 들이기의 스크롤 양, 평평한 목록과 계층의 형제 자리, 같은 키를 보이는 두 목록의 행 자리표가 갈리고 각 모델이 제 행만 아는 것을 확인한다. UIA 쪽(찾기·읽기·들이기와 들인 뒤 같은 provider가 tree의 행으로 답하는 것)은 [uia_provider_tests.cpp](../tests/uia_provider_tests.cpp)다.
 
 키 처리 순서(값 step이 묶음보다 앞이라는 것)와 글자 탐색의 질의 규칙은 [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)가 함께 확인한다.
 
