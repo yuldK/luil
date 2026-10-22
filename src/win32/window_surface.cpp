@@ -953,6 +953,7 @@ namespace luil::win32 {
         translated.surface = id_;
         // 이 메시지가 꺼내진 시점의 큐에 동기화된 상태다 (펜의 키 상태와 같은 규칙).
         translated.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+        translated.scale = static_cast<float>(dpi_) / 96.0f;
         std::optional<raw_input_event> event { translate_pointer_message(translated) };
         if (event.has_value() == false)
             return false;
@@ -970,6 +971,7 @@ namespace luil::win32 {
     void window_surface::annotate_pointer_event(raw_input_event& event, const POINT screen, const bool captured) const
     {
         auto* const moved { std::get_if<pointer_moved_event>(&event) };
+
         auto* const released { std::get_if<pointer_released_event>(&event) };
         if (moved == nullptr && (released == nullptr || released->cancelled))
             return;

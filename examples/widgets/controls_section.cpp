@@ -19,6 +19,21 @@
 #include <utility>
 
 namespace widgets {
+    namespace {
+        [[nodiscard]] luil::tooltip_config make_counter_tooltip()
+        {
+            return luil::make_markdown_tooltip({
+                .text = u8"### 카운터를 하나 더합니다\n\n**마크다운**과 *강조*, `인라인 코드`를 표시합니다. "
+                        u8"툴팁 위로 이동해도 열린 채로 유지됩니다.\n\n"
+                        u8"- 여러 줄 설명과 목록\n- 클릭할 수 있는 링크\n\n"
+                        u8"```cpp\nbutton->set_tooltip_content(\n    make_markdown_tooltip(help));\n```\n\n"
+                        u8"[여기를 눌러 카운터 더하기](app:increment)",
+                .activate_link
+                = [](const std::u8string_view destination) -> luil::input_action { return destination == u8"app:increment" ? luil::make_app_action(increment_intent {}) : luil::input_action {}; },
+            });
+        }
+    } // namespace
+
     section build_controls_section(const app_state& state)
     {
         // 제목 + 내용을 세로로 쌓는다.
@@ -53,6 +68,8 @@ namespace widgets {
         // 글자 버튼: 같은 intent를 낸다. 어느 쪽을 눌러도 결과가 같다.
         auto text_button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_counter_button }, luil::text_button_config { .text = u8"하나 더" }) };
         text_button->set_cursor(luil::ui_cursor::hand);
+        text_button->set_tooltip(u8"카운터를 하나 더합니다. 제목·설명·코드가 있는 커스텀 툴팁입니다.");
+        text_button->set_tooltip_content(make_counter_tooltip());
         text_button->set_action(luil::ui_trigger::left_click, luil::make_message_action(increment_intent {}));
         row->add(std::move(text_button), { .length = 96.0f });
 

@@ -1,0 +1,26 @@
+{
+  "source": "https://github.com/mity/md4c",
+  "version": "release-0.5.2",
+  "files": [
+    {
+      "name": "entity.c",
+      "sha256": "69d9362cd3b61261c3ed9d9f226ae1c66a3209f9db03805b1d114841ee3a6c1f"
+    },
+    {
+      "name": "entity.h",
+      "sha256": "7d021cb683c0e7643df6ce0db51d75f8cbc313be9ec754cb4dc18c40ebaa400b"
+    },
+    {
+      "name": "LICENSE.md",
+      "sha256": "d30937367d5413e7eaa218b1640b8946ff76fd34d97152f6979fd96169d5d0fc"
+    },
+    {
+      "name": "md4c.c",
+      "sha256": "52e39843b96b64d0281bf795128bcc88c9c4dc52d7436737e9f4306648dc4590"
+    },
+    {
+      "name": "md4c.h",
+      "sha256": "4efd19bf7ec270691d5b4189f496886e421768a814b5e817eb945aa85e859f18"
+    }
+  ]
+}

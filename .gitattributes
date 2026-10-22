@@ -30,6 +30,9 @@ gradlew text eol=lf
 *.gif binary
 *.webp binary
 
-# submodule로 가져오는 제3자 소스는 정규화하지 않는다.
+# 제3자 원본 소스와 고정한 checksum을 보존한다.
 /third_party/catch2/** -text
 /third_party/nlohmann_json/** -text
+# 원본 주석의 공백도 체크섬에 포함된다. 관리하는 메타데이터만 평소 규칙을 따른다.
+/third_party/md4c/** -text -whitespace
+/third_party/md4c/version.json text eol=crlf whitespace

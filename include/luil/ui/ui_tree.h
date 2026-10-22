@@ -56,6 +56,15 @@ namespace luil {
     // 배치가 끝난 element tree다.
     // 게시 후 불변이며 UI thread(그리기), input thread(hit test),
     // UI thread의 동기 조회(caption NC 클릭)가 공유한다.
+    struct tooltip_placement
+    {
+        rect_f anchor {};
+        rect_f box {};
+        rect_f content {};
+        // 원래 요소와 상자를 잇는 좁은 띠다. 이 틈을 건너는 동안에는 닫지 않는다.
+        rect_f bridge {};
+    };
+
     class ui_tree
     {
     public:
@@ -70,6 +79,8 @@ namespace luil {
         // 허용하므로 다른 질의(find·hit_test)와 같은 규칙으로 답한다.
         [[nodiscard]] const ui_element* root() const noexcept;
         [[nodiscard]] const ui_element* hit_test(float x, float y) const;
+        [[nodiscard]] std::optional<tooltip_placement> place_tooltip(const ui_element_id& owner, float scale) const;
+        [[nodiscard]] const ui_element* hit_tooltip(const ui_element_id& owner, const tooltip_placement& placement, float scale, float x, float y, float scroll_offset = 0.0f) const;
         // 좌표에서 payload를 수락하는 가장 위의 drop 대상을 찾는다.
         // 일반 hit test와 달리 drop 대상이 아닌 element(예: 끌 수 있는 항목 위의 버튼)를 건너뛰고,
         // hit test와 같은 규칙으로 잘려 보이지 않는 자리는 대상이 아니다.
@@ -212,6 +223,7 @@ namespace luil {
         // element에서 그 id까지의 경로를 path에 쌓는다 (root 쪽이 앞). 찾지 못하면 path는 그대로다.
         [[nodiscard]] static bool find_path(const ui_element& element, const ui_element_id& id, std::vector<const ui_element*>& path);
         void draw_focus_ring(draw_context& context, const interaction_snapshot& interaction) const;
+        [[nodiscard]] const ui_element* tooltip_target(const interaction_snapshot& interaction) const;
         void draw_tooltip(draw_context& context, const interaction_snapshot& interaction) const;
         void draw_drag_visual(draw_context& context, const drag_visual& drag) const;
 

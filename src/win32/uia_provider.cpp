@@ -456,9 +456,7 @@ namespace luil::win32 {
             if (before.value != after.value)
                 raise_property(*events_, *provider, UIA_ValueValuePropertyId, variant_from_utf8(before.value), variant_from_utf8(after.value));
             if (before.checked != after.checked || before.mixed != after.mixed)
-            {
                 raise_property(*events_, *provider, UIA_ToggleToggleStatePropertyId, variant_from_int(toggle_state_of(before)), variant_from_int(toggle_state_of(after)));
-            }
             if (before.expanded != after.expanded)
             {
                 const auto state { [](const std::optional<bool>& expanded) { return expanded == true ? ExpandCollapseState_Expanded : ExpandCollapseState_Collapsed; } };
@@ -995,6 +993,12 @@ namespace luil::win32 {
             case UIA_NamePropertyId:
                 result->vt = VT_BSTR;
                 result->bstrVal = bstr_from_utf8(element->accessibility().name);
+                break;
+            case UIA_HelpTextPropertyId:
+                // 커스텀 콘텐츠는 접근 tree에 들지 않으므로 원래 문자열이 설명을 맡는다.
+                // 글자 버튼처럼 이름이 이미 있는 컨트롤도 이름과 도움말을 따로 읽을 수 있다.
+                result->vt = VT_BSTR;
+                result->bstrVal = bstr_from_utf8(element->tooltip());
                 break;
             case UIA_ControlTypePropertyId:
                 set_int(*result, control_type_for(element->accessibility().role));
@@ -1735,8 +1739,7 @@ namespace luil::win32 {
         });
     }
 
-    HRESULT uia_element_provider::FindItemByProperty(IRawElementProviderSimple* const start_after, const PROPERTYID property, const VARIANT value,
-        IRawElementProviderSimple** const result)
+    HRESULT uia_element_provider::FindItemByProperty(IRawElementProviderSimple* const start_after, const PROPERTYID property, const VARIANT value, IRawElementProviderSimple** const result)
     {
         return guarded([&]() -> HRESULT {
             if (result == nullptr)

@@ -59,6 +59,7 @@ TEST_CASE("Executable resources contain the Codicons font and licenses", "[asset
     const std::string_view notice_text(static_cast<const char*>(notice.data), notice.size);
     REQUIRE(notice_text.find("Component: luil") != std::string_view::npos);
     REQUIRE(notice_text.find("Component: Unicode Data Files") != std::string_view::npos);
+    REQUIRE(notice_text.find("Component: MD4C") != std::string_view::npos);
     REQUIRE(notice_text.find("Copyright (c) 2026 yuldk") != std::string_view::npos);
     REQUIRE(notice_text.find("Permission is hereby granted, free of charge") != std::string_view::npos);
     REQUIRE(notice_text.find("OUT OF OR IN CONNECTION WITH THE SOFTWARE") != std::string_view::npos);

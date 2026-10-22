@@ -8,14 +8,26 @@ class SkCanvas;
 class SkPaint;
 
 namespace luil {
-    enum class text_layout_face { ui, code };
-    enum class text_layout_backend { unavailable, measured, primitive, harfbuzz };
+    enum class text_layout_face
+    {
+        ui,
+        code
+    };
+    enum class text_layout_backend
+    {
+        unavailable,
+        measured,
+        primitive,
+        harfbuzz
+    };
 
     struct text_layout_style
     {
         std::size_t begin { 0 };
         std::size_t end { 0 };
         bool bold { false };
+        bool italic { false };
+        bool code { false };
         [[nodiscard]] bool operator==(const text_layout_style&) const noexcept = default;
     };
 
@@ -33,7 +45,11 @@ namespace luil {
         [[nodiscard]] bool operator==(const text_layout_request&) const noexcept = default;
     };
 
-    struct text_layout_size { float width { 0.0f }; float height { 0.0f }; };
+    struct text_layout_size
+    {
+        float width { 0.0f };
+        float height { 0.0f };
+    };
     struct text_layout_cluster
     {
         std::size_t begin { 0 };
@@ -122,6 +138,5 @@ namespace luil {
     void clear_text_layout_cache();
 
     // origin은 첫 줄의 왼쪽 위다. 범위는 원문 byte offset이며 전체 glyph를 다시 shape하지 않는다.
-    void draw_text_layout(SkCanvas& canvas, const text_layout& layout, zoom_point origin, const SkPaint& paint,
-        std::size_t begin = 0, std::size_t end = std::numeric_limits<std::size_t>::max());
+    void draw_text_layout(SkCanvas& canvas, const text_layout& layout, zoom_point origin, const SkPaint& paint, std::size_t begin = 0, std::size_t end = std::numeric_limits<std::size_t>::max());
 } // namespace luil

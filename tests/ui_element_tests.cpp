@@ -295,6 +295,7 @@ TEST_CASE("The tree announces the tooltip delay as a next update", "[ui][element
     root->arrange({ { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f });
     auto target { std::make_unique<test_panel>(card_id(kind_card_body, u8"hinted")) };
     target->set_tooltip(u8"설명");
+    target->arrange({ { 10.0f, 10.0f, 50.0f, 20.0f }, 1.0f });
     root->add(std::move(target));
     const luil::ui_tree tree { std::move(root) };
 

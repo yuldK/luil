@@ -12,6 +12,8 @@
 | 앱 스타일(중립 색·tone·치수) | `ui_style`, `default_ui_style` | [theme/ui_style.h](../include/luil/theme/ui_style.h) | [설명](concepts/theming.md) |
 | 불변 화면 트리 | `ui_tree` | [ui/ui_tree.h](../include/luil/ui/ui_tree.h) | [설명](concepts/immutable-tree.md) |
 | 포인터·키보드 입력 정책 | `interaction_policy` | [ui/ui_interaction.h](../include/luil/ui/ui_interaction.h) | [설명](concepts/interaction.md) |
+| 문자열·커스텀·마크다운 툴팁 | `set_tooltip`, `set_tooltip_content`, `make_markdown_tooltip` | [ui/ui_element.h](../include/luil/ui/ui_element.h) | [설명](tooltip-design.md) |
+| 마크다운 본문·링크 | `markdown_element`, `parse_markdown` | [ui/markdown_element.h](../include/luil/ui/markdown_element.h) | [설명](tooltip-design.md) |
 | 텍스트 표시 | `label_element` | [ui/label_element.h](../include/luil/ui/label_element.h) | [설명](concepts/ui-element.md) |
 | 아이콘 버튼 | `button_element` | [ui/button_element.h](../include/luil/ui/button_element.h) | [설명](concepts/ui-element.md) |
 | 폰트 아이콘 표시 | `glyph_element` | [ui/glyph_element.h](../include/luil/ui/glyph_element.h) | [설명](concepts/fonts.md) |

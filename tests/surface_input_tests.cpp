@@ -201,3 +201,17 @@ TEST_CASE("Mouse presses, moves and releases carry Ctrl, Shift and Alt", "[surfa
     REQUIRE(up.shift);
     REQUIRE(up.alt == false);
 }
+
+TEST_CASE("Native mouse hover and press carry the same surface DPI for tooltip hits", "[win32][input][tooltip]")
+{
+    luil::win32::pointer_message message {};
+    message.message = WM_MOUSEMOVE;
+    message.scale = 1.5f;
+    const auto hover { luil::win32::translate_pointer_message(message) };
+    REQUIRE(hover.has_value());
+    REQUIRE(std::get<luil::pointer_moved_event>(*hover).scale == 1.5f);
+    message.message = WM_LBUTTONDOWN;
+    const auto press { luil::win32::translate_pointer_message(message) };
+    REQUIRE(press.has_value());
+    REQUIRE(std::get<luil::pointer_pressed_event>(*press).scale == 1.5f);
+}

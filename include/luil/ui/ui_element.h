@@ -736,6 +736,17 @@ namespace luil {
 
     // input thread가 게시하고 UI thread가 그리기에 쓰는 상호작용 발행본이다.
     // 앱 상태가 아니라 순수한 "입력 정규화 상태"다.
+    struct tooltip_interaction
+    {
+        ui_element_id owner {};
+        std::u8string surface {};
+        ui_element_id hovered {};
+        ui_element_id pressed {};
+        float scale { 1.0f };
+        float scroll_offset { 0.0f };
+        [[nodiscard]] bool operator==(const tooltip_interaction&) const = default;
+    };
+
     struct interaction_snapshot
     {
         ui_element_id hovered {};
@@ -785,6 +796,8 @@ namespace luil {
         //    강조가 그냥 사라진다 — 그래서 강조는 자기 표식을 따로 든다
         //    (multi-window-design.md).
         std::u8string menu_surface {};
+        // 커스텀 툴팁의 id 공간은 주 tree와 분리한다. 원래 요소의 hover는 표시 수명을 유지한다.
+        std::optional<tooltip_interaction> tooltip {};
 
         [[nodiscard]] bool operator==(const interaction_snapshot&) const = default;
     };
@@ -805,6 +818,24 @@ namespace luil {
     [[nodiscard]] interaction_snapshot interaction_for_surface(interaction_snapshot snapshot, const std::u8string& surface);
 
     inline constexpr std::chrono::milliseconds tooltip_delay { 500 };
+    class ui_tree;
+
+    // 정보 표시용 hover 콘텐츠다. 내용은 배율 1의 논리 좌표로 배치한 독립 tree이고,
+    // root의 bounds가 내용 크기다. 그릴 때 소유 표면의 DPI를 적용하므로 여러 배율에서 공유할 수 있다.
+    // 포인터는 내용에 먼저 전달한다. 키보드 초점·접근 tree는 분리하며 읽을 요약은 소유 요소의 set_tooltip에 둔다.
+    struct tooltip_config
+    {
+        std::shared_ptr<const ui_tree> content {};
+        std::chrono::milliseconds delay { tooltip_delay };
+        float padding { 8.0f };
+        float gap { 3.0f };
+        float corner_radius { 4.0f };
+        float shadow { 0.16f };
+        // 비어 있으면 각각 tooltip_background·tooltip_border다.
+        std::function<ui_color(const ui_color_palette&)> background {};
+        std::function<ui_color(const ui_color_palette&)> border {};
+    };
+
     // caret 깜빡임의 반주기다.
     // 켜짐·꺼짐이 이 간격으로 번갈아 나타난다.
     inline constexpr std::chrono::milliseconds caret_blink_interval { 530 };
@@ -833,6 +864,9 @@ namespace luil {
         [[nodiscard]] bool enabled() const noexcept;
         [[nodiscard]] bool visible() const noexcept;
         [[nodiscard]] const std::u8string& tooltip() const noexcept;
+        // 유효한 커스텀 내용이 없으면 nullptr다. 문자열은 접근성 요약과 기본 표시로 남는다.
+        [[nodiscard]] const tooltip_config* tooltip_content() const noexcept;
+        [[nodiscard]] bool has_tooltip() const noexcept;
         // 묶음 안 글자 탐색이 읽는 글이다 (그리기에는 쓰지 않는다).
         // 비어 있으면 그 항목은 글자로 찾을 수 없다.
         [[nodiscard]] const std::u8string& search_label() const noexcept;
@@ -943,9 +977,18 @@ namespace luil {
         void set_enabled(bool value) noexcept;
         void set_visible(bool value) noexcept;
         // 후보 popup처럼 입력 칸의 논리 초점을 유지하는 표면에 쓴다.
-        void set_preserve_pointer_focus(bool preserve) noexcept { preserve_pointer_focus_ = preserve; }
-        [[nodiscard]] bool preserves_pointer_focus() const noexcept { return preserve_pointer_focus_; }
+        void set_preserve_pointer_focus(bool preserve) noexcept
+        {
+            preserve_pointer_focus_ = preserve;
+        }
+        [[nodiscard]] bool preserves_pointer_focus() const noexcept
+        {
+            return preserve_pointer_focus_;
+        }
         void set_tooltip(std::u8string text);
+        // 커스텀 내용이 문자열 대신 표시된다. 빈 content로 지우면 문자열 표시로 돌아간다.
+        // 게시 후에는 내용 tree도 불변이다. 화면 밖으로 넘치는 내용은 표면 안에서 잘린다.
+        void set_tooltip_content(tooltip_config config);
         void set_search_label(std::u8string text);
         // 화면에 뜨지 않는, 보조 기술만 읽는 이름이다 (`access_name`).
         //
@@ -1145,6 +1188,7 @@ namespace luil {
         bool visible_ { true };
         bool arranged_ { false };
         std::u8string tooltip_ {};
+        std::unique_ptr<tooltip_config> tooltip_content_ {};
         bool preserve_pointer_focus_ { false };
         std::u8string search_label_ {};
         std::u8string access_name_ {};

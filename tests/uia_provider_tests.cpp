@@ -457,6 +457,26 @@ TEST_CASE("A UIA provider answers name and control type from the current tree", 
     root->Release();
 }
 
+TEST_CASE("A custom tooltip exposes its summary as UIA help independently of its control name", "[win32][uia][tooltip]")
+{
+    fake_uia_host host {};
+    auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"confirm" }, luil::text_button_config { .text = u8"확인" }) };
+    button->set_tooltip(u8"이 변경을 저장합니다");
+    auto content { std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"description" }, luil::label_config { .text = u8"자세한 도움말" }) };
+    button->set_tooltip_content({ .content = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(content), { 0.0f, 0.0f, 120.0f, 24.0f }, 1.0f)) });
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(button), { 0.0f, 0.0f, 80.0f, 30.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const provider { root->make_element_provider({ kind_item, u8"confirm" }) };
+    REQUIRE(read_text_property(*provider, UIA_NamePropertyId) == L"확인");
+    REQUIRE(read_text_property(*provider, UIA_HelpTextPropertyId) == L"이 변경을 저장합니다");
+    REQUIRE(host.tree->find({ kind_item, u8"description" }) == nullptr);
+
+    // 같은 provider도 새 frame에서 지운 설명을 다시 읽는다.
+    host.tree = make_page_tree();
+    REQUIRE(read_text_property(*provider, UIA_HelpTextPropertyId).empty());
+    provider->Release();
+    root->Release();
+}
 TEST_CASE("Tree, table, toolbar, separator and status bar roles map to their UIA control types", "[win32][uia]")
 {
     struct expected_type
@@ -2076,8 +2096,7 @@ namespace {
     }
 
     // 목록의 ItemContainer로 찾은 항목이다. 없으면 nullptr다.
-    [[nodiscard]] luil::win32::uia_element_provider* find_item(
-        luil::win32::uia_element_provider& list, luil::win32::uia_element_provider* const after, const PROPERTYID property, const VARIANT& value)
+    [[nodiscard]] luil::win32::uia_element_provider* find_item(luil::win32::uia_element_provider& list, luil::win32::uia_element_provider* const after, const PROPERTYID property, const VARIANT& value)
     {
         IRawElementProviderSimple* found { nullptr };
         REQUIRE(list.FindItemByProperty(after, property, value, &found) == S_OK);

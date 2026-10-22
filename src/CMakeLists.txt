@@ -192,6 +192,8 @@ luil_add_source_filter(luil_core_files "ui/content"
     ui/badge_paint.h
     ui/image_element.cpp
     "${public_headers}/ui/image_element.h"
+    ui/markdown_element.cpp
+    "${public_headers}/ui/markdown_element.h"
     ui/label_element.cpp
     "${public_headers}/ui/label_element.h"
     ui/webview_element.cpp
@@ -687,3 +689,26 @@ if(LUIL_PLATFORM STREQUAL "android")
         target_link_libraries(luil PRIVATE luil_smb2)
     endif()
 endif()
+
+# CommonMark 파서는 원본 C로 컴파일해 core 정적 라이브러리에 담는다.
+target_sources(luil_core PRIVATE
+    "${LUIL_THIRD_PARTY_DIRECTORY}/md4c/md4c.c"
+    "${LUIL_THIRD_PARTY_DIRECTORY}/md4c/entity.c")
+target_include_directories(luil_core SYSTEM PRIVATE "${LUIL_THIRD_PARTY_DIRECTORY}/md4c")
+set_source_files_properties(
+    "${LUIL_THIRD_PARTY_DIRECTORY}/md4c/md4c.c"
+    "${LUIL_THIRD_PARTY_DIRECTORY}/md4c/entity.c"
+    PROPERTIES COMPILE_OPTIONS "$<IF:$<C_COMPILER_ID:MSVC>,/w,-w>")
+
+# 원본의 줄 끝을 유지한 채 고정 릴리스의 체크섬을 확인한다.
+file(READ "${LUIL_THIRD_PARTY_DIRECTORY}/md4c/version.json" md4c_manifest)
+string(JSON md4c_file_count LENGTH "${md4c_manifest}" files)
+math(EXPR md4c_last_file "${md4c_file_count} - 1")
+foreach(index RANGE ${md4c_last_file})
+    string(JSON md4c_file GET "${md4c_manifest}" files ${index} name)
+    string(JSON md4c_expected GET "${md4c_manifest}" files ${index} sha256)
+    file(SHA256 "${LUIL_THIRD_PARTY_DIRECTORY}/md4c/${md4c_file}" md4c_actual)
+    if(NOT md4c_actual STREQUAL md4c_expected)
+        message(FATAL_ERROR "MD4C checksum mismatch: ${md4c_file}")
+    endif()
+endforeach()

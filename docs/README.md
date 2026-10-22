@@ -60,6 +60,7 @@
 - [터치 제스처와 펜 입력](touch-pen-input-design.md)
 - [Modal dialog host](modal-dialog-design.md)
 - [시트와 서랍](sheet-design.md)
+- [문자열·커스텀·마크다운 툴팁](tooltip-design.md)
 - [Caption 버튼 구성](caption-button-design.md)
 - [모바일 앱 바](app-bar-design.md)
 
