@@ -94,6 +94,8 @@ namespace luil {
         std::optional<screen_point> screen {};
         // 포인터 밑에 실제로 보이는 표면이다 (`pointer_over`). 캡처 중에만 플랫폼이 싣는다.
         std::optional<pointer_over> over {};
+        // 커스텀 툴팁의 논리 좌표와 표면 좌표를 잇는 배율이다.
+        float scale { 1.0f };
     };
 
     struct pointer_pressed_event

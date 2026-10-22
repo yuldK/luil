@@ -1,9 +1,12 @@
 #include "luil/ui/ui_element.h"
 
+#include "luil/ui/ui_tree.h"
+
 #include "include/core/SkCanvas.h"
 #include "include/core/SkRect.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace luil {
@@ -47,6 +50,8 @@ namespace luil {
         // 값마다 자기 표식이 있고, 표식이 이 표면을 가리키지 않으면 그 값은
         // 여기서 일어난 일이 아니다. **값과 표식을 함께 비운다** — 표식만 남으면
         // 거른 결과가 그 자체로는 옳지 않은 snapshot이 된다.
+        if (view.tooltip.has_value() && view.tooltip->surface != surface)
+            view.tooltip.reset();
         if (view.hovered_surface != surface)
         {
             view.hovered = {};
@@ -130,6 +135,25 @@ namespace luil {
         return tooltip_;
     }
 
+    const tooltip_config* ui_element::tooltip_content() const noexcept
+    {
+        if (tooltip_content_ == nullptr)
+            return nullptr;
+        const ui_tree* const content { tooltip_content_->content.get() };
+        if (content == nullptr || content->root() == nullptr)
+            return nullptr;
+        const ui_element& root { *content->root() };
+        const rect_f box { root.bounds() };
+        return root.visible() && root.arranged() && std::isfinite(box.x) && std::isfinite(box.y) && std::isfinite(box.width) && std::isfinite(box.height) && box.width > 0.0f && box.height > 0.0f
+            ? tooltip_content_.get()
+            : nullptr;
+    }
+
+    bool ui_element::has_tooltip() const noexcept
+    {
+        return tooltip_.empty() == false || tooltip_content() != nullptr;
+    }
+
     const std::u8string& ui_element::search_label() const noexcept
     {
         return search_label_;
@@ -207,7 +231,7 @@ namespace luil {
 
     bool ui_element::interactive() const noexcept
     {
-        if (tooltip_.empty() == false || cursor_ != ui_cursor::inherit || drag_source_.has_value() || drop_target_.has_value() || pointer_drag_target_.has_value())
+        if (has_tooltip() || cursor_ != ui_cursor::inherit || drag_source_.has_value() || drop_target_.has_value() || pointer_drag_target_.has_value())
             return true;
         for (const ui_action& stored : actions_)
             if (stored)
@@ -240,6 +264,17 @@ namespace luil {
     void ui_element::set_tooltip(std::u8string text)
     {
         tooltip_ = std::move(text);
+    }
+
+    void ui_element::set_tooltip_content(tooltip_config config)
+    {
+        const auto nonnegative = [](const float value) { return std::isfinite(value) && value > 0.0f ? value : 0.0f; };
+        config.delay = std::max(config.delay, std::chrono::milliseconds::zero());
+        config.padding = nonnegative(config.padding);
+        config.gap = nonnegative(config.gap);
+        config.corner_radius = nonnegative(config.corner_radius);
+        config.shadow = std::min(nonnegative(config.shadow), 1.0f);
+        tooltip_content_ = config.content != nullptr ? std::make_unique<tooltip_config>(std::move(config)) : nullptr;
     }
 
     void ui_element::set_search_label(std::u8string text)

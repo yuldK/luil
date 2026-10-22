@@ -262,6 +262,7 @@ namespace luil::android {
             event.control = control;
             event.shift = shift;
             event.alt = alt;
+            event.scale = mapping.scale;
             return raw_input_event { event };
         };
 

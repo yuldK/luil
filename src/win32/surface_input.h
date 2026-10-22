@@ -28,6 +28,7 @@ namespace luil::win32 {
         // 그 메시지를 꺼낸 순간 Alt가 눌려 있었는가다 (`GetKeyState(VK_MENU)`).
         // Ctrl·Shift는 wparam(`MK_CONTROL`·`MK_SHIFT`)이 싣지만 Alt는 싣지 않아 창이 조회해 넣는다.
         bool alt { false };
+        float scale { 1.0f };
     };
 
     // 포인터·휠 메시지를 입력 이벤트로 옮긴다.

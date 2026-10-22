@@ -55,6 +55,7 @@ namespace luil {
                 moved.x = sample.x;
                 moved.y = sample.y;
                 moved.time = sample.time;
+                moved.scale = sample.scale;
                 moved.surface = sample.surface;
                 moved.device = sample.device;
                 moved.pointer_id = sample.pointer_id;
@@ -85,6 +86,7 @@ namespace luil {
             moved.x = sample.x;
             moved.y = sample.y;
             moved.time = sample.time;
+            moved.scale = sample.scale;
             moved.surface = sample.surface;
             moved.device = sample.device;
             moved.pointer_id = sample.pointer_id;

@@ -29,6 +29,9 @@ function(luil_install_rules)
     install(FILES "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../LICENSE"
         DESTINATION share/luil
         RENAME LICENSE.luil)
+    install(FILES "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/md4c/LICENSE.md"
+        DESTINATION share/luil
+        RENAME LICENSE.md4c)
     install(FILES "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/unicode-LICENSE.txt"
         DESTINATION share/luil
         RENAME LICENSE.unicode)

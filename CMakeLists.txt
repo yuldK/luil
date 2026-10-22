@@ -8,7 +8,7 @@ if(NOT DEFINED PROJECT_NAME)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(luil VERSION 0.1.0 LANGUAGES CXX)
+project(luil VERSION 0.1.0 LANGUAGES C CXX)
 
 # 대상 플랫폼이다. 플랫폼을 모르는 층(luil_core)은 어디서나 같고, 그 위의 조립과
 # 검사·Skia 계약이 여기서 갈린다 (docs/android-port-plan.md).

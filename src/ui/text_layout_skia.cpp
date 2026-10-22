@@ -53,9 +53,7 @@ namespace luil {
             {
                 for (const auto& run : runs)
                 {
-                    const auto first { std::lower_bound(run.groups.begin(), run.groups.end(), begin,
-                        [](const auto& group, const auto at) { return group.end <= at; })
-                    };
+                    const auto first { std::lower_bound(run.groups.begin(), run.groups.end(), begin, [](const auto& group, const auto at) { return group.end <= at; }) };
                     std::size_t glyph_begin { run.glyphs.size() };
                     std::size_t glyph_end { 0 };
                     for (auto group { first }; group != run.groups.end() && group->begin < end; ++group)
@@ -64,8 +62,8 @@ namespace luil {
                         glyph_end = std::max(glyph_end, group->first + group->count);
                     }
                     if (glyph_begin < glyph_end)
-                        canvas.drawGlyphs({ run.glyphs.data() + glyph_begin, glyph_end - glyph_begin },
-                            { run.positions.data() + glyph_begin, glyph_end - glyph_begin }, { origin.x, origin.y }, run.font, paint);
+                        canvas.drawGlyphs(
+                            { run.glyphs.data() + glyph_begin, glyph_end - glyph_begin }, { run.positions.data() + glyph_begin, glyph_end - glyph_begin }, { origin.x, origin.y }, run.font, paint);
                 }
             }
             std::size_t storage_bytes() const noexcept override
@@ -90,12 +88,16 @@ namespace luil {
             return { ink.x(), ink.y(), ink.width(), ink.height() };
         }
 
-        struct font_segment { std::size_t begin; std::size_t end; SkFont font; };
+        struct font_segment
+        {
+            std::size_t begin;
+            std::size_t end;
+            SkFont font;
+        };
 
         bool invisible_format(const char32_t codepoint) noexcept
         {
-            return codepoint == 0x200D || (codepoint >= 0xFE00 && codepoint <= 0xFE0F)
-                || (codepoint >= 0xE0100 && codepoint <= 0xE01EF) || (codepoint >= 0xE0020 && codepoint <= 0xE007F);
+            return codepoint == 0x200D || (codepoint >= 0xFE00 && codepoint <= 0xFE0F) || (codepoint >= 0xE0100 && codepoint <= 0xE01EF) || (codepoint >= 0xE0020 && codepoint <= 0xE007F);
         }
 
         bool covers(const SkFont& font, const std::u8string_view cluster)
@@ -124,8 +126,13 @@ namespace luil {
                     while (style != styles.end() && style->end <= offset + at)
                         ++style;
                     SkFont chosen { font };
-                    if (style != styles.end() && style->begin <= offset + at && style->bold)
-                        chosen.setEmbolden(true);
+                    if (style != styles.end() && style->begin <= offset + at)
+                    {
+                        chosen.setEmbolden(style->bold);
+                        chosen.setSkewX(style->italic ? -0.2f : 0.0f);
+                        if (style->code)
+                            chosen.setTypeface(configured_code_typeface());
+                    }
                     if (chosen.unicharToGlyph(static_cast<SkUnichar>(point.codepoint)) == 0)
                         if (auto fallback { text_layout_fallback(point.codepoint) }; fallback != nullptr)
                             chosen.setTypeface(std::move(fallback));
@@ -145,8 +152,13 @@ namespace luil {
                 while (style != styles.end() && style->end <= offset + at)
                     ++style;
                 SkFont chosen { font };
-                if (style != styles.end() && style->begin <= offset + at && style->bold)
-                    chosen.setEmbolden(true);
+                if (style != styles.end() && style->begin <= offset + at)
+                {
+                    chosen.setEmbolden(style->bold);
+                    chosen.setSkewX(style->italic ? -0.2f : 0.0f);
+                    if (style->code)
+                        chosen.setTypeface(configured_code_typeface());
+                }
                 const auto cluster { text.substr(at, next - at) };
                 if (covers(chosen, cluster) == false)
                 {
@@ -250,11 +262,27 @@ namespace luil {
         class layout_font_iterator final : public SkShaper::FontRunIterator
         {
         public:
-            explicit layout_font_iterator(const std::vector<font_segment>& fonts) : fonts_ { fonts } {}
-            void consume() override { current_ = next_++; end_ = fonts_[current_].end; }
-            std::size_t endOfCurrentRun() const override { return end_; }
-            bool atEnd() const override { return next_ == fonts_.size(); }
-            const SkFont& currentFont() const override { return fonts_[current_].font; }
+            explicit layout_font_iterator(const std::vector<font_segment>& fonts)
+                : fonts_ { fonts }
+            {}
+            void consume() override
+            {
+                current_ = next_++;
+                end_ = fonts_[current_].end;
+            }
+            std::size_t endOfCurrentRun() const override
+            {
+                return end_;
+            }
+            bool atEnd() const override
+            {
+                return next_ == fonts_.size();
+            }
+            const SkFont& currentFont() const override
+            {
+                return fonts_[current_].font;
+            }
+
         private:
             const std::vector<font_segment>& fonts_;
             std::size_t current_ { 0 };
@@ -267,9 +295,14 @@ namespace luil {
         public:
             text_layout_segment result {};
             std::shared_ptr<glyph_drawing> drawing { std::make_shared<glyph_drawing>() };
-            void beginLine() override { pen_ = 0.0f; }
-            void runInfo(const RunInfo&) override {}
-            void commitRunInfo() override {}
+            void beginLine() override
+            {
+                pen_ = 0.0f;
+            }
+            void runInfo(const RunInfo&) override
+            {}
+            void commitRunInfo() override
+            {}
             Buffer runBuffer(const RunInfo& info) override
             {
                 glyph_run run {};
@@ -307,7 +340,10 @@ namespace luil {
                 result.runs.push_back({ info.utf8Range.begin(), end, 0, info.glyphCount, rtl });
                 pen_ += info.fAdvance.x();
             }
-            void commitLine() override { result.width = pen_; }
+            void commitLine() override
+            {
+                result.width = pen_;
+            }
             text_layout_segment finish()
             {
                 std::sort(result.clusters.begin(), result.clusters.end(), [](const auto& a, const auto& b) { return a.begin < b.begin; });
@@ -317,6 +353,7 @@ namespace luil {
                 result.drawing = std::move(drawing);
                 return std::move(result);
             }
+
         private:
             float pen_ { 0.0f };
             std::vector<SkPoint> advances_ {};
@@ -386,10 +423,8 @@ namespace luil {
         auto& state { cache() };
         {
             const std::scoped_lock lock { state.mutex };
-            const auto found { std::find_if(state.entries.begin(), state.entries.end(), [&](const auto& entry) {
-                return entry.revision == revision && entry.font == font && entry.request == request;
-            })
-            };
+            const auto matches = [&](const auto& entry) { return entry.revision == revision && entry.font == font && entry.request == request; };
+            const auto found { std::find_if(state.entries.begin(), state.entries.end(), matches) };
             if (found != state.entries.end())
             {
                 ++state.usage.hits;
@@ -404,7 +439,7 @@ namespace luil {
         if (backend != text_layout_backend::unavailable && factory != nullptr && factory->getUnicode() != nullptr && text::utf8_is_valid(request.text))
             backend = text_layout_backend::harfbuzz;
 #endif
-        const auto layout { build_text_layout(request, backend, [&](const std::u8string_view text, const std::size_t offset) {
+        const auto shape = [&](const std::u8string_view text, const std::size_t offset) {
             const auto fonts { fonts_for(text, offset, font, request.styles, backend != text_layout_backend::harfbuzz) };
 #if defined(LUIL_UI_TEXT_LAYOUT)
             if (backend == text_layout_backend::harfbuzz && text.empty() == false)
@@ -419,8 +454,7 @@ namespace luil {
                     SkShaper::TrivialLanguageRunIterator languages { language.empty() ? "und" : language.c_str(), text.size() };
                     layout_run_handler handler {};
                     handler.drawing->base_font = font;
-                    shaper->shape(reinterpret_cast<const char*>(text.data()), text.size(), iterator, *bidi, *script, languages,
-                        nullptr, 0, std::numeric_limits<float>::max(), &handler);
+                    shaper->shape(reinterpret_cast<const char*>(text.data()), text.size(), iterator, *bidi, *script, languages, nullptr, 0, std::numeric_limits<float>::max(), &handler);
                     auto segment { handler.finish() };
                     set_metrics(segment, font, request.line_height, static_cast<const glyph_drawing*>(segment.drawing.get()));
                     return segment;
@@ -430,8 +464,8 @@ namespace luil {
             }
 #endif
             return primitive_segment(text, fonts, font, request.line_height);
-        })
         };
+        const auto layout { build_text_layout(request, backend, shape) };
         const std::size_t bytes { layout.storage_bytes() + sizeof(layout_cache_entry) + request.text.capacity() + request.styles.capacity() * sizeof(text_layout_style) };
         if (bytes <= cache_byte_limit)
         {
@@ -472,8 +506,7 @@ namespace luil {
                 canvas.save();
                 const float top { std::min(line.top, line.ink_bounds.y) };
                 const float bottom { std::max(line.top + line.height, line.ink_bounds.y + line.ink_bounds.height) };
-                canvas.clipRect(SkRect::MakeXYWH(origin.x + std::min(left, right), origin.y + top,
-                    std::abs(right - left), bottom - top));
+                canvas.clipRect(SkRect::MakeXYWH(origin.x + std::min(left, right), origin.y + top, std::abs(right - left), bottom - top));
             }
             drawing->draw(canvas, { origin.x, origin.y + line.top + line.baseline }, paint, from - line.begin, to - line.begin);
             if (clip)

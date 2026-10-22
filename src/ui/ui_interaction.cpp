@@ -218,6 +218,8 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process(const raw_input_event& event)
     {
+        if (auto actions { process_tooltip_event(event) }; actions.has_value())
+            return std::move(*actions);
         // 활성 표면은 `update_focus`의 **전제**라 그보다 먼저 선다.
         // 뒤에 두면 그 `update_focus`가 옛 활성 표면으로 진입을 판정해, 방금
         // 떠난 창의 가둠이 초점을 곧바로 되잡는다 — 거둠과 진입이 서로를 지우는
@@ -2770,16 +2772,14 @@ namespace luil {
         const bool word_navigation { event.word_navigation_down() };
         const text_input_snapshot value { focused_text_input().value_or(text_input_snapshot {}) };
         if (value.navigation_keys_to_parent && value.composing == false && event.shortcut_modifier_down() == false
-            && (event.key == key_code::arrow_up || event.key == key_code::arrow_down || event.key == key_code::page_up
-                || event.key == key_code::page_down || event.key == key_code::home || event.key == key_code::end || event.key == key_code::enter))
+            && (event.key == key_code::arrow_up || event.key == key_code::arrow_down || event.key == key_code::page_up || event.key == key_code::page_down || event.key == key_code::home
+                || event.key == key_code::end || event.key == key_code::enter))
             return std::nullopt;
         if (value.read_only)
         {
-            const bool edits { event.key == key_code::delete_forward
-                || (event.key == key_code::enter && event.shortcut_modifier_down() == false) || (event.key == key_code::insert && event.shift)
-                || (primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x
-                    || event.key == key_code::key_z || event.key == key_code::key_y))
-            };
+            const bool clipboard_edit { primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x || event.key == key_code::key_z || event.key == key_code::key_y) };
+            const bool enter_edit { event.key == key_code::enter && event.shortcut_modifier_down() == false };
+            const bool edits { event.key == key_code::delete_forward || enter_edit || (event.key == key_code::insert && event.shift) || clipboard_edit };
             if (edits)
                 return std::vector<input_action> {};
         }
@@ -3180,8 +3180,168 @@ namespace luil {
         return ui_action_context { element, x, y, modifiers.control, modifiers.shift, modifiers.alt };
     }
 
+    void interaction_controller::dismiss_tooltip() noexcept
+    {
+        snapshot_.tooltip.reset();
+        snapshot_.hover_started_at.reset();
+        tooltip_pressed_content_.reset();
+    }
+
+    bool interaction_controller::update_tooltip(const float x, const float y, const std::chrono::steady_clock::time_point time, const std::u8string& surface, const float scale)
+    {
+        const ui_tree* const tree { surface_tree(surface) };
+        const bool open { snapshot_.tooltip.has_value() };
+        const ui_element_id owner { open ? snapshot_.tooltip->owner : snapshot_.hovered };
+        const std::u8string owner_surface { open ? snapshot_.tooltip->surface : snapshot_.hovered_surface };
+        const ui_element* const target { tree != nullptr ? tree->find(owner) : nullptr };
+        const tooltip_config* const config { target != nullptr ? target->tooltip_content() : nullptr };
+        if (owner_surface != surface || config == nullptr || snapshot_.drag.has_value() || snapshot_.pressed != ui_element_id {}
+            || (open == false && (snapshot_.hover_started_at.has_value() == false || time - *snapshot_.hover_started_at < config->delay)))
+        {
+            snapshot_.tooltip.reset();
+            tooltip_pressed_content_.reset();
+            return false;
+        }
+        const auto placement { tree->place_tooltip(owner, scale) };
+        if (placement.has_value() == false || (placement->anchor.contains(x, y) == false && placement->box.contains(x, y) == false && placement->bridge.contains(x, y) == false))
+        {
+            snapshot_.tooltip.reset();
+            return false;
+        }
+        if (open == false)
+            snapshot_.tooltip = tooltip_interaction { .owner = owner, .surface = surface, .scale = scale };
+        auto& state { *snapshot_.tooltip };
+        state.scale = scale;
+        state.scroll_offset = std::clamp(state.scroll_offset, 0.0f, std::max(0.0f, config->content->root()->bounds().height - placement->content.height / scale));
+        const ui_element* const hit { tree->hit_tooltip(owner, *placement, scale, x, y, state.scroll_offset) };
+        state.hovered = hit != nullptr ? hit->id() : ui_element_id {};
+        // tree의 주소는 매 frame 달라질 수 있다. 클릭의 정체성은 element id이며,
+        // 마크다운 링크는 목적지도 id에 담아 같은 자리의 다른 링크로 바뀌면 취소한다.
+        if (state.pressed != ui_element_id {} && config->content->find(state.pressed) == nullptr)
+            state.pressed = {};
+        return true;
+    }
+
+    std::optional<std::vector<input_action>> interaction_controller::process_tooltip_event(const raw_input_event& event)
+    {
+        return std::visit(
+            [this](const auto& value) -> std::optional<std::vector<input_action>> {
+                using event_type = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<event_type, pointer_moved_event>)
+                {
+                    if (value.device != pointer_device::touch && update_tooltip(value.x, value.y, value.time, value.surface, positive_scale(value.scale)))
+                    {
+                        pointer_inside_ = true;
+                        last_pointer_x_ = value.x;
+                        last_pointer_y_ = value.y;
+                        last_pointer_time_ = value.time;
+                        last_pointer_surface_ = value.surface;
+                        return std::vector<input_action> {};
+                    }
+                }
+                else if constexpr (std::is_same_v<event_type, pointer_pressed_event>)
+                {
+                    if (value.device != pointer_device::touch && update_tooltip(value.x, value.y, value.time, value.surface, positive_scale(value.scale)))
+                    {
+                        auto& state { *snapshot_.tooltip };
+                        const ui_tree* const tree { surface_tree(value.surface) };
+                        const auto placement { tree->place_tooltip(state.owner, state.scale) };
+                        if (placement->box.contains(value.x, value.y))
+                        {
+                            const auto* const hit { tree->hit_tooltip(state.owner, *placement, state.scale, value.x, value.y, state.scroll_offset) };
+                            state.pressed = hit != nullptr && hit->enabled() ? hit->id() : ui_element_id {};
+                            tooltip_pressed_button_ = value.button;
+                            tooltip_pressed_content_ = tree->find(state.owner)->tooltip_content()->content;
+                            return std::vector<input_action> {};
+                        }
+                    }
+                    if (snapshot_.tooltip.has_value())
+                        dismiss_tooltip();
+                }
+                else if constexpr (std::is_same_v<event_type, pointer_released_event>)
+                {
+                    if (tooltip_pressed_content_ != nullptr)
+                    {
+                        std::vector<input_action> actions {};
+                        if (value.button != tooltip_pressed_button_ && value.cancelled == false)
+                            return actions;
+                        if (snapshot_.tooltip.has_value() && snapshot_.tooltip->surface == value.surface && value.cancelled == false)
+                        {
+                            auto& state { *snapshot_.tooltip };
+                            const ui_tree* const tree { surface_tree(value.surface) };
+                            const auto placement { tree != nullptr ? tree->place_tooltip(state.owner, state.scale) : std::nullopt };
+                            if (placement.has_value())
+                                if (const auto* const hit { tree->hit_tooltip(state.owner, *placement, state.scale, value.x, value.y, state.scroll_offset) };
+                                    hit != nullptr && hit->enabled() && hit->id() == state.pressed)
+                                {
+                                    const ui_trigger trigger { value.button == pointer_button::left ? ui_trigger::left_click : ui_trigger::right_click };
+                                    if (const auto* const action { hit->action(trigger) }; action != nullptr)
+                                    {
+                                        const auto origin { tree->find(state.owner)->tooltip_content()->content->root()->bounds() };
+                                        actions = (*action)(action_context(hit->id(), (value.x - placement->content.x) / state.scale + origin.x,
+                                            (value.y - placement->content.y) / state.scale + origin.y + state.scroll_offset, modifiers_of(value)));
+                                    }
+                                }
+                            state.pressed = {};
+                        }
+                        tooltip_pressed_content_.reset();
+                        return actions;
+                    }
+                }
+                else if constexpr (std::is_same_v<event_type, mouse_wheel_event>)
+                {
+                    if (snapshot_.tooltip.has_value() && snapshot_.tooltip->surface == value.surface)
+                    {
+                        auto& state { *snapshot_.tooltip };
+                        const auto* const tree { surface_tree(value.surface) };
+                        const auto placement { tree != nullptr ? tree->place_tooltip(state.owner, state.scale) : std::nullopt };
+                        if (placement.has_value() && placement->box.contains(value.x, value.y))
+                        {
+                            const auto* const config { tree->find(state.owner)->tooltip_content() };
+                            const float maximum { std::max(0.0f, config->content->root()->bounds().height - placement->content.height / state.scale) };
+                            state.scroll_offset = std::clamp(state.scroll_offset - value.delta / 120.0f * input_wheel_scroll_step, 0.0f, maximum);
+                            state.hovered = {};
+                            state.pressed = {};
+                            tooltip_pressed_content_.reset();
+                            return std::vector<input_action> {};
+                        }
+                        dismiss_tooltip();
+                    }
+                }
+                else if constexpr (std::is_same_v<event_type, key_pressed_event>)
+                {
+                    const auto* const tree { surface_tree(value.surface) };
+                    const auto* const hovered { tree != nullptr ? tree->find(snapshot_.hovered) : nullptr };
+                    const bool dismiss { snapshot_.tooltip.has_value() || (hovered != nullptr && hovered->tooltip_content() != nullptr && snapshot_.hover_started_at.has_value()) };
+                    if (dismiss)
+                    {
+                        dismiss_tooltip();
+                        if (value.key == key_code::escape)
+                            return std::vector<input_action> {};
+                    }
+                }
+                else if constexpr (std::is_same_v<event_type, file_drag_entered_event>)
+                    dismiss_tooltip();
+                else if constexpr (std::is_same_v<event_type, pointer_left_event> || std::is_same_v<event_type, surface_focus_lost_event>)
+                {
+                    if (snapshot_.tooltip.has_value() && snapshot_.tooltip->surface == value.surface)
+                        dismiss_tooltip();
+                    else if (snapshot_.hovered_surface == value.surface)
+                    {
+                        const auto* const tree { surface_tree(value.surface) };
+                        const auto* const target { tree != nullptr ? tree->find(snapshot_.hovered) : nullptr };
+                        if (target != nullptr && target->tooltip_content() != nullptr)
+                            dismiss_tooltip();
+                    }
+                }
+                return std::nullopt;
+            },
+            event);
+    }
     void interaction_controller::update_hover(const float x, const float y, const std::chrono::steady_clock::time_point time, const bool moved)
     {
+        if (snapshot_.tooltip.has_value() && update_tooltip(x, y, time, last_pointer_surface_, snapshot_.tooltip->scale))
+            return;
         // hover는 포인터가 마지막으로 있던 표면의 tree로 판정한다.
         const ui_tree* const tree { surface_tree(last_pointer_surface_) };
         const ui_element* const hit { tree != nullptr ? tree->hit_test(x, y) : nullptr };
@@ -3634,6 +3794,7 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::cancel_dropped_gestures()
     {
+        dismiss_tooltip();
         inertia_.reset();
         // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
         // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.

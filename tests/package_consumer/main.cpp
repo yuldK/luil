@@ -3,6 +3,7 @@
 #include "luil/ui/glyph_element.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_encode.h"
+#include "luil/ui/markdown_element.h"
 
 #include <windows.h>
 
@@ -30,6 +31,14 @@ int main()
     if (notice_text.find("Component: luil") == std::string_view::npos || notice_text.find("Copyright (c) 2026 yuldk") == std::string_view::npos
         || notice_text.find("Permission is hereby granted, free of charge") == std::string_view::npos || notice_text.find("OUT OF OR IN CONNECTION WITH THE SOFTWARE") == std::string_view::npos)
         return 6;
+    if (notice_text.find("Component: MD4C") == std::string_view::npos)
+        return 10;
+    const auto markdown { luil::parse_markdown(u8"**help** [link](app:help) &amp;") };
+    if (markdown.size() != 1 || markdown.front().text != u8"help link &")
+        return 11;
+    const auto tooltip { luil::make_markdown_tooltip({ .text = u8"### Help\n\n`code`" }) };
+    if (tooltip.content == nullptr || tooltip.content->root() == nullptr || tooltip.content->unarranged().empty() == false)
+        return 12;
     const auto font { luil::load_codicon_typeface() };
     if (font == nullptr || font->unicharToGlyph(luil::codicons::icon_search) == 0)
         return 3;

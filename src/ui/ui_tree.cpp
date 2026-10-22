@@ -16,6 +16,80 @@
 #include <utility>
 
 namespace luil {
+    namespace {
+        [[nodiscard]] std::chrono::milliseconds tooltip_delay_of(const ui_element& element)
+        {
+            const tooltip_config* const config { element.tooltip_content() };
+            return config != nullptr ? config->delay : tooltip_delay;
+        }
+
+        [[nodiscard]] rect_f tooltip_bounds(const rect_f& window, const rect_f& anchor, const float width, const float height, const float gap)
+        {
+            const float box_width { std::min(width, window.width) };
+            const float box_height { std::min(height, window.height) };
+            float y { anchor.y + anchor.height + gap };
+            if (y + box_height > window.y + window.height)
+                y = anchor.y - box_height - gap;
+            return {
+                std::clamp(anchor.x, window.x, window.x + window.width - box_width),
+                std::clamp(y, window.y, window.y + window.height - box_height),
+                box_width,
+                box_height,
+            };
+        }
+
+        void draw_tooltip_content(draw_context& context, const tooltip_config& config, const rect_f& window, const rect_f& anchor, const interaction_snapshot& interaction)
+        {
+            const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+            const rect_f content { config.content->root()->bounds() };
+            const rect_f box { tooltip_bounds(window, anchor, (content.width + config.padding * 2.0f) * scale, (content.height + config.padding * 2.0f) * scale, config.gap * scale) };
+            const float padding { std::min({ config.padding * scale, box.width / 2.0f, box.height / 2.0f }) };
+            const float radius { config.corner_radius * scale };
+            const SkRRect body { SkRRect::MakeRectXY(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), radius, radius) };
+            const SkAutoCanvasRestore restore { &context.canvas, true };
+            context.canvas.clipRect(SkRect::MakeXYWH(window.x, window.y, window.width, window.height));
+            draw_surface_shadow(context, box, radius, config.shadow);
+            const SkPaint background { solid_paint(config.background ? config.background(context.palette) : context.palette.tooltip_background) };
+            context.canvas.drawRRect(body, background);
+            {
+                const SkAutoCanvasRestore restore_content { &context.canvas, true };
+                context.canvas.clipRRect(body);
+                context.canvas.clipRect(SkRect::MakeXYWH(box.x + padding, box.y + padding, box.width - padding * 2.0f, box.height - padding * 2.0f));
+                context.canvas.translate(box.x + padding, box.y + padding);
+                context.canvas.scale(scale, scale);
+                const float scroll { interaction.tooltip.has_value() ? interaction.tooltip->scroll_offset : 0.0f };
+                context.canvas.translate(-content.x, -content.y - scroll);
+                draw_context inner {
+                    .canvas = context.canvas,
+                    .codicon_typeface = context.codicon_typeface,
+                    .ui_typeface = context.ui_typeface,
+                    .code_typeface = context.code_typeface,
+                    .fonts = context.fonts,
+                    .palette = context.palette,
+                    .scale = 1.0f,
+                    .now = context.now,
+                    .maximized = context.maximized,
+                    .fullscreen = context.fullscreen,
+                    .metrics = context.metrics,
+                };
+                // 내용 tree의 id가 주 tree와 같아도 hover·눌림·초점 그림을 물려받지 않는다.
+                interaction_snapshot content_interaction {};
+                if (interaction.tooltip.has_value())
+                {
+                    content_interaction.hovered = interaction.tooltip->hovered;
+                    content_interaction.pressed = interaction.tooltip->pressed;
+                }
+                config.content->draw(inner, content_interaction);
+            }
+            SkPaint border { solid_paint(config.border ? config.border(context.palette) : context.palette.tooltip_border) };
+            border.setStyle(SkPaint::kStroke_Style);
+            border.setStrokeWidth(scale);
+            SkRRect outline { body };
+            outline.inset(scale / 2.0f, scale / 2.0f);
+            context.canvas.drawRRect(outline, border);
+        }
+    } // namespace
+
     ui_tree::ui_tree(std::unique_ptr<ui_element> root)
         : root_ { std::move(root) }
     {
@@ -39,6 +113,39 @@ namespace luil {
     const ui_element* ui_tree::hit_test(const float x, const float y) const
     {
         return root_ != nullptr ? root_->hit_test(x, y) : nullptr;
+    }
+
+    std::optional<tooltip_placement> ui_tree::place_tooltip(const ui_element_id& owner, const float requested_scale) const
+    {
+        const ui_element* const target { find(owner) };
+        const tooltip_config* const config { target != nullptr ? target->tooltip_content() : nullptr };
+        if (root_ == nullptr || config == nullptr || visibly_contains(owner) == false)
+            return std::nullopt;
+        const auto anchor { visible_bounds(*target) };
+        const rect_f window { root_->bounds() };
+        if (anchor.has_value() == false || window.width <= 0.0f || window.height <= 0.0f)
+            return std::nullopt;
+        const float scale { requested_scale > 0.0f ? requested_scale : 1.0f };
+        const rect_f content { config->content->root()->bounds() };
+        const rect_f box { tooltip_bounds(window, *anchor, (content.width + config->padding * 2.0f) * scale, (content.height + config->padding * 2.0f) * scale, config->gap * scale) };
+        const float padding { std::min({ config->padding * scale, box.width / 2.0f, box.height / 2.0f }) };
+        const float left { std::max(anchor->x, box.x) };
+        const float right { std::min(anchor->x + anchor->width, box.x + box.width) };
+        const float top { std::min(anchor->y + anchor->height, box.y + box.height) };
+        const float bottom { std::max(anchor->y, box.y) };
+        const rect_f content_box { box.x + padding, box.y + padding, box.width - padding * 2.0f, box.height - padding * 2.0f };
+        const rect_f bridge { left, top, std::max(0.0f, right - left), std::max(0.0f, bottom - top) };
+        return tooltip_placement { *anchor, box, content_box, bridge };
+    }
+
+    const ui_element* ui_tree::hit_tooltip(const ui_element_id& owner, const tooltip_placement& placement, const float scale, const float x, const float y, const float scroll_offset) const
+    {
+        const ui_element* const target { find(owner) };
+        const tooltip_config* const config { target != nullptr ? target->tooltip_content() : nullptr };
+        if (config == nullptr || placement.content.contains(x, y) == false)
+            return nullptr;
+        const rect_f origin { config->content->root()->bounds() };
+        return config->content->hit_test((x - placement.content.x) / scale + origin.x, (y - placement.content.y) / scale + origin.y + scroll_offset);
     }
 
     const ui_element* ui_tree::find_drop_target(const float x, const float y, const drag_payload& payload) const
@@ -78,6 +185,15 @@ namespace luil {
 
     ui_cursor ui_tree::cursor_at(const float x, const float y, const interaction_snapshot& interaction) const
     {
+        if (interaction.tooltip.has_value() && interaction.drag.has_value() == false)
+        {
+            const auto& state { *interaction.tooltip };
+            if (const auto placement { place_tooltip(state.owner, state.scale) }; placement.has_value() && placement->box.contains(x, y))
+            {
+                const auto* const hit { hit_tooltip(state.owner, *placement, state.scale, x, y, state.scroll_offset) };
+                return hit != nullptr ? hit->cursor_at(0.0f, 0.0f, {}) : ui_cursor::arrow;
+            }
+        }
         // 끌고 있는 동안은 포인터가 무엇 위에 있든 잡은 쪽이 모양을 정한다.
         //  - 놓을 자리를 찾아 헤매는 동안 모양이 깜빡이지 않는다.
         if (interaction.drag.has_value())
@@ -362,11 +478,21 @@ namespace luil {
 
         // tooltip은 element 계층 밖에서 tree가 그리므로 지연이 끝나는 시각도 tree가 답한다.
         // 끄는 동안에는 그리지 않으니 답할 것도 없다 (draw_tooltip과 같은 조건).
-        if (interaction.drag.has_value() == false && interaction.hover_started_at.has_value() && context.now - *interaction.hover_started_at < tooltip_delay)
+        if (const ui_element* const hovered { tooltip_target(interaction) }; hovered != nullptr)
         {
-            const ui_element* const hovered { find(interaction.hovered) };
-            if (hovered != nullptr && hovered->tooltip().empty() == false)
-                merge(*interaction.hover_started_at + tooltip_delay);
+            const auto shown_at { *interaction.hover_started_at + tooltip_delay_of(*hovered) };
+            if (context.now < shown_at)
+                merge(shown_at);
+            else if (const tooltip_config* const config { hovered->tooltip_content() }; config != nullptr)
+            {
+                interaction_snapshot content_interaction {};
+                if (interaction.tooltip.has_value())
+                {
+                    content_interaction.hovered = interaction.tooltip->hovered;
+                    content_interaction.pressed = interaction.tooltip->pressed;
+                }
+                merge(config->content->next_update(context, content_interaction));
+            }
         }
         return next;
     }
@@ -504,17 +630,27 @@ namespace luil {
         context.canvas.drawRRect(SkRRect::MakeRectXY(body, 5.0f * scale, 5.0f * scale), ring);
     }
 
+    const ui_element* ui_tree::tooltip_target(const interaction_snapshot& interaction) const
+    {
+        // 숨거나 완전히 잘린 대상은 이전 snapshot에 hover가 남아 있어도 설명을 세우지 않는다.
+        if (root_ == nullptr || root_->bounds().width <= 0.0f || root_->bounds().height <= 0.0f || interaction.drag.has_value() || interaction.hover_started_at.has_value() == false)
+            return nullptr;
+        const ui_element* const hovered { find(interaction.hovered) };
+        return hovered != nullptr && hovered->has_tooltip() && visibly_contains(hovered->id()) && visible_bounds(*hovered).has_value() ? hovered : nullptr;
+    }
+
     void ui_tree::draw_tooltip(draw_context& context, const interaction_snapshot& interaction) const
     {
-        // 끄는 동안에는 hover가 유지되어도 tooltip을 띄우지 않는다.
-        // 놓을 자리를 찾는 중에 설명이 끼어들 일이 아니다.
-        if (interaction.drag.has_value())
+        const ui_element* const hovered { tooltip_target(interaction) };
+        if (hovered == nullptr || context.now - *interaction.hover_started_at < tooltip_delay_of(*hovered))
             return;
-        if (interaction.hover_started_at.has_value() == false || context.now - *interaction.hover_started_at < tooltip_delay)
+        const rect_f window { root_->bounds() };
+        const rect_f anchor { *visible_bounds(*hovered) };
+        if (const tooltip_config* const config { hovered->tooltip_content() }; config != nullptr)
+        {
+            draw_tooltip_content(context, *config, window, anchor, interaction);
             return;
-        const ui_element* const hovered { find(interaction.hovered) };
-        if (hovered == nullptr || hovered->tooltip().empty())
-            return;
+        }
 
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
@@ -523,17 +659,12 @@ namespace luil {
         const float padding { 5.0f * scale };
         const float box_width { text_width + padding * 2.0f };
         const float box_height { 22.0f * scale };
-        const rect_f window { root_->bounds() };
-        const rect_f anchor { hovered->bounds() };
-
-        // 기본은 대상 아래이고, 창을 벗어나면 위로 뒤집고 좌우는 창 안으로 민다.
-        float box_x { anchor.x };
-        float box_y { anchor.y + anchor.height + 3.0f * scale };
-        if (box_y + box_height > window.y + window.height)
-            box_y = anchor.y - box_height - 3.0f * scale;
-        box_x = std::clamp(box_x, window.x, std::max(window.x, window.x + window.width - box_width));
-
-        const SkRect box { SkRect::MakeXYWH(box_x, box_y, box_width, box_height) };
+        const rect_f placed { tooltip_bounds(window, anchor, box_width, box_height, 3.0f * scale) };
+        const float box_x { placed.x };
+        const float box_y { placed.y };
+        const SkAutoCanvasRestore restore { &context.canvas, true };
+        context.canvas.clipRect(SkRect::MakeXYWH(placed.x, placed.y, placed.width, placed.height));
+        const SkRect box { SkRect::MakeXYWH(placed.x, placed.y, placed.width, placed.height) };
         const SkPaint background { solid_paint(context.palette.tooltip_background) };
         context.canvas.drawRRect(SkRRect::MakeRectXY(box, 2.0f * scale, 2.0f * scale), background);
         SkPaint border { solid_paint(context.palette.tooltip_border) };
