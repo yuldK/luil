@@ -633,7 +633,10 @@ namespace luil {
 
     std::optional<text_caret_position> text_area_element::caret_at_point(const float x, const float y, const text_measurer& measurer) const
     {
-        const std::u8string_view text { value_.text };
+        // 조합 중에도 그려진 글(조합 글 포함)에서 찾는다.
+        //  - 누름은 host가 조합을 먼저 확정한 뒤에 오고, 확정된 글이 곧 이 글이다.
+        //    확정 글로 재면 조합 뒤쪽을 누른 자리가 조합 폭만큼 어긋난다.
+        const std::u8string_view text { displayed_text() };
         if (measurer == nullptr)
             return text_caret_position { text.size(), false };
         const float size { font_size() };
@@ -659,12 +662,13 @@ namespace luil {
     std::optional<std::size_t> text_area_element::offset_at(const float x, const text_measurer& measurer) const
     {
         // y가 없으면 caret이 선 줄에서 판정한다.
+        // 판정이 `caret_at_point`와 같은 글(그려진 글)에서 해야 줄이 맞는다.
         if (measurer == nullptr)
-            return value_.text.size();
+            return displayed_text().size();
         const float size { font_size() };
         const auto measure { [this, &measurer, size](const std::u8string_view value) { return measure_with(measurer)(value, size); } };
         std::vector<line> storage {};
-        const std::size_t index { caret_line_of(lines_for(value_.text, measure, storage), std::min(value_.caret, value_.text.size()), value_.caret_upstream) };
+        const std::size_t index { caret_line_of(lines_for(displayed_text(), measure, storage), displayed_caret(), value_.composing == false && value_.caret_upstream) };
         const float line_height { line_height_logical() * scale_ };
         return offset_at_point(x, text_top() + (static_cast<float>(index) + 0.5f) * line_height, measurer);
     }

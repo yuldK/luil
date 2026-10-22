@@ -901,6 +901,18 @@ namespace luil::win32 {
             return store_ != nullptr && store_->composing();
         }
 
+        void commit_composition()
+        {
+            finish_composition();
+        }
+
+        void start_composition_for_test()
+        {
+            BOOL accepted { FALSE };
+            if (store_ != nullptr)
+                static_cast<void>(store_->OnStartComposition(nullptr, &accepted));
+        }
+
         [[nodiscard]] bool owns_tsf_focus() const noexcept
         {
             if (thread_manager_ == nullptr || document_manager_ == nullptr)
@@ -1010,6 +1022,11 @@ namespace luil::win32 {
         return impl_->handle_key(message, word_parameter, long_parameter);
     }
 
+    void tsf_input_session::commit_composition()
+    {
+        impl_->commit_composition();
+    }
+
     bool tsf_input_session::composing() const noexcept
     {
         return impl_->composing();
@@ -1018,5 +1035,10 @@ namespace luil::win32 {
     bool tsf_input_session::owns_tsf_focus() const noexcept
     {
         return impl_->owns_tsf_focus();
+    }
+
+    void start_session_composition_for_test(tsf_input_session& session)
+    {
+        session.impl_->start_composition_for_test();
     }
 } // namespace luil::win32

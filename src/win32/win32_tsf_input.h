@@ -80,6 +80,12 @@ namespace luil::win32 {
         // true면 TIP이 먹었으므로 앱은 그 키를 처리하지 않는다.
         [[nodiscard]] bool handle_key(UINT message, WPARAM word_parameter, LPARAM long_parameter);
 
+        // 진행 중인 조합을 TSF를 통해 확정한다. 조합이 없으면 아무 일도 없다.
+        // 확정 글(`replace_all`)과 조합 표시 해제를 **이 호출 안에서** host에 보낸다.
+        //  - 표면이 포인터 누름을 input thread에 넘기기 전에 부른다. 그래야 누름이 낸
+        //    caret 이동이 확정 글 뒤에 앱에 닿는다 (초점 상실과 같은 확정이다).
+        void commit_composition();
+
         // 조합 중이면 `WM_CHAR`를 흘리지 않는다.
         //  - 확정 글은 TSF가 이미 보냈다.
         [[nodiscard]] bool composing() const noexcept;
@@ -91,6 +97,7 @@ namespace luil::win32 {
     private:
         class implementation;
         explicit tsf_input_session(std::unique_ptr<implementation> impl) noexcept;
+        friend void start_session_composition_for_test(tsf_input_session& session);
 
         std::unique_ptr<implementation> impl_ {};
     };
@@ -104,4 +111,7 @@ namespace luil::win32 {
     // 초점 이동을 흉내 내 sink 알림 경로를 두드린다.
     // `create_text_store_for_test`가 만든 store에만 쓴다.
     void reset_text_store_document_for_test(ITextStoreACP2& store, std::optional<text_input_target> target, shadow_document document);
+    // TIP 없이 session의 store에 조합이 시작된 것처럼 알린다 (`OnStartComposition`).
+    // 글은 바꾸지 않으므로 그림자의 지금 글이 곧 조합 글이다.
+    void start_session_composition_for_test(tsf_input_session& session);
 } // namespace luil::win32

@@ -213,6 +213,28 @@ TEST_CASE("A leading glyph moves where the pointer lands in the text", "[ui][dia
     // 글이 글리프 칸(14 + 5)만큼 오른쪽으로 밀렸으므로 같은 좌표가 앞쪽 글자를 가리킨다.
     REQUIRE(searched.offset_at(100.0f + 7.0f + 25.0f, measure) == 1u);
 }
+
+TEST_CASE("A composing text input places the pointer on the displayed text", "[ui][dialog]")
+{
+    // 누름은 host가 조합을 확정한 뒤에 온다. 확정된 글이 곧 표시 문서라 포인터는 표시 문서에서 잰다.
+    const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; } };
+    luil::text_input_view value {};
+    value.text = u8"ab";
+    value.caret = 2;
+    value.anchor = 2;
+    value.composing = true;
+    value.composition_text = u8"abcdef";
+    value.composition_caret = 6;
+    value.composing_begin = 2;
+    value.composing_end = 6;
+    luil::text_input_element input { { luil::application_element_kind(0), u8"query" }, value, luil::text_input_config {} };
+    input.arrange({ .slot = { 100.0f, 10.0f, 214.0f, 20.0f }, .scale = 1.0f, .measurer = &measure });
+    // 조합 글 안쪽(넷째 경계)이다. 확정 글로 재면 그 끝(2)으로 뭉개진다.
+    REQUIRE(input.offset_at(100.0f + 7.0f + 42.0f, measure) == 4u);
+    REQUIRE(input.offset_at(100.0f + 7.0f + 500.0f, measure) == 6u);
+    REQUIRE(input.offset_at(100.0f + 7.0f + 12.0f, measure) == 1u);
+}
+
 TEST_CASE("Long UTF-8 input hit testing measures logarithmically many prefixes", "[ui][dialog]")
 {
     luil::text_input_view value {};

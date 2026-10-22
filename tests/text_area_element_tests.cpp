@@ -239,10 +239,59 @@ TEST_CASE("A composing text area wraps the displayed text and rewraps the commit
     const auto caret { memo.text_span_bounds({ view.composition_text, 20, 20, 20 }, fixed_width) };
     REQUIRE(caret->x == 7.0f + 50.0f);
     REQUIRE(caret->y == 5.0f + 18.0f);
-    // 포인터 판정은 확정 글로 한다. 그 글은 한 줄이라 둘째 줄 자리는 마지막 줄 아래, 곧 확정 글의 끝이다.
-    REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(1), fixed_width) == 15u);
-    REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(0), fixed_width) == 2u);
+    // 확정 글로 묻는 구간은 그 글을 같은 폭으로 다시 접어 답한다. 확정 글은 한 줄이라 끝(15)도 첫 줄에 선다.
+    const auto committed_end { memo.text_span_bounds({ view.text, 15, 15, 15 }, fixed_width) };
+    REQUIRE(committed_end->x == 7.0f + 150.0f);
+    REQUIRE(committed_end->y == 5.0f);
 }
+
+TEST_CASE("A composing text area places the pointer on the displayed text", "[ui][text-area]")
+{
+    // 누름은 host가 조합을 확정한 뒤에 온다. 확정된 글이 곧 표시 문서라 포인터는 표시 문서에서 잰다.
+    luil::text_input_view view { view_of(u8"aaaa bbbb cccc ", 15) };
+    view.composing = true;
+    view.composition_text = u8"aaaa bbbb cccc dddd eeee";
+    view.composition_caret = 20;
+    view.composing_begin = 15;
+    view.composing_end = 24;
+    const auto tree { wrapped_tree(view) };
+    const luil::text_area_element& memo { memo_of(*tree) };
+    // 조합 글이 넘겨 접은 둘째 화면 줄을 누르면 그 줄의 자리다. 확정 글로 재면 글 끝(15)으로 뭉개진다.
+    REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(1), fixed_width) == 17u);
+    REQUIRE(memo.offset_at_point(7.0f + 22.0f, row_middle(0), fixed_width) == 2u);
+    // 마지막 줄 아래는 표시 문서의 끝이다.
+    REQUIRE(memo.offset_at_point(7.0f, row_middle(4), fixed_width) == 24u);
+    // y 없이 묻는 자리는 조합 caret이 선 줄(둘째 줄)에서 판정한다.
+    REQUIRE(memo.offset_at(7.0f + 22.0f, fixed_width) == 17u);
+}
+
+TEST_CASE("A press on a composing text area places the caret where the displayed text was pressed", "[ui][text-area][interaction]")
+{
+    // 조합 중에 눌러도 controller는 caret 편집을 낸다 — 확정은 host가 누름보다 먼저 앱에 보낸다.
+    // 그 편집의 offset은 확정 뒤의 글(= 표시 문서) 위의 자리여야 한다.
+    luil::text_input_view view { view_of(u8"aaaa bbbb cccc ", 15) };
+    view.composing = true;
+    view.composition_text = u8"aaaa bbbb cccc dddd eeee";
+    view.composition_caret = 20;
+    view.composing_begin = 15;
+    view.composing_end = 24;
+    memo_policy policy {};
+    luil::interaction_controller controller { &policy, fixed_config() };
+    controller.set_tree(wrapped_tree(view));
+    const auto pressed { edit_in(controller.process(luil::pointer_pressed_event { 7.0f + 22.0f, row_middle(1), luil::pointer_button::left, at(0) })) };
+    REQUIRE(pressed.has_value());
+    REQUIRE(pressed->command == luil::text::text_edit_command::place_caret);
+    REQUIRE(pressed->offset == 17u);
+    REQUIRE(pressed->extend == false);
+
+    // 누른 채 끌면 같은 글 위에서 선택을 늘린다. 첫 줄의 둘째 글자 뒤까지다.
+    const auto dragged { edit_in(controller.process(luil::pointer_moved_event { 7.0f + 22.0f, row_middle(0), at(20) })) };
+    REQUIRE(dragged.has_value());
+    REQUIRE(dragged->command == luil::text::text_edit_command::place_caret);
+    REQUIRE(dragged->offset == 2u);
+    REQUIRE(dragged->extend);
+}
+
 TEST_CASE("Line keys follow the screen lines of a wrapped text area", "[ui][text-area][interaction]")
 {
     memo_policy policy {};

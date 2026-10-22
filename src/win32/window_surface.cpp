@@ -525,6 +525,7 @@ namespace luil::win32 {
         case WM_MBUTTONDBLCLK:
             if (duplicate_pointer_mouse_message())
                 return LRESULT { 0 };
+            commit_composition_before_press();
             // 이 표면 위의 누름은 popup 밖 클릭이다.
             // 닫자는 메시지를 내고 클릭 자체는 그대로 진행한다.
             if (input_dismisses_popups())
@@ -1043,6 +1044,15 @@ namespace luil::win32 {
         host->post_raw_input(std::move(event));
     }
 
+    void window_surface::commit_composition_before_press()
+    {
+        // 확정은 이 호출 안에서 앱 inbox에 들어가고(`surface_tsf_host::post_edit`), 누름은 그 뒤에
+        // `post_raw_input`으로 나간다. 그래서 controller가 낸 caret 이동이 확정 글 뒤에 적용된다.
+        //  - controller는 아직 조합 중인 tree로 자리를 잰다. 칸이 조합 글(= 확정될 글)에서 재므로 offset이 맞는다.
+        if (text_input_ != nullptr && text_input_->composing())
+            text_input_->commit_composition();
+    }
+
     bool window_surface::handle_pointer_message(const UINT message, const WPARAM word_parameter)
     {
         const std::uint32_t pointer_id { GET_POINTERID_WPARAM(word_parameter) };
@@ -1113,6 +1123,8 @@ namespace luil::win32 {
         {
             if (message == WM_POINTERDOWN)
             {
+                // 펜·터치도 마우스 누름처럼 조합을 먼저 확정한다.
+                commit_composition_before_press();
                 // 이 표면 위의 누름은 popup 밖 누름이다 (마우스 누름과 같은 규칙).
                 if (input_dismisses_popups())
                     static_cast<void>(context_.dismiss_popups(popup_dismiss_reason::pointer_press_outside));

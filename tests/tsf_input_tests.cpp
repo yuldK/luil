@@ -329,6 +329,52 @@ TEST_CASE("A TSF session activates and tears down cleanly", "[win32][tsf]")
     }
 }
 
+// 표면은 포인터 누름을 넘기기 전에 조합을 확정한다. 확정 글과 표시 해제가 그 호출 안에서
+// 한 번씩만 나가야 누름이 낸 caret 이동이 확정 글 뒤에 앱에 닿는다.
+TEST_CASE("Committing a TSF composition posts the committed text once before returning", "[win32][tsf]")
+{
+    const com_scope com {};
+    if (com.ready() == false)
+        SKIP("COM apartment initialization failed.");
+
+    stub_host host {};
+    const std::unique_ptr<luil::win32::tsf_input_session> session {
+        luil::win32::tsf_input_session::create(nullptr, host),
+    };
+    if (session == nullptr)
+        SKIP("Text Services Framework is not available on this machine.");
+
+    host.focused = luil::text_input_target { 1 };
+    host.document = { u8"확정", 6u, 6u };
+    session->synchronize();
+    REQUIRE(host.edits.empty());
+
+    // 조합이 없으면 아무것도 보내지 않는다.
+    session->commit_composition();
+    REQUIRE(host.edits.empty());
+    REQUIRE(host.compositions.empty());
+
+    luil::win32::start_session_composition_for_test(*session);
+    REQUIRE(session->composing());
+
+    session->commit_composition();
+    REQUIRE(session->composing() == false);
+    REQUIRE(host.edits.size() == 1u);
+    REQUIRE(host.edits[0].target == luil::text_input_target { 1 });
+    REQUIRE(host.edits[0].command == luil::text::text_edit_command::replace_all);
+    REQUIRE(host.edits[0].text == u8"확정");
+    REQUIRE(host.edits[0].offset == 6u);
+    // 마지막 조합 알림은 표시 해제다.
+    REQUIRE(host.compositions.empty() == false);
+    REQUIRE(host.compositions.back().composing == false);
+
+    // 두 번 확정해도 같은 글을 다시 보내지 않는다.
+    const std::size_t compositions { host.compositions.size() };
+    session->commit_composition();
+    REQUIRE(host.edits.size() == 1u);
+    REQUIRE(host.compositions.size() == compositions);
+}
+
 // 암호 칸에 초점이 있는 동안 창의 IME 문맥을 떼어 한글 모드의 IME 조합 창이 뜨지 않게 한다.
 TEST_CASE("A password box detaches the window's IME context while it has focus", "[win32][tsf][secret]")
 {
