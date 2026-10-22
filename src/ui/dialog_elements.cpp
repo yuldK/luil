@@ -503,14 +503,14 @@ namespace luil {
 
     std::optional<std::size_t> text_input_element::offset_at(const float x, const text_measurer& measurer) const
     {
-        // 조합 중에는 포인터로 caret을 옮기지 않는다.
-        //  - 조합은 IME가 소유한다.
-        // 가린 칸은 그려진 점들 위에서 경계를 찾고 원래 글의 경계로 돌린다.
+        // 조합 중에도 그려진 글(조합 글 포함)에서 찾는다.
+        //  - 누름은 host가 조합을 먼저 확정한 뒤에 오고, 확정된 글이 곧 이 글이다.
+        // 가린 칸은 그려진 점들 위에서 경계를 찾고 원래 글의 경계로 돌린다 (가린 칸은 조합하지 않는다).
         const std::u8string dots { masked() ? masked_text(value_.text) : std::u8string {} };
-        const std::u8string_view text { masked() ? std::u8string_view { dots } : std::u8string_view { value_.text } };
+        const std::u8string_view text { masked() ? std::u8string_view { dots } : value_.displayed_text() };
         const auto original = [this](const std::size_t offset) { return masked() ? unmasked_offset(value_.text, offset) : offset; };
         if (measurer == nullptr)
-            return value_.text.size();
+            return original(text.size());
 
         const float size { font_size() };
         const auto measure { [&measurer, size](const std::u8string_view value) { return measurer(value, size); } };
@@ -532,7 +532,7 @@ namespace luil {
             boundaries.push_back(text.size());
         const auto after { std::upper_bound(boundaries.begin(), boundaries.end(), target, [&](const float position, const std::size_t offset) { return position < measure(text.substr(0, offset)); }) };
         if (after == boundaries.end())
-            return value_.text.size();
+            return original(text.size());
         if (after == boundaries.begin())
             return original(*after);
         const std::size_t before { *(after - 1) };

@@ -355,6 +355,12 @@ namespace luil::win32 {
             return true;
         }
 
+        // 누름이 input thread로 가기 전에 진행 중인 IME 조합을 확정한다.
+        // 확정 글이 앱에 먼저 닿아야 누름이 놓은 caret·끌어 잡은 선택이 그 글 위에 선다 —
+        // 미루면 조합이 끝날 때의 `replace_all`이 caret을 조합 끝으로 되돌린다.
+        // 기본은 이 표면의 session이다. popup은 자기 session이 없어 앵커의 것을 확정한다.
+        virtual void commit_composition_before_press();
+
         // 이 표면이 OS 파일 끌기를 받는가다.
         // 기본은 받지 않는다 — popup은 메뉴류라 드롭 소비자가 없다
         // (os-dragdrop-design.md). 주 창·보조 창(caption_surface)만 설정을 따른다.

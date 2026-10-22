@@ -72,4 +72,13 @@ namespace luil::win32 {
     {
         return take_popup_dismiss_action(dismiss_, dismiss_requested_, reason);
     }
+
+    void popup_surface::commit_composition_before_press()
+    {
+        // 앵커 칸에서 조합하다 popup의 후보를 눌러도 같다 — 확정 글이 먼저 가야 고른 후보가 그 위에 선다.
+        const window_surface* const anchor { context_.surface_by_id(anchor_) };
+        tsf_input_session* const session { anchor != nullptr ? anchor->text_input() : nullptr };
+        if (session != nullptr && session->composing())
+            session->commit_composition();
+    }
 } // namespace luil::win32

@@ -50,6 +50,9 @@ namespace luil::win32 {
             return false;
         }
 
+        // popup 안 글 칸의 조합은 앵커 표면의 session이 맡는다 (popup-ime-design.md).
+        void commit_composition_before_press() override;
+
         // popup 둘레의 테두리는 tree가 아니라 표면이 긋는다 (`ui_popup::border`).
         void prepare_frame(frame_state& state) override
         {
