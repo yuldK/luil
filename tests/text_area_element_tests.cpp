@@ -292,6 +292,31 @@ TEST_CASE("A press on a composing text area places the caret where the displayed
     REQUIRE(dragged->extend);
 }
 
+TEST_CASE("A tap on a composing text area places the caret where the displayed text was tapped", "[ui][text-area][interaction][touch]")
+{
+    // 터치는 뗄 때 caret을 놓는다. Android host도 누름에서 조합을 먼저 확정하므로 같은 규칙이다.
+    luil::text_input_view view { view_of(u8"aaaa bbbb cccc ", 15) };
+    view.composing = true;
+    view.composition_text = u8"aaaa bbbb cccc dddd eeee";
+    view.composition_caret = 20;
+    view.composing_begin = 15;
+    view.composing_end = 24;
+    memo_policy policy {};
+    luil::interaction_controller controller { &policy, fixed_config() };
+    controller.set_tree(wrapped_tree(view));
+    luil::pointer_pressed_event press { 7.0f + 22.0f, row_middle(1), luil::pointer_button::left, at(0) };
+    press.device = luil::pointer_device::touch;
+    press.pointer_id = 1;
+    static_cast<void>(controller.process(press));
+    luil::pointer_released_event release { 7.0f + 22.0f, row_middle(1), luil::pointer_button::left, at(40) };
+    release.device = luil::pointer_device::touch;
+    release.pointer_id = 1;
+    const auto tapped { edit_in(controller.process(release)) };
+    REQUIRE(tapped.has_value());
+    REQUIRE(tapped->command == luil::text::text_edit_command::place_caret);
+    REQUIRE(tapped->offset == 17u);
+}
+
 TEST_CASE("Line keys follow the screen lines of a wrapped text area", "[ui][text-area][interaction]")
 {
     memo_policy policy {};

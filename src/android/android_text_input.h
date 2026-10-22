@@ -82,7 +82,10 @@ namespace luil::android {
         void set_keyboard_visible(bool visible) noexcept;
         // 초점을 가진 칸을 다시 눌렀다. 키보드가 내려가 있으면 다시 띄운다.
         void request_keyboard();
-        // 편집 메뉴로 넘어간다. 조합을 확정하고 IME의 조합 표시도 거둔다. 키보드는 유지한다.
+        // 조합을 확정하고 IME의 조합 표시도 거둔다. 키보드는 유지한다.
+        // 편집 메뉴를 열 때, 그리고 포인터 누름을 input thread에 넘기기 전에 host가 부른다.
+        //  - 확정 글(`replace_all`)은 이 호출 안에서 host에 간다. 그 뒤에 앱이 놓은 caret은 다음
+        //    `synchronize`가 IME에 넘긴다.
         void commit_composition();
 
         [[nodiscard]] bool composing() const noexcept;

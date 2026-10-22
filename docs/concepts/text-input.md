@@ -30,7 +30,7 @@ struct text_input_view
 
 IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전체 문자열을 `composition_text`에 둔다. element는 그 값을 그리고 `composing_begin`부터 `composing_end`까지 표시한다. 확정 시 앱은 한 번의 `replace_all`로 초안을 갱신하므로 조합 단계가 undo 기록에 쌓이지 않는다.
 
-조합 중에 마우스·펜·터치로 창을 누르면 Windows 표면은 누름을 input thread에 넘기기 **전에** TSF 조합을 확정한다(`tsf_input_session::commit_composition`). 확정 글의 `replace_all`이 앱 inbox에 먼저 들어가고 누름이 낸 caret 이동·끌기 선택이 그 뒤에 적용되므로, caret은 누른 자리로 가고 끌면 선택이 잡힌다. controller는 아직 조합 중인 tree로 자리를 재므로, 칸의 `offset_at`·`offset_at_point`는 조합 중에도 표시 문서(`displayed_text()`)에서 offset을 찾는다. 확정된 글이 곧 그 문서다. popup 표면은 자기 TSF 연결이 없어 앵커 표면의 연결로 확정한다. 그래서 앵커 칸에서 조합하다 popup의 후보를 눌러도 확정 글 위에 그 후보가 선다.
+조합 중에 마우스·펜·터치로 창을 누르면 Windows 표면은 누름을 input thread에 넘기기 **전에** TSF 조합을 확정한다(`tsf_input_session::commit_composition`). Android host도 같은 자리에서 IME 조합을 확정한다(`ime_session::commit_composition`). 터치는 뗄 때 caret을 놓지만 확정은 누를 때 한다. 확정 글의 `replace_all`이 앱 inbox에 먼저 들어가고 누름이 낸 caret 이동·끌기 선택이 그 뒤에 적용되므로, caret은 누른 자리로 가고 끌면 선택이 잡힌다. controller는 아직 조합 중인 tree로 자리를 재므로, 칸의 `offset_at`·`offset_at_point`는 조합 중에도 표시 문서(`displayed_text()`)에서 offset을 찾는다. 확정된 글이 곧 그 문서다. popup 표면은 자기 TSF 연결이 없어 앵커 표면의 연결로 확정한다. 그래서 앵커 칸에서 조합하다 popup의 후보를 눌러도 확정 글 위에 그 후보가 선다.
 
 앱은 `make_text_input_view(state, composition, target)`로 확정 초안과 해당 target의 조합 표시를 합칠 수 있다. `text_input_view::displayed_text()`는 조합 중 화면에 보이는 전체 문자열을 반환한다. 점진 검색은 `search_query(view, any_match)`를 사용하면 표시 문자열이 아무 결과도 맞히지 못하는 조합 단계에서 비어 있지 않은 확정 문자열로 물러설 수 있다. 확정 문자열이 비어 있으면 표시 문자열을 그대로 쓴다.
 
