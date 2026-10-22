@@ -75,6 +75,7 @@
 #include "luil/ui/text_input_options.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/text_layout.h"
+#include "luil/ui/theme_picker_element.h"
 #include "luil/ui/toast_element.h"
 #include "luil/ui/transition.h"
 #include "luil/ui/ui_cursor.h"
@@ -93,6 +94,7 @@
 #include "luil/app/app_delegate.h"
 #include "luil/app/app_host.h"
 #include "luil/app/file_dialog.h"
+#include "luil/app/menu_popup.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/app/webview.h"
 

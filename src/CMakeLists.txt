@@ -172,6 +172,8 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/button_element.h"
     ui/check_element.cpp
     "${public_headers}/ui/check_element.h"
+    ui/theme_picker_element.cpp
+    "${public_headers}/ui/theme_picker_element.h"
     ui/choice_group_element.cpp
     "${public_headers}/ui/choice_group_element.h"
     ui/combo_box_element.cpp
@@ -307,6 +309,8 @@ luil_add_source_filter(luil_core_files "app"
     host/app_delegate.cpp
     "${public_headers}/app/app_delegate.h"
     host/app_host.cpp
+    host/menu_popup.cpp
+    "${public_headers}/app/menu_popup.h"
     "${public_headers}/app/file_dialog.h"
     host/file_dialog_gate.h
     "${public_headers}/app/app_host.h"

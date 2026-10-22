@@ -6,6 +6,7 @@
 ## 시작과 빌드
 
 - [시작 가이드](how-to-start.md)
+- [UI 갤러리와 재사용 안내](demo-guide.md)
 - [Skia 빌드 준비](skia-build.md)
 - [컴포넌트 안내](components.md)
 - [공용 UI 보강](ui-foundation-design.md)

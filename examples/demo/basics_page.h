@@ -26,6 +26,11 @@ namespace demo {
     // --- 이 페이지의 메시지 ---
     // 텍스트 편집·조합 메시지(edit_intent·composition_intent)는 창 페이지와
     // target으로 나눠 가지므로 common.h에 있다.
+    struct basics_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
     struct increment_intent
     {};
 
@@ -143,6 +148,7 @@ namespace demo {
         std::shared_ptr<luil::text_area_wrap_cache> memo_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
+        float page_scroll_ { 0.0f };
         bool dialog_open_ { false };
         // 가운데에서 얼마나 밀어 둔 dialog인지다 (논리 픽셀).
         float dialog_x_ { 0.0f };

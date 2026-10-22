@@ -44,6 +44,11 @@ namespace demo {
         std::u8string key {};
     };
 
+    struct popups_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
     class popups_page
     {
     public:
@@ -66,7 +71,12 @@ namespace demo {
         // 다음에 열 때 목록이 온전히 보여야 한다.
         void close_dropdown() noexcept;
 
-        std::u8string renderer_ { u8"자동" };
+        std::u8string presentation_ { u8"자세히" };
+        bool pinned_ { false };
+        bool locked_ { true };
+        bool deleted_ { false };
+        bool preview_ { false };
+        float scroll_ { 0.0f };
         // 드롭다운 popup 안 검색 칸의 상태다.
         // 여느 텍스트 칸과 똑같이 앱이 들고 있다 — popup이라고 다르지 않다.
         luil::text::text_edit_state search_ {};

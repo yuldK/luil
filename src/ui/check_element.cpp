@@ -1,5 +1,6 @@
 #include "luil/ui/check_element.h"
 
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 
 #include "include/core/SkCanvas.h"
@@ -47,12 +48,13 @@ namespace luil {
 
     float check_element::height_for(const check_config& config) noexcept
     {
-        static_cast<void>(config);
-        return check_row_height;
+        return config.style == check_style::toggle_button ? text_button_height : check_row_height;
     }
 
     float check_element::indicator_width_for(const check_config& config) noexcept
     {
+        if (config.style == check_style::toggle_button)
+            return 0.0f;
         return config.style == check_style::toggle_switch ? check_switch_width : check_box_size;
     }
 
@@ -74,6 +76,25 @@ namespace luil {
     {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
+        if (config_.style == check_style::toggle_button)
+        {
+            text_button_config button {};
+            button.text = config_.label;
+            button.visual = config_.checked ? text_button_visual::accent : text_button_visual::normal;
+            text_button_element visual { id(), std::move(button) };
+            visual.set_enabled(enabled());
+            visual.arrange({ box, scale });
+            visual.draw(context, interaction);
+            if (config_.checked)
+            {
+                SkPaint border { solid_paint(enabled() ? context.palette.accent : context.palette.disabled_foreground) };
+                border.setStyle(SkPaint::kStroke_Style);
+                border.setStrokeWidth(scale);
+                const float radius { context.metrics.control_corner_radius * scale };
+                context.canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), radius, radius), border);
+            }
+            return;
+        }
         draw_hover_fill(context, box, id(), interaction, enabled(), context.metrics.control_corner_radius);
 
         // 꺼진 표시의 선과 켜진 표시의 채움은 팔레트의 역할로만 고른다.
@@ -91,6 +112,8 @@ namespace luil {
 
         switch (config_.style)
         {
+        case check_style::toggle_button:
+            break;
         case check_style::checkbox: {
             const SkRect shape { SkRect::MakeXYWH(mark.x, mark.y, mark.width, mark.height) };
             const float radius { context.metrics.control_corner_radius * scale };
@@ -175,6 +198,9 @@ namespace luil {
         access_info info {};
         switch (config_.style)
         {
+        case check_style::toggle_button:
+            info.role = access_role::button;
+            break;
         case check_style::checkbox:
             info.role = access_role::check_box;
             break;
@@ -201,6 +227,13 @@ namespace luil {
     std::optional<size_f> check_element::preferred_size(const measure_context& context, const float available_width) const
     {
         static_cast<void>(available_width);
+        if (config_.style == check_style::toggle_button)
+        {
+            text_button_config button {};
+            button.text = config_.label;
+            const text_button_element visual { id(), std::move(button) };
+            return visual.preferred_size(context, available_width);
+        }
         // 그리기의 자리와 같다 — 안쪽 여백, 표시 부분, 간격과 글, 오른쪽 안쪽 여백이다.
         float width { check_inset + indicator_width_for(config_) + check_inset };
         if (config_.label.empty() == false)

@@ -11,6 +11,7 @@
 #include "luil/ui/menu_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/root_element.h"
+#include "luil/ui/stack_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/toast_element.h"
 #include "luil/ui/ui_element.h"
@@ -81,7 +82,8 @@ namespace demo {
     constexpr luil::ui_element_kind kind_memo_input { luil::application_element_kind(38) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
-    struct image_pick_intent {};
+    struct image_pick_intent
+    {};
 
     // 앱이 정의하는 포인터 모양이다 (세로 목록의 순서 바꾸기).
     constexpr luil::ui_cursor cursor_reorder { luil::application_cursor(0) };
@@ -98,6 +100,8 @@ namespace demo {
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.
+    inline constexpr std::u8string_view page_overview { u8"overview" };
+    inline constexpr std::u8string_view page_controls { u8"controls" };
     inline constexpr std::u8string_view page_basics { u8"basics" };
     inline constexpr std::u8string_view page_lists { u8"lists" };
     inline constexpr std::u8string_view page_tabs { u8"tabs" };
@@ -133,6 +137,11 @@ namespace demo {
     struct navigate_intent
     {
         std::u8string page {};
+    };
+
+    struct navigation_scroll_intent
+    {
+        float delta { 0.0f };
     };
 
     struct sidebar_toggle_intent
@@ -180,6 +189,25 @@ namespace demo {
     // 편집 적용(apply_text_edit)과 view 합성(make_text_input_view)은
     // 라이브러리(luil)의 것을 그대로 쓴다.
     [[nodiscard]] std::u8string to_u8(int value);
+
+    // 고정 높이 예제의 내용 높이를 함께 모아 공용 scroll_area에 넘긴다.
+    // 페이지가 길어지거나 창이 작아져도 휠·막대·초점 드러내기가 함께 동작한다.
+    class page_layout
+    {
+    public:
+        explicit page_layout(std::u8string owner);
+        void add(std::unique_ptr<luil::ui_element> element, float height);
+        void add(std::unique_ptr<luil::ui_element> element, luil::stack_item item);
+        void gap(float height = 12.0f);
+        void heading(std::u8string title, std::u8string description);
+        [[nodiscard]] std::unique_ptr<luil::ui_element> finish(float offset, std::function<luil::input_action(float)> scroll);
+
+    private:
+        std::u8string owner_ {};
+        std::unique_ptr<luil::stack_element> column_ {};
+        float height_ { 48.0f };
+        int heading_ { 0 };
+    };
 
     [[nodiscard]] std::unique_ptr<luil::label_element> make_label(luil::ui_element_id id, std::u8string text, float font_size, luil::label_color_role color);
 

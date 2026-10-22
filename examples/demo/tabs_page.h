@@ -5,9 +5,9 @@
 // 우클릭으로 여는 탭 컨텍스트 메뉴.
 
 #include "demo/common.h"
+#include "luil/app/app_host.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
-#include "luil/win32/app_host.h"
 
 #include <vector>
 
@@ -27,6 +27,7 @@ namespace demo {
     {
         std::u8string moved {};
         std::u8string target {};
+        luil::drop_side side { luil::drop_side::before };
     };
 
     struct tab_scroll_intent
@@ -56,6 +57,27 @@ namespace demo {
     struct tab_menu_close_intent
     {};
 
+    struct tab_detach_intent
+    {
+        std::u8string key {};
+        std::optional<luil::window_screen_anchor> anchor {};
+    };
+
+    struct tab_attach_intent
+    {
+        std::u8string key {};
+        std::u8string target {};
+        luil::drop_side side { luil::drop_side::after };
+    };
+
+    struct tab_window_metrics_intent
+    {
+        std::u8string key {};
+        float width { 640.0f };
+        float height { 360.0f };
+        float scale { 1.0f };
+    };
+
     class tabs_page
     {
     public:
@@ -66,7 +88,9 @@ namespace demo {
 
         // 넘침 메뉴가 열려 있으면 탭 막대 오른쪽 아래에 popup을 단다.
         // 같은 frame에서 build가 만든 element의 자리(bounds)를 쓰므로 build 뒤에 불러야 한다.
-        [[nodiscard]] std::vector<luil::win32::ui_popup> make_popups(float scale) const;
+        [[nodiscard]] std::vector<luil::ui_popup> make_popups(float scale) const;
+        [[nodiscard]] std::vector<luil::ui_window> make_windows() const;
+        [[nodiscard]] static std::vector<luil::input_action> route_key(const luil::ui_tree* tree, const luil::key_pressed_event& event);
 
         // 떠 있는 popup을 닫는다 (페이지 이동·Esc·바깥 클릭).
         void close_popups() noexcept
@@ -90,6 +114,20 @@ namespace demo {
         // 탭을 닫고, 고른 탭이었으면 이웃 탭을 고른다.
         void close_tab(const std::u8string& key);
 
+        struct detached_tab
+        {
+            tab_entry tab {};
+            float width { 640.0f };
+            float height { 360.0f };
+            float scale { 1.0f };
+            std::optional<luil::window_screen_anchor> anchor {};
+        };
+
+        void reveal_selected();
+        void run_command(const std::u8string& command, const std::u8string& key);
+        std::vector<tab_entry> closed_ {};
+        std::vector<detached_tab> detached_ {};
+        float lane_width_ { 0.0f };
         std::vector<tab_entry> tabs_ {};
         std::u8string selected_ {};
         float scroll_ { 0.0f };
