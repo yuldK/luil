@@ -29,6 +29,39 @@ namespace luil {
         pen,
     };
 
+    // 화면의 한 점이다 (가상 화면 물리 픽셀). 왼쪽·위에 놓인 모니터에서는 음수다.
+    //  - 표면 좌표(client 물리 픽셀)와 달리 창이 어디 있든 같은 점을 가리킨다. 끌어 낸 항목을 놓은 자리에 새 창을 세울 때
+    //    쓴다 (`ui_window::screen_anchor`, multi-window-design.md).
+    struct screen_point
+    {
+        int x { 0 };
+        int y { 0 };
+
+        [[nodiscard]] bool operator==(const screen_point&) const noexcept = default;
+    };
+
+    // 포인터 밑에 실제로 보이는 것이다.
+    //
+    // 누른 채 끄는 포인터는 누른 표면이 잡고 있어서(Win32 마우스 캡처) 이벤트가 언제나 그 표면(`surface`)의 좌표로 온다.
+    // 포인터가 그 창 밖으로 나가면 좌표만으로는 지금 무엇 위에 있는지 알 수 없으므로, 플랫폼이 화면에서 다시 찾아
+    // 싣는다. 내부 끌기(drag & drop)가 다른 창의 tree에 놓이는 것이 이 값으로 선다.
+    //  - 찾는 규칙은 OS의 Z 순서다. 그 점에서 **맨 위에 보이는 창**이 답이고, 그것이 이 앱의 표면이 아니면(다른 앱이
+    //    덮고 있다, 바탕화면이다) `outside`다. 주 창 위에 뜬 보조 창이나 popup은 주 창보다 먼저 답한다.
+    //  - 비어 있으면(`std::nullopt`) 플랫폼이 판정하지 않았다. 이벤트의 `surface`와 좌표가 곧 포인터 밑이다 — 캡처가
+    //    없거나 판정할 수 없는 플랫폼·test가 그렇다.
+    struct pointer_over
+    {
+        // 이 앱의 표면이 아니다 (바탕화면·다른 앱·작업 표시줄 위). 참이면 아래 셋은 뜻이 없다.
+        bool outside { false };
+        // 포인터 밑의 표면이다 (표면 표식의 통상 규칙 — 비면 주 창이다).
+        std::u8string surface {};
+        // 그 표면의 client 좌표다 (물리 픽셀).
+        float x { 0.0f };
+        float y { 0.0f };
+
+        [[nodiscard]] bool operator==(const pointer_over&) const noexcept = default;
+    };
+
     // Win32 메시지의 최소 복사다.
     // `HWND`와 lparam 원문은 담지 않는다.
     // time은 UI thread가 기록하며 더블 클릭·tooltip·길게 누르기 판정의 기준이다.
@@ -57,6 +90,10 @@ namespace luil {
         bool control { false };
         bool shift { false };
         bool alt { false };
+        // 이 이동의 화면 자리다. 모르는 플랫폼은 비운다.
+        std::optional<screen_point> screen {};
+        // 포인터 밑에 실제로 보이는 표면이다 (`pointer_over`). 캡처 중에만 플랫폼이 싣는다.
+        std::optional<pointer_over> over {};
     };
 
     struct pointer_pressed_event
@@ -100,6 +137,10 @@ namespace luil {
         //  - 끝을 듣는 손잡이(`pointer_drag_target::on_release`)는 마지막 이동의 자리와 수식 키를 받는다 — 취소의 끝은
         //    마지막 이벤트의 값이라는 규약이다 (터치·펜의 `pointer_cancelled_event`와 같다).
         bool cancelled { false };
+        // 뗀 자리의 화면 자리와 그 밑의 표면이다 (`pointer_moved_event`와 같은 규약).
+        //  - 받는 대상 없이 끝난 끌기를 앱이 놓은 자리에 새 창으로 세울 때 쓴다 (`drag_source::on_unclaimed_drop`).
+        std::optional<screen_point> screen {};
+        std::optional<pointer_over> over {};
     };
 
     // 터치·펜 접촉이 정상적인 뗌 없이 끝났다 (캡처 상실·OS 취소·접촉 중 버튼 전환).
@@ -456,11 +497,16 @@ namespace luil {
         // 가장자리도 캡션 끌기 띠도 그동안 없다. 앱은 이 명령만 내고, 어느 모니터를
         // 덮을지·나올 때 어디로 돌아갈지는 UI thread가 든다
         // (docs/concepts/window.md).
-        //  - 주 창에만 듣는다. 보조 창은 배치 저장과 마찬가지로 대상이 아니다.
+        //  - 주 창에만 듣는다. 보조 창(소유된 창·독립 창)은 대상이 아니다 — 화면을 덮는 창이 여럿이면 어느 것이 덮는지가
+        //    앱 상태 밖에서 갈린다 (multi-window-design.md).
         window_toggle_fullscreen,
         window_close,
         // 초점 텍스트 칸의 터치 편집 메뉴다. 지원하는 host만 실행한다 (Android).
         text_edit_menu,
+        // 앱을 끝낸다. 주 창의 닫힘을 앱이 받아 가도(`ui_frame::close`) 이 명령은 그 훅을 거치지 않는다.
+        //  - `window_close`는 주 창을 닫자는 **요청**이라 훅이 있으면 훅으로 간다. 훅을 단 앱이 정말로 끝낼 때
+        //    이것을 낸다 (multi-window-design.md).
+        application_exit,
     };
 
     // UI thread에서 실행해야 하는 **앱 정의** 명령이다 (파일 dialog, 클립보드 밖의 shell 실행 등).

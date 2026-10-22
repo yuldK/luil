@@ -10,6 +10,7 @@
 #include "win32/caption_surface.h"
 #include "win32/composition_device.h"
 #include "win32/dpi_scale.h"
+#include "win32/drag_ghost_window.h"
 #include "win32/embedded_assets.h"
 #include "win32/popup_surface.h"
 #include "win32/secondary_surface.h"
@@ -36,6 +37,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -98,11 +100,10 @@ namespace luil::win32 {
             std::uint32_t dpi { 96 };
         };
 
-        [[nodiscard]] std::optional<initial_window_placement> resolve_initial_placement(const window_config& config) noexcept
+        // 저장 배치를 만들 창의 화면 사각형으로 옮긴다. 주 창과 보조 창이 같은 규칙을 쓴다.
+        //  - 최소 크기는 논리 픽셀이고 대상 모니터의 DPI로 견준다.
+        [[nodiscard]] std::optional<initial_window_placement> resolve_initial_placement(const window_placement& placement, const int minimum_width, const int minimum_height) noexcept
         {
-            if (config.initial_placement.has_value() == false)
-                return std::nullopt;
-            const window_placement& placement { *config.initial_placement };
             if (placement.valid() == false || placement_in_screen_range(placement) == false)
                 return std::nullopt;
             RECT bounds { placement.x, placement.y, placement.x + placement.width, placement.y + placement.height };
@@ -113,7 +114,7 @@ namespace luil::win32 {
             UINT dpi_y { 96 };
             if (monitor == nullptr || GetMonitorInfoW(monitor, &information) == FALSE || FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y)))
                 return std::nullopt;
-            if (placement.width < MulDiv(config.minimum_client_width, static_cast<int>(dpi_x), 96) || placement.height < MulDiv(config.minimum_client_height, static_cast<int>(dpi_x), 96))
+            if (placement.width < MulDiv(minimum_width, static_cast<int>(dpi_x), 96) || placement.height < MulDiv(minimum_height, static_cast<int>(dpi_x), 96))
                 return std::nullopt;
 
             // WINDOWPLACEMENT는 작업 영역 좌표지만 CreateWindowEx는 화면 좌표다.
@@ -128,6 +129,13 @@ namespace luil::win32 {
             if (MonitorFromRect(&bounds, MONITOR_DEFAULTTONULL) != monitor)
                 return std::nullopt;
             return initial_window_placement { placement, bounds, dpi_x };
+        }
+
+        [[nodiscard]] std::optional<initial_window_placement> resolve_initial_placement(const window_config& config) noexcept
+        {
+            if (config.initial_placement.has_value() == false)
+                return std::nullopt;
+            return resolve_initial_placement(*config.initial_placement, config.minimum_client_width, config.minimum_client_height);
         }
 
         constexpr int direct3d_unavailable_exit_code { 77 };
@@ -810,6 +818,7 @@ namespace luil::win32 {
                 {
                 case snapshot_wake_message: {
                     apply_requested_window_placement();
+                    apply_main_visibility();
                     // 창을 먼저 맞춘다.
                     // popup의 앵커 표면이 있어야 그 위에 배치할 수 있다.
                     // 대조 결과는 표면별 현재 콘텐츠와 게시된 콘텐츠의 차이를 반영한다.
@@ -830,6 +839,8 @@ namespace luil::win32 {
                     // 않으므로 발행본이 바뀔 때 잡은 창이 스스로 맞춘다.
                     if (every_surface)
                         refresh_captured_cursors();
+                    // 창 밖으로 끌고 나간 항목의 그림이다. 끄는 자리가 바뀔 때마다 발행본이 오므로 여기서 따라간다.
+                    update_drag_ghost();
                     // **예고가 꺼져 있으면 여기서 켠다.** 표면을 골라 깨우는 순간
                     // "게시마다 주 창이 그려지며 다시 건다"는 전제가 무너졌다 —
                     // popup은 자기 render에서 예고를 걸지 않으므로(5.2), popup의
@@ -879,12 +890,18 @@ namespace luil::win32 {
                         //  - 주 창이 최소화면 소유된 보조 창·popup도 함께 감춰져
                         //    보이는 표면이 없다. 그때만 사슬을 놓고, 복원의
                         //    `WM_SIZE`가 다시 그리며 그 render가 이어 붙인다.
-                        if (IsIconic(window_) == FALSE)
+                        //  - 독립 창(`ui_window::independent`)은 주 창과 따로 보이므로
+                        //    그것이 하나라도 보이면 사슬을 잇는다.
+                        if (any_surface_showing())
                             arm_update_timer(nullptr, nullptr);
                         return 0;
                     }
                     break;
                 case WM_CLOSE:
+                    // 앱이 주 창의 닫힘을 받아 가면(`ui_frame::close`) 그 동작만 내고 아무것도 닫지 않는다. 나머지 창을
+                    // 어떻게 할지는 앱이 정한다 — 끝내기로 했으면 `ui_command::application_exit`가 이 길을 비켜 온다.
+                    if (exiting_ == false && request_main_close())
+                        return 0;
                     // 스레드를 모두 정리한 뒤에 창을 파괴한다.
                     // 창 배치는 종료 신호보다 먼저 게시해야 같은 채널의 순서로 반영된다.
                     if (host_ != nullptr)
@@ -1040,6 +1057,7 @@ namespace luil::win32 {
                     }
                     destroy_all_popups();
                     destroy_all_secondary_windows();
+                    drag_ghost_.destroy();
                     main_.detach_window();
                     PostQuitMessage(0);
                     return 0;
@@ -1211,7 +1229,82 @@ namespace luil::win32 {
                     return;
                 case ui_command::text_edit_menu:
                     return;
+                case ui_command::application_exit:
+                    // 닫힘 훅을 비켜 간다 — 훅을 단 앱이 정말로 끝내는 길이다.
+                    exiting_ = true;
+                    PostMessageW(window_, WM_CLOSE, 0, 0);
+                    return;
                 }
+            }
+
+            // 주 창의 닫힘 요청을 앱의 훅(`ui_frame::close`)에 넘긴다. 훅이 없으면 거짓이라 지금처럼 끝낸다.
+            //  - 게시된 frame당 한 번만 낸다 (보조 창의 `close`와 같은 빗장). 같은 frame에 거듭 온 요청은 삼킨다.
+            [[nodiscard]] bool request_main_close()
+            {
+                const std::shared_ptr<const ui_frame> frame { host_ != nullptr ? host_->acquire_frame() : nullptr };
+                if (frame == nullptr || frame->close == nullptr)
+                    return false;
+                if (close_requested_frame_ == frame)
+                    return true;
+                close_requested_frame_ = frame;
+                try
+                {
+                    dispatch_action(frame->close());
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The main window close action threw an exception.");
+                }
+                return true;
+            }
+
+            // 앱이 주 창을 숨기자고 했는가를 창에 옮긴다 (`ui_frame::main_hidden`). 바뀐 때만 손댄다.
+            void apply_main_visibility()
+            {
+                const std::shared_ptr<const ui_frame> frame { host_ != nullptr ? host_->acquire_frame() : nullptr };
+                const bool hidden { frame != nullptr && frame->main_hidden };
+                if (hidden == main_hidden_)
+                    return;
+                main_hidden_ = hidden;
+                ShowWindow(window_, hidden ? SW_HIDE : SW_SHOW);
+            }
+
+            // 보이는 표면이 하나라도 있는가 (시간 예고의 사슬을 이을지).
+            //  - 주 창이 최소화되면 소유된 보조 창도 숨는다. 독립 창은 따로 보인다.
+            [[nodiscard]] bool any_surface_showing() const noexcept
+            {
+                if (IsWindowVisible(window_) != FALSE && IsIconic(window_) == FALSE)
+                    return true;
+                for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                    if (const HWND handle { secondary->window() }; handle != nullptr && IsWindowVisible(handle) != FALSE && IsIconic(handle) == FALSE)
+                        return true;
+                return false;
+            }
+
+            // 창 밖으로 끌고 나간 내부 끌기면 화면 위에 그 그림을 세우고, 아니면 거둔다.
+            //  - 그림은 출발 쪽이 자기 그림을 그리지 않는 끌기(`custom_visual`이 아닌 것)에만 선다.
+            //  - 자리는 발행본의 끄는 자리다. 창 밖이면 그 좌표가 출발 창 client 기준이라 그 창으로 화면에 옮긴다 —
+            //    마우스 커서를 읽으면 펜·손가락으로 끄는 동안 그림이 엉뚱한 자리에 선다.
+            void update_drag_ghost()
+            {
+                if (host_ == nullptr)
+                {
+                    drag_ghost_.hide();
+                    return;
+                }
+                const interaction_snapshot published { host_->acquire_interaction() };
+                const bool detached { published.drag.has_value() && published.drag->outside && published.drag->payload.files.empty() && published.drag->payload.custom_visual == false };
+                const window_surface* const origin { detached ? surface_by_id(published.drag->surface) : nullptr };
+                POINT cursor { detached ? static_cast<LONG>(std::lround(published.drag->x)) : 0, detached ? static_cast<LONG>(std::lround(published.drag->y)) : 0 };
+                if (origin == nullptr || origin->window() == nullptr || ClientToScreen(origin->window(), &cursor) == FALSE)
+                {
+                    drag_ghost_.hide();
+                    return;
+                }
+                frame_state appearance {};
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                const sk_sp<SkTypeface> code { apply_frame_appearance(appearance, frame.get()) };
+                drag_ghost_.show(instance_, published.drag->payload, appearance, cursor);
             }
 
             // 종료 직전·크기 조절 뒤·전체 화면 전환의 창 배치를 앱에 알린다.
@@ -1890,6 +1983,34 @@ namespace luil::win32 {
             // 앵커 표면의 session이 이것으로 popup의 tree와 창을 함께 본다
             // (popup-ime-design.md).
             //  - 빈 id는 주 창을 가리키므로 popup일 수 없다.
+            const window_surface* surface_by_id(const std::u8string& id) const noexcept override
+            {
+                if (id.empty())
+                    return &main_;
+                for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                    if (secondary->id() == id)
+                        return secondary.get();
+                for (const std::unique_ptr<popup_surface>& popup : popups_)
+                    if (popup->id() == id)
+                        return popup.get();
+                return nullptr;
+            }
+
+            const window_surface* surface_of_window(const HWND window) const noexcept override
+            {
+                if (window == nullptr)
+                    return nullptr;
+                if (main_.window() == window)
+                    return &main_;
+                for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                    if (secondary->window() == window)
+                        return secondary.get();
+                for (const std::unique_ptr<popup_surface>& popup : popups_)
+                    if (popup->window() == window)
+                        return popup.get();
+                return nullptr;
+            }
+
             const window_surface* anchored_popup(const std::u8string& anchor, const std::u8string& id) const noexcept override
             {
                 if (id.empty())
@@ -2193,32 +2314,69 @@ namespace luil::win32 {
                     return;
                 }
 
-                // 초기 배치는 주 창 client 기준 논리 픽셀을 주 창 배율로 계산한다.
-                // 생성 뒤에는 자기 모니터의 DPI를 따른다.
-                const float scale { dpi_scale(dpi_) };
-                POINT origin { 0, 0 };
-                ClientToScreen(window_, &origin);
-                RECT bounds {};
-                bounds.left = origin.x + scaled_pixels(source.x, scale);
-                bounds.top = origin.y + scaled_pixels(source.y, scale);
-                bounds.right = bounds.left + scaled_pixels(source.width, scale);
-                bounds.bottom = bounds.top + scaled_pixels(source.height, scale);
-                // client 크기를 창 크기로 바꾸고 작업 영역 안으로 다듬는다.
-                // 보조 창은 전체 화면이 되지 않는다 — 배치와 마찬가지로 주 창의 것이다.
-                static_cast<void>(AdjustWindowRectExForDpi(&bounds, custom_window_style_for(source.caption.buttons, window_display_mode::normal), FALSE, 0, dpi_));
-                int x { bounds.left };
-                int y { bounds.top };
-                const int width { bounds.right - bounds.left };
-                const int height { bounds.bottom - bounds.top };
-                const HMONITOR monitor { MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST) };
-                MONITORINFO information {};
-                information.cbSize = sizeof(information);
-                if (GetMonitorInfoW(monitor, &information) != FALSE)
+                // 독립 창은 작업 표시줄에 따로 서고 주 창에 매이지 않는다 (소유자가 없다).
+                const DWORD extended { secondary_extended_style(source.independent) };
+                const HWND owner { source.independent ? nullptr : window_ };
+
+                // 저장 배치가 있으면 그것이 먼저다. 값은 앱이 `placement`로 받은 그대로라 이미 물리 픽셀의 창 사각형이다.
+                const std::optional<initial_window_placement> restored {
+                    source.initial_placement.has_value()
+                        ? resolve_initial_placement(*source.initial_placement, static_cast<int>(std::ceil(source.minimum_width)), static_cast<int>(std::ceil(source.minimum_height)))
+                        : std::nullopt,
+                };
+                int x { 0 };
+                int y { 0 };
+                int width { 0 };
+                int height { 0 };
+                if (restored.has_value())
                 {
-                    const screen_area work { information.rcWork.left, information.rcWork.top, information.rcWork.right, information.rcWork.bottom };
-                    const auto [clamped_x, clamped_y] { clamp_popup_position(x, y, width, height, work) };
-                    x = clamped_x;
-                    y = clamped_y;
+                    x = restored->screen_bounds.left;
+                    y = restored->screen_bounds.top;
+                    width = restored->screen_bounds.right - restored->screen_bounds.left;
+                    height = restored->screen_bounds.bottom - restored->screen_bounds.top;
+                }
+                else
+                {
+                    // 화면 닻이면 그 점이 있는 모니터의 배율로, 아니면 주 창 client 기준 논리 픽셀을 주 창 배율로 계산한다.
+                    // 생성 뒤에는 자기 모니터의 DPI를 따른다.
+                    RECT bounds {};
+                    UINT dpi { dpi_ };
+                    if (source.screen_anchor.has_value())
+                    {
+                        const POINT point { source.screen_anchor->screen.x, source.screen_anchor->screen.y };
+                        UINT dpi_x { 96 };
+                        UINT dpi_y { 96 };
+                        if (SUCCEEDED(GetDpiForMonitor(MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y)))
+                            dpi = dpi_x;
+                        bounds = anchored_client_bounds(*source.screen_anchor, source.width, source.height, dpi);
+                    }
+                    else
+                    {
+                        const float scale { dpi_scale(dpi_) };
+                        POINT origin { 0, 0 };
+                        ClientToScreen(window_, &origin);
+                        bounds.left = origin.x + scaled_pixels(source.x, scale);
+                        bounds.top = origin.y + scaled_pixels(source.y, scale);
+                        bounds.right = bounds.left + scaled_pixels(source.width, scale);
+                        bounds.bottom = bounds.top + scaled_pixels(source.height, scale);
+                    }
+                    // client 크기를 창 크기로 바꾸고 작업 영역 안으로 다듬는다.
+                    // 보조 창은 전체 화면이 되지 않는다 — 전체 화면은 주 창의 것이다.
+                    static_cast<void>(AdjustWindowRectExForDpi(&bounds, custom_window_style_for(source.caption.buttons, window_display_mode::normal), FALSE, extended, dpi));
+                    x = bounds.left;
+                    y = bounds.top;
+                    width = bounds.right - bounds.left;
+                    height = bounds.bottom - bounds.top;
+                    const HMONITOR monitor { MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST) };
+                    MONITORINFO information {};
+                    information.cbSize = sizeof(information);
+                    if (GetMonitorInfoW(monitor, &information) != FALSE)
+                    {
+                        const screen_area work { information.rcWork.left, information.rcWork.top, information.rcWork.right, information.rcWork.bottom };
+                        const auto [clamped_x, clamped_y] { clamp_popup_position(x, y, width, height, work) };
+                        x = clamped_x;
+                        y = clamped_y;
+                    }
                 }
 
                 std::wstring title {};
@@ -2229,10 +2387,10 @@ namespace luil::win32 {
                 auto secondary { std::make_unique<secondary_surface>(*this, source.id) };
                 secondary->set_caption(source.caption);
                 secondary->set_minimum_client_size(source.minimum_width, source.minimum_height);
-                // 주 창이 소유해 언제나 그 위에 있다.
+                // 소유된 창은 주 창이 소유해 언제나 그 위에 있다. 독립 창은 소유자가 없다.
                 // 스타일은 이 창의 caption 버튼 집합에서 나오고 시스템 캡션만 뗀다.
                 const DWORD style { window_style_for(source.caption.buttons, window_display_mode::normal) };
-                const HWND handle { CreateWindowExW(0, secondary_class_name_.c_str(), title.c_str(), style, x, y, width, height, window_, nullptr, instance_, secondary.get()) };
+                const HWND handle { CreateWindowExW(extended, secondary_class_name_.c_str(), title.c_str(), style, x, y, width, height, owner, nullptr, instance_, secondary.get()) };
                 if (handle == nullptr)
                 {
                     failed_windows_.push_back(source.id);
@@ -2267,8 +2425,12 @@ namespace luil::win32 {
                 static_cast<void>(secondary->adopt(source));
                 // 앱은 이 메시지의 실제 크기·배율로 tree를 배치해 다음 frame에 싣는다.
                 secondary->post_metrics();
+                secondary_surface* const created { secondary.get() };
                 windows_.push_back(std::move(secondary));
-                ShowWindow(handle, SW_SHOWNOACTIVATE);
+                // 저장 배치가 최대화였으면 복원 사각형 위에서 최대화한다 — 돌아갈 자리가 그 사각형으로 남는다.
+                ShowWindow(handle, restored.has_value() && restored->placement.maximized ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE);
+                // 앱이 저장할 처음 배치다. 이후는 이동·크기 조절의 끝과 최대화 전환이 알린다.
+                created->post_placement();
             }
 
             void destroy_secondary(const std::u8string& id)
@@ -2350,6 +2512,14 @@ namespace luil::win32 {
             // 자기 ReleaseCapture가 낳는 WM_CAPTURECHANGED와 진짜 캡처 상실을
             // 구분하는 근거다 — 뗌 처리기가 ReleaseCapture 직전에 내린다.
             bool pointer_capture_active_ { false };
+            // 앱이 끝내자고 했다 (`ui_command::application_exit`). 주 창의 닫힘 훅을 더는 거치지 않는다.
+            bool exiting_ { false };
+            // 닫힘 훅을 마지막으로 낸 frame이다. 같은 frame에 거듭 온 요청은 삼킨다.
+            std::shared_ptr<const ui_frame> close_requested_frame_ {};
+            // 주 창을 숨겨 두었다 (`ui_frame::main_hidden`).
+            bool main_hidden_ { false };
+            // 창 밖으로 끌고 나간 항목의 그림이다.
+            drag_ghost_window drag_ghost_ {};
             // 가족 이름 → typeface(글꼴 미리 보기)와 글자 → 대체 typeface를 함께 맡는다.
             // 둘 다 win32_fonts의 같은 cache를 보므로 나눌 이유가 없다.
             struct registry_font_resolver final : font_resolver, font_fallback

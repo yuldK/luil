@@ -3735,3 +3735,327 @@ TEST_CASE("A tooltip clock starts only when the pointer really moves onto an ele
     static_cast<void>(controller.process(luil::pointer_moved_event { .x = 24.0f, .y = 15.0f, .time = at(11000), .surface = u8"floating", .device = luil::pointer_device::pen }));
     REQUIRE(controller.snapshot().hover_started_at == at(11000));
 }
+
+namespace {
+    // 받는 대상 없이 끝난 놓기의 기록이다 (`drag_source::on_unclaimed_drop`).
+    struct unclaimed_record
+    {
+        int calls { 0 };
+        luil::drag_payload payload {};
+        luil::drag_release release {};
+    };
+
+    // 끌 것 하나, 받을 것 하나, 막는 판 하나다. 끌 것은 놓을 자리 없이 끝나면 기록에 남긴다.
+    //  - 끌 것의 키는 `tool-drag`라 `gesture_tree`의 받을 것도 이것을 받는다 — 창을 넘는 놓기가 그 tree에 선다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> release_tree(const std::shared_ptr<unclaimed_record>& record)
+    {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root, u8"release" }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+
+        auto source { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"tool-drag" }) };
+        source->arrange({ { 0.0f, 0.0f, 50.0f, 50.0f }, 1.0f });
+        luil::drag_source drag {};
+        drag.make_payload = [](const luil::ui_action_context& context) {
+            luil::drag_payload payload {};
+            payload.source = context.element;
+            payload.dragged_owner = context.element.owner;
+            return payload;
+        };
+        drag.on_unclaimed_drop = [record](const luil::drag_payload& payload, const luil::drag_release& release) -> std::vector<luil::input_action> {
+            ++record->calls;
+            record->payload = payload;
+            record->release = release;
+            return { luil::input_action { luil::app_message { fake_intent { u8"unclaimed" } } } };
+        };
+        source->set_drag_source(std::move(drag));
+        root->add(std::move(source));
+
+        auto target { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"release-drop" }) };
+        target->arrange({ { 130.0f, 100.0f, 60.0f, 60.0f }, 1.0f });
+        luil::drop_target drop {};
+        drop.accepts = [](const luil::drag_payload& payload) { return payload.dragged_owner == u8"tool-drag"; };
+        drop.on_drop = [](const luil::drag_payload&, const luil::ui_action_context&) -> std::vector<luil::input_action> {
+            return { luil::input_action { luil::app_message { fake_intent { u8"dropped" } } } };
+        };
+        target->set_drop_target(std::move(drop));
+        root->add(std::move(target));
+
+        // modal scrim처럼 아래를 가리는 판이다. 받는 것은 없다.
+        auto cover { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"cover" }) };
+        cover->arrange({ { 0.0f, 170.0f, 100.0f, 30.0f }, 1.0f });
+        cover->set_hit_opaque(true);
+        root->add(std::move(cover));
+
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    }
+
+    // 주 창의 끌 것을 누르고 시작 거리를 넘겨 끌기를 세운다.
+    void start_release_drag(luil::interaction_controller& controller, const std::u8string& surface = {})
+    {
+        luil::pointer_pressed_event press { 10.0f, 10.0f, luil::pointer_button::left, at(0) };
+        press.surface = surface;
+        static_cast<void>(controller.process(press));
+        luil::pointer_moved_event moved { 30.0f, 30.0f, at(10) };
+        moved.surface = surface;
+        static_cast<void>(controller.process(moved));
+        REQUIRE(controller.snapshot().drag.has_value());
+    }
+} // namespace
+
+TEST_CASE("A drag released where nothing accepts it tells its source", "[ui][interaction][drag]")
+{
+    const auto record { std::make_shared<unclaimed_record>() };
+    luil::interaction_controller controller {};
+    controller.set_tree(release_tree(record));
+    start_release_drag(controller);
+
+    SECTION("창 밖에 놓으면 화면 자리와 수식 키를 함께 알린다")
+    {
+        // 플랫폼이 포인터 밑을 싣지 않으면 그 표면의 내용 밖이 곧 창 밖이다.
+        static_cast<void>(controller.process(luil::pointer_moved_event { -40.0f, 60.0f, at(20) }));
+        REQUIRE(controller.snapshot().drag->outside);
+        REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id {});
+
+        luil::pointer_released_event released { -40.0f, 60.0f, luil::pointer_button::left, at(30) };
+        released.control = true;
+        released.screen = luil::screen_point { 860, 412 };
+        const auto actions { controller.process(released) };
+        REQUIRE(actions.size() == 1u);
+        REQUIRE(intent_of(actions[0])->name == u8"unclaimed");
+        REQUIRE(record->calls == 1);
+        REQUIRE(record->payload.dragged_owner == u8"tool-drag");
+        REQUIRE(record->release.outside);
+        REQUIRE(record->release.surface.empty());
+        REQUIRE(record->release.x == -40.0f);
+        REQUIRE(record->release.y == 60.0f);
+        REQUIRE(record->release.screen == luil::screen_point { 860, 412 });
+        REQUIRE(record->release.control);
+        REQUIRE(record->release.shift == false);
+        REQUIRE(controller.snapshot().drag.has_value() == false);
+    }
+
+    SECTION("플랫폼이 창 밖이라고 하면 좌표가 창 안이어도 창 밖이다")
+    {
+        // 다른 앱의 창이 그 자리를 덮고 있다.
+        luil::pointer_released_event released { 80.0f, 80.0f, luil::pointer_button::left, at(30) };
+        released.over = luil::pointer_over { .outside = true };
+        const auto actions { controller.process(released) };
+        REQUIRE(actions.size() == 1u);
+        REQUIRE(record->calls == 1);
+        REQUIRE(record->release.outside);
+        REQUIRE(record->release.x == 80.0f);
+    }
+
+    SECTION("창 안의 빈 자리도 받는 대상이 없는 놓기다")
+    {
+        const auto actions { controller.process(luil::pointer_released_event { 90.0f, 60.0f, luil::pointer_button::left, at(30) }) };
+        REQUIRE(actions.size() == 1u);
+        REQUIRE(record->calls == 1);
+        REQUIRE(record->release.outside == false);
+        REQUIRE(record->release.screen.has_value() == false);
+    }
+
+    SECTION("받는 대상 위의 놓기는 그 대상의 것이다")
+    {
+        const auto actions { controller.process(luil::pointer_released_event { 150.0f, 120.0f, luil::pointer_button::left, at(30) }) };
+        REQUIRE(actions.size() == 1u);
+        REQUIRE(intent_of(actions[0])->name == u8"dropped");
+        REQUIRE(record->calls == 0);
+    }
+
+    SECTION("불투명 판이 가린 자리는 빈 자리가 아니다")
+    {
+        const auto actions { controller.process(luil::pointer_released_event { 50.0f, 185.0f, luil::pointer_button::left, at(30) }) };
+        REQUIRE(actions.empty());
+        REQUIRE(record->calls == 0);
+        REQUIRE(controller.snapshot().drag.has_value() == false);
+    }
+}
+
+TEST_CASE("A cancelled drag never reports an unclaimed drop", "[ui][interaction][drag]")
+{
+    const auto record { std::make_shared<unclaimed_record>() };
+    luil::interaction_controller controller {};
+    controller.set_tree(release_tree(record));
+    start_release_drag(controller);
+    static_cast<void>(controller.process(luil::pointer_moved_event { -40.0f, 60.0f, at(20) }));
+    REQUIRE(controller.snapshot().drag->outside);
+
+    SECTION("Esc")
+    {
+        REQUIRE(controller.process(luil::key_pressed_event { luil::key_code::escape }).empty());
+    }
+
+    SECTION("캡처 상실")
+    {
+        luil::pointer_released_event lost { -10000.0f, -10000.0f, luil::pointer_button::left, at(30) };
+        lost.cancelled = true;
+        REQUIRE(controller.process(lost).empty());
+    }
+
+    SECTION("입력 큐 유실")
+    {
+        REQUIRE(controller.cancel_dropped_gestures().empty());
+    }
+
+    REQUIRE(controller.snapshot().drag.has_value() == false);
+    REQUIRE(record->calls == 0);
+    // 거둔 뒤의 뗌도 놓기가 되지 않는다.
+    REQUIRE(controller.process(luil::pointer_released_event { -40.0f, 60.0f, luil::pointer_button::left, at(40) }).empty());
+    REQUIRE(record->calls == 0);
+}
+
+TEST_CASE("A drag crosses into another surface and drops there", "[ui][interaction][drag][window]")
+{
+    // 주 창에서 끌어 보조 창의 tree에 놓는다. 캡처는 주 창이 쥐고 있어 이벤트는 주 창 좌표로 오고, 포인터 밑의
+    // 표면은 플랫폼이 다시 찾아 싣는다 (`pointer_over`).
+    const auto record { std::make_shared<unclaimed_record>() };
+    luil::interaction_controller controller {};
+    controller.set_tree(release_tree(record));
+    luil::surface_tree_list surfaces {};
+    surfaces.emplace_back(u8"tool", gesture_tree());
+    controller.set_surface_trees(std::move(surfaces));
+    start_release_drag(controller);
+
+    luil::pointer_moved_event over_tool { 420.0f, 130.0f, at(20) };
+    over_tool.over = luil::pointer_over { .surface = u8"tool", .x = 150.0f, .y = 120.0f };
+    static_cast<void>(controller.process(over_tool));
+
+    const luil::drag_visual& drag { *controller.snapshot().drag };
+    REQUIRE(drag.surface.empty());
+    REQUIRE(drag.pointer_on() == u8"tool");
+    REQUIRE(drag.outside == false);
+    REQUIRE(drag.x == 150.0f);
+    REQUIRE(drag.hovered_drop_target == luil::ui_element_id { kind_card, u8"tool-drop" });
+
+    SECTION("강조와 ghost는 포인터가 놓인 창에 서고 출발 창에는 끌리는 표시만 남는다")
+    {
+        const luil::interaction_snapshot tool { luil::interaction_for_surface(controller.snapshot(), u8"tool") };
+        REQUIRE(tool.drag.has_value());
+        REQUIRE(tool.drag->outside == false);
+        REQUIRE(tool.drag->hovered_drop_target == luil::ui_element_id { kind_card, u8"tool-drop" });
+
+        const luil::interaction_snapshot main { luil::interaction_for_surface(controller.snapshot(), {}) };
+        REQUIRE(main.drag.has_value());
+        REQUIRE(main.drag->payload.dragged_owner == u8"tool-drag");
+        REQUIRE(main.drag->outside);
+        REQUIRE(main.drag->hovered_drop_target == luil::ui_element_id {});
+
+        // 둘 다 아닌 표면에는 없다.
+        REQUIRE(luil::interaction_for_surface(controller.snapshot(), u8"other").drag.has_value() == false);
+    }
+
+    SECTION("놓으면 그 창의 대상이 받는다")
+    {
+        luil::pointer_released_event released { 420.0f, 130.0f, luil::pointer_button::left, at(30) };
+        released.over = over_tool.over;
+        const auto actions { controller.process(released) };
+        REQUIRE(actions.size() == 1u);
+        REQUIRE(intent_of(actions[0])->name == u8"tool-dropped");
+        REQUIRE(record->calls == 0);
+    }
+
+    SECTION("그 창의 빈 자리에 놓으면 그 창 좌표로 알린다")
+    {
+        luil::pointer_released_event released { 280.0f, 80.0f, luil::pointer_button::left, at(30) };
+        released.over = luil::pointer_over { .surface = u8"tool", .x = 10.0f, .y = 80.0f };
+        static_cast<void>(controller.process(released));
+        REQUIRE(record->calls == 1);
+        REQUIRE(record->release.outside == false);
+        REQUIRE(record->release.surface == u8"tool");
+        REQUIRE(record->release.x == 10.0f);
+        REQUIRE(record->release.y == 80.0f);
+    }
+
+    SECTION("포인터가 가 있던 창이 닫혀도 끌기는 남는다")
+    {
+        controller.set_surface_trees({});
+        REQUIRE(controller.snapshot().drag.has_value());
+        REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id {});
+
+        // 돌아오면 다시 주 창의 자리를 찾는다.
+        static_cast<void>(controller.process(luil::pointer_moved_event { 150.0f, 120.0f, at(40) }));
+        REQUIRE(controller.snapshot().drag->pointer_on().empty());
+        REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id { kind_card, u8"release-drop" });
+    }
+
+    SECTION("다른 창의 tree가 다시 와도 그 자리의 대상을 다시 찾는다")
+    {
+        luil::surface_tree_list replaced {};
+        replaced.emplace_back(u8"tool", gesture_tree());
+        controller.set_surface_trees(std::move(replaced));
+        REQUIRE(controller.snapshot().drag->hovered_drop_target == luil::ui_element_id { kind_card, u8"tool-drop" });
+        REQUIRE(controller.snapshot().drag->pointer_on() == u8"tool");
+    }
+}
+
+TEST_CASE("A drag whose origin surface closes mid-drag is cancelled", "[ui][interaction][drag][window]")
+{
+    // 마지막 탭을 끌어낸 창을 끄는 도중에 닫으면 그 창이 쥔 캡처도 풀린다 — 뗌이 어디 떨어질지 알 수 없으므로
+    // 놓기가 아니라 취소다. 앱은 놓기의 메시지를 받은 뒤에 빈 창을 닫는다.
+    const auto record { std::make_shared<unclaimed_record>() };
+    luil::interaction_controller controller {};
+    controller.set_tree(gesture_tree());
+    luil::surface_tree_list surfaces {};
+    surfaces.emplace_back(u8"tool", release_tree(record));
+    controller.set_surface_trees(std::move(surfaces));
+    start_release_drag(controller, u8"tool");
+
+    // 창 밖으로 끌고 나갔다.
+    luil::pointer_moved_event away { 400.0f, 60.0f, at(20) };
+    away.surface = u8"tool";
+    away.over = luil::pointer_over { .outside = true };
+    static_cast<void>(controller.process(away));
+    REQUIRE(controller.snapshot().drag->outside);
+
+    controller.set_surface_trees({});
+    REQUIRE(controller.snapshot().drag.has_value() == false);
+
+    luil::pointer_released_event released { 400.0f, 60.0f, luil::pointer_button::left, at(30) };
+    released.surface = u8"tool";
+    released.over = away.over;
+    REQUIRE(controller.process(released).empty());
+    REQUIRE(record->calls == 0);
+}
+
+TEST_CASE("A drag outside every window asks for the outside cursor", "[ui][tree][drag]")
+{
+    const auto record { std::make_shared<unclaimed_record>() };
+    const std::shared_ptr<const luil::ui_tree> tree { release_tree(record) };
+    constexpr luil::ui_cursor detach { luil::application_cursor(3) };
+
+    luil::interaction_snapshot interaction {};
+    interaction.drag = luil::drag_visual {};
+    interaction.drag->payload.source = luil::ui_element_id { kind_card, u8"tool-drag" };
+    interaction.drag->payload.outside_cursor = detach;
+
+    // 창 안에서는 잡은 쪽의 모양이다.
+    REQUIRE(tree->cursor_at(60.0f, 60.0f, interaction) != detach);
+    interaction.drag->outside = true;
+    REQUIRE(tree->cursor_at(60.0f, 60.0f, interaction) == detach);
+    // 청하지 않았으면 지금처럼 잡은 쪽의 모양이 이어진다.
+    interaction.drag->payload.outside_cursor = luil::ui_cursor::inherit;
+    REQUIRE(tree->cursor_at(60.0f, 60.0f, interaction) != detach);
+}
+
+TEST_CASE("A drop target can refuse a spot and let the one below answer", "[ui][tree][drag]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    luil::drop_target below {};
+    below.accepts = [](const luil::drag_payload&) { return true; };
+    root->set_drop_target(std::move(below));
+
+    auto half { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"half" }) };
+    half->arrange({ { 0.0f, 0.0f, 100.0f, 100.0f }, 1.0f });
+    luil::drop_target left_only {};
+    left_only.accepts = [](const luil::drag_payload&) { return true; };
+    left_only.accepts_at = [](const luil::drag_payload&, const float x, const float) { return x < 50.0f; };
+    half->set_drop_target(std::move(left_only));
+    root->add(std::move(half));
+    const luil::ui_tree tree { std::move(root) };
+
+    const luil::drag_payload payload {};
+    REQUIRE(tree.find_drop_target(20.0f, 20.0f, payload)->id() == luil::ui_element_id { kind_card, u8"half" });
+    REQUIRE(tree.find_drop_target(80.0f, 20.0f, payload)->id() == luil::ui_element_id { luil::ui_element_kind::root });
+}

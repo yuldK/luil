@@ -219,6 +219,11 @@ namespace luil {
         //  - `not_allowed`를 주면 받는 대상이 없는 자리(놓을 수 없는 행·빈 곳) 위에서 금지 모양이다. 받는 대상 위에서는
         //    잡은 쪽의 모양이다.
         ui_cursor rejected_cursor { ui_cursor::inherit };
+        // 포인터가 이 앱의 어느 창 위에도 없을 때의 모양이다 (창 밖으로 끌어 내 새 창으로 떼어 낼 자리).
+        //  - `inherit`(기본)이면 잡은 쪽의 모양이 이어진다. 앱이 정의한 모양(`application_cursor`)을 주면 "떼어 낸다"를
+        //    알아볼 수 있다. 실제 커서는 `window_config::resolve_cursor`가 준다.
+        //  - 창 밖에서는 ghost도 화면 위를 따로 따라온다 (`custom_visual`이 아닐 때 — multi-window-design.md).
+        ui_cursor outside_cursor { ui_cursor::inherit };
 
         // 이 끌기가 그 키의 항목을 싣고 있는가 (`dragged_owner` 또는 `dragged_owners`).
         [[nodiscard]] bool carries(std::u8string_view owner) const noexcept;
@@ -234,15 +239,62 @@ namespace luil {
         [[nodiscard]] bool operator==(const drag_payload&) const = default;
     };
 
+    // 받는 대상 없이 끝난 놓기다 (`drag_source::on_unclaimed_drop`).
+    // 놓은 자리를 두 가지로 준다 — 어느 표면 위였는지와 그 표면 좌표, 그리고 화면 좌표다.
+    struct drag_release
+    {
+        // 놓은 자리의 표면이다 (표면 표식의 통상 규칙 — 비면 주 창이다).
+        //  - `outside`면 끌기가 시작된 표면이다. 아래 좌표도 그 표면 기준이라 창 밖의 값일 수 있다.
+        std::u8string surface {};
+        // 그 표면의 client 좌표다 (물리 픽셀).
+        float x { 0.0f };
+        float y { 0.0f };
+        // 이 앱의 어느 표면 위도 아니다 (바탕화면·다른 앱·작업 표시줄 위). 탭을 새 창으로 떼어 낼 자리다.
+        //  - 거짓이면 이 앱의 창 위였지만 받는 대상이 없는 자리다 (다른 창의 빈 곳). 그 창에 합칠지는 앱이 정한다.
+        bool outside { false };
+        // 놓은 자리의 화면 좌표다 (가상 화면 물리 픽셀). 모르는 플랫폼은 비운다.
+        //  - 새 창을 그 자리에 세우려면 `ui_window::screen_anchor`에 그대로 넘긴다.
+        std::optional<screen_point> screen {};
+        // 놓는 순간의 수식 키다 (`ui_action_context`와 같은 규약).
+        bool control { false };
+        bool shift { false };
+        bool alt { false };
+
+        [[nodiscard]] bool operator==(const drag_release&) const = default;
+    };
+
     struct drag_source
     {
         std::function<drag_payload(const ui_action_context&)> make_payload {};
+        // 받는 대상 없이 놓였다 (창 밖에 놓았다, 창 안이지만 받는 element가 없는 자리다).
+        //  - **취소에는 부르지 않는다.** Esc, 캡처 상실, 시스템의 접촉 취소, 입력 큐 유실, 출발 표면의 소멸은 놓기가
+        //    아니다. 불투명 표면(modal·메뉴)이 가린 자리에 놓은 것도 부르지 않는다 — 그 자리는 막힌 것이지 빈 것이
+        //    아니다 (OS 파일 drop의 창 전체 물러섬과 같은 규칙, os-dragdrop-design.md).
+        //  - 끌기가 **시작될 때** 쥐어 둔다. 출발 element가 끄는 동안의 새 tree에서 사라져도 이 값으로 알린다.
+        //  - 비어 있으면 지금처럼 아무것도 내지 않는다.
+        std::function<std::vector<input_action>(const drag_payload&, const drag_release&)> on_unclaimed_drop {};
+    };
+
+    // 순서가 있는 항목의 어느 쪽에 놓는가다 (항목의 앞 반쪽이면 앞, 뒤 반쪽이면 뒤).
+    enum class drop_side
+    {
+        before,
+        after,
     };
 
     struct drop_target
     {
         std::function<bool(const drag_payload&)> accepts {};
         std::function<std::vector<input_action>(const drag_payload&, const ui_action_context&)> on_drop {};
+        // 자리마다 받기를 가른다 (같은 항목이라도 앞 반쪽은 받고 뒤 반쪽은 받지 않는 식).
+        //  - 있으면 `accepts`가 참인 뒤에 이것도 참이어야 받는다. 좌표는 그 표면의 client 물리 픽셀이다.
+        //  - 받지 않은 자리는 아래의 대상으로 내려가 다시 찾는다 (보통 element처럼 지나친다).
+        //  - 끄는 동안 이동마다 불린다. `accepts`처럼 가볍게 둔다.
+        std::function<bool(const drag_payload&, float x, float y)> accepts_at {};
+        // 받는 쪽이 자기 강조를 그린다 (항목 사이의 틈 표시 등). 기본 강조 테두리를 그리지 않는다.
+        //  - 끄는 쪽이 끈 강조(`drag_payload::suppress_drop_highlight`)와는 다른 자리의 판단이다 — 그쪽은 모든
+        //    대상의 기본 강조를 끄고, 이쪽은 이 대상의 테두리만 자기 그림으로 바꾼다.
+        bool custom_highlight { false };
     };
 
     class ui_element;
@@ -661,6 +713,23 @@ namespace luil {
         //  - **꼬리에 둔다** — 위치 초기화로 만드는 자리들이 이미 있어 가운데
         //    끼우면 그 자리들의 뜻이 조용히 어긋난다.
         std::u8string surface {};
+        // 포인터가 지금 놓인 표면이다. `x`·`y`와 `hovered_drop_target`은 이 표면의 것이다.
+        //  - 끌기는 표면을 넘는다. 한 창에서 시작한 끌기가 다른 창 위에 오면 그 창의 tree에서 놓을 자리를 찾고,
+        //    ghost와 강조도 그 창에 선다. 출발 표면에는 끌리는 항목의 흐린 표시만 남는다 (multi-window-design.md).
+        //  - 비어 있으면(`std::nullopt`) 출발 표면(`surface`)이다. 처음에는 그렇다. 읽을 때는 `pointer_on()`으로 묻는다.
+        std::optional<std::u8string> pointer_surface {};
+        // 포인터가 `pointer_on()` 위에 없다. 그 표면은 ghost와 강조를 그리지 않는다.
+        //  - 발행본에서는 포인터가 이 앱의 어느 표면 위에도 없다는 뜻이다 (바탕화면·다른 앱 위). 그때 포인터 표면은
+        //    출발 표면이고 `x`·`y`는 그 표면 기준이라 창 밖의 값이다.
+        //  - 표면별로 거른 것(`interaction_for_surface`)에서는 "포인터가 이 표면 밖에 있다"이다. 출발 표면은 포인터가
+        //    다른 창에 가 있는 동안 이 값으로 받는다.
+        bool outside { false };
+
+        // 포인터가 놓인 표면이다 (`pointer_surface`가 비면 출발 표면).
+        [[nodiscard]] const std::u8string& pointer_on() const noexcept
+        {
+            return pointer_surface.has_value() ? *pointer_surface : surface;
+        }
 
         [[nodiscard]] bool operator==(const drag_visual&) const = default;
     };

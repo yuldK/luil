@@ -30,7 +30,7 @@ namespace luil {
         int width { 0 };
         int height { 0 };
         bool maximized { false };
-        // 창이 화면을 덮고 있는가다 (주 창 전용 — 배치 자체가 주 창의 것이다).
+        // 창이 화면을 덮고 있는가다 (주 창 전용 — 전체 화면은 주 창의 것이라 보조 창의 배치에서는 늘 거짓이다).
         //
         // **참이면 나머지 값은 지금 창의 사각형이 아니라 "돌아갈 자리"다.**
         // 전체 화면 창의 사각형은 모니터가 정하므로 적어 둘 것이 없고, 적어 둘
@@ -117,7 +117,23 @@ namespace luil {
         bool border { true };
     };
 
-    // 주 창이 소유하는 보조 top-level 창 하나다 (도구 창·문서 창).
+    // 화면의 한 점에 창을 세우는 닻이다 (`ui_window::screen_anchor`).
+    // 새 창 client의 논리 점 (`client_x`, `client_y`)이 화면의 물리 점 `screen`에 오게 놓는다 — 끌어 낸 탭을 놓은
+    // 자리에 그 탭이 그대로 오는 새 창이 이것이다.
+    //  - 논리 점을 물리로 바꾸는 배율은 **그 화면 점이 있는 모니터의 것**이다. 앱은 모니터 배치도 배율도 모른 채
+    //    "탭이 이 점에 오게"만 말한다.
+    //  - 그 뒤 창을 그 모니터의 작업 영역 안으로 민다 (다른 초기 배치와 같은 규칙). 밀린 만큼 점은 어긋난다.
+    struct window_screen_anchor
+    {
+        screen_point screen {};
+        float client_x { 0.0f };
+        float client_y { 0.0f };
+
+        [[nodiscard]] bool operator==(const window_screen_anchor&) const noexcept = default;
+    };
+
+    // 주 창 곁의 보조 top-level 창 하나다. 기본은 주 창이 소유하는 도구·문서 창이고, `independent`면 주 창에 매이지
+    // 않는 창이다 (브라우저의 창 하나처럼).
     // 열림·닫힘은 popup처럼 앱 상태다: frame에 실으면 창이 생기고 빼면 사라진다.
     // 자기 캡션(custom caption)·테두리·DPI를 갖고 화면 어디로든 움직인다
     // (multi-window-design.md).
@@ -131,7 +147,8 @@ namespace luil {
         // 비클라이언트 hit test가 이 metrics를 쓴다.
         caption_config caption {};
         // 초기 배치다 (논리 픽셀). x·y는 주 창 client 기준이다.
-        // 창을 만들 때 한 번만 쓰고, 이후의 이동·크기 조절은 사용자의 것이다.
+        // 창을 만들 때 한 번만 쓰고, 이후의 이동·크기 조절은 사용자의 것이다 (앱은 `placement`로 그 결과를 받는다).
+        //  - 화면 자리로 놓으려면 `screen_anchor`, 저장해 둔 배치로 되돌리려면 `initial_placement`다. 둘이 x·y보다 앞선다.
         float x { 0.0f };
         float y { 0.0f };
         // client 크기다. 0 이하면 창을 만들지 않는다.
@@ -149,6 +166,25 @@ namespace luil {
         // UI thread는 이 메시지만 내고, 창을 없애는 것은 앱이 목록에서 빼는 것이다.
         // 비어 있으면 닫힘 요청을 무시한다 (앱이 다른 경로로만 닫는 창).
         std::function<input_action()> close {};
+        // 화면 자리로 만든다 (끌어 낸 탭을 놓은 자리에 새 창을 세울 때 — `drag_release::screen`).
+        // 있으면 `x`·`y` 대신 쓴다. 만들 때 한 번만이다.
+        std::optional<window_screen_anchor> screen_anchor {};
+        // 주 창에 매이지 않는 최상위 창이다 — 작업 표시줄에 따로 서고, 따로 최소화되고, 주 창 위에 붙어 있지 않다.
+        // 거짓(기본)이면 지금처럼 주 창이 소유하는 창이다 (주 창 위에 뜨고 주 창과 함께 숨는다).
+        //  - 만들 때 정한다. 같은 id로 값을 바꿔 실어도 살아 있는 창은 그대로다 — 바꾸려면 id를 빼고 다시 싣는다.
+        //  - 여전히 앱 상태다. 목록에서 빼면 사라지고, 주 창과 같은 입력 pump·renderer 정책·popup 앵커를 쓴다.
+        //  - 주 창이 닫힐 때 이 창들을 어떻게 할지는 앱이 `ui_frame::close`로 정한다 (multi-window-design.md).
+        bool independent { false };
+        // 저장해 둔 배치로 만든다. 있으면 `x`·`y`·크기·`screen_anchor`보다 앞선다.
+        //  - 값의 규약은 주 창의 `window_config::initial_placement`와 같다 — `placement`로 받은 그대로다
+        //    (x·y는 작업 영역 좌표, 크기는 물리 픽셀). 잘못된 값·화면 밖 배치는 통째로 무시한다.
+        //  - `fullscreen`은 보지 않는다. 전체 화면은 주 창의 것이다.
+        std::optional<window_placement> initial_placement {};
+        // 배치를 알릴 메시지다 (만든 직후, 이동·크기 조절이 끝났을 때, 최대화 ↔ 복원).
+        //  - 앱은 받은 값을 저장했다가 다음 실행의 `initial_placement`로 되돌린다. 주 창의
+        //    `window_delegate::make_window_placement_message`와 같은 값이다 (`fullscreen`은 늘 거짓).
+        //  - 비어 있으면 알리지 않는다.
+        std::function<app_message(const window_placement&)> placement {};
     };
 
     // 앱이 바라는 화면 방향이다 (device-request-design.md).
@@ -258,6 +294,18 @@ namespace luil {
         // 화면 방향·시스템 막대 등 기기에 바라는 것이다. 기본값이면 플랫폼에 맡긴다.
         device_request device {};
         std::optional<file_dialog_request> file_dialog {};
+        // 주 창의 닫힘 요청(캡션 close, Alt+F4, 작업 표시줄 닫기, `ui_command::window_close`)에서 낼 동작이다.
+        //  - 비어 있으면 지금처럼 앱을 끝낸다 (다른 창도 함께 사라진다).
+        //  - 있으면 이 동작만 내고 아무것도 닫지 않는다. 나머지 창을 어떻게 할지는 앱이 정한다: 독립 창
+        //    (`ui_window::independent`)을 남기려면 `main_hidden`으로 주 창을 숨기고, 끝내려면
+        //    `ui_command::application_exit`를 낸다.
+        //  - 보조 창의 `close`처럼 게시된 frame당 한 번만 낸다. 같은 frame에 거듭 와도 앱이 넘치지 않는다.
+        //  - 세션 종료(로그오프·재시작)는 이것을 거치지 않고 끝낸다 — 저장은 종료 메시지가 한다.
+        std::function<input_action()> close {};
+        // 주 창을 숨긴다 (작업 표시줄에서도 빠진다). 독립 창만 남기고 앱을 계속 돌리는 동안이다.
+        //  - 주 창이 소유한 보조 창과 주 창에 앵커한 popup은 함께 숨지 않는다 — 앱이 같은 frame에서 뺀다.
+        //  - 숨긴 동안에도 앱은 살아 있다. 마지막 창을 닫을 때 `ui_command::application_exit`를 내는 것은 앱의 몫이다.
+        bool main_hidden { false };
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };

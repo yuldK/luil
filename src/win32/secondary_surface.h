@@ -2,9 +2,24 @@
 
 #include "win32/caption_surface.h"
 
+#include <cstdint>
 #include <functional>
 
 namespace luil::win32 {
+    // 화면 닻으로 놓을 새 창의 client 사각형이다 (물리 픽셀, 화면 좌표 — multi-window-design.md).
+    // client의 논리 점 (`client_x`, `client_y`)이 화면 점에 오도록 원점을 물린다.
+    //  - `dpi`는 그 화면 점이 있는 모니터의 것이다. 크기(`width`·`height`, 논리 픽셀)도 같은 배율로 곱한다.
+    //  - 작업 영역으로 미는 것은 이 뒤다 (창 사각형으로 바꾼 다음).
+    [[nodiscard]] RECT anchored_client_bounds(const window_screen_anchor& anchor, float width, float height, std::uint32_t dpi) noexcept;
+
+    // 보조 창의 확장 스타일이다.
+    // 독립 창(`ui_window::independent`)은 작업 표시줄에 따로 선다 — 소유자가 없어도 도구 창이 아닌 것을 분명히 한다.
+    [[nodiscard]] DWORD secondary_extended_style(bool independent) noexcept;
+
+    // Win32가 기록한 배치(`GetWindowPlacement`)를 앱에 알릴 값으로 옮긴다.
+    // 최대화·최소화 상태에서도 복원 사각형을 담는다. 보조 창은 전체 화면이 없어 `fullscreen`은 늘 거짓이다.
+    [[nodiscard]] window_placement placement_from(const WINDOWPLACEMENT& placement) noexcept;
+
     // 주 창이 소유하는 보조 top-level 창 하나다 (도구 창·문서 창).
     // 자기 캡션·테두리·배율·renderer·TSF 문서를 갖고 화면 어디로든 움직인다
     // (multi-window-design.md).
@@ -36,6 +51,10 @@ namespace luil::win32 {
         // 앱은 이 값으로 그 창의 tree를 다시 배치해 다음 frame에 싣는다.
         void post_metrics() const noexcept;
 
+        // 창의 배치를 앱에 알린다 (생성 직후·이동과 크기 조절의 끝·최대화 ↔ 복원 — `ui_window::placement`).
+        // 앱이 알릴 곳을 달지 않았으면 아무것도 하지 않는다.
+        void post_placement() noexcept;
+
     private:
         LRESULT procedure(UINT message, WPARAM word_parameter, LPARAM long_parameter);
 
@@ -52,6 +71,9 @@ namespace luil::win32 {
 
         std::function<app_message(float, float, float)> metrics_ {};
         std::function<input_action()> close_ {};
+        std::function<app_message(const window_placement&)> placement_ {};
+        // 마지막으로 알린 최대화 상태다. 크기를 끄는 동안 연달아 오는 `SIZE_RESTORED`를 전환으로 세지 않는다.
+        bool posted_maximized_ { false };
         // 한 계기에 닫힘 요청을 한 번만 낸다.
         // 새 frame이 창을 계속 실으면 다시 낼 수 있게 풀린다.
         bool close_requested_ { false };

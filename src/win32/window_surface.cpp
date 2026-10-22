@@ -30,6 +30,7 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace luil::win32 {
@@ -534,14 +535,17 @@ namespace luil::win32 {
             return std::nullopt;
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
-        case WM_MBUTTONUP:
+        case WM_MBUTTONUP: {
             if (duplicate_pointer_mouse_message())
                 return LRESULT { 0 };
+            // 놓은 자리를 다른 창에서 찾으려면 캡처를 쥐고 있었는지를 풀기 전에 적어 둔다.
+            const bool captured { GetCapture() == window_ };
             if ((word_parameter & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
                 release_pointer_capture();
-            if (post_pointer_message(message, word_parameter, long_parameter))
+            if (post_pointer_message(message, word_parameter, long_parameter, captured))
                 return LRESULT { 0 };
             return std::nullopt;
+        }
         case WM_MOUSEHWHEEL:
         case WM_MOUSEWHEEL:
             // popup의 자리는 이번 frame element의 자리에서 왔다.
@@ -921,7 +925,7 @@ namespace luil::win32 {
         context_.report_error(error);
     }
 
-    bool window_surface::post_pointer_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
+    bool window_surface::post_pointer_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter, const std::optional<bool> captured)
     {
         app_host* const host { context_.host() };
         if (host == nullptr)
@@ -951,8 +955,56 @@ namespace luil::win32 {
         std::optional<raw_input_event> event { translate_pointer_message(translated) };
         if (event.has_value() == false)
             return false;
+        // 휠의 점은 위에서 client로 옮겼다. 화면 자리는 이동·뗌만 싣는다.
+        if (message != WM_MOUSEWHEEL && message != WM_MOUSEHWHEEL)
+        {
+            POINT screen { point };
+            if (ClientToScreen(window_, &screen) != FALSE)
+                annotate_pointer_event(*event, screen, captured.value_or(GetCapture() == window_));
+        }
         host->post_raw_input(std::move(*event));
         return true;
+    }
+
+    void window_surface::annotate_pointer_event(raw_input_event& event, const POINT screen, const bool captured) const
+    {
+        auto* const moved { std::get_if<pointer_moved_event>(&event) };
+        auto* const released { std::get_if<pointer_released_event>(&event) };
+        if (moved == nullptr && (released == nullptr || released->cancelled))
+            return;
+        const screen_point point { static_cast<int>(screen.x), static_cast<int>(screen.y) };
+        if (moved != nullptr)
+            moved->screen = point;
+        else
+            released->screen = point;
+
+        // 포인터 밑을 다시 찾는 것은 이 창이 포인터를 잡고 내부 끌기가 서 있을 때만이다. 그 밖에는 이벤트가 난 창이
+        // 곧 포인터 밑이라 찾을 것이 없다.
+        //  - 끌기는 input thread의 발행본으로 본다. 끌기가 선 바로 그 이동은 아직 발행 전이라 싣지 않는다 — 그 한 번은
+        //    이벤트의 창과 좌표가 답한다.
+        app_host* const host { context_.host() };
+        if (host == nullptr || captured == false || IsWindowVisible(window_) == FALSE)
+            return;
+        const interaction_snapshot published { host->acquire_interaction() };
+        if (published.drag.has_value() == false || published.drag->payload.files.empty() == false)
+            return;
+        pointer_over over {};
+        const HWND hit { WindowFromPoint(screen) };
+        const HWND root { hit != nullptr ? GetAncestor(hit, GA_ROOT) : nullptr };
+        const window_surface* const under { root != nullptr ? context_.surface_of_window(root) : nullptr };
+        POINT client { screen };
+        if (under == nullptr || under->window() == nullptr || ScreenToClient(under->window(), &client) == FALSE)
+            over.outside = true;
+        else
+        {
+            over.surface = under->id();
+            over.x = static_cast<float>(client.x);
+            over.y = static_cast<float>(client.y);
+        }
+        if (moved != nullptr)
+            moved->over = std::move(over);
+        else
+            released->over = std::move(over);
     }
 
     void window_surface::capture_pointer() noexcept
@@ -1132,7 +1184,12 @@ namespace luil::win32 {
         sample.surface = id_;
         if (host != nullptr && phase.has_value())
             for (raw_input_event& event : pointer_tracker_.accept(sample))
+            {
+                // 펜·손가락으로 끄는 탭도 다른 창에 놓을 수 있다. 포인터 메시지의 자리는 원래 화면 좌표다.
+                //  - 이 길에 온 접촉은 이 창이 받은 것이라 끝날 때까지 이 창이 쥔다 (암묵 캡처).
+                annotate_pointer_event(event, input.info.ptPixelLocation, true);
                 host->post_raw_input(std::move(event));
+            }
         if (ends)
             forget();
         // 펜은 메시지를 소비하므로 마우스 변환이 없다 — 커서를 여기서 맞춘다.
@@ -1203,8 +1260,21 @@ namespace luil::win32 {
 
     void window_surface::refresh_captured_cursor()
     {
-        if (window_ != nullptr && GetCapture() == window_)
-            apply_cursor();
+        if (window_ == nullptr || GetCapture() != window_)
+            return;
+        // 끄는 포인터가 다른 창 위에 있으면 그 창의 tree가 그 창 좌표로 모양을 정한다 — 놓을 수 없는 자리의 금지
+        // 모양도 그 창의 대상이 답한다. 이 창의 것으로 물으면 다른 창 위에서도 "창 밖" 모양이 된다.
+        if (app_host* const host { context_.host() }; host != nullptr)
+        {
+            const interaction_snapshot published { host->acquire_interaction() };
+            if (published.drag.has_value() && published.drag->outside == false && published.drag->pointer_on() != id_)
+                if (const window_surface* const other { context_.surface_by_id(published.drag->pointer_on()) }; other != nullptr && other->window() != nullptr)
+                {
+                    apply_surface_cursor(other->window(), other->tree(), host, context_.config(), other->id());
+                    return;
+                }
+        }
+        apply_cursor();
     }
 
     void window_surface::track_mouse_leave() noexcept

@@ -75,8 +75,24 @@ namespace luil {
             view.menu_surface.clear();
         }
         // 끌기의 표식은 `drag_visual` 안에 있어 값과 함께 사라진다.
-        if (view.drag.has_value() && view.drag->surface != surface)
-            view.drag.reset();
+        //  - 끌기는 표면 둘에 걸친다. 출발 표면은 끌리는 항목의 흐린 표시를, 포인터가 놓인 표면은 ghost와 강조를
+        //    그린다. 둘 다 아닌 표면에는 없다.
+        //  - 포인터가 이 표면 위에 없으면 그 자리의 것(좌표·강조)을 지우고 `outside`로 알린다. 남겨 두면 다른 창
+        //    좌표의 ghost가 이 창의 같은 자리에 그려지고, 다른 tree의 id가 이 tree의 같은 id를 강조한다.
+        if (view.drag.has_value())
+        {
+            drag_visual& drag { *view.drag };
+            const bool origin { drag.surface == surface };
+            const bool pointer { drag.pointer_on() == surface && drag.outside == false };
+            if (origin == false && pointer == false)
+                view.drag.reset();
+            else if (pointer == false)
+            {
+                drag.pointer_surface.reset();
+                drag.outside = true;
+                drag.hovered_drop_target = {};
+            }
+        }
         return view;
     }
 
@@ -466,7 +482,9 @@ namespace luil {
         }
 
         // 일반 hit test와 달리 drop 대상이 아닌 element는 조용히 지나친다.
-        if (enabled_ && bounds_.contains(x, y) && drop_target_.has_value() && drop_target_->accepts && drop_target_->accepts(payload))
+        // 자리로 가르는 대상(`accepts_at`)이 거절한 자리는 받지 않은 것이라 아래로 내려간다.
+        if (enabled_ && bounds_.contains(x, y) && drop_target_.has_value() && drop_target_->accepts && drop_target_->accepts(payload)
+            && (drop_target_->accepts_at == nullptr || drop_target_->accepts_at(payload, x, y)))
             return { this, false };
         if (hit_opaque_ && bounds_.contains(x, y))
             return { nullptr, true };

@@ -418,6 +418,11 @@ luil_add_source_filter(luil_files "win32/popup"
     win32/popup_surface.cpp
     win32/popup_surface.h)
 
+# 창 밖으로 끌고 나간 항목의 그림이다 (투명한 층 창).
+luil_add_source_filter(luil_files "win32/drag"
+    win32/drag_ghost_window.cpp
+    win32/drag_ghost_window.h)
+
 # OS에서 들어오는 것이다 (포인터·휠 번역, IME, 클립보드, 파일 끌어놓기).
 luil_add_source_filter(luil_files "win32/input"
     win32/surface_input.cpp

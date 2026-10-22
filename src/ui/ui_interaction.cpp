@@ -141,9 +141,9 @@ namespace luil {
             update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_, false);
 
         // 끄는 동안 내용이 흘렀으면(가장자리 자동 스크롤) 포인터 밑의 놓을 자리도 바뀐다. 포인터가 멈춰 있어도
-        // 강조가 새 내용을 따라가게 한다.
-        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface.empty() && tree_ != nullptr)
-            update_drag(*tree_, snapshot_.drag->x, snapshot_.drag->y);
+        // 강조가 새 내용을 따라가게 한다. 포인터가 주 창 위에 있을 때만이다 — 다른 창의 자리는 그 창의 tree가 온다.
+        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->pointer_on().empty())
+            relocate_drag();
         settle_auto_scroll();
         resume_auto_scroll();
     }
@@ -166,9 +166,8 @@ namespace luil {
             update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_, false);
 
         // 주 tree를 받을 때와 같이 흐른 내용 위의 놓을 자리를 다시 찾는다.
-        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface.empty() == false)
-            if (const ui_tree* const tree { surface_tree(snapshot_.drag->surface) }; tree != nullptr)
-                update_drag(*tree, snapshot_.drag->x, snapshot_.drag->y);
+        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->pointer_on().empty() == false)
+            relocate_drag();
         settle_auto_scroll();
         resume_auto_scroll();
     }
@@ -196,8 +195,15 @@ namespace luil {
         // 따로 든 멤버였다면 여기서 빠뜨릴 수 있는 자리다.
         //  - 주 창의 끌기는 `surface_tree`가 주 tree로 답하므로 그대로 남는다.
         //    끌기를 시작한 자리는 이미 clear_press로 비워져 위 검사에 걸리지 않는다.
+        //  - **출발 표면의 소멸은 취소다** (놓기가 아니다 — `on_unclaimed_drop`도 부르지 않는다). 그 창이 쥔 포인터
+        //    캡처가 창과 함께 풀려 뗌이 어디에 떨어질지 알 수 없다. 마지막 탭을 끌어낸 창을 앱이 닫는 것은 놓기의
+        //    메시지를 받은 **뒤**다 (multi-window-design.md).
+        //  - 포인터가 가 있던 다른 표면이 사라진 것은 끌기를 죽이지 않는다. 그 자리의 강조만 거두고 다음 이동이 새
+        //    자리를 찾는다.
         if (snapshot_.drag.has_value() && surface_tree(snapshot_.drag->surface) == nullptr)
-            snapshot_.drag.reset();
+            abandon_drag();
+        else if (snapshot_.drag.has_value() && snapshot_.drag->outside == false && surface_tree(snapshot_.drag->pointer_on()) == nullptr)
+            snapshot_.drag->hovered_drop_target = {};
     }
 
     const ui_tree* interaction_controller::surface_tree(const std::u8string& surface) const noexcept
@@ -491,20 +497,22 @@ namespace luil {
             return actions;
         }
 
+        // drag 중이면 ghost 위치와 수락 중인 drop 대상만 갱신한다.
+        // drop 대상은 포인터가 실제로 놓인 표면에서 찾는다 — 끌고 간 다른 창이면 그 창의 tree다
+        // (multi-window-design.md).
+        if (snapshot_.drag.has_value())
+        {
+            const drag_location at { locate_drag(event) };
+            update_drag(at);
+            update_hover(event.x, event.y, event.time, moved);
+            track_auto_scroll(at.surface, at.x, at.y, event.time);
+            return {};
+        }
+
         const ui_tree* const tree { surface_tree(event.surface) };
         if (tree == nullptr)
         {
             update_hover(event.x, event.y, event.time, moved);
-            return {};
-        }
-
-        // drag 중이면 ghost 위치와 수락 중인 drop 대상만 갱신한다.
-        // drop 대상은 이벤트가 난 표면에서 찾는다.
-        if (snapshot_.drag.has_value())
-        {
-            update_drag(*tree, event.x, event.y);
-            update_hover(event.x, event.y, event.time, moved);
-            track_auto_scroll(event.surface, event.x, event.y, event.time);
             return {};
         }
 
@@ -553,11 +561,13 @@ namespace luil {
                 // 자리는 누른 자리이고 수식 키는 끌기가 시작되는 이 이동의 순간이다.
                 const ui_action_context context { action_context(pressed_id_, pressed_x_, pressed_y_, modifiers_of(event)) };
                 // 끌기는 지금 이벤트가 난 표면에서 선다 — 캡처 중이라 누른 표면과 같다.
-                // 그 표면이 사라지면 끌기도 죽고, 표시도 그 표면에만 선다
+                // 그 표면이 사라지면 끌기도 죽는다. 포인터가 다른 창으로 가면 표시는 그 창으로 옮겨 간다
                 // (multi-window-design.md).
-                snapshot_.drag = drag_visual { source->drag()->make_payload(context), event.x, event.y, {}, event.surface };
+                begin_drag(*source->drag(), context, event.x, event.y, event.surface);
                 clear_press();
-                track_auto_scroll(event.surface, event.x, event.y, event.time);
+                const drag_location at { locate_drag(event) };
+                update_drag(at);
+                track_auto_scroll(at.surface, at.x, at.y, event.time);
             }
             drag_candidate_ = false;
         }
@@ -566,27 +576,92 @@ namespace luil {
         return {};
     }
 
-    void interaction_controller::update_drag(const ui_tree& tree, const float x, const float y)
+    template<typename event_type>
+    interaction_controller::drag_location interaction_controller::locate_drag(const event_type& event) const
     {
-        snapshot_.drag->x = x;
-        snapshot_.drag->y = y;
-        snapshot_.drag->hovered_drop_target = {};
-        if (const ui_element* const over { tree.find_drop_target(x, y, snapshot_.drag->payload) }; over != nullptr)
-            snapshot_.drag->hovered_drop_target = over->id();
+        // 플랫폼이 포인터 밑을 다시 찾아 실었다. 캡처는 누른 창이 쥐고 있어 좌표가 그 창 기준이라, 다른 창 위인지는
+        // 화면에서 찾아야만 안다 (`pointer_over`).
+        if (event.over.has_value())
+        {
+            if (event.over->outside)
+                return { event.surface, event.x, event.y, true };
+            return { event.over->surface, event.over->x, event.over->y, false };
+        }
+        // 싣지 않았으면 이벤트의 표면이 포인터 밑이다. 그 표면의 내용 밖이면 창 밖이다.
+        const ui_tree* const tree { surface_tree(event.surface) };
+        const ui_element* const root { tree != nullptr ? tree->root() : nullptr };
+        const bool outside { root != nullptr && root->bounds().contains(event.x, event.y) == false };
+        return { event.surface, event.x, event.y, outside };
     }
 
-    std::vector<input_action> interaction_controller::finish_drag(const ui_tree* const tree, const float x, const float y, const modifier_keys modifiers)
+    void interaction_controller::begin_drag(const drag_source& source, const ui_action_context& context, const float x, const float y, const std::u8string& surface)
+    {
+        // payload를 먼저 짓는다 — 짓는 앱 콜백이 던지면 반쯤 선 끌기가 남지 않는다.
+        drag_payload payload { source.make_payload(context) };
+        drag_unclaimed_ = source.on_unclaimed_drop;
+        snapshot_.drag = drag_visual { std::move(payload), x, y, {}, surface };
+    }
+
+    void interaction_controller::update_drag(const drag_location& at)
+    {
+        drag_visual& drag { *snapshot_.drag };
+        drag.x = at.x;
+        drag.y = at.y;
+        drag.outside = at.outside;
+        // 출발 표면이면 비워 둔다 — 비어 있는 것이 "출발 표면"의 뜻이라 한 값에 두 표현이 생기지 않는다.
+        if (at.surface == drag.surface)
+            drag.pointer_surface.reset();
+        else
+            drag.pointer_surface = at.surface;
+        drag.hovered_drop_target = {};
+        if (at.outside)
+            return;
+        if (const ui_tree* const tree { surface_tree(at.surface) }; tree != nullptr)
+            if (const ui_element* const over { tree->find_drop_target(at.x, at.y, drag.payload) }; over != nullptr)
+                drag.hovered_drop_target = over->id();
+    }
+
+    void interaction_controller::relocate_drag()
+    {
+        const drag_visual& drag { *snapshot_.drag };
+        update_drag(drag_location { drag.pointer_on(), drag.x, drag.y, drag.outside });
+    }
+
+    std::vector<input_action> interaction_controller::finish_drag(const drag_location& at, const modifier_keys modifiers, const std::optional<screen_point> screen)
     {
         std::vector<input_action> actions {};
         const drag_visual drag { *snapshot_.drag };
-        // **죽은 표면 위의 뗌은 drop이 아니다.** 놓을 자리를 찾지 않고
-        // 거두기만 한다 — 그 표면에는 이제 아무것도 없다.
-        const ui_element* const over { tree != nullptr ? tree->find_drop_target(x, y, drag.payload) : nullptr };
-        if (over != nullptr && over->drop()->on_drop)
-            actions = over->drop()->on_drop(drag.payload, action_context(over->id(), x, y, modifiers));
-        snapshot_.drag.reset();
+        const auto unclaimed { std::move(drag_unclaimed_) };
+        abandon_drag();
         clear_press();
-        return actions;
+        // 놓을 자리는 포인터가 놓인 표면에서 찾는다. 창 밖이면 찾을 tree가 없다.
+        const ui_tree* const tree { at.outside ? nullptr : surface_tree(at.surface) };
+        const drop_hit_result hit { tree != nullptr ? tree->drop_hit_test(at.x, at.y, drag.payload) : drop_hit_result {} };
+        if (hit.target != nullptr)
+        {
+            if (hit.target->drop()->on_drop)
+                actions = hit.target->drop()->on_drop(drag.payload, action_context(hit.target->id(), at.x, at.y, modifiers));
+            return actions;
+        }
+        // 받는 대상이 없는 놓기다. 불투명 표면이 가린 자리는 빈 자리가 아니라 막힌 자리라 알리지 않는다.
+        if (hit.blocked || unclaimed == nullptr)
+            return actions;
+        drag_release release {};
+        release.surface = at.surface;
+        release.x = at.x;
+        release.y = at.y;
+        release.outside = at.outside;
+        release.screen = screen;
+        release.control = modifiers.control;
+        release.shift = modifiers.shift;
+        release.alt = modifiers.alt;
+        return unclaimed(drag.payload, release);
+    }
+
+    void interaction_controller::abandon_drag() noexcept
+    {
+        snapshot_.drag.reset();
+        drag_unclaimed_ = nullptr;
     }
 
     // OS 파일 끌기의 표시 상태다 (os-dragdrop-design.md).
@@ -606,6 +681,8 @@ namespace luil {
             if (const ui_element* const over { tree->find_drop_target(event.x, event.y, visual.payload) }; over != nullptr)
                 visual.hovered_drop_target = over->id();
         snapshot_.drag = std::move(visual);
+        // 밖에서 온 끌기의 놓기는 UI thread가 직접 실행한다. 안에서 시작한 끌기의 알림 곳이 남아 있을 자리가 아니다.
+        drag_unclaimed_ = nullptr;
     }
 
     void interaction_controller::process_file_drag_moved(const file_drag_moved_event& event)
@@ -1269,7 +1346,7 @@ namespace luil {
                 return {};
             }
             if (event.button == pointer_button::left)
-                return finish_drag(tree, event.x, event.y, modifiers_of(event));
+                return finish_drag(locate_drag(event), modifiers_of(event), event.screen);
             return {};
         }
 
@@ -1629,8 +1706,9 @@ namespace luil {
             }
             if (snapshot_.drag.has_value())
             {
-                update_drag(*tree, event.x, event.y);
-                track_auto_scroll(contact.surface, event.x, event.y, event.time);
+                const drag_location at { locate_drag(event) };
+                update_drag(at);
+                track_auto_scroll(at.surface, at.x, at.y, event.time);
             }
             break;
         case touch_phase::panning: {
@@ -1748,11 +1826,12 @@ namespace luil {
                 else if (source->drag() != nullptr && source->drag()->make_payload)
                 {
                     const ui_action_context context { action_context(contact.target, contact.start_x, contact.start_y, contact.modifiers) };
-                    snapshot_.drag = drag_visual { source->drag()->make_payload(context), event.x, event.y, {}, contact.surface };
+                    begin_drag(*source->drag(), context, event.x, event.y, contact.surface);
                     clear_press();
                     contact.phase = touch_phase::dragging;
-                    update_drag(*tree, event.x, event.y);
-                    track_auto_scroll(contact.surface, event.x, event.y, event.time);
+                    const drag_location at { locate_drag(event) };
+                    update_drag(at);
+                    track_auto_scroll(at.surface, at.x, at.y, event.time);
                 }
             }
             break;
@@ -1858,12 +1937,12 @@ namespace luil {
         case touch_phase::dragging:
             if (tree == nullptr || live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) == nullptr)
             {
-                snapshot_.drag.reset();
+                abandon_drag();
                 clear_press();
                 return {};
             }
             if (snapshot_.drag.has_value())
-                return finish_drag(tree, event.x, event.y, contact.modifiers);
+                return finish_drag(locate_drag(event), contact.modifiers, event.screen);
             clear_press();
             return {};
         case touch_phase::handoff: {
@@ -2252,7 +2331,7 @@ namespace luil {
         if (auto_scroll_->handle)
             alive = pointer_drag_id_ == auto_scroll_->handle_id;
         else
-            alive = snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->surface == auto_scroll_->surface;
+            alive = snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->pointer_on() == auto_scroll_->surface;
         if (alive == false)
             auto_scroll_.reset();
     }
@@ -2404,7 +2483,7 @@ namespace luil {
         pointer_contact_.reset();
         text_drag_id_ = {};
         if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty())
-            snapshot_.drag.reset();
+            abandon_drag();
         clear_press();
     }
 
@@ -2516,7 +2595,7 @@ namespace luil {
     void interaction_controller::cancel_touch() noexcept
     {
         if (touch_.has_value() && touch_->phase == touch_phase::dragging)
-            snapshot_.drag.reset();
+            abandon_drag();
         touch_.reset();
         clear_press();
     }
@@ -2862,7 +2941,7 @@ namespace luil {
         // 앱 정책까지 가지 않는다.
         if (event.key == key_code::escape && snapshot_.drag.has_value())
         {
-            snapshot_.drag.reset();
+            abandon_drag();
             return {};
         }
 
@@ -3570,7 +3649,7 @@ namespace luil {
         pointer_contact_.reset();
         clear_press();
         text_drag_id_ = {};
-        snapshot_.drag.reset();
+        abandon_drag();
         auto_scroll_.reset();
         return actions;
     }

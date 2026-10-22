@@ -1,5 +1,6 @@
 #include "luil/ui/ui_tree.h"
 
+#include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
 
 #include "include/core/SkCanvas.h"
@@ -83,6 +84,11 @@ namespace luil {
         {
             // 끄는 쪽이 금지 모양을 청했으면 받는 대상이 없는 자리에서 그것이다 (`drag_payload::rejected_cursor`).
             const drag_payload& payload { interaction.drag->payload };
+            // 이 앱의 어느 창 위도 아니면(창 밖으로 끌어 냈다) 끄는 쪽이 청한 "떼어 낸다" 모양이다.
+            //  - 표면별로 거른 것의 `outside`는 "포인터가 이 표면 밖"이라 다른 창 위일 수도 있다. 그 창의 모양은
+            //    플랫폼이 그 창의 tree에 묻는다 — 여기서 답하는 것은 포인터가 어느 창 위에도 없는 자리뿐이다.
+            if (interaction.drag->outside && payload.outside_cursor != ui_cursor::inherit)
+                return payload.outside_cursor;
             if (payload.rejected_cursor != ui_cursor::inherit && interaction.drag->hovered_drop_target == ui_element_id {})
                 return payload.rejected_cursor;
             const ui_element* const source { find(payload.source) };
@@ -557,16 +563,73 @@ namespace luil {
         return { text, count > 1u ? count - 1u : 0u };
     }
 
+    namespace {
+        // ghost 상자 하나다 (바탕·테두리·이름·나머지 개수). 창 안의 ghost와 창 밖에서 따라오는 그림이 같은 상자를 쓴다.
+        //  - `glyph`가 0이 아니면 이름 앞에 그 글리프를 accent로 얹는다 (창 밖 그림의 "새 창" 표시).
+        void draw_drag_ghost_box(draw_context& context, const drag_payload& payload, const SkRect& ghost, const char32_t glyph)
+        {
+            const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+            SkPaint fill { solid_paint(context.palette.surface_background) };
+            fill.setAlphaf(0.85f);
+            context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), fill);
+            SkPaint border { solid_paint(context.palette.accent) };
+            border.setStyle(SkPaint::kStroke_Style);
+            border.setStrokeWidth(1.0f * scale);
+            context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), border);
+
+            const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
+            const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
+            const drag_ghost_label label { drag_ghost_label_of(payload) };
+            // 여러 항목이면 오른쪽에 나머지 개수(`+N`)의 알약을 얹는다. 이름은 그 앞까지만 그린다.
+            float text_right { ghost.right() - 7.0f * scale };
+            if (label.more > 0u)
+            {
+                const std::string digits { std::to_string(label.more) };
+                const std::u8string count { u8"+" + std::u8string { digits.begin(), digits.end() } };
+                const float count_width { measure_text(count, font) };
+                const float pill_height { ghost.height() - 8.0f * scale };
+                const SkRect pill { SkRect::MakeXYWH(ghost.right() - 4.0f * scale - count_width - 10.0f * scale, ghost.top() + 4.0f * scale, count_width + 10.0f * scale, pill_height) };
+                context.canvas.drawRRect(SkRRect::MakeRectXY(pill, pill_height / 2.0f, pill_height / 2.0f), solid_paint(context.palette.accent));
+                draw_text(context.canvas, count, pill.left() + 5.0f * scale, ghost.top() + centered_text_baseline(font, ghost.height()), font, solid_paint(context.palette.accent_foreground));
+                text_right = pill.left() - 4.0f * scale;
+            }
+            float text_left { ghost.left() + 7.0f * scale };
+            if (glyph != 0u && context.codicon_typeface != nullptr)
+            {
+                const float glyph_size { 14.0f * scale };
+                const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), glyph_size };
+                draw_centered_glyph(context.canvas, glyph, { text_left, ghost.top(), glyph_size, ghost.height() }, glyph_font, solid_paint(context.palette.accent));
+                text_left += glyph_size + 6.0f * scale;
+            }
+            if (text_right > text_left)
+                static_cast<void>(draw_text_within(context.canvas, label.text, text_left, ghost.top() + centered_text_baseline(font, ghost.height()), text_right - text_left, font, foreground));
+        }
+    } // namespace
+
+    void draw_detached_drag_ghost(draw_context& context, const drag_payload& payload)
+    {
+        // 창 안의 ghost와 같은 상자에 "새 창" 글리프를 얹는다 — 놓으면 새 창이 된다는 표시다.
+        //  - 바깥 여백 없이 (0,0)부터 채운다. 둘레는 투명 창의 알파가 가른다.
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        const float inset { 0.5f * scale };
+        draw_drag_ghost_box(context, payload, SkRect::MakeXYWH(inset, inset, detached_drag_ghost_width * scale - 2.0f * inset, detached_drag_ghost_height * scale - 2.0f * inset), codicons::icon_open_in_window);
+    }
+
     void ui_tree::draw_drag_visual(draw_context& context, const drag_visual& drag) const
     {
+        // 포인터가 이 표면 위에 없으면 그릴 것이 없다 — 좌표도 강조도 다른 창(또는 화면)의 것이다. 끌리는 항목의 흐린
+        // 표시는 element가 payload를 보고 스스로 그린다.
+        if (drag.outside)
+            return;
         const drag_overlay_plan plan { plan_drag_overlay(drag.payload) };
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
 
         // 수락 중인 drop 대상을 먼저 강조한다.
         // 대상이 자르는 컨테이너에 걸쳐 있으면 보이는 만큼만 테두리를 친다.
         //  - 오버레이는 clip 밖에 그려지므로 원시 bounds를 쓰면 창 밖으로 샌다.
+        //  - 자기 강조를 그리는 대상(`drop_target::custom_highlight` — 틈 표시)에는 테두리를 겹치지 않는다.
         const ui_element* const target { plan.highlight_target ? find(drag.hovered_drop_target) : nullptr };
-        if (target != nullptr)
+        if (target != nullptr && (target->drop() == nullptr || target->drop()->custom_highlight == false))
         {
             if (const std::optional<rect_f> target_bounds { visible_bounds(*target) }; target_bounds.has_value())
             {
@@ -586,33 +649,6 @@ namespace luil {
 
         // 포인터를 따라다니는 ghost다.
         // 원본 element의 축소 표시로 충분하다.
-        const SkRect ghost { SkRect::MakeXYWH(drag.x + 10.0f * scale, drag.y + 10.0f * scale, 112.0f * scale, 24.0f * scale) };
-        SkPaint fill { solid_paint(context.palette.surface_background) };
-        fill.setAlphaf(0.85f);
-        context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), fill);
-        SkPaint border { solid_paint(context.palette.accent) };
-        border.setStyle(SkPaint::kStroke_Style);
-        border.setStrokeWidth(1.0f * scale);
-        context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), border);
-
-        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
-        const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
-        const drag_ghost_label label { drag_ghost_label_of(drag.payload) };
-        // 여러 항목이면 오른쪽에 나머지 개수(`+N`)의 알약을 얹는다. 이름은 그 앞까지만 그린다.
-        float text_right { ghost.right() - 7.0f * scale };
-        if (label.more > 0u)
-        {
-            const std::string digits { std::to_string(label.more) };
-            const std::u8string count { u8"+" + std::u8string { digits.begin(), digits.end() } };
-            const float count_width { measure_text(count, font) };
-            const float pill_height { ghost.height() - 8.0f * scale };
-            const SkRect pill { SkRect::MakeXYWH(ghost.right() - 4.0f * scale - count_width - 10.0f * scale, ghost.top() + 4.0f * scale, count_width + 10.0f * scale, pill_height) };
-            context.canvas.drawRRect(SkRRect::MakeRectXY(pill, pill_height / 2.0f, pill_height / 2.0f), solid_paint(context.palette.accent));
-            draw_text(context.canvas, count, pill.left() + 5.0f * scale, ghost.top() + centered_text_baseline(font, ghost.height()), font, solid_paint(context.palette.accent_foreground));
-            text_right = pill.left() - 4.0f * scale;
-        }
-        const float text_left { ghost.left() + 7.0f * scale };
-        if (text_right > text_left)
-            static_cast<void>(draw_text_within(context.canvas, label.text, text_left, ghost.top() + centered_text_baseline(font, ghost.height()), text_right - text_left, font, foreground));
+        draw_drag_ghost_box(context, drag.payload, SkRect::MakeXYWH(drag.x + 10.0f * scale, drag.y + 10.0f * scale, 112.0f * scale, 24.0f * scale), 0u);
     }
 } // namespace luil

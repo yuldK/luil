@@ -28,6 +28,28 @@ namespace {
         std::u8string target {};
     };
 
+    struct move_intent
+    {
+        std::u8string moved {};
+        std::u8string target {};
+        luil::drop_side side { luil::drop_side::before };
+    };
+
+    struct receive_intent
+    {
+        std::u8string moved {};
+        luil::ui_element_id from {};
+        std::u8string target {};
+        luil::drop_side side { luil::drop_side::before };
+    };
+
+    struct detach_intent
+    {
+        std::u8string key {};
+        float grab_offset_x { 0.0f };
+        luil::drag_release release {};
+    };
+
     struct menu_intent
     {
         std::u8string key {};
@@ -352,4 +374,207 @@ TEST_CASE("A tab badge speaks after the tab name", "[ui][tab][accessibility]")
     REQUIRE(tab_at(bar, 3).accessibility().name == u8"tab-d");
     // 글자 탐색은 탭에 적힌 이름만 본다.
     REQUIRE(tab_at(bar, 0).search_label() == u8"tab-a");
+}
+
+namespace {
+    // 막대 하나를 tree에 담는다 — drop 판정은 tree가 자식부터 훑는 순서로 한다.
+    [[nodiscard]] luil::ui_tree bar_tree(luil::tab_bar_config config)
+    {
+        auto bar { std::make_unique<luil::tab_bar_element>(std::move(config)) };
+        bar->arrange({ { 0.0f, 0.0f, 800.0f, 36.0f }, 1.0f });
+        return luil::ui_tree { std::move(bar) };
+    }
+
+    [[nodiscard]] const luil::tab_bar_element& bar_of(const luil::ui_tree& tree)
+    {
+        return static_cast<const luil::tab_bar_element&>(*tree.root());
+    }
+
+    [[nodiscard]] luil::input_action move_message(const std::u8string& moved, const std::u8string& target, const luil::drop_side side)
+    {
+        return luil::input_action { luil::app_message { move_intent { moved, target, side } } };
+    }
+
+    // 그 자리에 놓았을 때의 메시지다. 받는 대상이 없으면 빈 목록이다.
+    [[nodiscard]] std::vector<luil::input_action> drop_at(const luil::ui_tree& tree, const luil::drag_payload& payload, const float x)
+    {
+        const luil::ui_element* const target { tree.find_drop_target(x, 18.0f, payload) };
+        if (target == nullptr)
+            return {};
+        return target->drop()->on_drop(payload, { target->id(), x, 18.0f });
+    }
+} // namespace
+
+TEST_CASE("Moving a tab names the side and refuses the spots that keep the order", "[ui][tab][drag]")
+{
+    // 탭 폭 160: a는 0–160, b는 160–320, c는 320–480이고 그 뒤는 빈 틈이다.
+    luil::tab_bar_config config { make_config(3) };
+    config.move = move_message;
+    const luil::ui_tree tree { bar_tree(std::move(config)) };
+    const luil::tab_bar_element& bar { bar_of(tree) };
+
+    const luil::ui_element& first { tab_at(bar, 0) };
+    REQUIRE(first.drag() != nullptr);
+    const luil::drag_payload payload { first.drag()->make_payload({ first.id(), 20.0f, 10.0f }) };
+
+    SECTION("그대로인 자리는 받지 않는다")
+    {
+        // 자기 자신의 두 반쪽과 바로 뒤 탭의 앞 반쪽이다. 강조도 서지 않는다.
+        REQUIRE(tree.find_drop_target(40.0f, 18.0f, payload) == nullptr);
+        REQUIRE(tree.find_drop_target(140.0f, 18.0f, payload) == nullptr);
+        REQUIRE(tree.find_drop_target(170.0f, 18.0f, payload) == nullptr);
+        REQUIRE(drop_at(tree, payload, 170.0f).empty());
+    }
+
+    SECTION("바뀌는 자리는 앞·뒤를 싣는다")
+    {
+        auto after_b { drop_at(tree, payload, 300.0f) };
+        const auto* const behind { single_message<move_intent>(after_b) };
+        REQUIRE(behind != nullptr);
+        REQUIRE(behind->moved == u8"tab-a");
+        REQUIRE(behind->target == u8"tab-b");
+        REQUIRE(behind->side == luil::drop_side::after);
+
+        auto before_c { drop_at(tree, payload, 330.0f) };
+        const auto* const ahead { single_message<move_intent>(before_c) };
+        REQUIRE(ahead != nullptr);
+        REQUIRE(ahead->target == u8"tab-c");
+        REQUIRE(ahead->side == luil::drop_side::before);
+    }
+
+    SECTION("마지막 탭 뒤의 빈 곳은 마지막 탭의 뒤다")
+    {
+        const luil::ui_element* const end { tree.find_drop_target(600.0f, 18.0f, payload) };
+        REQUIRE(end == &bar);
+        auto dropped { drop_at(tree, payload, 600.0f) };
+        const auto* const message { single_message<move_intent>(dropped) };
+        REQUIRE(message != nullptr);
+        REQUIRE(message->target == u8"tab-c");
+        REQUIRE(message->side == luil::drop_side::after);
+
+        // 이미 마지막인 탭에는 그 틈도 그대로인 자리다.
+        const luil::ui_element& last { tab_at(bar, 2) };
+        const luil::drag_payload trailing { last.drag()->make_payload({ last.id(), 20.0f, 10.0f }) };
+        REQUIRE(tree.find_drop_target(600.0f, 18.0f, trailing) == nullptr);
+        REQUIRE(tree.find_drop_target(460.0f, 18.0f, trailing) == nullptr);
+        REQUIRE(tree.find_drop_target(300.0f, 18.0f, trailing) == nullptr);
+        REQUIRE(tree.find_drop_target(20.0f, 18.0f, trailing) == &tab_at(bar, 0));
+    }
+
+    SECTION("받는 자리는 테두리 대신 틈으로 보인다")
+    {
+        REQUIRE(tab_at(bar, 1).drop()->custom_highlight);
+        REQUIRE(bar.drop()->custom_highlight);
+    }
+
+    SECTION("다른 막대의 탭은 move로 받지 않는다")
+    {
+        luil::drag_payload foreign { payload };
+        foreign.dragged_owner = u8"tab-x";
+        REQUIRE(tree.find_drop_target(300.0f, 18.0f, foreign) == nullptr);
+        REQUIRE(tree.find_drop_target(600.0f, 18.0f, foreign) == nullptr);
+    }
+}
+
+TEST_CASE("A tab bar receives a tab dragged from another bar", "[ui][tab][drag]")
+{
+    // 두 창이 같은 코드로 막대를 지어 owner가 같다 — 키로 갈라야 남의 탭을 알아본다.
+    luil::tab_bar_config other_config { make_config(2) };
+    for (luil::tab_item& item : other_config.items)
+        item.key = item.key == u8"tab-a" ? u8"tab-x" : u8"tab-y";
+    other_config.move = move_message;
+    const luil::ui_tree other { bar_tree(std::move(other_config)) };
+    const luil::ui_element& dragged { tab_at(bar_of(other), 0) };
+    const luil::drag_payload payload { dragged.drag()->make_payload({ dragged.id(), 20.0f, 10.0f }) };
+
+    const auto receive = [](const luil::drag_payload& source, const std::u8string& target, const luil::drop_side side) {
+        return luil::input_action { luil::app_message { receive_intent { source.dragged_owner, source.container, target, side } } };
+    };
+
+    SECTION("어느 틈이든 받고 앞·뒤를 싣는다")
+    {
+        luil::tab_bar_config config { make_config(3) };
+        config.move = move_message;
+        config.receive = receive;
+        const luil::ui_tree tree { bar_tree(std::move(config)) };
+
+        // 같은 막대라면 그대로인 자리였을 곳도 남의 탭에는 새 자리다.
+        auto front { drop_at(tree, payload, 20.0f) };
+        const auto* const first { single_message<receive_intent>(front) };
+        REQUIRE(first != nullptr);
+        REQUIRE(first->moved == u8"tab-x");
+        REQUIRE(first->from == payload.container);
+        REQUIRE(first->target == u8"tab-a");
+        REQUIRE(first->side == luil::drop_side::before);
+
+        auto end { drop_at(tree, payload, 700.0f) };
+        const auto* const last { single_message<receive_intent>(end) };
+        REQUIRE(last != nullptr);
+        REQUIRE(last->target == u8"tab-c");
+        REQUIRE(last->side == luil::drop_side::after);
+    }
+
+    SECTION("탭이 없는 막대는 막대 전체가 끝의 틈이다")
+    {
+        luil::tab_bar_config config {};
+        config.receive = receive;
+        const luil::ui_tree tree { bar_tree(std::move(config)) };
+        auto dropped { drop_at(tree, payload, 50.0f) };
+        const auto* const message { single_message<receive_intent>(dropped) };
+        REQUIRE(message != nullptr);
+        REQUIRE(message->target.empty());
+        REQUIRE(message->side == luil::drop_side::after);
+    }
+
+    SECTION("receive가 없으면 남의 탭을 받지 않는다")
+    {
+        luil::tab_bar_config config { make_config(3) };
+        config.move = move_message;
+        const luil::ui_tree tree { bar_tree(std::move(config)) };
+        REQUIRE(tree.find_drop_target(300.0f, 18.0f, payload) == nullptr);
+        REQUIRE(tree.find_drop_target(700.0f, 18.0f, payload) == nullptr);
+    }
+
+    SECTION("탭이 아닌 끌기와 파일은 받지 않는다")
+    {
+        luil::tab_bar_config config { make_config(3) };
+        config.receive = receive;
+        const luil::ui_tree tree { bar_tree(std::move(config)) };
+        luil::drag_payload row { payload };
+        row.source.kind = luil::ui_element_kind::list_row;
+        REQUIRE(tree.find_drop_target(300.0f, 18.0f, row) == nullptr);
+        luil::drag_payload files {};
+        files.files = { u8"C:\\a.txt" };
+        REQUIRE(tree.find_drop_target(300.0f, 18.0f, files) == nullptr);
+    }
+}
+
+TEST_CASE("A tab dropped where nothing takes it reports its key", "[ui][tab][drag]")
+{
+    // 떼어 내기만 하는 막대도 탭을 끌 수 있다 (`reorder`·`move` 없이).
+    luil::tab_bar_config config { make_config(2) };
+    config.outside_cursor = luil::application_cursor(2);
+    config.unclaimed_drop = [](const luil::drag_payload& payload, const luil::drag_release& release) {
+        return luil::input_action { luil::app_message { detach_intent { payload.dragged_owner, payload.grab_offset_x, release } } };
+    };
+    luil::tab_bar_element bar { std::move(config) };
+    bar.arrange({ { 0.0f, 0.0f, 800.0f, 36.0f }, 1.0f });
+
+    const luil::ui_element& second { tab_at(bar, 1) };
+    REQUIRE(second.drag() != nullptr);
+    REQUIRE(second.drop() == nullptr);
+    const luil::drag_payload payload { second.drag()->make_payload({ second.id(), 170.0f, 10.0f }) };
+    REQUIRE(payload.outside_cursor == luil::application_cursor(2));
+    REQUIRE(second.drag()->on_unclaimed_drop != nullptr);
+
+    luil::drag_release release {};
+    release.outside = true;
+    release.screen = luil::screen_point { 1200, 300 };
+    auto actions { second.drag()->on_unclaimed_drop(payload, release) };
+    const auto* const message { single_message<detach_intent>(actions) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->key == u8"tab-b");
+    // 잡은 지점이 함께 와서 새 창에서 그 탭을 놓은 점에 둘 수 있다.
+    REQUIRE(message->grab_offset_x == 10.0f);
+    REQUIRE(message->release == release);
 }
