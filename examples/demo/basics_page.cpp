@@ -96,6 +96,11 @@ namespace demo {
 
     bool basics_page::handle(const luil::app_message& message)
     {
+        if (const auto* const scroll { message.get<basics_scroll_intent>() }; scroll != nullptr)
+        {
+            page_scroll_ = std::max(0.0f, page_scroll_ + scroll->delta);
+            return true;
+        }
         if (message.get<increment_intent>() != nullptr)
         {
             ++clicks_;
@@ -249,40 +254,39 @@ namespace demo {
         if (films_read_ == false)
             read_films();
 
-        luil::stack_config config {};
-        config.padding = luil::edge_insets::all(24.0f);
-        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"basics" }, config) };
-        column->add(make_counter_row(), 32.0f);
-        column->add_gap(16.0f);
-        column->add(make_input_row(), 50.0f);
-        column->add_gap(16.0f);
-        column->add(make_memo(), 118.0f);
-        column->add_gap(22.0f);
-        column->add(make_image_row(), 78.0f);
-        column->add_gap(4.0f);
-        column->add(make_picture_status(), 16.0f);
-        column->add_gap(16.0f);
-        column->add(make_film_row(), 118.0f);
-        column->add_gap(4.0f);
-        column->add(make_film_status(), 16.0f);
+        page_layout page { u8"basics" };
+        page.heading(u8"입력과 다이얼로그", u8"IME 조합 · 여러 줄 편집 · 기본 버튼과 확인 흐름");
+        page.add(make_counter_row(), 32.0f);
+        page.gap(16.0f);
+        page.add(make_input_row(), 50.0f);
+        page.gap(16.0f);
+        page.add(make_memo(), 118.0f);
+        page.gap(22.0f);
+        page.add(make_image_row(), 78.0f);
+        page.gap(4.0f);
+        page.add(make_picture_status(), 16.0f);
+        page.gap(16.0f);
+        page.add(make_film_row(), 118.0f);
+        page.gap(4.0f);
+        page.add(make_film_status(), 16.0f);
         // 멈출 것이 없으면 단추도 두지 않는다 — 라이브러리가 없는 것을 두지 않는
         // 것과 같은 규칙이고, 눌러도 아무 일도 없는 단추가 화면에서 고장으로
         // 보이는 자리를 여기서 자른다.
         if (sweep_.valid() || spinner_.valid())
         {
-            column->add_gap(8.0f);
-            column->add(make_playback_button(), { .length = 26.0f, .cross_length = 132.0f });
+            page.gap(8.0f);
+            page.add(make_playback_button(), { .length = 26.0f, .cross_length = 132.0f });
         }
-        column->add_gap(12.0f);
-        column->add(make_label(luil::ui_element_id { kind_text, u8"basics-hint" }, u8"확인 dialog는 캡션을 잡아 옮기고 Esc로 닫는다.", 11.0f, luil::label_color_role::dim), 18.0f);
-        column->add_gap(10.0f);
+        page.gap(12.0f);
+        page.add(make_label(luil::ui_element_id { kind_text, u8"basics-hint" }, u8"확인 dialog는 캡션을 잡아 옮기고 Esc로 닫는다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        page.gap(10.0f);
 
         auto open { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_open }, luil::text_button_config { .text = u8"카운터 초기화" }) };
         open->set_tooltip(u8"확인 dialog를 연다");
         open->set_cursor(luil::ui_cursor::hand);
         open->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { true }));
-        column->add(std::move(open), { .length = 32.0f, .cross_length = 140.0f });
-        return column;
+        page.add(std::move(open), { .length = 32.0f, .cross_length = 140.0f });
+        return page.finish(page_scroll_, [](const float delta) { return luil::make_app_action(basics_scroll_intent { delta }); });
     }
 
     std::unique_ptr<luil::stack_element> basics_page::make_counter_row() const
@@ -323,8 +327,7 @@ namespace demo {
         if (picture_.valid() == false)
             return make_label(luil::ui_element_id { kind_text, u8"picture-status" }, u8"그림을 읽지 못했다 — " + picture_error_.message, 11.0f, luil::label_color_role::primary);
         return make_label(luil::ui_element_id { kind_text, u8"picture-status" },
-            u8"assets/gradient.png을 " + to_u8(picture_.width()) + u8"×" + to_u8(picture_.height()) + u8" 픽셀로 읽었다 (원본 480×240).", 11.0f,
-            luil::label_color_role::dim);
+            u8"assets/gradient.png을 " + to_u8(picture_.width()) + u8"×" + to_u8(picture_.height()) + u8" 픽셀로 읽었다 (원본 480×240).", 11.0f, luil::label_color_role::dim);
     }
 
     std::unique_ptr<luil::stack_element> basics_page::make_labeled_picture(std::u8string owner, std::u8string label, const luil::image_fit fit, std::u8string description) const
@@ -333,8 +336,8 @@ namespace demo {
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"picture-" + owner }, config) };
         column->add(make_label(luil::ui_element_id { kind_text, u8"picture-" + owner }, std::move(label), 11.0f, luil::label_color_role::dim), 18.0f);
         column->add_gap(4.0f);
-        column->add(std::make_unique<luil::image_element>(luil::ui_element_id { kind_picture, std::move(owner) },
-                        luil::image_config { .image = picture_, .fit = fit, .description = std::move(description) }),
+        column->add(
+            std::make_unique<luil::image_element>(luil::ui_element_id { kind_picture, std::move(owner) }, luil::image_config { .image = picture_, .fit = fit, .description = std::move(description) }),
             56.0f);
         return column;
     }
@@ -377,8 +380,8 @@ namespace demo {
         // 함께 선다 — 멈춤 단추가 하나로 족한 이유다.
         //  - 설명은 보조 기술이 읽는다. 움직인다는 것은 이름이 아니라 그림의
         //    성질이라 그 글에 담는다 (image-design.md).
-        column->add(std::make_unique<luil::image_element>(luil::ui_element_id { kind_picture, std::move(owner) },
-                        luil::image_config { .description = std::move(description), .animation = film, .playback = playback_ }),
+        column->add(std::make_unique<luil::image_element>(
+                        luil::ui_element_id { kind_picture, std::move(owner) }, luil::image_config { .description = std::move(description), .animation = film, .playback = playback_ }),
             96.0f);
         return column;
     }

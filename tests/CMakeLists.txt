@@ -21,6 +21,7 @@ add_executable(luil_core_tests
     badge_element_tests.cpp
     button_element_tests.cpp
     check_element_tests.cpp
+    theme_picker_tests.cpp
     choice_group_element_tests.cpp
     content_layout_tests.cpp
     dialog_elements_tests.cpp
@@ -120,7 +121,12 @@ target_sources(luil_core_tests PRIVATE
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/workbench_page.cpp"
-    workbench_page_tests.cpp)
+    workbench_page_tests.cpp
+    "${PROJECT_SOURCE_DIR}/examples/demo/gallery_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
+    demo_gallery_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"

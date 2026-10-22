@@ -7,7 +7,7 @@
 
 namespace luil {
     // 낱개 컨트롤이 그려지는 모양이다.
-    // 셋은 **그리는 모양만 다르고 계약이 같다** — 상태를 설정으로 받아 그리고,
+    // 넷은 **그리는 모양만 다르고 계약이 같다** — 상태를 설정으로 받아 그리고,
     // 바꾸자는 메시지만 낸다. 무엇이 바뀌는지(뒤집기·고르기)는 앱이 액션으로 정한다.
     enum class check_style
     {
@@ -18,6 +18,8 @@ namespace luil {
         radio,
         // 미끄러지는 손잡이가 있는 스위치다. 켬/끔이 즉시 반영되는 설정에 쓴다.
         toggle_switch,
+        // 누른 상태가 남는 글자 버튼이다. 배타 선택은 choice_group으로 묶는다.
+        toggle_button,
     };
 
     struct check_config

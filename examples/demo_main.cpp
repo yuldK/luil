@@ -29,6 +29,7 @@
 #include "demo/basics_page.h"
 #include "demo/common.h"
 #include "demo/files_page.h"
+#include "demo/gallery_page.h"
 #include "demo/groups_page.h"
 #include "demo/images_page.h"
 #include "demo/lists_page.h"
@@ -45,6 +46,7 @@
 #include "luil/net/http_client.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/list_element.h"
 #include "luil/ui/sidebar_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/transition.h"
@@ -61,8 +63,8 @@
 #include <array>
 #include <atomic>
 #include <charconv>
-#include <cmath>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -201,7 +203,7 @@ namespace demo {
             // `page`가 비어 있지 않으면 그 페이지로 시작한다 (--page=).
             demo_driver(const std::optional<luil::win32::window_placement> restore, std::u8string page)
                 : restore_ { restore }
-                , page_ { page.empty() ? std::u8string { page_basics } : std::move(page) }
+                , page_ { page.empty() ? std::u8string { page_overview } : std::move(page) }
             {}
 
             // 창과 host가 준비된 직후 UI thread가 알려 주는 자리다.
@@ -328,6 +330,11 @@ namespace demo {
                     workbench_.close_popups();
                     return;
                 }
+                if (const auto* const scroll { message.get<navigation_scroll_intent>() }; scroll != nullptr)
+                {
+                    navigation_scroll_ = std::max(0.0f, navigation_scroll_ + scroll->delta);
+                    return;
+                }
                 if (message.get<sidebar_toggle_intent>() != nullptr)
                 {
                     sidebar_collapsed_ = sidebar_collapsed_ == false;
@@ -368,6 +375,9 @@ namespace demo {
                 if (const auto* const select { message.get<card_menu_select_intent>() }; select != nullptr)
                 {
                     static_cast<void>(popups_.handle(message));
+                    if (select->key == u8"복사")
+                        if (luil::app_host* const host { host_.load() }; host != nullptr)
+                            host->post_clipboard_request(luil::clipboard_copy_request { u8"문서/보고서.md" });
                     static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"컨텍스트 메뉴: " + select->key, luil::toast_severity::success } }));
                     return;
                 }
@@ -383,9 +393,9 @@ namespace demo {
 
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
-                if (basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message)
-                    || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message) || zoom_.handle(message)
-                    || theme_.handle(message) || workbench_.handle(message))
+                if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
+                    || toasts_.handle(message) || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message)
+                    || zoom_.handle(message) || theme_.handle(message) || workbench_.handle(message))
                     return;
             }
 
@@ -481,6 +491,8 @@ namespace demo {
                 for (luil::win32::ui_popup& popup : workbench_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
                 // 도구 창은 페이지의 일부가 아니라 어느 페이지에서든 열려 있다.
+                for (luil::ui_window& window : tabs_.make_windows())
+                    frame->windows.push_back(std::move(window));
                 for (luil::win32::ui_window& window : windows_.make_windows())
                     frame->windows.push_back(std::move(window));
                 // 웹뷰도 어느 페이지에서든 실려 있다. 페이지를 떠났다고 목록에서
@@ -512,8 +524,7 @@ namespace demo {
             [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() override
             {
                 std::optional<std::chrono::steady_clock::time_point> next { toasts_.next_expiry() };
-                for (const std::optional<std::chrono::steady_clock::time_point> other :
-                    { luil::transition_next_update(sidebar_motion_, std::chrono::steady_clock::now()), workbench_.next_due() })
+                for (const std::optional<std::chrono::steady_clock::time_point> other : { luil::transition_next_update(sidebar_motion_, std::chrono::steady_clock::now()), workbench_.next_due() })
                     if (other.has_value() && (next.has_value() == false || *other < *next))
                         next = other;
                 return next;
@@ -618,12 +629,18 @@ namespace demo {
             // 사이드바 내용: 페이지를 오가는 배타 선택이다.
             [[nodiscard]] std::unique_ptr<luil::ui_element> make_navigation() const
             {
-                luil::choice_group_config navigation {};
+                luil::list_config navigation {};
                 navigation.owner = u8"navigation";
-                navigation.style = luil::choice_style::radio;
-                navigation.name = u8"페이지";
-                const auto add_page = [&navigation](const std::u8string_view key, std::u8string label) { navigation.items.push_back({ std::u8string { key }, std::move(label) }); };
-                add_page(page_basics, u8"기본");
+                navigation.row_height = 32.0f;
+                navigation.scroll_offset = navigation_scroll_;
+                navigation.scroll = [](const float delta) { return luil::make_app_action(navigation_scroll_intent { delta }); };
+                const auto add_page = [&navigation](const std::u8string_view key, std::u8string label) {
+                    const char32_t icon { key == page_overview ? luil::codicons::icon_rocket : (key == page_theme ? luil::codicons::icon_settings_gear : luil::codicons::icon_file) };
+                    navigation.items.push_back({ std::u8string { key }, std::move(label), icon });
+                };
+                add_page(page_overview, u8"시작 / 기능 색인");
+                add_page(page_controls, u8"버튼과 컨트롤");
+                add_page(page_basics, u8"입력과 다이얼로그");
                 add_page(page_lists, u8"목록");
                 add_page(page_files, u8"파일");
                 add_page(page_tabs, u8"탭");
@@ -635,16 +652,17 @@ namespace demo {
                 add_page(page_network, u8"네트워크");
                 add_page(page_webview, u8"웹뷰");
                 add_page(page_zoom, u8"확대 보기");
-                add_page(page_theme, u8"테마");
+                add_page(page_theme, u8"모양과 색");
                 add_page(page_workbench, u8"변경 작업대");
                 navigation.selected = page_;
                 navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
-                const float navigation_height { luil::choice_group_element::height_for(navigation) };
 
                 luil::stack_config config {};
                 config.padding = luil::edge_insets::symmetric(8.0f, 4.0f);
                 auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"navigation" }, config) };
-                column->add(std::make_unique<luil::choice_group_element>(std::move(navigation)), navigation_height);
+                auto pages { std::make_unique<luil::list_element>(std::move(navigation)) };
+                pages->set_access_name(u8"페이지");
+                column->add_flexible(std::move(pages));
                 // 손잡이를 놓을 때 저장한 폭이다. 끄는 동안에는 바뀌지 않고 놓아야 따라온다.
                 if (sidebar_resize_finishes_ > 0)
                 {
@@ -663,6 +681,10 @@ namespace demo {
 
             [[nodiscard]] std::unique_ptr<luil::ui_element> build_page(const float width, const float height, const float scale)
             {
+                if (page_ == page_overview)
+                    return gallery_.build_overview(width);
+                if (page_ == page_controls)
+                    return gallery_.build_controls();
                 if (page_ == page_lists)
                     return lists_.build(width, height, scale);
                 if (page_ == page_files)
@@ -692,6 +714,7 @@ namespace demo {
                 return basics_.build(width, height, scale);
             }
 
+            gallery_page gallery_ {};
             basics_page basics_ {};
             lists_page lists_ {};
             files_page files_ {};
@@ -733,6 +756,7 @@ namespace demo {
 
             std::u8string page_ {};
             bool sidebar_collapsed_ { false };
+            float navigation_scroll_ { 0.0f };
             float sidebar_width_ { sidebar_default_width };
             // 손잡이를 놓았을 때 저장한 폭과 그 횟수다 (`sidebar_config::resize_finish`의 시연).
             float saved_sidebar_width_ { sidebar_default_width };
@@ -832,9 +856,10 @@ namespace demo {
                 return luil::route_reveal(tree, focused);
             }
 
-            // 이 셸에는 앱이 가로챌 키가 없다.
-            // Esc는 modal host의 dismiss 액션이 처리하고 Enter는 default button이 처리한다.
-            // 나머지 키는 앱 단축키를 위해 policy hook으로 전달할 수 있다.
+            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot&) override
+            {
+                return tabs_page::route_key(tree, event);
+            }
         };
 
         class demo_delegate final : public luil::win32::window_delegate

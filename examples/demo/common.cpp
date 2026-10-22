@@ -1,5 +1,7 @@
 #include "demo/common.h"
 
+#include "luil/ui/scroll_area_element.h"
+
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/stack_element.h"
@@ -11,6 +13,52 @@
 #include <utility>
 
 namespace demo {
+    page_layout::page_layout(std::u8string owner)
+        : owner_ { std::move(owner) }
+    {
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(24.0f);
+        column_ = std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, owner_ }, config);
+    }
+
+    void page_layout::add(std::unique_ptr<luil::ui_element> element, const float height)
+    {
+        column_->add(std::move(element), height);
+        height_ += height;
+    }
+
+    void page_layout::add(std::unique_ptr<luil::ui_element> element, const luil::stack_item item)
+    {
+        column_->add(std::move(element), item);
+        height_ += item.length;
+    }
+
+    void page_layout::gap(const float height)
+    {
+        column_->add_gap(height);
+        height_ += height;
+    }
+
+    void page_layout::heading(std::u8string title, std::u8string description)
+    {
+        const std::u8string key { owner_ + u8"/heading/" + to_u8(heading_++) };
+        add(make_label({ kind_text, key }, std::move(title), 20.0f, luil::label_color_role::primary), 32.0f);
+        add(make_label({ kind_text, key + u8"/description" }, std::move(description), 12.0f, luil::label_color_role::dim), 24.0f);
+        gap(16.0f);
+    }
+
+    std::unique_ptr<luil::ui_element> page_layout::finish(const float offset, std::function<luil::input_action(float)> scroll)
+    {
+        luil::scroll_area_config config {};
+        config.owner = owner_;
+        config.content_height = height_;
+        config.scroll_offset = offset;
+        config.scroll = std::move(scroll);
+        config.bar = luil::scrollbar_visibility::always;
+        auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        area->set_content(std::move(column_));
+        return area;
+    }
     std::u8string to_u8(const int value)
     {
         const std::string digits { std::to_string(value) };

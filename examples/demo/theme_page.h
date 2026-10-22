@@ -8,6 +8,11 @@
 
 namespace demo {
     // --- 이 페이지의 메시지 ---
+    struct theme_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
     struct theme_intent
     {
         luil::theme_preference theme { luil::theme_preference::system };
@@ -32,5 +37,6 @@ namespace demo {
 
     private:
         luil::appearance_settings appearance_ {};
+        float scroll_ { 0.0f };
     };
 } // namespace demo

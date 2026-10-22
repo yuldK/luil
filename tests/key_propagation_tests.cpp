@@ -316,3 +316,38 @@ TEST_CASE("A focused text box takes Ctrl+A before the list around it", "[ui][int
     REQUIRE(intent_at(actions, 0)->by == u8"text");
     REQUIRE(list_calls == 0);
 }
+
+TEST_CASE("Ctrl Tab reaches app commands without moving keyboard focus", "[ui][interaction][keys]")
+{
+    row_tree built { make_row_tree() };
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(built.root)));
+    focus_button(controller);
+    const auto before { controller.snapshot().focused };
+    for (const bool backward : { false, true })
+    {
+        const auto actions { controller.process(luil::key_pressed_event { .key = luil::key_code::tab, .control = true, .shift = backward }) };
+        REQUIRE(intent_at(actions, 0) != nullptr);
+        REQUIRE(intent_at(actions, 0)->by == u8"policy");
+        REQUIRE(controller.snapshot().focused == before);
+    }
+}
+
+TEST_CASE("Shift F10 opens the nearest enabled context menu at the focused control", "[ui][interaction][keys]")
+{
+    row_tree built { make_row_tree() };
+    built.row->set_action(luil::ui_trigger::right_click, [](const luil::ui_action_context& context) {
+        REQUIRE(context.x == 100.0f);
+        REQUIRE(context.y == 12.0f);
+        return std::vector<luil::input_action> { luil::make_app_action(handled_intent { u8"context" }) };
+    });
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(built.root)));
+    focus_button(controller);
+    const auto actions { controller.process(luil::key_pressed_event { .key = luil::key_code::f10, .shift = true }) };
+    REQUIRE(intent_at(actions, 0) != nullptr);
+    REQUIRE(intent_at(actions, 0)->by == u8"context");
+    REQUIRE(policy.keys == 0);
+}

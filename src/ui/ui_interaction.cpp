@@ -2899,6 +2899,23 @@ namespace luil {
                 return {};
             }
 
+        // 키보드의 컨텍스트 메뉴도 오른쪽 클릭과 같은 액션을 실행한다.
+        // 초점이 자식 단추에 있어도 가장 가까운 메뉴 임자를 찾는다.
+        if (event.key == key_code::f10 && event.shift && event.shortcut_modifier_down() == false)
+        {
+            const ui_tree* const focused_tree { surface_tree(snapshot_.focused_surface) };
+            if (focused_tree != nullptr)
+                for (const ui_element* const element : focused_tree->ancestry_of(snapshot_.focused))
+                {
+                    if (focused_tree->within_focus_trap(element->id()) == false)
+                        break;
+                    if (element->enabled() == false || element->action(ui_trigger::right_click) == nullptr)
+                        continue;
+                    const rect_f box { element->bounds() };
+                    return run_trigger(*element, ui_trigger::right_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, modifiers_of(event));
+                }
+        }
+
         // Space와 Enter는 초점을 가진 컨트롤을 실행한다.
         //  - **초점이 이긴다.** Enter가 초점 테와 다른 자리를 실행하면 테가
         //    거짓말을 한다 (enter-default-design.md). 기본 버튼은 초점이
@@ -2911,7 +2928,7 @@ namespace luil {
         //  - 자리가 하나도 없으면 삼키지 않고 앱 정책으로 흘려보낸다.
         //  - 지금 자리가 **Tab을 자기 것으로 쓰면**(코드 칸) 옮기지 않는다.
         //    빠져나가는 길은 앱이 만든다 (focus-group-design.md).
-        if (event.key == key_code::tab && focus_takes_tab() == false && move_focus(event.shift == false, event.surface, event.time))
+        if (event.key == key_code::tab && event.shortcut_modifier_down() == false && focus_takes_tab() == false && move_focus(event.shift == false, event.surface, event.time))
             return {};
 
         // 초점을 가진 텍스트 박스가 먼저 가져간다.

@@ -55,7 +55,7 @@ build\vs2026-examples\examples\Debug\luil_hello.exe
 | --- | --- | --- |
 | [hello](examples/hello) | `luil_hello` | 창과 버튼으로 구성한 최소 앱 |
 | [widgets](examples/widgets) | `luil_widgets` | 컨트롤과 입력 요소 사용법 |
-| [demo](examples/demo) | `luil_demo` | UI·창·이미지·HTTP·웹뷰 통합 예제 |
+| [demo](examples/demo) ([사용 안내](docs/demo-guide.md)) | `luil_demo` | UI·창·이미지·HTTP·웹뷰 통합 예제 |
 
 첫 앱의 구성은 [시작 가이드](docs/how-to-start.md)에 설명되어 있다.
 

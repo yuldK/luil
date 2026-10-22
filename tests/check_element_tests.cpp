@@ -143,3 +143,26 @@ TEST_CASE("A parent check aggregates its children", "[ui][check]")
     const std::vector<check_state> lone_mixed { check_state::mixed };
     REQUIRE(luil::aggregate_check(lone_mixed) == check_state::mixed);
 }
+
+TEST_CASE("Independent toggle buttons expose Toggle state and keep button sizing", "[ui][check]")
+{
+    luil::check_config config {};
+    config.owner = u8"pin";
+    config.label = u8"상단 고정";
+    config.style = luil::check_style::toggle_button;
+    config.checked = true;
+    config.mixed = true;
+    config.toggle = make_toggle(u8"pin");
+    luil::check_element control { config };
+    const auto info { control.accessibility() };
+    REQUIRE(info.role == luil::access_role::button);
+    REQUIRE(info.checked == true);
+    REQUIRE(info.selected.has_value() == false);
+    REQUIRE(info.mixed == false);
+    REQUIRE(luil::check_element::height_for(config) == 28.0f);
+    const auto actions { (*control.action(luil::ui_trigger::left_click))({}) };
+    REQUIRE(std::get<luil::app_message>(actions.front()).get<toggle_intent>()->owner == u8"pin");
+    REQUIRE(control.accessibility().checked == true);
+    control.set_enabled(false);
+    REQUIRE(control.focusable() == false);
+}
