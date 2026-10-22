@@ -120,10 +120,11 @@ namespace luil {
                         return payload;
                     };
                     // 받는 대상 없이 놓였다 — 창 밖에 놓아 새 창으로 떼어 낼 자리다. 무엇을 할지는 앱이 정한다.
+                    //  - **factory를 값으로 쥔다.** controller는 이 콜백을 끌기가 시작될 때 쥐어 두고 끝날 때 부른다. 그 사이에
+                    //    새 frame이 오면 이 막대(와 `bar`)가 든 옛 tree는 풀리므로, 참조로 쥐면 놓는 순간 풀린 자리를 부른다.
                     if (bar.unclaimed_drop != nullptr)
-                        source.on_unclaimed_drop = [&unclaimed = bar.unclaimed_drop](const drag_payload& payload, const drag_release& release) -> std::vector<input_action> {
-                            return { unclaimed(payload, release) };
-                        };
+                        source.on_unclaimed_drop
+                            = [unclaimed = bar.unclaimed_drop](const drag_payload& payload, const drag_release& release) -> std::vector<input_action> { return { unclaimed(payload, release) }; };
                     set_drag_source(std::move(source));
                 }
 
@@ -150,8 +151,8 @@ namespace luil {
                         const std::size_t slot { index + (side_at(self->bounds(), x) == drop_side::after ? 1u : 0u) };
                         return changes_order(*order, payload.dragged_owner, slot);
                     };
-                    drop.on_drop = [self, key, container, order, &move = bar.move, &reorder, &receive = bar.receive](const drag_payload& payload,
-                                       const ui_action_context& context) -> std::vector<input_action> {
+                    drop.on_drop = [self, key, container, order, &move = bar.move, &reorder, &receive = bar.receive](
+                                       const drag_payload& payload, const ui_action_context& context) -> std::vector<input_action> {
                         const drop_side side { side_at(self->bounds(), context.x) };
                         if (own_tab(payload, container, *order) == false)
                             return { receive(payload, key, side) };
@@ -435,9 +436,8 @@ namespace luil {
             const bool moving { config_.move != nullptr };
             const bool receiving { config_.receive != nullptr };
             drop_target end {};
-            end.accepts = [container, order, moving, receiving](const drag_payload& payload) {
-                return (moving && own_tab(payload, container, *order)) || (receiving && foreign_tab(payload, container, *order));
-            };
+            end.accepts = [container, order, moving, receiving](
+                              const drag_payload& payload) { return (moving && own_tab(payload, container, *order)) || (receiving && foreign_tab(payload, container, *order)); };
             end.accepts_at = [self, container, order](const drag_payload& payload, const float x, const float y) {
                 if (self->end_gap_contains(x, y) == false)
                     return false;
