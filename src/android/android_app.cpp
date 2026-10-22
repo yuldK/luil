@@ -1104,6 +1104,11 @@ namespace luil::android {
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::wheel_scrolled));
                     for (raw_input_event& value : routed.events)
                     {
+                        // 조합 중의 누름은 조합을 먼저 확정한다 (Windows 표면과 같다). 확정 글이 앱 inbox에 먼저
+                        // 들어가야 누름·탭이 낸 caret 이동과 끌기 선택이 그 글 위에 선다 — 미루면 caret 이동이
+                        // 조합 표시에 가려지고, 조합이 끝날 때의 replace_all이 caret을 조합 끝으로 되돌린다.
+                        if (std::holds_alternative<pointer_pressed_event>(value) && ime_ != nullptr && ime_->composing())
+                            ime_->commit_composition();
                         // 키보드를 내린 뒤 초점을 가진 텍스트 칸을 다시 누르면 키보드를 다시 띄운다.
                         if (const auto* const released { std::get_if<pointer_released_event>(&value) }; released != nullptr && released->device != pointer_device::mouse)
                             request_keyboard_at(released->surface, released->x, released->y);

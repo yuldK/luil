@@ -195,6 +195,43 @@ TEST_CASE("Composition shows on screen and commits as one replacement", "[androi
     REQUIRE(host.compositions.back().composing == false);
 }
 
+TEST_CASE("A press mid composition commits it and the tapped caret reaches the IME", "[android][ime]")
+{
+    fake_host host {};
+    fake_platform platform {};
+    luil::android::ime_session session { host, platform.hooks() };
+    host.target = note;
+    host.committed = { u8"ab", 2, 2 };
+    session.synchronize();
+    session.accept({ u8"ab하", { 3, 3 }, { 2, 3 } });
+    REQUIRE(session.composing());
+
+    // host가 누름을 넘기기 전에 확정한다. 확정 글이 앱으로, 조합 없는 상태가 IME로 간다.
+    session.commit_composition();
+    REQUIRE(session.composing() == false);
+    REQUIRE(host.edits.size() == 1u);
+    REQUIRE(host.edits[0].command == luil::text::text_edit_command::replace_all);
+    REQUIRE(host.edits[0].text == u8"ab하");
+    REQUIRE(host.edits[0].offset == 5u);
+    REQUIRE(host.compositions.back().composing == false);
+    REQUIRE(platform.sent.back().text == u8"ab하");
+    REQUIRE(platform.sent.back().composing.defined() == false);
+    const std::size_t sent { platform.sent.size() };
+
+    // 앱이 확정을 적용하기 전의 snapshot으로는 IME를 되돌리지 않는다.
+    session.synchronize();
+    REQUIRE(platform.sent.size() == sent);
+
+    // 앱이 확정 뒤에 탭이 놓은 caret(1)을 적용했다. 그 caret이 IME에 간다 — 조합 끝으로 되돌아가지 않는다.
+    host.committed = { u8"ab하", 1, 1 };
+    host.committed.applied_sequence = host.edits.back().sequence;
+    session.synchronize();
+    REQUIRE(platform.sent.size() == sent + 1u);
+    REQUIRE(platform.sent.back().text == u8"ab하");
+    REQUIRE(platform.sent.back().selection == luil::android::ime_span { 1, 1 });
+    REQUIRE(host.edits.size() == 1u);
+}
+
 TEST_CASE("The IME is not rewound while its edit travels through logic", "[android][ime]")
 {
     fake_host host {};
