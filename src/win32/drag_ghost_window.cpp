@@ -93,8 +93,8 @@ namespace luil::win32 {
         if (RegisterClassExW(&type) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
             return false;
         // 클릭이 통과하는(`WS_EX_TRANSPARENT`) 층 창이라 OS hit test가 지나친다. 작업 표시줄·Alt+Tab에 서지 않는다.
-        window_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, drag_ghost_class_name, L"", WS_POPUP, 0, 0, 1, 1, nullptr,
-            nullptr, instance, nullptr);
+        window_ = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, drag_ghost_class_name, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance, nullptr);
         return window_ != nullptr;
     }
 

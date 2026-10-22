@@ -2,10 +2,12 @@
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element.h"
+#include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <variant>
@@ -577,4 +579,46 @@ TEST_CASE("A tab dropped where nothing takes it reports its key", "[ui][tab][dra
     // 잡은 지점이 함께 와서 새 창에서 그 탭을 놓은 점에 둘 수 있다.
     REQUIRE(message->grab_offset_x == 10.0f);
     REQUIRE(message->release == release);
+}
+
+namespace {
+    // 떼어 내기를 알리는 막대 하나를 tree로 짓는다. 알림이 올 때마다 `calls`를 센다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> detachable_bar_tree(const std::shared_ptr<int>& calls)
+    {
+        luil::tab_bar_config config { make_config(2) };
+        config.unclaimed_drop = [calls](const luil::drag_payload& payload, const luil::drag_release& release) {
+            ++*calls;
+            return luil::input_action { luil::app_message { detach_intent { payload.dragged_owner, payload.grab_offset_x, release } } };
+        };
+        auto bar { std::make_unique<luil::tab_bar_element>(std::move(config)) };
+        bar->arrange({ { 0.0f, 0.0f, 800.0f, 36.0f }, 1.0f });
+        return std::make_shared<const luil::ui_tree>(std::move(bar));
+    }
+
+    [[nodiscard]] std::chrono::steady_clock::time_point at(const int milliseconds)
+    {
+        return std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { milliseconds };
+    }
+} // namespace
+
+TEST_CASE("A torn off tab still reports its drop after the bar is rebuilt mid drag", "[ui][tab][drag]")
+{
+    // 끄는 동안 앱은 frame을 다시 게시한다 (끌리는 탭을 흐리게 다시 지은 tree). 옛 tree가 풀린 뒤의 놓기도 끌기를
+    // 시작한 막대의 factory로 알려야 한다 — 그 factory를 참조로 쥐었다면 여기서 풀린 자리를 부른다.
+    const auto calls { std::make_shared<int>(0) };
+    luil::interaction_controller controller {};
+    controller.set_tree(detachable_bar_tree(calls));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 170.0f, 10.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(luil::pointer_moved_event { 200.0f, 20.0f, at(10) }));
+    REQUIRE(controller.snapshot().drag.has_value());
+
+    controller.set_tree(detachable_bar_tree(calls));
+
+    // 막대 아래로 내려 창 밖에 놓는다.
+    auto actions { controller.process(luil::pointer_released_event { 200.0f, 300.0f, luil::pointer_button::left, at(20) }) };
+    REQUIRE(*calls == 1);
+    const auto* const message { single_message<detach_intent>(actions) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->key == u8"tab-b");
+    REQUIRE(message->release.outside);
 }

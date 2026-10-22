@@ -612,7 +612,8 @@ namespace luil {
         //  - 바깥 여백 없이 (0,0)부터 채운다. 둘레는 투명 창의 알파가 가른다.
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const float inset { 0.5f * scale };
-        draw_drag_ghost_box(context, payload, SkRect::MakeXYWH(inset, inset, detached_drag_ghost_width * scale - 2.0f * inset, detached_drag_ghost_height * scale - 2.0f * inset), codicons::icon_open_in_window);
+        draw_drag_ghost_box(
+            context, payload, SkRect::MakeXYWH(inset, inset, detached_drag_ghost_width * scale - 2.0f * inset, detached_drag_ghost_height * scale - 2.0f * inset), codicons::icon_open_in_window);
     }
 
     void ui_tree::draw_drag_visual(draw_context& context, const drag_visual& drag) const

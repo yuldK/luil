@@ -3774,9 +3774,8 @@ namespace {
         target->arrange({ { 130.0f, 100.0f, 60.0f, 60.0f }, 1.0f });
         luil::drop_target drop {};
         drop.accepts = [](const luil::drag_payload& payload) { return payload.dragged_owner == u8"tool-drag"; };
-        drop.on_drop = [](const luil::drag_payload&, const luil::ui_action_context&) -> std::vector<luil::input_action> {
-            return { luil::input_action { luil::app_message { fake_intent { u8"dropped" } } } };
-        };
+        drop.on_drop
+            = [](const luil::drag_payload&, const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"dropped" } } } }; };
         target->set_drop_target(std::move(drop));
         root->add(std::move(target));
 
