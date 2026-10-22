@@ -21,7 +21,8 @@ payload는 `shared_ptr<const void>`로 보관한다. 복사 가능한 envelope�
 | `window_minimize` | 주 창을 최소화한다. |
 | `window_toggle_maximize` | 최대화와 복원을 오간다. |
 | `window_toggle_fullscreen` | 테두리 없는 전체 화면을 오간다 (주 창 전용 — [Win32 창과 표면](window.md)). |
-| `window_close` | 닫기를 요청한다. |
+| `window_close` | 주 창 닫기를 요청한다. 앱이 주 창의 닫힘을 받아 가면(`ui_frame::close`) 그 훅으로 간다. |
+| `application_exit` | 앱을 끝낸다. 닫힘 훅을 거치지 않는다 ([여러 top-level window](../multi-window-design.md)). |
 
 앞의 셋은 창을 어떤 모습으로 세울지의 명령이라 **앱 상태가 아니다.** logic thread를 지나지 않고 UI thread가 그 자리에서 실행하며, 앱은 결과를 창 배치 보고(`window_placement`)로 되받는다. 전체 화면은 OS에 넘길 명령이 없어 표면이 스타일·자리·갈무리를 함께 바꾼다.
 

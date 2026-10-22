@@ -686,10 +686,32 @@ namespace luil {
         [[nodiscard]] bool pointer_gesture_active() const noexcept;
         // 누른 element로 초점을 옮기거나 거둔다 (마우스는 누를 때, 터치는 탭이 확정될 때).
         void apply_press_focus(const ui_tree& tree, const ui_element* hit, const std::u8string& surface, std::chrono::steady_clock::time_point time);
-        // 끌리는 그림의 자리와 수락 중인 drop 대상을 갱신한다.
-        void update_drag(const ui_tree& tree, float x, float y);
+        // 끄는 포인터가 놓인 자리다 (multi-window-design.md).
+        //  - `outside`면 이 앱의 어느 표면 위도 아니다. 그때 `surface`는 끌기를 시작한 표면이고 좌표는 그 표면 기준이다
+        //    (창 밖의 값) — 가장자리 자동 스크롤이 창 밖으로 끌고 나간 목록을 계속 흘리는 것이 이 좌표다.
+        struct drag_location
+        {
+            std::u8string surface {};
+            float x { 0.0f };
+            float y { 0.0f };
+            bool outside { false };
+        };
+        // 이동·뗌이 실은 자리를 끄는 포인터의 자리로 옮긴다.
+        //  - 플랫폼이 포인터 밑을 다시 찾아 실었으면(`pointer_over`) 그것이 답이다. 다른 창 위면 그 창의 좌표다.
+        //  - 싣지 않았으면 이벤트의 표면과 좌표가 답이고, 그 표면 tree의 root 밖이면 창 밖으로 본다.
+        template<typename event_type>
+        [[nodiscard]] drag_location locate_drag(const event_type& event) const;
+        // 끌기를 세운다. 놓을 자리 없이 끝날 때 알릴 곳(`drag_source::on_unclaimed_drop`)을 함께 쥔다.
+        void begin_drag(const drag_source& source, const ui_action_context& context, float x, float y, const std::u8string& surface);
+        // 끌리는 그림의 자리와 수락 중인 drop 대상을 갱신한다. 놓을 자리는 포인터가 놓인 표면의 tree에서 찾는다.
+        void update_drag(const drag_location& at);
+        // 새 tree를 받았다. 포인터가 멈춰 있어도 그 자리의 놓을 자리를 다시 찾는다.
+        void relocate_drag();
         // 끌기를 놓는다. 수락하는 대상 위에서만 drop 액션이 나간다.
-        [[nodiscard]] std::vector<input_action> finish_drag(const ui_tree* tree, float x, float y, modifier_keys modifiers);
+        // 받는 대상이 없고 불투명 표면이 가리지도 않은 자리면 끌기를 시작한 쪽의 `on_unclaimed_drop`을 부른다.
+        [[nodiscard]] std::vector<input_action> finish_drag(const drag_location& at, modifier_keys modifiers, std::optional<screen_point> screen);
+        // 내부 끌기를 액션 없이 거둔다 (취소). 쥐어 둔 알림 곳도 함께 놓는다.
+        void abandon_drag() noexcept;
         [[nodiscard]] std::optional<text_input_target> text_target(ui_element_kind kind) const;
         [[nodiscard]] input_action text_edit_action(text_input_target target, text::text_edit_command command, bool extend = false) const;
         [[nodiscard]] std::vector<input_action> process_move(const pointer_moved_event& event);
@@ -816,6 +838,10 @@ namespace luil {
         // 스크롤 막대의 끌기와 달리 element handler를 두지 않는다.
         //  - offset 계산에 측정 함수가 필요해 controller가 직접 다룬다.
         ui_element_id text_drag_id_ {};
+
+        // 끄는 중인 내부 끌기가 놓을 자리 없이 끝나면 알릴 곳이다 (`drag_source::on_unclaimed_drop`).
+        //  - 끌기가 시작될 때 쥐어 둔다. 출발 element가 새 tree에서 사라져도 값으로 담긴 factory라 그대로 산다.
+        std::function<std::vector<input_action>(const drag_payload&, const drag_release&)> drag_unclaimed_ {};
 
         // 스크롤 막대처럼 누른 채 끄는 대상이다.
         // 값이 있으면 포인터 이동이 클릭· drag 대신 이 element로 간다.

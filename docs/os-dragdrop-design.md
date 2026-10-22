@@ -48,7 +48,7 @@ OLE의 `DragEnter`, `DragOver`, `DragLeave`, `Drop`은 UI STA에서 동기로 �
 - drop target이 아닌 보통 element는 아래 대상을 막지 않는다.
 - `hit_opaque` element는 막는다. 그 안의 수락 element는 찾지만, 그것이 가린 아래 대상은 찾지 않고 결과를 `blocked`로 알린다. 내부 drag의 대상 탐색(`find_drop_target`)도 같은 규칙이다.
 - clip과 visibility를 따른다.
-- 완전한 payload로 `accepts`를 부른다.
+- 완전한 payload로 `accepts`를 부른다. 자리마다 받기를 가르는 대상(`drop_target::accepts_at`)은 그 좌표로도 묻고, 거절한 자리는 받지 않은 것이라 아래 대상으로 내려가 다시 찾는다.
 
 대상을 찾으면 `on_drop`을 element id와 물리 client 좌표로 부른다. 문맥의 수식 키(`control`·`shift`·`alt`)는 OLE가 `Drop`에 실은 키 상태(`MK_CONTROL`·`MK_SHIFT`·`MK_ALT`)다 — 다른 프로그램에서 끌어오는 동안 키보드 입력은 그쪽에 있어서, 이 thread의 `GetKeyState`는 낡은 값이다. 결과 `input_action`은 보통의 action dispatch를 거치므로 app message, UI command, clipboard action의 thread 규칙이 유지된다.
 
@@ -60,12 +60,29 @@ OLE의 `DragEnter`, `DragOver`, `DragLeave`, `Drop`은 UI STA에서 동기로 �
 
 element가 payload를 받았으면 fallback은 부르지 않는다. 불투명 표면이 가린 자리(`blocked`)에서도 부르지 않는다. modal이 떠 있는 동안 뒤의 창이 파일을 여는 일이 없다.
 
+## 안에서 시작한 끌기와의 관계
+
+안에서 시작한 끌기(탭·목록 행)는 OLE를 쓰지 않는다. 같은 `drag_payload`와 `drop_target`을 쓰지만 끄는 동안의 포인터를 입력 controller가 직접 따라가므로, 앱 밖(탐색기·다른 앱)에 놓을 수는 없고 앱의 창들 사이에서만 놓인다. 두 끌기의 갈림은 다음과 같다.
+
+| | OS 파일 끌기 | 안에서 시작한 끌기 |
+| --- | --- | --- |
+| 포인터를 쥐는 쪽 | OLE (`DoDragDrop`은 밖의 source가 돈다) | 누른 창의 캡처 |
+| 다른 창으로 넘어감 | 창마다 `DragEnter`·`DragLeave`가 온다 | 플랫폼이 화면에서 포인터 밑 창을 찾아 이벤트에 싣는다(`pointer_over`, [여러 top-level window](multi-window-design.md)) |
+| 놓을 자리 탐색 | UI thread가 그 표면 tree에 동기로 묻는다 | input thread가 포인터가 놓인 표면 tree에서 찾는다 |
+| 받는 대상이 없을 때 | 창 전체 fallback(`window_delegate::on_file_dropped`) | 끌기를 시작한 쪽의 `drag_source::on_unclaimed_drop` |
+| 불투명 표면이 가린 자리 | fallback을 부르지 않는다 | `on_unclaimed_drop`을 부르지 않는다 |
+| 창 밖의 그림 | 셸이 그린다 (`custom_visual`) | 플랫폼의 투명 창이 그린다 |
+
+받는 대상이 없는 놓기를 알리는 규칙이 한 벌이다. 불투명 표면이 가린 자리는 빈 자리가 아니라 막힌 자리라, 파일 끌기의 fallback도 안에서 시작한 끌기의 알림도 그 자리에서는 서지 않는다 — modal이 떠 있는 동안 뒤의 창이 파일을 열지 않는 것과 탭이 떼어지지 않는 것이 같은 이유다.
+
+받는 쪽이 자기 강조를 그리는 대상(`drop_target::custom_highlight` — 탭 막대의 틈 표시)은 기본 테두리를 그리지 않는다. 파일 끌기에도 같다.
+
 ## 수명과 실패
 
 `com_sta_scope`가 COM STA와 OLE를 초기화한다. 대상 표면은 attach할 때 `IDropTarget` 하나를 등록하고 `HWND`가 사라지기 전에 revoke한다. OLE 초기화나 등록이 실패하면 그 표면의 파일 drop만 꺼지고 나머지 창은 계속 동작한다.
 
-drag event에는 표면 id가 실린다. 보조 창은 자기 tree에서 대상을 강조하고 drop을 해석한다. 출발 표면이 사라지면 그 표면에 매인 gesture 상태를 정리한다.
+drag event에는 표면 id가 실린다. 보조 창은 자기 tree에서 대상을 강조하고 drop을 해석한다. 출발 표면이 사라지면 그 표면에 매인 gesture 상태를 정리한다. 안에서 시작한 끌기도 출발 표면이 사라지면 놓기 없이 취소된다 — 그 창이 쥔 캡처가 함께 풀려 뗌을 받을 수 없기 때문이다.
 
 ## 검증
 
-[`tests/win32_drop_tests.cpp`](../tests/win32_drop_tests.cpp)는 경로 순서와 상한, 빈 payload, COM 전달, copy-only 협상, copy를 허락하지 않은 source의 거절, 가린 자리의 NONE 답, element 액션, fallback과 불투명 표면이 막은 fallback을 확인한다. [`tests/raster_draw_tests.cpp`](../tests/raster_draw_tests.cpp)는 OS가 drag visual을 소유해도 대상 강조가 남는지 확인한다.
+[`tests/win32_drop_tests.cpp`](../tests/win32_drop_tests.cpp)는 경로 순서와 상한, 빈 payload, COM 전달, copy-only 협상, copy를 허락하지 않은 source의 거절, 가린 자리의 NONE 답, element 액션, fallback과 불투명 표면이 막은 fallback을 확인한다. [`tests/raster_draw_tests.cpp`](../tests/raster_draw_tests.cpp)는 OS가 drag visual을 소유해도 대상 강조가 남는지 확인한다. 자리마다 받기를 가르는 대상이 거절한 자리에서 아래 대상이 답하는 것과, 안에서 시작한 끌기의 받는 대상 없는 놓기·취소·불투명 표면 규칙은 [`tests/ui_interaction_tests.cpp`](../tests/ui_interaction_tests.cpp)가 확인한다.

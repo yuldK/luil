@@ -47,6 +47,16 @@ namespace luil {
     using tab_message_factory = std::function<input_action(const std::u8string& key)>;
     // 끌어 놓은 탭을 대상 탭 자리로 옮기자는 메시지다.
     using tab_reorder_message_factory = std::function<input_action(const std::u8string& moved, const std::u8string& target)>;
+    // 끌어 놓은 탭을 대상 탭의 앞(`before`)이나 뒤(`after`)로 옮기자는 메시지다.
+    using tab_move_message_factory = std::function<input_action(const std::u8string& moved, const std::u8string& target, drop_side side)>;
+    // 다른 탭 막대(다른 창)에서 끌어 온 탭을 이 막대의 대상 탭 앞이나 뒤에 넣자는 메시지다.
+    //  - `payload`는 출발 탭이 지은 그대로다. `dragged_owner`가 탭 키이고 `container`가 출발 막대다.
+    //  - `target`이 비어 있으면 탭이 하나도 없는 막대다 (넣을 자리는 처음이자 끝이다).
+    using tab_receive_message_factory = std::function<input_action(const drag_payload& payload, const std::u8string& target, drop_side side)>;
+    // 끌던 탭을 받는 대상이 없는 자리에 놓았다는 메시지다 (`drag_source::on_unclaimed_drop`).
+    //  - 탭 키는 `payload.dragged_owner`다. 잡은 지점(`grab_offset_x`·`grab_offset_y`)도 payload에 있어, 새 창을 세울 때 그
+    //    탭이 놓은 점에 그대로 오게 할 수 있다 (`ui_window::screen_anchor`).
+    using tab_release_message_factory = std::function<input_action(const drag_payload& payload, const drag_release& release)>;
     // 탭에 컨텍스트 메뉴를 열자는 메시지다.
     //  - 문맥의 좌표(물리 픽셀, 창 좌표)는 메뉴를 띄울 자리이고, 수식 키는 그 순간의 것이다.
     using tab_context_message_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
@@ -86,6 +96,22 @@ namespace luil {
         // 표 없는 휠·초점 되살리기도 레인을 흘린다. 휠을 막대 전체로 받으려면
         // 지금처럼 앱의 표가 이름 댄다.
         std::function<input_action(float delta)> scroll {};
+        // 끌어 놓은 탭을 대상 탭의 앞이나 뒤로 옮기자는 메시지다. 있으면 `reorder` 대신 이것이 선다.
+        //  - 놓는 자리는 대상 탭의 앞 반쪽이면 앞, 뒤 반쪽이면 뒤다. 마지막 탭 뒤의 빈 곳은 마지막 탭의 뒤다.
+        //  - **순서가 그대로인 자리는 받지 않는다** — 자기 자신, 바로 앞 탭의 뒤 반쪽, 바로 뒤 탭의 앞 반쪽이다. 그
+        //    자리에서는 강조도 서지 않고 놓아도 메시지가 없다.
+        //  - 받는 자리는 탭 테두리 대신 그 틈에 accent 세로 막대로 보인다.
+        tab_move_message_factory move {};
+        // 다른 탭 막대(다른 창)에서 끌어 온 탭을 받는다 — 창의 탭을 다른 창으로 합치는 길이다.
+        //  - 자리 규칙과 틈 표시는 `move`와 같다. 다른 막대에서 왔으니 그대로인 자리가 없어 어디든 받는다.
+        //  - 받는 것은 탭(`ui_element_kind::tab`)뿐이다. 어느 막대에서 왔는지는 `payload.container`로 본다.
+        tab_receive_message_factory receive {};
+        // 끌던 탭을 받는 대상이 없는 자리에 놓았다 (창 밖 — 새 창으로 떼어 낼 자리, 또는 다른 창의 빈 곳).
+        //  - Esc·캡처 상실로 취소된 끌기에는 오지 않는다. 자리와 화면 좌표는 `drag_release`에 있다.
+        //  - 있으면 `reorder`·`move`가 없어도 탭을 끌 수 있다.
+        tab_release_message_factory unclaimed_drop {};
+        // 탭을 끌어 창 밖으로 나갔을 때의 포인터 모양이다 (`drag_payload::outside_cursor`).
+        ui_cursor outside_cursor { ui_cursor::inherit };
     };
 
     // 넘침 메뉴 버튼의 폭이다 (논리 픽셀).
@@ -117,8 +143,15 @@ namespace luil {
         [[nodiscard]] access_info accessibility() const override;
 
     private:
+        // 마지막 탭의 오른쪽 끝이다 (물리 픽셀). 탭이 없으면 띠의 왼쪽 끝이다.
+        [[nodiscard]] float end_gap_x() const noexcept;
+        // 그 자리가 마지막 탭 뒤의 빈 틈인가 (`tab_bar_config::move`·`receive`).
+        [[nodiscard]] bool end_gap_contains(float x, float y) const noexcept;
+
         tab_bar_config config_ {};
         strip_element* strip_ { nullptr };
+        // 마지막 탭이다. 탭이 없으면 nullptr다.
+        const ui_element* last_tab_ { nullptr };
         // 넘침 액션이 없으면 nullptr다.
         ui_element* overflow_ { nullptr };
         float maximum_scroll_ { 0.0f };

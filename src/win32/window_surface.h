@@ -181,6 +181,22 @@ namespace luil::win32 {
         //  - popup은 popup에 앵커할 수 없어 한 단계로 끝난다.
         [[nodiscard]] virtual const window_surface* anchored_popup(const std::u8string& anchor, const std::u8string& id) const noexcept = 0;
 
+        // id가 같은 표면이다 (주 창·보조 창·popup). 없으면 nullptr다.
+        //  - 끄는 포인터가 다른 창 위에 있을 때 잡은 창이 그 창의 tree로 커서 모양을 묻는다 (multi-window-design.md).
+        //  - 기본은 없다 — 창 하나로 재는 test 대역이 그대로 선다.
+        [[nodiscard]] virtual const window_surface* surface_by_id(const std::u8string& id) const noexcept
+        {
+            static_cast<void>(id);
+            return nullptr;
+        }
+        // 이 최상위 창이 이 앱의 표면이면 그 표면이다. 아니면 nullptr다.
+        //  - 끄는 포인터 밑의 창을 OS hit test로 찾은 뒤 표면으로 옮긴다 (`pointer_over`).
+        [[nodiscard]] virtual const window_surface* surface_of_window(HWND window) const noexcept
+        {
+            static_cast<void>(window);
+            return nullptr;
+        }
+
         // 포인터 캡처 무장 상태다.
         // 캡처는 프로세스에 하나뿐인 자원이라 표면마다 갖지 않는다.
         [[nodiscard]] virtual bool pointer_capture_active() const noexcept = 0;
@@ -394,7 +410,9 @@ namespace luil::win32 {
 
         // 포인터·휠 메시지 하나를 번역해 같은 pump에 넣는다.
         // 번역이 됐으면 참이라 호출자가 메시지를 삼킨다.
-        [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter);
+        //  - `captured`는 이 메시지가 올 때 이 창이 포인터를 잡고 있었는가다. 뗌 처리기는 캡처를 먼저 풀고 부르므로
+        //    풀기 전의 값을 넘긴다. 비어 있으면 지금 캡처를 본다.
+        [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter, std::optional<bool> captured = std::nullopt);
 
         // 누름 동안 포인터를 이 창에 묶는다.
         // 배경 스레드의 `SetCapture`는 실제로 캡처를 얻지 못할 수 있어,
@@ -411,6 +429,13 @@ namespace luil::win32 {
         // 먼 좌표의 왼쪽 뗌을 합성해 press·끌기를 전부 푼다 —
         // hit가 없는 뗌은 클릭이 되지 않고 상태만 정리된다.
         void cancel_pointer_press();
+        // 이동·뗌 이벤트에 화면 자리를 싣고, 이 창이 포인터를 잡은 채 내부 끌기 중이면 포인터 밑에 실제로 보이는
+        // 표면도 싣는다 (`pointer_over`). 잡은 창 밖으로 끌고 나가도 다른 창의 tree에 놓을 수 있는 것이 이것이다.
+        //  - 밑의 창은 OS hit test(`WindowFromPoint`)로 찾는다 — 그 점에서 맨 위에 보이는 창이 답이다(Z 순서).
+        //  - 보이지 않는 창(test의 숨은 창)은 싣지 않는다. 화면의 점이 그 창을 가리키지 않아 엉뚱한 답이 된다.
+        //  - `captured`는 이 창이 그 포인터를 잡고 있는가다 (마우스 캡처, 또는 터치·펜 접촉의 암묵 캡처).
+        void annotate_pointer_event(raw_input_event& event, POINT screen, bool captured) const;
+
         // 터치·펜 `WM_POINTER*` 메시지다. 소비했으면 참이고, 아니면 기본 처리에 맡긴다.
         //  - 소비하기로 한 시퀀스는 처음부터 끝까지 이 길로 간다. 일부만 기본 처리에
         //    넘겨 OS의 제스처·마우스 변환을 섞지 않는다.

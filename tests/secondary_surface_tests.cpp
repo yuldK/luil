@@ -494,3 +494,165 @@ TEST_CASE("Win32 mouse capture loss cancels the owning surface through the input
         }
     }
 }
+
+TEST_CASE("A screen anchor puts the grabbed client point on the drop point", "[win32][window]")
+{
+    // 끌어 낸 탭을 놓은 화면 점에 그 탭이 오게 새 창을 놓는다. 논리 점은 그 점이 있는 모니터의 배율로 곱한다.
+    luil::window_screen_anchor anchor {};
+    anchor.screen = luil::screen_point { 1000, 500 };
+    anchor.client_x = 80.0f;
+    anchor.client_y = 18.0f;
+
+    SECTION("100%")
+    {
+        const RECT bounds { luil::win32::anchored_client_bounds(anchor, 600.0f, 400.0f, 96) };
+        REQUIRE(bounds.left == 920);
+        REQUIRE(bounds.top == 482);
+        REQUIRE(bounds.right - bounds.left == 600);
+        REQUIRE(bounds.bottom - bounds.top == 400);
+    }
+
+    SECTION("150%")
+    {
+        const RECT bounds { luil::win32::anchored_client_bounds(anchor, 600.0f, 400.0f, 144) };
+        REQUIRE(bounds.left == 880);
+        REQUIRE(bounds.top == 473);
+        REQUIRE(bounds.right - bounds.left == 900);
+        REQUIRE(bounds.bottom - bounds.top == 600);
+    }
+
+    SECTION("왼쪽 모니터의 음수 좌표")
+    {
+        anchor.screen = luil::screen_point { -1500, -200 };
+        const RECT bounds { luil::win32::anchored_client_bounds(anchor, 600.0f, 400.0f, 192) };
+        REQUIRE(bounds.left == -1660);
+        REQUIRE(bounds.top == -236);
+    }
+}
+
+TEST_CASE("An independent window stands on the taskbar by itself", "[win32][window]")
+{
+    REQUIRE((luil::win32::secondary_extended_style(true) & WS_EX_APPWINDOW) != 0);
+    REQUIRE(luil::win32::secondary_extended_style(false) == 0);
+}
+
+TEST_CASE("A Win32 placement becomes the placement the app stores", "[win32][window]")
+{
+    WINDOWPLACEMENT recorded {};
+    recorded.length = sizeof(recorded);
+    recorded.rcNormalPosition = RECT { 100, 50, 900, 650 };
+
+    SECTION("통상")
+    {
+        recorded.showCmd = SW_SHOWNORMAL;
+        const luil::window_placement value { luil::win32::placement_from(recorded) };
+        REQUIRE(value == luil::window_placement { 100, 50, 800, 600, false, false });
+    }
+
+    SECTION("최대화도 복원 사각형을 싣는다")
+    {
+        recorded.showCmd = SW_SHOWMAXIMIZED;
+        const luil::window_placement value { luil::win32::placement_from(recorded) };
+        REQUIRE(value == luil::window_placement { 100, 50, 800, 600, true, false });
+    }
+
+    SECTION("최대화로 돌아갈 최소화는 최대화다")
+    {
+        recorded.showCmd = SW_SHOWMINIMIZED;
+        recorded.flags = WPF_RESTORETOMAXIMIZED;
+        REQUIRE(luil::win32::placement_from(recorded).maximized);
+        recorded.flags = 0;
+        REQUIRE(luil::win32::placement_from(recorded).maximized == false);
+    }
+}
+
+namespace {
+    struct placement_seen
+    {
+        luil::window_placement value {};
+    };
+
+    struct placement_close
+    {};
+
+    // 보조 창이 알린 배치를 받아 적는 logic이다.
+    class placement_driver final : public luil::logic_driver
+    {
+    public:
+        void handle(luil::app_message message) override
+        {
+            if (const auto* const seen { message.get<placement_seen>() }; seen != nullptr)
+            {
+                last = seen->value;
+                ++reports;
+            }
+            if (message.get<placement_close>() != nullptr)
+                closed.store(true);
+        }
+        [[nodiscard]] std::shared_ptr<const luil::ui_frame> make_frame() override
+        {
+            return std::make_shared<luil::ui_frame>();
+        }
+        [[nodiscard]] luil::app_message make_close_message() override
+        {
+            return luil::app_message { placement_close {} };
+        }
+        [[nodiscard]] bool shutdown_completed() const override
+        {
+            return closed.load();
+        }
+        std::atomic<int> reports { 0 };
+        luil::window_placement last {};
+        std::atomic<bool> closed { false };
+    };
+} // namespace
+
+TEST_CASE("A secondary window reports its placement when moving ends and when it maximizes", "[win32][window]")
+{
+    placement_driver driver {};
+    luil::app_host host { {}, driver, nullptr };
+    fake_surface_context context {};
+    context.input_host = &host;
+    luil::win32::secondary_surface surface { context, u8"document" };
+
+    luil::win32::ui_window source {};
+    source.id = u8"document";
+    source.tree = tool_tree(u8"document");
+    source.placement = [](const luil::window_placement& value) { return luil::app_message { placement_seen { value } }; };
+    REQUIRE(surface.adopt(source));
+    const test_window window { surface, true };
+    REQUIRE(window.handle() != nullptr);
+
+    const auto wait_for = [&driver](const int count) {
+        const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+        while (driver.reports.load() < count && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
+        REQUIRE(driver.reports.load() == count);
+    };
+
+    // 이동·크기 조절의 끝이다. 숨은 창의 실제 사각형이 그대로 실린다.
+    SendMessageW(window.handle(), WM_EXITSIZEMOVE, 0, 0);
+    wait_for(1);
+    REQUIRE(driver.last.width == 400);
+    REQUIRE(driver.last.height == 300);
+    REQUIRE(driver.last.maximized == false);
+    REQUIRE(driver.last.fullscreen == false);
+
+    // 크기를 끄는 동안의 `SIZE_RESTORED`는 전환이 아니다.
+    SendMessageW(window.handle(), WM_SIZE, SIZE_RESTORED, MAKELPARAM(400, 300));
+    SendMessageW(window.handle(), WM_EXITSIZEMOVE, 0, 0);
+    wait_for(2);
+
+    // 최대화 전환은 끝을 기다리지 않고 알린다 (값은 그 순간 Win32가 기록한 배치다).
+    SendMessageW(window.handle(), WM_SIZE, SIZE_MAXIMIZED, MAKELPARAM(400, 300));
+    wait_for(3);
+
+    // 알릴 곳을 떼면 아무것도 오지 않는다.
+    source.placement = nullptr;
+    static_cast<void>(surface.adopt(source));
+    surface.post_placement();
+    SendMessageW(window.handle(), WM_EXITSIZEMOVE, 0, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds { 20 });
+    REQUIRE(driver.reports.load() == 3);
+    host.shutdown();
+}

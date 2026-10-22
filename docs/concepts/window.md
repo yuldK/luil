@@ -52,7 +52,7 @@ config.initial_placement = saved_placement;
 
 전체 화면은 **테두리 없는 창**이다. 제시가 DirectComposition 합성 swap chain을 지나므로 독점 전체 화면(exclusive fullscreen)은 설 수 없다 — 합성 swap chain은 `SetFullscreenState`를 받지 못한다. 그래서 유일하게 가능한 길인 "`MONITORINFO::rcMonitor`를 그대로 덮는 창"을 구현한다. rcWork를 쓰는 다른 계산(최대화 한계, popup 다듬기, 보조 창 초기 배치)과 달리 여기만 rcMonitor를 목표로 삼는다.
 
-**주 창 전용이다.** 배치 저장·복원과 같은 범위이며 보조 창과 popup은 대상이 아니다. 앱은 [`ui_command::window_toggle_fullscreen`](../../include/luil/ui/ui_events.h)만 내고 어느 모니터를 덮을지, 나올 때 어디로 돌아갈지는 UI thread가 든다.
+**주 창 전용이다.** 보조 창(소유된 창·독립 창)과 popup은 대상이 아니다. 보조 창도 배치 보고·복원은 받지만([여러 top-level window](../multi-window-design.md)) 화면을 덮는 창이 여럿이면 어느 것이 덮는지가 앱 상태 밖에서 갈리므로 전체 화면은 주 창에만 둔다. 앱은 [`ui_command::window_toggle_fullscreen`](../../include/luil/ui/ui_events.h)만 내고 어느 모니터를 덮을지, 나올 때 어디로 돌아갈지는 UI thread가 든다.
 
 창이 지금 어떤 모습인지는 [`window_display_mode`](../../src/win32/window_mode.h) 한 값이다. 창 스타일, 비클라이언트 판정, `WM_GETMINMAXINFO`의 최대화 크기, DWM 프레임이 모두 이 값을 본다. 특히 **스타일은 버튼 집합과 모드를 함께 받는 하나의 계산**이다. `caption_surface::set_caption`이 버튼이 바뀔 때마다 `GWL_STYLE`을 통째로 다시 쓰기 때문에, 전체 화면이 스타일을 나중에 덧칠하는 방식이면 caption이 바뀌는 아무 frame에서나 그 덧칠이 지워진다.
 

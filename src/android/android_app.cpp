@@ -1045,8 +1045,8 @@ namespace luil::android {
                 for (const ui_command command : host_->take_ui_commands())
                 {
                     // 창 하나가 화면을 덮으므로 최소화·최대화·전체 화면은 뜻이 없다.
-                    // 닫기는 Activity를 끝낸다.
-                    if (command == ui_command::window_close)
+                    // 닫기와 끝내기는 Activity를 끝낸다 (창이 하나라 둘이 같다).
+                    if (command == ui_command::window_close || command == ui_command::application_exit)
                         finish();
                     else if (command == ui_command::text_edit_menu)
                         open_edit_menu();
@@ -1499,7 +1499,7 @@ namespace luil::android {
             {
                 if (auto* const message { std::get_if<app_message>(&action) }; message != nullptr && message->empty() == false)
                     host_->post_app_message(std::move(*message));
-                else if (const auto* const command { std::get_if<ui_command>(&action) }; command != nullptr && *command == ui_command::window_close)
+                else if (const auto* const command { std::get_if<ui_command>(&action) }; command != nullptr && (*command == ui_command::window_close || *command == ui_command::application_exit))
                     finish();
                 else if (const auto* const command { std::get_if<app_ui_command>(&action) }; command != nullptr && environment_.delegate != nullptr)
                     environment_.delegate->execute_app_ui_command(*host_, *command);

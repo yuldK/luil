@@ -1,9 +1,39 @@
 #include "win32/secondary_surface.h"
 
+#include "win32/dpi_scale.h"
+
 #include <algorithm>
 #include <utility>
 
 namespace luil::win32 {
+    RECT anchored_client_bounds(const window_screen_anchor& anchor, const float width, const float height, const std::uint32_t dpi) noexcept
+    {
+        const float scale { dpi_scale(static_cast<int>(dpi)) };
+        RECT bounds {};
+        bounds.left = anchor.screen.x - scaled_pixels(anchor.client_x, scale);
+        bounds.top = anchor.screen.y - scaled_pixels(anchor.client_y, scale);
+        bounds.right = bounds.left + scaled_pixels(width, scale);
+        bounds.bottom = bounds.top + scaled_pixels(height, scale);
+        return bounds;
+    }
+
+    DWORD secondary_extended_style(const bool independent) noexcept
+    {
+        return independent ? static_cast<DWORD>(WS_EX_APPWINDOW) : DWORD { 0 };
+    }
+
+    window_placement placement_from(const WINDOWPLACEMENT& placement) noexcept
+    {
+        window_placement value {};
+        value.x = placement.rcNormalPosition.left;
+        value.y = placement.rcNormalPosition.top;
+        value.width = placement.rcNormalPosition.right - placement.rcNormalPosition.left;
+        value.height = placement.rcNormalPosition.bottom - placement.rcNormalPosition.top;
+        // 최소화된 창도 돌아갈 상태가 최대화면 최대화로 알린다 (`WPF_RESTORETOMAXIMIZED`).
+        value.maximized = placement.showCmd == SW_SHOWMAXIMIZED || (placement.showCmd == SW_SHOWMINIMIZED && (placement.flags & WPF_RESTORETOMAXIMIZED) != 0);
+        return value;
+    }
+
     secondary_surface::secondary_surface(surface_context& context, std::u8string id) noexcept
         : caption_surface { context, std::move(id) }
     {}
@@ -48,6 +78,17 @@ namespace luil::win32 {
             return 0;
         }
         case WM_SIZE:
+            // 최대화 ↔ 복원 전환만 배치로 알린다. 끌어서 크기를 바꾸는 동안의 `SIZE_RESTORED`는 끝(`WM_EXITSIZEMOVE`)이
+            // 알린다 (주 창과 같은 규칙).
+            if (word_parameter == SIZE_MAXIMIZED || word_parameter == SIZE_RESTORED)
+            {
+                const bool maximized { word_parameter == SIZE_MAXIMIZED };
+                if (maximized != posted_maximized_)
+                {
+                    posted_maximized_ = maximized;
+                    post_placement();
+                }
+            }
             if (word_parameter != SIZE_MINIMIZED)
             {
                 // 크기 변경은 popup의 닫힘 계기다 (주 창과 같은 규칙).
@@ -61,6 +102,10 @@ namespace luil::win32 {
                 return 0;
             }
             break;
+        case WM_EXITSIZEMOVE:
+            // 이동·크기 조절이 끝난 자리다. 앱이 저장할 값을 알아야 한다.
+            post_placement();
+            return 0;
         case WM_CLOSE:
             // Alt+F4도 캡션 close처럼 닫자는 메시지만 낸다.
             // 창을 없애는 것은 다음 frame의 대조다.
@@ -86,6 +131,7 @@ namespace luil::win32 {
     {
         metrics_ = source.metrics;
         close_ = source.close;
+        placement_ = source.placement;
         close_requested_ = false;
         // 캡션과 최소 크기는 **창을 만들 때 한 번만** 실렸다. 그런데 그 값을 읽는
         // 자리는 매번 오는 OS 질문이다 — 비클라이언트 hit test(`WM_NCHITTEST`)와
@@ -112,6 +158,29 @@ namespace luil::win32 {
         const float scale { static_cast<float>(dpi_) / 96.0f };
         if (app_message message { metrics_(static_cast<float>(client.right - client.left), static_cast<float>(client.bottom - client.top), scale) }; message.empty() == false)
             host->post_app_message(std::move(message));
+    }
+
+    void secondary_surface::post_placement() noexcept
+    {
+        app_host* const host { context_.host() };
+        if (host == nullptr || placement_ == nullptr || window_ == nullptr)
+            return;
+        WINDOWPLACEMENT placement {};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(window_, &placement) == FALSE)
+            return;
+        const window_placement value { placement_from(placement) };
+        posted_maximized_ = value.maximized;
+        // 앱의 factory는 noexcept가 아니다. 창 메시지 처리 밖으로 새지 않게 여기서 거둔다.
+        try
+        {
+            if (app_message message { placement_(value) }; message.empty() == false)
+                host->post_app_message(std::move(message));
+        }
+        catch (...)
+        {
+            context_.report_error(u8"The window placement factory threw an exception.");
+        }
     }
 
     bool secondary_surface::execute_caption_button(const WPARAM hit)

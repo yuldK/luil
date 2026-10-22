@@ -43,6 +43,16 @@ namespace luil {
 
     [[nodiscard]] drag_ghost_label drag_ghost_label_of(const drag_payload& payload) noexcept;
 
+    // 포인터가 이 앱의 창 밖에 있는 동안 화면 위를 따라오는 끌기 그림의 크기다 (논리 픽셀).
+    // 플랫폼이 이 크기의 투명 창을 띄우고 아래 함수로 채운다 (multi-window-design.md).
+    inline constexpr float detached_drag_ghost_width { 160.0f };
+    inline constexpr float detached_drag_ghost_height { 28.0f };
+
+    // 창 밖 끌기 그림을 (0,0)부터 그린다 — 창 안의 ghost와 같은 상자에 "새 창" 글리프를 얹은 것이다.
+    //  - 그리기 문맥의 배율로 위 크기를 곱한 자리를 채운다. 바깥은 그리지 않으므로 투명하게 남는다.
+    //  - `custom_visual`인 끌기(출발 쪽이 자기 그림을 그린다)에는 플랫폼이 이 창을 띄우지 않는다.
+    void draw_detached_drag_ghost(draw_context& context, const drag_payload& payload);
+
     // 배치가 끝난 element tree다.
     // 게시 후 불변이며 UI thread(그리기), input thread(hit test),
     // UI thread의 동기 조회(caption NC 클릭)가 공유한다.
