@@ -25,6 +25,72 @@ namespace luil {
         [[nodiscard]] bool operator==(const ui_metrics&) const noexcept = default;
     };
 
+    // 팔레트의 역할 하나를 이름으로 가리킨다.
+    // 컴포넌트 스타일이 "어느 역할로 칠할지"를 값으로 고르는 자리다 — 색 자체가 아니라 역할이라 테마 전환과
+    // 고대비가 그대로 따라온다. 선택자(`std::function`)와 달리 비교되고 JSON에 적힌다.
+    //  - 바탕으로 칠할 만한 역할만 둔다. 글자·선 역할은 그 자리의 뜻이 정해져 있어 고를 일이 없다.
+    enum class palette_role
+    {
+        window_background,
+        surface_background,
+        input_background,
+        tooltip_background,
+        notice_background,
+        caption_background,
+        button_hover_background,
+        accent_soft,
+    };
+
+    // 역할이 그 팔레트에서 갖는 색이다.
+    [[nodiscard]] ui_color palette_color(const ui_color_palette& palette, palette_role role) noexcept;
+
+    // 탭 막대를 어떤 모양으로 그리는가다.
+    enum class tab_bar_variant
+    {
+        // 선택된 탭 바탕 + 아래 강조선이다 (처음부터의 모양).
+        underline,
+        // 선택된 탭을 아래 내용 영역과 한 판으로 잇는다. 위 모서리는 둥글고 아래 끝은 바깥으로 휜다.
+        connected,
+        // 탭을 세로 칸막이로 맞붙인다. 선택된 칸은 위 강조선을 긋고 내용 바탕으로 아래가 열린다.
+        flat,
+    };
+
+    // 탭의 닫기 단추를 언제 보이는가다. 숨어도 자리는 지켜 이름이 들썩이지 않는다.
+    enum class tab_close_visibility
+    {
+        always,
+        // 선택된 탭과 포인터가 올라간 탭에서만 보인다.
+        selected_or_hovered,
+    };
+
+    // 탭 상태 표시(`tab_indicator`)를 어디에 두는가다.
+    enum class tab_indicator_placement
+    {
+        // 아이콘의 오른쪽 아래 모서리다. 진행 중이면 아이콘을 감싸는 호다.
+        icon_corner,
+        // 닫기 단추 자리다. 포인터를 단추에 올리거나 초점이 가면 닫기 단추로 바뀐다.
+        close_slot,
+    };
+
+    // 탭 막대의 앱 스타일이다 (`ui_style::tab_bar`).
+    //  - 막대마다 config에 적지 않고 앱이 한 번 정하면 그 앱의 모든 탭 막대가 같은 모양이다. 한 막대만 달라야
+    //    하면 `tab_bar_config::style`이 통째로 덮는다.
+    //  - 값은 enum과 역할뿐이다 — 비교되고 JSON(`assets/style.json`의 `tabBar`)에 적힌다.
+    struct tab_bar_style
+    {
+        tab_bar_variant variant { tab_bar_variant::underline };
+        tab_close_visibility close_visibility { tab_close_visibility::always };
+        tab_indicator_placement indicator_placement { tab_indicator_placement::icon_corner };
+        // 이어지는 두 모양(`connected`·`flat`)의 막대 바탕과 선택된 탭 바탕이다.
+        //  - 선택된 탭 바탕은 막대 아래 내용 영역과 같은 역할이어야 한 판으로 이어 보인다.
+        //  - 두 역할이 같은 색이 되면(고대비는 창 바탕과 표면이 같다) 선택된 탭에 테를 둘러 선택을 남긴다.
+        //  - `underline`은 막대 바탕을 칠하지 않는다 (처음부터의 모양).
+        palette_role bar_background { palette_role::window_background };
+        palette_role selected_background { palette_role::surface_background };
+
+        [[nodiscard]] bool operator==(const tab_bar_style&) const noexcept = default;
+    };
+
     // 앱이 정하는 스타일이다 — 두 테마의 중립 색, accent tone, 치수.
     // 키 컬러(accent)와 테마 선호는 여기 없다. 그 둘은 사용자 설정(`appearance_settings`)이고,
     // 이것은 **앱의 것**이라 계층이 다르다: 설정이 바뀌어도 스타일은 그대로다.
@@ -38,6 +104,9 @@ namespace luil {
         neutral_color_palette light {};
         accent_tones tones {};
         ui_metrics metrics {};
+        // 컴포넌트 스타일이다. 컴포넌트마다 한 칸이고, 그 컴포넌트가 그리기에서 읽는다
+        // (`arrange_context::app_style`). 막대 config의 `style`이 비어 있으면 이 값이다.
+        tab_bar_style tab_bar {};
 
         // 테마의 중립 색이다.
         // 고대비는 중립 색을 쓰지 않으므로 dark를 돌려준다 — 부르는 쪽이 고대비를

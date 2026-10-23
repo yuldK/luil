@@ -62,16 +62,27 @@ namespace luil {
             return tone == badge_tone::error ? codicons::icon_error : codicons::icon_warning;
         }
 
+        // 알약이 글 앞에 그릴 글리프다 (없으면 0). 심각도는 앱의 글리프보다 앞선다 — 뜻을 고정하는 자리다.
+        [[nodiscard]] char32_t pill_glyph(const badge_tone tone, const char32_t glyph) noexcept
+        {
+            return badge_element::shows_glyph(tone) ? tone_glyph(tone) : glyph;
+        }
+
         [[nodiscard]] float positive_scale(const draw_context& context) noexcept
         {
             return context.scale > 0.0f ? context.scale : 1.0f;
         }
     } // namespace
 
-    float badge_pill_width_for(const float text_width, const bool has_text, const badge_tone tone, const float font_size) noexcept
+    ui_color badge_tone_color(const ui_color_palette& palette, const badge_tone tone) noexcept
+    {
+        return tone_color(palette, tone);
+    }
+
+    float badge_pill_width_for(const float text_width, const bool has_text, const badge_tone tone, const float font_size, const bool app_glyph) noexcept
     {
         float width { 2.0f * badge_padding };
-        const bool glyph { badge_element::shows_glyph(tone) };
+        const bool glyph { badge_element::shows_glyph(tone) || app_glyph };
         if (glyph)
             width += font_size;
         if (has_text)
@@ -84,7 +95,7 @@ namespace luil {
         return std::max(width, badge_element::height_for({ .font_size = font_size }));
     }
 
-    float badge_pill_width(const draw_context& context, const std::u8string_view text, const badge_tone tone, const float font_size)
+    float badge_pill_width(const draw_context& context, const std::u8string_view text, const badge_tone tone, const float font_size, const char32_t glyph)
     {
         const float scale { positive_scale(context) };
         float text_width { 0.0f };
@@ -93,10 +104,10 @@ namespace luil {
             const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(font_size, scale) };
             text_width = measure_text(text, font) / scale;
         }
-        return badge_pill_width_for(text_width, text.empty() == false, tone, font_size) * scale;
+        return badge_pill_width_for(text_width, text.empty() == false, tone, font_size, glyph != 0) * scale;
     }
 
-    void draw_badge_pill(draw_context& context, const rect_f& box, const std::u8string_view text, const badge_tone tone, const float font_size)
+    void draw_badge_pill(draw_context& context, const rect_f& box, const std::u8string_view text, const badge_tone tone, const float font_size, const char32_t app_glyph, const bool spinning)
     {
         if (box.width <= 0.0f || box.height <= 0.0f)
             return;
@@ -118,7 +129,8 @@ namespace luil {
         const SkRect inset { SkRect::MakeXYWH(box.x + scale / 2.0f, box.y + scale / 2.0f, box.width - scale, box.height - scale) };
         context.canvas.drawRRect(SkRRect::MakeRectXY(inset, radius, radius), border);
 
-        if (text.empty() && badge_element::shows_glyph(tone) == false)
+        const char32_t glyph { pill_glyph(tone, app_glyph) };
+        if (text.empty() && glyph == 0)
             return;
 
         const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(font_size, scale) };
@@ -126,11 +138,16 @@ namespace luil {
         const float padding { badge_padding * scale };
         float text_left { box.x + padding };
 
-        if (badge_element::shows_glyph(tone))
+        if (glyph != 0)
         {
             const float glyph_size { font_size * scale };
             const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), glyph_size };
-            draw_centered_glyph(context.canvas, tone_glyph(tone), { text_left, box.y, glyph_size, box.height }, glyph_font, foreground);
+            const rect_f glyph_box { text_left, box.y, glyph_size, box.height };
+            // 진행 중인 글리프만 돈다. 심각도 글리프는 돌지 않는다 — 경고는 진행이 아니다.
+            if (spinning && badge_element::shows_glyph(tone) == false && context.reduce_motion == false)
+                draw_spinning_glyph(context.canvas, glyph, glyph_box, glyph_font, foreground, context.now);
+            else
+                draw_centered_glyph(context.canvas, glyph, glyph_box, glyph_font, foreground);
             text_left += glyph_size + badge_glyph_gap * scale;
         }
 

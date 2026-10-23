@@ -294,5 +294,8 @@ namespace luil {
     //  - `surface`는 그릴 수 있는 표면 전체다 (`arrange_context::surface`). 비우면 자리 밖을 모른다.
     //  - `metrics`는 내용 크기를 재는 스타일 치수다 (`arrange_context::metrics`). 비우면 내장 스타일이다. 스타일을
     //    바꾼 앱이 그리기와 같은 치수를 준다.
-    [[nodiscard]] ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, float scale, const rect_f& surface = {}, const ui_metrics* metrics = nullptr);
+    //  - `style`은 컴포넌트가 배치에서 읽는 앱 스타일이다 (`arrange_context::style`). `metrics`를 비우고 `style`을 주면
+    //    그 스타일의 치수를 쓴다 — 스타일 하나를 넘기면 둘이 맞는다.
+    [[nodiscard]] ui_tree make_arranged_tree(
+        std::unique_ptr<ui_element> root, const rect_f& slot, float scale, const rect_f& surface = {}, const ui_metrics* metrics = nullptr, const ui_style* style = nullptr);
 } // namespace luil

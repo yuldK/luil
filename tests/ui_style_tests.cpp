@@ -56,6 +56,26 @@ TEST_CASE("The built-in style is the generated one and carries the documented de
     REQUIRE(luil::ui_metrics {}.small_font_size == 11.0f);
     REQUIRE(luil::ui_metrics {}.control_corner_radius == 3.0f);
     REQUIRE(luil::ui_metrics {}.row_corner_radius == 4.0f);
+    // 컴포넌트 스타일도 struct의 기본값(처음부터의 모양)과 같다.
+    REQUIRE(style.tab_bar == luil::tab_bar_style {});
+    REQUIRE(luil::tab_bar_style {}.variant == luil::tab_bar_variant::underline);
+    REQUIRE(luil::tab_bar_style {}.close_visibility == luil::tab_close_visibility::always);
+}
+
+TEST_CASE("A palette role names the color it carries in every theme", "[theme][style]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        REQUIRE(luil::palette_color(palette, luil::palette_role::window_background) == palette.window_background);
+        REQUIRE(luil::palette_color(palette, luil::palette_role::surface_background) == palette.surface_background);
+        REQUIRE(luil::palette_color(palette, luil::palette_role::input_background) == palette.input_background);
+        REQUIRE(luil::palette_color(palette, luil::palette_role::tooltip_background) == palette.tooltip_background);
+        REQUIRE(luil::palette_color(palette, luil::palette_role::notice_background) == palette.notice_background);
+        REQUIRE(luil::palette_color(palette, luil::palette_role::caption_background) == palette.caption.background);
+        REQUIRE(luil::palette_color(palette, luil::palette_role::button_hover_background) == palette.button_hover_background);
+        REQUIRE(luil::palette_color(palette, luil::palette_role::accent_soft) == palette.accent_soft);
+    }
 }
 
 TEST_CASE("A style answers the neutral palette by theme and folds high contrast onto dark", "[theme][style]")

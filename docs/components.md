@@ -45,6 +45,7 @@
 | 열 머리글이 있는 표 | `table_element` | [ui/table_element.h](../include/luil/ui/table_element.h) | [설명](table-design.md) |
 | 여러 항목 선택 규칙(기준점·범위·토글) | `item_selection`, `selection_pick`, `selection_move` | [ui/selection_model.h](../include/luil/ui/selection_model.h) | [설명](keyboard-selection-design.md) |
 | 탭 선택·닫기·재정렬·컨텍스트 메뉴 | `tab_bar_element` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](focus-group-design.md) |
+| 탭 모양·상태 표시·가운데 버튼 닫기·줄이기·한 탭씩 넘기기·견본 | `tab_bar_style`, `tab_indicator`, `tab_bar_preview` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](tab-bar-style-design.md) |
 | 시각적 테마·강조색 선택 | theme_picker_element, accent_picker_element | [ui/theme_picker_element.h](../include/luil/ui/theme_picker_element.h) | [사용 예](demo-guide.md) |
 | 독립 토글 버튼 | check_style::toggle_button | [ui/check_element.h](../include/luil/ui/check_element.h) | [사용 예](demo-guide.md) |
 | 메뉴 팝업 조립 | make_menu_popup | [app/menu_popup.h](../include/luil/app/menu_popup.h) | [사용 예](demo-guide.md) |

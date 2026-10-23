@@ -4,7 +4,9 @@
 #include "luil/ui/strip_element.h"
 #include "luil/ui/ui_element.h"
 
+#include <cstddef>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -25,8 +27,43 @@ namespace luil {
         //  - 비어 있으면 `text`를 읽는다. 그것도 비면(상태 점) 읽을 말이 없다 — 점의 뜻은 앱만 알므로,
         //    보조 기술에 알리려면 여기에 적는다.
         std::u8string description {};
+        // 글 앞에 붙일 앱의 글리프다 (codicon, 0이면 없다).
+        //  - neutral·accent에서만 쓴다. warning·error는 심각도 글리프가 정한다 — 경고의 모양을 앱이 바꾸면 같은
+        //    경고가 자리마다 다르게 보인다.
+        char32_t glyph { 0 };
+        // 그 글리프가 진행 중을 뜻해 돈다 (`tab_indicator_kind::busy`와 같은 규칙 — 움직임 줄이기면 멈춘다).
+        bool spinning { false };
 
         [[nodiscard]] bool operator==(const tab_badge&) const = default;
+    };
+
+    // 탭 상태 표시의 모양이다.
+    enum class tab_indicator_kind
+    {
+        // 채운 점이다 (저장하지 않은 변경 같은 것).
+        dot,
+        // 속 빈 고리다.
+        ring,
+        // 진행 중이다. 도는 호로 그린다 — 움직임 줄이기면 멈춘 호다.
+        busy,
+        // 앱이 고른 글리프다 (`tab_indicator::glyph`).
+        glyph,
+    };
+
+    // 탭 하나에 다는 작은 상태 표시다. 배지와 별개이고 둘을 함께 달 수 있다.
+    //  - 자리(아이콘 모서리·닫기 단추 자리)는 앱 스타일이 정한다 (`tab_bar_style::indicator_placement`).
+    //  - 색만으로 뜻을 말하지 않도록 모양(점·고리·호·글리프)이 먼저이고 tone은 그 위의 색이다.
+    struct tab_indicator
+    {
+        tab_indicator_kind kind { tab_indicator_kind::dot };
+        badge_tone tone { badge_tone::accent };
+        // `kind`가 `glyph`일 때의 글리프다 (codicon).
+        char32_t glyph { 0 };
+        // 보조 기술이 읽을 말이다. 배지의 `description`과 같은 규약으로 탭 이름 뒤에 붙어 읽힌다.
+        //  - 비어 있으면 읽을 말이 없다 — 표시의 뜻은 앱만 안다.
+        std::u8string description {};
+
+        [[nodiscard]] bool operator==(const tab_indicator&) const = default;
     };
 
     // 탭 하나의 설정이다.
@@ -41,6 +78,36 @@ namespace luil {
         bool closable { false };
         // 이름 뒤의 배지다 (개수·상태 점). 없으면 배지가 없다.
         std::optional<tab_badge> badge {};
+        // 상태 표시다. 없으면 표시가 없다.
+        std::optional<tab_indicator> indicator {};
+    };
+
+    // 넘칠 때 탭을 어떻게 넘기는가다.
+    enum class tab_overflow_mode
+    {
+        // 띠를 흘린다 (휠·터치 끌기·초점 되살리기). 처음부터의 동작이다.
+        scroll,
+        // 양 끝에 앞·뒤 단추를 두고 한 탭씩 넘긴다. 흘리는 길(터치 끌기·초점 되살리기)은 그대로 남는다.
+        step,
+    };
+
+    // 견본 막대다 (`tab_bar_config::preview`). 환경 설정에서 스타일과 상태 표시를 고를 때 그림만 보인다.
+    //  - 누름·hover·초점·끌기·접근 tree에서 모두 빠진다. 접근 tree에는 `name` 하나(그림)로만 선다.
+    //  - 상태를 키로 고정해 그린다 — 견본은 포인터가 없어도 "올라간 탭"을 보여야 한다.
+    struct tab_bar_preview
+    {
+        // 보조 기술이 읽을 견본의 이름이다 ("이어진 탭 견본"). 비면 접근 tree에서 빠진다.
+        std::u8string name {};
+        // 포인터가 올라간 것처럼 그릴 탭이다.
+        std::u8string hovered {};
+        // 눌린 것처럼 그릴 탭이다.
+        std::u8string pressed {};
+        // 키보드 초점 테를 두른 것처럼 그릴 탭이다.
+        std::u8string focused {};
+        // 닫기 단추에 포인터가 올라간 것처럼 그릴 탭이다. 상태 표시가 닫기 단추 자리에 있으면 단추로 바뀐다.
+        std::u8string close_hovered {};
+
+        [[nodiscard]] bool operator==(const tab_bar_preview&) const = default;
     };
 
     // 탭 키 하나를 담은 메시지다 (선택·닫기).
@@ -70,6 +137,35 @@ namespace luil {
         std::u8string selected {};
         // 탭 한 개의 폭이다 (논리 픽셀).
         float tab_width { 160.0f };
+        // 자리가 모자랄 때 줄일 수 있는 최소 폭이다 (논리 픽셀). 0이거나 `tab_width` 이상이면 줄이지 않는다.
+        //  - 모자라면 모든 탭을 같은 폭으로 `tab_width`에서 이 값까지 줄이고, 그래도 넘칠 때만 넘침이 시작된다.
+        //  - 줄어든 폭에서는 배지와 상태 표시가 먼저 자리를 갖고 이름이 말줄임된다.
+        //  - 지금 실제 폭은 `tab_bar_element::tab_width()`로 묻는다.
+        float min_tab_width { 0.0f };
+        // 이 막대만의 스타일이다. 비어 있으면 앱 스타일(`ui_style::tab_bar`)을 따른다.
+        //  - 앱 안의 모든 탭 막대를 한 모양으로 하려면 막대마다 적지 말고 `ui_style`에 한 번 적는다 (공용 스타일).
+        //    여기는 견본 막대처럼 한 막대만 달라야 하는 자리다.
+        std::optional<tab_bar_style> style {};
+        // 가운데 버튼으로 탭을 닫는다 (`close` factory가 있고 닫을 수 있는 탭). 선택은 바뀌지 않는다.
+        bool middle_click_close { true };
+        // 넘칠 때 탭을 넘기는 방식이다.
+        tab_overflow_mode overflow_mode { tab_overflow_mode::scroll };
+        // 앞·뒤 단추의 tooltip이자 보조 기술이 읽는 이름이다 (`overflow_tooltip`과 같은 규약 — 비면 접근 tree에서 빠진다).
+        //  - 단추는 `scroll` factory가 있어야 선다 (넘기는 것도 스크롤 메시지다).
+        std::u8string step_back_tooltip {};
+        std::u8string step_forward_tooltip {};
+        // 휠(세로·가로) 한 칸에 탭 하나씩 넘긴다. 잘게 오는 휠은 쌓았다가 탭 경계에 맞춘다.
+        //  - `scroll` factory가 있어야 한다. 넘기는 방식(`overflow_mode`)과 따로 켠다.
+        bool wheel_steps { false };
+        // 막대 끝에 따라붙는 꼬리 element다 (새 탭 단추 같은 것). 탭이 적으면 마지막 탭 바로 뒤에 서고, 넘치면 오른쪽
+        // 끝에 고정된다.
+        //  - factory다 — config를 값으로 복사할 수 있게 둔다. element는 막대를 지을 때 한 번 짓는다.
+        //  - 꼬리는 막대의 초점 묶음(←/→) 안에 선다.
+        std::function<std::unique_ptr<ui_element>()> trailing {};
+        // 꼬리의 폭이다 (논리 픽셀).
+        float trailing_width { 0.0f };
+        // 있으면 견본 막대다 — 그림만 남고 동작은 하나도 서지 않는다 (`tab_bar_preview`).
+        std::optional<tab_bar_preview> preview {};
         // 넘칠 때의 가로 스크롤 값이다 (논리 픽셀, 앱 상태).
         // 휠을 이 값으로 옮길지는 앱 정책이 정한다. 범위 밖 값은 arrange가 다듬는다.
         float scroll_offset { 0.0f };
@@ -114,19 +210,32 @@ namespace luil {
         ui_cursor outside_cursor { ui_cursor::inherit };
     };
 
-    // 넘침 메뉴 버튼의 폭이다 (논리 픽셀).
+    // 넘침 메뉴 버튼의 폭이다 (논리 픽셀). 앞·뒤 단추도 같은 폭이다.
     inline constexpr float tab_overflow_width { 28.0f };
+
+    // 한 탭씩 넘기는 스크롤 값이다 (논리 픽셀). 앞·뒤 단추와 칸 휠이 같은 식을 쓴다.
+    //  - 앞으로(`steps` > 0)는 오른쪽 끝에 걸친 탭이 온전히 드러나는 자리, 뒤로는 왼쪽 끝에 걸친 탭이 온전히
+    //    드러나는 자리다. 한 칸마다 탭 경계 하나를 넘는다.
+    //  - `viewport`는 띠의 폭, `maximum`은 흘릴 수 있는 최대치다. 답은 [0, maximum] 안이다.
+    [[nodiscard]] float tab_step_offset(float offset, float tab_width, float viewport, float maximum, int steps) noexcept;
+
+    // 자리에 맞춘 탭 폭이다 (논리 픽셀). 다 들어가면 `tab_width`, 모자라면 같은 폭으로 줄이되 `min_tab_width` 밑으로는
+    // 줄이지 않는다. `available`은 탭이 쓸 수 있는 폭이다 (꼬리를 뗀 막대 폭).
+    [[nodiscard]] float fitted_tab_width(std::size_t count, float tab_width, float min_tab_width, float available) noexcept;
 
     // 가로로 탭을 늘어놓는 막대다.
     // 선택·닫기·순서·컨텍스트 메뉴는 앱 상태이고 element는 메시지만 낸다.
     // 넘치는 탭은 가로 스크롤로 가리고(잘린 탭은 눌리지도 않는다), 내용 영역은 앱 몫이다.
     //
-    // 조립은 **가로 stack 두 칸**이다: 흘리는 띠(`strip_element`) + 넘침 버튼.
-    // 띠 안에는 탭을 늘어놓는 가로 `stack_element`가 있다.
-    //  - 흘리기·잘라내기·다듬기를 막대가 스스로 하지 않으므로 그 넷을 한 자리에
-    //    빠짐없이 갖춘다 (stack-expressiveness-design.md).
-    //  - **넘침 판정은 버튼 폭을 떼기 전의 slot 폭으로** 한다. 뗀 뒤에 재면
+    // 조립은 가로 한 줄이다: [앞] 흘리는 띠(`strip_element`) [뒤] [넘침 메뉴] [꼬리].
+    // 띠 안에는 탭을 같은 폭으로 늘어놓는 레인이 있다.
+    //  - 흘리기·잘라내기·다듬기는 띠의 몫이다 (stack-expressiveness-design.md).
+    //  - **넘침 판정은 단추 폭을 떼기 전의 slot 폭으로** 한다. 뗀 뒤에 재면
     //    "버튼이 있어서 넘친다"가 되어 판정이 자기참조가 된다.
+    //  - 탭 폭은 자리에 달려(`min_tab_width`) 배치에서 정한다. 그래서 레인은 고정 길이 stack이 아니라 막대가 폭을
+    //    정해 주는 레인이다.
+    //
+    // 모양은 앱 스타일(`ui_style::tab_bar`)이나 `tab_bar_config::style`이 정한다 (tab-bar-style-design.md).
     class tab_bar_element final : public ui_element
     {
     public:
@@ -137,6 +246,12 @@ namespace luil {
         [[nodiscard]] float maximum_scroll() const noexcept;
         // arrange가 범위 안으로 다듬은 스크롤 값이다 (논리 픽셀).
         [[nodiscard]] float scroll_offset() const noexcept;
+        // 지금 실제 탭 폭이다 (논리 픽셀). arrange 뒤에 유효하다 (`min_tab_width`로 줄었을 수 있다).
+        [[nodiscard]] float tab_width() const noexcept;
+        // 넘치고 있는가다. arrange 뒤에 유효하다.
+        [[nodiscard]] bool overflowing() const noexcept;
+        // 한 탭씩 넘기는 스크롤 변화량이다 (논리 픽셀, `tab_step_offset`). arrange 뒤에 유효하다.
+        [[nodiscard]] float step_delta(int steps) const noexcept;
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
@@ -150,10 +265,23 @@ namespace luil {
 
         tab_bar_config config_ {};
         strip_element* strip_ { nullptr };
+        // 탭을 같은 폭으로 늘어놓는 레인이다.
+        ui_element* lane_ { nullptr };
         // 마지막 탭이다. 탭이 없으면 nullptr다.
         const ui_element* last_tab_ { nullptr };
         // 넘침 액션이 없으면 nullptr다.
         ui_element* overflow_ { nullptr };
+        // 한 탭씩 넘기는 앞·뒤 단추다. 넘기는 방식이 `step`이고 `scroll` factory가 있을 때만 선다.
+        ui_element* step_back_ { nullptr };
+        ui_element* step_forward_ { nullptr };
+        // 꼬리 element다. 없으면 nullptr다.
+        ui_element* trailing_ { nullptr };
+        // 배치가 고른 스타일이다 (`config_.style` 또는 앱 스타일). 끝의 단추들이 이 자리를 가리킨다.
+        tab_bar_style style_ {};
         float maximum_scroll_ { 0.0f };
+        float tab_width_ { 0.0f };
+        // 띠의 폭이다 (논리 픽셀).
+        float viewport_ { 0.0f };
+        bool overflowing_ { false };
     };
 } // namespace luil

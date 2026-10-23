@@ -129,6 +129,13 @@ namespace luil {
         table_editor,
         // 가상 목록 행 앞에 선 펼침 단추다. owner는 항목 키다.
         virtual_list_expander,
+        // 탭 막대가 넘칠 때 양 끝에 서는 앞·뒤 단추다 (`tab_overflow_mode::step`). owner는 막대의 owner다.
+        //  - 끝에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 모두 밀린다.
+        tab_step_back,
+        tab_step_forward,
+        // 견본 막대(`tab_bar_config::preview`)의 탭이다. 동작이 없는 그림이라 탭(`tab`)과 kind가 다르다 — 탭을 kind로
+        // 찾는 앱 코드가 견본을 집지 않는다. owner는 막대 owner와 항목 키를 함께 담아 견본 막대가 여럿이어도 겹치지 않는다.
+        tab_sample,
         // 앱이 정의하는 kind는 이 값부터다.
         // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         first_application_kind = 64,

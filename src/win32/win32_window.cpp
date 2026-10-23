@@ -177,6 +177,14 @@ namespace luil::win32 {
             return FALSE != SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(high_contrast), &high_contrast, 0) && (high_contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
         }
 
+        // 움직임 줄이기다. 설정 앱의 "애니메이션 효과"를 끄면 클라이언트 영역 애니메이션이 꺼진다.
+        //  - 읽지 못하면 움직임을 둔다 (지금까지의 그림).
+        [[nodiscard]] bool read_reduce_motion() noexcept
+        {
+            BOOL animation { TRUE };
+            return SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animation, 0) != FALSE && animation == FALSE;
+        }
+
         // OS의 글꼴 다듬기 설정이다.
         // ClearType이면 LCD 서브픽셀, 아니면(접근성으로 껐거나 표준 다듬기) 회색조다.
         [[nodiscard]] text_render_quality read_text_render_quality() noexcept
@@ -1030,6 +1038,7 @@ namespace luil::win32 {
                     // popup·보조 창 표면도 새 팔레트로 다시 칠한다.
                     system_prefers_light_ = read_system_prefers_light_theme();
                     high_contrast_ = read_high_contrast_enabled();
+                    reduce_motion_ = read_reduce_motion();
                     set_text_render_quality(read_text_render_quality());
                     invalidate_all_surfaces();
                     return 0;
@@ -1608,7 +1617,7 @@ namespace luil::win32 {
             //    그때는 모든 표면이 발행본을 자기 것으로 거른 값으로 답한다.
             void arm_update_timer(const std::u8string* const caller, const interaction_snapshot* const interaction) noexcept
             {
-                const update_context context { std::chrono::steady_clock::now() };
+                const update_context context { .now = std::chrono::steady_clock::now(), .reduce_motion = reduce_motion_ };
                 std::vector<surface_update_deadline> deadlines {};
                 deadlines.reserve(1 + popups_.size() + windows_.size());
                 // 부르는 표면의 것은 이미 손에 있다 (거기에만 caption hover가 얹혀
@@ -1687,6 +1696,7 @@ namespace luil::win32 {
                 state.accent_id = appearance.accent_id;
                 // 앱이 실은 스타일이다. frame은 이 렌더 동안 살아 있으므로 포인터로 족하다.
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
+                state.reduce_motion = reduce_motion_;
                 if (state.theme == color_theme::high_contrast)
                     state.high_contrast = read_high_contrast_colors();
                 // 그리기와 창 테두리·웹뷰 바닥이 **같은 팔레트**를 본다.
@@ -2490,6 +2500,7 @@ namespace luil::win32 {
             std::optional<std::pair<BOOL, COLORREF>> frame_theme_ {};
             // 고대비 여부의 캐시다 (WM_SETTINGCHANGE가 갱신).
             bool high_contrast_ { read_high_contrast_enabled() };
+            bool reduce_motion_ { read_reduce_motion() };
             // update timer가 깨울 표면들이다.
             // "그 시각을 답한 표면"을 timer와 함께 들고 있는 것이 표면별 다시 그리기의
             // 절반이다 — 나머지 절반은 frame 대조가 낸다 (rendering.md).

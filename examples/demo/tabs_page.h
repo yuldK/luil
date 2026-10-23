@@ -2,10 +2,12 @@
 
 // 탭 페이지다: 선택·닫기·끌어서 순서 바꾸기·가로 스크롤과,
 // 넘칠 때 나타나는 넘침 메뉴 버튼(popup으로 탭 목록을 띄운다),
-// 우클릭으로 여는 탭 컨텍스트 메뉴.
+// 우클릭으로 여는 탭 컨텍스트 메뉴, 가운데 버튼 닫기.
+// 탭 막대의 모양·닫기 단추·상태 표시·넘침 방식을 고르고 견본 막대로 미리 본다.
 
 #include "demo/common.h"
 #include "luil/app/app_host.h"
+#include "luil/theme/ui_style.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
 
@@ -78,6 +80,13 @@ namespace demo {
         float scale { 1.0f };
     };
 
+    // 탭 막대 설정 한 칸을 바꿨다 (`setting`은 칸 이름, `value`는 고른 값).
+    struct tab_setting_intent
+    {
+        std::u8string setting {};
+        std::u8string value {};
+    };
+
     class tabs_page
     {
     public:
@@ -125,6 +134,16 @@ namespace demo {
 
         void reveal_selected();
         void run_command(const std::u8string& command, const std::u8string& key);
+        // 모양·닫기 단추·상태 표시를 고르는 줄과 그 견본이다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_settings() const;
+        // 이번 build의 탭 폭이다 (논리 픽셀, 줄이기를 켜면 자리에 맞춰 준다). 고른 탭을 레인 안으로 들일 때 쓴다.
+        float tab_width_ { 150.0f };
+        // 이 페이지가 앱 스타일로 쓰는 값이다. 탭 막대는 config에 모양을 적지 않고 배치 문맥에서 이 값을 읽는다 —
+        // 본 막대와 분리된 창의 막대가 한 번 고른 모양으로 함께 바뀐다 (공용 스타일).
+        luil::ui_style style_ { luil::default_ui_style() };
+        // 한 탭씩 넘기기와 자리가 모자라면 줄이기다.
+        bool step_overflow_ { false };
+        bool shrink_ { false };
         std::vector<tab_entry> closed_ {};
         std::vector<detached_tab> detached_ {};
         float lane_width_ { 0.0f };

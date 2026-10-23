@@ -63,6 +63,7 @@
 - [시트와 서랍](sheet-design.md)
 - [문자열·커스텀·마크다운 툴팁](tooltip-design.md)
 - [Caption 버튼 구성](caption-button-design.md)
+- [탭 막대 스타일과 공용 스타일](tab-bar-style-design.md)
 - [모바일 앱 바](app-bar-design.md)
 
 ## 플랫폼과 콘텐츠

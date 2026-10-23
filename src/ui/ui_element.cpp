@@ -20,6 +20,11 @@ namespace luil {
         pointer_focus_target_ = std::move(target);
     }
 
+    const ui_style& arrange_context::app_style() const noexcept
+    {
+        return style != nullptr ? *style : default_ui_style();
+    }
+
     bool rect_f::contains(const float point_x, const float point_y) const noexcept
     {
         return point_x >= x && point_x < x + width && point_y >= y && point_y < y + height;
@@ -401,6 +406,16 @@ namespace luil {
     void ui_element::set_hit_opaque(const bool value) noexcept
     {
         hit_opaque_ = value;
+    }
+
+    bool ui_element::hover_only() const noexcept
+    {
+        return hover_only_;
+    }
+
+    void ui_element::set_hover_only(const bool value) noexcept
+    {
+        hover_only_ = value;
     }
 
     void ui_element::set_tab_stop(const bool value) noexcept

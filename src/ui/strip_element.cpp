@@ -18,6 +18,11 @@ namespace luil {
         add_child(std::move(content));
     }
 
+    void strip_element::set_content_width(const float width) noexcept
+    {
+        config_.content_width = width;
+    }
+
     float strip_element::maximum_scroll() const noexcept
     {
         return maximum_scroll_;
@@ -62,6 +67,7 @@ namespace luil {
                 source.axis = scroll_axis::horizontal;
                 source.at_start = config_.scroll_offset <= 0.0f;
                 source.at_end = config_.scroll_offset >= maximum_scroll_;
+                source.step = config_.step;
                 set_scroll_source(std::move(source));
             }
             else

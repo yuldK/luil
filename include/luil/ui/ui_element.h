@@ -66,9 +66,13 @@ namespace luil {
         left_click,
         right_click,
         double_click,
+        // 가운데 버튼 클릭이다. 같은 element 위에서 누르고 뗐을 때만 서고, 끌기 문턱을 넘어 움직이면 취소된다.
+        //  - 선택·초점·끌기·연타 판정을 건드리지 않는다 — 가운데 버튼은 그 자리의 부가 동작(탭 닫기)이다.
+        //  - 터치에는 가운데 버튼이 없다.
+        middle_click,
     };
 
-    inline constexpr std::size_t ui_trigger_count { 3 };
+    inline constexpr std::size_t ui_trigger_count { 4 };
 
     // 액션 실행 시점의 문맥이다.
     // 좌표는 물리 픽셀(창 좌표)이다.
@@ -517,6 +521,12 @@ namespace luil {
         bool at_start { false };
         // 내용이 끝(맨 아래·맨 오른쪽)에 있다. 관성 스크롤이 이 방향에서 멈춘다.
         bool at_end { false };
+        // 휠을 칸 단위로 넘기는 메시지다 (`steps`는 넘길 칸 수, 양수 = 앞으로). 비어 있으면 휠은 `scroll`로 양만큼 흘린다.
+        //  - 휠 한 칸(120)마다 한 칸이다. 터치패드처럼 잘게 오는 휠은 controller가 쌓아 두었다가 한 칸이 차면 낸다 —
+        //    tree는 frame마다 새로 서므로 쌓는 자리는 element가 아니라 controller다.
+        //  - 칸을 항목 경계에 맞춘 변화량으로 바꾸는 것은 이 메시지를 지은 쪽이다 (탭 막대는 다음 탭이 온전히 드러나는
+        //    자리로 옮긴다). 그래서 `scroll`과 따로다 — 터치 끌기와 초점 되살리기는 지금처럼 양으로 흘린다.
+        std::function<input_action(int steps)> step {};
         // 절대 자리(`scroll_to`)는 여기 두지 않는다. 휠도 되살리기도 변화량으로만
         // 말하고, 절대 자리를 읽는 것은 보조 기술뿐이라 그 값은 그것을 실제로
         // 내주는 자리(`scrollbar_config::scroll_to`)에 있다 — 아무도 읽지 않는
@@ -613,9 +623,19 @@ namespace luil {
         //    넘겨야 잰 폭과 그린 글이 맞는다 — 스타일을 바꾼 앱은 `make_arranged_tree`에 같은 치수를 준다.
         //  - 포인터만 들고 배치가 끝나면 잊는다 (`measurer`와 같다).
         const ui_metrics* metrics { nullptr };
+        // 앱의 스타일 전체다. 컴포넌트가 자기 칸(`ui_style::tab_bar` 같은 것)을 **배치에서** 읽어 그 모양으로
+        // 자리를 잡고 그린다 (tab-bar-style-design.md의 공용 스타일).
+        //  - 배치에서 읽는 까닭은 모양이 자리와 입력 규칙까지 정하기 때문이다 — 닫기 단추를 숨기는 모양은 터치의
+        //    탭이 그 단추를 지나가게 한다. 그림만 바꾸는 값이라도 같은 자리에서 읽어 한 tree가 한 스타일을 본다.
+        //  - 비어 있으면 내장 스타일이다 (`default_ui_style`, LUIL_STYLE로 바꾼 값). 읽을 때는 `app_style()`로 묻는다.
+        //  - 스타일을 실행 시점에 바꾸는 앱은 `ui_frame::style`(팔레트)과 `make_arranged_tree`(이것)에 같은 값을 준다.
+        //  - 포인터만 들고 배치가 끝나면 잊는다 (`metrics`와 같다).
+        const ui_style* style { nullptr };
 
         // 이 배치가 쓸 측정기다.
         [[nodiscard]] const text_measurer& measure_text() const;
+        // 이 배치가 쓸 앱 스타일이다 (비었으면 내장 스타일).
+        [[nodiscard]] const ui_style& app_style() const noexcept;
         // 이 배치로 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
         //  - 머리글에 둔다. 묻기만 하는 컨테이너가 기본 측정기(글꼴 등록부)까지 링크로 끌어오지 않는다
         //    (`text_measurer.cpp`의 경계).
@@ -631,7 +651,7 @@ namespace luil {
         //  - 문맥에 새 값이 생겨도 모든 부모가 저절로 잇는다.
         [[nodiscard]] arrange_context for_child(const rect_f& child_slot) const noexcept
         {
-            return { child_slot, scale, scroll_offset, surface, measurer, metrics };
+            return { child_slot, scale, scroll_offset, surface, measurer, metrics, style };
         }
 
         // 표면 전체를 아는가다 (넓이가 있는 `surface`).
@@ -685,6 +705,10 @@ namespace luil {
         // 스타일의 치수다 (`ui_style::metrics`). 그리기 안에 박혀 있던 글자 크기·모서리가
         // 여기서 온다. 기본값은 내장 스타일과 같아 채우지 않은 context도 지금까지의 그림이다.
         ui_metrics metrics {};
+        // 시스템의 움직임 줄이기 설정이다 (Win32는 클라이언트 영역 애니메이션을 끈 것).
+        //  - 참이면 돌아가는 표시가 멈춘 그림으로 선다. `update_context::reduce_motion`과 같은 값이라야 한다 —
+        //    멈춘 그림에 다음 frame을 청하면 헛도는 timer만 남는다.
+        bool reduce_motion { false };
     };
 
     // update 판정의 문맥이다.
@@ -693,6 +717,8 @@ namespace luil {
     struct update_context
     {
         std::chrono::steady_clock::time_point now {};
+        // 움직임 줄이기다 (`draw_context::reduce_motion`). 참이면 돌아가는 표시는 다음 frame을 청하지 않는다.
+        bool reduce_motion { false };
     };
 
     struct drag_visual
@@ -966,6 +992,11 @@ namespace luil {
         // 위에 떠 있는 표면(메뉴·토스트·scrim)의 빈 자리 클릭이 아래
         // element로 새지 않게 한다 — 흡수만 하고 아무 일도 하지 않는다.
         [[nodiscard]] bool hit_opaque() const noexcept;
+        // 참이면 포인터가 올라가 있을 때만 그려지는 부품이다 (탭의 숨은 닫기 단추).
+        //  - 마우스·펜은 누르기 전에 늘 올라가므로 보이는 것을 누른다. 터치에는 올림이 없어 손가락이 보이지 않는
+        //    부품을 누르게 되므로, 터치의 탭은 이것을 지나 **감싼 가장 가까운 누를 수 있는 조상**이 받는다.
+        //  - 접근 tree와 키보드에서는 그대로 선다 — 보이지 않을 뿐 없는 것이 아니다.
+        [[nodiscard]] bool hover_only() const noexcept;
         [[nodiscard]] std::span<const std::unique_ptr<ui_element>> children() const noexcept;
         // 참이면 자식을 자기 bounds 안으로 자른다.
         // 그리기와 hit test 양쪽에 함께 걸리므로 보이지 않는 자식은 눌리지도 않는다.
@@ -1026,6 +1057,8 @@ namespace luil {
         void set_pointer_focus_target(ui_element_id target);
         void set_clip_children(bool value) noexcept;
         void set_hit_opaque(bool value) noexcept;
+        // 포인터를 올려야 그려지는 부품이다 (`hover_only`).
+        void set_hover_only(bool value) noexcept;
         // 자손들을 Tab의 한 자리로 묶는다 (탭 막대·라디오 묶음·목록).
         //  - 묶음 자체는 자리가 아니다. 자리는 **그 안의 항목 하나**다 —
         //    테를 두를 자리가 항목이어야 어디에 있는지 보인다.
@@ -1206,6 +1239,7 @@ namespace luil {
         ui_element_id pointer_focus_target_ {};
         bool clip_children_ { false };
         bool hit_opaque_ { false };
+        bool hover_only_ { false };
         // 비어 있으면 액션 유무에서 판정한다 (`tab_stop`).
         std::optional<bool> tab_stop_ {};
         focus_axis focus_group_ { focus_axis::none };

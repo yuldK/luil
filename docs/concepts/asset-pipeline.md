@@ -50,4 +50,6 @@ add_subdirectory(luil)
 
 파일은 `dark`, `light`, `tones`, `metrics` 네 객체를 가진 JSON 객체다. `dark`·`light`는 `neutral_color_palette`의 역할을 camelCase 키로 담고(`windowBackground`, `secondaryForeground`, … 그리고 `caption` 객체), 색은 `#rrggbb` 또는 `#rrggbbaa`다 — 구분선·보조 글자처럼 알파가 실린 역할이 있어 accent 카탈로그와 달리 알파를 받는다. `tones`는 accent 위에 얹는 알파(0~1)이고 `metrics`는 논리 픽셀 치수다. 키가 빠지거나 낯선 키가 있으면 생성이 실패한다 — 생성물이 `ui_style`의 지정 초기화라 struct와 어긋난 파일이 조용히 지나가지 않는다. 기본 파일을 복사해 수정하면 된다.
 
+컴포넌트 스타일 객체(`tabBar`)는 예외로 **빠져도 된다**. 이 객체가 생기기 전의 JSON이 그대로 빌드되어야 하므로, 객체가 없거나 그 안의 키가 빠지면 struct의 기본값이다. 값은 enum 이름(camelCase, 예: `"connected"`, `"selectedOrHovered"`)과 팔레트 역할 이름(`"windowBackground"` 같은 것)이고, 낯선 키와 모르는 값은 여전히 생성을 멈춘다 ([탭 막대 스타일](../tab-bar-style-design.md)).
+
 실행 시점에 값을 세우는 길은 [테마와 글꼴](theming.md)의 스타일 절에 있다.
