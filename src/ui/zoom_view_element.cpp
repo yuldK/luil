@@ -250,6 +250,7 @@ namespace luil {
             .maximized = context.maximized,
             .fullscreen = context.fullscreen,
             .metrics = context.metrics,
+            .reduce_motion = context.reduce_motion,
         };
         draw_children(child, interaction);
     }

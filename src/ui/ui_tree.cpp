@@ -71,6 +71,7 @@ namespace luil {
                     .maximized = context.maximized,
                     .fullscreen = context.fullscreen,
                     .metrics = context.metrics,
+                    .reduce_motion = context.reduce_motion,
                 };
                 // 내용 tree의 id가 주 tree와 같아도 hover·눌림·초점 그림을 물려받지 않는다.
                 interaction_snapshot content_interaction {};
@@ -176,10 +177,10 @@ namespace luil {
         return unarranged_;
     }
 
-    ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, const float scale, const rect_f& surface, const ui_metrics* const metrics)
+    ui_tree make_arranged_tree(std::unique_ptr<ui_element> root, const rect_f& slot, const float scale, const rect_f& surface, const ui_metrics* const metrics, const ui_style* const style)
     {
         if (root != nullptr)
-            root->arrange({ .slot = slot, .scale = scale, .surface = surface, .metrics = metrics });
+            root->arrange({ .slot = slot, .scale = scale, .surface = surface, .metrics = metrics != nullptr || style == nullptr ? metrics : &style->metrics, .style = style });
         return ui_tree { std::move(root) };
     }
 

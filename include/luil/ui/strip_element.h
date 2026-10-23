@@ -20,6 +20,8 @@ namespace luil {
         // 있으면 넘칠 때 이 띠가 가로 흘림의 임자로 선다 (`scroll_source`) —
         // 터치 끌기·표 없는 휠·초점 되살리기가 이 메시지로 띠를 흘린다.
         std::function<input_action(float delta)> scroll {};
+        // 휠을 칸으로 넘기는 메시지다 (`scroll_source::step`). 비어 있으면 휠은 양만큼 흘린다.
+        std::function<input_action(int steps)> step {};
     };
 
     // 내용을 가로로 흘려 보여 주는 띠다.
@@ -46,6 +48,10 @@ namespace luil {
         strip_element(ui_element_id id, strip_config config);
 
         void set_content(std::unique_ptr<ui_element> content);
+        // 내용 폭을 배치 직전에 다시 정한다 (논리 픽셀, arrange 전에 부른다).
+        //  - 내용 폭이 자리에 달린 담는 쪽(자리가 모자라면 탭을 줄이는 탭 막대)이 쓴다. 측정 단계가 없다는 계약은
+        //    그대로다 — 폭을 정하는 것은 여전히 담는 쪽이고, 정하는 때만 배치로 늦춘다.
+        void set_content_width(float width) noexcept;
 
         // 이 띠에서 흘릴 수 있는 최대치다 (논리 픽셀).
         // arrange 뒤에 유효하며 앱이 스크롤 값을 다듬을 때 쓴다.

@@ -8,6 +8,30 @@ namespace luil {
         return theme == color_theme::light ? light : dark;
     }
 
+    ui_color palette_color(const ui_color_palette& palette, const palette_role role) noexcept
+    {
+        switch (role)
+        {
+        case palette_role::window_background:
+            return palette.window_background;
+        case palette_role::surface_background:
+            return palette.surface_background;
+        case palette_role::input_background:
+            return palette.input_background;
+        case palette_role::tooltip_background:
+            return palette.tooltip_background;
+        case palette_role::notice_background:
+            return palette.notice_background;
+        case palette_role::caption_background:
+            return palette.caption.background;
+        case palette_role::button_hover_background:
+            return palette.button_hover_background;
+        case palette_role::accent_soft:
+            return palette.accent_soft;
+        }
+        return palette.window_background;
+    }
+
     const ui_style& default_ui_style() noexcept
     {
         return generated::default_style;

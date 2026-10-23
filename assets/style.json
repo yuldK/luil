@@ -74,5 +74,12 @@
         "smallFontSize": 11,
         "controlCornerRadius": 3,
         "rowCornerRadius": 4
+    },
+    "tabBar": {
+        "variant": "underline",
+        "closeVisibility": "always",
+        "indicatorPlacement": "iconCorner",
+        "barBackground": "windowBackground",
+        "selectedBackground": "surfaceBackground"
     }
 }

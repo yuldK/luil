@@ -754,6 +754,8 @@ namespace luil {
         // 주 tree와 popup tree를 차례로 보고 없으면 tree가 nullptr다 (메뉴가 닫혀 있다).
         [[nodiscard]] menu_location find_menu(const menu_kinds& kinds) const;
         [[nodiscard]] std::vector<input_action> run_trigger(const ui_element& element, ui_trigger trigger, float x, float y, modifier_keys modifiers);
+        // 칸으로 넘기는 창(`scroll_source::step`)의 휠이다. 그런 창이 아니면 nullopt다.
+        [[nodiscard]] std::optional<std::vector<input_action>> step_wheel(const ui_tree& tree, const mouse_wheel_event& event);
         // 초점을 가진 텍스트 박스의 키 처리다.
         // 그 박스가 소비한 키만 값을 돌려주고, 아니면 nullopt라 기존 키 경로가 이어진다.
         [[nodiscard]] std::optional<std::vector<input_action>> process_text_input_key(const key_pressed_event& event);
@@ -915,6 +917,27 @@ namespace luil {
             pointer_button button { pointer_button::none };
         };
         std::optional<pointer_contact> pointer_contact_ {};
+        // 가운데 버튼의 누름이다. 왼쪽·오른쪽 누름(`pressed_id_`)과 따로 둔다 — 가운데 버튼은 선택·초점·끌기를
+        // 바꾸지 않으므로, 같은 칸에 두면 그 상태들을 함께 거두거나 덮어쓴다.
+        struct middle_press
+        {
+            ui_element_id id {};
+            std::u8string surface {};
+            pointer_device device { pointer_device::mouse };
+            std::uint32_t pointer_id { 0 };
+            float x { 0.0f };
+            float y { 0.0f };
+        };
+        std::optional<middle_press> middle_press_ {};
+        // 칸으로 넘기는 창(`scroll_source::step`)에 쌓인 휠이다 (120 = 한 칸, 부호는 흘림 방향).
+        //  - 다른 창으로 옮겨 가거나 방향이 바뀌면 버린다 — 반대로 굴린 몫이 앞의 몫을 갚으면 첫 칸이 늦게 선다.
+        struct wheel_steps
+        {
+            ui_element_id owner {};
+            std::u8string surface {};
+            float pending { 0.0f };
+        };
+        wheel_steps wheel_steps_ {};
 
         std::optional<touch_contact> touch_ {};
         std::optional<inertial_pan> inertia_ {};

@@ -62,6 +62,8 @@ namespace luil {
         // 앱이 frame에 실은 스타일이다 (`ui_frame::style`). 없으면 내장 스타일이다.
         // 포인터는 렌더 호출 동안만 유효하면 된다 (tree와 같은 규칙).
         const ui_style* style { nullptr };
+        // 시스템의 움직임 줄이기 설정이다 (`draw_context::reduce_motion`). platform이 OS에서 읽어 채운다.
+        bool reduce_motion { false };
         bool maximized { false };
         // 테두리 없는 전체 화면인가다.
         // 최대화와 마찬가지로 view snapshot에 없는 창 상태라 표면이 채운다 —

@@ -319,6 +319,9 @@ namespace luil {
                     const ui_tree* const tree { surface_tree(value.surface) };
                     if (tree == nullptr)
                         return {};
+                    // 칸으로 넘기는 창은 앱 정책보다 먼저 받는다 — 칸을 쌓는 일은 controller만 할 수 있다.
+                    if (std::optional<std::vector<input_action>> stepped { step_wheel(*tree, value) }; stepped.has_value())
+                        return std::move(*stepped);
                     const ui_element* const owner { tree->root() != nullptr ? wheel_owner_at(*tree->root(), value.x, value.y) : nullptr };
                     // 보기 안의 스크롤도 공통 라우팅을 탄다. 텍스트 정책만 가진 앱이
                     // 빈 on_wheel 기본값 때문에 안쪽 창의 휠을 잃으면 안 된다.
@@ -425,6 +428,11 @@ namespace luil {
         last_pointer_y_ = event.y;
         last_pointer_time_ = event.time;
         last_pointer_surface_ = event.surface;
+
+        // 가운데 버튼을 누른 채 끌기 문턱을 넘으면 클릭이 아니다 (왼쪽 버튼의 끌기와 같은 문턱).
+        if (middle_press_.has_value() && middle_press_->device == event.device && middle_press_->pointer_id == event.pointer_id
+            && (middle_press_->surface != event.surface || distance_between(middle_press_->x, middle_press_->y, event.x, event.y) >= config_.drag_start_distance))
+            middle_press_.reset();
 
         // 터치가 조작을 쥐고 있으면 마우스·펜의 이동은 hover만 바꾼다.
         // 잡은 전용 조작(스크롤 막대)을 다른 장치가 끌면 안 된다.
@@ -903,6 +911,34 @@ namespace luil {
         return { source->scroll(event.horizontal ? -scroll_delta : scroll_delta) };
     }
 
+    std::optional<std::vector<input_action>> interaction_controller::step_wheel(const ui_tree& tree, const mouse_wheel_event& event)
+    {
+        const ui_element* const root { tree.root() };
+        if (root == nullptr)
+            return std::nullopt;
+        // 휠이 갈 창은 `route_wheel`과 같은 규칙으로 찾는다 (가로 휠은 가로 창, 세로 휠은 덮는 창).
+        const auto takes_horizontal = [](const ui_element& element) {
+            const scroll_source* const source { element.scroll() };
+            return element.zoom() != nullptr || (source != nullptr && source->scroll != nullptr && source->axis == scroll_axis::horizontal);
+        };
+        const ui_element* const owner { event.horizontal ? pan_owner_at(*root, event.x, event.y, takes_horizontal) : wheel_owner_at(*root, event.x, event.y) };
+        const scroll_source* const source { owner != nullptr ? owner->scroll() : nullptr };
+        if (source == nullptr || source->step == nullptr || owner->zoom() != nullptr)
+            return std::nullopt;
+
+        // 세로 휠은 위로 굴린 것(양수)이 앞으로, 가로 휠은 오른쪽(양수)이 뒤로 가는 것이다.
+        const float notches { event.horizontal ? event.delta : -event.delta };
+        const bool same_owner { wheel_steps_.owner == owner->id() && wheel_steps_.surface == event.surface };
+        if (same_owner == false || (wheel_steps_.pending < 0.0f) != (notches < 0.0f))
+            wheel_steps_ = wheel_steps { owner->id(), event.surface, 0.0f };
+        wheel_steps_.pending += notches;
+        const float steps { std::trunc(wheel_steps_.pending / 120.0f) };
+        if (steps == 0.0f)
+            return std::vector<input_action> {};
+        wheel_steps_.pending -= steps * 120.0f;
+        return std::vector<input_action> { source->step(static_cast<int>(steps)) };
+    }
+
     std::optional<pan_target> route_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
     {
         const ui_element* const root { tree.root() };
@@ -1093,9 +1129,17 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_press(const pointer_pressed_event& event)
     {
-        // 가운데 버튼은 선택·초점·끌기 상태를 바꾸지 않는다.
+        // 가운데 버튼은 선택·초점·끌기 상태를 바꾸지 않는다. 누른 자리만 적어 두었다가 같은 자리에서 떼면
+        // 가운데 클릭이다 (`ui_trigger::middle_click`).
         if (event.button == pointer_button::middle)
+        {
+            middle_press_.reset();
+            const ui_tree* const tree { event.device == pointer_device::touch ? nullptr : surface_tree(event.surface) };
+            const ui_element* const hit { tree != nullptr ? tree->hit_test(event.x, event.y) : nullptr };
+            if (hit != nullptr && hit->enabled())
+                middle_press_ = middle_press { hit->id(), event.surface, event.device, event.pointer_id, event.x, event.y };
             return {};
+        }
         inertia_.reset();
         if (event.device == pointer_device::touch)
             return process_touch_press(event);
@@ -1261,8 +1305,19 @@ namespace luil {
     std::vector<input_action> interaction_controller::process_release(const pointer_released_event& event)
     {
         // 가운데 버튼은 선택·초점·끌기 상태를 바꾸지 않는다.
+        //  - 클릭은 누른 그 element 위에서 뗀 것이다 (왼쪽 클릭과 같은 규칙). 끌기 문턱을 넘은 누름은 이미 거둬졌다.
         if (event.button == pointer_button::middle)
-            return {};
+        {
+            const std::optional<middle_press> pressed { std::move(middle_press_) };
+            middle_press_.reset();
+            if (pressed.has_value() == false || event.cancelled || pressed->surface != event.surface || pressed->device != event.device || pressed->pointer_id != event.pointer_id)
+                return {};
+            const ui_tree* const tree { surface_tree(event.surface) };
+            const ui_element* const hit { tree != nullptr ? tree->hit_test(event.x, event.y) : nullptr };
+            if (hit == nullptr || hit->enabled() == false || hit->id() != pressed->id || hit->action(ui_trigger::middle_click) == nullptr)
+                return {};
+            return run_trigger(*hit, ui_trigger::middle_click, event.x, event.y, modifiers_of(event));
+        }
         if (event.device == pointer_device::touch)
             return process_touch_release(event);
         // 터치가 조작을 쥔 동안의 마우스·펜 뗌은 짝인 누름이 없다
@@ -2380,9 +2435,20 @@ namespace luil {
             clear_focus();
             return {};
         }
-        const ui_element* const target { live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) };
+        const ui_element* target { live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) };
         if (target == nullptr)
             return {};
+        // 포인터를 올려야 보이는 부품(`hover_only` — 숨은 닫기 단추)은 손가락에는 보이지 않는다. 그 자리의 탭은
+        // 부품을 감싼 가장 가까운 누를 수 있는 조상의 것이다. 보이지 않는 단추가 탭을 닫으면 안 된다.
+        if (target->hover_only())
+        {
+            const std::vector<const ui_element*> ancestry { tree->ancestry_of(target->id()) };
+            const auto pressable = [](const ui_element* const element) { return element->enabled() && element->action(ui_trigger::left_click) != nullptr; };
+            const auto owner { std::find_if(ancestry.begin() + (ancestry.empty() ? 0 : 1), ancestry.end(), pressable) };
+            if (owner == ancestry.end())
+                return {};
+            target = *owner;
+        }
         apply_press_focus(*tree, target, contact.surface, event.time);
 
         // 길게 누르기는 보통 누르고 있는 동안 `advance`가 낸다. 여기는 pump가 그 시각에
@@ -2483,6 +2549,7 @@ namespace luil {
     {
         view_drag_.reset();
         pointer_contact_.reset();
+        middle_press_.reset();
         text_drag_id_ = {};
         if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty())
             abandon_drag();
@@ -3291,7 +3358,11 @@ namespace luil {
                                 if (const auto* const hit { tree->hit_tooltip(state.owner, *placement, state.scale, value.x, value.y, state.scroll_offset) };
                                     hit != nullptr && hit->enabled() && hit->id() == state.pressed)
                                 {
-                                    const ui_trigger trigger { value.button == pointer_button::left ? ui_trigger::left_click : ui_trigger::right_click };
+                                    ui_trigger trigger { ui_trigger::right_click };
+                                    if (value.button == pointer_button::left)
+                                        trigger = ui_trigger::left_click;
+                                    else if (value.button == pointer_button::middle)
+                                        trigger = ui_trigger::middle_click;
                                     if (const auto* const action { hit->action(trigger) }; action != nullptr)
                                     {
                                         const auto origin { tree->find(state.owner)->tooltip_content()->content->root()->bounds() };

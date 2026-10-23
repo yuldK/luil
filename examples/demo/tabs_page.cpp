@@ -2,7 +2,9 @@
 
 #include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
+#include "luil/ui/button_element.h"
 #include "luil/ui/caption_element.h"
+#include "luil/ui/choice_group_element.h"
 #include "luil/ui/commands.h"
 #include "luil/ui/dialog_elements.h"
 
@@ -29,6 +31,59 @@ namespace demo {
             };
         }
         constexpr std::u8string_view bar_owner { u8"demo-tabs" };
+        // 레인 오른쪽 끝의 새 탭 단추 폭과, 견본 막대 하나의 폭이다.
+        constexpr float new_tab_width { 32.0f };
+        constexpr float sample_width { 260.0f };
+        // 줄이기를 켰을 때의 최소 탭 폭이다.
+        constexpr float narrow_tab_width { 96.0f };
+
+        // 그 아래 가지를 이 스타일로 배치한다 — 앱이 `make_arranged_tree`에 스타일을 넘기는 것과 같은 길이다.
+        // 데모는 페이지마다 다른 화면이라 페이지 뿌리에서 배치 문맥의 스타일만 바꾼다. 막대는 config에 모양을 적지 않는다.
+        class style_scope final : public luil::ui_element
+        {
+        public:
+            style_scope(const luil::ui_style* const style, std::unique_ptr<luil::ui_element> content)
+                : ui_element { luil::ui_element_id { kind_layout, u8"tabs-style" } }
+                , style_ { style }
+                , content_ { content.get() }
+            {
+                add_child(std::move(content));
+            }
+
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+                luil::arrange_context inner { context.for_child(context.slot) };
+                inner.style = style_;
+                content_->arrange(inner);
+            }
+
+            void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+            {
+                draw_children(context, interaction);
+            }
+
+        private:
+            const luil::ui_style* style_ { nullptr };
+            luil::ui_element* content_ { nullptr };
+        };
+
+        // 설정 한 줄이다: 왼쪽에 이름, 오른쪽에 배타 선택이다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> setting_row(const std::u8string& setting, std::u8string title, std::vector<luil::choice_item> items, const std::u8string_view selected)
+        {
+            const luil::stack_config line { .direction = luil::stack_direction::row, .spacing = 12.0f };
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs-setting/" + setting }, line) };
+            row->add(make_label({ kind_text, u8"tabs-setting-title/" + setting }, title, 12.0f, luil::label_color_role::dim), 110.0f);
+            luil::choice_group_config choices {};
+            choices.owner = u8"tabs-setting/" + setting;
+            choices.name = std::move(title);
+            choices.style = luil::choice_style::toggle;
+            choices.items = std::move(items);
+            choices.selected = std::u8string { selected };
+            choices.select = [setting](const std::u8string& value) { return luil::make_app_action(tab_setting_intent { setting, value }); };
+            row->add_flexible(std::make_unique<luil::choice_group_element>(std::move(choices)));
+            return row;
+        }
     } // namespace
 
     tabs_page::tabs_page()
@@ -150,12 +205,73 @@ namespace demo {
             overflow_open_ = overflow->open;
             return true;
         }
+        if (const auto* const setting { message.get<tab_setting_intent>() }; setting != nullptr)
+        {
+            luil::tab_bar_style& style { style_.tab_bar };
+            if (setting->setting == u8"variant")
+                style.variant = setting->value == u8"connected" ? luil::tab_bar_variant::connected : setting->value == u8"flat" ? luil::tab_bar_variant::flat : luil::tab_bar_variant::underline;
+            else if (setting->setting == u8"close")
+                style.close_visibility = setting->value == u8"hover" ? luil::tab_close_visibility::selected_or_hovered : luil::tab_close_visibility::always;
+            else if (setting->setting == u8"indicator")
+                style.indicator_placement = setting->value == u8"slot" ? luil::tab_indicator_placement::close_slot : luil::tab_indicator_placement::icon_corner;
+            else if (setting->setting == u8"overflow")
+                step_overflow_ = setting->value == u8"step";
+            else if (setting->setting == u8"width")
+                shrink_ = setting->value == u8"shrink";
+            reveal_selected();
+            return true;
+        }
         return false;
+    }
+
+    std::unique_ptr<luil::ui_element> tabs_page::make_settings() const
+    {
+        const luil::tab_bar_style& style { style_.tab_bar };
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs-settings" }, luil::stack_config { .spacing = luil::choice_toggle_gap }) };
+        column->add(setting_row(u8"variant", u8"모양", { { u8"underline", u8"기본" }, { u8"connected", u8"이어진 탭" }, { u8"flat", u8"평평한 칸" } },
+                        style.variant == luil::tab_bar_variant::connected  ? u8"connected"
+                            : style.variant == luil::tab_bar_variant::flat ? u8"flat"
+                                                                           : u8"underline"),
+            luil::choice_toggle_height);
+        column->add(setting_row(u8"close", u8"닫기 단추", { { u8"always", u8"늘 보이기" }, { u8"hover", u8"선택·포인터만" } },
+                        style.close_visibility == luil::tab_close_visibility::always ? u8"always" : u8"hover"),
+            luil::choice_toggle_height);
+        column->add(setting_row(u8"indicator", u8"상태 표시", { { u8"corner", u8"아이콘 모서리" }, { u8"slot", u8"닫기 단추 자리" } },
+                        style.indicator_placement == luil::tab_indicator_placement::icon_corner ? u8"corner" : u8"slot"),
+            luil::choice_toggle_height);
+        column->add(setting_row(u8"overflow", u8"넘칠 때", { { u8"scroll", u8"흘리기" }, { u8"step", u8"한 탭씩" } }, step_overflow_ ? u8"step" : u8"scroll"), luil::choice_toggle_height);
+        column->add(setting_row(u8"width", u8"탭 폭", { { u8"fixed", u8"고정" }, { u8"shrink", u8"모자라면 줄이기" } }, shrink_ ? u8"shrink" : u8"fixed"), luil::choice_toggle_height);
+        column->add_gap(8.0f);
+
+        // 견본이다. 모양마다 막대 하나를 그림으로만 둔다 — 누르거나 초점이 가지 않고 보조 기술에는 이름 하나로 읽힌다.
+        // 둘째 탭은 포인터가 올라간 상태로 고정해 hover의 그림도 함께 보인다.
+        auto samples { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs-samples" }, luil::stack_config { .direction = luil::stack_direction::row, .spacing = 16.0f }) };
+        const std::pair<luil::tab_bar_variant, std::u8string_view> variants[] {
+            { luil::tab_bar_variant::underline, u8"기본 모양 견본" },
+            { luil::tab_bar_variant::connected, u8"이어진 탭 견본" },
+            { luil::tab_bar_variant::flat, u8"평평한 칸 견본" },
+        };
+        for (const auto& [variant, name] : variants)
+        {
+            luil::tab_bar_config sample {};
+            sample.owner = u8"tabs-sample/" + std::u8string { name };
+            sample.tab_width = sample_width / 3.0f;
+            sample.selected = u8"a";
+            sample.items.push_back({ .key = u8"a", .label = u8"가", .icon = luil::codicons::icon_file, .closable = true });
+            sample.items.push_back({ .key = u8"b", .label = u8"나", .icon = luil::codicons::icon_file, .closable = true, .indicator = luil::tab_indicator {} });
+            sample.items.push_back({ .key = u8"c", .label = u8"다", .icon = luil::codicons::icon_file, .closable = true });
+            luil::tab_bar_style look { style };
+            look.variant = variant;
+            sample.style = look;
+            sample.preview = luil::tab_bar_preview { .name = std::u8string { name }, .hovered = u8"b" };
+            samples->add(std::make_unique<luil::tab_bar_element>(std::move(sample)), sample_width);
+        }
+        column->add(std::move(samples), tab_bar_height);
+        return column;
     }
 
     std::unique_ptr<luil::ui_element> tabs_page::build(const float width, const float height, const float scale)
     {
-        static_cast<void>(width);
         static_cast<void>(height);
         static_cast<void>(scale);
         bar_ = nullptr;
@@ -170,26 +286,42 @@ namespace demo {
             item.label = tab.label;
             item.icon = luil::codicons::icon_file;
             item.closable = true;
-            // 배지의 세 모양을 차례로 보인다 — 개수, 상태 점, 심각도. 넷째마다 없다.
-            //  - 점의 뜻은 앱만 알아 설명이 없으면 보조 기술에 읽히지 않는다. 그래서 적는다.
+            // 배지와 상태 표시를 차례로 보인다 — 개수 배지, 저장하지 않음 점, 심각도 배지, 불러오는 중.
+            //  - 점과 진행의 뜻은 앱만 알아 설명이 없으면 보조 기술에 읽히지 않는다. 그래서 적는다.
             switch (index % 4)
             {
             case 0:
                 item.badge = luil::tab_badge { .text = u8"3", .description = u8"바뀐 곳 3개" };
                 break;
             case 1:
-                item.badge = luil::tab_badge { .tone = luil::badge_tone::neutral, .description = u8"저장하지 않음" };
+                item.indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::dot, .tone = luil::badge_tone::neutral, .description = u8"저장하지 않음" };
                 break;
             case 2:
                 item.badge = luil::tab_badge { .tone = luil::badge_tone::error, .description = u8"오류 있음" };
                 break;
             default:
+                item.indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::busy, .description = u8"불러오는 중" };
                 break;
             }
             bar_config.items.push_back(std::move(item));
         }
         bar_config.selected = selected_;
         bar_config.tab_width = 150.0f;
+        bar_config.min_tab_width = shrink_ ? narrow_tab_width : 0.0f;
+        bar_config.overflow_mode = step_overflow_ ? luil::tab_overflow_mode::step : luil::tab_overflow_mode::scroll;
+        bar_config.wheel_steps = step_overflow_;
+        bar_config.step_back_tooltip = u8"앞 탭 보기";
+        bar_config.step_forward_tooltip = u8"뒤 탭 보기";
+        // 막대 끝의 새 탭 단추다. 탭이 적으면 마지막 탭 뒤에 따라붙고, 넘치면 오른쪽 끝에 선다.
+        bar_config.trailing = [] {
+            const luil::button_config add { .glyph = luil::codicons::icon_add, .icon_size = 14.0f };
+            auto button { std::make_unique<luil::button_element>(luil::ui_element_id { kind_layout, u8"tabs/new-tab" }, add) };
+            button->set_tooltip(u8"새 탭 (Ctrl+T)");
+            button->set_cursor(luil::ui_cursor::hand);
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(tab_menu_command_intent { u8"new" }));
+            return std::unique_ptr<luil::ui_element> { std::move(button) };
+        };
+        bar_config.trailing_width = new_tab_width;
         bar_config.scroll_offset = scroll_;
         bar_config.select = [](const std::u8string& key) { return luil::make_app_action(tab_select_intent { key }); };
         bar_config.close = [](const std::u8string& key) { return luil::make_app_action(tab_close_intent { key }); };
@@ -203,11 +335,17 @@ namespace demo {
                 intent.anchor = luil::window_screen_anchor { *release.screen, 24.0f + payload.grab_offset_x, 34.0f + payload.grab_offset_y };
             return luil::make_app_action(std::move(intent));
         };
+        // 막대와 같은 식으로 탭 폭과 레인 폭을 미리 잰다 — 고른 탭을 레인 안으로 들이는 계산이 쓴다.
+        //  - 넘치면 꼬리(새 탭)·넘침 메뉴, 한 탭씩이면 앞·뒤 단추까지 레인에서 빠진다.
+        const float bar_width { std::max(0.0f, width - 48.0f) };
         const float previous_lane { lane_width_ };
-        lane_width_ = std::max(0.0f, width - 48.0f - (static_cast<float>(tabs_.size()) * 150.0f > width - 48.0f ? luil::tab_overflow_width : 0.0f));
+        const float smallest { luil::fitted_tab_width(tabs_.size(), 150.0f, shrink_ ? narrow_tab_width : 0.0f, 0.0f) };
+        const bool overflowing { static_cast<float>(tabs_.size()) * smallest + new_tab_width > bar_width };
+        tab_width_ = overflowing ? smallest : luil::fitted_tab_width(tabs_.size(), 150.0f, shrink_ ? narrow_tab_width : 0.0f, bar_width - new_tab_width);
+        lane_width_ = overflowing ? std::max(0.0f, bar_width - new_tab_width - luil::tab_overflow_width - (step_overflow_ ? 2.0f * luil::tab_overflow_width : 0.0f)) : bar_width;
         if (lane_width_ != previous_lane)
             reveal_selected();
-        scroll_ = std::clamp(scroll_, 0.0f, std::max(0.0f, static_cast<float>(tabs_.size()) * 150.0f - lane_width_));
+        scroll_ = std::clamp(scroll_, 0.0f, std::max(0.0f, static_cast<float>(tabs_.size()) * tab_width_ - lane_width_));
         bar_config.scroll_offset = scroll_;
         // 우클릭(터치는 길게 누르기)한 자리에 컨텍스트 메뉴를 띄운다.
         bar_config.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(tab_menu_intent { key, context.x, context.y }); };
@@ -221,10 +359,12 @@ namespace demo {
         luil::stack_config config {};
         config.padding = luil::edge_insets::all(24.0f);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs" }, config) };
-        column->add(make_label(luil::ui_element_id { kind_text, u8"tabs-hint" }, u8"탭 사이로 끌어 순서를 바꾸고, 창 밖으로 놓아 분리하세요. 우클릭 / Shift+F10으로 탭 메뉴를 엽니다.", 11.0f,
-                        luil::label_color_role::dim),
+        column->add(make_label(luil::ui_element_id { kind_text, u8"tabs-hint" },
+                        u8"탭 사이로 끌어 순서를 바꾸고, 창 밖으로 놓아 분리하세요. 우클릭 / Shift+F10으로 탭 메뉴를 열고, 가운데 버튼으로 닫습니다.", 11.0f, luil::label_color_role::dim),
             18.0f);
         column->add_gap(8.0f);
+        column->add(make_settings(), 5.0f * luil::choice_toggle_height + 4.0f * luil::choice_toggle_gap + 8.0f + tab_bar_height);
+        column->add_gap(12.0f);
         auto toolbar { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs-toolbar" }, luil::stack_config { .direction = luil::stack_direction::row, .spacing = 8.0f }) };
         for (const luil::app_command& command : tab_commands())
         {
@@ -240,7 +380,9 @@ namespace demo {
         column->add(std::move(toolbar), luil::text_button_height);
         column->add_gap(12.0f);
         column->add(std::move(bar), tab_bar_height);
-        column->add_gap(16.0f);
+        // 이어지는 모양은 선택된 탭이 내용 판과 한 판이라 사이를 띄우지 않는다. 판의 바탕이 선택된 탭 바탕(표면)과 같다.
+        const bool joined { style_.tab_bar.variant != luil::tab_bar_variant::underline };
+        column->add_gap(joined ? 0.0f : 16.0f);
 
         // 내용 영역은 앱 몫이다: 고른 탭을 보여 주는 판이다.
         std::u8string current { u8"열린 탭이 없다" };
@@ -249,7 +391,7 @@ namespace demo {
                 current = tab.label + u8" 내용";
         luil::panel_config surface_panel {};
         surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
-        surface_panel.corner_radius = 6.0f;
+        surface_panel.corner_radius = joined ? 0.0f : 6.0f;
         auto content_panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_page_panel, u8"tab-content" }, std::move(surface_panel)) };
         luil::stack_config content_config {};
         content_config.padding = luil::edge_insets::all(16.0f);
@@ -259,7 +401,7 @@ namespace demo {
         content->add(make_label({ kind_text, u8"tab-detach-help" }, u8"분리된 창의 탭을 이 탭 막대에 끌어 놓으면 다시 합쳐집니다.", 12.0f, luil::label_color_role::dim), 28.0f);
         content_panel->set_content(std::move(content));
         column->add_flexible(std::move(content_panel));
-        return column;
+        return std::make_unique<style_scope>(&style_, std::move(column));
     }
 
     void tabs_page::close_tab(const std::u8string& key)
@@ -361,11 +503,11 @@ namespace demo {
             scroll_ = 0.0f;
             return;
         }
-        const float left { static_cast<float>(selected - tabs_.begin()) * 150.0f };
+        const float left { static_cast<float>(selected - tabs_.begin()) * tab_width_ };
         if (left < scroll_)
             scroll_ = left;
-        else if (left + 150.0f > scroll_ + lane_width_)
-            scroll_ = left + 150.0f - lane_width_;
+        else if (left + tab_width_ > scroll_ + lane_width_)
+            scroll_ = left + tab_width_ - lane_width_;
     }
 
     void tabs_page::run_command(const std::u8string& command, const std::u8string& key)
@@ -461,7 +603,8 @@ namespace demo {
             restore->set_action(luil::ui_trigger::left_click, luil::make_message_action(tab_attach_intent { key }));
             body->add(std::move(restore), { .length = luil::text_button_height, .cross_length = 200.0f });
             root->add_flexible(std::move(body));
-            window.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, item.width * scale, item.height * scale }, scale));
+            // 분리된 창의 막대도 같은 앱 스타일로 배치한다 — 고른 모양이 창마다 따로 놀지 않는다.
+            window.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, item.width * scale, item.height * scale }, scale, {}, nullptr, &style_));
             windows.push_back(std::move(window));
         }
         return windows;
