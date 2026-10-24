@@ -1851,7 +1851,17 @@ namespace luil::win32 {
                 }
                 if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
                     return;
-                const auto* const owner { anchor_surface(frame->file_dialog->owner_surface) };
+                // popup은 소유 창으로 쓰지 않고 그 사슬의 뿌리(주 창·보조 창)를 쓴다. 대화상자가 활성을 가져가면 popup은
+                // 활성 변화로 닫히므로, popup을 소유자로 주면 modal 도중에 소유 창이 사라져 대화상자가 함께 끝난다.
+                std::u8string owner_id { frame->file_dialog->owner_surface };
+                for (std::size_t depth { 0 }; depth < frame->popups.size(); ++depth)
+                {
+                    const auto parent { std::find_if(frame->popups.begin(), frame->popups.end(), [&owner_id](const ui_popup& popup) { return popup.id == owner_id; }) };
+                    if (parent == frame->popups.end())
+                        break;
+                    owner_id = parent->anchor;
+                }
+                const auto* const owner { anchor_surface(owner_id) };
                 const file_dialog_result result { run_file_dialog(owner != nullptr ? owner->window() : nullptr, *frame->file_dialog) };
                 file_dialog_gate_.finish();
                 if (host_ != nullptr && environment_.delegate != nullptr)

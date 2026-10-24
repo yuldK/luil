@@ -21,6 +21,7 @@ namespace luil {
         std::u8string initial_folder {};
         std::u8string default_name {};
         std::vector<file_filter> filters {};
+        // 소유 창이다. 비면 주 창이고, popup id면 그 사슬의 뿌리 창이다 (file-dialog-design.md).
         std::u8string owner_surface {};
     };
     enum class file_dialog_status { chosen, cancelled, failed, unsupported };
