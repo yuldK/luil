@@ -61,7 +61,7 @@ origin' = anchor − (anchor − origin) × (next / current)
 
 ## 입력 임자
 
-`zoom_source`는 `scroll_source` 옆에 있다. 휠과 이동의 임자는 역순으로 자식을 먼저 찾고, 보이지 않거나 비활성인 가지는 건너뛰며, clip 밖의 가지를 보지 않는다. 가장 안쪽 흘리는 창이나 보기가 이긴다. `hit_opaque`인 방벽은 뒤의 보기를 막는다. 경계에 닿아도 바깥으로 넘기지 않는다.
+`zoom_source`는 `scroll_source` 옆에 있다. 휠과 이동의 임자는 역순으로 자식을 먼저 찾고, 보이지 않거나 비활성인 가지는 건너뛰며, clip 밖의 가지를 보지 않는다. 가장 안쪽 흘리는 창이나 보기가 이긴다. `hit_opaque`인 방벽은 뒤의 보기를 막지만, 자기를 감싼 보기나 흘리는 창은 막지 않는다. 경계에 닿아도 바깥으로 넘기지 않는다.
 
 컨트롤러는 보기의 휠을 직접 처리한다. 표 없는 `route_wheel(tree, event, scroll_delta)`도 같은 판정과 수정자를 쓴다. 기존 좌표·델타만 받는 짝은 스크롤 호출을 위해 남긴다. `mouse_wheel_event` 뒤에 `control`, `shift`, `horizontal`을 붙여 기존 위치 초기화의 뜻을 지킨다. `WM_MOUSEHWHEEL`은 화면 좌표를 client로 옮긴 뒤 가로 표시를 싣는다.
 
