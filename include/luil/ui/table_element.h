@@ -1,6 +1,9 @@
 #pragma once
 
 #include "luil/ui/check_element.h"
+#include "luil/ui/label_element.h"
+#include "luil/ui/scroll_area_element.h"
+#include "luil/ui/scrollbar_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/virtual_list_element.h"
 
@@ -41,6 +44,10 @@ namespace luil {
         // 끌어도 이 아래로는 줄지 않는다 (논리 픽셀).
         float min_width { 40.0f };
         column_align align { column_align::start };
+        // 칸 글이 넘칠 때 줄이는 자리다. 경로처럼 앞뒤가 다 중요한 열은 `middle`로 가운데를 줄인다.
+        //  - `end`는 지금처럼 뒤를 잘라 그린다. 머리글은 이 값과 무관하게 `end`다.
+        //  - 표가 그리는 글(`cell_text`)에만 쓰인다. 앱이 지은 칸(`build_cell`)은 그 칸이 정한다.
+        text_elide elide { text_elide::end };
         sort_direction sort { sort_direction::none };
         // 거짓이면 오른쪽 경계를 끌 수 없다.
         bool resizable { true };
@@ -98,7 +105,15 @@ namespace luil {
         float scroll_x { 0.0f };
         // 가로로 이만큼 흘리자는 메시지다 (+ = 오른쪽 내용이 보인다). 가로 휠·←·→가 낸다.
         //  - 없으면 가로로 흐르지 않는다. 넘친 열은 잘린다.
+        //  - 있으면 열이 창보다 넓을 때 표 아래에 가로 막대가 선다 (`horizontal_bar`). 막대의 끌기·클릭·키도 이 메시지다.
         std::function<input_action(float delta)> scroll_horizontal {};
+        // 가로 스크롤을 **이 자리로** 하라는 절대 메시지다 (논리 픽셀). 가로 막대의 보조 기술 값 설정(UIA `SetValue`)이 낸다.
+        //  - 없으면 막대의 값이 읽기 전용으로 선다. 변화량으로 환산하지 않는 이유는 `scrollbar_config::scroll_to`와 같다.
+        std::function<input_action(float offset)> scroll_horizontal_to {};
+        // 가로 막대를 언제 세울지다. `automatic`이면 열 폭의 합이 창보다 넓을 때만 선다.
+        //  - 막대가 서면 그 높이만큼 본문의 창이 준다. 마지막 행이 막대 밑에 숨지 않는다.
+        //  - 세로 막대가 서 있으면 그 폭만큼 짧게 서서 구석을 비운다.
+        scrollbar_visibility horizontal_bar { scrollbar_visibility::automatic };
         // 머리글을 눌렀다. 정렬 순서를 정하고 행을 다시 늘어놓는 것은 앱이다 — 표는 `table_column::sort`를 그릴 뿐이다.
         table_column_message_factory sort_request {};
         // 열 경계를 끌었다. 끄는 동안 이어서 오고, 끝나면 `resize_column_end`가 한 번 온다.
@@ -171,7 +186,8 @@ namespace luil {
     // **본문은 가상 목록 그대로다.** 행의 가상화·선택·커서·키보드·컨텍스트 메뉴·끌어 옮기기가 `rows`의 값으로
     // 그대로 선다. 표가 더하는 것은 열이다.
     //  - 머리글과 본문의 열 경계가 같은 계산(`table_column_spans`)에서 나와 어느 배율에서나 맞는다.
-    //  - 가로 스크롤은 값 하나(`scroll_x`)라 머리글과 본문이 함께 흐른다. 가로 휠과 ←·→가 그것을 청한다.
+    //  - 가로 스크롤은 값 하나(`scroll_x`)라 머리글과 본문이 함께 흐른다. 가로 휠·←·→·가로 막대가 그것을 청한다.
+    //  - 가로 창 폭은 세로 막대를 뺀 본문의 폭이다. 끝까지 흘리면 마지막 열의 끝이 세로 막대 앞에 선다.
     //  - 열 경계를 끌면 폭 변화량을, 머리글을 누르면 정렬 요청을 낸다. 정렬과 폭 저장은 앱의 몫이다.
     //  - 보조 기술은 본문을 표(DataGrid)로, 행을 DataItem으로, 머리글 칸을 HeaderItem으로 읽는다.
     //
@@ -187,6 +203,9 @@ namespace luil {
         [[nodiscard]] float content_width() const noexcept;
         // 본문 목록이다.
         [[nodiscard]] const virtual_list_element& body() const noexcept;
+        // 가로 막대다. `scroll_horizontal`이 없거나 `horizontal_bar`가 `never`면 nullptr다.
+        //  - 열이 넘치지 않는 배치에서는 숨는다 (`visible()`이 거짓).
+        [[nodiscard]] const scrollbar_element* horizontal_bar() const noexcept;
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
@@ -214,6 +233,10 @@ namespace luil {
         [[nodiscard]] std::optional<std::size_t> column_index(std::u8string_view key) const noexcept;
         ui_element* header_ { nullptr };
         virtual_list_element* body_ { nullptr };
+        scrollbar_element* horizontal_bar_ { nullptr };
+        // 본문의 세로 막대가 서는 규칙이다 (본문이 흘리지 않으면 `never`). 행 설정은 본문으로 옮겨 가므로 따로 든다 —
+        // 가로 막대의 구석과 가로 창 폭이 이것으로 정해진다.
+        scrollbar_visibility vertical_bar_ { scrollbar_visibility::never };
         float content_width_ { 0.0f };
         float scroll_x_ { 0.0f };
         float viewport_width_ { 0.0f };
