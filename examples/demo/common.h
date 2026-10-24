@@ -97,6 +97,9 @@ namespace demo {
     constexpr luil::text_input_target target_network_url { static_cast<luil::text_input_target>(6) };
     constexpr luil::text_input_target target_memo { static_cast<luil::text_input_target>(7) };
     constexpr luil::text_input_target target_workbench_summary { static_cast<luil::text_input_target>(8) };
+    constexpr luil::text_input_target target_workbench_author { static_cast<luil::text_input_target>(9) };
+    constexpr luil::text_input_target target_workbench_diff { static_cast<luil::text_input_target>(10) };
+    constexpr luil::text_input_target target_workbench_find { static_cast<luil::text_input_target>(11) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.

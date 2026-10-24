@@ -15,7 +15,7 @@
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
 //  - 테마: 테마 선호와 키 컬러                             (demo/theme_page)
-//  - 변경 작업대: 지연 로딩 계층·체크와 정렬이 있는 표·맞춤 양식, 커스텀 element 없이 (demo/workbench_page)
+//  - 변경 작업대: 지연 로딩 계층·하위 메뉴가 있는 표·읽기 전용 차이 보기·편집형 콤보·패치 불러오기, 커스텀 element 없이 (demo/workbench_page)
 // 이 파일은 셸이다: 사이드바 내비게이션, 페이지 전환, driver·policy·delegate 조립.
 //
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
@@ -279,6 +279,7 @@ namespace demo {
                     return;
                 }
 
+                // 파일 대화상자는 한 번에 하나다. 누가 물었는지 기억해 결과를 그 페이지에 돌려준다.
                 if (message.get<image_pick_intent>() != nullptr)
                 {
                     luil::file_dialog_request request {};
@@ -289,14 +290,28 @@ namespace demo {
                         filter.extensions.emplace_back(extension);
                     request.filters.push_back(std::move(filter));
                     file_dialog_ = std::move(request);
+                    file_dialog_purpose_ = file_dialog_purpose::image;
+                    return;
+                }
+                if (message.get<workbench_import_intent>() != nullptr)
+                {
+                    file_dialog_ = workbench_page::patch_dialog_request(++file_dialog_revision_);
+                    file_dialog_purpose_ = file_dialog_purpose::patch;
                     return;
                 }
                 if (const auto* result { message.get<luil::file_dialog_result>() }; result != nullptr)
                 {
-                    if (file_dialog_.has_value() && file_dialog_->id == result->id)
-                        file_dialog_.reset();
+                    // 지금 실은 요청의 답만 받는다. 목적은 그 요청을 실을 때 정했다.
+                    if (file_dialog_.has_value() == false || file_dialog_->id != result->id)
+                        return;
+                    file_dialog_.reset();
                     if (result->status == luil::file_dialog_status::chosen && result->paths.empty() == false)
-                        static_cast<void>(images_.handle(luil::app_message { image_open_intent { result->paths.front() } }));
+                    {
+                        if (file_dialog_purpose_ == file_dialog_purpose::patch)
+                            static_cast<void>(workbench_.handle(luil::app_message { workbench_patch_intent { result->paths.front() } }));
+                        else
+                            static_cast<void>(images_.handle(luil::app_message { image_open_intent { result->paths.front() } }));
+                    }
                     if (result->status == luil::file_dialog_status::failed)
                         static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { result->error, luil::toast_severity::error } }));
                     return;
@@ -474,6 +489,9 @@ namespace demo {
                 auto frame { std::make_shared<luil::win32::ui_frame>() };
                 frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
                 frame->appearance = theme_.appearance();
+                // 코드 글꼴은 이름을 줘야 고정폭이 된다. 비워 두면 내장 UI 글꼴이다 (appearance.h).
+                // 변경 작업대의 차이 보기가 이 글꼴로 열을 맞춘다. Windows에 늘 있는 Consolas다.
+                frame->fonts.code_family = u8"Consolas";
                 // 크기·최대화의 복원이다. 자리는 창을 만들 때 이미 잡았다 (wWinMain).
                 // 요청은 revision이 바뀔 때만 적용되므로 매 frame 같은 값을 실어도
                 // 창은 한 번만 움직인다.
@@ -726,6 +744,8 @@ namespace demo {
             images_page images_ {};
             std::optional<luil::file_dialog_request> file_dialog_ {};
             std::uint64_t file_dialog_revision_ { 0 };
+            enum class file_dialog_purpose { image, patch };
+            file_dialog_purpose file_dialog_purpose_ { file_dialog_purpose::image };
             network_page network_ {};
             zoom_page zoom_ {};
             theme_page theme_ {};
@@ -794,6 +814,13 @@ namespace demo {
                     return target_network_url;
                 if (kind == kind_workbench_summary_input)
                     return target_workbench_summary;
+                // 콤보는 root와 안쪽 입력 칸이 같은 kind다. 둘 다 같은 편집 대상이다 (combo-box-design.md).
+                if (kind == kind_workbench_author_input)
+                    return target_workbench_author;
+                if (kind == kind_workbench_diff)
+                    return target_workbench_diff;
+                if (kind == kind_workbench_find_input)
+                    return target_workbench_find;
                 return std::nullopt;
             }
 
