@@ -1,5 +1,7 @@
 #include "luil/ui/stack_element.h"
 
+#include "ui/flexible_lengths.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <limits>
@@ -92,58 +94,33 @@ namespace luil {
         if (remaining < 0.0f)
             remaining = 0.0f;
 
-        // 상한에 걸린 유연 항목은 상한에 서고, 남긴 자리를 걸리지 않은 항목이 다시 나눈다.
-        //  - 한 걸음마다 그 걸음 처음의 몫으로 견주고 넘친 것을 모두 걸어 둔다. 걸린 것이 없을 때까지 되풀이한다
-        //    (항목 수만큼 이내다).
-        //  - 상한이 없으면 첫 걸음에서 끝나고, 몫은 지금까지의 식(`remaining × weight / weights`) 그대로다.
+        // 유연 항목은 하한·상한을 지키며 남은 자리를 비율대로 나눈다 (`distribute_flexible`).
+        //  - 하한에 걸린 항목의 부족분은 다른 유연 항목의 몫에서 나온다. 하한들의 합이 남은 자리를 넘을 때만 넘친다.
+        //  - 상한에 걸린 항목이 남긴 자리는 걸리지 않은 항목이 나눈다.
+        //  - 제한이 없으면 몫은 지금까지의 식(`remaining × weight / weights`) 그대로다.
         std::vector<float> lengths(entries_.size(), 0.0f);
-        std::vector<bool> capped(entries_.size(), false);
-        float pool { remaining };
-        float open { weights };
-        bool any_capped { false };
-        while (open > 0.0f)
-        {
-            bool capped_now { false };
-            for (std::size_t index = 0; index < entries_.size(); ++index)
-            {
-                if (flexible(index) == false || capped[index] || entries_[index].item.maximum <= 0.0f)
-                    continue;
-                const float share { pool * (entries_[index].item.weight / open) };
-                if (share > entries_[index].item.maximum * scale)
-                {
-                    capped[index] = true;
-                    lengths[index] = entries_[index].item.maximum * scale;
-                    capped_now = true;
-                }
-            }
-            if (capped_now == false)
-                break;
-            any_capped = true;
-            pool = remaining;
-            open = 0.0f;
-            for (std::size_t index = 0; index < entries_.size(); ++index)
-            {
-                if (flexible(index) == false)
-                    continue;
-                if (capped[index])
-                    pool -= lengths[index];
-                else
-                    open += entries_[index].item.weight;
-            }
-            if (pool < 0.0f)
-                pool = 0.0f;
-        }
+        std::vector<flexible_share> shares {};
+        std::vector<std::size_t> owners {};
         for (std::size_t index = 0; index < entries_.size(); ++index)
-            if (flexible(index) && capped[index] == false)
-                lengths[index] = open > 0.0f ? pool * (entries_[index].item.weight / open) : 0.0f;
+        {
+            if (flexible(index) == false)
+                continue;
+            const stack_item& item { entries_[index].item };
+            shares.push_back({ .weight = item.weight, .minimum = item.minimum * scale, .maximum = item.maximum * scale });
+            owners.push_back(index);
+        }
+        const std::vector<float> resolved { distribute_flexible(shares, remaining) };
+        float flexible_total { 0.0f };
+        for (std::size_t share = 0; share < owners.size(); ++share)
+        {
+            lengths[owners[share]] = resolved[share];
+            flexible_total += resolved[share];
+        }
 
         // 남는 자리는 유연 항목이 다 가져가므로, 유연 항목이 하나도 없거나 모두 상한에 걸렸을 때만
         // 정렬이 뜻을 갖는다.
-        //  - `remaining`은 위에서 이미 0으로 잘렸으므로 `free`는 음수가 되지 않는다.
-        //    넘칠 때 가운데·끝 정렬이 여백 밖으로 새는 경계가 아예 없다.
-        float free { weights > 0.0f ? 0.0f : remaining };
-        if (any_capped && open <= 0.0f)
-            free = pool;
+        //  - 음수로 내려가지 않는다. 하한들이 넘칠 때 가운데·끝 정렬이 여백 밖으로 새는 경계가 아예 없다.
+        float free { weights > 0.0f ? std::max(0.0f, remaining - flexible_total) : remaining };
         float offset { 0.0f };
         if (config_.main_alignment == stack_main_alignment::center)
             offset = free / 2.0f;
@@ -158,9 +135,6 @@ namespace luil {
                 length = (row ? fitted[index].width : fitted[index].height) * scale;
             else if (flexible(index) == false)
                 length = current.item.length * scale;
-            // 하한은 아래로만 민다. 그만큼 넘치고, 다른 유연 항목의 몫은 줄지 않는다.
-            else if (length < current.item.minimum * scale)
-                length = current.item.minimum * scale;
             if (current.child != nullptr)
             {
                 // 교차축 길이를 정하지 않았으면 남는 폭을 다 채운다.

@@ -2,6 +2,7 @@
 
 #include "luil/ui/ui_element.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -419,7 +420,7 @@ TEST_CASE("A flexible item never shrinks below its minimum", "[ui][stack]")
     REQUIRE(flexible_probe->bounds().x + flexible_probe->bounds().width == 360.0f);
 }
 
-TEST_CASE("A minimum does not take room from the other flexible items", "[ui][stack]")
+TEST_CASE("A minimum takes its room from the other flexible items", "[ui][stack]")
 {
     const auto place = [](const float width) {
         luil::stack_config config {};
@@ -437,8 +438,44 @@ TEST_CASE("A minimum does not take room from the other flexible items", "[ui][st
 
     // 하한이 넉넉하면 비율 분배 그대로다.
     REQUIRE(place(400.0f) == std::pair { 200.0f, 200.0f });
-    // 하나가 하한에 걸려도 **다른 항목의 몫은 줄지 않는다** — 재분배하지 않는다.
-    REQUIRE(place(300.0f) == std::pair { 160.0f, 150.0f });
+    // 하나가 하한에 걸리면 그 부족분은 다른 유연 항목의 몫에서 나온다. 합이 stack 폭 그대로라 넘치지 않는다.
+    REQUIRE(place(300.0f) == std::pair { 160.0f, 140.0f });
+    // 하한만으로 자리가 모자라면 다른 항목은 0이 되고, 그때만 넘친다.
+    REQUIRE(place(120.0f) == std::pair { 160.0f, 0.0f });
+}
+
+TEST_CASE("A capped side panel and a weighted body fit a narrow row without overflow", "[ui][stack]")
+{
+    // 데모 변경 작업대의 몸통 행과 같은 모양이다: 옆 판(비율 1, 200~300)과 본문(비율 3), 간격 12.
+    //  - 예전 규칙에서는 옆 판이 하한 200에 걸려도 본문이 제 몫(3/4)을 그대로 받아, 좁은 창에서 오른쪽으로 넘쳤다.
+    const auto place = [](const float width, const float scale) {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 12.0f;
+        auto stack { std::make_unique<luil::stack_element>(luil::ui_element_id { luil::application_element_kind(50) }, config) };
+        auto side { make_probe(u8"side") };
+        auto body { make_probe(u8"body") };
+        const luil::ui_element* const side_probe { side.get() };
+        const luil::ui_element* const body_probe { body.get() };
+        stack->add(std::move(side), { .weight = 1.0f, .minimum = 200.0f, .maximum = 300.0f });
+        stack->add_flexible(std::move(body), 3.0f);
+        stack->arrange({ { 0.0f, 0.0f, width, 400.0f }, scale });
+        return std::pair { side_probe->bounds(), body_probe->bounds() };
+    };
+
+    // 넓으면 옆 판이 상한 300에 서고 본문이 나머지를 갖는다.
+    const auto [wide_side, wide_body] { place(1268.0f, 1.0f) };
+    REQUIRE(wide_side.width == 300.0f);
+    REQUIRE(wide_body.width == 956.0f);
+    // 좁으면 옆 판이 하한 200에 서고 본문은 줄어든다. 오른쪽 끝이 stack 폭을 넘지 않는다.
+    const auto [narrow_side, narrow_body] { place(752.0f, 1.0f) };
+    REQUIRE(narrow_side.width == 200.0f);
+    REQUIRE(narrow_body.width == 540.0f);
+    REQUIRE(narrow_body.x + narrow_body.width == 752.0f);
+    // 배율 1.5의 같은 논리 폭(501)도 물리 폭(751.5) 안에 든다.
+    const auto [scaled_side, scaled_body] { place(751.5f, 1.5f) };
+    REQUIRE(scaled_side.width == 300.0f);
+    REQUIRE(scaled_body.x + scaled_body.width == Catch::Approx(751.5f));
 }
 
 TEST_CASE("A minimum is a logical pixel and only a flexible item has one", "[ui][stack]")
@@ -462,8 +499,8 @@ TEST_CASE("A minimum is a logical pixel and only a flexible item has one", "[ui]
 
     // 고정 100(=50×2)을 뺀 500을 둘이 250씩 나누는데, 하한 160은 배율 2에서 320이다.
     REQUIRE(scaled_probe->bounds().width == 320.0f);
-    // 음수 하한은 조용히 무시된다.
-    REQUIRE(negative_probe->bounds().width == 250.0f);
+    // 음수 하한은 조용히 무시된다. 하한에 선 320을 뺀 나머지 180을 받는다.
+    REQUIRE(negative_probe->bounds().width == 180.0f);
     REQUIRE(pinned_probe->bounds().width == 100.0f);
 }
 

@@ -267,3 +267,23 @@ TEST_CASE("Containers that only fix lengths do not answer a size", "[ui][layout]
     REQUIRE(wanted->width == 36.0f + 4.0f);
     REQUIRE(wanted->height == 2.0f * luil::label_element::height_for({ .font_size = 12.0f }) + 4.0f + 4.0f);
 }
+
+TEST_CASE("A grid flexible column at its minimum takes room from the other flexible columns", "[ui][layout][grid]")
+{
+    // 400을 1:3으로 나누면 100·300이다. 첫 열이 하한 200에 서면 둘째 열은 나머지 200을 받는다 — 넘치지 않는다.
+    luil::grid_config config { .columns = { luil::grid_track::flexible(1.0f, 200.0f), luil::grid_track::flexible(3.0f) } };
+    auto grid { std::make_unique<luil::grid_element>(named(u8"columns"), config) };
+    grid->add(label(u8"left", u8""), { .row = 0, .column = 0 });
+    grid->add(label(u8"right", u8""), { .row = 0, .column = 1 });
+    auto* const columns { grid.get() };
+    const luil::ui_tree tree { arranged(std::move(grid), { 0.0f, 0.0f, 400.0f, 40.0f }) };
+    REQUIRE(columns->column_widths() == std::vector<float> { 200.0f, 200.0f });
+    REQUIRE(bounds_of(tree, u8"right").x + bounds_of(tree, u8"right").width == 400.0f);
+
+    // 하한만으로 모자라면 그때만 넘친다.
+    luil::grid_config tight { .columns = { luil::grid_track::flexible(1.0f, 200.0f), luil::grid_track::flexible(1.0f, 300.0f) } };
+    auto narrow { std::make_unique<luil::grid_element>(named(u8"tight"), tight) };
+    auto* const tight_columns { narrow.get() };
+    const luil::ui_tree narrow_tree { arranged(std::move(narrow), { 0.0f, 0.0f, 400.0f, 40.0f }) };
+    REQUIRE(tight_columns->column_widths() == std::vector<float> { 200.0f, 300.0f });
+}
