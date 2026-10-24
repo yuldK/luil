@@ -32,7 +32,11 @@ namespace luil {
 
         // 칸 글 한 줄을 그린다. 끝 정렬은 글이 들어갈 때만 오른쪽에 붙고, 넘치면 시작에서 잘라 그린다 —
         // 넘친 숫자를 오른쪽에 붙이면 앞자리가 잘려 다른 숫자로 읽힌다.
-        void draw_cell_text(SkCanvas& canvas, const std::u8string_view text, const rect_f& cell, const column_align align, const float scale, const SkFont& font, const SkPaint& paint)
+        //  - 가운데 말줄임은 label과 같은 도우미(`elide_text_middle`)로 줄인 뒤 그린다. 줄인 글은 언제나 들어가므로
+        //    끝 정렬이면 오른쪽에 붙는다.
+        //  - 뒤 말줄임은 지금까지의 `draw_text_within` 길 그대로다. 글리프 자리와 raster가 바뀌지 않는다.
+        void draw_cell_text(SkCanvas& canvas, const std::u8string_view text, const rect_f& cell, const column_align align, const text_elide elide, const float scale,
+            const SkFont& font, const SkPaint& paint)
         {
             if (text.empty())
                 return;
@@ -40,11 +44,22 @@ namespace luil {
             const float available { cell.width - padding * 2.0f };
             if (available <= 0.0f)
                 return;
+            const float baseline { cell.y + centered_text_baseline(font, cell.height) };
+            if (elide == text_elide::middle)
+            {
+                const std::u8string drawn { elide_text_middle(text, available, font) };
+                if (drawn.empty())
+                    return;
+                const float width { measure_text(drawn, font) };
+                const float left { align == column_align::end ? cell.x + cell.width - padding - width : cell.x + padding };
+                draw_text(canvas, drawn, left, baseline, font, paint);
+                return;
+            }
             float left { cell.x + padding };
             if (align == column_align::end)
                 if (const float width { measure_text(text, font) }; width <= available)
                     left = cell.x + cell.width - padding - width;
-            static_cast<void>(draw_text_within(canvas, text, left, cell.y + centered_text_baseline(font, cell.height), available, font, paint));
+            static_cast<void>(draw_text_within(canvas, text, left, baseline, available, font, paint));
         }
 
         // 편집 중인 칸의 자리다. 앱의 편집기를 담고 초점을 그 안에 가둔다.
@@ -221,7 +236,7 @@ namespace luil {
                     const float lead { leads_[column] * scale };
                     cell.x += lead;
                     cell.width = std::max(0.0f, cell.width - lead);
-                    draw_cell_text(context.canvas, texts_[column], cell, columns[column].align, scale, font, foreground);
+                    draw_cell_text(context.canvas, texts_[column], cell, columns[column].align, columns[column].elide, scale, font, foreground);
                 }
                 context.canvas.restore();
                 draw_children(context, interaction);
@@ -436,7 +451,7 @@ namespace luil {
                 }
                 const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
                 const SkPaint foreground { solid_paint(sort_ != sort_direction::none ? context.palette.primary_foreground : context.palette.secondary_foreground) };
-                draw_cell_text(context.canvas, header_, text_box, align_, scale, font, foreground);
+                draw_cell_text(context.canvas, header_, text_box, align_, text_elide::end, scale, font, foreground);
             }
 
             [[nodiscard]] access_info accessibility() const override
@@ -565,6 +580,8 @@ namespace luil {
         virtual_list_config rows { std::move(config_.rows) };
         config_.rows = {};
         expand_ = rows.set_expanded;
+        // 본문의 영역은 흘릴 메시지가 없으면 막대를 짓지 않는다 (`scroll_area_element`와 같은 판정).
+        vertical_bar_ = rows.scroll != nullptr ? rows.bar : scrollbar_visibility::never;
         rows.owner = config_.owner;
         // 계층은 트리 열 안에 그린다. 행 앞에 따로 자리를 두지 않는다.
         rows.tree_gutter = false;
@@ -579,6 +596,24 @@ namespace luil {
         auto body { std::make_unique<virtual_list_element>(std::move(rows)) };
         body_ = body.get();
         add_child(std::move(body));
+
+        // 가로 막대다. 보임과 자리는 창 폭을 아는 `arrange`가 정한다.
+        //  - 자리표는 본문의 세로 막대(`scroll_area_bar`, 표 owner)와 겹치지 않게 부품 자리표로 둔다.
+        //  - Tab의 자리가 아니다. 본문이 이미 ←·→를 가진 자리라, 막대까지 자리가 되면 같은 표에 자리가 둘 선다.
+        //  - 눌러도 초점은 본문에 선다 (머리글·체크 칸과 같은 이유). 막대를 끈 뒤에도 ↓·←·→가 표의 것이다.
+        if (config_.scroll_horizontal != nullptr && config_.horizontal_bar != scrollbar_visibility::never)
+        {
+            scrollbar_config bar {};
+            bar.axis = scrollbar_axis::horizontal;
+            bar.scroll = config_.scroll_horizontal;
+            bar.scroll_to = config_.scroll_horizontal_to;
+            auto element { std::make_unique<scrollbar_element>(ui_element_id { ui_element_kind::scroll_area_bar, part_owner(config_.owner, u8"scroll-x") }, std::move(bar)) };
+            element->set_tab_stop(false);
+            element->set_pointer_focus_target(body_id(config_.owner));
+            element->set_visible(false);
+            horizontal_bar_ = element.get();
+            add_child(std::move(element));
+        }
 
         const bool checks { config_.check_column.empty() == false && config_.toggle_check != nullptr };
         if (config_.scroll_horizontal != nullptr || checks || config_.move_column != nullptr || config_.begin_edit != nullptr)
@@ -713,6 +748,11 @@ namespace luil {
         return *body_;
     }
 
+    const scrollbar_element* table_element::horizontal_bar() const noexcept
+    {
+        return horizontal_bar_;
+    }
+
     const table_config& table_element::config() const noexcept
     {
         return config_;
@@ -732,7 +772,31 @@ namespace luil {
     {
         set_bounds(context.slot);
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-        viewport_width_ = context.slot.width / scale;
+        const float header_height { std::min(table_header_height * scale, context.slot.height) };
+        const float rows_height { context.slot.height - header_height };
+
+        // 두 막대가 서로의 자리를 줄인다. 세로 막대가 서면 가로 창이 좁아져 열이 넘치고, 가로 막대가 서면 본문 창이
+        // 낮아져 행이 넘친다. 그래서 본문을 배치하기 **전에** 둘을 함께 정한다 — 본문은 높이가 있는 첫 배치에서
+        // 행을 지으므로(`virtual_list_element::arrange`) 한 번 배치해 보고 다시 배치할 수 없다.
+        //  - 세로의 판정은 본문 영역이 막대를 세우는 식(`scroll_area_element::bar_takes_space`)과 같다. 어긋나면 구석이
+        //    비었는데 세로 막대가 없거나, 세로 막대 밑으로 가로 막대가 지난다.
+        //  - 막대가 서면 상대의 자리는 줄기만 하므로 넘치던 쪽이 다시 들어가는 일은 없다. 두 번이면 정해진다.
+        const float vertical_width { std::min(scroll_area_bar_width * scale, context.slot.width) };
+        const float horizontal_full { std::min(scroll_area_bar_width * scale, rows_height) };
+        const auto vertical_over = [this, scale](const float height) {
+            return vertical_bar_ == scrollbar_visibility::always || (vertical_bar_ == scrollbar_visibility::automatic && body_->content_height() > height / scale);
+        };
+        const auto horizontal_over = [this, scale](const float width) {
+            return horizontal_bar_ != nullptr && (config_.horizontal_bar == scrollbar_visibility::always || content_width_ > width / scale);
+        };
+        bool vertical { vertical_over(rows_height) };
+        const bool horizontal { horizontal_over(context.slot.width - (vertical ? vertical_width : 0.0f)) };
+        if (horizontal && vertical == false)
+            vertical = vertical_over(rows_height - horizontal_full);
+        const float horizontal_height { horizontal ? horizontal_full : 0.0f };
+        // 가로 창은 본문이 실제로 글을 보이는 폭이다. 세로 막대 밑으로 들어간 열은 보이지 않으므로 창이 아니다.
+        const float view_width { context.slot.width - (vertical ? vertical_width : 0.0f) };
+        viewport_width_ = view_width / scale;
         scroll_x_ = table_clamp_scroll(config_.scroll_x, content_width_, viewport_width_);
 
         // 가로 휠의 임자다. 세로 휠은 안쪽 본문이 가지고, 가로 휠은 축이 다른 본문을 지나 여기로 온다
@@ -751,9 +815,22 @@ namespace luil {
             set_scroll_source(std::move(source));
         }
 
-        const float header_height { std::min(table_header_height * scale, context.slot.height) };
         header_->arrange(context.for_child({ context.slot.x, context.slot.y, context.slot.width, header_height }));
-        body_->arrange(context.for_child({ context.slot.x, context.slot.y + header_height, context.slot.width, context.slot.height - header_height }));
+        // 가로 막대의 높이만큼 본문 창이 준다. 마지막 행이 막대 밑에 숨지 않는다.
+        const float body_height { rows_height - horizontal_height };
+        body_->arrange(context.for_child({ context.slot.x, context.slot.y + header_height, context.slot.width, body_height }));
+
+        if (horizontal_bar_ == nullptr)
+            return;
+        // 넘치지 않는 배치에서는 숨긴다. 숨긴 막대는 그려지지도 눌리지도 않는다 (`scroll_area_element`의 세로 막대와 같다).
+        horizontal_bar_->set_visible(horizontal);
+        horizontal_bar_->set_enabled(horizontal);
+        if (horizontal == false)
+            return;
+        horizontal_bar_->set_access_name(access_name());
+        horizontal_bar_->set_metrics(content_width_, viewport_width_, scroll_x_);
+        // 세로 막대의 폭만큼 짧게 세워 구석을 비운다. 두 막대의 끝이 겹치면 구석의 누름이 어느 막대의 것인지 모른다.
+        horizontal_bar_->arrange(context.for_child({ context.slot.x, context.slot.y + header_height + body_height, view_width, horizontal_height }));
     }
 
     void table_element::draw(draw_context& context, const interaction_snapshot& interaction) const

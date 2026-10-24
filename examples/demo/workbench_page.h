@@ -112,6 +112,12 @@ namespace demo {
         float delta { 0.0f };
     };
 
+    // 표의 가로 막대에서 보조 기술이 자리를 정했다 (논리 픽셀, 절대 값).
+    struct workbench_change_scroll_x_to_intent
+    {
+        float offset { 0.0f };
+    };
+
     // 행을 우클릭했다. 메뉴는 그 자리에 선다 (물리 픽셀).
     struct workbench_menu_intent
     {

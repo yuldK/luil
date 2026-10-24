@@ -263,8 +263,9 @@ namespace demo {
             changes_.push_back({ u8"trunk/tests/case_" + number + u8".cpp", u8"추가됨", 512 + index * 37, false });
         }
 
+        // 경로 열은 가운데를 줄인다. 좁혀도 폴더의 시작과 파일 이름이 함께 남는다.
         columns_ = {
-            { .key = u8"path", .header = u8"경로", .width = 340.0f, .min_width = 120.0f },
+            { .key = u8"path", .header = u8"경로", .width = 340.0f, .min_width = 120.0f, .elide = luil::text_elide::middle },
             { .key = u8"status", .header = u8"상태", .width = 90.0f },
             { .key = u8"size", .header = u8"크기", .width = 100.0f, .align = luil::column_align::end },
         };
@@ -606,6 +607,11 @@ namespace demo {
         if (const auto* const scroll { message.get<workbench_change_scroll_x_intent>() }; scroll != nullptr)
         {
             changes_scroll_x_ = std::max(0.0f, changes_scroll_x_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_change_scroll_x_to_intent>() }; scroll != nullptr)
+        {
+            changes_scroll_x_ = std::max(0.0f, scroll->offset);
             return true;
         }
         if (const auto* const menu { message.get<workbench_menu_intent>() }; menu != nullptr)
@@ -1015,6 +1021,7 @@ namespace demo {
         table.toggle_check = [](const std::u8string& key) { return luil::make_app_action(workbench_change_check_intent { key }); };
         table.scroll_x = changes_scroll_x_;
         table.scroll_horizontal = [](const float delta) { return luil::make_app_action(workbench_change_scroll_x_intent { delta }); };
+        table.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(workbench_change_scroll_x_to_intent { offset }); };
         table.sort_request = [](const std::u8string& column) { return luil::make_app_action(workbench_sort_intent { column }); };
         table.resize_column = [](const std::u8string& column, const float delta) { return luil::make_app_action(workbench_resize_intent { column, delta }); };
 

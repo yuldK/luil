@@ -1,9 +1,12 @@
 #include "luil/ui/table_element.h"
 
+#include "luil/theme/ui_theme.h"
+#include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -38,6 +41,11 @@ namespace {
     struct scroll_x_intent
     {
         float delta { 0.0f };
+    };
+
+    struct scroll_x_to_intent
+    {
+        float offset { 0.0f };
     };
 
     struct scroll_y_intent
@@ -107,7 +115,8 @@ namespace {
         return { name, author, revision };
     }
 
-    // 열 폭의 합은 320이고 창은 200이다 — 가로로 120만큼 흐를 수 있다.
+    // 열 폭의 합은 320이고 표는 200 폭이다. 스무 행(400)이 넘쳐 세로 막대(16)가 서므로 가로 창은 184다 —
+    // 가로로 136만큼 흐를 수 있다.
     [[nodiscard]] luil::table_config make_config(const bool custom_cells = false)
     {
         luil::table_config config {};
@@ -278,8 +287,9 @@ TEST_CASE("A table clamps its horizontal scroll and only realises the visible ro
     const luil::table_element* const table { owned.get() };
     const luil::ui_tree tree { luil::make_arranged_tree(std::move(owned), { 0.0f, 0.0f, 200.0f, 120.0f }, 1.0f) };
     REQUIRE(table->content_width() == 320.0f);
-    REQUIRE(table->scroll_x() == 120.0f);
-    // 머리글 28을 뺀 92 높이에 20짜리 행 다섯과 overscan이다. 모델 스무 줄을 다 짓지 않는다.
+    // 가로 창은 세로 막대를 뺀 184다. 끝까지 흘리면 마지막 열의 끝이 세로 막대 앞에 선다.
+    REQUIRE(table->scroll_x() == 136.0f);
+    // 머리글 28과 가로 막대 16을 뺀 76 높이에 20짜리 행 넷과 overscan이다. 모델 스무 줄을 다 짓지 않는다.
     REQUIRE(table->body().realized().end - table->body().realized().begin < 10u);
 }
 
@@ -442,9 +452,9 @@ TEST_CASE("With cell navigation left and right move the cell cursor and reveal i
     const auto right { controller.process(press(luil::key_code::arrow_right, 10)) };
     REQUIRE(message_at<column_intent>(right, 0) != nullptr);
     REQUIRE(message_at<column_intent>(right, 0)->column == u8"revision");
-    // 리비전 열(250~320)은 창(0~200) 밖이라 끝을 맞춰 들인다.
+    // 리비전 열(250~320)은 창(세로 막대를 뺀 0~184) 밖이라 끝을 맞춰 들인다.
     REQUIRE(message_at<scroll_x_intent>(right, 1) != nullptr);
-    REQUIRE(message_at<scroll_x_intent>(right, 1)->delta == 120.0f);
+    REQUIRE(message_at<scroll_x_intent>(right, 1)->delta == 136.0f);
 
     const auto left { controller.process(press(luil::key_code::arrow_left, 20)) };
     REQUIRE(message_at<column_intent>(left, 0) != nullptr);
@@ -555,4 +565,108 @@ TEST_CASE("Dragging a header onto another asks the app to reorder the columns", 
     const auto opened { (*menu)({ revision.id(), 260.0f, 10.0f }) };
     REQUIRE(message_at<column_intent>(opened, 0) != nullptr);
     REQUIRE(message_at<column_intent>(opened, 0)->column == u8"revision");
+}
+
+TEST_CASE("A horizontal bar stands under the rows only while the columns overflow", "[ui][table][scrollbar]")
+{
+    luil::table_config config { make_config() };
+    config.scroll_x = 50.0f;
+    config.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(scroll_x_to_intent { offset }); };
+    auto owned { std::make_unique<luil::table_element>(std::move(config)) };
+    const luil::table_element* const table { owned.get() };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(owned), { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f) };
+    REQUIRE(tree.duplicate_ids().empty());
+    REQUIRE(tree.unarranged().empty());
+
+    // 열(320)이 창(세로 막대를 뺀 184)보다 넓어 막대가 선다. 범위와 값이 표의 가로 스크롤 그대로다.
+    const luil::scrollbar_element* const bar { table->horizontal_bar() };
+    REQUIRE(bar != nullptr);
+    REQUIRE(bar->visible());
+    REQUIRE(bar->tab_stop() == false);
+    REQUIRE(bar->pointer_focus_target() == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
+    const luil::access_info info { bar->accessibility() };
+    REQUIRE(info.role == luil::access_role::scroll_bar);
+    REQUIRE(info.orientation == luil::access_orientation::horizontal);
+    REQUIRE(table->scroll_x() == 50.0f);
+    REQUIRE(info.range == luil::access_range { 0.0f, 136.0f, table->scroll_x() });
+
+    // 막대는 본문 아래에 서고, 세로 막대의 폭만큼 짧아 구석을 비운다.
+    const luil::rect_f box { bar->bounds() };
+    REQUIRE(box.x == 0.0f);
+    REQUIRE(box.y == 300.0f - luil::scroll_area_bar_width);
+    REQUIRE(box.width == 200.0f - luil::scroll_area_bar_width);
+    REQUIRE(box.height == luil::scroll_area_bar_width);
+    // 본문 창은 머리글과 막대를 뺀 높이다. 마지막 행이 막대 밑에 숨지 않는다.
+    const float rows { 300.0f - luil::table_header_height - luil::scroll_area_bar_width };
+    REQUIRE(table->body().bounds().height == rows);
+    REQUIRE(table->body().metrics().viewport_height == rows);
+
+    // 보조 기술의 값 설정은 절대 메시지다. 범위 밖 값은 막대가 다듬는다.
+    const std::optional<std::vector<luil::input_action>> set { bar->access_actions({ luil::access_command::set_value, 500.0f }) };
+    REQUIRE(set.has_value());
+    REQUIRE(message_at<scroll_x_to_intent>(*set, 0) != nullptr);
+    REQUIRE(message_at<scroll_x_to_intent>(*set, 0)->offset == 136.0f);
+
+    // 열이 창 안에 들어가면 막대가 숨고 본문이 그 자리를 되찾는다.
+    luil::table_config narrow_config { make_config() };
+    narrow_config.columns[0].width = 60.0f;
+    narrow_config.columns[1].width = 50.0f;
+    narrow_config.columns[2].width = 40.0f;
+    auto narrow_owned { std::make_unique<luil::table_element>(std::move(narrow_config)) };
+    const luil::table_element* const narrow { narrow_owned.get() };
+    const luil::ui_tree narrow_tree { luil::make_arranged_tree(std::move(narrow_owned), { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f) };
+    REQUIRE(narrow_tree.unarranged().empty());
+    REQUIRE(narrow->horizontal_bar() != nullptr);
+    REQUIRE(narrow->horizontal_bar()->visible() == false);
+    REQUIRE(narrow->body().bounds().height == 300.0f - luil::table_header_height);
+
+    // 가로로 흐르지 않는 표와 막대를 끈 표에는 막대가 없다.
+    luil::table_config fixed { make_config() };
+    fixed.scroll_horizontal = {};
+    REQUIRE(luil::table_element { std::move(fixed) }.horizontal_bar() == nullptr);
+    luil::table_config hidden { make_config() };
+    hidden.horizontal_bar = luil::scrollbar_visibility::never;
+    REQUIRE(luil::table_element { std::move(hidden) }.horizontal_bar() == nullptr);
+}
+
+TEST_CASE("A horizontal bar that pushes the rows into overflow still leaves the corner", "[ui][table][scrollbar]")
+{
+    // 열세 행(260)은 머리글만 뺀 창(272)에 들어가지만, 가로 막대가 선 창(256)에는 넘친다.
+    luil::table_config config { make_config() };
+    config.rows.items.resize(13u);
+    config.scroll_x = 1000.0f;
+    auto owned { std::make_unique<luil::table_element>(std::move(config)) };
+    const luil::table_element* const table { owned.get() };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(owned), { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f) };
+    REQUIRE(tree.unarranged().empty());
+    REQUIRE(table->body().metrics().overflowing());
+    REQUIRE(find(tree, { luil::ui_element_kind::scroll_area_bar, u8"files" }).visible());
+    // 세로 막대가 서므로 가로 창도 그만큼 준다. 막대와 다듬기가 같은 창을 본다.
+    REQUIRE(table->horizontal_bar()->bounds().width == 200.0f - luil::scroll_area_bar_width);
+    REQUIRE(table->scroll_x() == 320.0f - (200.0f - luil::scroll_area_bar_width));
+}
+
+TEST_CASE("A column can shorten its text in the middle", "[ui][table][elide]")
+{
+    // 기본은 지금처럼 뒤를 줄인다.
+    REQUIRE(luil::table_column {}.elide == luil::text_elide::end);
+
+    // 이 test 실행 파일은 글꼴 관리자가 비어 있어(`core_platform_stub.cpp`) 글 폭을 잴 수 없다. 줄인 글의 앞뒤는
+    // `elide_text_middle`이 맡고, 여기서는 열의 값이 그리기까지 닿아 그 길이 끝까지 도는지를 본다.
+    luil::table_config config { make_config() };
+    config.columns[0].elide = luil::text_elide::middle;
+    config.columns[2].elide = luil::text_elide::middle;
+    config.cell_text = [](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) {
+        return u8"trunk/source/very/deep/folder/" + row.key + u8"." + column.key;
+    };
+    auto owned { std::make_unique<luil::table_element>(std::move(config)) };
+    const luil::table_element* const table { owned.get() };
+    const auto tree { std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(owned), { 0.0f, 0.0f, 400.0f, 600.0f }, 2.0f)) };
+    REQUIRE(table->config().columns[0].elide == luil::text_elide::middle);
+    REQUIRE(table->config().columns[1].elide == luil::text_elide::end);
+
+    luil::testing::raster_frame frame { 400, 600, luil::color_palette_for(luil::color_theme::dark), 2.0f };
+    // 가운데 말줄임 길을 지나 끝까지 그린다. 픽셀은 글꼴에 매이므로 보지 않는다.
+    frame.draw(*tree, {});
+    REQUIRE(tree->unarranged().empty());
 }
