@@ -1044,8 +1044,10 @@ namespace demo {
         std::u8string title { patch_path_.empty() ? diff_source_ : u8"불러온 패치: " + patch_path_ };
         if (title.empty())
             title = u8"표에서 변경을 고르면 차이를 보인다";
+        // 제목과 찾기 칸이 좁은 판의 폭을 나눈다. 찾기 칸은 96~180이고, 제목은 남는 폭에서 가운데를 줄인다.
         head->add_flexible(std::make_unique<luil::label_element>(
-            workbench_id(u8"diff-title"), luil::label_config { .text = std::move(title), .color = luil::label_color_role::primary, .elide = luil::text_elide::middle }));
+                               workbench_id(u8"diff-title"), luil::label_config { .text = std::move(title), .color = luil::label_color_role::primary, .elide = luil::text_elide::middle }),
+            2.0f);
         if (patch_path_.empty() == false)
         {
             auto close { std::make_unique<luil::text_button_element>(workbench_id(u8"patch-close"), luil::text_button_config { .text = u8"패치 닫기", .visual = luil::text_button_visual::link }) };
@@ -1060,7 +1062,7 @@ namespace demo {
         find_config.submit = luil::make_message_action(workbench_find_step_intent { 1 });
         head->add(std::make_unique<luil::text_input_element>(luil::ui_element_id { kind_workbench_find_input }, luil::make_text_input_view(find_, find_composition_, target_workbench_find),
                       std::move(find_config)),
-            luil::stack_item { .length = 180.0f, .cross_length = 28.0f });
+            luil::stack_item { .weight = 1.0f, .cross_length = 28.0f, .minimum = 96.0f, .maximum = 180.0f });
         std::u8string count {};
         if (matched_query_.empty() == false)
             count = matches_.empty() ? std::u8string { u8"없음" } : to_u8(static_cast<int>(current_match_ + 1)) + u8"/" + to_u8(static_cast<int>(matches_.size()));
