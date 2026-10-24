@@ -79,6 +79,39 @@ TEST_CASE("CRLF and a trailing newline preserve empty logical rows and byte offs
     REQUIRE_FALSE(luil::text_layout {}.valid());
 }
 
+TEST_CASE("Wrapped rows hang trailing spaces outside their width", "[ui][text-layout]")
+{
+    const auto layout { luil::make_text_layout({ .text = u8"abc    def", .width = 30.0f, .wrap = true, .line_height = 10.0f }, cells) };
+    REQUIRE(layout.lines().size() == 2);
+    // 공백은 접은 줄에 남아 caret을 둘 수 있지만 폭은 보이는 글자까지다.
+    REQUIRE(layout.lines()[0].end == 7);
+    REQUIRE(layout.lines()[0].width == 30.0f);
+    REQUIRE(layout.lines()[1].begin == 7);
+    REQUIRE(layout.size().width == 30.0f);
+    // 접지 않은 마지막 줄의 공백은 입력 칸의 caret 자리라 폭에 남는다.
+    REQUIRE(luil::make_text_layout({ .text = u8"ab  ", .width = 100.0f, .wrap = true }, cells).size().width == 40.0f);
+}
+
+TEST_CASE("Wrap cuts stay on grapheme boundaries after a space with a combining mark", "[ui][text-layout]")
+{
+    const std::u8string text { u8"ab ́cdef" };
+    const auto layout { luil::make_text_layout({ .text = text, .width = 20.0f, .wrap = true, .line_height = 10.0f }, cells) };
+    const auto lines { layout.lines() };
+    REQUIRE(lines.size() > 1);
+    REQUIRE(lines.front().begin == 0);
+    for (std::size_t index { 1 }; index < lines.size(); ++index)
+        REQUIRE(lines[index].begin == lines[index - 1].end);
+    REQUIRE(lines.back().end == text.size());
+}
+
+TEST_CASE("The selected newline marker follows the physical font size", "[ui][text-layout]")
+{
+    const auto layout { luil::make_text_layout({ .text = u8"a\nb", .font_size = 24.0f, .line_height = 10.0f }, cells) };
+    const auto selection { layout.selection_rects(0, 3) };
+    REQUIRE(selection.size() == 2);
+    REQUIRE(selection[0].width == Catch::Approx(18.0f));
+}
+
 TEST_CASE("Synthetic ligature clusters divide carets without measuring prefixes", "[ui][text-layout][ligature]")
 {
     int calls { 0 };

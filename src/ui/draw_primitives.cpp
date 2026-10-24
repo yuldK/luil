@@ -159,15 +159,16 @@ namespace luil {
     {
         if (text.empty())
             return;
-        std::u8string storage {};
-        const std::u8string_view drawable { drawable_text(text, storage) };
-
+        // 배치에는 원문을 그대로 넘긴다. 잘못된 byte는 배치가 offset을 지키며 U+FFFD glyph로 그리고 Skia에 UTF-8로 넘기지 않는다.
+        //  - 고친 사본을 넘기면 같은 글이 입력 칸의 배치와 다른 backend로 재여 폭이 갈린다.
         if (ui_text_shaping_enabled())
         {
-            const auto layout { make_font_text_layout({ .text = std::u8string { drawable }, .font_size = font.getSize() }, font) };
+            const auto layout { make_font_text_layout({ .text = std::u8string { text }, .font_size = font.getSize() }, font) };
             draw_text_layout(canvas, layout, { x, y - layout.lines().front().baseline }, paint);
             return;
         }
+        std::u8string storage {};
+        const std::u8string_view drawable { drawable_text(text, storage) };
         const SkFont adjusted { quality_font(font) };
         float pen { x };
         for (const text_run& run : split_text_runs(drawable, adjusted))
@@ -213,11 +214,11 @@ namespace luil {
     {
         if (text.empty())
             return 0.0f;
+        // 그리기와 같이 원문으로 잰다. 배치의 잘못된 UTF-8 처리와 폭이 같아야 caret과 글자가 맞는다.
+        if (ui_text_shaping_enabled())
+            return make_font_text_layout({ .text = std::u8string { text }, .font_size = font.getSize() }, font).size().width;
         std::u8string storage {};
         const std::u8string_view drawable { drawable_text(text, storage) };
-
-        if (ui_text_shaping_enabled())
-            return make_font_text_layout({ .text = std::u8string { drawable }, .font_size = font.getSize() }, font).size().width;
         // 그리기와 같은 품질 설정으로 재야 caret 자리와 글자가 일치한다.
         const SkFont adjusted { quality_font(font) };
         float width { 0.0f };

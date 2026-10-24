@@ -241,6 +241,20 @@ namespace luil {
             invalidate_text_layouts();
     }
 
+    std::u8string configured_ui_family()
+    {
+        font_registry& state { registry() };
+        const std::lock_guard<std::mutex> lock { state.mutex };
+        return state.ui_family;
+    }
+
+    std::u8string configured_code_family()
+    {
+        font_registry& state { registry() };
+        const std::lock_guard<std::mutex> lock { state.mutex };
+        return state.code_family;
+    }
+
     sk_sp<SkTypeface> configured_ui_typeface()
     {
         font_registry& state { registry() };
@@ -265,7 +279,6 @@ namespace luil {
 
     void clear_font_caches()
     {
-        invalidate_text_layouts();
         font_registry& state { registry() };
         const std::lock_guard<std::mutex> lock { state.mutex };
         state.cache.clear();
@@ -280,6 +293,8 @@ namespace luil {
         //    자물쇠를 쥔 이 자리에서 치르면 `WM_FONTCHANGE`가 UI를 멈춰 세운다.
         state.manager = nullptr;
         state.manager_ready = false;
+        // 비운 뒤에 올린다. 먼저 올리면 그 사이 배치가 새 revision으로 낡은 대체 글꼴을 cache에 넣는다.
+        invalidate_text_layouts();
     }
 
     std::size_t fallback_cache_size()

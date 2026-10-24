@@ -55,6 +55,9 @@ namespace luil {
     // 빈 이름은 내장 글꼴을 뜻하고, 목록에 없는 이름도 조용히 내장 글꼴로 되돌아간다.
     // 값이 그대로면 아무 일도 하지 않으므로 매 frame 불러도 된다 (UI thread).
     void set_configured_fonts(std::u8string_view ui_family, std::u8string_view code_family);
+    // 지금 설정된 가족 이름이다. 잠시 바꾼 설정을 원래대로 되돌릴 때 쓴다.
+    [[nodiscard]] std::u8string configured_ui_family();
+    [[nodiscard]] std::u8string configured_code_family();
 
     // 현재 설정된 글꼴이다.
     // 그리기 thread와 입력 thread가 같은 값을 봐야 caret 자리와

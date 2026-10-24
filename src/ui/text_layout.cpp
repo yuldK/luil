@@ -166,28 +166,43 @@ namespace luil {
             float right { x_at(stops, to) };
             if (left > right)
                 std::swap(left, right);
+            // 고른 줄 바꿈의 표시다. 요청이 물리 픽셀이라 글자 크기를 따른다 — 12px에서 예전의 4px이다.
             if (end > row.end && row.wrapped == false)
-                right += 4.0f;
+                right += data_->font_size / 3.0f;
             rects.push_back({ left, row.top, right - left, row.height });
         }
         return rects;
     }
 
+    void normalize_text_layout_request(text_layout_request& request) noexcept
+    {
+        request.font_size = std::isfinite(request.font_size) ? std::max(0.0f, request.font_size) : 12.0f;
+        // 접지 않으면 폭은 기하에 쓰이지 않는다. 남겨 두면 폭만 다른 같은 배치가 cache를 따로 채운다.
+        if (request.wrap == false || std::isfinite(request.width) == false || request.width < 0.0f)
+            request.width = 0.0f;
+        if (std::isfinite(request.line_height) == false || request.line_height < 0.0f)
+            request.line_height = 0.0f;
+    }
+
     text_layout build_text_layout(text_layout_request request, const text_layout_backend backend, const text_layout_shaper& shape)
     {
+        normalize_text_layout_request(request);
         auto data { std::make_shared<text_layout_data>() };
         data->text = std::move(request.text);
-        if (std::isfinite(request.width) == false)
-            request.width = 0.0f;
         data->backend = backend;
+        data->font_size = request.font_size;
         const std::u8string_view text { data->text };
         std::size_t logical { 0 };
-        const auto append = [&](const std::size_t begin, const std::size_t end, const bool wrapped, text_layout_segment segment) {
+        const auto append = [&](const std::size_t begin, const std::size_t end, const bool wrapped, text_layout_segment segment, const std::size_t visible) {
             const auto index { data->lines.size() };
             const float height { std::max(1.0f, segment.height) };
             auto stops { stops_of(text.substr(begin, end - begin), segment, data->approximate) };
             const bool increasing { std::is_sorted(stops.begin(), stops.end(), [](const auto& a, const auto& b) { return a.x < b.x; }) };
-            data->lines.push_back({ begin, end, logical, wrapped, segment.width, data->size.height, height, segment.baseline, data->stops.size(), stops.size(), increasing });
+            // 접은 줄 끝에 매단 공백은 caret 자리로 남기되 폭에는 넣지 않는다. 넣으면 줄이 접은 폭을 넘은 것처럼 보인다.
+            float width { segment.width };
+            if (visible < end && increasing && stops.empty() == false)
+                width = std::min(width, x_at(stops, visible - begin));
+            data->lines.push_back({ begin, end, logical, wrapped, width, data->size.height, height, segment.baseline, data->stops.size(), stops.size(), increasing });
             data->lines.back().ascent = segment.ascent;
             data->lines.back().descent = segment.descent;
             data->lines.back().ink_bounds = { segment.ink_bounds.x, data->size.height + segment.baseline + segment.ink_bounds.y,
@@ -213,7 +228,7 @@ namespace luil {
                 data->runs.push_back(run);
             }
             data->drawings.push_back(std::move(segment.drawing));
-            data->size.width = std::max(data->size.width, segment.width);
+            data->size.width = std::max(data->size.width, width);
             data->size.height += height;
         };
         for (std::size_t paragraph { 0 };; ++logical)
@@ -223,7 +238,7 @@ namespace luil {
             const auto content { text.substr(paragraph, end - paragraph) };
             auto full { shape(content, paragraph) };
             if (request.wrap == false || request.width <= 0.0f || full.width <= request.width || content.empty())
-                append(paragraph, end, false, std::move(full));
+                append(paragraph, end, false, std::move(full), end);
             else
             {
                 bool approximate { false };
@@ -236,13 +251,15 @@ namespace luil {
                     while (fit + 1 < boundaries.size() && stops[fit + 1].x - stops[first].x <= request.width)
                         ++fit;
                     std::size_t cut { boundaries[fit] };
+                    // 자르는 자리는 언제나 글자소 경계다. 공백 뒤 결합 부호는 공백과 한 글자소라
+                    // byte 단위로 건너면 그 부호가 어느 줄에도 속하지 않는다.
                     while (cut < content.size() && content[cut] == u8' ')
-                        ++cut;
+                        cut = *std::upper_bound(boundaries.begin(), boundaries.end(), cut);
                     if (cut == boundaries[fit] && cut < content.size())
                     {
                         const auto space { content.substr(boundaries[first], cut - boundaries[first]).find_last_of(u8' ') };
                         if (space != std::u8string_view::npos)
-                            cut = boundaries[first] + space + 1;
+                            cut = *std::lower_bound(boundaries.begin(), boundaries.end(), boundaries[first] + space + 1);
                     }
                     auto row { shape(content.substr(boundaries[first], cut - boundaries[first]), paragraph + boundaries[first]) };
                     // 줄 경계 문맥으로 폭이 늘면 다시 줄인다. 글자소 하나는 넘쳐도 보존한다.
@@ -251,7 +268,10 @@ namespace luil {
                         cut = *std::prev(std::lower_bound(boundaries.begin(), boundaries.end(), cut));
                         row = shape(content.substr(boundaries[first], cut - boundaries[first]), paragraph + boundaries[first]);
                     }
-                    append(paragraph + boundaries[first], paragraph + cut, cut < content.size(), std::move(row));
+                    std::size_t visible { cut };
+                    while (cut < content.size() && visible > boundaries[first] && content[visible - 1] == u8' ')
+                        --visible;
+                    append(paragraph + boundaries[first], paragraph + cut, cut < content.size(), std::move(row), paragraph + visible);
                     first = static_cast<std::size_t>(std::lower_bound(boundaries.begin(), boundaries.end(), cut) - boundaries.begin());
                 }
             }
@@ -274,7 +294,8 @@ namespace luil {
 
     text_layout make_text_layout(text_layout_request request, const text_measurer& measurer)
     {
-        const float size { std::isfinite(request.font_size) ? std::max(0.0f, request.font_size) : 12.0f };
+        normalize_text_layout_request(request);
+        const float size { request.font_size };
         const float height { request.line_height > 0.0f ? request.line_height : std::max(1.0f, size * 1.5f) };
         return build_text_layout(std::move(request), text_layout_backend::measured, [&](const std::u8string_view text, std::size_t) {
             text_layout_segment segment {};
