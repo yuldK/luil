@@ -53,18 +53,20 @@ namespace luil::win32 {
             return fail(u8"Cannot set file dialog name", code);
         if (initial.value->empty() == false)
         {
+            // 처음 폴더는 힌트다. 지워졌거나 옮겨진 폴더 때문에 요청 전체를 실패시키지 않고 OS가 고른 폴더로 연다.
             Microsoft::WRL::ComPtr<IShellItem> folder {};
-            if (FAILED(code = SHCreateItemFromParsingName(initial.value->c_str(), nullptr, IID_PPV_ARGS(&folder)))
-                || FAILED(code = dialog->SetFolder(folder.Get())))
-                return fail(u8"Cannot use the initial folder", code);
+            if (SUCCEEDED(SHCreateItemFromParsingName(initial.value->c_str(), nullptr, IID_PPV_ARGS(&folder))))
+                static_cast<void>(dialog->SetFolder(folder.Get()));
         }
         std::vector<std::wstring> labels {};
         std::vector<std::wstring> patterns {};
         std::vector<COMDLG_FILTERSPEC> filters {};
+        std::u8string default_extension {};
         if (request.kind != file_dialog_kind::folder)
         {
             for (const auto& filter : request.filters)
             {
+                const bool first_filter { labels.empty() };
                 const auto label { utf8_to_utf16(filter.label) };
                 if (label.value.has_value() == false)
                     return fail(u8"Invalid file filter label", E_INVALIDARG);
@@ -83,6 +85,8 @@ namespace luil::win32 {
                         else if (extension.starts_with(u8"."))
                             extension.erase(0, 1);
                         pattern += u8"*." + extension;
+                        if (first_filter && default_extension.empty() && extension.empty() == false && extension != u8"*")
+                            default_extension = extension;
                     }
                 }
                 const auto converted { utf8_to_utf16(pattern.empty() ? u8"*.*" : pattern) };
@@ -94,6 +98,15 @@ namespace luil::win32 {
                 filters.push_back({ labels[index].c_str(), patterns[index].c_str() });
             if (filters.empty() == false && FAILED(code = dialog->SetFileTypes(static_cast<UINT>(filters.size()), filters.data())))
                 return fail(u8"Cannot set file filters", code);
+            // 저장은 확장자 없이 쓴 이름에 첫 필터의 확장자를 붙인다. 없으면 사용자가 쓴 이름 그대로 저장된다.
+            if (request.kind == file_dialog_kind::save && default_extension.empty() == false)
+            {
+                const auto extension { utf8_to_utf16(default_extension) };
+                if (extension.value.has_value() == false)
+                    return fail(u8"Invalid file filter extension", E_INVALIDARG);
+                if (FAILED(code = dialog->SetDefaultExtension(extension.value->c_str())))
+                    return fail(u8"Cannot set the default extension", code);
+            }
         }
         code = dialog->Show(owner);
         if (code == HRESULT_FROM_WIN32(ERROR_CANCELLED))

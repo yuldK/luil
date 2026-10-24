@@ -14,4 +14,11 @@ TEST_CASE("Combo suggestions reject stale and duplicate responses", "[ui][combo]
     REQUIRE(state.loading == false);
     REQUIRE(state.items == items);
     REQUIRE(luil::accept_combo_suggestions(state, second, items) == false);
+    // 새 질의를 받는 동안에도 앞 후보는 남는다.
+    const auto third { luil::begin_combo_query(state, u8"abc") };
+    REQUIRE(state.loading);
+    REQUIRE(state.items == items);
+    REQUIRE(state.query == u8"abc");
+    REQUIRE(luil::accept_combo_suggestions(state, third, nullptr));
+    REQUIRE(state.items == nullptr);
 }

@@ -6,17 +6,20 @@
 
 입력·IME 상태를 반영한 뒤 `displayed_text()`로 `begin_combo_query`를 부르고, 반환 token을
 `suggestion_request(token)`에 넘긴다. 앱의 비동기 결과는 `accept_combo_suggestions`로 받는다.
-다른 token과 이미 완료된 token은 버린다. 기본 필터는 표시 글이 라벨에 포함되는지이며 `matches`로 바꿀 수 있다.
+다른 token과 이미 완료된 token은 버린다. `suggestion_request`는 상태의 token과 같으면 그 token의 `query`를 보낸다.
+새 질의를 시작해도 앞 후보는 새 결과가 올 때까지 남아 강조·↑↓·Enter가 이어진다.
+다 받은 후보는 표시 글이 그 `query`와 같으면 원천의 답으로 보고 다시 거르지 않는다. 받는 중이거나 글이
+그 뒤 바뀌었으면 기본 필터로 표시 글이 라벨에 포함되는(대소문자 구분) 후보만 남긴다. `matches`를 주면 언제나 그것으로 거른다.
 선택·확정·복원·열림·강조·스크롤은 다른 luil 요소처럼 앱 메시지다. 확정한 앱은 열림 상태도 닫는다.
 `allow_custom=false`이면 후보 밖 확정을 `invalid`로 보내며 앱의 검증 메시지를 칸 아래에 표시한다.
+받는 중에는 남은 앞 후보와 정확히 같은 글만 선택하고, 아니면 `invalid` 없이 Enter를 삼킨다.
 
-↑↓·Page·Home·End와 Enter는 열린 후보의 동작이고 Esc는 조합·열림·편집 복원의 순서다.
+↑↓·Page와 Enter는 열린 후보의 동작이고 Esc는 조합·열림·편집 복원의 순서다.
+Home·End(Shift 포함)는 열려 있어도 글 칸의 caret을 옮긴다. 편집형 콤보의 관례다.
 조합 중 키는 IME에 맡긴다. 새 token을 요청한 동안에는 스피너를 표시한다.
 
-## C0 연동
+## 조상 전파 연동
 
-조상 전파는 Claude의 C0가 소유한다. 이 브랜치는 그 구현을 복제하지 않는다.
-`set_key_handler`가 있으면 생성자가 자동 연결하고 `ancestor_keys_connected()`가 참이다.
-현재 기준 코드에는 그 API가 없으므로 후보 상태·필터·popup·공개 `on_key`는 구현되어 있지만,
-입력 칸에서 콤보 조상으로 이어지는 키 경로의 완료는 C0 병합 뒤 검증해야 한다.
-C0가 없는 구성을 편집형 콤보 전체가 준비된 것으로 보고하지 않는다.
+조상 전파(C0, [key-propagation-design.md](key-propagation-design.md))는 main에 들어와 있다. 생성자가
+`set_key_handler`로 `on_key`를 연결하므로 입력 칸이 쓰지 않은 키가 콤보로 온다. `ancestor_keys_connected()`는
+늘 참이며 옛 호출부를 위해 남겼다. 데스크톱 demo의 변경 작업대가 작성자 칸으로 이 경로를 쓴다.

@@ -14,6 +14,7 @@ namespace luil {
     struct file_dialog_request
     {
         // 같은 id는 실행 중인 앱의 수명 동안 한 번만 연다.
+        // 0은 채우지 않은 값이라 열지 않고 `failed` 결과로 답한다.
         std::uint64_t id { 0 };
         file_dialog_kind kind { file_dialog_kind::open };
         std::u8string title {};

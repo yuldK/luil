@@ -1834,7 +1834,22 @@ namespace luil::win32 {
                 if (host_ == nullptr)
                     return;
                 const auto frame { host_->acquire_frame() };
-                if (frame == nullptr || frame->file_dialog.has_value() == false || file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
+                if (frame == nullptr)
+                    return;
+                if (frame->file_dialog.has_value() == false)
+                {
+                    file_dialog_gate_.idle();
+                    return;
+                }
+                // id 없는 요청은 열지 않고 실패로 답한다. 조용히 버리면 앱이 답을 영영 기다린다.
+                if (const std::optional<file_dialog_result> rejected { file_dialog_gate_.rejection(*frame->file_dialog) }; rejected.has_value())
+                {
+                    if (environment_.delegate != nullptr)
+                        if (auto message { environment_.delegate->make_file_dialog_message(*rejected) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
+                    return;
+                }
+                if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
                     return;
                 const auto* const owner { anchor_surface(frame->file_dialog->owner_surface) };
                 const file_dialog_result result { run_file_dialog(owner != nullptr ? owner->window() : nullptr, *frame->file_dialog) };
