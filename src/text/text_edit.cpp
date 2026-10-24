@@ -34,23 +34,80 @@ namespace luil::text {
             return grapheme_next(text, offset);
         }
 
-        // 왼쪽으로: 구분자를 먼저 지나고 그다음 낱말을 지난다.
-        std::size_t word_left(const std::u8string_view text, std::size_t offset) noexcept
+        bool is_line_break(const char8_t value) noexcept
         {
-            while (offset > 0 && is_word_byte(text[previous_boundary(text, offset)]) == false)
-                offset = previous_boundary(text, offset);
-            while (offset > 0 && is_word_byte(text[previous_boundary(text, offset)]))
-                offset = previous_boundary(text, offset);
+            return value == u8'\r' || value == u8'\n';
+        }
+
+        // 줄 하나의 글자소 경계를 한 번 모아 두고 그 안에서 걷는다.
+        //  - 낱말 단위 명령은 글자소마다 경계를 묻는다. `grapheme_previous`·`grapheme_next`는 부를 때마다 offset을
+        //    감싼 줄을 다시 훑으므로, 긴 줄에서는 낱말 하나가 줄 길이 × 글자 수가 된다.
+        //  - 경계는 CR·LF를 넘지 않는다 (GB4·GB5). 줄 바꿈 둘레는 그 자리에서 답하고, 다른 줄로 넘어가면 그 줄을 모은다.
+        class grapheme_walker
+        {
+        public:
+            explicit grapheme_walker(const std::u8string_view text) noexcept
+                : text_ { text }
+            {}
+
+            std::size_t previous(const std::size_t offset)
+            {
+                if (offset == 0 || is_line_break(text_[offset - 1]))
+                    return previous_boundary(text_, offset);
+                load(offset - 1);
+                const auto found { std::lower_bound(boundaries_.begin(), boundaries_.end(), offset - begin_) };
+                return begin_ + *(found - 1);
+            }
+
+            std::size_t next(const std::size_t offset)
+            {
+                if (offset >= text_.size() || is_line_break(text_[offset]))
+                    return next_boundary(text_, offset);
+                load(offset);
+                const auto found { std::upper_bound(boundaries_.begin(), boundaries_.end(), offset - begin_) };
+                return begin_ + *found;
+            }
+
+        private:
+            // 줄 바꿈이 아닌 `at` 바이트가 든 줄을 모은다.
+            void load(const std::size_t at)
+            {
+                if (boundaries_.empty() == false && at >= begin_ && at < end_)
+                    return;
+                begin_ = at;
+                while (begin_ > 0 && is_line_break(text_[begin_ - 1]) == false)
+                    --begin_;
+                end_ = at;
+                while (end_ < text_.size() && is_line_break(text_[end_]) == false)
+                    ++end_;
+                boundaries_ = grapheme_boundaries(text_.substr(begin_, end_ - begin_));
+            }
+
+            std::u8string_view text_ {};
+            std::size_t begin_ { 0 };
+            std::size_t end_ { 0 };
+            std::vector<std::size_t> boundaries_ {};
+        };
+
+        // 왼쪽으로: 구분자를 먼저 지나고 그다음 낱말을 지난다.
+        std::size_t word_left(const std::u8string_view text, std::size_t offset)
+        {
+            grapheme_walker walker { text };
+            while (offset > 0 && is_word_byte(text[walker.previous(offset)]) == false)
+                offset = walker.previous(offset);
+            while (offset > 0 && is_word_byte(text[walker.previous(offset)]))
+                offset = walker.previous(offset);
             return offset;
         }
 
         // 오른쪽으로: 낱말을 먼저 지나고 그다음 구분자를 지나 다음 낱말의 시작에 선다.
-        std::size_t word_right(const std::u8string_view text, std::size_t offset) noexcept
+        std::size_t word_right(const std::u8string_view text, std::size_t offset)
         {
+            grapheme_walker walker { text };
             while (offset < text.size() && is_word_byte(text[offset]))
-                offset = next_boundary(text, offset);
+                offset = walker.next(offset);
             while (offset < text.size() && is_word_byte(text[offset]) == false)
-                offset = next_boundary(text, offset);
+                offset = walker.next(offset);
             return offset;
         }
         // 선택 범위만 지운다.
@@ -145,9 +202,10 @@ namespace luil::text {
     {
         if (text.empty())
             return;
-        // 선택을 덮어쓰거나 한 글자보다 긴 조각을 넣는 것은 묶지 않는다.
+        // 선택을 덮어쓰거나 코드포인트 하나보다 긴 조각을 넣는 것은 묶지 않는다.
         //  - 붙여넣기와 대체는 한 번에 되돌아가야 한다.
-        const bool replaces { text_edit_has_selection(state) || text.size() > 3u };
+        //  - 친 글자는 바이트가 아니라 코드포인트로 센다. 4바이트 글자(이모지, BMP 밖 한자)도 친 글자로 이어 묶인다.
+        const bool replaces { text_edit_has_selection(state) || utf8_decode(text, 0).length < text.size() };
         begin_edit(state, replaces ? text_edit_group::replace : text_edit_group::insert);
         erase_selection_only(state);
         state.caret = text_edit_clamp_offset(state.text, state.caret);
@@ -312,14 +370,15 @@ namespace luil::text {
         }
 
         // 끝에 섰으면 마지막 문자가 속한 덩어리를 고른다.
-        const std::size_t sample { at < text.size() ? at : previous_boundary(text, at) };
+        grapheme_walker walker { text };
+        const std::size_t sample { at < text.size() ? at : walker.previous(at) };
         const bool word { is_word_byte(text[sample]) };
         std::size_t begin { sample };
-        while (begin > 0 && is_word_byte(text[previous_boundary(text, begin)]) == word)
-            begin = previous_boundary(text, begin);
+        while (begin > 0 && is_word_byte(text[walker.previous(begin)]) == word)
+            begin = walker.previous(begin);
         std::size_t end { sample };
         while (end < text.size() && is_word_byte(text[end]) == word)
-            end = next_boundary(text, end);
+            end = walker.next(end);
         state.anchor = begin;
         state.caret = end;
         break_group(state);

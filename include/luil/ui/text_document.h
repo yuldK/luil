@@ -45,6 +45,8 @@ namespace luil {
 
     // begin 순서이고 겹치지 않는 비어 있지 않은 구간에서 표시 범위만 참조한다. 복사하지 않는다.
     // 문서에 적용할 byte 범위는 유효한 UTF-8 글자소 경계로 앱이 제공한다.
+    // 빈 범위(`begin >= end`)는 아무것도 걸지 않는다. 빈 줄이나 줄 끝의 줄 바꿈 칸을 칠하려면 그 줄 바꿈 바이트까지
+    // 넓혀 묻는다 (`text_area_element`는 줄 바꿈으로 끝나는 화면 줄을 [처음, 끝 + 1)로 묻는다).
     [[nodiscard]] std::span<const text_span> text_spans_in_range(std::span<const text_span> spans, std::size_t begin, std::size_t end) noexcept;
     [[nodiscard]] std::span<const text_highlight> text_highlights_in_range(std::span<const text_highlight> spans, std::size_t begin, std::size_t end) noexcept;
 } // namespace luil

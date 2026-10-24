@@ -640,6 +640,46 @@ TEST_CASE("Read only documents keep selection and copy while suppressing edits",
     REQUIRE(copied.size() == 1u);
     REQUIRE(std::get<luil::clipboard_copy_request>(copied.front()).text == u8"abc");
     REQUIRE(controller.process(luil::key_pressed_event { luil::key_code::key_a, true }).size() == 1u);
+    // 글을 바꾸는 나머지 키도 삼킨다 — Delete, Shift+Delete(잘라내기), Enter, Shift+Insert(붙여넣기),
+    // Ctrl+Backspace(WM_CHAR의 U+007F).
+    for (const luil::key_pressed_event& event : { key(luil::key_code::delete_forward), key(luil::key_code::delete_forward, true), key(luil::key_code::enter), key(luil::key_code::insert, true) })
+        REQUIRE(controller.process(event).empty());
+    REQUIRE(controller.process(luil::character_typed_event { U'\x7F' }).empty());
+    // Ctrl+Insert는 복사라 남는다.
+    REQUIRE(controller.process(key(luil::key_code::insert, false, true)).size() == 1u);
+}
+
+TEST_CASE("A text area without native layout ends a CRLF line before its CR", "[ui][text-area]")
+{
+    // LF만 나누는 길에서도 CR은 줄의 글이 아니다. 남기면 글리프로 그려지고 줄 끝 누름이 CR과 LF 사이에 선다.
+    using line = luil::text_area_element::line;
+    const auto tree { wrapped_tree(view_of(u8"ab\r\ncd\r\n", 0)) };
+    const luil::text_area_element& memo { memo_of(*tree) };
+    REQUIRE(memo.lines() == std::vector<line> { { 0, 2, false }, { 4, 6, false }, { 8, 8, false } });
+    REQUIRE(memo.caret_at_point(7.0f + 5000.0f, row_middle(0), fixed_width) == luil::text_caret_position { 2, false });
+    REQUIRE(memo.caret_at_point(7.0f + 5000.0f, row_middle(1), fixed_width) == luil::text_caret_position { 6, false });
+}
+
+TEST_CASE("Horizontal caret following keeps the caret inside the text padding", "[ui][text-area]")
+{
+    const std::u8string text { u8"012345678901234567890123456789" };
+    const auto config_at = [](const float scroll_x) {
+        auto config { scrolling_config() };
+        config.wrap = false;
+        config.scroll_horizontal = config.scroll;
+        config.scroll_x = scroll_x;
+        return config;
+    };
+    // 글 폭 300에 좌우 여백 7씩이라 내용 폭은 314다.
+    const float viewport { memo_of(*wrapped_tree(view_of(text, 0), config_at(0.0f))).area().viewport().width };
+    const float limit { 314.0f - viewport };
+    REQUIRE(limit > 7.0f);
+    // Home: 여백만큼 흘린 자리(7)에서 처음으로 돌아간다. 여백을 빼지 않고 들이면 7에 멈춘다.
+    REQUIRE(scroll_in(memo_of(*wrapped_tree(view_of(text, 0), config_at(7.0f))).scroll_to_offset(0)) == -7.0f);
+    // End: 글 끝이 자르는 끝에 딱 닿은 자리에서는 오른쪽 여백만큼 더 흘린다. 폭 0으로 들이면 caret이 자르는 끝 밖에 남는다.
+    REQUIRE(scroll_in(memo_of(*wrapped_tree(view_of(text, 30), config_at(limit - 7.0f))).scroll_to_offset(30)) == 7.0f);
+    // 끝까지 흘린 자리의 글 끝 caret은 이미 보인다. 더 흘릴 수 없는 delta를 내지 않는다.
+    REQUIRE(scroll_in(memo_of(*wrapped_tree(view_of(text, 30), config_at(limit))).scroll_to_offset(30)).has_value() == false);
 }
 
 TEST_CASE("Unwrapped documents measure the longest line and expose horizontal scrolling", "[ui][text-area]")
