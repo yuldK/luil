@@ -188,8 +188,11 @@ if(LUIL_PLATFORM STREQUAL "android")
     # 없어, test를 공유 라이브러리로 세우고 app_process가 띄운 JVM이 읽게 한다
     # (cmake/android/adb_run.cmake의 JVM_DEX). 라이브러리(luil)는 GameActivity 진입점을 붙잡으므로
     # 링크하지 않고 HTTP 소스를 직접 넣는다.
+    #  - 본문의 그림 해독이 core의 그림 요소를 거쳐 글꼴 registry까지 끌어온다. 플랫폼 hook은 core test와
+    #    같은 대역으로 채운다 (core_platform_stub.cpp).
     add_library(luil_net_tests SHARED
         "${LUIL_SOURCE_DIRECTORY}/android/java_vm.cpp"
+        core_platform_stub.cpp
         "${LUIL_SOURCE_DIRECTORY}/net/android/android_http_client.cpp"
         "${LUIL_SOURCE_DIRECTORY}/net/android/android_text_transcode.cpp"
         "${LUIL_SOURCE_DIRECTORY}/net/http_body.cpp"
