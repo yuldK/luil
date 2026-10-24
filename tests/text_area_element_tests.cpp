@@ -715,3 +715,34 @@ TEST_CASE("Document gutters stay outside text offsets and do not invalidate cach
     static_cast<void>(wrapped_tree(view_of(u8"first\nsecond", 0), config));
     REQUIRE(config.wrap_cache->size() == 2u);
 }
+
+TEST_CASE("Repeated paragraphs with different bold spans keep their geometry across cached arranges", "[ui][text-area][document]")
+{
+    // 코드·diff의 `}`처럼 같은 글의 문단이 굵기만 다르다. 가운데 문단만 굵다.
+    //  - 주입한 측정기는 굵기를 재지 않으므로 같은 글을 하나로 쥔다. Shaping 구성은 굵기마다 따로 쥐는데, core
+    //    test에는 글꼴이 없어 그 길은 native test가 본다.
+    const std::u8string text { u8"}\n}\n}" };
+    auto config { scrolling_config() };
+    config.wrap = false;
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 2, 3, luil::text_color_role::accent, true } });
+    const auto plain { wrapped_tree(view_of(text, 0), config) };
+    config.wrap_cache = std::make_shared<luil::text_area_wrap_cache>();
+    for (int pass { 0 }; pass < 2; ++pass)
+    {
+        const auto tree { wrapped_tree(view_of(text, 0), config) };
+        const auto& memo { memo_of(*tree) };
+        REQUIRE(memo.lines() == memo_of(*plain).lines());
+        REQUIRE(memo.content_width() == memo_of(*plain).content_width());
+        for (std::size_t at { 0 }; at <= text.size(); ++at)
+        {
+            const auto cached { memo.text_span_bounds({ text, at, at, at }, fixed_width) };
+            const auto expected { memo_of(*plain).text_span_bounds({ text, at, at, at }, fixed_width) };
+            REQUIRE(cached.has_value());
+            REQUIRE(expected.has_value());
+            REQUIRE(cached->x == expected->x);
+            REQUIRE(cached->y == expected->y);
+            REQUIRE(cached->width == expected->width);
+        }
+        REQUIRE(config.wrap_cache->size() == 1u);
+    }
+}

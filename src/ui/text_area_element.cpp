@@ -15,8 +15,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -278,6 +280,17 @@ namespace luil {
             void draw(draw_context&, const interaction_snapshot&) const override
             {}
         };
+
+        // 이번 배치에서 쓰지 않은 갈래를 버리고, 갈래가 모두 빠진 글도 버린다.
+        template<typename entry_map>
+        void prune_unused(entry_map& entries, const std::uint64_t generation)
+        {
+            for (auto item { entries.begin() }; item != entries.end();)
+            {
+                std::erase_if(item->second, [generation](const auto& variant) { return variant.used != generation; });
+                item = item->second.empty() ? entries.erase(item) : std::next(item);
+            }
+        }
     } // namespace
 
     text_area_element::text_area_element(const ui_element_id id, text_input_view value, text_area_config config)
@@ -410,7 +423,10 @@ namespace luil {
     std::size_t text_area_wrap_cache::size() const
     {
         const std::scoped_lock lock { mutex_ };
-        return entries_.size();
+        std::size_t count { 0 };
+        for (const auto& item : entries_)
+            count += item.second.size();
+        return count;
     }
 
     std::size_t text_area_wrap_cache::key_hash::operator()(const std::u8string_view key) const noexcept
@@ -525,35 +541,43 @@ namespace luil {
         const float sample { measure(u8"Wg 0가") };
         const auto face { config_.face == text_face::code ? text_layout_face::code : text_layout_face::ui };
         const auto revision { native_layout_ ? text_layout_revision() : 0 };
-        if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.sample_width_ != sample || cache.wrap_ != config_.wrap
-            || cache.native_ != native_layout_ || cache.face_ != face || cache.font_revision_ != revision)
+        if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.scale_ != scale_ || cache.sample_width_ != sample
+            || cache.wrap_ != config_.wrap || cache.native_ != native_layout_ || cache.face_ != face || cache.font_revision_ != revision)
         {
             cache.entries_.clear();
+            cache.rows_.clear();
             cache.width_ = wrap_width_;
             cache.wrap_ = config_.wrap;
             cache.font_size_ = font_size();
+            cache.scale_ = scale_;
             cache.sample_width_ = sample;
             cache.native_ = native_layout_;
             cache.face_ = face;
             cache.font_revision_ = revision;
         }
         const std::uint64_t generation { ++cache.generation_ };
+        // 돌려준 접은 자리는 `split_screen_lines`가 그 문단을 다 나눌 때까지만 쓴다. 다음 문단이 같은 글의 다른 굵기를
+        // 더해 vector가 옮겨 가도 그때는 이미 다 썼다.
         const auto cached_cuts = [&](const std::u8string_view paragraph) -> const std::vector<std::size_t>& {
+            // 측정기 길은 굵기를 재지 않으므로 구간을 비워 같은 글을 하나로 쥔다.
+            const auto begin { static_cast<std::size_t>(paragraph.data() - text.data()) };
+            const auto styles { native_layout_ ? metric_styles(begin, begin + paragraph.size(), true) : std::vector<text_layout_style> {} };
             auto found { cache.entries_.find(paragraph) };
             if (found == cache.entries_.end())
-                found = cache.entries_.emplace(std::u8string { paragraph }, entry_for(paragraph)).first;
-            else if (native_layout_)
+                found = cache.entries_.emplace(std::u8string { paragraph }, std::vector<text_area_wrap_cache::entry> {}).first;
+            auto& variants { found->second };
+            auto variant { std::find_if(variants.begin(), variants.end(), [&styles](const auto& item) { return item.styles == styles; }) };
+            if (variant == variants.end())
             {
-                const auto begin { static_cast<std::size_t>(paragraph.data() - text.data()) };
-                if (found->second.styles != metric_styles(begin, begin + paragraph.size(), true))
-                    found->second = entry_for(paragraph);
+                variants.push_back(entry_for(paragraph));
+                variant = std::prev(variants.end());
             }
-            content_width_ = std::max(content_width_, found->second.width);
-            found->second.used = generation;
-            return found->second.cuts;
+            content_width_ = std::max(content_width_, variant->width);
+            variant->used = generation;
+            return variant->cuts;
         };
         std::vector<line> lines { split_screen_lines(text, cached_cuts, native_layout_) };
-        std::erase_if(cache.entries_, [generation](const auto& item) { return item.second.used != generation; });
+        prune_unused(cache.entries_, generation);
         return lines;
     }
 
@@ -645,11 +669,42 @@ namespace luil {
             const float last { std::ceil((area_->viewport().y + area_->viewport().height - text_top()) / height) };
             const auto from { std::min(lines_.size(), first > 0.0f ? static_cast<std::size_t>(first) : 0u) };
             const auto to { std::min(lines_.size(), last > 0.0f ? static_cast<std::size_t>(last) + 1 : 0u) };
+            const auto text { displayed_text() };
+            if (config_.wrap_cache == nullptr)
+            {
+                for (std::size_t index { from }; index < to; ++index)
+                {
+                    const auto row { lines_[index] };
+                    row_layouts_.emplace_back(row.begin, remake_text_layout(font_layout_, layout_request(text.substr(row.begin, row.end - row.begin), row.begin, false, true)));
+                }
+                return;
+            }
+            // 보이는 줄의 배치를 frame 사이에 쥔다. 흘리거나 caret만 옮긴 frame에서 다시 shape하지 않는다.
+            //  - 전역 배치 cache는 한 항목의 크기에 상한이 있어, 접지 않은 칸의 긴 줄(줄 바꿈 없는 minified 파일)은
+            //    거기 남지 못한다.
+            //  - 줄 높이·글꼴·배율은 `wrap_displayed`가 맞춰 두었다. 다르면 거기서 통째로 비웠다.
+            text_area_wrap_cache& cache { *config_.wrap_cache };
+            const std::scoped_lock lock { cache.mutex_ };
+            const std::uint64_t generation { cache.generation_ };
             for (std::size_t index { from }; index < to; ++index)
             {
                 const auto row { lines_[index] };
-                row_layouts_.emplace_back(row.begin, remake_text_layout(font_layout_, layout_request(displayed_text().substr(row.begin, row.end - row.begin), row.begin, false, true)));
+                const auto content { text.substr(row.begin, row.end - row.begin) };
+                const auto styles { metric_styles(row.begin, row.end, true) };
+                auto found { cache.rows_.find(content) };
+                if (found == cache.rows_.end())
+                    found = cache.rows_.emplace(std::u8string { content }, std::vector<text_area_wrap_cache::row_entry> {}).first;
+                auto& variants { found->second };
+                auto variant { std::find_if(variants.begin(), variants.end(), [&styles](const auto& item) { return item.styles == styles; }) };
+                if (variant == variants.end())
+                {
+                    variants.push_back({ styles, remake_text_layout(font_layout_, layout_request(content, row.begin, false, true)) });
+                    variant = std::prev(variants.end());
+                }
+                variant->used = generation;
+                row_layouts_.emplace_back(row.begin, variant->layout);
             }
+            prune_unused(cache.rows_, generation);
         }
     }
 
