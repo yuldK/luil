@@ -3,6 +3,7 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/ui_element.h"
+#include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 
 #include "include/core/SkCanvas.h"
@@ -14,6 +15,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -79,9 +81,30 @@ namespace {
         return luil::ui_tree { std::move(root) };
     }
 
-    [[nodiscard]] luil::interaction_snapshot hovering()
+    [[nodiscard]] luil::ui_tree make_text_tree(const float scale, const luil::rect_f& anchor)
     {
-        return { .hovered = hint_id, .hover_started_at = started };
+        auto target { std::make_unique<luil::panel_element>(hint_id, luil::panel_config {}) };
+        target->set_tooltip(u8"설명");
+        target->arrange({ { anchor.x * scale, anchor.y * scale, anchor.width * scale, anchor.height * scale }, scale });
+        auto root { std::make_unique<luil::panel_element>(luil::ui_element_id { luil::ui_element_kind::root }, luil::panel_config {}) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f * scale, 200.0f * scale }, scale });
+        root->set_content(std::move(target));
+        return luil::ui_tree { std::move(root) };
+    }
+
+    [[nodiscard]] luil::interaction_snapshot hovering(const std::optional<luil::point_f>& point = std::nullopt)
+    {
+        return { .hovered = hint_id, .hover_started_at = started, .hover_point = point };
+    }
+
+    [[nodiscard]] bool near(const float actual, const float expected)
+    {
+        return std::abs(actual - expected) < 0.01f;
+    }
+
+    void move(luil::interaction_controller& controller, const float x, const float y, const std::chrono::milliseconds after)
+    {
+        static_cast<void>(controller.process(luil::pointer_moved_event { .x = x, .y = y, .time = started + after }));
     }
 
     [[nodiscard]] luil::ui_color_palette palette()
@@ -221,4 +244,115 @@ TEST_CASE("Oversized tooltip content is clipped within even a tiny surface", "[u
     REQUIRE_FALSE(frame.contains_color({ 100.0f, 0.0f, 60.0f, 120.0f }, frame.palette().error_accent));
     REQUIRE_FALSE(frame.contains_color({ 0.0f, 0.0f, 160.0f, 30.0f }, frame.palette().error_accent));
     REQUIRE_FALSE(frame.contains_color({ 0.0f, 70.0f, 160.0f, 50.0f }, frame.palette().error_accent));
+}
+
+TEST_CASE("A pointer hover places the tooltip under the cursor and keeps it inside the surface at every DPI", "[ui][tooltip]")
+{
+    for (const float scale : { 1.0f, 1.5f, 2.0f })
+    {
+        CAPTURE(scale);
+        // 상자는 내용 80x40에 여백 4를 더한 88x48이고, 넓은 대상은 창 오른쪽 끝(400) 가까이까지 간다.
+        const auto top { make_tree(make_config(), scale, { 20.0f, 20.0f, 375.0f, 10.0f }) };
+        const auto bottom { make_tree(make_config(), scale, { 20.0f, 170.0f, 375.0f, 20.0f }) };
+        const auto at = [scale](const float x, const float y) { return std::optional { luil::point_f { x * scale, y * scale } }; };
+
+        // 넓은 대상의 오른쪽에서 hover하면 상자가 대상 왼쪽 끝이 아니라 포인터 x에서, 커서 그림(20) 아래에서 시작한다.
+        const auto wide { top.place_tooltip(hint_id, scale, at(250.0f, 25.0f)) };
+        REQUIRE(wide.has_value());
+        REQUIRE(near(wide->box.x, 250.0f * scale));
+        REQUIRE(near(wide->box.y, 45.0f * scale));
+        // 포인터에서 곧장 내려가는 길이 대상·간격·상자로 끊기지 않는다.
+        REQUIRE(wide->bridge.contains(250.0f * scale, 35.0f * scale));
+
+        // 오른쪽으로 넘치면 창 안으로 민다. 간격은 여전히 포인터 아래를 덮는다.
+        const auto right { top.place_tooltip(hint_id, scale, at(390.0f, 25.0f)) };
+        REQUIRE(near(right->box.x, 312.0f * scale));
+        REQUIRE(near(right->box.y, 45.0f * scale));
+        REQUIRE(right->bridge.contains(390.0f * scale, 35.0f * scale));
+
+        // 아래로 넘치면 커서를 가리지 않게 포인터보다 간격(3)만큼 위로 뒤집는다.
+        const auto flipped { bottom.place_tooltip(hint_id, scale, at(390.0f, 180.0f)) };
+        REQUIRE(near(flipped->box.x, 312.0f * scale));
+        REQUIRE(near(flipped->box.y, 129.0f * scale));
+        REQUIRE(flipped->box.y + flipped->box.height <= 180.0f * scale);
+
+        // 포인터 자리가 없으면(키보드·보조 기술·터치) 예전처럼 대상의 왼쪽 끝 아래다.
+        const auto anchored { top.place_tooltip(hint_id, scale) };
+        REQUIRE(near(anchored->box.x, 20.0f * scale));
+        REQUIRE(near(anchored->box.y, 33.0f * scale));
+        const auto anchored_flip { bottom.place_tooltip(hint_id, scale) };
+        REQUIRE(near(anchored_flip->box.x, 20.0f * scale));
+        REQUIRE(near(anchored_flip->box.y, 119.0f * scale));
+    }
+}
+
+TEST_CASE("Text and custom tooltips are drawn where the pointer placement puts them", "[ui][tooltip][raster]")
+{
+    for (const float scale : { 1.0f, 1.5f, 2.0f })
+    {
+        CAPTURE(scale);
+        const luil::point_f pointer { 250.0f * scale, 25.0f * scale };
+        luil::testing::raster_frame frame { static_cast<int>(400.0f * scale), static_cast<int>(200.0f * scale), palette(), scale };
+        const auto pixel = [&](const float x, const float y) { return frame.pixel_at(static_cast<int>(x * scale), static_cast<int>(y * scale)); };
+
+        const auto text { make_text_tree(scale, { 20.0f, 20.0f, 375.0f, 10.0f }) };
+        frame.draw(text, hovering(pointer), started + luil::tooltip_delay);
+        REQUIRE(pixel(252.0f, 47.0f) == frame.palette().tooltip_background);
+        REQUIRE(pixel(22.0f, 35.0f) != frame.palette().tooltip_background);
+        frame.draw(text, hovering(), started + luil::tooltip_delay);
+        REQUIRE(pixel(22.0f, 35.0f) == frame.palette().tooltip_background);
+
+        // 그리기도 입력 쪽(hit test·간격 건너기)과 같은 `place_tooltip` 자리에 선다.
+        const auto custom { make_tree(make_config(), scale, { 20.0f, 20.0f, 375.0f, 10.0f }) };
+        const auto placement { custom.place_tooltip(hint_id, scale, pointer) };
+        REQUIRE(placement.has_value());
+        frame.draw(custom, hovering(pointer), started + 200ms);
+        const float center_x { placement->content.x + placement->content.width / 2.0f };
+        const float center_y { placement->content.y + placement->content.height / 2.0f };
+        REQUIRE(frame.pixel_at(static_cast<int>(center_x), static_cast<int>(center_y)) == frame.palette().error_accent);
+        REQUIRE(pixel(25.0f, 38.0f) != frame.palette().error_accent);
+    }
+}
+
+TEST_CASE("Hover records the tooltip point until the delay ends and forgets it with the hover", "[ui][tooltip][interaction]")
+{
+    luil::interaction_controller controller {};
+    SECTION("text tooltip")
+    {
+        controller.set_tree(std::make_shared<const luil::ui_tree>(make_text_tree(1.0f, { 20.0f, 20.0f, 375.0f, 10.0f })));
+        move(controller, 100.0f, 25.0f, 0ms);
+        REQUIRE(controller.snapshot().hover_point == luil::point_f { 100.0f, 25.0f });
+        // 지연 전의 이동은 마지막 자리를 남긴다.
+        move(controller, 150.0f, 25.0f, 499ms);
+        REQUIRE(controller.snapshot().hover_point == luil::point_f { 150.0f, 25.0f });
+        // 뜬 뒤에는 포인터를 따라가지 않는다.
+        move(controller, 200.0f, 25.0f, 500ms);
+        REQUIRE(controller.snapshot().hover_point == luil::point_f { 150.0f, 25.0f });
+        // tooltip이 없는 자리로 나가면 잊고, 다시 들어오면 새 자리다.
+        move(controller, 100.0f, 100.0f, 600ms);
+        REQUIRE_FALSE(controller.snapshot().hover_point.has_value());
+        move(controller, 300.0f, 25.0f, 700ms);
+        REQUIRE(controller.snapshot().hover_point == luil::point_f { 300.0f, 25.0f });
+        static_cast<void>(controller.process(luil::pointer_left_event {}));
+        REQUIRE_FALSE(controller.snapshot().hover_point.has_value());
+    }
+    SECTION("custom tooltip")
+    {
+        const auto tree { std::make_shared<const luil::ui_tree>(make_tree(make_config(), 1.0f, { 20.0f, 20.0f, 375.0f, 10.0f })) };
+        controller.set_tree(tree);
+        move(controller, 100.0f, 25.0f, 0ms);
+        move(controller, 150.0f, 25.0f, 100ms);
+        move(controller, 200.0f, 25.0f, 250ms);
+        REQUIRE(controller.snapshot().tooltip.has_value());
+        REQUIRE(controller.snapshot().hover_point == luil::point_f { 150.0f, 25.0f });
+        const auto placement { tree->place_tooltip(hint_id, 1.0f, controller.snapshot().hover_point) };
+        REQUIRE(near(placement->box.x, 150.0f));
+        REQUIRE(near(placement->box.y, 45.0f));
+        // 열린 상자 위를 지나도 자리는 그대로다.
+        move(controller, 300.0f, 25.0f, 300ms);
+        REQUIRE(controller.snapshot().hover_point == luil::point_f { 150.0f, 25.0f });
+        REQUIRE_FALSE(luil::interaction_for_surface(controller.snapshot(), u8"other-window").hover_point.has_value());
+        REQUIRE(controller.process(luil::key_pressed_event { .key = luil::key_code::escape, .time = started + 301ms }).empty());
+        REQUIRE_FALSE(controller.snapshot().hover_point.has_value());
+    }
 }

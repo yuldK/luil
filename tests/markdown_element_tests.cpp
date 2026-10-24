@@ -129,22 +129,26 @@ TEST_CASE("A shown tooltip survives its gap and accepts links at every DPI witho
         const auto tree { page(scale) };
         luil::interaction_controller controller {};
         controller.set_tree(tree);
+        // 상자는 hover가 시작된 (25,25)의 커서 그림 아래 (25,45)에 서고, 내용은 여백 8을 둔 (33,53)부터다.
         move(controller, 25.0f, 25.0f, scale, 0);
         move(controller, 25.0f, 31.0f, scale, 501);
         REQUIRE(controller.snapshot().tooltip.has_value());
         REQUIRE(controller.snapshot().hovered == owner);
-        move(controller, 35.0f, 48.0f, scale, 502);
+        // 대상 아래 끝(30)과 상자 위 끝(45) 사이를 건너는 동안 닫히지 않는다.
+        move(controller, 30.0f, 44.0f, scale, 502);
+        REQUIRE(controller.snapshot().tooltip.has_value());
+        move(controller, 40.0f, 60.0f, scale, 503);
         const auto link { controller.snapshot().tooltip->hovered };
         REQUIRE(link.owner == u8"help/link/0:app:first");
-        REQUIRE(tree->cursor_at(35.0f * scale, 48.0f * scale, controller.snapshot()) == luil::ui_cursor::hand);
-        REQUIRE(controller.process(luil::pointer_pressed_event { .x = 35.0f * scale, .y = 48.0f * scale, .time = started + 503ms, .scale = scale }).empty());
+        REQUIRE(tree->cursor_at(40.0f * scale, 60.0f * scale, controller.snapshot()) == luil::ui_cursor::hand);
+        REQUIRE(controller.process(luil::pointer_pressed_event { .x = 40.0f * scale, .y = 60.0f * scale, .time = started + 504ms, .scale = scale }).empty());
         REQUIRE(controller.snapshot().pressed == luil::ui_element_id {});
         controller.set_tree(tree);
-        const auto actions { controller.process(luil::pointer_released_event { .x = 35.0f * scale, .y = 48.0f * scale, .time = started + 504ms }) };
+        const auto actions { controller.process(luil::pointer_released_event { .x = 40.0f * scale, .y = 60.0f * scale, .time = started + 505ms }) };
         REQUIRE(activated(actions) == u8"app:first");
         REQUIRE(controller.snapshot().tooltip.has_value());
         REQUIRE(controller.snapshot().tooltip->pressed == luil::ui_element_id {});
-        move(controller, 300.0f, 200.0f, scale, 505);
+        move(controller, 300.0f, 200.0f, scale, 506);
         REQUIRE_FALSE(controller.snapshot().tooltip.has_value());
     }
 }
@@ -156,7 +160,7 @@ TEST_CASE("Tooltip dismissal and changed content cancel pressed links", "[ui][to
     controller.set_tree(tree);
     const auto enter = [&] {
         move(controller, 25.0f, 25.0f, 1.0f, 0);
-        move(controller, 35.0f, 48.0f, 1.0f, 501);
+        move(controller, 40.0f, 60.0f, 1.0f, 501);
         REQUIRE(controller.snapshot().tooltip.has_value());
     };
     enter();
@@ -178,15 +182,15 @@ TEST_CASE("Tooltip dismissal and changed content cancel pressed links", "[ui][to
     }
     SECTION("content replacement")
     {
-        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 35.0f, .y = 48.0f, .time = started + 502ms }));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 40.0f, .y = 60.0f, .time = started + 502ms }));
         controller.set_tree(page(1.0f, content(u8"app:changed")));
-        REQUIRE(controller.process(luil::pointer_released_event { .x = 35.0f, .y = 48.0f, .time = started + 503ms }).empty());
+        REQUIRE(controller.process(luil::pointer_released_event { .x = 40.0f, .y = 60.0f, .time = started + 503ms }).empty());
     }
     SECTION("same link in a newly published tree")
     {
-        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 35.0f, .y = 48.0f, .time = started + 502ms }));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 40.0f, .y = 60.0f, .time = started + 502ms }));
         controller.set_tree(page(1.0f));
-        REQUIRE(activated(controller.process(luil::pointer_released_event { .x = 35.0f, .y = 48.0f, .time = started + 503ms })) == u8"app:first");
+        REQUIRE(activated(controller.process(luil::pointer_released_event { .x = 40.0f, .y = 60.0f, .time = started + 503ms })) == u8"app:first");
     }
     SECTION("hidden owner")
     {
@@ -195,14 +199,14 @@ TEST_CASE("Tooltip dismissal and changed content cancel pressed links", "[ui][to
     }
     SECTION("lost input")
     {
-        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 35.0f, .y = 48.0f, .time = started + 502ms }));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 40.0f, .y = 60.0f, .time = started + 502ms }));
         static_cast<void>(controller.cancel_dropped_gestures());
-        REQUIRE(controller.process(luil::pointer_released_event { .x = 35.0f, .y = 48.0f, .time = started + 503ms }).empty());
+        REQUIRE(controller.process(luil::pointer_released_event { .x = 40.0f, .y = 60.0f, .time = started + 503ms }).empty());
         REQUIRE_FALSE(controller.snapshot().tooltip.has_value());
     }
     SECTION("cancelled press")
     {
-        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 35.0f, .y = 48.0f, .time = started + 502ms }));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { .x = 40.0f, .y = 60.0f, .time = started + 502ms }));
         REQUIRE(controller.process(luil::pointer_released_event { .cancelled = true }).empty());
     }
     auto snapshot { controller.snapshot() };

@@ -36,6 +36,15 @@ namespace luil {
         [[nodiscard]] bool contains(float point_x, float point_y) const noexcept;
     };
 
+    // 한 점이다 (단위는 쓰는 자리가 정한다).
+    struct point_f
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+
+        [[nodiscard]] bool operator==(const point_f&) const noexcept = default;
+    };
+
     // 폭과 높이다 (단위는 쓰는 자리가 정한다 — `preferred_size`는 논리 픽셀이다).
     struct size_f
     {
@@ -790,6 +799,12 @@ namespace luil {
         // hover가 시작된 시각이다.
         // tooltip 표시 여부(지연 경과)는 그리는 쪽이 판정한다.
         std::optional<std::chrono::steady_clock::time_point> hover_started_at {};
+        // tooltip을 놓을 포인터 자리다 (표면 좌표, 물리 픽셀). `hovered_surface`의 것이다.
+        //  - hover가 시작될 때 세우고 지연이 끝나기 전까지 같은 element 안의 이동을 따른다. 그 뒤로는 멈춘다 —
+        //    OS tooltip처럼 한 번 뜬 상자는 포인터를 따라다니지 않는다.
+        //  - tooltip이 있는 element 위에서만 기록한다. 그 밖의 hover까지 세우면 이동마다 발행본이 바뀐다.
+        //  - 비어 있으면(키보드·보조 기술·터치·캡션 버튼) 대상의 보이는 영역에 놓는다.
+        std::optional<point_f> hover_point {};
         std::optional<drag_visual> drag {};
         // 키보드 초점이다 (element라면 무엇이든).
         // Tab이 옮기고, 자리인 element를 누르면 그리로 간다

@@ -780,6 +780,8 @@ namespace luil {
         // `moved`는 포인터가 실제로 움직였는가다. 거짓이면(tree 재판정) hover만 옮기고
         // tooltip 시계는 세우지 않는다.
         void update_hover(float x, float y, std::chrono::steady_clock::time_point time, bool moved);
+        // hover 대상 위의 포인터 자리를 tooltip을 놓을 자리로 남긴다 (`interaction_snapshot::hover_point`).
+        void record_hover_point(const ui_element* hit, float x, float y, std::chrono::steady_clock::time_point time, bool moved);
         [[nodiscard]] bool update_tooltip(float x, float y, std::chrono::steady_clock::time_point time, const std::u8string& surface, float scale);
         [[nodiscard]] std::optional<std::vector<input_action>> process_tooltip_event(const raw_input_event& event);
         void dismiss_tooltip() noexcept;

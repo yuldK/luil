@@ -79,7 +79,9 @@ namespace luil {
         // 허용하므로 다른 질의(find·hit_test)와 같은 규칙으로 답한다.
         [[nodiscard]] const ui_element* root() const noexcept;
         [[nodiscard]] const ui_element* hit_test(float x, float y) const;
-        [[nodiscard]] std::optional<tooltip_placement> place_tooltip(const ui_element_id& owner, float scale) const;
+        // 커스텀 tooltip의 상자 자리다. 그리기·hit test·커서가 모두 이 답을 쓴다.
+        //  - `pointer`(`interaction_snapshot::hover_point`)가 있으면 그 커서 그림 아래에, 없으면 대상의 보이는 영역 아래에 놓는다.
+        [[nodiscard]] std::optional<tooltip_placement> place_tooltip(const ui_element_id& owner, float scale, const std::optional<point_f>& pointer = std::nullopt) const;
         [[nodiscard]] const ui_element* hit_tooltip(const ui_element_id& owner, const tooltip_placement& placement, float scale, float x, float y, float scroll_offset = 0.0f) const;
         // 좌표에서 payload를 수락하는 가장 위의 drop 대상을 찾는다.
         // 일반 hit test와 달리 drop 대상이 아닌 element(예: 끌 수 있는 항목 위의 버튼)를 건너뛰고,

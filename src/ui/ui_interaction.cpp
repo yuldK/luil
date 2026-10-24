@@ -253,6 +253,7 @@ namespace luil {
                         snapshot_.hovered = {};
                         snapshot_.hovered_surface.clear();
                         snapshot_.hover_started_at.reset();
+                        snapshot_.hover_point.reset();
                     }
                     // 포인터 자리의 기억도 그 표면의 것일 때만 버린다.
                     // 이미 다른 표면으로 옮겨 갔으면 그 기억이 최신이고,
@@ -3288,6 +3289,7 @@ namespace luil {
     {
         snapshot_.tooltip.reset();
         snapshot_.hover_started_at.reset();
+        snapshot_.hover_point.reset();
         tooltip_pressed_content_.reset();
     }
 
@@ -3306,7 +3308,7 @@ namespace luil {
             tooltip_pressed_content_.reset();
             return false;
         }
-        const auto placement { tree->place_tooltip(owner, scale) };
+        const auto placement { tree->place_tooltip(owner, scale, snapshot_.hover_point) };
         if (placement.has_value() == false || (placement->anchor.contains(x, y) == false && placement->box.contains(x, y) == false && placement->bridge.contains(x, y) == false))
         {
             snapshot_.tooltip.reset();
@@ -3349,7 +3351,7 @@ namespace luil {
                     {
                         auto& state { *snapshot_.tooltip };
                         const ui_tree* const tree { surface_tree(value.surface) };
-                        const auto placement { tree->place_tooltip(state.owner, state.scale) };
+                        const auto placement { tree->place_tooltip(state.owner, state.scale, snapshot_.hover_point) };
                         if (placement->box.contains(value.x, value.y))
                         {
                             const auto* const hit { tree->hit_tooltip(state.owner, *placement, state.scale, value.x, value.y, state.scroll_offset) };
@@ -3373,7 +3375,7 @@ namespace luil {
                         {
                             auto& state { *snapshot_.tooltip };
                             const ui_tree* const tree { surface_tree(value.surface) };
-                            const auto placement { tree != nullptr ? tree->place_tooltip(state.owner, state.scale) : std::nullopt };
+                            const auto placement { tree != nullptr ? tree->place_tooltip(state.owner, state.scale, snapshot_.hover_point) : std::nullopt };
                             if (placement.has_value())
                                 if (const auto* const hit { tree->hit_tooltip(state.owner, *placement, state.scale, value.x, value.y, state.scroll_offset) };
                                     hit != nullptr && hit->enabled() && hit->id() == state.pressed)
@@ -3402,7 +3404,7 @@ namespace luil {
                     {
                         auto& state { *snapshot_.tooltip };
                         const auto* const tree { surface_tree(value.surface) };
-                        const auto placement { tree != nullptr ? tree->place_tooltip(state.owner, state.scale) : std::nullopt };
+                        const auto placement { tree != nullptr ? tree->place_tooltip(state.owner, state.scale, snapshot_.hover_point) : std::nullopt };
                         if (placement.has_value() && placement->box.contains(value.x, value.y))
                         {
                             const auto* const config { tree->find(state.owner)->tooltip_content() };
@@ -3467,6 +3469,7 @@ namespace luil {
             // 움직이면 그때부터 잰다 — 사람이 그 자리를 가리켰다는 첫 증거다.
             if (moved && none == false && snapshot_.hover_started_at.has_value() == false)
                 snapshot_.hover_started_at = time;
+            record_hover_point(hit, x, y, time, moved);
             return;
         }
         snapshot_.hovered = hovered;
@@ -3487,6 +3490,20 @@ namespace luil {
             else
                 snapshot_.hover_started_at.reset();
         }
+        record_hover_point(hit, x, y, time, moved);
+    }
+
+    void interaction_controller::record_hover_point(const ui_element* const hit, const float x, const float y, const std::chrono::steady_clock::time_point time, const bool moved)
+    {
+        if (hit == nullptr || hit->has_tooltip() == false || snapshot_.hover_started_at.has_value() == false)
+        {
+            snapshot_.hover_point.reset();
+            return;
+        }
+        // 지연이 지난 뒤의 이동은 이미 뜬(또는 곧 그려질) 상자를 옮기지 않는다.
+        const tooltip_config* const config { hit->tooltip_content() };
+        if (moved && time - *snapshot_.hover_started_at < (config != nullptr ? config->delay : tooltip_delay))
+            snapshot_.hover_point = point_f { x, y };
     }
 
     std::optional<std::vector<input_action>> interaction_controller::process_activation_key(const key_pressed_event& event)
