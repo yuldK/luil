@@ -450,8 +450,8 @@ TEST_CASE("A UIA provider answers name and control type from the current tree", 
     REQUIRE(type.vt == VT_I4);
     REQUIRE(type.lVal == UIA_ButtonControlTypeId);
 
-    // 자동화 id는 kind:owner다.
-    REQUIRE(read_text_property(*button, UIA_AutomationIdPropertyId) == L"65:confirm");
+    // 자동화 id는 kind:owner다. 앱 kind는 1024부터라 `application_element_kind(1)`은 1025다.
+    REQUIRE(read_text_property(*button, UIA_AutomationIdPropertyId) == L"1025:confirm");
 
     button->Release();
     root->Release();

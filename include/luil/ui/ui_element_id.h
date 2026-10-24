@@ -8,9 +8,11 @@ namespace luil {
     // 종류 + 소유 키(owner)가 tree 안의 안정적인 정체성이 되어 snapshot이
     // 다시 빌드되어도 hover·pressed·tooltip이 같은 대상으로 이어진다.
     //
-    // 라이브러리는 자기 element(caption 계열)의 kind만 예약하고,
+    // 라이브러리는 자기 element의 kind만 예약하고,
     // 나머지는 앱이 `application_element_kind`로 정의한다.
     // 열거자 밖의 값도 유효한 kind다.
+    //  - 수는 두 대역이다: 라이브러리 [0, 1024), 앱 [1024, …).
+    //    라이브러리 kind와 앱 kind가 같은 수가 되면 kind로 찾는 코드가 서로를 집는다.
     //  - 앱은 `constexpr ui_element_kind my_kind { application_element_kind(0) };` 식으로
     //    상수를 만들고 switch의 case로도 그대로 쓸 수 있다.
     enum class ui_element_kind : std::uint32_t
@@ -130,20 +132,35 @@ namespace luil {
         // 가상 목록 행 앞에 선 펼침 단추다. owner는 항목 키다.
         virtual_list_expander,
         // 탭 막대가 넘칠 때 양 끝에 서는 앞·뒤 단추다 (`tab_overflow_mode::step`). owner는 막대의 owner다.
-        //  - 끝에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 모두 밀린다.
         tab_step_back,
         tab_step_forward,
         // 견본 막대(`tab_bar_config::preview`)의 탭이다. 동작이 없는 그림이라 탭(`tab`)과 kind가 다르다 — 탭을 kind로
         // 찾는 앱 코드가 견본을 집지 않는다. owner는 막대 owner와 항목 키를 함께 담아 견본 막대가 여럿이어도 겹치지 않는다.
         tab_sample,
-        // 앱이 정의하는 kind는 이 값부터다.
-        // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
-        first_application_kind = 64,
+        // 라이브러리 kind의 끝 표시다. kind가 아니다.
+        //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
+        //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind
+        //    64부터와 같은 수가 된 적이 있다.
+        end_of_library_kinds,
+        // 앱이 정의하는 kind는 이 값부터다 (`application_element_kind`).
+        // 라이브러리 kind가 늘어도 앱 상수가 밀리지 않도록 예약 대역을 넉넉히 둔다 (지금 쓰는 것의 열 배 넘게).
+        //  - 64에서 1024로 넓혔다. 앱 상수의 수와 자동화 id의 앞 숫자는 그때 한 번 바뀌었다.
+        first_application_kind = 1024,
     };
+
+    // 라이브러리 kind가 앱 대역에 닿지 않는다.
+    static_assert(static_cast<std::uint32_t>(ui_element_kind::end_of_library_kinds) <= static_cast<std::uint32_t>(ui_element_kind::first_application_kind),
+        "Library element kinds overflow into application kinds. Widen the reserved band (first_application_kind).");
 
     [[nodiscard]] constexpr ui_element_kind application_element_kind(const std::uint32_t index) noexcept
     {
         return static_cast<ui_element_kind>(static_cast<std::uint32_t>(ui_element_kind::first_application_kind) + index);
+    }
+
+    // 그 kind가 앱이 정의한 것인가다.
+    [[nodiscard]] constexpr bool is_application_element_kind(const ui_element_kind kind) noexcept
+    {
+        return static_cast<std::uint32_t>(kind) >= static_cast<std::uint32_t>(ui_element_kind::first_application_kind);
     }
 
     struct ui_element_id

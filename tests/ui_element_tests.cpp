@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -72,6 +73,24 @@ namespace {
         return { kind, std::u8string { value } };
     }
 } // namespace
+
+TEST_CASE("Library element kinds never share a number with application kinds", "[ui][element][kind]")
+{
+    // 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind 0~5와 같은 수가 된 적이 있다. 대역을 1024로 넓혔다.
+    using luil::ui_element_kind;
+    const ui_element_kind first[] { ui_element_kind::none, ui_element_kind::root, ui_element_kind::table_row, ui_element_kind::table_expander };
+    const ui_element_kind last[] { ui_element_kind::virtual_list_expander, ui_element_kind::tab_sample, ui_element_kind::end_of_library_kinds };
+    std::vector<ui_element_kind> library { std::begin(first), std::end(first) };
+    library.insert(library.end(), std::begin(last), std::end(last));
+    for (const ui_element_kind kind : library)
+        REQUIRE(luil::is_application_element_kind(kind) == false);
+    REQUIRE(static_cast<std::uint32_t>(ui_element_kind::first_application_kind) == 1024u);
+    REQUIRE(static_cast<std::uint32_t>(luil::application_element_kind(0)) == 1024u);
+    REQUIRE(luil::is_application_element_kind(luil::application_element_kind(0)));
+    for (std::uint32_t index = 0; index < 32u; ++index)
+        for (const ui_element_kind kind : library)
+            REQUIRE(luil::application_element_kind(index) != kind);
+}
 
 TEST_CASE("An element is interactive once it has an action, tooltip, or drag role", "[ui][element]")
 {
