@@ -2112,10 +2112,20 @@ namespace luil {
             opened_hover_at_ = snapshot_.hover_started_at;
             // hover로 여는 메뉴는 강조 없이 선다 — 앞서 키로 연 표식이 남아 있으면 지운다.
             submenu_opened_by_key_ = false;
+            // 자식이 있는 항목은 제 자식을 연다 (열린 형제 자식은 열림 경로가 바뀌며 함께 닫힌다). 자식이 없는 항목은
+            // 열린 형제 자식을 닫는다 — 열어 둔 채면 그 자식이 끝없이 서 있고 키보드도 그쪽으로 간다. 닫음은 열린
+            // 자식의 `close_submenu`다. ←·Esc가 닫을 때 부르는 그 메시지라, 부모의 것을 부르면 깊이 1 이상에서는 포인터가
+            // 선 메뉴 자신을 닫는 뜻이 된다. 강조는 `update_focus`가 깊이의 변화로 부모에 되돌린다.
             if (const auto* menu { hovered_menu() }; menu != nullptr)
+            {
+                std::vector<input_action> more {};
                 if (auto opened { menu->open_submenu(snapshot_.hovered.owner) }; opened.has_value())
-                    for (auto& action : *opened)
-                        actions.push_back(std::move(action));
+                    more = std::move(*opened);
+                else if (const auto* const child { open_child_menu(*menu, snapshot_.hovered_surface) }; child != nullptr && child->config().close_submenu)
+                    more = child->config().close_submenu(ui_action_context { snapshot_.hovered, last_pointer_x_, last_pointer_y_ });
+                for (auto& action : more)
+                    actions.push_back(std::move(action));
+            }
         }
         const auto with_flow = [&actions](std::vector<input_action> more) {
             for (input_action& action : more)
@@ -3148,12 +3158,28 @@ namespace luil {
         // 포인터 이동마다, 그리고 `next_deadline`마다 불린다. 메뉴 항목 위가 아니면 tree를 훑지 않는다 — 훑으면
         // 메뉴가 없는 화면에서도 이동 하나가 tree 전체의 dynamic_cast가 되고, 같은 키를 쓴 다른 kind(도구 막대
         // 단추)가 메뉴 항목으로 읽혀 하위 메뉴 시계를 세운다. 항목 kind는 `menu_element`가 정한 라이브러리 kind다.
+        //  - 자식이 없는 항목도 메뉴를 돌려준다. 그 위에 멎으면 열린 형제 자식을 닫아야 하고, 그 자식으로 가는 길에
+        //    지나는 동안 시계를 다시 세는 것(`update_hover`)도 잎 위에서 똑같이 걸려야 한다.
         if (snapshot_.hovered.kind != ui_element_kind::menu_item)
             return nullptr;
         const ui_tree* const tree { surface_tree(snapshot_.hovered_surface) };
         // 항목을 감싼 메뉴는 접근 색인이 바로 답한다 (항목의 접근 부모가 메뉴다).
         const auto* const menu { tree != nullptr ? dynamic_cast<const menu_element*>(tree->access_parent_of(snapshot_.hovered)) : nullptr };
-        return menu != nullptr && menu->enabled() && menu->has_submenu(snapshot_.hovered.owner) ? menu : nullptr;
+        return menu != nullptr && menu->enabled() ? menu : nullptr;
+    }
+
+    const menu_element* interaction_controller::open_child_menu(const menu_element& parent, const std::u8string& parent_surface) const noexcept
+    {
+        // 자식은 제 설정에 부모의 표면·연 항목·깊이를 적고 선다 (popup-anchor-design.md). 셋이 다 맞는 메뉴가 지금
+        // 부모가 연 자식이다. hover 닫음이 발화할 때만 불려 표면 목록을 훑는 값이 이동마다 들지 않는다.
+        for (const auto& [id, tree] : surface_trees_)
+        {
+            const auto* const child { tree != nullptr && id != parent_surface ? menu_in_element(tree->root()) : nullptr };
+            if (child != nullptr && child->config().depth == parent.config().depth + 1 && child->config().parent_surface == parent_surface
+                && child->config().anchor_key == parent.config().opened_key)
+                return child;
+        }
+        return nullptr;
     }
 
     std::optional<std::chrono::steady_clock::time_point> interaction_controller::submenu_deadline() const noexcept
@@ -3162,6 +3188,9 @@ namespace luil {
         if (menu == nullptr || snapshot_.hover_started_at.has_value() == false
             || (opened_hover_ == snapshot_.hovered && opened_hover_surface_ == snapshot_.hovered_surface && opened_hover_at_ == snapshot_.hover_started_at)
             || menu->config().opened_key == snapshot_.hovered.owner)
+            return std::nullopt;
+        // 열 자식이 없는 항목은 닫을 형제 자식이 열려 있을 때만 시계를 세운다. 그 밖의 잎 위에서는 셀 일이 없다.
+        if (menu->has_submenu(snapshot_.hovered.owner) == false && menu->config().opened_key.empty())
             return std::nullopt;
         return *snapshot_.hover_started_at + menu->config().hover_delay;
     }

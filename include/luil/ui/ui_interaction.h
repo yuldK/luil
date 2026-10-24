@@ -733,7 +733,10 @@ namespace luil {
         // 메뉴 container가 있는 표면과 그 tree다.
         // 메뉴가 닫혀 있으면 `tree`가 nullptr다.
         [[nodiscard]] const menu_element* hovered_menu() const noexcept;
+        // `parent`가 `parent_surface`에서 연 하위 메뉴다. 그 tree가 아직(또는 더는) 없으면 nullptr다.
+        [[nodiscard]] const menu_element* open_child_menu(const menu_element& parent, const std::u8string& parent_surface) const noexcept;
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> submenu_deadline() const noexcept;
+        // hover 시계가 이미 발화한 항목·표면·시각이다 (열었든 형제 자식을 닫았든). 같은 머묾에서 거듭 내지 않는다.
         ui_element_id opened_hover_ {};
         std::u8string opened_hover_surface_ {};
         std::optional<std::chrono::steady_clock::time_point> opened_hover_at_ {};
