@@ -49,6 +49,13 @@ namespace demo {
         float delta { 0.0f };
     };
 
+    // popup 모양을 골랐다 (`setting`은 "corner"·"border", `value`는 고른 값).
+    struct popup_shape_intent
+    {
+        std::u8string setting {};
+        std::u8string value {};
+    };
+
     class popups_page
     {
     public:
@@ -71,6 +78,9 @@ namespace demo {
         // 다음에 열 때 목록이 온전히 보여야 한다.
         void close_dropdown() noexcept;
 
+        // 이 페이지의 popup에 거는 모서리와 경계다. 기본은 OS 기본(Windows 11은 작게 둥글다)과 경계 있음이다.
+        luil::popup_corner corner_ { luil::popup_corner::system };
+        bool popup_border_ { true };
         std::u8string presentation_ { u8"자세히" };
         bool pinned_ { false };
         bool locked_ { true };

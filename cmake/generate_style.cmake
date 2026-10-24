@@ -183,15 +183,23 @@ function(luil_style_numbers output_variable object_key field_pairs minimum maxim
     set(${output_variable} "${text}" PARENT_SCOPE)
 endfunction()
 
-# 컴포넌트 스타일(`tabBar`)은 **빠져도 된다** — 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하고,
+# 컴포넌트 스타일(`tabBar`·`popup`)은 **빠져도 된다** — 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하고,
 # 빠진 칸은 struct의 기본값(처음부터의 모양)이다. 낯선 키와 모르는 값은 여기서도 막는다.
 #  - 짝은 `key|field|enum type|허용 값들`이고 허용 값은 `,`로 적는다. JSON 값은 camelCase, C++ 값은 snake_case다.
+set(palette_roles "windowBackground,surfaceBackground,inputBackground,tooltipBackground,noticeBackground,captionBackground,buttonHoverBackground,accentSoft")
 set(tab_bar_fields
     "variant|variant|tab_bar_variant|underline,connected,flat"
     "closeVisibility|close_visibility|tab_close_visibility|always,selectedOrHovered"
     "indicatorPlacement|indicator_placement|tab_indicator_placement|iconCorner,closeSlot"
-    "barBackground|bar_background|palette_role|windowBackground,surfaceBackground,inputBackground,tooltipBackground,noticeBackground,captionBackground,buttonHoverBackground,accentSoft"
-    "selectedBackground|selected_background|palette_role|windowBackground,surfaceBackground,inputBackground,tooltipBackground,noticeBackground,captionBackground,buttonHoverBackground,accentSoft")
+    "barBackground|bar_background|palette_role|${palette_roles}"
+    "selectedBackground|selected_background|palette_role|${palette_roles}")
+set(popup_fields
+    "corner|corner|popup_corner|system,round,roundSmall,square")
+
+# 컴포넌트 칸의 JSON 키와 C++ 필드, 그 필드 표다. 순서가 곧 지정 초기화의 순서라 struct 선언과 같아야 한다.
+set(component_sections
+    "tabBar|tab_bar|tab_bar_fields"
+    "popup|popup|popup_fields")
 
 # camelCase를 snake_case로 바꾼다 (`selectedOrHovered` → `selected_or_hovered`).
 function(luil_style_snake_case output_variable text)
@@ -200,47 +208,48 @@ function(luil_style_snake_case output_variable text)
     set(${output_variable} "${snake}" PARENT_SCOPE)
 endfunction()
 
-function(luil_style_tab_bar output_variable)
-    string(JSON tab_bar_type ERROR_VARIABLE missing TYPE "${style_json}" "tabBar")
+# 컴포넌트 칸 하나를 지정 초기화로 적는다. 칸이 없으면 아무것도 적지 않는다 (struct의 기본값).
+function(luil_style_component output_variable json_key cpp_field field_specs)
+    string(JSON section_type ERROR_VARIABLE missing TYPE "${style_json}" "${json_key}")
     if(missing)
         set(${output_variable} "" PARENT_SCOPE)
         return()
     endif()
-    if(NOT tab_bar_type STREQUAL "OBJECT")
-        message(FATAL_ERROR "tabBar must be an object, got ${tab_bar_type}")
+    if(NOT section_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "${json_key} must be an object, got ${section_type}")
     endif()
-    string(JSON tab_bar_json GET "${style_json}" "tabBar")
+    string(JSON section_json GET "${style_json}" "${json_key}")
     set(known_keys "")
-    foreach(spec IN LISTS tab_bar_fields)
+    foreach(spec IN LISTS field_specs)
         string(REPLACE "|" ";" parts "${spec}")
         list(GET parts 0 key)
         list(APPEND known_keys "${key}")
     endforeach()
-    string(JSON count LENGTH "${tab_bar_json}")
+    string(JSON count LENGTH "${section_json}")
     if(count GREATER 0)
         math(EXPR last "${count} - 1")
         foreach(index RANGE 0 ${last})
-            string(JSON key MEMBER "${tab_bar_json}" ${index})
+            string(JSON key MEMBER "${section_json}" ${index})
             if(NOT key IN_LIST known_keys)
-                message(FATAL_ERROR "Unknown key in tabBar: ${key}")
+                message(FATAL_ERROR "Unknown key in ${json_key}: ${key}")
             endif()
         endforeach()
     endif()
     # 지정 초기화는 선언 순서라야 하므로 JSON 순서가 아니라 표의 순서로 적는다.
-    set(text "        .tab_bar = {\n")
-    foreach(spec IN LISTS tab_bar_fields)
+    set(text "        .${cpp_field} = {\n")
+    foreach(spec IN LISTS field_specs)
         string(REPLACE "|" ";" parts "${spec}")
         list(GET parts 0 key)
         list(GET parts 1 field)
         list(GET parts 2 enum_type)
         list(GET parts 3 allowed)
-        string(JSON value ERROR_VARIABLE absent GET "${tab_bar_json}" "${key}")
+        string(JSON value ERROR_VARIABLE absent GET "${section_json}" "${key}")
         if(absent)
             continue()
         endif()
         string(REPLACE "," ";" allowed "${allowed}")
         if(NOT value IN_LIST allowed)
-            message(FATAL_ERROR "Invalid value at tabBar.${key}: ${value} (expected one of ${allowed})")
+            message(FATAL_ERROR "Invalid value at ${json_key}.${key}: ${value} (expected one of ${allowed})")
         endif()
         luil_style_snake_case(enum_value "${value}")
         string(APPEND text "            .${field} = ${enum_type}::${enum_value},\n")
@@ -250,17 +259,25 @@ function(luil_style_tab_bar output_variable)
 endfunction()
 
 set(root_keys "dark;light;tones;metrics")
-string(JSON tab_bar_probe ERROR_VARIABLE no_tab_bar GET "${style_json}" "tabBar")
-if(NOT no_tab_bar)
-    list(APPEND root_keys "tabBar")
-endif()
+set(components_text "")
+foreach(section IN LISTS component_sections)
+    string(REPLACE "|" ";" parts "${section}")
+    list(GET parts 0 json_key)
+    list(GET parts 1 cpp_field)
+    list(GET parts 2 fields_variable)
+    string(JSON probe ERROR_VARIABLE absent GET "${style_json}" "${json_key}")
+    if(NOT absent)
+        list(APPEND root_keys "${json_key}")
+    endif()
+    luil_style_component(section_text "${json_key}" "${cpp_field}" "${${fields_variable}}")
+    string(APPEND components_text "${section_text}")
+endforeach()
 luil_style_expect_keys("${style_json}" "root" "${root_keys}")
 luil_style_neutral(dark_text "dark")
 luil_style_neutral(light_text "light")
 # tone은 알파라 0~1이고, 치수는 논리 픽셀이라 위가 열려 있다 (상한은 실수 방지용이다).
 luil_style_numbers(tones_text "tones" "${tone_fields}" 0 1)
 luil_style_numbers(metrics_text "metrics" "${metric_fields}" 0 1000)
-luil_style_tab_bar(tab_bar_text)
 
 set(output_text "#pragma once\n\n")
 string(APPEND output_text "// 스타일 JSON에서 생성된 파일이다. 직접 고치지 않는다.\n")
@@ -268,7 +285,7 @@ string(APPEND output_text "// 원본: ${INPUT_FILE}\n\n")
 string(APPEND output_text "#include \"luil/theme/ui_style.h\"\n\n")
 string(APPEND output_text "namespace luil::generated {\n")
 string(APPEND output_text "    inline constexpr ui_style default_style {\n")
-string(APPEND output_text "${dark_text}${light_text}${tones_text}${metrics_text}${tab_bar_text}")
+string(APPEND output_text "${dark_text}${light_text}${tones_text}${metrics_text}${components_text}")
 string(APPEND output_text "    };\n} // namespace luil::generated\n")
 
 get_filename_component(output_directory "${OUTPUT_FILE}" DIRECTORY)

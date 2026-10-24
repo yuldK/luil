@@ -47,6 +47,9 @@ namespace luil {
         std::u8string parent_surface {};
         std::u8string anchor_key {};
         std::chrono::milliseconds hover_delay { 300 };
+        // 메뉴 둘레에 1px 선을 긋는다. 둥근 popup 창에 담을 때는 끈다 — 사각 선이 모서리에서 튀어나오고, OS가 같은
+        // 모양의 테두리를 긋는다 (`make_menu_popup`이 popup 모양에 맞춰 정한다).
+        bool border { true };
     };
 
     // 항목 한 줄의 높이, 구분선 줄의 높이, 메뉴 둘레 여백이다 (논리 픽셀).

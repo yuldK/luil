@@ -60,6 +60,9 @@ TEST_CASE("The built-in style is the generated one and carries the documented de
     REQUIRE(style.tab_bar == luil::tab_bar_style {});
     REQUIRE(luil::tab_bar_style {}.variant == luil::tab_bar_variant::underline);
     REQUIRE(luil::tab_bar_style {}.close_visibility == luil::tab_close_visibility::always);
+    // popup은 OS 기본 모서리다 — 지원하는 OS는 새 모양, 아니면 처음부터의 모양이다.
+    REQUIRE(style.popup == luil::popup_style {});
+    REQUIRE(luil::popup_style {}.corner == luil::popup_corner::system);
 }
 
 TEST_CASE("A palette role names the color it carries in every theme", "[theme][style]")

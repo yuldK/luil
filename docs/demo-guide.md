@@ -23,6 +23,7 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 | 명령과 단축키의 공통 정의 | app_command, match_command, menu_item_from | [탭](../examples/demo/tabs_page.cpp) |
 | 앞·뒤 삽입으로 탭 이동 | tab_bar_config::move | [탭](../examples/demo/tabs_page.cpp) |
 | 창 밖으로 분리·다시 합치기 | tab_bar_config::unclaimed_drop, receive, ui_window | [탭](../examples/demo/tabs_page.cpp) |
+| popup 창의 모서리와 경계 고르기 (Windows 11 둥근 창) | ui_popup::corner, border, popup_corner_radius, menu_popup_config::corner | [메뉴](../examples/demo/popups_page.cpp) |
 | 탭 모양·닫기 단추·상태 표시를 앱 스타일로 고르기 | ui_style::tab_bar, arrange_context::style | [탭](../examples/demo/tabs_page.cpp) |
 | 견본 막대·가운데 버튼 닫기·줄이기·한 탭씩 넘기기·새 탭 꼬리 | tab_bar_config::preview, middle_click_close, min_tab_width, overflow_mode, trailing | [탭](../examples/demo/tabs_page.cpp) |
 
@@ -76,7 +77,7 @@ width를 비우면 글·아이콘·단축키 열로 너비를 정한다. 높이�
 
 - 컨트롤: 독립 토글과 자동 저장 스위치, 서식 미리보기, 배타 선택, 슬라이더·진행률, 비활성 버튼, 링크가 있는 hover.
 - 모양과 색: 밝게·시스템·어둡게 카드, 선택 체크 표시, 시스템 강조색과 색상 카탈로그.
-- 메뉴: 표시 방식 변경, 검색과 IME 조합, 문서 미리보기, 즐겨찾기·잠금 체크 메뉴, 경로 복사, 삭제와 복원.
+- 메뉴: 표시 방식 변경, 검색과 IME 조합, 문서 미리보기, 즐겨찾기·잠금 체크 메뉴, 경로 복사, 삭제와 복원, popup 모서리(OS 기본·둥글게·작게 둥글게·직각)와 경계 끄기.
 - 탭: 새 탭, 닫은 탭 복원, 앞·뒤 삽입, 이웃 이동, 다른 탭·오른쪽 탭·모든 탭 닫기, 넘침 목록, 가운데 버튼 닫기.
 - 탭 모양: 기본·이어진 탭·평평한 칸, 닫기 단추를 선택·포인터에서만 보이기, 상태 표시를 아이콘 모서리나 닫기 단추 자리에 두기, 넘칠 때 한 탭씩 넘기기, 자리가 모자라면 줄이기. 세 모양의 견본 막대가 그림으로만 선다.
 - 분리 창: 문서 하나를 별도 창으로 띄우고 원래 막대에 끌어 합친다. 창을 닫거나 복귀 버튼을 눌러도 원래 탭으로 돌아온다.

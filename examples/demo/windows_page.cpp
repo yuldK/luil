@@ -213,6 +213,8 @@ namespace demo {
         menu.owner = u8"tool";
         menu.items = narrow_menu_items(tool_menu_items(), search);
         menu.select = [](const std::u8string& key) { return luil::make_app_action(tool_menu_select_intent { key }); };
+        // OS 기본 모서리의 popup이다. 둥근 창이면 메뉴의 사각 선은 끄고 경계를 OS 테두리에 맡긴다.
+        menu.border = luil::popup_corner_radius(luil::popup_corner::system) <= 0.0f;
 
         // 메뉴 버튼 바로 아래에 붙인다.
         // 자리는 **도구 창 client** 기준 논리 픽셀이다 — 앵커가 그 창이기 때문이다.

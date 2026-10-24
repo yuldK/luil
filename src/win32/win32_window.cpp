@@ -611,6 +611,11 @@ namespace luil::win32 {
                     return false;
                 }
                 caption_surface::apply_dwm_frame(window_, window_display_mode::normal);
+                // DWM이 모서리 선택을 받는 판인지 주 창에 기본값을 걸어 묻는다 — 기본값이라 주 창 모양은 그대로다.
+                // 받지 않는 판(Windows 10 이하)은 실패를 돌려주고 popup은 직각으로 물러선다.
+                const DWM_WINDOW_CORNER_PREFERENCE probe { DWMWCP_DEFAULT };
+                corner_preference_supported_ = SUCCEEDED(DwmSetWindowAttribute(window_, DWMWA_WINDOW_CORNER_PREFERENCE, &probe, sizeof(probe)));
+                publish_popup_support();
                 set_dpi(GetDpiForWindow(window_));
                 // 요청 크기는 논리 96 DPI 기준이다.
                 // 창이 어느 모니터에 뜰지는 만들어 봐야 알므로, 만든 뒤 그 모니터의
@@ -1039,6 +1044,7 @@ namespace luil::win32 {
                     system_prefers_light_ = read_system_prefers_light_theme();
                     high_contrast_ = read_high_contrast_enabled();
                     reduce_motion_ = read_reduce_motion();
+                    publish_popup_support();
                     set_text_render_quality(read_text_render_quality());
                     invalidate_all_surfaces();
                     return 0;
@@ -1763,23 +1769,57 @@ namespace luil::win32 {
                     InvalidateRect(popup->window(), nullptr, FALSE);
             }
 
-            [[nodiscard]] bool ensure_popup_class()
+            // popup 창 클래스는 모양마다 하나다. 그림자(`CS_DROPSHADOW`)가 창 클래스의 스타일이라 popup마다 고를 수
+            // 없으므로 클래스를 나눈다 (popup-overlay-design.md).
+            //  - 직각 창: 그림자는 OS의 것이다 (메뉴·tooltip이 쓰는 그 그림자). popup은 자기 창이라 우리가 그린 것은 창
+            //    밖으로 드리울 수 없고, 창 클래스의 drop shadow가 창 둘레에 그것을 얹는다.
+            //  - 둥근 창: drop shadow를 쓰지 않는다. 둥글게 잘린 창 밑에 사각 그림자가 깔린다. DWM이 같은 모양의
+            //    그림자를 얹는다.
+            [[nodiscard]] const std::wstring* ensure_popup_class(const bool rounded)
             {
-                if (popup_class_registered_)
-                    return true;
-                popup_class_name_ = config_.class_name + L".Popup";
+                bool& registered { rounded ? rounded_popup_class_registered_ : popup_class_registered_ };
+                std::wstring& name { rounded ? rounded_popup_class_name_ : popup_class_name_ };
+                if (registered)
+                    return &name;
+                name = config_.class_name + (rounded ? L".PopupRounded" : L".Popup");
                 WNDCLASSEXW popup_class {};
                 popup_class.cbSize = sizeof(popup_class);
-                // 그림자는 OS의 것이다 (메뉴·tooltip이 쓰는 그 그림자).
-                // popup은 자기 창이라 우리가 그린 것은 창 밖으로 드리울 수 없고, 창 클래스의
-                // drop shadow가 창 둘레에 그것을 얹는다 (popup-overlay-design.md).
-                popup_class.style = CS_HREDRAW | CS_VREDRAW | CS_DROPSHADOW;
+                popup_class.style = CS_HREDRAW | CS_VREDRAW | (rounded ? 0u : CS_DROPSHADOW);
                 popup_class.lpfnWndProc = &popup_surface::static_procedure;
                 popup_class.hInstance = instance_;
                 popup_class.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-                popup_class.lpszClassName = popup_class_name_.c_str();
-                popup_class_registered_ = RegisterClassExW(&popup_class) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
-                return popup_class_registered_;
+                popup_class.lpszClassName = name.c_str();
+                registered = RegisterClassExW(&popup_class) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+                return registered ? &name : nullptr;
+            }
+
+            // popup 창의 모서리를 OS가 둥글게 잘라 줄 수 있는가다.
+            //  - DWM이 모서리 선택을 받는 판(Windows 11)이어야 한다 — 주 창을 만들 때 한 번 물어 둔다.
+            //  - 원격 세션이 아니어야 한다. 원격 데스크톱은 DWM 효과가 꺼져 둥근 창의 그림자와 테두리가 그려지지 않으므로
+            //    클래스 그림자와 표면의 선이 있는 직각 창이라야 경계가 남는다.
+            [[nodiscard]] bool rounded_popups() const noexcept
+            {
+                BOOL composition { FALSE };
+                return corner_preference_supported_ && GetSystemMetrics(SM_REMOTESESSION) == 0 && SUCCEEDED(DwmIsCompositionEnabled(&composition)) && composition != FALSE;
+            }
+
+            // 지금 popup 모양 지원을 플랫폼 성질로 게시한다 (`ui_platform::rounded_popup_corners`).
+            // 앱은 이것으로 popup 안 tree의 반지름을 고른다. 바뀐 때만 적는다.
+            void publish_popup_support()
+            {
+                ui_platform platform { current_ui_platform() };
+                const bool rounded { rounded_popups() };
+                if (platform.rounded_popup_corners == rounded)
+                    return;
+                platform.rounded_popup_corners = rounded;
+                set_ui_platform(platform);
+            }
+
+            // frame의 스타일과 OS 지원으로 popup 하나의 모양을 푼다. popup이 모서리를 고르지 않았으면 앱 스타일이다.
+            [[nodiscard]] popup_shape popup_shape_for(const ui_frame& frame, const ui_popup& popup) const noexcept
+            {
+                const ui_style& style { frame.style != nullptr ? *frame.style : default_ui_style() };
+                return resolve_popup_shape(popup.corner.value_or(style.popup.corner), popup.border, rounded_popups());
             }
 
             // frame의 popup 목록과 살아 있는 창을 대조해 만들고·옮기고·없앤다.
@@ -1846,6 +1886,8 @@ namespace luil::win32 {
                 std::shared_ptr<const ui_frame> frame {};
                 if (host_ != nullptr)
                     frame = host_->acquire_frame();
+                // 원격 연결이 붙고 떨어지면 둥근 모서리를 쓸 수 있는지가 바뀐다. popup을 대조할 때마다 다시 본다.
+                publish_popup_support();
 
                 std::vector<popup_placement> alive {};
                 alive.reserve(popups_.size());
@@ -1880,7 +1922,7 @@ namespace luil::win32 {
                             continue;
                         const float scale { dpi_scale(anchor->dpi()) };
                         wanted.push_back({ popup.id, scaled_pixels(popup.x, scale), scaled_pixels(popup.y, scale),
-                            scaled_pixels(popup.width, scale), scaled_pixels(popup.height, scale), popup.anchor
+                            scaled_pixels(popup.width, scale), scaled_pixels(popup.height, scale), popup.anchor, popup_shape_for(*frame, popup).rounded()
                         });
                         sources.push_back(&popup);
                     }
@@ -1915,7 +1957,7 @@ namespace luil::win32 {
                         continue;
                     if (anchor_surface(wanted[index].anchor) == nullptr)
                         continue;
-                    create_popup(wanted[index], *sources[index]);
+                    create_popup(wanted[index], *sources[index], popup_shape_for(*frame, *sources[index]));
                     if (find_popup(wanted[index].id) != nullptr)
                         created.push_back(wanted[index].id);
                 }
@@ -1935,7 +1977,7 @@ namespace luil::win32 {
                     contents.push_back(surface_content { popup.id, fresh ? nullptr : alive_popup->tree(), popup.tree.get() });
                     // 새 frame이 popup을 계속 실었다는 것은 앱이 상태를 유지하기로 했다는 뜻이다.
                     // adopt는 tree 말고도 닫힘 factory와 빗장을 갱신하므로 판정과 무관하게 부른다.
-                    static_cast<void>(alive_popup->adopt(popup));
+                    static_cast<void>(alive_popup->adopt(popup, popup_shape_for(*frame, popup)));
                 }
                 return contents;
             }
@@ -2069,9 +2111,10 @@ namespace luil::win32 {
                 return { x, y };
             }
 
-            void create_popup(const popup_placement& placement, const ui_popup& source)
+            void create_popup(const popup_placement& placement, const ui_popup& source, const popup_shape& shape)
             {
-                if (ensure_popup_class() == false)
+                const std::wstring* const class_name { ensure_popup_class(shape.rounded()) };
+                if (class_name == nullptr)
                 {
                     failed_popups_.push_back(placement.id);
                     return;
@@ -2090,7 +2133,7 @@ namespace luil::win32 {
                 const HWND owner { anchor != nullptr ? anchor->window() : window_ };
                 const HWND handle {
                     CreateWindowExW(
-                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, popup_class_name_.c_str(), L"", WS_POPUP, screen.x, screen.y, placement.width, placement.height, owner, nullptr, instance_, popup.get()),
+                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, class_name->c_str(), L"", WS_POPUP, screen.x, screen.y, placement.width, placement.height, owner, nullptr, instance_, popup.get()),
                 };
                 if (handle == nullptr)
                 {
@@ -2107,7 +2150,9 @@ namespace luil::win32 {
                     failed_popups_.push_back(placement.id);
                     return;
                 }
-                static_cast<void>(popup->adopt(source));
+                // 모양은 보이기 전에 건다 — 첫 그림부터 둥근 창이다. 모서리가 직각이어도 건다 (`apply_corner`).
+                static_cast<void>(popup->adopt(source, shape));
+                popup->apply_corner();
                 popups_.push_back(std::move(popup));
                 ShowWindow(handle, SW_SHOWNOACTIVATE);
             }
@@ -2603,6 +2648,11 @@ namespace luil::win32 {
             std::vector<std::unique_ptr<popup_surface>> popups_ {};
             std::wstring popup_class_name_ {};
             bool popup_class_registered_ { false };
+            // 둥근 popup의 창 클래스다 (drop shadow가 없다).
+            std::wstring rounded_popup_class_name_ {};
+            bool rounded_popup_class_registered_ { false };
+            // DWM이 창 모서리 선택을 받는가다 (Windows 11). 주 창을 만들 때 한 번 묻는다.
+            bool corner_preference_supported_ { false };
             // 만들다 실패한 popup·보조 창의 id다.
             // frame 목록에 남아 있는 한 매 frame 생성→실패가 반복되므로
             // 실패를 기억해 건너뛰고, 앱이 목록에서 빼면 잊는다

@@ -39,6 +39,11 @@ namespace luil {
         // 거짓이면 시스템이 상태 표시줄을 그리고 창 버튼이 없다. 그때 `caption_element`는
         // 자리를 차지하지 않는다 — 앱이 잊고 넣어도 모바일 화면에 데스크톱 chrome이 서지 않는다.
         bool window_caption { true };
+        // popup 창의 모서리를 OS가 둥글게 잘라 줄 수 있는가다 (Windows 11의 DWM 모서리 선택).
+        //  - 거짓이면 모든 popup이 직각과 처음부터의 경계(창 그림자 + 1px 선)로 물러선다. Windows 10 이하와 원격 데스크톱
+        //    세션이 그렇다 — 원격 세션은 DWM 효과가 꺼져 둥근 창의 그림자·테두리가 그려지지 않아 경계가 사라진다.
+        //  - 원격 연결이 붙고 떨어지면 host가 실행 중에 고쳐 적는다. 앱은 frame을 지을 때 읽는다 (`popup_corner_radius`).
+        bool rounded_popup_corners { false };
         ui_platform_capabilities capabilities {};
 
         [[nodiscard]] bool operator==(const ui_platform&) const noexcept = default;

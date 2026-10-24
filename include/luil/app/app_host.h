@@ -10,6 +10,7 @@
 #include "luil/ui/caption_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"
 
 #include <atomic>
@@ -108,14 +109,27 @@ namespace luil {
         //  - 어느 popup도 닫자고 하지 않은 Esc는 삼켜지지 않고 앱의 키 라우팅으로
         //    간다 — 남기로 한 popup이 Esc를 자기 뜻대로 쓰는 길이다.
         std::function<input_action(popup_dismiss_reason)> dismiss {};
-        // 표면 둘레에 1px 테두리를 긋는다 (`tooltip_border`).
+        // popup 둘레에 경계를 둔다.
         // popup은 다른 화면 위에 뜨는 판이라 경계가 있어야 아래 화면과 갈린다 — 그래서
-        // 기본이 참이다. 자기 테두리를 긋는 tree(메뉴)는 같은 자리를 다시 긋는 것이라
-        // 해가 없고, 경계를 일부러 지우는 popup(꼬리 달린 말풍선)만 끈다.
-        //  - 그림자는 여기 없다. popup은 자기 창이라 그림자를 밖으로 드리울 자리가 없고,
-        //    그것은 창 클래스의 drop shadow가 맡는다 (popup-overlay-design.md).
+        // 기본이 참이다. 경계를 일부러 지우는 popup(꼬리 달린 말풍선)만 끈다.
+        //  - 직각 창이면 표면이 tree를 다 그린 뒤 1px `tooltip_border` 선을 긋는다 (처음부터의 모양).
+        //  - 둥근 창이면 사각 선을 긋지 않는다 — OS 테두리와 겹치고 모서리에서 사각으로 튀어나온다. 대신 OS가 긋는
+        //    테두리를 같은 색(`tooltip_border`)으로 맞춘다. 끄면 OS 테두리도 없앤다 (`DWMWA_COLOR_NONE`).
+        //  - 그림자는 여기 없다. popup은 자기 창이라 그림자를 밖으로 드리울 자리가 없고, 직각 창은 창 클래스의
+        //    drop shadow가, 둥근 창은 DWM이 같은 모양으로 맡는다 (popup-overlay-design.md).
         bool border { true };
+        // 모서리다. 비어 있으면 앱 스타일(`ui_style::popup.corner`, 기본은 OS 기본)이다.
+        //  - 둥근 모서리를 못 쓰는 OS·환경에서는 무엇을 골라도 직각이다 (`ui_platform::rounded_popup_corners`).
+        //  - 같은 id의 popup이 둥근 창과 직각 창 사이를 오가면 host는 창을 다시 만든다. 그림자가 창 클래스의 것이라
+        //    만든 뒤 바꿀 수 없다.
+        std::optional<popup_corner> corner {};
     };
+
+    // 그 모서리 선택이 이 플랫폼에서 실제로 갖는 반지름이다 (논리 픽셀).
+    // popup 안의 tree가 창과 같은 반지름으로 바탕·선택 행을 그릴 때 쓴다. 둥근 모서리를 못 쓰면 0이다.
+    //  - `system`은 OS가 popup에 쓰는 모양이다 (Windows 11은 작게 둥근 4, 그 밖은 0).
+    //  - 반지름은 OS가 창을 자르는 값이다 (Windows 11: 둥글게 8, 작게 4). 화면 배율은 OS가 곱한다.
+    [[nodiscard]] float popup_corner_radius(popup_corner corner, const ui_platform& platform = current_ui_platform()) noexcept;
 
     // 화면의 한 점에 창을 세우는 닻이다 (`ui_window::screen_anchor`).
     // 새 창 client의 논리 점 (`client_x`, `client_y`)이 화면의 물리 점 `screen`에 오게 놓는다 — 끌어 낸 탭을 놓은

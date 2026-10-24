@@ -54,7 +54,26 @@ Popup surface는 다음 창 정책을 사용한다.
 
 Tool window 확장 스타일 때문에 taskbar와 Alt+Tab의 독립 창으로 나타나지 않는다. Owner가 파괴되면 운영체제 소유 관계에 따라 popup도 사라진다.
 
-Popup 창 클래스는 `CS_DROPSHADOW`를 켠다. Popup은 자기 창이라 tree가 그린 것은 창 밖으로 드리울 수 없고, 메뉴·tooltip이 쓰는 OS의 그림자가 창 둘레에 선다. 그래서 `ui_popup`에는 그림자 설정이 없다.
+## 모서리·그림자·테두리
+
+Popup 창은 지금 OS의 모양을 따른다. Windows 11처럼 DWM이 창 모서리 선택을 받는 판에서는 둥근 창이고, 그렇지 않으면 처음부터의 직각 창이다. 앱이 popup마다 고를 수 있고, 고르지 않으면 앱 스타일(`ui_style::popup.corner`, JSON의 `popup.corner`)이며 그 기본은 OS 기본이다.
+
+| `popup_corner` | Windows 11 | 그 밖 |
+| --- | --- | --- |
+| `system` (기본) | 작게 둥글게 — OS의 메뉴·tooltip과 같다 | 직각 |
+| `round` | `DWMWCP_ROUND` (8) | 직각 |
+| `round_small` | `DWMWCP_ROUNDSMALL` (4) | 직각 |
+| `square` | `DWMWCP_DONOTROUND` | 직각 |
+
+규칙은 [`resolve_popup_shape`](../src/host/popup_reconcile.h) 하나에 모았다 — 플랫폼을 모르는 순수 함수라 조합을 test로 잠근다.
+
+- **둥근 모서리.** popup 창을 만든 직후, 보이기 전에 `DWMWA_WINDOW_CORNER_PREFERENCE`를 건다. 직각을 고른 창에도 `DWMWCP_DONOTROUND`를 건다 — 꼬리 달린 말풍선처럼 모양을 스스로 그리는 popup은 OS가 popup을 둥글게 하는 판이 와도 직각이어야 한다.
+- **그림자.** 직각 창은 창 클래스의 `CS_DROPSHADOW`(메뉴·tooltip이 쓰는 그 그림자)다. 둥근 창에는 쓰지 않는다 — 둥글게 잘린 창 밑에 사각 그림자가 깔려 모서리 밖으로 보인다. 둥근 창에는 DWM이 같은 모양의 그림자를 얹는다. 그림자는 창 클래스의 스타일이라 popup마다 고를 수 없으므로 **클래스를 모양별로 둘** 둔다(`.Popup`·`.PopupRounded`). 그래서 같은 id의 popup이 둥근 창과 직각 창 사이를 오가면 대조(`reconcile_popups`)가 옮기지 않고 다시 만든다 — 앵커가 바뀐 popup과 같은 판정이다(`popup_placement::rounded`). 둥근 정도만 바뀐 것(둥글게 ↔ 작게)은 같은 창에 다시 건다.
+- **테두리.** `ui_popup::border`는 "경계를 둔다"이다. 직각 창은 표면이 tree를 다 그린 뒤 1px `tooltip_border` 선을 긋는다(`frame_state::border`). 둥근 창은 그 사각 선을 긋지 않는다 — OS 테두리와 겹치고 모서리에서 사각으로 튀어나온다. 대신 OS 테두리 색을 `DWMWA_BORDER_COLOR`로 같은 역할색(창 바탕 위에 얹은 불투명 결과 — DWM은 알파를 받지 않는다)에 맞춘다. 경계를 끄면 둥근 창은 `DWMWA_COLOR_NONE`으로 OS 테두리도 없앤다. 직각 창에도 OS 테두리는 `DWMWA_COLOR_NONE`이다 — 경계는 표면의 선 하나다. 고대비는 OS 색(`DWMWA_COLOR_DEFAULT`)이 맞다.
+- **명암.** popup에도 `DWMWA_USE_IMMERSIVE_DARK_MODE`를 건다. 어두운 바탕이면 OS 그림자와 테두리가 어두운 모드의 것이라 어울린다. 명암은 테마 이름이 아니라 바탕의 밝기(`is_dark_background`)가 정한다 — 주 창과 같은 규칙이다. 색과 명암은 표면이 그릴 때마다 frame의 팔레트로 견주고 바뀐 때만 DWM에 말한다.
+- **tree의 반지름.** popup 안의 tree가 창과 같은 반지름으로 그리려면 [`popup_corner_radius`](../include/luil/app/app_host.h)가 고른 모서리의 실제 반지름(논리 픽셀)을 답한다. 둥근 모서리를 못 쓰면 0이다. 자기 둘레에 사각 선을 긋는 tree(메뉴)는 둥근 창에서 그 선을 끈다 — `make_menu_popup`이 popup 모양에 맞춰 `menu_config::border`를 정한다.
+
+**물러서기.** 둥근 창은 `ui_platform::rounded_popup_corners`가 참일 때만이다. Win32 host는 주 창을 만들 때 `DWMWA_WINDOW_CORNER_PREFERENCE`에 기본값을 걸어 받는 판인지 묻고(Windows 10 이하는 실패를 돌려준다), 원격 세션(`SM_REMOTESESSION`)과 꺼진 composition이 아닌지를 popup을 대조할 때마다 다시 본다. 원격 데스크톱은 DWM 효과가 꺼져 둥근 창의 그림자와 테두리가 그려지지 않으므로, 그대로 두면 클래스 그림자도 사각 선도 없는 창이 되어 경계가 사라진다 — 그래서 원격 세션은 직각 창, 클래스 그림자, 1px 선으로 물러선다. 바뀌면 플랫폼 성질을 고쳐 적어 앱의 다음 frame이 반지름 0으로 그린다. 판정이 틀려 모서리 선택이 실패하면 그 창은 직각으로 물러서 표면의 선을 다시 켠다 (그림자 없는 클래스라도 선이 경계를 맡는다).
 
 ## 렌더링
 
@@ -64,7 +83,7 @@ Tree가 바뀌면 해당 popup을 invalidate한다. 크기가 바뀌면 renderer
 
 Popup은 caption chrome을 만들지 않는다. 포인터, 휠, 커서, tree draw 같은 공통 surface 입력과 렌더링만 사용한다.
 
-`ui_popup::border`가 참이면(기본값) 표면이 tree를 다 그린 뒤 둘레에 1px `tooltip_border`를 긋는다 (`frame_state::border`). 다른 화면 위에 뜨는 판이라 경계가 있어야 아래 화면과 갈리고, tree 위에 긋기 때문에 가장자리까지 채운 내용에도 경계가 남는다. 자기 테두리를 긋는 tree(메뉴)는 같은 자리를 다시 긋는 것이라 해가 없고, 경계를 일부러 지우는 popup(꼬리 달린 말풍선)만 끈다.
+`ui_popup::border`가 참이면(기본값) popup에 경계가 선다. 직각 창은 표면이 tree를 다 그린 뒤 둘레에 1px `tooltip_border`를 긋고(`frame_state::border`), 둥근 창은 OS 테두리가 같은 색으로 맡는다 (위 절). 다른 화면 위에 뜨는 판이라 경계가 있어야 아래 화면과 갈리고, tree 위에 긋기 때문에 가장자리까지 채운 내용에도 경계가 남는다. 경계를 일부러 지우는 popup(꼬리 달린 말풍선)만 끈다.
 
 ## 입력 합류
 
@@ -124,7 +143,7 @@ Android에는 popup마다 띄울 창이 없다. 같은 `ui_popup` 선언을 주 
 
 ## 검증 지침
 
-[overlay_input_tests.cpp](../tests/overlay_input_tests.cpp)는 layer 라우팅(맨 위 layer, 접촉의 캡처, 호버 이탈, 바깥 누름·휠)을, [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 layer가 자리 안에만 그려지는 것을 확인한다. [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을 픽셀로 확인한다.
+[overlay_input_tests.cpp](../tests/overlay_input_tests.cpp)는 layer 라우팅(맨 위 layer, 접촉의 캡처, 호버 이탈, 바깥 누름·휠)을, [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 layer가 자리 안에만 그려지는 것을 확인한다. [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. 모서리 넷 × 경계 켬·끔 × OS 지원 여부의 모양(그림자 클래스, 표면의 선, OS 테두리), 둥근 창과 직각 창 사이의 재생성, 실제 반지름, 메뉴 popup이 둥근 창과 경계 끔에서 자기 선을 끄는 것도 여기서 본다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을 픽셀로 확인한다.
 
 전체 조립은 [win32_window.cpp](../src/win32/win32_window.cpp), popup 메시지 처리는 [popup_surface.cpp](../src/win32/popup_surface.cpp)에 있다.
 

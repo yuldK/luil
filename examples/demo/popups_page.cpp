@@ -2,6 +2,7 @@
 
 #include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
+#include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/markdown_element.h"
 
@@ -31,6 +32,17 @@ namespace demo {
         if (const auto* const scroll { message.get<popups_scroll_intent>() }; scroll != nullptr)
         {
             scroll_ = std::max(0.0f, scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const shape { message.get<popup_shape_intent>() }; shape != nullptr)
+        {
+            if (shape->setting == u8"corner")
+                corner_ = shape->value == u8"round" ? luil::popup_corner::round
+                    : shape->value == u8"small"     ? luil::popup_corner::round_small
+                    : shape->value == u8"square"    ? luil::popup_corner::square
+                                                    : luil::popup_corner::system;
+            else if (shape->setting == u8"border")
+                popup_border_ = shape->value == u8"on";
             return true;
         }
         if (const auto* const select { message.get<card_menu_select_intent>() }; select != nullptr)
@@ -165,6 +177,42 @@ namespace demo {
             page.add(std::make_unique<luil::markdown_element>(luil::ui_element_id { kind_text, u8"document-preview" }, std::move(markdown)), 180.0f);
         }
         page.add(make_label({ kind_text, u8"popups-help" }, u8"검색 중에는 IME 조합을 지원합니다. Esc 또는 바깥 클릭으로 팝업을 닫을 수 있습니다.", 12.0f, luil::label_color_role::dim), 28.0f);
+        page.gap(16.0f);
+
+        // popup 창의 모양이다. 앱마다 고르는 렌더링 선택지이고, 고르지 않으면 OS 기본이다. 둥근 모서리를 못 쓰는 OS·원격
+        // 세션에서는 무엇을 골라도 직각과 처음부터의 경계다.
+        const auto shape_choice = [](std::u8string setting, std::u8string name, std::vector<luil::choice_item> items, std::u8string selected) {
+            luil::choice_group_config choices {};
+            choices.owner = u8"popup-shape/" + setting;
+            choices.name = std::move(name);
+            choices.style = luil::choice_style::toggle;
+            choices.items = std::move(items);
+            choices.selected = std::move(selected);
+            choices.select = [setting](const std::u8string& value) { return luil::make_app_action(popup_shape_intent { setting, value }); };
+            return std::make_unique<luil::choice_group_element>(std::move(choices));
+        };
+        std::u8string corner_value { u8"system" };
+        switch (corner_)
+        {
+        case luil::popup_corner::round:
+            corner_value = u8"round";
+            break;
+        case luil::popup_corner::round_small:
+            corner_value = u8"small";
+            break;
+        case luil::popup_corner::square:
+            corner_value = u8"square";
+            break;
+        case luil::popup_corner::system:
+            break;
+        }
+        page.add(make_label({ kind_text, u8"popup-shape-title" }, u8"popup 모양 (드롭다운·문서 작업 메뉴)", 15.0f, luil::label_color_role::primary), 28.0f);
+        page.add(shape_choice(u8"corner", u8"popup 모서리", { { u8"system", u8"OS 기본" }, { u8"round", u8"둥글게" }, { u8"small", u8"작게 둥글게" }, { u8"square", u8"직각" } }, corner_value),
+            luil::choice_toggle_height);
+        page.gap(4.0f);
+        page.add(shape_choice(u8"border", u8"popup 경계", { { u8"on", u8"경계 있음" }, { u8"off", u8"경계 없음" } }, popup_border_ ? u8"on" : u8"off"), luil::choice_toggle_height);
+        const std::u8string radius { to_u8(static_cast<int>(luil::popup_corner_radius(corner_))) };
+        page.add(make_label({ kind_text, u8"popup-shape-radius" }, u8"이 OS에서 고른 모서리의 반지름: " + radius + u8" 논리 픽셀", 12.0f, luil::label_color_role::dim), 24.0f);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(popups_scroll_intent { delta }); });
     }
     std::vector<luil::win32::ui_popup> popups_page::make_popups(const float scale) const
@@ -190,6 +238,8 @@ namespace demo {
             menu.owner = u8"presentation";
             menu.items = narrow_menu_items(std::move(values), search);
             menu.select = [](const std::u8string& value) { return luil::make_app_action(dropdown_select_intent { value }); };
+            // 둥근 창에서는 메뉴의 사각 선이 모서리에서 튀어나온다. 경계는 OS 테두리가 긋는다.
+            menu.border = popup_border_ && luil::popup_corner_radius(corner_) <= 0.0f;
 
             // 칸 바로 아래에 붙인다.
             const luil::rect_f field { dropdown_->bounds() };
@@ -200,6 +250,8 @@ namespace demo {
             popup.x = field.x / scale;
             popup.y = (field.y + field.height) / scale + 2.0f;
             popup.tree = make_search_menu_tree(std::move(menu), kind_dropdown_search_input, search, u8"검색", popup.width, scale);
+            popup.corner = corner_;
+            popup.border = popup_border_;
             popup.dismiss = [](const luil::win32::popup_dismiss_reason reason) {
                 // 검색 중이던 목록이다 — 계기를 가려서 남는다.
                 if (search_popup_stays(reason))
@@ -234,6 +286,8 @@ namespace demo {
             popup.y = menu_y_ / scale;
             popup.scale = scale;
             popup.dismiss = [](const luil::popup_dismiss_reason) { return luil::make_app_action(card_menu_close_intent {}); };
+            popup.corner = corner_;
+            popup.border = popup_border_;
             popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
         }
         return popups;
