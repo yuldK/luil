@@ -2110,6 +2110,8 @@ namespace luil {
             opened_hover_ = snapshot_.hovered;
             opened_hover_surface_ = snapshot_.hovered_surface;
             opened_hover_at_ = snapshot_.hover_started_at;
+            // hover로 여는 메뉴는 강조 없이 선다 — 앞서 키로 연 표식이 남아 있으면 지운다.
+            submenu_opened_by_key_ = false;
             if (const auto* menu { hovered_menu() }; menu != nullptr)
                 if (auto opened { menu->open_submenu(snapshot_.hovered.owner) }; opened.has_value())
                     for (auto& action : *opened)
@@ -2859,9 +2861,11 @@ namespace luil {
         const bool primary_shortcut { event.primary_shortcut_down() };
         const bool word_navigation { event.word_navigation_down() };
         const text_input_snapshot value { focused_text_input().value_or(text_input_snapshot {}) };
+        // 열린 후보의 탐색 키는 칸을 감싼 쪽(콤보)이 받는다. Home·End(Shift 포함)는 칸에 남긴다 — 편집 가능한 콤보의
+        // 칸에서 Home·End는 caret을 줄 처음·끝으로 옮기는 키라, 자동 완성 목록이 열린 동안에도 caret이 움직여야 한다.
         if (value.navigation_keys_to_parent && value.composing == false && event.shortcut_modifier_down() == false
-            && (event.key == key_code::arrow_up || event.key == key_code::arrow_down || event.key == key_code::page_up || event.key == key_code::page_down || event.key == key_code::home
-                || event.key == key_code::end || event.key == key_code::enter))
+            && (event.key == key_code::arrow_up || event.key == key_code::arrow_down || event.key == key_code::page_up || event.key == key_code::page_down
+                || event.key == key_code::enter))
             return std::nullopt;
         if (value.read_only)
         {
@@ -3141,8 +3145,14 @@ namespace luil {
 
     const menu_element* interaction_controller::hovered_menu() const noexcept
     {
+        // 포인터 이동마다, 그리고 `next_deadline`마다 불린다. 메뉴 항목 위가 아니면 tree를 훑지 않는다 — 훑으면
+        // 메뉴가 없는 화면에서도 이동 하나가 tree 전체의 dynamic_cast가 되고, 같은 키를 쓴 다른 kind(도구 막대
+        // 단추)가 메뉴 항목으로 읽혀 하위 메뉴 시계를 세운다. 항목 kind는 `menu_element`가 정한 라이브러리 kind다.
+        if (snapshot_.hovered.kind != ui_element_kind::menu_item)
+            return nullptr;
         const ui_tree* const tree { surface_tree(snapshot_.hovered_surface) };
-        const auto* const menu { tree != nullptr ? menu_in_element(tree->root()) : nullptr };
+        // 항목을 감싼 메뉴는 접근 색인이 바로 답한다 (항목의 접근 부모가 메뉴다).
+        const auto* const menu { tree != nullptr ? dynamic_cast<const menu_element*>(tree->access_parent_of(snapshot_.hovered)) : nullptr };
         return menu != nullptr && menu->enabled() && menu->has_submenu(snapshot_.hovered.owner) ? menu : nullptr;
     }
 
@@ -3159,20 +3169,36 @@ namespace luil {
     std::optional<std::vector<input_action>> interaction_controller::process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host)
     {
         const ui_tree& tree { *host.tree };
-        const menu_element* const menu { menu_in_element(tree.root()) };
+        const menu_element* const menu { host.menu };
+        // 지난 키로 연 메뉴가 서지 않았으면 그 표식이 뒤의 hover 열림에 묻어가지 않게 한다.
+        submenu_opened_by_key_ = false;
+        // 강조가 이 메뉴에 없다 (hover로 연 하위 메뉴다). 강조 없이 이 메뉴에 서서 키가 처음부터 세게 한다 —
+        // 첫 항목을 골라 둔 채 같은 키를 흘리면 첫 ↓가 둘째 항목에 서고, Enter가 강조로 보인 적 없는 항목을
+        // 실행한다. ←·Esc는 그대로 이 메뉴를 닫는다.
         if (menu != nullptr && menu->config().depth > 0 && snapshot_.menu_surface != host.surface)
-            for (const auto& item : menu->config().items)
-                if (item.enabled)
-                {
-                    snapshot_.menu_highlight = { kinds.item, item.key };
-                    snapshot_.menu_surface = host.surface;
-                    break;
-                }
+        {
+            snapshot_.menu_highlight = {};
+            snapshot_.menu_surface = host.surface;
+            // →는 부모 항목에서 이미 열린 자식으로 들어가는 키다. 첫 활성 항목에 서고 키를 쓴다.
+            if (event.key == key_code::arrow_right && event.shortcut_modifier_down() == false)
+            {
+                for (const auto& item : menu->config().items)
+                    if (item.enabled)
+                    {
+                        snapshot_.menu_highlight = { kinds.item, item.key };
+                        break;
+                    }
+                return std::vector<input_action> {};
+            }
+        }
         if (menu != nullptr && event.shortcut_modifier_down() == false)
         {
             if (event.key == key_code::arrow_right || event.key == key_code::enter)
                 if (auto opened { menu->open_submenu(snapshot_.menu_highlight.owner) }; opened.has_value())
+                {
+                    submenu_opened_by_key_ = true;
                     return opened;
+                }
             if ((event.key == key_code::arrow_left || event.key == key_code::escape) && menu->config().depth > 0)
             {
                 snapshot_.menu_highlight = { kinds.item, menu->config().anchor_key };
@@ -3262,7 +3288,7 @@ namespace luil {
             const std::size_t level { menu != nullptr ? menu->config().depth : 0 };
             if (result.tree == nullptr || level > depth)
             {
-                result = { tree, surface };
+                result = { tree, surface, menu };
                 depth = level;
             }
         };
@@ -3884,15 +3910,54 @@ namespace luil {
         }
 
         // 컨텍스트 메뉴가 열리고 닫힐 때마다 키보드 강조를 지운다.
-        // 새 메뉴는 강조 없이 시작한다 (첫 ↓가 첫 활성 항목을 고른다).
+        // 깊이 0의 새 메뉴는 강조 없이 시작한다 (첫 ↓가 첫 활성 항목을 고른다).
         const std::optional<menu_kinds> menu { policy_ != nullptr ? policy_->menu() : std::nullopt };
-        const bool menu_open { menu.has_value() && find_menu(*menu).tree != nullptr };
+        const menu_location deepest { menu.has_value() ? find_menu(*menu) : menu_location {} };
+        const bool menu_open { deepest.tree != nullptr };
         if (menu_open != context_menu_open_)
         {
             context_menu_open_ = menu_open;
             snapshot_.menu_highlight = {};
             snapshot_.menu_surface.clear();
         }
+        if (menu_open == false)
+        {
+            menu_depth_ = 0;
+            menu_anchor_.clear();
+            menu_parent_surface_.clear();
+            submenu_opened_by_key_ = false;
+            return;
+        }
+
+        // 하위 메뉴 사슬이 줄거나 늘었다.
+        //  - 줄었으면 닫힌 메뉴를 연 부모 항목으로 강조를 되돌린다. Esc는 플랫폼이 가장 깊은 popup의 닫힘으로 삼켜
+        //    키 경로(←)를 거치지 않으므로, 되돌림은 키가 아니라 깊이의 변화에 매인다. 여러 단계가 한꺼번에 닫혀
+        //    적어 둔 부모가 지금 가장 깊은 메뉴가 아니면 되돌릴 자리가 없다.
+        //  - 키보드로 연 메뉴가 섰으면 그 첫 활성 항목을 강조한다. 강조 없이 두면 다음 ↓가 둘째 항목에 서고,
+        //    보이지 않던 항목을 Enter가 실행한다.
+        const std::size_t depth { deepest.menu != nullptr ? deepest.menu->config().depth : 0 };
+        if (depth < menu_depth_ && menu_anchor_.empty() == false && deepest.surface == menu_parent_surface_)
+        {
+            // 포인터가 부모의 다른 항목 위에 있으면(hover가 닫았다) 그 항목이 강조다. 앵커까지 세우면 두 줄이 강조된다.
+            const bool on_parent { snapshot_.hovered.kind == menu->item && snapshot_.hovered_surface == menu_parent_surface_ };
+            const bool pointer_elsewhere { on_parent && snapshot_.hovered.owner != menu_anchor_ };
+            snapshot_.menu_highlight = pointer_elsewhere ? ui_element_id {} : ui_element_id { menu->item, menu_anchor_ };
+            snapshot_.menu_surface = menu_parent_surface_;
+        }
+        else if (depth > menu_depth_ && submenu_opened_by_key_ && deepest.menu != nullptr)
+        {
+            submenu_opened_by_key_ = false;
+            for (const auto& item : deepest.menu->config().items)
+                if (item.enabled)
+                {
+                    snapshot_.menu_highlight = { menu->item, item.key };
+                    snapshot_.menu_surface = deepest.surface;
+                    break;
+                }
+        }
+        menu_depth_ = depth;
+        menu_anchor_ = deepest.menu != nullptr ? deepest.menu->config().anchor_key : std::u8string {};
+        menu_parent_surface_ = deepest.menu != nullptr ? deepest.menu->config().parent_surface : std::u8string {};
     }
 
     void interaction_controller::clear_focus() noexcept

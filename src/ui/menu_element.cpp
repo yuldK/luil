@@ -25,6 +25,8 @@ namespace luil {
             menu_item_element(menu_item_config item, const menu_config& config)
                 : ui_element { ui_element_id { ui_element_kind::menu_item, item.key } }
                 , item_ { std::move(item) }
+                , opened_ { item_.children.empty() == false && config.opened_key == item_.key }
+                , open_submenu_ { &config.open_submenu }
             {
                 set_enabled(item_.enabled);
                 // 메뉴가 열려 있으면 키보드는 메뉴의 것이다 (↑/↓/Enter/Esc).
@@ -48,7 +50,8 @@ namespace luil {
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const rect_f box { bounds() };
                 // 키보드 강조는 hover와 같은 자리 표시다.
-                const bool highlighted { interaction.hovered == id() || interaction.menu_highlight == id() };
+                // 하위 메뉴를 연 항목도 강조로 남는다 — 포인터와 키 강조가 자식으로 옮겨 가도 어느 항목의 자식인지 보인다.
+                const bool highlighted { interaction.hovered == id() || interaction.menu_highlight == id() || opened_ };
                 if (enabled() && (highlighted || interaction.pressed == id()))
                 {
                     const ui_color background { interaction.pressed == id() ? context.palette.button_pressed_background : context.palette.button_hover_background };
@@ -103,11 +106,28 @@ namespace luil {
                     info.checked = item_.checked;
                 if (item_.kind == menu_item_kind::radio)
                     info.selected = item_.checked;
+                // 자식이 있는 항목은 펼침 상태를 알린다 (UIA ExpandCollapse). 보조 기술이 하위 메뉴가 열렸는지 읽는다.
+                if (item_.children.empty() == false)
+                    info.expanded = opened_;
                 return info;
+            }
+
+            // 펼치기는 이 항목의 키로 여는 절대 메시지다 — 클릭으로 흘려도 같은 메시지지만, 펼침 명령은 기본 실행으로
+            // 물러서지 않는다 (`ui_element::access_actions`). 접기는 열린 하위 메뉴의 `close_submenu`가 쥐어 여기서 낼 수 없다.
+            [[nodiscard]] std::optional<std::vector<input_action>> access_actions(const access_request& request) const override
+            {
+                if (request.command != access_command::expand)
+                    return ui_element::access_actions(request);
+                if (item_.children.empty() || item_.enabled == false || *open_submenu_ == nullptr)
+                    return std::nullopt;
+                return std::vector<input_action> { (*open_submenu_)(item_.key) };
             }
 
         private:
             menu_item_config item_ {};
+            bool opened_ { false };
+            // 담은 메뉴의 설정 안 factory다. 메뉴가 항목을 소유하므로 항목보다 오래 산다 (클릭 액션이 같은 것을 쥔다).
+            const menu_message_factory* open_submenu_ { nullptr };
         };
     } // namespace
 
@@ -139,8 +159,9 @@ namespace luil {
     {
         if (has_submenu(key) == false)
             return std::nullopt;
-        if (config_.opened_key == key)
-            return std::vector<input_action> {};
+        // 이미 연 항목이어도 여는 메시지를 다시 낸다. 키가 이 메뉴에 왔다는 것은 자식 tree가 아직(또는 더는) 없다는
+        // 뜻이라, 빈 답으로 삼키면 →가 자식으로 들어가지 못한다. 열림 경로를 그 키로 두는 메시지라 거듭 내도 같다.
+        //  - hover 열림은 `submenu_deadline`이 이미 연 항목을 따로 거른다.
         return std::vector<input_action> { config_.open_submenu(std::u8string { key }) };
     }
 

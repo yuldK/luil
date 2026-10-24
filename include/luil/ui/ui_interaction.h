@@ -742,6 +742,8 @@ namespace luil {
             const ui_tree* tree { nullptr };
             // 비어 있으면 주 창이다 (표면 표식의 통상 규칙).
             std::u8string surface {};
+            // 그 tree의 메뉴다. 찾을 때 이미 훑은 값이라 쓰는 쪽이 다시 훑지 않는다.
+            const menu_element* menu { nullptr };
         };
 
         // 컨텍스트 메뉴가 열린 동안의 키 처리다.
@@ -1011,6 +1013,15 @@ namespace luil {
         // 컨텍스트 메뉴의 열림 상태다.
         // 여닫는 edge에서 키보드 강조를 지운다.
         bool context_menu_open_ { false };
+        // 지난번에 본 가장 깊은 메뉴의 깊이와, 그 메뉴를 연 부모 항목·부모 표면이다.
+        //  - 깊이가 줄면 무엇이 닫았든(←, 플랫폼이 삼킨 Esc, 앵커 닫힘) 강조를 그 부모 항목으로 되돌린다.
+        //    닫힌 메뉴의 설정은 tree와 함께 사라지므로 미리 적어 둔다.
+        std::size_t menu_depth_ { 0 };
+        std::u8string menu_anchor_ {};
+        std::u8string menu_parent_surface_ {};
+        // 키보드(→·Enter)가 하위 메뉴를 열었다. 그 메뉴가 서면 첫 활성 항목을 강조한다 — hover로 연 메뉴는
+        // 강조 없이 선다 (Windows 메뉴의 갈래다).
+        bool submenu_opened_by_key_ { false };
 
         // 마지막으로 본 포인터 위치·시각·표면이다.
         // 포인터가 머문 채 내용만 스크롤되면 (휠) 새

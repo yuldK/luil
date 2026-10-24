@@ -1,6 +1,7 @@
 #include "host/popup_reconcile.h"
 
 #include "luil/app/menu_popup.h"
+#include "luil/theme/ui_style.h"
 #include "luil/ui/ui_platform.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -172,6 +173,23 @@ TEST_CASE("A menu popup drops its own line inside a rounded window and when the 
     luil::set_ui_platform(square);
     REQUIRE(menu_border(luil::popup_corner::round, true));
     luil::set_ui_platform(previous);
+}
+
+TEST_CASE("A menu popup measures its width at the font size its items are drawn with", "[win32][popup]")
+{
+    const auto width = [](const std::optional<float> font_size) {
+        luil::menu_config menu {};
+        menu.items.push_back({ u8"open", u8"Open" });
+        luil::menu_popup_config config {};
+        config.id = u8"menu";
+        config.font_size = font_size;
+        config.measurer = [](const std::u8string_view text, const float size) { return static_cast<float>(text.size()) * size; };
+        return luil::make_menu_popup(std::move(menu), std::move(config)).width;
+    };
+    // 글 4자 × 크기 + 여백(2 × 4) + 아이콘 열(22) + 오른쪽 여유(16)다. 비우면 내장 스타일의 본문 글자로 잰다.
+    REQUIRE(width(std::nullopt) == 4.0f * luil::default_ui_style().metrics.body_font_size + 46.0f);
+    // 큰 글자로 그리는 앱은 그 크기를 넘겨 글이 잘리지 않는 폭을 받는다.
+    REQUIRE(width(24.0f) == 4.0f * 24.0f + 46.0f);
 }
 
 TEST_CASE("An anchored popup still moves inside its own surface", "[win32][popup]")

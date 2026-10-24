@@ -110,6 +110,33 @@ TEST_CASE("Menu check and radio items expose actions with their own selection co
     REQUIRE(plain.accessibility().selection_container == false);
 }
 
+TEST_CASE("A submenu parent item reports whether its submenu is open and expands by its key", "[ui][menu][accessibility]")
+{
+    std::u8string opened_by {};
+    auto config { make_config() };
+    config.items[0].children.push_back({ u8"nested", u8"Nested" });
+    config.open_submenu = [&opened_by](const std::u8string& key) {
+        opened_by = key;
+        return luil::input_action { luil::app_message { select_intent { key } } };
+    };
+    const luil::menu_element closed { config };
+    REQUIRE(closed.children()[0]->accessibility().expanded == false);
+    // 잎 항목은 펼침 상태가 없다.
+    REQUIRE(closed.children()[1]->accessibility().expanded.has_value() == false);
+    const auto expand { luil::plan_access_request(*closed.children()[0], { luil::access_command::expand }) };
+    REQUIRE(expand.has_value());
+    REQUIRE(expand->size() == 1u);
+    REQUIRE(opened_by == u8"open");
+
+    config.opened_key = u8"open";
+    const luil::menu_element opened { config };
+    REQUIRE(opened.children()[0]->accessibility().expanded == true);
+    // 이미 펼쳐져 있으면 할 일이 없다.
+    const auto again { luil::plan_access_request(*opened.children()[0], { luil::access_command::expand }) };
+    REQUIRE(again.has_value());
+    REQUIRE(again->empty());
+}
+
 TEST_CASE("Menu width reserves the longest label and shortcut on the same row", "[ui][menu]")
 {
     luil::menu_config config {};
