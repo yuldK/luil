@@ -164,3 +164,20 @@ TEST_CASE("A palette selector on a text button answers the colour, never the sha
         REQUIRE(text_button_fill_for(confirm, true) == text_button_fill::solid_accent);
     }
 }
+
+TEST_CASE("An icon-only text button is named by its access name or tooltip", "[ui][text_button][accessibility]")
+{
+    // 글이 없는 단추가 이름 없이 읽히면 스크린 리더에는 "단추"뿐이다.
+    luil::text_button_element named { { kind_button, u8"named" }, luil::text_button_config { .glyph = luil::codicons::icon_arrow_up } };
+    named.set_access_name(u8"이전 찾은 곳");
+    REQUIRE(named.accessibility().name == u8"이전 찾은 곳");
+
+    luil::text_button_element tipped { { kind_button, u8"tipped" }, luil::text_button_config { .glyph = luil::codicons::icon_arrow_down } };
+    tipped.set_tooltip(u8"다음 찾은 곳");
+    REQUIRE(tipped.accessibility().name == u8"다음 찾은 곳");
+
+    // 적힌 글이 있으면 그 글이 이름이다.
+    luil::text_button_element texted { { kind_button, u8"texted" }, luil::text_button_config { .text = u8"열기", .glyph = luil::codicons::icon_add } };
+    texted.set_access_name(u8"다른 이름");
+    REQUIRE(texted.accessibility().name == u8"열기");
+}

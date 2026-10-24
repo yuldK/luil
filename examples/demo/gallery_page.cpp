@@ -229,8 +229,8 @@ namespace demo {
         page.add(std::make_unique<luil::progress_element>(luil::ui_element_id { kind_layout, u8"gallery/progress" }, luil::progress_config { .value = value_ / 100.0f }), 8.0f);
         page.gap(24.0f);
 
-        auto hover { button(
-            u8"gallery/hover", u8"여기에 마우스를 올려 보세요", luil::text_button_visual::normal, luil::make_message_action(toast_request_intent { u8"툴팁 안의 링크도 눌러 보세요." })) };
+        luil::ui_action hover_action { luil::make_message_action(toast_request_intent { u8"툴팁 안의 링크도 눌러 보세요." }) };
+        auto hover { button(u8"gallery/hover", u8"여기에 마우스를 올려 보세요", luil::text_button_visual::normal, std::move(hover_action)) };
         hover->set_tooltip(u8"마크다운 도움말: 팝업 안으로 마우스를 옮겨 링크를 누를 수 있습니다.");
         luil::markdown_config markdown {};
         markdown.text = u8"### 마크다운 hover\n**굵게**, *기울임*, 인라인 코드와 링크를 지원합니다.\n\n- 팝업 위에서도 열린 상태 유지\n- 긴 내용은 휠로 스크롤\n\n[테마 설정](app:theme) · [탭 "
