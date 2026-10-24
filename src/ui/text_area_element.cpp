@@ -48,6 +48,72 @@ namespace luil {
             }
         }
 
+        // 조합 중의 표시 문서와 확정 글 사이의 offset 대응이다. 앱의 구간(`spans`·`highlights`)은 확정 글 기준인데
+        // 칸은 조합 글이 섞인 표시 문서를 그린다.
+        //  - 조합 글은 `at`(`composing_begin`)에 끼어들고, 그 뒤의 글은 표시 문서에서 두 글의 길이 차만큼 밀린다.
+        //  - 구간의 처음은 끼어든 자리에서도 밀리고, 끝은 그 자리를 넘을 때만 밀린다. 조합 자리에서 끝나는 구간이
+        //    조합 글을 덮지 않고, 조합 자리를 품은 구간은 조합 글까지 늘어난다.
+        //  - 조합하지 않으면 그대로이고 글 끝으로만 자른다.
+        struct composition_shift
+        {
+            std::size_t at { 0 };
+            std::size_t committed_size { 0 };
+            std::size_t displayed_size { 0 };
+
+            [[nodiscard]] std::size_t to_displayed(const std::size_t offset, const bool range_end) const noexcept
+            {
+                if (offset < at || (range_end && offset == at))
+                    return std::min(offset, displayed_size);
+                const std::size_t tail { offset - at };
+                const std::size_t moved { displayed_size >= committed_size ? tail + (displayed_size - committed_size) : tail - std::min(tail, committed_size - displayed_size) };
+                return std::min(at + moved, displayed_size);
+            }
+
+            [[nodiscard]] std::size_t to_committed(const std::size_t offset) const noexcept
+            {
+                if (offset <= at)
+                    return std::min(offset, committed_size);
+                const std::size_t tail { offset - at };
+                const std::size_t moved { displayed_size >= committed_size ? tail - std::min(tail, displayed_size - committed_size) : tail + (committed_size - displayed_size) };
+                return std::min(at + moved, committed_size);
+            }
+        };
+
+        [[nodiscard]] composition_shift shift_of(const text_input_view& value) noexcept
+        {
+            const std::size_t displayed { value.displayed_text().size() };
+            if (value.composing == false)
+                return { 0, value.text.size(), displayed };
+            return { std::min({ value.composing_begin, value.text.size(), displayed }), value.text.size(), displayed };
+        }
+
+        [[nodiscard]] std::size_t codepoint_floor(const std::u8string_view text, std::size_t offset) noexcept
+        {
+            offset = std::min(offset, text.size());
+            while (offset > 0 && offset < text.size() && (static_cast<unsigned int>(text[offset]) & 0xC0u) == 0x80u)
+                --offset;
+            return offset;
+        }
+
+        // 앱의 구간을 표시 문서 기준으로 옮겨, 표시 문서의 [begin, end)에 걸친 것만 모은다.
+        //  - 확정 글에서는 한 바이트 넓게 묻는다. 조합 글 안에 든 줄은 확정 글에서 빈 범위가 되어 조합 자리를 품은
+        //    구간을 놓친다. 넓힌 끝에서 시작한 구간은 옮긴 뒤 아래 판정에서 걸러진다.
+        //  - 옮긴 끝을 코드포인트 처음으로 당긴다. 구간이 UTF-8 한가운데를 가리키면 글자 조각을 자르는 그리기가
+        //    깨진 UTF-8을 Skia에 넘긴다.
+        template<typename range, typename query_function>
+        [[nodiscard]] std::vector<range> displayed_ranges(const std::u8string_view text, const composition_shift& shift, const std::size_t begin, const std::size_t end, query_function&& query)
+        {
+            std::vector<range> result {};
+            for (range item : query(shift.to_committed(begin), shift.to_committed(end) + 1))
+            {
+                item.begin = codepoint_floor(text, shift.to_displayed(item.begin, false));
+                item.end = codepoint_floor(text, shift.to_displayed(item.end, true));
+                if (item.begin < item.end && item.end > begin && item.begin < end)
+                    result.push_back(item);
+            }
+            return result;
+        }
+
         std::u8string line_number_text(std::size_t number)
         {
             std::u8string result {};
@@ -60,15 +126,10 @@ namespace luil {
             return result;
         }
 
-        // 줄 넘김과 hit test가 같은 글자소 경계를 쓴다.
+        // 줄 넘김과 hit test가 같은 글자소 경계를 쓴다. 경계마다 글을 다시 훑지 않도록 한 번에 모은다.
         [[nodiscard]] std::vector<std::size_t> boundaries_of(const std::u8string_view line)
         {
-            std::vector<std::size_t> boundaries { 0 };
-            for (std::size_t offset { text::grapheme_next(line, 0) }; offset < line.size(); offset = text::grapheme_next(line, offset))
-                boundaries.push_back(offset);
-            if (line.empty() == false)
-                boundaries.push_back(line.size());
-            return boundaries;
+            return text::grapheme_boundaries(line);
         }
 
         // 문단 하나(줄 바꿈이 없는 글)를 폭으로 접은 자리다. 문단 처음 기준 offset이고, 문단의 끝은 넣지 않는다.
@@ -141,7 +202,11 @@ namespace luil {
             while (true)
             {
                 const std::size_t newline { crlf ? text.find_first_of(u8"\r\n", begin) : text.find(u8'\n', begin) };
-                const std::size_t end { newline != std::u8string_view::npos ? newline : text.size() };
+                std::size_t end { newline != std::u8string_view::npos ? newline : text.size() };
+                // LF만 나누는 길에서도 CRLF의 CR은 줄의 글이 아니다. 남기면 글리프로 그려지고, End나 줄 끝 누름이 CR과
+                // LF 사이(글자소 한가운데)에 선다. native 배치와 같은 줄 끝이 된다.
+                if (crlf == false && newline != std::u8string_view::npos && end > begin && text[end - 1] == u8'\r')
+                    --end;
                 std::size_t start { begin };
                 for (const std::size_t cut : cuts_of(text.substr(begin, end - begin)))
                 {
@@ -278,9 +343,15 @@ namespace luil {
 
     float text_area_element::scroll_delta_to_reveal(const rect_f& target) const
     {
+        // 글은 여백 안쪽에서 시작한다 (`text_left`). 여백을 빼지 않으면 Home이 여백만큼 흘린 자리에 멈춘다.
+        //  - caret은 폭이 있다. 폭 0으로 들이면 End의 caret이 자르는 끝 바로 밖에 그려진다.
+        //  - 오른쪽은 여백 안에 caret 폭만큼 더 들인다. 끝까지 흘린 자리(내용 폭은 좌우 여백을 품는다)에서 글 끝의
+        //    caret이 정확히 맞아, 더 흘릴 수 없는 delta를 내지 않는다.
         const rect_f viewport { area_->viewport() };
-        const float gutter { gutter_width_ * scale_ };
-        return luil::scroll_delta_to_reveal(target.x, target.width, viewport.x + gutter, std::max(0.0f, viewport.width - gutter)) / scale_;
+        const float inset { (gutter_width_ + text_area_padding_x) * scale_ };
+        const float caret { 1.0f * scale_ };
+        const float extent { std::max(0.0f, viewport.width - inset - text_area_padding_x * scale_ + caret) };
+        return luil::scroll_delta_to_reveal(target.x, std::max(target.width, caret), viewport.x + inset, extent) / scale_;
     }
 
     std::optional<rect_f> text_area_element::line_rect(const std::size_t logical_line) const
@@ -353,7 +424,8 @@ namespace luil {
             return lines_;
         if (native_layout_)
         {
-            const auto layout { remake_text_layout(font_layout_, layout_request(text, 0, config_.wrap)) };
+            // 표시 문서가 아닌 글(조합 중의 확정 글)이라 구간을 옮기지 않는다.
+            const auto layout { remake_text_layout(font_layout_, layout_request(text, 0, config_.wrap, false)) };
             for (const auto& row : layout.lines())
                 storage.push_back({ row.begin, row.end, row.wrapped });
             return storage;
@@ -362,24 +434,32 @@ namespace luil {
         return storage;
     }
 
-    std::vector<text_layout_style> text_area_element::metric_styles(const std::size_t begin, const std::size_t end) const
+    std::vector<text_layout_style> text_area_element::metric_styles(const std::size_t begin, const std::size_t end, const bool displayed) const
     {
         std::vector<text_layout_style> styles {};
-        if (config_.spans != nullptr)
-            for (const auto& span : text_spans_in_range(*config_.spans, begin, end))
-                if (span.bold)
-                {
-                    const auto from { std::max(span.begin, begin) - begin };
-                    const auto to { std::min(span.end, end) - begin };
-                    if (styles.empty() == false && styles.back().end == from)
-                        styles.back().end = to;
-                    else
-                        styles.push_back({ from, to, true });
-                }
+        if (config_.spans == nullptr)
+            return styles;
+        // 표시 문서의 offset이면 확정 글 기준의 구간을 조합 글만큼 옮겨 읽는다 (`displayed_ranges`).
+        const auto query = [this](const std::size_t from, const std::size_t to) { return text_spans_in_range(*config_.spans, from, to); };
+        std::vector<text_span> shown {};
+        if (displayed)
+            shown = displayed_ranges<text_span>(displayed_text(), shift_of(value_), begin, end, query);
+        for (const auto& span : displayed ? std::span<const text_span> { shown } : query(begin, end))
+            if (span.bold)
+            {
+                const auto from { std::max(span.begin, begin) - begin };
+                const auto to { std::min(span.end, end) - begin };
+                if (from >= to)
+                    continue;
+                if (styles.empty() == false && styles.back().end == from)
+                    styles.back().end = to;
+                else
+                    styles.push_back({ from, to, true });
+            }
         return styles;
     }
 
-    text_layout_request text_area_element::layout_request(const std::u8string_view text, const std::size_t begin, const bool wrap) const
+    text_layout_request text_area_element::layout_request(const std::u8string_view text, const std::size_t begin, const bool wrap, const bool displayed) const
     {
         text_layout_request request {};
         request.text = text;
@@ -388,7 +468,7 @@ namespace luil {
         request.width = wrap ? wrap_width_ : 0.0f;
         request.wrap = wrap;
         request.line_height = line_height_logical() * scale_;
-        request.styles = metric_styles(begin, begin + text.size());
+        request.styles = metric_styles(begin, begin + text.size(), displayed);
         return request;
     }
 
@@ -397,7 +477,8 @@ namespace luil {
         if (native_layout_ == false)
             return {};
         const auto displayed { displayed_text() };
-        if ((text.data() == displayed.data() && text.size() == displayed.size()) || text == displayed)
+        const bool shown { (text.data() == displayed.data() && text.size() == displayed.size()) || text == displayed };
+        if (shown)
         {
             const auto found { std::lower_bound(row_layouts_.begin(), row_layouts_.end(), row.begin,
                 [](const auto& item, const auto at) { return item.first < at; })
@@ -405,7 +486,7 @@ namespace luil {
             if (found != row_layouts_.end() && found->first == row.begin)
                 return found->second;
         }
-        return remake_text_layout(font_layout_, layout_request(text.substr(row.begin, row.end - row.begin), row.begin, false));
+        return remake_text_layout(font_layout_, layout_request(text.substr(row.begin, row.end - row.begin), row.begin, false, shown));
     }
 
     std::vector<text_area_element::line> text_area_element::wrap_displayed(const width_of& measure)
@@ -416,7 +497,7 @@ namespace luil {
             if (native_layout_)
             {
                 const auto begin { static_cast<std::size_t>(paragraph.data() - text.data()) };
-                auto request { layout_request(paragraph, begin, config_.wrap) };
+                auto request { layout_request(paragraph, begin, config_.wrap, true) };
                 entry.styles = request.styles;
                 const auto layout { remake_text_layout(font_layout_, std::move(request)) };
                 for (const auto& row : layout.lines())
@@ -464,7 +545,7 @@ namespace luil {
             else if (native_layout_)
             {
                 const auto begin { static_cast<std::size_t>(paragraph.data() - text.data()) };
-                if (found->second.styles != metric_styles(begin, begin + paragraph.size()))
+                if (found->second.styles != metric_styles(begin, begin + paragraph.size(), true))
                     found->second = entry_for(paragraph);
             }
             content_width_ = std::max(content_width_, found->second.width);
@@ -499,7 +580,7 @@ namespace luil {
         font_layout_ = {};
         if (ui_text_shaping_enabled() && context.measurer == nullptr)
         {
-            font_layout_ = make_text_layout(layout_request({}, 0, false));
+            font_layout_ = make_text_layout(layout_request({}, 0, false, true));
             native_layout_ = font_layout_.backend() != text_layout_backend::unavailable;
         }
         code_measurer_ = context.measurer != nullptr ? *context.measurer : default_code_text_measurer();
@@ -567,7 +648,7 @@ namespace luil {
             for (std::size_t index { from }; index < to; ++index)
             {
                 const auto row { lines_[index] };
-                row_layouts_.emplace_back(row.begin, remake_text_layout(font_layout_, layout_request(displayed_text().substr(row.begin, row.end - row.begin), row.begin, false)));
+                row_layouts_.emplace_back(row.begin, remake_text_layout(font_layout_, layout_request(displayed_text().substr(row.begin, row.end - row.begin), row.begin, false, true)));
             }
         }
     }
@@ -723,6 +804,8 @@ namespace luil {
         const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
         // 고른 줄 바꿈을 보이는 폭이다. 빈 줄을 골라도 고른 줄이 보인다.
         const float newline_width { 4.0f * scale };
+        // 앱의 구간은 확정 글 기준이다. 조합 글이 섞인 표시 문서에 옮겨 그린다.
+        const composition_shift shift { shift_of(value_) };
         // 구간이 그 화면 줄에 걸치는가. 접은 자리에서 시작하는 구간은 아랫줄의 것이다.
         const auto touches = [](const line& row, const std::size_t from, const std::size_t to) { return to > row.begin && (from < row.end || (from == row.end && row.wrapped == false)); };
         for (std::size_t index = first; index < last; ++index)
@@ -742,17 +825,26 @@ namespace luil {
                     context.canvas.drawRect(SkRect::MakeXYWH(viewport.x + gutter_width_ * scale, row_top, viewport.width - gutter_width_ * scale, line_height),
                         solid_paint(span_background(static_cast<text_background_role>(found->background), context.palette)));
             }
-            const std::span<const text_span> styled { config_.spans != nullptr ? text_spans_in_range(*config_.spans, row.begin, row.end) : std::span<const text_span> {} };
+            // 줄 바꿈으로 끝나는 줄은 그 줄 바꿈 칸까지 묻는다. 빈 줄을 지나는 구간과 줄 바꿈 하나뿐인 검색 결과가
+            // 어느 줄에도 걸리지 않으면 아무것도 칠하지 않는다.
+            const std::size_t reach { row.wrapped || row.end >= text.size() ? row.end : row.end + 1 };
+            std::vector<text_span> styled {};
+            if (config_.spans != nullptr)
+                styled = displayed_ranges<text_span>(text, shift, row.begin, reach, [this](const std::size_t from, const std::size_t to) { return text_spans_in_range(*config_.spans, from, to); });
             const auto range_rect = [&](const std::size_t begin, const std::size_t end) {
                 const auto from { std::max(begin, row.begin) };
                 const auto to { std::min(end, row.end) };
                 const float x { left + position(from - row.begin) };
-                return SkRect::MakeXYWH(x, row_top, position(to - row.begin) - position(from - row.begin), line_height);
+                // 줄 바꿈을 덮는 구간은 고른 줄 바꿈처럼 그 칸을 더 칠한다.
+                const float newline { end > row.end && row.wrapped == false ? newline_width : 0.0f };
+                return SkRect::MakeXYWH(x, row_top, position(to - row.begin) - position(from - row.begin) + newline, line_height);
             };
             for (const auto& span : styled)
                 if (span.background != text_background_role::none)
                     context.canvas.drawRect(range_rect(span.begin, span.end), solid_paint(span_background(span.background, context.palette)));
-            const auto highlights { text_highlights_in_range(config_.highlights, row.begin, row.end) };
+            const std::vector<text_highlight> highlights { displayed_ranges<text_highlight>(text, shift, row.begin, reach,
+                [this](const std::size_t from, const std::size_t to) { return text_highlights_in_range(config_.highlights, from, to); })
+            };
             for (const auto& match : highlights)
             {
                 const auto match_box { range_rect(match.begin, match.end) };

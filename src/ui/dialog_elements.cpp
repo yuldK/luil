@@ -525,13 +525,9 @@ namespace luil {
         if (target <= 0.0f)
             return std::size_t { 0 };
 
-        // UTF-8 경계를 한 번 모은 뒤 폭을 이분 탐색한다. 긴 입력에서도
-        // 모든 접두사를 반복 측정하지 않는다.
-        std::vector<std::size_t> boundaries { 0 };
-        for (std::size_t offset { text::grapheme_next(text, 0) }; offset < text.size(); offset = text::grapheme_next(text, offset))
-            boundaries.push_back(offset);
-        if (text.empty() == false)
-            boundaries.push_back(text.size());
+        // 글자소 경계를 한 번에 모은 뒤 폭을 이분 탐색한다. 긴 입력에서도
+        // 모든 접두사를 반복 측정하지 않고, 경계마다 글을 다시 훑지 않는다.
+        const std::vector<std::size_t> boundaries { text::grapheme_boundaries(text) };
         const auto after { std::upper_bound(boundaries.begin(), boundaries.end(), target, [&](const float position, const std::size_t offset) { return position < measure(text.substr(0, offset)); }) };
         if (after == boundaries.end())
             return original(text.size());

@@ -294,3 +294,50 @@ TEST_CASE("Typing an emoji inserts all four bytes at the caret", "[domain][text-
     REQUIRE(state.text == u8"a😀b");
     REQUIRE(state.caret == 5u);
 }
+
+TEST_CASE("Typed four byte characters join one undo group like other typed characters", "[domain][text-edit][undo]")
+{
+    // 친 글자인지는 바이트가 아니라 코드포인트로 센다. 바이트로 세면 이모지 하나하나가 따로 되돌아간다.
+    luil::text::text_edit_state state {};
+    for (const char32_t value : { U'\U0001F600', U'\U00020000', U'\U0001F600' })
+        luil::text::text_edit_insert(state, luil::text::text_edit_encode_utf8(value));
+    REQUIRE(state.text.size() == 12u);
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text.empty());
+
+    // 코드포인트 둘 이상인 조각(붙여넣기)은 앞의 입력과 묶이지 않는다.
+    luil::text::text_edit_insert(state, u8"a");
+    luil::text::text_edit_insert(state, u8"bc");
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text == u8"a");
+}
+
+TEST_CASE("Word commands walk graphemes across CRLF line breaks", "[domain][text-edit]")
+{
+    // "ab 😀" CRLF CRLF "cd é" + "f" — 낱말 경계는 줄 바꿈을 넘어도 글자소 단위이고, CRLF는 한 덩어리다.
+    const std::u8string text { u8"ab \U0001F600\r\n\r\ncd éf" };
+    REQUIRE(text.size() == 18u);
+    luil::text::text_edit_state state { at_end(text) };
+    const auto word_left = [&state] {
+        luil::text::text_edit_move(state, luil::text::text_edit_motion::word_left, false);
+        return state.caret;
+    };
+    REQUIRE(word_left() == 14u);
+    REQUIRE(word_left() == 11u);
+    REQUIRE(word_left() == 3u);
+    REQUIRE(word_left() == 0u);
+    const auto word_right = [&state] {
+        luil::text::text_edit_move(state, luil::text::text_edit_motion::word_right, false);
+        return state.caret;
+    };
+    REQUIRE(word_right() == 3u);
+    REQUIRE(word_right() == 11u);
+    REQUIRE(word_right() == 14u);
+    REQUIRE(word_right() == 18u);
+
+    // 결합 문자 가운데를 가리켜도 낱말 전체를 고른다. 줄 바꿈 위면 이어진 줄 바꿈 덩어리다.
+    luil::text::text_edit_select_word(state, 15);
+    REQUIRE(luil::text::text_edit_selected_text(state) == u8"éf");
+    luil::text::text_edit_select_word(state, 8);
+    REQUIRE(luil::text::text_edit_selected_text(state) == u8"\r\n\r\n");
+}

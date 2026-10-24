@@ -92,7 +92,9 @@ namespace luil {
         std::function<input_action(float delta)> scroll_horizontal {};
         std::function<input_action(float offset)> scroll_horizontal_to {};
         // 구간은 begin 순서이고 겹치지 않는다. 공유한 vector는 게시 뒤 고치지 않는다.
+        //  - offset은 확정 글(`text_input_view::text`) 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
         std::shared_ptr<const std::vector<text_span>> spans {};
+        // `line` 오름차순이고 같은 줄이 둘 없다. 그리기가 줄마다 이분 탐색(`lower_bound`)으로 찾는다.
         std::shared_ptr<const std::vector<line_decoration>> lines {};
         std::vector<gutter_column> gutters {};
         std::vector<text_highlight> highlights {};
@@ -190,8 +192,9 @@ namespace luil {
         // 표시 문서를 접는다. 설정에 캐시가 있으면 바뀐 문단만 잰다.
         [[nodiscard]] std::vector<line> wrap_displayed(const std::function<float(std::u8string_view)>& measure);
         // 글이 서는 왼쪽 끝과 첫 줄의 위다 (물리 픽셀).
-        [[nodiscard]] std::vector<text_layout_style> metric_styles(std::size_t begin, std::size_t end) const;
-        [[nodiscard]] text_layout_request layout_request(std::u8string_view text, std::size_t begin, bool wrap) const;
+        // `displayed`면 `begin`·`end`가 표시 문서(조합 글 포함)의 offset이라 확정 글 기준의 구간을 옮겨 읽는다.
+        [[nodiscard]] std::vector<text_layout_style> metric_styles(std::size_t begin, std::size_t end, bool displayed) const;
+        [[nodiscard]] text_layout_request layout_request(std::u8string_view text, std::size_t begin, bool wrap, bool displayed) const;
         [[nodiscard]] text_layout row_layout(std::u8string_view text, const line& row) const;
         [[nodiscard]] float text_left() const noexcept;
         [[nodiscard]] float text_top() const noexcept;

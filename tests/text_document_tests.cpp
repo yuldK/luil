@@ -28,3 +28,15 @@ TEST_CASE("Search highlights use half open byte ranges", "[ui][document]")
     REQUIRE(visible.front().current);
     REQUIRE(visible.front().begin == 10u);
 }
+
+TEST_CASE("An empty row finds the ranges over its line break by asking through that byte", "[ui][document]")
+{
+    // "a\n\nb"의 빈 줄은 [2, 2)이고 그 줄 바꿈은 offset 2다. 빈 범위는 아무것도 걸지 않으므로 칸은 줄 바꿈까지 묻는다.
+    const std::vector<luil::text_span> spans { { 0, 4, luil::text_color_role::accent } };
+    REQUIRE(luil::text_spans_in_range(spans, 2, 2).empty());
+    REQUIRE(luil::text_spans_in_range(spans, 2, 3).size() == 1u);
+    // 줄 바꿈 하나뿐인 검색 결과는 그것으로 끝나는 첫 줄 [0, 1)의 줄 바꿈 칸에서 걸린다.
+    const std::vector<luil::text_highlight> newline_only { { 1, 2 } };
+    REQUIRE(luil::text_highlights_in_range(newline_only, 0, 1).empty());
+    REQUIRE(luil::text_highlights_in_range(newline_only, 0, 2).size() == 1u);
+}
