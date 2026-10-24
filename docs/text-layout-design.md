@@ -117,7 +117,14 @@ const auto selection = layout.selection_rects(0, 6);
 
 값은 원문·줄·cluster·caret stop·run 정보를 읽기 전용으로 내준다. Glyph·위치·typeface는
 native 불변 payload에 있다. 줄은 baseline·ascent/descent·논리 크기·ink bounds를 가진다.
-`backend()`는 unavailable·measured·primitive·harfbuzz를 구별한다.
+`backend()`는 unavailable·measured·primitive·harfbuzz를 구별한다. 글자가 하나도 없는 typeface(SkFont가
+nullptr 대신 넣는 빈 typeface)는 unavailable이라 입력 칸·문서 보기가 자기 측정기로 돌아간다.
+shaper나 run iterator를 만들지 못하면 예외 대신 배치 전체를 primitive로 다시 짓고 그 backend를 알린다.
+잘못된 UTF-8은 고친 사본으로 shape하지 않고 원문 byte offset 그대로 primitive로 잰다. 옵션 ON의
+`measure_text`·`draw_text`도 원문을 넘겨 같은 글의 폭이 배치와 같다.
+접은 줄 끝의 공백은 그 줄의 범위와 caret stop에 남지만 줄 폭과 `size()`에는 들어가지 않는다.
+접지 않은 마지막 줄의 공백은 폭에 남는다. 자르는 자리는 언제나 글자소 경계다.
+`remake_text_layout`은 기준 배치의 글꼴을 빌리되 요청한 `font_size`로 다시 잰다.
 `approximate_ligature_carets()`는 SkShaper가 OpenType ligature caret 표를 내주지 않아
 글자소 수로 분할한 경우를 알린다. UTF-8 byte offset과 soft-wrap affinity를 계속 쓴다.
 `draw_text_layout`의 구간도 유효한 글자소 경계다. 부분 합자는 같은 glyph의 해당 영역을 잘라 칠한다.
@@ -132,7 +139,9 @@ shaping 결과의 폭과 glyph로 그린다. 입력 칸은 배치한 값을 그�
 색·검색·선택은 cache key에서 제외한다. 굵기는 key에 들어간다. Native cache는 프로세스당
 **16MiB·512항목 상한의 LRU**이며 `text_layout_cache_usage()`로 보유량·hit/miss를 본다.
 byte 수는 원문·기하·glyph buffer와 cache key의 보유량이며 Skia/OS의 공용 글꼴 cache는 제외한다.
-큰 항목은 LRU에 넣지 않는다. `text_area_wrap_cache`는 현재 문서의 접은 자리만 남기므로,
+큰 항목은 LRU에 넣지 않는다. key는 넣기 전에 맞춘다 — NaN·무한 폭과 줄 높이는 0, 접지 않는 요청의
+폭은 0이고, 글꼴이 정한 face는 key에서 뺀다. 지난 revision의 항목은 revision이 오른 뒤 처음 볼 때
+거두고, 자물쇠 밖에서 짓는 사이 같은 요청이 먼저 들어왔으면 그 값을 돌려준다. `text_area_wrap_cache`는 현재 문서의 접은 자리만 남기므로,
 큰 문단도 caret만 바뀌었다고 전체 문단을 다시 shape하지 않는다. 이 문단 cache를 앱이 유지해야 한다.
 `text_layout_revision()`은 글꼴·언어·fallback·그리기 품질 변경 때 증가한다.
 발행된 레이아웃의 글꼴·glyph는 계속 살아 있고 다음 배치부터 새 설정을 쓴다.

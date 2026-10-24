@@ -22,7 +22,6 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
-#include <stdexcept>
 #include <utility>
 
 namespace luil {
@@ -47,7 +46,9 @@ namespace luil {
             std::vector<glyph_run> runs {};
             text_layout relayout(text_layout_request request) const override
             {
-                return make_font_text_layout(std::move(request), base_font);
+                // 요청한 크기를 따른다. 주 글꼴만 빌려 오는 호출이 크기를 바꿔도 조용히 원래 크기로 재지 않는다.
+                const SkFont font { std::isfinite(request.font_size) ? base_font.makeWithSize(std::max(0.0f, request.font_size)) : base_font };
+                return make_font_text_layout(std::move(request), font);
             }
             void draw(SkCanvas& canvas, const zoom_point origin, const SkPaint& paint, const std::size_t begin, const std::size_t end) const override
             {
@@ -115,6 +116,9 @@ namespace luil {
         std::vector<font_segment> fonts_for(const std::u8string_view text, const std::size_t offset, const SkFont& font, const std::span<const text_layout_style> styles, const bool primitive)
         {
             std::vector<font_segment> fonts {};
+            // 코드 글꼴을 찾지 못하면 주 글꼴로 둔다. nullptr를 넣으면 SkFont가 빈 typeface로 바꿔 그 구간의 폭이 0이 된다.
+            //  - registry 자물쇠를 글자마다 쥐지 않도록 한 번만 묻는다.
+            const auto code_face { std::ranges::any_of(styles, [](const auto& item) { return item.code; }) ? configured_code_typeface() : sk_sp<SkTypeface> {} };
             auto style { std::lower_bound(styles.begin(), styles.end(), offset, [](const auto& item, const auto at) { return item.end <= at; }) };
             if (primitive)
             {
@@ -130,8 +134,8 @@ namespace luil {
                     {
                         chosen.setEmbolden(style->bold);
                         chosen.setSkewX(style->italic ? -0.2f : 0.0f);
-                        if (style->code)
-                            chosen.setTypeface(configured_code_typeface());
+                        if (style->code && code_face != nullptr)
+                            chosen.setTypeface(code_face);
                     }
                     if (chosen.unicharToGlyph(static_cast<SkUnichar>(point.codepoint)) == 0)
                         if (auto fallback { text_layout_fallback(point.codepoint) }; fallback != nullptr)
@@ -156,8 +160,8 @@ namespace luil {
                 {
                     chosen.setEmbolden(style->bold);
                     chosen.setSkewX(style->italic ? -0.2f : 0.0f);
-                    if (style->code)
-                        chosen.setTypeface(configured_code_typeface());
+                    if (style->code && code_face != nullptr)
+                        chosen.setTypeface(code_face);
                 }
                 const auto cluster { text.substr(at, next - at) };
                 if (covers(chosen, cluster) == false)
@@ -375,12 +379,30 @@ namespace luil {
             std::mutex mutex {};
             std::list<layout_cache_entry> entries {};
             text_layout_cache_statistics usage {};
+            // 지난 항목을 마지막으로 거둔 revision이다.
+            std::uint64_t revision { 0 };
         };
         layout_cache& cache()
         {
             static layout_cache state {};
             return state;
         }
+
+        // 지난 revision의 항목은 다시 맞지 않는데 예산만 차지한다. revision이 오른 뒤 처음 볼 때 거둔다.
+        void retire_locked(layout_cache& state, const std::uint64_t revision)
+        {
+            if (revision <= state.revision)
+                return;
+            state.revision = revision;
+            state.entries.remove_if([&state, revision](const auto& entry) {
+                if (entry.revision >= revision)
+                    return false;
+                state.usage.bytes -= entry.bytes;
+                return true;
+            });
+            state.usage.entries = state.entries.size();
+        }
+
         constexpr std::size_t cache_byte_limit { 16 * 1024 * 1024 };
         constexpr std::size_t cache_entry_limit { 512 };
     } // namespace
@@ -410,20 +432,27 @@ namespace luil {
 
     text_layout make_text_layout(text_layout_request request)
     {
-        const auto face { request.face == text_layout_face::code ? configured_code_typeface() : configured_ui_typeface() };
-        const SkFont font { face, std::isfinite(request.font_size) ? std::max(0.0f, request.font_size) : 12.0f };
+        // 코드 글꼴이 없으면 주 글꼴로 잰다. 둘 다 없으면 빈 typeface가 되어 backend가 unavailable로 알린다.
+        auto face { request.face == text_layout_face::code ? configured_code_typeface() : sk_sp<SkTypeface> {} };
+        if (face == nullptr)
+            face = configured_ui_typeface();
+        const SkFont font { std::move(face), std::isfinite(request.font_size) ? std::max(0.0f, request.font_size) : 12.0f };
         return make_font_text_layout(std::move(request), font);
     }
 
     text_layout make_font_text_layout(text_layout_request request, const SkFont& source_font)
     {
         const SkFont font { text_layout_font(source_font) };
+        normalize_text_layout_request(request);
         request.font_size = font.getSize();
+        // face는 font가 이미 정했다. key에 남기면 같은 배치가 face 값만 달라 따로 cache된다.
+        request.face = text_layout_face::ui;
         const auto revision { text_layout_revision() };
         auto& state { cache() };
+        const auto matches = [&](const auto& entry) { return entry.revision == revision && entry.font == font && entry.request == request; };
         {
             const std::scoped_lock lock { state.mutex };
-            const auto matches = [&](const auto& entry) { return entry.revision == revision && entry.font == font && entry.request == request; };
+            retire_locked(state, revision);
             const auto found { std::find_if(state.entries.begin(), state.entries.end(), matches) };
             if (found != state.entries.end())
             {
@@ -433,11 +462,15 @@ namespace luil {
             }
             ++state.usage.misses;
         }
-        text_layout_backend backend { font.getTypeface() != nullptr ? text_layout_backend::primitive : text_layout_backend::unavailable };
+        // SkFont는 nullptr typeface를 빈 typeface로 바꿔 둔다. 글자가 하나도 없는 글꼴은 폭이 모두 0이라
+        // 호출자가 자기 측정기로 돌아가도록 unavailable로 알린다.
+        text_layout_backend backend { font.getTypeface()->countGlyphs() > 0 ? text_layout_backend::primitive : text_layout_backend::unavailable };
 #if defined(LUIL_UI_TEXT_LAYOUT)
         const auto factory { text_shaping_factory() };
+        // 잘못된 UTF-8은 고친 사본으로 shape하지 않는다. U+FFFD로 바꾸면 byte 길이가 달라져 원문 offset 계약이 깨진다.
         if (backend != text_layout_backend::unavailable && factory != nullptr && factory->getUnicode() != nullptr && text::utf8_is_valid(request.text))
             backend = text_layout_backend::harfbuzz;
+        bool shaper_failed { false };
 #endif
         const auto shape = [&](const std::u8string_view text, const std::size_t offset) {
             const auto fonts { fonts_for(text, offset, font, request.styles, backend != text_layout_backend::harfbuzz) };
@@ -459,17 +492,36 @@ namespace luil {
                     set_metrics(segment, font, request.line_height, static_cast<const glyph_drawing*>(segment.drawing.get()));
                     return segment;
                 }
-                // backend를 실행 도중 조용히 섞지 않는다.
-                throw std::runtime_error { "Cannot create the configured UI text shaper" };
+                // 그리기·측정 경로에서 부르므로 예외로 끊지 않는다. 아래에서 배치 전체를 다시 짓는다.
+                shaper_failed = true;
             }
 #endif
             return primitive_segment(text, fonts, font, request.line_height);
         };
-        const auto layout { build_text_layout(request, backend, shape) };
+        auto layout { build_text_layout(request, backend, shape) };
+#if defined(LUIL_UI_TEXT_LAYOUT)
+        // 한 배치 안에서 backend를 섞지 않는다. shaper를 못 만든 줄이 하나라도 있으면 전부 끈 구성으로 짓고 backend로 알린다.
+        if (shaper_failed)
+        {
+            backend = text_layout_backend::primitive;
+            layout = build_text_layout(request, backend, shape);
+        }
+#endif
         const std::size_t bytes { layout.storage_bytes() + sizeof(layout_cache_entry) + request.text.capacity() + request.styles.capacity() * sizeof(text_layout_style) };
         if (bytes <= cache_byte_limit)
         {
             const std::scoped_lock lock { state.mutex };
+            const auto latest { text_layout_revision() };
+            retire_locked(state, latest);
+            // 짓는 사이 설정이 바뀌었으면 이 값은 다시 맞지 않는다. 예산만 차지하므로 넣지 않는다.
+            if (revision != latest)
+                return layout;
+            // 자물쇠를 놓고 지었으니 다른 thread가 같은 요청을 먼저 넣었을 수 있다. 같은 값을 두 번 두지 않는다.
+            if (const auto found { std::find_if(state.entries.begin(), state.entries.end(), matches) }; found != state.entries.end())
+            {
+                state.entries.splice(state.entries.begin(), state.entries, found);
+                return state.entries.front().layout;
+            }
             while (state.entries.empty() == false && (state.usage.bytes + bytes > cache_byte_limit || state.entries.size() >= cache_entry_limit))
             {
                 state.usage.bytes -= state.entries.back().bytes;
