@@ -622,6 +622,8 @@ namespace demo {
         discard.separator_above = true;
         menu.items.push_back(std::move(discard));
         menu.select = [](const std::u8string& command) { return luil::make_app_action(workbench_menu_select_intent { command }); };
+        // OS 기본 모서리의 popup이다. 둥근 창이면 메뉴의 사각 선은 끄고 경계를 OS 테두리에 맡긴다.
+        menu.border = luil::popup_corner_radius(luil::popup_corner::system) <= 0.0f;
 
         luil::win32::ui_popup popup {};
         popup.id = u8"workbench-menu";

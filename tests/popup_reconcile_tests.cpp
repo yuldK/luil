@@ -1,7 +1,11 @@
 #include "host/popup_reconcile.h"
 
+#include "luil/app/menu_popup.h"
+#include "luil/ui/ui_platform.h"
+
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
 #include <vector>
 
 namespace {
@@ -71,6 +75,103 @@ TEST_CASE("A popup that changes anchor is rebuilt rather than moved", "[win32][p
     REQUIRE(plan.create == std::vector<std::size_t> { 0 });
     REQUIRE(plan.move.empty());
     REQUIRE(plan.destroy == std::vector<std::u8string> { u8"menu" });
+}
+
+TEST_CASE("A popup that turns rounded or square is rebuilt with its new window class", "[win32][popup]")
+{
+    // 그림자가 창 클래스의 것이라 둥근 창과 직각 창 사이는 옮길 수 없다. 둥근 정도만 바뀐 것은 같은 창이다.
+    const std::vector<popup_placement> alive {
+        { u8"menu", 10, 10, 100, 200, {}, false },
+        { u8"list", 10, 10, 100, 200, {}, true },
+    };
+    const std::vector<popup_placement> wanted {
+        { u8"menu", 10, 10, 100, 200, {}, true },
+        { u8"list", 10, 10, 100, 200, {}, true },
+    };
+    const auto plan { luil::reconcile_popups(alive, wanted) };
+    REQUIRE(plan.create == std::vector<std::size_t> { 0 });
+    REQUIRE(plan.move.empty());
+    REQUIRE(plan.destroy == std::vector<std::u8string> { u8"menu" });
+}
+
+TEST_CASE("A popup shape follows the corner, the border and what the OS supports", "[win32][popup]")
+{
+    using luil::popup_corner;
+    using luil::popup_shape;
+
+    SECTION("rounded corners where the OS cuts them")
+    {
+        // OS 기본은 이 OS가 popup에 쓰는 모양이다 — Windows 11의 메뉴처럼 작게 둥글다.
+        REQUIRE(luil::resolve_popup_corner(popup_corner::system, true) == popup_corner::round_small);
+        // 둥근 창은 클래스 그림자도 사각 선도 쓰지 않고, OS 테두리를 팔레트 색으로 긋는다.
+        REQUIRE(luil::resolve_popup_shape(popup_corner::round, true, true) == popup_shape { .corner = popup_corner::round, .drop_shadow = false, .line = false, .system_border = true });
+        REQUIRE(luil::resolve_popup_shape(popup_corner::system, true, true) == popup_shape { .corner = popup_corner::round_small, .drop_shadow = false, .line = false, .system_border = true });
+        // 경계를 끄면 OS 테두리도 없앤다 (`DWMWA_COLOR_NONE`).
+        REQUIRE(luil::resolve_popup_shape(popup_corner::round_small, false, true) == popup_shape { .corner = popup_corner::round_small, .drop_shadow = false, .line = false, .system_border = false });
+    }
+
+    SECTION("a square popup keeps the original edge")
+    {
+        // 꼬리 달린 말풍선처럼 모양을 스스로 그리는 popup이 고르는 직각은 지원하는 OS에서도 처음부터의 모양이다.
+        REQUIRE(luil::resolve_popup_shape(popup_corner::square, true, true) == popup_shape { .corner = popup_corner::square, .drop_shadow = true, .line = true, .system_border = false });
+        REQUIRE(luil::resolve_popup_shape(popup_corner::square, false, true) == popup_shape { .corner = popup_corner::square, .drop_shadow = true, .line = false, .system_border = false });
+    }
+
+    SECTION("an OS without corner preference falls back to the square edge")
+    {
+        // Windows 10 이하와 원격 세션은 무엇을 골라도 직각, 클래스 그림자, 1px 선이다 — 경계가 사라지지 않는다.
+        for (const popup_corner corner : { popup_corner::system, popup_corner::round, popup_corner::round_small, popup_corner::square })
+        {
+            REQUIRE(luil::resolve_popup_shape(corner, true, false) == popup_shape { .corner = popup_corner::square, .drop_shadow = true, .line = true, .system_border = false });
+            REQUIRE(luil::resolve_popup_shape(corner, false, false) == popup_shape { .corner = popup_corner::square, .drop_shadow = true, .line = false, .system_border = false });
+        }
+    }
+}
+
+TEST_CASE("The popup corner radius is what the OS actually cuts", "[win32][popup]")
+{
+    using luil::popup_corner;
+    luil::ui_platform rounded {};
+    rounded.rounded_popup_corners = true;
+    REQUIRE(luil::popup_corner_radius(popup_corner::round, rounded) == 8.0f);
+    REQUIRE(luil::popup_corner_radius(popup_corner::round_small, rounded) == 4.0f);
+    REQUIRE(luil::popup_corner_radius(popup_corner::system, rounded) == 4.0f);
+    REQUIRE(luil::popup_corner_radius(popup_corner::square, rounded) == 0.0f);
+    // 둥근 모서리를 못 쓰면 tree도 직각으로 그린다.
+    const luil::ui_platform square {};
+    REQUIRE(luil::popup_corner_radius(popup_corner::round, square) == 0.0f);
+    REQUIRE(luil::popup_corner_radius(popup_corner::system, square) == 0.0f);
+}
+
+TEST_CASE("A menu popup drops its own line inside a rounded window and when the border is off", "[win32][popup]")
+{
+    const auto menu_border = [](const std::optional<luil::popup_corner> corner, const bool border) {
+        luil::menu_config menu {};
+        menu.items.push_back({ u8"open", u8"Open" });
+        luil::menu_popup_config config {};
+        config.id = u8"menu";
+        config.corner = corner;
+        config.border = border;
+        const luil::ui_popup popup { luil::make_menu_popup(std::move(menu), std::move(config)) };
+        REQUIRE(popup.border == border);
+        REQUIRE(popup.corner.has_value());
+        return static_cast<const luil::menu_element*>(popup.tree->root())->config().border;
+    };
+    luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform rounded { previous };
+    rounded.rounded_popup_corners = true;
+    luil::set_ui_platform(rounded);
+    // 둥근 창은 OS 테두리가 경계다.
+    REQUIRE(menu_border(luil::popup_corner::round, true) == false);
+    // 직각 창은 처음처럼 메뉴가 선을 긋는다. 경계를 끄면 긋지 않는다.
+    REQUIRE(menu_border(luil::popup_corner::square, true));
+    REQUIRE(menu_border(luil::popup_corner::square, false) == false);
+    // 둥근 모서리를 못 쓰는 플랫폼은 무엇을 골라도 직각이라 선을 긋는다.
+    luil::ui_platform square { previous };
+    square.rounded_popup_corners = false;
+    luil::set_ui_platform(square);
+    REQUIRE(menu_border(luil::popup_corner::round, true));
+    luil::set_ui_platform(previous);
 }
 
 TEST_CASE("An anchored popup still moves inside its own surface", "[win32][popup]")

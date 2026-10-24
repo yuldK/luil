@@ -1,5 +1,7 @@
 #include "host/popup_reconcile.h"
 
+#include "luil/app/app_host.h"
+
 #include <algorithm>
 
 namespace luil {
@@ -59,6 +61,46 @@ namespace luil {
         return result;
     }
 
+    popup_corner resolve_popup_corner(const popup_corner requested, const bool rounded_supported) noexcept
+    {
+        if (rounded_supported == false)
+            return popup_corner::square;
+        // OS 기본은 이 OS가 popup에 쓰는 모양이다 — Windows 11의 메뉴·tooltip은 작게 둥글다.
+        return requested == popup_corner::system ? popup_corner::round_small : requested;
+    }
+
+    popup_shape resolve_popup_shape(const popup_corner requested, const bool border, const bool rounded_supported) noexcept
+    {
+        const popup_corner corner { resolve_popup_corner(requested, rounded_supported) };
+        const bool rounded { corner != popup_corner::square };
+        return popup_shape {
+            .corner = corner,
+            .drop_shadow = rounded == false,
+            .line = border && rounded == false,
+            .system_border = border && rounded,
+        };
+    }
+
+    float popup_corner_logical_radius(const popup_corner resolved) noexcept
+    {
+        switch (resolved)
+        {
+        case popup_corner::round:
+            return 8.0f;
+        case popup_corner::round_small:
+            return 4.0f;
+        case popup_corner::system:
+        case popup_corner::square:
+            break;
+        }
+        return 0.0f;
+    }
+
+    float popup_corner_radius(const popup_corner corner, const ui_platform& platform) noexcept
+    {
+        return popup_corner_logical_radius(resolve_popup_corner(corner, platform.rounded_popup_corners));
+    }
+
     popup_reconcile_result reconcile_popups(const std::span<const popup_placement> alive, const std::span<const popup_placement> wanted)
     {
         popup_reconcile_result result {};
@@ -69,9 +111,9 @@ namespace luil {
             if (visible(want) == false)
                 continue;
             const popup_placement* const existing { find_by_id(alive, want.id) };
-            // 앵커가 바뀌면 창의 소유자를 고칠 수 없으므로 다시 만든다.
-            // 없애는 쪽은 아래 순회가 같은 판정으로 낸다.
-            if (existing == nullptr || existing->anchor != want.anchor)
+            // 앵커가 바뀌면 창의 소유자를 고칠 수 없으므로 다시 만든다. 둥근 창과 직각 창 사이를 오가도 같다 —
+            // 그림자가 창 클래스의 것이다. 없애는 쪽은 아래 순회가 같은 판정으로 낸다.
+            if (existing == nullptr || existing->anchor != want.anchor || existing->rounded != want.rounded)
             {
                 result.create.push_back(index);
                 continue;
@@ -83,7 +125,7 @@ namespace luil {
         for (const popup_placement& current : alive)
         {
             const popup_placement* const still { find_by_id(wanted, current.id) };
-            if (still == nullptr || visible(*still) == false || still->anchor != current.anchor)
+            if (still == nullptr || visible(*still) == false || still->anchor != current.anchor || still->rounded != current.rounded)
                 result.destroy.push_back(current.id);
         }
         // 부모 창이 다시 만들어지면 그 소유 창인 자식도 다시 만든다.

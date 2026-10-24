@@ -81,5 +81,8 @@
         "indicatorPlacement": "iconCorner",
         "barBackground": "windowBackground",
         "selectedBackground": "surfaceBackground"
+    },
+    "popup": {
+        "corner": "system"
     }
 }

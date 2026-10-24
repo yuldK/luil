@@ -15,6 +15,12 @@ namespace luil {
         float width { 0.0f };
         float scale { 1.0f };
         std::function<input_action(popup_dismiss_reason)> dismiss {};
+        // popup 창의 모서리다 (`ui_popup::corner`). 비어 있으면 내장 스타일의 값이다 — 실행 시점에 스타일을 세운 앱은
+        // 그 스타일의 `popup.corner`를 넘긴다.
+        //  - 둥근 창이 되면 메뉴의 사각 선을 끈다 (`menu_config::border`). 경계는 OS 테두리가 맡는다.
+        std::optional<popup_corner> corner {};
+        // popup의 경계다 (`ui_popup::border`). 끄면 메뉴 자신의 선도 긋지 않는다.
+        bool border { true };
     };
 
     // 메뉴 높이·배율·분리 tree를 한곳에서 조립한다. 열림 상태와 명령 실행은 앱의 몫이다.

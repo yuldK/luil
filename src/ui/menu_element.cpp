@@ -189,10 +189,13 @@ namespace luil {
         const rect_f box { bounds() };
         const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
         context.canvas.drawRect(body, solid_paint(context.palette.surface_background));
-        SkPaint border { solid_paint(context.palette.tooltip_border) };
-        border.setStyle(SkPaint::kStroke_Style);
-        border.setStrokeWidth(1.0f * scale);
-        context.canvas.drawRect(body, border);
+        if (config_.border)
+        {
+            SkPaint border { solid_paint(context.palette.tooltip_border) };
+            border.setStyle(SkPaint::kStroke_Style);
+            border.setStrokeWidth(1.0f * scale);
+            context.canvas.drawRect(body, border);
+        }
 
         // 구분선은 항목 사이 여백의 한가운데를 지난다.
         const SkPaint divider { solid_paint(context.palette.divider) };

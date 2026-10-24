@@ -72,6 +72,28 @@ namespace luil {
         close_slot,
     };
 
+    // 자기 창을 갖는 popup(메뉴·목록·떠 있는 판)의 모서리다 (`ui_popup::corner`).
+    //  - 둥근 모서리는 OS가 창을 잘라 내는 것이다 (Windows 11의 DWM). 그것을 못 하는 OS·환경(Windows 10 이하,
+    //    원격 데스크톱)에서는 모두 직각으로 물러서고 처음부터의 모양(창 그림자 + 1px 선)이다.
+    //  - 고른 모서리의 실제 반지름은 `popup_corner_radius`가 답한다 (app_host.h).
+    enum class popup_corner
+    {
+        // 이 OS가 popup에 쓰는 모양이다. Windows 11은 메뉴·tooltip처럼 작게 둥글다.
+        system,
+        round,
+        round_small,
+        // 직각이다. 꼬리 달린 말풍선처럼 모양을 직접 그리는 popup이 고른다.
+        square,
+    };
+
+    // popup의 앱 스타일이다 (`ui_style::popup`). popup마다 적지 않으면 이 값이다.
+    struct popup_style
+    {
+        popup_corner corner { popup_corner::system };
+
+        [[nodiscard]] bool operator==(const popup_style&) const noexcept = default;
+    };
+
     // 탭 막대의 앱 스타일이다 (`ui_style::tab_bar`).
     //  - 막대마다 config에 적지 않고 앱이 한 번 정하면 그 앱의 모든 탭 막대가 같은 모양이다. 한 막대만 달라야
     //    하면 `tab_bar_config::style`이 통째로 덮는다.
@@ -107,6 +129,9 @@ namespace luil {
         // 컴포넌트 스타일이다. 컴포넌트마다 한 칸이고, 그 컴포넌트가 그리기에서 읽는다
         // (`arrange_context::app_style`). 막대 config의 `style`이 비어 있으면 이 값이다.
         tab_bar_style tab_bar {};
+        // popup 창의 모양이다. popup은 tree가 아니라 host가 만드는 창이라 배치 문맥이 아니라 frame의 스타일
+        // (`ui_frame::style`)에서 읽는다.
+        popup_style popup {};
 
         // 테마의 중립 색이다.
         // 고대비는 중립 색을 쓰지 않으므로 dark를 돌려준다 — 부르는 쪽이 고대비를
