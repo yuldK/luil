@@ -18,6 +18,7 @@
 #include <catch2/catch_approx.hpp>
 
 #include <limits>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -118,7 +119,77 @@ TEST_CASE("Native layout cache keys normalize geometry-free fields", "[ui][text-
     const auto narrow { luil::make_font_text_layout({ .text = u8"unwrapped", .width = 10.0f }, font) };
     const auto wide { luil::make_font_text_layout({ .text = u8"unwrapped", .face = luil::text_layout_face::code, .width = 500.0f }, font) };
     REQUIRE(narrow.caret_stops().data() == wide.caret_stops().data());
+    const auto usage { luil::text_layout_cache_usage() };
+    REQUIRE(usage.entries == 2);
+    REQUIRE(usage.hits == 2);
+    REQUIRE(usage.misses == 2);
+}
+
+TEST_CASE("Native layout cache evicts the least recently used entry", "[ui][text-layout][cache]")
+{
+    luil::clear_text_layout_cache();
+    const auto numbered = [](const int index) {
+        const auto number { std::to_string(index) };
+        std::u8string text { u8"lru " };
+        text.append(reinterpret_cast<const char8_t*>(number.data()), number.size());
+        return luil::text_layout_request { .text = std::move(text), .font_size = 18.0f };
+    };
+    const luil::text_layout_request recent { .text = u8"lru recent", .font_size = 18.0f };
+    const luil::text_layout_request oldest { .text = u8"lru oldest", .font_size = 18.0f };
+    static_cast<void>(luil::make_text_layout(recent));
+    static_cast<void>(luil::make_text_layout(oldest));
+    for (int index { 0 }; index < 510; ++index)
+        static_cast<void>(luil::make_text_layout(numbered(index)));
+    REQUIRE(luil::text_layout_cache_usage().entries == 512);
+    // 먼저 넣었어도 다시 쓴 항목은 앞으로 온다. 다음 항목이 밀어내는 것은 그 뒤에 남은 oldest다.
+    static_cast<void>(luil::make_text_layout(recent));
+    static_cast<void>(luil::make_text_layout(numbered(510)));
+    REQUIRE(luil::text_layout_cache_usage().entries == 512);
+    const auto before { luil::text_layout_cache_usage() };
+    static_cast<void>(luil::make_text_layout(recent));
+    REQUIRE(luil::text_layout_cache_usage().hits == before.hits + 1);
+    static_cast<void>(luil::make_text_layout(oldest));
+    REQUIRE(luil::text_layout_cache_usage().misses == before.misses + 1);
+}
+
+TEST_CASE("Native layout cache compares the whole key when hashes collide", "[ui][text-layout][cache]")
+{
+    // 시험이 실패해도 다음 시험에 같은 hash가 남지 않게 되돌린다.
+    struct forced_hash
+    {
+        forced_hash() { luil::set_text_layout_cache_hash_for_test(7); }
+        ~forced_hash() { luil::set_text_layout_cache_hash_for_test(std::nullopt); }
+    };
+    const forced_hash scope {};
+    const luil::text_layout_request left { .text = u8"collide left", .font_size = 18.0f };
+    const luil::text_layout_request right { .text = u8"collide right", .font_size = 18.0f };
+    const auto first { luil::make_text_layout(left) };
+    const auto second { luil::make_text_layout(right) };
+    REQUIRE(first.text() == left.text);
+    REQUIRE(second.text() == right.text);
+    REQUIRE(first.caret_stops().data() != second.caret_stops().data());
     REQUIRE(luil::text_layout_cache_usage().entries == 2);
+    // 같은 bucket에서도 원문이 같은 항목만 맞는다.
+    const auto again_left { luil::make_text_layout(left) };
+    const auto again_right { luil::make_text_layout(right) };
+    REQUIRE(again_left.caret_stops().data() == first.caret_stops().data());
+    REQUIRE(again_right.caret_stops().data() == second.caret_stops().data());
+    // 원문이 같고 크기만 다른 요청도 같은 bucket에서 갈라진다.
+    auto larger { left };
+    larger.font_size = 24.0f;
+    const auto large { luil::make_text_layout(larger) };
+    REQUIRE(large.caret_stops().data() != first.caret_stops().data());
+    auto usage { luil::text_layout_cache_usage() };
+    REQUIRE(usage.entries == 3);
+    REQUIRE(usage.hits == 2);
+    REQUIRE(usage.misses == 3);
+    // 지난 revision을 거둘 때 같은 bucket의 색인도 함께 지워야 다시 지은 값이 낡은 항목에 맞지 않는다.
+    luil::invalidate_text_layouts();
+    const auto rebuilt { luil::make_text_layout(left) };
+    REQUIRE(rebuilt.caret_stops().data() != first.caret_stops().data());
+    REQUIRE(luil::make_text_layout(left).caret_stops().data() == rebuilt.caret_stops().data());
+    usage = luil::text_layout_cache_usage();
+    REQUIRE(usage.entries == 1);
 }
 
 TEST_CASE("Native layout cache drops stale revisions and keeps one entry per request", "[ui][text-layout][cache]")

@@ -17,11 +17,17 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstring>
+#include <functional>
+#include <iterator>
 #include <list>
 #include <mutex>
 #include <numeric>
 #include <optional>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 
 namespace luil {
@@ -368,24 +374,100 @@ namespace luil {
 
         struct layout_cache_entry
         {
+            // 원문은 비워 둔다. layout이 같은 원문을 이미 가지므로 긴 문단이 예산을 두 번 먹지 않게 그쪽과 비교한다.
             text_layout_request request {};
             SkFont font {};
             std::uint64_t revision { 0 };
+            std::uint64_t hash { 0 };
             text_layout layout {};
             std::size_t bytes { 0 };
         };
+        using layout_cache_list = std::list<layout_cache_entry>;
         struct layout_cache
         {
             std::mutex mutex {};
-            std::list<layout_cache_entry> entries {};
+            layout_cache_list entries {};
+            // 매 frame 모든 라벨이 찾으므로 512개를 다 걷지 않는다. hash가 같아도 같은 요청이라 단정하지 않고
+            // 같은 hash의 항목을 모두 끝까지 비교한다. 충돌한 두 요청이 서로를 덮어쓰지 않게 multimap이다.
+            std::unordered_multimap<std::uint64_t, layout_cache_list::iterator> index {};
             text_layout_cache_statistics usage {};
             // 지난 항목을 마지막으로 거둔 revision이다.
             std::uint64_t revision { 0 };
+            std::optional<std::uint64_t> forced_hash {};
         };
         layout_cache& cache()
         {
             static layout_cache state {};
             return state;
+        }
+
+        std::uint64_t mix_hash(const std::uint64_t seed, const std::uint64_t value) noexcept
+        {
+            // 이웃한 크기·폭 값이 한 bucket에 몰리지 않게 섞는다. boost::hash_combine의 64bit 상수다.
+            return seed ^ (std::hash<std::uint64_t> {}(value) + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+        }
+        std::uint64_t float_bits(const float value) noexcept
+        {
+            // ==는 -0과 0을 같게 본다. bit를 그대로 섞으면 같은 key가 다른 hash를 받아 맞지 않는다.
+            const float canonical { value == 0.0f ? 0.0f : value };
+            std::uint32_t bits { 0 };
+            std::memcpy(&bits, &canonical, sizeof(bits));
+            return bits;
+        }
+        // 동등 비교가 보는 값만 섞는다. 비교가 무시하는 값을 넣으면 같은 요청이 다른 hash를 받는다. 일부만 섞는 것은 괜찮다.
+        std::uint64_t layout_key_hash(const std::uint64_t revision, const SkFont& font, const text_layout_request& request, const std::u8string_view text) noexcept
+        {
+            std::uint64_t seed { std::hash<std::u8string_view> {}(text) };
+            // SkFont의 ==는 typeface를 pointer로 비교한다. 같은 typeface는 같은 uniqueID를 가진다.
+            const std::array<std::uint64_t, 14> values {
+                revision,
+                std::uint64_t { font.getTypeface()->uniqueID() },
+                float_bits(font.getSize()),
+                float_bits(font.getScaleX()),
+                float_bits(font.getSkewX()),
+                static_cast<std::uint64_t>(font.getEdging()),
+                static_cast<std::uint64_t>(font.getHinting()),
+                std::uint64_t { font.isSubpixel() },
+                std::uint64_t { font.isEmbolden() },
+                float_bits(request.font_size),
+                float_bits(request.width),
+                std::uint64_t { request.wrap },
+                float_bits(request.line_height),
+                static_cast<std::uint64_t>(request.styles.size()),
+            };
+            for (const std::uint64_t value : values)
+                seed = mix_hash(seed, value);
+            for (const auto& style : request.styles)
+            {
+                seed = mix_hash(seed, style.begin);
+                seed = mix_hash(seed, style.end);
+                seed = mix_hash(seed, (style.bold ? 1u : 0u) | (style.italic ? 2u : 0u) | (style.code ? 4u : 0u));
+            }
+            return seed;
+        }
+
+        layout_cache_list::iterator find_locked(layout_cache& state, const std::uint64_t hash, const std::uint64_t revision, const SkFont& font, const text_layout_request& request, const std::u8string_view text)
+        {
+            const auto [first, last] { state.index.equal_range(hash) };
+            for (auto at { first }; at != last; ++at)
+            {
+                const auto& entry { *at->second };
+                if (entry.revision == revision && entry.font == font && entry.request == request && entry.layout.text() == text)
+                    return at->second;
+            }
+            return state.entries.end();
+        }
+        layout_cache_list::iterator erase_locked(layout_cache& state, const layout_cache_list::iterator entry)
+        {
+            const auto [first, last] { state.index.equal_range(entry->hash) };
+            for (auto at { first }; at != last; ++at)
+                if (at->second == entry)
+                {
+                    state.index.erase(at);
+                    break;
+                }
+            state.usage.bytes -= entry->bytes;
+            return state.entries.erase(entry);
         }
 
         // 지난 revision의 항목은 다시 맞지 않는데 예산만 차지한다. revision이 오른 뒤 처음 볼 때 거둔다.
@@ -394,12 +476,8 @@ namespace luil {
             if (revision <= state.revision)
                 return;
             state.revision = revision;
-            state.entries.remove_if([&state, revision](const auto& entry) {
-                if (entry.revision >= revision)
-                    return false;
-                state.usage.bytes -= entry.bytes;
-                return true;
-            });
+            for (auto entry { state.entries.begin() }; entry != state.entries.end();)
+                entry = entry->revision < revision ? erase_locked(state, entry) : std::next(entry);
             state.usage.entries = state.entries.size();
         }
 
@@ -426,6 +504,16 @@ namespace luil {
     {
         auto& state { cache() };
         const std::scoped_lock lock { state.mutex };
+        state.index.clear();
+        state.entries.clear();
+        state.usage = {};
+    }
+    void set_text_layout_cache_hash_for_test(const std::optional<std::uint64_t> hash)
+    {
+        auto& state { cache() };
+        const std::scoped_lock lock { state.mutex };
+        state.forced_hash = hash;
+        state.index.clear();
         state.entries.clear();
         state.usage = {};
     }
@@ -447,13 +535,17 @@ namespace luil {
         request.font_size = font.getSize();
         // face는 font가 이미 정했다. key에 남기면 같은 배치가 face 값만 달라 따로 cache된다.
         request.face = text_layout_face::ui;
+        // 원문은 key 밖에서 비교한다. 들어간 항목은 원문을 layout에만 두므로 key의 원문은 양쪽 다 비운다.
+        std::u8string key_text { std::move(request.text) };
+        request.text.clear();
         const auto revision { text_layout_revision() };
+        // 원문을 걷는 hash는 자물쇠 밖에서 한 번만 잰다.
+        const auto hash { layout_key_hash(revision, font, request, key_text) };
         auto& state { cache() };
-        const auto matches = [&](const auto& entry) { return entry.revision == revision && entry.font == font && entry.request == request; };
         {
             const std::scoped_lock lock { state.mutex };
             retire_locked(state, revision);
-            const auto found { std::find_if(state.entries.begin(), state.entries.end(), matches) };
+            const auto found { find_locked(state, state.forced_hash.value_or(hash), revision, font, request, key_text) };
             if (found != state.entries.end())
             {
                 ++state.usage.hits;
@@ -462,6 +554,7 @@ namespace luil {
             }
             ++state.usage.misses;
         }
+        request.text = std::move(key_text);
         // SkFont는 nullptr typeface를 빈 typeface로 바꿔 둔다. 글자가 하나도 없는 글꼴은 폭이 모두 0이라
         // 호출자가 자기 측정기로 돌아가도록 unavailable로 알린다.
         text_layout_backend backend { font.getTypeface()->countGlyphs() > 0 ? text_layout_backend::primitive : text_layout_backend::unavailable };
@@ -507,7 +600,10 @@ namespace luil {
             layout = build_text_layout(request, backend, shape);
         }
 #endif
-        const std::size_t bytes { layout.storage_bytes() + sizeof(layout_cache_entry) + request.text.capacity() + request.styles.capacity() * sizeof(text_layout_style) };
+        // 원문은 layout이 가졌다. 비운 문자열을 새로 끼워야 사본의 heap 버퍼까지 놓인다.
+        request.text = std::u8string {};
+        constexpr std::size_t index_bytes { sizeof(std::pair<const std::uint64_t, layout_cache_list::iterator>) + 2 * sizeof(void*) };
+        const std::size_t bytes { layout.storage_bytes() + sizeof(layout_cache_entry) + index_bytes + request.styles.capacity() * sizeof(text_layout_style) };
         if (bytes <= cache_byte_limit)
         {
             const std::scoped_lock lock { state.mutex };
@@ -516,18 +612,20 @@ namespace luil {
             // 짓는 사이 설정이 바뀌었으면 이 값은 다시 맞지 않는다. 예산만 차지하므로 넣지 않는다.
             if (revision != latest)
                 return layout;
+            const auto key_hash { state.forced_hash.value_or(hash) };
             // 자물쇠를 놓고 지었으니 다른 thread가 같은 요청을 먼저 넣었을 수 있다. 같은 값을 두 번 두지 않는다.
-            if (const auto found { std::find_if(state.entries.begin(), state.entries.end(), matches) }; found != state.entries.end())
+            if (const auto found { find_locked(state, key_hash, revision, font, request, layout.text()) }; found != state.entries.end())
             {
                 state.entries.splice(state.entries.begin(), state.entries, found);
                 return state.entries.front().layout;
             }
             while (state.entries.empty() == false && (state.usage.bytes + bytes > cache_byte_limit || state.entries.size() >= cache_entry_limit))
-            {
-                state.usage.bytes -= state.entries.back().bytes;
-                state.entries.pop_back();
-            }
-            state.entries.push_front({ std::move(request), font, revision, layout, bytes });
+                erase_locked(state, std::prev(state.entries.end()));
+            // 색인에 넣다 실패하면 색인 없는 항목이 남는다. 따로 지은 node를 먼저 색인에 걸고 성공한 뒤에 옮긴다.
+            layout_cache_list node {};
+            node.push_back({ std::move(request), font, revision, key_hash, layout, bytes });
+            state.index.emplace(key_hash, node.begin());
+            state.entries.splice(state.entries.begin(), node);
             state.usage.bytes += bytes;
             state.usage.entries = state.entries.size();
         }
