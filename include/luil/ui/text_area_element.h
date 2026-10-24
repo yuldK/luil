@@ -27,26 +27,38 @@ namespace luil {
     // 다시 접는다 — 수백 줄 메모에는 문제가 없지만 수십만 바이트 글에서는 키 하나에 한 frame을 넘긴다
     // (docs/text-area-wrap-design.md "비용"). 앱이 이것을 하나 쥐고 같은 칸의 설정(`text_area_config::wrap_cache`)에
     // frame마다 넘기면, 글이 같은 문단은 다시 재지 않는다.
-    //  - 접는 폭·글자 크기·글꼴(표본 글의 폭)이 바뀌면 통째로 비운다.
-    //  - 이번 배치에서 쓰지 않은 문단은 버린다. 지운 글이 쌓이지 않고, 쥔 양이 지금 글의 크기에 머문다.
+    //  - 접는 폭·글자 크기·배율·글꼴(표본 글의 폭)이 바뀌면 통째로 비운다.
+    //  - Shaping 구성에서는 같은 글이라도 굵기 구간이 다르면 따로 쥔다. 굵기는 advance를 바꾸므로, 글로만 찾으면
+    //    코드·diff의 `}`나 빈 줄처럼 되풀이되는 문단이 서로의 자리를 덮어 frame마다 다시 shape된다.
+    //  - Shaping 구성에서는 보이는 화면 줄의 배치도 쥔다. 접지 않은 칸의 줄은 문단 전체라 전역 배치 cache의
+    //    한 항목 상한을 넘을 수 있고, 그러면 흘리거나 caret만 옮겨도 frame마다 다시 shape된다.
+    //  - 이번 배치에서 쓰지 않은 문단과 화면 줄은 버린다. 지운 글이 쌓이지 않고, 쥔 양이 지금 글의 크기에 머문다.
     //  - 배치(logic thread)에서만 쓴다. 안의 잠금이 한 번에 배치 하나만 들인다.
     //  - 칸 하나에 하나다. 칸 둘이 나눠 쓰면 서로의 문단을 버린다.
     class text_area_wrap_cache
     {
     public:
-        // 쥐고 있는 문단 수다 (test·진단용).
+        // 쥐고 있는 문단 수다 (test·진단용). 같은 글을 굵기 구간마다 따로 쥐면 그 수만큼 센다. 화면 줄은 세지 않는다.
         [[nodiscard]] std::size_t size() const;
 
     private:
         friend class text_area_element;
 
         // 문단 처음 기준으로 넘겨 접은 자리다 (오름차순, 문단의 끝은 넣지 않는다).
+        //  - `styles`는 그 문단 기준의 굵기 구간이다. 측정기 길은 굵기를 재지 않아 늘 비어 있다.
         struct entry
         {
             std::vector<std::size_t> cuts {};
             std::uint64_t used { 0 };
             float width { 0.0f };
             std::vector<text_layout_style> styles {};
+        };
+        // 보이는 화면 줄 하나를 shape한 배치다. `styles`는 그 줄 기준의 굵기 구간이다.
+        struct row_entry
+        {
+            std::vector<text_layout_style> styles {};
+            text_layout layout {};
+            std::uint64_t used { 0 };
         };
         struct key_hash
         {
@@ -55,9 +67,14 @@ namespace luil {
         };
 
         mutable std::mutex mutex_ {};
-        std::unordered_map<std::u8string, entry, key_hash, std::equal_to<>> entries_ {};
+        // 글로 찾고, 같은 글 안에서는 굵기 구간으로 고른다. 대개 글 하나에 하나라 찾는 값을 글 하나로 둔다.
+        std::unordered_map<std::u8string, std::vector<entry>, key_hash, std::equal_to<>> entries_ {};
+        std::unordered_map<std::u8string, std::vector<row_entry>, key_hash, std::equal_to<>> rows_ {};
         float width_ { 0.0f };
         float font_size_ { 0.0f };
+        // 화면 줄의 배치는 줄 높이를 품는다. 글자 크기는 배율을 표로 옮길 수 있어(Android) 글자 크기만으로는 배율이
+        // 바뀐 것을 놓칠 수 있다.
+        float scale_ { 0.0f };
         float sample_width_ { 0.0f };
         bool wrap_ { true };
         bool native_ { false };
