@@ -16,6 +16,17 @@ struct ui_element_id
 constexpr auto kind_button = luil::application_element_kind(3);
 ```
 
+kind의 수는 두 대역으로 나뉜다.
+
+| 대역 | 수 | 주인 |
+| --- | --- | --- |
+| 라이브러리 | 0 ~ 1023 | 프레임워크 kind (`end_of_library_kinds` 앞까지) |
+| 앱 | 1024 ~ | `application_element_kind(index)` = 1024 + index |
+
+예약 대역은 처음에 64였다. 프레임워크 kind가 그것을 넘어 표·목록의 펼침 단추와 탭 막대의 새 kind가 앱의 첫 kind들(`application_element_kind(0)`~`(5)`)과 같은 수가 되었고, kind로 찾는 코드(`ids_of_kind`, 정책의 kind 판정)가 서로를 집을 수 있는 상태였다. 예약 대역을 지금 쓰는 것의 열 배가 넘는 1024로 넓혔다. 새 프레임워크 kind는 `end_of_library_kinds` 바로 위에 더하고, 그 값이 앱 대역에 닿으면 `static_assert`가 막는다. `is_application_element_kind`는 앱 대역인지 답한다.
+
+이 변경으로 앱 kind의 수가 한 번 바뀌었다(64 + index → 1024 + index). `application_element_kind(index)`로 상수를 만든 앱은 다시 빌드하면 그대로 맞는다. kind 수를 직접 적었거나 저장해 둔 곳(설정 파일, 자동화 script의 AutomationId `kind:owner`)은 앱마다 고쳐야 한다. 자동화 script는 kind 수를 코드에 박지 않는다.
+
 액션은 `std::function<std::vector<input_action>(const ui_action_context&)>`이며 상태를 직접 바꾸지 않는다. 액션은 메시지만 반환하고 logic 또는 UI가 해당 메시지를 실행한다.
 
 ## Drag와 draw
