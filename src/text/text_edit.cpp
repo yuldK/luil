@@ -122,18 +122,52 @@ namespace luil::text {
             state.anchor = begin;
         }
 
+        std::size_t history_bytes(const std::vector<text_edit_revision>& revisions) noexcept
+        {
+            std::size_t bytes { 0 };
+            for (const text_edit_revision& revision : revisions)
+                bytes += revision.text.size();
+            return bytes;
+        }
+
+        // 앞(가장 먼 시점)부터 버려 `bytes`를 상한 안으로 줄인다.
+        // 마지막 하나(바로 이웃한 시점)는 상한을 넘어도 남긴다.
+        void drop_oldest(std::vector<text_edit_revision>& revisions, std::size_t& bytes)
+        {
+            std::size_t count { 0 };
+            while (bytes > text_edit_history_byte_limit && count + 1 < revisions.size())
+            {
+                bytes -= revisions[count].text.size();
+                ++count;
+            }
+            revisions.erase(revisions.begin(), revisions.begin() + static_cast<std::ptrdiff_t>(count));
+        }
+
+        // 기록을 개수와 바이트 상한 안으로 줄인다.
+        // 기록이 늘어나는 모든 자리(새 덩어리, 실행 취소, 다시 실행)가 부른다.
+        //  - 가장 먼 과거(undo 앞)를 먼저 버린다. 그래도 넘치면 가장 먼 미래(redo 앞)를 버린다.
+        //    redo의 뒤가 다음에 다시 실행할 시점이라 앞이 가장 멀다.
+        //  - 바이트는 `size()`로 센다. 시점은 복사로 만들어 용량이 길이와 거의 같다.
+        void trim_history(text_edit_state& state)
+        {
+            if (state.undo.size() > text_edit_history_limit)
+                state.undo.erase(state.undo.begin(), state.undo.end() - static_cast<std::ptrdiff_t>(text_edit_history_limit));
+            std::size_t bytes { history_bytes(state.undo) + history_bytes(state.redo) };
+            drop_oldest(state.undo, bytes);
+            drop_oldest(state.redo, bytes);
+        }
+
         // 새 편집 덩어리를 연다.
         // 종류가 같고 caret이 직전 편집이 끝난 자리에서 이어질 때만 묶어 기록을 남기지 않는다.
         void begin_edit(text_edit_state& state, const text_edit_group group)
         {
             const bool joins { group != text_edit_group::replace && group == state.group && state.caret == state.group_caret && state.undo.empty() == false };
+            state.redo.clear();
             if (joins == false)
             {
                 state.undo.push_back({ state.text, state.caret, state.anchor });
-                if (state.undo.size() > text_edit_history_limit)
-                    state.undo.erase(state.undo.begin());
+                trim_history(state);
             }
-            state.redo.clear();
             state.group = group;
         }
 
@@ -292,6 +326,7 @@ namespace luil::text {
         state.text = previous.text;
         state.caret = text_edit_clamp_offset(state.text, previous.caret);
         state.anchor = text_edit_clamp_offset(state.text, previous.anchor);
+        trim_history(state);
         break_group(state);
         return true;
     }
@@ -306,6 +341,7 @@ namespace luil::text {
         state.text = next.text;
         state.caret = text_edit_clamp_offset(state.text, next.caret);
         state.anchor = text_edit_clamp_offset(state.text, next.anchor);
+        trim_history(state);
         break_group(state);
         return true;
     }
