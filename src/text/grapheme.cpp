@@ -11,6 +11,9 @@ namespace luil::text {
         enum class grapheme_property { other, cr, lf, control, extend, zwj, regional_indicator, prepend, spacing_mark, l, v, t, lv, lvt };
         struct grapheme_range { char32_t begin; char32_t end; grapheme_property property; };
         struct codepoint_range { char32_t begin; char32_t end; };
+        // Indic_Conjunct_Break다 (UAX #29 GB9c). 표에 없으면 none이다.
+        enum class incb_property { none, consonant, extend, linker };
+        struct incb_range { char32_t begin; char32_t end; incb_property property; };
 
 #include "text/grapheme_data.h"
 
@@ -44,6 +47,34 @@ namespace luil::text {
             return offset > 0 ? codepoint_start(text, offset - 1) : 0;
         }
 
+        incb_property incb(const char32_t value) noexcept
+        {
+            const auto* const found { find_range(incb_ranges, value) };
+            return found != nullptr ? found->property : incb_property::none;
+        }
+
+        // GB9c: 자음 + (Extend·Linker)* 안에 Linker가 하나라도 있으면 다음 자음과 붙는다 ("क्ष"가 한 글자소다).
+        //  - 거꾸로 걷는 길이는 그 결합 자리 안이다. 결합 부호가 끝없이 이어지지 않는 한 짧다.
+        bool joins_conjunct(const std::u8string_view text, const std::size_t position) noexcept
+        {
+            if (incb(utf8_decode(text, position).codepoint) != incb_property::consonant)
+                return false;
+            bool linked { false };
+            std::size_t cursor { position };
+            while (cursor > 0)
+            {
+                cursor = before(text, cursor);
+                const incb_property value { incb(utf8_decode(text, cursor).codepoint) };
+                if (value == incb_property::linker)
+                    linked = true;
+                else if (value == incb_property::consonant)
+                    return linked;
+                else if (value != incb_property::extend)
+                    return false;
+            }
+            return false;
+        }
+
         bool is_control(const grapheme_property value) noexcept
         {
             return value == grapheme_property::cr || value == grapheme_property::lf || value == grapheme_property::control;
@@ -68,6 +99,8 @@ namespace luil::text {
             if ((previous == lvt || previous == t) && current == t)
                 return false;
             if (current == extend || current == zwj || current == spacing_mark || previous == prepend)
+                return false;
+            if (joins_conjunct(text, position))
                 return false;
             if (previous == zwj && find_range(pictographic_ranges, utf8_decode(text, position).codepoint) != nullptr)
             {
@@ -106,6 +139,11 @@ namespace luil::text {
         if (auto boundaries { platform_grapheme_boundaries(text) }; boundaries.has_value())
             return std::move(*boundaries);
 #endif
+        return builtin_grapheme_boundaries(text);
+    }
+
+    std::vector<std::size_t> builtin_grapheme_boundaries(const std::u8string_view text)
+    {
         std::vector<std::size_t> boundaries { 0 };
         std::size_t regional_count { 0 };
         for (std::size_t at { 0 }; at < text.size();)
