@@ -1,5 +1,6 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/text/grapheme.h"
+#include "ui/single_line_text.h"
 #include "ui/text_layout_skia.h"
 
 #include "luil/text/utf8_text.h"
@@ -55,7 +56,119 @@ namespace luil {
             adjusted.setEdging(installed_quality.load(std::memory_order_relaxed) == text_render_quality::subpixel_lcd ? SkFont::Edging::kSubpixelAntiAlias : SkFont::Edging::kAntiAlias);
             return adjusted;
         }
+
+        // host가 frame의 스타일에서 옮겨 둔 한 줄 글의 줄바꿈 처리다.
+        // 그리기 thread와 입력 thread(측정)가 함께 읽으므로 atomic이다.
+        std::atomic<single_line_break> installed_line_break { single_line_break::space };
+
+        // 줄바꿈이 없는 한 줄을 그린다.
+        // 배치에는 원문을 그대로 넘긴다. 잘못된 byte는 배치가 offset을 지키며 U+FFFD glyph로 그리고 Skia에 UTF-8로 넘기지 않는다.
+        //  - 고친 사본을 넘기면 같은 글이 입력 칸의 배치와 다른 backend로 재여 폭이 갈린다.
+        void draw_line(SkCanvas& canvas, const std::u8string_view text, const float x, const float y, const SkFont& font, const SkPaint& paint)
+        {
+            if (text.empty())
+                return;
+            if (ui_text_shaping_enabled())
+            {
+                const auto layout { make_font_text_layout({ .text = std::u8string { text }, .font_size = font.getSize() }, font) };
+                draw_text_layout(canvas, layout, { x, y - layout.lines().front().baseline }, paint);
+                return;
+            }
+            std::u8string storage {};
+            const std::u8string_view drawable { drawable_text(text, storage) };
+            const SkFont adjusted { quality_font(font) };
+            float pen { x };
+            for (const text_run& run : split_text_runs(drawable, adjusted))
+            {
+                if (run.text.empty())
+                    continue;
+                if (run.typeface == nullptr)
+                {
+                    canvas.drawSimpleText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8, pen, y, adjusted, paint);
+                    pen += adjusted.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
+                    continue;
+                }
+
+                // 크기·품질 같은 나머지 설정은 그대로 두고 typeface만 바꾼다.
+                SkFont run_font { adjusted };
+                run_font.setTypeface(run.typeface);
+                canvas.drawSimpleText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8, pen, y, run_font, paint);
+                pen += run_font.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
+            }
+        }
+
+        // 줄바꿈이 없는 한 줄의 폭이다.
+        // 그리기와 같이 원문으로 잰다. 배치의 잘못된 UTF-8 처리와 폭이 같아야 caret과 글자가 맞는다.
+        [[nodiscard]] float measure_line(const std::u8string_view text, const SkFont& font)
+        {
+            if (text.empty())
+                return 0.0f;
+            if (ui_text_shaping_enabled())
+                return make_font_text_layout({ .text = std::u8string { text }, .font_size = font.getSize() }, font).size().width;
+            std::u8string storage {};
+            const std::u8string_view drawable { drawable_text(text, storage) };
+            // 그리기와 같은 품질 설정으로 재야 caret 자리와 글자가 일치한다.
+            const SkFont adjusted { quality_font(font) };
+            float width { 0.0f };
+            for (const text_run& run : split_text_runs(drawable, adjusted))
+            {
+                if (run.text.empty())
+                    continue;
+                if (run.typeface == nullptr)
+                {
+                    width += adjusted.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
+                    continue;
+                }
+                SkFont run_font { adjusted };
+                run_font.setTypeface(run.typeface);
+                width += run_font.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
+            }
+            return width;
+        }
     } // namespace
+
+    std::u8string_view single_line_text(const std::u8string_view text, const single_line_break mode, std::u8string& storage)
+    {
+        if (mode == single_line_break::paragraphs || text.find_first_of(u8"\r\n") == std::u8string_view::npos)
+            return text;
+        // U+21B5 "↵"다. 한 줄 칸 안에서 줄바꿈이 있었다는 것만 보인다.
+        const std::u8string_view mark { mode == single_line_break::symbol ? std::u8string_view { u8"↵" } : std::u8string_view { u8" " } };
+        storage.clear();
+        storage.reserve(text.size() + 2u);
+        for (std::size_t index { 0 }; index < text.size(); ++index)
+        {
+            const char8_t unit { text[index] };
+            if (unit != u8'\r' && unit != u8'\n')
+            {
+                storage.push_back(unit);
+                continue;
+            }
+            storage.append(mark);
+            // CRLF 짝은 줄바꿈 하나다. 둘로 세면 Windows에서 온 글만 공백이 두 칸이 된다.
+            if (unit == u8'\r' && index + 1 < text.size() && text[index + 1] == u8'\n')
+                ++index;
+        }
+        return storage;
+    }
+
+    std::vector<std::u8string_view> single_line_paragraphs(const std::u8string_view text)
+    {
+        std::vector<std::u8string_view> lines {};
+        std::size_t begin { 0 };
+        while (true)
+        {
+            const std::size_t line_end { text.find_first_of(u8"\r\n", begin) };
+            if (line_end == std::u8string_view::npos)
+            {
+                lines.push_back(text.substr(begin));
+                return lines;
+            }
+            lines.push_back(text.substr(begin, line_end - begin));
+            begin = line_end + 1;
+            if (text[line_end] == u8'\r' && begin < text.size() && text[begin] == u8'\n')
+                ++begin;
+        }
+    }
 
     SkPaint solid_paint(const ui_color color)
     {
@@ -155,39 +268,35 @@ namespace luil {
             invalidate_text_layouts();
     }
 
+    void set_single_line_break(const single_line_break mode) noexcept
+    {
+        // 배치 cache를 비우지 않는다. 줄바꿈은 배치에 닿기 전에 바뀌므로 cache는 바뀐 글을 key로 갖는다 —
+        // 줄바꿈 없는 글은 어느 값에서나 같은 항목이고, 있는 글은 값마다 다른 글이라 항목이 섞이지 않는다.
+        installed_line_break.store(mode, std::memory_order_relaxed);
+    }
+
+    single_line_break single_line_break_mode() noexcept { return installed_line_break.load(std::memory_order_relaxed); }
+
     void draw_text(SkCanvas& canvas, const std::u8string_view text, const float x, const float y, const SkFont& font, const SkPaint& paint)
     {
         if (text.empty())
             return;
-        // 배치에는 원문을 그대로 넘긴다. 잘못된 byte는 배치가 offset을 지키며 U+FFFD glyph로 그리고 Skia에 UTF-8로 넘기지 않는다.
-        //  - 고친 사본을 넘기면 같은 글이 입력 칸의 배치와 다른 backend로 재여 폭이 갈린다.
-        if (ui_text_shaping_enabled())
+        // 측정(`measure_text`)과 같은 값을 한 번만 읽어 한 호출 안에서 규칙이 갈리지 않게 한다.
+        const single_line_break mode { single_line_break_mode() };
+        if (mode == single_line_break::paragraphs)
         {
-            const auto layout { make_font_text_layout({ .text = std::u8string { text }, .font_size = font.getSize() }, font) };
-            draw_text_layout(canvas, layout, { x, y - layout.lines().front().baseline }, paint);
+            // 두 구성이 같은 줄 간격으로 내려가도록 배치의 여러 줄 대신 줄을 직접 나눠 한 줄씩 그린다.
+            const float spacing { font.getSpacing() };
+            float baseline { y };
+            for (const std::u8string_view line : single_line_paragraphs(text))
+            {
+                draw_line(canvas, line, x, baseline, font, paint);
+                baseline += spacing;
+            }
             return;
         }
         std::u8string storage {};
-        const std::u8string_view drawable { drawable_text(text, storage) };
-        const SkFont adjusted { quality_font(font) };
-        float pen { x };
-        for (const text_run& run : split_text_runs(drawable, adjusted))
-        {
-            if (run.text.empty())
-                continue;
-            if (run.typeface == nullptr)
-            {
-                canvas.drawSimpleText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8, pen, y, adjusted, paint);
-                pen += adjusted.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
-                continue;
-            }
-
-            // 크기·품질 같은 나머지 설정은 그대로 두고 typeface만 바꾼다.
-            SkFont run_font { adjusted };
-            run_font.setTypeface(run.typeface);
-            canvas.drawSimpleText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8, pen, y, run_font, paint);
-            pen += run_font.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
-        }
+        draw_line(canvas, single_line_text(text, mode, storage), x, y, font, paint);
     }
 
     void draw_hover_fill(draw_context& context, const rect_f& box, const ui_element_id& id, const interaction_snapshot& interaction, const bool enabled, const float radius)
@@ -214,28 +323,17 @@ namespace luil {
     {
         if (text.empty())
             return 0.0f;
-        // 그리기와 같이 원문으로 잰다. 배치의 잘못된 UTF-8 처리와 폭이 같아야 caret과 글자가 맞는다.
-        if (ui_text_shaping_enabled())
-            return make_font_text_layout({ .text = std::u8string { text }, .font_size = font.getSize() }, font).size().width;
-        std::u8string storage {};
-        const std::u8string_view drawable { drawable_text(text, storage) };
-        // 그리기와 같은 품질 설정으로 재야 caret 자리와 글자가 일치한다.
-        const SkFont adjusted { quality_font(font) };
-        float width { 0.0f };
-        for (const text_run& run : split_text_runs(drawable, adjusted))
+        // 그리기와 같은 변환을 지나야 폭과 그림이 맞는다.
+        const single_line_break mode { single_line_break_mode() };
+        if (mode == single_line_break::paragraphs)
         {
-            if (run.text.empty())
-                continue;
-            if (run.typeface == nullptr)
-            {
-                width += adjusted.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
-                continue;
-            }
-            SkFont run_font { adjusted };
-            run_font.setTypeface(run.typeface);
-            width += run_font.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
+            float widest { 0.0f };
+            for (const std::u8string_view line : single_line_paragraphs(text))
+                widest = std::max(widest, measure_line(line, font));
+            return widest;
         }
-        return width;
+        std::u8string storage {};
+        return measure_line(single_line_text(text, mode, storage), font);
     }
 
     std::u8string elide_text(const std::u8string_view text, const float max_width, const SkFont& font)

@@ -183,7 +183,7 @@ function(luil_style_numbers output_variable object_key field_pairs minimum maxim
     set(${output_variable} "${text}" PARENT_SCOPE)
 endfunction()
 
-# 컴포넌트 스타일(`tabBar`·`popup`)은 **빠져도 된다** — 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하고,
+# 컴포넌트 스타일(`tabBar`·`popup`·`text`)은 **빠져도 된다** — 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하고,
 # 빠진 칸은 struct의 기본값(처음부터의 모양)이다. 낯선 키와 모르는 값은 여기서도 막는다.
 #  - 짝은 `key|field|enum type|허용 값들`이고 허용 값은 `,`로 적는다. JSON 값은 camelCase, C++ 값은 snake_case다.
 set(palette_roles "windowBackground,surfaceBackground,inputBackground,tooltipBackground,noticeBackground,captionBackground,buttonHoverBackground,accentSoft")
@@ -195,11 +195,14 @@ set(tab_bar_fields
     "selectedBackground|selected_background|palette_role|${palette_roles}")
 set(popup_fields
     "corner|corner|popup_corner|system,round,roundSmall,square")
+set(text_fields
+    "lineBreak|line_break|single_line_break|space,symbol,paragraphs")
 
 # 컴포넌트 칸의 JSON 키와 C++ 필드, 그 필드 표다. 순서가 곧 지정 초기화의 순서라 struct 선언과 같아야 한다.
 set(component_sections
     "tabBar|tab_bar|tab_bar_fields"
-    "popup|popup|popup_fields")
+    "popup|popup|popup_fields"
+    "text|text|text_fields")
 
 # camelCase를 snake_case로 바꾼다 (`selectedOrHovered` → `selected_or_hovered`).
 function(luil_style_snake_case output_variable text)

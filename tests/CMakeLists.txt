@@ -60,6 +60,7 @@ add_executable(luil_core_tests
     selection_model_tests.cpp
     sheet_host_element_tests.cpp
     sidebar_element_tests.cpp
+    single_line_text_tests.cpp
     slider_element_tests.cpp
     split_handle_element_tests.cpp
     text_area_element_tests.cpp

@@ -1702,6 +1702,8 @@ namespace luil::win32 {
                 state.accent_id = appearance.accent_id;
                 // 앱이 실은 스타일이다. frame은 이 렌더 동안 살아 있으므로 포인터로 족하다.
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
+                // 한 줄 도우미는 문맥 인자가 없어 스타일의 줄바꿈 처리를 프로세스 값으로 건다 (실린 것이 없으면 내장값).
+                set_single_line_break(frame_style(state).text.line_break);
                 state.reduce_motion = reduce_motion_;
                 if (state.theme == color_theme::high_contrast)
                     state.high_contrast = read_high_contrast_colors();

@@ -54,7 +54,7 @@ frame->style = style; // 매 frame 같은 포인터를 실으면 된다
 
 ### 컴포넌트 칸 — 공용 스타일
 
-앱이 화면 전체에서 통일하고 싶은 **모양의 선택**은 컴포넌트마다 `ui_style`의 한 칸에 둔다. 첫 칸은 탭 막대의 `ui_style::tab_bar`(모양·닫기 단추 보이기·상태 표시 자리·바탕 역할)다. popup 창의 모서리(`ui_style::popup`)도 같은 모양의 칸이지만 tree가 아니라 host가 만드는 창이라 `ui_frame::style`에서 읽는다 ([popup 오버레이](../popup-overlay-design.md#모서리그림자테두리)). 칸의 값은 enum과 `palette_role`뿐이라 비교되고 JSON(`tabBar`)에 적힌다. 컴포넌트는 그 칸을 **배치 문맥**(`arrange_context::style`, `make_arranged_tree`의 `style`)에서 읽고, 컴포넌트 config의 `std::optional` 칸이 그 막대 하나만 덮는다. 앱이 한 번 적으면 config에 모양을 적지 않은 모든 막대가 따른다. 자세한 규칙과 다음 컴포넌트를 늘리는 모양은 [탭 막대 스타일과 공용 스타일](../tab-bar-style-design.md)에 있다.
+앱이 화면 전체에서 통일하고 싶은 **모양의 선택**은 컴포넌트마다 `ui_style`의 한 칸에 둔다. 첫 칸은 탭 막대의 `ui_style::tab_bar`(모양·닫기 단추 보이기·상태 표시 자리·바탕 역할)다. popup 창의 모서리(`ui_style::popup`)도 같은 모양의 칸이지만 tree가 아니라 host가 만드는 창이라 `ui_frame::style`에서 읽는다 ([popup 오버레이](../popup-overlay-design.md#모서리그림자테두리)). 한 줄 글의 줄바꿈 처리(`ui_style::text`, JSON `text.lineBreak`: `space`·`symbol`·`paragraphs`, 기본 `space`)도 host가 `ui_frame::style`에서 읽어 한 줄 도우미(`draw_text`·`measure_text`)에 건다 — 도우미에 문맥 인자가 없어서다 ([한 줄 도우미의 줄바꿈](../text-layout-design.md#한-줄-도우미의-줄바꿈)). 칸의 값은 enum과 `palette_role`뿐이라 비교되고 JSON(`tabBar`)에 적힌다. 컴포넌트는 그 칸을 **배치 문맥**(`arrange_context::style`, `make_arranged_tree`의 `style`)에서 읽고, 컴포넌트 config의 `std::optional` 칸이 그 막대 하나만 덮는다. 앱이 한 번 적으면 config에 모양을 적지 않은 모든 막대가 따른다. 자세한 규칙과 다음 컴포넌트를 늘리는 모양은 [탭 막대 스타일과 공용 스타일](../tab-bar-style-design.md)에 있다.
 
 `ui_metrics`는 `draw_context::metrics`로 element에 닿는다. config에 이미 열린 값(`label_config::font_size`·`button_config::corner_radius`)과 앱이 tree를 짓는 산수에 쓰는 배치 상수(`check_row_height` 같은 `inline constexpr`)는 여기 담지 않는다. 텍스트 입력의 글꼴 크기도 담지 않는다 — 포인터를 caret으로 옮기는 계산이 그리기 밖에서 같은 글꼴을 재기 때문이다.
 
