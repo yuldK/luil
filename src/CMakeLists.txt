@@ -137,6 +137,7 @@ luil_add_source_filter(luil_core_files "ui/drawing"
 
 # 자식을 담고 자리를 정하는 element다.
 luil_add_source_filter(luil_core_files "ui/layout"
+    ui/flexible_lengths.h
     ui/grid_element.cpp
     "${public_headers}/ui/grid_element.h"
     ui/group_element.cpp

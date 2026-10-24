@@ -29,7 +29,8 @@ namespace luil {
         float length { 0.0f };
         // `flexible`의 비율이다. 0 이하면 1로 본다.
         float weight { 0.0f };
-        // 맞춤·유연 줄이 반드시 받는 길이다. 하한은 stack처럼 넘침을 만든다 (다른 줄에서 빼지 않는다).
+        // 맞춤·유연 줄이 반드시 받는 길이다. 유연 줄의 부족분은 stack처럼 다른 유연 줄의 몫에서 나오고, 유연 줄
+        // 하한들의 합이 남은 자리를 넘을 때만 넘친다. 맞춤 줄의 하한은 고정 길이처럼 먼저 빠진다.
         float minimum { 0.0f };
 
         [[nodiscard]] static constexpr grid_track fixed(const float length) noexcept

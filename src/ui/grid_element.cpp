@@ -1,5 +1,7 @@
 #include "luil/ui/grid_element.h"
 
+#include "ui/flexible_lengths.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -43,15 +45,24 @@ namespace luil {
                 }
                 fixed += lengths[index];
             }
-            const float remaining { bounded ? std::max(0.0f, available - fixed) : 0.0f };
+            if (bounded == false || weights <= 0.0f)
+                return lengths;
+            // 유연 줄은 stack의 유연 항목과 같은 규칙으로 나눈다. 하한에 걸린 줄의 부족분은 다른 유연 줄의 몫에서 나오고,
+            // 하한들의 합이 남은 자리를 넘을 때만 넘친다 (`distribute_flexible`).
+            const float remaining { std::max(0.0f, available - fixed) };
+            std::vector<flexible_share> shares {};
+            std::vector<std::size_t> owners {};
             for (std::size_t index = 0; index < tracks.size(); ++index)
             {
                 const grid_track& track { tracks[index] };
-                if (track.kind != grid_track_kind::flexible || bounded == false)
+                if (track.kind != grid_track_kind::flexible)
                     continue;
-                const float weight { track.weight > 0.0f ? track.weight : 1.0f };
-                lengths[index] = std::max(track.minimum, weights > 0.0f ? remaining * (weight / weights) : 0.0f);
+                shares.push_back({ .weight = track.weight > 0.0f ? track.weight : 1.0f, .minimum = track.minimum });
+                owners.push_back(index);
             }
+            const std::vector<float> resolved { distribute_flexible(shares, remaining) };
+            for (std::size_t share = 0; share < owners.size(); ++share)
+                lengths[owners[share]] = resolved[share];
             return lengths;
         }
 
