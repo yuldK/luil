@@ -327,10 +327,12 @@ namespace luil {
     {
         // 고른 값을 싣고 있으면 라디오 항목이다 — 그리는 모양이 글자 버튼일 뿐
         // 하는 일은 여럿 가운데 하나를 고르는 것이다 (`choice_group`의 토글 스타일).
+        // 이름은 적힌 글이다. 아이콘만 있는 단추는 글이 없으므로 앱이 단 이름(없으면 툴팁)으로 읽힌다.
+        const std::u8string& name { config_.text.empty() ? access_name() : config_.text };
         if (config_.selected.has_value())
-            return { .role = access_role::radio_button, .name = config_.text, .selected = config_.selected };
-        // link는 글 흐름 안의 자리라 역할도 갈린다. 이름은 둘 다 적힌 글이다.
-        return { .role = config_.visual == text_button_visual::link ? access_role::link : access_role::button, .name = config_.text };
+            return { .role = access_role::radio_button, .name = name, .selected = config_.selected };
+        // link는 글 흐름 안의 자리라 역할도 갈린다.
+        return { .role = config_.visual == text_button_visual::link ? access_role::link : access_role::button, .name = name };
     }
 
     float text_input_element::leading_width_for(const text_input_config& config) noexcept

@@ -597,8 +597,8 @@ namespace demo {
             body->add(make_label({ kind_text, u8"detached-title" }, item.tab.label, 22.0f, luil::label_color_role::primary), 40.0f);
             body->add(make_label({ kind_text, u8"detached-help" }, u8"탭을 원래 창의 탭 막대에 끌어 놓아 합치세요.", 12.0f, luil::label_color_role::dim), 28.0f);
             body->add_gap(16.0f);
-            auto restore { std::make_unique<luil::text_button_element>(
-                luil::ui_element_id { kind_layout, u8"detached-restore" }, luil::text_button_config { .text = u8"원래 창으로 돌려놓기", .visual = luil::text_button_visual::accent }) };
+            luil::text_button_config restore_config { .text = u8"원래 창으로 돌려놓기", .visual = luil::text_button_visual::accent };
+            auto restore { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"detached-restore" }, std::move(restore_config)) };
             restore->set_cursor(luil::ui_cursor::hand);
             restore->set_action(luil::ui_trigger::left_click, luil::make_message_action(tab_attach_intent { key }));
             body->add(std::move(restore), { .length = luil::text_button_height, .cross_length = 200.0f });

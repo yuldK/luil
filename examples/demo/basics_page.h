@@ -21,7 +21,8 @@ namespace demo {
     // kind 등록부는 common.h이고 이 값도 그 번호를 그대로 잇는다 — 이 페이지
     // 밖에서 쓰는 곳이 없어 여기 섰을 뿐이라, 다른 페이지가 같은 것을 원하면
     // 그때 등록부로 옮긴다.
-    constexpr luil::ui_element_kind kind_playback_toggle { luil::application_element_kind(30) };
+    //  - 30은 이미지 드롭 영역(common.h)이 먼저 썼다. 변경 작업대(39~43) 다음 빈 번호다.
+    constexpr luil::ui_element_kind kind_playback_toggle { luil::application_element_kind(44) };
 
     // --- 이 페이지의 메시지 ---
     // 텍스트 편집·조합 메시지(edit_intent·composition_intent)는 창 페이지와

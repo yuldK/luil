@@ -277,9 +277,14 @@ namespace luil {
         const std::size_t rows { (children().size() + columns - 1u) / columns };
         const float height { rows == 0 ? 0.0f : static_cast<float>(rows) * (swatch_size + swatch_gap) - swatch_gap };
         set_bounds({ context.slot.x, context.slot.y, context.slot.width, height * scale });
+        const float pitch { (swatch_size + swatch_gap) * scale };
+        const float side { std::min(swatch_size * scale, context.slot.width) };
         for (std::size_t index = 0; index < children().size(); ++index)
-            children()[index]->arrange(context.for_child({ context.slot.x + static_cast<float>(index % columns) * (swatch_size + swatch_gap) * scale,
-                context.slot.y + static_cast<float>(index / columns) * (swatch_size + swatch_gap) * scale, std::min(swatch_size * scale, context.slot.width), swatch_size * scale }));
+        {
+            const float x { context.slot.x + static_cast<float>(index % columns) * pitch };
+            const float y { context.slot.y + static_cast<float>(index / columns) * pitch };
+            children()[index]->arrange(context.for_child({ x, y, side, swatch_size * scale }));
+        }
     }
 
     void accent_picker_element::draw(draw_context& context, const interaction_snapshot& interaction) const

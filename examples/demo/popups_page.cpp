@@ -134,8 +134,8 @@ namespace demo {
         page.add(std::move(field), luil::dropdown_height);
         page.gap(24.0f);
 
-        auto menu_button { std::make_unique<luil::text_button_element>(
-            luil::ui_element_id { kind_layout, u8"card-menu-button" }, luil::text_button_config { .text = deleted_ ? u8"문서 복원" : u8"문서 작업…", .glyph = luil::codicons::icon_ellipsis }) };
+        luil::text_button_config menu_button_config { .text = deleted_ ? u8"문서 복원" : u8"문서 작업…", .glyph = luil::codicons::icon_ellipsis };
+        auto menu_button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"card-menu-button" }, std::move(menu_button_config)) };
         menu_button->set_cursor(luil::ui_cursor::hand);
         if (deleted_)
             menu_button->set_action(luil::ui_trigger::left_click, luil::make_message_action(card_menu_select_intent { u8"복원" }));
