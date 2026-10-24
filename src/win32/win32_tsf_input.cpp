@@ -147,12 +147,14 @@ namespace luil::win32 {
                 const bool status_changed { document_.read_only != document.read_only };
                 target_ = target;
                 document_ = std::move(document);
+                // 새 문서가 앞 문서의 게시 대기를 대신한다. 남기면 다음 lock이 이 칸에 replace_all을 보낸다.
+                dirty_ = false;
 
                 if (sink_ == nullptr)
                     return;
                 // sink가 mask로 청약한 알림만 보낸다.
                 if (status_changed && (sink_mask_ & TS_AS_STATUS_CHANGE) == TS_AS_STATUS_CHANGE)
-                    static_cast<void>(sink_->OnStatusChange(TS_SD_READONLY));
+                    static_cast<void>(sink_->OnStatusChange(document_.read_only ? TS_SD_READONLY : 0));
                 if ((sink_mask_ & TS_AS_TEXT_CHANGE) == TS_AS_TEXT_CHANGE)
                 {
                     TS_TEXTCHANGE change {};
@@ -170,8 +172,14 @@ namespace luil::win32 {
             // 편집 session이 끝날 때마다 결과를 logic에 보낸다.
             void publish()
             {
-                if (host_ == nullptr || target_.has_value() == false || document_.read_only)
+                if (host_ == nullptr || target_.has_value() == false)
                     return;
+                if (document_.read_only)
+                {
+                    // 읽기 전용으로 바뀐 뒤 끝난 조합은 보내지 않는다. 대기를 남기면 쓰기가 풀린 뒤 늦게 나간다.
+                    dirty_ = false;
+                    return;
+                }
 
                 if (composing_)
                 {

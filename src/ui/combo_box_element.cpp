@@ -11,20 +11,6 @@
 
 namespace luil {
     namespace {
-        using combo_key_handler = std::function<std::optional<std::vector<input_action>>(const key_pressed_event&)>;
-
-        template<typename element>
-        bool connect_ancestor_keys(element& target, combo_key_handler handler)
-        {
-            // C0가 합쳐지면 같은 소스가 정식 조상 전파 API를 연결한다.
-            if constexpr (requires { target.set_key_handler(handler); })
-            {
-                target.set_key_handler(std::move(handler));
-                return true;
-            }
-            return false;
-        }
-
         void keep_input_focus(ui_element& element)
         {
             element.set_preserve_pointer_focus(true);
@@ -37,9 +23,12 @@ namespace luil {
         : ui_element { id }, value_ { std::move(value) }, config_ { std::move(config) }
     {
         const auto query { value_.displayed_text() };
+        // 다 받은 후보는 그 질의에 대한 원천의 답이다. 원천은 대소문자·접두어·별칭 같은 자기 규칙으로 고르므로
+        // 같은 글을 다시 걸러 그 답을 숨기지 않는다. 받는 중(앞 질의의 후보)이거나 글이 그 뒤 바뀌었을 때만 칸에서 거른다.
+        const bool answered { config_.suggestions.loading == false && query == config_.suggestions.query };
         if (config_.suggestions.items != nullptr)
             for (const auto& item : *config_.suggestions.items)
-                if (config_.matches ? config_.matches(item, query) : item.label.find(query) != std::u8string::npos)
+                if (config_.matches ? config_.matches(item, query) : (answered || item.label.find(query) != std::u8string::npos))
                     visible_items_.push_back(item);
         auto input { config_.input };
         input.navigation_keys_to_parent = config_.open;
@@ -59,7 +48,9 @@ namespace luil {
             validation_ = label.get();
             add_child(std::move(label));
         }
-        keys_connected_ = connect_ancestor_keys(*this, [this](const key_pressed_event& event) { return on_key(event); });
+        // 입력 칸이 쓰지 않은 키(↑↓·Page·Enter·Esc)가 조상 전파로 이 콤보에 온다 (key-propagation-design.md).
+        set_key_handler([this](const key_pressed_event& event) { return on_key(event); });
+        keys_connected_ = true;
     }
 
     bool combo_box_element::ancestor_keys_connected() const noexcept
@@ -69,7 +60,11 @@ namespace luil {
 
     std::optional<input_action> combo_box_element::suggestion_request(const std::uint64_t token) const
     {
-        return config_.request_suggestions ? std::optional<input_action> { config_.request_suggestions(token, std::u8string { value_.displayed_text() }) } : std::nullopt;
+        if (config_.request_suggestions == nullptr)
+            return std::nullopt;
+        // token의 질의는 begin_combo_query가 상태에 남긴 글이다. 칸의 글은 앞 frame의 것일 수 있다.
+        const bool known { token != 0 && token == config_.suggestions.token };
+        return config_.request_suggestions(token, known ? config_.suggestions.query : std::u8string { value_.displayed_text() });
     }
 
     std::optional<std::vector<input_action>> combo_box_element::on_key(const key_pressed_event& event) const
@@ -84,9 +79,8 @@ namespace luil {
                 return config_.restore({ id() });
             return std::nullopt;
         }
-        const bool navigation { event.key == key_code::arrow_down || event.key == key_code::arrow_up
-            || event.key == key_code::page_down || event.key == key_code::page_up || event.key == key_code::home || event.key == key_code::end
-        };
+        // Home·End는 글 칸의 caret 몫이다 (편집형 콤보의 관례). 열린 후보는 ↑↓·Page로만 옮긴다.
+        const bool navigation { event.key == key_code::arrow_down || event.key == key_code::arrow_up || event.key == key_code::page_down || event.key == key_code::page_up };
         const auto* const items { &visible_items_ };
         if (navigation)
         {
@@ -96,15 +90,9 @@ namespace luil {
                 return std::vector<input_action> {};
             const auto current { std::find_if(items->begin(), items->end(), [this](const auto& item) { return item.key == config_.highlighted; }) };
             int index { current == items->end() ? -1 : static_cast<int>(current - items->begin()) };
-            bool forward { event.key == key_code::arrow_down || event.key == key_code::page_down || event.key == key_code::end };
+            const bool forward { event.key == key_code::arrow_down || event.key == key_code::page_down };
             const int page { std::max(1, static_cast<int>(config_.popup_height / 24.0f)) };
-            int count { event.key == key_code::page_down || event.key == key_code::page_up ? page : 1 };
-            if (event.key == key_code::home || event.key == key_code::end)
-            {
-                forward = event.key == key_code::home;
-                index = forward ? -1 : static_cast<int>(items->size());
-                count = 1;
-            }
+            const int count { event.key == key_code::page_down || event.key == key_code::page_up ? page : 1 };
             if (index == -1 && forward == false)
                 index = static_cast<int>(items->size());
             int enabled_index { index >= 0 && index < static_cast<int>(items->size()) && (*items)[static_cast<std::size_t>(index)].enabled ? index : -1 };
@@ -145,6 +133,9 @@ namespace luil {
                 for (const auto& item : *items)
                     if (item.enabled && item.label == query && config_.select)
                         return std::vector<input_action> { config_.select(item.key) };
+            // 받는 중의 후보는 앞 질의의 것이라 맞는 후보가 아직 없을 수 있다. 틀렸다고 단정하지 않고 Enter만 삼킨다.
+            if (config_.suggestions.loading)
+                return std::vector<input_action> {};
             return config_.invalid ? std::vector<input_action> { config_.invalid(query) } : std::vector<input_action> {};
         }
         return config_.commit ? std::optional<std::vector<input_action>> { std::vector<input_action> { config_.commit(query) } } : std::nullopt;

@@ -1256,7 +1256,22 @@ namespace luil::android {
                 if (host_ == nullptr)
                     return;
                 const auto frame { host_->acquire_frame() };
-                if (frame == nullptr || frame->file_dialog.has_value() == false || file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
+                if (frame == nullptr)
+                    return;
+                if (frame->file_dialog.has_value() == false)
+                {
+                    file_dialog_gate_.idle();
+                    return;
+                }
+                // id 없는 요청은 Win32와 같이 실패로 답한다 (file_dialog_gate.h).
+                if (const std::optional<file_dialog_result> rejected { file_dialog_gate_.rejection(*frame->file_dialog) }; rejected.has_value())
+                {
+                    if (environment_.delegate != nullptr)
+                        if (auto message { environment_.delegate->make_file_dialog_message(*rejected) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
+                    return;
+                }
+                if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
                     return;
                 const file_dialog_result result { frame->file_dialog->id, file_dialog_status::unsupported };
                 file_dialog_gate_.finish();

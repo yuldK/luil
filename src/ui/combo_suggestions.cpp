@@ -9,7 +9,7 @@ namespace luil {
         if (state.token == 0)
             ++state.token;
         state.query = std::move(query);
-        state.items.reset();
+        // 앞 후보는 새 답이 올 때까지 둔다. 비우면 받는 동안 강조·↑↓·Enter의 정확한 후보 선택이 끊긴다.
         state.loading = true;
         return state.token;
     }
