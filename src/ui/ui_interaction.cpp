@@ -233,6 +233,7 @@ namespace luil {
         // 되살리기를 그 넷에 각각 심으면 언젠가 하나를 빠뜨리므로, 옮겨진 사실을
         // **여기 한 곳에서** 전후 비교로 센다 (focus-reveal-design.md).
         const ui_element_id focused_before { snapshot_.focused };
+        const std::u8string focused_surface_before { snapshot_.focused_surface };
         std::vector<input_action> actions {};
         actions = std::visit(
             [this](const auto& value) -> std::vector<input_action> {
@@ -397,6 +398,16 @@ namespace luil {
                     return {};
             },
             event);
+
+        // 가지를 떠난 초점도 되살리기와 같은 전후 비교 한 곳에서 센다 (`ui_element::focus_leave_action`).
+        // Tab·묶음·글자 탐색·누름·보조 기술이 초점을 옮기는 자리마다 심으면 언젠가 하나를 빠뜨린다.
+        //  - 창의 비활성화가 거둔 초점은 떠남이 아니다. Alt+Tab으로 잠깐 다른 창을 본 것으로 후보 popup이 닫히면 안 된다.
+        //  - 맨 앞의 `update_focus`가 거둔·세운 초점은 이 비교 앞이라 세지 않는다. tree 교체와 창 활성화가 계기인
+        //    변화이지 사람이 옮긴 초점이 아니다.
+        //  - tree는 `process` 안에서 바뀌지 않으므로 옛 초점의 조상은 지금의 표면 tree에서 찾으면 그것이 옮긴 순간의 tree다.
+        if (std::holds_alternative<surface_focus_lost_event>(event) == false)
+            for (input_action& action : focus_leave_actions(focused_before, focused_surface_before))
+                actions.push_back(std::move(action));
 
         // **키보드로** 옮겨진 초점만 되살린다. 누른 자리는 이미 보인다 —
         // 마우스와 키보드를 가르는 값이 `focus_visible`로 이미 서 있어
@@ -2152,8 +2163,15 @@ namespace luil {
         clear_press();
         // 탭처럼 초점부터 옮긴다 (텍스트 칸이면 그 칸이 메뉴의 대상이다). 손잡이는
         // 누를 때 이미 옮겼다.
+        //  - 시계가 옮긴 초점이라 `process`의 전후 비교를 지나지 않는다. 가지 떠남은 여기서 따로 센다.
         if (contact.phase == touch_phase::pending)
+        {
+            const ui_element_id focused_before { snapshot_.focused };
+            const std::u8string focused_surface_before { snapshot_.focused_surface };
             apply_press_focus(*tree, target, contact.surface, now);
+            for (input_action& action : focus_leave_actions(focused_before, focused_surface_before))
+                actions.push_back(std::move(action));
+        }
         // 우클릭이 된 접촉은 연속 탭의 기록에서도 빠진다.
         last_click_id_ = {};
         last_click_surface_.clear();
@@ -3996,6 +4014,40 @@ namespace luil {
         snapshot_.focused_surface.clear();
         snapshot_.focus_started_at.reset();
         snapshot_.focus_visible = false;
+    }
+
+    std::vector<input_action> interaction_controller::focus_leave_actions(const ui_element_id& before, const std::u8string& before_surface) const
+    {
+        if (before == ui_element_id {} || (before == snapshot_.focused && before_surface == snapshot_.focused_surface))
+            return {};
+        const ui_tree* const tree { surface_tree(before_surface) };
+        if (tree == nullptr)
+            return {};
+        // 다른 표면(popup·보조 창)으로 옮겨 간 초점은 떠남으로 치지 않는다. 창 비활성화와 같은 자리다 — 보조 기술이
+        // 콤보의 후보 popup 행으로 초점을 옮기면 그 popup을 연 콤보가 스스로 닫혀 후보를 고를 수 없게 된다.
+        // 컨트롤러는 popup과 그것을 연 element의 짝을 모르므로 표면이 바뀐 이동은 모두 남긴다.
+        if (snapshot_.focused != ui_element_id {} && snapshot_.focused_surface != before_surface)
+            return {};
+        // 새 초점이 같은 표면에 있을 때만 가지를 함께 쓸 수 있다. id는 표면마다 따로라, 다른 표면의 같은 id를
+        // 이 tree에서 찾으면 남의 element를 제 자손으로 읽는다.
+        //  - 품었는지는 id가 아니라 element로 가린다. 이름 없는 컨테이너(빈 owner)가 여럿이라 id로 찾으면 엉뚱한 것이 답한다.
+        const bool same_surface { snapshot_.focused != ui_element_id {} && snapshot_.focused_surface == before_surface };
+        const std::vector<const ui_element*> kept { same_surface ? tree->ancestry_of(snapshot_.focused) : std::vector<const ui_element*> {} };
+        std::vector<input_action> actions {};
+        // 조상 사슬은 자신부터 root까지라 안쪽이 먼저 실행된다. 새 초점을 품은 조상을 만나면 그 위도 모두 품으므로 멈춘다.
+        for (const ui_element* const element : tree->ancestry_of(before))
+        {
+            if (std::find(kept.begin(), kept.end(), element) != kept.end())
+                break;
+            const ui_action* const leave { element->focus_leave_action() };
+            if (leave == nullptr)
+                continue;
+            // 좌표는 그 element의 한가운데다 (포인터가 관여하지 않은 실행의 통상 규칙 — 가둠의 Esc와 같다).
+            const rect_f box { element->bounds() };
+            for (input_action& action : (*leave)(ui_action_context { element->id(), box.x + box.width / 2.0f, box.y + box.height / 2.0f }))
+                actions.push_back(std::move(action));
+        }
+        return actions;
     }
 
     void interaction_controller::clear_press() noexcept

@@ -18,6 +18,14 @@
 Home·End(Shift 포함)는 열려 있어도 글 칸의 caret을 옮긴다. 편집형 콤보의 관례다.
 조합 중 키는 IME에 맡긴다. 새 token을 요청한 동안에는 스피너를 표시한다.
 
+열린 콤보(`open`이 참이고 `set_open`이 있다)는 root에 `set_focus_leave_action`을 달아, 키보드 초점이 콤보의 가지를
+떠나면 `set_open(false)`를 보낸다. Tab·Shift+Tab·보조 기술의 초점 이동은 플랫폼의 popup 닫힘(`pointer_press_outside`)에
+오지 않아, 이전에는 후보 popup이 떠 있는 채 ↑↓·Enter가 새 칸으로 가고 행만 눌렸다. 초점은 입력 칸(`:input`)에 서지만
+훅은 root에 있어 칸에 선 초점이 떠나는 것을 받는다. 칸 안의 부품(펼침 단추)을 눌러도 초점은 칸에 남아 떠남이 아니다. 창의 비활성화(Alt+Tab)는 떠남이 아니라 popup이 남는다.
+주 창의 다른 자리를 누르면 플랫폼 닫힘과 이 훅이 함께 와 `set_open(false)`가 두 번 올 수 있다. 목표 상태를 나르는
+메시지라 거듭 와도 결과가 같다. 닫힌 콤보는 훅을 달지 않는다. 계약은 [keyboard-focus-design.md](keyboard-focus-design.md)의
+"초점이 가지를 떠날 때"에 있다.
+
 ## 조상 전파 연동
 
 조상 전파(C0, [key-propagation-design.md](key-propagation-design.md))는 main에 들어와 있다. 생성자가

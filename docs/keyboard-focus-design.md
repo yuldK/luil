@@ -56,6 +56,17 @@ Tab은 앞으로, Shift+Tab은 뒤로 이동하며 끝에서 반대쪽 끝으로
 
 포인터 press는 눌린 표면과 element를 기록하고 `focus_visible`을 끈다. 키보드 탐색과 접근성 focus 요청은 테를 켠다. 자동 진입은 테를 끄고 복귀는 켠다.
 
+## 초점이 가지를 떠날 때
+
+`ui_element::set_focus_leave_action`은 키보드 초점이 그 element나 자손에 있다가 가지 밖의 element로, 또는 초점 없음으로 옮겨 갈 때 한 번 실행된다. 초점을 따라 사는 표면(편집형 콤보의 후보 popup)을 닫는 자리다.
+
+- controller는 `process()`의 초점 전후 비교 한 곳에서 센다. 포커스 되살리기와 같은 자리라 Tab, group 이동, typeahead, 포인터 press(빈 곳 포함), 접근성 focus 요청이 모두 같은 규칙을 탄다. `process()` 밖에서 초점을 옮기는 것은 `advance()`의 터치 길게 누름뿐이라 거기서도 같은 함수로 센다.
+- 옛 초점의 조상을 안쪽부터 훑어, 새 초점을 품지 않은 조상의 액션을 차례로 실행한다. 가지 안의 이동은 떠남이 아니다. 초점 없음으로 옮겨 가면(빈 곳 press) 옛 조상은 모두 떠난 것이다.
+- 다른 표면(popup·보조 창)으로 옮겨 간 초점은 떠남이 아니다. 보조 기술이 콤보의 후보 popup 행으로 초점을 옮기면 그 popup을 연 콤보가 스스로 닫혀 고를 수 없게 된다. controller는 popup과 그것을 연 element의 짝을 모르므로 표면이 바뀐 이동은 모두 남긴다. 다른 표면을 누르는 것은 플랫폼의 popup 닫힘 계기가 맡는다.
+- 액션이 불릴 때 snapshot은 이미 새 초점이다. tree는 `process()` 안에서 바뀌지 않으므로 조상은 초점이 옮겨 간 순간의 tree에서 찾는다.
+- `surface_focus_lost_event`가 거둔 초점은 떠남이 아니다. 다른 창을 잠깐 보는 것은 하던 일을 그만두는 것이 아니다. 플랫폼도 이때 popup을 닫지 않는다.
+- `set_tree()`·`set_surface_trees()`와 `process()` 첫머리의 `update_focus()`가 바꾼 초점(제거·숨김·trap 이탈, 자동 진입·복귀)도 계기가 아니다. 그 tree를 지은 것이 앱이고, 옛 element는 이미 없으며, 그 자리에는 메시지를 돌려줄 길이 없다.
+
 ## 초점 테와 caret
 
 초점 테는 `ui_tree::draw()`가 element 계층을 모두 그린 뒤 overlay로 그린다. Drag 표시와 tooltip은 그 뒤에 올라온다. 대상은 `focused_surface`가 현재 그리는 표면과 같고 `focus_visible`이 참일 때만 선택된다.
@@ -110,6 +121,7 @@ Group은 여러 항목을 Tab의 한 자리로 접고 내부 탐색을 방향키
 - 포인터 초점은 테를 끄고 keyboard 탐색은 켠다.
 - Caret과 초점 테의 표시 조건은 독립적이다.
 - 표면마다 snapshot을 필터한 뒤 그린다.
+- 가지 떠남 액션은 사람의 입력이 옮긴 초점에만, 떠난 가지마다 한 번 실행한다.
 
 ## 검증 지침
 

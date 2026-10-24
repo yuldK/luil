@@ -991,6 +991,20 @@ namespace luil {
         //    규칙이라 저장 중 진행 표시처럼 닫히면 안 되는 dialog가
         //    따로 플래그 없이 표현된다 (modal-dialog-design.md).
         [[nodiscard]] const ui_action* dismiss_action() const noexcept;
+        // 키보드 초점이 이 element의 가지를 떠날 때 실행할 액션이다 (없으면 nullptr).
+        // 초점이 자신이나 자손에 있다가 그 밖의 element로, 또는 아무 데도 아닌 곳으로 옮겨 간 순간이다.
+        //  - **떠날 때마다 한 번이다.** 가지 안에서 옮겨 다니는 것(입력 칸에서 그 옆 부품으로)은 떠난 것이 아니다.
+        //    겹친 가지가 함께 떠나면 안쪽부터 차례로 실행된다.
+        //  - 액션이 불릴 때 controller의 snapshot은 이미 새 초점이다. 옛 초점의 조상은 초점이 옮겨 간 그 순간의
+        //    tree에서 찾는다.
+        //  - **창의 비활성화는 떠남이 아니다** (`surface_focus_lost_event`). Alt+Tab으로 다른 창을 잠깐 보는 것은 "이
+        //    검색을 그만두자"가 아니라서, 그것으로 후보 popup이 닫히면 치던 흐름이 끊긴다 (demo의 `search_popup_stays`가
+        //    같은 판단이다). 돌아오면 초점도 popup도 그대로여야 한다. 창 활성화가 다시 세운 초점(가둠 진입)도 계기가 아니다.
+        //  - **tree 교체가 거둔 초점도 계기가 아니다** (`set_tree`·`set_surface_trees`). 그 element를 뺀 tree를 지은 것이
+        //    앱이라 이미 알고, 옛 tree는 그때 이미 없으며 그 자리에는 메시지를 돌려줄 길도 없다.
+        //  - 계기는 사람의 입력이 옮긴 초점이다 — Tab·Shift+Tab, 묶음의 화살표·글자 탐색, 포인터 누름(빈 곳 포함),
+        //    보조 기술의 초점 요청(`access_focus_event`).
+        [[nodiscard]] const ui_action* focus_leave_action() const noexcept;
         // 참이면 이 화면의 **기본 자리**다 — 초점이 받지 못한 Enter가 여기로 온다.
         // 실행되는 것은 이 element의 `left_click`이다.
         //  - **표식이 액션이 아니라 bool인 이유**: 실행할 것이 이미 있다. 액션을
@@ -1096,6 +1110,10 @@ namespace luil {
         // 가둠이 떠 있는 동안의 Esc를 이 액션으로 받는다.
         // 무엇을 닫을지는 앱이 정한다 — element는 메시지만 만든다.
         void set_dismiss_action(ui_action action);
+        // 키보드 초점이 이 가지를 떠날 때의 액션이다 (`focus_leave_action`).
+        // 초점을 따라 사는 표면(편집형 콤보의 후보 popup)을 닫는 자리다 — 밖 누름은 플랫폼의 popup 닫힘이 이미 받지만
+        // Tab·보조 기술로 옮긴 초점은 거기 오지 않는다.
+        void set_focus_leave_action(ui_action action);
         // 초점이 받지 못한 Enter를 이 자리로 데려온다 (기본 버튼).
         // 강조색 채움으로 그것을 알리는 것은 그리는 쪽의 몫이다 —
         // `text_button_config`가 한 값으로 둘을 함께 낸다.
@@ -1263,6 +1281,7 @@ namespace luil {
         bool focus_trap_ { false };
         ui_element_id focus_return_ {};
         ui_action dismiss_action_ {};
+        ui_action focus_leave_action_ {};
         bool default_button_ { false };
         ui_cursor cursor_ { ui_cursor::inherit };
         ui_cursor active_cursor_ { ui_cursor::inherit };

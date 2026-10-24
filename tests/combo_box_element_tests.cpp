@@ -1,6 +1,103 @@
 #include "luil/ui/combo_box_element.h"
+#include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_tree.h"
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <memory>
+#include <utility>
+#include <vector>
+
+namespace {
+    // 콤보와 그 뒤의 자리를 담는 뿌리이자, 누를 수 있는 자리(Tab의 자리)다. 배치는 시험이 직접 한다.
+    class focus_box final : public luil::ui_element
+    {
+    public:
+        using ui_element::ui_element;
+
+        void add(std::unique_ptr<ui_element> child)
+        {
+            add_child(std::move(child));
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {}
+    };
+
+    [[nodiscard]] std::unique_ptr<focus_box> make_stop(std::u8string owner, const float y)
+    {
+        auto stop { std::make_unique<focus_box>(luil::ui_element_id { luil::application_element_kind(1), std::move(owner) }) };
+        stop->arrange({ { 0.0f, y, 200.0f, 24.0f }, 1.0f });
+        stop->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; });
+        return stop;
+    }
+
+    // 열림을 닫는 메시지(`set_open(false)`)의 수다.
+    [[nodiscard]] int close_count(const std::vector<luil::input_action>& actions)
+    {
+        int count { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr && message->get<bool>() != nullptr && *message->get<bool>() == false)
+                ++count;
+        return count;
+    }
+
+    // 콤보 하나와, 있으면 그 아래 자리 하나를 담은 tree다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> combo_tree(const bool open, const bool with_next)
+    {
+        luil::combo_box_config config {};
+        config.open = open;
+        config.set_open = [](const bool value) { return luil::input_action { luil::app_message { value } }; };
+        auto root { std::make_unique<focus_box>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        auto combo { std::make_unique<luil::combo_box_element>(luil::ui_element_id { luil::application_element_kind(0), u8"repo" }, luil::text_input_view {}, config) };
+        combo->arrange({ { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f });
+        root->add(std::move(combo));
+        if (with_next)
+            root->add(make_stop(u8"next", 40.0f));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    }
+} // namespace
+
+TEST_CASE("Focus leaving an open combo closes its suggestions once", "[ui][combo][focus]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(combo_tree(true, true));
+    // 첫 Tab은 콤보의 입력 칸에 선다. 들어오는 것은 떠남이 아니다.
+    REQUIRE(close_count(controller.process(luil::key_pressed_event { luil::key_code::tab })) == 0);
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::application_element_kind(0), u8"repo:input" });
+    // 입력 칸에서 다음 자리로 나가면 콤보 root의 훅이 한 번 닫는다.
+    REQUIRE(close_count(controller.process(luil::key_pressed_event { luil::key_code::tab })) == 1);
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::application_element_kind(1), u8"next" });
+
+    // 창의 비활성화가 거둔 초점은 떠남이 아니다 — Alt+Tab으로 후보가 닫히지 않는다.
+    controller.set_tree(combo_tree(true, true));
+    static_cast<void>(controller.process(luil::access_focus_event { luil::ui_element_id { luil::application_element_kind(0), u8"repo:input" } }));
+    REQUIRE(close_count(controller.process(luil::surface_focus_lost_event {})) == 0);
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id {});
+}
+
+TEST_CASE("Focus that stays in the combo or a closed combo closes nothing", "[ui][combo][focus]")
+{
+    // 자리가 입력 칸 하나뿐이면 Tab은 제자리로 돈다. 가지 안에 남은 초점은 떠난 것이 아니다.
+    luil::interaction_controller alone {};
+    alone.set_tree(combo_tree(true, false));
+    REQUIRE(close_count(alone.process(luil::key_pressed_event { luil::key_code::tab })) == 0);
+    REQUIRE(close_count(alone.process(luil::key_pressed_event { luil::key_code::tab })) == 0);
+    REQUIRE(alone.snapshot().focused == luil::ui_element_id { luil::application_element_kind(0), u8"repo:input" });
+
+    // 닫힌 콤보는 훅을 달지 않는다.
+    luil::interaction_controller closed {};
+    closed.set_tree(combo_tree(false, true));
+    REQUIRE(close_count(closed.process(luil::key_pressed_event { luil::key_code::tab })) == 0);
+    REQUIRE(close_count(closed.process(luil::key_pressed_event { luil::key_code::tab })) == 0);
+    REQUIRE(closed.snapshot().focused == luil::ui_element_id { luil::application_element_kind(1), u8"next" });
+}
 
 TEST_CASE("Combo navigation and Escape use the candidate and editing state", "[ui][combo]")
 {
