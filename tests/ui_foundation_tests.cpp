@@ -129,7 +129,108 @@ namespace {
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
         {}
     };
+
+    // 자식을 담는 칸이다. 누를 수 있게 하면 Tab의 자리가 된다.
+    class focus_cell final : public luil::ui_element
+    {
+    public:
+        using ui_element::ui_element;
+
+        void add(std::unique_ptr<ui_element> child)
+        {
+            add_child(std::move(child));
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {}
+    };
+
+    [[nodiscard]] std::unique_ptr<focus_cell> make_focus_cell(std::u8string owner, const luil::rect_f& slot, const bool stop)
+    {
+        auto cell { std::make_unique<focus_cell>(luil::ui_element_id { luil::application_element_kind(2), std::move(owner) }) };
+        cell->arrange({ slot, 1.0f });
+        if (stop)
+            cell->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; });
+        return cell;
+    }
 } // namespace
+
+TEST_CASE("A focus leave action runs once when focus leaves its subtree", "[ui][interaction][focus]")
+{
+    std::vector<std::u8string> left {};
+    const auto record = [&left](const luil::ui_action_context& context) {
+        left.push_back(context.element.owner);
+        return std::vector<luil::input_action> {};
+    };
+    // outer ⊃ inner ⊃ {a, b}, outer ⊃ c, 그리고 바깥의 d다. 훅은 outer와 inner에 있다.
+    auto root { std::make_unique<focus_cell>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 300.0f, 300.0f }, 1.0f });
+    auto outer { make_focus_cell(u8"outer", { 0.0f, 0.0f, 300.0f, 150.0f }, false) };
+    outer->set_focus_leave_action(record);
+    auto inner { make_focus_cell(u8"inner", { 0.0f, 0.0f, 300.0f, 80.0f }, false) };
+    inner->set_focus_leave_action(record);
+    inner->add(make_focus_cell(u8"a", { 0.0f, 0.0f, 100.0f, 30.0f }, true));
+    inner->add(make_focus_cell(u8"b", { 0.0f, 40.0f, 100.0f, 30.0f }, true));
+    outer->add(std::move(inner));
+    outer->add(make_focus_cell(u8"c", { 0.0f, 100.0f, 100.0f, 30.0f }, true));
+    root->add(std::move(outer));
+    root->add(make_focus_cell(u8"d", { 0.0f, 200.0f, 100.0f, 30.0f }, true));
+
+    luil::interaction_controller controller {};
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    const luil::key_pressed_event tab { luil::key_code::tab };
+    // 들어오는 것과 가지 안에서 옮기는 것은 떠남이 아니다.
+    static_cast<void>(controller.process(tab));
+    static_cast<void>(controller.process(tab));
+    REQUIRE(controller.snapshot().focused.owner == u8"b");
+    REQUIRE(left.empty());
+    // inner만 떠나고 outer에는 남는다.
+    static_cast<void>(controller.process(tab));
+    REQUIRE(left == std::vector<std::u8string> { u8"inner" });
+    // c에서 d로 나가면 outer가 떠난다. inner는 이미 떠났으므로 다시 오지 않는다.
+    static_cast<void>(controller.process(tab));
+    REQUIRE(left == std::vector<std::u8string> { u8"inner", u8"outer" });
+
+    // 겹친 가지를 한꺼번에 떠나면 안쪽부터다 (a에서 Shift+Tab으로 d까지 돈다).
+    left.clear();
+    static_cast<void>(controller.process(tab));
+    REQUIRE(controller.snapshot().focused.owner == u8"a");
+    luil::key_pressed_event back { luil::key_code::tab };
+    back.shift = true;
+    static_cast<void>(controller.process(back));
+    REQUIRE(controller.snapshot().focused.owner == u8"d");
+    REQUIRE(left == std::vector<std::u8string> { u8"inner", u8"outer" });
+
+    // 빈 곳을 눌러 초점이 사라진 것도 떠남이다.
+    left.clear();
+    static_cast<void>(controller.process(luil::access_focus_event { luil::ui_element_id { luil::application_element_kind(2), u8"b" } }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 250.0f, 280.0f, luil::pointer_button::left }));
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id {});
+    REQUIRE(left == std::vector<std::u8string> { u8"inner", u8"outer" });
+
+    // 창의 비활성화는 떠남이 아니다.
+    left.clear();
+    static_cast<void>(controller.process(luil::access_focus_event { luil::ui_element_id { luil::application_element_kind(2), u8"a" } }));
+    static_cast<void>(controller.process(luil::surface_focus_lost_event {}));
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id {});
+    REQUIRE(left.empty());
+
+    // 다른 표면(후보 popup)으로 옮겨 간 초점도 떠남이 아니다. 보조 기술이 후보 행에 서도 콤보가 닫히지 않는다.
+    auto popup_root { std::make_unique<focus_cell>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    popup_root->arrange({ { 0.0f, 0.0f, 100.0f, 60.0f }, 1.0f });
+    popup_root->add(make_focus_cell(u8"row", { 0.0f, 0.0f, 100.0f, 24.0f }, true));
+    controller.set_surface_trees({ { u8"suggestions", std::make_shared<const luil::ui_tree>(std::move(popup_root)) } });
+    static_cast<void>(controller.process(luil::access_focus_event { luil::ui_element_id { luil::application_element_kind(2), u8"a" } }));
+    static_cast<void>(controller.process(luil::access_focus_event { luil::ui_element_id { luil::application_element_kind(2), u8"row" }, u8"suggestions" }));
+    REQUIRE(controller.snapshot().focused.owner == u8"row");
+    REQUIRE(controller.snapshot().focused_surface == u8"suggestions");
+    REQUIRE(left.empty());
+}
 
 TEST_CASE("Home and End stay with a text box that hands navigation keys to its parent", "[ui][interaction][keys]")
 {

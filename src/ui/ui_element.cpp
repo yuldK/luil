@@ -389,6 +389,11 @@ namespace luil {
         return dismiss_action_ ? &dismiss_action_ : nullptr;
     }
 
+    const ui_action* ui_element::focus_leave_action() const noexcept
+    {
+        return focus_leave_action_ ? &focus_leave_action_ : nullptr;
+    }
+
     bool ui_element::default_button() const noexcept
     {
         return default_button_;
@@ -457,6 +462,11 @@ namespace luil {
     void ui_element::set_dismiss_action(ui_action action)
     {
         dismiss_action_ = std::move(action);
+    }
+
+    void ui_element::set_focus_leave_action(ui_action action)
+    {
+        focus_leave_action_ = std::move(action);
     }
 
     void ui_element::set_clip_children(const bool value) noexcept

@@ -840,6 +840,10 @@ namespace luil {
         [[nodiscard]] bool move_focus(bool forward, const std::u8string& key_surface, std::chrono::steady_clock::time_point time);
         void clear_focus() noexcept;
         void update_focus();
+        // 옛 초점(`before`, `before_surface`)이 떠난 가지들의 `focus_leave_action`이다 (안쪽부터).
+        // 지금 초점이 그대로면 비어 있다. `process`의 전후 비교와, 그 밖에서 초점을 옮기는 유일한 자리인 터치 길게
+        // 누름(`advance`)에서만 부른다.
+        [[nodiscard]] std::vector<input_action> focus_leave_actions(const ui_element_id& before, const std::u8string& before_surface) const;
 
         interaction_policy* policy_ { nullptr };
         interaction_config config_ {};

@@ -51,6 +51,12 @@ namespace luil {
         // 입력 칸이 쓰지 않은 키(↑↓·Page·Enter·Esc)가 조상 전파로 이 콤보에 온다 (key-propagation-design.md).
         set_key_handler([this](const key_pressed_event& event) { return on_key(event); });
         keys_connected_ = true;
+        // 초점이 콤보를 떠나면 열린 후보를 닫는다 (Tab·Shift+Tab·보조 기술의 초점 이동). 남겨 두면 행은 여전히 눌리는데
+        // ↑↓·Enter는 새 칸으로 가 popup이 키를 받지 않는 채 떠 있다. 밖 누름은 플랫폼의 popup 닫힘도 받으므로 그때는
+        // `set_open(false)`가 두 번 올 수 있다 — 목표 상태를 나르는 메시지라 거듭 와도 같다.
+        //  - 창의 비활성화는 떠남이 아니라 Alt+Tab으로는 닫히지 않는다 (`ui_element::focus_leave_action`).
+        if (config_.open && config_.set_open)
+            set_focus_leave_action([close = config_.set_open](const ui_action_context&) { return std::vector<input_action> { close(false) }; });
     }
 
     bool combo_box_element::ancestor_keys_connected() const noexcept
