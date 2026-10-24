@@ -1,6 +1,9 @@
 #include "demo/workbench_page.h"
 
+#include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
+#include "luil/text/grapheme.h"
+#include "luil/text/utf8_text.h"
 #include "luil/ui/badge_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -9,11 +12,16 @@
 #include "luil/ui/layer_element.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/panel_element.h"
+#include "luil/ui/spinner_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/ui/virtual_list_element.h"
 
 #include <algorithm>
+#include <array>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -22,7 +30,26 @@ namespace demo {
     namespace {
         // 흉내 낸 서버가 폴더 목록을 돌려주기까지의 시간이다.
         constexpr std::chrono::milliseconds load_delay { 700 };
+        // 흉내 낸 서버가 작성자 후보를 돌려주기까지의 시간이다. 치는 동안 스피너가 보일 만큼 둔다.
+        constexpr std::chrono::milliseconds author_delay { 250 };
         constexpr float workbench_menu_width { 180.0f };
+        constexpr float author_popup_height { 168.0f };
+        // 보기에 띄울 패치 파일의 상한이다. 넘으면 읽지 않고 이유를 적는다.
+        constexpr std::uintmax_t patch_size_limit { 1024u * 1024u };
+        // 찾은 곳을 이만큼만 칠한다. 한 글자로 큰 패치를 찾아도 frame이 무거워지지 않는다.
+        constexpr std::size_t match_limit { 1000 };
+
+        constexpr std::array<std::u8string_view, 6> author_catalog {
+            u8"luil 예제 <demo@luil.dev>",
+            u8"김하늘 <sky@luil.dev>",
+            u8"박도윤 <doyun@luil.dev>",
+            u8"이서준 <seojun@luil.dev>",
+            u8"Alex Kim <alex@luil.dev>",
+            u8"Jamie Park <jamie@luil.dev>",
+        };
+
+        // 행 메뉴의 하위 메뉴가 붙는 항목이다.
+        constexpr std::u8string_view sort_submenu { u8"sort" };
 
         [[nodiscard]] luil::ui_element_id workbench_id(std::u8string owner)
         {
@@ -88,6 +115,120 @@ namespace demo {
         {
             return to_u8(size) + u8" B";
         }
+
+        // 흉내 낸 저장소가 변경 하나에 돌려줄 차이다. 수정 차이에는 가로로 흘려야 보이는 긴 줄과 여러 hunk를 둔다.
+        [[nodiscard]] std::u8string diff_for(const std::u8string_view path, const std::u8string_view status)
+        {
+            const std::u8string name { path };
+            std::u8string text { u8"diff --git a/" + name + u8" b/" + name + u8"\n" };
+            if (status == u8"추가됨")
+            {
+                text += u8"--- /dev/null\n+++ b/" + name + u8"\n@@ -0,0 +1,7 @@\n";
+                text += u8"+// " + name + u8"\n+#include \"luil/ui/table_element.h\"\n+\n+namespace demo {\n";
+                text += u8"+    // 새 파일이다. 모든 줄이 더한 줄로 칠해진다.\n+    void run_case();\n+} // namespace demo\n";
+                return text;
+            }
+            if (status == u8"지워짐")
+            {
+                text += u8"--- a/" + name + u8"\n+++ /dev/null\n@@ -1,5 +0,0 @@\n";
+                text += u8"-#include \"demo/app.h\"\n-\n-int main()\n-{\n-    return demo::run();\n-}\n";
+                return text;
+            }
+            text += u8"--- a/" + name + u8"\n+++ b/" + name + u8"\n";
+            text += u8"@@ -12,9 +12,10 @@ namespace luil {\n";
+            text += u8"     struct column_layout\n     {\n";
+            text += u8"-        float width { 80.0f };\n";
+            text += u8"+        float width { 120.0f };\n";
+            text += u8"+        float min_width { 48.0f };\n";
+            text += u8"         bool visible { true };\n     };\n \n";
+            text += u8"@@ -40,7 +41,7 @@ namespace luil {\n";
+            text += u8"     void layout_columns(std::span<column_layout> columns, const float available)\n     {\n";
+            text += u8"-        const float total { sum_widths(columns) };\n";
+            text += u8"+        const float total { std::max(sum_widths(columns), 1.0f) }; // 열이 모두 0 폭이어도 나눗셈이 무한대가 되지 않는다 — 이 줄은 일부러 길어서 가로로 흘려야 끝이 보인다.\n";
+            text += u8"         for (column_layout& column : columns)\n";
+            text += u8"             column.width *= available / total;\n     }\n";
+            text += u8"@@ -88,6 +89,6 @@ namespace luil {\n";
+            text += u8"     // 한글·이모지 👩‍💻 · 결합 문자 é 도 글자소 단위로 고르고 지운다.\n";
+            text += u8"-    constexpr int header_height { 22 };\n";
+            text += u8"+    constexpr int header_height { 24 };\n";
+            text += u8"     constexpr int row_height { 24 };\n";
+            return text;
+        }
+
+        struct diff_decorations
+        {
+            std::vector<luil::text_span> spans {};
+            std::vector<luil::line_decoration> lines {};
+        };
+
+        // 통합 diff의 줄 머리로 구간 색과 줄 장식을 정한다. 불러온 패치에도 같은 규칙을 쓴다.
+        //  - 구간은 줄 하나를 덮는다. 줄 경계는 늘 글자소 경계라 문서 칸의 계약을 지킨다 (text_document.h).
+        [[nodiscard]] diff_decorations decorate_diff(const std::u8string_view text)
+        {
+            diff_decorations result {};
+            std::size_t begin { 0 };
+            for (std::size_t line { 0 }; begin <= text.size(); ++line)
+            {
+                const std::size_t newline { text.find(u8'\n', begin) };
+                std::size_t end { newline == std::u8string_view::npos ? text.size() : newline };
+                if (end > begin && text[end - 1] == u8'\r')
+                    --end;
+                const std::u8string_view row { text.substr(begin, end - begin) };
+                if (row.starts_with(u8"@@"))
+                    result.spans.push_back({ .begin = begin, .end = end, .color = luil::text_color_role::accent, .bold = true });
+                else if (row.starts_with(u8"diff ") || row.starts_with(u8"--- ") || row.starts_with(u8"+++ ") || row.starts_with(u8"index "))
+                    result.spans.push_back({ .begin = begin, .end = end, .color = luil::text_color_role::secondary, .bold = true });
+                else if (row.starts_with(u8'+'))
+                    result.lines.push_back({ .line = line, .background = luil::line_background_role::added, .marker = U'+' });
+                else if (row.starts_with(u8'-'))
+                    result.lines.push_back({ .line = line, .background = luil::line_background_role::removed, .marker = U'-' });
+                if (newline == std::u8string_view::npos)
+                    break;
+                begin = newline + 1;
+            }
+            // 빈 줄의 구간은 두지 않는다 (비어 있지 않은 구간만 받는다).
+            std::erase_if(result.spans, [](const luil::text_span& span) { return span.begin == span.end; });
+            return result;
+        }
+
+        // 패치 파일을 읽는다. 깨진 UTF-8은 대체 글자로 바꿔 그린다 — 밖에서 온 글은 언제든 깨질 수 있다 (utf8_text.h).
+        [[nodiscard]] bool read_patch(const std::u8string& path, std::u8string& text, std::u8string& error)
+        {
+            const std::filesystem::path file { path };
+            std::error_code code {};
+            const std::uintmax_t size { std::filesystem::file_size(file, code) };
+            if (code)
+            {
+                error = u8"파일 크기를 읽지 못했다";
+                return false;
+            }
+            if (size > patch_size_limit)
+            {
+                error = u8"1MiB가 넘는 패치는 띄우지 않는다";
+                return false;
+            }
+            std::ifstream stream { file, std::ios::binary };
+            if (stream.is_open() == false)
+            {
+                error = u8"파일을 열지 못했다";
+                return false;
+            }
+            const std::string bytes { std::istreambuf_iterator<char> { stream }, std::istreambuf_iterator<char> {} };
+            const std::u8string_view raw { reinterpret_cast<const char8_t*>(bytes.data()), bytes.size() };
+            text = luil::text::utf8_is_valid(raw) ? std::u8string { raw } : luil::text::utf8_replace_invalid(raw);
+            return true;
+        }
+
+        [[nodiscard]] std::size_t line_of(const std::u8string_view text, const std::size_t offset)
+        {
+            return static_cast<std::size_t>(std::count(text.begin(), text.begin() + static_cast<std::ptrdiff_t>(std::min(offset, text.size())), u8'\n'));
+        }
+
+        [[nodiscard]] std::u8string file_name(const std::u8string_view path)
+        {
+            const std::size_t slash { path.find_last_of(u8"/\\") };
+            return std::u8string { slash == std::u8string_view::npos ? path : path.substr(slash + 1) };
+        }
     } // namespace
 
     workbench_page::workbench_page()
@@ -129,6 +270,8 @@ namespace demo {
         };
         const std::vector<luil::virtual_list_item> items { change_items() };
         selection_ = luil::selection_reconcile(selection_, {}, items);
+        set_author(std::u8string { author_catalog.front() });
+        refresh_diff();
     }
 
     luil::tree_node* workbench_page::find_node(const std::u8string& key)
@@ -155,6 +298,8 @@ namespace demo {
         for (const pending_load& load : pending_)
             if (next.has_value() == false || load.due < *next)
                 next = load.due;
+        if (author_pending_.has_value() && (next.has_value() == false || author_pending_->due < *next))
+            next = author_pending_->due;
         return next;
     }
 
@@ -183,6 +328,130 @@ namespace demo {
             node->load = luil::node_load::loaded;
         }
         pending_ = std::move(waiting);
+
+        if (author_pending_.has_value() && author_pending_->due <= now)
+        {
+            // 서버는 부분 일치로 거른다. 받는 동안 콤보가 앞 후보를 보이는 글로 거르므로 둘이 같은 규칙이어야 한다 (combo-box-design.md).
+            //  - 칸의 글이 확정한 작성자 그대로면 펼치기다. 그 하나만 돌려주면 고를 것이 없으므로 전부를 돌려준다.
+            const bool browse { author_pending_->query == author_committed_ };
+            auto items { std::make_shared<std::vector<luil::combo_suggestion>>() };
+            for (const std::u8string_view author : author_catalog)
+                if (browse || author.find(author_pending_->query) != std::u8string_view::npos)
+                    items->push_back({ std::u8string { author }, std::u8string { author } });
+            // 더 새 물음이 이미 나갔으면 이 답은 버려진다 (token이 다르다).
+            if (luil::accept_combo_suggestions(author_suggestions_, author_pending_->token, std::move(items))
+                && std::none_of(author_suggestions_.items->begin(), author_suggestions_.items->end(), [this](const luil::combo_suggestion& item) { return item.key == author_highlight_; }))
+            {
+                author_highlight_.clear();
+                author_scroll_ = 0.0f;
+            }
+            author_pending_.reset();
+        }
+    }
+
+    luil::file_dialog_request workbench_page::patch_dialog_request(const std::uint64_t id)
+    {
+        luil::file_dialog_request request {};
+        request.id = id;
+        request.title = u8"패치 불러오기";
+        request.filters.push_back({ u8"패치 파일", { u8"patch", u8"diff" } });
+        request.filters.push_back({ u8"모든 파일", { u8"*" } });
+        return request;
+    }
+
+    void workbench_page::refresh_diff()
+    {
+        std::u8string source {};
+        std::u8string text {};
+        if (patch_path_.empty() == false)
+        {
+            source = u8"patch:" + patch_path_;
+            text = patch_text_;
+        }
+        else if (const auto found { find_change(selection_.cursor) }; found != changes_.end())
+        {
+            source = found->path;
+            text = diff_for(found->path, found->status);
+        }
+        if (source == diff_source_)
+            return;
+        diff_source_ = std::move(source);
+        diff_ = {};
+        diff_.text = std::move(text);
+        diff_decorations decorations { decorate_diff(diff_.text) };
+        diff_spans_ = std::make_shared<const std::vector<luil::text_span>>(std::move(decorations.spans));
+        diff_lines_ = std::make_shared<const std::vector<luil::line_decoration>>(std::move(decorations.lines));
+        // 다른 문서다. 앞 문서의 접은 자리와 스크롤을 들고 가지 않는다.
+        diff_wrap_ = std::make_shared<luil::text_area_wrap_cache>();
+        diff_scroll_ = 0.0f;
+        diff_scroll_x_ = 0.0f;
+        // 찾는 글은 그대로 두고 새 문서에서 다시 찾는다.
+        matches_stale_ = true;
+        static_cast<void>(refresh_matches());
+    }
+
+    bool workbench_page::refresh_matches()
+    {
+        // 조합 중인 글자도 보이는 대로 찾는다 — 화면의 칸과 칠한 곳이 어긋나지 않는다.
+        const std::u8string query { luil::make_text_input_view(find_, find_composition_, target_workbench_find).displayed_text() };
+        if (query == matched_query_ && matches_stale_ == false)
+            return false;
+        matched_query_ = query;
+        matches_stale_ = false;
+        matches_.clear();
+        current_match_ = 0;
+        if (query.empty())
+            return true;
+        // 찾은 곳의 양 끝이 글자소 경계인 것만 칠한다. "e"로 "é"의 반쪽을 칠하지 않는다.
+        const std::vector<std::size_t> boundaries { luil::text::grapheme_boundaries(diff_.text) };
+        const auto on_boundary = [&boundaries](const std::size_t offset) { return std::binary_search(boundaries.begin(), boundaries.end(), offset); };
+        for (std::size_t at { diff_.text.find(query) }; at != std::u8string::npos && matches_.size() < match_limit; at = diff_.text.find(query, at + 1))
+            if (on_boundary(at) && on_boundary(at + query.size()))
+                matches_.push_back({ .begin = at, .end = at + query.size() });
+        return true;
+    }
+
+    void workbench_page::reveal_match()
+    {
+        if (current_match_ >= matches_.size())
+            return;
+        const luil::text_highlight& match { matches_[current_match_] };
+        diff_.anchor = match.begin;
+        diff_.caret = match.end;
+        diff_.caret_upstream = false;
+        // 접지 않는 보기라 논리 줄이 화면 줄이다. 찾은 줄 위로 세 줄을 남기고 세운다 (넘친 값은 배치가 다듬는다).
+        const float line { static_cast<float>(line_of(diff_.text, match.begin)) };
+        diff_scroll_ = std::max(0.0f, (line - 3.0f) * luil::text_area_line_height);
+    }
+
+    void workbench_page::apply_author_edit(const luil::text_edit_request& request)
+    {
+        const std::u8string before { author_.text };
+        luil::apply_text_edit(author_, request);
+        if (author_.text == before)
+            return;
+        author_error_.clear();
+        author_open_ = true;
+        query_authors(std::chrono::steady_clock::now());
+    }
+
+    void workbench_page::query_authors(const std::chrono::steady_clock::time_point now)
+    {
+        std::u8string query { luil::make_text_input_view(author_, author_composition_, target_workbench_author).displayed_text() };
+        const std::uint64_t token { luil::begin_combo_query(author_suggestions_, query) };
+        author_pending_ = pending_authors { token, std::move(query), now + author_delay };
+    }
+
+    void workbench_page::set_author(std::u8string text)
+    {
+        author_ = {};
+        author_.text = std::move(text);
+        author_.caret = author_.text.size();
+        author_.anchor = author_.caret;
+        author_committed_ = author_.text;
+        author_composition_.reset();
+        author_error_.clear();
+        author_open_ = false;
     }
 
     std::vector<luil::virtual_list_item> workbench_page::change_items() const
@@ -230,6 +499,9 @@ namespace demo {
     void workbench_page::close_popups() noexcept
     {
         menu_open_ = false;
+        submenu_.clear();
+        author_open_ = false;
+        author_combo_ = nullptr;
     }
 
     bool workbench_page::handle(const luil::app_message& message)
@@ -342,6 +614,7 @@ namespace demo {
             if (luil::selection_contains(selection_, menu->key) == false)
                 selection_ = luil::selection_pick(selection_, change_items(), menu->key, {});
             menu_open_ = true;
+            submenu_.clear();
             menu_x_ = menu->x;
             menu_y_ = menu->y;
             return true;
@@ -349,12 +622,31 @@ namespace demo {
         if (message.get<workbench_menu_close_intent>() != nullptr)
         {
             menu_open_ = false;
+            submenu_.clear();
+            return true;
+        }
+        if (const auto* const submenu { message.get<workbench_submenu_intent>() }; submenu != nullptr)
+        {
+            submenu_ = submenu->key;
             return true;
         }
         if (const auto* const select { message.get<workbench_menu_select_intent>() }; select != nullptr)
         {
             menu_open_ = false;
-            if (select->command == u8"stage" || select->command == u8"unstage")
+            submenu_.clear();
+            if (select->command.starts_with(u8"sort:"))
+            {
+                const std::vector<luil::virtual_list_item> previous { change_items() };
+                sort_column_ = select->command.substr(5);
+                reconcile(previous);
+            }
+            else if (select->command == u8"sort-descending")
+            {
+                const std::vector<luil::virtual_list_item> previous { change_items() };
+                sort_direction_ = sort_direction_ == luil::sort_direction::descending ? luil::sort_direction::ascending : luil::sort_direction::descending;
+                reconcile(previous);
+            }
+            else if (select->command == u8"stage" || select->command == u8"unstage")
                 stage_selection(select->command == u8"stage");
             else if (select->command == u8"discard")
             {
@@ -384,21 +676,149 @@ namespace demo {
             reconcile(previous);
             return true;
         }
+        if (const auto* const patch { message.get<workbench_patch_intent>() }; patch != nullptr)
+        {
+            std::u8string text {};
+            std::u8string error {};
+            if (read_patch(patch->path, text, error) == false)
+            {
+                patch_error_ = file_name(patch->path) + u8": " + error;
+                return true;
+            }
+            patch_error_.clear();
+            patch_path_ = patch->path;
+            patch_text_ = std::move(text);
+            refresh_diff();
+            return true;
+        }
+        if (message.get<workbench_patch_close_intent>() != nullptr)
+        {
+            patch_path_.clear();
+            patch_text_.clear();
+            patch_error_.clear();
+            refresh_diff();
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_diff_scroll_intent>() }; scroll != nullptr)
+        {
+            float& offset { scroll->horizontal ? diff_scroll_x_ : diff_scroll_ };
+            offset = std::max(0.0f, offset + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_diff_scroll_to_intent>() }; scroll != nullptr)
+        {
+            (scroll->horizontal ? diff_scroll_x_ : diff_scroll_) = std::max(0.0f, scroll->offset);
+            return true;
+        }
+        if (const auto* const step { message.get<workbench_find_step_intent>() }; step != nullptr)
+        {
+            if (matches_.empty())
+                return true;
+            const std::size_t count { matches_.size() };
+            current_match_ = step->direction < 0 ? (current_match_ + count - 1) % count : (current_match_ + 1) % count;
+            reveal_match();
+            return true;
+        }
+
+        if (const auto* const open { message.get<workbench_author_open_intent>() }; open != nullptr)
+        {
+            author_open_ = open->open;
+            if (author_open_)
+                query_authors(now);
+            return true;
+        }
+        if (const auto* const move { message.get<workbench_author_move_intent>() }; move != nullptr)
+        {
+            author_highlight_ = move->key;
+            return true;
+        }
+        if (const auto* const select { message.get<workbench_author_select_intent>() }; select != nullptr)
+        {
+            set_author(select->key);
+            return true;
+        }
+        if (const auto* const commit { message.get<workbench_author_commit_intent>() }; commit != nullptr)
+        {
+            // 후보 밖의 글도 받는다. 형식만 앱이 본다 — 틀리면 칸 아래에 이유를 적고 칸을 그대로 둔다.
+            if (commit->text.find(u8'<') == std::u8string::npos || commit->text.find(u8'@') == std::u8string::npos || commit->text.ends_with(u8'>') == false)
+            {
+                author_error_ = u8"\"이름 <메일>\" 꼴로 적는다";
+                author_open_ = false;
+                return true;
+            }
+            set_author(commit->text);
+            return true;
+        }
+        if (message.get<workbench_author_restore_intent>() != nullptr)
+        {
+            set_author(author_committed_);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_author_scroll_intent>() }; scroll != nullptr)
+        {
+            author_scroll_ = std::max(0.0f, author_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_author_scroll_to_intent>() }; scroll != nullptr)
+        {
+            author_scroll_ = std::max(0.0f, scroll->offset);
+            return true;
+        }
+
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
         {
-            if (edit->request.target != target_workbench_summary)
+            const luil::text_input_target target { edit->request.target };
+            if (target == target_workbench_summary)
+                luil::apply_text_edit(summary_, edit->request);
+            else if (target == target_workbench_author)
+                apply_author_edit(edit->request);
+            else if (target == target_workbench_diff)
+            {
+                // 읽기 전용 칸이라 caret·선택만 온다. 그래도 글이 바뀌는 요청이면 글은 되돌리고 caret만 받는다 —
+                // 보기의 글은 장식(줄·구간)과 짝이라 앱이 아닌 곳에서 바뀌면 둘이 어긋난다.
+                const std::u8string text { diff_.text };
+                luil::apply_text_edit(diff_, edit->request);
+                if (diff_.text != text)
+                {
+                    diff_.text = text;
+                    diff_.caret = std::min(diff_.caret, diff_.text.size());
+                    diff_.anchor = diff_.caret;
+                }
+            }
+            else if (target == target_workbench_find)
+            {
+                luil::apply_text_edit(find_, edit->request);
+                if (refresh_matches())
+                    reveal_match();
+            }
+            else
                 return false;
-            luil::apply_text_edit(summary_, edit->request);
             return true;
         }
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
-            if (composition->event.target != target_workbench_summary)
+            const luil::text_input_target target { composition->event.target };
+            std::optional<luil::text_composition_event>* slot { nullptr };
+            if (target == target_workbench_summary)
+                slot = &composition_;
+            else if (target == target_workbench_author)
+                slot = &author_composition_;
+            else if (target == target_workbench_find)
+                slot = &find_composition_;
+            if (slot == nullptr)
                 return false;
             if (composition->event.composing)
-                composition_ = composition->event;
+                *slot = composition->event;
             else
-                composition_.reset();
+                slot->reset();
+            // 조합 중인 글자도 보이는 대로 다시 묻고 다시 찾는다.
+            if (target == target_workbench_author)
+            {
+                author_open_ = true;
+                query_authors(now);
+            }
+            if (target == target_workbench_find && refresh_matches())
+                reveal_match();
             return true;
         }
         return false;
@@ -408,6 +828,9 @@ namespace demo {
     {
         static_cast<void>(width);
         static_cast<void>(height);
+        // 표의 커서가 옮겨 갔거나 행이 지워졌으면 보기도 따라간다.
+        refresh_diff();
+        author_combo_ = nullptr;
         luil::stack_config config {};
         config.padding = luil::edge_insets::all(16.0f);
         config.spacing = 12.0f;
@@ -419,9 +842,14 @@ namespace demo {
         body_config.direction = luil::stack_direction::row;
         body_config.spacing = 12.0f;
         auto body { std::make_unique<luil::stack_element>(workbench_id(u8"body"), body_config) };
-        // 저장소 판은 창을 따라 넓어지되 300을 넘지 않는다. 남는 폭은 표가 갖는다 (stack 상한의 재분배).
+        // 저장소 판은 창을 따라 넓어지되 300을 넘지 않는다. 남는 폭은 표와 변경 내용 보기가 갖는다 (stack 상한의 재분배).
         body->add(make_tree_panel(), luil::stack_item { .weight = 1.0f, .minimum = 200.0f, .maximum = 300.0f });
-        body->add_flexible(make_changes_table(), 3.0f);
+        luil::stack_config detail_config {};
+        detail_config.spacing = 12.0f;
+        auto detail { std::make_unique<luil::stack_element>(workbench_id(u8"detail"), detail_config) };
+        detail->add(make_changes_table(), luil::stack_item { .weight = 1.0f, .minimum = 120.0f });
+        detail->add(make_diff_panel(), luil::stack_item { .weight = 1.0f, .minimum = 160.0f });
+        body->add_flexible(std::move(detail), 3.0f);
         root->add_flexible(std::move(body));
         root->add_fit(make_form());
         return root;
@@ -437,6 +865,15 @@ namespace demo {
         auto row { std::make_unique<luil::stack_element>(workbench_id(u8"header"), config) };
         row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"title"), luil::label_config { .text = u8"변경 작업대", .font_size = 16.0f, .color = luil::label_color_role::primary }));
         row->add_flexible_gap();
+
+        // 패치 파일은 공용 파일 대화상자로 고른다. 요청과 결과는 셸이 frame으로 나른다 (file-dialog-design.md).
+        luil::text_button_config import_config {};
+        import_config.text = u8"패치 불러오기…";
+        import_config.glyph = luil::codicons::icon_folder_opened;
+        auto import { std::make_unique<luil::text_button_element>(workbench_id(u8"import"), std::move(import_config)) };
+        import->set_action(luil::ui_trigger::left_click, luil::make_message_action(workbench_import_intent {}));
+        import->set_tooltip(u8".patch·.diff 파일을 골라 변경 내용 보기에 띄운다");
+        row->add_fit(std::move(import));
 
         // 전체 스테이지 체크다. 일부만 스테이지했으면 일부 상태로 그리고 읽힌다.
         std::vector<luil::check_state> states {};
@@ -489,8 +926,21 @@ namespace demo {
         list.activate = [](const std::u8string& key) { return luil::make_app_action(workbench_tree_activate_intent { key }); };
         list.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(workbench_tree_expand_intent { key, expanded }); };
         list.scroll = [](const float delta) { return luil::make_app_action(workbench_tree_scroll_intent { delta }); };
-        // 실패 줄만 앱이 짓는다: 사유와 다시 시도 링크다. 나머지 줄은 목록의 기본 행(이름 한 줄)이다.
+        // 불러오는 중 줄과 실패 줄만 앱이 짓는다: 스피너와 안내, 사유와 다시 시도 링크다. 나머지 줄은 목록의 기본 행(이름 한 줄)이다.
         list.build_row = [](const luil::virtual_list_item& item, std::size_t, bool) -> std::unique_ptr<luil::ui_element> {
+            if (item.key.ends_with(luil::tree_loading_suffix))
+            {
+                luil::stack_config config {};
+                config.direction = luil::stack_direction::row;
+                config.spacing = 6.0f;
+                config.padding = luil::edge_insets::symmetric(8.0f, 0.0f);
+                config.cross_alignment = luil::stack_alignment::center;
+                auto row { std::make_unique<luil::stack_element>(workbench_id(u8"loading-row:" + item.key), config) };
+                row->add(std::make_unique<luil::spinner_element>(workbench_id(u8"loading-spinner:" + item.key), luil::spinner_config { .name = item.label, .size = 12.0f }),
+                    luil::stack_item { .length = 14.0f, .cross_length = 14.0f });
+                row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"loading-text:" + item.key), luil::label_config { .text = item.label }));
+                return row;
+            }
             const std::u8string node { failed_node(item.key) };
             if (node.empty())
                 return nullptr;
@@ -576,12 +1026,97 @@ namespace demo {
         return card;
     }
 
+    std::unique_ptr<luil::ui_element> workbench_page::make_diff_panel()
+    {
+        luil::stack_config head_config {};
+        head_config.direction = luil::stack_direction::row;
+        head_config.spacing = 6.0f;
+        head_config.cross_alignment = luil::stack_alignment::center;
+        auto head { std::make_unique<luil::stack_element>(workbench_id(u8"diff-head"), head_config) };
+        // 긴 경로는 가운데를 줄인다 — 앞의 폴더와 뒤의 파일 이름이 둘 다 남는다.
+        std::u8string title { patch_path_.empty() ? diff_source_ : u8"불러온 패치: " + patch_path_ };
+        if (title.empty())
+            title = u8"표에서 변경을 고르면 차이를 보인다";
+        head->add_flexible(std::make_unique<luil::label_element>(
+            workbench_id(u8"diff-title"), luil::label_config { .text = std::move(title), .color = luil::label_color_role::primary, .elide = luil::text_elide::middle }));
+        if (patch_path_.empty() == false)
+        {
+            auto close { std::make_unique<luil::text_button_element>(workbench_id(u8"patch-close"), luil::text_button_config { .text = u8"패치 닫기", .visual = luil::text_button_visual::link }) };
+            close->set_action(luil::ui_trigger::left_click, luil::make_message_action(workbench_patch_close_intent {}));
+            head->add_fit(std::move(close));
+        }
+
+        // 찾는 칸이다. 치는 대로 칠하고 Enter·단추로 찾은 곳 사이를 옮긴다.
+        luil::text_input_config find_config {};
+        find_config.placeholder = u8"차이에서 찾기";
+        find_config.leading_glyph = luil::codicons::icon_search;
+        find_config.submit = luil::make_message_action(workbench_find_step_intent { 1 });
+        head->add(std::make_unique<luil::text_input_element>(luil::ui_element_id { kind_workbench_find_input }, luil::make_text_input_view(find_, find_composition_, target_workbench_find),
+                      std::move(find_config)),
+            luil::stack_item { .length = 180.0f, .cross_length = 28.0f });
+        std::u8string count {};
+        if (matched_query_.empty() == false)
+            count = matches_.empty() ? std::u8string { u8"없음" } : to_u8(static_cast<int>(current_match_ + 1)) + u8"/" + to_u8(static_cast<int>(matches_.size()));
+        head->add(std::make_unique<luil::label_element>(workbench_id(u8"find-count"), luil::label_config { .text = count, .align = luil::text_align::end }), 48.0f);
+        const auto step_button = [this](std::u8string owner, const char32_t glyph, const std::u8string& name, const int direction) {
+            auto button { std::make_unique<luil::text_button_element>(workbench_id(std::move(owner)), luil::text_button_config { .glyph = glyph }) };
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(workbench_find_step_intent { direction }));
+            button->set_tooltip(name);
+            button->set_access_name(name);
+            button->set_enabled(matches_.empty() == false);
+            return button;
+        };
+        // 아이콘만 있는 단추는 정사각형으로 둔다 (글자 단추의 최소 폭을 쓰지 않는다).
+        head->add(step_button(u8"find-previous", luil::codicons::icon_arrow_up, u8"이전 찾은 곳", -1), luil::stack_item { .length = 28.0f, .cross_length = 28.0f });
+        head->add(step_button(u8"find-next", luil::codicons::icon_arrow_down, u8"다음 찾은 곳", 1), luil::stack_item { .length = 28.0f, .cross_length = 28.0f });
+
+        // 읽기 전용 문서 칸이다. 줄 번호와 +/- 표시, 줄 바탕, 머리 줄의 굵은 색 구간, 찾은 곳을 같은 배치 값 위에 칠한다.
+        //  - 코드 글꼴로 접지 않고 가로로 흘린다. 선택과 복사는 읽기 전용에서도 된다.
+        luil::text_area_config view {};
+        view.placeholder = u8"변경 내용";
+        view.read_only = true;
+        view.wrap = false;
+        view.face = luil::text_face::code;
+        view.scroll_offset = diff_scroll_;
+        view.scroll = [](const float delta) { return luil::make_app_action(workbench_diff_scroll_intent { false, delta }); };
+        view.scroll_to = [](const float offset) { return luil::make_app_action(workbench_diff_scroll_to_intent { false, offset }); };
+        view.scroll_x = diff_scroll_x_;
+        view.scroll_horizontal = [](const float delta) { return luil::make_app_action(workbench_diff_scroll_intent { true, delta }); };
+        view.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(workbench_diff_scroll_to_intent { true, offset }); };
+        view.wrap_cache = diff_wrap_;
+        view.spans = diff_spans_;
+        view.lines = diff_lines_;
+        view.gutters.push_back({ .kind = luil::gutter_kind::line_number });
+        view.highlights = matches_;
+        if (current_match_ < view.highlights.size())
+            view.highlights[current_match_].current = true;
+
+        luil::stack_config column_config {};
+        column_config.padding = luil::edge_insets::all(8.0f);
+        column_config.spacing = 6.0f;
+        auto column { std::make_unique<luil::stack_element>(workbench_id(u8"diff-column"), column_config) };
+        column->add(std::move(head), 28.0f);
+        if (patch_error_.empty() == false)
+            column->add(std::make_unique<luil::label_element>(workbench_id(u8"patch-error"), luil::label_config { .text = patch_error_, .color = luil::label_color_role::error }), 20.0f);
+        column->add_flexible(std::make_unique<luil::text_area_element>(
+            luil::ui_element_id { kind_workbench_diff }, luil::make_text_input_view(diff_, std::nullopt, target_workbench_diff), std::move(view)));
+
+        luil::panel_config panel {};
+        panel.corner_radius = 6.0f;
+        panel.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
+        auto card { std::make_unique<luil::panel_element>(workbench_id(u8"diff-panel"), std::move(panel)) };
+        card->set_content(std::move(column));
+        return card;
+    }
+
     std::unique_ptr<luil::ui_element> workbench_page::make_form()
     {
         // 라벨 열은 가장 긴 라벨 폭이다 (맞춤 열). 줄 높이는 입력 칸이 서는 28 이상이다.
         luil::grid_config config {};
         config.columns = { luil::grid_track::fit(), luil::grid_track::flexible() };
-        config.rows = { luil::grid_track::fit(28.0f), luil::grid_track::fit(28.0f), luil::grid_track::fit(28.0f) };
+        // 작성자 줄은 콤보가 검증 글을 칸 아래에 둘 자리만큼 높아진다.
+        const float author_height { author_error_.empty() ? 28.0f : 48.0f };
+        config.rows = { luil::grid_track::fit(28.0f), luil::grid_track::fixed(author_height), luil::grid_track::fit(28.0f) };
         config.column_spacing = 12.0f;
         config.row_spacing = 6.0f;
         auto form { std::make_unique<luil::grid_element>(workbench_id(u8"form"), std::move(config)) };
@@ -595,10 +1130,30 @@ namespace demo {
                       luil::text_input_config { .placeholder = u8"무엇을 바꿨는지 한 줄로" }),
             { .row = 0, .column = 1 });
 
-        // 작성자 칸은 편집형 콤보(Codex X6)가 들어오면 그 자리에 선다. 지금은 읽기만 한다.
-        form->add(caption(u8"author-label", u8"작성자"), { .row = 1, .column = 0, .vertical = luil::layout_alignment::center });
-        form->add(std::make_unique<luil::label_element>(workbench_id(u8"author"), luil::label_config { .text = u8"luil 예제 <demo@luil.dev>" }),
-            { .row = 1, .column = 1, .vertical = luil::layout_alignment::center });
+        // 작성자 칸은 편집형 콤보다. 치면 흉내 낸 서버에 후보를 묻고, 답이 오기 전에는 popup에 스피너가 돈다.
+        //  - 후보 밖의 글도 확정할 수 있다. 형식이 틀리면 앱이 검증 글을 칸 아래에 둔다.
+        //  - 닫힌 칸의 Esc는 마지막으로 확정한 작성자로 되돌린다.
+        form->add(caption(u8"author-label", u8"작성자"), { .row = 1, .column = 0, .vertical = author_error_.empty() ? luil::layout_alignment::center : luil::layout_alignment::start });
+        luil::combo_box_config combo {};
+        combo.input.placeholder = u8"이름 <메일>";
+        combo.suggestions = author_suggestions_;
+        combo.highlighted = author_highlight_;
+        combo.validation_message = author_error_;
+        combo.open = author_open_;
+        combo.popup_height = author_popup_height;
+        combo.set_open = [](const bool open) { return luil::make_app_action(workbench_author_open_intent { open }); };
+        combo.move = [](const std::u8string& key) { return luil::make_app_action(workbench_author_move_intent { key }); };
+        combo.select = [](const std::u8string& key) { return luil::make_app_action(workbench_author_select_intent { key }); };
+        combo.commit = [](const std::u8string& text) { return luil::make_app_action(workbench_author_commit_intent { text }); };
+        combo.restore = luil::make_message_action(workbench_author_restore_intent {});
+        combo.scroll_offset = author_scroll_;
+        combo.scroll = [](const float delta) { return luil::make_app_action(workbench_author_scroll_intent { delta }); };
+        combo.scroll_to = [](const float offset) { return luil::make_app_action(workbench_author_scroll_to_intent { offset }); };
+        const luil::text_input_view author_view { luil::make_text_input_view(author_, author_composition_, target_workbench_author) };
+        auto author { std::make_unique<luil::combo_box_element>(luil::ui_element_id { kind_workbench_author_input, u8"workbench-author" }, author_view, std::move(combo)) };
+        author->set_access_name(u8"작성자");
+        author_combo_ = author.get();
+        form->add(std::move(author), { .row = 1, .column = 1 });
 
         form->add(caption(u8"last-label", u8"마지막 커밋"), { .row = 2, .column = 0, .vertical = luil::layout_alignment::center });
         form->add(std::make_unique<luil::label_element>(workbench_id(u8"last"), luil::label_config { .text = last_commit_.empty() ? std::u8string { u8"아직 없음" } : last_commit_ }),
@@ -609,32 +1164,60 @@ namespace demo {
     std::vector<luil::win32::ui_popup> workbench_page::make_popups(const float scale) const
     {
         std::vector<luil::win32::ui_popup> popups {};
+        // 작성자 후보 popup은 이번 frame에 배치한 콤보의 자리를 따라 선다.
+        if (author_open_ && author_combo_ != nullptr)
+            popups.push_back(author_combo_->suggestion_popup());
         if (menu_open_ == false)
             return popups;
+
+        // 정렬 하위 메뉴다. 라디오 항목이 지금 정렬 열을, 체크 항목이 방향을 보인다.
+        std::vector<luil::menu_item_config> sort_items {
+            { .key = u8"sort:path", .label = u8"경로", .kind = luil::menu_item_kind::radio, .checked = sort_column_ == u8"path" },
+            { .key = u8"sort:status", .label = u8"상태", .kind = luil::menu_item_kind::radio, .checked = sort_column_ == u8"status" },
+            { .key = u8"sort:size", .label = u8"크기", .kind = luil::menu_item_kind::radio, .checked = sort_column_ == u8"size" },
+        };
+        const bool descending { sort_direction_ == luil::sort_direction::descending };
+        sort_items.push_back({ .key = u8"sort-descending", .label = u8"내림차순", .separator_above = true, .kind = luil::menu_item_kind::check, .checked = descending });
+
         luil::menu_config menu {};
         menu.owner = u8"workbench-menu";
         menu.items.push_back({ u8"stage", u8"스테이지", luil::codicons::icon_add });
         menu.items.push_back({ u8"unstage", u8"스테이지 취소", luil::codicons::icon_remove });
-        luil::menu_item_config discard {};
-        discard.key = u8"discard";
-        discard.label = u8"변경 버리기";
-        discard.icon = luil::codicons::icon_trash;
-        discard.separator_above = true;
-        menu.items.push_back(std::move(discard));
+        menu.items.push_back({ .key = std::u8string { sort_submenu }, .label = u8"정렬", .separator_above = true, .children = sort_items });
+        menu.items.push_back({ .key = u8"discard", .label = u8"변경 버리기", .icon = luil::codicons::icon_trash, .separator_above = true });
         menu.select = [](const std::u8string& command) { return luil::make_app_action(workbench_menu_select_intent { command }); };
-        // OS 기본 모서리의 popup이다. 둥근 창이면 메뉴의 사각 선은 끄고 경계를 OS 테두리에 맡긴다.
-        menu.border = luil::popup_corner_radius(luil::popup_corner::system) <= 0.0f;
+        // 하위 메뉴의 열림 경로는 앱 상태다. 오른쪽·Enter·hover가 열고 왼쪽·Esc가 한 단계만 닫는다 (popup-anchor-design.md).
+        menu.open_submenu = [](const std::u8string& key) { return luil::make_app_action(workbench_submenu_intent { key }); };
+        menu.close_submenu = luil::make_message_action(workbench_submenu_intent {});
+        menu.opened_key = submenu_;
 
-        luil::win32::ui_popup popup {};
-        popup.id = u8"workbench-menu";
-        popup.width = workbench_menu_width;
-        popup.height = luil::menu_element::height_for(menu);
-        popup.x = menu_x_ / scale;
-        popup.y = menu_y_ / scale;
-        auto root { std::make_unique<luil::menu_element>(std::move(menu)) };
-        popup.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
-        popup.dismiss = [](luil::win32::popup_dismiss_reason) { return luil::make_app_action(workbench_menu_close_intent {}); };
-        popups.push_back(std::move(popup));
+        // 하위 메뉴는 부모 popup 기준 자리에 선다. 붙는 항목의 위 끝까지의 높이를 앞 항목들로 센다.
+        float submenu_y { luil::menu_padding };
+        for (const luil::menu_item_config& item : menu.items)
+        {
+            if (item.separator_above)
+                submenu_y += luil::menu_separator_height;
+            if (item.key == sort_submenu)
+                break;
+            submenu_y += luil::menu_item_height;
+        }
+
+        const auto dismiss = [](luil::win32::popup_dismiss_reason) { return luil::make_app_action(workbench_menu_close_intent {}); };
+        popups.push_back(luil::make_menu_popup(
+            std::move(menu), { .id = u8"workbench-menu", .x = menu_x_ / scale, .y = menu_y_ / scale, .width = workbench_menu_width, .scale = scale, .dismiss = dismiss }));
+        if (submenu_ == sort_submenu)
+        {
+            luil::menu_config child {};
+            child.owner = u8"workbench-sort-menu";
+            child.items = std::move(sort_items);
+            child.select = [](const std::u8string& command) { return luil::make_app_action(workbench_menu_select_intent { command }); };
+            child.close_submenu = luil::make_message_action(workbench_submenu_intent {});
+            child.depth = 1;
+            child.parent_surface = u8"workbench-menu";
+            child.anchor_key = std::u8string { sort_submenu };
+            popups.push_back(luil::make_menu_popup(std::move(child),
+                { .id = u8"workbench-sort-menu", .anchor = u8"workbench-menu", .x = workbench_menu_width, .y = submenu_y - luil::menu_padding, .scale = scale, .dismiss = dismiss }));
+        }
         return popups;
     }
 } // namespace demo

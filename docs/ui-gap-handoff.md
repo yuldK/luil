@@ -145,6 +145,7 @@ void set_key_handler(key_handler handler);
 - C6(내용 크기 배치)이 들어갔다. `ui_element::preferred_size`·`measure_context`, stack의 `add_fit`·`maximum`, `grid_element`, `layer_element`다. label·글자 버튼·체크·글리프가 원하는 크기를 답한다. Codex가 새로 만드는 글 있는 element도 `preferred_size`를 재정의하면 맞춤 배치에 들어간다. 여러 줄 label은 X0의 label 변경 뒤에 Claude가 더한다.
 - C7(항목 모델 도우미)이 들어갔다. `flatten_tree`·`tree_nodes_to_load`·`sort_filter`·`request_ledger`다. 불러오는 중 줄의 진행 표시는 X0 스피너가 나오면 예제의 `build_row`가 쓴다.
 - C8의 1차가 들어갔다. 데스크톱 demo의 "변경 작업대" 페이지(`examples/demo/workbench_page.*`)가 커스텀 element 없이 지연 로딩 계층·체크 표·맞춤 양식·겹친 배지·행 메뉴를 조립한다. 문서 보기(X2)·편집형 콤보(X6)·하위 메뉴(X4)·파일 대화상자(X7)의 자리는 비워 두었고 주석에 적었다. 그 부품이 들어오면 Codex가 이 페이지에 끼운다(M6의 "부품을 예제에 맞춰 보완").
+- M6이 들어갔다. 변경 작업대가 X0 스피너(불러오는 중 줄), X2·X5 문서 보기(읽기 전용 차이 보기: 코드 글꼴·가로 흘림·줄 번호·줄 장식·구간 색·검색 강조), X3·X4 하위 메뉴(행 메뉴의 정렬 라디오·체크), X6 편집형 콤보(늦게 답하는 작성자 후보·검증 글), X7 파일 대화상자(패치 불러오기)를 쓴다. 여전히 커스텀 element는 없다.
 - Codex 소유 파일에 Claude가 **추가만** 한 것이 있다. `label_element`·`text_button_element`(`dialog_elements`)의 `preferred_size` 재정의와 `text_button_padding`·`text_button_minimum_width`·`text_button_height` 상수다. X0에서 label을 고칠 때 이 재정의를 같이 맞춘다(정렬·말줄임은 원하는 크기를 바꾸지 않는다).
 
 ### 5.3 Codex → Claude: 가로 스크롤 막대 (X0)

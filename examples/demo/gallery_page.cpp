@@ -9,6 +9,7 @@
 #include "luil/ui/markdown_element.h"
 #include "luil/ui/progress_element.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/spinner_element.h"
 
 #include <algorithm>
 #include <array>
@@ -24,13 +25,13 @@ namespace demo {
         };
 
         constexpr std::array features {
-            feature { page_controls, u8"버튼과 컨트롤", u8"토글 · 스위치 · 툴팁 · 슬라이더" },
+            feature { page_controls, u8"버튼과 컨트롤", u8"토글 · 스위치 · 툴팁 · 슬라이더 · 스피너" },
             feature { page_theme, u8"모양과 색", u8"시각적 테마 카드 · 시스템 강조색" },
             feature { page_tabs, u8"문서와 탭", u8"순서 이동 · 키보드 전환 · 메뉴" },
             feature { page_popups, u8"메뉴와 팝업", u8"검색 · 명령 · 컨텍스트 메뉴" },
             feature { page_basics, u8"입력과 다이얼로그", u8"IME · 여러 줄 편집 · 기본 버튼" },
             feature { page_lists, u8"목록과 트리", u8"가상 목록 · 드래그 · sticky 머리행" },
-            feature { page_workbench, u8"변경 작업대", u8"비동기 트리 · 표 정렬 · 편집 폼" },
+            feature { page_workbench, u8"변경 작업대", u8"비동기 트리 · 표 정렬 · 차이 보기 · 편집형 콤보" },
             feature { page_files, u8"파일 작업", u8"여럿 선택 · 끌어 놓기 · 클립보드" },
             feature { page_groups, u8"그룹과 선택", u8"접이식 섹션 · 배타 선택 · 체크" },
             feature { page_toasts, u8"알림", u8"심각도 · 실행 취소 · 만료" },
@@ -227,6 +228,13 @@ namespace demo {
         page.add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_layout, u8"gallery/slider" }, std::move(slider)), luil::slider_row_height);
         page.gap();
         page.add(std::make_unique<luil::progress_element>(luil::ui_element_id { kind_layout, u8"gallery/progress" }, luil::progress_config { .value = value_ / 100.0f }), 8.0f);
+        page.gap();
+        // 끝을 모르는 진행은 값 없이 도는 스피너다. 움직임 줄이기 설정에서는 멈춘 모양으로 그린다.
+        auto busy { row(u8"gallery/busy") };
+        busy->add(std::make_unique<luil::spinner_element>(luil::ui_element_id { kind_layout, u8"gallery/spinner" }, luil::spinner_config { .name = u8"동기화 중" }),
+            luil::stack_item { .length = 20.0f, .cross_length = 20.0f });
+        busy->add_fit(make_label({ kind_text, u8"gallery/busy-text" }, u8"동기화 중… 끝을 모르는 작업", 12.0f, luil::label_color_role::dim));
+        page.add(std::move(busy), 24.0f);
         page.gap(24.0f);
 
         luil::ui_action hover_action { luil::make_message_action(toast_request_intent { u8"툴팁 안의 링크도 눌러 보세요." }) };
