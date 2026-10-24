@@ -417,6 +417,8 @@ namespace luil::win32 {
         {
             state.interaction.hovered = caption_button_element_id(hovered_caption_button_);
             state.interaction.hover_started_at = nc_hover_since_;
+            // 비클라이언트 hover에는 포인터 자리를 싣지 않는다. 남은 값은 client 영역 hover의 것이라 버튼 아래에 놓는다.
+            state.interaction.hover_point.reset();
             // **표식도 자기 id로 함께 세운다.** 이 hover는 표면 필터를 지난 뒤에
             // 얹히므로 표식이 비어 있으면 "주 창의 hover"라는 거짓말이 되고,
             // 이 상태를 다시 거르는 자리(보조 창의 `schedule_update_repaint`)에서

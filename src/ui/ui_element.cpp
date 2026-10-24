@@ -61,8 +61,9 @@ namespace luil {
         {
             view.hovered = {};
             view.hovered_surface.clear();
-            // tooltip 지연의 기준 시각도 그 hover의 것이다.
+            // tooltip 지연의 기준 시각과 놓을 자리도 그 hover의 것이다.
             view.hover_started_at.reset();
+            view.hover_point.reset();
         }
         if (view.pressed_surface != surface)
         {
