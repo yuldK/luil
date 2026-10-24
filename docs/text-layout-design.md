@@ -138,8 +138,9 @@ shaping 결과의 폭과 glyph로 그린다. 입력 칸은 배치한 값을 그�
 
 색·검색·선택은 cache key에서 제외한다. 굵기는 key에 들어간다. Native cache는 프로세스당
 **16MiB·512항목 상한의 LRU**이며 `text_layout_cache_usage()`로 보유량·hit/miss를 본다.
-byte 수는 원문·기하·glyph buffer와 cache key의 보유량이며 Skia/OS의 공용 글꼴 cache는 제외한다.
-큰 항목은 LRU에 넣지 않는다. key는 넣기 전에 맞춘다 — NaN·무한 폭과 줄 높이는 0, 접지 않는 요청의
+byte 수는 원문·기하·glyph buffer와 cache key·색인의 보유량이며 Skia/OS의 공용 글꼴 cache는 제외한다.
+항목은 revision·글꼴·key·원문의 hash로 찾고, 같은 hash의 항목은 모두 끝까지 비교해 충돌이 다른 배치를
+돌려주지 않는다. 원문은 배치가 가진 사본과 비교하므로 key에 따로 두지 않는다. 큰 항목은 LRU에 넣지 않는다. key는 넣기 전에 맞춘다 — NaN·무한 폭과 줄 높이는 0, 접지 않는 요청의
 폭은 0이고, 글꼴이 정한 face는 key에서 뺀다. 지난 revision의 항목은 revision이 오른 뒤 처음 볼 때
 거두고, 자물쇠 밖에서 짓는 사이 같은 요청이 먼저 들어왔으면 그 값을 돌려준다. `text_area_wrap_cache`는 현재 문서의 접은 자리만 남기므로,
 큰 문단도 caret만 바뀌었다고 전체 문단을 다시 shape하지 않는다. 이 문단 cache를 앱이 유지해야 한다.
