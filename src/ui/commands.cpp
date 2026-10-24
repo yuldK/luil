@@ -30,16 +30,11 @@ namespace luil {
             return {};
         std::u8string key {};
         const std::uint32_t platform { platform_key_of(chord.key) };
+        // 플랫폼 대역(`first_platform_key` 위)은 이름으로 옮기지 않는다. 그 값의 뜻이 플랫폼마다 달라(Windows는 VK,
+        // Android는 AKEYCODE) 한 표로 읽으면 Android의 SysRq·미디어 키가 F 키로 적힌다. F1–F12는 두 host 모두
+        // 이름 키로 보낸다.
         if ((platform >= 'A' && platform <= 'Z') || (platform >= '0' && platform <= '9'))
             key.push_back(static_cast<char8_t>(platform));
-        else if (platform >= 0x70 && platform <= 0x87)
-        {
-            const auto number { platform - 0x70 + 1 };
-            key = u8"F";
-            if (number >= 10)
-                key.push_back(static_cast<char8_t>(u8'0' + number / 10));
-            key.push_back(static_cast<char8_t>(u8'0' + number % 10));
-        }
         else
         {
             switch (chord.key)
@@ -58,6 +53,18 @@ namespace luil {
             case key_code::arrow_right: key = u8"Right"; break;
             case key_code::arrow_up: key = u8"Up"; break;
             case key_code::arrow_down: key = u8"Down"; break;
+            case key_code::f1: key = u8"F1"; break;
+            case key_code::f2: key = u8"F2"; break;
+            case key_code::f3: key = u8"F3"; break;
+            case key_code::f4: key = u8"F4"; break;
+            case key_code::f5: key = u8"F5"; break;
+            case key_code::f6: key = u8"F6"; break;
+            case key_code::f7: key = u8"F7"; break;
+            case key_code::f8: key = u8"F8"; break;
+            case key_code::f9: key = u8"F9"; break;
+            case key_code::f10: key = u8"F10"; break;
+            case key_code::f11: key = u8"F11"; break;
+            case key_code::f12: key = u8"F12"; break;
             default: return {};
             }
         }

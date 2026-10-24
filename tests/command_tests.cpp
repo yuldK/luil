@@ -24,8 +24,12 @@ TEST_CASE("Command matching respects focused overrides modal isolation and disab
 
 TEST_CASE("Command menu values preserve check state and format function keys", "[ui][commands]")
 {
-    const luil::key_chord chord { luil::platform_key_code(0x74), true, true };
+    // host는 F 키를 이름 키로 보낸다. 플랫폼 대역의 값은 host마다 뜻이 달라 이름으로 읽지 않는다.
+    const luil::key_chord chord { luil::key_code::f5, true, true };
     REQUIRE(luil::shortcut_label(chord) == u8"Ctrl+Shift+F5");
+    REQUIRE(luil::shortcut_label({ luil::key_code::f1 }) == u8"F1");
+    REQUIRE(luil::shortcut_label({ luil::key_code::f12, false, false, true }) == u8"Alt+F12");
+    REQUIRE(luil::shortcut_label({ luil::platform_key_code(0x74) }).empty());
     luil::app_command command { u8"show", u8"Show", chord };
     command.checkable = true;
     const auto item { luil::menu_item_from(command) };
