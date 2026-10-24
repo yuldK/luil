@@ -749,6 +749,13 @@ namespace luil {
     }
 
     namespace {
+        // 휠을 받아 흘리거나 확대하는 창인가.
+        [[nodiscard]] bool takes_wheel(const ui_element& element) noexcept
+        {
+            const scroll_source* const source { element.scroll() };
+            return (source != nullptr && source->scroll != nullptr) || element.zoom() != nullptr;
+        }
+
         // 좌표를 덮는 가장 안쪽·가장 위의 element 중, 휠이 거기서 멈추는 것이다.
         //
         // 답은 둘 중 하나다: 흘리는 컨테이너이거나, **흘리지는 않지만 휠을
@@ -760,6 +767,10 @@ namespace luil {
         //    막는 것이 modal의 몫이라면(modal-dialog-design.md) 휠도 포인터다.
         //  - 자식을 역순으로 보는 것과 자르는 컨테이너 밖을 보지 않는 것은
         //    `ui_element::hit_test`와 같은 규칙이다.
+        //  - **방벽은 덮은 것만 막는다.** 자기를 감싼 흘리는 창은 막지 않는다 —
+        //    누름만 흡수하려고 `hit_opaque`를 켠 목록 행 위에서도 그 목록이
+        //    흐른다. scrim은 뒤 화면의 형제로 떠 있어 그 화면의 조상이 아니므로
+        //    그대로 막힌다. 감싼 흘리는 창이 없으면 뿌리까지 올라가 삼켜진다.
         //  - 다만 `interactive()`는 묻지 않는다. 흘리는 창은 누를 것이 없어도
         //    휠을 받는다.
         //  - 비활성인 가지는 통째로 지나친다. 흐리게 그려 놓고 굴러가면 그것은
@@ -773,11 +784,15 @@ namespace luil {
             const std::span<const std::unique_ptr<ui_element>> children { element.children() };
             for (std::size_t index = children.size(); index > 0u; --index)
                 if (const ui_element* const found { wheel_owner_at(*children[index - 1u], x, y) }; found != nullptr)
+                {
+                    // 안쪽에서 막기만 하는 것이 걸렸고 이 element가 그것을 감싼 흘리는 창이면 이 창이 임자다.
+                    if (takes_wheel(*found) == false && takes_wheel(element) && element.bounds().contains(x, y))
+                        return &element;
                     return found;
+                }
             if (element.bounds().contains(x, y) == false)
                 return nullptr;
-            const scroll_source* const source { element.scroll() };
-            if ((source != nullptr && source->scroll != nullptr) || element.zoom() != nullptr || element.hit_opaque())
+            if (takes_wheel(element) || element.hit_opaque())
                 return &element;
             return nullptr;
         }
@@ -787,6 +802,7 @@ namespace luil {
         // 축이 다른 흘리는 컨테이너는 방벽이 아니라 지나친다 — 가로 탭 막대가
         // 세로 화면의 세로 손짓을 삼키지 않는다.
         //  - 그래도 그 컨테이너가 `hit_opaque`면 방벽이다. 막는 것은 축과 무관하다.
+        //  - 방벽이 덮은 것만 막는 것도 휠과 같다. 축이 맞는 감싼 창은 방벽 위의 끌기를 받는다.
         template<typename accepts_type>
         [[nodiscard]] const ui_element* pan_owner_at(const ui_element& element, const float x, const float y, const accepts_type& accepts)
         {
@@ -797,7 +813,11 @@ namespace luil {
             const std::span<const std::unique_ptr<ui_element>> children { element.children() };
             for (std::size_t index = children.size(); index > 0u; --index)
                 if (const ui_element* const found { pan_owner_at(*children[index - 1u], x, y, accepts) }; found != nullptr)
+                {
+                    if (accepts(*found) == false && accepts(element) && element.bounds().contains(x, y))
+                        return &element;
                     return found;
+                }
             if (element.bounds().contains(x, y) == false)
                 return nullptr;
             if (accepts(element) || element.hit_opaque())

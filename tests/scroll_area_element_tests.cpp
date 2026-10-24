@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -643,6 +644,47 @@ TEST_CASE("A modal scrim swallows the wheel that would scroll the page behind it
     REQUIRE(scrim->hit_opaque());
     REQUIRE(luil::route_wheel(blocked, 100.0f, 100.0f, 48.0f).empty());
     REQUIRE(blocked.unarranged().empty());
+}
+
+TEST_CASE("An opaque row inside a scroll area still lets the area take the wheel", "[ui][scroll][interaction]")
+{
+    // 액션 없이 누름만 흡수하려고 `hit_opaque`를 켠 행이다 (누르는 순간 고르는 목록 행).
+    class opaque_row final : public luil::ui_element
+    {
+    public:
+        explicit opaque_row(luil::ui_element_id id)
+            : ui_element { std::move(id) }
+        {
+            set_hit_opaque(true);
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {}
+    };
+
+    luil::scroll_area_config config { make_config(u8"refs", 10) };
+    auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+    auto content { std::make_unique<content_stack>(luil::ui_element_id { kind_content, u8"refs" }, row_height) };
+    for (std::size_t index = 0; index < 10; ++index)
+        content->add(std::make_unique<opaque_row>(row_id(u8"refs", index)));
+    area->set_content(std::move(content));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(area), { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f) };
+
+    // 방벽은 덮은 것만 막는다. 행을 감싼 영역은 막히지 않아 휠과 세로 끌기가 영역으로 간다.
+    const std::vector<luil::input_action> actions { luil::route_wheel(tree, 100.0f, 100.0f, 48.0f) };
+    const scroll_intent* const message { single_message<scroll_intent>(actions) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->owner == u8"refs");
+    const std::optional<luil::pan_target> pan { luil::route_pan(tree, 100.0f, 100.0f, luil::scroll_axis::vertical) };
+    REQUIRE(pan.has_value());
+    REQUIRE(pan->id.owner == u8"refs");
+    // 축이 맞는 감싼 창이 없으면 행은 여전히 방벽이다.
+    REQUIRE(luil::route_pan(tree, 100.0f, 100.0f, luil::scroll_axis::horizontal).has_value() == false);
 }
 
 TEST_CASE("route_reveal chains outward through every scrolling ancestor", "[ui][scroll][focus]")
