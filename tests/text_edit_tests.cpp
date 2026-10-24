@@ -12,6 +12,26 @@ namespace {
         luil::text::text_edit_set_text(state, text, true);
         return state;
     }
+
+    std::size_t history_bytes(const luil::text::text_edit_state& state)
+    {
+        std::size_t bytes { 0 };
+        for (const auto* revisions : { &state.undo, &state.redo })
+            for (const luil::text::text_edit_revision& revision : *revisions)
+                bytes += revision.text.size();
+        return bytes;
+    }
+
+    // 줄마다 16바이트인 1 MiB 글이다.
+    // 줄을 나눠 글자소 경계를 묻는 비용이 줄 하나에 머문다.
+    std::u8string mebibyte_text()
+    {
+        std::u8string text {};
+        text.reserve(std::size_t { 1024 } * 1024);
+        while (text.size() < std::size_t { 1024 } * 1024)
+            text += u8"0123456789abcde\n";
+        return text;
+    }
 } // namespace
 
 TEST_CASE("Text edit inserts and deletes at the caret", "[domain][text-edit]")
@@ -250,6 +270,82 @@ TEST_CASE("Text edit history is dropped when the text comes from outside", "[dom
     // 사용자의 편집이 아니므로 되돌릴 것이 없다.
     REQUIRE_FALSE(luil::text::text_edit_undo(state));
     REQUIRE(state.text == u8"/trunk");
+}
+
+TEST_CASE("Text edit history keeps a large document under the byte limit", "[domain][text-edit][undo]")
+{
+    // 시점마다 1 MiB를 복사한다.
+    // 개수 상한만 있으면 100걸음에 100 MiB를 쥔다.
+    luil::text::text_edit_state state { at_end(mebibyte_text()) };
+    std::u8string before_last {};
+    for (std::size_t step { 0 }; step < luil::text::text_edit_history_limit; ++step)
+    {
+        before_last = state.text;
+        // 두 코드포인트 조각은 묶이지 않아 걸음마다 새 덩어리다.
+        luil::text::text_edit_insert(state, u8"xy");
+    }
+    REQUIRE(history_bytes(state) <= luil::text::text_edit_history_byte_limit);
+    REQUIRE(state.undo.size() > 1u);
+    REQUIRE(state.undo.size() < luil::text::text_edit_history_limit);
+
+    // 가장 오래된 시점부터 버렸으므로 바로 앞 걸음은 그대로 되돌아간다.
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text == before_last);
+}
+
+TEST_CASE("Text edit history keeps one step of a document larger than the byte limit", "[domain][text-edit][undo]")
+{
+    const std::u8string large(luil::text::text_edit_history_byte_limit + 1u, u8'a');
+    luil::text::text_edit_state state { at_end(large) };
+    luil::text::text_edit_insert(state, u8"xy");
+    luil::text::text_edit_insert(state, u8"zw");
+
+    // 상한을 넘어도 바로 앞 한 걸음은 남는다.
+    REQUIRE(state.undo.size() == 1u);
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text.ends_with(u8"axy"));
+    REQUIRE_FALSE(luil::text::text_edit_undo(state));
+
+    // 다시 실행할 한 걸음도 남는다.
+    REQUIRE(luil::text::text_edit_redo(state));
+    REQUIRE(state.text.ends_with(u8"xyzw"));
+}
+
+TEST_CASE("Text edit history keeps the count limit for small texts", "[domain][text-edit][undo]")
+{
+    luil::text::text_edit_state state {};
+    for (std::size_t step { 0 }; step < luil::text::text_edit_history_limit + 50u; ++step)
+        luil::text::text_edit_insert(state, u8"xy");
+    REQUIRE(state.undo.size() == luil::text::text_edit_history_limit);
+
+    for (std::size_t step { 0 }; step < luil::text::text_edit_history_limit; ++step)
+        REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE_FALSE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text.size() == 100u);
+    REQUIRE(state.redo.size() == luil::text::text_edit_history_limit);
+}
+
+TEST_CASE("Text edit redo replays undone steps under the byte limit", "[domain][text-edit][undo]")
+{
+    luil::text::text_edit_state state { at_end(mebibyte_text()) };
+    for (std::size_t step { 0 }; step < 60u; ++step)
+        luil::text::text_edit_insert(state, u8"xy");
+    const std::u8string last { state.text };
+
+    // 실행 취소는 redo로 옮길 뿐 기록 전체를 늘리지 않아야 한다.
+    for (std::size_t step { 0 }; step < 10u; ++step)
+    {
+        REQUIRE(luil::text::text_edit_undo(state));
+        REQUIRE(history_bytes(state) <= luil::text::text_edit_history_byte_limit);
+    }
+    REQUIRE(state.redo.size() == 10u);
+    for (std::size_t step { 0 }; step < 10u; ++step)
+    {
+        REQUIRE(luil::text::text_edit_redo(state));
+        REQUIRE(history_bytes(state) <= luil::text::text_edit_history_byte_limit);
+    }
+    REQUIRE(state.text == last);
+    REQUIRE_FALSE(luil::text::text_edit_redo(state));
 }
 
 TEST_CASE("Text edit accepts characters above the BMP", "[domain][text-edit]")

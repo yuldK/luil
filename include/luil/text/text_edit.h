@@ -37,6 +37,13 @@ namespace luil::text {
     // 한 줄 칸이라 이 정도면 충분하다.
     inline constexpr std::size_t text_edit_history_limit { 100 };
 
+    // 실행 취소·복구 기록이 함께 담는 글의 바이트 상한이다 (32 MiB).
+    // 시점마다 글 전체를 복사하므로 개수 상한만으로는 20MB 문서가 기록에 2GB를 쥔다.
+    //  - 개수 상한도 그대로 지킨다. 작은 글은 전처럼 100걸음을 남긴다.
+    //  - 넘치면 가장 먼 과거부터, 그다음 가장 먼 미래부터 버린다.
+    //  - 바로 앞뒤 한 걸음씩은 남긴다. 상한보다 큰 문서도 한 번은 되돌리고 다시 실행한다.
+    inline constexpr std::size_t text_edit_history_byte_limit { std::size_t { 32 } * 1024 * 1024 };
+
     struct text_edit_state
     {
         std::u8string text {};
