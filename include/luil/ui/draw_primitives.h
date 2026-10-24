@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/theme/ui_style.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/ui_element.h"
 
@@ -78,6 +79,14 @@ namespace luil {
     // 렌더러가 그 정보를 준 표면에서만 실제로 켜진다.
     void set_text_render_quality(text_render_quality quality) noexcept;
 
+    // 한 줄 도우미(`draw_text`·`measure_text`)가 글 안의 줄바꿈을 다루는 방식이다 (`single_line_break`).
+    // 도우미에 문맥 인자가 없어 그리기 품질처럼 프로세스에 하나다. host가 frame의 외양을 옮길 때마다
+    // frame의 스타일(`ui_style::text`, 없으면 내장 스타일)에서 정한다. 정하지 않으면 `space`다 — test가 이 경로다.
+    //  - 그리기와 측정이 같은 값을 읽어 폭과 그림이 맞는다. 배치는 그리기 전에 서므로 값을 바꾼 첫 frame의
+    //    tree는 앞 값으로 잰 폭을 들 수 있고, 다음 배치부터 새 값이다.
+    void set_single_line_break(single_line_break mode) noexcept;
+    [[nodiscard]] single_line_break single_line_break_mode() noexcept;
+
     // 이어 그릴 한 조각이다.
     // `typeface`가 nullptr이면 기본 글꼴 그대로다.
     struct text_run
@@ -98,6 +107,8 @@ namespace luil {
     // 경계를 test가 직접 확인할 수 있도록 노출한다.
     [[nodiscard]] std::vector<text_run> split_text_runs(std::u8string_view text, const SkFont& font);
 
+    // 한 줄 글을 baseline `y`에 그린다. 글 안의 줄바꿈은 `set_single_line_break`의 값을 따른다
+    // (`measure_text`도 같은 값으로 잰다).
     void draw_text(SkCanvas& canvas, std::u8string_view text, float x, float y, const SkFont& font, const SkPaint& paint);
 
     // `with_alpha`는 theme/ui_theme.h로 옮겼다 — 팔레트 합성이 같은 함수로 tone을 얹는다.

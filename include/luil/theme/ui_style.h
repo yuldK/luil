@@ -113,6 +113,35 @@ namespace luil {
         [[nodiscard]] bool operator==(const tab_bar_style&) const noexcept = default;
     };
 
+    // 한 줄 도우미(`draw_text`·`measure_text`)가 글 안의 줄바꿈을 어떻게 다루는가다.
+    // 라벨·버튼·표 칸처럼 baseline 하나를 받고 폭 하나를 돌려주는 자리에 여러 줄 글(프로세스 출력·커밋 제목·
+    // 붙여 넣은 값)이 오면, 전에는 shaping 구성이 줄을 아래로 내려 칸을 벗어나고 끈 구성은 .notdef 네모를
+    // 그려 두 구성이 서로 다른 그림을 냈다. 어느 값이든 **두 구성이 같은 그림과 폭**을 낸다.
+    //  - 줄바꿈 하나는 CR, LF, 또는 CRLF 짝(한 번으로 센다)이다.
+    //  - 여러 줄을 offset과 함께 다루는 자리(`make_text_layout`·텍스트 입력·문서 보기)는 이 값을 보지 않는다.
+    enum class single_line_break
+    {
+        // 줄바꿈마다 공백 하나로 그리고 잰다 (기본). 한 줄 칸이 무너지지 않는다.
+        space,
+        // 줄바꿈마다 보이는 되돌림 표시(U+21B5 "↵")로 그린다. 줄바꿈이 있다는 사실 자체가 내용인 로그·값 보기의 자리다.
+        symbol,
+        // 문단마다 첫 줄 아래로 한 줄씩 내려 그리고(글꼴의 줄 간격만큼), 가장 넓은 줄의 폭을 잰다.
+        //  - 도우미는 높이를 알려 주지 않는다. 줄 수만큼 높은 칸은 부르는 쪽이 마련해야 하고, 그렇지 않으면
+        //    아래 줄이 이웃을 덮는다.
+        paragraphs,
+    };
+
+    // 한 줄 글의 앱 스타일이다 (`ui_style::text`).
+    //  - popup처럼 host가 frame의 스타일(`ui_frame::style`)에서 읽어 한 줄 도우미에 건다(`set_single_line_break`).
+    //    도우미에는 문맥 인자가 없어 배치 문맥으로는 닿지 않는다.
+    //  - JSON(`assets/style.json`의 `text`)에 적힌다.
+    struct text_style
+    {
+        single_line_break line_break { single_line_break::space };
+
+        [[nodiscard]] bool operator==(const text_style&) const noexcept = default;
+    };
+
     // 앱이 정하는 스타일이다 — 두 테마의 중립 색, accent tone, 치수.
     // 키 컬러(accent)와 테마 선호는 여기 없다. 그 둘은 사용자 설정(`appearance_settings`)이고,
     // 이것은 **앱의 것**이라 계층이 다르다: 설정이 바뀌어도 스타일은 그대로다.
@@ -132,6 +161,8 @@ namespace luil {
         // popup 창의 모양이다. popup은 tree가 아니라 host가 만드는 창이라 배치 문맥이 아니라 frame의 스타일
         // (`ui_frame::style`)에서 읽는다.
         popup_style popup {};
+        // 한 줄 도우미의 줄바꿈 처리다. popup과 같이 host가 frame의 스타일에서 읽는다.
+        text_style text {};
 
         // 테마의 중립 색이다.
         // 고대비는 중립 색을 쓰지 않으므로 dark를 돌려준다 — 부르는 쪽이 고대비를

@@ -84,5 +84,8 @@
     },
     "popup": {
         "corner": "system"
+    },
+    "text": {
+        "lineBreak": "space"
     }
 }

@@ -73,6 +73,30 @@ RTL 글리프를 그릴 수 있다는 이유로 양방향 편집 지원을 선�
 실제 backend를 진단값으로 제공하여 fallback을 shaping 성공으로 오인하지 않게 한다.
 동일 layout을 그리는 도중 다른 backend로 바꾸지 않는다. OS별 링크 대상·고지는 기존 옵션을 따른다.
 
+### 한 줄 도우미의 줄바꿈
+
+`draw_text`·`measure_text`는 baseline 하나를 받고 폭 하나를 돌려주는 한 줄 도우미다(라벨·글 단추·표 칸).
+전에는 여러 줄 글이 오면 켠 구성은 배치가 문단을 나눠 칸 아래로 줄을 내렸고, 끈 구성은 줄바꿈 글리프를
+.notdef 네모와 그 advance로 그려 두 구성의 그림과 폭이 달랐다. 이제 두 구성은 같은 규칙 하나를 지난다.
+규칙은 앱 스타일의 [`ui_style::text`](../include/luil/theme/ui_style.h)(`single_line_break`)가 정하고 기본은 `space`다.
+
+| 값 | 그림 | 폭 |
+| --- | --- | --- |
+| `space` | 줄바꿈마다 공백 하나 | 공백을 넣은 한 줄 |
+| `symbol` | 줄바꿈마다 되돌림 표시 `↵`(U+21B5) | 표시를 넣은 한 줄 |
+| `paragraphs` | 문단마다 첫 줄 아래로 `SkFont::getSpacing()`만큼 내려 한 줄씩 | 가장 넓은 줄 |
+
+- 줄바꿈 하나는 CR, LF, 또는 CRLF 짝이다. 도우미는 byte offset을 밖으로 내지 않으므로 CRLF를 하나로 접는다.
+  offset을 지켜야 하는 `make_text_layout`·텍스트 입력·문서 보기는 이 규칙을 지나지 않고 지금처럼 여러 줄을 다룬다.
+- `paragraphs`는 켠 구성에서도 배치의 여러 줄 대신 줄을 직접 나눠 한 줄씩 그린다. 줄 간격이 두 구성에서 같다.
+  도우미는 높이를 알려 주지 않으므로 줄 수만큼 높은 칸은 부르는 쪽이 마련한다.
+- 도우미에 문맥 인자가 없어 값은 그리기 품질처럼 프로세스에 하나다(`set_single_line_break`). Win32·Android host가
+  frame의 외양을 옮길 때마다 frame의 스타일(없으면 내장 스타일)에서 건다. 배치는 그리기 전에 서므로 값을 바꾼 첫
+  frame의 tree는 앞 값으로 잰 폭을 들 수 있다.
+- 바꾸기는 배치·run 분할 전에 일어나므로 native cache는 바뀐 글을 key로 갖는다. 줄바꿈 없는 글은 어느 값에서나 같은
+  항목이라 값을 바꿔도 cache를 비우지 않는다.
+- 규칙은 `src/ui/single_line_text.h`가 내놓고 `single_line_text_tests.cpp`가 글꼴 없이 확인한다.
+
 ## 캐시와 대용량 문서
 
 배치 thread가 문단 layout을 만들고 게시한 뒤 render/input thread는 읽기만 한다.

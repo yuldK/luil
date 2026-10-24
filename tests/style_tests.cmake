@@ -29,7 +29,8 @@ foreach(needle
     ".secondary_foreground = 0xBFFFFFFFu"
     ".close_button_hover_background = 0xFFC42B1Cu"
     ".body_font_size = 12.0f"
-    ".soft_button = 0.25f")
+    ".soft_button = 0.25f"
+    ".line_break = single_line_break::space")
     string(FIND "${header}" "${needle}" position)
     if(position EQUAL -1)
         message(FATAL_ERROR "The generated header lacks: ${needle}")
@@ -41,18 +42,29 @@ string(JSON custom SET "${style}" dark windowBackground "\"#1a1b26\"")
 string(JSON custom SET "${custom}" light divider "\"#10203080\"")
 string(JSON custom SET "${custom}" metrics controlCornerRadius "6.5")
 string(JSON custom SET "${custom}" tones pressed "1")
+string(JSON custom SET "${custom}" text lineBreak "\"paragraphs\"")
 luil_expect_generation("${custom}" TRUE "a customized style")
 file(READ "${output}" header)
 foreach(needle
     ".window_background = 0xFF1A1B26u"
     ".divider = 0x80102030u"
     ".control_corner_radius = 6.5f"
-    ".pressed = 1.0f")
+    ".pressed = 1.0f"
+    ".line_break = single_line_break::paragraphs")
     string(FIND "${header}" "${needle}" position)
     if(position EQUAL -1)
         message(FATAL_ERROR "The customized header lacks: ${needle}")
     endif()
 endforeach()
+
+# 컴포넌트 칸은 빠져도 된다 — 앱이 가진 옛 JSON이 그대로 빌드되고, 빠진 칸은 struct의 기본값이다.
+string(JSON legacy REMOVE "${style}" text)
+luil_expect_generation("${legacy}" TRUE "a style without the text section")
+file(READ "${output}" header)
+string(FIND "${header}" ".line_break" position)
+if(NOT position EQUAL -1)
+    message(FATAL_ERROR "A style without the text section still wrote line_break")
+endif()
 
 # 어긋난 파일은 막는다.
 luil_expect_generation("[]" FALSE "a non-object root")
@@ -77,3 +89,9 @@ string(JSON broken REMOVE "${style}" metrics)
 luil_expect_generation("${broken}" FALSE "a missing metrics object")
 string(JSON broken SET "${style}" extra "{}")
 luil_expect_generation("${broken}" FALSE "an unknown root key")
+string(JSON broken SET "${style}" text lineBreak "\"newline\"")
+luil_expect_generation("${broken}" FALSE "an unknown line break value")
+string(JSON broken SET "${style}" text lineBrake "\"space\"")
+luil_expect_generation("${broken}" FALSE "an unknown key in text (typo)")
+string(JSON broken SET "${style}" text "\"space\"")
+luil_expect_generation("${broken}" FALSE "a text section that is not an object")
