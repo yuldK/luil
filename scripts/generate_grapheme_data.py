@@ -1,6 +1,7 @@
 """Unicode 16.0.0 UCD에서 내장 글자소 표를 만든다.
 
-입력 디렉터리에 GraphemeBreakProperty.txt, emoji-data.txt, UnicodeData.txt를 둔다.
+입력 디렉터리에 auxiliary/GraphemeBreakProperty.txt, emoji/emoji-data.txt, UnicodeData.txt,
+DerivedCoreProperties.txt를 둔다 (UCD 압축의 배치 그대로다).
 원본: https://www.unicode.org/Public/16.0.0/ucd/ (Unicode License V3).
 다운로드한 파일은 저장소에 넣지 않고 판과 출처를 생성물에 남긴다.
 """
@@ -25,8 +26,8 @@ def require_version(path, text):
     # 다른 판의 파일로 만들면 생성물 머리말의 판과 표가 조용히 어긋난다. 판이 맞지 않으면 멈춘다.
     lines = text.splitlines()
     first = lines[0].strip() if lines else ''
-    if path.name == 'GraphemeBreakProperty.txt':
-        expected = f'# GraphemeBreakProperty-{UNICODE_VERSION}.txt'
+    if path.name in ('GraphemeBreakProperty.txt', 'DerivedCoreProperties.txt'):
+        expected = f'# {path.stem}-{UNICODE_VERSION}.txt'
         if first != expected:
             sys.exit(f'{path}: 첫 줄이 "{expected}"가 아니다 (읽은 줄: "{first}")')
     elif path.name == 'emoji-data.txt':
@@ -58,6 +59,33 @@ def property_rows(path, selected=None):
         parts = bounds.split('..')
         rows.append((int(parts[0], 16), int(parts[-1], 16), prop))
     return sorted(rows)
+
+
+def incb_rows(path):
+    # Indic_Conjunct_Break는 "범위 ; InCB ; 값" 세 칸이다. GB9c(인도계 결합 자음)가 이 값을 본다.
+    rows = []
+    text = read_ucd(path)
+    require_version(path, text)
+    for line in text.splitlines():
+        fields = [x.strip() for x in line.split('#')[0].split(';')]
+        if len(fields) != 3 or fields[1] != 'InCB':
+            continue
+        parts = fields[0].split('..')
+        rows.append((int(parts[0], 16), int(parts[-1], 16), fields[2]))
+    if not rows:
+        sys.exit(f'{path}: InCB 값이 없다')
+    return sorted(rows)
+
+
+def merge_property_ranges(rows):
+    # 값이 같은 이웃 범위를 하나로 묶는다. 값이 다르면 붙어 있어도 따로 둔다.
+    result = []
+    for begin, end, prop in sorted(rows):
+        if result and result[-1][2] == prop and begin <= result[-1][1] + 1:
+            result[-1] = (result[-1][0], max(result[-1][1], end), prop)
+        else:
+            result.append((begin, end, prop))
+    return result
 
 
 def merge_ranges(rows):
@@ -100,6 +128,12 @@ def main():
             marks.append((int(fields[0], 16), int(fields[0], 16)))
     for begin, end in merge_ranges(marks):
         lines.append(f'    {{ 0x{begin:X}, 0x{end:X} }},')
+    lines += ['};', '', 'inline constexpr incb_range incb_ranges[] {']
+    incb_mapping = {'Consonant': 'consonant', 'Extend': 'extend', 'Linker': 'linker'}
+    for begin, end, prop in merge_property_ranges(incb_rows(args.ucd / 'DerivedCoreProperties.txt')):
+        if prop not in incb_mapping:
+            sys.exit(f'모르는 InCB 값이다: {prop}')
+        lines.append(f'    {{ 0x{begin:X}, 0x{end:X}, incb_property::{incb_mapping[prop]} }},')
     lines += ['};', '']
     args.output.write_bytes('\r\n'.join(lines).encode())
 

@@ -36,9 +36,12 @@ struct text_edit_state
 ## 글자소 편집 경계
 
 좌우 이동·Delete·caret 놓기·낱말 선택은 글자소 경계를 따른다. 내장 표는 Unicode 16.0.0의
-UAX #29 부분 집합이며 결합 부호·이체 선택자·이모지 수식자·ZWJ 이모지·국기 RI 쌍·한글 자모·CR LF를 묶는다.
+UAX #29 부분 집합이며 결합 부호·이체 선택자·이모지 수식자·ZWJ 이모지·국기 RI 쌍·한글 자모·CR LF와
+인도계 결합 자음(GB9c, `क्ष`처럼 virama로 이은 자음)을 묶는다.
 `LUIL_ENABLE_TEXT_SHAPING` 구성은 기존 SkUnicode 경로의 플랫폼 ICU 또는 libgrapheme을 먼저 쓰고,
 그 서비스를 열 수 없으면 내장 표로 물러선다. 글자소 표의 생성기는 `scripts/generate_grapheme_data.py`다.
+UCD 16.0.0의 `auxiliary/GraphemeBreakProperty.txt`, `emoji/emoji-data.txt`, `UnicodeData.txt`,
+`DerivedCoreProperties.txt`(InCB)를 읽고, 각 파일의 판을 확인한 뒤 `src/text/grapheme_data.h`를 쓴다.
 
 Backspace도 한 글자소를 지우되, 마지막 코드포인트가 Mn·Mc·Me 결합 부호인 일반 글은 그 부호만 벗긴다.
 `e`와 결합 악센트에서는 `e`가 남는다. ZWJ·이체 선택자·피부색·keycap·국기·한글 자모 시퀀스는

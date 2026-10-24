@@ -1,5 +1,6 @@
 #include "luil/text/grapheme.h"
 #include "luil/text/text_edit.h"
+#include "text/grapheme_internal.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -90,4 +91,20 @@ TEST_CASE("Grapheme queries answer around line breaks without crossing them", "[
     for (std::size_t offset { mixed.size() }; offset > 0;)
         backward.insert(backward.begin(), offset = luil::text::grapheme_previous(mixed, offset));
     REQUIRE(backward == boundaries);
+}
+
+TEST_CASE("The built-in table joins Indic conjuncts across a virama (GB9c)", "[domain][grapheme]")
+{
+    // 기본 구성(모양 잡기 끔)은 내장 표만 쓴다. 플랫폼 경계가 있는 구성에서도 내장 표를 직접 시험한다.
+    using luil::text::builtin_grapheme_boundaries;
+    // क्ष: 자음 + virama(Linker) + 자음은 한 글자소다. caret이 virama 뒤에 서지 않는다.
+    REQUIRE(builtin_grapheme_boundaries(u8"क्ष") == std::vector<std::size_t> { 0, 9 });
+    // ZWJ(InCB Extend)가 끼어도 Linker가 있으면 붙는다.
+    REQUIRE(builtin_grapheme_boundaries(u8"क्‍ष") == std::vector<std::size_t> { 0, 12 });
+    // Linker가 없으면 자음끼리 붙지 않는다.
+    REQUIRE(builtin_grapheme_boundaries(u8"कष") == std::vector<std::size_t> { 0, 3, 6 });
+    // Linker 뒤가 자음이 아니면 거기서 나뉜다.
+    REQUIRE(builtin_grapheme_boundaries(u8"क्a") == std::vector<std::size_t> { 0, 6, 7 });
+    // 앞의 내용과 무관하게 같은 결과다 (거꾸로 걷는 자리가 결합 안에서 멈춘다).
+    REQUIRE(builtin_grapheme_boundaries(u8"xक्ष") == std::vector<std::size_t> { 0, 1, 10 });
 }
