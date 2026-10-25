@@ -1,7 +1,9 @@
 #include "luil/ui/toast_element.h"
 
+#include "luil/theme/ui_theme.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -161,4 +163,22 @@ TEST_CASE("A timed toast announces its fade as the next update", "[ui][toast][up
     sticky_stack->arrange({ { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f });
     const luil::ui_tree sticky_tree { std::move(sticky_stack) };
     REQUIRE(sticky_tree.next_update({ shown }, idle).has_value() == false);
+}
+
+TEST_CASE("A toast body is the neutral raised background whatever its severity", "[ui][toast][raster]")
+{
+    // 심각도는 글리프와 그 색이 말한다. 몸이 notice(붉은 바탕)로 칠해지면 성공 토스트도 경고처럼 읽힌다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    for (const luil::toast_severity severity : { luil::toast_severity::info, luil::toast_severity::success, luil::toast_severity::error })
+    {
+        luil::toast_config config { make_toast(u8"one") };
+        config.text.clear();
+        config.severity = severity;
+        // 자리는 물리 픽셀이다 (raster_probe.h의 규약). 글리프에서 먼 오른쪽 몸을 본다.
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::toast_element>(std::move(config)), { 0.0f, 0.0f, 400.0f, 80.0f }, 2.0f) };
+        luil::testing::raster_frame frame { 400, 80, palette };
+        frame.draw(tree, luil::interaction_snapshot {});
+        REQUIRE(frame.pixel_at(300, 40) == palette.raised_background);
+        REQUIRE(frame.contains_color({ 0.0f, 0.0f, 400.0f, 80.0f }, palette.notice_background) == false);
+    }
 }

@@ -18,6 +18,9 @@ namespace luil {
         // notice 배너다.
         // 일반 표면과 같은 색으로 보이지 않도록 바탕을 깐다.
         notice,
+        // 뜻 없는 중립 바탕을 모서리를 둥글려 깐다 — 번호·짧은 꼬리표처럼 옆 글과 한 덩어리로 읽히지 않아야 할 때다.
+        //  - 모서리는 `ui_metrics::control_corner_radius`다.
+        raised,
     };
 
     enum class text_align { start, center, end };

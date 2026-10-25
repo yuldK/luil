@@ -43,7 +43,7 @@ namespace luil {
                 // 배너 바탕은 항상 불투명하게 칠한다.
                 // hover 색은 반투명이라 바탕을 대체하면 고정된 머리행 아래를
                 // 지나가는 행이 비쳐 글자가 겹쳐 보인다. 위에 겹쳐 칠한다.
-                context.canvas.drawRect(body, solid_paint(context.palette.notice_background));
+                context.canvas.drawRect(body, solid_paint(context.palette.raised_background));
                 draw_hover_fill(context, box, id(), interaction, enabled());
                 context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y + box.height - scale, box.width, scale), solid_paint(context.palette.divider));
 

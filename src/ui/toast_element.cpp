@@ -111,7 +111,8 @@ namespace luil {
             context.canvas.saveLayerAlphaf(&body, opacity);
 
         const float radius { 6.0f * scale };
-        context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(context.palette.notice_background));
+        // 몸은 심각도와 무관한 중립 바탕이다. 심각도는 글리프와 그 색이 말한다.
+        context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(context.palette.raised_background));
         SkPaint border { solid_paint(context.palette.tooltip_border) };
         border.setStyle(SkPaint::kStroke_Style);
         border.setStrokeWidth(1.0f * scale);

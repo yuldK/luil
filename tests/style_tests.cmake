@@ -28,6 +28,7 @@ foreach(needle
     ".window_background = 0xFF1E1E1Eu"
     ".secondary_foreground = 0xBFFFFFFFu"
     ".close_button_hover_background = 0xFFC42B1Cu"
+    ".raised_background = 0xFF38383Cu"
     ".body_font_size = 12.0f"
     ".soft_button = 0.25f"
     ".line_break = single_line_break::space")
@@ -65,6 +66,20 @@ string(FIND "${header}" ".line_break" position)
 if(NOT position EQUAL -1)
     message(FATAL_ERROR "A style without the text section still wrote line_break")
 endif()
+
+# 나중에 생긴 중립 역할(`raisedBackground`)도 빠져도 된다. 옛 JSON은 그 자리를 notice 바탕으로 채워 전과 같게 그린다.
+string(JSON legacy REMOVE "${style}" dark raisedBackground)
+string(JSON legacy REMOVE "${legacy}" light raisedBackground)
+luil_expect_generation("${legacy}" TRUE "a style without raisedBackground")
+file(READ "${output}" header)
+foreach(needle ".raised_background = 0xFF422427u" ".raised_background = 0xFFFDE7E9u")
+    string(FIND "${header}" "${needle}" position)
+    if(position EQUAL -1)
+        message(FATAL_ERROR "A style without raisedBackground did not fall back to noticeBackground: ${needle}")
+    endif()
+endforeach()
+string(JSON broken SET "${style}" dark raisedBackground "\"#38383\"")
+luil_expect_generation("${broken}" FALSE "a short optional color")
 
 # 어긋난 파일은 막는다.
 luil_expect_generation("[]" FALSE "a non-object root")

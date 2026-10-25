@@ -7,6 +7,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkTypeface.h"
 
@@ -98,6 +99,13 @@ namespace luil {
         {
             const SkPaint fill { solid_paint(context.palette.notice_background) };
             context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), fill);
+        }
+        else if (config_.background == label_background_role::raised)
+        {
+            SkPaint fill { solid_paint(context.palette.raised_background) };
+            fill.setAntiAlias(true);
+            const float radius { context.metrics.control_corner_radius * scale };
+            context.canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), radius, radius), fill);
         }
 
         // 창이 좁아 slot이 줄면 글자를 잘라 옆 UI를 침범하지 않게 한다.

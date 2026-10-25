@@ -118,9 +118,9 @@ namespace luil {
         const float radius { box.height / 2.0f };
         const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
 
-        // 강조 배지만 바탕이 tone이고 나머지는 notice 바탕이다.
-        // 고대비에서 notice 바탕은 창 배경으로 접히지만 테가 남아 배지는 보인다.
-        context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), solid_paint(emphasized ? color : context.palette.notice_background));
+        // 강조 배지만 바탕이 tone이고 나머지는 올라온 중립 바탕이다 — 뜻은 테와 글리프의 색이 말한다.
+        // 고대비에서 그 바탕은 창 배경으로 접히지만 테가 남아 배지는 보인다.
+        context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), solid_paint(emphasized ? color : context.palette.raised_background));
 
         SkPaint border { solid_paint(color) };
         border.setStyle(SkPaint::kStroke_Style);

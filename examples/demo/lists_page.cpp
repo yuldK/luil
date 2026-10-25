@@ -125,7 +125,7 @@ namespace demo {
             badge.text = log_number(index);
             badge.font_size = 10.0f;
             badge.color = luil::label_color_role::dim;
-            badge.background = luil::label_background_role::notice;
+            badge.background = luil::label_background_role::raised;
             badge.padding = 6.0f;
             row->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"log-index-" + item.key }, std::move(badge)), 52.0f);
 
