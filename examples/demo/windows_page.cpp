@@ -51,8 +51,28 @@ namespace demo {
         menu_search_ = {};
     }
 
+    std::optional<luil::focus_request> windows_page::make_focus_request() const
+    {
+        if (focus_revision_ == 0)
+            return std::nullopt;
+        return luil::focus_request {
+            .id = focus_revision_,
+            .surface = u8"tool",
+            .target = luil::ui_element_id { kind_tool_note_input },
+            .activate = true,
+        };
+    }
+
     bool windows_page::handle(const luil::app_message& message)
     {
+        if (message.get<tool_focus_intent>() != nullptr)
+        {
+            if (tool_open_ == false)
+                tool_metrics_ = {};
+            tool_open_ = true;
+            ++focus_revision_;
+            return true;
+        }
         if (const auto* const toggle { message.get<tool_window_toggle_intent>() }; toggle != nullptr)
         {
             // 다시 열면 요청 크기에서 시작한다.
@@ -150,6 +170,12 @@ namespace demo {
         toggle->set_action(luil::ui_trigger::left_click,
             [open](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(tool_window_toggle_intent { open == false }) }; });
         column->add(std::move(toggle), { .length = 26.0f, .cross_length = 140.0f });
+        column->add_gap(8.0f);
+        // 아직 없는 창의 칸에 초점을 청한다. luil이 칸이 설 때까지 요청을 들고 있다가 한 번 이행한다.
+        auto focus { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, u8"focus" }, luil::text_button_config { .text = u8"도구 창 메모 칸에 초점" }) };
+        focus->set_cursor(luil::ui_cursor::hand);
+        focus->set_action(luil::ui_trigger::left_click, luil::make_message_action(tool_focus_intent {}));
+        column->add(std::move(focus), { .length = 26.0f, .cross_length = 180.0f });
         column->add_gap(18.0f);
 
         // 주 창의 전체 화면 전환이다.

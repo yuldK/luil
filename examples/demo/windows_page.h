@@ -50,6 +50,19 @@ namespace demo {
         std::u8string key {};
     };
 
+    // 도구 창을 열고(열려 있으면 앞으로 세우고) 그 안의 메모 칸에 초점을 청한다.
+    // 칸은 요청하는 frame에 아직 없다 — 창은 UI thread가 다음 대조에서 만든다. 그래서 luil이 요청을
+    // 들고 있다가 칸이 서는 순간 이행한다 (deferred-focus-design.md).
+    struct tool_focus_intent
+    {};
+
+    // 초점 요청의 결과다 (`ui_frame::focus_report`).
+    struct tool_focus_report_intent
+    {
+        std::uint64_t id { 0 };
+        luil::focus_request_outcome outcome { luil::focus_request_outcome::fulfilled };
+    };
+
     // OS에서 도구 창의 메모 칸에 끌어다 놓은 파일이다.
     // 보조 창도 표면이라 주 창과 같은 길로 받는다 (os-dragdrop-design.md).
     struct tool_note_file_intent
@@ -72,6 +85,10 @@ namespace demo {
         // 같은 frame에서 make_windows가 만든 메뉴 버튼의 자리를 쓰므로 그 뒤에 불러야 한다.
         [[nodiscard]] std::vector<luil::win32::ui_popup> make_popups() const;
 
+        // 도구 창 메모 칸의 초점 요청이다. 한 번도 청하지 않았으면 없다.
+        //  - 같은 번호를 frame마다 실어도 luil은 한 번만 이행한다.
+        [[nodiscard]] std::optional<luil::focus_request> make_focus_request() const;
+
         // 떠 있는 메뉴를 닫는다 (Esc·바깥 클릭).
         void close_popups() noexcept
         {
@@ -85,6 +102,8 @@ namespace demo {
 
         bool tool_open_ { false };
         bool tool_menu_open_ { false };
+        // 메모 칸 초점 요청의 번호다. 청할 때마다 하나씩 올린다.
+        std::uint64_t focus_revision_ { 0 };
         // 이번 frame이 만든 도구 창의 메뉴 버튼이다.
         // popup의 자리 계산에만 쓰고 frame이 게시되기 전까지만 유효하다.
         const luil::ui_element* tool_menu_button_ { nullptr };

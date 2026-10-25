@@ -333,6 +333,8 @@ luil_add_source_filter(luil_core_files "host/fonts"
 
 luil_add_source_filter(luil_core_files "host"
     host/fence_wait.h
+    host/focus_request_tracker.cpp
+    host/focus_request_tracker.h
     host/frame_state.cpp
     host/frame_state.h
     host/pointer_sequence.cpp

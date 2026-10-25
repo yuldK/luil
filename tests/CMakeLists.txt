@@ -28,6 +28,7 @@ add_executable(luil_core_tests
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
     fence_wait_tests.cpp
+    focus_request_tests.cpp
     font_scale_tests.cpp
     group_element_tests.cpp
     grouped_list_element_tests.cpp

@@ -273,6 +273,39 @@ namespace luil {
         denied,
     };
 
+    // 나중에 서는 초점·창 활성화 요청이다 (deferred-focus-design.md).
+    // "보조 창을 띄우고 그 안의 입력 칸에 초점", "목록을 그 행까지 흘린 뒤 그 행에 초점"처럼 요청하는 frame에
+    // 아직 없는 대상을 UI thread가 들고 있다가, 대상이 서는 순간 한 번 이행한다.
+    struct focus_request
+    {
+        // 요청 번호다. 0이면 요청이 없다.
+        //  - **번호가 바뀔 때만 새 요청이다** (`window_placement_revision`과 같은 규칙). 같은 요청을 frame마다
+        //    실어도 한 번만 이행한다.
+        std::uint64_t id { 0 };
+        // 표면 id다. 비어 있으면 주 창, 아니면 `ui_window::id`나 `ui_popup::id`다.
+        std::u8string surface {};
+        // 초점을 옮길 element다. 비어 있으면 초점은 그대로 두고 표면만 활성화한다.
+        ui_element_id target {};
+        // 그 표면의 창을 앞으로 세우고 활성화한다. 최소화돼 있으면 되살린다.
+        //  - popup은 활성화를 받지 않는 표면이라 무시한다.
+        //  - 앱이 앞 창이 아니면 OS가 막고 작업 표시줄 단추만 깜빡인다. 그래도 초점은 세운다.
+        //  - Android는 지원하지 않는다 (Activity를 앞으로 세우는 것은 앱의 Java 쪽 일이다).
+        bool activate { false };
+        // 대상이 이 시간 안에 서지 않으면 버린다.
+        std::chrono::milliseconds timeout { 2000 };
+    };
+
+    // 초점 요청 하나의 결과다. 요청마다 한 번 알린다.
+    enum class focus_request_outcome
+    {
+        // 대상이 서서 초점 요청(과 활성화)을 보냈다.
+        fulfilled,
+        // 기한 안에 대상이 서지 않아 버렸다.
+        expired,
+        // 이행 전에 새 번호의 요청이 와서 버렸다.
+        superseded,
+    };
+
     struct ui_frame
     {
         std::shared_ptr<const ui_tree> tree {};
@@ -320,6 +353,10 @@ namespace luil {
         //  - 주 창이 소유한 보조 창과 주 창에 앵커한 popup은 함께 숨지 않는다 — 앱이 같은 frame에서 뺀다.
         //  - 숨긴 동안에도 앱은 살아 있다. 마지막 창을 닫을 때 `ui_command::application_exit`를 내는 것은 앱의 몫이다.
         bool main_hidden { false };
+        // 나중에 서는 초점·활성화 요청이다 (`focus_request`). 비어 있으면 요청이 없다.
+        std::optional<focus_request> focus {};
+        // 초점 요청의 결과를 알릴 메시지다. 비어 있으면 알리지 않는다.
+        std::function<app_message(std::uint64_t id, focus_request_outcome outcome)> focus_report {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };

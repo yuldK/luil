@@ -51,6 +51,7 @@
 - [Focus group과 Tab 순서](focus-group-design.md)
 - [초점 진입과 복귀](focus-entry-design.md)
 - [키보드 초점 자동 스크롤](focus-reveal-design.md)
+- [나중에 서는 초점과 창 활성화](deferred-focus-design.md)
 - [Enter와 기본 버튼](enter-default-design.md)
 - [키 조상 전파](key-propagation-design.md)
 - [키보드 선택 규칙](keyboard-selection-design.md)
