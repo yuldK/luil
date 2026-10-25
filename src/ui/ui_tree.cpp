@@ -612,6 +612,36 @@ namespace luil {
         return visible_bounds_of(*root_, target, std::nullopt);
     }
 
+    namespace {
+        [[nodiscard]] bool caption_client_under(const ui_element& node, const float x, const float y, const std::optional<rect_f>& clip)
+        {
+            if (node.visible() == false)
+                return false;
+            if (node.caption_client())
+            {
+                const std::optional<rect_f> shown { clip.has_value() ? intersect(node.bounds(), *clip) : std::optional<rect_f> { node.bounds() } };
+                if (shown.has_value() && shown->contains(x, y))
+                    return true;
+            }
+            std::optional<rect_f> next_clip { clip };
+            if (node.clip_children())
+            {
+                next_clip = clip.has_value() ? intersect(*clip, node.bounds()) : std::optional<rect_f> { node.bounds() };
+                if (next_clip.has_value() == false)
+                    return false;
+            }
+            for (const std::unique_ptr<ui_element>& child : node.children())
+                if (caption_client_under(*child, x, y, next_clip))
+                    return true;
+            return false;
+        }
+    } // namespace
+
+    bool ui_tree::caption_client_at(const float x, const float y) const
+    {
+        return root_ != nullptr && caption_client_under(*root_, x, y, std::nullopt);
+    }
+
     void ui_tree::draw_focus_ring(draw_context& context, const interaction_snapshot& interaction) const
     {
         // **키보드로 옮긴 초점에만** 테를 그린다. 눌러서 잡은 초점까지 테가 남으면

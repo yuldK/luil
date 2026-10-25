@@ -72,6 +72,8 @@ namespace luil {
             button->set_action(ui_trigger::left_click, app.action);
             button->set_tooltip(app.tooltip);
             button->set_enabled(app.enabled);
+            // 끌기 띠 위의 단추라 그 자리는 client다.
+            button->set_caption_client(true);
             app_buttons_.push_back(button.get());
             add_child(std::move(button));
         }

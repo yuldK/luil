@@ -1,9 +1,16 @@
 #include "luil/ui/caption_element.h"
 #include "luil/ui/caption_metrics.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/root_element.h"
+#include "luil/ui/ui_tree.h"
 #include "win32/caption_layout.h"
 #include "win32/caption_surface.h"
+#include "win32/window_mode.h"
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <memory>
+#include <utility>
 
 TEST_CASE("Caption button bounds scale with DPI", "[caption]")
 {
@@ -169,15 +176,98 @@ TEST_CASE("The caption drag strip answers client over an app button", "[caption]
 
     // 비클라이언트 판정 자체는 그 자리를 끌기로 본다 — 단추를 아는 것은 tree다.
     REQUIRE(luil::win32::hit_test_caption(layout, settings_x, 18) == luil::win32::caption_hit::drag);
-    REQUIRE(luil::win32::caption_app_button_at(&tree, settings_x, 18));
+    REQUIRE(luil::win32::caption_client_at(&tree, settings_x, 18));
     // 비활성 단추 위도 끌기 자리가 아니다.
-    REQUIRE(luil::win32::caption_app_button_at(&tree, off_x, 18));
+    REQUIRE(luil::win32::caption_client_at(&tree, off_x, 18));
     // 제목 자리와 caption 아래는 단추가 아니다.
-    REQUIRE(luil::win32::caption_app_button_at(&tree, 100, 18) == false);
-    REQUIRE(luil::win32::caption_app_button_at(&tree, settings_x, 60) == false);
-    REQUIRE(luil::win32::caption_app_button_at(nullptr, settings_x, 18) == false);
+    REQUIRE(luil::win32::caption_client_at(&tree, 100, 18) == false);
+    REQUIRE(luil::win32::caption_client_at(&tree, settings_x, 60) == false);
+    REQUIRE(luil::win32::caption_client_at(nullptr, settings_x, 18) == false);
 
     // 앱 단추가 없는 caption은 지금처럼 전부 끌기다.
     const auto plain = luil::make_caption_tree(1000.0f, 1.0f, luil::caption_config {});
-    REQUIRE(luil::win32::caption_app_button_at(&plain, settings_x, 18) == false);
+    REQUIRE(luil::win32::caption_client_at(&plain, settings_x, 18) == false);
+}
+
+namespace {
+    // 자식을 자기 bounds 안으로 자르는 칸이다 (흘려 감춘 자리를 본다).
+    class clipping_panel final : public luil::ui_element
+    {
+    public:
+        explicit clipping_panel(const char8_t* key)
+            : ui_element { luil::ui_element_id { luil::application_element_kind(2), key } }
+        {
+            set_clip_children(true);
+        }
+
+        void add(std::unique_ptr<luil::ui_element> child)
+        {
+            add_child(std::move(child));
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {}
+    };
+
+    [[nodiscard]] std::unique_ptr<luil::ui_element> make_caption_field(const char8_t* key, const luil::rect_f& slot)
+    {
+        auto field { std::make_unique<luil::text_button_element>(luil::ui_element_id { luil::application_element_kind(1), key }, luil::text_button_config {}) };
+        field->set_caption_client(true);
+        field->arrange({ slot, 1.0f });
+        return field;
+    }
+} // namespace
+
+TEST_CASE("Any element marked as a caption client turns the drag strip into client", "[caption][window-mode]")
+{
+    // 브라우저·편집기형 제목 표시줄: caption 위에 겹쳐 세운 검색 칸이 그 자리를 client로 만든다.
+    luil::caption_config config {};
+    auto root { std::make_unique<luil::root_element>() };
+    root->arrange({ { 0.0f, 0.0f, 1000.0f, 600.0f }, 1.0f });
+    auto caption { std::make_unique<luil::caption_element>(config) };
+    caption->arrange({ { 0.0f, 0.0f, 1000.0f, 36.0f }, 1.0f });
+    root->add(std::move(caption));
+    root->add(make_caption_field(u8"search", { 400.0f, 4.0f, 200.0f, 28.0f }));
+
+    auto disabled { make_caption_field(u8"back", { 100.0f, 4.0f, 28.0f, 28.0f }) };
+    disabled->set_enabled(false);
+    root->add(std::move(disabled));
+
+    auto hidden { make_caption_field(u8"hidden", { 200.0f, 4.0f, 28.0f, 28.0f }) };
+    hidden->set_visible(false);
+    root->add(std::move(hidden));
+
+    // 칸 폭 40 안으로 잘린 단추: 잘려 나간 오른쪽은 끌기 자리다.
+    auto strip { std::make_unique<clipping_panel>(u8"strip") };
+    strip->arrange({ { 700.0f, 4.0f, 40.0f, 28.0f }, 1.0f });
+    strip->add(make_caption_field(u8"clipped", { 700.0f, 4.0f, 120.0f, 28.0f }));
+    root->add(std::move(strip));
+
+    const luil::ui_tree tree { std::move(root) };
+    const auto layout = luil::win32::make_caption_layout(1000, 96, config.metrics, config.buttons);
+    // 비클라이언트 판정 자체는 그 자리를 끌기로 본다 — 칸을 아는 것은 tree다.
+    REQUIRE(luil::win32::hit_test_caption(layout, 500, 18) == luil::win32::caption_hit::drag);
+    REQUIRE(luil::win32::caption_client_at(&tree, 500, 18));
+    // 칸 옆은 그대로 끌기다.
+    REQUIRE(luil::win32::caption_client_at(&tree, 380, 18) == false);
+    // 비활성 칸도 끌기 자리가 아니다.
+    REQUIRE(luil::win32::caption_client_at(&tree, 110, 18));
+    // 숨긴 칸은 없는 것이다.
+    REQUIRE(luil::win32::caption_client_at(&tree, 210, 18) == false);
+    // 잘린 칸은 보이는 자리만 client다.
+    REQUIRE(luil::win32::caption_client_at(&tree, 720, 18));
+    REQUIRE(luil::win32::caption_client_at(&tree, 780, 18) == false);
+}
+
+TEST_CASE("A fullscreen window answers client everywhere, caption clients or not", "[caption][window-mode]")
+{
+    // 전체 화면에는 끌기 띠가 없다. 표시와 상관없이 모든 자리가 client다.
+    const luil::win32::window_frame_metrics metrics { luil::default_caption_ui_metrics, luil::default_caption_buttons, 8, 16 };
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::fullscreen, 1000, 800, 96, 500, 18) == luil::win32::window_hit::client);
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, 500, 18) == luil::win32::window_hit::caption_drag);
 }

@@ -110,6 +110,11 @@ namespace luil {
         // tree에 없거나 완전히 잘렸으면 nullopt다.
         // drag 오버레이가 잘린 부분에 강조를 그리지 않을 때 쓴다.
         [[nodiscard]] std::optional<rect_f> visible_bounds(const ui_element& target) const;
+        // (x, y)에 제목 표시줄 안의 client 자리(`ui_element::caption_client`)가 보이는가.
+        // 창의 비클라이언트 판정이 끌기 띠로 계산한 자리에서 묻는다 (caption-button-design.md).
+        //  - 숨긴 조상 아래는 없는 것이고, 자르는 조상이 있으면 그 안으로 자른 자리만 본다.
+        //  - hit test와 달리 비활성 element도 센다. 눌러도 아무 일이 없는 칸을 잡고 창이 딸려 가면 안 된다.
+        [[nodiscard]] bool caption_client_at(float x, float y) const;
         // 그 자리에서 그릴 포인터 모양이다.
         // 잡고 끄는 중이면 포인터가 어디에 있든 잡은 element가 정하고,
         // 아니면 좌표 아래 element가 정한다.
