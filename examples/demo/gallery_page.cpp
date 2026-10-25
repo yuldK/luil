@@ -6,6 +6,7 @@
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/grid_element.h"
+#include "luil/ui/layer_element.h"
 #include "luil/ui/markdown_element.h"
 #include "luil/ui/progress_element.h"
 #include "luil/ui/slider_element.h"
@@ -122,6 +123,16 @@ namespace demo {
             }
             shortcut_ = luil::parse_shortcut(luil::shortcut_label(shortcut->chord)).value_or(luil::key_chord {});
             shortcut_note_.clear();
+            return true;
+        }
+        if (const auto* const preview { message.get<gallery_preview_intent>() }; preview != nullptr)
+        {
+            preview_open_ = preview->open;
+            return true;
+        }
+        if (const auto* const toolbar { message.get<gallery_toolbar_intent>() }; toolbar != nullptr)
+        {
+            toolbar_shown_ = toolbar->shown;
             return true;
         }
         if (const auto* const scroll { message.get<gallery_scroll_intent>() }; scroll != nullptr)
@@ -318,6 +329,43 @@ namespace demo {
         auto strip_panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, u8"gallery/border-strip" }, std::move(strip)) };
         strip_panel->set_content(make_label({ kind_text, u8"gallery/border-strip-text" }, u8"위·아래 변만 긋는 판입니다.", 12.0f, luil::label_color_role::primary));
         page.add(std::move(strip_panel), 32.0f);
+        page.gap(24.0f);
+
+        // 머무름: 카드 위에 0.35초 머무르면 미리보기가 열리고, 떠나거나 누르면 닫힌다.
+        luil::panel_config card_config {};
+        card_config.corner_radius = 6.0f;
+        card_config.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
+        auto dwell_card { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, u8"gallery/dwell-card" }, std::move(card_config)) };
+        dwell_card->set_content(make_label({ kind_text, u8"gallery/dwell-card-text" }, u8"여기에 포인터를 잠시 머무르세요", 12.0f, luil::label_color_role::primary));
+        dwell_card->set_hover_dwell(luil::hover_dwell_target {
+            .delay = std::chrono::milliseconds { 350 },
+            .on_dwell = luil::make_message_action(gallery_preview_intent { true }),
+            .on_end = luil::make_message_action(gallery_preview_intent { false }),
+        });
+        page.add(std::move(dwell_card), 36.0f);
+        page.add(make_label({ kind_text, u8"gallery/dwell-preview" }, preview_open_ ? u8"미리보기가 열렸습니다 — 떠나거나 누르면 닫힙니다." : u8"(미리보기 닫힘)", 12.0f,
+                     preview_open_ ? luil::label_color_role::primary : luil::label_color_role::dim),
+            24.0f);
+        page.gap();
+
+        // hover 영역: hit를 받지 않는 띠에 포인터가 들면 도구 막대가 드러난다. 띠 아래의 글은 그대로 고를 수 있다.
+        auto reveal_layer { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"gallery/reveal-layer" }) };
+        auto reveal_row { row(u8"gallery/reveal-row") };
+        if (toolbar_shown_)
+        {
+            reveal_row->add_fit(button(u8"gallery/reveal-cut", u8"잘라내기", luil::text_button_visual::normal, luil::make_message_action(toast_request_intent { u8"잘라내기" })));
+            reveal_row->add_fit(button(u8"gallery/reveal-copy", u8"복사", luil::text_button_visual::normal, luil::make_message_action(toast_request_intent { u8"복사" })));
+        }
+        else
+            reveal_row->add_fit(make_label({ kind_text, u8"gallery/reveal-hint" }, u8"이 띠 위로 포인터를 올리면 도구 막대가 드러납니다.", 12.0f, luil::label_color_role::dim));
+        reveal_layer->add(std::move(reveal_row));
+        auto reveal_region { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"gallery/reveal-region" }) };
+        reveal_region->set_hover_region(luil::hover_region_target {
+            .on_enter = [] { return luil::make_app_action(gallery_toolbar_intent { true }); },
+            .on_leave = [] { return luil::make_app_action(gallery_toolbar_intent { false }); },
+        });
+        reveal_layer->add(std::move(reveal_region));
+        page.add(std::move(reveal_layer), luil::text_button_height);
         page.gap(24.0f);
 
         luil::ui_action hover_action { luil::make_message_action(toast_request_intent { u8"툴팁 안의 링크도 눌러 보세요." }) };

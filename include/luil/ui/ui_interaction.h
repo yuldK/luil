@@ -474,6 +474,9 @@ namespace luil {
         //  - 바뀌지 않았으면 아무것도 내지 않는다. 휠로 caret에서 멀리 흘린 frame이 되돌아가지 않는 것이 그래서다.
         //  - 돌려준 액션은 `process`의 것처럼 내보낸다. 입력 pump가 tree를 받을 때마다 부른다.
         [[nodiscard]] std::vector<input_action> follow_text_caret();
+        // 새 tree를 받은 뒤 머무름과 hover 영역을 다시 본다. 포인터가 머문 채 덮개가 서거나 영역이 사라졌으면
+        // 끝·나감을, 영역이 새로 섰으면 들어옴을 낸다 (hover-dwell-design.md). 입력 pump가 tree를 받을 때마다 부른다.
+        [[nodiscard]] std::vector<input_action> refresh_hover_tracking();
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
     private:
@@ -736,6 +739,13 @@ namespace luil {
         // `parent`가 `parent_surface`에서 연 하위 메뉴다. 그 tree가 아직(또는 더는) 없으면 nullptr다.
         [[nodiscard]] const menu_element* open_child_menu(const menu_element& parent, const std::u8string& parent_surface) const noexcept;
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> submenu_deadline() const noexcept;
+        // 머무름이 찰 시각이다. 재는 중이 아니면 없다.
+        [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> dwell_deadline() const noexcept;
+        // 이벤트를 처리한 뒤 머무름의 임자·누름을 다시 본다. 끝·취소의 액션을 `actions`에 더한다.
+        //  - `event`가 없으면 새 tree를 받은 뒤다 (덮개가 서서 hover가 옮았을 수 있다).
+        void update_dwell(const raw_input_event* event, std::vector<input_action>& actions);
+        // 이벤트를 처리한 뒤 포인터가 든 hover 영역을 다시 본다. 들어옴·나감의 액션을 `actions`에 더한다.
+        void update_hover_regions(const raw_input_event& event, std::vector<input_action>& actions);
         // hover 시계가 이미 발화한 항목·표면·시각이다 (열었든 형제 자식을 닫았든). 같은 머묾에서 거듭 내지 않는다.
         ui_element_id opened_hover_ {};
         std::u8string opened_hover_surface_ {};
@@ -1041,6 +1051,31 @@ namespace luil {
         float last_pointer_y_ { 0.0f };
         std::chrono::steady_clock::time_point last_pointer_time_ {};
         std::u8string last_pointer_surface_ {};
+
+        // 머무름의 장부다 (`ui_element::set_hover_dwell` — hover-dwell-design.md).
+        //  - 액션은 받은 때의 사본이다. 끝을 알릴 때 임자가 tree에서 이미 사라졌을 수 있다.
+        struct dwell_state
+        {
+            ui_element_id owner {};
+            std::u8string surface {};
+            std::chrono::steady_clock::time_point started {};
+            std::chrono::milliseconds delay { 0 };
+            ui_action on_dwell {};
+            ui_action on_end {};
+            bool fired { false };
+            // 누른 뒤다. 임자를 떠났다 돌아올 때까지 다시 재지 않는다.
+            bool suppressed { false };
+        };
+        std::optional<dwell_state> dwell_ {};
+        // 포인터가 든 hover 영역들이다 (`ui_element::set_hover_region`). 나감은 받은 때의 사본으로 알린다.
+        struct hover_region_entry
+        {
+            ui_element_id id {};
+            std::u8string surface {};
+            std::function<input_action()> on_leave {};
+            bool hold_while_captured { true };
+        };
+        std::vector<hover_region_entry> hover_regions_ {};
     };
 
     // input thread의 소비 루프다.

@@ -120,6 +120,9 @@ namespace luil {
         //    위를 덮은 도구 막대·대화 상자는 그쪽의 자리다.
         //  - 여럿이 겹치면 가장 안쪽(나중에 담은) 것이 정한다.
         [[nodiscard]] std::chrono::milliseconds cursor_idle_hide_at(float x, float y) const;
+        // (x, y)를 보이는 자리 안에 둔 hover 영역 element들이다 (`ui_element::set_hover_region`, 그리기 순서).
+        //  - hit test가 아니라 자리다. 위를 덮은 element가 hit를 받아도 영역 안이다.
+        [[nodiscard]] std::vector<const ui_element*> hover_regions_at(float x, float y) const;
         // 그 자리에서 그릴 포인터 모양이다.
         // 잡고 끄는 중이면 포인터가 어디에 있든 잡은 element가 정하고,
         // 아니면 좌표 아래 element가 정한다.
@@ -271,6 +274,8 @@ namespace luil {
         // `next_update`가 이것만 훑는다 — 숨긴 가지의 애니메이션은 화면에 그릴
         // 변화가 없으니 창을 깨울 이유도 없다 (hit test·접근 색인과 같은 규칙).
         std::vector<const ui_element*> visible_index_ {};
+        // 보이는 경로 위의 hover 영역 element들이다 (`hover_regions_at`). 대개 비어 있어 이동마다 훑어도 싸다.
+        std::vector<const ui_element*> hover_regions_ {};
         // id → element 해시 색인이다. find가 문자열 선형 비교 대신 이것을 쓴다.
         // 같은 id는 첫 등록이 이긴다.
         std::unordered_map<ui_element_id, const ui_element*, id_hash> lookup_ {};

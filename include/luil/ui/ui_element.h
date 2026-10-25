@@ -600,6 +600,33 @@ namespace luil {
         std::function<std::vector<input_action>(const key_pressed_event& event)> on_key {};
     };
 
+    // 포인터가 이 element 위에 `delay` 동안 머무르면 낸다 (미리보기 카드 — hover-dwell-design.md).
+    //  - 머무름의 임자는 포인터 아래 element에서 root 쪽으로 처음 만나는 이 역할이다. 안쪽 자식 사이를 옮겨 다녀도
+    //    임자가 같으면 시계가 이어진다.
+    //  - 머무름이 찬 뒤 그 끝(`on_end`)이 한 번 온다: 임자를 떠남, 아무 버튼이나 누름, 끌기 시작. 가둠·popup이
+    //    덮어 hover가 그쪽으로 옮겨도 떠남이다.
+    //  - 차기 전에 떠나거나 누르면 아무것도 내지 않는다. 누른 뒤에는 임자를 떠났다 돌아올 때까지 다시 재지 않는다.
+    //  - 마우스·펜의 hover만 잰다. 터치에는 머무름이 없다.
+    struct hover_dwell_target
+    {
+        std::chrono::milliseconds delay { 350 };
+        ui_action on_dwell {};
+        ui_action on_end {};
+    };
+
+    // hit를 받지 않고 자리만으로 포인터의 들어옴·나감을 알리는 역할이다 (자동으로 숨는 도구 막대 — hover-dwell-design.md).
+    //  - 판정은 hit test가 아니라 보이는 자리(`ui_tree::visible_bounds`)다. 그 자리의 누름·hover는 아래 element가
+    //    그대로 받는다. 비활성이어도 알린다.
+    //  - `hold_while_captured`면 누른 채 끄는 동안(포인터를 잡은 동안)은 자리를 벗어나도 나감을 뗄 때까지 미룬다 —
+    //    드러난 도구 막대를 끄는 도중에 숨기지 않는다.
+    //  - 마우스·펜만이다. 터치에는 hover가 없다.
+    struct hover_region_target
+    {
+        std::function<input_action()> on_enter {};
+        std::function<input_action()> on_leave {};
+        bool hold_while_captured { true };
+    };
+
     // 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
     //  - 배율은 글을 물리 크기로 재고 논리 픽셀로 되돌리는 데 쓴다. 글꼴의 힌팅이 크기마다 달라 논리 크기로 잰
     //    폭은 그린 폭과 어긋날 수 있다.
@@ -953,6 +980,10 @@ namespace luil {
         [[nodiscard]] const key_search_target* key_search() const noexcept;
         // 초점을 가진 동안 다음 키를 모두 받는 역할이다 (`key_capture_target`). 없으면 nullptr다.
         [[nodiscard]] const key_capture_target* key_capture() const noexcept;
+        // 머무름 역할이다 (`hover_dwell_target`). 없으면 nullptr다.
+        [[nodiscard]] const hover_dwell_target* hover_dwell() const noexcept;
+        // hit를 받지 않는 hover 영역 역할이다 (`hover_region_target`). 없으면 nullptr다.
+        [[nodiscard]] const hover_region_target* hover_region() const noexcept;
         // 더 안쪽이 소비하지 않은 키를 받는 처리기다. 없으면 nullptr다.
         [[nodiscard]] const key_handler* key_handler_of() const noexcept;
         // 앱이 지정한 포인터 모양이다.
@@ -1096,6 +1127,10 @@ namespace luil {
         void set_key_search_target(std::optional<key_search_target> target);
         // 초점을 가진 동안 다음 키를 모두 받는다 (단축키 편집 칸). Tab의 자리여야 초점을 받는다 (`set_tab_stop`).
         void set_key_capture(std::optional<key_capture_target> target);
+        // 포인터가 머무르면 낸다 (미리보기 카드).
+        void set_hover_dwell(std::optional<hover_dwell_target> target);
+        // hit를 받지 않고 자리만으로 들어옴·나감을 알린다 (자동으로 숨는 도구 막대).
+        void set_hover_region(std::optional<hover_region_target> target);
         // 보조 기술이 시킨 실행을 앱 메시지로 받는다 (다중 선택 항목의 더하기·빼기·고르기 등).
         // 기본 `access_actions`가 먼저 이것에 묻고, 답이 없으면(nullopt) 지금까지의 기본(클릭)으로 물러선다.
         //  - `access_actions`를 재정의한 element도 처리하지 않는 명령을 기본 구현으로 넘기면 이것이 답한다.
@@ -1305,6 +1340,8 @@ namespace luil {
         std::optional<pan_handoff_target> pan_handoff_ {};
         std::optional<key_search_target> key_search_target_ {};
         std::optional<key_capture_target> key_capture_target_ {};
+        std::optional<hover_dwell_target> hover_dwell_target_ {};
+        std::optional<hover_region_target> hover_region_target_ {};
         access_handler access_handler_ {};
         key_handler key_handler_ {};
         ui_element_id pointer_focus_target_ {};

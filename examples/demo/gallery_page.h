@@ -23,6 +23,18 @@ namespace demo {
         luil::key_chord chord {};
     };
 
+    // 머무름 카드의 미리보기를 연다·닫는다 (`ui_element::set_hover_dwell`).
+    struct gallery_preview_intent
+    {
+        bool open { false };
+    };
+
+    // 숨은 도구 막대 띠에 포인터가 들었다·나갔다 (`ui_element::set_hover_region`).
+    struct gallery_toolbar_intent
+    {
+        bool shown { false };
+    };
+
     struct gallery_scroll_intent
     {
         bool controls { false };
@@ -58,6 +70,9 @@ namespace demo {
         // 단축키 잡기 칸의 값과, 예약 키를 눌렀을 때의 안내다.
         luil::key_chord shortcut_ { luil::key_code::key_p, true, true };
         std::u8string shortcut_note_ {};
+        // 머무름 미리보기와 숨은 도구 막대의 표시 상태다.
+        bool preview_open_ { false };
+        bool toolbar_shown_ { false };
         float overview_scroll_ { 0.0f };
         float controls_scroll_ { 0.0f };
         std::u8string choice_ { u8"comfortable" };
