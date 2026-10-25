@@ -1,5 +1,6 @@
 #include "luil/ui/check_element.h"
 
+#include "luil/generated/codicons.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 
@@ -10,6 +11,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkTypeface.h"
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <utility>
@@ -19,6 +21,67 @@ namespace luil {
         // 표시 부분과 라벨 사이의 간격, 줄 양쪽의 여백이다 (논리 픽셀).
         constexpr float check_gap { 8.0f };
         constexpr float check_inset { 4.0f };
+        // 칩의 왼쪽 여백·체크 표시·표시와 글 사이·오른쪽 여백이다 (논리 픽셀).
+        constexpr float chip_leading { 10.0f };
+        constexpr float chip_mark { 12.0f };
+        constexpr float chip_mark_gap { 6.0f };
+        constexpr float chip_trailing { 12.0f };
+
+        [[nodiscard]] bool button_like(const check_style style) noexcept
+        {
+            return style == check_style::toggle_button || style == check_style::toggle_chip;
+        }
+
+        // 칩 한 개를 그린다. 꺼지면 테만, 켜지면 옅은 강조 바탕·강조 테·체크 표시다.
+        void draw_chip(draw_context& context, const rect_f& box, const check_config& config, const ui_element_id& id, const interaction_snapshot& interaction, const bool enabled)
+        {
+            const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+            const float radius { box.height / 2.0f };
+            const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
+            if (config.checked && enabled)
+            {
+                SkPaint fill { solid_paint(context.palette.active_toggle_background) };
+                fill.setAntiAlias(true);
+                context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), fill);
+            }
+            draw_hover_fill(context, box, id, interaction, enabled, radius / scale);
+
+            // 테가 몸 안쪽에 온전히 들어오도록 반 픽셀 오므린다.
+            ui_color line { context.palette.group_border };
+            if (enabled == false)
+                line = context.palette.divider;
+            else if (config.checked)
+                line = context.palette.accent;
+            SkPaint border { solid_paint(line) };
+            border.setStyle(SkPaint::kStroke_Style);
+            border.setStrokeWidth(scale);
+            border.setAntiAlias(true);
+            const SkRect edge { body.makeInset(scale / 2.0f, scale / 2.0f) };
+            context.canvas.drawRRect(SkRRect::MakeRectXY(edge, radius - scale / 2.0f, radius - scale / 2.0f), border);
+
+            ui_color text_color { context.palette.primary_foreground };
+            if (enabled == false)
+                text_color = context.palette.disabled_foreground;
+            else if (config.checked)
+                text_color = context.palette.accent_emphasis_foreground;
+            const SkPaint foreground { solid_paint(text_color) };
+            const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+            const float baseline { box.y + centered_text_baseline(font, box.height) };
+            const float content_left { box.x + (chip_leading + chip_mark + chip_mark_gap) * scale };
+            const float content_width { std::max(0.0f, box.x + box.width - chip_trailing * scale - content_left) };
+            if (config.checked)
+            {
+                const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), chip_mark * scale };
+                draw_centered_glyph(context.canvas, codicons::icon_check, { box.x + chip_leading * scale, box.y, chip_mark * scale, box.height }, glyph_font, foreground);
+                static_cast<void>(draw_text_within(context.canvas, config.label, content_left, baseline, content_width, font, foreground));
+                return;
+            }
+            // 꺼진 칩은 체크 자리까지 합친 안쪽 폭의 가운데에 글을 둔다.
+            const float inner_left { box.x + chip_leading * scale };
+            const float inner_width { std::max(0.0f, box.width - (chip_leading + chip_trailing) * scale) };
+            const float text_width { std::min(measure_text(config.label, font), inner_width) };
+            static_cast<void>(draw_text_within(context.canvas, config.label, inner_left + (inner_width - text_width) / 2.0f, baseline, inner_width, font, foreground));
+        }
     } // namespace
 
     check_state aggregate_check(const std::span<const check_state> children) noexcept
@@ -48,12 +111,12 @@ namespace luil {
 
     float check_element::height_for(const check_config& config) noexcept
     {
-        return config.style == check_style::toggle_button ? text_button_height : check_row_height;
+        return button_like(config.style) ? text_button_height : check_row_height;
     }
 
     float check_element::indicator_width_for(const check_config& config) noexcept
     {
-        if (config.style == check_style::toggle_button)
+        if (button_like(config.style))
             return 0.0f;
         return config.style == check_style::toggle_switch ? check_switch_width : check_box_size;
     }
@@ -76,6 +139,11 @@ namespace luil {
     {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
+        if (config_.style == check_style::toggle_chip)
+        {
+            draw_chip(context, box, config_, id(), interaction, enabled());
+            return;
+        }
         if (config_.style == check_style::toggle_button)
         {
             text_button_config button {};
@@ -113,6 +181,7 @@ namespace luil {
         switch (config_.style)
         {
         case check_style::toggle_button:
+        case check_style::toggle_chip:
             break;
         case check_style::checkbox: {
             const SkRect shape { SkRect::MakeXYWH(mark.x, mark.y, mark.width, mark.height) };
@@ -199,6 +268,7 @@ namespace luil {
         switch (config_.style)
         {
         case check_style::toggle_button:
+        case check_style::toggle_chip:
             info.role = access_role::button;
             break;
         case check_style::checkbox:
@@ -233,6 +303,12 @@ namespace luil {
             button.text = config_.label;
             const text_button_element visual { id(), std::move(button) };
             return visual.preferred_size(context, available_width);
+        }
+        if (config_.style == check_style::toggle_chip)
+        {
+            // 켬/끔과 무관하게 체크 자리를 넣어 잰다 — 그리기의 자리와 같다.
+            const float text { std::ceil(context.text_width(config_.label, context.style_metrics().body_font_size)) };
+            return size_f { chip_leading + chip_mark + chip_mark_gap + text + chip_trailing, height_for(config_) };
         }
         // 그리기의 자리와 같다 — 안쪽 여백, 표시 부분, 간격과 글, 오른쪽 안쪽 여백이다.
         float width { check_inset + indicator_width_for(config_) + check_inset };
