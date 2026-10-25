@@ -18,6 +18,12 @@ namespace demo {
         std::u8string id {};
     };
 
+    // 페이지 본문의 휠 스크롤이다.
+    struct toasts_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
     class toasts_page
     {
     public:
@@ -51,5 +57,6 @@ namespace demo {
 
         std::vector<toast_entry> toasts_ {};
         int next_id_ { 0 };
+        float scroll_ { 0.0f };
     };
 } // namespace demo
