@@ -1,5 +1,6 @@
 #include "demo/windows_page.h"
 
+#include "luil/app/platform_services.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -7,6 +8,10 @@
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_tree.h"
 
+#include <windows.h>
+
+#include <filesystem>
+#include <string>
 #include <utility>
 
 namespace demo {
@@ -65,6 +70,22 @@ namespace demo {
 
     bool windows_page::handle(const luil::app_message& message)
     {
+        // 플랫폼 도구는 logic thread에서 부른다. 탐색기와 메모장은 따로 뜨는 창이라 이쪽은 결과만 적는다.
+        if (message.get<reveal_executable_intent>() != nullptr)
+        {
+            wchar_t module[MAX_PATH] {};
+            const DWORD length { GetModuleFileNameW(nullptr, module, MAX_PATH) };
+            const std::filesystem::path executable { std::wstring { module, length } };
+            const luil::platform_result result { luil::reveal_in_file_manager(executable.u8string()) };
+            platform_report_ = result.ok() ? u8"탐색기에서 실행 파일을 골라 두었다." : u8"탐색기를 열지 못했다 — " + result.error;
+            return true;
+        }
+        if (message.get<launch_notepad_intent>() != nullptr)
+        {
+            const luil::platform_result result { luil::launch_program(u8"notepad.exe", {}) };
+            platform_report_ = result.ok() ? u8"메모장을 띄웠다." : u8"메모장을 띄우지 못했다 — " + result.error;
+            return true;
+        }
         if (message.get<tool_focus_intent>() != nullptr)
         {
             if (tool_open_ == false)
@@ -200,6 +221,25 @@ namespace demo {
         fullscreen->set_action(luil::ui_trigger::left_click,
             [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::ui_command::window_toggle_fullscreen } }; });
         column->add(std::move(fullscreen), { .length = 26.0f, .cross_length = 140.0f });
+
+        // 플랫폼 도구다. 경로 따옴표·COM·핸들 정리는 라이브러리가 맡는다.
+        column->add_gap(18.0f);
+        luil::stack_config tools_config {};
+        tools_config.direction = luil::stack_direction::row;
+        tools_config.spacing = 8.0f;
+        auto tools { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-platform" }, tools_config) };
+        auto reveal { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, u8"reveal" }, luil::text_button_config { .text = u8"탐색기에서 실행 파일 보기" }) };
+        reveal->set_action(luil::ui_trigger::left_click, luil::make_message_action(reveal_executable_intent {}));
+        tools->add(std::move(reveal), 180.0f);
+        auto notepad { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, u8"notepad" }, luil::text_button_config { .text = u8"메모장 열기" }) };
+        notepad->set_action(luil::ui_trigger::left_click, luil::make_message_action(launch_notepad_intent {}));
+        tools->add(std::move(notepad), 100.0f);
+        column->add(std::move(tools), 26.0f);
+        if (platform_report_.empty() == false)
+        {
+            column->add_gap(4.0f);
+            column->add(make_label(luil::ui_element_id { kind_text, u8"windows-platform-report" }, platform_report_, 11.0f, luil::label_color_role::dim), 18.0f);
+        }
         return column;
     }
 

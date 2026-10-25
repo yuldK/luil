@@ -382,6 +382,9 @@ luil_add_source_filter(luil_files "win32/host"
     win32/file_dialog.h
     "${public_headers}/app/secret_store.h"
     win32/secret_store_win32.cpp
+    "${public_headers}/app/platform_services.h"
+    win32/command_line.h
+    win32/platform_services_win32.cpp
     win32/fail_fast.cpp
     "${public_headers}/win32/app_host.h"
     "${public_headers}/win32/renderer_policy.h"
@@ -647,6 +650,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_window_control.h
         "${public_headers}/app/secret_store.h"
         android/secret_store_android.cpp
+        "${public_headers}/app/platform_services.h"
+        android/platform_services_android.cpp
         android/cpu_skia_renderer.cpp
         android/cpu_skia_renderer.h
         android/device_request.cpp
