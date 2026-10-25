@@ -95,6 +95,12 @@ namespace demo {
         float offset { 0.0f };
     };
 
+    // 가상 목록을 격자(타일)로·목록으로 바꾼다. 맨 위 항목이 그대로 맨 위 줄에 남게 스크롤 값을 다시 정한다.
+    struct log_grid_intent
+    {
+        bool grid { false };
+    };
+
     // 두 목록을 나눈 자리를 논리 픽셀만큼 옮긴다.
     // +가 아래 판이 넓어지는 쪽이다 (부호는 손잡이가 맞춘다).
     struct split_intent
@@ -147,6 +153,8 @@ namespace demo {
         std::u8string log_opened_ {};
         std::u8string log_cursor_ {};
         float log_scroll_ { 0.0f };
+        // 가상 목록을 격자로 보이는가 (`virtual_list_config::columns`).
+        bool log_grid_ { false };
         float grouped_scroll_ { 0.0f };
         // 아래 판(그룹 목록)의 높이다 (논리 픽셀). 나눈 자리가 이 값이고, 위 판은
         // 나머지를 갖는다 — 창이 커지면 늘어난 만큼은 위 판이 먹는다.

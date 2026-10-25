@@ -87,6 +87,15 @@ namespace luil {
     //    그 행의 빠짐 알림(`ElementRemovedFromSelection`)은 나지 않는다.
     inline constexpr std::size_t virtual_list_offscreen_selection_limit { 64 };
 
+    // 커서를 창 안으로 들이는 자리다 (`virtual_list_config::reveal`).
+    enum class virtual_list_reveal
+    {
+        // 가까운 가장자리에 붙인다 (지금까지의 동작).
+        nearest,
+        // 창 가운데에 둔다 (사진 보기의 필름 띠처럼 지금 항목 앞뒤를 함께 보일 때).
+        center,
+    };
+
     struct virtual_list_config
     {
         // 같은 화면에 목록이 여럿일 때 구분하는 키다.
@@ -236,7 +245,28 @@ namespace luil {
         // ←·→를 계층 키로 쓰는가. ←·→에 다른 뜻을 먼저 주는 컴포넌트(셀 커서가 있는 표)가 끄고, 계층 키가 필요한
         // 자리에서 `step_tree`를 직접 부른다.
         bool tree_keys { true };
+        // 격자(타일) 모드의 열 수다 (virtual-list-grid-design.md). 0이면 지금처럼 한 줄에 하나다.
+        //  - 격자 모드에서는 모든 칸이 `row_height` 높이다 (`virtual_list_item::height`를 보지 않는다).
+        //  - ↑/↓는 한 줄(열 수만큼), ←/→는 한 칸이다. Page는 창에 드는 줄 수만큼, Home/End는 처음·끝이다.
+        //  - 계층(`set_expanded`)과 함께 쓰지 않는다 — ←/→가 칸 이동이 된다.
+        std::size_t columns { 0 };
+        // 0보다 크면 칸 폭이 이 값(논리 픽셀) 이상인 만큼 열을 정한다 (창 폭에 따라 열 수가 바뀐다). `columns`보다 앞선다.
+        //  - 열 수가 바뀌어도 같은 항목을 보이려면 앱이 `virtual_list_grid_offset_keeping`으로 스크롤 값을 다시 정한다.
+        float minimum_column_width { 0.0f };
+        // 키보드가 커서를 창 밖으로 옮겼을 때 들이는 자리다. `center`는 커서 항목을 창 가운데로 들인다.
+        virtual_list_reveal reveal { virtual_list_reveal::nearest };
     };
+
+    // 이 설정이 내용 폭 `width`(논리 픽셀)에서 쓰는 열 수다. 격자 모드가 아니면 1이다.
+    //  - 목록은 막대가 설 때 그 폭(`scroll_area_bar_width`)을 뺀 폭으로 센다. 앱이 같은 수를 얻으려면 같은 폭을 준다.
+    [[nodiscard]] std::size_t virtual_list_grid_columns(const virtual_list_config& config, float width) noexcept;
+    // 열 수·줄 높이가 바뀔 때, 창 맨 위 줄의 첫 항목이 새 배치에서도 맨 위 줄에 서는 스크롤 값이다 (논리 픽셀).
+    // 목록↔격자 전환(열 1 ↔ n, 줄 높이도 함께 바뀌기 쉽다)과 창 폭에 따른 열 수 변화에 쓴다.
+    //  - 줄 안에서 흘러간 만큼은 줄 높이의 비율로 옮긴다.
+    [[nodiscard]] float virtual_list_grid_offset_keeping(float scroll_offset, std::size_t old_columns, float old_row_height, std::size_t new_columns, float new_row_height) noexcept;
+    // 구간 [`begin`, `begin` + `length`)를 창 안으로 들이는 스크롤 값이다 (논리 픽셀, 절대). 이미 다 보이면 지금 값 그대로다.
+    //  - `center`면 그 구간의 가운데를 창 가운데에 둔다. `nearest`면 가까운 가장자리에 붙인다.
+    [[nodiscard]] float virtual_list_reveal_offset(float begin, float length, float scroll_offset, float viewport_height, virtual_list_reveal reveal) noexcept;
 
     // 모델 안에서 키가 커서를 옮길 자리다.
     //
@@ -259,7 +289,7 @@ namespace luil {
     // 글자 질의로 찾을 항목이다 (모델 전체에서).
     //
     // 규칙은 묶음의 글자 탐색과 같다.
-    //  - `label`이 질의로 **시작하는** 첫 항목이고, 비교는 UTF-8 byte 그대로다.
+    //  - `label`이 질의로 **시작하는** 첫 항목이고, 대소문자를 가리지 않는다 (`text::starts_with_folded` — case-fold-design.md).
     //  - `first`가 참이면 `from`의 **다음**부터 찾고 끝에서 처음으로 돈다 —
     //    같은 글자를 거듭 치면 그 글자로 시작하는 항목들을 돈다. 거짓이면
     //    `from`부터 찾는다 (글을 더 적은 것이지 다음으로 가자는 뜻이 아니다).
@@ -354,6 +384,8 @@ namespace luil {
         // 계층 목록의 ←(`forward` 거짓)·→가 할 일이다 (`set_expanded`). 갈 곳이 없으면 nullopt다.
         //  - 목록 자신의 ←·→가 이것이다. `tree_keys`를 끈 컴포넌트가 자기 규칙 안에서 같은 일을 시킬 때 부른다.
         [[nodiscard]] std::optional<std::vector<input_action>> step_tree(bool forward) const;
+        // `arrange` 뒤에 유효한 열 수다 (격자 모드가 아니면 1).
+        [[nodiscard]] std::size_t columns() const noexcept;
 
         // 목록 자신은 hit의 답이 되지 않는다 — 답은 언제나 행이거나 없음이다.
         //
@@ -394,6 +426,12 @@ namespace luil {
         [[nodiscard]] std::unique_ptr<ui_element> make_row(std::size_t index, bool selected, bool with_content) const;
         // `index`번 항목을 창 안으로 들이는 스크롤 변화량이다 (논리 픽셀). 이미 보이면 0이다.
         [[nodiscard]] float reveal_delta(std::size_t index) const;
+        // `index`번 항목이 서는 세로 구간이다 (격자면 그 줄의 구간).
+        [[nodiscard]] virtual_list_span span_of(std::size_t index) const noexcept;
+        // 격자 모드인가 (`columns`나 `minimum_column_width`를 정했다).
+        [[nodiscard]] bool grid() const noexcept;
+        // 격자의 화살표·Page·Home/End가 커서를 옮길 자리다. 옮길 수 없으면 빈 값이다.
+        [[nodiscard]] std::optional<std::size_t> grid_step_target(value_step step, bool sideways) const noexcept;
 
         virtual_list_config config_ {};
         scroll_area_element* area_ { nullptr };
@@ -414,5 +452,7 @@ namespace luil {
         std::optional<std::size_t> cursor_ {};
         // `arrange`가 정하는 창 높이다 (논리 픽셀). Page 걸음과 되살리기가 읽는다.
         float viewport_height_ { 0.0f };
+        // 격자의 열 수다. 폭에 따라 정하는 격자는 `arrange`가 다시 정한다. 격자가 아니면 1이다.
+        std::size_t columns_ { 1 };
     };
 } // namespace luil

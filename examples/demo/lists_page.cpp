@@ -1,10 +1,12 @@
 #include "demo/lists_page.h"
 
 #include "luil/generated/codicons.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/grouped_list_element.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/scroll_view_element.h"
 #include "luil/ui/split_handle_element.h"
+#include "luil/ui/virtual_list_element.h"
 
 #include <algorithm>
 #include <array>
@@ -57,6 +59,9 @@ namespace demo {
         // --- 가상 목록 (세 번째 판) ---
         // 치수와 모델 크기다.
         constexpr float log_row_height { 26.0f };
+        // 격자로 볼 때의 열 수와 칸 높이다.
+        constexpr std::size_t log_grid_columns { 3 };
+        constexpr float log_tile_height { 52.0f };
         // 커서와 고른 항목을 함께 적는 아래 줄이다.
         // 둘이 갈라져 있다는 것이 화면에 보여야 `move`와 `select`를 왜 나눴는지가
         // 예제에서 읽힌다 — 상태 이름만으로는 아무도 그 차이를 보지 못한다.
@@ -234,6 +239,15 @@ namespace demo {
         if (const auto* const scroll_to { message.get<log_scroll_to_intent>() }; scroll_to != nullptr)
         {
             log_scroll_ = scroll_to->offset;
+            return true;
+        }
+        if (const auto* const grid { message.get<log_grid_intent>() }; grid != nullptr)
+        {
+            // 맨 위 줄의 첫 항목이 새 배치에서도 맨 위 줄에 서게 한다. 줄 높이도 함께 바뀐다.
+            if (grid->grid != log_grid_)
+                log_scroll_ = grid->grid ? luil::virtual_list_grid_offset_keeping(log_scroll_, 1, log_row_height, log_grid_columns, log_tile_height)
+                                         : luil::virtual_list_grid_offset_keeping(log_scroll_, log_grid_columns, log_tile_height, 1, log_row_height);
+            log_grid_ = grid->grid;
             return true;
         }
         if (const auto* const scroll { message.get<tree_scroll_intent>() }; scroll != nullptr)
@@ -435,7 +449,9 @@ namespace demo {
         // 다듬기의 기준이 실제 창 높이여야 하므로 여기서 미리 뺀다 — `add_flexible`이
         // 나눠 줄 값을 눈대중으로 적으면 앱과 목록이 다른 창을 재게 된다.
         const float list_height { viewport_height - log_footer_height - log_footer_gap };
-        const float content_height { luil::virtual_list_content_height(*log_items_, log_row_height) };
+        // 격자는 칸이 모두 한 줄 높이라 줄 수로 잰다 (`virtual_list_config::columns`).
+        const std::size_t grid_rows { (log_items_->size() + log_grid_columns - 1) / log_grid_columns };
+        const float content_height { log_grid_ ? static_cast<float>(grid_rows) * log_tile_height : luil::virtual_list_content_height(*log_items_, log_row_height) };
         // 다른 두 목록과 같은 자리에서 같은 식으로 다듬는다.
         // 앱이 든 값과 목록이 재는 값이 어긋나면 커서를 따라가는 스크롤이 한 번에
         // 닿지 못한다 — 목록은 다듬은 값에서, 앱은 원값에서 델타를 세기 때문이다.
@@ -448,7 +464,8 @@ namespace demo {
         config.shared_items = log_items_;
         config.selected = log_selected_;
         config.cursor = log_cursor_;
-        config.row_height = log_row_height;
+        config.row_height = log_grid_ ? log_tile_height : log_row_height;
+        config.columns = log_grid_ ? log_grid_columns : 0;
         config.scroll_offset = log_scroll_;
         // 기본 행은 이름 한 줄이다. 색인 badge와 오른쪽 보조 칸은 앱의 것이라
         // 여기서 짓는다 (그 둘 말고는 전부 목록이 쥔다).
@@ -472,7 +489,18 @@ namespace demo {
         // 두 번 누른 줄이다. 한 번 누름은 고르기만 하므로 이 값은 따라오지 않는다.
         if (log_opened_.empty() == false)
             footer += u8"  ·  연 것 " + log_label_of(*log_items_, log_opened_);
-        column->add(make_label(luil::ui_element_id { kind_text, u8"log-footer" }, footer, 10.0f, luil::label_color_role::dim), log_footer_height);
+        luil::stack_config footer_config {};
+        footer_config.direction = luil::stack_direction::row;
+        footer_config.spacing = 8.0f;
+        auto footer_row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"log-footer-row" }, footer_config) };
+        footer_row->add_flexible(make_label(luil::ui_element_id { kind_text, u8"log-footer" }, footer, 10.0f, luil::label_color_role::dim));
+        // 목록 ↔ 격자 전환이다. ↑/↓는 한 줄, ←/→는 한 칸이 된다.
+        luil::text_button_config toggle_config { .text = log_grid_ ? u8"목록으로 보기" : u8"격자로 보기", .visual = luil::text_button_visual::link };
+        auto toggle { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"log-grid" }, std::move(toggle_config)) };
+        toggle->set_cursor(luil::ui_cursor::hand);
+        toggle->set_action(luil::ui_trigger::left_click, luil::make_message_action(log_grid_intent { log_grid_ == false }));
+        footer_row->add_fit(std::move(toggle));
+        column->add(std::move(footer_row), log_footer_height);
 
         luil::panel_config surface_panel {};
         surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };

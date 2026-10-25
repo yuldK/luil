@@ -263,9 +263,10 @@ namespace luil {
                 : ui_element { std::move(id) }
             {}
 
-            void add_row(std::unique_ptr<ui_element> row, const virtual_list_span& span)
+            // 격자 모드에서는 줄 안의 칸 자리(`column`/`columns`)를 함께 받는다. 한 줄에 하나면 0/1이다.
+            void add_row(std::unique_ptr<ui_element> row, const virtual_list_span& span, const std::size_t column = 0, const std::size_t columns = 1)
             {
-                spans_.push_back(span);
+                cells_.push_back(cell { span, column, columns > 0 ? columns : 1 });
                 add_child(std::move(row));
             }
 
@@ -276,8 +277,11 @@ namespace luil {
                 const std::span<const std::unique_ptr<ui_element>> rows { children() };
                 for (std::size_t index = 0; index < rows.size(); ++index)
                 {
-                    const virtual_list_span& span { spans_[index] };
-                    rows[index]->arrange(context.for_child({ context.slot.x, context.slot.y + span.begin * scale, context.slot.width, span.length * scale }));
+                    const cell& placed { cells_[index] };
+                    // 칸의 왼쪽·오른쪽을 따로 반올림하지 않고 비율로 나눈다 — 칸 사이에 틈이나 겹침이 생기지 않는다.
+                    const float left { context.slot.x + context.slot.width * static_cast<float>(placed.column) / static_cast<float>(placed.columns) };
+                    const float right { context.slot.x + context.slot.width * static_cast<float>(placed.column + 1) / static_cast<float>(placed.columns) };
+                    rows[index]->arrange(context.for_child({ left, context.slot.y + placed.span.begin * scale, right - left, placed.span.length * scale }));
                 }
             }
 
@@ -287,9 +291,58 @@ namespace luil {
             }
 
         private:
-            std::vector<virtual_list_span> spans_ {};
+            struct cell
+            {
+                virtual_list_span span {};
+                std::size_t column { 0 };
+                std::size_t columns { 1 };
+            };
+            std::vector<cell> cells_ {};
         };
+
+        // 격자의 줄 수다.
+        [[nodiscard]] std::size_t grid_rows(const std::size_t count, const std::size_t columns) noexcept
+        {
+            return columns > 0 ? (count + columns - 1) / columns : count;
+        }
     } // namespace
+
+    std::size_t virtual_list_grid_columns(const virtual_list_config& config, const float width) noexcept
+    {
+        if (config.minimum_column_width > 0.0f)
+        {
+            if (width <= 0.0f)
+                return 1;
+            const auto fitting { static_cast<std::size_t>(width / config.minimum_column_width) };
+            return fitting > 0 ? fitting : 1;
+        }
+        return config.columns > 0 ? config.columns : 1;
+    }
+
+    float virtual_list_grid_offset_keeping(const float scroll_offset, const std::size_t old_columns, const float old_row_height, const std::size_t new_columns, const float new_row_height) noexcept
+    {
+        if (old_row_height <= 0.0f || new_row_height <= 0.0f || old_columns == 0 || new_columns == 0)
+            return scroll_offset;
+        // 옛 배치의 맨 위 줄 첫 항목이 새 배치에서 서는 줄의 위다. 줄 안에서 흘러간 만큼은 줄 높이의 비율로 옮긴다.
+        const float top { scroll_offset > 0.0f ? scroll_offset : 0.0f };
+        const auto old_row { static_cast<std::size_t>(top / old_row_height) };
+        const float within { (top - static_cast<float>(old_row) * old_row_height) / old_row_height };
+        const std::size_t first { old_row * old_columns };
+        return (static_cast<float>(first / new_columns) + within) * new_row_height;
+    }
+
+    float virtual_list_reveal_offset(const float begin, const float length, const float scroll_offset, const float viewport_height, const virtual_list_reveal reveal) noexcept
+    {
+        const float end { begin + length };
+        if (begin >= scroll_offset && end <= scroll_offset + viewport_height)
+            return scroll_offset;
+        if (reveal == virtual_list_reveal::center)
+        {
+            const float centered { begin + length / 2.0f - viewport_height / 2.0f };
+            return centered > 0.0f ? centered : 0.0f;
+        }
+        return scroll_offset + luil::scroll_delta_to_reveal(begin, length, scroll_offset, viewport_height);
+    }
 
     float virtual_list_content_height(const std::span<const virtual_list_item> items, const float row_height) noexcept
     {
@@ -417,7 +470,14 @@ namespace luil {
         : ui_element(ui_element_id { ui_element_kind::virtual_list, config.owner })
         , config_(std::move(config))
     {
-        content_height_ = virtual_list_content_height(model(), config_.row_height);
+        // 격자는 칸이 모두 한 줄 높이라 줄 수로 잰다. 폭으로 열을 정하는 격자는 배치가 다시 잰다.
+        if (grid())
+        {
+            columns_ = virtual_list_grid_columns(config_, 0.0f);
+            content_height_ = static_cast<float>(grid_rows(model().size(), columns_)) * config_.row_height;
+        }
+        else
+            content_height_ = virtual_list_content_height(model(), config_.row_height);
 
         // 커서는 앱이 이름 댄 항목이고, 없으면 고른 항목이며, 그것도 없으면
         // 첫 활성 항목이다. 세 단계가 한곳에 있어야 키보드·그리기·접근성이
@@ -474,10 +534,19 @@ namespace luil {
         // 여기까지 올라온다 (key-propagation-design.md). 쓰지 않는 키는 nullopt로 흘린다.
         //  - 계층 목록(`set_expanded`)의 ←·→도 여기다. 갈 곳이 없는 ←·→는 흘려서 감싼 표가 가로로 흐르게 한다.
         const bool selection_keys { config_.multiple_selection && (config_.select_all != nullptr || config_.toggle_at_cursor != nullptr) };
-        if (selection_keys || config_.set_expanded != nullptr)
+        if (selection_keys || config_.set_expanded != nullptr || (grid() && moves_cursor()))
             set_key_handler([this](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
                 if (event.alt || event.meta)
                     return std::nullopt;
+                // 격자의 ←/→는 한 칸이다. Shift는 범위, Ctrl은 커서만 옮기기다 (↑/↓와 같은 수식 키 뜻).
+                if (grid() && moves_cursor() && (event.key == key_code::arrow_left || event.key == key_code::arrow_right))
+                {
+                    const value_step step { event.key == key_code::arrow_left ? value_step::decrease : value_step::increase };
+                    const std::optional<std::size_t> target { grid_step_target(step, true) };
+                    if (target.has_value() == false)
+                        return std::vector<input_action> {};
+                    return move_cursor(*target, { step, event.shift, event.control });
+                }
                 if ((event.key == key_code::arrow_left || event.key == key_code::arrow_right) && event.control == false && event.shift == false)
                     return config_.tree_keys ? step_tree(event.key == key_code::arrow_right) : std::nullopt;
                 if (config_.multiple_selection == false)
@@ -504,7 +573,8 @@ namespace luil {
         key_step_target steps {};
         steps.axis = focus_axis::vertical;
         const auto step_to = [this](const value_step step, const virtual_list_move_context& context) -> std::optional<std::vector<input_action>> {
-            const std::optional<std::size_t> target { virtual_list_step_target(model(), cursor_, step, page_rows(step)) };
+            // 격자의 ↑/↓·Page는 줄 단위다. 한 줄에 하나인 목록은 지금처럼 모델 위의 걸음이다.
+            const std::optional<std::size_t> target { grid() ? grid_step_target(step, false) : virtual_list_step_target(model(), cursor_, step, page_rows(step)) };
             if (target.has_value() == false)
                 return std::vector<input_action> {};
             return move_cursor(*target, context);
@@ -541,6 +611,12 @@ namespace luil {
         //  - 배치 전에는 창을 모르므로 한 줄로 본다. 키가 멈추지는 않는다.
         if (viewport_height_ <= 0.0f || model().empty() || (step != value_step::decrease_page && step != value_step::increase_page))
             return 1;
+        // 격자는 칸이 모두 한 줄 높이라 창에 드는 줄 수 그대로다.
+        if (grid())
+        {
+            const auto rows { config_.row_height > 0.0f ? static_cast<int>(viewport_height_ / config_.row_height) : 1 };
+            return rows > 0 ? rows : 1;
+        }
         float used { 0.0f };
         int rows { 0 };
         std::size_t index { cursor_.value_or(0u) };
@@ -641,11 +717,64 @@ namespace luil {
 
     float virtual_list_element::reveal_delta(const std::size_t index) const
     {
-        const virtual_list_span span { virtual_list_row_span(model(), config_.row_height, index) };
+        const virtual_list_span span { span_of(index) };
         // 지금 흘러간 자리는 **다듬은 값**이다. 앱이 준 원값으로 재면 범위를 벗어난
         // 상태에서 키를 눌렀을 때 화면에 보이는 것과 다른 자리를 기준으로 삼는다.
         const float offset { area_->metrics().scroll_offset };
-        return luil::scroll_delta_to_reveal(span.begin, span.length, offset, viewport_height_);
+        // 가운데 맞춤이면 그 항목의 줄을 창 가운데에 둔다. 끝 근처는 영역이 범위 안으로 다듬는다.
+        const float target { virtual_list_reveal_offset(span.begin, span.length, offset, viewport_height_, config_.reveal) };
+        const float limit { std::max(0.0f, content_height_ - viewport_height_) };
+        return std::min(target, limit) - offset;
+    }
+
+    bool virtual_list_element::grid() const noexcept
+    {
+        return config_.columns > 0 || config_.minimum_column_width > 0.0f;
+    }
+
+    std::size_t virtual_list_element::columns() const noexcept
+    {
+        return columns_;
+    }
+
+    virtual_list_span virtual_list_element::span_of(const std::size_t index) const noexcept
+    {
+        if (grid() == false)
+            return virtual_list_row_span(model(), config_.row_height, index);
+        if (index >= model().size())
+            return {};
+        return { static_cast<float>(index / columns_) * config_.row_height, config_.row_height };
+    }
+
+    std::optional<std::size_t> virtual_list_element::grid_step_target(const value_step step, const bool sideways) const noexcept
+    {
+        const std::span<const virtual_list_item> items { model() };
+        if (items.empty())
+            return std::nullopt;
+        if (step == value_step::minimum)
+            return edge_item(items, true);
+        if (step == value_step::maximum)
+            return edge_item(items, false);
+        if (cursor_.has_value() == false || *cursor_ >= items.size())
+            return edge_item(items, true);
+
+        const std::size_t index { *cursor_ };
+        const std::size_t columns { columns_ > 0 ? columns_ : 1 };
+        const bool backwards { step == value_step::decrease || step == value_step::decrease_page };
+        const bool page { step == value_step::decrease_page || step == value_step::increase_page };
+        const std::size_t count { sideways ? 1 : columns * static_cast<std::size_t>(page ? page_rows(step) : 1) };
+        std::size_t target { index };
+        if (backwards)
+            target = index >= count ? index - count : (page ? index % columns : index);
+        else if (index + count < items.size())
+            target = index + count;
+        // 아래 줄이 있는데 그 칸이 비었으면(마지막 줄이 덜 찼다) 마지막 항목으로 간다 — 파일 관리자와 같다.
+        else if (sideways == false && index / columns + 1 < grid_rows(items.size(), columns))
+            target = items.size() - 1;
+        // 비활성 칸에 서지 않는다. 같은 방향으로 가장 가까운 활성 칸이고, 없으면 제자리다.
+        if (selectable(items[target]) == false)
+            return stepped(items, target, backwards ? -1 : 1, 1).value_or(index);
+        return target;
     }
 
     float virtual_list_element::content_height() const noexcept
@@ -723,8 +852,41 @@ namespace luil {
         if (realized_built_ == false && context.slot.height > 0.0f)
         {
             realized_built_ = true;
+            // 폭으로 열을 정하는 격자는 지금 폭에서 열과 내용 높이를 다시 잰다.
+            if (grid())
+            {
+                // 칸은 막대를 뺀 내용 폭에 선다. 막대가 서는지는 내용 높이가 정하고 그것은 열 수가 정하므로, 막대 없이
+                // 세어 넘치면 막대 폭을 빼고 다시 센다 (열이 줄면 더 넘칠 뿐이라 한 번이면 된다).
+                const float width { context.slot.width / scale };
+                const bool bar_possible { config_.scroll != nullptr && config_.bar != scrollbar_visibility::never };
+                columns_ = virtual_list_grid_columns(config_, width);
+                content_height_ = static_cast<float>(grid_rows(model().size(), columns_)) * config_.row_height;
+                if (bar_possible && (config_.bar == scrollbar_visibility::always || content_height_ > viewport_height_))
+                {
+                    columns_ = virtual_list_grid_columns(config_, width - scroll_area_bar_width);
+                    content_height_ = static_cast<float>(grid_rows(model().size(), columns_)) * config_.row_height;
+                }
+                area_->set_content_height(content_height_);
+            }
             const float offset { clamp_scroll(content_height_, viewport_height_, config_.scroll_offset) };
-            realized_ = virtual_list_visible_range(model(), config_.row_height, offset, viewport_height_, config_.overscan);
+            if (grid())
+            {
+                // 걸치는 줄의 반열린 구간을 항목 구간으로 옮긴다. 줄 단위로 위아래를 더 짓는다.
+                const std::size_t rows { grid_rows(model().size(), columns_) };
+                if (rows > 0 && config_.row_height > 0.0f && viewport_height_ > 0.0f)
+                {
+                    const auto first_row { static_cast<std::size_t>(offset / config_.row_height) };
+                    const auto end_row { std::min(rows, static_cast<std::size_t>(std::ceil((offset + viewport_height_) / config_.row_height))) };
+                    const std::size_t margin { config_.overscan > 0 ? static_cast<std::size_t>(config_.overscan) : 0u };
+                    const std::size_t begin_row { first_row > margin ? first_row - margin : 0u };
+                    const std::size_t last_row { std::min(rows, end_row + margin) };
+                    realized_ = { begin_row * columns_, std::min(model().size(), last_row * columns_) };
+                }
+                else
+                    realized_ = {};
+            }
+            else
+                realized_ = virtual_list_visible_range(model(), config_.row_height, offset, viewport_height_, config_.overscan);
             build_rows();
         }
         // 이름은 안쪽 영역을 지나 막대까지 이어진다 (`list_element`와 같은 줄).
@@ -869,7 +1031,11 @@ namespace luil {
         const auto realize = [this, lane, &chosen](const std::size_t index, const float begin) {
             const virtual_list_item& item { model()[index] };
             const bool selected { item.enabled && (item.key == config_.selected || chosen.contains(item.key)) };
-            lane->add_row(make_row(index, selected, true), { begin, item_height(item, config_.row_height) });
+            // 격자는 줄 안의 칸 자리를 함께 준다. 줄의 위는 색인에서 바로 나온다.
+            if (grid())
+                lane->add_row(make_row(index, selected, true), span_of(index), index % columns_, columns_);
+            else
+                lane->add_row(make_row(index, selected, true), { begin, item_height(item, config_.row_height) });
         };
 
         // 창에 걸치지 않아도 짓는 행이다.
