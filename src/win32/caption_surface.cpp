@@ -346,16 +346,32 @@ namespace luil::win32 {
             context_.surface_moved(id_);
             return std::nullopt;
         case WM_NCLBUTTONDOWN:
+        case WM_NCLBUTTONDBLCLK:
+            // 틀이 빠진 동안(전체 화면)의 비클라이언트 누름은 들어가기 전 판정의 꼬리다. 버린다 — 기본 처리에 맡기면
+            // 창 끌기·크기 조절 루프가 전체 화면 창을 잡는다.
+            if (display_mode() == window_display_mode::fullscreen)
+            {
+                pressed_caption_hit_ = HTNOWHERE;
+                return LRESULT { 0 };
+            }
             // 캡션·테두리를 잡는 것도 popup 밖 클릭이다.
             if (input_dismisses_popups())
                 static_cast<void>(context_.dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+            pressed_caption_hit_ = is_caption_button(word_parameter) ? word_parameter : HTNOWHERE;
             if (is_caption_button(word_parameter))
                 return LRESULT { 0 };
             return std::nullopt;
-        case WM_NCLBUTTONUP:
-            if (execute_caption_button(word_parameter))
+        case WM_NCLBUTTONUP: {
+            const WPARAM pressed { std::exchange(pressed_caption_hit_, HTNOWHERE) };
+            if (display_mode() == window_display_mode::fullscreen)
+                return LRESULT { 0 };
+            if (caption_click_executes(pressed, word_parameter, display_mode()) && execute_caption_button(word_parameter))
+                return LRESULT { 0 };
+            // 캡션 단추 위의 짝이 맞지 않는 뗌은 삼킨다. 기본 처리는 단추 위의 뗌을 그 단추로 실행한다.
+            if (is_caption_button(word_parameter))
                 return LRESULT { 0 };
             return std::nullopt;
+        }
         case WM_NCRBUTTONUP:
             if (word_parameter == HTCAPTION || word_parameter == HTSYSMENU)
             {
@@ -416,6 +432,13 @@ namespace luil::win32 {
             // 방금 얹은 것이 도로 지워진다 (multi-window-design.md).
             state.interaction.hovered_surface = id_;
         }
+    }
+
+    bool caption_click_executes(const WPARAM pressed_hit, const WPARAM released_hit, const window_display_mode mode) noexcept
+    {
+        if (mode == window_display_mode::fullscreen)
+            return false;
+        return pressed_hit == released_hit && (released_hit == HTMINBUTTON || released_hit == HTMAXBUTTON || released_hit == HTCLOSE);
     }
 
     bool caption_surface::is_caption_button(const WPARAM hit) noexcept
