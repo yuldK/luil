@@ -2,12 +2,14 @@
 
 #include "luil/ui/image_element.h"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace luil {
     // 자료가 그림보다 먼저 끝난 입력을 어떻게 할 것인가.
@@ -177,6 +179,8 @@ namespace luil {
         animation_too_large,
         // 장 하나가 코덱에서 실패했다. 몇 번째인지는 `frame`에 있다.
         frame_failed,
+        // 청한 장 번호가 장 수 밖이다 (`decode_image_frame_bytes`). 번호는 `frame`에 있다.
+        frame_out_of_range,
         // 앱이 `image_decode_options::cancelled`로 접었다.
         cancelled,
         // 픽셀을 담을 자리를 잡지 못했다.
@@ -288,6 +292,39 @@ namespace luil {
     // `decode_image_bytes`와 같다.
     [[nodiscard]] ui_animated_image decode_animated_image_bytes(std::span<const std::uint8_t> bytes, image_decode_error& error);
     [[nodiscard]] ui_animated_image decode_animated_image_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
+
+    // 움직이는 그림의 장 목록이다 (image-frames-scaling-design.md). 픽셀은 들지 않는다.
+    struct image_frame_table
+    {
+        // EXIF로 돌려세운 뒤의 **원본** 크기다. 상한(`max_width`·`max_height`)은 장을 펼 때의 일이라 보지 않는다.
+        image_pixel_size size {};
+        // 장마다의 표시 시간이다. 장 수가 곧 이 길이다. `load_animated_image_file`과 같은 규칙으로 다듬은
+        // 값이다 (`animation_frame_too_fast` 이하는 `animation_frame_minimum`).
+        std::vector<std::chrono::milliseconds> durations {};
+        // 바퀴 수다 (`ui_animated_image::play_count`와 같은 규약, `image_plays_forever`).
+        int play_count { 1 };
+    };
+
+    // 픽셀을 펴지 않고 장 수·길이·바퀴 수만 읽는다.
+    //  - 머리를 읽고 장 목록을 짓는다(파일 전체를 한 번 훑는다). 그 전에 `cancelled`를 묻는다.
+    //  - 움직이지 않는 파일은 한 장짜리 목록이다. 원본 상한(`max_source_pixels`)은 여기서도 건다 — 펼 수 없는
+    //    그림의 목록을 내주면 앱이 장을 청하는 자리에서야 실패를 본다.
+    //  - 실패하면 빈 목록(`durations`가 비었다)과 오류다.
+    [[nodiscard]] image_frame_table read_image_frames_file(std::u8string_view path, image_decode_error& error);
+    [[nodiscard]] image_frame_table read_image_frames_file(std::u8string_view path, const image_decode_options& options, image_decode_error& error);
+    [[nodiscard]] image_frame_table read_image_frames_bytes(std::span<const std::uint8_t> bytes, image_decode_error& error);
+    [[nodiscard]] image_frame_table read_image_frames_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
+
+    // `index`번 장 하나를 합성까지 마친 그림으로 읽는다.
+    //  - 코덱이 그 장에 필요한 앞 장들을 스스로 먼저 푼다. 그래서 뒤쪽 장일수록 오래 걸린다 — 여러 장을 차례로 볼
+    //    앱은 `load_animated_image_file`이 낫다.
+    //  - 원본 크기로 펴고 다 된 장을 상한에 맞춰 줄인다 (움직이는 그림의 규칙). 들고 있는 것이 한 장이라 장을
+    //    합한 상한(`animation_too_large`)은 걸리지 않는다.
+    //  - 장 수 밖의 번호는 빈 값과 `frame_out_of_range`다. `cancelled`는 펴기 전과 직후에 묻는다 — 코덱 안의
+    //    앞 장 풀기는 중간에 끊지 못한다.
+    //  - 실패·thread·EXIF 규칙은 `load_image_file`과 같다.
+    [[nodiscard]] ui_image load_image_frame_file(std::u8string_view path, std::size_t index, const image_decode_options& options, image_decode_error& error);
+    [[nodiscard]] ui_image decode_image_frame_bytes(std::span<const std::uint8_t> bytes, std::size_t index, const image_decode_options& options, image_decode_error& error);
 
     // SVG 파일을 읽어 **벡터** `ui_image`로 만든다 (docs/vector-image-design.md).
     //

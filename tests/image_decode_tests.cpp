@@ -1457,3 +1457,90 @@ TEST_CASE("An animation that fails for a reason other than truncation is refused
         REQUIRE(error.frame == 2u);
     }
 }
+
+TEST_CASE("A frame table matches the animation decode without unpacking pixels", "[ui][image][frames]")
+{
+    // 같은 파일에서 목록과 전체 디코드가 같은 시간표·바퀴 수·크기를 답해야 한다.
+    // 합성(overlay)·되돌리기(restore previous)·webp·apng를 함께 본다.
+    const std::array<std::span<const std::uint8_t>, 5> files { bytes_of(animated_gif), bytes_of(overlay_gif), bytes_of(restore_previous_gif), bytes_of(animated_webp), bytes_of(animated_png) };
+    for (const std::span<const std::uint8_t> bytes : files)
+    {
+        luil::image_decode_error error {};
+        const luil::image_frame_table table { luil::read_image_frames_bytes(bytes, error) };
+        REQUIRE(error.empty());
+        const luil::ui_animated_image whole { luil::decode_animated_image_bytes(bytes, error) };
+        REQUIRE(whole.valid());
+        REQUIRE(table.durations == durations_of(whole));
+        REQUIRE(table.play_count == whole.play_count());
+        REQUIRE(table.size == luil::image_pixel_size { whole.width(), whole.height() });
+    }
+}
+
+TEST_CASE("A frame table of a still file is one frame of the minimum length", "[ui][image][frames]")
+{
+    luil::image_decode_error error {};
+    const luil::image_frame_table table { luil::read_image_frames_bytes(bytes_of(solid_png), error) };
+    REQUIRE(error.empty());
+    REQUIRE(table.durations == std::vector<std::chrono::milliseconds> { luil::animation_frame_minimum });
+    REQUIRE(table.play_count == 1);
+    REQUIRE(table.size == luil::image_pixel_size { 64, 32 });
+
+    // EXIF로 돌려세운 뒤의 크기다 — 정지 디코드가 답하는 크기와 같다.
+    const luil::image_frame_table oriented { luil::read_image_frames_bytes(bytes_of(oriented_jpeg), error) };
+    const luil::ui_image still { luil::decode_image_bytes(bytes_of(oriented_jpeg), error) };
+    REQUIRE(oriented.size == luil::image_pixel_size { still.width(), still.height() });
+
+    // 실패는 빈 목록과 오류다.
+    luil::image_decode_error empty {};
+    REQUIRE(luil::read_image_frames_bytes(bytes_of(empty_file), empty).durations.empty());
+    REQUIRE(empty.kind == luil::image_decode_error_kind::file_empty);
+}
+
+TEST_CASE("One decoded frame equals that frame of the whole animation", "[ui][image][frames][raster]")
+{
+    // 코덱이 앞 장들을 스스로 먼저 풀어 합성까지 마친 장이어야 한다. overlay의 둘째 장은 앞 장이 없으면
+    // 오른쪽 절반이 투명이고, restore previous의 셋째 장은 둘째 장을 지운 그림이다.
+    const std::array<std::span<const std::uint8_t>, 5> files { bytes_of(animated_gif), bytes_of(overlay_gif), bytes_of(restore_previous_gif), bytes_of(animated_webp), bytes_of(animated_png) };
+    for (const std::span<const std::uint8_t> bytes : files)
+    {
+        luil::image_decode_error error {};
+        const luil::ui_animated_image whole { luil::decode_animated_image_bytes(bytes, error) };
+        for (std::size_t index { 0 }; index < whole.frame_count(); ++index)
+        {
+            CAPTURE(index);
+            const luil::ui_image frame { luil::decode_image_frame_bytes(bytes, index, {}, error) };
+            REQUIRE(error.empty());
+            REQUIRE(frame.width() == whole.width());
+            REQUIRE(raster_pixels(frame, frame.width(), frame.height()) == frame_pixels(whole, index));
+        }
+    }
+}
+
+TEST_CASE("A frame outside the list, a cancelled frame and a smaller frame", "[ui][image][frames][cancel]")
+{
+    luil::image_decode_error error {};
+    REQUIRE(luil::decode_image_frame_bytes(bytes_of(animated_gif), 3, {}, error).valid() == false);
+    REQUIRE(error.kind == luil::image_decode_error_kind::frame_out_of_range);
+    REQUIRE(error.frame == 3u);
+
+    // 펴기 전·직후에 묻는다. 목록도 장 목록을 짓기 전에 묻는다.
+    for (const int count : { 0, 1, 2 })
+    {
+        CAPTURE(count);
+        const auto asked { std::make_shared<int>(0) };
+        luil::image_decode_error cancelled {};
+        const luil::ui_image frame { luil::decode_image_frame_bytes(bytes_of(animated_gif), 2, { .cancelled = cancelled_after(asked, count) }, cancelled) };
+        REQUIRE(frame.valid() == false);
+        REQUIRE(cancelled.kind == luil::image_decode_error_kind::cancelled);
+    }
+    luil::image_decode_error table_cancelled {};
+    REQUIRE(luil::read_image_frames_bytes(bytes_of(animated_gif), { .cancelled = always_cancelled() }, table_cancelled).durations.empty());
+    REQUIRE(table_cancelled.kind == luil::image_decode_error_kind::cancelled);
+
+    // 원본으로 펴고 다 된 장을 상한에 맞춰 줄인다.
+    luil::image_decode_error smaller {};
+    const luil::ui_image frame { luil::decode_image_frame_bytes(bytes_of(animated_gif), 1, { .max_width = 1 }, smaller) };
+    REQUIRE(smaller.empty());
+    REQUIRE(frame.width() == 1);
+    REQUIRE(frame.height() == 1);
+}
