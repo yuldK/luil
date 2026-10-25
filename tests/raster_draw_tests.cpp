@@ -904,9 +904,10 @@ TEST_CASE("A palette scope redraws its branch with the adjusted palette", "[ui][
 {
     // 기본 버튼은 `accent` 채움이다. 가지가 accent를 바꾸면 그 안의 버튼만 바뀐 색으로 칠해진다.
     const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
-    constexpr luil::ui_color red { luil::make_ui_color(255, 0, 0) };
-    constexpr luil::ui_color blue { luil::make_ui_color(0, 0, 255) };
-    const auto to_red = [red](luil::ui_color_palette colors, luil::color_theme) {
+    // 상수는 static이라 람다가 잡지 않고 읽는다 (MSVC와 clang이 함께 받는 꼴).
+    static constexpr luil::ui_color red { luil::make_ui_color(255, 0, 0) };
+    static constexpr luil::ui_color blue { luil::make_ui_color(0, 0, 255) };
+    const auto to_red = [](luil::ui_color_palette colors, luil::color_theme) {
         colors.accent = red;
         return colors;
     };
@@ -942,7 +943,7 @@ TEST_CASE("A palette scope redraws its branch with the adjusted palette", "[ui][
     SECTION("nested scopes see the outer change")
     {
         // 안쪽 함수는 바깥이 바꾼 팔레트를 받는다 — 빨강을 받았으면 파랑으로 바꾼다.
-        const auto red_to_blue = [red, blue](luil::ui_color_palette colors, luil::color_theme) {
+        const auto red_to_blue = [](luil::ui_color_palette colors, luil::color_theme) {
             if (colors.accent == red)
                 colors.accent = blue;
             return colors;
