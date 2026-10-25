@@ -49,7 +49,7 @@
 | 탭 선택·닫기·재정렬·컨텍스트 메뉴 | `tab_bar_element` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](focus-group-design.md) |
 | 탭 모양·상태 표시·가운데 버튼 닫기·줄이기·한 탭씩 넘기기·견본 | `tab_bar_style`, `tab_indicator`, `tab_bar_preview` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](tab-bar-style-design.md) |
 | 시각적 테마·강조색 선택 | theme_picker_element, accent_picker_element | [ui/theme_picker_element.h](../include/luil/ui/theme_picker_element.h) | [사용 예](demo-guide.md) |
-| 독립 토글 버튼 | check_style::toggle_button | [ui/check_element.h](../include/luil/ui/check_element.h) | [사용 예](demo-guide.md) |
+| 독립 토글 버튼·토글 칩 | check_style::toggle_button, check_style::toggle_chip | [ui/check_element.h](../include/luil/ui/check_element.h) | [사용 예](demo-guide.md) |
 | 메뉴 팝업 조립 | make_menu_popup | [app/menu_popup.h](../include/luil/app/menu_popup.h) | [사용 예](demo-guide.md) |
 | 선택 묶음 | `choice_group_element` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
 | 명령표·단축키 | `app_command`, `match_command` | [ui/commands.h](../include/luil/ui/commands.h) | [설명](popup-anchor-design.md) |

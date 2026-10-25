@@ -1,8 +1,11 @@
 #include "luil/ui/check_element.h"
 
+#include "luil/theme/ui_theme.h"
 #include "luil/ui/app_message.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -165,4 +168,36 @@ TEST_CASE("Independent toggle buttons expose Toggle state and keep button sizing
     REQUIRE(control.accessibility().checked == true);
     control.set_enabled(false);
     REQUIRE(control.focusable() == false);
+}
+
+TEST_CASE("A toggle chip keeps button sizing and draws its accent edge only when on", "[ui][check]")
+{
+    luil::check_config config {};
+    config.owner = u8"bold";
+    config.label = u8"굵게";
+    config.style = luil::check_style::toggle_chip;
+    config.mixed = true;
+    config.toggle = make_toggle(u8"bold");
+    REQUIRE(luil::check_element::height_for(config) == luil::text_button_height);
+    REQUIRE(luil::check_element::indicator_width_for(config) == 0.0f);
+
+    // 칩도 독립 토글 버튼과 같은 계약이다 — 눌린 상태를 Toggle로 알리고 일부 상태는 없다.
+    config.checked = true;
+    const luil::check_element pressed { config };
+    REQUIRE(pressed.accessibility().role == luil::access_role::button);
+    REQUIRE(pressed.accessibility().checked == true);
+    REQUIRE(pressed.accessibility().mixed == false);
+
+    // 자리는 물리 픽셀이다 (raster_probe.h의 규약). 테는 위 가장자리 가운데에서 본다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const auto draw = [&palette](luil::check_config chip) {
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::check_element>(std::move(chip)), { 0.0f, 0.0f, 200.0f, 56.0f }, 2.0f) };
+        luil::testing::raster_frame frame { 200, 56, palette };
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    };
+    const luil::rect_f top_edge { 60.0f, 0.0f, 80.0f, 2.0f };
+    REQUIRE(draw(config).count_color(top_edge, palette.accent) == 160);
+    config.checked = false;
+    REQUIRE(draw(config).contains_color({ 0.0f, 0.0f, 200.0f, 56.0f }, palette.accent) == false);
 }
