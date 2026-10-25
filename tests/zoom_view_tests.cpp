@@ -784,3 +784,76 @@ TEST_CASE("Double tap helper zooms from the base and returns to it", "[zoom][dou
     settings.double_tap.factor = 0.0f;
     REQUIRE_THROWS_AS(luil::zoom_view_element { settings }, std::invalid_argument);
 }
+
+TEST_CASE("Fitting the width or the height keeps the reading place on the other axis", "[zoom][fit]")
+{
+    // 폭 100 × 높이 400의 긴 쪽이다. 창 240 정사각, 여백 20이면 폭 맞춤 2배, 높이 맞춤 0.5배다.
+    // 지금은 1배이고 내용 (50, 50)이 창 가운데에 있다 (원점은 창 가운데 기준).
+    auto settings { config() };
+    settings.content_bounds = luil::rect_f { 0.0f, 0.0f, 100.0f, 400.0f };
+    settings.origin = { -50.0f, -50.0f };
+    const luil::zoom_point viewport { 240.0f, 240.0f };
+
+    SECTION("overlap")
+    {
+        const auto width { luil::zoom_to_fit(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::width) };
+        REQUIRE(width.zoom == 2.0f);
+        // 가로는 가운데로, 세로는 읽던 자리(내용 y 50)가 그대로 창 가운데다.
+        REQUIRE(width.origin == luil::zoom_point { -100.0f, -100.0f });
+        const auto height { luil::zoom_to_fit(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::height) };
+        REQUIRE(height.zoom == 0.5f);
+        REQUIRE(height.origin == luil::zoom_point { -25.0f, -100.0f });
+        // 전체 맞춤은 지금까지와 같다.
+        const auto whole { luil::zoom_to_fit(settings, viewport, 20.0f, 4.0f) };
+        REQUIRE(whole.zoom == 0.5f);
+        REQUIRE(whole.origin == luil::zoom_point { -25.0f, -100.0f });
+        // 맞춘 축도 상한으로 자른다.
+        REQUIRE(luil::zoom_to_fit(settings, viewport, 20.0f, 1.5f, luil::zoom_fit::width).zoom == 1.5f);
+    }
+
+    SECTION("contain")
+    {
+        // contain은 지금 상태부터 다듬는다. 1배의 세로 400은 창보다 길어 위쪽 끝에 붙고(원점 y -120), 창 가운데의
+        // 내용은 y 120이다. 폭 맞춤은 그 자리를 지켜 -240이고, 그것이 다시 빈 곳 없는 범위 안이다.
+        settings.bounds = luil::zoom_bounds::contain;
+        const auto width { luil::zoom_to_fit(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::width) };
+        REQUIRE(width.zoom == 2.0f);
+        REQUIRE(width.origin == luil::zoom_point { -100.0f, -240.0f });
+        const auto height { luil::zoom_to_fit(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::height) };
+        REQUIRE(height.origin == luil::zoom_point { -25.0f, -100.0f });
+    }
+
+    SECTION("a low window still fits the width")
+    {
+        // 높이가 여백 두 배보다 낮아도 폭은 맞춘다. 전체 맞춤은 서지 않는다.
+        const luil::zoom_point low { 240.0f, 30.0f };
+        REQUIRE(luil::zoom_to_fit(settings, low, 20.0f, 4.0f, luil::zoom_fit::width).zoom == 2.0f);
+        REQUIRE(luil::zoom_to_fit(settings, low, 20.0f, 4.0f).zoom == settings.zoom);
+        REQUIRE(luil::zoom_to_fit(settings, low, 20.0f, 4.0f, luil::zoom_fit::height).zoom == settings.zoom);
+    }
+}
+
+TEST_CASE("Fit actions reach the fitted state through zoom then pan", "[zoom][fit]")
+{
+    auto settings { config() };
+    settings.content_bounds = luil::rect_f { 0.0f, 0.0f, 100.0f, 400.0f };
+    // 가로가 가운데에서 벗어나 있다. 가운데 기준 확대가 원점을 (-60, -100)으로 옮긴 뒤, 남은 가로 -40만큼 민다.
+    settings.origin = { -30.0f, -50.0f };
+    const luil::zoom_point viewport { 240.0f, 240.0f };
+    const auto actions { luil::zoom_fit_actions(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::width) };
+    REQUIRE(actions.size() == 2u);
+    REQUIRE(read(actions[0]).factor == 2.0f);
+    REQUIRE(read(actions[1]).delta == luil::zoom_point { -40.0f, 0.0f });
+    const auto zoomed { luil::zoom_about(settings, viewport, read(actions[0]).factor, read(actions[0]).anchor) };
+    settings.zoom = zoomed.zoom;
+    settings.origin = zoomed.origin;
+    const auto moved { luil::pan_by(settings, viewport, read(actions[1]).delta) };
+    REQUIRE(moved.zoom == 2.0f);
+    REQUIRE(moved.origin == luil::zoom_point { -100.0f, -100.0f });
+
+    // 이미 그 상태면 할 일이 없다. 경계나 메시지가 없어도 그렇다.
+    settings.origin = moved.origin;
+    REQUIRE(luil::zoom_fit_actions(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::width).empty());
+    settings.pan_by = {};
+    REQUIRE(luil::zoom_fit_actions(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::height).empty());
+}
