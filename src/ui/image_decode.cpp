@@ -476,6 +476,19 @@ namespace luil {
             return image;
         }
 
+        // Skia의 되풀이 수는 **첫 바퀴를 빼고** 센다 (SkCodec.h:785-805) — 0이
+        // "한 번 돈다"이고 음수가 "끝없이"다. 그대로 내보내면 0을 "돌지
+        // 않는다"로 읽는 자리가 반드시 생겨, 바퀴 수로 옮기는 것을 여기서
+        // 한 번 하고 만다 (`image_plays_forever`). 장 목록(`read_frames`)도 같은 식을 본다.
+        //  - wuffs는 넘치는 되풀이 수를 `INT_MAX`로 잘라 준다
+        //    (SkWuffsCodec.cpp:881) — 그것도 끝없다로 본다. 잘리지 않았다면
+        //    `repetition + 1`이 넘쳐 음수가 될 자리이기도 하다.
+        [[nodiscard]] int play_count_of(SkCodec& codec)
+        {
+            const int repetition { codec.getRepetitionCount() };
+            return repetition < 0 || repetition >= std::numeric_limits<int>::max() ? image_plays_forever : repetition + 1;
+        }
+
         [[nodiscard]] ui_animated_image decode_animation(sk_sp<SkData> data, const image_decode_options& options, image_decode_error& error)
         {
             const std::unique_ptr<SkCodec> codec { make_codec(std::move(data), SkCodec::SelectionPolicy::kPreferAnimation, error) };
@@ -680,17 +693,7 @@ namespace luil {
                 return {};
             }
 
-            // Skia의 되풀이 수는 **첫 바퀴를 빼고** 센다 (SkCodec.h:785-805) — 0이
-            // "한 번 돈다"이고 음수가 "끝없이"다. 그대로 내보내면 0을 "돌지
-            // 않는다"로 읽는 자리가 반드시 생겨, 바퀴 수로 옮기는 것을 여기서
-            // 한 번 하고 만다 (`image_plays_forever`).
-            //  - wuffs는 넘치는 되풀이 수를 `INT_MAX`로 잘라 준다
-            //    (SkWuffsCodec.cpp:881) — 그것도 끝없다로 본다. 잘리지 않았다면
-            //    `repetition + 1`이 넘쳐 음수가 될 자리이기도 하다.
-            const int repetition { codec->getRepetitionCount() };
-            const int play_count { repetition < 0 || repetition >= std::numeric_limits<int>::max() ? image_plays_forever : repetition + 1 };
-
-            ui_animated_image image { make_animated_image(frames, durations, play_count) };
+            ui_animated_image image { make_animated_image(frames, durations, play_count_of(*codec)) };
             if (image.valid() == false)
             {
                 // 크기도 길이도 방금 우리가 맞췄으므로 남는 실패는 만드는 자리의
@@ -703,6 +706,137 @@ namespace luil {
             // 화면에 그대로 적을 수 있다.
             if (failure.empty() == false)
                 error = std::move(failure);
+            return image;
+        }
+
+        // 장 목록만 읽는다. 픽셀을 펴지 않는다 (image-frames-scaling-design.md).
+        [[nodiscard]] image_frame_table read_frames(sk_sp<SkData> data, const image_decode_options& options, image_decode_error& error)
+        {
+            const std::unique_ptr<SkCodec> codec { make_codec(std::move(data), SkCodec::SelectionPolicy::kPreferAnimation, error) };
+            if (codec == nullptr)
+                return {};
+            const SkISize native { codec->dimensions() };
+            if (check_native_size(native, options, error) == false)
+                return {};
+            // 목록을 짓는 것은 파일 전체를 훑는 일이다 (`decode_animation`과 같은 자리).
+            if (decode_cancelled(options))
+            {
+                error = cancelled_error();
+                return {};
+            }
+            const int count { codec->getFrameCount() };
+            if (count <= 0)
+            {
+                error = make_error(image_decode_error_kind::no_pixels, u8"The image has no frames.");
+                return {};
+            }
+            image_frame_table table {};
+            const bool swaps { SkEncodedOriginSwapsWidthHeight(codec->getOrigin()) };
+            table.size = swaps ? image_pixel_size { native.height(), native.width() } : image_pixel_size { native.width(), native.height() };
+            table.durations.reserve(static_cast<std::size_t>(count));
+            for (int index = 0; index < count; ++index)
+            {
+                SkCodec::FrameInfo info {};
+                // 정지 파일은 목록이 없다 — 한 장짜리 값이다 (`decode_animation`과 같은 규칙).
+                if (codec->getFrameInfo(index, &info) == false)
+                {
+                    if (count > 1)
+                    {
+                        error = make_error(image_decode_error_kind::internal_error, u8"Failed to read the image frame list.");
+                        return {};
+                    }
+                    info.fDuration = 0;
+                }
+                // `make_animated_image`가 장에 거는 규칙과 같아야 목록과 디코드한 값이 같은 시간표를 답한다.
+                const std::chrono::milliseconds duration { info.fDuration };
+                table.durations.push_back(duration <= animation_frame_too_fast ? animation_frame_minimum : duration);
+            }
+            table.play_count = play_count_of(*codec);
+            return table;
+        }
+
+        // `index`번 장 하나를 합성까지 마쳐 편다.
+        [[nodiscard]] ui_image decode_frame(sk_sp<SkData> data, const std::size_t index, const image_decode_options& options, image_decode_error& error)
+        {
+            const std::unique_ptr<SkCodec> codec { make_codec(std::move(data), SkCodec::SelectionPolicy::kPreferAnimation, error) };
+            if (codec == nullptr)
+                return {};
+            const SkISize native { codec->dimensions() };
+            if (check_native_size(native, options, error) == false)
+                return {};
+            if (decode_cancelled(options))
+            {
+                error = cancelled_error();
+                return {};
+            }
+            const int count { codec->getFrameCount() };
+            if (count <= 0)
+            {
+                error = make_error(image_decode_error_kind::no_pixels, u8"The image has no frames.");
+                return {};
+            }
+            if (index >= static_cast<std::size_t>(count))
+            {
+                error = make_error(image_decode_error_kind::frame_out_of_range, u8"The frame index is outside the image frame list.");
+                error.frame = index;
+                return {};
+            }
+            const int frame { static_cast<int>(index) };
+            const oriented_target target { measure_target(*codec, options) };
+
+            // **native 크기로만 편다.** 움직이는 그림을 코덱이 줄이면 옳지 않을 수 있다 (`decode_animation`).
+            const SkImageInfo work { premultiplied_info(native) };
+            SkBitmap decoded {};
+            if (decoded.tryAllocPixels(work) == false)
+            {
+                error = at_frame(make_error(image_decode_error_kind::out_of_memory, u8"Failed to allocate the decoded image pixels."), frame);
+                return {};
+            }
+            decoded.eraseColor(SK_ColorTRANSPARENT);
+            // 앞 장을 주지 않는다(`fPriorFrame = kNoFrame`). 그러면 코덱이 이 장에 필요한 앞 장들을 같은 버퍼에 먼저
+            // 푼다 (SkCodec.h의 `fPriorFrame` 주석) — 사슬을 우리가 들지 않아 들고 있는 것이 한 장이다.
+            SkCodec::Options decode_options {};
+            decode_options.fFrameIndex = frame;
+            if (decode_cancelled(options))
+            {
+                error = cancelled_error();
+                return {};
+            }
+            const SkCodec::Result result { codec->getPixels(work, decoded.getPixels(), decoded.rowBytes(), &decode_options) };
+            if (decode_cancelled(options))
+            {
+                error = cancelled_error();
+                return {};
+            }
+            // 잘린 장은 정지 그림과 같은 규칙이다 — `accept`면 푼 만큼과 이유를 함께 낸다.
+            image_decode_error incomplete {};
+            if (result != SkCodec::kSuccess)
+            {
+                image_decode_error failure { frame_failure(frame, pixel_failure_kind(result), result_reason(result)) };
+                if (keeps_partial_value(failure.kind, options) == false)
+                {
+                    error = std::move(failure);
+                    return {};
+                }
+                incomplete = std::move(failure);
+            }
+
+            const std::unique_ptr<std::uint8_t[]> straight { allocate_straight_pixels(target.display, error) };
+            if (straight == nullptr)
+            {
+                error = at_frame(std::move(error), frame);
+                return {};
+            }
+            const std::size_t straight_bytes { static_cast<std::size_t>(target.display.width) * static_cast<std::size_t>(target.display.height) * 4 };
+            image_decode_error finish_error {};
+            ui_image image { finish_frame(decoded, target, straight.get(), straight_bytes, finish_error) };
+            if (image.valid() == false)
+            {
+                error = at_frame(std::move(finish_error), frame);
+                return {};
+            }
+            if (incomplete.empty() == false)
+                error = std::move(incomplete);
             return image;
         }
     } // namespace
@@ -783,5 +917,47 @@ namespace luil {
         if (data == nullptr)
             return {};
         return decode_animation(std::move(data), options, error);
+    }
+
+    image_frame_table read_image_frames_file(const std::u8string_view path, image_decode_error& error)
+    {
+        return read_image_frames_file(path, image_decode_options {}, error);
+    }
+
+    image_frame_table read_image_frames_file(const std::u8string_view path, const image_decode_options& options, image_decode_error& error)
+    {
+        sk_sp<SkData> data { read_image_file(path, options, error) };
+        if (data == nullptr)
+            return {};
+        return read_frames(std::move(data), options, error);
+    }
+
+    image_frame_table read_image_frames_bytes(const std::span<const std::uint8_t> bytes, image_decode_error& error)
+    {
+        return read_image_frames_bytes(bytes, image_decode_options {}, error);
+    }
+
+    image_frame_table read_image_frames_bytes(const std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error)
+    {
+        sk_sp<SkData> data { borrow_image_bytes(bytes, options, error) };
+        if (data == nullptr)
+            return {};
+        return read_frames(std::move(data), options, error);
+    }
+
+    ui_image load_image_frame_file(const std::u8string_view path, const std::size_t index, const image_decode_options& options, image_decode_error& error)
+    {
+        sk_sp<SkData> data { read_image_file(path, options, error) };
+        if (data == nullptr)
+            return {};
+        return decode_frame(std::move(data), index, options, error);
+    }
+
+    ui_image decode_image_frame_bytes(const std::span<const std::uint8_t> bytes, const std::size_t index, const image_decode_options& options, image_decode_error& error)
+    {
+        sk_sp<SkData> data { borrow_image_bytes(bytes, options, error) };
+        if (data == nullptr)
+            return {};
+        return decode_frame(std::move(data), index, options, error);
     }
 } // namespace luil

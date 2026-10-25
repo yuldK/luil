@@ -15,6 +15,7 @@
 
 #include "luil/generated/codicons.h"
 
+#include <chrono>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -35,6 +36,9 @@ namespace demo {
         // 맞춰 매번 다시 읽는 것이 더 정확하지만, 그러면 창을 끄는 동안 디스크와
         // 디코딩이 계속 돈다 — 이 데모가 보일 것이 아니다.
         constexpr int preview_pixel_limit { 1600 };
+        // 가운데 장 섬네일의 상한이다.
+        constexpr int thumbnail_pixel_limit { 160 };
+        constexpr float thumbnail_row_height { 96.0f };
 
         [[nodiscard]] float clamp_width(const float value) noexcept
         {
@@ -202,6 +206,19 @@ namespace demo {
         options.incomplete = luil::image_incomplete_policy::accept;
         animation_ = luil::load_animated_image_file(open->path, options, picture_error_);
         playback_ = animation_.valid() ? luil::image_playback { .started = std::chrono::steady_clock::now() } : luil::image_playback {};
+
+        // 장 목록은 픽셀을 펴지 않는다. 가운데 장은 그 장 하나만 읽는다 — 코덱이 앞 장들을 스스로 먼저 푼다.
+        //  - 오류는 미리 보기의 것만 상태 줄에 적는다. 같은 파일이라 실패하면 위에서 이미 실패했다.
+        luil::image_decode_error frames_error {};
+        frames_ = luil::read_image_frames_file(open->path, frames_error);
+        middle_frame_ = {};
+        if (frames_.durations.empty() == false)
+        {
+            luil::image_decode_options thumbnail {};
+            thumbnail.max_width = thumbnail_pixel_limit;
+            thumbnail.max_height = thumbnail_pixel_limit;
+            middle_frame_ = luil::load_image_frame_file(open->path, frames_.durations.size() / 2, thumbnail, frames_error);
+        }
         return true;
     }
 
@@ -281,6 +298,25 @@ namespace demo {
         //    드롭 영역과 상태 줄이 이미 말한다.
         column->add_flexible(std::make_unique<luil::image_element>(luil::ui_element_id { kind_image_preview, u8"image" },
             luil::image_config { .fit = luil::image_fit::contain, .description = picture_name_, .animation = animation_, .playback = playback_ }));
+        if (middle_frame_.valid())
+        {
+            luil::stack_config strip {};
+            strip.direction = luil::stack_direction::row;
+            strip.spacing = 12.0f;
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"images-middle" }, strip) };
+            row->add(std::make_unique<luil::image_element>(
+                         luil::ui_element_id { kind_image_preview, u8"middle" }, luil::image_config { .image = middle_frame_, .fit = luil::image_fit::contain, .description = u8"가운데 장" }),
+                thumbnail_row_height);
+            std::chrono::milliseconds total {};
+            for (const std::chrono::milliseconds duration : frames_.durations)
+                total += duration;
+            const int count { static_cast<int>(frames_.durations.size()) };
+            std::u8string summary { u8"가운데 장 " + to_u8(count / 2 + 1) + u8"/" + to_u8(count) };
+            summary += u8" · 한 바퀴 " + to_u8(static_cast<int>(total.count())) + u8" ms (장 목록은 픽셀 없이, 이 장은 하나만 읽었다)";
+            row->add_flexible(make_label(luil::ui_element_id { kind_text, u8"images-middle" }, summary, 11.0f, luil::label_color_role::dim));
+            column->add_gap(8.0f);
+            column->add(std::move(row), thumbnail_row_height);
+        }
         panel->set_content(std::move(column));
         return panel;
     }

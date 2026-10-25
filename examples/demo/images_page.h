@@ -61,5 +61,9 @@ namespace demo {
         luil::image_playback playback_ {};
         std::u8string picture_name_ {};
         luil::image_decode_error picture_error_ {};
+        // 장 목록과 가운데 장 하나다 (image-frames-scaling-design.md). 목록은 픽셀 없이 읽고, 가운데 장은 그 장
+        // 하나만 합성까지 마쳐 읽는다 — 미리 보기 줄이 "어느 장을 보고 있는가"를 함께 보인다.
+        luil::image_frame_table frames_ {};
+        luil::ui_image middle_frame_ {};
     };
 } // namespace demo
