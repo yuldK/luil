@@ -15,7 +15,7 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 
 | 기능 | 공개 API | 예제 |
 | --- | --- | --- |
-| 독립 토글 버튼·스위치 | check_element, check_style::toggle_button | [컨트롤](../examples/demo/gallery_page.cpp) |
+| 독립 토글 칩·스위치 | check_element, check_style::toggle_chip | [컨트롤](../examples/demo/gallery_page.cpp) |
 | 시각적 테마 카드 | theme_picker_element | [모양과 색](../examples/demo/theme_page.cpp) |
 | 시스템·카탈로그 강조색 | accent_picker_element | [모양과 색](../examples/demo/theme_page.cpp) |
 | 마크다운 hover와 클릭 링크 | make_markdown_tooltip, markdown_config::activate_link | [컨트롤](../examples/demo/gallery_page.cpp) |
@@ -47,7 +47,8 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
     column->add(std::make_unique<luil::theme_picker_element>(std::move(config)), height);
 
 height_for에는 요소가 실제로 받는 논리 폭을 준다. 여백과 스크롤 막대 자리를 먼저 뺀다.
-좁은 폭에서는 카드가 세로로 쌓인다. labels와 name으로 표시 언어를 바꿀 수 있다.
+카드는 card_width × preview_height(기본 112×70) 고정 크기라 폭이 넓어도 늘어나지 않고, 세 장이 들지 않으면
+다음 줄로 넘어간다. labels와 name으로 표시 언어를 바꿀 수 있다.
 강조색 선택기도 같은 방식으로 height_for와 selected, select를 연결한다.
 
 ### 메뉴 팝업
