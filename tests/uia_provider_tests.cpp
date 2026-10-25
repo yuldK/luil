@@ -493,6 +493,7 @@ TEST_CASE("Tree, table, toolbar, separator and status bar roles map to their UIA
         { luil::access_role::tool_bar, UIA_ToolBarControlTypeId },
         { luil::access_role::separator, UIA_SeparatorControlTypeId },
         { luil::access_role::status_bar, UIA_StatusBarControlTypeId },
+        { luil::access_role::navigation, UIA_GroupControlTypeId },
     };
     for (const expected_type& entry : expected)
     {
@@ -506,6 +507,16 @@ TEST_CASE("Tree, table, toolbar, separator and status bar roles map to their UIA
         REQUIRE(probe->GetPropertyValue(UIA_ControlTypePropertyId, &type) == S_OK);
         REQUIRE(type.vt == VT_I4);
         REQUIRE(type.lVal == entry.control_type);
+        // 이동 길잡이만 navigation 랜드마크를 단다. 나머지는 랜드마크가 없다.
+        VARIANT landmark {};
+        REQUIRE(probe->GetPropertyValue(UIA_LandmarkTypePropertyId, &landmark) == S_OK);
+        if (entry.role == luil::access_role::navigation)
+        {
+            REQUIRE(landmark.vt == VT_I4);
+            REQUIRE(landmark.lVal == UIA_NavigationLandmarkTypeId);
+        }
+        else
+            REQUIRE(landmark.vt == VT_EMPTY);
         probe->Release();
         root_provider->Release();
     }

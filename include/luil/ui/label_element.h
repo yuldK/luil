@@ -21,7 +21,13 @@ namespace luil {
     };
 
     enum class text_align { start, center, end };
-    enum class text_elide { end, middle };
+    // 들어가지 않는 한 줄 글을 줄이는 자리다. `start`는 앞을 줄여 끝(파일 이름)을 남긴다.
+    enum class text_elide
+    {
+        end,
+        middle,
+        start
+    };
 
     struct label_config
     {

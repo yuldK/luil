@@ -30,6 +30,7 @@
 #include "luil/ui/app_bar_element.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/badge_element.h"
+#include "luil/ui/breadcrumb_element.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/caption_metrics.h"

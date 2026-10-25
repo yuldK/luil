@@ -137,6 +137,12 @@ namespace luil {
         // 견본 막대(`tab_bar_config::preview`)의 탭이다. 동작이 없는 그림이라 탭(`tab`)과 kind가 다르다 — 탭을 kind로
         // 찾는 앱 코드가 견본을 집지 않는다. owner는 막대 owner와 항목 키를 함께 담아 견본 막대가 여럿이어도 겹치지 않는다.
         tab_sample,
+        // 경로 조각 막대와 그 조각·꺾쇠·접은 단추다 (`breadcrumb_element`). 조각·꺾쇠의 owner는 막대 owner와 조각 키를,
+        // 접은 단추는 막대 owner를 담는다.
+        breadcrumb,
+        breadcrumb_item,
+        breadcrumb_chevron,
+        breadcrumb_overflow,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind
