@@ -27,6 +27,7 @@ namespace luil {
                 , item_ { std::move(item) }
                 , opened_ { item_.children.empty() == false && config.opened_key == item_.key }
                 , open_submenu_ { &config.open_submenu }
+                , menu_ { &config }
             {
                 set_enabled(item_.enabled);
                 // 메뉴가 열려 있으면 키보드는 메뉴의 것이다 (↑/↓/Enter/Esc).
@@ -37,7 +38,15 @@ namespace luil {
                     return;
                 const std::u8string key { item_.key };
                 set_cursor(ui_cursor::hand);
-                set_action(ui_trigger::left_click, [key, &select](const ui_action_context&) -> std::vector<input_action> { return { select(key) }; });
+                // 끝 항목은 고른 뒤의 메시지(`after_select`)를 함께 낸다. 하위 메뉴를 여는 항목은 고른 것이 아니다.
+                const ui_action* const after { item_.children.empty() ? &config.after_select : nullptr };
+                set_action(ui_trigger::left_click, [key, &select, after](const ui_action_context& context) -> std::vector<input_action> {
+                    std::vector<input_action> actions { select(key) };
+                    if (after != nullptr && *after != nullptr)
+                        for (input_action& action : (*after)(context))
+                            actions.push_back(std::move(action));
+                    return actions;
+                });
             }
 
             void arrange(const arrange_context& context) override
@@ -51,7 +60,7 @@ namespace luil {
                 const rect_f box { bounds() };
                 // 키보드 강조는 hover와 같은 자리 표시다.
                 // 하위 메뉴를 연 항목도 강조로 남는다 — 포인터와 키 강조가 자식으로 옮겨 가도 어느 항목의 자식인지 보인다.
-                const bool highlighted { interaction.hovered == id() || interaction.menu_highlight == id() || opened_ };
+                const bool highlighted { interaction.hovered == id() || interaction.menu_highlight == id() || opened_ || shown_as_default(interaction) };
                 if (enabled() && (highlighted || interaction.pressed == id()))
                 {
                     const ui_color background { interaction.pressed == id() ? context.palette.button_pressed_background : context.palette.button_hover_background };
@@ -124,10 +133,25 @@ namespace luil {
             }
 
         private:
+            // 강조가 이 메뉴의 어느 항목에도 없을 때 기본 항목(`default_key`)이면 강조처럼 그린다 — Enter가 고를 것이 보인다.
+            //  - 질의가 바뀌어 강조한 항목이 사라진 자리도 "없다"다. 그때 Enter가 기본 항목을 고르는 것과 같은 판정이다.
+            [[nodiscard]] bool shown_as_default(const interaction_snapshot& interaction) const noexcept
+            {
+                if (item_.enabled == false || menu_->default_key.empty() || menu_->default_key != item_.key)
+                    return false;
+                if (interaction.menu_highlight.kind != ui_element_kind::menu_item)
+                    return true;
+                for (const menu_item_config& sibling : menu_->items)
+                    if (sibling.key == interaction.menu_highlight.owner)
+                        return false;
+                return true;
+            }
+
             menu_item_config item_ {};
             bool opened_ { false };
             // 담은 메뉴의 설정 안 factory다. 메뉴가 항목을 소유하므로 항목보다 오래 산다 (클릭 액션이 같은 것을 쥔다).
             const menu_message_factory* open_submenu_ { nullptr };
+            const menu_config* menu_ { nullptr };
         };
     } // namespace
 

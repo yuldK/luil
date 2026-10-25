@@ -37,6 +37,7 @@
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/combo_box_element.h"
+#include "luil/ui/command_palette.h"
 #include "luil/ui/commands.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"

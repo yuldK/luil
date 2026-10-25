@@ -64,6 +64,8 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/lists_page.h
     demo/network_page.cpp
     demo/network_page.h
+    demo/palette.cpp
+    demo/palette.h
     demo/popups_page.cpp
     demo/popups_page.h
     demo/tabs_page.cpp
