@@ -2,6 +2,8 @@
 
 #include <jni.h>
 
+#include <string>
+
 namespace luil::android {
     // 프로세스의 JavaVM이다. JNI를 쓰는 층(HTTP client 등)이 Activity 없이 여기서 얻는다.
     //
@@ -10,6 +12,11 @@ namespace luil::android {
     // 바뀌지 않는다 (Android 프로세스의 JavaVM은 하나다).
     void set_java_vm(JavaVM* vm) noexcept;
     [[nodiscard]] JavaVM* java_vm() noexcept;
+
+    // 앱 내부 저장소의 파일 폴더다 (`ANativeActivity::internalDataPath`). 비밀 저장소가 암호문을 둔다.
+    //  - JavaVM과 같은 자리에서 한 번 적는다. 적기 전이면 빈 글이다.
+    void set_files_directory(const char* path);
+    [[nodiscard]] std::string files_directory();
 
     // 이 thread의 JNIEnv다. JVM에 붙지 않은 thread면 붙이고, 범위를 벗어날 때 뗀다.
     //

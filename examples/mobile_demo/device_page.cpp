@@ -1,5 +1,6 @@
 #include "mobile_demo/device_page.h"
 
+#include "luil/app/secret_store.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -8,10 +9,40 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace mobile_demo {
     namespace {
+        // 비밀 저장소를 한 바퀴 돌린다: 쓰기 → 읽기 → 덮어쓰기 → 읽기 → 지우기 → 없는지 읽기 (secret-store-design.md).
+        // 사람이 읽을 결과 한 줄을 돌려준다. 단계가 어긋나면 그 자리와 OS의 이유를 적는다.
+        [[nodiscard]] std::u8string check_secret_store()
+        {
+            constexpr std::u8string_view service { u8"luil-demo" };
+            constexpr std::u8string_view name { u8"sample" };
+            const auto bytes = [](const std::u8string_view text) { return std::vector<std::uint8_t> { text.begin(), text.end() }; };
+            const auto failed = [](const std::u8string_view step, const luil::secret_store_result& result) {
+                return std::u8string { step } + u8"에서 멈췄다 — " + (result.status == luil::secret_store_status::unsupported ? std::u8string { u8"이 플랫폼에는 저장소가 없다" } : result.error);
+            };
+            std::vector<std::uint8_t> read {};
+            if (const auto result { luil::store_secret(service, name, bytes(u8"첫 값")) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"쓰기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::ok || read != bytes(u8"첫 값"))
+                return failed(u8"읽기", result);
+            if (const auto result { luil::store_secret(service, name, bytes(u8"둘째 값")) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"덮어쓰기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::ok || read != bytes(u8"둘째 값"))
+                return failed(u8"다시 읽기", result);
+            if (const auto result { luil::erase_secret(service, name) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"지우기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::not_found)
+                return failed(u8"지운 뒤 읽기", result);
+            return u8"쓰기·읽기·덮어쓰기·지우기를 모두 확인했다 (luil-demo/sample).";
+        }
+
         struct orientation_choice
         {
             luil::screen_orientation value {};
@@ -83,6 +114,12 @@ namespace mobile_demo {
             ++(key->up ? volume_up_count_ : volume_down_count_);
             if (key->repeat)
                 ++volume_repeat_count_;
+            return true;
+        }
+        if (message.get<secret_check_intent>() != nullptr)
+        {
+            // logic thread에서 돈다 — Keystore 호출은 수십 ms까지 걸려 UI thread의 자리가 아니다.
+            secret_report_ = check_secret_store();
             return true;
         }
         if (const auto* const local { message.get<local_network_intent>() }; local != nullptr)
@@ -238,6 +275,15 @@ namespace mobile_demo {
             column.add(std::move(ask), touch_height);
             break;
         }
+
+        // 비밀 저장소다. Keystore의 AES-GCM 키로 암호화해 앱 내부 파일에 둔다 (Java 0줄, JNI).
+        column.gap(20.0f);
+        column.heading(u8"secret-heading", u8"비밀 저장소");
+        auto check { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"secret-check" }, luil::text_button_config { .text = u8"한 바퀴 돌려 보기" }) };
+        check->set_action(luil::ui_trigger::left_click, luil::make_message_action(secret_check_intent {}));
+        column.add(std::move(check), touch_height);
+        if (secret_report_.empty() == false)
+            column.note(u8"secret-report", secret_report_);
         return column.finish();
     }
 } // namespace mobile_demo

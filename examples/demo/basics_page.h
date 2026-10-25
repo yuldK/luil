@@ -69,6 +69,10 @@ namespace demo {
     struct playback_toggle_intent
     {};
 
+    // 비밀 저장소를 한 바퀴 돌려 본다 (자격 증명 관리자 — secret-store-design.md).
+    struct secret_check_intent
+    {};
+
     // 여러 줄 메모 칸의 세로 스크롤이다 (논리 픽셀). 위치는 앱 상태다.
     struct memo_scroll_intent
     {
@@ -157,6 +161,8 @@ namespace demo {
         int clicks_ { 0 };
         float page_scroll_ { 0.0f };
         bool dialog_open_ { false };
+        // 비밀 저장소를 돌린 결과 한 줄이다. 아직 돌리지 않았으면 비었다.
+        std::u8string secret_report_ {};
         // 가운데에서 얼마나 밀어 둔 dialog인지다 (논리 픽셀).
         float dialog_x_ { 0.0f };
         float dialog_y_ { 0.0f };

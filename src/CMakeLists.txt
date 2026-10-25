@@ -380,6 +380,8 @@ luil_add_source_filter(luil_files "umbrella"
 luil_add_source_filter(luil_files "win32/host"
     win32/file_dialog.cpp
     win32/file_dialog.h
+    "${public_headers}/app/secret_store.h"
+    win32/secret_store_win32.cpp
     win32/fail_fast.cpp
     "${public_headers}/win32/app_host.h"
     "${public_headers}/win32/renderer_policy.h"
@@ -582,6 +584,8 @@ if(LUIL_PLATFORM STREQUAL "windows")
             # win32 계층이 쓰는 Windows 시스템 라이브러리다.
             # static library라 최종 링크는 소비자 몫이므로 PUBLIC으로 나른다.
             # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.
+            # 비밀 저장소의 자격 증명 관리자 API다 (CredWriteW 등, secret-store-design.md).
+            advapi32
             d3d12
             # Direct3D 제시가 창이 아니라 합성에 붙는다
             # (webview-composition-design.md).
@@ -641,6 +645,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_text_input.h
         android/android_window_control.cpp
         android/android_window_control.h
+        "${public_headers}/app/secret_store.h"
+        android/secret_store_android.cpp
         android/cpu_skia_renderer.cpp
         android/cpu_skia_renderer.h
         android/device_request.cpp

@@ -1,5 +1,6 @@
 #include "demo/basics_page.h"
 
+#include "luil/app/secret_store.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -14,13 +15,41 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace demo {
     namespace {
+        // 비밀 저장소를 한 바퀴 돌린다: 쓰기 → 읽기 → 덮어쓰기 → 읽기 → 지우기 → 없는지 읽기 (secret-store-design.md).
+        // 사람이 읽을 결과 한 줄을 돌려준다. 단계가 어긋나면 그 자리와 OS의 이유를 적는다.
+        [[nodiscard]] std::u8string check_secret_store()
+        {
+            constexpr std::u8string_view service { u8"luil-demo" };
+            constexpr std::u8string_view name { u8"sample" };
+            const auto bytes = [](const std::u8string_view text) { return std::vector<std::uint8_t> { text.begin(), text.end() }; };
+            const auto failed = [](const std::u8string_view step, const luil::secret_store_result& result) {
+                return std::u8string { step } + u8"에서 멈췄다 — " + (result.status == luil::secret_store_status::unsupported ? std::u8string { u8"이 플랫폼에는 저장소가 없다" } : result.error);
+            };
+            std::vector<std::uint8_t> read {};
+            if (const auto result { luil::store_secret(service, name, bytes(u8"첫 값")) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"쓰기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::ok || read != bytes(u8"첫 값"))
+                return failed(u8"읽기", result);
+            if (const auto result { luil::store_secret(service, name, bytes(u8"둘째 값")) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"덮어쓰기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::ok || read != bytes(u8"둘째 값"))
+                return failed(u8"다시 읽기", result);
+            if (const auto result { luil::erase_secret(service, name) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"지우기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::not_found)
+                return failed(u8"지운 뒤 읽기", result);
+            return u8"쓰기·읽기·덮어쓰기·지우기를 모두 확인했다 (luil-demo/sample).";
+        }
+
         // 숫자 칸의 범위다. 검사·거르기·증감이 같은 범위를 본다.
         [[nodiscard]] luil::number_input_range number_range()
         {
@@ -135,6 +164,11 @@ namespace demo {
         if (const auto* const scroll_to { message.get<memo_scroll_to_intent>() }; scroll_to != nullptr)
         {
             memo_scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
+        if (message.get<secret_check_intent>() != nullptr)
+        {
+            secret_report_ = check_secret_store();
             return true;
         }
         if (message.get<playback_toggle_intent>() != nullptr)
@@ -303,6 +337,20 @@ namespace demo {
         {
             page.gap(8.0f);
             page.add(make_playback_button(), { .length = 26.0f, .cross_length = 132.0f });
+        }
+        // 비밀 저장소다. 눌러 보면 자격 증명 관리자에 luil:luil-demo/sample을 쓰고 읽고 지운다.
+        page.gap(12.0f);
+        {
+            luil::stack_config secret_config {};
+            secret_config.direction = luil::stack_direction::row;
+            secret_config.spacing = 12.0f;
+            auto secret { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"basics-secret" }, secret_config) };
+            auto check { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"secret-check" }, luil::text_button_config { .text = u8"비밀 저장소 확인" }) };
+            check->set_action(luil::ui_trigger::left_click, luil::make_message_action(secret_check_intent {}));
+            secret->add(std::move(check), 132.0f);
+            const std::u8string report { secret_report_.empty() ? u8"자격 증명 관리자에 쓰고·읽고·지워 본다." : secret_report_ };
+            secret->add_flexible(make_label(luil::ui_element_id { kind_text, u8"secret-report" }, report, 11.0f, luil::label_color_role::dim));
+            page.add(std::move(secret), 26.0f);
         }
         page.gap(12.0f);
         page.add(make_label(luil::ui_element_id { kind_text, u8"basics-hint" }, u8"확인 dialog는 캡션을 잡아 옮기고 Esc로 닫는다.", 11.0f, luil::label_color_role::dim), 18.0f);

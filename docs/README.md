@@ -61,6 +61,7 @@
 - [숫자 칸 검증](number-input-design.md)
 - [장 하나 읽기·고품질 축소·큰 그림·축 맞춤](image-frames-scaling-design.md)
 - [명령 팔레트](command-palette-design.md)
+- [비밀 저장소](secret-store-design.md)
 - [Enter와 기본 버튼](enter-default-design.md)
 - [키 조상 전파](key-propagation-design.md)
 - [키보드 선택 규칙](keyboard-selection-design.md)
