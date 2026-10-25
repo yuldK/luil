@@ -13,7 +13,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <utility>
+#include <vector>
 
 namespace demo {
     namespace {
@@ -98,7 +100,16 @@ namespace demo {
         }
         if (const auto* const value { message.get<gallery_value_intent>() }; value != nullptr)
         {
-            value_ = std::clamp(value->relative ? value_ + value->value : value->value, 0.0f, 100.0f);
+            // 범위 다듬기는 값을 가진 앱의 몫이다 (slider_config).
+            const auto apply = [value](float& target, const float minimum, const float maximum) { target = std::clamp(value->relative ? target + value->value : value->value, minimum, maximum); };
+            if (value->key == u8"volume")
+                apply(volume_, 0.0f, 150.0f);
+            else if (value->key == u8"balance")
+                apply(balance_, -100.0f, 100.0f);
+            else if (value->key == u8"position")
+                apply(position_, 0.0f, 1440.0f);
+            else
+                apply(value_, 0.0f, 100.0f);
             return true;
         }
         if (const auto* const scroll { message.get<gallery_scroll_intent>() }; scroll != nullptr)
@@ -119,6 +130,9 @@ namespace demo {
             italic_ = false;
             pinned_ = true;
             value_ = 65.0f;
+            volume_ = 72.0f;
+            balance_ = -18.0f;
+            position_ = 400.0f;
             choice_ = u8"comfortable";
             return true;
         }
@@ -235,6 +249,33 @@ namespace demo {
             luil::stack_item { .length = 20.0f, .cross_length = 20.0f });
         busy->add_fit(make_label({ kind_text, u8"gallery/busy-text" }, u8"동기화 중… 끝을 모르는 작업", 12.0f, luil::label_color_role::dim));
         page.add(std::move(busy), 24.0f);
+        page.gap(24.0f);
+
+        // 자석 막대: 앱이 정한 지점 근처에서 손잡이가 붙고, Ctrl을 누른 채 끌면 자석 없이 놓는다.
+        page.add(make_label({ kind_text, u8"gallery/magnet-title" }, u8"자석 막대", 15.0f, luil::label_color_role::primary), 28.0f);
+        page.add(make_label({ kind_text, u8"gallery/magnet-help" }, u8"표식 근처에서 손잡이가 붙습니다. Ctrl을 누른 채 끌면 자석 없이 놓습니다.", 12.0f, luil::label_color_role::dim), 24.0f);
+        const auto magnet_slider = [&page](std::u8string key, std::u8string name, std::u8string caption, const float minimum, const float maximum, const float value, std::vector<float> magnets) {
+            page.add(make_label({ kind_text, u8"gallery/" + key + u8"-value" }, std::move(caption), 12.0f, luil::label_color_role::primary), 24.0f);
+            luil::slider_config config {};
+            config.minimum = minimum;
+            config.maximum = maximum;
+            config.value = value;
+            config.magnets = std::move(magnets);
+            config.change = [key](const float delta) { return luil::make_app_action(gallery_value_intent { delta, true, key }); };
+            config.change_to = [key](const float target) { return luil::make_app_action(gallery_value_intent { target, false, key }); };
+            auto element { std::make_unique<luil::slider_element>(luil::ui_element_id { kind_layout, u8"gallery/" + key }, std::move(config)) };
+            element->set_tooltip(std::move(name));
+            page.add(std::move(element), luil::slider_row_height);
+            page.gap();
+        };
+        const int balance { static_cast<int>(std::lround(balance_)) };
+        const std::u8string balance_text { balance == 0 ? std::u8string { u8"가운데" } : (balance < 0 ? u8"왼쪽 " + to_u8(-balance) : u8"오른쪽 " + to_u8(balance)) };
+        const int position { static_cast<int>(std::lround(position_)) };
+        const int seconds { position % 60 };
+        const std::u8string position_text { to_u8(position / 60) + u8":" + (seconds < 10 ? u8"0" : u8"") + to_u8(seconds) + u8" / 24:00" };
+        magnet_slider(u8"volume", u8"볼륨", u8"볼륨  " + to_u8(static_cast<int>(std::lround(volume_))) + u8"% — 100%에 붙습니다", 0.0f, 150.0f, volume_, { 100.0f });
+        magnet_slider(u8"balance", u8"좌우 균형", u8"좌우 균형  " + balance_text + u8" — 가운데에 붙습니다", -100.0f, 100.0f, balance_, { 0.0f });
+        magnet_slider(u8"position", u8"재생 위치", u8"재생 위치  " + position_text + u8" — 장이 시작하는 자리에 붙습니다", 0.0f, 1440.0f, position_, { 192.0f, 580.0f, 905.0f, 1290.0f });
         page.gap(24.0f);
 
         luil::ui_action hover_action { luil::make_message_action(toast_request_intent { u8"툴팁 안의 링크도 눌러 보세요." }) };

@@ -12,6 +12,8 @@ namespace demo {
     {
         float value { 0.0f };
         bool relative { false };
+        // 어느 막대의 값인지다. 비어 있으면 진행률 막대다.
+        std::u8string key {};
     };
 
     struct gallery_scroll_intent
@@ -42,6 +44,10 @@ namespace demo {
         bool italic_ { false };
         bool pinned_ { true };
         float value_ { 65.0f };
+        // 자석 막대의 값이다: 볼륨(%), 좌우 균형(-100..100), 재생 위치(초).
+        float volume_ { 72.0f };
+        float balance_ { -18.0f };
+        float position_ { 400.0f };
         float overview_scroll_ { 0.0f };
         float controls_scroll_ { 0.0f };
         std::u8string choice_ { u8"comfortable" };
