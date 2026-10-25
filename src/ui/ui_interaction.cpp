@@ -3460,9 +3460,10 @@ namespace luil {
             // Ctrl·Alt가 눌린 Enter는 앱 단축키다 — 실행 키가 되는 것은 Shift뿐이다 (Space·Enter 실행과 같은 규약).
             if (event.shortcut_modifier_down())
                 return std::nullopt;
-            if (snapshot_.menu_highlight == ui_element_id {})
-                return std::vector<input_action> {};
-            const ui_element* const item { tree.find(snapshot_.menu_highlight) };
+            const ui_element* item { snapshot_.menu_highlight == ui_element_id {} ? nullptr : tree.find(snapshot_.menu_highlight) };
+            // 강조가 없거나 강조한 항목이 사라졌으면(질의가 바뀌었다) 메뉴가 정한 기본 항목이다 (명령 팔레트의 첫 결과).
+            if (item == nullptr && menu != nullptr && menu->config().default_key.empty() == false)
+                item = tree.find({ kinds.item, menu->config().default_key });
             if (item == nullptr || item->enabled() == false)
                 return std::vector<input_action> {};
             const rect_f box { item->bounds() };

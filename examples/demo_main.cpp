@@ -34,6 +34,7 @@
 #include "demo/images_page.h"
 #include "demo/lists_page.h"
 #include "demo/network_page.h"
+#include "demo/palette.h"
 #include "demo/popups_page.h"
 #include "demo/tabs_page.h"
 #include "demo/theme_page.h"
@@ -46,6 +47,7 @@
 #include "luil/net/http_client.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/command_palette.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/sidebar_element.h"
@@ -401,6 +403,9 @@ namespace demo {
                 // 초점 요청의 결과는 셸이 토스트로 알린다. 덮어쓴 요청은 새 요청이 이어받아 말하지 않는다.
                 if (const auto* const focus_report { message.get<tool_focus_report_intent>() }; focus_report != nullptr)
                 {
+                    // 팔레트의 초점 요청은 알리지 않는다 — 열면 곧바로 칸에 초점이 서는 것이 보인다.
+                    if (focus_report->id == palette_focus_id_)
+                        return;
                     if (focus_report->outcome == luil::focus_request_outcome::fulfilled)
                         static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"도구 창 메모 칸으로 초점을 옮겼습니다.", luil::toast_severity::success } }));
                     else if (focus_report->outcome == luil::focus_request_outcome::expired)
@@ -416,6 +421,19 @@ namespace demo {
                         static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"도구 창 메뉴에서 보낸 토스트", luil::toast_severity::success } }));
                     return;
                 }
+
+                // 명령 팔레트에서 고른 명령이다. 팔레트는 무엇을 골랐는지만 알리고 실행은 셸이 한다 — 단축키(Ctrl+B)와 같은
+                // 메시지라 두 길이 갈라지지 않는다.
+                if (const auto* const run { message.get<palette_run_intent>() }; run != nullptr)
+                {
+                    if (run->id.starts_with(u8"page:"))
+                        handle(luil::app_message { navigate_intent { run->id.substr(5) } });
+                    else if (run->id == u8"view.sidebar")
+                        handle(luil::app_message { sidebar_toggle_intent {} });
+                    return;
+                }
+                if (palette_.handle(message))
+                    return;
 
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
@@ -478,14 +496,16 @@ namespace demo {
                     // 끌기 띠 위에서도 눌린다 (caption-button-design.md).
                     constexpr float search_width { 240.0f };
                     constexpr float search_inset { 4.0f };
-                    luil::text_button_config search_config {};
-                    search_config.text = u8"명령 찾기…";
-                    search_config.visual = luil::text_button_visual::normal;
-                    auto search { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"caption/search" }, std::move(search_config)) };
-                    search->set_caption_client(true);
-                    search->set_cursor(luil::ui_cursor::hand);
-                    search->set_tooltip(u8"메뉴와 팝업 페이지의 명령 검색을 엽니다.");
-                    search->set_action(luil::ui_trigger::left_click, luil::make_message_action(navigate_intent { std::u8string { page_popups } }));
+                    // 명령 팔레트의 진입 단추다 (command-palette-design.md). caption client 표시와 툴팁의 단축키는
+                    // 라이브러리가 단다.
+                    luil::command_palette_entry_config search_config {
+                        .owner = u8"caption/search",
+                        .text = u8"명령 찾기…",
+                        .tooltip = u8"명령 팔레트를 엽니다",
+                        .shortcut = palette_shortcut,
+                        .open = luil::make_message_action(palette_open_intent {}),
+                    };
+                    auto search { luil::make_command_palette_entry(std::move(search_config)) };
                     search->arrange({ { (width - search_width * scale) / 2.0f, search_inset * scale, search_width * scale, caption_height - search_inset * 2.0f * scale }, scale });
                     root->add(std::move(search));
                 }
@@ -548,8 +568,26 @@ namespace demo {
                 // 창 tree를 만든 뒤라야 메뉴 버튼의 자리를 안다.
                 for (luil::win32::ui_popup& popup : windows_.make_popups())
                     frame->popups.push_back(std::move(popup));
+                // 명령 팔레트는 어느 페이지에서든 제목 표시줄 바로 아래 가운데에 뜬다.
+                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, caption_height / scale + 8.0f, scale))
+                    frame->popups.push_back(std::move(popup));
                 frame->file_dialog = file_dialog_;
-                frame->focus = windows_.make_focus_request();
+                // 초점 요청은 두 곳(도구 창 페이지·명령 팔레트)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
+                // 쪽의 요청을 셸 번호로 다시 매겨 싣는다 — 팔레트를 닫았다고 도구 창의 지난 요청이 되살아나지 않는다.
+                if (const auto request { windows_.make_focus_request() }; request.has_value() && request->id != seen_tool_focus_)
+                {
+                    seen_tool_focus_ = request->id;
+                    focus_ = *request;
+                    focus_->id = ++focus_revision_;
+                }
+                if (const auto request { palette_.make_focus_request() }; request.has_value() && request->id != seen_palette_focus_)
+                {
+                    seen_palette_focus_ = request->id;
+                    focus_ = *request;
+                    focus_->id = ++focus_revision_;
+                    palette_focus_id_ = focus_->id;
+                }
+                frame->focus = focus_;
                 frame->focus_report = [](const std::uint64_t id, const luil::focus_request_outcome outcome) { return luil::app_message { tool_focus_report_intent { id, outcome } }; };
                 return frame;
             }
@@ -776,6 +814,13 @@ namespace demo {
             file_dialog_purpose file_dialog_purpose_ { file_dialog_purpose::image };
             network_page network_ {};
             zoom_page zoom_ {};
+            command_palette_host palette_ {};
+            // 셸이 실은 마지막 초점 요청과, 두 요청원의 마지막으로 본 번호다.
+            std::optional<luil::focus_request> focus_ {};
+            std::uint64_t focus_revision_ { 0 };
+            std::uint64_t seen_tool_focus_ { 0 };
+            std::uint64_t seen_palette_focus_ { 0 };
+            std::uint64_t palette_focus_id_ { 0 };
             theme_page theme_ {};
             webview_page webview_ {};
             workbench_page workbench_ {};
@@ -849,6 +894,8 @@ namespace demo {
                     return target_workbench_diff;
                 if (kind == kind_workbench_find_input)
                     return target_workbench_find;
+                if (kind == luil::ui_element_kind::command_palette_search)
+                    return target_palette;
                 return std::nullopt;
             }
 
@@ -913,6 +960,11 @@ namespace demo {
 
             [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot&) override
             {
+                // 팔레트를 여는 단축키와 팔레트 명령의 단축키(Ctrl+B)다. 팔레트에 보이는 단축키 열과 같은 명령표로 맞춘다.
+                if (luil::chord_of(event) == palette_shortcut)
+                    return { luil::make_app_action(palette_open_intent {}) };
+                if (const auto id { luil::match_command(palette_commands(), event, luil::command_scope::window) }; id.has_value())
+                    return { luil::make_app_action(palette_run_intent { *id }) };
                 return tabs_page::route_key(tree, event);
             }
         };

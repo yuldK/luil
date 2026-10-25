@@ -145,3 +145,27 @@ TEST_CASE("Menu width reserves the longest label and shortcut on the same row", 
     const luil::text_measurer measure { [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 10.0f; } };
     REQUIRE(luil::menu_element::width_for(config, measure) == 162.0f);
 }
+
+TEST_CASE("A menu sends its after-select message only for leaf items", "[ui][menu]")
+{
+    // 고르면 닫히는 메뉴다. 하위 메뉴를 여는 항목은 고른 것이 아니라 닫기가 따라가지 않는다.
+    luil::menu_config config { make_config() };
+    luil::menu_item_config parent {};
+    parent.key = u8"more";
+    parent.label = u8"더 보기";
+    parent.children.push_back({ u8"child", u8"자식" });
+    config.items.push_back(std::move(parent));
+    config.open_submenu = [](const std::u8string& key) { return luil::input_action { luil::app_message { select_intent { u8"open:" + key } } }; };
+    config.after_select = [](const luil::ui_action_context&) { return std::vector<luil::input_action> { luil::input_action { luil::app_message { select_intent { u8"close" } } } }; };
+    const luil::menu_element menu { std::move(config) };
+    const auto keys_of = [](const std::vector<luil::input_action>& actions) {
+        std::vector<std::u8string> keys {};
+        for (const luil::input_action& action : actions)
+            keys.push_back(std::get<luil::app_message>(action).get<select_intent>()->key);
+        return keys;
+    };
+    const luil::ui_element& open { *menu.children()[0] };
+    REQUIRE(keys_of((*open.action(luil::ui_trigger::left_click))({ open.id() })) == std::vector<std::u8string> { u8"open", u8"close" });
+    const luil::ui_element& more { *menu.children()[3] };
+    REQUIRE(keys_of((*more.action(luil::ui_trigger::left_click))({ more.id() })) == std::vector<std::u8string> { u8"open:more" });
+}

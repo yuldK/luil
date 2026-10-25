@@ -16,6 +16,7 @@
 | 마크다운 본문·링크 | `markdown_element`, `parse_markdown` | [ui/markdown_element.h](../include/luil/ui/markdown_element.h) | [설명](tooltip-design.md) |
 | 텍스트 표시 | `label_element` | [ui/label_element.h](../include/luil/ui/label_element.h) | [설명](concepts/ui-element.md) · [여러 줄](label-wrap-design.md) |
 | 경로 조각 막대 | `breadcrumb_element` | [ui/breadcrumb_element.h](../include/luil/ui/breadcrumb_element.h) | [설명](breadcrumb-design.md) |
+| 명령 팔레트 | `make_command_palette`, `filter_commands`, `make_command_palette_entry` | [ui/command_palette.h](../include/luil/ui/command_palette.h) | [설명](command-palette-design.md) |
 | 아이콘 버튼 | `button_element` | [ui/button_element.h](../include/luil/ui/button_element.h) | [설명](concepts/ui-element.md) |
 | 폰트 아이콘 표시 | `glyph_element` | [ui/glyph_element.h](../include/luil/ui/glyph_element.h) | [설명](concepts/fonts.md) |
 | 폰트 파일·바이트 로딩 | `load_typeface_file`, `load_typeface_bytes` | [text/fonts.h](../include/luil/text/fonts.h) | [설명](concepts/fonts.md) |
