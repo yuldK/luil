@@ -56,6 +56,7 @@
 - [머무름 트리거와 hover 영역](hover-dwell-design.md)
 - [여러 줄 라벨](label-wrap-design.md)
 - [경로 조각 막대와 앞쪽 말줄임](breadcrumb-design.md)
+- [가상 목록의 격자 모드와 가운데 맞춤 들이기](virtual-list-grid-design.md)
 - [Enter와 기본 버튼](enter-default-design.md)
 - [키 조상 전파](key-propagation-design.md)
 - [키보드 선택 규칙](keyboard-selection-design.md)
