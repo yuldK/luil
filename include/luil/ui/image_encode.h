@@ -1,8 +1,11 @@
 #pragma once
 
+#include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -37,4 +40,37 @@ namespace luil {
 
     // 무손실 WebP다. 같은 그림을 PNG보다 대개 작게 담는다 (화면 캡처가 이 형식이다).
     [[nodiscard]] std::vector<std::uint8_t> encode_webp_lossless(const ui_image& image, std::u8string& error);
+
+    // 바이트 한도 안의 손실 WebP를 짓는 규칙이다 (image-encode-design.md의 "바이트 한도").
+    struct webp_size_limit_options
+    {
+        // 담을 바이트 수의 상한이다. 0이면 한도가 없다 (표의 첫 품질로 한 번 짓는다).
+        std::size_t maximum_bytes { 0 };
+        // 차례로 시도할 품질이다. 값은 0–100으로 자르고, 비면 기본 표다.
+        std::vector<int> qualities { 90, 80, 70, 60, 50, 40 };
+        // 표 끝으로도 넘치면 변을 이만큼 곱해 줄이고 표를 처음부터 다시 돈다. 0과 1 사이가 아니면 0.75다.
+        float shrink { 0.75f };
+        // 긴 변이 이보다 작아지는 축소는 하지 않는다 (픽셀). 그때까지도 넘치면 실패다.
+        int minimum_side { 64 };
+        // 인코딩마다 그 앞에서, 그리고 축소 안에서 묻는다. 비어 있으면 묻지 않는다.
+        std::function<bool()> cancelled {};
+    };
+
+    struct webp_size_limit_result
+    {
+        // 한도 안의 WebP 바이트다. 실패하면 비었다.
+        std::vector<std::uint8_t> bytes {};
+        // 고른 품질과 담은 그림의 크기다.
+        int quality { 0 };
+        image_pixel_size size {};
+        // 인코딩한 횟수다.
+        int attempts { 0 };
+        // `cancelled`로 접혔다.
+        bool cancelled { false };
+    };
+
+    // 한도에 들 때까지 품질 표를 차례로 낮추고, 표 끝으로도 넘치면 고품질로 3/4씩 줄여 표를 처음부터 다시 돈다.
+    //  - 줄일 때마다 원본에서 새로 줄인다. 긴 변이 `minimum_side`보다 작아지면 멈추고 빈 바이트와 `error`다.
+    //  - 인코딩을 여러 번 돌리는 동기 작업이다. UI thread에서 부를 자리가 아니다.
+    [[nodiscard]] webp_size_limit_result encode_webp_within(const ui_image& image, const webp_size_limit_options& options, std::u8string& error);
 } // namespace luil

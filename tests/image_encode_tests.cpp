@@ -167,3 +167,95 @@ TEST_CASE("An empty image is not encoded", "[ui][image][encode]")
     REQUIRE(luil::encode_jpeg(luil::ui_image {}, 90, error).empty());
     REQUIRE(error.empty() == false);
 }
+
+namespace {
+    // 압축이 잘 안 되는 잡음 그림이다 — 품질과 크기를 바꾸면 바이트 수가 분명히 움직인다.
+    [[nodiscard]] luil::ui_image make_noise_image(const int size)
+    {
+        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4u, 255u);
+        std::uint32_t state { 0x9E3779B9u };
+        for (std::size_t index { 0 }; index < pixels.size(); index += 4u)
+            for (std::size_t channel { 0 }; channel < 3u; ++channel)
+            {
+                state ^= state << 13u;
+                state ^= state >> 17u;
+                state ^= state << 5u;
+                pixels[index + channel] = static_cast<std::uint8_t>(state & 0xFFu);
+            }
+        return luil::make_rgba_image(size, size, pixels);
+    }
+} // namespace
+
+TEST_CASE("A size-limited webp lowers the quality step by step until it fits", "[ui][image][encode][limit]")
+{
+    const luil::ui_image noise { make_noise_image(256) };
+    std::u8string error {};
+    // 한도가 없으면 표의 첫 품질로 한 번이다.
+    const luil::webp_size_limit_result unlimited { luil::encode_webp_within(noise, {}, error) };
+    REQUIRE(unlimited.attempts == 1);
+    REQUIRE(unlimited.quality == 90);
+    REQUIRE(unlimited.size == luil::image_pixel_size { 256, 256 });
+    REQUIRE(decode(unlimited.bytes).width() == 256);
+
+    // 첫 품질로 넘치는 한도면 품질이 내려가고, 크기는 그대로다.
+    luil::webp_size_limit_options options {};
+    options.maximum_bytes = unlimited.bytes.size() * 7u / 10u;
+    const luil::webp_size_limit_result lowered { luil::encode_webp_within(noise, options, error) };
+    REQUIRE(lowered.bytes.empty() == false);
+    REQUIRE(lowered.bytes.size() <= options.maximum_bytes);
+    REQUIRE(lowered.quality < 90);
+    REQUIRE(lowered.size == luil::image_pixel_size { 256, 256 });
+    REQUIRE(lowered.attempts == static_cast<int>(std::find(options.qualities.begin(), options.qualities.end(), lowered.quality) - options.qualities.begin()) + 1);
+
+    // 앱의 표를 쓴다.
+    luil::webp_size_limit_options single {};
+    single.qualities = { 75 };
+    REQUIRE(luil::encode_webp_within(noise, single, error).quality == 75);
+}
+
+TEST_CASE("A size-limited webp shrinks by three quarters and walks the table again", "[ui][image][encode][limit]")
+{
+    const luil::ui_image noise { make_noise_image(256) };
+    std::u8string error {};
+    luil::webp_size_limit_options last_step {};
+    last_step.qualities = { 40 };
+    const std::size_t at_lowest { luil::encode_webp_within(noise, last_step, error).bytes.size() };
+
+    // 표 끝 품질로도 넘치는 한도다. 줄인 뒤에는 표를 처음부터 다시 돌므로, 고른 품질은 마지막 바퀴의 차례와 맞는다.
+    luil::webp_size_limit_options options {};
+    options.maximum_bytes = at_lowest / 2u;
+    const luil::webp_size_limit_result shrunk { luil::encode_webp_within(noise, options, error) };
+    REQUIRE(shrunk.bytes.empty() == false);
+    REQUIRE(shrunk.bytes.size() <= options.maximum_bytes);
+    REQUIRE(shrunk.size.width < 256);
+    REQUIRE(shrunk.size.width == shrunk.size.height);
+    REQUIRE(shrunk.attempts > 6);
+    REQUIRE(options.qualities[static_cast<std::size_t>((shrunk.attempts - 1) % 6)] == shrunk.quality);
+    REQUIRE(decode(shrunk.bytes).width() == shrunk.size.width);
+}
+
+TEST_CASE("A size-limited webp that cannot fit, is cancelled or has no pixels", "[ui][image][encode][limit]")
+{
+    const luil::ui_image noise { make_noise_image(256) };
+    // 긴 변이 64보다 작아지기 전에 멈추고 이유를 적는다.
+    std::u8string error {};
+    luil::webp_size_limit_options tiny {};
+    tiny.maximum_bytes = 100u;
+    const luil::webp_size_limit_result impossible { luil::encode_webp_within(noise, tiny, error) };
+    REQUIRE(impossible.bytes.empty());
+    REQUIRE(impossible.cancelled == false);
+    REQUIRE(error.find(u8"does not fit in 100 bytes") != std::u8string::npos);
+
+    luil::webp_size_limit_options stop {};
+    stop.maximum_bytes = 100u;
+    stop.cancelled = [] { return true; };
+    std::u8string cancelled_error {};
+    const luil::webp_size_limit_result cancelled { luil::encode_webp_within(noise, stop, cancelled_error) };
+    REQUIRE(cancelled.cancelled);
+    REQUIRE(cancelled.attempts == 0);
+    REQUIRE(cancelled.bytes.empty());
+
+    std::u8string empty_error {};
+    REQUIRE(luil::encode_webp_within(luil::ui_image {}, {}, empty_error).bytes.empty());
+    REQUIRE(empty_error == u8"The image is empty.");
+}

@@ -65,5 +65,7 @@ namespace demo {
         // 하나만 합성까지 마쳐 읽는다 — 미리 보기 줄이 "어느 장을 보고 있는가"를 함께 보인다.
         luil::image_frame_table frames_ {};
         luil::ui_image middle_frame_ {};
+        // 미리 보기 첫 장을 200 KB 안의 WebP로 담아 본 결과다 (image-encode-design.md의 바이트 한도).
+        std::u8string webp_summary_ {};
     };
 } // namespace demo
