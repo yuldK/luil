@@ -47,6 +47,13 @@ namespace demo {
             feature { page_webview, u8"웹 콘텐츠", u8"내장 웹뷰 · 로컬 문서" },
         };
 
+        // 배타 선택 묶음과 막대(슬라이더·진행률)가 차지하는 폭이다 (논리 픽셀).
+        // 카드 폭을 다 채우지 않는다 — 막대가 길수록 한 칸의 값이 흐려지고 손잡이까지 멀어진다.
+        constexpr float choice_width { 264.0f };
+        constexpr float bar_width { 360.0f };
+        // 기능 색인은 카드를 세 줄로 놓아야 하므로 다른 페이지보다 넓게 둔다.
+        constexpr float overview_max_width { 960.0f };
+
         [[nodiscard]] luil::input_action follow_link(const std::u8string_view destination)
         {
             if (destination == u8"app:theme")
@@ -166,7 +173,7 @@ namespace demo {
 
     std::unique_ptr<luil::ui_element> gallery_page::build_overview(const float width)
     {
-        page_layout page { u8"overview" };
+        page_layout page { u8"overview", overview_max_width };
         page.heading(u8"luil UI 갤러리", u8"기능을 직접 조작하고, 필요한 페이지부터 프로젝트에 가져가세요.");
         auto actions { row(u8"overview/actions") };
         actions->add_fit(button(u8"overview/start", u8"컨트롤 둘러보기", luil::text_button_visual::accent, luil::make_message_action(navigate_intent { std::u8string { page_controls } })));
@@ -174,7 +181,8 @@ namespace demo {
         page.add(std::move(actions), luil::text_button_height);
         page.gap(24.0f);
 
-        const std::size_t columns { width >= 1000.0f ? 3u : (width >= 600.0f ? 2u : 1u) };
+        const float content_width { page_layout::content_width(width, overview_max_width) };
+        const std::size_t columns { content_width >= 720.0f ? 3u : (content_width >= 460.0f ? 2u : 1u) };
         const std::size_t rows { (features.size() + columns - 1) / columns };
         luil::grid_config config {};
         config.column_spacing = 12.0f;
@@ -212,28 +220,27 @@ namespace demo {
     std::unique_ptr<luil::ui_element> gallery_page::build_controls()
     {
         page_layout page { u8"controls" };
-        page.heading(u8"버튼과 컨트롤", u8"상태가 실제로 바뀌는 공용 컨트롤과 마크다운 hover를 체험하세요.");
+        page.heading(u8"버튼과 컨트롤", u8"상태가 실제로 바뀌는 공용 컨트롤입니다. 직접 눌러 보세요.");
 
+        page.begin_card(u8"단추");
         auto buttons { row(u8"gallery/buttons") };
         buttons->add_fit(button(u8"gallery/notify", u8"알림 보내기", luil::text_button_visual::accent,
             luil::make_message_action(toast_request_intent { u8"공용 버튼에서 보낸 알림입니다.", luil::toast_severity::success })));
         buttons->add_fit(button(u8"gallery/reset", u8"상태 초기화", luil::text_button_visual::danger, luil::make_message_action(gallery_reset_intent {})));
         buttons->add_fit(button(u8"gallery/theme", u8"모양 설정", luil::text_button_visual::link, luil::make_message_action(navigate_intent { std::u8string { page_theme } })));
-        auto disabled { button(u8"gallery/disabled", u8"비활성 버튼", luil::text_button_visual::normal, {}) };
+        auto disabled { button(u8"gallery/disabled", u8"비활성 단추", luil::text_button_visual::normal, {}) };
         disabled->set_enabled(false);
         buttons->add_fit(std::move(disabled));
         page.add(std::move(buttons), luil::text_button_height);
-        page.gap(24.0f);
-        page.add(make_label({ kind_text, u8"gallery/toggles-title" }, u8"독립 토글과 즉시 적용 스위치", 15.0f, luil::label_color_role::primary), 28.0f);
+        page.end_card();
 
+        page.begin_card(u8"토글 칩", u8"칩마다 따로 켜고 끕니다.");
         auto toggles { row(u8"gallery/toggles") };
-        toggles->add_fit(toggle(u8"bold", u8"굵게", bold_, luil::check_style::toggle_button));
-        toggles->add_fit(toggle(u8"italic", u8"기울임", italic_, luil::check_style::toggle_button));
-        toggles->add_fit(toggle(u8"pinned", u8"상단 고정", pinned_, luil::check_style::toggle_button));
+        toggles->add_fit(toggle(u8"bold", u8"굵게", bold_, luil::check_style::toggle_chip));
+        toggles->add_fit(toggle(u8"italic", u8"기울임", italic_, luil::check_style::toggle_chip));
+        toggles->add_fit(toggle(u8"pinned", u8"상단 고정", pinned_, luil::check_style::toggle_chip));
         page.add(std::move(toggles), luil::text_button_height);
-        page.gap();
-        page.add(toggle(u8"autosave", u8"자동 저장", autosave_, luil::check_style::toggle_switch), luil::check_row_height);
-        page.add(make_label({ kind_text, u8"gallery/autosave-status" }, autosave_ ? u8"변경 사항을 자동으로 저장합니다." : u8"수동 저장 모드입니다.", 12.0f, luil::label_color_role::dim), 24.0f);
+        page.gap(4.0f);
 
         luil::markdown_config preview {};
         preview.text = u8"선택한 서식: ";
@@ -245,7 +252,12 @@ namespace demo {
             preview.text += u8"기본 글씨";
         preview.text += pinned_ ? u8" · 상단 고정 켜짐" : u8" · 상단 고정 꺼짐";
         page.add(std::make_unique<luil::markdown_element>(luil::ui_element_id { kind_text, u8"gallery/format-preview" }, std::move(preview)), 32.0f);
-        page.gap(20.0f);
+        page.end_card();
+
+        page.begin_card(u8"즉시 적용 스위치");
+        page.add(toggle(u8"autosave", u8"자동 저장", autosave_, luil::check_style::toggle_switch), luil::check_row_height);
+        page.add(make_label({ kind_text, u8"gallery/autosave-status" }, autosave_ ? u8"바뀐 내용을 자동으로 저장합니다." : u8"저장 단추를 눌러야 저장합니다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        page.end_card();
 
         luil::choice_group_config choices {};
         choices.owner = u8"gallery/density";
@@ -254,31 +266,32 @@ namespace demo {
         choices.items = { { u8"compact", u8"간결하게" }, { u8"comfortable", u8"여유롭게" }, { u8"wide", u8"넓게" } };
         choices.selected = choice_;
         choices.select = [](const std::u8string& value) { return luil::make_app_action(gallery_choice_intent { value }); };
-        page.add(make_label({ kind_text, u8"gallery/choices-title" }, u8"배타 선택", 15.0f, luil::label_color_role::primary), 28.0f);
-        page.add(std::make_unique<luil::choice_group_element>(std::move(choices)), luil::choice_toggle_height);
-        page.gap(24.0f);
+        page.begin_card(u8"배타 선택", u8"하나만 고릅니다.");
+        // 묶음은 글 폭에 맞춘 칸만 차지한다 — 화면 끝까지 늘이면 칸 하나가 수백 px이 되어 무엇을 고르는지 흐려진다.
+        page.add(std::make_unique<luil::choice_group_element>(std::move(choices)), { .length = luil::choice_toggle_height, .cross_length = choice_width });
+        page.end_card();
 
-        page.add(make_label({ kind_text, u8"gallery/value" }, u8"진행률  " + to_u8(static_cast<int>(value_)) + u8"%", 15.0f, luil::label_color_role::primary), 28.0f);
+        page.begin_card(u8"진행률 · " + to_u8(static_cast<int>(value_)) + u8"%");
         luil::slider_config slider {};
         slider.maximum = 100.0f;
         slider.value = value_;
         slider.change = [](const float delta) { return luil::make_app_action(gallery_value_intent { delta, true }); };
         slider.change_to = [](const float value) { return luil::make_app_action(gallery_value_intent { value, false }); };
-        page.add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_layout, u8"gallery/slider" }, std::move(slider)), luil::slider_row_height);
+        page.add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_layout, u8"gallery/slider" }, std::move(slider)), { .length = luil::slider_row_height, .cross_length = bar_width });
         page.gap();
-        page.add(std::make_unique<luil::progress_element>(luil::ui_element_id { kind_layout, u8"gallery/progress" }, luil::progress_config { .value = value_ / 100.0f }), 8.0f);
+        page.add(std::make_unique<luil::progress_element>(luil::ui_element_id { kind_layout, u8"gallery/progress" }, luil::progress_config { .value = value_ / 100.0f }),
+            { .length = 8.0f, .cross_length = bar_width });
         page.gap();
         // 끝을 모르는 진행은 값 없이 도는 스피너다. 움직임 줄이기 설정에서는 멈춘 모양으로 그린다.
         auto busy { row(u8"gallery/busy") };
         busy->add(std::make_unique<luil::spinner_element>(luil::ui_element_id { kind_layout, u8"gallery/spinner" }, luil::spinner_config { .name = u8"동기화 중" }),
             luil::stack_item { .length = 20.0f, .cross_length = 20.0f });
-        busy->add_fit(make_label({ kind_text, u8"gallery/busy-text" }, u8"동기화 중… 끝을 모르는 작업", 12.0f, luil::label_color_role::dim));
+        busy->add_fit(make_label({ kind_text, u8"gallery/busy-text" }, u8"동기화하는 중… 끝을 모르는 작업", 12.0f, luil::label_color_role::dim));
         page.add(std::move(busy), 24.0f);
-        page.gap(24.0f);
+        page.end_card();
 
         // 자석 막대: 앱이 정한 지점 근처에서 손잡이가 붙고, Ctrl을 누른 채 끌면 자석 없이 놓는다.
-        page.add(make_label({ kind_text, u8"gallery/magnet-title" }, u8"자석 막대", 15.0f, luil::label_color_role::primary), 28.0f);
-        page.add(make_label({ kind_text, u8"gallery/magnet-help" }, u8"표식 근처에서 손잡이가 붙습니다. Ctrl을 누른 채 끌면 자석 없이 놓습니다.", 12.0f, luil::label_color_role::dim), 24.0f);
+        page.begin_card(u8"자석 막대", u8"표식 근처에서 손잡이가 붙습니다. Ctrl을 누른 채 끌면 자석 없이 놓습니다.");
         const auto magnet_slider = [&page](std::u8string key, std::u8string name, std::u8string caption, const float minimum, const float maximum, const float value, std::vector<float> magnets) {
             page.add(make_label({ kind_text, u8"gallery/" + key + u8"-value" }, std::move(caption), 12.0f, luil::label_color_role::primary), 24.0f);
             luil::slider_config config {};
@@ -290,7 +303,7 @@ namespace demo {
             config.change_to = [key](const float target) { return luil::make_app_action(gallery_value_intent { target, false, key }); };
             auto element { std::make_unique<luil::slider_element>(luil::ui_element_id { kind_layout, u8"gallery/" + key }, std::move(config)) };
             element->set_tooltip(std::move(name));
-            page.add(std::move(element), luil::slider_row_height);
+            page.add(std::move(element), { .length = luil::slider_row_height, .cross_length = bar_width });
             page.gap();
         };
         const int balance { static_cast<int>(std::lround(balance_)) };
@@ -301,7 +314,9 @@ namespace demo {
         magnet_slider(u8"volume", u8"볼륨", u8"볼륨  " + to_u8(static_cast<int>(std::lround(volume_))) + u8"% — 100%에 붙습니다", 0.0f, 150.0f, volume_, { 100.0f });
         magnet_slider(u8"balance", u8"좌우 균형", u8"좌우 균형  " + balance_text + u8" — 가운데에 붙습니다", -100.0f, 100.0f, balance_, { 0.0f });
         magnet_slider(u8"position", u8"재생 위치", u8"재생 위치  " + position_text + u8" — 장이 시작하는 자리에 붙습니다", 0.0f, 1440.0f, position_, { 192.0f, 580.0f, 905.0f, 1290.0f });
-        page.gap(24.0f);
+        page.end_card();
+
+        page.begin_card(u8"마크다운 도움말", u8"도움말 안으로 마우스를 옮겨도 유지됩니다. 링크를 누르거나 Esc로 닫아 보세요.");
 
         // 단축키 잡기 칸: 초점을 가진 동안 Tab·Esc·Alt 조합까지 모든 키가 이 칸의 것이다.
         page.add(make_label({ kind_text, u8"gallery/shortcut-title" }, u8"단축키 잡기", 15.0f, luil::label_color_role::primary), 28.0f);
@@ -432,9 +447,10 @@ namespace demo {
                         u8"예제](app:tabs) · [링크 실행](app:sample)";
         markdown.activate_link = follow_link;
         hover->set_tooltip_content(luil::make_markdown_tooltip(std::move(markdown), 340.0f));
-        page.add(std::move(hover), luil::text_button_height);
-        page.gap();
-        page.add(make_label({ kind_text, u8"gallery/hover-help" }, u8"도움말 안으로 마우스를 옮겨도 유지됩니다. 링크를 누르거나 Esc로 닫아 보세요.", 12.0f, luil::label_color_role::dim), 24.0f);
+        auto hover_row { row(u8"gallery/hover-row") };
+        hover_row->add_fit(std::move(hover));
+        page.add(std::move(hover_row), luil::text_button_height);
+        page.end_card();
         return page.finish(controls_scroll_, [](const float delta) { return luil::make_app_action(gallery_scroll_intent { true, delta }); });
     }
 } // namespace demo

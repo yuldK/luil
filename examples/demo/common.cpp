@@ -2,6 +2,7 @@
 
 #include "luil/ui/scroll_area_element.h"
 
+#include "luil/theme/ui_theme.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/stack_element.h"
@@ -10,45 +11,112 @@
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace demo {
-    page_layout::page_layout(std::u8string owner)
+    namespace {
+        // 본문의 바깥 여백과 카드의 안쪽 여백이다 (논리 픽셀).
+        constexpr luil::edge_insets page_padding { 40.0f, 32.0f, 40.0f, 32.0f };
+        constexpr float card_padding { 16.0f };
+        // 카드 사이 간격이다.
+        constexpr float card_spacing { 16.0f };
+    } // namespace
+
+    page_layout::page_layout(std::u8string owner, const float max_width)
         : owner_ { std::move(owner) }
+        , max_width_ { max_width }
     {
         luil::stack_config config {};
-        config.padding = luil::edge_insets::all(24.0f);
+        config.padding = page_padding;
         column_ = std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, owner_ }, config);
+        height_ = page_padding.top + page_padding.bottom;
+    }
+
+    float page_layout::content_width(const float width, const float max_width) noexcept
+    {
+        const float available { width - page_padding.left - page_padding.right - luil::scroll_area_bar_width };
+        return std::max(0.0f, std::min(available, max_width));
+    }
+
+    float page_layout::card_content_width(const float width, const float max_width) noexcept
+    {
+        return std::max(0.0f, content_width(width, max_width) - card_padding * 2.0f);
+    }
+
+    luil::stack_element& page_layout::target() noexcept
+    {
+        return card_ != nullptr ? *card_ : *column_;
     }
 
     void page_layout::add(std::unique_ptr<luil::ui_element> element, const float height)
     {
-        column_->add(std::move(element), height);
-        height_ += height;
+        target().add(std::move(element), height);
+        (card_ != nullptr ? card_height_ : height_) += height;
     }
 
     void page_layout::add(std::unique_ptr<luil::ui_element> element, const luil::stack_item item)
     {
-        column_->add(std::move(element), item);
-        height_ += item.length;
+        target().add(std::move(element), item);
+        (card_ != nullptr ? card_height_ : height_) += item.length;
     }
 
     void page_layout::gap(const float height)
     {
-        column_->add_gap(height);
-        height_ += height;
+        target().add_gap(height);
+        (card_ != nullptr ? card_height_ : height_) += height;
     }
 
     void page_layout::heading(std::u8string title, std::u8string description)
     {
         const std::u8string key { owner_ + u8"/heading/" + to_u8(heading_++) };
-        add(make_label({ kind_text, key }, std::move(title), 20.0f, luil::label_color_role::primary), 32.0f);
-        add(make_label({ kind_text, key + u8"/description" }, std::move(description), 12.0f, luil::label_color_role::dim), 24.0f);
-        gap(16.0f);
+        add(make_label({ kind_text, key }, std::move(title), 18.0f, luil::label_color_role::primary), 28.0f);
+        add(make_label({ kind_text, key + u8"/description" }, std::move(description), 12.0f, luil::label_color_role::dim), 20.0f);
+        gap(20.0f);
+    }
+
+    void page_layout::begin_card(std::u8string title, std::u8string description)
+    {
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(card_padding);
+        const std::u8string key { owner_ + u8"/card/" + to_u8(cards_) };
+        card_ = std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, key + u8"/body" }, config);
+        card_height_ = card_padding * 2.0f;
+        if (title.empty() == false)
+            add(make_label({ kind_text, key + u8"/title" }, std::move(title), 14.0f, luil::label_color_role::primary), 22.0f);
+        if (description.empty() == false)
+            add(make_label({ kind_text, key + u8"/description" }, std::move(description), 11.0f, luil::label_color_role::dim), 18.0f);
+        gap(10.0f);
+    }
+
+    void page_layout::end_card()
+    {
+        if (card_ == nullptr)
+            return;
+
+        // 앱 화면 규칙의 카드다: 전경색의 옅은 알파 바탕, 1px 구분선 테, 8px 모서리.
+        luil::panel_config config {};
+        config.background = [](const luil::ui_color_palette& palette) { return luil::with_alpha(palette.primary_foreground, 0.035f); };
+        config.border = [](const luil::ui_color_palette& palette) { return palette.divider; };
+        config.corner_radius = 8.0f;
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, owner_ + u8"/card/" + to_u8(cards_++) }, std::move(config)) };
+        panel->set_content(std::move(card_));
+        const float height { card_height_ };
+        card_height_ = 0.0f;
+        if (column_->children().empty() == false && cards_ > 1)
+            gap(card_spacing);
+        add(std::move(panel), height);
     }
 
     std::unique_ptr<luil::ui_element> page_layout::finish(const float offset, std::function<luil::input_action(float)> scroll)
     {
+        end_card();
+        // 본문을 최대 폭에 묶어 왼쪽에 둔다. 남는 자리는 비워 둔다.
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, owner_ + u8"/frame" }, row_config) };
+        row->add(std::move(column_), luil::stack_item { .weight = 1.0f, .maximum = max_width_ + page_padding.left + page_padding.right });
+
         luil::scroll_area_config config {};
         config.owner = owner_;
         config.content_height = height_;
@@ -56,7 +124,7 @@ namespace demo {
         config.scroll = std::move(scroll);
         config.bar = luil::scrollbar_visibility::always;
         auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
-        area->set_content(std::move(column_));
+        area->set_content(std::move(row));
         return area;
     }
     std::u8string to_u8(const int value)

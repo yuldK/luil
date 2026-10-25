@@ -193,23 +193,42 @@ namespace demo {
     // 라이브러리(luil)의 것을 그대로 쓴다.
     [[nodiscard]] std::u8string to_u8(int value);
 
+    // 페이지 본문의 기본 최대 폭이다 (논리 픽셀). 설정·컨트롤 화면은 이보다 넓어지지 않고 왼쪽에 붙는다.
+    //  - 창이 넓어져도 줄 길이와 컨트롤의 비율이 그대로라 화면이 늘어져 보이지 않는다.
+    inline constexpr float page_max_width { 720.0f };
+
     // 고정 높이 예제의 내용 높이를 함께 모아 공용 scroll_area에 넘긴다.
     // 페이지가 길어지거나 창이 작아져도 휠·막대·초점 드러내기가 함께 동작한다.
+    //  - 본문은 `max_width`를 넘지 않는다. 폭에서 높이를 재는 element는 `content_width`를 쓴다.
+    //  - `begin_card`와 `end_card` 사이에 담은 것은 카드 하나(옅은 바탕·1px 테·8px 모서리)에 들어간다.
     class page_layout
     {
     public:
-        explicit page_layout(std::u8string owner);
+        explicit page_layout(std::u8string owner, float max_width = page_max_width);
+        // 페이지가 `width`(논리 픽셀)를 받았을 때 본문 한 줄이 실제로 받는 폭이다.
+        // 카드 안이면 카드의 안쪽 여백까지 뺀다.
+        [[nodiscard]] static float content_width(float width, float max_width = page_max_width) noexcept;
+        [[nodiscard]] static float card_content_width(float width, float max_width = page_max_width) noexcept;
         void add(std::unique_ptr<luil::ui_element> element, float height);
         void add(std::unique_ptr<luil::ui_element> element, luil::stack_item item);
         void gap(float height = 12.0f);
         void heading(std::u8string title, std::u8string description);
+        // 카드를 연다. 제목이 비어 있지 않으면 첫 줄에 둔다.
+        void begin_card(std::u8string title, std::u8string description = {});
+        void end_card();
         [[nodiscard]] std::unique_ptr<luil::ui_element> finish(float offset, std::function<luil::input_action(float)> scroll);
 
     private:
+        [[nodiscard]] luil::stack_element& target() noexcept;
+
         std::u8string owner_ {};
+        float max_width_ { page_max_width };
         std::unique_ptr<luil::stack_element> column_ {};
-        float height_ { 48.0f };
+        float height_ { 0.0f };
         int heading_ { 0 };
+        std::unique_ptr<luil::stack_element> card_ {};
+        float card_height_ { 0.0f };
+        int cards_ { 0 };
     };
 
     [[nodiscard]] std::unique_ptr<luil::label_element> make_label(luil::ui_element_id id, std::u8string text, float font_size, luil::label_color_role color);
