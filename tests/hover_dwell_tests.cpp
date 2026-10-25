@@ -131,6 +131,22 @@ TEST_CASE("Resting over an element fires its dwell once after the delay", "[hove
     REQUIRE(said(controller.process(move_to(150.0f, 120.0f, 1s))) == std::vector<std::u8string> { u8"preview-end" });
 }
 
+TEST_CASE("A card with only a dwell still takes the pointer and fires", "[hover][dwell]")
+{
+    // 실제 데모에서 잡힌 결함이다: 액션 없이 머무름만 단 카드는 hit 대상이 아니어서 hover가 서지 않았다.
+    auto root { make_panel(u8"root", { 0.0f, 0.0f, 300.0f, 200.0f }) };
+    auto card { make_panel(u8"card", { 0.0f, 0.0f, 100.0f, 100.0f }) };
+    card->set_hover_dwell(luil::hover_dwell_target { .delay = 350ms, .on_dwell = say(u8"preview"), .on_end = say(u8"preview-end") });
+    REQUIRE(card->interactive());
+    root->add(std::move(card));
+    luil::interaction_controller controller {};
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    static_cast<void>(controller.process(move_to(20.0f, 20.0f, 0ms)));
+    REQUIRE(controller.next_deadline() == at(350ms));
+    REQUIRE(said(controller.advance(at(350ms))) == std::vector<std::u8string> { u8"preview" });
+    REQUIRE(said(controller.process(move_to(150.0f, 120.0f, 1s))) == std::vector<std::u8string> { u8"preview-end" });
+}
+
 TEST_CASE("Leaving before the delay fires nothing", "[hover][dwell]")
 {
     luil::interaction_controller controller {};

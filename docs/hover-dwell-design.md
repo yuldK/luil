@@ -24,6 +24,7 @@ card->set_hover_dwell(luil::hover_dwell_target {
 | 터치 | 머무름이 없다 (hover가 없다) |
 
 - **임자**는 포인터 아래 element에서 root 쪽으로 처음 만나는 머무름 역할이다. 카드 안의 제목·그림 사이를 옮겨 다녀도 임자가 같아 시계가 이어진다. 비활성 element는 임자가 아니다.
+- 머무름 역할만 단 element(액션 없는 카드)도 hit 대상이다(`interactive()`). 그러지 않으면 포인터 아래 hover가 서지 않아 머무름이 영영 차지 않는다 — 실제 데모에서 잡힌 결함이다.
 - 시간은 서브메뉴를 hover로 여는 것과 같은 길이다. controller는 시계를 보지 않고 `next_deadline`으로 찰 시각을 알리며, 입력 pump가 그때 `advance`로 지금 시각을 준다. test는 시각을 손으로 정한다.
 - 판정은 이벤트를 처리한 **뒤의** hover·누름 상태로 한 곳(`update_dwell`)에서 센다. 누름·끌기·떠남의 갈래마다 심으면 언젠가 하나를 빠뜨린다.
 - 새 tree를 받을 때도 다시 본다(`refresh_hover_tracking`). 포인터가 머문 채 대화 상자의 scrim이 서면 hover가 scrim으로 옮고 머무름이 끝난다.
