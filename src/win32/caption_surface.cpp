@@ -363,7 +363,8 @@ namespace luil::win32 {
         case WM_SYSKEYDOWN:
             // Alt+Space는 시스템 메뉴다 (bit 29가 Alt다).
             // 나머지 Alt 조합은 앱 단축키라 호출자가 이어 본다.
-            if (word_parameter == VK_SPACE && (long_parameter & (1LL << 29)) != 0)
+            //  - 키 잡기 모드에서는 잡는 칸의 것이다 (window_surface의 `WM_SYSKEYDOWN`).
+            if (word_parameter == VK_SPACE && (long_parameter & (1LL << 29)) != 0 && key_capturing() == false)
             {
                 RECT window_rectangle {};
                 GetWindowRect(window_, &window_rectangle);

@@ -354,6 +354,9 @@ namespace luil {
                 }
                 else if constexpr (std::is_same_v<value_type, character_typed_event>)
                 {
+                    // 키 잡기 칸이 받는 동안의 글자는 버린다. 같은 키가 키로 이미 갔다.
+                    if (focused_key_capture() != nullptr)
+                        return {};
                     // 문자 입력은 초점을 가진 텍스트 박스로만 간다.
                     // 받을 값인지는 앱 logic이 거른다.
                     const std::optional<text_input_target> target { text_target(snapshot_.focused_input.kind) };
@@ -418,6 +421,8 @@ namespace luil {
                     actions.push_back(std::move(action));
         // 끌기가 끝났으면(뗌·취소·Esc) 가장자리 흐름도 멈춘다.
         settle_auto_scroll();
+        // 플랫폼이 읽는 키 잡기 표식이다. 초점이 옮는 자리마다 세우지 않고 여기 한 곳에서 다시 센다.
+        snapshot_.key_capture = focused_key_capture() != nullptr;
         return actions;
     }
 
@@ -2886,6 +2891,10 @@ namespace luil {
         if (focused.has_value() == false)
             return std::nullopt;
         const text_input_target target { *focused };
+        // Backspace는 글자다 — 지우기는 글자 경로(U+0008, Ctrl이면 U+007F)가 한다. 키 쪽은 칸에서 끝내야 글을 지우는
+        // 동안 "뒤로" 같은 앱 단축키가 함께 실행되지 않는다 (Space와 같은 규칙).
+        if (event.key == key_code::backspace && event.alt == false && event.meta == false)
+            return std::vector<input_action> {};
         const bool primary_shortcut { event.primary_shortcut_down() };
         const bool word_navigation { event.word_navigation_down() };
         const text_input_snapshot value { focused_text_input().value_or(text_input_snapshot {}) };
@@ -2999,8 +3008,22 @@ namespace luil {
         return std::nullopt;
     }
 
+    const key_capture_target* interaction_controller::focused_key_capture() const
+    {
+        if (snapshot_.focused == ui_element_id {})
+            return nullptr;
+        const ui_tree* const tree { surface_tree(snapshot_.focused_surface) };
+        const ui_element* const element { tree != nullptr ? tree->find(snapshot_.focused) : nullptr };
+        return element != nullptr && element->enabled() ? element->key_capture() : nullptr;
+    }
+
     std::vector<input_action> interaction_controller::process_key(const key_pressed_event& event)
     {
+        // 키 잡기 칸이 초점을 가졌으면 모든 키가 그 칸의 것이다 — 메뉴·Tab·Esc·명령보다 먼저다
+        // (keyboard-shortcut-design.md).
+        if (const key_capture_target* const capture { focused_key_capture() }; capture != nullptr)
+            return capture->on_key(event);
+
         // 컨텍스트 메뉴가 열려 있으면 ↑/↓/Enter/Esc는 메뉴의 몫이다.
         // 목록 탐색으로 흘러가지 않는다.
         // 메뉴는 주 tree에 있을 수도, popup tree에 있을 수도 있다.

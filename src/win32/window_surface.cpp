@@ -617,7 +617,15 @@ namespace luil::win32 {
             // Alt 조합 키다 — 앱 단축키(Alt+X 등)를 같은 경로로 나른다.
             // Alt+Space(시스템 메뉴)는 caption chrome이 먼저 보고 여기까지 오지 않는다.
             // Alt+F4는 창 닫기라 삼키지 않고 시스템에 맡긴다.
-            if (word_parameter != VK_F4 && post_key_event(word_parameter, long_parameter))
+            //  - 키 잡기 모드에서는 Alt+F4·Alt+Space도 잡는 칸의 것이다. 단축키를 고르다 창이 닫히면 안 된다.
+            //    잡는 칸은 그것이 시스템 예약 키라는 것을 보여 준다 (`system_reserved_chord`).
+            if ((word_parameter != VK_F4 || key_capturing()) && post_key_event(word_parameter, long_parameter))
+                return LRESULT { 0 };
+            return std::nullopt;
+        case WM_SYSKEYUP:
+        case WM_SYSCHAR:
+            // 키 잡기 모드에서 Alt를 떼면 메뉴 모드(SC_KEYMENU)로 들어가 다음 키를 OS가 가져간다. 그것을 막는다.
+            if (key_capturing())
                 return LRESULT { 0 };
             return std::nullopt;
         case WM_IME_SETCONTEXT:
@@ -1284,7 +1292,8 @@ namespace luil::win32 {
         {
             // 문자를 만드는 키인지는 layout이 안다 (번역은 layout을 모른다).
             // 죽은 키(dead key) 표시 비트는 무시한다.
-            const bool character_key { (MapVirtualKeyW(static_cast<UINT>(virtual_key), MAPVK_VK_TO_CHAR) & 0x7FFFFFFFu) != 0 };
+            //  - 키 잡기 모드에서는 글자 키도 수정자 없이 키로 보낸다. 잡는 칸이 "N" 하나도 받아야 한다.
+            const bool character_key { key_capturing() == false && (MapVirtualKeyW(static_cast<UINT>(virtual_key), MAPVK_VK_TO_CHAR) & 0x7FFFFFFFu) != 0 };
             key = modified_key_from_virtual(virtual_key, control, alt, character_key);
         }
         if (key == key_code::none)
@@ -1342,6 +1351,12 @@ namespace luil::win32 {
             return;
         }
         apply_surface_cursor(window_, tree_.get(), context_.host(), context_.config(), id_, client_position);
+    }
+
+    bool window_surface::key_capturing() const
+    {
+        app_host* const host { context_.host() };
+        return host != nullptr && host->acquire_interaction().key_capture;
     }
 
     void window_surface::note_pointer_activity(const std::optional<POINT> client_position, const bool pressed)

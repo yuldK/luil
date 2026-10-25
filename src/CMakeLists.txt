@@ -338,6 +338,8 @@ luil_add_source_filter(luil_core_files "host"
     host/focus_request_tracker.h
     host/frame_state.cpp
     host/frame_state.h
+    host/key_mapping.cpp
+    host/key_mapping.h
     host/pointer_sequence.cpp
     host/overlay_input.cpp
     host/overlay_input.h

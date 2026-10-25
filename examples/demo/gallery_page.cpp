@@ -112,6 +112,18 @@ namespace demo {
                 apply(value_, 0.0f, 100.0f);
             return true;
         }
+        if (const auto* const shortcut { message.get<gallery_shortcut_intent>() }; shortcut != nullptr)
+        {
+            // 예약 키는 정하지 않고 그렇다고 보여 준다. 저장할 때는 글로 왕복한다 (shortcut_label·parse_shortcut).
+            if (luil::system_reserved_chord(shortcut->chord))
+            {
+                shortcut_note_ = u8"시스템 예약 키라 정할 수 없습니다 — " + luil::shortcut_label(shortcut->chord);
+                return true;
+            }
+            shortcut_ = luil::parse_shortcut(luil::shortcut_label(shortcut->chord)).value_or(luil::key_chord {});
+            shortcut_note_.clear();
+            return true;
+        }
         if (const auto* const scroll { message.get<gallery_scroll_intent>() }; scroll != nullptr)
         {
             float& offset { scroll->controls ? controls_scroll_ : overview_scroll_ };
@@ -276,6 +288,26 @@ namespace demo {
         magnet_slider(u8"volume", u8"볼륨", u8"볼륨  " + to_u8(static_cast<int>(std::lround(volume_))) + u8"% — 100%에 붙습니다", 0.0f, 150.0f, volume_, { 100.0f });
         magnet_slider(u8"balance", u8"좌우 균형", u8"좌우 균형  " + balance_text + u8" — 가운데에 붙습니다", -100.0f, 100.0f, balance_, { 0.0f });
         magnet_slider(u8"position", u8"재생 위치", u8"재생 위치  " + position_text + u8" — 장이 시작하는 자리에 붙습니다", 0.0f, 1440.0f, position_, { 192.0f, 580.0f, 905.0f, 1290.0f });
+        page.gap(24.0f);
+
+        // 단축키 잡기 칸: 초점을 가진 동안 Tab·Esc·Alt 조합까지 모든 키가 이 칸의 것이다.
+        page.add(make_label({ kind_text, u8"gallery/shortcut-title" }, u8"단축키 잡기", 15.0f, luil::label_color_role::primary), 28.0f);
+        page.add(make_label({ kind_text, u8"gallery/shortcut-help" }, u8"칸을 누르고 키를 누르세요. Tab·Esc도 잡힙니다. 빠져나가려면 다른 곳을 누르세요.", 12.0f, luil::label_color_role::dim), 24.0f);
+        auto shortcut_row { row(u8"gallery/shortcut-row") };
+        const std::u8string current { luil::shortcut_label(shortcut_) };
+        // 눌러서 초점을 받는 자리라 누름 자체는 아무 일도 하지 않는다.
+        const luil::ui_action focus_only { [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; } };
+        auto capture { button(u8"gallery/shortcut", current.empty() ? u8"(없음)" : current, luil::text_button_visual::normal, focus_only) };
+        capture->set_tooltip(luil::label_with_shortcut(u8"명령 팔레트 열기", shortcut_));
+        capture->set_key_capture(luil::key_capture_target {
+            .on_key = [](const luil::key_pressed_event& event) -> std::vector<luil::input_action> { return { luil::make_app_action(gallery_shortcut_intent { luil::chord_of(event) }) }; },
+        });
+        shortcut_row->add(std::move(capture), luil::stack_item { .length = 160.0f, .cross_length = luil::text_button_height });
+        shortcut_row->add(button(u8"gallery/shortcut-clear", u8"지우기", luil::text_button_visual::normal, luil::make_message_action(gallery_shortcut_intent {})),
+            luil::stack_item { .length = 72.0f, .cross_length = luil::text_button_height });
+        page.add(std::move(shortcut_row), luil::text_button_height);
+        if (shortcut_note_.empty() == false)
+            page.add(make_label({ kind_text, u8"gallery/shortcut-note" }, shortcut_note_, 12.0f, luil::label_color_role::dim), 24.0f);
         page.gap(24.0f);
 
         luil::ui_action hover_action { luil::make_message_action(toast_request_intent { u8"툴팁 안의 링크도 눌러 보세요." }) };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "demo/common.h"
+#include "luil/ui/commands.h"
 
 namespace demo {
     struct gallery_toggle_intent
@@ -14,6 +15,12 @@ namespace demo {
         bool relative { false };
         // 어느 막대의 값인지다. 비어 있으면 진행률 막대다.
         std::u8string key {};
+    };
+
+    // 단축키 잡기 칸이 받은 키다 (`ui_element::set_key_capture`). 비어 있으면 지우기다.
+    struct gallery_shortcut_intent
+    {
+        luil::key_chord chord {};
     };
 
     struct gallery_scroll_intent
@@ -48,6 +55,9 @@ namespace demo {
         float volume_ { 72.0f };
         float balance_ { -18.0f };
         float position_ { 400.0f };
+        // 단축키 잡기 칸의 값과, 예약 키를 눌렀을 때의 안내다.
+        luil::key_chord shortcut_ { luil::key_code::key_p, true, true };
+        std::u8string shortcut_note_ {};
         float overview_scroll_ { 0.0f };
         float controls_scroll_ { 0.0f };
         std::u8string choice_ { u8"comfortable" };

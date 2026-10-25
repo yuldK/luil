@@ -457,6 +457,9 @@ namespace luil::win32 {
         [[nodiscard]] bool post_key_event(WPARAM virtual_key, LPARAM long_parameter);
 
         void track_mouse_leave() noexcept;
+        // 초점을 가진 element가 다음 키를 모두 받는 중인가 (`ui_element::set_key_capture`).
+        // 발행된 상호작용에서 읽는다 — 초점이 바뀔 때만 달라져 키마다 읽어도 싸다.
+        [[nodiscard]] bool key_capturing() const;
         // 지금 포인터 자리의 모양을 이 창에 적용한다.
         // 어느 모양인지는 이 표면의 tree가 정하고, 실제 커서로 옮기는 것은
         // 소비자가 준 해석기(없으면 기본 매핑)다.
