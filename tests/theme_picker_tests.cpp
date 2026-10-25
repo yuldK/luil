@@ -65,6 +65,53 @@ TEST_CASE("Theme cards share measured height with horizontal and stacked layouts
     REQUIRE(luil::theme_picker_element::height_for(config, 240.0f) > luil::theme_picker_element::height_for(config, 700.0f));
 }
 
+TEST_CASE("Theme cards keep their size on wide slots and wrap on narrow ones", "[ui][theme-picker]")
+{
+    const auto config { themes() };
+    const float card_height { config.preview_height + 26.0f };
+    // 넓은 폭: 카드는 늘어나지 않고 왼쪽부터 한 줄로 선다.
+    for (const float width : { 700.0f, 1600.0f })
+    {
+        const float height { luil::theme_picker_element::height_for(config, width) };
+        REQUIRE(height == card_height);
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(config), { 0.0f, 0.0f, width, height }, 1.0f) };
+        for (std::size_t index = 0; index < tree.root()->children().size(); ++index)
+        {
+            const luil::rect_f card { tree.root()->children()[index]->bounds() };
+            REQUIRE(card.width == config.card_width);
+            REQUIRE(card.x == static_cast<float>(index) * (config.card_width + config.gap));
+            REQUIRE(card.y == 0.0f);
+        }
+    }
+    // 세 장이 들지 않는 폭: 두 장 뒤에 셋째가 다음 줄로 넘어간다. 카드 크기는 그대로다.
+    const float narrow { config.card_width * 2.0f + config.gap + 10.0f };
+    const float height { luil::theme_picker_element::height_for(config, narrow) };
+    REQUIRE(height == card_height * 2.0f + config.gap);
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(config), { 0.0f, 0.0f, narrow, height }, 1.0f) };
+    const luil::rect_f third { tree.root()->children()[2]->bounds() };
+    REQUIRE(third.x == 0.0f);
+    REQUIRE(third.y == card_height + config.gap);
+    REQUIRE(third.width == config.card_width);
+}
+
+TEST_CASE("Accent swatches split evenly across the rows they need", "[ui][theme-picker]")
+{
+    luil::accent_picker_config config {};
+    config.owner = u8"accent";
+    config.include_system = false;
+    // 32px 견본 17개가 드는 폭이다. 카탈로그를 두 줄에 고르게 나누면 둘째 줄이 한두 개로 남지 않는다.
+    const float width { 17.0f * 40.0f - 8.0f };
+    const float height { luil::accent_picker_element::height_for(config, width) };
+    REQUIRE(height == 2.0f * 40.0f - 8.0f);
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::accent_picker_element>(config), { 0.0f, 0.0f, width, height }, 1.0f) };
+    std::size_t first_row { 0 };
+    for (const auto& child : tree.root()->children())
+        if (child->bounds().y == 0.0f)
+            ++first_row;
+    const std::size_t count { luil::accent_catalog().size() };
+    REQUIRE(first_row == (count + 1u) / 2u);
+}
+
 TEST_CASE("Read-only theme cards do not offer keyboard activation", "[ui][theme-picker]")
 {
     auto config { themes() };
