@@ -1616,7 +1616,7 @@ TEST_CASE("Text ranges walk characters, not bytes, across a surrogate pair", "[w
     REQUIRE(walker->begin_offset() == 0u);
     REQUIRE(walker->end_offset() == 10u);
 
-    // 구간 찾기는 ASCII 대소문자를 접는다. 없는 글은 빈 답이다.
+    // 구간 찾기는 대소문자를 접는다 (case-fold-design.md). 없는 글은 빈 답이다.
     ITextRangeProvider* found { nullptr };
     BSTR needle { SysAllocString(L"B") };
     REQUIRE(caret_range->FindText(needle, FALSE, TRUE, &found) == S_OK);
@@ -1631,6 +1631,42 @@ TEST_CASE("Text ranges walk characters, not bytes, across a surrogate pair", "[w
     REQUIRE(found == nullptr);
 
     caret_range->Release();
+    note->Release();
+    root->Release();
+}
+
+TEST_CASE("Text range search folds case beyond ASCII and answers the original span", "[win32][uia][case-fold]")
+{
+    fake_uia_host host {};
+    // ſ(U+017F, 2 byte)는 s(1 byte)로 접힌다. 찾은 구간은 원문 바이트 구간이어야 한다.
+    host.tree = make_note_tree({ .text = u8"Éclair maſter", .caret = 0, .anchor = 0 });
+    host.text_target = static_cast<luil::text_input_target>(7);
+    host.text_offset = 0;
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const note { root->make_element_provider({ kind_item, u8"note" }) };
+    ITextRangeProvider* whole { nullptr };
+    REQUIRE(note->RangeFromPoint(UiaPoint { 0.0, 0.0 }, &whole) == S_OK);
+    REQUIRE(whole->ExpandToEnclosingUnit(TextUnit_Document) == S_OK);
+
+    const auto find = [&whole](const wchar_t* text, const BOOL ignore_case) {
+        ITextRangeProvider* found { nullptr };
+        BSTR needle { SysAllocString(text) };
+        REQUIRE(whole->FindText(needle, FALSE, ignore_case, &found) == S_OK);
+        SysFreeString(needle);
+        std::wstring result {};
+        if (found != nullptr)
+        {
+            result = range_text(*found);
+            found->Release();
+        }
+        return result;
+    };
+    REQUIRE(find(L"éCL", TRUE) == L"Écl");
+    REQUIRE(find(L"MASTER", TRUE) == L"maſter");
+    // 대소문자를 가리면 그대로 비교한다.
+    REQUIRE(find(L"éCL", FALSE).empty());
+
+    whole->Release();
     note->Release();
     root->Release();
 }

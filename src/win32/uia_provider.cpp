@@ -1,5 +1,6 @@
 #include "win32/uia_provider.h"
 
+#include "luil/text/case_fold.h"
 #include "luil/text/text_edit.h"
 #include "luil/text/utf8_text.h"
 #include "luil/ui/ui_interaction.h"
@@ -1928,17 +1929,6 @@ namespace luil::win32 {
         {
             return index + 1u < starts.size() ? starts[index + 1u] : text.size();
         }
-
-        // ASCII만 접는 소문자화다 — FindText의 ignore_case가 이 범위다.
-        // 유니코드 대소문자 접기는 이 한 줄 칸의 쓰임보다 큰 계약이다.
-        [[nodiscard]] std::u8string ascii_lowered(const std::u8string_view text)
-        {
-            std::u8string lowered { text };
-            for (char8_t& character : lowered)
-                if (character >= u8'A' && character <= u8'Z')
-                    character = static_cast<char8_t>(character + (u8'a' - u8'A'));
-            return lowered;
-        }
     } // namespace
 
     uia_text_range_provider::uia_text_range_provider(uia_root_provider& root, ui_element_id id, const std::size_t begin, const std::size_t end) noexcept
@@ -2082,12 +2072,17 @@ namespace luil::win32 {
             const std::u8string_view whole { document->text };
             const std::size_t begin { text::text_edit_clamp_offset(whole, begin_) };
             const std::size_t end { std::max(begin, text::text_edit_clamp_offset(whole, end_)) };
-            std::u8string haystack { whole.substr(begin, end - begin) };
-            std::u8string wanted { *needle.value };
+            const std::u8string_view haystack { whole.substr(begin, end - begin) };
+            const std::u8string& wanted { *needle.value };
+            // 대소문자를 가리지 않으면 공용 접기로 찾는다. 찾은 자리는 원문 구간이다 — 접기가 바이트 길이를
+            // 바꿔도(ſ → s) 원문을 고른다 (case-fold-design.md).
             if (ignore_case != FALSE)
             {
-                haystack = ascii_lowered(haystack);
-                wanted = ascii_lowered(wanted);
+                const std::optional<text::folded_match> found { text::find_folded(haystack, wanted, backward != FALSE) };
+                if (found.has_value() == false)
+                    return S_OK;
+                *result = new uia_text_range_provider { *root_, id_, begin + found->begin, begin + found->end };
+                return S_OK;
             }
             const std::size_t found { backward != FALSE ? haystack.rfind(wanted) : haystack.find(wanted) };
             if (found == std::u8string::npos)

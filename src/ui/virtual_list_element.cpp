@@ -1,5 +1,6 @@
 #include "luil/ui/virtual_list_element.h"
 
+#include "luil/text/case_fold.h"
 #include "luil/ui/draw_primitives.h"
 #include "ui/tree_expander.h"
 
@@ -405,7 +406,8 @@ namespace luil {
         {
             const std::size_t index { (start + step) % items.size() };
             const virtual_list_item& item { items[index] };
-            if (selectable(item) && std::u8string_view { item.label }.starts_with(query))
+            // 대소문자는 가리지 않는다 — 묶음의 글자 찾기와 같은 규칙이다 (case-fold-design.md).
+            if (selectable(item) && text::starts_with_folded(item.label, query))
                 return index;
         }
         return std::nullopt;
