@@ -54,6 +54,7 @@
 - [나중에 서는 초점과 창 활성화](deferred-focus-design.md)
 - [커서 감추기와 멈춘 커서 자동 감추기](cursor-idle-design.md)
 - [머무름 트리거와 hover 영역](hover-dwell-design.md)
+- [여러 줄 라벨](label-wrap-design.md)
 - [Enter와 기본 버튼](enter-default-design.md)
 - [키 조상 전파](key-propagation-design.md)
 - [키보드 선택 규칙](keyboard-selection-design.md)
