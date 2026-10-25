@@ -44,6 +44,7 @@
 #include "demo/workbench_page.h"
 #include "demo/zoom_page.h"
 
+#include "luil/app/platform_services.h"
 #include "luil/net/http_client.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
@@ -171,17 +172,16 @@ namespace demo {
             std::filesystem::create_directories(path.parent_path(), error);
             if (error)
                 return;
-            std::ofstream file { path, std::ios::binary | std::ios::trunc };
-            if (file.is_open() == false)
-                return;
+            // 통째로 바꾼다 — 종료하다 끊겨도 지난 배치 파일이 반쪽으로 남지 않는다 (platform-services-design.md).
             const std::string text { format_placement(placement) };
-            file.write(text.data(), static_cast<std::streamsize>(text.size()));
+            static_cast<void>(luil::replace_file_atomically(path.u8string(), { reinterpret_cast<const std::uint8_t*>(text.data()), text.size() }));
         }
 
-        [[nodiscard]] luil::caption_config make_caption_config()
+        // 같은 사용자 세션에서 먼저 뜬 데모가 있으면 제목에 그 사실을 적는다 (`single_instance`).
+        [[nodiscard]] luil::caption_config make_caption_config(const bool primary_instance = true)
         {
             luil::caption_config caption {};
-            caption.title = u8"luil demo";
+            caption.title = primary_instance ? u8"luil demo" : u8"luil demo — 둘째 인스턴스";
             caption.application_icon = luil::codicons::icon_rocket;
             caption.minimize_tooltip = u8"Minimize";
             caption.maximize_tooltip = u8"Maximize or restore";
@@ -204,9 +204,10 @@ namespace demo {
             // 지난 실행이 갈무리한 배치다.
             // 비어 있으면 복원하지 않는다 (첫 실행·--position이 이긴 실행).
             // `page`가 비어 있지 않으면 그 페이지로 시작한다 (--page=).
-            demo_driver(const std::optional<luil::win32::window_placement> restore, std::u8string page)
+            demo_driver(const std::optional<luil::win32::window_placement> restore, std::u8string page, const bool primary_instance)
                 : restore_ { restore }
                 , page_ { page.empty() ? std::u8string { page_overview } : std::move(page) }
+                , primary_instance_ { primary_instance }
             {}
 
             // 창과 host가 준비된 직후 UI thread가 알려 주는 자리다.
@@ -484,7 +485,7 @@ namespace demo {
                 //  - 그 사실은 배치 메시지가 나른다 (`window_placement::fullscreen`).
                 //    창을 어떤 모습으로 세울지는 앱의 상태가 아니지만, 무엇을 그릴지는
                 //    앱의 것이다 — 라이브러리는 알리기만 하고 tree는 우리가 짓는다.
-                const luil::caption_config caption_config { make_caption_config() };
+                const luil::caption_config caption_config { make_caption_config(primary_instance_) };
                 const float caption_height { placement_.fullscreen ? 0.0f : luil::caption_element::height_for(caption_config) * scale };
                 if (placement_.fullscreen == false)
                 {
@@ -815,6 +816,8 @@ namespace demo {
             network_page network_ {};
             zoom_page zoom_ {};
             command_palette_host palette_ {};
+            // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).
+            bool primary_instance_ { true };
             // 셸이 실은 마지막 초점 요청과, 두 요청원의 마지막으로 본 번호다.
             std::optional<luil::focus_request> focus_ {};
             std::uint64_t focus_revision_ { 0 };
@@ -1078,9 +1081,12 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     if (arguments.has_value() == false)
         return 1;
 
+    // 같은 세션에서 둘째로 뜬 데모도 막지 않고 띄운다 — 데모는 창을 여럿 띄워 보는 자리이기도 하다. 제목만 다르다.
+    //  - 프로세스가 끝날 때까지 쥔다. wWinMain의 지역이라 메시지 루프가 끝난 뒤에 놓인다.
+    const luil::single_instance instance { u8"luil-demo" };
     luil::win32::window_config config {};
     config.class_name = L"Luil.Demo.Window";
-    config.caption = demo::make_caption_config();
+    config.caption = demo::make_caption_config(instance.primary());
     // 파일을 받는다 — 노트 칸(기본 페이지·도구 창)이 대상이고 나머지는 토스트다.
     config.accept_file_drop = true;
     // 앱이 정의한 모양만 앱이 해석하고 나머지는 라이브러리 기본 매핑에 맡긴다.
@@ -1106,7 +1112,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
             config.initial_position = luil::win32::window_position { restore->x, restore->y };
     }
 
-    demo::demo_driver driver { restore, start_page };
+    demo::demo_driver driver { restore, start_page, instance.primary() };
     demo::demo_policy policy {};
     demo::demo_delegate delegate { driver };
 

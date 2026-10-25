@@ -56,6 +56,13 @@ namespace demo {
     struct tool_focus_intent
     {};
 
+    // 플랫폼 도구다 (platform-services-design.md): 데모 실행 파일을 탐색기에서 고른 채로 보이고, 메모장을 띄운다.
+    struct reveal_executable_intent
+    {};
+
+    struct launch_notepad_intent
+    {};
+
     // 초점 요청의 결과다 (`ui_frame::focus_report`).
     struct tool_focus_report_intent
     {
@@ -104,6 +111,8 @@ namespace demo {
         bool tool_menu_open_ { false };
         // 메모 칸 초점 요청의 번호다. 청할 때마다 하나씩 올린다.
         std::uint64_t focus_revision_ { 0 };
+        // 플랫폼 도구를 마지막으로 부른 결과 한 줄이다.
+        std::u8string platform_report_ {};
         // 이번 frame이 만든 도구 창의 메뉴 버튼이다.
         // popup의 자리 계산에만 쓰고 frame이 게시되기 전까지만 유효하다.
         const luil::ui_element* tool_menu_button_ { nullptr };
