@@ -37,10 +37,17 @@ namespace luil::win32 {
     namespace {
         // `ui_cursor`의 기본 매핑이다.
         // 소비자가 `resolve_cursor`를 주지 않았거나 그쪽이 nullptr를 돌려줄 때 쓴다.
+        // 멈춘 커서 감추기의 기한이다 (`ui_element::set_cursor_idle_hide`).
+        //  - 주 창의 timer(1·2)와 겹치지 않는다. 주 창이 모르는 번호는 표면으로 흘러온다.
+        constexpr UINT_PTR cursor_idle_timer_id { 3 };
+
         [[nodiscard]] HCURSOR default_cursor_handle(const ui_cursor cursor) noexcept
         {
             switch (cursor)
             {
+            // 감춘 커서다. `SetCursor(nullptr)`가 그리지 않는 모양이다.
+            case ui_cursor::none:
+                return nullptr;
             case ui_cursor::text:
                 return LoadCursorW(nullptr, IDC_IBEAM);
             case ui_cursor::hand:
@@ -143,6 +150,11 @@ namespace luil::win32 {
 
     void window_surface::detach_window() noexcept
     {
+        // 감춘 커서는 스레드의 커서라 창이 사라져도 남는다. 보이는 모양으로 되돌려 둔다.
+        if (window_ != nullptr)
+            KillTimer(window_, cursor_idle_timer_id);
+        if (cursor_idle_.reveal())
+            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         // UIA 클라이언트가 쥔 참조부터 푼다 — 창이 사라진 뒤에는 풀 길이 없다.
         revoke_uia_provider();
         revoke_drop_target();
@@ -446,6 +458,9 @@ namespace luil::win32 {
         // 재그리기 거름의 표식을 비운다 — 새 tree가 옛 주소를 재사용해도
         // "같은 발행본"으로 오인하지 않는다.
         announced_access_tree_ = nullptr;
+        // 새 tree에서 정책이 빠졌으면 감춘 커서를 되돌리고, 새로 섰으면 시계를 건다.
+        if (window_ != nullptr && cursor_idle_point_.has_value())
+            schedule_cursor_idle();
         return true;
     }
 
@@ -507,12 +522,16 @@ namespace luil::win32 {
             if (duplicate_pointer_mouse_message())
                 return LRESULT { 0 };
             track_mouse_leave();
+            note_pointer_activity(POINT { GET_X_LPARAM(long_parameter), GET_Y_LPARAM(long_parameter) }, false);
             if (post_pointer_message(message, word_parameter, long_parameter))
                 return LRESULT { 0 };
             return std::nullopt;
         case WM_MOUSELEAVE:
             // hover 강조가 창 밖에서 남지 않게 한다.
             tracking_mouse_ = false;
+            // 창 밖의 커서는 OS의 것이다. 감춤도 시계도 놓는다.
+            reveal_idle_cursor(false);
+            cursor_idle_point_.reset();
             context_.webview_pointer_left(id_);
             if (app_host* const host { context_.host() }; host != nullptr)
                 host->post_raw_input(pointer_left_event { id_ });
@@ -526,6 +545,7 @@ namespace luil::win32 {
             if (duplicate_pointer_mouse_message())
                 return LRESULT { 0 };
             commit_composition_before_press();
+            note_pointer_activity(POINT { GET_X_LPARAM(long_parameter), GET_Y_LPARAM(long_parameter) }, true);
             // 이 표면 위의 누름은 popup 밖 클릭이다.
             // 닫자는 메시지를 내고 클릭 자체는 그대로 진행한다.
             if (input_dismisses_popups())
@@ -539,6 +559,7 @@ namespace luil::win32 {
         case WM_MBUTTONUP: {
             if (duplicate_pointer_mouse_message())
                 return LRESULT { 0 };
+            note_pointer_activity(POINT { GET_X_LPARAM(long_parameter), GET_Y_LPARAM(long_parameter) }, true);
             // 놓은 자리를 다른 창에서 찾으려면 캡처를 쥐고 있었는지를 풀기 전에 적어 둔다.
             const bool captured { GetCapture() == window_ };
             if ((word_parameter & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
@@ -567,6 +588,12 @@ namespace luil::win32 {
                 return std::nullopt;
             apply_cursor();
             return LRESULT { TRUE };
+        case WM_TIMER:
+            if (word_parameter != cursor_idle_timer_id)
+                return std::nullopt;
+            KillTimer(window_, cursor_idle_timer_id);
+            hide_idle_cursor();
+            return LRESULT { 0 };
         case WM_KEYUP:
             // TIP이 먼저 볼 기회를 준다.
             // 먹었으면 앱은 손대지 않는다.
@@ -640,6 +667,8 @@ namespace luil::win32 {
                 webview_focused_ = true;
                 return LRESULT { 0 };
             }
+            // 초점을 잃은 창 위의 커서는 다른 창의 일을 보러 가는 중이다. 감춘 채 두지 않는다.
+            reveal_idle_cursor(true);
             // 먼저 이전 target이 살아 있을 때 실제 TSF composition을 끝낸다.
             // 그 뒤 input thread에도 알려 이 표면의 text focus를 거둔다.
             if (text_input_ != nullptr)
@@ -1306,7 +1335,75 @@ namespace luil::win32 {
 
     void window_surface::apply_cursor(const std::optional<POINT> client_position)
     {
+        // 감춘 동안에는 누가 모양을 다시 걸어도(끌기가 끝남·tree 교체) 감춘 그대로다. 되돌리는 것은 움직임이다.
+        if (cursor_idle_.hidden())
+        {
+            SetCursor(nullptr);
+            return;
+        }
         apply_surface_cursor(window_, tree_.get(), context_.host(), context_.config(), id_, client_position);
+    }
+
+    void window_surface::note_pointer_activity(const std::optional<POINT> client_position, const bool pressed)
+    {
+        if (client_position.has_value())
+        {
+            // 같은 자리의 이동 메시지는 창이 움직이거나 덮개가 걷힐 때 OS가 다시 보낸 것이다.
+            if (pressed == false && cursor_idle_point_.has_value() && cursor_idle_point_->x == client_position->x && cursor_idle_point_->y == client_position->y)
+                return;
+            cursor_idle_point_ = client_position;
+        }
+        if (cursor_idle_.activity(std::chrono::steady_clock::now()))
+            apply_cursor(client_position);
+        schedule_cursor_idle();
+    }
+
+    void window_surface::schedule_cursor_idle()
+    {
+        if (window_ == nullptr)
+            return;
+        KillTimer(window_, cursor_idle_timer_id);
+        std::chrono::milliseconds delay { 0 };
+        if (tree_ != nullptr && cursor_idle_point_.has_value())
+            delay = tree_->cursor_idle_hide_at(static_cast<float>(cursor_idle_point_->x), static_cast<float>(cursor_idle_point_->y));
+        const std::chrono::steady_clock::time_point now { std::chrono::steady_clock::now() };
+        // 정책이 빠졌으면 되돌리고, 새로 섰으면 시계를 지금부터 잰다.
+        if (delay <= std::chrono::milliseconds { 0 })
+            reveal_idle_cursor(true);
+        else if (cursor_idle_delay_ <= std::chrono::milliseconds { 0 })
+            cursor_idle_.restart(now);
+        cursor_idle_delay_ = delay;
+        if (const std::optional<std::chrono::steady_clock::time_point> deadline { cursor_idle_.deadline(delay) }; deadline.has_value())
+        {
+            const auto remaining { std::chrono::ceil<std::chrono::milliseconds>(*deadline - now).count() };
+            SetTimer(window_, cursor_idle_timer_id, static_cast<UINT>(std::max<long long>(remaining, USER_TIMER_MINIMUM)), nullptr);
+        }
+    }
+
+    void window_surface::reveal_idle_cursor(const bool apply)
+    {
+        if (window_ != nullptr)
+            KillTimer(window_, cursor_idle_timer_id);
+        if (cursor_idle_.reveal() && apply)
+            apply_cursor(cursor_idle_point_);
+    }
+
+    void window_surface::hide_idle_cursor()
+    {
+        if (tree_ == nullptr || cursor_idle_point_.has_value() == false)
+            return;
+        // 누른 채 멈춘 포인터(끌기를 붙잡고 있다)는 멈춘 것이 아니다.
+        if (GetKeyState(VK_LBUTTON) < 0 || GetKeyState(VK_RBUTTON) < 0 || GetKeyState(VK_MBUTTON) < 0)
+        {
+            static_cast<void>(cursor_idle_.activity(std::chrono::steady_clock::now()));
+            schedule_cursor_idle();
+            return;
+        }
+        const std::chrono::milliseconds delay { tree_->cursor_idle_hide_at(static_cast<float>(cursor_idle_point_->x), static_cast<float>(cursor_idle_point_->y)) };
+        if (cursor_idle_.hide_if_due(std::chrono::steady_clock::now(), delay))
+            SetCursor(nullptr);
+        else
+            schedule_cursor_idle();
     }
 
     surface_tsf_host::surface_tsf_host(surface_context& context, const window_surface& surface) noexcept

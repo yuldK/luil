@@ -642,6 +642,55 @@ namespace luil {
         return root_ != nullptr && caption_client_under(*root_, x, y, std::nullopt);
     }
 
+    namespace {
+        [[nodiscard]] bool subtree_contains(const ui_element& node, const ui_element* const target)
+        {
+            if (&node == target)
+                return true;
+            for (const std::unique_ptr<ui_element>& child : node.children())
+                if (subtree_contains(*child, target))
+                    return true;
+            return false;
+        }
+
+        // 그리기 순서로 훑어 마지막(가장 안쪽·나중에 담은) 정책 element를 남긴다.
+        void find_idle_hide(const ui_element& node, const float x, const float y, const std::optional<rect_f>& clip, const ui_element*& found)
+        {
+            if (node.visible() == false)
+                return;
+            if (node.cursor_idle_hide() > std::chrono::milliseconds { 0 })
+            {
+                const std::optional<rect_f> shown { clip.has_value() ? intersect(node.bounds(), *clip) : std::optional<rect_f> { node.bounds() } };
+                if (shown.has_value() && shown->contains(x, y))
+                    found = &node;
+            }
+            std::optional<rect_f> next_clip { clip };
+            if (node.clip_children())
+            {
+                next_clip = clip.has_value() ? intersect(*clip, node.bounds()) : std::optional<rect_f> { node.bounds() };
+                if (next_clip.has_value() == false)
+                    return;
+            }
+            for (const std::unique_ptr<ui_element>& child : node.children())
+                find_idle_hide(*child, x, y, next_clip, found);
+        }
+    } // namespace
+
+    std::chrono::milliseconds ui_tree::cursor_idle_hide_at(const float x, const float y) const
+    {
+        if (root_ == nullptr)
+            return std::chrono::milliseconds { 0 };
+        const ui_element* policy { nullptr };
+        find_idle_hide(*root_, x, y, std::nullopt, policy);
+        if (policy == nullptr)
+            return std::chrono::milliseconds { 0 };
+        // 덮은 것이 hit를 받으면 그쪽의 자리다. 아무도 hit를 받지 않는 자리(그림만 있는 보기)는 정책의 자리다.
+        const ui_element* const hit { hit_test(x, y) };
+        if (hit != nullptr && subtree_contains(*policy, hit) == false)
+            return std::chrono::milliseconds { 0 };
+        return policy->cursor_idle_hide();
+    }
+
     void ui_tree::draw_focus_ring(draw_context& context, const interaction_snapshot& interaction) const
     {
         // **키보드로 옮긴 초점에만** 테를 그린다. 눌러서 잡은 초점까지 테가 남으면

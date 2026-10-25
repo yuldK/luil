@@ -424,6 +424,16 @@ namespace luil {
         hover_only_ = value;
     }
 
+    void ui_element::set_cursor_idle_hide(const std::chrono::milliseconds delay) noexcept
+    {
+        cursor_idle_hide_ = delay > std::chrono::milliseconds { 0 } ? delay : std::chrono::milliseconds { 0 };
+    }
+
+    std::chrono::milliseconds ui_element::cursor_idle_hide() const noexcept
+    {
+        return cursor_idle_hide_;
+    }
+
     bool ui_element::caption_client() const noexcept
     {
         return caption_client_;

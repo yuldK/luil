@@ -24,6 +24,7 @@ add_executable(luil_core_tests
     theme_picker_tests.cpp
     choice_group_element_tests.cpp
     content_layout_tests.cpp
+    cursor_idle_tests.cpp
     dialog_elements_tests.cpp
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp

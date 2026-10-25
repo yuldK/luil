@@ -115,6 +115,11 @@ namespace luil {
         //  - 숨긴 조상 아래는 없는 것이고, 자르는 조상이 있으면 그 안으로 자른 자리만 본다.
         //  - hit test와 달리 비활성 element도 센다. 눌러도 아무 일이 없는 칸을 잡고 창이 딸려 가면 안 된다.
         [[nodiscard]] bool caption_client_at(float x, float y) const;
+        // (x, y)에서 커서를 감출 때까지 멈춰 있어야 하는 시간이다 (`ui_element::set_cursor_idle_hide`). 0이면 감추지 않는다.
+        //  - 정책을 단 element의 보이는 자리 안이고, 그 자리의 hit가 그 element이거나 그 자손일 때만이다.
+        //    위를 덮은 도구 막대·대화 상자는 그쪽의 자리다.
+        //  - 여럿이 겹치면 가장 안쪽(나중에 담은) 것이 정한다.
+        [[nodiscard]] std::chrono::milliseconds cursor_idle_hide_at(float x, float y) const;
         // 그 자리에서 그릴 포인터 모양이다.
         // 잡고 끄는 중이면 포인터가 어디에 있든 잡은 element가 정하고,
         // 아니면 좌표 아래 element가 정한다.
