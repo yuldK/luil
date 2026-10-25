@@ -42,6 +42,22 @@ namespace luil {
         // 테두리는 내용 위다. 내용이 가장자리까지 채워도 카드의 경계가 남는다.
         if (config_.border == nullptr)
             return;
+        const panel_border_sides& sides { config_.border_sides };
+        if (sides.all() == false)
+        {
+            // 변마다 곧은 1 px 띠다. 둥근 모서리 자리는 비운다.
+            const SkPaint paint { solid_paint(config_.border(context.palette)) };
+            const float line { scale };
+            if (sides.top)
+                context.canvas.drawRect(SkRect::MakeXYWH(box.x + radius, box.y, box.width - radius * 2.0f, line), paint);
+            if (sides.bottom)
+                context.canvas.drawRect(SkRect::MakeXYWH(box.x + radius, box.y + box.height - line, box.width - radius * 2.0f, line), paint);
+            if (sides.left)
+                context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y + radius, line, box.height - radius * 2.0f), paint);
+            if (sides.right)
+                context.canvas.drawRect(SkRect::MakeXYWH(box.x + box.width - line, box.y + radius, line, box.height - radius * 2.0f), paint);
+            return;
+        }
         SkPaint border { solid_paint(config_.border(context.palette)) };
         border.setStyle(SkPaint::kStroke_Style);
         border.setStrokeWidth(scale);

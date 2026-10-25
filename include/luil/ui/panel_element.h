@@ -6,6 +6,22 @@
 #include <memory>
 
 namespace luil {
+    // 테두리를 긋는 변이다. 기본은 네 변 전부다.
+    struct panel_border_sides
+    {
+        bool top { true };
+        bool right { true };
+        bool bottom { true };
+        bool left { true };
+
+        [[nodiscard]] constexpr bool all() const noexcept
+        {
+            return top && right && bottom && left;
+        }
+
+        [[nodiscard]] bool operator==(const panel_border_sides&) const = default;
+    };
+
     // 배경 panel의 설정이다.
     struct panel_config
     {
@@ -20,6 +36,11 @@ namespace luil {
         //  - 바탕과 같은 색의 카드(대화상자 위의 설정 항목)는 테두리가 있어야 카드로 읽힌다.
         //  - 내용을 그린 **뒤에** 긋는다. 내용이 가장자리까지 채워도 테두리가 남는다.
         std::function<ui_color(const ui_color_palette&)> border {};
+        // 테두리를 긋는 변이다 (위·아래만 긋는 목록 판, 오른쪽만 긋는 옆 판).
+        //  - 네 변 전부면 지금처럼 둥근 모서리를 따라 한 줄로 긋는다.
+        //  - 일부만이면 변마다 곧은 선이다. 모서리가 둥글면 둥근 부분은 긋지 않고 곧은 변만 긋는다 —
+        //    빠진 변 쪽으로 휘어 들어가다 끊긴 선이 남지 않는다.
+        panel_border_sides border_sides {};
         // 바깥으로 드리우는 그림자의 진하기다 (0~1). 0이면 없다.
         // overlay 안의 dialog처럼 바깥에 그릴 자리가 있는 상자에서만 뜻이 있다 — 표면
         // 가장자리에 붙은 panel에서는 잘린다. 색은 `content_shadow`다 (`draw_surface_shadow`).

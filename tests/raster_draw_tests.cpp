@@ -8,6 +8,7 @@
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/modal_host_element.h"
+#include "luil/ui/panel_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
 #include "luil/ui/slider_element.h"
@@ -863,4 +864,37 @@ TEST_CASE("A split handle can keep a thin divider while resting", "[ui][raster][
     hovering.hovered = id;
     REQUIRE(draw(true, hovering)[0] == palette.accent);
     REQUIRE(draw(true, hovering)[1] == palette.accent);
+}
+
+TEST_CASE("A panel can draw its border on chosen sides only", "[ui][raster][panel]")
+{
+    // 배율 2에서 100 × 60 판이다. 테두리는 1 논리 px(물리 2 px)라 위 변은 y 0..2, 왼 변은 x 0..2다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const auto draw = [&](const luil::panel_border_sides sides) {
+        luil::panel_config config {};
+        config.background = [](const luil::ui_color_palette& colors) { return colors.surface_background; };
+        config.border = [](const luil::ui_color_palette& colors) { return colors.accent; };
+        config.border_sides = sides;
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { luil::application_element_kind(1), u8"panel" }, config) };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(panel), { 0.0f, 0.0f, 100.0f, 60.0f }, raster_scale) };
+        luil::testing::raster_frame frame { 100, 60, palette, raster_scale };
+        frame.draw(tree, {});
+        // 위 변 · 아래 변 · 왼 변 · 오른 변의 가운데다.
+        return std::array<luil::ui_color, 4> { frame.pixel_at(50, 0), frame.pixel_at(50, 59), frame.pixel_at(0, 30), frame.pixel_at(99, 30) };
+    };
+
+    // 기본은 네 변 전부다.
+    const auto all { draw({}) };
+    REQUIRE(all[0] == palette.accent);
+    REQUIRE(all[2] == palette.accent);
+    // 위·아래만이면 좌우 변은 바탕이다.
+    const auto rows { draw({ .top = true, .right = false, .bottom = true, .left = false }) };
+    REQUIRE(rows[0] == palette.accent);
+    REQUIRE(rows[1] == palette.accent);
+    REQUIRE(rows[2] == palette.surface_background);
+    REQUIRE(rows[3] == palette.surface_background);
+    // 오른쪽만이다.
+    const auto right { draw({ .top = false, .right = true, .bottom = false, .left = false }) };
+    REQUIRE(right[0] == palette.surface_background);
+    REQUIRE(right[3] == palette.accent);
 }

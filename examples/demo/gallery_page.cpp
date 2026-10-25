@@ -310,6 +310,16 @@ namespace demo {
             page.add(make_label({ kind_text, u8"gallery/shortcut-note" }, shortcut_note_, 12.0f, luil::label_color_role::dim), 24.0f);
         page.gap(24.0f);
 
+        // 변을 고른 테두리: 위·아래만 그어 목록 띠처럼 앞뒤 내용과 가른다.
+        luil::panel_config strip {};
+        strip.background = [](const luil::ui_color_palette& palette) { return palette.window_background; };
+        strip.border = [](const luil::ui_color_palette& palette) { return palette.divider; };
+        strip.border_sides = { .top = true, .right = false, .bottom = true, .left = false };
+        auto strip_panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, u8"gallery/border-strip" }, std::move(strip)) };
+        strip_panel->set_content(make_label({ kind_text, u8"gallery/border-strip-text" }, u8"위·아래 변만 긋는 판입니다.", 12.0f, luil::label_color_role::primary));
+        page.add(std::move(strip_panel), 32.0f);
+        page.gap(24.0f);
+
         luil::ui_action hover_action { luil::make_message_action(toast_request_intent { u8"툴팁 안의 링크도 눌러 보세요." }) };
         auto hover { button(u8"gallery/hover", u8"여기에 마우스를 올려 보세요", luil::text_button_visual::normal, std::move(hover_action)) };
         hover->set_tooltip(u8"마크다운 도움말: 팝업 안으로 마우스를 옮겨 링크를 누를 수 있습니다.");
