@@ -220,6 +220,11 @@ TEST_CASE("The frame decorations follow the window mode", "[win32][window-mode]"
     REQUIRE(luil::win32::maximum_size_follows_work_area(window_display_mode::normal));
     REQUIRE(luil::win32::maximum_size_follows_work_area(window_display_mode::maximized));
     REQUIRE(luil::win32::maximum_size_follows_work_area(window_display_mode::fullscreen) == false);
+
+    // 앱의 최소 창 크기도 전체 화면에서만 빠진다. 최소 크기보다 작은 모니터에서 창이 삐져나오지 않는다.
+    REQUIRE(luil::win32::minimum_size_applies(window_display_mode::normal));
+    REQUIRE(luil::win32::minimum_size_applies(window_display_mode::maximized));
+    REQUIRE(luil::win32::minimum_size_applies(window_display_mode::fullscreen) == false);
 }
 
 TEST_CASE("Fullscreen targets the whole monitor", "[win32][window-mode]")

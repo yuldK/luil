@@ -63,6 +63,7 @@ config.initial_placement = saved_placement;
 | 창 스타일 | `WS_THICKFRAME`, 버튼에 따른 `WS_MAXIMIZEBOX` | 둘 다 없음 (`WS_SYSMENU`·`WS_MINIMIZEBOX`는 남는다) |
 | 비클라이언트 판정 | 테두리·모서리·시스템 메뉴·버튼·끌기 | 전부 `HTCLIENT` |
 | `ptMaxSize` | 모니터 작업 영역(rcWork)으로 제한 | 건드리지 않음 |
+| `ptMinTrackSize` | 앱의 최소 client 크기 | 건드리지 않음 — 최소 크기보다 작은 모니터에서 창이 모니터 밖으로 삐져나오지 않는다 |
 | DWM 프레임 | `MARGINS`의 위쪽 1px | 0 (그 한 줄이 화면 맨 위의 이음매가 된다) |
 
 크기 조절을 판정만으로 막지 않는 이유는 Alt+Space의 시스템 메뉴와 Win+↑가 그 판정을 지나지 않기 때문이다. 스타일에서 함께 빼야 화면과 상태가 갈라지지 않는다.
