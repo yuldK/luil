@@ -332,6 +332,7 @@ luil_add_source_filter(luil_core_files "host/fonts"
     host/typeface_loading.cpp)
 
 luil_add_source_filter(luil_core_files "host"
+    host/cursor_idle.h
     host/fence_wait.h
     host/focus_request_tracker.cpp
     host/focus_request_tracker.h

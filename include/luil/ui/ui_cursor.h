@@ -27,6 +27,11 @@ namespace luil {
         resize_vertical,
         not_allowed,
         wait,
+        // 커서를 그리지 않는다 (전체 화면 영상·그림 보기).
+        //  - 창을 떠나면 OS의 커서로 돌아온다. 이 모양은 이 앱의 창 위에서만 뜻이 있다.
+        //  - 멈춘 동안만 감추려면 `ui_element::set_cursor_idle_hide`를 쓴다.
+        //  - 포인터 커서가 없는 플랫폼(Android 터치)에서는 아무 뜻이 없다.
+        none,
         // 앱이 정의하는 모양은 이 값부터다.
         // 라이브러리가 예약 대역을 넓혀도 기존 앱 상수가 밀리지 않도록 여유를 둔다.
         first_application_cursor = 64,

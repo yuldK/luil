@@ -91,10 +91,14 @@ namespace demo {
         viewport_ = { std::max(0.0f, width - 32.0f), std::max(0.0f, height - 110.0f) };
         state_ = luil::zoom_about(config(), viewport_, 1.0f, {});
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-page" }, luil::stack_config { .spacing = 8.0f, .padding = luil::edge_insets::all(16.0f) }) };
-        column->add(make_label({ kind_text, u8"zoom-help" }, u8"휠·두 손가락: 확대 / 빈 곳 끌기: 이동 / 초점에서 +, -, 0, 화살표, Page", 12.0f, luil::label_color_role::primary), 28.0f);
+        column->add(
+            make_label({ kind_text, u8"zoom-help" }, u8"휠·두 손가락: 확대 / 빈 곳 끌기: 이동 / 초점에서 +, -, 0, 화살표, Page / 멈추면 커서가 숨습니다", 12.0f, luil::label_color_role::primary),
+            28.0f);
         column->add(std::make_unique<luil::zoom_controls_element>(luil::zoom_controls_config { .view = config(), .viewport = viewport_ }), 34.0f);
         auto view { std::make_unique<luil::zoom_view_element>(config()) };
         view->set_access_name(u8"도면 확대 보기");
+        // 그림 위에서 포인터가 1.5초 멈추면 커서를 감춘다. 움직이거나 누르면 곧바로 돌아온다.
+        view->set_cursor_idle_hide(std::chrono::milliseconds { 1500 });
         view->set_content(std::make_unique<diagram>());
         column->add_flexible(std::move(view));
         return column;

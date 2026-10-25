@@ -1,5 +1,6 @@
 #pragma once
 
+#include "host/cursor_idle.h"
 #include "host/frame_state.h"
 #include "luil/app/app_host.h"
 #include "luil/app/renderer_policy.h"
@@ -460,6 +461,9 @@ namespace luil::win32 {
         // 어느 모양인지는 이 표면의 tree가 정하고, 실제 커서로 옮기는 것은
         // 소비자가 준 해석기(없으면 기본 매핑)다.
         void apply_cursor(std::optional<POINT> client_position = std::nullopt);
+        // 포인터가 움직였거나 눌렸다 (멈춘 커서 감추기 — `ui_element::set_cursor_idle_hide`).
+        //  - 같은 자리의 `WM_MOUSEMOVE`(창이 움직이면 OS가 다시 보낸다)는 움직임이 아니다.
+        void note_pointer_activity(std::optional<POINT> client_position, bool pressed);
 
     private:
         // --- uia_surface_host ---
@@ -552,6 +556,16 @@ namespace luil::win32 {
         std::optional<char16_t> pending_high_surrogate_ {};
         std::shared_ptr<const ui_tree> tree_ {};
         bool tracking_mouse_ { false };
+        // 멈춘 커서 감추기의 장부와, 마지막 포인터 자리·그 자리의 감춤 시간이다.
+        cursor_idle_tracker cursor_idle_ {};
+        std::optional<POINT> cursor_idle_point_ {};
+        std::chrono::milliseconds cursor_idle_delay_ { 0 };
+        // 마지막 자리의 정책으로 기한 timer를 다시 건다 (정책이 새로 섰으면 시계를 지금부터 잰다).
+        void schedule_cursor_idle();
+        // 감춰 둔 커서를 되돌린다 (창을 떠남·초점 상실·정책이 빠짐). `apply`면 그 자리의 모양을 다시 건다.
+        void reveal_idle_cursor(bool apply);
+        // 기한이 됐다. 아직 멈춰 있고 정책이 그대로면 감춘다.
+        void hide_idle_cursor();
 
         // 이 표면이 소비 중인 터치·펜 시퀀스의 임자다. 접촉의 DOWN에서 정하고
         // 그 접촉의 UP까지 바꾸지 않는다.

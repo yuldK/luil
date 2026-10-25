@@ -1137,6 +1137,15 @@ namespace luil {
         // 지정하지 않으면 element의 역할에서 고른다 (`cursor_at`).
         void set_cursor(ui_cursor cursor) noexcept;
         void set_active_cursor(ui_cursor cursor) noexcept;
+        // 포인터가 이 element 위에서 `delay` 동안 움직이지 않으면 커서를 감춘다 (전체 화면 영상·그림 보기).
+        // 0이면 감추지 않는다 (기본).
+        //  - 움직이거나 누르면 곧바로 되돌린다. 창을 떠나거나, 창이 초점을 잃거나, 정책이 빠지면 되돌린다.
+        //  - 위에 다른 element(도구 막대·대화 상자)가 덮은 자리는 그쪽의 것이다 — 포인터 아래의 element가
+        //    이 element 안에 있을 때만 감춘다.
+        //  - 시간은 플랫폼 표면이 잰다. 포인터가 움직일 때마다 상호작용 상태를 바꾸면 모든 창이 다시 그려진다.
+        //  - 포인터 커서가 없는 플랫폼(Android 터치)에서는 아무 뜻이 없다.
+        void set_cursor_idle_hide(std::chrono::milliseconds delay) noexcept;
+        [[nodiscard]] std::chrono::milliseconds cursor_idle_hide() const noexcept;
 
         // 부모가 준 slot 안에서 자기 bounds와 자식 배치를 확정한다.
         virtual void arrange(const arrange_context& context) = 0;
@@ -1294,6 +1303,7 @@ namespace luil {
         bool default_button_ { false };
         ui_cursor cursor_ { ui_cursor::inherit };
         ui_cursor active_cursor_ { ui_cursor::inherit };
+        std::chrono::milliseconds cursor_idle_hide_ { 0 };
         std::vector<std::unique_ptr<ui_element>> children_ {};
     };
 } // namespace luil
