@@ -9,6 +9,7 @@
 #include "luil/ui/grid_element.h"
 #include "luil/ui/layer_element.h"
 #include "luil/ui/markdown_element.h"
+#include "luil/ui/palette_scope_element.h"
 #include "luil/ui/progress_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/spinner_element.h"
@@ -357,6 +358,23 @@ namespace demo {
         description.wrap = true;
         description.max_lines = 2;
         page.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"gallery/wrapped-description" }, description), 2.0f * luil::label_element::height_for(description));
+        page.gap(24.0f);
+
+        // 가지 단위 팔레트: 안의 기본 컨트롤을 옅게 그린다 (잠긴 판·미리 보기). 고대비에서는 바꾸지 않는다.
+        luil::palette_scope_config faded {};
+        faded.palette = [](luil::ui_color_palette colors, luil::color_theme) {
+            colors.primary_foreground = luil::with_alpha(colors.primary_foreground, 0.55f);
+            colors.secondary_foreground = luil::with_alpha(colors.secondary_foreground, 0.55f);
+            colors.accent = luil::with_alpha(colors.accent, 0.45f);
+            colors.accent_hover = luil::with_alpha(colors.accent_hover, 0.45f);
+            return colors;
+        };
+        auto faded_scope { std::make_unique<luil::palette_scope_element>(luil::ui_element_id { kind_layout, u8"gallery/faded" }, std::move(faded)) };
+        auto faded_row { row(u8"gallery/faded-row") };
+        faded_row->add_fit(button(u8"gallery/faded-primary", u8"옅게 그린 기본 단추", luil::text_button_visual::accent, luil::make_message_action(toast_request_intent { u8"옅은 판 안의 단추" })));
+        faded_row->add_fit(make_label({ kind_text, u8"gallery/faded-text" }, u8"판 안의 글과 강조색이 함께 옅어집니다.", 12.0f, luil::label_color_role::primary));
+        faded_scope->set_content(std::move(faded_row));
+        page.add(std::move(faded_scope), luil::text_button_height);
         page.gap(24.0f);
 
         // 변을 고른 테두리: 위·아래만 그어 목록 띠처럼 앞뒤 내용과 가른다.

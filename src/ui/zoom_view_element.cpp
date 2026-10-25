@@ -238,20 +238,7 @@ namespace luil {
 
     void zoom_view_element::draw(draw_context& context, const interaction_snapshot& interaction) const
     {
-        draw_context child {
-            .canvas = context.canvas,
-            .codicon_typeface = context.codicon_typeface,
-            .ui_typeface = context.ui_typeface,
-            .code_typeface = context.code_typeface,
-            .fonts = context.fonts,
-            .palette = context.palette,
-            .scale = scale_ * config_.zoom,
-            .now = context.now,
-            .maximized = context.maximized,
-            .fullscreen = context.fullscreen,
-            .metrics = context.metrics,
-            .reduce_motion = context.reduce_motion,
-        };
+        draw_context child { derive_draw_context(context, context.palette, scale_ * config_.zoom) };
         draw_children(child, interaction);
     }
 

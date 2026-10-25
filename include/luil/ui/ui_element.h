@@ -757,7 +757,16 @@ namespace luil {
         //  - 참이면 돌아가는 표시가 멈춘 그림으로 선다. `update_context::reduce_motion`과 같은 값이라야 한다 —
         //    멈춘 그림에 다음 frame을 청하면 헛도는 timer만 남는다.
         bool reduce_motion { false };
+        // 이 팔레트가 난 테마다. 고대비(`color_theme::high_contrast`)면 팔레트가 사용자가 OS에서 고른 시스템 색이다 —
+        // 가지의 팔레트를 바꾸는 쪽(`palette_scope_element`)이 그 색을 덮지 않으려고 본다.
+        color_theme theme { color_theme::dark };
     };
+
+    // `context`에서 팔레트·배율만 바꾼 문맥이다 (가지의 팔레트·확대 보기·툴팁 내용이 자식에게 줄 문맥).
+    //  - 문맥을 필드마다 다시 짓는 자리가 이것 하나다. 문맥에 필드가 늘어도 이 함수만 고치면 되고, 앱이 필드를
+    //    손으로 옮기다 새 필드를 조용히 빠뜨리지 않는다.
+    //  - `palette`는 돌려준 문맥보다 오래 살아야 한다 (문맥은 팔레트를 참조로 든다).
+    [[nodiscard]] draw_context derive_draw_context(const draw_context& context, const ui_color_palette& palette, float scale) noexcept;
 
     // update 판정의 문맥이다.
     // 그리기와 같은 시계(steady_clock)를 쓰므로 next_update가 예고한 시각에

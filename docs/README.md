@@ -57,6 +57,7 @@
 - [여러 줄 라벨](label-wrap-design.md)
 - [경로 조각 막대와 앞쪽 말줄임](breadcrumb-design.md)
 - [가상 목록의 격자 모드와 가운데 맞춤 들이기](virtual-list-grid-design.md)
+- [가지 단위 팔레트 덮어쓰기](palette-scope-design.md)
 - [Enter와 기본 버튼](enter-default-design.md)
 - [키 조상 전파](key-propagation-design.md)
 - [키보드 선택 규칙](keyboard-selection-design.md)
