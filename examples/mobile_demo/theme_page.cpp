@@ -79,10 +79,11 @@ namespace mobile_demo {
     {
         static_cast<void>(scale);
 
-        // 테마 선호는 배타 선택이라 토글 묶음으로 그린다.
+        // 테마 선호는 배타 선택이라 선택 묶음으로 그린다. 폰 화면 폭에 채운다.
         luil::choice_group_config themes {};
         themes.owner = u8"theme";
         themes.style = luil::choice_style::toggle;
+        themes.width = luil::choice_width::fill;
         const auto add_theme
             = [&themes](const luil::theme_preference value, std::u8string label) { themes.items.push_back({ std::u8string { luil::theme_preference_name(value) }, std::move(label) }); };
         add_theme(luil::theme_preference::system, u8"시스템");

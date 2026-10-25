@@ -59,10 +59,11 @@ namespace mobile_demo {
         const float group_height { luil::group_element::height_for(advanced) };
         auto group { std::make_unique<luil::group_element>(std::move(advanced), std::move(inner)) };
 
-        // 토글 묶음이다: slot 폭을 같은 크기로 나눠 갖는다.
+        // 선택 묶음이다: 폰 화면에서는 slot 폭을 같은 크기로 나눠 갖는다.
         luil::choice_group_config view {};
         view.owner = u8"view";
         view.style = luil::choice_style::toggle;
+        view.width = luil::choice_width::fill;
         view.items = { { u8"grid", u8"바둑판" }, { u8"list", u8"목록" }, { u8"detail", u8"자세히" } };
         view.selected = view_;
         view.select = [](const std::u8string& value) { return luil::make_app_action(view_intent { value }); };

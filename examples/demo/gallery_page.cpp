@@ -47,9 +47,8 @@ namespace demo {
             feature { page_webview, u8"웹 콘텐츠", u8"내장 웹뷰 · 로컬 문서" },
         };
 
-        // 배타 선택 묶음과 막대(슬라이더·진행률)가 차지하는 폭이다 (논리 픽셀).
+        // 막대(슬라이더·진행률)가 차지하는 폭이다 (논리 픽셀).
         // 카드 폭을 다 채우지 않는다 — 막대가 길수록 한 칸의 값이 흐려지고 손잡이까지 멀어진다.
-        constexpr float choice_width { 264.0f };
         constexpr float bar_width { 360.0f };
         // 기능 색인은 카드를 세 줄로 놓아야 하므로 다른 페이지보다 넓게 둔다.
         constexpr float overview_max_width { 960.0f };
@@ -152,7 +151,7 @@ namespace demo {
         }
         if (const auto* const choice { message.get<gallery_choice_intent>() }; choice != nullptr)
         {
-            choice_ = choice->value;
+            (choice->group == u8"language" ? language_ : choice_) = choice->value;
             return true;
         }
         if (message.get<gallery_reset_intent>() != nullptr)
@@ -166,6 +165,7 @@ namespace demo {
             balance_ = -18.0f;
             position_ = 400.0f;
             choice_ = u8"comfortable";
+            language_ = u8"system";
             return true;
         }
         return false;
@@ -266,9 +266,21 @@ namespace demo {
         choices.items = { { u8"compact", u8"간결하게" }, { u8"comfortable", u8"여유롭게" }, { u8"wide", u8"넓게" } };
         choices.selected = choice_;
         choices.select = [](const std::u8string& value) { return luil::make_app_action(gallery_choice_intent { value }); };
-        page.begin_card(u8"배타 선택", u8"하나만 고릅니다.");
-        // 묶음은 글 폭에 맞춘 칸만 차지한다 — 화면 끝까지 늘이면 칸 하나가 수백 px이 되어 무엇을 고르는지 흐려진다.
-        page.add(std::make_unique<luil::choice_group_element>(std::move(choices)), { .length = luil::choice_toggle_height, .cross_length = choice_width });
+        page.begin_card(u8"선택 묶음", u8"여럿 가운데 하나를 고릅니다. 고른 칸만 판이 떠오릅니다.");
+        // 기본은 맞춤이다 — 칸이 가장 긴 글에 맞춘 같은 폭이라 화면이 넓어도 고른 칸이 멀어지지 않는다.
+        page.add(std::make_unique<luil::choice_group_element>(std::move(choices)), luil::choice_toggle_height);
+        page.gap(14.0f);
+        // 설정 화면처럼 줄을 맞출 때는 앱이 판 폭 채움을 고른다.
+        page.add(make_label({ kind_text, u8"gallery/language-title" }, u8"판 폭에 채움 — 언어", 11.0f, luil::label_color_role::dim), 18.0f);
+        luil::choice_group_config languages {};
+        languages.owner = u8"gallery/language";
+        languages.name = u8"언어";
+        languages.style = luil::choice_style::toggle;
+        languages.width = luil::choice_width::fill;
+        languages.items = { { u8"system", u8"시스템" }, { u8"ko", u8"한국어" }, { u8"en", u8"English" } };
+        languages.selected = language_;
+        languages.select = [](const std::u8string& value) { return luil::make_app_action(gallery_choice_intent { value, u8"language" }); };
+        page.add(std::make_unique<luil::choice_group_element>(std::move(languages)), luil::choice_toggle_height);
         page.end_card();
 
         page.begin_card(u8"진행률 · " + to_u8(static_cast<int>(value_)) + u8"%");

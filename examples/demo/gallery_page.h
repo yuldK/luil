@@ -47,6 +47,8 @@ namespace demo {
     struct gallery_choice_intent
     {
         std::u8string value {};
+        // 어느 묶음의 값인지다. 비면 표시 밀도다.
+        std::u8string group {};
     };
 
     // 기능 색인과 조작 가능한 컨트롤 갤러리다. 모든 상태는 앱에 있고 공용 요소를 조립한다.
@@ -76,5 +78,6 @@ namespace demo {
         float overview_scroll_ { 0.0f };
         float controls_scroll_ { 0.0f };
         std::u8string choice_ { u8"comfortable" };
+        std::u8string language_ { u8"system" };
     };
 } // namespace demo

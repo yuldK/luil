@@ -50,7 +50,12 @@ add_subdirectory(luil)
 
 파일은 `dark`, `light`, `tones`, `metrics` 네 객체를 가진 JSON 객체다. `dark`·`light`는 `neutral_color_palette`의 역할을 camelCase 키로 담고(`windowBackground`, `secondaryForeground`, … 그리고 `caption` 객체), 색은 `#rrggbb` 또는 `#rrggbbaa`다 — 구분선·보조 글자처럼 알파가 실린 역할이 있어 accent 카탈로그와 달리 알파를 받는다. `tones`는 accent 위에 얹는 알파(0~1)이고 `metrics`는 논리 픽셀 치수다. 키가 빠지거나 낯선 키가 있으면 생성이 실패한다 — 생성물이 `ui_style`의 지정 초기화라 struct와 어긋난 파일이 조용히 지나가지 않는다. 기본 파일을 복사해 수정하면 된다.
 
-나중에 생긴 중립 역할 `raisedBackground`(배지·고정되는 묶음 머리행·토스트의 몸에 까는 뜻 없는 바탕)만은 빠져도 된다. 빠지면 같은 테마의 `noticeBackground` 값을 써서, 이 키가 생기기 전의 JSON은 전과 같은 색으로 그린다. 붉은 notice 바탕을 걷어내려면 이 키를 적는다.
+나중에 생긴 중립 역할은 빠져도 된다. 빠지면 같은 테마의 다른 키 값을 대신 써서, 이 키가 생기기 전의 JSON이 그대로 빌드된다.
+
+| 키 | 뜻 | 빠졌을 때 |
+| --- | --- | --- |
+| `raisedBackground` | 배지·고정되는 묶음 머리행·토스트의 몸에 까는 뜻 없는 바탕 | `noticeBackground` (전과 같은 색이다. 붉은 notice 바탕을 걷어내려면 이 키를 적는다) |
+| `thumbBackground` | 선택 묶음에서 고른 칸이 트랙 위에 뜨는 판. 트랙(`inputBackground`)보다 밝아야 한다 | `buttonPressedBackground` |
 
 컴포넌트 스타일 객체(`tabBar`, `popup`, `text`)는 예외로 **빠져도 된다**. 이 객체가 생기기 전의 JSON이 그대로 빌드되어야 하므로, 객체가 없거나 그 안의 키가 빠지면 struct의 기본값이다. 값은 enum 이름(camelCase, 예: `"connected"`, `"selectedOrHovered"`)과 팔레트 역할 이름(`"windowBackground"` 같은 것)이고, 낯선 키와 모르는 값은 여전히 생성을 멈춘다 ([탭 막대 스타일](../tab-bar-style-design.md)).
 

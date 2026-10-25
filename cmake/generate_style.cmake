@@ -99,7 +99,8 @@ set(neutral_fields
 #  - 짝은 `key|field|대신할 key`다. 빠지면 같은 테마의 그 key 값을 쓴다 — 옛 JSON은 역할이 갈리기 전과 같은 색으로 그린다.
 #  - struct에서는 `neutral_fields`의 뒤, `caption`의 앞에 이 순서로 선다.
 set(neutral_optional_fields
-    "raisedBackground|raised_background|noticeBackground")
+    "raisedBackground|raised_background|noticeBackground"
+    "thumbBackground|thumb_background|buttonPressedBackground")
 set(tone_fields
     "pressed|pressed"
     "softButton|soft_button"

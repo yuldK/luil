@@ -166,6 +166,18 @@ TEST_CASE("compose_palette folds neutral colors, the accent and the tones into o
         REQUIRE(palette.caption == neutral.caption);
         REQUIRE(palette.notice_background == neutral.notice_background);
         REQUIRE(palette.raised_background == neutral.raised_background);
+        REQUIRE(palette.thumb_background == neutral.thumb_background);
+    }
+
+    SECTION("떠 있는 판은 트랙보다 밝다")
+    {
+        // 선택 묶음의 고른 칸이 트랙(`input_background`) 위에서 눌려 들어가 보이지 않게 한다.
+        // 라이트는 불투명한 흰 판, 다크는 트랙보다 진한 전경색 알파다.
+        const luil::neutral_color_palette& light { luil::default_ui_style().neutral_for(luil::color_theme::light) };
+        REQUIRE(light.thumb_background == light.surface_background);
+        const luil::neutral_color_palette& dark { luil::default_ui_style().neutral_for(luil::color_theme::dark) };
+        REQUIRE((dark.thumb_background & 0x00FFFFFFu) == (dark.primary_foreground & 0x00FFFFFFu));
+        REQUIRE(alpha_of(dark.thumb_background) > alpha_of(dark.input_background));
     }
 
     SECTION("올라온 바탕은 뜻 없는 중립색이고 notice와 갈린다")

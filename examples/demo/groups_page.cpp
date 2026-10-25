@@ -61,7 +61,7 @@ namespace demo {
         const float group_height { luil::group_element::height_for(advanced) };
         auto group { std::make_unique<luil::group_element>(std::move(advanced), std::move(inner)) };
 
-        // 토글 묶음이다: slot 폭을 같은 크기로 나눠 갖는다.
+        // 선택 묶음이다: 칸은 가장 긴 글에 맞춘 같은 폭이다.
         luil::choice_group_config view {};
         view.owner = u8"view";
         view.style = luil::choice_style::toggle;
@@ -79,9 +79,9 @@ namespace demo {
         column->add_gap(10.0f);
         column->add(std::move(group), group_height);
         column->add_gap(20.0f);
-        column->add(make_label(luil::ui_element_id { kind_text, u8"view-hint" }, u8"보기 방식 (토글 묶음)", 11.0f, luil::label_color_role::dim), 18.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"view-hint" }, u8"보기 방식 (선택 묶음)", 11.0f, luil::label_color_role::dim), 18.0f);
         column->add_gap(6.0f);
-        column->add(std::make_unique<luil::choice_group_element>(std::move(view)), { .length = view_height, .cross_length = 320.0f });
+        column->add(std::make_unique<luil::choice_group_element>(std::move(view)), view_height);
         return column;
     }
 } // namespace demo

@@ -321,6 +321,7 @@ namespace mobile_demo {
         luil::choice_group_config view {};
         view.owner = u8"list-view";
         view.style = luil::choice_style::toggle;
+        view.width = luil::choice_width::fill;
         view.items = { { u8"list", u8"순서" }, { u8"tree", u8"tree" }, { u8"log", u8"가상 목록" } };
         view.selected = view_;
         view.select = [](const std::u8string& value) { return luil::make_app_action(list_view_intent { value }); };
