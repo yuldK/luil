@@ -85,6 +85,9 @@ namespace luil::win32 {
     void apply_size_limits(MINMAXINFO* const information, const HWND window, const std::uint32_t dpi, const DWORD style, const DWORD extended_style, const int minimum_client_width,
         const int minimum_client_height, const window_display_mode mode) noexcept
     {
+        // 전체 화면은 앱의 최소 크기를 걸지 않는다 (`minimum_size_applies`). 최대화 크기와 함께 OS 기본에 맡긴다.
+        if (minimum_size_applies(mode) == false)
+            return;
         RECT minimum { 0, 0, minimum_client_width, minimum_client_height };
         if (AdjustWindowRectExForDpi(&minimum, style, FALSE, extended_style, dpi) != FALSE)
         {

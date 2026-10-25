@@ -155,6 +155,14 @@ namespace luil::win32 {
         return mode != window_display_mode::fullscreen;
     }
 
+    // 이 모드에서 앱의 최소 창 크기(`ptMinTrackSize`)를 거는가다.
+    // 전체 화면만 거짓이다 — 모니터 크기로 세우는 창에 최소 크기가 걸리면, 최소 크기보다 작은 모니터에서
+    // 창이 모니터 밖으로 삐져나오고 전체 화면 전환의 자리 계산이 어긋난다. 끌어서 줄이는 테두리도 없다.
+    [[nodiscard]] constexpr bool minimum_size_applies(const window_display_mode mode) noexcept
+    {
+        return mode != window_display_mode::fullscreen;
+    }
+
     // 비클라이언트 판정의 답이다.
     // Win32 `HT*` 값으로 옮기는 것은 창을 든 자리(caption_surface.cpp)가 한다 —
     // 이 열거가 windows.h를 모르는 것이 판정을 창 없이 재는 조건이다.
