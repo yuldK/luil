@@ -48,6 +48,8 @@ config.initial_placement = saved_placement;
 
 저장 상태를 첫 표시부터 유지하되 `STARTUPINFO`의 비활성·최소화·숨김 정책을 함께 따른다. `SW_SHOWNOACTIVATE`와 `SW_SHOWMINNOACTIVE` 실행은 초점을 가져오지 않는다. 초기 배치가 없으면 기존 `SW_SHOWDEFAULT` 표시 경로를 사용한다.
 
+초기 배치가 없거나 무시된 실행도 첫 표시 직후 **실제 배치를 한 번 알린다**(`make_window_placement_message`). 저장한 배치가 없는 첫 실행에서 앱이 사용자가 창을 움직이거나 끝낼 때까지 저장할 값을 모르면, 그 사이에 비정상 종료한 다음 실행도 또 기본 배치다. 초기 배치가 있는 실행은 첫 `make_frame()` 전의 초기 메시지가 이미 그 값을 알렸다.
+
 ## 전체 화면
 
 전체 화면은 **테두리 없는 창**이다. 제시가 DirectComposition 합성 swap chain을 지나므로 독점 전체 화면(exclusive fullscreen)은 설 수 없다 — 합성 swap chain은 `SetFullscreenState`를 받지 못한다. 그래서 유일하게 가능한 길인 "`MONITORINFO::rcMonitor`를 그대로 덮는 창"을 구현한다. rcWork를 쓰는 다른 계산(최대화 한계, popup 다듬기, 보조 창 초기 배치)과 달리 여기만 rcMonitor를 목표로 삼는다.

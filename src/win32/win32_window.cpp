@@ -761,7 +761,13 @@ namespace luil::win32 {
                         SetWindowLongPtrW(window_, GWL_EXSTYLE, extended_style);
                 }
                 else
+                {
                     ShowWindow(window_, SW_SHOWDEFAULT);
+                    // 저장한 배치가 없는 첫 실행(또는 저장 값이 깨져 버린 실행)에도 OS가 고른 실제 배치를 한 번 알린다.
+                    // 알리지 않으면 앱은 사용자가 창을 움직이거나 끝낼 때까지 저장할 값이 없다 — 그 사이에 끝나면
+                    // 다음 실행도 또 기본 배치다. 배치가 있는 실행은 위의 초기 메시지가 이미 알렸다.
+                    post_window_placement();
+                }
                 UpdateWindow(window_);
                 MSG message {};
                 BOOL received {};
