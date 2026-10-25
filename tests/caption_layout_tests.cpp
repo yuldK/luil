@@ -271,3 +271,18 @@ TEST_CASE("A fullscreen window answers client everywhere, caption clients or not
     REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::fullscreen, 1000, 800, 96, 500, 18) == luil::win32::window_hit::client);
     REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, 500, 18) == luil::win32::window_hit::caption_drag);
 }
+
+TEST_CASE("A caption button runs only when pressed and released on it outside fullscreen", "[caption][window-mode]")
+{
+    using luil::win32::window_display_mode;
+    // 누른 단추에서 뗀 것만 실행한다 — OS의 캡션 단추와 같다.
+    REQUIRE(luil::win32::caption_click_executes(HTCLOSE, HTCLOSE, window_display_mode::normal));
+    REQUIRE(luil::win32::caption_click_executes(HTMAXBUTTON, HTMAXBUTTON, window_display_mode::maximized));
+    // 다른 곳(끌기 띠·다른 단추)에서 눌러 닫기 위에서 떼면 닫지 않는다.
+    REQUIRE(luil::win32::caption_click_executes(HTNOWHERE, HTCLOSE, window_display_mode::normal) == false);
+    REQUIRE(luil::win32::caption_click_executes(HTMINBUTTON, HTCLOSE, window_display_mode::normal) == false);
+    // 단추가 아닌 자리의 뗌은 실행이 아니다.
+    REQUIRE(luil::win32::caption_click_executes(HTCAPTION, HTCAPTION, window_display_mode::normal) == false);
+    // 전체 화면으로 들어가는 동안 남은 누름의 꼬리는 실행하지 않는다.
+    REQUIRE(luil::win32::caption_click_executes(HTCLOSE, HTCLOSE, window_display_mode::fullscreen) == false);
+}

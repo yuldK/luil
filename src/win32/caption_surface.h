@@ -192,5 +192,13 @@ namespace luil::win32 {
         caption_button_hover hovered_caption_button_ { caption_button_hover::none };
         std::chrono::steady_clock::time_point nc_hover_since_ {};
         bool tracking_non_client_mouse_ { false };
+        // 왼쪽 버튼을 누른 캡션 단추의 판정이다 (`HTMINBUTTON`·`HTMAXBUTTON`·`HTCLOSE`, 아니면 `HTNOWHERE`).
+        WPARAM pressed_caption_hit_ { HTNOWHERE };
     };
+
+    // 캡션 단추의 뗌이 그 단추를 실행하는가다.
+    //  - 누른 단추와 뗀 단추가 같아야 한다. 다른 곳에서 눌러 닫기 위에서 떼면 닫지 않는다 (OS의 캡션 단추와 같다).
+    //  - 전체 화면이면 실행하지 않는다. 틀(`WS_THICKFRAME`)이 빠진 동안 오는 비클라이언트 메시지는 들어가기 전에
+    //    시작된 누름의 꼬리라, 실행하면 전체 화면으로 들어가는 순간 창이 닫히거나 줄어든다.
+    [[nodiscard]] bool caption_click_executes(WPARAM pressed_hit, WPARAM released_hit, window_display_mode mode) noexcept;
 } // namespace luil::win32
