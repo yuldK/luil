@@ -76,24 +76,10 @@ namespace luil::win32 {
         return HTCLIENT;
     }
 
-    bool caption_app_button_at(const ui_tree* const tree, const int x, const int y) noexcept
+    bool caption_client_at(const ui_tree* const tree, const int x, const int y) noexcept
     {
-        // caption은 창마다 하나라 id에 owner가 없다. 어디에 담겼든 id로 찾는다.
-        const ui_element* const caption { tree != nullptr ? tree->find(ui_element_id { ui_element_kind::caption }) : nullptr };
-        if (caption == nullptr)
-            return false;
-        // hit test는 비활성 element를 건너뛰므로 자리로 직접 본다. 앱 단추는 caption의 직접 자식이다.
-        const float point_x { static_cast<float>(x) };
-        const float point_y { static_cast<float>(y) };
-        for (const std::unique_ptr<ui_element>& child : caption->children())
-        {
-            if (child->id().kind != ui_element_kind::caption_app_button || child->visible() == false)
-                continue;
-            const rect_f box { child->bounds() };
-            if (point_x >= box.x && point_x < box.x + box.width && point_y >= box.y && point_y < box.y + box.height)
-                return true;
-        }
-        return false;
+        // hit test는 비활성 element를 건너뛰므로 표시와 자리로 직접 본다 (앱 단추도 표시를 단다).
+        return tree != nullptr && tree->caption_client_at(static_cast<float>(x), static_cast<float>(y));
     }
 
     void apply_size_limits(MINMAXINFO* const information, const HWND window, const std::uint32_t dpi, const DWORD style, const DWORD extended_style, const int minimum_client_width,
@@ -331,9 +317,10 @@ namespace luil::win32 {
             const LRESULT hit { caption_hit_test(window_, long_parameter, dpi_, caption_, context_.config(), display_mode()) };
             if (hit != HTCAPTION)
                 return hit;
-            // 끌기 자리에 앱 단추가 서 있으면 그 자리는 client다 — 눌러야 할 단추를 잡고 창이 딸려 가면 안 된다.
+            // 끌기 자리에 client 표시를 단 element(앱 단추·검색 칸)가 서 있으면 그 자리는 client다 — 눌러야 할 칸을
+            // 잡고 창이 딸려 가면 안 된다.
             POINT point { GET_X_LPARAM(long_parameter), GET_Y_LPARAM(long_parameter) };
-            if (ScreenToClient(window_, &point) != FALSE && caption_app_button_at(tree(), point.x, point.y))
+            if (ScreenToClient(window_, &point) != FALSE && caption_client_at(tree(), point.x, point.y))
                 return LRESULT { HTCLIENT };
             return hit;
         }

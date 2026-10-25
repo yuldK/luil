@@ -46,6 +46,7 @@
 #include "luil/net/http_client.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/sidebar_element.h"
 #include "luil/ui/stack_element.h"
@@ -462,6 +463,21 @@ namespace demo {
                     auto caption { std::make_unique<luil::caption_element>(caption_config) };
                     caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
                     root->add(std::move(caption));
+
+                    // 제목 표시줄 가운데의 명령 찾기 단추다. caption 위에 겹쳐 세우고 client 표시를 달면
+                    // 끌기 띠 위에서도 눌린다 (caption-button-design.md).
+                    constexpr float search_width { 240.0f };
+                    constexpr float search_inset { 4.0f };
+                    luil::text_button_config search_config {};
+                    search_config.text = u8"명령 찾기…";
+                    search_config.visual = luil::text_button_visual::normal;
+                    auto search { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"caption/search" }, std::move(search_config)) };
+                    search->set_caption_client(true);
+                    search->set_cursor(luil::ui_cursor::hand);
+                    search->set_tooltip(u8"메뉴와 팝업 페이지의 명령 검색을 엽니다.");
+                    search->set_action(luil::ui_trigger::left_click, luil::make_message_action(navigate_intent { std::u8string { page_popups } }));
+                    search->arrange({ { (width - search_width * scale) / 2.0f, search_inset * scale, search_width * scale, caption_height - search_inset * 2.0f * scale }, scale });
+                    root->add(std::move(search));
                 }
 
                 // 캡션 아래는 사이드바 + 현재 페이지의 가로 stack이다.

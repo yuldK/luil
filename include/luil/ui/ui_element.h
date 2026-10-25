@@ -1026,6 +1026,12 @@ namespace luil {
         //    부품을 누르게 되므로, 터치의 탭은 이것을 지나 **감싼 가장 가까운 누를 수 있는 조상**이 받는다.
         //  - 접근 tree와 키보드에서는 그대로 선다 — 보이지 않을 뿐 없는 것이 아니다.
         [[nodiscard]] bool hover_only() const noexcept;
+        // 참이면 창 제목 표시줄의 끌기 띠 위에 서 있어도 그 자리를 client로 판정한다
+        // (caption-button-design.md). 검색 칸·명령 단추처럼 제목 표시줄 안에서 눌려야 하는 element가 단다.
+        //  - 비클라이언트 판정은 게시된 tree에서 이 element의 **보이는 자리**를 본다 (`ui_tree::caption_client_at`).
+        //  - 비활성이어도 client다. 눌러도 아무 일이 없는 칸을 잡고 창이 딸려 가면 안 된다.
+        //  - 창 caption이 없는 플랫폼(Android)에서는 아무 뜻이 없다.
+        [[nodiscard]] bool caption_client() const noexcept;
         [[nodiscard]] std::span<const std::unique_ptr<ui_element>> children() const noexcept;
         // 참이면 자식을 자기 bounds 안으로 자른다.
         // 그리기와 hit test 양쪽에 함께 걸리므로 보이지 않는 자식은 눌리지도 않는다.
@@ -1088,6 +1094,8 @@ namespace luil {
         void set_hit_opaque(bool value) noexcept;
         // 포인터를 올려야 그려지는 부품이다 (`hover_only`).
         void set_hover_only(bool value) noexcept;
+        // 제목 표시줄 안의 client 자리다 (`caption_client`).
+        void set_caption_client(bool value) noexcept;
         // 자손들을 Tab의 한 자리로 묶는다 (탭 막대·라디오 묶음·목록).
         //  - 묶음 자체는 자리가 아니다. 자리는 **그 안의 항목 하나**다 —
         //    테를 두를 자리가 항목이어야 어디에 있는지 보인다.
@@ -1273,6 +1281,7 @@ namespace luil {
         bool clip_children_ { false };
         bool hit_opaque_ { false };
         bool hover_only_ { false };
+        bool caption_client_ { false };
         // 비어 있으면 액션 유무에서 판정한다 (`tab_stop`).
         std::optional<bool> tab_stop_ {};
         focus_axis focus_group_ { focus_axis::none };

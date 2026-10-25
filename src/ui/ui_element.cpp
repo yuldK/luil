@@ -424,6 +424,16 @@ namespace luil {
         hover_only_ = value;
     }
 
+    bool ui_element::caption_client() const noexcept
+    {
+        return caption_client_;
+    }
+
+    void ui_element::set_caption_client(const bool value) noexcept
+    {
+        caption_client_ = value;
+    }
+
     void ui_element::set_tab_stop(const bool value) noexcept
     {
         tab_stop_ = value;
