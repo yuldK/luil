@@ -161,6 +161,10 @@ namespace luil {
         // notice 배너의 바탕이다.
         // 일반 표면과 같은 색으로 보이지 않도록 구분한다.
         ui_color notice_background { 0 };
+        // 표면 위로 한 단 올라온 중립 바탕이다 — 배지, 고정되는 묶음 머리행, 토스트의 몸.
+        //  - 불투명하다. 머리행은 그 아래로 행이 지나가고 토스트는 내용 위에 뜬다.
+        //  - 뜻이 없는 색이라 notice와 갈린다. 경고처럼 읽히지 않는다.
+        ui_color raised_background { 0 };
         caption_color_palette caption {};
 
         [[nodiscard]] bool operator==(const neutral_color_palette&) const noexcept = default;
@@ -262,6 +266,10 @@ namespace luil {
         // notice 배너의 바탕이다.
         // 일반 표면과 같은 색으로 보이지 않도록 구분한다.
         ui_color notice_background { 0 };
+        // 표면 위로 한 단 올라온 중립 바탕이다 — 배지, 고정되는 묶음 머리행, 토스트의 몸.
+        //  - 불투명하다. 머리행은 그 아래로 행이 지나가고 토스트는 내용 위에 뜬다.
+        //  - 뜻이 없는 색이라 notice와 갈린다. 경고처럼 읽히지 않는다.
+        ui_color raised_background { 0 };
         caption_color_palette caption {};
 
         ui_color document_added_background { 0 };

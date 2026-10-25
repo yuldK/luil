@@ -19,6 +19,7 @@
         "tooltipBorder": "#5a5a5c",
         "contentShadow": "#000000",
         "noticeBackground": "#422427",
+        "raisedBackground": "#38383c",
         "caption": {
             "background": "#252526",
             "foreground": "#ffffff",
@@ -48,6 +49,7 @@
         "tooltipBorder": "#c8c8c8",
         "contentShadow": "#000000",
         "noticeBackground": "#fde7e9",
+        "raisedBackground": "#f0f0f0",
         "caption": {
             "background": "#f0f0f0",
             "foreground": "#1f1f1f",

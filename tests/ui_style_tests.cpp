@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
 
 namespace {
@@ -164,6 +165,23 @@ TEST_CASE("compose_palette folds neutral colors, the accent and the tones into o
         REQUIRE(palette.group_border == neutral.group_border);
         REQUIRE(palette.caption == neutral.caption);
         REQUIRE(palette.notice_background == neutral.notice_background);
+        REQUIRE(palette.raised_background == neutral.raised_background);
+    }
+
+    SECTION("올라온 바탕은 뜻 없는 중립색이고 notice와 갈린다")
+    {
+        // 배지·묶음 머리행·토스트의 몸이 경고처럼 읽히지 않게 색상을 싣지 않는다.
+        for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light })
+        {
+            const luil::neutral_color_palette& defaults { luil::default_ui_style().neutral_for(theme) };
+            const luil::ui_color raised { defaults.raised_background };
+            const std::uint32_t red { (raised >> 16u) & 0xFFu };
+            const std::uint32_t green { (raised >> 8u) & 0xFFu };
+            const std::uint32_t blue { raised & 0xFFu };
+            REQUIRE(alpha_of(raised) == 0xFFu);
+            REQUIRE(std::max({ red, green, blue }) - std::min({ red, green, blue }) <= 8u);
+            REQUIRE(raised != defaults.notice_background);
+        }
     }
 
     SECTION("tone을 바꾸면 파생 역할만 따라온다")

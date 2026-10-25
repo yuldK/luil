@@ -15,14 +15,16 @@ endif()
 
 # 객체의 키가 기대한 목록과 정확히 같은지 본다.
 # 낯선 키는 오타일 가능성이 커서 조용히 지나가면 "바꿨는데 안 바뀐다"가 된다.
+#  - 넷째 인자부터는 빠져도 되는 키다. 낯선 키 검사에는 들지만 없어도 막지 않는다.
 function(luil_style_expect_keys object_json path expected_keys)
+    set(known_keys ${expected_keys} ${ARGN})
     string(JSON count LENGTH "${object_json}")
     set(seen "")
     if(count GREATER 0)
         math(EXPR last "${count} - 1")
         foreach(index RANGE 0 ${last})
             string(JSON key MEMBER "${object_json}" ${index})
-            if(NOT key IN_LIST expected_keys)
+            if(NOT key IN_LIST known_keys)
                 message(FATAL_ERROR "Unknown key in ${path}: ${key}")
             endif()
             list(APPEND seen "${key}")
@@ -93,6 +95,11 @@ set(neutral_fields
     "tooltipBorder|tooltip_border"
     "contentShadow|content_shadow"
     "noticeBackground|notice_background")
+# 나중에 생긴 중립 역할이다. 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하므로 빠져도 된다.
+#  - 짝은 `key|field|대신할 key`다. 빠지면 같은 테마의 그 key 값을 쓴다 — 옛 JSON은 역할이 갈리기 전과 같은 색으로 그린다.
+#  - struct에서는 `neutral_fields`의 뒤, `caption`의 앞에 이 순서로 선다.
+set(neutral_optional_fields
+    "raisedBackground|raised_background|noticeBackground")
 set(tone_fields
     "pressed|pressed"
     "softButton|soft_button"
@@ -135,12 +142,26 @@ function(luil_style_neutral output_variable theme_key)
     endif()
     luil_style_keys_of(neutral_keys "${neutral_fields}")
     list(APPEND neutral_keys "caption")
-    luil_style_expect_keys("${theme_json}" "${theme_key}" "${neutral_keys}")
+    luil_style_keys_of(optional_keys "${neutral_optional_fields}")
+    luil_style_expect_keys("${theme_json}" "${theme_key}" "${neutral_keys}" ${optional_keys})
 
     set(text "        .${theme_key} = {\n")
     foreach(pair IN LISTS neutral_fields)
         luil_style_split_pair("${pair}" key field)
         string(JSON color_text GET "${theme_json}" "${key}")
+        luil_style_color(color "${theme_key}.${key}" "${color_text}")
+        string(APPEND text "            .${field} = ${color},\n")
+    endforeach()
+    foreach(spec IN LISTS neutral_optional_fields)
+        string(REPLACE "|" ";" parts "${spec}")
+        list(GET parts 0 key)
+        list(GET parts 1 field)
+        list(GET parts 2 fallback_key)
+        string(JSON color_text ERROR_VARIABLE absent GET "${theme_json}" "${key}")
+        if(absent)
+            set(key "${fallback_key}")
+            string(JSON color_text GET "${theme_json}" "${key}")
+        endif()
         luil_style_color(color "${theme_key}.${key}" "${color_text}")
         string(APPEND text "            .${field} = ${color},\n")
     endforeach()
