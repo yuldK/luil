@@ -12,6 +12,7 @@
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/core/SkTiledImageUtils.h"
 
 #include <chrono>
 #include <cmath>
@@ -576,7 +577,10 @@ namespace luil {
             //    짓는 것**이다 (image_element.h의 `image_config::source`).
             const bool whole { covers_whole_image(source, width, height) };
             const SkCanvas::SrcRectConstraint constraint { whole ? SkCanvas::kFast_SrcRectConstraint : SkCanvas::kStrict_SrcRectConstraint };
-            context.canvas.drawImageRect(picture->backing()->image.get(), SkRect::MakeXYWH(source.x, source.y, source.width, source.height),
+            // GPU는 최대 텍스처(흔히 16384)보다 큰 그림을 한 장으로 올리지 못한다 — 긴 세로 그림이 흔한 자리다. 지금의
+            // Ganesh는 그런 비트맵을 스스로 나누지만 스스로 나누지 않는 뒷단(Graphite)도 있어 명시 API로 부른다. 텍스처에
+            // 드는 그림과 CPU 렌더러에서는 `drawImageRect` 그대로다 (image-frames-scaling-design.md).
+            SkTiledImageUtils::DrawImageRect(&context.canvas, picture->backing()->image.get(), SkRect::MakeXYWH(source.x, source.y, source.width, source.height),
                 SkRect::MakeXYWH(destination.x, destination.y, destination.width, destination.height), sampling_options_for(config_.sampling), &paint, constraint);
         }
         if (clip)
