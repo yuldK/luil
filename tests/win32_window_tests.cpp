@@ -111,6 +111,9 @@ namespace {
         RECT first_show {};
         WINDOWPLACEMENT saved {};
         std::optional<luil::window_placement> reported_placement {};
+        // 닫힘(`WM_CLOSE`)이 갈무리해 알린 것과 가르려고, 닫힘 전에 알린 첫 배치를 따로 둔다.
+        std::optional<luil::window_placement> reported_before_close {};
+        bool closing { false };
         luil::window_metrics metrics {};
         bool hidden { false };
         bool maximized { false };
@@ -141,6 +144,8 @@ namespace {
                 }
                 if (message->message == WM_ACTIVATE && LOWORD(message->wParam) != WA_INACTIVE)
                     active_probe->activated = true;
+                if (message->message == WM_CLOSE)
+                    active_probe->closing = true;
             }
         }
         return CallNextHookEx(nullptr, code, word_parameter, long_parameter);
@@ -201,6 +206,8 @@ namespace {
         {
             if (probe_.reported_placement.has_value() == false)
                 probe_.reported_placement = placement;
+            if (probe_.closing == false && probe_.reported_before_close.has_value() == false)
+                probe_.reported_before_close = placement;
             return {};
         }
         void on_started(luil::app_host&) override
@@ -391,6 +398,21 @@ TEST_CASE("Invalid initial placements use the complete default placement", "[win
         REQUIRE(probe.before_show.right - probe.before_show.left == MulDiv(config.initial_width, static_cast<int>(probe.dpi), 96));
         REQUIRE(probe.before_show.bottom - probe.before_show.top == MulDiv(config.initial_height, static_cast<int>(probe.dpi), 96));
     }
+}
+
+TEST_CASE("A first run without a saved placement reports where the window landed", "[win32][window]")
+{
+    // 저장한 배치가 없어도 첫 표시 직후 실제 배치를 한 번 알린다. 닫힘이 알리는 것을 기다리지 않는다.
+    const MONITORINFO monitor { test_monitor() };
+    luil::win32::window_config config {};
+    config.initial_position = luil::win32::window_position { monitor.rcWork.left + 120, monitor.rcWork.top + 90 };
+    config.initial_width = 700;
+    config.initial_height = 500;
+    const placement_probe probe { run_placement_probe(config) };
+    REQUIRE(probe.reported_before_close.has_value());
+    REQUIRE(probe.reported_before_close->width == MulDiv(config.initial_width, static_cast<int>(probe.dpi), 96));
+    REQUIRE(probe.reported_before_close->height == MulDiv(config.initial_height, static_cast<int>(probe.dpi), 96));
+    REQUIRE(probe.reported_before_close->maximized == false);
 }
 
 TEST_CASE("Initial placement respects inactive startup policies", "[win32][window]")
