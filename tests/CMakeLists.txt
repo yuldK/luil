@@ -396,6 +396,11 @@ target_compile_definitions(luil_tests PRIVATE
     "LUIL_TESTS_TEXT_SHAPING=$<BOOL:${LUIL_ENABLE_TEXT_SHAPING}>"
     "LUIL_TESTS_TEXT_SHAPING_FALLBACK=$<BOOL:${LUIL_ENABLE_TEXT_SHAPING_FALLBACK}>")
 luil_disable_automatic_windows_manifest(luil_tests)
+# GPU 렌더러의 큰 그림 타일 그리기를 창 없는 Direct3D 12 문맥에서 픽셀로 본다 (image-frames-scaling-design.md).
+# 렌더러를 뺀 구성에는 그 문맥을 세울 Ganesh Direct3D가 없다.
+if(LUIL_ENABLE_DIRECT3D)
+    target_sources(luil_tests PRIVATE gpu_image_tiling_tests.cpp)
+endif()
 
 # messaging의 ASan 검증이다.
 # messaging은 header-only라 이 실행 파일만

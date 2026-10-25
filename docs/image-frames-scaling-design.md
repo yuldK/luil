@@ -7,7 +7,7 @@
 | 움직이는 그림의 장 수·길이를 알려고 전부 디코드하거나, Skia 코덱을 직접 부른다 | `read_image_frames_bytes`·`read_image_frames_file`이 픽셀 없이 목록만 읽는다 |
 | 특정 장(미리 보기·탐색)을 보려고 전부 디코드한다 | `decode_image_frame_bytes`·`load_image_frame_file`이 그 장 하나를 합성까지 마쳐 준다 |
 | 섬네일을 선형+mipmap보다 곱게 줄이려고 자기 리샘플러를 든다 | `image_decode_options::downscale = high_quality`, 또는 `downscale_image` |
-| GPU 최대 텍스처보다 큰 그림(긴 세로 그림)이 GPU 렌더러에서 비어 보여 CPU로 쪼개 그린다 | `image_element`가 그 그림을 타일로 나눠 그린다 |
+| GPU 최대 텍스처보다 큰 그림(긴 세로 그림)을 그릴 수 있는지 몰라 미리 쪼개 둔다 | `image_element`가 그 그림을 타일로 나눠 그리고, GPU 픽셀 test가 그것을 지킨다 |
 | 폭 맞춤·높이 맞춤을 `zoom_by`·`pan_by` 짝으로 직접 계산한다 | `zoom_to_fit`·`zoom_fit_actions`의 `zoom_fit` 축 |
 
 공개 형식은 [image_decode.h](../include/luil/ui/image_decode.h)와 [zoom_view_element.h](../include/luil/ui/zoom_view_element.h)다.
@@ -51,9 +51,10 @@ const luil::ui_image smaller { luil::downscale_image(picture, options, error) };
 
 ## 큰 그림 그리기
 
-GPU 렌더러(Windows Direct3D 12, Android Vulkan)는 최대 텍스처(흔히 16384)보다 큰 그림을 한 장으로 올리지 못한다. 그 그림은 지금까지 GPU에서만 비어 보였다.
+GPU 렌더러(Windows Direct3D 12, Android Vulkan)는 최대 텍스처(흔히 16384)보다 큰 그림을 한 장으로 올리지 못한다.
 
-- `image_element`의 래스터 그리기를 `SkTiledImageUtils::DrawImageRect`로 바꿨다. 텍스처에 들지 않는 비트맵 그림만 타일로 나눠 그리고, 나머지는 지금까지의 `drawImageRect` 그대로다. CPU 렌더러에서는 아무것도 바뀌지 않는다.
+- **지금의 Ganesh(Skia m157)는 그런 비트맵을 스스로 나눠 그린다.** 바꾸기 전에 test로 쟀다. 한도보다 한 픽셀 넓은 한 픽셀 줄무늬 띠의 오른쪽 끝(한도 밖 열)을 1:1로 그려도, `drawImageRect` 그대로 무늬가 픽셀 단위로 맞았다. 그래서 이 바꿈으로 지금 화면이 달라지는 자리는 없다.
+- 그래도 `image_element`의 래스터 그리기를 `SkTiledImageUtils::DrawImageRect`로 바꿨다. Skia가 이 함수를 따로 둔 것은 스스로 나누지 않는 뒷단(Graphite)이 있기 때문이다. 암묵 분할에 기대지 않고 명시 API로 부르면 뒷단을 바꾸거나 Skia가 그 동작을 걷어 내도 그림이 비지 않는다. 텍스처에 드는 그림과 CPU 렌더러에서는 `drawImageRect`로 그대로 넘어간다.
 - 표본과 조각 제약(`kFast`·`kStrict`)도 그대로 넘긴다. 타일 경계에서 옆 타일을 읽는 일은 Skia가 맡는다.
 - 앱은 아무것도 고르지 않는다. 확대 보기 안의 그림도 같은 element라 같은 길을 탄다.
 
@@ -76,8 +77,9 @@ const auto fit_width { luil::zoom_fit_actions(config, viewport, 16.0f, 4.0f, lui
   - 4000×7000 그림을 400폭으로 고품질 축소한 크기와 색, 32줄마다 묻는 취소(물음 수와 멈춘 자리);
   - 한 픽셀 바둑판이 고른 회색이 되는지, EXIF 방향보다 먼저 줄이는지, 움직이는 그림의 장마다 축소, 디코드 안의 취소;
   - 이미 상한 안인 그림·빈 그림·벡터 그림.
-- `tests/raster_draw_tests.cpp`: 긴 세로 그림을 CPU에서 그린 색.
-- `tests/gpu_image_tiling_tests.cpp`: 헤드리스 Direct3D 12 문맥을 세운다. 최대 텍스처보다 한 픽셀 넓은 그림을 `image_element`로 그리고 픽셀을 읽어 색이 닿았는지 본다. 하드웨어 어댑터가 없으면 건너뛴다.
+- `tests/gpu_image_tiling_tests.cpp`(Direct3D 구성):
+  - 창 없는 Direct3D 12 문맥을 세운다. 최대 텍스처보다 한 픽셀 넓은 줄무늬 띠의 한도 밖 끝을 `image_element`로 1:1 그리고, 픽셀을 읽어 무늬가 그대로인지 본다. 하드웨어 어댑터가 없으면 건너뛴다. 지금 Skia에서는 명시 타일 없이도 통과하므로, 이 test는 회귀를 지키는 것이지 바꿈의 효과를 재는 것이 아니다;
+  - 같은 그림을 CPU 표면에 그린 색.
 - `tests/zoom_view_tests.cpp`: 폭·높이 맞춤의 배율과 원점(`overlap`·`contain`), 메시지 짝.
 - 데모:
   - "이미지" 페이지: 움직이는 그림의 장 번호 보기와 고품질 섬네일;
