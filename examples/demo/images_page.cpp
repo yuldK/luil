@@ -1,9 +1,10 @@
 #include "demo/images_page.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/image_decode.h"
+#include "luil/ui/image_encode.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/stack_element.h"
-#include "luil/ui/image_decode.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -39,6 +40,8 @@ namespace demo {
         // 가운데 장 섬네일의 상한이다.
         constexpr int thumbnail_pixel_limit { 160 };
         constexpr float thumbnail_row_height { 96.0f };
+        // 데모가 흉내 내는 업로드 한도다.
+        constexpr std::size_t webp_byte_limit { 200u * 1024u };
 
         [[nodiscard]] float clamp_width(const float value) noexcept
         {
@@ -221,6 +224,23 @@ namespace demo {
             thumbnail.downscale = luil::image_downscale::high_quality;
             middle_frame_ = luil::load_image_frame_file(open->path, frames_.durations.size() / 2, thumbnail, frames_error);
         }
+
+        // 업로드처럼 받는 쪽이 크기를 정한 자리다. 품질을 낮춰 가다 모자라면 3/4씩 줄여 200 KB 안에 담는다.
+        webp_summary_.clear();
+        if (animation_.valid())
+        {
+            luil::webp_size_limit_options limit {};
+            limit.maximum_bytes = webp_byte_limit;
+            std::u8string encode_error {};
+            const luil::webp_size_limit_result fitted { luil::encode_webp_within(animation_.frame_image(0), limit, encode_error) };
+            if (fitted.bytes.empty())
+                webp_summary_ = u8"200 KB 안의 WebP로 담지 못했다 — " + encode_error;
+            else
+            {
+                webp_summary_ = u8"200 KB 안의 WebP: 품질 " + to_u8(fitted.quality) + u8", " + to_u8(fitted.size.width) + u8"×" + to_u8(fitted.size.height);
+                webp_summary_ += u8", " + to_u8(static_cast<int>(fitted.bytes.size() / 1024u)) + u8" KB (" + to_u8(fitted.attempts) + u8"번 지었다)";
+            }
+        }
         return true;
     }
 
@@ -247,6 +267,8 @@ namespace demo {
         column->add_flexible(std::move(row));
         column->add_gap(10.0f);
         column->add(make_status(), 16.0f);
+        if (webp_summary_.empty() == false)
+            column->add(make_label(luil::ui_element_id { kind_text, u8"images-webp" }, webp_summary_, 11.0f, luil::label_color_role::dim), 16.0f);
         return column;
     }
 
