@@ -10,6 +10,7 @@
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
+#include "luil/ui/slider_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
@@ -784,5 +785,51 @@ TEST_CASE("A mixed checkbox is a filled box with a dash, not a tick", "[ui][rast
         const luil::testing::raster_frame checked { draw_box(true, false) };
         REQUIRE(checked.pixel_at(22, 15) == palette.accent);
         REQUIRE(checked.pixel_at(22, 24) != palette.accent_foreground);
+    }
+}
+
+TEST_CASE("Slider magnets paint a mark and a ring while the knob holds on", "[ui][raster][slider]")
+{
+    // 배율 2에서 폭 224·높이 40이면 손잡이 24, 도는 거리 200이다. 트랙은 y 16..24, 표식은
+    // 4 × 20(y 10..30), 고리는 지름 44다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_element_id id { luil::application_element_kind(1), u8"slider" };
+    const luil::rect_f slot { 0.0f, 0.0f, 224.0f, 40.0f };
+
+    const auto make_tree = [&](const float value) {
+        luil::slider_config config {};
+        config.value = value;
+        config.change = [](const float) { return luil::input_action {}; };
+        // 0.1은 채운 쪽(x 32), 0.75는 빈 쪽(x 162)이다.
+        config.magnets = { 0.1f, 0.75f };
+        return luil::make_arranged_tree(std::make_unique<luil::slider_element>(id, std::move(config)), slot, raster_scale);
+    };
+
+    SECTION("marks")
+    {
+        const luil::ui_tree tree { make_tree(0.25f) };
+        luil::testing::raster_frame frame { 224, 40, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+        // 채운 쪽 표식은 면 색의 홈이다 — 채운 accent 위에서도 온전한 색이다.
+        REQUIRE(frame.pixel_at(32, 20) == palette.surface_background);
+        REQUIRE(frame.pixel_at(32, 12) == palette.surface_background);
+        // 빈 쪽 표식은 `control_border`의 알파라 바탕과 섞인다. 옆자리는 바탕 그대로다.
+        REQUIRE(frame.pixel_at(162, 12) != palette.window_background);
+        REQUIRE(frame.pixel_at(170, 12) == palette.window_background);
+    }
+
+    SECTION("ring")
+    {
+        const luil::ui_tree tree { make_tree(0.75f) };
+        // 손잡이 중심은 x 162, y 20이다. y 4는 손잡이(반지름 12) 밖이고 고리(반지름 22) 안이다.
+        luil::testing::raster_frame idle { 224, 40, palette, raster_scale };
+        idle.draw(tree, luil::interaction_snapshot {});
+        REQUIRE(idle.pixel_at(162, 4) == palette.window_background);
+
+        luil::interaction_snapshot pressing {};
+        pressing.pressed = id;
+        luil::testing::raster_frame held { 224, 40, palette, raster_scale };
+        held.draw(tree, pressing);
+        REQUIRE(held.pixel_at(162, 4) != palette.window_background);
     }
 }

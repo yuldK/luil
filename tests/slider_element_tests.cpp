@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <variant>
@@ -33,6 +34,37 @@ namespace {
         auto slider { std::make_unique<luil::slider_element>(luil::ui_element_id { kind_slider }, config) };
         slider->arrange({ { 100.0f, 40.0f, width, 20.0f * scale }, scale });
         return slider;
+    }
+
+    // 절대 값 메시지의 앱 쪽 정의다.
+    struct target_intent
+    {
+        float value { 0.0f };
+    };
+
+    // 폭 112px(물리)·배율 1이면 도는 거리가 100이라, 지점 0.5는 트랙 왼쪽 끝에서 50px,
+    // 포인터 x로는 156이다.
+    [[nodiscard]] std::unique_ptr<luil::slider_element> make_magnet_slider(const float value, std::vector<float> magnets, const bool absolute, const float scale = 1.0f, const float width = 112.0f)
+    {
+        luil::slider_config config {};
+        config.value = value;
+        config.change = make_change_factory();
+        if (absolute)
+            config.change_to = [](const float target) { return luil::input_action { luil::app_message { target_intent { target } } }; };
+        config.magnets = std::move(magnets);
+        auto slider { std::make_unique<luil::slider_element>(luil::ui_element_id { kind_slider }, config) };
+        slider->arrange({ { 100.0f, 40.0f, width, 20.0f * scale }, scale });
+        return slider;
+    }
+
+    void require_target(const std::vector<luil::input_action>& actions, const float expected)
+    {
+        REQUIRE(actions.size() == 1);
+        const auto* const message { std::get_if<luil::app_message>(&actions[0]) };
+        REQUIRE(message != nullptr);
+        const auto* const intent { message->get<target_intent>() };
+        REQUIRE(intent != nullptr);
+        REQUIRE(intent->value == expected);
     }
 
     void require_delta(const std::vector<luil::input_action>& actions, const float expected)
@@ -157,4 +189,118 @@ TEST_CASE("A slider at the end swallows the key instead of leaking it", "[ui][sl
     const std::optional<std::vector<luil::input_action>> forward { pinned.key_step()->on_step(luil::value_step::increase) };
     REQUIRE(forward.has_value());
     REQUIRE(forward->empty());
+}
+
+TEST_CASE("A magnet holds the knob, then lets it catch up with the pointer", "[ui][slider][magnet]")
+{
+    // 붙는 거리(6) 안은 지점 그대로, 풀리는 거리(12)까지는 따라잡고, 그 밖은 포인터다.
+    const auto slider { make_magnet_slider(0.0f, { 0.5f }, false) };
+    std::optional<std::size_t> magnet {};
+    REQUIRE(slider->knob_offset_for(156.0f, false, &magnet) == 50.0f);
+    REQUIRE(magnet == std::size_t { 0 });
+    REQUIRE(slider->knob_offset_for(162.0f, false, &magnet) == 50.0f);
+    REQUIRE(magnet == std::size_t { 0 });
+    REQUIRE(slider->knob_offset_for(150.0f, false) == 50.0f);
+    // 따라잡는 구간은 붙는 거리에서 지점, 풀리는 거리에서 포인터에 닿는 직선이다.
+    REQUIRE(slider->knob_offset_for(165.0f, false, &magnet) == 56.0f);
+    REQUIRE(magnet.has_value() == false);
+    REQUIRE(slider->knob_offset_for(147.0f, false) == 44.0f);
+    REQUIRE(slider->knob_offset_for(168.0f, false) == 62.0f);
+    REQUIRE(slider->knob_offset_for(176.0f, false) == 70.0f);
+    // 붙는 거리 바로 밖도 지점에서 거의 떨어지지 않는다 — 손잡이가 튀지 않는다.
+    REQUIRE(slider->knob_offset_for(162.01f, false) < 50.1f);
+    // Ctrl은 자석 없이 포인터 그대로다.
+    REQUIRE(slider->knob_offset_for(159.0f, true, &magnet) == 53.0f);
+    REQUIRE(magnet.has_value() == false);
+}
+
+TEST_CASE("A magnet scales with the layout", "[ui][slider][magnet]")
+{
+    // 배율 2에서는 폭 224, 손잡이 24 → 도는 거리 200, 붙는 거리 12다.
+    const auto slider { make_magnet_slider(0.0f, { 0.5f }, false, 2.0f, 224.0f) };
+    REQUIRE(slider->knob_offset_for(100.0f + 12.0f + 111.0f, false) == 100.0f);
+    REQUIRE(slider->knob_offset_for(100.0f + 12.0f + 130.0f, false) == 130.0f);
+}
+
+TEST_CASE("Neighbouring magnets split the space between them", "[ui][slider][magnet]")
+{
+    // 50과 56.25px의 두 지점은 간격의 절반(3.125)씩만 당긴다.
+    const auto slider { make_magnet_slider(0.0f, { 0.5625f, 0.5f }, false) };
+    std::optional<std::size_t> magnet {};
+    REQUIRE(slider->knob_offset_for(106.0f + 53.0f, false, &magnet) == 50.0f);
+    REQUIRE(magnet == std::size_t { 0 });
+    REQUIRE(slider->knob_offset_for(106.0f + 54.0f, false, &magnet) == 56.25f);
+    REQUIRE(magnet == std::size_t { 1 });
+}
+
+TEST_CASE("Magnets outside the range are dropped", "[ui][slider][magnet]")
+{
+    // 범위 밖·겹친 지점은 버리고 남은 것을 정렬한다. 0.5 하나만 남는다.
+    const auto slider { make_magnet_slider(0.0f, { 2.0f, 0.5f, -1.0f, 0.5f }, false) };
+    std::optional<std::size_t> magnet {};
+    REQUIRE(slider->knob_offset_for(156.0f, false, &magnet) == 50.0f);
+    REQUIRE(magnet == std::size_t { 0 });
+    REQUIRE(slider->knob_offset_for(206.0f, false) == 100.0f);
+}
+
+TEST_CASE("Dragging through a magnet sends the difference of knob spots", "[ui][slider][magnet]")
+{
+    const auto slider { make_magnet_slider(0.5f, { 0.5f }, false) };
+    const luil::pointer_drag_target* const drag { slider->pointer_drag() };
+    const luil::ui_action_context near { slider->id(), 150.0f, 50.0f };
+    const luil::ui_action_context closer { slider->id(), 160.0f, 50.0f };
+    const luil::ui_action_context away { slider->id(), 170.0f, 50.0f };
+    // 둘 다 붙는 거리 안이라 손잡이가 움직이지 않는다.
+    REQUIRE(drag->on_move(near, closer).empty());
+    // 지점(50)에서 포인터 자리(64)까지다.
+    require_delta(drag->on_move(near, away), 0.14f);
+    require_delta(drag->on_move(away, near), -0.14f);
+}
+
+TEST_CASE("Ctrl frees the knob even in the middle of a drag", "[ui][slider][magnet]")
+{
+    // 각 문맥의 Ctrl로 함수를 고르므로, 누르고 떼는 사이의 델타를 더하면 포인터 자리의
+    // 손잡이와 같다.
+    const auto slider { make_magnet_slider(0.5f, { 0.5f }, false) };
+    const luil::pointer_drag_target* const drag { slider->pointer_drag() };
+    const luil::ui_action_context held { slider->id(), 160.0f, 50.0f };
+    luil::ui_action_context freed { held };
+    freed.control = true;
+    // 붙어 있던 손잡이(50)가 Ctrl로 포인터(54)에게 간다.
+    require_delta(drag->on_move(held, freed), 0.04f);
+    // Ctrl을 떼면 다시 지점이다.
+    require_delta(drag->on_move(freed, held), -0.04f);
+}
+
+TEST_CASE("A slider keeps the knob at the end until the pointer returns", "[ui][slider]")
+{
+    // 포인터 자리는 트랙 안으로 자른다. 끝 너머에서 움직이면 아무 말도 하지 않는다.
+    const auto slider { make_slider(0.5f, 1.0f) };
+    const luil::pointer_drag_target* const drag { slider->pointer_drag() };
+    const luil::ui_action_context inside { slider->id(), 156.0f, 50.0f };
+    const luil::ui_action_context beyond { slider->id(), 400.0f, 50.0f };
+    const luil::ui_action_context still_beyond { slider->id(), 380.0f, 50.0f };
+    require_delta(drag->on_move(inside, beyond), 0.5f);
+    REQUIRE(drag->on_move(beyond, still_beyond).empty());
+}
+
+TEST_CASE("Snapping sends the magnet value itself when the app takes one", "[ui][slider][magnet]")
+{
+    // 델타를 이어 더한 값은 지점에서 오차만큼 비켜 선다. 절대 메시지는 지점 그대로다.
+    const auto slider { make_magnet_slider(0.0f, { 0.5f }, true) };
+    const luil::pointer_drag_target* const drag { slider->pointer_drag() };
+    require_target(drag->on_move({ slider->id(), 140.0f, 50.0f }, { slider->id(), 156.0f, 50.0f }), 0.5f);
+    // 누른 자리도 같다.
+    require_target(drag->on_press({ slider->id(), 160.0f, 50.0f }), 0.5f);
+    // 붙지 않는 이동은 지금처럼 델타다.
+    require_delta(drag->on_move({ slider->id(), 170.0f, 50.0f }, { slider->id(), 180.0f, 50.0f }), 0.1f);
+}
+
+TEST_CASE("Keys walk past magnets without snapping", "[ui][slider][magnet]")
+{
+    // 방향키는 정확한 값을 고르는 길이라 자석이 없다.
+    const auto slider { make_magnet_slider(0.495f, { 0.5f }, true) };
+    const std::optional<std::vector<luil::input_action>> step { slider->key_step()->on_step(luil::value_step::increase) };
+    REQUIRE(step.has_value());
+    require_delta(*step, 0.01f);
 }
