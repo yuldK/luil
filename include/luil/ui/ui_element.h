@@ -1001,7 +1001,7 @@ namespace luil {
         // `inherit`이면 지정하지 않았다는 뜻이라 `cursor_at`이 역할에서 고른다.
         [[nodiscard]] ui_cursor cursor() const noexcept;
         [[nodiscard]] ui_cursor active_cursor() const noexcept;
-        // 액션·drag·drop·tooltip·커서 중 하나라도 있으면 hit test의 대상이 된다.
+        // 액션·drag·drop·tooltip·커서·머무름 중 하나라도 있으면 hit test의 대상이 된다 (hover 영역은 아니다).
         //  - 포인터 모양도 tooltip처럼 hover에만 필요한 것이라 hit가 되어야 뜻이 생긴다.
         // 비활성 element도 tooltip 표시를 위해 hit는 되고 액션 실행만 막는다.
         [[nodiscard]] bool interactive() const noexcept;

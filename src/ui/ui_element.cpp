@@ -244,6 +244,10 @@ namespace luil {
     {
         if (has_tooltip() || cursor_ != ui_cursor::inherit || drag_source_.has_value() || drop_target_.has_value() || pointer_drag_target_.has_value())
             return true;
+        // 머무름도 hover에만 필요한 역할이라 hit가 되어야 뜻이 생긴다 — 액션 없는 카드가 포인터를 받지 못하면 머무름이 영영
+        // 차지 않는다. hover 영역은 반대로 hit를 받지 않는 것이 계약이라 여기 넣지 않는다.
+        if (hover_dwell() != nullptr)
+            return true;
         for (const ui_action& stored : actions_)
             if (stored)
                 return true;
