@@ -1,8 +1,8 @@
 #include "luil/win32/win32_window.h"
 
-#include "host/font_registry.h"
 #include "host/file_dialog_gate.h"
-#include "win32/file_dialog.h"
+#include "host/focus_request_tracker.h"
+#include "host/font_registry.h"
 #include "host/popup_reconcile.h"
 #include "host/surface_invalidate.h"
 #include "luil/ui/draw_primitives.h"
@@ -12,6 +12,7 @@
 #include "win32/dpi_scale.h"
 #include "win32/drag_ghost_window.h"
 #include "win32/embedded_assets.h"
+#include "win32/file_dialog.h"
 #include "win32/popup_surface.h"
 #include "win32/secondary_surface.h"
 #include "win32/skia_renderer.h"
@@ -154,6 +155,8 @@ namespace luil::win32 {
         // 예고가 없으면 timer도 없다.
         //  - 평소에는 이벤트가 있을 때만 그린다.
         constexpr UINT_PTR update_timer_id { 1 };
+        // 들고 있는 초점 요청의 기한이다 (deferred-focus-design.md).
+        constexpr UINT_PTR focus_request_timer_id { 2 };
         // 연속 애니메이션(회전 표시처럼 next_update가 "지금"을 답하는 것)의 다시 그리기 간격이다.
         // 30fps면 눈에 매끄럽다.
         constexpr std::chrono::milliseconds continuous_repaint_interval { 33 };
@@ -867,6 +870,8 @@ namespace luil::win32 {
                     if (update_timer_armed_ == false)
                         arm_update_timer(nullptr, nullptr);
                     synchronize_file_dialog();
+                    // 창과 popup을 맞춘 뒤에 본다. 새 보조 창의 tree가 있어야 그 안의 칸이 섰는지 안다.
+                    advance_focus_request();
                     return 0;
                 }
                 case ui_command_request_message:
@@ -887,6 +892,13 @@ namespace luil::win32 {
                             execute_clipboard_request(request);
                     return 0;
                 case WM_TIMER:
+                    if (word_parameter == focus_request_timer_id)
+                    {
+                        KillTimer(window_, word_parameter);
+                        // frame이 오지 않아도 기한에 버리고 알린다.
+                        advance_focus_request();
+                        return 0;
+                    }
                     if (word_parameter == update_timer_id)
                     {
                         KillTimer(window_, word_parameter);
@@ -2009,6 +2021,63 @@ namespace luil::win32 {
                 return contents;
             }
 
+            // 게시된 초점 요청을 받고, 들고 있는 요청의 대상이 섰으면 한 번 이행한다 (deferred-focus-design.md).
+            //  - 초점은 입력 상태라 직접 세우지 않는다. 보조 기술의 초점 요청과 같은 길(`access_focus_event`)로 보낸다.
+            //  - 활성화는 창을 앞으로 세우는 것이다. 앱이 앞 창이 아니면 OS가 막고 작업 표시줄만 깜빡인다 —
+            //    앞 창을 빼앗지 않는 OS 규칙을 넘지 않는다. 가짜 누름으로 초점을 세우지도 않는다.
+            void advance_focus_request()
+            {
+                if (host_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                const std::chrono::steady_clock::time_point now { std::chrono::steady_clock::now() };
+                const std::optional<focus_request> published { frame != nullptr ? frame->focus : std::nullopt };
+                const auto ready = [this](const focus_request& request) {
+                    const window_surface* const surface { anchor_surface(request.surface) };
+                    if (surface == nullptr || surface->attached() == false || surface->tree() == nullptr)
+                        return false;
+                    return request.target == ui_element_id {} || focus_target_ready(*surface->tree(), request.target);
+                };
+                const focus_request_tracker::step step { focus_tracker_.advance(published, now, ready) };
+
+                if (step.fulfil.has_value())
+                {
+                    const focus_request& request { *step.fulfil };
+                    window_surface* const surface { anchor_surface(request.surface) };
+                    // popup은 활성화를 받지 않는 표면이다 (`WS_EX_NOACTIVATE`).
+                    if (request.activate && surface != nullptr && find_popup(request.surface) == nullptr)
+                    {
+                        const HWND window { surface->window() };
+                        if (IsIconic(window) != FALSE)
+                            ShowWindow(window, SW_RESTORE);
+                        SetForegroundWindow(window);
+                    }
+                    if (request.target != ui_element_id {})
+                        host_->post_raw_input(access_focus_event { request.target, request.surface, now });
+                }
+
+                if (frame != nullptr && frame->focus_report != nullptr)
+                    for (const focus_request_tracker::report& report : step.reports)
+                    {
+                        try
+                        {
+                            if (app_message message { frame->focus_report(report.id, report.outcome) }; message.empty() == false)
+                                host_->post_app_message(std::move(message));
+                        }
+                        catch (...)
+                        {
+                            report_runtime_error(u8"The focus report factory threw an exception.");
+                        }
+                    }
+
+                KillTimer(window_, focus_request_timer_id);
+                if (const std::optional<std::chrono::steady_clock::time_point> deadline { focus_tracker_.deadline() }; deadline.has_value())
+                {
+                    const auto remaining { std::chrono::ceil<std::chrono::milliseconds>(*deadline - now).count() };
+                    SetTimer(window_, focus_request_timer_id, static_cast<UINT>(std::max<long long>(remaining, USER_TIMER_MINIMUM)), nullptr);
+                }
+            }
+
             // popup이 붙는 표면이다.
             // 앵커 id가 비어 있으면 주 창이고, 가리키는 보조 창이 없으면 nullptr다
             // (아직 만들어지지 않았거나 이미 닫힌 창이다).
@@ -2559,6 +2628,8 @@ namespace luil::win32 {
             // 마지막으로 적용한 창 배치 게시 번호다.
             // 0은 아직 적용한 적이 없다는 뜻이다.
             std::uint64_t applied_window_placement_revision_ { 0 };
+            // 대상이 설 때까지 들고 있는 초점 요청이다 (`advance_focus_request`).
+            focus_request_tracker focus_tracker_ {};
             // 마지막으로 배치를 알린 최대화 상태다.
             // WM_SIZE 폭주 중에 같은 상태를 반복해서 보내지 않는다.
             bool posted_maximized_ { false };

@@ -398,6 +398,16 @@ namespace demo {
                     return;
                 }
 
+                // 초점 요청의 결과는 셸이 토스트로 알린다. 덮어쓴 요청은 새 요청이 이어받아 말하지 않는다.
+                if (const auto* const focus_report { message.get<tool_focus_report_intent>() }; focus_report != nullptr)
+                {
+                    if (focus_report->outcome == luil::focus_request_outcome::fulfilled)
+                        static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"도구 창 메모 칸으로 초점을 옮겼습니다.", luil::toast_severity::success } }));
+                    else if (focus_report->outcome == luil::focus_request_outcome::expired)
+                        static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"메모 칸이 제때 서지 않아 초점을 옮기지 못했습니다.", luil::toast_severity::warning } }));
+                    return;
+                }
+
                 // 도구 창 메뉴의 선택도 같은 규칙이다: 페이지가 메뉴(와 필요하면 창)를 닫고 셸이 잇는다.
                 if (const auto* const tool_select { message.get<tool_menu_select_intent>() }; tool_select != nullptr)
                 {
@@ -539,6 +549,8 @@ namespace demo {
                 for (luil::win32::ui_popup& popup : windows_.make_popups())
                     frame->popups.push_back(std::move(popup));
                 frame->file_dialog = file_dialog_;
+                frame->focus = windows_.make_focus_request();
+                frame->focus_report = [](const std::uint64_t id, const luil::focus_request_outcome outcome) { return luil::app_message { tool_focus_report_intent { id, outcome } }; };
                 return frame;
             }
 

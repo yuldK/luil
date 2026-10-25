@@ -13,12 +13,13 @@
 #include "android/main_thread.h"
 #include "android/vulkan_device.h"
 #include "android/vulkan_skia_renderer.h"
+#include "host/file_dialog_gate.h"
+#include "host/focus_request_tracker.h"
 #include "host/font_registry.h"
 #include "host/frame_state.h"
 #include "host/overlay_input.h"
 #include "host/popup_dismiss.h"
 #include "host/popup_reconcile.h"
-#include "host/file_dialog_gate.h"
 #include "host/skia_renderer.h"
 #include "host/text_edit_menu.h"
 #include "luil/theme/ui_theme.h"
@@ -486,6 +487,7 @@ namespace luil::android {
 
                     update_overlays();
                     process_file_dialog();
+                    process_focus_request();
                     process_input();
                     process_text_input();
 
@@ -1025,9 +1027,13 @@ namespace luil::android {
                     return -1;
                 if (dirty_ && renderer_ != nullptr)
                     return 0;
-                if (update_deadline_.has_value() == false)
+                // 그림의 예고와 초점 요청의 기한 가운데 이른 쪽까지만 잔다.
+                std::optional<std::chrono::steady_clock::time_point> wake { update_deadline_ };
+                if (const auto deadline { focus_tracker_.deadline() }; deadline.has_value())
+                    wake = wake.has_value() ? std::min(*wake, *deadline) : *deadline;
+                if (wake.has_value() == false)
                     return -1;
-                const auto remaining { std::chrono::duration_cast<std::chrono::milliseconds>(*update_deadline_ - std::chrono::steady_clock::now()) };
+                const auto remaining { std::chrono::duration_cast<std::chrono::milliseconds>(*wake - std::chrono::steady_clock::now()) };
                 return static_cast<int>(std::clamp<std::chrono::milliseconds::rep>(remaining.count(), 0, 60'000));
             }
 
@@ -1278,6 +1284,36 @@ namespace luil::android {
                 if (environment_.delegate != nullptr)
                     if (auto message { environment_.delegate->make_file_dialog_message(result) }; message.empty() == false)
                         host_->post_app_message(std::move(message));
+            }
+
+            // 게시된 초점 요청을 받고, 대상이 섰으면 한 번 이행한다 (deferred-focus-design.md).
+            //  - 창이 하나라 표면은 주 표면과 그 위의 popup뿐이다.
+            //  - 활성화는 지원하지 않는다. Activity를 앞으로 세우는 것은 앱의 Java 쪽 일이고 luil은 Java 코드를
+            //    싣지 않는다. 활성화만의 요청(대상이 빈 것)은 곧바로 이행한 것으로 알린다.
+            void process_focus_request()
+            {
+                if (host_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                const std::chrono::steady_clock::time_point now { std::chrono::steady_clock::now() };
+                const std::optional<focus_request> published { frame != nullptr ? frame->focus : std::nullopt };
+                const auto ready = [this, &frame](const focus_request& request) {
+                    if (request.target == ui_element_id {})
+                        return true;
+                    const ui_tree* tree { nullptr };
+                    if (request.surface.empty())
+                        tree = frame != nullptr ? frame->tree.get() : nullptr;
+                    else if (const overlay_entry* const overlay { find_overlay(request.surface) }; overlay != nullptr)
+                        tree = overlay->tree.get();
+                    return tree != nullptr && focus_target_ready(*tree, request.target);
+                };
+                const focus_request_tracker::step step { focus_tracker_.advance(published, now, ready) };
+                if (step.fulfil.has_value() && step.fulfil->target != ui_element_id {})
+                    host_->post_raw_input(access_focus_event { step.fulfil->target, step.fulfil->surface, now });
+                if (frame != nullptr && frame->focus_report != nullptr)
+                    for (const focus_request_tracker::report& report : step.reports)
+                        if (app_message message { frame->focus_report(report.id, report.outcome) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
             }
 
             // frame의 popup을 주 표면 위의 layer로 세운다. frame이 바뀔 때만 다시 세운다.
@@ -1676,6 +1712,8 @@ namespace luil::android {
             // layer를 세운 frame이다. 바뀌면 다시 세운다.
             std::shared_ptr<const ui_frame> overlay_frame_ {};
             file_dialog_gate file_dialog_gate_ {};
+            // 대상이 설 때까지 들고 있는 초점 요청이다 (`process_focus_request`).
+            focus_request_tracker focus_tracker_ {};
             overlay_input_router router_ {};
             bool warned_windows_ { false };
             std::unique_ptr<ime_session> ime_ {};
