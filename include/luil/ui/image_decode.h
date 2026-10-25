@@ -42,6 +42,21 @@ namespace luil {
         accept,
     };
 
+    // 상한에 맞춰 줄일 때의 표본이다 (image-frames-scaling-design.md).
+    enum class image_downscale
+    {
+        // 선형 + mipmap이다. 그리기의 `image_sampling::smooth`와 같은 값이라 디코드에서 줄인 그림과 그리기에서
+        // 줄인 그림이 같아 보인다. 지금까지의 동작이다.
+        standard,
+        // 두 축이 목표의 두 배 이상인 동안 2×2 평균으로 반씩 줄이고, 남은 두 배 미만을 Mitchell–Netravali
+        // (B = C = 1/3) 3차 필터로 맞춘다. 섬네일의 잔물결·계단이 사라지는 대신 시간이 더 든다.
+        //  - `cancelled`를 출력 `image_downscale_cancel_rows`줄마다 묻는다.
+        high_quality,
+    };
+
+    // 고품질 축소가 취소를 묻는 줄 간격이다 (각 단계의 출력 줄).
+    inline constexpr int image_downscale_cancel_rows { 32 };
+
     // 디코드 시점에 이미지를 줄일 상한이다 (이미지 자체의 픽셀, 화면 배율과 무관).
     //
     // 4000×3000 사진을 200px 칸에 놓는 것이 흔한 쓰임이다. 원본 그대로 들고 있으면
@@ -118,6 +133,11 @@ namespace luil {
         //    이유로 답을 그대로 내보낸다 (http_client.h:136-142 — 취소가 답을
         //    지우면 화면에 영원히 도는 표시가 남는다).
         std::function<bool()> cancelled {};
+
+        // 상한에 맞춰 줄일 때의 표본이다. 기본은 지금까지의 선형 + mipmap이다.
+        //  - 줄이는 것은 EXIF로 돌려세우기 **전**, 파일 축에서다. 돌려세우기는 그 뒤 1:1이다.
+        //  - 움직이는 그림에서는 장마다 같은 축소를 건다.
+        image_downscale downscale { image_downscale::standard };
     };
 
     struct image_pixel_size
@@ -292,6 +312,13 @@ namespace luil {
     // `decode_image_bytes`와 같다.
     [[nodiscard]] ui_animated_image decode_animated_image_bytes(std::span<const std::uint8_t> bytes, image_decode_error& error);
     [[nodiscard]] ui_animated_image decode_animated_image_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
+
+    // 이미 가진 그림을 상한(`max_width`·`max_height`)에 맞춰 고품질로 줄인다 (`image_downscale::high_quality`).
+    //  - 이미 상한 안이면 같은 그림을 그대로 돌려준다(복사하지 않는다).
+    //  - `cancelled`를 출력 `image_downscale_cancel_rows`줄마다 묻는다. 접히면 빈 값과 `cancelled`다.
+    //  - 벡터 그림(SVG)은 줄일 픽셀이 없어 `unsupported_format`이다 — 그리는 배율대로 이미 날카롭다.
+    //  - 픽셀 수에 비례해 오래 걸린다. UI thread에서 부를 자리가 아니다.
+    [[nodiscard]] ui_image downscale_image(const ui_image& image, const image_decode_options& options, image_decode_error& error);
 
     // 움직이는 그림의 장 목록이다 (image-frames-scaling-design.md). 픽셀은 들지 않는다.
     struct image_frame_table

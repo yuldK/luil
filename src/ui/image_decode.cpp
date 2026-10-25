@@ -1,6 +1,8 @@
 #include "luil/ui/image_decode.h"
 
+#include "ui/image_backing.h"
 #include "ui/image_codecs.h"
+#include "ui/image_resample.h"
 #include "ui/image_source.h"
 
 #include "include/codec/SkCodec.h"
@@ -16,6 +18,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSamplingOptions.h"
@@ -276,8 +279,36 @@ namespace luil {
         //
         // `straight`는 **바깥에서 한 번 잡아 장마다 다시 쓰는** 스크래치다. 장마다
         // 새로 잡으면 200장짜리 gif에서 자리 잡기가 200번 돈다.
-        [[nodiscard]] ui_image finish_frame(const SkBitmap& decoded, const oriented_target& target, std::uint8_t* const straight, const std::size_t straight_bytes, image_decode_error& error)
+        //  - 고품질 축소(`image_downscale::high_quality`)도 여기서 한다. 파일 축 목표로 먼저 줄이고, 돌려세우기는
+        //    그 뒤 1:1이다 — 두 일을 한 자리에 두는 이유가 그대로 선다.
+        [[nodiscard]] ui_image finish_frame(
+            const SkBitmap& input, const oriented_target& target, std::uint8_t* const straight, const std::size_t straight_bytes, const image_decode_options& options, image_decode_error& error)
         {
+            SkBitmap resampled {};
+            const SkBitmap* picked { &input };
+            if (options.downscale == image_downscale::high_quality && input.dimensions() != target.file && input.width() >= target.file.width() && input.height() >= target.file.height())
+            {
+                SkPixmap pixels {};
+                if (input.peekPixels(&pixels) == false)
+                {
+                    error = make_error(image_decode_error_kind::internal_error, u8"Failed to read the decoded image pixels.");
+                    return {};
+                }
+                const image_resample_result result { downscale_premultiplied(pixels, target.file, options.cancelled, resampled) };
+                if (result == image_resample_result::cancelled)
+                {
+                    error = cancelled_error();
+                    return {};
+                }
+                if (result == image_resample_result::out_of_memory)
+                {
+                    error = make_error(image_decode_error_kind::out_of_memory, u8"Failed to allocate the downscaled image pixels.");
+                    return {};
+                }
+                picked = &resampled;
+            }
+            const SkBitmap& decoded { *picked };
+
             // 방향도 크기도 그대로면 옮겨 그릴 것이 없다 — 흔한 자리(EXIF 없는
             // png를 상한 없이 읽기)가 한 번의 복사도 하지 않는다.
             const SkBitmap* finished { &decoded };
@@ -466,7 +497,7 @@ namespace luil {
             if (straight == nullptr)
                 return {};
             const std::size_t straight_bytes { static_cast<std::size_t>(target.display.width) * static_cast<std::size_t>(target.display.height) * 4 };
-            ui_image image { finish_frame(decoded, target, straight.get(), straight_bytes, error) };
+            ui_image image { finish_frame(decoded, target, straight.get(), straight_bytes, options, error) };
             if (image.valid() == false)
                 return {};
             // **값이 섰는데도 오류가 선다.** 앱은 `valid()`로 그림이 있는지를
@@ -666,7 +697,7 @@ namespace luil {
 
                 // **다 된 장만 목록에 넣는다.** 넣고 나서 살펴보면 실패한 장이
                 // 목록에 남아, 받기로 한 앱에게 빈 장이 섞인 애니메이션이 간다.
-                ui_image finished { finish_frame(canvas_bitmap, target, straight.get(), straight_bytes, failure) };
+                ui_image finished { finish_frame(canvas_bitmap, target, straight.get(), straight_bytes, options, failure) };
                 if (finished.valid() == false)
                 {
                     // `finish_frame`은 정지 경로와 함께 쓰는 함수라 장을 모르고 0을
@@ -829,7 +860,7 @@ namespace luil {
             }
             const std::size_t straight_bytes { static_cast<std::size_t>(target.display.width) * static_cast<std::size_t>(target.display.height) * 4 };
             image_decode_error finish_error {};
-            ui_image image { finish_frame(decoded, target, straight.get(), straight_bytes, finish_error) };
+            ui_image image { finish_frame(decoded, target, straight.get(), straight_bytes, options, finish_error) };
             if (image.valid() == false)
             {
                 error = at_frame(std::move(finish_error), frame);
@@ -917,6 +948,59 @@ namespace luil {
         if (data == nullptr)
             return {};
         return decode_animation(std::move(data), options, error);
+    }
+
+    ui_image downscale_image(const ui_image& image, const image_decode_options& options, image_decode_error& error)
+    {
+        if (image.valid() == false)
+        {
+            error = make_error(image_decode_error_kind::no_pixels, u8"The image has no pixels.");
+            return {};
+        }
+        const image_backing* const backing { image.backing() };
+        if (backing->image == nullptr)
+        {
+            error = make_error(image_decode_error_kind::unsupported_format, u8"A vector image has no pixels to downscale.");
+            return {};
+        }
+        const image_pixel_size size { decoded_image_size(image.width(), image.height(), options) };
+        if (size == image_pixel_size { image.width(), image.height() })
+            return image;
+        if (decode_cancelled(options))
+        {
+            error = cancelled_error();
+            return {};
+        }
+        // 그림은 premul 비트맵에서 왔다 (`make_rgba_image`·디코드). 그대로 들여다보고, 못 보면 한 번 옮겨 읽는다.
+        SkBitmap copy {};
+        SkPixmap pixels {};
+        if (backing->image->peekPixels(&pixels) == false || pixels.colorType() != kN32_SkColorType || pixels.alphaType() != kPremul_SkAlphaType)
+        {
+            if (copy.tryAllocPixels(premultiplied_info(SkISize { image.width(), image.height() })) == false || backing->image->readPixels(copy.pixmap(), 0, 0) == false)
+            {
+                error = make_error(image_decode_error_kind::out_of_memory, u8"Failed to read the image pixels.");
+                return {};
+            }
+            pixels = copy.pixmap();
+        }
+        SkBitmap smaller {};
+        const image_resample_result result { downscale_premultiplied(pixels, SkISize { size.width, size.height }, options.cancelled, smaller) };
+        if (result == image_resample_result::cancelled)
+        {
+            error = cancelled_error();
+            return {};
+        }
+        if (result == image_resample_result::out_of_memory)
+        {
+            error = make_error(image_decode_error_kind::out_of_memory, u8"Failed to allocate the downscaled image pixels.");
+            return {};
+        }
+        // premul 그대로 싸서 내준다 — straight로 한 번 돌았다 오면 채널마다 반올림이 한 번 더 쌓인다.
+        smaller.setImmutable();
+        ui_image result_image { image_access::raster_image(smaller.asImage()) };
+        if (result_image.valid() == false)
+            error = make_error(image_decode_error_kind::out_of_memory, u8"Failed to wrap the downscaled image pixels for drawing.");
+        return result_image;
     }
 
     image_frame_table read_image_frames_file(const std::u8string_view path, image_decode_error& error)

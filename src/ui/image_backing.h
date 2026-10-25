@@ -53,6 +53,8 @@ namespace luil {
         // 기록한 그림 하나로 벡터 `ui_image`를 짓는다. 그림의 좌표는 `{0, 0, width, height}`다.
         // 그림이 없거나 크기가 양수가 아니면 빈 값이다.
         [[nodiscard]] static ui_image picture_image(sk_sp<SkPicture> picture, int width, int height);
+        // premul 래스터 그림 하나로 `ui_image`를 짓는다 (고품질 축소의 결과). 그림이 없으면 빈 값이다.
+        [[nodiscard]] static ui_image raster_image(sk_sp<SkImage> image);
         // Lottie 하나를 짓는다. 길이와 장 빠르기가 양수가 아니면 빈 값이다.
         [[nodiscard]] static ui_lottie lottie(std::shared_ptr<const lottie_backing> backing, int width, int height, std::chrono::nanoseconds duration, double frame_rate);
     };

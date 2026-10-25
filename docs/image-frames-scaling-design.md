@@ -73,8 +73,9 @@ const auto fit_width { luil::zoom_fit_actions(config, viewport, 16.0f, 4.0f, lui
 - `tests/image_decode_tests.cpp`:
   - 장 목록이 `load_animated_image_file`의 길이·바퀴 수와 같은지, 픽셀 없이 읽는지;
   - 가운데 장과 마지막 장이 전체 디코드의 그 장과 같은 픽셀인지, 범위 밖 번호와 취소;
-  - 4000×7000 그림을 400폭으로 고품질 축소한 크기와 색, 32줄마다 묻는 취소;
-  - 반 평균 경계, 알파 가장자리의 테, EXIF 방향과의 순서.
+  - 4000×7000 그림을 400폭으로 고품질 축소한 크기와 색, 32줄마다 묻는 취소(물음 수와 멈춘 자리);
+  - 한 픽셀 바둑판이 고른 회색이 되는지, EXIF 방향보다 먼저 줄이는지, 움직이는 그림의 장마다 축소, 디코드 안의 취소;
+  - 이미 상한 안인 그림·빈 그림·벡터 그림.
 - `tests/raster_draw_tests.cpp`: 긴 세로 그림을 CPU에서 그린 색.
 - `tests/gpu_image_tiling_tests.cpp`: 헤드리스 Direct3D 12 문맥을 세운다. 최대 텍스처보다 한 픽셀 넓은 그림을 `image_element`로 그리고 픽셀을 읽어 색이 닿았는지 본다. 하드웨어 어댑터가 없으면 건너뛴다.
 - `tests/zoom_view_tests.cpp`: 폭·높이 맞춤의 배율과 원점(`overlap`·`contain`), 메시지 짝.
