@@ -65,7 +65,7 @@
   - 명령 줄 따옴표 규칙, `cmd /c exit 3`의 종료 코드(창 없이);
   - 없는 경로의 보이기(탐색기를 열지 않는 갈래만);
   - 배경 우선순위 왕복, 파이프 읽기에 막힌 thread의 취소와 막힌 것이 없을 때의 `not_found`.
-- Android는 같은 test를 돌릴 진입점이 없다. 원자적 교체·파일 잠금·우선순위는 POSIX 호출이라 Android 빌드로 컴파일만 확인했다.
+- Android는 Catch2 test를 돌릴 진입점이 없다. 그래서 `platform_services_android.cpp`를 그대로 묶은 작은 확인 프로그램을 실기기에서 셸 사용자와 앱 uid(`run-as`)로 돌렸다. 원자적 교체(남는 임시 파일 없음, 없는 폴더는 실패), 파일 잠금 둘, 단일 인스턴스의 `unsupported`, 우선순위 nice 10 → 0 왕복, 나머지 셋의 `unsupported`가 모두 맞았다.
 - 데모:
   - 창 배치 저장이 `replace_file_atomically`를 쓴다;
   - 데모가 시작할 때 `single_instance`를 쥐고, 둘째 인스턴스면 제목에 그 사실을 적는다;
