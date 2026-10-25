@@ -76,6 +76,8 @@ luil_add_source_filter(luil_core_files "messaging"
 
 # text: 도메인 무관 텍스트 규칙이다 (UTF-8 순회, 편집 상태 기계).
 luil_add_source_filter(luil_core_files "text"
+    text/case_fold.cpp
+    "${public_headers}/text/case_fold.h"
     text/grapheme.cpp
     text/grapheme_data.h
     text/grapheme_internal.h

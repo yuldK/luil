@@ -2,6 +2,7 @@
 #include "luil/ui/menu_element.h"
 
 #include "luil/messaging/envelope.h"
+#include "luil/text/case_fold.h"
 #include "luil/ui/zoom_view_element.h"
 
 #include <algorithm>
@@ -3760,7 +3761,8 @@ namespace luil {
         {
             const ui_element_id& candidate { scope.members[(start + step) % count] };
             const ui_element* const element { tree->find(candidate) };
-            if (element == nullptr || element->search_label().starts_with(typeahead_query_) == false)
+            // 대소문자는 가리지 않는다 — "d"로 "Documents"에 간다 (case-fold-design.md).
+            if (element == nullptr || text::starts_with_folded(element->search_label(), typeahead_query_) == false)
                 continue;
             if (candidate != snapshot_.focused)
                 set_keyboard_focus(snapshot_.focused_surface, candidate, event.time);

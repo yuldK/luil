@@ -23,6 +23,7 @@ add_executable(luil_core_tests
     check_element_tests.cpp
     theme_picker_tests.cpp
     choice_group_element_tests.cpp
+    case_fold_tests.cpp
     content_layout_tests.cpp
     cursor_idle_tests.cpp
     dialog_elements_tests.cpp
