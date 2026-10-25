@@ -6,6 +6,7 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/modal_host_element.h"
+#include "luil/ui/number_input.h"
 #include "luil/ui/text_area_element.h"
 #include "mobile_demo/assets.h"
 
@@ -33,15 +34,10 @@ namespace mobile_demo {
             return luil::text_line_height(note_text_size, note_line_height - note_text_size) + 4.0f + scaled_input_height();
         }
 
-        // 숫자 칸에 들어갈 수 있는 글자만 남긴다.
-        // 붙여넣기와 IME 확정도 이 관문을 지난다.
-        [[nodiscard]] std::u8string keep_digits(const std::u8string_view text)
+        // 숫자 칸의 범위다. 붙여넣기와 IME 확정은 라이브러리 거르기(`number_input_filter`)가 숫자만 남긴다 — 전각 숫자도 ASCII로 옮긴다.
+        [[nodiscard]] luil::number_input_range number_range()
         {
-            std::u8string digits {};
-            for (const char8_t character : text)
-                if (character >= u8'0' && character <= u8'9')
-                    digits.push_back(character);
-            return digits;
+            return { .minimum = 0.0 };
         }
 
         [[nodiscard]] float clamp_offset(const float value, const float minimum, const float maximum)
@@ -141,7 +137,7 @@ namespace mobile_demo {
     void basics_page::apply_edit(const luil::text_edit_request& request)
     {
         if (request.target == target_number)
-            luil::apply_text_edit(number_, request, keep_digits);
+            luil::apply_text_edit(number_, request, luil::number_input_filter(number_range()));
         else if (request.target == target_note)
             luil::apply_text_edit(note_, request);
         else if (request.target == target_secret)
