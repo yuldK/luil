@@ -316,6 +316,8 @@ namespace demo {
         config.axis = luil::split_axis::vertical;
         config.grows = luil::split_grows::toward_start;
         config.resize = [](const float delta) { return luil::make_app_action(split_intent { delta }); };
+        // 위아래 판 사이를 가르는 다른 선이 없어 쉬는 동안에도 얇은 구분선을 긋는다.
+        config.resting_divider = true;
         return std::make_unique<luil::split_handle_element>(luil::ui_element_id { kind_list_split }, config);
     }
 

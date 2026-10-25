@@ -11,6 +11,7 @@
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/split_handle_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
@@ -832,4 +833,34 @@ TEST_CASE("Slider magnets paint a mark and a ring while the knob holds on", "[ui
         held.draw(tree, pressing);
         REQUIRE(held.pixel_at(162, 4) != palette.window_background);
     }
+}
+
+TEST_CASE("A split handle can keep a thin divider while resting", "[ui][raster][split]")
+{
+    // 배율 2에서 높이 32의 가로 손잡이다. 쉬는 동안의 선은 1 논리 px(물리 2 px)로 y 15..17, 강조는 2 논리 px로 y 14..18이다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_element_id id { luil::application_element_kind(1), u8"split" };
+    const auto draw = [&](const bool resting, const luil::interaction_snapshot& interaction) {
+        luil::split_handle_config config {};
+        config.axis = luil::split_axis::vertical;
+        config.resize = [](const float) { return luil::input_action {}; };
+        config.resting_divider = resting;
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::split_handle_element>(id, config), { 0.0f, 0.0f, 100.0f, 32.0f }, raster_scale) };
+        luil::testing::raster_frame frame { 100, 32, palette, raster_scale };
+        frame.draw(tree, interaction);
+        return std::array<luil::ui_color, 2> { frame.pixel_at(50, 16), frame.pixel_at(50, 14) };
+    };
+
+    // 기본은 쉬는 동안 아무것도 그리지 않는다.
+    REQUIRE(draw(false, {})[0] == palette.window_background);
+    // 켜면 가운데에 `divider`가 선다. 알파 색이라 바탕과 섞인 값이고, 강조 두께까지 번지지 않는다.
+    const auto resting { draw(true, {}) };
+    REQUIRE(resting[0] != palette.window_background);
+    REQUIRE(resting[0] != palette.accent);
+    REQUIRE(resting[1] == palette.window_background);
+    // hover 동안은 켜든 끄든 강조다.
+    luil::interaction_snapshot hovering {};
+    hovering.hovered = id;
+    REQUIRE(draw(true, hovering)[0] == palette.accent);
+    REQUIRE(draw(true, hovering)[1] == palette.accent);
 }
