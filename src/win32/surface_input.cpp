@@ -1,5 +1,7 @@
 #include "win32/surface_input.h"
 
+#include "host/key_mapping.h"
+
 #include <windowsx.h>
 
 #include <utility>
@@ -161,6 +163,9 @@ namespace luil::win32 {
             return key_code::page_up;
         case VK_NEXT:
             return key_code::page_down;
+        // 글자(`WM_CHAR` U+0008)이면서 누름이다 (Space와 같다).
+        case VK_BACK:
+            return key_code::backspace;
         default:
             break;
         }
@@ -202,6 +207,9 @@ namespace luil::win32 {
         // 그 밖의 키는 플랫폼 대역으로 옮긴다.
         if (virtual_key == VK_SHIFT || virtual_key == VK_CONTROL || virtual_key == VK_MENU || virtual_key == VK_LWIN || virtual_key == VK_RWIN)
             return key_code::none;
+        // 구두점·키패드는 이름 키다. 예전에는 플랫폼 대역으로 왔다 (keyboard-shortcut-design.md).
+        if (const key_code named { named_key_from_win32_virtual(static_cast<std::uint32_t>(virtual_key)) }; named != key_code::none)
+            return named;
         return platform_key_code(static_cast<std::uint32_t>(virtual_key));
     }
 } // namespace luil::win32

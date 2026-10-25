@@ -320,6 +320,39 @@ namespace luil {
         //    그 키를 이미 받고 있는 앱이 보는 값이 달라진다.
         volume_up,
         volume_down,
+        // Backspace는 글자(`U'\b'`)이면서 **누름**이다 — Space와 같다. 수정자 없이도 키로 온다.
+        //  - 텍스트 박스에 초점이 있으면 controller가 키 쪽을 삼키고 글자만 먹는다 (지우기는 글자 경로의 것이다).
+        backspace,
+        // 구두점과 키패드다. 글자를 만드는 키라 영문자처럼 **단축키 수정자와 함께일 때만** 키로 온다
+        // (키 잡기 모드에서는 수정자 없이도 온다 — `ui_element::set_key_capture`).
+        //  - 이름은 미국 배열의 자리다. 다른 배열에서 같은 자리의 키가 다른 글자를 만들어도 이 이름이다.
+        //  - Win32 가상 키와 Android 키 코드의 매핑은 luil이 맡는다. 예전에 플랫폼 대역으로 오던 값이다.
+        minus,
+        equal,
+        comma,
+        period,
+        slash,
+        semicolon,
+        quote,
+        bracket_left,
+        bracket_right,
+        backslash,
+        grave,
+        numpad_0,
+        numpad_1,
+        numpad_2,
+        numpad_3,
+        numpad_4,
+        numpad_5,
+        numpad_6,
+        numpad_7,
+        numpad_8,
+        numpad_9,
+        numpad_add,
+        numpad_subtract,
+        numpad_multiply,
+        numpad_divide,
+        numpad_decimal,
         first_platform_key = 0x1000,
     };
 

@@ -109,6 +109,12 @@ namespace luil::android {
         [[nodiscard]] std::vector<raw_input_event> translate(const key_input& input);
         using dead_key_combiner = std::function<char32_t(char32_t, char32_t)>;
         void set_dead_key_combiner(dead_key_combiner combine);
+        // 초점을 가진 element가 다음 키를 모두 받는 중이다 (`interaction_snapshot::key_capture`).
+        // 그동안은 글자 키도 수정자 없이 키로 보내고 글자는 보내지 않는다.
+        void set_key_capture(bool capture) noexcept
+        {
+            key_capture_ = capture;
+        }
         // 창이 사라진다. 진행 중인 접촉을 정상적인 뗌 없이 끝내고 마우스 hover를 거둔다.
         [[nodiscard]] std::vector<raw_input_event> cancel_all(std::chrono::steady_clock::time_point time);
 
@@ -125,5 +131,6 @@ namespace luil::android {
         bool mouse_inside_ { false };
         char32_t pending_accent_ {};
         dead_key_combiner combine_dead_key_ {};
+        bool key_capture_ { false };
     };
 } // namespace luil::android

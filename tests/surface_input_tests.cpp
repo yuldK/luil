@@ -128,9 +128,43 @@ TEST_CASE("Character keys only become events under Ctrl or Alt", "[surface-input
 
 TEST_CASE("Platform-specific keys still travel in the platform band", "[surface-input]")
 {
-    const key_code key { modified_key_from_virtual(VK_OEM_1, true, false, true) };
-    REQUIRE(key == platform_key_code(VK_OEM_1));
-    REQUIRE(platform_key_of(key) == VK_OEM_1);
+    // 이름이 없는 키(Pause)만 플랫폼 대역이다. 구두점·키패드는 이제 이름 키다.
+    const key_code key { modified_key_from_virtual(VK_PAUSE, true, false, false) };
+    REQUIRE(key == platform_key_code(VK_PAUSE));
+    REQUIRE(platform_key_of(key) == VK_PAUSE);
+}
+
+TEST_CASE("Punctuation and keypad keys map to named keys under a shortcut modifier", "[surface-input][shortcut]")
+{
+    // 글자를 만드는 키라 영문자처럼 Ctrl·Alt와 함께일 때만 키다.
+    REQUIRE(modified_key_from_virtual(VK_OEM_MINUS, false, false, true) == key_code::none);
+    REQUIRE(modified_key_from_virtual(VK_OEM_MINUS, true, false, true) == key_code::minus);
+    REQUIRE(modified_key_from_virtual(VK_OEM_PLUS, true, false, true) == key_code::equal);
+    REQUIRE(modified_key_from_virtual(VK_OEM_COMMA, true, false, true) == key_code::comma);
+    REQUIRE(modified_key_from_virtual(VK_OEM_PERIOD, false, true, true) == key_code::period);
+    REQUIRE(modified_key_from_virtual(VK_OEM_2, true, false, true) == key_code::slash);
+    REQUIRE(modified_key_from_virtual(VK_OEM_1, true, false, true) == key_code::semicolon);
+    REQUIRE(modified_key_from_virtual(VK_OEM_7, true, false, true) == key_code::quote);
+    REQUIRE(modified_key_from_virtual(VK_OEM_4, true, false, true) == key_code::bracket_left);
+    REQUIRE(modified_key_from_virtual(VK_OEM_6, true, false, true) == key_code::bracket_right);
+    REQUIRE(modified_key_from_virtual(VK_OEM_5, true, false, true) == key_code::backslash);
+    REQUIRE(modified_key_from_virtual(VK_OEM_3, true, false, true) == key_code::grave);
+    REQUIRE(modified_key_from_virtual(VK_NUMPAD0, true, false, true) == key_code::numpad_0);
+    REQUIRE(modified_key_from_virtual(VK_NUMPAD9, true, false, true) == key_code::numpad_9);
+    REQUIRE(modified_key_from_virtual(VK_ADD, true, false, true) == key_code::numpad_add);
+    REQUIRE(modified_key_from_virtual(VK_SUBTRACT, true, false, true) == key_code::numpad_subtract);
+    REQUIRE(modified_key_from_virtual(VK_MULTIPLY, true, false, true) == key_code::numpad_multiply);
+    REQUIRE(modified_key_from_virtual(VK_DIVIDE, true, false, true) == key_code::numpad_divide);
+    REQUIRE(modified_key_from_virtual(VK_DECIMAL, true, false, true) == key_code::numpad_decimal);
+    // 키 잡기 모드는 글자 키 표식을 끄고 부른다 — 수정자 없이도 키다.
+    REQUIRE(modified_key_from_virtual(VK_OEM_MINUS, false, false, false) == key_code::minus);
+    REQUIRE(modified_key_from_virtual('N', false, false, false) == platform_key_code('N'));
+}
+
+TEST_CASE("Backspace is a key as well as a character", "[surface-input][shortcut]")
+{
+    // Space와 같다 — 수정자 없이도 키로 오고, 지우기는 WM_CHAR U+0008이 한다.
+    REQUIRE(named_key_from_virtual(VK_BACK) == key_code::backspace);
 }
 
 TEST_CASE("Modifier keys themselves are not events", "[surface-input]")

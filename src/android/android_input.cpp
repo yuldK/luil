@@ -1,5 +1,7 @@
 #include "android/android_input.h"
 
+#include "host/key_mapping.h"
+
 #include <android/input.h>
 #include <android/keycodes.h>
 
@@ -70,6 +72,9 @@ namespace luil::android {
                 return key_code::page_up;
             case AKEYCODE_PAGE_DOWN:
                 return key_code::page_down;
+            // 글자(U+0008)이면서 누름이다 (Win32와 같이 Space의 규칙).
+            case AKEYCODE_DEL:
+                return key_code::backspace;
             default:
                 break;
             }
@@ -134,6 +139,9 @@ namespace luil::android {
             // 글자를 만드는 키는 수정자가 있을 때만 키다. 그냥 치면 글자의 것이다.
             if (character_key && shortcut == false)
                 return key_code::none;
+            // 구두점·키패드는 이름 키다. 예전에는 플랫폼 대역으로 왔다 (keyboard-shortcut-design.md).
+            if (const key_code named { named_key_from_android(key) }; named != key_code::none)
+                return named;
             return static_cast<key_code>(static_cast<std::uint32_t>(key_code::first_platform_key) + static_cast<std::uint32_t>(key));
         }
     } // namespace
@@ -449,8 +457,9 @@ namespace luil::android {
         }
 
         key_code key { named_key(input.key_code) };
+        // 키 잡기 모드에서는 글자 키도 수정자 없이 키다. 잡는 칸이 "N" 하나도 받아야 한다.
         if (key == key_code::none)
-            key = modified_key(input.key_code, shortcut, character_key);
+            key = modified_key(input.key_code, shortcut || key_capture_, character_key);
         if (shortcut || backspace || named_key(input.key_code) != key_code::none)
             pending_accent_ = {};
         if (key != key_code::none)
@@ -464,7 +473,8 @@ namespace luil::android {
         }
 
         // 글자는 Alt·Meta 없이 친 것만이다. Ctrl+Backspace는 Win32처럼 U+007F다.
-        if (alt || meta)
+        //  - 키 잡기 모드에서는 글자를 보내지 않는다. 같은 키가 키로 이미 갔다.
+        if (alt || meta || key_capture_)
             return events;
         if (backspace)
             events.push_back(raw_input_event { character_typed_event { control ? char32_t { 0x7F } : U'\b', time } });

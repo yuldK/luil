@@ -1089,6 +1089,8 @@ namespace luil::android {
                     // Esc가 popup을 닫았으면 키를 삼킨다 (Win32와 같다).
                     if (key.keyCode == AKEYCODE_ESCAPE && key.action == AKEY_EVENT_ACTION_DOWN && dismiss_popups(popup_dismiss_reason::escape_key))
                         continue;
+                    // 키 잡기 칸이 초점을 가졌으면 글자 키도 키로 보낸다 (`ui_element::set_key_capture`).
+                    input_.set_key_capture(host_->acquire_interaction().key_capture);
                     post_events(input_.translate(copy_key(key)));
                 }
                 android_app_clear_motion_events(inputs);

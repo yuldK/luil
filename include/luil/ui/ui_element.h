@@ -588,6 +588,18 @@ namespace luil {
         std::function<std::optional<std::vector<input_action>>(std::u8string_view query, bool first)> on_search {};
     };
 
+    // 초점을 가진 동안 **다음 키 입력을 모두** 받는 역할이다 (단축키 편집 칸 — keyboard-shortcut-design.md).
+    //  - Tab·Esc·Enter·화살표·Alt 조합·앱 단축키보다 먼저 이것이 받는다. 초점 이동도, 대화 상자의 Esc도, 명령도
+    //    일어나지 않는다. 빠져나가는 길(취소 단추·포인터)은 앱이 둔다.
+    //  - 글자 키도 수정자 없이 키로 온다(플랫폼이 이 역할을 보고 바꾼다). 그 사이의 글자 입력은 버린다.
+    //  - 수정자 키 자체(Ctrl·Shift·Alt만 누름)는 키가 아니라 오지 않는다.
+    //  - OS가 먼저 가져가는 키(Alt+Tab·Ctrl+Alt+Del·Windows 키 조합)는 오지 않는다. Alt+F4·Alt+Space는 오고,
+    //    잡는 칸은 `system_reserved_chord`로 그것을 예약 키로 보여 준다.
+    struct key_capture_target
+    {
+        std::function<std::vector<input_action>(const key_pressed_event& event)> on_key {};
+    };
+
     // 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
     //  - 배율은 글을 물리 크기로 재고 논리 픽셀로 되돌리는 데 쓴다. 글꼴의 힌팅이 크기마다 달라 논리 크기로 잰
     //    폭은 그린 폭과 어긋날 수 있다.
@@ -839,6 +851,10 @@ namespace luil {
         std::u8string menu_surface {};
         // 커스텀 툴팁의 id 공간은 주 tree와 분리한다. 원래 요소의 hover는 표시 수명을 유지한다.
         std::optional<tooltip_interaction> tooltip {};
+        // 초점을 가진 element가 다음 키를 모두 받는 중이다 (`ui_element::set_key_capture`).
+        //  - 플랫폼이 읽는다. 글자 키도 수정자 없이 키로 보내고, Alt를 떼어 드는 메뉴 모드를 막는다.
+        //  - 초점이 바뀔 때만 달라진다.
+        bool key_capture { false };
 
         [[nodiscard]] bool operator==(const interaction_snapshot&) const = default;
     };
@@ -935,6 +951,8 @@ namespace luil {
         [[nodiscard]] const pan_handoff_target* pan_handoff() const noexcept;
         // 초점을 가진 채 글자로 자기 모델을 찾는 역할이다. 없으면 nullptr다.
         [[nodiscard]] const key_search_target* key_search() const noexcept;
+        // 초점을 가진 동안 다음 키를 모두 받는 역할이다 (`key_capture_target`). 없으면 nullptr다.
+        [[nodiscard]] const key_capture_target* key_capture() const noexcept;
         // 더 안쪽이 소비하지 않은 키를 받는 처리기다. 없으면 nullptr다.
         [[nodiscard]] const key_handler* key_handler_of() const noexcept;
         // 앱이 지정한 포인터 모양이다.
@@ -1076,6 +1094,8 @@ namespace luil {
         void set_pan_handoff(std::optional<pan_handoff_target> target);
         // 글자 탐색이 이 element의 모델을 묻게 한다 (가상 목록).
         void set_key_search_target(std::optional<key_search_target> target);
+        // 초점을 가진 동안 다음 키를 모두 받는다 (단축키 편집 칸). Tab의 자리여야 초점을 받는다 (`set_tab_stop`).
+        void set_key_capture(std::optional<key_capture_target> target);
         // 보조 기술이 시킨 실행을 앱 메시지로 받는다 (다중 선택 항목의 더하기·빼기·고르기 등).
         // 기본 `access_actions`가 먼저 이것에 묻고, 답이 없으면(nullopt) 지금까지의 기본(클릭)으로 물러선다.
         //  - `access_actions`를 재정의한 element도 처리하지 않는 명령을 기본 구현으로 넘기면 이것이 답한다.
@@ -1284,6 +1304,7 @@ namespace luil {
         std::optional<zoom_source> zoom_source_ {};
         std::optional<pan_handoff_target> pan_handoff_ {};
         std::optional<key_search_target> key_search_target_ {};
+        std::optional<key_capture_target> key_capture_target_ {};
         access_handler access_handler_ {};
         key_handler key_handler_ {};
         ui_element_id pointer_focus_target_ {};

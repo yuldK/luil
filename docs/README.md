@@ -58,6 +58,7 @@
 - [키보드 선택 규칙](keyboard-selection-design.md)
 - [항목 모델 도우미](item-model-design.md)
 - [키보드로 값 조절하기](value-step-design.md)
+- [키보드 단축키: 이름 키·문자열 왕복·키 잡기](keyboard-shortcut-design.md)
 - [자석 슬라이더](slider-magnet-design.md)
 - [활성 표면과 초점 수명](active-surface-design.md)
 - [키 이벤트의 표면 라우팅](key-surface-routing-design.md)

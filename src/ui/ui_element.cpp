@@ -230,6 +230,11 @@ namespace luil {
         return key_search_target_.has_value() ? &*key_search_target_ : nullptr;
     }
 
+    const key_capture_target* ui_element::key_capture() const noexcept
+    {
+        return key_capture_target_.has_value() && key_capture_target_->on_key != nullptr ? &*key_capture_target_ : nullptr;
+    }
+
     const key_handler* ui_element::key_handler_of() const noexcept
     {
         return key_handler_ != nullptr ? &key_handler_ : nullptr;
@@ -336,6 +341,11 @@ namespace luil {
     void ui_element::set_key_search_target(std::optional<key_search_target> target)
     {
         key_search_target_ = std::move(target);
+    }
+
+    void ui_element::set_key_capture(std::optional<key_capture_target> target)
+    {
+        key_capture_target_ = std::move(target);
     }
 
     void ui_element::set_access_handler(access_handler handler)

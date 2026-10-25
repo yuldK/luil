@@ -770,6 +770,8 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> copy_focused_selection(text_input_target target, bool erase) const;
         // 초점을 가진 텍스트 박스의 글이다. 없으면 nullopt다.
         [[nodiscard]] std::optional<text_input_snapshot> focused_text_input() const;
+        // 초점을 가진 활성 element의 키 잡기 역할이다 (`ui_element::set_key_capture`). 없으면 nullptr다.
+        [[nodiscard]] const key_capture_target* focused_key_capture() const;
         // 초점을 가진 박스에서 낱말 하나를 지운다 (Ctrl+Backspace·Ctrl+Delete). 암호 칸은 그쪽 끝까지다.
         [[nodiscard]] std::vector<input_action> delete_word(text_input_target target, bool left) const;
         // 포인터 (x, y)를 그 텍스트 박스의 caret 자리로 옮기는 편집 동작이다.
