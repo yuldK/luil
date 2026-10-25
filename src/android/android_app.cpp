@@ -1800,6 +1800,8 @@ namespace luil::android {
         // JNI를 쓰는 층(HTTP client)이 Activity 없이 JavaVM을 얻는 자리다. 앱이 `on_started`에서
         // client를 세울 수 있도록 무엇보다 먼저 적는다.
         set_java_vm(app->activity->vm);
+        // 비밀 저장소가 암호문을 두는 앱 내부 폴더다 (secret-store-design.md).
+        set_files_directory(app->activity->internalDataPath);
         application instance { app, config, environment };
         return instance.run();
     }

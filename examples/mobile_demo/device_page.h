@@ -45,6 +45,10 @@ namespace mobile_demo {
         bool answered { false };
     };
 
+    // 비밀 저장소를 한 바퀴 돌려 본다 (Keystore AES-GCM).
+    struct secret_check_intent
+    {};
+
     // 로컬 네트워크 권한을 묻는 앱 UI 명령이다. delegate가 받아 `app_host::request_permission`을 부른다.
     inline constexpr std::uint32_t command_request_local_network { 0x6c6e };
 
@@ -70,5 +74,7 @@ namespace mobile_demo {
         // 로컬 네트워크 권한의 마지막 상태와, 사용자가 답한 적이 있는가다.
         luil::permission_state local_network_ { luil::permission_state::not_required };
         bool local_network_answered_ { false };
+        // 비밀 저장소를 돌린 결과 한 줄이다. 아직 돌리지 않았으면 비었다.
+        std::u8string secret_report_ {};
     };
 } // namespace mobile_demo

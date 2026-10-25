@@ -359,6 +359,7 @@ add_executable(luil_tests
     loopback_socket_win32.cpp
     raster_probe.cpp
     secondary_surface_tests.cpp
+    secret_store_tests.cpp
     surface_input_tests.cpp
     tsf_input_tests.cpp
     uia_provider_tests.cpp

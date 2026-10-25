@@ -1,11 +1,26 @@
 #include "android/java_vm.h"
 
 #include <atomic>
+#include <mutex>
 
 namespace luil::android {
     namespace {
         std::atomic<JavaVM*> process_vm { nullptr };
+        std::mutex files_lock {};
+        std::string files_path {};
     } // namespace
+
+    void set_files_directory(const char* const path)
+    {
+        const std::lock_guard lock { files_lock };
+        files_path = path != nullptr ? path : "";
+    }
+
+    std::string files_directory()
+    {
+        const std::lock_guard lock { files_lock };
+        return files_path;
+    }
 
     void set_java_vm(JavaVM* const vm) noexcept
     {
