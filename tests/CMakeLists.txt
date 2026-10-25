@@ -49,6 +49,7 @@ add_executable(luil_core_tests
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp
     multi_item_drag_tests.cpp
+    number_input_tests.cpp
     overlay_input_tests.cpp
     panel_element_tests.cpp
     pointer_drag_start_tests.cpp

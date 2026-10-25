@@ -427,6 +427,8 @@ namespace luil {
         //    Alt·Meta와 함께인 키는 여전히 앱 단축키다.
         //  - `on_step`만 든 element에는 Shift가 지금처럼 보이지 않는다 (막대의 Shift+→는 그냥 →다).
         std::function<std::optional<std::vector<input_action>>(value_step step, const key_step_context& context)> on_step_with {};
+        // 세로 축에서 ↑·PageUp이 값을 늘린다 (숫자 칸·스핀). 기본(거짓)은 화면 아래쪽이 큰 값인 막대·목록의 규칙이다.
+        bool up_increases { false };
     };
 
     // 흘리는 컨테이너가 자기 스크롤을 청하는 메시지다.

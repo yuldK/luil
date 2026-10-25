@@ -114,6 +114,10 @@ namespace luil {
         std::optional<access_orientation> orientation {};
         // 메뉴의 라디오 항목처럼 역할을 바꾸지 않고 선택 container를 알린다.
         bool selection_container { false };
+        // 입력 칸의 값이 받아들여지지 않는다 (UIA IsDataValidForForm의 반대). 오류 글이 있으면 그것이 까닭이다.
+        bool invalid { false };
+        // 입력 칸 아래의 오류 글이다. 새로 생기거나 바뀌면 platform이 그 글을 읽게 알린다 (number-input-design.md).
+        std::u8string error {};
 
         [[nodiscard]] bool operator==(const access_info&) const = default;
     };

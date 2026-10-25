@@ -57,6 +57,12 @@ namespace demo {
         std::u8string path {};
     };
 
+    // 숫자 칸의 ↑↓·스핀 단추가 지은 다음 글이다 (number-input-design.md). 칸의 글을 통째로 바꾼다.
+    struct number_text_intent
+    {
+        std::u8string text {};
+    };
+
     // 움직이는 그림을 멈추거나, 멈춘 자리에서 이어 돌린다.
     // 메시지가 하나인 것은 단추가 하나여서다 — 어느 쪽인지는 재생 시계가 이미
     // 알고 있고(`image_playback::paused_at`), 단추의 글이 그것을 그대로 말한다.
@@ -112,7 +118,7 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_film(std::u8string owner, std::u8string label, const luil::ui_animated_image& film, std::u8string description) const;
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_playback_button() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_input(
-            std::u8string owner, std::u8string label, luil::ui_element_kind input_kind, luil::text_input_view view, std::u8string placeholder, luil::drop_target drop = {}) const;
+            std::u8string owner, std::u8string label, luil::ui_element_kind input_kind, luil::text_input_view view, luil::text_input_config input, luil::drop_target drop = {}) const;
         [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_body();
         [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_buttons();
 

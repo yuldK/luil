@@ -56,6 +56,7 @@
 #include "luil/ui/markdown_element.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/modal_host_element.h"
+#include "luil/ui/number_input.h"
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"

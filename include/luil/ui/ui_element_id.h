@@ -143,6 +143,9 @@ namespace luil {
         breadcrumb_item,
         breadcrumb_chevron,
         breadcrumb_overflow,
+        // 숫자 칸의 스핀 단추다 (`text_input_number::spin_buttons`). owner는 칸 owner다.
+        text_input_increase,
+        text_input_decrease,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

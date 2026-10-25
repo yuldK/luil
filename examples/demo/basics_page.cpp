@@ -6,6 +6,7 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/modal_host_element.h"
+#include "luil/ui/number_input.h"
 #include "luil/ui/text_area_element.h"
 
 #include <windows.h>
@@ -20,15 +21,29 @@
 
 namespace demo {
     namespace {
-        // 숫자 칸에 들어갈 수 있는 글자만 남긴다.
-        // 붙여넣기와 IME 확정도 이 관문을 지난다.
-        [[nodiscard]] std::u8string keep_digits(const std::u8string_view text)
+        // 숫자 칸의 범위다. 검사·거르기·증감이 같은 범위를 본다.
+        [[nodiscard]] luil::number_input_range number_range()
         {
-            std::u8string digits {};
-            for (const char8_t character : text)
-                if (character >= u8'0' && character <= u8'9')
-                    digits.push_back(character);
-            return digits;
+            return { .minimum = 0.0, .maximum = 3600.0, .step = 5.0 };
+        }
+
+        // 오류 글은 앱의 말이다. 빈 칸은 오류로 보지 않는다 — 아직 적지 않은 것이다.
+        [[nodiscard]] std::u8string number_error(const luil::number_input_check& check)
+        {
+            switch (check.problem)
+            {
+            case luil::number_input_problem::none:
+            case luil::number_input_problem::empty:
+                return {};
+            case luil::number_input_problem::not_a_number:
+                return u8"숫자로 적어 주세요";
+            case luil::number_input_problem::too_precise:
+                return u8"소수 없이 적어 주세요";
+            case luil::number_input_problem::below_minimum:
+            case luil::number_input_problem::above_maximum:
+                return u8"0에서 3600 사이로 적어 주세요";
+            }
+            return {};
         }
 
         [[nodiscard]] float clamp_offset(const float value, const float minimum, const float maximum)
@@ -154,6 +169,17 @@ namespace demo {
             dialog_y_ += move->dy;
             return true;
         }
+        if (const auto* const stepped { message.get<number_text_intent>() }; stepped != nullptr)
+        {
+            // 칸이 지은 글로 통째로 바꾼다. 실행 취소 한 덩어리이고 caret은 끝에 선다.
+            luil::text_edit_request request {};
+            request.target = target_number;
+            request.command = luil::text::text_edit_command::replace_all;
+            request.text = stepped->text;
+            request.offset = stepped->text.size();
+            luil::apply_text_edit(number_, request);
+            return true;
+        }
         if (const auto* const file { message.get<note_file_intent>() }; file != nullptr)
         {
             // 드롭은 칸의 글을 통째로 바꾼다.
@@ -173,7 +199,7 @@ namespace demo {
     void basics_page::apply_edit(const luil::text_edit_request& request)
     {
         if (request.target == target_number)
-            luil::apply_text_edit(number_, request, keep_digits);
+            luil::apply_text_edit(number_, request, luil::number_input_filter(number_range()));
         else if (request.target == target_note)
             luil::apply_text_edit(note_, request);
         else if (request.target == target_memo)
@@ -258,7 +284,8 @@ namespace demo {
         page.heading(u8"입력과 다이얼로그", u8"IME 조합 · 여러 줄 편집 · 기본 버튼과 확인 흐름");
         page.add(make_counter_row(), 32.0f);
         page.gap(16.0f);
-        page.add(make_input_row(), 50.0f);
+        // 숫자 칸의 오류 줄 자리를 늘 잡아 둔다 — 오류가 생겨도 아래 줄이 밀리지 않는다.
+        page.add(make_input_row(), 50.0f + luil::text_input_error_height);
         page.gap(16.0f);
         page.add(make_memo(), 118.0f);
         page.gap(22.0f);
@@ -406,7 +433,19 @@ namespace demo {
         config.direction = luil::stack_direction::row;
         config.spacing = 24.0f;
         auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"inputs" }, config) };
-        row->add(make_labeled_input(u8"number", u8"숫자만 받는 칸", kind_number_input, make_input_view(number_, target_number), u8"0-9"), 160.0f);
+        // 숫자 칸이다 (number-input-design.md). 0–3600을 5씩, ↑↓·PageUp/PageDown·스핀 단추로 늘리고 줄인다.
+        //  - 붙여넣기·IME 확정은 `number_input_filter`가 거르고(전각 숫자는 ASCII로), 범위 밖은 칸 아래 오류 줄로 보인다.
+        luil::text_input_config number {};
+        number.placeholder = u8"0–3600";
+        number.error = number_error(luil::check_number_input(number_.text, number_range()));
+        number.number = luil::text_input_number {
+            .range = number_range(),
+            .change_to = [](std::u8string text) { return luil::make_app_action(number_text_intent { std::move(text) }); },
+            .spin_buttons = true,
+            .increase_tooltip = u8"5 늘리기",
+            .decrease_tooltip = u8"5 줄이기",
+        };
+        row->add(make_labeled_input(u8"number", u8"숫자 칸 (0–3600, ↑↓ 5씩)", kind_number_input, make_input_view(number_, target_number), std::move(number)), 160.0f);
 
         // OS에서 끌어 온 파일을 받는 칸이다 (os-dragdrop-design.md).
         // 수락은 "밖에서 온 끌기인가" 한 줄이고, 놓이면 첫 경로가 칸의 글이 된다.
@@ -418,7 +457,8 @@ namespace demo {
         // 창이 좁아져도 이 칸이 사라지지 않는다.
         // 하한에 걸리면 그만큼 넘치는데, 폭 0으로 없어지는 것보다는 낫다 — 그
         // 판단은 앱의 것이고 라이브러리는 넘침을 만들 뿐이다.
-        row->add(make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME 조합·붙여넣기·파일 드롭)", kind_note_input, make_input_view(note_, target_note), u8"메모", std::move(note_drop)),
+        row->add(make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME 조합·붙여넣기·파일 드롭)", kind_note_input, make_input_view(note_, target_note),
+                     luil::text_input_config { .placeholder = u8"메모" }, std::move(note_drop)),
             { .weight = 1.0f, .minimum = 160.0f });
         return row;
     }
@@ -441,17 +481,21 @@ namespace demo {
     }
 
     std::unique_ptr<luil::stack_element> basics_page::make_labeled_input(
-        std::u8string owner, std::u8string label, const luil::ui_element_kind input_kind, luil::text_input_view view, std::u8string placeholder, luil::drop_target drop) const
+        std::u8string owner, std::u8string label, const luil::ui_element_kind input_kind, luil::text_input_view view, luil::text_input_config input_config, luil::drop_target drop) const
     {
         luil::stack_config config {};
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"input-" + owner }, config) };
-        column->add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(label), 11.0f, luil::label_color_role::dim), 18.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, label, 11.0f, luil::label_color_role::dim), 18.0f);
         column->add_gap(4.0f);
-        auto input { std::make_unique<luil::text_input_element>(luil::ui_element_id { input_kind }, std::move(view), luil::text_input_config { .placeholder = std::move(placeholder) }) };
+        // 오류 줄이 있으면 칸이 그만큼 키를 더 받는다 (측정 단계가 없어 담는 쪽이 더한다).
+        const float height { 28.0f + luil::text_input_element::error_height_for(input_config) };
+        auto input { std::make_unique<luil::text_input_element>(luil::ui_element_id { input_kind }, std::move(view), std::move(input_config)) };
+        // 안내 글은 적으면 사라지므로 접근 이름은 위 라벨이다.
+        input->set_access_name(std::move(label));
         // 드롭 대상은 온 칸에만 단다 — 없는 것은 두지 않는다.
         if (drop.accepts && drop.on_drop)
             input->set_drop_target(std::move(drop));
-        column->add(std::move(input), 28.0f);
+        column->add(std::move(input), height);
         return column;
     }
 

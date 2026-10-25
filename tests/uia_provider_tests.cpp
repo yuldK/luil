@@ -14,6 +14,7 @@
 #include "luil/ui/ui_tree.h"
 #include "luil/ui/virtual_list_element.h"
 #include "luil/ui/zoom_view_element.h"
+#include "win32/utf8.h"
 
 #include <uiautomation.h>
 
@@ -423,6 +424,13 @@ namespace {
         void selection_invalidated(luil::win32::uia_element_provider& provider) override
         {
             records.push_back({ .kind = u8"invalidated", .owner = provider.element_id().owner });
+        }
+
+        void notification(luil::win32::uia_element_provider& provider, const std::u8string_view text) override
+        {
+            record entry { .kind = u8"notification", .owner = provider.element_id().owner };
+            entry.new_text = luil::win32::utf8_to_utf16(text).value.value_or(std::wstring {});
+            records.push_back(std::move(entry));
         }
 
         void structure_changed(IRawElementProviderSimple& provider) override
@@ -2312,5 +2320,65 @@ TEST_CASE("Finding items by selection, automation id and order walks the whole m
     for (luil::win32::uia_element_provider* const item : { first, second, plain, next, by_id, last })
         item->Release();
     list->Release();
+    root->Release();
+}
+
+TEST_CASE("An invalid text field reads its error and announces it once it appears", "[win32][uia][number]")
+{
+    // 같은 칸을 오류 없이, 오류와 함께 두 번 짓는다 — frame마다 새 tree다.
+    const auto make_field_tree = [](const std::u8string_view error) {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::text_input_config config {};
+        config.error = std::u8string { error };
+        luil::text_input_view view {};
+        view.text = u8"9000";
+        auto input { std::make_unique<luil::text_input_element>(luil::ui_element_id { kind_item, u8"seconds" }, std::move(view), std::move(config)) };
+        input->set_access_name(u8"제한 시간");
+        root->add(std::move(input));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    };
+
+    fake_uia_host host {};
+    host.tree = make_field_tree(u8"");
+    const luil::access_snapshot before { luil::make_access_snapshot(*host.tree) };
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    recording_event_sink sink {};
+    sink.root = static_cast<IRawElementProviderSimple*>(root);
+    root->set_event_sink_for_test(sink);
+
+    luil::win32::uia_element_provider* const field { root->make_element_provider({ kind_item, u8"seconds" }) };
+    VARIANT valid {};
+    REQUIRE(field->GetPropertyValue(UIA_IsDataValidForFormPropertyId, &valid) == S_OK);
+    REQUIRE(valid.vt == VT_BOOL);
+    REQUIRE(valid.boolVal == VARIANT_TRUE);
+
+    host.tree = make_field_tree(u8"3600 이하로 적어 주세요");
+    root->announce_changes(luil::diff_access_snapshots(before, luil::make_access_snapshot(*host.tree)));
+    // 상태가 뒤집힌 것, 도움말이 바뀐 것, 그리고 그 글을 읽으라는 알림이다.
+    REQUIRE(sink.records.size() == 3u);
+    REQUIRE(sink.records[0].property == UIA_IsDataValidForFormPropertyId);
+    REQUIRE(sink.records[1].property == UIA_HelpTextPropertyId);
+    REQUIRE(sink.records[1].new_text == L"3600 이하로 적어 주세요");
+    REQUIRE(sink.records[2].kind == u8"notification");
+    REQUIRE(sink.records[2].owner == u8"seconds");
+    REQUIRE(sink.records[2].new_text == L"3600 이하로 적어 주세요");
+
+    // 지금 tree에서 읽으면 오류가 도움말·설명이고 이름은 앱이 단 것이다.
+    REQUIRE(read_text_property(*field, UIA_NamePropertyId) == L"제한 시간");
+    REQUIRE(read_text_property(*field, UIA_HelpTextPropertyId) == L"3600 이하로 적어 주세요");
+    REQUIRE(read_text_property(*field, UIA_FullDescriptionPropertyId) == L"3600 이하로 적어 주세요");
+    REQUIRE(field->GetPropertyValue(UIA_IsDataValidForFormPropertyId, &valid) == S_OK);
+    REQUIRE(valid.boolVal == VARIANT_FALSE);
+
+    // 오류가 사라질 때는 알림 없이 상태와 도움말만 돌아온다.
+    sink.records.clear();
+    const luil::access_snapshot invalid { luil::make_access_snapshot(*host.tree) };
+    host.tree = make_field_tree(u8"");
+    root->announce_changes(luil::diff_access_snapshots(invalid, luil::make_access_snapshot(*host.tree)));
+    REQUIRE(sink.records.size() == 2u);
+    REQUIRE(sink.records[0].property == UIA_IsDataValidForFormPropertyId);
+    REQUIRE(sink.records[1].property == UIA_HelpTextPropertyId);
+
+    field->Release();
     root->Release();
 }

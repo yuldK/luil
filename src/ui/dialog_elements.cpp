@@ -305,22 +305,60 @@ namespace luil {
         //    여기서는 클릭을 흡수해 hit test 대상이 되게만 한다.
         set_action(ui_trigger::left_click, [](const ui_action_context&) -> std::vector<input_action> { return {}; });
 
-        if (config_.clear == nullptr)
+        if (config_.clear != nullptr)
+        {
+            const button_config clear_button {
+                .glyph = config_.clear_glyph != 0 ? config_.clear_glyph : codicons::icon_close,
+                .icon_size = 10.0f,
+                .corner_radius = 3.0f,
+            };
+            auto clear { std::make_unique<button_element>(ui_element_id { ui_element_kind::text_input_clear, id.owner }, clear_button) };
+            // 칸 **안의** 보조 버튼이다. Tab의 자리는 칸이고, 이 버튼까지 자리를 가지면
+            // Tab이 칸과 지우기를 번갈아 지난다 — 탭의 닫기 버튼과 같은 판정이다.
+            clear->set_tab_stop(false);
+            clear->set_tooltip(config_.clear_tooltip);
+            clear->set_action(ui_trigger::left_click, config_.clear);
+            clear_ = clear.get();
+            add_child(std::move(clear));
+        }
+
+        if (config_.number.has_value() == false || config_.number->change_to == nullptr)
+            return;
+        // 한 줄 칸의 텍스트 경로는 ↑↓·PageUp/PageDown을 쓰지 않으므로 그 넷이 여기로 흐른다.
+        // ←→·Home/End는 그대로 caret의 것이다.
+        key_step_target steps {};
+        steps.axis = focus_axis::vertical;
+        steps.up_increases = true;
+        steps.on_step = [this](const value_step step) -> std::optional<std::vector<input_action>> { return step_number(step); };
+        set_key_step_target(std::move(steps));
+        if (config_.number->spin_buttons == false)
             return;
 
-        const button_config clear_button {
-            .glyph = config_.clear_glyph != 0 ? config_.clear_glyph : codicons::icon_close,
-            .icon_size = 10.0f,
-            .corner_radius = 3.0f,
+        // 지우기 단추와 같은 칸 안의 보조 단추다 — Tab 자리를 갖지 않고, 키보드로는 ↑↓가 같은 일을 한다.
+        const auto spin_button = [this, &id](const ui_element_kind kind, const char32_t glyph, const std::u8string& tooltip, const value_step step) {
+            const button_config look { .glyph = glyph, .icon_size = 8.0f, .corner_radius = 2.0f };
+            auto button { std::make_unique<button_element>(ui_element_id { kind, id.owner }, look) };
+            button->set_tab_stop(false);
+            button->set_tooltip(tooltip);
+            button->set_action(ui_trigger::left_click, [this, step](const ui_action_context&) { return step_number(step); });
+            ui_element* const raw { button.get() };
+            add_child(std::move(button));
+            return raw;
         };
-        auto clear { std::make_unique<button_element>(ui_element_id { ui_element_kind::text_input_clear, id.owner }, clear_button) };
-        // 칸 **안의** 보조 버튼이다. Tab의 자리는 칸이고, 이 버튼까지 자리를 가지면
-        // Tab이 칸과 지우기를 번갈아 지난다 — 탭의 닫기 버튼과 같은 판정이다.
-        clear->set_tab_stop(false);
-        clear->set_tooltip(config_.clear_tooltip);
-        clear->set_action(ui_trigger::left_click, config_.clear);
-        clear_ = clear.get();
-        add_child(std::move(clear));
+        increase_ = spin_button(ui_element_kind::text_input_increase, codicons::icon_chevron_up, config_.number->increase_tooltip, value_step::increase);
+        decrease_ = spin_button(ui_element_kind::text_input_decrease, codicons::icon_chevron_down, config_.number->decrease_tooltip, value_step::decrease);
+    }
+
+    std::vector<input_action> text_input_element::step_number(const value_step step) const
+    {
+        // 조합 중의 걸음은 삼킨다 — 확정되지 않은 글을 바꾸면 IME와 초안이 어긋난다.
+        // 끝에 닿은 걸음도 삼킨다. 흘려보내면 PageDown이 바깥 스크롤로 새어 화면이 함께 뛴다.
+        if (value_.composing || config_.number.has_value() == false || config_.number->change_to == nullptr)
+            return {};
+        std::optional<std::u8string> next { stepped_number_input(value_.text, config_.number->range, step) };
+        if (next.has_value() == false)
+            return {};
+        return { config_.number->change_to(std::move(*next)) };
     }
 
     access_info text_button_element::accessibility() const
@@ -342,7 +380,25 @@ namespace luil {
 
     float text_input_element::trailing_width_for(const text_input_config& config) noexcept
     {
-        return config.clear != nullptr ? text_input_clear_size + text_input_icon_gap : 0.0f;
+        const bool spin { config.number.has_value() && config.number->spin_buttons && config.number->change_to != nullptr };
+        return (config.clear != nullptr ? text_input_clear_size + text_input_icon_gap : 0.0f) + (spin ? text_input_spin_width + text_input_icon_gap : 0.0f);
+    }
+
+    float text_input_element::error_height_for(const text_input_config& config) noexcept
+    {
+        return config.error.empty() ? 0.0f : text_input_error_height;
+    }
+
+    bool text_input_element::invalid() const noexcept
+    {
+        return config_.invalid || config_.error.empty() == false;
+    }
+
+    rect_f text_input_element::box() const noexcept
+    {
+        const rect_f slot { bounds() };
+        const float error { error_height_for(config_) * scale_ };
+        return { slot.x, slot.y, slot.width, std::max(0.0f, slot.height - error) };
     }
 
     float text_input_element::font_size() const noexcept
@@ -423,7 +479,7 @@ namespace luil {
             return layout_;
         if (layout_.valid() == false)
             return {};
-        return remake_text_layout(layout_, { .text = std::u8string { text }, .font_size = font_size(), .line_height = bounds().height });
+        return remake_text_layout(layout_, { .text = std::u8string { text }, .font_size = font_size(), .line_height = box().height });
     }
 
     float text_input_element::scroll_for(const text_layout& layout, const std::size_t caret) const
@@ -438,19 +494,30 @@ namespace luil {
         scale_ = context.scale > 0.0f ? context.scale : 1.0f;
         font_size_ = scaled_font_size(11.0f, scale_);
         layout_ = {};
+        const rect_f area { box() };
         if (ui_text_shaping_enabled() && context.measurer == nullptr)
         {
-            auto layout { make_text_layout({ .text = std::u8string { displayed_text() }, .font_size = font_size(), .line_height = context.slot.height }) };
+            auto layout { make_text_layout({ .text = std::u8string { displayed_text() }, .font_size = font_size(), .line_height = area.height }) };
             if (layout.backend() != text_layout_backend::unavailable)
                 layout_ = std::move(layout);
         }
+
+        // 오른쪽 안쪽 가장자리부터 스핀 단추, 지우기 단추 차례로 붙인다. 글이 차지하는 폭은 inner_width가 이미 뺐다.
+        const float inset { 4.0f * scale_ };
+        float right { area.x + area.width - inset };
+        if (increase_ != nullptr && decrease_ != nullptr)
+        {
+            // 위·아래 단추가 상자 높이를 반씩 나눈다. 테두리 안쪽 한 픽셀씩은 비운다.
+            const float width { text_input_spin_width * scale_ };
+            const float half { std::max(0.0f, area.height - 2.0f * scale_) / 2.0f };
+            increase_->arrange(context.for_child({ right - width, area.y + scale_, width, half }));
+            decrease_->arrange(context.for_child({ right - width, area.y + scale_ + half, width, half }));
+            right -= width + text_input_icon_gap * scale_;
+        }
         if (clear_ == nullptr)
             return;
-
-        // 오른쪽 안쪽 가장자리에 붙인다. 글이 차지하는 폭은 inner_width가 이미 뺐다.
         const float size { text_input_clear_size * scale_ };
-        const float inset { 4.0f * scale_ };
-        clear_->arrange(context.for_child({ context.slot.x + context.slot.width - size - inset, context.slot.y + (context.slot.height - size) / 2.0f, size, size }));
+        clear_->arrange(context.for_child({ right - size, area.y + (area.height - size) / 2.0f, size, size }));
     }
 
     std::optional<text_input_snapshot> text_input_element::text_input() const
@@ -467,6 +534,9 @@ namespace luil {
             config_.input,
         };
         snapshot.navigation_keys_to_parent = config_.navigation_keys_to_parent;
+        // 숫자 칸은 앱이 키보드 종류를 따로 고르지 않아도 숫자 키보드를 띄운다.
+        if (config_.number.has_value() && snapshot.options.kind == text_input_kind::text)
+            snapshot.options.kind = config_.number->range.decimals > 0 ? text_input_kind::decimal : text_input_kind::number;
         return snapshot;
     }
 
@@ -495,12 +565,12 @@ namespace luil {
             const float left { text_left() - scroll_for(layout, shown_offset(query.text, query.caret)) };
             const float from { left + layout.caret_rect(begin).x };
             const float to { left + layout.caret_rect(end).x };
-            return rect_f { std::min(from, to), bounds().y, std::abs(to - from), bounds().height };
+            return rect_f { std::min(from, to), box().y, std::abs(to - from), box().height };
         }
         const float left { text_left() - scroll_for(measure, text, shown_offset(query.text, query.caret)) };
         const float from { left + measure(text.substr(0, begin)) };
         const float to { left + measure(text.substr(0, end)) };
-        return rect_f { from, bounds().y, to - from, bounds().height };
+        return rect_f { from, box().y, to - from, box().height };
     }
 
     std::optional<std::size_t> text_input_element::offset_at(const float x, const text_measurer& measurer) const
@@ -547,14 +617,16 @@ namespace luil {
     {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const bool focused { interaction.focused_input == id() };
-        const rect_f box { bounds() };
+        const rect_f box { this->box() };
         const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
         const float radius { context.metrics.control_corner_radius * scale };
         context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(context.palette.input_background));
         // 초점을 받은 칸은 테두리를 강조해 입력이 이곳으로 간다는 것을 보인다.
-        SkPaint border { solid_paint(focused ? context.palette.accent : context.palette.input_border) };
+        // 오류 상태는 초점을 받아도 오류색을 지키고 두께만 늘린다 — 고치는 동안 오류 표시가 사라지지 않는다.
+        const bool invalid { this->invalid() };
+        SkPaint border { solid_paint(invalid ? context.palette.error_accent : (focused ? context.palette.accent : context.palette.input_border)) };
         border.setStyle(SkPaint::kStroke_Style);
-        border.setStrokeWidth(1.0f * scale);
+        border.setStrokeWidth((invalid && focused ? 2.0f : 1.0f) * scale);
         context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), border);
 
         // 앞 글리프는 글의 일부가 아니라 칸의 표식이라 흐린 보조색이다.
@@ -652,6 +724,16 @@ namespace luil {
         }
         context.canvas.restore();
 
+        // 오류 글은 상자 아래 줄이다. 한 줄이라 길면 끝을 줄이고, 보조 기술은 전체 글을 읽는다.
+        if (config_.error.empty() == false)
+        {
+            const SkFont error_font { sk_ref_sp(context.ui_typeface), scaled_font_size(10.0f, scale) };
+            const float line { bounds().y + bounds().height - box.y - box.height };
+            const float error_baseline { box.y + box.height + centered_text_baseline(error_font, line) };
+            const SkPaint error_paint { solid_paint(context.palette.error_accent) };
+            static_cast<void>(draw_text_within(context.canvas, config_.error, box.x + 2.0f * scale, error_baseline, box.width - 2.0f * scale, error_font, error_paint));
+        }
+
         // 지우기 버튼은 글의 clip 밖이다 — 글이 길어도 버튼이 잘리지 않는다.
         draw_children(context, interaction);
     }
@@ -671,7 +753,13 @@ namespace luil {
         // 값은 확정 글이다 — 조합 글은 아직 사용자의 글이 아니라 싣지 않는다
         // (`text_input_view::text`가 같은 판단으로 조합 글을 밖에 둔다).
         // 가린 칸은 화면처럼 점이다. 보조 기술이 글자 수는 알되 글은 읽지 못한다.
-        return { .role = access_role::edit, .name = config_.placeholder, .value = masked() ? masked_text(value_.text) : value_.text, .secret = config_.secret };
+        // 이름은 앱이 단 것이 먼저다. 안내 글은 글을 쓰면 사라지는 것이라 이름이 없을 때의 대신이다.
+        access_info info {
+            .role = access_role::edit, .name = access_name().empty() ? config_.placeholder : access_name(), .value = masked() ? masked_text(value_.text) : value_.text, .secret = config_.secret
+        };
+        info.invalid = invalid();
+        info.error = config_.error;
+        return info;
     }
 
     std::optional<size_f> text_button_element::preferred_size(const measure_context& context, const float available_width) const
