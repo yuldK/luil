@@ -241,6 +241,14 @@ namespace luil::win32 {
     } // namespace
 
     namespace {
+        using raise_notification = HRESULT(WINAPI*)(IRawElementProviderSimple*, NotificationKind, NotificationProcessing, BSTR, BSTR);
+
+        [[nodiscard]] raise_notification find_raise_notification() noexcept
+        {
+            const HMODULE module { GetModuleHandleW(L"uiautomationcore.dll") };
+            return module != nullptr ? reinterpret_cast<raise_notification>(GetProcAddress(module, "UiaRaiseNotificationEvent")) : nullptr;
+        }
+
         // 기본 이벤트 창구다 — OS로 그대로 쏜다.
         // 상태가 없어 프로세스 공용 하나로 충분하다.
         // 클라이언트가 없으면 아무것도 쏘지 않는다 — `UiaRaise*`도 스스로
@@ -305,6 +313,21 @@ namespace luil::win32 {
                 // 무엇이 들고 났는지까지 세지 않는다 — 자식 구성이 바뀌었으니
                 // 다시 읽으라는 알림이 이 저장소 규모의 정직한 최소다.
                 static_cast<void>(UiaRaiseStructureChangedEvent(&provider, StructureChangeType_ChildrenInvalidated, nullptr, 0));
+            }
+
+            void notification(uia_element_provider& provider, const std::u8string_view text) override
+            {
+                if (UiaClientsAreListening() == FALSE)
+                    return;
+                // Windows 10 1709부터 있는 함수라 실행 중에 찾는다. 없으면 속성 변화만 알린다.
+                static const raise_notification raise { find_raise_notification() };
+                if (raise == nullptr)
+                    return;
+                BSTR display { bstr_from_utf8(text) };
+                BSTR activity { SysAllocString(L"luil.input-error") };
+                static_cast<void>(raise(&provider, NotificationKind_Other, NotificationProcessing_ImportantMostRecent, display, activity));
+                SysFreeString(activity);
+                SysFreeString(display);
             }
         };
 
@@ -389,6 +412,13 @@ namespace luil::win32 {
             return value;
         }
 
+        [[nodiscard]] VARIANT variant_from_bool(const bool value) noexcept
+        {
+            VARIANT variant {};
+            set_bool(variant, value);
+            return variant;
+        }
+
         [[nodiscard]] VARIANT variant_from_int(const long number) noexcept
         {
             VARIANT value {};
@@ -468,6 +498,16 @@ namespace luil::win32 {
             }
             // 범위는 값의 변화만 알린다 — 경계(minimum·maximum)가 흔들리는
             // frame은 구조가 아니라 표시의 사정이고, 보조 기술이 듣는 것은 값이다.
+            // 오류는 상태와 글을 함께 알린다. Narrator는 속성 변화만으로는 오류를 읽지 않으므로, 새로 생기거나 바뀐
+            // 오류 글은 알림으로 읽게 한다 (number-input-design.md).
+            if (before.invalid != after.invalid)
+                raise_property(*events_, *provider, UIA_IsDataValidForFormPropertyId, variant_from_bool(before.invalid == false), variant_from_bool(after.invalid == false));
+            if (before.error != after.error)
+            {
+                raise_property(*events_, *provider, UIA_HelpTextPropertyId, variant_from_utf8(before.error), variant_from_utf8(after.error));
+                if (after.error.empty() == false)
+                    events_->notification(*provider, after.error);
+            }
             if (before.range.has_value() && after.range.has_value() && before.range->value != after.range->value)
                 raise_property(
                     *events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(static_cast<double>(before.range->value)), variant_from_double(static_cast<double>(after.range->value)));
@@ -998,11 +1038,27 @@ namespace luil::win32 {
                 result->vt = VT_BSTR;
                 result->bstrVal = bstr_from_utf8(element->accessibility().name);
                 break;
-            case UIA_HelpTextPropertyId:
+            case UIA_HelpTextPropertyId: {
                 // 커스텀 콘텐츠는 접근 tree에 들지 않으므로 원래 문자열이 설명을 맡는다.
                 // 글자 버튼처럼 이름이 이미 있는 컨트롤도 이름과 도움말을 따로 읽을 수 있다.
+                // 입력 칸의 오류 글이 있으면 그것이 먼저다 — 사용자가 지금 들어야 하는 것이 그 글이다.
+                const access_info info { element->accessibility() };
                 result->vt = VT_BSTR;
-                result->bstrVal = bstr_from_utf8(element->tooltip());
+                result->bstrVal = bstr_from_utf8(info.error.empty() ? std::u8string_view { element->tooltip() } : std::u8string_view { info.error });
+                break;
+            }
+            case UIA_FullDescriptionPropertyId: {
+                const access_info info { element->accessibility() };
+                if (info.error.empty() == false)
+                {
+                    result->vt = VT_BSTR;
+                    result->bstrVal = bstr_from_utf8(info.error);
+                }
+                break;
+            }
+            case UIA_IsDataValidForFormPropertyId:
+                if (element->accessibility().role == access_role::edit)
+                    set_bool(*result, element->accessibility().invalid == false);
                 break;
             case UIA_ControlTypePropertyId:
                 set_int(*result, control_type_for(element->accessibility().role));

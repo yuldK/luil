@@ -124,6 +124,8 @@ namespace luil::win32 {
         virtual void selection_invalidated(uia_element_provider& provider) = 0;
         // 이 요소(요소 provider 또는 표면 root)의 자식 구성이 바뀌었다.
         virtual void structure_changed(IRawElementProviderSimple& provider) = 0;
+        // 이 글을 지금 읽게 알린다 (입력 칸의 오류 글, UiaRaiseNotificationEvent).
+        virtual void notification(uia_element_provider& provider, std::u8string_view text) = 0;
     };
 
     // 표면 하나의 UIA fragment root다.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/ui/number_input.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/text_layout.h"
 #include "luil/ui/ui_element.h"
@@ -209,6 +210,19 @@ namespace luil {
     //
     // 값(`text_input_view`)은 따로 받는다 — 그것은 설정이 아니라 **매 frame 바뀌는
     // 초안**이고, 설정에 섞으면 "바뀌는 것"과 "정하는 것"이 한 자리에 눕는다.
+    // 숫자 칸의 증감이다 (number-input-design.md).
+    struct text_input_number
+    {
+        number_input_range range {};
+        // ↑↓·PageUp/PageDown·스핀 단추가 지은 다음 글을 앱 메시지로 바꾼다. 비어 있으면 칸은 증감하지 않는다.
+        //  - 앱은 받은 글로 초안 전체를 바꾼다 (`text_edit_command::replace_all`, `offset`은 글 길이).
+        std::function<input_action(std::u8string text)> change_to {};
+        // 칸 오른쪽 안쪽에 위·아래 화살표 단추를 세운다. `change_to`가 있어야 선다.
+        bool spin_buttons { false };
+        std::u8string increase_tooltip {};
+        std::u8string decrease_tooltip {};
+    };
+
     struct text_input_config
     {
         // 비어 있고 초점이 없을 때만 그리는 흐린 안내 글이다.
@@ -241,12 +255,24 @@ namespace luil {
         ui_action submit {};
         // 콤보의 열린 후보 탐색은 입력 칸 바깥의 키 handler가 맡는다.
         bool navigation_keys_to_parent { false };
+        // 값이 받아들여지지 않는다. 테두리를 오류색으로 그리고 보조 기술에 알린다. 판단은 앱이 한다
+        // (`check_number_input`) — 칸이 혼자 붉어지지 않아 "저장할 때만 보이기" 같은 앱의 규칙이 선다.
+        bool invalid { false };
+        // 칸 아래 줄에 그리는 오류 글이다. 비어 있지 않으면 `invalid`로도 본다.
+        //  - 담는 쪽이 `text_input_element::error_height_for`만큼 칸을 키운다. 입력 상자는 slot의 위쪽이다.
+        //  - 새로 생기거나 바뀌면 보조 기술이 그 글을 읽는다.
+        std::u8string error {};
+        // 숫자 칸의 증감이다. 있으면 ↑가 늘리고 ↓가 줄인다 (←→·Home/End는 caret의 것으로 남는다).
+        std::optional<text_input_number> number {};
     };
 
     // 앞 글리프와 지우기 버튼의 크기, 그리고 글과의 간격이다 (논리 픽셀).
     inline constexpr float text_input_glyph_size { 14.0f };
     inline constexpr float text_input_clear_size { 18.0f };
     inline constexpr float text_input_icon_gap { 5.0f };
+    // 스핀 단추 기둥의 폭과 칸 아래 오류 줄의 높이다 (논리 픽셀).
+    inline constexpr float text_input_spin_width { 14.0f };
+    inline constexpr float text_input_error_height { 16.0f };
 
     // dialog가 공유하는 한 줄 텍스트 박스다 (환경설정의 제한 시간 칸, switch dialog의 질의 막대).
     // 상태를 담지 않는다.
@@ -275,6 +301,10 @@ namespace luil {
         //    안에서 지을 수 없어서다.
         [[nodiscard]] static float leading_width_for(const text_input_config& config) noexcept;
         [[nodiscard]] static float trailing_width_for(const text_input_config& config) noexcept;
+        // 칸 아래 오류 줄의 높이다 (논리 픽셀). 오류 글이 없으면 0이다.
+        [[nodiscard]] static float error_height_for(const text_input_config& config) noexcept;
+        // 오류 상태다 (`invalid`이거나 오류 글이 있다).
+        [[nodiscard]] bool invalid() const noexcept;
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
@@ -290,6 +320,10 @@ namespace luil {
         // 글자 크기(논리 11 × scale)다.
         // arrange가 정하고 그리기와 hit test가 같이 쓴다.
         [[nodiscard]] float font_size() const noexcept;
+        // 입력 상자다. 오류 줄이 있으면 slot에서 그 줄을 뺀 위쪽이다.
+        [[nodiscard]] rect_f box() const noexcept;
+        // 증감 한 걸음의 메시지다. 조합 중이거나 끝에 닿았으면 빈 목록(삼킨다)이다.
+        [[nodiscard]] std::vector<input_action> step_number(value_step step) const;
         // 글 왼쪽 시작 x와 글이 보이는 안쪽 폭이다.
         [[nodiscard]] float text_left() const noexcept;
         [[nodiscard]] float inner_width() const noexcept;
@@ -319,6 +353,9 @@ namespace luil {
         std::u8string masked_ {};
         // 지우기 액션이 없으면 nullptr다.
         ui_element* clear_ { nullptr };
+        // 스핀 단추가 없으면 nullptr다.
+        ui_element* increase_ { nullptr };
+        ui_element* decrease_ { nullptr };
         float scale_ { 1.0f };
     };
 } // namespace luil

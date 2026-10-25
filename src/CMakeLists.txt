@@ -286,6 +286,8 @@ luil_add_source_filter(luil_core_files "ui/lists"
 luil_add_source_filter(luil_core_files "ui/overlays"
     ui/dialog_elements.cpp
     "${public_headers}/ui/dialog_elements.h"
+    ui/number_input.cpp
+    "${public_headers}/ui/number_input.h"
     ui/text_document.cpp
     "${public_headers}/ui/text_document.h"
     ui/text_area_element.cpp

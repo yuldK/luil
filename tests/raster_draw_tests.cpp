@@ -998,3 +998,40 @@ TEST_CASE("A derived draw context keeps every field but the palette and scale", 
     REQUIRE(derived.reduce_motion);
     REQUIRE(derived.theme == luil::color_theme::light);
 }
+
+TEST_CASE("An invalid text field keeps the error colour on its border even while focused", "[ui][raster][number]")
+{
+    // 오류 줄은 상자 아래다. 테는 상자에만 긋고 오류 줄까지 내려가지 않는다 (글꼴을 싣지 않아 글자는 보지 않는다).
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_element_id field { luil::application_element_kind(3), u8"seconds" };
+    const auto build = [&field](std::u8string error) {
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 240.0f, 120.0f }, raster_scale });
+        luil::text_input_config config {};
+        config.error = std::move(error);
+        const float height { (28.0f + luil::text_input_element::error_height_for(config)) * raster_scale };
+        auto input { std::make_unique<luil::text_input_element>(field, luil::text_input_view {}, std::move(config)) };
+        input->arrange({ { 0.0f, 0.0f, 200.0f, height }, raster_scale });
+        root->add(std::move(input));
+        return luil::ui_tree { std::move(root) };
+    };
+    const float box_bottom { 28.0f * raster_scale };
+
+    luil::testing::raster_frame frame { 240, 120, palette, raster_scale };
+    frame.draw(build(u8""), {});
+    // 보통 테는 반투명한 테두리색이라 바탕과 섞인다. 오류색이 아닌 것만 본다.
+    REQUIRE(frame.pixel_at(100, 0) != palette.error_accent);
+
+    const luil::ui_tree invalid { build(u8"범위 밖") };
+    frame.draw(invalid, {});
+    REQUIRE(frame.pixel_at(100, 0) == palette.error_accent);
+    // 상자의 아래 테는 오류 줄 위에 선다. 그 아래 오류 줄의 바탕은 칸 바탕이 아니다.
+    REQUIRE(frame.pixel_at(100, static_cast<int>(box_bottom) - 1) == palette.error_accent);
+    REQUIRE(frame.pixel_at(100, static_cast<int>(box_bottom) + 8) == palette.window_background);
+
+    luil::interaction_snapshot focused {};
+    focused.focused_input = field;
+    frame.draw(invalid, focused);
+    REQUIRE(frame.pixel_at(100, 0) == palette.error_accent);
+    REQUIRE(frame.pixel_at(100, 1) == palette.error_accent);
+}

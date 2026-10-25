@@ -3965,6 +3965,14 @@ namespace luil {
         }
         if (step.has_value() == false)
             return std::nullopt;
+        // 숫자 칸은 ↑가 늘린다. ←→는 그대로다 — 가로 축의 오른쪽은 어디서나 큰 값이다.
+        if (target->up_increases)
+        {
+            if (event.key == key_code::arrow_up || event.key == key_code::arrow_down)
+                step = event.key == key_code::arrow_up ? value_step::increase : value_step::decrease;
+            else if (event.key == key_code::page_up || event.key == key_code::page_down)
+                step = event.key == key_code::page_up ? value_step::increase_page : value_step::decrease_page;
+        }
         // element의 nullopt는 "그 걸음은 내 것이 아니다"라 키가 그대로 흐른다.
         if (with_context)
             return target->on_step_with(*step, key_step_context { event.shift, event.control });
