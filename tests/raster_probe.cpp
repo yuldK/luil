@@ -42,8 +42,14 @@ namespace luil::testing {
             .scale = scale_,
             .now = now,
             .metrics = metrics_,
+            .theme = theme_,
         };
         tree.draw(context, interaction);
+    }
+
+    void raster_frame::set_theme(const color_theme theme) noexcept
+    {
+        theme_ = theme;
     }
 
     const ui_color_palette& raster_frame::palette() const noexcept

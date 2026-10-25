@@ -8,6 +8,7 @@
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/modal_host_element.h"
+#include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
@@ -897,4 +898,103 @@ TEST_CASE("A panel can draw its border on chosen sides only", "[ui][raster][pane
     const auto right { draw({ .top = false, .right = true, .bottom = false, .left = false }) };
     REQUIRE(right[0] == palette.surface_background);
     REQUIRE(right[3] == palette.accent);
+}
+
+TEST_CASE("A palette scope redraws its branch with the adjusted palette", "[ui][raster][palette]")
+{
+    // 기본 버튼은 `accent` 채움이다. 가지가 accent를 바꾸면 그 안의 버튼만 바뀐 색으로 칠해진다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    constexpr luil::ui_color red { luil::make_ui_color(255, 0, 0) };
+    constexpr luil::ui_color blue { luil::make_ui_color(0, 0, 255) };
+    const auto to_red = [red](luil::ui_color_palette colors, luil::color_theme) {
+        colors.accent = red;
+        return colors;
+    };
+    const auto build = [&](const luil::palette_scope_config& outer, const std::optional<luil::palette_scope_config>& inner) {
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 120.0f }, raster_scale });
+        auto scope { std::make_unique<luil::palette_scope_element>(luil::ui_element_id { luil::application_element_kind(2), u8"scope" }, outer) };
+        scope->arrange({ { 0.0f, 0.0f, 200.0f, 120.0f }, raster_scale });
+        std::unique_ptr<luil::ui_element> button { make_button({ luil::application_element_kind(1), u8"inside" }, { 20.0f, 20.0f, 160.0f, 56.0f }, true) };
+        if (inner.has_value())
+        {
+            auto nested { std::make_unique<luil::palette_scope_element>(luil::ui_element_id { luil::application_element_kind(2), u8"nested" }, *inner) };
+            nested->arrange({ { 0.0f, 0.0f, 200.0f, 120.0f }, raster_scale });
+            nested->set_content(std::move(button));
+            scope->set_content(std::move(nested));
+        }
+        else
+            scope->set_content(std::move(button));
+        root->add(std::move(scope));
+        root->add(make_button({ luil::application_element_kind(1), u8"outside" }, { 220.0f, 20.0f, 160.0f, 56.0f }, true));
+        return luil::ui_tree { std::move(root) };
+    };
+
+    SECTION("inside and outside")
+    {
+        const luil::ui_tree tree { build({ .palette = to_red }, std::nullopt) };
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.draw(tree, {});
+        REQUIRE(frame.pixel_at(100, 48) == red);
+        REQUIRE(frame.pixel_at(300, 48) == palette.accent);
+    }
+
+    SECTION("nested scopes see the outer change")
+    {
+        // 안쪽 함수는 바깥이 바꾼 팔레트를 받는다 — 빨강을 받았으면 파랑으로 바꾼다.
+        const auto red_to_blue = [red, blue](luil::ui_color_palette colors, luil::color_theme) {
+            if (colors.accent == red)
+                colors.accent = blue;
+            return colors;
+        };
+        const luil::ui_tree tree { build({ .palette = to_red }, luil::palette_scope_config { .palette = red_to_blue }) };
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.draw(tree, {});
+        REQUIRE(frame.pixel_at(100, 48) == blue);
+    }
+
+    SECTION("high contrast keeps the system colours unless asked")
+    {
+        const luil::ui_color_palette system { luil::color_palette_for(luil::color_theme::high_contrast) };
+        const luil::ui_tree kept { build({ .palette = to_red }, std::nullopt) };
+        luil::testing::raster_frame frame { 400, 120, system, raster_scale };
+        frame.set_theme(luil::color_theme::high_contrast);
+        frame.draw(kept, {});
+        REQUIRE(frame.pixel_at(100, 48) == system.accent);
+        const luil::ui_tree forced { build({ .palette = to_red, .in_high_contrast = true }, std::nullopt) };
+        frame.draw(forced, {});
+        REQUIRE(frame.pixel_at(100, 48) == red);
+    }
+}
+
+TEST_CASE("A derived draw context keeps every field but the palette and scale", "[ui][palette]")
+{
+    // 문맥에 필드가 늘면 이 test와 `derive_draw_context`를 함께 고친다.
+    SkBitmap bitmap {};
+    bitmap.allocN32Pixels(1, 1);
+    SkCanvas canvas { bitmap };
+    const luil::ui_color_palette outer { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color_palette inner { luil::color_palette_for(luil::color_theme::light) };
+    luil::ui_metrics metrics {};
+    metrics.body_font_size = 17.0f;
+    const luil::draw_context context {
+        .canvas = canvas,
+        .palette = outer,
+        .scale = 1.5f,
+        .now = std::chrono::steady_clock::time_point {} + std::chrono::seconds { 3 },
+        .maximized = true,
+        .fullscreen = false,
+        .metrics = metrics,
+        .reduce_motion = true,
+        .theme = luil::color_theme::light,
+    };
+    const luil::draw_context derived { luil::derive_draw_context(context, inner, 3.0f) };
+    REQUIRE(&derived.canvas == &canvas);
+    REQUIRE(&derived.palette == &inner);
+    REQUIRE(derived.scale == 3.0f);
+    REQUIRE(derived.now == context.now);
+    REQUIRE(derived.maximized);
+    REQUIRE(derived.metrics.body_font_size == 17.0f);
+    REQUIRE(derived.reduce_motion);
+    REQUIRE(derived.theme == luil::color_theme::light);
 }

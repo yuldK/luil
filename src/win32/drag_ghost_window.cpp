@@ -145,6 +145,7 @@ namespace luil::win32 {
                         .scale = scale,
                         .now = std::chrono::steady_clock::now(),
                         .metrics = frame_style(appearance).metrics,
+                        .theme = appearance.theme,
                     };
                     draw_detached_drag_ghost(context, payload);
                     POINT origin { 0, 0 };

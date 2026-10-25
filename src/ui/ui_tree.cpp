@@ -77,20 +77,7 @@ namespace luil {
                 context.canvas.scale(scale, scale);
                 const float scroll { interaction.tooltip.has_value() ? interaction.tooltip->scroll_offset : 0.0f };
                 context.canvas.translate(-content.x, -content.y - scroll);
-                draw_context inner {
-                    .canvas = context.canvas,
-                    .codicon_typeface = context.codicon_typeface,
-                    .ui_typeface = context.ui_typeface,
-                    .code_typeface = context.code_typeface,
-                    .fonts = context.fonts,
-                    .palette = context.palette,
-                    .scale = 1.0f,
-                    .now = context.now,
-                    .maximized = context.maximized,
-                    .fullscreen = context.fullscreen,
-                    .metrics = context.metrics,
-                    .reduce_motion = context.reduce_motion,
-                };
+                draw_context inner { derive_draw_context(context, context.palette, 1.0f) };
                 // 내용 tree의 id가 주 tree와 같아도 hover·눌림·초점 그림을 물려받지 않는다.
                 interaction_snapshot content_interaction {};
                 if (interaction.tooltip.has_value())

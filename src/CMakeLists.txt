@@ -146,6 +146,8 @@ luil_add_source_filter(luil_core_files "ui/layout"
     "${public_headers}/ui/group_element.h"
     ui/layer_element.cpp
     "${public_headers}/ui/layer_element.h"
+    ui/palette_scope_element.cpp
+    "${public_headers}/ui/palette_scope_element.h"
     ui/panel_element.cpp
     "${public_headers}/ui/panel_element.h"
     ui/root_element.cpp

@@ -86,6 +86,7 @@ namespace luil {
             .fullscreen = state.fullscreen,
             .metrics = frame_style(state).metrics,
             .reduce_motion = state.reduce_motion,
+            .theme = state.theme,
         };
 
         // tree가 화면 전체를 그린다 (caption 포함).

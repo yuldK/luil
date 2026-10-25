@@ -747,6 +747,26 @@ namespace luil {
         children_.push_back(std::move(child));
     }
 
+    draw_context derive_draw_context(const draw_context& context, const ui_color_palette& palette, const float scale) noexcept
+    {
+        // 새 필드를 더하면 여기에도 더한다. 문맥을 필드마다 짓는 라이브러리 안의 자리는 이것뿐이다.
+        return draw_context {
+            .canvas = context.canvas,
+            .codicon_typeface = context.codicon_typeface,
+            .ui_typeface = context.ui_typeface,
+            .code_typeface = context.code_typeface,
+            .fonts = context.fonts,
+            .palette = palette,
+            .scale = scale,
+            .now = context.now,
+            .maximized = context.maximized,
+            .fullscreen = context.fullscreen,
+            .metrics = context.metrics,
+            .reduce_motion = context.reduce_motion,
+            .theme = context.theme,
+        };
+    }
+
     void ui_element::draw_children(draw_context& context, const interaction_snapshot& interaction) const
     {
         // 자르는 컨테이너는 자식을 그리는 동안만 canvas를 좁힌다.
