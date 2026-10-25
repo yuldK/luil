@@ -33,6 +33,7 @@ add_executable(luil_core_tests
     focus_request_tests.cpp
     font_scale_tests.cpp
     group_element_tests.cpp
+    hover_dwell_tests.cpp
     grouped_list_element_tests.cpp
     image_animation_tests.cpp
     image_element_tests.cpp

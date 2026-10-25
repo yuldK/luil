@@ -348,6 +348,26 @@ namespace luil {
         key_capture_target_ = std::move(target);
     }
 
+    const hover_dwell_target* ui_element::hover_dwell() const noexcept
+    {
+        return hover_dwell_target_.has_value() && hover_dwell_target_->on_dwell != nullptr ? &*hover_dwell_target_ : nullptr;
+    }
+
+    const hover_region_target* ui_element::hover_region() const noexcept
+    {
+        return hover_region_target_.has_value() ? &*hover_region_target_ : nullptr;
+    }
+
+    void ui_element::set_hover_dwell(std::optional<hover_dwell_target> target)
+    {
+        hover_dwell_target_ = std::move(target);
+    }
+
+    void ui_element::set_hover_region(std::optional<hover_region_target> target)
+    {
+        hover_region_target_ = std::move(target);
+    }
+
     void ui_element::set_access_handler(access_handler handler)
     {
         access_handler_ = std::move(handler);

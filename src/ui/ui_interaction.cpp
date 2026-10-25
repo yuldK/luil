@@ -413,6 +413,11 @@ namespace luil {
             for (input_action& action : focus_leave_actions(focused_before, focused_surface_before))
                 actions.push_back(std::move(action));
 
+        // 머무름과 hover 영역은 처리한 **뒤의** hover·누름 상태로 본다. 누름·끌기·떠남을 갈래마다 심지 않고 여기 한
+        // 곳에서 전후를 센다 (hover-dwell-design.md).
+        update_dwell(&event, actions);
+        update_hover_regions(event, actions);
+
         // **키보드로** 옮겨진 초점만 되살린다. 누른 자리는 이미 보인다 —
         // 마우스와 키보드를 가르는 값이 `focus_visible`로 이미 서 있어
         // 새 상태를 세우지 않는다 (keyboard-focus-design.md).
@@ -2096,10 +2101,131 @@ namespace luil {
         const std::optional<std::chrono::steady_clock::time_point> gesture { gesture_deadline() };
         const std::optional<std::chrono::steady_clock::time_point> flow { auto_scroll_deadline() };
         std::optional<std::chrono::steady_clock::time_point> result { gesture };
-        for (const auto candidate : { flow, submenu_deadline() })
+        for (const auto candidate : { flow, submenu_deadline(), dwell_deadline() })
             if (candidate.has_value() && (result.has_value() == false || *candidate < *result))
                 result = candidate;
         return result;
+    }
+
+    std::optional<std::chrono::steady_clock::time_point> interaction_controller::dwell_deadline() const noexcept
+    {
+        if (dwell_.has_value() == false || dwell_->fired || dwell_->suppressed)
+            return std::nullopt;
+        return dwell_->started + dwell_->delay;
+    }
+
+    std::vector<input_action> interaction_controller::refresh_hover_tracking()
+    {
+        std::vector<input_action> actions {};
+        update_dwell(nullptr, actions);
+        if (pointer_inside_)
+            update_hover_regions(pointer_moved_event { last_pointer_x_, last_pointer_y_, last_pointer_time_, last_pointer_surface_ }, actions);
+        return actions;
+    }
+
+    void interaction_controller::update_dwell(const raw_input_event* const event, std::vector<input_action>& actions)
+    {
+        const auto end_fired = [this, &actions] {
+            if (dwell_.has_value() == false || dwell_->fired == false)
+                return;
+            dwell_->fired = false;
+            if (dwell_->on_end != nullptr)
+                for (input_action& action : dwell_->on_end(ui_action_context { dwell_->owner, last_pointer_x_, last_pointer_y_ }))
+                    actions.push_back(std::move(action));
+        };
+
+        // 임자는 포인터 아래 element에서 root 쪽으로 처음 만나는 머무름 역할이다. 터치는 hover를 남기지 않아 임자가 없다.
+        const hover_dwell_target* target { nullptr };
+        ui_element_id owner {};
+        if (snapshot_.hovered != ui_element_id {})
+            if (const ui_tree* const tree { surface_tree(snapshot_.hovered_surface) }; tree != nullptr)
+                for (const ui_element* const element : tree->ancestry_of(snapshot_.hovered))
+                    if (const hover_dwell_target* const found { element->hover_dwell() }; found != nullptr && element->enabled())
+                    {
+                        target = found;
+                        owner = element->id();
+                        break;
+                    }
+
+        if (dwell_.has_value() == false || dwell_->owner != owner || dwell_->surface != snapshot_.hovered_surface)
+        {
+            end_fired();
+            dwell_.reset();
+            if (target != nullptr)
+            {
+                const auto* const moved { event != nullptr ? std::get_if<pointer_moved_event>(event) : nullptr };
+                const std::chrono::steady_clock::time_point started { moved != nullptr ? moved->time : snapshot_.hover_started_at.value_or(last_pointer_time_) };
+                dwell_ = dwell_state { owner, snapshot_.hovered_surface, started, target->delay, target->on_dwell, target->on_end };
+            }
+        }
+
+        // 누름·끌기는 머무름의 끝이자 취소다. 떠났다 돌아올 때까지 다시 재지 않는다.
+        const bool pressed_now { event != nullptr && std::holds_alternative<pointer_pressed_event>(*event) };
+        if (dwell_.has_value() && (pressed_now || snapshot_.drag.has_value() || snapshot_.pressed != ui_element_id {}))
+        {
+            end_fired();
+            dwell_->suppressed = true;
+        }
+    }
+
+    void interaction_controller::update_hover_regions(const raw_input_event& event, std::vector<input_action>& actions)
+    {
+        // 마우스·펜의 자리만 본다. 터치에는 hover가 없다.
+        std::optional<point_f> point {};
+        std::u8string surface {};
+        bool left { false };
+        if (const auto* const moved { std::get_if<pointer_moved_event>(&event) }; moved != nullptr && moved->device != pointer_device::touch)
+        {
+            point = point_f { moved->x, moved->y };
+            surface = moved->surface;
+        }
+        else if (const auto* const pressed { std::get_if<pointer_pressed_event>(&event) }; pressed != nullptr && pressed->device != pointer_device::touch)
+        {
+            point = point_f { pressed->x, pressed->y };
+            surface = pressed->surface;
+        }
+        else if (const auto* const released { std::get_if<pointer_released_event>(&event) }; released != nullptr && released->device != pointer_device::touch)
+        {
+            point = point_f { released->x, released->y };
+            surface = released->surface;
+        }
+        else if (const auto* const gone { std::get_if<pointer_left_event>(&event) }; gone != nullptr && gone->device != pointer_device::touch)
+        {
+            surface = gone->surface;
+            left = true;
+        }
+        else
+            return;
+
+        std::vector<const ui_element*> inside {};
+        if (left == false && point.has_value())
+            if (const ui_tree* const tree { surface_tree(surface) }; tree != nullptr)
+                inside = tree->hover_regions_at(point->x, point->y);
+
+        // 누른 채 끄는 동안의 나감은 뗄 때까지 미룬다 (`hover_region_target::hold_while_captured`).
+        const bool captured { snapshot_.pressed != ui_element_id {} || snapshot_.drag.has_value() };
+        const auto contains = [&inside](const ui_element_id& id) { return std::any_of(inside.begin(), inside.end(), [&id](const ui_element* const element) { return element->id() == id; }); };
+        for (auto entry { hover_regions_.begin() }; entry != hover_regions_.end();)
+        {
+            if (entry->surface != surface || contains(entry->id) || (captured && entry->hold_while_captured))
+            {
+                ++entry;
+                continue;
+            }
+            if (entry->on_leave != nullptr)
+                actions.push_back(entry->on_leave());
+            entry = hover_regions_.erase(entry);
+        }
+        for (const ui_element* const element : inside)
+        {
+            const bool known { std::any_of(hover_regions_.begin(), hover_regions_.end(), [&](const hover_region_entry& entry) { return entry.id == element->id() && entry.surface == surface; }) };
+            if (known)
+                continue;
+            const hover_region_target& region { *element->hover_region() };
+            if (region.on_enter != nullptr)
+                actions.push_back(region.on_enter());
+            hover_regions_.push_back(hover_region_entry { element->id(), surface, region.on_leave, region.hold_while_captured });
+        }
     }
 
     std::optional<std::chrono::steady_clock::time_point> interaction_controller::gesture_deadline() const noexcept
@@ -2122,6 +2248,13 @@ namespace luil {
     {
         // 가장자리 흐름은 터치 판정과 따로 간다 (손가락으로 끄는 동안에도 흐른다).
         std::vector<input_action> actions { advance_auto_scroll(now) };
+        // 머무름이 찼다. 한 번만 낸다 — 끝은 떠남·누름이 알린다.
+        if (const auto deadline { dwell_deadline() }; deadline.has_value() && now >= *deadline)
+        {
+            dwell_->fired = true;
+            for (input_action& action : dwell_->on_dwell(ui_action_context { dwell_->owner, last_pointer_x_, last_pointer_y_ }))
+                actions.push_back(std::move(action));
+        }
         if (const auto deadline { submenu_deadline() }; deadline.has_value() && now >= *deadline)
         {
             opened_hover_ = snapshot_.hovered;
@@ -4181,6 +4314,8 @@ namespace luil {
             }
             // 편집이 적용된 tree가 왔으면 여러 줄 칸의 caret 줄을 들인다. 바뀐 것이 없으면 아무것도 내지 않는다.
             dispatch(controller.follow_text_caret());
+            // 포인터가 머문 채 덮개가 서거나 hover 영역이 바뀌었으면 끝·나감·들어옴을 낸다.
+            dispatch(controller.refresh_hover_tracking());
             // 게시자가 이미 검증했다. 그래도 잘못된 값이면 controller가 거절하고 직전 값이 남는다.
             if (touch_slot != nullptr)
                 if (const auto touch { touch_slot->take_newer(touch_version) }; touch.has_value())

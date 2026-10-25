@@ -553,6 +553,8 @@ namespace luil {
         if (visible_path)
         {
             visible_index_.push_back(&element);
+            if (element.hover_region() != nullptr)
+                hover_regions_.push_back(&element);
             std::size_t position { no_access_position };
             if (element.accessibility().role != access_role::none && owns_id)
             {
@@ -675,6 +677,15 @@ namespace luil {
                 find_idle_hide(*child, x, y, next_clip, found);
         }
     } // namespace
+
+    std::vector<const ui_element*> ui_tree::hover_regions_at(const float x, const float y) const
+    {
+        std::vector<const ui_element*> result {};
+        for (const ui_element* const region : hover_regions_)
+            if (const std::optional<rect_f> shown { visible_bounds(*region) }; shown.has_value() && shown->contains(x, y))
+                result.push_back(region);
+        return result;
+    }
 
     std::chrono::milliseconds ui_tree::cursor_idle_hide_at(const float x, const float y) const
     {
