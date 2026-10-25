@@ -19,6 +19,17 @@ namespace luil {
         contain,
     };
 
+    // 맞춤의 축이다 (image-frames-scaling-design.md의 축 맞춤).
+    enum class zoom_fit
+    {
+        // 내용 전체가 여백 뺀 창에 든다. 지금까지의 맞춤이다.
+        whole,
+        // 내용 폭을 창 폭에 맞춘다. 세로는 지금 창 가운데에 있는 내용 자리를 지킨다 (읽던 자리가 그대로다).
+        width,
+        // 내용 높이를 창 높이에 맞춘다. 가로는 지금 창 가운데에 있는 내용 자리를 지킨다.
+        height,
+    };
+
     // 두 번 탭 확대다 (zoom-view-design.md의 두 번 탭). 기본은 끈다.
     //  - 내용에 두 번 탭 동작이 없는 보기(그림 한 장 등)에서 켠다. 첫 탭은 늦추지 않고 그대로 나가므로, 내용의
     //    탭 동작이 있으면 두 번 탭의 첫 탭이 그것도 실행한다.
@@ -57,7 +68,12 @@ namespace luil {
 
     [[nodiscard]] zoom_view_state zoom_about(const zoom_view_config& config, zoom_point viewport, float factor, zoom_point anchor) noexcept;
     [[nodiscard]] zoom_view_state pan_by(const zoom_view_config& config, zoom_point viewport, zoom_point delta) noexcept;
-    [[nodiscard]] zoom_view_state zoom_to_fit(const zoom_view_config& config, zoom_point viewport, float margin = 16.0f, float maximum_fit_zoom = 1.0f) noexcept;
+    // 맞춘 상태다. 맞춘 축의 배율은 `maximum_fit_zoom`과 `minimum_zoom`·`maximum_zoom`으로 자르고, 위치는 `zoom_bounds`로 다듬는다.
+    //  - 맞출 축의 창이 여백 두 배 이하이거나 내용 경계가 없으면 지금 상태 그대로다.
+    [[nodiscard]] zoom_view_state zoom_to_fit(const zoom_view_config& config, zoom_point viewport, float margin = 16.0f, float maximum_fit_zoom = 1.0f, zoom_fit axis = zoom_fit::whole) noexcept;
+    // 지금 상태에서 `zoom_to_fit`의 상태로 가는 메시지다 (`zoom_by` 다음 `pan_by`). 맞춤 단추와 두 번 탭이 쓰는 그 계산이다.
+    //  - 내용 경계나 두 메시지가 없으면 빈 목록이다. 이미 그 상태면 빈 목록이다.
+    [[nodiscard]] std::vector<input_action> zoom_fit_actions(const zoom_view_config& config, zoom_point viewport, float margin = 16.0f, float maximum_fit_zoom = 1.0f, zoom_fit axis = zoom_fit::whole);
     // `pan_by`가 경계 다듬기로 버리는 몫이다 (`delta` − 실제로 옮겨진 몫). 축마다 따로다.
     [[nodiscard]] zoom_point pan_blocked(const zoom_view_config& config, zoom_point viewport, zoom_point delta) noexcept;
     // 접촉 하나의 옮겨진 몫·막힌 몫·뗄 때의 속도로 경계 쓸기를 판정한다 (`zoom_edge_swipe_config`의 세 기준).

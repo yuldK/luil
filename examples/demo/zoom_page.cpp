@@ -94,7 +94,22 @@ namespace demo {
         column->add(
             make_label({ kind_text, u8"zoom-help" }, u8"휠·두 손가락: 확대 / 빈 곳 끌기: 이동 / 초점에서 +, -, 0, 화살표, Page / 멈추면 커서가 숨습니다", 12.0f, luil::label_color_role::primary),
             28.0f);
-        column->add(std::make_unique<luil::zoom_controls_element>(luil::zoom_controls_config { .view = config(), .viewport = viewport_ }), 34.0f);
+        // 축 맞춤 단추 둘이다 (image-frames-scaling-design.md). 계산은 라이브러리의 `zoom_fit_actions`이고 단추 글은 앱이 단다.
+        //  - 맞추지 않는 축은 지금 창 가운데에 있는 도면 자리를 지킨다.
+        luil::stack_config controls_config {};
+        controls_config.direction = luil::stack_direction::row;
+        controls_config.spacing = 8.0f;
+        auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-controls" }, controls_config) };
+        controls->add(std::make_unique<luil::zoom_controls_element>(luil::zoom_controls_config { .view = config(), .viewport = viewport_ }), 244.0f);
+        const auto fit_button = [this](std::u8string owner, std::u8string text, const luil::zoom_fit axis) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, luil::text_button_config { .text = std::move(text) }) };
+            button->set_action(
+                luil::ui_trigger::left_click, [view = config(), viewport = viewport_, axis](const luil::ui_action_context&) { return luil::zoom_fit_actions(view, viewport, 16.0f, 5.0f, axis); });
+            return button;
+        };
+        controls->add(fit_button(u8"zoom-fit-width", u8"폭 맞춤", luil::zoom_fit::width), 72.0f);
+        controls->add(fit_button(u8"zoom-fit-height", u8"높이 맞춤", luil::zoom_fit::height), 80.0f);
+        column->add(std::move(controls), 34.0f);
         auto view { std::make_unique<luil::zoom_view_element>(config()) };
         view->set_access_name(u8"도면 확대 보기");
         // 그림 위에서 포인터가 1.5초 멈추면 커서를 감춘다. 움직이거나 누르면 곧바로 돌아온다.

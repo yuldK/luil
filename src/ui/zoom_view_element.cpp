@@ -65,12 +65,13 @@ namespace luil {
             return value;
         }
 
-        [[nodiscard]] std::vector<input_action> fit_actions(const zoom_view_config& config, const zoom_point viewport, const float margin = 16.0f, const float maximum = 1.0f)
+        [[nodiscard]] std::vector<input_action> fit_actions(
+            const zoom_view_config& config, const zoom_point viewport, const float margin = 16.0f, const float maximum = 1.0f, const zoom_fit axis = zoom_fit::whole)
         {
             if (config.content_bounds.has_value() == false || config.zoom_by == nullptr || config.pan_by == nullptr)
                 return {};
             const zoom_view_state current { zoom_about(config, viewport, 1.0f, {}) };
-            const zoom_view_state next { zoom_to_fit(config, viewport, margin, maximum) };
+            const zoom_view_state next { zoom_to_fit(config, viewport, margin, maximum, axis) };
             // 먼저 중앙에서 확대하면 원점도 비율만큼 움직인다. 이동은 그 뒤 원점과의 차이다.
             const float ratio { next.zoom / current.zoom };
             std::vector<input_action> result {};
@@ -158,15 +159,30 @@ namespace luil {
         return { config.zoom_by(1.0f / current.zoom, {}) };
     }
 
-    zoom_view_state zoom_to_fit(const zoom_view_config& config, const zoom_point viewport, const float margin, const float maximum_fit_zoom) noexcept
+    zoom_view_state zoom_to_fit(const zoom_view_config& config, const zoom_point viewport, const float margin, const float maximum_fit_zoom, const zoom_fit axis) noexcept
     {
         const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
+        // 맞출 축의 창만 여백보다 넓으면 된다 — 폭 맞춤은 낮은 창에서도 선다.
+        const bool needs_width { axis != zoom_fit::height };
+        const bool needs_height { axis != zoom_fit::width };
         if (valid_config(config) == false || config.content_bounds.has_value() == false || finite_point(viewport) == false || std::isfinite(margin) == false || margin < 0.0f
-            || std::isfinite(maximum_fit_zoom) == false || maximum_fit_zoom <= 0.0f || viewport.x <= margin * 2.0f || viewport.y <= margin * 2.0f)
+            || std::isfinite(maximum_fit_zoom) == false || maximum_fit_zoom <= 0.0f || (needs_width && viewport.x <= margin * 2.0f) || (needs_height && viewport.y <= margin * 2.0f))
             return current;
         const rect_f& box { *config.content_bounds };
-        const float zoom { std::clamp(std::min({ (viewport.x - margin * 2.0f) / box.width, (viewport.y - margin * 2.0f) / box.height, maximum_fit_zoom }), config.minimum_zoom, config.maximum_zoom) };
-        return clamp_state(config, viewport, { zoom, { -(box.x + box.width / 2.0f) * zoom, -(box.y + box.height / 2.0f) * zoom } });
+        const float across { (viewport.x - margin * 2.0f) / box.width };
+        const float down { (viewport.y - margin * 2.0f) / box.height };
+        const float fitted { axis == zoom_fit::whole ? std::min(across, down) : (axis == zoom_fit::width ? across : down) };
+        const float zoom { std::clamp(std::min(fitted, maximum_fit_zoom), config.minimum_zoom, config.maximum_zoom) };
+        const zoom_point centered { -(box.x + box.width / 2.0f) * zoom, -(box.y + box.height / 2.0f) * zoom };
+        // 맞추지 않는 축은 지금 창 가운데의 내용 자리를 지킨다. 원점은 창 가운데 기준이라 배율의 비만큼 늘면 그 자리다.
+        const float ratio { zoom / current.zoom };
+        const zoom_point origin { axis == zoom_fit::height ? current.origin.x * ratio : centered.x, axis == zoom_fit::width ? current.origin.y * ratio : centered.y };
+        return clamp_state(config, viewport, { zoom, origin });
+    }
+
+    std::vector<input_action> zoom_fit_actions(const zoom_view_config& config, const zoom_point viewport, const float margin, const float maximum_fit_zoom, const zoom_fit axis)
+    {
+        return fit_actions(config, viewport, margin, maximum_fit_zoom, axis);
     }
 
     zoom_view_element::zoom_view_element(zoom_view_config config)
