@@ -41,6 +41,7 @@ add_executable(luil_core_tests
     item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
+    label_wrap_tests.cpp
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp

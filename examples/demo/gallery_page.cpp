@@ -321,6 +321,16 @@ namespace demo {
             page.add(make_label({ kind_text, u8"gallery/shortcut-note" }, shortcut_note_, 12.0f, luil::label_color_role::dim), 24.0f);
         page.gap(24.0f);
 
+        // 여러 줄 라벨: 폭에서 줄을 바꾸고 두 줄을 넘으면 마지막 줄 끝을 줄인다. 창 폭을 줄여 보세요.
+        luil::label_config description {};
+        description.text = u8"설명 글은 칸의 폭에서 줄을 바꿉니다. 공백에서 먼저 바꾸고, 공백이 없는 긴 낱말은 글자 경계에서 바꿉니다. "
+                           u8"두 줄을 넘으면 마지막 줄의 끝을 줄여 아래 내용이 밀리지 않습니다.";
+        description.font_size = 12.0f;
+        description.wrap = true;
+        description.max_lines = 2;
+        page.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"gallery/wrapped-description" }, description), 2.0f * luil::label_element::height_for(description));
+        page.gap(24.0f);
+
         // 변을 고른 테두리: 위·아래만 그어 목록 띠처럼 앞뒤 내용과 가른다.
         luil::panel_config strip {};
         strip.background = [](const luil::ui_color_palette& palette) { return palette.window_background; };

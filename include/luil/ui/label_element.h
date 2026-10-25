@@ -33,20 +33,50 @@ namespace luil {
         float padding { 0.0f };
         text_align align { text_align::start };
         text_elide elide { text_elide::end };
+        // 폭에서 줄을 바꾼다 (설명·오류 글 — label-wrap-design.md). 거짓이면 지금처럼 한 줄이다.
+        //  - 줄 바꿈은 여러 줄 칸과 같은 text_layout 규칙이다: 공백에서 먼저 바꾸고, 공백이 없는 긴 낱말은 글자소
+        //    경계에서 바꾼다. 조합형 한글·이모지 결합 글자가 줄 경계에서 갈리지 않는다. `\n`은 줄 바꿈이다.
+        //  - 바꾼 글은 시작 쪽으로 붙는다 (`align`·`elide`를 보지 않는다).
+        bool wrap { false };
+        // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 줄의 끝을 `…`로 줄인다.
+        std::size_t max_lines { 0 };
     };
 
-    // 텍스트 한 줄이다.
-    // bounds 안에서 설정한 가로 정렬과 세로 중앙 baseline으로 그린다.
+    // 줄을 바꾼 결과다 (`label_element::measure_wrap`).
+    struct label_wrap
+    {
+        // 보이는 줄마다의 원문 byte 구간이다. 말줄임한 마지막 줄은 남은 글 전체의 구간이다.
+        struct line
+        {
+            std::size_t begin { 0 };
+            std::size_t end { 0 };
+        };
+        std::vector<line> lines {};
+        // `max_lines`에 걸려 뒤를 줄였다.
+        bool truncated { false };
+        // 보이는 줄 높이의 합이다 (논리 픽셀).
+        float height { 0.0f };
+        // 가장 넓은 줄의 폭이다 (논리 픽셀, 여백 제외).
+        float width { 0.0f };
+    };
+
+    // 텍스트다. 기본은 한 줄이고 `wrap`이면 여러 줄이다.
+    // 한 줄은 bounds 안에서 설정한 가로 정렬과 세로 중앙 baseline으로 그린다.
     class label_element final : public ui_element
     {
     public:
         label_element(ui_element_id id, label_config config);
+
+        // `wrap`인 설정을 폭 `available_width`(논리 픽셀, 여백 포함)에서 바꾼 결과다. 그리기·배치와 같은 규칙이다.
+        //  - 한 줄의 높이는 `height_for`다 — 한 줄 label과 같은 행 높이가 줄마다 쌓인다.
+        [[nodiscard]] static label_wrap measure_wrap(const label_config& config, const measure_context& context, float available_width);
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
         // 글 한 줄의 폭(양옆 `padding` 포함)과 `height_for` 높이다. 폭은 올림한다 — 잰 폭에 꼭 맞춘 자리에서
         // 부동소수 잔차로 말줄임이 서지 않게 한다.
+        //  - `wrap`이면 그 폭에서 바꾼 줄 수만큼의 높이다 (`measure_wrap`). 폭은 바꾼 줄이 있으면 받은 폭이다.
         [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
 
         // 한 줄이 차지하는 자연 높이다 (논리 픽셀).
@@ -56,5 +86,7 @@ namespace luil {
 
     private:
         label_config config_ {};
+        // `wrap`일 때 배치가 바꾼 줄이다 (물리 픽셀 배치의 결과를 그리기가 쓴다).
+        label_wrap wrapped_ {};
     };
 } // namespace luil
