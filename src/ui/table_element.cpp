@@ -45,9 +45,9 @@ namespace luil {
             if (available <= 0.0f)
                 return;
             const float baseline { cell.y + centered_text_baseline(font, cell.height) };
-            if (elide == text_elide::middle)
+            if (elide == text_elide::middle || elide == text_elide::start)
             {
-                const std::u8string drawn { elide_text_middle(text, available, font) };
+                const std::u8string drawn { elide == text_elide::middle ? elide_text_middle(text, available, font) : elide_text_start(text, available, font) };
                 if (drawn.empty())
                     return;
                 const float width { measure_text(drawn, font) };

@@ -71,6 +71,8 @@ namespace luil {
         separator,
         // 창 아래의 상태 줄이다.
         status_bar,
+        // 이동 길잡이 묶음이다 (경로 조각 막대). UIA에서는 Group에 navigation 랜드마크를 단다.
+        navigation,
     };
 
     // 범위 값이다 (막대·스크롤 막대·진행률).

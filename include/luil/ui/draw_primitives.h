@@ -129,6 +129,10 @@ namespace luil {
     // 경로처럼 끝이 중요한 글은 앞뒤를 남기고 가운데를 줄인다.
     [[nodiscard]] std::u8string elide_text_middle(std::u8string_view text, float max_width, const SkFont& font);
 
+    // 끝만 남기고 앞을 줄인다: "…ments\\report.txt". 긴 경로에서 파일 이름이 가장 중요할 때다.
+    // 자르는 위치는 글자소 경계다. `…`조차 들어가지 않으면 빈 값이다.
+    [[nodiscard]] std::u8string elide_text_start(std::u8string_view text, float max_width, const SkFont& font);
+
     // `max_width` 안에서 잘라 그린다.
     // 좁은 창에서 글자가 옆 UI를 침범하지 않게 하는 공통 경로다.
     // 반환값은 실제로 그린 폭이다.

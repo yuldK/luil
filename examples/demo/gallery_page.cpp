@@ -2,6 +2,7 @@
 #include "demo/files_page.h"
 
 #include "luil/ui/badge_element.h"
+#include "luil/ui/breadcrumb_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -319,6 +320,33 @@ namespace demo {
         page.add(std::move(shortcut_row), luil::text_button_height);
         if (shortcut_note_.empty() == false)
             page.add(make_label({ kind_text, u8"gallery/shortcut-note" }, shortcut_note_, 12.0f, luil::label_color_role::dim), 24.0f);
+        page.gap(24.0f);
+
+        // 경로 조각 막대: 폭이 모자라면 앞부터 "…"로 접는다. 꺾쇠는 아래 단계, "…"는 접힌 조각을 연다.
+        luil::breadcrumb_config path {};
+        path.owner = u8"gallery/path";
+        path.segments = {
+            { u8"c", u8"C:", true },
+            { u8"users", u8"Users", true },
+            { u8"someone", u8"someone", true },
+            { u8"documents", u8"Documents", true },
+            { u8"projects", u8"Projects", true },
+            { u8"luil", u8"luil", false },
+        };
+        path.navigate = [](const std::u8string& key) { return luil::make_app_action(toast_request_intent { u8"이동: " + key }); };
+        path.open_children = [](const std::u8string& key, const luil::ui_action_context&) { return luil::make_app_action(toast_request_intent { u8"하위 항목 메뉴: " + key }); };
+        path.open_collapsed = [](const std::vector<std::u8string>& keys, const luil::ui_action_context&) {
+            std::u8string listed {};
+            for (const std::u8string& key : keys)
+                listed += (listed.empty() ? u8"" : u8" · ") + key;
+            return luil::make_app_action(toast_request_intent { u8"접힌 경로: " + listed });
+        };
+        path.name = u8"경로";
+        path.current_label = u8"현재 위치";
+        path.children_label = u8"하위 항목";
+        path.collapsed_label = u8"앞 경로";
+        page.add(make_label({ kind_text, u8"gallery/path-title" }, u8"경로 조각 — 창 폭을 줄이면 앞부터 접힙니다", 12.0f, luil::label_color_role::dim), 24.0f);
+        page.add(std::make_unique<luil::breadcrumb_element>(std::move(path)), luil::breadcrumb_element::height_for({}));
         page.gap(24.0f);
 
         // 여러 줄 라벨: 폭에서 줄을 바꾸고 두 줄을 넘으면 마지막 줄 끝을 줄인다. 창 폭을 줄여 보세요.

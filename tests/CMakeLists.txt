@@ -340,6 +340,7 @@ luil_configure_resource_script("${luil_tests_resource}" "${luil_tests_notices}")
 add_executable(luil_tests
     text_layout_native_tests.cpp
     "${luil_tests_resource}"
+    breadcrumb_tests.cpp
     caption_layout_tests.cpp
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp

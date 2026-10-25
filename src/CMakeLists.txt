@@ -171,6 +171,8 @@ luil_add_source_filter(luil_core_files "ui/layout"
 
 # 사용자가 값을 바꾸는 element다.
 luil_add_source_filter(luil_core_files "ui/controls"
+    ui/breadcrumb_element.cpp
+    "${public_headers}/ui/breadcrumb_element.h"
     ui/button_element.cpp
     "${public_headers}/ui/button_element.h"
     ui/check_element.cpp

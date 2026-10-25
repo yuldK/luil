@@ -101,6 +101,9 @@ namespace luil::win32 {
                 return UIA_SeparatorControlTypeId;
             case access_role::status_bar:
                 return UIA_StatusBarControlTypeId;
+            // 이동 길잡이에는 ControlType이 없다. Group에 navigation 랜드마크(LandmarkType)를 단다.
+            case access_role::navigation:
+                return UIA_GroupControlTypeId;
             default:
                 return UIA_PaneControlTypeId;
             }
@@ -1043,6 +1046,10 @@ namespace luil::win32 {
                 break;
             case UIA_IsPasswordPropertyId:
                 set_bool(*result, element->accessibility().secret);
+                break;
+            case UIA_LandmarkTypePropertyId:
+                if (element->accessibility().role == access_role::navigation)
+                    set_int(*result, UIA_NavigationLandmarkTypeId);
                 break;
             default:
                 break;
