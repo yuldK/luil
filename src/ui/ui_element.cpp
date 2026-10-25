@@ -637,6 +637,11 @@ namespace luil {
         return std::nullopt;
     }
 
+    std::optional<rect_f> ui_element::focus_ring_bounds() const
+    {
+        return std::nullopt;
+    }
+
     std::vector<std::size_t> ui_element::text_line_starts() const
     {
         return {};

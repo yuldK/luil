@@ -748,6 +748,11 @@ namespace luil {
         return context.now + (caret_blink_interval - phase);
     }
 
+    std::optional<rect_f> text_input_element::focus_ring_bounds() const
+    {
+        return box();
+    }
+
     access_info text_input_element::accessibility() const
     {
         // 값은 확정 글이다 — 조합 글은 아직 사용자의 글이 아니라 싣지 않는다

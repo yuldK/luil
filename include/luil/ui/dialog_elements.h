@@ -315,6 +315,8 @@ namespace luil {
         [[nodiscard]] std::optional<text_input_snapshot> text_input() const override;
         [[nodiscard]] std::optional<rect_f> text_span_bounds(const text_span_query& query, const text_measurer& measurer) const override;
         [[nodiscard]] access_info accessibility() const override;
+        // 초점 테는 입력 상자만 두른다 — 오류 줄은 칸의 몸이 아니다.
+        [[nodiscard]] std::optional<rect_f> focus_ring_bounds() const override;
 
     private:
         // 글자 크기(논리 11 × scale)다.
