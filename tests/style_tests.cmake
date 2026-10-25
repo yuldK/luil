@@ -29,6 +29,7 @@ foreach(needle
     ".secondary_foreground = 0xBFFFFFFFu"
     ".close_button_hover_background = 0xFFC42B1Cu"
     ".raised_background = 0xFF38383Cu"
+    ".thumb_background = 0x29FFFFFFu"
     ".body_font_size = 12.0f"
     ".soft_button = 0.25f"
     ".line_break = single_line_break::space")
@@ -78,6 +79,13 @@ foreach(needle ".raised_background = 0xFF422427u" ".raised_background = 0xFFFDE7
         message(FATAL_ERROR "A style without raisedBackground did not fall back to noticeBackground: ${needle}")
     endif()
 endforeach()
+string(JSON legacy REMOVE "${style}" dark thumbBackground)
+luil_expect_generation("${legacy}" TRUE "a style without thumbBackground")
+file(READ "${output}" header)
+string(FIND "${header}" ".thumb_background = 0x2DFFFFFFu" position)
+if(position EQUAL -1)
+    message(FATAL_ERROR "A style without thumbBackground did not fall back to buttonPressedBackground")
+endif()
 string(JSON broken SET "${style}" dark raisedBackground "\"#38383\"")
 luil_expect_generation("${broken}" FALSE "a short optional color")
 

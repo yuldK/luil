@@ -20,6 +20,7 @@
         "contentShadow": "#000000",
         "noticeBackground": "#422427",
         "raisedBackground": "#38383c",
+        "thumbBackground": "#ffffff29",
         "caption": {
             "background": "#252526",
             "foreground": "#ffffff",
@@ -50,6 +51,7 @@
         "contentShadow": "#000000",
         "noticeBackground": "#fde7e9",
         "raisedBackground": "#f0f0f0",
+        "thumbBackground": "#ffffff",
         "caption": {
             "background": "#f0f0f0",
             "foreground": "#1f1f1f",

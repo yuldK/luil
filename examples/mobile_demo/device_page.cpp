@@ -115,6 +115,8 @@ namespace mobile_demo {
             luil::choice_group_config orientations {};
             orientations.owner = u8"orientation";
             orientations.style = luil::choice_style::toggle;
+            // 폰 화면은 묶음을 화면 폭에 채운다 — 손가락이 닿는 칸이 넓다.
+            orientations.width = luil::choice_width::fill;
             orientations.name = u8"화면 방향";
             for (const orientation_choice& choice : orientation_choices)
             {
@@ -145,6 +147,7 @@ namespace mobile_demo {
             luil::choice_group_config bars {};
             bars.owner = u8"system-bars";
             bars.style = luil::choice_style::toggle;
+            bars.width = luil::choice_width::fill;
             bars.name = u8"시스템 막대";
             bars.items = { { u8"visible", u8"보임" }, { u8"immersive", u8"몰입" } };
             bars.selected = request_.system_bars == luil::system_bars_mode::immersive ? u8"immersive" : u8"visible";

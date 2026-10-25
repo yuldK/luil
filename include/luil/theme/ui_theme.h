@@ -165,6 +165,10 @@ namespace luil {
         //  - 불투명하다. 머리행은 그 아래로 행이 지나가고 토스트는 내용 위에 뜬다.
         //  - 뜻이 없는 색이라 notice와 갈린다. 경고처럼 읽히지 않는다.
         ui_color raised_background { 0 };
+        // 트랙 위에 떠 있는 판이다 — 선택 묶음(`choice_style::toggle`)에서 고른 칸.
+        //  - 트랙(`input_background`)보다 **밝아야** 한다. 어두우면 고른 칸이 눌려 들어가 꺼진 것으로 읽힌다.
+        //  - 라이트는 표면 흰색, 다크는 전경색의 옅은 알파라 트랙 위에서 한 단 뜬다.
+        ui_color thumb_background { 0 };
         caption_color_palette caption {};
 
         [[nodiscard]] bool operator==(const neutral_color_palette&) const noexcept = default;
@@ -270,6 +274,10 @@ namespace luil {
         //  - 불투명하다. 머리행은 그 아래로 행이 지나가고 토스트는 내용 위에 뜬다.
         //  - 뜻이 없는 색이라 notice와 갈린다. 경고처럼 읽히지 않는다.
         ui_color raised_background { 0 };
+        // 트랙 위에 떠 있는 판이다 — 선택 묶음(`choice_style::toggle`)에서 고른 칸.
+        //  - 트랙(`input_background`)보다 **밝아야** 한다. 어두우면 고른 칸이 눌려 들어가 꺼진 것으로 읽힌다.
+        //  - 라이트는 표면 흰색, 다크는 전경색의 옅은 알파라 트랙 위에서 한 단 뜬다.
+        ui_color thumb_background { 0 };
         caption_color_palette caption {};
 
         ui_color document_added_background { 0 };
