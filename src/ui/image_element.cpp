@@ -362,6 +362,17 @@ namespace luil {
         return image;
     }
 
+    ui_image image_access::raster_image(sk_sp<SkImage> raster)
+    {
+        if (raster == nullptr || raster->width() <= 0 || raster->height() <= 0)
+            return {};
+        ui_image image {};
+        image.width_ = raster->width();
+        image.height_ = raster->height();
+        image.backing_ = std::make_shared<const image_backing>(std::move(raster));
+        return image;
+    }
+
     ui_lottie image_access::lottie(std::shared_ptr<const lottie_backing> backing, const int width, const int height, const std::chrono::nanoseconds duration, const double frame_rate)
     {
         if (backing == nullptr || width <= 0 || height <= 0 || duration <= std::chrono::nanoseconds { 0 } || std::isfinite(frame_rate) == false || frame_rate <= 0.0)

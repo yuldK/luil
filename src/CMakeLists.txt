@@ -243,6 +243,8 @@ luil_add_source_filter(luil_core_files "ui/image"
     ui/image_decode.cpp
     "${public_headers}/ui/image_decode.h"
     ui/image_backing.h
+    ui/image_resample.cpp
+    ui/image_resample.h
     ui/image_source.cpp
     ui/image_source.h
     ui/image_codecs.h

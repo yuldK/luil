@@ -1544,3 +1544,141 @@ TEST_CASE("A frame outside the list, a cancelled frame and a smaller frame", "[u
     REQUIRE(frame.width() == 1);
     REQUIRE(frame.height() == 1);
 }
+
+TEST_CASE("A 4000x7000 picture downscales in high quality and stops within a few rows when asked", "[ui][image][downscale][cancel]")
+{
+    // 왼쪽 절반 빨강, 오른쪽 절반 파랑이다. 반 평균 세 번(→500×875) 뒤 Mitchell로 400×700에 맞춘다.
+    constexpr int width { 4000 };
+    constexpr int height { 7000 };
+    luil::ui_image source {};
+    {
+        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0u);
+        for (std::size_t index { 0 }; index < pixels.size(); index += 4u)
+        {
+            const bool left { (index / 4u) % static_cast<std::size_t>(width) < static_cast<std::size_t>(width / 2) };
+            pixels[index + (left ? 0u : 2u)] = 255u;
+            pixels[index + 3u] = 255u;
+        }
+        source = make_image_from(pixels, width, height);
+    }
+    REQUIRE(source.valid());
+
+    const auto asked { std::make_shared<int>(0) };
+    luil::image_decode_options options { .max_width = 400 };
+    options.cancelled = [asked] {
+        ++*asked;
+        return false;
+    };
+    luil::image_decode_error error {};
+    const luil::ui_image smaller { luil::downscale_image(source, options, error) };
+    REQUIRE(error.empty());
+    REQUIRE(smaller.width() == 400);
+    REQUIRE(smaller.height() == 700);
+    const std::vector<luil::ui_color> drawn { raster_pixels(smaller, 400, 700) };
+    REQUIRE(drawn[350u * 400u + 100u] == luil::ui_color { 0xFFFF0000 });
+    REQUIRE(drawn[350u * 400u + 300u] == luil::ui_color { 0xFF0000FF });
+    // 출력 32줄마다 묻는다: 반 평균 3500·1750·875줄, Mitchell 875·700줄 → 110 + 55 + 28 + 28 + 22번, 그리고 시작 전 한 번.
+    REQUIRE(*asked == 244);
+
+    // 여섯째 물음에서 접는다 — 첫 반 평균의 다섯째 묶음(160줄)에서 멈춘다.
+    const auto stop { std::make_shared<int>(0) };
+    options.cancelled = cancelled_after(stop, 5);
+    luil::image_decode_error cancelled {};
+    REQUIRE(luil::downscale_image(source, options, cancelled).valid() == false);
+    REQUIRE(cancelled.kind == luil::image_decode_error_kind::cancelled);
+    REQUIRE(*stop == 6);
+}
+
+TEST_CASE("High-quality downscale turns a fine checkerboard into an even grey", "[ui][image][downscale][raster]")
+{
+    // 한 픽셀 바둑판은 선형 표본으로 줄이면 줄무늬(모아레)가 남는 그림이다. 반 평균 한 번 뒤 Mitchell(150→100)이다.
+    constexpr int size { 300 };
+    std::vector<std::uint8_t> pixels(static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4u, 0u);
+    for (int y { 0 }; y < size; ++y)
+        for (int x { 0 }; x < size; ++x)
+        {
+            const std::size_t at { (static_cast<std::size_t>(y) * static_cast<std::size_t>(size) + static_cast<std::size_t>(x)) * 4u };
+            const std::uint8_t value { static_cast<std::uint8_t>((x + y) % 2 == 0 ? 255u : 0u) };
+            pixels[at] = value;
+            pixels[at + 1u] = value;
+            pixels[at + 2u] = value;
+            pixels[at + 3u] = 255u;
+        }
+    luil::image_decode_error error {};
+    const luil::ui_image smaller { luil::downscale_image(make_image_from(pixels, size, size), { .max_width = 100 }, error) };
+    REQUIRE(smaller.width() == 100);
+    for (const luil::ui_color color : raster_pixels(smaller, 100, 100))
+        for (const int shift : { 0, 8, 16 })
+        {
+            REQUIRE(channel_of(color, shift) >= 127u);
+            REQUIRE(channel_of(color, shift) <= 129u);
+        }
+}
+
+TEST_CASE("High-quality decode downscales before turning the picture upright", "[ui][image][downscale][raster]")
+{
+    // 파일 16×32, EXIF 6. 표시 32×16의 오른쪽 위 8×8이 빨강이다. 폭 10을 청하면 jpeg가 3/8(6×12)로 펴고 나머지는
+    // Mitchell이 파일 축 5×10으로 맞춘 뒤 돌려세운다.
+    luil::image_decode_options options { .max_width = 10 };
+    options.downscale = luil::image_downscale::high_quality;
+    luil::image_decode_error error {};
+    const luil::ui_image decoded { luil::decode_image_bytes(bytes_of(oriented_jpeg), options, error) };
+    REQUIRE(error.empty());
+    REQUIRE(decoded.width() == 10);
+    REQUIRE(decoded.height() == 5);
+    const std::vector<luil::ui_color> pixels { raster_pixels(decoded, 10, 5) };
+    REQUIRE(is_red(pixels[9]));
+    REQUIRE(is_green(pixels[4u * 10u]));
+
+    // 움직이는 그림은 장마다 같은 축소다.
+    luil::image_decode_options frames { .max_width = 1 };
+    frames.downscale = luil::image_downscale::high_quality;
+    const luil::ui_animated_image animation { luil::decode_animated_image_bytes(bytes_of(animated_gif), frames, error) };
+    REQUIRE(animation.width() == 1);
+    REQUIRE(frame_pixels(animation, 0) == filled_with(1u, luil::ui_color { 0xFFFF0000 }));
+    REQUIRE(frame_pixels(animation, 2) == filled_with(1u, luil::ui_color { 0xFF0000FF }));
+}
+
+TEST_CASE("High-quality decode asks to stop while it downscales", "[ui][image][downscale][cancel]")
+{
+    // 보통 축소가 묻는 횟수를 먼저 센다. 고품질은 그 다음 물음이 축소 안에서 나온다.
+    const auto counted { std::make_shared<int>(0) };
+    luil::image_decode_options options { .max_width = 16 };
+    options.cancelled = [counted] {
+        ++*counted;
+        return false;
+    };
+    luil::image_decode_error error {};
+    REQUIRE(luil::decode_image_bytes(bytes_of(solid_png), options, error).valid());
+
+    const auto asked { std::make_shared<int>(0) };
+    options.cancelled = cancelled_after(asked, *counted);
+    REQUIRE(luil::decode_image_bytes(bytes_of(solid_png), options, error).valid());
+    options.downscale = luil::image_downscale::high_quality;
+    *asked = 0;
+    luil::image_decode_error cancelled {};
+    REQUIRE(luil::decode_image_bytes(bytes_of(solid_png), options, cancelled).valid() == false);
+    REQUIRE(cancelled.kind == luil::image_decode_error_kind::cancelled);
+}
+
+TEST_CASE("Downscaling an image already within the limit or without pixels", "[ui][image][downscale]")
+{
+    luil::image_decode_error error {};
+    const luil::ui_image solid { luil::decode_image_bytes(bytes_of(solid_png), error) };
+    // 이미 상한 안이면 같은 그림이다 — 복사하지 않는다.
+    const luil::ui_image same { luil::downscale_image(solid, { .max_width = 64 }, error) };
+    REQUIRE(same.backing() == solid.backing());
+
+    luil::image_decode_error empty {};
+    REQUIRE(luil::downscale_image(luil::ui_image {}, { .max_width = 4 }, empty).valid() == false);
+    REQUIRE(empty.kind == luil::image_decode_error_kind::no_pixels);
+
+#if LUIL_TESTS_SVG
+    constexpr std::string_view svg { R"(<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="red"/></svg>)" };
+    const luil::ui_image vector { luil::decode_svg_bytes({ reinterpret_cast<const std::uint8_t*>(svg.data()), svg.size() }, error) };
+    REQUIRE(vector.valid());
+    luil::image_decode_error unsupported {};
+    REQUIRE(luil::downscale_image(vector, { .max_width = 10 }, unsupported).valid() == false);
+    REQUIRE(unsupported.kind == luil::image_decode_error_kind::unsupported_format);
+#endif
+}

@@ -217,6 +217,8 @@ namespace demo {
             luil::image_decode_options thumbnail {};
             thumbnail.max_width = thumbnail_pixel_limit;
             thumbnail.max_height = thumbnail_pixel_limit;
+            // 섬네일은 반 평균 + Mitchell로 곱게 줄인다 — 160px로 크게 줄이는 자리라 선형 표본의 계단이 잘 보인다.
+            thumbnail.downscale = luil::image_downscale::high_quality;
             middle_frame_ = luil::load_image_frame_file(open->path, frames_.durations.size() / 2, thumbnail, frames_error);
         }
         return true;
