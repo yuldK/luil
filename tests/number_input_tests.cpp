@@ -322,6 +322,11 @@ TEST_CASE("An error line sits under the box and the field reads as invalid", "[n
 
     // 스핀 단추는 상자 안이다 — 오류 줄까지 내려가지 않는다.
     REQUIRE(input->children()[1]->bounds().y + input->children()[1]->bounds().height <= 28.0f);
+    // 키보드 초점 테도 상자만 두른다.
+    const std::optional<luil::rect_f> ring { input->focus_ring_bounds() };
+    REQUIRE(ring.has_value());
+    REQUIRE(ring->height == 28.0f);
+    REQUIRE(ring->width == 160.0f);
     // IME 후보 창이 붙는 글 구간도 상자 높이다.
     const auto span { input->text_span_bounds({ u8"9000", 4u, 0u, 4u }, [](const std::u8string_view text, float) { return static_cast<float>(text.size()) * 7.0f; }) };
     REQUIRE(span.has_value());

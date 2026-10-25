@@ -1264,6 +1264,9 @@ namespace luil {
         // IME 후보 창을 조합 글자 밑에 앉히는 근거라, 글꼴 크기·안쪽 여백·
         // 가로 스크롤을 그리기와 같은 값으로 element가 직접 계산한다.
         [[nodiscard]] virtual std::optional<rect_f> text_span_bounds(const text_span_query& query, const text_measurer& measurer) const;
+        // 키보드 초점 테를 두를 사각형이다. 없으면(기본) element 전체다.
+        //  - 칸 아래 오류 줄처럼 몸이 아닌 자리를 품은 element가 몸만 답한다 (number-input-design.md).
+        [[nodiscard]] virtual std::optional<rect_f> focus_ring_bounds() const;
         // 여러 줄 텍스트 박스만 구현한다.
         // 표시 문서(조합 중이면 조합 글이 섞인 문서)의 화면 줄이 시작하는 offset이다. 첫 값은 0이다.
         // 보조 기술의 줄 단위(UIA `TextUnit_Line`)가 쓴다 — 넘겨 접은 줄도 한 줄이라 배치의 결과를 그대로 내준다.

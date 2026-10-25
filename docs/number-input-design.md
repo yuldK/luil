@@ -78,6 +78,7 @@ config.number = luil::text_input_number {
 
 - `invalid`가 참이거나 `error`가 비어 있지 않으면 오류 상태다. 테두리를 오류색(`error_accent`)으로 그린다. 초점을 받아도 오류색을 지키고 두께만 늘린다. 초점 색으로 바꾸면 고치는 동안 오류 표시가 사라진다.
 - `error`가 있으면 칸 아래 `text_input_error_height`(16 논리 픽셀) 줄에 오류색으로 그린다. 칸에는 측정 단계가 없으므로, 담는 쪽이 `text_input_element::error_height_for(config)`만큼 높이를 더해 잡는다. 입력 상자는 slot의 위쪽이다.
+- 키보드 초점 테는 입력 상자만 두른다(`ui_element::focus_ring_bounds`). 오류 줄까지 감싸면 테가 칸이 아니라 칸과 안내를 묶은 덩어리로 읽힌다.
 - 오류 글은 한 줄이다. 길면 끝을 말줄임한다. 보조 기술은 줄이지 않은 전체 글을 읽는다.
 
 ## 보조 기술

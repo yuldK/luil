@@ -703,9 +703,20 @@ namespace luil {
         //  - 아래의 바깥 여백만큼(3px)은 그 잘린 상자 밖으로 나간다. 초점은
         //    `on_focus_moved`가 화면 안으로 들이므로 반쯤 잘린 초점은 지나가는
         //    상태다 — 그 한순간을 위해 테를 상자 안으로 접지 않는다.
-        const std::optional<rect_f> box { visible_bounds(*focused) };
+        std::optional<rect_f> box { visible_bounds(*focused) };
         if (box.has_value() == false)
             return;
+        // 몸만 두르는 element(오류 줄을 품은 텍스트 칸)는 그 사각형과 보이는 자리의 겹침이다.
+        if (const std::optional<rect_f> ring { focused->focus_ring_bounds() }; ring.has_value())
+        {
+            const float left { std::max(box->x, ring->x) };
+            const float top { std::max(box->y, ring->y) };
+            const float right { std::min(box->x + box->width, ring->x + ring->width) };
+            const float bottom { std::min(box->y + box->height, ring->y + ring->height) };
+            if (right <= left || bottom <= top)
+                return;
+            box = rect_f { left, top, right - left, bottom - top };
+        }
 
         // element마다 그리지 않고 tree가 한곳에서 얹는다 — tooltip·drag 표시와
         // 같은 자리다. 앱이 만든 element도 고칠 것 없이 테를 받는다.
