@@ -13,6 +13,8 @@ namespace luil {
         // 드러났을 때 긋는 선의 두께다 (논리 픽셀).
         // 잡는 두께는 담는 쪽이 slot으로 정하므로 여기 있는 것은 보이는 두께뿐이다.
         constexpr float handle_line_width { 2.0f };
+        // 쉬는 동안의 구분선 두께다 (판을 가르는 다른 1 px 선과 같다).
+        constexpr float resting_divider_width { 1.0f };
     } // namespace
 
     split_handle_element::split_handle_element(const ui_element_id id, split_handle_config config)
@@ -85,10 +87,20 @@ namespace luil {
 
     void split_handle_element::draw(draw_context& context, const interaction_snapshot& interaction) const
     {
-        if (interaction.hovered != id() && interaction.pressed != id())
-            return;
-
         const rect_f box { bounds() };
+        if (interaction.hovered != id() && interaction.pressed != id())
+        {
+            // 쉬는 동안의 구분선이다. 강조와 같은 가운데에 서서 hover로 바뀔 때 선이 옆으로 튀지 않는다.
+            if (config_.resting_divider == false)
+                return;
+            const float divider { resting_divider_width * scale_ };
+            if (config_.axis == split_axis::horizontal)
+                context.canvas.drawRect(SkRect::MakeXYWH(box.x + (box.width - divider) / 2.0f, box.y, divider, box.height), solid_paint(context.palette.divider));
+            else
+                context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y + (box.height - divider) / 2.0f, box.width, divider), solid_paint(context.palette.divider));
+            return;
+        }
+
         const float line { handle_line_width * scale_ };
         if (config_.axis == split_axis::horizontal)
             context.canvas.drawRect(SkRect::MakeXYWH(box.x + (box.width - line) / 2.0f, box.y, line, box.height), solid_paint(context.palette.accent));
