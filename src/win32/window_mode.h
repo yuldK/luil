@@ -209,6 +209,12 @@ namespace luil::win32 {
     //    HTSYSMENU도 같은 이유로 없다.
     //  - 최대화 창은 가장자리만 없다. 이미 작업 영역에 맞물려 있어 조절할 것이 없고,
     //    캡션은 그대로 살아 있어야 끌어 내려 복원할 수 있다.
+    //
+    // 캡션 쪽 판정(시스템 메뉴·버튼·끌기)은 `band` 안에서만 일어난다 (`caption_band_in`).
+    // 캡션을 창 아래에 두면 아래 가장자리의 크기 조절이 그 띠보다 먼저다 — 위에 둘 때와 같은 규칙이다.
+    [[nodiscard]] window_hit hit_test_window(
+        const window_frame_metrics& metrics, window_display_mode mode, int width, int height, std::uint32_t dpi, int x, int y, const caption_band& band) noexcept;
+    // 캡션이 client 맨 위를 가로지르는 창이다 (`default_caption_band`).
     [[nodiscard]] window_hit hit_test_window(const window_frame_metrics& metrics, window_display_mode mode, int width, int height, std::uint32_t dpi, int x, int y) noexcept;
 
     // 창 하나가 설 자리다 (물리 픽셀).

@@ -1,3 +1,5 @@
+#include "luil/ui/root_element.h"
+#include "luil/ui/ui_tree.h"
 #include "luil/win32/win32_window.h"
 #include "win32/caption_surface.h"
 
@@ -81,12 +83,13 @@ namespace {
 
     // 창 왼쪽 위에서 (x, y)만큼 떨어진 자리를 이 모드로 판정한다.
     // `WM_NCHITTEST`의 lParam은 **화면 좌표**라 창 자리를 더해 넘긴다.
-    [[nodiscard]] LRESULT hit_test_at(const HWND window, const luil::win32::window_display_mode mode, const int x, const int y)
+    // `tree`는 캡션 띠의 자리를 정하는 게시된 tree다 (없으면 맨 위 띠).
+    [[nodiscard]] LRESULT hit_test_at(const HWND window, const luil::win32::window_display_mode mode, const int x, const int y, const luil::ui_tree* const tree = nullptr)
     {
         RECT bounds {};
         GetWindowRect(window, &bounds);
         const LPARAM position { MAKELPARAM(bounds.left + x, bounds.top + y) };
-        return luil::win32::caption_hit_test(window, position, 96, luil::caption_config {}, luil::win32::window_config {}, mode);
+        return luil::win32::caption_hit_test(window, position, 96, luil::caption_config {}, luil::win32::window_config {}, mode, tree);
     }
 
     // 두 test가 함께 쓰는 설정이다.
@@ -484,6 +487,33 @@ TEST_CASE("A fullscreen window has no non-client area at all", "[win32][window]"
     REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 300, 10) == HTCLIENT);
     REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 980, 10) == HTCLIENT);
     REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 500, 400) == HTCLIENT);
+
+    DestroyWindow(window);
+}
+
+TEST_CASE("The window hit test reads the caption band from the published tree", "[win32][window]")
+{
+    // 앱이 캡션을 창 아래에 세운 tree다. 판정은 그 tree가 그린 자리를 본다.
+    const HWND window { create_hit_test_window() };
+    REQUIRE(window != nullptr);
+    RECT bounds {};
+    GetWindowRect(window, &bounds);
+    const float width { static_cast<float>(bounds.right - bounds.left) };
+    const float height { static_cast<float>(bounds.bottom - bounds.top) };
+
+    auto root { std::make_unique<luil::root_element>() };
+    root->arrange({ { 0.0f, 0.0f, width, height }, 1.0f });
+    auto caption { std::make_unique<luil::caption_element>(luil::caption_config {}) };
+    caption->arrange({ { 0.0f, height - 36.0f, width, 0.0f }, 1.0f });
+    root->add(std::move(caption));
+    const luil::ui_tree tree { std::move(root) };
+
+    const int bottom_row { static_cast<int>(height) - 20 };
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, bottom_row, &tree) == HTCAPTION);
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, static_cast<int>(width) - 20, bottom_row, &tree) == HTCLOSE);
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, 10, &tree) == HTCLIENT);
+    // tree가 없으면 예전처럼 맨 위가 캡션이다.
+    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, 10) == HTCAPTION);
 
     DestroyWindow(window);
 }

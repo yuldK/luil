@@ -29,6 +29,21 @@ luil::caption_config caption {
 
 논리 픽셀로 지정한 `caption_ui_metrics`는 DPI에 맞춰 물리 픽셀로 변환된다. 그리기와 hit test는 동일한 높이와 버튼 폭을 사용한다.
 
+## caption의 자리
+
+caption이 창의 어디에 서는지는 **앱의 배치**가 정한다. `caption_element::arrange`에 준 slot이 곧 caption의 자리다. 창 아래에 두어도, 아래에 두었다가 위로 밀어 올리는 동안이어도, 창 일부만 덮어도 된다.
+
+비클라이언트 판정은 그 자리를 **게시된 tree**에서 읽는다(`caption_band_in`). tree에서 그리기 순서로 첫 `caption_element`를 찾아 그 bounds를 띠(`caption_band`)로 삼고, 끌기·창 버튼·시스템 메뉴 칸을 모두 그 띠 안에 둔다. 창 버튼은 띠의 오른쪽 끝부터, 시스템 메뉴 칸은 띠의 왼쪽 끝이다. 띠 밖은 위쪽이라도 client다.
+
+- `caption_config`에 앵커 값을 두지 않는다. 배치가 이미 자리를 말하므로, 따로 둔 앵커는 slot과 어긋날 두 번째 원천이 된다. 주 창의 `caption_config`는 창을 만들 때 한 번 실리므로 frame마다 움직이는 caption을 따라가지도 못한다.
+- 앱 단추·caption client 표시와 같은 이유다. 그림과 판정이 같은 tree 하나를 본다. 다음 frame의 tree가 caption을 옮기면 판정도 그 frame부터 옮겨 간다.
+- 띠의 가장자리는 각각 반올림한다. 반 픽셀 자리에 선 caption(움직이는 도중)도 그린 자리에 맞는다.
+- caption이나 그 조상이 숨어 있으면 띠가 없다. 어느 자리도 끌기가 아니고 창 버튼도 맞지 않는다. 보이지 않는 띠를 잡고 창이 딸려 가면 안 된다.
+- tree가 아직 없거나(첫 frame 전) tree에 caption element가 없으면 client 맨 위를 가로지르는 띠다(`default_caption_band`). 예전의 판정과 같다.
+- Alt+Space의 시스템 메뉴는 띠의 왼쪽 아래에서 연다. 띠가 창 아래 끝에 있어 메뉴가 화면을 넘치면 OS가 위로 뒤집는다.
+- 크기 조절 가장자리는 띠보다 먼저다. caption을 창 아래에 두면 아래 가장자리 몇 픽셀이 크기 조절이다. 위에 둘 때 위 가장자리와 같은 규칙이다.
+- DWM 프레임의 위쪽 1px(`dwm_frame_top_margin_for`)은 caption이 아니라 창 테두리라 caption의 자리와 상관없다.
+
 ## Hit test와 시스템 동작
 
 Custom caption의 비클라이언트 hit test는 다음 우선순위를 사용한다.
@@ -121,9 +136,10 @@ luil::ui_window inspector {
 - 전체 화면 창의 caption은 그려지더라도 hit되지 않는다.
 - 버튼 집합과 창 모드는 같은 스타일 계산의 인자이며 서로를 덮어쓰지 않는다.
 - 앱 단추의 자리는 끌기가 아니라 client이고, 그 판정은 단추를 그린 tree에서 나온다.
+- 끌기 띠·창 버튼·시스템 메뉴 칸은 tree의 caption element가 선 자리에 있다. 숨긴 caption에는 띠가 없다.
 
 ## 검증 지침
 
-[caption_layout_tests.cpp](../tests/caption_layout_tests.cpp)는 전체 버튼, 일부 버튼, 버튼 없음의 경계와 hit 결과를 검증한다. 또한 `caption_element` bounds와 `make_caption_layout()`의 일치, 버튼 opt-out과 창 style의 일치, caption 자리 계산이 비클라이언트 판정과 하나임을 확인한다. 앱 단추가 창 버튼 왼쪽에 목록 차례로 서는 것과, 그 자리가 비활성이어도 끌기가 아니라 client로 답해지는 것도 확인한다. 모드별 스타일과 hit 결과는 [window_mode_tests.cpp](../tests/window_mode_tests.cpp)가 창 없이 검증한다.
+[caption_layout_tests.cpp](../tests/caption_layout_tests.cpp)는 전체 버튼, 일부 버튼, 버튼 없음의 경계와 hit 결과를 검증한다. 또한 `caption_element` bounds와 `make_caption_layout()`의 일치, 버튼 opt-out과 창 style의 일치, caption 자리 계산이 비클라이언트 판정과 하나임을 확인한다. 앱 단추가 창 버튼 왼쪽에 목록 차례로 서는 것과, 그 자리가 비활성이어도 끌기가 아니라 client로 답해지는 것도 확인한다. caption을 창 아래·창 일부·반 픽셀 자리·높은 배율에 세운 tree에서 띠와 버튼이 그린 자리를 따르는 것, 숨긴 caption에 띠가 없는 것, tree나 caption이 없으면 맨 위 띠인 것도 확인한다. [win32_window_tests.cpp](../tests/win32_window_tests.cpp)는 실제 창의 판정 경로가 tree의 띠를 읽는지 확인한다. 모드별 스타일과 hit 결과는 [window_mode_tests.cpp](../tests/window_mode_tests.cpp)가 창 없이 검증한다.
 
 Win32 구현 경계는 [caption_layout.cpp](../src/win32/caption_layout.cpp), [caption_surface.cpp](../src/win32/caption_surface.cpp), [caption_surface.h](../src/win32/caption_surface.h), [window_mode.h](../src/win32/window_mode.h)에 있다.

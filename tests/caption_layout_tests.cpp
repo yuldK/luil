@@ -286,3 +286,120 @@ TEST_CASE("A caption button runs only when pressed and released on it outside fu
     // 전체 화면으로 들어가는 동안 남은 누름의 꼬리는 실행하지 않는다.
     REQUIRE(luil::win32::caption_click_executes(HTCLOSE, HTCLOSE, window_display_mode::fullscreen) == false);
 }
+
+namespace {
+    // 1000x800 창의 (slot)에 caption을 세운 tree다. 앱이 캡션을 놓는 자리는 배치가 정한다.
+    [[nodiscard]] luil::ui_tree make_placed_caption_tree(const luil::rect_f& slot, const luil::caption_config& config = {}, const bool visible = true)
+    {
+        auto root { std::make_unique<luil::root_element>() };
+        root->arrange({ { 0.0f, 0.0f, 1000.0f, 800.0f }, 1.0f });
+        auto caption { std::make_unique<luil::caption_element>(config) };
+        caption->arrange({ slot, 1.0f });
+        caption->set_visible(visible);
+        root->add(std::move(caption));
+        return luil::ui_tree { std::move(root) };
+    }
+
+    [[nodiscard]] luil::win32::window_hit hit_with_band(const luil::win32::caption_band& band, const int x, const int y)
+    {
+        return luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1000, 800, 96, x, y, band);
+    }
+} // namespace
+
+TEST_CASE("The caption band follows where the tree placed the caption", "[caption][window-mode]")
+{
+    using luil::win32::window_hit;
+
+    SECTION("창 아래에 둔 caption은 아래 띠가 끌기이고 위는 client다")
+    {
+        const auto tree { make_placed_caption_tree({ 0.0f, 764.0f, 1000.0f, 0.0f }) };
+        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1000, 96) };
+        REQUIRE(band == luil::win32::caption_band { 0, 764, 1000, 36 });
+
+        REQUIRE(hit_with_band(band, 300, 780) == window_hit::caption_drag);
+        REQUIRE(hit_with_band(band, 20, 780) == window_hit::system_menu);
+        REQUIRE(hit_with_band(band, 880, 780) == window_hit::minimize_button);
+        REQUIRE(hit_with_band(band, 930, 780) == window_hit::maximize_button);
+        REQUIRE(hit_with_band(band, 980, 780) == window_hit::close_button);
+        // 예전 자리(맨 위)는 이제 내용이다. 위 가장자리의 크기 조절만 남는다.
+        REQUIRE(hit_with_band(band, 300, 20) == window_hit::client);
+        REQUIRE(hit_with_band(band, 980, 20) == window_hit::client);
+        REQUIRE(hit_with_band(band, 300, 1) == window_hit::resize_top);
+        // 아래 가장자리의 크기 조절이 띠보다 먼저다 — 위에 둘 때 위 가장자리와 같은 규칙이다.
+        REQUIRE(hit_with_band(band, 300, 798) == window_hit::resize_bottom);
+        REQUIRE(hit_with_band(band, 998, 798) == window_hit::resize_bottom_right);
+    }
+
+    SECTION("창 일부만 덮은 caption은 그 폭 안에서 버튼이 오른쪽 끝에 선다")
+    {
+        const auto tree { make_placed_caption_tree({ 200.0f, 300.0f, 600.0f, 0.0f }) };
+        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1000, 96) };
+        REQUIRE(band == luil::win32::caption_band { 200, 300, 600, 36 });
+
+        // 그린 버튼과 판정의 버튼이 같은 자리다.
+        const auto layout { luil::win32::make_caption_layout(band, 96) };
+        const luil::ui_element* const close { tree.find(luil::ui_element_id { luil::ui_element_kind::caption_close }) };
+        const luil::ui_element* const minimize { tree.find(luil::ui_element_id { luil::ui_element_kind::caption_minimize }) };
+        REQUIRE(static_cast<int>(close->bounds().x) == layout.close_left);
+        REQUIRE(static_cast<int>(minimize->bounds().x) == layout.minimize_left);
+        REQUIRE(static_cast<int>(close->bounds().y) == layout.top);
+
+        REQUIRE(hit_with_band(band, 790, 310) == window_hit::close_button);
+        REQUIRE(hit_with_band(band, 210, 310) == window_hit::system_menu);
+        REQUIRE(hit_with_band(band, 400, 310) == window_hit::caption_drag);
+        // 띠의 양옆과 위아래는 내용이다.
+        REQUIRE(hit_with_band(band, 100, 310) == window_hit::client);
+        REQUIRE(hit_with_band(band, 900, 310) == window_hit::client);
+        REQUIRE(hit_with_band(band, 400, 290) == window_hit::client);
+        REQUIRE(hit_with_band(band, 400, 340) == window_hit::client);
+    }
+
+    SECTION("띠는 tree가 실은 그 frame의 자리를 따른다")
+    {
+        // 아래에서 위로 밀어 올리는 도중의 frame이다. 반 픽셀 자리도 그린 자리에 맞춰 반올림한다.
+        const auto tree { make_placed_caption_tree({ 0.0f, 400.4f, 1000.0f, 0.0f }) };
+        REQUIRE(luil::win32::caption_band_in(&tree, 1000, 96) == luil::win32::caption_band { 0, 400, 1000, 36 });
+    }
+
+    SECTION("숨긴 caption은 어느 자리도 끌기가 아니다")
+    {
+        const auto tree { make_placed_caption_tree({ 0.0f, 0.0f, 1000.0f, 0.0f }, {}, false) };
+        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1000, 96) };
+        REQUIRE(band == luil::win32::caption_band {});
+        REQUIRE(hit_with_band(band, 300, 20) == window_hit::client);
+        REQUIRE(hit_with_band(band, 980, 20) == window_hit::client);
+        REQUIRE(hit_with_band(band, 20, 20) == window_hit::client);
+    }
+
+    SECTION("tree가 없거나 caption을 담지 않았으면 맨 위 띠다")
+    {
+        const luil::win32::caption_band top { luil::win32::default_caption_band(1000, 96) };
+        REQUIRE(top == luil::win32::caption_band { 0, 0, 1000, 36 });
+        REQUIRE(luil::win32::caption_band_in(nullptr, 1000, 96) == top);
+
+        auto root { std::make_unique<luil::root_element>() };
+        root->arrange({ { 0.0f, 0.0f, 1000.0f, 800.0f }, 1.0f });
+        const luil::ui_tree bare { std::move(root) };
+        REQUIRE(luil::win32::caption_band_in(&bare, 1000, 96) == top);
+        // 기존 판정(띠를 주지 않는 호출)과 같은 답이다.
+        REQUIRE(hit_with_band(top, 300, 20) == luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1000, 800, 96, 300, 20));
+    }
+
+    SECTION("배율이 있어도 띠는 그린 자리이고 버튼 폭은 같은 식으로 잰다")
+    {
+        auto root { std::make_unique<luil::root_element>() };
+        root->arrange({ { 0.0f, 0.0f, 1500.0f, 1200.0f }, 1.5f });
+        auto caption { std::make_unique<luil::caption_element>(luil::caption_config {}) };
+        caption->arrange({ { 0.0f, 1146.0f, 1500.0f, 0.0f }, 1.5f });
+        root->add(std::move(caption));
+        const luil::ui_tree tree { std::move(root) };
+
+        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1500, 144) };
+        REQUIRE(band == luil::win32::caption_band { 0, 1146, 1500, 54 });
+        const auto layout { luil::win32::make_caption_layout(band, 144) };
+        const luil::ui_element* const close { tree.find(luil::ui_element_id { luil::ui_element_kind::caption_close }) };
+        REQUIRE(static_cast<int>(close->bounds().x) == layout.close_left);
+        REQUIRE(luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1500, 1200, 144, 1480, 1170, band)
+                == window_hit::close_button);
+    }
+}

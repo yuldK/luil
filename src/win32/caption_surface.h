@@ -26,7 +26,10 @@ namespace luil::win32 {
     // 판정 자체는 `hit_test_window`가 하고 여기서는 창에서 좌표를 읽어 Win32 `HT*`로
     // 옮긴다. 모드를 받는 이유는 그 판정이 모드마다 다르기 때문이다 —
     // 전체 화면이면 어디를 눌러도 `HTCLIENT`다 (window_mode.h).
-    [[nodiscard]] LRESULT caption_hit_test(HWND window, LPARAM long_parameter, std::uint32_t dpi, const caption_config& caption, const window_config& config, window_display_mode mode);
+    //  - 캡션 띠의 자리는 `tree`에 담긴 `caption_element`가 선 자리다 (`caption_band_in`).
+    //    tree가 없으면 client 맨 위다.
+    [[nodiscard]] LRESULT caption_hit_test(
+        HWND window, LPARAM long_parameter, std::uint32_t dpi, const caption_config& caption, const window_config& config, window_display_mode mode, const ui_tree* tree = nullptr);
 
     // 게시된 tree에서 (x, y)(client 물리 픽셀)에 제목 표시줄 안의 client 자리가 보이는가
     // (`ui_element::caption_client` — 앱 단추·앱이 세운 검색 칸 등).
