@@ -37,6 +37,14 @@ namespace demo {
         float scale { 1.0f };
     };
 
+    // 주 창 캡션을 창 위에 둘지 아래에 둘지 고른다.
+    // 캡션의 자리는 셸의 배치가 정하고, 끌기 띠·창 버튼·시스템 메뉴의 판정이 그 자리를 따른다
+    // (caption-button-design.md의 "caption의 자리").
+    struct caption_position_intent
+    {
+        bool bottom { false };
+    };
+
     // 도구 창 안의 메뉴를 여닫는다.
     struct tool_menu_toggle_intent
     {
@@ -102,6 +110,12 @@ namespace demo {
             close_tool_menu();
         }
 
+        // 주 창 캡션을 창 아래에 둘 것인가다. 셸이 캡션과 내용을 배치할 때 읽는다.
+        [[nodiscard]] bool caption_at_bottom() const noexcept
+        {
+            return caption_bottom_;
+        }
+
     private:
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_tool_tree();
         // 메뉴를 닫고 검색 상태도 함께 비운다.
@@ -109,6 +123,7 @@ namespace demo {
 
         bool tool_open_ { false };
         bool tool_menu_open_ { false };
+        bool caption_bottom_ { false };
         // 메모 칸 초점 요청의 번호다. 청할 때마다 하나씩 올린다.
         std::uint64_t focus_revision_ { 0 };
         // 플랫폼 도구를 마지막으로 부른 결과 한 줄이다.
