@@ -5,16 +5,16 @@
 namespace luil::win32 {
     namespace {
         // 논리 픽셀을 이 배율의 물리 픽셀로 옮긴다.
-        // 반올림까지 `caption_layout.cpp`와 같은 식이어야 한다 — 캡션 높이를 두 곳에서
-        // 재는데 1px이 갈리면 판정 경계에서 답이 어긋난다.
+        // 반올림까지 `caption_layout.cpp`와 같은 식이어야 한다 — 시스템 메뉴 칸과 버튼 폭을
+        // 두 곳에서 재는데 1px이 갈리면 판정 경계에서 답이 어긋난다.
         [[nodiscard]] int scale_for_dpi(const int value, const std::uint32_t dpi) noexcept
         {
             return static_cast<int>((static_cast<std::uint64_t>(value) * dpi + 48U) / 96U);
         }
     } // namespace
 
-    window_hit hit_test_window(
-        const window_frame_metrics& metrics, const window_display_mode mode, const int width, const int height, const std::uint32_t dpi, const int x, const int y) noexcept
+    window_hit hit_test_window(const window_frame_metrics& metrics, const window_display_mode mode, const int width, const int height, const std::uint32_t dpi, const int x,
+        const int y, const caption_band& band) noexcept
     {
         // 화면을 덮은 창에는 비클라이언트가 없다.
         // 가장자리도 캡션 띠도 시스템 메뉴도 없이 통째로 client다.
@@ -50,11 +50,13 @@ namespace luil::win32 {
                 return window_hit::resize_bottom;
         }
 
-        if (y >= 0 && y < scale_for_dpi(metrics.caption.height, dpi) && x >= 0 && x < scale_for_dpi(metrics.caption.application_icon_slot_width, dpi))
+        const caption_layout layout { make_caption_layout(band, dpi, metrics.caption, metrics.buttons) };
+        const caption_hit hit { hit_test_caption(layout, x, y) };
+        // 시스템 메뉴 아이콘 칸은 캡션 띠의 왼쪽 끝이고 버튼보다 먼저다.
+        if (hit != caption_hit::client && x < layout.left + scale_for_dpi(metrics.caption.application_icon_slot_width, dpi))
             return window_hit::system_menu;
 
-        const caption_layout layout { make_caption_layout(width, dpi, metrics.caption, metrics.buttons) };
-        switch (hit_test_caption(layout, x, y))
+        switch (hit)
         {
         case caption_hit::drag:
             return window_hit::caption_drag;
@@ -68,6 +70,12 @@ namespace luil::win32 {
             break;
         }
         return window_hit::client;
+    }
+
+    window_hit hit_test_window(
+        const window_frame_metrics& metrics, const window_display_mode mode, const int width, const int height, const std::uint32_t dpi, const int x, const int y) noexcept
+    {
+        return hit_test_window(metrics, mode, width, height, dpi, x, y, default_caption_band(width, dpi, metrics.caption));
     }
 
     window_bounds fullscreen_bounds_for(const screen_area& monitor) noexcept

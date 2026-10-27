@@ -55,6 +55,11 @@ namespace luil {
     // 버튼 액션은 `ui_command`를 반환한다.
     // 창 끌기 영역 판정(WM_NCHITTEST)은 platform의 `caption_layout`이
     // 같은 metrics로 동기 계산하며, 두 계산의 일치는 test로 고정한다.
+    //
+    // **자리는 앱의 배치가 정한다.** 창 아래에 두든, 아래에서 위로 밀어 올리든, 창 일부만 덮든
+    // arrange에 준 slot이 곧 caption이다. 비클라이언트 판정은 게시된 tree에서 이 element가 선 자리를
+    // 읽어 끌기 띠·창 버튼·시스템 메뉴 칸을 그 자리에 둔다 (caption-button-design.md).
+    // 숨기면(`set_visible(false)`) 끌기 띠도 사라진다.
     class caption_element final : public ui_element
     {
     public:

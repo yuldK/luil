@@ -18,7 +18,8 @@ namespace luil::win32 {
         }
     } // namespace
 
-    LRESULT caption_hit_test(const HWND window, const LPARAM long_parameter, const std::uint32_t dpi, const caption_config& caption, const window_config& config, const window_display_mode mode)
+    LRESULT caption_hit_test(const HWND window, const LPARAM long_parameter, const std::uint32_t dpi, const caption_config& caption, const window_config& config,
+        const window_display_mode mode, const ui_tree* const tree)
     {
         // 전체 화면에서는 DWM에게도 묻지 않는다.
         // 시스템 캡션 버튼을 대신 판정해 주는 자리라 `HTMAXBUTTON`을 돌려줄 수 있고,
@@ -38,9 +39,11 @@ namespace luil::win32 {
             config.resize_border_thickness,
             config.resize_corner_thickness,
         };
+        // 비클라이언트가 0이라(`WM_NCCALCSIZE`) 창 좌표가 곧 tree의 client 좌표다.
+        const int width { window_rectangle.right - window_rectangle.left };
         const window_hit hit {
-            hit_test_window(metrics, mode, window_rectangle.right - window_rectangle.left, window_rectangle.bottom - window_rectangle.top, dpi, GET_X_LPARAM(long_parameter) - window_rectangle.left,
-                GET_Y_LPARAM(long_parameter) - window_rectangle.top),
+            hit_test_window(metrics, mode, width, window_rectangle.bottom - window_rectangle.top, dpi, GET_X_LPARAM(long_parameter) - window_rectangle.left,
+                GET_Y_LPARAM(long_parameter) - window_rectangle.top, caption_band_in(tree, width, dpi, caption.metrics)),
         };
         switch (hit)
         {
@@ -317,7 +320,7 @@ namespace luil::win32 {
                 return LRESULT { 0 };
             return std::nullopt;
         case WM_NCHITTEST: {
-            const LRESULT hit { caption_hit_test(window_, long_parameter, dpi_, caption_, context_.config(), display_mode()) };
+            const LRESULT hit { caption_hit_test(window_, long_parameter, dpi_, caption_, context_.config(), display_mode(), tree()) };
             if (hit != HTCAPTION)
                 return hit;
             // 끌기 자리에 client 표시를 단 element(앱 단추·검색 칸)가 서 있으면 그 자리는 client다 — 눌러야 할 칸을
@@ -385,9 +388,11 @@ namespace luil::win32 {
             //  - 키 잡기 모드에서는 잡는 칸의 것이다 (window_surface의 `WM_SYSKEYDOWN`).
             if (word_parameter == VK_SPACE && (long_parameter & (1LL << 29)) != 0 && key_capturing() == false)
             {
+                // 메뉴는 캡션 띠의 왼쪽 아래에서 연다. 띠가 창 아래에 있어 화면 밖으로 넘치면 OS가 위로 뒤집는다.
                 RECT window_rectangle {};
                 GetWindowRect(window_, &window_rectangle);
-                show_system_menu({ window_rectangle.left, window_rectangle.top + MulDiv(caption_.metrics.height, static_cast<int>(dpi_), 96) });
+                const caption_band band { caption_band_in(tree(), window_rectangle.right - window_rectangle.left, dpi_, caption_.metrics) };
+                show_system_menu({ window_rectangle.left + band.left, window_rectangle.top + band.top + band.height });
                 return LRESULT { 0 };
             }
             return std::nullopt;
