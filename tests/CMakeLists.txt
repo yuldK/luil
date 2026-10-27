@@ -343,6 +343,7 @@ luil_configure_resource_script("${luil_tests_resource}" "${luil_tests_notices}")
 add_executable(luil_tests
     text_layout_native_tests.cpp
     "${luil_tests_resource}"
+    backdrop_tests.cpp
     breadcrumb_tests.cpp
     caption_layout_tests.cpp
     dpi_scale_tests.cpp
@@ -526,6 +527,16 @@ luil_disable_automatic_windows_manifest(luil_layered_screen_check)
 luil_set_ide_folder("Tests" luil_layered_screen_check)
 add_test(NAME luil_layered_screen COMMAND luil_layered_screen_check)
 set_tests_properties(luil_layered_screen PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "screen")
+
+# 주 창 배경 효과가 합성된 화면에서 서는지 본다 (backdrop-design.md). 같은 까닭으로 LUIL_SCREEN_TESTS=1일 때만 돈다.
+add_executable(luil_backdrop_screen_check
+    "${luil_tests_resource}"
+    backdrop_screen_check.cpp)
+target_link_libraries(luil_backdrop_screen_check PRIVATE luil::luil luil_options dwmapi)
+luil_disable_automatic_windows_manifest(luil_backdrop_screen_check)
+luil_set_ide_folder("Tests" luil_backdrop_screen_check)
+add_test(NAME luil_backdrop_screen COMMAND luil_backdrop_screen_check)
+set_tests_properties(luil_backdrop_screen PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "screen")
 
 # 실제 입력 데스크톱을 쓰므로 일반 ctest에 등록하지 않는다.
 # --interactive를 준 전용 대화형 검증 환경에서만 입력을 주입한다.

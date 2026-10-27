@@ -21,6 +21,7 @@
         "noticeBackground": "#422427",
         "raisedBackground": "#38383c",
         "thumbBackground": "#ffffff29",
+        "backdropBackground": "#1e1e1e59",
         "caption": {
             "background": "#252526",
             "foreground": "#ffffff",
@@ -52,6 +53,7 @@
         "noticeBackground": "#fde7e9",
         "raisedBackground": "#f0f0f0",
         "thumbBackground": "#ffffff",
+        "backdropBackground": "#f8f8f866",
         "caption": {
             "background": "#f0f0f0",
             "foreground": "#1f1f1f",

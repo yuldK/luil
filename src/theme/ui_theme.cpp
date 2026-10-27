@@ -210,6 +210,7 @@ namespace luil {
             .notice_background = neutral.notice_background,
             .raised_background = neutral.raised_background,
             .thumb_background = neutral.thumb_background,
+            .backdrop_background = neutral.backdrop_background,
             .caption = neutral.caption,
             .document_added_background = with_alpha(accent.accent, 0.12f),
             .document_removed_background = with_alpha(neutral.error_accent, 0.12f),
@@ -274,6 +275,8 @@ namespace luil {
             .raised_background = colors.window_background,
             // 고른 칸은 고른 행과 같은 highlight 짝이다. 그 위 글자는 `selection_foreground`가 맡는다.
             .thumb_background = colors.highlight_background,
+            // 고대비에는 배경 효과가 서지 않는다. 그래도 값은 창 바탕으로 채워 둔다.
+            .backdrop_background = colors.window_background,
             .caption = {
                 .background = colors.button_background,
                 .foreground = colors.button_foreground,

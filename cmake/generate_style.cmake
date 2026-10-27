@@ -100,7 +100,8 @@ set(neutral_fields
 #  - struct에서는 `neutral_fields`의 뒤, `caption`의 앞에 이 순서로 선다.
 set(neutral_optional_fields
     "raisedBackground|raised_background|noticeBackground"
-    "thumbBackground|thumb_background|buttonPressedBackground")
+    "thumbBackground|thumb_background|buttonPressedBackground"
+    "backdropBackground|backdrop_background|windowBackground")
 set(tone_fields
     "pressed|pressed"
     "softButton|soft_button"

@@ -93,7 +93,7 @@ UI thread는 "이 tree가 새 크기로 배치됐는가"를 앱의 협조 없이
 레이어드 창은 알파 0인 픽셀을 마우스 판정에서 투명하게 본다(문서화된 동작). 그 자리의 클릭은 뒤 창으로 간다.
 
 - 기본(`layered_click_through = false`)은 바탕 알파가 0인 frame에서 알파 0 픽셀을 1로 올려 낸다. premultiplied라 1/255 검정이고 눈에는 투명하다. 창 안의 빈 자리 클릭이 창에 온다.
-- 바탕 알파가 0이 아니면 알파 0 픽셀이 생길 수 없어 전체를 훑지 않는다. 기본 테마가 그렇다.
+- 바탕 알파가 0이 아니면 알파 0 픽셀이 생길 수 없어 전체를 훑지 않는다. 기본 테마와 배경 효과의 옅은 바탕(`backdrop_background`)이 그렇다.
 - `layered_click_through = true`면 알파 0 픽셀을 그대로 둔다.
 
 ## 모서리·테두리·그림자
@@ -102,15 +102,7 @@ UI thread는 "이 tree가 새 크기로 배치됐는가"를 앱의 협조 없이
 
 ## 배경 효과
 
-luil은 창 배경 효과(시스템 backdrop, accent blur·acrylic) API를 두지 않는다. 그래서 감지해 알리거나 대체 경로를 고를 자리도 아직 없다. 둘 때 알아 둘 것은 다음과 같다. 아래 표는 이 기능을 요청할 때 함께 온 측정이다(빨강·파랑 반반 배경 위에서 경계가 번지는지로 판정). luil 쪽에서는 다시 재지 않았다.
-
-| 효과 | 일반 창 | 레이어드 창 |
-| --- | --- | --- |
-| `DWMWA_SYSTEMBACKDROP_TYPE` (`DWMSBT_*`) | 흐림 + 색 막 | 흐림 없는 단색 판 |
-| 비공개 accent blur behind | 흐림 | 같다 |
-| 비공개 accent acrylic blur behind | 흐림 + 색 막 | 같다 |
-
-레이어드 창의 accent 효과는 픽셀 알파와 관계없이 창 사각형 전체에 깔린다. 배경 효과 API를 더할 때는 레이어드 표시와 `DWMSBT_*`의 조합을 막거나 accent 경로로 고르게 해야 한다.
+배경 효과(`ui_frame::backdrop`)는 [창 배경 효과](backdrop-design.md)가 다룬다. 레이어드 표시에서는 시스템 배경 효과(`DWMSBT_*`)가 흐림 없는 단색 판이 되므로(실측), `acrylic`은 비공개 accent acrylic으로 세우고 `mica`·`mica_alt`는 `backdrop_status::unsupported_presentation`으로 알린다.
 
 ## 범위
 

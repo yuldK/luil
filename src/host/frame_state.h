@@ -74,6 +74,10 @@ namespace luil {
         // popup 표면이 켠다 (`popup_surface::prepare_frame`) — 다른 화면 위에 뜨는 판이라
         // 경계가 있어야 아래 화면과 갈린다. tree를 다 그린 뒤 그 위에 긋는다.
         bool border { false };
+        // 창 배경 효과가 선 창이다 (주 표면만, `ui_frame::backdrop`).
+        // 참이면 창 전체를 칠하는 바탕과 캡션 바탕이 `backdrop_background`가 된다 — 그 알파만큼 효과가 비친다.
+        //  - 효과가 **실제로 선** frame에서만 참이다. 서지 않은 창에 옅은 바탕을 칠하면 창이 검거나 통째로 비친다.
+        bool backdrop { false };
 
         // input thread가 게시한 상호작용 상태다.
         // caption의 비클라이언트 hover는 UI thread가 게시 전에 합쳐 둔다.
