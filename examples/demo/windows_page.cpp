@@ -106,6 +106,11 @@ namespace demo {
                 close_tool_menu();
             return true;
         }
+        if (const auto* const position { message.get<caption_position_intent>() }; position != nullptr)
+        {
+            caption_bottom_ = position->bottom;
+            return true;
+        }
         if (const auto* const menu { message.get<tool_menu_toggle_intent>() }; menu != nullptr)
         {
             if (menu->open)
@@ -221,6 +226,21 @@ namespace demo {
         fullscreen->set_action(luil::ui_trigger::left_click,
             [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::ui_command::window_toggle_fullscreen } }; });
         column->add(std::move(fullscreen), { .length = 26.0f, .cross_length = 140.0f });
+
+        // 주 창 캡션의 자리다. 그리기는 셸의 배치를 따르고, 끌기·창 버튼·Alt+Space 메뉴는 게시된 tree에서
+        // 캡션이 선 자리를 읽어 따라간다 — 라이브러리에 앵커를 따로 알리지 않는다.
+        column->add_gap(18.0f);
+        const bool bottom { caption_bottom_ };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"windows-caption-position" }, bottom ? u8"캡션 위치: 아래" : u8"캡션 위치: 위", 11.0f,
+                        luil::label_color_role::dim),
+            18.0f);
+        column->add_gap(4.0f);
+        luil::text_button_config position_config {};
+        position_config.text = bottom ? u8"캡션을 위로" : u8"캡션을 아래로";
+        auto position { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, u8"caption-position" }, std::move(position_config)) };
+        position->set_cursor(luil::ui_cursor::hand);
+        position->set_action(luil::ui_trigger::left_click, luil::make_message_action(caption_position_intent { bottom == false }));
+        column->add(std::move(position), { .length = 26.0f, .cross_length = 140.0f });
 
         // 플랫폼 도구다. 경로 따옴표·COM·핸들 정리는 라이브러리가 맡는다.
         column->add_gap(18.0f);

@@ -487,10 +487,15 @@ namespace demo {
                 //    앱의 것이다 — 라이브러리는 알리기만 하고 tree는 우리가 짓는다.
                 const luil::caption_config caption_config { make_caption_config(primary_instance_) };
                 const float caption_height { placement_.fullscreen ? 0.0f : luil::caption_element::height_for(caption_config) * scale };
+                // 캡션은 창 위나 아래에 선다 (창 페이지의 전환). 놓는 자리가 곧 끌기 띠의 자리다 —
+                // 라이브러리는 게시된 tree에서 캡션이 선 자리를 읽어 판정한다 (caption-button-design.md).
+                const bool caption_bottom { windows_.caption_at_bottom() };
+                const float caption_top { caption_bottom ? height - caption_height : 0.0f };
+                const float content_top { caption_bottom ? 0.0f : caption_height };
                 if (placement_.fullscreen == false)
                 {
                     auto caption { std::make_unique<luil::caption_element>(caption_config) };
-                    caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+                    caption->arrange({ { 0.0f, caption_top, width, caption_height }, scale });
                     root->add(std::move(caption));
 
                     // 제목 표시줄 가운데의 명령 찾기 단추다. caption 위에 겹쳐 세우고 client 표시를 달면
@@ -507,7 +512,8 @@ namespace demo {
                         .open = luil::make_message_action(palette_open_intent {}),
                     };
                     auto search { luil::make_command_palette_entry(std::move(search_config)) };
-                    search->arrange({ { (width - search_width * scale) / 2.0f, search_inset * scale, search_width * scale, caption_height - search_inset * 2.0f * scale }, scale });
+                    search->arrange(
+                        { { (width - search_width * scale) / 2.0f, caption_top + search_inset * scale, search_width * scale, caption_height - search_inset * 2.0f * scale }, scale });
                     root->add(std::move(search));
                 }
 
@@ -522,7 +528,7 @@ namespace demo {
                 auto shell { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, shell_config) };
                 shell->add(std::make_unique<luil::sidebar_element>(sidebar_config, sidebar_collapsed_ ? nullptr : make_navigation()), sidebar_width);
                 shell->add_flexible(build_page(content_width, content_height, scale));
-                shell->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
+                shell->arrange({ { 0.0f, content_top, width, height - caption_height }, scale });
                 root->add(std::move(shell));
 
                 // 오버레이들: dialog는 화면을 덮고 토스트는 오른쪽 아래에 쌓인다.
@@ -569,8 +575,8 @@ namespace demo {
                 // 창 tree를 만든 뒤라야 메뉴 버튼의 자리를 안다.
                 for (luil::win32::ui_popup& popup : windows_.make_popups())
                     frame->popups.push_back(std::move(popup));
-                // 명령 팔레트는 어느 페이지에서든 제목 표시줄 바로 아래 가운데에 뜬다.
-                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, caption_height / scale + 8.0f, scale))
+                // 명령 팔레트는 어느 페이지에서든 내용 영역 맨 위 가운데에 뜬다 (캡션이 위면 제목 표시줄 바로 아래).
+                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale))
                     frame->popups.push_back(std::move(popup));
                 frame->file_dialog = file_dialog_;
                 // 초점 요청은 두 곳(도구 창 페이지·명령 팔레트)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
