@@ -5,6 +5,9 @@
 
 #include "demo/common.h"
 #include "luil/theme/appearance.h"
+#include "luil/win32/win32_window.h"
+
+#include <optional>
 
 namespace demo {
     // --- 이 페이지의 메시지 ---
@@ -23,6 +26,18 @@ namespace demo {
         std::u8string id {};
     };
 
+    // 주 창의 배경 효과를 고른다. 셸이 frame에 싣는다 (`ui_frame::backdrop`).
+    struct backdrop_intent
+    {
+        luil::window_backdrop backdrop { luil::window_backdrop::none };
+    };
+
+    // 라이브러리가 알린 배경 효과의 상태다 (`window_delegate::make_backdrop_message`).
+    struct backdrop_report_intent
+    {
+        luil::win32::backdrop_report report {};
+    };
+
     class theme_page
     {
     public:
@@ -35,8 +50,23 @@ namespace demo {
             return appearance_;
         }
 
+        // 셸이 frame에 싣는 배경 효과다.
+        [[nodiscard]] luil::window_backdrop backdrop() const noexcept
+        {
+            return backdrop_;
+        }
+
+        // 배경 효과를 고르고 시작한다 (`--backdrop=`).
+        void set_backdrop(const luil::window_backdrop backdrop) noexcept
+        {
+            backdrop_ = backdrop;
+        }
+
     private:
         luil::appearance_settings appearance_ {};
+        luil::window_backdrop backdrop_ { luil::window_backdrop::none };
+        // 마지막으로 알린 상태다. 알림이 오기 전에는 비어 있다.
+        std::optional<luil::win32::backdrop_report> report_ {};
         float scroll_ { 0.0f };
     };
 } // namespace demo

@@ -216,8 +216,10 @@ namespace luil::win32 {
                 const sk_sp<SkTypeface> ui { configured_ui_typeface() };
                 draw_frame(*surface_->getCanvas(), codicon_typeface_.get(), ui.get(), state);
                 // 알파 0 픽셀은 바탕을 알파 0으로 칠했을 때만 생긴다 — 바탕이 표면 전체를 먼저 칠한다. 그 밖의 frame은
-                // 전체를 훑지 않는다.
-                const ui_color background { frame_palette(state).window_background };
+                // 전체를 훑지 않는다 (배경 효과의 옅은 바탕도 알파가 0이 아니다).
+                //  - 배경 효과가 선 frame의 바탕은 `backdrop_background`다 (`draw_frame`).
+                const ui_color_palette palette { frame_palette(state) };
+                const ui_color background { state.backdrop ? palette.backdrop_background : palette.window_background };
                 if (click_through_ == false && (background >> 24) == 0)
                     raise_transparent_pixels();
 

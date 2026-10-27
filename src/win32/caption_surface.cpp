@@ -148,9 +148,9 @@ namespace luil::win32 {
         return true;
     }
 
-    void caption_surface::apply_dwm_frame(const HWND window, const window_display_mode mode) noexcept
+    void caption_surface::apply_dwm_frame(const HWND window, const window_display_mode mode, const bool glass) noexcept
     {
-        const MARGINS margins { 0, 0, dwm_frame_top_margin_for(mode), 0 };
+        const MARGINS margins { glass ? MARGINS { -1, -1, -1, -1 } : MARGINS { 0, 0, dwm_frame_top_margin_for(mode), 0 } };
         DwmExtendFrameIntoClientArea(window, &margins);
         // 레이어드 창은 기본값(`DWMWCP_DEFAULT`)에서 모서리도 테두리도 그림자도 없는 직각 판이다. 둥글게를 명시하면
         // 일반 창과 같은 모서리·테두리·그림자가 선다 (둘 다 실측, layered-presentation-design.md).
@@ -160,6 +160,15 @@ namespace luil::win32 {
             const DWM_WINDOW_CORNER_PREFERENCE corner { mode == window_display_mode::fullscreen ? DWMWCP_DONOTROUND : DWMWCP_ROUND };
             static_cast<void>(DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner)));
         }
+    }
+
+    void caption_surface::set_backdrop_glass(const bool glass) noexcept
+    {
+        if (backdrop_glass_ == glass)
+            return;
+        backdrop_glass_ = glass;
+        if (window_ != nullptr)
+            apply_dwm_frame(window_, display_mode(), backdrop_glass_);
     }
 
     window_display_mode caption_surface::display_mode() const noexcept
@@ -241,7 +250,7 @@ namespace luil::win32 {
             // 확장 스타일과 배치는 갈무리한 것을 그대로 되돌린다.
             // 그 둘은 우리가 계산하는 값이 아니라 창이 들어오기 전에 갖고 있던 것이다.
             SetWindowLongPtrW(window_, GWL_EXSTYLE, static_cast<LONG_PTR>(saved.extended_style));
-            apply_dwm_frame(window_, display_mode());
+            apply_dwm_frame(window_, display_mode(), backdrop_glass_);
             // 자리와 `showCmd`를 함께 되돌린다 — 최대화된 창에서 들어갔으면
             // 최대화된 창으로 나온다.
             WINDOWPLACEMENT placement { saved.placement };
@@ -270,7 +279,7 @@ namespace luil::win32 {
         const window_display_mode mode { window_display_mode::fullscreen };
         update_custom_window_style(window_, caption_.buttons, mode);
         SetWindowLongPtrW(window_, GWL_EXSTYLE, static_cast<LONG_PTR>(extended_window_style_for(saved.extended_style, mode)));
-        apply_dwm_frame(window_, mode);
+        apply_dwm_frame(window_, mode, backdrop_glass_);
         SetWindowPos(window_, nullptr, bounds->x, bounds->y, bounds->width, bounds->height, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
         return true;
     }
@@ -413,7 +422,7 @@ namespace luil::win32 {
         case WM_DWMCOMPOSITIONCHANGED:
             // 합성이 다시 서면 프레임도 다시 얹는다.
             // **지금 모드로** 얹어야 전체 화면 중의 재시작이 위쪽 한 줄을 되살리지 않는다.
-            apply_dwm_frame(window_, display_mode());
+            apply_dwm_frame(window_, display_mode(), backdrop_glass_);
             return LRESULT { 0 };
         default:
             return std::nullopt;

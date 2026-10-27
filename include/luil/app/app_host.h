@@ -306,6 +306,22 @@ namespace luil {
         superseded,
     };
 
+    // 주 창 뒤에 까는 배경 효과다 (docs/backdrop-design.md).
+    // 뜻으로 고르고, 어떤 길로 세울지는 플랫폼이 표시 방식에 맞춰 고른다. 서지 않으면 창은 지금처럼 불투명하고
+    // 그 까닭은 플랫폼이 알린다 (Win32는 `window_delegate::make_backdrop_message`).
+    //  - 효과가 선 창은 바탕을 `backdrop_background`로 칠한다. 표면·입력칸 같은 다른 역할은 그대로 불투명하다.
+    //  - Android는 보지 않는다.
+    enum class window_backdrop
+    {
+        none,
+        // 바탕화면 색을 옅게 깐다. 뒤 창은 비치지 않는다.
+        mica,
+        // mica보다 진한 변형이다 (탭이 많은 창의 바탕).
+        mica_alt,
+        // 뒤에 있는 것을 흐리게 비춘다.
+        acrylic,
+    };
+
     struct ui_frame
     {
         std::shared_ptr<const ui_tree> tree {};
@@ -328,6 +344,8 @@ namespace luil {
         //  - 선호(`appearance`)가 아니라 여기 있는 이유: 사용자 설정이 아니라 **앱의
         //    것**이라 계층이 다르다 (ui_style.h).
         std::shared_ptr<const ui_style> style {};
+        // 주 창의 배경 효과다. 테마처럼 frame마다 실으며, 바뀐 frame에서 UI thread가 다시 건다.
+        window_backdrop backdrop { window_backdrop::none };
         // 창 배치 적용 요청이다.
         // revision이 바뀐 경우에만 UI thread가 적용한다.
         std::uint64_t window_placement_revision { 0 };

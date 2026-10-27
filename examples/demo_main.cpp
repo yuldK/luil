@@ -27,6 +27,7 @@
 //                       지난 실행이 저장한 배치보다 세다)
 //       --presentation=standard|layered (주 창의 표시 방식 — layered는 CPU 렌더러로 배치와 frame을 한 합성에 낸다)
 //       --caption=top|bottom (주 창 캡션의 처음 자리 — 창 페이지의 전환과 같다)
+//       --backdrop=none|mica|mica_alt|acrylic (주 창 배경 효과의 처음 값 — 테마 페이지의 고르기와 같다)
 
 #include "demo/basics_page.h"
 #include "demo/common.h"
@@ -214,11 +215,12 @@ namespace demo {
                 , primary_instance_ { primary_instance }
             {}
 
-            // 창 페이지의 시작 상태다 (`--caption=bottom`, `--presentation=`).
-            void set_window_options(const bool caption_bottom, const bool layered) noexcept
+            // 창 페이지·테마 페이지의 시작 상태다 (`--caption=bottom`, `--presentation=`, `--backdrop=`).
+            void set_window_options(const bool caption_bottom, const bool layered, const luil::window_backdrop backdrop) noexcept
             {
                 windows_.set_caption_at_bottom(caption_bottom);
                 windows_.set_layered_presentation(layered);
+                theme_.set_backdrop(backdrop);
             }
 
             // 창과 host가 준비된 직후 UI thread가 알려 주는 자리다.
@@ -571,6 +573,7 @@ namespace demo {
                 auto frame { std::make_shared<luil::win32::ui_frame>() };
                 frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
                 frame->appearance = theme_.appearance();
+                frame->backdrop = theme_.backdrop();
                 // 코드 글꼴은 이름을 줘야 고정폭이 된다. 비워 두면 내장 UI 글꼴이다 (appearance.h).
                 // 변경 작업대의 차이 보기가 이 글꼴로 열을 맞춘다. Windows에 늘 있는 Consolas다.
                 frame->fonts.code_family = u8"Consolas";
@@ -1036,6 +1039,11 @@ namespace demo {
                 return luil::app_message { window_metrics_intent { width, height, scale } };
             }
 
+            [[nodiscard]] luil::app_message make_backdrop_message(const luil::win32::backdrop_report& report) override
+            {
+                return luil::app_message { backdrop_report_intent { report } };
+            }
+
             [[nodiscard]] luil::app_message make_window_placement_message(const luil::win32::window_placement& placement) override
             {
                 return luil::app_message { placement_intent { placement } };
@@ -1067,7 +1075,8 @@ namespace demo {
 } // namespace demo
 
 namespace {
-    [[nodiscard]] bool parse_arguments(const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom)
+    [[nodiscard]] bool parse_arguments(
+        const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom, luil::window_backdrop& backdrop)
     {
         for (std::size_t index = 1; index < arguments.size(); ++index)
         {
@@ -1109,6 +1118,14 @@ namespace {
                 config.presentation = luil::win32::window_presentation::layered;
             else if (argument == u8"--caption=top" || argument == u8"--caption=bottom")
                 caption_bottom = argument == u8"--caption=bottom";
+            else if (argument == u8"--backdrop=none")
+                backdrop = luil::window_backdrop::none;
+            else if (argument == u8"--backdrop=mica")
+                backdrop = luil::window_backdrop::mica;
+            else if (argument == u8"--backdrop=mica_alt")
+                backdrop = luil::window_backdrop::mica_alt;
+            else if (argument == u8"--backdrop=acrylic")
+                backdrop = luil::window_backdrop::acrylic;
             else
                 return false;
         }
@@ -1142,7 +1159,8 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     };
     std::u8string start_page {};
     bool caption_bottom { false };
-    if (parse_arguments(*arguments, config, start_page, caption_bottom) == false)
+    luil::window_backdrop backdrop { luil::window_backdrop::none };
+    if (parse_arguments(*arguments, config, start_page, caption_bottom, backdrop) == false)
         return 2;
 
     // 지난 실행이 갈무리한 배치를 되돌린다.
@@ -1158,7 +1176,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     }
 
     demo::demo_driver driver { restore, start_page, instance.primary() };
-    driver.set_window_options(caption_bottom, config.presentation == luil::win32::window_presentation::layered);
+    driver.set_window_options(caption_bottom, config.presentation == luil::win32::window_presentation::layered, backdrop);
     demo::demo_policy policy {};
     demo::demo_delegate delegate { driver };
 

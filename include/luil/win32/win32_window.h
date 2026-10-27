@@ -105,10 +105,40 @@ namespace luil::win32 {
         //  - CPU 렌더러만 쓴다. `renderer`가 `direct3d`·`gpu`면 창이 시작하지 않는다(시작 실패로 알린다).
         //    `automatic`은 CPU다.
         //  - 웹뷰는 설 자리가 없다 (CPU 렌더러와 같다 — 자리표가 placeholder를 그린다).
+        //  - 배경 효과(`ui_frame::backdrop`)는 acrylic만 선다. mica는 `backdrop_status::unsupported_presentation`이다.
         //  - 주 창만 이 방식이다. 보조 창과 popup은 `standard`로 남는다.
         //  - 크기 변경은 앱이 새 tree를 낼 때까지 한두 frame 늦게 따라온다. 앱이 정해진 시간 안에 tree를 내지
         //    않으면 가진 tree로 내고 넘어간다.
         layered,
+    };
+
+    // 주 창 배경 효과가 지금 어떤 상태인가다 (docs/backdrop-design.md).
+    enum class backdrop_status
+    {
+        // 효과를 고르지 않았다 (`window_backdrop::none`).
+        off,
+        // 고른 효과가 섰다.
+        applied,
+        // 이 표시 방식이 그 효과를 세울 수 없다. 레이어드 표시는 acrylic만 선다.
+        unsupported_presentation,
+        // 이 Windows에 그 효과가 없다 (시스템 배경 효과는 Windows 11 22H2부터다).
+        unsupported_system,
+        // 사용자가 OS 설정에서 투명 효과를 껐다.
+        transparency_disabled,
+        // 고대비다. 효과를 깔면 사용자가 맞춘 대비가 무너진다.
+        high_contrast,
+        // 원격 데스크톱이다. 원격 세션은 DWM 효과를 그리지 않는다.
+        remote_session,
+    };
+
+    // 배경 효과 상태 보고다. 상태가 바뀔 때마다 한 번 알린다.
+    struct backdrop_report
+    {
+        // 앱이 frame에 실은 효과다.
+        window_backdrop requested { window_backdrop::none };
+        backdrop_status status { backdrop_status::off };
+
+        [[nodiscard]] bool operator==(const backdrop_report&) const noexcept = default;
     };
 
     // 창의 겉모습과 정책이다.
@@ -142,7 +172,7 @@ namespace luil::win32 {
         // 레이어드 창에서 알파 0인 픽셀이 마우스를 뒤 창으로 통과시키게 둔다 (`layered` 전용).
         //  - 레이어드 창은 알파 0인 픽셀을 마우스 판정에서 투명하게 본다. 이 값이 거짓(기본값)이면 그린 바탕이
         //    알파 0인 frame에서 알파 0 픽셀을 1로 올려 낸다 — 창 안의 빈 자리 클릭이 창에 온다.
-        //  - 바탕 알파가 0이 아닌 테마(기본 테마가 그렇다)에서는 알파 0 픽셀이 없어 어느 쪽이든 같다.
+        //  - 바탕 알파가 0이 아닌 테마(기본 테마, 배경 효과의 옅은 바탕)에서는 알파 0 픽셀이 없어 어느 쪽이든 같다.
         bool layered_click_through { false };
         // Direct3D를 **만들 때** 실패시킨다. 그러면 스왑체인이 아예 없는 채로
         // 처음부터 CPU로 시작한다.
@@ -197,6 +227,14 @@ namespace luil::win32 {
         [[nodiscard]] virtual app_message make_window_placement_message(const window_placement& placement)
         {
             static_cast<void>(placement);
+            return {};
+        }
+
+        // 주 창 배경 효과의 상태가 바뀌었다 (앱이 고른 효과가 바뀌었거나, OS 설정·고대비가 바뀌었다).
+        // 빈 메시지는 게시하지 않는다. 설정 화면이 "이 표시 방식에서는 mica를 쓸 수 없다" 같은 까닭을 보일 때 쓴다.
+        [[nodiscard]] virtual app_message make_backdrop_message(const backdrop_report& report)
+        {
+            static_cast<void>(report);
             return {};
         }
 

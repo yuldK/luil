@@ -24,7 +24,12 @@ namespace luil {
         // 키 컬러 경로는 스타일의 중립 색 위에 accent를 얹는 나머지 두 테마의 것이다.
         if (state.theme == color_theme::high_contrast)
             return high_contrast_palette_for(state.high_contrast);
-        return color_palette_for(frame_style(state), state.theme, accent_for(state.accent_id));
+        ui_color_palette palette { color_palette_for(frame_style(state), state.theme, accent_for(state.accent_id)) };
+        // 캡션도 효과를 비춘다. 창 바탕 역할(`window_background`) 자체는 그대로 둔다 — 체크 표시처럼 그 색을 대비로
+        // 쓰는 자리가 있어 옅게 하면 표시가 흐려진다. 옅어지는 것은 창 전체를 칠하는 바탕(`draw_frame`)과 캡션뿐이다.
+        if (state.backdrop)
+            palette.caption.background = palette.backdrop_background;
+        return palette;
     }
 
     namespace {
@@ -91,7 +96,7 @@ namespace luil {
 
         // tree가 화면 전체를 그린다 (caption 포함).
         // 없으면 배경만 칠한다.
-        canvas.clear(colors.window_background);
+        canvas.clear(state.backdrop ? colors.backdrop_background : colors.window_background);
         // 내용은 안전 영역의 원점에서 시작한다. 배경은 위에서 표면 전체에 칠했다.
         //  - 옮긴 원점은 tree에만 쓴다. 아래의 테두리와 웹뷰 구멍은 표면 좌표다.
         if (state.tree != nullptr)

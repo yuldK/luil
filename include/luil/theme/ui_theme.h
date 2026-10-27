@@ -169,6 +169,10 @@ namespace luil {
         //  - 트랙(`input_background`)보다 **밝아야** 한다. 어두우면 고른 칸이 눌려 들어가 꺼진 것으로 읽힌다.
         //  - 라이트는 표면 흰색, 다크는 전경색의 옅은 알파라 트랙 위에서 한 단 뜬다.
         ui_color thumb_background { 0 };
+        // 창 배경 효과(`window_backdrop`)가 선 창의 바탕이다. 창 전체를 칠하는 바탕과 캡션 바탕이 이 색이 된다.
+        //  - 알파가 효과를 얼마나 비출지다. 불투명하면 효과가 서도 보이지 않는다.
+        //  - 효과가 서지 않은 창(설정이 끔·OS 투명 효과 꺼짐·고대비)은 이 색을 쓰지 않고 `window_background`다.
+        ui_color backdrop_background { 0 };
         caption_color_palette caption {};
 
         [[nodiscard]] bool operator==(const neutral_color_palette&) const noexcept = default;
@@ -278,6 +282,8 @@ namespace luil {
         //  - 트랙(`input_background`)보다 **밝아야** 한다. 어두우면 고른 칸이 눌려 들어가 꺼진 것으로 읽힌다.
         //  - 라이트는 표면 흰색, 다크는 전경색의 옅은 알파라 트랙 위에서 한 단 뜬다.
         ui_color thumb_background { 0 };
+        // 창 배경 효과가 선 창의 바탕이다 (`neutral_color_palette::backdrop_background`).
+        ui_color backdrop_background { 0 };
         caption_color_palette caption {};
 
         ui_color document_added_background { 0 };
