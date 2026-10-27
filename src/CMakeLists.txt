@@ -442,6 +442,11 @@ luil_add_source_filter(luil_files "win32/caption"
     win32/window_mode.cpp
     win32/window_mode.h)
 
+# 레이어드 주 창이 미룬 배치다 (layered-presentation-design.md).
+luil_add_source_filter(luil_files "win32/layered"
+    win32/layered_placement.cpp
+    win32/layered_placement.h)
+
 # 떠 있는 창의 자리·대조·닫힘이다 (메뉴·드롭다운).
 luil_add_source_filter(luil_files "win32/popup"
     win32/popup_surface.cpp

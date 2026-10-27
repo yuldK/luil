@@ -92,6 +92,25 @@ namespace luil::win32 {
         std::u8string preface {};
     };
 
+    // 주 창의 그림을 화면에 내는 방식이다 (docs/layered-presentation-design.md).
+    enum class window_presentation
+    {
+        // 렌더러가 창에 그리고 창 크기는 OS가 바로 바꾼다. 지금까지의 방식이다.
+        //  - 위·왼쪽 끝이 움직이는 크기 변경에서 한 합성 동안 이전 frame이 새 창의 왼쪽 위에 붙어 보인다.
+        //    아래·오른쪽에 붙은 내용(아래 캡션 등)이 그 한 frame 동안 제자리를 벗어난다.
+        standard,
+        // 레이어드 창(`WS_EX_LAYERED`)에 `UpdateLayeredWindow`로 낸다.
+        // 크기가 바뀌는 배치는 새 크기로 배치한 tree가 올 때까지 미뤘다가 그 frame과 **같은 호출로** 위치·크기를
+        // 함께 넘긴다. 사용자의 테두리 끌기·최대화·배율 변경·앱의 배치 요청이 모두 이 길을 지난다.
+        //  - CPU 렌더러만 쓴다. `renderer`가 `direct3d`·`gpu`면 창이 시작하지 않는다(시작 실패로 알린다).
+        //    `automatic`은 CPU다.
+        //  - 웹뷰는 설 자리가 없다 (CPU 렌더러와 같다 — 자리표가 placeholder를 그린다).
+        //  - 주 창만 이 방식이다. 보조 창과 popup은 `standard`로 남는다.
+        //  - 크기 변경은 앱이 새 tree를 낼 때까지 한두 frame 늦게 따라온다. 앱이 정해진 시간 안에 tree를 내지
+        //    않으면 가진 tree로 내고 넘어간다.
+        layered,
+    };
+
     // 창의 겉모습과 정책이다.
     // 값만 바꾸면 되도록 한곳에 모아 둔다 (단위를 별도로 적지 않은 크기는 논리 96 DPI 기준 px).
     struct window_config
@@ -118,6 +137,13 @@ namespace luil::win32 {
         // 0이면 시스템 기본 아이콘이다.
         int icon_resource { 0 };
         renderer_mode renderer { renderer_mode::automatic };
+        // 주 창의 표시 방식이다. 기본값은 지금까지의 방식이다.
+        window_presentation presentation { window_presentation::standard };
+        // 레이어드 창에서 알파 0인 픽셀이 마우스를 뒤 창으로 통과시키게 둔다 (`layered` 전용).
+        //  - 레이어드 창은 알파 0인 픽셀을 마우스 판정에서 투명하게 본다. 이 값이 거짓(기본값)이면 그린 바탕이
+        //    알파 0인 frame에서 알파 0 픽셀을 1로 올려 낸다 — 창 안의 빈 자리 클릭이 창에 온다.
+        //  - 바탕 알파가 0이 아닌 테마(기본 테마가 그렇다)에서는 알파 0 픽셀이 없어 어느 쪽이든 같다.
+        bool layered_click_through { false };
         // Direct3D를 **만들 때** 실패시킨다. 그러면 스왑체인이 아예 없는 채로
         // 처음부터 CPU로 시작한다.
         bool simulate_direct3d_failure { false };

@@ -306,6 +306,12 @@ namespace luil::win32 {
         // 창을 붙인 뒤(`WM_NCCREATE`) 한 번 부른다.
         [[nodiscard]] bool create_renderer(renderer_mode mode, renderer_fault_injection fault, int width, int height, std::u8string& error);
         [[nodiscard]] bool resize_renderer(int width, int height, std::u8string& error);
+        // CPU 렌더러가 frame을 내는 방식이다. `create_renderer` 전에 정한다.
+        //  - 레이어드면 창이 `WS_EX_LAYERED`로 만들어져 있어야 한다.
+        void set_cpu_presentation(const cpu_presentation& presentation) noexcept
+        {
+            presentation_ = presentation;
+        }
 
         // 이 표면의 IME 연결을 만든다 (multi-window-design.md — 표면마다 문서 하나).
         // 만들지 못하면 조용히 없이 간다 — 그 표면은 `WM_CHAR` 경로만으로 동작하고
@@ -377,6 +383,22 @@ namespace luil::win32 {
             static_cast<void>(state);
         }
 
+        // frame의 크기를 client 크기로 세운 직후, 발행본을 집기 전에 부른다.
+        // 레이어드 주 창은 여기서 tree를 집고, 그 tree가 반영한 미룬 배치가 있으면 frame을 그 크기로 세우고
+        // `next_placement_`에 담는다 (layered-presentation-design.md).
+        //  - `presenting`이 거짓이면(캡처) 미룬 배치를 꺼내지 않는다. 꺼낸 배치는 화면에 내야 사라진다.
+        virtual void begin_frame(frame_state& state, bool presenting)
+        {
+            static_cast<void>(state);
+            static_cast<void>(presenting);
+        }
+
+        // `next_placement_`를 실어 낸 frame이 화면에 닿았다.
+        virtual void placement_presented(const screen_bounds& bounds)
+        {
+            static_cast<void>(bounds);
+        }
+
         // 이번 frame에 **그릴 것**을 세운다. 알리기·웹뷰·TSF는 하지 않는다.
         //
         // `render`와 `capture`가 여기 하나를 함께 본다. 갈라 두면 화면과 캡처가
@@ -384,7 +406,11 @@ namespace luil::win32 {
         //  - `frame`과 `code`는 **`state`를 쓰는 동안 살아 있어야 한다.** 외양은
         //    발행본에서 오고 글리프는 typeface가 쥐고 있어, 먼저 놓으면 그리는
         //    중에 사라진다. 그래서 수명을 부르는 쪽에 돌려준다.
-        [[nodiscard]] bool build_frame(frame_state& state, std::shared_ptr<const ui_frame>& frame, sk_sp<SkTypeface>& code, std::u8string& error);
+        //  - `presenting`은 이 frame을 화면에 내는가다 (`begin_frame`).
+        [[nodiscard]] bool build_frame(frame_state& state, std::shared_ptr<const ui_frame>& frame, sk_sp<SkTypeface>& code, bool presenting, std::u8string& error);
+
+        // 이번 frame이 창을 옮기며 낼 배치다 (레이어드 주 창만 채운다). `render`가 렌더러에 넘기고 비운다.
+        std::optional<screen_bounds> next_placement_ {};
 
     private:
         // 세워 둔 frame을 raster bitmap에 그린다 (찍기와 녹화가 함께 쓴다).
@@ -551,6 +577,7 @@ namespace luil::win32 {
         bool webview_focused_ { false };
         std::uint32_t dpi_ { 96 };
         std::unique_ptr<renderer_host> renderer_ {};
+        cpu_presentation presentation_ {};
         // host가 session보다 오래 살아야 한다 (선언 순서가 곧 파괴 순서의 역이다).
         std::unique_ptr<surface_tsf_host> text_input_host_ {};
         std::unique_ptr<tsf_input_session> text_input_ {};

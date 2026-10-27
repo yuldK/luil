@@ -481,7 +481,7 @@ namespace luil::win32 {
                 return false;
             }
         }
-        renderer_ = create_renderer_host(window_, mode, fault, composition, error);
+        renderer_ = create_renderer_host(window_, mode, fault, composition, presentation_, error);
         return renderer_ != nullptr && renderer_->resize(std::max(1, width), std::max(1, height), error);
     }
 
@@ -725,7 +725,7 @@ namespace luil::win32 {
         }
     }
 
-    bool window_surface::build_frame(frame_state& state, std::shared_ptr<const ui_frame>& frame, sk_sp<SkTypeface>& code, std::u8string& error)
+    bool window_surface::build_frame(frame_state& state, std::shared_ptr<const ui_frame>& frame, sk_sp<SkTypeface>& code, const bool presenting, std::u8string& error)
     {
         RECT client {};
         if (GetClientRect(window_, &client) == FALSE)
@@ -741,6 +741,7 @@ namespace luil::win32 {
         // 두고, 그 상태를 든 표면이 `prepare_frame`에서 둘을 한 모드로 함께 세운다
         // (`caption_surface::prepare_frame` — 둘이 동시에 참이 되지 않는 자리다).
         state.maximized = IsZoomed(window_) != FALSE;
+        begin_frame(state, presenting);
 
         if (app_host* const host { context_.host() }; host != nullptr)
         {
@@ -774,7 +775,7 @@ namespace luil::win32 {
         std::shared_ptr<const ui_frame> frame {};
         // typeface는 이 호출이 끝날 때까지 살아 있어야 한다.
         sk_sp<SkTypeface> code {};
-        if (build_frame(state, frame, code, error) == false)
+        if (build_frame(state, frame, code, true, error) == false)
             return false;
 
         // 초점 변화는 언제나 발행본 게시로 오고 게시는 모든 표면을 깨우므로,
@@ -792,8 +793,13 @@ namespace luil::win32 {
         // 조합 중이면 session이 미룬다.
         if (text_input_ != nullptr)
             text_input_->synchronize();
+        const std::optional<screen_bounds> placement { std::exchange(next_placement_, std::nullopt) };
+        if (layered_renderer* const layered { renderer_layered(*renderer_) }; layered != nullptr)
+            layered->place_next_frame(placement);
         if (renderer_->render(state, error) == false)
             return false;
+        if (placement.has_value())
+            placement_presented(*placement);
 
         // 그린 뒤에 모은다. 실패한 frame은 화면에 닿지 않았으므로 녹화에도 없다.
         if (recording_)
@@ -812,7 +818,7 @@ namespace luil::win32 {
         frame_state state {};
         std::shared_ptr<const ui_frame> frame {};
         sk_sp<SkTypeface> code {};
-        if (build_frame(state, frame, code, error) == false)
+        if (build_frame(state, frame, code, false, error) == false)
             return false;
 
         // 알리지 않는다. 캡처는 **보는 일**이라 접근성 발행본의 기준선을 옮기면

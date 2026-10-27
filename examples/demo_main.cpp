@@ -25,6 +25,8 @@
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
+//       --presentation=standard|layered (주 창의 표시 방식 — layered는 CPU 렌더러로 배치와 frame을 한 합성에 낸다)
+//       --caption=top|bottom (주 창 캡션의 처음 자리 — 창 페이지의 전환과 같다)
 
 #include "demo/basics_page.h"
 #include "demo/common.h"
@@ -206,9 +208,18 @@ namespace demo {
             // `page`가 비어 있지 않으면 그 페이지로 시작한다 (--page=).
             demo_driver(const std::optional<luil::win32::window_placement> restore, std::u8string page, const bool primary_instance)
                 : restore_ { restore }
+                , placement_request_ { restore }
+                , placement_revision_ { restore.has_value() ? 1u : 0u }
                 , page_ { page.empty() ? std::u8string { page_overview } : std::move(page) }
                 , primary_instance_ { primary_instance }
             {}
+
+            // 창 페이지의 시작 상태다 (`--caption=bottom`, `--presentation=`).
+            void set_window_options(const bool caption_bottom, const bool layered) noexcept
+            {
+                windows_.set_caption_at_bottom(caption_bottom);
+                windows_.set_layered_presentation(layered);
+            }
 
             // 창과 host가 준비된 직후 UI thread가 알려 주는 자리다.
             // 배출구(`deliver`)가 답을 logic thread로 나르려면 이 포인터가 필요하다.
@@ -333,6 +344,24 @@ namespace demo {
                 if (const auto* const placement { message.get<placement_intent>() }; placement != nullptr)
                 {
                     placement_ = placement->placement;
+                    return;
+                }
+                if (const auto* const edge { message.get<edge_resize_intent>() }; edge != nullptr)
+                {
+                    // 마지막 배치 보고에서 위·왼쪽 끝만 옮긴다. 최대화·전체 화면 창은 끝이 화면에 붙어 있어 두지 않는다.
+                    //  - 라이브러리는 앱의 배치 요청을 되울려 보고하지 않으므로 낸 값을 그대로 지금 배치로 삼는다.
+                    if (placement_.valid() == false || placement_.maximized || placement_.fullscreen)
+                        return;
+                    const int left { static_cast<int>(edge->left * metrics_.scale) };
+                    const int top { static_cast<int>(edge->top * metrics_.scale) };
+                    luil::win32::window_placement next { placement_ };
+                    next.x -= left;
+                    next.width += left;
+                    next.y -= top;
+                    next.height += top;
+                    placement_ = next;
+                    placement_request_ = next;
+                    ++placement_revision_;
                     return;
                 }
                 if (const auto* const metrics { message.get<window_metrics_intent>() }; metrics != nullptr)
@@ -545,13 +574,13 @@ namespace demo {
                 // 코드 글꼴은 이름을 줘야 고정폭이 된다. 비워 두면 내장 UI 글꼴이다 (appearance.h).
                 // 변경 작업대의 차이 보기가 이 글꼴로 열을 맞춘다. Windows에 늘 있는 Consolas다.
                 frame->fonts.code_family = u8"Consolas";
-                // 크기·최대화의 복원이다. 자리는 창을 만들 때 이미 잡았다 (wWinMain).
+                // 크기·최대화의 복원과 창 페이지의 끝 옮기기다. 복원의 자리는 창을 만들 때 이미 잡았다 (wWinMain).
                 // 요청은 revision이 바뀔 때만 적용되므로 매 frame 같은 값을 실어도
                 // 창은 한 번만 움직인다.
-                if (restore_.has_value())
+                if (placement_request_.has_value())
                 {
-                    frame->window_placement_revision = 1;
-                    frame->window_placement_request = restore_;
+                    frame->window_placement_revision = placement_revision_;
+                    frame->window_placement_request = placement_request_;
                 }
                 // popup은 이번 frame에서 배치된 element의 자리를 쓰므로 tree를 만든 뒤 단다.
                 // 현재 페이지의 것만 뜬다 (다른 페이지의 열림 상태는 이동 때 닫았다).
@@ -855,6 +884,9 @@ namespace demo {
             // 하나는 시작에 쓰고 하나는 종료 저장에 쓴다.
             std::optional<luil::win32::window_placement> restore_ {};
             luil::win32::window_placement placement_ {};
+            // 지금 싣는 배치 요청과 그 번호다. 복원이 있으면 1번이 복원이다.
+            std::optional<luil::win32::window_placement> placement_request_ {};
+            std::uint64_t placement_revision_ { 0 };
 
             std::u8string page_ {};
             bool sidebar_collapsed_ { false };
@@ -1035,7 +1067,7 @@ namespace demo {
 } // namespace demo
 
 namespace {
-    [[nodiscard]] bool parse_arguments(const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page)
+    [[nodiscard]] bool parse_arguments(const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom)
     {
         for (std::size_t index = 1; index < arguments.size(); ++index)
         {
@@ -1071,6 +1103,12 @@ namespace {
                     return false;
                 config.initial_position = position;
             }
+            else if (argument == u8"--presentation=standard")
+                config.presentation = luil::win32::window_presentation::standard;
+            else if (argument == u8"--presentation=layered")
+                config.presentation = luil::win32::window_presentation::layered;
+            else if (argument == u8"--caption=top" || argument == u8"--caption=bottom")
+                caption_bottom = argument == u8"--caption=bottom";
             else
                 return false;
         }
@@ -1103,7 +1141,8 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
         return {};
     };
     std::u8string start_page {};
-    if (parse_arguments(*arguments, config, start_page) == false)
+    bool caption_bottom { false };
+    if (parse_arguments(*arguments, config, start_page, caption_bottom) == false)
         return 2;
 
     // 지난 실행이 갈무리한 배치를 되돌린다.
@@ -1119,6 +1158,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     }
 
     demo::demo_driver driver { restore, start_page, instance.primary() };
+    driver.set_window_options(caption_bottom, config.presentation == luil::win32::window_presentation::layered);
     demo::demo_policy policy {};
     demo::demo_delegate delegate { driver };
 

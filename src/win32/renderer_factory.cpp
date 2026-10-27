@@ -10,7 +10,13 @@ namespace luil::win32 {
         return composition != nullptr ? composition->underlay() : nullptr;
     }
 
-    std::unique_ptr<renderer_host> create_renderer_host(const HWND window, const renderer_mode mode, const renderer_fault_injection fault, IDCompositionDevice* const composition, std::u8string& error)
+    layered_renderer* renderer_layered(renderer_host& host) noexcept
+    {
+        return dynamic_cast<layered_renderer*>(&host.current());
+    }
+
+    std::unique_ptr<renderer_host> create_renderer_host(
+        const HWND window, const renderer_mode mode, const renderer_fault_injection fault, IDCompositionDevice* const composition, const cpu_presentation& presentation, std::u8string& error)
     {
         renderer_factories factories {};
         factories.gpu_name = u8"Direct3D";
@@ -25,7 +31,7 @@ namespace luil::win32 {
                 result = create_direct3d_skia_renderer(window, composition);
             return result;
         };
-        factories.create_cpu = [window] { return create_cpu_skia_renderer(window); };
+        factories.create_cpu = [window, presentation] { return create_cpu_skia_renderer(window, presentation); };
         return renderer_host::create(mode, fault, std::move(factories), error);
     }
 } // namespace luil::win32

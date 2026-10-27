@@ -1,16 +1,28 @@
 #pragma once
 
 #include "host/skia_renderer.h"
+#include "win32/layered_placement.h"
 
 #include <windows.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 struct IDCompositionDevice;
 struct IDCompositionVisual;
 
 namespace luil::win32 {
+    // CPU 렌더러가 frame을 창에 내는 방식이다.
+    struct cpu_presentation
+    {
+        // 레이어드 창에 `UpdateLayeredWindow`로 낸다. 거짓이면 창 DC에 복사한다.
+        bool layered { false };
+        // 레이어드 창에서 알파 0 픽셀을 그대로 둔다 (마우스가 뒤 창으로 지나간다).
+        // 거짓이면 바탕 알파가 0인 frame에서 알파 0 픽셀을 1로 올린다.
+        bool click_through { false };
+    };
+
     // DirectComposition에 제시하는 렌더러다 (Direct3D).
     // 렌더러 interface(host/skia_renderer.h)는 플랫폼을 모르므로 합성 자리는 이 확장이 낸다.
     class composition_renderer : public skia_renderer
@@ -19,6 +31,20 @@ namespace luil::win32 {
         // 우리가 그린 것 **아래**에 놓이는 visual이다. 웹뷰가 여기 들어간다.
         [[nodiscard]] virtual IDCompositionVisual* underlay() noexcept = 0;
     };
+
+    // 레이어드 창에 `UpdateLayeredWindow`로 내는 렌더러다 (CPU).
+    // 그 호출은 그림과 함께 창의 위치·크기를 받으므로, 미룬 배치를 frame과 같은 합성에 낸다
+    // (layered-presentation-design.md).
+    class layered_renderer : public skia_renderer
+    {
+    public:
+        // 다음 `render`가 창을 이 사각형으로 옮기며 낸다. 비우면 지금 자리에 낸다.
+        //  - 크기는 그 frame의 크기와 같아야 한다 — 표면이 frame을 이 크기로 세운다.
+        virtual void place_next_frame(std::optional<screen_bounds> bounds) noexcept = 0;
+    };
+
+    // 지금 렌더러가 레이어드 창에 내는가다. 아니면 nullptr다.
+    [[nodiscard]] layered_renderer* renderer_layered(renderer_host& host) noexcept;
 
     // 지금 렌더러가 내주는 웹뷰 자리다.
     //
@@ -33,9 +59,12 @@ namespace luil::win32 {
     // (프로세스에 하나 — composition_device.h). nullptr이면 Direct3D를
     // 만들지 않는다: 합성 스왑체인은 device 없이 화면에 닿지 못하므로
     // 그것이 곧 "Direct3D를 쓸 수 없다"이고, automatic 모드는 CPU로 물러선다.
-    [[nodiscard]] std::unique_ptr<renderer_host> create_renderer_host(HWND window, renderer_mode mode, renderer_fault_injection fault, IDCompositionDevice* composition, std::u8string& error);
+    //  - `layered`면 CPU 렌더러가 레이어드 창에 낸다. 창은 `WS_EX_LAYERED`로 만들어져 있어야 하고, mode는
+    //    표면이 이미 CPU로 정해 넘긴다 (레이어드 창에는 합성 스왑체인이 붙지 않는다).
+    [[nodiscard]] std::unique_ptr<renderer_host> create_renderer_host(
+        HWND window, renderer_mode mode, renderer_fault_injection fault, IDCompositionDevice* composition, const cpu_presentation& presentation, std::u8string& error);
 
-    [[nodiscard]] renderer_factory_result create_cpu_skia_renderer(HWND window);
+    [[nodiscard]] renderer_factory_result create_cpu_skia_renderer(HWND window, const cpu_presentation& presentation);
     // 이 빌드에 Direct3D 렌더러가 들어 있는가 (LUIL_ENABLE_DIRECT3D).
     // 없으면 표면은 DirectComposition device도 묻지 않는다 — 쓸 곳이 없는데
     // 물으면 그 때문에 프로세스에 device가 생긴다.

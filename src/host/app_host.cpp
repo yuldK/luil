@@ -80,6 +80,13 @@ namespace luil {
         std::vector<app_message> initial_messages {};
         messaging::latest_slot<std::shared_ptr<const ui_frame>> frame_slot {};
         messaging::latest_slot<std::shared_ptr<const ui_tree>> tree_slot {};
+        // 주 tree를 짓기 전에 처리한 app 메시지의 표다 (`acquired_tree_ticket`).
+        // tree 게시와 표 갱신을 한 자물쇠로 묶는다. 따로 두면 UI thread가 tree를 집은 뒤 표를 읽기 전에 다음 판이
+        // 끼어들어, 옛 tree에 새 표가 붙는다 — 그러면 아직 반영되지 않은 크기를 반영됐다고 본다.
+        std::mutex tree_ticket_mutex {};
+        std::uint64_t published_tree_ticket { 0 };
+        // logic thread만 쓴다. 지금까지 처리한 메시지의 표다.
+        std::uint64_t handled_ticket { 0 };
         // 주 창 밖 표면(popup·보조 창)의 tree들이다.
         // 주 tree처럼 신호 없이 게시하고 input thread가 처리 직전에 받는다.
         messaging::latest_slot<surface_tree_list> surface_tree_slot {};
@@ -429,6 +436,21 @@ namespace luil {
         {}
     }
 
+    std::uint64_t app_host::post_app_message_ticketed(app_message message) noexcept
+    {
+        try
+        {
+            std::uint64_t sequence { 0 };
+            const messaging::post_result result { assembly_->app_inbox.post(std::move(message), sequence) };
+            // 표는 접수 번호에 1을 더한 값이다. 0을 "표 없음"으로 남겨 두려는 것이다.
+            if (result == messaging::post_result::posted || result == messaging::post_result::posted_after_drop)
+                return sequence + 1;
+        }
+        catch (...)
+        {}
+        return 0;
+    }
+
     std::shared_ptr<const ui_frame> app_host::acquire_frame()
     {
         if (const auto newer { assembly_->frame_slot.take_newer(seen_frame_version_) }; newer.has_value())
@@ -441,10 +463,12 @@ namespace luil {
 
     std::shared_ptr<const ui_tree> app_host::acquire_ui_tree()
     {
+        const std::lock_guard<std::mutex> lock { assembly_->tree_ticket_mutex };
         if (const auto newer { assembly_->tree_slot.take_newer(seen_tree_version_) }; newer.has_value())
         {
             seen_tree_version_ = newer->version;
             current_tree_ = newer->value;
+            current_tree_ticket_ = assembly_->published_tree_ticket;
         }
         return current_tree_;
     }
@@ -484,7 +508,11 @@ namespace luil {
             return;
         // wake 신호는 frame 게시에 붙어 있고 tree slot에는 신호가 없다.
         // tree를 먼저 게시해야 깨어난 UI 스레드가 새 tree를 읽는다.
-        static_cast<void>(assembly_->tree_slot.publish(frame->tree));
+        {
+            const std::lock_guard<std::mutex> lock { assembly_->tree_ticket_mutex };
+            static_cast<void>(assembly_->tree_slot.publish(frame->tree));
+            assembly_->published_tree_ticket = assembly_->handled_ticket;
+        }
         // popup과 보조 창의 tree가 한 표면 목록으로 input thread에 간다.
         // controller에는 표면만 있고 둘의 구분이 없다.
         surface_tree_list surfaces {};
@@ -549,13 +577,17 @@ namespace luil {
             if (status == messaging::receive_status::received)
             {
                 driver_.handle(std::move(received.payload));
+                assembly_->handled_ticket = received.sequence + 1;
 
                 // 몰려온 메시지는 한 번에 처리하고 frame은 batch당 한 번만 게시한다.
                 // 상한이 렌더링 기회를 보존한다.
                 batch.clear();
                 static_cast<void>(assembly_->app_inbox.drain(batch, 63));
                 for (messaging::envelope<app_message>& entry : batch)
+                {
                     driver_.handle(std::move(entry.payload));
+                    assembly_->handled_ticket = entry.sequence + 1;
+                }
                 changed = true;
             }
 

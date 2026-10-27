@@ -45,6 +45,16 @@ namespace demo {
         bool bottom { false };
     };
 
+    // 주 창의 위·왼쪽 끝을 옮겨 크기를 바꾼다 (논리 px, 양수면 커진다). 아래·오른쪽 끝은 그대로다.
+    // 셸이 마지막 배치 보고에 더해 배치 요청(`window_placement_request`)으로 낸다. 레이어드 표시
+    // (`--presentation=layered`)는 그 크기의 tree와 창 배치를 한 합성에 내므로 아래 캡션이 한 frame도 튀지 않는다
+    // (layered-presentation-design.md).
+    struct edge_resize_intent
+    {
+        float left { 0.0f };
+        float top { 0.0f };
+    };
+
     // 도구 창 안의 메뉴를 여닫는다.
     struct tool_menu_toggle_intent
     {
@@ -116,6 +126,18 @@ namespace demo {
             return caption_bottom_;
         }
 
+        // 캡션을 아래에 두고 시작한다 (`--caption=bottom`).
+        void set_caption_at_bottom(const bool bottom) noexcept
+        {
+            caption_bottom_ = bottom;
+        }
+
+        // 주 창이 레이어드 표시인가다. 끝 옮기기 칸의 안내 글이 쓴다 (`--presentation=`).
+        void set_layered_presentation(const bool layered) noexcept
+        {
+            layered_ = layered;
+        }
+
     private:
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_tool_tree();
         // 메뉴를 닫고 검색 상태도 함께 비운다.
@@ -124,6 +146,7 @@ namespace demo {
         bool tool_open_ { false };
         bool tool_menu_open_ { false };
         bool caption_bottom_ { false };
+        bool layered_ { false };
         // 메모 칸 초점 요청의 번호다. 청할 때마다 하나씩 올린다.
         std::uint64_t focus_revision_ { 0 };
         // 플랫폼 도구를 마지막으로 부른 결과 한 줄이다.

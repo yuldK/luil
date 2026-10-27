@@ -87,6 +87,15 @@ namespace messaging {
 
         [[nodiscard]] post_result post(payload_type payload)
         {
+            std::uint64_t sequence { 0 };
+            return post(std::move(payload), sequence);
+        }
+
+        // 받았으면 `sequence`에 그 envelope의 접수 번호를 적는다.
+        // 소비자가 "이 메시지까지 처리했다"를 envelope 번호로 알리면 생산자가 자기 메시지와 맞춰 볼 수 있다.
+        // 받지 못했으면(가득 참·닫힘) 건드리지 않는다.
+        [[nodiscard]] post_result post(payload_type payload, std::uint64_t& sequence)
+        {
             std::function<void()> signal {};
             post_result result { post_result::posted };
             {
@@ -107,6 +116,7 @@ namespace messaging {
                     result = post_result::posted_after_drop;
                 }
 
+                sequence = next_sequence_;
                 queue_.push_back(envelope<payload_type> {
                     next_sequence_++,
                     options_.clock ? options_.clock() : std::chrono::steady_clock::now(),

@@ -506,6 +506,11 @@ namespace luil {
         //  - 포화하면 조용히 버려진다 (reject_newest). 유실 여부는
         //    `app_inbox_statistics`가 답한다.
         void post_app_message(app_message message) noexcept;
+        // `post_app_message`와 같고, 받았으면 이 메시지의 표(0보다 큰 수)를, 버려졌으면 0을 돌려준다.
+        // 표는 게시 순서대로 커진다. `acquired_tree_ticket`이 이 값 이상이면 그 tree는 이 메시지를 처리한 뒤에
+        // 지어졌다 — 플랫폼이 "새 크기로 배치한 tree가 왔는가"를 앱의 협조 없이 아는 길이다
+        // (layered-presentation-design.md).
+        [[nodiscard]] std::uint64_t post_app_message_ticketed(app_message message) noexcept;
         // 실행 중 터치 몸짓 설정을 바꾼다. **어느 thread에서 불러도 된다.**
         // 잘못된 값이면 거짓이고 직전 설정이 남는다.
         //  - 참은 **게시**의 성공이지 적용 완료가 아니다. input thread가 다음 이벤트를
@@ -536,6 +541,13 @@ namespace luil {
         // 마지막으로 게시된 ui tree다.
         // 그리기와 caption 버튼의 동기 실행이 쓴다.
         [[nodiscard]] std::shared_ptr<const ui_tree> acquire_ui_tree();
+        // 마지막 `acquire_ui_tree`가 집은 tree를 짓기 전에 logic이 처리를 마친 app 메시지의 표다.
+        // 이 값 이하의 표(`post_app_message_ticketed`)는 모두 그 tree에 반영됐다. 아직 아무 메시지도
+        // 처리하지 않았으면 0이다.
+        [[nodiscard]] std::uint64_t acquired_tree_ticket() const noexcept
+        {
+            return current_tree_ticket_;
+        }
         // input thread가 게시한 최신 상호작용 상태다.
         // hover·tooltip 그리기가 쓴다.
         [[nodiscard]] interaction_snapshot acquire_interaction();
@@ -569,6 +581,7 @@ namespace luil {
         std::uint64_t seen_frame_version_ { 0 };
         std::shared_ptr<const ui_tree> current_tree_ {};
         std::uint64_t seen_tree_version_ { 0 };
+        std::uint64_t current_tree_ticket_ { 0 };
         interaction_snapshot current_interaction_ {};
         std::uint64_t seen_interaction_version_ { 0 };
         bool shut_down_ { false };

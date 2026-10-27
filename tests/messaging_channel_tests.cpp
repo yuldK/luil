@@ -75,6 +75,28 @@ TEST_CASE("A channel delivers messages in FIFO order with contiguous sequences",
     REQUIRE(channel.try_receive(received) == messaging::receive_status::empty);
 }
 
+TEST_CASE("A post reports the sequence its envelope carries", "[messaging][channel]")
+{
+    messaging::channel<int> channel { fixed_clock_options(1) };
+    std::uint64_t first { 99 };
+    REQUIRE(channel.post(10, first) == messaging::post_result::posted);
+    REQUIRE(first == 0u);
+
+    // 받지 못한 post는 번호를 건드리지 않는다.
+    std::uint64_t rejected { 99 };
+    REQUIRE(channel.post(20, rejected) == messaging::post_result::channel_full);
+    REQUIRE(rejected == 99u);
+
+    messaging::envelope<int> received {};
+    REQUIRE(channel.try_receive(received) == messaging::receive_status::received);
+    REQUIRE(received.sequence == first);
+    std::uint64_t second { 0 };
+    REQUIRE(channel.post(30, second) == messaging::post_result::posted);
+    REQUIRE(second == 1u);
+    REQUIRE(channel.try_receive(received) == messaging::receive_status::received);
+    REQUIRE(received.sequence == second);
+}
+
 TEST_CASE("A full reject_newest channel refuses the post and keeps its contents", "[messaging][channel]")
 {
     messaging::channel<int> channel { fixed_clock_options(2) };
