@@ -354,6 +354,7 @@ add_executable(luil_tests
     http_media_type_tests.cpp
     http_text_transcode_tests.cpp
     image_decode_tests.cpp
+    layered_placement_tests.cpp
     loopback_http_server.cpp
     loopback_http_server_tests.cpp
     loopback_socket_win32.cpp
@@ -513,6 +514,18 @@ luil_set_ide_folder("Tests"
     luil_core_tests
     luil_messaging_asan_tests
     luil_tests)
+
+# 위·왼쪽 끝 크기 변경에서 아래·오른쪽 내용이 한 합성이라도 튀는지 합성된 화면을 캡처해 본다
+# (layered-presentation-design.md). 사람의 입력 데스크톱에 창을 띄우므로 LUIL_SCREEN_TESTS=1일 때만 돌고,
+# 아니면 건너뜀(77)으로 끝난다. `--drag`를 손으로 주면 실제 마우스로 테두리를 끄는 길도 잰다.
+add_executable(luil_layered_screen_check
+    "${luil_tests_resource}"
+    layered_screen_check.cpp)
+target_link_libraries(luil_layered_screen_check PRIVATE luil::luil luil_options dwmapi)
+luil_disable_automatic_windows_manifest(luil_layered_screen_check)
+luil_set_ide_folder("Tests" luil_layered_screen_check)
+add_test(NAME luil_layered_screen COMMAND luil_layered_screen_check)
+set_tests_properties(luil_layered_screen PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "screen")
 
 # 실제 입력 데스크톱을 쓰므로 일반 ctest에 등록하지 않는다.
 # --interactive를 준 전용 대화형 검증 환경에서만 입력을 주입한다.

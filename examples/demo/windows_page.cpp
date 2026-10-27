@@ -242,6 +242,29 @@ namespace demo {
         position->set_action(luil::ui_trigger::left_click, luil::make_message_action(caption_position_intent { bottom == false }));
         column->add(std::move(position), { .length = 26.0f, .cross_length = 140.0f });
 
+        // 위·왼쪽 끝을 옮기는 크기 변경이다. 캡션을 아래에 두고 누르면, 표준 표시에서는 크기가 바뀐 직후 한 합성 동안
+        // 캡션이 창 맨 위에 보이고, 레이어드 표시에서는 그 frame이 없다.
+        column->add_gap(18.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"windows-presentation" },
+                        layered_ ? u8"표시 방식: 레이어드 — 배치와 frame을 한 합성에 낸다" : u8"표시 방식: 표준 — --presentation=layered로 켠다", 11.0f, luil::label_color_role::dim),
+            18.0f);
+        column->add_gap(4.0f);
+        luil::stack_config edges_config {};
+        edges_config.direction = luil::stack_direction::row;
+        edges_config.spacing = 8.0f;
+        auto edges { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-edges" }, edges_config) };
+        const auto add_edge = [&edges](const std::u8string_view key, const std::u8string_view text, const edge_resize_intent intent) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, std::u8string { key } }, luil::text_button_config { .text = std::u8string { text } }) };
+            button->set_cursor(luil::ui_cursor::hand);
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(intent));
+            edges->add(std::move(button), 96.0f);
+        };
+        add_edge(u8"edge-top-grow", u8"위로 키우기", edge_resize_intent { .top = 80.0f });
+        add_edge(u8"edge-top-shrink", u8"위에서 줄이기", edge_resize_intent { .top = -80.0f });
+        add_edge(u8"edge-left-grow", u8"왼쪽으로 키우기", edge_resize_intent { .left = 80.0f });
+        add_edge(u8"edge-left-shrink", u8"왼쪽에서 줄이기", edge_resize_intent { .left = -80.0f });
+        column->add(std::move(edges), 26.0f);
+
         // 플랫폼 도구다. 경로 따옴표·COM·핸들 정리는 라이브러리가 맡는다.
         column->add_gap(18.0f);
         luil::stack_config tools_config {};

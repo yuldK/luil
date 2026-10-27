@@ -13,6 +13,7 @@
 #include "win32/drag_ghost_window.h"
 #include "win32/embedded_assets.h"
 #include "win32/file_dialog.h"
+#include "win32/layered_placement.h"
 #include "win32/popup_surface.h"
 #include "win32/secondary_surface.h"
 #include "win32/skia_renderer.h"
@@ -157,6 +158,9 @@ namespace luil::win32 {
         constexpr UINT_PTR update_timer_id { 1 };
         // 들고 있는 초점 요청의 기한이다 (deferred-focus-design.md).
         constexpr UINT_PTR focus_request_timer_id { 2 };
+        // 레이어드 표시에서 미룬 배치가 새 tree를 기다리는 기한이다 (`layered_placement_timeout`).
+        //  - 3은 표면의 커서 숨김 timer다 (window_surface.cpp). 같은 창에 걸리므로 겹치지 않게 둔다.
+        constexpr UINT_PTR layered_placement_timer_id { 4 };
         // 연속 애니메이션(회전 표시처럼 next_update가 "지금"을 답하는 것)의 다시 그리기 간격이다.
         // 30fps면 눈에 매끄럽다.
         constexpr std::chrono::milliseconds continuous_repaint_interval { 33 };
@@ -247,16 +251,44 @@ namespace luil::win32 {
                 : caption_surface { context }
             {}
 
+            // 레이어드 표시에서 미룬 배치를 묻는 자리다. 표준 표시는 비워 둔다.
+            void set_placement_host(layered_placement_host* const host) noexcept
+            {
+                placement_host_ = host;
+            }
+
         private:
+            void begin_frame(frame_state& state, const bool presenting) override
+            {
+                app_host* const host { context_.host() };
+                if (host == nullptr)
+                    return;
+                // 주 tree는 그릴 때마다 게시본을 집는다.
+                // 다른 표면은 frame의 목록이 실어 준다.
+                //  - **크기를 정하기 전에 집는다.** 미룬 배치는 이 tree가 어느 크기 메시지까지 반영했는지로 고른다.
+                static_cast<void>(set_tree(host->acquire_ui_tree()));
+                if (presenting == false || placement_host_ == nullptr)
+                    return;
+                const std::optional<screen_bounds> placement { placement_host_->take_layered_placement(host->acquired_tree_ticket()) };
+                if (placement.has_value() == false)
+                    return;
+                RECT current {};
+                static_cast<void>(GetWindowRect(window_, &current));
+                presented_from_ = { current.left, current.top, current.right - current.left, current.bottom - current.top };
+                state.width = std::max(1, placement->width);
+                state.height = std::max(1, placement->height);
+                next_placement_ = placement;
+            }
+
+            void placement_presented(const screen_bounds& bounds) override
+            {
+                if (placement_host_ != nullptr)
+                    placement_host_->layered_placement_presented(presented_from_, bounds);
+            }
+
             void prepare_frame(frame_state& state) override
             {
-                if (app_host* const host { context_.host() }; host != nullptr)
-                {
-                    // 주 tree는 그릴 때마다 게시본을 집는다.
-                    // 다른 표면은 frame의 목록이 실어 준다.
-                    static_cast<void>(set_tree(host->acquire_ui_tree()));
-                }
-                else
+                if (context_.host() == nullptr)
                 {
                     // host가 없으면(smoke) caption만 있는 화면을 그린다.
                     // 렌더러와 글꼴·글리프 경로가 실제와 같은 코드로 검증된다.
@@ -312,13 +344,17 @@ namespace luil::win32 {
                     return false;
                 }
             }
+
+            layered_placement_host* placement_host_ { nullptr };
+            // 미룬 배치를 낸 frame의 직전 창 사각형이다. 낸 뒤의 뒤처리가 무엇이 바뀌었는지 본다.
+            screen_bounds presented_from_ {};
         };
 
         // 주 창의 런타임이다.
         // 창 클래스 등록·조립·표면 목록 대조·프로세스 수명을 맡고,
         // 표면들이 함께 보는 것은 `surface_context`로 연다
         // (win32-surface-design.md).
-        class application_window final : public surface_context
+        class application_window final : public surface_context, private layered_placement_host
         {
         public:
             application_window(const HINSTANCE instance, window_config config, const window_environment environment) noexcept
@@ -580,7 +616,16 @@ namespace luil::win32 {
                 if (const auto converted { utf8_to_utf16(config_.caption.title) }; converted.value.has_value() && converted.value->empty() == false)
                     title = *converted.value;
 
+                // 레이어드 창에는 합성 스왑체인이 붙지 않는다. GPU를 요구한 설정은 조용히 CPU로 바꾸지 않고 시작을
+                // 멈춘다 — 앱이 GPU라고 믿는 채로 CPU로 돈다.
+                layered_ = config_.presentation == window_presentation::layered;
+                if (layered_ && renderer_mode_requires_gpu(config_.renderer))
+                {
+                    error = u8"Layered window presentation draws on the CPU renderer only; the requested renderer needs the GPU.";
+                    return false;
+                }
                 // 파일 드롭은 표면의 IDropTarget이 받는다 — 확장 스타일의 몫이 아니다.
+                //  - 크기 한계 계산이 보는 확장 스타일이다. `WS_EX_LAYERED`는 틀 두께와 무관해 넣지 않는다.
                 main_.set_extended_style(WS_EX_APPWINDOW);
                 main_.set_caption(config_.caption);
                 main_.set_minimum_client_size(static_cast<float>(config_.minimum_client_width), static_cast<float>(config_.minimum_client_height));
@@ -599,7 +644,8 @@ namespace luil::win32 {
                     if (initial_placement_->placement.maximized)
                         style |= WS_MAXIMIZE;
                 }
-                window_ = CreateWindowExW(WS_EX_APPWINDOW, config_.class_name.c_str(), title.c_str(), style, initial_x, initial_y, initial_width, initial_height, nullptr, nullptr, instance_, this);
+                window_ = CreateWindowExW(WS_EX_APPWINDOW | (layered_ ? WS_EX_LAYERED : 0), config_.class_name.c_str(), title.c_str(), style, initial_x, initial_y, initial_width, initial_height,
+                    nullptr, nullptr, instance_, this);
 
                 if (window_ == nullptr)
                 {
@@ -618,6 +664,9 @@ namespace luil::win32 {
                 // 받지 않는 판(Windows 10 이하)은 실패를 돌려주고 popup은 직각으로 물러선다.
                 const DWM_WINDOW_CORNER_PREFERENCE probe { DWMWCP_DEFAULT };
                 corner_preference_supported_ = SUCCEEDED(DwmSetWindowAttribute(window_, DWMWA_WINDOW_CORNER_PREFERENCE, &probe, sizeof(probe)));
+                // 레이어드 창은 기본값이 직각이다. 묻느라 덮은 값을 다시 둥글게 건다 (`apply_dwm_frame`).
+                if (layered_)
+                    caption_surface::apply_dwm_frame(window_, window_display_mode::normal);
                 publish_popup_support();
                 set_dpi(GetDpiForWindow(window_));
                 // 요청 크기는 논리 96 DPI 기준이다.
@@ -646,7 +695,10 @@ namespace luil::win32 {
                     .at_creation = config_.simulate_direct3d_failure,
                     .after_frames = config_.simulate_direct3d_loss_after_frames,
                 };
-                if (main_.create_renderer(config_.renderer, fault, client.right - client.left, client.bottom - client.top, error) == false)
+                main_.set_cpu_presentation(cpu_presentation { .layered = layered_, .click_through = config_.layered_click_through });
+                if (layered_)
+                    main_.set_placement_host(this);
+                if (main_.create_renderer(layered_ ? renderer_mode::cpu : config_.renderer, fault, client.right - client.left, client.bottom - client.top, error) == false)
                 {
                     // 캡션 실패와 같은 정리다. 그냥 돌아가면 숨은 창이 살아남고
                     // `GWLP_USERDATA`가 곧 사라질 이 객체를 계속 가리킨다.
@@ -857,6 +909,13 @@ namespace luil::win32 {
                     //    있다. 그러면 이번 게시의 테마 변화를 이 wake가 놓친다.
                     const bool every_surface { posting_changes_every_surface() };
                     invalidate_surfaces(surfaces_to_repaint(contents, every_surface));
+                    // 미룬 배치가 새 tree를 기다리고 있으면 이 게시가 그 tree일 수 있다. `WM_PAINT`는 큐가 빌 때에야
+                    // 오므로, 끄는 동안 마우스 메시지가 이어지면 창이 그만큼 늦게 따라온다. 바로 그린다.
+                    if (layered_ && deferred_placements_.empty() == false)
+                    {
+                        InvalidateRect(window_, nullptr, FALSE);
+                        UpdateWindow(window_);
+                    }
                     // 끄는 동안의 커서 모양은 상호작용 발행본이 정한다. 마우스를 잡은 창에는 `WM_SETCURSOR`가 오지
                     // 않으므로 발행본이 바뀔 때 잡은 창이 스스로 맞춘다.
                     if (every_surface)
@@ -905,6 +964,19 @@ namespace luil::win32 {
                         advance_focus_request();
                         return 0;
                     }
+                    if (word_parameter == layered_placement_timer_id)
+                    {
+                        KillTimer(window_, word_parameter);
+                        // 기한이 지났으면 다음 그리기가 가진 tree로 낸다 (`deferred_placements::take_ready`).
+                        // 아직이면 남은 시간만큼 다시 건다.
+                        if (deferred_placements_.empty() == false)
+                        {
+                            InvalidateRect(window_, nullptr, FALSE);
+                            UpdateWindow(window_);
+                            arm_layered_placement_timer();
+                        }
+                        return 0;
+                    }
                     if (word_parameter == update_timer_id)
                     {
                         KillTimer(window_, word_parameter);
@@ -937,6 +1009,8 @@ namespace luil::win32 {
                     // 창 배치는 종료 신호보다 먼저 게시해야 같은 채널의 순서로 반영된다.
                     if (host_ != nullptr)
                     {
+                        // 끝나는 창이 미뤄 둔 배치는 내지 않는다. 화면에 있는 그대로의 배치를 알린다.
+                        deferred_placements_.clear();
                         post_window_placement();
                         host_->shutdown();
                         host_.reset();
@@ -953,6 +1027,7 @@ namespace luil::win32 {
                     // shutdown의 3초 상한은 세션 종료 유예(기본 5초) 안이다.
                     if (word_parameter != FALSE && host_ != nullptr)
                     {
+                        deferred_placements_.clear();
                         post_window_placement();
                         host_->shutdown();
                         host_.reset();
@@ -966,6 +1041,14 @@ namespace luil::win32 {
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::activation_changed));
                     }
                     break;
+                case WM_WINDOWPOSCHANGING: {
+                    if (layered_ == false)
+                        break;
+                    // 기본 처리가 먼저 크기 한계(`WM_GETMINMAXINFO`)로 다듬는다. 미룰 크기는 다듬은 값이다.
+                    const LRESULT result { DefWindowProcW(window_, message, word_parameter, long_parameter) };
+                    defer_layered_placement(*reinterpret_cast<WINDOWPOS*>(long_parameter));
+                    return result;
+                }
                 case WM_SIZE:
                     main_.update_caption_hover(caption_button_hover::none);
                     // 최대화 ↔ 복원 전환만 배치로 알린다.
@@ -984,8 +1067,17 @@ namespace luil::win32 {
                             post_window_placement();
                         }
                     }
+                    // 레이어드 창의 크기 변경을 미뤄 둔 동안 오는 `WM_SIZE`는 최대화 표식이 바뀐 것을 알릴 뿐 크기는
+                    // 옛 값이다. 렌더러·metrics는 미룬 배치가 맡는다 (`defer_layered_placement`).
+                    if (word_parameter != SIZE_MINIMIZED && layered_ && deferred_placements_.empty() == false)
+                    {
+                        InvalidateRect(window_, nullptr, FALSE);
+                        return 0;
+                    }
                     if (word_parameter != SIZE_MINIMIZED)
                     {
+                        if (layered_)
+                            layered_frame_size_ = SIZE { LOWORD(long_parameter), HIWORD(long_parameter) };
                         // 크기 변경도 popup의 닫힘 계기다.
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
                         std::u8string error {};
@@ -1350,6 +1442,13 @@ namespace luil::win32 {
             {
                 if (host_ == nullptr || environment_.delegate == nullptr)
                     return;
+                // 레이어드 창이 크기 변경을 미뤄 둔 동안 OS의 배치는 아직 옛 값이다. 낸 뒤에 알린다
+                // (`layered_placement_presented`).
+                if (layered_ && deferred_placements_.empty() == false)
+                {
+                    layered_placement_report_ = true;
+                    return;
+                }
                 WINDOWPLACEMENT placement {};
                 placement.length = sizeof(placement);
                 if (GetWindowPlacement(window_, &placement) == FALSE)
@@ -1457,11 +1556,23 @@ namespace luil::win32 {
             {
                 if (environment_.delegate == nullptr)
                     return {};
-                RECT client_rectangle {};
-                if (GetClientRect(window_, &client_rectangle) == FALSE)
-                    return {};
-                const float width { static_cast<float>(client_rectangle.right - client_rectangle.left) };
-                const float height { static_cast<float>(client_rectangle.bottom - client_rectangle.top) };
+                // 레이어드 창이 크기 변경을 미뤄 둔 동안 배치할 크기는 지금 창이 아니라 가장 새 미룬 배치다.
+                //  - 배율 변경이 그 예다. 새 배율과 새 크기를 함께 알려야 그 크기의 tree가 온다.
+                float width { 0.0f };
+                float height { 0.0f };
+                if (const std::optional<screen_bounds> latest { layered_ ? deferred_placements_.latest() : std::nullopt }; latest.has_value())
+                {
+                    width = static_cast<float>(latest->width);
+                    height = static_cast<float>(latest->height);
+                }
+                else
+                {
+                    RECT client_rectangle {};
+                    if (GetClientRect(window_, &client_rectangle) == FALSE)
+                        return {};
+                    width = static_cast<float>(client_rectangle.right - client_rectangle.left);
+                    height = static_cast<float>(client_rectangle.bottom - client_rectangle.top);
+                }
                 const float scale { static_cast<float>(dpi_) / 96.0f };
                 // delegate는 noexcept가 아니다 (`post_window_placement`와 같은 이유).
                 try
@@ -1481,6 +1592,95 @@ namespace luil::win32 {
                     return;
                 if (app_message message { make_window_metrics_message() }; message.empty() == false)
                     host_->post_app_message(std::move(message));
+            }
+
+            // 크기가 바뀌는 배치를 미룬다 (레이어드 창, layered-presentation-design.md).
+            //
+            // 일반 창은 OS가 크기를 바로 바꾸고, 다음 합성은 새 창 영역에 이전 frame을 왼쪽 위에 붙여 보인다 — 위·왼쪽
+            // 끝이 움직이면 아래·오른쪽에 붙은 내용이 한 합성 동안 제자리를 벗어난다. 그래서 여기서 위치·크기 변경을
+            // 걷어 내고(`SWP_NOSIZE | SWP_NOMOVE`) 그 크기를 앱에 알린 뒤, 그 크기로 배치한 tree가 오면 그 frame과 함께
+            // `UpdateLayeredWindow` 한 번으로 낸다 (`main_surface::begin_frame`).
+            //  - 사용자의 테두리 끌기, 최대화·복원, 배율 변경, 전체 화면 전환, 앱의 배치 요청이 모두 이 메시지를 지난다.
+            //    시스템 크기 조절 루프는 창의 실제 크기가 아니라 처음 사각형과 마우스 변위로 다음 사각형을 셈하므로,
+            //    걷어 내도 끌기가 어긋나지 않는다.
+            //  - 크기가 화면의 frame과 같으면(자리만 옮기기, 최소화에서 되살리기) 그대로 둔다. 화면의 그림이 이미 맞다.
+            //    다만 앞서 미룬 배치가 있으면 그 뒤에 줄을 세운다. 먼저 나가면 순서가 뒤집힌다.
+            void defer_layered_placement(WINDOWPOS& position)
+            {
+                if (host_ == nullptr || IsWindowVisible(window_) == FALSE || IsIconic(window_) != FALSE)
+                    return;
+                if ((position.flags & SWP_NOSIZE) != 0 && (position.flags & SWP_NOMOVE) != 0)
+                    return;
+
+                RECT current {};
+                if (GetWindowRect(window_, &current) == FALSE)
+                    return;
+                const screen_bounds base {
+                    deferred_placements_.latest().value_or(screen_bounds { current.left, current.top, current.right - current.left, current.bottom - current.top }),
+                };
+                const screen_bounds target {
+                    (position.flags & SWP_NOMOVE) != 0 ? base.x : position.x,
+                    (position.flags & SWP_NOMOVE) != 0 ? base.y : position.y,
+                    (position.flags & SWP_NOSIZE) != 0 ? base.width : position.cx,
+                    (position.flags & SWP_NOSIZE) != 0 ? base.height : position.cy,
+                };
+                const SIZE shown { layered_frame_size_.value_or(SIZE { base.width, base.height }) };
+                const bool resized { deferred_placements_.empty() ? target.width != shown.cx || target.height != shown.cy : target.width != base.width || target.height != base.height };
+                if (deferred_placements_.empty() && resized == false)
+                    return;
+
+                position.flags |= SWP_NOSIZE | SWP_NOMOVE;
+                const auto now { std::chrono::steady_clock::now() };
+                if (resized)
+                {
+                    // 크기가 바뀌면 popup의 닫힘 계기다 (`WM_SIZE`와 같다). 창 크기는 아직 옛 값이라 여기서 부른다.
+                    static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
+                    // 쌓은 뒤에 알린다 — metrics는 가장 새 미룬 배치의 크기를 싣는다. 표는 그다음에 붙인다.
+                    deferred_placements_.push(target, 0, now);
+                    const std::uint64_t ticket { post_layered_window_metrics() };
+                    deferred_placements_.set_latest_ticket(ticket);
+                }
+                else
+                    deferred_placements_.push_move(target, now);
+                arm_layered_placement_timer();
+                // 기다릴 tree가 없으면(앱이 크기를 받지 않는다) 다음 그리기가 바로 낸다.
+                InvalidateRect(window_, nullptr, FALSE);
+            }
+
+            // 미룬 배치의 크기로 metrics를 알리고 그 메시지의 표를 돌려준다. 알리지 못했으면 0이다.
+            [[nodiscard]] std::uint64_t post_layered_window_metrics() noexcept
+            {
+                if (app_message message { make_window_metrics_message() }; message.empty() == false)
+                    return host_->post_app_message_ticketed(std::move(message));
+                return 0;
+            }
+
+            void arm_layered_placement_timer() noexcept
+            {
+                const std::optional<std::chrono::steady_clock::time_point> deadline { deferred_placements_.deadline(layered_placement_timeout) };
+                if (deadline.has_value() == false)
+                    return;
+                const long long remaining { std::chrono::duration_cast<std::chrono::milliseconds>(*deadline - std::chrono::steady_clock::now()).count() };
+                SetTimer(window_, layered_placement_timer_id, static_cast<UINT>(std::max<long long>(remaining + 1, USER_TIMER_MINIMUM)), nullptr);
+            }
+
+            [[nodiscard]] std::optional<screen_bounds> take_layered_placement(const std::uint64_t tree_ticket) override
+            {
+                return deferred_placements_.take_ready(tree_ticket, std::chrono::steady_clock::now(), layered_placement_timeout);
+            }
+
+            // `UpdateLayeredWindow`는 위치·크기를 바꿔도 `WM_WINDOWPOSCHANGED`·`WM_SIZE`·`WM_MOVE`를 보내지 않는다
+            // (실측). 그 메시지들이 하던 뒤처리를 여기서 한다. 렌더러 크기와 metrics는 이미 새 값이다.
+            void layered_placement_presented(const screen_bounds& previous, const screen_bounds& bounds) override
+            {
+                layered_frame_size_ = SIZE { bounds.width, bounds.height };
+                if (previous.x != bounds.x || previous.y != bounds.y)
+                    surface_moved(main_.id());
+                if (deferred_placements_.empty() == false)
+                    return;
+                KillTimer(window_, layered_placement_timer_id);
+                if (std::exchange(layered_placement_report_, false))
+                    post_window_placement();
             }
 
             // 클립보드 요청을 실행한다.
@@ -2639,6 +2839,15 @@ namespace luil::win32 {
             // 마지막으로 배치를 알린 최대화 상태다.
             // WM_SIZE 폭주 중에 같은 상태를 반복해서 보내지 않는다.
             bool posted_maximized_ { false };
+            // 주 창이 레이어드 창이다 (`window_presentation::layered`).
+            bool layered_ { false };
+            // 새 tree를 기다리는 크기 변경들이다 (layered-presentation-design.md).
+            deferred_placements deferred_placements_ {};
+            // 마지막으로 화면에 낸 주 창 frame의 크기다. 크기가 이것과 같은 배치는 미루지 않는다 — 화면의 그림이
+            // 이미 그 크기에 맞는다 (최소화에서 되살리기가 그렇다).
+            std::optional<SIZE> layered_frame_size_ {};
+            // 미룬 배치가 남은 동안 알리지 못한 배치 보고다. 낸 뒤에 알린다 — 그 전에는 OS의 배치가 아직 옛 값이다.
+            bool layered_placement_report_ { false };
             // OS의 "앱 모드" 설정이다.
             // 레지스트리 조회는 프레임마다 하지 않고 시작 시 한 번,
             // 이후 WM_SETTINGCHANGE·WM_THEMECHANGED에서만 갱신한다.

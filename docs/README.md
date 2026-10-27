@@ -86,6 +86,7 @@
 - [Android 이식 계획](android-port-plan.md)
 - [기기 요청과 플랫폼 능력](device-request-design.md)
 - [Win32 window surface](win32-surface-design.md)
+- [레이어드 표시: 창 배치와 frame을 한 합성에](layered-presentation-design.md)
 - [여러 top-level window](multi-window-design.md)
 - [Popup overlay 표면](popup-overlay-design.md)
 - [Popup 앵커 표면](popup-anchor-design.md)

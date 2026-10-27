@@ -152,6 +152,14 @@ namespace luil::win32 {
     {
         const MARGINS margins { 0, 0, dwm_frame_top_margin_for(mode), 0 };
         DwmExtendFrameIntoClientArea(window, &margins);
+        // 레이어드 창은 기본값(`DWMWCP_DEFAULT`)에서 모서리도 테두리도 그림자도 없는 직각 판이다. 둥글게를 명시하면
+        // 일반 창과 같은 모서리·테두리·그림자가 선다 (둘 다 실측, layered-presentation-design.md).
+        //  - 전체 화면은 모니터를 덮는 창이라 깎지 않는다. 최대화는 DWM이 스스로 깎지 않는다.
+        if ((GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_LAYERED) != 0)
+        {
+            const DWM_WINDOW_CORNER_PREFERENCE corner { mode == window_display_mode::fullscreen ? DWMWCP_DONOTROUND : DWMWCP_ROUND };
+            static_cast<void>(DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner)));
+        }
     }
 
     window_display_mode caption_surface::display_mode() const noexcept

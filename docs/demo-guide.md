@@ -10,6 +10,12 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
     build\vs2026-examples\examples\Debug\luil_demo.exe --page=controls
     build\vs2026-examples\examples\Debug\luil_demo.exe --page=theme
     build\vs2026-examples\examples\Debug\luil_demo.exe --page=tabs
+    build\vs2026-examples\examples\Debug\luil_demo.exe --page=windows --caption=bottom --presentation=layered
+
+`--presentation=layered`는 주 창을 레이어드 표시로 띄운다([레이어드 표시](layered-presentation-design.md)).
+`--caption=bottom`은 캡션을 창 아래에 두고 시작한다. 창 페이지의 끝 옮기기 단추(위로 키우기·위에서 줄이기·
+왼쪽으로 키우기·왼쪽에서 줄이기)를 누르거나 위·왼쪽 테두리를 끌어, 표준 표시에서는 크기를 바꾼 직후 한 합성
+동안 아래 캡션이 창 맨 위에 보이고 레이어드 표시에서는 그 frame이 없는 것을 견준다.
 
 ## 바로 가져갈 공용 기능
 
