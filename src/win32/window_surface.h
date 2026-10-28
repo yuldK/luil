@@ -6,6 +6,7 @@
 #include "luil/app/renderer_policy.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/win32/win32_window.h"
+#include "win32/backdrop.h"
 #include "win32/skia_renderer.h"
 #include "win32/surface_input.h"
 #include "win32/uia_provider.h"
@@ -313,6 +314,29 @@ namespace luil::win32 {
             presentation_ = presentation;
         }
 
+        // --- 배경 효과 (backdrop-design.md) ---
+        // 앱이 이 표면에 고른 효과다. 주 창은 frame에서, 보조 창·popup은 자기 목록 항목에서 소유자가 옮겨 준다.
+        void request_backdrop(const window_backdrop requested) noexcept
+        {
+            requested_backdrop_ = requested;
+        }
+
+        // 고른 효과를 OS·표면 사정에 맞춘다. 길이 바뀌면 다시 걸고 frame을 다시 그리게 한다.
+        // 알릴 보고가 있으면 돌려준다 (알릴지는 소유자가 정한다 — popup은 알리지 않는다).
+        //  - 같은 길이면 DWM에 아무것도 말하지 않는다. 효과를 고른 적 없는 표면은 지금과 픽셀 단위로 같다.
+        //  - `system_supported`는 이 Windows가 시스템 배경 효과를 받는가다 (주 창을 만들 때 물은 값).
+        [[nodiscard]] std::optional<backdrop_report> refresh_backdrop(const backdrop_environment& environment, bool system_supported);
+
+        // 효과의 색 막 명암이다 (바탕 밝기, `is_dark_background`). 바뀌면 accent 길의 색 막을 다시 건다.
+        void set_backdrop_dark(bool dark) noexcept;
+
+        // 이 표면 뒤에 효과가 실제로 섰는가다. 참이면 frame의 바탕과 캡션이 `backdrop_background`다
+        // (`frame_state::backdrop`).
+        [[nodiscard]] bool backdrop_active() const noexcept
+        {
+            return backdrop_.decision().active();
+        }
+
         // 이 표면의 IME 연결을 만든다 (multi-window-design.md — 표면마다 문서 하나).
         // 만들지 못하면 조용히 없이 간다 — 그 표면은 `WM_CHAR` 경로만으로 동작하고
         // 조합은 시스템 창이 그린다.
@@ -382,6 +406,12 @@ namespace luil::win32 {
         {
             static_cast<void>(state);
         }
+
+        // 배경 효과가 서거나 거둬졌다. DWM 프레임을 창 전체로 넓히거나(`MARGINS` -1) 되돌린다 — 넓히지 않은 자리는
+        // client의 알파가 버려져 검게 보인다.
+        //  - 기본은 프레임을 다시 걸지 않는 표면(popup)의 것이다. 캡션 표면은 전체 화면·합성 재시작에서도 같은 값을
+        //    따라야 해 자기 것을 쓴다 (`caption_surface::backdrop_frame_changed`).
+        virtual void backdrop_frame_changed(bool active) noexcept;
 
         // frame의 크기를 client 크기로 세운 직후, 발행본을 집기 전에 부른다.
         // 레이어드 주 창은 여기서 tree를 집고, 그 tree가 반영한 미룬 배치가 있으면 frame을 그 크기로 세우고
@@ -578,6 +608,10 @@ namespace luil::win32 {
         std::uint32_t dpi_ { 96 };
         std::unique_ptr<renderer_host> renderer_ {};
         cpu_presentation presentation_ {};
+        window_backdrop requested_backdrop_ { window_backdrop::none };
+        // 세워 둔 길과 알린 상태다. 보조 창은 효과를 고른 적 없으면 알리지 않는다 (주 창만 처음 상태를 알린다).
+        surface_backdrop backdrop_;
+        bool backdrop_dark_ { true };
         // host가 session보다 오래 살아야 한다 (선언 순서가 곧 파괴 순서의 역이다).
         std::unique_ptr<surface_tsf_host> text_input_host_ {};
         std::unique_ptr<tsf_input_session> text_input_ {};

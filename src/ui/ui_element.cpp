@@ -773,6 +773,7 @@ namespace luil {
             .metrics = context.metrics,
             .reduce_motion = context.reduce_motion,
             .theme = context.theme,
+            .backdrop = context.backdrop,
         };
     }
 

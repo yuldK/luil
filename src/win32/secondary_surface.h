@@ -64,6 +64,8 @@ namespace luil::win32 {
         [[nodiscard]] bool execute_caption_button(WPARAM hit) override;
 
         void prepare_frame(frame_state& state) override;
+        // 배경 효과가 선 동안 창의 어두운 모드를 바탕 밝기에 맞춘다 (backdrop-design.md).
+        void apply_backdrop_theme(const frame_state& state) noexcept;
 
         // 닫힘 요청을 낸다 (캡션 close, Alt+F4).
         // UI thread는 메시지만 내고, 창을 없애는 것은 앱이 목록에서 빼는 것이다.
@@ -77,5 +79,7 @@ namespace luil::win32 {
         // 한 계기에 닫힘 요청을 한 번만 낸다.
         // 새 frame이 창을 계속 실으면 다시 낼 수 있게 풀린다.
         bool close_requested_ { false };
+        // DWM에 마지막으로 말한 어두운 모드다. 효과를 건 적 없는 창은 비어 있고 DWM에 말하지 않는다.
+        std::optional<BOOL> dwm_dark_ {};
     };
 } // namespace luil::win32

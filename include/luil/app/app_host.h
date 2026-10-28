@@ -77,6 +77,24 @@ namespace luil {
         anchor_closed,
     };
 
+    // top-level 표면 뒤에 까는 배경 효과다 (docs/backdrop-design.md).
+    // 주 창(`ui_frame::backdrop`)·보조 창(`ui_window::backdrop`)·popup(`ui_popup::backdrop`)이 같은 값으로 고른다.
+    // 뜻으로 고르고, 어떤 길로 세울지는 플랫폼이 표면의 표시 방식·활성화 여부에 맞춰 고른다. 서지 않으면 표면은
+    // 지금처럼 불투명하고 그 까닭은 플랫폼이 알린다 (Win32는 `window_delegate::make_backdrop_message`).
+    //  - 효과가 선 표면은 바탕을 `backdrop_background`로 칠한다. 표면·입력칸 같은 다른 역할은 그대로 불투명하다.
+    //  - Android는 보지 않는다.
+    enum class window_backdrop
+    {
+        none,
+        // 바탕화면 색을 옅게 깐다. 뒤 창은 비치지 않는다.
+        //  - 활성 창의 재질이라 활성화되지 않는 popup에는 서지 않는다 (`unsupported_presentation`).
+        mica,
+        // mica보다 진한 변형이다 (탭이 많은 창의 바탕).
+        mica_alt,
+        // 뒤에 있는 것을 흐리게 비춘다. 메뉴·플라이아웃처럼 떠 있는 판의 재질이다.
+        acrylic,
+    };
+
     // 주 창 위에 띄우는 가벼운 popup 하나다 (메뉴·드롭다운·긴 tooltip).
     // 열림·닫힘은 앱 상태다: frame에 실으면 창이 생기고 빼면 사라진다.
     // 자리는 앵커 표면 client 좌표의 논리 픽셀이며, 화면 좌표 변환과 모니터 경계
@@ -123,6 +141,14 @@ namespace luil {
         //  - 같은 id의 popup이 둥근 창과 직각 창 사이를 오가면 host는 창을 다시 만든다. 그림자가 창 클래스의 것이라
         //    만든 뒤 바꿀 수 없다.
         std::optional<popup_corner> corner {};
+        // popup 뒤의 배경 효과다. 기본값이면 지금까지의 불투명한 popup이다.
+        //  - 서면 popup의 바탕(`draw_frame`의 전체 칠)이 `backdrop_background`가 된다. tree가 바탕을 따로 칠하면 그
+        //    칠이 효과를 덮는다 — 메뉴(`menu_element`)는 효과가 선 표면에서 몸통을 칠하지 않는다
+        //    (`draw_context::backdrop`).
+        //  - popup은 활성화되지 않는 표면이라 `acrylic`만 선다. `mica`·`mica_alt`는 서지 않는다.
+        //  - 상태를 알리지 않는다 (`win32::backdrop_report`). 서지 않는 OS 사정은 주 창 보고와 같다.
+        //  - 같은 id에서 이 값만 바뀌면 창을 다시 만들지 않고 효과만 다시 건다.
+        window_backdrop backdrop { window_backdrop::none };
     };
 
     // 그 모서리 선택이 이 플랫폼에서 실제로 갖는 반지름이다 (논리 픽셀).
@@ -199,6 +225,11 @@ namespace luil {
         //    `window_delegate::make_window_placement_message`와 같은 값이다 (`fullscreen`은 늘 거짓).
         //  - 비어 있으면 알리지 않는다.
         std::function<app_message(const window_placement&)> placement {};
+        // 이 창 뒤의 배경 효과다. 주 창(`ui_frame::backdrop`)과 같은 규칙으로 서고, 기본값이면 지금까지의 창이다.
+        //  - 효과가 선 창은 바탕과 캡션이 `backdrop_background`다. 비활성 창에서는 OS가 효과를 단색으로 깐다 (주 창과 같다).
+        //  - 상태는 주 창처럼 알린다 (`win32::backdrop_report::surface`가 이 창의 id다).
+        //  - 같은 id에서 이 값만 바뀌면 창을 다시 만들지 않고 효과만 다시 건다.
+        window_backdrop backdrop { window_backdrop::none };
     };
 
     // 앱이 바라는 화면 방향이다 (device-request-design.md).
@@ -306,22 +337,6 @@ namespace luil {
         superseded,
     };
 
-    // 주 창 뒤에 까는 배경 효과다 (docs/backdrop-design.md).
-    // 뜻으로 고르고, 어떤 길로 세울지는 플랫폼이 표시 방식에 맞춰 고른다. 서지 않으면 창은 지금처럼 불투명하고
-    // 그 까닭은 플랫폼이 알린다 (Win32는 `window_delegate::make_backdrop_message`).
-    //  - 효과가 선 창은 바탕을 `backdrop_background`로 칠한다. 표면·입력칸 같은 다른 역할은 그대로 불투명하다.
-    //  - Android는 보지 않는다.
-    enum class window_backdrop
-    {
-        none,
-        // 바탕화면 색을 옅게 깐다. 뒤 창은 비치지 않는다.
-        mica,
-        // mica보다 진한 변형이다 (탭이 많은 창의 바탕).
-        mica_alt,
-        // 뒤에 있는 것을 흐리게 비춘다.
-        acrylic,
-    };
-
     struct ui_frame
     {
         std::shared_ptr<const ui_tree> tree {};
@@ -345,6 +360,7 @@ namespace luil {
         //    것**이라 계층이 다르다 (ui_style.h).
         std::shared_ptr<const ui_style> style {};
         // 주 창의 배경 효과다. 테마처럼 frame마다 실으며, 바뀐 frame에서 UI thread가 다시 건다.
+        // 보조 창과 popup은 각자 고른다 (`ui_window::backdrop`·`ui_popup::backdrop`).
         window_backdrop backdrop { window_backdrop::none };
         // 창 배치 적용 요청이다.
         // revision이 바뀐 경우에만 UI thread가 적용한다.

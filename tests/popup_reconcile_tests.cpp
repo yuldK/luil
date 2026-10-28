@@ -95,6 +95,34 @@ TEST_CASE("A popup that turns rounded or square is rebuilt with its new window c
     REQUIRE(plan.destroy == std::vector<std::u8string> { u8"menu" });
 }
 
+TEST_CASE("A popup or window that only changes its backdrop keeps its window", "[win32][popup][backdrop]")
+{
+    // 효과는 창의 정체에 들지 않는다. popup·보조 창은 효과와 상관없이 표준 표시라 같은 창에서 효과만 다시 건다
+    // (`surface_backdrop`) — 표시 방식이 바뀌지 않으니 다시 만들 까닭이 없다.
+    luil::menu_config menu {};
+    menu.items.push_back(luil::menu_item_config { .key = u8"open", .label = u8"Open" });
+    luil::menu_popup_config plain {};
+    plain.id = u8"menu";
+    plain.width = 120.0f;
+    luil::menu_popup_config glass { plain };
+    glass.backdrop = luil::window_backdrop::acrylic;
+    const luil::ui_popup before { luil::make_menu_popup(menu, plain) };
+    const luil::ui_popup after { luil::make_menu_popup(menu, glass) };
+    REQUIRE(after.backdrop == luil::window_backdrop::acrylic);
+    const auto placement_of = [](const luil::ui_popup& popup) { return popup_placement { popup.id, 0, 0, static_cast<int>(popup.width), static_cast<int>(popup.height), popup.anchor, false }; };
+    const std::vector<popup_placement> alive { placement_of(before) };
+    const std::vector<popup_placement> wanted { placement_of(after) };
+    const auto plan { luil::reconcile_popups(alive, wanted) };
+    REQUIRE(plan.create.empty());
+    REQUIRE(plan.move.empty());
+    REQUIRE(plan.destroy.empty());
+
+    const std::vector<std::u8string> windows { u8"tool" };
+    const auto window_plan { luil::reconcile_windows(windows, windows) };
+    REQUIRE(window_plan.create.empty());
+    REQUIRE(window_plan.destroy.empty());
+}
+
 TEST_CASE("A popup shape follows the corner, the border and what the OS supports", "[win32][popup]")
 {
     using luil::popup_corner;

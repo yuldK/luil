@@ -33,7 +33,7 @@ caption button은 `caption_config::buttons`, `caption_layout`, `window_style_for
 
 주 창의 표시 방식은 `window_config::presentation`이 고른다. 기본(`standard`)은 렌더러가 창에 그리고 OS가 크기를 바로 바꾼다. `layered`는 레이어드 창에 `UpdateLayeredWindow`로 내며, 크기가 바뀌는 배치를 그 크기의 tree가 올 때까지 미뤘다가 frame과 한 호출로 낸다 — 위·왼쪽 끝이 움직이는 크기 변경에서 아래·오른쪽 내용이 한 합성도 튀지 않는다. CPU 렌더러만 쓰고 주 창에만 적용한다([레이어드 표시](../layered-presentation-design.md)).
 
-주 창 뒤의 배경 효과(mica·acrylic)는 `ui_frame::backdrop`으로 frame마다 고른다. 표시 방식에 맞는 길(시스템 배경 효과·레이어드의 accent acrylic)은 luil이 고르고, 효과가 실제로 선 frame에서만 창 바탕과 캡션을 `backdrop_background`로 옅게 칠한다. 서지 않으면 불투명하게 그리고 까닭을 `make_backdrop_message`로 알린다([창 배경 효과](../backdrop-design.md)).
+창 뒤의 배경 효과(mica·acrylic)는 주 창은 `ui_frame::backdrop`, 보조 창은 `ui_window::backdrop`, popup은 `ui_popup::backdrop`으로 frame마다 고른다. 표면에 맞는 길(활성화되는 표준 창의 시스템 배경 효과, 레이어드 창과 popup의 accent acrylic)은 luil이 고르고, 효과가 실제로 선 표면에서만 바탕과 캡션을 `backdrop_background`로 옅게 칠한다. 서지 않으면 불투명하게 그리고 주 창·보조 창은 까닭을 `make_backdrop_message`로 알린다([창 배경 효과](../backdrop-design.md)).
 
 창 배치는 `WM_EXITSIZEMOVE`, maximized/restored 전환, 전체 화면 전환, `WM_CLOSE`에서 delegate에 보고한다. 앱이 복원할 배치는 `window_placement_revision`이 새로울 때만 적용한다. 창 또는 renderer 생성이 실패하면 `show_startup_error`가 디버그 출력과 메시지 상자를 내며 smoke 모드에서는 상자를 생략한다. 상자의 제목과 앞글은 `window_config::startup_error`로 앱이 정한다.
 

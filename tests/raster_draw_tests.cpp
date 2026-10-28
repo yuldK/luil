@@ -7,6 +7,7 @@
 #include "luil/ui/image_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/menu_element.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
@@ -585,6 +586,72 @@ TEST_CASE("A popup frame strokes its border over the whole surface", "[win32][ra
         luil::draw_frame(canvas, nullptr, nullptr, state);
         REQUIRE(pixel_at(0, 30) == palette.window_background);
         REQUIRE(pixel_at(50, 59) == palette.window_background);
+    }
+}
+
+namespace {
+    // premultiplied 표면에서 되읽은 반투명 색은 성분이 반올림만큼 어긋난다.
+    [[nodiscard]] bool near_color(const luil::ui_color actual, const luil::ui_color expected) noexcept
+    {
+        for (const int shift : { 24, 16, 8, 0 })
+            if (std::abs(static_cast<int>((actual >> shift) & 0xFFu) - static_cast<int>((expected >> shift) & 0xFFu)) > 2)
+                return false;
+        return true;
+    }
+} // namespace
+
+TEST_CASE("Only a surface whose backdrop stands clears with the backdrop background", "[win32][raster][backdrop]")
+{
+    // 효과가 실제로 선 표면만 바탕이 옅다 (`frame_state::backdrop`). 서지 않은 표면(설정·OS 사정·popup의 mica)은
+    // 지금처럼 불투명한 창 바탕이다 — 그 판단은 표면 종류와 상관없이 이 한 값으로 들어온다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // 옅은 바탕은 비치되 비지 않는다. 알파가 0이면 아래 견줌이 지운 픽셀과 구별되지 않는다.
+    REQUIRE((palette.backdrop_background >> 24) > 0u);
+    REQUIRE((palette.backdrop_background >> 24) < 0xFFu);
+    SkBitmap pixels {};
+    pixels.allocN32Pixels(160, 120);
+    SkCanvas canvas { pixels };
+    luil::menu_config menu {};
+    menu.owner = u8"menu";
+    menu.items.push_back(luil::menu_item_config { .key = u8"open", .label = {} });
+    menu.items.push_back(luil::menu_item_config { .key = u8"save", .label = {} });
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::menu_element>(std::move(menu)), { 0.0f, 0.0f, 160.0f, 120.0f }, raster_scale) };
+    luil::frame_state state {};
+    state.width = 160;
+    state.height = 120;
+    state.dpi_scale = raster_scale;
+    state.theme = luil::color_theme::dark;
+    const auto pixel_at = [&pixels](const int x, const int y) { return static_cast<luil::ui_color>(pixels.getColor(x, y)); };
+
+    SECTION("효과가 서지 않은 표면은 바탕도 메뉴 몸통도 불투명하다")
+    {
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(pixel_at(80, 60) == palette.window_background);
+        state.tree = &tree;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(pixel_at(80, 110) == palette.surface_background);
+    }
+
+    SECTION("효과가 선 popup은 바탕이 옅고, 메뉴는 몸통을 칠하지 않아 그 바탕을 비춘다")
+    {
+        state.backdrop = true;
+        state.popup = true;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(near_color(pixel_at(80, 60), palette.backdrop_background));
+        state.tree = &tree;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(near_color(pixel_at(80, 110), palette.backdrop_background));
+    }
+
+    SECTION("효과가 선 창 안에 둔 메뉴는 그대로 불투명한 판이다")
+    {
+        // 창 바탕만 옅다. 창 안의 메뉴는 popup이 아니라 창 바탕을 대신하지 않는다.
+        state.backdrop = true;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(near_color(pixel_at(80, 60), palette.backdrop_background));
+        state.tree = &tree;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(pixel_at(80, 110) == palette.surface_background);
     }
 }
 

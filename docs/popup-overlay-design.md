@@ -77,7 +77,9 @@ Popup 창은 지금 OS의 모양을 따른다. Windows 11처럼 DWM이 창 모�
 
 ## 렌더링
 
-각 popup surface는 자기 `window_surface`와 renderer를 갖는다. Popup renderer는 CPU 모드로 생성된다. Popup은 보통 작고 수명이 짧으므로 HWND마다 D3D swapchain과 실패 복구 수명을 추가하지 않는다.
+각 popup surface는 자기 `window_surface`와 renderer를 갖는다. Popup renderer는 CPU 모드로 생성되고 표시 방식은 표준(창 DC에 복사)이다. Popup은 보통 작고 수명이 짧으므로 HWND마다 D3D swapchain과 실패 복구 수명을 추가하지 않는다.
+
+**배경 효과.** `ui_popup::backdrop`을 고르면 popup 뒤에 효과가 선다([창 배경 효과](backdrop-design.md)). popup은 활성화되지 않아 시스템 배경 효과가 비활성 대체 색이 되므로, 효과는 비공개 accent acrylic으로 세운다 — 표준 표시·CPU 렌더러를 그대로 두고 DWM 프레임을 창 전체로 넓힌다(`MARGINS` -1). 그래서 popup은 효과를 켜도 레이어드 창이 되지 않고 창을 다시 만들지도 않는다. `acrylic`만 서고 mica 계열은 서지 않아 불투명하다. 효과가 서면 `draw_frame`의 바탕이 `backdrop_background`이고 메뉴는 몸통을 칠하지 않는다(`draw_context::backdrop` — 효과가 선 popup에서만 참이다). 모서리·그림자·OS 테두리·명암은 위 절 그대로다 — accent 색 막의 명암도 같은 `is_dark_background`를 따른다.
 
 Tree가 바뀌면 해당 popup을 invalidate한다. 크기가 바뀌면 renderer도 새 client 크기에 맞춘다. 주 창과 popup은 같은 theme, font, interaction snapshot을 사용하지만 `interaction_for_surface()`로 각 표면의 상태만 남겨 그린다.
 
@@ -139,11 +141,12 @@ Android에는 popup마다 띄울 창이 없다. 같은 `ui_popup` 선언을 주 
 - 모든 입력은 공통 input inbox와 controller를 거친다.
 - Popup event 좌표는 popup client 좌표다.
 - Dismiss는 action만 내고 앱이 다음 frame에서 제거한다.
-- 렌더러는 CPU 모드이고 DPI는 anchor를 따른다.
+- 렌더러는 CPU 모드·표준 표시이고 DPI는 anchor를 따른다. 배경 효과를 켜도 표시 방식은 바뀌지 않는다 — 효과는 같은 창에 다시 걸 뿐이다.
+- 배경 효과가 실제로 선 popup만 바탕이 옅다. 서지 않으면 지금처럼 불투명하다.
 
 ## 검증 지침
 
-[overlay_input_tests.cpp](../tests/overlay_input_tests.cpp)는 layer 라우팅(맨 위 layer, 접촉의 캡처, 호버 이탈, 바깥 누름·휠)을, [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 layer가 자리 안에만 그려지는 것을 확인한다. [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. 모서리 넷 × 경계 켬·끔 × OS 지원 여부의 모양(그림자 클래스, 표면의 선, OS 테두리), 둥근 창과 직각 창 사이의 재생성, 실제 반지름, 메뉴 popup이 둥근 창과 경계 끔에서 자기 선을 끄는 것도 여기서 본다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을 픽셀로 확인한다.
+[overlay_input_tests.cpp](../tests/overlay_input_tests.cpp)는 layer 라우팅(맨 위 layer, 접촉의 캡처, 호버 이탈, 바깥 누름·휠)을, [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 layer가 자리 안에만 그려지는 것을 확인한다. [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 frame 목록과 surface 수명의 대조를 검증한다. 모서리 넷 × 경계 켬·끔 × OS 지원 여부의 모양(그림자 클래스, 표면의 선, OS 테두리), 둥근 창과 직각 창 사이의 재생성, 실제 반지름, 메뉴 popup이 둥근 창과 경계 끔에서 자기 선을 끄는 것도 여기서 본다. [popup_dismiss_tests.cpp](../tests/popup_dismiss_tests.cpp)는 reason별 action과 중복 억제를 확인한다. [surface_input_tests.cpp](../tests/surface_input_tests.cpp)는 popup 표면 id와 좌표 정규화를 검증한다. [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 `frame_state::border`가 tree 없는 frame에서도 둘레 1px을 창 안에 긋는 것을, 배경 효과가 선 frame만 바탕과 메뉴 몸통이 `backdrop_background`인 것을 픽셀로 확인한다.
 
 전체 조립은 [win32_window.cpp](../src/win32/win32_window.cpp), popup 메시지 처리는 [popup_surface.cpp](../src/win32/popup_surface.cpp)에 있다.
 

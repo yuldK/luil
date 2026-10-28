@@ -92,6 +92,7 @@ namespace luil {
             .metrics = frame_style(state).metrics,
             .reduce_motion = state.reduce_motion,
             .theme = state.theme,
+            .backdrop = state.backdrop && state.popup,
         };
 
         // tree가 화면 전체를 그린다 (caption 포함).

@@ -162,7 +162,7 @@ namespace luil::win32 {
         }
     }
 
-    void caption_surface::set_backdrop_glass(const bool glass) noexcept
+    void caption_surface::backdrop_frame_changed(const bool glass) noexcept
     {
         if (backdrop_glass_ == glass)
             return;

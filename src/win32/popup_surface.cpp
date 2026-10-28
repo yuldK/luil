@@ -66,6 +66,8 @@ namespace luil::win32 {
     {
         dismiss_ = source.dismiss;
         dismiss_requested_ = false;
+        // 효과는 소유자가 OS 사정과 함께 맞춘다 (`refresh_backdrop`). 창을 다시 만들 일은 없다 — 표시 방식이 그대로다.
+        request_backdrop(source.backdrop);
         // 경계·모서리가 바뀐 것도 내용이 바뀐 것이다 — 다시 그려야 화면에 닿는다.
         const bool shape_changed { shape_ != shape };
         const bool corner_changed { shape_.corner != shape.corner };
@@ -101,6 +103,7 @@ namespace luil::win32 {
     void popup_surface::prepare_frame(frame_state& state)
     {
         state.border = shape_.line;
+        state.popup = true;
         if (window_ == nullptr)
             return;
         // 둥근 창의 OS 테두리를 팔레트에 맞춘다. 끈 창과 직각 창은 OS 테두리를 없앤다 — 직각 창의 경계는 표면의 선이라
@@ -123,6 +126,8 @@ namespace luil::win32 {
         }
         // 어두운 바탕이면 그림자와 테두리도 어두운 모드의 것이다. 명암은 테마 이름이 아니라 바탕의 밝기가 정한다.
         const BOOL dark { is_dark_background(palette.window_background) ? TRUE : FALSE };
+        // accent acrylic의 색 막도 같은 명암을 따른다. 효과가 없으면 아무것도 하지 않는다.
+        set_backdrop_dark(dark != FALSE);
         if (dwm_theme_.has_value() && dwm_theme_->first == color && dwm_theme_->second == dark)
             return;
         dwm_theme_ = std::pair { color, dark };

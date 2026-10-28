@@ -378,6 +378,7 @@ namespace demo {
                     tabs_.close_popups();
                     popups_.close_popups();
                     workbench_.close_popups();
+                    theme_.close_popups();
                     return;
                 }
                 if (const auto* const scroll { message.get<navigation_scroll_intent>() }; scroll != nullptr)
@@ -419,6 +420,7 @@ namespace demo {
                     popups_.close_popups();
                     windows_.close_popups();
                     workbench_.close_popups();
+                    theme_.close_popups();
                     return;
                 }
                 // 컨텍스트 메뉴 선택은 페이지가 메뉴를 닫고 셸이 토스트로 잇는다.
@@ -593,10 +595,15 @@ namespace demo {
                     frame->popups.push_back(std::move(popup));
                 for (luil::win32::ui_popup& popup : workbench_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
+                for (luil::win32::ui_popup& popup : theme_.make_popups(scale))
+                    frame->popups.push_back(std::move(popup));
                 // 도구 창은 페이지의 일부가 아니라 어느 페이지에서든 열려 있다.
                 for (luil::ui_window& window : tabs_.make_windows())
                     frame->windows.push_back(std::move(window));
                 for (luil::win32::ui_window& window : windows_.make_windows())
+                    frame->windows.push_back(std::move(window));
+                // 테마 페이지의 배경 효과 견본 창이다.
+                for (luil::win32::ui_window& window : theme_.make_windows())
                     frame->windows.push_back(std::move(window));
                 // 웹뷰도 어느 페이지에서든 실려 있다. 페이지를 떠났다고 목록에서
                 // 빼면 웹뷰가 사라지고 읽던 문서도 함께 사라진다 — 자리표가 없는
