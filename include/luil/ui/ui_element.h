@@ -762,6 +762,12 @@ namespace luil {
         // 이 팔레트가 난 테마다. 고대비(`color_theme::high_contrast`)면 팔레트가 사용자가 OS에서 고른 시스템 색이다 —
         // 가지의 팔레트를 바꾸는 쪽(`palette_scope_element`)이 그 색을 덮지 않으려고 본다.
         color_theme theme { color_theme::dark };
+        // 이 표면이 배경 효과(`ui_popup::backdrop`)가 **실제로 선 popup**이다. 표면 바탕은 이미 `backdrop_background`로
+        // 칠해져 있다.
+        //  - popup의 창 바탕을 대신하는 판(메뉴 몸통)은 참일 때 자기 바탕을 칠하지 않아 효과를 비춘다. 그 밖의 표면·입력칸은
+        //    그대로 불투명하게 칠한다.
+        //  - 효과가 서지 않은 popup과 주 창·보조 창에서는 거짓이다 — 창 안에 둔 메뉴는 창에 효과가 서도 불투명한 판이다.
+        bool backdrop { false };
     };
 
     // `context`에서 팔레트·배율만 바꾼 문맥이다 (가지의 팔레트·확대 보기·툴팁 내용이 자식에게 줄 문맥).

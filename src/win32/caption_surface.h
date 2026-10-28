@@ -65,9 +65,6 @@ namespace luil::win32 {
         //  - `glass`면 프레임을 창 전체로 넓힌다 (`MARGINS` -1). 배경 효과가 선 창은 그래야 client가 효과 위에
         //    알파대로 겹친다. 넓히지 않은 자리의 알파는 버려져 검게 보인다 (backdrop-design.md).
         static void apply_dwm_frame(HWND window, window_display_mode mode, bool glass = false) noexcept;
-        // 배경 효과가 선 창인가다. 바뀌면 DWM 프레임을 지금 모드로 다시 건다. 이 표면이 프레임을 다시 거는 자리
-        // (전체 화면 전환·합성 재시작)도 이 값을 따른다.
-        void set_backdrop_glass(bool glass) noexcept;
 
         // 비클라이언트 hit test가 쓰는 캡션 치수다 (논리 픽셀).
         // 이 표면이 그리는 caption의 치수와 버튼 집합이다.
@@ -168,6 +165,10 @@ namespace luil::win32 {
             return context_.config().accept_file_drop;
         }
 
+        // 배경 효과가 선 창은 DWM 프레임을 창 전체로 넓힌다. 이 표면이 프레임을 다시 거는 자리(전체 화면 전환·합성
+        // 재시작)도 이 값을 따른다.
+        void backdrop_frame_changed(bool active) noexcept override;
+
     private:
         void track_non_client_mouse_leave() noexcept;
         void show_system_menu(POINT position) const;
@@ -197,7 +198,7 @@ namespace luil::win32 {
         float minimum_client_width_ { 0.0f };
         float minimum_client_height_ { 0.0f };
         DWORD extended_style_ { 0 };
-        // 배경 효과가 선 창이라 DWM 프레임을 창 전체로 넓혔다 (`set_backdrop_glass`).
+        // 배경 효과가 선 창이라 DWM 프레임을 창 전체로 넓혔다 (`backdrop_frame_changed`).
         bool backdrop_glass_ { false };
         caption_button_hover hovered_caption_button_ { caption_button_hover::none };
         std::chrono::steady_clock::time_point nc_hover_since_ {};

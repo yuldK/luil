@@ -190,32 +190,6 @@ namespace luil::win32 {
             return status != ERROR_SUCCESS || value != 0;
         }
 
-        // 비공개 `SetWindowCompositionAttribute`다 (레이어드 창의 acrylic). 문서화되지 않은 API라 찾지 못할 수 있다.
-        struct accent_policy
-        {
-            int state { 0 };
-            int flags { 0 };
-            DWORD gradient_color { 0 };
-            int animation_id { 0 };
-        };
-
-        struct window_composition_attribute_data
-        {
-            int attribute { 0 };
-            void* data { nullptr };
-            SIZE_T size { 0 };
-        };
-
-        using set_window_composition_attribute_function = BOOL(WINAPI*)(HWND, window_composition_attribute_data*);
-
-        [[nodiscard]] set_window_composition_attribute_function find_set_window_composition_attribute() noexcept
-        {
-            const HMODULE user32 { GetModuleHandleW(L"user32.dll") };
-            if (user32 == nullptr)
-                return nullptr;
-            return reinterpret_cast<set_window_composition_attribute_function>(GetProcAddress(user32, "SetWindowCompositionAttribute"));
-        }
-
         [[nodiscard]] bool read_high_contrast_enabled() noexcept
         {
             HIGHCONTRASTW high_contrast {};
@@ -296,13 +270,6 @@ namespace luil::win32 {
                 placement_host_ = host;
             }
 
-            // 배경 효과가 선 창인가다. 참이면 frame의 바탕과 캡션이 `backdrop_background`다 (`frame_state::backdrop`).
-            void set_backdrop(const bool active) noexcept
-            {
-                backdrop_ = active;
-                set_backdrop_glass(active);
-            }
-
         private:
             void begin_frame(frame_state& state, const bool presenting) override
             {
@@ -341,7 +308,6 @@ namespace luil::win32 {
                     static_cast<void>(set_tree(std::make_shared<const ui_tree>(make_caption_tree(static_cast<float>(state.width), state.dpi_scale, context_.config().caption))));
                 }
                 state.tree = tree_.get();
-                state.backdrop = backdrop_;
                 caption_surface::prepare_frame(state);
                 context_.schedule_update_repaint(id_, state.interaction);
             }
@@ -395,7 +361,6 @@ namespace luil::win32 {
             layered_placement_host* placement_host_ { nullptr };
             // 미룬 배치를 낸 frame의 직전 창 사각형이다. 낸 뒤의 뒤처리가 무엇이 바뀌었는지 본다.
             screen_bounds presented_from_ {};
-            bool backdrop_ { false };
         };
 
         // 주 창의 런타임이다.
@@ -1704,77 +1669,61 @@ namespace luil::win32 {
                 InvalidateRect(window_, nullptr, FALSE);
             }
 
-            // 주 창의 배경 효과를 앱의 선택과 OS 사정에 맞춘다 (backdrop-design.md).
-            // 게시 wake와 OS 설정 변경이 부른다. 정한 것이 그대로면 아무것도 하지 않는다.
-            void refresh_backdrop() noexcept
+            // 모든 표면에 공통인 OS 사정이다. 표면마다 다른 것(표시 방식·활성화 여부)은 부른 쪽이 채운다.
+            [[nodiscard]] backdrop_environment backdrop_environment_for(const bool layered, const bool activates) const noexcept
             {
-                if (window_ == nullptr)
-                    return;
-                const std::shared_ptr<const ui_frame> frame { host_ != nullptr ? host_->acquire_frame() : nullptr };
-                const window_backdrop requested { frame != nullptr ? frame->backdrop : window_backdrop::none };
-                const backdrop_environment environment {
-                    .layered = layered_,
+                return backdrop_environment {
+                    .layered = layered,
+                    .activates = activates,
                     .transparency_enabled = transparency_enabled_,
                     .high_contrast = high_contrast_,
                     .remote_session = GetSystemMetrics(SM_REMOTESESSION) != 0,
                     .system_backdrop_supported = system_backdrop_supported_,
-                    .accent_supported = set_window_composition_attribute_ != nullptr,
+                    .accent_supported = accent_backdrop_available(),
                 };
-                const backdrop_decision decision { decide_backdrop(requested, environment) };
-                if (decision.mechanism != backdrop_.mechanism)
-                {
-                    apply_backdrop_mechanism(decision.mechanism);
-                    // 바탕을 옅게 칠하는 것은 효과가 선 뒤다. 프레임을 넓히는 것도 같은 값을 따른다 — 넓힌 창에
-                    // 효과가 없으면 옅은 바탕 자리가 검게 보인다.
-                    main_.set_backdrop(decision.active());
-                    InvalidateRect(window_, nullptr, FALSE);
-                }
-                backdrop_ = decision;
+            }
 
-                const backdrop_report report { requested, decision.status };
-                if (posted_backdrop_ == report)
+            // 모든 표면의 배경 효과를 앱의 선택과 OS 사정에 맞춘다 (backdrop-design.md).
+            // 게시 wake와 OS 설정 변경이 부른다. 정한 것이 그대로면 아무것도 하지 않는다.
+            //  - 보조 창·popup이 고른 효과는 대조가 표면에 옮겨 둔 것이다 (`adopt`). 새로 만든 표면은 보이기 전에 따로
+            //    맞춘다 — 첫 그림부터 효과 위에 선다.
+            void refresh_backdrop()
+            {
+                if (window_ == nullptr)
                     return;
-                posted_backdrop_ = report;
-                if (host_ == nullptr || environment_.delegate == nullptr)
+                const std::shared_ptr<const ui_frame> frame { host_ != nullptr ? host_->acquire_frame() : nullptr };
+                main_.request_backdrop(frame != nullptr ? frame->backdrop : window_backdrop::none);
+                post_backdrop_report(main_.refresh_backdrop(backdrop_environment_for(layered_, true), system_backdrop_supported_));
+                for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                    refresh_secondary_backdrop(*secondary);
+                for (const std::unique_ptr<popup_surface>& popup : popups_)
+                    refresh_popup_backdrop(*popup);
+            }
+
+            // 보조 창은 표준 표시이고 활성화되는 창이다 — 주 창의 표준 표시와 같은 길이다.
+            void refresh_secondary_backdrop(secondary_surface& secondary)
+            {
+                post_backdrop_report(secondary.refresh_backdrop(backdrop_environment_for(false, true), system_backdrop_supported_));
+            }
+
+            // popup은 표준 표시이지만 활성화되지 않는다 (`WS_EX_NOACTIVATE`). 상태는 알리지 않는다 (`backdrop_report`).
+            void refresh_popup_backdrop(popup_surface& popup)
+            {
+                static_cast<void>(popup.refresh_backdrop(backdrop_environment_for(false, false), system_backdrop_supported_));
+            }
+
+            void post_backdrop_report(const std::optional<backdrop_report>& report)
+            {
+                if (report.has_value() == false || host_ == nullptr || environment_.delegate == nullptr)
                     return;
                 try
                 {
-                    if (app_message message { environment_.delegate->make_backdrop_message(report) }; message.empty() == false)
+                    if (app_message message { environment_.delegate->make_backdrop_message(*report) }; message.empty() == false)
                         host_->post_app_message(std::move(message));
                 }
                 catch (...)
                 {
                     report_runtime_error(u8"The backdrop delegate threw an exception.");
-                }
-            }
-
-            // 효과 하나를 세우고 나머지 길은 거둔다. 두 길(시스템·accent)을 함께 걸면 판이 겹친다.
-            void apply_backdrop_mechanism(const backdrop_mechanism mechanism) noexcept
-            {
-                if (system_backdrop_supported_)
-                {
-                    DWM_SYSTEMBACKDROP_TYPE type { DWMSBT_NONE };
-                    if (mechanism == backdrop_mechanism::system_mica)
-                        type = DWMSBT_MAINWINDOW;
-                    else if (mechanism == backdrop_mechanism::system_mica_alt)
-                        type = DWMSBT_TABBEDWINDOW;
-                    else if (mechanism == backdrop_mechanism::system_acrylic)
-                        type = DWMSBT_TRANSIENTWINDOW;
-                    static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type)));
-                    // 시스템 효과를 건 창은 위쪽 캡션 높이만큼을 따로 칠한다 — 캡션이 없는 창(`WM_NCCALCSIZE` 0)인데도
-                    // 효과 위에 회색 띠가 선다 (실측). 캡션 색을 "없음"으로 두면 그 띠가 효과와 같아진다.
-                    const COLORREF caption { type == DWMSBT_NONE ? DWMWA_COLOR_DEFAULT : DWMWA_COLOR_NONE };
-                    static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_CAPTION_COLOR, &caption, sizeof(caption)));
-                }
-                if (set_window_composition_attribute_ != nullptr && layered_)
-                {
-                    // 4는 acrylic blur behind, 0은 끔이다. 19는 `WCA_ACCENT_POLICY`다.
-                    //  - 플래그 0이 표준 창의 시스템 acrylic과 가장 가까운 밝기다. 플래그 2(색 막을 쓴다)는 알파 0x10
-                    //    이하에서 거의 검게 되고, 0x40에서도 한 단 어둡다 (실측). 색 막은 명암에 맞춰 둔다.
-                    const DWORD tint { frame_dark_ ? 0x40202020u : 0x40f3f3f3u };
-                    accent_policy policy { mechanism == backdrop_mechanism::accent_acrylic ? 4 : 0, 0, tint, 0 };
-                    window_composition_attribute_data data { 19, &policy, sizeof(policy) };
-                    static_cast<void>(set_window_composition_attribute_(window_, &data));
                 }
             }
 
@@ -2105,12 +2054,7 @@ namespace luil::win32 {
                     return;
                 frame_theme_ = std::pair { dark, border };
                 // 레이어드 창의 acrylic 색 막도 명암을 따른다.
-                if (frame_dark_ != (dark != FALSE))
-                {
-                    frame_dark_ = dark != FALSE;
-                    if (backdrop_.mechanism == backdrop_mechanism::accent_acrylic)
-                        apply_backdrop_mechanism(backdrop_.mechanism);
-                }
+                main_.set_backdrop_dark(dark != FALSE);
                 static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)));
                 // `DWMWA_BORDER_COLOR`는 지원되는 Windows에서 적용되며, 미지원 환경에서는 기본 테두리를 유지한다.
                 static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_BORDER_COLOR, &border, sizeof(border)));
@@ -2593,6 +2537,8 @@ namespace luil::win32 {
                 // 모양은 보이기 전에 건다 — 첫 그림부터 둥근 창이다. 모서리가 직각이어도 건다 (`apply_corner`).
                 static_cast<void>(popup->adopt(source, shape));
                 popup->apply_corner();
+                // 배경 효과도 보이기 전에 건다. 첫 그림이 불투명한 판으로 한 번 서지 않는다.
+                refresh_popup_backdrop(*popup);
                 popups_.push_back(std::move(popup));
                 ShowWindow(handle, SW_SHOWNOACTIVATE);
             }
@@ -2918,6 +2864,8 @@ namespace luil::win32 {
                     secondary->create_text_input();
 
                 static_cast<void>(secondary->adopt(source));
+                // 배경 효과는 보이기 전에 건다 (popup과 같은 이유).
+                refresh_secondary_backdrop(*secondary);
                 // 앱은 이 메시지의 실제 크기·배율로 tree를 배치해 다음 frame에 싣는다.
                 secondary->post_metrics();
                 secondary_surface* const created { secondary.get() };
@@ -2997,15 +2945,9 @@ namespace luil::win32 {
             // 고대비 여부의 캐시다 (WM_SETTINGCHANGE가 갱신).
             bool high_contrast_ { read_high_contrast_enabled() };
             bool transparency_enabled_ { read_transparency_enabled() };
-            // 이 Windows가 시스템 배경 효과를 받는가다. 주 창을 만들 때 한 번 묻는다.
+            // 이 Windows가 시스템 배경 효과를 받는가다. 주 창을 만들 때 한 번 묻는다. 보조 창·popup도 이 답을 쓴다.
+            //  - 표면마다 세워 둔 효과와 알린 상태는 표면이 든다 (`window_surface::refresh_backdrop`).
             bool system_backdrop_supported_ { false };
-            // 레이어드 창의 acrylic을 세우는 비공개 API다. 찾지 못하면 비어 있다.
-            set_window_composition_attribute_function set_window_composition_attribute_ { find_set_window_composition_attribute() };
-            // 지금 세워 둔 배경 효과와 마지막으로 알린 상태다.
-            backdrop_decision backdrop_ {};
-            // 창 요소의 명암이다 (`apply_frame_theme`). 레이어드 acrylic의 색 막이 따른다.
-            bool frame_dark_ { true };
-            std::optional<backdrop_report> posted_backdrop_ {};
             bool reduce_motion_ { read_reduce_motion() };
             // update timer가 깨울 표면들이다.
             // "그 시각을 답한 표면"을 timer와 함께 들고 있는 것이 표면별 다시 그리기의

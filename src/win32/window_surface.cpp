@@ -21,6 +21,7 @@
 
 #include <windowsx.h>
 
+#include <dwmapi.h>
 #include <uiautomationcoreapi.h>
 
 #include <algorithm>
@@ -140,7 +141,44 @@ namespace luil::win32 {
     window_surface::window_surface(surface_context& context, std::u8string id) noexcept
         : context_ { context }
         , id_ { std::move(id) }
+        , backdrop_ { id_.empty() == false }
     {}
+
+    std::optional<backdrop_report> window_surface::refresh_backdrop(const backdrop_environment& environment, const bool system_supported)
+    {
+        const surface_backdrop::update update { backdrop_.refresh(requested_backdrop_, environment) };
+        if (update.apply.has_value() && window_ != nullptr)
+        {
+            apply_backdrop_mechanism(window_, *update.apply, update.previous, system_supported, backdrop_dark_);
+            // 바탕을 옅게 칠하는 것은 효과가 선 뒤다. 프레임을 넓히는 것도 같은 값을 따른다 — 넓힌 창에 효과가 없으면
+            // 옅은 바탕 자리가 검게 보인다.
+            if (backdrop_active() != (update.previous != backdrop_mechanism::none))
+                backdrop_frame_changed(backdrop_active());
+            InvalidateRect(window_, nullptr, FALSE);
+        }
+        std::optional<backdrop_report> report { update.report };
+        if (report.has_value())
+            report->surface = id_;
+        return report;
+    }
+
+    void window_surface::set_backdrop_dark(const bool dark) noexcept
+    {
+        if (backdrop_dark_ == dark)
+            return;
+        backdrop_dark_ = dark;
+        const backdrop_mechanism mechanism { backdrop_.decision().mechanism };
+        if (mechanism == backdrop_mechanism::accent_acrylic)
+            apply_backdrop_mechanism(window_, mechanism, mechanism, false, dark);
+    }
+
+    void window_surface::backdrop_frame_changed(const bool active) noexcept
+    {
+        if (window_ == nullptr)
+            return;
+        const MARGINS margins { active ? MARGINS { -1, -1, -1, -1 } : MARGINS { 0, 0, 0, 0 } };
+        static_cast<void>(DwmExtendFrameIntoClientArea(window_, &margins));
+    }
 
     void window_surface::attach_window(const HWND window) noexcept
     {
@@ -741,6 +779,7 @@ namespace luil::win32 {
         // 두고, 그 상태를 든 표면이 `prepare_frame`에서 둘을 한 모드로 함께 세운다
         // (`caption_surface::prepare_frame` — 둘이 동시에 참이 되지 않는 자리다).
         state.maximized = IsZoomed(window_) != FALSE;
+        state.backdrop = backdrop_active();
         begin_frame(state, presenting);
 
         if (app_host* const host { context_.host() }; host != nullptr)

@@ -528,7 +528,7 @@ luil_set_ide_folder("Tests" luil_layered_screen_check)
 add_test(NAME luil_layered_screen COMMAND luil_layered_screen_check)
 set_tests_properties(luil_layered_screen PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "screen")
 
-# 주 창 배경 효과가 합성된 화면에서 서는지 본다 (backdrop-design.md). 같은 까닭으로 LUIL_SCREEN_TESTS=1일 때만 돈다.
+# 주 창·보조 창·popup의 배경 효과가 합성된 화면에서 서는지 본다 (backdrop-design.md). 같은 까닭으로 LUIL_SCREEN_TESTS=1일 때만 돈다.
 add_executable(luil_backdrop_screen_check
     "${luil_tests_resource}"
     backdrop_screen_check.cpp)

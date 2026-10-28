@@ -233,7 +233,9 @@ namespace luil {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
         const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
-        context.canvas.drawRect(body, solid_paint(context.palette.surface_background));
+        // 메뉴는 popup의 창 바탕을 대신하는 판이다. 효과가 선 표면이면 표면 바탕(`backdrop_background`)을 그대로 둔다.
+        if (context.backdrop == false)
+            context.canvas.drawRect(body, solid_paint(context.palette.surface_background));
         if (config_.border)
         {
             SkPaint border { solid_paint(context.palette.tooltip_border) };

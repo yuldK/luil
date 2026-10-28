@@ -24,6 +24,7 @@ namespace luil {
         const popup_corner corner { config.corner.value_or(default_ui_style().popup.corner) };
         popup.corner = corner;
         popup.border = config.border;
+        popup.backdrop = config.backdrop;
         // 둥근 창이면 메뉴의 사각 선이 모서리에서 튀어나온다. 경계는 OS 테두리가 긋는다.
         menu.border = config.border && popup_corner_radius(corner) <= 0.0f;
         auto root { std::make_unique<menu_element>(std::move(menu)) };

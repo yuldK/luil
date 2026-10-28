@@ -1,16 +1,20 @@
 # 창 배경 효과
 
-주 창 뒤에 mica나 acrylic 같은 배경 효과를 깐다. 앱은 효과를 **뜻으로** 고르고, 어떤 길로 세울지는 luil이 표시 방식(표준·레이어드)과 OS 사정에 맞춰 고른다. 효과가 실제로 선 frame에서만 창 바탕이 옅어지고, 서지 않으면 창은 지금처럼 불투명하며 그 까닭을 앱에 알린다.
+top-level 표면(주 창·보조 창·popup) 뒤에 mica나 acrylic 같은 배경 효과를 깐다. 앱은 효과를 **뜻으로** 고르고, 어떤 길로 세울지는 luil이 표면의 표시 방식(표준·레이어드)·활성화 여부와 OS 사정에 맞춰 고른다. 효과가 실제로 선 표면에서만 바탕이 옅어지고, 서지 않으면 표면은 지금처럼 불투명하며 그 까닭을 앱에 알린다.
 
-공개 형식은 [app_host.h](../include/luil/app/app_host.h)의 `window_backdrop`·`ui_frame::backdrop`과 [win32_window.h](../include/luil/win32/win32_window.h)의 `backdrop_status`·`backdrop_report`·`window_delegate::make_backdrop_message`다.
+공개 형식은 [app_host.h](../include/luil/app/app_host.h)의 `window_backdrop`·`ui_frame::backdrop`·`ui_window::backdrop`·`ui_popup::backdrop`과 [win32_window.h](../include/luil/win32/win32_window.h)의 `backdrop_status`·`backdrop_report`·`window_delegate::make_backdrop_message`다.
 
 ```cpp
 // make_frame
-frame->backdrop = luil::window_backdrop::acrylic;
+frame->backdrop = luil::window_backdrop::acrylic;       // 주 창
+tool.backdrop = luil::window_backdrop::mica;            // 보조 창 (ui_window)
+popup.backdrop = luil::window_backdrop::acrylic;        // popup (ui_popup)
+menu_config.backdrop = luil::window_backdrop::acrylic;  // make_menu_popup (menu_popup_config)
 
 // window_delegate
 luil::app_message make_backdrop_message(const luil::win32::backdrop_report& report) override
 {
+    // report.surface가 비어 있으면 주 창, 아니면 보조 창 id다.
     return luil::app_message { backdrop_state_intent { report } };
 }
 ```
@@ -19,30 +23,37 @@ luil::app_message make_backdrop_message(const luil::win32::backdrop_report& repo
 
 | 값 | 뜻 |
 | --- | --- |
-| `none` | 효과 없음. 지금까지의 창이다. |
+| `none` | 효과 없음. 지금까지의 표면이다. |
 | `mica` | 바탕화면 색을 옅게 깐다. 뒤 창은 비치지 않는다. |
 | `mica_alt` | mica보다 진한 변형이다. |
-| `acrylic` | 뒤에 있는 것을 흐리게 비춘다. |
+| `acrylic` | 뒤에 있는 것을 흐리게 비춘다. 메뉴·플라이아웃처럼 떠 있는 판의 재질이다. |
 
-효과는 테마처럼 **frame마다** 싣는다. 바뀐 frame을 받은 UI thread가 DWM 속성을 다시 건다. 설정 화면의 토글이 다시 띄우지 않고 바로 반영되는 것이 이 자리의 이유다.
+효과는 테마처럼 **frame마다** 싣는다. 주 창은 `ui_frame`에, 보조 창과 popup은 자기 목록 항목에 싣는다. 바뀐 frame을 받은 UI thread가 DWM 속성을 다시 건다. 설정 화면의 토글이 다시 띄우지 않고 바로 반영되는 것이 이 자리의 이유다.
 
 ## 어떤 길로 서는가
 
-빨강·파랑 반반 판 위에 창을 띄우고 창 안 경계가 번지는지로 잰 결과다(실기기, 활성 창).
+빨강·파랑 반반 판 위에 창을 띄우고 창 안 경계가 번지는지로 잰 결과다(실기기). "활성"은 창에 `WM_NCACTIVATE`로 활성 모습을 세운 것이고, popup에는 아무것도 보내지 않았다.
 
-| 효과 | 표준 · CPU 렌더러 | 표준 · GPU 렌더러 | 레이어드 |
-| --- | --- | --- | --- |
-| 시스템 acrylic `DWMSBT_TRANSIENTWINDOW` | 흐림 | 흐림 | 단색 판 |
-| 시스템 mica·mica alt | 바탕화면 색 | 바탕화면 색 | 단색 판 |
-| accent acrylic (비공개 API) | 회색 판 | 회색 판 | 흐림 |
-| accent blur (비공개 API) | 회색 판 | 회색 판 | 아주 어두운 흐림 |
-| 효과 없이 투명한 바탕 | 검정 | 창이 통째로 비침 | 창이 통째로 비침 |
+| 효과 | 표준 · 활성 (CPU·GPU 렌더러) | 표준 · 비활성 | popup (`WS_POPUP`, 활성화 안 됨) | 레이어드 |
+| --- | --- | --- | --- | --- |
+| 시스템 acrylic `DWMSBT_TRANSIENTWINDOW` | 흐림 | 단색 대체 색 | 단색 대체 색 | 단색 판 |
+| 시스템 mica·mica alt | 바탕화면 색 | 단색 대체 색 | 단색 대체 색 | 단색 판 |
+| accent acrylic (비공개 API) | 회색 판 | 회색 판 | 흐림 | 흐림 |
+| accent blur (비공개 API) | 회색 판 | — | — | 아주 어두운 흐림 |
+| 효과 없이 투명한 바탕 | 검정 | — | — | 창이 통째로 비침 |
+
+accent acrylic이 회색 판이 되는 것은 표준 창이라서가 아니라 **캡션 스타일(`WS_CAPTION`)이 있는 창이라서**다. 같은 표준 표시라도 캡션 스타일이 없는 popup에서는 레이어드 창과 같은 값으로 흐리게 선다 — 시험 창에 `WS_CAPTION | WS_THICKFRAME`을 주자 같은 accent가 (38,38,38) 회색 판이 되었다. accent는 활성 여부와 상관없다.
+
+popup에서 시스템 acrylic이 서는지도 쟀다. `WS_POPUP`만 가진 창은 `WM_NCACTIVATE`로 활성 모습을 세워도, 그 값을 계속 참으로 붙들어도, owner를 활성으로 세워도 (84,84,84) 단색이었다. 캡션 스타일을 더하고(`WM_NCCALCSIZE`는 0) `WM_NCACTIVATE`를 붙들면 주 창과 같은 흐림이 섰지만 그 길은 쓰지 않는다 — popup에 크기 조절 테두리의 비클라이언트 판정이 생기고, 활성화되지 않는 창에 "활성"을 거짓으로 붙들어야 한다.
 
 그래서 길을 이렇게 고른다([`decide_backdrop`](../src/win32/backdrop.h)).
 
-- 표준 표시는 `DWMWA_SYSTEMBACKDROP_TYPE`이다. 렌더러가 GPU에서 CPU로 물러서도 효과가 그대로다.
-- 레이어드 표시의 `acrylic`은 비공개 `SetWindowCompositionAttribute`의 acrylic blur behind다. 레이어드에서 `mica`·`mica_alt`는 길이 없어 `unsupported_presentation`이다.
+- **활성화되는 표준 표면**(표준 표시의 주 창, 보조 창)은 `DWMWA_SYSTEMBACKDROP_TYPE`이다. 렌더러가 GPU에서 CPU로 물러서도 효과가 그대로다.
+- **레이어드 창과 활성화되지 않는 표면**(popup)의 `acrylic`은 비공개 `SetWindowCompositionAttribute`의 acrylic blur behind다. 그 표면의 `mica`·`mica_alt`는 길이 없어 `unsupported_presentation`이다 — mica는 활성 창의 재질이고, 활성화되지 않는 표면에서는 늘 단색 대체 색이다.
+- popup은 효과를 위해 레이어드 표시로 바꾸지 않는다. 표준 표시·CPU 렌더러에서 accent가 이미 서므로 렌더러도, 알파 0 픽셀의 클릭 통과 처리도 바꿀 것이 없다.
 - accent blur는 열지 않는다. 쓸 만한 그림이 서는 조합이 없다.
+
+판단은 창 없이 test하려고 값으로 모은다(`backdrop_environment`). 표시 방식(`layered`)과 활성화 여부(`activates`) 말고는 OS 사정이다. **지금 활성인지는 넣지 않는다.** 활성화되는 표면이 비활성일 때 단색이 되는 것은 OS의 비활성 창 모습이고, 활성 전환마다 길을 바꾸면 바탕이 전환마다 다시 깔린다.
 
 비공개 API는 문서화되지 않아 Windows 업데이트에서 바뀔 수 있다. 그 위험을 luil 안에 가두려고 효과를 뜻으로 고르게 했다 — 앱 코드에는 그 이름이 나오지 않는다.
 
@@ -52,73 +63,112 @@ luil::app_message make_backdrop_message(const luil::win32::backdrop_report& repo
 | --- | --- | --- |
 | `off` | `none`을 골랐다 | — |
 | `applied` | 섰다 | — |
-| `unsupported_presentation` | 레이어드 표시에서 mica 계열 | 아니다 |
-| `unsupported_system` | 시스템 배경 효과가 없는 Windows(11 22H2 이전), 또는 accent API를 찾지 못함 | 아니다 |
+| `unsupported_presentation` | 레이어드 표시·popup에서 mica 계열 | 아니다 |
+| `unsupported_system` | 시스템 배경 효과가 없는 Windows(11 22H2 이전, 활성화되는 표준 표면), 또는 accent API를 찾지 못함(레이어드·popup) | 아니다 |
 | `high_contrast` | 고대비 | 그렇다 |
 | `remote_session` | 원격 데스크톱 — DWM 효과를 그리지 않는다 | 그렇다 |
 | `transparency_disabled` | 설정 앱의 "투명 효과"가 꺼짐 | 그렇다 |
 
 바꿀 수 없는 까닭을 먼저 답한다. 레이어드 창에서 mica를 골랐는데 투명 효과까지 꺼져 있을 때 "투명 효과를 켜세요"라고 안내하면, 켜도 서지 않으므로 안내가 틀린 것이 된다.
 
-상태가 바뀔 때마다 한 번 알린다(`make_backdrop_message`). 앱이 고른 효과가 바뀌었을 때, 그리고 OS 설정·고대비가 바뀌었을 때(`WM_SETTINGCHANGE`·`WM_THEMECHANGED`)다. 시스템 배경 효과를 받는지는 주 창을 만들 때 기본값(`DWMSBT_AUTO`)을 걸어 한 번 묻는다. 모서리 선택을 묻는 것과 같은 방식이다.
+**누가 알리는가.** 표면마다 상태가 바뀔 때 한 번 알린다(`make_backdrop_message`). 앱이 고른 효과가 바뀌었을 때, 그리고 OS 설정·고대비가 바뀌었을 때(`WM_SETTINGCHANGE`·`WM_THEMECHANGED`)다. 어느 표면인지는 `backdrop_report::surface`다(비면 주 창).
+
+- 주 창은 처음 상태(`off`)부터 알린다.
+- 보조 창은 효과를 고른 적이 없으면 알리지 않는다 — 창마다 "효과 없음"이 가면 앱이 모든 창의 보고를 걸러야 한다. 효과를 골랐다가 다시 `none`으로 두면 `off`도 알린다. 창을 닫았다 다시 만들면 처음부터 다시 알린다.
+- **popup은 알리지 않는다.** 수명이 짧고, popup만의 까닭(mica는 `unsupported_presentation`)은 값으로 정해져 있으며, OS 사정은 주 창 보고가 같이 말한다. 주 창 보고가 `applied`가 아니면 그 까닭이 popup에도 해당한다 — accent 길만 따로 `unsupported_system`이 될 수 있는데, 그때는 레이어드 창도 같다.
+
+시스템 배경 효과를 받는지는 주 창을 만들 때 기본값(`DWMSBT_AUTO`)을 걸어 한 번 묻고, 보조 창·popup도 그 답을 쓴다. 모서리 선택을 묻는 것과 같은 방식이다.
+
+## 수명
+
+표면 하나의 효과 상태는 [`surface_backdrop`](../src/win32/backdrop.h)이 든다 — 세워 둔 길과 알린 보고다. 새 선택·OS 사정을 받으면 길이 바뀔 때만 다시 걸고, 상태가 바뀔 때만 알린다. 효과를 고른 적 없는 표면에는 DWM에 아무것도 말하지 않으므로 기본값이면 지금과 픽셀 단위로 같다.
+
+- **효과만 바뀌면 같은 창에 다시 건다.** 보조 창과 popup은 효과와 상관없이 표준 표시라 창을 다시 만들 까닭이 없다. 효과는 창의 정체(`popup_placement`·창 id)에 들지 않아 대조(`reconcile_popups`·`reconcile_windows`)는 아무것도 내지 않고, 표면이 `adopt`에서 새 선택을 받아 다음 맞춤에서 길을 바꾼다. 표시 방식이 바뀌는 것은 주 창의 `window_config::presentation`뿐이고 그것은 창을 만들 때 정한다.
+- **새로 만든 표면은 보이기 전에 건다.** 첫 그림이 불투명한 판으로 한 번 서지 않는다.
+- **맞추는 자리**는 게시 wake(창·popup 대조 뒤)와 OS 설정 변경이다. 둘 다 주 창·보조 창·popup을 모두 맞춘다.
+- 길을 바꿀 때 앞의 길을 거둔다. 시스템 효과와 accent를 한 창에 함께 걸지 않는다.
 
 ## 바탕을 옅게 하는 것
 
-효과가 비치려면 창의 바탕이 반투명해야 한다. 그런데 효과가 서지 않은 창에 반투명 바탕을 칠하면 위 표의 마지막 줄처럼 창이 검게 되거나 통째로 비쳐 글을 읽을 수 없다. 그래서 바탕을 옅게 하는 판단은 앱 스타일이 아니라 luil이 든다.
+효과가 비치려면 표면의 바탕이 반투명해야 한다. 그런데 효과가 서지 않은 표면에 반투명 바탕을 칠하면 위 표의 마지막 줄처럼 창이 검게 되거나 통째로 비쳐 글을 읽을 수 없다. 그래서 바탕을 옅게 하는 판단은 앱 스타일이 아니라 luil이 든다.
 
-- 효과가 **실제로 선** frame에서만 `frame_state::backdrop`이 참이다. 그때 창 전체를 칠하는 바탕(`draw_frame`의 `clear`)과 캡션 바탕이 `backdrop_background`가 된다.
+- 효과가 **실제로 선** 표면에서만 `frame_state::backdrop`이 참이다(표면 종류와 상관없이 이 한 값이다). 그때 표면 전체를 칠하는 바탕(`draw_frame`의 `clear`)과 캡션 바탕이 `backdrop_background`가 된다. 고대비·원격 세션·투명 효과 꺼짐·API 없음·popup의 mica에서는 거짓이라 지금처럼 불투명하다.
+- 효과가 선 **popup**이면 그리기 문맥에도 간다(`draw_context::backdrop`). popup의 창 바탕을 대신하는 판인 메뉴(`menu_element`)는 참일 때 몸통을 칠하지 않아 효과를 비춘다. 그래서 `make_menu_popup`에 효과를 주면 메뉴가 반투명해진다. 주 창·보조 창 안에 둔 메뉴는 창에 효과가 서도 거짓이라 지금처럼 불투명하다 — 이미 주 창에 효과를 건 앱의 창 안 메뉴가 바뀌지 않는다. 그 밖의 element는 이 값을 보지 않는다.
 - `backdrop_background`는 스타일의 중립 색이다(`assets/style.json`의 `backdropBackground`, 테마마다). 알파가 효과를 얼마나 비출지다. 내장값은 어두운 테마 `#1e1e1e59`, 밝은 테마 `#f8f8f866`이다. 이 키가 없는 옛 스타일은 `windowBackground`를 쓴다 — 효과가 서도 불투명해 지금과 같은 그림이다.
 - 창 바탕 **역할**(`window_background`)은 그대로 둔다. 체크 표시처럼 그 색을 대비로 쓰는 자리가 있어 옅게 하면 표시가 흐려진다. 표면(`surface_background`)·입력칸·떠 있는 판도 불투명하다(실측: 효과가 선 창의 표면 칸은 효과 없는 창과 같은 색이다).
 
-## DWM 프레임
+## DWM 프레임과 모양
 
-효과가 선 표준 창은 DWM 프레임을 창 전체로 넓힌다(`MARGINS` -1, `caption_surface::set_backdrop_glass`). 넓히지 않은 자리는 client의 알파가 버려져 검게 보인다. 표면이 프레임을 다시 거는 자리(전체 화면 전환·합성 재시작)도 이 값을 따른다.
+효과가 선 표면은 DWM 프레임을 창 전체로 넓힌다(`MARGINS` -1). 넓히지 않은 자리는 client의 알파가 버려져 검게 보인다. 주 창·보조 창은 표면이 프레임을 다시 거는 자리(전체 화면 전환·합성 재시작)도 이 값을 따른다(`caption_surface::backdrop_frame_changed`). popup은 프레임을 다시 거는 자리가 없어 효과가 서고 거둘 때만 건다(`window_surface::backdrop_frame_changed`).
 
-시스템 배경 효과를 건 창은 캡션이 없는데도(`WM_NCCALCSIZE`가 0) 위쪽 캡션 높이만큼을 회색 띠로 따로 칠한다(실측). `DWMWA_CAPTION_COLOR`를 `DWMWA_COLOR_NONE`으로 두면 그 띠가 효과와 같아진다. 효과를 거둘 때 `DWMWA_COLOR_DEFAULT`로 되돌린다.
+시스템 배경 효과를 건 창은 캡션이 없는데도(`WM_NCCALCSIZE`가 0) 위쪽 캡션 높이만큼을 회색 띠로 따로 칠한다(실측). `DWMWA_CAPTION_COLOR`를 `DWMWA_COLOR_NONE`으로 두면 그 띠가 효과와 같아진다. 효과를 거둘 때 `DWMWA_COLOR_DEFAULT`로 되돌린다. 보조 창도 같은 규칙이다.
 
-레이어드 창의 accent acrylic은 플래그 0으로 건다. 플래그 2(색 막을 쓴다)는 색 막 알파가 0x10 이하에서 거의 검게 되고 0x40에서도 한 단 어둡다(실측). 색 막은 창 요소의 명암(`apply_frame_theme`)을 따라 어두운 쪽 `0x40202020`, 밝은 쪽 `0x40f3f3f3`이다.
+**명암.** 시스템 효과의 재질(mica 색·acrylic 밝기)은 창의 `DWMWA_USE_IMMERSIVE_DARK_MODE`를 따른다. 주 창과 popup은 늘 바탕 밝기(`is_dark_background`)로 걸어 둔다. 보조 창은 지금까지 그 속성을 걸지 않았으므로 효과가 선 동안만 바탕 밝기로 걸고, 거두면 기본값으로 되돌린다 — 효과 없는 보조 창의 테두리·그림자는 그대로다.
 
-레이어드 창은 알파 0 픽셀을 마우스가 지나가게 한다. 옅은 바탕은 알파가 0이 아니라 클릭이 창에 온다. 바탕 알파를 0으로 둔 스타일은 [레이어드 표시](layered-presentation-design.md)의 알파 바닥(1로 올림)이 받는다.
+**accent 색 막.** accent acrylic은 플래그 0으로 건다. 플래그 2(색 막을 쓴다)는 색 막 알파가 0x10 이하에서 거의 검게 되고 0x40에서도 한 단 어둡다(실측). 색 막은 표면의 명암을 따라 어두운 쪽 `0x40202020`, 밝은 쪽 `0x40f3f3f3`이다 — 주 창은 창 요소의 명암(`apply_frame_theme`), popup은 OS 테두리와 같은 바탕 밝기다. 명암이 바뀌면 색 막만 다시 건다.
+
+**모서리·그림자·테두리.** 효과는 모양을 바꾸지 않는다. 둥근 popup은 효과를 걸어도 모서리가 둥글고 DWM 그림자가 그대로이며(아래 표의 모서리·아래 열), OS 테두리 색(`ui_popup::border`)도 같은 규칙이다. 레이어드 주 창은 [레이어드 표시](layered-presentation-design.md)의 둥근 모서리 명시가 효과와 상관없이 모서리·테두리·그림자를 세운다. 직각 popup의 클래스 그림자(`CS_DROPSHADOW`)는 이 검사로 재지 못했다 — 효과가 없는 직각 시험 창에서도 둘레에 그림자 픽셀이 잡히지 않았다(맨 위에 둔 판이 따로 서는 그림자를 가리는 것으로 보인다). 효과는 창 클래스를 바꾸지 않는다.
+
+레이어드 창은 알파 0 픽셀을 마우스가 지나가게 한다. 옅은 바탕은 알파가 0이 아니라 클릭이 창에 온다. 바탕 알파를 0으로 둔 스타일은 레이어드 표시의 알파 바닥(1로 올림)이 받는다. popup은 레이어드 창이 아니라 이 일이 없다.
 
 ## 비활성 창
 
-시스템 배경 효과는 비활성 창에서 단색 대체 색이 된다(실측: 활성으로 그리지 않은 시험 창은 acrylic도 (84,84,84) 판이었다). Windows의 동작이고 luil이 바꾸지 않는다. 앱이 그 상태를 따로 알 필요는 없다 — 바탕은 여전히 옅게 칠하지만 DWM이 그 아래를 단색으로 깐다.
+시스템 배경 효과는 비활성 창에서 단색 대체 색이 된다(아래 표의 `secondary-inactive`: acrylic도 (65,65,65) 판이다 — 대체 색 (84,84,84) 위에 옅은 바탕을 얹은 값). Windows의 동작이고 luil이 바꾸지 않는다. 앱이 그 상태를 따로 알 필요는 없다 — 바탕은 여전히 옅게 칠하지만 DWM이 그 아래를 단색으로 깐다. 주 창과 보조 창이 같다.
+
+활성화되지 않는 popup은 이 대체 색에 갇히므로 시스템 길을 쓰지 않는다(위 절). accent acrylic은 활성 여부와 상관없이 흐리다.
 
 ## 검증
 
-[backdrop_tests.cpp](../tests/backdrop_tests.cpp)가 표시 방식·OS 사정별로 고르는 길과 까닭의 순서를 창 없이 본다. [style_tests.cmake](../tests/style_tests.cmake)는 `backdropBackground`가 없는 스타일이 창 바탕으로 물러서는지 본다.
+[backdrop_tests.cpp](../tests/backdrop_tests.cpp)가 표준·레이어드 × 활성화되는 표면·활성화되지 않는 표면 × OS 사정별로 고르는 길과 까닭의 순서를, 그리고 `surface_backdrop`이 길이 바뀔 때만 다시 걸고 상태가 바뀔 때만 알리는 것(주 창의 처음 알림, 효과를 고른 적 없는 보조 창의 침묵, popup의 제자리 전환)을 창 없이 본다. [popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)는 효과만 바뀐 popup·보조 창을 대조가 다시 만들지 않는 것을, [raster_draw_tests.cpp](../tests/raster_draw_tests.cpp)는 효과가 선 frame만 바탕이 `backdrop_background`이고 서지 않은 frame은 불투명한 것, 메뉴 몸통은 효과가 선 popup에서만 비고 창 안에서는 불투명한 것을 픽셀로 본다. [style_tests.cmake](../tests/style_tests.cmake)는 `backdropBackground`가 없는 스타일이 창 바탕으로 물러서는지 본다.
 
-합성된 화면은 [`luil_backdrop_screen_check`](../tests/backdrop_screen_check.cpp)가 본다. 빨강·파랑 반반 판 위에 luil 창을 띄우고, 창 위쪽은 창 바탕만 두고 아래쪽에는 불투명한 표면 칸을 둔다. 사람의 입력 데스크톱에 창을 띄우므로 `LUIL_SCREEN_TESTS=1`일 때만 돈다(CTest 레이블 `screen`). 초점을 빼앗지 않으려고 `WM_NCACTIVATE`로 활성 모습만 세운다.
+합성된 화면은 [`luil_backdrop_screen_check`](../tests/backdrop_screen_check.cpp)가 본다. 빨강·파랑 반반 판 위에 luil 표면을 띄우고, 위쪽은 바탕만 두고 아래쪽에는 불투명한 표면 칸을 둔다. 보조 창·popup을 잴 때 주 창은 판 밖에 비켜 둔다. 사람의 입력 데스크톱에 창을 띄우므로 `LUIL_SCREEN_TESTS=1`일 때만 돈다(CTest 레이블 `screen`). 초점을 빼앗지 않으려고 `WM_NCACTIVATE`로 활성 모습만 세운다 — `secondary-inactive`와 `popup`에는 보내지 않는다. popup은 상태를 알리지 않아 같은 프로세스의 주 창에 acrylic을 걸고 그 보고(`applied`)로 OS 사정을 갈음했다. 모서리는 표면 왼쪽 위 픽셀(둥글면 판 색), 아래는 표면 아래 6px 밖의 픽셀(그림자면 판의 빨강 (230,30,30)보다 어둡다)이다.
 
-| 표시 · 효과 | 상태 | 창 바탕(왼/오) | 경계 번짐 | 위쪽(캡션 자리) | 표면 칸 |
-| --- | --- | --- | --- | --- | --- |
-| 표준 CPU · none | `off` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) |
-| 표준 CPU · mica | `applied` | (31,31,30)/(30,32,27) | 0 | (30,31,30) | (45,45,48) |
-| 표준 CPU · acrylic | `applied` | (157,27,27)/(43,43,170) | 76 | (157,27,27) | (45,45,48) |
-| 표준 GPU · none | `off` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) |
-| 표준 GPU · mica | `applied` | (31,31,30)/(30,32,27) | 0 | (30,31,30) | (45,45,48) |
-| 표준 GPU · acrylic | `applied` | (157,27,27)/(43,43,170) | 76 | (157,27,27) | (45,45,48) |
-| 레이어드 · none | `off` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) |
-| 레이어드 · mica | `unsupported_presentation` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) |
-| 레이어드 · acrylic | `applied` | (114,31,31)/(29,29,128) | 75 | (111,31,31) | (45,45,48) |
-| 표준 GPU · acrylic · 밝은 테마 | `applied` | (247,179,179)/(184,184,247) | 70 | (247,179,179) | (45,45,48) |
-| 레이어드 · acrylic · 밝은 테마 | `applied` | (235,168,168)/(166,166,232) | 73 | (235,170,170) | (45,45,48) |
+| 표면 · 효과 | 상태 | 바탕(왼/오) | 경계 번짐 | 위쪽(캡션 자리) | 표면 칸 | 모서리 / 아래 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 표준 CPU · none | `off` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 표준 CPU · mica | `applied` | (30,31,33)/(29,31,33) | 0 | (29,31,33) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 표준 CPU · acrylic | `applied` | (157,27,27)/(43,43,170) | 76 | (157,27,27) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 표준 GPU · none | `off` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 표준 GPU · mica | `applied` | (30,31,33)/(29,31,33) | 0 | (29,31,33) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 표준 GPU · acrylic | `applied` | (157,27,27)/(43,43,170) | 76 | (157,27,27) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 레이어드 · none | `off` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (213,28,28) / (147,19,19) |
+| 레이어드 · mica | `unsupported_presentation` | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (213,28,28) / (147,19,19) |
+| 레이어드 · acrylic | `applied` | (114,31,31)/(29,29,128) | 75 | (111,31,31) | (45,45,48) | (213,28,28) / (147,19,19) |
+| 보조 창 활성 · none | (알리지 않음) | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (217,28,28) / (169,22,22) |
+| 보조 창 활성 · mica | `applied` | (30,31,33)/(29,31,33) | 0 | (29,31,33) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 보조 창 활성 · acrylic | `applied` | (157,27,27)/(43,43,170) | 76 | (157,27,27) | (45,45,48) | (198,26,26) / (109,14,14) |
+| 보조 창 비활성 · none | (알리지 않음) | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (222,29,29) / (189,25,25) |
+| 보조 창 비활성 · mica | `applied` | (31,31,31)/(31,31,31) | 0 | (31,31,31) | (45,45,48) | (213,28,28) / (147,19,19) |
+| 보조 창 비활성 · acrylic | `applied` | (65,65,65)/(65,65,65) | 0 | (65,65,65) | (45,45,48) | (213,28,28) / (147,19,19) |
+| popup · none | (알리지 않음) | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (229,30,30) / (210,27,27) |
+| popup · mica | (알리지 않음, 서지 않음) | (30,30,30)/(30,30,30) | 0 | (30,30,30) | (45,45,48) | (229,30,30) / (210,27,27) |
+| popup · acrylic | (알리지 않음, 섬) | (114,31,31)/(29,29,128) | 75 | (112,31,31) | (45,45,48) | (229,30,30) / (210,27,27) |
+| 표준 GPU · acrylic · 밝은 테마 | `applied` | (247,179,179)/(184,184,247) | 70 | (247,179,179) | (45,45,48) | (217,28,28) / (169,22,22) |
+| 레이어드 · acrylic · 밝은 테마 | `applied` | (235,168,168)/(166,166,232) | 73 | (235,170,170) | (45,45,48) | (222,29,29) / (189,25,25) |
+| 보조 창 활성 · acrylic · 밝은 테마 | `applied` | (247,179,179)/(184,184,247) | 70 | (247,179,179) | (45,45,48) | (217,28,28) / (169,22,22) |
+| popup · acrylic · 밝은 테마 | (알리지 않음, 섬) | (235,168,168)/(166,166,232) | 73 | (235,170,170) | (45,45,48) | (229,30,30) / (210,27,27) |
 
-캡션 색을 "없음"으로 두기 전에는 표준 창의 위쪽이 (70,70,70)이었다. 레이어드 acrylic을 플래그 2·색 막 알파 0x10으로 걸었을 때는 창 바탕이 (18,13,13)/(12,12,17)로 거의 검었다.
+보조 창은 주 창의 표준 표시와 같은 값이고, popup의 accent acrylic은 레이어드 주 창과 같은 값이다(같은 accent 길이다). 모든 표면에서 모서리가 판 색에 가깝고 아래가 판보다 어두워, 효과를 건 표면도 둥근 모서리와 그림자가 그대로다. 주 창·보조 창의 그림자(아래 열)가 popup보다 진한 것은 창 종류에 따른 DWM 그림자의 차이이고 효과와 상관없다(효과 없는 행도 같다).
 
-격리 데스크톱에서는 데모(`--page=theme`)의 효과 고르기를 UIA로 몰아 표준·레이어드 표시에서 상태 문구가 맞게 바뀌는 것을 확인했다.
+캡션 색을 "없음"으로 두기 전에는 표준 창의 위쪽이 (70,70,70)이었다. 레이어드 acrylic을 플래그 2·색 막 알파 0x10으로 걸었을 때는 창 바탕이 (18,13,13)/(12,12,17)로 거의 검었다. 위 "어떤 길로 서는가"의 popup·캡션 스타일 비교는 luil 밖의 시험 창(Win32 창 하나에 같은 DWM 호출)으로 잰 것이다.
+
+격리 데스크톱에서는 데모(테마 페이지)의 효과 고르기를 UIA로 몰아 확인했다. 주 창 acrylic·없음의 상태 문구, 견본 보조 창을 연 뒤 acrylic·mica·없음으로 바꿀 때 그 창의 상태 문구(`surface`가 견본 창 id인 보고), 창을 닫으면 문구가 처음으로 돌아가는 것, 견본 메뉴를 acrylic·mica로 열어 항목을 고르고 닫는 것이다.
 
 ## 범위
 
-- 주 창만이다. 보조 창과 popup은 효과가 없다.
-- Android는 `ui_frame::backdrop`을 보지 않는다.
+- 주 창·보조 창·popup이 같은 값으로 고른다. Android는 `backdrop`을 보지 않는다.
+- popup의 효과는 `acrylic`뿐이다. element의 hover tooltip은 그 표면의 tree 안에 그려지는 판이라 popup이 아니고 따로 효과가 없다 — 긴 tooltip을 popup으로 띄우는 앱은 그 popup에 효과를 고를 수 있다.
 - 효과의 세기(흐림 반경·색 막)는 OS가 정한다. 앱이 고르는 것은 효과의 종류와 `backdropBackground`의 알파다.
 - 전체 화면 창에 효과를 건 경우는 재지 않았다. 효과가 선 창은 전체 화면에서도 DWM 프레임을 창 전체로 넓힌다(`MARGINS` -1). 효과가 없는 전체 화면 창이 위쪽 여백을 0으로 두어 피한 이음매가 이 경우에 다시 서는지는 확인하지 않았다.
+- 직각 popup의 클래스 그림자는 위 검사로 재지 못했다.
 
 ## 반드시 유지할 불변식
 
-- 바탕을 옅게 칠하는 것은 효과가 실제로 선 frame뿐이다.
-- 창 바탕 역할(`window_background`)의 색은 효과와 상관없이 그대로다.
-- 시스템 효과와 accent 효과를 한 창에 함께 걸지 않는다.
-- 효과가 선 표준 창의 DWM 프레임은 창 전체다. 다시 거는 자리도 그 값을 따른다.
+- 바탕을 옅게 칠하는 것은 효과가 실제로 선 표면뿐이다. 표면 종류와 상관없이 `frame_state::backdrop` 한 값이 정한다.
+- 창 바탕 역할(`window_background`)의 색은 효과와 상관없이 그대로다. 효과가 선 popup의 메뉴 몸통 말고는 element가 효과를 보고 바탕을 비우지 않는다.
+- 시스템 효과와 accent 효과를 한 창에 함께 걸지 않는다. 길을 바꿀 때 앞의 길을 거둔다.
+- 효과를 고른 적 없는 표면에는 DWM에 배경 효과·프레임·명암을 새로 말하지 않는다.
+- 효과가 선 표면의 DWM 프레임은 창 전체다. 다시 거는 자리도 그 값을 따른다.
+- 효과만 바뀌면 같은 창에 다시 건다. 표면의 표시 방식은 효과 때문에 바뀌지 않는다.
+- 활성화되지 않는 표면은 시스템 효과를 쓰지 않는다.
 - 바꿀 수 없는 까닭을 바꿀 수 있는 까닭보다 먼저 알린다.

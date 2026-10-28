@@ -106,20 +106,20 @@ namespace luil::win32 {
         //    `automatic`은 CPU다.
         //  - 웹뷰는 설 자리가 없다 (CPU 렌더러와 같다 — 자리표가 placeholder를 그린다).
         //  - 배경 효과(`ui_frame::backdrop`)는 acrylic만 선다. mica는 `backdrop_status::unsupported_presentation`이다.
-        //  - 주 창만 이 방식이다. 보조 창과 popup은 `standard`로 남는다.
+        //  - 주 창만 이 방식이다. 보조 창과 popup은 `standard`로 남는다 (배경 효과도 표준 표시의 길로 선다).
         //  - 크기 변경은 앱이 새 tree를 낼 때까지 한두 frame 늦게 따라온다. 앱이 정해진 시간 안에 tree를 내지
         //    않으면 가진 tree로 내고 넘어간다.
         layered,
     };
 
-    // 주 창 배경 효과가 지금 어떤 상태인가다 (docs/backdrop-design.md).
+    // 표면 하나의 배경 효과가 지금 어떤 상태인가다 (docs/backdrop-design.md).
     enum class backdrop_status
     {
         // 효과를 고르지 않았다 (`window_backdrop::none`).
         off,
         // 고른 효과가 섰다.
         applied,
-        // 이 표시 방식이 그 효과를 세울 수 없다. 레이어드 표시는 acrylic만 선다.
+        // 이 표시 방식·표면이 그 효과를 세울 수 없다. 레이어드 표시와 활성화되지 않는 표면(popup)은 acrylic만 선다.
         unsupported_presentation,
         // 이 Windows에 그 효과가 없다 (시스템 배경 효과는 Windows 11 22H2부터다).
         unsupported_system,
@@ -131,14 +131,20 @@ namespace luil::win32 {
         remote_session,
     };
 
-    // 배경 효과 상태 보고다. 상태가 바뀔 때마다 한 번 알린다.
+    // 배경 효과 상태 보고다. 표면마다 상태가 바뀔 때 한 번 알린다.
+    //  - 주 창과 보조 창이 알린다. popup은 알리지 않는다 — 수명이 짧고, popup만의 까닭(mica는
+    //    `unsupported_presentation`)은 값으로 정해져 있으며, OS 사정(투명 효과·고대비·원격)은 주 창 보고가 같이 말한다.
+    //  - 보조 창은 효과를 고른 적이 없으면(처음부터 `none`) 알리지 않는다. 창을 다시 만들면 처음부터 다시 알린다.
     struct backdrop_report
     {
         // 앱이 frame에 실은 효과다.
         window_backdrop requested { window_backdrop::none };
         backdrop_status status { backdrop_status::off };
+        // 표면 id다. 비어 있으면 주 창, 아니면 보조 창(`ui_window::id`)이다.
+        //  - 뒤에 둔 것은 주 창만 알리던 때의 `{ requested, status }` 초기화가 그대로 주 창을 뜻하게 하려는 것이다.
+        std::u8string surface {};
 
-        [[nodiscard]] bool operator==(const backdrop_report&) const noexcept = default;
+        [[nodiscard]] bool operator==(const backdrop_report&) const = default;
     };
 
     // 창의 겉모습과 정책이다.
@@ -230,8 +236,9 @@ namespace luil::win32 {
             return {};
         }
 
-        // 주 창 배경 효과의 상태가 바뀌었다 (앱이 고른 효과가 바뀌었거나, OS 설정·고대비가 바뀌었다).
-        // 빈 메시지는 게시하지 않는다. 설정 화면이 "이 표시 방식에서는 mica를 쓸 수 없다" 같은 까닭을 보일 때 쓴다.
+        // 주 창이나 보조 창의 배경 효과 상태가 바뀌었다 (앱이 고른 효과가 바뀌었거나, OS 설정·고대비가 바뀌었다).
+        // 어느 표면인지는 `report.surface`다. 빈 메시지는 게시하지 않는다. 설정 화면이 "이 표시 방식에서는 mica를 쓸 수
+        // 없다" 같은 까닭을 보일 때 쓴다.
         [[nodiscard]] virtual app_message make_backdrop_message(const backdrop_report& report)
         {
             static_cast<void>(report);

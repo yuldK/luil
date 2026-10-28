@@ -1,6 +1,9 @@
 #include "win32/secondary_surface.h"
 
+#include "luil/theme/ui_theme.h"
 #include "win32/dpi_scale.h"
+
+#include <dwmapi.h>
 
 #include <algorithm>
 #include <utility>
@@ -133,6 +136,8 @@ namespace luil::win32 {
         close_ = source.close;
         placement_ = source.placement;
         close_requested_ = false;
+        // 효과는 소유자가 OS 사정과 함께 맞춘다. 표시 방식이 그대로라 창을 다시 만들 일은 없다.
+        request_backdrop(source.backdrop);
         // 캡션과 최소 크기는 **창을 만들 때 한 번만** 실렸다. 그런데 그 값을 읽는
         // 자리는 매번 오는 OS 질문이다 — 비클라이언트 hit test(`WM_NCHITTEST`)와
         // 크기 한계(`WM_GETMINMAXINFO`)가 그것이다.
@@ -204,10 +209,27 @@ namespace luil::win32 {
     void secondary_surface::prepare_frame(frame_state& state)
     {
         caption_surface::prepare_frame(state);
+        apply_backdrop_theme(state);
         // 이 창의 caption tooltip 지연도 update timer에 실리도록 여기서도 예고를 다시 건다.
         // 넘기는 것은 **이 표면의 것**이라 자기 id를 함께 준다 — 나머지 표면은
         // 발행본을 각자의 것으로 다시 거른다 (multi-window-design.md).
         context_.schedule_update_repaint(id_, state.interaction);
+    }
+
+    void secondary_surface::apply_backdrop_theme(const frame_state& state) noexcept
+    {
+        if (window_ == nullptr)
+            return;
+        // 효과가 선 창의 재질 명암(mica 색·acrylic 밝기)은 창의 어두운 모드를 따른다. 주 창은 늘 바탕 밝기로 걸어 두지만
+        // 보조 창은 지금까지 기본값(밝은 모드)이었으므로, 효과가 선 동안만 바탕 밝기로 걸고 거두면 기본값으로 되돌린다.
+        // 고대비에는 효과가 서지 않는다.
+        BOOL dark { FALSE };
+        if (backdrop_active())
+            dark = is_dark_background(frame_palette(state).window_background) ? TRUE : FALSE;
+        if (dwm_dark_.value_or(FALSE) == dark)
+            return;
+        dwm_dark_ = dark;
+        static_cast<void>(DwmSetWindowAttribute(window_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)));
     }
 
     void secondary_surface::request_close()
