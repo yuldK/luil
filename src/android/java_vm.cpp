@@ -6,6 +6,7 @@
 namespace luil::android {
     namespace {
         std::atomic<JavaVM*> process_vm { nullptr };
+        std::atomic<jobject> process_context { nullptr };
         std::mutex files_lock {};
         std::string files_path {};
     } // namespace
@@ -30,6 +31,33 @@ namespace luil::android {
     JavaVM* java_vm() noexcept
     {
         return process_vm.load(std::memory_order_acquire);
+    }
+
+    void set_application_context(JNIEnv& env, const jobject activity) noexcept
+    {
+        if (activity == nullptr || process_context.load(std::memory_order_acquire) != nullptr)
+            return;
+        const jclass context_class { env.FindClass("android/content/Context") };
+        const jmethodID get_application_context { context_class != nullptr ? env.GetMethodID(context_class, "getApplicationContext", "()Landroid/content/Context;") : nullptr };
+        const jobject context { get_application_context != nullptr ? env.CallObjectMethod(activity, get_application_context) : nullptr };
+        if (env.ExceptionCheck())
+            env.ExceptionClear();
+        if (context != nullptr)
+        {
+            const jobject global { env.NewGlobalRef(context) };
+            jobject expected { nullptr };
+            // 프로세스에 하나라 먼저 적힌 것을 지키고 나중 것은 놓는다.
+            if (global != nullptr && process_context.compare_exchange_strong(expected, global, std::memory_order_acq_rel) == false)
+                env.DeleteGlobalRef(global);
+            env.DeleteLocalRef(context);
+        }
+        if (context_class != nullptr)
+            env.DeleteLocalRef(context_class);
+    }
+
+    jobject application_context() noexcept
+    {
+        return process_context.load(std::memory_order_acquire);
     }
 
     jni_thread_scope::jni_thread_scope(const char* const thread_name) noexcept

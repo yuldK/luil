@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace luil {
     // 플랫폼 도구의 답이다 (platform-services-design.md).
@@ -94,8 +95,24 @@ namespace luil {
     };
 
     // 외부 프로그램을 띄운다. 인자는 Windows 명령 줄 규칙(따옴표 안의 백슬래시와 따옴표)으로 이어 넘긴다.
-    //  - Android는 `unsupported`다 (다른 앱을 여는 것은 Activity의 Intent라 Java 쪽 일이다).
+    //  - Android는 `unsupported`다 (다른 앱은 프로세스가 아니라 Intent로 열린다. 주소는 `open_url`이 연다).
     [[nodiscard]] platform_result launch_program(std::u8string_view program, std::span<const std::u8string> arguments, const launch_options& options = {});
+
+    struct open_url_options
+    {
+        // 열어도 되는 scheme이다. 대소문자를 가리지 않는다.
+        //  - 글 안의 링크처럼 믿을 수 없는 주소가 들어오는 길이라, 실행 파일·`file:`·스크립트 scheme을 기본으로 막는다.
+        std::vector<std::u8string> schemes { u8"http", u8"https", u8"mailto" };
+    };
+
+    // 주소의 scheme(RFC 3986: 알파벳 하나 뒤에 알파벳·숫자·`+-.`, 그리고 `:`)이 목록에 있는가.
+    //  - scheme이 없거나 깨졌으면, `:` 뒤가 비었으면, 공백으로 시작·끝나거나 제어 문자가 섞였으면 거짓이다.
+    [[nodiscard]] bool url_scheme_allowed(std::u8string_view url, std::span<const std::u8string> schemes);
+
+    // 기본 브라우저·메일 앱으로 주소를 연다. 어느 thread에서나 부른다.
+    //  - 허용되지 않은 주소는 열지 않고 `failed`다. 열 앱이 없으면 `not_found`다.
+    //  - Windows: `ShellExecuteExW`(open). Android: `ACTION_VIEW` Intent를 앱 context로 띄운다.
+    [[nodiscard]] platform_result open_url(std::u8string_view url, const open_url_options& options = {});
 
     // **부른 thread**를 배경 우선순위로 내리거나(참) 되돌린다(거짓). 색인 작성·섬네일처럼 사용자를 기다리게 하지 않는 일에 쓴다.
     //  - Windows: CPU·I/O·메모리 우선순위를 함께 내리는 배경 모드다. Android: nice 10 / 0이다.
