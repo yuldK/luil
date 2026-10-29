@@ -154,6 +154,12 @@ namespace luil {
         bool caret_upstream { false };
         bool read_only { false };
         bool navigation_keys_to_parent { false };
+        // caret이 선 링크의 주소다 (`text_area_config::links`). 고른 범위가 있으면 그 범위가 한 링크 안일 때만이다.
+        //  - 편집 메뉴가 "링크 열기·주소 복사"를 세우는 근거다. 암호 칸은 늘 비운다.
+        std::u8string_view link {};
+        // 그 링크를 여는 앱 메시지를 짓는다 (칸 설정의 `activate_link`). 칸의 설정을 가리키므로 위의 글처럼 element와
+        // 수명이 같다. 링크가 있어도 비어 있을 수 있다 — 그러면 주소 복사만 선다.
+        const std::function<input_action(std::u8string_view)>* activate_link { nullptr };
     };
 
     // 포인터 자리에 놓을 caret이다. `upstream`이면 그 offset의 앞 글자 쪽(넘겨 접은 윗줄의 끝)에 붙는다.
@@ -899,6 +905,10 @@ namespace luil {
         //  - 플랫폼이 읽는다. 글자 키도 수정자 없이 키로 보내고, Alt를 떼어 드는 메뉴 모드를 막는다.
         //  - 초점이 바뀔 때만 달라진다.
         bool key_capture { false };
+        // 마지막 마우스·펜 이동에서 Ctrl이 눌려 있었는가다.
+        //  - 편집 칸의 링크가 "지금 누르면 열린다"를 손 모양과 굵은 밑줄로 보이는 근거다 (Ctrl+누름만 링크의 것이다).
+        //  - 포인터를 움직이지 않고 Ctrl만 누르고 떼도 바뀌도록 Windows 표면이 그 자리의 이동을 다시 알린다.
+        bool pointer_control { false };
 
         [[nodiscard]] bool operator==(const interaction_snapshot&) const = default;
     };
@@ -1092,6 +1102,10 @@ namespace luil {
         //    부품을 누르게 되므로, 터치의 탭은 이것을 지나 **감싼 가장 가까운 누를 수 있는 조상**이 받는다.
         //  - 접근 tree와 키보드에서는 그대로 선다 — 보이지 않을 뿐 없는 것이 아니다.
         [[nodiscard]] bool hover_only() const noexcept;
+        // 참이면 텍스트 칸 안의 링크다 (`text_link`). 편집 칸 안이면 수식 키 없는 누름·탭과 길게 누름을 감싼 칸이 받는다.
+        //  - 링크 위에서도 caret을 놓고 끌어 고를 수 있어야 해서다. 편집 칸의 링크는 Ctrl+누름만 받는다.
+        //  - 읽기 전용 칸의 링크는 누름을 받고, 길게 누름만 칸의 편집 메뉴로 넘긴다.
+        [[nodiscard]] bool inline_link() const noexcept;
         // 참이면 창 제목 표시줄의 끌기 띠 위에 서 있어도 그 자리를 client로 판정한다
         // (caption-button-design.md). 검색 칸·명령 단추처럼 제목 표시줄 안에서 눌려야 하는 element가 단다.
         //  - 비클라이언트 판정은 게시된 tree에서 이 element의 **보이는 자리**를 본다 (`ui_tree::caption_client_at`).
@@ -1166,6 +1180,8 @@ namespace luil {
         void set_hit_opaque(bool value) noexcept;
         // 포인터를 올려야 그려지는 부품이다 (`hover_only`).
         void set_hover_only(bool value) noexcept;
+        // 텍스트 칸 안의 링크다 (`inline_link`).
+        void set_inline_link(bool value) noexcept;
         // 제목 표시줄 안의 client 자리다 (`caption_client`).
         void set_caption_client(bool value) noexcept;
         // 자손들을 Tab의 한 자리로 묶는다 (탭 막대·라디오 묶음·목록).
@@ -1368,6 +1384,7 @@ namespace luil {
         bool clip_children_ { false };
         bool hit_opaque_ { false };
         bool hover_only_ { false };
+        bool inline_link_ { false };
         bool caption_client_ { false };
         // 비어 있으면 액션 유무에서 판정한다 (`tab_stop`).
         std::optional<bool> tab_stop_ {};

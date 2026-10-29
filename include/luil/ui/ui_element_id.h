@@ -150,6 +150,9 @@ namespace luil {
         command_palette,
         command_palette_search,
         command_palette_entry,
+        // 텍스트 칸 안의 링크다 (`text_area_config::links`·`text_input_config::links`). owner는 칸의 kind 수·owner와
+        // 링크 순번을 함께 담는다. 칸과 kind가 다른 이유는 칸 kind가 텍스트 대상이라 같은 kind면 링크가 글 칸으로 읽혀서다.
+        text_link,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

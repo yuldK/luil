@@ -936,7 +936,10 @@ namespace luil::win32 {
                     // 끄는 동안의 커서 모양은 상호작용 발행본이 정한다. 마우스를 잡은 창에는 `WM_SETCURSOR`가 오지
                     // 않으므로 발행본이 바뀔 때 잡은 창이 스스로 맞춘다.
                     if (every_surface)
+                    {
                         refresh_captured_cursors();
+                        refresh_control_cursors();
+                    }
                     // 창 밖으로 끌고 나간 항목의 그림이다. 끄는 자리가 바뀔 때마다 발행본이 오므로 여기서 따라간다.
                     update_drag_ghost();
                     // **예고가 꺼져 있으면 여기서 켠다.** 표면을 골라 깨우는 순간
@@ -1336,6 +1339,20 @@ namespace luil::win32 {
                     window->refresh_captured_cursor();
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                     popup->refresh_captured_cursor();
+            }
+
+            // Ctrl만 누르고 떼어 편집 칸 링크 위의 모양이 바뀌었으면 포인터 밑 표면의 커서를 맞춘다.
+            //  - 바뀐 발행본에서만 맞춘다. 포인터가 움직일 때는 `WM_SETCURSOR`가 이미 맞춘다.
+            void refresh_control_cursors()
+            {
+                if (last_interaction_.pointer_control == cursor_control_)
+                    return;
+                cursor_control_ = last_interaction_.pointer_control;
+                main_.refresh_hover_cursor();
+                for (const std::unique_ptr<secondary_surface>& window : windows_)
+                    window->refresh_hover_cursor();
+                for (const std::unique_ptr<popup_surface>& popup : popups_)
+                    popup->refresh_hover_cursor();
             }
 
             [[nodiscard]] window_surface* surface_for_capture(const std::u8string& surface)
@@ -2965,6 +2982,8 @@ namespace luil::win32 {
             // frame slot과 interaction slot이 같은 wake를 쓰므로 이것과 견주는 것이
             // "상호작용이 바뀌었나"를 아는 유일한 길이다 (rendering.md).
             interaction_snapshot last_interaction_ {};
+            // 커서를 마지막으로 맞춘 Ctrl 상태다 (`refresh_control_cursors`).
+            bool cursor_control_ { false };
             appearance_settings last_appearance_ {};
             font_settings last_fonts_ {};
             // 버튼을 눌러 캡처를 잡고 있는 중이다.

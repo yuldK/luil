@@ -95,6 +95,34 @@ namespace luil {
             const float delta_y { to_y - from_y };
             return std::sqrt(delta_x * delta_x + delta_y * delta_y);
         }
+
+        // 텍스트 칸 안 링크(`inline_link`)를 담은 가장 가까운 글 칸이다. 없으면 nullptr다.
+        [[nodiscard]] const ui_element* link_owner(const ui_tree& tree, const ui_element& link)
+        {
+            const std::vector<const ui_element*> ancestry { tree.ancestry_of(link.id()) };
+            const auto owner { std::find_if(ancestry.begin() + (ancestry.empty() ? 0 : 1), ancestry.end(), [](const ui_element* const element) { return element->text_input().has_value(); }) };
+            return owner != ancestry.end() ? *owner : nullptr;
+        }
+
+        // 누른 자리의 임자다. 편집 칸 안의 링크를 수식 키 없이 누른 것은 그 칸의 누름이다 — 링크 위에서도 caret을 놓고
+        // 끌어 고른다. Ctrl+누름과 읽기 전용 칸의 링크는 링크의 것이다.
+        [[nodiscard]] const ui_element* press_target(const ui_tree& tree, const ui_element* const hit, const bool control)
+        {
+            if (hit == nullptr || hit->inline_link() == false || control)
+                return hit;
+            const ui_element* const owner { link_owner(tree, *hit) };
+            const std::optional<text_input_snapshot> value { owner != nullptr ? owner->text_input() : std::nullopt };
+            return value.has_value() && value->read_only == false ? owner : hit;
+        }
+
+        // 길게 누름의 임자다. 링크를 길게 누르면 읽기 전용 칸이어도 그 칸의 편집 메뉴다 (주소 복사·링크 열기가 거기 선다).
+        [[nodiscard]] const ui_element* long_press_target(const ui_tree& tree, const ui_element* const target)
+        {
+            if (target == nullptr || target->inline_link() == false)
+                return target;
+            const ui_element* const owner { link_owner(tree, *target) };
+            return owner != nullptr ? owner : target;
+        }
     } // namespace
 
     interaction_controller::interaction_controller(interaction_policy* const policy, interaction_config config) noexcept
@@ -451,6 +479,7 @@ namespace luil {
         last_pointer_y_ = event.y;
         last_pointer_time_ = event.time;
         last_pointer_surface_ = event.surface;
+        snapshot_.pointer_control = event.control;
 
         // 가운데 버튼을 누른 채 끌기 문턱을 넘으면 클릭이 아니다 (왼쪽 버튼의 끌기와 같은 문턱).
         if (middle_press_.has_value() && middle_press_->device == event.device && middle_press_->pointer_id == event.pointer_id
@@ -1198,7 +1227,7 @@ namespace luil {
         if (tree == nullptr)
             return {};
 
-        const ui_element* const hit { tree->hit_test(event.x, event.y) };
+        const ui_element* const hit { press_target(*tree, tree->hit_test(event.x, event.y), event.control) };
         if (hit == nullptr || hit->enabled() == false)
         {
             // 빈 곳이나 비활성 element를 누른 것도 "다른 곳을 누른" 것이라
@@ -1211,6 +1240,7 @@ namespace luil {
         pressed_surface_ = event.surface;
         pressed_modifiers_ = modifiers_of(event);
         pointer_contact_ = pointer_contact { event.device, event.pointer_id, event.surface, event.button };
+        snapshot_.pointer_control = event.control;
 
         // 앱이 「어느 판을 만졌는가」를 듣는다. 이 누름의 다른 액션보다 앞선다.
         std::vector<input_action> actions {};
@@ -1465,7 +1495,7 @@ namespace luil {
             return {};
         }
 
-        const ui_element* const hit { tree->hit_test(event.x, event.y) };
+        const ui_element* const hit { press_target(*tree, tree->hit_test(event.x, event.y), event.control) };
         const ui_element_id pressed { pressed_id_ };
         const pointer_button pressed_button { pressed_button_ };
         clear_press();
@@ -1515,7 +1545,7 @@ namespace luil {
             const ui_element* const target { tree.find(id) };
             if (target == nullptr || target->enabled() == false || tree.visibly_contains(id) == false)
                 return nullptr;
-            const ui_element* const hit { tree.hit_test(x, y) };
+            const ui_element* const hit { press_target(tree, tree.hit_test(x, y), false) };
             return hit != nullptr && hit->id() == id ? target : nullptr;
         }
 
@@ -1631,7 +1661,8 @@ namespace luil {
 
         // 초점은 아직 옮기지 않는다. 스크롤이 될 접촉이 칸의 초점과 IME를 빼앗으면
         // 안 된다 — 탭이 확정되는 뗌에서 옮긴다.
-        const ui_element* const hit { tree->hit_test(event.x, event.y) };
+        //  - 편집 칸 안 링크의 탭은 caret이다. 터치에는 Ctrl이 없으므로 링크는 길게 누름의 편집 메뉴로 연다.
+        const ui_element* const hit { press_target(*tree, tree->hit_test(event.x, event.y), false) };
         const ui_element* const view { zoom_owner_at(*tree, event.x, event.y) };
         if (view != nullptr && (hit == nullptr || (hit->enabled() && hit->pointer_drag() == nullptr && hit->drag() == nullptr)) && view->zoom()->pan_by)
         {
@@ -2289,7 +2320,7 @@ namespace luil {
             return with_flow(advance_inertia(now));
         touch_contact& contact { *touch_ };
         const ui_tree* const tree { surface_tree(contact.surface) };
-        const ui_element* const target { tree != nullptr ? live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) : nullptr };
+        const ui_element* const target { tree != nullptr ? long_press_target(*tree, live_touch_target(*tree, contact.target, contact.start_x, contact.start_y)) : nullptr };
         // 대상이 사라졌거나 가려졌으면 뗌의 탭 판정도 같은 이유로 액션이 없다. 우클릭이
         // 없는 대상은 길게 눌러도 그냥 탭이다 — 뗌이 정한다.
         if (target == nullptr || has_long_press_action(*target) == false)
@@ -2644,15 +2675,18 @@ namespace luil {
         // 길게 누르기는 보통 누르고 있는 동안 `advance`가 낸다. 여기는 pump가 그 시각에
         // 깨기 전에 뗌이 먼저 온 경우다 — 같은 판정을 뗌의 시각으로 한다.
         // 우클릭 액션이 없으면 그냥 탭이다.
-        if (contact.config.long_press_enabled && contact.long_press == long_press_state::waiting && event.time - contact.pressed_at >= contact.config.long_press_time && has_long_press_action(*target))
+        if (const ui_element* const pressed { long_press_target(*tree, target) }; contact.config.long_press_enabled && contact.long_press == long_press_state::waiting
+            && event.time - contact.pressed_at >= contact.config.long_press_time && has_long_press_action(*pressed))
         {
             // 우클릭이 된 접촉은 연속 탭의 기록에서도 빠진다.
             last_click_id_ = {};
             last_click_surface_.clear();
             click_streak_ = 0;
+            if (pressed != target)
+                apply_press_focus(*tree, pressed, contact.surface, event.time);
             if (policy_ != nullptr)
-                policy_->on_click(*target);
-            return run_long_press(contact, *target, event.x, event.y);
+                policy_->on_click(*pressed);
+            return run_long_press(contact, *pressed, event.x, event.y);
         }
 
         // 연속 탭은 대상·표면·장치로 잇는다. 접촉마다 바뀌는 포인터 id는 보지 않는다.

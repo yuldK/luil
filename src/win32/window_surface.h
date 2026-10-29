@@ -269,6 +269,9 @@ namespace luil::win32 {
         // 잡은 동안에는 `WM_SETCURSOR`가 오지 않아, 끄는 동안 바뀐 모양(잡은 모양·놓을 수 없는 자리의 금지 모양)이
         // 누를 때의 모양에 묶인다. 새 상호작용 발행본이 올 때 부른다.
         void refresh_captured_cursor();
+        // 포인터가 이 창의 client 위에 있고 아무도 마우스를 잡지 않았으면 커서 모양을 지금 상호작용으로 다시 맞춘다.
+        // Ctrl만 누르고 떼어 모양이 바뀔 때 부른다 (편집 칸의 링크) — 포인터가 그대로면 `WM_SETCURSOR`가 오지 않는다.
+        void refresh_hover_cursor();
 
         // 창이 아직 살아 있는지다.
         // `WM_DESTROY`가 오면 거짓이 되고 소유자가 목록에서 걷어낸다.
@@ -476,6 +479,8 @@ namespace luil::win32 {
         //  - `captured`는 이 메시지가 올 때 이 창이 포인터를 잡고 있었는가다. 뗌 처리기는 캡처를 먼저 풀고 부르므로
         //    풀기 전의 값을 넘긴다. 비어 있으면 지금 캡처를 본다.
         [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter, std::optional<bool> captured = std::nullopt);
+        // Ctrl을 누르거나 뗐다. 포인터가 이 창 위에 있으면 그 자리의 이동을 다시 알린다 (`interaction_snapshot::pointer_control`).
+        void post_control_move(bool control);
 
         // 누름 동안 포인터를 이 창에 묶는다.
         // 배경 스레드의 `SetCapture`는 실제로 캡처를 얻지 못할 수 있어,

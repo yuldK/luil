@@ -2,6 +2,7 @@
 #include "luil/text/grapheme.h"
 #include "luil/text/text_edit.h"
 #include "ui/text_layout_internal.h"
+#include "ui/text_link_element.h"
 
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
@@ -327,6 +328,13 @@ namespace luil {
             horizontal_bar_ = element.get();
             add_child(std::move(element));
         }
+        // 링크는 막대 뒤에 더해 hit가 먼저 닿는다. 조각은 창 안으로 잘리므로 막대를 가리지 않는다.
+        if (config_.links != nullptr)
+            make_text_link_elements(
+                id, value_.text, *config_.links, config_.read_only == false, config_.activate_link, config_.link_hint, [this](const std::size_t index, std::unique_ptr<text_link_element> element) {
+                    link_elements_.emplace_back(index, element.get());
+                    add_child(std::move(element));
+                });
     }
 
     float text_area_element::scale() const noexcept
@@ -677,6 +685,7 @@ namespace luil {
                     const auto row { lines_[index] };
                     row_layouts_.emplace_back(row.begin, remake_text_layout(font_layout_, layout_request(text.substr(row.begin, row.end - row.begin), row.begin, false, true)));
                 }
+                place_links();
                 return;
             }
             // 보이는 줄의 배치를 frame 사이에 쥔다. 흘리거나 caret만 옮긴 frame에서 다시 shape하지 않는다.
@@ -706,6 +715,58 @@ namespace luil {
             }
             prune_unused(cache.rows_, generation);
         }
+        place_links();
+    }
+
+    const text_link_element* text_area_element::link_element(const std::size_t index) const noexcept
+    {
+        const auto found { std::lower_bound(link_elements_.begin(), link_elements_.end(), index, [](const auto& item, const std::size_t at) { return item.first < at; }) };
+        return found != link_elements_.end() && found->first == index ? found->second : nullptr;
+    }
+
+    void text_area_element::place_links()
+    {
+        if (link_elements_.empty())
+            return;
+        // 그리기와 같은 창·같은 줄 자리로 놓는다. 조각이 글자와 어긋나면 누른 링크와 밑줄 친 링크가 다르다.
+        const rect_f viewport { area_->viewport() };
+        const rect_f clip { viewport.x + gutter_width_ * scale_, viewport.y, std::max(0.0f, viewport.width - gutter_width_ * scale_), viewport.height };
+        const float line_height { line_height_logical() * scale_ };
+        const float top { text_top() };
+        const float left { text_left() };
+        const float first_row { std::floor((viewport.y - top) / line_height) };
+        const std::size_t first { first_row > 0.0f ? static_cast<std::size_t>(first_row) : 0u };
+        const float last_row { std::ceil((viewport.y + viewport.height - top) / line_height) };
+        const std::size_t last { std::min(lines_.size(), last_row > 0.0f ? static_cast<std::size_t>(last_row) + 1u : 0u) };
+        const std::u8string_view text { displayed_text() };
+        const composition_shift shift { shift_of(value_) };
+        const float size { font_size() };
+        const auto measure = [this, size](const std::u8string_view value) { return measure_with(layout_measurer_)(value, size); };
+        std::vector<std::vector<rect_f>> fragments(config_.links->size());
+        for (std::size_t index { first }; index < last; ++index)
+        {
+            const line row { lines_[index] };
+            if (row.begin == row.end)
+                continue;
+            const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
+            const auto layout { row_layout(text, row) };
+            const auto position = [&](const std::size_t at) { return layout.valid() ? layout.caret_rect(at).x : measure(content.substr(0, at)); };
+            const float row_top { top + static_cast<float>(index) * line_height };
+            for (const text_link& link : text_links_in_range(*config_.links, shift.to_committed(row.begin), shift.to_committed(row.end) + 1))
+            {
+                const std::size_t from { std::max(codepoint_floor(text, shift.to_displayed(link.begin, false)), row.begin) };
+                const std::size_t to { std::min(codepoint_floor(text, shift.to_displayed(link.end, true)), row.end) };
+                if (from >= to)
+                    continue;
+                const float x { left + position(from - row.begin) };
+                fragments[static_cast<std::size_t>(&link - config_.links->data())].push_back({ x, row_top, left + position(to - row.begin) - x, line_height });
+            }
+        }
+        for (const auto& [index, element] : link_elements_)
+        {
+            element->set_enabled(enabled());
+            element->place(std::move(fragments[index]), clip);
+        }
     }
 
     std::optional<text_input_snapshot> text_area_element::text_input() const
@@ -722,6 +783,20 @@ namespace luil {
         snapshot.multiline = true;
         snapshot.read_only = config_.read_only;
         snapshot.caret_upstream = value_.caret_upstream;
+        // caret이 링크 안이거나 바로 뒤면 그 링크다 — 링크 끝 글자를 누르면 caret이 링크 뒤에 선다.
+        if (config_.links != nullptr && value_.composing == false)
+        {
+            const std::size_t begin { std::min(value_.caret, value_.anchor) };
+            const std::size_t end { std::max(value_.caret, value_.anchor) };
+            const text_link* link { text_link_at(*config_.links, begin) };
+            if (link == nullptr && begin == end && begin > 0)
+                link = text_link_at(*config_.links, begin - 1);
+            if (link != nullptr && end <= link->end)
+            {
+                snapshot.link = link->destination;
+                snapshot.activate_link = config_.activate_link != nullptr ? &config_.activate_link : nullptr;
+            }
+        }
         return snapshot;
     }
 
@@ -911,6 +986,16 @@ namespace luil {
                     context.canvas.drawRect(match_box, match_border);
                 }
             }
+            // 이 줄에 걸친 링크의 표시 문서 구간과 그 자식이다.
+            std::vector<std::pair<std::pair<std::size_t, std::size_t>, const text_link_element*>> row_links {};
+            if (config_.links != nullptr && row.begin != row.end)
+                for (const text_link& link : text_links_in_range(*config_.links, shift.to_committed(row.begin), shift.to_committed(row.end) + 1))
+                {
+                    const std::size_t from { std::max(codepoint_floor(text, shift.to_displayed(link.begin, false)), row.begin) };
+                    const std::size_t to { std::min(codepoint_floor(text, shift.to_displayed(link.end, true)), row.end) };
+                    if (from < to)
+                        row_links.push_back({ { from, to }, link_element(static_cast<std::size_t>(&link - config_.links->data())) });
+                }
             std::optional<SkRect> selection {};
             if (selection_begin != selection_end && touches(row, selection_begin, selection_end))
             {
@@ -949,6 +1034,21 @@ namespace luil {
                     draw_piece(cursor, row.end, font, foreground.getColor());
                 };
                 draw_content(std::nullopt);
+                // 링크는 강조색 글자와 밑줄이다. 검색 결과와 선택이 그 위에 덮는다.
+                for (const auto& [link, element] : row_links)
+                {
+                    const SkRect link_box { range_rect(link.first, link.second) };
+                    if (enabled())
+                    {
+                        context.canvas.save();
+                        context.canvas.clipRect(link_box);
+                        draw_content(context.palette.accent);
+                        context.canvas.restore();
+                    }
+                    const bool emphasized { element != nullptr && element->emphasized(interaction) };
+                    context.canvas.drawRect(SkRect::MakeXYWH(link_box.x(), baseline_of(index) + 1.0f * scale, link_box.width(), (emphasized ? 2.0f : 1.0f) * scale),
+                        solid_paint(enabled() ? context.palette.accent : context.palette.disabled_foreground));
+                }
                 for (const auto& match : highlights)
                 {
                     context.canvas.save();

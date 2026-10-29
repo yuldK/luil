@@ -84,6 +84,12 @@ namespace demo {
         float offset { 0.0f };
     };
 
+    // 글 안의 링크를 눌렀다 (메모·메모 한 줄 칸·안내 칸). 앱이 주소를 확인하고 기본 브라우저·메일 앱으로 연다.
+    struct open_link_intent
+    {
+        std::u8string destination {};
+    };
+
     class basics_page
     {
     public:
@@ -114,6 +120,8 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_counter_row() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_input_row() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_memo() const;
+        // 읽기 전용 안내 칸과 링크를 연 결과 한 줄이다.
+        [[nodiscard]] std::unique_ptr<luil::stack_element> make_link_view() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_image_row() const;
         [[nodiscard]] std::unique_ptr<luil::label_element> make_picture_status() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_picture(std::u8string owner, std::u8string label, luil::image_fit fit, std::u8string description) const;
@@ -157,6 +165,13 @@ namespace demo {
         float memo_scroll_ { 0.0f };
         // 메모 칸이 접은 자리를 frame 사이에 쥔다. 바뀐 문단만 다시 잰다 (`text_area_wrap_cache`).
         std::shared_ptr<luil::text_area_wrap_cache> memo_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+        // 링크를 보이는 읽기 전용 안내 칸이다. 글은 고정이고 caret·선택만 바뀐다 (복사할 수 있다).
+        luil::text::text_edit_state link_view_ {
+            .text = u8"설명서는 https://example.com/luil/docs 에 있고, 문의는 hello@example.com 으로 보낸다.\n"
+                    u8"www.example.org 도 있다. 이 칸은 읽기 전용이라 그냥 클릭으로 연다.",
+        };
+        // 마지막으로 링크를 연 결과 한 줄이다. 아직 열지 않았으면 비었다.
+        std::u8string link_report_ {};
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
         float page_scroll_ { 0.0f };

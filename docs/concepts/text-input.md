@@ -45,7 +45,7 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 | 키 | 여러 줄 칸 |
 | --- | --- |
 | Enter, Shift+Enter | 줄 바꿈을 넣는다 (`insert "\n"`). 기본 버튼으로 가지 않는다 |
-| Ctrl+Enter, Alt+Enter | 칸이 받지 않는다. 앱 단축키로 흐른다 |
+| Ctrl+Enter, Alt+Enter | 칸이 받지 않는다. 앱 단축키로 흐른다 (caret 자리의 링크를 여는 단축키도 앱이 여기에 묶는다 — [text-link-design.md](../text-link-design.md)) |
 | ↑, ↓ | 같은 가로 자리의 위아래 화면 줄로 간다. 접은 줄도 한 줄이다. 첫 줄의 ↑는 글의 처음, 마지막 줄의 ↓는 글의 끝이다 |
 | Page Up, Page Down | 창에 드는 줄 수에서 한 줄을 남긴 만큼 간다 |
 | Home, End | caret이 선 화면 줄의 처음과 끝이다. 접은 줄의 End는 접은 자리에 서고 caret이 그 줄 끝에 붙는다(`caret_upstream`) |
