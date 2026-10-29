@@ -1,5 +1,7 @@
 #include "android/main_thread.h"
 
+#include "android/java_vm.h"
+
 #include <game-activity/GameActivity.h>
 
 #include <android/log.h>
@@ -140,6 +142,9 @@ extern "C" GameActivity_createFunc __real_GameActivity_onCreate;
 extern "C" void __wrap_GameActivity_onCreate(GameActivity* const activity, void* const saved_state, const size_t saved_state_size)
 {
     luil::android::attach_bridge(activity);
+    // 다른 앱을 여는 Intent(`open_url`)가 쓸 Application이다. 메인 thread의 JNIEnv가 확실한 첫 자리다.
+    if (activity->env != nullptr)
+        luil::android::set_application_context(*activity->env, activity->javaGameActivity);
     __real_GameActivity_onCreate(activity, saved_state, saved_state_size);
     luil::android::wrap_destroy(activity);
 }

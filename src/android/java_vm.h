@@ -18,6 +18,14 @@ namespace luil::android {
     void set_files_directory(const char* path);
     [[nodiscard]] std::string files_directory();
 
+    // 앱(Application)의 Context 전역 참조다. 다른 앱을 여는 Intent(`open_url`)가 어느 thread에서나 쓴다.
+    //  - Activity가 아니라 Application을 쥐는 이유는 Activity는 회전·종료로 지고 다시 서지만
+    //    Application은 프로세스와 함께 살아 전역 참조가 낡지 않아서다.
+    //  - GameActivity가 메인 thread에서 부르는 생성 함수에서 처음 한 번 적는다 (android/main_thread.cpp).
+    //    적기 전이면 nullptr이다.
+    void set_application_context(JNIEnv& env, jobject activity) noexcept;
+    [[nodiscard]] jobject application_context() noexcept;
+
     // 이 thread의 JNIEnv다. JVM에 붙지 않은 thread면 붙이고, 범위를 벗어날 때 뗀다.
     //
     // 이미 붙은 thread(Java가 띄운 thread, 남이 붙인 thread)는 그대로 두고 떼지 않는다 —

@@ -162,6 +162,57 @@ TEST_CASE("A launched program reports its exit code without a window", "[platfor
     REQUIRE(luil::reveal_in_file_manager(u8"C:\\luil-no-such-folder\\file.txt").status == luil::platform_status::not_found);
 }
 
+TEST_CASE("Only URLs whose scheme is on the allow list may be opened", "[platform]")
+{
+    const luil::open_url_options defaults {};
+    const auto allowed = [&defaults](const std::u8string_view url) { return luil::url_scheme_allowed(url, defaults.schemes); };
+    REQUIRE(allowed(u8"https://example.com/path?q=1"));
+    REQUIRE(allowed(u8"http://example.com"));
+    REQUIRE(allowed(u8"mailto:someone@example.com"));
+    // scheme은 대소문자를 가리지 않는다.
+    REQUIRE(allowed(u8"HTTPS://EXAMPLE.COM"));
+    REQUIRE(allowed(u8"MailTo:someone@example.com"));
+    REQUIRE(allowed(u8"https://例え.jp/경로"));
+
+    REQUIRE(allowed(u8"javascript:alert(1)") == false);
+    REQUIRE(allowed(u8"file:///C:/Windows/System32/calc.exe") == false);
+    REQUIRE(allowed(u8"C:\\Windows\\System32\\calc.exe") == false);
+    REQUIRE(allowed(u8"calc.exe") == false);
+    REQUIRE(allowed(u8"example.com/a:b") == false);
+    REQUIRE(allowed(u8"//example.com") == false);
+    REQUIRE(allowed(u8"") == false);
+    REQUIRE(allowed(u8":") == false);
+    REQUIRE(allowed(u8"https:") == false);
+    REQUIRE(allowed(u8"1http://example.com") == false);
+    REQUIRE(allowed(u8"ht tp://example.com") == false);
+    // OS가 공백·제어 문자를 걸러 읽으면 막은 scheme이 되살아난다.
+    REQUIRE(allowed(u8" http://example.com") == false);
+    REQUIRE(allowed(u8"http://example.com ") == false);
+    REQUIRE(allowed(u8"java\tscript:alert(1)") == false);
+    REQUIRE(allowed(u8"https://example.com/\n") == false);
+    REQUIRE(allowed(u8"https://example.com/\u0085") == false);
+
+    // 사용자 지정 목록은 기본 목록을 대신한다. 목록 쪽 대소문자도 가리지 않는다.
+    const std::vector<std::u8string> custom { u8"VSCODE", u8"git+ssh" };
+    REQUIRE(luil::url_scheme_allowed(u8"vscode://file/a.txt", custom));
+    REQUIRE(luil::url_scheme_allowed(u8"git+ssh://host/repo.git", custom));
+    REQUIRE(luil::url_scheme_allowed(u8"https://example.com", custom) == false);
+    REQUIRE(luil::url_scheme_allowed(u8"https://example.com", {}) == false);
+}
+
+TEST_CASE("Opening a URL with a blocked scheme opens nothing and fails", "[platform]")
+{
+    // 막히는 주소만 넘긴다. 허용된 주소는 실제 브라우저를 띄우므로 여기서 열지 않는다.
+    for (const std::u8string_view url : { u8"javascript:alert(1)", u8"file:///C:/Windows/System32/calc.exe", u8"calc.exe", u8"C:\\Windows\\System32\\calc.exe", u8" https://example.com" })
+    {
+        const luil::platform_result result { luil::open_url(url) };
+        REQUIRE(result.status == luil::platform_status::failed);
+        REQUIRE(result.error.find(u8"scheme") != std::u8string::npos);
+    }
+    // 허용 목록을 비우면 무엇도 열지 않는다.
+    REQUIRE(luil::open_url(u8"https://example.com", { .schemes = {} }).status == luil::platform_status::failed);
+}
+
 TEST_CASE("Background priority goes down and back up on the calling thread", "[platform]")
 {
     REQUIRE(luil::set_background_priority(true).ok());

@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include <objbase.h>
+#include <shellapi.h>
 #include <shlobj.h>
 
 #include <algorithm>
@@ -345,6 +346,35 @@ namespace luil {
             result.exit_code = static_cast<int>(code);
         }
         return result;
+    }
+
+    platform_result open_url(const std::u8string_view url, const open_url_options& options)
+    {
+        if (url_scheme_allowed(url, options.schemes) == false)
+            return failure(u8"The URL has no scheme or its scheme is not allowed.");
+        const std::optional<std::wstring> target { wide(url) };
+        if (target.has_value() == false)
+            return failure(u8"The URL is not valid UTF-8.");
+        // scheme 처리기가 COM으로 서는 shell 확장일 수 있어, ShellExecuteEx 문서대로 부르는 thread에서 apartment를 연다.
+        // 이미 열려 있으면(다른 모델이어도) 그대로 쓴다.
+        const HRESULT initialized { CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
+        SHELLEXECUTEINFOW execute {};
+        execute.cbSize = sizeof(execute);
+        // NOASYNC: 메시지 루프가 없거나 곧 끝날 thread에서도 넘기기가 끝난 뒤 돌아온다.
+        // FLAG_NO_UI: 처리기가 없을 때 shell이 대화 상자를 띄우지 않고 오류로 답하게 한다.
+        execute.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+        execute.lpVerb = L"open";
+        execute.lpFile = target->c_str();
+        execute.nShow = SW_SHOWNORMAL;
+        const bool opened { ShellExecuteExW(&execute) != FALSE };
+        const DWORD error { opened ? ERROR_SUCCESS : GetLastError() };
+        if (SUCCEEDED(initialized))
+            CoUninitialize();
+        if (opened)
+            return success();
+        if (error == ERROR_NO_ASSOCIATION)
+            return { platform_status::not_found, u8"No app is registered for the URL scheme.", std::nullopt };
+        return failure(win32::make_hresult_error(u8"Failed to open the URL", HRESULT_FROM_WIN32(error)));
     }
 
     platform_result set_background_priority(const bool background)
