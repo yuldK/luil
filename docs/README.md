@@ -46,6 +46,7 @@
 - [가상 목록](virtual-list-design.md)
 - [표](table-design.md)
 - [여러 줄 칸의 자동 줄 넘김](text-area-wrap-design.md)
+- [텍스트 칸의 하이퍼링크](text-link-design.md)
 - [끄는 동안의 가장자리 자동 스크롤](drag-auto-scroll-design.md)
 - [키보드 초점과 Tab 순회](keyboard-focus-design.md)
 - [Focus group과 Tab 순서](focus-group-design.md)

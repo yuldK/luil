@@ -6,6 +6,7 @@
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
 #include "ui/text_layout_internal.h"
+#include "ui/text_link_element.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -322,6 +323,12 @@ namespace luil {
             add_child(std::move(clear));
         }
 
+        if (config_.links != nullptr && config_.secret == false)
+            make_text_link_elements(id, value_.text, *config_.links, true, config_.activate_link, config_.link_hint, [this](const std::size_t index, std::unique_ptr<text_link_element> element) {
+                link_elements_.emplace_back(index, element.get());
+                add_child(std::move(element));
+            });
+
         if (config_.number.has_value() == false || config_.number->change_to == nullptr)
             return;
         // 한 줄 칸의 텍스트 경로는 ↑↓·PageUp/PageDown을 쓰지 않으므로 그 넷이 여기로 흐른다.
@@ -514,10 +521,31 @@ namespace luil {
             decrease_->arrange(context.for_child({ right - width, area.y + scale_ + half, width, half }));
             right -= width + text_input_icon_gap * scale_;
         }
-        if (clear_ == nullptr)
+        if (clear_ != nullptr)
+        {
+            const float size { text_input_clear_size * scale_ };
+            clear_->arrange(context.for_child({ right - size, area.y + (area.height - size) / 2.0f, size, size }));
+        }
+        if (link_elements_.empty())
             return;
-        const float size { text_input_clear_size * scale_ };
-        clear_->arrange(context.for_child({ right - size, area.y + (area.height - size) / 2.0f, size, size }));
+        // 링크 조각은 그리기와 같은 가로 스크롤로 놓고 글이 보이는 안쪽 폭으로 자른다.
+        const rect_f clip { text_left(), area.y, inner_width(), area.height };
+        const std::u8string_view text { displayed_text() };
+        const float size { font_size() };
+        const text_measurer& measurer { context.measure_text() };
+        const auto measure = [&measurer, size](const std::u8string_view value) { return measurer != nullptr ? measurer(value, size) : 0.0f; };
+        const auto layout { layout_for(text) };
+        const auto position = [&](const std::size_t at) { return layout.valid() ? layout.caret_rect(at).x : measure(text.substr(0, at)); };
+        const float left { text_left() - (layout.valid() ? scroll_for(layout, displayed_caret()) : scroll_for(measure)) };
+        for (const auto& [index, element] : link_elements_)
+        {
+            const text_link& link { (*config_.links)[index] };
+            std::vector<rect_f> fragments {};
+            if (value_.composing == false && link.end <= text.size())
+                fragments.push_back({ left + position(link.begin), area.y, position(link.end) - position(link.begin), area.height });
+            element->set_enabled(enabled());
+            element->place(std::move(fragments), clip);
+        }
     }
 
     std::optional<text_input_snapshot> text_input_element::text_input() const
@@ -534,6 +562,20 @@ namespace luil {
             config_.input,
         };
         snapshot.navigation_keys_to_parent = config_.navigation_keys_to_parent;
+        // caret이 링크 안이거나 바로 뒤면 그 링크다 (`text_area_element`와 같은 규칙).
+        if (config_.links != nullptr && config_.secret == false && value_.composing == false)
+        {
+            const std::size_t begin { std::min(value_.caret, value_.anchor) };
+            const std::size_t end { std::max(value_.caret, value_.anchor) };
+            const text_link* link { text_link_at(*config_.links, begin) };
+            if (link == nullptr && begin == end && begin > 0)
+                link = text_link_at(*config_.links, begin - 1);
+            if (link != nullptr && end <= link->end)
+            {
+                snapshot.link = link->destination;
+                snapshot.activate_link = config_.activate_link != nullptr ? &config_.activate_link : nullptr;
+            }
+        }
         // 숫자 칸은 앱이 키보드 종류를 따로 고르지 않아도 숫자 키보드를 띄운다.
         if (config_.number.has_value() && snapshot.options.kind == text_input_kind::text)
             snapshot.options.kind = config_.number->range.decimals > 0 ? text_input_kind::decimal : text_input_kind::number;
@@ -685,6 +727,25 @@ namespace luil {
                 draw_text_layout(context.canvas, layout, { left - scroll, box.y }, foreground);
             else
                 draw_text(context.canvas, text, left - scroll, baseline, font, foreground);
+            // 링크는 강조색 글자와 밑줄이다. 조각은 배치가 링크 자식에 놓은 그대로다.
+            for (const auto& [index, element] : link_elements_)
+            {
+                const rect_f part { element->bounds() };
+                if (part.width <= 0.0f)
+                    continue;
+                if (enabled())
+                {
+                    context.canvas.save();
+                    context.canvas.clipRect(SkRect::MakeXYWH(part.x, part.y, part.width, part.height));
+                    if (layout.valid())
+                        draw_text_layout(context.canvas, layout, { left - scroll, box.y }, solid_paint(context.palette.accent));
+                    else
+                        draw_text(context.canvas, text, left - scroll, baseline, font, solid_paint(context.palette.accent));
+                    context.canvas.restore();
+                }
+                context.canvas.drawRect(SkRect::MakeXYWH(part.x, baseline + 1.0f * scale, part.width, (element->emphasized(interaction) ? 2.0f : 1.0f) * scale),
+                    solid_paint(enabled() ? context.palette.accent : context.palette.disabled_foreground));
+            }
             // 고른 구간의 글자는 그 바탕의 짝이다. 옅은 바탕에서는 본문 글자와 같은 값이라
             // 겹쳐 그려도 같은 그림이고, 고대비에서만 highlight 글자로 바뀐다.
             if (selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground)

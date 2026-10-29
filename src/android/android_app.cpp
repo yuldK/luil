@@ -1162,7 +1162,7 @@ namespace luil::android {
                     return;
                 }
                 const int width { std::min(content_width(), static_cast<int>(std::ceil(288.0f * scale_))) };
-                const int height { std::min(content_height(), static_cast<int>(std::ceil(text_edit_menu_height() * scale_))) };
+                const int height { std::min(content_height(), static_cast<int>(std::ceil(text_edit_menu_height(text_edit_menu_has_link(*value)) * scale_))) };
                 edit_menu_->tree = make_text_edit_menu(*value, user_ui_language().starts_with("ko"), static_cast<float>(width), static_cast<float>(height), scale_);
                 const rect_f anchor { location.element->bounds() };
                 const int left { static_cast<int>(std::lround(location.origin_x + anchor.x + (anchor.width - static_cast<float>(width)) / 2.0f)) };
@@ -1199,6 +1199,17 @@ namespace luil::android {
                     dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *target, .command = text::text_edit_command::select_all }));
                     dirty_ = true;
                     return;
+                }
+                else if (key == u8"copy-link")
+                {
+                    if (value->link.empty() || jni_ == nullptr || copy_text_to_clipboard(*jni_, app_->activity->javaGameActivity, value->link) == false)
+                        return;
+                }
+                else if (key == u8"open-link")
+                {
+                    if (value->link.empty() || value->activate_link == nullptr || *value->activate_link == nullptr)
+                        return;
+                    dispatch((*value->activate_link)(value->link));
                 }
                 close_edit_menu();
             }

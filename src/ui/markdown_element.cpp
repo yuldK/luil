@@ -245,7 +245,9 @@ namespace luil {
                     set_cursor(ui_cursor::hand);
                     set_action(ui_trigger::left_click, [activate = config.activate_link, destination](const ui_action_context&) { return std::vector<input_action> { activate(destination) }; });
                 }
-                set_tab_stop(false);
+                // 열 수 있는 링크는 Tab의 자리다. 초점 element의 Enter·Space가 클릭과 같은 길로 열고, 초점 테는 tree가 두른다.
+                // 표시만 하는 링크는 누를 것이 없어 자리도 없다.
+                set_tab_stop(config.activate_link != nullptr);
             }
             void place(std::vector<rect_f> fragments)
             {

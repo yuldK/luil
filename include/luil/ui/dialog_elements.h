@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/ui/number_input.h"
+#include "luil/ui/text_document.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/text_layout.h"
 #include "luil/ui/ui_element.h"
@@ -8,11 +9,16 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace luil {
+    class text_link_element;
+
     // 캡션을 잡아 끈 만큼 dialog를 옮기는 메시지를 만든다.
     // 이동량은 논리 픽셀이고, 무엇을 얼마나 옮길지는 앱이 정한다.
     using dialog_move_message_factory = std::function<input_action(float dx, float dy)>;
@@ -264,6 +270,14 @@ namespace luil {
         std::u8string error {};
         // 숫자 칸의 증감이다. 있으면 ↑가 늘리고 ↓가 줄인다 (←→·Home/End는 caret의 것으로 남는다).
         std::optional<text_input_number> number {};
+        // 글 안의 하이퍼링크다 (`text_area_config::links`와 같은 규칙). 공유한 vector는 게시 뒤 고치지 않는다.
+        //  - 한 줄 칸은 늘 편집 칸이라 Ctrl+클릭으로 연다. 그냥 클릭은 caret을 놓는다.
+        //  - 조합 중에는 링크 표시를 쉰다 — 조합 글이 끼어든 자리를 옮겨 그리지 않는다. 확정되면 다시 선다.
+        //  - 암호 칸은 링크를 세우지 않는다.
+        std::shared_ptr<const std::vector<text_link>> links {};
+        std::function<input_action(std::u8string_view destination)> activate_link {};
+        // 링크 tooltip에서 주소 뒤에 붙는 안내다 (예: "Ctrl+클릭하여 열기").
+        std::u8string link_hint {};
     };
 
     // 앞 글리프와 지우기 버튼의 크기, 그리고 글과의 간격이다 (논리 픽셀).
@@ -359,5 +373,7 @@ namespace luil {
         ui_element* increase_ { nullptr };
         ui_element* decrease_ { nullptr };
         float scale_ { 1.0f };
+        // 링크의 순번과 그 자식이다 (순번 오름차순).
+        std::vector<std::pair<std::size_t, text_link_element*>> link_elements_ {};
     };
 } // namespace luil

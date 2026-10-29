@@ -633,12 +633,16 @@ namespace luil::win32 {
             hide_idle_cursor();
             return LRESULT { 0 };
         case WM_KEYUP:
+            if (word_parameter == VK_CONTROL)
+                post_control_move(false);
             // TIP이 먼저 볼 기회를 준다.
             // 먹었으면 앱은 손대지 않는다.
             if (text_input_ != nullptr && text_input_->handle_key(message, word_parameter, long_parameter))
                 return LRESULT { 0 };
             return std::nullopt;
         case WM_KEYDOWN:
+            if (word_parameter == VK_CONTROL && (long_parameter & (LPARAM { 1 } << 30)) == 0)
+                post_control_move(true);
             // 조합 키는 TIP의 것이다.
             // 먹지 않은 키만 앱의 단축키로 간다.
             if (text_input_ != nullptr && text_input_->handle_key(message, word_parameter, long_parameter))
@@ -1353,6 +1357,36 @@ namespace luil::win32 {
         event.meta = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
         host->post_raw_input(std::move(event));
         return true;
+    }
+
+    void window_surface::post_control_move(const bool control)
+    {
+        // Ctrl을 누르고 떼는 것만으로 편집 칸의 링크가 "지금 누르면 열린다"를 보인다 (`interaction_snapshot::pointer_control`).
+        // controller는 그 상태를 포인터 이동에서 읽으므로 같은 자리의 이동을 다시 알린다. 같은 자리라 tooltip 시계는 서지 않는다.
+        //  - 버튼을 누른 채면 끄는 중이다. 이동을 지어 끼우지 않는다.
+        //  - 포인터가 이 창 위에 있을 때만이다. 키는 초점 창으로 오지만 포인터는 다른 창 위일 수 있다.
+        if (window_ == nullptr || (GetKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetKeyState(VK_RBUTTON) & 0x8000) != 0 || (GetKeyState(VK_MBUTTON) & 0x8000) != 0)
+            return;
+        POINT position {};
+        if (GetCursorPos(&position) == FALSE || WindowFromPoint(position) != window_ || ScreenToClient(window_, &position) == FALSE)
+            return;
+        WPARAM keys { control ? WPARAM { MK_CONTROL } : WPARAM { 0 } };
+        if ((GetKeyState(VK_SHIFT) & 0x8000) != 0)
+            keys |= MK_SHIFT;
+        static_cast<void>(post_pointer_message(WM_MOUSEMOVE, keys, MAKELPARAM(position.x, position.y)));
+    }
+
+    void window_surface::refresh_hover_cursor()
+    {
+        if (window_ == nullptr || GetCapture() != nullptr)
+            return;
+        POINT position {};
+        if (GetCursorPos(&position) == FALSE || WindowFromPoint(position) != window_)
+            return;
+        // 크기 조절 테두리·캡션 끌기 자리는 시스템 모양이다 (`WM_SETCURSOR`와 같은 판정).
+        if (SendMessageW(window_, WM_NCHITTEST, 0, MAKELPARAM(position.x, position.y)) != HTCLIENT)
+            return;
+        apply_cursor();
     }
 
     void window_surface::refresh_captured_cursor()

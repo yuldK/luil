@@ -294,6 +294,8 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     "${public_headers}/ui/command_palette.h"
     ui/text_document.cpp
     "${public_headers}/ui/text_document.h"
+    ui/text_link_element.cpp
+    ui/text_link_element.h
     ui/text_area_element.cpp
     "${public_headers}/ui/text_area_element.h"
     ui/commands.cpp

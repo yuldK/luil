@@ -1,5 +1,6 @@
 #include "demo/basics_page.h"
 
+#include "luil/app/platform_services.h"
 #include "luil/app/secret_store.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/button_element.h"
@@ -166,6 +167,13 @@ namespace demo {
             memo_scroll_ = std::max(0.0f, scroll_to->offset);
             return true;
         }
+        if (const auto* const link { message.get<open_link_intent>() }; link != nullptr)
+        {
+            // 라이브러리는 링크를 열지 않는다 — 여는 것은 앱이고, `open_url`은 허용한 scheme(http·https·mailto)만 연다.
+            const luil::platform_result result { luil::open_url(link->destination) };
+            link_report_ = result.ok() ? link->destination + u8" 를 열었다." : link->destination + u8" 를 열지 못했다 — " + result.error;
+            return true;
+        }
         if (message.get<secret_check_intent>() != nullptr)
         {
             secret_report_ = check_secret_store();
@@ -180,7 +188,7 @@ namespace demo {
         {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
-            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_memo)
+            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_memo && edit->request.target != target_link_view)
                 return false;
             apply_edit(edit->request);
             return true;
@@ -238,6 +246,8 @@ namespace demo {
             luil::apply_text_edit(note_, request);
         else if (request.target == target_memo)
             luil::apply_text_edit(memo_, request);
+        else if (request.target == target_link_view)
+            luil::apply_text_edit(link_view_, request);
     }
 
     void basics_page::apply_composition(const luil::text_composition_event& event)
@@ -322,6 +332,8 @@ namespace demo {
         page.add(make_input_row(), 50.0f + luil::text_input_error_height);
         page.gap(16.0f);
         page.add(make_memo(), 118.0f);
+        page.gap(16.0f);
+        page.add(make_link_view(), 86.0f);
         page.gap(22.0f);
         page.add(make_image_row(), 78.0f);
         page.gap(4.0f);
@@ -505,8 +517,13 @@ namespace demo {
         // 창이 좁아져도 이 칸이 사라지지 않는다.
         // 하한에 걸리면 그만큼 넘치는데, 폭 0으로 없어지는 것보다는 낫다 — 그
         // 판단은 앱의 것이고 라이브러리는 넘침을 만들 뿐이다.
-        row->add(make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME 조합·붙여넣기·파일 드롭)", kind_note_input, make_input_view(note_, target_note),
-                     luil::text_input_config { .placeholder = u8"메모" }, std::move(note_drop)),
+        // 친 글의 주소는 링크로 보이고 Ctrl+클릭으로 연다 (한 줄 칸의 링크).
+        luil::text_input_config note { .placeholder = u8"메모" };
+        note.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(note_.text));
+        note.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
+        note.link_hint = u8"Ctrl+클릭하여 열기";
+        row->add(
+            make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME 조합·붙여넣기·파일 드롭·주소 링크)", kind_note_input, make_input_view(note_, target_note), std::move(note), std::move(note_drop)),
             { .weight = 1.0f, .minimum = 160.0f });
         return row;
     }
@@ -516,7 +533,9 @@ namespace demo {
         // 줄 바꿈·세로 스크롤·여러 줄 붙여넣기를 받는 칸이다. 글과 스크롤은 앱 상태이고 편집은 한 줄 칸과 같은 길이다.
         luil::stack_config config {};
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"input-memo" }, config) };
-        column->add(make_label(luil::ui_element_id { kind_text, u8"memo" }, u8"여러 줄 메모 (Enter 줄 바꿈 · ↑↓ 줄 이동 · 휠 스크롤)", 11.0f, luil::label_color_role::primary), 18.0f);
+        column->add(
+            make_label(luil::ui_element_id { kind_text, u8"memo" }, u8"여러 줄 메모 (Enter 줄 바꿈 · ↑↓ 줄 이동 · 휠 스크롤 · 주소는 Ctrl+클릭으로 연다)", 11.0f, luil::label_color_role::primary),
+            18.0f);
         column->add_gap(4.0f);
         luil::text_area_config memo {};
         memo.placeholder = u8"여러 줄 메모";
@@ -524,7 +543,28 @@ namespace demo {
         memo.scroll = [](const float delta) { return luil::make_app_action(memo_scroll_intent { delta }); };
         memo.scroll_to = [](const float offset) { return luil::make_app_action(memo_scroll_to_intent { offset }); };
         memo.wrap_cache = memo_wrap_;
+        // 친 글에서 주소를 찾아 링크로 보인다. 메모 정도의 글이라 frame마다 찾아도 된다.
+        memo.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(memo_.text));
+        memo.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
+        memo.link_hint = u8"Ctrl+클릭하여 열기";
         column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo_input }, make_input_view(memo_, target_memo), std::move(memo)), 96.0f);
+        return column;
+    }
+
+    std::unique_ptr<luil::stack_element> basics_page::make_link_view() const
+    {
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"input-links" }, luil::stack_config {}) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"links" }, u8"읽기 전용 안내 (링크는 그냥 클릭으로 연다 · 머무르면 주소)", 11.0f, luil::label_color_role::primary), 18.0f);
+        column->add_gap(4.0f);
+        luil::text_area_config view {};
+        view.read_only = true;
+        view.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(link_view_.text));
+        view.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
+        column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_link_view_input }, make_input_view(link_view_, target_link_view), std::move(view)), 44.0f);
+        column->add_gap(4.0f);
+        column->add(
+            make_label(luil::ui_element_id { kind_text, u8"link-report" }, link_report_.empty() ? std::u8string { u8"아직 연 링크가 없다." } : link_report_, 11.0f, luil::label_color_role::dim),
+            16.0f);
         return column;
     }
 

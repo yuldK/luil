@@ -20,6 +20,7 @@
 
 namespace luil {
     class text_area_element;
+    class text_link_element;
 
     // 여러 줄 칸이 문단(줄 바꿈으로 나뉜 줄)마다 접은 자리를 frame 사이에 쥐는 곳이다.
     //
@@ -115,6 +116,18 @@ namespace luil {
         std::shared_ptr<const std::vector<line_decoration>> lines {};
         std::vector<gutter_column> gutters {};
         std::vector<text_highlight> highlights {};
+        // 글 안의 하이퍼링크다 (`text_link`, 글에서 찾으려면 `detect_text_links`). begin 순서이고 겹치지 않는다.
+        // 공유한 vector는 게시 뒤 고치지 않는다.
+        //  - offset은 `spans`처럼 확정 글 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
+        //  - 강조색과 밑줄로 그리고, 링크마다 보조 기술의 Hyperlink가 선다. 머무르면 주소를 tooltip으로 보인다.
+        //  - 읽기 전용 칸은 클릭으로, 편집 칸은 Ctrl+클릭으로 연다. 편집 칸의 그냥 클릭은 caret을 놓는다 — 링크 안의 글도
+        //    고칠 수 있어야 해서다. 터치는 탭이 caret이고, 길게 누르면 편집 메뉴에 "링크 열기·주소 복사"가 선다.
+        std::shared_ptr<const std::vector<text_link>> links {};
+        // 링크를 눌렀을 때 앱 메시지를 짓는다. 비어 있으면 링크는 표시만 한다.
+        //  - 라이브러리는 주소를 스스로 열지 않는다. 앱이 받아 확인하고 연다 (`open_url`).
+        std::function<input_action(std::u8string_view destination)> activate_link {};
+        // 편집 칸의 링크 tooltip에서 주소 뒤에 붙는 안내다 (예: "Ctrl+클릭하여 열기"). 비어 있으면 주소만 보인다.
+        std::u8string link_hint {};
     };
 
     // 글자 크기와 줄 높이, 안쪽 여백이다 (논리 픽셀).
@@ -215,6 +228,10 @@ namespace luil {
         [[nodiscard]] text_layout row_layout(std::u8string_view text, const line& row) const;
         [[nodiscard]] float text_left() const noexcept;
         [[nodiscard]] float text_top() const noexcept;
+        // 창에 걸친 줄에서 링크 자식의 화면 조각을 놓는다. 배치의 끝에서 부른다.
+        void place_links();
+        // 그 순번의 링크 자식이다. 짓지 않은 링크(글 밖)면 nullptr다.
+        [[nodiscard]] const text_link_element* link_element(std::size_t index) const noexcept;
 
         text_input_view value_ {};
         text_area_config config_ {};
@@ -236,6 +253,8 @@ namespace luil {
         bool native_layout_ { false };
         text_layout font_layout_ {};
         std::vector<std::pair<std::size_t, text_layout>> row_layouts_ {};
+        // 링크의 순번과 그 자식이다 (순번 오름차순).
+        std::vector<std::pair<std::size_t, text_link_element*>> link_elements_ {};
 
     };
 } // namespace luil

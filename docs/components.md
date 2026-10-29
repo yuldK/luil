@@ -20,9 +20,9 @@
 | 아이콘 버튼 | `button_element` | [ui/button_element.h](../include/luil/ui/button_element.h) | [설명](concepts/ui-element.md) |
 | 폰트 아이콘 표시 | `glyph_element` | [ui/glyph_element.h](../include/luil/ui/glyph_element.h) | [설명](concepts/fonts.md) |
 | 폰트 파일·바이트 로딩 | `load_typeface_file`, `load_typeface_bytes` | [text/fonts.h](../include/luil/text/fonts.h) | [설명](concepts/fonts.md) |
-| 글자 버튼·텍스트 입력 | `text_button_element`, `text_input_element` | [ui/dialog_elements.h](../include/luil/ui/dialog_elements.h) | [설명](concepts/text-input.md) · [숫자 칸](number-input-design.md) |
+| 글자 버튼·텍스트 입력 | `text_button_element`, `text_input_element` | [ui/dialog_elements.h](../include/luil/ui/dialog_elements.h) | [설명](concepts/text-input.md) · [숫자 칸](number-input-design.md) · [링크](text-link-design.md) |
 | 텍스트 배치·caret·선택 질의 | `text_layout` | [ui/text_layout.h](../include/luil/ui/text_layout.h) | [설명](text-layout-design.md) |
-| 여러 줄 텍스트 입력 | `text_area_element` | [ui/text_area_element.h](../include/luil/ui/text_area_element.h) | [설명](concepts/text-input.md) |
+| 여러 줄 텍스트 입력 | `text_area_element` | [ui/text_area_element.h](../include/luil/ui/text_area_element.h) | [설명](concepts/text-input.md) · [링크](text-link-design.md) |
 | 체크(삼상 포함)·라디오·스위치 | `check_element`, `aggregate_check` | [ui/check_element.h](../include/luil/ui/check_element.h) | [설명](keyboard-focus-design.md) |
 | 불확정 진행 | `spinner_element` | [ui/spinner_element.h](../include/luil/ui/spinner_element.h) | [설명](concepts/ui-element.md) |
 | 진행률 | `progress_element` | [ui/progress_element.h](../include/luil/ui/progress_element.h) | [설명](value-step-design.md) |
