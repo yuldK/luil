@@ -241,7 +241,7 @@ endif()
 # 기본 구성에는 라이브러리 target만 둔다.
 # test와 개발 도구 target은 명시적으로 켤 때만 만들어진다.
 #   cmake --preset vs2026-tests     → test target과 CTest 등록 포함
-#   -DLUIL_BUILD_TOOLING=ON      → clang-format·style 검사 target 포함
+#   -DLUIL_BUILD_TOOLING=ON      → 소스 style 검사 target 포함
 # 설치·Direct3D·웹뷰는 Windows의 것이라 Android에서는 일반 변수로 먼저 꺼 둔다.
 # 아래 option이 그 값을 따른다 (CMP0077).
 if(LUIL_PLATFORM STREQUAL "android")
@@ -256,7 +256,7 @@ if(LUIL_BUILD_POINTER_INTEGRATION_TESTS AND NOT LUIL_BUILD_TESTS)
     message(FATAL_ERROR "LUIL_BUILD_POINTER_INTEGRATION_TESTS requires LUIL_BUILD_TESTS=ON.")
 endif()
 option(LUIL_BUILD_EXAMPLES "Build the luil example targets." OFF)
-option(LUIL_BUILD_TOOLING "Build the clang-format and source style targets." OFF)
+option(LUIL_BUILD_TOOLING "Build the source style check target." OFF)
 option(LUIL_ENABLE_MSVC_ANALYZE "Enable MSVC /analyze for library sources." OFF)
 # Direct3D 12 렌더러를 넣는다. 끄면 CPU 렌더러만 남는다 — `automatic`은 CPU로
 # 그리고 `direct3d`를 명시한 창은 만들기에 실패한다. 공개 API는 그대로다.
@@ -462,43 +462,19 @@ if(LUIL_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# clang-format target은 **있으면 만든다.**
-# 그것이 없다고 라이브러리와 test를 세우지 못할 이유가 없는데, test preset이
-# 이 옵션을 함께 켜므로 여기서 죽으면 빌드 전체가 막힌다 — 실제로 Visual Studio의
-# C++ Clang 도구를 설치하지 않은 머신에서 그렇게 걸렸다.
+# clang-format은 **검사하지 않는다.**
+# 손으로 고른 줄바꿈(뜻 단위로 묶은 조건, 제 줄에 닫는 중괄호)을 formatter가 다시 채워
+# 버린다. `.clang-format`은 편집기에서 고른 범위에 쓰는 선택 도구로만 남긴다.
+# 검사는 인코딩·줄 끝·식별자·닫는 중괄호 같은 문자 규칙만 본다 (run_style_check.cmake).
 if(LUIL_BUILD_TOOLING)
-    # 사람이 -DLUIL_CLANG_FORMAT_EXECUTABLE로 준 것이 있으면 그것을 쓴다.
-    if(NOT LUIL_CLANG_FORMAT_EXECUTABLE)
-        luil_find_visual_studio_clang_format(LUIL_CLANG_FORMAT_EXECUTABLE)
-    endif()
-    if(NOT LUIL_CLANG_FORMAT_EXECUTABLE)
-        message(WARNING
-            "The formatting targets are not available: "
-            "clang-format (Visual Studio Installer: \"C++ Clang tools for Windows\") was not found.\n"
-            "luil_format and luil_format_check are skipped. Everything "
-            "else - the library, the tests and the examples - still builds.\n"
-            "Set LUIL_CLANG_FORMAT_EXECUTABLE to point at one explicitly.")
-    else()
-        # 스타일 검사는 PowerShell을 돌 때 PATH에서 찾는 script로 부른다 (run_style_check.cmake).
-        # 구성 시점의 절대 경로는 PowerShell이 자리를 옮기면 낡는다.
-        luil_add_clang_format_targets(
-            CLANG_FORMAT_EXECUTABLE "${LUIL_CLANG_FORMAT_EXECUTABLE}"
-            FORMAT_TARGET luil_format
-            CHECK_TARGET luil_format_check
-            SOURCE_DIRECTORIES
-                "${LUIL_INCLUDE_DIRECTORY}"
-                "${LUIL_SOURCE_DIRECTORY}"
-                "${LUIL_TEST_DIRECTORY}"
-            FILE_EXTENSIONS cpp h
-            CHECK_COMMAND
-                "${CMAKE_COMMAND}"
-                "-DROOT_DIRECTORY=${PROJECT_SOURCE_DIR}"
-                -P "${LUIL_CMAKE_DIRECTORY}/run_style_check.cmake"
-        )
-        luil_set_ide_folder("Tooling"
-            luil_format
-            luil_format_check)
-    endif()
+    add_custom_target(luil_style_check
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DROOT_DIRECTORY=${PROJECT_SOURCE_DIR}"
+            -P "${LUIL_CMAKE_DIRECTORY}/run_style_check.cmake"
+        COMMENT "Checking project source style"
+        VERBATIM)
+    luil_set_ide_folder("Tooling" luil_style_check)
 endif()
 
 if(TARGET luil)

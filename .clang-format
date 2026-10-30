@@ -30,7 +30,7 @@ IndentWidth: 4
 NamespaceIndentation: All
 TabWidth: 4
 UseTab: Never
-ColumnLimit: 200
+ColumnLimit: 0
 LineEnding: CRLF
 DerivePointerAlignment: false
 PointerAlignment: Left
@@ -39,7 +39,8 @@ SpaceBeforeCpp11BracedList: true
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortBlocksOnASingleLine: Never
-RemoveBracesLLVM: true
+RemoveBracesLLVM: false
+FixNamespaceComments: false
 IncludeBlocks: Preserve
 ...
 

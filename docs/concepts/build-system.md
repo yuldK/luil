@@ -45,7 +45,7 @@ cmake --preset vs2026-tests
 cmake --preset vs2026-analysis
 ```
 
-tooling을 요청해도 clang-format 또는 PowerShell이 없으면 관련 형식 검사 타깃을 경고와 함께 생략한다. 라이브러리·테스트·예제의 구성은 계속된다. 실행 파일의 리소스 통합은 [소비자 계약](consumer-contract.md)을 따른다.
+tooling을 켜면 소스 스타일 검사 타깃 `luil_style_check`가 생긴다. 검사는 돌 때마다 PATH에서 PowerShell을 찾으므로 구성 단계는 PowerShell이 없어도 계속된다. clang-format은 검사하지 않는다. 손으로 고른 줄바꿈을 formatter가 다시 채우기 때문이다. `.clang-format`은 줄 길이 제한 없이 편집기에서 고른 범위에 쓰는 선택 도구다. 실행 파일의 리소스 통합은 [소비자 계약](consumer-contract.md)을 따른다.
 
 ## Android
 
