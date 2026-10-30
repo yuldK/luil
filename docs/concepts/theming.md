@@ -35,7 +35,7 @@ accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `sys
 
 ## 스타일 — 앱이 정하는 중립 색과 치수
 
-키 컬러는 사용자 설정이지만 바탕·표면·글자·구분선 같은 **중립 색**은 앱의 것이다. [`ui_style`](../../include/luil/theme/ui_style.h)이 그 자리다: 두 테마의 `neutral_color_palette`, `accent_tones`, 그리고 그리기 안에 박혀 있던 치수 `ui_metrics`(본문·작은 글자 크기, 컨트롤·행 모서리)다.
+키 컬러는 사용자 설정이지만 바탕·표면·글자·구분선 같은 **중립 색**은 앱의 것이다. [`ui_style`](../../include/luil/theme/ui_style.h)이 그 자리다: 두 테마의 `neutral_color_palette`, `accent_tones`, 그리고 그리기 안에 박혀 있던 치수 `ui_metrics`(본문·작은 글자 크기, 컨트롤·행 모서리, 컴포넌트 글의 굵기 `font_weights`)다. 굵기는 JSON의 `metrics.fontWeights`이고 빠져도 된다 ([글꼴 굵기와 기울임](../font-style-design.md)).
 
 내장값은 `assets/style.json`에서 빌드 시 생성되며 `default_ui_style()`이 돌려준다. 앱이 손대는 길은 둘이다.
 

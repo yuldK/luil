@@ -122,7 +122,7 @@ namespace demo {
                 const float padding { 10.0f * scale };
                 const luil::rect_f box { bounds() };
                 const luil::text_block_style style {
-                    .font = { .size = 13.0f, .bold = true },
+                    .font = { .size = 13.0f, .weight = luil::font_weight::bold },
                     .align = luil::text_align::center,
                     .vertical = luil::text_vertical_align::bottom,
                     .wrap = true,

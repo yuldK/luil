@@ -9,6 +9,20 @@ luil::set_ui_typeface_families({ u8"Pretendard", u8"Malgun Gothic", u8"Segoe UI"
 
 목록은 DirectWrite에서 읽은 UTF-8 가족 이름이며 정렬과 중복 제거를 거친다. 조회에 실패하면 빈 목록을 반환한다. 기본 UI 글꼴은 앞에서부터 설치된 가족을 선택하며, 빈 목록이나 사용할 수 없는 이름만 지정하면 Segoe UI를 사용한다. 앱 시작 전에 설정한다. 호출 시 내부 글꼴 캐시를 비우지만 이미 만들어진 화면과 글꼴 객체를 갱신하지는 않는다.
 
+## 굵기와 앱 글꼴 가족
+
+글의 굵기(`font_weight`, 100~900과 그 사이 값)와 기울임(`font_slant`)은 `text_font`·`label_config`·스타일의 `metrics.fontWeights`로 지정한다. 그 굵기의 진짜 face를 찾고, 없으면 획 덧칠·눕힘으로 메운다. 가변 글꼴은 `wght` 축으로 요청한 굵기를 그대로 낸다. 직접 `SkFont`를 짓는 element는 `apply_font_style(font, style)`로 굵기를 건다.
+
+```cpp
+luil::register_font_family(u8"Pretendard", {
+    luil::load_typeface_file(u8"assets/Pretendard-Regular.otf"),
+    luil::load_typeface_file(u8"assets/Pretendard-Bold.otf"),
+});
+luil::set_ui_typeface_families({ u8"Pretendard", u8"Segoe UI" });
+```
+
+`register_font_family`는 파일·바이트로 읽은 face를 OS에 설치하지 않고 한 가족 이름으로 묶는다. 등록한 이름은 설치된 가족처럼 기본 UI 글꼴 목록·설정의 글꼴 가족·설치 목록에 나오고, 같은 이름이면 설치된 가족보다 앞선다. 규칙 전체는 [글꼴 굵기와 기울임](../font-style-design.md)에 있다.
+
 ## 아이콘 폰트
 
 `glyph_element`는 폰트의 Unicode 코드포인트 하나를 가운데 정렬해 그린다. 폰트를 생략하면 실행 파일에 내장된 Codicons를 사용한다.

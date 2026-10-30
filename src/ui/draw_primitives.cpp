@@ -1,5 +1,6 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/text/grapheme.h"
+#include "ui/font_synthesis.h"
 #include "ui/single_line_text.h"
 #include "ui/text_layout_skia.h"
 
@@ -89,9 +90,9 @@ namespace luil {
                     continue;
                 }
 
-                // 크기·품질 같은 나머지 설정은 그대로 두고 typeface만 바꾼다.
+                // 크기·품질 같은 나머지 설정은 그대로 두고 typeface만 바꾼다. 덧칠·눕힘은 대체 face에 맞춰 다시 건다.
                 SkFont run_font { adjusted };
-                run_font.setTypeface(run.typeface);
+                use_face(run_font, run.typeface, font_style_of(adjusted));
                 canvas.drawSimpleText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8, pen, y, run_font, paint);
                 pen += run_font.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
             }
@@ -120,7 +121,7 @@ namespace luil {
                     continue;
                 }
                 SkFont run_font { adjusted };
-                run_font.setTypeface(run.typeface);
+                use_face(run_font, run.typeface, font_style_of(adjusted));
                 width += run_font.measureText(run.text.data(), run.text.size(), SkTextEncoding::kUTF8);
             }
             return width;
@@ -226,11 +227,13 @@ namespace luil {
             return runs;
         }
 
+        // 대체 face도 바탕 글꼴의 굵기·기울임으로 고른다. 굵은 글 속 한글이 보통 굵기로 가늘어지지 않는다.
+        const font_style style { font_style_of(font) };
         std::size_t run_begin { 0 };
         sk_sp<SkTypeface> run_typeface {};
         for (std::size_t index = 0; index < codepoints.size(); ++index)
         {
-            sk_sp<SkTypeface> wanted { glyphs[index] != 0 ? sk_sp<SkTypeface> {} : fallback->for_codepoint(static_cast<char32_t>(codepoints[index])) };
+            sk_sp<SkTypeface> wanted { glyphs[index] != 0 ? sk_sp<SkTypeface> {} : fallback->for_styled_codepoint(static_cast<char32_t>(codepoints[index]), style) };
             if (index == 0)
             {
                 run_typeface = std::move(wanted);
@@ -250,10 +253,16 @@ namespace luil {
 
     SkFont text_layout_font(const SkFont& font) { return quality_font(font); }
 
-    sk_sp<SkTypeface> text_layout_fallback(const char32_t codepoint)
+    sk_sp<SkTypeface> text_layout_fallback(const char32_t codepoint, const font_style style)
     {
         const auto* const fallback { installed_fallback.load(std::memory_order_relaxed) };
-        return fallback != nullptr ? fallback->for_codepoint(codepoint) : nullptr;
+        return fallback != nullptr ? fallback->for_styled_codepoint(codepoint, style) : nullptr;
+    }
+
+    sk_sp<SkTypeface> font_fallback::for_styled_codepoint(const char32_t codepoint, const font_style style) const
+    {
+        static_cast<void>(style);
+        return for_codepoint(codepoint);
     }
 
     void set_font_fallback(const font_fallback* const fallback) noexcept

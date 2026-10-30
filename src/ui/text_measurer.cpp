@@ -35,6 +35,17 @@ namespace luil {
         return measurer;
     }
 
+    text_measurer styled_text_measurer(const font_style style)
+    {
+        if (style == font_style {})
+            return default_text_measurer();
+        return [style](const std::u8string_view text, const float size) {
+            SkFont font { configured_ui_typeface(), size };
+            apply_font_style(font, style);
+            return measure_text(text, font);
+        };
+    }
+
     const text_measurer& arrange_context::measure_text() const
     {
         return measurer != nullptr ? *measurer : default_text_measurer();
@@ -57,5 +68,17 @@ namespace luil {
         // 그리기와 같은 글자 크기다 — 시스템 글자 크기 설정(`scaled_font_size`)까지 같아야 잰 폭과 그린 글이 맞는다.
         const float ratio { scale > 0.0f ? scale : 1.0f };
         return measure_text()(text, scaled_font_size(font_size, ratio)) / ratio;
+    }
+
+    float measure_context::text_width(const std::u8string_view text, const float font_size, const font_style style) const
+    {
+        if (style == font_style {} || measurer != nullptr)
+            return text_width(text, font_size);
+        if (text.empty())
+            return 0.0f;
+        const float ratio { scale > 0.0f ? scale : 1.0f };
+        SkFont font { configured_ui_typeface(), scaled_font_size(font_size, ratio) };
+        apply_font_style(font, style);
+        return luil::measure_text(text, font) / ratio;
     }
 }

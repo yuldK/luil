@@ -260,6 +260,11 @@ namespace luil::android {
             {
                 return fallback_typeface(codepoint);
             }
+
+            [[nodiscard]] sk_sp<SkTypeface> for_styled_codepoint(const char32_t codepoint, const font_style style) const override
+            {
+                return fallback_typeface(codepoint, style);
+            }
         };
 
         // GameActivity Activity 하나의 수명이다.

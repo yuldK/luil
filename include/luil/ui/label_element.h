@@ -28,6 +28,9 @@ namespace luil {
     {
         std::u8string text {};
         float font_size { 12.0f };
+        // 굵기와 기울임이다. 그 굵기의 face를 찾고, 없으면 덧칠·눕힘으로 메운다 (docs/font-style-design.md).
+        font_weight weight { font_weight::regular };
+        font_slant slant { font_slant::upright };
         label_color_role color { label_color_role::dim };
         label_background_role background { label_background_role::none };
         // 바탕이 있을 때 글자를 좌우로 들여쓰는 여백이다 (논리 픽셀).

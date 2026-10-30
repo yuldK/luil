@@ -57,6 +57,13 @@ TEST_CASE("The built-in style is the generated one and carries the documented de
     REQUIRE(luil::ui_metrics {}.small_font_size == 11.0f);
     REQUIRE(luil::ui_metrics {}.control_corner_radius == 3.0f);
     REQUIRE(luil::ui_metrics {}.row_corner_radius == 4.0f);
+    // 컴포넌트 굵기는 처음부터의 그림이다. 고른 선택지만 굵다 — 전에는 덧칠로 굵혔다.
+    REQUIRE(luil::ui_font_weights {}.body_text == luil::font_weight::regular);
+    REQUIRE(luil::ui_font_weights {}.small_text == luil::font_weight::regular);
+    REQUIRE(luil::ui_font_weights {}.button_text == luil::font_weight::regular);
+    REQUIRE(luil::ui_font_weights {}.selected_tab == luil::font_weight::regular);
+    REQUIRE(luil::ui_font_weights {}.selected_choice == luil::font_weight::semibold);
+    REQUIRE(luil::ui_font_weights {}.title == luil::font_weight::regular);
     // 컴포넌트 스타일도 struct의 기본값(처음부터의 모양)과 같다.
     REQUIRE(style.tab_bar == luil::tab_bar_style {});
     REQUIRE(luil::tab_bar_style {}.variant == luil::tab_bar_variant::underline);

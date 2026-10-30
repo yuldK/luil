@@ -183,13 +183,14 @@ function(luil_style_neutral output_variable theme_key)
 endfunction()
 
 # 숫자 객체(tones·metrics)를 지정 초기화로 적는다.
+#  - 여섯째 인자부터는 숫자가 아닌, 빠져도 되는 칸이다 (metrics의 `fontWeights`). 낯선 키 검사만 통과시키고 따로 적는다.
 function(luil_style_numbers output_variable object_key field_pairs minimum maximum)
     string(JSON object_json ERROR_VARIABLE object_error GET "${style_json}" "${object_key}")
     if(object_error)
         message(FATAL_ERROR "The style file has no ${object_key} object: ${object_error}")
     endif()
     luil_style_keys_of(keys "${field_pairs}")
-    luil_style_expect_keys("${object_json}" "${object_key}" "${keys}")
+    luil_style_expect_keys("${object_json}" "${object_key}" "${keys}" ${ARGN})
     set(text "        .${object_key} = {\n")
     foreach(pair IN LISTS field_pairs)
         luil_style_split_pair("${pair}" key field)
@@ -220,6 +221,15 @@ set(popup_fields
     "corner|corner|popup_corner|system,round,roundSmall,square")
 set(text_fields
     "lineBreak|line_break|single_line_break|space,symbol,paragraphs")
+# `metrics.fontWeights`다 (`ui_font_weights`). 값은 굵기의 이름이고 빠진 칸은 struct의 기본값이다.
+set(font_weight_names "thin,extraLight,light,regular,medium,semibold,bold,extraBold,black")
+set(font_weight_fields
+    "bodyText|body_text|font_weight|${font_weight_names}"
+    "smallText|small_text|font_weight|${font_weight_names}"
+    "buttonText|button_text|font_weight|${font_weight_names}"
+    "selectedTab|selected_tab|font_weight|${font_weight_names}"
+    "selectedChoice|selected_choice|font_weight|${font_weight_names}"
+    "title|title|font_weight|${font_weight_names}")
 
 # 컴포넌트 칸의 JSON 키와 C++ 필드, 그 필드 표다. 순서가 곧 지정 초기화의 순서라 struct 선언과 같아야 한다.
 set(component_sections
@@ -235,16 +245,17 @@ function(luil_style_snake_case output_variable text)
 endfunction()
 
 # 컴포넌트 칸 하나를 지정 초기화로 적는다. 칸이 없으면 아무것도 적지 않는다 (struct의 기본값).
-function(luil_style_component output_variable json_key cpp_field field_specs)
-    string(JSON section_type ERROR_VARIABLE missing TYPE "${style_json}" "${json_key}")
+#  - `parent_json` 안의 `json_key` 칸을 읽는다. `path`는 오류 글에 쓰는 자리이고 `indent`는 적을 들여쓰기다.
+function(luil_style_enum_section output_variable parent_json path json_key cpp_field field_specs indent)
+    string(JSON section_type ERROR_VARIABLE missing TYPE "${parent_json}" "${json_key}")
     if(missing)
         set(${output_variable} "" PARENT_SCOPE)
         return()
     endif()
     if(NOT section_type STREQUAL "OBJECT")
-        message(FATAL_ERROR "${json_key} must be an object, got ${section_type}")
+        message(FATAL_ERROR "${path} must be an object, got ${section_type}")
     endif()
-    string(JSON section_json GET "${style_json}" "${json_key}")
+    string(JSON section_json GET "${parent_json}" "${json_key}")
     set(known_keys "")
     foreach(spec IN LISTS field_specs)
         string(REPLACE "|" ";" parts "${spec}")
@@ -257,12 +268,12 @@ function(luil_style_component output_variable json_key cpp_field field_specs)
         foreach(index RANGE 0 ${last})
             string(JSON key MEMBER "${section_json}" ${index})
             if(NOT key IN_LIST known_keys)
-                message(FATAL_ERROR "Unknown key in ${json_key}: ${key}")
+                message(FATAL_ERROR "Unknown key in ${path}: ${key}")
             endif()
         endforeach()
     endif()
     # 지정 초기화는 선언 순서라야 하므로 JSON 순서가 아니라 표의 순서로 적는다.
-    set(text "        .${cpp_field} = {\n")
+    set(text "${indent}.${cpp_field} = {\n")
     foreach(spec IN LISTS field_specs)
         string(REPLACE "|" ";" parts "${spec}")
         list(GET parts 0 key)
@@ -275,12 +286,17 @@ function(luil_style_component output_variable json_key cpp_field field_specs)
         endif()
         string(REPLACE "," ";" allowed "${allowed}")
         if(NOT value IN_LIST allowed)
-            message(FATAL_ERROR "Invalid value at ${json_key}.${key}: ${value} (expected one of ${allowed})")
+            message(FATAL_ERROR "Invalid value at ${path}.${key}: ${value} (expected one of ${allowed})")
         endif()
         luil_style_snake_case(enum_value "${value}")
-        string(APPEND text "            .${field} = ${enum_type}::${enum_value},\n")
+        string(APPEND text "${indent}    .${field} = ${enum_type}::${enum_value},\n")
     endforeach()
-    string(APPEND text "        },\n")
+    string(APPEND text "${indent}},\n")
+    set(${output_variable} "${text}" PARENT_SCOPE)
+endfunction()
+
+function(luil_style_component output_variable json_key cpp_field field_specs)
+    luil_style_enum_section(text "${style_json}" "${json_key}" "${json_key}" "${cpp_field}" "${field_specs}" "        ")
     set(${output_variable} "${text}" PARENT_SCOPE)
 endfunction()
 
@@ -303,7 +319,13 @@ luil_style_neutral(dark_text "dark")
 luil_style_neutral(light_text "light")
 # tone은 알파라 0~1이고, 치수는 논리 픽셀이라 위가 열려 있다 (상한은 실수 방지용이다).
 luil_style_numbers(tones_text "tones" "${tone_fields}" 0 1)
-luil_style_numbers(metrics_text "metrics" "${metric_fields}" 0 1000)
+luil_style_numbers(metrics_text "metrics" "${metric_fields}" 0 1000 "fontWeights")
+# 굵기 묶음은 metrics의 마지막 칸이다 (struct 선언 순서). 닫는 줄 앞에 끼운다.
+string(JSON metrics_json GET "${style_json}" "metrics")
+luil_style_enum_section(weights_text "${metrics_json}" "metrics.fontWeights" "fontWeights" "font_weights" "${font_weight_fields}" "            ")
+if(NOT weights_text STREQUAL "")
+    string(REGEX REPLACE "        },\n$" "${weights_text}        },\n" metrics_text "${metrics_text}")
+endif()
 
 set(output_text "#pragma once\n\n")
 string(APPEND output_text "// 스타일 JSON에서 생성된 파일이다. 직접 고치지 않는다.\n")

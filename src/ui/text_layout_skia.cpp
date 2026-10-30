@@ -4,6 +4,7 @@
 #include "luil/text/grapheme.h"
 #include "luil/text/utf8_text.h"
 #include "luil/ui/draw_primitives.h"
+#include "ui/font_synthesis.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_shaping.h"
 
@@ -126,6 +127,30 @@ namespace luil {
             //  - registry 자물쇠를 글자마다 쥐지 않도록 한 번만 묻는다.
             const auto code_face { std::ranges::any_of(styles, [](const auto& item) { return item.code; }) ? configured_code_typeface() : sk_sp<SkTypeface> {} };
             auto style { std::lower_bound(styles.begin(), styles.end(), offset, [](const auto& item, const auto at) { return item.end <= at; }) };
+            // 범위 강조를 건 글꼴이다. 강조는 진짜 Bold·Italic face로 그리고, face가 없으면 덧칠·눕힘으로 메운다.
+            //  - 굵기는 바탕보다 가늘어지지 않는다 (Black label 안의 강조는 Black 그대로다).
+            //  - 등록부 자물쇠를 글자소마다 쥐지 않도록 강조 구간 하나에 한 번만 짓는다.
+            const text_layout_style* styled_for { nullptr };
+            SkFont styled {};
+            const auto emphasized = [&](const text_layout_style& item) -> const SkFont& {
+                if (item.bold == false
+                    && item.italic == false
+                    && item.code == false)
+                    return font;
+                if (styled_for == &item)
+                    return styled;
+                styled = font;
+                if (item.code && code_face != nullptr)
+                    styled.setTypeface(code_face);
+                font_style wanted { font_style_of(font) };
+                if (item.bold)
+                    wanted.weight = static_cast<font_weight>(std::max(font_weight_value(wanted.weight), font_weight_value(font_weight::bold)));
+                if (item.italic)
+                    wanted.slant = font_slant::italic;
+                apply_font_style(styled, wanted);
+                styled_for = &item;
+                return styled;
+            };
             if (primitive)
             {
                 // 끈 구성의 glyph·advance는 기존 코드포인트별 fallback과 같다.
@@ -135,17 +160,13 @@ namespace luil {
                     const auto next { at + point.length };
                     while (style != styles.end() && style->end <= offset + at)
                         ++style;
-                    SkFont chosen { font };
-                    if (style != styles.end() && style->begin <= offset + at)
-                    {
-                        chosen.setEmbolden(style->bold);
-                        chosen.setSkewX(style->italic ? -0.2f : 0.0f);
-                        if (style->code && code_face != nullptr)
-                            chosen.setTypeface(code_face);
-                    }
+                    SkFont chosen { style != styles.end() && style->begin <= offset + at ? emphasized(*style) : font };
                     if (chosen.unicharToGlyph(static_cast<SkUnichar>(point.codepoint)) == 0)
-                        if (auto fallback { text_layout_fallback(point.codepoint) }; fallback != nullptr)
-                            chosen.setTypeface(std::move(fallback));
+                    {
+                        const font_style wanted { font_style_of(chosen) };
+                        if (auto fallback { text_layout_fallback(point.codepoint, wanted) }; fallback != nullptr)
+                            use_face(chosen, std::move(fallback), wanted);
+                    }
                     if (fonts.empty() == false && fonts.back().font == chosen)
                         fonts.back().end = next;
                     else
@@ -161,17 +182,11 @@ namespace luil {
                 const auto next { boundaries[index + 1] };
                 while (style != styles.end() && style->end <= offset + at)
                     ++style;
-                SkFont chosen { font };
-                if (style != styles.end() && style->begin <= offset + at)
-                {
-                    chosen.setEmbolden(style->bold);
-                    chosen.setSkewX(style->italic ? -0.2f : 0.0f);
-                    if (style->code && code_face != nullptr)
-                        chosen.setTypeface(code_face);
-                }
+                SkFont chosen { style != styles.end() && style->begin <= offset + at ? emphasized(*style) : font };
                 const auto cluster { text.substr(at, next - at) };
                 if (covers(chosen, cluster) == false)
                 {
+                    const font_style wanted { font_style_of(chosen) };
                     // 하나의 글자소를 지원하는 face를 먼저 고른다. ZWJ·결합 부호를 font run으로 쪼개지 않는다.
                     //  - 다 담는 face가 없으면 처음 받은 대체 face로 그린다. 끈 구성과 같이 그 face의 빈 네모가 보인다.
                     //    주 글꼴이 아이콘 글꼴이면 빈 글자의 폭이 0이라 글이 사라진다 — 빈 네모가 보이는 편이 침묵보다 낫다.
@@ -180,10 +195,10 @@ namespace luil {
                     for (std::size_t cursor { at }; cursor < next;)
                     {
                         const auto point { text::utf8_decode(text, cursor) };
-                        if (auto fallback { text_layout_fallback(point.codepoint) }; fallback != nullptr)
+                        if (auto fallback { text_layout_fallback(point.codepoint, wanted) }; fallback != nullptr)
                         {
                             SkFont candidate { chosen };
-                            candidate.setTypeface(std::move(fallback));
+                            use_face(candidate, std::move(fallback), wanted);
                             if (covers(candidate, cluster))
                             {
                                 chosen = std::move(candidate);

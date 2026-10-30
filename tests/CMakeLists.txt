@@ -43,6 +43,7 @@ add_executable(luil_core_tests
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
     label_wrap_tests.cpp
+    font_style_tests.cpp
     text_block_tests.cpp
     keyboard_selection_tests.cpp
     list_element_tests.cpp
@@ -352,6 +353,7 @@ add_executable(luil_tests
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp
     font_fallback_tests.cpp
+    font_style_native_tests.cpp
     glyph_element_tests.cpp
     http_body_tests.cpp
     http_client_tests.cpp

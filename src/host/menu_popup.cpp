@@ -16,9 +16,10 @@ namespace luil {
         popup.x = config.x;
         popup.y = config.y;
         const float font_size { config.font_size.value_or(default_ui_style().metrics.body_font_size) };
+        const font_weight weight { config.weight.value_or(default_ui_style().metrics.font_weights.body_text) };
         popup.width = std::isfinite(config.width) && config.width > 0.0f
             ? config.width
-            : menu_element::width_for(menu, config.measurer ? config.measurer : default_text_measurer(), font_size);
+            : menu_element::width_for(menu, config.measurer ? config.measurer : styled_text_measurer({ weight }), font_size);
         popup.height = menu_element::height_for(menu);
         popup.dismiss = std::move(config.dismiss);
         const popup_corner corner { config.corner.value_or(default_ui_style().popup.corner) };

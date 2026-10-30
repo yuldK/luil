@@ -1,6 +1,7 @@
 #include "luil/ui/choice_group_element.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -70,7 +71,7 @@ namespace luil {
                 const float text_width { box.x + box.width - inset - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                    const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                     const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
                     static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }
@@ -143,9 +144,10 @@ namespace luil {
                     text_color = context.palette.disabled_foreground;
                 else if (selected_)
                     text_color = context.palette.selection_foreground;
-                SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
-                // 고른 글은 획을 조금 두껍게 한다. 칸 폭은 여백에 이 몫을 담아 두어 고른 칸이 바뀌어도 들썩이지 않는다.
-                font.setEmbolden(selected_);
+                // 고른 글은 `selected_choice` 굵기다. 칸 폭은 두 굵기 중 넓은 쪽으로 재 두어(`fitted_segment_width`) 고른 칸이
+                // 바뀌어도 들썩이지 않는다.
+                const ui_font_weights& weights { context.metrics.font_weights };
+                const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = selected_ ? weights.selected_choice : weights.body_text }) };
                 const SkPaint foreground { solid_paint(text_color) };
                 const float inset { std::min(choice_segment_padding * scale, box.width / 2.0f) };
                 const float text_room { box.width - inset * 2.0f };
@@ -167,9 +169,13 @@ namespace luil {
         // 선택 묶음 칸 하나의 맞춤 폭이다 (논리 픽셀). 가장 긴 글에 좌우 여백을 더한다.
         [[nodiscard]] float fitted_segment_width(const choice_group_config& config, const measure_context& context)
         {
+            const ui_metrics& metrics { context.style_metrics() };
             float widest { 0.0f };
             for (const choice_item& item : config.items)
-                widest = std::max(widest, context.text_width(item.label, context.style_metrics().body_font_size));
+            {
+                widest = std::max(widest, context.text_width(item.label, metrics.body_font_size, { metrics.font_weights.body_text }));
+                widest = std::max(widest, context.text_width(item.label, metrics.body_font_size, { metrics.font_weights.selected_choice }));
+            }
             return std::ceil(widest) + choice_segment_padding * 2.0f;
         }
 

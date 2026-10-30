@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/text/font_style.h"
 #include "luil/theme/ui_style.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/ui_element.h"
@@ -57,6 +58,12 @@ namespace luil {
         // (글꼴이 설치·삭제되면 낡은 답이 그대로 남는다). `sk_sp`를 돌려주면
         // 그 의존이 사라져 해석기가 자기 cache를 자유롭게 비울 수 있다.
         [[nodiscard]] virtual sk_sp<SkTypeface> for_codepoint(char32_t codepoint) const = 0;
+
+        // 굵기·기울임을 맞춰 고른 대체 typeface다 — 굵은 글 속 한글이 Bold 대체 face로 그려진다.
+        //  - 기본은 모양 없이 찾는다(`for_codepoint`). 모양을 아는 해석기(글꼴 등록부)가 덮어쓴다.
+        //  - 찾은 face가 모양을 다 내지 못하면 덧칠·눕힘은 그리는 쪽이 건다.
+        //  - 몸통은 .cpp에 둔다. 이 header는 `SkTypeface`를 전방 선언만 해서 여기서 `sk_sp`를 돌려줄 수 없다.
+        [[nodiscard]] virtual sk_sp<SkTypeface> for_styled_codepoint(char32_t codepoint, font_style style) const;
     };
 
     // platform이 시작할 때 한 번 등록하고 끝날 때 nullptr로 되돌린다.
@@ -86,6 +93,17 @@ namespace luil {
     //    tree는 앞 값으로 잰 폭을 들 수 있고, 다음 배치부터 새 값이다.
     void set_single_line_break(single_line_break mode) noexcept;
     [[nodiscard]] single_line_break single_line_break_mode() noexcept;
+
+    // `font`가 그리는 굵기·기울임이다. face의 굵기(가변 글꼴은 `wght` 축 자리)에 덧칠·눕힘을 더해 읽는다.
+    //  - 대체 글꼴을 고를 때 바탕 글꼴의 모양을 잇는 데 쓴다. 덧칠한 글은 Bold로 읽는다.
+    [[nodiscard]] font_style font_style_of(const SkFont& font);
+
+    // `font`의 face를 `style`로 바꾼다 (docs/font-style-design.md). 크기·품질 같은 나머지 설정은 그대로 둔다.
+    // 직접 `SkFont`를 짓는 element가 굵기를 거는 길이다 — `make_text_font`도 이 함수로 굵기를 건다.
+    //  - 시스템 가족과 등록한 앱 가족(`register_font_family`)은 그 굵기의 face를 찾는다. 가변 글꼴은 `wght` 축으로
+    //    clone한다. 그래도 모자라면 덧칠·눕힘으로 메운다 (`synthetic_bold_threshold`).
+    //  - 기본 모양(regular·upright)은 face를 그대로 둔다. 앞서 걸린 덧칠·눕힘은 지운다.
+    void apply_font_style(SkFont& font, font_style style);
 
     // 이어 그릴 한 조각이다.
     // `typeface`가 nullptr이면 기본 글꼴 그대로다.

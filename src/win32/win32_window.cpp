@@ -3012,6 +3012,11 @@ namespace luil::win32 {
                 {
                     return fallback_typeface(codepoint);
                 }
+
+                [[nodiscard]] sk_sp<SkTypeface> for_styled_codepoint(const char32_t codepoint, const font_style style) const override
+                {
+                    return fallback_typeface(codepoint, style);
+                }
             };
 
             registry_font_resolver font_resolver_ {};

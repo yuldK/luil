@@ -27,7 +27,10 @@ namespace luil {
         // 시점 스타일의 `metrics.body_font_size`로 그려지므로, 실행 시점에 스타일을 세운 앱은 그 값을 넘긴다.
         // 넘기지 않으면 큰 글자에서 글이 잘린다.
         std::optional<float> font_size {};
-        // 폭을 잴 함수다. 비어 있으면 `default_text_measurer`다.
+        // 폭을 잴 글 굵기다. 비어 있으면 내장 스타일의 본문 굵기(`metrics.font_weights.body_text`)다 — `font_size`와 같은
+        // 까닭으로 실행 시점에 스타일을 세운 앱은 그 값을 넘긴다.
+        std::optional<font_weight> weight {};
+        // 폭을 잴 함수다. 비어 있으면 `weight`를 건 UI 글꼴이다 (`styled_text_measurer`). 넣으면 `weight`는 쓰지 않는다.
         text_measurer measurer {};
     };
 

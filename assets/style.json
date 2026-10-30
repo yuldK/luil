@@ -79,7 +79,15 @@
         "bodyFontSize": 12,
         "smallFontSize": 11,
         "controlCornerRadius": 3,
-        "rowCornerRadius": 4
+        "rowCornerRadius": 4,
+        "fontWeights": {
+            "bodyText": "regular",
+            "smallText": "regular",
+            "buttonText": "regular",
+            "selectedTab": "regular",
+            "selectedChoice": "semibold",
+            "title": "regular"
+        }
     },
     "tabBar": {
         "variant": "underline",

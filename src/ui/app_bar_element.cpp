@@ -2,6 +2,7 @@
 
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -87,7 +88,7 @@ namespace luil {
         if (title_right > title_left && config_.title.empty() == false)
         {
             const SkPaint foreground { solid_paint(context.palette.caption.foreground) };
-            const SkFont title_font { sk_ref_sp(context.ui_typeface), scaled_font_size(static_cast<float>(config_.metrics.title_font_size), scale) };
+            const SkFont title_font { make_text_font(context, { .size = static_cast<float>(config_.metrics.title_font_size), .weight = context.metrics.font_weights.title }) };
             static_cast<void>(draw_text_within(context.canvas, config_.title, title_left, box.y + centered_text_baseline(title_font, box.height), title_right - title_left, title_font, foreground));
         }
 

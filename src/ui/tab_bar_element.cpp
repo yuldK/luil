@@ -6,6 +6,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -638,7 +639,7 @@ namespace luil {
                 const float text_width { text_right - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                    const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = selected ? context.metrics.font_weights.selected_tab : context.metrics.font_weights.body_text }) };
                     SkPaint foreground { solid_paint(context.palette.primary_foreground) };
                     if (selected == false)
                         foreground.setAlphaf(0.75f);

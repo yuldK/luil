@@ -84,6 +84,7 @@ luil_add_source_filter(luil_core_files "text"
     "${public_headers}/text/grapheme.h"
     text/text_edit.cpp
     "${public_headers}/text/fonts.h"
+    "${public_headers}/text/font_style.h"
     "${public_headers}/text/text_edit.h"
     text/utf8_text.cpp
     "${public_headers}/text/utf8_text.h")
@@ -134,6 +135,8 @@ luil_add_source_filter(luil_core_files "ui/interaction"
 luil_add_source_filter(luil_core_files "ui/drawing"
     ui/draw_primitives.cpp
     "${public_headers}/ui/draw_primitives.h"
+    ui/font_synthesis.cpp
+    ui/font_synthesis.h
     ui/text_block.cpp
     "${public_headers}/ui/text_block.h"
     "${public_headers}/ui/layout_metrics.h"

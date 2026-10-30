@@ -2,6 +2,7 @@
 
 #include "luil/ui/draw_primitives.h"
 #include "luil/generated/codicons.h"
+#include "luil/ui/text_block.h"
 
 #include <algorithm>
 
@@ -87,7 +88,7 @@ namespace luil {
                 // 아이콘 유무와 무관하게 글자 시작을 맞춰 목록이 줄지어 보이게 한다.
                 text_left += 22.0f * scale;
 
-                const SkFont shortcut_font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                const SkFont shortcut_font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                 const float arrow_width { item_.children.empty() ? 0.0f : 18.0f * scale };
                 if (arrow_width > 0.0f)
                     draw_centered_glyph(context.canvas, codicons::icon_chevron_right,
@@ -102,7 +103,7 @@ namespace luil {
                 const float text_width { box.x + box.width - inset - text_left - shortcut_width - shortcut_gap - arrow_width };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                    const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                     const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
                     static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }
