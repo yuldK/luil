@@ -134,6 +134,8 @@ luil_add_source_filter(luil_core_files "ui/interaction"
 luil_add_source_filter(luil_core_files "ui/drawing"
     ui/draw_primitives.cpp
     "${public_headers}/ui/draw_primitives.h"
+    ui/text_block.cpp
+    "${public_headers}/ui/text_block.h"
     "${public_headers}/ui/layout_metrics.h"
     "${public_headers}/ui/transition.h")
 

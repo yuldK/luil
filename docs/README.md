@@ -56,6 +56,7 @@
 - [커서 감추기와 멈춘 커서 자동 감추기](cursor-idle-design.md)
 - [머무름 트리거와 hover 영역](hover-dwell-design.md)
 - [여러 줄 라벨](label-wrap-design.md)
+- [직접 그리는 글](text-block-design.md)
 - [경로 조각 막대와 앞쪽 말줄임](breadcrumb-design.md)
 - [가상 목록의 격자 모드와 가운데 맞춤 들이기](virtual-list-grid-design.md)
 - [가지 단위 팔레트 덮어쓰기](palette-scope-design.md)

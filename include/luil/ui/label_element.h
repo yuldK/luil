@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/ui/text_block.h"
 #include "luil/ui/ui_element.h"
 
 namespace luil {
@@ -23,15 +24,6 @@ namespace luil {
         raised,
     };
 
-    enum class text_align { start, center, end };
-    // 들어가지 않는 한 줄 글을 줄이는 자리다. `start`는 앞을 줄여 끝(파일 이름)을 남긴다.
-    enum class text_elide
-    {
-        end,
-        middle,
-        start
-    };
-
     struct label_config
     {
         std::u8string text {};
@@ -45,32 +37,19 @@ namespace luil {
         // 폭에서 줄을 바꾼다 (설명·오류 글 — label-wrap-design.md). 거짓이면 지금처럼 한 줄이다.
         //  - 줄 바꿈은 여러 줄 칸과 같은 text_layout 규칙이다: 공백에서 먼저 바꾸고, 공백이 없는 긴 낱말은 글자소
         //    경계에서 바꾼다. 조합형 한글·이모지 결합 글자가 줄 경계에서 갈리지 않는다. `\n`은 줄 바꿈이다.
-        //  - 바꾼 글은 시작 쪽으로 붙는다 (`align`·`elide`를 보지 않는다).
+        //  - 바꾼 줄도 줄마다 `align`을 따른다. `elide`는 한 줄 label의 것이다 — 넘친 마지막 줄은 늘 끝을 줄인다.
         bool wrap { false };
         // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 줄의 끝을 `…`로 줄인다.
         std::size_t max_lines { 0 };
     };
 
-    // 줄을 바꾼 결과다 (`label_element::measure_wrap`).
-    struct label_wrap
-    {
-        // 보이는 줄마다의 원문 byte 구간이다. 말줄임한 마지막 줄은 남은 글 전체의 구간이다.
-        struct line
-        {
-            std::size_t begin { 0 };
-            std::size_t end { 0 };
-        };
-        std::vector<line> lines {};
-        // `max_lines`에 걸려 뒤를 줄였다.
-        bool truncated { false };
-        // 보이는 줄 높이의 합이다 (논리 픽셀).
-        float height { 0.0f };
-        // 가장 넓은 줄의 폭이다 (논리 픽셀, 여백 제외).
-        float width { 0.0f };
-    };
+    // 줄을 바꾼 결과다 (`label_element::measure_wrap`). 직접 그리는 글과 같은 값이다 (`measure_text_block`).
+    //  - 폭은 여백을 뺀 논리 픽셀이고, 높이는 보이는 줄 높이의 합이다.
+    using label_wrap = text_block_layout;
 
     // 텍스트다. 기본은 한 줄이고 `wrap`이면 여러 줄이다.
     // 한 줄은 bounds 안에서 설정한 가로 정렬과 세로 중앙 baseline으로 그린다.
+    //  - 그리기는 `draw_text_block`이다. element 없이 같은 글을 그리려는 element는 그 함수를 부른다.
     class label_element final : public ui_element
     {
     public:

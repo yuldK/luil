@@ -48,6 +48,6 @@ if (icons != nullptr)
 
 `glyph`는 폰트 내부 글리프 색인이 아니다. 0이나 잘못된 Unicode 값, 지정한 폰트에 없는 문자는 그리지 않는다. 아이콘의 의미가 달라질 수 있으므로 시스템 폰트 대체는 하지 않는다.
 
-직접 그리는 element에서는 기존 `draw_centered_glyph`와 `SkFont`를 사용할 수 있다. 내장 폰트도 공개 함수 `luil::load_codicon_typeface()`로 얻을 수 있다. 일반 텍스트처럼 기준선과 글자 전진 폭으로 그리려면 이 폰트로 `SkFont`를 만들고 기존 `draw_text`/`measure_text`에 UTF-8 문자열을 전달한다. 이 일반 텍스트 경로는 기존의 폰트 대체 규칙을 따른다.
+직접 그리는 element에서는 기존 `draw_centered_glyph`와 `SkFont`를 사용할 수 있다. 내장 폰트도 공개 함수 `luil::load_codicon_typeface()`로 얻을 수 있다. 일반 텍스트처럼 기준선과 글자 전진 폭으로 그리려면 이 폰트로 `SkFont`를 만들고 기존 `draw_text`/`measure_text`에 UTF-8 문자열을 전달한다. 이 일반 텍스트 경로는 기존의 폰트 대체 규칙을 따른다. 상자에 맞춰 정렬·줄 바꿈·말줄임·테두리까지 label과 같은 규칙으로 놓으려면 `text_font::typeface`에 이 폰트를 넣고 `draw_text_block`을 쓴다 ([직접 그리는 글](../text-block-design.md)).
 
 드래그의 기본 대상 강조를 앱에서 직접 그리려면 payload의 `suppress_drop_highlight`를 `true`로 설정한다. 대상 테두리와 목록·탭의 drop 배경이 사라지고 hit test와 drop 액션은 유지된다. ghost는 별도의 `custom_visual`로 제어한다.

@@ -43,6 +43,7 @@ add_executable(luil_core_tests
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
     label_wrap_tests.cpp
+    text_block_tests.cpp
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
@@ -343,6 +344,7 @@ luil_configure_resource_script("${luil_tests_resource}" "${luil_tests_notices}")
 
 add_executable(luil_tests
     text_layout_native_tests.cpp
+    text_block_native_tests.cpp
     "${luil_tests_resource}"
     backdrop_tests.cpp
     breadcrumb_tests.cpp

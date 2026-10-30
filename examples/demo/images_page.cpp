@@ -3,8 +3,10 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_encode.h"
+#include "luil/ui/layer_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -89,18 +91,51 @@ namespace demo {
             return joined;
         }
 
-        // 칸 가운데에 한 줄을 그린다.
-        // 좁은 칸에서 잘린 글은 **자른 폭으로** 가운데 둔다 — 원문 폭으로 재면
-        // 잘린 글이 왼쪽으로 밀린다.
+        // 칸 가운데에 한 줄을 그린다. 좁은 칸에서는 자른 글의 폭으로 가운데 둔다 (`draw_text_block`).
         void draw_centered_line(luil::draw_context& context, const std::u8string_view text, const luil::rect_f& box, const float font_size, const SkPaint& paint)
         {
-            if (text.empty() || box.width <= 0.0f)
-                return;
-            const SkFont font { sk_ref_sp(context.ui_typeface), font_size };
-            const std::u8string fitted { luil::elide_text(text, box.width, font) };
-            const float width { luil::measure_text(fitted, font) };
-            luil::draw_text(context.canvas, fitted, box.x + (box.width - width) * 0.5f, box.y + luil::centered_text_baseline(font, box.height), font, paint);
+            const luil::text_block_style style { .font = { .size = font_size }, .align = luil::text_align::center };
+            static_cast<void>(luil::draw_text_block(context, text, box, style, paint));
         }
+
+        // 그림 위에 얹는 이름이다. 그림이 밝든 어둡든 읽히도록 글자에 바탕색 테두리를 두른다.
+        //  - 칸에 바탕을 까는 label은 그림을 가린다. 직접 그리는 글(`draw_text_block`)은 글자 둘레만 덮는다.
+        //  - 테두리는 불투명하게 칠한다. 반투명이면 이웃 글자의 테두리가 겹친 자리만 짙어진다.
+        class picture_caption_element final : public luil::ui_element
+        {
+        public:
+            picture_caption_element(luil::ui_element_id id, std::u8string caption)
+                : ui_element { std::move(id) }
+                , caption_ { std::move(caption) }
+            {}
+
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+            }
+
+            void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+            {
+                static_cast<void>(interaction);
+                const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+                const float padding { 10.0f * scale };
+                const luil::rect_f box { bounds() };
+                const luil::text_block_style style {
+                    .font = { .size = 13.0f, .bold = true },
+                    .align = luil::text_align::center,
+                    .vertical = luil::text_vertical_align::bottom,
+                    .wrap = true,
+                    .max_lines = 2,
+                    .halo_color = context.palette.window_background,
+                    .halo_width = 2.0f,
+                };
+                const luil::rect_f area { box.x + padding, box.y + padding, box.width - padding * 2.0f, box.height - padding * 2.0f };
+                static_cast<void>(luil::draw_text_block(context, caption_, area, style, luil::solid_paint(context.palette.primary_foreground)));
+            }
+
+        private:
+            std::u8string caption_ {};
+        };
 
         // 파일을 받는 자리다.
         //
@@ -168,9 +203,9 @@ namespace demo {
                 const float padding { 12.0f * scale };
                 const float text_x { box.x + padding };
                 const float text_width { box.width - padding * 2.0f };
-                draw_centered_line(context, title_, { text_x, top, text_width, title_height }, 12.0f * scale, luil::solid_paint(context.palette.primary_foreground));
+                draw_centered_line(context, title_, { text_x, top, text_width, title_height }, 12.0f, luil::solid_paint(context.palette.primary_foreground));
                 top += title_height;
-                draw_centered_line(context, hint_, { text_x, top, text_width, hint_height }, 11.0f * scale, accent_text);
+                draw_centered_line(context, hint_, { text_x, top, text_width, hint_height }, 11.0f, accent_text);
             }
 
         private:
@@ -320,8 +355,13 @@ namespace demo {
         //  - 아직 고른 그림이 없으면 빈 이미지라 아무것도 그리지 않는다. 자리
         //    표시를 그리면 "그림이 있다"는 거짓말이 되고, 무엇을 해야 하는지는
         //    드롭 영역과 상태 줄이 이미 말한다.
-        column->add_flexible(std::make_unique<luil::image_element>(luil::ui_element_id { kind_image_preview, u8"image" },
+        //  - 그림이 서면 칸 아래쪽에 그 이름을 얹는다. 겹침 배치라 그림의 자리는 그대로다.
+        auto picture { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"images-picture" }) };
+        picture->add(std::make_unique<luil::image_element>(luil::ui_element_id { kind_image_preview, u8"image" },
             luil::image_config { .fit = luil::image_fit::contain, .description = picture_name_, .animation = animation_, .playback = playback_ }));
+        if (animation_.valid())
+            picture->add(std::make_unique<picture_caption_element>(luil::ui_element_id { kind_image_preview, u8"caption" }, picture_name_));
+        column->add_flexible(std::move(picture));
         if (middle_frame_.valid())
         {
             luil::stack_config strip {};
