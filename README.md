@@ -96,7 +96,8 @@ ctest --preset vs2026-tests-release
 Release 테스트에는 messaging의 AddressSanitizer 검증이 포함된다.
 `smoke` 레이블은 실제 창에서 CPU·Direct3D·fallback 경로를 확인하며,
 `package` 레이블은 설치 위치를 옮긴 뒤 외부 소비자 프로젝트를 빌드한다.
-소스 형식은 `scripts\check_source_style.ps1`로 검사한다.
+소스 형식은 `scripts\check_source_style.ps1`로 검사한다. 줄 배치는 formatter가 아니라
+손으로 맞춘다 ([코드 컨벤션](docs/code-style.md)).
 
 터치·펜의 실제 Win32 입력 경로는 선택적으로 빌드하는 `luil_pointer_integration`으로
 검증한다. 일반 `ctest`에는 포함하지 않으며, 전용 대화형 Windows 환경에서 명시적으로

@@ -15,7 +15,10 @@ $checked_extensions = @('.cmake', '.cpp', '.h', '.json', '.md', '.ps1', '.rc', '
 $special_names = @('.clang-format', '.clang-tidy', '.editorconfig', '.gitattributes', '.gitignore', 'CMakeLists.txt')
 $errors = [System.Collections.Generic.List[string]]::new()
 
-function Add-MultilineBraceClosureErrors {
+# 주석·문자열 밖의 코드만 보는 두 규칙이다.
+#  - 여러 줄 블록의 닫는 `}`는 제 줄에 혼자 선다.
+#  - 여러 줄 식을 끊을 때 `&&`·`||`는 줄 끝이 아니라 다음 줄 처음에 둔다.
+function Add-CodeLayoutErrors {
     param(
         [Parameter(Mandatory)]
         [string]$text,
@@ -123,6 +126,19 @@ function Add-MultilineBraceClosureErrors {
         }
         if ($character -eq "'") {
             $state = 'character'
+            continue
+        }
+        if (($character -eq '&' -or $character -eq '|') -and $next_character -eq $character) {
+            $line_end = $text.IndexOf("`n", $index)
+            if ($line_end -lt 0) {
+                $line_end = $text.Length
+            }
+            $rest = $text.Substring($index + 2, $line_end - $index - 2).Trim()
+            if ($rest -eq '' -or $rest.StartsWith('//') -or $rest.StartsWith('/*')) {
+                $errors.Add(
+                    "$relative`:$line_number`: A line must not end with '$character$character'; start the next line with it.")
+            }
+            $index++
             continue
         }
         if ($character -eq '{') {
@@ -247,7 +263,12 @@ foreach ($file in $files) {
         if ($text -match 'template[ \t]*<[^\r\n]+>[ \t]+\S') {
             $errors.Add("$relative`: A template declaration and its signature must be on separate lines.")
         }
-        Add-MultilineBraceClosureErrors -text $text -relative $relative -errors $errors
+        Add-CodeLayoutErrors -text $text -relative $relative -errors $errors
+        # 빈 몸통은 선언과 같은 줄의 `{}`이거나 `{`와 `}`가 각자 제 줄이다. 줄을 바꾼 뒤 합치지 않는다.
+        foreach ($empty_body in [regex]::Matches($text, '(?m)^[ ]*\{\};?[ ]*\r?$')) {
+            $empty_line = 1 + ([regex]::Matches($text.Substring(0, $empty_body.Index), "`n")).Count
+            $errors.Add("$relative`:$empty_line`: An empty body on its own line must put '{' and '}' on separate lines.")
+        }
 
         $declarations = [regex]::Matches(
             $text,
