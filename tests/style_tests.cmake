@@ -32,6 +32,7 @@ foreach(needle
     ".thumb_background = 0x29FFFFFFu"
     ".body_font_size = 12.0f"
     ".soft_button = 0.25f"
+    ".selected_choice = font_weight::semibold"
     ".line_break = single_line_break::space")
     string(FIND "${header}" "${needle}" position)
     if(position EQUAL -1)
@@ -45,6 +46,8 @@ string(JSON custom SET "${custom}" light divider "\"#10203080\"")
 string(JSON custom SET "${custom}" metrics controlCornerRadius "6.5")
 string(JSON custom SET "${custom}" tones pressed "1")
 string(JSON custom SET "${custom}" text lineBreak "\"paragraphs\"")
+string(JSON custom SET "${custom}" metrics fontWeights bodyText "\"medium\"")
+string(JSON custom SET "${custom}" metrics fontWeights title "\"extraBold\"")
 luil_expect_generation("${custom}" TRUE "a customized style")
 file(READ "${output}" header)
 foreach(needle
@@ -52,6 +55,8 @@ foreach(needle
     ".divider = 0x80102030u"
     ".control_corner_radius = 6.5f"
     ".pressed = 1.0f"
+    ".body_text = font_weight::medium"
+    ".title = font_weight::extra_bold"
     ".line_break = single_line_break::paragraphs")
     string(FIND "${header}" "${needle}" position)
     if(position EQUAL -1)
@@ -66,6 +71,22 @@ file(READ "${output}" header)
 string(FIND "${header}" ".line_break" position)
 if(NOT position EQUAL -1)
     message(FATAL_ERROR "A style without the text section still wrote line_break")
+endif()
+
+# 굵기 묶음도 빠져도 된다. 빠진 칸은 struct의 기본값이다 — 옛 JSON은 처음부터의 굵기로 그린다.
+string(JSON legacy REMOVE "${style}" metrics fontWeights)
+luil_expect_generation("${legacy}" TRUE "a style without font weights")
+file(READ "${output}" header)
+string(FIND "${header}" ".font_weights" position)
+if(NOT position EQUAL -1)
+    message(FATAL_ERROR "A style without font weights still wrote font_weights")
+endif()
+string(JSON legacy REMOVE "${style}" metrics fontWeights selectedTab)
+luil_expect_generation("${legacy}" TRUE "a style with some font weights")
+file(READ "${output}" header)
+string(FIND "${header}" ".selected_tab" position)
+if(NOT position EQUAL -1)
+    message(FATAL_ERROR "A style without selectedTab still wrote selected_tab")
 endif()
 
 # 나중에 생긴 중립 역할(`raisedBackground`)도 빠져도 된다. 옛 JSON은 그 자리를 notice 바탕으로 채워 전과 같게 그린다.
@@ -118,6 +139,14 @@ string(JSON broken SET "${style}" metrics bodyFontSize "-1")
 luil_expect_generation("${broken}" FALSE "a negative metric")
 string(JSON broken REMOVE "${style}" metrics)
 luil_expect_generation("${broken}" FALSE "a missing metrics object")
+string(JSON broken SET "${style}" metrics fontWeights bodyText "\"heavy\"")
+luil_expect_generation("${broken}" FALSE "an unknown font weight name")
+string(JSON broken SET "${style}" metrics fontWeights bodyText "700")
+luil_expect_generation("${broken}" FALSE "a font weight given as a number")
+string(JSON broken SET "${style}" metrics fontWeights bodyTxt "\"bold\"")
+luil_expect_generation("${broken}" FALSE "an unknown font weight key (typo)")
+string(JSON broken SET "${style}" metrics fontWeights "\"bold\"")
+luil_expect_generation("${broken}" FALSE "font weights given as a string")
 string(JSON broken SET "${style}" extra "{}")
 luil_expect_generation("${broken}" FALSE "an unknown root key")
 string(JSON broken SET "${style}" text lineBreak "\"newline\"")

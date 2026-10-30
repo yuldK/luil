@@ -5,6 +5,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -240,7 +241,7 @@ namespace luil {
                 const float text_width { box.x + box.width - 8.0f * scale - text_left };
                 if (text_width > 0.0f)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                    const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                     static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
                 }
                 draw_children(context, interaction);

@@ -2,6 +2,7 @@
 
 #include "luil/text/case_fold.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 #include "ui/tree_expander.h"
 
 #include "include/core/SkCanvas.h"
@@ -212,7 +213,7 @@ namespace luil {
                 // 나란히 놓아도 글의 왼쪽 끝이 맞는다.
                 if (content_ == nullptr)
                 {
-                    const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                    const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                     const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
                     const float text_left { box.x + (8.0f + indent_) * scale };
                     if (const float text_width { box.x + box.width - 8.0f * scale - text_left }; text_width > 0.0f)

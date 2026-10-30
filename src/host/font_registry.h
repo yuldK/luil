@@ -1,5 +1,7 @@
 #pragma once
 
+#include "luil/text/font_style.h"
+
 #include "include/core/SkRefCnt.h"
 
 #include <cstddef>
@@ -119,4 +121,30 @@ namespace luil {
     //  - 매 frame 시스템에 물으면 비싸다.
     //    찾지 못하면 nullptr다.
     [[nodiscard]] sk_sp<SkTypeface> fallback_typeface(char32_t codepoint);
+    // 굵기·기울임을 맞춰 고른 대체 typeface다. 굵은 글 속 한글이 Bold 대체 face로 그려진다.
+    //  - cache 키는 (글자, 굵기, 기울임)이다. 찾은 face가 모양을 다 내지 못하면 메움은 부르는 쪽이 건다 (`use_face`).
+    [[nodiscard]] sk_sp<SkTypeface> fallback_typeface(char32_t codepoint, font_style style);
+
+    // 굵기·기울임을 건 face와 그 face가 다 내지 못한 몫의 메움이다.
+    struct styled_typeface
+    {
+        sk_sp<SkTypeface> typeface {};
+        bool embolden { false };
+        bool skew { false };
+    };
+
+    // `base`를 `style`로 그릴 face다 (docs/font-style-design.md).
+    // face가 어디서 왔는지(출처)에 따라 묻는 곳이 다르다.
+    //  - 시스템 가족: 글꼴 관리자에 (가족, 굵기, 기울임)으로 묻는다. 등록부가 내준 face만 이 출처다.
+    //  - 앱이 등록한 가족(`register_font_family`): 그 가족의 face 중 가장 가까운 것이다.
+    //  - 그 밖(파일·바이트로 읽은 face): 그 face 그대로다. 시스템에 같은 이름이 깔려 있어도 묻지 않는다 —
+    //    이름으로 찾으면 앱 글꼴이 조용히 시스템 글꼴로 바뀐다.
+    //  고른 face에 `wght` 축이 있으면 요청한 굵기로 clone한다. 그래도 모자라면 덧칠·눕힘을 표시한다.
+    //  - 기본 모양(regular·upright)이면 `base`를 그대로 돌려주고 자물쇠를 쥐지 않는다 (매 frame 그리기의 대부분이다).
+    //  - 결과를 (base, 굵기, 기울임)으로 cache한다. clone을 매번 새로 만들면 typeface id가 frame마다 바뀌어 배치 cache가
+    //    한 번도 맞지 않는다.
+    [[nodiscard]] styled_typeface style_typeface(SkTypeface* base, font_style style);
+
+    // 굵기 해석 cache에 담긴 항목 수다. 상한과 비우기를 test가 확인한다.
+    [[nodiscard]] std::size_t styled_cache_size();
 }

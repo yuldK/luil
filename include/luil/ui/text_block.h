@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/text/font_style.h"
 #include "luil/ui/text_layout.h"
 #include "luil/ui/ui_element.h"
 
@@ -43,9 +44,18 @@ namespace luil {
         float size { 12.0f };
         // `code`인데 문맥에 고정폭 글꼴이 없으면 UI 글꼴이다.
         text_layout_face face { text_layout_face::ui };
-        bool bold { false };
-        // 있으면 `face` 대신 이 글꼴이다 (`load_typeface_file`로 읽은 앱 글꼴).
+        // 굵기와 기울임이다 (docs/font-style-design.md). 그 굵기의 face를 찾고, 없으면 덧칠·눕힘으로 메운다.
+        font_weight weight { font_weight::regular };
+        font_slant slant { font_slant::upright };
+        // 있으면 `face` 대신 이 글꼴이다 (`load_typeface_file`로 읽은 앱 글꼴). 굵기는 그 face의 `wght` 축이나 그 face가
+        // 든 등록 가족(`register_font_family`)에서 찾는다.
         sk_sp<SkTypeface> typeface {};
+
+        // 굵기와 기울임을 한 값으로 묶은 것이다 (`apply_font_style`).
+        [[nodiscard]] font_style style() const noexcept
+        {
+            return { weight, slant };
+        }
     };
 
     // 문맥의 글꼴·배율·시스템 글자 크기로 만든 그리기 글꼴이다.
@@ -97,7 +107,8 @@ namespace luil {
 
     // 폭 `available_width`(논리 픽셀)에 놓은 글의 줄과 크기다 (논리 픽셀). 그리기와 같은 규칙·글꼴로 잰다.
     //  - 배치에서 칸 높이를 정하는 element가 `preferred_size`에서 부른다. 문맥에 측정기를 넣었으면(test) 그것으로 잰다.
-    //  - 넣은 측정기는 `bold`·`face`보다 앞선다 — 굵기는 측정기가 직접 반영해야 한다. 앱 글꼴(`typeface`)만은 그 글꼴로 잰다.
+    //  - 넣은 측정기는 `weight`·`slant`·`face`보다 앞선다 — 굵기는 측정기가 직접 반영해야 한다. 앱 글꼴(`typeface`)만은
+    //    그 글꼴로 잰다.
     [[nodiscard]] text_block_layout measure_text_block(const measure_context& context, std::u8string_view text, const text_block_style& style, float available_width);
 
     // `box`(물리 픽셀) 안에 글을 놓아 그린다. 그린 글이 차지한 자리(물리 픽셀)를 돌려준다 — 글 뒤에 바탕을 깔거나

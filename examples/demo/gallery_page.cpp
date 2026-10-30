@@ -7,6 +7,7 @@
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/grid_element.h"
+#include "luil/ui/label_element.h"
 #include "luil/ui/layer_element.h"
 #include "luil/ui/markdown_element.h"
 #include "luil/ui/palette_scope_element.h"
@@ -17,6 +18,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -252,6 +255,27 @@ namespace demo {
             preview.text += u8"기본 글씨";
         preview.text += pinned_ ? u8" · 상단 고정 켜짐" : u8" · 상단 고정 꺼짐";
         page.add(std::make_unique<luil::markdown_element>(luil::ui_element_id { kind_text, u8"gallery/format-preview" }, std::move(preview)), 32.0f);
+        page.end_card();
+
+        // 굵기마다 진짜 face로 선다. 설치되지 않은 굵기는 가장 가까운 face이고, semibold 이상이 모자라면 획을 덧칠한다.
+        page.begin_card(u8"글 굵기", u8"label의 weight·slant로 고릅니다.");
+        auto weights { row(u8"gallery/weights") };
+        const std::pair<luil::font_weight, std::u8string_view> ladder[] {
+            { luil::font_weight::light, u8"Light 가벼움" },
+            { luil::font_weight::regular, u8"Regular 보통" },
+            { luil::font_weight::semibold, u8"Semibold 조금 굵게" },
+            { luil::font_weight::bold, u8"Bold 굵게" },
+            { luil::font_weight::black, u8"Black 아주 굵게" },
+        };
+        for (const auto& [weight, text] : ladder)
+        {
+            luil::label_config weighted { .text = std::u8string { text }, .font_size = 14.0f, .weight = weight, .color = luil::label_color_role::primary };
+            const std::u8string key { u8"gallery/weight/" + std::u8string { text.substr(0, text.find(u8' ')) } };
+            weights->add_fit(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, key }, std::move(weighted)));
+        }
+        page.add(std::move(weights), 26.0f);
+        luil::label_config leaning { .text = u8"Italic 기울임 — 기울임 face가 없는 한글은 눕혀 그립니다", .font_size = 14.0f, .slant = luil::font_slant::italic, .color = luil::label_color_role::primary };
+        page.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"gallery/weight/italic" }, std::move(leaning)), 26.0f);
         page.end_card();
 
         page.begin_card(u8"즉시 적용 스위치");

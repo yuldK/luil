@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/text/font_style.h"
 #include "luil/ui/font_scale.h"
 #include "luil/ui/text_input_options.h"
 
@@ -114,6 +115,9 @@ namespace luil {
     // 설정된 UI 글꼴(그리기가 쓰는 그 글꼴)로 재는 측정기다. 어느 thread에서나 부를 수 있다.
     [[nodiscard]] const text_measurer& default_text_measurer();
     [[nodiscard]] const text_measurer& default_code_text_measurer();
+    // 설정된 UI 글꼴에 굵기·기울임을 건 측정기다 (그리기의 `make_text_font`와 같은 face). 어느 thread에서나 부를 수 있다.
+    //  - 기본 모양이면 `default_text_measurer`와 같다. face는 부를 때마다 등록부에서 찾는다 — 글꼴 설정이 바뀌어도 따라간다.
+    [[nodiscard]] text_measurer styled_text_measurer(font_style style);
 
     // 텍스트 박스가 내주는 편집 상태다.
     // 초점을 가진 박스의 선택 글을 클립보드로 복사할 때 입력 thread가 읽는다.
@@ -652,6 +656,9 @@ namespace luil {
         // `font_size`(논리 픽셀) 글 한 줄의 폭이다 (논리 픽셀). 그리기와 같은 물리 크기(`scaled_font_size`)로 재서
         // 배율로 나눈다.
         [[nodiscard]] float text_width(std::u8string_view text, float font_size) const;
+        // 굵기·기울임을 건 UI 글꼴로 잰 폭이다 (그리기의 `make_text_font`와 같은 face).
+        //  - 넣은 측정기(`measurer`)는 굵기보다 앞선다 — test의 고정 폭 측정기가 그대로 잰다.
+        [[nodiscard]] float text_width(std::u8string_view text, float font_size, font_style style) const;
     };
 
     // 배치 문맥이다.

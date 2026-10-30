@@ -2,6 +2,7 @@
 
 #include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 #include "ui/reorder_drop.h"
 #include "ui/tree_expander.h"
 
@@ -226,7 +227,7 @@ namespace luil {
                 const rect_f box { bounds() };
                 const std::vector<table_column_span>& spans { table_->spans() };
                 const std::vector<table_column>& columns { table_->config().columns };
-                const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                 const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
                 context.canvas.save();
                 context.canvas.clipRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height));
@@ -449,7 +450,7 @@ namespace luil {
                         solid_paint(context.palette.primary_foreground));
                     text_box.width -= glyph + 4.0f * scale;
                 }
-                const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
+                const SkFont font { make_text_font(context, { .size = context.metrics.small_font_size, .weight = context.metrics.font_weights.small_text }) };
                 const SkPaint foreground { solid_paint(sort_ != sort_direction::none ? context.palette.primary_foreground : context.palette.secondary_foreground) };
                 draw_cell_text(context.canvas, header_, text_box, align_, text_elide::end, scale, font, foreground);
             }

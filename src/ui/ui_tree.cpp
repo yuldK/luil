@@ -2,6 +2,7 @@
 
 #include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -762,7 +763,7 @@ namespace luil {
         }
 
         const rect_f anchor { *visible_bounds(*hovered) };
-        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
+        const SkFont font { make_text_font(context, { .size = context.metrics.small_font_size, .weight = context.metrics.font_weights.small_text }) };
         const std::u8string& text { hovered->tooltip() };
         const float text_width { measure_text(text, font) };
         const float padding { 5.0f * scale };
@@ -817,7 +818,7 @@ namespace luil {
             border.setStrokeWidth(1.0f * scale);
             context.canvas.drawRRect(SkRRect::MakeRectXY(ghost, context.metrics.control_corner_radius * scale, context.metrics.control_corner_radius * scale), border);
 
-            const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.small_font_size, scale) };
+            const SkFont font { make_text_font(context, { .size = context.metrics.small_font_size, .weight = context.metrics.font_weights.small_text }) };
             const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
             const drag_ghost_label label { drag_ghost_label_of(payload) };
             // 여러 항목이면 오른쪽에 나머지 개수(`+N`)의 알약을 얹는다. 이름은 그 앞까지만 그린다.

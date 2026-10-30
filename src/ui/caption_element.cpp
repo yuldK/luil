@@ -3,6 +3,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 #include "luil/ui/ui_platform.h"
 
 #include "include/core/SkCanvas.h"
@@ -156,7 +157,7 @@ namespace luil {
         context.canvas.drawRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height), fill);
 
         const SkPaint foreground { solid_paint(context.palette.caption.foreground) };
-        const SkFont title_font { sk_ref_sp(context.ui_typeface), scaled_font_size(static_cast<float>(config_.metrics.title_font_size), scale) };
+        const SkFont title_font { make_text_font(context, { .size = static_cast<float>(config_.metrics.title_font_size), .weight = context.metrics.font_weights.title }) };
 
         float title_left { box.x + static_cast<float>(config_.metrics.title_left_padding) * scale };
         if (context.codicon_typeface != nullptr && config_.application_icon != 0)

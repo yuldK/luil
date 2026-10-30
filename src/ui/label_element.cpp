@@ -33,7 +33,7 @@ namespace luil {
         [[nodiscard]] text_block_style block_style(const label_config& config) noexcept
         {
             return text_block_style {
-                .font = { .size = config.font_size },
+                .font = { .size = config.font_size, .weight = config.weight, .slant = config.slant },
                 .align = config.align,
                 .vertical = config.wrap ? text_vertical_align::top : text_vertical_align::center,
                 .elide = config.elide,
@@ -116,6 +116,7 @@ namespace luil {
             return size_f { width, std::max(measured.height, height_for(config_)) };
         }
         static_cast<void>(available_width);
-        return size_f { std::ceil(context.text_width(config_.text, config_.font_size)) + config_.padding * 2.0f, height_for(config_) };
+        const font_style style { config_.weight, config_.slant };
+        return size_f { std::ceil(context.text_width(config_.text, config_.font_size, style)) + config_.padding * 2.0f, height_for(config_) };
     }
 }

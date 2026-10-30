@@ -5,6 +5,7 @@
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_link_element.h"
 
@@ -144,7 +145,7 @@ namespace luil {
         {
             // 닫기 버튼과 겹치지 않도록 오른쪽을 비운다.
             const float reserved { close_ != nullptr ? 40.0f * scale : inset };
-            const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(config_.title_font_size, scale) };
+            const SkFont font { make_text_font(context, { .size = config_.title_font_size, .weight = context.metrics.font_weights.title }) };
             const SkPaint foreground { solid_paint(context.palette.primary_foreground) };
             static_cast<void>(draw_text_within(context.canvas, config_.title, box.x + inset, box.y + centered_text_baseline(font, box.height), box.width - inset - reserved, font, foreground));
         }
@@ -251,7 +252,7 @@ namespace luil {
             context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(background));
         }
 
-        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+        const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.button_text }) };
         ui_color label_color { context.palette.primary_foreground };
         // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다. 채운 강조와 옅은 강조는 바탕의 밝기가
         // 달라 글자 역할도 다르다.
@@ -831,7 +832,7 @@ namespace luil {
     std::optional<size_f> text_button_element::preferred_size(const measure_context& context, const float available_width) const
     {
         static_cast<void>(available_width);
-        const float content { icon_width_for(config_) + std::ceil(context.text_width(config_.text, context.style_metrics().body_font_size)) };
+        const float content { icon_width_for(config_) + std::ceil(context.text_width(config_.text, context.style_metrics().body_font_size, { context.style_metrics().font_weights.button_text })) };
         if (config_.visual == text_button_visual::link)
             return size_f { content, text_button_height };
         return size_f { std::max(text_button_minimum_width, content + text_button_padding * 2.0f), text_button_height };

@@ -115,13 +115,13 @@ TEST_CASE("A text block shortens a line that does not fit and stacks wrapped lin
     REQUIRE(drawn.width <= box.width + 0.5f);
 }
 
-TEST_CASE("Measuring a text block agrees with drawing it, bold included", "[ui][text-block][native]")
+TEST_CASE("Measuring a text block agrees with drawing it, weights included", "[ui][text-block][native]")
 {
     text_canvas surface {};
     auto context { surface.context() };
-    for (const bool bold : { false, true })
+    for (const luil::font_weight weight : { luil::font_weight::light, luil::font_weight::regular, luil::font_weight::semibold, luil::font_weight::bold })
     {
-        const luil::text_block_style style { .font = { .size = 15.0f, .bold = bold } };
+        const luil::text_block_style style { .font = { .size = 15.0f, .weight = weight, .slant = weight == luil::font_weight::bold ? luil::font_slant::italic : luil::font_slant::upright } };
         // 배치는 문맥에 측정기가 없어 설정된 UI 글꼴로 잰다 — 그리기가 쓰는 글꼴과 같다.
         const luil::text_block_layout measured { luil::measure_text_block(luil::measure_context {}, u8"Measure 측정 Wide", style, 1000.0f) };
         const luil::rect_f drawn { luil::draw_text_block(context, u8"Measure 측정 Wide", { 0.0f, 0.0f, 1000.0f, 40.0f }, style, luil::solid_paint(SK_ColorBLACK)) };
@@ -134,7 +134,7 @@ TEST_CASE("A text block halo rings the letters for text over a picture", "[ui][t
 {
     const luil::rect_f box { 10.0f, 10.0f, 380.0f, 60.0f };
     const SkPaint ink { luil::solid_paint(SK_ColorWHITE) };
-    luil::text_block_style style { .font = { .size = 28.0f, .bold = true } };
+    luil::text_block_style style { .font = { .size = 28.0f, .weight = luil::font_weight::bold } };
 
     text_canvas plain {};
     plain.bitmap.eraseColor(SK_ColorGRAY);

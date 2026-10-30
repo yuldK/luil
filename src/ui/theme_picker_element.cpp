@@ -2,6 +2,7 @@
 
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -211,7 +212,7 @@ namespace luil {
                     context.canvas.drawLine(cx - 3.5f * scale, cy, cx - 1.0f * scale, cy + 2.5f * scale, tick);
                     context.canvas.drawLine(cx - 1.0f * scale, cy + 2.5f * scale, cx + 4.0f * scale, cy - 3.0f * scale, tick);
                 }
-                const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+                const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                 const float label_width { measure_text(label_, font) };
                 const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
                 static_cast<void>(draw_text_within(context.canvas, label_, box.x + std::max(0.0f, (box.width - label_width) / 2.0f),

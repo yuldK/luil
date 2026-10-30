@@ -3,6 +3,7 @@
 #include "host/font_registry.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
+#include "ui/font_synthesis.h"
 
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
@@ -29,11 +30,14 @@ namespace luil {
         }
 
         // 굵기·앱 글꼴은 기본 측정기가 모르므로 그리기와 같은 글꼴을 지어 잰다.
-        [[nodiscard]] text_measurer typeface_measurer(sk_sp<SkTypeface> typeface, const bool bold)
+        //  - face는 한 번만 고른다. 측정기는 줄을 바꾸는 동안 여러 번 불린다.
+        [[nodiscard]] text_measurer typeface_measurer(sk_sp<SkTypeface> typeface, const font_style style)
         {
-            return [typeface = std::move(typeface), bold](const std::u8string_view text, const float size) {
-                SkFont font { typeface, size };
-                font.setEmbolden(bold);
+            SkFont styled { std::move(typeface) };
+            apply_font_style(styled, style);
+            return [styled](const std::u8string_view text, const float size) {
+                SkFont font { styled };
+                font.setSize(size);
                 return measure_text(text, font);
             };
         }
@@ -43,12 +47,12 @@ namespace luil {
         [[nodiscard]] text_measurer layout_measurer(const measure_context& context, const text_font& font)
         {
             if (font.typeface != nullptr)
-                return typeface_measurer(font.typeface, font.bold);
+                return typeface_measurer(font.typeface, font.style());
             if (context.measurer != nullptr)
                 return *context.measurer;
             const bool code { font.face == text_layout_face::code };
-            if (font.bold)
-                return typeface_measurer(code ? configured_code_typeface() : configured_ui_typeface(), true);
+            if (font.style() != font_style {})
+                return typeface_measurer(code ? configured_code_typeface() : configured_ui_typeface(), font.style());
             return code ? default_code_text_measurer() : default_text_measurer();
         }
 
@@ -212,8 +216,23 @@ namespace luil {
         if (typeface == nullptr)
             typeface = font.face == text_layout_face::code && context.code_typeface != nullptr ? context.code_typeface : context.ui_typeface;
         SkFont result { sk_ref_sp(typeface), scaled_font_size(font.size, positive_scale(context.scale)) };
-        result.setEmbolden(font.bold);
+        apply_font_style(result, font.style());
         return result;
+    }
+
+    void apply_font_style(SkFont& font, const font_style style)
+    {
+        styled_typeface styled { style_typeface(font.getTypeface(), style) };
+        if (styled.typeface != nullptr)
+            font.setTypeface(std::move(styled.typeface));
+        else
+        {
+            // face가 없으면 찾을 곳도 없다. 요청한 모양을 통째로 흉내 낸다.
+            styled.embolden = font_weight_value(style.weight) >= font_weight_value(synthetic_bold_threshold);
+            styled.skew = style.slant == font_slant::italic;
+        }
+        font.setEmbolden(styled.embolden);
+        font.setSkewX(styled.skew ? synthetic_skew : 0.0f);
     }
 
     float text_block_line_height(const text_block_style& style) noexcept

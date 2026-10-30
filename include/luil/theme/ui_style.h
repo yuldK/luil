@@ -1,8 +1,34 @@
 #pragma once
 
+#include "luil/text/font_style.h"
 #include "luil/theme/ui_theme.h"
 
 namespace luil {
+    // 컴포넌트 글의 굵기다 (`ui_metrics::font_weights`, docs/font-style-design.md).
+    // 글자 크기처럼 config에 자리가 없는 글의 굵기를 앱이 한 번에 정한다. JSON에서는 `metrics.fontWeights`이고
+    // 값은 이름이다 (`regular`·`semibold`·`extraBold` 같은 것).
+    //  - 측정과 그리기가 같은 값을 읽는다. 굵은 face는 대개 넓어서, 측정이 다른 굵기로 재면 글이 말줄임된다.
+    //  - 필드 이름에 `small`을 쓰지 않는다. Windows 헤더(rpcndr.h)가 그 낱말을 `char`로 바꾼다.
+    struct ui_font_weights
+    {
+        // 본문 글자(`body_font_size`)다 — 목록 행·메뉴·탭·드롭다운·체크 라벨·표 칸·toast.
+        font_weight body_text { font_weight::regular };
+        // 작은 글자(`small_font_size`)다 — 머리행 제목·tooltip·끌기 ghost.
+        font_weight small_text { font_weight::regular };
+        // 글 단추(`text_button`)의 이름이다.
+        font_weight button_text { font_weight::regular };
+        // 고른 탭의 이름이다. 고르지 않은 탭은 `body_text`다.
+        //  - 탭의 자리는 이름 폭으로 정하지 않아 굵기를 바꿔도 탭이 들썩이지 않는다. 좁은 탭에서는 이름이 먼저 줄어든다.
+        font_weight selected_tab { font_weight::regular };
+        // 선택지 묶음(`choice_group_element`)에서 고른 칸의 이름이다. 칸 폭은 이 굵기와 `body_text` 중 넓은 쪽으로 잰다 —
+        // 고른 칸이 바뀌어도 칸이 들썩이지 않는다.
+        font_weight selected_choice { font_weight::semibold };
+        // 제목이다 — dialog·app bar·caption 줄·묶음 틀의 제목.
+        font_weight title { font_weight::regular };
+
+        [[nodiscard]] bool operator==(const ui_font_weights&) const noexcept = default;
+    };
+
     // 라이브러리가 그리기 안에 박아 두었던 논리 픽셀 치수다.
     // element config에 이미 열린 값(`label_config::font_size`·`button_config::corner_radius`
     // 같은 것)은 앱이 element마다 정하므로 여기 담지 않는다 — 여기 담는 것은 config에
@@ -21,6 +47,8 @@ namespace luil {
         float control_corner_radius { 3.0f };
         // 고른 행의 채움·그룹 틀의 모서리다.
         float row_corner_radius { 4.0f };
+        // 컴포넌트 글의 굵기다. JSON에서 빠져도 된다 — 빠진 칸은 이 기본값이다.
+        ui_font_weights font_weights {};
 
         [[nodiscard]] bool operator==(const ui_metrics&) const noexcept = default;
     };

@@ -1027,6 +1027,8 @@ namespace luil {
                         const auto from { std::max(span.begin, row.begin) };
                         const auto to { std::min(span.end, row.end) };
                         draw_piece(cursor, from, font, foreground.getColor());
+                        // 배치가 없는 이 길은 caret·조각 자리를 보통 글꼴로 잰다. 진짜 Bold face는 폭이 달라 다음 조각과
+                        // 겹치므로, 폭을 바꾸지 않는 덧칠을 남긴다. 배치가 있는 길은 진짜 face다 (`fonts_for`).
                         SkFont styled_font { font };
                         styled_font.setEmbolden(span.bold);
                         draw_piece(from, to, styled_font, enabled() ? span_foreground(span.color, context.palette) : context.palette.disabled_foreground);

@@ -3,6 +3,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/text_block.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -65,7 +66,7 @@ namespace luil {
             else if (config.checked)
                 text_color = context.palette.accent_emphasis_foreground;
             const SkPaint foreground { solid_paint(text_color) };
-            const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+            const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
             const float baseline { box.y + centered_text_baseline(font, box.height) };
             const float content_left { box.x + (chip_leading + chip_mark + chip_mark_gap) * scale };
             const float content_width { std::max(0.0f, box.x + box.width - chip_trailing * scale - content_left) };
@@ -258,7 +259,7 @@ namespace luil {
         const float text_width { box.x + box.width - check_inset * scale - text_left };
         if (text_width <= 0.0f)
             return;
-        const SkFont font { sk_ref_sp(context.ui_typeface), scaled_font_size(context.metrics.body_font_size, scale) };
+        const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
         const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
         static_cast<void>(draw_text_within(context.canvas, config_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
     }
@@ -307,13 +308,13 @@ namespace luil {
         if (config_.style == check_style::toggle_chip)
         {
             // 켬/끔과 무관하게 체크 자리를 넣어 잰다 — 그리기의 자리와 같다.
-            const float text { std::ceil(context.text_width(config_.label, context.style_metrics().body_font_size)) };
+            const float text { std::ceil(context.text_width(config_.label, context.style_metrics().body_font_size, { context.style_metrics().font_weights.body_text })) };
             return size_f { chip_leading + chip_mark + chip_mark_gap + text + chip_trailing, height_for(config_) };
         }
         // 그리기의 자리와 같다 — 안쪽 여백, 표시 부분, 간격과 글, 오른쪽 안쪽 여백이다.
         float width { check_inset + indicator_width_for(config_) + check_inset };
         if (config_.label.empty() == false)
-            width += check_gap + std::ceil(context.text_width(config_.label, context.style_metrics().body_font_size));
+            width += check_gap + std::ceil(context.text_width(config_.label, context.style_metrics().body_font_size, { context.style_metrics().font_weights.body_text }));
         return size_f { width, height_for(config_) };
     }
 }
