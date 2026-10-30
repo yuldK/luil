@@ -82,4 +82,4 @@ namespace luil::win32 {
         // DWM에 마지막으로 말한 어두운 모드다. 효과를 건 적 없는 창은 비어 있고 DWM에 말하지 않는다.
         std::optional<BOOL> dwm_dark_ {};
     };
-} // namespace luil::win32
+}

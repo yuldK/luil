@@ -95,4 +95,4 @@ namespace luil {
 
         check_config config_ {};
     };
-} // namespace luil
+}

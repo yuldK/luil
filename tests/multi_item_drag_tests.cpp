@@ -83,7 +83,7 @@ namespace {
                     return *intent;
         return std::nullopt;
     }
-} // namespace
+}
 
 TEST_CASE("A payload counts the items it carries", "[ui][drag][multi-drag]")
 {

@@ -30,7 +30,8 @@ namespace {
     };
 
     struct edit_intent
-    {};
+    {
+    };
 
     [[nodiscard]] luil::number_input_range seconds_range()
     {
@@ -123,7 +124,7 @@ namespace {
             return controller.process(luil::key_pressed_event { key, control, shift });
         }
     };
-} // namespace
+}
 
 TEST_CASE("A number field reads ASCII, full-width and minus-sign digits", "[number][input]")
 {

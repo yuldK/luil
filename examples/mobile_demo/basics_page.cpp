@@ -68,7 +68,7 @@ namespace mobile_demo {
         {
             return luil::decode_animated_image_bytes(bytes, { .max_height = 360 }, error);
         }
-    } // namespace
+    }
 
     bool basics_page::handle(const luil::app_message& message)
     {
@@ -482,4 +482,4 @@ namespace mobile_demo {
         row->add(std::move(confirm), 88.0f);
         return row;
     }
-} // namespace mobile_demo
+}

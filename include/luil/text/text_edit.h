@@ -180,4 +180,4 @@ namespace luil::text {
     // caret·anchor는 범위 안 문자 경계로 되돌아가고,
     // 사용자의 편집이 아니므로 실행 취소 기록을 비운다.
     void text_edit_set_text(text_edit_state& state, std::u8string_view text, bool caret_to_end);
-} // namespace luil::text
+}

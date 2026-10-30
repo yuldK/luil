@@ -250,7 +250,7 @@ namespace {
     {
         smb2_set_version(context, SMB2_VERSION_ANY);
     }
-} // namespace
+}
 
 int main(const int argc, char** const argv)
 {

@@ -51,4 +51,4 @@ namespace luil {
         edge_insets padding_ {};
         std::vector<entry> entries_ {};
     };
-} // namespace luil
+}

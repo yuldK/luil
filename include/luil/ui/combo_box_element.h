@@ -74,4 +74,4 @@ namespace luil {
         bool keys_connected_ { false };
         std::vector<combo_suggestion> visible_items_ {};
     };
-} // namespace luil
+}

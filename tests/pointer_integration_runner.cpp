@@ -970,8 +970,8 @@ namespace luil::testing {
             std::cout << passed << " native pointer integration scenarios passed; " << skipped << " native probes skipped\n";
             return 0;
         }
-    } // namespace
-} // namespace luil::testing
+    }
+}
 
 int wmain(const int count, wchar_t** arguments)
 {

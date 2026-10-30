@@ -152,4 +152,4 @@ namespace luil {
         scrollbar_element* bar_ { nullptr };
         scroll_metrics metrics_ {};
     };
-} // namespace luil
+}

@@ -10,4 +10,4 @@ namespace luil {
     //  - 플랫폼 header 없이 값으로 적어 두어 두 표를 한 test가 Windows에서 함께 잠근다.
     [[nodiscard]] key_code named_key_from_win32_virtual(std::uint32_t virtual_key) noexcept;
     [[nodiscard]] key_code named_key_from_android(std::int32_t key_code) noexcept;
-} // namespace luil
+}

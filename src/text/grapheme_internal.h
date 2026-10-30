@@ -14,4 +14,4 @@ namespace luil::text {
     [[nodiscard]] std::optional<std::vector<std::size_t>> platform_grapheme_boundaries(std::u8string_view text);
     [[nodiscard]] std::optional<std::size_t> platform_grapheme_boundary(std::u8string_view text, std::size_t offset, bool forward) noexcept;
 #endif
-} // namespace luil::text
+}

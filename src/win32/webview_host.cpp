@@ -154,7 +154,7 @@ namespace luil::win32 {
             if (SUCCEEDED(settings.As(&settings6)) && settings6 != nullptr)
                 static_cast<void>(settings6->put_IsSwipeNavigationEnabled(policy.swipe_navigation_enabled ? TRUE : FALSE));
         }
-    } // namespace
+    }
 
     // 폴더 하나에 대응하는 환경이다.
     struct webview_host::environment
@@ -1222,7 +1222,7 @@ namespace luil::win32 {
             const WORD flags { message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL ? GET_KEYSTATE_WPARAM(word_parameter) : static_cast<WORD>(word_parameter) };
             return static_cast<COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS>(flags);
         }
-    } // namespace
+    }
 
     bool webview_host::relay_pointer(const std::u8string& anchor, const UINT message, const WPARAM word_parameter, const int client_x, const int client_y)
     {
@@ -1337,7 +1337,7 @@ namespace luil::win32 {
                     return value.first == pointer_id;
             });
         }
-    } // namespace
+    }
 
     void webview_host::send_pointer_input(entry& target, const webview_pointer_input& input, const UINT event_kind)
     {
@@ -1563,4 +1563,4 @@ namespace luil::win32 {
         entries_.clear();
         environments_.clear();
     }
-} // namespace luil::win32
+}

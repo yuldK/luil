@@ -54,4 +54,4 @@ namespace luil::android {
         }
         return nullptr;
     }
-} // namespace luil::android
+}

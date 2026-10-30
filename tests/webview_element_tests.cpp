@@ -15,7 +15,7 @@ namespace {
     {
         return ui_element_id { ui_element_kind::webview, std::move(owner) };
     }
-} // namespace
+}
 
 TEST_CASE("A webview placeholder takes the slot it is given", "[ui][webview]")
 {

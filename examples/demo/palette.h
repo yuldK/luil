@@ -17,10 +17,12 @@
 
 namespace demo {
     struct palette_open_intent
-    {};
+    {
+    };
 
     struct palette_close_intent
-    {};
+    {
+    };
 
     // 팔레트에서 고른 명령이다. 페이지 이동은 "page:" 뒤에 페이지 키가 온다.
     struct palette_run_intent
@@ -58,4 +60,4 @@ namespace demo {
         luil::text::text_edit_state query_ {};
         std::optional<luil::text_composition_event> composition_ {};
     };
-} // namespace demo
+}

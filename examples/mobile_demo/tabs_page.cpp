@@ -14,7 +14,7 @@ namespace mobile_demo {
         constexpr float overflow_menu_width { 200.0f };
         constexpr float tab_menu_width { 180.0f };
         constexpr std::u8string_view bar_owner { u8"demo-tabs" };
-    } // namespace
+    }
 
     tabs_page::tabs_page()
     {
@@ -250,4 +250,4 @@ namespace mobile_demo {
         };
         return luil::route_reveal(tree, focused, routes);
     }
-} // namespace mobile_demo
+}

@@ -19,7 +19,7 @@ namespace luil {
             const sk_sp<SkFontMgr> manager { platform_font_source().make_uncached_manager() };
             return manager != nullptr ? manager->makeFromData(std::move(data), face_index) : nullptr;
         }
-    } // namespace
+    }
 
     sk_sp<SkTypeface> load_typeface_bytes(const std::span<const std::uint8_t> bytes, const int face_index)
     {
@@ -46,4 +46,4 @@ namespace luil {
             return nullptr;
         return typeface_from_data(std::move(data), face_index);
     }
-} // namespace luil
+}

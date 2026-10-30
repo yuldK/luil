@@ -11,7 +11,7 @@ namespace luil::win32 {
         {
             return static_cast<int>((static_cast<std::uint64_t>(value) * dpi + 48U) / 96U);
         }
-    } // namespace
+    }
 
     window_hit hit_test_window(const window_frame_metrics& metrics, const window_display_mode mode, const int width, const int height, const std::uint32_t dpi, const int x,
         const int y, const caption_band& band) noexcept
@@ -105,4 +105,4 @@ namespace luil::win32 {
         value.fullscreen = true;
         return value;
     }
-} // namespace luil::win32
+}

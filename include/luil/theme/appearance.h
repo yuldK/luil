@@ -86,4 +86,4 @@ namespace luil {
     // 이름을 선호로 되돌린다.
     // 모르는 이름이면 false이고 대상은 건드리지 않는다.
     [[nodiscard]] bool parse_theme_preference(std::u8string_view name, theme_preference& target) noexcept;
-} // namespace luil
+}

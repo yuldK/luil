@@ -51,4 +51,4 @@ namespace luil::android {
     //  - 눈금: 34부터 `SEGMENT_TICK`, 그 아래 `CLOCK_TICK`
     //  - 확인·거절: 30부터 `CONFIRM`·`REJECT`, 그 아래 `VIRTUAL_KEY`·`LONG_PRESS`
     [[nodiscard]] int haptic_feedback_constant(haptic_feedback feedback, int api_level) noexcept;
-} // namespace luil::android
+}

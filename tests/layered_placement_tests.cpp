@@ -15,7 +15,7 @@ namespace {
     {
         return deferred_placements::clock::time_point { std::chrono::milliseconds { milliseconds } };
     }
-} // namespace
+}
 
 TEST_CASE("A deferred placement waits for the tree that handled its size", "[win32][layered]")
 {

@@ -14,4 +14,4 @@ namespace luil::win32 {
     //  - 렌더러와 이미지 디코딩이 둘 다 쓴다. 소비자가 둘이 되기 전에 한 자리로
     //    모았다 (`dropped_file_paths`와 같은 자리다).
     [[nodiscard]] std::u8string make_hresult_error(std::u8string_view message, HRESULT result);
-} // namespace luil::win32
+}

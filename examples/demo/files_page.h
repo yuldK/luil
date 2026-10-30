@@ -75,7 +75,8 @@ namespace demo {
         float y { 0.0f };
     };
     struct files_range_end_intent
-    {};
+    {
+    };
     // 클립보드에서 읽은 파일 목록과 클립보드의 변화다 (delegate가 보낸다).
     struct files_clipboard_read_intent
     {
@@ -87,10 +88,12 @@ namespace demo {
     };
     // 잘라 넣었다. 다음 클립보드 알림의 번호가 잘라 둔 표시의 번호다.
     struct files_cut_intent
-    {};
+    {
+    };
     // 옮긴 뒤 비우기를 청했다. 비울지는 UI thread가 클립보드 번호로 정한다.
     struct files_clear_intent
-    {};
+    {
+    };
 
     class files_page
     {
@@ -139,4 +142,4 @@ namespace demo {
         std::u8string last_action_ { u8"아직 없음" };
         std::u8string clipboard_text_ { u8"아직 읽지 않음" };
     };
-} // namespace demo
+}

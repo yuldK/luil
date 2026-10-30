@@ -382,4 +382,4 @@ namespace luil {
     // (`interactive() || hit_opaque()`)로는 읽을 것이 빠진다.
     // hit를 흡수하는 자리(scrim)에 가리면 아무것도 아니다 (nullptr).
     [[nodiscard]] const ui_element* access_element_at(const ui_tree& tree, float x, float y);
-} // namespace luil
+}

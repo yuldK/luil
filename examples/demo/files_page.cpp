@@ -55,7 +55,7 @@ namespace demo {
             panel->set_content(std::move(column));
             return panel;
         }
-    } // namespace
+    }
 
     files_page::files_page()
     {
@@ -413,4 +413,4 @@ namespace demo {
             pasted_sequence_.has_value());
         return row;
     }
-} // namespace demo
+}

@@ -165,7 +165,7 @@ namespace {
         }
         return text;
     }
-} // namespace
+}
 
 TEST_CASE("A text area splits lines at line breaks", "[ui][text-area]")
 {

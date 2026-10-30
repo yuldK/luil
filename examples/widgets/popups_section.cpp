@@ -23,7 +23,7 @@ namespace widgets {
         constexpr float dropdown_width { 200.0f };
         constexpr float card_menu_width { 180.0f };
         constexpr std::array<std::u8string_view, 3> sort_values { u8"이름순", u8"날짜순", u8"크기순" };
-    } // namespace
+    }
 
     section build_popups_section(const app_state& state, const luil::ui_element** const dropdown)
     {
@@ -132,4 +132,4 @@ namespace widgets {
         }
         return popups;
     }
-} // namespace widgets
+}

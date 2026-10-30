@@ -241,4 +241,4 @@ namespace luil {
         float scroll_x_ { 0.0f };
         float viewport_width_ { 0.0f };
     };
-} // namespace luil
+}

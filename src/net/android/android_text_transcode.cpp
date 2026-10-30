@@ -292,7 +292,7 @@ namespace luil::net {
             }
             return text;
         }
-    } // namespace
+    }
 
     // UTF-8은 몸 판정, UTF-16은 직접 변환, 나머지는 Android의 CharsetDecoder가 맡는다.
     http_text_transcoder codepage_text_transcoder()
@@ -307,4 +307,4 @@ namespace luil::net {
             return transcode_utf16(bytes, order, charset, error);
         };
     }
-} // namespace luil::net
+}

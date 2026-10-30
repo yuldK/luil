@@ -14,7 +14,7 @@ namespace mobile_demo {
         constexpr float dropdown_width { 200.0f };
         constexpr float context_menu_width { 180.0f };
         inline constexpr std::u8string_view renderer_values[] { u8"자동", u8"CPU", u8"Vulkan" };
-    } // namespace
+    }
 
     void popups_page::close_dropdown() noexcept
     {
@@ -195,4 +195,4 @@ namespace mobile_demo {
         }
         return popups;
     }
-} // namespace mobile_demo
+}

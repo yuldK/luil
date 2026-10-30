@@ -143,7 +143,7 @@ namespace luil {
         // 하위 32비트가 색, 그 위 1비트가 "서 있음"이다.
         constexpr std::uint64_t system_accent_present_bit { std::uint64_t { 1 } << 32U };
         std::atomic<std::uint64_t> system_accent_key { 0 };
-    } // namespace
+    }
 
     float relative_luminance(const ui_color color) noexcept
     {
@@ -417,4 +417,4 @@ namespace luil {
             return system_prefers_light ? color_theme::light : color_theme::dark;
         }
     }
-} // namespace luil
+}

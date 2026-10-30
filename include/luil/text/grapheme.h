@@ -11,4 +11,4 @@ namespace luil::text {
     [[nodiscard]] std::size_t grapheme_next(std::u8string_view text, std::size_t offset) noexcept;
     // 0과 끝을 포함한다. 레이아웃은 iterator를 한 번만 돌려 경계를 모은다.
     [[nodiscard]] std::vector<std::size_t> grapheme_boundaries(std::u8string_view text);
-} // namespace luil::text
+}

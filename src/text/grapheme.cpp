@@ -131,7 +131,7 @@ namespace luil::text {
             }
             return true;
         }
-    } // namespace
+    }
 
     std::vector<std::size_t> grapheme_boundaries(const std::u8string_view text)
     {
@@ -216,4 +216,4 @@ namespace luil::text {
         }
         return last;
     }
-} // namespace luil::text
+}

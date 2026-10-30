@@ -57,4 +57,4 @@ namespace luil::win32 {
         message += u8" or newer is required.";
         return message;
     }
-} // namespace luil::win32
+}

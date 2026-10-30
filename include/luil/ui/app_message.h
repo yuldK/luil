@@ -22,7 +22,8 @@ namespace luil {
         explicit app_message(message_type value)
             : value_ { std::make_shared<const message_type>(std::move(value)) }
             , type_ { &typeid(message_type) }
-        {}
+        {
+        }
 
         [[nodiscard]] bool empty() const noexcept
         {
@@ -43,4 +44,4 @@ namespace luil {
         std::shared_ptr<const void> value_ {};
         const std::type_info* type_ { nullptr };
     };
-} // namespace luil
+}

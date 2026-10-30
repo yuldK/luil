@@ -39,4 +39,4 @@ namespace luil::net {
 
     // 진단 글에 넣을 십진수다.
     [[nodiscard]] std::u8string count_text(std::size_t value);
-} // namespace luil::net
+}

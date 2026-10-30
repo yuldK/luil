@@ -42,4 +42,4 @@ namespace luil {
 
         [[nodiscard]] bool operator==(const text_input_view&) const = default;
     };
-} // namespace luil
+}

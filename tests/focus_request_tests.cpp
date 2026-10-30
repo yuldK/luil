@@ -59,14 +59,15 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] focus_request make_request(const std::uint64_t id)
     {
         return focus_request { .id = id, .surface = u8"tool", .target = field_id, .timeout = std::chrono::milliseconds { 500 } };
     }
-} // namespace
+}
 
 TEST_CASE("A focus target is ready once it stands visible and focusable", "[focus][deferred]")
 {

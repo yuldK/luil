@@ -60,7 +60,8 @@ namespace {
         }
 
         void webview_pointer_left(const std::u8string&) override
-        {}
+        {
+        }
         void cancel_webview_pointer(const std::u8string& surface) override
         {
             canceled_surfaces.push_back(surface);
@@ -77,22 +78,28 @@ namespace {
         }
 
         void surface_moved(const std::u8string&) override
-        {}
+        {
+        }
 
         void dispatch_action(luil::input_action) override
-        {}
+        {
+        }
 
         void deliver_file_drop(const std::vector<std::u8string>&) override
-        {}
+        {
+        }
 
         void schedule_update_repaint(const std::u8string&, const luil::interaction_snapshot&) noexcept override
-        {}
+        {
+        }
 
         void surface_focus_lost(const std::u8string&) override
-        {}
+        {
+        }
 
         void surface_focus_gained(const std::u8string&) override
-        {}
+        {
+        }
 
         [[nodiscard]] const luil::win32::window_surface* anchored_popup(const std::u8string&, const std::u8string&) const noexcept override
         {
@@ -110,7 +117,8 @@ namespace {
         }
 
         void report_error(const std::u8string&) noexcept override
-        {}
+        {
+        }
 
     private:
         luil::win32::window_config config_ {};
@@ -128,7 +136,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 주 창과 같은 공통 캡션 경로다. 보조 창의 실제 procedure와 함께 재어,
@@ -190,7 +199,7 @@ namespace {
         root->arrange({ { 0.0f, 0.0f, 200.0f, 120.0f }, 1.0f });
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("A secondary window adopts the caption and size limits of every frame", "[win32][window][caption]")
 {
@@ -301,7 +310,8 @@ TEST_CASE("Caption activation permits both transitions and preserves window meta
 
 namespace {
     struct capture_close
-    {};
+    {
+    };
 
     class capture_driver final : public luil::logic_driver
     {
@@ -408,7 +418,7 @@ namespace {
         REQUIRE(policy.fences.load() == expected);
         REQUIRE_FALSE(host.faulted());
     }
-} // namespace
+}
 
 TEST_CASE("Win32 mouse capture loss cancels the owning surface through the input pump", "[win32][capture][surface-input]")
 {
@@ -573,7 +583,8 @@ namespace {
     };
 
     struct placement_close
-    {};
+    {
+    };
 
     // 보조 창이 알린 배치를 받아 적는 logic이다.
     class placement_driver final : public luil::logic_driver
@@ -605,7 +616,7 @@ namespace {
         luil::window_placement last {};
         std::atomic<bool> closed { false };
     };
-} // namespace
+}
 
 TEST_CASE("A secondary window reports its placement when moving ends and when it maximizes", "[win32][window]")
 {

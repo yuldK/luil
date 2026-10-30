@@ -32,7 +32,8 @@ namespace {
     };
 
     struct policy_intent
-    {};
+    {
+    };
 
     class test_panel final : public luil::ui_element
     {
@@ -50,7 +51,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     class test_text_input final : public luil::ui_element
@@ -64,7 +66,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<std::size_t> offset_at(const float, const luil::text_measurer&) const override
         {
@@ -143,7 +146,7 @@ namespace {
     {
         return luil::key_pressed_event { code, control, shift, alt };
     }
-} // namespace
+}
 
 TEST_CASE("Every named key survives a label and parse round trip", "[shortcut]")
 {

@@ -13,4 +13,4 @@ namespace luil {
     // 모든 cache key가 같은 hash를 받게 한다. 충돌을 일부러 내야 hash만으로 같은 요청이라 단정하지 않는지 잴 수 있다.
     // 저장된 hash가 낡으므로 cache를 비운다. std::nullopt로 되돌린다.
     void set_text_layout_cache_hash_for_test(std::optional<std::uint64_t> hash);
-} // namespace luil
+}

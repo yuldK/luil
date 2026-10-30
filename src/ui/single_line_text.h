@@ -21,4 +21,4 @@ namespace luil {
     // `paragraphs`가 그릴 줄들이다. 줄바꿈 byte는 빠지고 원문을 가리키는 조각만 남는다.
     // 줄바꿈이 없으면 원문 하나, 끝에 줄바꿈이 있으면 뒤에 빈 줄 하나가 선다 (문서 배치의 마지막 빈 줄과 같은 뜻이다).
     [[nodiscard]] std::vector<std::u8string_view> single_line_paragraphs(std::u8string_view text);
-} // namespace luil
+}

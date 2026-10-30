@@ -32,7 +32,7 @@ namespace {
             return luil::app_message { metrics };
         }
     };
-} // namespace
+}
 
 TEST_CASE("Window width classes break at 600 and 840 logical pixels", "[app][window][width_class]")
 {

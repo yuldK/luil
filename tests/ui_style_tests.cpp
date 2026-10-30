@@ -31,7 +31,7 @@ namespace {
         style.metrics.control_corner_radius = 0.0f;
         return style;
     }
-} // namespace
+}
 
 TEST_CASE("The built-in style is the generated one and carries the documented defaults", "[theme][style]")
 {

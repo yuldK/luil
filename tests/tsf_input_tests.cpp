@@ -118,7 +118,8 @@ namespace {
     public:
         com_scope() noexcept
             : result_ { CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED) }
-        {}
+        {
+        }
 
         com_scope(const com_scope&) = delete;
         com_scope(com_scope&&) = delete;
@@ -146,7 +147,8 @@ namespace {
     public:
         hidden_window() noexcept
             : window_ { CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr) }
-        {}
+        {
+        }
 
         hidden_window(const hidden_window&) = delete;
         hidden_window(hidden_window&&) = delete;
@@ -263,7 +265,7 @@ namespace {
         }
     };
     using store_pointer = std::unique_ptr<ITextStoreACP2, store_release>;
-} // namespace
+}
 
 // TSF 연결이 실제로 서는지다.
 // ITfThreadMgr2 활성화 · document manager · context · text

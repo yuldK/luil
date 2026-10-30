@@ -119,4 +119,4 @@ namespace luil {
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
     };
-} // namespace luil
+}

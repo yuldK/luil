@@ -51,7 +51,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         // 픽셀 10개가 글자 하나다 (텍스트 칸으로 쓸 때).
         [[nodiscard]] std::optional<std::size_t> offset_at(const float x, const luil::text_measurer&) const override
@@ -231,7 +232,7 @@ namespace {
         std::vector<luil::pointer_device> pressed {};
         std::vector<luil::ui_element_id> clicked {};
     };
-} // namespace
+}
 
 TEST_CASE("Touch text editing menus are opt in and preserve custom context actions", "[ui][interaction][touch][text-menu]")
 {
@@ -860,7 +861,7 @@ namespace {
         config.touch.long_press_haptic = true;
         return config;
     }
-} // namespace
+}
 
 TEST_CASE("A long press that opens the menu asks for one haptic", "[ui][interaction][touch][haptic]")
 {

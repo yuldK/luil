@@ -178,7 +178,7 @@ namespace {
         root->add(std::move(picture));
         return luil::ui_tree { std::move(root) };
     }
-} // namespace
+}
 
 TEST_CASE("The playback clock measures from its start and holds while paused", "[ui][image][animation]")
 {

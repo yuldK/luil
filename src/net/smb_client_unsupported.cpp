@@ -6,10 +6,11 @@
 namespace luil::net {
     namespace {
         constexpr std::u8string_view unsupported_message { u8"SMB is built only on Android with LUIL_ENABLE_SMB=ON." };
-    } // namespace
+    }
 
     struct smb_client::engine
-    {};
+    {
+    };
 
     std::unique_ptr<smb_client> smb_client::create(smb_client_config config, std::u8string& error)
     {
@@ -25,7 +26,8 @@ namespace luil::net {
 
     smb_client::smb_client(std::unique_ptr<engine> implementation) noexcept
         : engine_ { std::move(implementation) }
-    {}
+    {
+    }
 
     smb_client::~smb_client() = default;
 
@@ -49,10 +51,12 @@ namespace luil::net {
     }
 
     void smb_client::cancel_all() noexcept
-    {}
+    {
+    }
 
     void smb_client::stop() noexcept
-    {}
+    {
+    }
 
     std::size_t smb_client::in_flight() const noexcept
     {
@@ -60,5 +64,6 @@ namespace luil::net {
     }
 
     void smb_client::close_idle() noexcept
-    {}
-} // namespace luil::net
+    {
+    }
+}

@@ -62,7 +62,7 @@ namespace {
         REQUIRE(element != nullptr);
         return element->bounds();
     }
-} // namespace
+}
 
 TEST_CASE("Text elements answer the size their content wants", "[ui][layout][measure]")
 {

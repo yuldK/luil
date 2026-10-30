@@ -44,4 +44,4 @@ namespace luil {
     [[nodiscard]] std::u8string_view renderer_backend_name(renderer_backend backend) noexcept;
     // `gpu`와 `direct3d`는 같은 규칙이다 — GPU를 쓸 수 없으면 선택이 실패한다.
     [[nodiscard]] renderer_selection select_renderer_backend(renderer_mode mode, bool direct3d_available) noexcept;
-} // namespace luil
+}

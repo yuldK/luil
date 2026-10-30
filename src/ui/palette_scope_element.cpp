@@ -6,7 +6,8 @@ namespace luil {
     palette_scope_element::palette_scope_element(ui_element_id id, palette_scope_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void palette_scope_element::set_content(std::unique_ptr<ui_element> content)
     {
@@ -39,4 +40,4 @@ namespace luil {
     {
         return content_ != nullptr ? content_->preferred_size(context, available_width) : std::nullopt;
     }
-} // namespace luil
+}

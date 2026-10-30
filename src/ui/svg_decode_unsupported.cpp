@@ -12,7 +12,7 @@ namespace luil {
         {
             return { image_decode_error_kind::unsupported_format, u8"This build does not read SVG (LUIL_ENABLE_SVG is OFF).", 0 };
         }
-    } // namespace
+    }
 
     ui_image load_svg_file(const std::u8string_view path, image_decode_error& error)
     {
@@ -39,4 +39,4 @@ namespace luil {
         error = svg_unsupported();
         return {};
     }
-} // namespace luil
+}

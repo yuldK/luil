@@ -17,7 +17,7 @@ namespace luil {
             for (const auto& child : element.children())
                 keep_input_focus(*child);
         }
-    } // namespace
+    }
 
     combo_box_element::combo_box_element(const ui_element_id id, text_input_view value, combo_box_config config)
         : ui_element { id }, value_ { std::move(value) }, config_ { std::move(config) }
@@ -211,4 +211,4 @@ namespace luil {
             return std::vector<input_action> { config_.set_open(request.command == access_command::expand) };
         return ui_element::access_actions(request);
     }
-} // namespace luil
+}

@@ -258,4 +258,4 @@ namespace luil::win32 {
     // `fullscreen = true`만 얹는다. 저장했다가 그대로 다시 넣으면 전체 화면으로
     // 열리면서 돌아갈 자리도 함께 산다 (app_host.h의 `window_placement`).
     [[nodiscard]] window_placement placement_to_report(const window_placement& observed, const std::optional<window_placement>& restore) noexcept;
-} // namespace luil::win32
+}

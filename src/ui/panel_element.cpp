@@ -12,7 +12,8 @@ namespace luil {
     panel_element::panel_element(ui_element_id id, panel_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void panel_element::set_content(std::unique_ptr<ui_element> content)
     {
@@ -66,4 +67,4 @@ namespace luil {
         const float inner_radius { radius > inset ? radius - inset : 0.0f };
         context.canvas.drawRRect(SkRRect::MakeRectXY(shape.makeInset(inset, inset), inner_radius, inner_radius), border);
     }
-} // namespace luil
+}

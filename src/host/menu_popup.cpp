@@ -31,4 +31,4 @@ namespace luil {
         popup.tree = std::make_shared<const ui_tree>(make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
         return popup;
     }
-} // namespace luil
+}

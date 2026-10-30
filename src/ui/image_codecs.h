@@ -16,4 +16,4 @@ namespace luil {
     // 래스터·SVG·Lottie가 Skia 코덱을 열기 전에 이 함수를 부른다. 구현 안 static의
     // 초기화가 끝날 때까지 다른 thread의 디코드도 기다린다.
     void register_optional_image_decoders();
-} // namespace luil
+}

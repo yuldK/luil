@@ -77,7 +77,7 @@ namespace {
         const auto* const message { std::get_if<luil::app_message>(&actions[0]) };
         return message != nullptr ? message->get<intent_type>() : nullptr;
     }
-} // namespace
+}
 
 TEST_CASE("A breadcrumb folds leading segments as the width shrinks", "[ui][breadcrumb]")
 {

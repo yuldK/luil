@@ -72,7 +72,7 @@ namespace luil {
             if (layer.border)
                 draw_border(canvas, colors, scale, bounds);
         }
-    } // namespace
+    }
 
     void draw_frame(SkCanvas& canvas, SkTypeface* const codicon_typeface, SkTypeface* const ui_typeface, const frame_state& state)
     {
@@ -135,4 +135,4 @@ namespace luil {
             canvas.drawRect(SkRect::MakeXYWH(static_cast<float>(hole.x), static_cast<float>(hole.y), static_cast<float>(hole.width), static_cast<float>(hole.height)), clear);
         }
     }
-} // namespace luil
+}

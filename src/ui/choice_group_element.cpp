@@ -181,7 +181,7 @@ namespace luil {
             const float segments { static_cast<float>(count) };
             return segment_width * segments + choice_segment_gap * (segments - 1.0f) + choice_track_padding * 2.0f;
         }
-    } // namespace
+    }
 
     choice_group_element::choice_group_element(choice_group_config config)
         : ui_element { ui_element_id { ui_element_kind::choice_group, config.owner } }
@@ -278,4 +278,4 @@ namespace luil {
         // 준 말이다 (「무엇을 고르는 중인가」는 묶음만이 답할 수 있다).
         return { .role = access_role::radio_group, .name = config_.name };
     }
-} // namespace luil
+}

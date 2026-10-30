@@ -69,4 +69,4 @@ namespace luil {
         // 이 자리가 무엇인지를 말하는 묶음 하나다.
         return { .role = access_role::group, .name = config_.name };
     }
-} // namespace luil
+}

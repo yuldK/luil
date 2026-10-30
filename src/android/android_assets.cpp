@@ -19,4 +19,4 @@ namespace luil {
         static const sk_sp<SkTypeface> typeface { load_typeface_bytes(std::span<const std::uint8_t> { luil_codicon_font, luil_codicon_font_size }) };
         return typeface;
     }
-} // namespace luil
+}

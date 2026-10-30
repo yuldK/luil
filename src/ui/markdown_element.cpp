@@ -273,7 +273,8 @@ namespace luil {
                 set_bounds(context.slot);
             }
             void draw(draw_context&, const interaction_snapshot&) const override
-            {}
+            {
+            }
             [[nodiscard]] const ui_element* hit_test(const float x, const float y) const override
             {
                 if (visible() && interactive())
@@ -296,7 +297,7 @@ namespace luil {
         {
             return std::isfinite(value) && value > 0.0f ? value : fallback;
         }
-    } // namespace
+    }
 
     std::vector<markdown_block> parse_markdown(const std::u8string_view text)
     {
@@ -452,4 +453,4 @@ namespace luil {
         appearance.content = std::make_shared<const ui_tree>(make_arranged_tree(std::move(content), { 0.0f, 0.0f, size.width, size.height }, 1.0f));
         return appearance;
     }
-} // namespace luil
+}

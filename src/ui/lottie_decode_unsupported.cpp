@@ -12,7 +12,7 @@ namespace luil {
         {
             return { image_decode_error_kind::unsupported_format, u8"This build does not read Lottie (LUIL_ENABLE_LOTTIE is OFF).", 0 };
         }
-    } // namespace
+    }
 
     ui_lottie load_lottie_file(const std::u8string_view path, image_decode_error& error)
     {
@@ -39,4 +39,4 @@ namespace luil {
         error = lottie_unsupported();
         return {};
     }
-} // namespace luil
+}

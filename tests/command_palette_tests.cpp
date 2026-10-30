@@ -27,10 +27,12 @@ namespace {
     };
 
     struct close_intent
-    {};
+    {
+    };
 
     struct edit_intent
-    {};
+    {
+    };
 
     [[nodiscard]] std::vector<luil::app_command> sample_commands()
     {
@@ -115,7 +117,7 @@ namespace {
         }
         return result;
     }
-} // namespace
+}
 
 TEST_CASE("Commands are filtered by label start, word start, contained text and id", "[palette][command]")
 {

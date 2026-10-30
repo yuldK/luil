@@ -38,14 +38,15 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::unique_ptr<content_probe> make_content()
     {
         return std::make_unique<content_probe>(luil::ui_element_id { luil::application_element_kind(50) });
     }
-} // namespace
+}
 
 TEST_CASE("A sidebar takes its width from the collapse state and clings to its side", "[ui][sidebar]")
 {

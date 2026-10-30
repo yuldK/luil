@@ -30,7 +30,7 @@ namespace luil {
                 button->set_action(ui_trigger::left_click, source.action);
             return button;
         }
-    } // namespace
+    }
 
     app_bar_element::app_bar_element(app_bar_config config)
         : ui_element { ui_element_id { ui_element_kind::app_bar } }
@@ -103,4 +103,4 @@ namespace luil {
     {
         return static_cast<float>(config.metrics.height);
     }
-} // namespace luil
+}

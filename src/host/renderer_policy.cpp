@@ -54,4 +54,4 @@ namespace luil {
             return { renderer_selection_status::selected, renderer_backend::cpu, true };
         return { renderer_selection_status::unavailable, renderer_backend::direct3d, false };
     }
-} // namespace luil
+}

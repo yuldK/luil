@@ -137,7 +137,7 @@ namespace luil::text {
             }
             return offset;
         }
-    } // namespace
+    }
 
     char32_t fold_case(const char32_t codepoint) noexcept
     {
@@ -193,4 +193,4 @@ namespace luil::text {
             }
         return found;
     }
-} // namespace luil::text
+}

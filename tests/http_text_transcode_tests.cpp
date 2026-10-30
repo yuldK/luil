@@ -24,7 +24,7 @@ namespace {
     {
         return luil::net::parse_media_type(header);
     }
-} // namespace
+}
 
 TEST_CASE("The default transcoder really reads euc-kr", "[net][body]")
 {

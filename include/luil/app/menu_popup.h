@@ -34,4 +34,4 @@ namespace luil {
     // 메뉴 높이·배율·분리 tree를 한곳에서 조립한다. 열림 상태와 명령 실행은 앱의 몫이다.
     // 반환한 popup을 ui_frame::popups에 싣고, 닫힘 메시지에서 목록에서 뺀다.
     [[nodiscard]] ui_popup make_menu_popup(menu_config menu, menu_popup_config popup);
-} // namespace luil
+}

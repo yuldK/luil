@@ -102,7 +102,8 @@ namespace mobile_demo {
 
     // --- 셸 수준 메시지 ---
     struct close_intent
-    {};
+    {
+    };
 
     struct window_metrics_intent
     {
@@ -123,11 +124,13 @@ namespace mobile_demo {
 
     // 뒤로 간다 (앱 바의 뒤로 단추, Android의 뒤로 가기). 좁은 화면에서 페이지를 닫고 목록으로 간다.
     struct back_intent
-    {};
+    {
+    };
 
     // 떠 있는 popup(드롭다운·컨텍스트 메뉴·탭 넘침)을 모두 닫자는 요청이다.
     struct popup_close_intent
-    {};
+    {
+    };
 
     // 텍스트 편집·IME 조합 메시지다.
     // policy가 모든 텍스트 칸의 요청을 이 타입으로 나르고, 페이지들이 target을 보고 자기 것만 갖는다.
@@ -223,4 +226,4 @@ namespace mobile_demo {
     // 검색 칸 + 메뉴로 된 popup tree다. 배경 panel이 popup 전체를 칠하고 누름을 흡수한다.
     [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_search_menu_tree(
         luil::menu_config menu, luil::ui_element_kind search_kind, luil::text_input_view search, std::u8string placeholder, float width, float scale);
-} // namespace mobile_demo
+}

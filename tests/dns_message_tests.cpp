@@ -15,7 +15,7 @@ namespace {
     {
         return luil::net::parse_dns_message(packet);
     }
-} // namespace
+}
 
 TEST_CASE("A DNS query names its questions with class IN", "[net][dns]")
 {

@@ -376,4 +376,4 @@ namespace luil {
         // 링크의 순번과 그 자식이다 (순번 오름차순).
         std::vector<std::pair<std::size_t, text_link_element*>> link_elements_ {};
     };
-} // namespace luil
+}

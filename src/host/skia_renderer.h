@@ -98,4 +98,4 @@ namespace luil {
         int loss_after_frames_ { 0 };
         int frames_drawn_ { 0 };
     };
-} // namespace luil
+}

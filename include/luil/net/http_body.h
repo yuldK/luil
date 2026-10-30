@@ -167,4 +167,4 @@ namespace luil::net {
     //    어느 thread에서 받아도 이미 다 풀려 있다.
     [[nodiscard]] http_body decode_http_body(std::vector<std::uint8_t> bytes, const http_media_type& content_type, const http_body_parse_options& options);
     [[nodiscard]] http_body decode_http_body(std::vector<std::uint8_t> bytes, const http_media_type& content_type, const http_body_parse_options& options, const http_text_transcoder& transcode);
-} // namespace luil::net
+}

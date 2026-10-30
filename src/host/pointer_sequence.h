@@ -83,4 +83,4 @@ namespace luil {
 
         std::vector<contact> contacts_ {};
     };
-} // namespace luil
+}

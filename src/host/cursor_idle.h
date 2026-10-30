@@ -63,4 +63,4 @@ namespace luil {
         std::optional<clock::time_point> last_activity_ {};
         bool hidden_ { false };
     };
-} // namespace luil
+}

@@ -36,4 +36,4 @@ namespace luil::net {
     // 끝낼 수도 있다. 소켓을 열지 못했거나 어느 곳으로도 보내지 못했으면 거짓이고 `error`가 이유다.
     [[nodiscard]] bool mdns_exchange(std::span<const std::uint8_t> query, std::span<const mdns_destination> destinations, std::chrono::steady_clock::time_point deadline,
         const std::function<bool(const std::vector<dns_record>&)>& stop, std::vector<dns_record>& records, std::string& error);
-} // namespace luil::net
+}

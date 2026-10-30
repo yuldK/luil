@@ -66,4 +66,4 @@ namespace luil {
         virtual void post_composition(text_composition_event event) = 0;
         virtual void post_edit(text_edit_request request) = 0;
     };
-} // namespace luil
+}

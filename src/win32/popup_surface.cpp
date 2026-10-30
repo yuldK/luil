@@ -10,7 +10,8 @@ namespace luil::win32 {
     popup_surface::popup_surface(surface_context& context, std::u8string id, std::u8string anchor) noexcept
         : window_surface { context, std::move(id) }
         , anchor_ { std::move(anchor) }
-    {}
+    {
+    }
 
     LRESULT CALLBACK popup_surface::static_procedure(const HWND window, const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
     {
@@ -149,4 +150,4 @@ namespace luil::win32 {
         if (session != nullptr && session->composing())
             session->commit_composition();
     }
-} // namespace luil::win32
+}

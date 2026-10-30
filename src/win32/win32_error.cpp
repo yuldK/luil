@@ -20,4 +20,4 @@ namespace luil::win32 {
         output += u8")";
         return output;
     }
-} // namespace luil::win32
+}

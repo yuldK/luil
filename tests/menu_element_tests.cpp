@@ -29,7 +29,7 @@ namespace {
         config.select = [](const std::u8string& key) { return luil::input_action { luil::app_message { select_intent { key } } }; };
         return config;
     }
-} // namespace
+}
 
 TEST_CASE("A menu stacks its items and counts separators into its height", "[ui][menu]")
 {

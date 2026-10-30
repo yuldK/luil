@@ -47,7 +47,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // dialog 본체다.
@@ -72,7 +73,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::unique_ptr<test_dialog> make_content()
@@ -83,7 +85,7 @@ namespace {
         body->add(std::move(confirm));
         return body;
     }
-} // namespace
+}
 
 TEST_CASE("A modal host centers its content and follows the app offset", "[ui][modal]")
 {

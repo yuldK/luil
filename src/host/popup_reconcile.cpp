@@ -18,7 +18,7 @@ namespace luil {
         {
             return placement.width > 0 && placement.height > 0;
         }
-    } // namespace
+    }
 
     bool popup_is_descendant(const std::span<const popup_placement> placements, const std::u8string& child, const std::u8string& ancestor) noexcept
     {
@@ -208,4 +208,4 @@ namespace luil {
             y = area.top;
         return { x, y };
     }
-} // namespace luil
+}

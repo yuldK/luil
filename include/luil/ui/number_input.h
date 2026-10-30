@@ -66,4 +66,4 @@ namespace luil {
     //  - 숫자, 최솟값이 음수면 부호, `decimals`가 있으면 마침표를 남긴다. 전각 글자는 ASCII로 바꾼다.
     //  - 조각만 보므로 이어 붙여 틀린 글("1..2")은 막지 못한다 — 그것은 `check_number_input`이 잡는다.
     [[nodiscard]] text_insert_filter number_input_filter(const number_input_range& range);
-} // namespace luil
+}

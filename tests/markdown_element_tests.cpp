@@ -77,7 +77,7 @@ namespace {
         REQUIRE(message->get<visit_link>() != nullptr);
         return message->get<visit_link>()->destination;
     }
-} // namespace
+}
 
 TEST_CASE("CommonMark blocks preserve headings, lists, quotes, fences and nested inline styles", "[ui][markdown]")
 {

@@ -46,7 +46,7 @@ namespace {
             result.push_back(static_cast<char8_t>(value));
         return result;
     }
-} // namespace
+}
 
 TEST_CASE("UTF-8 validation rejects what Skia rejects", "[utf8][domain]")
 {

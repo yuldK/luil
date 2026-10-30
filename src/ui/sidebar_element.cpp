@@ -115,4 +115,4 @@ namespace luil {
         context.canvas.drawRect(SkRect::MakeXYWH(inner, box.y, scale, box.height), solid_paint(context.palette.divider));
         draw_children(context, interaction);
     }
-} // namespace luil
+}

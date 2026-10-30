@@ -111,7 +111,7 @@ namespace luil::android {
             // 창 버퍼의 형식을 RGBA로 정했는가.
             bool format_set_ { false };
         };
-    } // namespace
+    }
 
     renderer_factory_result create_cpu_skia_renderer(ANativeWindow* const window)
     {
@@ -119,4 +119,4 @@ namespace luil::android {
             return { nullptr, u8"There is no native window to render into." };
         return { std::make_unique<cpu_skia_renderer>(window), {} };
     }
-} // namespace luil::android
+}

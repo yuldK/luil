@@ -68,4 +68,4 @@ namespace demo {
         // 미리 보기 첫 장을 200 KB 안의 WebP로 담아 본 결과다 (image-encode-design.md의 바이트 한도).
         std::u8string webp_summary_ {};
     };
-} // namespace demo
+}

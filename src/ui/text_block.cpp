@@ -204,7 +204,7 @@ namespace luil {
                 return { box.x, top, 0.0f, height };
             return { left, top, right - left, height };
         }
-    } // namespace
+    }
 
     SkFont make_text_font(const draw_context& context, const text_font& font)
     {
@@ -260,4 +260,4 @@ namespace luil {
     {
         return draw_lines(context, text, box, style, paint, make_text_font(context, style.font), layout);
     }
-} // namespace luil
+}

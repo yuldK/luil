@@ -33,4 +33,4 @@ namespace mobile_demo {
     private:
         luil::appearance_settings appearance_ {};
     };
-} // namespace mobile_demo
+}

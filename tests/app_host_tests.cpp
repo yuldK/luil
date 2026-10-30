@@ -25,7 +25,8 @@ namespace {
     };
 
     struct close_intent
-    {};
+    {
+    };
 
     // 처리 횟수를 세고 그 수를 frame에 싣는 최소 driver다.
     // 창 없는 조립 test라 tree는 싣지 않는다.
@@ -102,7 +103,7 @@ namespace {
         }
         return condition();
     }
-} // namespace
+}
 
 TEST_CASE("Initial app messages are handled before the first frame", "[win32][host]")
 {
@@ -196,7 +197,7 @@ namespace {
         std::atomic<bool> closed { false };
         std::atomic<int> ticks { 0 };
     };
-} // namespace
+}
 
 TEST_CASE("The logic thread ticks on schedule without any messages", "[win32][host][tick]")
 {
@@ -267,7 +268,7 @@ namespace {
         std::atomic<bool> closed { false };
         std::atomic<int> handled { 0 };
     };
-} // namespace
+}
 
 TEST_CASE("The close message survives a saturated app inbox", "[win32][host][shutdown]")
 {
@@ -318,7 +319,8 @@ namespace {
 
         explicit throwing_driver(const throw_point point)
             : point_ { point }
-        {}
+        {
+        }
 
         void start() override
         {
@@ -385,7 +387,7 @@ namespace {
             throw std::runtime_error { "on_key" };
         }
     };
-} // namespace
+}
 
 TEST_CASE("A driver exception faults the host instead of terminating the process", "[win32][host][fault]")
 {
@@ -445,7 +447,8 @@ namespace {
 
         explicit throwing_shutdown_driver(const throw_point point)
             : point_ { point }
-        {}
+        {
+        }
 
         void handle(luil::app_message message) override
         {
@@ -524,7 +527,7 @@ namespace {
         std::atomic<bool> cancelled { false };
         std::atomic<bool> closed { false };
     };
-} // namespace
+}
 
 TEST_CASE("Shutdown finishes cleanup even when driver callbacks throw", "[win32][host][shutdown]")
 {
@@ -576,7 +579,7 @@ namespace {
             return { luil::input_action { luil::haptic_request { luil::haptic_feedback::confirm } } };
         }
     };
-} // namespace
+}
 
 TEST_CASE("Haptics reach the platform output from any thread and from input actions", "[win32][host][haptic]")
 {
@@ -686,7 +689,7 @@ namespace {
             return {};
         }
     };
-} // namespace
+}
 
 TEST_CASE("File clipboard requests reach the UI thread from input actions and from any thread", "[win32][host][clipboard]")
 {

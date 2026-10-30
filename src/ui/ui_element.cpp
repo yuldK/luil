@@ -109,7 +109,8 @@ namespace luil {
 
     ui_element::ui_element(ui_element_id id) noexcept
         : id_ { std::move(id) }
-    {}
+    {
+    }
 
     const ui_element_id& ui_element::id() const noexcept
     {
@@ -800,4 +801,4 @@ namespace luil {
         if (clip_children_)
             context.canvas.restore();
     }
-} // namespace luil
+}

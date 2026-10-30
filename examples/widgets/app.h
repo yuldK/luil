@@ -50,7 +50,8 @@ namespace widgets {
 
     // --- 앱 메시지(intent) ---
     struct close_intent
-    {};
+    {
+    };
 
     struct metrics_intent
     {
@@ -61,12 +62,14 @@ namespace widgets {
 
     // controls: 카운터 버튼.
     struct increment_intent
-    {};
+    {
+    };
 
     // controls: 녹화 켬끔. 파일로 남기는 일은 라이브러리가 하고, 앱은 지금
     // 켜져 있는지만 안다 (버튼의 글과 다음에 낼 명령이 그 값에서 난다).
     struct toggle_record_intent
-    {};
+    {
+    };
 
     // inputs: 편집·조합 메시지. policy가 라이브러리 요청을 이 봉투에 담는다.
     struct edit_intent
@@ -91,7 +94,8 @@ namespace widgets {
     };
 
     struct collapse_intent
-    {};
+    {
+    };
 
     // choices: 낱개 컨트롤 하나를 뒤집는다.
     // 어느 것인지는 owner가 말한다 — element는 뒤집지 않고 이 메시지만 낸다.
@@ -141,7 +145,8 @@ namespace widgets {
 
     // popups: 떠 있는 popup을 모두 닫는다 (바깥 누름·Esc·뒤로 가기 등).
     struct popup_close_intent
-    {};
+    {
+    };
 
     // 섹션 전체를 담은 창을 이만큼 흘린다 (논리 픽셀, +가 아래로).
     // 휠과 터치 쓸기가 같은 메시지로 온다 — 창이 `scroll_source`를 세운다.
@@ -266,4 +271,4 @@ namespace widgets {
     public:
         [[nodiscard]] luil::app_message make_window_metrics_message(float width, float height, float scale) override;
     };
-} // namespace widgets
+}

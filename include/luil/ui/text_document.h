@@ -74,4 +74,4 @@ namespace luil {
     //  - 끝의 문장 부호(`.,;:!?'*`)는 빼고, 닫는 괄호는 주소 안에 짝이 없을 때만 뺀다 ("(https://a.b/x_(y))").
     //  - ASCII 영숫자 바로 뒤에서는 시작하지 않는다 ("xhttp://"는 링크가 아니다).
     [[nodiscard]] std::vector<text_link> detect_text_links(std::u8string_view text);
-} // namespace luil
+}

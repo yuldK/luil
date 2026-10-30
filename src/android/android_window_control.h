@@ -34,4 +34,4 @@ namespace luil::android {
     // 권한을 묻는다 (`Activity.requestPermissions`). 답은 Activity의 콜백으로 오는데 그것을 받으려면 Java가 있어야
     // 하므로, host가 초점을 되찾을 때 `has_permission`으로 다시 읽는다. 메인 thread에서 부른다.
     void request_permission(JNIEnv& env, jobject activity, const char* permission);
-} // namespace luil::android
+}

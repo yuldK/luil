@@ -18,4 +18,4 @@ namespace luil::android {
     //    주석은 NativeActivity에서 남은 것이다). 그래서 링크로 돌린다.
     //  - 다리가 서지 않았으면(luil 밖에서 GameActivity를 링크한 경우) 일을 버리고 거짓을 돌려준다.
     bool post_to_main_thread(main_thread_work work);
-} // namespace luil::android
+}

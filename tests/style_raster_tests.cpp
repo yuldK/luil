@@ -66,7 +66,7 @@ namespace {
         config.selected = u8"b";
         return luil::make_arranged_tree(std::make_unique<luil::list_element>(std::move(config)), { 0.0f, 0.0f, 400.0f, 200.0f }, raster_scale);
     }
-} // namespace
+}
 
 TEST_CASE("A selected row is filled with the row selection role", "[ui][raster][style]")
 {

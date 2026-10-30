@@ -45,7 +45,8 @@ namespace {
     public:
         trailing_button()
             : ui_element { luil::ui_element_id { luil::ui_element_kind::app_bar_button, u8"new-tab" } }
-        {}
+        {
+        }
 
         void arrange(const luil::arrange_context& context) override
         {
@@ -53,7 +54,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] luil::tab_bar_config make_config(const std::size_t count)
@@ -136,7 +138,7 @@ namespace {
     {
         return frame.count_color({ left, 0.0f, 320.0f, 68.0f }, color);
     }
-} // namespace
+}
 
 TEST_CASE("The fitted tab width shrinks evenly down to the minimum", "[ui][tab][layout]")
 {

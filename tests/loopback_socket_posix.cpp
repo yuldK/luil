@@ -24,7 +24,7 @@ namespace luil::testing::loopback_socket {
             address.sin_port = htons(port);
             return inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1;
         }
-    } // namespace
+    }
 
     bool startup() noexcept
     {
@@ -32,7 +32,8 @@ namespace luil::testing::loopback_socket {
     }
 
     void cleanup() noexcept
-    {}
+    {
+    }
 
     std::uintptr_t bind_loopback(const bool listen, std::uint16_t& port) noexcept
     {
@@ -149,4 +150,4 @@ namespace luil::testing::loopback_socket {
         setsockopt(native(socket), SOL_SOCKET, SO_LINGER, &option, sizeof(option));
         ::close(native(socket));
     }
-} // namespace luil::testing::loopback_socket
+}

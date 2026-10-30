@@ -20,7 +20,7 @@ namespace {
         value.surface = u8"tools";
         return value;
     }
-} // namespace
+}
 
 TEST_CASE("Wheel messages preserve control shift and horizontal direction", "[surface-input][zoom]")
 {

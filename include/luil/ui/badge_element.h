@@ -63,4 +63,4 @@ namespace luil {
     private:
         badge_config config_ {};
     };
-} // namespace luil
+}

@@ -22,7 +22,7 @@ namespace luil::net {
                     character = static_cast<char8_t>(character - u8'A' + u8'a');
             return result;
         }
-    } // namespace
+    }
 
     std::u8string smb_server_key(const std::u8string_view server)
     {
@@ -59,7 +59,8 @@ namespace luil::net {
 
     smb_connection_pool::smb_connection_pool(const smb_pool_config config) noexcept
         : config_ { config }
-    {}
+    {
+    }
 
     std::optional<smb_lease> smb_connection_pool::acquire(const smb_connection_key& key, const time_point now, const bool fresh, std::vector<void*>& evicted)
     {
@@ -172,4 +173,4 @@ namespace luil::net {
     {
         return static_cast<std::size_t>(std::ranges::count_if(entries_, [](const entry& item) { return item.busy == false; }));
     }
-} // namespace luil::net
+}

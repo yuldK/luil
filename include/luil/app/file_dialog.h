@@ -32,4 +32,4 @@ namespace luil {
         std::vector<std::u8string> paths {};
         std::u8string error {};
     };
-} // namespace luil
+}

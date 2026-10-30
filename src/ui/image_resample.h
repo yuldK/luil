@@ -21,4 +21,4 @@ namespace luil {
     //  - 결과는 같은 색 형식의 premul이다. 필터의 음의 꼬리로 넘친 값은 0–255로, 색은 알파 이하로 자른다.
     //  - `cancelled`는 각 단계의 출력 `image_downscale_cancel_rows`줄마다 묻는다 (첫 줄 포함). 비어 있으면 묻지 않는다.
     [[nodiscard]] image_resample_result downscale_premultiplied(const SkPixmap& source, SkISize target, const std::function<bool()>& cancelled, SkBitmap& output);
-} // namespace luil
+}

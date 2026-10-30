@@ -455,4 +455,4 @@ namespace luil {
         // 격자의 열 수다. 폭에 따라 정하는 격자는 `arrange`가 다시 정한다. 격자가 아니면 1이다.
         std::size_t columns_ { 1 };
     };
-} // namespace luil
+}

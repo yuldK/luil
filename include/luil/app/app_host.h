@@ -415,7 +415,8 @@ namespace luil {
         // logic thread 시작 직후 한 번이다.
         // 초기 상태 로드를 여기서 제출한다.
         virtual void start()
-        {}
+        {
+        }
 
         // app inbox 메시지 1건을 처리한다.
         virtual void handle(app_message message) = 0;
@@ -429,7 +430,8 @@ namespace luil {
         // 오래 걸리는 handle·tick·make_frame이 이를 보고 일찍 돌아와야
         // 종료 예산 안에 logic thread가 빠져나온다. 짧은 콜백만 쓰면 비워 둔다.
         virtual void cancel() noexcept
-        {}
+        {
+        }
 
         // 종료 신호 메시지다.
         // shutdown()이 app inbox에 넣고, 앱 logic은 이를 처리하며 종료 저장을 제출한다.
@@ -441,7 +443,8 @@ namespace luil {
         // 종료 순서 중 worker pool을 멈출 시점이다.
         // worker가 없으면 비워 둔다.
         virtual void stop_workers()
-        {}
+        {
+        }
 
         // 시간이 흘러야 바뀌는 logic 상태(토스트 만료·진행률·시간 제한)의 예고다.
         // frame 게시 뒤마다 물어, 답한 시각이 되면 메시지가 없어도 `tick`이
@@ -620,4 +623,4 @@ namespace luil {
         std::uint64_t seen_interaction_version_ { 0 };
         bool shut_down_ { false };
     };
-} // namespace luil
+}

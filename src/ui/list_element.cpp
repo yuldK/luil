@@ -287,7 +287,7 @@ namespace luil {
             // 잎이거나 목록이 접힘을 쓰지 않으면 nullptr다.
             ui_element* expander_ { nullptr };
         };
-    } // namespace
+    }
 
     list_element::list_element(list_config config)
         : ui_element { ui_element_id { ui_element_kind::list, config.owner } }
@@ -423,4 +423,4 @@ namespace luil {
         // 목록에 툴팁을 달면 행 사이 빈 자리에서 글 상자가 뜬다.
         return { .role = access_role::list, .name = access_name() };
     }
-} // namespace luil
+}

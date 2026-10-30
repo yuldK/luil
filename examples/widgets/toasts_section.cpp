@@ -16,7 +16,7 @@
 namespace widgets {
     namespace {
         constexpr std::chrono::milliseconds toast_duration { 3000 };
-    } // namespace
+    }
 
     section build_toasts_section(const app_state&)
     {
@@ -80,4 +80,4 @@ namespace widgets {
         }
         return std::make_unique<luil::toast_stack_element>(std::move(config), std::move(toasts));
     }
-} // namespace widgets
+}

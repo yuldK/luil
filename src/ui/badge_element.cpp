@@ -10,7 +10,8 @@ namespace luil {
     badge_element::badge_element(ui_element_id id, badge_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void badge_element::arrange(const arrange_context& context)
     {
@@ -33,4 +34,4 @@ namespace luil {
         const float text_width { std::ceil(context.text_width(config_.text, config_.font_size)) };
         return size_f { badge_pill_width_for(text_width, config_.text.empty() == false, config_.tone, config_.font_size), height_for(config_) };
     }
-} // namespace luil
+}

@@ -61,4 +61,4 @@ namespace luil::testing {
         float scale_ { 2.0f };
         SkBitmap pixels_ {};
     };
-} // namespace luil::testing
+}

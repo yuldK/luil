@@ -11,7 +11,7 @@
 
 namespace {
     using luil::popup_placement;
-} // namespace
+}
 
 TEST_CASE("Popup reconciliation creates, moves, and destroys by id", "[win32][popup]")
 {

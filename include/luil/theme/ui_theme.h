@@ -344,4 +344,4 @@ namespace luil {
     // 설정의 선호를 실제 팔레트 선택으로 바꾼다.
     // 고대비가 가장 세고, `system`은 OS의 밝은 앱 설정(`system_prefers_light`)을 따른다.
     [[nodiscard]] color_theme resolve_color_theme(theme_preference preference, bool high_contrast, bool system_prefers_light) noexcept;
-} // namespace luil
+}

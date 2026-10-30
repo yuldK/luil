@@ -11,7 +11,8 @@ namespace luil::android {
             explicit local_frame(JNIEnv& env)
                 : env_ { env }
                 , pushed_ { env.PushLocalFrame(16) == JNI_OK }
-            {}
+            {
+            }
             local_frame(const local_frame&) = delete;
             local_frame(local_frame&&) = delete;
             local_frame& operator=(const local_frame&) = delete;
@@ -32,7 +33,7 @@ namespace luil::android {
             JNIEnv& env_;
             bool pushed_;
         };
-    } // namespace
+    }
 
     std::optional<system_input_settings> read_system_input_settings(JNIEnv& env, const jobject context, const float density)
     {
@@ -117,4 +118,4 @@ namespace luil::android {
         config.pan_start_distance = settings.touch_slop;
         return config;
     }
-} // namespace luil::android
+}

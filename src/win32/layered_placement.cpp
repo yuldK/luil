@@ -49,4 +49,4 @@ namespace luil::win32 {
             return std::nullopt;
         return entries_.front().queued_at + timeout;
     }
-} // namespace luil::win32
+}

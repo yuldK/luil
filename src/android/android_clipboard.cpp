@@ -11,7 +11,8 @@ namespace luil::android {
             explicit local_frame(JNIEnv& env) noexcept
                 : env_ { &env }
                 , pushed_ { env.PushLocalFrame(16) == JNI_OK }
-            {}
+            {
+            }
 
             local_frame(const local_frame&) = delete;
             local_frame(local_frame&&) = delete;
@@ -55,7 +56,7 @@ namespace luil::android {
             const jobject manager { env.CallObjectMethod(context, get_system_service, name) };
             return failed(env) ? nullptr : manager;
         }
-    } // namespace
+    }
 
     bool copy_text_to_clipboard(JNIEnv& env, const jobject context, const std::u8string_view text)
     {
@@ -143,4 +144,4 @@ namespace luil::android {
         env.ReleaseStringUTFChars(string, characters);
         return result;
     }
-} // namespace luil::android
+}

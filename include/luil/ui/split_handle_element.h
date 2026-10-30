@@ -94,4 +94,4 @@ namespace luil {
         split_handle_config config_ {};
         float scale_ { 1.0f };
     };
-} // namespace luil
+}

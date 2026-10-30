@@ -79,12 +79,13 @@ namespace luil {
         {
             return lengths.empty() ? 0.0f : spanned(lengths, 0u, lengths.size(), spacing);
         }
-    } // namespace
+    }
 
     grid_element::grid_element(ui_element_id id, grid_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void grid_element::add(std::unique_ptr<ui_element> child, const grid_cell cell)
     {
@@ -207,4 +208,4 @@ namespace luil {
     {
         return row_heights_;
     }
-} // namespace luil
+}

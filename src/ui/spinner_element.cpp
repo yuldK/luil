@@ -11,7 +11,8 @@
 namespace luil {
     spinner_element::spinner_element(const ui_element_id id, spinner_config config)
         : ui_element { id }, config_ { std::move(config) }
-    {}
+    {
+    }
 
     void spinner_element::arrange(const arrange_context& context)
     {
@@ -41,4 +42,4 @@ namespace luil {
     {
         return { .role = access_role::progress, .name = config_.name };
     }
-} // namespace luil
+}

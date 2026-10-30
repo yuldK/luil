@@ -45,4 +45,4 @@ namespace luil {
             return high_contrast_palette_for(high_contrast_colors {});
         return compose_palette(style.neutral_for(theme), accent.for_theme(theme), style.tones);
     }
-} // namespace luil
+}

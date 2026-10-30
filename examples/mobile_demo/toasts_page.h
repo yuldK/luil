@@ -52,4 +52,4 @@ namespace mobile_demo {
         std::vector<toast_entry> toasts_ {};
         int next_id_ { 0 };
     };
-} // namespace mobile_demo
+}

@@ -84,7 +84,7 @@ namespace demo {
             row->add_flexible(std::make_unique<luil::choice_group_element>(std::move(choices)));
             return row;
         }
-    } // namespace
+    }
 
     tabs_page::tabs_page()
     {
@@ -637,4 +637,4 @@ namespace demo {
         };
         return luil::route_reveal(tree, focused, routes);
     }
-} // namespace demo
+}

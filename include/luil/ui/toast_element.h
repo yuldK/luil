@@ -104,4 +104,4 @@ namespace luil {
         toast_stack_config config_ {};
         std::vector<toast_element*> toasts_ {};
     };
-} // namespace luil
+}

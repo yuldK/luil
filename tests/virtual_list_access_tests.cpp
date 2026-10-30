@@ -92,7 +92,7 @@ namespace {
         item.depth = depth;
         return item;
     }
-} // namespace
+}
 
 TEST_CASE("A virtual list answers for rows it did not build", "[ui][list][accessibility]")
 {

@@ -26,4 +26,4 @@ namespace luil::win32 {
     {
         return static_cast<int>(std::lround(static_cast<double>(logical) * static_cast<double>(scale)));
     }
-} // namespace luil::win32
+}

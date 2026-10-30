@@ -41,4 +41,4 @@ namespace mobile_demo {
         int page_ { 1 };
         std::optional<luil::zoom_edge_swipe> last_swipe_ {};
     };
-} // namespace mobile_demo
+}

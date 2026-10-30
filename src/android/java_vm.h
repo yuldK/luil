@@ -47,4 +47,4 @@ namespace luil::android {
         JNIEnv* env_ { nullptr };
         bool attached_ { false };
     };
-} // namespace luil::android
+}

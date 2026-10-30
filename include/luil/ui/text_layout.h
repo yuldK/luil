@@ -139,4 +139,4 @@ namespace luil {
 
     // origin은 첫 줄의 왼쪽 위다. 범위는 원문 byte offset이며 전체 glyph를 다시 shape하지 않는다.
     void draw_text_layout(SkCanvas& canvas, const text_layout& layout, zoom_point origin, const SkPaint& paint, std::size_t begin = 0, std::size_t end = std::numeric_limits<std::size_t>::max());
-} // namespace luil
+}

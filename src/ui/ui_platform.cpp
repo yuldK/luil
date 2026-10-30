@@ -8,7 +8,7 @@ namespace luil {
         // (읽는 쪽은 frame을 지을 때 몇 번뿐이다).
         std::mutex platform_mutex {};
         ui_platform platform_value {};
-    } // namespace
+    }
 
     void set_ui_platform(const ui_platform& platform) noexcept
     {
@@ -21,4 +21,4 @@ namespace luil {
         const std::lock_guard lock { platform_mutex };
         return platform_value;
     }
-} // namespace luil
+}

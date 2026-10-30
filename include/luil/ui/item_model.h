@@ -175,4 +175,4 @@ namespace luil {
         std::unordered_map<std::u8string, std::uint64_t> latest_ {};
         std::uint64_t next_ { 0 };
     };
-} // namespace luil
+}

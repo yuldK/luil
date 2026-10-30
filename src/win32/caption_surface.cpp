@@ -16,7 +16,7 @@ namespace luil::win32 {
             const auto current { static_cast<window_style_bits>(GetWindowLongPtrW(window, GWL_STYLE)) };
             SetWindowLongPtrW(window, GWL_STYLE, static_cast<LONG_PTR>(updated_custom_window_style(current, buttons, mode)));
         }
-    } // namespace
+    }
 
     LRESULT caption_hit_test(const HWND window, const LPARAM long_parameter, const std::uint32_t dpi, const caption_config& caption, const window_config& config,
         const window_display_mode mode, const ui_tree* const tree)
@@ -124,7 +124,8 @@ namespace luil::win32 {
 
     caption_surface::caption_surface(surface_context& context, std::u8string id) noexcept
         : window_surface { context, std::move(id) }
-    {}
+    {
+    }
 
     bool caption_surface::remove_system_caption(const HWND window, std::u8string& error)
     {
@@ -517,4 +518,4 @@ namespace luil::win32 {
         if (command != 0)
             PostMessageW(window_, WM_SYSCOMMAND, command, 0);
     }
-} // namespace luil::win32
+}

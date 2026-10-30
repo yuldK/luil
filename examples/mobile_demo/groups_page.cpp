@@ -81,4 +81,4 @@ namespace mobile_demo {
         column.add(std::make_unique<luil::choice_group_element>(std::move(view)), view_height, std::min(width - 2.0f * page_padding, 360.0f));
         return column.finish();
     }
-} // namespace mobile_demo
+}

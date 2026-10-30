@@ -16,4 +16,4 @@ namespace messaging {
         std::chrono::steady_clock::time_point enqueued_at {};
         payload_type payload {};
     };
-} // namespace messaging
+}

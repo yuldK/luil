@@ -403,4 +403,4 @@ namespace luil {
     // 규칙은 `decode_image_bytes`와 같다 (장면은 바이트를 복사하지 않고 다 지은 뒤에 놓는다).
     [[nodiscard]] ui_lottie decode_lottie_bytes(std::span<const std::uint8_t> bytes, image_decode_error& error);
     [[nodiscard]] ui_lottie decode_lottie_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
-} // namespace luil
+}

@@ -23,4 +23,4 @@ namespace luil {
         const sk_sp<SkData> data { SkJpegEncoder::Encode(pixels.pixmap(), options) };
         return encoded_bytes(data.get(), error);
     }
-} // namespace luil
+}

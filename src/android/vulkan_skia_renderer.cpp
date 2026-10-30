@@ -566,7 +566,7 @@ namespace luil::android {
             bool needs_rebuild_ { false };
             bool suboptimal_checked_ { false };
         };
-    } // namespace
+    }
 
     renderer_factory_result create_vulkan_skia_renderer(vulkan_device& device, ANativeWindow* const window)
     {
@@ -581,4 +581,4 @@ namespace luil::android {
             return { nullptr, std::move(error) };
         return { std::move(renderer), {} };
     }
-} // namespace luil::android
+}

@@ -30,7 +30,7 @@ namespace {
         REQUIRE(std::holds_alternative<event_type>(event));
         return std::get<event_type>(event);
     }
-} // namespace
+}
 
 TEST_CASE("A press inside a popup lands in its surface and coordinates", "[overlay]")
 {

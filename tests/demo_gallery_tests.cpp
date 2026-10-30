@@ -35,7 +35,7 @@ namespace {
         const auto* const tab { tree.find({ luil::ui_element_kind::tab, key }) };
         return tab != nullptr && tab->accessibility().selected == true;
     }
-} // namespace
+}
 
 TEST_CASE("Gallery toggles retain independent state and reset to usable defaults", "[demo][gallery]")
 {

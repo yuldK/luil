@@ -99,4 +99,4 @@ namespace luil {
         // 이름은 "무엇을 고르는 칸인가"(placeholder), 값은 지금 고른 라벨이다.
         return { .role = access_role::combo_box, .name = config_.placeholder, .expanded = config_.open, .value = config_.text };
     }
-} // namespace luil
+}

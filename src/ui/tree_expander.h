@@ -30,4 +30,4 @@ namespace luil {
         bool expanded_ { false };
         tree_expand_message_factory set_expanded_ {};
     };
-} // namespace luil
+}

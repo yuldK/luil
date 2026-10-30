@@ -85,7 +85,7 @@ namespace mobile_demo {
             orientation_choice { luil::screen_orientation::landscape, u8"landscape", u8"가로" },
             orientation_choice { luil::screen_orientation::current, u8"current", u8"지금 고정" },
         };
-    } // namespace
+    }
 
     bool device_page::handle(const luil::app_message& message)
     {
@@ -286,4 +286,4 @@ namespace mobile_demo {
             column.note(u8"secret-report", secret_report_);
         return column.finish();
     }
-} // namespace mobile_demo
+}

@@ -91,4 +91,4 @@ namespace luil {
 
     // smoke 화면처럼 view snapshot 없이 caption만 그릴 때 쓰는 단독 tree다.
     [[nodiscard]] ui_tree make_caption_tree(float window_width, float scale, caption_config config);
-} // namespace luil
+}

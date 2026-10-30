@@ -1401,4 +1401,4 @@ namespace luil {
         std::chrono::milliseconds cursor_idle_hide_ { 0 };
         std::vector<std::unique_ptr<ui_element>> children_ {};
     };
-} // namespace luil
+}

@@ -138,4 +138,4 @@ namespace luil {
         struct state;
         std::unique_ptr<state> state_ {};
     };
-} // namespace luil
+}

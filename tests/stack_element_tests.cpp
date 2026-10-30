@@ -21,14 +21,15 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::unique_ptr<slot_probe> make_probe(const std::u8string& name)
     {
         return std::make_unique<slot_probe>(luil::ui_element_id { luil::application_element_kind(30), name });
     }
-} // namespace
+}
 
 TEST_CASE("A column stack gives fixed lengths first and splits the rest by weight", "[ui][stack]")
 {

@@ -24,7 +24,7 @@ namespace {
             return mobile_demo::make_metrics_message(metrics);
         }
     };
-} // namespace
+}
 
 int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
 {

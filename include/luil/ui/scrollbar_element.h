@@ -88,4 +88,4 @@ namespace luil {
         float thumb_top_ { 0.0f };
         float thumb_height_ { 0.0f };
     };
-} // namespace luil
+}

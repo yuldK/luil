@@ -40,7 +40,8 @@ namespace {
     public:
         socket_scope() noexcept
             : ready_ { loopback_socket::startup() }
-        {}
+        {
+        }
 
         socket_scope(const socket_scope&) = delete;
         socket_scope(socket_scope&&) = delete;
@@ -223,7 +224,7 @@ namespace {
         }
         return predicate();
     }
-} // namespace
+}
 
 TEST_CASE("A loopback server answers with a content-length body and records the request", "[net][loopback]")
 {

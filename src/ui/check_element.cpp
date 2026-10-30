@@ -82,7 +82,7 @@ namespace luil {
             const float text_width { std::min(measure_text(config.label, font), inner_width) };
             static_cast<void>(draw_text_within(context.canvas, config.label, inner_left + (inner_width - text_width) / 2.0f, baseline, inner_width, font, foreground));
         }
-    } // namespace
+    }
 
     check_state aggregate_check(const std::span<const check_state> children) noexcept
     {
@@ -316,4 +316,4 @@ namespace luil {
             width += check_gap + std::ceil(context.text_width(config_.label, context.style_metrics().body_font_size));
         return size_f { width, height_for(config_) };
     }
-} // namespace luil
+}

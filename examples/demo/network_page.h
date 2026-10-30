@@ -41,7 +41,8 @@ namespace demo {
 
     // 날아가 있는 것을 전부 접자는 요청이다 (`http_client::cancel_all`).
     struct network_cancel_intent
-    {};
+    {
+    };
 
     // 심장 박동을 켜거나 끈다. 값은 **바뀐 뒤의 상태**다 — 확인란은 지금 상태의
     // 반대를 실은 액션을 매 frame 새로 싣는다.
@@ -175,4 +176,4 @@ namespace demo {
         float strip_scroll_ { 0.0f };
         float preview_scroll_ { 0.0f };
     };
-} // namespace demo
+}

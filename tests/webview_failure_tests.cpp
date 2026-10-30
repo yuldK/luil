@@ -8,7 +8,7 @@ namespace {
     using luil::win32::webview_environment_failure_for;
     using luil::win32::webview_runtime_build_number;
     using luil::win32::webview_runtime_too_old_message;
-} // namespace
+}
 
 TEST_CASE("The loader's file-not-found result means the WebView2 runtime is missing", "[win32][webview]")
 {

@@ -81,7 +81,7 @@ namespace mobile_demo {
             return u8"경계 쓸기: " + direction_name(swipe.horizontal, swipe.vertical) + u8" · 막힘 " + to_u8(static_cast<int>(std::lround(blocked))) + u8" · 속도 "
                 + to_u8(static_cast<int>(std::lround(speed))) + u8"/s";
         }
-    } // namespace
+    }
 
     luil::zoom_view_config zoom_page::config() const
     {
@@ -152,4 +152,4 @@ namespace mobile_demo {
         column->add_flexible(std::move(view));
         return column;
     }
-} // namespace mobile_demo
+}

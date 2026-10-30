@@ -436,4 +436,4 @@ namespace luil::win32 {
         std::size_t end_ { 0 };
         ULONG references_ { 1 };
     };
-} // namespace luil::win32
+}

@@ -16,4 +16,4 @@ namespace luil {
         const sk_sp<SkData> data { SkPngRustEncoder::Encode(pixels.pixmap(), SkPngRustEncoder::Options {}) };
         return encoded_bytes(data.get(), error);
     }
-} // namespace luil
+}

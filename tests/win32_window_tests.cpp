@@ -199,7 +199,8 @@ namespace {
     public:
         explicit placement_delegate(placement_probe& probe)
             : probe_ { probe }
-        {}
+        {
+        }
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
         {
             probe_.metrics = metrics;
@@ -278,7 +279,7 @@ namespace {
         REQUIRE(driver.first_metrics->scale == static_cast<float>(probe.dpi) / 96.0f);
         return probe;
     }
-} // namespace
+}
 
 TEST_CASE("Initial placement is physical and precedes first layout and display", "[win32][window]")
 {

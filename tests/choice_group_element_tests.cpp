@@ -29,7 +29,7 @@ namespace {
         config.select = [](const std::u8string& value) { return luil::input_action { luil::app_message { select_intent { value } } }; };
         return config;
     }
-} // namespace
+}
 
 TEST_CASE("A radio choice group stacks one row per value", "[ui][choice]")
 {

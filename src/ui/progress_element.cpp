@@ -13,7 +13,8 @@ namespace luil {
     progress_element::progress_element(const ui_element_id id, progress_config config)
         : ui_element { id }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void progress_element::arrange(const arrange_context& context)
     {
@@ -46,4 +47,4 @@ namespace luil {
     {
         return { .role = access_role::progress, .name = tooltip(), .range = access_range { 0.0f, 1.0f, clamp_value(config_.value) } };
     }
-} // namespace luil
+}

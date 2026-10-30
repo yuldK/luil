@@ -79,7 +79,7 @@ namespace {
             return luil::make_arranged_tree(std::make_unique<luil::virtual_list_element>(std::move(config)), { 0.0f, 0.0f, 400.0f, 600.0f }, 1.0f);
         };
     }
-} // namespace
+}
 
 TEST_CASE("Virtual list geometry with one hundred thousand rows", "[.][benchmark][list]")
 {

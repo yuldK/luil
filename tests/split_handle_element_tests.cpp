@@ -140,7 +140,7 @@ namespace {
                     total += intent->delta;
         return total;
     }
-} // namespace
+}
 
 TEST_CASE("A split handle keeps dragging after the pane it resizes moves it away from the press", "[ui][split][interaction]")
 {

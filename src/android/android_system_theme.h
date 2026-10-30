@@ -26,4 +26,4 @@ namespace luil::android {
     //  - **메인 thread에서만** 부른다 (`post_to_main_thread`). View 계층을 만진다.
     //  - Android 11부터는 `WindowInsetsController`, 그 아래는 `View.setSystemUiVisibility`다.
     void apply_system_bar_icons(JNIEnv& env, jobject activity, bool light_background);
-} // namespace luil::android
+}

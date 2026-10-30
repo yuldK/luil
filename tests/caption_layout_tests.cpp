@@ -133,7 +133,7 @@ namespace {
             .enabled = enabled,
         };
     }
-} // namespace
+}
 
 TEST_CASE("Caption app buttons stand left of the window buttons in their listed order", "[caption]")
 {
@@ -211,7 +211,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::unique_ptr<luil::ui_element> make_caption_field(const char8_t* key, const luil::rect_f& slot)
@@ -221,7 +222,7 @@ namespace {
         field->arrange({ slot, 1.0f });
         return field;
     }
-} // namespace
+}
 
 TEST_CASE("Any element marked as a caption client turns the drag strip into client", "[caption][window-mode]")
 {
@@ -304,7 +305,7 @@ namespace {
     {
         return luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1000, 800, 96, x, y, band);
     }
-} // namespace
+}
 
 TEST_CASE("The caption band follows where the tree placed the caption", "[caption][window-mode]")
 {

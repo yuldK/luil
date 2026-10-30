@@ -82,4 +82,4 @@ namespace luil::win32 {
         // DWM에 마지막으로 말한 테두리 색과 명암이다. 같은 답이면 다시 말하지 않는다.
         std::optional<std::pair<COLORREF, BOOL>> dwm_theme_ {};
     };
-} // namespace luil::win32
+}

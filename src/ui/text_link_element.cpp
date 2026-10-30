@@ -56,10 +56,12 @@ namespace luil {
     }
 
     void text_link_element::arrange(const arrange_context&)
-    {}
+    {
+    }
 
     void text_link_element::draw(draw_context&, const interaction_snapshot&) const
-    {}
+    {
+    }
 
     const ui_element* text_link_element::hit_test(const float x, const float y) const
     {
@@ -101,4 +103,4 @@ namespace luil {
             add(index, std::make_unique<text_link_element>(text_link_id(owner, index), link, std::u8string { text.substr(link.begin, link.end - link.begin) }, editable, activate, hint));
         }
     }
-} // namespace luil
+}

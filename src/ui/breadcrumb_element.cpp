@@ -97,7 +97,7 @@ namespace luil {
                 width += item_width(config, context, index) + (has_separator(config, index) ? separator_width : 0.0f);
             return width;
         }
-    } // namespace
+    }
 
     ui_element_id breadcrumb_segment_id(const std::u8string_view owner, const std::u8string_view key)
     {
@@ -274,4 +274,4 @@ namespace luil {
         static_cast<void>(available_width);
         return size_f { total_width(config_, context, 0), row_height };
     }
-} // namespace luil
+}

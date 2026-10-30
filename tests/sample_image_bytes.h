@@ -49,4 +49,4 @@ namespace luil::testing {
         0x08, 0x04, 0x10, 0x10, 0x00, 0x3B,
     };
     // clang-format on
-} // namespace luil::testing
+}

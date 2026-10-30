@@ -208,4 +208,4 @@ namespace luil::win32 {
         // 기억해 건너뛴다 (popup·보조 창과 같은 규칙). stub에서는 알린 id다.
         std::vector<std::u8string> failed_ {};
     };
-} // namespace luil::win32
+}

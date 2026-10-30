@@ -12,7 +12,7 @@ namespace luil {
         std::shared_ptr<const std::vector<float>> font_sizes {};
         std::mutex font_sizes_mutex {};
         std::atomic<bool> has_font_sizes { false };
-    } // namespace
+    }
 
     float scaled_font_size(const float logical_size, const float display_scale) noexcept
     {
@@ -58,4 +58,4 @@ namespace luil {
         has_font_sizes.store(true);
         return true;
     }
-} // namespace luil
+}

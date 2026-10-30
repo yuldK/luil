@@ -12,7 +12,7 @@ namespace luil::win32 {
         {
             return static_cast<int>(std::lround(static_cast<double>(value)));
         }
-    } // namespace
+    }
 
     webview_layout plan_webview_layout(const std::optional<rect_f>& visible, const int client_width, const int client_height, const bool occluded, const float scale) noexcept
     {
@@ -55,4 +55,4 @@ namespace luil::win32 {
             .y = client_y - layout.y,
         };
     }
-} // namespace luil::win32
+}

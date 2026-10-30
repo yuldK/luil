@@ -60,7 +60,7 @@ namespace luil {
                 return state.language;
             }
         };
-    } // namespace
+    }
 
     const font_source& platform_font_source() noexcept
     {
@@ -75,5 +75,5 @@ namespace luil {
             const std::lock_guard<std::mutex> lock { state.mutex };
             state.language = std::move(language);
         }
-    } // namespace android
-} // namespace luil
+    }
+}

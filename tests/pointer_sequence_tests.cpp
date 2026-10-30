@@ -22,7 +22,7 @@ namespace {
         sample.surface = u8"tools";
         return sample;
     }
-} // namespace
+}
 
 TEST_CASE("A touch contact becomes a press, moves and a release with its id and scale", "[pointer-sequence][touch]")
 {

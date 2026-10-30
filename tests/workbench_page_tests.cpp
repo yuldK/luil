@@ -70,7 +70,7 @@ namespace {
     {
         return std::chrono::steady_clock::now() + std::chrono::hours { 1 };
     }
-} // namespace
+}
 
 TEST_CASE("The workbench assembles without duplicate or unarranged elements", "[demo][workbench]")
 {

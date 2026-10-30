@@ -238,7 +238,7 @@ namespace luil::win32 {
                 return E_FAIL;
             }
         }
-    } // namespace
+    }
 
     namespace {
         using raise_notification = HRESULT(WINAPI*)(IRawElementProviderSimple*, NotificationKind, NotificationProcessing, BSTR, BSTR);
@@ -336,14 +336,15 @@ namespace luil::win32 {
             static live_uia_event_sink sink {};
             return sink;
         }
-    } // namespace
+    }
 
     // --- uia_root_provider ---
 
     uia_root_provider::uia_root_provider(uia_surface_host& host) noexcept
         : host_ { &host }
         , events_ { &default_event_sink() }
-    {}
+    {
+    }
 
     void uia_root_provider::detach() noexcept
     {
@@ -442,7 +443,7 @@ namespace luil::win32 {
             static_cast<void>(VariantClear(&old_value));
             static_cast<void>(VariantClear(&new_value));
         }
-    } // namespace
+    }
 
     void uia_root_provider::announce_changes(const std::vector<access_change>& changes)
     {
@@ -1992,7 +1993,7 @@ namespace luil::win32 {
         {
             return index + 1u < starts.size() ? starts[index + 1u] : text.size();
         }
-    } // namespace
+    }
 
     uia_text_range_provider::uia_text_range_provider(uia_root_provider& root, ui_element_id id, const std::size_t begin, const std::size_t end) noexcept
         : root_ { &root }
@@ -2494,4 +2495,4 @@ namespace luil::win32 {
             return S_OK;
         });
     }
-} // namespace luil::win32
+}

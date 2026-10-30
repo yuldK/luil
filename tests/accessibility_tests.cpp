@@ -59,7 +59,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 자식을 정해진 자리에 그대로 두는 판이다.
@@ -88,7 +89,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
     private:
         std::vector<luil::rect_f> boxes_ {};
@@ -191,7 +193,7 @@ namespace {
         config.text = std::u8string { text };
         return std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, std::u8string { owner } }, std::move(config));
     }
-} // namespace
+}
 
 TEST_CASE("A text button reads as a button named by its text", "[ui][access]")
 {
@@ -993,7 +995,7 @@ namespace {
         root->add(make_note(u8"hint", note));
         return luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f);
     }
-} // namespace
+}
 
 TEST_CASE("Snapshot diff reports each changed element once", "[ui][access]")
 {

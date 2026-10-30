@@ -24,4 +24,4 @@ namespace luil {
     // 기본 UI 글꼴을 앞에서부터 찾는다. 빈 목록이나 모두 없는 이름이면 Segoe UI다.
     // 앱 시작 전에 지정한다. 이미 생성된 화면과 글꼴 객체는 자동으로 갱신하지 않는다.
     void set_ui_typeface_families(std::vector<std::u8string> families);
-} // namespace luil
+}

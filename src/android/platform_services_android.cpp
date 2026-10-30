@@ -51,7 +51,8 @@ namespace luil {
             explicit local_frame(JNIEnv& env) noexcept
                 : env_ { &env }
                 , pushed_ { env.PushLocalFrame(16) == JNI_OK }
-            {}
+            {
+            }
             local_frame(const local_frame&) = delete;
             local_frame(local_frame&&) = delete;
             local_frame& operator=(const local_frame&) = delete;
@@ -134,7 +135,7 @@ namespace luil {
             }
             return true;
         }
-    } // namespace
+    }
 
     platform_result replace_file_atomically(const std::u8string_view path, const std::span<const std::uint8_t> contents)
     {
@@ -317,11 +318,13 @@ namespace luil {
     }
 
     struct blocking_io_canceller::state
-    {};
+    {
+    };
 
     blocking_io_canceller::blocking_io_canceller()
         : state_ { std::make_unique<state>() }
-    {}
+    {
+    }
 
     blocking_io_canceller::blocking_io_canceller(blocking_io_canceller&&) noexcept = default;
     blocking_io_canceller& blocking_io_canceller::operator=(blocking_io_canceller&&) noexcept = default;
@@ -331,4 +334,4 @@ namespace luil {
     {
         return unsupported(u8"Android has no call that cancels another thread's blocking I/O.");
     }
-} // namespace luil
+}

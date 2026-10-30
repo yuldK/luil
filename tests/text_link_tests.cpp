@@ -134,7 +134,7 @@ namespace {
     }
 
     constexpr float first_row { 5.0f + 9.0f };
-} // namespace
+}
 
 TEST_CASE("Address detection finds web, www and mail links and trims sentence punctuation", "[ui][document][link]")
 {

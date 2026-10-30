@@ -49,7 +49,7 @@ namespace luil {
             }
             return codicons::icon_info;
         }
-    } // namespace
+    }
 
     toast_element::toast_element(toast_config config)
         : ui_element { ui_element_id { ui_element_kind::toast, config.id } }
@@ -199,4 +199,4 @@ namespace luil {
     {
         return { .role = access_role::alert, .name = config_.text };
     }
-} // namespace luil
+}

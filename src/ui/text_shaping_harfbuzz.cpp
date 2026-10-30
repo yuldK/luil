@@ -19,11 +19,11 @@ namespace luil {
                 return SkShapers::Primitive::Factory();
             return sk_make_sp<SkShapers::HarfbuzzFactory>(std::move(unicode));
         }
-    } // namespace
+    }
 
     sk_sp<SkShapers::Factory> text_shaping_factory()
     {
         static const sk_sp<SkShapers::Factory> factory { make_text_shaping_factory() };
         return factory;
     }
-} // namespace luil
+}

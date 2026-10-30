@@ -58,4 +58,4 @@ namespace luil {
         // Lottie 하나를 짓는다. 길이와 장 빠르기가 양수가 아니면 빈 값이다.
         [[nodiscard]] static ui_lottie lottie(std::shared_ptr<const lottie_backing> backing, int width, int height, std::chrono::nanoseconds duration, double frame_rate);
     };
-} // namespace luil
+}

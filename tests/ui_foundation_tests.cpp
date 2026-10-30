@@ -71,7 +71,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<std::size_t> offset_at(const float, const luil::text_measurer&) const override
         {
@@ -127,7 +128,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 자식을 담는 칸이다. 누를 수 있게 하면 Tab의 자리가 된다.
@@ -147,7 +149,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::unique_ptr<focus_cell> make_focus_cell(std::u8string owner, const luil::rect_f& slot, const bool stop)
@@ -158,7 +161,7 @@ namespace {
             cell->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; });
         return cell;
     }
-} // namespace
+}
 
 TEST_CASE("A focus leave action runs once when focus leaves its subtree", "[ui][interaction][focus]")
 {

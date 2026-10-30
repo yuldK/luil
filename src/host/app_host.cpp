@@ -69,7 +69,7 @@ namespace luil {
                 std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
             }
         }
-    } // namespace
+    }
 
     // 구성 요소의 선언 순서가 곧 파괴의 역순이다.
     // 스레드는 shutdown()이 먼저 멈추므로 여기서는 소유만 담당한다.
@@ -158,7 +158,8 @@ namespace luil {
                     output(feedback);
                 }
                 catch (...)
-                {}
+                {
+                }
             };
         parts.permission = std::move(configuration.permission);
         parts.request_permission = std::move(configuration.request_permission);
@@ -271,7 +272,8 @@ namespace luil {
             close_posted = post_close_message(assembly_->app_inbox, driver_.make_close_message(), assembly_->shutdown_deadline);
         }
         catch (...)
-        {}
+        {
+        }
 
         // 2. logic이 종료 신호를 처리할 때까지 기다린다.
         //    이 시점 이후에는 종료 저장 요청이 이미 worker에 들어가 있다.
@@ -288,7 +290,8 @@ namespace luil {
             driver_.stop_workers();
         }
         catch (...)
-        {}
+        {
+        }
 
         // 4. app inbox를 닫아 남은 메시지를 소진시키고 join한다.
         //    join 자체는 무기한이라, 스레드가 실제로 나오는지 먼저 유한하게
@@ -361,7 +364,8 @@ namespace luil {
             static_cast<void>(assembly_->input_inbox.post(std::move(event)));
         }
         catch (...)
-        {}
+        {
+        }
     }
 
     void app_host::perform_haptic(const haptic_feedback feedback) const noexcept
@@ -379,7 +383,8 @@ namespace luil {
             assembly_->execute_clipboard(std::move(request));
         }
         catch (...)
-        {}
+        {
+        }
     }
 
     permission_state app_host::permission(const app_permission permission) const noexcept
@@ -433,7 +438,8 @@ namespace luil {
             static_cast<void>(assembly_->app_inbox.post(std::move(message)));
         }
         catch (...)
-        {}
+        {
+        }
     }
 
     std::uint64_t app_host::post_app_message_ticketed(app_message message) noexcept
@@ -447,7 +453,8 @@ namespace luil {
                 return sequence + 1;
         }
         catch (...)
-        {}
+        {
+        }
         return 0;
     }
 
@@ -605,4 +612,4 @@ namespace luil {
             next_tick = driver_.next_tick();
         }
     }
-} // namespace luil
+}

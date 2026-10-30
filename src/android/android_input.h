@@ -133,4 +133,4 @@ namespace luil::android {
         dead_key_combiner combine_dead_key_ {};
         bool key_capture_ { false };
     };
-} // namespace luil::android
+}

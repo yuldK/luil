@@ -27,11 +27,12 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         float seen_scroll_offset { -1.0f };
     };
-} // namespace
+}
 
 TEST_CASE("A strip that is not overflowed keeps its origin and fills the slot", "[ui][strip]")
 {

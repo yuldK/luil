@@ -120,7 +120,7 @@ namespace luil::net {
                     out.push_back(std::move(header));
             }
         }
-    } // namespace
+    }
 
     void finish_and_close(request_context& context, const http_error& outcome) noexcept
     {
@@ -298,4 +298,4 @@ namespace luil::net {
     {
         std::lock_guard lock { request_table_mutex() };
     }
-} // namespace luil::net
+}

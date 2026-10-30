@@ -67,4 +67,4 @@ namespace luil {
     private:
         accent_picker_config config_ {};
     };
-} // namespace luil
+}

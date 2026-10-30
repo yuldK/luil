@@ -11,4 +11,4 @@ namespace luil::win32 {
     [[nodiscard]] std::wstring quote_argument(std::wstring_view argument);
     // 프로그램과 인자를 한 명령 줄로 잇는다. 프로그램 이름도 같은 규칙으로 감싼다.
     [[nodiscard]] std::wstring make_command_line(std::wstring_view program, std::span<const std::wstring> arguments);
-} // namespace luil::win32
+}

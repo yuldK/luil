@@ -120,7 +120,7 @@ namespace luil::net {
                 return false;
             return std::equal(signature.begin(), signature.end(), bytes.begin() + static_cast<std::ptrdiff_t>(offset));
         }
-    } // namespace
+    }
 
     http_media_type parse_media_type(const std::u8string_view value)
     {
@@ -198,4 +198,4 @@ namespace luil::net {
             return http_body_kind::image;
         return http_body_kind::bytes;
     }
-} // namespace luil::net
+}

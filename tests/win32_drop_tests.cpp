@@ -51,7 +51,8 @@ namespace {
 
         explicit drop_handle(const std::vector<std::wstring>& paths)
             : storage { make_drop_block(paths) }
-        {}
+        {
+        }
 
         drop_handle(const drop_handle&) = delete;
         drop_handle(drop_handle&&) = delete;
@@ -77,7 +78,8 @@ namespace {
     public:
         explicit file_data_object(std::vector<std::wstring> paths)
             : paths_ { std::move(paths) }
-        {}
+        {
+        }
 
         HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) override
         {
@@ -242,9 +244,11 @@ namespace {
         }
 
         void webview_pointer_left(const std::u8string&) override
-        {}
+        {
+        }
         void cancel_webview_pointer(const std::u8string&) override
-        {}
+        {
+        }
 
         [[nodiscard]] sk_sp<SkTypeface> apply_frame_appearance(luil::frame_state&, const luil::ui_frame*) override
         {
@@ -257,7 +261,8 @@ namespace {
         }
 
         void surface_moved(const std::u8string&) override
-        {}
+        {
+        }
 
         void dispatch_action(luil::input_action action) override
         {
@@ -270,13 +275,16 @@ namespace {
         }
 
         void schedule_update_repaint(const std::u8string&, const luil::interaction_snapshot&) noexcept override
-        {}
+        {
+        }
 
         void surface_focus_lost(const std::u8string&) override
-        {}
+        {
+        }
 
         void surface_focus_gained(const std::u8string&) override
-        {}
+        {
+        }
 
         [[nodiscard]] const luil::win32::window_surface* anchored_popup(const std::u8string&, const std::u8string&) const noexcept override
         {
@@ -289,10 +297,12 @@ namespace {
         }
 
         void set_pointer_capture_active(bool) noexcept override
-        {}
+        {
+        }
 
         void report_error(const std::u8string&) noexcept override
-        {}
+        {
+        }
 
     private:
         luil::win32::window_config config_ {};
@@ -315,7 +325,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     struct drop_intent
@@ -330,7 +341,7 @@ namespace {
         bool shift { false };
         bool alt { false };
     };
-} // namespace
+}
 
 TEST_CASE("Dropped file paths read every path in order", "[win32][drop]")
 {

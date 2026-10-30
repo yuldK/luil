@@ -124,4 +124,4 @@ namespace luil {
     // 팔레트는 `frame_palette`가 합성하고,
     // tree가 있으면 tree가 화면 전체를 그린다 (tooltip·drag 표시 포함).
     void draw_frame(SkCanvas& canvas, SkTypeface* codicon_typeface, SkTypeface* ui_typeface, const frame_state& state);
-} // namespace luil
+}

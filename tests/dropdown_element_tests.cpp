@@ -13,7 +13,7 @@ namespace {
     {
         bool open { false };
     };
-} // namespace
+}
 
 TEST_CASE("A dropdown toggles only when the config gives an action", "[ui][dropdown]")
 {

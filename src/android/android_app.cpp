@@ -286,7 +286,8 @@ namespace luil::android {
                 : app_ { app }
                 , config_ { config }
                 , environment_ { environment }
-            {}
+            {
+            }
 
             application(const application&) = delete;
             application(application&&) = delete;
@@ -1790,7 +1791,7 @@ namespace luil::android {
             float reported_scale_ { -1.0f };
             luil::edge_insets reported_outside_ {};
         };
-    } // namespace
+    }
 
     void apply_debug_properties(application_config& config)
     {
@@ -1816,4 +1817,4 @@ namespace luil::android {
         application instance { app, config, environment };
         return instance.run();
     }
-} // namespace luil::android
+}

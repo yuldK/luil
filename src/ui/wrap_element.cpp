@@ -6,7 +6,8 @@ namespace luil {
     wrap_element::wrap_element(const ui_element_id id, wrap_config config)
         : ui_element { id }
         , config_ { config }
-    {}
+    {
+    }
 
     void wrap_element::add(std::unique_ptr<ui_element> child)
     {
@@ -44,4 +45,4 @@ namespace luil {
     {
         draw_children(context, interaction);
     }
-} // namespace luil
+}

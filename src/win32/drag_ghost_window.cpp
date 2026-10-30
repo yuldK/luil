@@ -20,7 +20,7 @@
 namespace luil::win32 {
     namespace {
         constexpr wchar_t drag_ghost_class_name[] { L"Luil.DragGhost" };
-    } // namespace
+    }
 
     POINT drag_ghost_position(const POINT cursor, const std::uint32_t dpi) noexcept
     {
@@ -170,4 +170,4 @@ namespace luil::win32 {
             SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         return painted;
     }
-} // namespace luil::win32
+}

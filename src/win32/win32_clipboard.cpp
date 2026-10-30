@@ -33,7 +33,8 @@ namespace luil::win32 {
         {
             explicit scoped_clipboard(const HWND owner) noexcept
                 : open { open_clipboard(owner) }
-            {}
+            {
+            }
             scoped_clipboard(const scoped_clipboard&) = delete;
             scoped_clipboard& operator=(const scoped_clipboard&) = delete;
             ~scoped_clipboard()
@@ -51,7 +52,8 @@ namespace luil::win32 {
             explicit scoped_global_lock(const HANDLE source) noexcept
                 : handle { source }
                 , memory { GlobalLock(source) }
-            {}
+            {
+            }
             scoped_global_lock(const scoped_global_lock&) = delete;
             scoped_global_lock& operator=(const scoped_global_lock&) = delete;
             ~scoped_global_lock()
@@ -80,7 +82,7 @@ namespace luil::win32 {
             GlobalUnlock(storage);
             return storage;
         }
-    } // namespace
+    }
 
     bool copy_text_to_clipboard(const HWND owner, const std::u8string_view text) noexcept
     {
@@ -226,7 +228,7 @@ namespace luil::win32 {
             const auto upper = [](const char8_t value) { return value >= u8'a' && value <= u8'z' ? static_cast<char8_t>(value - (u8'a' - u8'A')) : value; };
             return rest.size() >= 4u && upper(rest[0]) == u8'U' && upper(rest[1]) == u8'N' && upper(rest[2]) == u8'C' && path_separator(rest[3]) && unc_path(rest.substr(4u));
         }
-    } // namespace
+    }
 
     bool absolute_clipboard_path(const std::u8string_view path) noexcept
     {
@@ -388,4 +390,4 @@ namespace luil::win32 {
             return content;
         }
     }
-} // namespace luil::win32
+}

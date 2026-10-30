@@ -16,4 +16,4 @@ namespace luil {
     {
         return payload.source.kind == item_kind && payload.container == container && payload.dragged_owner.empty() == false && payload.dragged_owner != key;
     }
-} // namespace luil
+}

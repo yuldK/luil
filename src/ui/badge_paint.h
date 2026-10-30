@@ -32,4 +32,4 @@ namespace luil {
     //    (`badge_element::shows_glyph`).
     //  - 점도 테를 두른다. 고대비가 채우기 색을 접어도 테가 남는다.
     void draw_badge_dot(draw_context& context, float center_x, float center_y, float radius, badge_tone tone);
-} // namespace luil
+}

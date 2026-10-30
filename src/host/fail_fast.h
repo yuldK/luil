@@ -9,4 +9,4 @@ namespace luil {
     // **플랫폼 계층이 하나를 정의한다** (Win32는 src/win32/fail_fast.cpp의 `__fastfail`).
     // core에 컴파일러 내장 함수나 OS 헤더를 들이지 않으려고 링크로 묶는다.
     [[noreturn]] void platform_fail_fast() noexcept;
-} // namespace luil
+}

@@ -93,7 +93,7 @@ namespace demo {
             }
             return line;
         }
-    } // namespace
+    }
 
     bool webview_page::handle(const luil::app_message& message)
     {
@@ -284,4 +284,4 @@ namespace demo {
         }
         return column;
     }
-} // namespace demo
+}

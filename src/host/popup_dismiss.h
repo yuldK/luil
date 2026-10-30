@@ -16,4 +16,4 @@ namespace luil {
     //    내며, 새 frame이 popup을 계속 실으면 소유자가 푼다
     //    (Win32 `popup_surface::adopt`, 모바일은 overlay를 다시 세우는 앱 host).
     [[nodiscard]] std::optional<input_action> take_popup_dismiss_action(const std::function<input_action(popup_dismiss_reason)>& dismiss, bool& requested, popup_dismiss_reason reason);
-} // namespace luil
+}

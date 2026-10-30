@@ -107,7 +107,7 @@ namespace {
             }
         return luil::make_rgba_image(size, size, pixels);
     }
-} // namespace
+}
 
 TEST_CASE("The default button is painted as a fill and the focus ring as a ring", "[ui][raster][draw]")
 {
@@ -598,7 +598,7 @@ namespace {
                 return false;
         return true;
     }
-} // namespace
+}
 
 TEST_CASE("Only a surface whose backdrop stands clears with the backdrop background", "[win32][raster][backdrop]")
 {
@@ -663,7 +663,8 @@ namespace {
         fill_element(const luil::ui_element_id& id, const luil::ui_color color)
             : ui_element { id }
             , color_ { color }
-        {}
+        {
+        }
 
         void arrange(const luil::arrange_context& context) override
         {
@@ -682,7 +683,7 @@ namespace {
     private:
         luil::ui_color color_;
     };
-} // namespace
+}
 
 TEST_CASE("Content starts at the frame origin while the background fills the surface", "[ui][raster][frame]")
 {

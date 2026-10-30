@@ -67,7 +67,7 @@ namespace {
         SkBitmap bitmap { allocated() };
         SkCanvas canvas { bitmap };
     };
-} // namespace
+}
 
 TEST_CASE("A text block aligns its drawn width inside the box", "[ui][text-block][native]")
 {

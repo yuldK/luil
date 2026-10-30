@@ -66,4 +66,4 @@ namespace widgets {
 
         return { std::move(column), title_height + 8.0f + 28.0f + 8.0f + echo_height };
     }
-} // namespace widgets
+}

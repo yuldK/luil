@@ -36,4 +36,4 @@ namespace mobile_demo {
         std::u8string coffee_ { u8"mocha" };
         std::u8string view_ { u8"grid" };
     };
-} // namespace mobile_demo
+}

@@ -50,4 +50,4 @@ namespace luil {
         const auto* const begin { static_cast<const std::uint8_t*>(data->data()) };
         return std::vector<std::uint8_t> { begin, begin + data->size() };
     }
-} // namespace luil
+}

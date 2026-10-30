@@ -76,4 +76,4 @@ namespace luil {
     // 시각은 그 시각을 확실히 지나도록 살짝 늦춘다. 상한이 지연을 줄이더라도
     // 가장 이른 예고를 답한 표면은 반드시 든다.
     [[nodiscard]] update_timer_plan plan_update_timer(std::span<const surface_update_deadline> deadlines, std::chrono::steady_clock::time_point now, std::chrono::milliseconds repaint_interval);
-} // namespace luil
+}

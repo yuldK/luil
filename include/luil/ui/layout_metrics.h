@@ -143,4 +143,4 @@ namespace luil {
         const float viewport_end { viewport_begin + viewport_length };
         return target_end > viewport_end ? target_end - viewport_end : 0.0f;
     }
-} // namespace luil
+}

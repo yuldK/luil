@@ -78,4 +78,4 @@ namespace luil::win32 {
     // 포인터를 먹지 않는다.
     // 누름을 시작한 웹뷰는 캡처 동안 사각형 밖의 이동과 뗌도 받는다.
     [[nodiscard]] webview_pointer translate_webview_pointer(const webview_layout& layout, int client_x, int client_y, bool captured = false) noexcept;
-} // namespace luil::win32
+}

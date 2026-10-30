@@ -38,7 +38,7 @@ namespace demo {
             page_entry { page_theme, u8"모양과 색" },
             page_entry { page_workbench, u8"변경 작업대" },
         };
-    } // namespace
+    }
 
     std::vector<luil::app_command> palette_commands()
     {
@@ -124,4 +124,4 @@ namespace demo {
         popups.push_back(std::move(popup));
         return popups;
     }
-} // namespace demo
+}

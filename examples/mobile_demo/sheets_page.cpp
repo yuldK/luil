@@ -60,7 +60,7 @@ namespace mobile_demo {
             button->set_action(luil::ui_trigger::left_click, std::move(action));
             return button;
         }
-    } // namespace
+    }
 
     bool sheets_page::handle(const luil::app_message& message)
     {
@@ -210,4 +210,4 @@ namespace mobile_demo {
         host->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .surface = surface });
         root.add(std::move(host));
     }
-} // namespace mobile_demo
+}

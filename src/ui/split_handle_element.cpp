@@ -15,7 +15,7 @@ namespace luil {
         constexpr float handle_line_width { 2.0f };
         // 쉬는 동안의 구분선 두께다 (판을 가르는 다른 1 px 선과 같다).
         constexpr float resting_divider_width { 1.0f };
-    } // namespace
+    }
 
     split_handle_element::split_handle_element(const ui_element_id id, split_handle_config config)
         : ui_element { id }
@@ -113,4 +113,4 @@ namespace luil {
         // 같은 이유다 (value-step-design.md).
         return { .role = access_role::handle, .name = tooltip() };
     }
-} // namespace luil
+}

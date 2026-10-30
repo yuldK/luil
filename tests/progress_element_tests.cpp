@@ -6,7 +6,7 @@
 
 namespace {
     constexpr luil::ui_element_kind kind_progress { luil::application_element_kind(0) };
-} // namespace
+}
 
 TEST_CASE("A progress bar reports its height from the thickness", "[ui][progress]")
 {

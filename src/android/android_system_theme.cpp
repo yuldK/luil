@@ -20,7 +20,8 @@ namespace luil::android {
             explicit local_frame(JNIEnv& env) noexcept
                 : env_ { env }
                 , pushed_ { env.PushLocalFrame(16) == 0 }
-            {}
+            {
+            }
 
             local_frame(const local_frame&) = delete;
             local_frame(local_frame&&) = delete;
@@ -59,7 +60,7 @@ namespace luil::android {
             const jobject window { env.CallObjectMethod(activity, get_window) };
             return failed(env) ? nullptr : window;
         }
-    } // namespace
+    }
 
     std::optional<ui_color> read_dynamic_accent(JNIEnv& env, const jobject context)
     {
@@ -193,4 +194,4 @@ namespace luil::android {
         env.CallVoidMethod(decor, set_flags, flags);
         static_cast<void>(failed(env));
     }
-} // namespace luil::android
+}

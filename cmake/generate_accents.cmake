@@ -113,7 +113,7 @@ if(NOT DEFAULT_ACCENT_ID IN_LIST seen_identifiers)
     message(FATAL_ERROR "The accent catalog must contain the default id: ${DEFAULT_ACCENT_ID}")
 endif()
 
-string(APPEND output_text "    };\n} // namespace luil::generated\n")
+string(APPEND output_text "    };\n}\n")
 get_filename_component(output_directory "${OUTPUT_FILE}" DIRECTORY)
 file(MAKE_DIRECTORY "${output_directory}")
 file(WRITE "${OUTPUT_FILE}" "${output_text}")

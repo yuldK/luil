@@ -30,4 +30,4 @@ namespace luil::win32 {
         }
         return device_;
     }
-} // namespace luil::win32
+}

@@ -56,4 +56,4 @@ namespace luil {
     // 칸 글 `text`의 링크마다 자식을 지어 `add`에 그 링크의 순번과 함께 넘긴다. 글을 벗어나거나 빈 구간은 짓지 않는다.
     void make_text_link_elements(const ui_element_id& owner, std::u8string_view text, std::span<const text_link> links, bool editable, const text_link_activation& activate, std::u8string_view hint,
         const std::function<void(std::size_t index, std::unique_ptr<text_link_element> element)>& add);
-} // namespace luil
+}

@@ -257,4 +257,4 @@ namespace luil {
         std::vector<std::pair<std::size_t, text_link_element*>> link_elements_ {};
 
     };
-} // namespace luil
+}

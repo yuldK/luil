@@ -98,4 +98,4 @@ namespace luil::win32 {
         // 꺼낸 배치를 frame과 함께 냈다. OS가 배치 변경 메시지를 보내지 않으므로 그 뒤처리를 여기서 한다.
         virtual void layered_placement_presented(const screen_bounds& previous, const screen_bounds& bounds) = 0;
     };
-} // namespace luil::win32
+}

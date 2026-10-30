@@ -85,4 +85,4 @@ namespace luil {
         ui_element* overflow_ { nullptr };
         std::size_t collapsed_ { 0 };
     };
-} // namespace luil
+}

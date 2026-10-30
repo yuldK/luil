@@ -107,4 +107,4 @@ namespace luil {
     rect_f draw_text_block(draw_context& context, std::u8string_view text, const rect_f& box, const text_block_style& style, const SkPaint& paint);
     // 배치에서 잰 줄(`measure_text_block`)로 그린다. 그리기마다 줄을 다시 바꾸지 않는다.
     rect_f draw_text_block(draw_context& context, std::u8string_view text, const rect_f& box, const text_block_style& style, const SkPaint& paint, const text_block_layout& layout);
-} // namespace luil
+}

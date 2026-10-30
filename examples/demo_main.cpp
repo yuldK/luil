@@ -213,7 +213,8 @@ namespace demo {
                 , placement_revision_ { restore.has_value() ? 1u : 0u }
                 , page_ { page.empty() ? std::u8string { page_overview } : std::move(page) }
                 , primary_instance_ { primary_instance }
-            {}
+            {
+            }
 
             // 창 페이지·테마 페이지의 시작 상태다 (`--caption=bottom`, `--presentation=`, `--backdrop=`).
             void set_window_options(const bool caption_bottom, const bool layered, const luil::window_backdrop backdrop) noexcept
@@ -1029,7 +1030,8 @@ namespace demo {
             // 둘 다 wWinMain의 지역이라 수명이 같다.
             explicit demo_delegate(demo_driver& driver) noexcept
                 : driver_ { driver }
-            {}
+            {
+            }
 
             // 창과 host가 준비된 직후다 (메시지 루프 전).
             // HTTP client의 배출구가 답을 넣을 곳이 이 host다.
@@ -1080,8 +1082,8 @@ namespace demo {
         private:
             demo_driver& driver_;
         };
-    } // namespace
-} // namespace demo
+    }
+}
 
 namespace {
     [[nodiscard]] bool parse_arguments(
@@ -1140,7 +1142,7 @@ namespace {
         }
         return true;
     }
-} // namespace
+}
 
 int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
 {

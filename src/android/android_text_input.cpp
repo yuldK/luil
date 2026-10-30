@@ -62,7 +62,7 @@ namespace luil::android {
         {
             return value >= 0xDC00u && value <= 0xDFFFu;
         }
-    } // namespace
+    }
 
     std::u8string utf8_from_modified_utf8(const std::string_view text)
     {
@@ -169,7 +169,8 @@ namespace luil::android {
     ime_session::ime_session(text_input_host& host, platform platform)
         : host_ { &host }
         , platform_ { std::move(platform) }
-    {}
+    {
+    }
 
     void ime_session::synchronize()
     {
@@ -423,4 +424,4 @@ namespace luil::android {
         state.selection = { utf16_offset_from_utf8(document.text, document.anchor), utf16_offset_from_utf8(document.text, document.caret) };
         platform_.set_state(state);
     }
-} // namespace luil::android
+}

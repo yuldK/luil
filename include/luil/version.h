@@ -8,4 +8,4 @@
 namespace luil {
     // 라이브러리 판번 문자열이다 (LUIL_VERSION_STRING과 같다).
     [[nodiscard]] const char* library_version() noexcept;
-} // namespace luil
+}

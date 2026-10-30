@@ -41,12 +41,13 @@ namespace luil {
                 .max_lines = config.max_lines,
             };
         }
-    } // namespace
+    }
 
     label_element::label_element(ui_element_id id, label_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     label_wrap label_element::measure_wrap(const label_config& config, const measure_context& context, const float available_width)
     {
@@ -117,4 +118,4 @@ namespace luil {
         static_cast<void>(available_width);
         return size_f { std::ceil(context.text_width(config_.text, config_.font_size)) + config_.padding * 2.0f, height_for(config_) };
     }
-} // namespace luil
+}

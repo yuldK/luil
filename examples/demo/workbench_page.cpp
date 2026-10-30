@@ -229,7 +229,7 @@ namespace demo {
             const std::size_t slash { path.find_last_of(u8"/\\") };
             return std::u8string { slash == std::u8string_view::npos ? path : path.substr(slash + 1) };
         }
-    } // namespace
+    }
 
     workbench_page::workbench_page()
     {
@@ -1229,4 +1229,4 @@ namespace demo {
         }
         return popups;
     }
-} // namespace demo
+}

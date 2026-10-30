@@ -107,14 +107,15 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] luil::key_pressed_event key(const luil::key_code code)
     {
         return luil::key_pressed_event { code };
     }
-} // namespace
+}
 
 TEST_CASE("Submenu hover waits for its deadline and sends one open intent", "[ui][menu][submenu]")
 {

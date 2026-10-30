@@ -746,4 +746,4 @@ namespace luil {
 
     // 휠 한 눈금이 움직이는 논리 픽셀이다.
     inline constexpr float input_wheel_scroll_step { 48.0f };
-} // namespace luil
+}

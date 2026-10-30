@@ -18,7 +18,7 @@ namespace demo {
     namespace {
         constexpr float dropdown_width { 200.0f };
         inline constexpr std::u8string_view presentation_values[] { u8"자세히", u8"간결하게" };
-    } // namespace
+    }
 
     void popups_page::close_dropdown() noexcept
     {
@@ -292,4 +292,4 @@ namespace demo {
         }
         return popups;
     }
-} // namespace demo
+}

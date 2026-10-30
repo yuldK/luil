@@ -149,4 +149,4 @@ namespace luil {
         stack_config config_ {};
         std::vector<entry> entries_ {};
     };
-} // namespace luil
+}

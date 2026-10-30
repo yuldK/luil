@@ -6,7 +6,7 @@
 
 namespace luil {
     class ui_tree;
-} // namespace luil
+}
 
 namespace luil::win32 {
     // caption이 서 있는 자리다 (client 물리 픽셀).
@@ -64,4 +64,4 @@ namespace luil::win32 {
         int client_width, std::uint32_t dpi, const caption_ui_metrics& metrics = default_caption_ui_metrics, const caption_buttons& buttons = default_caption_buttons) noexcept;
     // 띠 밖은 client다. `x < right`를 먼저 거르므로 왼쪽 좌표가 오른쪽 끝과 같은 버튼은 맞지 않는다.
     [[nodiscard]] caption_hit hit_test_caption(const caption_layout& layout, int x, int y) noexcept;
-} // namespace luil::win32
+}

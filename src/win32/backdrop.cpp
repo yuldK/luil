@@ -55,7 +55,7 @@ namespace luil::win32 {
             static const set_window_composition_attribute_function function { find_set_window_composition_attribute() };
             return function;
         }
-    } // namespace
+    }
 
     backdrop_decision decide_backdrop(const window_backdrop requested, const backdrop_environment& environment) noexcept
     {
@@ -149,4 +149,4 @@ namespace luil::win32 {
             static_cast<void>(accent(window, &data));
         }
     }
-} // namespace luil::win32
+}

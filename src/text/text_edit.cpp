@@ -48,7 +48,8 @@ namespace luil::text {
         public:
             explicit grapheme_walker(const std::u8string_view text) noexcept
                 : text_ { text }
-            {}
+            {
+            }
 
             std::size_t previous(const std::size_t offset)
             {
@@ -183,7 +184,7 @@ namespace luil::text {
         {
             state.group = text_edit_group::none;
         }
-    } // namespace
+    }
 
     std::u8string text_edit_encode_utf8(const char32_t character)
     {
@@ -467,4 +468,4 @@ namespace luil::text {
         state.anchor = text_edit_clamp_offset(state.text, state.anchor);
         state.group_caret = state.caret;
     }
-} // namespace luil::text
+}

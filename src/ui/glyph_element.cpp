@@ -15,7 +15,8 @@ namespace luil {
     glyph_element::glyph_element(ui_element_id id, glyph_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void glyph_element::arrange(const arrange_context& context)
     {
@@ -54,4 +55,4 @@ namespace luil {
         static_cast<void>(available_width);
         return size_f { config_.font_size, config_.font_size };
     }
-} // namespace luil
+}

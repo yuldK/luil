@@ -26,7 +26,7 @@ namespace {
             return nullptr;
         return message->get<fake_intent>();
     }
-} // namespace
+}
 
 TEST_CASE("A dismiss trigger reaches the app with its reason", "[win32][popup]")
 {

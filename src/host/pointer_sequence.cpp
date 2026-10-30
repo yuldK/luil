@@ -25,7 +25,7 @@ namespace luil {
         {
             return raw_input_event { pointer_cancelled_event { device, pointer_id, surface, time } };
         }
-    } // namespace
+    }
 
     std::vector<raw_input_event> pointer_sequence_tracker::accept(const pointer_sample& sample)
     {
@@ -168,4 +168,4 @@ namespace luil {
     {
         std::erase_if(contacts_, [pointer_id](const contact& value) { return value.pointer_id == pointer_id; });
     }
-} // namespace luil
+}

@@ -191,7 +191,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
     private:
         std::size_t index_ { 0 };
@@ -229,7 +230,7 @@ namespace {
         config.scroll = scroll_factory();
         return press_key_on(std::move(config), key);
     }
-} // namespace
+}
 
 TEST_CASE("Virtual list geometry answers the content height and each row span without a tree", "[ui][list]")
 {

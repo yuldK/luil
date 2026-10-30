@@ -5,7 +5,7 @@
 namespace {
     using luil::win32::webview_message_gate;
     using luil::win32::webview_message_verdict;
-} // namespace
+}
 
 TEST_CASE("Web messages under both limits are accepted", "[win32][webview]")
 {

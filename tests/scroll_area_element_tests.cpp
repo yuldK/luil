@@ -48,7 +48,8 @@ namespace {
         content_stack(luil::ui_element_id id, const float height)
             : ui_element { std::move(id) }
             , height_ { height }
-        {}
+        {
+        }
 
         void add(std::unique_ptr<ui_element> child)
         {
@@ -76,7 +77,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
     private:
         float height_ { 0.0f };
@@ -101,7 +103,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 영역 여럿을 가로로 똑같이 나눠 세우는 판이다.
@@ -130,7 +133,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 자식 전부에게 자기 자리를 통째로 주는 판이다.
@@ -153,7 +157,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] luil::ui_element_id row_id(const std::u8string_view owner, const std::size_t index)
@@ -237,7 +242,7 @@ namespace {
     {
         return std::find(order.begin(), order.end(), id) != order.end();
     }
-} // namespace
+}
 
 TEST_CASE("A scroll area reports the same logical metrics at every scale", "[ui][scroll]")
 {
@@ -664,7 +669,8 @@ TEST_CASE("An opaque row inside a scroll area still lets the area take the wheel
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     luil::scroll_area_config config { make_config(u8"refs", 10) };

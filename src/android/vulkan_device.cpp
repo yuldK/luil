@@ -50,7 +50,7 @@ namespace luil::android {
             error += u8'.';
             return error;
         }
-    } // namespace
+    }
 
     std::unique_ptr<vulkan_device> vulkan_device::create(std::u8string& error)
     {
@@ -415,4 +415,4 @@ namespace luil::android {
             return;
         context_->freeGpuResources();
     }
-} // namespace luil::android
+}

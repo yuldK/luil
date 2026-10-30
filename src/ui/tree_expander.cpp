@@ -46,4 +46,4 @@ namespace luil {
         const ui_color color { interaction.hovered == id() ? context.palette.primary_foreground : context.palette.secondary_foreground };
         draw_centered_glyph(context.canvas, expanded_ ? codicons::icon_chevron_down : codicons::icon_chevron_right, bounds(), glyph_font, solid_paint(color));
     }
-} // namespace luil
+}

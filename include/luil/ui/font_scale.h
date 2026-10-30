@@ -13,4 +13,4 @@ namespace luil {
     // 플랫폼이 읽은 변환 표다. sizes[n]은 n sp의 dp 크기다. 빈 표는 기본 배율이다.
     // Android의 비선형 글자 확대를 보존한다. 유한한 단조 증가 표만 받으며 어느 thread에서나 읽을 수 있다.
     [[nodiscard]] bool set_system_font_sizes(std::vector<float> sizes);
-} // namespace luil
+}

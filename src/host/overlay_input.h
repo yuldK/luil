@@ -68,4 +68,4 @@ namespace luil {
         pointer_device hover_device_ { pointer_device::mouse };
         std::u8string hover_surface_ {};
     };
-} // namespace luil
+}

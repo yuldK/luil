@@ -76,7 +76,7 @@ namespace {
         REQUIRE(intent != nullptr);
         REQUIRE(intent->delta == expected);
     }
-} // namespace
+}
 
 TEST_CASE("A slider puts the knob centre at the ends of its travel", "[ui][slider]")
 {

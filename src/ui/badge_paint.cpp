@@ -72,7 +72,7 @@ namespace luil {
         {
             return context.scale > 0.0f ? context.scale : 1.0f;
         }
-    } // namespace
+    }
 
     ui_color badge_tone_color(const ui_color_palette& palette, const badge_tone tone) noexcept
     {
@@ -168,4 +168,4 @@ namespace luil {
         border.setStrokeWidth(scale);
         context.canvas.drawCircle(center_x, center_y, std::max(radius - scale / 2.0f, 0.0f), border);
     }
-} // namespace luil
+}

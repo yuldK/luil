@@ -17,4 +17,4 @@ namespace luil::win32 {
         static_cast<void>(composition);
         return { nullptr, u8"This build has no Direct3D renderer (LUIL_ENABLE_DIRECT3D=OFF)." };
     }
-} // namespace luil::win32
+}

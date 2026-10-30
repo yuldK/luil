@@ -10,4 +10,4 @@ namespace luil::android {
     //  - 창의 수명은 앱 host가 쥔다. 렌더러는 그동안 참조를 하나 더 잡고, 창이 사라지는
     //    알림(APP_CMD_TERM_WINDOW) 안에서 렌더러가 먼저 사라져야 한다.
     [[nodiscard]] renderer_factory_result create_cpu_skia_renderer(ANativeWindow* window);
-} // namespace luil::android
+}

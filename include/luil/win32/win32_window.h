@@ -301,4 +301,4 @@ namespace luil::win32 {
     // 명령행을 UTF-8 인자 목록으로 바꾼다.
     // 변환 실패면 nullopt다.
     [[nodiscard]] std::optional<std::vector<std::u8string>> command_line_arguments();
-} // namespace luil::win32
+}

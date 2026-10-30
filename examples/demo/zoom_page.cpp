@@ -55,7 +55,7 @@ namespace demo {
         private:
             float scale_ { 1.0f };
         };
-    } // namespace
+    }
 
     luil::zoom_view_config zoom_page::config() const
     {
@@ -118,4 +118,4 @@ namespace demo {
         column->add_flexible(std::move(view));
         return column;
     }
-} // namespace demo
+}

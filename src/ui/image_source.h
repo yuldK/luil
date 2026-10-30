@@ -28,5 +28,5 @@ namespace luil {
         [[nodiscard]] sk_sp<SkData> read_image_file(std::u8string_view path, const image_decode_options& options, image_decode_error& error);
         // 바이트를 복사하지 않고 빌린다. 코덱이 이 호출 안에서 끝나야 한다.
         [[nodiscard]] sk_sp<SkData> borrow_image_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
-    } // namespace image_input
-} // namespace luil
+    }
+}

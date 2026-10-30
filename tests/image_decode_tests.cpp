@@ -644,7 +644,7 @@ namespace {
     private:
         std::filesystem::path path_ {};
     };
-} // namespace
+}
 
 TEST_CASE("The decoded size honours the limits and never grows the image", "[ui][image][decode]")
 {

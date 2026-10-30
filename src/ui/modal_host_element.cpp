@@ -109,4 +109,4 @@ namespace luil {
         // 라이브러리가 지어낼 수 있는 것이 없다 (`modal_host_config::name`).
         return { .role = access_role::dialog, .name = config_.name };
     }
-} // namespace luil
+}

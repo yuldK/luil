@@ -5,7 +5,7 @@
 namespace {
     using luil::rect_f;
     using luil::win32::plan_webview_layout;
-} // namespace
+}
 
 TEST_CASE("A webview with no visible bounds takes no place", "[win32][webview]")
 {

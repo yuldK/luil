@@ -111,7 +111,7 @@ namespace {
     {
         return luil::color_palette_for(luil::color_theme::dark);
     }
-} // namespace
+}
 
 TEST_CASE("Custom tooltip content makes disabled elements hover targets and preserves the text summary", "[ui][tooltip]")
 {

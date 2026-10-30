@@ -279,7 +279,8 @@ namespace luil {
             }
 
             void draw(draw_context&, const interaction_snapshot&) const override
-            {}
+            {
+            }
         };
 
         // 이번 배치에서 쓰지 않은 갈래를 버리고, 갈래가 모두 빠진 글도 버린다.
@@ -292,7 +293,7 @@ namespace luil {
                 item = item->second.empty() ? entries.erase(item) : std::next(item);
             }
         }
-    } // namespace
+    }
 
     text_area_element::text_area_element(const ui_element_id id, text_input_view value, text_area_config config)
         : ui_element { id }
@@ -1146,4 +1147,4 @@ namespace luil {
         // 값은 확정 글이다 — 조합 글은 아직 사용자의 글이 아니다 (`text_input_element`와 같은 판단).
         return { .role = access_role::edit, .name = config_.placeholder, .value = value_.text };
     }
-} // namespace luil
+}

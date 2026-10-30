@@ -80,7 +80,7 @@ namespace {
         auto* const message { std::get_if<luil::app_message>(&actions[0]) };
         return message != nullptr ? message->get<T>() : nullptr;
     }
-} // namespace
+}
 
 TEST_CASE("A list builds a row per item and a scrollbar only where it can scroll", "[ui][list]")
 {

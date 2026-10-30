@@ -262,7 +262,7 @@ namespace luil::net {
             source = http_body_kind_source::declared;
             return classify_media_type(content_type);
         }
-    } // namespace
+    }
 
     http_body decode_http_body(std::vector<std::uint8_t> bytes, const http_media_type& content_type, const http_body_parse_options& options)
     {
@@ -304,4 +304,4 @@ namespace luil::net {
         }
         return body;
     }
-} // namespace luil::net
+}

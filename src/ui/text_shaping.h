@@ -4,7 +4,7 @@
 
 namespace SkShapers {
     class Factory;
-} // namespace SkShapers
+}
 
 namespace luil {
     // UI text_layout·SVG의 `<text>`·Lottie 글자 레이어가 함께 쓰는 모양 잡기 공장이다.
@@ -23,4 +23,4 @@ namespace luil {
     //    그림마다 하지 않는다. 공장은 shaper를 부를 때마다 새로 짓고 Unicode 래퍼만
     //    나눠 쓰므로 여러 디코딩 thread가 함께 써도 된다.
     [[nodiscard]] sk_sp<SkShapers::Factory> text_shaping_factory();
-} // namespace luil
+}

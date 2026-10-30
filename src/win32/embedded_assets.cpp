@@ -70,11 +70,11 @@ namespace luil::win32 {
         }
         return true;
     }
-} // namespace luil::win32
+}
 
 namespace luil {
     sk_sp<SkTypeface> load_codicon_typeface()
     {
         return win32::load_codicon_typeface();
     }
-} // namespace luil
+}
