@@ -75,7 +75,6 @@ configure_file(
     "${LUIL_CMAKE_DIRECTORY}/version.h.in"
     "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/version.h"
     @ONLY)
-set(LUIL_SOURCE_STYLE_SCRIPT "${PROJECT_SOURCE_DIR}/scripts/check_source_style.ps1")
 
 # Skia 헤더와 라이브러리 위치를 정한다.
 # 기본값은 fetch_skia.ps1의 설치 디렉터리이며 직접 빌드한 트리도 지정할 수 있다.
@@ -468,30 +467,20 @@ endif()
 # 이 옵션을 함께 켜므로 여기서 죽으면 빌드 전체가 막힌다 — 실제로 Visual Studio의
 # C++ Clang 도구를 설치하지 않은 머신에서 그렇게 걸렸다.
 if(LUIL_BUILD_TOOLING)
-    find_program(LUIL_POWERSHELL_EXECUTABLE NAMES pwsh powershell)
     # 사람이 -DLUIL_CLANG_FORMAT_EXECUTABLE로 준 것이 있으면 그것을 쓴다.
     if(NOT LUIL_CLANG_FORMAT_EXECUTABLE)
         luil_find_visual_studio_clang_format(LUIL_CLANG_FORMAT_EXECUTABLE)
     endif()
-    if(NOT LUIL_CLANG_FORMAT_EXECUTABLE OR NOT LUIL_POWERSHELL_EXECUTABLE)
-        set(luil_tooling_missing "")
-        if(NOT LUIL_CLANG_FORMAT_EXECUTABLE)
-            list(APPEND luil_tooling_missing
-                "clang-format (Visual Studio Installer: \"C++ Clang tools for Windows\")")
-        endif()
-        if(NOT LUIL_POWERSHELL_EXECUTABLE)
-            list(APPEND luil_tooling_missing "pwsh or powershell")
-        endif()
-        list(JOIN luil_tooling_missing " and " luil_tooling_missing_text)
+    if(NOT LUIL_CLANG_FORMAT_EXECUTABLE)
         message(WARNING
             "The formatting targets are not available: "
-            "${luil_tooling_missing_text} was not found.\n"
+            "clang-format (Visual Studio Installer: \"C++ Clang tools for Windows\") was not found.\n"
             "luil_format and luil_format_check are skipped. Everything "
             "else - the library, the tests and the examples - still builds.\n"
             "Set LUIL_CLANG_FORMAT_EXECUTABLE to point at one explicitly.")
-        unset(luil_tooling_missing)
-        unset(luil_tooling_missing_text)
     else()
+        # 스타일 검사는 PowerShell을 돌 때 PATH에서 찾는 script로 부른다 (run_style_check.cmake).
+        # 구성 시점의 절대 경로는 PowerShell이 자리를 옮기면 낡는다.
         luil_add_clang_format_targets(
             CLANG_FORMAT_EXECUTABLE "${LUIL_CLANG_FORMAT_EXECUTABLE}"
             FORMAT_TARGET luil_format
@@ -502,11 +491,9 @@ if(LUIL_BUILD_TOOLING)
                 "${LUIL_TEST_DIRECTORY}"
             FILE_EXTENSIONS cpp h
             CHECK_COMMAND
-                "${LUIL_POWERSHELL_EXECUTABLE}"
-                -NoProfile
-                -ExecutionPolicy Bypass
-                -File "${LUIL_SOURCE_STYLE_SCRIPT}"
-                -root "${PROJECT_SOURCE_DIR}"
+                "${CMAKE_COMMAND}"
+                "-DROOT_DIRECTORY=${PROJECT_SOURCE_DIR}"
+                -P "${LUIL_CMAKE_DIRECTORY}/run_style_check.cmake"
         )
         luil_set_ide_folder("Tooling"
             luil_format
