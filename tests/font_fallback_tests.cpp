@@ -22,7 +22,8 @@ namespace {
         scripted_fallback(SkTypeface* const typeface, std::set<char32_t> covered)
             : typeface_ { typeface }
             , covered_ { std::move(covered) }
-        {}
+        {
+        }
 
         [[nodiscard]] sk_sp<SkTypeface> for_codepoint(const char32_t codepoint) const override
         {
@@ -61,7 +62,7 @@ namespace {
             result.append(run.text);
         return result;
     }
-} // namespace
+}
 
 TEST_CASE("Text runs stay whole when no fallback is installed", "[ui][fonts]")
 {

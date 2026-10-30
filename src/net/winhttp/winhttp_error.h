@@ -22,4 +22,4 @@ namespace luil::net {
 
     // 보안 실패 깃발을 사람이 읽을 목록으로 푼다 (빈 깃발이면 빈 글이다).
     [[nodiscard]] std::u8string describe_secure_failure(unsigned long secure_flags);
-} // namespace luil::net
+}

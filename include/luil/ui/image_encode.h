@@ -73,4 +73,4 @@ namespace luil {
     //  - 줄일 때마다 원본에서 새로 줄인다. 긴 변이 `minimum_side`보다 작아지면 멈추고 빈 바이트와 `error`다.
     //  - 인코딩을 여러 번 돌리는 동기 작업이다. UI thread에서 부를 자리가 아니다.
     [[nodiscard]] webp_size_limit_result encode_webp_within(const ui_image& image, const webp_size_limit_options& options, std::u8string& error);
-} // namespace luil
+}

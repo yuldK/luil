@@ -120,4 +120,4 @@ namespace luil::net {
     //  - **text도 맡지 않는다.** "UTF-8로 읽히니 글이겠지"는 zip을 글로 만든다.
     //    모르는 바이트는 `bytes`이고, 그것이 정직한 답이다.
     [[nodiscard]] http_body_kind sniff_body_kind(std::span<const std::uint8_t> bytes) noexcept;
-} // namespace luil::net
+}

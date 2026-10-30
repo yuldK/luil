@@ -37,10 +37,12 @@ namespace {
     };
 
     struct select_all_intent
-    {};
+    {
+    };
 
     struct policy_key_intent
-    {};
+    {
+    };
 
     class recording_policy final : public luil::interaction_policy
     {
@@ -70,7 +72,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::chrono::steady_clock::time_point at(const int milliseconds)
@@ -136,7 +139,7 @@ namespace {
         static_cast<void>(controller.process(key(luil::key_code::tab, false, false, 0)));
         REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
     }
-} // namespace
+}
 
 TEST_CASE("A list with only move keeps its old keys: Shift is invisible and Ctrl+arrow belongs to the app", "[ui][list][selection]")
 {

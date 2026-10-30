@@ -82,11 +82,11 @@ namespace luil {
                 return result;
             }
         };
-    } // namespace
+    }
 
     const font_source& platform_font_source() noexcept
     {
         static const win32_font_source source {};
         return source;
     }
-} // namespace luil
+}

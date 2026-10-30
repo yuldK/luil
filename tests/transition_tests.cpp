@@ -12,7 +12,7 @@ namespace {
 
     // 길이 100의 전환 하나다 (0 → 200).
     constexpr luil::transition sample { 0.0f, 200.0f, at(1000), std::chrono::milliseconds { 100 } };
-} // namespace
+}
 
 TEST_CASE("Easing stays inside the unit square and is symmetric about the middle", "[ui][transition]")
 {

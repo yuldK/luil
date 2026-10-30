@@ -29,7 +29,8 @@ namespace luil::net {
         public:
             explicit reader(const std::span<const std::uint8_t> packet) noexcept
                 : packet_ { packet }
-            {}
+            {
+            }
 
             [[nodiscard]] bool failed() const noexcept
             {
@@ -218,7 +219,7 @@ namespace luil::net {
         {
             return record.type == type && same_dns_name(record.name, name);
         }
-    } // namespace
+    }
 
     dns_name make_dns_name(const std::string_view dotted)
     {
@@ -427,4 +428,4 @@ namespace luil::net {
         }
         return questions;
     }
-} // namespace luil::net
+}

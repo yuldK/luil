@@ -65,5 +65,5 @@ namespace luil::testing {
         void close(std::uintptr_t socket) noexcept;
         // RST를 던지고 닫는다 (SO_LINGER {켬, 0초}).
         void close_abortively(std::uintptr_t socket) noexcept;
-    } // namespace loopback_socket
-} // namespace luil::testing
+    }
+}

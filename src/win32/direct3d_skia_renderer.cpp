@@ -55,7 +55,8 @@ namespace luil::win32 {
                 , composition_(&composition)
                 , codicon_typeface_(load_codicon_typeface())
                 , ui_typeface_(load_ui_typeface())
-            {}
+            {
+            }
 
             ~direct3d_skia_renderer() override
             {
@@ -477,7 +478,7 @@ namespace luil::win32 {
             sk_sp<SkTypeface> codicon_typeface_ {};
             sk_sp<SkTypeface> ui_typeface_ {};
         };
-    } // namespace
+    }
 
     bool direct3d_renderer_built() noexcept
     {
@@ -495,4 +496,4 @@ namespace luil::win32 {
             return { nullptr, std::move(error) };
         return { std::move(renderer), {} };
     }
-} // namespace luil::win32
+}

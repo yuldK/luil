@@ -59,4 +59,4 @@ namespace demo {
         int next_id_ { 0 };
         float scroll_ { 0.0f };
     };
-} // namespace demo
+}

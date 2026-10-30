@@ -121,4 +121,4 @@ namespace demo {
         const luil::ui_element* sample_menu_button_ { nullptr };
         float scroll_ { 0.0f };
     };
-} // namespace demo
+}

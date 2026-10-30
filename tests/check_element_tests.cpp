@@ -25,7 +25,7 @@ namespace {
     {
         return [owner = std::move(owner)](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(toggle_intent { owner }) }; };
     }
-} // namespace
+}
 
 TEST_CASE("A check control fills the slot width and its configured row height", "[ui][check]")
 {

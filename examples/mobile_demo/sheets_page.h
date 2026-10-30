@@ -77,4 +77,4 @@ namespace mobile_demo {
         // 마지막으로 시트가 닫힌 계기다 (화면에 적는다).
         std::optional<luil::sheet_dismiss_reason> last_dismiss_ {};
     };
-} // namespace mobile_demo
+}

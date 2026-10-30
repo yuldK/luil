@@ -278,7 +278,7 @@ namespace demo {
         // 소스가 UTF-8이라 이 글자들을 그냥 적으면 UTF-8로 나간다 — 다른 charset이
         // 실제로 읽히는 것을 보이려면 바이트를 손으로 적는 수밖에 없다.
         constexpr std::array<std::uint8_t, 11> euc_kr_sample { 0xC7, 0xD1, 0xB1, 0xDB, 0x20, 0xC5, 0xD8, 0xBD, 0xBA, 0xC6, 0xAE };
-    } // namespace
+    }
 
     std::function<luil::testing::loopback_response(const luil::testing::loopback_request&)> make_network_handler()
     {
@@ -839,4 +839,4 @@ namespace demo {
         };
         return luil::route_wheel(tree, event.x, event.y, delta, routes);
     }
-} // namespace demo
+}

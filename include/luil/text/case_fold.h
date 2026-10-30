@@ -29,4 +29,4 @@ namespace luil::text {
         std::size_t end { 0 };
     };
     [[nodiscard]] std::optional<folded_match> find_folded(std::u8string_view text, std::u8string_view needle, bool backward = false) noexcept;
-} // namespace luil::text
+}

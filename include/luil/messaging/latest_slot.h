@@ -96,7 +96,8 @@ namespace messaging {
                     static_cast<void>(signal());
                 }
                 catch (...)
-                {}
+                {
+                }
             }
         }
 
@@ -121,4 +122,4 @@ namespace messaging {
         bool pending_ { false };
         bool closed_ { false };
     };
-} // namespace messaging
+}

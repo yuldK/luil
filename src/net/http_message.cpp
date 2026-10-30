@@ -20,7 +20,7 @@ namespace luil::net {
                     return false;
             return true;
         }
-    } // namespace
+    }
 
     std::u8string_view http_method_name(const http_method method) noexcept
     {
@@ -155,4 +155,4 @@ namespace luil::net {
     {
         return find_header(headers, name);
     }
-} // namespace luil::net
+}

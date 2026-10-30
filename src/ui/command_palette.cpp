@@ -75,7 +75,7 @@ namespace luil {
                 }
             return menu;
         }
-    } // namespace
+    }
 
     std::vector<std::size_t> filter_commands(const std::span<const app_command> commands, const std::u8string_view query)
     {
@@ -165,4 +165,4 @@ namespace luil {
             button->set_action(ui_trigger::left_click, std::move(config.open));
         return button;
     }
-} // namespace luil
+}

@@ -26,7 +26,8 @@ namespace luil::net {
         public:
             explicit socket_guard(const int family) noexcept
                 : socket_ { ::socket(family, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP) }
-            {}
+            {
+            }
 
             socket_guard(const socket_guard&) = delete;
             socket_guard& operator=(const socket_guard&) = delete;
@@ -63,7 +64,7 @@ namespace luil::net {
                 records.push_back(std::move(record));
             }
         }
-    } // namespace
+    }
 
     std::vector<mdns_destination> mdns_destinations()
     {
@@ -208,4 +209,4 @@ namespace luil::net {
             }
         }
     }
-} // namespace luil::net
+}

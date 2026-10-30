@@ -80,7 +80,7 @@ namespace luil {
                     return previous[index - 1u].key;
             return std::nullopt;
         }
-    } // namespace
+    }
 
     bool selection_contains(const item_selection& selection, const std::u8string_view key) noexcept
     {
@@ -181,4 +181,4 @@ namespace luil {
         }
         return selection;
     }
-} // namespace luil
+}

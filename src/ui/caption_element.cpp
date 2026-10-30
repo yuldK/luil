@@ -31,7 +31,7 @@ namespace luil {
             button->set_tooltip(std::move(tooltip));
             return button;
         }
-    } // namespace
+    }
 
     ui_element_id caption_button_element_id(const caption_button_hover hover) noexcept
     {
@@ -195,4 +195,4 @@ namespace luil {
     {
         return { .role = access_role::title_bar, .name = config_.title };
     }
-} // namespace luil
+}

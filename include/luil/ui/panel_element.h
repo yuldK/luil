@@ -66,4 +66,4 @@ namespace luil {
         panel_config config_ {};
         ui_element* content_ { nullptr };
     };
-} // namespace luil
+}

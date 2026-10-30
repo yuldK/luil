@@ -45,7 +45,7 @@ namespace {
     }
 
     const luil::tree_flatten_options labelled { .loading_label = u8"불러오는 중…", .failed_label = u8"목록을 가져오지 못했습니다" };
-} // namespace
+}
 
 TEST_CASE("Flattening a tree shows expanded children and status rows", "[ui][model]")
 {

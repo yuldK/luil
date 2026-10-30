@@ -71,4 +71,4 @@ namespace luil {
 
     // 마크다운을 논리 좌표로 측정·배치해 툴팁에 붙일 내용으로 만든다.
     [[nodiscard]] tooltip_config make_markdown_tooltip(markdown_config config, float width = 320.0f, tooltip_config appearance = {});
-} // namespace luil
+}

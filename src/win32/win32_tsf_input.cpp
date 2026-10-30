@@ -20,7 +20,7 @@ namespace luil::win32 {
         {
             return codepoint >= 0x10000u ? 2 : 1;
         }
-    } // namespace
+    }
 
     long acp_length(const std::u8string_view text) noexcept
     {
@@ -90,7 +90,8 @@ namespace luil::win32 {
         public:
             explicit text_store(tsf_host& host) noexcept
                 : host_ { &host }
-            {}
+            {
+            }
 
             // --- IUnknown ---
 
@@ -749,7 +750,7 @@ namespace luil::win32 {
             LONG composing_begin_ { 0 };
             LONG composing_end_ { 0 };
         };
-    } // namespace
+    }
 
     ITextStoreACP2* create_text_store_for_test(tsf_host& host)
     {
@@ -769,7 +770,8 @@ namespace luil::win32 {
             : host_ { &host }
             , window_ { window } // HWND가 없는 session은 COM 수명 test용이라 focus가 있다고 본다.
             , window_focused_ { window == nullptr || GetFocus() == window }
-        {}
+        {
+        }
 
         implementation(const implementation&) = delete;
         implementation(implementation&&) = delete;
@@ -1011,7 +1013,8 @@ namespace luil::win32 {
 
     tsf_input_session::tsf_input_session(std::unique_ptr<implementation> impl) noexcept
         : impl_ { std::move(impl) }
-    {}
+    {
+    }
 
     tsf_input_session::~tsf_input_session() = default;
 
@@ -1049,4 +1052,4 @@ namespace luil::win32 {
     {
         session.impl_->start_composition_for_test();
     }
-} // namespace luil::win32
+}

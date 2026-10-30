@@ -125,7 +125,7 @@ namespace luil {
             }
             return width;
         }
-    } // namespace
+    }
 
     std::u8string_view single_line_text(const std::u8string_view text, const single_line_break mode, std::u8string& storage)
     {
@@ -622,4 +622,4 @@ namespace luil {
         return target_height * 0.5f - (font_metrics.fAscent + font_metrics.fDescent) * 0.5f;
     }
 
-} // namespace luil
+}

@@ -14,4 +14,4 @@ namespace luil {
         const edge_insets& outside { metrics.outside };
         return { -outside.left, -outside.top, metrics.width + outside.left + outside.right, metrics.height + outside.top + outside.bottom };
     }
-} // namespace luil
+}

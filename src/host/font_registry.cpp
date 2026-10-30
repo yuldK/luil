@@ -120,7 +120,7 @@ namespace luil {
             const std::string name { reinterpret_cast<const char*>(family.data()), family.size() };
             return manager.matchFamilyStyle(name.c_str(), SkFontStyle::Normal());
         }
-    } // namespace
+    }
 
     std::vector<std::u8string> installed_font_families()
     {
@@ -350,4 +350,4 @@ namespace luil {
         state.fallback_cache.emplace(codepoint, typeface);
         return typeface;
     }
-} // namespace luil
+}

@@ -42,7 +42,8 @@ namespace {
     public:
         explicit content(std::u8string owner = u8"content")
             : ui_element { { luil::application_element_kind(0), std::move(owner) } }
-        {}
+        {
+        }
         void add(std::unique_ptr<ui_element> child)
         {
             add_child(std::move(child));
@@ -56,7 +57,8 @@ namespace {
                 child->arrange(context.for_child({ context.slot.x, context.slot.y, 40.0f * context.scale, 40.0f * context.scale }));
         }
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
         float scale { 1.0f };
         int arranges { 0 };
     };
@@ -97,7 +99,7 @@ namespace {
     {
         return { .x = x, .y = y, .device = luil::pointer_device::touch, .pointer_id = id };
     }
-} // namespace
+}
 
 TEST_CASE("Zoom preserves its anchor using the actual bounded ratio", "[zoom]")
 {
@@ -492,7 +494,7 @@ namespace {
                     found.push_back(*value);
         return found;
     }
-} // namespace
+}
 
 TEST_CASE("Contain bounds center a small page and hide empty space around a large one", "[zoom][edge]")
 {
@@ -654,7 +656,7 @@ namespace {
                     found.push_back(*value);
         return found;
     }
-} // namespace
+}
 
 TEST_CASE("Double tap zoom stays off unless the view asks for it", "[zoom][double_tap]")
 {

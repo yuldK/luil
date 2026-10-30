@@ -137,7 +137,7 @@ namespace demo {
             const std::filesystem::path path { directory / L"assets" / name };
             return luil::load_animated_image_file(path.u8string(), { .max_height = 200 }, error);
         }
-    } // namespace
+    }
 
     bool basics_page::handle(const luil::app_message& message)
     {
@@ -699,4 +699,4 @@ namespace demo {
         row->add(std::move(confirm), 88.0f);
         return row;
     }
-} // namespace demo
+}

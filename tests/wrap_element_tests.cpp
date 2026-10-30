@@ -29,7 +29,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::vector<luil::ui_element*> fill(luil::wrap_element& wrap, const std::size_t count)
@@ -43,7 +44,7 @@ namespace {
         }
         return probes;
     }
-} // namespace
+}
 
 TEST_CASE("Wrap sizers count the columns and rows that fit", "[ui][wrap]")
 {

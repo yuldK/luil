@@ -31,7 +31,7 @@ namespace luil::testing::loopback_socket {
             // inet_addr가 아니라 inet_pton이다 — 앞엣것은 폐기 표시가 붙어 /WX에서 오류다.
             return inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1;
         }
-    } // namespace
+    }
 
     bool startup() noexcept
     {
@@ -161,4 +161,4 @@ namespace luil::testing::loopback_socket {
         setsockopt(native(socket), SOL_SOCKET, SO_LINGER, reinterpret_cast<const char*>(&option), static_cast<int>(sizeof(option)));
         closesocket(native(socket));
     }
-} // namespace luil::testing::loopback_socket
+}

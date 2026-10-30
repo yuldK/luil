@@ -171,11 +171,12 @@ namespace mobile_demo {
             button->set_action(luil::ui_trigger::left_click, std::move(action));
             return button;
         }
-    } // namespace
+    }
 
     smb_page::smb_page(smb_page_transport transport)
         : transport_ { std::move(transport) }
-    {}
+    {
+    }
 
     bool smb_page::handle(const luil::app_message& message)
     {
@@ -560,4 +561,4 @@ namespace mobile_demo {
         }
         return column.finish();
     }
-} // namespace mobile_demo
+}

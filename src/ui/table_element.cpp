@@ -527,7 +527,7 @@ namespace luil {
             // 손잡이(칸 뒤의 자식들) 하나하나가 선 열이다.
             std::vector<std::size_t> grip_columns_ {};
         };
-    } // namespace
+    }
 
     std::vector<table_column_span> table_column_spans(const std::span<const table_column> columns)
     {
@@ -843,4 +843,4 @@ namespace luil {
         // 구조다. 머리글(Header)과 본문(DataGrid)이 이 자리로 올라온다.
         return {};
     }
-} // namespace luil
+}

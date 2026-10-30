@@ -65,4 +65,4 @@ namespace luil {
 
     // 돋보기 글리프와 글을 단 단추다. caption client라 끌기 띠 위에서도 눌린다 (caption-button-design.md).
     [[nodiscard]] std::unique_ptr<text_button_element> make_command_palette_entry(command_palette_entry_config config);
-} // namespace luil
+}

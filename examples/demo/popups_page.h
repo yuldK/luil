@@ -35,7 +35,8 @@ namespace demo {
     };
 
     struct card_menu_close_intent
-    {};
+    {
+    };
 
     // 컨텍스트 메뉴에서 항목을 골랐다.
     // 페이지는 메뉴를 닫고, 셸이 토스트 알림으로 잇는다.
@@ -100,4 +101,4 @@ namespace demo {
         // popup의 자리 계산에만 쓰고 frame이 게시되기 전까지만 유효하다.
         const luil::ui_element* dropdown_ { nullptr };
     };
-} // namespace demo
+}

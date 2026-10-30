@@ -112,7 +112,7 @@ namespace luil::android {
             bridge.glue_destroy = activity->callbacks->onDestroy;
             activity->callbacks->onDestroy = &detach_bridge;
         }
-    } // namespace
+    }
 
     bool post_to_main_thread(main_thread_work work)
     {
@@ -131,7 +131,7 @@ namespace luil::android {
             __android_log_print(ANDROID_LOG_WARN, "luil", "The main thread bridge is not set up; the app must link luil::luil, which wraps GameActivity_onCreate.");
         return false;
     }
-} // namespace luil::android
+}
 
 // glue의 생성 함수다. 링크가 `--wrap=GameActivity_onCreate`로 GameActivity의 부름을 아래로 돌린다.
 extern "C" GameActivity_createFunc __real_GameActivity_onCreate;

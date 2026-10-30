@@ -135,7 +135,7 @@ namespace luil {
                 error = make_error(image_decode_error_kind::internal_error, u8"Failed to record the SVG.");
             return image;
         }
-    } // namespace
+    }
 
     ui_image load_svg_file(const std::u8string_view path, image_decode_error& error)
     {
@@ -162,4 +162,4 @@ namespace luil {
             return {};
         return decode_svg(std::move(data), options, error);
     }
-} // namespace luil
+}

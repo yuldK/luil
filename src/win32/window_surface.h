@@ -650,4 +650,4 @@ namespace luil::win32 {
         // 웹뷰 위에 떠 있는 펜이다. 그리로 넘어갈 때 우리 hover를 한 번 거둔다.
         std::vector<std::uint32_t> webview_pen_hovers_ {};
     };
-} // namespace luil::win32
+}

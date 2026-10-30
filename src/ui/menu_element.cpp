@@ -153,7 +153,7 @@ namespace luil {
             const menu_message_factory* open_submenu_ { nullptr };
             const menu_config* menu_ { nullptr };
         };
-    } // namespace
+    }
 
     menu_element::menu_element(menu_config config)
         : ui_element { ui_element_id { ui_element_kind::menu, config.owner } }
@@ -261,4 +261,4 @@ namespace luil {
         const bool radio { std::any_of(config_.items.begin(), config_.items.end(), [](const auto& item) { return item.kind == menu_item_kind::radio; }) };
         return { .role = access_role::menu, .name = tooltip(), .selection_container = radio };
     }
-} // namespace luil
+}

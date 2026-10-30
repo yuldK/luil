@@ -173,7 +173,7 @@ namespace luil::testing {
             response.body = loopback_bytes("not found");
             return response;
         }
-    } // namespace
+    }
 
     std::optional<std::string> loopback_request::header(const std::string_view lower_case_name) const
     {
@@ -667,4 +667,4 @@ namespace luil::testing {
     {
         return loopback_url_text(port_, path_and_query);
     }
-} // namespace luil::testing
+}

@@ -52,4 +52,4 @@ namespace luil {
         bool active_ { false };
         bool zero_reported_ { false };
     };
-} // namespace luil
+}

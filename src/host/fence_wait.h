@@ -28,4 +28,4 @@ namespace luil {
             return 0;
         return std::min(slice_ms, budget_ms - waited_ms);
     }
-} // namespace luil
+}

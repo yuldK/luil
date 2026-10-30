@@ -54,4 +54,4 @@ namespace luil::win32 {
         std::uint32_t accepted_ { 0 };
         std::uint32_t dropped_ { 0 };
     };
-} // namespace luil::win32
+}

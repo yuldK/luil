@@ -39,7 +39,7 @@ namespace luil {
         {
             return failure(win32::make_hresult_error(what, HRESULT_FROM_WIN32(GetLastError())));
         }
-    } // namespace
+    }
 
     secret_store_result store_secret(const std::u8string_view service, const std::u8string_view name, const std::span<const std::uint8_t> secret)
     {
@@ -91,4 +91,4 @@ namespace luil {
         }
         return success();
     }
-} // namespace luil
+}

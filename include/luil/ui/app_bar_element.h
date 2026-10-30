@@ -72,4 +72,4 @@ namespace luil {
         // 설정의 `actions`와 같은 순서다.
         std::vector<ui_element*> actions_ {};
     };
-} // namespace luil
+}

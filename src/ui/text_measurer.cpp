@@ -17,7 +17,7 @@ namespace luil {
             const SkFont font { configured_ui_typeface(), pixel_size };
             return measure_text(text, font);
         }
-    } // namespace
+    }
 
     const text_measurer& default_text_measurer()
     {
@@ -58,4 +58,4 @@ namespace luil {
         const float ratio { scale > 0.0f ? scale : 1.0f };
         return measure_text()(text, scaled_font_size(font_size, ratio)) / ratio;
     }
-} // namespace luil
+}

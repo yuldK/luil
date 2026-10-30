@@ -33,7 +33,7 @@ namespace luil::net {
             error.message = message;
             return error;
         }
-    } // namespace
+    }
 
     bool check_smb_request(const smb_request& request, const std::size_t max_read_bytes, smb_error& failure)
     {
@@ -312,4 +312,4 @@ namespace luil::net {
             return false;
         }
     }
-} // namespace luil::net
+}

@@ -29,9 +29,11 @@ namespace luil::testing {
             float scale { 1.0f };
         };
         struct close_intent
-        {};
+        {
+        };
         struct refresh_intent
-        {};
+        {
+        };
         struct click_intent
         {
             bool right { false };
@@ -366,7 +368,8 @@ send();
         public:
             explicit fixture_delegate(fixture_driver& driver)
                 : driver_ { driver }
-            {}
+            {
+            }
             void on_started(win32::app_host& host) override
             {
                 host_ = &host;
@@ -488,7 +491,7 @@ send();
             fixture_driver& driver_;
             win32::app_host* host_ { nullptr };
         };
-    } // namespace
+    }
 
     int run_pointer_fixture(const std::filesystem::path& profile)
     {
@@ -505,4 +508,4 @@ send();
         fixture_delegate delegate { driver };
         return win32::run_application_window(config, { &driver, &policy, &delegate });
     }
-} // namespace luil::testing
+}

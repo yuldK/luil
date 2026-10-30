@@ -870,7 +870,7 @@ namespace luil {
                 error = std::move(incomplete);
             return image;
         }
-    } // namespace
+    }
 
     image_pixel_size decoded_image_size(const int width, const int height, const image_decode_options& options) noexcept
     {
@@ -1044,4 +1044,4 @@ namespace luil {
             return {};
         return decode_frame(std::move(data), index, options, error);
     }
-} // namespace luil
+}

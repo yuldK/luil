@@ -39,7 +39,7 @@ namespace {
     {
         return luil::win32::hit_test_window(make_metrics(), mode, 1000, 800, 96, x, y);
     }
-} // namespace
+}
 
 TEST_CASE("The window style is one computation of buttons and mode", "[win32][window-mode]")
 {

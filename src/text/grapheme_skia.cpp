@@ -87,4 +87,4 @@ namespace luil::text {
             return std::nullopt;
         }
     }
-} // namespace luil::text
+}

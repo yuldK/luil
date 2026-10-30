@@ -94,7 +94,7 @@ namespace luil {
             outline.inset(scale / 2.0f, scale / 2.0f);
             context.canvas.drawRRect(outline, border);
         }
-    } // namespace
+    }
 
     ui_tree::ui_tree(std::unique_ptr<ui_element> root)
         : root_ { std::move(root) }
@@ -592,7 +592,7 @@ namespace luil {
                     return found;
             return std::nullopt;
         }
-    } // namespace
+    }
 
     std::optional<rect_f> ui_tree::visible_bounds(const ui_element& target) const
     {
@@ -624,7 +624,7 @@ namespace luil {
                     return true;
             return false;
         }
-    } // namespace
+    }
 
     bool ui_tree::caption_client_at(const float x, const float y) const
     {
@@ -663,7 +663,7 @@ namespace luil {
             for (const std::unique_ptr<ui_element>& child : node.children())
                 find_idle_hide(*child, x, y, next_clip, found);
         }
-    } // namespace
+    }
 
     std::vector<const ui_element*> ui_tree::hover_regions_at(const float x, const float y) const
     {
@@ -844,7 +844,7 @@ namespace luil {
             if (text_right > text_left)
                 static_cast<void>(draw_text_within(context.canvas, label.text, text_left, ghost.top() + centered_text_baseline(font, ghost.height()), text_right - text_left, font, foreground));
         }
-    } // namespace
+    }
 
     void draw_detached_drag_ghost(draw_context& context, const drag_payload& payload)
     {
@@ -892,4 +892,4 @@ namespace luil {
         // 원본 element의 축소 표시로 충분하다.
         draw_drag_ghost_box(context, drag.payload, SkRect::MakeXYWH(drag.x + 10.0f * scale, drag.y + 10.0f * scale, 112.0f * scale, 24.0f * scale), 0u);
     }
-} // namespace luil
+}

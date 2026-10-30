@@ -59,4 +59,4 @@ namespace luil {
     //    옛 모델을 모르면(빈 span) 새 모델의 첫 활성 항목이다. 새 모델이 비면 비운다.
     //  - 기준점이 사라졌으면 같은 규칙으로 옮기되, 찾지 못하면 커서로 둔다.
     [[nodiscard]] item_selection selection_reconcile(item_selection selection, std::span<const virtual_list_item> previous, std::span<const virtual_list_item> items);
-} // namespace luil
+}

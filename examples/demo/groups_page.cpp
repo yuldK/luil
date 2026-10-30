@@ -84,4 +84,4 @@ namespace demo {
         column->add(std::make_unique<luil::choice_group_element>(std::move(view)), view_height);
         return column;
     }
-} // namespace demo
+}

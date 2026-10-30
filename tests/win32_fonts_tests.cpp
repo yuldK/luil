@@ -43,7 +43,7 @@ namespace {
             luil::set_font_fallback(nullptr);
         }
     };
-} // namespace
+}
 
 // 설치된 글꼴 이름은 미리 보기에서 그대로 Skia로 그려진다.
 // UTF-8이 아닌 이름이 하나라도 섞이면 `SkFont::countText`가 -1을 돌려주고 그 값이

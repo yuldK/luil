@@ -199,7 +199,8 @@ namespace messaging {
                     signal();
                 }
                 catch (...)
-                {}
+                {
+                }
             }
         }
 
@@ -244,4 +245,4 @@ namespace messaging {
         bool closed_ { false };
         std::thread::id consumer_thread_ {};
     };
-} // namespace messaging
+}

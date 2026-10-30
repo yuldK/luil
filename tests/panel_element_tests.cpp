@@ -29,7 +29,8 @@ namespace {
         fill_element(luil::ui_element_id id, const luil::ui_color color)
             : ui_element { std::move(id) }
             , color_ { color }
-        {}
+        {
+        }
 
         void arrange(const luil::arrange_context& context) override
         {
@@ -56,7 +57,8 @@ namespace {
         placed_root(luil::ui_element_id id, const luil::rect_f& child_slot)
             : ui_element { std::move(id) }
             , child_slot_ { child_slot }
-        {}
+        {
+        }
 
         void add(std::unique_ptr<ui_element> child)
         {
@@ -96,7 +98,7 @@ namespace {
         root->add(std::move(panel));
         return luil::make_arranged_tree(std::move(root), { root_slot.x * raster_scale, root_slot.y * raster_scale, root_slot.width * raster_scale, root_slot.height * raster_scale }, raster_scale);
     }
-} // namespace
+}
 
 TEST_CASE("A panel strokes its border over the content", "[ui][panel][raster]")
 {

@@ -54,7 +54,8 @@ namespace mobile_demo {
     };
 
     struct tab_menu_close_intent
-    {};
+    {
+    };
 
     class tabs_page
     {
@@ -103,4 +104,4 @@ namespace mobile_demo {
         // popup의 자리 계산에만 쓰고 frame이 게시되기 전까지만 유효하다.
         const luil::ui_element* bar_ { nullptr };
     };
-} // namespace mobile_demo
+}

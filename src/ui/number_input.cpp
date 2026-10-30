@@ -209,7 +209,7 @@ namespace luil {
                 digits.insert(digits.begin(), u8'-');
             return digits;
         }
-    } // namespace
+    }
 
     number_input_check check_number_input(const std::u8string_view text, const number_input_range& range)
     {
@@ -296,4 +296,4 @@ namespace luil {
             return kept;
         };
     }
-} // namespace luil
+}

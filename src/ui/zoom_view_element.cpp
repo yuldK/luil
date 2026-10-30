@@ -84,7 +84,7 @@ namespace luil {
                 result.push_back(config.pan_by(delta));
             return result;
         }
-    } // namespace
+    }
 
     zoom_view_state zoom_about(const zoom_view_config& config, const zoom_point viewport, const float factor, const zoom_point anchor) noexcept
     {
@@ -367,4 +367,4 @@ namespace luil {
     {
         draw_children(context, interaction);
     }
-} // namespace luil
+}

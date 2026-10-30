@@ -47,4 +47,4 @@ namespace luil {
         maximize,
         close,
     };
-} // namespace luil
+}

@@ -23,7 +23,8 @@ namespace luil::android {
             explicit local_frame(JNIEnv& env) noexcept
                 : env_ { env }
                 , pushed_ { env.PushLocalFrame(16) == 0 }
-            {}
+            {
+            }
 
             local_frame(const local_frame&) = delete;
             local_frame(local_frame&&) = delete;
@@ -106,7 +107,7 @@ namespace luil::android {
                 return false;
             return env.GetIntField(configuration, field) == configuration_landscape;
         }
-    } // namespace
+    }
 
     void apply_screen_orientation(JNIEnv& env, const jobject activity, const screen_orientation request, std::optional<int>& original)
     {
@@ -259,4 +260,4 @@ namespace luil::android {
         if (failed(env))
             __android_log_print(ANDROID_LOG_WARN, "luil", "requestPermissions failed for %s", permission);
     }
-} // namespace luil::android
+}

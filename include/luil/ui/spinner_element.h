@@ -22,4 +22,4 @@ namespace luil {
     private:
         spinner_config config_ {};
     };
-} // namespace luil
+}

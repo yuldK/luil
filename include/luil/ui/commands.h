@@ -76,4 +76,4 @@ namespace luil {
     [[nodiscard]] bool system_reserved_chord(const key_chord& chord) noexcept;
     // 키 이벤트의 단축키다 (잡은 키를 저장할 때).
     [[nodiscard]] key_chord chord_of(const key_pressed_event& event) noexcept;
-} // namespace luil
+}

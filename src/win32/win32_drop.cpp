@@ -23,7 +23,7 @@ namespace luil::win32 {
         {
             return effect != nullptr ? *effect : static_cast<DWORD>(DROPEFFECT_NONE);
         }
-    } // namespace
+    }
 
     std::vector<std::u8string> dropped_file_paths(const HDROP drop)
     {
@@ -68,7 +68,8 @@ namespace luil::win32 {
     surface_drop_target::surface_drop_target(const HWND window, drop_target_host& host) noexcept
         : window_ { window }
         , host_ { &host }
-    {}
+    {
+    }
 
     HRESULT surface_drop_target::QueryInterface(REFIID riid, void** const object)
     {
@@ -171,4 +172,4 @@ namespace luil::win32 {
         files_.clear();
         return S_OK;
     }
-} // namespace luil::win32
+}

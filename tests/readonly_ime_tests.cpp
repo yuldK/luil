@@ -15,7 +15,7 @@ namespace {
         int edits { 0 };
         int clears { 0 };
     };
-} // namespace
+}
 
 TEST_CASE("Read only IME documents reject edits and end an existing composition without committing", "[android][ime][read_only]")
 {

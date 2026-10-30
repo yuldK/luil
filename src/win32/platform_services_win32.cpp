@@ -45,12 +45,14 @@ namespace luil {
             owned_handle() noexcept = default;
             explicit owned_handle(const HANDLE handle) noexcept
                 : handle_ { handle }
-            {}
+            {
+            }
             owned_handle(const owned_handle&) = delete;
             owned_handle& operator=(const owned_handle&) = delete;
             owned_handle(owned_handle&& other) noexcept
                 : handle_ { std::exchange(other.handle_, nullptr) }
-            {}
+            {
+            }
             owned_handle& operator=(owned_handle&& other) noexcept
             {
                 if (this != &other)
@@ -85,7 +87,7 @@ namespace luil {
 
             HANDLE handle_ { nullptr };
         };
-    } // namespace
+    }
 
     namespace win32 {
         std::wstring quote_argument(const std::wstring_view argument)
@@ -125,7 +127,7 @@ namespace luil {
             }
             return line;
         }
-    } // namespace win32
+    }
 
     platform_result replace_file_atomically(const std::u8string_view path, const std::span<const std::uint8_t> contents)
     {
@@ -421,4 +423,4 @@ namespace luil {
             return { platform_status::not_found, {}, std::nullopt };
         return last_error(u8"Failed to cancel the blocked I/O");
     }
-} // namespace luil
+}

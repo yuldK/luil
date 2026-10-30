@@ -16,12 +16,13 @@ namespace luil {
             const std::optional<size_f> size { child.preferred_size(context, available_width) };
             return size.has_value() ? *size : size_f {};
         }
-    } // namespace
+    }
 
     stack_element::stack_element(const ui_element_id id, stack_config config)
         : ui_element { id }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void stack_element::add(std::unique_ptr<ui_element> child, const stack_item item)
     {
@@ -199,4 +200,4 @@ namespace luil {
             return std::nullopt;
         return row ? size_f { main + padding_width, cross + padding_height } : size_f { cross + padding_width, main + padding_height };
     }
-} // namespace luil
+}

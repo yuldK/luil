@@ -170,7 +170,7 @@ namespace luil {
                 return {};
             return { std::move(action) };
         }
-    } // namespace
+    }
 
     sheet_kind resolve_sheet_kind(const sheet_host_config& config, const float width) noexcept
     {
@@ -361,4 +361,4 @@ namespace luil {
     {
         return surface_->bounds();
     }
-} // namespace luil
+}

@@ -91,7 +91,7 @@ namespace demo {
             config.toggle = luil::make_message_action(gallery_toggle_intent { std::move(key) });
             return std::make_unique<luil::check_element>(std::move(config));
         }
-    } // namespace
+    }
 
     bool gallery_page::handle(const luil::app_message& message)
     {
@@ -465,4 +465,4 @@ namespace demo {
         page.end_card();
         return page.finish(controls_scroll_, [](const float delta) { return luil::make_app_action(gallery_scroll_intent { true, delta }); });
     }
-} // namespace demo
+}

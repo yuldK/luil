@@ -49,7 +49,8 @@ namespace luil {
         public:
             explicit skottie_scene(sk_sp<skottie::Animation> animation)
                 : animation_ { std::move(animation) }
-            {}
+            {
+            }
 
             void draw(SkCanvas& canvas, const double seconds, const SkRect& bounds) const override
             {
@@ -123,7 +124,7 @@ namespace luil {
                 error = make_error(image_decode_error_kind::internal_error, u8"Failed to build the Lottie animation.");
             return result;
         }
-    } // namespace
+    }
 
     ui_lottie load_lottie_file(const std::u8string_view path, image_decode_error& error)
     {
@@ -150,4 +151,4 @@ namespace luil {
             return {};
         return decode_lottie(data, options, error);
     }
-} // namespace luil
+}

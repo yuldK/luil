@@ -175,7 +175,7 @@ namespace luil {
                 pixel[channel] = static_cast<std::uint8_t>(channel == alpha_channel ? alpha : std::min(clamped, alpha));
             }
         }
-    } // namespace
+    }
 
     image_resample_result downscale_premultiplied(const SkPixmap& source, const SkISize target, const std::function<bool()>& cancelled, SkBitmap& output)
     {
@@ -232,4 +232,4 @@ namespace luil {
         return filter_axis(
             target_width, target_height, false, down_taps, read_middle, [&output_at](const int x, const int y, const float* value) { store_premultiplied(output_at(x, y), value); }, cancelled);
     }
-} // namespace luil
+}

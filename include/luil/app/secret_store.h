@@ -41,4 +41,4 @@ namespace luil {
     [[nodiscard]] secret_store_result load_secret(std::u8string_view service, std::u8string_view name, std::vector<std::uint8_t>& secret);
     // 없으면 `not_found`다.
     [[nodiscard]] secret_store_result erase_secret(std::u8string_view service, std::u8string_view name);
-} // namespace luil
+}

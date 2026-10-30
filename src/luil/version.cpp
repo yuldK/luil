@@ -5,4 +5,4 @@ namespace luil {
     {
         return LUIL_VERSION_STRING;
     }
-} // namespace luil
+}

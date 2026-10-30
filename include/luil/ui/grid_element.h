@@ -118,4 +118,4 @@ namespace luil {
         std::vector<float> column_widths_ {};
         std::vector<float> row_heights_ {};
     };
-} // namespace luil
+}

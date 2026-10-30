@@ -7,7 +7,8 @@ namespace luil {
     layer_element::layer_element(ui_element_id id, const edge_insets padding)
         : ui_element { std::move(id) }
         , padding_ { padding }
-    {}
+    {
+    }
 
     void layer_element::add(std::unique_ptr<ui_element> child, const layer_item item)
     {
@@ -77,4 +78,4 @@ namespace luil {
             return std::nullopt;
         return size_f { width + padding_.left + padding_.right, height + padding_.top + padding_.bottom };
     }
-} // namespace luil
+}

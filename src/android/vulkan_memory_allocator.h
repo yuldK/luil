@@ -20,5 +20,5 @@ namespace skgpu {
 
     namespace VulkanMemoryAllocators {
         sk_sp<VulkanMemoryAllocator> Make(const VulkanBackendContext&, ThreadSafe);
-    } // namespace VulkanMemoryAllocators
-} // namespace skgpu
+    }
+}

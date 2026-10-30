@@ -36,7 +36,7 @@ namespace luil {
                 return {};
             }
         };
-    } // namespace
+    }
 
     const font_source& platform_font_source() noexcept
     {
@@ -48,4 +48,4 @@ namespace luil {
     {
         std::abort();
     }
-} // namespace luil
+}

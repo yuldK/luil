@@ -168,4 +168,4 @@ namespace luil::net {
     void close_request(std::uint64_t id) noexcept;
     // 표를 쥔 콜백이 지금 없음을 보장하는 관문이다. 임자가 부서지기 전에 지난다.
     void wait_for_request_lookups() noexcept;
-} // namespace luil::net
+}

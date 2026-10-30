@@ -33,7 +33,8 @@ namespace demo {
     };
 
     struct increment_intent
-    {};
+    {
+    };
 
     struct dialog_intent
     {
@@ -41,7 +42,8 @@ namespace demo {
     };
 
     struct counter_reset_intent
-    {};
+    {
+    };
 
     // 캡션을 잡고 끈 만큼 dialog를 옮긴다 (논리 픽셀).
     struct move_dialog_intent
@@ -67,11 +69,13 @@ namespace demo {
     // 메시지가 하나인 것은 단추가 하나여서다 — 어느 쪽인지는 재생 시계가 이미
     // 알고 있고(`image_playback::paused_at`), 단추의 글이 그것을 그대로 말한다.
     struct playback_toggle_intent
-    {};
+    {
+    };
 
     // 비밀 저장소를 한 바퀴 돌려 본다 (자격 증명 관리자 — secret-store-design.md).
     struct secret_check_intent
-    {};
+    {
+    };
 
     // 여러 줄 메모 칸의 세로 스크롤이다 (논리 픽셀). 위치는 앱 상태다.
     struct memo_scroll_intent
@@ -182,4 +186,4 @@ namespace demo {
         float dialog_x_ { 0.0f };
         float dialog_y_ { 0.0f };
     };
-} // namespace demo
+}

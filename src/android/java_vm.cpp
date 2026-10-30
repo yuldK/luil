@@ -9,7 +9,7 @@ namespace luil::android {
         std::atomic<jobject> process_context { nullptr };
         std::mutex files_lock {};
         std::string files_path {};
-    } // namespace
+    }
 
     void set_files_directory(const char* const path)
     {
@@ -97,4 +97,4 @@ namespace luil::android {
     {
         return env_;
     }
-} // namespace luil::android
+}

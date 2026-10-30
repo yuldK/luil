@@ -278,7 +278,7 @@ namespace luil::net {
                     finish_and_close(*stranded, make_http_error(http_error_kind::system_error, u8"The status callback failed unexpectedly.", 0));
             }
         }
-    } // namespace
+    }
 
     // WinHTTP 세션 하나와 pump thread 하나를 든 실체다.
     //
@@ -312,7 +312,8 @@ namespace luil::net {
         explicit engine(http_client_config configuration)
             : configuration_ { std::move(configuration) }
             , completions_ { messaging::channel_options { std::numeric_limits<std::size_t>::max(), messaging::overflow_policy::reject_newest, {} } }
-        {}
+        {
+        }
 
         engine(const engine&) = delete;
         engine(engine&&) = delete;
@@ -1123,7 +1124,8 @@ namespace luil::net {
 
     http_client::http_client(std::unique_ptr<engine> owned) noexcept
         : engine_ { std::move(owned) }
-    {}
+    {
+    }
 
     http_client::~http_client()
     {
@@ -1188,4 +1190,4 @@ namespace luil::net {
         if (engine_ != nullptr)
             static_cast<void>(engine_->stop());
     }
-} // namespace luil::net
+}

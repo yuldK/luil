@@ -89,7 +89,7 @@ namespace {
         text += u8"}";
         return text_bytes(text);
     }
-} // namespace
+}
 
 TEST_CASE("An empty body is empty whatever the header says", "[net][body]")
 {

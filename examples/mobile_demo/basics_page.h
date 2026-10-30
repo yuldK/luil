@@ -27,7 +27,8 @@ namespace mobile_demo {
     // 텍스트 편집·조합 메시지(edit_intent·composition_intent)는 창 페이지와
     // target으로 나눠 가지므로 common.h에 있다.
     struct increment_intent
-    {};
+    {
+    };
 
     struct dialog_intent
     {
@@ -35,7 +36,8 @@ namespace mobile_demo {
     };
 
     struct counter_reset_intent
-    {};
+    {
+    };
 
     // 캡션을 잡고 끈 만큼 dialog를 옮긴다 (논리 픽셀).
     struct move_dialog_intent
@@ -48,7 +50,8 @@ namespace mobile_demo {
     // 메시지가 하나인 것은 단추가 하나여서다 — 어느 쪽인지는 재생 시계가 이미
     // 알고 있고(`image_playback::paused_at`), 단추의 글이 그것을 그대로 말한다.
     struct playback_toggle_intent
-    {};
+    {
+    };
 
     // 암호 칸의 글을 보이거나 가린다.
     struct secret_reveal_intent
@@ -145,4 +148,4 @@ namespace mobile_demo {
         float dialog_x_ { 0.0f };
         float dialog_y_ { 0.0f };
     };
-} // namespace mobile_demo
+}

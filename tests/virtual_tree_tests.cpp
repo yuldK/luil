@@ -30,7 +30,8 @@ namespace {
     };
 
     struct policy_key_intent
-    {};
+    {
+    };
 
     class recording_policy final : public luil::interaction_policy
     {
@@ -101,7 +102,7 @@ namespace {
         REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"tree" });
         return controller.process(luil::key_pressed_event { key, false, false, false, false, at(10) });
     }
-} // namespace
+}
 
 TEST_CASE("A tree list indents rows and puts a triangle only on branches", "[ui][list][tree]")
 {

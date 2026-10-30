@@ -180,4 +180,4 @@ namespace luil {
     // 접근성 설정은 앱의 스타일보다 세다. 실제 시스템 색을 아는 platform은
     // `high_contrast_palette_for`를 쓴다.
     [[nodiscard]] ui_color_palette color_palette_for(const ui_style& style, color_theme theme, const accent_definition& accent) noexcept;
-} // namespace luil
+}

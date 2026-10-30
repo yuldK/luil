@@ -77,7 +77,8 @@ namespace {
     };
 
     struct close_intent
-    {};
+    {
+    };
 
     class color_block final : public luil::ui_element
     {
@@ -85,7 +86,8 @@ namespace {
         color_block(const luil::ui_element_id id, const std::uint32_t color)
             : ui_element { id }
             , color_ { color }
-        {}
+        {
+        }
 
         void arrange(const luil::arrange_context& context) override
         {
@@ -134,7 +136,8 @@ namespace {
             : kind_ { kind }
             , backdrop_ { backdrop }
             , theme_ { theme }
-        {}
+        {
+        }
 
         void handle(luil::app_message message) override
         {
@@ -616,7 +619,7 @@ namespace {
             return luil::window_backdrop::acrylic;
         return luil::window_backdrop::none;
     }
-} // namespace
+}
 
 int main(const int argc, char** const argv)
 {

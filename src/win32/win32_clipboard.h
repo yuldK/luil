@@ -90,4 +90,4 @@ namespace luil::win32 {
     // 클립보드의 파일 목록과 뜻, 읽은 순간의 번호다. 파일 목록이 없거나 읽지 못하면 빈 목록이고, 뜻이 없으면 복사다.
     // 목록은 `max_dropped_paths`까지 읽는다 (파일 끌기와 같은 상한).
     [[nodiscard]] file_clipboard_content read_files_from_clipboard(HWND owner) noexcept;
-} // namespace luil::win32
+}

@@ -87,7 +87,7 @@ namespace {
     {
         return bytes.size() >= signature.size() && std::equal(signature.begin(), signature.end(), bytes.begin());
     }
-} // namespace
+}
 
 TEST_CASE("A png keeps every pixel and the alpha", "[ui][image][encode]")
 {
@@ -184,7 +184,7 @@ namespace {
             }
         return luil::make_rgba_image(size, size, pixels);
     }
-} // namespace
+}
 
 TEST_CASE("A size-limited webp lowers the quality step by step until it fits", "[ui][image][encode][limit]")
 {

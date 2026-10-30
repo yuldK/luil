@@ -35,7 +35,7 @@ namespace {
     }
 
     using keys = std::vector<std::u8string>;
-} // namespace
+}
 
 TEST_CASE("A plain pick selects one item and moves the anchor and cursor onto it", "[ui][selection]")
 {

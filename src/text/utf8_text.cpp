@@ -65,7 +65,7 @@ namespace luil::text {
                 return { utf8_replacement_character, 0 };
             return { codepoint, length };
         }
-    } // namespace
+    }
 
     bool utf8_is_valid(const std::u8string_view text) noexcept
     {
@@ -142,4 +142,4 @@ namespace luil::text {
         const utf8_decoded decoded { decode_strict(text, offset) };
         return decoded.length == 0 ? utf8_decoded {} : decoded;
     }
-} // namespace luil::text
+}

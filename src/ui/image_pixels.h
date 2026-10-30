@@ -20,4 +20,4 @@ namespace luil {
 
     // 인코더가 낸 바이트를 공개 API의 값으로 옮긴다. null이면 빈 값과 `error`다.
     [[nodiscard]] std::vector<std::uint8_t> encoded_bytes(const SkData* data, std::u8string& error);
-} // namespace luil
+}

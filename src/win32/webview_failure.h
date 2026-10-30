@@ -32,4 +32,4 @@ namespace luil::win32 {
     // 판이 낮아 세우지 않을 때의 설명이다. 찾은 판과 필요한 판을 함께 말한다.
     //  - `version`이 nullptr이면 판을 읽지 못한 것이다.
     [[nodiscard]] std::u8string webview_runtime_too_old_message(const wchar_t* version);
-} // namespace luil::win32
+}

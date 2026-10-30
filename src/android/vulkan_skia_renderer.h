@@ -14,4 +14,4 @@ namespace luil::android {
     //  - 소멸자가 스왑체인과 `VkSurfaceKHR`을 부숴 창과의 연결을 끊는다. 창은 생산자를 하나만
     //    받으므로, CPU로 물러설 때 CPU 렌더러가 버퍼를 잠그려면 이것이 먼저다.
     [[nodiscard]] renderer_factory_result create_vulkan_skia_renderer(vulkan_device& device, ANativeWindow* window);
-} // namespace luil::android
+}

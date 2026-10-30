@@ -93,4 +93,4 @@ namespace luil::win32 {
         // DragLeave가 짝 없는 알림을 내지 않는다.
         std::vector<std::u8string> files_ {};
     };
-} // namespace luil::win32
+}

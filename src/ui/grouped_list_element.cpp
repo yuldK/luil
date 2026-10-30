@@ -65,7 +65,7 @@ namespace luil {
         private:
             std::u8string title_ {};
         };
-    } // namespace
+    }
 
     grouped_list_element::grouped_list_element(grouped_list_config config, std::vector<list_group> groups)
         : ui_element { ui_element_id { ui_element_kind::grouped_list, config.owner } }
@@ -137,4 +137,4 @@ namespace luil {
     {
         return { .role = access_role::list, .name = tooltip() };
     }
-} // namespace luil
+}

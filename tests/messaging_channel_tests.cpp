@@ -51,7 +51,7 @@ namespace {
                 return;
         }
     }
-} // namespace
+}
 
 TEST_CASE("A channel delivers messages in FIFO order with contiguous sequences", "[messaging][channel]")
 {

@@ -10,7 +10,7 @@ namespace luil {
                 return { nullptr, name + u8" is not available on this platform." };
             return factory();
         }
-    } // namespace
+    }
 
     std::unique_ptr<renderer_host> renderer_host::create(const renderer_mode mode, const renderer_fault_injection fault, renderer_factories factories, std::u8string& error)
     {
@@ -52,7 +52,8 @@ namespace luil {
         , renderer_ { std::move(renderer) }
         , used_fallback_ { used_fallback }
         , loss_after_frames_ { loss_after_frames }
-    {}
+    {
+    }
 
     bool renderer_host::injected_loss_due() noexcept
     {
@@ -141,4 +142,4 @@ namespace luil {
         used_fallback_ = true;
         return true;
     }
-} // namespace luil
+}

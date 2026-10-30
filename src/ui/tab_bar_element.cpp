@@ -769,7 +769,8 @@ namespace luil {
         public:
             explicit tab_lane_element(std::u8string owner)
                 : ui_element { ui_element_id { ui_element_kind::tab_lane, std::move(owner) } }
-            {}
+            {
+            }
 
             void add(std::unique_ptr<ui_element> tab)
             {
@@ -884,7 +885,7 @@ namespace luil {
             const tab_bar_style* style_ { nullptr };
             char32_t glyph_ { 0 };
         };
-    } // namespace
+    }
 
     float tab_step_offset(const float offset, const float tab_width, const float viewport, const float maximum, const int steps) noexcept
     {
@@ -1200,4 +1201,4 @@ namespace luil {
         // 막대에 툴팁을 달면 탭 오른쪽 빈 자리에서 글 상자가 뜬다.
         return { .role = access_role::tab_list, .name = access_name() };
     }
-} // namespace luil
+}

@@ -21,13 +21,14 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         // 내용이 받은 스크롤 값이다.
         // 가상화가 보이는 범위를 계산할 때 쓰는 값이라 그대로 전해지는지 본다.
         float scroll_offset { -1.0f };
     };
-} // namespace
+}
 
 TEST_CASE("clamp_scroll matches the arrange clamp so app state and view agree", "[ui][scroll]")
 {

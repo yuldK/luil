@@ -38,7 +38,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] luil::ui_action say(std::u8string what)
@@ -111,7 +112,7 @@ namespace {
     {
         return std::chrono::steady_clock::time_point {} + value;
     }
-} // namespace
+}
 
 TEST_CASE("Resting over an element fires its dwell once after the delay", "[hover][dwell]")
 {

@@ -89,4 +89,4 @@ namespace widgets {
 
         return { std::move(column), group_height + 12.0f + view_height + 12.0f + checks_height };
     }
-} // namespace widgets
+}

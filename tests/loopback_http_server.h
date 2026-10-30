@@ -199,4 +199,4 @@ namespace luil::testing {
         std::uint16_t port_ { 0 };
         bool sockets_ready_ { false };
     };
-} // namespace luil::testing
+}

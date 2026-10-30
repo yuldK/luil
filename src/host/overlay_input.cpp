@@ -122,4 +122,4 @@ namespace luil {
         result.events.push_back(std::move(event));
         return result;
     }
-} // namespace luil
+}

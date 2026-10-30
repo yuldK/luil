@@ -73,7 +73,7 @@ namespace {
             ++count;
         return count;
     }
-} // namespace
+}
 
 TEST_CASE("A file is replaced whole and leaves no temporary file behind", "[platform]")
 {

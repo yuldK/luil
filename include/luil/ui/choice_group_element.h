@@ -94,4 +94,4 @@ namespace luil {
     private:
         choice_group_config config_ {};
     };
-} // namespace luil
+}

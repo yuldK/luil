@@ -91,7 +91,7 @@ namespace mobile_demo {
             panel->set_content(std::move(row));
             return panel;
         }
-    } // namespace
+    }
 
     void mobile_driver::handle(luil::app_message message)
     {
@@ -401,4 +401,4 @@ namespace mobile_demo {
     {
         return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class, luil::window_surface(metrics) } };
     }
-} // namespace mobile_demo
+}

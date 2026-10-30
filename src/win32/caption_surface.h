@@ -212,4 +212,4 @@ namespace luil::win32 {
     //  - 전체 화면이면 실행하지 않는다. 틀(`WS_THICKFRAME`)이 빠진 동안 오는 비클라이언트 메시지는 들어가기 전에
     //    시작된 누름의 꼬리라, 실행하면 전체 화면으로 들어가는 순간 창이 닫히거나 줄어든다.
     [[nodiscard]] bool caption_click_executes(WPARAM pressed_hit, WPARAM released_hit, window_display_mode mode) noexcept;
-} // namespace luil::win32
+}

@@ -47,7 +47,7 @@ namespace {
         const auto on_boundary = [&boundaries](const std::size_t offset) { return std::find(boundaries.begin(), boundaries.end(), offset) != boundaries.end(); };
         return std::all_of(wrap.lines.begin(), wrap.lines.end(), [&](const luil::label_wrap::line& line) { return on_boundary(line.begin) && on_boundary(line.end); });
     }
-} // namespace
+}
 
 TEST_CASE("A wrapping label breaks at spaces first", "[ui][label][wrap]")
 {

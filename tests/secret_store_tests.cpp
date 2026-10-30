@@ -24,7 +24,7 @@ namespace {
     {
         return { text.begin(), text.end() };
     }
-} // namespace
+}
 
 TEST_CASE("A secret is written, read back, overwritten and erased", "[secret]")
 {

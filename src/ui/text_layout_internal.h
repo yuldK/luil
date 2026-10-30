@@ -54,4 +54,4 @@ namespace luil {
     void normalize_text_layout_request(text_layout_request& request) noexcept;
     using text_layout_shaper = std::function<text_layout_segment(std::u8string_view text, std::size_t document_offset)>;
     [[nodiscard]] text_layout build_text_layout(text_layout_request request, text_layout_backend backend, const text_layout_shaper& shape);
-} // namespace luil
+}

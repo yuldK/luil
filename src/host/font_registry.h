@@ -119,4 +119,4 @@ namespace luil {
     //  - 매 frame 시스템에 물으면 비싸다.
     //    찾지 못하면 nullptr다.
     [[nodiscard]] sk_sp<SkTypeface> fallback_typeface(char32_t codepoint);
-} // namespace luil
+}

@@ -64,7 +64,8 @@ namespace {
     public:
         explicit cell_probe(std::u8string owner)
             : ui_element { luil::ui_element_id { kind_cell, std::move(owner) } }
-        {}
+        {
+        }
 
         void arrange(const luil::arrange_context& context) override
         {
@@ -72,7 +73,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::u8string part(const std::u8string& key)
@@ -178,7 +180,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<luil::text_input_snapshot> text_input() const override
         {
@@ -238,7 +241,7 @@ namespace {
         REQUIRE(element != nullptr);
         return *element;
     }
-} // namespace
+}
 
 TEST_CASE("Column geometry is a running sum and clamps stay in range", "[ui][table]")
 {

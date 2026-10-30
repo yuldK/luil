@@ -88,4 +88,4 @@ namespace luil {
     {
         return transition { transition_value(value, now), target, now, duration };
     }
-} // namespace luil
+}

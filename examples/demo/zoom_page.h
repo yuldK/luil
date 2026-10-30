@@ -28,4 +28,4 @@ namespace demo {
         luil::zoom_view_state state_ { 1.0f, {} };
         luil::zoom_point viewport_ {};
     };
-} // namespace demo
+}

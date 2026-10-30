@@ -67,7 +67,8 @@ namespace luil {
             explicit local_frame(JNIEnv* const env) noexcept
                 : env_ { env }
                 , pushed_ { env->PushLocalFrame(64) == 0 }
-            {}
+            {
+            }
             local_frame(const local_frame&) = delete;
             local_frame(local_frame&&) = delete;
             local_frame& operator=(const local_frame&) = delete;
@@ -90,7 +91,8 @@ namespace luil {
         public:
             explicit keystore_session(JNIEnv* const env) noexcept
                 : env_ { env }
-            {}
+            {
+            }
 
             [[nodiscard]] const std::u8string& error() const noexcept
             {
@@ -338,7 +340,7 @@ namespace luil {
         {
             return "luil-secret:" + hex(service);
         }
-    } // namespace
+    }
 
     secret_store_result store_secret(const std::u8string_view service, const std::u8string_view name, const std::span<const std::uint8_t> secret)
     {
@@ -444,4 +446,4 @@ namespace luil {
             return { secret_store_status::not_found, {} };
         return success();
     }
-} // namespace luil
+}

@@ -161,4 +161,4 @@ namespace demo {
         //  - 한계가 담긴 자리에 달려 있어 `handle`이 아니라 `build`가 다듬는다.
         float grouped_height_ { 170.0f };
     };
-} // namespace demo
+}

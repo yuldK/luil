@@ -143,4 +143,4 @@ namespace luil::win32 {
     void webview_host::shutdown() noexcept
     {
     }
-} // namespace luil::win32
+}

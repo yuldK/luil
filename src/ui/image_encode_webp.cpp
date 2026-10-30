@@ -48,7 +48,7 @@ namespace luil {
             error = u8"The size-limited WebP encode was cancelled.";
             return result;
         }
-    } // namespace
+    }
 
     std::vector<std::uint8_t> encode_webp(const ui_image& image, const int quality, std::u8string& error)
     {
@@ -139,4 +139,4 @@ namespace luil {
         options.fCompression = SkWebpEncoder::Compression::kLossless;
         return encode_webp_with(image, options, error);
     }
-} // namespace luil
+}

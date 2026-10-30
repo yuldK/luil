@@ -84,4 +84,4 @@ namespace luil::net {
             parsed.target = L"/";
         return parsed;
     }
-} // namespace luil::net
+}

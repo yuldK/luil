@@ -47,7 +47,8 @@ namespace mobile_demo {
 
     // 비밀 저장소를 한 바퀴 돌려 본다 (Keystore AES-GCM).
     struct secret_check_intent
-    {};
+    {
+    };
 
     // 로컬 네트워크 권한을 묻는 앱 UI 명령이다. delegate가 받아 `app_host::request_permission`을 부른다.
     inline constexpr std::uint32_t command_request_local_network { 0x6c6e };
@@ -77,4 +78,4 @@ namespace mobile_demo {
         // 비밀 저장소를 돌린 결과 한 줄이다. 아직 돌리지 않았으면 비었다.
         std::u8string secret_report_ {};
     };
-} // namespace mobile_demo
+}

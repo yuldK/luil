@@ -103,4 +103,4 @@ namespace widgets {
 
         return { std::move(column), title_height + 8.0f + slider_height + 8.0f + row_height + 8.0f + badge_height };
     }
-} // namespace widgets
+}

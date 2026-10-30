@@ -87,4 +87,4 @@ namespace luil {
     private:
         menu_config config_ {};
     };
-} // namespace luil
+}

@@ -274,7 +274,8 @@ namespace luil {
         public:
             explicit layout_font_iterator(const std::vector<font_segment>& fonts)
                 : fonts_ { fonts }
-            {}
+            {
+            }
             void consume() override
             {
                 current_ = next_++;
@@ -310,9 +311,11 @@ namespace luil {
                 pen_ = 0.0f;
             }
             void runInfo(const RunInfo&) override
-            {}
+            {
+            }
             void commitRunInfo() override
-            {}
+            {
+            }
             Buffer runBuffer(const RunInfo& info) override
             {
                 glyph_run run {};
@@ -483,7 +486,7 @@ namespace luil {
 
         constexpr std::size_t cache_byte_limit { 16 * 1024 * 1024 };
         constexpr std::size_t cache_entry_limit { 512 };
-    } // namespace
+    }
 
     bool ui_text_shaping_enabled() noexcept
     {
@@ -663,4 +666,4 @@ namespace luil {
                 canvas.restore();
         }
     }
-} // namespace luil
+}

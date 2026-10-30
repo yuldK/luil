@@ -85,4 +85,4 @@ namespace luil::win32 {
     // 영문자·숫자는 공통 이름 키로, 나머지는 platform 대역으로 나른다.
     //  - 어떤 키가 문자를 만드는지는 layout이 아는 값이라 창이 조회해 넘긴다.
     [[nodiscard]] key_code modified_key_from_virtual(WPARAM virtual_key, bool control, bool alt, bool character_key) noexcept;
-} // namespace luil::win32
+}

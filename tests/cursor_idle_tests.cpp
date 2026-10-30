@@ -22,7 +22,8 @@ namespace {
     public:
         viewer()
             : ui_element { luil::ui_element_id { luil::application_element_kind(1), u8"viewer" } }
-        {}
+        {
+        }
 
         void add(std::unique_ptr<luil::ui_element> child)
         {
@@ -35,7 +36,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::unique_ptr<luil::text_button_element> make_button(const char8_t* key, const luil::rect_f& slot)
@@ -45,7 +47,7 @@ namespace {
         button->arrange({ slot, 1.0f });
         return button;
     }
-} // namespace
+}
 
 TEST_CASE("A still pointer hides the cursor after the delay and a move brings it back", "[cursor][idle]")
 {

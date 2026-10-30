@@ -167,4 +167,4 @@ namespace dns_test {
         response.aaaa("nas.local", { 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0x02, 0x11, 0x32, 0xff, 0xfe, 0x12, 0x34, 0x56 });
         return response.finish();
     }
-} // namespace dns_test
+}

@@ -628,7 +628,8 @@ namespace luil::net {
             local_frame(JNIEnv* const env, const jint capacity) noexcept
                 : env_ { env }
                 , pushed_ { env->PushLocalFrame(capacity) == 0 }
-            {}
+            {
+            }
 
             local_frame(const local_frame&) = delete;
             local_frame(local_frame&&) = delete;
@@ -665,7 +666,8 @@ namespace luil::net {
                 , state_ { state }
                 , configuration_ { configuration }
                 , result_ { result }
-            {}
+            {
+            }
 
             [[nodiscard]] http_error run()
             {
@@ -1129,7 +1131,7 @@ namespace luil::net {
             jobject connection_ { nullptr };
             bool body_drained_ { false };
         };
-    } // namespace
+    }
 
     // JNI의 HttpURLConnection 위에 선 실체다 (docs/android-port-plan.md 결정 3).
     //
@@ -1161,7 +1163,8 @@ namespace luil::net {
         explicit engine(http_client_config configuration)
             : configuration_ { std::move(configuration) }
             , completions_ { messaging::channel_options { std::numeric_limits<std::size_t>::max(), messaging::overflow_policy::reject_newest, {} } }
-        {}
+        {
+        }
 
         engine(const engine&) = delete;
         engine(engine&&) = delete;
@@ -1814,7 +1817,8 @@ namespace luil::net {
 
     http_client::http_client(std::unique_ptr<engine> owned) noexcept
         : engine_ { std::move(owned) }
-    {}
+    {
+    }
 
     http_client::~http_client()
     {
@@ -1874,4 +1878,4 @@ namespace luil::net {
         if (engine_ != nullptr)
             static_cast<void>(engine_->stop());
     }
-} // namespace luil::net
+}

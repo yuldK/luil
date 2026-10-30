@@ -34,4 +34,4 @@ namespace luil::win32 {
         factories.create_cpu = [window, presentation] { return create_cpu_skia_renderer(window, presentation); };
         return renderer_host::create(mode, fault, std::move(factories), error);
     }
-} // namespace luil::win32
+}

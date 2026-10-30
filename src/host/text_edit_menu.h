@@ -9,4 +9,4 @@ namespace luil {
     [[nodiscard]] bool text_edit_menu_has_link(const text_input_snapshot& value) noexcept;
     [[nodiscard]] float text_edit_menu_height(bool link = false) noexcept;
     [[nodiscard]] std::shared_ptr<const ui_tree> make_text_edit_menu(const text_input_snapshot& value, bool korean, float width, float height, float scale);
-} // namespace luil
+}

@@ -28,7 +28,7 @@ namespace luil {
             // 굵으면 접히는 데 오래 걸리는데, 1 MiB면 요즘 디스크에서 한 걸음이
             // 밀리초 단위라 어느 쪽도 아니다.
             constexpr std::size_t image_read_chunk_bytes { 1u * 1024u * 1024u };
-        } // namespace
+        }
 
         // 실패 하나를 짓는 자리다 (`make_http_error`가 이미 선 그 모양이다 —
         // src/net/winhttp/winhttp_error.cpp:29-37). 갈래와 글이 **언제나 함께** 서므로
@@ -179,5 +179,5 @@ namespace luil {
             // 그보다 오래 살 필요가 없다.
             return SkData::MakeWithoutCopy(bytes.data(), bytes.size());
         }
-    } // namespace image_input
-} // namespace luil
+    }
+}

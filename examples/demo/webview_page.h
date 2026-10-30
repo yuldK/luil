@@ -89,4 +89,4 @@ namespace demo {
         // 이유를 버리면 "왜 안 뜨는가"가 디버거에서도 사라진다.
         luil::image_decode_error picture_error_ {};
     };
-} // namespace demo
+}

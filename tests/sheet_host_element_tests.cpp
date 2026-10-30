@@ -73,7 +73,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 시트 안의 세로 목록이다. 자리를 통째로 받고, 처음에 있는지는 앱이 싣는다.
@@ -95,7 +96,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 뒤 화면(누르면 "behind")과 400×800 자리의 시트를 짓는다.
@@ -165,7 +167,7 @@ namespace {
             total += event.drag.value_or(0.0f);
         return total;
     }
-} // namespace
+}
 
 TEST_CASE("A bottom sheet stops at half and full and follows the drag between them", "[ui][sheet]")
 {

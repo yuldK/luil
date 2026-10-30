@@ -23,7 +23,7 @@ namespace widgets {
             const std::string digits { std::to_string(value) };
             return std::u8string { digits.begin(), digits.end() };
         }
-    } // namespace
+    }
 
     void widgets_driver::handle(luil::app_message message)
     {
@@ -309,4 +309,4 @@ namespace widgets {
     {
         return luil::app_message { metrics_intent { width, height, scale } };
     }
-} // namespace widgets
+}

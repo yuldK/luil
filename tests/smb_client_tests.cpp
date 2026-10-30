@@ -240,7 +240,7 @@ namespace {
         request.timeout = timeout;
         return request;
     }
-} // namespace
+}
 
 TEST_CASE("A test server exchange lists a folder and reads ranges of a file", "[net][smb][android][server]")
 {
@@ -303,7 +303,7 @@ namespace {
         request.path = std::move(path);
         return request;
     }
-} // namespace
+}
 
 TEST_CASE("The same account reuses its connection and another account opens its own", "[net][smb][android][server][reuse]")
 {

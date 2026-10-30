@@ -84,7 +84,7 @@ namespace luil {
         // `frame_image`가 참조를 답하는 계약이라 어딘가 서 있어야 한다 — 색인을 순수
         // 함수에서 받아 그대로 넘기는 자리라, 부르는 쪽이 범위를 다시 검사하지 않는다.
         const ui_image empty_frame {};
-    } // namespace
+    }
 
     bool ui_animated_image::valid() const noexcept
     {
@@ -205,7 +205,7 @@ namespace luil {
             // 줄여 넣는다. 그래도 답을 비워 두지 않는다.
             return { durations.empty() ? 0 : durations.size() - 1, end };
         }
-    } // namespace
+    }
 
     animation_frame animation_frame_at(const std::span<const std::chrono::milliseconds> frame_durations, const int play_count, const std::chrono::nanoseconds elapsed) noexcept
     {
@@ -473,12 +473,13 @@ namespace luil {
             const int rounded { static_cast<int>(std::lround(extent)) };
             return rounded > 0 ? rounded : 1;
         }
-    } // namespace
+    }
 
     image_element::image_element(ui_element_id id, image_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void image_element::arrange(const arrange_context& context)
     {
@@ -617,4 +618,4 @@ namespace luil {
             return {};
         return { .role = access_role::image, .name = config_.description };
     }
-} // namespace luil
+}

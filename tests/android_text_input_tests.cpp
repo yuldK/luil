@@ -72,7 +72,7 @@ namespace {
         std::vector<bool> secret_keyboard {};
         std::vector<luil::text_input_options> configured {};
     };
-} // namespace
+}
 
 TEST_CASE("Keyboard options change without replacing the focused document or its composition", "[android][ime]")
 {

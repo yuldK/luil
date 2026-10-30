@@ -144,7 +144,7 @@ namespace luil::android {
                 return named;
             return static_cast<key_code>(static_cast<std::uint32_t>(key_code::first_platform_key) + static_cast<std::uint32_t>(key));
         }
-    } // namespace
+    }
 
     std::chrono::steady_clock::time_point event_time(const std::int64_t nanoseconds) noexcept
     {
@@ -530,4 +530,4 @@ namespace luil::android {
         }
         return events;
     }
-} // namespace luil::android
+}

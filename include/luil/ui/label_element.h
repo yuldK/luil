@@ -77,4 +77,4 @@ namespace luil {
         // `wrap`일 때 배치가 바꾼 줄이다 (물리 픽셀 배치의 결과를 그리기가 쓴다).
         label_wrap wrapped_ {};
     };
-} // namespace luil
+}

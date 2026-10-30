@@ -21,7 +21,7 @@ namespace demo {
         constexpr float card_padding { 16.0f };
         // 카드 사이 간격이다.
         constexpr float card_spacing { 16.0f };
-    } // namespace
+    }
 
     page_layout::page_layout(std::u8string owner, const float max_width)
         : owner_ { std::move(owner) }
@@ -208,4 +208,4 @@ namespace demo {
         // root가 자식까지 배치하는 tree라 표준 입구를 쓴다.
         return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(panel), { 0.0f, 0.0f, width * scale, height * scale }, scale));
     }
-} // namespace demo
+}

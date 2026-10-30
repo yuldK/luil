@@ -53,7 +53,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 창 없이 만든다 — 화면 좌표 변환이 빠질 뿐 경로는 같다
@@ -65,7 +66,8 @@ namespace {
         role_probe(luil::ui_element_id id, const luil::access_role role)
             : ui_element { std::move(id) }
             , role_ { role }
-        {}
+        {
+        }
 
         void arrange(const luil::arrange_context& context) override
         {
@@ -73,7 +75,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] luil::access_info accessibility() const override
         {
@@ -197,7 +200,8 @@ namespace {
         }
 
         void accessibility_request_focus(const luil::ui_element_id&) override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<luil::text_input_target> accessibility_text_target(luil::ui_element_kind) const override
         {
@@ -205,7 +209,8 @@ namespace {
         }
 
         void accessibility_text_edit(luil::text_edit_request) override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<RECT> accessibility_text_span(const luil::ui_element_id&, std::u8string_view, std::size_t, std::size_t, std::size_t) const override
         {
@@ -443,7 +448,7 @@ namespace {
             records.push_back({ .kind = u8"structure", .owner = static_cast<luil::win32::uia_element_provider&>(provider).element_id().owner });
         }
     };
-} // namespace
+}
 
 TEST_CASE("A UIA provider answers name and control type from the current tree", "[win32][uia]")
 {
@@ -1539,7 +1544,7 @@ namespace {
         SysFreeString(text);
         return value;
     }
-} // namespace
+}
 
 TEST_CASE("A wired text box serves the Text pattern from its published document", "[win32][uia]")
 {
@@ -1902,7 +1907,7 @@ namespace {
         static_cast<void>(SafeArrayDestroy(array));
         return owners;
     }
-} // namespace
+}
 
 TEST_CASE("A multiple selection list adds three rows, removes one and reads the rest back", "[win32][uia][multi-select]")
 {
@@ -2191,7 +2196,7 @@ namespace {
         served->Release();
         return true;
     }
-} // namespace
+}
 
 TEST_CASE("A long list finds a row it did not build and answers for it from the model", "[win32][uia][virtual]")
 {

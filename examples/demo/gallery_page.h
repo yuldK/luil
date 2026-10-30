@@ -42,7 +42,8 @@ namespace demo {
     };
 
     struct gallery_reset_intent
-    {};
+    {
+    };
 
     struct gallery_choice_intent
     {
@@ -80,4 +81,4 @@ namespace demo {
         std::u8string choice_ { u8"comfortable" };
         std::u8string language_ { u8"system" };
     };
-} // namespace demo
+}

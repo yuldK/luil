@@ -31,7 +31,7 @@ namespace {
     constexpr int rotation_90 { 1 };
     constexpr int rotation_180 { 2 };
     constexpr int rotation_270 { 3 };
-} // namespace
+}
 
 TEST_CASE("A platform does no device requests unless its host says it can", "[ui][platform][device]")
 {

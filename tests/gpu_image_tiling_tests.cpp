@@ -141,7 +141,7 @@ namespace {
         }
         return true;
     }
-} // namespace
+}
 
 TEST_CASE("An image wider than the GPU texture limit still reaches a Direct3D surface", "[gpu][image][tiling]")
 {

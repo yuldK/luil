@@ -261,7 +261,8 @@ namespace luil {
         public:
             explicit virtual_lane_element(ui_element_id id) noexcept
                 : ui_element { std::move(id) }
-            {}
+            {
+            }
 
             // 격자 모드에서는 줄 안의 칸 자리(`column`/`columns`)를 함께 받는다. 한 줄에 하나면 0/1이다.
             void add_row(std::unique_ptr<ui_element> row, const virtual_list_span& span, const std::size_t column = 0, const std::size_t columns = 1)
@@ -305,7 +306,7 @@ namespace luil {
         {
             return columns > 0 ? (count + columns - 1) / columns : count;
         }
-    } // namespace
+    }
 
     std::size_t virtual_list_grid_columns(const virtual_list_config& config, const float width) noexcept
     {
@@ -1208,4 +1209,4 @@ namespace luil {
             return std::vector<input_action> { config_.scroll(delta) };
         return std::vector<input_action> {};
     }
-} // namespace luil
+}

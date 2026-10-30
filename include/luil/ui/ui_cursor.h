@@ -41,4 +41,4 @@ namespace luil {
     {
         return static_cast<ui_cursor>(static_cast<std::uint32_t>(ui_cursor::first_application_cursor) + index);
     }
-} // namespace luil
+}

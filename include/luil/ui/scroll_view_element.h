@@ -62,4 +62,4 @@ namespace luil {
         // `arrange`가 채우므로 그 전에는 1이다.
         float scale_ { 1.0f };
     };
-} // namespace luil
+}

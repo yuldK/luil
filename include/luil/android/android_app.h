@@ -79,4 +79,4 @@ namespace luil::android {
     //    사용자의 터치 피드백 설정을 따른다.
     // 반환값은 0이면 정상 종료, 아니면 시작에 실패한 것이다.
     int run_application(android_app* app, const application_config& config, const application_environment& environment);
-} // namespace luil::android
+}

@@ -47,7 +47,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::chrono::steady_clock::time_point at(const int milliseconds)
@@ -132,7 +133,7 @@ namespace {
         root->add(std::move(list));
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("A press released within the start distance is a click, not a drag", "[ui][interaction][pointer-drag]")
 {

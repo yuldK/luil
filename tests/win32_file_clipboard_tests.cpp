@@ -79,7 +79,7 @@ namespace {
         }
         CloseClipboard();
     }
-} // namespace
+}
 
 TEST_CASE("Clipboard paths must be absolute drive or UNC paths", "[win32][clipboard][files]")
 {

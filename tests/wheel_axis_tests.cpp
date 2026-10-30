@@ -47,7 +47,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] const scroll_intent* single_scroll(const std::vector<luil::input_action>& actions)
@@ -71,7 +72,7 @@ namespace {
     {
         return -(event.delta / 120.0f) * luil::input_wheel_scroll_step;
     }
-} // namespace
+}
 
 TEST_CASE("A vertical wheel goes to the innermost scroll container whatever its axis", "[ui][scroll][wheel]")
 {

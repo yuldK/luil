@@ -22,7 +22,7 @@ namespace {
         config.text = u8"알림";
         return config;
     }
-} // namespace
+}
 
 TEST_CASE("A toast stack anchors toasts to the chosen corner", "[ui][toast]")
 {

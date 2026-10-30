@@ -40,4 +40,4 @@ namespace luil::win32 {
     // 짝이 맞지 않는 조각은 **버린다**.
     //  - 잘못된 UTF-8을 만들지 않는 것이 계약이다.
     [[nodiscard]] std::optional<char32_t> merge_utf16_code_unit(std::optional<char16_t>& pending, char16_t code_unit) noexcept;
-} // namespace luil::win32
+}

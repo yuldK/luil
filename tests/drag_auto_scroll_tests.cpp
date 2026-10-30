@@ -53,7 +53,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     struct list_state
@@ -201,7 +202,7 @@ namespace {
         static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 160.0f, luil::pointer_button::left, at(0) }));
         static_cast<void>(controller.process(move(x, y, 10)));
     }
-} // namespace
+}
 
 TEST_CASE("The edge speed ramps through the band and keeps growing outside the window", "[ui][interaction][auto-scroll]")
 {

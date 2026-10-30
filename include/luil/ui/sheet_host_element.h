@@ -150,4 +150,4 @@ namespace luil {
         // 배치에서 받은 표면 전체다. modal이면 자리 밖의 띠에도 scrim을 칠한다 (비면 자리 안만).
         rect_f screen_ {};
     };
-} // namespace luil
+}

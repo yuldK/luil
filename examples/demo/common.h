@@ -85,7 +85,8 @@ namespace demo {
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
-    {};
+    {
+    };
 
     // 앱이 정의하는 포인터 모양이다 (세로 목록의 순서 바꾸기).
     constexpr luil::ui_cursor cursor_reorder { luil::application_cursor(0) };
@@ -125,7 +126,8 @@ namespace demo {
 
     // --- 셸 수준 메시지 ---
     struct close_intent
-    {};
+    {
+    };
 
     struct window_metrics_intent
     {
@@ -152,7 +154,8 @@ namespace demo {
     };
 
     struct sidebar_toggle_intent
-    {};
+    {
+    };
 
     // 손잡이를 끈 만큼의 폭 변화다 (+가 넓어지는 쪽, 논리 픽셀).
     struct sidebar_resize_intent
@@ -162,12 +165,14 @@ namespace demo {
 
     // 손잡이 조절이 끝났다 (뗌·키 한 번). 끝난 폭을 저장할 자리다.
     struct sidebar_resize_finish_intent
-    {};
+    {
+    };
 
     // 떠 있는 popup(드롭다운·컨텍스트 메뉴·탭 넘침)을 모두 닫자는 요청이다.
     // popup을 소유한 페이지들이 각자 자기 열림 상태를 지운다.
     struct popup_close_intent
-    {};
+    {
+    };
 
     // 텍스트 편집·IME 조합 메시지다.
     // policy가 모든 텍스트 칸의 요청을 이 타입으로 나르고,
@@ -272,4 +277,4 @@ namespace demo {
 
     // 최상위 컨테이너(root_element)와 배경 panel(panel_element)은
     // 라이브러리의 것을 그대로 쓴다.
-} // namespace demo
+}

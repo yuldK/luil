@@ -48,7 +48,7 @@ namespace demo {
             items.push_back({ u8"close", u8"도구 창 닫기", luil::codicons::icon_close });
             return items;
         }
-    } // namespace
+    }
 
     void windows_page::close_tool_menu() noexcept
     {
@@ -413,4 +413,4 @@ namespace demo {
         root->add(std::move(column));
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace demo
+}

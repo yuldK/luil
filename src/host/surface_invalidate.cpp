@@ -8,7 +8,7 @@ namespace luil {
         // timer는 밀리초 단위로 잘려 오므로, 여유 없이 깨우면 element가
         // "아직 아니다"라며 같은 시각을 다시 예고해 한 번 더 돈다.
         constexpr std::chrono::milliseconds update_timer_slack { 15 };
-    } // namespace
+    }
 
     std::vector<std::u8string> surfaces_to_repaint(const std::span<const surface_content> surfaces, const bool every_surface)
     {
@@ -50,4 +50,4 @@ namespace luil {
                 plan.wake.push_back(deadline.surface);
         return plan;
     }
-} // namespace luil
+}

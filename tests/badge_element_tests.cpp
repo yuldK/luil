@@ -7,7 +7,7 @@
 
 namespace {
     constexpr luil::ui_element_kind kind_badge { luil::application_element_kind(0) };
-} // namespace
+}
 
 TEST_CASE("A badge is as tall as a label of the same size", "[ui][badge]")
 {

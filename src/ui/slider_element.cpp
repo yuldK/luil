@@ -256,4 +256,4 @@ namespace luil {
             return std::vector<input_action> {};
         return std::vector<input_action> { config_.change_to(target) };
     }
-} // namespace luil
+}

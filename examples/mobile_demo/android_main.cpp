@@ -58,7 +58,7 @@ namespace {
     private:
         std::unique_ptr<luil::net::smb_client> smb_ {};
     };
-} // namespace
+}
 
 extern "C" void android_main(android_app* app)
 {

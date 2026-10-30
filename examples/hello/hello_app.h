@@ -33,7 +33,8 @@ namespace hello {
 
     // 버튼을 눌렀다.
     struct increment_intent
-    {};
+    {
+    };
 
     // 창 크기·배율이 정해졌거나 바뀌었다 (delegate가 보낸다).
     struct metrics_intent
@@ -45,7 +46,8 @@ namespace hello {
 
     // 창을 닫는다 (캡션 X, Alt+F4).
     struct close_intent
-    {};
+    {
+    };
 
     // --- logic thread: 앱 상태와 화면 ---
     //
@@ -86,4 +88,4 @@ namespace hello {
         // 반환한 메시지가 app inbox로 들어가 driver::handle에 닿는다.
         [[nodiscard]] luil::app_message make_window_metrics_message(float width, float height, float scale) override;
     };
-} // namespace hello
+}

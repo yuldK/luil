@@ -68,7 +68,7 @@ namespace luil {
             std::u8string title_ {};
             bool collapsed_ { false };
         };
-    } // namespace
+    }
 
     group_element::group_element(group_config config, std::unique_ptr<ui_element> content)
         : ui_element { ui_element_id { ui_element_kind::group, config.owner } }
@@ -144,4 +144,4 @@ namespace luil {
             return std::nullopt;
         return header_->access_actions(request);
     }
-} // namespace luil
+}

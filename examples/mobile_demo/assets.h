@@ -30,4 +30,4 @@ namespace mobile_demo {
     {
         return { mobile_demo_spinner_gif, mobile_demo_spinner_gif_size };
     }
-} // namespace mobile_demo
+}

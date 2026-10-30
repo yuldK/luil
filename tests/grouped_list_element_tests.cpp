@@ -31,7 +31,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 그룹 두 개: recent(내용 200) + old(내용 300)다.
@@ -61,7 +62,7 @@ namespace {
                 return child.get();
         return nullptr;
     }
-} // namespace
+}
 
 TEST_CASE("A grouped list stacks headers and contents and sums its height", "[ui][grouped-list]")
 {

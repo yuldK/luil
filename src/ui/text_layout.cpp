@@ -52,7 +52,7 @@ namespace luil {
             };
             return found == stops.begin() ? found->x : std::prev(found)->x;
         }
-    } // namespace
+    }
 
     std::uint64_t text_layout_revision() noexcept { return layout_revision.load(std::memory_order_relaxed); }
     void invalidate_text_layouts() noexcept { layout_revision.fetch_add(1, std::memory_order_relaxed); }
@@ -317,4 +317,4 @@ namespace luil {
             return segment;
         });
     }
-} // namespace luil
+}

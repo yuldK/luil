@@ -51,4 +51,4 @@ namespace luil {
         // 받은 마지막 번호다. 같은 번호의 재게시를 다시 받지 않는다.
         std::uint64_t last_id_ { 0 };
     };
-} // namespace luil
+}

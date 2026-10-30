@@ -287,7 +287,7 @@ namespace luil::net {
                 error = lossy_charset_note(charset);
             return text;
         }
-    } // namespace
+    }
 
     unsigned int charset_code_page(const std::u8string_view charset) noexcept
     {
@@ -335,4 +335,4 @@ namespace luil::net {
             return transcode_code_page(code_page, bytes, charset, error);
         };
     }
-} // namespace luil::net
+}

@@ -74,4 +74,4 @@ namespace luil::win32 {
     // 렌더러가 살아 있는 동안만 창이 합성 대상이고, 놓으면 GDI가 다시 드러난다
     // (webview-composition-design.md).
     [[nodiscard]] renderer_factory_result create_direct3d_skia_renderer(HWND window, IDCompositionDevice* composition);
-} // namespace luil::win32
+}

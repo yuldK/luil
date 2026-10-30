@@ -1090,4 +1090,4 @@ namespace luil {
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* policy = nullptr, interaction_config config = {},
         const std::function<void(app_ui_command)>& execute_app_ui_command = {}, const std::function<void(clipboard_request)>& execute_clipboard = {},
         messaging::latest_slot<touch_gesture_config>* touch_slot = nullptr, const std::function<void(haptic_feedback)>& execute_haptic = {});
-} // namespace luil
+}

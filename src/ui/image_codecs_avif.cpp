@@ -12,4 +12,4 @@ namespace luil {
         static const bool registered { (SkCodecs::Register(SkAvifDecoder::LibAvif::Decoder()), true) };
         static_cast<void>(registered);
     }
-} // namespace luil
+}

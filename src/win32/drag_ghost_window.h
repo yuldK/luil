@@ -51,4 +51,4 @@ namespace luil::win32 {
         std::uint32_t painted_dpi_ { 0 };
         bool painted_ { false };
     };
-} // namespace luil::win32
+}

@@ -26,4 +26,4 @@ namespace luil::net {
     //  - 가르는 일을 `WinHttpCrackUrl`에게 맡기는 이유는 전송이 실제로 읽는 규칙이
     //    그것이기 때문이다. 우리가 따로 가르면 파서가 둘이 되어 언젠가 어긋난다.
     [[nodiscard]] std::optional<parsed_url> parse_http_url(std::u8string_view url, http_error& error);
-} // namespace luil::net
+}

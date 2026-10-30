@@ -106,4 +106,4 @@ namespace luil::android {
         sk_sp<GrDirectContext> context_ {};
         bool lost_ { false };
     };
-} // namespace luil::android
+}

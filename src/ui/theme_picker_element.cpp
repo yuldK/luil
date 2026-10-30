@@ -224,7 +224,7 @@ namespace luil {
             bool selected_ { false };
             accent_definition accent_ {};
         };
-    } // namespace
+    }
 
     theme_picker_element::theme_picker_element(theme_picker_config config)
         : ui_element { ui_element_id { ui_element_kind::choice_group, config.owner } }
@@ -318,4 +318,4 @@ namespace luil {
     {
         return { .role = access_role::radio_group, .name = config_.name };
     }
-} // namespace luil
+}

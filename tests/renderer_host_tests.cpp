@@ -103,7 +103,7 @@ namespace {
         };
         return factories;
     }
-} // namespace
+}
 
 TEST_CASE("Automatic rendering starts on the GPU when it can", "[renderer]")
 {

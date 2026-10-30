@@ -75,4 +75,4 @@ namespace luil::net {
 
     // mDNS로 풀 이름(`.local`로 끝난다)인가. ASCII 대소문자를 접는다.
     [[nodiscard]] bool is_mdns_host(std::u8string_view host) noexcept;
-} // namespace luil::net
+}

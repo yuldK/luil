@@ -28,7 +28,7 @@ namespace luil::win32 {
                     return found;
             return nullptr;
         }
-    } // namespace
+    }
 
     caption_band default_caption_band(const int client_width, const std::uint32_t dpi, const caption_ui_metrics& metrics) noexcept
     {
@@ -95,4 +95,4 @@ namespace luil::win32 {
             return caption_hit::minimize;
         return caption_hit::drag;
     }
-} // namespace luil::win32
+}

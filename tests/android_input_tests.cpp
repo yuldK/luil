@@ -51,7 +51,7 @@ namespace {
         REQUIRE(std::holds_alternative<event_type>(event));
         return std::get<event_type>(event);
     }
-} // namespace
+}
 
 TEST_CASE("Android event times are on the steady clock", "[android][input]")
 {

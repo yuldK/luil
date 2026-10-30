@@ -99,7 +99,7 @@ namespace {
     {
         return luil::diff_access_snapshots(luil::make_access_snapshot(make_tree(before, true, count)), luil::make_access_snapshot(make_tree(after, true, count)));
     }
-} // namespace
+}
 
 TEST_CASE("A multiple selection list announces itself and selects every chosen row", "[ui][accessibility][multi-select]")
 {
@@ -192,7 +192,8 @@ TEST_CASE("Rows without app handlers cannot be added or removed", "[ui][accessib
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] luil::access_info accessibility() const override
         {

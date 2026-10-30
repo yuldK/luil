@@ -92,7 +92,7 @@ namespace luil {
                     collect_unloaded(node.children, expanded, keys);
             }
         }
-    } // namespace
+    }
 
     std::vector<tree_row> flatten_tree(const std::span<const tree_node> roots, const std::unordered_set<std::u8string>& expanded, const tree_flatten_options& options)
     {
@@ -156,4 +156,4 @@ namespace luil {
     {
         return latest_.size();
     }
-} // namespace luil
+}

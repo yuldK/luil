@@ -66,7 +66,7 @@ namespace {
         const std::optional<std::vector<luil::input_action>> actions { (*list.key_handler_of())(luil::key_pressed_event { key }) };
         return actions.has_value() ? moved(*actions) : std::u8string {};
     }
-} // namespace
+}
 
 TEST_CASE("A grid takes its column count from the width or the fixed count", "[ui][list][grid]")
 {

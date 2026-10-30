@@ -481,4 +481,4 @@ namespace luil {
     private:
         image_config config_ {};
     };
-} // namespace luil
+}

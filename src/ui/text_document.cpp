@@ -148,7 +148,7 @@ namespace luil {
             }
             return mail;
         }
-    } // namespace
+    }
 
     std::span<const text_span> text_spans_in_range(const std::span<const text_span> spans, const std::size_t begin, const std::size_t end) noexcept
     {
@@ -189,4 +189,4 @@ namespace luil {
                 result.push_back(std::move(link));
         return result;
     }
-} // namespace luil
+}

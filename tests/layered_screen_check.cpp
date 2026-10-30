@@ -56,7 +56,8 @@ namespace {
     };
 
     struct close_intent
-    {};
+    {
+    };
 
     // 칠한 사각형 하나다.
     class color_block final : public luil::ui_element
@@ -65,7 +66,8 @@ namespace {
         color_block(const luil::ui_element_id id, const std::uint32_t color)
             : ui_element { id }
             , color_ { color }
-        {}
+        {
+        }
 
         void arrange(const luil::arrange_context& context) override
         {
@@ -110,7 +112,8 @@ namespace {
     public:
         explicit check_driver(request_box& requests)
             : requests_ { requests }
-        {}
+        {
+        }
 
         void handle(luil::app_message message) override
         {
@@ -585,7 +588,7 @@ namespace {
         CloseHandle(process.hProcess);
         return static_cast<int>(code);
     }
-} // namespace
+}
 
 int main(const int argc, char** const argv)
 {

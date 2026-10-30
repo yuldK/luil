@@ -137,7 +137,7 @@ namespace demo {
             row->add(make_label(luil::ui_element_id { kind_text, u8"log-elapsed-" + item.key }, log_elapsed_text(index), 10.0f, luil::label_color_role::dim), 56.0f);
             return row;
         }
-    } // namespace
+    }
 
     lists_page::lists_page()
     {
@@ -586,4 +586,4 @@ namespace demo {
         };
         return luil::route_reveal(tree, focused, routes);
     }
-} // namespace demo
+}

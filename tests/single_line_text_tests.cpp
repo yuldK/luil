@@ -28,7 +28,7 @@ namespace {
         std::u8string storage {};
         return std::u8string { luil::single_line_text(text, mode, storage) };
     }
-} // namespace
+}
 
 TEST_CASE("Single-line text draws each line break as one space by default", "[ui][text]")
 {

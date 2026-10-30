@@ -22,7 +22,7 @@ namespace {
     const int first_tree { 0 };
     const int second_tree { 0 };
     const int third_tree { 0 };
-} // namespace
+}
 
 TEST_CASE("A surface that keeps the same tree is not repainted", "[win32][render]")
 {

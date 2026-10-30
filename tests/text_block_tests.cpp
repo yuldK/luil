@@ -28,7 +28,7 @@ namespace {
     {
         return luil::measure_context { .scale = scale, .measurer = &half_size_measurer };
     }
-} // namespace
+}
 
 TEST_CASE("A text block lays out one line at its natural width until it overflows", "[ui][text-block]")
 {

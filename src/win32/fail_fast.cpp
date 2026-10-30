@@ -9,4 +9,4 @@ namespace luil {
         constexpr unsigned int fast_fail_fatal_app_exit { 7 };
         __fastfail(fast_fail_fatal_app_exit);
     }
-} // namespace luil
+}

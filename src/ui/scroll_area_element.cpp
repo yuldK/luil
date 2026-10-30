@@ -154,4 +154,4 @@ namespace luil {
         // 같은 offset을 본다 — 앱이 앞서 든 값으로 그리면 한 frame 낡은 그림자가 선다.
         draw_scroll_edges(context, bounds(), metrics_.scroll_offset, metrics_.maximum_scroll, config_.edges);
     }
-} // namespace luil
+}

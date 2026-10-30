@@ -10,4 +10,4 @@ namespace luil::win32 {
     using luil::webview_event;
     using luil::webview_event_kind;
     using luil::webview_policy;
-} // namespace luil::win32
+}

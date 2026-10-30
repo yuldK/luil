@@ -33,4 +33,4 @@ namespace luil {
 
         [[nodiscard]] bool operator==(const text_input_options&) const noexcept = default;
     };
-} // namespace luil
+}

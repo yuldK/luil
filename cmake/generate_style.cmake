@@ -312,7 +312,7 @@ string(APPEND output_text "#include \"luil/theme/ui_style.h\"\n\n")
 string(APPEND output_text "namespace luil::generated {\n")
 string(APPEND output_text "    inline constexpr ui_style default_style {\n")
 string(APPEND output_text "${dark_text}${light_text}${tones_text}${metrics_text}${components_text}")
-string(APPEND output_text "    };\n} // namespace luil::generated\n")
+string(APPEND output_text "    };\n}\n")
 
 get_filename_component(output_directory "${OUTPUT_FILE}" DIRECTORY)
 file(MAKE_DIRECTORY "${output_directory}")

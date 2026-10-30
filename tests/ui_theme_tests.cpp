@@ -48,7 +48,7 @@ namespace {
             luil::set_system_accent(std::nullopt);
         }
     };
-} // namespace
+}
 
 namespace {
     [[nodiscard]] float contrast_ratio(const luil::ui_color first, const luil::ui_color second) noexcept
@@ -57,7 +57,7 @@ namespace {
         const float b { luil::relative_luminance(second) };
         return (std::max(a, b) + 0.05f) / (std::min(a, b) + 0.05f);
     }
-} // namespace
+}
 
 TEST_CASE("Text on a filled accent or error keeps WCAG AA contrast in every accent and theme", "[theme]")
 {

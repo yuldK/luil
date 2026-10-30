@@ -36,4 +36,4 @@ namespace luil::win32 {
         // 창을 만들 때마다 같은 실패를 되풀이할 이유가 없다.
         bool attempted_ { false };
     };
-} // namespace luil::win32
+}

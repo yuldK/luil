@@ -24,7 +24,7 @@ namespace hello {
             const std::string digits { std::to_string(clicks) };
             return u8"버튼을 누른 횟수: " + std::u8string { digits.begin(), digits.end() };
         }
-    } // namespace
+    }
 
     void hello_driver::handle(luil::app_message message)
     {
@@ -128,4 +128,4 @@ namespace hello {
         // 창 크기가 바뀔 때마다 이 메시지가 오고, driver가 새 크기로 다시 배치한다.
         return luil::app_message { metrics_intent { width, height, scale } };
     }
-} // namespace hello
+}

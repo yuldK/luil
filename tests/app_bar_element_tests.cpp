@@ -35,7 +35,7 @@ namespace {
     {
         return luil::app_bar_button { .glyph = glyph, .label = std::move(label) };
     }
-} // namespace
+}
 
 TEST_CASE("The platform is a desktop with a window caption unless the host says otherwise", "[ui][platform]")
 {

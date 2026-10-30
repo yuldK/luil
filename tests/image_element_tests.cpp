@@ -80,7 +80,7 @@ namespace {
         };
         return luil::make_rgba_image(2, 2, pixels);
     }
-} // namespace
+}
 
 TEST_CASE("An image is made once from RGBA pixels or not at all", "[ui][image]")
 {

@@ -3,7 +3,7 @@
 namespace luil::win32 {
     namespace {
         constexpr std::uint64_t window_length_ms { 1000 };
-    } // namespace
+    }
 
     webview_message_decision webview_message_gate::admit(
         const std::uint64_t now_ms, const std::size_t bytes, const std::size_t maximum_bytes, const std::uint32_t maximum_per_second) noexcept
@@ -33,4 +33,4 @@ namespace luil::win32 {
         ++dropped_;
         return decision;
     }
-} // namespace luil::win32
+}

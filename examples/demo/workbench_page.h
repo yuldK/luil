@@ -83,7 +83,8 @@ namespace demo {
     };
 
     struct workbench_change_select_all_intent
-    {};
+    {
+    };
 
     // 체크 칸을 눌렀다 (그 행의 스테이지를 뒤집는다).
     struct workbench_change_check_intent
@@ -127,7 +128,8 @@ namespace demo {
     };
 
     struct workbench_menu_close_intent
-    {};
+    {
+    };
 
     struct workbench_menu_select_intent
     {
@@ -143,7 +145,8 @@ namespace demo {
     // --- 변경 내용 보기의 메시지 ---
     // 패치 파일을 고르자는 요청이다. 셸이 공용 파일 대화상자 요청으로 바꾼다.
     struct workbench_import_intent
-    {};
+    {
+    };
 
     // 고른 패치 파일이다. 페이지가 읽어 보기에 띄운다.
     struct workbench_patch_intent
@@ -153,7 +156,8 @@ namespace demo {
 
     // 불러온 패치를 닫고 표의 커서 행으로 돌아간다.
     struct workbench_patch_close_intent
-    {};
+    {
+    };
 
     struct workbench_diff_scroll_intent
     {
@@ -176,10 +180,12 @@ namespace demo {
     // --- 양식의 메시지 ---
     // 전체 체크다. 일부만 스테이지했으면 모두 스테이지한다.
     struct workbench_stage_all_intent
-    {};
+    {
+    };
 
     struct workbench_commit_intent
-    {};
+    {
+    };
 
     // 작성자 콤보의 메시지다. 후보·열림·강조·스크롤은 전부 앱 상태다 (combo-box-design.md).
     struct workbench_author_open_intent
@@ -205,7 +211,8 @@ namespace demo {
 
     // 닫힌 콤보의 Esc다. 마지막으로 확정한 작성자로 되돌린다.
     struct workbench_author_restore_intent
-    {};
+    {
+    };
 
     struct workbench_author_scroll_intent
     {
@@ -348,4 +355,4 @@ namespace demo {
         // 이번 frame에 배치한 콤보다. 후보 popup은 그 자리를 따라 선다.
         const luil::combo_box_element* author_combo_ { nullptr };
     };
-} // namespace demo
+}

@@ -124,4 +124,4 @@ namespace luil::android {
         bool configured_multiline_ { false };
         std::optional<text_input_options> options_ {};
     };
-} // namespace luil::android
+}

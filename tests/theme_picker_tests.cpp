@@ -24,7 +24,7 @@ namespace {
         config.select = [](const luil::theme_preference value) { return luil::make_app_action(selected_theme { value }); };
         return config;
     }
-} // namespace
+}
 
 TEST_CASE("Theme preview cards expose a named selection group and keep state controlled", "[ui][theme-picker]")
 {

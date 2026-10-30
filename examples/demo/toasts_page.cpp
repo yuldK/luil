@@ -168,4 +168,4 @@ namespace demo {
         }
         return std::make_unique<luil::toast_stack_element>(std::move(config), std::move(toasts));
     }
-} // namespace demo
+}

@@ -114,7 +114,7 @@ namespace luil::win32 {
             }
             return true;
         }
-    } // namespace
+    }
 
     void apply_surface_cursor(const HWND window, const ui_tree* const tree, app_host* const host, const window_config& config, const std::u8string& surface, const std::optional<POINT> client_position)
     {
@@ -142,7 +142,8 @@ namespace luil::win32 {
         : context_ { context }
         , id_ { std::move(id) }
         , backdrop_ { id_.empty() == false }
-    {}
+    {
+    }
 
     std::optional<backdrop_report> window_surface::refresh_backdrop(const backdrop_environment& environment, const bool system_supported)
     {
@@ -1503,7 +1504,8 @@ namespace luil::win32 {
     surface_tsf_host::surface_tsf_host(surface_context& context, const window_surface& surface) noexcept
         : context_ { &context }
         , surface_ { &surface }
-    {}
+    {
+    }
 
     // 이 host가 TSF로 대신 볼 표면이다.
     // popup은 keyboard focus를 받지 못해 자기 session이 없으므로, 자기에게
@@ -1611,4 +1613,4 @@ namespace luil::win32 {
             return nullptr;
         return surface.tree()->find(context_->host()->acquire_interaction().focused_input);
     }
-} // namespace luil::win32
+}

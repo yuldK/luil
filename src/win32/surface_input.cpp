@@ -212,4 +212,4 @@ namespace luil::win32 {
             return named;
         return platform_key_code(static_cast<std::uint32_t>(virtual_key));
     }
-} // namespace luil::win32
+}

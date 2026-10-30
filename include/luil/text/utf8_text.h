@@ -38,4 +38,4 @@ namespace luil::text {
     };
 
     [[nodiscard]] utf8_decoded utf8_decode(std::u8string_view text, std::size_t offset) noexcept;
-} // namespace luil::text
+}

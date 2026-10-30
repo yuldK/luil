@@ -54,7 +54,7 @@ namespace {
         }
         return count;
     }
-} // namespace
+}
 
 TEST_CASE("Public font loaders own bytes and read Unicode file paths", "[fonts][glyph]")
 {

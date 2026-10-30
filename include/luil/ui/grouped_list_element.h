@@ -66,4 +66,4 @@ namespace luil {
         std::vector<entry> entries_ {};
         float content_height_ { 0.0f };
     };
-} // namespace luil
+}

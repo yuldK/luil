@@ -114,4 +114,4 @@ namespace luil::win32 {
     // TIP 없이 session의 store에 조합이 시작된 것처럼 알린다 (`OnStartComposition`).
     // 글은 바꾸지 않으므로 그림자의 지금 글이 곧 조합 글이다.
     void start_session_composition_for_test(tsf_input_session& session);
-} // namespace luil::win32
+}

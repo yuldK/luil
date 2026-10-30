@@ -96,4 +96,4 @@ namespace luil {
             return static_cast<key_code>(static_cast<std::uint32_t>(key_code::numpad_0) + static_cast<std::uint32_t>(key_code_value - 144));
         return key_code::none;
     }
-} // namespace luil
+}

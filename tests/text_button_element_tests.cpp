@@ -10,7 +10,7 @@
 
 namespace {
     constexpr luil::ui_element_kind kind_button { luil::application_element_kind(0) };
-} // namespace
+}
 
 TEST_CASE("A text button without a glyph keeps the text-only layout", "[ui][text_button]")
 {

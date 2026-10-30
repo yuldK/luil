@@ -38,4 +38,4 @@ namespace luil {
         palette_scope_config config_ {};
         ui_element* content_ { nullptr };
     };
-} // namespace luil
+}

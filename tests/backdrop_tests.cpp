@@ -24,7 +24,7 @@ namespace {
         environment.layered = true;
         return environment;
     }
-} // namespace
+}
 
 TEST_CASE("A standard window raises the system backdrop for each effect", "[win32][backdrop]")
 {
@@ -91,7 +91,7 @@ namespace {
         environment.activates = false;
         return environment;
     }
-} // namespace
+}
 
 TEST_CASE("A surface that never activates raises acrylic through the accent path and refuses mica", "[win32][backdrop]")
 {

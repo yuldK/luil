@@ -60,7 +60,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::chrono::steady_clock::time_point at(const int milliseconds)
@@ -164,7 +165,7 @@ namespace {
         root->add(std::move(folder));
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("A click carries the modifiers held when the button went up", "[ui][interaction][modifiers]")
 {

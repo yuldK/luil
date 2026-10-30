@@ -45,7 +45,7 @@ namespace {
             return std::nullopt;
         return intent->delta;
     }
-} // namespace
+}
 
 TEST_CASE("A scrollbar arranges its thumb from logical values and the scale", "[ui][scrollbar]")
 {

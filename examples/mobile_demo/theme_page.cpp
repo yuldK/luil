@@ -28,7 +28,8 @@ namespace mobile_demo {
                 : ui_element { id }
                 , color_ { color }
                 , selected_ { selected }
-            {}
+            {
+            }
 
             void arrange(const luil::arrange_context& context) override
             {
@@ -58,7 +59,7 @@ namespace mobile_demo {
             luil::ui_color color_ { 0 };
             bool selected_ { false };
         };
-    } // namespace
+    }
 
     bool theme_page::handle(const luil::app_message& message)
     {
@@ -143,4 +144,4 @@ namespace mobile_demo {
         column.add(std::move(grid), luil::wrap_height_for(swatches, width - 2.0f * page_padding, accents.size()));
         return column.finish();
     }
-} // namespace mobile_demo
+}

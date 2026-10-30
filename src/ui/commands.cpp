@@ -130,7 +130,7 @@ namespace luil {
                     return name.key;
             return key_code::none;
         }
-    } // namespace
+    }
 
     std::vector<key_chord> effective_shortcuts(const app_command& command)
     {
@@ -286,4 +286,4 @@ namespace luil {
             }
         return result;
     }
-} // namespace luil
+}

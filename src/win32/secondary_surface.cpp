@@ -39,7 +39,8 @@ namespace luil::win32 {
 
     secondary_surface::secondary_surface(surface_context& context, std::u8string id) noexcept
         : caption_surface { context, std::move(id) }
-    {}
+    {
+    }
 
     LRESULT CALLBACK secondary_surface::static_procedure(const HWND window, const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
     {
@@ -239,4 +240,4 @@ namespace luil::win32 {
         close_requested_ = true;
         context_.dispatch_action(close_());
     }
-} // namespace luil::win32
+}

@@ -21,11 +21,13 @@ namespace mobile_demo {
     // --- 이 페이지의 메시지 ---
     // 적은 주소의 폴더를 연다.
     struct smb_open_intent
-    {};
+    {
+    };
 
     // 지금 폴더의 위 폴더로 간다.
     struct smb_up_intent
-    {};
+    {
+    };
 
     // 열거한 항목 하나를 눌렀다. 폴더면 들어가고 파일이면 앞부분을 읽는다.
     struct smb_entry_intent
@@ -47,7 +49,8 @@ namespace mobile_demo {
 
     // 읽던 파일의 다음 구간을 읽는다.
     struct smb_next_range_intent
-    {};
+    {
+    };
 
     // 공유 목록에서 공유 하나를 눌렀다. 주소를 "서버/공유"로 바꾸고 연다.
     struct smb_share_intent
@@ -57,7 +60,8 @@ namespace mobile_demo {
 
     // 같은 네트워크의 SMB 서버를 찾는다.
     struct smb_discover_intent
-    {};
+    {
+    };
 
     // 찾은 서버 하나를 눌렀다. 주소를 그 서버로 바꾸고 공유 목록을 연다.
     struct smb_server_intent
@@ -67,7 +71,8 @@ namespace mobile_demo {
 
     // 쉬는 연결을 닫는다 (단추, 그리고 앱이 뒤로 갈 때 delegate가 보낸다).
     struct smb_close_idle_intent
-    {};
+    {
+    };
 
     // delegate가 앱 host가 선 뒤 세운 client다. logic thread가 이미 돌고 있어 직접 걸지 않고 메시지로 넘긴다.
     struct smb_client_intent
@@ -144,4 +149,4 @@ namespace mobile_demo {
         std::u8string status_ { u8"주소를 적고 열기를 누른다." };
         std::u8string detail_ {};
     };
-} // namespace mobile_demo
+}

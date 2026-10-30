@@ -22,7 +22,7 @@ namespace {
     {
         return luil::net::media_type_invites_sniffing(luil::net::parse_media_type(content_type));
     }
-} // namespace
+}
 
 TEST_CASE("A media type without parameters keeps its essence", "[net][media]")
 {

@@ -107,7 +107,8 @@ namespace demo {
             picture_caption_element(luil::ui_element_id id, std::u8string caption)
                 : ui_element { std::move(id) }
                 , caption_ { std::move(caption) }
-            {}
+            {
+            }
 
             void arrange(const luil::arrange_context& context) override
             {
@@ -150,7 +151,8 @@ namespace demo {
                 : ui_element { std::move(id) }
                 , title_ { std::move(title) }
                 , hint_ { std::move(hint) }
-            {}
+            {
+            }
 
             void arrange(const luil::arrange_context& context) override
             {
@@ -212,7 +214,7 @@ namespace demo {
             std::u8string title_ {};
             std::u8string hint_ {};
         };
-    } // namespace
+    }
 
     bool is_supported_image(const std::u8string_view path)
     {
@@ -414,4 +416,4 @@ namespace demo {
         }
         return make_label(id, read, 11.0f, luil::label_color_role::dim);
     }
-} // namespace demo
+}

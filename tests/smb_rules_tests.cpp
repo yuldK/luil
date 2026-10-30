@@ -26,7 +26,7 @@ namespace {
         return luil::net::check_smb_request(request, max_read, failure) == false && failure.kind == luil::net::smb_error_kind::invalid_request
             && failure.message.find(u8"secret") == std::u8string::npos;
     }
-} // namespace
+}
 
 TEST_CASE("An SMB request names a server and a share and reads a bounded range", "[net][smb]")
 {

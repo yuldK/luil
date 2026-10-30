@@ -315,4 +315,4 @@ namespace luil {
     //    그 스타일의 치수를 쓴다 — 스타일 하나를 넘기면 둘이 맞는다.
     [[nodiscard]] ui_tree make_arranged_tree(
         std::unique_ptr<ui_element> root, const rect_f& slot, float scale, const rect_f& surface = {}, const ui_metrics* metrics = nullptr, const ui_style* style = nullptr);
-} // namespace luil
+}

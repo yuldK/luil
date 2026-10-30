@@ -93,7 +93,7 @@ namespace {
         auto* const message { std::get_if<luil::app_message>(&actions[0]) };
         return message != nullptr ? message->get<T>() : nullptr;
     }
-} // namespace
+}
 
 TEST_CASE("A tab bar builds a tab per item and close buttons only where allowed", "[ui][tab]")
 {
@@ -262,7 +262,8 @@ TEST_CASE("A tab bar scrolls overflowing tabs and clips them from hit testing", 
 TEST_CASE("A tab bar shows its overflow button only while tabs overflow", "[ui][tab]")
 {
     struct overflow_intent
-    {};
+    {
+    };
 
     luil::tab_bar_config config { make_config(10) };
     config.tab_width = 160.0f;
@@ -318,7 +319,8 @@ TEST_CASE("A tab bar is one tab stop and its close buttons are not stops", "[ui]
 TEST_CASE("An overflow button narrows the tab lane instead of covering it", "[ui][tab]")
 {
     struct overflow_intent
-    {};
+    {
+    };
 
     luil::tab_bar_config config { make_config(10) };
     config.tab_width = 160.0f;
@@ -343,7 +345,8 @@ TEST_CASE("An overflow button narrows the tab lane instead of covering it", "[ui
 TEST_CASE("A scaled tab bar keeps its lane and maximum in logical pixels", "[ui][tab]")
 {
     struct overflow_intent
-    {};
+    {
+    };
 
     luil::tab_bar_config config { make_config(10) };
     config.tab_width = 160.0f;
@@ -405,7 +408,7 @@ namespace {
             return {};
         return target->drop()->on_drop(payload, { target->id(), x, 18.0f });
     }
-} // namespace
+}
 
 TEST_CASE("Moving a tab names the side and refuses the spots that keep the order", "[ui][tab][drag]")
 {
@@ -599,7 +602,7 @@ namespace {
     {
         return std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { milliseconds };
     }
-} // namespace
+}
 
 TEST_CASE("A torn off tab still reports its drop after the bar is rebuilt mid drag", "[ui][tab][drag]")
 {

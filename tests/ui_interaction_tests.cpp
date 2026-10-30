@@ -56,7 +56,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // offset_at·text_input을 내주는 최소 텍스트 박스다.
@@ -85,7 +86,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<std::size_t> offset_at(const float x, const luil::text_measurer&) const override
         {
@@ -115,7 +117,8 @@ namespace {
     public:
         explicit test_multiline_text_input(luil::ui_element_id id)
             : test_text_input { std::move(id), u8"abcdef\nghijkl", 0u, 0u }
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<std::size_t> offset_at_point(const float x, const float y, const luil::text_measurer& measurer) const override
         {
@@ -224,7 +227,7 @@ namespace {
     {
         return std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { milliseconds };
     }
-} // namespace
+}
 
 TEST_CASE("app_message round trips a typed value and rejects other types", "[ui][message]")
 {
@@ -952,7 +955,7 @@ namespace {
         root->add(std::move(item));
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("Popup surface events hit the popup tree instead of the main tree", "[ui][interaction][popup]")
 {
@@ -1201,7 +1204,7 @@ namespace {
 
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("A vanished surface's press stops swallowing later pointer moves", "[ui][interaction][popup]")
 {
@@ -1466,7 +1469,7 @@ namespace {
         root->add(std::move(row));
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("A double click does not carry across surfaces", "[ui][interaction][window]")
 {
@@ -2944,7 +2947,7 @@ namespace {
         root->add(std::move(trap));
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("A focus trap enters in the surface that holds the keyboard", "[ui][interaction][window][focus]")
 {
@@ -3155,7 +3158,8 @@ namespace {
         reveal_probe(const luil::ui_element_id id, const float delta)
             : ui_element { id }
             , delta_ { delta }
-        {}
+        {
+        }
 
         void add(std::unique_ptr<ui_element> child)
         {
@@ -3168,7 +3172,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] float scroll_delta_to_reveal(const luil::rect_f&) const override
         {
@@ -3195,7 +3200,7 @@ namespace {
         int calls { 0 };
         luil::ui_element_id last_focused {};
     };
-} // namespace
+}
 
 TEST_CASE("Reveal routing picks the first route that owns the focused element", "[ui][interaction][focus]")
 {
@@ -3429,9 +3434,10 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
-} // namespace
+}
 
 TEST_CASE("Keys on a focused value control change the value and leave the focus in place", "[ui][interaction][focus]")
 {
@@ -3799,7 +3805,7 @@ namespace {
         static_cast<void>(controller.process(moved));
         REQUIRE(controller.snapshot().drag.has_value());
     }
-} // namespace
+}
 
 TEST_CASE("A drag released where nothing accepts it tells its source", "[ui][interaction][drag]")
 {

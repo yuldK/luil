@@ -43,7 +43,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 초점을 받는 최소 텍스트 칸이다.
@@ -58,7 +59,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<std::size_t> offset_at(const float, const luil::text_measurer&) const override
         {
@@ -169,7 +171,7 @@ namespace {
         static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::tab, false, false, false, false, at(0) }));
         REQUIRE(controller.snapshot().focused == luil::ui_element_id { kind_button, u8"button" });
     }
-} // namespace
+}
 
 TEST_CASE("A tree answers the path from an element up to the root", "[ui][interaction][keys]")
 {

@@ -85,4 +85,4 @@ namespace luil {
         // 항목이 전부 같은 크기라 항목별로 기억할 것이 없다 — `children()`이 곧 순서다.
         wrap_config config_ {};
     };
-} // namespace luil
+}

@@ -65,7 +65,7 @@ namespace {
         return frame;
     }
 #endif
-} // namespace
+}
 
 #if LUIL_TESTS_SVG
 TEST_CASE("An svg decodes into a vector image drawn sharply at any size", "[ui][image][svg][raster]")

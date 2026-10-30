@@ -32,7 +32,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     // 회전하는 진행 표시를 흉내 내는 element다.
@@ -47,7 +48,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
 
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_update(const luil::update_context& context, const luil::interaction_snapshot&) const override
         {
@@ -72,7 +74,7 @@ namespace {
     {
         return { kind, std::u8string { value } };
     }
-} // namespace
+}
 
 TEST_CASE("Library element kinds never share a number with application kinds", "[ui][element][kind]")
 {

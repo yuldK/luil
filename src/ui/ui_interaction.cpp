@@ -31,7 +31,7 @@ namespace luil {
                     return menu;
             return nullptr;
         }
-    } // namespace
+    }
 
     namespace {
         // 놓는 순간의 속도를 재는 창이다. 이보다 오래된 이동은 속도에 넣지 않는다.
@@ -123,7 +123,7 @@ namespace luil {
             const ui_element* const owner { link_owner(tree, *target) };
             return owner != nullptr ? owner : target;
         }
-    } // namespace
+    }
 
     interaction_controller::interaction_controller(interaction_policy* const policy, interaction_config config) noexcept
         : policy_ { policy }
@@ -917,7 +917,7 @@ namespace luil {
                 return viewport;
             return { viewport.x, top, viewport.width, bottom - top };
         }
-    } // namespace
+    }
 
     std::vector<input_action> route_wheel(const ui_tree& tree, const float x, const float y, const float delta)
     {
@@ -1594,7 +1594,7 @@ namespace luil {
                 return {};
             return { pan.scroll(delta) };
         }
-    } // namespace
+    }
 
     bool interaction_controller::pointer_gesture_active() const noexcept
     {
@@ -2466,7 +2466,7 @@ namespace luil {
                 return false;
             return std::ranges::any_of(path, [&outer](const ui_element* const element) { return element->id() == outer; });
         }
-    } // namespace
+    }
 
     const pointer_drag_target* interaction_controller::live_drag_handler(const ui_tree* const tree, const ui_element_id& id, const float x, const float y) const
     {
@@ -4399,4 +4399,4 @@ namespace luil {
             }
         }
     }
-} // namespace luil
+}

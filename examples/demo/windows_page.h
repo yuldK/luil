@@ -72,14 +72,17 @@ namespace demo {
     // 칸은 요청하는 frame에 아직 없다 — 창은 UI thread가 다음 대조에서 만든다. 그래서 luil이 요청을
     // 들고 있다가 칸이 서는 순간 이행한다 (deferred-focus-design.md).
     struct tool_focus_intent
-    {};
+    {
+    };
 
     // 플랫폼 도구다 (platform-services-design.md): 데모 실행 파일을 탐색기에서 고른 채로 보이고, 메모장을 띄운다.
     struct reveal_executable_intent
-    {};
+    {
+    };
 
     struct launch_notepad_intent
-    {};
+    {
+    };
 
     // 초점 요청의 결과다 (`ui_frame::focus_report`).
     struct tool_focus_report_intent
@@ -163,4 +166,4 @@ namespace demo {
         luil::text::text_edit_state menu_search_ {};
         std::optional<luil::text_composition_event> composition_ {};
     };
-} // namespace demo
+}

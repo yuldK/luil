@@ -72,7 +72,8 @@ namespace luil {
     button_element::button_element(ui_element_id id, button_config config)
         : ui_element { std::move(id) }
         , config_ { std::move(config) }
-    {}
+    {
+    }
 
     void button_element::arrange(const arrange_context& context)
     {
@@ -108,4 +109,4 @@ namespace luil {
         const SkFont icon_font { sk_ref_sp(context.codicon_typeface), config_.icon_size * scale };
         draw_centered_glyph(context.canvas, glyph, box, icon_font, icon_paint);
     }
-} // namespace luil
+}

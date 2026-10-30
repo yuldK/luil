@@ -60,7 +60,7 @@ namespace luil {
                 return nullptr;
             return std::nullopt;
         }
-    } // namespace
+    }
 
     std::optional<std::vector<input_action>> plan_access_request(const ui_element& element, const access_request& request)
     {
@@ -287,7 +287,7 @@ namespace luil {
                 children[entry.parent].push_back(entry.id);
             return children;
         }
-    } // namespace
+    }
 
     access_snapshot make_access_snapshot(const ui_tree& tree)
     {
@@ -452,4 +452,4 @@ namespace luil {
             return nullptr;
         return find_access_at(*root, x, y).value_or(nullptr);
     }
-} // namespace luil
+}

@@ -44,7 +44,7 @@ namespace luil::win32 {
                 },
             };
         }
-    } // namespace
+    }
 
     utf_conversion_result<std::u8string> utf16_to_utf8(const std::wstring_view input) noexcept
     {
@@ -132,4 +132,4 @@ namespace luil::win32 {
         pending.reset();
         return code_unit;
     }
-} // namespace luil::win32
+}

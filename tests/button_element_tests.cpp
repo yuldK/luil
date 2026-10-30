@@ -13,7 +13,7 @@ namespace {
     // 색 값을 적어 두지 않고 **팔레트의 어느 자리에서 길어 오는지**를 비교하므로
     // 테마 색이 바뀌어도 이 test는 그대로 서 있다.
     const luil::ui_color_palette dark { luil::color_palette_for(luil::color_theme::dark) };
-} // namespace
+}
 
 TEST_CASE("An icon button reads every colour from a palette role", "[ui][button]")
 {

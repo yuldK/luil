@@ -204,4 +204,4 @@ namespace luil {
             return std::vector<input_action> {};
         return std::vector<input_action> { config_.scroll_to(target) };
     }
-} // namespace luil
+}

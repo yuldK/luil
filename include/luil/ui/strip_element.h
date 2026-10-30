@@ -79,4 +79,4 @@ namespace luil {
         // 물리 bounds를 논리 델타로 옮길 때 쓴다 (세로 창과 같은 규칙).
         float scale_ { 1.0f };
     };
-} // namespace luil
+}

@@ -8,4 +8,4 @@ namespace luil {
         // abort는 SIGABRT로 끝나 tombstone과 logcat에 호출 스택이 남는다.
         std::abort();
     }
-} // namespace luil
+}

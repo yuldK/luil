@@ -153,4 +153,4 @@ namespace mobile_demo {
         // 좁은 화면에서 위 판에 보이는 목록이다. 넓은 화면은 셋을 나란히 둔다.
         std::u8string view_ { u8"list" };
     };
-} // namespace mobile_demo
+}

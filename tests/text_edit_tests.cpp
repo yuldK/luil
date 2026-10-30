@@ -32,7 +32,7 @@ namespace {
             text += u8"0123456789abcde\n";
         return text;
     }
-} // namespace
+}
 
 TEST_CASE("Text edit inserts and deletes at the caret", "[domain][text-edit]")
 {

@@ -21,7 +21,7 @@ namespace luil::testing {
         {
             return static_cast<int>(std::ceil(value));
         }
-    } // namespace
+    }
 
     raster_frame::raster_frame(const int width, const int height, ui_color_palette palette, const float scale)
         : palette_ { std::move(palette) }
@@ -87,4 +87,4 @@ namespace luil::testing {
     {
         return count_color(area, color) > 0;
     }
-} // namespace luil::testing
+}

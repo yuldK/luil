@@ -10,7 +10,7 @@ namespace luil::net {
             return true;
         }
 
-    } // namespace
+    }
 
     http_error make_http_error(const http_error_kind kind, const std::u8string_view message)
     {
@@ -108,4 +108,4 @@ namespace luil::net {
         }
         return text;
     }
-} // namespace luil::net
+}

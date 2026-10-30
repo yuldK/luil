@@ -93,7 +93,7 @@ namespace demo {
             choice.selected = prefix + backdrop_key(selected);
             return choice;
         }
-    } // namespace
+    }
 
     bool theme_page::handle(const luil::app_message& message)
     {
@@ -313,4 +313,4 @@ namespace demo {
         page.end_card();
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(theme_scroll_intent { delta }); });
     }
-} // namespace demo
+}

@@ -32,7 +32,7 @@ namespace widgets {
                 = [](const std::u8string_view destination) -> luil::input_action { return destination == u8"app:increment" ? luil::make_app_action(increment_intent {}) : luil::input_action {}; },
             });
         }
-    } // namespace
+    }
 
     section build_controls_section(const app_state& state)
     {
@@ -151,4 +151,4 @@ namespace widgets {
         // 섹션 전체 높이 = 제목 + 간격 + 버튼 줄 + 간격 + panel.
         return { std::move(column), title_height + 8.0f + 30.0f + 8.0f + panel_height };
     }
-} // namespace widgets
+}

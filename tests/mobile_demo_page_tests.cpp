@@ -77,7 +77,7 @@ namespace {
             return tree.find({ mobile_demo::kind_smb_entry, u8"smb-entry-" + name }) != nullptr;
         }
     };
-} // namespace
+}
 
 TEST_CASE("The demo clears an interrupted adaptive sheet drag while preserving its stop and list", "[ui][sheet][mobile-demo]")
 {

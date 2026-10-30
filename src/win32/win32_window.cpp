@@ -71,7 +71,7 @@ namespace luil::win32 {
             }
             return static_cast<int>(negative ? -value : value);
         }
-    } // namespace
+    }
 
     std::optional<window_position> parse_window_position(const std::u8string_view text) noexcept
     {
@@ -262,7 +262,8 @@ namespace luil::win32 {
         public:
             explicit main_surface(surface_context& context) noexcept
                 : caption_surface { context }
-            {}
+            {
+            }
 
             // 레이어드 표시에서 미룬 배치를 묻는 자리다. 표준 표시는 비워 둔다.
             void set_placement_host(layered_placement_host* const host) noexcept
@@ -3109,7 +3110,7 @@ namespace luil::win32 {
                 text = *wide_preface.value + L"\n\n" + text;
             MessageBoxW(nullptr, text.c_str(), title.c_str(), MB_OK | MB_ICONERROR);
         }
-    } // namespace
+    }
 
     cursor_handle load_system_cursor(const system_cursor cursor) noexcept
     {
@@ -3186,7 +3187,8 @@ namespace luil::win32 {
         // OleInitialize가 같은 STA를 함께 세우고 OLE 서비스(drag & drop)를 더한다.
         // CoInitializeEx만으로는 RegisterDragDrop이 서지 않는다.
         : succeeded_ { SUCCEEDED(OleInitialize(nullptr)) }
-    {}
+    {
+    }
 
     com_sta_scope::~com_sta_scope()
     {
@@ -3221,4 +3223,4 @@ namespace luil::win32 {
         LocalFree(wide_arguments);
         return arguments;
     }
-} // namespace luil::win32
+}

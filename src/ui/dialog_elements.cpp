@@ -76,7 +76,7 @@ namespace luil {
             }
             return text.size();
         }
-    } // namespace
+    }
 
     dialog_caption_element::dialog_caption_element(dialog_caption_config config)
         : ui_element { ui_element_id { ui_element_kind::dialog_caption, config.owner } }
@@ -836,4 +836,4 @@ namespace luil {
             return size_f { content, text_button_height };
         return size_f { std::max(text_button_minimum_width, content + text_button_padding * 2.0f), text_button_height };
     }
-} // namespace luil
+}

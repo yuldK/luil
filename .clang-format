@@ -12,8 +12,8 @@ BraceWrapping:
   BeforeCatch: true
   BeforeElse: true
   IndentBraces: false
-  SplitEmptyFunction: false
-  SplitEmptyRecord: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
   SplitEmptyNamespace: false
 AccessModifierOffset: -4
 AlignAfterOpenBracket: DontAlign

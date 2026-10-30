@@ -20,4 +20,4 @@ namespace luil::android {
     // 정수 sp 0..256을 dp로 바꾼 표다. Android 14 이후의 비선형 변환도 시스템에 맡긴다.
     [[nodiscard]] std::optional<std::vector<float>> read_system_font_sizes(JNIEnv& env, jobject context, float density);
     [[nodiscard]] touch_gesture_config apply_system_input_settings(touch_gesture_config config, const system_input_settings& settings) noexcept;
-} // namespace luil::android
+}

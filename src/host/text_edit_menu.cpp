@@ -62,4 +62,4 @@ namespace luil {
         panel->arrange({ { 0.0f, 0.0f, width, height }, scale });
         return std::make_shared<const ui_tree>(std::move(panel));
     }
-} // namespace luil
+}

@@ -14,7 +14,7 @@ namespace {
             static_cast<void>(luil::set_system_font_sizes({}));
         }
     };
-} // namespace
+}
 
 TEST_CASE("System font sizes preserve nonlinear scaling and reject corrupt settings", "[ui][font-scale]")
 {

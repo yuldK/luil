@@ -38,7 +38,7 @@ namespace luil {
             }
             return false;
         }
-    } // namespace
+    }
 
     bool url_scheme_allowed(const std::u8string_view url, const std::span<const std::u8string> schemes)
     {
@@ -57,4 +57,4 @@ namespace luil {
         const std::u8string_view scheme { url.substr(0, end) };
         return std::ranges::any_of(schemes, [scheme](const std::u8string& allowed) { return same_scheme(scheme, allowed); });
     }
-} // namespace luil
+}

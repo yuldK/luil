@@ -55,4 +55,4 @@ namespace luil {
 
     // 지금 플랫폼의 성질이다. 어느 thread에서 불러도 된다.
     [[nodiscard]] ui_platform current_ui_platform() noexcept;
-} // namespace luil
+}

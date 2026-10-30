@@ -37,7 +37,8 @@ namespace luil::win32 {
                 : window_ { window }
                 , codicon_typeface_ { load_codicon_typeface() }
                 , ui_typeface_ { load_ui_typeface() }
-            {}
+            {
+            }
 
             [[nodiscard]] renderer_backend backend() const noexcept override
             {
@@ -125,7 +126,8 @@ namespace luil::win32 {
                 , click_through_ { click_through }
                 , codicon_typeface_ { load_codicon_typeface() }
                 , ui_typeface_ { load_ui_typeface() }
-            {}
+            {
+            }
 
             cpu_layered_renderer(const cpu_layered_renderer&) = delete;
             cpu_layered_renderer(cpu_layered_renderer&&) = delete;
@@ -273,7 +275,7 @@ namespace luil::win32 {
             sk_sp<SkTypeface> codicon_typeface_ {};
             sk_sp<SkTypeface> ui_typeface_ {};
         };
-    } // namespace
+    }
 
     renderer_factory_result create_cpu_skia_renderer(const HWND window, const cpu_presentation& presentation)
     {
@@ -291,4 +293,4 @@ namespace luil::win32 {
             return { nullptr, std::move(error) };
         return { std::move(renderer), {} };
     }
-} // namespace luil::win32
+}

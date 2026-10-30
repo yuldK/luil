@@ -24,7 +24,7 @@ namespace luil::net {
                 text += u8", ";
             text += reason;
         }
-    } // namespace
+    }
 
     http_error make_http_error(const http_error_kind kind, const std::u8string_view message, const unsigned long code)
     {
@@ -107,4 +107,4 @@ namespace luil::net {
         }
         return make_http_error(http_error_kind::system_error, u8"The request failed.", code);
     }
-} // namespace luil::net
+}

@@ -26,7 +26,8 @@ namespace {
         }
 
         void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
-        {}
+        {
+        }
     };
 
     [[nodiscard]] std::unique_ptr<focus_box> make_stop(std::u8string owner, const float y)
@@ -62,7 +63,7 @@ namespace {
             root->add(make_stop(u8"next", 40.0f));
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
-} // namespace
+}
 
 TEST_CASE("Focus leaving an open combo closes its suggestions once", "[ui][combo][focus]")
 {

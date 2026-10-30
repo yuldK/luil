@@ -17,4 +17,4 @@ namespace luil::win32 {
     [[nodiscard]] embedded_resource_view find_embedded_resource(int resource_id) noexcept;
     [[nodiscard]] sk_sp<SkTypeface> load_codicon_typeface();
     [[nodiscard]] bool verify_embedded_resources(std::u8string& error);
-} // namespace luil::win32
+}

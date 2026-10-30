@@ -35,4 +35,4 @@ namespace luil {
     private:
         glyph_config config_ {};
     };
-} // namespace luil
+}

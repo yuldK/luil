@@ -72,4 +72,4 @@ namespace luil {
         ui_element* toggle_ { nullptr };
         ui_element* handle_ { nullptr };
     };
-} // namespace luil
+}

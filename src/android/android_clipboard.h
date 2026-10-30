@@ -15,4 +15,4 @@ namespace luil::android {
     [[nodiscard]] bool copy_text_to_clipboard(JNIEnv& env, jobject context, std::u8string_view text);
     // 글이 없거나 읽지 못하면 nullopt다.
     [[nodiscard]] std::optional<std::u8string> read_text_from_clipboard(JNIEnv& env, jobject context);
-} // namespace luil::android
+}

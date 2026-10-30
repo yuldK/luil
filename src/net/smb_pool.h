@@ -120,4 +120,4 @@ namespace luil::net {
         std::uint64_t generation_ { 0 };
         bool closed_ { false };
     };
-} // namespace luil::net
+}

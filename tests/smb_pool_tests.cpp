@@ -42,7 +42,7 @@ namespace {
 
     int first {};
     int second {};
-} // namespace
+}
 
 TEST_CASE("A server key ignores case and the default port", "[net][smb][pool]")
 {

@@ -90,7 +90,7 @@ namespace {
         const std::array<luil::net::dns_question, 1> questions { luil::net::dns_question { luil::net::smb_service_name(), luil::net::dns_type_ptr } };
         return luil::net::make_dns_query(1, questions);
     }
-} // namespace
+}
 
 TEST_CASE("A one-shot query collects the unicast answer of a responder", "[net][smb][android][mdns]")
 {

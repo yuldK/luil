@@ -50,4 +50,4 @@ namespace luil {
             return std::nullopt;
         return deadline_;
     }
-} // namespace luil
+}

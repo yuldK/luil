@@ -167,7 +167,7 @@ namespace luil::net {
                 return false;
             return smb2_service_fd(context, socket, probe.revents) >= 0 && smb2_get_fd(context) >= 0;
         }
-    } // namespace
+    }
 
     struct smb_client::engine
     {
@@ -253,7 +253,8 @@ namespace luil::net {
                         shared->config.deliver(std::move(response));
                     }
                     catch (...)
-                    {}
+                    {
+                    }
                 }
                 lock.lock();
                 shared->jobs.erase(ticket);
@@ -846,7 +847,8 @@ namespace luil::net {
 
     smb_client::smb_client(std::unique_ptr<engine> implementation) noexcept
         : engine_ { std::move(implementation) }
-    {}
+    {
+    }
 
     smb_client::~smb_client()
     {
@@ -948,4 +950,4 @@ namespace luil::net {
         }
         destroy_all(closed);
     }
-} // namespace luil::net
+}

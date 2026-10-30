@@ -36,7 +36,7 @@ foreach(codepoint_index RANGE 0 ${last_codepoint_index})
     endforeach()
 endforeach()
 
-string(APPEND output_text "} // namespace luil::codicons\n")
+string(APPEND output_text "}\n")
 get_filename_component(output_directory "${OUTPUT_FILE}" DIRECTORY)
 file(MAKE_DIRECTORY "${output_directory}")
 file(WRITE "${OUTPUT_FILE}" "${output_text}")
