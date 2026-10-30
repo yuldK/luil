@@ -476,10 +476,9 @@ add_test(NAME luil_core_portability
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_core_portability.cmake")
 
-find_program(LUIL_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
+# PowerShell은 script가 돌 때 PATH에서 찾는다 (run_style_check.cmake에 이유가 있다).
 add_test(NAME luil_source_style
     COMMAND "${CMAKE_COMMAND}"
-        "-DPOWERSHELL_EXECUTABLE=${LUIL_POWERSHELL_EXECUTABLE}"
         "-DROOT_DIRECTORY=${PROJECT_SOURCE_DIR}"
         -P "${LUIL_CMAKE_DIRECTORY}/run_style_check.cmake")
 
