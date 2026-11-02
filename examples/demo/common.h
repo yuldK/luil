@@ -134,6 +134,8 @@ namespace demo {
         float width { 0.0f };
         float height { 0.0f };
         float scale { 1.0f };
+        // 시스템의 움직임 줄이기 설정이다 (`window_metrics::reduce_motion`). 참이면 사이드바 접힘이 스프링 없이 끝 폭에 선다.
+        bool reduce_motion { false };
     };
 
     // 창 배치 보고다 (이동·크기 조절 끝, 최대화 전환, 종료 직전 — 라이브러리가 낸다).

@@ -187,7 +187,7 @@ std::function<input_action(const sheet_release&)> release {};
 - **page_anim**: 곡선을 받는 자리는 (시각 → 값)과 (시각 → 끝났는가) 둘이면 된다. 0에서 1로 가는 스프링 `spring { 0, 1, started, config }`의 `spring_value`·`spring_finished`가 그 둘이다. 길이 기반 `ease_in_out`과 달리 끝 시각이 없고, ζ가 1보다 작으면 진행률이 [0, 1]을 벗어난다. 곡선 자리는 `spring_config`를 받고(포인터 없는 값이라 element config에 둘 수 있다), 효과가 벗어남을 받거나 자르거나 `spring_smooth`를 쓴다. 끝은 되돌아오지 않으므로 끝난 뒤 이전 tree를 놓아도 된다. 전환 element가 UI thread에서 `draw_context::reduce_motion`을 읽는 쪽은 `spring_*`를 부르기 전에 끝으로 처리한다.
 - **놓은 속도를 앱에 건네는 뒤 노드**(controller를 고치는 ink·rotate 같은 것): 속도는 값의 단위 / 초로 건넨다(규칙 5의 표).
 - **시트**: 결정 7이 b이므로 `sheet_release`를 이 노드가 세웠다.
-- **같은 라운드의 줄 4**: `examples/demo_main.cpp`는 줄 4의 file_watch·taskbar도 고친다. 이 노드는 사이드바(`sidebar_motion_`)와 metrics override(`make_window_metrics_message` → `make_metrics_message`)만 바꾼다. 줄 4는 `bind_host`·`stop_workers`에 한 줄씩, `make_backdrop_message` 뒤에 `make_taskbar_message`를 더해 metrics override 자리를 건드리지 않는다. 모바일 데모의 `app.cpp`는 file_watch가 새 페이지를 이으며 `page_entries`·`handle` 끝·`stop_workers`·`build`를 고치고, 이 노드는 metrics 처리와 `next_tick`만 고친다. 병합은 줄 3이 먼저다.
+- **같은 라운드의 줄 4**: `examples/demo_main.cpp`는 줄 4의 file_watch·taskbar도 고친다. 이 노드는 사이드바(`sidebar_motion_`)와 metrics override(`make_window_metrics_message` → `make_metrics_message`)만 바꾼다. 줄 4는 `bind_host`·`stop_workers`에 한 줄씩, `make_backdrop_message` 뒤에 `make_taskbar_message`를 더해 metrics override 자리를 건드리지 않는다. 모바일 데모의 `app.cpp`는 file_watch가 새 페이지를 이으며 `page_entries`·`handle` 끝·`stop_workers`·`build`를 고치고, 이 노드는 metrics 처리, `make_frame`의 두 줄(frame 시각을 읽는 줄과 시트 overlay에 그 시각을 넘기는 줄), `next_tick`만 고치고 `app.h`에 멤버 하나(`frame_time_`)를 더한다. 병합은 줄 3이 먼저다.
 
 ## 확인
 
@@ -212,10 +212,11 @@ std::function<input_action(const sheet_release&)> release {};
 데모. 상태를 label로 그려 `luil-uia`로 되읽는다.
 
 - 데스크톱 데모: 사이드바 접힘이 `spring_smooth`로 돈다. 셸 왼쪽 아래 구석에 label `sidebar-motion`("사이드바 44 · 멈춤", 도는 중에는 "도는 중")을 root 자식으로 얹는다. 접힌 동안은 사이드바 내용이 없어서 이 label이 폭을 말한다.
-- 모바일 데모의 시트 페이지: 놓기(`release`)가 `spring_snappy`로 보이는 높이를 멈춤점까지 보낸다. 높이를 직접 태우지 않고 **끄는 양(`drag_offset`)을 0으로 보내는 스프링**으로 짠다. 놓은 순간의 끄는 양이 `target_height - visible_height`이고 속도는 `-velocity`(높이가 오르면 끄는 양이 줄어든다)다. 이렇게 하면 도는 중에 손잡이를 다시 잡을 때 지금 끄는 양이 곧 스프링의 지금 값이라 화면 높이를 몰라도 이어 끌 수 있다(`drag_offset_ = 지금 끄는 양 + 새로 끈 양`). 닫는 놓기는 전처럼 바로 거둔다(범위 밖). 페이지의 `handle`·`add_overlay`·`build`는 시각을 인자로 받는다(기본은 지금). 시트 안에 한 줄을 더한다(아래 시트일 때만이다. 옆 시트와 서랍에는 멈춤점이 없다).
+  - 도는 중 다음 frame은 마지막으로 지은 frame의 시각(`frame_time_`)에서 센다. 예고를 묻는 지금 시각에서 세면, frame을 지은 뒤 예고를 묻기 전에 끝난 스프링이 label에 "도는 중"을 남긴 채 잠든다.
+- 모바일 데모의 시트 페이지: 놓기(`release`)가 `spring_snappy`로 보이는 높이를 멈춤점까지 보낸다. 높이를 직접 태우지 않고 **끄는 양(`drag_offset`)을 0으로 보내는 스프링**으로 짠다. 놓은 순간의 끄는 양이 `target_height - visible_height`이고 속도는 `-velocity`(높이가 오르면 끄는 양이 줄어든다)다. 이렇게 하면 도는 중에 손잡이를 다시 잡을 때 지금 끄는 양이 곧 스프링의 지금 값이라 화면 높이를 몰라도 이어 끌 수 있다(`drag_offset_ = 지금 끄는 양 + 새로 끈 양`). 닫는 놓기는 전처럼 바로 거둔다(범위 밖). 페이지의 `handle`·`add_overlay`는 시각을 인자로 받는다(기본은 지금). 시트 안에 한 줄을 더한다(아래 시트일 때만이다. 옆 시트와 서랍에는 멈춤점이 없다).
   - 단추 `sheet-fling`("튕기기")이 UIA가 같은 놓기를 되풀이하게 한다. 반 → 전체는 위로 초당 1800, 전체 → 반은 아래로 1800 논리 픽셀이고, 시트가 `settle_sheet`로 멈춤점을 고르는 규칙은 손으로 놓을 때와 같다.
   - label `sheets-motion`이 상태를 말한다("멈춤" / "도는 중 · 목표 높이 n").
-  - 도는 중은 `mobile_driver::next_tick`이 `sheets_page::next_update`를 함께 모아 깨운다.
+  - 도는 중은 `mobile_driver::next_tick`이 `sheets_page::next_update`를 함께 모아 깨운다. 데스크톱 데모와 같이 마지막으로 지은 frame의 시각에서 센다.
 - UIA(격리 데스크톱): 접기 단추를 Invoke하고 1초 뒤 `sidebar-motion`이 44·멈춤, 다시 펴면 200·멈춤이다. 도는 중에 한 번 더 눌러도 끝은 목표다. 모바일 데모(Windows 창)는 시트를 열고 `sheet-fling`을 Invoke한 뒤 1초 안에 `sheets-motion`이 멈춤이고 시트가 전체 높이다. 도는 중의 값은 시각에 달려 읽지 않는다. Android에는 접근성 계층이 없어 사람이 화면으로 읽는다.
 
 사람 확인.
