@@ -16,6 +16,7 @@
 #include "win32/embedded_assets.h"
 #include "win32/file_dialog.h"
 #include "win32/instance_message.h"
+#include "win32/jump_list.h"
 #include "win32/layered_placement.h"
 #include "win32/notification_win32.h"
 #include "win32/popup_surface.h"
@@ -713,6 +714,8 @@ namespace luil::win32 {
                 system_backdrop_supported_ = SUCCEEDED(DwmSetWindowAttribute(window_, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_probe, sizeof(backdrop_probe)));
                 // 작업 표시줄 개체는 UI thread의 STA에서만 만들어진다. 능력 플래그가 이 결과를 따르므로 게시보다 앞선다.
                 taskbar_.open();
+                // 점프 목록은 앱 식별의 id로 짓는다. 식별은 `run_application_window`가 창보다 먼저 걸었다.
+                jump_list_.configure(config_.identity.id, current_executable_path());
                 publish_platform();
                 set_dpi(GetDpiForWindow(window_));
                 // 요청 크기는 논리 96 DPI 기준이다.
@@ -2842,6 +2845,8 @@ namespace luil::win32 {
                     taskbar_.button_lost(u8"");
                 std::vector<std::u8string> live { u8"" };
                 post_taskbar_report(taskbar_.apply(u8"", window_, dpi_, frame->taskbar));
+                // 점프 목록은 단추가 아니라 앱 식별에 묶여 숨은 동안에도 낸다. 독립 창의 것은 읽지 않는다 (jump-list-design.md).
+                post_jump_list_report(jump_list_.apply(frame->taskbar.jump_list));
                 for (const ui_window& source : frame->windows)
                 {
                     if (source.independent == false)
@@ -2868,6 +2873,21 @@ namespace luil::win32 {
                 catch (...)
                 {
                     report_runtime_error(u8"The taskbar delegate threw an exception.");
+                }
+            }
+
+            void post_jump_list_report(const std::optional<jump_list_report>& report)
+            {
+                if (report.has_value() == false || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                try
+                {
+                    if (app_message message { environment_.delegate->make_jump_list_message(*report) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The jump list delegate threw an exception.");
                 }
             }
 
@@ -3164,6 +3184,8 @@ namespace luil::win32 {
             // 작업 표시줄 단추에 거는 진행률과 오버레이다. 개체는 주 창을 만들 때 연다.
             //  - 창 표면들보다 먼저 선언해 나중에 사라진다. 오버레이 아이콘은 창이 모두 사라진 뒤에 놓는다.
             taskbar_button taskbar_ {};
+            // 작업 표시줄 점프 목록을 셸에 내는 자리다. 목록은 셸이 파일로 쥐므로 창이 사라져도 놓을 것이 없다.
+            jump_list_writer jump_list_ {};
             // update timer가 깨울 표면들이다.
             // "그 시각을 답한 표면"을 timer와 함께 들고 있는 것이 표면별 다시 그리기의
             // 절반이다 — 나머지 절반은 frame 대조가 낸다 (rendering.md).

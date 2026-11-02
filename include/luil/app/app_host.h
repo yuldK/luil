@@ -235,6 +235,7 @@ namespace luil {
         //  - 소유된 창은 단추가 없어 읽지 않는다. 독립 창은 주 창(`ui_frame::taskbar`)과 따로 단추가 서므로 요청도 따로 건다.
         //  - 창이 사라지면 그 창의 기록과 아이콘도 함께 사라진다. 상태는 주 창처럼 알린다
         //    (`win32::taskbar_report::surface`가 이 창의 id다).
+        //  - 점프 목록(`taskbar_request::jump_list`)은 앱마다 하나라 이 창의 것은 읽지 않는다. 주 창의 것이 이 창 단추에도 보인다.
         taskbar_request taskbar {};
     };
 
@@ -403,6 +404,7 @@ namespace luil {
         // 주 창의 작업 표시줄 단추에 바라는 진행률과 오버레이다 (taskbar-design.md). 기본값이면 셸을 만지지 않는다.
         //  - 주 창이 숨은 동안(`main_hidden`)은 단추가 없어 요청을 쥐기만 한다. 보이면 단추가 새로 서고 그때 한 번에 낸다.
         //  - 하지 못하는 플랫폼(Android)은 받고 무시한다. 독립 창은 `ui_window::taskbar`다.
+        //  - 점프 목록(`taskbar_request::jump_list`)은 이 칸의 것만 읽는다 (docs/jump-list-design.md).
         taskbar_request taskbar {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.

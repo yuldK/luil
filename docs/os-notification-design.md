@@ -218,7 +218,7 @@ namespace luil::win32 {
 ## 다른 노드와의 약속
 
 - **인자 넘기기(줄 4, 앞).** `window_config`의 식별 칸은 이 노드가 낸다(그 문서 결정 2의 전제). 알림 눌림은 `send_to_primary`를 쓰지 않는다. 결정 4 b에서 떠 있는 첫째는 COM으로 받는다. 첫째가 끝나는 중의 경합에서만 COM이 띄운 둘째가 앱의 G7 길로 `-luil-notification` 인자를 넘기고, 앱은 `notification_launch`로 걸러낸다. 그 문서의 약속 절은 이미 이 뜻으로 고쳤다. `win32_window.cpp`는 그 노드 뒤에 직렬로 고친다. `on_started` 뒤와 `host_.reset()` 세 자리 앞은 같은 hunk가 될 수 있어 그 노드의 줄 뒤에 잇는다. 앞으로 세우는 helper는 그 노드가 `advance_focus_request`에서 뽑은 것을 쓴다. 병합 순서는 인자 넘기기, os_notify, image_clip이다.
-- **점프 목록.** 인자 넘기기 결정 8이 이 노드의 AUMID 실측을 보고 정한다. 실측 결과(아래 확인)는 그 결정의 근거로 쓴다.
+- **점프 목록.** 인자 넘기기 결정 8이 이 노드의 AUMID 실측을 보고 정한다. 실측 결과(아래 확인)는 그 결정의 근거로 쓴다. 결정 8은 길 a로 승인됐고, [점프 목록](jump-list-design.md) 결정 5가 이 실측을 근거로 `identity.id`를 `SetAppID`에 쓴다. 이 노드의 파일은 고치지 않는다.
 - **작업 표시줄.** 215줄의 "os_notify의 앱 식별이 먼저 서야 한다"를 구현 커밋이 이 문서로 잇고 244줄 범위 밖의 AUMID를 지운다. 식별을 단 앱에서 진행률이 그대로 서는지 사람 확인에 더한다. `WM_APP + 6`은 이 노드가 표의 첫 새 번호다.
 - **image_clip(줄 4, 다음).** `win32_window.cpp`와 `app_delegate.h`를 이 노드 뒤에 고친다. 훅은 이 노드의 것 뒤에 더한다. `notification_android.cpp`의 `ui_image`→Bitmap 변환이 필요하면 그 노드가 공용 헤더로 꺼낸다.
 - **줄 3 ink·inspector.** `android_app.cpp`의 함수가 다르다. ink는 `copy_motion`과 `start()`의 축 켜기(653~654줄)를, 이 노드는 `start()`의 538줄 한 줄과 다른 함수를 고친다. 콜드 스타트 읽기가 `start()` 밖이라 ink의 줄과 hunk가 붙지 않는다. 읽기를 `start()` 안에 두어야 하면 ink가 먼저 병합되고 이 노드가 그 위에 얹는다. 줄은 `return true;` 바로 앞에 두고 `if`에 중괄호를 더하지 않는다. inspector의 `win32_window.cpp` frame 칸 한 줄은 줄 4가 통합 단계에서 별도 커밋으로 내고([인자 넘기기](single-instance-args-design.md)가 맡는다) 이 노드 커밋에 섞지 않는다.
@@ -250,4 +250,4 @@ namespace luil::win32 {
 - 앱 식별의 자동 정리, 시작 메뉴 바로가기, 설치기 연동.
 - 실행 파일 아이콘을 `IconUri`용 파일로 뽑는 일. 앱이 파일을 준다.
 - 집중 지원 상태 읽기. 공개 API가 없다.
-- 점프 목록(인자 넘기기 결정 8).
+- 점프 목록([점프 목록](jump-list-design.md)이 다룬다).

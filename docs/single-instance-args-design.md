@@ -156,7 +156,7 @@ if (instance.primary() == false)
 - 길 a: os_notify 뒤 노드로 더한다. `taskbar_request`에 `jump_list`(작업의 제목·인자·아이콘)를 더하고 `ICustomDestinationList`를 쓴다. 되는 것: G7과 앱 식별이 서는 라운드에 같이 닫힌다. 대가: os_notify의 실측(레지스트리 AUMID로 서는가)이 나오기 전에 설계를 세우는 것이라 어긋나면 고친다. 줄 4가 L 노드 뒤에 M을 더하고 R1 파일(`taskbar.h`·`taskbar_sync`)을 다시 연다.
 - 길 b: 더하지 않는다. os_notify가 앱 식별을 실측으로 세운 뒤 줄 4의 다음 노드로 따로 정한다. 되는 것: 이 문서의 API는 점프 목록 없이 완결이다. 점프 목록은 같은 `send_to_primary`를 쓰는 또 하나의 보내는 쪽이라 이 API를 고치지 않는다. 대가: 작업 표시줄 문서의 미룬 항목이 이번에도 닫히지 않는다.
 - 길 c: 라이브러리에 넣지 않고 앱 몫으로 둔다. 앱이 `wWinMain`에서 AUMID를 걸고 점프 목록을 짓는다. 되는 것: 없다. 대가: 앱마다 COM 호출을 짜고, os_notify가 세울 앱 식별과 어긋난 AUMID를 쓸 위험이 있다.
-- 권장: b. 대가: 점프 목록은 R2에서 서지 않는다. 앱 식별의 실측이 이 노드 다음 노드에서 나오므로 그 결과를 보고 정하는 것이 싸다. **승인: 길 a (2026-11-02, 권장 b와 다름). 구현은 docs/jump-list-design.md**
+- 권장: b. 대가: 점프 목록은 R2에서 서지 않는다. 앱 식별의 실측이 이 노드 다음 노드에서 나오므로 그 결과를 보고 정하는 것이 싸다. **승인: 길 a (2026-11-02, 권장 b와 다름). 구현은 [점프 목록](jump-list-design.md).**
 
 ## 플랫폼
 
@@ -181,7 +181,7 @@ if (instance.primary() == false)
 
 - **platform-services-design.md 개정.** 구현 커밋이 같은 묶음에서 이 문서의 판단으로 고친다. 15줄 표의 단일 인스턴스 행에 인자 보내기를 더하고, 36줄 "알리는 길(IPC)은 앱마다 달라 넣지 않았다"를 이 문서로 잇는 말로 바꾸고, 104줄에 Android의 `send_to_primary`가 `unsupported`임을 적고, 검증 절(108~121줄)의 단일 인스턴스 test와 데모 설명을 새 test로 맞춘다.
 - **os_notify(줄 4, 다음).** 앱 식별(AUMID)을 세우는 노드다. 이 노드는 `window_config`를 고치지 않아 그 필드와 겹치지 않는다. 알림 눌림은 os_notify의 COM 활성화기가 받는다([OS 알림](os-notification-design.md) 결정 4). 첫째가 끝나는 중에 COM이 띄운 둘째만 `-luil-notification` 인자를 이 길로 넘기고, 앱은 `notification_launch`로 걸러낸다. 같은 `win32_window.cpp`를 직렬로 고친다. 이 노드는 `run()`의 `on_started` 뒤, `host_.reset()` 세 자리의 앞, `handle_window_message`의 case 하나, `advance_focus_request`의 활성화 helper 추출을 고친다. 병합 순서는 이 노드, os_notify, image_clip이다.
-- **작업 표시줄 점프 목록.** 결정 8은 길 a라 os_notify 뒤 노드가 `docs/jump-list-design.md`로 세운다(그 문서는 그 노드가 더한다). 이 노드는 만들지 않는다. 점프 목록은 같은 `send_to_primary`를 쓰는 또 하나의 보내는 쪽이라 이 API는 바뀌지 않는다. 항목의 인자 따옴표는 `win32::make_command_line`을 쓴다.
+- **작업 표시줄 점프 목록.** 결정 8은 길 a라 os_notify 뒤 노드가 [점프 목록](jump-list-design.md)으로 세웠다. 이 노드는 만들지 않는다. 점프 목록은 같은 `send_to_primary`를 쓰는 또 하나의 보내는 쪽이라 이 API는 바뀌지 않았다. 항목의 인자 따옴표는 `win32::quote_argument`를 쓴다(실행 파일은 셸 링크의 경로 칸에 따로 싣는다).
 - **auto_update(줄 4, R4).** 도우미가 부모 종료를 기다려 다시 띄우면 새 프로세스가 첫째라 이 길을 쓰지 않을 수 있다(추측). 쓰면 이 API를 그대로 쓴다.
 - **줄 3 ink·inspector.** `window_surface.cpp`는 고치지 않는다. 계획은 이 파일에 `WM_COPYDATA` 자리를 두었으나, 받는 것이 주 창뿐이라 표면 계층(보조 창·popup과 공유)에 `surface_context` 가상 함수를 더할 이유가 없다. ink는 `handle_pointer_message`를 혼자 고친다. inspector가 필요로 하는 `win32_window.cpp`의 한 줄은 줄 4가 내고 이 문서가 그 몫을 맡는다. inspector가 main에 병합된 뒤 통합 단계에서 `application_window::apply_frame_appearance`의 `state.style` 다음에 `state.inspector = frame != nullptr ? &frame->inspector : nullptr;`를 커밋 하나로 낸다. 그 칸은 줄 3 브랜치에만 있어 줄 4 브랜치에서는 컴파일되지 않는다. 이 노드·os_notify·image_clip 커밋과 섞지 않는다.
 - **WM_APP 번호표와 UIPI 자리.** 새 번호가 없다(`WM_COPYDATA`는 시스템 번호). `allow_instance_message`가 `allow_shell_events` 옆에 선다.
@@ -203,6 +203,6 @@ if (instance.primary() == false)
 - 첫째가 둘째에 글을 돌려주는 답. `bool` 하나뿐이다.
 - 인자의 해석: 경로 절대화, 파일 열기, scheme 검사. 앱의 몫이다.
 - 이름 둘 이상, 첫째 열거, 세션·데스크톱·사용자를 넘는 전달.
-- 점프 목록(결정 8의 길 a. 별도 노드와 별도 문서), 알림 클릭과 COM 활성화(os_notify).
+- 점프 목록(결정 8의 길 a, [점프 목록](jump-list-design.md)), 알림 클릭과 COM 활성화(os_notify).
 - Android의 새 Intent 받기와 `Activity.getIntent()` 읽기.
 - OS의 앞 창 규칙을 넘는 편법(`AttachThreadInput` 등).

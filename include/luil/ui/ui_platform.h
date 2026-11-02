@@ -27,6 +27,7 @@ namespace luil {
         bool haptics { false };
         // 작업 표시줄 단추에 진행률과 오버레이를 걸 수 있다 (`ui_frame::taskbar`, `ui_window::taskbar`). 참은 이 프로세스가
         // 요청을 셸에 낼 수 있다는 뜻이다 — 단추가 실제로 섰는지는 Win32의 `taskbar_report`가 말한다.
+        //  - 점프 목록(`taskbar_request::jump_list`)도 이 값을 따른다. 목록이 셸에 닿았는지는 Win32의 `jump_list_report`가 말한다.
         bool taskbar { false };
         // OS 알림을 올릴 수 있다 (`show_notification`). Windows는 앱 식별이 서고 알림 개체를 얻었을 때 참이다. 사용자가
         // 알림을 껐는지는 `notification_status`가 말한다.

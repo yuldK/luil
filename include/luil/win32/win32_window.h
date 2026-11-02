@@ -10,6 +10,7 @@
 // 별칭 헤더를 들인다 (luil/win32/app_host.h).
 #include "luil/win32/app_host.h"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -178,6 +179,32 @@ namespace luil::win32 {
         [[nodiscard]] bool operator==(const taskbar_report&) const = default;
     };
 
+    // 점프 목록(`taskbar_request::jump_list`)에 앱의 요청이 닿은 정도다 (docs/jump-list-design.md).
+    enum class jump_list_status
+    {
+        // 작업 목록을 지었다.
+        applied,
+        // 이 앱의 목록을 지웠다.
+        removed,
+        // 셸 개체(`ICustomDestinationList`)를 만들지 못했다. `com_sta_scope`가 없는 앱 등이다.
+        unavailable,
+        // 요청이 규칙 밖이거나 셸 호출이 실패했다. `error`가 그 까닭이다.
+        failed,
+    };
+
+    // 점프 목록의 보고다. 셸에 낸 일(짓기·지우기)마다 한 번 알린다. 요청이 비어 있거나 바뀌지 않았으면 알리지 않는다.
+    //  - 셸에는 읽는 길이 없어 `applied`는 호출이 오류 없이 끝났다는 뜻이다. 목록에 실제로 보이는 모양은 사람이 본다.
+    struct jump_list_report
+    {
+        jump_list_status status { jump_list_status::applied };
+        // 지은 작업 수다. 지웠거나 실패했으면 0이다. 셸은 자리가 모자라면 덜 보인다.
+        std::size_t tasks { 0 };
+        // `failed`·`unavailable`일 때의 영문 진단이다 (HRESULT가 붙는다). 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const jump_list_report&) const = default;
+    };
+
     // 앱 식별(AUMID)이다 (docs/os-notification-design.md). OS 알림(`show_notification`)이 이것으로 선다.
     //  - id가 있으면 `run_application_window`가 창보다 먼저 프로세스에 AUMID를 걸고(`SetCurrentProcessExplicitAppUserModelID`)
     //    `HKCU\Software\Classes\AppUserModelId\<id>`에 표시 이름·아이콘을 쓴다. 바로가기와 설치기가 없어도 빌드 폴더의
@@ -310,6 +337,13 @@ namespace luil::win32 {
         // 주 창이나 독립 창의 작업 표시줄 단추 상태가 바뀌었다 (`make_backdrop_message`와 같은 모양이다).
         // 어느 창인지는 `report.surface`다. 빈 메시지는 게시하지 않는다. 앱이 "셸이 요청을 받았는가"를 화면에 보일 때 쓴다.
         [[nodiscard]] virtual app_message make_taskbar_message(const taskbar_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 점프 목록을 셸에 냈다 (짓기·지우기마다 한 번). 빈 메시지는 게시하지 않는다. UI thread에서 불린다.
+        [[nodiscard]] virtual app_message make_jump_list_message(const jump_list_report& report)
         {
             static_cast<void>(report);
             return {};

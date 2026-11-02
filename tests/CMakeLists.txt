@@ -391,6 +391,7 @@ add_executable(luil_tests
     http_text_transcode_tests.cpp
     image_decode_tests.cpp
     instance_message_tests.cpp
+    jump_list_tests.cpp
     layered_placement_tests.cpp
     loopback_http_server.cpp
     loopback_http_server_tests.cpp

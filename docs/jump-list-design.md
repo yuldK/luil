@@ -124,7 +124,7 @@ frame->taskbar.jump_list = list;
 4. `CLSID_EnumerableObjectCollection`에 링크를 차례로 넣고 `AddUserTasks`.
 5. `CommitList`. 성공하면 `applied`이고 `tasks`가 작업 수다.
 
-**지우기.** 앱 식별이 있으면 `DeleteList(identity.id)`다. 없으면 `DeleteList`에 넘길 id가 없으므로 `BeginList`·`CommitList`로 빈 목록을 짓는다. 둘 다 `removed`다.
+**지우기.** 앱 식별이 있으면 `DeleteList(identity.id)`다. 없으면 `DeleteList`에 넘길 id가 없으므로 `BeginList`·`CommitList`로 빈 목록을 짓는다. 둘 다 `removed`다. 지을 목록이 없는 id를 `DeleteList`해도 성공이었다(아래 실측). 그래서 첫 빈 목록이 앞 실행의 목록 없이 와도 `failed`가 아니다.
 
 **인자의 길.** 작업은 앱의 실행 파일을 새로 띄우는 것이라 라이브러리가 인자를 해석하거나 첫째로 보내지 않는다. 앱은 같은 인자를 두 곳에서 받는다.
 
@@ -208,7 +208,8 @@ frame->taskbar.jump_list = list;
 
 - `tests/taskbar_sync_tests.cpp`(core, 추가): 비어 있음은 호출 없음(처음과 중간 모두). 첫 목록은 다시 짓기, 첫 빈 목록은 지우기. 같은 목록은 호출 없음. 비어 있음을 지난 뒤 같은 목록은 호출 없음. 칸 하나(제목·인자·설명·아이콘 번호)가 달라지면 다시 짓기. 작업이 있다가 빈 목록이면 지우기, 다시 빈 목록이면 없음.
 - `tests/jump_list_tests.cpp`(새 파일, `luil_tests`): 변환이 실행 파일 경로를 쓰는지, 인자 따옴표(빈칸·따옴표·빈 인자·끝 백슬래시)가 `CommandLineToArgvW`로 같은 목록이 되는지, 아이콘 경로가 비면 실행 파일인지, 빈 제목·잘못된 UTF-8·NUL·1024 코드 단위 인자 줄과 설명·`MAX_PATH` 아이콘 경로의 거절과 1023의 통과. 가짜 `ICustomDestinationList`를 꽂은 `jump_list_writer`로 호출 순서(`SetAppID`→`BeginList`→`AddUserTasks`→`CommitList`), 식별이 없으면 `SetAppID`가 없는지, `AddUserTasks`가 받은 링크를 되읽어 경로·인자·설명·아이콘·`PKEY_Title`이 맞는지, 지우기가 식별이 있으면 `DeleteList(id)`이고 없으면 빈 `BeginList`·`CommitList`인지, `BeginList`·`AddUserTasks`·`CommitList` 실패가 `failed`이고 시작한 목록을 `AbortList`로 거두는지, 셸 개체를 만들지 못하면 `unavailable`인지, 규칙 밖 요청은 셸을 부르지 않는지, 같은 요청을 다시 주면 보고가 없는지.
-- 실측(구현 단계, 사용자 허락, 2026-11-02 X-8 a): `luil_tests "[.jump-list-live]"`가 `luil.test.jumplist` 식별로 작업 하나를 실제로 `CommitList`하고 `%APPDATA%\Microsoft\Windows\Recent\CustomDestinations`의 파일이 하나 늘었는지 본 뒤, 같은 id로 `DeleteList`하고 그 파일이 사라졌는지 본다. ctest는 이 test를 돌리지 않는다. 작업 표시줄 오른쪽 클릭으로 보이는지는 사람이 본다.
+- 실측(구현 단계, 사용자 허락, 2026-11-02 X-8 a): `luil_tests "[.jump-list-live]"`가 `luil.test.jumplist` 식별로 작업 하나를 실제로 `CommitList`하고 `%APPDATA%\Microsoft\Windows\Recent\CustomDestinations`의 파일이 하나 늘었는지 본 뒤, 같은 id로 `DeleteList`하고 그 파일이 사라졌는지 본다. ctest는 이 test를 돌리지 않는다. 작업 표시줄 오른쪽 클릭으로 보이는지는 사람이 본다. `"[.jump-list-live-cleanup]"`은 실측이 중간에 멈췄을 때 같은 id를 지운다.
+  - 실측(2026-11-03, 이 저장소의 개발 PC, 빌드 폴더의 test 실행 파일): `CommitList`가 성공해 `applied`였고 그 폴더에 파일이 하나 생겼다. 같은 id의 `DeleteList`가 성공해 `removed`였고 그 파일이 사라졌다. 이어 없는 목록을 한 번 더 `DeleteList`해도 성공(`removed`)이었다. 끝난 뒤 폴더에 그 파일이 없음을 다시 보았다. 레지스트리 식별 항목 없이 `SetAppID`만으로 목록이 섰다.
 - `tests/windows_page_tests.cpp`(추가): 점프 목록 두 줄의 이름(`점프 목록 요청: 손대지 않음`, `점프 목록 반영: 아직 보고 없음`), 채우기 뒤 요청이 작업 둘과 `--send-to-first` 인자를 싣는지, 비우기 뒤 빈 목록인지, 보고 intent가 반영 줄(`적용됨 · 작업 2개`, `지움`, `실패 (<진단>)`)에 닿는지, 독립 창 요청에는 목록이 없는지.
 - 데모 `examples/demo/windows_page.cpp`의 작업 표시줄 구역 끝: 단추 `점프 목록 채우기`·`점프 목록 비우기`, label 둘이 UIA로 읽힌다. 요청 `점프 목록 요청: 손대지 않음`(채우면 `작업 2개`, 비우면 `비움`), 반영 `점프 목록 반영: 아직 보고 없음`(받으면 `적용됨 · 작업 2개`·`지움`·`쓸 수 없음`·`실패 (<진단>)`). 작업은 `메모로 보내기`(`--send-to-first jump:note`)와 `그림으로 보내기`(`--send-to-first jump:image`)다. `examples/demo_main.cpp`가 `make_jump_list_message`를 `jump_list_report_intent`로 페이지에 넘긴다. 데모는 식별 `luil.Demo`를 달아 그 id로 짓는다.
 - 모바일 데모는 고치지 않는다. 기존 `taskbar-none` 줄(`이 플랫폼에는 작업 표시줄이 없다.`)이 점프 목록도 덮는다. 고친다면 읽을 값이 같은 거짓 하나다.

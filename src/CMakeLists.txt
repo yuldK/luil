@@ -445,10 +445,12 @@ luil_add_source_filter(luil_files "win32/host"
     "${public_headers}/win32/webview.h")
 
 # 작업 표시줄 단추다 (taskbar-design.md). 어떤 호출을 할지는 core의 host/taskbar_sync가 고르고, 여기는
-# ITaskbarList3 호출과 창별 아이콘 핸들만 쥔다.
+# ITaskbarList3 호출과 창별 아이콘 핸들만 쥔다. 점프 목록(jump-list-design.md)은 ICustomDestinationList로 같은 자리에서 낸다.
 luil_add_source_filter(luil_files "win32/taskbar"
     win32/icon_from_image.cpp
     win32/icon_from_image.h
+    win32/jump_list.cpp
+    win32/jump_list.h
     win32/taskbar_button.cpp
     win32/taskbar_button.h)
 
