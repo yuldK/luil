@@ -1069,6 +1069,60 @@ TEST_CASE("Turning to another zoom page stands the page upright", "[mobile-demo]
 }
 
 namespace {
+    // UIA가 되읽는 줌 단추의 이름이다. 단추의 글이 곧 접근 이름이다.
+    [[nodiscard]] std::u8string zoom_button_name(mobile_demo::zoom_page& page, const luil::ui_element_kind kind)
+    {
+        const auto tree { zoom_tree(page) };
+        const auto* const button { tree->find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+}
+
+TEST_CASE("The zoom page names its buttons in the default language until the button switches them to English", "[mobile-demo][zoom][default-text]")
+{
+    mobile_demo::zoom_page page {};
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"확대");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"맞춤");
+    REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+
+    // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
+    REQUIRE(press_zoom_button(page, u8"zoom-label-toggle") == 1);
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"Zoom out");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"Zoom in");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"Fit");
+    REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: English");
+
+    // 같은 메시지가 거듭 와도 결과가 같다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::zoom_labels_intent { true } }));
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"Fit");
+
+    REQUIRE(press_zoom_button(page, u8"zoom-label-toggle") == 1);
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+}
+
+TEST_CASE("The language row of the zoom page fits the 400dp window below the rotation row", "[mobile-demo][zoom][default-text]")
+{
+    mobile_demo::zoom_page page {};
+    const auto tree { zoom_tree(page) };
+    const auto* const rotate { tree->find({ mobile_demo::kind_layout, u8"zoom-rotate-left" }) };
+    const auto* const toggle { tree->find({ mobile_demo::kind_layout, u8"zoom-label-toggle" }) };
+    const auto* const language { tree->find({ mobile_demo::kind_text, u8"zoom-label-language" }) };
+    const auto* const view { tree->find({ luil::ui_element_kind::zoom_view, u8"diagram" }) };
+    REQUIRE(rotate != nullptr);
+    REQUIRE(toggle != nullptr);
+    REQUIRE(language != nullptr);
+    REQUIRE(view != nullptr);
+    // 줄이 늘어도 단추는 창 안에 들고 보기를 가리지 않는다.
+    REQUIRE(toggle->bounds().y >= rotate->bounds().y + rotate->bounds().height);
+    REQUIRE(toggle->bounds().x + toggle->bounds().width <= language->bounds().x);
+    REQUIRE(language->bounds().x + language->bounds().width <= 400.0f);
+    REQUIRE(toggle->bounds().y + toggle->bounds().height <= view->bounds().y);
+}
+
+namespace {
     // 페이지를 짓고 label 하나의 이름(UIA Name과 같은 글)을 읽는다.
     [[nodiscard]] std::u8string files_label(mobile_demo::files_page& page, const std::u8string& owner)
     {

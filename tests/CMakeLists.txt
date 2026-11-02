@@ -151,6 +151,7 @@ target_sources(luil_core_tests PRIVATE
     secret_store_stub.cpp
     mobile_demo_page_tests.cpp)
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
+# 확대 보기 페이지는 도면 요소가 luil과 Skia 헤더만 써서 같은 목록에 오른다. 줌 단추 글을 바꾸는 단추를 검증한다.
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/workbench_page.cpp"
@@ -160,6 +161,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/zoom_page.cpp"
     demo_gallery_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE

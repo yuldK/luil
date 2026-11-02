@@ -105,6 +105,8 @@ namespace demo {
             state_ = luil::zoom_about(config(), viewport_, target->value / state_.zoom, {});
         else if (const auto* const rotate { message.get<rotate_intent>() }; rotate != nullptr)
             state_ = luil::rotate_about(config(), viewport_, rotate->degrees, rotate->anchor);
+        else if (const auto* const labels { message.get<zoom_labels_intent>() }; labels != nullptr)
+            english_labels_ = labels->english;
         else
             return false;
         return true;
@@ -127,7 +129,16 @@ namespace demo {
         controls_config.direction = luil::stack_direction::row;
         controls_config.spacing = 8.0f;
         auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-controls" }, controls_config) };
-        controls->add(std::make_unique<luil::zoom_controls_element>(luil::zoom_controls_config { .view = config(), .viewport = viewport_ }), 244.0f);
+        // 영어 앱은 세 칸을 채운다. 비워 두면 단추 이름이 기본 문구(축소·확대·맞춤)다.
+        luil::zoom_controls_config zoom_buttons { .view = config(), .viewport = viewport_ };
+        if (english_labels_)
+        {
+            zoom_buttons.decrease_label = u8"Zoom out";
+            zoom_buttons.increase_label = u8"Zoom in";
+            zoom_buttons.fit_label = u8"Fit";
+        }
+
+        controls->add(std::make_unique<luil::zoom_controls_element>(std::move(zoom_buttons)), 244.0f);
         const auto fit_button = [this](std::u8string owner, std::u8string text, const luil::zoom_fit axis) {
             auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, luil::text_button_config { .text = std::move(text) }) };
             button->set_action(
@@ -136,6 +147,11 @@ namespace demo {
         };
         controls->add(fit_button(u8"zoom-fit-width", u8"폭 맞춤", luil::zoom_fit::width), 72.0f);
         controls->add(fit_button(u8"zoom-fit-height", u8"높이 맞춤", luil::zoom_fit::height), 80.0f);
+        // 줌 단추 글의 언어를 바꾸는 단추와 지금 언어다. 누르면 반대 언어를 절대 값으로 보낸다.
+        auto language_toggle { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"zoom-label-toggle" }, luil::text_button_config { .text = u8"줌 단추 글 바꾸기" }) };
+        language_toggle->set_action(luil::ui_trigger::left_click, luil::make_message_action(zoom_labels_intent { english_labels_ == false }));
+        controls->add(std::move(language_toggle), 136.0f);
+        controls->add(make_label({ kind_text, u8"zoom-label-language" }, english_labels_ ? u8"줌 단추 글: English" : u8"줌 단추 글: 기본", 13.0f, luil::label_color_role::primary), 160.0f);
         column->add(std::move(controls), controls_height);
         // 회전 단추 셋과 지금 각도다. 단추는 키(Shift+←/→/Home)와 같은 `rotate_by` 메시지를 보내 UIA가 Invoke로 되풀이한다.
         //  - 0도 복귀는 지금 각도를 되돌리는 상대 각도다. 이미 0도면 할 일이 없으므로 단추를 끈다. 켜 둔 채 빈 동작을 내면

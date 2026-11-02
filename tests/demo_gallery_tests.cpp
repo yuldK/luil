@@ -4,6 +4,7 @@
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
 #include "demo/toasts_page.h"
+#include "demo/zoom_page.h"
 
 #include "luil/ui/menu_element.h"
 #include "luil/ui/tab_bar_element.h"
@@ -471,4 +472,77 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(demo::text_target_of_kind(demo::kind_text).has_value() == false);
+}
+
+namespace {
+    [[nodiscard]] luil::ui_tree zoom_tree(demo::zoom_page& page)
+    {
+        return arranged(page.build(800.0f, 600.0f, 1.0f));
+    }
+
+    // UIA가 되읽는 줌 단추의 이름이다. 단추의 글이 곧 접근 이름이다.
+    [[nodiscard]] std::u8string zoom_button_name(const luil::ui_tree& tree, const luil::ui_element_kind kind)
+    {
+        const luil::ui_element* const button { tree.find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+
+    // 줌 단추 글을 바꾸는 단추를 눌러 나온 메시지를 페이지에 넘긴다. 누름은 tree에 있던 그 액션이다.
+    void press_zoom_labels(demo::zoom_page& page, const luil::ui_tree& tree)
+    {
+        const luil::ui_element_id id { demo::kind_layout, u8"zoom-label-toggle" };
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+}
+
+TEST_CASE("The desktop zoom page switches its button names between the default language and English", "[demo][zoom][default-text]")
+{
+    demo::zoom_page page {};
+    auto tree { zoom_tree(page) };
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"확대");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"맞춤");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+
+    // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
+    press_zoom_labels(page, tree);
+    tree = zoom_tree(page);
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"Zoom out");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"Zoom in");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"Fit");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: English");
+
+    // 같은 메시지가 거듭 와도 결과가 같다.
+    send(page, demo::zoom_labels_intent { true });
+    REQUIRE(zoom_button_name(zoom_tree(page), luil::ui_element_kind::zoom_fit) == u8"Fit");
+
+    press_zoom_labels(page, tree);
+    tree = zoom_tree(page);
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+}
+
+TEST_CASE("The desktop zoom page puts the language switch after the fit buttons in the same row", "[demo][zoom][default-text]")
+{
+    demo::zoom_page page {};
+    const auto tree { zoom_tree(page) };
+    const luil::ui_element* const controls { tree.find({ luil::ui_element_kind::zoom_controls, u8"diagram" }) };
+    const luil::ui_element* const fit_height { tree.find({ demo::kind_layout, u8"zoom-fit-height" }) };
+    const luil::ui_element* const toggle { tree.find({ demo::kind_layout, u8"zoom-label-toggle" }) };
+    const luil::ui_element* const language { tree.find({ demo::kind_text, u8"zoom-label-language" }) };
+    REQUIRE(controls != nullptr);
+    REQUIRE(fit_height != nullptr);
+    REQUIRE(toggle != nullptr);
+    REQUIRE(language != nullptr);
+    // 한 줄에 놓이고 800 폭 창 안에 든다.
+    REQUIRE(toggle->bounds().x >= fit_height->bounds().x + fit_height->bounds().width);
+    REQUIRE(language->bounds().x >= toggle->bounds().x + toggle->bounds().width);
+    REQUIRE(language->bounds().x + language->bounds().width <= 800.0f);
+    REQUIRE(toggle->bounds().y == Catch::Approx(controls->bounds().y));
 }
