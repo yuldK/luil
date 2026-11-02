@@ -6,8 +6,8 @@
 #
 #  - 실행 파일은 바뀌었을 때만 올린다 (`adb push --sync`). test마다 이 script가 불리므로
 #    매번 올리면 수백 MB가 오간다.
-#  - 기기 쪽 표준 출력과 오류, 종료 코드를 그대로 돌려준다. Catch2의 발견은 그 출력을
-#    읽고, CTest는 종료 코드로 성패를 가른다.
+#  - 기기 쪽 표준 출력과 오류를 그대로 돌려주고, 종료 코드는 성공·실패로 돌려준다. Catch2의 발견은 그 출력을
+#    읽고, CTest는 종료 코드로 성패를 가른다. Catch2의 건너뜀(4)은 표시 글로 알린다 (맨 아래).
 #  - 기기는 adb가 고른다. 여럿이면 ANDROID_SERIAL 환경 변수로 정한다.
 #  - `-DJVM_DEX=<dex>`를 주면 실행 파일 자리에 공유 라이브러리를 받아 JVM 안에서 돌린다.
 #    dex의 `luil.testing.JvmTestMain`이 라이브러리를 읽고 그 진입점을 부른다
@@ -134,5 +134,10 @@ endif()
 if(NOT run_result EQUAL 0)
     # 기기 쪽 종료 코드를 그대로 낼 수는 없다 (cmake -P는 실패를 1로 끝낸다).
     # 출력은 이미 흘렀으므로 원인은 그 앞에 있다.
+    #  - Catch2는 test가 SKIP으로 끝나면 4를 낸다. 종료 코드로는 CTest의 SKIP_RETURN_CODE에 닿지 않으므로
+    #    표시 글을 남기고, tests/CMakeLists.txt가 그 글을 SKIP_REGULAR_EXPRESSION으로 받아 건너뜀으로 센다.
+    if(run_result EQUAL 4)
+        message(FATAL_ERROR "${executable_name} skipped its test on the device.")
+    endif()
     message(FATAL_ERROR "${executable_name} exited with ${run_result} on the device.")
 endif()
