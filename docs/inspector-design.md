@@ -1,6 +1,6 @@
 # 검사기
 
-실행 중인 화면 위에 요소의 윤곽과 정보를 얹는 개발 도구다. 앱이 `ui_frame::inspector` 칸으로 켜면 공용 그리기(`draw_frame`)가 집은 요소의 윤곽, 안쪽 여백, 정보 상자를 그린다. tree를 평탄화하고 요소를 글로 풀어 쓰는 순수 함수도 함께 내서 앱의 로그와 test가 같은 글을 쓴다. 공개 형식은 새 헤더 [ui_inspect.h](../include/luil/ui/ui_inspect.h)의 `inspector_config`·`inspect_node`와 질의 함수들, [app_host.h](../include/luil/app/app_host.h)의 `ui_frame::inspector`다.
+실행 중인 화면 위에 요소의 윤곽과 정보를 얹는 개발 도구다. 앱이 `ui_frame::inspector` 칸으로 켜면 공용 그리기(`draw_frame`)가 집은 요소의 윤곽, 안쪽 여백, 정보 상자를 그린다. tree를 평탄화하고 요소를 글로 풀어 쓰는 순수 함수도 함께 내서 앱의 로그와 test가 같은 글을 쓴다. 공개 형식은 새 헤더 [ui_inspect.h](../include/luil/ui/ui_inspect.h)의 `inspector_config`·`inspect_node`와 질의 함수들, [app_host.h](../include/luil/app/app_host.h)의 `ui_frame::inspector`다. 새 헤더는 `luil.h`에도 더한다(`luil_umbrella_header` 검사가 막는다).
 
 overlay는 그리기만 한다. 요소가 아니라서 hit test, 입력, 초점, 접근성 tree에 닿지 않는다.
 
@@ -192,7 +192,7 @@ elements 214  dup 0  unarranged 0
 
 ### Win32
 
-- 모든 표면(주 창, 보조 창, popup)이 `window_surface::build_frame`의 `apply_frame_appearance`(window_surface.cpp 811행, win32_window.cpp 2038행)를 지난다. 그 함수의 `state.style` 옆 한 줄(`state.inspector = frame != nullptr ? &frame->inspector : nullptr;`)이 모든 표면에 선다. `win32_window.cpp`는 줄 4의 파일이라 그 한 줄은 줄 4가 별도 커밋으로 낸다.
+- 모든 표면(주 창, 보조 창, popup)이 `window_surface::build_frame`의 `apply_frame_appearance`(window_surface.cpp 811행, win32_window.cpp 2038행)를 지난다. 그 함수의 `state.style` 옆 한 줄(`state.inspector = frame != nullptr ? &frame->inspector : nullptr;`)이 모든 표면에 선다. `win32_window.cpp`는 줄 4의 파일이라 그 한 줄은 줄 4가 낸다([인자 넘기기](single-instance-args-design.md)가 그 몫을 맡는다). `ui_frame::inspector`와 `frame_state::inspector`는 이 브랜치에만 생긴다. 그래서 이 한 줄은 inspector가 main에 병합된 직후 통합 단계에서 줄 4 몫 커밋 하나로 낸다. 그 전에는 Win32에서 overlay가 그려지지 않으므로 Win32 래스터 밖 확인(UIA 데모, 사람 확인)은 그 커밋 뒤에 한다.
 - 표면마다 자기 tree와 걸러진 interaction으로 따로 그린다. 작은 popup 창(메뉴)에는 윤곽만 선다. 캡처와 녹화도 `draw_frame`을 지나므로 overlay가 사진에 찍힌다. 앱이 켠 채 찍지 않는 것은 앱의 몫이다.
 - 고대비는 시스템 색을 읽은 팔레트라 윤곽은 hotlight와 창 글자색으로 선다. UIA provider는 tree만 읽으므로 켜도 달라지지 않는다. 별도 창(결정 1의 b)은 Win32 전용으로 열어 둔다.
 
@@ -205,10 +205,10 @@ elements 214  dup 0  unarranged 0
 ## 다른 노드와의 약속
 
 - **R1에서 미룬 것.** R1 설계 문서에 이 노드로 미룬 항목은 없다. 그 문서들이 G4–G7로 미룬 것도 이 노드와 닿지 않는다. R1에서 넘어온 controller 한계 둘, 메뉴 폭, `local_frame` 복제는 이 노드의 범위 밖이다.
-- **kind를 더하지 않는다.** overlay는 요소가 아니라 그리기다. 그래서 `ui_element_id.h`를 고치지 않고, 라운드 계획의 "inspector도 kind를 더한다"는 가정은 닫는다.
-- **이름표를 채우는 이는 통합이다.** 이름표(`src/ui/inspect_names.cpp`)는 이 브랜치에만 생기므로 msg_box, rating, ink(`ink_canvas`)의 브랜치는 이 파일을 건드리지 않는다. inspector가 먼저 들어오면 전수 test와 컴파일러가 뒤따르는 kind의 누락을 알리고, 통합 담당이 "이름 채우기" 커밋 하나로 채운다. inspector가 마지막이면 이 브랜치의 병합 커밋이 그때 있는 kind를 한꺼번에 채운다. 이름은 열거자 이름 그대로다. 그 뒤 새 kind를 더하는 노드는 같은 커밋에 case를 더한다. [ink-design.md](ink-design.md)의 "`ink_canvas` 한 줄은 통합 때"와 같은 규칙이다.
+- **kind를 더하지 않는다.** overlay는 요소가 아니라 그리기다. 그래서 kind를 더하지 않고, 라운드 계획의 "inspector도 kind를 더한다"는 가정은 닫는다. `ui_element_id.h`에는 `end_of_library_kinds` 주석 끝에 한 줄만 더한다("새 kind는 같은 커밋에 `inspect_names.cpp`의 case를 더한다"). 다른 노드가 kind를 더하는 자리(`info_bar_close` 다음 줄)와 주석 한 덩어리만큼 떨어져 병합은 기계적이다.
+- **이름표는 병합 커밋이 채운다.** 이름표(`src/ui/inspect_names.cpp`)의 `library_kind_name`은 `default` 없는 `switch`다. Android 빌드는 clang `-Wall -Wextra`이고 경고를 오류로 본다(`LUIL_WARNINGS_AS_ERRORS` 기본 켬, [clang.cmake](../cmake/compiler/clang.cmake)). 이름 없는 kind가 main에 들어오면 `-Wswitch`로 그 커밋부터 빌드가 깨진다. 그래서 따로 "이름 채우기" 커밋을 두지 않는다. R2 통합은 줄 1(msg_box·rating)을 줄 3(ink·inspector)보다 먼저 병합하고, 줄 3의 병합 커밋이 그때 있는 kind를 한꺼번에 채운다. ink의 `ink_canvas`는 같은 브랜치라 inspector 커밋이 채운다. 순서가 바뀌면 뒤에 오는 줄의 병합 커밋 안에서 case를 더한다. 이름은 열거자 이름 그대로다. 그 뒤 새 kind를 더하는 노드는 같은 커밋에 case를 더한다.
 - **ui_frame·frame_state 꼬리.** 같은 라운드에 `ui_frame`이나 `frame_state` 꼬리에 칸을 더하는 노드가 있어도 덧붙임이라 병합이 기계적이다. `frame_state.cpp`는 `draw_frame`과 `draw_overlay`를 고친다. page_anim(R4)이 `draw_frame`의 그리기를 바꿀 때 overlay 호출은 지금의 tree에만 둔다.
-- **ink·image_clip·os_notify(줄 3·4, `android_app.cpp`).** 이 노드는 `render()`의 한 줄만 낸다. ink는 `copy_motion`과 `start`의 축 켜기, image_clip은 클립보드 실행과 액션 분기, os_notify는 권한 다시 읽기다. 각자 자기 함수만 고친다.
+- **ink·image_clip·os_notify(줄 3·4, `android_app.cpp`).** 이 노드는 `render()`의 한 줄만 낸다. ink는 `copy_motion`과 `start`의 축 켜기, image_clip은 `execute_clipboard`, os_notify는 권한 읽기와 `APP_CMD_GAINED_FOCUS` 분기, `start()`의 능력 한 줄(538줄)이다. 함수가 다르거나 줄이 멀어 겹치지 않는다.
 - **`ui_tree.*`·컨트롤러를 고치지 않는다.** `inspect_at`과 평탄화는 `ui_inspect.cpp`의 자유 함수라 teaching_tip(R4)이 `ui_tree.cpp`를 고치는 것과 겹치지 않는다. `ui_events.h`, `ui_interaction.*`, `window_surface.cpp`도 건드리지 않는다.
 - **기본 문구 정책(줄 1).** 검사기 글은 ASCII 식별자라 그 노드의 한국어 리터럴 검사에 걸리지 않고 R5 i18n의 번역 대상도 아니다.
 - **style_sheet·G4(줄 2).** 팔레트 견본은 `context.palette`만 읽어 파서에 기대지 않는다. G4의 키 표 헤더가 서면 24개 표를 그 표로 바꾸는 후속이 된다.
@@ -234,7 +234,8 @@ elements 214  dup 0  unarranged 0
 
 - label `inspector-state`, `inspector-pick`, `inspector-levels`, `inspector-selected`, `inspector-count`(`inspect_nodes`가 센 요소 수)를 둔다. 단추 `inspector-toggle`, `inspector-up`·`inspector-down`(조상 단계), `inspector-parent`·`inspector-child`·`inspector-prev`·`inspector-next`(선택 이동), `inspector-outline`, `inspector-palette`를 둔다. 데스크톱은 Ctrl+Shift+I로도 켠다(팔레트의 Ctrl+Shift+P와 겹치지 않는다).
 - UIA(격리 데스크톱): `Get-LuilTree`로 끈 트리를 받고 `inspector-toggle`을 Invoke한 뒤 다시 받아 `inspector-*` label 값을 뺀 나머지가 같다. 이동 단추를 누를 때마다 `inspector-selected`가 이동 순서대로 바뀐다. 윤곽은 UIA로 읽지 못해 사람 확인이다.
-- `tests/mobile_demo_page_tests.cpp`(`[mobile-demo][inspector]`)와 `demo_gallery_tests.cpp`가 페이지 짓기와 `inspector-*` 상태 label을 지킨다.
+- 새 페이지 둘은 `examples/CMakeLists.txt`(데스크톱 페이지 목록), `examples/mobile_demo/mobile_demo.cmake`, `tests/CMakeLists.txt`의 `luil_core_tests` 데모 목록(모바일·데스크톱)에 등록한다. 이 등록은 라이브러리 커밋이 아니라 데모 연결 커밋에 넣는다.
+- `tests/mobile_demo_page_tests.cpp`(`[mobile-demo][inspector]`)와 `tests/demo_gallery_tests.cpp`가 페이지 짓기와 `inspector-*` 상태 label을 지킨다.
 
 사람 확인.
 

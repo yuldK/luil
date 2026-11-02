@@ -2,7 +2,7 @@
 
 펜으로 그린 획을 받아 그리고 지운다. 컨트롤러는 펜 접촉 하나를 통째로 쥐고 압력·기울기·시각이 든 표본을 캔버스에 건넨다. 획은 앱 상태이고 캔버스는 그 획을 그리며 앱 메시지를 낸다. 지우개 끝과 지우개 도구는 닿은 획을 통째로 지운다.
 
-공개 형식은 [ui_element.h](../include/luil/ui/ui_element.h)의 입력 역할 `ink_source`·`ink_input`·`ink_sample`, 새 헤더 [ink.h](../include/luil/ui/ink.h)의 `ink_point`·`ink_style`·`ink_stroke`·`ink_layer`와 도우미, 새 헤더 [ink_canvas_element.h](../include/luil/ui/ink_canvas_element.h)의 `ink_canvas_config`·`ink_canvas_element`다. 펜 값이 이벤트에 실리는 길과 지우개 계약의 개정은 [잉크 입력](ink-input-design.md)에 따로 적었다.
+공개 형식은 [ui_element.h](../include/luil/ui/ui_element.h)의 입력 역할 `ink_source`·`ink_input`·`ink_sample`, 새 헤더 [ink.h](../include/luil/ui/ink.h)의 `ink_point`·`ink_style`·`ink_stroke`·`ink_layer`와 도우미, 새 헤더 [ink_canvas_element.h](../include/luil/ui/ink_canvas_element.h)의 `ink_canvas_config`·`ink_canvas_element`다. 펜 값이 이벤트에 실리는 길과 지우개 계약의 개정은 [잉크 입력](ink-input-design.md)에 따로 적었다. 새 헤더 둘은 `luil.h`에도 더한다(`luil_umbrella_header` 검사가 막는다).
 
 ## 문제
 
@@ -84,7 +84,7 @@ enum class ink_tool { pen, eraser };
 // 캔버스가 앱에 건네는 획 입력이다. 자리는 내용 좌표다.
 struct ink_stroke_input { ink_phase phase {}; pointer_device device {}; std::uint32_t pointer_id {}; ink_point point {}; float tilt_x {}; float tilt_y {}; bool interrupted { false }; };
 //  - strokes는 굳은 획, wet는 진행 중 획이다 (결정 2). eraser_radius는 내용 논리 픽셀이다.
-//  - zoom·rotation·content_bounds는 내용 좌표 변환이다 (rotate-gesture-design.md의 규약). 확대 보기 밖이면 기본값이다.
+//  - rotation·content_bounds는 내용 좌표 변환이다 (rotate-gesture-design.md의 규약). 확대 보기 밖이면 기본값이다. zoom 칸은 없다 (좌표와 배율).
 //  - access_name·access_summary가 비면 기본 문구다 (G6).
 struct ink_canvas_config
 {
@@ -95,7 +95,7 @@ struct ink_canvas_config
     bool mouse { false };
     bool touch { false };
     float eraser_radius { 8.0f };
-    float zoom { 1.0f }, rotation { 0.0f };
+    float rotation { 0.0f };
     std::optional<rect_f> content_bounds {};
     std::function<input_action(const ink_stroke_input&)> on_stroke {};
     std::function<input_action(std::vector<std::uint64_t> ids)> on_erase {};
@@ -132,8 +132,8 @@ else points_.clear(); // cancel
 
 좌표와 배율.
 
-- 내용 좌표는 [두 손가락 회전](rotate-gesture-design.md)의 규약이다. 원점의 화면 자리 `o = slot의 왼쪽 위 − rotated_bounds(content_bounds, rotation)의 왼쪽 위 × scale × zoom`, 점 `p = rotate_point((표본 − o) / (scale × zoom), −rotation)`이다. `content_bounds`가 비면 캔버스 크기(zoom 1의 논리 픽셀)와 원점 왼쪽 위다.
-- 폭·지우개 반지름·단순화 오차는 내용 논리 픽셀이다. 그릴 때 `scale × zoom`을 곱한다. 확대하면 획도 굵어진다.
+- 확대 보기는 내용을 `창 배율 × zoom`의 `arrange_context`로 한 번만 배치하고 그림 문맥도 같은 배율로 준다(`zoom_view_element.cpp`의 `arrange`와 `draw`, [확대 보기](zoom-view-design.md) 배치와 그림). 캔버스가 받는 `context.scale`에 zoom이 이미 들어 있어 따로 곱하지 않는다. 내용 좌표는 [두 손가락 회전](rotate-gesture-design.md)의 규약이다. 원점의 화면 자리 `o = slot의 왼쪽 위 − rotated_bounds(content_bounds, rotation)의 왼쪽 위 × context.scale`, 점 `p = rotate_point((표본 − o) / context.scale, −rotation)`이다. rotate 문서의 식은 확대 보기가 `scale`과 `zoom`을 따로 알고 쓴 것이고, 자식 캔버스가 받는 값은 그 곱이다. `content_bounds`가 비면 원점이 왼쪽 위이고 크기는 `slot 크기 / context.scale`이다.
+- 폭·지우개 반지름·단순화 오차는 내용 논리 픽셀이다. 그릴 때 `context.scale`만 곱한다. 확대하면 획도 굵어진다.
 - 압력은 0~1로 접는다. `pressure`가 비면 점의 압력은 1이다. 마우스와 압력 없는 펜은 `width` 그대로다.
 
 그리기.
@@ -214,13 +214,13 @@ else points_.clear(); // cancel
 
 ## 다른 노드와의 약속
 
-- **두 손가락 회전(R1)**: 회전한 보기 위의 점을 되돌리는 식은 rotate 문서의 것을 그대로 쓴다. ink는 `zoom_source`를 넓히지 않는다. rotate가 남긴 "ink가 넓히면 그 뒤에 더한다"는 쓸 일이 없어 닫는다. rotate 문서가 ink 몫으로 둔 `process_touch_press`(1678행 조건 하나)와 펜·마우스 경로만 고친다.
+- **두 손가락 회전(R1)**: 회전한 보기 위의 점을 되돌리는 식은 rotate 문서의 것을 쓰되 `scale × zoom`은 캔버스의 `context.scale`이다. ink는 `zoom_source`를 넓히지 않는다. rotate가 남긴 "ink가 넓히면 그 뒤에 더한다"는 쓸 일이 없어 닫는다. rotate 문서가 ink 몫으로 둔 `process_touch_press`(1678행 조건 하나)와 펜·마우스 경로만 고친다.
 - **스프링(R1)**: 뗄 때의 속도를 건네지 않는다. 표본마다 시각이 있어 앱이 잴 수 있다. spring 문서의 "놓은 속도를 건네는 뒤 노드"에 ink는 들지 않는다.
-- **기본 문구 정책(줄 1)**: 캔버스의 기본 이름("잉크 캔버스")과 기본 요약("획 N개")은 그 노드가 세우는 비공개 기본 문구 헤더에 두 줄로 더한다. ink는 그 헤더가 main에 들어온 뒤 병합한다. **i18n(R5)**에서 요약은 복수형 항목이 된다.
+- **기본 문구 정책(줄 1)**: 기본 이름("잉크 캔버스")과 기본 요약("획 N개")은 [기본 문구 정책](default-text-design.md)의 비공개 헤더 `src/ui/default_text.h`·`.cpp`에 함수 둘로 더한다. `ink_canvas_name()`과 `ink_canvas_summary(std::size_t strokes)`이고 사례는 `tests/default_text_tests.cpp`에 덧붙인다. 줄 3 브랜치에는 그 헤더가 없고 그 정책의 `verify_default_text` 검사가 한국어 리터럴을 막는다. 그래서 브랜치는 빈 값 판정 자리만 두고 한국어 리터럴과 기본 문구 단언을 두지 않는다. 두 함수와 호출, 그 단언은 줄 1이 main에 들어온 뒤 ink 병합 커밋이 더한다. **i18n(R5)**에서 요약은 복수형 항목이 된다.
 - **undo_stack(줄 2)**: ink는 되돌리기를 짓지 않는다. `on_stroke`의 끝과 `on_erase`는 앱 메시지라 앱이 그 노드의 쌓기에 넣는다.
-- **image_clip(줄 4)**: 클립보드는 그 노드의 것이다. ink는 `render_ink_image`로 `ui_image`를 내줄 뿐이다. `ui_events.h`에서 ink는 `pointer_*_event` 구조체 끝만, image_clip은 `clipboard_*`·`clipboard_request`·`input_action`만 고친다. `android_app.cpp`에서 ink는 `copy_motion`과 `start`의 축 켜기 줄만 고친다.
-- **os_notify·인자 넘기기(줄 4)**: `android_app.cpp`의 권한 다시 읽기, `window_surface.cpp`의 `WM_COPYDATA` 자리는 ink가 건드리지 않는다. ink는 `handle_pointer_message`만 고친다.
-- **inspector(줄 3, 다음 문서)**: 둘 다 `ui_element_id.h`의 `end_of_library_kinds` 위에 kind를 더한다(ink는 `ink_canvas`). inspector가 kind 이름표를 두면 `ink_canvas` 한 줄을 통합 때 더한다. kind 숫자를 test와 UIA 스크립트에 박지 않는다.
+- **image_clip(줄 4)**: 클립보드는 그 노드의 것이다. ink는 `render_ink_image`로 `ui_image`를 내줄 뿐이다. `ui_events.h`에서 ink는 `pointer_*_event` 구조체 끝만, image_clip은 include 한 줄, `clipboard_change` 끝, 새 구조체, `clipboard_request` 끝만 고친다(`input_action`은 안 고친다). `android_app.cpp`에서 ink는 `copy_motion`과 `start`의 축 켜기 줄만, image_clip은 `execute_clipboard`만 고친다.
+- **os_notify·인자 넘기기(줄 4)**: `android_app.cpp`에서 os_notify는 권한 읽기와 `APP_CMD_GAINED_FOCUS` 분기, `start()`의 능력 한 줄(538줄)을 고친다. 축 켜기(653~654줄)와 떨어져 있고 콜드 스타트 읽기는 `start()` 밖이다. 읽기가 `start()` 안으로 오면 ink가 먼저 병합되고 os_notify가 그 위에 얹는다([OS 알림](os-notification-design.md)의 약속). `window_surface.cpp`·`.h`는 이번 라운드에 ink만 고친다. 인자 넘기기는 받는 자리를 `win32_window.cpp` 주 창에 둔다.
+- **inspector(줄 3, 다음 문서)**: ink만 `ui_element_id.h`의 `end_of_library_kinds` 위에 kind(`ink_canvas`)를 더한다. inspector는 kind를 더하지 않는다. 같은 줄에서 ink가 먼저 들어가므로 inspector의 이름표(`src/ui/inspect_names.cpp`)가 `ink_canvas`를 처음부터 채운다. 줄 1의 kind가 이름표보다 늦게 병합되면 그 병합 커밋이 case를 더한다([검사기](inspector-design.md)의 약속). kind 숫자를 test와 UIA 스크립트에 박지 않는다.
 - **menu_bar·rich_edit(R3)·teaching_tip(R4)**: 같은 controller 파일이라 ink 뒤에 직렬로 한다. ink는 `raw_input_event` variant와 키 경로를 고치지 않는다.
 - **데모**: 라이브러리 커밋과 데모 연결 커밋을 나눈다. `examples/demo_main.cpp`·`examples/mobile_demo/app.cpp`의 페이지 등록은 통합 때 다른 줄의 연결과 직렬로 쌓는다.
 
@@ -228,7 +228,7 @@ else points_.clear(); // cancel
 
 자동 test. 입력 쪽 test(추적기·Android·Win32 변환)는 [잉크 입력](ink-input-design.md#확인)에 있다.
 
-- `tests/ink_stroke_tests.cpp`(`luil_core_tests`, 기기에서도 돈다): 압력 → 폭(0·0.5·1, 압력 없음은 `width`), 유한하지 않은 점 버림, 빈 획·한 점 획, 단순화 뒤 원본 점과의 거리가 오차 안, 압력이 크게 바뀌는 점은 남음, `ink_strokes_hit`의 선분-획 거리와 경계 상자 거르기, `with`·`without`(없는 id 무시), 내용 좌표 식(zoom 2·회전 90도에서 되돌린 점이 원래 점).
+- `tests/ink_stroke_tests.cpp`(`luil_core_tests`, 기기에서도 돈다): 압력 → 폭(0·0.5·1, 압력 없음은 `width`), 유한하지 않은 점 버림, 빈 획·한 점 획, 단순화 뒤 원본 점과의 거리가 오차 안, 압력이 크게 바뀌는 점은 남음, `ink_strokes_hit`의 선분-획 거리와 경계 상자 거르기, `with`·`without`(없는 id 무시), 내용 좌표 식(zoom이 든 `context.scale` 4(창 배율 2 × zoom 2)와 회전 90도에서 되돌린 점이 원래 점이고 zoom을 따로 곱하지 않는다).
 - `tests/ink_canvas_tests.cpp`(controller 시나리오): 펜 누름·이동·뗌이 `begin`·`extend`·`end`를 내고 압력·기울기가 실린다. 마우스는 끈 캔버스에서 클릭 경로이고 켜면 그린다. 끈 캔버스 위의 손가락은 감싼 창을 흘리고 확대 보기를 옮긴다. 켜면 그린다. 확대 보기 안의 펜은 보기를 옮기지 않는다. 지우개 끝과 지우개 도구가 닿은 획 id를 낸다. 단추 위의 지우개는 클릭·초점·관성·터치 조작을 바꾸지 않는다. 캔버스가 사라지면 `cancel`, 시스템 취소는 `cancel`, 배럴 전환과 큐 유실은 `end`+`interrupted`이고 남은 이벤트를 삼킨다. 펜 누름이 손가락 획을 `cancel`한다. 접근 이름과 요약 값.
 - `tests/raster_draw_tests.cpp` 방식의 그리기 확인: 획이 픽셀을 만들고, 압력에 따라 폭이 달라지고, 캔버스 밖은 비고, 반투명 획의 겹친 곳이 한 번만 칠해진다. 기본색 획은 팔레트를 바꾸면 색이 바뀐다.
 

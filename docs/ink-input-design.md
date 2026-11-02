@@ -112,8 +112,8 @@ bool button_switch { false };
 ## 다른 노드와의 약속
 
 - **image_clip(줄 4)**: `ui_events.h`에서 ink는 `pen_sample`을 포인터 이벤트 앞에 두고 세 이벤트와 `pointer_cancelled_event`의 끝에만 더한다. `clipboard_*`, `clipboard_request`, `input_action`, `raw_input_event`의 구성원 순서는 건드리지 않는다.
-- **os_notify·inspector·image_clip(android_app.cpp)**: ink는 `copy_motion`과 `start`의 축 켜기 세 줄만 고친다.
-- **인자 넘기기(줄 4)**: `window_surface.cpp`에서 ink는 `handle_pointer_message`만, 그 노드는 `WM_COPYDATA` 받는 자리만 고친다. `window_surface.h`에 둘 다 멤버를 더하면 병합은 기계적이다.
+- **os_notify·inspector·image_clip(android_app.cpp)**: ink는 `copy_motion`과 `start`의 축 켜기 세 줄만 고친다. os_notify는 `start()`의 538줄 능력 한 줄과 `APP_CMD_GAINED_FOCUS` 분기를 고치고 콜드 스타트 읽기를 `start()` 밖에 둔다. 읽기가 `start()` 안으로 오면 ink가 먼저 병합된다([OS 알림](os-notification-design.md)의 약속).
+- **인자 넘기기(줄 4)**: `window_surface.cpp`·`.h`는 이번 라운드에 ink만 고친다(`handle_pointer_message`와 포인터별 `frameId` 멤버). 인자 넘기기는 받는 자리를 `win32_window.cpp` 주 창에 두어([둘째 인스턴스의 인자 넘기기](single-instance-args-design.md)) 이 파일들을 건드리지 않는다.
 - **menu_bar(R3)**: `raw_input_event` variant와 키 메시지 자리를 ink가 고치지 않는다.
 - **웹뷰**: 펜 원본 전달은 그대로다. 웹 콘텐츠는 지금처럼 자기 지우개·압력을 쓴다.
 
