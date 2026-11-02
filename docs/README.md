@@ -47,7 +47,9 @@
 - [가상 목록](virtual-list-design.md)
 - [표](table-design.md)
 - [여러 줄 칸의 자동 줄 넘김](text-area-wrap-design.md)
+- [줄 나눔 규칙](line-break-design.md): UAX #14로 접는 자리를 고르고 한국어는 어절에서 바꾼다
 - [텍스트 칸의 하이퍼링크](text-link-design.md)
+- [구문 강조 도우미](syntax-highlight-design.md): 편집한 줄부터 렉서를 다시 돌려 색 구간을 잇는다
 - [끄는 동안의 가장자리 자동 스크롤](drag-auto-scroll-design.md)
 - [키보드 초점과 Tab 순회](keyboard-focus-design.md)
 - [Focus group과 Tab 순서](focus-group-design.md)
@@ -77,12 +79,17 @@
 - [활성 표면과 초점 수명](active-surface-design.md)
 - [키 이벤트의 표면 라우팅](key-surface-routing-design.md)
 - [터치 제스처와 펜 입력](touch-pen-input-design.md)
+- [두 손가락 회전](rotate-gesture-design.md): 확대 보기가 두 접촉이 돌린 각도와 Shift+화살표를 알린다
 - [Modal dialog host](modal-dialog-design.md)
 - [시트와 서랍](sheet-design.md)
+- [스프링](spring-design.md): 손을 뗀 속도에서 이어 목표까지 값을 움직인다
+- [움직임 줄이기 연결](reduce-motion-design.md): 시스템 설정을 앱이 든 전환과 Android까지 잇는다
 - [문자열·커스텀·마크다운 툴팁](tooltip-design.md)
 - [Caption 버튼 구성](caption-button-design.md)
 - [탭 막대 스타일과 공용 스타일](tab-bar-style-design.md)
 - [모바일 앱 바](app-bar-design.md)
+- [분할 버튼](split-button-design.md): 기본 동작 본체와 메뉴 화살표, 필드 popup 열림 규약
+- [정보 막대](info-bar-design.md): 닫을 때까지 남는 상태 알림과 토스트가 함께 쓰는 심각도
 
 ## 플랫폼과 콘텐츠
 
@@ -92,11 +99,13 @@
 - [레이어드 표시: 창 배치와 frame을 한 합성에](layered-presentation-design.md)
 - [창 배경 효과](backdrop-design.md)
 - [여러 top-level window](multi-window-design.md)
+- [작업 표시줄 진행률과 오버레이](taskbar-design.md): Win32 전용, 작업 표시줄 단추의 진행률과 오버레이 아이콘
 - [Popup overlay 표면](popup-overlay-design.md)
 - [Popup 앵커 표면](popup-anchor-design.md)
 - [Popup 안의 텍스트 입력과 IME](popup-ime-design.md)
 - [OS 파일 drag & drop](os-dragdrop-design.md)
 - [파일 목록 클립보드](file-clipboard-design.md)
+- [파일 변경 감시](file-watch-design.md): 폴더와 파일의 변경을 OS 알림으로 받아 묶음으로 건넨다
 - [UI Automation 접근성](accessibility-design.md)
 - [접근성 동작](accessibility-action-design.md)
 - [이미지](image-design.md)
