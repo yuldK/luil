@@ -18,6 +18,32 @@ namespace mobile_demo {
         return std::u8string { reinterpret_cast<const char8_t*>(digits.c_str()) };
     }
 
+    std::optional<luil::text_input_target> text_target_of_kind(const luil::ui_element_kind kind) noexcept
+    {
+        if (kind == kind_number_input)
+            return target_number;
+        if (kind == kind_note_input)
+            return target_note;
+        if (kind == kind_secret_input)
+            return target_secret;
+        if (kind == kind_memo_input)
+            return target_memo;
+        if (kind == kind_code_input)
+            return target_code;
+        if (kind == kind_line_break_input)
+            return target_line_break;
+        // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다 (popup-ime-design.md).
+        if (kind == kind_dropdown_search_input)
+            return target_dropdown_search;
+        if (kind == kind_smb_address_input)
+            return target_smb_address;
+        if (kind == kind_smb_user_input)
+            return target_smb_user;
+        if (kind == kind_smb_password_input)
+            return target_smb_password;
+        return std::nullopt;
+    }
+
     luil::text_input_config make_secret_input_config(std::u8string placeholder, const bool reveal, luil::ui_action toggle)
     {
         // 단추의 글리프는 누르면 무엇이 되는지를 말한다 — 보이는 중이면 감은 눈이다.

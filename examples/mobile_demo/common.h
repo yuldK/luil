@@ -165,6 +165,11 @@ namespace mobile_demo {
     // --- 공용 도우미 ---
     [[nodiscard]] std::u8string to_u8(int value);
 
+    // 어느 element가 텍스트 칸인지다 (`interaction_policy::text_target_of`).
+    //  - 여기에 없는 kind는 편집 대상이 없어 키 입력이 닿지 않고, 접근성 값도 읽기 전용으로 답한다.
+    //  - 정책 밖의 함수로 둔 것은 page test가 데모의 모든 편집 칸이 등록됐는지 묻게 하려는 것이다.
+    [[nodiscard]] std::optional<luil::text_input_target> text_target_of_kind(luil::ui_element_kind kind) noexcept;
+
     [[nodiscard]] std::unique_ptr<luil::label_element> make_label(luil::ui_element_id id, std::u8string text, float font_size, luil::label_color_role color);
 
     // 암호 칸의 설정이다. 칸 오른쪽의 눈 단추가 보이기를 켜고 끈다 (누르면 `toggle`).

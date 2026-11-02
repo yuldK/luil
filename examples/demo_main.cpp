@@ -40,6 +40,7 @@
 #include "demo/palette.h"
 #include "demo/popups_page.h"
 #include "demo/tabs_page.h"
+#include "demo/text_targets.h"
 #include "demo/theme_page.h"
 #include "demo/toasts_page.h"
 #include "demo/webview_page.h"
@@ -946,40 +947,10 @@ namespace demo {
         class demo_policy final : public luil::interaction_policy
         {
         public:
+            // 표는 page test가 함께 보도록 `text_targets.h`에 둔다.
             [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
             {
-                if (kind == kind_number_input)
-                    return target_number;
-                if (kind == kind_note_input)
-                    return target_note;
-                if (kind == kind_memo_input)
-                    return target_memo;
-                if (kind == kind_link_view_input)
-                    return target_link_view;
-                if (kind == kind_code_input)
-                    return target_code;
-                if (kind == kind_tool_note_input)
-                    return target_tool_note;
-                // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다.
-                // popup이라고 다른 경로가 아니다 (popup-ime-design.md).
-                if (kind == kind_dropdown_search_input)
-                    return target_dropdown_search;
-                if (kind == kind_tool_menu_search_input)
-                    return target_tool_menu_search;
-                if (kind == kind_network_url_input)
-                    return target_network_url;
-                if (kind == kind_workbench_summary_input)
-                    return target_workbench_summary;
-                // 콤보는 root와 안쪽 입력 칸이 같은 kind다. 둘 다 같은 편집 대상이다 (combo-box-design.md).
-                if (kind == kind_workbench_author_input)
-                    return target_workbench_author;
-                if (kind == kind_workbench_diff)
-                    return target_workbench_diff;
-                if (kind == kind_workbench_find_input)
-                    return target_workbench_find;
-                if (kind == luil::ui_element_kind::command_palette_search)
-                    return target_palette;
-                return std::nullopt;
+                return text_target_of_kind(kind);
             }
 
             [[nodiscard]] luil::input_action make_text_edit_action(const luil::text_edit_request& request) const override
