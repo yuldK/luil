@@ -31,6 +31,7 @@ add_executable(luil_core_tests
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
     fence_wait_tests.cpp
+    field_popup_tests.cpp
     focus_request_tests.cpp
     font_scale_tests.cpp
     group_element_tests.cpp
@@ -39,6 +40,7 @@ add_executable(luil_core_tests
     image_animation_tests.cpp
     image_element_tests.cpp
     image_encode_tests.cpp
+    info_bar_element_tests.cpp
     item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
@@ -68,10 +70,12 @@ add_executable(luil_core_tests
     scroll_view_element_tests.cpp
     scrollbar_element_tests.cpp
     selection_model_tests.cpp
+    severity_paint_tests.cpp
     sheet_host_element_tests.cpp
     sidebar_element_tests.cpp
     single_line_text_tests.cpp
     slider_element_tests.cpp
+    split_button_element_tests.cpp
     split_handle_element_tests.cpp
     text_area_element_tests.cpp
     text_link_tests.cpp
@@ -128,8 +132,10 @@ target_sources(luil_core_tests PRIVATE
 # 모바일 demo의 적응형 시트와 비동기 SMB 목록 상태도 서버 없이 검증한다.
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/toasts_page.cpp"
     mobile_demo_page_tests.cpp)
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
 target_sources(luil_core_tests PRIVATE
@@ -140,6 +146,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
     demo_gallery_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE

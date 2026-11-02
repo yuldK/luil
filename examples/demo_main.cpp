@@ -8,8 +8,8 @@
 //  - 파일: 여럿 고르기, 고른 것 끌어 폴더에 놓기, 끌어서 범위 고르기, 파일 클립보드 (demo/files_page)
 //  - 탭: 선택·닫기·순서·가로 스크롤·넘침 메뉴 popup        (demo/tabs_page)
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
-//  - 토스트: 심각도별 알림과 실행 취소 토스트               (demo/toasts_page)
-//  - 메뉴·팝업: 드롭다운과 컨텍스트 메뉴 (popup 창)         (demo/popups_page)
+//  - 토스트: 심각도별 알림, 실행 취소 토스트, 정보 막대      (demo/toasts_page)
+//  - 메뉴·팝업: 드롭다운·컨텍스트 메뉴·분할 버튼 (popup 창) (demo/popups_page)
 //  - 창: 보조 top-level 창(도구 창) 여닫기와 전체 화면 전환 (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
@@ -592,7 +592,8 @@ namespace demo {
                 // 현재 페이지의 것만 뜬다 (다른 페이지의 열림 상태는 이동 때 닫았다).
                 for (luil::win32::ui_popup& popup : tabs_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
-                for (luil::win32::ui_popup& popup : popups_.make_popups(scale))
+                // 필드 메뉴는 창 client 안에서 아래가 모자라면 위로 뒤집힌다.
+                for (luil::win32::ui_popup& popup : popups_.make_popups(scale, { 0.0f, 0.0f, width, height }))
                     frame->popups.push_back(std::move(popup));
                 for (luil::win32::ui_popup& popup : workbench_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));

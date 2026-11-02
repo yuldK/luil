@@ -10,6 +10,7 @@
 #include "luil/ui/group_element.h"
 #include "luil/ui/grouped_list_element.h"
 #include "luil/ui/image_element.h"
+#include "luil/ui/info_bar_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_element.h"
@@ -18,6 +19,7 @@
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scrollbar_element.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/split_button_element.h"
 #include "luil/ui/split_handle_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/tab_bar_element.h"
@@ -550,6 +552,61 @@ TEST_CASE("A toast reads as an alert with its message", "[ui][access]")
     REQUIRE(toast.accessibility().name == u8"저장했다");
 }
 
+namespace {
+    [[nodiscard]] luil::info_bar_config sync_bar()
+    {
+        luil::info_bar_config config {};
+        config.owner = u8"sync";
+        config.severity = luil::ui_severity::error;
+        config.title = u8"동기화하지 못했습니다";
+        config.message = u8"서버에 닿지 않습니다.";
+        config.action_label = u8"다시 시도";
+        config.action = tagged_action(u8"retry");
+        config.close = tagged_action(u8"dismiss");
+        return config;
+    }
+
+    [[nodiscard]] std::unique_ptr<test_panel> info_bar_page(luil::info_bar_config config)
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"page" }) };
+        page->add(std::make_unique<luil::info_bar_element>(std::move(config)));
+        page->arrange({ { 0.0f, 0.0f, 600.0f, 80.0f }, 1.0f });
+        return page;
+    }
+}
+
+TEST_CASE("An info bar reads as an alert with its two buttons as children", "[ui][access][info-bar]")
+{
+    const auto page { info_bar_page(sync_bar()) };
+    const luil::ui_element& bar { *page->children()[0] };
+    REQUIRE(bar.accessibility().role == luil::access_role::alert);
+    REQUIRE(bar.accessibility().name == u8"오류 동기화하지 못했습니다 서버에 닿지 않습니다.");
+
+    // 글 노드는 따로 서지 않는다. 막대 아래 단추 둘이 서고, 토스트와 같은 모양이다.
+    const std::vector<const luil::ui_element*> children { luil::access_children(bar) };
+    REQUIRE(children.size() == 2u);
+    REQUIRE(children[0]->id() == luil::ui_element_id { luil::ui_element_kind::info_bar_action, u8"sync" });
+    REQUIRE(children[1]->id() == luil::ui_element_id { luil::ui_element_kind::info_bar_close, u8"sync" });
+    REQUIRE(children[0]->accessibility().role == luil::access_role::button);
+    REQUIRE(children[0]->accessibility().name == u8"다시 시도");
+    REQUIRE(children[1]->accessibility().role == luil::access_role::button);
+    REQUIRE(children[1]->accessibility().name == u8"닫기");
+
+    // 단추는 Invoke로 눌린다. 막대는 닫는 일을 하지 않고 앱의 액션이 나갈 뿐이다.
+    REQUIRE(tag_of(luil::plan_access_request(*children[0], { luil::access_command::invoke })) == u8"retry");
+    REQUIRE(tag_of(luil::plan_access_request(*children[1], { luil::access_command::invoke })) == u8"dismiss");
+}
+
+TEST_CASE("An info bar without buttons has no children in the access tree", "[ui][access][info-bar]")
+{
+    luil::info_bar_config config { sync_bar() };
+    config.action = nullptr;
+    config.close = nullptr;
+    const auto page { info_bar_page(std::move(config)) };
+    REQUIRE(luil::access_children(*page->children()[0]).empty());
+    REQUIRE(page->children()[0]->accessibility().role == luil::access_role::alert);
+}
+
 TEST_CASE("A pressable element with a name reads as a button by default", "[ui][access]")
 {
     test_panel card { luil::ui_element_id { kind_item, u8"card" } };
@@ -779,6 +836,107 @@ TEST_CASE("A dropdown opens and closes through an absolute message", "[ui][acces
     // 토글 액션만 있으면 클릭은 서지만 접근 실행은 거절된다.
     const luil::dropdown_element toggling { { .owner = u8"roast", .placeholder = u8"원두", .open = false, .toggle = tagged_action(u8"roast") } };
     REQUIRE(luil::plan_access_request(toggling, { luil::access_command::expand }).has_value() == false);
+}
+
+namespace {
+    [[nodiscard]] luil::split_button_config split_config(const bool open)
+    {
+        luil::split_button_config config {};
+        config.owner = u8"save";
+        config.look.text = u8"저장";
+        config.invoke = tagged_action(u8"save");
+        config.open = open;
+        config.set_open = [](const bool target) { return luil::make_app_action(access_state_intent { u8"save", target }); };
+        return config;
+    }
+
+    [[nodiscard]] std::unique_ptr<test_panel> split_page(luil::split_button_config config)
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"page" }) };
+        page->add(std::make_unique<luil::split_button_element>(std::move(config)));
+        page->arrange({ { 0.0f, 0.0f, 200.0f, 28.0f }, 1.0f });
+        return page;
+    }
+}
+
+TEST_CASE("A split button folds into two sibling buttons, a body and an arrow", "[ui][access][split-button]")
+{
+    const auto page { split_page(split_config(false)) };
+    // root는 구조일 뿐이라 접근 tree에서 접히고 두 절반이 형제로 선다.
+    REQUIRE(page->children()[0]->accessibility().role == luil::access_role::none);
+    const std::vector<const luil::ui_element*> siblings { luil::access_children(*page) };
+    REQUIRE(siblings.size() == 2u);
+    const luil::ui_element& body { *siblings[0] };
+    const luil::ui_element& arrow { *siblings[1] };
+    REQUIRE(body.id() == luil::ui_element_id { luil::ui_element_kind::split_button_body, u8"save" });
+    REQUIRE(arrow.id() == luil::ui_element_id { luil::ui_element_kind::split_button_arrow, u8"save" });
+
+    // 본체는 글로 읽히는 단추이고 펼침 상태가 없다.
+    const luil::access_info body_info { body.accessibility() };
+    REQUIRE(body_info.role == luil::access_role::button);
+    REQUIRE(body_info.name == u8"저장");
+    REQUIRE(body_info.expanded.has_value() == false);
+    // 화살표는 본체 글 뒤에 기본 문구를 붙인 이름의 단추이고 펼침 상태를 알린다.
+    const luil::access_info arrow_info { arrow.accessibility() };
+    REQUIRE(arrow_info.role == luil::access_role::button);
+    REQUIRE(arrow_info.name == u8"저장 옵션");
+    REQUIRE(arrow_info.expanded == false);
+    REQUIRE(split_page(split_config(true))->children()[0]->children()[1]->accessibility().expanded == true);
+
+    // 앱이 이름을 주면 그 이름이다.
+    luil::split_button_config named { split_config(false) };
+    named.arrow_name = u8"저장 방식";
+    REQUIRE(split_page(std::move(named))->children()[0]->children()[1]->accessibility().name == u8"저장 방식");
+    // 본체 글이 없으면 툴팁이 이름의 대신이고, 화살표 이름도 그것을 따른다.
+    luil::split_button_config iconic { split_config(false) };
+    iconic.look.text = {};
+    iconic.tooltip = u8"저장";
+    const auto iconic_page { split_page(std::move(iconic)) };
+    REQUIRE(iconic_page->children()[0]->children()[0]->accessibility().name == u8"저장");
+    REQUIRE(iconic_page->children()[0]->children()[1]->accessibility().name == u8"저장 옵션");
+}
+
+TEST_CASE("A split button's body invokes and its arrow expands through an absolute message", "[ui][access][split-button]")
+{
+    const auto closed_page { split_page(split_config(false)) };
+    const std::vector<const luil::ui_element*> closed { luil::access_children(*closed_page) };
+    // 본체는 눌리기만 한다. 펼치기는 할 수 없는 일이다.
+    REQUIRE(tag_of(luil::plan_access_request(*closed[0], { luil::access_command::invoke })) == u8"save");
+    REQUIRE(luil::plan_access_request(*closed[0], { luil::access_command::expand }).has_value() == false);
+
+    // 화살표의 펼치기는 목표 상태를 실은 절대 메시지다. 같은 명령이 거듭 와도 같은 상태가 실린다.
+    REQUIRE(state_of(luil::plan_access_request(*closed[1], { luil::access_command::expand })).state == true);
+    REQUIRE(state_of(luil::plan_access_request(*closed[1], { luil::access_command::expand })).state == true);
+    require_nothing_to_do(luil::plan_access_request(*closed[1], { luil::access_command::collapse }));
+
+    const auto open_page { split_page(split_config(true)) };
+    const std::vector<const luil::ui_element*> open { luil::access_children(*open_page) };
+    REQUIRE(state_of(luil::plan_access_request(*open[1], { luil::access_command::collapse })).state == false);
+    REQUIRE(state_of(luil::plan_access_request(*open[1], { luil::access_command::collapse })).state == false);
+    require_nothing_to_do(luil::plan_access_request(*open[1], { luil::access_command::expand }));
+
+    // 절대 메시지가 없으면 화살표는 읽기만 서고 쓰기는 거절된다.
+    luil::split_button_config read_only { split_config(false) };
+    read_only.set_open = nullptr;
+    const auto read_only_page { split_page(std::move(read_only)) };
+    const std::vector<const luil::ui_element*> frozen { luil::access_children(*read_only_page) };
+    REQUIRE(frozen[1]->accessibility().expanded == false);
+    REQUIRE(luil::plan_access_request(*frozen[1], { luil::access_command::expand }).has_value() == false);
+}
+
+TEST_CASE("A split button without a body is a single button that reports its open state", "[ui][access][split-button]")
+{
+    luil::split_button_config config { split_config(true) };
+    config.invoke = nullptr;
+    const auto page { split_page(std::move(config)) };
+    const std::vector<const luil::ui_element*> nodes { luil::access_children(*page) };
+    REQUIRE(nodes.size() == 1u);
+    // 한 노드의 단추에 펼침이 붙고 이름은 본체 글이다.
+    const luil::access_info info { nodes[0]->accessibility() };
+    REQUIRE(info.role == luil::access_role::button);
+    REQUIRE(info.name == u8"저장");
+    REQUIRE(info.expanded == true);
+    REQUIRE(state_of(luil::plan_access_request(*nodes[0], { luil::access_command::collapse })).state == false);
 }
 
 TEST_CASE("Only elements a person could reach are execution targets", "[ui][access]")

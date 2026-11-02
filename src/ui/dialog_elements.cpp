@@ -6,6 +6,7 @@
 #include "luil/ui/button_element.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/text_block.h"
+#include "ui/text_button_paint.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_link_element.h"
 
@@ -206,18 +207,93 @@ namespace luil {
         set_bounds(context.slot);
     }
 
+    ui_color text_button_background(const text_button_fill fill, const text_button_state& state, const ui_color_palette& palette) noexcept
+    {
+        const bool down { state.enabled && state.pressed };
+        const bool over { state.enabled && state.hovered };
+        // 채운 버튼의 hover·눌림은 **자기 색 안에서** 움직인다.
+        // 중립색으로 갈아 끼우면 누르는 동안만 주 동작이 아닌 것처럼 보인다.
+        ui_color background { palette.input_background };
+        if (fill == text_button_fill::solid_accent)
+            background = down ? palette.accent_pressed : (over ? palette.accent_hover : palette.accent);
+        else if (fill == text_button_fill::soft_accent)
+        {
+            background = down ? palette.button_pressed_background : (over ? palette.soft_button_hover_background : palette.soft_button_background);
+            // 꺼진 글자(`disabled_foreground`)는 옅은 강조 바탕을 위해 만든 색이 아니다. 고대비는 이 바탕을
+            // 불투명한 highlight로 접어 GrayText가 사라지므로, 꺼진 글자와 짝인 입력 표면에 깐다.
+            if (state.enabled == false && disabled_label_unreadable_on(background, palette.disabled_foreground))
+                background = palette.input_background;
+        }
+        else if (fill == text_button_fill::soft_danger)
+            // 오류색에는 강조색과 달리 hover·soft 짝이 없다.
+            // 팔레트가 역할 하나에 tone을 층 지어 같은 자리를 만든다 — 색을 새로 정하지 않는다.
+            background = down ? palette.danger_button_pressed_background : (over ? palette.danger_button_hover_background : palette.danger_button_background);
+        else if (down)
+            background = palette.button_pressed_background;
+        else if (over)
+            background = palette.button_hover_background;
+        return background;
+    }
+
+    ui_color text_button_label_color(const text_button_config& config, const text_button_fill fill, const text_button_state& state, const ui_color_palette& palette)
+    {
+        const bool hot { state.enabled && (state.pressed || state.hovered) };
+        ui_color label_color { palette.primary_foreground };
+        // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다. 채운 강조와 옅은 강조는 바탕의 밝기가
+        // 달라 글자 역할도 다르다.
+        if (fill == text_button_fill::solid_accent)
+            label_color = palette.accent_foreground;
+        else if (config.visual == text_button_visual::accent)
+            label_color = palette.accent_emphasis_foreground;
+        else if (config.visual == text_button_visual::danger)
+            // 옅은 바탕이라 뜻을 나르는 것은 글자다 — 오류색 그대로 쓴다.
+            label_color = palette.error_accent;
+        else if (config.visual == text_button_visual::link)
+            // 바탕이 없으니 hover를 글자 색이 말한다.
+            label_color = hot ? palette.accent_hover : palette.accent;
+        if (config.label_color)
+            label_color = config.label_color(palette);
+        return state.enabled ? label_color : palette.disabled_foreground;
+    }
+
+    void draw_text_button_label(draw_context& context, const text_button_config& config, const text_button_fill fill, const text_button_state& state, const rect_f& box)
+    {
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        const bool link { config.visual == text_button_visual::link };
+
+        const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.button_text }) };
+        const SkPaint foreground { solid_paint(text_button_label_color(config, fill, state, context.palette)) };
+
+        // 아이콘과 글자를 **한 덩어리로** 가운데에 둔다.
+        // 아이콘만 왼쪽 끝에 붙이면 글이 짧을 때 버튼이 한쪽으로 쏠려 보인다.
+        const float icon { text_button_element::icon_width_for(config) * scale };
+        const float text_width { measure_text(config.text, font) };
+        float left { box.x + (box.width - icon - text_width) / 2.0f };
+        // 덩어리가 버튼보다 넓으면 왼쪽 끝에서 시작해 글을 잘라 낸다.
+        // 가운데 정렬을 그대로 두면 아이콘이 버튼 밖으로 나간다.
+        if (left < box.x)
+            left = box.x;
+
+        if (config.glyph != 0)
+        {
+            const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), text_button_icon_size * scale };
+            draw_centered_glyph(context.canvas, config.glyph, { left, box.y, text_button_icon_size * scale, box.height }, glyph_font, foreground);
+            left += icon;
+        }
+        const float baseline { box.y + centered_text_baseline(font, box.height) };
+        const float drawn { draw_text_within(context.canvas, config.text, left, baseline, box.x + box.width - left, font, foreground) };
+
+        // 밑줄은 **실제로 그려진 폭**만큼이다. 잘린 글 뒤로 밑줄만 뻗지 않는다.
+        if (link && drawn > 0.0f)
+            context.canvas.drawRect(SkRect::MakeXYWH(left, baseline + 2.0f * scale, drawn, scale), foreground);
+    }
+
     void text_button_element::draw(draw_context& context, const interaction_snapshot& interaction) const
     {
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const rect_f box { bounds() };
-        const bool accent { config_.visual == text_button_visual::accent };
-        const bool danger { config_.visual == text_button_visual::danger };
-        const bool link { config_.visual == text_button_visual::link };
-        const bool hot { enabled() && (interaction.pressed == id() || interaction.hovered == id()) };
-        const bool down { enabled() && interaction.pressed == id() };
-        const bool over { enabled() && interaction.hovered == id() };
+        const text_button_state state { .enabled = enabled(), .hovered = interaction.hovered == id(), .pressed = interaction.pressed == id() };
         const text_button_fill fill { text_button_fill_for(config_, enabled()) };
-        const bool solid { fill == text_button_fill::solid_accent };
 
         // link는 바탕을 칠하지 않는다.
         // 상자가 없어야 글 흐름 안에 놓을 수 있고, 그것이 link가 버튼과 갈리는 전부다.
@@ -225,73 +301,14 @@ namespace luil {
         {
             const SkRect body { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
             const float radius { context.metrics.control_corner_radius * scale };
-            // 채운 버튼의 hover·눌림은 **자기 색 안에서** 움직인다.
-            // 중립색으로 갈아 끼우면 누르는 동안만 주 동작이 아닌 것처럼 보인다.
-            ui_color background { context.palette.input_background };
-            if (solid)
-                background = down ? context.palette.accent_pressed : (over ? context.palette.accent_hover : context.palette.accent);
-            else if (fill == text_button_fill::soft_accent)
-            {
-                background = down ? context.palette.button_pressed_background : (over ? context.palette.soft_button_hover_background : context.palette.soft_button_background);
-                // 꺼진 글자(`disabled_foreground`)는 옅은 강조 바탕을 위해 만든 색이 아니다. 고대비는 이 바탕을
-                // 불투명한 highlight로 접어 GrayText가 사라지므로, 꺼진 글자와 짝인 입력 표면에 깐다.
-                if (enabled() == false && disabled_label_unreadable_on(background, context.palette.disabled_foreground))
-                    background = context.palette.input_background;
-            }
-            else if (fill == text_button_fill::soft_danger)
-                // 오류색에는 강조색과 달리 hover·soft 짝이 없다.
-                // 팔레트가 역할 하나에 tone을 층 지어 같은 자리를 만든다 — 색을 새로 정하지 않는다.
-                background = down ? context.palette.danger_button_pressed_background : (over ? context.palette.danger_button_hover_background : context.palette.danger_button_background);
-            else if (down)
-                background = context.palette.button_pressed_background;
-            else if (over)
-                background = context.palette.button_hover_background;
+            ui_color background { text_button_background(fill, state, context.palette) };
             // 선택자는 마지막에 얹고, 그 색은 hover·눌림에도 그대로 남는다.
             if (config_.fill)
                 background = config_.fill(context.palette);
             context.canvas.drawRRect(SkRRect::MakeRectXY(body, radius, radius), solid_paint(background));
         }
 
-        const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.button_text }) };
-        ui_color label_color { context.palette.primary_foreground };
-        // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다. 채운 강조와 옅은 강조는 바탕의 밝기가
-        // 달라 글자 역할도 다르다.
-        if (solid)
-            label_color = context.palette.accent_foreground;
-        else if (accent)
-            label_color = context.palette.accent_emphasis_foreground;
-        else if (danger)
-            // 옅은 바탕이라 뜻을 나르는 것은 글자다 — 오류색 그대로 쓴다.
-            label_color = context.palette.error_accent;
-        else if (link)
-            // 바탕이 없으니 hover를 글자 색이 말한다.
-            label_color = hot ? context.palette.accent_hover : context.palette.accent;
-        if (config_.label_color)
-            label_color = config_.label_color(context.palette);
-        const SkPaint foreground { solid_paint(enabled() ? label_color : context.palette.disabled_foreground) };
-
-        // 아이콘과 글자를 **한 덩어리로** 가운데에 둔다.
-        // 아이콘만 왼쪽 끝에 붙이면 글이 짧을 때 버튼이 한쪽으로 쏠려 보인다.
-        const float icon { icon_width_for(config_) * scale };
-        const float text_width { measure_text(config_.text, font) };
-        float left { box.x + (box.width - icon - text_width) / 2.0f };
-        // 덩어리가 버튼보다 넓으면 왼쪽 끝에서 시작해 글을 잘라 낸다.
-        // 가운데 정렬을 그대로 두면 아이콘이 버튼 밖으로 나간다.
-        if (left < box.x)
-            left = box.x;
-
-        if (config_.glyph != 0)
-        {
-            const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), text_button_icon_size * scale };
-            draw_centered_glyph(context.canvas, config_.glyph, { left, box.y, text_button_icon_size * scale, box.height }, glyph_font, foreground);
-            left += icon;
-        }
-        const float baseline { box.y + centered_text_baseline(font, box.height) };
-        const float drawn { draw_text_within(context.canvas, config_.text, left, baseline, box.x + box.width - left, font, foreground) };
-
-        // 밑줄은 **실제로 그려진 폭**만큼이다. 잘린 글 뒤로 밑줄만 뻗지 않는다.
-        if (link && drawn > 0.0f)
-            context.canvas.drawRect(SkRect::MakeXYWH(left, baseline + 2.0f * scale, drawn, scale), foreground);
+        draw_text_button_label(context, config_, fill, state, box);
     }
 
     text_input_element::text_input_element(const ui_element_id id, text_input_view value, text_input_config config)

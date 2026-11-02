@@ -193,8 +193,12 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/combo_box_element.h"
     ui/dropdown_element.cpp
     "${public_headers}/ui/dropdown_element.h"
+    ui/field_popup.cpp
+    "${public_headers}/ui/field_popup.h"
     ui/slider_element.cpp
-    "${public_headers}/ui/slider_element.h")
+    "${public_headers}/ui/slider_element.h"
+    ui/split_button_element.cpp
+    "${public_headers}/ui/split_button_element.h")
 
 # 보여 주기만 하는 element다 (글·그림·상태 표시).
 luil_add_source_filter(luil_core_files "ui/content"
@@ -204,6 +208,11 @@ luil_add_source_filter(luil_core_files "ui/content"
     "${public_headers}/ui/badge_element.h"
     ui/badge_paint.cpp
     ui/badge_paint.h
+    ui/info_bar_element.cpp
+    "${public_headers}/ui/info_bar_element.h"
+    ui/severity_paint.cpp
+    ui/severity_paint.h
+    "${public_headers}/ui/severity.h"
     ui/image_element.cpp
     "${public_headers}/ui/image_element.h"
     ui/markdown_element.cpp
@@ -293,6 +302,7 @@ luil_add_source_filter(luil_core_files "ui/lists"
 luil_add_source_filter(luil_core_files "ui/overlays"
     ui/dialog_elements.cpp
     "${public_headers}/ui/dialog_elements.h"
+    ui/text_button_paint.h
     ui/number_input.cpp
     "${public_headers}/ui/number_input.h"
     ui/command_palette.cpp
