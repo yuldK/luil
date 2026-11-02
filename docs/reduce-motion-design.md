@@ -94,13 +94,13 @@ logic thread의 앱이 이 값을 받는 길을 어디에 두는가.
 
 ### 4. Win32 변경을 누가 고치나
 
-logic thread로 알리려면 `src/win32/win32_window.cpp`의 두 곳을 고쳐야 한다(아래 플랫폼 절). 이 파일은 같은 시기에 작업표시줄 연동과 비공개 helper 추출이 크게 고치는 파일이다.
+logic thread로 알리려면 `src/win32/win32_window.cpp`의 두 곳을 고쳐야 한다(아래 플랫폼 절). 계획은 이 파일을 고치는 노드를 줄 4에만 둔다. 같은 라운드의 작업표시줄 노드(taskbar)가 같은 `WM_SETTINGCHANGE` case에서 `publish_popup_support()`를 `publish_platform()`으로 바꾼다.
 
-- a. 이 노드가 직접 고친다(약 10줄). Win32까지 한 번에 끝난다. 대가: 두 작업이 같은 파일의 가까운 구간을 고쳐 합칠 때 충돌할 수 있다. helper 추출이 이 구간을 옮기면 손으로 맞춘다.
-- b. 이 노드는 core·Android·데모·test까지 하고, Win32 두 곳은 `win32_window.cpp`를 고치는 플랫폼 작업이 이 문서의 변경대로 함께 고친다. 대가: 그 작업이 들어올 때까지 Windows의 `reduce_motion`은 거짓이다. 앱이 든 값이 Windows에서 움직임 줄이기를 지키지 못하는 것은 지금과 같다.
-- c. 노드 전체를 플랫폼 작업으로 옮긴다. 대가: Android 쪽 이득이 미뤄지고, 스프링이 이 필드를 약속으로만 쓰고 먼저 나간다.
+- a. 이 노드가 직접 고친다(약 10줄). Win32까지 한 번에 끝난다. 대가: 계획의 파일 규칙에 어긋나고, 같은 case를 고치는 taskbar와 합칠 때 충돌한다.
+- b. 이 노드는 core·Android·데모·test까지 하고, Win32 두 곳은 이 문서의 변경대로 taskbar가 함께 고친다. 대가: taskbar가 들어올 때까지 Windows의 `reduce_motion`은 거짓이다. 앱이 든 값이 Windows에서 움직임 줄이기를 지키지 못하는 것은 지금과 같다.
+- c. 노드 전체를 줄 4로 옮긴다. 대가: Android 쪽 이득이 미뤄지고, 스프링이 이 필드를 약속으로만 쓰고 먼저 나간다.
 
-권장은 b다. 대가는 Windows 연결이 늦어지는 것이고, 변경이 이 문서에 그대로 적혀 있어 옮기는 쪽이 새로 설계할 것은 없다. 승인 필요.
+계획이 `win32_window.cpp`를 줄 4에 두었으므로 b로 간다. 받는 노드는 같은 라운드의 taskbar다. 대가는 Windows 연결이 늦어지는 것이고, 변경이 이 문서에 그대로 적혀 있어 taskbar가 새로 설계할 것은 없다. 권장대로 진행.
 
 ### 5. 앱이 값을 쓰는 helper
 
@@ -134,7 +134,7 @@ if (was_reduced != reduce_motion_)
 - 레이어드 창이 크기 변경을 미룬 동안에도 `make_window_metrics_message`가 가장 새 미룬 배치의 크기를 싣는다. 크기가 어긋난 metrics는 나가지 않는다. 메시지의 표는 inbox 순서라, 뒤따라 보내는 이 메시지가 앞선 미룬 배치의 표 비교(`deferred_placements::take_ready`)를 흔들지 않는다.
 - host가 아직 없을 때(`host_ == nullptr`)의 변경은 `post_window_metrics`가 버린다. 첫 metrics가 그때의 값을 싣는다.
 - 보조 창·popup은 같은 `reduce_motion_`을 `apply_frame_appearance`로 받는다. 따로 할 일이 없다.
-- 이 두 곳의 소유는 결정 4가 정한다.
+- 이 두 곳은 taskbar(줄 4 R1)가 낸다(결정 4).
 
 ### Android
 
@@ -159,7 +159,7 @@ if (was_reduced != reduce_motion_)
 
 - **spring**: 이 노드가 세운 `window_metrics::reduce_motion`과 `motion_duration`을 쓴다. `spring_to`는 참이면 목표에 정지한 값(속도 0)을 돌려주는 길을 같은 이름의 인자로 연다. 놓은 속도(`drag_velocity`)가 있어도 참이면 쓰지 않는다. 모양은 스프링 설계가 정한다.
 - **page_anim**: 전환 element가 UI thread에서 `draw_context::reduce_motion`을 읽어 끝 상태를 바로 그리면 앱은 몰라도 된다. 앱이 이전 tree를 쥐고 전환을 시작하는 쪽은 `window_metrics::reduce_motion`이 참이면 전환을 시작하지 않는다. 이전 tree를 쥘 이유가 없다.
-- **`win32_window.cpp`를 고치는 플랫폼 작업**(결정 4가 b일 때): 위 Win32 절의 두 변경과 `tests/win32_window_tests.cpp`의 test를 함께 맡는다.
+- **taskbar**(줄 4 R1, 결정 4): 위 Win32 절의 두 변경과 `tests/win32_window_tests.cpp`의 test 둘을 `publish_platform` 변경과 같은 커밋 묶음으로 낸다. 같은 `WM_SETTINGCHANGE` case를 고치는 노드가 맡는다. 이 노드는 `win32_window.cpp`를 고치지 않는다.
 - **앱이 시간 기반 값을 소유하는 노드 모두**: 새 값의 시작 길이를 `motion_duration`으로 거친다. 도는 중에 바뀌면 끝값으로 붙인다.
 
 ## 확인
@@ -169,15 +169,16 @@ if (was_reduced != reduce_motion_)
 - `tests/window_metrics_tests.cpp`(추가): `make_window_metrics`가 만든 값의 `reduce_motion`은 거짓이다. 이 칸만 다른 두 metrics는 같지 않다. `make_metrics_message`를 넓힌 delegate는 참인 값을 그대로 받고, 세 값짜리만 넓힌 delegate는 지금처럼 돈다(기존 test가 지킨다).
 - `tests/transition_tests.cpp`(추가, `STATIC_REQUIRE`): `motion_duration`은 참이면 0이고 거짓이면 그대로다. 참인 길이로 시작한 `transition_to`는 지금 값에서 출발해도 어느 시각에 물어도 목표값이고, `transition_finished`가 참이며 `transition_next_update`가 비어 있다.
 - 기존 `tests/ui_foundation_tests.cpp`(spinner), `tests/tab_bar_style_tests.cpp`, `tests/raster_draw_tests.cpp`(`derive_draw_context`)는 무변경으로 통과해야 한다.
-- 결정 4가 b면 Win32 몫이다. `tests/win32_window_tests.cpp`는 첫 metrics의 `reduce_motion`이 `SystemParametersInfoW`로 읽은 값과 같은지 본다. `on_started`에서 같은 창에 `WM_SETTINGCHANGE`를 보내고 값이 그대로면 delegate의 `make_metrics_message` 호출이 늘지 않는지 본다. OS 설정을 바꾸는 test는 두지 않는다.
+- Win32 몫은 taskbar가 낸다(결정 4). `tests/win32_window_tests.cpp`는 첫 metrics의 `reduce_motion`이 `SystemParametersInfoW`로 읽은 값과 같은지 본다. `on_started`에서 같은 창에 `WM_SETTINGCHANGE`를 보내고 값이 그대로면 delegate의 `make_metrics_message` 호출이 늘지 않는지 본다. OS 설정을 바꾸는 test는 두지 않는다.
 - Android의 JNI 읽기는 자동 test가 없다. 기기 test 실행기(`app_process`)에는 앱 Context가 없다.
 - `scripts/check_source_style.ps1`. 새 공개 헤더가 없어 우산 헤더 검사는 그대로다.
 
 데모. 모바일 데모의 기기 페이지(`examples/mobile_demo/device_page.cpp`)에 칸을 더한다.
 
 - `motion-heading`("움직임 줄이기")과 label `motion-state`("켜짐 · 도는 표시가 멈춘다" / "꺼짐 · 도는 표시가 돈다"), 그 아래 `spinner_element` 하나다. 값은 `window_metrics_intent`의 꼬리 칸으로 `build`에 온다(`common.h`, `app.cpp`의 `make_metrics_message`).
+- 자리는 페이지 머리다. `build`의 "창 폭" 구역(`window-note`와 그 뒤 간격) 바로 뒤, "화면 방향" 앞에 둔다. 같은 파일에 같은 라운드의 다른 줄이 칸을 더한다. taskbar의 `capabilities.taskbar` 줄은 햅틱 구역 뒤 "로컬 네트워크 권한" 앞에 놓이고, file_watch의 모바일 칸은 이 파일이 아닌 새 페이지(`files_page`)로 간다. 자리가 멀어 병합이 겹치지 않는다.
 - 모바일 데모는 Windows 창으로도 뜬다(`examples/mobile_demo/main.cpp`). Win32 변경이 서면 `luil-uia`로 `motion-state`를 되읽는다. Android에는 접근성 계층이 없어 사람이 화면으로 읽는다.
-- 데스크톱 데모(`examples/demo`)는 건드리지 않는다. 같은 값을 모바일 데모가 Windows에서도 보이고, `demo_main.cpp`는 스프링 시연이 고치는 공용 파일이다.
+- 데스크톱 데모(`examples/demo`)는 건드리지 않는다. 같은 값을 모바일 데모가 Windows에서도 보이고, `demo_main.cpp`는 스프링 시연이 고치는 공용 파일이고 줄 4의 file_watch·taskbar도 고친다.
 
 사람 확인. 시스템 설정을 바꾸는 일이라 사람이 한다.
 
