@@ -3,6 +3,7 @@
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
 #include "mobile_demo/ink_page.h"
+#include "mobile_demo/inspector_page.h"
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
@@ -10,6 +11,7 @@
 #include "mobile_demo/zoom_page.h"
 
 #include "luil/ui/split_button_element.h"
+#include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
 
@@ -17,6 +19,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -1298,4 +1301,164 @@ TEST_CASE("The ink page buttons add sample strokes, switch tools and let fingers
     stroke_ink(page, luil::pointer_device::touch, { { box.x + 20.0f, y }, { box.x + 120.0f, y } });
     REQUIRE(ink_text(page, u8"ink-count") == u8"획 1개");
     REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 손가락, 압력 없음");
+}
+
+namespace {
+    // 폭 400의 휴대폰 화면에서 조립해 배치한 검사기 페이지다 (배율 1). 높이는 페이지 내용 높이다.
+    [[nodiscard]] luil::ui_tree inspector_tree(mobile_demo::inspector_page& page)
+    {
+        mobile_demo::page_content content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] std::u8string inspector_label(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] std::u8string inspector_button(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const button { tree.find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+
+    [[nodiscard]] std::u8string inspector_number(const std::size_t value)
+    {
+        const std::string digits { std::to_string(value) };
+        return std::u8string { digits.begin(), digits.end() };
+    }
+
+    // 손가락 탭이 단추에서 낸 앱 메시지를 페이지에 돌려준다. 돌려준 수를 돌려준다.
+    int tap_inspector_button(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const auto tree { std::make_shared<const luil::ui_tree>(inspector_tree(page)) };
+        const luil::ui_element* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        int delivered { 0 };
+        for (const luil::input_action& action : controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, after_milliseconds(time_point {}, 40) }))
+        {
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        }
+        return delivered;
+    }
+}
+
+TEST_CASE("The inspector page starts off and counts the elements of its own tree", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    const luil::ui_tree tree { inspector_tree(page) };
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: focused");
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: 없음");
+    const std::size_t elements { luil::inspect_nodes(tree).size() };
+    REQUIRE(elements > 20);
+    REQUIRE(inspector_label(page, u8"inspector-count") == u8"요소 " + inspector_number(elements) + u8"개");
+    // 꺼져 있으면 frame에 켜지 않은 설정이 실린다.
+    REQUIRE(page.config().enabled == false);
+}
+
+TEST_CASE("The inspector buttons switch it on, move the ancestor level and toggle the extras", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 켬");
+    REQUIRE(page.config().enabled);
+    REQUIRE(page.config().pick == luil::inspector_pick::focused);
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 2");
+    REQUIRE(page.config().ancestor_levels == 2);
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    // 0 아래로는 내려가지 않는다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 끔");
+    REQUIRE(tap_inspector_button(page, u8"inspector-outline") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 켬");
+    REQUIRE(page.config().outline_all);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 끔");
+    REQUIRE(tap_inspector_button(page, u8"inspector-palette") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
+    REQUIRE(page.config().show_palette);
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
+    REQUIRE(page.config().enabled == false);
+}
+
+TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    // 선택이 없을 때 다음은 뿌리(페이지 기둥)다. 집는 길이 선택으로 바뀐다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: selected");
+    REQUIRE(page.config().pick == luil::inspector_pick::selected);
+    REQUIRE(page.config().selected == luil::ui_element_id { mobile_demo::kind_layout, u8"inspector-page" });
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-child") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-help");
+    REQUIRE(tap_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-state");
+    REQUIRE(tap_inspector_button(page, u8"inspector-prev") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-help");
+    REQUIRE(tap_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+    // 뿌리 위로는 갈 곳이 없어 선택이 그대로다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+
+    // 끄고 다시 켜면 처음 모습이다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: 없음");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: focused");
+}
+
+TEST_CASE("The inspector names the demo kinds and reads the sample's inner padding", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    const luil::inspector_config config { page.config() };
+    REQUIRE(luil::kind_display_name(mobile_demo::kind_layout, config) == u8"layout");
+    REQUIRE(luil::kind_display_name(mobile_demo::kind_text, config) == u8"text");
+    REQUIRE(luil::kind_display_name(luil::ui_element_kind::ink_canvas, config) == u8"ink_canvas");
+
+    const luil::ui_tree tree { inspector_tree(page) };
+    const luil::ui_element* const stack { tree.find({ mobile_demo::kind_layout, u8"inspector-sample-stack" }) };
+    REQUIRE(stack != nullptr);
+    const std::u8string text { luil::describe_element(tree, *stack, 1.0f, config) };
+    REQUIRE(text.starts_with(u8"layout:inspector-sample-stack  "));
+    // 견본 stack의 안쪽 여백 위 8, 오른쪽 12, 아래 8, 왼쪽 12다.
+    REQUIRE(text.find(u8"  inset 8 12 8 12\n") != std::u8string::npos);
+
+    // 조상 한 단계를 올리면 견본 stack에서 그것을 감싼 panel이 집힌다.
+    luil::inspector_config picking { config };
+    picking.enabled = true;
+    picking.pick = luil::inspector_pick::selected;
+    picking.selected = stack->id();
+    picking.ancestor_levels = 1;
+    const luil::interaction_snapshot interaction {};
+    const luil::ui_element* const picked { luil::pick_inspected(tree, interaction, picking) };
+    REQUIRE(picked != nullptr);
+    REQUIRE(picked->id() == luil::ui_element_id { mobile_demo::kind_layout, u8"inspector-sample" });
 }

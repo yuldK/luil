@@ -62,6 +62,9 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/groups_page.h
     demo/images_page.cpp
     demo/images_page.h
+    demo/inspector_page.cpp
+    demo/inspector_page.h
+    demo/inspector_state.h
     demo/lists_page.cpp
     demo/lists_page.h
     demo/network_page.cpp

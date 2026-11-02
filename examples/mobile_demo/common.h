@@ -102,6 +102,7 @@ namespace mobile_demo {
     inline constexpr std::u8string_view page_popups { u8"popups" };
     inline constexpr std::u8string_view page_zoom { u8"zoom" };
     inline constexpr std::u8string_view page_ink { u8"ink" };
+    inline constexpr std::u8string_view page_inspector { u8"inspector" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
     inline constexpr std::u8string_view page_device { u8"device" };
     inline constexpr std::u8string_view page_sheets { u8"sheets" };

@@ -41,6 +41,7 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 | popup 창의 모서리와 경계 고르기 (Windows 11 둥근 창) | ui_popup::corner, border, popup_corner_radius, menu_popup_config::corner | [메뉴](../examples/demo/popups_page.cpp) |
 | 탭 모양·닫기 단추·상태 표시를 앱 스타일로 고르기 | ui_style::tab_bar, arrange_context::style | [탭](../examples/demo/tabs_page.cpp) |
 | 견본 막대·가운데 버튼 닫기·줄이기·한 탭씩 넘기기·새 탭 꼬리 | tab_bar_config::preview, middle_click_close, min_tab_width, overflow_mode, trailing | [탭](../examples/demo/tabs_page.cpp) |
+| 실행 중 요소 검사기(Ctrl+Shift+I)와 tree 글 | ui_frame::inspector, inspector_config, describe_element, dump_tree | [검사기](../examples/demo/inspector_page.cpp) |
 
 공개 헤더는 luil/ui/theme_picker_element.h, luil/ui/check_element.h, luil/app/menu_popup.h다.
 소스 포함과 설치 패키지 모두 기존의 luil::luil 링크 대상으로 사용할 수 있다.

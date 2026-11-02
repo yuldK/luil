@@ -14,6 +14,7 @@
 #include "mobile_demo/files_page.h"
 #include "mobile_demo/groups_page.h"
 #include "mobile_demo/ink_page.h"
+#include "mobile_demo/inspector_page.h"
 #include "mobile_demo/lists_page.h"
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
@@ -71,6 +72,7 @@ namespace mobile_demo {
         popups_page popups_ {};
         zoom_page zoom_ {};
         ink_page ink_ {};
+        inspector_page inspector_ {};
         theme_page theme_ {};
         device_page device_ {};
         sheets_page sheets_ {};

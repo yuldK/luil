@@ -139,7 +139,7 @@ target_sources(luil_core_tests PRIVATE
     dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
-# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지의 상태 줄, 파일 감시 묶음의 표시도
+# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지와 검사기 페이지의 상태 줄, 파일 감시 묶음의 표시도
 # 서버·감시자 없이 검증한다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
 target_sources(luil_core_tests PRIVATE
@@ -147,6 +147,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/device_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/files_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/ink_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/inspector_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
@@ -160,6 +161,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/workbench_page.cpp"
     workbench_page_tests.cpp
     "${PROJECT_SOURCE_DIR}/examples/demo/gallery_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/inspector_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
