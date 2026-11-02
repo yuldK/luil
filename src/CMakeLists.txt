@@ -140,6 +140,7 @@ luil_add_source_filter(luil_core_files "ui/drawing"
     ui/text_block.cpp
     "${public_headers}/ui/text_block.h"
     "${public_headers}/ui/layout_metrics.h"
+    "${public_headers}/ui/spring.h"
     "${public_headers}/ui/transition.h")
 
 # 자식을 담고 자리를 정하는 element다.

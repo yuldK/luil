@@ -29,6 +29,7 @@ namespace {
         std::optional<luil::sheet_dismiss_reason> dismiss {};
         std::optional<float> scroll {};
         std::optional<std::u8string> click {};
+        std::optional<luil::sheet_release> release {};
     };
 
     [[nodiscard]] std::vector<sheet_event> events_in(const std::vector<luil::input_action>& actions)
@@ -51,6 +52,14 @@ namespace {
         config.dismiss = [](const luil::sheet_dismiss_reason reason) { return luil::make_app_action(sheet_event { .dismiss = reason }); };
         config.drag = [](const float delta) { return luil::make_app_action(sheet_event { .drag = delta }); };
         config.settle = [](const luil::sheet_detent detent) { return luil::make_app_action(sheet_event { .settle = detent }); };
+        return config;
+    }
+
+    // `release`도 단 설정이다. 놓은 결과가 `settle`·`dismiss(drag)` 대신 이것으로만 나간다.
+    [[nodiscard]] luil::sheet_host_config release_config(const luil::sheet_kind kind = luil::sheet_kind::bottom)
+    {
+        luil::sheet_host_config config { sheet_config(kind) };
+        config.release = [](const luil::sheet_release& release) { return luil::make_app_action(sheet_event { .release = release }); };
         return config;
     }
 
@@ -166,6 +175,20 @@ namespace {
         for (const sheet_event& event : events)
             total += event.drag.value_or(0.0f);
         return total;
+    }
+
+    // 놓은 결과로 나간 release다. 놓기 하나가 낸 이벤트의 마지막이어야 한다.
+    [[nodiscard]] luil::sheet_release released(const std::vector<sheet_event>& events)
+    {
+        REQUIRE(events.empty() == false);
+        REQUIRE(events.back().release.has_value());
+        // release가 있으면 settle·dismiss(drag)는 나가지 않는다.
+        for (const sheet_event& event : events)
+        {
+            REQUIRE(event.settle.has_value() == false);
+            REQUIRE(event.dismiss.has_value() == false);
+        }
+        return *events.back().release;
     }
 }
 
@@ -319,6 +342,161 @@ TEST_CASE("A sheet does not fling on a pause, a jitter or a far away release", "
         REQUIRE(events.size() == 1u);
         REQUIRE(events[0].settle == luil::sheet_detent::half);
     }
+}
+
+TEST_CASE("A release callback replaces settle and dismiss and hands over the height and velocity", "[ui][sheet][release]")
+{
+    // 반 높이 시트의 손잡이를 아래로 튕긴다. 닫는 쪽이어도 dismiss(drag)가 아니라 release 하나가 나가고, 닫을지는 앱이 정한다.
+    // 속도는 배율 2에서도 논리 픽셀이고 높이가 줄어드니 음수다.
+    for (const float scale : { 1.0f, 2.0f })
+    {
+        CAPTURE(scale);
+        const auto config { release_config() };
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config, {}, 400.0f * scale, 800.0f * scale, {}, scale));
+        static_cast<void>(controller.process(touch_press(200.0f * scale, 410.0f * scale, 0)));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f * scale, (410.0f + 25.0f * static_cast<float>(step)) * scale, 10 * step)));
+        const auto events { events_in(controller.process(touch_release(200.0f * scale, 510.0f * scale, 50))) };
+        REQUIRE(events.size() == 1u);
+        const luil::sheet_release release { released(events) };
+        REQUIRE(release.settle == luil::sheet_settle { luil::sheet_detent::half, true });
+        REQUIRE(release.visible_height == 400.0f);
+        REQUIRE(release.target_height == 0.0f);
+        REQUIRE(release.velocity == Catch::Approx(-2500.0f).margin(1.0f));
+    }
+}
+
+TEST_CASE("The handle, the sheet body and the mouse report the same release", "[ui][sheet][release]")
+{
+    const auto config { release_config() };
+    const auto expect_fling_up = [](const luil::sheet_release& release) {
+        // 반에서 위로 튕기면 전체 높이다. 높이는 늘어나니 속도가 양수다.
+        REQUIRE(release.settle == luil::sheet_settle { luil::sheet_detent::full, false });
+        REQUIRE(release.visible_height == 400.0f);
+        REQUIRE(release.target_height == 776.0f);
+        REQUIRE(release.velocity == Catch::Approx(2000.0f).margin(1.0f));
+    };
+    // 터치로 손잡이를 끈다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 420.0f, 0)));
+        for (int step { 1 }; step <= 5; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 420.0f - 20.0f * static_cast<float>(step), 10 * step)));
+        expect_fling_up(released(events_in(controller.process(touch_release(200.0f, 320.0f, 60)))));
+    }
+    // 터치로 목록 없는 시트 몸을 끈다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 600.0f, 0)));
+        for (int step { 1 }; step <= 5; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 600.0f - 20.0f * static_cast<float>(step), 10 * step)));
+        expect_fling_up(released(events_in(controller.process(touch_release(200.0f, 500.0f, 60)))));
+    }
+    // 마우스로 손잡이를 끈다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 200.0f, 420.0f, luil::pointer_button::left, at(0) }));
+        for (int step { 1 }; step <= 5; ++step)
+            static_cast<void>(controller.process(luil::pointer_moved_event { 200.0f, 420.0f - 20.0f * static_cast<float>(step), at(10 * step) }));
+        expect_fling_up(released(events_in(controller.process(luil::pointer_released_event { 200.0f, 320.0f, luil::pointer_button::left, at(60) }))));
+    }
+}
+
+TEST_CASE("A release without speed reports zero velocity", "[ui][sheet][release]")
+{
+    const auto config { release_config() };
+    const auto expect_still = [](const std::vector<sheet_event>& events) {
+        const luil::sheet_release release { released(events) };
+        REQUIRE(release.velocity == 0.0f);
+        REQUIRE(release.settle == luil::sheet_settle { luil::sheet_detent::half, false });
+        REQUIRE(release.visible_height == 400.0f);
+        REQUIRE(release.target_height == 400.0f);
+    };
+    // 빠르게 끌다 멈추고 200ms 뒤에 놓았다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 410.0f + 25.0f * static_cast<float>(step), 10 * step)));
+        expect_still(events_in(controller.process(touch_release(200.0f, 510.0f, 240))));
+    }
+    // 시스템이 접촉을 거뒀다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 410.0f + 25.0f * static_cast<float>(step), 10 * step)));
+        expect_still(events_in(controller.process(luil::pointer_cancelled_event { luil::pointer_device::touch, 1, {}, at(50) })));
+    }
+    // 입력 큐가 넘쳐 몸짓을 거뒀다.
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(sheet_tree(config));
+        static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+        for (int step { 1 }; step <= 4; ++step)
+            static_cast<void>(controller.process(touch_move(200.0f, 410.0f + 25.0f * static_cast<float>(step), 10 * step)));
+        expect_still(events_in(controller.cancel_dropped_gestures()));
+    }
+}
+
+TEST_CASE("A release reports the height including the last move and picks the stop from it", "[ui][sheet][release]")
+{
+    for (const float scale : { 1.0f, 2.0f })
+        for (const bool upward : { false, true })
+        {
+            CAPTURE(scale, upward);
+            auto config { release_config() };
+            luil::interaction_controller controller {};
+            const auto publish = [&] { controller.set_tree(sheet_tree(config, {}, 400.0f * scale, 800.0f * scale, {}, scale)); };
+            publish();
+            const float start { upward ? 600.0f : 500.0f };
+            const float direction { upward ? -1.0f : 1.0f };
+            static_cast<void>(controller.process(touch_press(200.0f * scale, start * scale, 0)));
+            static_cast<void>(controller.process(touch_move(200.0f * scale, (start + direction * 20.0f) * scale, 40)));
+            config.drag_offset = direction * 20.0f;
+            publish();
+            const float offset { upward ? -178.0f : 190.0f };
+            static_cast<void>(controller.process(touch_move(200.0f * scale, (start + offset) * scale, 900)));
+            config.drag_offset = offset;
+            publish();
+            // 뗌의 마지막 이동 20은 아직 tree에 실리지 않았다. 보이는 높이는 그것까지 더한 값이다.
+            const auto events { events_in(controller.process(touch_release(200.0f * scale, (start + offset + direction * 20.0f) * scale, 1200))) };
+            REQUIRE(events.size() == 2u);
+            REQUIRE(events[0].drag == direction * 20.0f);
+            const luil::sheet_release release { released(events) };
+            REQUIRE(release.visible_height == 400.0f - offset - direction * 20.0f);
+            if (upward)
+            {
+                REQUIRE(release.settle == luil::sheet_settle { luil::sheet_detent::full, false });
+                REQUIRE(release.target_height == 776.0f);
+            }
+            else
+            {
+                REQUIRE(release.settle.dismiss);
+                REQUIRE(release.target_height == 0.0f);
+            }
+            REQUIRE(release.velocity == 0.0f);
+        }
+}
+
+TEST_CASE("A sheet without a release callback keeps settling and dismissing as before", "[ui][sheet][release]")
+{
+    const auto config { sheet_config() };
+    luil::interaction_controller controller {};
+    controller.set_tree(sheet_tree(config));
+    static_cast<void>(controller.process(touch_press(200.0f, 410.0f, 0)));
+    for (int step { 1 }; step <= 4; ++step)
+        static_cast<void>(controller.process(touch_move(200.0f, 410.0f + 25.0f * static_cast<float>(step), 10 * step)));
+    const auto events { events_in(controller.process(touch_release(200.0f, 510.0f, 50))) };
+    REQUIRE(events.size() == 1u);
+    REQUIRE(events[0].dismiss == luil::sheet_dismiss_reason::drag);
+    REQUIRE(events[0].release.has_value() == false);
 }
 
 TEST_CASE("Dragging the handle down past half closes the sheet", "[ui][sheet]")

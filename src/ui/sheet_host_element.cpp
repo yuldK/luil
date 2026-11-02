@@ -154,9 +154,17 @@ namespace luil {
         };
 
         // 놓은 자리에서 낼 메시지다. 닫는 쪽이 가까우면 닫힘, 아니면 가장 가까운 멈춤점이다.
+        // `velocity`는 놓은 순간의 속도다 (초당 논리 픽셀, 아래가 양수).
         [[nodiscard]] input_action release_action(const sheet_host_config& config, const float height, const float velocity)
         {
             const sheet_settle settle { settle_sheet(config, height, velocity) };
+            if (config.release)
+            {
+                // 앱이 움직임을 이어 짜도록 놓은 순간의 높이와 속도를 건넨다. 속도는 높이의 방향으로 바꾼다 (아래가 양수 → 높아지는 쪽이 양수).
+                const float target { settle.dismiss ? 0.0f : sheet_detent_height(config, settle.detent, height) };
+                const float rising { std::isfinite(velocity) && velocity != 0.0f ? -velocity : 0.0f };
+                return config.release(sheet_release { settle, sheet_visible_height(config, height), target, rising });
+            }
             if (settle.dismiss && config.dismiss)
                 return config.dismiss(sheet_dismiss_reason::drag);
             if (config.settle)

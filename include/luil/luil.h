@@ -72,6 +72,7 @@
 #include "luil/ui/slider_element.h"
 #include "luil/ui/spinner_element.h"
 #include "luil/ui/split_handle_element.h"
+#include "luil/ui/spring.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/strip_element.h"
 #include "luil/ui/tab_bar_element.h"
