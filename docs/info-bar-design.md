@@ -33,7 +33,7 @@ using toast_severity = ui_severity;  // 옛 이름이다. toast_severity::info �
 ```
 
 ```cpp
-// include/luil/ui/info_bar_element.h
+// include/luil/ui/info_bar_element.h (severity.h와 text_block.h를 include한다. 비공개 배치 결과가 줄 구간을 든다)
 inline constexpr float info_bar_minimum_height { 40.0f };  // 논리 픽셀
 inline constexpr float info_bar_close_size { 24.0f };
 // 동작 단추를 옆에 둘 때 글에 남아야 하는 폭이다. 모자라면 단추가 글 아래로 간다.
@@ -146,14 +146,14 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
 
 **2. 심각도 타입과 색·글리프 helper.** 질문: 심각도 타입과 색·글리프 helper를 어디에 두는가.
 
-- 길 a: 새 공개 `ui_severity`와 비공개 `severity_paint.h`. `toast_severity`는 별칭으로 남긴다. 되는 것: 막대·토스트·msg_box가 한 타입과 한 그림을 쓴다. 별칭이라 데모 호출부와 [theming.md](concepts/theming.md)의 링크가 그대로 선다. 대가: 같은 타입에 이름이 둘 남는다. 별칭을 언제 지울지는 정하지 않았다.
+- 길 a: 새 공개 `ui_severity`와 비공개 `severity_paint.h`. `toast_severity`는 별칭으로 남긴다. 되는 것: 막대·토스트·msg_box가 한 타입과 한 그림을 쓴다. 별칭이라 데모 호출부가 그대로 서고, [theming.md](concepts/theming.md)의 링크는 새 이름으로 옮겼다. 대가: 같은 타입에 이름이 둘 남는다. 별칭을 언제 지울지는 정하지 않았다.
 - 길 b: `toast_severity`를 그대로 쓰고 막대가 `toast_element.h`를 include한다. 되는 것: 이름도 파일도 그대로다. 대가: 막대와 msg_box의 설정이 토스트의 이름과 헤더에 기댄다.
 - 길 c: 막대에 복제한다. 되는 것: 다른 파일을 건드리지 않는다. 대가: 고대비 규칙이 갈라진다.
 - 권장: a. 이름만 바뀌고 동작은 같다. 대가: 공개 헤더 하나와 공개 타입 이름 하나가 늘고, 옛 이름은 별칭으로 남는다. 권장대로 진행.
 
 **3. 막대를 짓는 방식.** 질문: 막대를 어떻게 짓는가.
 
-- 길 a: `info_bar_element` 한 클래스와 정적 `measure`. 되는 것: 폭에서 높이를 한 곳이 답한다. 데스크톱 데모는 `page_layout::add`의 `stack_item::fit`으로, 모바일 데모는 `page_column`이 높이만 받으므로 `measure`의 높이로 담는다. 대가: 클래스 하나가 그리기와 두 단추의 자리를 모두 안다.
+- 길 a: `info_bar_element` 한 클래스와 정적 `measure`. 되는 것: 폭에서 높이를 한 곳이 답한다. 데스크톱 데모는 `stack_item`의 맞춤(`fit`)으로 담되 `page_layout`이 페이지 높이를 `length`로 세므로 `measure`의 높이를 `length`로도 주고, 모바일 데모는 `page_column`이 높이만 받으므로 `measure`의 높이로 담는다. 대가: 클래스 하나가 그리기와 두 단추의 자리를 모두 안다.
 - 길 b: `make_info_bar`가 stack을 조립한다. 되는 것: 클래스가 늘지 않는다. 대가: 위 문제의 까닭으로 줄 바뀐 높이를 답하지 못한다. 앱이 높이를 센다.
 - 길 c: 부품(글리프 칸, 본문)을 공개해 앱이 조립한다. 되는 것: 모양을 앱이 마음대로 짠다. 대가: 같은 문제를 앱마다 푼다.
 - 권장: a. 폭에서 높이를 한 곳이 답한다. 대가: 클래스 하나가 그리기와 두 단추의 자리를 모두 안다. 권장대로 진행.
@@ -222,7 +222,7 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
 - `tests/ui_element_tests.cpp`: 라이브러리 kind의 `last[]`에 앞 노드 분할 버튼의 마지막 kind(`split_button_arrow`)와 이 노드의 마지막 kind(`info_bar_close`)를 더해 앱 대역과 겹치지 않는지.
 - `tests/raster_draw_tests.cpp`: 네 심각도의 테 색(info의 보조 글자색은 알파가 있어 바탕과 섞인 값), 밝은·어두운·고대비에서 바탕과 테가 남는지, 닫기 hover와 동작 단추(옆·아래)가 그려지는지, 바탕이 `raised_background`인지. raster 축은 글꼴을 싣지 않아 글리프 픽셀은 볼 수 없다. 글리프가 네 심각도마다 다르다는 것은 `severity_paint_tests.cpp`가 값으로 잠그고, 그려지는 모양은 사람 확인이다.
 - `tests/accessibility_tests.cpp`(토스트 test 옆): 접근 tree에서 막대 아래 단추 둘이 서는지. `tests/uia_provider_tests.cpp`: 막대가 Text로 이름을 내고 단추 Invoke가 메시지를 나르는지. 결정 6이 a라 나타남 알림 test는 없다. b가 승인되면 나타난 `alert`가 알림 한 번을 내고 첫 발행본은 내지 않는지, 토스트도 읽히는지를 더한다.
-- 데모(`examples/demo`, `examples/mobile_demo`의 토스트 페이지): "정보 막대" 카드에 네 심각도 막대(제목, 긴 본문, 동작 단추, 닫기)를 놓는다. "막대: 열림/닫힘"과 "마지막 동작: …"을 label로 그려 UIA가 되읽고, 닫으면 다시 여는 단추가 선다. 격리 데스크톱에서 luil-uia로 막대 노드의 이름과 두 단추의 Invoke를 돌린다. `demo_gallery_tests.cpp`·`mobile_demo_page_tests.cpp`가 페이지 짓기를 지킨다.
+- 데모(`examples/demo`, `examples/mobile_demo`의 토스트 페이지): "정보 막대" 카드에 네 심각도 막대(제목, 긴 본문, 동작 단추, 닫기)를 놓는다. 심각도별 "정보 막대: 열림/닫힘" 꼴의 label과 "마지막 동작: …"을 그려 UIA가 되읽고, 닫으면 다시 여는 단추가 선다. 격리 데스크톱에서 luil-uia로 막대 노드의 이름과 두 단추의 Invoke를 돌린다. `demo_gallery_tests.cpp`·`mobile_demo_page_tests.cpp`가 페이지 짓기를 지킨다.
 - 사람 확인: Narrator의 막대 읽기(결정 6이 b면 나타나는 순간까지), 밝은·어두운·고대비 테마에서 네 심각도 구분, 실기기에서 닫기·동작 단추의 탭 크기, 긴 글 줄바꿈과 회전 뒤 높이.
 
 ## 범위 밖
