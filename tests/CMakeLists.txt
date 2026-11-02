@@ -105,6 +105,7 @@ add_executable(luil_core_tests
     ui_interaction_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp
+    undo_stack_tests.cpp
     vector_image_tests.cpp
     virtual_list_access_tests.cpp
     virtual_list_benchmark_tests.cpp

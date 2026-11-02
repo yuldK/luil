@@ -353,3 +353,66 @@ TEST_CASE("Shift F10 opens the nearest enabled context menu at the focused contr
     REQUIRE(intent_at(actions, 0)->by == u8"context");
     REQUIRE(policy.keys == 0);
 }
+
+TEST_CASE("Ctrl Z in a focused text box is the box's own undo and never reaches the app", "[ui][interaction][keys][undo]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto box { std::make_unique<test_text_input>(luil::ui_element_id { kind_query_input, u8"query" }) };
+    box->arrange({ { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f });
+    box->set_action(luil::ui_trigger::left_click, no_op_action());
+    root->add(std::move(box));
+
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 12.0f, luil::pointer_button::left, at(0) }));
+    static_cast<void>(controller.process(luil::pointer_released_event { 20.0f, 12.0f, luil::pointer_button::left, at(5) }));
+    REQUIRE(controller.snapshot().focused_input == luil::ui_element_id { kind_query_input, u8"query" });
+
+    struct chord_case
+    {
+        luil::key_code key;
+        bool shift;
+        luil::text::text_edit_command expected;
+    };
+    // 앱 stack의 세 단축키가 칸에서는 칸의 되돌리기와 다시 실행이다. 칸의 기록이 비어도 앱으로 넘어가지 않는다.
+    const chord_case cases[] {
+        { luil::key_code::key_z, false, luil::text::text_edit_command::undo },
+        { luil::key_code::key_z, true, luil::text::text_edit_command::redo },
+        { luil::key_code::key_y, false, luil::text::text_edit_command::redo },
+    };
+    int milliseconds { 10 };
+    for (const chord_case& value : cases)
+    {
+        luil::key_pressed_event event { value.key };
+        event.control = true;
+        event.shift = value.shift;
+        event.time = at(milliseconds);
+        milliseconds += 10;
+        policy.last_edit = {};
+        const std::vector<luil::input_action> actions { controller.process(event) };
+        REQUIRE(actions.size() == 1u);
+        REQUIRE(policy.last_edit.command == value.expected);
+        REQUIRE(intent_at(actions, 0) != nullptr);
+        REQUIRE(intent_at(actions, 0)->by == u8"text");
+    }
+    REQUIRE(policy.keys == 0);
+}
+
+TEST_CASE("Ctrl Z with a button focused reaches the app policy for its undo stack", "[ui][interaction][keys][undo]")
+{
+    row_tree built { make_row_tree() };
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(built.root)));
+    focus_button(controller);
+
+    luil::key_pressed_event event { luil::key_code::key_z };
+    event.control = true;
+    event.time = at(10);
+    const std::vector<luil::input_action> actions { controller.process(event) };
+    REQUIRE(policy.keys == 1);
+    REQUIRE(intent_at(actions, 0) != nullptr);
+    REQUIRE(intent_at(actions, 0)->by == u8"policy");
+}

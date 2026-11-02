@@ -29,6 +29,8 @@ struct text_edit_state
 
 편집 함수는 `text_edit_state&`를 받고 픽셀 좌표를 다루지 않는다. `caret_upstream`은 caret이 앞 글자 쪽에 붙는다는 표시(affinity)다. 여러 줄 칸에서 넘겨 접은 자리의 caret을 윗줄 끝에 그릴 때만 뜻이 있다. `apply_text_edit`가 `place_caret`에서만 세우고 다른 모든 명령에서 지운다 ([자동 줄 넘김](../text-area-wrap-design.md#접은-자리의-caret-affinity)). 같은 종류의 삽입 또는 삭제가 caret을 이어 가는 동안 하나의 undo 그룹이 된다. caret을 옮기거나 선택하면 `none`으로 시작한다. 선택 대체와 붙여넣기는 `replace` 그룹이며 묶지 않는다. IME는 조합 중간 상태를 기록하지 않고 확정 결과를 하나의 `replace_all` 명령으로 적용한다. undo 기록은 100개(`text_edit_history_limit`)로 제한하고, 시점마다 글 전체를 복사하므로 undo·redo가 함께 담는 글도 32 MiB(`text_edit_history_byte_limit`)로 제한한다. 넘치면 가장 먼 과거부터, 그다음 가장 먼 미래부터 버리되 바로 앞뒤 한 걸음씩은 남겨 상한보다 큰 문서도 한 번은 되돌리고 다시 실행할 수 있다.
 
+이 기록은 칸의 것이고 칸 밖의 앱 상태를 되돌리는 [`undo_stack`](../undo-stack-design.md)과 따로 간다. 텍스트 칸에 초점이 있으면 Ctrl+Z·Ctrl+Shift+Z·Ctrl+Y는 칸의 `undo`·`redo`가 먼저 먹고, 컨트롤러는 칸의 기록을 보지 않으므로 칸을 다 되돌린 뒤 한 번 더 눌러도 앱 stack으로 넘어가지 않는다. 앱 정책의 `on_key`는 초점이 칸 밖일 때만 이 키를 받는다. 읽기 전용 칸은 지금 이 키를 삼키지만 줄 3이 R2에서 고쳐 앱 `on_key`로 넘긴다. 메뉴와 팔레트의 실행 취소는 초점과 상관없이 앱 stack의 것이다. 칸 편집을 앱 걸음으로 올릴지는 앱이 고른다. 확정 시점(blur, Enter)에 `restore_text_intent { before }`와 `{ after }`를 쌓고, 되돌림이 `text_edit_set_text`로 글을 갈면 칸 기록은 비워진다.
+
 `text_edit_command`는 insert, backspace, 단어 이동·선택, undo, redo, caret 배치 등의 동작을 표현한다. input 스레드는 `text_edit_request`를 만들고 policy가 이를 앱 메시지로 변환한다. 앱 logic은 [`ui_interaction.h`](../../include/luil/ui/ui_interaction.h)의 `luil::apply_text_edit(state, request, filter)`로 초안을 갱신한다. 선택적인 `text_insert_filter`는 insert·replace 전에 숫자 제한이나 길이 제한처럼 앱별 입력 규칙을 적용한다.
 
 이 편집 모델의 문자 이동은 아래의 글자소 경계를 따른다. 단어 이동에서 ASCII 영숫자와 비ASCII 바이트는 단어로, 나머지는 구분자로 취급한다. 경로의 `/`와 식별자의 `-` 등에서 멈춘다. 외부 값으로 글을 교체할 때는 `text_edit_set_text()`가 caret·anchor를 유효 범위로 맞추고 undo·redo를 비운다.

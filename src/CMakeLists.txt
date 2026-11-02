@@ -111,6 +111,10 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/accessibility.cpp
     "${public_headers}/ui/accessibility.h"
     "${public_headers}/ui/app_message.h"
+    ui/undo_commands.cpp
+    "${public_headers}/ui/undo_commands.h"
+    ui/undo_stack.cpp
+    "${public_headers}/ui/undo_stack.h"
     ui/ui_element.cpp
     "${public_headers}/ui/ui_element.h"
     ui/text_measurer.cpp

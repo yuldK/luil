@@ -52,7 +52,7 @@ public:
     [[nodiscard]] std::u8string_view redo_label() const noexcept;
     [[nodiscard]] std::size_t undo_count() const noexcept;
     [[nodiscard]] std::size_t redo_count() const noexcept;
-    [[nodiscard]] std::size_t bytes() const noexcept;  // 쌓인 걸음의 weight 합
+    [[nodiscard]] std::size_t bytes() const noexcept;  // 되돌릴 수 있는 걸음의 weight 합이다. redo 쪽은 세지 않는다
     void break_merge() noexcept;  // 다음 push는 합치지 않는다
     void set_clean() noexcept;  // 지금 자리를 저장 지점으로 삼는다
     [[nodiscard]] bool clean() const noexcept;
@@ -105,7 +105,7 @@ else if (message.get<undo_requested>() != nullptr)
 
 **재생 중에는 쌓지 않는다.** `undo`·`redo`가 `apply`를 부르는 동안 stack은 재생 중이다.
 
-- 이때 `push`·`end`·`undo`·`redo`는 거짓을 돌려주고 `begin`·`set_clean`·`break_merge`·`clear`·`set_limits`는 아무 일도 하지 않는다. 질의는 되고, 위치는 `apply`를 부르기 전에 이미 옮겨 둔다.
+- 이때 `push`·`end`·`undo`·`redo`는 거짓을 돌려주고 `begin`·`set_clean`·`break_merge`·`clear`·`set_limits`는 아무 일도 하지 않는다. 질의는 되고, 위치는 `apply`를 부르기 전에 이미 옮겨 둔다. `apply`가 예외를 던져도 재생 표시는 풀리고 위치는 옮긴 채로 남는다.
 - 앱이 재생 메시지를 사용자 동작과 같은 타입으로 만들었거나 기록하는 `handle`에 그대로 흘려도, 그 `handle`이 낸 `push`가 무시되어 redo가 지워지거나 걸음이 두 번 쌓이지 않는다. 메시지 목록을 돌려주는 길로는 막을 수 없다(결정 2).
 
 **합치기.** 시간 창을 두지 않는다. 앱이 키로 말한다.
@@ -117,11 +117,11 @@ else if (message.get<undo_requested>() != nullptr)
 **묶음.** `begin`과 `end` 사이의 `push`는 한 걸음이 된다.
 
 - 중첩할 수 있고 바깥 `end`에서 확정한다. 이름은 바깥 `begin`의 것이다. 걸음 안에서 `undo`는 쌓은 반대 차례, `redo`는 쌓은 차례로 `apply`에 넘긴다. 빈 묶음은 걸음을 만들지 않는다.
-- 묶음이 열린 동안 `can_undo`·`can_redo`는 거짓이고 `undo`·`redo`·`set_clean`은 아무 일도 하지 않는다. `clear`만 열린 묶음까지 버린다. 확정은 redo를 비우고 합치기를 끊는다.
+- 묶음이 열린 동안 `can_undo`·`can_redo`는 거짓이고 `undo_label`·`redo_label`은 빈 글이며 `undo`·`redo`·`set_clean`은 아무 일도 하지 않는다. 묶음에 담긴 메시지는 앱이 이미 적용했으므로 그때 `clean()`도 거짓이다. `clear`만 열린 묶음까지 버린다. 확정은 redo를 비우고 합치기를 끊는다. 빈 묶음은 redo도 비우지 않는다.
 
 **용량과 저장 지점.** 칸 기록의 규칙(`text_edit_history_limit`, `text_edit_history_byte_limit`)을 따른다.
 
-- 쌓을 때마다 걸음 수가 `steps`를, `weight` 합이 `bytes`를 넘으면 가장 오래된 걸음부터 버린다. 가장 새 걸음은 상한보다 커도 남겨 한 번은 되돌린다. redo 쪽은 줄이지 않는다. 쌓는 순간 비워지기 때문이다. `weight`를 알리지 않은 걸음은 0으로 센다.
+- 쌓을 때마다 걸음 수가 `steps`를, `weight` 합이 `bytes`를 넘으면 가장 오래된 걸음부터 버린다. 가장 새 걸음은 상한보다 커도 남겨 한 번은 되돌린다. redo 쪽은 줄이지 않는다. 쌓는 순간 비워지기 때문이다. `weight`를 알리지 않은 걸음은 0으로 센다. `bytes()`는 되돌릴 쪽의 `weight` 합이고 `bytes` 상한이 견주는 값이다. `set_limits`로 상한을 줄이면 되돌릴 쪽만 줄고, `redo`로 돌아온 걸음도 되돌릴 쪽 상한에 맞춰 가장 오래된 걸음부터 다시 버린다.
 - 저장 지점은 `set_clean`이 찍은 자리(되돌릴 수 있는 걸음 수)다. 처음과 `clear` 뒤는 저장 지점이다. `clean()`은 지금 자리가 저장 지점이면 참이라 앱이 "수정됨" 표시를 이것으로 낸다.
 - 저장 지점이 버려진 redo 쪽에 있었거나 맨 아래 걸음이 상한으로 버려져 걸음 밖으로 나가면 저장 지점은 사라진다. `clean()`은 `set_clean`을 다시 부를 때까지 거짓이다.
 
@@ -130,7 +130,7 @@ else if (message.get<undo_requested>() != nullptr)
 **키 경로와 칸의 undo.**
 
 - **키는 칸이 먼저다.** `text_target_of`가 대상을 주는 kind에 초점이 있으면 Ctrl+Z·Ctrl+Shift+Z·Ctrl+Y는 칸의 `text_edit_command::undo`·`redo`가 된다. 컨트롤러는 칸의 기록을 보지 않으므로 칸을 다 되돌린 뒤 한 번 더 눌러도 앱 stack으로 넘어가지 않는다.
-- **읽기 전용 칸도 삼킨다.** 읽기 전용 칸은 글을 바꾸는 키로 Ctrl+Z·Ctrl+Y를 삼킨다(`process_text_input_key`의 `read_only` 갈래, [text_area_element_tests.cpp](../tests/text_area_element_tests.cpp) 641행이 잠근다). 되돌릴 기록이 없는 칸인데도 앱 단축키가 닿지 않는다. 데모 작업대의 차이 보기가 그 칸이다. 이 노드는 controller를 고치지 않으며(범위 밖), 앱은 단추나 메뉴로 같은 요청을 함께 낸다.
+- **읽기 전용 칸은 지금 삼킨다.** 읽기 전용 칸은 글을 바꾸는 키로 Ctrl+Z·Ctrl+Y를 삼킨다(`process_text_input_key`의 `read_only` 갈래, [text_area_element_tests.cpp](../tests/text_area_element_tests.cpp) 641행이 잠근다). 되돌릴 기록이 없는 칸인데도 앱 단축키가 닿지 않는다. 데모 작업대의 차이 보기가 그 칸이다. 줄 3이 R2에서 고친다(읽기 전용 칸은 Ctrl+Z·Ctrl+Y를 앱 `on_key`로 넘긴다). 이 노드는 controller를 고치지 않으며, 앱은 단추나 메뉴로 같은 요청을 함께 낸다. 단축키가 없는 모바일도 같은 단추가 요청을 낸다.
 - **열린 메뉴 뒤로는 가지 않는다.** 메뉴(팔레트 포함)가 열려 있으면 메뉴가 갖지 않은 키는 초점 칸까지만 가고 앱 `on_key`에 닿지 않는다. 앱이 활성 범위를 `modal`로 `match_command`에 넘기면 window 범위의 실행 취소는 맞지 않는다(`modal`은 window로 물러서지 않는다). 열린 대화 상자 뒤의 문서가 되돌아가지 않는다.
 - **메뉴·팔레트의 실행 취소는 초점과 상관없이 stack의 것이다.** 클릭은 키 경로를 타지 않는다. 초점 칸의 기록을 메뉴로 되돌리는 길은 만들지 않는다(결정 3의 길 c).
 - 칸 편집을 걸음으로 올릴지는 앱이 고른다. 확정 시점(blur, Enter)에 `restore_text_intent { before }`와 `{ after }`를 쌓을 수 있다. 되돌림이 칸의 글을 `text_edit_set_text`로 갈면 칸 기록은 비워진다.
@@ -149,7 +149,7 @@ else if (message.get<undo_requested>() != nullptr)
 - 길 a: `app_message` 쌍. 되는 것: stack이 값이라 복사와 시험이 싸고 앱 상태를 가리키는 참조를 쥐지 않는다. 되돌림이 앱 `handle`의 길을 타서 로직이 두 벌이 되지 않는다. 상태 스냅샷은 이 길의 한 쓰임이다. 대가: 되돌림마다 메시지 타입을 앱이 정의하고, 역 메시지가 맞는지 라이브러리가 검증하지 못한다.
 - 길 b: `std::function` do/undo 쌍(`QUndoCommand`식). 되는 것: 메시지 타입 없이 람다로 쓴다. 대가: 람다가 앱 상태를 가리키는 참조를 쥔다. 문서를 닫거나 컨테이너가 다시 잡히면 허공을 가리키고, 걸음을 시험이나 기록으로 들여다볼 수 없다. 게시된 액션의 규칙과 부딪히지는 않는다. 함수는 logic thread에서만 불린다.
 - 길 c: 상태 스냅샷 전용 `snapshot_undo_stack<state>`. 되는 것: 상태가 복사 싼 값이면 역 동작을 적을 일이 없다. 대가: 걸음마다 상태 전체를 쥐고(칸이 32MiB 상한을 둔 까닭), 일부만 바꾸는 걸음에 맞지 않으며, 템플릿이라 .cpp에 둘 수 없다.
-- 권장: a. c는 a 위에서 앱이 `restore_intent`로 쓸 수 있어 따로 만들지 않는다. 대가: 위의 타입 정의와 검증 불가다. 승인 필요.
+- 권장: a. c는 a 위에서 앱이 `restore_intent`로 쓸 수 있어 따로 만들지 않는다. 대가: 위의 타입 정의와 검증 불가다. 승인: 길 a (2026-11-02).
 
 **2. 되돌릴 메시지를 앱에 건네는 길.** 질문: stack이 메시지를 어떻게 돌려주는가.
 
@@ -193,6 +193,24 @@ else if (message.get<undo_requested>() != nullptr)
 - 길 c: 길 a에 `undo_group`을 더한다. 되는 것: 활성 stack 전환을 라이브러리가 한다. 대가: 첫 소비자가 없고(데모도 stack이 하나) 모양을 추측으로 정한다.
 - 권장: a. 대가: 위의 활성 전환이다. 권장대로 진행.
 
+**8. 상한이 세는 쪽.** 질문: `bytes()`와 `steps`·`bytes` 상한은 어느 쪽 걸음을 세는가. 구현에서 정했다.
+
+- 길 a: 되돌릴 쪽만. 되는 것: 상한이 견주는 값과 `bytes()`가 같고, 쌓는 순간 redo가 비어 규칙이 한 줄이다. 대가: 방금 되돌린 걸음이 쥔 redo 쪽 메모리는 상한 밖이다. 그 양은 되돌릴 쪽이 이미 지킨 상한을 넘지 않는다.
+- 길 b: 두 쪽의 합. 되는 것: 메모리 총량이 상한이다. 대가: `undo`·`redo`가 합을 바꾸지 못해 저장 지점 계산이 두 쪽에 걸치고, 되돌린 직후 상한을 다시 따지게 된다.
+- 권장: a. `set_limits`로 줄일 때와 `redo`로 걸음이 돌아올 때도 되돌릴 쪽만 상한에 맞춘다. 대가: 위의 redo 쪽이다. 권장대로 진행.
+
+**9. 열린 묶음 중의 질의.** 질문: 묶음이 열려 있을 때 `undo_label`·`redo_label`·`clean()`은 무엇을 답하는가. 구현에서 정했다.
+
+- 길 a: 라벨은 빈 글이고, 묶음에 메시지가 담겼으면 `clean()`은 거짓이다. 되는 것: `can_undo`·`can_redo`가 거짓인 때와 어긋나지 않고, 앱이 이미 적용한 상태를 저장한 자리로 오인하지 않는다. 대가: 빈 묶음 위에서는 `clean()`이 그대로여서 묶음 안에 담긴 메시지 수에 따라 답이 갈린다.
+- 길 b: 확정한 걸음만 따른다. 되는 것: 질의가 묶음과 무관하다. 대가: 적용된 상태가 저장 지점과 다른데 "수정됨" 표시가 꺼진다.
+- 권장: a. 대가: 위의 갈림이다. 권장대로 진행.
+
+**10. 데모의 끌기 경계.** 질문: 열 폭 끌기 하나를 한 걸음으로 만드는 길은 무엇인가. 구현에서 정했다.
+
+- 길 a: 표의 `resize_column_end`(열 경계를 놓음)가 낸 메시지로 `break_merge()`를 부른다. 되는 것: 병합 키는 열 이름 하나이고, 이미 있는 놓음 메시지를 쓴다. 대가: 놓음 메시지를 받는 `handle` 분기가 하나 는다.
+- 길 b: 끌기 번호를 병합 키에 넣는다. 되는 것: 분기가 없다. 대가: 놓음을 몰라 다음 끌기를 앱이 따로 세야 하고, 번호 증가가 시작 메시지에 걸린다.
+- 권장: a. 대가: 위의 분기다. 권장대로 진행.
+
 ## 플랫폼
 
 **Win32.** 플랫폼 호출이 없다. `src/win32`는 고치지 않는다. Ctrl+Z는 `key_pressed_event`로 오고 명령표가 맞춘다.
@@ -202,6 +220,7 @@ else if (message.get<undo_requested>() != nullptr)
 ## 다른 노드와의 약속
 
 - 앞 라운드(R1) 문서는 이 노드로 미룬 것이 없다. 이 노드는 라이브러리 기본 문구(G6)도 두지 않는다. 앱이 최종 글을 주므로 줄 1의 비공개 문구 헤더로 옮길 낱말이 없다. 기본값이 필요해지면 옮길 낱말은 "실행 취소", "다시 실행"과 구분자 ": " 셋이다.
+- **빈 글의 후속.** `make_undo_commands`는 `undo_label`·`redo_label`이 비면 `app_command::label`을 빈 채로 둔다. 통합 뒤 후속(줄 1 `default_text`가 main에 들어온 뒤)에는 비었을 때 `default_text::undo_command_undo()`(실행 취소)·`undo_command_redo()`(다시 실행)를 쓴다. 걸음 이름을 잇는 문장은 앱 몫이고 R5 자리 값에서 바뀐다. 판정용 표(`make_undo_commands({})`)는 id와 단축키만 쓰므로 영향이 없다.
 - **style_sheet**(같은 줄의 다음): 기능 파일은 겹치지 않는다. 목록 파일 셋에 줄을 더하는 것만 겹친다. `src/CMakeLists.txt`(이 노드는 `ui/foundation` 필터의 소스 줄, style_sheet는 core 링크와 파서 소스), `tests/CMakeLists.txt`, `include/luil/luil.h`다. 모두 줄을 더하는 병합이라 기계적이다.
 - **ink**(줄 3, 같은 라운드): 획 되돌리기를 이 stack에 올릴 수 있다. 서로 기대지 않으며 ink 설계가 절대 값 규칙과 합치기 키를 따른다. 이 노드는 `ui_events.h`·`ui_interaction.cpp`를 고치지 않는다.
 - **rich_edit·hotkey·menu_bar**(R3): 칸의 기록은 칸의 것이라(결정 3) 서식 되돌리기를 `text_edit_state`에 넣어도 이 stack과 따로 간다. hotkey가 `key_chord`를 고치므로 `make_undo_commands`는 지정 초기화(`.key`, `.control`, `.shift`)로 짓는다. menu_bar의 편집 메뉴는 그 결과를 `menu_item_from`으로 짓고 글은 앱이 준다.
@@ -222,17 +241,17 @@ else if (message.get<undo_requested>() != nullptr)
   - 저장 지점: 처음 참, `push` 뒤 거짓, `undo`로 돌아오면 참인지. redo 쪽 저장 지점이 `push`로 지워지거나 맨 아래 걸음이 버려져 걸음 밖으로 나가면 `set_clean` 전까지 거짓인지. `clear` 뒤 참인지;
   - 명령 helper: id·단축키 묶음(Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z)·범위. `match_command`가 세 키에 id를 돌려주고 Ctrl+Z와 Ctrl+Shift+Z가 서로 맞지 않는지. `can_undo`가 거짓이면 맞지 않는지. `find_conflicts`에 새 충돌이 없는지.
 - `tests/key_propagation_tests.cpp`(끝에 둘): 텍스트 칸 초점의 Ctrl+Z가 `text_edit_command::undo` 하나를 내고 정책의 `on_key`를 부르지 않는지. 단추 초점의 Ctrl+Z는 정책의 `on_key`가 받는지. 읽기 전용 칸의 삼킴은 `text_area_element_tests.cpp`가 이미 잠근다.
-- `tests/workbench_page_tests.cpp`: 체크·스테이지·버리기·열 폭을 되돌리고 다시 실행하면 처음 상태와 같은지, 새 동작이 redo를 비우는지, 같은 열의 연속 조절이 한 걸음인지, 커밋이 stack을 비우는지. `tests/mobile_demo_page_tests.cpp`: 재배열을 되돌리면 이전 순서인지. 이 test가 읽는 `examples/mobile_demo/lists_page.cpp`는 `luil_core_tests`의 모바일 데모 목록(`tests/CMakeLists.txt` 141~151행)에 없어서 연결 커밋이 목록에 올린다. 그 파일은 luil 헤더와 `mobile_demo/common.h`만 부르고 `common.cpp`는 목록에 이미 있어 대역이 필요하지 않을 것으로 보며, 링크는 구현 때 확인한다. 데스크톱 `workbench_page.cpp`는 이미 등록돼 있다(155~156행).
+- `tests/workbench_page_tests.cpp`: 체크·스테이지·버리기·열 폭을 되돌리고 다시 실행하면 처음 상태와 같은지, 새 동작이 redo를 비우는지, 같은 열의 연속 조절이 한 걸음인지, 커밋이 stack을 비우는지. `tests/mobile_demo_page_tests.cpp`: 재배열을 되돌리면 이전 순서인지. 이 test가 읽는 `examples/mobile_demo/lists_page.cpp`는 `luil_core_tests`의 모바일 데모 목록(`tests/CMakeLists.txt` 141~151행)에 없어서 연결 커밋이 목록에 올린다. 그 파일은 luil 헤더와 `mobile_demo/common.h`만 부르고 `common.cpp`는 목록에 이미 있어 대역이 필요하지 않다. 링크는 구현 때 확인했다. 데스크톱 `workbench_page.cpp`는 이미 등록돼 있다(155~156행).
 - `luil_umbrella_header`(우산 헤더에 두 헤더), `luil_core_portability`, `luil_source_style`.
 
 데모. 상태를 label로 그려 `luil-uia`로 되읽는다.
 
-- 데스크톱 변경 작업대: 스테이지 바꿈(체크 칸, 메뉴의 stage·unstage, 전체 체크), 버리기, 열 폭 조절을 걸음으로 쌓는다. 같은 열의 연속 조절은 키 `resize:<열>`로 합친다. 재생 전용 메시지 `workbench_set_staged_intent`·`workbench_remove_intent`·`workbench_restore_intent`(지운 행과 자리)·`workbench_set_width_intent`는 절대 값을 담는다. 사용자 메시지는 걸음을 쌓은 뒤 같은 `apply`를 부른다.
-  - 읽기 전용 차이 보기가 Ctrl+Z를 삼키므로 단추 `workbench-undo`·`workbench-redo`가 팔레트 명령과 같은 요청 메시지를 보낸다. 켜짐은 `can_undo`·`can_redo`를 따른다. 켜 둔 채 빈 동작을 내면 Invoke가 오류로 끝나기 때문이다.
-  - label `workbench-history`("되돌리기 2 · 다시 실행 1 · 다음: 변경 버리기 · 저장 지점 일치")가 상태를 말하고 단추 `workbench-mark-saved`가 `set_clean`을 부른다. 커밋 메시지 칸에서 Ctrl+Z는 칸의 것이고 표나 단추에 초점이 있을 때만 stack의 것이다.
-  - 팔레트의 정적 표(`palette_commands()`)에 `make_undo_commands({})`를 잇는다. `command_palette_host::make_popups`는 stack 상태(`undo_command_state`)를 인자로 받아 보이는 표의 글과 켜짐을 짓는다. 셸의 `palette_run_intent` 갈래가 `edit.undo`·`edit.redo`를 작업대 페이지가 보일 때만 작업대에 보낸다.
-- 모바일 데모 목록 페이지: 재배열(`reorder_intent`)을 걸음으로 쌓고 되돌림은 순서 전체를 담은 `reorder_restore_intent`(스냅샷도 같은 길이다)다. 단추 `list-undo`·`list-redo`와 label `list-history`를 둔다.
-- UIA(격리 데스크톱): 행을 체크하고 `workbench-undo`를 Invoke해 label이 처음으로 돌아오는지, 버리기를 되돌리면 같은 자리에 돌아오는지, 새 동작 뒤 `workbench-redo`가 꺼지는지 읽는다. 키는 PostMessage로 보내 표 초점의 Ctrl+Z는 되돌리고 차이 보기·커밋 메시지 칸 초점에서는 stack이 그대로인지 읽는다. 모바일 데모(Windows 창)는 같은 label을 읽는다. Android에는 접근성 계층이 없어 사람이 화면으로 읽는다.
+- 데스크톱 변경 작업대: 스테이지 바꿈(체크 칸, 메뉴의 stage·unstage, 전체 체크), 버리기, 열 폭 조절을 걸음으로 쌓는다. 같은 열의 연속 조절은 키 `resize:<열>`로 합치고, 열 경계를 놓으면 표의 `resize_column_end`가 `workbench_resize_end_intent`를 내 `break_merge()`를 부르므로 끌기 하나가 걸음 하나다. 재생 전용 메시지 `workbench_set_staged_intent`·`workbench_remove_intent`·`workbench_restore_intent`(지운 행과 자리)·`workbench_set_width_intent`는 절대 값을 담는다. 사용자 메시지는 걸음을 쌓은 뒤 같은 `apply`를 부른다.
+  - 읽기 전용 차이 보기가 Ctrl+Z를 삼키므로 단추 `workbench-undo`·`workbench-redo`가 팔레트 명령과 같은 요청 메시지를 보낸다. 켜짐은 `can_undo`·`can_redo`를 따른다. 켜 둔 채 빈 동작을 내면 Invoke가 오류로 끝나기 때문이다. 요청 메시지는 `workbench_undo_intent`·`workbench_redo_intent`이고 머리 줄 아래의 한 줄(`history-bar`)에 단추 셋과 label이 선다. 툴팁과 켜짐은 `make_undo_commands(undo_state())`가 짓는다.
+  - label `workbench-history`("되돌리기 2 · 다시 실행 1 · 다음: 변경 버리기 · 저장 지점 일치")가 상태를 말하고 단추 `workbench-mark-saved`가 `set_clean`을 부른다. 커밋 메시지 칸에서 Ctrl+Z는 칸의 것이고 표나 단추에 초점이 있을 때만 stack의 것이다. 커밋은 행이 저장소로 넘어가 되돌림 메시지가 가리킬 대상이 사라지므로 `clear()`를 부른다.
+  - 팔레트의 정적 표(`palette_commands()`)에 `make_undo_commands({})`를 잇는다. `command_palette_host::make_popups`는 stack 상태(`undo_command_state`)를 인자로 받아 보이는 표의 글과 켜짐을 짓는다. 셸의 `palette_run_intent` 갈래가 `edit.undo`·`edit.redo`를 작업대 페이지가 보일 때만 작업대에 보낸다. 다른 페이지에서는 두 항목을 꺼 둔 채 보인다.
+- 모바일 데모 목록 페이지: 재배열(`reorder_intent`)을 걸음으로 쌓고 되돌림은 순서 전체를 담은 `reorder_restore_intent`(스냅샷도 같은 길이다)다. 단추 `list-undo`·`list-redo`(손가락 높이)와 그 아래 label `list-history`("되돌리기 1 · 다시 실행 0 · 다음: 순서 바꿈")를 목록 위에 둔다. 켜짐은 `can_undo`·`can_redo`를 따른다.
+- UIA(격리 데스크톱): 행을 체크하고 `workbench-undo`를 Invoke해 label이 처음으로 돌아오는지, 버리기를 되돌리면 같은 자리에 돌아오는지, 새 동작 뒤 `workbench-redo`가 꺼지는지 읽는다. 키는 PostMessage로 보내 표 초점의 Ctrl+Z는 되돌리고 커밋 메시지 칸 초점에서는 stack이 그대로인지 읽는다. 차이 보기 초점은 줄 3의 변경이 들어오기 전에는 stack이 그대로이고, 들어온 뒤에는 읽기 전용 칸이 이 키를 앱 `on_key`로 넘기므로 되돌아간다. 통합 뒤에는 기대를 바꿔 읽는다. 모바일 데모(Windows 창)는 같은 label을 읽는다. Android에는 접근성 계층이 없어 사람이 화면으로 읽는다.
 
 사람 확인.
 
@@ -241,7 +260,7 @@ else if (message.get<undo_requested>() != nullptr)
 
 ## 범위 밖
 
-- 읽기 전용 칸이 Ctrl+Z·Ctrl+Y를 삼키는 것. controller(`ui_interaction.cpp`, 줄 3)를 고치는 일이고 앱 단축키 전체에 걸치므로 R1에서 넘어온 한계와 같이 사용자에게 따로 묻는다.
+- 읽기 전용 칸이 Ctrl+Z·Ctrl+Y를 삼키는 것. 줄 3이 R2에서 고친다(읽기 전용 칸은 Ctrl+Z·Ctrl+Y를 앱 `on_key`로 넘긴다). controller(`ui_interaction.cpp`)는 이 노드가 고치지 않는다.
 - 칸의 기록을 메뉴·단추로 부르는 길과 칸의 되돌릴 수 있음을 snapshot에 싣는 일(결정 3의 길 c).
 - 문서·탭별 stack 묶음(`QUndoGroup`)과 걸음 목록 보기(`QUndoView`).
 - 걸음의 직렬화와 저장, 시간 창 합치기, 걸음 사이의 상쇄, 역 메시지의 검증.

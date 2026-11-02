@@ -98,6 +98,8 @@
 #include "luil/ui/ui_element_id.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
+#include "luil/ui/undo_commands.h"
+#include "luil/ui/undo_stack.h"
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/ui/virtual_list_element.h"
