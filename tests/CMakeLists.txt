@@ -73,6 +73,7 @@ add_executable(luil_core_tests
     single_line_text_tests.cpp
     slider_element_tests.cpp
     split_handle_element_tests.cpp
+    spring_tests.cpp
     text_area_element_tests.cpp
     text_link_tests.cpp
     stack_element_tests.cpp
