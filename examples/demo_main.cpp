@@ -8,7 +8,7 @@
 //  - 파일: 여럿 고르기, 고른 것 끌어 폴더에 놓기, 끌어서 범위 고르기, 파일 클립보드 (demo/files_page)
 //  - 탭: 선택·닫기·순서·가로 스크롤·넘침 메뉴 popup        (demo/tabs_page)
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
-//  - 토스트: 심각도별 알림과 실행 취소 토스트               (demo/toasts_page)
+//  - 토스트: 심각도별 알림, 실행 취소 토스트, 정보 막대      (demo/toasts_page)
 //  - 메뉴·팝업: 드롭다운·컨텍스트 메뉴·분할 버튼 (popup 창) (demo/popups_page)
 //  - 창: 보조 top-level 창(도구 창) 여닫기와 전체 화면 전환 (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
