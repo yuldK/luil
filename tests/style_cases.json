@@ -58,6 +58,24 @@
             "expect": [ { "path": [ "text", "lineBreak" ], "default": true } ]
         },
         {
+            "name": "a unicode wrap policy",
+            "edits": [ { "op": "set", "path": [ "text", "wrapPolicy" ], "value": "\"unicode\"" } ],
+            "accept": true,
+            "expect": [ { "path": [ "text", "wrapPolicy" ], "name": "unicode" } ]
+        },
+        {
+            "name": "a style without the wrap policy",
+            "edits": [ { "op": "remove", "path": [ "text", "wrapPolicy" ] } ],
+            "accept": true,
+            "expect": [ { "path": [ "text", "wrapPolicy" ], "default": true } ]
+        },
+        {
+            "name": "an unknown wrap policy value",
+            "edits": [ { "op": "set", "path": [ "text", "wrapPolicy" ], "value": "\"keepAll\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_value", "path": "text", "key": "wrapPolicy", "message": "Invalid value at text.wrapPolicy: keepAll (expected one of hangulWords, unicode)" }
+        },
+        {
             "name": "a style without font weights",
             "edits": [ { "op": "remove", "path": [ "metrics", "fontWeights" ] } ],
             "accept": true,

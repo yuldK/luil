@@ -170,7 +170,7 @@ namespace luil::generated::style_keys {
 - 길 a: 이번에도 두지 않는다. 되는 것: 공개 config와 `ui_element.h` 문맥을 건드리지 않아 이 노드가 스타일 파일 안에 머문다. 키 표가 한 곳이 되어 나중의 추가가 struct 필드와 한 행이다. 대가: 앱 전체를 `unicode`로 바꾸려는 앱은 컨트롤마다 적는다. G4의 근거 넷째가 이번 라운드에 쓰이지 않는다.
 - 길 b: 지금 더하고 잇는다. `text_style::wrap_policy`(JSON `text.wrapPolicy`, `hangulWords`·`unicode`), 세 config(`label_config`·`markdown_config`·`text_area_config`)와 `text_block_style`의 `line_break`를 `std::optional`로(탭 막대 칸의 선례), `measure_context`·`draw_context`에 스타일을 싣는다. 되는 것: 앱 전체 기본을 파일에서 고른다. 대가: 공개 구조체 넷과 문맥 둘이 바뀌어 읽는 코드(`config.line_break == …`)가 깨지고, `measure_context`를 손으로 짓는 열 곳(test·데모)을 고친다. rich_edit(R3)와 약속한 "정책은 `text_layout_request::line_break`로만" 경계는 그대로이지만 그 앞단이 넓게 바뀐다.
 - 길 c: 키와 필드만 두고 잇기는 나중. 대가: 읽어도 아무 일도 하지 않는 키라 "바꿨는데 안 바뀐다"를 라이브러리가 만든다.
-- 권장: a. 다시 미루는 까닭은 위의 대가가 스타일 읽기와 무관한 배치·그리기 문맥 변경이기 때문이다. 앱 전체 기본이 필요한 첫 소비자(같은 줄 R4 markup이 서식 글의 기본을 앱에서 받을 때 등)가 서면 길 b를 그 노드에서 한다. 키 이름과 값은 위대로 예약한다. **승인: 길 b (2026-11-02, 권장 a와 다름). 구현은 [docs/wrap-policy-key-design.md](wrap-policy-key-design.md).** 이 노드는 키 표 데이터 파일·생성기·실행 중 파서·시험까지 하고 `text.wrapPolicy` 키는 더하지 않는다. 그 노드는 데이터 파일의 `text_fields`에 한 행을 더하고 생성기·파서는 고치지 않는다.
+- 권장: a. 다시 미루는 까닭은 위의 대가가 스타일 읽기와 무관한 배치·그리기 문맥 변경이기 때문이다. 앱 전체 기본이 필요한 첫 소비자(같은 줄 R4 markup이 서식 글의 기본을 앱에서 받을 때 등)가 서면 길 b를 그 노드에서 한다. 키 이름과 값은 위대로 예약한다. **승인: 길 b (2026-11-02, 권장 a와 다름). 구현은 [docs/wrap-policy-key-design.md](wrap-policy-key-design.md).** 이 노드는 키 표 데이터 파일·생성기·실행 중 파서·시험까지 하고 `text.wrapPolicy` 키는 더하지 않는다. 그 노드는 데이터 파일의 `text_fields`에 한 행을 더하고 생성기·파서는 고치지 않는다. 그 노드가 그대로 더했다(공유 사례 표 45개에서 48개).
 
 **6. Android 앱 묶음 파일.** 질문: APK assets를 읽는 길을 이 노드가 더하는가.
 
@@ -266,5 +266,5 @@ namespace luil::generated::style_keys {
 - 선택자·상속·상태별 값(G4 c). 요소가 앱에서 색을 받지 않는다는 [테마](concepts/theming.md) 69행의 원칙과 부딪힌다.
 - 파일 읽기, 감시, 다시 읽기의 디바운스(R5 hot_reload). APK assets 읽기(결정 6).
 - 스타일을 JSON으로 쓰는 직렬화, 덮어쓰기 파일(결정 4의 길 c), 스키마 판 번호.
-- 줄 나눔 정책 키(`text.wrapPolicy`). 결정 5는 길 b이고 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 맡는다.
+- 줄 나눔 정책 키(`text.wrapPolicy`). 결정 5는 길 b이고 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 이 문서의 키 표 위에 더했다.
 - R1에서 넘어온 controller 한계, 메뉴 폭의 글꼴 배율, `android_settings.cpp`의 `local_frame` 복제. 사용자에게 따로 묻는다.

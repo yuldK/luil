@@ -247,6 +247,15 @@ TEST_CASE("The built-in style file reads back as the built-in style", "[theme][s
     REQUIRE(result.ok());
     REQUIRE(result.errors.empty());
     REQUIRE(*result.style == luil::default_ui_style());
+
+    // 라이브러리의 견본 파일(assets/style.json)은 여러 줄 정책을 적어 둔다. 앱이 복사해 고치는 파일에 키가 보이고,
+    // 값은 struct 기본값과 같다.
+    const std::u8string_view base { embedded(luil_test_base_style, luil_test_base_style_size) };
+    REQUIRE(base.find(u8"\"wrapPolicy\"") != std::u8string_view::npos);
+    const luil::style_parse_result sample { luil::parse_ui_style(base) };
+    REQUIRE(sample.ok());
+    REQUIRE(sample.style->text.wrap_policy == luil::line_break_policy::hangul_words);
+    REQUIRE(sample.style->text.wrap_policy == luil::text_style {}.wrap_policy);
 }
 
 TEST_CASE("The key table covers every field in declaration order", "[theme][style][style_json]")

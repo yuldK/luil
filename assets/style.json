@@ -112,6 +112,7 @@
         "corner": "system"
     },
     "text": {
-        "lineBreak": "space"
+        "lineBreak": "space",
+        "wrapPolicy": "hangulWords"
     }
 }

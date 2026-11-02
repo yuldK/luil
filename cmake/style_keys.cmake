@@ -82,7 +82,8 @@ set(tab_bar_fields
 set(popup_fields
     "corner|corner|popup_corner|system,round,roundSmall,square")
 set(text_fields
-    "lineBreak|line_break|single_line_break|space,symbol,paragraphs")
+    "lineBreak|line_break|single_line_break|space,symbol,paragraphs"
+    "wrapPolicy|wrap_policy|line_break_policy|hangulWords,unicode")
 # `metrics.fontWeights`다 (`ui_font_weights`). 값은 굵기의 이름이고 빠진 칸은 struct의 기본값이다.
 set(font_weight_names "thin,extraLight,light,regular,medium,semibold,bold,extraBold,black")
 set(font_weight_fields

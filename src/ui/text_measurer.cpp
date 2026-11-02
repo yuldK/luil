@@ -70,15 +70,15 @@ namespace luil {
         return measure_text()(text, scaled_font_size(font_size, ratio)) / ratio;
     }
 
-    float measure_context::text_width(const std::u8string_view text, const float font_size, const font_style style) const
+    float measure_context::text_width(const std::u8string_view text, const float font_size, const font_style face_style) const
     {
-        if (style == font_style {} || measurer != nullptr)
+        if (face_style == font_style {} || measurer != nullptr)
             return text_width(text, font_size);
         if (text.empty())
             return 0.0f;
         const float ratio { scale > 0.0f ? scale : 1.0f };
         SkFont font { configured_ui_typeface(), scaled_font_size(font_size, ratio) };
-        apply_font_style(font, style);
+        apply_font_style(font, face_style);
         return luil::measure_text(text, font) / ratio;
     }
 }

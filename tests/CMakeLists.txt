@@ -48,6 +48,7 @@ add_executable(luil_core_tests
     label_wrap_tests.cpp
     font_style_tests.cpp
     text_block_tests.cpp
+    wrap_policy_tests.cpp
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp

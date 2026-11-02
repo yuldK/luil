@@ -78,7 +78,7 @@ namespace luil {
         float scale_ { 0.0f };
         float sample_width_ { 0.0f };
         bool wrap_ { true };
-        // 접은 자리를 고른 규칙이다. 바뀌면 문단의 접은 자리와 화면 줄의 배치를 함께 비운다.
+        // 접은 자리를 고른 규칙이다 (배치가 푼 값). 바뀌면 문단의 접은 자리와 화면 줄의 배치를 함께 비운다.
         text::line_break_policy line_break_ { text::line_break_policy::hangul_words };
         bool native_ { false };
         text_layout_face face_ { text_layout_face::ui };
@@ -106,8 +106,10 @@ namespace luil {
         // 읽기 전용에서도 선택·복사와 caret은 남는다.
         bool read_only { false };
         bool wrap { true };
-        // 접는 자리를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾼다. 바꾸면 `wrap_cache`가 통째로 비워진다.
-        text::line_break_policy line_break { text::line_break_policy::hangul_words };
+        // 접는 자리를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다 (배치 문맥의 `style`,
+        // docs/wrap-policy-key-design.md). 적은 값이 스타일보다 앞선다.
+        //  - 배치가 푼 정책이 바뀌면 `wrap_cache`가 통째로 비워진다. config가 같아도 스타일이 바뀌어 정책이 뒤집히면 그렇다.
+        std::optional<text::line_break_policy> line_break {};
         text_face face { text_face::ui };
         float font_size { 0.0f };
         float scroll_x { 0.0f };
@@ -242,6 +244,9 @@ namespace luil {
 
         text_input_view value_ {};
         text_area_config config_ {};
+        // 배치가 푼 줄 나눔 정책이다 (config, 배치 문맥의 앱 스타일, 내장값 순). 배치 밖에서 다시 접는 자리
+        // (`lines_for`·`layout_request`)도 이것을 읽어 배치의 줄과 같은 정책이다. 배치 전에는 config나 내장 스타일의 값이다.
+        text::line_break_policy resolved_line_break_ { text::line_break_policy::hangul_words };
         scroll_area_element* area_ { nullptr };
         // 줄을 그리는 몸통이다. 흘린 만큼 위로 밀려 배치된다.
         ui_element* body_ { nullptr };

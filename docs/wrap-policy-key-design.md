@@ -190,6 +190,14 @@ luil::label_config title { .text = u8"설정을 저장했습니다", .wrap = tru
 - 길 c: 문맥을 집합체가 아니게 하고 만드는 함수로만 짓게 한다. 되는 것: 빠뜨림을 컴파일이 막는다. 대가: 지정 초기화를 쓰는 모든 자리(test 수십 곳과 앱)가 깨진다. 길 b가 말하지 않은 공개 API 변경이다.
 - 권장: a. 대가: 위의 데모 한계다. 권장대로 진행.
 
+구현하며 정한 것이다.
+
+**6. `measure_context::text_width`의 인자 이름.** 새 멤버 `style`이 `text_width(text, font_size, font_style style)`의 인자 이름을 가려 MSVC가 경고(C4458, 경고를 오류로 본다)를 낸다. 인자 이름을 `face_style`로 바꿨다(헤더와 `text_measurer.cpp`). 인자의 형과 순서는 그대로라 부르는 코드는 바뀌지 않는다. 멤버 이름을 `app_style_source` 같은 것으로 바꾸는 길은 배치 문맥(`arrange_context::style`)과 이름이 갈려 버렸다.
+
+**7. 그리기 길의 시험 자리.** core test(`luil_core_tests`)는 글꼴 관리자가 비어 다섯 인자 `draw_text_block`이 쓰는 글꼴 측정(`font_measurer`)이 폭 0을 잰다. 모든 글이 한 줄에 들어 두 정책의 차이가 서지 않는다. 그래서 그리기 길의 줄 수 견주기는 실제 UI 글꼴이 있는 `tests/text_block_native_tests.cpp`(`luil_tests`, Windows)에 두고, `derive_draw_context`가 정책을 옮기는지와 채우지 않은 문맥의 기본값은 core의 `tests/wrap_policy_tests.cpp`에 둔다. 대가: Android 기기에서는 그리기 길의 줄 수를 시험이 보지 않는다. 같은 C++이고 Windows와 같은 식이다.
+
+**8. 테마 페이지의 측정 도우미.** `line_break_sample.h`의 `measure_line_break_status`(97행)에 스타일 인자를 더하지 않고, 정책 칸이 빈 label(`style_wrap_label_config`)과 그것을 스타일을 실은 문맥으로 재는 `measure_style_wrap`·`measure_style_wrap_status`를 같은 파일에 더했다. 기본 페이지의 칸은 config에 정책을 적어 스타일 인자가 아무 일도 하지 않고, 상태 글의 꼴도 다르다("정책 X · 라벨 N줄 · 칸 M줄 …"과 "스타일 정책 X · 라벨 N줄 · 첫 줄 끝 'Y'"). 데스크톱은 견본 단추를 첫 줄의 빈 셋째 자리에 두고, 모바일은 견본 단추 목록의 되돌림 앞에 둔다. 모바일 상태 줄은 두 줄까지 폭에서 바꾼다. 기존 `theme-style-status`의 꼴과 시험은 그대로다.
+
 ## 손으로 짓는 문맥 자리
 
 `measure_context`. 새 칸 `style`은 끝에 기본값 `nullptr`로 더해 셋까지 적은 위치 초기화와 지정 초기화가 그대로다.
@@ -208,7 +216,7 @@ luil::label_config title { .text = u8"설정을 저장했습니다", .wrap = tru
 | `tests/text_block_native_tests.cpp` 126행 | 빈 문맥 | 그대로 |
 | `tests/text_block_tests.cpp` 29행 | 지정 | 그대로 |
 | `tests/choice_group_element_tests.cpp` 87행, `tests/markdown_element_tests.cpp` 114행 | `preferred_size({ … })` | 그대로 |
-| `examples/demo/line_break_sample.h` 97행 | 지정 | 이 노드가 고친다(데모 커밋). `const luil::ui_style*` 인자를 받아 `.style`에 싣는다. 테마 페이지의 새 칸이 쓴다 |
+| `examples/demo/line_break_sample.h` 97행 | 지정 | 그대로(구현에서 바꿈, 결정 8). 기본 페이지의 칸은 config에 정책을 적어 스타일이 닿지 않는다. 테마 페이지의 새 칸은 같은 파일에 더한 `measure_style_wrap`·`measure_style_wrap_status`가 `.style`을 실은 문맥으로 잰다 |
 | `examples/demo/basics_page.cpp` 643행, `examples/mobile_demo/basics_page.cpp` 323행 | 지정 | 그대로. 줄 나눔 칸은 config에 정책을 적어 스타일보다 앞선다 |
 | `examples/demo/toasts_page.cpp` 208행, `examples/mobile_demo/toasts_page.cpp` 209행 | 지정 | 그대로. info_bar 본문은 칸이 없어 스타일을 따르는데 이 자리는 내장 스타일로 잰다. 견본 스타일이 `wrapPolicy`를 바꾼 뒤에는 높이가 어긋날 수 있어 한계로 적는다 |
 
@@ -221,7 +229,7 @@ luil::label_config title { .text = u8"설정을 저장했습니다", .wrap = tru
 | `src/win32/drag_ghost_window.cpp` 139~149행 | 그대로. 끌기 ghost는 한 줄 글(`draw_text`·`draw_text_within`)이라 정책을 읽지 않는다 |
 | `tests/font_style_native_tests.cpp`, `glyph_element_tests.cpp`, `gpu_image_tiling_tests.cpp`, `raster_draw_tests.cpp`(1270행), `raster_probe.cpp`(39행), `text_block_native_tests.cpp`, `text_block_tests.cpp` | 그대로. 새 시험만 `.wrap_policy`를 적는다 |
 
-config를 값으로 읽는 라이브러리 자리는 이 노드가 고친다. `label_element.cpp` 41행(optional을 그대로 옮긴다), `markdown_element.cpp` 356행, `text_area_element.cpp` 447·490·529·548·555행, `text_block.cpp` 81행이다. test와 데모는 칸에 대입만 해(`label_wrap_tests.cpp` 132행, `text_area_element_tests.cpp` 886·911행, `line_break_sample.h` 51·60행) 그대로 컴파일된다. 칸을 값으로 견주거나 `switch`하는 test는 없다.
+config를 값으로 읽는 라이브러리 자리는 이 노드가 고친다. `label_element.cpp` 41행(optional을 그대로 옮긴다), `markdown_element.cpp` 356행, `text_area_element.cpp` 447·490·529·548·555행, `text_block.cpp` 81행이다. test와 데모는 칸에 대입만 해(`label_wrap_tests.cpp` 132행, `text_area_element_tests.cpp` 886·911행, `line_break_sample.h` 51·60행) 그대로 컴파일된다. 칸을 값으로 견주거나 `switch`하는 test는 없다. 앱 코드의 `config.line_break == text::line_break_policy::hangul_words`는 그대로 컴파일되지만 칸이 비면 거짓이다. 컴파일이 잡지 못하는 조용한 뜻 변화라, 정책을 견주는 앱은 `context.line_break_for(config.line_break)`로 푼 값을 견준다.
 
 ## 플랫폼
 
@@ -255,16 +263,17 @@ config를 값으로 읽는 라이브러리 자리는 이 노드가 고친다. `l
   - 우선순위: 칸이 빈 label을 `unicode` 스타일을 실은 측정 문맥으로 재면 음절 사이에서 접고, 칸에 `hangul_words`를 적으면 같은 문맥에서도 어절에서 접는지. 빈 측정 문맥은 `default_ui_style()`의 정책인지;
   - `arrange_context::measure()`가 `style`을 넘기고, `make_arranged_tree(..., style)`로 배치한 label의 접은 줄이 스타일을 따르는지(`for_child`로 몇 계층 아래까지);
   - markdown: 칸이 빈 블록이 스타일의 정책으로 접히는지. 여러 줄 칸: 두 경로(측정기 길과 `make_text_layout(request, measurer)`)가 스타일 `unicode`에서 같은 줄인지, config는 그대로 두고 스타일만 바꿔 다시 배치하면 `text_area_wrap_cache`가 비워지고 다시 찬 자리가 cache 없이 접은 것과 같은지;
-  - `text_block`: `measure_text_block`이 측정 문맥의 스타일을, 다섯 인자 `draw_text_block`이 `draw_context::wrap_policy`를 따르는지(raster로 두 줄 수를 견준다). 채우지 않은 그리기 문맥은 `hangul_words`인지;
+  - `text_block`: `measure_text_block`이 측정 문맥의 스타일을 따르는지. 채우지 않은 그리기 문맥은 `hangul_words`인지;
   - `derive_draw_context`가 `wrap_policy`를 옮기는지;
   - info_bar 본문이 config 칸 없이 측정 문맥의 스타일로 접히는지.
+- `tests/text_block_native_tests.cpp`(`luil_tests`, Windows, 실제 UI 글꼴): 다섯 인자 `draw_text_block`이 칸이 비면 `draw_context::wrap_policy`로 접고, 적은 칸이 그리기 문맥보다 앞서는지. 그린 자리의 높이(줄 수 곱하기 줄 높이)를 같은 글꼴로 잰 `measure_text_block`의 줄 수와 견준다(결정 7).
 - 기존 시험(`label_wrap_tests`, `text_block_tests`, `text_area_element_tests`, `markdown_element_tests`, `line_break_tests`, `text_layout_tests`)이 고치지 않고 그대로 통과하는지. `luil_umbrella_header`, `luil_core_portability`, `luil_source_style`, `luil_installed_consumer`.
 
 데모. 상태를 label로 그려 UIA Name과 화면으로 되읽는다.
 
 - 데스크톱 테마 페이지의 "스타일 파일" 묶음에 견본 단추 `theme-style-sample-wrap`("견본: 줄 나눔 unicode")을 더한다. 내장 파일 글의 `text.wrapPolicy`를 `unicode`로 바꿔 칸에 싣고 곧바로 읽는다(`style_sheet_sample.h`에 동작 하나). 그 아래에 칸이 빈 여러 줄 label `theme-wrap-label`(견본 글과 폭은 `line_break_sample.h`의 것)과 상태 label `theme-wrap-status`를 둔다. 상태는 "스타일 정책 unicode · 라벨 N줄 · 첫 줄 끝 'X'"이고 build에서 `measure_wrap(label, { .scale, .measurer, .style = 지금 스타일 })`로 잰 값이다. 주 tree는 `make_frame`이 본문 `arrange_context`에 `.style`을 이미 실어([실행 중 스타일 읽기](style-sheet-design.md) 234행) 화면의 label도 같은 정책으로 접힌다. 처음과 `theme-style-reset` 뒤에는 "스타일 정책 hangul_words"다. 거부(낯선 키 견본) 뒤에는 앞서 적용한 정책이 남는다.
 - 모바일 데모 테마 페이지에 같은 견본 단추와 두 label을 둔다. 상태 label은 폭에서 줄을 바꾼다.
-- 데모 kind는 각 데모의 `common.h`에 더하고 test·UIA 스크립트는 이름으로 찾는다. `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`가 고정 폭 측정기로 두 정책의 상태 글을 잠근다. 화면의 값은 실제 글꼴로 잰 값이라 다를 수 있어 검증 때 UIA와 화면으로 되읽는다.
+- 새 데모 kind는 없다. 단추는 기존 스타일 단추와 같은 kind(데스크톱 `kind_tool_toggle`, 모바일 `kind_style_sheet_button`)이고 두 label은 `kind_text`다. test·UIA 스크립트는 이름으로 찾는다. `tests/mobile_demo_page_tests.cpp`가 고정 폭 측정기(ASCII는 글자 크기의 0.6배, 그 밖은 0.9배)로 두 정책의 상태 글("라벨 5줄 · 첫 줄 끝 '낱말'"과 "'한가'")을 잠그고, `tests/demo_gallery_tests.cpp`는 견본·거부·되돌림 뒤의 정책 낱말과, 상태 줄이 같은 도우미로 잰 글과 같은지를 본다. core test는 글꼴이 없어 페이지가 잰 줄 수는 화면과 다르다. 화면의 값은 실제 글꼴로 잰 값이라 다를 수 있어 검증 때 UIA와 화면으로 되읽는다.
 - UIA(격리 데스크톱): `theme-style-sample-wrap`을 Invoke해 `theme-wrap-status`가 `unicode`와 첫 줄 끝을 말하는지, 낯선 키 견본 뒤에도 `unicode`가 남는지, `theme-style-reset` 뒤 `hangul_words`인지 읽는다. 기본 페이지의 줄 나눔 칸(`line-break-status`)은 스위치가 적은 정책을 그대로 말해 스타일에 닿지 않는지 읽는다. 모바일 데모(Windows 창)도 같은 label을 읽는다. Android에는 접근성 계층이 없어 사람이 화면으로 읽는다.
 
 사람 확인.

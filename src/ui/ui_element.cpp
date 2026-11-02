@@ -25,6 +25,17 @@ namespace luil {
         return style != nullptr ? *style : default_ui_style();
     }
 
+    const ui_style& measure_context::app_style() const noexcept
+    {
+        return style != nullptr ? *style : default_ui_style();
+    }
+
+    text::line_break_policy measure_context::line_break_for(const std::optional<text::line_break_policy> chosen) const noexcept
+    {
+        // config에 적은 값, 문맥의 앱 스타일, 내장 스타일 순이다 (`app_style`이 뒤의 둘을 고른다).
+        return chosen.has_value() ? *chosen : app_style().text.wrap_policy;
+    }
+
     bool rect_f::contains(const float point_x, const float point_y) const noexcept
     {
         return point_x >= x && point_x < x + width && point_y >= y && point_y < y + height;
@@ -782,6 +793,7 @@ namespace luil {
             .maximized = context.maximized,
             .fullscreen = context.fullscreen,
             .metrics = context.metrics,
+            .wrap_policy = context.wrap_policy,
             .reduce_motion = context.reduce_motion,
             .theme = context.theme,
             .backdrop = context.backdrop,

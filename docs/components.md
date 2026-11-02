@@ -28,6 +28,7 @@
 | 구문 강조(편집에 맞춰 줄 단위로 다시 칠하는 구간) | `syntax_highlighter`, `syntax_line_lexer`, `text_span`, `text_color_role` | [ui/syntax_highlighter.h](../include/luil/ui/syntax_highlighter.h) · [ui/text_document.h](../include/luil/ui/text_document.h) | [설명](syntax-highlight-design.md) |
 | 두 글의 바뀐 구간 | `text::text_change_between` | [text/text_change.h](../include/luil/text/text_change.h) | [설명](syntax-highlight-design.md) |
 | 줄 나눔 자리(UAX #14, 한국어 어절 우선) | `text::line_break_opportunities`, `text::line_break_policy`, `text_layout_request::line_break` | [text/line_break.h](../include/luil/text/line_break.h) | [설명](line-break-design.md) |
+| 앱 전체의 여러 줄 정책(스타일 키 `text.wrapPolicy`, config가 비면 따른다) | `text_style::wrap_policy`, `measure_context::line_break_for`, `draw_context::wrap_policy` | [theme/ui_style.h](../include/luil/theme/ui_style.h) | [설명](wrap-policy-key-design.md) |
 | 체크(삼상 포함)·라디오·스위치 | `check_element`, `aggregate_check` | [ui/check_element.h](../include/luil/ui/check_element.h) | [설명](keyboard-focus-design.md) |
 | 불확정 진행 | `spinner_element` | [ui/spinner_element.h](../include/luil/ui/spinner_element.h) | [설명](concepts/ui-element.md) |
 | 진행률 | `progress_element` | [ui/progress_element.h](../include/luil/ui/progress_element.h) | [설명](value-step-design.md) |

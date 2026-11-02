@@ -645,13 +645,22 @@ namespace luil {
     // 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
     //  - 배율은 글을 물리 크기로 재고 논리 픽셀로 되돌리는 데 쓴다. 글꼴의 힌팅이 크기마다 달라 논리 크기로 잰
     //    폭은 그린 폭과 어긋날 수 있다.
-    //  - 측정기와 치수는 배치 문맥에서 온다 (`arrange_context::measure`). 비어 있으면 기본값이다.
+    //  - 측정기·치수·스타일은 배치 문맥에서 온다 (`arrange_context::measure`). 비어 있으면 기본값이다.
     struct measure_context
     {
         float scale { 1.0f };
         const text_measurer* measurer { nullptr };
         const ui_metrics* metrics { nullptr };
+        // 앱 스타일이다 (`arrange_context::style`에서 온다). 비어 있으면 내장 스타일(`default_ui_style`, LUIL_STYLE로 바꾼 값)이다.
+        //  - 여러 줄 글이 config에 정하지 않은 줄 나눔 정책(`text.wrap_policy`)을 여기서 읽는다 (`line_break_for`).
+        //  - 끝에 두어 세 칸만 적은 초기화(`{ scale, &measurer, metrics }`, `{ .scale = 2.0f }`)가 그대로다.
+        //  - 포인터만 들고 잰 뒤 잊는다 (`metrics`와 같다).
+        const ui_style* style { nullptr };
 
+        // 이 문맥이 쓸 앱 스타일이다 (비었으면 내장 스타일).
+        [[nodiscard]] const ui_style& app_style() const noexcept;
+        // config가 고른 정책이 있으면 그것, 없으면 앱 스타일의 `text.wrap_policy`다 (docs/wrap-policy-key-design.md).
+        [[nodiscard]] text::line_break_policy line_break_for(std::optional<text::line_break_policy> chosen) const noexcept;
         // 이 문맥이 쓸 측정기다 (비었으면 `default_text_measurer`).
         [[nodiscard]] const text_measurer& measure_text() const;
         // 이 문맥이 쓸 스타일 치수다 (비었으면 내장 스타일).
@@ -661,7 +670,7 @@ namespace luil {
         [[nodiscard]] float text_width(std::u8string_view text, float font_size) const;
         // 굵기·기울임을 건 UI 글꼴로 잰 폭이다 (그리기의 `make_text_font`와 같은 face).
         //  - 넣은 측정기(`measurer`)는 굵기보다 앞선다 — test의 고정 폭 측정기가 그대로 잰다.
-        [[nodiscard]] float text_width(std::u8string_view text, float font_size, font_style style) const;
+        [[nodiscard]] float text_width(std::u8string_view text, float font_size, font_style face_style) const;
     };
 
     // 배치 문맥이다.
@@ -707,7 +716,7 @@ namespace luil {
         //    (`text_measurer.cpp`의 경계).
         [[nodiscard]] measure_context measure() const noexcept
         {
-            return { scale, measurer, metrics };
+            return { scale, measurer, metrics, style };
         }
 
         // 같은 배율·scroll_offset으로 자식에게 줄 문맥이다.
@@ -771,6 +780,12 @@ namespace luil {
         // 스타일의 치수다 (`ui_style::metrics`). 그리기 안에 박혀 있던 글자 크기·모서리가
         // 여기서 온다. 기본값은 내장 스타일과 같아 채우지 않은 context도 지금까지의 그림이다.
         ui_metrics metrics {};
+        // 스타일의 여러 줄 정책이다 (`ui_style::text::wrap_policy`). 그리기에서 줄을 접는 길(배치한 줄 없이 부르는
+        // `draw_text_block`)이 config 칸이 빈 글에 쓴다.
+        //  - 기본값은 struct 기본값이라 채우지 않은 문맥은 지금까지의 그림이다 (`metrics`와 같은 규칙이다). 측정 문맥은
+        //    비면 내장 스타일(LUIL_STYLE)을 보므로, 손으로 지은 두 빈 문맥은 LUIL_STYLE이 정책을 바꾼 앱에서 갈린다.
+        //  - 배치에서 접은 줄을 그리는 label·markdown·여러 줄 칸·info_bar 본문은 이 값을 읽지 않는다.
+        text::line_break_policy wrap_policy { text::line_break_policy::hangul_words };
         // 시스템의 움직임 줄이기 설정이다 (Win32는 클라이언트 영역 애니메이션을 끈 것).
         //  - 참이면 돌아가는 표시가 멈춘 그림으로 선다. `update_context::reduce_motion`과 같은 값이라야 한다 —
         //    멈춘 그림에 다음 frame을 청하면 헛도는 timer만 남는다.

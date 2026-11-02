@@ -52,7 +52,8 @@ foreach(needle
     ".body_font_size = 12.0f"
     ".soft_button = 0.25f"
     ".selected_choice = font_weight::semibold"
-    ".line_break = single_line_break::space")
+    ".line_break = single_line_break::space"
+    ".wrap_policy = line_break_policy::hangul_words")
     string(FIND "${header}" "${needle}" position)
     if(position EQUAL -1)
         message(FATAL_ERROR "The generated header lacks: ${needle}")
@@ -243,7 +244,8 @@ list(APPEND key_needles
     "{ \"raisedBackground\", &neutral_color_palette::raised_background, &neutral_color_palette::notice_background }"
     "{ \"selectedOrHovered\", tab_close_visibility::selected_or_hovered }"
     "make_component(\"tabBar\", &ui_style::tab_bar"
-    "make_enum_row(\"lineBreak\", &text_section::line_break, single_line_break_names)")
+    "make_enum_row(\"lineBreak\", &text_section::line_break, single_line_break_names)"
+    "make_enum_row(\"wrapPolicy\", &text_section::wrap_policy, line_break_policy_names)")
 foreach(needle IN LISTS key_needles)
     string(FIND "${keys_header}" "${needle}" position)
     if(position EQUAL -1)

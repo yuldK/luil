@@ -288,6 +288,7 @@ namespace luil {
         : ui_element { id }
         , value_ { std::move(value) }
         , config_ { std::move(config) }
+        , resolved_line_break_ { config_.line_break.value_or(default_ui_style().text.wrap_policy) }
     {
         // 누름·끌기·더블 클릭은 interaction controller가 직접 다룬다 (`text_input_element`와 같다).
         // 여기서는 클릭을 흡수해 hit test의 대상이 되게만 한다.
@@ -444,7 +445,7 @@ namespace luil {
                 storage.push_back({ row.begin, row.end, row.wrapped });
             return storage;
         }
-        storage = wrap_lines(text, wrap_width_, measure, config_.line_break);
+        storage = wrap_lines(text, wrap_width_, measure, resolved_line_break_);
         return storage;
     }
 
@@ -487,7 +488,7 @@ namespace luil {
         request.wrap = wrap;
         request.line_height = line_height_logical() * scale_;
         request.styles = metric_styles(begin, begin + text.size(), displayed);
-        request.line_break = config_.line_break;
+        request.line_break = resolved_line_break_;
         return request;
     }
 
@@ -526,7 +527,7 @@ namespace luil {
             }
             else
             {
-                entry.cuts = wrap_paragraph(paragraph, wrap_width_, measure, config_.line_break);
+                entry.cuts = wrap_paragraph(paragraph, wrap_width_, measure, resolved_line_break_);
                 entry.width = config_.wrap ? 0.0f : measure(paragraph) / scale_;
             }
             return entry;
@@ -545,14 +546,14 @@ namespace luil {
         const auto face { config_.face == text_face::code ? text_layout_face::code : text_layout_face::ui };
         const auto revision { native_layout_ ? text_layout_revision() : 0 };
         if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.scale_ != scale_ || cache.sample_width_ != sample
-            || cache.wrap_ != config_.wrap || cache.line_break_ != config_.line_break || cache.native_ != native_layout_ || cache.face_ != face
+            || cache.wrap_ != config_.wrap || cache.line_break_ != resolved_line_break_ || cache.native_ != native_layout_ || cache.face_ != face
             || cache.font_revision_ != revision)
         {
             cache.entries_.clear();
             cache.rows_.clear();
             cache.width_ = wrap_width_;
             cache.wrap_ = config_.wrap;
-            cache.line_break_ = config_.line_break;
+            cache.line_break_ = resolved_line_break_;
             cache.font_size_ = font_size();
             cache.scale_ = scale_;
             cache.sample_width_ = sample;
@@ -600,6 +601,8 @@ namespace luil {
     {
         set_bounds(context.slot);
         scale_ = context.scale > 0.0f ? context.scale : 1.0f;
+        // 정책은 배치에서 한 번 푼다. 아래의 글꼴 배치(`layout_request`)부터 이 값을 읽는다.
+        resolved_line_break_ = context.measure().line_break_for(config_.line_break);
 
         // 줄은 여기서 접는다 — 접은 줄 수가 내용 높이고, 내용 높이가 흘리는 범위와 막대다.
         //  - 흘리는 칸은 막대 자리를 늘 뺀 폭으로 접는다. 막대는 넘칠 때만 서는데, 그 자리를 그때만 빼면 줄 하나가
