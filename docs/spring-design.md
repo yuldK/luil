@@ -175,7 +175,7 @@ std::function<input_action(const sheet_release&)> release {};
 
 ### Win32
 
-플랫폼 호출이 없는 순수 계산이라 `src/win32`는 고치지 않는다. 손잡이를 마우스로 끌 때도 `end_pointer_drag`가 `on_release`에 `drag_velocity`를 준다. 데스크톱 데모는 `window_metrics_intent`(`examples/demo/common.h`)에 `reduce_motion` 꼬리 칸을 더하고, 세 값짜리 `make_window_metrics_message` 대신 `make_metrics_message`를 넓혀 받는다. 값은 Win32 전달이 서기 전에는 항상 거짓이다. 그 전달은 같은 라운드의 taskbar가 낸다([움직임 줄이기 연결](reduce-motion-design.md)의 결정 4).
+플랫폼 호출이 없는 순수 계산이라 `src/win32`는 고치지 않는다. 손잡이를 마우스로 끌 때도 `end_pointer_drag`가 `on_release`에 `drag_velocity`를 준다. 데스크톱 데모는 `window_metrics_intent`(`examples/demo/common.h`)에 `reduce_motion` 꼬리 칸을 더하고, 세 값짜리 `make_window_metrics_message` 대신 `make_metrics_message`를 넓혀 받는다. Windows에서 이 값은 같은 라운드의 taskbar가 낸 Win32 전달로 OS 설정을 따른다([움직임 줄이기 연결](reduce-motion-design.md)의 결정 4).
 
 ### Android
 

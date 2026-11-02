@@ -122,7 +122,7 @@ if (was_reduced != reduce_motion_)
 - 레이어드 창이 크기 변경을 미룬 동안에도 `make_window_metrics_message`가 가장 새 미룬 배치의 크기를 싣는다. 크기가 어긋난 metrics는 나가지 않는다. 메시지의 표는 inbox 순서라, 뒤따라 보내는 이 메시지가 앞선 미룬 배치의 표 비교(`deferred_placements::take_ready`)를 흔들지 않는다.
 - host가 아직 없을 때(`host_ == nullptr`)의 변경은 `post_window_metrics`가 버린다. 첫 metrics가 그때의 값을 싣는다.
 - 보조 창·popup은 같은 `reduce_motion_`을 `apply_frame_appearance`로 받는다. 따로 할 일이 없다.
-- 이 두 곳은 taskbar(줄 4 R1)가 낸다(결정 4).
+- 이 두 곳은 taskbar(줄 4 R1)가 냈다(결정 4).
 
 ### Android
 
@@ -147,7 +147,7 @@ if (was_reduced != reduce_motion_)
 
 - **spring**: 이 노드가 세운 `window_metrics::reduce_motion`과 `motion_duration`을 쓴다. `spring_to`는 참이면 목표에 정지한 값(속도 0)을 돌려주는 길을 같은 이름의 인자로 연다. 놓은 속도(`drag_velocity`)가 있어도 참이면 쓰지 않는다. 모양은 스프링 설계가 정한다.
 - **page_anim**: 전환 element가 UI thread에서 `draw_context::reduce_motion`을 읽어 끝 상태를 바로 그리면 앱은 몰라도 된다. 앱이 이전 tree를 쥐고 전환을 시작하는 쪽은 `window_metrics::reduce_motion`이 참이면 전환을 시작하지 않는다. 이전 tree를 쥘 이유가 없다.
-- **taskbar**(줄 4 R1, 결정 4): 위 Win32 절의 두 변경과 `tests/win32_window_tests.cpp`의 test 둘을 `publish_platform` 변경과 같은 커밋 묶음으로 낸다. 같은 `WM_SETTINGCHANGE` case를 고치는 노드가 맡는다. 이 노드는 `win32_window.cpp`를 고치지 않는다.
+- **taskbar**(줄 4 R1, 결정 4): 위 Win32 절의 두 변경과 `tests/win32_window_tests.cpp`의 test 둘을 `publish_platform` 변경과 같은 커밋 묶음으로 냈다. 같은 `WM_SETTINGCHANGE` case를 고치는 노드가 맡았다. 이 노드는 `win32_window.cpp`를 고치지 않는다.
 - **앱이 시간 기반 값을 소유하는 노드 모두**: 새 값의 시작 길이를 `motion_duration`으로 거친다. 도는 중에 바뀌면 끝값으로 붙인다.
 
 ## 확인
@@ -157,7 +157,7 @@ if (was_reduced != reduce_motion_)
 - `tests/window_metrics_tests.cpp`(추가): `make_window_metrics`가 만든 값의 `reduce_motion`은 거짓이다. 이 칸만 다른 두 metrics는 같지 않다. `make_metrics_message`를 넓힌 delegate는 참인 값을 그대로 받고, 세 값짜리만 넓힌 delegate는 참인 값이 와도 크기·배율만 받는다.
 - `tests/transition_tests.cpp`(추가, `STATIC_REQUIRE`): `motion_duration`은 참이면 0이고 거짓이면 그대로다. 참인 길이로 시작한 `transition_to`는 지금 값에서 출발해도 어느 시각에 물어도 목표값이고, `transition_finished`가 참이며 `transition_next_update`가 비어 있다.
 - 기존 `tests/ui_foundation_tests.cpp`(spinner), `tests/tab_bar_style_tests.cpp`, `tests/raster_draw_tests.cpp`(`derive_draw_context`)는 무변경으로 통과해야 한다.
-- Win32 몫은 taskbar가 낸다(결정 4). `tests/win32_window_tests.cpp`는 첫 metrics의 `reduce_motion`이 `SystemParametersInfoW`로 읽은 값과 같은지 본다. `on_started`에서 같은 창에 `WM_SETTINGCHANGE`를 보내고 값이 그대로면 delegate의 `make_metrics_message` 호출이 늘지 않는지 본다. OS 설정을 바꾸는 test는 두지 않는다.
+- Win32 몫은 taskbar가 냈다(결정 4). `tests/win32_window_tests.cpp`는 첫 metrics의 `reduce_motion`이 `SystemParametersInfoW`로 읽은 값과 같은지 본다. `on_started`에서 같은 창에 `WM_SETTINGCHANGE`를 보내고 값이 그대로면 delegate의 `make_metrics_message` 호출이 늘지 않는지 본다. OS 설정을 바꾸는 test는 두지 않는다.
 - Android의 JNI 읽기는 자동 test가 없다. 기기 test 실행기(`app_process`)에는 앱 Context가 없다.
 - `scripts/check_source_style.ps1`. 새 공개 헤더가 없어 우산 헤더 검사는 그대로다.
 
