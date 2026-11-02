@@ -1,52 +1,13 @@
 #include "android/android_window_control.h"
 
 #include "android/device_request.h"
+#include "android/java_vm.h"
 
 #include <android/api-level.h>
 #include <android/log.h>
 
 namespace luil::android {
     namespace {
-        // Java 예외가 났으면 거두고 참이다.
-        [[nodiscard]] bool failed(JNIEnv& env) noexcept
-        {
-            if (env.ExceptionCheck() == false)
-                return false;
-            env.ExceptionClear();
-            return true;
-        }
-
-        // 지역 참조 틀이다. 한 번의 조작이 쓴 지역 참조를 한 번에 놓는다.
-        class local_frame
-        {
-        public:
-            explicit local_frame(JNIEnv& env) noexcept
-                : env_ { env }
-                , pushed_ { env.PushLocalFrame(16) == 0 }
-            {
-            }
-
-            local_frame(const local_frame&) = delete;
-            local_frame(local_frame&&) = delete;
-            local_frame& operator=(const local_frame&) = delete;
-            local_frame& operator=(local_frame&&) = delete;
-
-            ~local_frame()
-            {
-                if (pushed_)
-                    env_.PopLocalFrame(nullptr);
-            }
-
-            [[nodiscard]] bool pushed() const noexcept
-            {
-                return pushed_;
-            }
-
-        private:
-            JNIEnv& env_;
-            bool pushed_ { false };
-        };
-
         // `Configuration.ORIENTATION_LANDSCAPE`다.
         constexpr jint configuration_landscape { 2 };
         // `WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`(API 30)다.
@@ -61,10 +22,10 @@ namespace luil::android {
                 return nullptr;
             const jclass type { env.GetObjectClass(target) };
             const jmethodID method { env.GetMethodID(type, name, signature) };
-            if (method == nullptr || failed(env))
+            if (method == nullptr || jni_failed(env))
                 return nullptr;
             const jobject result { env.CallObjectMethod(target, method) };
-            return failed(env) ? nullptr : result;
+            return jni_failed(env) ? nullptr : result;
         }
 
         // 객체의 인자 없는 int 메서드다. 실패하면 nullopt다.
@@ -74,10 +35,10 @@ namespace luil::android {
                 return std::nullopt;
             const jclass type { env.GetObjectClass(target) };
             const jmethodID method { env.GetMethodID(type, name, "()I") };
-            if (method == nullptr || failed(env))
+            if (method == nullptr || jni_failed(env))
                 return std::nullopt;
             const jint result { env.CallIntMethod(target, method) };
-            if (failed(env))
+            if (jni_failed(env))
                 return std::nullopt;
             return result;
         }
@@ -103,7 +64,7 @@ namespace luil::android {
                 return false;
             const jclass type { env.GetObjectClass(configuration) };
             const jfieldID field { env.GetFieldID(type, "orientation", "I") };
-            if (field == nullptr || failed(env))
+            if (field == nullptr || jni_failed(env))
                 return false;
             return env.GetIntField(configuration, field) == configuration_landscape;
         }
@@ -111,7 +72,7 @@ namespace luil::android {
 
     void apply_screen_orientation(JNIEnv& env, const jobject activity, const screen_orientation request, std::optional<int>& original)
     {
-        const local_frame frame { env };
+        const jni_local_frame frame { env };
         if (frame.pushed() == false)
             return;
         if (original.has_value() == false)
@@ -128,10 +89,10 @@ namespace luil::android {
 
         const jclass type { env.GetObjectClass(activity) };
         const jmethodID set_requested { env.GetMethodID(type, "setRequestedOrientation", "(I)V") };
-        if (set_requested == nullptr || failed(env))
+        if (set_requested == nullptr || jni_failed(env))
             return;
         env.CallVoidMethod(activity, set_requested, static_cast<jint>(value));
-        if (failed(env))
+        if (jni_failed(env))
             return;
         // 기기마다 다른 회전과 고른 값을 logcat에서 바로 맞대 보는 자리다.
         __android_log_print(ANDROID_LOG_INFO, "luil", "requested orientation %d (rotation %d, landscape %d)", value, static_cast<int>(rotation), landscape ? 1 : 0);
@@ -139,20 +100,20 @@ namespace luil::android {
 
     void perform_haptic_feedback(JNIEnv& env, const jobject activity, const int constant)
     {
-        const local_frame frame { env };
+        const jni_local_frame frame { env };
         if (frame.pushed() == false)
             return;
         const jobject decor { call_object(env, call_object(env, activity, "getWindow", "()Landroid/view/Window;"), "getDecorView", "()Landroid/view/View;") };
         if (decor == nullptr)
             return;
         const jclass view_type { env.FindClass("android/view/View") };
-        if (view_type == nullptr || failed(env))
+        if (view_type == nullptr || jni_failed(env))
             return;
         const jmethodID perform { env.GetMethodID(view_type, "performHapticFeedback", "(I)Z") };
-        if (perform == nullptr || failed(env))
+        if (perform == nullptr || jni_failed(env))
             return;
         const jboolean performed { env.CallBooleanMethod(decor, perform, static_cast<jint>(constant)) };
-        if (failed(env))
+        if (jni_failed(env))
             return;
         // 사용자가 터치 피드백을 껐으면 시스템이 거절한다. 울리지 않은 까닭을 logcat에서 가른다.
         __android_log_print(ANDROID_LOG_DEBUG, "luil", "haptic feedback %d performed %d", constant, performed ? 1 : 0);
@@ -160,7 +121,7 @@ namespace luil::android {
 
     void apply_system_bars(JNIEnv& env, const jobject activity, const system_bars_mode mode)
     {
-        const local_frame frame { env };
+        const jni_local_frame frame { env };
         if (frame.pushed() == false)
             return;
         const bool hide { mode == system_bars_mode::immersive };
@@ -173,25 +134,25 @@ namespace luil::android {
             const jobject controller { call_object(env, window, "getInsetsController", "()Landroid/view/WindowInsetsController;") };
             const jclass types { env.FindClass("android/view/WindowInsets$Type") };
             const jclass controller_type { env.FindClass("android/view/WindowInsetsController") };
-            if (controller == nullptr || types == nullptr || controller_type == nullptr || failed(env))
+            if (controller == nullptr || types == nullptr || controller_type == nullptr || jni_failed(env))
                 return;
             const jmethodID system_bars { env.GetStaticMethodID(types, "systemBars", "()I") };
             const jmethodID set_behavior { env.GetMethodID(controller_type, "setSystemBarsBehavior", "(I)V") };
             const jmethodID change { env.GetMethodID(controller_type, hide ? "hide" : "show", "(I)V") };
-            if (system_bars == nullptr || set_behavior == nullptr || change == nullptr || failed(env))
+            if (system_bars == nullptr || set_behavior == nullptr || change == nullptr || jni_failed(env))
                 return;
             const jint bars { env.CallStaticIntMethod(types, system_bars) };
-            if (failed(env))
+            if (jni_failed(env))
                 return;
             // 쓸어 꺼낸 막대가 잠시 뒤 다시 숨는 몰입 모드다. 보일 때도 행동을 그대로 두어 다음 숨김이 같다.
             if (hide)
             {
                 env.CallVoidMethod(controller, set_behavior, transient_bars_by_swipe);
-                if (failed(env))
+                if (jni_failed(env))
                     return;
             }
             env.CallVoidMethod(controller, change, bars);
-            static_cast<void>(failed(env));
+            static_cast<void>(jni_failed(env));
             return;
         }
 
@@ -203,61 +164,61 @@ namespace luil::android {
             return;
         const jclass view_type { env.GetObjectClass(decor) };
         const jmethodID set_flags { env.GetMethodID(view_type, "setSystemUiVisibility", "(I)V") };
-        if (set_flags == nullptr || failed(env))
+        if (set_flags == nullptr || jni_failed(env))
             return;
         env.CallVoidMethod(decor, set_flags, hide ? (*flags | immersive_flags) : (*flags & ~immersive_flags));
-        static_cast<void>(failed(env));
+        static_cast<void>(jni_failed(env));
     }
     int read_target_sdk(JNIEnv& env, const jobject activity)
     {
-        local_frame frame { env };
+        jni_local_frame frame { env };
         if (frame.pushed() == false)
             return 0;
         const jobject info { call_object(env, activity, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;") };
         if (info == nullptr)
             return 0;
         const jfieldID field { env.GetFieldID(env.GetObjectClass(info), "targetSdkVersion", "I") };
-        if (field == nullptr || failed(env))
+        if (field == nullptr || jni_failed(env))
             return 0;
         const jint value { env.GetIntField(info, field) };
-        return failed(env) ? 0 : static_cast<int>(value);
+        return jni_failed(env) ? 0 : static_cast<int>(value);
     }
 
     bool has_permission(JNIEnv& env, const jobject activity, const char* const permission)
     {
-        local_frame frame { env };
+        jni_local_frame frame { env };
         if (frame.pushed() == false || activity == nullptr || permission == nullptr)
             return false;
         const jclass type { env.GetObjectClass(activity) };
         const jmethodID check { env.GetMethodID(type, "checkSelfPermission", "(Ljava/lang/String;)I") };
-        if (check == nullptr || failed(env))
+        if (check == nullptr || jni_failed(env))
             return false;
         const jstring name { env.NewStringUTF(permission) };
-        if (name == nullptr || failed(env))
+        if (name == nullptr || jni_failed(env))
             return false;
         // `PackageManager.PERMISSION_GRANTED`는 0이다.
         const jint result { env.CallIntMethod(activity, check, name) };
-        return failed(env) == false && result == 0;
+        return jni_failed(env) == false && result == 0;
     }
 
     void request_permission(JNIEnv& env, const jobject activity, const char* const permission)
     {
-        local_frame frame { env };
+        jni_local_frame frame { env };
         if (frame.pushed() == false || activity == nullptr || permission == nullptr)
             return;
         const jclass type { env.GetObjectClass(activity) };
         const jmethodID request { env.GetMethodID(type, "requestPermissions", "([Ljava/lang/String;I)V") };
         const jclass string_type { env.FindClass("java/lang/String") };
-        if (request == nullptr || string_type == nullptr || failed(env))
+        if (request == nullptr || string_type == nullptr || jni_failed(env))
             return;
         const jstring name { env.NewStringUTF(permission) };
         const jobjectArray names { name != nullptr ? env.NewObjectArray(1, string_type, name) : nullptr };
-        if (names == nullptr || failed(env))
+        if (names == nullptr || jni_failed(env))
             return;
         // 요청 번호는 결과 콜백이 쓰는 것이라 우리에게는 뜻이 없다. 하위 16비트 안의 값이면 된다.
         constexpr jint request_code { 0x4c4e };
         env.CallVoidMethod(activity, request, names, request_code);
-        if (failed(env))
+        if (jni_failed(env))
             __android_log_print(ANDROID_LOG_WARN, "luil", "requestPermissions failed for %s", permission);
     }
 }
