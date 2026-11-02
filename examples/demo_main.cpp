@@ -10,7 +10,7 @@
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
 //  - 토스트: 심각도별 알림과 실행 취소 토스트               (demo/toasts_page)
 //  - 메뉴·팝업: 드롭다운과 컨텍스트 메뉴 (popup 창)         (demo/popups_page)
-//  - 창: 보조 top-level 창(도구 창) 여닫기와 전체 화면 전환 (demo/windows_page)
+//  - 창: 보조 top-level 창(도구 창) 여닫기, 전체 화면 전환, 작업 표시줄 진행률·오버레이 (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
@@ -621,6 +621,8 @@ namespace demo {
                 for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale))
                     frame->popups.push_back(std::move(popup));
                 frame->file_dialog = file_dialog_;
+                // 주 창 작업 표시줄 단추의 진행률과 오버레이다. 독립 창의 것은 그 창(`ui_window::taskbar`)에 실린다.
+                frame->taskbar = windows_.make_taskbar_request();
                 // 초점 요청은 두 곳(도구 창 페이지·명령 팔레트)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
                 // 쪽의 요청을 셸 번호로 다시 매겨 싣는다 — 팔레트를 닫았다고 도구 창의 지난 요청이 되살아나지 않는다.
                 if (const auto request { windows_.make_focus_request() }; request.has_value() && request->id != seen_tool_focus_)
@@ -1055,6 +1057,12 @@ namespace demo {
             [[nodiscard]] luil::app_message make_backdrop_message(const luil::win32::backdrop_report& report) override
             {
                 return luil::app_message { backdrop_report_intent { report } };
+            }
+
+            // 작업 표시줄 단추에 요청이 닿은 정도다. 창 페이지가 받아 글로 보인다.
+            [[nodiscard]] luil::app_message make_taskbar_message(const luil::win32::taskbar_report& report) override
+            {
+                return luil::app_message { taskbar_report_intent { report } };
             }
 
             [[nodiscard]] luil::app_message make_window_placement_message(const luil::win32::window_placement& placement) override

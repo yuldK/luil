@@ -395,10 +395,15 @@ add_executable(luil_tests
     win32_window_tests.cpp
     window_messages_tests.cpp
     window_mode_tests.cpp
-    window_position_tests.cpp)
+    window_position_tests.cpp
+    # 데스크톱 데모의 창 페이지는 Win32 호출(탐색기·메모장)을 부르므로 Windows 전용 test에서 읽는다.
+    "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/windows_page.cpp"
+    windows_page_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
+        "${PROJECT_SOURCE_DIR}/examples"
         "${LUIL_TEST_DIRECTORY}")
 target_link_libraries(luil_tests
     PRIVATE
