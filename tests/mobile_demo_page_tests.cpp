@@ -2050,6 +2050,59 @@ TEST_CASE("The inspector selection buttons walk the page tree in drawing order",
     REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: focused");
 }
 
+TEST_CASE("The inspector buttons keep the tapped sample focused so the ancestor steps climb from it", "[mobile-demo][inspector]")
+{
+    // 실기기의 손가락 탭과 같은 길이다. 탭마다 페이지가 메시지를 받고 tree를 새로 지어 같은 controller에 건넨다.
+    mobile_demo::inspector_page page {};
+    luil::interaction_controller controller {};
+    auto tree { std::make_shared<const luil::ui_tree>(inspector_tree(page)) };
+    controller.set_tree(tree);
+    int now { 0 };
+    const auto tap = [&](const std::u8string& owner) {
+        const luil::ui_element* const target { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(target != nullptr);
+        const luil::rect_f box { target->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        static_cast<void>(controller.process(touch_press(x, y, now)));
+        const std::vector<luil::input_action> actions { controller.process(touch_release(x, y, now + 40)) };
+        now += 1000;
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(page.handle(*message));
+        tree = std::make_shared<const luil::ui_tree>(inspector_tree(page));
+        controller.set_tree(tree);
+    };
+    const auto picked_owner = [&]() {
+        const luil::ui_element* const picked { luil::pick_inspected(*tree, controller.snapshot(), page.config()) };
+        REQUIRE(picked != nullptr);
+        return picked->id().owner;
+    };
+    const luil::ui_element_id sample_button { mobile_demo::kind_layout, u8"inspector-sample-button" };
+
+    tap(u8"inspector-toggle");
+    tap(u8"inspector-sample-button");
+    REQUIRE(controller.snapshot().focused == sample_button);
+    REQUIRE(picked_owner() == u8"inspector-sample-button");
+
+    // 조상 위로를 누를 때마다 견본 단추에서 견본 stack, 견본 panel, 페이지 순으로 오른다. 초점은 견본 단추에 남는다.
+    tap(u8"inspector-up");
+    REQUIRE(controller.snapshot().focused == sample_button);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 1");
+    REQUIRE(picked_owner() == u8"inspector-sample-stack");
+    tap(u8"inspector-up");
+    REQUIRE(picked_owner() == u8"inspector-sample");
+    tap(u8"inspector-up");
+    REQUIRE(picked_owner() == u8"inspector-page");
+    REQUIRE(controller.snapshot().focused == sample_button);
+
+    // 다른 제어 단추도 초점을 옮기지 않는다.
+    tap(u8"inspector-outline");
+    tap(u8"inspector-down");
+    REQUIRE(controller.snapshot().focused == sample_button);
+    REQUIRE(picked_owner() == u8"inspector-sample");
+}
+
 TEST_CASE("The inspector names the demo kinds and reads the sample's inner padding", "[mobile-demo][inspector]")
 {
     mobile_demo::inspector_page page {};

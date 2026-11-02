@@ -72,12 +72,16 @@ namespace mobile_demo {
         column.gap(row_spacing);
 
         // 손가락으로 누르는 단추 줄이다.
+        //  - 탭해도 초점을 가져가지 않는다. 기본 집기(focused)는 초점 자리를 집으므로, 단추가 초점을 가져가면
+        //    견본 단추를 탭한 뒤 누른 '조상 위로'가 견본이 아니라 방금 누른 단추에서 오른다.
+        //  - Tab의 자리는 그대로라 키보드로는 단추에 갈 수 있다.
         luil::stack_config row_config {};
         row_config.direction = luil::stack_direction::row;
         row_config.spacing = row_spacing;
         const auto add_button = [](luil::stack_element& row, std::u8string owner, std::u8string text, const demo::inspector_command command) {
             auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, luil::text_button_config { .text = std::move(text) }) };
             button->set_action(luil::ui_trigger::left_click, luil::make_message_action(demo::inspector_command_intent { command }));
+            button->set_preserve_pointer_focus(true);
             row.add_flexible(std::move(button));
         };
         auto switches { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"inspector-switches" }, row_config) };
