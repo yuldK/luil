@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/app/app_delegate.h"
+#include "luil/app/platform_services.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/ui_events.h"
@@ -293,6 +294,22 @@ namespace luil::win32 {
             static_cast<void>(path);
             return false;
         }
+
+        // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다 (`single_instance::send_to_primary`,
+        // docs/single-instance-args-design.md). `window_environment::instance`를 단 첫째의 주 창이 받는다.
+        // true면 앱이 받았다는 뜻이고 보낸 쪽은 `ok`를 본다. false는 보낸 쪽의 `failed`다.
+        //  - UI thread의 주 창 프로시저 안에서 불린다. 보낸 쪽이 끝나기를 기다리므로 곧 돌아와야 한다:
+        //    `host.post_app_message_ticketed`로 게시하고 표가 0이 아닌지를 답한다. 대화 상자나 막는 호출을 하지 않는다.
+        //  - 던진 예외는 삼키고 false로 본다.
+        //  - 인자는 명령 줄과 같이 믿을 수 없는 입력이다. 파일 연결이나 URL 프로토콜로 뜬 둘째의 인자는 문서와 웹 링크에서 온다.
+        //  - 콜백 뒤 보낸 쪽이 `activate`를 켰고 주 창이 보이면 라이브러리가 주 창을 앞으로 세운다 (최소화는 되살린다).
+        //    답이 true든 false든 같다.
+        [[nodiscard]] virtual bool on_instance_arguments(app_host& host, const instance_arguments& arguments)
+        {
+            static_cast<void>(host);
+            static_cast<void>(arguments);
+            return false;
+        }
     };
 
     // 창을 만들고 메시지 루프를 돈다.
@@ -305,6 +322,15 @@ namespace luil::win32 {
         logic_driver* driver { nullptr };
         interaction_policy* policy { nullptr };
         window_delegate* delegate { nullptr };
+        // 이 프로세스의 단일 인스턴스다. 첫째(`primary()`)이면 주 창이 같은 이름의 둘째가 보낸 인자를 받는다
+        // (`window_delegate::on_instance_arguments`). 창보다 오래 살아야 한다.
+        //  - 비었거나 둘째이거나 host가 없는 smoke 모드이거나 delegate가 없으면 받지 않는다. 보내는 쪽은 `not_found`를 본다.
+        const single_instance* instance { nullptr };
+        // 관리자 권한으로 도는 첫째가 낮은 권한 프로세스(일반 권한의 탐색기에서 연 파일)의 인자도 받는다 (UIPI를 연다).
+        //  - 기본은 닫힘이다. 인자가 높은 권한 앱의 입력이 되므로 앱이 그 위험을 알고 켠다.
+        //    닫힌 채 낮은 권한 둘째가 보내면 `send_to_primary`가 접근 거부로 `failed`다.
+        //  - 샌드박스 안의 프로세스를 포함해 낮은 권한 프로세스가 인자를 먹일 수 있다.
+        bool instance_from_lower_integrity { false };
     };
 
     // 실행 module은 라이브러리가 스스로 얻는다 (Win32 HINSTANCE를 받지 않는다).

@@ -71,4 +71,9 @@ namespace luil::win32 {
     // 관리자 권한으로 도는 앱이 낮은 권한의 셸이 보내는 등록 메시지를 받게 한다 (UIPI).
     // 두 메시지 모두 값을 싣지 않아 열어도 얻는 것이 없다. 실패해도 메시지가 안 올 뿐이라 조용히 넘어간다.
     void allow_shell_events(HWND window) noexcept;
+
+    // 관리자 권한으로 도는 첫째가 낮은 권한 프로세스의 `WM_COPYDATA`(둘째 인스턴스의 인자)를 받게 한다 (UIPI).
+    // 셸 메시지와 달리 값을 싣는다. 그래서 늘 걸지 않고 앱이 `window_environment::instance_from_lower_integrity`를 켰을 때만
+    // 건다 (docs/single-instance-args-design.md 결정 6). 실패해도 낮은 권한 둘째가 접근 거부를 받을 뿐이라 조용히 넘어간다.
+    void allow_instance_message(HWND window) noexcept;
 }

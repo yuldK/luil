@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -40,6 +41,24 @@ namespace luil {
     //  - 폴더가 없으면 `failed`다 (만들지 않는다).
     [[nodiscard]] platform_result replace_file_atomically(std::u8string_view path, std::span<const std::uint8_t> contents);
 
+    // 둘째가 첫째에 건넨 값이다 (single-instance-args-design.md). 라이브러리는 해석하지 않는다 (경로를 풀지도, 열지도 않는다).
+    struct instance_arguments
+    {
+        // 보낸 쪽이 준 목록 그대로다. 실행 파일 경로(argv[0])는 앱이 넣어야 들어간다.
+        std::vector<std::u8string> arguments {};
+        // 보낸 프로세스의 작업 폴더다. 상대 경로를 풀 때 쓴다. 보내는 쪽이 늘 채운다.
+        std::u8string working_directory {};
+    };
+
+    struct instance_send_options
+    {
+        // 첫 창이 설 때까지의 기다림과 답을 기다림을 합친 시한이다.
+        std::chrono::milliseconds timeout { 3000 };
+        // 첫째의 보이는 주 창을 앞으로 세운다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다.
+        //  - 다르게 하려는 앱은 거짓으로 보내고 자기 `focus_request`를 쓴다.
+        bool activate { true };
+    };
+
     // 같은 이름의 인스턴스 가운데 첫째인가. 객체가 사는 동안 쥐고 없어질 때 놓는다.
     //  - Windows: 이름 있는 뮤텍스 `Local\luil-instance:<name>`(같은 사용자 세션 안에서 하나).
     //  - Android: OS가 앱마다 프로세스를 하나로 묶는다. `primary()`는 참, `status()`는 `unsupported`다.
@@ -55,6 +74,16 @@ namespace luil {
 
         [[nodiscard]] bool primary() const noexcept;
         [[nodiscard]] const platform_result& status() const noexcept;
+        // 받은 이름이다. 옮겨 간 뒤의 빈 객체는 빈 글이다.
+        [[nodiscard]] std::u8string_view name() const noexcept;
+
+        // 첫째에 인자를 보내고 앱이 받을 때까지 기다린다. 둘째(`primary() == false`)가 어느 thread에서나 부른다.
+        //  - `ok`: 첫째의 앱이 받았다 (`window_delegate::on_instance_arguments`가 true).
+        //  - `failed`: 받지 않았다. 앱이 false를 답했거나, 인자가 잘못되었거나(잘못된 UTF-8, NUL, 항목 4096개·글 256 KiB 초과,
+        //    이름이 UTF-16 241 코드 단위 초과), 시한이 지났거나, 첫째가 더 높은 권한이다. 시한이 지난 보내기는 첫째가 나중에 받을 수 있다.
+        //  - `not_found`: 시한 안에 첫째의 주 창이 서지 않았거나 이 객체가 첫째다.
+        //  - 보내는 동안 부른 thread는 다른 메시지를 풀지 않는다. Android는 늘 `unsupported`다.
+        [[nodiscard]] platform_result send_to_primary(std::span<const std::u8string> arguments, const instance_send_options& options = {}) const;
 
     private:
         struct state;

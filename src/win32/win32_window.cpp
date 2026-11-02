@@ -14,6 +14,7 @@
 #include "win32/drag_ghost_window.h"
 #include "win32/embedded_assets.h"
 #include "win32/file_dialog.h"
+#include "win32/instance_message.h"
 #include "win32/layered_placement.h"
 #include "win32/popup_surface.h"
 #include "win32/secondary_surface.h"
@@ -245,6 +246,16 @@ namespace luil::win32 {
                 .button_foreground = read_system_color(COLOR_BTNTEXT),
                 .disabled_foreground = read_system_color(COLOR_GRAYTEXT),
             };
+        }
+
+        // 창을 앞으로 세운다. 최소화는 되살린다.
+        //  - 앞 창을 빼앗지 않는 OS 규칙을 넘지 않는다: 이 프로세스가 앞 창이 아니면 OS가 막고 작업 표시줄 단추만 깜빡인다.
+        //    초점 요청(`advance_focus_request`)과 둘째 인스턴스의 인자(`receive_instance_message`)가 같은 규칙을 쓴다.
+        void bring_window_forward(const HWND window) noexcept
+        {
+            if (IsIconic(window) != FALSE)
+                ShowWindow(window, SW_RESTORE);
+            SetForegroundWindow(window);
         }
 
         // 주 창의 표면이다.
@@ -815,6 +826,8 @@ namespace luil::win32 {
 
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);
+                // 앱이 둘째 인스턴스의 인자를 받을 준비가 됐다. 창을 보이기 전에 표식을 건다.
+                publish_instance_mark();
                 // 클립보드가 바뀌면 앱에 알린다 (잘라 둔 항목의 표시를 거둘 때를 안다).
                 // 실패해도 알림만 없을 뿐 클립보드 읽기·쓰기는 그대로다.
                 static_cast<void>(AddClipboardFormatListener(window_));
@@ -1049,6 +1062,8 @@ namespace luil::win32 {
                     // 창 배치는 종료 신호보다 먼저 게시해야 같은 채널의 순서로 반영된다.
                     if (host_ != nullptr)
                     {
+                        // 거두기 전에 표식부터 지운다. 둘째가 이미 정리를 시작한 앱에 인자를 보내지 않는다.
+                        clear_instance_mark();
                         // 끝나는 창이 미뤄 둔 배치는 내지 않는다. 화면에 있는 그대로의 배치를 알린다.
                         deferred_placements_.clear();
                         post_window_placement();
@@ -1067,6 +1082,7 @@ namespace luil::win32 {
                     // shutdown의 3초 상한은 세션 종료 유예(기본 5초) 안이다.
                     if (word_parameter != FALSE && host_ != nullptr)
                     {
+                        clear_instance_mark();
                         deferred_placements_.clear();
                         post_window_placement();
                         host_->shutdown();
@@ -1216,6 +1232,13 @@ namespace luil::win32 {
                 case WM_CLIPBOARDUPDATE:
                     post_clipboard_change();
                     return 0;
+                case WM_COPYDATA: {
+                    // 같은 이름의 둘째 인스턴스가 보낸 인자다. 표식이 없거나 이 형식의 표식이 아닌 WM_COPYDATA는 기본 처리에 넘긴다.
+                    const auto* const data { reinterpret_cast<const COPYDATASTRUCT*>(long_parameter) };
+                    if (instance_property_.empty() || data == nullptr || data->dwData != instance_message_tag)
+                        break;
+                    return receive_instance_message(*data);
+                }
                 case WM_DESTROY:
                     static_cast<void>(RemoveClipboardFormatListener(window_));
                     // **웹뷰가 가장 먼저다.** 웹뷰는 표면 렌더러가 소유한 visual에
@@ -1225,6 +1248,7 @@ namespace luil::win32 {
                     // WM_CLOSE를 거치지 않은 파괴 경로에서도 스레드를 먼저 정리한다.
                     if (host_ != nullptr)
                     {
+                        clear_instance_mark();
                         host_->shutdown();
                         host_.reset();
                     }
@@ -2382,12 +2406,7 @@ namespace luil::win32 {
                     window_surface* const surface { anchor_surface(request.surface) };
                     // popup은 활성화를 받지 않는 표면이다 (`WS_EX_NOACTIVATE`).
                     if (request.activate && surface != nullptr && find_popup(request.surface) == nullptr)
-                    {
-                        const HWND window { surface->window() };
-                        if (IsIconic(window) != FALSE)
-                            ShowWindow(window, SW_RESTORE);
-                        SetForegroundWindow(window);
-                    }
+                        bring_window_forward(surface->window());
                     if (request.target != ui_element_id {})
                         host_->post_raw_input(access_focus_event { request.target, request.surface, now });
                 }
@@ -2998,6 +3017,64 @@ namespace luil::win32 {
                 return MulDiv(value, static_cast<int>(dpi_), 96);
             }
 
+            // 첫째이면 주 창에 이름 표식을 건다. 둘째 인스턴스가 이 표식으로 첫째의 주 창을 찾는다 (single-instance-args-design.md).
+            //  - 표식이 서면 받을 준비가 된 것이다: 단일 인스턴스가 첫째이고 host와 delegate가 있다. 아니면 걸지 않아 보내는 쪽이 `not_found`를 본다.
+            //  - 낮은 권한 프로세스가 보낸 인자는 앱이 허락한 경우에만 받는다 (UIPI).
+            void publish_instance_mark()
+            {
+                if (environment_.instance == nullptr || environment_.instance->primary() == false || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                std::optional<std::wstring> property { instance_property_name(environment_.instance->name()) };
+                if (property.has_value() == false)
+                {
+                    report_runtime_error(u8"The instance name is empty or longer than 241 UTF-16 code units, so the main window cannot be marked.");
+                    return;
+                }
+                if (SetPropW(window_, property->c_str(), reinterpret_cast<HANDLE>(1)) == FALSE)
+                {
+                    report_runtime_error(make_last_error(u8"Failed to mark the main window for the second instance"));
+                    return;
+                }
+                instance_property_ = std::move(*property);
+                if (environment_.instance_from_lower_integrity)
+                    allow_instance_message(window_);
+            }
+
+            // 표식을 지운다. host를 거두기 직전에 부른다 (WM_CLOSE·WM_ENDSESSION·WM_DESTROY).
+            //  - 닫기를 앱이 막아 창이 남으면 지우지 않아 표식도 남는다.
+            void clear_instance_mark() noexcept
+            {
+                if (instance_property_.empty())
+                    return;
+                static_cast<void>(RemovePropW(window_, instance_property_.c_str()));
+                instance_property_.clear();
+            }
+
+            // 둘째가 보낸 WM_COPYDATA를 읽어 앱에 건넨다. 앱이 받았으면 TRUE다. 모양이 맞지 않거나 앱이 받지 않았으면 FALSE다.
+            //  - `lpData`는 이 호출 안에서만 유효해 그 안에서 `instance_arguments`로 옮긴다.
+            //  - 앞으로 세우기는 콜백이 true를 답하든 false를 답하든 같다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다.
+            [[nodiscard]] LRESULT receive_instance_message(const COPYDATASTRUCT& data)
+            {
+                if (host_ == nullptr || environment_.delegate == nullptr)
+                    return FALSE;
+                const std::span<const std::byte> bytes { static_cast<const std::byte*>(data.lpData), data.lpData != nullptr ? data.cbData : 0 };
+                instance_decode_result message { decode_instance_message(data.dwData, bytes) };
+                if (message.ok() == false)
+                    return FALSE;
+                bool accepted { false };
+                try
+                {
+                    accepted = environment_.delegate->on_instance_arguments(*host_, message.value);
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The instance arguments delegate threw an exception.");
+                }
+                if (message.activate && IsWindowVisible(window_) != FALSE)
+                    bring_window_forward(window_);
+                return accepted ? TRUE : FALSE;
+            }
+
             void report_runtime_error(const std::u8string& error) const noexcept
             {
                 const auto wide_error { utf8_to_utf16(error) };
@@ -3012,6 +3089,8 @@ namespace luil::win32 {
             window_config config_ {};
             window_environment environment_ {};
             HWND window_ { nullptr };
+            // 주 창에 건 표식의 속성 이름이다. 비어 있으면 둘째 인스턴스의 인자를 받지 않는다.
+            std::wstring instance_property_ {};
             std::uint32_t dpi_ { 96 };
             std::optional<initial_window_placement> initial_placement_ {};
             // 마지막으로 적용한 창 배치 게시 번호다.

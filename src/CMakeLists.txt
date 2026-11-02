@@ -420,6 +420,8 @@ luil_add_source_filter(luil_files "win32/host"
     "${public_headers}/app/platform_services.h"
     win32/command_line.h
     win32/owned_handle.h
+    win32/instance_message.cpp
+    win32/instance_message.h
     win32/platform_services_win32.cpp
     win32/file_watcher_win32.cpp
     win32/file_watcher_win32.h

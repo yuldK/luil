@@ -12,7 +12,7 @@
 | 일 | Windows | Android |
 | --- | --- | --- |
 | 원자적 파일 교체 | 같은 폴더의 임시 파일에 write-through로 쓰고 `MoveFileExW(REPLACE_EXISTING \| WRITE_THROUGH)` | 같은 폴더의 임시 파일에 쓰고 `fsync` 뒤 `rename`, 폴더도 `fsync` |
-| 단일 인스턴스 | 이름 있는 뮤텍스 `Local\luil-instance:<이름>` | 지원 안 함. OS가 앱 하나에 프로세스 하나를 둔다 — `primary()`는 참이다 |
+| 단일 인스턴스 | 이름 있는 뮤텍스 `Local\luil-instance:<이름>`. 둘째는 `send_to_primary`로 첫째의 주 창(창 속성 표식)에 인자와 작업 폴더를 `WM_COPYDATA`로 보낸다 | 지원 안 함. OS가 앱 하나에 프로세스 하나를 둔다. `primary()`는 참이고 `send_to_primary`는 `unsupported`다 |
 | 파일 잠금 | `LockFileEx`(배타, 기다리지 않음) | `flock(LOCK_EX \| LOCK_NB)` |
 | 파일 관리자에서 보이기 | `SHOpenFolderAndSelectItems`(그 파일을 고른 채로) | 지원 안 함 |
 | 외부 프로그램 실행 | `CreateProcessW`(인자를 Windows 규칙으로 따옴표 처리) | 지원 안 함 |
@@ -33,7 +33,7 @@
 
 `single_instance`와 `file_lock`은 객체가 사는 동안 쥐고, 없어질 때 놓는다. 프로세스가 죽어도 OS가 놓는다.
 
-- `single_instance { u8"my-app" }.primary()`가 첫 인스턴스인지 답한다. 두 번째 인스턴스는 대개 첫 인스턴스에 창을 앞으로 세우라고 알리고 끝낸다. 알리는 길(IPC)은 앱마다 달라 넣지 않았다.
+- `single_instance { u8"my-app" }.primary()`가 첫 인스턴스인지 답한다. 두 번째 인스턴스는 대개 첫 인스턴스에 창을 앞으로 세우라고 알리고 끝낸다. 그 알리는 길은 `send_to_primary`가 낸다. 처음에는 앱마다 달라 넣지 않았으나 이 판단은 뒤집었다(G7, 2026-11-02). 인자와 작업 폴더를 보내고, 첫째는 `window_delegate::on_instance_arguments`로 받으며, 앞으로 세우는 권한도 둘째가 넘긴다. 이름은 `name()`이 돌려준다. 형식과 규칙은 [둘째 인스턴스의 인자 넘기기](single-instance-args-design.md)다.
 - 뮤텍스는 `Local\` 이름 공간이다. 같은 사용자 세션 안에서만 하나다. 빠른 사용자 전환으로 다른 세션에서 띄운 것은 따로다.
 - `file_lock`은 파일 하나를 배타적으로 잠근다. 파일이 없으면 만든다. 이미 잠겨 있으면 기다리지 않고 `locked()`가 거짓이다. 같은 프로세스의 두 객체도 서로 막는다.
 
@@ -101,7 +101,7 @@ JNI로 `new Intent(Intent.ACTION_VIEW, Uri.parse(url))`을 짓고 `FLAG_ACTIVITY
 
 공개 API는 두 플랫폼에 같이 있고, 플랫폼 층에서만 갈린다. 뜻이 없는 것은 `unsupported`로 답한다.
 
-- 단일 인스턴스: OS가 앱(패키지)마다 프로세스와 task를 하나로 묶는다. `primary()`는 늘 참이고 `status()`는 `unsupported`다.
+- 단일 인스턴스: OS가 앱(패키지)마다 프로세스와 task를 하나로 묶는다. `primary()`는 늘 참이고 `status()`와 `send_to_primary`는 `unsupported`다(`primary()`가 참이어도 `not_found`보다 `unsupported`가 먼저다). 둘째 프로세스가 생기지 않고, 앱을 다시 여는 요청은 Activity의 Intent로 온다. 받는 훅(`window_delegate`)도 Win32 헤더에만 있다([이유](single-instance-args-design.md)).
 - 파일 관리자·외부 프로그램: 다른 앱은 프로세스가 아니라 Intent로 열린다. 파일을 고른 채로 보여 주는 공통 파일 관리자도 없다. 주소는 예외다. `ACTION_VIEW`는 Java 코드 없이 JNI로 Application context에서 띄울 수 있어 `open_url`이 연다.
 - 막힌 I/O 취소: 같은 일을 하는 시스템 호출이 없다. 신호로 끊는 길은 앱의 다른 시스템 호출까지 흔들어 넣지 않는다.
 
@@ -110,6 +110,7 @@ JNI로 `new Intent(Intent.ACTION_VIEW, Uri.parse(url))`을 짓고 `FLAG_ACTIVITY
 - `tests/platform_services_tests.cpp`(Windows):
   - 원자적 교체의 내용과 남은 임시 파일, 없는 폴더;
   - 단일 인스턴스 둘과 놓은 뒤의 첫째, 파일 잠금 둘;
+  - 단일 인스턴스의 `name()`과 `send_to_primary`: 별도 thread의 시험 창이 받은 목록·작업 폴더·표지, 앱의 FALSE 답, 응답 없음의 시한, 입력 위반, 표식 없는 창, 241 코드 단위 경계(운반 형식은 `tests/instance_message_tests.cpp`, 첫째 쪽 받기는 `tests/win32_window_tests.cpp`);
   - 명령 줄 따옴표 규칙, `cmd /c exit 3`의 종료 코드(창 없이);
   - 없는 경로의 보이기(탐색기를 열지 않는 갈래만);
   - `url_scheme_allowed` 표(허용·대소문자·`javascript:`·`file:`·경로·scheme 없음·앞뒤 공백·제어 문자·사용자 지정 목록·빈 목록), 막힌 주소의 `open_url`이 열지 않고 `failed`인 것(허용된 주소를 실제로 여는 갈래는 브라우저가 떠서 보지 않는다);
@@ -118,4 +119,5 @@ JNI로 `new Intent(Intent.ACTION_VIEW, Uri.parse(url))`을 짓고 `FLAG_ACTIVITY
 - 데모:
   - 창 배치 저장이 `replace_file_atomically`를 쓴다;
   - 데모가 시작할 때 `single_instance`를 쥐고, 둘째 인스턴스면 제목에 그 사실을 적는다;
+  - `--send-to-first`를 단 둘째는 나머지 인자를 첫째에 보내고 끝낸다. 첫째의 "창" 페이지가 받은 인자와 작업 폴더를 label로 보인다;
   - "창" 페이지에 "탐색기에서 실행 파일 보기"·"메모장 열기" 단추가 있다.

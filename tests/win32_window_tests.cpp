@@ -9,10 +9,17 @@
 #include <windows.h>
 
 #include <atomic>
+#include <chrono>
 #include <cwchar>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -185,7 +192,9 @@ namespace {
         {
             if (first_metrics.has_value() == false)
                 first_metrics = current_metrics;
-            return std::make_shared<luil::ui_frame>();
+            auto frame { std::make_shared<luil::ui_frame>() };
+            frame->main_hidden = main_hidden;
+            return frame;
         }
         [[nodiscard]] luil::app_message make_close_message() override
         {
@@ -198,6 +207,8 @@ namespace {
         luil::window_metrics current_metrics {};
         std::optional<luil::window_metrics> first_metrics {};
         std::atomic<bool> closed { false };
+        // 주 창을 숨긴 채 도는 앱이다 (`ui_frame::main_hidden`).
+        bool main_hidden { false };
     };
 
     class placement_delegate final : public luil::win32::window_delegate
@@ -594,4 +605,246 @@ TEST_CASE("A settings change that leaves reduced motion alone sends no new metri
     const placement_probe probe { run_placement_probe(config, true) };
     REQUIRE(probe.metrics_calls_during_setting_change.has_value());
     REQUIRE(*probe.metrics_calls_during_setting_change == 0);
+}
+
+namespace {
+    constexpr const wchar_t* instance_class_name { L"Luil.Test.InstanceArguments" };
+
+    BOOL CALLBACK find_instance_window(const HWND window, const LPARAM parameter)
+    {
+        wchar_t name[class_name_capacity] {};
+        if (GetClassNameW(window, name, class_name_capacity) > 0 && std::wcscmp(name, instance_class_name) == 0)
+        {
+            *reinterpret_cast<HWND*>(parameter) = window;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    [[nodiscard]] std::u8string instance_test_name(const std::string_view purpose)
+    {
+        static int counter { 0 };
+        const std::string text { "luil-tests-window-" + std::string { purpose } + "-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++counter) };
+        return std::u8string { text.begin(), text.end() };
+    }
+
+    // 둘째가 보낼 것이다.
+    struct instance_plan
+    {
+        std::vector<std::u8string> arguments { u8"a.txt", u8"b c" };
+        std::chrono::milliseconds timeout { 3000 };
+        bool activate { false };
+        // 주 창이 숨을 때까지 기다렸다가 보낸다 (`ui_frame::main_hidden`).
+        bool wait_until_hidden { false };
+    };
+
+    // 한 번의 실행에서 본 것이다. 보낸 thread와 창 thread가 나눠 쓰므로 실행이 끝나고 thread를 거둔 뒤에 읽는다.
+    struct instance_probe
+    {
+        DWORD ui_thread { 0 };
+        DWORD sender_thread { 0 };
+        std::vector<DWORD> callback_threads {};
+        std::vector<luil::instance_arguments> received {};
+        luil::platform_result sent {};
+        bool sent_returned { false };
+        bool hidden_after_send { false };
+    };
+
+    class instance_delegate final : public luil::win32::window_delegate
+    {
+    public:
+        enum class reply
+        {
+            accept,
+            reject,
+            throw_exception,
+        };
+
+        instance_delegate(instance_probe& probe, const luil::single_instance& second, instance_plan plan, const reply answer)
+            : probe_ { probe }
+            , second_ { second }
+            , plan_ { std::move(plan) }
+            , answer_ { answer }
+        {
+        }
+
+        instance_delegate(const instance_delegate&) = delete;
+        instance_delegate& operator=(const instance_delegate&) = delete;
+
+        ~instance_delegate()
+        {
+            join();
+        }
+
+        void join()
+        {
+            if (sender_.joinable())
+                sender_.join();
+        }
+
+        void on_started(luil::app_host&) override
+        {
+            probe_.ui_thread = GetCurrentThreadId();
+            EnumThreadWindows(GetCurrentThreadId(), &find_instance_window, reinterpret_cast<LPARAM>(&window_));
+            if (window_ == nullptr)
+                return;
+            // 창이 아직 보이지 않고 메시지 루프도 돌기 전이다. 보내는 쪽은 다른 thread에서 표식이 서기를 기다린다.
+            sender_ = std::thread { [this] { send(); } };
+        }
+
+        [[nodiscard]] bool on_instance_arguments(luil::app_host&, const luil::instance_arguments& arguments) override
+        {
+            probe_.callback_threads.push_back(GetCurrentThreadId());
+            probe_.received.push_back(arguments);
+            if (answer_ == reply::throw_exception)
+                throw std::runtime_error { "The delegate fails on purpose." };
+            return answer_ == reply::accept;
+        }
+
+    private:
+        void wait_until_visible(const bool visible) const
+        {
+            const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+            while ((IsWindowVisible(window_) != FALSE) != visible && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds { 5 });
+        }
+
+        void send()
+        {
+            probe_.sender_thread = GetCurrentThreadId();
+            if (plan_.wait_until_hidden)
+            {
+                // 첫 표시 뒤에 첫 frame이 와서 숨긴다. 보이고 나서 숨는 순서를 기다린다.
+                wait_until_visible(true);
+                wait_until_visible(false);
+            }
+            luil::instance_send_options options {};
+            options.timeout = plan_.timeout;
+            options.activate = plan_.activate;
+            probe_.sent = second_.send_to_primary(plan_.arguments, options);
+            probe_.sent_returned = true;
+            probe_.hidden_after_send = IsWindowVisible(window_) == FALSE;
+            PostMessageW(window_, WM_CLOSE, 0, 0);
+        }
+
+        instance_probe& probe_;
+        const luil::single_instance& second_;
+        instance_plan plan_;
+        reply answer_;
+        HWND window_ { nullptr };
+        std::thread sender_ {};
+    };
+
+    // 창을 띄우고 delegate의 `on_started`가 띄운 thread가 닫을 때까지 돈다. 반환값은 창의 종료 코드다.
+    [[nodiscard]] int run_instance_window(placement_driver& driver, instance_delegate& delegate, const luil::single_instance* const instance, const bool lower_integrity = false)
+    {
+        luil::win32::enable_per_monitor_dpi_awareness();
+        const luil::win32::com_sta_scope com {};
+        luil::win32::window_config config {};
+        config.class_name = instance_class_name;
+        config.caption.title = u8"instance arguments";
+        config.renderer = luil::renderer_mode::cpu;
+        const int result { luil::win32::run_application_window(config, { &driver, nullptr, &delegate, instance, lower_integrity }) };
+        drain_quit_message();
+        delegate.join();
+        return result;
+    }
+}
+
+TEST_CASE("A second instance reaches the delegate on the window thread and the mark goes with the window", "[win32][window][instance]")
+{
+    const std::u8string name { instance_test_name("deliver") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    REQUIRE(first.primary());
+    REQUIRE(second.primary() == false);
+
+    instance_probe probe {};
+    placement_driver driver {};
+    instance_delegate delegate { probe, second, instance_plan {}, instance_delegate::reply::accept };
+    REQUIRE(run_instance_window(driver, delegate, &first) == 0);
+
+    REQUIRE(probe.sent_returned);
+    REQUIRE(probe.sent.ok());
+    REQUIRE(probe.received.size() == 1);
+    REQUIRE(probe.received.front().arguments == std::vector<std::u8string> { u8"a.txt", u8"b c" });
+    REQUIRE(probe.received.front().working_directory == std::filesystem::current_path().u8string());
+    // 콜백은 창을 만든 thread에서 불리고, 보낸 thread와는 다르다.
+    REQUIRE(probe.callback_threads.size() == 1);
+    REQUIRE(probe.callback_threads.front() == probe.ui_thread);
+    REQUIRE(probe.callback_threads.front() != probe.sender_thread);
+
+    // 창이 닫히면 표식도 없다.
+    REQUIRE(second.send_to_primary(std::vector<std::u8string> { u8"late" }, luil::instance_send_options { std::chrono::milliseconds { 50 }, false }).status == luil::platform_status::not_found);
+}
+
+TEST_CASE("The delegate's answer decides what the second instance sees", "[win32][window][instance]")
+{
+    for (const instance_delegate::reply answer : { instance_delegate::reply::reject, instance_delegate::reply::throw_exception })
+    {
+        const std::u8string name { instance_test_name("answer") };
+        const luil::single_instance first { name };
+        const luil::single_instance second { name };
+
+        instance_probe probe {};
+        placement_driver driver {};
+        instance_delegate delegate { probe, second, instance_plan {}, answer };
+        REQUIRE(run_instance_window(driver, delegate, &first) == 0);
+
+        // 받기는 했으나 앱이 받지 않았다. 던진 예외도 같다 (프로시저 밖으로 새지 않는다).
+        REQUIRE(probe.sent_returned);
+        REQUIRE(probe.sent.status == luil::platform_status::failed);
+        REQUIRE(probe.received.size() == 1);
+    }
+}
+
+TEST_CASE("A window whose environment names no first instance carries no mark", "[win32][window][instance]")
+{
+    const std::u8string name { instance_test_name("nomark") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    instance_plan plan {};
+    plan.timeout = std::chrono::milliseconds { 300 };
+
+    // 환경에 단일 인스턴스를 달지 않았다.
+    {
+        instance_probe probe {};
+        placement_driver driver {};
+        instance_delegate delegate { probe, second, plan, instance_delegate::reply::accept };
+        REQUIRE(run_instance_window(driver, delegate, nullptr) == 0);
+        REQUIRE(probe.sent_returned);
+        REQUIRE(probe.sent.status == luil::platform_status::not_found);
+        REQUIRE(probe.received.empty());
+    }
+    // 둘째 객체를 달았다. 첫째가 아니면 표식을 걸지 않는다.
+    {
+        instance_probe probe {};
+        placement_driver driver {};
+        instance_delegate delegate { probe, second, plan, instance_delegate::reply::accept };
+        REQUIRE(run_instance_window(driver, delegate, &second) == 0);
+        REQUIRE(probe.sent_returned);
+        REQUIRE(probe.sent.status == luil::platform_status::not_found);
+        REQUIRE(probe.received.empty());
+    }
+}
+
+TEST_CASE("A hidden main window stays hidden after a second instance asks to bring it forward", "[win32][window][instance]")
+{
+    const std::u8string name { instance_test_name("hidden") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+
+    instance_probe probe {};
+    placement_driver driver {};
+    driver.main_hidden = true;
+    instance_plan plan {};
+    // 숨은 창은 앞으로 세우지 않으므로 앞 창을 가져가지 않는다.
+    plan.activate = true;
+    plan.wait_until_hidden = true;
+    instance_delegate delegate { probe, second, plan, instance_delegate::reply::accept };
+    REQUIRE(run_instance_window(driver, delegate, &first) == 0);
+
+    REQUIRE(probe.sent.ok());
+    REQUIRE(probe.received.size() == 1);
+    REQUIRE(probe.hidden_after_send);
 }
