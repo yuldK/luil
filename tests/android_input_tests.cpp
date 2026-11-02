@@ -334,12 +334,17 @@ TEST_CASE("Android keys follow the Windows key and character split", "[android][
     REQUIRE(copy.primary_shortcut_down());
     REQUIRE(copy.word_navigation_down());
 
-    // Backspace는 U+0008, Ctrl+Backspace는 키와 U+007F다 (Win32의 WM_CHAR와 같다).
+    // Backspace는 Space처럼 누름이면서 글자다. 글자는 U+0008, Ctrl과 함께면 U+007F다
+    // (Win32의 WM_KEYDOWN 뒤 WM_CHAR와 같다). 텍스트 칸에서는 controller가 키 쪽을 삼킨다.
     events = translator.translate(key(AKEYCODE_DEL));
-    REQUIRE(events.size() == 1u);
-    REQUIRE(as<luil::character_typed_event>(events[0]).character == U'\b');
+    REQUIRE(events.size() == 2u);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).key == luil::key_code::backspace);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).control == false);
+    REQUIRE(as<luil::character_typed_event>(events[1]).character == U'\b');
     events = translator.translate(key(AKEYCODE_DEL, AMETA_CTRL_ON));
     REQUIRE(events.size() == 2u);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).key == luil::key_code::backspace);
+    REQUIRE(as<luil::key_pressed_event>(events[0]).word_navigation_down());
     REQUIRE(as<luil::character_typed_event>(events[1]).character == char32_t { 0x7F });
 
     // Space는 누름이면서 글자다.
