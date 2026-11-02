@@ -231,6 +231,7 @@ namespace demo {
             void bind_host(luil::win32::app_host& host) noexcept
             {
                 host_.store(&host);
+                files_.bind_host(host);
             }
 
             // logic thread가 시작한 직후 한 번이다.
@@ -494,6 +495,7 @@ namespace demo {
             {
                 if (luil::net::http_client* const client { live_client_.load() }; client != nullptr)
                     client->stop();
+                files_.stop_watcher();
                 if (luil::testing::loopback_http_server* const server { live_server_.load() }; server != nullptr)
                     server->stop();
             }

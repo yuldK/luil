@@ -249,10 +249,14 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
   - Android는 `file_watcher_android.cpp`가 JVM이 필요 없어 `android_input.cpp`처럼 `luil_core_tests`에 소스를 넣어 기기 셸(`cmake/android/adb_run.cmake`)에서 돈다. 넘침은 감시 thread를 `deliver` 안에 묶어 둔 채 `max_queued_events`보다 많은 이벤트가 나도록 파일을 만들어 본다. `replace_file_atomically`는 `luil` 쪽이라 그 경우만 Windows에서 본다.
 - 데스크톱 데모: `examples/demo/files_page.cpp`에 임시 폴더 하나를 감시하는 구역을 둔다. "파일 만들기"·"고치기"·"지우기"·"이름 바꾸기" 단추와 마지막 묶음을 그린 label(`변경: created a.txt` 같은 글, rescan·끝 표시 포함)이 있어 UIA로 되읽는다.
   - 감시자는 `files_page`가 쥔다. `deliver`는 `post_app_message_ticketed`로 보내야 하므로 host가 필요하다. `demo_main.cpp`의 `bind_host`가 `files_.bind_host(host)`로 host 포인터를 원자적 손잡이로 넘긴다.
+  - 감시자는 감시 구역의 단추를 처음 누를 때 logic thread에서 세우고 `%TEMP%/luil-demo-watch-<pid>`를 `folder`로 건다. 파일을 바꾸기 전에 건다. 한 frame만 그리는 smoke 모드에서는 thread가 서지 않는다. 폴더는 페이지가 없어질 때 지운다.
+  - label은 둘이다. `files-watch-state`가 "감시: 켜짐 <폴더>"·"감시: 끝남"을, `files-watch-batch`가 마지막 묶음 글을 그린다.
   - `stop_workers`는 UI thread에서 logic join 전에 불린다. 그 자리가 닿는 것은 감시자의 원자적 손잡이 하나(`files_.stop_watcher()`)이고, `live_client_`와 같은 이유다. `demo_main.cpp`의 몫은 이 두 줄이다.
 - 모바일 데모: 새 페이지 `examples/mobile_demo/files_page.cpp`·`.h`다. 앱 전용 폴더에서 같은 일을 하는 단추와 label을 둔다. `device_page.cpp`에는 더하지 않는다(약속).
-  - `smb_page`와 같은 길이다. delegate(`android_main.cpp`, Windows 창의 `main.cpp`)가 `on_started`에서 감시자를 세워 `file_watcher_intent`로 driver에 넘긴다. 페이지가 쥔 것은 포인터뿐이고 `mobile_driver::stop_workers`가 `files_.stop()`을 부른다(`smb_.stop()`과 같다).
-  - 폴더는 Android가 `android_main`이 읽은 `internalDataPath` 아래, Windows 창이 `std::filesystem::temp_directory_path()` 아래다. 연결은 `app.cpp`의 `page_entries`(11 → 12)·`handle` 끝·`build`와 `app.h`·`mobile_demo.cmake`다.
+  - `smb_page`와 같은 길이다. delegate(`android_main.cpp`, Windows 창의 `main.cpp`)가 `on_started`에서 감시자를 세워 `file_watcher_intent`로 driver에 넘긴다. 세우고 거는 것은 `files_page.h`의 inline `start_files_watch` 하나를 두 delegate가 부른다. `mobile_driver::stop_workers`가 `files_.stop()`을 부른다(`smb_.stop()`과 같다).
+  - 페이지가 쥔 것은 포인터가 아니라 감시자를 멈추는 함수 하나다(intent의 `stop`). 페이지 소스는 감시자 구현 없이 `luil_core_tests`에 묶이므로, 페이지가 `file_watcher`의 멤버를 직접 부르면 Windows의 core test가 링크되지 않는다. `start_files_watch`가 inline인 것도 같은 이유다.
+  - 폴더는 Android가 `android_main`이 읽은 `internalDataPath`의 `watch-demo`, Windows 창이 `std::filesystem::temp_directory_path()`의 `luil-mobile-demo-watch-<pid>`다. 연결은 `app.cpp`의 `page_entries`(11 → 12)·`handle` 끝·`build`·`stop_workers`와 `app.h`·`mobile_demo.cmake`다. 페이지 키 `page_files`는 공용 `common.h`를 고치지 않으려고 `files_page.h`에 둔다.
+  - label은 `files-watch-state`("감시: 켜짐"·"감시: 끝남"·"감시: 걸지 못함 (…)")와 `files-watch-batch`(마지막 묶음 글)다. 단추는 "파일 만들기"·"고치기"·"지우기"·"이름 바꾸기"이고 감시가 걸린 뒤에만 폴더를 바꾼다.
   - `tests/mobile_demo_page_tests.cpp`(추가): 묶음 intent를 페이지에 직접 주면 label이 마지막 묶음 글(rescan·끝 표시 포함)로 바뀌는지 본다. 감시자는 세우지 않는다.
 - 사람 확인: 실기기 공유 저장소에서 파일 관리자가 만든 변경이 오는지(FUSE 한계 실측). 네트워크 공유·이동식 드라이브와 그 분리 시의 `lost`. 백신·색인기가 도는 실제 개발 폴더에서 묶음이 하나로 모이는지.
 

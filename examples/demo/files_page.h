@@ -10,14 +10,20 @@
 //  - 행 왼쪽의 손잡이를 끌면 범위를 고른다. 목록 가장자리에 대면 목록이 흘러 범위가 이어서 늘어난다.
 //  - 복사·잘라내기는 고른 항목의 경로를 OS 클립보드에 넣는다. 탐색기에서 복사한 파일도 붙여 넣어 읽는다.
 //    데모는 파일을 실제로 옮기지 않는다 — 경로만 주고받는다.
+//  - 아래 감시 구역만은 실제 임시 폴더에 파일을 만들고 고치고 지우고 이름을 바꾼다. 그 폴더를 `file_watcher`가 보고,
+//    마지막으로 받은 묶음을 label에 그린다 (file-watch-design.md의 "확인").
 
 #include "demo/common.h"
 
+#include "luil/app/file_watcher.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/virtual_list_element.h"
+#include "luil/win32/app_host.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -95,12 +101,41 @@ namespace demo {
     {
     };
 
+    // 감시 구역의 단추다. 감시 폴더의 파일 하나를 바꾼다.
+    enum class files_watch_operation
+    {
+        create,
+        modify,
+        remove,
+        rename,
+    };
+    struct files_watch_intent
+    {
+        files_watch_operation operation { files_watch_operation::create };
+    };
+    // 감시자가 낸 묶음이다 (감시 thread의 `deliver`가 보낸다).
+    struct files_watch_batch_intent
+    {
+        luil::file_change_batch batch {};
+    };
+
+    // 묶음 하나를 한 줄로 적는다 ("변경: created a.txt, renamed a.txt→b.txt, rescan"). UIA Name으로 되읽는 글이다.
+    [[nodiscard]] std::u8string describe_file_change_batch(const luil::file_change_batch& batch);
+
     class files_page
     {
     public:
         files_page();
+        files_page(const files_page&) = delete;
+        files_page& operator=(const files_page&) = delete;
+        // 감시자를 멈추고 임시 폴더를 지운다.
+        ~files_page();
 
         bool handle(const luil::app_message& message);
+        // 창과 host가 준비된 직후 UI thread가 넘긴다. 감시자의 `deliver`가 묶음을 logic thread로 나를 길이다.
+        void bind_host(luil::win32::app_host& host) noexcept;
+        // 종료 3단계다 (UI thread). 이 뒤로 `deliver`가 불리지 않는다.
+        void stop_watcher() noexcept;
         // width·height는 내용 영역의 논리 픽셀 크기다.
         [[nodiscard]] std::unique_ptr<luil::ui_element> build(float width, float height, float scale);
 
@@ -108,6 +143,10 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_files_list();
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_archive_list();
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_buttons() const;
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_watch_buttons() const;
+        // 처음 누른 단추에서 감시자를 세우고 폴더를 건다. 파일을 바꾸기 전에 걸어야 그 변경을 놓치지 않는다.
+        void ensure_watcher();
+        void run_watch_operation(files_watch_operation operation);
         [[nodiscard]] std::optional<std::size_t> index_of(const std::u8string& key) const;
         [[nodiscard]] std::vector<std::u8string> selected_paths() const;
         void select_range(std::size_t from, std::size_t to);
@@ -141,5 +180,15 @@ namespace demo {
 
         std::u8string last_action_ { u8"아직 없음" };
         std::u8string clipboard_text_ { u8"아직 읽지 않음" };
+
+        // 감시 구역이다. 감시자는 logic thread가 쥐고, UI thread의 종료 단계는 원자적 손잡이로만 본다
+        // (demo_main.cpp의 `live_client_`와 같은 이유다).
+        std::atomic<luil::win32::app_host*> host_ { nullptr };
+        std::unique_ptr<luil::file_watcher> watcher_ {};
+        std::atomic<luil::file_watcher*> live_watcher_ { nullptr };
+        std::filesystem::path watch_folder_ {};
+        luil::file_watch_ticket watch_ticket_ {};
+        std::u8string watch_state_ { u8"감시: 꺼짐 (단추를 누르면 임시 폴더를 건다)" };
+        std::u8string watch_text_ { u8"변경: 아직 없음" };
     };
 }
