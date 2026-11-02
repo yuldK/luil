@@ -8,6 +8,7 @@
 
 #include "luil/ui/dropdown_element.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/split_button_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_tree.h"
 #include <algorithm>
@@ -17,14 +18,58 @@
 namespace demo {
     namespace {
         constexpr float dropdown_width { 200.0f };
+        // 분할 버튼과 드롭다운 단추의 폭이다 (논리 픽셀). 분할 버튼은 이 가운데 화살표 몫(28)이 오른쪽에 선다.
+        constexpr float field_button_width { 160.0f };
         inline constexpr std::u8string_view presentation_values[] { u8"자세히", u8"간결하게" };
+
+        // 필드 메뉴의 항목 키가 마지막 동작 label에 적히는 글이다.
+        [[nodiscard]] std::u8string field_menu_action_text(const std::u8string_view key)
+        {
+            if (key == u8"save")
+                return u8"저장";
+            if (key == u8"save-as")
+                return u8"다른 이름으로 저장";
+            if (key == u8"mail")
+                return u8"메일로 보내기";
+            return u8"링크 복사";
+        }
+
+        // 필드 아래에 놓는 메뉴 popup이다. 자리는 `below`가 메뉴 크기를 잰 뒤에 정하고, 아래가 창 밖으로 넘치면 위로 뒤집힌다.
+        [[nodiscard]] luil::win32::ui_popup make_field_menu(
+            std::u8string owner, std::vector<luil::menu_item_config> items, const luil::rect_f& field, const luil::rect_f& surface, const float scale, const luil::popup_corner corner, const bool border)
+        {
+            luil::menu_config menu {};
+            menu.owner = owner;
+            menu.items = std::move(items);
+            menu.select = [owner](const std::u8string& key) { return luil::make_app_action(field_menu_select_intent { owner, key }); };
+            // 고르면 닫힌다. 닫기는 절대 메시지라 바깥 누름 닫기와 겹쳐 두 번 와도 같다.
+            menu.after_select = luil::make_message_action(field_menu_intent { owner, false });
+
+            luil::menu_popup_config popup {};
+            popup.id = owner + u8"-menu";
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = field, .limit = surface };
+            popup.dismiss = [owner](const luil::popup_dismiss_reason) { return luil::make_app_action(field_menu_intent { owner, false }); };
+            popup.corner = corner;
+            popup.border = border;
+            return luil::make_menu_popup(std::move(menu), std::move(popup));
+        }
     }
 
-    void popups_page::close_dropdown() noexcept
+    void popups_page::show_popup(std::u8string owner)
     {
-        dropdown_open_ = false;
-        search_ = {};
-        composition_.reset();
+        if (open_popup_ != owner)
+        {
+            search_ = {};
+            composition_.reset();
+        }
+        open_popup_ = std::move(owner);
+    }
+
+    void popups_page::close_popup(const std::u8string_view owner)
+    {
+        if (open_popup_ == owner)
+            show_popup({});
     }
 
     bool popups_page::handle(const luil::app_message& message)
@@ -47,7 +92,7 @@ namespace demo {
         }
         if (const auto* const select { message.get<card_menu_select_intent>() }; select != nullptr)
         {
-            menu_open_ = false;
+            close_popup(u8"card");
             if (select->key == u8"열기")
                 preview_ = !preview_;
             if (select->key == u8"즐겨찾기")
@@ -62,20 +107,36 @@ namespace demo {
         }
         if (const auto* const toggle { message.get<dropdown_toggle_intent>() }; toggle != nullptr)
         {
-            if (toggle->open == false)
-            {
-                close_dropdown();
-                return true;
-            }
-            dropdown_open_ = true;
-            // 한 번에 하나만 띄운다.
-            menu_open_ = false;
+            // 한 번에 하나만 띄운다. 다른 popup이 떠 있으면 이 열기가 그것을 대신한다.
+            if (toggle->open)
+                show_popup(u8"presentation");
+            else
+                close_popup(u8"presentation");
             return true;
         }
         if (const auto* const select { message.get<dropdown_select_intent>() }; select != nullptr)
         {
             presentation_ = select->value;
-            close_dropdown();
+            close_popup(u8"presentation");
+            return true;
+        }
+        // 분할 버튼과 드롭다운 단추다. 열기·닫기는 절대 메시지 하나로 오고, 닫기는 자기 popup이 떠 있을 때만 듣는다.
+        if (const auto* const menu { message.get<field_menu_intent>() }; menu != nullptr)
+        {
+            if (menu->open)
+                show_popup(menu->owner);
+            else
+                close_popup(menu->owner);
+            return true;
+        }
+        if (const auto* const picked { message.get<field_menu_select_intent>() }; picked != nullptr)
+        {
+            last_action_ = field_menu_action_text(picked->key);
+            return true;
+        }
+        if (message.get<split_invoke_intent>() != nullptr)
+        {
+            last_action_ = u8"저장";
             return true;
         }
         // 검색 칸의 편집·조합이다.
@@ -99,15 +160,14 @@ namespace demo {
         }
         if (const auto* const open { message.get<card_menu_intent>() }; open != nullptr)
         {
-            menu_open_ = true;
+            show_popup(u8"card");
             menu_x_ = open->x;
             menu_y_ = open->y;
-            close_dropdown();
             return true;
         }
         if (message.get<card_menu_close_intent>() != nullptr)
         {
-            menu_open_ = false;
+            close_popup(u8"card");
             return true;
         }
         return false;
@@ -119,13 +179,15 @@ namespace demo {
         static_cast<void>(height);
         static_cast<void>(scale);
         dropdown_ = nullptr;
+        split_ = nullptr;
+        send_ = nullptr;
         page_layout page { u8"popups" };
         page.heading(u8"메뉴와 팝업", u8"우클릭 또는 Shift+F10으로 문서 작업을 열고, 선택 결과를 확인하세요.");
 
         luil::dropdown_config dropdown {};
         dropdown.owner = u8"presentation";
         dropdown.text = presentation_;
-        dropdown.open = dropdown_open_;
+        dropdown.open = open_popup_ == u8"presentation";
         dropdown.set_open = [](const bool open) { return luil::make_app_action(dropdown_toggle_intent { open }); };
         auto field { std::make_unique<luil::dropdown_element>(std::move(dropdown)) };
         field->set_access_name(u8"문서 표시 방식");
@@ -179,6 +241,42 @@ namespace demo {
         page.add(make_label({ kind_text, u8"popups-help" }, u8"검색 중에는 IME 조합을 지원합니다. Esc 또는 바깥 클릭으로 팝업을 닫을 수 있습니다.", 12.0f, luil::label_color_role::dim), 28.0f);
         page.gap(16.0f);
 
+        // 분할 버튼과 드롭다운 단추다. 본체를 누르면 동작이 나가고, 화살표를 누르면(Alt+↓·F4도) 필드 아래에 메뉴가 뜬다.
+        // 열림과 마지막 동작은 label로도 그려 보조 기술과 자동화가 되읽는다.
+        page.add(make_label({ kind_text, u8"split-title" }, u8"분할 버튼과 드롭다운 단추", 15.0f, luil::label_color_role::primary), 28.0f);
+        luil::split_button_config save {};
+        save.owner = u8"save";
+        save.look.text = u8"저장";
+        save.look.glyph = luil::codicons::icon_save;
+        save.invoke = luil::make_message_action(split_invoke_intent {});
+        save.open = open_popup_ == u8"save";
+        save.set_open = [](const bool open) { return luil::make_app_action(field_menu_intent { u8"save", open }); };
+        save.tooltip = u8"문서를 저장합니다";
+        save.arrow_tooltip = u8"저장 옵션";
+        auto split { std::make_unique<luil::split_button_element>(std::move(save)) };
+        split_ = split.get();
+        page.add(std::move(split), luil::stack_item { .length = luil::text_button_height, .cross_length = field_button_width });
+        page.gap(8.0f);
+
+        // 본체가 없는 분할 버튼이 드롭다운 단추다. 버튼 전체가 메뉴를 연다.
+        luil::split_button_config send {};
+        send.owner = u8"send";
+        send.look.text = u8"보내기";
+        send.look.glyph = luil::codicons::icon_send;
+        send.open = open_popup_ == u8"send";
+        send.set_open = [](const bool open) { return luil::make_app_action(field_menu_intent { u8"send", open }); };
+        send.tooltip = u8"보내는 방법을 고릅니다";
+        auto dropdown_button { std::make_unique<luil::split_button_element>(std::move(send)) };
+        send_ = dropdown_button.get();
+        page.add(std::move(dropdown_button), luil::stack_item { .length = luil::text_button_height, .cross_length = field_button_width });
+        page.gap(8.0f);
+
+        const auto state_text = [this](const std::u8string_view owner, const std::u8string_view name) { return std::u8string { name } + u8" 메뉴 열림: " + (open_popup_ == owner ? u8"열림" : u8"닫힘"); };
+        page.add(make_label({ kind_text, u8"split-state-save" }, state_text(u8"save", u8"저장"), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.add(make_label({ kind_text, u8"split-state-send" }, state_text(u8"send", u8"보내기"), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.add(make_label({ kind_text, u8"split-last-action" }, std::u8string { u8"마지막 동작: " } + (last_action_.empty() ? std::u8string { u8"없음" } : last_action_), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.gap(16.0f);
+
         // popup 창의 모양이다. 앱마다 고르는 렌더링 선택지이고, 고르지 않으면 OS 기본이다. 둥근 모서리를 못 쓰는 OS·원격
         // 세션에서는 무엇을 골라도 직각과 처음부터의 경계다.
         const auto shape_choice = [](std::u8string setting, std::u8string name, std::vector<luil::choice_item> items, std::u8string selected) {
@@ -215,11 +313,11 @@ namespace demo {
         page.add(make_label({ kind_text, u8"popup-shape-radius" }, u8"이 OS에서 고른 모서리의 반지름: " + radius + u8" 논리 픽셀", 12.0f, luil::label_color_role::dim), 24.0f);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(popups_scroll_intent { delta }); });
     }
-    std::vector<luil::win32::ui_popup> popups_page::make_popups(const float scale) const
+    std::vector<luil::win32::ui_popup> popups_page::make_popups(const float scale, const luil::rect_f& surface) const
     {
         std::vector<luil::win32::ui_popup> popups {};
 
-        if (dropdown_open_ && dropdown_ != nullptr)
+        if (open_popup_ == u8"presentation" && dropdown_ != nullptr)
         {
             const luil::text_input_view search { luil::make_text_input_view(search_, composition_, target_dropdown_search) };
 
@@ -261,7 +359,22 @@ namespace demo {
             popups.push_back(std::move(popup));
         }
 
-        if (menu_open_)
+        if (open_popup_ == u8"save" && split_ != nullptr)
+        {
+            std::vector<luil::menu_item_config> items {};
+            items.push_back({ u8"save", u8"저장", luil::codicons::icon_save });
+            items.push_back({ u8"save-as", u8"다른 이름으로 저장…", luil::codicons::icon_save_as });
+            popups.push_back(make_field_menu(u8"save", std::move(items), split_->bounds(), surface, scale, corner_, popup_border_));
+        }
+        if (open_popup_ == u8"send" && send_ != nullptr)
+        {
+            std::vector<luil::menu_item_config> items {};
+            items.push_back({ u8"mail", u8"메일로 보내기", luil::codicons::icon_mail });
+            items.push_back({ u8"link", u8"링크 복사", luil::codicons::icon_link });
+            popups.push_back(make_field_menu(u8"send", std::move(items), send_->bounds(), surface, scale, corner_, popup_border_));
+        }
+
+        if (open_popup_ == u8"card")
         {
             luil::menu_config menu {};
             menu.owner = u8"card";

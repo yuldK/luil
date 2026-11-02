@@ -130,6 +130,7 @@ target_sources(luil_core_tests PRIVATE
 # 모바일 demo의 적응형 시트와 비동기 SMB 목록 상태도 서버 없이 검증한다.
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
     mobile_demo_page_tests.cpp)

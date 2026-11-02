@@ -246,7 +246,9 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - `tests/accessibility_tests.cpp`: root가 접히고 두 절반이 형제인지, 본체와 화살표의 info(`expanded`), expand·collapse가 절대 메시지인지.
 - `tests/uia_provider_tests.cpp`: 본체 노드는 Invoke만, 화살표 노드는 ExpandCollapse만 내고 Expand가 `set_open(true)`를 나르는지.
 - `tests/raster_draw_tests.cpp`: 구분선 한 줄, 바깥 모서리만 둥근지, 열린 동안 화살표의 눌림 바탕, accent·danger 채움, 비활성.
-- 데모(`examples/demo`, `examples/mobile_demo`의 popups 페이지): "저장" 분할 버튼(메뉴 두 항목)과 "보내기" 드롭다운 단추를 놓는다. "열림: 닫힘/열림"과 "마지막 동작: …"을 label로 그려 UIA가 되읽는다. 격리 데스크톱에서 luil-uia로 두 노드의 Invoke·Expand와 메뉴 항목 선택을 돌린다.
+- 데모(`examples/demo`, `examples/mobile_demo`의 popups 페이지): "저장" 분할 버튼(메뉴 두 항목)과 "보내기" 드롭다운 단추를 놓는다. "저장 메뉴 열림: 닫힘/열림", "보내기 메뉴 열림: 닫힘/열림", "마지막 동작: 없음/저장/…"을 label로 그려 UIA가 되읽는다. 격리 데스크톱에서 luil-uia로 두 노드의 Invoke·Expand와 메뉴 항목 선택을 돌린다.
+  - 데모는 `dropdown_open_`·`menu_open_`을 열린 필드의 owner 하나(`open_popup_`)로 바꿔 한 번에 하나만 뜨게 한다. 이미 닫힌 필드의 늦은 닫기 메시지는 지금 떠 있는 popup을 닫지 않는다.
+  - `examples/demo/popups_page`·`examples/mobile_demo/popups_page`의 test는 `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`가 읽는다.
 - 사람 확인: 실기기에서 화살표 탭 크기, Narrator의 두 노드 읽기, 두 절반 경계의 hover 강조, 고대비에서 구분선과 열림 표시.
 
 ## 범위 밖
