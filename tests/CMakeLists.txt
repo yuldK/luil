@@ -200,6 +200,9 @@ if(LUIL_PLATFORM STREQUAL "android")
             "$ENV{ANDROID_SDK_ROOT}/platform-tools"
             "$ENV{LOCALAPPDATA}/Android/Sdk/platform-tools"
         REQUIRED)
+    # 기기에서 SKIP으로 끝난 test를 건너뜀으로 센다. 실행기(cmake -P)는 Catch2의 종료 코드 4를 전하지 못하고
+    # 이 글을 남긴다 (adb_run.cmake). 글에 정규식 기호를 넣지 않는다.
+    set(luil_device_skip_pattern "skipped its test on the device")
     set_target_properties(luil_core_tests PROPERTIES
         CROSSCOMPILING_EMULATOR
             "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
@@ -213,12 +216,12 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/file_watcher_android.cpp"
             file_watcher_tests.cpp)
-    catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+    catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES
             CROSSCOMPILING_EMULATOR
                 "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
-        catch_discover_tests(luil_text_shaping_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+        catch_discover_tests(luil_text_shaping_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     endif()
 
     # HTTP client는 JNI로 java.net을 부르므로 JVM 안에서만 돈다. 셸에서 띄운 실행 파일에는 JVM이
@@ -296,7 +299,7 @@ if(LUIL_PLATFORM STREQUAL "android")
     set_target_properties(luil_net_tests PROPERTIES
         CROSSCOMPILING_EMULATOR
             "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-DJVM_DEX=${luil_jvm_runner_dex};-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
-    catch_discover_tests(luil_net_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+    catch_discover_tests(luil_net_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     luil_set_ide_folder("Tests" luil_core_tests luil_net_tests luil_jvm_test_main)
 
     # SMB client는 LUIL_ENABLE_SMB를 켠 구성에서 기기의 셸로 돈다 (JVM이 필요 없다). libsmb2.so와 시험 서버를
@@ -336,7 +339,7 @@ if(LUIL_PLATFORM STREQUAL "android")
         set_target_properties(luil_smb_tests PROPERTIES
             CROSSCOMPILING_EMULATOR
                 "${CMAKE_COMMAND};-DADB=${LUIL_ADB_EXECUTABLE};-DDEVICE_DIRECTORY=/data/local/tmp/luil;-DLIBRARIES=libsmb2.so,luil_smb_test_server;-P;${LUIL_CMAKE_DIRECTORY}/android/adb_run.cmake")
-        catch_discover_tests(luil_smb_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+        catch_discover_tests(luil_smb_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
         luil_set_ide_folder("Tests" luil_smb_tests luil_smb_test_server)
     endif()
     # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.
