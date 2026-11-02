@@ -32,6 +32,7 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 | 마크다운 hover와 클릭 링크 | make_markdown_tooltip, markdown_config::activate_link | [컨트롤](../examples/demo/gallery_page.cpp) |
 | 메뉴 팝업의 측정·배치 | make_menu_popup | [메뉴](../examples/demo/popups_page.cpp) |
 | 분할 버튼과 드롭다운 단추, 필드 아래에 놓고 위로 뒤집히는 메뉴 | split_button_element, menu_popup_config::below, place_field_popup | [메뉴](../examples/demo/popups_page.cpp) |
+| 닫기 전까지 남는 정보 막대, 폭에서 높이를 재서 담기 | info_bar_element, info_bar_element::measure, ui_severity | [토스트](../examples/demo/toasts_page.cpp) |
 | 명령과 단축키의 공통 정의 | app_command, match_command, menu_item_from | [탭](../examples/demo/tabs_page.cpp) |
 | 앞·뒤 삽입으로 탭 이동 | tab_bar_config::move | [탭](../examples/demo/tabs_page.cpp) |
 | 창 밖으로 분리·다시 합치기 | tab_bar_config::unclaimed_drop, receive, ui_window | [탭](../examples/demo/tabs_page.cpp) |

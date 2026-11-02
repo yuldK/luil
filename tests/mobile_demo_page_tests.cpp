@@ -1,6 +1,7 @@
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
+#include "mobile_demo/toasts_page.h"
 
 #include "luil/ui/split_button_element.h"
 
@@ -394,4 +395,128 @@ TEST_CASE("Choosing a mobile field menu item records it and the follow-up messag
     REQUIRE(screen.label(u8"split-last-action") == u8"마지막 동작: 링크 복사");
     REQUIRE(screen.label(u8"split-state-send") == u8"보내기 메뉴 열림: 닫힘");
     REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+}
+
+namespace {
+    struct bar_names
+    {
+        std::u8string_view owner {};
+        std::u8string_view word {};
+    };
+
+    constexpr bar_names bar_list[] { { u8"info", u8"정보" }, { u8"success", u8"성공" }, { u8"warning", u8"경고" }, { u8"error", u8"오류" } };
+
+    // 토스트 페이지를 폭 `width`로 지은 tree다. 막대의 높이가 폭에 달려 있어 회전은 폭이 다른 두 tree로 본다.
+    struct toasts_screen
+    {
+        luil::ui_tree tree;
+        float height;
+
+        [[nodiscard]] std::u8string label(const std::u8string& owner) const
+        {
+            const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, owner }) };
+            REQUIRE(found != nullptr);
+            return found->accessibility().name;
+        }
+
+        [[nodiscard]] luil::rect_f bounds(const luil::ui_element_kind kind, const std::u8string_view owner) const
+        {
+            const luil::ui_element* const found { tree.find({ kind, std::u8string { owner } }) };
+            REQUIRE(found != nullptr);
+            return found->bounds();
+        }
+    };
+
+    [[nodiscard]] toasts_screen build_toasts_screen(mobile_demo::toasts_page& page, const float width)
+    {
+        auto content { page.build(width, 1.0f) };
+        const float height { content.height };
+        return { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, width, height }, 1.0f), height };
+    }
+
+    // 정보 막대의 단추를 눌러 나온 메시지를 페이지에 넘긴다. 누름은 tree에 있던 그 액션이다.
+    void press(mobile_demo::toasts_page& page, const toasts_screen& screen, const luil::ui_element_id& id)
+    {
+        const luil::ui_element* const button { screen.tree.find(id) };
+        REQUIRE(button != nullptr);
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const auto pressed { (*action)(luil::ui_action_context { id, 0.0f, 0.0f }) };
+        REQUIRE(pressed.size() == 1u);
+        deliver(page, std::get<luil::app_message>(pressed.front()));
+    }
+}
+
+TEST_CASE("The mobile toasts page lists four info bars with finger sized buttons and state labels", "[ui][info-bar][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    const toasts_screen screen { build_toasts_screen(page, 400.0f) };
+    for (const bar_names& bar : bar_list)
+    {
+        CAPTURE(bar.owner);
+        const luil::ui_element* const element { screen.tree.find({ luil::ui_element_kind::info_bar, std::u8string { bar.owner } }) };
+        REQUIRE(element != nullptr);
+        REQUIRE(element->accessibility().role == luil::access_role::alert);
+        REQUIRE(element->accessibility().name.starts_with(std::u8string { bar.word } + u8" "));
+        // 손가락으로 누르므로 닫기는 터치 영역 정사각이고 막대의 최소 높이도 그만큼이다.
+        const luil::rect_f close { screen.bounds(luil::ui_element_kind::info_bar_close, bar.owner) };
+        REQUIRE(close.width == mobile_demo::touch_height);
+        REQUIRE(close.height == mobile_demo::touch_height);
+        REQUIRE(screen.bounds(luil::ui_element_kind::info_bar_action, bar.owner).height == mobile_demo::touch_height);
+        REQUIRE(screen.bounds(luil::ui_element_kind::info_bar, bar.owner).height >= mobile_demo::touch_height);
+        REQUIRE(screen.label(u8"info-bar-state-" + std::u8string { bar.owner }) == std::u8string { bar.word } + u8" 막대: 열림");
+    }
+    REQUIRE(screen.label(u8"info-bar-last-action") == u8"마지막 동작: 없음");
+    REQUIRE(screen.tree.find({ mobile_demo::kind_toast_trigger, u8"info-bar-reopen" }) == nullptr);
+}
+
+TEST_CASE("Pressing a mobile bar action records it and closing a bar removes it until it is reopened", "[ui][info-bar][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    auto screen { build_toasts_screen(page, 400.0f) };
+
+    press(page, screen, { luil::ui_element_kind::info_bar_action, u8"error" });
+    screen = build_toasts_screen(page, 400.0f);
+    REQUIRE(screen.label(u8"info-bar-last-action") == u8"마지막 동작: 오류 막대 다시 시도");
+    REQUIRE(screen.tree.find({ luil::ui_element_kind::info_bar, u8"error" }) != nullptr);
+
+    // 닫는 것은 앱이다. 다음 frame에 그 막대를 짓지 않고 다시 여는 단추가 선다.
+    press(page, screen, { luil::ui_element_kind::info_bar_close, u8"info" });
+    screen = build_toasts_screen(page, 400.0f);
+    REQUIRE(screen.tree.find({ luil::ui_element_kind::info_bar, u8"info" }) == nullptr);
+    REQUIRE(screen.tree.find({ luil::ui_element_kind::info_bar, u8"success" }) != nullptr);
+    REQUIRE(screen.label(u8"info-bar-state-info") == u8"정보 막대: 닫힘");
+    REQUIRE(screen.label(u8"info-bar-last-action") == u8"마지막 동작: 정보 막대 닫기");
+
+    press(page, screen, { mobile_demo::kind_toast_trigger, u8"info-bar-reopen" });
+    screen = build_toasts_screen(page, 400.0f);
+    REQUIRE(screen.tree.find({ luil::ui_element_kind::info_bar, u8"info" }) != nullptr);
+    REQUIRE(screen.label(u8"info-bar-state-info") == u8"정보 막대: 열림");
+    REQUIRE(screen.label(u8"info-bar-last-action") == u8"마지막 동작: 막대 다시 열기");
+    REQUIRE(screen.tree.find({ mobile_demo::kind_toast_trigger, u8"info-bar-reopen" }) == nullptr);
+}
+
+TEST_CASE("The mobile info bars are measured again when the width changes", "[ui][info-bar][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    // 가로로 눕히면 글 폭이 넉넉해 동작 단추가 닫기 옆에 서고, 세로에서는 글 아래로 내려가 막대가 높아진다.
+    const toasts_screen landscape { build_toasts_screen(page, 900.0f) };
+    const toasts_screen portrait { build_toasts_screen(page, 360.0f) };
+    const luil::rect_f wide_action { landscape.bounds(luil::ui_element_kind::info_bar_action, u8"error") };
+    const luil::rect_f wide_close { landscape.bounds(luil::ui_element_kind::info_bar_close, u8"error") };
+    REQUIRE(wide_action.y + wide_action.height / 2.0f == Catch::Approx(wide_close.y + wide_close.height / 2.0f));
+
+    const luil::rect_f narrow_bar { portrait.bounds(luil::ui_element_kind::info_bar, u8"error") };
+    const luil::rect_f narrow_action { portrait.bounds(luil::ui_element_kind::info_bar_action, u8"error") };
+    const luil::rect_f narrow_close { portrait.bounds(luil::ui_element_kind::info_bar_close, u8"error") };
+    REQUIRE(narrow_action.y >= narrow_close.y + narrow_close.height);
+    REQUIRE(narrow_action.y + narrow_action.height <= narrow_bar.y + narrow_bar.height + 0.5f);
+    REQUIRE(narrow_bar.height > landscape.bounds(luil::ui_element_kind::info_bar, u8"error").height);
+
+    // 페이지가 센 높이가 실제 배치와 맞아 마지막 줄이 페이지 안에 든다.
+    for (const toasts_screen* const screen : { &landscape, &portrait })
+    {
+        const luil::rect_f last { screen->bounds(mobile_demo::kind_text, u8"info-bar-last-action") };
+        REQUIRE(last.y + last.height <= screen->height + 0.5f);
+    }
 }

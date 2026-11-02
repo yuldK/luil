@@ -2,6 +2,7 @@
 #include "demo/popups_page.h"
 #include "demo/tabs_page.h"
 #include "demo/theme_page.h"
+#include "demo/toasts_page.h"
 
 #include "luil/ui/menu_element.h"
 #include "luil/ui/tab_bar_element.h"
@@ -11,7 +12,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <variant>
 
 namespace {
     [[nodiscard]] luil::ui_tree arranged(std::unique_ptr<luil::ui_element> root, const float width = 800.0f, const float height = 600.0f)
@@ -314,4 +318,120 @@ TEST_CASE("Choosing a field menu item records it, runs the select message and cl
     REQUIRE(label_text(tree, u8"split-last-action") == u8"마지막 동작: 다른 이름으로 저장");
     REQUIRE(label_text(tree, u8"split-state-save") == u8"저장 메뉴 열림: 닫힘");
     REQUIRE(page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }).empty());
+}
+
+namespace {
+    struct bar_names
+    {
+        std::u8string_view owner {};
+        std::u8string_view word {};
+    };
+
+    constexpr bar_names bar_list[] { { u8"info", u8"정보" }, { u8"success", u8"성공" }, { u8"warning", u8"경고" }, { u8"error", u8"오류" } };
+
+    [[nodiscard]] luil::ui_tree toasts_tree(demo::toasts_page& page, const float width = 800.0f)
+    {
+        return arranged(page.build(width, 2000.0f, 1.0f), width, 2000.0f);
+    }
+
+    [[nodiscard]] luil::ui_element_id bar_part(const luil::ui_element_kind kind, const std::u8string_view owner)
+    {
+        return { kind, std::u8string { owner } };
+    }
+
+    // 정보 막대의 단추를 눌러 나온 메시지를 페이지에 넘긴다. 누름은 tree에 있던 그 액션이다.
+    void press(demo::toasts_page& page, const luil::ui_tree& tree, const luil::ui_element_id& id)
+    {
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+
+    [[nodiscard]] float center_y(const luil::rect_f& box)
+    {
+        return box.y + box.height / 2.0f;
+    }
+}
+
+TEST_CASE("The toasts page lists four info bars with their state labels", "[demo][toasts][info-bar]")
+{
+    demo::toasts_page page {};
+    const auto tree { toasts_tree(page) };
+    for (const bar_names& bar : bar_list)
+    {
+        CAPTURE(bar.owner);
+        const luil::ui_element* const element { tree.find(bar_part(luil::ui_element_kind::info_bar, bar.owner)) };
+        REQUIRE(element != nullptr);
+        // 보조 기술은 막대를 alert로 읽고, 이름은 심각도 낱말로 시작한다.
+        const luil::access_info info { element->accessibility() };
+        REQUIRE(info.role == luil::access_role::alert);
+        REQUIRE(info.name.starts_with(std::u8string { bar.word } + u8" "));
+        REQUIRE(tree.find(bar_part(luil::ui_element_kind::info_bar_action, bar.owner)) != nullptr);
+        REQUIRE(tree.find(bar_part(luil::ui_element_kind::info_bar_close, bar.owner)) != nullptr);
+        REQUIRE(label_text(tree, u8"info-bar-state-" + std::u8string { bar.owner }) == std::u8string { bar.word } + u8" 막대: 열림");
+    }
+    REQUIRE(label_text(tree, u8"info-bar-last-action") == u8"마지막 동작: 없음");
+    // 닫은 막대가 없으면 다시 여는 단추도 없다.
+    REQUIRE(tree.find({ demo::kind_toast_trigger, u8"info-bar-reopen" }) == nullptr);
+}
+
+TEST_CASE("Pressing a bar action records it and closing a bar removes it until it is reopened", "[demo][toasts][info-bar]")
+{
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+
+    press(page, tree, bar_part(luil::ui_element_kind::info_bar_action, u8"error"));
+    tree = toasts_tree(page);
+    REQUIRE(label_text(tree, u8"info-bar-last-action") == u8"마지막 동작: 오류 막대 다시 시도");
+    // 동작은 막대를 닫지 않는다.
+    REQUIRE(tree.find(bar_part(luil::ui_element_kind::info_bar, u8"error")) != nullptr);
+
+    // 닫는 것은 앱이다. 다음 frame에 그 막대를 짓지 않고, 다른 막대는 그대로다. 다시 여는 단추가 선다.
+    press(page, tree, bar_part(luil::ui_element_kind::info_bar_close, u8"warning"));
+    tree = toasts_tree(page);
+    REQUIRE(tree.find(bar_part(luil::ui_element_kind::info_bar, u8"warning")) == nullptr);
+    REQUIRE(tree.find(bar_part(luil::ui_element_kind::info_bar_close, u8"warning")) == nullptr);
+    REQUIRE(tree.find(bar_part(luil::ui_element_kind::info_bar, u8"info")) != nullptr);
+    REQUIRE(label_text(tree, u8"info-bar-state-warning") == u8"경고 막대: 닫힘");
+    REQUIRE(label_text(tree, u8"info-bar-state-error") == u8"오류 막대: 열림");
+    REQUIRE(label_text(tree, u8"info-bar-last-action") == u8"마지막 동작: 경고 막대 닫기");
+
+    press(page, tree, bar_part(luil::ui_element_kind::info_bar_close, u8"info"));
+    tree = toasts_tree(page);
+    REQUIRE(label_text(tree, u8"info-bar-state-info") == u8"정보 막대: 닫힘");
+
+    // 다시 열면 닫았던 막대가 모두 돌아오고 단추는 사라진다.
+    press(page, tree, { demo::kind_toast_trigger, u8"info-bar-reopen" });
+    tree = toasts_tree(page);
+    for (const bar_names& bar : bar_list)
+        REQUIRE(tree.find(bar_part(luil::ui_element_kind::info_bar, bar.owner)) != nullptr);
+    REQUIRE(label_text(tree, u8"info-bar-state-warning") == u8"경고 막대: 열림");
+    REQUIRE(label_text(tree, u8"info-bar-last-action") == u8"마지막 동작: 막대 다시 열기");
+    REQUIRE(tree.find({ demo::kind_toast_trigger, u8"info-bar-reopen" }) == nullptr);
+}
+
+TEST_CASE("The action button of an info bar moves under the text when the page narrows", "[demo][toasts][info-bar]")
+{
+    demo::toasts_page page {};
+    const luil::ui_element_id bar_id { bar_part(luil::ui_element_kind::info_bar, u8"error") };
+    const luil::ui_element_id action_id { bar_part(luil::ui_element_kind::info_bar_action, u8"error") };
+    const luil::ui_element_id close_id { bar_part(luil::ui_element_kind::info_bar_close, u8"error") };
+
+    // 넓은 페이지에서는 동작 단추가 닫기 옆 첫 줄에 서서 막대가 낮다.
+    const auto wide { toasts_tree(page, 800.0f) };
+    const luil::rect_f wide_bar { wide.find(bar_id)->bounds() };
+    const luil::rect_f wide_action { wide.find(action_id)->bounds() };
+    REQUIRE(center_y(wide_action) == Catch::Approx(center_y(wide.find(close_id)->bounds())));
+
+    // 좁은 페이지에서는 글 폭이 모자라 글 아래 줄로 내려가고, 단추는 막대 안에 머문다.
+    const auto narrow { toasts_tree(page, 400.0f) };
+    const luil::rect_f narrow_bar { narrow.find(bar_id)->bounds() };
+    const luil::rect_f narrow_action { narrow.find(action_id)->bounds() };
+    const luil::rect_f narrow_close { narrow.find(close_id)->bounds() };
+    REQUIRE(narrow_action.y >= narrow_close.y + narrow_close.height);
+    REQUIRE(narrow_action.y + narrow_action.height <= narrow_bar.y + narrow_bar.height + 0.5f);
+    REQUIRE(narrow_bar.height > wide_bar.height);
 }

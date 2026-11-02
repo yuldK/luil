@@ -135,6 +135,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/toasts_page.cpp"
     mobile_demo_page_tests.cpp)
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
 target_sources(luil_core_tests PRIVATE
@@ -145,6 +146,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
     demo_gallery_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
