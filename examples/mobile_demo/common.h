@@ -120,6 +120,8 @@ namespace mobile_demo {
         luil::window_width_class width_class { luil::window_width_class::compact };
         // 그릴 수 있는 표면 전체다 (tree 좌표). 시트·dialog의 scrim과 시트 바탕이 안전 영역 밖까지 닿는다.
         luil::rect_f surface {};
+        // 시스템의 움직임 줄이기 설정이다 (`window_metrics::reduce_motion`). 기기 페이지가 상태를 보인다.
+        bool reduce_motion { false };
     };
 
     // 페이지를 연다. 좁은 화면에서는 목록 위로 페이지가 들어서고, 넓은 화면에서는 오른쪽 판이 바뀐다.

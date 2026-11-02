@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <utility>
 
 namespace mobile_demo {
@@ -21,6 +22,10 @@ namespace mobile_demo {
         constexpr float row_height { 44.0f };
         // 시트 안 머리(설명 한 줄과 단추 줄)의 높이다.
         constexpr float sheet_header_height { note_line_height + touch_height + 3.0f * 8.0f };
+        // 아래 시트에는 놓기를 되풀이하는 줄이 하나 더 있다.
+        constexpr float sheet_motion_row_height { touch_height + 8.0f };
+        // "튕기기" 단추가 놓는 속도다 (초당 논리 픽셀). 손으로 힘껏 튕기는 정도다.
+        constexpr float fling_speed { 1800.0f };
 
         struct sheet_choice
         {
@@ -53,6 +58,16 @@ namespace mobile_demo {
             return u8"";
         }
 
+        // 같은 놓기를 되풀이하는 release다. 멈춤점이 반이면 위로, 전체면 아래로 튕기고, 멈출 자리는 손으로 놓았을 때와 같은 규칙
+        // (`settle_sheet`)으로 고른다.
+        [[nodiscard]] luil::sheet_release make_fling(const luil::sheet_host_config& sheet, const float height)
+        {
+            const float rising { sheet.detent == luil::sheet_detent::half ? fling_speed : -fling_speed };
+            const luil::sheet_settle settle { luil::settle_sheet(sheet, height, -rising) };
+            const float target { settle.dismiss ? 0.0f : luil::sheet_detent_height(sheet, settle.detent, height) };
+            return luil::sheet_release { settle, luil::sheet_visible_height(sheet, height), target, rising };
+        }
+
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_button(const std::u8string& key, const std::u8string_view label, luil::ui_action action)
         {
             auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"sheet-" + key }, luil::text_button_config { .text = std::u8string { label } }) };
@@ -62,32 +77,79 @@ namespace mobile_demo {
         }
     }
 
-    bool sheets_page::handle(const luil::app_message& message)
+    float sheets_page::offset_at(const std::chrono::steady_clock::time_point now) const noexcept
+    {
+        return drag_offset_ + luil::spring_value(motion_, now);
+    }
+
+    void sheets_page::close(const luil::sheet_dismiss_reason reason)
+    {
+        open_.reset();
+        drag_offset_ = 0.0f;
+        motion_ = luil::spring_at_rest(0.0f);
+        last_dismiss_ = reason;
+    }
+
+    void sheets_page::apply_release(const luil::sheet_release& release, const std::chrono::steady_clock::time_point now)
+    {
+        if (release.settle.dismiss)
+        {
+            close(luil::sheet_dismiss_reason::drag);
+            return;
+        }
+        detent_ = release.settle.detent;
+        drag_offset_ = 0.0f;
+        target_height_ = release.target_height;
+        // 시트가 오르면 끄는 양이 줄어든다. 그래서 끄는 양의 속도는 높이의 속도와 부호가 반대다.
+        motion_ = luil::spring_release(release.target_height - release.visible_height, -release.velocity, 0.0f, now, luil::spring_snappy, reduce_motion_);
+    }
+
+    void sheets_page::set_reduce_motion(const bool reduce_motion) noexcept
+    {
+        reduce_motion_ = reduce_motion;
+        // 도는 중에 켜지면 멈춤점에 붙인다. 두면 남은 시간만큼 더 돌고 끝난다.
+        if (reduce_motion)
+            motion_ = luil::spring_at_rest(0.0f);
+    }
+
+    std::optional<std::chrono::steady_clock::time_point> sheets_page::next_update(const std::chrono::steady_clock::time_point now) const noexcept
+    {
+        return luil::spring_next_update(motion_, now);
+    }
+
+    bool sheets_page::handle(const luil::app_message& message, const std::chrono::steady_clock::time_point now)
     {
         if (const auto* const open { message.get<sheet_open_intent>() }; open != nullptr)
         {
             open_ = open_sheet { open->kind, open->modal };
             detent_ = luil::sheet_detent::half;
             drag_offset_ = 0.0f;
+            motion_ = luil::spring_at_rest(0.0f);
             list_offset_ = 0.0f;
             return true;
         }
         if (const auto* const drag { message.get<sheet_drag_intent>() }; drag != nullptr)
         {
-            drag_offset_ += drag->delta;
+            // 놓은 뒤 도는 중에 다시 잡으면 지금 끄는 양에서 이어 끈다. 스프링은 거둔다.
+            drag_offset_ = offset_at(now) + drag->delta;
+            motion_ = luil::spring_at_rest(0.0f);
             return true;
         }
         if (const auto* const settle { message.get<sheet_settle_intent>() }; settle != nullptr)
         {
             detent_ = settle->detent;
             drag_offset_ = 0.0f;
+            motion_ = luil::spring_at_rest(0.0f);
+            return true;
+        }
+        if (const auto* const release { message.get<sheet_release_intent>() }; release != nullptr)
+        {
+            apply_release(release->release, now);
             return true;
         }
         if (const auto* const dismiss { message.get<sheet_dismiss_intent>() }; dismiss != nullptr)
         {
-            open_.reset();
-            drag_offset_ = 0.0f;
-            last_dismiss_ = dismiss->reason;
+            close(dismiss->reason);
             return true;
         }
         if (const auto* const scroll { message.get<sheet_scroll_intent>() }; scroll != nullptr)
@@ -134,7 +196,7 @@ namespace mobile_demo {
         return column.finish();
     }
 
-    luil::sheet_host_config sheets_page::config() const
+    luil::sheet_host_config sheets_page::config(const std::chrono::steady_clock::time_point now) const
     {
         luil::sheet_host_config config {};
         config.owner = u8"demo-sheet";
@@ -144,10 +206,15 @@ namespace mobile_demo {
         if (adaptive_ && config.kind == luil::sheet_kind::bottom)
             config.side_from_width = side_sheet_width;
         config.detent = detent_;
-        config.drag_offset = drag_offset_;
+        config.drag_offset = offset_at(now);
         config.dismiss = [](const luil::sheet_dismiss_reason reason) { return luil::make_app_action(sheet_dismiss_intent { reason }); };
         config.drag = [](const float delta) { return luil::make_app_action(sheet_drag_intent { delta }); };
-        config.settle = [](const luil::sheet_detent detent) { return luil::make_app_action(sheet_settle_intent { detent }); };
+        // 놓기는 settle이 아니라 release로 나간다. 닫는 놓기는 전처럼 바로 거두고, 그 밖에는 놓은 자리에서 멈춤점까지 스프링으로 이어 간다.
+        config.release = [](const luil::sheet_release& release) {
+            if (release.settle.dismiss)
+                return luil::make_app_action(sheet_dismiss_intent { luil::sheet_dismiss_reason::drag });
+            return luil::make_app_action(sheet_release_intent { release });
+        };
         return config;
     }
 
@@ -156,16 +223,20 @@ namespace mobile_demo {
         return luil::make_app_action(sheet_dismiss_intent { luil::sheet_dismiss_reason::back });
     }
 
-    void sheets_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale, const luil::rect_f& surface)
+    void sheets_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale, const luil::rect_f& surface, const std::chrono::steady_clock::time_point now)
     {
         if (open_.has_value() == false)
             return;
-        const luil::sheet_host_config sheet { config() };
+        luil::sheet_host_config sheet { config(now) };
         const float logical_height { height / scale };
         const luil::sheet_kind kind { luil::resolve_sheet_kind(sheet, width / scale) };
-        // 옆 시트에는 끌기 종료 콜백이 없다. 아래 시트에서 끄던 양은 여기서 거두고 멈춤점과 목록 위치는 지킨다.
+        // 옆 시트에는 끌기 종료 콜백이 없다. 아래 시트에서 끄던 양과 도는 스프링은 여기서 거두고 멈춤점과 목록 위치는 지킨다.
         if (kind != luil::sheet_kind::bottom)
+        {
             drag_offset_ = 0.0f;
+            motion_ = luil::spring_at_rest(0.0f);
+            sheet.drag_offset = 0.0f;
+        }
         // 시트 안 자리의 높이다. 아래 시트는 지금 보이는 높이에서 손잡이(24)를 뺀다.
         const float inner_height { kind == luil::sheet_kind::bottom ? std::max(0.0f, luil::sheet_visible_height(sheet, logical_height) - 24.0f) : logical_height };
 
@@ -189,12 +260,28 @@ namespace mobile_demo {
         row->add(make_button(u8"close", u8"닫기", luil::make_message_action(sheet_dismiss_intent { luil::sheet_dismiss_reason::scrim })), 68.0f);
         content->add(std::move(row), touch_height);
 
+        // 아래 시트만이다 (옆 시트와 서랍에는 멈춤점이 없다). 단추가 같은 놓기를 되풀이하고, 글이 스프링의 상태를 말한다.
+        if (kind == luil::sheet_kind::bottom)
+        {
+            const bool moving { luil::spring_finished(motion_, now) == false };
+            std::u8string state { u8"멈춤" };
+            if (moving)
+                state = u8"도는 중 · 목표 높이 " + to_u8(static_cast<int>(std::lround(target_height_)));
+            luil::stack_config motion_config {};
+            motion_config.direction = luil::stack_direction::row;
+            motion_config.spacing = 8.0f;
+            auto motion_row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"sheet-motion-row" }, motion_config) };
+            motion_row->add(make_button(u8"fling", u8"튕기기", luil::make_message_action(sheet_release_intent { make_fling(sheet, logical_height) })), 80.0f);
+            motion_row->add_flexible(make_label({ kind_text, u8"sheets-motion" }, std::move(state), note_text_size, luil::label_color_role::dim));
+            content->add(std::move(motion_row), touch_height);
+        }
+
         // 시트 안의 세로 목록이다. 위치는 이 페이지의 상태이고, 맨 위인지를 함께 싣는다.
         page_column rows { u8"sheet-rows", 0.0f };
         for (int index { 0 }; index < row_count; ++index)
             rows.add(make_label({ kind_text, u8"sheet-row-" + to_u8(index) }, u8"항목 " + to_u8(index + 1), body_text_size, luil::label_color_role::primary), row_height);
         page_content list { rows.finish() };
-        const float viewport { std::max(0.0f, inner_height - sheet_header_height) };
+        const float viewport { std::max(0.0f, inner_height - sheet_header_height - (kind == luil::sheet_kind::bottom ? sheet_motion_row_height : 0.0f)) };
         list_offset_ = luil::clamp_scroll(list.height, viewport, list_offset_);
         auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { kind_page_scroll, u8"sheet-list" }, luil::scroll_view_config { list.height, list_offset_ }) };
         view->set_content(std::move(list.element));

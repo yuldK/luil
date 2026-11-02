@@ -78,6 +78,8 @@ namespace mobile_demo {
         // 흘리는 창마다의 위치다 (논리 픽셀). 범위는 frame을 지을 때 다듬는다.
         std::map<std::u8string, float> scrolls_ {};
         window_metrics_intent metrics_ {};
+        // 마지막으로 지은 frame의 시각이다. 시간이 흘러야 바뀌는 상태의 다음 예고를 이 시각에서 센다.
+        std::chrono::steady_clock::time_point frame_time_ {};
         std::atomic<bool> closed_ { false };
     };
 

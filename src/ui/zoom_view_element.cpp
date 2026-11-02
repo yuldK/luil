@@ -4,7 +4,9 @@
 #include "luil/ui/label_element.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -16,10 +18,39 @@ namespace luil {
             return std::isfinite(point.x) && std::isfinite(point.y);
         }
 
+        // 도를 (-180, 180]로 접는다. 유한한 값만 받는다.
+        [[nodiscard]] double fold_degrees(const double degrees) noexcept
+        {
+            const double folded { std::remainder(degrees, 360.0) };
+            return folded <= -180.0 ? folded + 360.0 : folded;
+        }
+
+        struct rotation_terms
+        {
+            double cosine { 1.0 };
+            double sine { 0.0 };
+        };
+
+        // 접은 각도의 코사인과 사인이다. 90도의 배수는 정확한 값을 줘서 가로세로 교환 같은 결과가 오차 없이 선다.
+        [[nodiscard]] rotation_terms rotation_terms_of(const double folded) noexcept
+        {
+            if (folded == 0.0)
+                return { 1.0, 0.0 };
+            if (folded == 90.0)
+                return { 0.0, 1.0 };
+            if (folded == -90.0)
+                return { 0.0, -1.0 };
+            if (folded == 180.0)
+                return { -1.0, 0.0 };
+            const double radians { folded * std::numbers::pi / 180.0 };
+            return { std::cos(radians), std::sin(radians) };
+        }
+
         [[nodiscard]] bool valid_config(const zoom_view_config& config) noexcept
         {
             if (std::isfinite(config.zoom) == false || config.zoom <= 0.0f || finite_point(config.origin) == false || std::isfinite(config.minimum_zoom) == false || config.minimum_zoom <= 0.0f
-                || std::isfinite(config.maximum_zoom) == false || config.maximum_zoom < config.minimum_zoom)
+                || std::isfinite(config.maximum_zoom) == false || config.maximum_zoom < config.minimum_zoom || std::isfinite(config.rotation) == false || std::isfinite(config.rotation_step) == false
+                || config.rotation_step <= 0.0f || config.rotation_step > 180.0f)
                 return false;
             const zoom_double_tap& tap { config.double_tap };
             if (tap.enabled
@@ -40,6 +71,7 @@ namespace luil {
             value.zoom = std::clamp(value.zoom, config.minimum_zoom, config.maximum_zoom);
             if (finite_point(value.origin) == false)
                 value.origin = config.origin;
+            value.rotation = std::isfinite(value.rotation) ? static_cast<float>(fold_degrees(value.rotation)) : 0.0f;
             if (config.content_bounds.has_value() == false || finite_point(viewport) == false || viewport.x <= 0.0f || viewport.y <= 0.0f)
                 return value;
             const rect_f& box { *config.content_bounds };
@@ -88,7 +120,7 @@ namespace luil {
 
     zoom_view_state zoom_about(const zoom_view_config& config, const zoom_point viewport, const float factor, const zoom_point anchor) noexcept
     {
-        zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
+        zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin, config.rotation }) };
         if (valid_config(config) == false || std::isfinite(factor) == false || factor <= 0.0f || finite_point(anchor) == false)
             return current;
         const float next { static_cast<float>(std::clamp(static_cast<double>(current.zoom) * factor, static_cast<double>(config.minimum_zoom), static_cast<double>(config.maximum_zoom))) };
@@ -99,12 +131,67 @@ namespace luil {
             static_cast<float>(anchor.x - (anchor.x - static_cast<double>(current.origin.x)) * ratio),
             static_cast<float>(anchor.y - (anchor.y - static_cast<double>(current.origin.y)) * ratio),
         };
-        return clamp_state(config, viewport, { next, origin });
+        return clamp_state(config, viewport, { next, origin, current.rotation });
+    }
+
+    zoom_view_state rotate_about(const zoom_view_config& config, const zoom_point viewport, const float degrees, const zoom_point anchor) noexcept
+    {
+        const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin, config.rotation }) };
+        if (valid_config(config) == false || std::isfinite(degrees) == false || finite_point(anchor) == false)
+            return current;
+        const double folded { fold_degrees(degrees) };
+        if (folded == 0.0)
+            return current;
+        const rotation_terms terms { rotation_terms_of(folded) };
+        const double across { anchor.x - static_cast<double>(current.origin.x) };
+        const double down { anchor.y - static_cast<double>(current.origin.y) };
+        const zoom_point origin {
+            static_cast<float>(anchor.x - (across * terms.cosine - down * terms.sine)),
+            static_cast<float>(anchor.y - (across * terms.sine + down * terms.cosine)),
+        };
+        if (finite_point(origin) == false)
+            return current;
+        return { current.zoom, origin, static_cast<float>(fold_degrees(static_cast<double>(current.rotation) + folded)) };
+    }
+
+    zoom_point rotate_point(const zoom_point point, const float degrees) noexcept
+    {
+        if (std::isfinite(degrees) == false || finite_point(point) == false)
+            return point;
+        const double folded { fold_degrees(degrees) };
+        if (folded == 0.0)
+            return point;
+        const rotation_terms terms { rotation_terms_of(folded) };
+        return { static_cast<float>(point.x * terms.cosine - point.y * terms.sine), static_cast<float>(point.x * terms.sine + point.y * terms.cosine) };
+    }
+
+    rect_f rotated_bounds(const rect_f& bounds, const float degrees) noexcept
+    {
+        if (std::isfinite(degrees) == false || fold_degrees(degrees) == 0.0)
+            return bounds;
+        const std::array<zoom_point, 4> corners {
+            rotate_point({ bounds.x, bounds.y }, degrees),
+            rotate_point({ bounds.x + bounds.width, bounds.y }, degrees),
+            rotate_point({ bounds.x, bounds.y + bounds.height }, degrees),
+            rotate_point({ bounds.x + bounds.width, bounds.y + bounds.height }, degrees),
+        };
+        float left { corners[0].x };
+        float top { corners[0].y };
+        float right { corners[0].x };
+        float bottom { corners[0].y };
+        for (const zoom_point corner : corners)
+        {
+            left = std::min(left, corner.x);
+            top = std::min(top, corner.y);
+            right = std::max(right, corner.x);
+            bottom = std::max(bottom, corner.y);
+        }
+        return { left, top, right - left, bottom - top };
     }
 
     zoom_view_state pan_by(const zoom_view_config& config, const zoom_point viewport, const zoom_point delta) noexcept
     {
-        zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
+        zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin, config.rotation }) };
         if (finite_point(delta) == false)
             return current;
         current.origin.x += delta.x;
@@ -116,7 +203,7 @@ namespace luil {
     {
         if (finite_point(delta) == false)
             return {};
-        const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
+        const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin, config.rotation }) };
         const zoom_view_state next { pan_by(config, viewport, delta) };
         return { delta.x - (next.origin.x - current.origin.x), delta.y - (next.origin.y - current.origin.y) };
     }
@@ -161,7 +248,7 @@ namespace luil {
 
     zoom_view_state zoom_to_fit(const zoom_view_config& config, const zoom_point viewport, const float margin, const float maximum_fit_zoom, const zoom_fit axis) noexcept
     {
-        const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin }) };
+        const zoom_view_state current { clamp_state(config, viewport, { config.zoom, config.origin, config.rotation }) };
         // 맞출 축의 창만 여백보다 넓으면 된다 — 폭 맞춤은 낮은 창에서도 선다.
         const bool needs_width { axis != zoom_fit::height };
         const bool needs_height { axis != zoom_fit::width };
@@ -177,7 +264,7 @@ namespace luil {
         // 맞추지 않는 축은 지금 창 가운데의 내용 자리를 지킨다. 원점은 창 가운데 기준이라 배율의 비만큼 늘면 그 자리다.
         const float ratio { zoom / current.zoom };
         const zoom_point origin { axis == zoom_fit::height ? current.origin.x * ratio : centered.x, axis == zoom_fit::width ? current.origin.y * ratio : centered.y };
-        return clamp_state(config, viewport, { zoom, origin });
+        return clamp_state(config, viewport, { zoom, origin, current.rotation });
     }
 
     std::vector<input_action> zoom_fit_actions(const zoom_view_config& config, const zoom_point viewport, const float margin, const float maximum_fit_zoom, const zoom_fit axis)
@@ -194,12 +281,15 @@ namespace luil {
         set_clip_children(true);
         set_tab_stop(true);
         set_hit_opaque(true);
-        set_zoom_source(zoom_source { config_.zoom_by, config_.pan_by, 1.0f, config_.wheel, [this](const key_pressed_event& event) { return keys(event); } });
+        zoom_source source { config_.zoom_by, config_.pan_by, 1.0f, config_.wheel, [this](const key_pressed_event& event) { return keys(event); } };
+        source.rotate_by = config_.rotate_by;
+        set_zoom_source(std::move(source));
     }
 
     zoom_source zoom_view_element::make_source(const zoom_point viewport) const
     {
         zoom_source source { config_.zoom_by, config_.pan_by, scale_, config_.wheel, [this](const key_pressed_event& event) { return keys(event); } };
+        source.rotate_by = config_.rotate_by;
         if (config_.edge_swipe)
         {
             // 배치한 상태의 사본으로 잰다. 그 뒤 앱이 상태를 바꿔도 이 접촉의 기준은 누를 때의 것이다.
@@ -235,6 +325,7 @@ namespace luil {
         const zoom_view_state value { zoom_about(config_, viewport, 1.0f, {}) };
         config_.zoom = value.zoom;
         config_.origin = value.origin;
+        config_.rotation = value.rotation;
         set_zoom_source(make_source(viewport));
         if (content_ == nullptr)
             return;
@@ -260,7 +351,7 @@ namespace luil {
 
     zoom_view_state zoom_view_element::state() const noexcept
     {
-        return { config_.zoom, config_.origin };
+        return { config_.zoom, config_.origin, config_.rotation };
     }
 
     access_info zoom_view_element::accessibility() const
@@ -281,6 +372,15 @@ namespace luil {
     {
         if (event.shortcut_modifier_down())
             return std::nullopt;
+        // Shift+←/→는 한 걸음씩, Shift+Home은 0도 복귀다. 회전을 켠 보기만 쓰고, 아니면 Shift+화살표는 이동으로 남는다.
+        // 이미 0도면 키만 소비하고 메시지는 없다.
+        if (config_.rotate_by && event.shift && (event.key == key_code::arrow_left || event.key == key_code::arrow_right || event.key == key_code::home))
+        {
+            const float degrees { event.key == key_code::home ? -config_.rotation : (event.key == key_code::arrow_right ? config_.rotation_step : -config_.rotation_step) };
+            if (degrees == 0.0f)
+                return std::vector<input_action> {};
+            return std::vector<input_action> { config_.rotate_by(degrees, {}) };
+        }
         if (event.key == key_code::zoom_in || event.key == key_code::zoom_out)
             return config_.zoom_by ? std::vector<input_action> { config_.zoom_by(event.key == key_code::zoom_in ? 1.2f : 1.0f / 1.2f, {}) } : std::vector<input_action> {};
         const zoom_point viewport { bounds().width / scale_, bounds().height / scale_ };

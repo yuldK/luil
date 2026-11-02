@@ -11,9 +11,11 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -621,13 +623,32 @@ namespace luil::testing {
                         touch.move(inner_first);
                         touch.move(inner_second, 1);
                         const auto contracted { uia.wait([&](const json& state) { return state["zoom"].get<float>() < expanded["zoom"].get<float>() * 0.8f; }, "Pinch contract") };
-                        touch.up(inner_first);
-                        POINT moved { inner_second };
+                        // 두 접촉을 가운데 둘레로 30도 시계 방향으로 돌린다. 간격이 같아 배율은 거의 그대로이고 rotation이 양수가 된다.
+                        const POINT center { (inner_first.x + inner_second.x) / 2, (inner_first.y + inner_second.y) / 2 };
+                        const auto turn = [&center](const POINT point, const double degrees) {
+                            const double radians { degrees * std::numbers::pi / 180.0 };
+                            const double across { static_cast<double>(point.x - center.x) };
+                            const double down { static_cast<double>(point.y - center.y) };
+                            return POINT {
+                                center.x + static_cast<LONG>(std::lround(across * std::cos(radians) - down * std::sin(radians))),
+                                center.y + static_cast<LONG>(std::lround(across * std::sin(radians) + down * std::cos(radians))),
+                            };
+                        };
+                        const POINT turned_first { turn(inner_first, 30.0) };
+                        const POINT turned_second { turn(inner_second, 30.0) };
+                        touch.move(turned_first);
+                        touch.move(turned_second, 1);
+                        const auto rotated { uia.wait([&](const json& state) { return state["rotation"].get<float>() > contracted["rotation"].get<float>() + 20.0f; }, "Pinch rotate clockwise") };
+                        require(rotated["rotation"].get<float>() < contracted["rotation"].get<float>() + 40.0f, "Rotation overshot the injected turn");
+                        require(std::abs(rotated["zoom"].get<float>() / contracted["zoom"].get<float>() - 1.0f) < 0.05f, "Rotation changed the zoom");
+                        touch.up(turned_first);
+                        POINT moved { turned_second };
                         moved.y += 24;
                         touch.move(moved, 1);
-                        const auto panned { uia.wait([&](const json& state) { return state["zoom_y"].get<float>() > contracted["zoom_y"].get<float>() + 8.0f; }, "Remaining finger pan") };
+                        const auto panned { uia.wait([&](const json& state) { return state["zoom_y"].get<float>() > rotated["zoom_y"].get<float>() + 8.0f; }, "Remaining finger pan") };
                         touch.up(moved, PEN_FLAG_NONE, 1);
-                        require(panned["zoom"] == contracted["zoom"], "Remaining finger changed zoom");
+                        require(panned["zoom"] == rotated["zoom"], "Remaining finger changed zoom");
+                        require(panned["rotation"] == rotated["rotation"], "Remaining finger changed rotation");
                         no_change(before, true);
                     });
                 uia.invoke(L"zoom-visible");

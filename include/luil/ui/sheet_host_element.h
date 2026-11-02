@@ -41,6 +41,31 @@ namespace luil {
         drag,
     };
 
+    // 아래 시트를 놓은 자리에서 정한 결과다.
+    struct sheet_settle
+    {
+        sheet_detent detent { sheet_detent::half };
+        // 닫는 쪽(높이 0)이 가장 가깝다.
+        bool dismiss { false };
+
+        [[nodiscard]] bool operator==(const sheet_settle&) const noexcept = default;
+    };
+
+    // 아래 시트를 놓은 순간의 상태다. 앱이 놓은 자리에서 멈출 자리까지 값을 움직이려면 높이와 속도가 함께 필요하다
+    // (`sheet_host_config::release`). 높이는 모두 논리 픽셀이라 앱이 화면 높이를 몰라도 스프링을 짤 수 있다.
+    struct sheet_release
+    {
+        // `settle_sheet`가 정한 결과다. 닫는 쪽이면 `settle.dismiss`다.
+        sheet_settle settle {};
+        // 놓은 순간 보이던 높이다 (마지막 이동까지 더한 값).
+        float visible_height { 0.0f };
+        // 멈출 자리의 높이다 (닫으면 0).
+        float target_height { 0.0f };
+        // 놓은 순간 높이가 변하는 속도다 (초당 논리 픽셀, 높아지는 쪽이 양수라 아래로 끌어 놓으면 음수다).
+        // 취소와 입력 유실로 끝난 끌기는 끝을 모르므로 0이다.
+        float velocity { 0.0f };
+    };
+
     // 같은 표면 안에 겹쳐 그리는 시트·서랍의 설정이다.
     //
     // **열림·멈춤점·끄는 양은 앱 상태다.** 열려 있으면 앱이 매 frame tree에 담고, 닫으면 빼고, host는 받은 값으로
@@ -79,6 +104,10 @@ namespace luil {
         // 끌기를 놓았고 멈출 자리가 이것이다 (`settle_sheet`). 앱은 `detent`에 넣고 `drag_offset`을 0으로 되돌린다.
         // 닫는 쪽으로 정해지면 이것 대신 `dismiss(drag)`가 나간다.
         std::function<input_action(sheet_detent)> settle {};
+        // 끌기를 놓은 순간의 높이와 속도, 멈출 자리를 한꺼번에 받는다. 앱이 놓은 속도에서 이어 움직이게 하려는 칸이다.
+        //  - 있으면 놓은 결과가 `settle`과 `dismiss(drag)` 대신 이것으로 나간다. 닫는 쪽이면 `release.settle.dismiss`가 참이고
+        //    닫을지는 앱이 정한다. 없으면 지금까지와 같다.
+        std::function<input_action(const sheet_release&)> release {};
         // 튕김으로 보는 속도다 (초당 논리 픽셀). 놓는 순간 이보다 빠르면 가장 가까운 자리 대신 그 방향의 다음 자리로
         // 간다 — 아래로 튕기면 지금 높이보다 낮은 첫 자리(없으면 닫힘), 위로 튕기면 높은 첫 자리(없으면 전체)다.
         // 0 이하면 속도를 보지 않는다.
@@ -94,16 +123,6 @@ namespace luil {
     [[nodiscard]] float sheet_detent_height(const sheet_host_config& config, sheet_detent detent, float height) noexcept;
     // 아래 시트가 지금 보이는 높이다. 멈춤점 높이에서 끄는 양을 빼고 0과 전체 높이 사이로 다듬는다.
     [[nodiscard]] float sheet_visible_height(const sheet_host_config& config, float height) noexcept;
-
-    // 아래 시트를 놓은 자리에서 정한 결과다.
-    struct sheet_settle
-    {
-        sheet_detent detent { sheet_detent::half };
-        // 닫는 쪽(높이 0)이 가장 가깝다.
-        bool dismiss { false };
-
-        [[nodiscard]] bool operator==(const sheet_settle&) const noexcept = default;
-    };
 
     // 놓은 자리와 속도로 멈출 자리를 정한다. `velocity`는 놓은 순간의 속도다 (초당 논리 픽셀, 아래가 양수).
     //  - `fling_velocity` 이상이면 지금 보이는 높이에서 그 방향의 다음 자리다 (닫힘(0)·반·전체).
@@ -121,7 +140,7 @@ namespace luil {
     // 같은 표면 안에서 화면 위에 겹치는 시트·서랍이다 (아래 시트, 오른쪽 옆 시트, 왼쪽 서랍).
     //  - 자리를 통째로 받아 그 안에 선다. modal이면 자리 전체를 scrim이 덮는다.
     //  - 아래 시트는 위에 끌기 손잡이가 선다. 손잡이와 시트 몸의 끌기가 `drag`를, 놓으면 `settle`이나 `dismiss(drag)`를
-    //    낸다. 시트 몸의 끌기는 안쪽 세로 목록이 맨 위(`scroll_source::at_start`)일 때만 넘겨받는다.
+    //    낸다 (`release`가 있으면 그것 하나를 낸다). 시트 몸의 끌기는 안쪽 세로 목록이 맨 위(`scroll_source::at_start`)일 때만 넘겨받는다.
     //  - modal이면 초점 가둠과 dialog 역할, 아니면 pane 역할이다.
     class sheet_host_element final : public ui_element
     {
