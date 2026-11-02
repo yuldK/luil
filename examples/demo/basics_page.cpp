@@ -634,7 +634,7 @@ namespace demo {
         column->add_gap(4.0f);
 
         // 칸을 그 폭으로 배치하고 label을 같은 폭으로 재어 상태 줄을 짓는다. 칸은 배치한 채로 tree에 넣는다.
-        luil::label_config label { line_break_label_config(line_break_.text, line_break_policy_, 12.0f) };
+        luil::label_config label { line_break_label_config(line_break_.text, line_break_policy_) };
         auto area { std::make_unique<luil::text_area_element>(
             luil::ui_element_id { kind_line_break_input }, make_input_view(line_break_, target_line_break), line_break_area_config(line_break_policy_, line_break_wrap_))
         };
