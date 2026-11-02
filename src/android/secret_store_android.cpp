@@ -21,6 +21,8 @@
 // Java 0줄이다. Keystore·Cipher는 JNI로 프레임워크 클래스를 부른다 (HTTP client와 같은 길).
 namespace luil {
     namespace {
+        using android::jni_local_frame;
+
         constexpr std::uint8_t file_version { 1 };
         constexpr std::size_t iv_bytes { 12 };
         constexpr jint tag_bits { 128 };
@@ -59,31 +61,6 @@ namespace luil {
         {
             return directory / (hex(service) + "-" + hex(name));
         }
-
-        // 이 호출 동안의 지역 참조를 모아 끝에서 한꺼번에 지운다.
-        class local_frame
-        {
-        public:
-            explicit local_frame(JNIEnv* const env) noexcept
-                : env_ { env }
-                , pushed_ { env->PushLocalFrame(64) == 0 }
-            {
-            }
-            local_frame(const local_frame&) = delete;
-            local_frame(local_frame&&) = delete;
-            local_frame& operator=(const local_frame&) = delete;
-            local_frame& operator=(local_frame&&) = delete;
-
-            ~local_frame()
-            {
-                if (pushed_)
-                    static_cast<void>(env_->PopLocalFrame(nullptr));
-            }
-
-        private:
-            JNIEnv* env_ { nullptr };
-            bool pushed_ { false };
-        };
 
         // Keystore 한 번의 일이다. 단계마다 Java 예외를 보고, 걸리면 그 이유를 글로 들고 멈춘다.
         class keystore_session
@@ -354,7 +331,7 @@ namespace luil {
         if (context.unavailable.has_value())
             return *context.unavailable;
         JNIEnv* const env { context.scope.env() };
-        const local_frame frame { env };
+        const jni_local_frame frame { *env, 64 };
         keystore_session session { env };
         const jobject key { session.key(alias_of(service), true) };
         if (key == nullptr)
@@ -409,7 +386,7 @@ namespace luil {
             return failure(u8"The secret file is not in a known format.");
 
         JNIEnv* const env { context.scope.env() };
-        const local_frame frame { env };
+        const jni_local_frame frame { *env, 64 };
         keystore_session session { env };
         const jobject key { session.key(alias_of(service), false) };
         if (key == nullptr)

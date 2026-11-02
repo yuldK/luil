@@ -16,10 +16,15 @@
 //    조합도 후보 창도 도구 창의 IME session이 대신 본다 (popup-ime-design.md).
 //    그래서 이 popup은 도구 창을 끌거나 주 창을 잠깐 보는 계기에는 **남는다**
 //    (`popup_dismiss_reason`을 보고 앱이 가른다).
+//  - 작업 표시줄 구역은 주 창 단추와 독립 창(`independent`) 단추에 진행률과 오버레이를 거는 예다
+//    (taskbar-design.md). 요청은 앱 상태라 `make_taskbar_request`가 frame마다 그대로 싣고, 셸에 닿은 정도는
+//    라이브러리가 알리는 보고(`taskbar_report_intent`)로 되읽는다. 세 줄이 UIA로 읽힌다: 능력·요청·반영.
 
 #include "demo/common.h"
 #include "luil/win32/app_host.h"
+#include "luil/win32/win32_window.h"
 
+#include <optional>
 #include <vector>
 
 namespace demo {
@@ -98,6 +103,52 @@ namespace demo {
         std::u8string path {};
     };
 
+    // --- 작업 표시줄 구역의 메시지 ---
+    // 주 창 단추의 진행 상태를 고른다. 값은 따로 정한다 (`taskbar_value_intent`).
+    struct taskbar_state_intent
+    {
+        luil::taskbar_progress_state state { luil::taskbar_progress_state::none };
+    };
+
+    // 진행 값(퍼센트, 0..100)이다. 막대를 끌면 변화량이고 `relative`가 거짓이면 그 값이다.
+    struct taskbar_value_intent
+    {
+        float value { 0.0f };
+        bool relative { false };
+    };
+
+    // 주 창 단추의 오버레이를 켜고 끈다.
+    struct taskbar_overlay_intent
+    {
+        bool on { false };
+    };
+
+    // 독립 창을 열고 닫는다. 독립 창은 작업 표시줄에 따로 서므로 단추도 따로 있다.
+    struct taskbar_window_toggle_intent
+    {
+        bool open { false };
+    };
+
+    // 독립 창 단추의 진행 상태를 다음 것으로 돌린다 (정상 → 오류 → 일시정지 → 불확정 → 없음).
+    struct taskbar_window_step_intent
+    {
+    };
+
+    // 독립 창의 실제 client 크기·배율이다 (생성 직후·크기 조절·DPI 변경).
+    struct taskbar_window_metrics_intent
+    {
+        float width { 0.0f };
+        float height { 0.0f };
+        float scale { 1.0f };
+    };
+
+    // 라이브러리가 알린 작업 표시줄 단추의 상태다 (`window_delegate::make_taskbar_message`).
+    // 주 창과 독립 창이 같은 메시지로 온다. 어느 단추인지는 `report.surface`다.
+    struct taskbar_report_intent
+    {
+        luil::win32::taskbar_report report {};
+    };
+
     class windows_page
     {
     public:
@@ -112,6 +163,9 @@ namespace demo {
         // 앵커가 도구 창이라 자리·소유자·배율이 전부 그 창을 따른다.
         // 같은 frame에서 make_windows가 만든 메뉴 버튼의 자리를 쓰므로 그 뒤에 불러야 한다.
         [[nodiscard]] std::vector<luil::win32::ui_popup> make_popups() const;
+
+        // 주 창 단추에 바라는 진행률과 오버레이다. 셸이 매 frame `ui_frame::taskbar`에 그대로 싣는다.
+        [[nodiscard]] luil::taskbar_request make_taskbar_request() const;
 
         // 도구 창 메모 칸의 초점 요청이다. 한 번도 청하지 않았으면 없다.
         //  - 같은 번호를 frame마다 실어도 luil은 한 번만 이행한다.
@@ -143,6 +197,11 @@ namespace demo {
 
     private:
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_tool_tree();
+        [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_taskbar_window_tree();
+        // 독립 창 단추에 바라는 진행률이다. 값은 60%로 고정하고 상태만 돌린다.
+        [[nodiscard]] luil::taskbar_request make_taskbar_window_request() const;
+        // 작업 표시줄 구역을 `column`에 더한다.
+        void add_taskbar_section(luil::stack_element& column);
         // 메뉴를 닫고 검색 상태도 함께 비운다.
         void close_tool_menu() noexcept;
 
@@ -160,6 +219,18 @@ namespace demo {
         // 도구 창의 실제 client 크기(물리 픽셀)와 배율이다.
         // 창이 만들어지면 metrics 메시지가 곧바로 채우고, 그 전에는 요청 크기로 배치한다.
         tool_window_metrics_intent tool_metrics_ {};
+        // 작업 표시줄 구역의 상태다 (모두 앱 상태다).
+        luil::taskbar_progress_state taskbar_state_ { luil::taskbar_progress_state::none };
+        float taskbar_percent_ { 42.0f };
+        bool taskbar_overlay_on_ { false };
+        luil::ui_image taskbar_icon_ {};
+        bool taskbar_window_open_ { false };
+        // 독립 창 단추의 진행 상태가 돈 순서의 자리다 (0은 없음).
+        int taskbar_window_step_ { 0 };
+        taskbar_window_metrics_intent taskbar_window_metrics_ {};
+        // 마지막으로 받은 보고다. 요청이 기본값이던 단추는 보고가 없다.
+        std::optional<luil::win32::taskbar_report> taskbar_report_ {};
+        std::optional<luil::win32::taskbar_report> taskbar_window_report_ {};
         luil::text::text_edit_state note_ {};
         // 도구 창 메뉴 안 검색 칸의 상태다.
         // 조합 상태는 창 안 메모 칸과 하나를 같이 쓴다 — target이 구분한다.

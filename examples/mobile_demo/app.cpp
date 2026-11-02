@@ -33,7 +33,7 @@ namespace mobile_demo {
             char32_t icon { 0 };
         };
 
-        constexpr std::array<page_entry, 11> page_entries {
+        constexpr std::array<page_entry, 12> page_entries {
             page_entry { page_basics, u8"기본", u8"단추, 글 칸, 그림, dialog", luil::codicons::icon_home },
             page_entry { page_lists, u8"목록", u8"순서 바꾸기, tree, 가상 목록", luil::codicons::icon_list_unordered },
             page_entry { page_tabs, u8"탭", u8"쓸어 넘기기, 넘침 메뉴", luil::codicons::icon_files },
@@ -45,6 +45,7 @@ namespace mobile_demo {
             page_entry { page_sheets, u8"시트", u8"아래 시트, 옆 시트, 서랍", luil::codicons::icon_layout_panel },
             page_entry { page_device, u8"기기", u8"방향, 막대, 볼륨 키, 햅틱, 창 폭", luil::codicons::icon_device_mobile },
             page_entry { page_smb, u8"SMB", u8"NAS 폴더 열거와 파일 읽기", luil::codicons::icon_server },
+            page_entry { page_files, u8"파일 감시", u8"파일 변경 묶음과 끝 묶음", luil::codicons::icon_eye },
         };
 
         [[nodiscard]] std::u8string page_title(const std::u8string_view page)
@@ -140,13 +141,15 @@ namespace mobile_demo {
         // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다. 편집 메시지만 타입이 같고
         // target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
         if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message)
-            || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message))
+            || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
+            || files_.handle(message))
             return;
     }
 
     void mobile_driver::stop_workers()
     {
         smb_.stop();
+        files_.stop();
     }
 
     void mobile_driver::close_popups()
@@ -293,6 +296,8 @@ namespace mobile_demo {
             return wrap_scroll(page, device_.build(width, scale, metrics_), height, scale);
         if (page == page_smb)
             return wrap_scroll(page, smb_.build(width, scale), height, scale);
+        if (page == page_files)
+            return wrap_scroll(page, files_.build(width, scale), height, scale);
         return wrap_scroll(page, basics_.build(width, scale), height, scale);
     }
 

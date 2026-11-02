@@ -5,8 +5,14 @@
 #include "luil/ui/panel_element.h"
 #include "luil/ui/stack_element.h"
 
+#include <process.h>
+
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 
 namespace demo {
@@ -17,8 +23,33 @@ namespace demo {
         constexpr float archive_width { 180.0f };
         constexpr float status_height { 18.0f };
         constexpr float button_height { 28.0f };
-        // 목록 위아래의 고정 칸이다 (안내·상태 셋·버튼 줄과 그 사이 간격, 바깥 여백).
-        constexpr float fixed_height { 2.0f * 24.0f + 18.0f + 8.0f + 3.0f * status_height + 8.0f + 8.0f + button_height };
+        // 목록 위아래의 고정 칸이다 (안내·상태 셋·버튼 줄과 그 사이 간격, 바깥 여백, 감시 구역의 상태 둘과 버튼 줄).
+        constexpr float watch_height { 8.0f + 2.0f * status_height + 8.0f + button_height };
+        constexpr float fixed_height { 2.0f * 24.0f + 18.0f + 8.0f + 3.0f * status_height + 8.0f + 8.0f + button_height + watch_height };
+        constexpr std::u8string_view watch_file { u8"a.txt" };
+        constexpr std::u8string_view renamed_file { u8"b.txt" };
+
+        [[nodiscard]] std::u8string kind_name(const luil::file_change_kind kind)
+        {
+            switch (kind)
+            {
+            case luil::file_change_kind::created:
+                return u8"created";
+            case luil::file_change_kind::removed:
+                return u8"removed";
+            case luil::file_change_kind::modified:
+                return u8"modified";
+            case luil::file_change_kind::renamed:
+                return u8"renamed";
+            }
+            return u8"changed";
+        }
+
+        void append_text(const std::filesystem::path& path, const std::string_view text)
+        {
+            std::ofstream file { path, std::ios::binary | std::ios::app };
+            file.write(text.data(), static_cast<std::streamsize>(text.size()));
+        }
 
         const luil::ui_element_id files_list_id { luil::ui_element_kind::virtual_list, u8"files" };
         const luil::ui_element_id archive_list_id { luil::ui_element_kind::virtual_list, u8"archive" };
@@ -74,6 +105,132 @@ namespace demo {
         selection_ = { u8"file-001", u8"file-002", u8"file-003" };
         cursor_ = u8"file-001";
         anchor_ = cursor_;
+    }
+
+    std::u8string describe_file_change_batch(const luil::file_change_batch& batch)
+    {
+        std::u8string text { u8"변경:" };
+        bool first { true };
+        const auto add = [&text, &first](const std::u8string& part) {
+            text += first ? u8" " : u8", ";
+            text += part;
+            first = false;
+        };
+        for (const luil::file_change& change : batch.changes)
+        {
+            if (change.kind == luil::file_change_kind::renamed)
+                add(kind_name(change.kind) + u8" " + change.old_path + u8"→" + change.path);
+            else
+                add(kind_name(change.kind) + u8" " + change.path);
+        }
+        if (batch.rescan)
+            add(u8"rescan");
+        if (batch.end == luil::file_watch_end::removed)
+            add(u8"끝 removed");
+        else if (batch.end == luil::file_watch_end::lost)
+            add(u8"끝 lost");
+        if (first)
+            text += u8" 없음";
+        return text;
+    }
+
+    files_page::~files_page()
+    {
+        stop_watcher();
+        watcher_.reset();
+        if (watch_folder_.empty() == false)
+        {
+            std::error_code ignored {};
+            std::filesystem::remove_all(watch_folder_, ignored);
+        }
+    }
+
+    void files_page::bind_host(luil::win32::app_host& host) noexcept
+    {
+        host_.store(&host);
+    }
+
+    void files_page::stop_watcher() noexcept
+    {
+        if (luil::file_watcher* const watcher { live_watcher_.load() }; watcher != nullptr)
+            watcher->stop();
+    }
+
+    void files_page::ensure_watcher()
+    {
+        if (watch_ticket_)
+            return;
+        std::u8string error {};
+        if (watcher_ == nullptr)
+        {
+            luil::file_watcher_config config {};
+            // 감시 thread에서 불린다. host가 받았는지를 답해야 inbox가 넘쳐도 감시자가 그 묶음을 다시 낸다.
+            config.deliver = [this](luil::file_change_batch batch) {
+                luil::win32::app_host* const host { host_.load() };
+                return host != nullptr && host->post_app_message_ticketed(luil::app_message { files_watch_batch_intent { std::move(batch) } }) != 0;
+            };
+            watcher_ = luil::file_watcher::create(std::move(config), error);
+            live_watcher_.store(watcher_.get());
+            if (watcher_ == nullptr)
+            {
+                watch_state_ = u8"감시: 세우지 못함 (" + error + u8")";
+                return;
+            }
+        }
+        if (watch_folder_.empty())
+            watch_folder_ = std::filesystem::temp_directory_path() / (L"luil-demo-watch-" + std::to_wstring(_getpid()));
+        std::error_code created {};
+        std::filesystem::create_directories(watch_folder_, created);
+        watch_ticket_ = watcher_->add(watch_folder_.u8string(), luil::file_watch_scope::folder, error);
+        watch_state_ = watch_ticket_ ? u8"감시: 켜짐 " + watch_folder_.u8string() : u8"감시: 걸지 못함 (" + error + u8")";
+    }
+
+    void files_page::run_watch_operation(const files_watch_operation operation)
+    {
+        ensure_watcher();
+        if (watch_ticket_ == luil::file_watch_ticket {})
+            return;
+        const std::filesystem::path first { watch_folder_ / std::filesystem::path { watch_file } };
+        const std::filesystem::path second { watch_folder_ / std::filesystem::path { renamed_file } };
+        std::error_code ignored {};
+        switch (operation)
+        {
+        case files_watch_operation::create:
+            append_text(first, "");
+            break;
+        case files_watch_operation::modify:
+            append_text(std::filesystem::exists(first, ignored) ? first : second, "x");
+            break;
+        case files_watch_operation::remove:
+            std::filesystem::remove(first, ignored);
+            std::filesystem::remove(second, ignored);
+            break;
+        case files_watch_operation::rename:
+            // 있는 쪽을 다른 이름으로 옮긴다. 두 번 누르면 제자리로 돌아온다.
+            if (std::filesystem::exists(first, ignored))
+                std::filesystem::rename(first, second, ignored);
+            else
+                std::filesystem::rename(second, first, ignored);
+            break;
+        }
+    }
+
+    std::unique_ptr<luil::ui_element> files_page::make_watch_buttons() const
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 8.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"files-watch-buttons" }, config) };
+        const auto add = [&row](const std::u8string& owner, std::u8string text, const files_watch_operation operation) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_files_button, owner }, luil::text_button_config { .text = std::move(text) }) };
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(files_watch_intent { operation }));
+            row->add(std::move(button), 110.0f);
+        };
+        add(u8"files-watch-create", u8"파일 만들기", files_watch_operation::create);
+        add(u8"files-watch-modify", u8"고치기", files_watch_operation::modify);
+        add(u8"files-watch-remove", u8"지우기", files_watch_operation::remove);
+        add(u8"files-watch-rename", u8"이름 바꾸기", files_watch_operation::rename);
+        return row;
     }
 
     std::optional<std::size_t> files_page::index_of(const std::u8string& key) const
@@ -247,6 +404,24 @@ namespace demo {
                 pasted_sequence_ = content.sequence;
             return true;
         }
+        if (const auto* const watch { message.get<files_watch_intent>() }; watch != nullptr)
+        {
+            run_watch_operation(watch->operation);
+            return true;
+        }
+        if (const auto* const delivered { message.get<files_watch_batch_intent>() }; delivered != nullptr)
+        {
+            if (delivered->batch.ticket != watch_ticket_)
+                return true;
+            watch_text_ = describe_file_change_batch(delivered->batch);
+            // 끝 묶음 뒤로 그 표에는 묶음이 없다. 다음 단추가 다시 건다.
+            if (delivered->batch.end != luil::file_watch_end::none)
+            {
+                watch_ticket_ = {};
+                watch_state_ = u8"감시: 끝남";
+            }
+            return true;
+        }
         return false;
     }
 
@@ -293,6 +468,11 @@ namespace demo {
         column->add(std::move(lists), list_height_ + 2.0f * panel_inset);
         column->add_gap(8.0f);
         column->add(make_buttons(), button_height);
+        column->add_gap(8.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"files-watch-state" }, watch_state_, 11.0f, luil::label_color_role::dim), status_height);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"files-watch-batch" }, watch_text_, 11.0f, luil::label_color_role::primary), status_height);
+        column->add_gap(8.0f);
+        column->add(make_watch_buttons(), button_height);
         return column;
     }
 

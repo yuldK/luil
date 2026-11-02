@@ -2,6 +2,7 @@
 
 #include "luil/app/webview.h"
 #include "luil/app/file_dialog.h"
+#include "luil/app/taskbar.h"
 #include "luil/messaging/channel.h"
 #include "luil/messaging/latest_slot.h"
 #include "luil/theme/appearance.h"
@@ -230,6 +231,11 @@ namespace luil {
         //  - 상태는 주 창처럼 알린다 (`win32::backdrop_report::surface`가 이 창의 id다).
         //  - 같은 id에서 이 값만 바뀌면 창을 다시 만들지 않고 효과만 다시 건다.
         window_backdrop backdrop { window_backdrop::none };
+        // 이 창의 작업 표시줄 단추에 바라는 진행률과 오버레이다 (`independent`인 창만 읽는다).
+        //  - 소유된 창은 단추가 없어 읽지 않는다. 독립 창은 주 창(`ui_frame::taskbar`)과 따로 단추가 서므로 요청도 따로 건다.
+        //  - 창이 사라지면 그 창의 기록과 아이콘도 함께 사라진다. 상태는 주 창처럼 알린다
+        //    (`win32::taskbar_report::surface`가 이 창의 id다).
+        taskbar_request taskbar {};
     };
 
     // 앱이 바라는 화면 방향이다 (device-request-design.md).
@@ -391,6 +397,10 @@ namespace luil {
         std::optional<focus_request> focus {};
         // 초점 요청의 결과를 알릴 메시지다. 비어 있으면 알리지 않는다.
         std::function<app_message(std::uint64_t id, focus_request_outcome outcome)> focus_report {};
+        // 주 창의 작업 표시줄 단추에 바라는 진행률과 오버레이다 (taskbar-design.md). 기본값이면 셸을 만지지 않는다.
+        //  - 주 창이 숨은 동안(`main_hidden`)은 단추가 없어 요청을 쥐기만 한다. 보이면 단추가 새로 서고 그때 한 번에 낸다.
+        //  - 하지 못하는 플랫폼(Android)은 받고 무시한다. 독립 창은 `ui_window::taskbar`다.
+        taskbar_request taskbar {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };

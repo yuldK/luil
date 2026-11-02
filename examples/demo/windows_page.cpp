@@ -5,14 +5,20 @@
 #include "luil/ui/caption_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/slider_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"
 
 #include <windows.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace demo {
     namespace {
@@ -25,6 +31,123 @@ namespace demo {
         // 도구 창 안 메뉴의 너비다 (논리 픽셀).
         constexpr float tool_menu_width { 180.0f };
 
+        // 작업 표시줄 구역이다 (논리 픽셀).
+        // 독립 창은 만들 때 한 번만 이 크기와 자리를 쓴다.
+        constexpr float taskbar_window_initial_width { 320.0f };
+        constexpr float taskbar_window_initial_height { 160.0f };
+        constexpr float taskbar_window_initial_x { 140.0f };
+        constexpr float taskbar_window_initial_y { 140.0f };
+        constexpr float taskbar_slider_width { 280.0f };
+        // 독립 창 단추에 거는 값이다. 상태만 돌리고 값은 고정한다.
+        constexpr float taskbar_window_percent { 60.0f };
+        // 독립 창의 표면 id다. 보고가 이 id로 온다.
+        constexpr std::u8string_view taskbar_window_id { u8"taskbar-window" };
+        // 독립 창 단추의 진행 상태가 도는 순서의 길이다. 0은 없음이다.
+        constexpr int taskbar_window_steps { 5 };
+
+        // 오버레이에 얹는 작은 원이다. 실행 중에 지은 그림이라 실행 파일 리소스에 기대지 않는다.
+        //  - 가장자리는 알파로 부드럽게 한다. 오버레이는 작업 표시줄 아이콘 크기(배율에 따라 16~32)로 맞춘다.
+        [[nodiscard]] luil::ui_image make_taskbar_icon()
+        {
+            constexpr int size { 32 };
+            constexpr float radius { 13.0f };
+            std::vector<std::uint8_t> pixels(static_cast<std::size_t>(size) * size * 4, 0);
+            for (int y = 0; y < size; ++y)
+            {
+                for (int x = 0; x < size; ++x)
+                {
+                    const float dx { static_cast<float>(x) + 0.5f - static_cast<float>(size) / 2.0f };
+                    const float dy { static_cast<float>(y) + 0.5f - static_cast<float>(size) / 2.0f };
+                    const float coverage { std::clamp(radius + 0.5f - std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f) };
+                    std::uint8_t* const pixel { pixels.data() + (static_cast<std::size_t>(y) * size + x) * 4 };
+                    pixel[0] = 232;
+                    pixel[1] = 72;
+                    pixel[2] = 60;
+                    pixel[3] = static_cast<std::uint8_t>(std::lround(coverage * 255.0f));
+                }
+            }
+            return luil::make_rgba_image(size, size, pixels);
+        }
+
+        // 독립 창 단추의 상태가 도는 순서다: 없음 → 정상 → 오류 → 일시정지 → 불확정 → 없음.
+        [[nodiscard]] luil::taskbar_progress_state taskbar_window_state(const int step) noexcept
+        {
+            switch (step)
+            {
+            case 1:
+                return luil::taskbar_progress_state::normal;
+            case 2:
+                return luil::taskbar_progress_state::error;
+            case 3:
+                return luil::taskbar_progress_state::paused;
+            case 4:
+                return luil::taskbar_progress_state::indeterminate;
+            default:
+                return luil::taskbar_progress_state::none;
+            }
+        }
+
+        // 상태를 화면 글로 옮긴다. 값이 있는 상태는 퍼센트가 뒤따른다.
+        [[nodiscard]] std::u8string taskbar_state_text(const luil::taskbar_progress_state state, const float percent)
+        {
+            const std::u8string value { to_u8(static_cast<int>(std::lround(percent))) + u8"%" };
+            switch (state)
+            {
+            case luil::taskbar_progress_state::indeterminate:
+                return u8"불확정";
+            case luil::taskbar_progress_state::normal:
+                return u8"정상 " + value;
+            case luil::taskbar_progress_state::error:
+                return u8"오류 " + value;
+            case luil::taskbar_progress_state::paused:
+                return u8"일시정지 " + value;
+            case luil::taskbar_progress_state::none:
+            default:
+                return u8"없음";
+            }
+        }
+
+        [[nodiscard]] std::u8string taskbar_status_text(const luil::win32::taskbar_status status)
+        {
+            switch (status)
+            {
+            case luil::win32::taskbar_status::waiting:
+                return u8"대기 중";
+            case luil::win32::taskbar_status::applied:
+                return u8"적용됨";
+            case luil::win32::taskbar_status::unavailable:
+                return u8"쓸 수 없음";
+            case luil::win32::taskbar_status::failed:
+                return u8"실패";
+            case luil::win32::taskbar_status::off:
+            default:
+                return u8"꺼짐";
+            }
+        }
+
+        // 보고를 한 줄로 옮긴다. 요청이 기본값이던 단추는 보고가 없다.
+        [[nodiscard]] std::u8string taskbar_report_text(const std::optional<luil::win32::taskbar_report>& report)
+        {
+            if (report.has_value() == false)
+                return u8"아직 보고 없음";
+            std::u8string text { taskbar_status_text(report->status) };
+            if (report->error.empty() == false)
+                text += u8" (" + report->error + u8")";
+            return text;
+        }
+
+        // 고른 쪽을 강조하는 작은 단추다.
+        [[nodiscard]] std::unique_ptr<luil::text_button_element> make_taskbar_button(std::u8string key, std::u8string text, const bool selected, luil::ui_action action)
+        {
+            luil::text_button_config config {};
+            config.text = std::move(text);
+            config.visual = selected ? luil::text_button_visual::accent : luil::text_button_visual::normal;
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, std::move(key) }, std::move(config)) };
+            button->set_cursor(luil::ui_cursor::hand);
+            button->set_action(luil::ui_trigger::left_click, std::move(action));
+            return button;
+        }
+
         // 창 caption과 tree의 caption element가 같은 설정을 쓴다.
         // 비클라이언트 hit test·그리기·창 스타일이 같은 metrics와 버튼 집합으로 맞물린다.
         [[nodiscard]] luil::caption_config make_tool_caption()
@@ -36,6 +159,16 @@ namespace demo {
             // 최소화·최대화 버튼이 사라질 뿐 아니라 그 창 스타일도 함께 빠져,
             // 캡션 더블클릭·Win+↑·시스템 메뉴로도 최대화되지 않는다.
             caption.buttons = { .minimize = false, .maximize = false, .close = true };
+            caption.close_tooltip = u8"Close";
+            return caption;
+        }
+
+        // 작업 표시줄 독립 창의 캡션이다. 최소화·최대화·닫기를 모두 둔다 — 독립 창은 작업 표시줄에서 따로 최소화된다.
+        [[nodiscard]] luil::caption_config make_taskbar_window_caption()
+        {
+            luil::caption_config caption {};
+            caption.title = u8"작업 표시줄 창";
+            caption.application_icon = luil::codicons::icon_window;
             caption.close_tooltip = u8"Close";
             return caption;
         }
@@ -130,6 +263,57 @@ namespace demo {
         if (const auto* const metrics { message.get<tool_window_metrics_intent>() }; metrics != nullptr)
         {
             tool_metrics_ = *metrics;
+            return true;
+        }
+        if (const auto* const state { message.get<taskbar_state_intent>() }; state != nullptr)
+        {
+            taskbar_state_ = state->state;
+            return true;
+        }
+        if (const auto* const value { message.get<taskbar_value_intent>() }; value != nullptr)
+        {
+            // 막대를 끌 때는 변화량이, 보조 기술이 값을 정할 때는 목표 값이 온다.
+            taskbar_percent_ = std::clamp(value->relative ? taskbar_percent_ + value->value : value->value, 0.0f, 100.0f);
+            return true;
+        }
+        if (const auto* const overlay { message.get<taskbar_overlay_intent>() }; overlay != nullptr)
+        {
+            // 그림은 처음 켤 때 지어 둔다. 같은 `ui_image` 복사본을 frame마다 실어야 같은 그림으로 읽힌다.
+            if (overlay->on && taskbar_icon_.valid() == false)
+                taskbar_icon_ = make_taskbar_icon();
+            taskbar_overlay_on_ = overlay->on;
+            return true;
+        }
+        if (const auto* const toggle { message.get<taskbar_window_toggle_intent>() }; toggle != nullptr)
+        {
+            // 다시 열면 요청 크기에서 시작하고 보고도 새로 받는다 (창을 다시 만들면 처음부터 다시 알린다).
+            if (toggle->open && taskbar_window_open_ == false)
+            {
+                taskbar_window_metrics_ = {};
+                taskbar_window_step_ = 1;
+            }
+            if (toggle->open == false)
+                taskbar_window_report_.reset();
+            taskbar_window_open_ = toggle->open;
+            return true;
+        }
+        if (message.get<taskbar_window_step_intent>() != nullptr)
+        {
+            taskbar_window_step_ = (taskbar_window_step_ + 1) % taskbar_window_steps;
+            return true;
+        }
+        if (const auto* const metrics { message.get<taskbar_window_metrics_intent>() }; metrics != nullptr)
+        {
+            taskbar_window_metrics_ = *metrics;
+            return true;
+        }
+        if (const auto* const report { message.get<taskbar_report_intent>() }; report != nullptr)
+        {
+            // 보고는 단추가 있는 창만 낸다: 주 창은 빈 id, 독립 창은 `ui_window::id`다.
+            if (report->report.surface.empty())
+                taskbar_report_ = report->report;
+            else if (report->report.surface == taskbar_window_id && taskbar_window_open_)
+                taskbar_window_report_ = report->report;
             return true;
         }
         // 창 안 메모 칸과 메뉴 안 검색 칸이 같은 메시지 타입을 나눠 쓴다.
@@ -283,29 +467,129 @@ namespace demo {
             column->add_gap(4.0f);
             column->add(make_label(luil::ui_element_id { kind_text, u8"windows-platform-report" }, platform_report_, 11.0f, luil::label_color_role::dim), 18.0f);
         }
+        add_taskbar_section(*column);
         return column;
+    }
+
+    luil::taskbar_request windows_page::make_taskbar_request() const
+    {
+        luil::taskbar_request request {};
+        request.progress.state = taskbar_state_;
+        request.progress.value = taskbar_percent_ / 100.0f;
+        if (taskbar_overlay_on_)
+        {
+            request.overlay.icon = taskbar_icon_;
+            request.overlay.description = u8"새 소식 있음";
+        }
+        return request;
+    }
+
+    luil::taskbar_request windows_page::make_taskbar_window_request() const
+    {
+        luil::taskbar_request request {};
+        request.progress.state = taskbar_window_state(taskbar_window_step_);
+        request.progress.value = taskbar_window_percent / 100.0f;
+        return request;
+    }
+
+    void windows_page::add_taskbar_section(luil::stack_element& column)
+    {
+        column.add_gap(18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-taskbar-hint" }, u8"작업 표시줄 단추에 진행률과 오버레이를 건다 — 창을 최소화해도 단추에 보인다.", 11.0f,
+                       luil::label_color_role::dim),
+            18.0f);
+        column.add_gap(4.0f);
+        // 세 줄이 UIA로 읽힌다: 이 프로세스가 셸에 낼 수 있는가, 앱이 바라는 것, 셸에 닿은 정도.
+        const bool capable { luil::current_ui_platform().capabilities.taskbar };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-taskbar-capability" }, capable ? u8"작업 표시줄 능력: 있음" : u8"작업 표시줄 능력: 없음", 12.0f, luil::label_color_role::primary),
+            18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-taskbar-request" },
+                       u8"작업 표시줄 요청: " + taskbar_state_text(taskbar_state_, taskbar_percent_) + u8" · 오버레이 " + (taskbar_overlay_on_ ? u8"켬" : u8"끔"), 12.0f, luil::label_color_role::primary),
+            18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-taskbar-report" }, u8"작업 표시줄 반영: " + taskbar_report_text(taskbar_report_), 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add_gap(6.0f);
+
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto states { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-taskbar-states" }, row_config) };
+        const auto add_state = [&states, this](const std::u8string_view key, const std::u8string_view text, const luil::taskbar_progress_state state) {
+            states->add(make_taskbar_button(u8"taskbar-" + std::u8string { key }, std::u8string { text }, taskbar_state_ == state, luil::make_message_action(taskbar_state_intent { state })), 92.0f);
+        };
+        add_state(u8"none", u8"진행 없음", luil::taskbar_progress_state::none);
+        add_state(u8"indeterminate", u8"진행 불확정", luil::taskbar_progress_state::indeterminate);
+        add_state(u8"normal", u8"진행 정상", luil::taskbar_progress_state::normal);
+        add_state(u8"error", u8"진행 오류", luil::taskbar_progress_state::error);
+        add_state(u8"paused", u8"진행 일시정지", luil::taskbar_progress_state::paused);
+        column.add(std::move(states), 26.0f);
+        column.add_gap(6.0f);
+
+        // 값은 정상·오류·일시정지에서만 단추에 닿는다. 셸에는 1000단계로 간다.
+        luil::slider_config slider {};
+        slider.maximum = 100.0f;
+        slider.value = taskbar_percent_;
+        slider.change = [](const float delta) { return luil::make_app_action(taskbar_value_intent { delta, true }); };
+        slider.change_to = [](const float value) { return luil::make_app_action(taskbar_value_intent { value, false }); };
+        auto value { std::make_unique<luil::slider_element>(luil::ui_element_id { kind_layout, u8"windows-taskbar-value" }, std::move(slider)) };
+        value->set_tooltip(u8"작업 표시줄 진행 값");
+        column.add(std::move(value), { .length = luil::slider_row_height, .cross_length = taskbar_slider_width });
+        column.add_gap(6.0f);
+
+        auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-taskbar-controls" }, row_config) };
+        const auto add_control = [&controls](std::u8string key, std::u8string text, const bool selected, luil::ui_action action, const float width) {
+            controls->add(make_taskbar_button(std::move(key), std::move(text), selected, std::move(action)), width);
+        };
+        add_control(u8"taskbar-overlay", taskbar_overlay_on_ ? u8"오버레이 끄기" : u8"오버레이 켜기", taskbar_overlay_on_, luil::make_message_action(taskbar_overlay_intent { taskbar_overlay_on_ == false }), 120.0f);
+        add_control(u8"taskbar-window-toggle", taskbar_window_open_ ? u8"독립 창 닫기" : u8"독립 창 열기", taskbar_window_open_, luil::make_message_action(taskbar_window_toggle_intent { taskbar_window_open_ == false }),
+            120.0f);
+        add_control(u8"taskbar-window-step", u8"독립 창 진행 바꾸기", false, luil::make_message_action(taskbar_window_step_intent {}), 140.0f);
+        column.add(std::move(controls), 26.0f);
+        column.add_gap(4.0f);
+        std::u8string window_text { u8"작업 표시줄 독립 창: 닫힘" };
+        if (taskbar_window_open_)
+            window_text = u8"작업 표시줄 독립 창: 요청 " + taskbar_state_text(taskbar_window_state(taskbar_window_step_), taskbar_window_percent) + u8" · 반영 " + taskbar_report_text(taskbar_window_report_);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-taskbar-window" }, std::move(window_text), 12.0f, luil::label_color_role::primary), 18.0f);
     }
 
     std::vector<luil::win32::ui_window> windows_page::make_windows()
     {
         tool_menu_button_ = nullptr;
         std::vector<luil::win32::ui_window> windows {};
-        if (tool_open_ == false)
-            return windows;
-
-        luil::win32::ui_window tool {};
-        tool.id = u8"tool";
-        tool.caption = make_tool_caption();
-        tool.x = tool_initial_x;
-        tool.y = tool_initial_y;
-        tool.width = tool_initial_width;
-        tool.height = tool_initial_height;
-        tool.minimum_width = 260.0f;
-        tool.minimum_height = 160.0f;
-        tool.tree = make_tool_tree();
-        tool.metrics = [](const float width, const float height, const float scale) { return luil::app_message { tool_window_metrics_intent { width, height, scale } }; };
-        tool.close = [] { return luil::make_app_action(tool_window_toggle_intent { false }); };
-        windows.push_back(std::move(tool));
+        if (tool_open_)
+        {
+            luil::win32::ui_window tool {};
+            tool.id = u8"tool";
+            tool.caption = make_tool_caption();
+            tool.x = tool_initial_x;
+            tool.y = tool_initial_y;
+            tool.width = tool_initial_width;
+            tool.height = tool_initial_height;
+            tool.minimum_width = 260.0f;
+            tool.minimum_height = 160.0f;
+            tool.tree = make_tool_tree();
+            tool.metrics = [](const float width, const float height, const float scale) { return luil::app_message { tool_window_metrics_intent { width, height, scale } }; };
+            tool.close = [] { return luil::make_app_action(tool_window_toggle_intent { false }); };
+            windows.push_back(std::move(tool));
+        }
+        if (taskbar_window_open_)
+        {
+            // 독립 창이다. 주 창에 매이지 않고 작업 표시줄에 따로 서므로 단추도 따로 있다.
+            luil::win32::ui_window taskbar {};
+            taskbar.id = std::u8string { taskbar_window_id };
+            taskbar.caption = make_taskbar_window_caption();
+            taskbar.x = taskbar_window_initial_x;
+            taskbar.y = taskbar_window_initial_y;
+            taskbar.width = taskbar_window_initial_width;
+            taskbar.height = taskbar_window_initial_height;
+            taskbar.minimum_width = 240.0f;
+            taskbar.minimum_height = 120.0f;
+            taskbar.independent = true;
+            taskbar.tree = make_taskbar_window_tree();
+            taskbar.metrics = [](const float width, const float height, const float scale) { return luil::app_message { taskbar_window_metrics_intent { width, height, scale } }; };
+            taskbar.close = [] { return luil::make_app_action(taskbar_window_toggle_intent { false }); };
+            taskbar.taskbar = make_taskbar_window_request();
+            windows.push_back(std::move(taskbar));
+        }
         return windows;
     }
 
@@ -409,6 +693,35 @@ namespace demo {
             [menu_open](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(tool_menu_toggle_intent { menu_open == false }) }; });
         tool_menu_button_ = menu_button.get();
         column->add(std::move(menu_button), { .length = 26.0f, .cross_length = 140.0f });
+        column->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
+        root->add(std::move(column));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    }
+
+    std::shared_ptr<const luil::ui_tree> windows_page::make_taskbar_window_tree()
+    {
+        // metrics가 오기 전(창이 만들어지는 그 frame)에는 요청 크기로 배치한다.
+        const float scale { taskbar_window_metrics_.scale > 0.0f ? taskbar_window_metrics_.scale : 1.0f };
+        const float width { taskbar_window_metrics_.width > 0.0f ? taskbar_window_metrics_.width : taskbar_window_initial_width * scale };
+        const float height { taskbar_window_metrics_.height > 0.0f ? taskbar_window_metrics_.height : taskbar_window_initial_height * scale };
+
+        auto root { std::make_unique<luil::root_element>(std::u8string { taskbar_window_id }) };
+        root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+
+        const luil::caption_config caption_config { make_taskbar_window_caption() };
+        const float caption_height { luil::caption_element::height_for(caption_config) * scale };
+        auto caption { std::make_unique<luil::caption_element>(caption_config) };
+        caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+        root->add(std::move(caption));
+
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(16.0f);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"taskbar-window" }, config) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"taskbar-window-hint" }, u8"독립 창이다 — 작업 표시줄에 따로 서고 자기 단추에 진행률이 걸린다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        column->add_gap(4.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"taskbar-window-state" }, u8"이 창의 진행: " + taskbar_state_text(taskbar_window_state(taskbar_window_step_), taskbar_window_percent), 12.0f,
+                        luil::label_color_role::primary),
+            18.0f);
         column->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
         root->add(std::move(column));
         return std::make_shared<const luil::ui_tree>(std::move(root));

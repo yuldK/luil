@@ -533,6 +533,13 @@ namespace luil::win32 {
 
     std::optional<LRESULT> window_surface::handle_surface_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
     {
+        // 셸의 등록 메시지는 번호가 실행마다 달라 아래 switch의 상수로 가를 수 없다. 주 창·보조 창·popup의 프로시저가
+        // 모두 이 함수를 지나므로 여기서 한 번만 걸러 소유자에게 알린다.
+        if (const shell_event event { shell_event_of(message) }; event != shell_event::none)
+        {
+            context_.handle_shell_event(id_, event);
+            return LRESULT { 0 };
+        }
         switch (message)
         {
         case WM_POINTERDOWN:

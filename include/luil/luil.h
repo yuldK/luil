@@ -109,10 +109,12 @@
 #include "luil/app/app_delegate.h"
 #include "luil/app/app_host.h"
 #include "luil/app/file_dialog.h"
+#include "luil/app/file_watcher.h"
 #include "luil/app/menu_popup.h"
 #include "luil/app/platform_services.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/app/secret_store.h"
+#include "luil/app/taskbar.h"
 #include "luil/app/webview.h"
 
 // Win32 platform 조립이다 (창 실행).
