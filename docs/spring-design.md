@@ -190,7 +190,7 @@ std::function<input_action(const sheet_release&)> release {};
 
 ### Win32
 
-플랫폼 호출이 없는 순수 계산이라 `src/win32`는 고치지 않는다. 손잡이를 마우스로 끌 때도 `end_pointer_drag`가 `on_release`에 `drag_velocity`를 준다. 데스크톱 데모는 `window_metrics_intent`(`examples/demo/common.h`)에 `reduce_motion` 꼬리 칸을 더하고, 세 값짜리 `make_window_metrics_message` 대신 `make_metrics_message`를 넓혀 받는다. 값은 Win32 전달이 서기 전에는 항상 거짓이다([움직임 줄이기 연결](reduce-motion-design.md)의 결정 4).
+플랫폼 호출이 없는 순수 계산이라 `src/win32`는 고치지 않는다. 손잡이를 마우스로 끌 때도 `end_pointer_drag`가 `on_release`에 `drag_velocity`를 준다. 데스크톱 데모는 `window_metrics_intent`(`examples/demo/common.h`)에 `reduce_motion` 꼬리 칸을 더하고, 세 값짜리 `make_window_metrics_message` 대신 `make_metrics_message`를 넓혀 받는다. 값은 Win32 전달이 서기 전에는 항상 거짓이다. 그 전달은 같은 라운드의 taskbar가 낸다([움직임 줄이기 연결](reduce-motion-design.md)의 결정 4).
 
 ### Android
 
@@ -202,6 +202,7 @@ std::function<input_action(const sheet_release&)> release {};
 - **page_anim**: 곡선을 받는 자리는 (시각 → 값)과 (시각 → 끝났는가) 둘이면 된다. 0에서 1로 가는 스프링 `spring { 0, 1, started, config }`의 `spring_value`·`spring_finished`가 그 둘이다. 길이 기반 `ease_in_out`과 달리 끝 시각이 없고, ζ가 1보다 작으면 진행률이 [0, 1]을 벗어난다. 곡선 자리는 `spring_config`를 받고(포인터 없는 값이라 element config에 둘 수 있다), 효과가 벗어남을 받거나 자르거나 `spring_smooth`를 쓴다. 끝은 되돌아오지 않으므로 끝난 뒤 이전 tree를 놓아도 된다. 전환 element가 UI thread에서 `draw_context::reduce_motion`을 읽는 쪽은 `spring_*`를 부르기 전에 끝으로 처리한다.
 - **놓은 속도를 앱에 건네는 뒤 노드**(controller를 고치는 ink·rotate 같은 것): 속도는 값의 단위 / 초로 건넨다(규칙 5의 표).
 - **시트**: 결정 7이 b면 `sheet_release`를 이 노드가 세운다.
+- **같은 라운드의 줄 4**: `examples/demo_main.cpp`는 줄 4의 file_watch·taskbar도 고친다. 이 노드는 사이드바(`sidebar_motion_`)와 metrics override(`make_window_metrics_message` → `make_metrics_message`)만 바꾼다. 줄 4는 `bind_host`·`stop_workers`에 한 줄씩, `make_backdrop_message` 뒤에 `make_taskbar_message`를 더해 metrics override 자리를 건드리지 않는다. 모바일 데모의 `app.cpp`는 file_watch가 새 페이지를 이으며 `page_entries`·`handle` 끝·`stop_workers`·`build`를 고치고, 이 노드는 metrics 처리와 `next_tick`만 고친다. 병합은 줄 3이 먼저다.
 
 ## 확인
 
