@@ -168,6 +168,7 @@ namespace luil {
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind
         //    64부터와 같은 수가 된 적이 있다.
+        //  - 새 kind는 같은 커밋에 `src/ui/inspect_names.cpp`의 case를 더한다 (검사기의 이름표다. 빠뜨리면 전수 test가 실패한다).
         end_of_library_kinds,
         // 앱이 정의하는 kind는 이 값부터다 (`application_element_kind`).
         // 라이브러리 kind가 늘어도 앱 상수가 밀리지 않도록 예약 대역을 넉넉히 둔다 (지금 쓰는 것의 열 배 넘게).

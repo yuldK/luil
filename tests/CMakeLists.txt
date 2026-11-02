@@ -44,6 +44,7 @@ add_executable(luil_core_tests
     info_bar_element_tests.cpp
     ink_canvas_tests.cpp
     ink_stroke_tests.cpp
+    inspector_overlay_tests.cpp
     item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
@@ -104,6 +105,7 @@ add_executable(luil_core_tests
     touch_input_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
+    ui_inspect_tests.cpp
     ui_interaction_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp

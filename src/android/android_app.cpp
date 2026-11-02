@@ -1702,6 +1702,7 @@ namespace luil::android {
                 update_system_bars(state.theme);
                 state.accent_id = appearance.accent_id;
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
+                state.inspector = frame != nullptr ? &frame->inspector : nullptr;
                 // 한 줄 도우미는 문맥 인자가 없어 스타일의 줄바꿈 처리를 프로세스 값으로 건다 (실린 것이 없으면 내장값).
                 set_single_line_break(frame_style(state).text.line_break);
 

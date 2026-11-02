@@ -75,6 +75,7 @@
 | 알림 심각도(토스트·정보 막대 공용) | `ui_severity` | [ui/severity.h](../include/luil/ui/severity.h) | [설명](info-bar-design.md) |
 | 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
 | 펜 잉크 캔버스(필압 획 그리기·지우개·내보내기) | `ink_canvas_element`, `ink_layer`, `make_ink_stroke`, `simplify_ink_points`, `render_ink_image` | [ui/ink_canvas_element.h](../include/luil/ui/ink_canvas_element.h) · [ui/ink.h](../include/luil/ui/ink.h) | [설명](ink-design.md) · [입력](ink-input-design.md) |
+| 실행 중 요소 검사기(윤곽·안쪽 여백·정보 상자·팔레트 견본, tree 평탄화와 글) | `ui_frame::inspector`, `inspector_config`, `inspect_nodes`, `inspect_at`, `pick_inspected`, `inspect_step`, `describe_element`, `dump_tree` | [ui/ui_inspect.h](../include/luil/ui/ui_inspect.h) | [설명](inspector-design.md) |
 | 이미지 파일·바이트 디코딩 | `load_image_file`, `decode_image_bytes`, `decode_animated_image_bytes`, `read_image_frames_bytes`, `decode_image_frame_bytes`, `downscale_image` | [ui/image_decode.h](../include/luil/ui/image_decode.h) | [설명](image-decode-design.md) · [장 하나·축소](image-frames-scaling-design.md) |
 | Windows 창과 실행 | `win32::run_application_window` | [win32/win32_window.h](../include/luil/win32/win32_window.h) | [설명](concepts/window.md) |
 | 렌더러 선택 | `renderer_mode` | [app/renderer_policy.h](../include/luil/app/renderer_policy.h) | [설명](concepts/rendering.md) |

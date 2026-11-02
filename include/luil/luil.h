@@ -99,6 +99,7 @@
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_element_id.h"
 #include "luil/ui/ui_events.h"
+#include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"

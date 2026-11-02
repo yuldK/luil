@@ -18,6 +18,12 @@
 #include "luil/ui/zoom_view_element.h"
 #include "win32/utf8.h"
 
+#include "host/frame_state.h"
+#include "luil/ui/ui_inspect.h"
+
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+
 #include <uiautomation.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -2505,5 +2511,91 @@ TEST_CASE("An invalid text field reads its error and announces it once it appear
     REQUIRE(sink.records[1].property == UIA_HelpTextPropertyId);
 
     field->Release();
+    root->Release();
+}
+
+namespace {
+    // 자식 하나가 UIA에 내주는 값들이다: 이름, 컨트롤 형, AutomationId, 화면 자리.
+    struct child_facts
+    {
+        std::u8string owner {};
+        std::wstring name {};
+        long control_type { 0 };
+        std::wstring automation_id {};
+        double left { 0.0 };
+        double top { 0.0 };
+        double width { 0.0 };
+        double height { 0.0 };
+
+        [[nodiscard]] bool operator==(const child_facts&) const = default;
+    };
+
+    [[nodiscard]] long read_integer_property(luil::win32::uia_element_provider& provider, const PROPERTYID property)
+    {
+        VARIANT value {};
+        REQUIRE(provider.GetPropertyValue(property, &value) == S_OK);
+        REQUIRE(value.vt == VT_I4);
+        const long result { value.lVal };
+        static_cast<void>(VariantClear(&value));
+        return result;
+    }
+
+    // 표면 root의 자식들을 클라이언트처럼 첫 자식에서 형제로 잇는다.
+    [[nodiscard]] std::vector<child_facts> read_children(luil::win32::uia_root_provider& root)
+    {
+        std::vector<child_facts> facts {};
+        IRawElementProviderFragment* step { nullptr };
+        REQUIRE(root.Navigate(NavigateDirection_FirstChild, &step) == S_OK);
+        while (step != nullptr)
+        {
+            auto* const child { static_cast<luil::win32::uia_element_provider*>(step) };
+            UiaRect rect {};
+            REQUIRE(child->get_BoundingRectangle(&rect) == S_OK);
+            facts.push_back({
+                child->element_id().owner,
+                read_text_property(*child, UIA_NamePropertyId),
+                read_integer_property(*child, UIA_ControlTypePropertyId),
+                read_text_property(*child, UIA_AutomationIdPropertyId),
+                rect.left,
+                rect.top,
+                rect.width,
+                rect.height,
+            });
+            IRawElementProviderFragment* next { nullptr };
+            REQUIRE(child->Navigate(NavigateDirection_NextSibling, &next) == S_OK);
+            child->Release();
+            step = next;
+        }
+        return facts;
+    }
+}
+
+TEST_CASE("Drawing a frame with the inspector on leaves the UIA children as they were", "[win32][uia][inspector]")
+{
+    fake_uia_host host {};
+    host.tree = make_page_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    const std::vector<child_facts> before { read_children(*root) };
+    REQUIRE(before.size() == 3u);
+
+    // 검사기를 켜고 윤곽, 정보 상자, 팔레트 견본까지 모두 그린다. overlay는 그리기만 하므로 접근 tree에 닿지 않는다.
+    luil::inspector_config config {};
+    config.enabled = true;
+    config.pick = luil::inspector_pick::selected;
+    config.selected = { kind_item, u8"volume" };
+    config.outline_all = true;
+    config.show_palette = true;
+    SkBitmap pixels {};
+    pixels.allocN32Pixels(400, 300);
+    SkCanvas canvas { pixels };
+    luil::frame_state state {};
+    state.width = 400;
+    state.height = 300;
+    state.tree = host.tree.get();
+    state.inspector = &config;
+    luil::draw_frame(canvas, nullptr, nullptr, state);
+
+    const std::vector<child_facts> after { read_children(*root) };
+    REQUIRE(after == before);
     root->Release();
 }
