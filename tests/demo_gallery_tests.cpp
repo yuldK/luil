@@ -1,6 +1,7 @@
 #include "demo/gallery_page.h"
 #include "demo/popups_page.h"
 #include "demo/tabs_page.h"
+#include "demo/text_targets.h"
 #include "demo/theme_page.h"
 #include "demo/toasts_page.h"
 
@@ -12,6 +13,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -434,4 +436,39 @@ TEST_CASE("The action button of an info bar moves under the text when the page n
     REQUIRE(narrow_action.y >= narrow_close.y + narrow_close.height);
     REQUIRE(narrow_action.y + narrow_action.height <= narrow_bar.y + narrow_bar.height + 0.5f);
     REQUIRE(narrow_bar.height > wide_bar.height);
+}
+
+TEST_CASE("Every editable field of the demo has a text target", "[demo][text-input]")
+{
+    // 편집 대상이 없는 칸은 키 입력이 닿지 않고 UIA Value가 읽기 전용으로 답한다. 칸을 더하면 이 표에도 더한다.
+    struct field
+    {
+        luil::ui_element_kind kind {};
+        luil::text_input_target target {};
+    };
+    const field fields[] {
+        { demo::kind_number_input, demo::target_number },
+        { demo::kind_note_input, demo::target_note },
+        { demo::kind_memo_input, demo::target_memo },
+        { demo::kind_link_view_input, demo::target_link_view },
+        { demo::kind_code_input, demo::target_code },
+        { demo::kind_line_break_input, demo::target_line_break },
+        { demo::kind_tool_note_input, demo::target_tool_note },
+        { demo::kind_dropdown_search_input, demo::target_dropdown_search },
+        { demo::kind_tool_menu_search_input, demo::target_tool_menu_search },
+        { demo::kind_network_url_input, demo::target_network_url },
+        { demo::kind_workbench_summary_input, demo::target_workbench_summary },
+        { demo::kind_workbench_author_input, demo::target_workbench_author },
+        { demo::kind_workbench_diff, demo::target_workbench_diff },
+        { demo::kind_workbench_find_input, demo::target_workbench_find },
+        { luil::ui_element_kind::command_palette_search, demo::target_palette },
+    };
+    for (const field& each : fields)
+    {
+        const std::optional<luil::text_input_target> target { demo::text_target_of_kind(each.kind) };
+        REQUIRE(target.has_value());
+        REQUIRE(*target == each.target);
+    }
+    // 글이 아닌 element는 편집 대상이 없다.
+    REQUIRE(demo::text_target_of_kind(demo::kind_text).has_value() == false);
 }

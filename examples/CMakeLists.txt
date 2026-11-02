@@ -48,7 +48,8 @@ target_link_libraries(luil_widgets PRIVATE luil::luil luil_options)
 luil_add_source_filter(luil_demo_files "app"
     demo_main.cpp
     demo/common.cpp
-    demo/common.h)
+    demo/common.h
+    demo/text_targets.h)
 luil_add_source_filter(luil_demo_files "pages"
     demo/gallery_page.cpp
     demo/gallery_page.h

@@ -1122,3 +1122,33 @@ TEST_CASE("The files page reports a watch that could not be added", "[file_watch
     page.stop();
     REQUIRE(mobile_demo::describe_file_change_batch({}) == u8"변경: 없음");
 }
+
+TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-demo][text-input]")
+{
+    // 편집 대상이 없는 칸은 키 입력이 닿지 않고 접근성 값이 읽기 전용으로 답한다. 칸을 더하면 이 표에도 더한다.
+    struct field
+    {
+        luil::ui_element_kind kind {};
+        luil::text_input_target target {};
+    };
+    const field fields[] {
+        { mobile_demo::kind_number_input, mobile_demo::target_number },
+        { mobile_demo::kind_note_input, mobile_demo::target_note },
+        { mobile_demo::kind_secret_input, mobile_demo::target_secret },
+        { mobile_demo::kind_memo_input, mobile_demo::target_memo },
+        { mobile_demo::kind_code_input, mobile_demo::target_code },
+        { mobile_demo::kind_line_break_input, mobile_demo::target_line_break },
+        { mobile_demo::kind_dropdown_search_input, mobile_demo::target_dropdown_search },
+        { mobile_demo::kind_smb_address_input, mobile_demo::target_smb_address },
+        { mobile_demo::kind_smb_user_input, mobile_demo::target_smb_user },
+        { mobile_demo::kind_smb_password_input, mobile_demo::target_smb_password },
+    };
+    for (const field& each : fields)
+    {
+        const std::optional<luil::text_input_target> target { mobile_demo::text_target_of_kind(each.kind) };
+        REQUIRE(target.has_value());
+        REQUIRE(*target == each.target);
+    }
+    // 글이 아닌 element는 편집 대상이 없다.
+    REQUIRE(mobile_demo::text_target_of_kind(mobile_demo::kind_text).has_value() == false);
+}
