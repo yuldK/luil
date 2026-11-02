@@ -560,4 +560,10 @@ TEST_CASE("Ink canvases are named images that summarize their stroke count", "[i
     luil::ink_canvas_element named { luil::ink_canvas_config { .owner = u8"named" } };
     named.set_access_name(u8"Signature");
     REQUIRE(named.accessibility().name == u8"Signature");
+
+    // 이름과 요약을 어느 쪽도 주지 않으면 라이브러리 기본 문구다 (default-text-design.md).
+    const luil::ink_canvas_element plain { luil::ink_canvas_config { .owner = u8"plain", .strokes = layer } };
+    REQUIRE(plain.accessibility().name == u8"잉크 캔버스");
+    REQUIRE(plain.accessibility().value == u8"획 2개");
+    REQUIRE(named.accessibility().value == u8"획 0개");
 }

@@ -1,6 +1,7 @@
 #include "luil/ui/ink_canvas_element.h"
 
 #include "luil/ui/zoom_view_element.h"
+#include "ui/default_text.h"
 #include "ui/ink_backing.h"
 
 #include "include/core/SkCanvas.h"
@@ -29,18 +30,6 @@ namespace luil {
                 return { slot.x, slot.y };
             const rect_f turned { rotated_bounds(*content_bounds, rotation) };
             return { slot.x - turned.x * scale, slot.y - turned.y * scale };
-        }
-
-        // 기본 이름과 기본 요약의 자리다. 라이브러리 문자열 정책(default-text-design.md)이 들어오면 그 함수로 채운다.
-        [[nodiscard]] std::u8string default_name()
-        {
-            return {};
-        }
-
-        [[nodiscard]] std::u8string default_summary(const std::size_t strokes)
-        {
-            static_cast<void>(strokes);
-            return {};
         }
     }
 
@@ -136,11 +125,12 @@ namespace luil {
     access_info ink_canvas_element::accessibility() const
     {
         std::u8string name { config_.access_name.empty() ? access_name() : config_.access_name };
+        // 기본 이름과 기본 요약은 라이브러리 문자열 정책의 함수다 (default-text-design.md).
         if (name.empty())
-            name = default_name();
+            name = default_text::ink_canvas_name();
         std::u8string summary { config_.access_summary ? config_.access_summary(config_.strokes.size()) : std::u8string {} };
         if (summary.empty())
-            summary = default_summary(config_.strokes.size());
+            summary = default_text::ink_canvas_summary(config_.strokes.size());
         return { .role = access_role::image, .name = std::move(name), .value = std::move(summary) };
     }
 }

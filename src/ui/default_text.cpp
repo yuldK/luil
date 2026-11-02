@@ -147,6 +147,19 @@ namespace luil::default_text {
         return u8"다시 실행";
     }
 
+    std::u8string_view ink_canvas_name() noexcept
+    {
+        return u8"잉크 캔버스";
+    }
+
+    std::u8string ink_canvas_summary(const std::size_t strokes)
+    {
+        std::u8string summary { u8"획 " };
+        append_number(summary, strokes);
+        summary += u8"개";
+        return summary;
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;
