@@ -96,6 +96,9 @@
 - [실행 취소 stack](undo-stack-design.md): 앱 수준 되돌리기 걸음과 실행 취소 명령표
 - [실행 중 스타일 읽기](style-sheet-design.md): 스타일 JSON을 실행 중에 읽어 빌드 때와 같은 판정으로 받는다
 - [줄 나눔 정책 스타일 키](wrap-policy-key-design.md): 스타일 파일 한 줄로 여러 줄 글의 기본 줄 나눔 정책을 고른다
+- [잉크 캔버스](ink-design.md): 펜으로 필압 획을 그리고 지우개로 지운다. 획은 앱 상태다
+- [잉크 입력](ink-input-design.md): 펜의 압력·기울기·지우개 표식과 합쳐 온 표본을 포인터 이벤트에 싣는다
+- [검사기](inspector-design.md): 실행 중 화면에 요소의 윤곽과 정보 상자를 얹는 개발 도구
 
 ## 플랫폼과 콘텐츠
 
@@ -105,12 +108,16 @@
 - [레이어드 표시: 창 배치와 frame을 한 합성에](layered-presentation-design.md)
 - [창 배경 효과](backdrop-design.md)
 - [여러 top-level window](multi-window-design.md)
+- [둘째 인스턴스의 인자 넘기기](single-instance-args-design.md): 같은 이름의 두 번째 실행이 첫 실행에 명령 줄 인자와 작업 폴더를 넘긴다
 - [작업 표시줄 진행률과 오버레이](taskbar-design.md): Win32 전용, 작업 표시줄 단추의 진행률과 오버레이 아이콘
+- [작업 표시줄 점프 목록](jump-list-design.md): Win32 전용, 단추의 점프 목록에 앱이 작업을 싣는다
+- [OS 알림](os-notification-design.md): 앱 창 밖 알림을 올리고 바꾸고 거두며, 꺼진 앱도 눌림을 받는다
 - [Popup overlay 표면](popup-overlay-design.md)
 - [Popup 앵커 표면](popup-anchor-design.md)
 - [Popup 안의 텍스트 입력과 IME](popup-ime-design.md)
 - [OS 파일 drag & drop](os-dragdrop-design.md)
 - [파일 목록 클립보드](file-clipboard-design.md)
+- [그림 클립보드](image-clipboard-design.md): 글과 그림을 한 클립에 넣고 다른 앱이 넣은 그림을 읽는다
 - [파일 변경 감시](file-watch-design.md): 폴더와 파일의 변경을 OS 알림으로 받아 묶음으로 건넨다
 - [UI Automation 접근성](accessibility-design.md)
 - [접근성 동작](accessibility-action-design.md)
