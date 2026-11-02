@@ -1,6 +1,7 @@
 #include "luil/app/platform_services.h"
 
 #include "win32/command_line.h"
+#include "win32/owned_handle.h"
 #include "win32/utf8.h"
 #include "win32/win32_error.h"
 
@@ -38,55 +39,7 @@ namespace luil {
             return win32::utf8_to_utf16(text).value;
         }
 
-        // 핸들 하나를 쥐고 없어질 때 닫는다.
-        class owned_handle
-        {
-        public:
-            owned_handle() noexcept = default;
-            explicit owned_handle(const HANDLE handle) noexcept
-                : handle_ { handle }
-            {
-            }
-            owned_handle(const owned_handle&) = delete;
-            owned_handle& operator=(const owned_handle&) = delete;
-            owned_handle(owned_handle&& other) noexcept
-                : handle_ { std::exchange(other.handle_, nullptr) }
-            {
-            }
-            owned_handle& operator=(owned_handle&& other) noexcept
-            {
-                if (this != &other)
-                {
-                    close();
-                    handle_ = std::exchange(other.handle_, nullptr);
-                }
-                return *this;
-            }
-            ~owned_handle()
-            {
-                close();
-            }
-
-            [[nodiscard]] HANDLE get() const noexcept
-            {
-                return handle_;
-            }
-
-            [[nodiscard]] bool valid() const noexcept
-            {
-                return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
-            }
-
-        private:
-            void close() noexcept
-            {
-                if (valid())
-                    static_cast<void>(CloseHandle(handle_));
-                handle_ = nullptr;
-            }
-
-            HANDLE handle_ { nullptr };
-        };
+        using win32::owned_handle;
     }
 
     namespace win32 {

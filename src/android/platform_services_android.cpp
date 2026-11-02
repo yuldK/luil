@@ -1,12 +1,12 @@
 #include "luil/app/platform_services.h"
 
 #include "android/android_text_input.h"
+#include "android/errno_text.h"
 #include "android/java_vm.h"
 
 #include <jni.h>
 
 #include <cerrno>
-#include <cstring>
 #include <string>
 #include <utility>
 
@@ -34,12 +34,7 @@ namespace luil {
 
         [[nodiscard]] platform_result errno_failure(const std::u8string_view what)
         {
-            std::u8string message { what };
-            message += u8" (";
-            for (const char* at { std::strerror(errno) }; *at != '\0'; ++at)
-                message.push_back(static_cast<char8_t>(*at));
-            message += u8").";
-            return { platform_status::failed, std::move(message), std::nullopt };
+            return { platform_status::failed, android::make_errno_error(what), std::nullopt };
         }
 
         [[nodiscard]] std::string narrow(const std::u8string_view text)
