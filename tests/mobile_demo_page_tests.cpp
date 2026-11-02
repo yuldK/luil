@@ -1309,7 +1309,7 @@ TEST_CASE("The mobile theme page applies a sample style and keeps it when a brok
         auto content { page.build(400.0f, 1.0f) };
         const float height { content.height };
         const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
-        for (const char8_t* const owner : { u8"theme-style-sample-background", u8"theme-style-sample-unknown", u8"theme-style-sample-broken", u8"theme-style-reset" })
+        for (const char8_t* const owner : { u8"theme-style-sample-background", u8"theme-style-sample-unknown", u8"theme-style-sample-broken", u8"theme-style-sample-wrap", u8"theme-style-reset" })
             REQUIRE(tree.find({ mobile_demo::kind_style_sheet_button, owner }) != nullptr);
         const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, u8"theme-style-status" }) };
         REQUIRE(label != nullptr);
@@ -1331,4 +1331,58 @@ TEST_CASE("The mobile theme page applies a sample style and keeps it when a brok
     deliver(page, demo::style_sheet_intent { demo::style_sheet_action::reset });
     REQUIRE(status() == u8"내장값 · dark.windowBackground #1e1e1e");
     REQUIRE(page.style() == nullptr);
+}
+
+TEST_CASE("The mobile theme page wrap sample switches the policy of a label that leaves its field empty", "[mobile-demo][style_json][wrap-policy]")
+{
+    // 정책 칸이 빈 label과 그 상태 줄이다 (docs/wrap-policy-key-design.md의 확인). 견본이 스타일을 바꾸면 상태 줄의 정책이 바뀐다.
+    const std::u8string source { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    mobile_demo::theme_page page { source };
+    const auto label_of = [&page](const char8_t* const owner) {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f, {}, nullptr, page.style().get()) };
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    };
+    REQUIRE(label_of(u8"theme-wrap-label") == demo::line_break_sample);
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 hangul_words · 라벨 "));
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_wrap });
+    REQUIRE(page.style() != nullptr);
+    REQUIRE(page.style()->text.wrap_policy == luil::line_break_policy::unicode);
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 unicode · 라벨 "));
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_broken });
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 unicode · 라벨 "));
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::reset });
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 hangul_words · 라벨 "));
+
+    // 줄 수와 첫 줄 끝은 고정 폭 측정기로 잠근다. ASCII는 글자 크기의 0.6배, 그 밖은 0.9배다. 기본 페이지 시험의 측정기(그 밖이
+    // 글자 크기만큼)로는 label 첫 줄에 다음 어절의 첫 음절도 들지 않아 두 정책이 같다.
+    const luil::text_measurer measurer { [](const std::u8string_view text, const float size) {
+        float width { 0.0f };
+        for (std::size_t offset { 0 }; offset < text.size();)
+        {
+            const auto decoded { luil::text::utf8_decode(text, offset) };
+            width += decoded.codepoint < 0x80 ? size * 0.6f : size * 0.9f;
+            offset += decoded.length;
+        }
+        return width;
+    }
+    };
+    luil::ui_style unicode_style { luil::default_ui_style() };
+    unicode_style.text.wrap_policy = luil::line_break_policy::unicode;
+    luil::ui_style words_style { luil::default_ui_style() };
+    words_style.text.wrap_policy = luil::line_break_policy::hangul_words;
+    const luil::label_config label { demo::style_wrap_label_config() };
+    REQUIRE(label.line_break.has_value() == false);
+    const std::u8string words { demo::measure_style_wrap_status(label, &words_style, 1.0f, &measurer) };
+    const std::u8string syllables { demo::measure_style_wrap_status(label, &unicode_style, 1.0f, &measurer) };
+    // 어절 정책은 첫 줄을 '낱말'에서 끊고, 음절 정책은 다음 어절의 두 음절까지 채운다.
+    REQUIRE(words == u8"스타일 정책 hangul_words · 라벨 5줄 · 첫 줄 끝 '낱말'");
+    REQUIRE(syllables == u8"스타일 정책 unicode · 라벨 5줄 · 첫 줄 끝 '한가'");
+    // 적은 칸은 스타일보다 앞선다. 기본 페이지의 줄 나눔 칸이 스타일에 닿지 않는 까닭이다.
+    luil::label_config chosen { label };
+    chosen.line_break = luil::line_break_policy::hangul_words;
+    REQUIRE(demo::measure_style_wrap_status(chosen, &unicode_style, 1.0f, &measurer) == words);
 }

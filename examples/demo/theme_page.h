@@ -132,8 +132,9 @@ namespace demo {
 
     private:
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_sample_tree() const;
-        // 스타일 파일 묶음이다. 칸·단추 줄·상태 줄을 카드에 담는다.
-        void add_style_sheet(page_layout& page) const;
+        // 스타일 파일 묶음이다. 칸·단추 줄·상태 줄과 스타일 정책을 따르는 여러 줄 label을 카드에 담는다.
+        //  - `scale`은 그 label을 재는 배율이다. 상태 줄이 build에서 잰 줄 수를 말한다.
+        void add_style_sheet(page_layout& page, float scale) const;
         void handle_style_sheet(style_sheet_action action);
         // 칸의 글을 통째로 바꾼다. 실행 취소 한 덩어리다.
         void set_style_text(std::u8string_view text);

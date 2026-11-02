@@ -1,5 +1,6 @@
 #include "demo/theme_page.h"
 
+#include "demo/line_break_sample.h"
 #include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/caption_element.h"
@@ -232,7 +233,7 @@ namespace demo {
         style_json_scroll_ = 0.0f;
     }
 
-    void theme_page::add_style_sheet(page_layout& page) const
+    void theme_page::add_style_sheet(page_layout& page, const float scale) const
     {
         // 스타일 JSON을 실행 중에 읽는다. 받으면 셸이 frame과 주 tree 배치에 같은 포인터로 싣고, 막히면 이전 스타일이 남는다.
         page.begin_card(u8"스타일 파일", u8"스타일 JSON을 실행 중에 읽습니다. 오류가 하나라도 있으면 이전 스타일을 그대로 둡니다.");
@@ -249,7 +250,7 @@ namespace demo {
             180.0f);
         page.gap(8.0f);
 
-        // 단추 다섯이다. 견본 셋은 칸에 글을 싣고 곧바로 읽는다.
+        // 단추 여섯이다. 견본 넷은 칸에 글을 싣고 곧바로 읽는다.
         struct style_button
         {
             std::u8string_view owner {};
@@ -260,7 +261,7 @@ namespace demo {
             {
                 { u8"theme-style-apply", u8"적용", style_sheet_action::apply },
                 { u8"theme-style-reset", u8"내장값으로", style_sheet_action::reset },
-                {},
+                { u8"theme-style-sample-wrap", u8"견본: 줄 나눔 unicode", style_sheet_action::sample_wrap },
             },
             {
                 { u8"theme-style-sample-background", u8"견본: 창 바탕 바꿈", style_sheet_action::sample_background },
@@ -292,6 +293,22 @@ namespace demo {
         }
         page.gap(4.0f);
         page.add(make_label({ kind_text, u8"theme-style-status" }, style_sheet_.status(), 11.0f, luil::label_color_role::dim), 18.0f);
+        page.gap(8.0f);
+
+        // 정책 칸이 빈 여러 줄 label이다. 주 tree의 배치 문맥이 지금 스타일을 실어 그 정책으로 접고, 상태 줄은 같은 스타일로
+        // 잰 줄 수와 첫 줄 끝을 말한다 (docs/wrap-policy-key-design.md의 확인).
+        const luil::ui_style* const style { style_sheet_.style().get() };
+        luil::label_config wrap_label { style_wrap_label_config() };
+        const float wrap_height { measure_style_wrap(wrap_label, style, scale).height };
+        const std::u8string wrap_status { measure_style_wrap_status(wrap_label, style, scale) };
+        luil::stack_config wrap_row {};
+        wrap_row.direction = luil::stack_direction::row;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"theme-wrap-row" }, wrap_row) };
+        row->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"theme-wrap-label" }, std::move(wrap_label)), line_break_cell_width);
+        row->add_flexible_gap();
+        page.add(std::move(row), wrap_height);
+        page.gap(4.0f);
+        page.add(make_label({ kind_text, u8"theme-wrap-status" }, wrap_status, 11.0f, luil::label_color_role::dim), 18.0f);
         page.end_card();
     }
 
@@ -374,7 +391,6 @@ namespace demo {
     {
         sample_menu_button_ = nullptr;
         static_cast<void>(height);
-        static_cast<void>(scale);
         // 카드 안의 element가 실제로 받는 폭이다. 테마 카드와 견본은 이 폭으로 줄 수를 정한다.
         const float content_width { page_layout::card_content_width(width) };
         page_layout page { u8"theme" };
@@ -448,7 +464,7 @@ namespace demo {
         page.add(std::move(menu_button), { .length = 26.0f, .cross_length = 140.0f });
         page.end_card();
 
-        add_style_sheet(page);
+        add_style_sheet(page, scale);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(theme_scroll_intent { delta }); });
     }
 }

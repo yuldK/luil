@@ -32,6 +32,9 @@ namespace demo {
         sample_unknown_key,
         // 닫는 괄호가 없는 견본이다. 문법 오류로 막힌다.
         sample_broken,
+        // 여러 줄 정책(`text.wrapPolicy`)을 `unicode`로 바꾼 견본이다. 받는다. 칸이 빈 여러 줄 label이 음절 사이에서도 접힌다
+        // (docs/wrap-policy-key-design.md의 확인).
+        sample_wrap,
     };
 
     struct style_sheet_intent
@@ -110,6 +113,15 @@ namespace demo {
         case style_sheet_action::sample_unknown_key:
             if (const std::size_t dark { style_sheet_detail::find_value(text, u8"dark", 0) }; dark != std::u8string::npos && text[dark] == u8'{')
                 text.insert(dark + 1, u8"\n        \"windowBackgrund\": \"" + std::u8string { style_sample_dark_background } + u8"\",");
+            break;
+        case style_sheet_action::sample_wrap:
+            if (style_sheet_detail::find_value(text, u8"wrapPolicy", 0) != std::u8string::npos)
+                style_sheet_detail::replace_value(text, u8"wrapPolicy", 0, u8"\"unicode\"");
+            else if (const std::size_t section { style_sheet_detail::find_value(text, u8"text", 0) }; section != std::u8string::npos && text[section] == u8'{')
+            {
+                // 키를 적지 않은 LUIL_STYLE 파일이면 `text` 절의 머리에 넣는다.
+                text.insert(section + 1, u8"\n        \"wrapPolicy\": \"unicode\",");
+            }
             break;
         case style_sheet_action::sample_broken:
             if (const std::size_t close { text.find_last_of(u8'}') }; close != std::u8string::npos)

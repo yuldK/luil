@@ -1,5 +1,6 @@
 #include "mobile_demo/theme_page.h"
 
+#include "demo/line_break_sample.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -95,8 +96,6 @@ namespace mobile_demo {
 
     page_content theme_page::build(const float width, const float scale)
     {
-        static_cast<void>(scale);
-
         // 테마 선호는 배타 선택이라 선택 묶음으로 그린다. 폰 화면 폭에 채운다.
         luil::choice_group_config themes {};
         themes.owner = u8"theme";
@@ -174,6 +173,7 @@ namespace mobile_demo {
             { u8"theme-style-sample-background", u8"견본: 창 바탕 바꿈", demo::style_sheet_action::sample_background },
             { u8"theme-style-sample-unknown", u8"견본: 낯선 키", demo::style_sheet_action::sample_unknown_key },
             { u8"theme-style-sample-broken", u8"견본: 괄호 없음", demo::style_sheet_action::sample_broken },
+            { u8"theme-style-sample-wrap", u8"견본: 줄 나눔 unicode", demo::style_sheet_action::sample_wrap },
             { u8"theme-style-reset", u8"내장값으로", demo::style_sheet_action::reset },
         };
         // 손가락으로 누를 단추라 높이를 넉넉히 둔다.
@@ -196,6 +196,24 @@ namespace mobile_demo {
         status.max_lines = 3;
         column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"theme-style-status" }, std::move(status)),
             3.0f * luil::text_line_height(note_text_size, note_line_height - note_text_size));
+        column.gap(12.0f);
+
+        // 정책 칸이 빈 여러 줄 label이다. 본문 배치가 지금 스타일을 실어 그 정책으로 접고, 상태 줄은 같은 스타일로 잰 줄 수와
+        // 첫 줄 끝을 말한다 (docs/wrap-policy-key-design.md의 확인). 견본 글과 폭은 기본 페이지의 줄 나눔 칸과 같다.
+        const luil::ui_style* const style { style_sheet_.style().get() };
+        luil::label_config wrap_label { demo::style_wrap_label_config() };
+        const float wrap_height { demo::measure_style_wrap(wrap_label, style, scale).height };
+        luil::label_config wrap_status {};
+        wrap_status.text = demo::measure_style_wrap_status(wrap_label, style, scale);
+        wrap_status.font_size = note_text_size;
+        wrap_status.color = luil::label_color_role::dim;
+        // 첫 줄 끝 글이 붙어 폰 폭을 넘을 수 있어 폭에서 줄을 바꾼다.
+        wrap_status.wrap = true;
+        wrap_status.max_lines = 2;
+        column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"theme-wrap-label" }, std::move(wrap_label)), wrap_height, demo::line_break_cell_width);
+        column.gap(6.0f);
+        column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"theme-wrap-status" }, std::move(wrap_status)),
+            2.0f * luil::text_line_height(note_text_size, note_line_height - note_text_size));
         return column.finish();
     }
 }
