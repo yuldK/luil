@@ -184,7 +184,7 @@ struct text_area_config { /* ... */ text::line_break_policy line_break { text::l
 데모 칸 (상태를 label로 그려 UIA로 되읽는다):
 
 - 견본 글과 칸 폭, label·칸 설정, 상태 글은 [examples/demo/line_break_sample.h](../examples/demo/line_break_sample.h) 하나에 두고 두 데모와 page test가 같이 쓴다.
-- `examples/demo/basics_page.cpp`에 "줄 나눔" 칸을 더한다. 한국어·한자·가나·영문·URL을 섞은 여러 줄 label과 읽기 전용 여러 줄 칸을 같은 폭(220 논리 픽셀)으로 나란히 두고, 정책을 고르는 스위치 `line-break-policy`를 둔다. label `line-break-status`가 "정책 hangul_words · 라벨 N줄 · 칸 M줄 · 첫 줄 끝 '…'"를 그린다. 줄 수와 첫 줄 끝은 build에서 그 폭으로 label을 재고(`label_element::measure_wrap`) 칸을 배치해(`text_area_element::lines()`) 센 값이다. UIA로 스위치를 바꾸고 되읽어 줄 수와 첫 줄 끝이 바뀌는지 본다.
+- `examples/demo/basics_page.cpp`에 "줄 나눔" 칸을 더한다. 한국어·한자·가나·영문·URL을 섞은 여러 줄 label과 편집할 수 있는 여러 줄 칸을 같은 폭(220 논리 픽셀)으로 나란히 두고(label은 칸의 확정 글을 그대로 그린다), 정책을 고르는 스위치 `line-break-policy`를 둔다. label `line-break-status`가 "정책 hangul_words · 라벨 N줄 · 칸 M줄 · 첫 줄 끝 '…'"를 그린다. 줄 수와 첫 줄 끝은 build에서 그 폭으로 label을 재고(`label_element::measure_wrap`) 칸을 배치해(`text_area_element::lines()`) 센 값이다. UIA로 스위치를 바꾸고 되읽어 줄 수와 첫 줄 끝이 바뀌는지 본다.
 - `examples/mobile_demo/basics_page.cpp`에 같은 칸을 위아래로 더한다.
 - `tests/mobile_demo_page_tests.cpp`가 고정 폭 측정기로 두 정책의 상태 글을 잠근다. 화면의 값은 실제 글꼴로 잰 값이라 다를 수 있어 검증 때 UIA와 화면으로 되읽는다.
 

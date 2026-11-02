@@ -5,6 +5,7 @@
 // (캡션을 잡아 옮긴다).
 
 #include "demo/code_lexer.h"
+#include "demo/line_break_sample.h"
 #include "demo/common.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/image_decode.h"
@@ -140,6 +141,9 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_memo() const;
         // 구문 강조를 보이는 코드 칸과 그 상태 줄이다 (`code_lexer.h`).
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_code() const;
+        // 줄 나눔 정책을 바꾸는 스위치와 같은 폭의 여러 줄 label·칸, 그 상태 줄이다 (`line_break_sample.h`).
+        //  - 상태 줄의 줄 수는 배율 `scale`에서 잰 값이다. 칸 전체의 높이를 `height`에 돌려준다 (논리 픽셀).
+        [[nodiscard]] std::unique_ptr<luil::stack_element> make_line_break(float scale, float& height) const;
         // 읽기 전용 안내 칸과 링크를 연 결과 한 줄이다.
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_link_view() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_image_row() const;
@@ -200,6 +204,10 @@ namespace demo {
         // 도우미가 게시한 구간이다. `spans()`가 const가 아니어서 `build`가 받아 두고 칸을 짓는 쪽이 읽는다.
         std::shared_ptr<const std::vector<luil::text_span>> code_spans_ {};
         bool code_painted_ { false };
+        // 줄 나눔 칸의 글과 정책이다. label은 칸의 확정 글을 그대로 그려, 고친 글도 두 접기가 같이 접는다.
+        luil::text::text_edit_state line_break_ { .text = std::u8string { line_break_sample } };
+        luil::text::line_break_policy line_break_policy_ { luil::text::line_break_policy::hangul_words };
+        std::shared_ptr<luil::text_area_wrap_cache> line_break_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
         float page_scroll_ { 0.0f };

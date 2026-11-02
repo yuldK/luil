@@ -2,6 +2,7 @@
 
 #include "luil/generated/codicons.h"
 #include "luil/ui/button_element.h"
+#include "luil/ui/check_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
@@ -92,7 +93,7 @@ namespace mobile_demo {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
             if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret && edit->request.target != target_memo
-                && edit->request.target != target_code)
+                && edit->request.target != target_code && edit->request.target != target_line_break)
                 return false;
             apply_edit(edit->request);
             return true;
@@ -100,9 +101,14 @@ namespace mobile_demo {
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
             if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_secret
-                && composition->event.target != target_memo && composition->event.target != target_code)
+                && composition->event.target != target_memo && composition->event.target != target_code && composition->event.target != target_line_break)
                 return false;
             apply_composition(composition->event);
+            return true;
+        }
+        if (const auto* const policy { message.get<demo::line_break_policy_intent>() }; policy != nullptr)
+        {
+            line_break_policy_ = policy->policy;
             return true;
         }
         if (const auto* const dialog { message.get<dialog_intent>() }; dialog != nullptr)
@@ -155,6 +161,8 @@ namespace mobile_demo {
             luil::apply_text_edit(secret_, request);
         else if (request.target == target_memo)
             luil::apply_text_edit(memo_, request);
+        else if (request.target == target_line_break)
+            luil::apply_text_edit(line_break_, request);
         else if (request.target == target_code)
         {
             luil::apply_text_edit(code_, request);
@@ -219,7 +227,6 @@ namespace mobile_demo {
 
     page_content basics_page::build(const float width, const float scale)
     {
-        static_cast<void>(scale);
         // 그림은 한 번만 읽는다. frame마다 읽으면 디코딩이 매 frame 선다 (image-decode-design.md).
         //  - `valid()`로 물으면 **읽지 못한** 바이트를 frame마다 다시 푼다. 실패도 한 번이어야
         //    하므로 읽었다는 사실을 따로 기억한다.
@@ -290,6 +297,41 @@ namespace mobile_demo {
         code_status.color = luil::label_color_role::dim;
         code_status.wrap = true;
         column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"code-status" }, std::move(code_status)), 2.0f * note_line_height);
+        column.gap(24.0f);
+
+        // 줄 나눔 칸이다. 같은 글을 같은 폭의 여러 줄 label과 여러 줄 칸에 위아래로 놓고, 스위치로 정책을 바꾼다.
+        // 상태 줄은 이 배율에서 잰 줄 수와 label 첫 줄의 끝 글자를 그린다 (line-break-design.md).
+        column.note(u8"line-break", u8"줄 나눔 (한국어는 어절 · 닫는 부호는 줄 머리에 두지 않는다)");
+        column.gap(4.0f);
+        {
+            const bool syllables { line_break_policy_ == luil::text::line_break_policy::unicode };
+            luil::check_config policy {};
+            policy.owner = u8"line-break-policy";
+            policy.style = luil::check_style::toggle_switch;
+            policy.label = u8"한글 음절 사이에서도 바꾸기 (unicode)";
+            policy.checked = syllables;
+            policy.toggle = luil::make_message_action(demo::line_break_policy_intent { syllables ? luil::text::line_break_policy::hangul_words : luil::text::line_break_policy::unicode });
+            const float policy_height { luil::check_element::height_for(policy) };
+            column.add(std::make_unique<luil::check_element>(std::move(policy)), std::max(policy_height, touch_height), std::min(width - 2.0f * page_padding, 360.0f));
+            column.gap(6.0f);
+            luil::label_config label { demo::line_break_label_config(line_break_.text, line_break_policy_, note_text_size) };
+            auto area { std::make_unique<luil::text_area_element>(
+                luil::ui_element_id { kind_line_break_input }, make_input_view(line_break_, target_line_break), demo::line_break_area_config(line_break_policy_, line_break_wrap_))
+            };
+            area->set_access_name(u8"줄 나눔 칸");
+            const std::u8string status { demo::measure_line_break_status(line_break_policy_, label, *area, scale) };
+            const float label_height { luil::label_element::measure_wrap(label, luil::measure_context { .scale = scale }, demo::line_break_cell_width).height };
+            column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"line-break-label" }, std::move(label)), label_height, demo::line_break_cell_width);
+            column.gap(6.0f);
+            column.add(std::move(area), demo::line_break_area_height, demo::line_break_cell_width);
+            column.gap(4.0f);
+            luil::label_config line_break_status {};
+            line_break_status.text = status;
+            line_break_status.font_size = note_text_size;
+            line_break_status.color = luil::label_color_role::dim;
+            line_break_status.wrap = true;
+            column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"line-break-status" }, std::move(line_break_status)), 2.0f * note_line_height);
+        }
         column.gap(24.0f);
 
         // 그림 둘을 나란히 둔다. 칸은 폭의 절반씩이다.
