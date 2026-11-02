@@ -14,7 +14,7 @@
 
 ## 공개 형식
 
-`ui_image`와 `make_rgba_image`를 `include/luil/ui/ui_image.h`로 옮긴다. 그 클래스는 `image_backing` 전방 선언과 `shared_ptr`만 쓴다(image_element.h 44~65줄). `image_element.h`가 새 헤더를 include해 기존 호출은 바뀌지 않는다. `ui_events.h`가 새 헤더를 include한다.
+`ui_image`와 `make_rgba_image`를 `include/luil/ui/ui_image.h`로 옮긴다. 그 클래스는 `image_backing` 전방 선언과 `shared_ptr`만 쓴다(image_element.h 44~65줄). `image_element.h`가 새 헤더를 include해 기존 호출은 바뀌지 않는다. `ui_events.h`가 새 헤더를 include한다. 새 공개 헤더 둘(`ui_image.h`, `clipboard_image.h`)은 `include/luil/luil.h`의 `image_element.h` 줄 옆에 더한다. [verify_umbrella_header.cmake](../cmake/verify_umbrella_header.cmake)가 `luil_umbrella_header` 검사로 빠뜨림을 막는다.
 
 ```cpp
 // include/luil/ui/ui_events.h, `clipboard_change` 다음
@@ -179,19 +179,20 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 - **인자 넘기기·os_notify(줄 4, 앞).** `win32_window.cpp`, `app_delegate.h`, `ui_platform.h`를 두 노드 뒤에 직렬로 고친다. 병합 순서는 인자 넘기기, os_notify, image_clip이다. 훅은 os_notify의 `make_notification_message` 뒤, 능력은 그 노드의 `notifications` 뒤에 더한다. os_notify 문서 216줄의 "`ui_image`→Bitmap 변환을 공용 헤더로 꺼낸다"는 이 노드가 Android에 그림을 넣지 않아 필요 없다. 꺼내지 않는다.
 - **rich_edit(줄 2, R3).** `clipboard_data_copy_request`와 `clipboard_data` 끝에 `html`·`rtf` 칸을 더한다. 기존 칸의 순서와 뜻은 바꾸지 않는다. Win32는 `put_clipboard_blocks`에 블록을 더하고, 읽기는 이 노드의 한 번 열기 안에서 읽는다. Android는 `ClipData.newHtmlText`로 글 칸과 함께 넣는다. 입력 thread에서 만드는 복사가 필요하면 결정 6의 b를 그때 줄 3과 함께 낸다.
 - **ink(줄 3, 같은 라운드).** 잉크 그림 복사는 `render_ink_image`가 낸 `ui_image`를 이 요청에 싣는다. `ui_events.h`에서 이 노드는 include 한 줄, `clipboard_change` 끝, 새 구조체, `clipboard_request` 끝만 고친다. `pen_sample`과 `pointer_*_event`, `input_action`, `raw_input_event`의 구성원 순서는 건드리지 않는다. `android_app.cpp`에서 ink는 `copy_motion`과 축 켜기, 이 노드는 `execute_clipboard`다.
-- **inspector(줄 3).** `android_app.cpp`의 `render()` 한 줄과 겹치지 않는다. 그 노드가 필요로 하는 `win32_window.cpp`의 frame 칸 한 줄은 줄 4가 별도 커밋으로 내고 이 노드 커밋에 섞지 않는다.
+- **inspector(줄 3).** `android_app.cpp`의 `render()` 한 줄과 겹치지 않는다. 그 노드가 필요로 하는 `win32_window.cpp`의 frame 칸 한 줄은 줄 4가 통합 단계에서 별도 커밋으로 내고([인자 넘기기](single-instance-args-design.md)가 맡는다) 이 노드 커밋에 섞지 않는다.
 - **`image_element.h`.** 이번 라운드에 이 헤더를 고치는 노드는 이 노드뿐이다. ink는 반환 형식으로 `ui_image`를 쓸 뿐이라 옮긴 뒤에도 그대로 빌드된다.
 - **파일 클립보드.** 구현 커밋이 [file-clipboard-design.md](file-clipboard-design.md)의 어휘 표에 `has_image`를, 지원하지 않는 플랫폼 절에 이 문서로 가는 한 줄을 더한다. [이미지 인코딩](image-encode-design.md)에 클립보드가 PNG를 앱에서 받는 까닭 한 줄을 더한다.
-- **데모 공용 파일.** `examples/demo_main.cpp`와 `examples/mobile_demo/app.cpp`의 훅 연결은 여러 줄이 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고 데모 연결은 통합 때 직렬로 쌓는다. `docs/README.md` 색인도 통합 때 붙인다.
+- **데모 공용 파일.** `examples/demo_main.cpp`와 `examples/mobile_demo/app.cpp`의 훅 연결은 여러 줄이 고친다. `examples/mobile_demo/basics_page.*`는 줄 1의 msg_box(대화 상자 460~573행 치환)와 rating(249행 근처 행)도 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고 데모 연결은 통합 때 직렬로 쌓는다. `basics_page.*`와 `tests/CMakeLists.txt`의 `basics_page.cpp` 등록은 msg_box, rating, 이 노드 순이다. 등록 줄은 먼저 쌓이는 msg_box 연결이 넣는다. `docs/README.md` 색인도 통합 때 붙인다.
 
 ## 확인
 
 - `tests/clipboard_image_tests.cpp`(`luil_core_tests`, Windows와 Android 기기에서 돈다): 24·32비트 `BI_RGB`와 V5 `BI_BITFIELDS`의 아래에서 위로·위에서 아래로 블록이 같은 RGBA가 되는지, 행 4바이트 정렬, 모든 알파 0이 불투명이 되는지, 머리가 말하는 크기보다 짧은 블록과 음수·0 크기의 거절, 픽셀 상한이 메모리 전에 걸리는지, 8비트 팔레트 블록이 BMP 길로 풀리는지, `encoded`의 PNG가 `decode_image_bytes`와 같은 픽셀인지(`sample_image_bytes.h`), `none`이 빈 그림과 오류인지.
 - `tests/win32_image_clipboard_tests.cpp`(`luil_tests`): `CF_DIBV5` 블록의 머리 크기·마스크·`LCS_sRGB`·양수 높이·곱하지 않은 픽셀, SVG 그림이 제 크기로 펴지는지, PNG 서명이 아니면 "PNG"를 넣지 않는지. `[system]` 태그 test는 파일 클립보드 test처럼 메시지 전용 창을 임자로 실제 클립보드에 쓰고 끝에 비운다. 넣고 되읽은 픽셀이 같은지, 읽는 순서(PNG가 DIB보다 먼저), 글만 든 클립보드는 `none`인지, `CF_BITMAP`만 넣어도 `has_image`가 참인지, 둘째 블록이 실패하면 첫 블록도 남지 않는지(실패하는 블록을 주입한다).
 - `tests/app_host_tests.cpp`(추가): 새 두 요청이 `post_clipboard_request`로 들어가 `take_clipboard_requests`로 나오는지.
+- `luil_umbrella_header`(기존 검사): 새 헤더 둘이 `luil.h`에 있어야 통과한다.
 - Android JNI 읽기는 `.cpp`를 묶은 확인 프로그램을 `run-as`로 실기기에서 돌린다(`platform_services_android`와 같은 길). 확인 프로그램이 넣은 글을 되읽고, 사람이 갤러리 앱에서 복사해 둔 그림을 읽어 `read_clipboard_data`의 꼴과 바이트 수를 적는다. Android 확인 프로그램은 초점이 없어 클립보드를 못 읽을 수 있다(실측). 막히면 모바일 데모의 label로 본다.
 - 데모 `examples/demo/images_page.cpp`의 "클립보드" 줄: 단추 `그림 복사`(연 그림과 파일 이름 글, PNG는 logic thread에서 짓는다)·`그림 붙여넣기`, label `클립보드 그림: 있음`(`has_image`), `붙여넣기 결과: 640×480 PNG`(없으면 `붙여넣기 결과: 그림 없음`, 크면 `붙여넣기 결과: 너무 큼`). 붙인 그림은 미리 보기 칸에 선다. UIA는 label 이름을 되읽는다.
-- 모바일 데모 `examples/mobile_demo/basics_page.cpp`의 그림 칸 아래: `클립보드 그림 붙여넣기` 단추와 `붙여넣기 결과:` label. `tests/mobile_demo_page_tests.cpp`에 `basics_page`를 더해 intent를 직접 주고 상태별 이름을 읽는다.
+- 모바일 데모 `examples/mobile_demo/basics_page.cpp`의 그림 칸(338~346행) 아래: `클립보드 그림 붙여넣기` 단추와 `붙여넣기 결과:` label. `tests/mobile_demo_page_tests.cpp`에 사례를 더해 intent를 직접 주고 상태별 이름을 읽는다. `basics_page.cpp`를 `tests/CMakeLists.txt`의 모바일 데모 목록(`luil_core_tests`)에 올리는 일은 데모 연결 커밋이 한다. msg_box 연결 커밋([message-box-design.md](message-box-design.md))이 먼저 올렸으면 이 노드는 사례만 더한다.
 - 사람 확인: 그림판·브라우저·Office·메신저로 넣고 그쪽에서 복사한 그림을 붙이기, 투명 PNG의 바탕과 반투명 가장자리, 화면 캡처 도구의 그림, 큰 그림(수천만 화소)의 멈춤, 원격 데스크톱 클립보드. Android 실기기: 갤러리·키보드·메신저 앱에서 복사한 그림, 텍스트 칸에 그림 URI가 붙지 않는지, 시스템 알림.
 
 ## 범위 밖

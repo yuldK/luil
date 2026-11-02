@@ -8,7 +8,7 @@
 
 - 둘째가 첫째에 닿을 길이 없다. `single_instance`는 이름 있는 뮤텍스 `Local\luil-instance:<이름>`으로 첫째 여부만 가른다([platform_services_win32.cpp](../src/win32/platform_services_win32.cpp)의 생성자는 `ERROR_ALREADY_EXISTS`만 본다). 데이터를 나르는 길이 없다.
 - 앱이 직접 짤 수도 없다. 주 창의 `HWND`와 프로시저는 공개 헤더에 없다. 앱은 파이프나 숨은 창을 따로 세우고 첫 창을 찾는 법, 크기 상한, 관리자 권한 창의 UIPI, 앞으로 세우기 권한을 앱마다 다시 푼다.
-- 쓰임은 모두 "새 프로세스 + 인자"다. 탐색기에서 연결된 파일을 여는 것, 점프 목록의 작업, 알림 클릭이 그렇다. 지금 데모는 둘째도 막지 않고 제목만 바꿔 띄운다([demo_main.cpp](../examples/demo_main.cpp)의 `single_instance`). [작업 표시줄 문서](taskbar-design.md) 217줄은 점프 목록을 이 길이 선 뒤로 미뤘다.
+- 쓰임은 모두 "새 프로세스 + 인자"다. 탐색기에서 연결된 파일을 여는 것과 점프 목록의 작업이 그렇다. 알림 클릭은 os_notify의 COM 활성화기가 받아 이 길을 쓰지 않는다. 지금 데모는 둘째도 막지 않고 제목만 바꿔 띄운다([demo_main.cpp](../examples/demo_main.cpp)의 `single_instance`). [작업 표시줄 문서](taskbar-design.md) 217줄은 점프 목록을 이 길이 선 뒤로 미뤘다.
 - 첫째는 앞 창이 아니어서 스스로 앞으로 서지 못한다. `focus_request::activate`는 앞 창이 아니면 OS가 막고 단추만 깜빡인다([app_host.h](../include/luil/app/app_host.h) 326~329줄). 둘째는 사용자의 동작으로 떴으므로 그 권한을 첫째에 넘겨 줄 수 있다.
 
 ## 공개 형식
@@ -180,10 +180,10 @@ if (instance.primary() == false)
 ## 다른 노드와의 약속
 
 - **platform-services-design.md 개정.** 구현 커밋이 같은 묶음에서 이 문서의 판단으로 고친다. 15줄 표의 단일 인스턴스 행에 인자 보내기를 더하고, 36줄 "알리는 길(IPC)은 앱마다 달라 넣지 않았다"를 이 문서로 잇는 말로 바꾸고, 104줄에 Android의 `send_to_primary`가 `unsupported`임을 적고, 검증 절(108~121줄)의 단일 인스턴스 test와 데모 설명을 새 test로 맞춘다.
-- **os_notify(줄 4, 다음).** 앱 식별(AUMID)을 세우는 노드다. 이 노드는 `window_config`를 고치지 않아 그 필드와 겹치지 않는다. 알림 클릭으로 뜬 새 프로세스가 첫 인스턴스가 있을 때 `send_to_primary`로 불투명 인자(알림 id)를 넘길 수 있다. 인자의 뜻은 os_notify가 정한다. 같은 `win32_window.cpp`를 직렬로 고친다. 이 노드는 `run()`의 `on_started` 뒤, `host_.reset()` 세 자리의 앞, `handle_window_message`의 case 하나, `advance_focus_request`의 활성화 helper 추출을 고친다. 병합 순서는 이 노드, os_notify, image_clip이다.
+- **os_notify(줄 4, 다음).** 앱 식별(AUMID)을 세우는 노드다. 이 노드는 `window_config`를 고치지 않아 그 필드와 겹치지 않는다. 알림 눌림은 os_notify의 COM 활성화기가 받는다([OS 알림](os-notification-design.md) 결정 4). 첫째가 끝나는 중에 COM이 띄운 둘째만 `-luil-notification` 인자를 이 길로 넘기고, 앱은 `notification_launch`로 걸러낸다. 같은 `win32_window.cpp`를 직렬로 고친다. 이 노드는 `run()`의 `on_started` 뒤, `host_.reset()` 세 자리의 앞, `handle_window_message`의 case 하나, `advance_focus_request`의 활성화 helper 추출을 고친다. 병합 순서는 이 노드, os_notify, image_clip이다.
 - **작업 표시줄 점프 목록.** 결정 8의 길에 따른다. 어느 길이든 이 API는 바뀌지 않는다. 항목의 인자 따옴표는 `win32::make_command_line`을 쓴다.
 - **auto_update(줄 4, R4).** 도우미가 부모 종료를 기다려 다시 띄우면 새 프로세스가 첫째라 이 길을 쓰지 않을 수 있다(추측). 쓰면 이 API를 그대로 쓴다.
-- **줄 3 ink·inspector.** `window_surface.cpp`는 고치지 않는다. 계획은 이 파일에 `WM_COPYDATA` 자리를 두었으나, 받는 것이 주 창뿐이라 표면 계층(보조 창·popup과 공유)에 `surface_context` 가상 함수를 더할 이유가 없다. ink는 `handle_pointer_message`를 혼자 고친다. inspector가 필요로 하는 `win32_window.cpp`의 frame 칸 한 줄은 줄 4가 별도 커밋으로 낸다. 이 노드 커밋에 섞지 않는다.
+- **줄 3 ink·inspector.** `window_surface.cpp`는 고치지 않는다. 계획은 이 파일에 `WM_COPYDATA` 자리를 두었으나, 받는 것이 주 창뿐이라 표면 계층(보조 창·popup과 공유)에 `surface_context` 가상 함수를 더할 이유가 없다. ink는 `handle_pointer_message`를 혼자 고친다. inspector가 필요로 하는 `win32_window.cpp`의 한 줄은 줄 4가 내고 이 문서가 그 몫을 맡는다. inspector가 main에 병합된 뒤 통합 단계에서 `application_window::apply_frame_appearance`의 `state.style` 다음에 `state.inspector = frame != nullptr ? &frame->inspector : nullptr;`를 커밋 하나로 낸다. 그 칸은 줄 3 브랜치에만 있어 줄 4 브랜치에서는 컴파일되지 않는다. 이 노드·os_notify·image_clip 커밋과 섞지 않는다.
 - **WM_APP 번호표와 UIPI 자리.** 새 번호가 없다(`WM_COPYDATA`는 시스템 번호). `allow_instance_message`가 `allow_shell_events` 옆에 선다.
 - **데모 공용 파일.** `examples/demo_main.cpp`는 여러 줄이 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고, 데모 연결은 통합 때 직렬로 쌓는다. `docs/README.md` 색인도 통합 때 붙인다.
 

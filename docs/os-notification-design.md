@@ -121,7 +121,7 @@ namespace luil::win32 {
 - 작은 아이콘은 `ApplicationInfo.icon`이다. 단색 실루엣으로 그려져 모양이 뭉개질 수 있다. 앱 자원을 모르는 라이브러리가 고를 수 있는 유일한 값이다.
 - 본문은 `BigTextStyle`, `setAutoCancel(true)`다.
 - 누르면 `PendingIntent.getActivity(context, 요청 번호, intent, FLAG_IMMUTABLE | FLAG_UPDATE_CURRENT)`가 뜬다. intent는 `getLaunchIntentForPackage`가 지은 런처 intent(MAIN/LAUNCHER, `FLAG_ACTIVITY_NEW_TASK`)에 extra `luil.notification.id`만 더한 것이다. extra는 intent 비교(`filterEquals`)에 들지 않아, task가 살아 있으면 Activity를 새로 세우지 않고 task를 앞으로 가져온다고 알려져 있다(실측 전). 요청 번호는 id의 해시라 알림마다 PendingIntent가 따로 선다.
-- 콜드 스타트는 `on_started` 뒤 `Activity.getIntent()`의 extra를 JNI로 읽어 `launched` 눌림으로 낸다. `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`가 있으면(최근 앱에서 다시 연 것) 읽지 않는다. 읽은 뒤 `removeExtra`로 지워 같은 프로세스에서 두 번 내지 않는다.
+- 콜드 스타트는 첫 `APP_CMD_GAINED_FOCUS`에서 한 번(`start()` 밖, 한 번 플래그) `Activity.getIntent()`의 extra를 JNI로 읽어 `launched` 눌림으로 낸다. 초점이 오기 전에는 사건이 앱에 가지 않는다. `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`가 있으면(최근 앱에서 다시 연 것) 읽지 않는다. 읽은 뒤 `removeExtra`로 지워 Activity가 다시 서도 같은 프로세스에서 두 번 내지 않는다.
 - `notification_status()`는 `areNotificationsEnabled()`와 채널 importance가 `NONE`인지를 본다. 꺼져 있고 `POST_NOTIFICATIONS`가 필요한데 없으면 `permission_needed`, 아니면 `blocked`다. 방해 금지 중에도 알림 창에는 들어가므로 `available`이다.
 
 **권한.** `android_permission_name`([device_request.cpp](../src/android/device_request.cpp) 46줄)에 `notifications` case를 더한다. 기기와 targetSdk가 둘 다 33 이상이면 `android.permission.POST_NOTIFICATIONS`, 아니면 `nullptr`(`not_required`)이다. 묻기와 답은 `local_network`와 같은 길이다([기기 요청](device-request-design.md)의 권한 절). targetSdk 33 미만 앱이 33 이상 기기에서 돌면 시스템이 첫 채널을 만들 때 스스로 묻는다. 이때 `permission`은 `not_required`이고 답 전까지 `notification_status()`가 `blocked`다. Windows는 늘 `not_required`이고 끈 설정은 `notification_status()`가 말한다.
@@ -204,20 +204,20 @@ namespace luil::win32 {
 ### Android
 
 - 모두 기존 framework 클래스 호출이라 Java 소스는 0줄이다([Android 이식 계획](android-port-plan.md)의 Java 소스 방침). `NotificationChannel`은 API 26이라 minSdk 26(examples/android/app/build.gradle.kts 40줄)과 맞는다.
-- [android_app.cpp](../src/android/android_app.cpp)에서 고치는 함수: `refresh_permissions`의 고정 목록(1024줄), `permission_book`의 칸과 `state` switch(1800~1815줄), `set_ui_platform`의 `.notifications = true`(538줄), 새 함수 `take_launch_notification`과 `on_started` 호출(657줄) 다음 한 줄, `APP_CMD_GAINED_FOCUS`의 큐 비우기 한 줄.
+- [android_app.cpp](../src/android/android_app.cpp)에서 고치는 함수: `refresh_permissions`의 고정 목록(1024줄), `permission_book`의 칸과 `state` switch(1800~1815줄), `APP_CMD_GAINED_FOCUS` 분기(760줄 이후)의 콜드 스타트 읽기와 큐 비우기, 새 함수 `take_launch_notification`이다. `start()` 안은 `set_ui_platform`의 `.notifications = true`(538줄) 한 줄뿐이다. 읽기를 `on_started` 호출(657줄) 다음에 두지 않는다. 그 자리는 줄 3 ink의 축 켜기(653~654줄) 바로 아래라 hunk가 붙는다. 538줄은 축 켜기와 115줄 떨어져 있다.
 - 매니페스트는 고치지 않는다. 지금 Activity는 `launchMode`가 없다([AndroidManifest.xml](../examples/android/app/src/main/AndroidManifest.xml) 21줄). 바꾸면 모든 예제의 수명이 바뀐다. 소비자가 바꾸는 것은 소비자 몫이다. mobile demo flavor 매니페스트에만 `POST_NOTIFICATIONS`를 더한다.
 - 살아 있는 앱의 눌림 사건, `dismissed`, `failed`, 단추·답장·예약은 unsupported다(결정 5·6).
 
 ## 다른 노드와의 약속
 
-- **인자 넘기기(줄 4, 앞).** `window_config`의 식별 칸은 이 노드가 낸다(그 문서 결정 2의 전제). 알림 눌림은 `send_to_primary`를 쓰지 않는다. 결정 4 b에서 떠 있는 첫째는 COM으로 받는다. 첫째가 끝나는 중의 경합에서만 COM이 띄운 둘째가 앱의 G7 길로 `-luil-notification` 인자를 넘기고, 앱은 `notification_launch`로 걸러낸다. 그 문서 183줄의 "알림 id를 넘길 수 있다"를 구현 커밋이 이 뜻으로 고친다. `win32_window.cpp`는 그 노드 뒤에 직렬로 고친다. `on_started` 뒤와 `host_.reset()` 세 자리 앞은 같은 hunk가 될 수 있어 그 노드의 줄 뒤에 잇는다. 앞으로 세우는 helper는 그 노드가 `advance_focus_request`에서 뽑은 것을 쓴다. 병합 순서는 인자 넘기기, os_notify, image_clip이다.
+- **인자 넘기기(줄 4, 앞).** `window_config`의 식별 칸은 이 노드가 낸다(그 문서 결정 2의 전제). 알림 눌림은 `send_to_primary`를 쓰지 않는다. 결정 4 b에서 떠 있는 첫째는 COM으로 받는다. 첫째가 끝나는 중의 경합에서만 COM이 띄운 둘째가 앱의 G7 길로 `-luil-notification` 인자를 넘기고, 앱은 `notification_launch`로 걸러낸다. 그 문서의 약속 절은 이미 이 뜻으로 고쳤다. `win32_window.cpp`는 그 노드 뒤에 직렬로 고친다. `on_started` 뒤와 `host_.reset()` 세 자리 앞은 같은 hunk가 될 수 있어 그 노드의 줄 뒤에 잇는다. 앞으로 세우는 helper는 그 노드가 `advance_focus_request`에서 뽑은 것을 쓴다. 병합 순서는 인자 넘기기, os_notify, image_clip이다.
 - **점프 목록.** 인자 넘기기 결정 8이 이 노드의 AUMID 실측을 보고 정한다. 실측 결과(아래 확인)는 그 결정의 근거로 쓴다.
 - **작업 표시줄.** 215줄의 "os_notify의 앱 식별이 먼저 서야 한다"를 구현 커밋이 이 문서로 잇고 244줄 범위 밖의 AUMID를 지운다. 식별을 단 앱에서 진행률이 그대로 서는지 사람 확인에 더한다. `WM_APP + 6`은 이 노드가 표의 첫 새 번호다.
 - **image_clip(줄 4, 다음).** `win32_window.cpp`와 `app_delegate.h`를 이 노드 뒤에 고친다. 훅은 이 노드의 것 뒤에 더한다. `notification_android.cpp`의 `ui_image`→Bitmap 변환이 필요하면 그 노드가 공용 헤더로 꺼낸다.
-- **줄 3 ink·inspector.** `android_app.cpp`의 함수가 다르다. ink의 `enableAxis` 두 줄(653~654줄)이 `on_started` 바로 위라 통합 때 hunk가 붙으면 기계적으로 푼다. inspector의 `win32_window.cpp` frame 칸 한 줄은 줄 4가 별도 커밋으로 내고 이 노드 커밋에 섞지 않는다.
+- **줄 3 ink·inspector.** `android_app.cpp`의 함수가 다르다. ink는 `copy_motion`과 `start()`의 축 켜기(653~654줄)를, 이 노드는 `start()`의 538줄 한 줄과 다른 함수를 고친다. 콜드 스타트 읽기가 `start()` 밖이라 ink의 줄과 hunk가 붙지 않는다. 읽기를 `start()` 안에 두어야 하면 ink가 먼저 병합되고 이 노드가 그 위에 얹는다. 줄은 `return true;` 바로 앞에 두고 `if`에 중괄호를 더하지 않는다. inspector의 `win32_window.cpp` frame 칸 한 줄은 줄 4가 통합 단계에서 별도 커밋으로 내고([인자 넘기기](single-instance-args-design.md)가 맡는다) 이 노드 커밋에 섞지 않는다.
 - **G6.** 이 노드에는 라이브러리 기본 문구가 없다. 제목·본문은 앱이, 표시 이름은 앱이나 caption 제목이, 채널 이름은 앱 이름이 준다. [default-text](default-text-design.md) 규칙의 "앱이 아니면 만들 수 없는 글"이라 `default_text.h`를 include하지 않는다.
 - **문서.** 구현 커밋이 [기기 요청](device-request-design.md) 권한 절에 알림 권한 한 문단, `docs/concepts/consumer-contract.md`에 매니페스트 `POST_NOTIFICATIONS` 한 줄을 더한다. `platform-services-design.md`는 고치지 않는다.
-- **데모 공용 파일.** `examples/demo/toasts_page.*`는 줄 1의 info_bar 카드도 더한다. `examples/demo_main.cpp`·`examples/mobile_demo/device_page.cpp`도 여러 줄이 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고 데모 연결은 통합 때 직렬로 쌓는다. `docs/README.md` 색인도 통합 때 붙인다.
+- **데모 공용 파일.** `examples/demo/toasts_page.*`의 정보 막대 카드는 R1에서 이미 들어갔고(`make_info_bar`), 이번 라운드에 이 페이지를 고치는 줄은 이 노드뿐이다. `examples/demo_main.cpp`·`examples/mobile_demo/device_page.cpp`는 여러 줄이 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고 이 두 파일의 연결은 통합 때 직렬로 쌓는다. `docs/README.md` 색인도 통합 때 붙인다.
 
 ## 확인
 
