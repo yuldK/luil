@@ -82,6 +82,7 @@ add_executable(luil_core_tests
     surface_invalidate_tests.cpp
     tab_bar_element_tests.cpp
     tab_bar_style_tests.cpp
+    taskbar_sync_tests.cpp
     table_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
@@ -380,6 +381,7 @@ add_executable(luil_tests
     platform_services_tests.cpp
     secret_store_tests.cpp
     surface_input_tests.cpp
+    taskbar_button_tests.cpp
     tsf_input_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp
@@ -391,6 +393,7 @@ add_executable(luil_tests
     win32_drop_tests.cpp
     win32_fonts_tests.cpp
     win32_window_tests.cpp
+    window_messages_tests.cpp
     window_mode_tests.cpp
     window_position_tests.cpp)
 target_include_directories(luil_tests

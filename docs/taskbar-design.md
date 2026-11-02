@@ -85,8 +85,8 @@ namespace luil::win32 {
 | --- | --- |
 | `src/host/taskbar_sync.h`·`.cpp` (core) | 바라는 상태와 적용한 상태를 견줘 셸에 할 호출 목록을 낸다. OS 헤더가 없다 |
 | `src/win32/taskbar_button.h`·`.cpp` | `ITaskbarList3`를 부르고 창별 기록과 아이콘 핸들을 쥔다 |
-| `src/win32/window_messages.h`·`.cpp` | `WM_APP` 번호표, 등록 메시지, `shell_event_of`, UIPI 허용 |
-| `src/win32/icon_from_image.h`·`.cpp` | `ui_image`를 `HICON`으로 옮긴다. tray가 같이 쓴다 |
+| `src/win32/window_messages.h`·`.cpp` | `WM_APP` 번호표, 등록 메시지, `shell_event_of`·`shell_event_message`, UIPI 허용 |
+| `src/win32/icon_from_image.h`·`.cpp` | `ui_image`를 `HICON`으로 옮기고 `HICON` 소유자 `owned_icon`을 둔다. tray가 같이 쓴다 |
 
 ## 규칙
 
@@ -106,7 +106,8 @@ namespace luil::win32 {
 
 **오버레이.** `icon_from_image`가 `ui_image`를 `HICON`으로 옮긴다. `read_image_pixels`([image_pixels.h](../src/ui/image_pixels.h))가 낸 픽셀을 알파 32비트 DIB로 바꾸고 `CreateIconIndirect`를 부른다.
 
-- 크기는 `GetSystemMetricsForDpi(SM_CXSMICON, 창 배율)`의 정사각형이다. 원본이 다르면 이 크기로 맞춘다. 창 배율이 바뀌면 오버레이만 새 크기로 다시 낸다.
+- 크기는 `GetSystemMetricsForDpi(SM_CXSMICON, 창 배율)`의 정사각형이다. 원본이 다르면 이 크기로 맞추되 비율을 지켜 가운데에 두고 남는 곳은 투명하다. 창 배율이 바뀌면 오버레이만 새 크기로 다시 낸다.
+- 색 비트맵은 **알파를 곱하지 않은 색**이다. 아이콘은 ICO 파일과 같은 모양으로 알파를 읽어, 곱한 색을 주면 반투명 가장자리가 한 번 더 곱해져 어두워진다(`DrawIconEx`로 회색 위에 얹어 실측했다). 마스크는 알파가 0인 자리만 투명으로 둔다. 알파가 모두 0인 그림은 알파 없는 아이콘으로 읽혀 마스크가 모양을 정하기 때문이다(마스크가 0이면 검은 사각형이 된다).
 - 같은 그림의 판정은 `ui_image::backing()` 포인터 비교다. 앱은 같은 `ui_image` 복사본을 frame마다 싣는다. 새로 지으면 새 그림이다.
 - 핸들은 교체·해제·창 파괴까지 쥔다. 셸이 복사하는지 참조하는지에 기대지 않는다.
 - 빈 이미지는 `SetOverlayIcon(hwnd, nullptr, L"")`로 해제한다. 설명만 바뀌면 같은 핸들로 다시 부른다. 변환에 실패하면 이전 오버레이를 두고 `failed`로 알린다. 설명이 잘못된 UTF-8이면 빈 글로 보내고 `error`에 적는다.
@@ -118,9 +119,9 @@ namespace luil::win32 {
 - 호출이 실패해도 적용한 것으로 기록하고 재시도하지 않는다. 다음 변화나 단추 재생성에서 다시 한다. `failed`로 한 번 알린다.
 - 관리자 권한으로 도는 앱은 UIPI가 셸이 보내는 등록 메시지를 막을 수 있다. 창을 만든 직후 `allow_shell_events`가 `ChangeWindowMessageFilterEx(MSGFLT_ALLOW)`를 건다. 두 메시지 모두 값을 싣지 않는다. 관리자 권한 실행은 사람 확인에서 본다.
 
-**주 창이 숨은 동안.** `main_hidden`이면 주 창의 단추가 없다. 이 동안 주 창 요청은 쥐기만 하고 호출하지 않는다 (`waiting`). 숨기는 순간 `ready`를 거두고 적용 기록을 지운다. 보이면 단추가 새로 서므로 메시지를 기다린다. 이 경우에 메시지가 다시 오지 않는 판이 실측되면 숨김을 푼 직후 한 번 더 적용하는 길을 더한다.
+**주 창이 숨은 동안.** `main_hidden`이면 주 창의 단추가 없다. 이 동안 주 창 요청은 쥐기만 하고 호출하지 않는다 (`waiting`). 숨기는 순간 `ready`를 거두고 적용 기록을 지운다(적용 자리가 게시 wake마다 `main_hidden_`을 보고 `button_lost`를 부른다). 보이면 단추가 새로 서므로 메시지를 기다린다. 이 경우에 메시지가 다시 오지 않는 판이 실측되면 숨김을 푼 직후 한 번 더 적용하는 길을 더한다.
 
-**창 단위.** 독립 창이 사라지면 그 창의 기록과 아이콘이 함께 사라진다. 같은 앱의 창이 한 단추로 묶일 때 진행률이 어떻게 합쳐지는지는 실측 전이다.
+**창 단위.** 독립 창이 사라지면 그 창의 기록과 아이콘이 함께 사라진다(`destroy_secondary`가 지우고, 적용 자리가 살아 있는 독립 창의 id만 남기는 `retain`으로 다시 거른다). 같은 앱의 창이 한 단추로 묶일 때 진행률이 어떻게 합쳐지는지는 실측 전이다.
 
 **접근성·테마·움직임.** 막대의 색과 불확정의 움직임은 셸이 그린다. 테마·고대비·배율을 luil이 줄 수 없다. 움직임 줄이기를 지키려는 앱은 `indeterminate` 대신 `normal`과 값을 싣는다. 막대에는 읽는 글이 없다. 앱은 같은 정보를 창 안에 글로도 둔다. 오버레이만 `description`을 셸의 접근 글로 넘긴다.
 
@@ -130,33 +131,33 @@ namespace luil::win32 {
 - 길 a: 주 창만(`ui_frame::taskbar` 하나). 대가: `main_hidden`으로 주 창을 숨기고 독립 창만 남기는 앱은 걸 단추가 없다.
 - 길 b: 주 창과 독립 창마다(`ui_window::taskbar`). 대가: 필드 하나와 "소유된 창은 읽지 않는다"는 규칙이 는다. 창마다 기록과 아이콘을 쥔다.
 - 길 c: 창 id를 키로 한 표를 frame에 싣는다. 대가: 소유된 창·popup id도 실을 수 있어 틀린 id를 가려야 한다.
-- 권장: b. 독립 창을 쓰는 앱이 이 기능을 가장 필요로 한다. 소유된 창은 단추가 없다(`secondary_extended_style(false)`가 0이고 소유자가 주 창이다). **승인 필요.**
+- 권장: b. 독립 창을 쓰는 앱이 이 기능을 가장 필요로 한다. 소유된 창은 단추가 없다(`secondary_extended_style(false)`가 0이고 소유자가 주 창이다). 대가: 필드 하나와 "소유된 창은 읽지 않는다"는 규칙이 늘고 창마다 기록과 아이콘을 쥔다. **승인: 길 b (2026-11-02).**
 
 **2. 썸네일 도구 막대 단추.** 질문: 이번 범위에 넣는가.
 - 길 a: 뺀다. 대가: 썸네일에 재생·이전·다음 같은 단추를 못 낸다.
 - 길 b: `taskbar_request::buttons`(최대 7개: id·그림·툴팁·사용·숨김)를 넣는다. 대가: `ThumbBarAddButtons`는 창마다 한 번만 부를 수 있고 7개가 상한이라, 목록 길이를 첫 적용에 못 박거나 7개를 만들어 숨김으로 가려야 한다. 눌림이 `WM_COMMAND`의 `THBN_CLICKED`로 와서 창 프로시저에 case가 늘고, 관리자 권한에서는 `WM_COMMAND`의 UIPI 허용도 필요하다. 그림마다 `HICON`을 쥐고 단추가 새로 설 때마다 다시 단다. 대략 300줄과 test가 는다.
-- 권장: a. 선언 모양(길이 고정)이 소비자 없이 정하면 틀리기 쉽다. 필요해지면 `taskbar_request`에 필드를 더하는 것으로 닫힌다. **승인 필요.**
+- 권장: a. 선언 모양(길이 고정)이 소비자 없이 정하면 틀리기 쉽다. 필요해지면 `taskbar_request`에 필드를 더하는 것으로 닫힌다. 대가: 썸네일에 재생·이전·다음 같은 단추를 못 낸다. **승인: 길 a (2026-11-02).** 범위 밖에 남긴다.
 
 **3. 선언 모델.** 질문: 앱이 어떻게 건네는가.
 - 길 a: frame 필드(바뀐 것만 적용). 대가: 바뀌지 않는 값도 매 frame 싣는다. 비교는 값 몇 개라 싸다.
 - 길 b: `app_host`의 setter. 대가: 단추가 새로 설 때마다 앱이 다시 불러야 하고, 마지막 요청만 유효하게 하려면 최신 값 slot이 따로 필요하다. [기기 요청](device-request-design.md)이 setter를 두지 않은 이유와 같다.
-- 권장: a. **권장대로 진행.**
+- 권장: a. 대가: 바뀌지 않는 값도 매 frame 싣는다. 비교는 값 몇 개라 싸다. **권장대로 진행.**
 
 **4. 오버레이 그림의 원천.** 질문: 그림을 무엇으로 받는가.
 - 길 a: `ui_image`. 대가: 변환 코드(`icon_from_image`)가 든다. 작은 그림을 크게 늘리면 흐리다. 크기는 라이브러리가 고른다.
 - 길 b: 실행 파일 아이콘 리소스 id. 대가: Win32 값이 플랫폼 중립 요청에 들어온다. 실행 중에 지은 그림(숫자 배지)을 못 쓴다.
 - 길 c: 불투명 `HICON` 핸들. 대가: 공개 API에 Win32 타입이 선다.
-- 권장: a. tray가 같은 변환을 쓴다. **권장대로 진행.**
+- 권장: a. tray가 같은 변환을 쓴다. 대가: 변환 코드(`icon_from_image`)가 들고, 작은 그림을 크게 늘리면 흐리다. **권장대로 진행.**
 
 **5. 상태 보고.** 질문: 셸에 무엇이 닿았는지 앱이 아는가.
 - 길 a: 알리지 않는다. 대가: `ITaskbarList3`에는 읽는 길이 없다. 데모와 UIA는 앱이 낸 요청만 보고, 반영 실패는 디버거 출력에만 남는다.
 - 길 b: `window_delegate::make_taskbar_message`가 창마다 상태가 바뀔 때 한 번 알린다 (`make_backdrop_message`와 같은 모양). 대가: 공개 타입 하나와 가상 함수 하나.
-- 권장: b. **권장대로 진행.**
+- 권장: b. 대가: 공개 타입 하나와 가상 함수 하나가 는다. **권장대로 진행.**
 
 **6. 숨은 주 창의 진행률.** 질문: 주 창이 숨은 동안 그 요청을 어디에 보이는가.
 - 길 a: 쥐기만 한다. 대가: 어디에도 보이지 않는다.
 - 길 b: 가장 앞의 독립 창에 대신 건다. 대가: 어느 창이 대표인지 라이브러리가 정해야 하고, 그 창의 요청과 겹친다.
-- 권장: a. 대체 표시(트레이 툴팁 등)는 앱이 tray(R3)로 고른다. **권장대로 진행.**
+- 권장: a. 대체 표시(트레이 툴팁 등)는 앱이 tray(R3)로 고른다. 대가: 숨은 동안 요청은 어디에도 보이지 않는다. **권장대로 진행.**
 
 G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `description`은 앱이 주고 라이브러리가 만드는 글이 없어 G6에 기대지 않는다. G6이 정해진 뒤 기본 설명이 필요한 자리가 생기는지 다시 본다.
 
@@ -166,7 +167,7 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 - `application_window::create()`가 창을 만든 뒤 `taskbar_button`을 연다. `CoCreateInstance(CLSID_TaskbarList, ...)`와 `HrInit()`이다. COM 포인터는 `Microsoft::WRL::ComPtr`다([file_dialog.cpp](../src/win32/file_dialog.cpp)와 같다). 새로 링크할 라이브러리는 없다. 호출은 UI thread의 STA에서만 한다. 개체를 만들면 능력 플래그가 참이다. `com_sta_scope`가 없으면 만들지 못해 거짓이고 보고는 `unavailable`이다.
 - 개체 하나를 모든 창이 나눠 쓴다. `HWND`를 인자로 받는다. `WM_DESTROY`에서 아이콘 핸들을 풀고 개체를 놓는다. `com_sta_scope`는 `wWinMain`의 지역이라 더 늦게 끝난다.
-- 등록 메시지는 `window_surface::handle_surface_message` 머리에서 `shell_event_of(message)`로 걸러 `surface_context::shell_event(surface, event)`로 소유자에게 알린다. 주 창과 보조 창의 프로시저가 둘 다 마지막에 이 함수를 부르므로 사본이 하나다. 소유자는 `taskbar_button_created`를 그 표면의 `HWND`로 `taskbar_button`에 넘긴다.
+- 등록 메시지는 `window_surface::handle_surface_message` 머리에서 `shell_event_of(message)`로 걸러 `surface_context::handle_shell_event(surface, event)`로 소유자에게 알린다(`shell_event`는 사건 enum의 이름이라 가상 함수는 `handle_`을 붙였다). 주 창과 보조 창의 프로시저가 둘 다 마지막에 이 함수를 부르므로 사본이 하나다. 소유자는 `taskbar_button_created`를 그 표면의 `HWND`로 `taskbar_button`에 넘긴다.
 - 독립 창은 같은 적용 자리에서 `frame->windows`를 훑어 `independent`인 것의 `HWND`로 적용한다. 창을 만든 직후(`create_secondary`)와 주 창을 만든 직후에 `allow_shell_events`를 건다.
 - 레이어드 표시나 Direct3D 합성 창도 작업 표시줄 단추는 같다. 영향은 사람 확인에서 본다.
 
@@ -207,7 +208,7 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 - 첫 frame 전에 정한다. `create()`가 `host_`를 만들기 전에 이 함수를 부르고, 값이 바뀔 때만 적는다.
 - 창을 세우는 test는 끝에 `set_ui_platform(previous)`로 되돌린다([popup_reconcile_tests.cpp](../tests/popup_reconcile_tests.cpp)와 같다). 성질은 프로세스 전역이다.
 
-**`surface_context`.** 새 가상 함수는 기본 구현을 갖는다. [secondary_surface_tests.cpp](../tests/secondary_surface_tests.cpp)의 `fake_surface_context`가 순수 가상을 전부 재정의하므로 순수로 더하면 대역이 깨진다. `shell_event`의 기본은 아무 일도 하지 않는다.
+**`surface_context`.** 새 가상 함수는 기본 구현을 갖는다. [secondary_surface_tests.cpp](../tests/secondary_surface_tests.cpp)의 `fake_surface_context`가 순수 가상을 전부 재정의하므로 순수로 더하면 대역이 깨진다. `handle_shell_event`의 기본은 아무 일도 하지 않는다.
 
 **`icon_from_image`.** `make_icon(const ui_image&, int size, std::u8string& error)`와 `HICON` 소유자 `owned_icon`이 이 파일에 있다. tray는 크기만 달리해 같은 함수를 쓴다.
 
@@ -217,19 +218,20 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 **비공개 helper.** [file-watch-design.md](file-watch-design.md)가 `owned_handle.h`를 꺼내는 일을 기다리지 않는다. 오류 글은 이미 있는 [win32_error.h](../src/win32/win32_error.h)의 `win32::make_hresult_error`와 `win32::make_last_error`를 쓰고 COM은 `ComPtr`이다. `owned_handle`은 `CloseHandle`용이라 `HICON`에 맞지 않는다. `HICON`은 `DestroyIcon`이라 `owned_icon`을 `icon_from_image.h`에 따로 둔다.
 
-**움직임 줄이기 연결.** [reduce-motion-design.md](reduce-motion-design.md)의 결정 4가 Win32 몫을 이 노드에 맡겼다. 그 문서의 Win32 절에 적힌 두 변경(`make_window_metrics_message`가 `metrics.reduce_motion`을 채우는 것, `WM_SETTINGCHANGE`에서 값이 바뀌면 `post_window_metrics()`를 부르는 것)과 `tests/win32_window_tests.cpp`의 test 둘을 `publish_platform` 변경과 같은 커밋 묶음으로 낸다. 같은 `WM_SETTINGCHANGE` case를 고치는 노드가 이 노드뿐이라 받는 노드가 따로 없다. 이 일이 빠지면 Windows의 `window_metrics::reduce_motion`은 기한 없이 거짓으로 남는다.
+**움직임 줄이기 연결.** [reduce-motion-design.md](reduce-motion-design.md)의 결정 4가 Win32 몫을 이 노드에 맡겼다. 그 문서의 Win32 절에 적힌 두 변경(`make_window_metrics_message`가 `metrics.reduce_motion`을 채우는 것, `WM_SETTINGCHANGE`에서 값이 바뀌면 `post_window_metrics()`를 부르는 것)과 `tests/win32_window_tests.cpp`의 test 둘을 `publish_platform` 변경과 같은 커밋 묶음으로 낸다. 같은 `WM_SETTINGCHANGE` case를 고치는 노드가 이 노드뿐이라 받는 노드가 따로 없다. 이 일이 빠지면 Windows의 `window_metrics::reduce_motion`은 기한 없이 거짓으로 남는다. 이 노드가 냈다: `make_window_metrics_message`가 `reduce_motion_`을 채우고, `WM_SETTINGCHANGE` case는 `std::exchange`로 이전 값을 받아 기존 갱신을 모두 한 뒤 값이 달라졌을 때만 `post_window_metrics()`를 부른다.
 
 **데모 공용 파일.** `examples/demo_main.cpp`는 줄 3의 spring도 고친다(사이드바와 `make_window_metrics_message` override). `make_taskbar_message` override는 `make_backdrop_message` 뒤에 더하고 metrics override 자리는 건드리지 않는다. file_watch도 `bind_host`·`stop_workers`에 한 줄씩 더한다. 병합은 줄 3이 먼저다. `examples/mobile_demo/device_page.cpp`는 줄 3의 reduce_motion도 고친다. `capabilities.taskbar` 줄은 기존 capability 항목들 바로 뒤(햅틱 구역 뒤, "로컬 네트워크 권한" 앞)에 더하고, reduce_motion의 칸은 페이지 머리라 자리가 멀다.
 
 ## 확인
 
 - `tests/taskbar_sync_tests.cpp`(core, `luil_core_tests`): 기본 요청은 호출 없음. 단추가 서기 전 보류, 서면 요청을 한 번 보냄. 없음→불확정→정상→오류→일시정지→없음의 호출 순서와 값 뒤 상태. 같은 요청과 1000단계 아래 변화는 호출 없음. 자르기와 NaN. 값 없는 상태에서 들어올 때 값부터. 메시지 재수신과 숨김 해제 뒤 처음부터 다시 보냄(기본값이면 없음). 같은 이미지는 호출 없음, 다른 이미지는 교체, 빈 이미지는 해제, 설명만 바뀜. 실패한 호출을 같은 요청으로 다시 하지 않음.
-- `tests/taskbar_button_tests.cpp`(`luil_tests`, Windows): 가짜 `ITaskbarList3`를 주입해 인자(창·값·총량·상태·아이콘·설명)를 본다. 숨은 창에 등록 메시지를 보내 쥐고 있던 요청이 나가는지 본다. 개체를 만들 수 없을 때 `unavailable`. `icon_from_image`의 크기, 투명·불투명·반투명 픽셀(`GetIconInfo`와 `GetDIBits`), 알파 가장자리가 어두워지지 않는지, 잘못된 이미지. 창 파괴 뒤 GDI 개체 수가 늘지 않는지(`GetGuiResources`). 잘못된 UTF-8 설명.
+- `tests/taskbar_button_tests.cpp`(`luil_tests`, Windows): 가짜 `ITaskbarList3`를 주입해 인자(창·값·총량·상태·아이콘·설명)를 본다. 소유자가 하는 일(등록 메시지를 받으면 `button_created`와 `apply`)을 그대로 하는 숨은 창에 진짜 등록 메시지를 보내 쥐고 있던 요청이 나가는지 본다. 개체를 열지 않았을 때 `unavailable`(COM이 서지 않은 스레드에서 `open`이 실패하는지는 프로세스에 다른 스레드가 MTA를 세웠는지에 따라 달라 재지 않는다). `icon_from_image`의 크기, 투명·불투명·반투명 픽셀(회색 위에 `DrawIconEx`로 얹어 읽는다), 알파 가장자리가 어두워지지 않는지, 비율을 지키는 맞춤, 잘못된 이미지. 아이콘을 만들고 놓은 뒤 GDI·USER 개체 수가 늘지 않는지(`GetGuiResources`, 첫 아이콘이 프로세스에 두는 개체를 지난 뒤에 센다). 잘못된 UTF-8 설명. 실패한 호출은 한 번만 알리고 같은 요청으로 다시 하지 않으며 다음 변화에서 `applied`로 돌아온다.
 - `tests/window_messages_tests.cpp`(`luil_tests`): 번호표의 값(+1~+5)과 서로 다름, 등록 메시지가 `0xC000` 이상이고 두 번 물어도 같음, `shell_event_of`의 매핑, `allow_shell_events`가 실패해도 던지지 않음.
+- `tests/windows_page_tests.cpp`(`luil_tests`): 데모 창 페이지의 세 줄(능력·요청·반영)과 독립 창 줄이 UIA 이름대로 서는지, 값·오버레이·독립 창 진행 바꾸기가 요청에 반영되는지, 같은 오버레이 그림을 frame마다 싣는지, 보고가 이름이 가리킨 창의 줄에 닿고 창을 닫으면 잊히는지. 이 페이지가 탐색기·메모장을 부르는 Win32 호출을 들고 있어 core test가 아니라 `luil_tests`가 `examples/demo/common.cpp`와 함께 링크한다.
 - `tests/win32_window_tests.cpp`(`luil_tests`, 추가, [움직임 줄이기 연결](reduce-motion-design.md)의 Win32 몫): 첫 metrics의 `reduce_motion`이 `SystemParametersInfoW`로 읽은 값(`SPI_GETCLIENTAREAANIMATION`이 꺼짐이면 참)과 같은지 본다. `on_started`에서 같은 창에 `WM_SETTINGCHANGE`를 보내고 값이 그대로면 delegate의 `make_metrics_message` 호출이 늘지 않는지 본다. OS 설정을 바꾸는 test는 두지 않는다.
 - `tests/device_request_tests.cpp`의 기본 능력 단언에 `taskbar == false`를 더한다.
-- 데모 `examples/demo/windows_page.cpp`에 "작업 표시줄" 구역을 둔다. 상태 단추 다섯, 값 슬라이더, 오버레이 켜고 끄기(`make_rgba_image`로 지은 작은 원), 독립 창을 여는 단추와 그 창의 진행률 단추다. label 셋이 UIA로 읽힌다. 요청(`작업 표시줄 요청: 정상 42% · 오버레이 켬`), 반영(`taskbar_report`의 상태), 능력(`작업 표시줄 능력: 있음`)이다. `examples/demo_main.cpp`가 `make_taskbar_message`를 받는다.
-- `examples/mobile_demo/device_page.cpp`는 `capabilities.taskbar == false`일 때 "이 플랫폼에는 작업 표시줄이 없다." 줄을 보인다. 기존 항목(`haptic-none` 등)과 같은 방식이다. 이 줄을 읽는 자동 test는 기존 항목에도 없고, Android는 사람이 화면으로 본다.
+- 데모 `examples/demo/windows_page.cpp`에 "작업 표시줄" 구역을 둔다. 상태 단추 다섯(`진행 없음`·`진행 불확정`·`진행 정상`·`진행 오류`·`진행 일시정지`), 값 슬라이더, 오버레이 켜고 끄기(`make_rgba_image`로 지은 작은 원), 독립 창을 여닫는 단추와 그 창의 진행 상태를 정상 → 오류 → 일시정지 → 불확정 → 없음으로 돌리는 단추(`독립 창 진행 바꾸기`)다. label 셋이 UIA로 읽힌다. 요청(`작업 표시줄 요청: 정상 42% · 오버레이 켬`), 반영(`작업 표시줄 반영: 적용됨`, `taskbar_report`의 상태), 능력(`작업 표시줄 능력: 있음`)이다. 독립 창을 열면 줄이 하나 더 선다(`작업 표시줄 독립 창: 요청 정상 60% · 반영 대기 중`, 닫으면 `닫힘`). 독립 창 단추는 값을 60%로 고정한다. `examples/demo_main.cpp`가 `make_taskbar_message`를 받아 `taskbar_report_intent`로 페이지에 넘기고, 매 frame `ui_frame::taskbar`에 `make_taskbar_request()`를 싣는다.
+- `examples/mobile_demo/device_page.cpp`는 `capabilities.taskbar == false`일 때 "이 플랫폼에는 작업 표시줄이 없다." 줄(`taskbar-none`)을 보이고, 참이면 `taskbar-note`를 보인다. 기존 항목(`haptic-none` 등)과 같은 방식이다. `tests/mobile_demo_page_tests.cpp`(core)가 플랫폼 성질을 바꿔 가며 두 줄의 이름을 읽는다. Android 화면에서 서는지는 사람이 본다.
 - 격리 데스크톱에는 작업 표시줄이 없을 것으로 보여(추정) UIA 되읽기는 `waiting`까지다. `applied`와 실제 모양은 사람이 실제 세션에서 본다.
 - 사람 확인: 상태별 막대 색과 불확정의 움직임. 최소화 중에도 진행률이 보이는지. 오버레이가 100%·150%·200% 배율에서 또렷한지, 접근 이름이 읽히는지. 빌드 폴더의 실행 파일에서 AUMID 없이 서는지. `main_hidden`을 켰다 끌 때 복원되는지(단추 재생성과 메시지 재수신 실측). 탐색기를 다시 시작한 뒤 복원되는지. 관리자 권한으로 띄운 앱에서 서는지. 독립 창마다 따로 서는지와 한 단추로 묶였을 때의 모양. 레이어드 주 창과 Direct3D 합성 창에서 서는지.
 

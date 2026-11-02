@@ -12,6 +12,7 @@
 #include "win32/uia_provider.h"
 #include "win32/win32_drop.h"
 #include "win32/win32_tsf_input.h"
+#include "win32/window_messages.h"
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkTypeface.h"
@@ -30,16 +31,6 @@
 struct IDCompositionDevice;
 
 namespace luil::win32 {
-    // 접근 실행이 낸 액션을 창의 **자기 차례**에 배분하는 신호다.
-    // UIA 호출은 COM 마샬링을 타고 thread가 메시지를 푸는 아무 자리에나 도착한다
-    // (크기 조절 modal 루프·시스템 메뉴·`UiaRaiseAutomationEvent` 안까지). 거기서
-    // 곧바로 창 명령을 실행하면 그리는 도중에 창이 죽을 수 있어, 큐에 담고 신호만
-    // 보낸다 — `clipboard_request_message`와 같은 모양이다
-    // (accessibility-action-design.md).
-    //  - `WM_APP` 대역은 주 창의 신호들(win32_window.cpp의 +1~+4)과 한 창에서
-    //    만나므로 번호가 겹치지 않아야 한다.
-    inline constexpr UINT access_dispatch_message { WM_APP + 5 };
-
     // 표면 하나의 포인터 모양을 그 창에 적용한다.
     // 어느 모양인지는 그 표면의 tree가 정하고, 실제 커서로 옮기는 것은
     // 소비자가 준 해석기(`window_config::resolve_cursor`)다 —
@@ -205,6 +196,15 @@ namespace luil::win32 {
         virtual void set_pointer_capture_active(bool active) noexcept = 0;
 
         virtual void report_error(const std::u8string& error) noexcept = 0;
+
+        // 셸이 이 표면의 창에 등록 메시지로 사건을 알렸다 (작업 표시줄 단추가 섰다 등).
+        // `surface`는 그 표면의 id다 (주 창은 빈 문자열).
+        //  - 기본은 아무 일도 하지 않는다. 순수 가상으로 더하면 모든 test 대역이 깨진다.
+        virtual void handle_shell_event(const std::u8string& surface, shell_event event)
+        {
+            static_cast<void>(surface);
+            static_cast<void>(event);
+        }
     };
 
     // 표면 하나의 TSF 창구다.

@@ -147,6 +147,36 @@ namespace luil::win32 {
         [[nodiscard]] bool operator==(const backdrop_report&) const = default;
     };
 
+    // 작업 표시줄 단추에 앱의 요청이 닿은 정도다 (docs/taskbar-design.md).
+    enum class taskbar_status
+    {
+        // 요청이 기본값이다. 셸에 걸린 것이 없다.
+        off,
+        // 요청이 있으나 단추가 아직 없다 (단추가 설 때까지, 주 창이 숨은 동안).
+        waiting,
+        // 셸 호출이 모두 성공했다.
+        applied,
+        // 셸 개체(`ITaskbarList3`)를 만들지 못했다 — `com_sta_scope`가 없는 앱 등.
+        unavailable,
+        // 셸 호출이 실패했다. `error`가 그 까닭이다.
+        failed,
+    };
+
+    // 작업 표시줄 단추 하나의 상태 보고다. 단추마다 상태가 바뀔 때 한 번 알린다.
+    //  - 주 창과 독립 창(`ui_window::independent`)이 알린다. 소유된 창은 단추가 없어 알리지 않는다.
+    //  - 요청이 기본값이던 단추는 알리지 않는다. 창을 다시 만들면 처음부터 다시 알린다.
+    //  - 셸에는 읽는 길이 없어 `applied`는 호출이 오류 없이 끝났다는 뜻이다. 단추에 실제로 보이는 모양은 사람이 본다.
+    struct taskbar_report
+    {
+        // 표면 id다. 비어 있으면 주 창, 아니면 독립 창(`ui_window::id`)이다.
+        std::u8string surface {};
+        taskbar_status status { taskbar_status::off };
+        // `failed`일 때 첫 실패의 영문 진단이다 (HRESULT가 붙는다). 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const taskbar_report&) const = default;
+    };
+
     // 창의 겉모습과 정책이다.
     // 값만 바꾸면 되도록 한곳에 모아 둔다 (단위를 별도로 적지 않은 크기는 논리 96 DPI 기준 px).
     struct window_config
@@ -240,6 +270,14 @@ namespace luil::win32 {
         // 어느 표면인지는 `report.surface`다. 빈 메시지는 게시하지 않는다. 설정 화면이 "이 표시 방식에서는 mica를 쓸 수
         // 없다" 같은 까닭을 보일 때 쓴다.
         [[nodiscard]] virtual app_message make_backdrop_message(const backdrop_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 주 창이나 독립 창의 작업 표시줄 단추 상태가 바뀌었다 (`make_backdrop_message`와 같은 모양이다).
+        // 어느 창인지는 `report.surface`다. 빈 메시지는 게시하지 않는다. 앱이 "셸이 요청을 받았는가"를 화면에 보일 때 쓴다.
+        [[nodiscard]] virtual app_message make_taskbar_message(const taskbar_report& report)
         {
             static_cast<void>(report);
             return {};

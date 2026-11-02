@@ -338,12 +338,14 @@ luil_add_source_filter(luil_core_files "app"
     host/fail_fast.h
     host/renderer_policy.cpp
     "${public_headers}/app/renderer_policy.h"
+    "${public_headers}/app/taskbar.h"
     "${public_headers}/app/webview.h")
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
 # (한 frame 그리기, 렌더러 실패 물러섬, 터치·펜 접촉 추적, popup·웹뷰 자리 대조,
-# 다시 그릴 표면과 timer 계획, GPU fence 대기 예산, 파일 감시의 합치기와 디바운스).
+# 다시 그릴 표면과 timer 계획, GPU fence 대기 예산, 파일 감시의 합치기와 디바운스,
+# 작업 표시줄 요청과 적용한 상태의 대조).
 # host/fonts: 글꼴 registry다 (설정된 글꼴, 가족 cache, 글자별 대체, 파일·바이트 로딩).
 # OS 글꼴 관리자와 사용자 언어는 플랫폼이 `platform_font_source()`로 공급한다.
 luil_add_source_filter(luil_core_files "host/fonts"
@@ -376,6 +378,8 @@ luil_add_source_filter(luil_core_files "host"
     host/skia_renderer.h
     host/surface_invalidate.cpp
     host/surface_invalidate.h
+    host/taskbar_sync.cpp
+    host/taskbar_sync.h
     host/text_input_host.h)
 
 # 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.
@@ -404,7 +408,17 @@ luil_add_source_filter(luil_files "win32/host"
     "${public_headers}/win32/renderer_policy.h"
     win32/win32_window.cpp
     "${public_headers}/win32/win32_window.h"
+    win32/window_messages.cpp
+    win32/window_messages.h
     "${public_headers}/win32/webview.h")
+
+# 작업 표시줄 단추다 (taskbar-design.md). 어떤 호출을 할지는 core의 host/taskbar_sync가 고르고, 여기는
+# ITaskbarList3 호출과 창별 아이콘 핸들만 쥔다.
+luil_add_source_filter(luil_files "win32/taskbar"
+    win32/icon_from_image.cpp
+    win32/icon_from_image.h
+    win32/taskbar_button.cpp
+    win32/taskbar_button.h)
 
 # Direct3D 렌더러다. 끈 구성은 "없음"을 돌려주는 stub을 대신 컴파일한다 —
 # Ganesh를 부르는 파일이 이것 하나라, 빠지면 링커가 Skia의 GPU 코드를 걷어 낸다.

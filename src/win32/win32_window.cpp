@@ -19,12 +19,14 @@
 #include "win32/secondary_surface.h"
 #include "win32/skia_renderer.h"
 #include "win32/surface_input.h"
+#include "win32/taskbar_button.h"
 #include "win32/utf8.h"
 #include "win32/webview_host.h"
 #include "win32/webview_layout.h"
 #include "win32/win32_clipboard.h"
 #include "win32/win32_drop.h"
 #include "win32/win32_error.h"
+#include "win32/window_messages.h"
 #include "win32/window_mode.h"
 #include "win32/window_surface.h"
 
@@ -142,16 +144,7 @@ namespace luil::win32 {
         }
 
         constexpr int direct3d_unavailable_exit_code { 77 };
-        // wake 신호다.
-        // frame slot과 interaction slot의 signal callback이 게시한다.
-        constexpr UINT snapshot_wake_message { WM_APP + 1 };
-        // input thread가 큐에 넣은 창 명령(`ui_command`)의 신호다.
-        // 내용은 host의 큐가 나른다 — 창 메시지는 신호만 싣는다.
-        constexpr UINT ui_command_request_message { WM_APP + 2 };
-        // input thread가 큐에 넣은 앱 UI 명령의 신호다.
-        constexpr UINT app_ui_command_request_message { WM_APP + 3 };
-        // 클립보드 요청(복사·붙여넣기)을 UI thread로 넘기는 신호다.
-        constexpr UINT clipboard_request_message { WM_APP + 4 };
+        // `WM_APP` 신호의 번호는 window_messages.h의 번호표에 있다.
         // tree가 next_update로 예고한 "다음에 그림이 달라지는 시각"에 다시 그리기 위한 timer다.
         // 매 render가 남은 시간을 다시 계산해 하나만 걸므로 반복 timer가 아니어도 이어진다.
         // 예고가 없으면 timer도 없다.
@@ -588,6 +581,24 @@ namespace luil::win32 {
                 report_runtime_error(error);
             }
 
+            // 셸이 단추를 만들었다고 알렸다. 새 단추에는 아무것도 걸려 있지 않으므로 지금 요청을 처음부터 다시 낸다.
+            //  - 탐색기가 다시 뜰 때도 같은 메시지가 와서 같은 길로 복원된다.
+            //  - `taskbar_created` 방송은 이 노드가 쓰지 않는다 (tray가 쓴다).
+            void handle_shell_event(const std::u8string& surface, const shell_event event) override
+            {
+                if (event != shell_event::taskbar_button_created)
+                    return;
+                HWND handle { nullptr };
+                if (surface.empty())
+                    handle = window_;
+                else if (const secondary_surface* const secondary { find_secondary(surface) }; secondary != nullptr)
+                    handle = secondary->window();
+                if (handle == nullptr)
+                    return;
+                taskbar_.button_created(surface, handle);
+                synchronize_taskbar();
+            }
+
             // dismiss_popups는 popup 구역에, dispatch_action과
             // schedule_update_repaint는 아래 구현부에 있다.
 
@@ -673,6 +684,8 @@ namespace luil::win32 {
                     window_ = nullptr;
                     return false;
                 }
+                // 셸이 단추를 만들면 보내는 등록 메시지를 관리자 권한에서도 받게 한다.
+                allow_shell_events(window_);
                 caption_surface::apply_dwm_frame(window_, window_display_mode::normal);
                 // DWM이 모서리 선택을 받는 판인지 주 창에 기본값을 걸어 묻는다 — 기본값이라 주 창 모양은 그대로다.
                 // 받지 않는 판(Windows 10 이하)은 실패를 돌려주고 popup은 직각으로 물러선다.
@@ -685,7 +698,9 @@ namespace luil::win32 {
                 // (Windows 11 22H2 이전)은 실패를 돌려준다.
                 const DWM_SYSTEMBACKDROP_TYPE backdrop_probe { DWMSBT_AUTO };
                 system_backdrop_supported_ = SUCCEEDED(DwmSetWindowAttribute(window_, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_probe, sizeof(backdrop_probe)));
-                publish_popup_support();
+                // 작업 표시줄 개체는 UI thread의 STA에서만 만들어진다. 능력 플래그가 이 결과를 따르므로 게시보다 앞선다.
+                taskbar_.open();
+                publish_platform();
                 set_dpi(GetDpiForWindow(window_));
                 // 요청 크기는 논리 96 DPI 기준이다.
                 // 창이 어느 모니터에 뜰지는 만들어 봐야 알므로, 만든 뒤 그 모니터의
@@ -915,6 +930,8 @@ namespace luil::win32 {
                     // popup의 앵커 표면이 있어야 그 위에 배치할 수 있다.
                     // 대조 결과는 표면별 현재 콘텐츠와 게시된 콘텐츠의 차이를 반영한다.
                     std::vector<surface_content> contents { synchronize_windows() };
+                    // 독립 창의 단추는 창이 선 뒤에 걸 수 있다.
+                    synchronize_taskbar();
                     synchronize_webviews();
                     for (surface_content& popup_content : synchronize_popups())
                         contents.push_back(std::move(popup_content));
@@ -1171,19 +1188,24 @@ namespace luil::win32 {
                     invalidate_all_surfaces();
                     return 0;
                 case WM_SETTINGCHANGE:
-                case WM_THEMECHANGED:
+                case WM_THEMECHANGED: {
                     // OS 테마가 바뀌면 `system` 선호가 가리키는 팔레트도 바뀐다.
                     // popup·보조 창 표면도 새 팔레트로 다시 칠한다.
                     system_prefers_light_ = read_system_prefers_light_theme();
                     high_contrast_ = read_high_contrast_enabled();
-                    reduce_motion_ = read_reduce_motion();
-                    publish_popup_support();
+                    const bool was_reduced { std::exchange(reduce_motion_, read_reduce_motion()) };
+                    publish_platform();
                     set_text_render_quality(read_text_render_quality());
                     // 투명 효과·고대비가 바뀌면 배경 효과가 서는지도 바뀐다.
                     transparency_enabled_ = read_transparency_enabled();
                     refresh_backdrop();
                     invalidate_all_surfaces();
+                    // 움직임 줄이기는 앱의 상태에도 닿는다 (앱이 든 전환·스프링). 그리기에 닿는 갱신을 마친 뒤, 값이 달라졌을
+                    // 때만 알린다 — 이 메시지는 이 설정이 아닌 일로도 자주 온다.
+                    if (was_reduced != reduce_motion_)
+                        post_window_metrics();
                     return 0;
+                }
                 case WM_DWMCOLORIZATIONCOLORCHANGED:
                     // OS accent가 바뀌었다.
                     // wParam에도 새 색이 실리지만 읽는 길은 시작과 같은 함수 하나로 둔다.
@@ -1208,6 +1230,8 @@ namespace luil::win32 {
                     }
                     destroy_all_popups();
                     destroy_all_secondary_windows();
+                    // 창이 사라지면 단추에 걸린 오버레이 아이콘도 더는 쓸 데가 없다.
+                    taskbar_.forget_all();
                     drag_ghost_.destroy();
                     main_.detach_window();
                     PostQuitMessage(0);
@@ -1617,7 +1641,9 @@ namespace luil::win32 {
                 // delegate는 noexcept가 아니다 (`post_window_placement`와 같은 이유).
                 try
                 {
-                    return environment_.delegate->make_metrics_message(make_window_metrics(width, height, scale));
+                    window_metrics metrics { make_window_metrics(width, height, scale) };
+                    metrics.reduce_motion = reduce_motion_;
+                    return environment_.delegate->make_metrics_message(metrics);
                 }
                 catch (...)
                 {
@@ -2123,15 +2149,19 @@ namespace luil::win32 {
                 return corner_preference_supported_ && GetSystemMetrics(SM_REMOTESESSION) == 0 && SUCCEEDED(DwmIsCompositionEnabled(&composition)) && composition != FALSE;
             }
 
-            // 지금 popup 모양 지원을 플랫폼 성질로 게시한다 (`ui_platform::rounded_popup_corners`).
-            // 앱은 이것으로 popup 안 tree의 반지름을 고른다. 바뀐 때만 적는다.
-            void publish_popup_support()
+            // 이 프로세스가 지금 실제로 하는 일을 플랫폼 성질로 게시한다. Win32의 `ui_platform`을 적는 유일한 자리다.
+            //  - popup 모양 지원 (`ui_platform::rounded_popup_corners`). 앱은 이것으로 popup 안 tree의 반지름을 고른다.
+            //  - 작업 표시줄 요청을 셸에 낼 수 있는가 (`capabilities.taskbar`). 개체를 만들 수 있었는가다.
+            // 바뀐 때만 적는다. 새 능력은 `ui_platform_capabilities` 끝에 기본 거짓으로 더하고 여기에 한 줄을 더한다.
+            void publish_platform()
             {
                 ui_platform platform { current_ui_platform() };
                 const bool rounded { rounded_popups() };
-                if (platform.rounded_popup_corners == rounded)
+                const bool taskbar { taskbar_.available() };
+                if (platform.rounded_popup_corners == rounded && platform.capabilities.taskbar == taskbar)
                     return;
                 platform.rounded_popup_corners = rounded;
+                platform.capabilities.taskbar = taskbar;
                 set_ui_platform(platform);
             }
 
@@ -2232,7 +2262,7 @@ namespace luil::win32 {
                 if (host_ != nullptr)
                     frame = host_->acquire_frame();
                 // 원격 연결이 붙고 떨어지면 둥근 모서리를 쓸 수 있는지가 바뀐다. popup을 대조할 때마다 다시 본다.
-                publish_popup_support();
+                publish_platform();
 
                 std::vector<popup_placement> alive {};
                 alive.reserve(popups_.size());
@@ -2757,6 +2787,51 @@ namespace luil::win32 {
                 return contents;
             }
 
+            // frame이 실은 작업 표시줄 요청을 단추에 맞춘다 (taskbar-design.md). 바뀐 것만 셸에 나가고 보고는 상태가
+            // 바뀐 단추만 낸다. 게시 wake와 셸의 단추 생성 메시지가 부른다.
+            //  - 주 창은 `ui_frame::taskbar`, 독립 창은 `ui_window::taskbar`다. 소유된 창은 단추가 없어 읽지 않는다.
+            //  - 주 창이 숨은 동안은 단추가 없다. 요청은 쥐고 호출하지 않으며, 다시 보이면 단추가 새로 서고 메시지가 온다.
+            void synchronize_taskbar()
+            {
+                if (host_ == nullptr || window_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr)
+                    return;
+
+                if (main_hidden_)
+                    taskbar_.button_lost(u8"");
+                std::vector<std::u8string> live { u8"" };
+                post_taskbar_report(taskbar_.apply(u8"", window_, dpi_, frame->taskbar));
+                for (const ui_window& source : frame->windows)
+                {
+                    if (source.independent == false)
+                        continue;
+                    const secondary_surface* const secondary { find_secondary(source.id) };
+                    if (secondary == nullptr || secondary->window() == nullptr)
+                        continue;
+                    live.push_back(source.id);
+                    post_taskbar_report(taskbar_.apply(source.id, secondary->window(), secondary->dpi(), source.taskbar));
+                }
+                // 사라진 창의 기록과 아이콘은 여기서 놓는다.
+                taskbar_.retain(live);
+            }
+
+            void post_taskbar_report(const std::optional<taskbar_report>& report)
+            {
+                if (report.has_value() == false || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                try
+                {
+                    if (app_message message { environment_.delegate->make_taskbar_message(*report) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The taskbar delegate threw an exception.");
+                }
+            }
+
             [[nodiscard]] secondary_surface* find_secondary(const std::u8string& id)
             {
                 for (const std::unique_ptr<secondary_surface>& secondary : windows_)
@@ -2863,6 +2938,8 @@ namespace luil::win32 {
                     failed_windows_.push_back(source.id);
                     return;
                 }
+                // 독립 창은 자기 작업 표시줄 단추가 선다. 단추를 만들었다는 등록 메시지를 관리자 권한에서도 받게 한다.
+                allow_shell_events(handle);
                 caption_surface::apply_dwm_frame(handle, window_display_mode::normal);
                 secondary->set_dpi(GetDpiForWindow(handle));
 
@@ -2904,6 +2981,8 @@ namespace luil::win32 {
                     const std::unique_ptr<secondary_surface> taken { std::move(*position) };
                     windows_.erase(position);
                     DestroyWindow(taken->window());
+                    // 창이 사라지면 그 창의 작업 표시줄 기록과 오버레이 아이콘도 함께 사라진다.
+                    taskbar_.forget(id);
                     return;
                 }
             }
@@ -2967,6 +3046,9 @@ namespace luil::win32 {
             //  - 표면마다 세워 둔 효과와 알린 상태는 표면이 든다 (`window_surface::refresh_backdrop`).
             bool system_backdrop_supported_ { false };
             bool reduce_motion_ { read_reduce_motion() };
+            // 작업 표시줄 단추에 거는 진행률과 오버레이다. 개체는 주 창을 만들 때 연다.
+            //  - 창 표면들보다 먼저 선언해 나중에 사라진다. 오버레이 아이콘은 창이 모두 사라진 뒤에 놓는다.
+            taskbar_button taskbar_ {};
             // update timer가 깨울 표면들이다.
             // "그 시각을 답한 표면"을 timer와 함께 들고 있는 것이 표면별 다시 그리기의
             // 절반이다 — 나머지 절반은 frame 대조가 낸다 (rendering.md).

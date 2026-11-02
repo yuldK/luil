@@ -71,6 +71,7 @@
 | 렌더러 선택 | `renderer_mode` | [app/renderer_policy.h](../include/luil/app/renderer_policy.h) | [설명](concepts/rendering.md) |
 | 비동기 HTTP | `net::http_client` | [net/http_client.h](../include/luil/net/http_client.h) | [설명](http-client-design.md) |
 | 파일 변경 감시 | `file_watcher` | [app/file_watcher.h](../include/luil/app/file_watcher.h) | [설명](file-watch-design.md) |
+| 작업 표시줄 진행률과 오버레이 | `taskbar_request`, `ui_frame::taskbar`, `ui_window::taskbar` | [app/taskbar.h](../include/luil/app/taskbar.h) | [설명](taskbar-design.md) |
 | 웹 콘텐츠 자리와 접근성 | `webview_element` | [ui/webview_element.h](../include/luil/ui/webview_element.h) | [설명](webview-composition-design.md) |
 | 웹뷰 구성·정책·명령 | `ui_webview`, `webview_policy` | [app/webview.h](../include/luil/app/webview.h) | [설명](webview-composition-design.md) |
 
