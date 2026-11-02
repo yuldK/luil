@@ -10,7 +10,7 @@
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
 //  - 토스트: 심각도별 알림, 실행 취소 토스트, 정보 막대      (demo/toasts_page)
 //  - 메뉴·팝업: 드롭다운·컨텍스트 메뉴·분할 버튼 (popup 창) (demo/popups_page)
-//  - 창: 보조 top-level 창(도구 창) 여닫기, 전체 화면 전환, 작업 표시줄 진행률·오버레이 (demo/windows_page)
+//  - 창: 보조 top-level 창(도구 창) 여닫기, 전체 화면 전환, 작업 표시줄 진행률·오버레이, 둘째 인스턴스가 넘긴 인자 (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
@@ -28,6 +28,8 @@
 //       --presentation=standard|layered (주 창의 표시 방식 — layered는 CPU 렌더러로 배치와 frame을 한 합성에 낸다)
 //       --caption=top|bottom (주 창 캡션의 처음 자리 — 창 페이지의 전환과 같다)
 //       --backdrop=none|mica|mica_alt|acrylic (주 창 배경 효과의 처음 값 — 테마 페이지의 고르기와 같다)
+//       --send-to-first (둘째 실행이 창을 띄우지 않고, 이 플래그를 뺀 나머지 인자와 작업 폴더를 먼저 뜬 데모에 보내고 끝낸다.
+//                       종료 코드는 받았으면 0, 먼저 뜬 데모가 없으면 3, 그 밖의 실패는 4다. 받은 인자는 창 페이지의 "둘째 인스턴스 인자" 줄에 보인다)
 
 #include "demo/basics_page.h"
 #include "demo/common.h"
@@ -1085,6 +1087,14 @@ namespace demo {
                 return true;
             }
 
+            // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다. 창 페이지가 받아 한 줄로 보인다.
+            //  - 보낸 쪽이 끝나기를 기다리므로 게시만 하고, 표가 0이 아닌지를 답한다 (file-watch-design.md의 `deliver`와 같다).
+            //    앞으로 세우기는 라이브러리가 콜백 뒤에 한다.
+            [[nodiscard]] bool on_instance_arguments(luil::win32::app_host& host, const luil::instance_arguments& arguments) override
+            {
+                return host.post_app_message_ticketed(luil::app_message { instance_arguments_intent { arguments } }) != 0;
+            }
+
         private:
             demo_driver& driver_;
         };
@@ -1092,6 +1102,28 @@ namespace demo {
 }
 
 namespace {
+    // `--send-to-first`가 있으면 그 플래그를 뺀 나머지 인자를 첫째 인스턴스에 보내고 종료 코드를 돌려준다. 없으면 빈 값이다.
+    //  - 종료 코드: 첫째가 받았으면 0, 첫째의 주 창이 시한 안에 없거나 이 프로세스가 첫째면 3, 그 밖의 실패는 4다.
+    //  - `parse_arguments`가 모르는 인자를 거절하므로 이 분기가 그 앞에 선다. 플래그가 없으면 둘째도 평소처럼 뜬다.
+    [[nodiscard]] std::optional<int> send_to_first_instance(const luil::single_instance& instance, const std::vector<std::u8string>& arguments)
+    {
+        std::vector<std::u8string> forwarded {};
+        bool requested { false };
+        for (std::size_t index = 1; index < arguments.size(); ++index)
+        {
+            if (const std::u8string_view argument { arguments[index] }; argument == u8"--send-to-first")
+                requested = true;
+            else
+                forwarded.push_back(arguments[index]);
+        }
+        if (requested == false)
+            return std::nullopt;
+        const luil::platform_result result { instance.send_to_primary(forwarded) };
+        if (result.ok())
+            return 0;
+        return result.status == luil::platform_status::not_found ? 3 : 4;
+    }
+
     [[nodiscard]] bool parse_arguments(
         const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom, luil::window_backdrop& backdrop)
     {
@@ -1162,6 +1194,9 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     // 같은 세션에서 둘째로 뜬 데모도 막지 않고 띄운다 — 데모는 창을 여럿 띄워 보는 자리이기도 하다. 제목만 다르다.
     //  - 프로세스가 끝날 때까지 쥔다. wWinMain의 지역이라 메시지 루프가 끝난 뒤에 놓인다.
     const luil::single_instance instance { u8"luil-demo" };
+    // 인자를 첫째에 넘기는 일만 하는 둘째는 창을 띄우지 않고 끝낸다.
+    if (const std::optional<int> sent { send_to_first_instance(instance, *arguments) }; sent.has_value())
+        return *sent;
     luil::win32::window_config config {};
     config.class_name = L"Luil.Demo.Window";
     config.caption = demo::make_caption_config(instance.primary());
@@ -1203,6 +1238,8 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
         environment.driver = &driver;
         environment.policy = &policy;
         environment.delegate = &delegate;
+        // 첫째이면 같은 이름의 둘째가 보낸 인자를 주 창이 받는다. instance는 wWinMain의 지역이라 창보다 오래 산다.
+        environment.instance = &instance;
     }
     return luil::win32::run_application_window(config, environment);
 }

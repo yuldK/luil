@@ -19,8 +19,11 @@
 //  - 작업 표시줄 구역은 주 창 단추와 독립 창(`independent`) 단추에 진행률과 오버레이를 거는 예다
 //    (taskbar-design.md). 요청은 앱 상태라 `make_taskbar_request`가 frame마다 그대로 싣고, 셸에 닿은 정도는
 //    라이브러리가 알리는 보고(`taskbar_report_intent`)로 되읽는다. 세 줄이 UIA로 읽힌다: 능력·요청·반영.
+//  - 둘째 인스턴스 구역은 같은 이름의 둘째 실행이 넘긴 인자와 작업 폴더를 한 줄로 보인다 (single-instance-args-design.md).
+//    라이브러리가 `window_delegate::on_instance_arguments`로 건넨 것을 셸이 `instance_arguments_intent`로 게시한다.
 
 #include "demo/common.h"
+#include "luil/app/platform_services.h"
 #include "luil/win32/app_host.h"
 #include "luil/win32/win32_window.h"
 
@@ -149,6 +152,12 @@ namespace demo {
         luil::win32::taskbar_report report {};
     };
 
+    // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다 (`window_delegate::on_instance_arguments`).
+    struct instance_arguments_intent
+    {
+        luil::instance_arguments arguments {};
+    };
+
     class windows_page
     {
     public:
@@ -202,6 +211,8 @@ namespace demo {
         [[nodiscard]] luil::taskbar_request make_taskbar_window_request() const;
         // 작업 표시줄 구역을 `column`에 더한다.
         void add_taskbar_section(luil::stack_element& column);
+        // 둘째 인스턴스 구역을 `column`에 더한다.
+        void add_instance_section(luil::stack_element& column);
         // 메뉴를 닫고 검색 상태도 함께 비운다.
         void close_tool_menu() noexcept;
 
@@ -231,6 +242,8 @@ namespace demo {
         // 마지막으로 받은 보고다. 요청이 기본값이던 단추는 보고가 없다.
         std::optional<luil::win32::taskbar_report> taskbar_report_ {};
         std::optional<luil::win32::taskbar_report> taskbar_window_report_ {};
+        // 마지막으로 받은 둘째 인스턴스의 인자다. 받은 적이 없으면 없다.
+        std::optional<luil::instance_arguments> instance_arguments_ {};
         luil::text::text_edit_state note_ {};
         // 도구 창 메뉴 안 검색 칸의 상태다.
         // 조합 상태는 창 안 메모 칸과 하나를 같이 쓴다 — target이 구분한다.

@@ -136,6 +136,18 @@ namespace demo {
             return text;
         }
 
+        // 둘째 인스턴스가 보낸 인자를 한 줄로 옮긴다: `2개 [a.txt] [b c] · 작업 폴더 <경로>`. 받은 적이 없으면 `없음`이다.
+        [[nodiscard]] std::u8string instance_arguments_text(const std::optional<luil::instance_arguments>& received)
+        {
+            if (received.has_value() == false)
+                return u8"없음";
+            std::u8string text { to_u8(static_cast<int>(received->arguments.size())) + u8"개" };
+            for (const std::u8string& argument : received->arguments)
+                text += u8" [" + argument + u8"]";
+            text += u8" · 작업 폴더 " + received->working_directory;
+            return text;
+        }
+
         // 고른 쪽을 강조하는 작은 단추다.
         [[nodiscard]] std::unique_ptr<luil::text_button_element> make_taskbar_button(std::u8string key, std::u8string text, const bool selected, luil::ui_action action)
         {
@@ -316,6 +328,11 @@ namespace demo {
                 taskbar_window_report_ = report->report;
             return true;
         }
+        if (const auto* const received { message.get<instance_arguments_intent>() }; received != nullptr)
+        {
+            instance_arguments_ = received->arguments;
+            return true;
+        }
         // 창 안 메모 칸과 메뉴 안 검색 칸이 같은 메시지 타입을 나눠 쓴다.
         // 어느 칸인지는 target이 정한다 — popup 안이라고 다른 경로가 아니다.
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
@@ -467,6 +484,7 @@ namespace demo {
             column->add_gap(4.0f);
             column->add(make_label(luil::ui_element_id { kind_text, u8"windows-platform-report" }, platform_report_, 11.0f, luil::label_color_role::dim), 18.0f);
         }
+        add_instance_section(*column);
         add_taskbar_section(*column);
         return column;
     }
@@ -490,6 +508,16 @@ namespace demo {
         request.progress.state = taskbar_window_state(taskbar_window_step_);
         request.progress.value = taskbar_window_percent / 100.0f;
         return request;
+    }
+
+    void windows_page::add_instance_section(luil::stack_element& column)
+    {
+        column.add_gap(18.0f);
+        const std::u8string hint { u8"같은 이름의 둘째 실행이 인자와 작업 폴더를 넘기면 아래 줄에 보인다. 둘째는 luil_demo.exe --send-to-first 뒤에 인자를 적어 띄운다." };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-instance-hint" }, hint, 11.0f, luil::label_color_role::dim), 18.0f);
+        column.add_gap(4.0f);
+        std::u8string received { u8"둘째 인스턴스 인자: " + instance_arguments_text(instance_arguments_) };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-instance-arguments" }, std::move(received), 12.0f, luil::label_color_role::primary), 18.0f);
     }
 
     void windows_page::add_taskbar_section(luil::stack_element& column)

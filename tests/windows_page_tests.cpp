@@ -198,6 +198,27 @@ TEST_CASE("Reports reach the line of the window they name and closing forgets th
     REQUIRE(name_of(page_tree(page), u8"windows-taskbar-report") == u8"작업 표시줄 반영: 대기 중");
 }
 
+TEST_CASE("The instance line names the arguments and the working directory a second instance sent", "[windows-page][instance]")
+{
+    demo::windows_page page {};
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-arguments") == u8"둘째 인스턴스 인자: 없음");
+
+    luil::instance_arguments received {};
+    received.arguments = { u8"a.txt", u8"b c" };
+    received.working_directory = u8"C:\\work dir";
+    deliver(page, demo::instance_arguments_intent { received });
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-arguments") == u8"둘째 인스턴스 인자: 2개 [a.txt] [b c] · 작업 폴더 C:\\work dir");
+
+    // 다음에 받은 것이 앞의 것을 덮는다. 인자가 없어도 받은 것이라 없음과 다르다.
+    luil::instance_arguments none {};
+    none.working_directory = u8"D:\\";
+    deliver(page, demo::instance_arguments_intent { none });
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-arguments") == u8"둘째 인스턴스 인자: 0개 · 작업 폴더 D:\\");
+
+    // 구역의 안내 글도 읽힌다.
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-hint").empty() == false);
+}
+
 TEST_CASE("The taskbar controls are buttons a person can read by name", "[windows-page][taskbar]")
 {
     demo::windows_page page {};
