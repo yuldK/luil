@@ -17,9 +17,10 @@ namespace luil {
         popup.y = config.y;
         const float font_size { config.font_size.value_or(default_ui_style().metrics.body_font_size) };
         const font_weight weight { config.weight.value_or(default_ui_style().metrics.font_weights.body_text) };
+        // 폭은 아래에서 tree를 배치하는 `scale`과 같은 배율로 잰다. 항목은 그 배율의 물리 글자 크기로 그려지기 때문이다.
         popup.width = std::isfinite(config.width) && config.width > 0.0f
             ? config.width
-            : menu_element::width_for(menu, config.measurer ? config.measurer : styled_text_measurer({ weight }), font_size);
+            : menu_element::width_for(menu, config.measurer ? config.measurer : styled_text_measurer({ weight }), font_size, scale);
         popup.height = menu_element::height_for(menu);
         // 크기를 안 뒤에 필드 아래의 자리를 정한다. 아래가 모자라면 위로 뒤집힌다.
         if (config.below.has_value())

@@ -14,6 +14,8 @@ namespace luil {
         float y { 0.0f };
         // 0이면 메뉴 글·아이콘·단축키 열을 측정해 정한다.
         float width { 0.0f };
+        // 표면의 배율이다. tree를 이 배율로 배치하고, `width`가 0일 때 글 폭도 이 배율의 물리 글자 크기로 잰다
+        // (그리는 크기와 같아야 가장 긴 항목이 말줄임되지 않는다). 0 이하거나 유한하지 않으면 1로 본다.
         float scale { 1.0f };
         std::function<input_action(popup_dismiss_reason)> dismiss {};
         // popup 창의 모서리다 (`ui_popup::corner`). 비어 있으면 내장 스타일의 값이다 — 실행 시점에 스타일을 세운 앱은

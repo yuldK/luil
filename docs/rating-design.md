@@ -237,7 +237,7 @@ column.add(std::make_unique<luil::rating_element>(std::move(rating)), { .length 
 - **slider·progress**. 고치지 않는다. [value-step-design.md](value-step-design.md)의 변화량 계약은 델타라고 적는다. 별점은 절대 값만 나르므로 구현 커밋이 그 문서에 예외를 더했다.
 - **공유 파일 `accessibility.h`·`uia_provider.cpp`**. 결정 7 b(승인)로 고쳤다. 위에서 확인한 대로 이번 라운드의 다른 줄은 두 파일을 고치지 않는다. 뒤 라운드의 슬라이더 쓰는 노드(color_picker)가 같은 칸을 채울 수 있다.
 - **ink**(줄 3). `ui_events.h`의 `pointer_*_event` 끝에 필드를 더한다. 이 노드는 그 구조체를 읽지 않고 `ui_action_context`만 쓰므로 겹치지 않는다.
-- **R1에서 넘어온 controller 한계**. 닿지 않는다. 칸은 묶음 구성원이 아니고 Tab 자리는 root 하나이며 열림 상태가 없다. 메뉴 폭이 글꼴 배율을 안 보는 일은 이 노드 밖이다.
+- **R1에서 넘어온 controller 한계**. 닿지 않는다. 칸은 묶음 구성원이 아니고 Tab 자리는 root 하나이며 열림 상태가 없다. 메뉴 폭이 그리는 배율로 재지 않아 배율 1.1부터 항목이 말줄임되던 일은 이 노드 밖이었고, 메뉴 폭 노드가 `menu_element::width_for`의 `scale` 칸으로 고쳤다([popup-overlay-design.md](popup-overlay-design.md)).
 - **데모**. 갤러리(`examples/demo/gallery_page.*`)는 이번 라운드에 이 노드만 고친다(color_picker는 R3). 모바일 `basics_page.cpp`는 msg_box와 같은 파일이다. 라이브러리 커밋과 데모 연결 커밋을 나누고 연결은 통합 때 직렬로 쌓는다. msg_box 연결이 먼저고 이 노드의 행은 카운터 행 뒤(249행 근처)에 둬 대화 쪽 수정(369행, 460행 이후)과 줄이 떨어진다. `docs/components.md` 행은 라이브러리 커밋이 붙였고 `docs/README.md` 색인은 통합 때 붙인다.
 
 ## 확인

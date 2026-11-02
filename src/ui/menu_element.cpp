@@ -5,6 +5,7 @@
 #include "luil/ui/text_block.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -202,14 +203,22 @@ namespace luil {
         return height;
     }
 
-    float menu_element::width_for(const menu_config& config, const text_measurer& measurer, const float font_size)
+    float menu_element::width_for(const menu_config& config, const text_measurer& measurer, const float font_size, const float scale)
     {
+        // 항목의 글은 `make_text_font`가 물리 크기 `scaled_font_size(font_size, 그리는 배율)`로 그린다. 같은 크기로 재야 한다.
+        //  - 논리 크기로 재서 배율을 곱하면 글자 advance를 정수로 맞추는 글꼴에서 그린 글이 더 넓어져, 항목 자리에 글이
+        //    꼭 맞는 가장 긴 항목이 배율 1.1부터 말줄임된다.
+        const float ratio { std::isfinite(scale) && scale > 0.0f ? scale : 1.0f };
+        const float size { scaled_font_size(font_size, ratio) };
+        const auto logical_width = [&](const std::u8string& text) {
+            return std::ceil(measurer(text, size) / ratio);
+        };
+
         float width { 0.0f };
-        const float size { scaled_font_size(font_size, 1.0f) };
         for (const auto& item : config.items)
         {
-            const float shortcut { item.shortcut_text.empty() ? 0.0f : 16.0f + measurer(item.shortcut_text, size) };
-            width = std::max(width, measurer(item.label, size) + shortcut + (item.children.empty() ? 0.0f : 18.0f));
+            const float shortcut { item.shortcut_text.empty() ? 0.0f : 16.0f + logical_width(item.shortcut_text) };
+            width = std::max(width, logical_width(item.label) + shortcut + (item.children.empty() ? 0.0f : 18.0f));
         }
         return width + 2.0f * menu_padding + 16.0f + 22.0f;
     }

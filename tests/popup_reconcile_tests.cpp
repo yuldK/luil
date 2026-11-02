@@ -2,10 +2,13 @@
 
 #include "luil/app/menu_popup.h"
 #include "luil/theme/ui_style.h"
+#include "luil/ui/font_scale.h"
 #include "luil/ui/ui_platform.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -218,6 +221,37 @@ TEST_CASE("A menu popup measures its width at the font size its items are drawn 
     REQUIRE(width(std::nullopt) == 4.0f * luil::default_ui_style().metrics.body_font_size + 46.0f);
     // 큰 글자로 그리는 앱은 그 크기를 넘겨 글이 잘리지 않는 폭을 받는다.
     REQUIRE(width(24.0f) == 4.0f * 24.0f + 46.0f);
+}
+
+TEST_CASE("A menu popup measures its width at the physical size its items draw with at the popup scale", "[host][popup][font-scale]")
+{
+    // 한 글자가 정수 픽셀 폭인 글꼴이다 (12는 6, 13.2는 7). 크기가 늘어도 폭이 같은 비율로 늘지 않는다.
+    const luil::text_measurer hinted { [](const std::u8string_view text, const float size) { return static_cast<float>(text.size()) * std::ceil(size * 0.5f); } };
+    const std::u8string label { u8"Export the selection as a PDF file" };
+    const auto make = [&](const float scale) {
+        luil::menu_config menu {};
+        menu.items.push_back({ .key = u8"open", .label = u8"Open" });
+        menu.items.push_back({ .key = u8"export", .label = label });
+        luil::menu_popup_config config {};
+        config.id = u8"menu";
+        config.scale = scale;
+        config.measurer = hinted;
+        return luil::make_menu_popup(std::move(menu), std::move(config));
+    };
+    const float font_size { luil::default_ui_style().metrics.body_font_size };
+
+    for (const float scale : { 1.0f, 1.1f, 1.5f })
+    {
+        const luil::ui_popup popup { make(scale) };
+        const luil::ui_element* const item { popup.tree->find({ luil::ui_element_kind::menu_item, u8"export" }) };
+        REQUIRE(item != nullptr);
+        // 항목 글이 앉는 자리는 항목 폭에서 안쪽 여백 둘(8)과 아이콘 열(22)을 뺀 것이다. 모두 논리 픽셀에 배율을 곱한다.
+        const float slot { item->bounds().width - (2.0f * 8.0f + 22.0f) * scale };
+        REQUIRE(slot >= hinted(label, luil::scaled_font_size(font_size, scale)) - 0.001f);
+    }
+
+    // 유효하지 않은 배율은 tree도 1로 배치하므로 폭도 1로 잰다.
+    REQUIRE(make(std::numeric_limits<float>::quiet_NaN()).width == make(1.0f).width);
 }
 
 TEST_CASE("An anchored popup still moves inside its own surface", "[win32][popup]")

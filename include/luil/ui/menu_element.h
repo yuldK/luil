@@ -78,7 +78,13 @@ namespace luil {
         // 이 설정의 전체 높이다 (논리 픽셀).
         // 담는 쪽이 popup 크기에 같은 값을 쓴다.
         [[nodiscard]] static float height_for(const menu_config& config) noexcept;
-        [[nodiscard]] static float width_for(const menu_config& config, const text_measurer& measurer = default_text_measurer(), float font_size = 12.0f);
+        // 이 설정의 폭이다 (논리 픽셀). 담는 쪽이 popup 크기에 같은 값을 쓴다.
+        //  - 글은 그릴 때와 같은 물리 크기(`scaled_font_size(font_size, scale)`)로 재고 `scale`로 나눈다. 글자 advance를
+        //    정수로 맞추는 글꼴은 `폭(12 * 1.1)`이 `폭(12) * 1.1`과 달라, 논리 크기로 재면 배율 1.1 이상에서 가장 긴 항목이
+        //    자리보다 넓어져 말줄임된다. 시스템 글자 크기 표는 `scaled_font_size`가 이미 반영하므로 따로 곱하지 않는다.
+        //  - `scale`은 그리는 문맥의 배율(`draw_context::scale`)이다. 0 이하거나 유한하지 않으면 1로 본다.
+        //  - 각 글 폭은 논리 픽셀로 되돌린 뒤 올림한다. 나눗셈 잔차로 글이 자리보다 한 올 모자라지 않게 한다.
+        [[nodiscard]] static float width_for(const menu_config& config, const text_measurer& measurer = default_text_measurer(), float font_size = 12.0f, float scale = 1.0f);
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
