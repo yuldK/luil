@@ -84,6 +84,10 @@
 #include <utility>
 #include <vector>
 
+// 데모 빌드가 실은 스타일 파일 글이다 (LUIL_STYLE, cmake/embed_binary.cmake). 테마 페이지의 스타일 파일 묶음이 처음 싣는다.
+extern const std::uint8_t luil_demo_style_json[];
+extern const std::size_t luil_demo_style_json_size;
+
 namespace demo {
     namespace {
         // 사이드바의 처음 폭과 접힌 폭이다 (논리 픽셀).
@@ -470,6 +474,10 @@ namespace demo {
                         handle(luil::app_message { navigate_intent { run->id.substr(5) } });
                     else if (run->id == u8"view.sidebar")
                         handle(luil::app_message { sidebar_toggle_intent {} });
+                    else if (run->id == luil::undo_command_id && page_ == page_workbench)
+                        static_cast<void>(workbench_.handle(luil::app_message { workbench_undo_intent {} }));
+                    else if (run->id == luil::redo_command_id && page_ == page_workbench)
+                        static_cast<void>(workbench_.handle(luil::app_message { workbench_redo_intent {} }));
                     return;
                 }
                 if (palette_.handle(message))
@@ -516,6 +524,8 @@ namespace demo {
 
                 auto root { std::make_unique<luil::root_element>() };
                 root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+                // 테마 페이지가 읽은 스타일이다 (비면 내장 스타일). 캡션과 본문을 이 스타일로 배치하고 frame에도 같은 포인터를 싣는다.
+                const luil::ui_style* const style { theme_.style().get() };
 
                 // 높이는 height_for가 미리 알려 준다 (미리 arrange해 보는 우회가 필요 없다).
                 //
@@ -535,7 +545,7 @@ namespace demo {
                 if (placement_.fullscreen == false)
                 {
                     auto caption { std::make_unique<luil::caption_element>(caption_config) };
-                    caption->arrange({ { 0.0f, caption_top, width, caption_height }, scale });
+                    caption->arrange({ .slot = { 0.0f, caption_top, width, caption_height }, .scale = scale, .style = style });
                     root->add(std::move(caption));
 
                     // 제목 표시줄 가운데의 명령 찾기 단추다. caption 위에 겹쳐 세우고 client 표시를 달면
@@ -570,7 +580,7 @@ namespace demo {
                 auto shell { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, shell_config) };
                 shell->add(std::make_unique<luil::sidebar_element>(sidebar_config, sidebar_collapsed_ ? nullptr : make_navigation()), sidebar_width);
                 shell->add_flexible(build_page(content_width, content_height, scale));
-                shell->arrange({ { 0.0f, content_top, width, height - caption_height }, scale });
+                shell->arrange({ .slot = { 0.0f, content_top, width, height - caption_height }, .scale = scale, .style = style });
                 root->add(std::move(shell));
 
                 // 사이드바 접힘 스프링의 상태다. 접힌 동안은 사이드바 내용이 없어서 이 label이 폭을 말한다.
@@ -598,6 +608,9 @@ namespace demo {
                 frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
                 frame->appearance = theme_.appearance();
                 frame->backdrop = theme_.backdrop();
+                // 테마 페이지가 실행 중에 읽은 스타일이다. 비어 있으면 내장 스타일이다. 위의 캡션·본문 배치에 준 것과 같은 포인터다 —
+                // 팔레트·그리기 치수는 이쪽에서, 컴포넌트 칸·글 크기는 배치에서 읽어 한쪽만 주면 잰 폭과 그린 글이 어긋난다.
+                frame->style = theme_.style();
                 // 코드 글꼴은 이름을 줘야 고정폭이 된다. 비워 두면 내장 UI 글꼴이다 (appearance.h).
                 // 변경 작업대의 차이 보기가 이 글꼴로 열을 맞춘다. Windows에 늘 있는 Consolas다.
                 frame->fonts.code_family = u8"Consolas";
@@ -638,7 +651,7 @@ namespace demo {
                 for (luil::win32::ui_popup& popup : windows_.make_popups())
                     frame->popups.push_back(std::move(popup));
                 // 명령 팔레트는 어느 페이지에서든 내용 영역 맨 위 가운데에 뜬다 (캡션이 위면 제목 표시줄 바로 아래).
-                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale))
+                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale, page_ == page_workbench ? workbench_.undo_state() : luil::undo_command_state { u8"실행 취소", u8"다시 실행", false, false }))
                     frame->popups.push_back(std::move(popup));
                 frame->file_dialog = file_dialog_;
                 // 주 창 작업 표시줄 단추의 진행률과 오버레이다. 독립 창의 것은 그 창(`ui_window::taskbar`)에 실린다.
@@ -896,7 +909,7 @@ namespace demo {
             std::uint64_t seen_tool_focus_ { 0 };
             std::uint64_t seen_palette_focus_ { 0 };
             std::uint64_t palette_focus_id_ { 0 };
-            theme_page theme_ {};
+            theme_page theme_ { std::u8string { reinterpret_cast<const char8_t*>(luil_demo_style_json), luil_demo_style_json_size } };
             webview_page webview_ {};
             workbench_page workbench_ {};
 

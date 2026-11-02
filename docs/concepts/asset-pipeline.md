@@ -60,4 +60,6 @@ add_subdirectory(luil)
 
 컴포넌트 스타일 객체(`tabBar`, `popup`, `text`)는 예외로 **빠져도 된다**. 이 객체가 생기기 전의 JSON이 그대로 빌드되어야 하므로, 객체가 없거나 그 안의 키가 빠지면 struct의 기본값이다. 값은 enum 이름(camelCase, 예: `"connected"`, `"selectedOrHovered"`)과 팔레트 역할 이름(`"windowBackground"` 같은 것)이고, 낯선 키와 모르는 값은 여전히 생성을 멈춘다 ([탭 막대 스타일](../tab-bar-style-design.md)).
 
+키 목록은 데이터 파일 [`cmake/style_keys.cmake`](../../cmake/style_keys.cmake) 하나에 있다. 생성기는 그것으로 기본값 헤더와 함께 실행 중 파서가 도는 키 표 헤더(`<빌드>/generated/private/luil/generated/ui_style_keys.h`, 설치하지 않는다)를 낸다. 같은 파일을 실행 중에 [`parse_ui_style`](../../include/luil/theme/ui_style_json.h)로 읽으면 같은 `ui_style`이 된다. 파서는 엄한 JSON이라 CMake가 너그럽게 받는 글(주석, 끝 쉼표, 겹친 키 등)만 막는 쪽이 다르다 ([실행 중 스타일 읽기](../style-sheet-design.md)).
+
 실행 시점에 값을 세우는 길은 [테마와 글꼴](theming.md)의 스타일 절에 있다.

@@ -2,15 +2,18 @@
 
 #include "luil/ui/grid_element.h"
 #include "luil/ui/table_element.h"
+#include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/ui/virtual_list_element.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -69,6 +72,82 @@ namespace {
     [[nodiscard]] std::chrono::steady_clock::time_point later()
     {
         return std::chrono::steady_clock::now() + std::chrono::hours { 1 };
+    }
+
+    // 실행 취소 기록의 상태 글이다. UIA가 되읽는 이름과 같다.
+    [[nodiscard]] std::u8string history_of(demo::workbench_page& page)
+    {
+        return published(page).find(workbench(u8"workbench-history"))->accessibility().name;
+    }
+
+    [[nodiscard]] bool enabled(demo::workbench_page& page, const std::u8string& owner)
+    {
+        // 찾은 요소는 tree의 것이라 tree를 살려 둔 채 읽는다.
+        const luil::ui_tree tree { published(page) };
+        const luil::ui_element* const button { tree.find(workbench(owner)) };
+        REQUIRE(button != nullptr);
+        return button->enabled();
+    }
+
+    [[nodiscard]] float column_width(demo::workbench_page& page, const std::u8string_view key)
+    {
+        const luil::ui_tree tree { published(page) };
+        for (const luil::table_column& column : changes(tree).config().columns)
+            if (column.key == key)
+                return column.width;
+        FAIL("no such column");
+        return 0.0f;
+    }
+
+    // 표 행이 보이는 차례의 키다.
+    [[nodiscard]] std::vector<std::u8string> order_of(demo::workbench_page& page)
+    {
+        const luil::ui_tree tree { published(page) };
+        std::vector<std::u8string> keys {};
+        for (const luil::virtual_list_item& item : changes(tree).body().model())
+            keys.push_back(item.key);
+        return keys;
+    }
+
+    // 표의 체크 칸이 그리는 스테이지 상태를 행 순서대로 읽는다.
+    [[nodiscard]] std::vector<bool> staged_of(demo::workbench_page& page)
+    {
+        const luil::ui_tree tree { published(page) };
+        const luil::table_element& table { changes(tree) };
+        std::vector<bool> staged {};
+        std::size_t index { 0 };
+        for (const luil::virtual_list_item& item : table.body().model())
+            staged.push_back(table.config().check_state_of(item, index++) == luil::check_state::checked);
+        return staged;
+    }
+
+    // 단추를 눌러 나온 메시지를 페이지에 돌려준다. 실제 입력 경로를 그대로 탄다. 돌려준 수를 돌려준다.
+    int press(demo::workbench_page& page, const std::u8string& owner)
+    {
+        const auto tree { std::make_shared<const luil::ui_tree>(published(page)) };
+        const luil::ui_element* const button { tree->find(workbench(owner)) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        using time_point = std::chrono::steady_clock::time_point;
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        int delivered { 0 };
+        for (const luil::input_action& action : controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }))
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
+    }
+
+    void discard_row(demo::workbench_page& page, const std::u8string& key)
+    {
+        REQUIRE(page.handle(luil::app_message { demo::workbench_menu_intent { key, 10.0f, 20.0f } }));
+        REQUIRE(page.handle(luil::app_message { demo::workbench_menu_select_intent { u8"discard" } }));
     }
 }
 
@@ -174,4 +253,196 @@ TEST_CASE("A row menu acts on the row it opened on", "[demo][workbench]")
     REQUIRE(page.handle(luil::app_message { demo::workbench_menu_select_intent { u8"stage" } }));
     REQUIRE(page.make_popups(1.0f).empty());
     REQUIRE(published(page).find(workbench(u8"commit-count"))->accessibility().name == u8"3");
+}
+
+TEST_CASE("Undoing and redoing check, stage, stage all, discard and column width brings back each state", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    const std::vector<std::u8string> first_order { order_of(page) };
+    const std::vector<bool> first_staged { staged_of(page) };
+    const float first_width { column_width(page, u8"path") };
+    REQUIRE(history_of(page) == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음 · 저장 지점 일치");
+    REQUIRE(enabled(page, u8"workbench-undo") == false);
+    REQUIRE(enabled(page, u8"workbench-redo") == false);
+
+    // 체크 칸 하나, 전체 체크, 한 행 버리기, 열 폭을 차례로 한다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_check_intent { u8"trunk/src/ui/list.cpp" } }));
+    const std::vector<bool> after_check { staged_of(page) };
+    REQUIRE(after_check != first_staged);
+    REQUIRE(history_of(page) == u8"되돌리기 1 · 다시 실행 0 · 다음: 스테이지 바꿈 · 저장 지점 다름");
+    REQUIRE(page.handle(luil::app_message { demo::workbench_stage_all_intent {} }));
+    const std::vector<bool> after_all { staged_of(page) };
+    REQUIRE(std::count(after_all.begin(), after_all.end(), true) == 45);
+    REQUIRE(published(page).find(workbench(u8"commit-count"))->accessibility().name == u8"45");
+    discard_row(page, u8"trunk/CMakeLists.txt");
+    const std::vector<std::u8string> after_discard { order_of(page) };
+    REQUIRE(after_discard.size() == 44u);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", 50.0f } }));
+    REQUIRE(column_width(page, u8"path") == first_width + 50.0f);
+    REQUIRE(history_of(page) == u8"되돌리기 4 · 다시 실행 0 · 다음: 열 폭 조절 · 저장 지점 다름");
+
+    // 거꾸로 되돌린다. 단계마다 그 단계 앞의 상태다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(column_width(page, u8"path") == first_width);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    // 버린 행이 같은 자리에 돌아온다.
+    REQUIRE(order_of(page) == first_order);
+    REQUIRE(staged_of(page) == after_all);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(staged_of(page) == after_check);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(staged_of(page) == first_staged);
+    REQUIRE(order_of(page) == first_order);
+    REQUIRE(history_of(page) == u8"되돌리기 0 · 다시 실행 4 · 다음: 없음 · 저장 지점 일치");
+    REQUIRE(enabled(page, u8"workbench-undo") == false);
+    REQUIRE(enabled(page, u8"workbench-redo"));
+    // 끝에서 더 되돌려도 아무것도 바뀌지 않는다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(history_of(page) == u8"되돌리기 0 · 다시 실행 4 · 다음: 없음 · 저장 지점 일치");
+
+    // 다시 실행하면 끝 상태로 간다.
+    for (int step { 0 }; step < 4; ++step)
+        REQUIRE(page.handle(luil::app_message { demo::workbench_redo_intent {} }));
+    // 버린 행 하나가 빠진 채 모두 스테이지한 상태다.
+    const std::vector<bool> staged_at_end { staged_of(page) };
+    REQUIRE(staged_at_end.size() == 44u);
+    REQUIRE(std::count(staged_at_end.begin(), staged_at_end.end(), true) == 44);
+    REQUIRE(order_of(page) == after_discard);
+    REQUIRE(column_width(page, u8"path") == first_width + 50.0f);
+    REQUIRE(history_of(page) == u8"되돌리기 4 · 다시 실행 0 · 다음: 열 폭 조절 · 저장 지점 다름");
+}
+
+TEST_CASE("The row menu stage and unstage are steps that undo to the earlier flags", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    const std::vector<bool> first_staged { staged_of(page) };
+    // 이미 스테이지한 행에 "스테이지"를 해도 바뀌는 것이 없어 걸음이 없다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_menu_intent { u8"trunk/src/ui/table.cpp", 10.0f, 20.0f } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_menu_select_intent { u8"stage" } }));
+    REQUIRE(history_of(page).starts_with(u8"되돌리기 0 "));
+
+    REQUIRE(page.handle(luil::app_message { demo::workbench_menu_intent { u8"trunk/src/ui/table.cpp", 10.0f, 20.0f } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_menu_select_intent { u8"unstage" } }));
+    REQUIRE(history_of(page) == u8"되돌리기 1 · 다시 실행 0 · 다음: 스테이지 취소 · 저장 지점 다름");
+    REQUIRE(staged_of(page) != first_staged);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(staged_of(page) == first_staged);
+}
+
+TEST_CASE("A new action after an undo clears the redo side", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_check_intent { u8"trunk/src/ui/list.cpp" } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(enabled(page, u8"workbench-redo"));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_stage_all_intent {} }));
+    REQUIRE(enabled(page, u8"workbench-redo") == false);
+    REQUIRE(history_of(page) == u8"되돌리기 1 · 다시 실행 0 · 다음: 모두 스테이지 · 저장 지점 다름");
+}
+
+TEST_CASE("Consecutive width changes of one column are one step until the drag ends", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    const float first_width { column_width(page, u8"path") };
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", 10.0f } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", 10.0f } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", 10.0f } }));
+    REQUIRE(column_width(page, u8"path") == first_width + 30.0f);
+    REQUIRE(history_of(page).starts_with(u8"되돌리기 1 "));
+
+    // 다른 열의 조절은 새 걸음이다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"status", 5.0f } }));
+    REQUIRE(history_of(page).starts_with(u8"되돌리기 2 "));
+    // 열 경계를 놓으면 같은 열의 다음 조절도 새 걸음이다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", 10.0f } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_end_intent { u8"path" } }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", 10.0f } }));
+    REQUIRE(history_of(page).starts_with(u8"되돌리기 4 "));
+
+    // 걸음 하나가 끌기 하나를 되돌린다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(column_width(page, u8"path") == first_width + 40.0f);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(column_width(page, u8"path") == first_width + 30.0f);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(column_width(page, u8"path") == first_width);
+    REQUIRE(column_width(page, u8"status") == 90.0f);
+}
+
+TEST_CASE("A width change that does not move the edge makes no step", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", -1000.0f } }));
+    REQUIRE(column_width(page, u8"path") == 120.0f);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_end_intent { u8"path" } }));
+    // 이미 최소 폭이라 더 줄일 수 없다.
+    REQUIRE(page.handle(luil::app_message { demo::workbench_resize_intent { u8"path", -50.0f } }));
+    REQUIRE(history_of(page).starts_with(u8"되돌리기 1 "));
+}
+
+TEST_CASE("Committing clears the undo stack because the committed rows are gone", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_check_intent { u8"trunk/src/ui/list.cpp" } }));
+    REQUIRE(page.handle(summary_text(u8"표 정렬")));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_commit_intent {} }));
+    REQUIRE(history_of(page) == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음 · 저장 지점 일치");
+    REQUIRE(enabled(page, u8"workbench-undo") == false);
+    REQUIRE(enabled(page, u8"workbench-redo") == false);
+}
+
+TEST_CASE("The save point button marks the place and undo and redo move away from it and back", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_check_intent { u8"trunk/src/ui/list.cpp" } }));
+    REQUIRE(history_of(page).ends_with(u8"저장 지점 다름"));
+    REQUIRE(press(page, u8"workbench-mark-saved") == 1);
+    REQUIRE(history_of(page).ends_with(u8"저장 지점 일치"));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_stage_all_intent {} }));
+    REQUIRE(history_of(page).ends_with(u8"저장 지점 다름"));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(history_of(page).ends_with(u8"저장 지점 일치"));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(history_of(page).ends_with(u8"저장 지점 다름"));
+}
+
+TEST_CASE("The undo and redo buttons send the same requests as the keys and are off when there is nothing to do", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    // 꺼진 단추는 눌러도 메시지가 없다. 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.
+    REQUIRE(press(page, u8"workbench-undo") == 0);
+    REQUIRE(press(page, u8"workbench-redo") == 0);
+
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_check_intent { u8"trunk/src/ui/list.cpp" } }));
+    const std::vector<bool> staged { staged_of(page) };
+    REQUIRE(press(page, u8"workbench-redo") == 0);
+    REQUIRE(press(page, u8"workbench-undo") == 1);
+    REQUIRE(staged_of(page) != staged);
+    REQUIRE(enabled(page, u8"workbench-undo") == false);
+    REQUIRE(press(page, u8"workbench-redo") == 1);
+    REQUIRE(staged_of(page) == staged);
+}
+
+TEST_CASE("The undo state names the next step for the palette and the menu", "[demo][workbench][undo]")
+{
+    demo::workbench_page page {};
+    luil::undo_command_state state { page.undo_state() };
+    REQUIRE(state.undo_label == u8"실행 취소");
+    REQUIRE(state.redo_label == u8"다시 실행");
+    REQUIRE(state.can_undo == false);
+    REQUIRE(state.can_redo == false);
+
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_check_intent { u8"trunk/src/ui/list.cpp" } }));
+    state = page.undo_state();
+    REQUIRE(state.undo_label == u8"실행 취소: 스테이지 바꿈");
+    REQUIRE(state.can_undo);
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    state = page.undo_state();
+    REQUIRE(state.redo_label == u8"다시 실행: 스테이지 바꿈");
+    REQUIRE(state.can_redo);
+    REQUIRE(state.can_undo == false);
+
+    // 단추의 툴팁은 같은 명령표의 글과 단축키다.
+    REQUIRE(published(page).find(workbench(u8"workbench-redo"))->tooltip() == u8"다시 실행: 스테이지 바꿈 (Ctrl+Y)");
 }

@@ -13,7 +13,7 @@ luil의 [CMake 구성](../../CMakeLists.txt)은 준비된 의존성을 검사하
 | SDK·런타임 | Windows SDK 10.0.22621.0 이상 | NDK libc++ 정적판(`c++_static`) |
 | 언어 | C++20 | C++20 |
 
-[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. 이 옵션의 기본값은 `LUIL_ENABLE_DIRECT3D`를 따른다. Catch2는 테스트를 켰을 때 필요하다.
+[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. `luil_core`도 실행 중 스타일 파서 안쪽에서 nlohmann을 쓴다(`$<BUILD_INTERFACE:...>` PRIVATE, 공개 헤더에는 nlohmann 형이 없다). WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. 이 옵션의 기본값은 `LUIL_ENABLE_DIRECT3D`를 따른다. Catch2는 테스트를 켰을 때 필요하다.
 
 libsmb2는 `LUIL_ENABLE_SMB`를 켠 Android 구성에서만 찾는다. **기본은 끔이다.** submodule(`third_party/libsmb2`, `libsmb2-6.2`에 고정)이고, upstream의 CMakeLists 대신 [`dependencies/libsmb2.cmake`](../../cmake/dependencies/libsmb2.cmake)가 같은 소스 목록과 `config.h`로 공유 라이브러리 `libsmb2.so`(target `luil_smb2`)를 세운다. upstream의 CMakeLists는 디렉터리 전체에 정의를 걸고 `BUILD_SHARED_LIBS`를 캐시에 세워 luil의 target까지 번지기 때문이다. libsmb2는 C라 켠 구성에서만 C 언어를 켠다. Windows에서 켜면 configure가 멈춘다. LGPL-2.1이라 앱 라이브러리에 섞지 않고 따로 싸는 것은 [소비자 계약](consumer-contract.md#smb)이 정한다.
 

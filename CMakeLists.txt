@@ -69,6 +69,11 @@ set(LUIL_STYLE "${PROJECT_SOURCE_DIR}/assets/style.json"
     CACHE FILEPATH "Style JSON (neutral palettes, accent tones, metrics) embedded at build time.")
 set(LUIL_GENERATED_STYLE
     "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/ui_style.h")
+# 실행 중 스타일 파서가 도는 키 표다 (docs/style-sheet-design.md). 내부 표라 설치하지 않는다 —
+# 공개 생성 헤더 자리(`LUIL_GENERATED_INCLUDE_DIRECTORY`)는 install이 통째로 복사하므로 그 밖에 둔다.
+set(LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY "${LUIL_GENERATED_DIRECTORY}/private")
+set(LUIL_GENERATED_STYLE_KEYS
+    "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}/luil/generated/ui_style_keys.h")
 # 판번 헤더는 project VERSION 하나에서 생성한다.
 # version.cpp와 소비자 매크로가 같은 근원을 본다.
 configure_file(

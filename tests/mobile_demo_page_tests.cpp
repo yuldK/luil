@@ -3,9 +3,11 @@
 #include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
+#include "mobile_demo/lists_page.h"
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
+#include "mobile_demo/theme_page.h"
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
 
@@ -21,6 +23,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,6 +32,10 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+// 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt). 스타일 파일 견본의 바탕으로 준다.
+extern const std::uint8_t luil_test_base_style[];
+extern const std::size_t luil_test_base_style_size;
 
 namespace {
     using time_point = std::chrono::steady_clock::time_point;
@@ -183,6 +191,59 @@ namespace {
         controller.set_tree(tree);
         static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
         return deliver_actions(page, controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }));
+    }
+
+    // 400x800 창에서 조립해 배치한 목록 페이지다 (배율 1).
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> lists_tree(mobile_demo::lists_page& page)
+    {
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(page.build(400.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 400.0f, 800.0f }, 1.0f));
+    }
+
+    // UIA가 되읽는 이름이 화면의 글과 같다.
+    [[nodiscard]] std::u8string lists_text(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const label { tree->find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] bool lists_button_enabled(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        return button->enabled();
+    }
+
+    // 순서 목록의 항목이 위에서부터 서는 높이다. 행은 모두 tree에 담기므로 순서가 높이로 읽힌다.
+    [[nodiscard]] float list_row_top(const luil::ui_tree& tree, const int number)
+    {
+        const auto* const row { tree.find({ luil::ui_element_kind::list_row, u8"항목 " + mobile_demo::to_u8(number) }) };
+        REQUIRE(row != nullptr);
+        return row->bounds().y;
+    }
+
+    // 단추를 눌러 나온 메시지를 페이지에 돌려준다. 실제 입력 경로를 그대로 탄다. 돌려준 수를 돌려준다.
+    int press_list_button(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        int delivered { 0 };
+        for (const luil::input_action& action : controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }))
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
     }
 
     // 요청을 기록하고 사람이 고른 차례로 답한다. 실제 페이지의 send·cancel·응답 처리 경로를 그대로 쓴다.
@@ -1546,4 +1607,163 @@ TEST_CASE("The mobile star row inside the horizontal window scrolls on a swipe a
     REQUIRE(rating_values_of(tapped) == std::vector<float> { 6.0f });
     deliver_actions(page, tapped);
     REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-strip-value") == u8"가로 창 별점: 6 / 10");
+}
+
+TEST_CASE("Undoing a reorder on the mobile list page brings back the earlier order and the buttons follow", "[mobile-demo][lists][undo]")
+{
+    mobile_demo::lists_page page {};
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음");
+    // 할 일이 없으면 꺼 둔다. 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.
+    REQUIRE(lists_button_enabled(page, u8"list-undo") == false);
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+    REQUIRE(press_list_button(page, u8"list-undo") == 0);
+
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 2));
+    }
+    // 항목 1을 항목 4 앞으로 끌어 놓는다.
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 4" });
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 2) < list_row_top(*tree, 3));
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 1));
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 4));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 1 · 다시 실행 0 · 다음: 순서 바꿈");
+    REQUIRE(lists_button_enabled(page, u8"list-undo"));
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+
+    // 단추가 되돌림 메시지를 낸다. 처음 순서로 돌아온다.
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 2));
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 4));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 1 · 다음: 없음");
+    REQUIRE(lists_button_enabled(page, u8"list-undo") == false);
+    REQUIRE(lists_button_enabled(page, u8"list-redo"));
+
+    // 다시 실행하면 옮긴 순서다.
+    REQUIRE(press_list_button(page, u8"list-redo") == 1);
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 1));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 1 · 다시 실행 0 · 다음: 순서 바꿈");
+}
+
+TEST_CASE("A new reorder after an undo clears the redo side and a reorder that moves nothing is not a step", "[mobile-demo][lists][undo]")
+{
+    mobile_demo::lists_page page {};
+    // 제자리로 놓거나 없는 항목을 옮기면 걸음이 없다.
+    deliver(page, mobile_demo::reorder_intent { u8"항목 2", u8"항목 2" });
+    deliver(page, mobile_demo::reorder_intent { u8"없는 항목", u8"항목 2" });
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 2" });
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음");
+
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 3" });
+    deliver(page, mobile_demo::reorder_intent { u8"항목 5", u8"항목 1" });
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 2 · 다시 실행 0 · 다음: 순서 바꿈");
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    REQUIRE(lists_button_enabled(page, u8"list-redo"));
+    deliver(page, mobile_demo::reorder_intent { u8"항목 6", u8"항목 1" });
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 2 · 다시 실행 0 · 다음: 순서 바꿈");
+
+    // 두 걸음을 모두 되돌리면 처음 순서다. 되돌림이 기록하지 않아 걸음이 늘지 않는다.
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    const auto tree { lists_tree(page) };
+    for (int number { 1 }; number < 8; ++number)
+        REQUIRE(list_row_top(*tree, number) < list_row_top(*tree, number + 1));
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 2 · 다음: 없음");
+}
+
+TEST_CASE("The mobile theme page applies a sample style and keeps it when a broken sample is refused", "[mobile-demo][style_json]")
+{
+    // 글 칸 대신 견본 단추만 있다. 받은 견본은 셸이 frame과 본문 배치에 실을 스타일이 되고, 막힌 견본은 그것을 그대로 둔다.
+    const std::u8string source { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    mobile_demo::theme_page page { source };
+    const auto status = [&page] {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
+        for (const char8_t* const owner : { u8"theme-style-sample-background", u8"theme-style-sample-unknown", u8"theme-style-sample-broken", u8"theme-style-sample-wrap", u8"theme-style-reset" })
+            REQUIRE(tree.find({ mobile_demo::kind_style_sheet_button, owner }) != nullptr);
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, u8"theme-style-status" }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    };
+    REQUIRE(status() == u8"내장값 · dark.windowBackground #1e1e1e");
+
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_background });
+    REQUIRE(status() == u8"적용됨 · 오류 0 · dark.windowBackground #1a1b26");
+    const std::shared_ptr<const luil::ui_style> applied { page.style() };
+    REQUIRE(applied != nullptr);
+    REQUIRE(applied->metrics.control_corner_radius == 8.0f);
+
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_broken });
+    REQUIRE(status().starts_with(u8"거부 · 오류 1 · Invalid JSON at byte "));
+    REQUIRE(status().ends_with(u8" · 이전 스타일 유지"));
+    REQUIRE(page.style() == applied);
+
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::reset });
+    REQUIRE(status() == u8"내장값 · dark.windowBackground #1e1e1e");
+    REQUIRE(page.style() == nullptr);
+}
+
+TEST_CASE("The mobile theme page wrap sample switches the policy of a label that leaves its field empty", "[mobile-demo][style_json][wrap-policy]")
+{
+    // 정책 칸이 빈 label과 그 상태 줄이다 (docs/wrap-policy-key-design.md의 확인). 견본이 스타일을 바꾸면 상태 줄의 정책이 바뀐다.
+    const std::u8string source { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    mobile_demo::theme_page page { source };
+    const auto label_of = [&page](const char8_t* const owner) {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f, {}, nullptr, page.style().get()) };
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    };
+    REQUIRE(label_of(u8"theme-wrap-label") == demo::line_break_sample);
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 hangul_words · 라벨 "));
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_wrap });
+    REQUIRE(page.style() != nullptr);
+    REQUIRE(page.style()->text.wrap_policy == luil::line_break_policy::unicode);
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 unicode · 라벨 "));
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_broken });
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 unicode · 라벨 "));
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::reset });
+    REQUIRE(label_of(u8"theme-wrap-status").starts_with(u8"스타일 정책 hangul_words · 라벨 "));
+
+    // 줄 수와 첫 줄 끝은 고정 폭 측정기로 잠근다. ASCII는 글자 크기의 0.6배, 그 밖은 0.9배다. 기본 페이지 시험의 측정기(그 밖이
+    // 글자 크기만큼)로는 label 첫 줄에 다음 어절의 첫 음절도 들지 않아 두 정책이 같다.
+    const luil::text_measurer measurer { [](const std::u8string_view text, const float size) {
+        float width { 0.0f };
+        for (std::size_t offset { 0 }; offset < text.size();)
+        {
+            const auto decoded { luil::text::utf8_decode(text, offset) };
+            width += decoded.codepoint < 0x80 ? size * 0.6f : size * 0.9f;
+            offset += decoded.length;
+        }
+        return width;
+    }
+    };
+    luil::ui_style unicode_style { luil::default_ui_style() };
+    unicode_style.text.wrap_policy = luil::line_break_policy::unicode;
+    luil::ui_style words_style { luil::default_ui_style() };
+    words_style.text.wrap_policy = luil::line_break_policy::hangul_words;
+    const luil::label_config label { demo::style_wrap_label_config() };
+    REQUIRE(label.line_break.has_value() == false);
+    const std::u8string words { demo::measure_style_wrap_status(label, &words_style, 1.0f, &measurer) };
+    const std::u8string syllables { demo::measure_style_wrap_status(label, &unicode_style, 1.0f, &measurer) };
+    // 어절 정책은 첫 줄을 '낱말'에서 끊고, 음절 정책은 다음 어절의 두 음절까지 채운다.
+    REQUIRE(words == u8"스타일 정책 hangul_words · 라벨 5줄 · 첫 줄 끝 '낱말'");
+    REQUIRE(syllables == u8"스타일 정책 unicode · 라벨 5줄 · 첫 줄 끝 '한가'");
+    // 적은 칸은 스타일보다 앞선다. 기본 페이지의 줄 나눔 칸이 스타일에 닿지 않는 까닭이다.
+    luil::label_config chosen { label };
+    chosen.line_break = luil::line_break_policy::hangul_words;
+    REQUIRE(demo::measure_style_wrap_status(chosen, &unicode_style, 1.0f, &measurer) == words);
 }

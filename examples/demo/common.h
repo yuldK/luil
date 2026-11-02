@@ -86,6 +86,8 @@ namespace demo {
     constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(64) };
     // 기본 페이지의 둘째 확인 대화(긴 본문·단추 셋·확인 칸)를 여는 단추다.
     constexpr luil::ui_element_kind kind_dialog_details_open { luil::application_element_kind(65) };
+    // 테마 페이지의 스타일 JSON 칸이다 (`parse_ui_style`, style-sheet-design.md).
+    constexpr luil::ui_element_kind kind_style_json_input { luil::application_element_kind(66) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
@@ -111,6 +113,7 @@ namespace demo {
     constexpr luil::text_input_target target_link_view { static_cast<luil::text_input_target>(13) };
     constexpr luil::text_input_target target_code { static_cast<luil::text_input_target>(14) };
     constexpr luil::text_input_target target_line_break { static_cast<luil::text_input_target>(15) };
+    constexpr luil::text_input_target target_style_json { static_cast<luil::text_input_target>(16) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.

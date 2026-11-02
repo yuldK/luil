@@ -49,6 +49,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(44) };
     // 기본 페이지의 둘째 확인 대화(긴 본문·단추 셋·확인 칸)를 여는 단추다.
     constexpr luil::ui_element_kind kind_dialog_details_open { luil::application_element_kind(45) };
+    // 테마 페이지의 스타일 파일 단추다 (demo/style_sheet_sample.h). 단추마다 owner가 갈린다.
+    constexpr luil::ui_element_kind kind_style_sheet_button { luil::application_element_kind(46) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     // 확인 대화 상자의 scrim·내용·단추는 라이브러리 kind(modal_host·message_box·message_box_button)가 짓는다.

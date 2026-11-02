@@ -26,6 +26,7 @@
 // 색·글꼴 선호 값과 팔레트 합성이다.
 #include "luil/theme/appearance.h"
 #include "luil/theme/ui_style.h"
+#include "luil/theme/ui_style_json.h"
 #include "luil/theme/ui_theme.h"
 
 // view 무관 UI element 계층이다.
@@ -100,6 +101,8 @@
 #include "luil/ui/ui_element_id.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_interaction.h"
+#include "luil/ui/undo_commands.h"
+#include "luil/ui/undo_stack.h"
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/ui/virtual_list_element.h"

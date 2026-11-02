@@ -10,6 +10,7 @@
 | UTF-8 텍스트 편집 | `text::text_edit_state` | [text/text_edit.h](../include/luil/text/text_edit.h) | [설명](concepts/text-editing.md) |
 | 테마·팔레트 | `color_theme`, `ui_color_palette`, `compose_palette` | [theme/ui_theme.h](../include/luil/theme/ui_theme.h) | [설명](concepts/theming.md) |
 | 앱 스타일(중립 색·tone·치수) | `ui_style`, `default_ui_style` | [theme/ui_style.h](../include/luil/theme/ui_style.h) | [설명](concepts/theming.md) |
+| 스타일 JSON 실행 중 읽기 | `parse_ui_style`, `style_parse_result`, `describe` | [theme/ui_style_json.h](../include/luil/theme/ui_style_json.h) | [설명](style-sheet-design.md) |
 | 불변 화면 트리 | `ui_tree` | [ui/ui_tree.h](../include/luil/ui/ui_tree.h) | [설명](concepts/immutable-tree.md) |
 | 포인터·키보드 입력 정책 | `interaction_policy` | [ui/ui_interaction.h](../include/luil/ui/ui_interaction.h) | [설명](concepts/interaction.md) |
 | 문자열·커스텀·마크다운 툴팁 | `set_tooltip`, `set_tooltip_content`, `make_markdown_tooltip` | [ui/ui_element.h](../include/luil/ui/ui_element.h) | [설명](tooltip-design.md) |
@@ -27,6 +28,7 @@
 | 구문 강조(편집에 맞춰 줄 단위로 다시 칠하는 구간) | `syntax_highlighter`, `syntax_line_lexer`, `text_span`, `text_color_role` | [ui/syntax_highlighter.h](../include/luil/ui/syntax_highlighter.h) · [ui/text_document.h](../include/luil/ui/text_document.h) | [설명](syntax-highlight-design.md) |
 | 두 글의 바뀐 구간 | `text::text_change_between` | [text/text_change.h](../include/luil/text/text_change.h) | [설명](syntax-highlight-design.md) |
 | 줄 나눔 자리(UAX #14, 한국어 어절 우선) | `text::line_break_opportunities`, `text::line_break_policy`, `text_layout_request::line_break` | [text/line_break.h](../include/luil/text/line_break.h) | [설명](line-break-design.md) |
+| 앱 전체의 여러 줄 정책(스타일 키 `text.wrapPolicy`, config가 비면 따른다) | `text_style::wrap_policy`, `measure_context::line_break_for`, `draw_context::wrap_policy` | [theme/ui_style.h](../include/luil/theme/ui_style.h) | [설명](wrap-policy-key-design.md) |
 | 체크(삼상 포함)·라디오·스위치 | `check_element`, `aggregate_check` | [ui/check_element.h](../include/luil/ui/check_element.h) | [설명](keyboard-focus-design.md) |
 | 불확정 진행 | `spinner_element` | [ui/spinner_element.h](../include/luil/ui/spinner_element.h) | [설명](concepts/ui-element.md) |
 | 진행률 | `progress_element` | [ui/progress_element.h](../include/luil/ui/progress_element.h) | [설명](value-step-design.md) |
@@ -58,6 +60,7 @@
 | 메뉴 팝업 조립(필드 아래 앵커 `below` 포함) | make_menu_popup | [app/menu_popup.h](../include/luil/app/menu_popup.h) | [사용 예](demo-guide.md) |
 | 선택 묶음(라디오 행·트랙 위에 판이 뜨는 segmented, 맞춤·채움 폭) | `choice_group_element`, `choice_width` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
 | 명령표·단축키 | `app_command`, `match_command` | [ui/commands.h](../include/luil/ui/commands.h) | [설명](popup-anchor-design.md) |
+| 앱 수준 실행 취소·다시 실행 (되돌림 메시지 쌍, 합치기, 묶음, 저장 지점, 명령표) | `undo_stack`, `undo_macro`, `make_undo_commands` | [ui/undo_stack.h](../include/luil/ui/undo_stack.h), [ui/undo_commands.h](../include/luil/ui/undo_commands.h) | [설명](undo-stack-design.md) |
 | 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | [설명](popup-overlay-design.md) |
 | 회전 진행 표시 | `spinner_element` | [ui/spinner_element.h](../include/luil/ui/spinner_element.h) | [설명](ui-foundation-design.md) |
 | 파일·폴더 선택 | `file_dialog_request` | [app/file_dialog.h](../include/luil/app/file_dialog.h) | [설명](file-dialog-design.md) |

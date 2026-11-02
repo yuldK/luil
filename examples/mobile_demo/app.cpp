@@ -174,6 +174,8 @@ namespace mobile_demo {
 
         auto root { std::make_unique<luil::root_element>() };
         root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+        // 테마 페이지가 읽은 스타일이다 (비면 내장 스타일). 앱 바와 본문을 이 스타일로 배치하고 frame에도 같은 포인터를 싣는다.
+        const luil::ui_style* const style { theme_.style().get() };
 
         // 데스크톱 창으로 띄우면 창 caption이 맨 위에 선다. 앱 바는 그 아래에서 같은 일을 한다.
         float top { 0.0f };
@@ -197,7 +199,7 @@ namespace mobile_demo {
             bar.navigation = luil::app_bar_button { .glyph = luil::codicons::icon_arrow_left, .label = u8"뒤로", .action = luil::make_message_action(back_intent {}) };
         const float bar_height { luil::app_bar_element::height_for(bar) * scale };
         auto app_bar { std::make_unique<luil::app_bar_element>(std::move(bar)) };
-        app_bar->arrange({ { 0.0f, top, width, bar_height }, scale });
+        app_bar->arrange({ .slot = { 0.0f, top, width, bar_height }, .scale = scale, .style = style });
         root->add(std::move(app_bar));
         top += bar_height;
 
@@ -221,7 +223,7 @@ namespace mobile_demo {
         {
             body = make_page(page_, body_width, body_height, scale);
         }
-        body->arrange({ { 0.0f, top, width, height - top }, scale });
+        body->arrange({ .slot = { 0.0f, top, width, height - top }, .scale = scale, .style = style });
         root->add(std::move(body));
 
         // 오버레이들: dialog는 화면을 덮고 토스트는 아래쪽에 쌓인다.
@@ -240,6 +242,8 @@ namespace mobile_demo {
         auto frame { std::make_shared<luil::ui_frame>() };
         frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
         frame->appearance = theme_.appearance();
+        // 위의 앱 바·본문 배치에 준 것과 같은 포인터다. 팔레트·그리기 치수는 이쪽에서 읽는다.
+        frame->style = theme_.style();
         // 기기 요청은 앱 상태라 어느 페이지를 보든 실린다.
         frame->device = device_.request();
         // popup은 이번 frame에서 배치된 element의 자리를 쓴다. 보이는 페이지의 것만 단다.

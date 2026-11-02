@@ -1,6 +1,8 @@
 #include "raster_probe.h"
 
+#include "host/frame_state.h"
 #include "luil/theme/ui_style.h"
+#include "luil/theme/ui_style_json.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/button_element.h"
 #include "luil/ui/check_element.h"
@@ -12,8 +14,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
+
+// 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt, ui_style_json_tests.cpp와 같은 것).
+extern const std::uint8_t luil_test_base_style[];
+extern const std::size_t luil_test_base_style_size;
 
 // 파생 역할과 치수가 **실제 픽셀**에 닿는지 보는 축이다.
 // 팔레트 합성의 단위 test는 역할이 값을 갖는지만 말한다. element가 그 역할을 읽지 않고
@@ -209,5 +218,49 @@ TEST_CASE("The row corner radius from the style reaches the selection fill", "[u
         frame.set_metrics(metrics);
         frame.draw(tree, luil::interaction_snapshot {});
         REQUIRE(frame.pixel_at(4, 42) == palette.row_selection_background);
+    }
+}
+
+TEST_CASE("A style read at run time reaches the window background and the button corners", "[ui][raster][style][style_json]")
+{
+    // 앱이 실행 중에 읽은 스타일을 두 자리(frame의 스타일, 배치의 스타일)에 같은 포인터로 준다 (style-sheet-design.md).
+    // 어두운 창 바탕과 컨트롤 모서리를 바꾼 글이다. 바탕은 팔레트로, 모서리는 그리기 치수로 픽셀에 닿는다.
+    std::string text { reinterpret_cast<const char*>(luil_test_base_style), luil_test_base_style_size };
+    const std::string background { "\"windowBackground\": \"#1e1e1e\"" };
+    const std::string corner { "\"controlCornerRadius\": 3" };
+    REQUIRE(text.find(background) != std::string::npos);
+    REQUIRE(text.find(corner) != std::string::npos);
+    text.replace(text.find(background), background.size(), "\"windowBackground\": \"#102030\"");
+    text.replace(text.find(corner), corner.size(), "\"controlCornerRadius\": 0");
+    const luil::style_parse_result parsed { luil::parse_ui_style({ reinterpret_cast<const char8_t*>(text.data()), text.size() }) };
+    REQUIRE(parsed.ok());
+    const luil::ui_style& style { *parsed.style };
+
+    luil::frame_state state {};
+    state.theme = luil::color_theme::dark;
+    state.style = &style;
+    const luil::ui_color_palette palette { luil::frame_palette(state) };
+    REQUIRE(palette.window_background == luil::make_ui_color(0x10, 0x20, 0x30));
+
+    const luil::ui_element_id id { luil::application_element_kind(1), u8"ok" };
+    auto button { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .default_button = true }) };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(button), { 20.0f, 20.0f, 160.0f, 40.0f }, raster_scale, {}, nullptr, &style) };
+
+    SECTION("두 자리에 주면 바탕과 모서리가 함께 바뀐다")
+    {
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.set_metrics(luil::frame_style(state).metrics);
+        frame.draw(tree, luil::interaction_snapshot {});
+        REQUIRE(frame.pixel_at(300, 100) == luil::make_ui_color(0x10, 0x20, 0x30));
+        REQUIRE(frame.pixel_at(20, 20) == palette.accent);
+    }
+
+    SECTION("배치에만 주면 모서리는 그대로다")
+    {
+        // 모서리는 그리기 치수(`draw_context::metrics`)가 정하고 그것은 frame의 스타일에서 온다. 배치만 바꾸면 둥근 채다.
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+        REQUIRE(frame.pixel_at(20, 20) == palette.window_background);
+        REQUIRE(frame.pixel_at(100, 40) == palette.accent);
     }
 }

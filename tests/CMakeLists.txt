@@ -49,6 +49,7 @@ add_executable(luil_core_tests
     label_wrap_tests.cpp
     font_style_tests.cpp
     text_block_tests.cpp
+    wrap_policy_tests.cpp
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
@@ -106,8 +107,10 @@ add_executable(luil_core_tests
     transition_tests.cpp
     ui_element_tests.cpp
     ui_interaction_tests.cpp
+    ui_style_json_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp
+    undo_stack_tests.cpp
     vector_image_tests.cpp
     virtual_list_access_tests.cpp
     virtual_list_benchmark_tests.cpp
@@ -138,8 +141,8 @@ target_sources(luil_core_tests PRIVATE
     dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
-# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 파일 감시 묶음의 표시도
-# 서버·감시자 없이 검증한다.
+# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 파일 감시 묶음의 표시, 테마 페이지의
+# 스타일 파일 견본도 서버·감시자 없이 검증한다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
 # 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
 target_sources(luil_core_tests PRIVATE
@@ -147,9 +150,11 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/device_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/files_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/lists_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/zoom_page.cpp"
     mobile_demo_assets_stub.cpp
@@ -172,12 +177,40 @@ target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
         "${PROJECT_SOURCE_DIR}/examples"
-        "${LUIL_TEST_DIRECTORY}")
+        "${LUIL_TEST_DIRECTORY}"
+        # 스타일 파서 시험이 키 표(설치하지 않는 생성 헤더)를 직접 잰다.
+        "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
 target_link_libraries(luil_core_tests
     PRIVATE
         luil::luil_core
         luil_options
+        # 스타일 파서 시험이 공유 사례 표를 읽고 고친다. 공개 헤더에는 nlohmann 형이 없다.
+        "$<BUILD_INTERFACE:luil_nlohmann_json>"
         Catch2::Catch2WithMain)
+# 스타일 파서 시험이 읽는 파일을 실행 파일에 싣는다. 기기에는 소스 트리가 없다.
+#  - LUIL_STYLE이 가리킨 파일은 내장값과 견주고, assets/style.json은 공유 사례 표(style_cases.json)의 바탕이다.
+set(luil_tests_embedded_directory "${CMAKE_CURRENT_BINARY_DIR}/embedded")
+foreach(embedded
+    "${LUIL_STYLE}|luil_test_built_in_style"
+    "${PROJECT_SOURCE_DIR}/assets/style.json|luil_test_base_style"
+    "${CMAKE_CURRENT_SOURCE_DIR}/style_cases.json|luil_test_style_cases")
+    string(REGEX REPLACE "\\|.*$" "" embedded_input "${embedded}")
+    string(REGEX REPLACE "^.*\\|" "" embedded_symbol "${embedded}")
+    set(embedded_source "${luil_tests_embedded_directory}/${embedded_symbol}.cpp")
+    add_custom_command(
+        OUTPUT "${embedded_source}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${embedded_input}"
+            "-DOUTPUT_FILE=${embedded_source}"
+            "-DSYMBOL=${embedded_symbol}"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS
+            "${embedded_input}"
+            "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding ${embedded_symbol}"
+        VERBATIM)
+    target_sources(luil_core_tests PRIVATE "${embedded_source}")
+endforeach()
 # SVG·Lottie 진입점은 켠 구성에서 실제 모듈로 읽어 그리고, 끈 구성에서 "지원 안 함"으로 답한다.
 target_compile_definitions(luil_core_tests PRIVATE
     "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"

@@ -41,6 +41,7 @@ accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `sys
 
 - **빌드 시점** — 같은 스키마의 JSON을 `LUIL_STYLE`로 준다 ([자산 파이프라인](asset-pipeline.md)). 앱 브랜딩처럼 고정된 값이면 이것으로 충분하다.
 - **실행 시점** — `ui_style` 값을 세워 `ui_frame::style`에 `shared_ptr`로 싣는다. 비어 있으면 내장 스타일이다. 값을 계산해서 만드는 앱(OS 색에서 중립 색을 뽑는 경우 등)은 `compose_palette()`가 같은 규칙으로 팔레트를 접어 주므로 그리기 코드가 그것을 구별하지 못한다.
+  - 값을 파일에서 얻는 갈래도 있다. 앱이 스타일 JSON 글을 읽어 [`parse_ui_style`](../../include/luil/theme/ui_style_json.h)에 넘기면 `LUIL_STYLE`과 같은 스키마·판정·대신 값으로 `ui_style`이 나온다. 오류가 하나라도 있으면 값이 비고 오류 목록(`style_error`, `describe`의 영문 한 줄)이 온다. 앱은 쥔 스타일을 그대로 둔다. 읽은 값은 `ui_frame::style`과 배치(`make_arranged_tree`의 `style`)에 같은 포인터로 준다 ([실행 중 스타일 읽기](../style-sheet-design.md)).
 
 중립 색 가운데 `backdrop_background`(`backdropBackground`)는 창 배경 효과가 선 표면(주 창·보조 창·popup)의 바탕이다. 알파가 효과를 얼마나 비출지를 정하고, 효과가 서지 않은 창은 이 색을 쓰지 않는다([창 배경 효과](../backdrop-design.md)). 이 키가 없는 스타일은 `windowBackground`로 물러선다.
 
@@ -59,6 +60,8 @@ frame->style = style; // 매 frame 같은 포인터를 실으면 된다
 ### 컴포넌트 칸 — 공용 스타일
 
 앱이 화면 전체에서 통일하고 싶은 **모양의 선택**은 컴포넌트마다 `ui_style`의 한 칸에 둔다. 첫 칸은 탭 막대의 `ui_style::tab_bar`(모양·닫기 단추 보이기·상태 표시 자리·바탕 역할)다. popup 창의 모서리(`ui_style::popup`)도 같은 모양의 칸이지만 tree가 아니라 host가 만드는 창이라 `ui_frame::style`에서 읽는다 ([popup 오버레이](../popup-overlay-design.md#모서리그림자테두리)). 한 줄 글의 줄바꿈 처리(`ui_style::text`, JSON `text.lineBreak`: `space`·`symbol`·`paragraphs`, 기본 `space`)도 host가 `ui_frame::style`에서 읽어 한 줄 도우미(`draw_text`·`measure_text`)에 건다 — 도우미에 문맥 인자가 없어서다 ([한 줄 도우미의 줄바꿈](../text-layout-design.md#한-줄-도우미의-줄바꿈)). 칸의 값은 enum과 `palette_role`뿐이라 비교되고 JSON(`tabBar`)에 적힌다. 컴포넌트는 그 칸을 **배치 문맥**(`arrange_context::style`, `make_arranged_tree`의 `style`)에서 읽고, 컴포넌트 config의 `std::optional` 칸이 그 막대 하나만 덮는다. 앱이 한 번 적으면 config에 모양을 적지 않은 모든 막대가 따른다. 자세한 규칙과 다음 컴포넌트를 늘리는 모양은 [탭 막대 스타일과 공용 스타일](../tab-bar-style-design.md)에 있다.
+
+여러 줄 글의 줄 나눔 정책도 `ui_style::text`의 한 칸이다(`text.wrap_policy`, JSON `text.wrapPolicy`: `hangulWords`·`unicode`, 기본 `hangulWords`). label·markdown·여러 줄 칸·`text_block_style`의 `line_break`가 비면 이 값이고, config에 적은 값이 앞선다. 배치·측정은 배치 문맥의 `style`(`measure_context::style`로 이어진다)에서, 배치한 줄 없이 그리는 글은 `draw_context::wrap_policy`에서 읽는다. 스타일을 실행 중에 바꾸는 앱은 `make_arranged_tree`와 `ui_frame::style`에 같은 포인터를 주면 정책도 함께 닿는다 ([줄 나눔 정책 스타일 키](../wrap-policy-key-design.md)).
 
 `ui_metrics`는 `draw_context::metrics`로 element에 닿는다. config에 이미 열린 값(`label_config::font_size`·`button_config::corner_radius`)과 앱이 tree를 짓는 산수에 쓰는 배치 상수(`check_row_height` 같은 `inline constexpr`)는 여기 담지 않는다. 텍스트 입력의 글꼴 크기도 담지 않는다 — 포인터를 caret으로 옮기는 계산이 그리기 밖에서 같은 글꼴을 재기 때문이다.
 
@@ -91,7 +94,7 @@ element가 `ui_color`를 앱에서 받는 자리는 라이브러리 어디에도
 - 고대비에서 접히는 방식을 정해야 하는 색: `high_contrast_palette_for()`가 역할마다 어떤 시스템 색으로 접을지 정한다. 선택자로 고른 색에는 그 자리가 없다.
 - 비활성 표시: element마다 알파를 발명하지 않고 `disabled_foreground` 하나를 쓴다.
 
-역할이 늘면 `ui_color_palette`와 합성 둘(`compose_palette`·`high_contrast_palette_for`)이 함께 늘어난다. 중립 역할이면 `neutral_color_palette`와 `assets/style.json`, 생성 script의 키 목록도 늘어난다. 그것을 같이 정할 수 없는 색이라면 그것은 아직 역할이 아니다.
+역할이 늘면 `ui_color_palette`와 합성 둘(`compose_palette`·`high_contrast_palette_for`)이 함께 늘어난다. 중립 역할이면 `neutral_color_palette`와 `assets/style.json`, 키 표 데이터 파일([`cmake/style_keys.cmake`](../../cmake/style_keys.cmake))의 한 행도 늘어난다. 생성기와 실행 중 파서가 그 한 행을 함께 읽는다. 그것을 같이 정할 수 없는 색이라면 그것은 아직 역할이 아니다.
 
 ## 글꼴 fallback
 
