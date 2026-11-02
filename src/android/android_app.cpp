@@ -552,6 +552,8 @@ namespace luil::android {
                 }
                 refresh_system_theme();
                 refresh_system_settings();
+                // 창이 서기 전이라 알림은 `post_metrics`가 막는다. 첫 창의 metrics가 이 값을 싣는다.
+                refresh_reduce_motion();
                 input_.set_dead_key_combiner([this](const char32_t accent, const char32_t character) {
                     if (jni_ == nullptr)
                         return char32_t {};
@@ -747,6 +749,8 @@ namespace luil::android {
                     // 대비 설정은 구성 변경으로 오지 않는다. 설정 앱에서 돌아올 때 다시 읽는다.
                     refresh_system_theme();
                     refresh_system_settings();
+                    // 애니메이션 배율도 구성 변경으로 오지 않는다 (`Configuration`에는 글자 배율만 있다).
+                    refresh_reduce_motion();
                     post_metrics();
                     restore_system_bars();
                     // 설정 앱에서 권한을 바꾸고 돌아왔을 수 있다. 묻는 중이었으면 답은 초점을 되찾을 때 알린다.
@@ -757,6 +761,8 @@ namespace luil::android {
                     // 알림 창·다른 앱에 다녀오면 시스템이 숨긴 막대를 다시 보일 수 있다.
                     restore_system_bars();
                     focused_ = true;
+                    // 분할 화면처럼 재개 상태인 채 초점만 오가면 `APP_CMD_RESUME`이 오지 않는다.
+                    refresh_reduce_motion();
                     // 권한 대화상자에서 돌아왔다. 묻는 중이었으면 지금 상태가 답이다.
                     refresh_permissions(true);
                     dirty_ = true;
@@ -908,15 +914,17 @@ namespace luil::android {
                 const float height { static_cast<float>(content_height()) };
                 // 안전 영역 밖의 거리다. 크기가 같아도 이것이 바뀌면 다시 알린다 (막대를 숨김, 돌림).
                 const luil::edge_insets outside { static_cast<float>(insets_.left), static_cast<float>(insets_.top), static_cast<float>(insets_.right), static_cast<float>(insets_.bottom) };
-                if (width == reported_width_ && height == reported_height_ && scale_ == reported_scale_ && outside == reported_outside_)
+                if (width == reported_width_ && height == reported_height_ && scale_ == reported_scale_ && outside == reported_outside_ && reduce_motion_ == reported_reduce_motion_)
                     return;
                 reported_width_ = width;
                 reported_height_ = height;
                 reported_scale_ = scale_;
                 reported_outside_ = outside;
+                reported_reduce_motion_ = reduce_motion_;
                 window_metrics metrics { make_window_metrics(width, height, scale_) };
                 metrics.outside = outside;
                 metrics.text_scale = scaled_font_size(12.0f) / 12.0f;
+                metrics.reduce_motion = reduce_motion_;
                 if (app_message message { environment_.delegate->make_metrics_message(metrics) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
             }
@@ -937,6 +945,21 @@ namespace luil::android {
                     system_input_ = *settings;
                 if (host_ != nullptr && config_.use_system_touch_settings)
                     static_cast<void>(host_->set_touch_gesture_config(apply_system_input_settings(config_.touch, system_input_)));
+            }
+
+            // 시스템의 애니메이션 배율이 0인지 다시 읽는다. 달라졌으면 다시 그리고 앱에 알린다.
+            //  - 크기·배율과 달리 어느 구성 변경으로도 오지 않아, 시작과 보이게 된 때(재개·초점)에 묻는다.
+            //  - 변경 관찰(`ContentObserver`)은 Java 클래스가 필요해 쓰지 않는다 (Java 0줄 방침).
+            void refresh_reduce_motion()
+            {
+                if (jni_ == nullptr)
+                    return;
+                const bool reduced { read_reduce_motion(*jni_, app_->activity->javaGameActivity) };
+                if (reduced == reduce_motion_)
+                    return;
+                reduce_motion_ = reduced;
+                dirty_ = true;
+                post_metrics();
             }
 
             // 시스템의 동적 색과 대비 설정을 읽는다. accent는 앱이 테마 목록에 보일 수 있게 프로세스에 세운다.
@@ -1638,6 +1661,7 @@ namespace luil::android {
                 state.origin_x = insets_.left;
                 state.origin_y = insets_.top;
                 state.dpi_scale = scale_;
+                state.reduce_motion = reduce_motion_;
 
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
                 const interaction_snapshot interaction { host_->acquire_interaction() };
@@ -1700,10 +1724,11 @@ namespace luil::android {
 
                 // 시간이 흘러야 바뀌는 그림(애니메이션·tooltip 지연)의 다음 시각이다.
                 const auto now { std::chrono::steady_clock::now() };
-                update_deadline_ = tree != nullptr ? tree->next_update(update_context { now }, state.interaction) : std::nullopt;
+                const update_context update { .now = now, .reduce_motion = reduce_motion_ };
+                update_deadline_ = tree != nullptr ? tree->next_update(update, state.interaction) : std::nullopt;
                 for (const overlay_layer& layer : layers)
                     if (layer.tree != nullptr)
-                        if (const auto next { layer.tree->next_update(update_context { now }, layer.interaction) }; next.has_value())
+                        if (const auto next { layer.tree->next_update(update, layer.interaction) }; next.has_value())
                             if (update_deadline_.has_value() == false || *next < *update_deadline_)
                                 update_deadline_ = next;
                 if (update_deadline_.has_value() && *update_deadline_ <= now)
@@ -1757,6 +1782,8 @@ namespace luil::android {
             std::vector<float> system_font_sizes_ {};
             bool prefers_light_ { false };
             bool high_contrast_ { false };
+            // 시스템의 애니메이션 배율이 0이다 (`read_reduce_motion`). 읽기 전과 읽지 못했을 때는 거짓이다.
+            bool reduce_motion_ { false };
             // 마지막으로 맞춘 막대 아이콘이다 (밝은 바탕이면 참).
             std::optional<bool> system_bars_light_ {};
             // 마지막으로 플랫폼에 옮긴 기기 요청이다.
@@ -1795,6 +1822,7 @@ namespace luil::android {
             float reported_height_ { -1.0f };
             float reported_scale_ { -1.0f };
             luil::edge_insets reported_outside_ {};
+            bool reported_reduce_motion_ { false };
         };
     }
 
