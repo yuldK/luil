@@ -1,6 +1,8 @@
 #include "luil/ui/toast_element.h"
 
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/info_bar_element.h"
+#include "luil/ui/severity.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
 #include "raster_probe.h"
@@ -9,6 +11,7 @@
 
 #include <chrono>
 #include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -22,6 +25,19 @@ namespace {
         config.text = u8"알림";
         return config;
     }
+}
+
+TEST_CASE("The toast severity is the shared severity under its old name", "[ui][toast][severity]")
+{
+    // 같은 타입의 별칭이라 정보 막대와 한 낱말을 쓰고, 옛 값 이름과 설정 필드가 그대로 선다.
+    STATIC_REQUIRE(std::is_same_v<luil::toast_severity, luil::ui_severity>);
+    STATIC_REQUIRE(luil::toast_severity::warning == luil::ui_severity::warning);
+    luil::toast_config config {};
+    config.severity = luil::ui_severity::error;
+    REQUIRE(config.severity == luil::toast_severity::error);
+    luil::info_bar_config bar {};
+    bar.severity = luil::toast_severity::success;
+    REQUIRE(bar.severity == luil::ui_severity::success);
 }
 
 TEST_CASE("A toast stack anchors toasts to the chosen corner", "[ui][toast]")

@@ -5,9 +5,11 @@
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/group_element.h"
+#include "luil/ui/info_bar_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/split_button_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_element.h"
@@ -963,6 +965,124 @@ TEST_CASE("Expanding through UIA carries the target state, and the open group st
     legacy->Release();
     group->Release();
     root->Release();
+}
+
+TEST_CASE("An info bar is Text with its name and its two buttons serve Invoke", "[win32][uia][info-bar]")
+{
+    fake_uia_host host {};
+    auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    luil::info_bar_config config {};
+    config.owner = u8"sync";
+    config.severity = luil::ui_severity::warning;
+    config.title = u8"동기화가 늦습니다";
+    config.message = u8"잠시 뒤 다시 시도합니다.";
+    config.action_label = u8"지금 시도";
+    config.action = tagged_action(u8"retry");
+    config.close = tagged_action(u8"dismiss");
+    page->add(std::make_unique<luil::info_bar_element>(std::move(config)));
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 600.0f, 60.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const bar { root->make_element_provider({ luil::ui_element_kind::info_bar, u8"sync" }) };
+    luil::win32::uia_element_provider* const action { root->make_element_provider({ luil::ui_element_kind::info_bar_action, u8"sync" }) };
+    luil::win32::uia_element_provider* const close { root->make_element_provider({ luil::ui_element_kind::info_bar_close, u8"sync" }) };
+
+    // 막대는 alert 역할이라 Text로 선다. 이름이 심각도 낱말, 제목, 본문이다.
+    REQUIRE(read_text_property(*bar, UIA_NamePropertyId) == L"경고 동기화가 늦습니다 잠시 뒤 다시 시도합니다.");
+    VARIANT type {};
+    REQUIRE(bar->GetPropertyValue(UIA_ControlTypePropertyId, &type) == S_OK);
+    REQUIRE(type.lVal == UIA_TextControlTypeId);
+    // 막대는 누를 자리가 아니다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(bar->GetPatternProvider(UIA_InvokePatternId, &pattern) == S_OK);
+    REQUIRE(pattern == nullptr);
+
+    // 두 단추는 Button이고 Invoke가 앱의 액션을 그대로 낸다.
+    REQUIRE(read_text_property(*action, UIA_NamePropertyId) == L"지금 시도");
+    REQUIRE(read_text_property(*close, UIA_NamePropertyId) == L"닫기");
+    for (luil::win32::uia_element_provider* const button : { action, close })
+    {
+        VARIANT button_type {};
+        REQUIRE(button->GetPropertyValue(UIA_ControlTypePropertyId, &button_type) == S_OK);
+        REQUIRE(button_type.lVal == UIA_ButtonControlTypeId);
+    }
+    REQUIRE(action->Invoke() == S_OK);
+    REQUIRE(dispatched_tag(host) == u8"retry");
+    host.dispatched.clear();
+    REQUIRE(close->Invoke() == S_OK);
+    REQUIRE(dispatched_tag(host) == u8"dismiss");
+
+    close->Release();
+    action->Release();
+    bar->Release();
+    root->Release();
+}
+
+TEST_CASE("A split button serves Invoke on its body and ExpandCollapse on its arrow", "[win32][uia][split-button]")
+{
+    for (const bool open : { false, true })
+    {
+        CAPTURE(open);
+        fake_uia_host host {};
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::split_button_config config {};
+        config.owner = u8"save";
+        config.look.text = u8"저장";
+        config.invoke = tagged_action(u8"save");
+        config.open = open;
+        config.set_open = [](const bool target) { return luil::make_app_action(probe_state_intent { target }); };
+        page->add(std::make_unique<luil::split_button_element>(std::move(config)));
+        host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 28.0f }, 1.0f));
+        auto* const root { new luil::win32::uia_root_provider { host } };
+        luil::win32::uia_element_provider* const body { root->make_element_provider({ luil::ui_element_kind::split_button_body, u8"save" }) };
+        luil::win32::uia_element_provider* const arrow { root->make_element_provider({ luil::ui_element_kind::split_button_arrow, u8"save" }) };
+
+        // 본체는 Invoke만 내건다.
+        IUnknown* pattern { nullptr };
+        REQUIRE(body->GetPatternProvider(UIA_InvokePatternId, &pattern) == S_OK);
+        REQUIRE(pattern != nullptr);
+        pattern->Release();
+        pattern = nullptr;
+        REQUIRE(body->GetPatternProvider(UIA_ExpandCollapsePatternId, &pattern) == S_OK);
+        REQUIRE(pattern == nullptr);
+        REQUIRE(body->Invoke() == S_OK);
+        REQUIRE(dispatched_tag(host) == u8"save");
+
+        // 화살표는 ExpandCollapse만 내건다. 한 노드에 둘을 함께 달 수 없다.
+        host.dispatched.clear();
+        REQUIRE(arrow->GetPatternProvider(UIA_InvokePatternId, &pattern) == S_OK);
+        REQUIRE(pattern == nullptr);
+        REQUIRE(arrow->GetPatternProvider(UIA_ExpandCollapsePatternId, &pattern) == S_OK);
+        REQUIRE(pattern != nullptr);
+        pattern->Release();
+        ExpandCollapseState state { ExpandCollapseState_Collapsed };
+        REQUIRE(arrow->get_ExpandCollapseState(&state) == S_OK);
+        REQUIRE(state == (open ? ExpandCollapseState_Expanded : ExpandCollapseState_Collapsed));
+
+        // Expand는 "펼쳐진 상태로 만들라"이고 이미 그 상태면 할 일이 없다. 아니면 목표 상태를 실은 절대 메시지다.
+        REQUIRE(arrow->Expand() == S_OK);
+        REQUIRE(host.dispatched.size() == (open ? 0u : 1u));
+        if (open == false)
+        {
+            const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+            REQUIRE(message != nullptr);
+            REQUIRE(message->get<probe_state_intent>() != nullptr);
+            REQUIRE(message->get<probe_state_intent>()->state == true);
+        }
+        host.dispatched.clear();
+        REQUIRE(arrow->Collapse() == S_OK);
+        REQUIRE(host.dispatched.size() == (open ? 1u : 0u));
+        if (open)
+        {
+            const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+            REQUIRE(message != nullptr);
+            REQUIRE(message->get<probe_state_intent>() != nullptr);
+            REQUIRE(message->get<probe_state_intent>()->state == false);
+        }
+
+        arrow->Release();
+        body->Release();
+        root->Release();
+    }
 }
 
 TEST_CASE("Setting a slider value through UIA carries the absolute target", "[win32][uia]")

@@ -36,7 +36,7 @@ namespace demo {
             feature { page_controls, u8"버튼과 컨트롤", u8"토글 · 스위치 · 툴팁 · 슬라이더 · 스피너" },
             feature { page_theme, u8"모양과 색", u8"시각적 테마 카드 · 시스템 강조색" },
             feature { page_tabs, u8"문서와 탭", u8"순서 이동 · 키보드 전환 · 메뉴" },
-            feature { page_popups, u8"메뉴와 팝업", u8"검색 · 명령 · 컨텍스트 메뉴" },
+            feature { page_popups, u8"메뉴와 팝업", u8"검색 · 명령 · 컨텍스트 메뉴 · 분할 버튼" },
             feature { page_basics, u8"입력과 다이얼로그", u8"IME · 여러 줄 편집 · 기본 버튼" },
             feature { page_lists, u8"목록과 트리", u8"가상 목록 · 드래그 · sticky 머리행" },
             feature { page_workbench, u8"변경 작업대", u8"비동기 트리 · 표 정렬 · 차이 보기 · 편집형 콤보" },

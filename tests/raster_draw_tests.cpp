@@ -5,6 +5,7 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_element.h"
+#include "luil/ui/info_bar_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_element.h"
@@ -14,6 +15,7 @@
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
 #include "luil/ui/slider_element.h"
+#include "luil/ui/split_button_element.h"
 #include "luil/ui/split_handle_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/ui_element.h"
@@ -82,6 +84,58 @@ namespace {
         std::uint8_t green { 0 };
         std::uint8_t blue { 0 };
     };
+
+    // 분할 버튼 raster 축의 도우미다. 자리는 물리 픽셀이고 화면은 200x80이다 (배율 2).
+    //  - 글은 비워 둔다. 도형과 색만 본다.
+    //  - 상자는 (20, 20) 160x40이다. 화살표는 오른쪽 논리 28 = 물리 56이라 x가 124~180이고, 본체는 20~124다.
+    constexpr luil::rect_f split_box { 20.0f, 20.0f, 160.0f, 40.0f };
+    const luil::ui_element_id split_body { luil::ui_element_kind::split_button_body, u8"split" };
+    const luil::ui_element_id split_arrow { luil::ui_element_kind::split_button_arrow, u8"split" };
+
+    [[nodiscard]] luil::ui_tree tree_with(std::unique_ptr<luil::ui_element> element)
+    {
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 80.0f }, raster_scale });
+        root->add(std::move(element));
+        return luil::ui_tree { std::move(root) };
+    }
+
+    [[nodiscard]] luil::split_button_config split_config()
+    {
+        luil::split_button_config config {};
+        config.owner = u8"split";
+        config.invoke = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+        config.set_open = [](const bool) { return luil::input_action {}; };
+        return config;
+    }
+
+    [[nodiscard]] luil::testing::raster_frame draw_split(luil::split_button_config config, const luil::ui_color_palette& palette, const luil::interaction_snapshot& interaction = {})
+    {
+        auto split { std::make_unique<luil::split_button_element>(std::move(config)) };
+        split->arrange({ split_box, raster_scale });
+        const luil::ui_tree tree { tree_with(std::move(split)) };
+        luil::testing::raster_frame frame { 200, 80, palette, raster_scale };
+        frame.draw(tree, interaction);
+        return frame;
+    }
+
+    // 같은 설정의 글자 버튼 한 상자에서 읽은 바탕색이다. 분할 버튼의 두 절반이 이 색과 같아야 한 dialog에 나란히 서도 어긋나지 않는다.
+    [[nodiscard]] luil::ui_color reference_fill(const luil::text_button_config& look, const luil::ui_color_palette& palette, const bool enabled = true, const bool pressed = false, const bool hovered = false)
+    {
+        const luil::ui_element_id id { luil::application_element_kind(1), u8"reference" };
+        auto button { std::make_unique<luil::text_button_element>(id, look) };
+        button->arrange({ split_box, raster_scale });
+        button->set_enabled(enabled);
+        const luil::ui_tree tree { tree_with(std::move(button)) };
+        luil::interaction_snapshot interaction {};
+        if (pressed)
+            interaction.pressed = id;
+        if (hovered)
+            interaction.hovered = id;
+        luil::testing::raster_frame frame { 200, 80, palette, raster_scale };
+        frame.draw(tree, interaction);
+        return frame.pixel_at(70, 40);
+    }
 
     // 사분면 색이 다른 정사각 이미지다 (한 사분면이 `block`×`block` 단색).
     // 윗줄은 빨강·초록, 아랫줄은 파랑·흰색이다.
@@ -186,6 +240,173 @@ TEST_CASE("The default button is painted as a fill and the focus ring as a ring"
         frame.draw(tree, interaction);
         REQUIRE(frame.count_color(secondary_ring_box, palette.accent) == 0);
     }
+}
+
+TEST_CASE("A split button is one rounded box cut into a body and an arrow with one divider line", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::testing::raster_frame frame { draw_split(split_config(), palette) };
+
+    const luil::ui_color body_fill { frame.pixel_at(70, 40) };
+    const luil::ui_color arrow_fill { frame.pixel_at(152, 40) };
+    // 두 절반은 글자 버튼과 같은 보통 바탕이다. 무엇인가 그려졌고 배경과 다르다.
+    REQUIRE(body_fill == reference_fill({}, palette));
+    REQUIRE(arrow_fill == body_fill);
+    REQUIRE(body_fill != palette.window_background);
+
+    // 구분선은 화살표 왼쪽 가장자리의 1 논리 픽셀(물리 2) 세로선 한 줄이다.
+    REQUIRE(frame.pixel_at(123, 40) == body_fill);
+    REQUIRE(frame.pixel_at(124, 40) != body_fill);
+    REQUIRE(frame.pixel_at(124, 40) == frame.pixel_at(125, 40));
+    REQUIRE(frame.pixel_at(126, 40) == arrow_fill);
+
+    // 바깥 모서리만 둥글다. 안쪽 가장자리는 곧아서 위아래 끝까지 칠한다.
+    REQUIRE(frame.pixel_at(20, 20) == palette.window_background);
+    REQUIRE(frame.pixel_at(179, 20) == palette.window_background);
+    REQUIRE(frame.pixel_at(20, 59) == palette.window_background);
+    REQUIRE(frame.pixel_at(179, 59) == palette.window_background);
+    REQUIRE(frame.pixel_at(123, 20) == body_fill);
+    REQUIRE(frame.pixel_at(123, 59) == body_fill);
+    REQUIRE(frame.pixel_at(124, 20) != palette.window_background);
+    REQUIRE(frame.pixel_at(124, 59) != palette.window_background);
+}
+
+TEST_CASE("A split button without a body is one rounded box with no divider", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::split_button_config config { split_config() };
+    config.invoke = nullptr;
+    const luil::testing::raster_frame frame { draw_split(std::move(config), palette) };
+    const luil::ui_color fill { frame.pixel_at(70, 40) };
+    REQUIRE(fill == reference_fill({}, palette));
+    // 선 없이 바탕 하나다.
+    REQUIRE(frame.pixel_at(124, 40) == fill);
+    REQUIRE(frame.pixel_at(152, 40) == fill);
+    // 네 모서리가 모두 둥글다.
+    for (const auto& [x, y] : { std::pair { 20, 20 }, std::pair { 179, 20 }, std::pair { 20, 59 }, std::pair { 179, 59 } })
+    {
+        CAPTURE(x, y);
+        REQUIRE(frame.pixel_at(x, y) == palette.window_background);
+    }
+}
+
+TEST_CASE("The two halves of a split button hover and press on their own", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color plain { reference_fill({}, palette) };
+    const luil::ui_color hovered { reference_fill({}, palette, true, false, true) };
+    const luil::ui_color pressed { reference_fill({}, palette, true, true, false) };
+    REQUIRE(hovered != plain);
+    REQUIRE(pressed != plain);
+
+    luil::interaction_snapshot over_body {};
+    over_body.hovered = split_body;
+    const luil::testing::raster_frame body_hover { draw_split(split_config(), palette, over_body) };
+    REQUIRE(body_hover.pixel_at(70, 40) == hovered);
+    REQUIRE(body_hover.pixel_at(152, 40) == plain);
+
+    luil::interaction_snapshot down_arrow {};
+    down_arrow.pressed = split_arrow;
+    const luil::testing::raster_frame arrow_press { draw_split(split_config(), palette, down_arrow) };
+    REQUIRE(arrow_press.pixel_at(152, 40) == pressed);
+    REQUIRE(arrow_press.pixel_at(70, 40) == plain);
+}
+
+TEST_CASE("While the menu is open the arrow wears the pressed fill even with the pointer on the body", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::split_button_config config { split_config() };
+    config.open = true;
+    luil::interaction_snapshot over_body {};
+    over_body.hovered = split_body;
+    const luil::testing::raster_frame frame { draw_split(std::move(config), palette, over_body) };
+    // 열린 동안 화살표는 눌림 바탕이고, 포인터가 본체 위여도 두 절반은 따로 선다.
+    REQUIRE(frame.pixel_at(152, 40) == reference_fill({}, palette, true, true, false));
+    REQUIRE(frame.pixel_at(70, 40) == reference_fill({}, palette, true, false, true));
+
+    // 닫힌 뒤에는 보통 바탕이다.
+    const luil::testing::raster_frame closed { draw_split(split_config(), palette) };
+    REQUIRE(closed.pixel_at(152, 40) == reference_fill({}, palette));
+}
+
+TEST_CASE("A split button takes the fill of the look it is given", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+
+    for (const luil::text_button_visual visual : { luil::text_button_visual::accent, luil::text_button_visual::danger })
+    {
+        CAPTURE(visual);
+        luil::split_button_config config { split_config() };
+        config.look.visual = visual;
+        const luil::testing::raster_frame frame { draw_split(config, palette) };
+        const luil::ui_color expected { reference_fill({ .visual = visual }, palette) };
+        REQUIRE(expected != reference_fill({}, palette));
+        REQUIRE(frame.pixel_at(70, 40) == expected);
+        REQUIRE(frame.pixel_at(152, 40) == expected);
+    }
+
+    // 기본 버튼은 두 절반이 함께 강조색으로 채워지고 구분선은 그 위의 글자 색이다.
+    luil::split_button_config primary { split_config() };
+    primary.look.default_button = true;
+    const luil::testing::raster_frame filled { draw_split(std::move(primary), palette) };
+    REQUIRE(filled.pixel_at(70, 40) == palette.accent);
+    REQUIRE(filled.pixel_at(152, 40) == palette.accent);
+    REQUIRE(filled.pixel_at(124, 40) == palette.accent_foreground);
+
+    // 상자가 없는 link는 normal로 읽는다.
+    luil::split_button_config link { split_config() };
+    link.look.visual = luil::text_button_visual::link;
+    const luil::testing::raster_frame linked { draw_split(std::move(link), palette) };
+    REQUIRE(linked.pixel_at(70, 40) == reference_fill({}, palette));
+}
+
+TEST_CASE("A fill selector paints both halves the same and stays through hover", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color custom { luil::make_ui_color(10, 200, 30) };
+    luil::split_button_config config { split_config() };
+    config.look.fill = [](const luil::ui_color_palette&) { return luil::make_ui_color(10, 200, 30); };
+    luil::interaction_snapshot over_arrow {};
+    over_arrow.hovered = split_arrow;
+    const luil::testing::raster_frame frame { draw_split(std::move(config), palette, over_arrow) };
+    REQUIRE(frame.pixel_at(70, 40) == custom);
+    REQUIRE(frame.pixel_at(152, 40) == custom);
+}
+
+TEST_CASE("A disabled split button and a disabled body fill like a disabled text button", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color disabled { reference_fill({}, palette, false, true, true) };
+
+    luil::interaction_snapshot over_both {};
+    over_both.hovered = split_arrow;
+    over_both.pressed = split_body;
+    luil::split_button_config off { split_config() };
+    off.enabled = false;
+    const luil::testing::raster_frame all_off { draw_split(std::move(off), palette, over_both) };
+    // 꺼진 절반은 hover·눌림 표시를 받지 않는다.
+    REQUIRE(all_off.pixel_at(70, 40) == disabled);
+    REQUIRE(all_off.pixel_at(152, 40) == disabled);
+
+    // 본체만 꺼진 버튼은 화살표만 살아 hover가 선다.
+    luil::split_button_config body_off { split_config() };
+    body_off.invoke_enabled = false;
+    const luil::testing::raster_frame half_off { draw_split(std::move(body_off), palette, over_both) };
+    REQUIRE(half_off.pixel_at(70, 40) == disabled);
+    REQUIRE(half_off.pixel_at(152, 40) == reference_fill({}, palette, true, false, true));
+}
+
+TEST_CASE("A split button whose body is off does not claim the Enter fill", "[ui][raster][split-button]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::split_button_config config { split_config() };
+    config.look.default_button = true;
+    config.invoke_enabled = false;
+    const luil::testing::raster_frame frame { draw_split(std::move(config), palette) };
+    // Enter가 갈 곳이 꺼졌으니 어느 절반도 강조색으로 약속하지 않는다.
+    REQUIRE(frame.pixel_at(70, 40) != palette.accent);
+    REQUIRE(frame.pixel_at(152, 40) != palette.accent);
+    REQUIRE(frame.pixel_at(152, 40) == reference_fill({}, palette));
 }
 
 TEST_CASE("A disabled accent button keeps GrayText readable in high contrast", "[ui][raster][draw]")
@@ -1103,4 +1324,171 @@ TEST_CASE("An invalid text field keeps the error colour on its border even while
     frame.draw(invalid, focused);
     REQUIRE(frame.pixel_at(100, 0) == palette.error_accent);
     REQUIRE(frame.pixel_at(100, 1) == palette.error_accent);
+}
+
+namespace {
+    // 정보 막대 raster 축의 도우미다. 화면은 840x200이고 배율은 2다 (자리는 물리 픽셀).
+    //  - 글은 비워 둔다. 글꼴을 싣지 않으면 글리프도 그려지지 않으므로 이 축이 보는 것은 바탕·테·단추의 색이다.
+    //    글리프가 네 심각도마다 다르다는 것은 `severity_paint_tests.cpp`가 값으로 잠근다.
+    //  - 막대 하나는 논리 400x40이고 (20, 20)에 선다. 오른쪽 가장자리는 물리 x 820, 첫 줄 가운데는 물리 y 60이다.
+    constexpr luil::rect_f info_bar_box { 20.0f, 20.0f, 800.0f, 80.0f };
+    const luil::ui_element_id info_bar_close_id { luil::ui_element_kind::info_bar_close, u8"bar" };
+
+    [[nodiscard]] luil::testing::raster_frame draw_info_bar(luil::info_bar_config config, const luil::ui_color_palette& palette, const luil::rect_f& slot = info_bar_box, const luil::interaction_snapshot& interaction = {})
+    {
+        config.owner = u8"bar";
+        auto bar { std::make_unique<luil::info_bar_element>(std::move(config)) };
+        bar->arrange({ slot, raster_scale });
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 840.0f, 200.0f }, raster_scale });
+        root->add(std::move(bar));
+        const luil::ui_tree tree { std::move(root) };
+        luil::testing::raster_frame frame { 840, 200, palette, raster_scale };
+        frame.draw(tree, interaction);
+        return frame;
+    }
+
+    // 심각도가 나르는 팔레트 역할이다. 라이브러리의 helper를 거치지 않고 다시 적어 둔 값이라 helper가 어긋나면 드러난다.
+    [[nodiscard]] luil::ui_color severity_role(const luil::ui_color_palette& palette, const luil::ui_severity severity)
+    {
+        switch (severity)
+        {
+        case luil::ui_severity::success:
+            return palette.accent;
+        case luil::ui_severity::warning:
+            return palette.warning_accent;
+        case luil::ui_severity::error:
+            return palette.error_accent;
+        case luil::ui_severity::info:
+            break;
+        }
+        return palette.secondary_foreground;
+    }
+
+    // 반투명한 색을 불투명한 바탕 위에 얹은 색이다. 보조 글자색은 알파가 있어 테가 바탕과 섞여 그려진다.
+    [[nodiscard]] luil::ui_color over(const luil::ui_color foreground, const luil::ui_color background) noexcept
+    {
+        const std::uint32_t alpha { foreground >> 24U };
+        const auto channel = [&](const std::uint32_t shift) {
+            const std::uint32_t top { (foreground >> shift) & 0xFFU };
+            const std::uint32_t bottom { (background >> shift) & 0xFFU };
+            return (top * alpha + bottom * (255U - alpha) + 127U) / 255U;
+        };
+        return 0xFF000000U | (channel(16U) << 16U) | (channel(8U) << 8U) | channel(0U);
+    }
+
+    // 반올림 오차(채널당 둘)까지는 같은 색이다.
+    [[nodiscard]] bool same_color(const luil::ui_color actual, const luil::ui_color expected) noexcept
+    {
+        for (const std::uint32_t shift : { 0U, 8U, 16U })
+        {
+            const int difference { static_cast<int>((actual >> shift) & 0xFFU) - static_cast<int>((expected >> shift) & 0xFFU) };
+            if (std::abs(difference) > 2)
+                return false;
+        }
+        return true;
+    }
+}
+
+TEST_CASE("An info bar is a neutral raised body with a one pixel border in the severity color", "[ui][raster][info-bar]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        for (const luil::ui_severity severity : { luil::ui_severity::info, luil::ui_severity::success, luil::ui_severity::warning, luil::ui_severity::error })
+        {
+            CAPTURE(theme, severity);
+            const luil::testing::raster_frame frame { draw_info_bar(luil::info_bar_config { .severity = severity }, palette) };
+            // 테는 바탕 위에 칠해진다. 보조 글자색(info)은 알파가 있어 바탕과 섞인다.
+            const luil::ui_color border { over(severity_role(palette, severity), palette.raised_background) };
+            // 몸은 심각도와 무관한 올라온 중립 바탕이다.
+            REQUIRE(frame.pixel_at(400, 60) == palette.raised_background);
+            REQUIRE(border != palette.raised_background);
+            // 테는 막대 안쪽에 온전히 들어온 1 논리 픽셀(물리 2)이다. 네 변 모두다.
+            const std::array samples { frame.pixel_at(20, 60), frame.pixel_at(21, 60), frame.pixel_at(819, 60), frame.pixel_at(400, 20), frame.pixel_at(400, 99) };
+            for (const luil::ui_color sample : samples)
+            {
+                CAPTURE(sample, border);
+                REQUIRE(same_color(sample, border));
+            }
+            REQUIRE(frame.pixel_at(22, 60) == palette.raised_background);
+            // 막대 밖은 창 바탕이다.
+            REQUIRE(frame.pixel_at(10, 60) == palette.window_background);
+            REQUIRE(frame.pixel_at(400, 110) == palette.window_background);
+        }
+    }
+}
+
+TEST_CASE("An info bar keeps its border when high contrast folds the body into the window", "[ui][raster][info-bar]")
+{
+    luil::high_contrast_colors colors {};
+    colors.window_background = luil::make_ui_color(0, 0, 0);
+    colors.window_foreground = luil::make_ui_color(255, 255, 255);
+    colors.emphasis = luil::make_ui_color(0x37, 0xDC, 0xFF);
+    const luil::ui_color_palette palette { luil::high_contrast_palette_for(colors) };
+
+    // 올라온 면은 창 바탕으로 접힌다. 테가 없으면 막대가 표면에서 사라진다.
+    REQUIRE(palette.raised_background == palette.window_background);
+    for (const luil::ui_severity severity : { luil::ui_severity::info, luil::ui_severity::success, luil::ui_severity::warning, luil::ui_severity::error })
+    {
+        CAPTURE(severity);
+        const luil::testing::raster_frame frame { draw_info_bar(luil::info_bar_config { .severity = severity }, palette) };
+        const luil::ui_color border { severity_role(palette, severity) };
+        REQUIRE(border != palette.window_background);
+        REQUIRE(frame.pixel_at(20, 60) == border);
+        REQUIRE(frame.pixel_at(400, 20) == border);
+        REQUIRE(frame.pixel_at(400, 60) == palette.window_background);
+        // info·warning·error는 같은 전경색이다. 둘을 가르는 것은 글리프의 몫이다.
+        if (severity != luil::ui_severity::success)
+            REQUIRE(border == colors.window_foreground);
+    }
+}
+
+TEST_CASE("An info bar draws its close button and its action button as ordinary buttons", "[ui][raster][info-bar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::info_bar_config config {};
+    config.action_label = u8"Retry";
+    config.action = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+    config.close = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+
+    // 닫기는 쉬는 동안 바탕이 없고(글리프만 선다) hover에서 도구 막대의 hover 바탕이 깔린다.
+    const luil::testing::raster_frame resting { draw_info_bar(config, palette) };
+    REQUIRE(resting.pixel_at(780, 60) == palette.raised_background);
+    luil::interaction_snapshot over_close {};
+    over_close.hovered = info_bar_close_id;
+    const luil::testing::raster_frame hovered { draw_info_bar(config, palette, info_bar_box, over_close) };
+    const luil::ui_color hover_fill { over(palette.button_hover_background, palette.raised_background) };
+    REQUIRE(hover_fill != palette.raised_background);
+    REQUIRE(same_color(hovered.pixel_at(780, 60), hover_fill));
+
+    // 동작 단추는 옆에 서고 보통 글자 버튼의 바탕(입력 표면)을 쓴다 (논리 폭 64, 닫기 왼쪽 8).
+    const luil::ui_color plain { over(palette.input_background, palette.raised_background) };
+    REQUIRE(plain != palette.raised_background);
+    REQUIRE(same_color(resting.pixel_at(630, 60), plain));
+    REQUIRE(resting.pixel_at(600, 60) == palette.raised_background);
+    // 단추 높이는 논리 28(물리 56)이라 첫 줄 가운데 위아래로 서고, 막대 안쪽에 머문다.
+    REQUIRE(same_color(resting.pixel_at(630, 34), plain));
+    REQUIRE(resting.pixel_at(630, 30) == palette.raised_background);
+}
+
+TEST_CASE("An info bar draws a narrow bar's action button on its own line under the text", "[ui][raster][info-bar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::info_bar_config config {};
+    config.action_label = u8"Retry";
+    config.action = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+    config.close = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+
+    // 논리 300 폭이면 글 폭이 200 아래라 단추가 아래 줄로 간다. 글이 비어도 첫 줄은 있어 단추는 그 아래 8에 선다.
+    // 막대는 논리 높이 76(위 10.5 + 첫 줄 19 + 8 + 단추 28 + 아래 10.5)이다.
+    const luil::rect_f slot { 20.0f, 20.0f, 600.0f, 152.0f };
+    const luil::testing::raster_frame frame { draw_info_bar(config, palette, slot) };
+    const luil::ui_color plain { over(palette.input_background, palette.raised_background) };
+    // 단추는 글의 왼쪽(물리 x 20 + 76)에서 시작해 물리 128 폭이다. 위쪽은 y 20 + 2 * 37.5 = 95다.
+    REQUIRE(same_color(frame.pixel_at(130, 120), plain));
+    REQUIRE(frame.pixel_at(130, 92) == palette.raised_background);
+    REQUIRE(frame.pixel_at(90, 120) == palette.raised_background);
+    // 옆에 서던 자리는 비어 있다.
+    REQUIRE(frame.pixel_at(450, 60) == palette.raised_background);
 }
