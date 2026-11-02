@@ -437,7 +437,7 @@ namespace luil {
         {
             std::uint64_t seed { std::hash<std::u8string_view> {}(text) };
             // SkFont의 ==는 typeface를 pointer로 비교한다. 같은 typeface는 같은 uniqueID를 가진다.
-            const std::array<std::uint64_t, 14> values {
+            const std::array<std::uint64_t, 15> values {
                 revision,
                 std::uint64_t { font.getTypeface()->uniqueID() },
                 float_bits(font.getSize()),
@@ -452,6 +452,7 @@ namespace luil {
                 std::uint64_t { request.wrap },
                 float_bits(request.line_height),
                 static_cast<std::uint64_t>(request.styles.size()),
+                static_cast<std::uint64_t>(request.line_break),
             };
             for (const std::uint64_t value : values)
                 seed = mix_hash(seed, value);

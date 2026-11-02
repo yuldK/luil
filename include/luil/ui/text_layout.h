@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/text/line_break.h"
 #include "luil/ui/ui_element.h"
 
 #include <limits>
@@ -42,6 +43,8 @@ namespace luil {
         float line_height { 0.0f };
         // begin 순서의 비중첩 글자소 범위다. 색은 배치와 분리한다.
         std::vector<text_layout_style> styles {};
+        // 접는 자리를 고르는 규칙이다 (docs/line-break-design.md). 정책만 다른 두 배치는 cache에서 다른 항목이다.
+        text::line_break_policy line_break { text::line_break_policy::hangul_words };
         [[nodiscard]] bool operator==(const text_layout_request&) const noexcept = default;
     };
 

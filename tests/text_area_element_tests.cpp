@@ -867,3 +867,63 @@ TEST_CASE("A syntax span in front of a composition keeps its place after the com
     const auto beyond { drawn(std::make_shared<const std::vector<luil::text_span>>(beyond_spans)) };
     REQUIRE(beyond == without);
 }
+
+TEST_CASE("Measured text area wrapping picks the same cuts as the text layout", "[ui][text-area][line-break]")
+{
+    const luil::text_measurer measurer { fixed_width };
+    // 칸 200에서 좌우 여백(7)을 뺀 186이 접는 폭이다.
+    for (const auto policy : { luil::text::line_break_policy::hangul_words, luil::text::line_break_policy::unicode })
+        for (const std::u8string& text : {
+                 std::u8string { u8"alpha-beta gamma/delta 東京「大阪」です。そして名古屋。" },
+                 std::u8string { u8"ab \u0301cdef ghij  \u0301k aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                 std::u8string { u8"설정을 저장했습니다 그리고 다시 열었습니다 설정을 저장했습니다 그리고 다시 열었습니다" },
+                 std::u8string { u8"ab\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000cd" },
+                 std::u8string { u8"https://example.com/luil/docs/line-break-design.md?query=1,234.5&x=100\u00A0km" },
+             })
+        {
+            CAPTURE(static_cast<int>(policy));
+            luil::text_area_config config {};
+            config.line_break = policy;
+            luil::text_area_element memo { luil::ui_element_id { kind_memo, u8"memo" }, view_of(text, 0), std::move(config) };
+            memo.arrange({ .slot = { 0.0f, 0.0f, 200.0f, 100.0f }, .scale = 1.0f, .measurer = &measurer });
+            const auto layout { luil::make_text_layout({ .text = text, .width = 186.0f, .wrap = true, .line_height = 18.0f, .line_break = policy }, measurer) };
+            std::vector<luil::text_area_element::line> expected {};
+            for (const auto& row : layout.lines())
+                expected.push_back({ row.begin, row.end, row.wrapped });
+            REQUIRE(memo.lines() == expected);
+        }
+}
+
+TEST_CASE("Changing the line break policy refills the wrap cache", "[ui][text-area][line-break]")
+{
+    std::size_t measured { 0 };
+    const luil::text_measurer counting { [&measured](const std::u8string_view value, const float size) {
+        ++measured;
+        return fixed_width(value, size);
+    }
+    };
+    // 칸의 접는 폭(186)은 열여덟 글자다. 앞 어절이 열한 글자라 두 정책의 첫 줄 끝이 다르다.
+    const std::u8string text { u8"가나다라마바사아자차카 타파하가나다라마바\n끝" };
+    const auto cache { std::make_shared<luil::text_area_wrap_cache>() };
+    const auto arrange = [&](const luil::text::line_break_policy policy, std::shared_ptr<luil::text_area_wrap_cache> with) {
+        luil::text_area_config config {};
+        config.wrap_cache = std::move(with);
+        config.line_break = policy;
+        luil::text_area_element memo { luil::ui_element_id { kind_memo, u8"memo" }, view_of(text, 0), std::move(config) };
+        memo.arrange({ .slot = { 0.0f, 0.0f, 200.0f, 100.0f }, .scale = 1.0f, .measurer = &counting });
+        return memo.lines();
+    };
+    const auto words { arrange(luil::text::line_break_policy::hangul_words, cache) };
+    REQUIRE(cache->size() == 2u);
+    measured = 0;
+    REQUIRE(arrange(luil::text::line_break_policy::hangul_words, cache) == words);
+    // 같은 정책이면 표본 글 하나만 잰다.
+    REQUIRE(measured == 1u);
+    // 정책이 바뀌면 통째로 비우고 다시 잰다. 다시 찬 자리는 cache 없이 접은 것과 같다.
+    measured = 0;
+    const auto syllables { arrange(luil::text::line_break_policy::unicode, cache) };
+    REQUIRE(measured > 1u);
+    REQUIRE(cache->size() == 2u);
+    REQUIRE(syllables == arrange(luil::text::line_break_policy::unicode, nullptr));
+    REQUIRE(syllables != words);
+}

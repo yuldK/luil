@@ -82,6 +82,9 @@ luil_add_source_filter(luil_core_files "text"
     text/grapheme_data.h
     text/grapheme_internal.h
     "${public_headers}/text/grapheme.h"
+    text/line_break.cpp
+    text/line_break_data.h
+    "${public_headers}/text/line_break.h"
     text/text_change.cpp
     "${public_headers}/text/text_change.h"
     text/text_edit.cpp
@@ -111,6 +114,8 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/ui_element.cpp
     "${public_headers}/ui/ui_element.h"
     ui/text_measurer.cpp
+    ui/line_fold.cpp
+    ui/line_fold.h
     ui/text_layout.cpp
     ui/text_layout_skia.cpp
     ui/text_layout_internal.h

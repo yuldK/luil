@@ -71,13 +71,14 @@ namespace luil {
             const std::u8string_view text, const text_block_style& style, const float width, const float pixel_size, const float line_height, const text_measurer& measure)
         {
             text_block_layout result {};
-            // 여러 줄 칸과 같은 배치다 — 공백 우선, 긴 낱말은 글자소 경계에서 바꾼다.
+            // 여러 줄 칸과 같은 배치다 — UAX #14의 후보에서 바꾸고, 후보가 없는 긴 낱말은 글자소 경계에서 바꾼다.
             text_layout_request request {
                 .text = std::u8string { text },
                 .font_size = pixel_size,
                 .width = width,
                 .wrap = true,
                 .line_height = line_height,
+                .line_break = style.line_break,
             };
             const text_layout layout { make_text_layout(std::move(request), measure) };
             const std::span<const text_layout_line> lines { layout.lines() };

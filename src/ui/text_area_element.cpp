@@ -1,7 +1,9 @@
 #include "luil/ui/text_area_element.h"
 #include "luil/text/grapheme.h"
+#include "luil/text/line_break.h"
 #include "luil/text/text_edit.h"
 #include "ui/font_synthesis.h"
+#include "ui/line_fold.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_link_element.h"
 #include "ui/text_span_color.h"
@@ -129,15 +131,18 @@ namespace luil {
         //  - 줄마다 폭에 드는 가장 먼 문자 경계를 찾는다. 앞 줄의 글자 수에서 시작해 걸음을 두 배로 늘려 넘치는 자리를
         //    잡고 그 사이를 이분 탐색한다 — 남은 문단 전체를 재지 않으므로 줄 바꿈 없는 긴 문단에서도 한 줄에 그 줄
         //    길이의 몇 배만 잰다. 줄 길이는 대개 비슷해 첫 걸음이 거의 맞는다.
-        //  - 그 안의 마지막 공백 뒤에서 접는다. 넘치는 자리가 공백이면 이어진 공백을 모두 윗줄에 매단다. 공백만 남은
-        //    꼬리는 접지 않는다 — 빈 화면 줄이 생기지 않는다.
-        //  - 공백이 없으면(칸보다 긴 낱말, 띄어 쓰지 않는 글) 글자 사이에서 접는다. 한 글자도 안 들면 한 글자는 둔다.
-        [[nodiscard]] std::vector<std::size_t> wrap_paragraph(const std::u8string_view paragraph, const float width, const width_of& measure)
+        //  - 자를 자리는 native 배치와 같은 `choose_line_fold`가 고른다. 넘치는 자리가 매달리는 공백이면 이어진 공백을
+        //    모두 윗줄에 매달고, 아니면 그 안의 마지막 줄 나눔 후보(UAX #14)에서 접는다. 공백만 남은 꼬리는 접지
+        //    않는다 — 빈 화면 줄이 생기지 않는다.
+        //  - 후보가 없으면(칸보다 긴 낱말) 글자소 사이에서 접는다. 한 글자소도 안 들면 한 글자소는 둔다.
+        //  - 후보는 문단이 칸 폭을 넘을 때만 한 번 구한다.
+        [[nodiscard]] std::vector<std::size_t> wrap_paragraph(const std::u8string_view paragraph, const float width, const width_of& measure, const text::line_break_policy policy)
         {
             std::vector<std::size_t> cuts {};
             if (width <= 0.0f || paragraph.empty())
                 return cuts;
             const std::vector<std::size_t> boundaries { boundaries_of(paragraph) };
+            std::vector<text::line_break_opportunity> opportunities {};
             const std::size_t last { boundaries.size() - 1 };
             std::size_t first { 0 };
             std::size_t span { 1 };
@@ -169,15 +174,9 @@ namespace luil {
                 }
                 span = std::max<std::size_t>(good - first, 1);
                 const std::size_t fit { boundaries[std::max(good, first + 1)] };
-                std::size_t cut { fit };
-                while (cut < paragraph.size() && paragraph[cut] == u8' ')
-                    ++cut;
-                if (cut == fit)
-                {
-                    const std::size_t space { paragraph.substr(start, fit - start).find_last_of(u8' ') };
-                    if (space != std::u8string_view::npos)
-                        cut = start + space + 1;
-                }
+                if (opportunities.empty())
+                    opportunities = text::line_break_opportunities(paragraph, policy);
+                const std::size_t cut { choose_line_fold(paragraph, boundaries, opportunities, start, fit).cut };
                 if (cut >= paragraph.size())
                     return cuts;
                 cuts.push_back(cut);
@@ -215,9 +214,9 @@ namespace luil {
             }
         }
 
-        [[nodiscard]] std::vector<text_line> wrap_lines(const std::u8string_view text, const float width, const width_of& measure)
+        [[nodiscard]] std::vector<text_line> wrap_lines(const std::u8string_view text, const float width, const width_of& measure, const text::line_break_policy policy)
         {
-            return split_screen_lines(text, [width, &measure](const std::u8string_view paragraph) { return wrap_paragraph(paragraph, width, measure); });
+            return split_screen_lines(text, [width, &measure, policy](const std::u8string_view paragraph) { return wrap_paragraph(paragraph, width, measure, policy); });
         }
 
         // offset이 선 화면 줄이다. 줄 바꿈 바로 뒤와 넘겨 접은 자리는 다음 줄의 처음이다.
@@ -445,7 +444,7 @@ namespace luil {
                 storage.push_back({ row.begin, row.end, row.wrapped });
             return storage;
         }
-        storage = wrap_lines(text, wrap_width_, measure);
+        storage = wrap_lines(text, wrap_width_, measure, config_.line_break);
         return storage;
     }
 
@@ -488,6 +487,7 @@ namespace luil {
         request.wrap = wrap;
         request.line_height = line_height_logical() * scale_;
         request.styles = metric_styles(begin, begin + text.size(), displayed);
+        request.line_break = config_.line_break;
         return request;
     }
 
@@ -526,7 +526,7 @@ namespace luil {
             }
             else
             {
-                entry.cuts = wrap_paragraph(paragraph, wrap_width_, measure);
+                entry.cuts = wrap_paragraph(paragraph, wrap_width_, measure, config_.line_break);
                 entry.width = config_.wrap ? 0.0f : measure(paragraph) / scale_;
             }
             return entry;
@@ -545,12 +545,14 @@ namespace luil {
         const auto face { config_.face == text_face::code ? text_layout_face::code : text_layout_face::ui };
         const auto revision { native_layout_ ? text_layout_revision() : 0 };
         if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.scale_ != scale_ || cache.sample_width_ != sample
-            || cache.wrap_ != config_.wrap || cache.native_ != native_layout_ || cache.face_ != face || cache.font_revision_ != revision)
+            || cache.wrap_ != config_.wrap || cache.line_break_ != config_.line_break || cache.native_ != native_layout_ || cache.face_ != face
+            || cache.font_revision_ != revision)
         {
             cache.entries_.clear();
             cache.rows_.clear();
             cache.width_ = wrap_width_;
             cache.wrap_ = config_.wrap;
+            cache.line_break_ = config_.line_break;
             cache.font_size_ = font_size();
             cache.scale_ = scale_;
             cache.sample_width_ = sample;
