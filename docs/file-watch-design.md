@@ -164,7 +164,7 @@ namespace luil {
 - 권장: 100 ms·1000 ms·4096. 편집기 저장은 수 ms 안에 끝나고, 쉬지 않고 쓰는 로그도 1초마다 보인다. 대가: 백신·색인기가 그 뒤에 건드리면 묶음이 하나 더 온다. **권장대로 진행.**
 
 **5. Android 범위.** 질문: 어느 저장소까지 약속하는가.
-- 길 a: 앱 전용 저장소(`luil::android::files_directory()`)만 보장하고, 공유 저장소는 받되 보장하지 않는다. 대가: 공유 저장소에서 다른 앱의 변경을 놓칠 수 있다.
+- 길 a: 앱 전용 저장소(`GameActivity`의 `internalDataPath`. 앱의 `android_main`이 받는 `android_app`의 `activity`에서 읽는다)만 보장하고, 공유 저장소는 받되 보장하지 않는다. 대가: 공유 저장소에서 다른 앱의 변경을 놓칠 수 있다.
 - 길 b: 앱 전용 밖은 `add`가 거절한다. 대가: 그 경로를 쓰는 앱이 길이 없다.
 - 길 c: 공유 저장소에 폴링을 더한다. 대가: 배터리와 구현 크기. 이번 범위를 넘는다.
 - 권장: a. **권장대로 진행.**
@@ -184,7 +184,7 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - `stop`과 `add`·`remove`는 `PostQueuedCompletionStatus`로 thread를 깨운다. 감시를 풀 때는 `CancelIoEx` 뒤 그 완료를 받고 나서 버퍼를 놓는다. `blocking_io_canceller`는 쓰지 않는다. 동기 I/O가 아니라서다.
 - 버퍼는 감시마다 64 KB다. 네트워크 경로는 64 KB를 넘는 버퍼를 거절한다. 모든 경로를 같은 크기로 두어 갈래를 만들지 않는다.
 - 감시 폴더가 지워지면 읽기가 오류로 끝난다. 그 오류를 `lost`로 바꾼다(오류 값은 구현 때 실측한다). 핸들은 옮겨 간 폴더를 따라가므로, 묶음을 낼 때 `GetFinalPathNameByHandleW`를 처음 경로와 견주어 달라졌으면 `lost`다. 안의 변경이 없으면 늦게 안다.
-- 같은 줄에서 뽑는 Win32 비공개 helper(핸들 소유와 OS 오류 글)를 쓴다. 경로는 `src/win32/utf8.h`로 옮긴다.
+- 핸들 소유는 `src/win32/owned_handle.h`, OS 오류 글은 `win32::make_last_error`를 쓴다(아래 비공개 helper). 경로 변환은 `src/win32/utf8.h`의 `utf8_to_utf16`·`utf16_to_utf8`이 맡는다.
 - 한계: SMB 공유는 서버가 변경 알림을 주지 않으면 `add`가 실패하거나 알림이 오지 않는다. 다른 기계가 바꾼 것은 늦거나 빠질 수 있다. 이동식 드라이브는 열린 핸들 때문에 "안전하게 제거"가 막힐 수 있다. 앱이 감시를 내려야 한다.
 
 ### Android
@@ -193,8 +193,23 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - 거는 표시는 `IN_CREATE | IN_DELETE | IN_MODIFY | IN_CLOSE_WRITE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF | IN_ONLYDIR`이다. 뿌리의 `IN_DELETE_SELF`·`IN_MOVE_SELF`·`IN_IGNORED`·`IN_UNMOUNT`는 `lost`다.
 - `subtree`는 폴더마다 watch를 건다. 새 폴더(`IN_CREATE | IN_ISDIR`, 들어온 `IN_MOVED_TO | IN_ISDIR`)는 watch를 먼저 걸고 그 안을 훑어 이미 있는 항목을 created로 낸다. watch를 걸기 전에 생긴 파일이 이렇게 잡히고, 겹친 것은 created+created로 합쳐진다. 안에서 옮긴 폴더는 watch 표의 경로를 고친다. 밖으로 나간 폴더는 그 아래 watch를 푼다.
 - watch 수가 `max_user_watches`를 넘으면(`ENOSPC`) `add`는 빈 표와 오류다. 이미 선 `subtree`가 새 폴더에서 넘으면 그 감시는 `lost`다. 일부만 보는 감시를 조용히 두지 않는다.
-- 앱 전용 저장소는 보장한다. 공유 저장소는 FUSE를 거쳐 다른 앱이 만든 변경이 오지 않을 수 있다고 알려져 있다. 실기기 확인 전 가정이라 보장하지 않는다.
-- JNI helper는 필요 없다. errno 글은 같은 줄의 비공개 helper 헤더에 맞춘다.
+- 앱 전용 저장소는 보장한다. 경로는 `android_app::activity->internalDataPath`(`GameActivity`)이고 `run_application`이 `set_files_directory`에 주는 값과 같다. 비공개 `android::files_directory()`는 앱이 부를 수 없고, 공개 접근자는 범위 밖이다. 앱은 자기 `android_main`이 받은 `android_app`에서 읽는다.
+- 공유 저장소는 FUSE를 거쳐 다른 앱이 만든 변경이 오지 않을 수 있다고 알려져 있다. 실기기 확인 전 가정이라 보장하지 않는다.
+- JNI helper는 필요 없다. errno 글은 아래 비공개 helper의 `android::make_errno_error`를 쓴다.
+
+### 비공개 helper
+
+이 노드가 두 번째 사용자가 되는 helper 둘을 먼저 `refactor:` 커밋으로 꺼낸다. 오류 글의 `win32::make_last_error`([win32_error.h](../src/win32/win32_error.h))와 JNI의 `jni_local_frame`·`jni_failed`([java_vm.h](../src/android/java_vm.h))는 이미 한 곳에 있다. 감시자는 JNI를 쓰지 않아 앞의 것만 쓴다.
+
+| 옮길 것 | 지금 자리 | 새 자리 |
+| --- | --- | --- |
+| `owned_handle` | `src/win32/platform_services_win32.cpp`의 익명 namespace | `src/win32/owned_handle.h` (header-only, 그대로 옮긴다) |
+| `errno_failure`의 글 | `src/android/platform_services_android.cpp`의 익명 namespace | `src/android/errno_text.h`의 `android::make_errno_error(message)` (`std::u8string`) |
+
+- `owned_handle`은 복제본이 없어 제자리에 두었던 것이다. 감시자가 폴더 핸들과 완료 포트에 쓰는 두 번째 사용자다. `platform_services_win32.cpp`는 자기 사본을 지우고 헤더를 쓴다.
+- `errno_failure`는 `platform_result`를 돌려줘 그대로는 옮길 수 없다. `make_last_error`처럼 글만 만들고(`errno`는 부른 바로 뒤에 읽는다), `platform_result` 래퍼는 `platform_services_android.cpp`에 남는다. 감시자는 이 글을 `std::u8string& error`에 쓴다.
+- 오류 문구와 호출 순서는 그대로다. 기존 `tests/platform_services_tests.cpp`가 무변경으로 통과해야 한다.
+- 범위 밖: `android_settings.cpp`의 `local_frame`. 소멸자에서 예외를 거두는 다른 뜻이다.
 
 ## 다른 노드와의 약속
 
@@ -205,7 +220,8 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - **임시 파일 뒤 이름 바꾸기 저장.** `a.json.tmp`에 쓰고 `a.json`으로 바꾸는 저장은 합치기 표대로 `a.json`의 created나 renamed 하나로 온다. `file` 감시는 임시 이름을 거르므로 앱은 임시 파일을 보지 않는다. `a.json`의 removed와 created가 따로 오지 않는다.
 - **반쯤 쓴 파일.** `modified`는 쓰기 완료가 아니다. 읽다 해석에 실패하면 이전 값을 지키고 다음 묶음을 기다린다. 쓰는 쪽이 luil이면 `replace_file_atomically`를 쓴다.
 - **순서.** `add`를 먼저 하고 처음 읽기를 한다.
-- **Win32·Android 비공개 helper.** 같은 줄이 이번 라운드에 뽑는 helper 헤더를 쓴다. 이 노드의 파일에 helper를 다시 복제하지 않는다.
+- **Win32·Android 비공개 helper.** 이 노드가 `owned_handle.h`와 `errno_text.h`를 세운다(플랫폼 절). taskbar는 `win32_error.h`를 쓰고 `owned_handle.h`는 쓰지 않는다. 이 노드의 파일에 helper를 다시 복제하지 않는다.
+- **같은 라운드의 줄 3과 데모 공용 파일.** `examples/demo_main.cpp`는 줄 3의 spring이 사이드바와 metrics override를 바꾸고 taskbar가 `make_taskbar_message`를 더한다. 이 노드는 `bind_host`와 `stop_workers`에 한 줄씩만 더해 자리가 겹치지 않는다. 모바일 데모는 `device_page.cpp`를 줄 3과 taskbar가 고치므로 이 노드는 거기에 더하지 않고 새 페이지를 둔다. 새 페이지가 고치는 `app.cpp`는 줄 3도 고친다(reduce_motion의 `make_metrics_message`, spring의 `next_tick`·metrics 처리). 자리가 달라 겹치지 않고, 병합은 줄 3이 먼저다.
 
 ## 확인
 
@@ -213,7 +229,13 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - `tests/file_watcher_tests.cpp`(실제 폴더, [platform_services_tests.cpp](../tests/platform_services_tests.cpp)의 `scratch_folder` 관용구): 생성·수정·삭제·이름 바꿈, `subtree`의 하위 폴더 파일과 새로 만든 폴더 안의 파일, `file` 감시가 임시 파일 저장을 한 항목으로 받는지, `replace_file_atomically`로 쓴 파일, 감시 폴더 삭제의 `lost`, `remove`의 끝 묶음, 두 감시자 동시, 변경 없을 때와 폭주 중의 `stop`이 예산 안에 끝나는지, `stop` 뒤 `deliver`가 없는지, `deliver`가 거짓을 답한 뒤 다시 오는지.
   - Windows는 `luil_tests`다. 작은 버퍼를 test 손잡이로 주어 넘침을 일으켜 rescan을 본다.
   - Android는 `file_watcher_android.cpp`가 JVM이 필요 없어 `android_input.cpp`처럼 `luil_core_tests`에 소스를 넣어 기기 셸(`cmake/android/adb_run.cmake`)에서 돈다. 넘침은 `max_queued_events`보다 많은 파일을 한 번에 만들어 본다.
-- 데모: `examples/demo/files_page.cpp`에 임시 폴더 하나를 감시하는 구역을 둔다. "파일 만들기"·"고치기"·"지우기"·"이름 바꾸기" 단추와 마지막 묶음을 그린 label(`변경: created a.txt` 같은 글, rescan·끝 표시 포함)이 있어 UIA로 되읽는다. `examples/demo_main.cpp`는 `stop_workers`에서 `stop()`을 부른다. `examples/mobile_demo/device_page.cpp`에는 앱 전용 폴더에서 같은 일을 하는 칸을 덧붙인다.
+- 데스크톱 데모: `examples/demo/files_page.cpp`에 임시 폴더 하나를 감시하는 구역을 둔다. "파일 만들기"·"고치기"·"지우기"·"이름 바꾸기" 단추와 마지막 묶음을 그린 label(`변경: created a.txt` 같은 글, rescan·끝 표시 포함)이 있어 UIA로 되읽는다.
+  - 감시자는 `files_page`가 쥔다. `deliver`는 `post_app_message_ticketed`로 보내야 하므로 host가 필요하다. `demo_main.cpp`의 `bind_host`가 `files_.bind_host(host)`로 host 포인터를 원자적 손잡이로 넘긴다.
+  - `stop_workers`는 UI thread에서 logic join 전에 불린다. 그 자리가 닿는 것은 감시자의 원자적 손잡이 하나(`files_.stop_watcher()`)이고, `live_client_`와 같은 이유다. `demo_main.cpp`의 몫은 이 두 줄이다.
+- 모바일 데모: 새 페이지 `examples/mobile_demo/files_page.cpp`·`.h`다. 앱 전용 폴더에서 같은 일을 하는 단추와 label을 둔다. `device_page.cpp`에는 더하지 않는다(약속).
+  - `smb_page`와 같은 길이다. delegate(`android_main.cpp`, Windows 창의 `main.cpp`)가 `on_started`에서 감시자를 세워 `file_watcher_intent`로 driver에 넘긴다. 페이지가 쥔 것은 포인터뿐이고 `mobile_driver::stop_workers`가 `files_.stop()`을 부른다(`smb_.stop()`과 같다).
+  - 폴더는 Android가 `android_main`이 읽은 `internalDataPath` 아래, Windows 창이 `std::filesystem::temp_directory_path()` 아래다. 연결은 `app.cpp`의 `page_entries`(11 → 12)·`handle` 끝·`build`와 `app.h`·`mobile_demo.cmake`다.
+  - `tests/mobile_demo_page_tests.cpp`(추가): 묶음 intent를 페이지에 직접 주면 label이 마지막 묶음 글(rescan·끝 표시 포함)로 바뀌는지 본다. 감시자는 세우지 않는다.
 - 사람 확인: 실기기 공유 저장소에서 파일 관리자가 만든 변경이 오는지(FUSE 한계 실측). 네트워크 공유·이동식 드라이브와 그 분리 시의 `lost`. 백신·색인기가 도는 실제 개발 폴더에서 묶음이 하나로 모이는지.
 
 ## 범위 밖
@@ -224,3 +246,4 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - 쓰기 완료를 알리는 종류. 두 플랫폼에서 같은 뜻으로 낼 길이 없다.
 - 감시 경로 기준 패턴 거르기(glob). 앱이 묶음을 거른다.
 - 다른 프로세스·다른 사용자의 감시 공유, 권한 상승이 필요한 폴더.
+- 앱 전용 폴더의 경로를 주는 공개 접근자. 앱이 `android_app`에서 읽는다.

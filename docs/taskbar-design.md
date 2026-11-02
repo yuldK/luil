@@ -215,16 +215,21 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 **점프 목록.** G7(두 번째 인스턴스가 첫 인스턴스에 인자 넘기기)이 정해지고 앱 식별이 서면 `taskbar_request`에 `jump_list` 필드를 더한다. 같은 규약(바뀐 것만 다시 구성)이다. 작업은 인자 달린 새 프로세스라 G7 없이는 떠 있는 앱에 닿지 않고 창이 하나 더 뜬다. 인자 따옴표는 `win32::make_command_line`([command_line.h](../src/win32/command_line.h))을 쓰고, `ICustomDestinationList`는 `propsys`를 링크 목록에 더한다.
 
-**비공개 helper.** [file-watch-design.md](file-watch-design.md)가 같은 줄에서 뽑기로 한 Win32 helper(핸들 소유와 OS 오류 글)를 기다리지 않는다. 오류 글은 `win32::make_hresult_error`([win32_error.h](../src/win32/win32_error.h))가 있고 COM은 `ComPtr`이다. `platform_services_win32.cpp`의 `owned_handle`은 `CloseHandle`용이라 `HICON`에 맞지 않아 `owned_icon`을 따로 둔다.
+**비공개 helper.** [file-watch-design.md](file-watch-design.md)가 `owned_handle.h`를 꺼내는 일을 기다리지 않는다. 오류 글은 이미 있는 [win32_error.h](../src/win32/win32_error.h)의 `win32::make_hresult_error`와 `win32::make_last_error`를 쓰고 COM은 `ComPtr`이다. `owned_handle`은 `CloseHandle`용이라 `HICON`에 맞지 않는다. `HICON`은 `DestroyIcon`이라 `owned_icon`을 `icon_from_image.h`에 따로 둔다.
+
+**움직임 줄이기 연결.** [reduce-motion-design.md](reduce-motion-design.md)의 결정 4가 Win32 몫을 이 노드에 맡겼다. 그 문서의 Win32 절에 적힌 두 변경(`make_window_metrics_message`가 `metrics.reduce_motion`을 채우는 것, `WM_SETTINGCHANGE`에서 값이 바뀌면 `post_window_metrics()`를 부르는 것)과 `tests/win32_window_tests.cpp`의 test 둘을 `publish_platform` 변경과 같은 커밋 묶음으로 낸다. 같은 `WM_SETTINGCHANGE` case를 고치는 노드가 이 노드뿐이라 받는 노드가 따로 없다. 이 일이 빠지면 Windows의 `window_metrics::reduce_motion`은 기한 없이 거짓으로 남는다.
+
+**데모 공용 파일.** `examples/demo_main.cpp`는 줄 3의 spring도 고친다(사이드바와 `make_window_metrics_message` override). `make_taskbar_message` override는 `make_backdrop_message` 뒤에 더하고 metrics override 자리는 건드리지 않는다. file_watch도 `bind_host`·`stop_workers`에 한 줄씩 더한다. 병합은 줄 3이 먼저다. `examples/mobile_demo/device_page.cpp`는 줄 3의 reduce_motion도 고친다. `capabilities.taskbar` 줄은 기존 capability 항목들 바로 뒤(햅틱 구역 뒤, "로컬 네트워크 권한" 앞)에 더하고, reduce_motion의 칸은 페이지 머리라 자리가 멀다.
 
 ## 확인
 
 - `tests/taskbar_sync_tests.cpp`(core, `luil_core_tests`): 기본 요청은 호출 없음. 단추가 서기 전 보류, 서면 요청을 한 번 보냄. 없음→불확정→정상→오류→일시정지→없음의 호출 순서와 값 뒤 상태. 같은 요청과 1000단계 아래 변화는 호출 없음. 자르기와 NaN. 값 없는 상태에서 들어올 때 값부터. 메시지 재수신과 숨김 해제 뒤 처음부터 다시 보냄(기본값이면 없음). 같은 이미지는 호출 없음, 다른 이미지는 교체, 빈 이미지는 해제, 설명만 바뀜. 실패한 호출을 같은 요청으로 다시 하지 않음.
 - `tests/taskbar_button_tests.cpp`(`luil_tests`, Windows): 가짜 `ITaskbarList3`를 주입해 인자(창·값·총량·상태·아이콘·설명)를 본다. 숨은 창에 등록 메시지를 보내 쥐고 있던 요청이 나가는지 본다. 개체를 만들 수 없을 때 `unavailable`. `icon_from_image`의 크기, 투명·불투명·반투명 픽셀(`GetIconInfo`와 `GetDIBits`), 알파 가장자리가 어두워지지 않는지, 잘못된 이미지. 창 파괴 뒤 GDI 개체 수가 늘지 않는지(`GetGuiResources`). 잘못된 UTF-8 설명.
 - `tests/window_messages_tests.cpp`(`luil_tests`): 번호표의 값(+1~+5)과 서로 다름, 등록 메시지가 `0xC000` 이상이고 두 번 물어도 같음, `shell_event_of`의 매핑, `allow_shell_events`가 실패해도 던지지 않음.
+- `tests/win32_window_tests.cpp`(`luil_tests`, 추가, [움직임 줄이기 연결](reduce-motion-design.md)의 Win32 몫): 첫 metrics의 `reduce_motion`이 `SystemParametersInfoW`로 읽은 값(`SPI_GETCLIENTAREAANIMATION`이 꺼짐이면 참)과 같은지 본다. `on_started`에서 같은 창에 `WM_SETTINGCHANGE`를 보내고 값이 그대로면 delegate의 `make_metrics_message` 호출이 늘지 않는지 본다. OS 설정을 바꾸는 test는 두지 않는다.
 - `tests/device_request_tests.cpp`의 기본 능력 단언에 `taskbar == false`를 더한다.
 - 데모 `examples/demo/windows_page.cpp`에 "작업 표시줄" 구역을 둔다. 상태 단추 다섯, 값 슬라이더, 오버레이 켜고 끄기(`make_rgba_image`로 지은 작은 원), 독립 창을 여는 단추와 그 창의 진행률 단추다. label 셋이 UIA로 읽힌다. 요청(`작업 표시줄 요청: 정상 42% · 오버레이 켬`), 반영(`taskbar_report`의 상태), 능력(`작업 표시줄 능력: 있음`)이다. `examples/demo_main.cpp`가 `make_taskbar_message`를 받는다.
-- `examples/mobile_demo/device_page.cpp`는 `capabilities.taskbar == false`일 때 "이 플랫폼에는 작업 표시줄이 없다." 줄을 보인다. 기존 항목과 같은 방식이고 `mobile_demo_page_tests.cpp`가 읽는다.
+- `examples/mobile_demo/device_page.cpp`는 `capabilities.taskbar == false`일 때 "이 플랫폼에는 작업 표시줄이 없다." 줄을 보인다. 기존 항목(`haptic-none` 등)과 같은 방식이다. 이 줄을 읽는 자동 test는 기존 항목에도 없고, Android는 사람이 화면으로 본다.
 - 격리 데스크톱에는 작업 표시줄이 없을 것으로 보여(추정) UIA 되읽기는 `waiting`까지다. `applied`와 실제 모양은 사람이 실제 세션에서 본다.
 - 사람 확인: 상태별 막대 색과 불확정의 움직임. 최소화 중에도 진행률이 보이는지. 오버레이가 100%·150%·200% 배율에서 또렷한지, 접근 이름이 읽히는지. 빌드 폴더의 실행 파일에서 AUMID 없이 서는지. `main_hidden`을 켰다 끌 때 복원되는지(단추 재생성과 메시지 재수신 실측). 탐색기를 다시 시작한 뒤 복원되는지. 관리자 권한으로 띄운 앱에서 서는지. 독립 창마다 따로 서는지와 한 단추로 묶였을 때의 모양. 레이어드 주 창과 Direct3D 합성 창에서 서는지.
 
