@@ -1,6 +1,7 @@
 #pragma once
 
-// 기본 페이지다: 버튼·카운터, 텍스트 입력 세 칸(숫자 전용·자유 입력·암호),
+// 기본 페이지다: 버튼·카운터, 별점 둘(손가락 크기의 별 다섯, 가로로 흐르는 창 안의 별 열),
+// 텍스트 입력 세 칸(숫자 전용·자유 입력·암호),
 // 앱에 실린 그림(정지 한 장과 움직이는 둘), 화면을 덮는 확인 대화 상자 둘
 // (`luil::make_message_box` — 크기는 내용에서 나오고 닫는 모든 계기가 한 결과 메시지를 낸다).
 
@@ -10,7 +11,9 @@
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/message_box.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/strip_element.h"
 #include "luil/ui/syntax_highlighter.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
@@ -60,6 +63,20 @@ namespace mobile_demo {
     // 둘째 대화의 "다시 묻지 않기" 칸을 뒤집는다. 칸은 닫지 않는다.
     struct dialog_check_intent
     {
+    };
+
+    // 별점의 값이다. key는 어느 별점인지(`stars` 별 다섯, `strip` 가로로 흐르는 창 안의 별 열)이다.
+    // 값은 절대 값이라 몇 번 겹쳐 와도 마지막 값 그대로다.
+    struct rating_intent
+    {
+        std::u8string key {};
+        float value { 0.0f };
+    };
+
+    // 별 열을 담은 가로로 흐르는 창의 스크롤이다 (논리 픽셀, 양수는 내용이 왼쪽으로). 위치는 앱 상태다.
+    struct rating_scroll_intent
+    {
+        float delta { 0.0f };
     };
 
     // 움직이는 그림을 멈추거나, 멈춘 자리에서 이어 돌린다.
@@ -131,6 +148,10 @@ namespace mobile_demo {
         void toggle_playback();
         [[nodiscard]] luil::text_input_view make_input_view(const luil::text::text_edit_state& state, luil::text_input_target target) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_counter_row() const;
+        // 별점 설정이다. 손가락 크기(44)의 칸이고, 별 수가 다섯이면 폭 220이다.
+        [[nodiscard]] luil::rating_config make_stars_config() const;
+        [[nodiscard]] luil::rating_config make_strip_rating_config() const;
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_rating_strip() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_pair_row(std::u8string owner, std::unique_ptr<luil::ui_element> left, std::unique_ptr<luil::ui_element> right) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_picture(std::u8string owner, std::u8string label, luil::image_fit fit, std::u8string description) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_film(std::u8string owner, std::u8string label, const luil::ui_animated_image& film, std::u8string description) const;
@@ -183,6 +204,12 @@ namespace mobile_demo {
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
+        // 별점 둘의 값이다. 0은 아직 매기지 않음이다.
+        float rating_stars_ { 0.0f };
+        float rating_strip_ { 0.0f };
+        // 별 열을 담은 창이 흘러간 양과, 끝까지 흘린 값이다 (논리 픽셀). 끝은 창의 폭에 달려 조립할 때 안다.
+        float rating_scroll_ { 0.0f };
+        float rating_scroll_limit_ { 0.0f };
         dialog_kind dialog_ { dialog_kind::none };
         // 마지막으로 닫은 결과의 key다. 아직 닫은 적이 없으면 비었다.
         std::u8string dialog_result_ {};

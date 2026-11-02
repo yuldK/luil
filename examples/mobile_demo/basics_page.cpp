@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -25,6 +26,16 @@ namespace mobile_demo {
         constexpr float picture_height { 90.0f };
         constexpr float film_height { 120.0f };
         constexpr float input_height { 40.0f };
+        // 별점 값을 "3 / 5", 소수 첫째 자리가 있으면 "3.5 / 5"로 적는다. 라이브러리의 기본 접근 값 글과 같은 꼴이다.
+        [[nodiscard]] std::u8string rating_text(const float value, const int count)
+        {
+            const int tenths { static_cast<int>(std::lround(value * 10.0f)) };
+            std::u8string text { to_u8(tenths / 10) };
+            if (tenths % 10 != 0)
+                text += u8"." + to_u8(tenths % 10);
+            return text + u8" / " + to_u8(count);
+        }
+
         [[nodiscard]] float scaled_input_height() noexcept
         {
             return luil::text_line_height(11.0f, input_height - 11.0f);
@@ -112,6 +123,20 @@ namespace mobile_demo {
         if (message.get<dialog_check_intent>() != nullptr)
         {
             ask_again_ = ask_again_ == false;
+            return true;
+        }
+        if (const auto* const rating { message.get<rating_intent>() }; rating != nullptr)
+        {
+            // 범위 다듬기는 값을 가진 앱의 몫이다 (rating_config).
+            if (rating->key == u8"stars")
+                rating_stars_ = std::clamp(rating->value, 0.0f, 5.0f);
+            else if (rating->key == u8"strip")
+                rating_strip_ = std::clamp(rating->value, 0.0f, 10.0f);
+            return true;
+        }
+        if (const auto* const scroll { message.get<rating_scroll_intent>() }; scroll != nullptr)
+        {
+            rating_scroll_ = std::clamp(rating_scroll_ + scroll->delta, 0.0f, rating_scroll_limit_);
             return true;
         }
         if (const auto* const reveal { message.get<secret_reveal_intent>() }; reveal != nullptr)
@@ -233,6 +258,22 @@ namespace mobile_demo {
 
         page_column column { u8"basics" };
         column.add(make_counter_row(), touch_height);
+        column.gap(12.0f);
+
+        // 별점이다. 탭이 칸의 값이고 같은 별을 다시 탭하면 지운다. 손가락으로 훑으면 별이 따라온다.
+        column.note(u8"rating-title", u8"별점 (탭하거나 훑어서 매기고, 같은 별을 다시 탭하면 지웁니다)");
+        column.gap(4.0f);
+        const luil::rating_config stars { make_stars_config() };
+        column.add(std::make_unique<luil::rating_element>(stars), luil::rating_element::height_for(stars), luil::rating_element::width_for(stars));
+        column.body(u8"rating-value", u8"별점: " + rating_text(rating_stars_, 5));
+        column.gap(8.0f);
+        // 가로로 흐르는 창 안의 별 열이다. 쓸면 창이 흐르고, 잠깐 눌러 창이 흐르지 않게 된 뒤에 옮기면 별이 따라온다.
+        column.note(u8"rating-strip-title", u8"가로로 흐르는 창 안의 별 열 (쓸면 창이 흐릅니다)");
+        column.gap(4.0f);
+        const luil::rating_config strip_rating { make_strip_rating_config() };
+        rating_scroll_limit_ = std::max(0.0f, luil::rating_element::width_for(strip_rating) - (width - 2.0f * page_padding));
+        column.add(make_rating_strip(), luil::rating_element::height_for(strip_rating));
+        column.body(u8"rating-strip-value", u8"가로 창 별점: " + rating_text(rating_strip_, 10));
         column.gap(20.0f);
 
         // 텍스트 칸 셋이다. 휴대폰은 좁아 위아래로 쌓는다.
@@ -389,6 +430,41 @@ namespace mobile_demo {
 
         row->add_flexible(make_label(luil::ui_element_id { kind_counter_label }, u8"누른 횟수: " + to_u8(clicks_), body_text_size, luil::label_color_role::primary));
         return row;
+    }
+
+    luil::rating_config basics_page::make_stars_config() const
+    {
+        luil::rating_config config {};
+        config.owner = u8"rating";
+        config.name = u8"별점";
+        config.value = rating_stars_;
+        config.control_size = touch_height;
+        config.change_to = [](const float value) { return luil::make_app_action(rating_intent { u8"stars", value }); };
+        return config;
+    }
+
+    luil::rating_config basics_page::make_strip_rating_config() const
+    {
+        luil::rating_config config {};
+        config.owner = u8"rating-strip";
+        config.name = u8"가로 창 별점";
+        config.count = 10;
+        config.value = rating_strip_;
+        config.control_size = touch_height;
+        config.change_to = [](const float value) { return luil::make_app_action(rating_intent { u8"strip", value }); };
+        return config;
+    }
+
+    std::unique_ptr<luil::ui_element> basics_page::make_rating_strip() const
+    {
+        luil::rating_config config { make_strip_rating_config() };
+        luil::strip_config strip {};
+        strip.content_width = luil::rating_element::width_for(config);
+        strip.scroll_offset = rating_scroll_;
+        strip.scroll = [](const float delta) { return luil::make_app_action(rating_scroll_intent { delta }); };
+        auto window { std::make_unique<luil::strip_element>(luil::ui_element_id { kind_layout, u8"rating-strip-window" }, std::move(strip)) };
+        window->set_content(std::make_unique<luil::rating_element>(std::move(config)));
+        return window;
     }
 
     std::unique_ptr<luil::stack_element> basics_page::make_pair_row(std::u8string owner, std::unique_ptr<luil::ui_element> left, std::unique_ptr<luil::ui_element> right) const

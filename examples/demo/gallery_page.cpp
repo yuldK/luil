@@ -12,6 +12,7 @@
 #include "luil/ui/markdown_element.h"
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/progress_element.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/spinner_element.h"
 
@@ -55,6 +56,20 @@ namespace demo {
         constexpr float bar_width { 360.0f };
         // 기능 색인은 카드를 세 줄로 놓아야 하므로 다른 페이지보다 넓게 둔다.
         constexpr float overview_max_width { 960.0f };
+
+        // 별점 줄의 평균이다. 표시 전용이라 앱 상태가 아니라 정해진 값이다.
+        constexpr float rating_average { 4.3f };
+
+        // 별점 값을 "3 / 5", 소수 첫째 자리가 있으면 "3.5 / 5"로 적는다. 라이브러리의 기본 접근 값 글과 같은 꼴이라
+        // 화면의 글과 보조 기술이 읽는 값이 같다.
+        [[nodiscard]] std::u8string rating_text(const float value, const int count)
+        {
+            const int tenths { static_cast<int>(std::lround(value * 10.0f)) };
+            std::u8string text { to_u8(tenths / 10) };
+            if (tenths % 10 != 0)
+                text += u8"." + to_u8(tenths % 10);
+            return text + u8" / " + to_u8(count);
+        }
 
         [[nodiscard]] luil::input_action follow_link(const std::u8string_view destination)
         {
@@ -124,6 +139,18 @@ namespace demo {
                 apply(value_, 0.0f, 100.0f);
             return true;
         }
+        if (const auto* const rating { message.get<gallery_rating_intent>() }; rating != nullptr)
+        {
+            // 범위 다듬기는 값을 가진 앱의 몫이다 (rating_config).
+            const float value { std::clamp(rating->value, 0.0f, 5.0f) };
+            if (rating->key == u8"whole")
+                rating_whole_ = value;
+            else if (rating->key == u8"half")
+                rating_half_ = value;
+            else if (rating->key == u8"reset")
+                rating_whole_ = rating_half_ = 0.0f;
+            return true;
+        }
         if (const auto* const shortcut { message.get<gallery_shortcut_intent>() }; shortcut != nullptr)
         {
             // 예약 키는 정하지 않고 그렇다고 보여 준다. 저장할 때는 글로 왕복한다 (shortcut_label·parse_shortcut).
@@ -167,6 +194,8 @@ namespace demo {
             volume_ = 72.0f;
             balance_ = -18.0f;
             position_ = 400.0f;
+            rating_whole_ = 3.0f;
+            rating_half_ = 3.5f;
             choice_ = u8"comfortable";
             language_ = u8"system";
             return true;
@@ -324,6 +353,32 @@ namespace demo {
             luil::stack_item { .length = 20.0f, .cross_length = 20.0f });
         busy->add_fit(make_label({ kind_text, u8"gallery/busy-text" }, u8"동기화하는 중… 끝을 모르는 작업", 12.0f, luil::label_color_role::dim));
         page.add(std::move(busy), 24.0f);
+        page.end_card();
+
+        // 별점: 정수 별과 반 별은 조작하고 평균은 같은 모양의 표시 전용이다. 줄마다 값을 label로 그려 화면과 보조 기술이 같은 말을 한다.
+        page.begin_card(u8"별점", u8"별을 누르거나 끌고 ← →로 옮깁니다. 같은 별을 다시 누르면 지웁니다. 평균은 표시 전용입니다.");
+        const auto rating_line = [&page](std::u8string key, std::u8string name, std::u8string title, const float value, const luil::rating_precision precision, const bool editable) {
+            luil::rating_config config {};
+            config.owner = u8"gallery/rating-" + key;
+            config.name = std::move(name);
+            config.value = value;
+            config.precision = precision;
+            if (editable)
+                config.change_to = [key](const float target) { return luil::make_app_action(gallery_rating_intent { key, target }); };
+            const float width { luil::rating_element::width_for(config) };
+            const float height { luil::rating_element::height_for(config) };
+            auto line { row(u8"gallery/rating-" + key + u8"-row") };
+            line->add(std::make_unique<luil::rating_element>(std::move(config)), luil::stack_item { .length = width, .cross_length = height });
+            line->add_fit(make_label({ kind_text, u8"gallery/rating-" + key + u8"-value" }, std::move(title) + u8": " + rating_text(value, 5), 13.0f, luil::label_color_role::primary));
+            page.add(std::move(line), height);
+            page.gap();
+        };
+        rating_line(u8"whole", u8"별점", u8"별점", rating_whole_, luil::rating_precision::whole, true);
+        rating_line(u8"half", u8"반 별 점수", u8"반 별", rating_half_, luil::rating_precision::half, true);
+        rating_line(u8"average", u8"평균 점수", u8"평균", rating_average, luil::rating_precision::whole, false);
+        auto rating_actions { row(u8"gallery/rating-actions") };
+        rating_actions->add_fit(button(u8"gallery/rating-reset", u8"별점 초기화", luil::text_button_visual::normal, luil::make_message_action(gallery_rating_intent { u8"reset", 0.0f })));
+        page.add(std::move(rating_actions), luil::text_button_height);
         page.end_card();
 
         // 자석 막대: 앱이 정한 지점 근처에서 손잡이가 붙고, Ctrl을 누른 채 끌면 자석 없이 놓는다.

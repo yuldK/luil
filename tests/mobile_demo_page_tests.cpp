@@ -10,8 +10,10 @@
 #include "mobile_demo/zoom_page.h"
 
 #include "luil/ui/message_box.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/root_element.h"
 #include "luil/ui/split_button_element.h"
+#include "luil/ui/strip_element.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
 
@@ -1395,4 +1397,153 @@ TEST_CASE("The long mobile box keeps its check apart from its buttons and closes
     REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: later");
     // 닫히면 설정이 비어 단추도 없다.
     REQUIRE(page.make_dialog_config().buttons.empty());
+}
+
+namespace {
+    // 400dp 창에서 조립해 배치한 기본 페이지의 tree다. 높이는 내용이 정한다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> basics_tree(mobile_demo::basics_page& page)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f));
+    }
+
+    [[nodiscard]] const luil::ui_element& rating_in(const luil::ui_tree& tree, const std::u8string& owner)
+    {
+        const luil::ui_element* const rating { tree.find({ luil::ui_element_kind::rating, owner }) };
+        REQUIRE(rating != nullptr);
+        return *rating;
+    }
+
+    // 낸 메시지 가운데 별점 값만 뽑는다.
+    [[nodiscard]] std::vector<float> rating_values_of(const std::vector<luil::input_action>& actions)
+    {
+        std::vector<float> values {};
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                if (const auto* const intent { message->get<mobile_demo::rating_intent>() }; intent != nullptr)
+                    values.push_back(intent->value);
+        return values;
+    }
+
+    [[nodiscard]] luil::pointer_pressed_event touch_press(const float x, const float y, const int milliseconds)
+    {
+        luil::pointer_pressed_event event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { milliseconds } };
+        event.device = luil::pointer_device::touch;
+        return event;
+    }
+
+    [[nodiscard]] luil::pointer_moved_event touch_move(const float x, const float y, const int milliseconds)
+    {
+        luil::pointer_moved_event event { x, y, time_point {} + std::chrono::milliseconds { milliseconds } };
+        event.device = luil::pointer_device::touch;
+        event.in_contact = true;
+        return event;
+    }
+
+    [[nodiscard]] luil::pointer_released_event touch_release(const float x, const float y, const int milliseconds)
+    {
+        luil::pointer_released_event event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { milliseconds } };
+        event.device = luil::pointer_device::touch;
+        return event;
+    }
+
+    [[nodiscard]] bool has_rating_scroll(const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr && message->get<mobile_demo::rating_scroll_intent>() != nullptr)
+                return true;
+        return false;
+    }
+}
+
+TEST_CASE("The mobile rating row has finger sized stars and reads its value back", "[mobile-demo][basics][rating]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 0 / 5");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-strip-value") == u8"가로 창 별점: 0 / 10");
+
+    // 별 다섯이 칸 44라 폭 220이다. 칸마다 손가락 크기다.
+    const auto tree { basics_tree(page) };
+    const luil::ui_element& stars { rating_in(*tree, u8"rating") };
+    REQUIRE(stars.bounds().width == 220.0f);
+    REQUIRE(stars.bounds().height == 44.0f);
+    REQUIRE(stars.children().size() == 5u);
+    for (const std::unique_ptr<luil::ui_element>& cell : stars.children())
+    {
+        REQUIRE(cell->bounds().width == 44.0f);
+        REQUIRE(cell->bounds().height == 44.0f);
+    }
+    REQUIRE(stars.accessibility().name == u8"별점");
+    REQUIRE(stars.accessibility().value == u8"0 / 5");
+
+    // 값은 앱 상태다. 절대 값이 오면 label과 접근 값이 함께 바뀐다.
+    deliver(page, mobile_demo::rating_intent { u8"stars", 3.0f });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 3 / 5");
+    REQUIRE(rating_in(*basics_tree(page), u8"rating").accessibility().value == u8"3 / 5");
+    // 범위 밖 값은 앱이 자른다.
+    deliver(page, mobile_demo::rating_intent { u8"stars", 9.0f });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 5 / 5");
+}
+
+TEST_CASE("Tapping a mobile star rates it and tapping it again clears it", "[mobile-demo][basics][rating]")
+{
+    mobile_demo::basics_page page {};
+    {
+        const auto tree { basics_tree(page) };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        const std::vector<luil::input_action> tapped { click_element(controller, *tree, rating_in(*tree, u8"rating").children()[3]->id()) };
+        REQUIRE(rating_values_of(tapped) == std::vector<float> { 4.0f });
+        deliver_actions(page, tapped);
+    }
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 4 / 5");
+
+    // 같은 별을 다시 탭하면 지운다.
+    const auto tree { basics_tree(page) };
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    const std::vector<luil::input_action> again { click_element(controller, *tree, rating_in(*tree, u8"rating").children()[3]->id()) };
+    REQUIRE(rating_values_of(again) == std::vector<float> { 0.0f });
+    deliver_actions(page, again);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 0 / 5");
+}
+
+TEST_CASE("The mobile star row inside the horizontal window scrolls on a swipe and rates on a tap", "[mobile-demo][basics][rating]")
+{
+    mobile_demo::basics_page page {};
+    const auto tree { basics_tree(page) };
+
+    // 별 열은 열 개라 폭 440이고 400dp 창의 흘리는 창보다 넓다. 넘치므로 창이 가로 흘림의 임자다.
+    const luil::ui_element& stars { rating_in(*tree, u8"rating-strip") };
+    REQUIRE(stars.children().size() == 10u);
+    REQUIRE(stars.bounds().width == 440.0f);
+    const luil::ui_element* const window { tree->find({ mobile_demo::kind_layout, u8"rating-strip-window" }) };
+    REQUIRE(window != nullptr);
+    REQUIRE(window->scroll() != nullptr);
+    REQUIRE(window->scroll()->axis == luil::scroll_axis::horizontal);
+    const float before { stars.bounds().x };
+
+    // 별 위에서 시작한 빠른 가로 쓸기는 창을 흘리고 값을 정하지 않는다.
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    const luil::rect_f start { stars.children()[2]->bounds() };
+    const float x { start.x + start.width / 2.0f };
+    const float y { start.y + start.height / 2.0f };
+    static_cast<void>(controller.process(touch_press(x, y, 0)));
+    const std::vector<luil::input_action> swiped { controller.process(touch_move(x - 60.0f, y, 50)) };
+    REQUIRE(has_rating_scroll(swiped));
+    REQUIRE(rating_values_of(swiped).empty());
+    static_cast<void>(controller.process(touch_release(x - 60.0f, y, 80)));
+    deliver_actions(page, swiped);
+    REQUIRE(rating_in(*basics_tree(page), u8"rating-strip").bounds().x < before);
+
+    // 탭은 값을 정한다. 흘러간 뒤에도 같은 자리에서 칸의 값이 나간다.
+    const auto scrolled_tree { basics_tree(page) };
+    luil::interaction_controller tapper {};
+    tapper.set_tree(scrolled_tree);
+    const std::vector<luil::input_action> tapped { click_element(tapper, *scrolled_tree, rating_in(*scrolled_tree, u8"rating-strip").children()[5]->id()) };
+    REQUIRE(rating_values_of(tapped) == std::vector<float> { 6.0f });
+    deliver_actions(page, tapped);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-strip-value") == u8"가로 창 별점: 6 / 10");
 }

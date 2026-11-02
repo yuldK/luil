@@ -17,6 +17,14 @@ namespace demo {
         std::u8string key {};
     };
 
+    // 별점 줄의 값이다. key는 어느 줄인지(`whole` 정수 별, `half` 반 별)이고 `reset`은 두 줄을 아직 매기지 않음(0)으로 되돌린다.
+    // 값은 절대 값이라 몇 번 겹쳐 와도 마지막 값 그대로다.
+    struct gallery_rating_intent
+    {
+        std::u8string key {};
+        float value { 0.0f };
+    };
+
     // 단축키 잡기 칸이 받은 키다 (`ui_element::set_key_capture`). 비어 있으면 지우기다.
     struct gallery_shortcut_intent
     {
@@ -70,6 +78,9 @@ namespace demo {
         float volume_ { 72.0f };
         float balance_ { -18.0f };
         float position_ { 400.0f };
+        // 별점 둘의 값이다: 정수 별과 반 별. 평균 줄은 표시 전용이라 상태가 없다.
+        float rating_whole_ { 3.0f };
+        float rating_half_ { 3.5f };
         // 단축키 잡기 칸의 값과, 예약 키를 눌렀을 때의 안내다.
         luil::key_chord shortcut_ { luil::key_code::key_p, true, true };
         std::u8string shortcut_note_ {};
