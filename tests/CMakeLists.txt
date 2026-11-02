@@ -221,6 +221,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/file_watcher_android.cpp"
             file_watcher_tests.cpp)
+    # 설정 읽기의 JNI 흐름은 가짜 JNIEnv로 잠근다. 틀과 예외 거둠을 실패 지점마다 친다 (android_settings_tests.cpp).
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_settings.cpp"
+            android_settings_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES
