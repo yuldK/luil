@@ -1,3 +1,4 @@
+#include "mobile_demo/files_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
 
@@ -262,4 +263,73 @@ TEST_CASE("SMB rejected and replaced requests cannot revive an old listing", "[s
     REQUIRE(fixture.has_entry(u8"late.txt") == false);
     deliver(fixture.page, mobile_demo::smb_entry_intent { u8"late.txt", false });
     REQUIRE(fixture.requests.size() == 4u);
+}
+
+namespace {
+    // 페이지를 짓고 label 하나의 이름(UIA Name과 같은 글)을 읽는다.
+    [[nodiscard]] std::u8string files_label(mobile_demo::files_page& page, const std::u8string& owner)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const auto tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, content.height }, 1.0f) };
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+}
+
+TEST_CASE("The files page draws the last watch batch with rescan and end marks", "[file_watch][mobile-demo]")
+{
+    mobile_demo::files_page page {};
+    REQUIRE(files_label(page, u8"files-watch-batch") == u8"변경: 아직 없음");
+
+    int stopped { 0 };
+    mobile_demo::file_watcher_intent attach {};
+    attach.folder = u8"watch-demo";
+    attach.ticket = luil::file_watch_ticket { 3 };
+    attach.stop = [&stopped] { ++stopped; };
+    deliver(page, std::move(attach));
+    REQUIRE(files_label(page, u8"files-watch-state") == u8"감시: 켜짐");
+
+    luil::file_change_batch batch {};
+    batch.ticket = luil::file_watch_ticket { 3 };
+    batch.changes = {
+        { luil::file_change_kind::created, u8"a.txt", {} },
+        { luil::file_change_kind::renamed, u8"b.txt", u8"a~.txt" },
+    };
+    batch.rescan = true;
+    deliver(page, mobile_demo::files_batch_intent { batch });
+    REQUIRE(files_label(page, u8"files-watch-batch") == u8"변경: created a.txt, renamed a~.txt→b.txt, rescan");
+
+    // 다른 표의 묶음은 화면을 덮지 않는다.
+    luil::file_change_batch other {};
+    other.ticket = luil::file_watch_ticket { 9 };
+    other.changes = { { luil::file_change_kind::removed, u8"x.txt", {} } };
+    deliver(page, mobile_demo::files_batch_intent { other });
+    REQUIRE(files_label(page, u8"files-watch-batch") == u8"변경: created a.txt, renamed a~.txt→b.txt, rescan");
+
+    // 끝 묶음 뒤로 감시가 끝났다고 적는다.
+    luil::file_change_batch ended {};
+    ended.ticket = luil::file_watch_ticket { 3 };
+    ended.end = luil::file_watch_end::lost;
+    ended.error = u8"gone";
+    deliver(page, mobile_demo::files_batch_intent { ended });
+    REQUIRE(files_label(page, u8"files-watch-batch") == u8"변경: 끝 lost");
+    REQUIRE(files_label(page, u8"files-watch-state") == u8"감시: 끝남");
+
+    page.stop();
+    REQUIRE(stopped == 1);
+}
+
+TEST_CASE("The files page reports a watch that could not be added", "[file_watch][mobile-demo]")
+{
+    mobile_demo::files_page page {};
+    mobile_demo::file_watcher_intent attach {};
+    attach.folder = u8"missing";
+    attach.error = u8"The folder does not exist.";
+    deliver(page, std::move(attach));
+    REQUIRE(files_label(page, u8"files-watch-state") == u8"감시: 걸지 못함 (The folder does not exist.)");
+    // 감시가 없으면 단추가 폴더를 바꾸지 않는다. 멈출 감시자도 없다.
+    deliver(page, mobile_demo::files_operation_intent { mobile_demo::files_operation::create });
+    page.stop();
+    REQUIRE(mobile_demo::describe_file_change_batch({}) == u8"변경: 없음");
 }

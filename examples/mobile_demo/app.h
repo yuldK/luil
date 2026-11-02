@@ -11,6 +11,7 @@
 #include "mobile_demo/basics_page.h"
 #include "mobile_demo/common.h"
 #include "mobile_demo/device_page.h"
+#include "mobile_demo/files_page.h"
 #include "mobile_demo/groups_page.h"
 #include "mobile_demo/lists_page.h"
 #include "mobile_demo/popups_page.h"
@@ -51,7 +52,7 @@ namespace mobile_demo {
         // 토스트 만료다. 다음 만료 시각을 예고하면 메시지가 없어도 그때 tick이 온다.
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() override;
         void tick(std::chrono::steady_clock::time_point now) override;
-        // SMB client를 멈춘다. 답이 앱 host를 거쳐 오므로 host보다 먼저 멈춘다.
+        // SMB client와 파일 감시자를 멈춘다. 답이 앱 host를 거쳐 오므로 host보다 먼저 멈춘다.
         void stop_workers() override;
 
     private:
@@ -72,6 +73,7 @@ namespace mobile_demo {
         device_page device_ {};
         sheets_page sheets_ {};
         smb_page smb_ {};
+        files_page files_ {};
 
         // 좁은 화면에서 열어 둔 페이지다. 비어 있으면 목록이다. 넓은 화면은 비어 있으면 첫 페이지를 보인다.
         std::u8string page_ {};
