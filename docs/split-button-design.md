@@ -2,7 +2,7 @@
 
 기본 동작 단추와 펼침 메뉴를 한 버튼에 담는다. 본체를 누르면 그 동작이 나가고, 오른쪽 화살표를 누르면 메뉴가 열린다. 본체 동작이 없으면 버튼 전체가 메뉴를 여는 드롭다운 단추가 된다. 공개 형식은 [split_button_element.h](../include/luil/ui/split_button_element.h)의 `split_button_config`·`split_button_element`다.
 
-이 노드는 닫힌 필드 하나가 앵커 popup 하나를 여닫는 규약도 처음 세운다. 공통 부분은 [field_popup.h](../include/luil/ui/field_popup.h)의 `place_field_popup`·`field_popup_key_handler`로 올리고, 규약은 "필드 popup 열림 규약" 절에 모았다. 날짜 칸, 색 고르개, 메뉴 막대가 이것을 따른다.
+이 노드는 닫힌 필드 하나가 앵커 popup 하나를 여닫는 규약도 처음 세운다. 공통 부분은 [field_popup.h](../include/luil/ui/field_popup.h)의 `place_field_popup`·`field_popup_key_handler`로 올리고, 규약은 "필드 popup 열림 규약" 절에 모았다. 날짜 칸, 색 고르개가 이것을 따르고 메뉴 막대는 여는 키와 항목 사이 이동만 달리 정한다.
 
 ## 문제
 
@@ -142,7 +142,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 | 키보드 초점이 필드를 떠남 | 열린 동안에만 root에 `set_focus_leave_action`을 단다(콤보와 같다) |
 
 - Esc는 필드가 처리하지 않는다. 열린 popup이 Esc를 먼저 가져간다(`window_surface.cpp`의 `escape_key` dismiss).
-- 앱 정책이 `menu()`를 돌려주면 메뉴가 열린 동안 Tab을 포함한 모든 키를 메뉴가 가져간다(`process_key`). 돌려주지 않는 앱에서는 Tab이 popup을 둔 채 초점을 옮기므로 초점 떠남 훅이 닫는다.
+- 앱 정책이 `menu()`를 돌려주면 메뉴가 열린 동안 Tab을 포함한 모든 키를 메뉴가 가져간다(`process_key`). 메뉴 키 경로(`process_menu_key`)가 먼저 받고 갖지 않은 키는 삼킨다. 최상위 메뉴의 ←/→는 하위 메뉴를 여닫을 때만 거기서 쓰이므로, 메뉴 막대의 이웃 메뉴 이동은 항목의 키 처리기가 아니라 이 경로에 넣어야 닿는다. 돌려주지 않는 앱에서는 Tab이 popup을 둔 채 초점을 옮기므로 초점 떠남 훅이 닫는다.
 
 **열기 키.** `field_popup_key_handler(open, set_open, down_opens)`가 만든다. 필드의 키 처리기는 닫혀 있을 때만 일한다.
 
@@ -175,8 +175,9 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - a. 기존 popup 앵커로 충분하다. 되는 것: 새 API가 없다. 대가: 앱이 `bounds()/scale`을 직접 계산한다. 위로 뒤집기가 없어 아래 공간이 모자라면 메뉴가 필드를 덮고, 정렬과 간격이 필드마다 되풀이된다.
 - b. 새 순수 함수 `place_field_popup`과 `menu_popup_config::below`. 되는 것: 뒤집기·정렬·간격이 한 곳에 서고 `tooltip_bounds`는 그대로다. 대가: 공개 함수와 설정 한 칸이 늘고, 뒤집기 산술이 tooltip과 비슷하게 두 곳에 생긴다.
 - c. `ui_tree.cpp`의 `tooltip_bounds`를 공용으로 꺼낸다. 되는 것: 산술이 한 곳이다. 대가: 그리기와 입력이 함께 쓰는 tooltip 위치(`tooltip_tests.cpp`가 잠근다)를 건드린다. 그 함수는 포인터 앵커와 창 전체 밀기를 가정해, 필드 아래 정렬이나 창 밖에 걸치는 popup과 인자가 갈린다.
+- d. helper는 정렬·간격만 정하고 뒤집기와 밀기는 host가 작업 영역(Win32)·내용 영역(Android)으로 한다. 되는 것: Win32에서 창 밖에 걸치는 메뉴가 그대로이고 앱이 `limit`을 주지 않는다. 모니터 경계를 host가 맡는다는 `ui_popup`의 원칙과, popup 위의 popup을 host가 왼쪽으로 뒤집는 지금 규칙(`popup_screen_position`, `update_overlays`)의 연장이다. 대가: `ui_popup`에 앵커 사각형 칸이 늘고 `popup_placement`와 `popup_surface::placement()`도 그것을 나른다(창이 움직이면 `surface_moved`가 그 placement로 다시 놓는다). 두 host의 배치 코드와 `clamp_popup_position`(앵커 높이를 받는다)을 고치고 `popup_reconcile_tests.cpp`가 따라온다. `win32_window.cpp`는 줄 4만 고치는 파일이라 이 노드의 Win32 몫을 줄 4 통합 때 얹어야 한다. 앱은 뒤집혔는지 모른다.
 
-권장은 b다. teaching_tip은 같은 header에 방향을 더해 늘린다. 이 노드는 아래 한 방향만 만든다. 대가는 위에 적은 것과, Win32에서 창 밖에 걸치던 메뉴가 `limit`(창 client) 안에 머문다는 점이다. 승인 필요.
+권장은 b다. 뒤집기 산술이 순수 함수 하나라 host 없이 test되고, `field_popup_position::above`로 앱이 뒤집혔는지 안다. 꼬리가 대상을 향해야 하는 teaching_tip이 같은 header에 방향을 더해 늘린다. 이 노드는 아래 한 방향만 만든다. 공유 층(`ui_popup`, host 두 곳)과 줄 4의 `win32_window.cpp`도 건드리지 않는다. 대가는 위에 적은 것과, Win32에서 창 밖에 걸치던 메뉴가 `limit`(창 client) 안에 머문다는 점이다. 창 아래·오른쪽 가장자리의 필드에서는 메뉴가 걸치는 대신 위로 뒤집히거나 왼쪽으로 밀린다. 위도 안 들어가면 지금처럼 아래에 두고 host가 민다. 창 밖 걸침을 지키는 쪽이 낫다고 보면 d다. 승인 필요.
 
 **3. Tab 자리를 어떻게 두는가.**
 
@@ -206,7 +207,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 
 **Win32.**
 
-- 메뉴는 별도 popup 창이다. 앵커 창 client 기준으로 놓이고 host가 작업 영역으로 민다(`popup_screen_position`, `clamp_popup_position`). 위로 뒤집지 않으므로 뒤집기는 helper가 한다.
+- 메뉴는 별도 popup 창이다. 앵커 창 client 기준으로 놓이고 host가 작업 영역으로 민다(`popup_screen_position`, `clamp_popup_position`). 위로 뒤집지 않으므로 뒤집기는 helper가 하고, 그 범위는 앱이 주는 `limit`(창 client)이다. 창 client 밖으로 걸치던 메뉴는 창 안에 머문다(결정 2).
 - Alt+↓는 `WM_SYSKEYDOWN`이 키 이벤트로 나르고 Alt+F4만 시스템에 남는다. F4는 `WM_KEYDOWN`이다.
 - UIA는 본체에 Invoke, 화살표에 ExpandCollapse를 낸다. `uia_provider.cpp`와 `win32_window.cpp`는 건드리지 않는다.
 
@@ -219,7 +220,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 
 ## 다른 노드와의 약속
 
-- **date_picker**, **color_picker**(popup 조립을 고를 때), **menu_bar**는 열림 규약을 그대로 따른다. `set_open` 절대 메시지, `field_popup_key_handler`, `place_field_popup`, 닫는 계기 표, 한 번에 하나만이다. menu_bar의 막대 항목 사이 hover 전환은 그 노드가 정한다.
+- **date_picker**, **color_picker**(popup 조립을 고를 때)는 열림 규약을 그대로 따른다. `set_open` 절대 메시지, `field_popup_key_handler`, `place_field_popup`, 닫는 계기 표, 한 번에 하나만이다. **menu_bar**는 상태와 절대 메시지(`set_open`), 닫는 계기 표, 한 번에 하나만, `place_field_popup` 자리는 따른다. 여는 키와 열린 동안 막대 항목 사이 이동은 menu_bar가 정한다(Alt·F10·←/→). 이동 코드는 `process_menu_key`에 들어가므로 controller를 고치는 menu_bar(줄 3)가 맡는다. 항목 사이 hover 전환도 그 노드의 몫이다.
 - **teaching_tip**은 `field_popup.h`에 방향을 더해 늘린다. 이 노드가 아래 한 방향의 시그니처를 세운다.
 - `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.cpp`는 date_picker·teaching_tip과 겹친다. 이 노드가 `open_popup_` 하나로 바꾸고 뒤 노드는 그 값을 쓴다.
 - `ui_element_id.h`의 kind 추가는 병렬 노드와 같은 자리라 통합 때 줄 충돌이 난다. AutomationId는 kind의 수라 병합 순서가 번호를 정한다. test와 luil-uia 스크립트는 번호를 박지 않는다.
