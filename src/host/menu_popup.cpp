@@ -21,6 +21,13 @@ namespace luil {
             ? config.width
             : menu_element::width_for(menu, config.measurer ? config.measurer : styled_text_measurer({ weight }), font_size);
         popup.height = menu_element::height_for(menu);
+        // 크기를 안 뒤에 필드 아래의 자리를 정한다. 아래가 모자라면 위로 뒤집힌다.
+        if (config.below.has_value())
+        {
+            const field_popup_position position { place_field_popup(*config.below, { popup.width, popup.height }, scale) };
+            popup.x = position.x;
+            popup.y = position.y;
+        }
         popup.dismiss = std::move(config.dismiss);
         const popup_corner corner { config.corner.value_or(default_ui_style().popup.corner) };
         popup.corner = corner;

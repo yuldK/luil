@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/app/app_host.h"
+#include "luil/ui/field_popup.h"
 #include "luil/ui/menu_element.h"
 
 namespace luil {
@@ -32,6 +33,10 @@ namespace luil {
         std::optional<font_weight> weight {};
         // 폭을 잴 함수다. 비어 있으면 `weight`를 건 UI 글꼴이다 (`styled_text_measurer`). 넣으면 `weight`는 쓰지 않는다.
         text_measurer measurer {};
+        // 닫힌 필드 아래에 놓을 때의 앵커다 (`place_field_popup`). 값이 있으면 `x`·`y`는 쓰지 않는다.
+        //  - 폭을 스스로 재는 곳이 `make_menu_popup`이라, 크기를 잰 뒤에 자리를 정한다. 앱이 같은 식을 되풀이하지 않는다.
+        //  - `scale`은 앵커의 물리 픽셀을 논리 좌표로 옮기는 배율이기도 하다.
+        std::optional<field_popup_anchor> below {};
     };
 
     // 메뉴 높이·배율·분리 tree를 한곳에서 조립한다. 열림 상태와 명령 실행은 앱의 몫이다.

@@ -351,3 +351,78 @@ TEST_CASE("Reparenting a popup recreates all of its owned descendants", "[host][
     REQUIRE(result.create == std::vector<std::size_t> { 0, 1 });
     REQUIRE(result.move.empty());
 }
+
+TEST_CASE("A menu popup anchored below a field is placed after its size is measured", "[host][popup][field-popup]")
+{
+    luil::menu_config menu {};
+    menu.items.push_back({ u8"open", u8"Open" });
+    menu.items.push_back({ u8"copy", u8"Copy" });
+    const float height { luil::menu_element::height_for(menu) };
+
+    // 배율 2에서 논리 (100, 50) 80x28인 필드다. 창은 1600x1200이다.
+    luil::field_popup_anchor anchor {};
+    anchor.field = { 200.0f, 100.0f, 160.0f, 56.0f };
+    anchor.limit = { 0.0f, 0.0f, 1600.0f, 1200.0f };
+    const auto make = [&menu](const luil::field_popup_anchor& below) {
+        luil::menu_popup_config config {};
+        config.id = u8"below";
+        config.scale = 2.0f;
+        config.width = 120.0f;
+        // 앵커가 있으면 이 자리는 쓰지 않는다.
+        config.x = 999.0f;
+        config.y = 999.0f;
+        config.below = below;
+        return luil::make_menu_popup(menu, std::move(config));
+    };
+
+    // 필드 아래에 간격 2를 두고 필드 왼쪽에 맞춘다. 좌표는 논리 픽셀이다.
+    const luil::ui_popup under { make(anchor) };
+    REQUIRE(under.x == 100.0f);
+    REQUIRE(under.y == (100.0f + 56.0f + 4.0f) / 2.0f);
+    REQUIRE(under.width == 120.0f);
+    REQUIRE(under.height == height);
+
+    // 아래가 모자라면 위로 뒤집는다. 크기를 잰 값(popup의 높이)으로 견주므로 앱이 높이를 되풀이하지 않는다.
+    anchor.field.y = 1180.0f - 56.0f;
+    const luil::ui_popup flipped { make(anchor) };
+    REQUIRE(flipped.y == (anchor.field.y - 4.0f - height * 2.0f) / 2.0f);
+
+    // 오른쪽 정렬은 popup의 오른쪽을 필드의 오른쪽에 맞춘다.
+    anchor.field.y = 100.0f;
+    anchor.alignment = luil::field_popup_alignment::end;
+    const luil::ui_popup aligned { make(anchor) };
+    REQUIRE(aligned.x == (200.0f + 160.0f) / 2.0f - 120.0f);
+}
+
+TEST_CASE("An anchored menu popup measures its own width before it aligns to the field end", "[host][popup][field-popup]")
+{
+    luil::menu_config menu {};
+    menu.items.push_back({ u8"open", u8"Open" });
+    luil::menu_popup_config config {};
+    config.id = u8"below";
+    config.measurer = [](const std::u8string_view text, const float size) { return static_cast<float>(text.size()) * size; };
+    config.below = luil::field_popup_anchor {
+        .field = { 300.0f, 20.0f, 100.0f, 28.0f },
+        .limit = { 0.0f, 0.0f, 800.0f, 600.0f },
+        .alignment = luil::field_popup_alignment::end,
+    };
+    const luil::ui_popup popup { luil::make_menu_popup(std::move(menu), std::move(config)) };
+    // 폭은 잰 값이고, 그 폭으로 오른쪽 끝을 맞춘다.
+    REQUIRE(popup.width > 0.0f);
+    REQUIRE(popup.x == 400.0f - popup.width);
+    REQUIRE(popup.y == 20.0f + 28.0f + 2.0f);
+}
+
+TEST_CASE("A menu popup without an anchor keeps the position it was given", "[host][popup][field-popup]")
+{
+    luil::menu_config menu {};
+    menu.items.push_back({ u8"open", u8"Open" });
+    luil::menu_popup_config config {};
+    config.id = u8"plain";
+    config.width = 120.0f;
+    config.x = 33.0f;
+    config.y = 44.0f;
+    const luil::ui_popup popup { luil::make_menu_popup(std::move(menu), std::move(config)) };
+    REQUIRE(popup.x == 33.0f);
+    REQUIRE(popup.y == 44.0f);
+}

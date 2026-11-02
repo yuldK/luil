@@ -153,6 +153,11 @@ namespace luil {
         // 텍스트 칸 안의 링크다 (`text_area_config::links`·`text_input_config::links`). owner는 칸의 kind 수·owner와
         // 링크 순번을 함께 담는다. 칸과 kind가 다른 이유는 칸 kind가 텍스트 대상이라 같은 kind면 링크가 글 칸으로 읽혀서다.
         text_link,
+        // 분할 버튼과 그 두 절반이다 (`split_button_element`). root는 구조일 뿐이고 본체(기본 동작)와 화살표(메뉴 열기)가 자식이다.
+        // 셋 다 owner는 버튼 설정의 owner다. kind가 달라 id가 겹치지 않는다.
+        split_button,
+        split_button_body,
+        split_button_arrow,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind
