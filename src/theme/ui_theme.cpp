@@ -217,6 +217,13 @@ namespace luil {
             .document_changed_background = with_alpha(neutral.warning_accent, 0.12f),
             .document_search_background = with_alpha(accent.soft, 0.35f),
             .document_search_foreground = neutral.primary_foreground,
+            // 구문 색
+            .syntax_keyword = neutral.syntax_keyword,
+            .syntax_string = neutral.syntax_string,
+            .syntax_comment = neutral.syntax_comment,
+            .syntax_number = neutral.syntax_number,
+            .syntax_type = neutral.syntax_type,
+            .syntax_function = neutral.syntax_function,
         };
     }
 
@@ -290,6 +297,13 @@ namespace luil {
             .document_changed_background = colors.window_background,
             .document_search_background = colors.highlight_background,
             .document_search_foreground = colors.highlight_foreground,
+            // 구문 색은 모두 창 글자색으로 접는다. 색으로 갈리던 토큰이 한 색이 되므로 렉서는 굵기·기울임으로도 가른다.
+            .syntax_keyword = colors.window_foreground,
+            .syntax_string = colors.window_foreground,
+            .syntax_comment = colors.window_foreground,
+            .syntax_number = colors.window_foreground,
+            .syntax_type = colors.window_foreground,
+            .syntax_function = colors.window_foreground,
         };
     }
 

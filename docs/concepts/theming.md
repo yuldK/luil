@@ -44,6 +44,8 @@ accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `sys
 
 중립 색 가운데 `backdrop_background`(`backdropBackground`)는 창 배경 효과가 선 표면(주 창·보조 창·popup)의 바탕이다. 알파가 효과를 얼마나 비출지를 정하고, 효과가 서지 않은 창은 이 색을 쓰지 않는다([창 배경 효과](../backdrop-design.md)). 이 키가 없는 스타일은 `windowBackground`로 물러선다.
 
+구문 색 여섯(`syntax_keyword`·`syntax_string`·`syntax_comment`·`syntax_number`·`syntax_type`·`syntax_function`, JSON은 `syntaxKeyword`…`syntaxFunction`)은 코드 칸의 `text_span`이 `text_color_role::keyword`…`function`으로 고르는 색이다. 경고·오류색처럼 키 컬러와 무관한 중립 색이라 `compose_palette`가 그대로 옮기고, 키가 없는 스타일은 본문색(`primaryForeground`)으로 물러선다. 내장값은 창·표면·입력 칸의 바탕 위에서 대비 4.5:1 이상이다. 고대비 팔레트는 여섯을 모두 시스템 창 글자색 하나로 접으므로, 렉서는 의미를 색에만 싣지 않고 굵기·기울임(`text_span::bold`·`italic`)에도 싣는 편이 좋다 ([구문 강조](../syntax-highlight-design.md)).
+
 ```cpp
 auto style { std::make_shared<luil::ui_style>(luil::default_ui_style()) };
 style->dark.window_background = luil::make_ui_color(26, 27, 38);

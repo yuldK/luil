@@ -173,6 +173,15 @@ namespace luil {
         //  - 알파가 효과를 얼마나 비출지다. 불투명하면 효과가 서도 보이지 않는다.
         //  - 효과가 서지 않은 창(설정이 끔·OS 투명 효과 꺼짐·고대비)은 이 색을 쓰지 않고 `window_background`다.
         ui_color backdrop_background { 0 };
+        // 구문 색이다 (`text_color_role`의 keyword·string·comment·number·type·function).
+        //  - 키 컬러와 무관한 중립 색이라 `warning_accent`·`error_accent`처럼 합성이 그대로 옮긴다.
+        //  - 바탕 위에서 대비 4.5:1 이상이어야 한다. 입력 칸의 합성 바탕(`input_background`을 표면에 얹은 색)도 포함한다.
+        ui_color syntax_keyword { 0 };
+        ui_color syntax_string { 0 };
+        ui_color syntax_comment { 0 };
+        ui_color syntax_number { 0 };
+        ui_color syntax_type { 0 };
+        ui_color syntax_function { 0 };
         caption_color_palette caption {};
 
         [[nodiscard]] bool operator==(const neutral_color_palette&) const noexcept = default;
@@ -291,6 +300,13 @@ namespace luil {
         ui_color document_changed_background { 0 };
         ui_color document_search_background { 0 };
         ui_color document_search_foreground { 0 };
+        // 구문 색이다 (`neutral_color_palette::syntax_*`). 고대비는 여섯 모두 창 글자색으로 접는다.
+        ui_color syntax_keyword { 0 };
+        ui_color syntax_string { 0 };
+        ui_color syntax_comment { 0 };
+        ui_color syntax_number { 0 };
+        ui_color syntax_type { 0 };
+        ui_color syntax_function { 0 };
 
         [[nodiscard]] bool operator==(const ui_color_palette&) const noexcept = default;
     };

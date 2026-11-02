@@ -63,7 +63,8 @@ request는 소유 텍스트, UI/code 글꼴, 크기, 폭/줄 넘김 정책, 배�
 
 shaping 결과에는 방향 정보를 저장한다. 초기 배포 범위는 LTR 문단과 결합·합자의 일관성이다.
 RTL 글리프를 그릴 수 있다는 이유로 양방향 편집 지원을 선언하지 않는다. 혼합 방향의 시각 이동,
-경계 affinity, 선택의 분리 사각형 규칙은 후속 단계에서 확정한다. UAX #14 줄 나눔도 별도 단계다.
+경계 affinity, 선택의 분리 사각형 규칙은 후속 단계에서 확정한다. UAX #14 줄 나눔은 별도 단계로
+[줄 나눔 규칙](line-break-design.md)에서 구현했다.
 
 ## 옵션과 실패 처리
 
@@ -148,6 +149,8 @@ shaper나 run iterator를 만들지 못하면 예외 대신 배치 전체를 pri
 `measure_text`·`draw_text`도 원문을 넘겨 같은 글의 폭이 배치와 같다.
 접은 줄 끝의 공백은 그 줄의 범위와 caret stop에 남지만 줄 폭과 `size()`에는 들어가지 않는다.
 접지 않은 마지막 줄의 공백은 폭에 남는다. 자르는 자리는 언제나 글자소 경계다.
+접는 자리는 `text_layout_request::line_break` 정책의 UAX #14 후보에서 고르고, 매다는 공백은
+`text::line_break_hangs`(U+0020·U+3000 등)다([줄 나눔 규칙](line-break-design.md)).
 `remake_text_layout`은 기준 배치의 글꼴을 빌리되 요청한 `font_size`로 다시 잰다.
 `approximate_ligature_carets()`는 SkShaper가 OpenType ligature caret 표를 내주지 않아
 글자소 수로 분할한 경우를 알린다. UTF-8 byte offset과 soft-wrap affinity를 계속 쓴다.

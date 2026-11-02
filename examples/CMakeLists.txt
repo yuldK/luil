@@ -54,6 +54,7 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/gallery_page.h
     demo/basics_page.cpp
     demo/basics_page.h
+    demo/code_lexer.h
     demo/files_page.cpp
     demo/files_page.h
     demo/groups_page.cpp

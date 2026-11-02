@@ -82,6 +82,10 @@ namespace demo {
     constexpr luil::ui_element_kind kind_memo_input { luil::application_element_kind(38) };
     // 링크를 보이는 읽기 전용 안내 칸이다 (`text_area_config::read_only`·`links`).
     constexpr luil::ui_element_kind kind_link_view_input { luil::application_element_kind(62) };
+    // 구문 강조를 보이는 코드 칸이다 (`text_area_element`와 `syntax_highlighter`).
+    constexpr luil::ui_element_kind kind_code_input { luil::application_element_kind(63) };
+    // 줄 나눔 정책을 시연하는 여러 줄 칸이다 (line_break_sample.h).
+    constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(64) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
@@ -105,6 +109,8 @@ namespace demo {
     constexpr luil::text_input_target target_workbench_find { static_cast<luil::text_input_target>(11) };
     // 12는 명령 팔레트의 검색 칸이다 (palette.h).
     constexpr luil::text_input_target target_link_view { static_cast<luil::text_input_target>(13) };
+    constexpr luil::text_input_target target_code { static_cast<luil::text_input_target>(14) };
+    constexpr luil::text_input_target target_line_break { static_cast<luil::text_input_target>(15) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.

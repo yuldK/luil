@@ -101,7 +101,14 @@ set(neutral_fields
 set(neutral_optional_fields
     "raisedBackground|raised_background|noticeBackground"
     "thumbBackground|thumb_background|buttonPressedBackground"
-    "backdropBackground|backdrop_background|windowBackground")
+    "backdropBackground|backdrop_background|windowBackground"
+    # 구문 색이다. 옛 JSON은 본문색으로 그려 구문 색 없이 읽힌다.
+    "syntaxKeyword|syntax_keyword|primaryForeground"
+    "syntaxString|syntax_string|primaryForeground"
+    "syntaxComment|syntax_comment|primaryForeground"
+    "syntaxNumber|syntax_number|primaryForeground"
+    "syntaxType|syntax_type|primaryForeground"
+    "syntaxFunction|syntax_function|primaryForeground")
 set(tone_fields
     "pressed|pressed"
     "softButton|soft_button"

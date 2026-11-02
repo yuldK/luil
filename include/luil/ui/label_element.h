@@ -38,10 +38,13 @@ namespace luil {
         text_align align { text_align::start };
         text_elide elide { text_elide::end };
         // 폭에서 줄을 바꾼다 (설명·오류 글 — label-wrap-design.md). 거짓이면 지금처럼 한 줄이다.
-        //  - 줄 바꿈은 여러 줄 칸과 같은 text_layout 규칙이다: 공백에서 먼저 바꾸고, 공백이 없는 긴 낱말은 글자소
-        //    경계에서 바꾼다. 조합형 한글·이모지 결합 글자가 줄 경계에서 갈리지 않는다. `\n`은 줄 바꿈이다.
+        //  - 줄 바꿈은 여러 줄 칸과 같은 text_layout 규칙이다: UAX #14의 후보(공백·하이픈·슬래시 뒤, 한자·가나 사이)
+        //    에서 바꾸고, 후보가 없는 긴 낱말은 글자소 경계에서 바꾼다. 닫는 부호는 줄 머리에 오지 않고, NBSP·WJ로
+        //    붙인 글은 떼지 않는다. 조합형 한글·이모지 결합 글자가 줄 경계에서 갈리지 않는다. `\n`은 줄 바꿈이다.
         //  - 바꾼 줄도 줄마다 `align`을 따른다. `elide`는 한 줄 label의 것이다 — 넘친 마지막 줄은 늘 끝을 줄인다.
         bool wrap { false };
+        // 후보를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾸고, `unicode`는 음절 사이에서도 바꾼다.
+        text::line_break_policy line_break { text::line_break_policy::hangul_words };
         // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 줄의 끝을 `…`로 줄인다.
         std::size_t max_lines { 0 };
     };

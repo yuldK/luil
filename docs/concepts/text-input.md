@@ -38,7 +38,7 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 
 [`text_area_element`](../../include/luil/ui/text_area_element.h)는 줄 바꿈·세로 스크롤·여러 줄 붙여넣기를 받는 칸이다. 한 줄 칸과 같은 초안(`text_edit_state`), 같은 view(`text_input_view`), 같은 편집 명령을 쓴다. 앱은 `text_target_of`에 그 kind를 이름 대고 `apply_text_edit`로 적용하면 된다. `text_input()`이 `multiline`을 참으로 답하므로 붙여넣기는 줄 바꿈과 탭을 보존한다.
 
-**줄은 칸 폭에서 넘겨 접는다.** 배치가 `arrange_context::measure_text()`로 줄을 접어 내용 높이를 정하고, 그리기·포인터 판정·IME 질의는 그 접은 줄(`lines()`)을 그대로 쓴다. 낱말 사이(공백 뒤)에서 접고, 칸보다 긴 낱말은 글자 사이에서 접는다. 가로로 미는 일은 없다. 큰 글(수십만 바이트)을 받는 칸은 앱이 `text_area_wrap_cache`를 하나 쥐고 `text_area_config::wrap_cache`로 넘긴다. 그러면 frame마다 바뀐 문단만 다시 잰다. 자세한 규칙과 잰 비용은 [자동 줄 넘김](../text-area-wrap-design.md)에 있다.
+**줄은 칸 폭에서 넘겨 접는다.** 배치가 `arrange_context::measure_text()`로 줄을 접어 내용 높이를 정하고, 그리기·포인터 판정·IME 질의는 그 접은 줄(`lines()`)을 그대로 쓴다. UAX #14의 후보(공백·하이픈·슬래시 뒤, 한자·가나 사이)에서 접고, 한국어는 어절에서 접는다. 후보가 없는 긴 낱말은 글자소 사이에서 접는다([줄 나눔 규칙](../line-break-design.md)). 가로로 미는 일은 없다. 큰 글(수십만 바이트)을 받는 칸은 앱이 `text_area_wrap_cache`를 하나 쥐고 `text_area_config::wrap_cache`로 넘긴다. 그러면 frame마다 바뀐 문단만 다시 잰다. 자세한 규칙과 잰 비용은 [자동 줄 넘김](../text-area-wrap-design.md)에 있다.
 
 키의 뜻은 `text_input_snapshot::multiline`을 보고 controller가 가른다. 한 줄 칸의 경로는 그대로다.
 
@@ -53,6 +53,8 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 | Tab | 칸을 떠난다. 탭 문자를 넣지 않는다 |
 
 줄을 오가는 이동은 지금 caret의 자리(`text_span_bounds`)를 칸에 묻고, 위아래로 옮긴 자리를 포인터처럼 다시 묻는다(`offset_at_point`). 그래서 판정이 클릭과 한 길이다. 짧은 줄을 지나도 처음의 가로 자리를 기억하지는 않는다.
+
+편집하는 코드 글의 구간 색은 [`syntax_highlighter`](../../include/luil/ui/syntax_highlighter.h)가 만든다. 앱이 줄 하나를 칠하는 렉서를 주고, `apply_text_edit` 다음 같은 logic turn에서 `update`를 부르면 바뀐 줄부터 다시 칠한 구간이 `spans()`로 나온다. 그 구간을 `text_area_config::spans`에 넘긴다. 구간은 색(`text_color_role`의 구문 색 여섯 포함)과 굵기·기울임을 싣는다 ([구문 강조](../syntax-highlight-design.md)).
 
 세로 스크롤은 앱 상태다(`scroll_offset`·`scroll`·`scroll_to`). 칸 안의 `scroll_area_element`가 막대·휠·범위 다듬기를 맡는다. caret 따라가기는 controller가 한다. 입력 pump는 새 tree를 받을 때마다 `follow_text_caret()`을 부르고, 초점을 가진 여러 줄 칸의 **caret이나 글이 바뀌었을 때만** caret 줄을 창 안으로 들이는 스크롤 메시지를 낸다. 편집은 logic이 적용한 뒤에야 caret 자리가 정해지므로 그 결과가 실린 tree에서 하는 것이다. 휠로 caret에서 멀리 흘린 frame은 caret도 글도 그대로라 되돌아가지 않는다.
 
