@@ -137,6 +137,16 @@ namespace luil::default_text {
         return name;
     }
 
+    std::u8string_view undo_command_undo() noexcept
+    {
+        return u8"실행 취소";
+    }
+
+    std::u8string_view undo_command_redo() noexcept
+    {
+        return u8"다시 실행";
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;

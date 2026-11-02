@@ -220,7 +220,7 @@ else if (message.get<undo_requested>() != nullptr)
 ## 다른 노드와의 약속
 
 - 앞 라운드(R1) 문서는 이 노드로 미룬 것이 없다. 이 노드는 라이브러리 기본 문구(G6)도 두지 않는다. 앱이 최종 글을 주므로 줄 1의 비공개 문구 헤더로 옮길 낱말이 없다. 기본값이 필요해지면 옮길 낱말은 "실행 취소", "다시 실행"과 구분자 ": " 셋이다.
-- **빈 글의 후속.** `make_undo_commands`는 `undo_label`·`redo_label`이 비면 `app_command::label`을 빈 채로 둔다. 통합 뒤 후속(줄 1 `default_text`가 main에 들어온 뒤)에는 비었을 때 `default_text::undo_command_undo()`(실행 취소)·`undo_command_redo()`(다시 실행)를 쓴다. 걸음 이름을 잇는 문장은 앱 몫이고 R5 자리 값에서 바뀐다. 판정용 표(`make_undo_commands({})`)는 id와 단축키만 쓰므로 영향이 없다.
+- **빈 글의 후속.** 이 노드의 구현은 `undo_label`·`redo_label`이 비면 `app_command::label`을 빈 채로 두었다. 통합 때(줄 1 `default_text`와 합친 뒤) 비었을 때 `default_text::undo_command_undo()`(실행 취소)·`undo_command_redo()`(다시 실행)를 쓰게 했다. 걸음 이름을 잇는 문장은 앱 몫이고 R5 자리 값에서 바뀐다. 판정용 표(`make_undo_commands({})`)는 id와 단축키만 판정에 쓰므로 영향이 없고, 그 표의 글은 이제 두 기본 이름이다.
 - **style_sheet**(같은 줄의 다음): 기능 파일은 겹치지 않는다. 목록 파일 셋에 줄을 더하는 것만 겹친다. `src/CMakeLists.txt`(이 노드는 `ui/foundation` 필터의 소스 줄, style_sheet는 core 링크와 파서 소스), `tests/CMakeLists.txt`, `include/luil/luil.h`다. 모두 줄을 더하는 병합이라 기계적이다.
 - **ink**(줄 3, 같은 라운드): 획 되돌리기를 이 stack에 올릴 수 있다. 서로 기대지 않으며 ink 설계가 절대 값 규칙과 합치기 키를 따른다. 이 노드는 `ui_events.h`·`ui_interaction.cpp`를 고치지 않는다.
 - **rich_edit·hotkey·menu_bar**(R3): 칸의 기록은 칸의 것이라(결정 3) 서식 되돌리기를 `text_edit_state`에 넣어도 이 stack과 따로 간다. hotkey가 `key_chord`를 고치므로 `make_undo_commands`는 지정 초기화(`.key`, `.control`, `.shift`)로 짓는다. menu_bar의 편집 메뉴는 그 결과를 `menu_item_from`으로 짓고 글은 앱이 준다.

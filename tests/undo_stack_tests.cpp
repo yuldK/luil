@@ -583,10 +583,11 @@ TEST_CASE("The undo and redo commands carry the ids, the shortcuts and the windo
     REQUIRE(commands[1].id == luil::redo_command_id);
     REQUIRE(commands[0].scope == luil::command_scope::window);
     REQUIRE(commands[1].scope == luil::command_scope::window);
-    // 판정용 표는 정적이라 둘 다 켠다. 글은 비어 있어도 된다.
+    // 판정용 표는 정적이라 둘 다 켠다. 앱이 글을 주지 않으면 기본 문구다 (docs/default-text-design.md).
     REQUIRE(commands[0].enabled);
     REQUIRE(commands[1].enabled);
-    REQUIRE(commands[0].label.empty());
+    REQUIRE(commands[0].label == u8"실행 취소");
+    REQUIRE(commands[1].label == u8"다시 실행");
 
     REQUIRE(luil::effective_shortcuts(commands[0]) == std::vector<luil::key_chord> { { .key = luil::key_code::key_z, .control = true } });
     REQUIRE(luil::effective_shortcuts(commands[1])

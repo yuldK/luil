@@ -13,7 +13,8 @@ namespace luil {
 
     struct undo_command_state
     {
-        // 메뉴·팔레트에 보일 최종 글이다. 앱이 걸음의 이름과 낱말을 이어 짓는다 ("실행 취소: 체크"). 라이브러리는 기본 문구를 두지 않는다.
+        // 메뉴·팔레트에 보일 최종 글이다. 앱이 걸음의 이름과 낱말을 이어 짓는다 ("실행 취소: 체크").
+        //  - 비면 라이브러리 기본 문구("실행 취소"·"다시 실행", docs/default-text-design.md)다. 걸음 이름을 잇는 문장은 앱 몫이다.
         // 키 판정용 표에서는 비워도 된다. 판정은 id와 단축키만 본다.
         std::u8string undo_label {};
         std::u8string redo_label {};

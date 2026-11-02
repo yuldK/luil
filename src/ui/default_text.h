@@ -42,6 +42,9 @@ namespace luil::default_text {
     //  - 값을 10배 반올림한 정수로 정수부와 소수 첫째 자리를 지어 로케일과 부동소수 서식 함수에 달리지 않게 한다.
     //    숫자 서식(자릿점, 숫자 모양)은 R5 몫이다.
     [[nodiscard]] std::u8string rating_value_name(float value, std::size_t count);
+    // 실행 취소 명령표(`make_undo_commands`)가 앱이 글을 주지 않았을 때 쓰는 명령 이름이다. 걸음 이름을 잇는 문장은 앱 몫이다.
+    [[nodiscard]] std::u8string_view undo_command_undo() noexcept;  // 실행 취소
+    [[nodiscard]] std::u8string_view undo_command_redo() noexcept;  // 다시 실행
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

@@ -165,7 +165,7 @@ controls.fit_label = u8"Fit";
 
 **rating**(줄 1). 값 이름("별점 3 / 5" 꼴)은 값과 최댓값을 받는 함수로 이 헤더에 둔다. 앱이 덮을 칸은 위 규칙의 `std::function` 꼴이다.
 
-**undo_stack**(줄 2). 그 브랜치에는 이 헤더가 아직 없다. 새 한국어 리터럴을 만들지 않고 "실행 취소: …" 같은 라벨 문장은 `std::u8string` 인자로 받는다. 기본 문구가 꼭 필요해지면 통합 뒤 이 헤더에 함수를 더하는 후속으로 한다.
+**undo_stack**(줄 2). 그 브랜치에는 이 헤더가 아직 없다. 새 한국어 리터럴을 만들지 않고 "실행 취소: …" 같은 라벨 문장은 `std::u8string` 인자로 받는다. 통합 뒤 이 헤더에 `undo_command_undo()`(실행 취소)·`undo_command_redo()`(다시 실행)를 더했고, `make_undo_commands`는 앱이 준 글이 비었을 때 그 이름을 쓴다. 걸음 이름을 잇는 문장은 그대로 앱 몫이다.
 
 **ink**(줄 3, 같은 라운드). 캔버스의 기본 이름(잉크 캔버스)과 획 수 요약(획 N개)을 이 헤더에 함수 둘로 더한다. `ink_canvas_name()`은 `std::u8string_view`를, `ink_canvas_summary(count)`는 수가 끼는 문장이라 `std::u8string`을 돌려준다. 앱이 덮는 칸은 `ink_canvas_config`의 `access_name`과 `std::function<std::u8string(std::size_t strokes)>` 꼴의 `access_summary`다. 줄 3은 이 헤더가 main에 들어온 뒤 병합한다. 같은 `default_text.h`·`default_text.cpp`의 끝에 함수를 덧붙이는 병합이고, `verify_default_text`가 서면 `ink_canvas_element.cpp`에도 한글 리터럴을 두지 않는다. R5에서 요약은 복수형 항목이 된다.
 
