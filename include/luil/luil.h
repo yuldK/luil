@@ -106,6 +106,7 @@
 #include "luil/app/platform_services.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/app/secret_store.h"
+#include "luil/app/taskbar.h"
 #include "luil/app/webview.h"
 
 // Win32 platform 조립이다 (창 실행).

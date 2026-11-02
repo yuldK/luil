@@ -118,6 +118,12 @@ namespace {
         std::optional<luil::window_placement> reported_before_close {};
         bool closing { false };
         luil::window_metrics metrics {};
+        // 첫 metrics다. 시작 메시지가 싣는 값을 보려고 따로 둔다.
+        std::optional<luil::window_metrics> first_metrics {};
+        // delegate가 metrics 메시지를 지은 횟수다.
+        int metrics_calls { 0 };
+        // `on_started`에서 `WM_SETTINGCHANGE`를 보냈다면 그 사이에 지은 metrics 메시지 수다.
+        std::optional<int> metrics_calls_during_setting_change {};
         bool hidden { false };
         bool maximized { false };
         bool shown { false };
@@ -197,13 +203,17 @@ namespace {
     class placement_delegate final : public luil::win32::window_delegate
     {
     public:
-        explicit placement_delegate(placement_probe& probe)
+        explicit placement_delegate(placement_probe& probe, const bool send_setting_change = false)
             : probe_ { probe }
+            , send_setting_change_ { send_setting_change }
         {
         }
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
         {
             probe_.metrics = metrics;
+            ++probe_.metrics_calls;
+            if (probe_.first_metrics.has_value() == false)
+                probe_.first_metrics = metrics;
             return luil::app_message { metrics };
         }
         [[nodiscard]] luil::app_message make_window_placement_message(const luil::window_placement& placement) override
@@ -227,11 +237,19 @@ namespace {
             probe_.hidden = IsWindowVisible(window) == FALSE;
             probe_.maximized = IsZoomed(window) != FALSE;
             probe_.activated_before_start = probe_.activated;
+            if (send_setting_change_)
+            {
+                // OS 설정을 바꾸지 않고 메시지만 보낸다. 움직임 줄이기가 그대로면 앱에 아무것도 알리지 않아야 한다.
+                const int before { probe_.metrics_calls };
+                SendMessageW(window, WM_SETTINGCHANGE, 0, 0);
+                probe_.metrics_calls_during_setting_change = probe_.metrics_calls - before;
+            }
             PostMessageW(window, WM_CLOSE, 0, 0);
         }
 
     private:
         placement_probe& probe_;
+        bool send_setting_change_ { false };
     };
 
     [[nodiscard]] MONITORINFO test_monitor()
@@ -255,13 +273,13 @@ namespace {
         return TRUE;
     }
 
-    [[nodiscard]] placement_probe run_placement_probe(luil::win32::window_config config)
+    [[nodiscard]] placement_probe run_placement_probe(luil::win32::window_config config, const bool send_setting_change = false)
     {
         luil::win32::enable_per_monitor_dpi_awareness();
         const luil::win32::com_sta_scope com {};
         placement_probe probe {};
         placement_driver driver {};
-        placement_delegate delegate { probe };
+        placement_delegate delegate { probe, send_setting_change };
         config.class_name = placement_class_name;
         config.caption.title = u8"initial placement";
         config.renderer = luil::renderer_mode::cpu;
@@ -557,4 +575,23 @@ TEST_CASE("A window can be created again after a failed attempt", "[win32][windo
     // smoke는 한 frame만 그리고 돌아오므로 이 창을 거두는 것은 소멸자의 안전망이다.
     drain_quit_message();
     REQUIRE(windows_of_class(test_class_name) == 0);
+}
+
+TEST_CASE("The first metrics carry the system setting for reduced motion", "[win32][window][motion]")
+{
+    // 설정 앱의 "애니메이션 효과"를 끄면 클라이언트 영역 애니메이션이 꺼진다. 읽지 못하면 움직임을 둔다.
+    BOOL animation { TRUE };
+    const bool expected { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animation, 0) != FALSE && animation == FALSE };
+    luil::win32::window_config config {};
+    const placement_probe probe { run_placement_probe(config) };
+    REQUIRE(probe.first_metrics.has_value());
+    REQUIRE(probe.first_metrics->reduce_motion == expected);
+}
+
+TEST_CASE("A settings change that leaves reduced motion alone sends no new metrics", "[win32][window][motion]")
+{
+    luil::win32::window_config config {};
+    const placement_probe probe { run_placement_probe(config, true) };
+    REQUIRE(probe.metrics_calls_during_setting_change.has_value());
+    REQUIRE(*probe.metrics_calls_during_setting_change == 0);
 }
