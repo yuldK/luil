@@ -390,6 +390,20 @@ TEST_CASE("A text area says it takes several lines and reads as an edit", "[ui][
     REQUIRE(info.value == u8"a\nb");
 }
 
+TEST_CASE("A text area reads the access name the app gave before its placeholder", "[ui][text-area][accessibility]")
+{
+    // 앱이 단 이름이 안내 글보다 먼저다. 이름이 없을 때만 안내 글로 물러선다 (바로 위 case).
+    auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(u8"a\nb", 1), scrolling_config()) };
+    memo->set_access_name(u8"읽기 전용 안내 칸");
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(memo), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+    const luil::ui_element* const found { tree.find({ kind_memo, u8"memo" }) };
+    REQUIRE(found != nullptr);
+    const luil::access_info info { found->accessibility() };
+    REQUIRE(info.role == luil::access_role::edit);
+    REQUIRE(info.name == u8"읽기 전용 안내 칸");
+    REQUIRE(info.value == u8"a\nb");
+}
+
 TEST_CASE("Enter breaks the line in a text area and stays a default key in a single line field", "[ui][text-area][interaction]")
 {
     memo_policy policy {};

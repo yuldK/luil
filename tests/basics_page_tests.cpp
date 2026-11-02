@@ -239,3 +239,14 @@ TEST_CASE("The page builds its dialog settings from one place for the overlay an
     REQUIRE(page.dialog_open() == false);
     REQUIRE(page.make_dialog_config().buttons.empty());
 }
+
+TEST_CASE("The read-only field reads the access name the page gave it", "[demo][basics][read-only]")
+{
+    // 보조 기술이 읽는 이름은 페이지가 단 이름이다. 칸에 안내 글이 없어도 이름이 빈 채로 읽히지 않는다.
+    demo::basics_page page {};
+    const luil::ui_tree tree { page_tree(page) };
+    const luil::ui_element* const area { tree.find({ demo::kind_link_view_input }) };
+    REQUIRE(area != nullptr);
+    REQUIRE(area->accessibility().role == luil::access_role::edit);
+    REQUIRE(area->accessibility().name == u8"읽기 전용 안내 칸");
+}

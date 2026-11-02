@@ -1616,6 +1616,17 @@ TEST_CASE("The mobile star row inside the horizontal window scrolls on a swipe a
     REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-strip-value") == u8"가로 창 별점: 6 / 10");
 }
 
+TEST_CASE("The mobile read-only field reads the access name the page gave it", "[mobile-demo][basics][read-only]")
+{
+    // 보조 기술이 읽는 이름은 페이지가 단 이름이다. 칸에 안내 글이 없어도 이름이 빈 채로 읽히지 않는다.
+    mobile_demo::basics_page page {};
+    const auto tree { basics_tree(page) };
+    const luil::ui_element* const area { tree->find({ mobile_demo::kind_readonly_input }) };
+    REQUIRE(area != nullptr);
+    REQUIRE(area->accessibility().role == luil::access_role::edit);
+    REQUIRE(area->accessibility().name == u8"읽기 전용 안내 칸");
+}
+
 TEST_CASE("Undoing a reorder on the mobile list page brings back the earlier order and the buttons follow", "[mobile-demo][lists][undo]")
 {
     mobile_demo::lists_page page {};

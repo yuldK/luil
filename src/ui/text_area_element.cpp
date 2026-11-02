@@ -1148,6 +1148,7 @@ namespace luil {
     access_info text_area_element::accessibility() const
     {
         // 값은 확정 글이다 — 조합 글은 아직 사용자의 글이 아니다 (`text_input_element`와 같은 판단).
-        return { .role = access_role::edit, .name = config_.placeholder, .value = value_.text };
+        // 이름은 앱이 단 것(`access_name`)이 먼저다. 안내 글은 글을 쓰면 사라지는 것이라 이름이 없을 때의 대신이다.
+        return { .role = access_role::edit, .name = access_name().empty() ? config_.placeholder : access_name(), .value = value_.text };
     }
 }
