@@ -31,6 +31,7 @@ add_executable(luil_core_tests
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
     fence_wait_tests.cpp
+    file_watch_batch_tests.cpp
     focus_request_tests.cpp
     font_scale_tests.cpp
     group_element_tests.cpp
@@ -189,6 +190,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/android_input.cpp"
             android_input_tests.cpp)
+    # 파일 감시도 JNI 없이 inotify만 부르므로 같은 길로 기기 셸에서 실제 폴더를 본다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/file_watcher_android.cpp"
+            file_watcher_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES
@@ -352,6 +358,7 @@ add_executable(luil_tests
     caption_layout_tests.cpp
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp
+    file_watcher_tests.cpp
     font_fallback_tests.cpp
     font_style_native_tests.cpp
     glyph_element_tests.cpp

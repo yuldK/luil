@@ -101,6 +101,7 @@
 #include "luil/app/app_delegate.h"
 #include "luil/app/app_host.h"
 #include "luil/app/file_dialog.h"
+#include "luil/app/file_watcher.h"
 #include "luil/app/menu_popup.h"
 #include "luil/app/platform_services.h"
 #include "luil/app/renderer_policy.h"
