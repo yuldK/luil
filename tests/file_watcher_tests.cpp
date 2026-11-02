@@ -301,6 +301,38 @@ TEST_CASE("A subtree watch sees nested files and files in new folders", "[file_w
     REQUIRE(sink.wait_change(change(file_change_kind::created, u8"new/inner/c.txt")));
 }
 
+TEST_CASE("Folders moved out of a subtree watch at once are no longer seen", "[file_watch][platform]")
+{
+    const scratch_folder folder {};
+    const scratch_folder outside {};
+    std::filesystem::create_directories(folder.file(u8"a/deep"));
+    std::filesystem::create_directories(folder.file(u8"b"));
+    std::filesystem::create_directories(folder.file(u8"c"));
+    recorder sink {};
+    const auto watcher { make_watcher(test_config(sink)) };
+    static_cast<void>(add(*watcher, folder.text(), luil::file_watch_scope::subtree));
+
+    // 두 폴더를 곧바로 이어 밖으로 옮기고 안의 폴더 이름도 바꾼다. inotify는 셋을 한 번의 읽기에 실어 올 수 있다.
+    // 나간 폴더를 하나만 기억하면 뒤의 것이 앞의 것을 덮어써 그 아래 watch가 남는다.
+    std::filesystem::rename(folder.file(u8"a"), outside.file(u8"a"));
+    std::filesystem::rename(folder.file(u8"b"), outside.file(u8"b"));
+    std::filesystem::rename(folder.file(u8"c"), folder.file(u8"d"));
+    REQUIRE(sink.wait_change(change(file_change_kind::renamed, u8"d", u8"c")));
+    sink.clear();
+
+    // 밖에서 쓴 것은 오지 않는다. 안의 폴더에 쓴 것이 오면 그보다 앞서 쓴 것은 이미 처리됐다.
+    write_file(outside.file(u8"a/deep/x.txt"), "x");
+    write_file(outside.file(u8"b/y.txt"), "y");
+    write_file(folder.file(u8"d/z.txt"), "z");
+    REQUIRE(sink.wait_change(change(file_change_kind::created, u8"d/z.txt")));
+    for (const file_change& seen : sink.changes())
+    {
+        CAPTURE(narrow(seen.path));
+        REQUIRE(seen.path.find(u8"x.txt") == std::u8string::npos);
+        REQUIRE(seen.path.find(u8"y.txt") == std::u8string::npos);
+    }
+}
+
 TEST_CASE("A folder watch does not see nested files", "[file_watch][platform]")
 {
     const scratch_folder folder {};

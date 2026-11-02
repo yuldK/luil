@@ -84,12 +84,13 @@ namespace luil {
             // 이 감시가 건 폴더다. inotify는 하위 폴더를 따라가지 않아 `subtree`는 폴더마다 건다 (wd → 뿌리 기준 상대 경로).
             std::unordered_map<int, std::string> folders {};
             // 이름이 바뀌어 나간 폴더다. 같은 읽기 안에 짝이 오면 그 아래 경로를 고치고, 오지 않으면 그 아래 watch를 푼다.
+            //  - 한 읽기 안에 여럿이 나갈 수 있어 cookie마다 하나씩 둔다. 하나만 두면 앞의 것을 덮어써 그 아래 watch가 남는다.
             struct moved_folder
             {
                 std::uint32_t cookie { 0 };
                 std::string path {};
             };
-            std::optional<moved_folder> moved {};
+            std::vector<moved_folder> moved {};
             file_watch_batch batch;
         };
 
@@ -252,7 +253,7 @@ namespace luil {
         for (const int wd : wds)
             drop(target, wd);
         target.root_wd = -1;
-        target.moved.reset();
+        target.moved.clear();
     }
 
     void file_watcher::engine::lose(watch& target, std::u8string error, const clock::time_point now)
@@ -400,19 +401,26 @@ namespace luil {
                     lose(*target, std::move(error), now);
             }
             else if ((event.mask & IN_MOVED_FROM) != 0)
-                target->moved = watch::moved_folder { event.cookie, path };
+                target->moved.push_back(watch::moved_folder { event.cookie, path });
             else if ((event.mask & IN_MOVED_TO) != 0)
             {
-                if (target->moved.has_value() && target->moved->cookie == event.cookie)
+                const auto pair { std::find_if(target->moved.begin(), target->moved.end(), [&event](const watch::moved_folder& each) { return each.cookie == event.cookie; }) };
+                if (pair != target->moved.end())
                 {
                     // 안에서 옮긴 폴더다. watch는 그대로 따라가므로 표의 경로만 고친다.
-                    const std::string from { target->moved->path };
-                    target->moved.reset();
+                    //  - 아직 짝을 기다리는 그 아래의 나간 폴더도 같이 고친다. 읽기 끝에서 새 경로로 풀어야 한다.
+                    const std::string from { pair->path };
+                    target->moved.erase(pair);
                     for (auto& [wd, folder_path] : target->folders)
                     {
                         static_cast<void>(wd);
                         if (below(folder_path, from))
                             folder_path = path + folder_path.substr(from.size());
+                    }
+                    for (watch::moved_folder& waiting : target->moved)
+                    {
+                        if (below(waiting.path, from))
+                            waiting.path = path + waiting.path.substr(from.size());
                     }
                 }
                 else if (watch_folder(*target, path, true, now, error) == false)
@@ -445,14 +453,14 @@ namespace luil {
         for (auto& [ticket, target] : watches)
         {
             static_cast<void>(ticket);
-            if (target->moved.has_value() == false)
+            if (target->moved.empty())
                 continue;
-            const std::string from { target->moved->path };
-            target->moved.reset();
+            const std::vector<watch::moved_folder> gone { std::exchange(target->moved, {}) };
             std::vector<int> wds {};
             for (const auto& [wd, folder_path] : target->folders)
             {
-                if (below(folder_path, from))
+                const auto under = [&folder_path](const watch::moved_folder& each) { return below(folder_path, each.path); };
+                if (std::any_of(gone.begin(), gone.end(), under))
                     wds.push_back(wd);
             }
             for (const int wd : wds)
