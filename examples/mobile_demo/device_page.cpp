@@ -260,6 +260,14 @@ namespace mobile_demo {
             column.add(std::move(grid), luil::wrap_height_for(grid_config, width - 2.0f * page_padding, haptic_choices.size()));
         }
 
+        // 작업 표시줄은 데스크톱의 창 단추다. 요청(`ui_frame::taskbar`)은 어느 플랫폼에서나 실을 수 있고 하지 못하는 플랫폼은 받기만 한다.
+        column.gap(20.0f);
+        column.heading(u8"taskbar-heading", u8"작업 표시줄");
+        if (capabilities.taskbar == false)
+            column.note(u8"taskbar-none", u8"이 플랫폼에는 작업 표시줄이 없다.");
+        else
+            column.note(u8"taskbar-note", u8"창 단추에 진행률과 오버레이를 걸 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
+
         // 집 안 NAS 같은 같은 네트워크의 기기에 붙으려면 Android 17부터 이 권한이 있어야 한다.
         column.gap(20.0f);
         column.heading(u8"local-network-heading", u8"로컬 네트워크 권한");

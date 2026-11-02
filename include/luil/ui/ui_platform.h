@@ -25,6 +25,9 @@ namespace luil {
         // 햅틱을 낼 수 있다 (`haptic_request`, `app_host::perform_haptic`). 기기에 진동 장치가 없거나 사용자가
         // 껐으면 요청해도 조용하다.
         bool haptics { false };
+        // 작업 표시줄 단추에 진행률과 오버레이를 걸 수 있다 (`ui_frame::taskbar`, `ui_window::taskbar`). 참은 이 프로세스가
+        // 요청을 셸에 낼 수 있다는 뜻이다 — 단추가 실제로 섰는지는 Win32의 `taskbar_report`가 말한다.
+        bool taskbar { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

@@ -621,37 +621,6 @@ namespace luil::net {
             return false;
         }
 
-        // 지역 참조 틀 하나다. 요청 하나가 쓰는 지역 참조를 한 번에 놓는다.
-        class local_frame
-        {
-        public:
-            local_frame(JNIEnv* const env, const jint capacity) noexcept
-                : env_ { env }
-                , pushed_ { env->PushLocalFrame(capacity) == 0 }
-            {
-            }
-
-            local_frame(const local_frame&) = delete;
-            local_frame(local_frame&&) = delete;
-            local_frame& operator=(const local_frame&) = delete;
-            local_frame& operator=(local_frame&&) = delete;
-
-            ~local_frame()
-            {
-                if (pushed_)
-                    env_->PopLocalFrame(nullptr);
-            }
-
-            [[nodiscard]] bool pushed() const noexcept
-            {
-                return pushed_;
-            }
-
-        private:
-            JNIEnv* env_ { nullptr };
-            bool pushed_ { false };
-        };
-
         // HttpURLConnection 하나로 요청 하나를 끝까지 몬다. worker thread에서만 돈다.
         //
         // 재지정은 직접 따라간다. 플랫폼의 자동 재지정은 횟수가 붙박이이고, 몸 있는 요청을
@@ -1569,7 +1538,7 @@ namespace luil::net {
                 }
                 else
                 {
-                    const local_frame frame { env, 64 };
+                    const android::jni_local_frame frame { *env, 64 };
                     try
                     {
                         request_runner runner { env, *api_, *state, configuration_, result };

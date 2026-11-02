@@ -35,6 +35,8 @@ caption button은 `caption_config::buttons`, `caption_layout`, `window_style_for
 
 창 뒤의 배경 효과(mica·acrylic)는 주 창은 `ui_frame::backdrop`, 보조 창은 `ui_window::backdrop`, popup은 `ui_popup::backdrop`으로 frame마다 고른다. 표면에 맞는 길(활성화되는 표준 창의 시스템 배경 효과, 레이어드 창과 popup의 accent acrylic)은 luil이 고르고, 효과가 실제로 선 표면에서만 바탕과 캡션을 `backdrop_background`로 옅게 칠한다. 서지 않으면 불투명하게 그리고 주 창·보조 창은 까닭을 `make_backdrop_message`로 알린다([창 배경 효과](../backdrop-design.md)).
 
+작업 표시줄 단추의 진행률과 오버레이 아이콘은 주 창은 `ui_frame::taskbar`, 독립 창(`ui_window::independent`)은 `ui_window::taskbar`로 frame마다 지금 바라는 상태를 싣는다. UI thread는 게시 wake에서 창 대조 뒤에 마지막으로 적용한 것과 견줘 바뀐 것만 `ITaskbarList3`로 옮기고, 셸이 단추를 만들었다고 알리는 등록 메시지(`TaskbarButtonCreated`)를 받으면 요청을 처음부터 다시 낸다. 단추가 서기 전과 주 창이 숨은 동안은 요청을 쥐기만 한다. 소유된 창은 단추가 없어 읽지 않는다. 반영 상태는 `make_taskbar_message`로 알리고, 이 프로세스가 셸에 낼 수 있는지는 `ui_platform::capabilities::taskbar`다. Android는 받고 무시한다([작업 표시줄 진행률과 오버레이](../taskbar-design.md)).
+
 창 배치는 `WM_EXITSIZEMOVE`, maximized/restored 전환, 전체 화면 전환, `WM_CLOSE`에서 delegate에 보고한다. 앱이 복원할 배치는 `window_placement_revision`이 새로울 때만 적용한다. 창 또는 renderer 생성이 실패하면 `show_startup_error`가 디버그 출력과 메시지 상자를 내며 smoke 모드에서는 상자를 생략한다. 상자의 제목과 앞글은 `window_config::startup_error`로 앱이 정한다.
 
 ## 초기 배치

@@ -32,6 +32,7 @@ add_executable(luil_core_tests
     dropdown_element_tests.cpp
     fence_wait_tests.cpp
     field_popup_tests.cpp
+    file_watch_batch_tests.cpp
     focus_request_tests.cpp
     font_scale_tests.cpp
     group_element_tests.cpp
@@ -88,6 +89,7 @@ add_executable(luil_core_tests
     surface_invalidate_tests.cpp
     tab_bar_element_tests.cpp
     tab_bar_style_tests.cpp
+    taskbar_sync_tests.cpp
     table_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
@@ -133,11 +135,13 @@ target_sources(luil_core_tests PRIVATE
     dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
-# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시도 서버 없이 검증한다.
+# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 파일 감시 묶음의 표시도
+# 서버·감시자 없이 검증한다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/device_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/files_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
@@ -204,6 +208,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/android_input.cpp"
             android_input_tests.cpp)
+    # 파일 감시도 JNI 없이 inotify만 부르므로 같은 길로 기기 셸에서 실제 폴더를 본다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/file_watcher_android.cpp"
+            file_watcher_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES
@@ -367,6 +376,7 @@ add_executable(luil_tests
     caption_layout_tests.cpp
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp
+    file_watcher_tests.cpp
     font_fallback_tests.cpp
     font_style_native_tests.cpp
     glyph_element_tests.cpp
@@ -384,6 +394,7 @@ add_executable(luil_tests
     platform_services_tests.cpp
     secret_store_tests.cpp
     surface_input_tests.cpp
+    taskbar_button_tests.cpp
     tsf_input_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp
@@ -395,11 +406,17 @@ add_executable(luil_tests
     win32_drop_tests.cpp
     win32_fonts_tests.cpp
     win32_window_tests.cpp
+    window_messages_tests.cpp
     window_mode_tests.cpp
-    window_position_tests.cpp)
+    window_position_tests.cpp
+    # 데스크톱 데모의 창 페이지는 Win32 호출(탐색기·메모장)을 부르므로 Windows 전용 test에서 읽는다.
+    "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/windows_page.cpp"
+    windows_page_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
+        "${PROJECT_SOURCE_DIR}/examples"
         "${LUIL_TEST_DIRECTORY}")
 target_link_libraries(luil_tests
     PRIVATE

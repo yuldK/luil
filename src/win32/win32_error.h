@@ -14,4 +14,8 @@ namespace luil::win32 {
     //  - 렌더러와 이미지 디코딩이 둘 다 쓴다. 소비자가 둘이 되기 전에 한 자리로
     //    모았다 (`dropped_file_paths`와 같은 자리다).
     [[nodiscard]] std::u8string make_hresult_error(std::u8string_view message, HRESULT result);
+
+    // 방금 실패한 Win32 호출의 `GetLastError()`를 HRESULT로 붙인 오류 글이다. 호출한 바로 뒤에 불러야 코드가 맞다.
+    //  - 실패 결과의 형식(`platform_result`·`secret_store_result`)이 파일마다 달라 여기서는 글만 만든다.
+    [[nodiscard]] std::u8string make_last_error(std::u8string_view message);
 }

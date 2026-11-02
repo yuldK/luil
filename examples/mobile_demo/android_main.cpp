@@ -5,14 +5,25 @@
 
 #include "mobile_demo/app.h"
 #include "mobile_demo/device_page.h"
+#include "mobile_demo/files_page.h"
 
 #include "luil/android/android_app.h"
 
+#include <game-activity/GameActivity.h>
+#include <game-activity/native_app_glue/android_native_app_glue.h>
+
+#include <filesystem>
+
 namespace {
-    // 화면 크기·배율·폭 등급과 로컬 네트워크 권한을 앱에 알리고, SMB client를 세운다. 그 밖의 훅은 기본값이다.
+    // 화면 크기·배율·폭 등급과 로컬 네트워크 권한을 앱에 알리고, SMB client와 파일 감시자를 세운다. 그 밖의 훅은 기본값이다.
     class mobile_delegate final : public luil::app_delegate
     {
     public:
+        // 파일 감시 페이지가 볼 앱 전용 폴더다 (`internalDataPath`).
+        explicit mobile_delegate(std::filesystem::path files_directory)
+            : files_directory_ { std::move(files_directory) }
+        {
+        }
         // 시작할 때 권한의 지금 상태를 알리고, SMB가 있는 구성이면 client를 세워 logic에 넘긴다. 답은 client의 배달
         // thread에서 앱 메시지가 된다. client는 logic이 `stop_workers`에서 멈추고, delegate가 host보다 오래 살며 쥔다.
         void on_started(luil::app_host& host) override
@@ -24,6 +35,9 @@ namespace {
             smb_ = luil::net::smb_client::create(std::move(config), error);
             if (smb_ != nullptr)
                 host.post_app_message(luil::app_message { mobile_demo::smb_client_intent { smb_.get() } });
+            // 감시자도 logic이 `stop_workers`에서 멈춘다.
+            if (files_directory_.empty() == false)
+                watcher_ = mobile_demo::start_files_watch(host, files_directory_ / "watch-demo");
         }
 
         // 기기 페이지의 "묻기"다. 묻지 않았으면(필요 없음·이미 받음) 지금 상태를 그대로 알린다.
@@ -57,6 +71,8 @@ namespace {
 
     private:
         std::unique_ptr<luil::net::smb_client> smb_ {};
+        std::filesystem::path files_directory_ {};
+        std::unique_ptr<luil::file_watcher> watcher_ {};
     };
 }
 
@@ -64,7 +80,8 @@ extern "C" void android_main(android_app* app)
 {
     mobile_demo::mobile_driver driver {};
     mobile_demo::mobile_policy policy {};
-    mobile_delegate delegate {};
+    // 앱 전용 저장소는 앱이 받은 `android_app`에서 읽는다. luil은 그 공개 접근자를 두지 않는다 (file-watch-design.md).
+    mobile_delegate delegate { app->activity != nullptr && app->activity->internalDataPath != nullptr ? std::filesystem::path { app->activity->internalDataPath } : std::filesystem::path {} };
 
     luil::android::application_environment environment {};
     environment.driver = &driver;
