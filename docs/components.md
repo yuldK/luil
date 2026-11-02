@@ -67,6 +67,8 @@
 | 모바일 앱 바 | `app_bar_element` | [ui/app_bar_element.h](../include/luil/ui/app_bar_element.h) | [설명](app-bar-design.md) |
 | 플랫폼 성질 | `ui_platform`, `current_ui_platform` | [ui/ui_platform.h](../include/luil/ui/ui_platform.h) | [설명](app-bar-design.md) |
 | 알림과 만료 | `toast_stack_element` | [ui/toast_element.h](../include/luil/ui/toast_element.h) | [설명](concepts/ui-element.md) |
+| 남아 있는 상태 알림(심각도 글리프·제목·줄이 바뀌는 본문·동작·닫기) | `info_bar_element`, `info_bar_config` | [ui/info_bar_element.h](../include/luil/ui/info_bar_element.h) | [설명](info-bar-design.md) |
+| 알림 심각도(토스트·정보 막대 공용) | `ui_severity` | [ui/severity.h](../include/luil/ui/severity.h) | [설명](info-bar-design.md) |
 | 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
 | 이미지 파일·바이트 디코딩 | `load_image_file`, `decode_image_bytes`, `decode_animated_image_bytes`, `read_image_frames_bytes`, `decode_image_frame_bytes`, `downscale_image` | [ui/image_decode.h](../include/luil/ui/image_decode.h) | [설명](image-decode-design.md) · [장 하나·축소](image-frames-scaling-design.md) |
 | Windows 창과 실행 | `win32::run_application_window` | [win32/win32_window.h](../include/luil/win32/win32_window.h) | [설명](concepts/window.md) |

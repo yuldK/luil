@@ -98,7 +98,7 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
 **구성.** root(`info_bar`)는 `access_role::alert` 몸통이다. 바탕·테·글리프·제목·본문은 root가 `draw_text_block`으로 직접 그린다. 접근 tree에 글 노드가 따로 서지 않는다. hit를 흡수한다(`set_hit_opaque`, 토스트와 같다). 자식은 최대 둘이고 owner는 셋 다 `config.owner`다.
 
 - `info_bar_action`: `text_button_element`(normal). `action_label`과 `action`이 둘 다 있을 때만 만든다. 하나만 있으면 눌러도 아무 일 없는 단추라 만들지 않는다.
-- `info_bar_close`: `button_element`(`codicons::icon_close`, role `toolbar`). `close`가 있을 때만 만든다.
+- `info_bar_close`: `button_element(codicons::icon_close, button_visual_role::toolbar)`. `close`가 있을 때만 만든다.
 - 둘 다 손 모양 커서이고 **Tab 자리다.** 토스트가 비운 까닭(곧 사라지는 알림)이 상주 알림에는 없다.
 - kind 셋은 `ui_element_id.h`의 `end_of_library_kinds` 바로 위에 더한다.
 
@@ -125,6 +125,7 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
 - 위·아래 여백은 `max(8, (최소 높이 - 한 줄 높이) / 2)`이다. 최소 높이는 `max(40, control_size)`다. 그래서 한 줄 막대는 최소 높이이고(한 줄 높이가 24 이하일 때) 첫 줄이 가운데 선다.
 - 글리프와 닫기 단추, 옆에 선 동작 단추는 첫 줄의 가운데에 맞춘다. 여러 줄이면 막대 가운데가 아니라 첫 줄에 붙는다.
 - 높이는 담는 쪽 몫이다. 모자라게 담으면 아래가 넘쳐 그려지고 자르지 않는다. 맞춤 담기(`add_fit`)가 규칙이다.
+- 좁은 막대의 경계는 자른다. 글 폭이 0 이하이면 본문을 재지 않고(한 글자 폭으로 접어 막대가 끝없이 길어지지 않는다) 그리지 않는다. 글 아래로 간 동작 단추는 오른쪽 가장자리 안(8 안쪽)으로 줄인다. `control_size`가 0 이하이거나 유한하지 않으면 정하지 않은 것으로 읽는다.
 
 **접근성.**
 
@@ -135,60 +136,55 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
 
 ## 결정
 
-**1. 심각도를 어떻게 표현하는가.**
+**1. 심각도 표현.** 질문: 막대가 심각도를 어떤 모양으로 말하는가.
 
-- a. 중립 바탕에 심각도 색 테·글리프. 되는 것: 팔레트·생성기·스타일 JSON을 건드리지 않아 R1에 서고, 고대비가 바탕을 접어도 테와 글리프가 남는다. 대가: 옅은 색 면으로 심각도를 알리는 모양보다 눈에 덜 띈다.
-- b. 심각도별 옅은 바탕. 되는 것: 멀리서도 심각도가 색 면으로 읽힌다. 대가: `accent_tones`에 톤 하나와 `ui_color_palette`에 파생 역할 넷(`ui_theme.h`), `compose_palette`(`ui_theme.cpp`), `generate_style.cmake`의 톤 목록, `assets/style.json`의 `tones`, `ui_style_tests.cpp`가 닿는다. 줄 2의 syntax(역할 추가)와 style_sheet(생성기 표)가 같은 곳을 고쳐서 그 뒤로 미뤄야 한다. 이 노드의 팔레트 부분이 R1을 벗어난다. 고대비에서는 이 바탕도 접혀 a와 같아진다.
-- c. 기존 `notice_background` 재사용. 안 된다. 값이 분홍 계열(light `#fde7e9`, dark `#422427`)이라 info·success에 쓰면 오류처럼 읽힌다. 토스트 test(`toast_element_tests.cpp`)가 같은 까닭으로 이 색을 쓰지 않음을 잠가 두었다.
+- 길 a: 중립 바탕에 심각도 색 테·글리프. 되는 것: 팔레트·생성기·스타일 JSON을 건드리지 않아 R1에 서고, 고대비가 바탕을 접어도 테와 글리프가 남는다. 대가: 옅은 색 면으로 심각도를 알리는 모양보다 눈에 덜 띈다.
+- 길 b: 심각도별 옅은 바탕. 되는 것: 멀리서도 심각도가 색 면으로 읽힌다. 대가: `accent_tones`에 톤 하나와 `ui_color_palette`에 파생 역할 넷(`ui_theme.h`), `compose_palette`(`ui_theme.cpp`), `generate_style.cmake`의 톤 목록, `assets/style.json`의 `tones`, `ui_style_tests.cpp`가 닿는다. 줄 2의 syntax(역할 추가)와 style_sheet(생성기 표)가 같은 곳을 고쳐서 그 뒤로 미뤄야 한다. 이 노드의 팔레트 부분이 R1을 벗어난다. 고대비에서는 이 바탕도 접혀 a와 같아진다.
+- 길 c: 기존 `notice_background` 재사용. 되는 것: 팔레트를 건드리지 않는다. 대가: 안 된다. 값이 분홍 계열(light `#fde7e9`, dark `#422427`)이라 info·success에 쓰면 오류처럼 읽힌다. 토스트 test(`toast_element_tests.cpp`)가 같은 까닭으로 이 색을 쓰지 않음을 잠가 두었다.
+- 권장: a. 팔레트를 건드리지 않고 고대비에서도 뜻이 남는다. 대가: 위의 눈에 띄는 정도다. 옅은 바탕이 필요해지면 b를 줄 2의 팔레트 작업 뒤에 따로 낸다.
+- 승인: 길 a (2026-11-02).
 
-권장은 a다. 대가는 위의 눈에 띄는 정도다. 옅은 바탕이 필요해지면 b를 줄 2의 팔레트 작업 뒤에 따로 낸다. 승인 필요.
+**2. 심각도 타입과 색·글리프 helper.** 질문: 심각도 타입과 색·글리프 helper를 어디에 두는가.
 
-**2. 심각도 타입과 색·글리프 helper를 어디에 두는가.**
+- 길 a: 새 공개 `ui_severity`와 비공개 `severity_paint.h`. `toast_severity`는 별칭으로 남긴다. 되는 것: 막대·토스트·msg_box가 한 타입과 한 그림을 쓴다. 별칭이라 데모 호출부와 [theming.md](concepts/theming.md)의 링크가 그대로 선다. 대가: 같은 타입에 이름이 둘 남는다. 별칭을 언제 지울지는 정하지 않았다.
+- 길 b: `toast_severity`를 그대로 쓰고 막대가 `toast_element.h`를 include한다. 되는 것: 이름도 파일도 그대로다. 대가: 막대와 msg_box의 설정이 토스트의 이름과 헤더에 기댄다.
+- 길 c: 막대에 복제한다. 되는 것: 다른 파일을 건드리지 않는다. 대가: 고대비 규칙이 갈라진다.
+- 권장: a. 이름만 바뀌고 동작은 같다. 대가: 공개 헤더 하나와 공개 타입 이름 하나가 늘고, 옛 이름은 별칭으로 남는다. 권장대로 진행.
 
-- a. 새 공개 `ui_severity`와 비공개 `severity_paint.h`. `toast_severity`는 별칭으로 남긴다. 되는 것: 막대·토스트·msg_box가 한 타입과 한 그림을 쓴다. 별칭이라 데모 호출부와 [theming.md](concepts/theming.md)의 링크가 그대로 선다. 대가: 같은 타입에 이름이 둘 남는다. 별칭을 언제 지울지는 정하지 않았다.
-- b. `toast_severity`를 그대로 쓰고 막대가 `toast_element.h`를 include한다. 되는 것: 이름도 파일도 그대로다. 대가: 막대와 msg_box의 설정이 토스트의 이름과 헤더에 기댄다.
-- c. 막대에 복제한다. 되는 것: 다른 파일을 건드리지 않는다. 대가: 고대비 규칙이 갈라진다.
+**3. 막대를 짓는 방식.** 질문: 막대를 어떻게 짓는가.
 
-권장은 a다. 이름만 바뀌고 동작은 같다. 권장대로 진행.
+- 길 a: `info_bar_element` 한 클래스와 정적 `measure`. 되는 것: 폭에서 높이를 한 곳이 답한다. 데스크톱 데모는 `page_layout::add`의 `stack_item::fit`으로, 모바일 데모는 `page_column`이 높이만 받으므로 `measure`의 높이로 담는다. 대가: 클래스 하나가 그리기와 두 단추의 자리를 모두 안다.
+- 길 b: `make_info_bar`가 stack을 조립한다. 되는 것: 클래스가 늘지 않는다. 대가: 위 문제의 까닭으로 줄 바뀐 높이를 답하지 못한다. 앱이 높이를 센다.
+- 길 c: 부품(글리프 칸, 본문)을 공개해 앱이 조립한다. 되는 것: 모양을 앱이 마음대로 짠다. 대가: 같은 문제를 앱마다 푼다.
+- 권장: a. 폭에서 높이를 한 곳이 답한다. 대가: 클래스 하나가 그리기와 두 단추의 자리를 모두 안다. 권장대로 진행.
 
-**3. 막대를 어떻게 짓는가.**
+**4. 본문 줄바꿈.** 질문: 본문을 줄바꿈하는가.
 
-- a. `info_bar_element` 한 클래스와 정적 `measure`. 되는 것: 폭에서 높이를 한 곳이 답한다. 데스크톱 데모는 `page_layout::add`의 `stack_item::fit`으로, 모바일 데모는 `page_column`이 높이만 받으므로 `measure`의 높이로 담는다. 대가: 클래스 하나가 그리기와 두 단추의 자리를 모두 안다.
-- b. `make_info_bar`가 stack을 조립한다. 되는 것: 클래스가 늘지 않는다. 대가: 위 문제의 까닭으로 줄 바뀐 높이를 답하지 못한다. 앱이 높이를 센다.
-- c. 부품(글리프 칸, 본문)을 공개해 앱이 조립한다. 되는 것: 모양을 앱이 마음대로 짠다. 대가: 같은 문제를 앱마다 푼다.
+- 길 a: 한 줄 말줄임만(토스트). 되는 것: 높이가 고정이라 담는 쪽이 재지 않는다. 대가: 상주 알림은 긴 글이 본뜻인데 잘린다. 접근 이름만 전체 글이다.
+- 길 b: `wrap`과 `max_lines`(기본 0, 제한 없음). 되는 것: 글이 잘리지 않고 앱이 상한을 건다. 대가: 높이가 폭에 달려 창 크기와 회전에서 바뀐다. 담는 쪽이 `add_fit`이나 `measure`로 재야 한다. 폭을 받아 매번 짓는 페이지는 바로 따라간다.
+- 권장: b. 상주 알림의 긴 글이 잘리지 않는다. 대가: 위의 높이가 폭에 달린다는 점이다. 권장대로 진행.
 
-권장은 a다. 권장대로 진행.
+**5. 동작 단추 자리.** 질문: 동작 단추를 어디에 두는가.
 
-**4. 본문을 줄바꿈하는가.**
+- 길 a: 항상 오른쪽(토스트와 같다). 되는 것: 높이가 단추에 달리지 않는다. 대가: 좁은 화면에서 단추가 글 폭을 먹는다.
+- 길 b: 항상 글 아래. 되는 것: 글 폭이 폭에만 달린다. 대가: 넓은 화면에서도 막대가 한 줄 높다.
+- 길 c: 폭에 따라 정한다(글 폭이 200 미만이면 아래). 되는 것: 넓으면 막대가 한 줄로 낮게 서고 좁으면 글 폭이 지켜진다. 대가: 높이가 폭에 따라 두 갈래로 갈린다.
+- 권장: c. 갈리는 경계는 순수 함수(`measure`의 `action_below`)가 정하고 test가 잠근다. 대가: 위의 두 갈래 높이다. 권장대로 진행.
 
-- a. 한 줄 말줄임만(토스트). 되는 것: 높이가 고정이라 담는 쪽이 재지 않는다. 대가: 상주 알림은 긴 글이 본뜻인데 잘린다. 접근 이름만 전체 글이다.
-- b. `wrap`과 `max_lines`(기본 0, 제한 없음). 되는 것: 글이 잘리지 않고 앱이 상한을 건다. 대가: 높이가 폭에 달려 창 크기와 회전에서 바뀐다. 담는 쪽이 `add_fit`이나 `measure`로 재야 한다. 폭을 받아 매번 짓는 페이지는 바로 따라간다.
+**6. 나타남 알림.** 질문: 나타나는 순간을 보조 기술에 알리는가.
 
-권장은 b다. 권장대로 진행.
+- 길 a: `alert` 역할과 이름만(토스트와 같다). 되는 것: 공유 파일을 건드리지 않는다. 대가: 화면 읽기 사용자는 막대가 나타나는 순간을 듣지 못하고 탐색하다 만나야 안다.
+- 길 b: 나타날 때 UIA Notification. 되는 것: 입력 칸 오류가 쓰는 길을 그대로 쓴다. 바뀌는 것: `access_change_kind`에 "나타남" 갈래, `diff_access_snapshots`가 새로 생긴 이름 있는 `alert`에 내기, `uia_event_sink::notification`의 활동 id(`uia_provider.cpp`에 `luil.input-error`로 박혀 있다)를 인자로 올리기, `announce_changes` 한 갈래다. 첫 발행본은 기준선이라(`window_surface.cpp`) 처음부터 있던 막대는 읽지 않는다. 토스트도 `alert`라 함께 읽힌다. 대가: 공개 enum이 늘고, `access_role`을 더하는 노드·rich_edit와 같은 파일을 만진다.
+- 길 c: LiveSetting 속성과 LiveRegionChanged 이벤트(SDK에 `UIA_LiveSettingPropertyId`, `UIA_LiveRegionChangedEventId`가 있다). 되는 것: UIA의 정식 live region 모양이다. 대가: `access_info`에 필드가 늘고 provider가 속성을 답해야 하며, 읽기 프로그램마다 읽는지 사람이 확인해야 한다.
+- 권장: a. 토스트와 막대에 함께 걸리는 공용 동작이라 이 노드의 병합과 섞지 않는다. 승인이 나면 b를 같은 줄에서 별 커밋으로 낸다. 대가: 위 a의 대가다.
+- 승인: 길 a (2026-11-02). 길 b는 승인되지 않아 만들지 않았다. 나타남을 읽게 하려면 b를 따로 설계한다.
 
-**5. 동작 단추를 어디에 두는가.**
+**7. 단추 크기.** 질문: 단추 크기를 어떻게 여는가.
 
-- a. 항상 오른쪽(토스트와 같다). 되는 것: 높이가 단추에 달리지 않는다. 대가: 좁은 화면에서 단추가 글 폭을 먹는다.
-- b. 항상 글 아래. 되는 것: 글 폭이 폭에만 달린다. 대가: 넓은 화면에서도 막대가 한 줄 높다.
-- c. 폭에 따라 정한다(글 폭이 200 미만이면 아래). 되는 것: 넓으면 막대가 한 줄로 낮게 서고 좁으면 글 폭이 지켜진다. 대가: 높이가 폭에 따라 두 갈래로 갈린다.
-
-권장은 c다. 갈리는 경계는 순수 함수(`measure`의 `action_below`)가 정하고 test가 잠근다. 권장대로 진행.
-
-**6. 나타나는 순간을 보조 기술에 알리는가.**
-
-- a. `alert` 역할과 이름만(토스트와 같다). 되는 것: 공유 파일을 건드리지 않는다. 대가: 화면 읽기 사용자는 막대가 나타나는 순간을 듣지 못하고 탐색하다 만나야 안다.
-- b. 나타날 때 UIA Notification. 되는 것: 입력 칸 오류가 쓰는 길을 그대로 쓴다. 바뀌는 것: `access_change_kind`에 "나타남" 갈래, `diff_access_snapshots`가 새로 생긴 이름 있는 `alert`에 내기, `uia_event_sink::notification`의 활동 id(`uia_provider.cpp`에 `luil.input-error`로 박혀 있다)를 인자로 올리기, `announce_changes` 한 갈래다. 첫 발행본은 기준선이라(`window_surface.cpp`) 처음부터 있던 막대는 읽지 않는다. 토스트도 `alert`라 함께 읽힌다. 대가: 공개 enum이 늘고, `access_role`을 더하는 노드·rich_edit와 같은 파일을 만진다.
-- c. LiveSetting 속성과 LiveRegionChanged 이벤트(SDK에 `UIA_LiveSettingPropertyId`, `UIA_LiveRegionChangedEventId`가 있다). 대가: `access_info`에 필드가 늘고 provider가 속성을 답해야 하며, 읽기 프로그램마다 읽는지 사람이 확인해야 한다.
-
-권장은 a로 서고, 승인이 나면 b를 같은 줄에서 별 커밋으로 낸다. 토스트와 막대에 함께 걸리는 공용 동작이라 이 노드의 병합과 섞지 않는다. 대가는 a의 것이다. 승인 필요.
-
-**7. 단추 크기를 어떻게 여는가.**
-
-- a. `control_size` 한 칸. 0이면 닫기 24, 동작 단추 28. 되는 것: 터치 앱이 올리면 최소 높이도 따라 오른다. 대가: 두 단추의 크기를 따로 못 준다.
-- b. `app_bar_metrics`처럼 구조체. 되는 것: 닫기와 동작 단추를 따로 정한다. 대가: 필요한 값이 하나뿐인데 칸이 늘어 읽기만 나빠진다.
-- c. 고정 24·28. 되는 것: 설정이 없다. 대가: 손가락에 작고 판정 영역을 넓히는 장치가 없다.
-
-권장은 a다. 권장대로 진행.
+- 길 a: `control_size` 한 칸. 0이면 닫기 24, 동작 단추 28. 되는 것: 터치 앱이 올리면 최소 높이도 따라 오른다. 대가: 두 단추의 크기를 따로 못 준다.
+- 길 b: `app_bar_metrics`처럼 구조체. 되는 것: 닫기와 동작 단추를 따로 정한다. 대가: 필요한 값이 하나뿐인데 칸이 늘어 읽기만 나빠진다.
+- 길 c: 고정 24·28. 되는 것: 설정이 없다. 대가: 손가락에 작고 판정 영역을 넓히는 장치가 없다.
+- 권장: a. 터치 앱이 한 값으로 단추와 최소 높이를 함께 올린다. 대가: 위의 두 단추 크기를 따로 못 주는 점이다. 권장대로 진행.
 
 ## 플랫폼
 
@@ -218,12 +214,14 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
   - 두 단추가 Tab 자리이고 클릭이 `action`·`close` 메시지를 내며, 몸통이 hit를 흡수하는지;
   - `measure`: 한 줄은 최소 높이, 폭을 좁히면 줄 수만큼 높이가 늘고, `max_lines`가 상한이고, 제목이 한 줄을 더하고, `control_size` 44가 최소 높이를 올리고, 높이가 배율과 무관한지;
   - 글 폭 200이 `action_below`를 가르고 아래일 때 8과 단추 높이가 더해지는지, 폭이 정해지지 않으면 `nullopt`인지;
-  - arrange: 한 줄이면 글리프와 닫기가 가운데, 여러 줄이면 첫 줄 가운데, 닫기가 오른쪽에서 8, 배율 2의 물리 좌표;
+  - arrange: 한 줄이면 닫기와 동작 단추가 막대 가운데, 여러 줄이면 첫 줄 가운데, 닫기가 오른쪽에서 8, 동작 단추가 닫기 왼쪽 8 또는 글 아래 8, 배율 2의 물리 좌표. 글리프는 root가 직접 그려 따로 bounds가 없으므로 같은 첫 줄 식을 쓰는 닫기의 가운데로 잠근다;
   - `accessibility()`: alert, 이름이 심각도 낱말·제목·본문 순(빈 것 건너뜀, `severity_name` 우선), 단추 이름.
+  - 측정기는 코드포인트마다 글자 크기의 절반 폭을 재고 글은 공백으로만 나뉜 ASCII다. 줄 나눔 규칙(uax14가 나중에 바꾼다)과 무관하게 줄 수가 정해진다.
 - `tests/severity_paint_tests.cpp`: 네 심각도의 색과 글리프가 토스트가 쓰던 값 그대로인지, 고대비 팔레트에서 info·warning·error의 색은 같고 글리프는 모두 다른지.
 - `tests/toast_element_tests.cpp`: `toast_severity`가 `ui_severity`와 같은 타입인지.
-- `tests/raster_draw_tests.cpp`: 네 심각도의 테와 글리프 색, 밝은·어두운·고대비에서 글리프가 남는지, 닫기 ×와 동작 단추가 그려지는지, 바탕이 `raised_background`인지.
-- `tests/accessibility_tests.cpp`(토스트 test 옆): 접근 tree에서 막대 아래 단추 둘이 서는지. `tests/uia_provider_tests.cpp`: 단추 Invoke가 메시지를 나르는지. 결정 6이 b로 승인되면 나타난 `alert`가 알림 한 번을 내고 첫 발행본은 내지 않는지, 토스트도 읽히는지를 더한다.
+- `tests/ui_element_tests.cpp`: 라이브러리 kind의 `last[]`에 앞 노드 분할 버튼의 마지막 kind(`split_button_arrow`)와 이 노드의 마지막 kind(`info_bar_close`)를 더해 앱 대역과 겹치지 않는지.
+- `tests/raster_draw_tests.cpp`: 네 심각도의 테 색(info의 보조 글자색은 알파가 있어 바탕과 섞인 값), 밝은·어두운·고대비에서 바탕과 테가 남는지, 닫기 hover와 동작 단추(옆·아래)가 그려지는지, 바탕이 `raised_background`인지. raster 축은 글꼴을 싣지 않아 글리프 픽셀은 볼 수 없다. 글리프가 네 심각도마다 다르다는 것은 `severity_paint_tests.cpp`가 값으로 잠그고, 그려지는 모양은 사람 확인이다.
+- `tests/accessibility_tests.cpp`(토스트 test 옆): 접근 tree에서 막대 아래 단추 둘이 서는지. `tests/uia_provider_tests.cpp`: 막대가 Text로 이름을 내고 단추 Invoke가 메시지를 나르는지. 결정 6이 a라 나타남 알림 test는 없다. b가 승인되면 나타난 `alert`가 알림 한 번을 내고 첫 발행본은 내지 않는지, 토스트도 읽히는지를 더한다.
 - 데모(`examples/demo`, `examples/mobile_demo`의 토스트 페이지): "정보 막대" 카드에 네 심각도 막대(제목, 긴 본문, 동작 단추, 닫기)를 놓는다. "막대: 열림/닫힘"과 "마지막 동작: …"을 label로 그려 UIA가 되읽고, 닫으면 다시 여는 단추가 선다. 격리 데스크톱에서 luil-uia로 막대 노드의 이름과 두 단추의 Invoke를 돌린다. `demo_gallery_tests.cpp`·`mobile_demo_page_tests.cpp`가 페이지 짓기를 지킨다.
 - 사람 확인: Narrator의 막대 읽기(결정 6이 b면 나타나는 순간까지), 밝은·어두운·고대비 테마에서 네 심각도 구분, 실기기에서 닫기·동작 단추의 탭 크기, 긴 글 줄바꿈과 회전 뒤 높이.
 

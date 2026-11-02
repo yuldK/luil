@@ -62,7 +62,7 @@ frame->style = style; // 매 frame 같은 포인터를 실으면 된다
 
 ## 색은 역할로 말한다
 
-element 설정은 구체 색을 담지 않는다. [`button_visual_role`](../../include/luil/ui/button_element.h), [`text_button_visual`](../../include/luil/ui/dialog_elements.h), [`badge_tone`](../../include/luil/ui/badge_element.h), [`toast_severity`](../../include/luil/ui/toast_element.h), [`label_color_role`](../../include/luil/ui/label_element.h)는 모두 "이 자리가 무엇을 뜻하는가"만 담고, 그 뜻을 색으로 바꾸는 일은 그리기 시점에 팔레트가 한다. 그래서 테마를 바꾸면 element를 하나도 손대지 않고 화면 전체가 따라온다.
+element 설정은 구체 색을 담지 않는다. [`button_visual_role`](../../include/luil/ui/button_element.h), [`text_button_visual`](../../include/luil/ui/dialog_elements.h), [`badge_tone`](../../include/luil/ui/badge_element.h), [`ui_severity`](../../include/luil/ui/severity.h), [`label_color_role`](../../include/luil/ui/label_element.h)는 모두 "이 자리가 무엇을 뜻하는가"만 담고, 그 뜻을 색으로 바꾸는 일은 그리기 시점에 팔레트가 한다. 그래서 테마를 바꾸면 element를 하나도 손대지 않고 화면 전체가 따라온다.
 
 element가 `ui_color`를 앱에서 받는 자리는 라이브러리 어디에도 없다. 색을 그대로 받으면 그 색은 dark에서 고른 값 그대로 light에 남고, 고대비에서는 사용자가 OS에서 고른 색을 그 element 하나만 무시한다. 접근성 설정을 element가 뒤엎는 자리가 되는 것이라 열지 않는다.
 

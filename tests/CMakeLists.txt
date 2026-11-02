@@ -40,6 +40,7 @@ add_executable(luil_core_tests
     image_animation_tests.cpp
     image_element_tests.cpp
     image_encode_tests.cpp
+    info_bar_element_tests.cpp
     item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
@@ -69,6 +70,7 @@ add_executable(luil_core_tests
     scroll_view_element_tests.cpp
     scrollbar_element_tests.cpp
     selection_model_tests.cpp
+    severity_paint_tests.cpp
     sheet_host_element_tests.cpp
     sidebar_element_tests.cpp
     single_line_text_tests.cpp

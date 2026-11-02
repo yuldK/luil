@@ -208,6 +208,11 @@ luil_add_source_filter(luil_core_files "ui/content"
     "${public_headers}/ui/badge_element.h"
     ui/badge_paint.cpp
     ui/badge_paint.h
+    ui/info_bar_element.cpp
+    "${public_headers}/ui/info_bar_element.h"
+    ui/severity_paint.cpp
+    ui/severity_paint.h
+    "${public_headers}/ui/severity.h"
     ui/image_element.cpp
     "${public_headers}/ui/image_element.h"
     ui/markdown_element.cpp

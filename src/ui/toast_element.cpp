@@ -1,9 +1,9 @@
 #include "luil/ui/toast_element.h"
 
-#include "luil/generated/codicons.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/text_block.h"
+#include "ui/severity_paint.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -16,42 +16,6 @@
 #include <utility>
 
 namespace luil {
-    namespace {
-        // 심각도의 역할색이다.
-        // info는 중립 알림이라 강조하지 않고, success가 "정상"의 키 컬러를 쓴다.
-        [[nodiscard]] ui_color severity_color(const ui_color_palette& palette, const toast_severity severity) noexcept
-        {
-            switch (severity)
-            {
-            case toast_severity::success:
-                return palette.accent;
-            case toast_severity::warning:
-                return palette.warning_accent;
-            case toast_severity::error:
-                return palette.error_accent;
-            case toast_severity::info:
-                break;
-            }
-            return palette.secondary_foreground;
-        }
-
-        [[nodiscard]] char32_t severity_glyph(const toast_severity severity) noexcept
-        {
-            switch (severity)
-            {
-            case toast_severity::success:
-                return codicons::icon_pass;
-            case toast_severity::warning:
-                return codicons::icon_warning;
-            case toast_severity::error:
-                return codicons::icon_error;
-            case toast_severity::info:
-                break;
-            }
-            return codicons::icon_info;
-        }
-    }
-
     toast_element::toast_element(toast_config config)
         : ui_element { ui_element_id { ui_element_kind::toast, config.id } }
         , config_ { std::move(config) }

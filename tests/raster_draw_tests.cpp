@@ -5,6 +5,7 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_element.h"
+#include "luil/ui/info_bar_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_element.h"
@@ -1323,4 +1324,171 @@ TEST_CASE("An invalid text field keeps the error colour on its border even while
     frame.draw(invalid, focused);
     REQUIRE(frame.pixel_at(100, 0) == palette.error_accent);
     REQUIRE(frame.pixel_at(100, 1) == palette.error_accent);
+}
+
+namespace {
+    // 정보 막대 raster 축의 도우미다. 화면은 840x200이고 배율은 2다 (자리는 물리 픽셀).
+    //  - 글은 비워 둔다. 글꼴을 싣지 않으면 글리프도 그려지지 않으므로 이 축이 보는 것은 바탕·테·단추의 색이다.
+    //    글리프가 네 심각도마다 다르다는 것은 `severity_paint_tests.cpp`가 값으로 잠근다.
+    //  - 막대 하나는 논리 400x40이고 (20, 20)에 선다. 오른쪽 가장자리는 물리 x 820, 첫 줄 가운데는 물리 y 60이다.
+    constexpr luil::rect_f info_bar_box { 20.0f, 20.0f, 800.0f, 80.0f };
+    const luil::ui_element_id info_bar_close_id { luil::ui_element_kind::info_bar_close, u8"bar" };
+
+    [[nodiscard]] luil::testing::raster_frame draw_info_bar(luil::info_bar_config config, const luil::ui_color_palette& palette, const luil::rect_f& slot = info_bar_box, const luil::interaction_snapshot& interaction = {})
+    {
+        config.owner = u8"bar";
+        auto bar { std::make_unique<luil::info_bar_element>(std::move(config)) };
+        bar->arrange({ slot, raster_scale });
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 840.0f, 200.0f }, raster_scale });
+        root->add(std::move(bar));
+        const luil::ui_tree tree { std::move(root) };
+        luil::testing::raster_frame frame { 840, 200, palette, raster_scale };
+        frame.draw(tree, interaction);
+        return frame;
+    }
+
+    // 심각도가 나르는 팔레트 역할이다. 라이브러리의 helper를 거치지 않고 다시 적어 둔 값이라 helper가 어긋나면 드러난다.
+    [[nodiscard]] luil::ui_color severity_role(const luil::ui_color_palette& palette, const luil::ui_severity severity)
+    {
+        switch (severity)
+        {
+        case luil::ui_severity::success:
+            return palette.accent;
+        case luil::ui_severity::warning:
+            return palette.warning_accent;
+        case luil::ui_severity::error:
+            return palette.error_accent;
+        case luil::ui_severity::info:
+            break;
+        }
+        return palette.secondary_foreground;
+    }
+
+    // 반투명한 색을 불투명한 바탕 위에 얹은 색이다. 보조 글자색은 알파가 있어 테가 바탕과 섞여 그려진다.
+    [[nodiscard]] luil::ui_color over(const luil::ui_color foreground, const luil::ui_color background) noexcept
+    {
+        const std::uint32_t alpha { foreground >> 24U };
+        const auto channel = [&](const std::uint32_t shift) {
+            const std::uint32_t top { (foreground >> shift) & 0xFFU };
+            const std::uint32_t bottom { (background >> shift) & 0xFFU };
+            return (top * alpha + bottom * (255U - alpha) + 127U) / 255U;
+        };
+        return 0xFF000000U | (channel(16U) << 16U) | (channel(8U) << 8U) | channel(0U);
+    }
+
+    // 반올림 오차(채널당 둘)까지는 같은 색이다.
+    [[nodiscard]] bool same_color(const luil::ui_color actual, const luil::ui_color expected) noexcept
+    {
+        for (const std::uint32_t shift : { 0U, 8U, 16U })
+        {
+            const int difference { static_cast<int>((actual >> shift) & 0xFFU) - static_cast<int>((expected >> shift) & 0xFFU) };
+            if (std::abs(difference) > 2)
+                return false;
+        }
+        return true;
+    }
+}
+
+TEST_CASE("An info bar is a neutral raised body with a one pixel border in the severity color", "[ui][raster][info-bar]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        for (const luil::ui_severity severity : { luil::ui_severity::info, luil::ui_severity::success, luil::ui_severity::warning, luil::ui_severity::error })
+        {
+            CAPTURE(theme, severity);
+            const luil::testing::raster_frame frame { draw_info_bar(luil::info_bar_config { .severity = severity }, palette) };
+            // 테는 바탕 위에 칠해진다. 보조 글자색(info)은 알파가 있어 바탕과 섞인다.
+            const luil::ui_color border { over(severity_role(palette, severity), palette.raised_background) };
+            // 몸은 심각도와 무관한 올라온 중립 바탕이다.
+            REQUIRE(frame.pixel_at(400, 60) == palette.raised_background);
+            REQUIRE(border != palette.raised_background);
+            // 테는 막대 안쪽에 온전히 들어온 1 논리 픽셀(물리 2)이다. 네 변 모두다.
+            const std::array samples { frame.pixel_at(20, 60), frame.pixel_at(21, 60), frame.pixel_at(819, 60), frame.pixel_at(400, 20), frame.pixel_at(400, 99) };
+            for (const luil::ui_color sample : samples)
+            {
+                CAPTURE(sample, border);
+                REQUIRE(same_color(sample, border));
+            }
+            REQUIRE(frame.pixel_at(22, 60) == palette.raised_background);
+            // 막대 밖은 창 바탕이다.
+            REQUIRE(frame.pixel_at(10, 60) == palette.window_background);
+            REQUIRE(frame.pixel_at(400, 110) == palette.window_background);
+        }
+    }
+}
+
+TEST_CASE("An info bar keeps its border when high contrast folds the body into the window", "[ui][raster][info-bar]")
+{
+    luil::high_contrast_colors colors {};
+    colors.window_background = luil::make_ui_color(0, 0, 0);
+    colors.window_foreground = luil::make_ui_color(255, 255, 255);
+    colors.emphasis = luil::make_ui_color(0x37, 0xDC, 0xFF);
+    const luil::ui_color_palette palette { luil::high_contrast_palette_for(colors) };
+
+    // 올라온 면은 창 바탕으로 접힌다. 테가 없으면 막대가 표면에서 사라진다.
+    REQUIRE(palette.raised_background == palette.window_background);
+    for (const luil::ui_severity severity : { luil::ui_severity::info, luil::ui_severity::success, luil::ui_severity::warning, luil::ui_severity::error })
+    {
+        CAPTURE(severity);
+        const luil::testing::raster_frame frame { draw_info_bar(luil::info_bar_config { .severity = severity }, palette) };
+        const luil::ui_color border { severity_role(palette, severity) };
+        REQUIRE(border != palette.window_background);
+        REQUIRE(frame.pixel_at(20, 60) == border);
+        REQUIRE(frame.pixel_at(400, 20) == border);
+        REQUIRE(frame.pixel_at(400, 60) == palette.window_background);
+        // info·warning·error는 같은 전경색이다. 둘을 가르는 것은 글리프의 몫이다.
+        if (severity != luil::ui_severity::success)
+            REQUIRE(border == colors.window_foreground);
+    }
+}
+
+TEST_CASE("An info bar draws its close button and its action button as ordinary buttons", "[ui][raster][info-bar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::info_bar_config config {};
+    config.action_label = u8"Retry";
+    config.action = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+    config.close = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+
+    // 닫기는 쉬는 동안 바탕이 없고(글리프만 선다) hover에서 도구 막대의 hover 바탕이 깔린다.
+    const luil::testing::raster_frame resting { draw_info_bar(config, palette) };
+    REQUIRE(resting.pixel_at(780, 60) == palette.raised_background);
+    luil::interaction_snapshot over_close {};
+    over_close.hovered = info_bar_close_id;
+    const luil::testing::raster_frame hovered { draw_info_bar(config, palette, info_bar_box, over_close) };
+    const luil::ui_color hover_fill { over(palette.button_hover_background, palette.raised_background) };
+    REQUIRE(hover_fill != palette.raised_background);
+    REQUIRE(same_color(hovered.pixel_at(780, 60), hover_fill));
+
+    // 동작 단추는 옆에 서고 보통 글자 버튼의 바탕(입력 표면)을 쓴다 (논리 폭 64, 닫기 왼쪽 8).
+    const luil::ui_color plain { over(palette.input_background, palette.raised_background) };
+    REQUIRE(plain != palette.raised_background);
+    REQUIRE(same_color(resting.pixel_at(630, 60), plain));
+    REQUIRE(resting.pixel_at(600, 60) == palette.raised_background);
+    // 단추 높이는 논리 28(물리 56)이라 첫 줄 가운데 위아래로 서고, 막대 안쪽에 머문다.
+    REQUIRE(same_color(resting.pixel_at(630, 34), plain));
+    REQUIRE(resting.pixel_at(630, 30) == palette.raised_background);
+}
+
+TEST_CASE("An info bar draws a narrow bar's action button on its own line under the text", "[ui][raster][info-bar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::info_bar_config config {};
+    config.action_label = u8"Retry";
+    config.action = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+    config.close = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+
+    // 논리 300 폭이면 글 폭이 200 아래라 단추가 아래 줄로 간다. 글이 비어도 첫 줄은 있어 단추는 그 아래 8에 선다.
+    // 막대는 논리 높이 76(위 10.5 + 첫 줄 19 + 8 + 단추 28 + 아래 10.5)이다.
+    const luil::rect_f slot { 20.0f, 20.0f, 600.0f, 152.0f };
+    const luil::testing::raster_frame frame { draw_info_bar(config, palette, slot) };
+    const luil::ui_color plain { over(palette.input_background, palette.raised_background) };
+    // 단추는 글의 왼쪽(물리 x 20 + 76)에서 시작해 물리 128 폭이다. 위쪽은 y 20 + 2 * 37.5 = 95다.
+    REQUIRE(same_color(frame.pixel_at(130, 120), plain));
+    REQUIRE(frame.pixel_at(130, 92) == palette.raised_background);
+    REQUIRE(frame.pixel_at(90, 120) == palette.raised_background);
+    // 옆에 서던 자리는 비어 있다.
+    REQUIRE(frame.pixel_at(450, 60) == palette.raised_background);
 }

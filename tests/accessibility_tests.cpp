@@ -10,6 +10,7 @@
 #include "luil/ui/group_element.h"
 #include "luil/ui/grouped_list_element.h"
 #include "luil/ui/image_element.h"
+#include "luil/ui/info_bar_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_element.h"
@@ -549,6 +550,61 @@ TEST_CASE("A toast reads as an alert with its message", "[ui][access]")
     const luil::toast_element toast { { .id = u8"saved", .text = u8"저장했다", .severity = luil::toast_severity::success } };
     REQUIRE(toast.accessibility().role == luil::access_role::alert);
     REQUIRE(toast.accessibility().name == u8"저장했다");
+}
+
+namespace {
+    [[nodiscard]] luil::info_bar_config sync_bar()
+    {
+        luil::info_bar_config config {};
+        config.owner = u8"sync";
+        config.severity = luil::ui_severity::error;
+        config.title = u8"동기화하지 못했습니다";
+        config.message = u8"서버에 닿지 않습니다.";
+        config.action_label = u8"다시 시도";
+        config.action = tagged_action(u8"retry");
+        config.close = tagged_action(u8"dismiss");
+        return config;
+    }
+
+    [[nodiscard]] std::unique_ptr<test_panel> info_bar_page(luil::info_bar_config config)
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"page" }) };
+        page->add(std::make_unique<luil::info_bar_element>(std::move(config)));
+        page->arrange({ { 0.0f, 0.0f, 600.0f, 80.0f }, 1.0f });
+        return page;
+    }
+}
+
+TEST_CASE("An info bar reads as an alert with its two buttons as children", "[ui][access][info-bar]")
+{
+    const auto page { info_bar_page(sync_bar()) };
+    const luil::ui_element& bar { *page->children()[0] };
+    REQUIRE(bar.accessibility().role == luil::access_role::alert);
+    REQUIRE(bar.accessibility().name == u8"오류 동기화하지 못했습니다 서버에 닿지 않습니다.");
+
+    // 글 노드는 따로 서지 않는다. 막대 아래 단추 둘이 서고, 토스트와 같은 모양이다.
+    const std::vector<const luil::ui_element*> children { luil::access_children(bar) };
+    REQUIRE(children.size() == 2u);
+    REQUIRE(children[0]->id() == luil::ui_element_id { luil::ui_element_kind::info_bar_action, u8"sync" });
+    REQUIRE(children[1]->id() == luil::ui_element_id { luil::ui_element_kind::info_bar_close, u8"sync" });
+    REQUIRE(children[0]->accessibility().role == luil::access_role::button);
+    REQUIRE(children[0]->accessibility().name == u8"다시 시도");
+    REQUIRE(children[1]->accessibility().role == luil::access_role::button);
+    REQUIRE(children[1]->accessibility().name == u8"닫기");
+
+    // 단추는 Invoke로 눌린다. 막대는 닫는 일을 하지 않고 앱의 액션이 나갈 뿐이다.
+    REQUIRE(tag_of(luil::plan_access_request(*children[0], { luil::access_command::invoke })) == u8"retry");
+    REQUIRE(tag_of(luil::plan_access_request(*children[1], { luil::access_command::invoke })) == u8"dismiss");
+}
+
+TEST_CASE("An info bar without buttons has no children in the access tree", "[ui][access][info-bar]")
+{
+    luil::info_bar_config config { sync_bar() };
+    config.action = nullptr;
+    config.close = nullptr;
+    const auto page { info_bar_page(std::move(config)) };
+    REQUIRE(luil::access_children(*page->children()[0]).empty());
+    REQUIRE(page->children()[0]->accessibility().role == luil::access_role::alert);
 }
 
 TEST_CASE("A pressable element with a name reads as a button by default", "[ui][access]")
