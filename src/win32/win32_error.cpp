@@ -20,4 +20,9 @@ namespace luil::win32 {
         output += u8")";
         return output;
     }
+
+    std::u8string make_last_error(const std::u8string_view message)
+    {
+        return make_hresult_error(message, HRESULT_FROM_WIN32(GetLastError()));
+    }
 }

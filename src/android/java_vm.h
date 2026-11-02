@@ -47,4 +47,46 @@ namespace luil::android {
         JNIEnv* env_ { nullptr };
         bool attached_ { false };
     };
+
+    // 이 호출 동안의 지역 참조를 모아 끝에서 한꺼번에 지운다. 호출 하나가 만드는 참조 수는 몇 개뿐이다.
+    //  - 붙인 thread는 오래 살 수 있어 지역 참조를 남기지 않는다. 틀을 얻지 못하면 `pushed()`가 거짓이다.
+    class jni_local_frame final
+    {
+    public:
+        explicit jni_local_frame(JNIEnv& env, const jint capacity = 16) noexcept
+            : env_ { &env }
+            , pushed_ { env.PushLocalFrame(capacity) == JNI_OK }
+        {
+        }
+
+        jni_local_frame(const jni_local_frame&) = delete;
+        jni_local_frame(jni_local_frame&&) = delete;
+        jni_local_frame& operator=(const jni_local_frame&) = delete;
+        jni_local_frame& operator=(jni_local_frame&&) = delete;
+
+        ~jni_local_frame()
+        {
+            if (pushed_)
+                static_cast<void>(env_->PopLocalFrame(nullptr));
+        }
+
+        [[nodiscard]] bool pushed() const noexcept
+        {
+            return pushed_;
+        }
+
+    private:
+        JNIEnv* env_ { nullptr };
+        bool pushed_ { false };
+    };
+
+    // Java 예외가 났으면 거두고 참이다.
+    //  - 예외가 남은 채로는 대부분의 JNI 함수를 부를 수 없어 호출한 자리에서 바로 거둔다.
+    [[nodiscard]] inline bool jni_failed(JNIEnv& env) noexcept
+    {
+        if (env.ExceptionCheck() == JNI_FALSE)
+            return false;
+        env.ExceptionClear();
+        return true;
+    }
 }

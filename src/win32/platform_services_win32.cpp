@@ -30,7 +30,7 @@ namespace luil {
 
         [[nodiscard]] platform_result last_error(const std::u8string_view what)
         {
-            return failure(win32::make_hresult_error(what, HRESULT_FROM_WIN32(GetLastError())));
+            return failure(win32::make_last_error(what));
         }
 
         [[nodiscard]] std::optional<std::wstring> wide(const std::u8string_view text)
