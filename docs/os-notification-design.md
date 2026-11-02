@@ -111,7 +111,7 @@ namespace luil::win32 {
 
 쓰기에 실패하면 시작은 이어지고 `notification_status()`가 `unsupported`, `show_notification`이 그 오류 글로 `failed`다. 라이브러리는 항목을 스스로 지우지 않는다. 앱이 꺼진 뒤에도 알림 센터의 알림이 앱을 가리켜야 해서다. 지우는 것은 앱의 제거 길(`unregister_app_identity`)이다. 실행 파일을 옮기면 다음 실행이 경로를 고쳐 쓴다. `run_application_window` 전에 `show_notification`을 부르면 식별이 아직 없어 `unsupported`다.
 
-**COM 활성화기.** `run()`이 `on_started` 뒤에 `CoRegisterClassObject(clsid, CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE)`로 `INotificationActivationCallback`을 건다. `window_environment::instance`가 있고 첫째가 아니면 걸지 않는다. 둘째가 걸면 COM이 어느 쪽으로 보낼지 모른다. host를 거두기 전에 `CoRevokeClassObject`로 푼다. UI thread STA에서 건 개체라 `Activate`가 UI thread의 메시지 펌프로 온다고 본다(실측 전). `Activate`는 `invokedArgs`의 `luil:<id>`를 읽어 큐에 넣고 곧 돌아온다. 활성화기를 걸면 `Activated`는 잇지 않는다. 같은 눌림이 두 길로 오지 않게 하려는 것이고, 두 길이 함께 오는지는 실측한다. 명령 줄에 `-luil-notification`이나 COM이 덧붙이는 `-Embedding`이 있으면 `notification_launch`가 참이고, 그 실행의 첫 눌림은 `launched`다.
+**COM 활성화기.** `run()`이 `on_started` 뒤, 사건 받는 창을 단 다음에 `CoRegisterClassObject(clsid, CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE)`로 `INotificationActivationCallback`을 짓는 클래스 개체를 건다(`register_notification_activator`). `window_environment::instance`가 있고 첫째가 아니면 걸지 않는다. 둘째가 걸면 COM이 어느 쪽으로 보낼지 모른다. host를 거두기 전에 `CoRevokeClassObject`로 푼다. 푸는 자리는 사건 받는 창을 떼는 `detach_notification_window` 안이라 `host_.reset()` 세 자리의 줄이 하나씩이다. COM이 없는 thread(앱이 `com_sta_scope`를 쓰지 않음)면 걸기가 실패하고, 떠 있는 동안의 눌림은 `Activated`로 받는다. UI thread STA에서 건 개체라 `Activate`가 UI thread의 메시지 펌프로 온다고 본다(실측 전). `Activate`는 `invokedArgs`의 `luil:<id>`를 읽어 큐에 넣고 곧 돌아온다. 활성화기를 걸면 `Activated`는 잇지 않는다. 같은 눌림이 두 길로 오지 않게 하려는 것이고, 두 길이 함께 오는지는 실측한다. 명령 줄에 `-luil-notification`이나 COM이 덧붙이는 `-Embedding`(`/Embedding`도, 대소문자 무시)이 있으면 `notification_launch`가 참이고, 그 실행의 첫 눌림은 `launched`다. `run_application_window`가 식별을 세울 때 명령 줄을 읽어 둔다.
 
 **그림.** Windows는 `encode_png`([image_encode.h](../include/luil/ui/image_encode.h) 30줄)로 `%TEMP%\luil-notifications\<AUMID>\<id>-<번호>.png`에 쓴다. 같은 id를 바꾸거나 거두면 옛 파일을 지운다. 시작할 때 `ToastNotificationHistory::GetHistory`에 없는 id의 파일을 지운다. 알림 센터에 남은 알림이 그림을 잃지 않게 종료 때는 지우지 않는다. Android는 `Bitmap.createBitmap(int[], w, h, ARGB_8888)`로 `setLargeIcon`에 싣는다. 256 px 상한은 바인더 거래 크기를 넘지 않게 하려는 것이다.
 
@@ -141,12 +141,13 @@ namespace luil::win32 {
 - 길 b: 시작 메뉴에 `System.AppUserModel.ID`·`ToastActivatorCLSID`를 단 바로가기를 만든다. 되는 것: 오래된 문서의 길이라 Windows 10 초기 판에서도 선다고 알려져 있다. 대가: 휴대용 앱이 사용자 시작 메뉴를 어지럽히고 `propsys`·`IShellLink` 코드가 는다.
 - 길 c: 설치기가 하고 라이브러리는 id만 받는다. 대가: 개발 중과 휴대용 실행에는 알림이 없다.
 - 권장: a. 공통 대가로, 식별을 단 프로세스는 `SetCurrentProcessExplicitAppUserModelID`를 걸어 이전에 고정한 바로가기(속성 없음)와 단추가 갈린다. 사용자는 다시 고정한다. 대가: 남는 레지스트리 항목, 실측 전 가정 하나. **승인: 길 a (2026-11-02).**
-- 실측(2026-11-03, 이 저장소의 개발 PC): 레지스트리 항목만 쓴 빌드 폴더의 test 실행 파일이 토스트를 올렸다. `notification_status()`가 `available`, `show_notification`이 `ok`였고, 프로세스가 끝난 뒤 Windows PowerShell의 `ToastNotificationManager.History.GetHistory(aumid)`가 1개(tag `live-1`, group `luil`)를 되읽었다. 바로가기 길(b)로 바꿀 까닭은 없었다. 이름과 아이콘이 배너에 맞게 보이는지는 사람 확인으로 남는다.
+- 실측(2026-11-03, 이 저장소의 개발 PC): 레지스트리 항목만 쓴 빌드 폴더의 test 실행 파일이 토스트를 올렸다. `notification_status()`가 `available`, `show_notification`이 `ok`였고, 프로세스가 끝난 뒤 Windows PowerShell의 `ToastNotificationManager.History.GetHistory(aumid)`가 1개(tag `live-1`, group `luil`)를 되읽었다. 바로가기 길(b)로 바꿀 까닭은 없었다. 활성화기 커밋 뒤 `CustomActivator`와 `CLSID\{clsid}\LocalServer32`를 함께 쓴 식별로 다시 재도 같았다(GetHistory 1개). 이름과 아이콘이 배너에 맞게 보이는지와 누르기는 사람 확인으로 남는다.
 
 **3. 활성화기 CLSID.** 질문: COM 활성화기의 CLSID를 누가 정하는가.
 - 길 a: AUMID에서 이름 기반 UUID(v5)로 짓는다. 되는 것: 같은 id면 늘 같고 앱이 GUID를 다루지 않는다. 대가: SHA-1 계산(advapi32의 CryptoAPI, 이미 링크됨)이 든다. AUMID를 바꾸면 CLSID도 바뀐다.
 - 길 b: `app_identity`에 CLSID 글을 받는다. 대가: 예제의 GUID를 베끼면 두 앱이 서로의 실행 파일을 띄운다.
 - 권장: a. 대가: 해시 코드 몇 줄. **권장대로 진행.**
+- 구현: 이름 공간은 luil이 한 번 고른 `{6C75696C-9A1E-4B5C-8D27-3E51A06B94C2}`(`app_identity.h`의 `activator_namespace`)이고 이름은 AUMID의 UTF-8 바이트다. 이 값을 바꾸면 모든 앱의 CLSID가 바뀌므로 고정한다. SHA-1은 advapi32의 CryptoAPI(`CALG_SHA1`)로 얻는다.
 
 **4. 클릭 활성화(Windows).** 질문: 앱이 꺼진 뒤의 클릭도 받는가.
 
@@ -228,7 +229,7 @@ namespace luil::win32 {
 ## 확인
 
 - `tests/toast_payload_tests.cpp`(`luil_tests`): `& < > " '` 이스케이프, 제어 문자 빼기, 탭·줄바꿈 유지, `launch`에 `luil:<id>`만 실리는지와 활성화 인자에서 id 꺼내기, 본문이 비면 `<text>` 하나, `silent`의 audio 요소, 그림 경로의 `file:///`와 공백·`#`·`%` 부호화.
-- `tests/app_identity_tests.cpp`(`luil_tests`): AUMID 검증(128·129자, 공백), 레지스트리 경로와 값 구성, CLSID가 같은 id에서 같고 다른 id에서 다른지와 UUID v5 판·변형 비트. 등록·해제 왕복은 `luil.test.<pid>` id로 HKCU에 쓰고 test가 지운다. 시작할 때 남은 `luil.test.*`를 먼저 지운다. 값이 같으면 다시 쓰지 않는지, 없는 id의 해제가 `not_found`인지.
+- `tests/app_identity_tests.cpp`(`luil_tests`): AUMID 검증(128·129자, 공백), 레지스트리 경로와 값 구성(활성화기 명령 줄 포함), CLSID가 같은 id에서 같고 다른 id에서 다른지와 UUID v5 판·변형 비트(RFC 4122의 DNS 이름 공간 값으로 계산도 맞춘다), `notification_launch`가 표식을 알아보는지. 등록·해제 왕복은 `luil.test.<pid>` id로 HKCU에 쓰고 test가 지운다. 시작할 때 남은 `luil.test.*`를 먼저 지운다. 값이 같으면 다시 쓰지 않는지, 없는 id의 해제가 `not_found`인지.
 - `tests/notification_queue_tests.cpp`(core): 순서 유지, 거절된 사건을 되돌려 다음에 먼저 내는지, 64개 상한에서 오래된 것을 버리고 `lost_before`에 세는지, 되보낸 뒤 수가 0으로 돌아오는지, 빈 메시지와 던지는 훅. 규칙이 core에 있어 id 규칙(65자, 공백, 한글, 빈 값은 거절), 제목·본문 자르기가 코드 포인트 경계와 `…`, 잘못된 UTF-8의 거절도 여기서 본다.
 - `tests/device_request_tests.cpp`(core, 추가): `notifications`가 API·targetSdk 32·33의 네 조합에서 33·33만 `POST_NOTIFICATIONS`인지. 기본 능력 단언에 `notifications == false`.
 - `tests/win32_window_tests.cpp`(추가, `run_placement_probe` 틀): 비공개 진입점으로 다른 thread에서 사건을 넣으면 delegate 훅이 창을 만든 thread에서 불리는지, 숨은 주 창이 보이지 않는지, `identity`가 규칙 밖이면 시작 실패인지. 토스트를 실제로 올리지 않는다.

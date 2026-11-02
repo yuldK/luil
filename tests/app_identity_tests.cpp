@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -102,26 +103,76 @@ TEST_CASE("The identity registry names the key, the display name and the icon", 
     luil::win32::app_identity identity {};
     identity.id = u8"Lusain.Demo";
     identity.icon_path = u8"C:\\app\\icon.png";
-    const std::optional<luil::win32::identity_registry> registry { luil::win32::make_identity_registry(identity, u8"Caption") };
+    identity.activator = false;
+    const std::optional<luil::win32::identity_registry> registry { luil::win32::make_identity_registry(identity, u8"Caption", L"C:\\app\\app.exe") };
     REQUIRE(registry.has_value());
     REQUIRE(registry->key == L"Software\\Classes\\AppUserModelId\\Lusain.Demo");
-    // 표시 이름이 비면 caption 제목이다.
+    // 표시 이름이 비면 caption 제목이다. 활성화기를 끈 설정은 앞 실행의 `CustomActivator`를 지운다.
     REQUIRE(registry->values == std::vector<luil::win32::registry_value> { { L"DisplayName", L"Caption" }, { L"IconUri", L"C:\\app\\icon.png" } });
-    REQUIRE(registry->removed.empty());
+    REQUIRE(registry->removed == std::vector<std::wstring> { L"CustomActivator" });
+    REQUIRE(registry->server_key.empty());
 
     identity.display_name = u8"\uB370\uBAA8";
     identity.icon_path.clear();
-    const std::optional<luil::win32::identity_registry> named { luil::win32::make_identity_registry(identity, u8"Caption") };
+    const std::optional<luil::win32::identity_registry> named { luil::win32::make_identity_registry(identity, u8"Caption", L"C:\\app\\app.exe") };
     REQUIRE(named->values == std::vector<luil::win32::registry_value> { { L"DisplayName", L"\uB370\uBAA8" } });
     // 아이콘을 뺀 설정은 앞 실행이 쓴 값을 지운다.
-    REQUIRE(named->removed == std::vector<std::wstring> { L"IconUri" });
+    REQUIRE(named->removed == std::vector<std::wstring> { L"IconUri", L"CustomActivator" });
 
     // 이름이 모두 비면 id다.
     identity.display_name.clear();
-    REQUIRE(luil::win32::make_identity_registry(identity, u8"")->values.front().data == L"Lusain.Demo");
+    REQUIRE(luil::win32::make_identity_registry(identity, u8"", L"C:\\app\\app.exe")->values.front().data == L"Lusain.Demo");
 
     identity.id = u8"bad id";
-    REQUIRE(luil::win32::make_identity_registry(identity, u8"Caption").has_value() == false);
+    REQUIRE(luil::win32::make_identity_registry(identity, u8"Caption", L"C:\\app\\app.exe").has_value() == false);
+}
+
+TEST_CASE("An activator writes its CLSID and the command line that relaunches the app", "[win32][notification][identity]")
+{
+    luil::win32::app_identity identity {};
+    identity.id = u8"Lusain.Demo";
+    const std::optional<luil::win32::identity_registry> registry { luil::win32::make_identity_registry(identity, u8"Caption", L"C:\\my app\\app.exe") };
+    REQUIRE(registry.has_value());
+    const std::optional<GUID> clsid { luil::win32::activator_clsid(identity.id) };
+    REQUIRE(clsid.has_value());
+    const std::wstring text { luil::win32::guid_text(*clsid) };
+    REQUIRE(registry->values.back() == luil::win32::registry_value { L"CustomActivator", text });
+    REQUIRE(registry->server_key == L"Software\\Classes\\CLSID\\" + text + L"\\LocalServer32");
+    // 경로에 공백이 있어도 한 인자다. 표식은 `notification_launch`가 알아본다.
+    REQUIRE(registry->server_command == L"\"C:\\my app\\app.exe\" -luil-notification");
+}
+
+TEST_CASE("The activator CLSID is a version 5 UUID stable per id", "[win32][notification][identity]")
+{
+    // RFC 4122 부록의 DNS 이름 공간과 Python `uuid.uuid5(NAMESPACE_DNS, "python.org")`의 값이다.
+    constexpr GUID dns { 0x6ba7b810u, 0x9dadu, 0x11d1u, { 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8 } };
+    const std::string name { "python.org" };
+    const std::optional<GUID> known { luil::win32::name_based_uuid(dns, std::as_bytes(std::span<const char> { name.data(), name.size() })) };
+    REQUIRE(known.has_value());
+    REQUIRE(luil::win32::guid_text(*known) == L"{886313E1-3B8A-5372-9B90-0C9AEE199E5D}");
+
+    const std::optional<GUID> first { luil::win32::activator_clsid(u8"Lusain.Demo") };
+    const std::optional<GUID> again { luil::win32::activator_clsid(u8"Lusain.Demo") };
+    const std::optional<GUID> other { luil::win32::activator_clsid(u8"Lusain.Other") };
+    REQUIRE(first.has_value());
+    REQUIRE(IsEqualGUID(*first, *again) != FALSE);
+    REQUIRE(IsEqualGUID(*first, *other) == FALSE);
+    // 판 5와 RFC 4122 변형이다.
+    REQUIRE((first->Data3 >> 12) == 5);
+    REQUIRE((first->Data4[0] & 0xC0) == 0x80);
+}
+
+TEST_CASE("A launch by the activator is told apart from other command lines", "[win32][notification][identity]")
+{
+    const std::vector<std::u8string> activator { u8"C:/app.exe", u8"-luil-notification" };
+    const std::vector<std::u8string> embedding { u8"C:/app.exe", u8"-Embedding" };
+    const std::vector<std::u8string> slash { u8"C:/app.exe", u8"/embedding" };
+    const std::vector<std::u8string> plain { u8"C:/app.exe", u8"note.txt", u8"--luil-notification" };
+    REQUIRE(luil::notification_launch(activator));
+    REQUIRE(luil::notification_launch(embedding));
+    REQUIRE(luil::notification_launch(slash));
+    REQUIRE(luil::notification_launch(plain) == false);
+    REQUIRE(luil::notification_launch(std::vector<std::u8string> {}) == false);
 }
 
 TEST_CASE("Writing the identity twice changes nothing and unregistering removes the key", "[win32][notification][identity]")
@@ -131,30 +182,36 @@ TEST_CASE("Writing the identity twice changes nothing and unregistering removes 
     identity.id = test_identity();
     identity.display_name = u8"luil test";
     identity.icon_path = u8"C:\\nowhere\\icon.png";
-    const std::optional<luil::win32::identity_registry> registry { luil::win32::make_identity_registry(identity, u8"") };
+    const std::optional<luil::win32::identity_registry> registry { luil::win32::make_identity_registry(identity, u8"", L"C:\\nowhere\\app.exe") };
     REQUIRE(registry.has_value());
+    const std::wstring server_parent { registry->server_key.substr(0, registry->server_key.rfind(L'\\')) };
 
     const luil::win32::identity_write_result first { luil::win32::write_identity_registry(*registry) };
     REQUIRE(first.result.ok());
     REQUIRE(first.changed);
     REQUIRE(read_value(registry->key, L"DisplayName") == L"luil test");
     REQUIRE(read_value(registry->key, L"IconUri") == L"C:\\nowhere\\icon.png");
+    REQUIRE(read_value(registry->key, L"CustomActivator").empty() == false);
+    REQUIRE(read_value(registry->server_key, nullptr) == L"\"C:\\nowhere\\app.exe\" -luil-notification");
 
     // 같은 값은 다시 쓰지 않는다.
     const luil::win32::identity_write_result second { luil::win32::write_identity_registry(*registry) };
     REQUIRE(second.result.ok());
     REQUIRE(second.changed == false);
 
-    // 아이콘을 빼면 그 값만 지운다.
+    // 아이콘과 활성화기를 빼면 그 값만 지운다. 서버 키는 해제가 지운다.
     identity.icon_path.clear();
-    const luil::win32::identity_write_result third { luil::win32::write_identity_registry(*luil::win32::make_identity_registry(identity, u8"")) };
+    identity.activator = false;
+    const luil::win32::identity_write_result third { luil::win32::write_identity_registry(*luil::win32::make_identity_registry(identity, u8"", L"C:\\nowhere\\app.exe")) };
     REQUIRE(third.result.ok());
     REQUIRE(third.changed);
     REQUIRE(read_value(registry->key, L"IconUri").empty());
+    REQUIRE(read_value(registry->key, L"CustomActivator").empty());
     REQUIRE(read_value(registry->key, L"DisplayName") == L"luil test");
 
     REQUIRE(luil::win32::unregister_app_identity(identity.id).ok());
     REQUIRE(key_exists(registry->key) == false);
+    REQUIRE(key_exists(server_parent) == false);
     // 없는 식별을 지우면 `not_found`다.
     REQUIRE(luil::win32::unregister_app_identity(identity.id).status == luil::platform_status::not_found);
     REQUIRE(luil::win32::unregister_app_identity(u8"bad id").status == luil::platform_status::failed);

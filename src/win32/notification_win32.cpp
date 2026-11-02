@@ -9,6 +9,7 @@
 #include "win32/win32_error.h"
 #include "win32/window_messages.h"
 
+#include <NotificationActivationCallback.h>
 #include <objbase.h>
 #include <roapi.h>
 #include <shobjidl_core.h>
@@ -20,6 +21,7 @@
 #include <wrl/wrappers/corewrappers.h>
 
 #include <atomic>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -64,7 +66,11 @@ namespace luil {
             std::wstring aumid {};
             // 식별을 세우다 실패한 글이다. 있으면 `notification_status`는 `unsupported`, `show_notification`은 이 글로 `failed`다.
             std::u8string identity_error {};
+            // 식별이 활성화기를 켰다 (`app_identity::activator`). 레지스트리에 `CustomActivator`가 있다.
             bool activator { false };
+            // 주 창이 이 프로세스에 클래스 개체를 걸었다. 걸었으면 눌림은 COM으로 오고 `Activated`는 잇지 않는다.
+            std::optional<DWORD> activator_cookie {};
+            GUID clsid {};
             // 알림 개체를 얻었다 (`ui_platform_capabilities::notifications`).
             bool available { false };
             std::map<std::u8string, held_toast> toasts {};
@@ -86,6 +92,72 @@ namespace luil {
         }
 
         std::atomic<HWND> event_window { nullptr };
+        // 이 실행이 알림 클릭으로 떴다. 활성화기의 첫 눌림이 `launched`로 가져간다.
+        std::atomic<bool> launch_pending { false };
+
+        // COM이 알림 클릭을 넘기는 개체다 (결정 4의 길 b). 주 창 thread의 STA에서 건 클래스 개체가 짓는다.
+        //  - `invokedArgs`의 `luil:<id>`만 읽어 대기열에 넣고 곧 돌아온다. 앱 상태는 UI thread가 대기열을 비우며 만진다.
+        class notification_activator final : public Microsoft::WRL::RuntimeClass<Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>, INotificationActivationCallback>
+        {
+        public:
+            IFACEMETHODIMP Activate(LPCWSTR, const LPCWSTR invoked_arguments, const NOTIFICATION_USER_INPUT_DATA*, ULONG) override
+            {
+                if (invoked_arguments == nullptr)
+                    return S_OK;
+                try
+                {
+                    const std::optional<std::u8string> argument { win32::utf16_to_utf8(invoked_arguments).value };
+                    const std::optional<std::u8string> id { argument.has_value() ? win32::toast_id_from_launch_argument(*argument) : std::nullopt };
+                    if (id.has_value() == false)
+                        return S_OK;
+                    notification_event event { notification_event_kind::activated, *id };
+                    event.launched = launch_pending.exchange(false);
+                    win32::post_notification_event(std::move(event));
+                }
+                catch (...)
+                {
+                }
+                return S_OK;
+            }
+        };
+
+        // 활성화기 개체를 짓는 클래스 개체다. COM이 클릭마다 `CreateInstance`를 부른다.
+        class activator_factory final : public Microsoft::WRL::RuntimeClass<Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>, IClassFactory>
+        {
+        public:
+            IFACEMETHODIMP CreateInstance(IUnknown* const outer, REFIID interface_id, void** const object) override
+            {
+                if (object == nullptr)
+                    return E_POINTER;
+                *object = nullptr;
+                if (outer != nullptr)
+                    return CLASS_E_NOAGGREGATION;
+                const ComPtr<notification_activator> activator { Microsoft::WRL::Make<notification_activator>() };
+                if (activator == nullptr)
+                    return E_OUTOFMEMORY;
+                return activator.CopyTo(interface_id, object);
+            }
+
+            IFACEMETHODIMP LockServer(BOOL) override
+            {
+                return S_OK;
+            }
+        };
+
+        // 대소문자를 가리지 않는 ASCII 비교다.
+        [[nodiscard]] bool same_flag(const std::u8string_view argument, const std::wstring_view flag) noexcept
+        {
+            if (argument.size() != flag.size())
+                return false;
+            for (std::size_t index = 0; index < argument.size(); ++index)
+            {
+                const char8_t left { argument[index] };
+                const wchar_t right { flag[index] };
+                if (right > 0x7F || std::tolower(static_cast<unsigned char>(left)) != std::tolower(static_cast<unsigned char>(right)))
+                    return false;
+            }
+            return true;
+        }
 
         [[nodiscard]] platform_result succeeded() noexcept
         {
@@ -299,7 +371,8 @@ namespace luil {
         }
 
         // 처리기를 단다. 처리기는 사건을 대기열에 넣고 신호만 게시한다. 앱 상태를 thread 풀에서 만지는 길은 없다.
-        [[nodiscard]] HRESULT attach_handlers(held_toast& held, const std::u8string& id)
+        //  - 활성화기를 걸었으면 `Activated`는 잇지 않는다. 같은 눌림이 두 길로 오지 않게 한다.
+        [[nodiscard]] HRESULT attach_handlers(held_toast& held, const std::u8string& id, const bool listen_activated)
         {
             const auto on_activated = [id](notifications::IToastNotification*, IInspectable*) -> HRESULT {
                 post_event_noexcept({ notification_event_kind::activated, id });
@@ -328,10 +401,14 @@ namespace luil {
                 return E_OUTOFMEMORY;
 
             EventRegistrationToken token {};
-            HRESULT result { held.toast->add_Activated(activated.Get(), &token) };
-            if (FAILED(result))
-                return result;
-            held.activated = token;
+            HRESULT result { S_OK };
+            if (listen_activated)
+            {
+                result = held.toast->add_Activated(activated.Get(), &token);
+                if (FAILED(result))
+                    return result;
+                held.activated = token;
+            }
             result = held.toast->add_Dismissed(dismissed.Get(), &token);
             if (FAILED(result))
                 return result;
@@ -348,13 +425,14 @@ namespace luil {
         {
             std::wstring aumid {};
             std::u8string error {};
+            bool activator_registered { false };
         };
 
         [[nodiscard]] identity_snapshot snapshot_identity()
         {
             center_state& state { center() };
             const std::lock_guard lock { state.mutex };
-            return { state.aumid, state.identity_error };
+            return { state.aumid, state.identity_error, state.activator_cookie.has_value() };
         }
 
         [[nodiscard]] notification_availability availability_of(const identity_snapshot& identity)
@@ -437,7 +515,7 @@ namespace luil {
         if (SUCCEEDED(result))
             result = tagged->put_Group(HStringReference { win32::toast_group.data(), static_cast<unsigned int>(win32::toast_group.size()) }.Get());
         if (SUCCEEDED(result))
-            result = attach_handlers(held, value.id);
+            result = attach_handlers(held, value.id, identity.activator_registered == false);
         ComPtr<notifications::IToastNotifier> notifier {};
         if (SUCCEEDED(result))
             result = toast_notifier(identity.aumid, notifier);
@@ -519,12 +597,39 @@ namespace luil {
             remove_orphan_images(directory, {});
         return succeeded();
     }
+
+    bool notification_launch(const std::span<const std::u8string> arguments) noexcept
+    {
+        for (const std::u8string& argument : arguments)
+        {
+            if (same_flag(argument, win32::activator_flag) || same_flag(argument, L"-Embedding") || same_flag(argument, L"/Embedding"))
+                return true;
+        }
+        return false;
+    }
 }
 
 namespace luil::win32 {
     platform_result apply_app_identity(const app_identity& identity, const std::u8string_view fallback_display_name)
     {
-        const std::optional<identity_registry> registry { make_identity_registry(identity, fallback_display_name) };
+        // 활성화기 명령 줄이 이 실행 파일을 가리킨다. 실행 파일을 옮기면 다음 실행이 고쳐 쓴다.
+        std::wstring executable(MAX_PATH, L'\0');
+        for (;;)
+        {
+            const DWORD written { GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())) };
+            if (written == 0)
+            {
+                executable.clear();
+                break;
+            }
+            if (written < executable.size())
+            {
+                executable.resize(written);
+                break;
+            }
+            executable.resize(executable.size() * 2);
+        }
+        const std::optional<identity_registry> registry { make_identity_registry(identity, fallback_display_name, executable) };
         const std::optional<std::wstring> aumid { utf8_to_utf16(identity.id).value };
         if (registry.has_value() == false || aumid.has_value() == false)
             return failure(u8"The app identity id is empty, too long, or contains spaces, control characters or backslashes.");
@@ -558,7 +663,8 @@ namespace luil::win32 {
             const std::lock_guard lock { state.mutex };
             state.aumid = *aumid;
             state.identity_error = result.ok() ? std::u8string {} : result.error;
-            state.activator = false;
+            state.activator = identity.activator;
+            state.clsid = activator_clsid(identity.id).value_or(GUID {});
             state.available = available;
             state.image_directory = directory;
         }
@@ -585,6 +691,31 @@ namespace luil::win32 {
             PostMessageW(window, notification_event_message, 0, 0);
     }
 
+    void set_notification_launch(const bool launched) noexcept
+    {
+        launch_pending.store(launched);
+    }
+
+    void register_notification_activator() noexcept
+    {
+        center_state& state { center() };
+        const std::lock_guard lock { state.mutex };
+        if (state.activator == false || state.available == false || state.activator_cookie.has_value())
+            return;
+        // UI thread STA에서 건다. COM이 `Activate`를 이 thread의 메시지 펌프로 보낸다. COM이 없는 thread면 실패하고
+        // 떠 있는 동안의 눌림은 `Activated`로 받는다.
+        try
+        {
+            const ComPtr<activator_factory> factory { Microsoft::WRL::Make<activator_factory>() };
+            DWORD cookie { 0 };
+            if (factory != nullptr && SUCCEEDED(CoRegisterClassObject(state.clsid, factory.Get(), CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE, &cookie)))
+                state.activator_cookie = cookie;
+        }
+        catch (...)
+        {
+        }
+    }
+
     void detach_notification_window(const HWND window) noexcept
     {
         HWND expected { window };
@@ -594,6 +725,10 @@ namespace luil::win32 {
         {
             center_state& state { center() };
             const std::lock_guard lock { state.mutex };
+            // 끝나는 중의 클릭은 COM이 새 프로세스로 띄운다. 그 프로세스가 둘째면 앱의 인자 넘기기 길로 표식이 온다.
+            if (state.activator_cookie.has_value())
+                static_cast<void>(CoRevokeClassObject(*state.activator_cookie));
+            state.activator_cookie.reset();
             for (auto& entry : state.toasts)
                 release_handlers(entry.second);
             state.toasts.clear();

@@ -458,6 +458,13 @@ namespace luil {
         return succeeded();
     }
 
+    bool notification_launch(const std::span<const std::u8string> arguments) noexcept
+    {
+        // Android의 알림은 인자가 아니라 intent extra로 앱을 띄운다.
+        static_cast<void>(arguments);
+        return false;
+    }
+
     platform_result close_all_notifications()
     {
         const notification_scope scope {};

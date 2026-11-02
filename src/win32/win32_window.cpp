@@ -832,6 +832,9 @@ namespace luil::win32 {
                 publish_instance_mark();
                 // OS 알림의 사건을 이 창이 받는다. 앱 객체가 서기 전에 온 사건은 대기열에 있다가 곧 나간다.
                 attach_notification_window(window_);
+                // 꺼진 앱의 알림 클릭도 받도록 활성화기를 건다. 둘째 인스턴스는 걸지 않는다.
+                if (config_.identity.activator && (environment_.instance == nullptr || environment_.instance->primary()))
+                    register_notification_activator();
                 // 클립보드가 바뀌면 앱에 알린다 (잘라 둔 항목의 표시를 거둘 때를 안다).
                 // 실패해도 알림만 없을 뿐 클립보드 읽기·쓰기는 그대로다.
                 static_cast<void>(AddClipboardFormatListener(window_));
@@ -3376,6 +3379,9 @@ namespace luil::win32 {
             }
             if (config.smoke_test == false)
             {
+                // 알림 클릭이 띄운 실행이면 활성화기의 첫 눌림이 `launched`다.
+                if (const std::optional<std::vector<std::u8string>> arguments { command_line_arguments() }; arguments.has_value())
+                    set_notification_launch(notification_launch(*arguments));
                 if (const platform_result applied { apply_app_identity(config.identity, config.caption.title) }; applied.ok() == false)
                 {
                     if (const auto wide_error { utf8_to_utf16(applied.error) }; wide_error.value.has_value())

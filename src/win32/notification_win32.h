@@ -22,10 +22,18 @@ namespace luil::win32 {
     // 식별이 서고 알림 개체를 얻었는가 (`ui_platform_capabilities::notifications`).
     [[nodiscard]] bool notifications_available() noexcept;
 
+    // 이 실행이 알림 클릭으로 떴는지 적는다 (`notification_launch`). 활성화기의 첫 눌림이 `launched`로 가져간다.
+    void set_notification_launch(bool launched) noexcept;
+
+    // 활성화기의 클래스 개체를 건다 (결정 4의 길 b). 주 창 thread(STA)에서 사건 받는 창을 단 뒤 부른다.
+    //  - 식별이 활성화기를 켰고 알림 개체를 얻었을 때만 건다. 둘째 인스턴스는 부르지 않는다 (COM이 어느 쪽으로 보낼지 모른다).
+    //  - 걸면 그 뒤 올리는 토스트는 `Activated`를 잇지 않는다. 푸는 것은 `detach_notification_window`다.
+    void register_notification_activator() noexcept;
+
     // 사건을 받을 주 창을 단다. 대기열에 이미 사건이 있으면 곧 신호를 게시한다.
     void attach_notification_window(HWND window) noexcept;
-    // 그 창을 뗀다. host를 거두기 전에 부른다. 쥔 토스트의 처리기를 풀고, 활성화기가 없는 식별이면 이 앱의 알림을 거둔다
-    // (꺼진 뒤의 클릭은 받을 곳이 없다).
+    // 그 창을 뗀다. host를 거두기 전에 부른다. 활성화기의 클래스 개체와 쥔 토스트의 처리기를 풀고, 활성화기가 없는 식별이면
+    // 이 앱의 알림을 거둔다 (꺼진 뒤의 클릭은 받을 곳이 없다).
     void detach_notification_window(HWND window) noexcept;
 
     // UI thread가 비울 사건 대기열이다.

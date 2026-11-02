@@ -4,6 +4,7 @@
 #include "luil/ui/image_element.h"
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -72,4 +73,9 @@ namespace luil {
     [[nodiscard]] platform_result close_notification(std::u8string_view id);
     // 이 앱이 올린 알림을 모두 거둔다.
     [[nodiscard]] platform_result close_all_notifications();
+    // 이 실행이 알림 클릭으로 뜬 것인가다 (Windows 활성화기의 표식 `-luil-notification`과 COM이 덧붙이는 `-Embedding`).
+    //  - 앱은 이때 인자를 파일로 읽지 않는다. 첫째가 끝나는 중에 COM이 띄운 둘째는 이 표식을 첫째에 넘길 수 있어
+    //    (`single_instance::send_to_primary`) 받은 인자(`instance_arguments`)를 거를 때도 쓴다.
+    //  - Android는 늘 거짓이다. 콜드 스타트 눌림은 `notification_event::launched`로 온다.
+    [[nodiscard]] bool notification_launch(std::span<const std::u8string> arguments) noexcept;
 }

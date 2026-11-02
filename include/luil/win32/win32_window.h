@@ -195,6 +195,10 @@ namespace luil::win32 {
         // 앱 아이콘 파일(.png·.ico)의 절대 경로다. 비면 적지 않는다. 실행 파일 리소스는 가리킬 수 없다.
         std::u8string icon_path {};
         // 꺼진 앱도 알림 클릭으로 띄운다 (COM 활성화기, 결정 4).
+        //  - 참이면 `CustomActivator`와 `HKCU\Software\Classes\CLSID\{clsid}\LocalServer32`(`"<실행 파일>" -luil-notification`)를
+        //    쓰고, 주 창이 서면 그 CLSID의 클래스 개체를 건다. CLSID는 id에서 이름 기반 UUID(v5)로 짓는다.
+        //  - 꺼진 앱의 알림을 누르면 COM이 그 명령 줄로 앱을 띄운다. 앱은 `notification_launch`로 그 실행을 알아본다.
+        //  - 거짓이면 떠 있는 동안의 눌림만 받고, 창을 거둘 때 이 앱의 알림을 거둔다.
         bool activator { true };
     };
 

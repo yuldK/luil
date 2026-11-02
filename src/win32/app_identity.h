@@ -2,7 +2,11 @@
 
 #include "luil/win32/win32_window.h"
 
+#include <windows.h>
+
+#include <cstddef>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,6 +30,21 @@ namespace luil::win32 {
         [[nodiscard]] bool operator==(const registry_value&) const = default;
     };
 
+    // 활성화기 CLSID를 짓는 이름 공간이다 (결정 3). luil이 한 번 고른 값이라 바꾸면 모든 앱의 CLSID가 바뀐다.
+    inline constexpr GUID activator_namespace { 0x6c75696cu, 0x9a1eu, 0x4b5cu, { 0x8d, 0x27, 0x3e, 0x51, 0xa0, 0x6b, 0x94, 0xc2 } };
+
+    // RFC 4122 이름 기반 UUID 판 5다 (SHA-1). 이름 공간과 이름 바이트가 같으면 늘 같다. SHA-1을 얻지 못하면 빈 값이다.
+    [[nodiscard]] std::optional<GUID> name_based_uuid(const GUID& name_space, std::span<const std::byte> name);
+
+    // AUMID의 UTF-8 바이트로 지은 활성화기 CLSID다. 앱이 GUID를 고르지 않아 예제를 베낀 두 앱이 부딪히지 않는다.
+    [[nodiscard]] std::optional<GUID> activator_clsid(std::u8string_view id);
+
+    // `{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}` 꼴의 대문자 글이다.
+    [[nodiscard]] std::wstring guid_text(const GUID& value);
+
+    // 활성화기 명령 줄의 표식이다. COM이 이 줄로 앱을 띄우면 `notification_launch`가 참이다.
+    inline constexpr std::wstring_view activator_flag { L"-luil-notification" };
+
     // `HKCU` 아래에 쓸 것이다.
     struct identity_registry
     {
@@ -35,12 +54,18 @@ namespace luil::win32 {
         std::vector<registry_value> values {};
         // 있으면 지울 값 이름이다. 앞 실행이 쓴 것을 이번 설정이 뺐을 때다.
         std::vector<std::wstring> removed {};
+        // 활성화기의 `Software\Classes\CLSID\{clsid}\LocalServer32`다. 활성화기가 없으면 비었다.
+        std::wstring server_key {};
+        // 그 키의 기본 값이다: `"<실행 파일>" -luil-notification`.
+        std::wstring server_command {};
     };
 
     // 식별에서 레지스트리 항목을 짓는다. id가 규칙 밖이거나 글을 UTF-16으로 옮기지 못하면 빈 값이다.
     //  - `DisplayName`은 `display_name`, 비면 `fallback_display_name`, 그것도 비면 id다.
     //  - `IconUri`는 `icon_path`가 있을 때만 쓰고 없으면 지울 값이다.
-    [[nodiscard]] std::optional<identity_registry> make_identity_registry(const app_identity& identity, std::u8string_view fallback_display_name);
+    //  - `activator`면 `CustomActivator`에 CLSID를 쓰고 `executable`(실행 파일의 절대 경로)을 띄울 서버 키를 짓는다.
+    //    아니면 `CustomActivator`가 지울 값이다.
+    [[nodiscard]] std::optional<identity_registry> make_identity_registry(const app_identity& identity, std::u8string_view fallback_display_name, std::wstring_view executable);
 
     struct identity_write_result
     {
