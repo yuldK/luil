@@ -1,6 +1,7 @@
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
+#include "mobile_demo/zoom_page.h"
 
 #include "luil/ui/ui_interaction.h"
 
@@ -92,6 +93,57 @@ namespace {
         const mobile_demo::window_metrics_intent window { .width = 400.0f, .height = 800.0f, .scale = 1.0f, .reduce_motion = reduce_motion };
         auto content { page.build(400.0f, 1.0f, window) };
         return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, content.height }, 1.0f);
+    }
+
+    // 400x800 창에서 조립해 배치한 확대 보기 페이지다 (배율 1).
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> zoom_tree(mobile_demo::zoom_page& page)
+    {
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(page.build(400.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 400.0f, 800.0f }, 1.0f));
+    }
+
+    // UIA가 되읽는 이름이 화면의 글과 같다.
+    [[nodiscard]] std::u8string zoom_text(mobile_demo::zoom_page& page, const std::u8string& owner)
+    {
+        const auto tree { zoom_tree(page) };
+        const auto* const label { tree->find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] luil::rect_f zoom_node_bounds(mobile_demo::zoom_page& page, const int index)
+    {
+        const auto tree { zoom_tree(page) };
+        const auto* const node { tree->find({ mobile_demo::kind_text, mobile_demo::to_u8(index) }) };
+        REQUIRE(node != nullptr);
+        return node->bounds();
+    }
+
+    // 페이지가 받은 메시지 수를 센다. 컨트롤러가 낸 동작 가운데 앱 메시지만 페이지로 돌려준다.
+    int deliver_actions(mobile_demo::zoom_page& page, const std::vector<luil::input_action>& actions)
+    {
+        int delivered { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
+    }
+
+    // 단추를 눌러 나온 메시지를 페이지에 돌려준다. 실제 입력 경로를 그대로 탄다. 돌려준 수를 돌려준다.
+    int press_zoom_button(mobile_demo::zoom_page& page, const std::u8string& owner)
+    {
+        const auto tree { zoom_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        return deliver_actions(page, controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }));
     }
 
     // 요청을 기록하고 사람이 고른 차례로 답한다. 실제 페이지의 send·cancel·응답 처리 경로를 그대로 쓴다.
@@ -477,4 +529,93 @@ TEST_CASE("SMB rejected and replaced requests cannot revive an old listing", "[s
     REQUIRE(fixture.has_entry(u8"late.txt") == false);
     deliver(fixture.page, mobile_demo::smb_entry_intent { u8"late.txt", false });
     REQUIRE(fixture.requests.size() == 4u);
+}
+
+TEST_CASE("The zoom page names its rotation and the buttons repeat the message the keys send", "[mobile-demo][zoom][rotate]")
+{
+    mobile_demo::zoom_page page {};
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
+    // 오른쪽 단추를 두 번 누르면 시계 방향으로 30도다.
+    REQUIRE(press_zoom_button(page, u8"zoom-rotate-right") == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 15°");
+    REQUIRE(press_zoom_button(page, u8"zoom-rotate-right") == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 30°");
+    // 왼쪽 단추를 세 번 누르면 -15도다.
+    for (int count { 0 }; count < 3; ++count)
+        REQUIRE(press_zoom_button(page, u8"zoom-rotate-left") == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 -15°");
+    // 0도 복귀는 지금 각도를 되돌린다. 이미 0도면 키처럼 메시지가 없다.
+    REQUIRE(press_zoom_button(page, u8"zoom-rotate-reset") == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
+    REQUIRE(press_zoom_button(page, u8"zoom-rotate-reset") == 0);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
+}
+
+TEST_CASE("Rotating the zoom page moves the nodes while their text stays upright", "[mobile-demo][zoom][rotate]")
+{
+    mobile_demo::zoom_page page {};
+    const luil::rect_f first { zoom_node_bounds(page, 0) };
+    REQUIRE(press_zoom_button(page, u8"zoom-rotate-right") == 1);
+    const luil::rect_f turned { zoom_node_bounds(page, 0) };
+    // 자리는 옮겨 가고 글 상자의 크기는 그대로다.
+    REQUIRE((turned.x != Catch::Approx(first.x).margin(1.0e-3) || turned.y != Catch::Approx(first.y).margin(1.0e-3)));
+    REQUIRE(turned.width == Catch::Approx(first.width));
+    REQUIRE(turned.height == Catch::Approx(first.height));
+    // 0도로 돌아오면 처음 자리다.
+    REQUIRE(press_zoom_button(page, u8"zoom-rotate-reset") == 1);
+    const luil::rect_f back { zoom_node_bounds(page, 0) };
+    REQUIRE(back.x == Catch::Approx(first.x).margin(1.0e-3));
+    REQUIRE(back.y == Catch::Approx(first.y).margin(1.0e-3));
+}
+
+TEST_CASE("Shift with the arrows and Home rotate the zoom page through the focused view", "[mobile-demo][zoom][rotate]")
+{
+    mobile_demo::zoom_page page {};
+    luil::interaction_controller controller {};
+    // 키는 발행본 위에서 처리된다. 메시지를 받을 때마다 새 발행본을 건넨다.
+    const auto key = [&page, &controller](const luil::key_code code) {
+        const int delivered { deliver_actions(page, controller.process(luil::key_pressed_event { .key = code, .shift = true })) };
+        controller.set_tree(zoom_tree(page));
+        return delivered;
+    };
+    controller.set_tree(zoom_tree(page));
+    static_cast<void>(controller.process(luil::access_focus_event { .target = { luil::ui_element_kind::zoom_view, u8"diagram" } }));
+    REQUIRE(key(luil::key_code::arrow_right) == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 15°");
+    REQUIRE(key(luil::key_code::arrow_left) == 1);
+    REQUIRE(key(luil::key_code::arrow_left) == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 -15°");
+    REQUIRE(key(luil::key_code::home) == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
+    REQUIRE(key(luil::key_code::home) == 0);
+}
+
+TEST_CASE("Two fingers turning the zoom page show the angle they turned", "[mobile-demo][zoom][rotate]")
+{
+    mobile_demo::zoom_page page {};
+    const auto tree { zoom_tree(page) };
+    const auto* const view { tree->find({ luil::ui_element_kind::zoom_view, u8"diagram" }) };
+    REQUIRE(view != nullptr);
+    const luil::rect_f box { view->bounds() };
+    const float x { box.x + box.width / 2.0f };
+    const float y { box.y + box.height / 2.0f };
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = x - 100.0f, .y = y, .device = luil::pointer_device::touch, .pointer_id = 1 }));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { .x = x + 100.0f, .y = y, .device = luil::pointer_device::touch, .pointer_id = 2 }));
+    // 오른쪽 손가락이 40 내려가면 선이 atan(0.2) = 11.3도 시계 방향으로 돈다: 이동, 확대, 회전이 차례로 온다.
+    const auto actions { controller.process(luil::pointer_moved_event { .x = x + 100.0f, .y = y + 40.0f, .device = luil::pointer_device::touch, .pointer_id = 2, .in_contact = true }) };
+    REQUIRE(deliver_actions(page, actions) == 3);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 11°");
+}
+
+TEST_CASE("Turning to another zoom page stands the page upright", "[mobile-demo][zoom][rotate]")
+{
+    mobile_demo::zoom_page page {};
+    REQUIRE(press_zoom_button(page, u8"zoom-rotate-right") == 1);
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 15°");
+    // 왼쪽으로 쓸어 다음 쪽으로 간다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::edge_swipe_intent { luil::zoom_edge_swipe { .horizontal = -1 } } }));
+    REQUIRE(zoom_text(page, u8"zoom-page-number") == u8"쪽 2 / 5");
+    REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
 }

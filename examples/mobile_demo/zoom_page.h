@@ -19,6 +19,12 @@ namespace mobile_demo {
     {
         float value { 1.0f };
     };
+    // 도면을 `degrees`만큼 돌리자는 메시지다. 두 손가락, Shift+←/→/Home, 단추가 같은 것을 보낸다.
+    struct rotate_intent
+    {
+        float degrees { 0.0f };
+        luil::zoom_point anchor {};
+    };
     // 보기가 알린 경계 쓸기다. 가로면 쪽을 넘긴다.
     struct edge_swipe_intent
     {
