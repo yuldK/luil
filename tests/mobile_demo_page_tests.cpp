@@ -3,6 +3,8 @@
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
 
+#include "luil/ui/ui_platform.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -109,6 +111,37 @@ TEST_CASE("The device page states whether the system reduces motion", "[mobile-d
         REQUIRE(spinner->accessibility().role == luil::access_role::progress);
         REQUIRE(spinner->bounds().y > state->bounds().y);
     }
+}
+
+TEST_CASE("The device page says whether the platform has a taskbar", "[mobile-demo][taskbar]")
+{
+    // 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    mobile_demo::device_page page {};
+    for (const bool capable : { false, true })
+    {
+        CAPTURE(capable);
+        luil::ui_platform platform { previous };
+        platform.capabilities.taskbar = capable;
+        luil::set_ui_platform(platform);
+        const auto tree { device_tree(page, false) };
+        REQUIRE(tree.find({ mobile_demo::kind_text, u8"taskbar-heading" }) != nullptr);
+        const auto* const none { tree.find({ mobile_demo::kind_text, u8"taskbar-none" }) };
+        const auto* const note { tree.find({ mobile_demo::kind_text, u8"taskbar-note" }) };
+        if (capable)
+        {
+            REQUIRE(none == nullptr);
+            REQUIRE(note != nullptr);
+        }
+        else
+        {
+            // 능력 플래그가 거짓인 플랫폼은 항목 대신 이유를 보인다 (`haptic-none` 등과 같은 방식이다).
+            REQUIRE(note == nullptr);
+            REQUIRE(none != nullptr);
+            REQUIRE(none->accessibility().name == u8"이 플랫폼에는 작업 표시줄이 없다.");
+        }
+    }
+    luil::set_ui_platform(previous);
 }
 
 TEST_CASE("The demo clears an interrupted adaptive sheet drag while preserving its stop and list", "[ui][sheet][mobile-demo]")
