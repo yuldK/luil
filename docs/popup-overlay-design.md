@@ -158,3 +158,11 @@ MenuItem 역할을 유지한다. 라디오가 있는 메뉴만 명시적 선택 
 
 `shortcut_text`는 오른쪽 정렬된 표시 열이다. 실행 바인딩은 하지 않는다. `width_for`는
 한 행에서 필요한 라벨과 단축키 폭을 함께 재고 가장 긴 행의 폭을 돌려준다.
+
+폭은 그리는 배율로 잰다. 항목의 글은 `scaled_font_size(글자 크기, 배율)`의 물리 크기로 그려지므로
+`width_for(config, measurer, font_size, scale)`도 같은 크기로 재고 `scale`로 나눈 논리 폭을 돌려준다
+(`scale`을 비우면 1). 글자 advance를 정수로 맞추는 글꼴은 `폭(12 * 1.1)`이 `폭(12) * 1.1`과 달라서,
+논리 크기로 재면 항목 자리에 글이 꼭 맞는 가장 긴 항목이 배율 1.1부터 말줄임된다. 글 폭마다 논리
+픽셀로 올림한다. 시스템 글자 크기 표는 `scaled_font_size`가 이미 반영하므로 `window_metrics::text_scale`을
+따로 곱하지 않는다. `make_menu_popup`은 tree를 배치하는 `menu_popup_config::scale`을 그대로 넘기므로 앱이
+따로 할 일이 없다. 필드 아래 메뉴와 분할 버튼 화살표 메뉴가 이 길을 쓴다.

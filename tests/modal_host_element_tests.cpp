@@ -10,7 +10,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -288,5 +290,183 @@ TEST_CASE("A modal host can wear the dialog surface for the app", "[ui][modal]")
         // 흡수는 그대로 내용의 몫이다. 표면이 생겼다고 dialog의 빈 자리가 뒤로 새면
         // 바깥 클릭으로 닫히는 dialog가 자기 몸을 눌러도 닫힌다.
         REQUIRE(content->hit_opaque());
+    }
+}
+
+namespace {
+    // 크기를 묻는 말에 정해 둔 답을 하고 무엇을 물었는지 남기는 내용이다.
+    class sized_content final : public luil::ui_element
+    {
+    public:
+        sized_content(luil::ui_element_id id, std::optional<luil::size_f> answer)
+            : ui_element { std::move(id) }
+            , answer_ { answer }
+        {
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+
+        [[nodiscard]] std::optional<luil::size_f> preferred_size(const luil::measure_context& context, const float available_width) const override
+        {
+            ++asks;
+            asked_width = available_width;
+            asked_scale = context.scale;
+            asked_measurer = context.measurer;
+            return answer_;
+        }
+
+        mutable int asks { 0 };
+        mutable float asked_width { 0.0f };
+        mutable float asked_scale { 0.0f };
+        mutable const luil::text_measurer* asked_measurer { nullptr };
+
+    private:
+        std::optional<luil::size_f> answer_ {};
+    };
+
+    const luil::ui_element_id sized_id { kind_dialog, u8"sized" };
+
+    struct placed_host
+    {
+        std::unique_ptr<luil::modal_host_element> host {};
+        const sized_content* content { nullptr };
+    };
+
+    // 내용을 넣고 `slot`(물리 픽셀)에 배치한 host다.
+    [[nodiscard]] placed_host place_sized(const luil::modal_host_config& config, const std::optional<luil::size_f> answer, const luil::rect_f& slot, const float scale, const luil::text_measurer* measurer = nullptr)
+    {
+        auto content { std::make_unique<sized_content>(sized_id, answer) };
+        const sized_content* const observed { content.get() };
+        auto host { std::make_unique<luil::modal_host_element>(config) };
+        host->set_content(std::move(content));
+        host->arrange({ .slot = slot, .scale = scale, .measurer = measurer });
+        return { std::move(host), observed };
+    }
+}
+
+TEST_CASE("A modal host that fits its height asks the content, at the width it will have", "[ui][modal][fit]")
+{
+    luil::modal_host_config config {};
+    config.content_width = 100.0f;
+    config.content_height = 40.0f;
+    config.fit_height = true;
+
+    const luil::text_measurer measurer { [](const std::u8string_view text, const float size) { return static_cast<float>(text.size()) * size; } };
+    const placed_host placed { place_sized(config, luil::size_f { 100.0f, 70.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f, &measurer) };
+
+    // 높이는 내용의 답이고 폭은 설정이다. 가운데에 놓이는 것은 전과 같다.
+    REQUIRE(placed.content->asks == 1);
+    REQUIRE(placed.content->asked_width == 100.0f);
+    // 측정 문맥이 배치 문맥이다 — 같은 배율과 같은 측정기다.
+    REQUIRE(placed.content->asked_scale == 2.0f);
+    REQUIRE(placed.content->asked_measurer == &measurer);
+    REQUIRE(placed.content->bounds().width == 200.0f);
+    REQUIRE(placed.content->bounds().height == 140.0f);
+    REQUIRE(placed.content->bounds().x == 100.0f);
+    REQUIRE(placed.content->bounds().y == 30.0f);
+
+    SECTION("내용이 답하지 않으면 content_height다")
+    {
+        const placed_host silent { place_sized(config, std::nullopt, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        REQUIRE(silent.content->asks == 1);
+        REQUIRE(silent.content->bounds().height == 80.0f);
+        REQUIRE(silent.content->bounds().y == 60.0f);
+    }
+
+    SECTION("끈 host는 내용을 묻지 않고 content_height를 쓴다")
+    {
+        config.fit_height = false;
+        const placed_host plain { place_sized(config, luil::size_f { 100.0f, 70.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        REQUIRE(plain.content->asks == 0);
+        REQUIRE(plain.content->bounds().height == 80.0f);
+    }
+
+    SECTION("밀어낸 양은 높이가 달라져도 그대로 더해진다")
+    {
+        config.offset_x = 30.0f;
+        config.offset_y = -10.0f;
+        const placed_host moved { place_sized(config, luil::size_f { 100.0f, 70.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        REQUIRE(moved.content->bounds().x == 160.0f);
+        REQUIRE(moved.content->bounds().y == 10.0f);
+    }
+}
+
+TEST_CASE("A modal host with a surface asks the content inside it, not the surface", "[ui][modal][fit]")
+{
+    luil::modal_host_config config {};
+    config.content_width = 100.0f;
+    config.content_height = 40.0f;
+    config.fit_height = true;
+    config.surface = luil::panel_config {};
+
+    const placed_host placed { place_sized(config, luil::size_f { 100.0f, 60.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 1.0f) };
+
+    // panel은 크기를 답하지 않는다. 표면이 있어도 앱이 넣은 내용의 답이 높이가 된다.
+    REQUIRE(placed.content->asks == 1);
+    REQUIRE(placed.host->children().size() == 2u);
+    const luil::ui_element& surface { *placed.host->children()[1] };
+    REQUIRE(surface.bounds().height == 60.0f);
+    REQUIRE(surface.bounds().y == 70.0f);
+    REQUIRE(placed.content->bounds().height == 60.0f);
+    REQUIRE(placed.content->bounds().y == 70.0f);
+}
+
+TEST_CASE("A modal host trims its content to the room inside the edge margin", "[ui][modal][fit]")
+{
+    luil::modal_host_config config {};
+    config.content_width = 300.0f;
+    config.content_height = 40.0f;
+    config.fit_height = true;
+    config.edge_margin = 16.0f;
+
+    // 자리는 논리 200 x 100이다. 여백 두 배를 빼면 168 x 68이다.
+    const placed_host placed { place_sized(config, luil::size_f { 300.0f, 150.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+
+    // 폭을 먼저 자르고 그 폭으로 묻는다. 답한 높이도 자른다.
+    REQUIRE(placed.content->asked_width == 168.0f);
+    REQUIRE(placed.content->bounds().width == 336.0f);
+    REQUIRE(placed.content->bounds().height == 136.0f);
+    REQUIRE(placed.content->bounds().x == 32.0f);
+    REQUIRE(placed.content->bounds().y == 32.0f);
+
+    SECTION("자리에 넉넉하면 자르지 않는다")
+    {
+        config.content_width = 100.0f;
+        const placed_host roomy { place_sized(config, luil::size_f { 100.0f, 30.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        REQUIRE(roomy.content->asked_width == 100.0f);
+        REQUIRE(roomy.content->bounds().width == 200.0f);
+        REQUIRE(roomy.content->bounds().height == 60.0f);
+    }
+
+    SECTION("묻지 않는 host도 여백이 있으면 자른다")
+    {
+        config.fit_height = false;
+        const placed_host plain { place_sized(config, std::nullopt, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        REQUIRE(plain.content->asks == 0);
+        REQUIRE(plain.content->bounds().width == 336.0f);
+        REQUIRE(plain.content->bounds().height == 80.0f);
+    }
+
+    SECTION("여백이 0이면 자르지 않는다")
+    {
+        config.edge_margin = 0.0f;
+        const placed_host loose { place_sized(config, luil::size_f { 300.0f, 150.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        REQUIRE(loose.content->asked_width == 300.0f);
+        REQUIRE(loose.content->bounds().width == 600.0f);
+        REQUIRE(loose.content->bounds().height == 300.0f);
+    }
+
+    SECTION("자리가 여백보다 좁아도 음수 크기는 없다")
+    {
+        const placed_host tiny { place_sized(config, luil::size_f { 300.0f, 150.0f }, { 0.0f, 0.0f, 20.0f, 20.0f }, 1.0f) };
+        REQUIRE(tiny.content->bounds().width == 0.0f);
+        REQUIRE(tiny.content->bounds().height == 0.0f);
     }
 }

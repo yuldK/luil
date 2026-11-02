@@ -47,11 +47,12 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_code_input { luil::application_element_kind(43) };
     // 줄 나눔 정책을 시연하는 여러 줄 칸이다 (demo/line_break_sample.h).
     constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(44) };
+    // 기본 페이지의 둘째 확인 대화(긴 본문·단추 셋·확인 칸)를 여는 단추다.
+    constexpr luil::ui_element_kind kind_dialog_details_open { luil::application_element_kind(45) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
-    constexpr luil::ui_element_kind kind_dialog { luil::application_element_kind(12) };
-    constexpr luil::ui_element_kind kind_dialog_cancel { luil::application_element_kind(13) };
-    constexpr luil::ui_element_kind kind_dialog_confirm { luil::application_element_kind(14) };
+    // 확인 대화 상자의 scrim·내용·단추는 라이브러리 kind(modal_host·message_box·message_box_button)가 짓는다.
+    // 11~14는 옛 손조립 대화의 자리였다. 당겨 메우지 않는다.
     constexpr luil::ui_element_kind kind_theme { luil::application_element_kind(15) };
     constexpr luil::ui_element_kind kind_accent { luil::application_element_kind(16) };
     // 배치만 하는 컨테이너들이다. 상호작용이 없어 owner로만 구분한다.

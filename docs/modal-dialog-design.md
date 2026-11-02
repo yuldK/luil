@@ -76,11 +76,22 @@ modal.surface = surface;
 
 편의 기능이다. 앱이 직접 `panel_element`로 content를 감싸도 화면은 같다. 다만 dialog를 세우는 앱이 예외 없이 같은 다섯 줄을 적고 있었고([examples/demo/basics_page.cpp](../examples/demo/basics_page.cpp)의 dialog), 되풀이되는 다섯 줄은 언젠가 한 앱에서만 모서리 반지름이 달라진다. 그래서 설정 한 줄로 옮겼다.
 
-표면은 가운데 자리를 받고 content는 그 안에서 같은 자리를 물려받는다. 크기는 여전히 `content_width`와 `content_height`가 정한다. Host는 content 크기를 재지 않는다 — framework에 측정 단계가 없어 element가 자기 크기를 말할 수 없고, host가 추측하면 그 추측이 앱의 배치와 어긋난다. 포인터 흡수도 그대로 content의 몫이다. panel은 자기 slot을 content에게 통째로 물려주므로 표면이 content보다 넓은 자리가 생기지 않는다.
+표면은 가운데 자리를 받고 content는 그 안에서 같은 자리를 물려받는다. 크기는 기본으로 `content_width`와 `content_height`가 정한다. `fit_height`를 켜지 않은 host(기본)는 content 크기를 재지 않는다. host가 추측하면 그 추측이 앱의 배치와 어긋나기 때문이다. 켠 host는 추측하지 않고 content에게 묻는다([아래 절](#내용에게-높이-묻기)). 포인터 흡수도 그대로 content의 몫이다. panel은 자기 slot을 content에게 통째로 물려주므로 표면이 content보다 넓은 자리가 생기지 않는다.
 
 표면 panel은 host가 조립하는 내부 부품이라 앱이 찾는 id를 갖지 않는다. 이름으로 찾을 대상은 앱이 만든 content다.
 
 표면이 바탕에서 떠 보이려면 `panel_config`의 `shadow`(바깥으로 드리우는 그림자의 진하기)와 `border`(둘레 1px의 색 선택자)를 준다. dialog만의 것이 아니라 panel의 일반 필드다 — 카드가 바탕과 같은 색이면 테두리가 있어야 카드로 읽히고, overlay처럼 상자 바깥에 자리가 있는 곳이라야 그림자가 보인다. 그리는 순서는 그림자 → 바탕 → 내용 → 테두리다.
+
+## 내용에게 높이 묻기
+
+`modal_host_config`의 `fit_height`를 켜면 host가 배치할 때 content에게 높이를 묻는다(`ui_element::preferred_size`). 폭은 `content_width`를 아래 `edge_margin`으로 자른 값이고, 측정기·스타일 치수·배율은 그 배치의 `arrange_context`(`measure()`)에서 온다. 측정 문맥이 곧 배치 문맥이라 만들 때 잰 높이가 배치와 갈릴 수 없다. 앱은 창 크기도 측정기도 넘기지 않는다.
+
+- 표면이 있어도 표면이 아니라 앱이 넣은 content에게 묻는다. panel은 크기를 답하지 않는다.
+- content가 답하지 않으면(nullopt) `content_height`다. 끈 host는 content를 묻지 않는다.
+- `edge_margin`이 0보다 크면 content의 폭과 높이를 host 자리에서 이 여백(논리 픽셀)의 두 배를 뺀 값으로 자른다. 폭을 먼저 자르고 그 폭으로 묻는다. 높이를 자르면 content가 그 높이를 받으므로 모자란 높이를 어떻게 줄일지는 content의 몫이다. 0(기본)이면 자르지 않는다. `fit_height`를 끈 host도 여백은 따른다.
+- `offset_x`·`offset_y`는 자르지 않는다. 위의 앱 상태 규칙 그대로다.
+
+표준 확인 대화 상자([message-box-design.md](message-box-design.md))가 이 두 칸을 켜서 높이를 내용에서 얻는다. 직접 짠 대화 상자도 같은 칸을 쓸 수 있다.
 
 ## Focus trap
 
@@ -119,7 +130,7 @@ Modal host는 자신이 속한 한 표면의 입력만 가둔다. 활성 보조 
 - `scrim_background`가 있으면 `scrim_opacity`는 쓰이지 않는다.
 - Content의 빈 영역은 outside click으로 취급되지 않는다. 표면이 있어도 흡수는 content가 한다.
 - `surface`가 비어 있으면 표면 element를 만들지 않고 배치도 달라지지 않는다.
-- Host는 content 크기를 재지 않고 offset도 clamp하지 않는다.
+- `fit_height`를 켜지 않은 host는 content 크기를 재지 않고, host는 offset을 clamp하지 않는다. 기본 설정(`fit_height` 거짓, `edge_margin` 0)의 배치는 두 칸이 생기기 전과 같다.
 - 열림 상태와 offset은 앱 상태다.
 - Host는 focus trap, entry, return, dismiss를 함께 선언한다.
 - Trap 밖의 초점과 기본 버튼은 modal 범위에서 무효다.
@@ -128,4 +139,4 @@ Modal host는 자신이 속한 한 표면의 입력만 가둔다. 활성 보조 
 
 ## 검증 지침
 
-[modal_host_element_tests.cpp](../tests/modal_host_element_tests.cpp)는 scrim과 content hit, 가운데 배치, offset, trap 속성을 검증한다. 같은 파일이 scrim 선택자가 `scrim_opacity`를 대신한다는 것을 실제로 칠해진 픽셀로 확인하고, 표면이 host와 content 사이에 서면서도 배치와 흡수가 달라지지 않는다는 것과 표면이 없을 때의 배치가 그대로라는 것을 함께 잠근다. [panel_element_tests.cpp](../tests/panel_element_tests.cpp)는 표면 panel의 테두리가 내용 위에 서고 그림자가 상자 밖에만, 아래쪽이 더 진하게 드리우는 것을 픽셀로 잠근다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 Tab 가둠, 초점 진입과 복귀, Esc 우선순위, 기본 버튼, 여러 표면을 확인한다.
+[modal_host_element_tests.cpp](../tests/modal_host_element_tests.cpp)는 scrim과 content hit, 가운데 배치, offset, trap 속성을 검증한다. 같은 파일이 `fit_height`가 내용의 답을 높이로 쓰고(표면이 있어도 안쪽 내용에게 묻고, 답이 없으면 `content_height`), `edge_margin`이 폭과 높이를 자르며 0이면 자르지 않는다는 것도 잠근다. scrim 선택자가 `scrim_opacity`를 대신한다는 것을 실제로 칠해진 픽셀로 확인하고, 표면이 host와 content 사이에 서면서도 배치와 흡수가 달라지지 않는다는 것과 표면이 없을 때의 배치가 그대로라는 것을 함께 잠근다. [panel_element_tests.cpp](../tests/panel_element_tests.cpp)는 표면 panel의 테두리가 내용 위에 서고 그림자가 상자 밖에만, 아래쪽이 더 진하게 드리우는 것을 픽셀로 잠근다. [ui_interaction_tests.cpp](../tests/ui_interaction_tests.cpp)는 Tab 가둠, 초점 진입과 복귀, Esc 우선순위, 기본 버튼, 여러 표면을 확인한다.

@@ -5,6 +5,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -198,4 +200,38 @@ TEST_CASE("Combo keeps previous candidates for Enter while suggestions load", "[
     REQUIRE(swallowed.has_value());
     REQUIRE(swallowed->empty());
     REQUIRE(invalid == false);
+}
+
+TEST_CASE("The loading indicator of the suggestions is named in the default language unless the app names it", "[ui][combo][default-text]")
+{
+    // 받는 중 표시가 popup tree에 선 자리의 접근 이름을 읽는다. 없으면 빈 글이 아니라 표시 자체가 없는 것이다.
+    const auto loading_name = [](const luil::combo_box_config& config) -> std::optional<std::u8string> {
+        luil::combo_box_element combo { { luil::application_element_kind(0), u8"repo" }, {}, config };
+        combo.arrange({ { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f });
+        const luil::ui_popup popup { combo.suggestion_popup() };
+        // 닫혀 있으면 popup에 tree가 없다.
+        if (popup.tree == nullptr)
+            return std::nullopt;
+        const luil::ui_element* const loading { popup.tree->find({ luil::ui_element_kind::none, u8"repo:suggestions:loading" }) };
+        if (loading == nullptr)
+            return std::nullopt;
+        REQUIRE(loading->accessibility().role == luil::access_role::progress);
+        return loading->accessibility().name;
+    };
+
+    luil::combo_box_config config {};
+    config.open = true;
+    config.suggestions.loading = true;
+    REQUIRE(loading_name(config) == std::u8string { u8"추천 항목을 불러오는 중" });
+
+    // 영어 앱은 칸을 채운다.
+    config.loading_name = u8"Loading suggestions";
+    REQUIRE(loading_name(config) == std::u8string { u8"Loading suggestions" });
+
+    // 다 받았거나 닫혀 있으면 표시가 서지 않는다. 칸을 채워도 마찬가지다.
+    config.suggestions.loading = false;
+    REQUIRE(loading_name(config).has_value() == false);
+    config.suggestions.loading = true;
+    config.open = false;
+    REQUIRE(loading_name(config).has_value() == false);
 }

@@ -32,6 +32,7 @@
 | 진행률 | `progress_element` | [ui/progress_element.h](../include/luil/ui/progress_element.h) | [설명](value-step-design.md) |
 | 상태 배지 | `badge_element` | [ui/badge_element.h](../include/luil/ui/badge_element.h) | [설명](concepts/ui-element.md) |
 | 값 조절 | `slider_element` | [ui/slider_element.h](../include/luil/ui/slider_element.h) | [설명](value-step-design.md) · [자석](slider-magnet-design.md) |
+| 별점(별 몇 개로 점수 매기기, 같은 모양으로 평균 보이기) | `rating_element`, `rating_config`, `rating_precision` | [ui/rating_element.h](../include/luil/ui/rating_element.h) | [설명](rating-design.md) |
 | 세로·가로 배치 | `stack_element` | [ui/stack_element.h](../include/luil/ui/stack_element.h) | [설명](stack-expressiveness-design.md) |
 | 줄바꿈 배치 | `wrap_element` | [ui/wrap_element.h](../include/luil/ui/wrap_element.h) | [설명](stack-expressiveness-design.md) |
 | 행·열 칸 배치 (폼) | `grid_element` | [ui/grid_element.h](../include/luil/ui/grid_element.h) | [설명](stack-expressiveness-design.md#grid) |
@@ -65,6 +66,7 @@
 | 분할 버튼(본체 동작과 메뉴 열기) | `split_button_element`, `split_button_config` | [ui/split_button_element.h](../include/luil/ui/split_button_element.h) | [설명](split-button-design.md) |
 | 필드 아래 popup 자리·여는 키 | `place_field_popup`, `field_popup_key_handler` | [ui/field_popup.h](../include/luil/ui/field_popup.h) | [설명](split-button-design.md#필드-popup-열림-규약) |
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |
+| 확인 대화 상자(제목·본문·단추 행·확인 칸, 크기는 내용에서) | `make_message_box`, `message_box_config`, `message_box_ok` | [ui/message_box.h](../include/luil/ui/message_box.h) | [설명](message-box-design.md) |
 | 아래 시트·옆 시트·서랍 | `sheet_host_element` | [ui/sheet_host_element.h](../include/luil/ui/sheet_host_element.h) | [설명](sheet-design.md) |
 | 값 하나를 목표로 스프링처럼 움직이기 (놓은 속도에서 이어 출발) | `spring`, `spring_to`, `spring_release` | [ui/spring.h](../include/luil/ui/spring.h) | [설명](spring-design.md) |
 | 창 캡션 | `caption_element` | [ui/caption_element.h](../include/luil/ui/caption_element.h) | [설명](caption-button-design.md) |

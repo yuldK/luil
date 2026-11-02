@@ -250,7 +250,7 @@ namespace mobile_demo {
         // 뒤로 가기는 열린 dialog를 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
         // 두어 플랫폼의 기본 동작(앱을 떠나기)을 받는다. popup은 host가 그보다 먼저 닫는다.
         if (shown == page_basics && basics_.dialog_open())
-            frame->back = [] { return luil::make_app_action(dialog_intent { false }); };
+            frame->back = [action = basics_.back_action()] { return action; };
         else if (shown == page_sheets && sheets_.sheet_open())
             frame->back = [action = sheets_.back_action()] { return action; };
         else if (nested)

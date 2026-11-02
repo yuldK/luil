@@ -27,6 +27,7 @@ add_executable(luil_core_tests
     command_palette_tests.cpp
     content_layout_tests.cpp
     cursor_idle_tests.cpp
+    default_text_tests.cpp
     dialog_elements_tests.cpp
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
@@ -51,6 +52,7 @@ add_executable(luil_core_tests
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
+    message_box_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp
@@ -65,6 +67,7 @@ add_executable(luil_core_tests
     popup_reconcile_tests.cpp
     progress_element_tests.cpp
     raster_draw_tests.cpp
+    rating_element_tests.cpp
     renderer_host_tests.cpp
     renderer_policy_tests.cpp
     scroll_area_element_tests.cpp
@@ -138,7 +141,9 @@ target_sources(luil_core_tests PRIVATE
 # 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 파일 감시 묶음의 표시도
 # 서버·감시자 없이 검증한다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
+# 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
 target_sources(luil_core_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/basics_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/device_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/files_page.cpp"
@@ -147,9 +152,11 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/zoom_page.cpp"
+    mobile_demo_assets_stub.cpp
     secret_store_stub.cpp
     mobile_demo_page_tests.cpp)
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
+# 확대 보기 페이지는 도면 요소가 luil과 Skia 헤더만 써서 같은 목록에 오른다. 줌 단추 글을 바꾸는 단추를 검증한다.
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/workbench_page.cpp"
@@ -159,6 +166,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/zoom_page.cpp"
     demo_gallery_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
@@ -415,7 +423,10 @@ add_executable(luil_tests
     # 데스크톱 데모의 창 페이지는 Win32 호출(탐색기·메모장)을 부르므로 Windows 전용 test에서 읽는다.
     "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/windows_page.cpp"
-    windows_page_tests.cpp)
+    windows_page_tests.cpp
+    # 데스크톱 데모의 기본 페이지도 <windows.h>와 비밀 저장소를 불러 Windows 전용 test에서 읽는다. 확인 대화의 열기·결과·닫기를 검증한다.
+    "${PROJECT_SOURCE_DIR}/examples/demo/basics_page.cpp"
+    basics_page_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
@@ -512,6 +523,14 @@ add_test(NAME luil_core_portability
         "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_core_portability.cmake")
+
+# 요소의 .cpp와 공개 헤더에 한글이 박혀 있지 않은지 본다.
+# 기본 문구는 src/ui/default_text.cpp 한곳이다 (script에 이유가 있다).
+add_test(NAME luil_default_text
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
+        "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
+        -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
 
 # PowerShell은 script가 돌 때 PATH에서 찾는다 (run_style_check.cmake에 이유가 있다).
 add_test(NAME luil_source_style

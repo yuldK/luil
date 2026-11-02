@@ -6,7 +6,7 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
-#include "luil/ui/modal_host_element.h"
+#include "luil/ui/message_box.h"
 #include "luil/ui/number_input.h"
 #include "luil/ui/text_area_element.h"
 #include "mobile_demo/assets.h"
@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -25,6 +26,16 @@ namespace mobile_demo {
         constexpr float picture_height { 90.0f };
         constexpr float film_height { 120.0f };
         constexpr float input_height { 40.0f };
+        // 별점 값을 "3 / 5", 소수 첫째 자리가 있으면 "3.5 / 5"로 적는다. 라이브러리의 기본 접근 값 글과 같은 꼴이다.
+        [[nodiscard]] std::u8string rating_text(const float value, const int count)
+        {
+            const int tenths { static_cast<int>(std::lround(value * 10.0f)) };
+            std::u8string text { to_u8(tenths / 10) };
+            if (tenths % 10 != 0)
+                text += u8"." + to_u8(tenths % 10);
+            return text + u8" / " + to_u8(count);
+        }
+
         [[nodiscard]] float scaled_input_height() noexcept
         {
             return luil::text_line_height(11.0f, input_height - 11.0f);
@@ -39,17 +50,6 @@ namespace mobile_demo {
         [[nodiscard]] luil::number_input_range number_range()
         {
             return { .minimum = 0.0 };
-        }
-
-        [[nodiscard]] float clamp_offset(const float value, const float minimum, const float maximum)
-        {
-            if (maximum < minimum)
-                return 0.0f;
-            if (value < minimum)
-                return minimum;
-            if (value > maximum)
-                return maximum;
-            return value;
         }
 
         // 가로는 색상, 세로는 밝기가 변하는 견본 이미지다 (앱에 실린 바이트, assets.h).
@@ -76,11 +76,6 @@ namespace mobile_demo {
         if (message.get<increment_intent>() != nullptr)
         {
             ++clicks_;
-            return true;
-        }
-        if (message.get<counter_reset_intent>() != nullptr)
-        {
-            clicks_ = 0;
             return true;
         }
         if (message.get<playback_toggle_intent>() != nullptr)
@@ -116,10 +111,32 @@ namespace mobile_demo {
             open_dialog(dialog->open);
             return true;
         }
-        if (const auto* const move { message.get<move_dialog_intent>() }; move != nullptr)
+        if (const auto* const result { message.get<dialog_result_intent>() }; result != nullptr)
         {
-            dialog_x_ += move->dx;
-            dialog_y_ += move->dy;
+            // 단추, Esc, 바깥 누름, 뒤로 가기가 모두 이 메시지 하나로 온다. 받아서 닫고 key로 가른다.
+            dialog_result_ = result->key;
+            if (dialog_ == dialog_kind::reset && result->key == u8"reset")
+                clicks_ = 0;
+            dialog_ = dialog_kind::none;
+            return true;
+        }
+        if (message.get<dialog_check_intent>() != nullptr)
+        {
+            ask_again_ = ask_again_ == false;
+            return true;
+        }
+        if (const auto* const rating { message.get<rating_intent>() }; rating != nullptr)
+        {
+            // 범위 다듬기는 값을 가진 앱의 몫이다 (rating_config).
+            if (rating->key == u8"stars")
+                rating_stars_ = std::clamp(rating->value, 0.0f, 5.0f);
+            else if (rating->key == u8"strip")
+                rating_strip_ = std::clamp(rating->value, 0.0f, 10.0f);
+            return true;
+        }
+        if (const auto* const scroll { message.get<rating_scroll_intent>() }; scroll != nullptr)
+        {
+            rating_scroll_ = std::clamp(rating_scroll_ + scroll->delta, 0.0f, rating_scroll_limit_);
             return true;
         }
         if (const auto* const reveal { message.get<secret_reveal_intent>() }; reveal != nullptr)
@@ -183,15 +200,9 @@ namespace mobile_demo {
         composition_ = event;
     }
 
-    void basics_page::open_dialog(const bool open)
+    void basics_page::open_dialog(const dialog_kind kind)
     {
-        // 열 때마다 가운데에서 시작한다.
-        if (open && dialog_open_ == false)
-        {
-            dialog_x_ = 0.0f;
-            dialog_y_ = 0.0f;
-        }
-        dialog_open_ = open;
+        dialog_ = kind;
     }
 
     void basics_page::read_films()
@@ -247,6 +258,22 @@ namespace mobile_demo {
 
         page_column column { u8"basics" };
         column.add(make_counter_row(), touch_height);
+        column.gap(12.0f);
+
+        // 별점이다. 탭이 칸의 값이고 같은 별을 다시 탭하면 지운다. 손가락으로 훑으면 별이 따라온다.
+        column.note(u8"rating-title", u8"별점 (탭하거나 훑어서 매기고, 같은 별을 다시 탭하면 지웁니다)");
+        column.gap(4.0f);
+        const luil::rating_config stars { make_stars_config() };
+        column.add(std::make_unique<luil::rating_element>(stars), luil::rating_element::height_for(stars), luil::rating_element::width_for(stars));
+        column.body(u8"rating-value", u8"별점: " + rating_text(rating_stars_, 5));
+        column.gap(8.0f);
+        // 가로로 흐르는 창 안의 별 열이다. 쓸면 창이 흐르고, 잠깐 눌러 창이 흐르지 않게 된 뒤에 옮기면 별이 따라온다.
+        column.note(u8"rating-strip-title", u8"가로로 흐르는 창 안의 별 열 (쓸면 창이 흐릅니다)");
+        column.gap(4.0f);
+        const luil::rating_config strip_rating { make_strip_rating_config() };
+        rating_scroll_limit_ = std::max(0.0f, luil::rating_element::width_for(strip_rating) - (width - 2.0f * page_padding));
+        column.add(make_rating_strip(), luil::rating_element::height_for(strip_rating));
+        column.body(u8"rating-strip-value", u8"가로 창 별점: " + rating_text(rating_strip_, 10));
         column.gap(20.0f);
 
         // 텍스트 칸 셋이다. 휴대폰은 좁아 위아래로 쌓는다.
@@ -364,13 +391,24 @@ namespace mobile_demo {
         }
         column.gap(24.0f);
 
-        column.note(u8"basics-hint", u8"확인 dialog는 캡션을 끌어 옮긴다.");
+        column.note(u8"basics-hint", u8"확인 대화 상자는 뒤로 가기나 바깥을 눌러 닫는다. 초기화 대화는 취소에 초점이 선다.");
         column.gap(8.0f);
         auto open { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_open }, luil::text_button_config { .text = u8"카운터 초기화" }) };
-        open->set_tooltip(u8"확인 dialog를 연다");
+        open->set_tooltip(u8"확인 대화 상자를 연다");
         open->set_cursor(luil::ui_cursor::hand);
-        open->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { true }));
+        open->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { dialog_kind::reset }));
         column.add(std::move(open), touch_height, std::min(width - 2.0f * page_padding, 180.0f));
+        column.gap(8.0f);
+        auto details { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_details_open }, luil::text_button_config { .text = u8"긴 확인 대화" }) };
+        details->set_tooltip(u8"긴 본문과 단추 셋과 확인 칸이 있는 대화를 연다");
+        details->set_cursor(luil::ui_cursor::hand);
+        details->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { dialog_kind::details }));
+        column.add(std::move(details), touch_height, std::min(width - 2.0f * page_padding, 180.0f));
+        // 대화 상태를 글로도 보인다. 화면과 보조 기술이 같은 말을 읽는다.
+        column.gap(8.0f);
+        column.note(u8"dialog-state", dialog_open() ? u8"대화: 열림" : u8"대화: 닫힘");
+        column.gap(4.0f);
+        column.note(u8"dialog-result", u8"마지막 결과: " + (dialog_result_.empty() ? std::u8string { u8"없음" } : dialog_result_));
         return column.finish();
     }
 
@@ -392,6 +430,41 @@ namespace mobile_demo {
 
         row->add_flexible(make_label(luil::ui_element_id { kind_counter_label }, u8"누른 횟수: " + to_u8(clicks_), body_text_size, luil::label_color_role::primary));
         return row;
+    }
+
+    luil::rating_config basics_page::make_stars_config() const
+    {
+        luil::rating_config config {};
+        config.owner = u8"rating";
+        config.name = u8"별점";
+        config.value = rating_stars_;
+        config.control_size = touch_height;
+        config.change_to = [](const float value) { return luil::make_app_action(rating_intent { u8"stars", value }); };
+        return config;
+    }
+
+    luil::rating_config basics_page::make_strip_rating_config() const
+    {
+        luil::rating_config config {};
+        config.owner = u8"rating-strip";
+        config.name = u8"가로 창 별점";
+        config.count = 10;
+        config.value = rating_strip_;
+        config.control_size = touch_height;
+        config.change_to = [](const float value) { return luil::make_app_action(rating_intent { u8"strip", value }); };
+        return config;
+    }
+
+    std::unique_ptr<luil::ui_element> basics_page::make_rating_strip() const
+    {
+        luil::rating_config config { make_strip_rating_config() };
+        luil::strip_config strip {};
+        strip.content_width = luil::rating_element::width_for(config);
+        strip.scroll_offset = rating_scroll_;
+        strip.scroll = [](const float delta) { return luil::make_app_action(rating_scroll_intent { delta }); };
+        auto window { std::make_unique<luil::strip_element>(luil::ui_element_id { kind_layout, u8"rating-strip-window" }, std::move(strip)) };
+        window->set_content(std::make_unique<luil::rating_element>(std::move(config)));
+        return window;
     }
 
     std::unique_ptr<luil::stack_element> basics_page::make_pair_row(std::u8string owner, std::unique_ptr<luil::ui_element> left, std::unique_ptr<luil::ui_element> right) const
@@ -457,117 +530,57 @@ namespace mobile_demo {
         return column;
     }
 
+    luil::message_box_config basics_page::make_dialog_config() const
+    {
+        luil::message_box_config box {};
+        // 닫는 모든 계기(단추, Esc, 바깥 누름, 뒤로 가기)가 이 함수 하나를 부른다.
+        box.result = [](const std::u8string_view key) { return luil::make_app_action(dialog_result_intent { std::u8string { key } }); };
+        // 터치 앱은 단추를 손가락 크기로 키운다.
+        box.control_size = touch_height;
+        if (dialog_ == dialog_kind::details)
+        {
+            box.owner = u8"details";
+            box.severity = luil::ui_severity::info;
+            box.title = u8"변경 내용을 저장할까요?";
+            box.body = u8"이 문서에는 저장하지 않은 변경이 있다. 저장하면 변경이 파일에 쓰이고, 저장하지 않고 닫으면 변경이 사라진다.\n"
+                       u8"나중에 다시 묻기를 고르면 대화만 닫고 문서는 그대로 둔다. 좁은 화면에서는 단추가 위에서 아래로 쌓이고, 본문이 길어도 높이는 내용에서 나온다.";
+            box.buttons = {
+                luil::message_box_button { .key = u8"later", .text = u8"나중에 다시 묻기", .role = luil::message_box_role::reject },
+                luil::message_box_button { .key = u8"discard", .text = u8"저장하지 않고 닫기", .role = luil::message_box_role::destructive },
+                luil::message_box_ok(u8"저장"),
+            };
+            box.check = luil::message_box_check { .label = u8"다시 묻지 않기", .checked = ask_again_, .toggle = luil::make_message_action(dialog_check_intent {}) };
+            box.focus_return = luil::ui_element_id { kind_dialog_details_open };
+            return box;
+        }
+        if (dialog_ == dialog_kind::reset)
+        {
+            box.owner = u8"reset";
+            box.severity = luil::ui_severity::warning;
+            box.title = u8"카운터를 0으로 되돌릴까요?";
+            box.body = u8"누른 횟수가 사라진다.";
+            // 위험한 단추는 Enter의 대상도 첫 초점도 되지 않는다. 뜨면 취소에 선다.
+            box.buttons = { luil::message_box_cancel(), luil::message_box_button { .key = u8"reset", .text = u8"초기화", .role = luil::message_box_role::destructive } };
+            box.focus_return = luil::ui_element_id { kind_dialog_open };
+        }
+        return box;
+    }
+
+    luil::input_action basics_page::back_action() const
+    {
+        // 뒤로 가기도 Esc와 같은 결과를 낸다. 닫는 길이 없는 설정이면 앱 상태를 바로 닫는다.
+        return luil::message_box_dismiss_message(make_dialog_config()).value_or(luil::make_app_action(dialog_intent {}));
+    }
+
     void basics_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale, const luil::rect_f& surface)
     {
-        if (dialog_open_ == false)
+        if (dialog_open() == false)
             return;
 
-        // dialog를 만들 때 캡션의 생김새를 정한다.
-        // 라이브러리는 없는 것을 두지 않는다.
-        luil::dialog_caption_config caption {};
-        caption.title = u8"확인";
-        caption.close_tooltip = u8"닫기";
-        caption.close = luil::make_message_action(dialog_intent { false });
-        caption.move = [](const float dx, const float dy) { return luil::make_app_action(move_dialog_intent { dx, dy }); };
-
-        // 캡션이 있으면 그만큼 키가 커진다.
-        // height_for는 논리 픽셀이다 (다른 element의 정적 사이저와 같은 단위).
-        const float caption_height { luil::dialog_caption_element::height_for(caption) };
-        // 좁은 휴대폰에서는 양옆 여백만 남기고 화면 폭에 맞춘다.
-        const float dialog_width { std::min(360.0f, width / scale - 2.0f * page_padding) };
-        const float dialog_height { caption_height + 148.0f };
-
-        // 창 밖으로 나가지 않도록 다듬고, 다듬은 값을 상태에 되돌려
-        // 다음 이동이 화면 밖에서부터 시작하지 않게 한다.
-        //  - 가운데 배치는 host가 하므로 앱이 아는 것은 "가운데에서 얼마나
-        //    밀어낼 수 있는가"뿐이고, 그 여유는 좌우가 같다.
-        const float free_x { (width / scale - dialog_width) / 2.0f };
-        const float free_y { (height / scale - dialog_height) / 2.0f };
-        dialog_x_ = clamp_offset(dialog_x_, -free_x, free_x);
-        dialog_y_ = clamp_offset(dialog_y_, -free_y, free_y);
-
-        // 캡션은 여백 없이 위를 다 차지하고, 본문이 나머지를 갖는다.
-        luil::stack_config content_config {};
-        auto content { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"dialog" }, content_config) };
-        content->add(std::make_unique<luil::dialog_caption_element>(caption), caption_height);
-        content->add_flexible(make_dialog_body());
-
-        luil::panel_config surface_panel {};
-        surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
-        surface_panel.corner_radius = 8.0f;
-        auto dialog { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_dialog }, std::move(surface_panel)) };
-        dialog->set_content(std::move(content));
-
-        // scrim·초점 가둠·Esc는 host의 몫이다.
-        // 앱이 정하는 것은 "무엇을 닫는가"뿐이다.
-        luil::modal_host_config modal {};
-        // dialog의 이름이다. 화면 읽기가 뜨는 순간 말하는 말이라 캡션과 같은 말을 적는다.
-        modal.name = caption.title;
-        modal.outside = luil::make_message_action(dialog_intent { false });
-        modal.dismiss = luil::make_message_action(dialog_intent { false });
-        // 뜨면 취소에 서고, 닫히면 이 dialog를 연 버튼으로 돌아간다.
-        //  - 진입 자리는 **취소**다. 되돌릴 수 없는 쪽(초기화)에 키보드를 미리
-        //    올려 두면 무심코 친 Space가 카운터를 지운다. Enter를 채움으로
-        //    말하는 기본 버튼과 초점이 서는 자리는 서로 다른 것이다.
-        //  - 되돌아갈 자리는 앱이 추측하지 않는다. 여는 계기가 그 버튼의 클릭이라
-        //    이름을 이미 손에 쥐고 있고, dialog를 짓는 이 함수 안에 그 이름이 있다.
-        modal.focus_entry = luil::ui_element_id { kind_dialog_cancel };
-        modal.focus_return = luil::ui_element_id { kind_dialog_open };
-        modal.content_width = dialog_width;
-        modal.content_height = dialog_height;
-        modal.offset_x = dialog_x_;
-        modal.offset_y = dialog_y_;
-        auto host { std::make_unique<luil::modal_host_element>(std::move(modal)) };
-        host->set_content(std::move(dialog));
+        // 크기는 내용에서 나온다. 앱은 높이도 폭을 줄이는 식도 넘기지 않고 배치만 한다.
+        // 좁은 휴대폰에서는 host가 폭을 자리 - 32로 줄이고 단추가 넘치면 쌓는다.
+        auto host { luil::make_message_box(make_dialog_config()) };
         host->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .surface = surface });
         root.add(std::move(host));
-    }
-
-    std::unique_ptr<luil::stack_element> basics_page::make_dialog_body()
-    {
-        luil::stack_config config {};
-        config.padding = luil::edge_insets::all(20.0f);
-        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"dialog-body" }, config) };
-        column->add(make_label(luil::ui_element_id { kind_text, u8"dialog-title" }, u8"카운터를 0으로 되돌릴까요?", body_text_size, luil::label_color_role::primary), body_line_height);
-        column->add_gap(4.0f);
-        column->add(make_label(luil::ui_element_id { kind_text, u8"dialog-note" }, u8"누른 횟수가 사라진다.", note_text_size, luil::label_color_role::dim), note_line_height);
-        column->add_flexible_gap();
-        column->add(make_dialog_buttons(), 40.0f);
-        return column;
-    }
-
-    std::unique_ptr<luil::stack_element> basics_page::make_dialog_buttons()
-    {
-        luil::stack_config config {};
-        config.direction = luil::stack_direction::row;
-        config.spacing = 8.0f;
-        // 버튼 둘을 오른쪽 끝에 붙인다.
-        // 선두 `add_flexible_gap()`도 같은 자리를 주지만 그것은 항목 **사이**의
-        // 도구다 — 바깥 자리는 정렬이 말한다.
-        config.main_alignment = luil::stack_main_alignment::end;
-        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"dialog-buttons" }, config) };
-
-        auto cancel { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_cancel }, luil::text_button_config { .text = u8"취소" }) };
-        cancel->set_cursor(luil::ui_cursor::hand);
-        cancel->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { false }));
-        row->add(std::move(cancel), 88.0f);
-
-        // Enter로 실행되는 버튼임을 강조색 채움이 말한다.
-        // 초점 테는 취소에 서 있으므로, 채움과 테가 한 화면에서 서로 다른 것을
-        // 말하는 자리가 바로 여기다 (enter-default-design.md).
-        luil::text_button_config confirm_config {};
-        confirm_config.text = u8"초기화";
-        confirm_config.visual = luil::text_button_visual::accent;
-        confirm_config.default_button = true;
-        auto confirm { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_confirm }, std::move(confirm_config)) };
-        confirm->set_cursor(luil::ui_cursor::hand);
-        confirm->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> {
-            return {
-                luil::make_app_action(counter_reset_intent {}),
-                luil::make_app_action(dialog_intent { false }),
-            };
-        });
-        row->add(std::move(confirm), 88.0f);
-        return row;
     }
 }

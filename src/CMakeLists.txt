@@ -126,6 +126,8 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     "${public_headers}/ui/ui_platform.h"
     ui/font_scale.cpp
     "${public_headers}/ui/font_scale.h"
+    ui/default_text.cpp
+    ui/default_text.h
     ui/ui_tree.cpp
     "${public_headers}/ui/ui_tree.h")
 
@@ -205,6 +207,8 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/field_popup.h"
     ui/slider_element.cpp
     "${public_headers}/ui/slider_element.h"
+    ui/rating_element.cpp
+    "${public_headers}/ui/rating_element.h"
     ui/split_button_element.cpp
     "${public_headers}/ui/split_button_element.h")
 
@@ -328,6 +332,10 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     "${public_headers}/ui/commands.h"
     ui/menu_element.cpp
     "${public_headers}/ui/menu_element.h"
+    ui/message_box.cpp
+    "${public_headers}/ui/message_box.h"
+    ui/message_box_element.cpp
+    ui/message_box_element.h
     ui/modal_host_element.cpp
     "${public_headers}/ui/modal_host_element.h"
     ui/sheet_host_element.cpp

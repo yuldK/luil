@@ -3,6 +3,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/field_popup.h"
+#include "ui/default_text.h"
 #include "ui/text_button_paint.h"
 
 #include "include/core/SkCanvas.h"
@@ -23,9 +24,6 @@ namespace luil {
     namespace {
         // 화살표의 chevron 글리프 크기다 (논리 픽셀). 드롭다운의 펼침 화살표와 같다.
         constexpr float chevron_size { 12.0f };
-        // 본체 글에 접근 이름이 없을 때 화살표 이름 뒤에 붙는 기본 문구다.
-        // 라이브러리 문자열 정책이 정해지면 그 문자열 헤더로 옮긴다.
-        constexpr std::u8string_view default_arrow_suffix { u8" 옵션" };
 
         // 분할 버튼의 한 절반이다.
         // 자리를 나누는 일과 상자 바탕·구분선은 root가 그리고, 이 절반은 자기 글과 chevron만 그린다.
@@ -166,7 +164,7 @@ namespace luil {
             else
             {
                 const std::u8string& base { text.empty() ? config_.tooltip : text };
-                arrow->set_access_name(config_.arrow_name.empty() ? std::u8string { base }.append(default_arrow_suffix) : config_.arrow_name);
+                arrow->set_access_name(config_.arrow_name.empty() ? default_text::split_button_arrow_name(base) : config_.arrow_name);
                 arrow->set_tooltip(config_.arrow_tooltip);
             }
             arrow_ = arrow.get();

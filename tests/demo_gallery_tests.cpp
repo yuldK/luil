@@ -4,7 +4,10 @@
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
 #include "demo/toasts_page.h"
+#include "demo/zoom_page.h"
 
+#include "luil/ui/accessibility.h"
+#include "luil/ui/app_message.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/ui_tree.h"
@@ -471,4 +474,188 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(demo::text_target_of_kind(demo::kind_text).has_value() == false);
+}
+
+namespace {
+    [[nodiscard]] luil::ui_tree zoom_tree(demo::zoom_page& page)
+    {
+        return arranged(page.build(800.0f, 600.0f, 1.0f));
+    }
+
+    // UIA가 되읽는 줌 단추의 이름이다. 단추의 글이 곧 접근 이름이다.
+    [[nodiscard]] std::u8string zoom_button_name(const luil::ui_tree& tree, const luil::ui_element_kind kind)
+    {
+        const luil::ui_element* const button { tree.find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+
+    // 줌 단추 글을 바꾸는 단추를 눌러 나온 메시지를 페이지에 넘긴다. 누름은 tree에 있던 그 액션이다.
+    void press_zoom_labels(demo::zoom_page& page, const luil::ui_tree& tree)
+    {
+        const luil::ui_element_id id { demo::kind_layout, u8"zoom-label-toggle" };
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+}
+
+TEST_CASE("The desktop zoom page switches its button names between the default language and English", "[demo][zoom][default-text]")
+{
+    demo::zoom_page page {};
+    auto tree { zoom_tree(page) };
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"확대");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"맞춤");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+
+    // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
+    press_zoom_labels(page, tree);
+    tree = zoom_tree(page);
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"Zoom out");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"Zoom in");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"Fit");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: English");
+
+    // 같은 메시지가 거듭 와도 결과가 같다.
+    send(page, demo::zoom_labels_intent { true });
+    REQUIRE(zoom_button_name(zoom_tree(page), luil::ui_element_kind::zoom_fit) == u8"Fit");
+
+    press_zoom_labels(page, tree);
+    tree = zoom_tree(page);
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+}
+
+TEST_CASE("The desktop zoom page puts the language switch after the fit buttons in the same row", "[demo][zoom][default-text]")
+{
+    demo::zoom_page page {};
+    const auto tree { zoom_tree(page) };
+    const luil::ui_element* const controls { tree.find({ luil::ui_element_kind::zoom_controls, u8"diagram" }) };
+    const luil::ui_element* const fit_height { tree.find({ demo::kind_layout, u8"zoom-fit-height" }) };
+    const luil::ui_element* const toggle { tree.find({ demo::kind_layout, u8"zoom-label-toggle" }) };
+    const luil::ui_element* const language { tree.find({ demo::kind_text, u8"zoom-label-language" }) };
+    REQUIRE(controls != nullptr);
+    REQUIRE(fit_height != nullptr);
+    REQUIRE(toggle != nullptr);
+    REQUIRE(language != nullptr);
+    // 한 줄에 놓이고 800 폭 창 안에 든다.
+    REQUIRE(toggle->bounds().x >= fit_height->bounds().x + fit_height->bounds().width);
+    REQUIRE(language->bounds().x >= toggle->bounds().x + toggle->bounds().width);
+    REQUIRE(language->bounds().x + language->bounds().width <= 800.0f);
+    REQUIRE(toggle->bounds().y == Catch::Approx(controls->bounds().y));
+}
+
+namespace {
+    // 별점 줄의 label이 그린 글이다. 줄마다 "이름: 3 / 5" 꼴이고 화면과 보조 기술이 같은 말을 한다.
+    [[nodiscard]] std::u8string rating_label(const luil::ui_tree& tree, const std::u8string& line)
+    {
+        return label_text(tree, u8"gallery/rating-" + line + u8"-value");
+    }
+
+    [[nodiscard]] const luil::ui_element& rating_of(const luil::ui_tree& tree, const std::u8string& line)
+    {
+        const luil::ui_element* const rating { tree.find({ luil::ui_element_kind::rating, u8"gallery/rating-" + line }) };
+        REQUIRE(rating != nullptr);
+        return *rating;
+    }
+
+    // 낸 메시지에서 별점 intent를 꺼낸다.
+    [[nodiscard]] demo::gallery_rating_intent rating_intent_of(const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        const auto* const intent { message->get<demo::gallery_rating_intent>() };
+        REQUIRE(intent != nullptr);
+        return *intent;
+    }
+}
+
+TEST_CASE("The gallery rating card draws whole, half and average lines and reads each value back", "[demo][gallery][rating]")
+{
+    demo::gallery_page page {};
+    const auto tree { arranged(page.build_controls()) };
+
+    // 줄마다 label이 값을 그린다. UIA가 이름으로 되읽는 말이다.
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 3 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 3.5 / 5");
+    REQUIRE(rating_label(tree, u8"average") == u8"평균: 4.3 / 5");
+
+    // 별점 요소의 접근 값도 같은 글이다. 이름은 줄마다 다르다.
+    const luil::access_info whole { rating_of(tree, u8"whole").accessibility() };
+    REQUIRE(whole.role == luil::access_role::slider);
+    REQUIRE(whole.name == u8"별점");
+    REQUIRE(whole.value == u8"3 / 5");
+    REQUIRE(whole.range == luil::access_range { 0.0f, 5.0f, 3.0f, 1.0f, 1.0f });
+    const luil::access_info half { rating_of(tree, u8"half").accessibility() };
+    REQUIRE(half.name == u8"반 별 점수");
+    REQUIRE(half.value == u8"3.5 / 5");
+    REQUIRE(half.range == luil::access_range { 0.0f, 5.0f, 3.5f, 0.5f, 1.0f });
+    const luil::access_info average { rating_of(tree, u8"average").accessibility() };
+    REQUIRE(average.name == u8"평균 점수");
+    REQUIRE(average.value == u8"4.3 / 5");
+
+    // 정수 별은 칸이 다섯, 반 별은 열이고, 평균은 표시 전용이라 칸이 없다.
+    REQUIRE(rating_of(tree, u8"whole").children().size() == 5u);
+    REQUIRE(rating_of(tree, u8"half").children().size() == 10u);
+    REQUIRE(rating_of(tree, u8"average").children().empty());
+    REQUIRE(luil::plan_access_request(rating_of(tree, u8"average"), { luil::access_command::set_value, 4.0f }).has_value() == false);
+}
+
+TEST_CASE("A star click, a value set from assistive technology and the reset button change the rating lines", "[demo][gallery][rating]")
+{
+    demo::gallery_page page {};
+    auto tree { arranged(page.build_controls()) };
+
+    // 별 3은 지금 값이라 다시 누르면 지운다. 별 4는 4를 매긴다.
+    const luil::ui_element& whole { rating_of(tree, u8"whole") };
+    const luil::ui_action* const clear { whole.children()[2]->action(luil::ui_trigger::left_click) };
+    REQUIRE(clear != nullptr);
+    const demo::gallery_rating_intent cleared { rating_intent_of(first_action((*clear)({ whole.children()[2]->id() }))) };
+    REQUIRE(cleared.key == u8"whole");
+    REQUIRE(cleared.value == 0.0f);
+    const luil::ui_action* const fourth { whole.children()[3]->action(luil::ui_trigger::left_click) };
+    REQUIRE(fourth != nullptr);
+    const demo::gallery_rating_intent chosen { rating_intent_of(first_action((*fourth)({ whole.children()[3]->id() }))) };
+    REQUIRE(chosen.value == 4.0f);
+    send(page, chosen);
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 4 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 3.5 / 5");
+
+    // 보조 기술의 값 정하기는 가장 가까운 별로 반올림해 같은 메시지를 낸다. 반 별 줄은 반 별이 걸음이다.
+    const luil::ui_element& half { rating_of(tree, u8"half") };
+    const auto plan { luil::plan_access_request(half, { luil::access_command::set_value, 1.3f }) };
+    REQUIRE(plan.has_value());
+    const demo::gallery_rating_intent set { rating_intent_of(first_action(*plan)) };
+    REQUIRE(set.key == u8"half");
+    REQUIRE(set.value == 1.5f);
+    send(page, set);
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 1.5 / 5");
+
+    // 범위 밖 값은 앱이 자른다.
+    send(page, demo::gallery_rating_intent { u8"whole", 9.0f });
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 5 / 5");
+
+    // 초기화 단추는 두 줄을 아직 매기지 않음으로 되돌리고 평균은 그대로다.
+    const luil::ui_element* const reset { tree.find({ demo::kind_layout, u8"gallery/rating-reset" }) };
+    REQUIRE(reset != nullptr);
+    const luil::ui_action* const pressed { reset->action(luil::ui_trigger::left_click) };
+    REQUIRE(pressed != nullptr);
+    send(page, rating_intent_of(first_action((*pressed)({ reset->id() }))));
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 0 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 0 / 5");
+    REQUIRE(rating_label(tree, u8"average") == u8"평균: 4.3 / 5");
+
+    // 상태 초기화는 처음 값으로 돌린다.
+    send(page, demo::gallery_reset_intent {});
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 3 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 3.5 / 5");
 }

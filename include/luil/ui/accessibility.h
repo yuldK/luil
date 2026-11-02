@@ -81,6 +81,13 @@ namespace luil {
         float minimum { 0.0f };
         float maximum { 0.0f };
         float value { 0.0f };
+        // 보조 기술에 알리는 걸음이다 (UIA RangeValue의 SmallChange·LargeChange). 값을 단계만큼 올리는 클라이언트가 이 크기로 움직인다.
+        //  - 0(기본)이면 알리지 않는다. 막대·스크롤 막대·진행률은 걸음을 element 안에서 델타로 정하므로 채우지 않고 지금처럼 0을 알린다.
+        //  - 값이 이산이라 걸음이 곧 본질인 요소(별점)가 채운다.
+        // 화살표 한 번이 옮기는 값이다.
+        float step { 0.0f };
+        // Page 키 한 번이 옮기는 값이다.
+        float page { 0.0f };
 
         [[nodiscard]] bool operator==(const access_range&) const = default;
     };

@@ -198,13 +198,13 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
 
 ## 다른 노드와의 약속
 
-- **msg_box**(R2)는 `ui_severity`와 `severity_paint.h`를 그대로 쓴다. 대화 상자 머리의 글리프 칸과 접근 이름의 심각도 낱말은 그 노드가 정한다.
+- **msg_box**(R2)는 `ui_severity`와 `severity_paint.h`를 그대로 쓴다. 대화 상자 머리의 글리프 칸(24칸에 크기 20)과 접근 이름 앞에 붙는 심각도 낱말(화면에는 그리지 않는다)은 [확인 대화 상자 문서](message-box-design.md)가 정했다.
 - **toast**는 모양을 그대로 두고 `severity_color`·`severity_glyph` 호출만 공용 helper로 바꾼다. 기존 raster test가 지킨다.
 - **teaching_tip**(R4)은 단추 모양을 맞춘다. 닫기는 `button_element`(`icon_close`, role `toolbar`, 손 모양 커서, Tab 자리)이고 동작은 `action_label`과 `action` 쌍이다.
 - **syntax·style_sheet**(줄 2)는 결정 1이 b일 때만 `ui_theme.h`·`ui_theme.cpp`·`generate_style.cmake`·`style.json`에서 겹친다. a면 겹치지 않는다.
 - **os_notify**(줄 4 R2)와 `examples/demo/toasts_page.*`를 함께 고친다. 이 노드는 카드를 더하기만 한다.
 - **split_button**과 같은 줄이라 병합 순서가 정해져 있다. `ui_element_id.h`의 kind 추가가 같은 자리이고 AutomationId는 kind의 수다. test와 luil-uia 스크립트는 번호를 박지 않는다.
-- 기본 문구("닫기", 심각도 낱말)는 라이브러리 문자열 정책(G6)이 정해지면 그 문자열 헤더로 옮긴다. 분할 버튼의 기본 문구와 같은 취급이다.
+- 기본 문구("닫기", 심각도 낱말)는 [default-text-design.md](default-text-design.md)의 헤더로 옮겼다. 분할 버튼의 기본 문구와 같은 취급이다.
 - `badge_paint.cpp`의 `tone_glyph`를 helper로 잇는 정리는 이 노드에서 하지 않는다.
 
 ## 확인

@@ -1425,19 +1425,35 @@ namespace luil::win32 {
 
     HRESULT uia_element_provider::get_LargeChange(double* result)
     {
-        if (result == nullptr)
-            return E_POINTER;
-        // 걸음의 크기는 element가 정하고 아직 어휘에 없다 (value-step-design.md).
-        *result = 0.0;
-        return S_OK;
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            *result = 0.0;
+            const ui_element* const element { resolve() };
+            if (element == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            // 걸음의 크기는 element가 정하고 `access_range::page`가 알린다. 비워 둔 요소(막대·스크롤 막대·진행률)는 0이다.
+            const access_info info { element->accessibility() };
+            if (info.range.has_value())
+                *result = static_cast<double>(info.range->page);
+            return S_OK;
+        });
     }
 
     HRESULT uia_element_provider::get_SmallChange(double* result)
     {
-        if (result == nullptr)
-            return E_POINTER;
-        *result = 0.0;
-        return S_OK;
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            *result = 0.0;
+            const ui_element* const element { resolve() };
+            if (element == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            const access_info info { element->accessibility() };
+            if (info.range.has_value())
+                *result = static_cast<double>(info.range->step);
+            return S_OK;
+        });
     }
 
     HRESULT uia_element_provider::Toggle()

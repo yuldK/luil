@@ -162,6 +162,15 @@ namespace luil {
         info_bar,
         info_bar_action,
         info_bar_close,
+        // 확인 대화 상자의 내용과 그 단추다 (`make_message_box`). 내용은 비공개 element이고 owner는 상자 설정의 owner다.
+        // 단추의 owner는 상자 owner와 단추 key 사이에 단위 구분자(U+001F)를 둔 것이다 (`message_box_button_id`).
+        message_box,
+        message_box_button,
+        // 별점과 그 걸음 칸이다 (`rating_element`). root는 접근 역할이 slider이고 별을 그린다. 칸은 걸음 하나마다 서서
+        // hit와 hover와 끌기만 맡는다. root의 owner는 별점 설정의 owner이고 칸의 owner는 그 owner, 단위 구분자(U+001F),
+        // 칸 번호(1부터 십진수) 순이다. kind가 달라 id가 겹치지 않는다.
+        rating,
+        rating_cell,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

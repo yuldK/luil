@@ -5,10 +5,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <limits>
 #include <memory>
+#include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace {
     struct selected_theme
@@ -173,4 +176,51 @@ TEST_CASE("Menu popup composition preserves anchor actions and logical size acro
     const auto fallback { luil::make_menu_popup(std::move(menu), config) };
     REQUIRE(fallback.width == 240.0f);
     REQUIRE(fallback.tree->root()->bounds().height == height);
+}
+
+TEST_CASE("The picker configs hold no default text and the elements fill the empty fields in Korean", "[ui][theme-picker][default-text]")
+{
+    // 공개 헤더에는 한국어 기본값이 없다.
+    const luil::theme_picker_config blank_themes {};
+    REQUIRE(blank_themes.name.empty());
+    for (const std::u8string& label : blank_themes.labels)
+        REQUIRE(label.empty());
+    const luil::accent_picker_config blank_accents {};
+    REQUIRE(blank_accents.name.empty());
+
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(themes()), { 0.0f, 0.0f, 700.0f, 200.0f }, 1.0f) };
+    REQUIRE(tree.root()->accessibility().name == u8"테마");
+    const std::vector<std::u8string> card_names { u8"밝게", u8"시스템", u8"어둡게" };
+    REQUIRE(tree.root()->children().size() == card_names.size());
+    for (std::size_t index = 0; index < card_names.size(); ++index)
+        REQUIRE(tree.root()->children()[index]->accessibility().name == card_names[index]);
+
+    luil::accent_picker_config accents {};
+    accents.owner = u8"accent";
+    const luil::ui_tree accent_tree { luil::make_arranged_tree(std::make_unique<luil::accent_picker_element>(accents), { 0.0f, 0.0f, 400.0f, 200.0f }, 1.0f) };
+    REQUIRE(accent_tree.root()->accessibility().name == u8"강조색");
+}
+
+TEST_CASE("The picker fields the app fills are used as given and the others stay default", "[ui][theme-picker][default-text]")
+{
+    auto config { themes() };
+    config.name = u8"Theme";
+    // 칸마다 따로 판정한다. 가운데 하나만 덮어도 나머지는 기본 낱말이다.
+    config.labels[1] = u8"Auto";
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(config), { 0.0f, 0.0f, 700.0f, 200.0f }, 1.0f) };
+    REQUIRE(tree.root()->accessibility().name == u8"Theme");
+    REQUIRE(tree.find({ luil::ui_element_kind::choice, u8"appearance/light" })->accessibility().name == u8"밝게");
+    REQUIRE(tree.find({ luil::ui_element_kind::choice, u8"appearance/system" })->accessibility().name == u8"Auto");
+    REQUIRE(tree.find({ luil::ui_element_kind::choice, u8"appearance/dark" })->accessibility().name == u8"어둡게");
+
+    // 공백만 있는 글은 앱이 준 글이다. 기본 낱말로 바꾸지 않는다.
+    config.labels[0] = u8" ";
+    const luil::ui_tree spaced { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(config), { 0.0f, 0.0f, 700.0f, 200.0f }, 1.0f) };
+    REQUIRE(spaced.find({ luil::ui_element_kind::choice, u8"appearance/light" })->accessibility().name == u8" ");
+
+    luil::accent_picker_config accents {};
+    accents.owner = u8"accent";
+    accents.name = u8"Accent color";
+    const luil::ui_tree accent_tree { luil::make_arranged_tree(std::make_unique<luil::accent_picker_element>(accents), { 0.0f, 0.0f, 400.0f, 200.0f }, 1.0f) };
+    REQUIRE(accent_tree.root()->accessibility().name == u8"Accent color");
 }

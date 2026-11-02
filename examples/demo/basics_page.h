@@ -1,8 +1,8 @@
 #pragma once
 
 // 기본 페이지다: 버튼·카운터, 텍스트 입력 두 칸(숫자 전용·자유 입력),
-// 파일에서 읽은 그림(정지 한 장과 움직이는 둘), 화면을 덮는 확인 dialog
-// (캡션을 잡아 옮긴다).
+// 파일에서 읽은 그림(정지 한 장과 움직이는 둘), 화면을 덮는 확인 대화 상자 둘
+// (`luil::make_message_box` — 크기는 내용에서 나오고 닫는 모든 계기가 한 결과 메시지를 낸다).
 
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
@@ -10,6 +10,7 @@
 #include "luil/text/text_edit.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
+#include "luil/ui/message_box.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/syntax_highlighter.h"
@@ -40,20 +41,31 @@ namespace demo {
     {
     };
 
+    // 열린 확인 대화 상자다. 열림은 앱 상태이고 하나만 열린다.
+    //  - reset은 카운터 초기화(취소와 위험한 초기화), details는 긴 본문과 단추 셋과 확인 칸을 가진 대화다.
+    enum class dialog_kind
+    {
+        none,
+        reset,
+        details,
+    };
+
+    // 대화를 열거나 닫는다. 값이 절대 값이라 거듭 와도 결과가 같다.
     struct dialog_intent
     {
-        bool open { false };
+        dialog_kind open { dialog_kind::none };
     };
 
-    struct counter_reset_intent
+    // 대화 상자를 닫는 모든 계기(단추, Esc, 바깥 누름)가 내는 결과다 (`message_box_config::result`).
+    // 앱은 이 메시지 하나를 받아 닫고 key로 가른다.
+    struct dialog_result_intent
     {
+        std::u8string key {};
     };
 
-    // 캡션을 잡고 끈 만큼 dialog를 옮긴다 (논리 픽셀).
-    struct move_dialog_intent
+    // 둘째 대화의 "다시 묻지 않기" 칸을 뒤집는다. 칸은 닫지 않는다.
+    struct dialog_check_intent
     {
-        float dx { 0.0f };
-        float dy { 0.0f };
     };
 
     // OS에서 노트 칸에 끌어다 놓은 파일이다.
@@ -124,13 +136,16 @@ namespace demo {
 
         [[nodiscard]] bool dialog_open() const noexcept
         {
-            return dialog_open_;
+            return dialog_ != dialog_kind::none;
         }
+
+        // 열린 대화 상자의 설정이다. 닫힌 때는 빈 설정이다.
+        [[nodiscard]] luil::message_box_config make_dialog_config() const;
 
     private:
         void apply_edit(const luil::text_edit_request& request);
         void apply_composition(const luil::text_composition_event& event);
-        void open_dialog(bool open);
+        void open_dialog(dialog_kind kind);
         // 움직이는 견본 둘을 읽고, 읽혔으면 그 자리에서 재생을 시작한다.
         void read_films();
         // 멈춰 있으면 잇고, 돌고 있으면 멈춘다.
@@ -155,8 +170,8 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_playback_button() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_input(
             std::u8string owner, std::u8string label, luil::ui_element_kind input_kind, luil::text_input_view view, luil::text_input_config input, luil::drop_target drop = {}) const;
-        [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_body();
-        [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_buttons();
+        // 대화를 여는 단추 둘이다.
+        [[nodiscard]] std::unique_ptr<luil::stack_element> make_dialog_row() const;
 
         // 그림은 만들 때 한 번 준비되는 불변 값이라 페이지가 들고 있는다 —
         // frame마다 config에 실리는 것은 손잡이뿐이다 (image-design.md).
@@ -211,11 +226,12 @@ namespace demo {
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
         float page_scroll_ { 0.0f };
-        bool dialog_open_ { false };
+        dialog_kind dialog_ { dialog_kind::none };
+        // 마지막으로 닫은 결과의 key다. 아직 닫은 적이 없으면 비었다.
+        std::u8string dialog_result_ {};
+        // 둘째 대화의 "다시 묻지 않기" 칸이다.
+        bool ask_again_ { false };
         // 비밀 저장소를 돌린 결과 한 줄이다. 아직 돌리지 않았으면 비었다.
         std::u8string secret_report_ {};
-        // 가운데에서 얼마나 밀어 둔 dialog인지다 (논리 픽셀).
-        float dialog_x_ { 0.0f };
-        float dialog_y_ { 0.0f };
     };
 }
