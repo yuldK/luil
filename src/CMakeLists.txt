@@ -223,6 +223,7 @@ luil_add_source_filter(luil_core_files "ui/content"
     "${public_headers}/ui/severity.h"
     ui/image_element.cpp
     "${public_headers}/ui/image_element.h"
+    "${public_headers}/ui/ui_image.h"
     ui/markdown_element.cpp
     "${public_headers}/ui/markdown_element.h"
     ui/label_element.cpp
@@ -262,6 +263,8 @@ else()
     set(luil_text_shaping_source ui/text_shaping_default.cpp)
 endif()
 luil_add_source_filter(luil_core_files "ui/image"
+    ui/clipboard_image.cpp
+    "${public_headers}/ui/clipboard_image.h"
     ui/image_decode.cpp
     "${public_headers}/ui/image_decode.h"
     ui/image_backing.h
@@ -530,6 +533,8 @@ luil_add_source_filter(luil_files "win32/input"
     win32/surface_input.h
     win32/win32_clipboard.cpp
     win32/win32_clipboard.h
+    win32/win32_image_clipboard.cpp
+    win32/win32_image_clipboard.h
     win32/win32_drop.cpp
     win32/win32_drop.h
     win32/win32_tsf_input.cpp

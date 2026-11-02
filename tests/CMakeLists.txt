@@ -23,6 +23,7 @@ add_executable(luil_core_tests
     check_element_tests.cpp
     theme_picker_tests.cpp
     choice_group_element_tests.cpp
+    clipboard_image_tests.cpp
     case_fold_tests.cpp
     command_palette_tests.cpp
     content_layout_tests.cpp
@@ -411,6 +412,7 @@ add_executable(luil_tests
     webview_message_gate_tests.cpp
     win32_clipboard_tests.cpp
     win32_file_clipboard_tests.cpp
+    win32_image_clipboard_tests.cpp
     win32_drop_tests.cpp
     win32_fonts_tests.cpp
     win32_window_tests.cpp

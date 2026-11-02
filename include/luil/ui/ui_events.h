@@ -2,9 +2,11 @@
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element_id.h"
+#include "luil/ui/ui_image.h"
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -652,12 +654,81 @@ namespace luil {
         //  - `owned`만으로는 잘라 둔 파일이 남았는지 모른다. 같은 앱이 글을 복사하거나 클립보드를 비워도 임자는 이
         //    앱이다. 잘라 둔 표시는 `owned && has_files`이고 번호가 자기가 넣은 뒤의 것일 때만 남긴다.
         bool has_files { false };
+        // 지금 클립보드에 그림이 있는가 (Win32 등록 형식 "PNG"나 `CF_DIB`, image-clipboard-design.md).
+        //  - `CF_BITMAP`만 넣은 앱도 OS가 `CF_DIB`를 지어 주므로 참이다. "그림 붙여넣기" 단추를 켜고 끄는 근거다.
+        bool has_image { false };
 
         [[nodiscard]] bool operator==(const clipboard_change&) const noexcept = default;
     };
 
+    // 클립보드에서 읽은 그림 바이트의 꼴이다 (`clipboard_data::image_format`).
+    enum class clipboard_image_format
+    {
+        // 그림이 없다.
+        none,
+        // 그림 파일 바이트다 (Win32 "PNG", Android의 image/* 내용). `decode_image_bytes`가 푼다.
+        encoded,
+        // Windows DIB다 (`CF_DIBV5`·`CF_DIB`, 파일 머리 없음). `decode_clipboard_image`가 코덱 없이 옮긴다.
+        dib,
+    };
+
+    // 글과 그림을 **한 클립에** 넣는다 (image-clipboard-design.md). 하나씩 넣으면 뒤의 것이 앞의 것을 지운다.
+    // 실제 클립보드 접근은 UI thread의 몫이다 — logic thread에서 `app_host::post_clipboard_request`로 넣는다.
+    //  - 빈 칸의 형식은 넣지 않고, 모두 비면 아무 일도 없다. 넣은 결과는 돌아오지 않는다 (글·파일 복사와 같다).
+    //  - Win32는 "PNG", `CF_DIBV5`, `CF_UNICODETEXT` 순으로 넣고, 하나라도 실패하면 넣은 것도 거둔다.
+    //  - 그림을 넣지 못하는 플랫폼(Android)은 글 칸만 넣는다 (`ui_platform_capabilities::clipboard_image_copy`).
+    struct clipboard_data_copy_request
+    {
+        std::u8string text {};
+        // 그림이다. Win32는 `CF_DIBV5`(곱하지 않은 알파, 아래에서 위로)로 넣는다. 비면 그림 형식이 없다.
+        ui_image image {};
+        // 앱이 미리 지은 PNG(`encode_png`)다. `image`가 있을 때만 Win32 "PNG" 형식으로 그대로 넣는다.
+        //  - 창 계층은 인코더를 링크하지 않는다. PNG를 원하는 앱만 logic thread에서 짓는다.
+        //  - 앞 8바이트가 PNG 서명이 아니면 버린다.
+        std::vector<std::uint8_t> png {};
+
+        // 그림은 같은 값(같은 backing)인가로 견준다.
+        [[nodiscard]] bool operator==(const clipboard_data_copy_request& other) const noexcept;
+    };
+
+    // 클립보드의 글과 그림을 함께 읽어 앱 메시지로 돌려 달라는 요청이다.
+    // UI thread가 한 번 열어 읽고 `app_delegate::make_clipboard_data_message`로 지은 메시지를 app inbox에 넣는다.
+    struct clipboard_data_paste_request
+    {
+        // 요청을 가르는 앱 정의 표식이다. 답에 그대로 실린다.
+        std::uint32_t tag { 0 };
+
+        [[nodiscard]] bool operator==(const clipboard_data_paste_request&) const noexcept = default;
+    };
+
+    // `clipboard_data_paste_request`의 답이다. 그림은 풀지 않은 바이트로 온다 (`decode_clipboard_image`가 logic thread에서 푼다).
+    // 그림이 없어도, 읽지 못해도 답은 온다.
+    struct clipboard_data
+    {
+        // 줄바꿈과 탭을 지킨다. 없으면 비었다. 텍스트 칸 붙여넣기와 달리 파일 경로로 대신하지 않는다.
+        std::u8string text {};
+        clipboard_image_format image_format { clipboard_image_format::none };
+        // 앱 메시지로 옮겨도 복사되지 않게 공유한다. `image_too_large`면 비었다.
+        std::shared_ptr<const std::vector<std::uint8_t>> image {};
+        // 그림은 있으나 `max_clipboard_image_bytes`(256 MiB)를 넘어 복사하지 않았다.
+        bool image_too_large { false };
+        // 요청의 표식이다.
+        std::uint32_t tag { 0 };
+        // 읽은 순간의 클립보드 번호다 (Win32 `GetClipboardSequenceNumber`). Android는 0이다.
+        std::uint32_t sequence { 0 };
+
+        [[nodiscard]] bool operator==(const clipboard_data&) const noexcept = default;
+    };
+
+    inline bool clipboard_data_copy_request::operator==(const clipboard_data_copy_request& other) const noexcept
+    {
+        return text == other.text && image.backing() == other.image.backing() && image.width() == other.image.width() && image.height() == other.image.height() && png == other.png;
+    }
+
     // UI thread만 다룰 수 있는 클립보드 요청이다.
-    using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_request, clipboard_files_copy_request, clipboard_files_paste_request>;
+    //  - 여러 형식 요청(`clipboard_data_*`)은 `input_action`에 없다. 그림은 앱 상태라 logic thread가 쥐고 넣는다.
+    using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_request, clipboard_files_copy_request, clipboard_files_paste_request,
+        clipboard_data_copy_request, clipboard_data_paste_request>;
 
     // 지금 화면을 파일로 남긴다 (무손실 WebP).
     //

@@ -28,6 +28,7 @@
 #include "win32/webview_host.h"
 #include "win32/webview_layout.h"
 #include "win32/win32_clipboard.h"
+#include "win32/win32_image_clipboard.h"
 #include "win32/win32_drop.h"
 #include "win32/win32_error.h"
 #include "win32/window_messages.h"
@@ -1884,6 +1885,30 @@ namespace luil::win32 {
                     }
                     return;
                 }
+                // 글과 그림을 한 클립에 넣는다 (image-clipboard-design.md). 결과는 돌려주지 않는다 (글·파일 복사와 같다).
+                if (const auto* const data { std::get_if<clipboard_data_copy_request>(&request) }; data != nullptr)
+                {
+                    static_cast<void>(copy_data_to_clipboard(window_, *data));
+                    return;
+                }
+                // 그림이 없어도 답은 간다. 그림은 풀지 않은 바이트라 앱이 logic thread에서 푼다.
+                if (const auto* const read { std::get_if<clipboard_data_paste_request>(&request) }; read != nullptr)
+                {
+                    if (host_ == nullptr || environment_.delegate == nullptr)
+                        return;
+                    clipboard_data data { read_clipboard_data(window_) };
+                    data.tag = read->tag;
+                    try
+                    {
+                        if (app_message message { environment_.delegate->make_clipboard_data_message(data) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
+                    }
+                    catch (...)
+                    {
+                        report_runtime_error(u8"The clipboard data delegate threw an exception.");
+                    }
+                    return;
+                }
                 const auto* const paste { std::get_if<clipboard_paste_request>(&request) };
                 if (paste == nullptr || host_ == nullptr || environment_.policy == nullptr)
                     return;
@@ -1911,7 +1936,7 @@ namespace luil::win32 {
             {
                 if (host_ == nullptr || environment_.delegate == nullptr)
                     return;
-                const clipboard_change change { GetClipboardOwner() == window_, static_cast<std::uint32_t>(GetClipboardSequenceNumber()), IsClipboardFormatAvailable(CF_HDROP) != FALSE };
+                const clipboard_change change { GetClipboardOwner() == window_, static_cast<std::uint32_t>(GetClipboardSequenceNumber()), IsClipboardFormatAvailable(CF_HDROP) != FALSE, clipboard_has_image() };
                 try
                 {
                     if (app_message message { environment_.delegate->make_clipboard_changed_message(change) }; message.empty() == false)
@@ -2197,6 +2222,7 @@ namespace luil::win32 {
             //  - popup 모양 지원 (`ui_platform::rounded_popup_corners`). 앱은 이것으로 popup 안 tree의 반지름을 고른다.
             //  - 작업 표시줄 요청을 셸에 낼 수 있는가 (`capabilities.taskbar`). 개체를 만들 수 있었는가다.
             //  - OS 알림을 올릴 수 있는가 (`capabilities.notifications`). 앱 식별이 서고 알림 개체를 얻었는가다.
+            //  - 그림을 클립보드에 넣을 수 있는가 (`capabilities.clipboard_image_copy`). Win32는 늘 참이다.
             // 바뀐 때만 적는다. 새 능력은 `ui_platform_capabilities` 끝에 기본 거짓으로 더하고 여기에 한 줄을 더한다.
             void publish_platform()
             {
@@ -2204,11 +2230,13 @@ namespace luil::win32 {
                 const bool rounded { rounded_popups() };
                 const bool taskbar { taskbar_.available() };
                 const bool notifications { notifications_available() };
-                if (platform.rounded_popup_corners == rounded && platform.capabilities.taskbar == taskbar && platform.capabilities.notifications == notifications)
+                if (platform.rounded_popup_corners == rounded && platform.capabilities.taskbar == taskbar && platform.capabilities.notifications == notifications
+                    && platform.capabilities.clipboard_image_copy)
                     return;
                 platform.rounded_popup_corners = rounded;
                 platform.capabilities.taskbar = taskbar;
                 platform.capabilities.notifications = notifications;
+                platform.capabilities.clipboard_image_copy = true;
                 set_ui_platform(platform);
             }
 

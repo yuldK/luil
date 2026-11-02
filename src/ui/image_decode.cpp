@@ -251,18 +251,8 @@ namespace luil {
 
         [[nodiscard]] bool check_native_size(const SkISize native, const image_decode_options& options, image_decode_error& error)
         {
-            if (native.width() <= 0 || native.height() <= 0)
-            {
-                error = make_error(image_decode_error_kind::no_pixels, u8"The image has no pixels.");
-                return false;
-            }
-            const std::uint64_t limit { source_pixel_limit(options) };
-            if (static_cast<std::uint64_t>(native.width()) * static_cast<std::uint64_t>(native.height()) > limit)
-            {
-                error = make_error(image_decode_error_kind::too_many_pixels, source_pixel_failure(limit));
-                return false;
-            }
-            return true;
+            const auto side = [](const int value) { return value > 0 ? static_cast<std::uint64_t>(value) : std::uint64_t { 0 }; };
+            return image_input::check_source_pixels(side(native.width()), side(native.height()), options, error);
         }
 
         [[nodiscard]] SkImageInfo premultiplied_info(const SkISize size)
@@ -869,6 +859,25 @@ namespace luil {
             if (incomplete.empty() == false)
                 error = std::move(incomplete);
             return image;
+        }
+    }
+
+    namespace image_input {
+        bool check_source_pixels(const std::uint64_t width, const std::uint64_t height, const image_decode_options& options, image_decode_error& error)
+        {
+            if (width == 0 || height == 0)
+            {
+                error = make_error(image_decode_error_kind::no_pixels, u8"The image has no pixels.");
+                return false;
+            }
+            // 변은 각각 32비트 안이라 곱이 넘치지 않는다. 그보다 큰 변은 상한을 넘은 것으로 본다.
+            const std::uint64_t limit { source_pixel_limit(options) };
+            if (width > 0xFFFFFFFFu || height > 0xFFFFFFFFu || width * height > limit)
+            {
+                error = make_error(image_decode_error_kind::too_many_pixels, source_pixel_failure(limit));
+                return false;
+            }
+            return true;
         }
     }
 

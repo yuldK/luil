@@ -32,6 +32,9 @@ namespace luil {
         // OS 알림을 올릴 수 있다 (`show_notification`). Windows는 앱 식별이 서고 알림 개체를 얻었을 때 참이다. 사용자가
         // 알림을 껐는지는 `notification_status`가 말한다.
         bool notifications { false };
+        // 그림을 클립보드에 넣을 수 있다 (`clipboard_data_copy_request::image`, image-clipboard-design.md). Win32만 참이다.
+        // 거짓인 플랫폼(Android)은 글 칸만 넣으므로 앱이 "그림 복사"를 감춘다. 읽기는 모든 플랫폼이 한다.
+        bool clipboard_image_copy { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

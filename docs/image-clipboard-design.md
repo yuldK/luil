@@ -1,6 +1,6 @@
 # 그림 클립보드
 
-앱이 그림을 클립보드에 넣고, 다른 앱이 넣은 그림을 읽는다. 글과 그림을 한 클립에 함께 넣을 수 있다. [파일 목록 클립보드](file-clipboard-design.md)와 같은 요청/응답 길을 탄다. 요청은 UI thread가 실행하고, 읽은 답은 `app_delegate` 훅이 앱 메시지로 짓는다. 공개 형식은 [ui_events.h](../include/luil/ui/ui_events.h)의 `clipboard_data_copy_request`·`clipboard_data_paste_request`·`clipboard_data`·`clipboard_image_format`과 `clipboard_change::has_image`, 새 헤더 `include/luil/ui/ui_image.h`(옮겨 온 `ui_image`), 새 헤더 `include/luil/ui/clipboard_image.h`의 `decode_clipboard_image`, `app_delegate::make_clipboard_data_message`, `ui_platform_capabilities::clipboard_image_copy`다.
+앱이 그림을 클립보드에 넣고, 다른 앱이 넣은 그림을 읽는다. 글과 그림을 한 클립에 함께 넣을 수 있다. [파일 목록 클립보드](file-clipboard-design.md)와 같은 요청/응답 길을 탄다. 요청은 UI thread가 실행하고, 읽은 답은 `app_delegate` 훅이 앱 메시지로 짓는다. 공개 형식은 [ui_events.h](../include/luil/ui/ui_events.h)의 `clipboard_data_copy_request`·`clipboard_data_paste_request`·`clipboard_data`·`clipboard_image_format`과 `clipboard_change::has_image`, 새 헤더 `include/luil/ui/ui_image.h`(옮겨 온 `ui_image`), 새 헤더 `include/luil/ui/clipboard_image.h`의 `decode_clipboard_image`와 `max_clipboard_image_bytes`, `app_delegate::make_clipboard_data_message`, `ui_platform_capabilities::clipboard_image_copy`다.
 
 이 노드는 한 클립에 여러 형식을 싣는 요청 모양과 Win32의 여러 형식 블록 쓰기 helper를 처음 세운다. R3 rich_edit가 HTML·RTF를 그 위에 얹는다.
 
@@ -14,7 +14,7 @@
 
 ## 공개 형식
 
-`ui_image`와 `make_rgba_image`를 `include/luil/ui/ui_image.h`로 옮긴다. 그 클래스는 `image_backing` 전방 선언과 `shared_ptr`만 쓴다(image_element.h 44~65줄). `image_element.h`가 새 헤더를 include해 기존 호출은 바뀌지 않는다. `ui_events.h`가 새 헤더를 include한다. 새 공개 헤더 둘(`ui_image.h`, `clipboard_image.h`)은 `include/luil/luil.h`의 `image_element.h` 줄 옆에 더한다. [verify_umbrella_header.cmake](../cmake/verify_umbrella_header.cmake)가 `luil_umbrella_header` 검사로 빠뜨림을 막는다.
+`ui_image`와 `make_rgba_image`를 `include/luil/ui/ui_image.h`로 옮긴다. 그 클래스는 `image_backing` 전방 선언과 `shared_ptr`만 쓴다(image_element.h 44~65줄). `image_element.h`가 새 헤더를 include해 기존 호출은 바뀌지 않는다. `ui_events.h`가 새 헤더를 include한다. 새 공개 헤더 둘(`ui_image.h`, `clipboard_image.h`)은 `include/luil/luil.h`의 알파벳 순서 자리(`choice_group_element.h` 뒤, `ui_events.h` 뒤)에 더한다. [verify_umbrella_header.cmake](../cmake/verify_umbrella_header.cmake)가 `luil_umbrella_header` 검사로 빠뜨림을 막는다.
 
 ```cpp
 // include/luil/ui/ui_events.h, `clipboard_change` 다음
@@ -34,7 +34,7 @@ struct clipboard_data_copy_request
     // 앱이 미리 지은 PNG(`encode_png`)다. `image`가 있을 때만 Win32 "PNG" 형식으로 그대로 넣는다.
     std::vector<std::uint8_t> png {};
 
-    // 그림은 같은 값(같은 backing)인가로 견준다.
+    // 그림은 같은 값(같은 backing)인가로 견준다. 정의는 헤더의 inline이라 견주는 앱이 디코더를 링크하지 않는다.
     [[nodiscard]] bool operator==(const clipboard_data_copy_request& other) const noexcept;
 };
 
@@ -66,7 +66,11 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 
 ```cpp
 // include/luil/ui/clipboard_image.h (core)
+// 클립보드에서 그림 하나로 읽는 바이트의 상한이다. 디코더의 인코딩 바이트 상한과 같다 (결정 10).
+inline constexpr std::size_t max_clipboard_image_bytes { 256u * 1024u * 1024u };
+
 // 클립보드의 그림 바이트를 `ui_image`로 푼다. 상한·오류·thread 규칙은 `decode_image_bytes`와 같다. logic thread나 worker에서 부른다.
+// 그림이 없으면(`none`이나 빈 바이트) `file_empty`, `image_too_large`면 `input_too_large`다.
 [[nodiscard]] ui_image decode_clipboard_image(const clipboard_data& data, const image_decode_options& options, image_decode_error& error);
 ```
 
@@ -78,9 +82,10 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 
 | 파일 | 몫 |
 | --- | --- |
-| `src/ui/clipboard_image.cpp` (core) | `decode_clipboard_image`. DIB 머리 읽기와 RGBA 옮기기는 순수 함수다 |
-| `src/win32/win32_clipboard.h`·`.cpp` | 여러 형식 블록을 한 번 열어 모두 넣거나 모두 거두는 `put_clipboard_blocks` |
-| `src/win32/win32_image_clipboard.h`·`.cpp` | `ui_image`→`CF_DIBV5` 블록, 그림·글 읽기, `has_image` 판정 |
+| `src/ui/clipboard_image.cpp` (core) | `decode_clipboard_image`. DIB 머리 읽기와 RGBA 옮기기는 순수 함수다. Windows 헤더 없이 바이트 자리로 읽는다(`luil_core_portability`) |
+| `src/ui/image_source.h`·`image_decode.cpp` (core) | `image_input::check_source_pixels`. 코덱과 같은 픽셀 상한과 같은 오류 글을 DIB 옮기기도 쓴다 (결정 12) |
+| `src/win32/win32_clipboard.h`·`.cpp` | 여러 형식 블록을 한 번 열어 모두 넣거나 모두 거두는 `put_clipboard_blocks`(`SetClipboardData` 자리를 test가 바꿔 끼운다), `unicode_text_block`. 그림 클립보드가 같은 열기를 쓰도록 `open_clipboard`·`scoped_clipboard`·`scoped_global_lock`을 헤더로 낸다 |
+| `src/win32/win32_image_clipboard.h`·`.cpp` | `ui_image`→`CF_DIBV5` 블록(`dibv5_block`), 요청→블록 목록(`clipboard_data_blocks`), 넣기(`copy_data_to_clipboard`), 그림·글 읽기(`read_clipboard_data`), `has_image` 판정(`clipboard_has_image`) |
 | `src/android/android_clipboard.h`·`.cpp` | `read_clipboard_data`, 글 읽기의 그림 항목 거르기 |
 
 ## 규칙
@@ -91,9 +96,9 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 
 **읽기(Win32).** 한 번 열어 글과 그림과 번호를 함께 읽는다. 번호는 연 채 읽어 내용과 짝이 맞는다. 글은 `CF_UNICODETEXT`만 보고 `text_from_utf16_block`의 상한(`max_clipboard_text_chars`)을 따른다. 텍스트 칸 붙여넣기와 달리 파일 경로로 대신하지 않는다. 그림은 "PNG", `CF_DIBV5`, `CF_DIB` 순으로 처음 있는 것 하나다. "PNG"는 `encoded`, 나머지는 `dib`다. 블록은 `GlobalSize` 안에서만 읽고 256 MiB를 넘으면 복사하지 않고 `image_too_large`다. 디코더의 바이트 상한과 같은 값이다(image_decode.h 185줄).
 
-**풀기.** `decode_clipboard_image`는 `encoded`를 `decode_image_bytes`에 넘긴다. `dib`는 머리(`BITMAPINFOHEADER`·V4·V5)를 읽어 24·32비트 `BI_RGB`와 `BI_BITFIELDS`를 직접 RGBA로 옮겨 `make_rgba_image`를 부른다. 코덱이 없다. 팔레트·RLE·16비트 같은 나머지는 14바이트 BMP 파일 머리를 앞에 붙여 `decode_image_bytes`(Skia BMP)에 넘긴다. 머리가 말하는 크기가 블록보다 크면 거절한다. 픽셀 상한(`max_source_pixels`)은 메모리를 잡기 전에 본다. `max_width`·`max_height`는 다 편 뒤 `downscale_image`로 맞춘다.
+**풀기.** `decode_clipboard_image`는 `encoded`를 `decode_image_bytes`에 넘긴다. `dib`는 머리(`BITMAPINFOHEADER`·V4·V5, 12바이트 `BITMAPCOREHEADER`는 `unsupported_format`)를 읽어 24·32비트 `BI_RGB`와 `BI_BITFIELDS`를 직접 RGBA로 옮겨 `make_rgba_image`를 부른다. 코덱이 없다. 팔레트·RLE·16비트 같은 나머지는 14바이트 BMP 파일 머리를 앞에 붙여 `decode_image_bytes`(Skia BMP)에 넘긴다. 머리가 말하는 크기가 블록보다 크면 거절한다. 픽셀 상한(`max_source_pixels`)은 메모리를 잡기 전에 본다. `max_width`·`max_height`는 다 편 뒤 `downscale_image`로 맞춘다.
 
-**알파(읽기).** 알파 마스크가 있으면 곱하지 않은 값으로 읽는다. 32비트 `BI_RGB`는 넷째 바이트를 알파로 보되, 모든 픽셀이 0이면 불투명으로 본다. 그 바이트를 비워 두는 앱이 흔해 그대로 읽으면 그림이 사라진다. 곱한 값을 넣는 앱을 가려내는 규칙은 두지 않는다(실측).
+**알파(읽기).** 알파 마스크가 있으면 곱하지 않은 값으로 읽는다. 32비트 `BI_RGB`는 넷째 바이트를 알파로 보되, 모든 픽셀이 0이면 불투명으로 본다. 그 바이트를 비워 두는 앱이 흔해 그대로 읽으면 그림이 사라진다. 알파 마스크가 있는 `BI_BITFIELDS`도 모든 알파가 0이면 같은 규칙을 따른다(결정 11). 곱한 값을 넣는 앱을 가려내는 규칙은 두지 않는다(실측).
 
 **thread와 비용.** 넣기와 읽기는 UI thread에서 돈다. 넣기는 픽셀 복사와 BGRA 옮기기라 큰 그림(수천만 화소)은 수십 ms다. 읽기는 블록 복사뿐이고 풀기는 앱이 logic thread에서 한다. PNG 인코딩도 앱이 logic thread에서 한다(결정 2).
 
@@ -111,14 +116,14 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 - 길 a: 그림 전용(`clipboard_image_copy_request`·`paste`). 되는 것: 뜻이 좁고 분명하다. 대가: 글과 그림을 한 클립에 넣지 못한다. 하나씩 넣으면 뒤의 것이 앞의 것을 지운다. rich_edit가 HTML+글용 요청을 또 만든다.
 - 길 b: 한 클립 여러 형식(`clipboard_data_copy_request`, 이 문서). 되는 것: 글+그림이 한 번에 들어가고, rich_edit는 `html`·`rtf` 칸을 구조체 끝에 더한다. 대가: 칸이 늘면 플랫폼마다 "이 칸을 넣는가"가 갈려 능력 표가 는다.
 - 길 c: 형식 항목 목록(`std::vector<clipboard_item>`, 항목은 variant). 대가: 앱 코드가 길고 같은 형식 둘처럼 뜻 없는 값을 걸러야 한다.
-- 권장: b. 대가: 칸마다 능력 값이 하나씩 늘 수 있다. **승인 필요.**
+- 권장: b. 대가: 칸마다 능력 값이 하나씩 늘 수 있다. **승인: 길 b (2026-11-02).**
 
 **2. 복사가 나르는 그림 값.** 질문: 요청에 무엇을 싣는가.
 - 길 a: `ui_image` + 앱이 고르는 PNG 바이트(이 문서). 되는 것: 창 계층은 픽셀만 읽어 `CF_DIBV5`를 짓고 인코더를 링크하지 않는다. PNG를 원하는 앱만 `encode_png`를 logic thread에서 부른다. 대가: `ui_image`를 `ui_image.h`로 옮긴다. 공개 헤더가 하나 는다.
 - 길 b: PNG 바이트만. 대가: 창 계층이 `CF_DIBV5`를 지으려면 PNG를 풀어야 해 디코더가 모든 창 앱에 링크된다. "PNG"만 넣으면 그림판처럼 DIB만 읽는 앱에 붙지 않는다.
 - 길 c: RGBA 바이트와 너비·높이. 대가: `ui_image`에서 픽셀을 꺼내는 공개 함수가 없어 앱이 그림을 다시 풀어야 한다.
 - 이 아래 갈래로 `ui_image`를 전방 선언하고 `std::shared_ptr<const ui_image>`를 싣는 길도 있다. 헤더는 그대로지만 앱이 그림을 한 번 더 싼다.
-- 권장: a와 헤더 옮기기. 대가: 공개 헤더 하나와 `image_element.h` 정리. **승인 필요.**
+- 권장: a와 헤더 옮기기. 대가: 공개 헤더 하나와 `image_element.h` 정리. **승인: 길 a (2026-11-02).**
 
 **3. 붙여넣기 풀기 자리.** 질문: 읽은 그림을 누가 푸는가.
 - 길 a: 플랫폼은 바이트와 꼴만 넘기고 앱이 `decode_clipboard_image`로 푼다(이 문서). 되는 것: 창 계층에 디코더가 없고 UI thread가 큰 그림에 멈추지 않는다. DIB는 코덱 없이 옮긴다. 대가: 앱 코드가 한 단계 길다.
@@ -147,7 +152,7 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 - 길 b: androidx `FileProvider.getUriForFile`을 JNI로 부르고 캐시 파일을 `ClipData.newUri`로 싣는다. 되는 것: luil Java는 0줄이다. 대가: 소비 앱 매니페스트에 provider와 `res/xml` 경로 파일이 들고, 설정 실수가 곧 파일 노출이다. 변화 알림이 없어 캐시 파일을 지울 때를 모른다.
 - 길 c: `MediaStore`에 넣는다. 대가: 갤러리에 흔적이 남고 minSdk 26~28은 저장소 권한이 든다.
 - 직접 provider를 두는 길은 `ContentProvider` 하위 클래스라 Java가 들어 막힌다.
-- 권장: a. 수요가 있으면 b를 따로 단계로 낸다. 대가: Android 그림 복사 없음. **승인 필요.**
+- 권장: a. 수요가 있으면 b를 따로 단계로 낸다. 대가: Android 그림 복사 없음. **승인: 길 a (2026-11-02).**
 
 **8. Android 글 붙여넣기의 그림 항목.** 질문: 텍스트 칸에 그림 URI가 `content://…`로 붙는 것을 두는가.
 - 길 a: 둔다. 대가: 칸에 쓸모없는 주소가 들어간다.
@@ -158,6 +163,26 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 - 길 a: 고정 256 MiB 바이트 상한과 `has_image`(이 문서). 되는 것: 디코더 상한과 같아 넘긴 바이트는 디코더도 받는다. "그림 붙여넣기" 단추를 켜고 끌 근거가 생긴다. 대가: 상한이 손잡이가 아니다.
 - 길 b: 요청에 상한을 싣는다. 대가: 올려도 디코더가 256 MiB에서 거절해 얻는 것이 없다(image_decode.h 94줄).
 - 권장: a. 대가: 손잡이 없음. **권장대로 진행.**
+
+**10. 읽기 상한의 자리.** 질문: Win32와 Android가 함께 쓰는 256 MiB를 어디에 두는가. 설계 단계에 없던 질문이라 구현하며 정했다.
+- 길 a: 공개 헤더 `clipboard_image.h`의 `max_clipboard_image_bytes`. 되는 것: 두 플랫폼이 같은 값을 쓰고, 앱이 `image_too_large`를 사람에게 설명할 때 그 수를 읽는다. 대가: 공개 이름 하나.
+- 길 b: 플랫폼 파일마다 같은 상수를 둔다. 대가: 두 벌이 어긋날 수 있다.
+- 고른 것: a. 손잡이가 아니라 읽는 값이다(결정 9).
+
+**11. 모두 0인 알파의 범위.** 질문: "모든 알파가 0이면 불투명" 규칙을 32비트 `BI_RGB`에만 거는가. 설계 단계에 없던 질문이라 구현하며 정했다.
+- 길 a: 알파 자리가 있는 32비트 꼴 모두(`BI_RGB`와 알파 마스크가 있는 `BI_BITFIELDS`)에 건다. 되는 것: V5 머리에 알파 마스크만 적고 바이트는 비워 둔 앱의 그림도 사라지지 않는다. 대가: 정말로 다 투명한 그림은 불투명하게 읽힌다. 클립보드에 다 투명한 그림을 넣을 까닭은 드물다.
+- 길 b: `BI_RGB`에만 건다. 대가: 위의 앱에서 붙인 그림이 보이지 않는다.
+- 고른 것: a.
+
+**12. DIB 옮기기의 픽셀 상한.** 질문: 코덱을 거치지 않는 DIB 옮기기가 `max_source_pixels`를 어떻게 지키는가. 설계 단계에 없던 질문이라 구현하며 정했다.
+- 길 a: 기본 64 M와 오류 글을 쥔 image_decode.cpp가 `image_input::check_source_pixels`를 내고, 코덱 길(`check_native_size`)과 DIB 길이 함께 부른다. 되는 것: 상한과 글이 한 벌이다. 대가: 비공개 함수 하나.
+- 길 b: clipboard_image.cpp가 기본값과 글을 다시 적는다. 대가: 두 벌이 어긋날 수 있다.
+- 고른 것: a. 상한은 메모리를 잡기 전, 머리가 말하는 크기가 블록보다 큰지 보기 전에 본다. 머리만 거대한 블록은 "모자람"이 아니라 "너무 큼"으로 답한다.
+
+**13. 모바일 데모의 요청 길.** 질문: 모바일 데모의 "클립보드 그림 붙여넣기" 단추가 요청을 어떻게 내는가. 설계 단계에 없던 질문이라 구현하며 정했다.
+- 길 a: 단추가 앱 UI 명령을 내고, delegate(`execute_app_ui_command`)가 host에 `clipboard_data_paste_request`를 넣는다. 되는 것: 모바일 데모의 logic(`mobile_driver`)은 host를 들지 않는다. 기기 페이지의 권한 묻기·알림 보내기와 같은 길이다. 대가: 그림을 넣는 요청처럼 앱 상태를 싣는 요청에는 이 길이 맞지 않는다. 붙여넣기는 앱 상태를 싣지 않아 이 길로 충분하다.
+- 길 b: delegate가 시작할 때 host를 logic에 넘긴다. 대가: 붙여넣기 하나를 위해 셸 구조가 바뀐다.
+- 고른 것: a. 데스크톱 데모는 결정 6대로 logic thread가 `post_clipboard_request`로 넣는다.
 
 ## 플랫폼
 
@@ -191,8 +216,8 @@ using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_r
 - `tests/app_host_tests.cpp`(추가): 새 두 요청이 `post_clipboard_request`로 들어가 `take_clipboard_requests`로 나오는지.
 - `luil_umbrella_header`(기존 검사): 새 헤더 둘이 `luil.h`에 있어야 통과한다.
 - Android JNI 읽기는 `.cpp`를 묶은 확인 프로그램을 `run-as`로 실기기에서 돌린다(`platform_services_android`와 같은 길). 확인 프로그램이 넣은 글을 되읽고, 사람이 갤러리 앱에서 복사해 둔 그림을 읽어 `read_clipboard_data`의 꼴과 바이트 수를 적는다. Android 확인 프로그램은 초점이 없어 클립보드를 못 읽을 수 있다(실측). 막히면 모바일 데모의 label로 본다.
-- 데모 `examples/demo/images_page.cpp`의 "클립보드" 줄: 단추 `그림 복사`(연 그림과 파일 이름 글, PNG는 logic thread에서 짓는다)·`그림 붙여넣기`, label `클립보드 그림: 있음`(`has_image`), `붙여넣기 결과: 640×480 PNG`(없으면 `붙여넣기 결과: 그림 없음`, 크면 `붙여넣기 결과: 너무 큼`). 붙인 그림은 미리 보기 칸에 선다. UIA는 label 이름을 되읽는다.
-- 모바일 데모 `examples/mobile_demo/basics_page.cpp`의 그림 칸(338~346행) 아래: `클립보드 그림 붙여넣기` 단추와 `붙여넣기 결과:` label. `tests/mobile_demo_page_tests.cpp`에 사례를 더해 intent를 직접 주고 상태별 이름을 읽는다. `basics_page.cpp`를 `tests/CMakeLists.txt`의 모바일 데모 목록(`luil_core_tests`)에 올리는 일은 데모 연결 커밋이 한다. msg_box 연결 커밋([message-box-design.md](message-box-design.md))이 먼저 올렸으면 이 노드는 사례만 더한다.
+- 데모 `examples/demo/images_page.cpp`의 "클립보드" 줄: 단추 `그림 복사`(연 그림과 파일 이름 글, PNG는 logic thread에서 짓는다. 연 그림이 없거나 `clipboard_image_copy`가 거짓이면 꺼진다)·`그림 붙여넣기`, label `클립보드 그림: 있음`(`has_image`, 없으면 `클립보드 그림: 없음`, 첫 변화 알림 전에는 `클립보드 그림: 알림 전`), `붙여넣기 결과: 640×480 PNG`(DIB면 `… DIB`, 없으면 `붙여넣기 결과: 그림 없음`, 크면 `붙여넣기 결과: 너무 큼`, 풀지 못하면 `붙여넣기 결과: 풀지 못함 (이유)`), 넣기는 답이 없어 보낸 것을 적는 `그림 복사: 보냈다 (W×H, PNG n KB)`. 붙인 그림은 미리 보기 칸에 서고 상태 줄의 이름이 `클립보드 그림`이 된다. UIA는 label 이름을 되읽는다.
+- 모바일 데모 `examples/mobile_demo/basics_page.cpp`의 그림 칸 아래: `클립보드 그림 붙여넣기` 단추(앱 UI 명령, 결정 13)와 `붙여넣기 결과:` label(`아직 없음`·`그림 없음`·`너무 큼`·`풀지 못함`, 풀었으면 `W×H PNG`처럼 크기와 앞 바이트로 가른 형식 이름 PNG·JPEG·GIF·WebP·DIB). `tests/mobile_demo_page_tests.cpp`에 사례를 더해 intent를 직접 주고 상태별 이름을 읽는다. `basics_page.cpp`를 `tests/CMakeLists.txt`의 모바일 데모 목록(`luil_core_tests`)에 올리는 일은 데모 연결 커밋이 한다. 이 브랜치에는 msg_box 연결([message-box-design.md](message-box-design.md))이 없어 그 커밋과 같은 등록 줄과 자산 대역(`tests/mobile_demo_assets_stub.cpp`)을 같은 글자로 넣었다. 통합이 두 벌을 하나로 합친다.
 - 사람 확인: 그림판·브라우저·Office·메신저로 넣고 그쪽에서 복사한 그림을 붙이기, 투명 PNG의 바탕과 반투명 가장자리, 화면 캡처 도구의 그림, 큰 그림(수천만 화소)의 멈춤, 원격 데스크톱 클립보드. Android 실기기: 갤러리·키보드·메신저 앱에서 복사한 그림, 텍스트 칸에 그림 URI가 붙지 않는지, 시스템 알림.
 
 ## 범위 밖

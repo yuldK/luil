@@ -1703,12 +1703,31 @@ namespace luil::android {
                         host_->post_app_message(std::move(message));
                     return;
                 }
+                // 글과 그림을 함께 읽는다 (image-clipboard-design.md). 그림이 없어도, JNI가 없어도 답은 간다.
+                if (const auto* const read { std::get_if<clipboard_data_paste_request>(&request) }; read != nullptr)
+                {
+                    if (environment_.delegate == nullptr)
+                        return;
+                    clipboard_data data { jni_ != nullptr ? read_clipboard_data(*jni_, app_->activity->javaGameActivity) : clipboard_data {} };
+                    data.tag = read->tag;
+                    if (app_message message { environment_.delegate->make_clipboard_data_message(data) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                    return;
+                }
                 if (jni_ == nullptr)
                     return;
                 const jobject context { app_->activity->javaGameActivity };
                 if (const auto* const copy { std::get_if<clipboard_copy_request>(&request) }; copy != nullptr)
                 {
                     if (copy_text_to_clipboard(*jni_, context, copy->text) == false)
+                        log_error(u8"Failed to copy the text to the clipboard.");
+                    return;
+                }
+                // 그림은 넣지 못한다 (결정 7, Java 0줄). 글 칸만 넣고 그림은 버린다 — `clipboard_image_copy`가 거짓이라 앱이 그림
+                // 복사를 감출 수 있다.
+                if (const auto* const data { std::get_if<clipboard_data_copy_request>(&request) }; data != nullptr)
+                {
+                    if (data->text.empty() == false && copy_text_to_clipboard(*jni_, context, data->text) == false)
                         log_error(u8"Failed to copy the text to the clipboard.");
                     return;
                 }

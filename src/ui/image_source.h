@@ -28,5 +28,9 @@ namespace luil {
         [[nodiscard]] sk_sp<SkData> read_image_file(std::u8string_view path, const image_decode_options& options, image_decode_error& error);
         // 바이트를 복사하지 않고 빌린다. 코덱이 이 호출 안에서 끝나야 한다.
         [[nodiscard]] sk_sp<SkData> borrow_image_bytes(std::span<const std::uint8_t> bytes, const image_decode_options& options, image_decode_error& error);
+        // 원본 한 장의 픽셀 수가 상한(`max_source_pixels`, 기본 64 M) 안인가. 변이 0이면 `no_pixels`, 넘으면 `too_many_pixels`다.
+        // 코덱 없이 픽셀을 옮기는 자리(클립보드 DIB)가 메모리를 잡기 전에 코덱과 같은 상한과 같은 글로 거절하게 한다.
+        //  - 정의는 기본 상한을 쥔 image_decode.cpp에 있다.
+        [[nodiscard]] bool check_source_pixels(std::uint64_t width, std::uint64_t height, const image_decode_options& options, image_decode_error& error);
     }
 }

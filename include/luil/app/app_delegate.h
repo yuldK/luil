@@ -147,5 +147,14 @@ namespace luil {
             static_cast<void>(event);
             return {};
         }
+
+        // 클립보드의 글과 그림을 읽었다 (`clipboard_data_paste_request`의 답, image-clipboard-design.md). 반환 메시지는 app inbox로 간다.
+        // 빈 메시지는 게시하지 않는다. 그림이 없거나 읽지 못해도 답은 온다. 그림은 풀지 않은 바이트라 앱이 logic thread에서
+        // `decode_clipboard_image`로 푼다 — 이 훅은 UI thread에서 불리므로 여기서 풀지 않는다.
+        [[nodiscard]] virtual app_message make_clipboard_data_message(const clipboard_data& data)
+        {
+            static_cast<void>(data);
+            return {};
+        }
     };
 }
