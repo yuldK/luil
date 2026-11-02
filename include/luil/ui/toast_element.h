@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/ui/severity.h"
 #include "luil/ui/ui_element.h"
 
 #include <chrono>
@@ -9,13 +10,8 @@
 #include <vector>
 
 namespace luil {
-    enum class toast_severity
-    {
-        info,
-        success,
-        warning,
-        error,
-    };
+    // 옛 이름이다. 심각도는 정보 막대와 함께 쓰는 `ui_severity` 하나이고, 값 이름(`toast_severity::info`)이 그대로 통한다.
+    using toast_severity = ui_severity;
 
     // 토스트 한 장의 설정이다.
     // 목록 관리와 만료 판정은 앱의 몫이다.

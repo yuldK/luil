@@ -5,6 +5,7 @@
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/group_element.h"
+#include "luil/ui/info_bar_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/slider_element.h"
@@ -963,6 +964,56 @@ TEST_CASE("Expanding through UIA carries the target state, and the open group st
 
     legacy->Release();
     group->Release();
+    root->Release();
+}
+
+TEST_CASE("An info bar is Text with its name and its two buttons serve Invoke", "[win32][uia][info-bar]")
+{
+    fake_uia_host host {};
+    auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    luil::info_bar_config config {};
+    config.owner = u8"sync";
+    config.severity = luil::ui_severity::warning;
+    config.title = u8"동기화가 늦습니다";
+    config.message = u8"잠시 뒤 다시 시도합니다.";
+    config.action_label = u8"지금 시도";
+    config.action = tagged_action(u8"retry");
+    config.close = tagged_action(u8"dismiss");
+    page->add(std::make_unique<luil::info_bar_element>(std::move(config)));
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 600.0f, 60.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const bar { root->make_element_provider({ luil::ui_element_kind::info_bar, u8"sync" }) };
+    luil::win32::uia_element_provider* const action { root->make_element_provider({ luil::ui_element_kind::info_bar_action, u8"sync" }) };
+    luil::win32::uia_element_provider* const close { root->make_element_provider({ luil::ui_element_kind::info_bar_close, u8"sync" }) };
+
+    // 막대는 alert 역할이라 Text로 선다. 이름이 심각도 낱말, 제목, 본문이다.
+    REQUIRE(read_text_property(*bar, UIA_NamePropertyId) == L"경고 동기화가 늦습니다 잠시 뒤 다시 시도합니다.");
+    VARIANT type {};
+    REQUIRE(bar->GetPropertyValue(UIA_ControlTypePropertyId, &type) == S_OK);
+    REQUIRE(type.lVal == UIA_TextControlTypeId);
+    // 막대는 누를 자리가 아니다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(bar->GetPatternProvider(UIA_InvokePatternId, &pattern) == S_OK);
+    REQUIRE(pattern == nullptr);
+
+    // 두 단추는 Button이고 Invoke가 앱의 액션을 그대로 낸다.
+    REQUIRE(read_text_property(*action, UIA_NamePropertyId) == L"지금 시도");
+    REQUIRE(read_text_property(*close, UIA_NamePropertyId) == L"닫기");
+    for (luil::win32::uia_element_provider* const button : { action, close })
+    {
+        VARIANT button_type {};
+        REQUIRE(button->GetPropertyValue(UIA_ControlTypePropertyId, &button_type) == S_OK);
+        REQUIRE(button_type.lVal == UIA_ButtonControlTypeId);
+    }
+    REQUIRE(action->Invoke() == S_OK);
+    REQUIRE(dispatched_tag(host) == u8"retry");
+    host.dispatched.clear();
+    REQUIRE(close->Invoke() == S_OK);
+    REQUIRE(dispatched_tag(host) == u8"dismiss");
+
+    close->Release();
+    action->Release();
+    bar->Release();
     root->Release();
 }
 
