@@ -3306,7 +3306,11 @@ namespace luil {
             return std::nullopt;
         if (value.read_only)
         {
-            const bool clipboard_edit { primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x || event.key == key_code::key_z || event.key == key_code::key_y) };
+            // 읽기 전용 칸에는 칸 자신의 되돌릴 글이 없다. Ctrl+Z·Ctrl+Y(Shift 포함)는 삼키지 않고 칸 밖으로 넘겨
+            // 앱 on_key가 받게 한다. 삼키면 문서 보기에 초점이 있는 동안 앱의 실행 취소 stack이 키를 잃는다.
+            if (primary_shortcut && (event.key == key_code::key_z || event.key == key_code::key_y))
+                return std::nullopt;
+            const bool clipboard_edit { primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x) };
             const bool enter_edit { event.key == key_code::enter && event.shortcut_modifier_down() == false };
             const bool edits { event.key == key_code::delete_forward || enter_edit || (event.key == key_code::insert && event.shift) || clipboard_edit };
             if (edits)

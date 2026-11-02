@@ -87,6 +87,11 @@ A를 골랐고, 형태는 이렇다.
 `read_only`는 선택·복사·이동을 남기고 편집 요청과 IME 쓰기를 막는다. TSF는 읽기 전용 상태와
 조합 거절을 내며, Android는 소프트 키보드를 열지 않는다. UIA는 Text를 계속 내고 읽기 전용을 알린다.
 
+읽기 전용 칸은 글을 바꾸는 키(Ctrl+X, Ctrl+V, Delete, Enter, Shift+Insert)를 삼키지만 Ctrl+Z·Ctrl+Y는 삼키지
+않는다. 칸에는 되돌릴 글이 없으므로 그 키는 칸 밖으로 흘러 앱 `on_key`가 받는다
+([키 조상 전파](key-propagation-design.md)). 앱이 차이 보기 같은 문서 보기에 초점이 있는 채로도 자기 실행 취소
+stack을 같은 키로 돌릴 수 있다.
+
 `wrap=false`는 문단을 접지 않는다. `scroll_x`와 가로 스크롤 factory를 주면 수평 막대가 서고
 caret이 이동한 frame에서 가로 위치도 되살린다. 가로 휠이 세로 창을 건너뛰는 controller 수정은
 Claude 트랙 C0와 함께 합친다. `face=code`는 측정과 그리기에 같은 코드 글꼴을 사용한다.
