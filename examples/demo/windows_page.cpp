@@ -136,6 +136,60 @@ namespace demo {
             return text;
         }
 
+        // 점프 목록의 작업 둘이다. 데모를 `--send-to-first`로 띄워, 떠 있는 데모가 있으면 그 창 페이지의 둘째 인스턴스 줄에
+        // 인자가 닿는다. 아이콘은 실행 파일의 것이다.
+        [[nodiscard]] luil::taskbar_jump_list make_demo_jump_list()
+        {
+            luil::taskbar_jump_list list {};
+            list.tasks.push_back(luil::taskbar_jump_task {
+                .title = u8"메모로 보내기"
+                , .arguments = { u8"--send-to-first", u8"jump:note" }
+                , .description = u8"떠 있는 데모의 창 페이지에 jump:note를 넘긴다"
+            });
+            list.tasks.push_back(luil::taskbar_jump_task {
+                .title = u8"그림으로 보내기"
+                , .arguments = { u8"--send-to-first", u8"jump:image" }
+                , .description = u8"떠 있는 데모의 창 페이지에 jump:image를 넘긴다"
+            });
+            return list;
+        }
+
+        [[nodiscard]] std::u8string jump_list_request_text(const std::optional<bool>& filled)
+        {
+            if (filled.has_value() == false)
+                return u8"손대지 않음";
+            if (*filled)
+                return u8"작업 " + to_u8(static_cast<int>(make_demo_jump_list().tasks.size())) + u8"개";
+            return u8"비움";
+        }
+
+        // 보고를 한 줄로 옮긴다. 셸에 낸 일이 없으면 보고가 없다.
+        [[nodiscard]] std::u8string jump_list_report_text(const std::optional<luil::win32::jump_list_report>& report)
+        {
+            if (report.has_value() == false)
+                return u8"아직 보고 없음";
+            std::u8string text {};
+            switch (report->status)
+            {
+            case luil::win32::jump_list_status::applied:
+                text = u8"적용됨 · 작업 " + to_u8(static_cast<int>(report->tasks)) + u8"개";
+                break;
+            case luil::win32::jump_list_status::removed:
+                text = u8"지움";
+                break;
+            case luil::win32::jump_list_status::unavailable:
+                text = u8"쓸 수 없음";
+                break;
+            case luil::win32::jump_list_status::failed:
+            default:
+                text = u8"실패";
+                break;
+            }
+            if (report->error.empty() == false)
+                text += u8" (" + report->error + u8")";
+            return text;
+        }
+
         // 둘째 인스턴스가 보낸 인자를 한 줄로 옮긴다: `2개 [a.txt] [b c] · 작업 폴더 <경로>`. 받은 적이 없으면 `없음`이다.
         [[nodiscard]] std::u8string instance_arguments_text(const std::optional<luil::instance_arguments>& received)
         {
@@ -328,6 +382,16 @@ namespace demo {
                 taskbar_window_report_ = report->report;
             return true;
         }
+        if (const auto* const fill { message.get<jump_list_fill_intent>() }; fill != nullptr)
+        {
+            jump_list_filled_ = fill->fill;
+            return true;
+        }
+        if (const auto* const report { message.get<jump_list_report_intent>() }; report != nullptr)
+        {
+            jump_list_report_ = report->report;
+            return true;
+        }
         if (const auto* const received { message.get<instance_arguments_intent>() }; received != nullptr)
         {
             instance_arguments_ = received->arguments;
@@ -499,6 +563,9 @@ namespace demo {
             request.overlay.icon = taskbar_icon_;
             request.overlay.description = u8"새 소식 있음";
         }
+        // 누르기 전에는 손대지 않는다. 앞 실행이 남긴 목록은 비우기를 눌러야 지워진다.
+        if (jump_list_filled_.has_value())
+            request.jump_list = *jump_list_filled_ ? make_demo_jump_list() : luil::taskbar_jump_list {};
         return request;
     }
 
@@ -577,6 +644,29 @@ namespace demo {
         if (taskbar_window_open_)
             window_text = u8"작업 표시줄 독립 창: 요청 " + taskbar_state_text(taskbar_window_state(taskbar_window_step_), taskbar_window_percent) + u8" · 반영 " + taskbar_report_text(taskbar_window_report_);
         column.add(make_label(luil::ui_element_id { kind_text, u8"windows-taskbar-window" }, std::move(window_text), 12.0f, luil::label_color_role::primary), 18.0f);
+        add_jump_list_section(column);
+    }
+
+    void windows_page::add_jump_list_section(luil::stack_element& column)
+    {
+        column.add_gap(12.0f);
+        const std::u8string hint { u8"점프 목록은 작업 표시줄 단추를 오른쪽 클릭하면 보인다. 작업을 누르면 둘째 실행이 떠 위의 둘째 인스턴스 인자 줄에 닿는다." };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-jump-list-hint" }, hint, 11.0f, luil::label_color_role::dim), 18.0f);
+        column.add_gap(4.0f);
+        // 두 줄이 UIA로 읽힌다: 앱이 바라는 것, 셸에 닿은 정도.
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-jump-list-request" }, u8"점프 목록 요청: " + jump_list_request_text(jump_list_filled_), 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-jump-list-report" }, u8"점프 목록 반영: " + jump_list_report_text(jump_list_report_), 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add_gap(6.0f);
+
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-jump-list-controls" }, row_config) };
+        const bool filled { jump_list_filled_.value_or(false) };
+        const bool cleared { jump_list_filled_.has_value() && filled == false };
+        controls->add(make_taskbar_button(u8"jump-list-fill", u8"점프 목록 채우기", filled, luil::make_message_action(jump_list_fill_intent { true })), 130.0f);
+        controls->add(make_taskbar_button(u8"jump-list-clear", u8"점프 목록 비우기", cleared, luil::make_message_action(jump_list_fill_intent { false })), 130.0f);
+        column.add(std::move(controls), 26.0f);
     }
 
     std::vector<luil::win32::ui_window> windows_page::make_windows()

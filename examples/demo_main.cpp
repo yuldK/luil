@@ -1121,6 +1121,12 @@ namespace demo {
                 return luil::app_message { taskbar_report_intent { report } };
             }
 
+            // 점프 목록을 셸에 낸 결과는 창 페이지의 반영 줄이 읽는다.
+            [[nodiscard]] luil::app_message make_jump_list_message(const luil::win32::jump_list_report& report) override
+            {
+                return luil::app_message { jump_list_report_intent { report } };
+            }
+
             [[nodiscard]] luil::app_message make_window_placement_message(const luil::win32::window_placement& placement) override
             {
                 return luil::app_message { placement_intent { placement } };
