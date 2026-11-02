@@ -218,6 +218,8 @@ column.add(std::make_unique<luil::rating_element>(std::move(rating)), { .length 
 
 **15. 알리는 범위의 최소.** `minimum_for`와 값 중 작은 쪽이다. 표시 전용 평균이 한 걸음보다 작은 소수 값(0.4)을 가지면서 지울 수 없는 설정이면 `minimum_for`(한 걸음)가 값보다 커 UIA가 범위 밖 값을 읽는다. 값 정하기(`set_value`)는 `minimum_for`만 쓴다.
 
+**16. 범위가 없는 요소의 변화량.** `get_SmallChange`·`get_LargeChange`는 `access_range`가 없는 요소에서 `get_Minimum`처럼 `UIA_E_INVALIDOPERATION`을 내지 않고 지금처럼 `S_OK`와 0을 돌려준다. 걸음을 알리지 않는 요소의 동작을 바꾸지 않으려는 것이다. 요소가 tree에서 사라졌을 때만 `UIA_E_ELEMENTNOTAVAILABLE`을 낸다(전에는 늘 `S_OK`였다). `get_Minimum`과 같은 COM 경계 가드를 거친다.
+
 ## 플랫폼
 
 **Win32.** `win32_window.cpp`와 `window_surface.cpp`를 고치지 않는다. UIA는 Slider에 RangeValue(Value·Minimum·Maximum·IsReadOnly)와 값 글의 Value 패턴을 낸다. SmallChange·LargeChange는 별점이 걸음과 한 별을 알린다(결정 7 b). 다른 요소는 지금처럼 0이다. 마우스·펜의 hover 미리 보기와 손 모양 커서는 지금의 입력 경로 그대로고, Windows 터치도 같은 controller라 결정 6의 규칙을 따른다.
