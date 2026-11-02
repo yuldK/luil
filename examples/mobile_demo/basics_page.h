@@ -7,6 +7,7 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
 #include "luil/text/text_edit.h"
+#include "luil/ui/clipboard_image.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/stack_element.h"
@@ -16,6 +17,7 @@
 #include "luil/ui/ui_interaction.h"
 #include "mobile_demo/common.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -26,6 +28,10 @@ namespace mobile_demo {
     // 밖에서 쓰는 곳이 없어 여기 섰을 뿐이라, 다른 페이지가 같은 것을 원하면
     // 그때 등록부로 옮긴다.
     constexpr luil::ui_element_kind kind_playback_toggle { luil::application_element_kind(30) };
+
+    // 클립보드의 그림을 붙이는 앱 UI 명령이다. 요청은 host가 받으므로 delegate가 받아 `clipboard_data_paste_request`를 넣는다
+    // (image-clipboard-design.md). 페이지는 플랫폼을 부르지 않는다.
+    inline constexpr std::uint32_t command_paste_clipboard_image { 0x6369 };
 
     // --- 이 페이지의 메시지 ---
     // 텍스트 편집·조합 메시지(edit_intent·composition_intent)는 창 페이지와
@@ -55,6 +61,12 @@ namespace mobile_demo {
     // 알고 있고(`image_playback::paused_at`), 단추의 글이 그것을 그대로 말한다.
     struct playback_toggle_intent
     {
+    };
+
+    // 클립보드에서 읽은 글과 그림이다 (`app_delegate::make_clipboard_data_message`). 페이지가 logic thread에서 푼다.
+    struct clipboard_image_intent
+    {
+        luil::clipboard_data data {};
     };
 
     // 암호 칸의 글을 보이거나 가린다.
@@ -133,6 +145,8 @@ namespace mobile_demo {
         luil::ui_image picture_ {};
         luil::image_decode_error picture_error_ {};
         bool picture_read_ { false };
+        // 클립보드 그림 붙여넣기의 결과 글이다. 화면의 label이 곧 보조 기술이 읽는 이름이다.
+        std::u8string clipboard_result_ { u8"붙여넣기 결과: 아직 없음" };
         // 움직이는 견본 둘이다 (webp 하나, gif 하나). 정지 그림과 같은 규칙으로
         // 한 번만 읽고, **읽었다는 사실**을 기억한다 — 성공을 기억하면 읽지 못한
         // 파일을 frame마다 다시 연다.

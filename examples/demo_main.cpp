@@ -527,6 +527,25 @@ namespace demo {
                 if (palette_.handle(message))
                     return;
 
+                // 그림 클립보드다 (image-clipboard-design.md). 클립보드는 UI thread의 몫이라 요청은 host에 넣고, 그림과 PNG는
+                // 앱 상태라 여기(logic thread)서 짓는다. 페이지는 host를 모른다.
+                if (message.get<image_clipboard_copy_intent>() != nullptr)
+                {
+                    if (luil::app_host* const host { host_.load() }; host != nullptr)
+                        if (std::optional<luil::clipboard_data_copy_request> request { images_.make_copy_request() }; request.has_value())
+                            host->post_clipboard_request(std::move(*request));
+                    return;
+                }
+                if (message.get<image_clipboard_paste_intent>() != nullptr)
+                {
+                    if (luil::app_host* const host { host_.load() }; host != nullptr)
+                        host->post_clipboard_request(luil::clipboard_data_paste_request {});
+                    return;
+                }
+                // 클립보드 변화는 파일 페이지가 임자다. 이미지 페이지는 그림이 있는지만 함께 본다.
+                if (const auto* const changed { message.get<files_clipboard_changed_intent>() }; changed != nullptr)
+                    images_.set_clipboard_has_image(changed->change.has_image);
+
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
@@ -1141,6 +1160,12 @@ namespace demo {
             [[nodiscard]] luil::app_message make_clipboard_changed_message(const luil::clipboard_change& change) override
             {
                 return luil::app_message { files_clipboard_changed_intent { change } };
+            }
+
+            // 클립보드의 글과 그림이다. 이미지 페이지가 받아 logic thread에서 푼다.
+            [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
+            {
+                return luil::app_message { image_clipboard_data_intent { data } };
             }
 
             // 받는 칸이 아닌 곳에 놓인 파일의 물러섬이다.

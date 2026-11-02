@@ -4,6 +4,7 @@
 // UI thread가 되고, run_application이 Activity가 끝날 때까지 돈다.
 
 #include "mobile_demo/app.h"
+#include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
 
@@ -42,9 +43,16 @@ namespace {
                 watcher_ = mobile_demo::start_files_watch(host, files_directory_ / "watch-demo");
         }
 
-        // 기기 페이지의 "묻기"와 "알림 보내기"다. 묻지 않았으면(필요 없음·이미 받음) 지금 상태를 그대로 알린다.
+        // 기기 페이지의 "묻기"와 "알림 보내기", 기본 페이지의 클립보드 그림 붙여넣기다. 묻지 않았으면(필요 없음·이미 받음) 지금
+        // 상태를 그대로 알린다.
         void execute_app_ui_command(luil::app_host& host, const luil::app_ui_command& command) override
         {
+            // 답은 `make_clipboard_data_message`로 온다.
+            if (command.command == mobile_demo::command_paste_clipboard_image)
+            {
+                host.post_clipboard_request(luil::clipboard_data_paste_request {});
+                return;
+            }
             if (command.command == mobile_demo::command_request_local_network)
             {
                 if (host.request_permission(luil::app_permission::local_network) == false)
@@ -95,6 +103,12 @@ namespace {
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
         {
             return mobile_demo::make_metrics_message(metrics);
+        }
+
+        // 클립보드의 글과 그림이다. 기본 페이지가 받아 logic thread에서 푼다.
+        [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
+        {
+            return luil::app_message { mobile_demo::clipboard_image_intent { data } };
         }
 
     private:

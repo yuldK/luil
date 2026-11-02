@@ -1,5 +1,6 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
+#include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
 #include "mobile_demo/popups_page.h"
@@ -7,6 +8,7 @@
 #include "mobile_demo/smb_page.h"
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
+#include "sample_image_bytes.h"
 
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/ui_interaction.h"
@@ -1211,4 +1213,71 @@ TEST_CASE("The device page reads the notification permission, the send result an
     REQUIRE(name_of(tree, u8"notification-none") == u8"이 플랫폼은 OS 알림을 올리지 못한다.");
     REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" }) == nullptr);
     luil::set_ui_platform(previous);
+}
+
+namespace {
+    // 400dp 창에서 지은 기본 페이지의 tree다 (배율 1).
+    [[nodiscard]] luil::ui_tree clipboard_basics_tree(mobile_demo::basics_page& page)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    // 클립보드 붙여넣기 결과 줄의 이름이다. 화면의 글이 곧 UIA Name이다.
+    [[nodiscard]] std::u8string clipboard_basics_result(mobile_demo::basics_page& page)
+    {
+        const luil::ui_tree tree { clipboard_basics_tree(page) };
+        const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, u8"clipboard-image-result" }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    [[nodiscard]] luil::clipboard_data clipboard_basics_data(const luil::clipboard_image_format format, std::vector<std::uint8_t> bytes)
+    {
+        luil::clipboard_data data {};
+        data.image_format = format;
+        data.image = std::make_shared<const std::vector<std::uint8_t>>(std::move(bytes));
+        return data;
+    }
+}
+
+TEST_CASE("The basics page pastes a clipboard image and names what it read", "[mobile-demo][clipboard][image]")
+{
+    mobile_demo::basics_page page {};
+    {
+        const luil::ui_tree tree { clipboard_basics_tree(page) };
+        const luil::ui_element* const button { tree.find({ mobile_demo::kind_layout, u8"clipboard-image-paste" }) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name == u8"클립보드 그림 붙여넣기");
+    }
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 아직 없음");
+
+    // 그림이 없어도 답은 온다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { luil::clipboard_data { .text = u8"글만" } } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 그림 없음");
+
+    const std::vector<std::uint8_t> png { luil::testing::sample_quadrant_png.begin(), luil::testing::sample_quadrant_png.end() };
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::encoded, png) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 2×2 PNG");
+
+    // 24비트 1×1 DIB다 (40바이트 머리, 행은 4바이트).
+    std::vector<std::uint8_t> dib(44, 0u);
+    dib[0] = 40;
+    dib[4] = 1;
+    dib[8] = 1;
+    dib[12] = 1;
+    dib[14] = 24;
+    dib[40] = 0xFFu;
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::dib, dib) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 1×1 DIB");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::encoded, { 1, 2, 3 }) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 풀지 못함");
+
+    luil::clipboard_data large {};
+    large.image_format = luil::clipboard_image_format::encoded;
+    large.image_too_large = true;
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { large } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 너무 큼");
 }
