@@ -5,6 +5,7 @@
 // (캡션을 잡아 옮긴다).
 
 #include "demo/code_lexer.h"
+#include "demo/line_break_sample.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
@@ -160,6 +161,10 @@ namespace mobile_demo {
         std::shared_ptr<luil::text_area_wrap_cache> code_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
         luil::syntax_highlighter highlighter_ { demo::code_highlighter_config() };
         bool code_painted_ { false };
+        // 줄 나눔 칸의 글과 정책이다 (데스크톱 demo의 `line_break_sample.h`를 함께 쓴다). label은 칸의 확정 글을 그린다.
+        luil::text::text_edit_state line_break_ { .text = std::u8string { demo::line_break_sample } };
+        luil::text::line_break_policy line_break_policy_ { luil::text::line_break_policy::hangul_words };
+        std::shared_ptr<luil::text_area_wrap_cache> line_break_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };

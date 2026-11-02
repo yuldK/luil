@@ -1,4 +1,5 @@
 #include "demo/code_lexer.h"
+#include "demo/line_break_sample.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
 
@@ -373,4 +374,38 @@ TEST_CASE("The code sample shows a one-line edit relexing one line and a comment
     REQUIRE(restored.keywords == original.keywords);
     REQUIRE(demo::code_status_text(restored, highlighter.stats().relexed) == u8"구간 22 · 키워드 4 · 문자열 1 · 주석 4 · 마지막에 다시 칠한 줄 9");
     REQUIRE(highlighter.spans()->size() == original_spans.size());
+}
+
+TEST_CASE("The demo line break cell counts lines with both policies", "[demo][line-break]")
+{
+    // ASCII는 글자 크기의 0.6배, 그 밖(한글·한자·가나)은 글자 크기만큼의 폭이다. 실제 글꼴과 다르므로 화면의 값은
+    // 검증 때 다시 읽는다.
+    const luil::text_measurer measurer { [](const std::u8string_view text, const float size) {
+        float width { 0.0f };
+        for (std::size_t offset { 0 }; offset < text.size();)
+        {
+            const auto decoded { luil::text::utf8_decode(text, offset) };
+            width += decoded.codepoint < 0x80 ? size * 0.6f : size;
+            offset += decoded.length;
+        }
+        return width;
+    }
+    };
+    const auto status_of = [&measurer](const luil::text::line_break_policy policy) {
+        const luil::label_config label { demo::line_break_label_config(std::u8string { demo::line_break_sample }, policy, 12.0f) };
+        luil::text_area_element area { luil::ui_element_id { luil::application_element_kind(44) },
+            luil::text_input_view { .text = std::u8string { demo::line_break_sample } }, demo::line_break_area_config(policy, std::make_shared<luil::text_area_wrap_cache>())
+        };
+        return demo::measure_line_break_status(policy, label, area, 1.0f, &measurer);
+    };
+    const std::u8string words { status_of(luil::text::line_break_policy::hangul_words) };
+    const std::u8string syllables { status_of(luil::text::line_break_policy::unicode) };
+    // 기본 정책은 첫 줄을 어절 끝에서 끊고, unicode 정책은 같은 폭을 음절 사이까지 채운다.
+    REQUIRE(words == u8"정책 hangul_words · 라벨 5줄 · 칸 5줄 · 첫 줄 끝 '바꾸고'");
+    REQUIRE(syllables == u8"정책 unicode · 라벨 5줄 · 칸 5줄 · 첫 줄 끝 '고 낱'");
+
+    // 줄 끝 글자는 매단 공백을 뺀 끝 글자소 셋이다.
+    REQUIRE(demo::line_break_line_end(u8"가나다라  ", 0, 14) == u8"나다라");
+    REQUIRE(demo::line_break_line_end(u8"ab", 0, 2) == u8"ab");
+    REQUIRE(demo::line_break_line_end(u8"ab", 2, 2).empty());
 }
