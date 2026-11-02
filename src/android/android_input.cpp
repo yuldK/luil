@@ -427,7 +427,8 @@ namespace luil::android {
         const bool meta { has_meta(input.meta_state, AMETA_META_ON) };
         const bool shortcut { control || alt || meta };
         const std::chrono::steady_clock::time_point time { event_time(input.time_ns) };
-        // Backspace는 글자다 (Win32의 WM_CHAR U+0008). 수정자가 있을 때만 키로도 간다.
+        // Backspace는 Space처럼 늘 누름이면서 글자다 (Win32의 WM_KEYDOWN 뒤 WM_CHAR U+0008). 텍스트 칸에서는
+        // controller가 키 쪽을 삼켜 앱 단축키로 새지 않는다.
         const bool backspace { input.key_code == AKEYCODE_DEL };
         const bool character_key { backspace || input.unicode_char != 0 };
 
