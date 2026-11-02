@@ -1,5 +1,6 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
+#include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
 #include "mobile_demo/popups_page.h"
@@ -8,6 +9,8 @@
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
 
+#include "luil/ui/message_box.h"
+#include "luil/ui/root_element.h"
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
@@ -1219,4 +1222,177 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(mobile_demo::text_target_of_kind(mobile_demo::kind_text).has_value() == false);
+}
+
+namespace {
+    // 창 전체를 덮는 확인 대화 상자의 tree다 (배율 1, 안전 영역 없음). 대화가 열려 있을 때만 의미가 있다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> basics_overlay(mobile_demo::basics_page& page, const float width = 400.0f, const float height = 800.0f)
+    {
+        auto root { std::make_unique<luil::root_element>() };
+        page.add_overlay(*root, width, height, 1.0f, {});
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, width, height }, 1.0f));
+    }
+
+    // 400dp 창에서 조립해 배치한 기본 페이지에서 읽은 글이다. 화면의 글이 곧 보조 기술이 읽는 이름이다.
+    [[nodiscard]] std::u8string basics_text(mobile_demo::basics_page& page, const luil::ui_element_kind kind, const std::u8string& owner)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
+        const luil::ui_element* const found { tree.find({ kind, owner }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    // 입력 경로가 돌려준 메시지를 페이지에 그대로 전한다. 앱 메시지가 아닌 것은 건너뛴다.
+    void deliver_actions(mobile_demo::basics_page& page, const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(page.handle(*message));
+    }
+
+    // 자리 한가운데를 눌렀다 뗀 입력이 내는 메시지다. 실제 입력 경로를 그대로 탄다.
+    [[nodiscard]] std::vector<luil::input_action> click_element(luil::interaction_controller& controller, const luil::ui_tree& tree, const luil::ui_element_id& id)
+    {
+        const luil::ui_element* const element { tree.find(id) };
+        REQUIRE(element != nullptr);
+        const luil::rect_f box { element->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        return controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } });
+    }
+
+    [[nodiscard]] luil::ui_element_id box_button(const std::u8string_view owner, const std::u8string_view key)
+    {
+        return luil::message_box_button_id(owner, key);
+    }
+
+    [[nodiscard]] luil::rect_f bounds_of(const luil::ui_tree& tree, const luil::ui_element_id& id)
+    {
+        const luil::ui_element* const found { tree.find(id) };
+        REQUIRE(found != nullptr);
+        return found->bounds();
+    }
+
+    [[nodiscard]] std::u8string result_key_of(const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        const auto* const result { message->get<mobile_demo::dialog_result_intent>() };
+        REQUIRE(result != nullptr);
+        return result->key;
+    }
+}
+
+TEST_CASE("The mobile reset box opens, reads its state back, and closes with one result from every way", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-state") == u8"대화: 닫힘");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: 없음");
+
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::reset });
+    REQUIRE(page.dialog_open());
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-state") == u8"대화: 열림");
+
+    // 뒤로 가기가 낼 메시지는 Esc가 내는 결과와 같다. 앱이 한 길을 빼먹어 대화가 열린 채 남지 않는다.
+    REQUIRE(result_key_of(page.back_action()) == u8"cancel");
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(basics_overlay(page));
+        const std::vector<luil::input_action> escaped { controller.process(luil::key_pressed_event { luil::key_code::escape, false, false, false, false, time_point {} }) };
+        REQUIRE(escaped.size() == 1u);
+        REQUIRE(result_key_of(escaped.front()) == u8"cancel");
+    }
+
+    // 뒤로 가기가 낸 메시지로 닫힌다.
+    deliver_actions(page, { page.back_action() });
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: cancel");
+
+    // 초기화 단추는 카운터를 0으로 되돌린다.
+    deliver(page, mobile_demo::increment_intent {});
+    deliver(page, mobile_demo::increment_intent {});
+    REQUIRE(basics_text(page, mobile_demo::kind_counter_label, {}) == u8"누른 횟수: 2");
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::reset });
+    const std::shared_ptr<const luil::ui_tree> tree { basics_overlay(page) };
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    deliver_actions(page, click_element(controller, *tree, box_button(u8"reset", u8"reset")));
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: reset");
+    REQUIRE(basics_text(page, mobile_demo::kind_counter_label, {}) == u8"누른 횟수: 0");
+}
+
+TEST_CASE("The mobile box buttons are finger sized and stand inside the screen margin", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::reset });
+    // 폭이 좁은 휴대폰이다. 자리 폭 320에서 양쪽 여백 16을 남기면 상자 폭은 288이다.
+    const std::shared_ptr<const luil::ui_tree> tree { basics_overlay(page, 320.0f, 640.0f) };
+    const luil::rect_f box { bounds_of(*tree, { luil::ui_element_kind::message_box, u8"reset" }) };
+    REQUIRE(box.x >= 16.0f);
+    REQUIRE(box.x + box.width <= 320.0f - 16.0f);
+    REQUIRE(bounds_of(*tree, box_button(u8"reset", u8"cancel")).height == Catch::Approx(mobile_demo::touch_height));
+    REQUIRE(bounds_of(*tree, box_button(u8"reset", u8"reset")).height == Catch::Approx(mobile_demo::touch_height));
+}
+
+TEST_CASE("The long mobile box stacks its three buttons on a narrow phone and keeps a row on a wide window", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::details });
+    const luil::ui_element_id later { box_button(u8"details", u8"later") };
+    const luil::ui_element_id discard { box_button(u8"details", u8"discard") };
+    const luil::ui_element_id save { box_button(u8"details", u8"ok") };
+
+    // 넓은 창에서는 세 단추가 한 행이다.
+    {
+        const std::shared_ptr<const luil::ui_tree> wide { basics_overlay(page, 480.0f, 800.0f) };
+        REQUIRE(bounds_of(*wide, later).y == Catch::Approx(bounds_of(*wide, save).y));
+        REQUIRE(bounds_of(*wide, later).x < bounds_of(*wide, discard).x);
+        REQUIRE(bounds_of(*wide, discard).x < bounds_of(*wide, save).x);
+    }
+
+    // 좁은 화면에서는 넘쳐서 쌓인다. 순서는 그대로 위에서 아래이고 모두 안쪽 폭 전체다.
+    const std::shared_ptr<const luil::ui_tree> narrow { basics_overlay(page, 320.0f, 800.0f) };
+    const luil::rect_f box { bounds_of(*narrow, { luil::ui_element_kind::message_box, u8"details" }) };
+    const luil::rect_f first { bounds_of(*narrow, later) };
+    const luil::rect_f second { bounds_of(*narrow, discard) };
+    const luil::rect_f third { bounds_of(*narrow, save) };
+    REQUIRE(first.y < second.y);
+    REQUIRE(second.y < third.y);
+    REQUIRE(first.x == Catch::Approx(second.x));
+    REQUIRE(second.x == Catch::Approx(third.x));
+    REQUIRE(first.width == Catch::Approx(box.width - 40.0f));
+    REQUIRE(second.y == Catch::Approx(first.y + mobile_demo::touch_height + 8.0f));
+    REQUIRE(third.y == Catch::Approx(second.y + mobile_demo::touch_height + 8.0f));
+    // 맨 아래 단추 아래가 안쪽 여백이라 상자가 단추를 모두 감싼다.
+    REQUIRE(third.y + third.height + 20.0f == Catch::Approx(box.y + box.height));
+}
+
+TEST_CASE("The long mobile box keeps its check apart from its buttons and closes only on a button", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::details });
+    REQUIRE(page.make_dialog_config().check.has_value());
+    REQUIRE(page.make_dialog_config().check->checked == false);
+    {
+        const std::shared_ptr<const luil::ui_tree> tree { basics_overlay(page) };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        deliver_actions(page, click_element(controller, *tree, luil::message_box_check_id(u8"details")));
+    }
+    REQUIRE(page.dialog_open());
+    REQUIRE(page.make_dialog_config().check->checked);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: 없음");
+
+    // 뒤로 가기는 나중에 다시 묻기(거절)의 key로 닫는다.
+    REQUIRE(result_key_of(page.back_action()) == u8"later");
+    deliver_actions(page, { page.back_action() });
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: later");
+    // 닫히면 설정이 비어 단추도 없다.
+    REQUIRE(page.make_dialog_config().buttons.empty());
 }

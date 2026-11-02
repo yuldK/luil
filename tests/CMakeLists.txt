@@ -140,7 +140,9 @@ target_sources(luil_core_tests PRIVATE
 # 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 파일 감시 묶음의 표시도
 # 서버·감시자 없이 검증한다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
+# 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
 target_sources(luil_core_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/basics_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/device_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/files_page.cpp"
@@ -149,6 +151,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/zoom_page.cpp"
+    mobile_demo_assets_stub.cpp
     secret_store_stub.cpp
     mobile_demo_page_tests.cpp)
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
@@ -419,7 +422,10 @@ add_executable(luil_tests
     # 데스크톱 데모의 창 페이지는 Win32 호출(탐색기·메모장)을 부르므로 Windows 전용 test에서 읽는다.
     "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/windows_page.cpp"
-    windows_page_tests.cpp)
+    windows_page_tests.cpp
+    # 데스크톱 데모의 기본 페이지도 <windows.h>와 비밀 저장소를 불러 Windows 전용 test에서 읽는다. 확인 대화의 열기·결과·닫기를 검증한다.
+    "${PROJECT_SOURCE_DIR}/examples/demo/basics_page.cpp"
+    basics_page_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"

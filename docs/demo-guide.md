@@ -35,6 +35,7 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 | 메뉴 팝업의 측정·배치 | make_menu_popup | [메뉴](../examples/demo/popups_page.cpp) |
 | 분할 버튼과 드롭다운 단추, 필드 아래에 놓고 위로 뒤집히는 메뉴 | split_button_element, menu_popup_config::below, place_field_popup | [메뉴](../examples/demo/popups_page.cpp) |
 | 닫기 전까지 남는 정보 막대, 폭에서 높이를 재서 담기 | info_bar_element, info_bar_element::measure, ui_severity | [토스트](../examples/demo/toasts_page.cpp) |
+| 확인 대화 상자, 크기는 내용에서 나오고 닫는 모든 계기가 한 결과를 낸다 | make_message_box, message_box_config, message_box_ok, modal_host_config::fit_height | [기본 입력](../examples/demo/basics_page.cpp) |
 | 명령과 단축키의 공통 정의 | app_command, match_command, menu_item_from | [탭](../examples/demo/tabs_page.cpp) |
 | 앞·뒤 삽입으로 탭 이동 | tab_bar_config::move | [탭](../examples/demo/tabs_page.cpp) |
 | 창 밖으로 분리·다시 합치기 | tab_bar_config::unclaimed_drop, receive, ui_window | [탭](../examples/demo/tabs_page.cpp) |
@@ -98,6 +99,7 @@ width를 비우면 글·아이콘·단축키 열로 너비를 정한다. 높이�
 - 탭 모양: 기본·이어진 탭·평평한 칸, 닫기 단추를 선택·포인터에서만 보이기, 상태 표시를 아이콘 모서리나 닫기 단추 자리에 두기, 넘칠 때 한 탭씩 넘기기, 자리가 모자라면 줄이기. 세 모양의 견본 막대가 그림으로만 선다.
 - 분리 창: 문서 하나를 별도 창으로 띄우고 원래 막대에 끌어 합친다. 창을 닫거나 복귀 버튼을 눌러도 원래 탭으로 돌아온다.
 - 기본 입력: 창이 짧아져도 스크롤로 입력·이미지·확인 다이얼로그 예제에 접근할 수 있다.
+- 확인 대화 상자: 기본 페이지의 "카운터 초기화"와 "긴 확인 대화"가 연다. 초기화 대화는 위험한 단추만 있어 취소에 초점이 서고 Enter와 Esc와 바깥 누름이 모두 취소의 결과로 닫는다. 긴 대화는 단추 셋과 확인 칸이 있고 마지막 긍정(저장)이 Enter의 대상이다. 좁은 화면에서는 단추가 위에서 아래로 쌓인다. 끌어서 옮기는 캡션 바는 없다. "대화"와 "마지막 결과" 두 줄이 열림과 결과 key를 글로 보인다.
 
 Ctrl+Tab과 Ctrl+Shift+Tab은 탭 전환, Ctrl+T는 새 탭, Ctrl+W는 닫기,
 Ctrl+Shift+T는 닫은 탭 복원이다. 일반 Tab과 Shift+Tab은 초점을 이동한다.

@@ -241,6 +241,8 @@ root.add(std::move(host));
 
 데모 칸(`examples/demo`, `examples/mobile_demo`의 기본 페이지). "카운터 초기화" 대화를 `make_message_box`로 바꾸고 "대화: 열림/닫힘"과 "마지막 결과: reset|cancel|없음" label을 그려 UIA가 되읽게 한다. 단추 셋과 긴 본문과 확인 칸을 가진 두 번째 대화를 더해 좁은 화면의 쌓임을 보인다. 연결 커밋이 첫 `basics_page` test(열기, 결과 메시지, 닫기)를 더한다. 모바일은 `tests/mobile_demo_page_tests.cpp`에 두고 `tests/CMakeLists.txt`의 모바일 데모 목록(141~151행)에 `basics_page.cpp`를 올린다. 이 페이지는 `mobile_demo_gradient_png` 같은 외부 기호 여섯을 부르는데, 기호는 앱 빌드가 [mobile_demo.cmake](../examples/mobile_demo/mobile_demo.cmake)에서 `cmake/embed_binary.cmake`로 만든 소스에 있어 core test에는 없다. 링크가 막히므로 `secret_store_stub.cpp`(150행)처럼 빈 바이트 대역(`tests/mobile_demo_assets_stub.cpp`)을 목록에 함께 올린다. 빈 바이트는 디코드 오류로 끝나고 페이지는 그 오류를 이미 다루므로(`load_demo_picture`, `read_films`) 대화 test는 그림 칸을 읽지 않는다. 빈 입력의 디코더 답은 구현 때 확인한다. 데스크톱 `basics_page.cpp`는 `<windows.h>`(`MAX_PATH`, 96행)와 비밀 저장소를 불러 `luil_core_tests`에 못 들어간다. Windows 전용 `luil_tests`의 `windows_page.cpp` 곁(415~418행 꼴)에 `basics_page.cpp`와 새 `tests/basics_page_tests.cpp`를 올려 같은 세 가지를 시험한다. 격리 데스크톱에서 luil-uia로 단추 이름과 Invoke를, 키 합성으로 Esc·Enter 결과를 읽는다.
 
+구현한 데모(2026-11-03)는 두 데모의 기본 페이지 맨 아래에 있다. 단추 둘, "카운터 초기화"(위험한 초기화와 취소, 경고 글리프)와 "긴 확인 대화"(단추 셋과 확인 칸, 정보 글리프)가 연다. 아래 두 줄이 label(UIA Name)로 상태를 읽힌다: `대화: 열림` 또는 `대화: 닫힘`, `마지막 결과: reset|cancel|later|discard|ok|없음`. 모바일은 뒤로 가기가 `basics_page::back_action`으로 같은 결과를 낸다. 데스크톱 `basics_page`의 test는 `luil_tests`의 `tests/basics_page_tests.cpp`, 모바일은 `mobile_demo_page_tests.cpp`에 있고 모바일 기본 페이지를 core test 목록에 올리면서 `tests/mobile_demo_assets_stub.cpp`(빈 견본 바이트)를 함께 두었다.
+
 사람 확인: Narrator가 대화 Window의 이름을 읽고 본문과 단추를 순서대로 탐색하는지, 실기기의 좁은 화면·회전·긴 본문·제스처 막대 겹침, 밝은·어두운·고대비에서 표면 경계와 글리프 구분, 끌기 시연이 빠진 데모가 허용되는지.
 
 ## 범위 밖
