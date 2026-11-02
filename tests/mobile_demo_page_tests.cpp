@@ -947,7 +947,7 @@ TEST_CASE("The demo line break cell counts lines with both policies", "[demo][li
     }
     };
     const auto status_of = [&measurer](const luil::text::line_break_policy policy) {
-        const luil::label_config label { demo::line_break_label_config(std::u8string { demo::line_break_sample }, policy, 12.0f) };
+        const luil::label_config label { demo::line_break_label_config(std::u8string { demo::line_break_sample }, policy) };
         luil::text_area_element area { luil::ui_element_id { luil::application_element_kind(44) },
             luil::text_input_view { .text = std::u8string { demo::line_break_sample } }, demo::line_break_area_config(policy, std::make_shared<luil::text_area_wrap_cache>())
         };
@@ -956,12 +956,16 @@ TEST_CASE("The demo line break cell counts lines with both policies", "[demo][li
     const std::u8string words { status_of(luil::text::line_break_policy::hangul_words) };
     const std::u8string syllables { status_of(luil::text::line_break_policy::unicode) };
     // 기본 정책은 첫 줄을 어절 끝에서 끊고, unicode 정책은 같은 폭을 음절 사이까지 채운다.
-    REQUIRE(words == u8"정책 hangul_words · 라벨 5줄 · 칸 5줄 · 첫 줄 끝 '바꾸고'");
-    REQUIRE(syllables == u8"정책 unicode · 라벨 5줄 · 칸 5줄 · 첫 줄 끝 '고 낱'");
+    //  - 칸은 안쪽 여백만큼 label보다 좁게 접는다. 이 측정기에서 label 첫 줄은 다음 어절의 첫 음절도 들이지 못해
+    //    두 정책이 같고, 칸 첫 줄 끝이 정책을 가른다. 상태 줄이 둘을 함께 싣는 까닭이다.
+    REQUIRE(words == u8"정책 hangul_words · 라벨 5줄 · 칸 5줄 · 첫 줄 끝 '낱말' / '바꾸고'");
+    REQUIRE(syllables == u8"정책 unicode · 라벨 5줄 · 칸 5줄 · 첫 줄 끝 '낱말' / '고 낱'");
 
     // 줄 끝 글자는 매단 공백을 뺀 끝 글자소 셋이다.
     REQUIRE(demo::line_break_line_end(u8"가나다라  ", 0, 14) == u8"나다라");
     REQUIRE(demo::line_break_line_end(u8"ab", 0, 2) == u8"ab");
+    // 셋의 앞머리에 걸린 공백도 뺀다.
+    REQUIRE(demo::line_break_line_end(u8"가 나다", 0, 10) == u8"나다");
     REQUIRE(demo::line_break_line_end(u8"ab", 2, 2).empty());
 }
 

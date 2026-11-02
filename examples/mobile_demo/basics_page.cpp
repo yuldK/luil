@@ -314,7 +314,7 @@ namespace mobile_demo {
             const float policy_height { luil::check_element::height_for(policy) };
             column.add(std::make_unique<luil::check_element>(std::move(policy)), std::max(policy_height, touch_height), std::min(width - 2.0f * page_padding, 360.0f));
             column.gap(6.0f);
-            luil::label_config label { demo::line_break_label_config(line_break_.text, line_break_policy_, note_text_size) };
+            luil::label_config label { demo::line_break_label_config(line_break_.text, line_break_policy_) };
             auto area { std::make_unique<luil::text_area_element>(
                 luil::ui_element_id { kind_line_break_input }, make_input_view(line_break_, target_line_break), demo::line_break_area_config(line_break_policy_, line_break_wrap_))
             };
