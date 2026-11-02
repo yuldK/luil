@@ -972,7 +972,15 @@ TEST_CASE("The demo line break cell counts lines with both policies", "[demo][li
 TEST_CASE("The zoom page names its rotation and the buttons repeat the message the keys send", "[mobile-demo][zoom][rotate]")
 {
     mobile_demo::zoom_page page {};
+    const auto reset_enabled = [&page] {
+        const auto tree { zoom_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, u8"zoom-rotate-reset" }) };
+        REQUIRE(button != nullptr);
+        return button->enabled();
+    };
     REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
+    // 0도에서는 되돌릴 것이 없어 0도 단추가 꺼져 있다. 켜진 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.
+    REQUIRE(reset_enabled() == false);
     // 오른쪽 단추를 두 번 누르면 시계 방향으로 30도다.
     REQUIRE(press_zoom_button(page, u8"zoom-rotate-right") == 1);
     REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 15°");
@@ -982,9 +990,11 @@ TEST_CASE("The zoom page names its rotation and the buttons repeat the message t
     for (int count { 0 }; count < 3; ++count)
         REQUIRE(press_zoom_button(page, u8"zoom-rotate-left") == 1);
     REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 -15°");
-    // 0도 복귀는 지금 각도를 되돌린다. 이미 0도면 키처럼 메시지가 없다.
+    // 0도 복귀는 지금 각도를 되돌린다. 0도로 돌아오면 단추가 다시 꺼지고 눌러도 메시지가 없다.
+    REQUIRE(reset_enabled());
     REQUIRE(press_zoom_button(page, u8"zoom-rotate-reset") == 1);
     REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
+    REQUIRE(reset_enabled() == false);
     REQUIRE(press_zoom_button(page, u8"zoom-rotate-reset") == 0);
     REQUIRE(zoom_text(page, u8"zoom-rotation") == u8"회전 0°");
 }

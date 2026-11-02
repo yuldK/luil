@@ -190,7 +190,7 @@ else if (const auto* const rotate { message.get<rotate_intent>() }; rotate != nu
 데모. 상태를 label로 그려 `luil-uia`로 되읽는다. 두 데모의 확대 보기 페이지에 같은 것을 더한다(`examples/demo/zoom_page.cpp`·`.h`, `examples/mobile_demo/zoom_page.cpp`·`.h`).
 
 - 도면의 노드는 글자가 선 채 자리와 격자만 `rotation`으로 돈다(결정 1의 a). `rotate_intent`가 `rotate_about`으로 상태를 바꾸고 `content_bounds`가 `rotated_bounds`를 준다.
-- label `zoom-rotation`("회전 0°", 시계 방향 15도면 "회전 15°")과 단추 `zoom-rotate-left`("-15°")·`zoom-rotate-right`("+15°")·`zoom-rotate-reset`("0°")를 둔다. 단추는 키와 같은 `rotate_by` 메시지를 보내 UIA가 Invoke로 되풀이한다. 두 데모 모두 단추 줄 밑에 줄 하나(`zoom-rotation-controls`, 높이 `controls_height`)를 더하고 그만큼을 보기의 논리 크기에서 뺀다.
+- label `zoom-rotation`("회전 0°", 시계 방향 15도면 "회전 15°")과 단추 `zoom-rotate-left`("-15°")·`zoom-rotate-right`("+15°")·`zoom-rotate-reset`("0°")를 둔다. 단추는 키와 같은 `rotate_by` 메시지를 보내 UIA가 Invoke로 되풀이한다. `zoom-rotate-reset`은 이미 0도면 꺼진다. 켜 둔 채 빈 동작을 내면 Invoke가 오류로 끝나기 때문이다. 두 데모 모두 단추 줄 밑에 줄 하나(`zoom-rotation-controls`, 높이 `controls_height`)를 더하고 그만큼을 보기의 논리 크기에서 뺀다.
 - UIA(격리 데스크톱): right를 두 번 Invoke하면 "회전 30°", 이어서 left를 세 번이면 "회전 -15°", reset이면 "회전 0°"이다. 한 번 돌린 뒤 노드 라벨(데스크톱 데모의 "노드 1")의 경계가 옮겨 가고, reset이면 처음 자리로 돌아온다. 두 손가락 몸짓과 키는 UIA로 주입하지 못해 아래의 사람 확인과 test가 맡는다.
 - 모바일 데모는 Windows 창으로도 뜨므로 같은 UIA 확인을 거친다. Android에는 접근성 계층이 없어 사람이 화면으로 읽는다.
 

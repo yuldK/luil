@@ -169,7 +169,8 @@ namespace mobile_demo {
             note_line_height);
         column->add(std::make_unique<luil::zoom_controls_element>(luil::zoom_controls_config { .view = config(), .viewport = viewport_ }), controls_height);
         // 회전 단추 셋과 지금 각도다. 단추는 키(Shift+←/→/Home)와 같은 `rotate_by` 메시지를 보내 UIA가 Invoke로 되풀이한다.
-        //  - 0도 복귀는 지금 각도를 되돌리는 상대 각도다. 이미 0도면 키처럼 메시지가 없다.
+        //  - 0도 복귀는 지금 각도를 되돌리는 상대 각도다. 이미 0도면 할 일이 없으므로 단추를 끈다. 켜 둔 채 빈 동작을 내면
+        //    보조 기술의 Invoke가 오류로 끝난다.
         luil::stack_config rotation_controls_config {};
         rotation_controls_config.direction = luil::stack_direction::row;
         rotation_controls_config.spacing = row_spacing;
@@ -178,8 +179,9 @@ namespace mobile_demo {
         const auto rotate_button = [&settings](std::u8string owner, std::u8string text, const float degrees) {
             auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, luil::text_button_config { .text = std::move(text) }) };
             button->set_action(luil::ui_trigger::left_click, [view = settings, degrees](const luil::ui_action_context&) {
-                return degrees != 0.0f ? std::vector<luil::input_action> { view.rotate_by(degrees, {}) } : std::vector<luil::input_action> {};
+                return std::vector<luil::input_action> { view.rotate_by(degrees, {}) };
             });
+            button->set_enabled(degrees != 0.0f);
             return button;
         };
         rotation_controls->add(rotate_button(u8"zoom-rotate-left", u8"-15°", -settings.rotation_step), 64.0f);
