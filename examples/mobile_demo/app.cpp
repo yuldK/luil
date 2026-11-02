@@ -39,7 +39,7 @@ namespace mobile_demo {
             page_entry { page_tabs, u8"탭", u8"쓸어 넘기기, 넘침 메뉴", luil::codicons::icon_files },
             page_entry { page_groups, u8"그룹", u8"접는 섹션, 선택 묶음", luil::codicons::icon_group_by_ref_type },
             page_entry { page_toasts, u8"토스트", u8"알림과 실행 취소", luil::codicons::icon_bell },
-            page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 길게 눌러 메뉴", luil::codicons::icon_menu },
+            page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 분할 버튼, 길게 눌러 메뉴", luil::codicons::icon_menu },
             page_entry { page_zoom, u8"확대 보기", u8"두 손가락 확대와 이동", luil::codicons::icon_zoom_in },
             page_entry { page_theme, u8"테마", u8"밝기, 키 컬러, 시스템 색", luil::codicons::icon_symbol_color },
             page_entry { page_sheets, u8"시트", u8"아래 시트, 옆 시트, 서랍", luil::codicons::icon_layout_panel },
@@ -239,7 +239,7 @@ namespace mobile_demo {
         if (shown == page_tabs)
             frame->popups = tabs_.make_popups(scale);
         if (shown == page_popups)
-            frame->popups = popups_.make_popups(scale);
+            frame->popups = popups_.make_popups(scale, { 0.0f, 0.0f, width, height });
         // 뒤로 가기는 열린 dialog를 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
         // 두어 플랫폼의 기본 동작(앱을 떠나기)을 받는다. popup은 host가 그보다 먼저 닫는다.
         if (shown == page_basics && basics_.dialog_open())

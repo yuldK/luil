@@ -1,6 +1,10 @@
+#include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
 
+#include "luil/ui/split_button_element.h"
+
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -12,6 +16,32 @@ namespace {
     void deliver(Page& page, Message message)
     {
         REQUIRE(page.handle(luil::app_message { std::move(message) }));
+    }
+
+    // 메뉴·팝업 페이지를 폭 400으로 지은 tree다. 필드의 포인터가 이 tree의 것이라 popup을 만들 때까지 살려 둔다.
+    struct popups_screen
+    {
+        luil::ui_tree tree;
+        float height;
+
+        [[nodiscard]] luil::rect_f surface() const
+        {
+            return { 0.0f, 0.0f, 400.0f, height };
+        }
+
+        [[nodiscard]] std::u8string label(const std::u8string& owner) const
+        {
+            const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, owner }) };
+            REQUIRE(found != nullptr);
+            return found->accessibility().name;
+        }
+    };
+
+    [[nodiscard]] popups_screen build_popups_screen(mobile_demo::popups_page& page)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f), height };
     }
 
     [[nodiscard]] luil::ui_tree sheet_tree(mobile_demo::sheets_page& page, const float width, const float height)
@@ -262,4 +292,106 @@ TEST_CASE("SMB rejected and replaced requests cannot revive an old listing", "[s
     REQUIRE(fixture.has_entry(u8"late.txt") == false);
     deliver(fixture.page, mobile_demo::smb_entry_intent { u8"late.txt", false });
     REQUIRE(fixture.requests.size() == 4u);
+}
+
+TEST_CASE("The mobile split button is sized for a finger and reads its state back", "[ui][split-button][mobile-demo]")
+{
+    mobile_demo::popups_page page {};
+    auto screen { build_popups_screen(page) };
+    const luil::ui_element* const body { screen.tree.find({ luil::ui_element_kind::split_button_body, u8"save" }) };
+    const luil::ui_element* const arrow { screen.tree.find({ luil::ui_element_kind::split_button_arrow, u8"save" }) };
+    REQUIRE(body != nullptr);
+    REQUIRE(arrow != nullptr);
+    // 손가락으로 누르므로 높이는 터치 영역이고 화살표는 기본 폭보다 넓다.
+    REQUIRE(body->bounds().height == mobile_demo::touch_height);
+    REQUIRE(arrow->bounds().height == mobile_demo::touch_height);
+    REQUIRE(arrow->bounds().width > luil::split_button_arrow_width);
+    // 드롭다운 단추는 본체 없이 버튼 전체가 하나의 누르는 자리다.
+    REQUIRE(screen.tree.find({ luil::ui_element_kind::split_button_body, u8"send" }) == nullptr);
+    const luil::ui_element* const send { screen.tree.find({ luil::ui_element_kind::split_button_arrow, u8"send" }) };
+    REQUIRE(send != nullptr);
+    REQUIRE(send->accessibility().name == u8"보내기");
+    REQUIRE(send->bounds().height == mobile_demo::touch_height);
+
+    REQUIRE(screen.label(u8"split-state-save") == u8"저장 메뉴 열림: 닫힘");
+    REQUIRE(screen.label(u8"split-state-send") == u8"보내기 메뉴 열림: 닫힘");
+    REQUIRE(screen.label(u8"split-last-action") == u8"마지막 동작: 없음");
+    REQUIRE(arrow->accessibility().expanded == false);
+
+    // 본체를 누르면 마지막 동작이 바뀐다.
+    const auto invoked { (*body->action(luil::ui_trigger::left_click))({ body->id(), 0.0f, 0.0f }) };
+    REQUIRE(invoked.size() == 1u);
+    deliver(page, std::get<luil::app_message>(invoked.front()));
+    // 화살표는 열림의 반대를 담은 절대 메시지를 내고, 그것으로 열면 label과 접근 상태가 따라온다.
+    const auto pressed { (*arrow->action(luil::ui_trigger::left_click))({ arrow->id(), 0.0f, 0.0f }) };
+    REQUIRE(std::get<luil::app_message>(pressed.front()).get<mobile_demo::field_menu_intent>()->open);
+    deliver(page, std::get<luil::app_message>(pressed.front()));
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"split-last-action") == u8"마지막 동작: 저장");
+    REQUIRE(screen.label(u8"split-state-save") == u8"저장 메뉴 열림: 열림");
+    REQUIRE(screen.tree.find({ luil::ui_element_kind::split_button_arrow, u8"save" })->accessibility().expanded == true);
+}
+
+TEST_CASE("The mobile field menu follows its button and only one popup is open", "[ui][split-button][mobile-demo]")
+{
+    mobile_demo::popups_page page {};
+    deliver(page, mobile_demo::field_menu_intent { u8"save", true });
+    auto screen { build_popups_screen(page) };
+    const luil::rect_f field { screen.tree.find({ luil::ui_element_kind::split_button, u8"save" })->bounds() };
+
+    // 필드 아래에 간격 2를 두고 왼쪽에 맞춘다.
+    auto popups { page.make_popups(1.0f, screen.surface()) };
+    REQUIRE(popups.size() == 1u);
+    REQUIRE(popups.front().id == u8"save-menu");
+    REQUIRE(popups.front().x == field.x);
+    REQUIRE(popups.front().y == field.y + field.height + 2.0f);
+
+    // 내용 영역이 필드 바로 아래에서 끝나면 위로 뒤집힌다.
+    popups = page.make_popups(1.0f, { 0.0f, 0.0f, 400.0f, field.y + field.height + 10.0f });
+    REQUIRE(popups.front().y + popups.front().height + 2.0f == Catch::Approx(field.y));
+
+    // 다른 필드를 열면 앞의 것이 닫히고, 이미 닫힌 필드의 늦은 닫기는 지금 것을 건드리지 않는다.
+    deliver(page, mobile_demo::field_menu_intent { u8"send", true });
+    deliver(page, mobile_demo::field_menu_intent { u8"save", false });
+    screen = build_popups_screen(page);
+    popups = page.make_popups(1.0f, screen.surface());
+    REQUIRE(popups.size() == 1u);
+    REQUIRE(popups.front().id == u8"send-menu");
+    REQUIRE(screen.label(u8"split-state-save") == u8"저장 메뉴 열림: 닫힘");
+    REQUIRE(screen.label(u8"split-state-send") == u8"보내기 메뉴 열림: 열림");
+
+    // 드롭다운과 컨텍스트 메뉴도 같은 한 자리를 쓴다.
+    deliver(page, mobile_demo::dropdown_toggle_intent { true });
+    popups = page.make_popups(1.0f, screen.surface());
+    REQUIRE(popups.size() == 1u);
+    REQUIRE(popups.front().id == u8"dropdown");
+    deliver(page, mobile_demo::card_menu_intent { 50.0f, 60.0f });
+    popups = page.make_popups(1.0f, screen.surface());
+    REQUIRE(popups.size() == 1u);
+    REQUIRE(popups.front().id == u8"card-menu");
+    page.close_popups();
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+}
+
+TEST_CASE("Choosing a mobile field menu item records it and the follow-up message closes the menu", "[ui][split-button][mobile-demo]")
+{
+    mobile_demo::popups_page page {};
+    deliver(page, mobile_demo::field_menu_intent { u8"send", true });
+    auto screen { build_popups_screen(page) };
+    const auto popups { page.make_popups(1.0f, screen.surface()) };
+    REQUIRE(popups.size() == 1u);
+    const auto& menu { static_cast<const luil::menu_element*>(popups.front().tree->root())->config() };
+    REQUIRE(menu.items.size() == 2u);
+
+    const luil::input_action picked { menu.select(u8"link") };
+    deliver(page, std::get<luil::app_message>(picked));
+    const auto after { menu.after_select(luil::ui_action_context { {}, 0.0f, 0.0f }) };
+    REQUIRE(after.size() == 1u);
+    REQUIRE(std::get<luil::app_message>(after.front()).get<mobile_demo::field_menu_intent>()->open == false);
+    deliver(page, std::get<luil::app_message>(after.front()));
+
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"split-last-action") == u8"마지막 동작: 링크 복사");
+    REQUIRE(screen.label(u8"split-state-send") == u8"보내기 메뉴 열림: 닫힘");
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
 }
