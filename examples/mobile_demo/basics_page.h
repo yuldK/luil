@@ -6,6 +6,7 @@
 
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
+#include "demo/readonly_undo_keys.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
@@ -165,6 +166,12 @@ namespace mobile_demo {
         luil::text::text_edit_state line_break_ { .text = std::u8string { demo::line_break_sample } };
         luil::text::line_break_policy line_break_policy_ { luil::text::line_break_policy::hangul_words };
         std::shared_ptr<luil::text_area_wrap_cache> line_break_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+        // 읽기 전용 안내 칸의 글이다. 글은 고정이고 caret·선택만 바뀐다. 그 칸에 초점이 있는 채 앱 on_key에 닿은
+        // Ctrl+Z·Ctrl+Y를 센다 (데스크톱 demo의 `readonly_undo_keys.h`를 함께 쓴다).
+        luil::text::text_edit_state readonly_ {
+            .text = u8"이 칸은 읽기 전용이다. 선택과 복사만 된다. 하드웨어 키보드로 이 칸에 초점을 두고 Ctrl+Z나 Ctrl+Y를 누르면 칸이 삼키지 않고 앱으로 넘긴다.",
+        };
+        demo::readonly_undo_keys undo_keys_ {};
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };

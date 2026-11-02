@@ -41,6 +41,7 @@
 #include "demo/network_page.h"
 #include "demo/palette.h"
 #include "demo/popups_page.h"
+#include "demo/readonly_undo_keys.h"
 #include "demo/tabs_page.h"
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
@@ -1024,8 +1025,11 @@ namespace demo {
                 return luil::route_reveal(tree, focused);
             }
 
-            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot&) override
+            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
             {
+                // 읽기 전용 안내 칸에 초점이 있는 채 닿은 Ctrl+Z·Ctrl+Y다. 칸이 삼키지 않고 넘긴 키를 기본 페이지가 센다.
+                if (const auto undo { readonly_undo_key_of(event, snapshot, kind_link_view_input) }; undo.has_value())
+                    return { luil::make_app_action(*undo) };
                 // 팔레트를 여는 단축키와 팔레트 명령의 단축키(Ctrl+B)다. 팔레트에 보이는 단축키 열과 같은 명령표로 맞춘다.
                 if (luil::chord_of(event) == palette_shortcut)
                     return { luil::make_app_action(palette_open_intent {}) };

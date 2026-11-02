@@ -190,6 +190,8 @@ namespace demo {
             link_report_ = result.ok() ? link->destination + u8" 를 열었다." : link->destination + u8" 를 열지 못했다 — " + result.error;
             return true;
         }
+        if (undo_keys_.handle(message))
+            return true;
         if (message.get<secret_check_intent>() != nullptr)
         {
             secret_report_ = check_secret_store();
@@ -365,7 +367,7 @@ namespace demo {
         page.gap(16.0f);
         page.add(make_memo(), 118.0f);
         page.gap(16.0f);
-        page.add(make_link_view(), 86.0f);
+        page.add(make_link_view(), 106.0f);
         page.gap(16.0f);
         page.add(make_code(), 202.0f);
         page.gap(22.0f);
@@ -666,11 +668,16 @@ namespace demo {
         view.read_only = true;
         view.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(link_view_.text));
         view.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
-        column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_link_view_input }, make_input_view(link_view_, target_link_view), std::move(view)), 44.0f);
+        auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_link_view_input }, make_input_view(link_view_, target_link_view), std::move(view)) };
+        area->set_access_name(u8"읽기 전용 안내 칸");
+        column->add(std::move(area), 44.0f);
         column->add_gap(4.0f);
         column->add(
             make_label(luil::ui_element_id { kind_text, u8"link-report" }, link_report_.empty() ? std::u8string { u8"아직 연 링크가 없다." } : link_report_, 11.0f, luil::label_color_role::dim),
             16.0f);
+        // 칸을 눌러 초점을 둔 채 Ctrl+Z나 Ctrl+Y를 누르면 센다. 칸은 되돌릴 글이 없어 키를 삼키지 않고 앱으로 넘긴다.
+        column->add_gap(4.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"readonly-undo-keys" }, undo_keys_.text(), 11.0f, luil::label_color_role::dim), 16.0f);
         return column;
     }
 

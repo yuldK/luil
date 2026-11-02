@@ -47,6 +47,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_code_input { luil::application_element_kind(43) };
     // 줄 나눔 정책을 시연하는 여러 줄 칸이다 (demo/line_break_sample.h).
     constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(44) };
+    // 읽기 전용 안내 칸이다 (`text_area_element`). 하드웨어 키보드의 Ctrl+Z·Ctrl+Y가 칸을 지나 앱 on_key에 닿는지 본다.
+    constexpr luil::ui_element_kind kind_readonly_input { luil::application_element_kind(45) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     constexpr luil::ui_element_kind kind_dialog { luil::application_element_kind(12) };
@@ -92,6 +94,7 @@ namespace mobile_demo {
     constexpr luil::text_input_target target_smb_address { static_cast<luil::text_input_target>(10) };
     constexpr luil::text_input_target target_smb_user { static_cast<luil::text_input_target>(11) };
     constexpr luil::text_input_target target_smb_password { static_cast<luil::text_input_target>(12) };
+    constexpr luil::text_input_target target_readonly { static_cast<luil::text_input_target>(13) };
 
     // --- 페이지 키 ---
     inline constexpr std::u8string_view page_basics { u8"basics" };

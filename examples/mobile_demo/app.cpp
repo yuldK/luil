@@ -1,5 +1,6 @@
 #include "mobile_demo/app.h"
 
+#include "demo/readonly_undo_keys.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/app_bar_element.h"
 #include "luil/ui/caption_element.h"
@@ -396,8 +397,11 @@ namespace mobile_demo {
         return luil::route_reveal(tree, focused);
     }
 
-    std::vector<luil::input_action> mobile_policy::on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot&)
+    std::vector<luil::input_action> mobile_policy::on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot)
     {
+        // 읽기 전용 안내 칸에 초점이 있는 채 닿은 Ctrl+Z·Ctrl+Y다. 칸이 삼키지 않고 넘긴 키를 기본 페이지가 센다.
+        if (const auto undo { demo::readonly_undo_key_of(event, snapshot, kind_readonly_input) }; undo.has_value())
+            return { luil::make_app_action(*undo) };
         if (event.key == luil::key_code::volume_up || event.key == luil::key_code::volume_down)
             return { luil::make_app_action(volume_key_intent { event.key == luil::key_code::volume_up, event.repeat }) };
         return {};

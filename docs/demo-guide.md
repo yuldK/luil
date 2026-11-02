@@ -42,6 +42,7 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 | 탭 모양·닫기 단추·상태 표시를 앱 스타일로 고르기 | ui_style::tab_bar, arrange_context::style | [탭](../examples/demo/tabs_page.cpp) |
 | 견본 막대·가운데 버튼 닫기·줄이기·한 탭씩 넘기기·새 탭 꼬리 | tab_bar_config::preview, middle_click_close, min_tab_width, overflow_mode, trailing | [탭](../examples/demo/tabs_page.cpp) |
 | 실행 중 요소 검사기(Ctrl+Shift+I)와 tree 글 | ui_frame::inspector, inspector_config, describe_element, dump_tree | [검사기](../examples/demo/inspector_page.cpp) |
+| 읽기 전용 칸에 초점이 있어도 Ctrl+Z·Ctrl+Y가 앱 on_key에 닿는다 | text_area_config::read_only, interaction_policy::on_key | [기본 입력](../examples/demo/basics_page.cpp) |
 
 공개 헤더는 luil/ui/theme_picker_element.h, luil/ui/check_element.h, luil/app/menu_popup.h다.
 소스 포함과 설치 패키지 모두 기존의 luil::luil 링크 대상으로 사용할 수 있다.
@@ -99,6 +100,7 @@ width를 비우면 글·아이콘·단축키 열로 너비를 정한다. 높이�
 - 탭 모양: 기본·이어진 탭·평평한 칸, 닫기 단추를 선택·포인터에서만 보이기, 상태 표시를 아이콘 모서리나 닫기 단추 자리에 두기, 넘칠 때 한 탭씩 넘기기, 자리가 모자라면 줄이기. 세 모양의 견본 막대가 그림으로만 선다.
 - 분리 창: 문서 하나를 별도 창으로 띄우고 원래 막대에 끌어 합친다. 창을 닫거나 복귀 버튼을 눌러도 원래 탭으로 돌아온다.
 - 기본 입력: 창이 짧아져도 스크롤로 입력·이미지·확인 다이얼로그 예제에 접근할 수 있다.
+- 읽기 전용 안내 칸: 칸을 눌러 초점을 두고 Ctrl+Z나 Ctrl+Y(Ctrl+Shift+Z)를 누르면 칸이 삼키지 않고 앱으로 넘겨, 바로 아래 `readonly-undo-keys` 글이 받은 횟수를 센다. 모바일 데모의 기본 페이지에도 같은 칸이 있고 하드웨어 키보드가 있어야 누를 수 있다.
 
 Ctrl+Tab과 Ctrl+Shift+Tab은 탭 전환, Ctrl+T는 새 탭, Ctrl+W는 닫기,
 Ctrl+Shift+T는 닫은 탭 복원이다. 일반 Tab과 Shift+Tab은 초점을 이동한다.

@@ -93,7 +93,7 @@ namespace mobile_demo {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
             if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret && edit->request.target != target_memo
-                && edit->request.target != target_code && edit->request.target != target_line_break)
+                && edit->request.target != target_code && edit->request.target != target_line_break && edit->request.target != target_readonly)
                 return false;
             apply_edit(edit->request);
             return true;
@@ -111,6 +111,8 @@ namespace mobile_demo {
             line_break_policy_ = policy->policy;
             return true;
         }
+        if (undo_keys_.handle(message))
+            return true;
         if (const auto* const dialog { message.get<dialog_intent>() }; dialog != nullptr)
         {
             open_dialog(dialog->open);
@@ -163,6 +165,8 @@ namespace mobile_demo {
             luil::apply_text_edit(memo_, request);
         else if (request.target == target_line_break)
             luil::apply_text_edit(line_break_, request);
+        else if (request.target == target_readonly)
+            luil::apply_text_edit(readonly_, request);
         else if (request.target == target_code)
         {
             luil::apply_text_edit(code_, request);
@@ -331,6 +335,26 @@ namespace mobile_demo {
             line_break_status.color = luil::label_color_role::dim;
             line_break_status.wrap = true;
             column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"line-break-status" }, std::move(line_break_status)), 2.0f * note_line_height);
+        }
+        column.gap(24.0f);
+
+        // 읽기 전용 안내 칸이다. 하드웨어 키보드로 칸에 초점을 두고 Ctrl+Z나 Ctrl+Y를 누르면 칸이 삼키지 않고 앱 on_key로
+        // 넘기고, 상태 줄이 그 횟수를 센다.
+        column.note(u8"readonly", u8"읽기 전용 칸 (하드웨어 키보드의 Ctrl+Z·Ctrl+Y는 앱으로 넘어간다)");
+        column.gap(4.0f);
+        {
+            luil::text_area_config readonly {};
+            readonly.read_only = true;
+            auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_readonly_input }, make_input_view(readonly_, target_readonly), std::move(readonly)) };
+            area->set_access_name(u8"읽기 전용 안내 칸");
+            column.add(std::move(area), 72.0f);
+            column.gap(4.0f);
+            luil::label_config undo_status {};
+            undo_status.text = undo_keys_.text();
+            undo_status.font_size = note_text_size;
+            undo_status.color = luil::label_color_role::dim;
+            undo_status.wrap = true;
+            column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"readonly-undo-keys" }, std::move(undo_status)), 2.0f * note_line_height);
         }
         column.gap(24.0f);
 

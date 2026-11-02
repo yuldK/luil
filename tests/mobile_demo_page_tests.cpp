@@ -1,5 +1,6 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
+#include "demo/readonly_undo_keys.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
 #include "mobile_demo/ink_page.h"
@@ -10,7 +11,9 @@
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
 
+#include "luil/ui/root_element.h"
 #include "luil/ui/split_button_element.h"
+#include "luil/ui/text_area_element.h"
 #include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
@@ -1156,6 +1159,7 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
         { mobile_demo::kind_memo_input, mobile_demo::target_memo },
         { mobile_demo::kind_code_input, mobile_demo::target_code },
         { mobile_demo::kind_line_break_input, mobile_demo::target_line_break },
+        { mobile_demo::kind_readonly_input, mobile_demo::target_readonly },
         { mobile_demo::kind_dropdown_search_input, mobile_demo::target_dropdown_search },
         { mobile_demo::kind_smb_address_input, mobile_demo::target_smb_address },
         { mobile_demo::kind_smb_user_input, mobile_demo::target_smb_user },
@@ -1461,4 +1465,81 @@ TEST_CASE("The inspector names the demo kinds and reads the sample's inner paddi
     const luil::ui_element* const picked { luil::pick_inspected(tree, interaction, picking) };
     REQUIRE(picked != nullptr);
     REQUIRE(picked->id() == luil::ui_element_id { mobile_demo::kind_layout, u8"inspector-sample" });
+}
+
+namespace {
+    // 모바일 데모 앱이 on_key에서 하는 일과 같은 정책이다. 읽기 전용 안내 칸에 초점이 있는 채 닿은 되돌리기 키를 메시지로 바꾼다.
+    class undo_key_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+        {
+            return mobile_demo::text_target_of_kind(kind);
+        }
+
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
+        {
+            if (const auto undo { demo::readonly_undo_key_of(event, snapshot, mobile_demo::kind_readonly_input) }; undo.has_value())
+                return { luil::make_app_action(*undo) };
+            return {};
+        }
+    };
+
+    [[nodiscard]] luil::key_pressed_event undo_chord(const luil::key_code code, const bool control, const bool shift = false)
+    {
+        luil::key_pressed_event event { code };
+        event.control = control;
+        event.shift = shift;
+        return event;
+    }
+
+    // 안내 칸 하나를 든 tree에서 칸을 눌러 초점을 주고 되돌리기 키와 그 밖의 키를 보낸 뒤, 앱이 센 값이다.
+    [[nodiscard]] demo::readonly_undo_keys press_undo_keys(const bool read_only)
+    {
+        undo_key_policy policy {};
+        luil::interaction_controller controller { &policy };
+        luil::text_input_view view {};
+        view.text = u8"읽기 전용 안내";
+        luil::text_area_config config {};
+        config.read_only = read_only;
+        auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { mobile_demo::kind_readonly_input }, std::move(view), std::move(config)) };
+        controller.set_tree(std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(area), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f)));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 12.0f, luil::pointer_button::left, time_point {} }));
+        static_cast<void>(controller.process(luil::pointer_released_event { 20.0f, 12.0f, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 5 } }));
+        REQUIRE(controller.snapshot().focused_input.kind == mobile_demo::kind_readonly_input);
+
+        demo::readonly_undo_keys counts {};
+        const luil::key_pressed_event keys[] {
+            undo_chord(luil::key_code::key_z, true),
+            undo_chord(luil::key_code::key_y, true),
+            undo_chord(luil::key_code::key_z, true, true),
+            // 수식 키 없는 z와 다른 Ctrl 키는 되돌리기가 아니다.
+            undo_chord(luil::key_code::key_z, false),
+            undo_chord(luil::key_code::key_x, true),
+        };
+        for (const luil::key_pressed_event& event : keys)
+        {
+            for (const luil::input_action& action : controller.process(event))
+            {
+                if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                    static_cast<void>(counts.handle(*message));
+            }
+        }
+        return counts;
+    }
+}
+
+TEST_CASE("A read-only mobile field hands Ctrl+Z and Ctrl+Y to the app and the label counts them", "[mobile-demo][read-only]")
+{
+    // Ctrl+Z 하나, Ctrl+Y 하나, Ctrl+Shift+Z 하나(다시 실행)가 앱 on_key에 닿는다.
+    const demo::readonly_undo_keys passed { press_undo_keys(true) };
+    REQUIRE(passed.undo_count() == 1);
+    REQUIRE(passed.redo_count() == 2);
+    REQUIRE(passed.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 1회 · Ctrl+Y 2회");
+
+    // 같은 칸이 편집 칸이면 칸이 되돌리기를 가져가 앱까지 오지 않는다.
+    const demo::readonly_undo_keys kept { press_undo_keys(false) };
+    REQUIRE(kept.undo_count() == 0);
+    REQUIRE(kept.redo_count() == 0);
+    REQUIRE(kept.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 0회 · Ctrl+Y 0회");
 }
