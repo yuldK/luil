@@ -104,3 +104,9 @@ Android host는 시작·구성 변경·설정 앱에서 복귀할 때 `TypedValu
 커스텀 element는 `scaled_font_size(logical_size, display_scale)`로 글자 크기를 구한다. 글과 고정 여백으로 행을 만들면 `text_line_height(logical_size, padding)`를 쓰고, label은 `label_element::height_for`를 쓴다. 앱이 직접 정한 고정 행 높이는 자동으로 늘어나지 않는다. 글이 든 element를 맞춤 항목(`stack_element::add_fit`, `grid_track::fit`)으로 담으면 같은 글자 크기로 잰 크기를 받는다 ([stack-expressiveness-design.md](../stack-expressiveness-design.md#내용-크기)). 글 크기를 키우는 행은 이 함수로 높이와 스크롤 콘텐츠 높이도 함께 정해야 한다. mobile demo의 기본 입력 칸·탐색 목록·페이지 글은 이 방식이다.
 
 글자 설정만 바뀌어도 `app_delegate::make_metrics_message`를 다시 부른다. `window_metrics::text_scale`은 12sp의 대표 배율이며, 비선형 변환의 실제 크기는 위 함수로 조회한다. 텍스트 칸은 배치할 때 크기를 저장해 그리기·hit test·IME 범위 측정이 같은 크기를 쓰게 한다.
+
+## 움직임 줄이기
+
+시스템의 움직임 줄이기 설정은 UI thread의 element(`draw_context::reduce_motion`·`update_context::reduce_motion`)와 logic thread의 앱(`window_metrics::reduce_motion`)에 같은 값으로 닿는다. 값의 주인은 시스템이라 앱이 고르지 않는다. 앱이 든 전환은 새로 시작할 때 `motion_duration(transition_duration, metrics.reduce_motion)`을 거치고, 참이면 길이 0이라 어느 시각에 물어도 끝값이다. 도는 중에 참으로 바뀌면 앱이 끝값으로 붙인다. 값은 바뀔 때만 다시 알린다. `make_metrics_message`를 넓힌 앱만 받는다. 세 값짜리 `make_window_metrics_message`만 넓힌 앱은 받지 못한다.
+
+Windows는 `SPI_GETCLIENTAREAANIMATION`을 읽는다. Android host는 `Settings.Global`의 `animator_duration_scale`이 0인지를 JNI로 읽고, 시작·`APP_CMD_RESUME`·`APP_CMD_GAINED_FOCUS`에서 다시 읽는다. 구성 변경으로는 오지 않고 변경 관찰은 Java 클래스가 필요해 쓰지 않는다. 읽지 못하면 거짓이다. 설계는 [reduce-motion-design.md](../reduce-motion-design.md)다.

@@ -70,3 +70,25 @@ TEST_CASE("Turning back mid-flight starts from where it is now", "[ui][transitio
     STATIC_REQUIRE(luil::transition_value(back, at(1050)) == 100.0f);
     STATIC_REQUIRE(luil::transition_value(back, at(1150)) == 0.0f);
 }
+
+TEST_CASE("Reduced motion takes the length out of a new transition", "[ui][transition][reduce_motion]")
+{
+    // 줄이지 않으면 길이는 그대로이고, 줄이면 0이다.
+    STATIC_REQUIRE(luil::motion_duration(luil::transition_duration, false) == luil::transition_duration);
+    STATIC_REQUIRE(luil::motion_duration(std::chrono::milliseconds { 300 }, false) == std::chrono::milliseconds { 300 });
+    STATIC_REQUIRE(luil::motion_duration(luil::transition_duration, true) == std::chrono::milliseconds { 0 });
+    STATIC_REQUIRE(luil::motion_duration(std::chrono::milliseconds { 0 }, false) == std::chrono::milliseconds { 0 });
+
+    // 도는 중인 전환(절반쯤 간 100)에서 줄인 길이로 출발해도 어느 시각에 물어도 목표값이다.
+    constexpr luil::transition reduced { luil::transition_to(sample, 0.0f, at(1050), luil::motion_duration(luil::transition_duration, true)) };
+    STATIC_REQUIRE(reduced.from == 100.0f);
+    STATIC_REQUIRE(reduced.to == 0.0f);
+    STATIC_REQUIRE(luil::transition_value(reduced, at(0)) == 0.0f);
+    STATIC_REQUIRE(luil::transition_value(reduced, at(1050)) == 0.0f);
+    STATIC_REQUIRE(luil::transition_value(reduced, at(1100)) == 0.0f);
+    STATIC_REQUIRE(luil::transition_value(reduced, at(9000)) == 0.0f);
+    // 시작하는 순간에 이미 끝나 있고, logic thread를 깨울 다음 시각이 없다.
+    STATIC_REQUIRE(luil::transition_finished(reduced, at(1050)));
+    STATIC_REQUIRE(luil::transition_next_update(reduced, at(1050)).has_value() == false);
+    STATIC_REQUIRE(luil::transition_next_update(reduced, at(0)).has_value() == false);
+}

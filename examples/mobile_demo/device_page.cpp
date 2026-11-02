@@ -4,6 +4,7 @@
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
+#include "luil/ui/spinner_element.h"
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/wrap_element.h"
 
@@ -143,6 +144,12 @@ namespace mobile_demo {
         column.heading(u8"window-heading", u8"창 폭");
         column.body(u8"window-class", to_u8(static_cast<int>(logical_width)) + u8"dp · " + std::u8string { width_class_name(window.width_class) });
         column.note(u8"window-note", u8"600dp부터 두 판, 840dp부터 넓은 판이다.");
+        column.gap(20.0f);
+        // 움직임 줄이기는 시스템의 값이다. 켜지면 아래 표시가 멈춘 그림으로 서고, 앱이 든 전환은 길이 없이 끝값에 선다.
+        column.heading(u8"motion-heading", u8"움직임 줄이기");
+        column.body(u8"motion-state", window.reduce_motion ? u8"켜짐 · 도는 표시가 멈춘다" : u8"꺼짐 · 도는 표시가 돈다");
+        column.gap(8.0f);
+        column.add(std::make_unique<luil::spinner_element>(luil::ui_element_id { kind_layout, u8"motion-spinner" }, luil::spinner_config { .name = u8"도는 표시" }), 24.0f, 24.0f);
         column.gap(20.0f);
         column.heading(u8"orientation-heading", u8"화면 방향");
         if (capabilities.screen_orientation == false)

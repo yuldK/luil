@@ -34,6 +34,9 @@ namespace luil {
         // 시스템이 키운 12sp 글자의 dp / 12다. Android 비선형 변환의 대표값이다.
         // 실제 크기는 scaled_font_size로 조회한다. 글자 설정만 바뀌어도 metrics를 다시 보낸다.
         float text_scale { 1.0f };
+        // 시스템의 움직임 줄이기 설정이다 (`draw_context::reduce_motion`과 같은 값).
+        // 참이면 앱이 든 전환·스프링은 길이 없이 끝값으로 선다 (`motion_duration`).
+        bool reduce_motion { false };
 
         [[nodiscard]] bool operator==(const window_metrics&) const noexcept = default;
     };

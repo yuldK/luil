@@ -33,6 +33,14 @@ namespace luil {
     // 답한다 (`next_tick`·`next_update`가 쓰는 그 계약이다).
     inline constexpr std::chrono::milliseconds transition_frame { 16 };
 
+    // 새 전환을 시작할 때 거치는 길이다. 시스템의 움직임 줄이기(`window_metrics::reduce_motion`)면 0이다.
+    //  - 길이가 0인 `transition`은 언제 물어도 끝값이라 앱은 다른 분기를 두지 않는다.
+    //  - 전환뿐 아니라 스프링·화면 전환도 같은 말을 쓰도록 한 곳에 둔다.
+    [[nodiscard]] constexpr std::chrono::milliseconds motion_duration(const std::chrono::milliseconds duration, const bool reduce_motion) noexcept
+    {
+        return reduce_motion ? std::chrono::milliseconds { 0 } : duration;
+    }
+
     // 완만하게 시작하고 완만하게 멈춘다. [0, 1] → [0, 1].
     // 범위 밖 입력은 끝값으로 잘린다.
     //  - 2차식이다. 3차 이상이 더 부드럽지만 눈으로 갈리지 않고, 식이 짧아야
