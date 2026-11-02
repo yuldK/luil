@@ -78,6 +78,8 @@ add_executable(luil_core_tests
     split_button_element_tests.cpp
     split_handle_element_tests.cpp
     text_area_element_tests.cpp
+    text_change_tests.cpp
+    syntax_highlighter_tests.cpp
     text_link_tests.cpp
     stack_element_tests.cpp
     strip_element_tests.cpp
@@ -89,6 +91,7 @@ add_executable(luil_core_tests
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
     grapheme_tests.cpp
+    line_break_tests.cpp
     text_edit_tests.cpp
     markdown_element_tests.cpp
     tooltip_tests.cpp

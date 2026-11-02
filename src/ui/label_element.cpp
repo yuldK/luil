@@ -38,6 +38,7 @@ namespace luil {
                 .vertical = config.wrap ? text_vertical_align::top : text_vertical_align::center,
                 .elide = config.elide,
                 .wrap = config.wrap,
+                .line_break = config.line_break,
                 .max_lines = config.max_lines,
             };
         }

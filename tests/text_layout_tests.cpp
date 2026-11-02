@@ -104,6 +104,61 @@ TEST_CASE("Wrap cuts stay on grapheme boundaries after a space with a combining 
     REQUIRE(lines.back().end == text.size());
 }
 
+TEST_CASE("Wrapped rows break after hyphens and keep closing brackets off the line head", "[ui][text-layout][line-break]")
+{
+    const auto texts_of = [](const luil::text_layout& layout) {
+        std::vector<std::u8string> result {};
+        for (const auto& row : layout.lines())
+            result.emplace_back(layout.text().substr(row.begin, row.end - row.begin));
+        return result;
+    };
+    // 하이픈 뒤에서 바꾼다. 폭이 다한 글자(`b`)에서 가르지 않는다.
+    const auto hyphens { luil::make_text_layout({ .text = u8"alpha-beta-gamma", .width = 70.0f, .wrap = true, .line_height = 10.0f }, cells) };
+    REQUIRE(texts_of(hyphens) == std::vector<std::u8string> { u8"alpha-", u8"beta-", u8"gamma" });
+    // 공백이 없는 일본어는 글자 사이에서 바꾸되 `」`·`。`를 줄 머리에 두지 않는다.
+    const auto japanese { luil::make_text_layout({ .text = u8"これは「テスト」です。", .width = 70.0f, .wrap = true, .line_height = 10.0f }, cells) };
+    REQUIRE(texts_of(japanese) == std::vector<std::u8string> { u8"これは「テス", u8"ト」です。" });
+    for (const auto& row : texts_of(japanese))
+        REQUIRE((row.starts_with(u8"」") || row.starts_with(u8"。") || row.ends_with(u8"「")) == false);
+}
+
+TEST_CASE("Korean words stay whole unless the unicode policy is chosen", "[ui][text-layout][line-break]")
+{
+    const auto texts_of = [](const luil::text_layout& layout) {
+        std::vector<std::u8string> result {};
+        for (const auto& row : layout.lines())
+            result.emplace_back(layout.text().substr(row.begin, row.end - row.begin));
+        return result;
+    };
+    const luil::text_layout_request words { .text = u8"설정을 저장했습니다", .width = 60.0f, .wrap = true, .line_height = 10.0f };
+    REQUIRE(texts_of(luil::make_text_layout(words, cells)) == std::vector<std::u8string> { u8"설정을 ", u8"저장했습니다" });
+    luil::text_layout_request syllables { words };
+    syllables.line_break = luil::text::line_break_policy::unicode;
+    REQUIRE(texts_of(luil::make_text_layout(syllables, cells)) == std::vector<std::u8string> { u8"설정을 저장", u8"했습니다" });
+    // 칸보다 긴 어절은 글자소에서 비상 분할한다.
+    const auto long_word { luil::make_text_layout({ .text = u8"가나다라마바사아자차", .width = 40.0f, .wrap = true, .line_height = 10.0f }, cells) };
+    REQUIRE(texts_of(long_word) == std::vector<std::u8string> { u8"가나다라", u8"마바사아", u8"자차" });
+}
+
+TEST_CASE("Ideographic spaces hang outside the wrapped row width", "[ui][text-layout][line-break]")
+{
+    const std::u8string text { u8"ab　　cd" };
+    const auto layout { luil::make_text_layout({ .text = text, .width = 20.0f, .wrap = true, .line_height = 10.0f }, cells) };
+    REQUIRE(layout.lines().size() == 2);
+    REQUIRE(layout.lines()[0].end == 8);
+    REQUIRE(layout.lines()[0].width == 20.0f);
+    REQUIRE(layout.size().width == 20.0f);
+    // 접은 자리는 모두 글자소 경계다.
+    const std::u8string mixed { u8"한국어 文章と「かな」, éclair-x https://a.b/c 👩🏽‍💻👩🏽‍💻 끝" };
+    const auto boundaries { luil::text::grapheme_boundaries(mixed) };
+    for (const float width : { 20.0f, 30.0f, 50.0f, 80.0f })
+    {
+        const auto wrapped { luil::make_text_layout({ .text = mixed, .width = width, .wrap = true, .line_height = 10.0f }, cells) };
+        for (const auto& row : wrapped.lines())
+            REQUIRE(std::binary_search(boundaries.begin(), boundaries.end(), row.end));
+    }
+}
+
 TEST_CASE("The selected newline marker follows the physical font size", "[ui][text-layout]")
 {
     const auto layout { luil::make_text_layout({ .text = u8"a\nb", .font_size = 24.0f, .line_height = 10.0f }, cells) };

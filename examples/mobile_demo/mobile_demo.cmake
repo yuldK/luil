@@ -15,6 +15,7 @@ function(luil_mobile_demo_sources out_var)
         "${directory}/assets.h"
         "${directory}/basics_page.cpp"
         "${directory}/basics_page.h"
+        "${directory}/../demo/code_lexer.h"
         "${directory}/common.cpp"
         "${directory}/common.h"
         "${directory}/device_page.cpp"

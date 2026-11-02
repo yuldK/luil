@@ -17,10 +17,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 TEST_CASE("Native layout drawing and measurement share glyph runs and caret geometry", "[ui][text-layout][native]")
@@ -295,4 +297,109 @@ TEST_CASE("Input and document queries agree with the arranged native text layout
     const auto original { luil::make_font_text_layout({ .text = alternate }, SkFont { original_face, 11.0f }) };
     REQUIRE(bounds->width == Catch::Approx(original.size().width));
 
+}
+
+TEST_CASE("An italic span lays out as an italic style request and only the paragraph whose italic changed is shaped again", "[ui][text-layout][native][syntax]")
+{
+    if (luil::ui_text_shaping_enabled() == false)
+        SKIP("The configured application retains the legacy text input path");
+
+    // 기울임 구간의 배치 폭이 `styles { italic }` 요청의 폭과 같다. 굵기 구간과 같은 길이다.
+    const std::u8string text { u8"office text" };
+    luil::text_input_view view { .text = text };
+    luil::text_area_config config {};
+    config.wrap = false;
+    config.font_size = 20.0f;
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 6, luil::text_color_role::comment, false, luil::text_background_role::none, true } });
+    luil::text_area_element document { { luil::application_element_kind(2) }, view, config };
+    document.arrange({ { 0.0f, 0.0f, 500.0f, 100.0f } });
+    const auto italic { luil::make_text_layout({ .text = text, .font_size = 20.0f, .styles = { { 0, 6, false, true } } }) };
+    const auto upright { luil::make_text_layout({ .text = text, .font_size = 20.0f }) };
+    const auto start { document.text_span_bounds({ text, 0, 0, 0 }, luil::default_text_measurer()) };
+    const auto end { document.text_span_bounds({ text, 0, text.size(), text.size() }, luil::default_text_measurer()) };
+    REQUIRE(start.has_value());
+    REQUIRE(end.has_value());
+    REQUIRE(end->x - start->x == Catch::Approx(italic.size().width));
+    // 기울임과 굵기는 따로 쥔다. 굵은 구간의 폭이 기울임 구간의 폭을 대신하지 않는다.
+    const auto bold { luil::make_text_layout({ .text = text, .font_size = 20.0f, .styles = { { 0, 6, true, false } } }) };
+    REQUIRE(italic.size().width > 0.0f);
+    REQUIRE(upright.size().width > 0.0f);
+    REQUIRE(bold.size().width > 0.0f);
+
+    // 두 문단에서 둘째 문단의 기울임만 바뀌면 그 문단만 다시 shape한다.
+    luil::clear_text_layout_cache();
+    const std::u8string paragraphs { u8"alpha beta\ngamma delta" };
+    luil::text_input_view two { .text = paragraphs };
+    luil::text_area_config shared {};
+    shared.wrap = false;
+    shared.font_size = 20.0f;
+    shared.wrap_cache = std::make_shared<luil::text_area_wrap_cache>();
+    const auto misses_after = [&](const std::vector<luil::text_span>& spans) {
+        luil::text_area_config next { shared };
+        next.spans = std::make_shared<const std::vector<luil::text_span>>(spans);
+        const auto before { luil::text_layout_cache_usage().misses };
+        luil::text_area_element element { { luil::application_element_kind(3) }, two, std::move(next) };
+        element.arrange({ { 0.0f, 0.0f, 500.0f, 100.0f } });
+        return luil::text_layout_cache_usage().misses - before;
+    };
+    const auto cold { misses_after({}) };
+    const auto second_italic { misses_after({ { 11, 16, luil::text_color_role::comment, false, luil::text_background_role::none, true } }) };
+    REQUIRE(cold > 0u);
+    REQUIRE(second_italic > 0u);
+    REQUIRE(second_italic < cold);
+    // 같은 구간으로 다시 배치하면 아무것도 다시 shape하지 않는다.
+    REQUIRE(misses_after({ { 11, 16, luil::text_color_role::comment, false, luil::text_background_role::none, true } }) == 0u);
+    // 색만 바뀌면 배치에 걸리지 않는다. 구문 색은 캐시를 무효로 하지 않는다.
+    REQUIRE(misses_after({ { 11, 16, luil::text_color_role::keyword, false, luil::text_background_role::none, true } }) == 0u);
+}
+
+TEST_CASE("Native layouts keep line break policies apart and cut at break opportunities", "[ui][text-layout][native][line-break]")
+{
+    const auto face { luil::configured_ui_typeface() };
+    REQUIRE(face != nullptr);
+    const SkFont font { face, 18.0f };
+    luil::clear_text_layout_cache();
+    const std::u8string text { u8"설정을 저장했습니다. 東京「大阪」です。 alpha-beta https://example.com/a/b 가나다라마바사아자차카타파하" };
+    luil::text_layout_request words { .text = text, .width = 120.0f, .wrap = true };
+    luil::text_layout_request syllables { words };
+    syllables.line_break = luil::text::line_break_policy::unicode;
+    // 정책만 다른 두 요청은 cache에서 따로 miss다. 같은 요청은 맞는다.
+    const auto first { luil::make_font_text_layout(words, font) };
+    const auto second { luil::make_font_text_layout(syllables, font) };
+    REQUIRE(luil::text_layout_cache_usage().misses == 2);
+    REQUIRE(luil::text_layout_cache_usage().entries == 2);
+    REQUIRE(luil::make_font_text_layout(words, font).caret_stops().data() == first.caret_stops().data());
+    REQUIRE(luil::text_layout_cache_usage().hits == 1);
+    // 접지 않는 요청은 정책이 달라도 한 항목이다.
+    luil::text_layout_request plain { .text = text };
+    luil::text_layout_request plain_unicode { plain };
+    plain_unicode.line_break = luil::text::line_break_policy::unicode;
+    REQUIRE(luil::make_font_text_layout(plain, font).caret_stops().data() == luil::make_font_text_layout(plain_unicode, font).caret_stops().data());
+
+    // 실제 글꼴로 접은 자리는 후보이거나, 후보가 없는 줄의 비상 분할(글자소 경계)이다.
+    const auto boundaries { luil::text::grapheme_boundaries(text) };
+    for (const auto& [layout, policy] : { std::pair { first, words.line_break }, std::pair { second, syllables.line_break } })
+    {
+        const auto opportunities { luil::text::line_break_opportunities(text, policy) };
+        const auto is_opportunity = [&opportunities](const std::size_t at) {
+            return std::any_of(opportunities.begin(), opportunities.end(), [at](const auto& item) { return item.offset == at; });
+        };
+        REQUIRE(layout.lines().size() > 2);
+        for (const auto& row : layout.lines())
+        {
+            REQUIRE(std::binary_search(boundaries.begin(), boundaries.end(), row.end));
+            if (row.wrapped == false || is_opportunity(row.end))
+                continue;
+            // 비상 분할이면 그 줄 안(처음 뒤)에 후보가 없다.
+            REQUIRE(std::none_of(opportunities.begin(), opportunities.end(), [&row](const auto& item) { return item.offset > row.begin && item.offset < row.end; }));
+        }
+        // 줄 경계 offset의 caret이 제 줄로 돌아온다.
+        for (std::size_t index { 0 }; index < layout.lines().size(); ++index)
+        {
+            const auto& row { layout.lines()[index] };
+            REQUIRE(layout.line_at(row.begin) == index);
+            if (row.wrapped)
+                REQUIRE(layout.line_at(row.end, true) == index);
+        }
+    }
 }

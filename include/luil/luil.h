@@ -18,6 +18,8 @@
 #include "luil/text/font_style.h"
 #include "luil/text/fonts.h"
 #include "luil/text/grapheme.h"
+#include "luil/text/line_break.h"
+#include "luil/text/text_change.h"
 #include "luil/text/text_edit.h"
 #include "luil/text/utf8_text.h"
 
@@ -79,6 +81,7 @@
 #include "luil/ui/stack_element.h"
 #include "luil/ui/strip_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/syntax_highlighter.h"
 #include "luil/ui/table_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_block.h"

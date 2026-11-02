@@ -8,7 +8,22 @@
 #include <vector>
 
 namespace luil {
-    enum class text_color_role { primary, secondary, accent, warning, error };
+    enum class text_color_role
+    {
+        primary,
+        secondary,
+        accent,
+        warning,
+        error,
+        // 구문 색이다. 팔레트의 `syntax_*` 역할로 칠한다 (구문 강조 도우미는 syntax_highlighter.h).
+        //  - 고대비에서는 여섯 모두 창 글자색 하나로 접힌다. 색에만 뜻을 싣지 않으려면 `bold`·`italic`을 함께 쓴다.
+        keyword,
+        string,
+        comment,
+        number,
+        type,
+        function,
+    };
     enum class text_background_role { none, added, removed, changed };
     enum class line_background_role { none, added, removed, changed };
     enum class gutter_kind { line_number, custom };
@@ -20,6 +35,9 @@ namespace luil {
         text_color_role color { text_color_role::primary };
         bool bold { false };
         text_background_role background { text_background_role::none };
+        // `background` 뒤에 둔다. `{ begin, end, color, bold }` 같은 순서 초기화가 그대로 읽힌다.
+        // 고대비에서 색이 모여도 남는 단서다 (주석을 기울이는 식). 기울임 face가 없는 글꼴은 글자를 눕혀 메운다.
+        bool italic { false };
     };
 
     struct line_decoration

@@ -25,6 +25,8 @@ namespace {
         style.dark.caption.background = luil::make_ui_color(22, 22, 30);
         style.light.window_background = luil::make_ui_color(250, 250, 255);
         style.light.error_accent = luil::make_ui_color(200, 0, 0);
+        style.dark.syntax_string = luil::make_ui_color(9, 99, 199);
+        style.light.syntax_function = luil::make_ui_color(120, 30, 10);
         style.tones.row_selection = 0.5f;
         style.tones.pressed = 0.9f;
         style.metrics.body_font_size = 14.0f;
@@ -76,6 +78,28 @@ TEST_CASE("The built-in style is the generated one and carries the documented de
     REQUIRE(luil::text_style {}.line_break == luil::single_line_break::space);
 }
 
+TEST_CASE("The built-in style carries the six syntax colors of the design", "[theme][style][syntax]")
+{
+    // assets/style.json의 구문 색이 생성값으로 그대로 오고, 빠지면 본문색으로 채우는 규칙(생성 script test)과 어긋나지 않는다.
+    const luil::ui_style& style { luil::default_ui_style() };
+    REQUIRE(style.dark.syntax_keyword == luil::make_ui_color(0x6c, 0xb2, 0xf2));
+    REQUIRE(style.dark.syntax_string == luil::make_ui_color(0xdb, 0xa1, 0x84));
+    REQUIRE(style.dark.syntax_comment == luil::make_ui_color(0x8d, 0xbb, 0x78));
+    REQUIRE(style.dark.syntax_number == luil::make_ui_color(0xb5, 0xce, 0xa8));
+    REQUIRE(style.dark.syntax_type == luil::make_ui_color(0x4e, 0xc9, 0xb0));
+    REQUIRE(style.dark.syntax_function == luil::make_ui_color(0xdc, 0xdc, 0xaa));
+    REQUIRE(style.light.syntax_keyword == luil::make_ui_color(0x00, 0x00, 0xff));
+    REQUIRE(style.light.syntax_string == luil::make_ui_color(0xa3, 0x15, 0x15));
+    REQUIRE(style.light.syntax_comment == luil::make_ui_color(0x00, 0x6b, 0x00));
+    REQUIRE(style.light.syntax_number == luil::make_ui_color(0x0a, 0x6b, 0x4a));
+    REQUIRE(style.light.syntax_type == luil::make_ui_color(0x1d, 0x6c, 0x84));
+    REQUIRE(style.light.syntax_function == luil::make_ui_color(0x6e, 0x53, 0x20));
+    // 고대비는 스타일의 구문 색을 쓰지 않고 시스템 글자색 하나다.
+    const luil::ui_color_palette high_contrast { luil::color_palette_for(luil::color_theme::high_contrast) };
+    REQUIRE(high_contrast.syntax_keyword == high_contrast.primary_foreground);
+    REQUIRE(high_contrast.syntax_comment == high_contrast.primary_foreground);
+}
+
 TEST_CASE("A palette role names the color it carries in every theme", "[theme][style]")
 {
     for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
@@ -113,6 +137,9 @@ TEST_CASE("A custom style's neutral colors reach the palette and the accent stay
         REQUIRE(palette.surface_background == style.dark.surface_background);
         REQUIRE(palette.primary_foreground == style.dark.primary_foreground);
         REQUIRE(palette.caption.background == style.dark.caption.background);
+        // 구문 색도 스타일의 것이다.
+        REQUIRE(palette.syntax_string == style.dark.syntax_string);
+        REQUIRE(palette.syntax_keyword == style.dark.syntax_keyword);
         // 키 컬러는 스타일이 아니라 사용자 설정이다.
         REQUIRE(palette.accent == blue.dark.accent);
         REQUIRE(palette.accent_soft == blue.dark.soft);
@@ -126,6 +153,7 @@ TEST_CASE("A custom style's neutral colors reach the palette and the accent stay
         const luil::ui_color_palette palette { luil::color_palette_for(style, luil::color_theme::light, blue) };
         REQUIRE(palette.window_background == style.light.window_background);
         REQUIRE(palette.error_accent == style.light.error_accent);
+        REQUIRE(palette.syntax_function == style.light.syntax_function);
         REQUIRE(palette.danger_button_background == luil::with_alpha(style.light.error_accent, style.tones.danger_button));
         REQUIRE(palette.accent == blue.light.accent);
     }
