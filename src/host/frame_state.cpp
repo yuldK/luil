@@ -90,6 +90,7 @@ namespace luil {
             .maximized = state.maximized,
             .fullscreen = state.fullscreen,
             .metrics = frame_style(state).metrics,
+            .wrap_policy = frame_style(state).text.wrap_policy,
             .reduce_motion = state.reduce_motion,
             .theme = state.theme,
             .backdrop = state.backdrop && state.popup,

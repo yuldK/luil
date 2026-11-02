@@ -225,7 +225,7 @@ luil::label_config title { .text = u8"설정을 저장했습니다", .wrap = tru
 | 자리 | 처리 |
 | --- | --- |
 | `src/ui/ui_element.cpp` 773~788행 `derive_draw_context` | 이 노드가 고친다. `.wrap_policy = context.wrap_policy`를 옮긴다. `palette_scope_element.cpp` 35행, `ui_tree.cpp` 81행(tooltip), `zoom_view_element.cpp` 348행은 이 함수를 지나 저절로 잇는다 |
-| `src/host/frame_state.cpp` 81~96행 `draw_frame` | 기본값으로 그대로 컴파일된다. 다른 줄의 파일이라 `.wrap_policy = frame_style(state).text.wrap_policy`를 잇는 일은 통합 몫이다 |
+| `src/host/frame_state.cpp` 81~96행 `draw_frame` | 기본값으로 그대로 컴파일된다. 다른 줄의 파일이라 `.wrap_policy = frame_style(state).text.wrap_policy`를 잇는 일은 통합 몫이었고, 줄 1과 합칠 때 이었다 |
 | `src/win32/drag_ghost_window.cpp` 139~149행 | 그대로. 끌기 ghost는 한 줄 글(`draw_text`·`draw_text_within`)이라 정책을 읽지 않는다 |
 | `tests/font_style_native_tests.cpp`, `glyph_element_tests.cpp`, `gpu_image_tiling_tests.cpp`, `raster_draw_tests.cpp`(1270행), `raster_probe.cpp`(39행), `text_block_native_tests.cpp`, `text_block_tests.cpp` | 그대로. 새 시험만 `.wrap_policy`를 적는다 |
 
@@ -245,7 +245,7 @@ config를 값으로 읽는 라이브러리 자리는 이 노드가 고친다. `l
 - **markup(R4, 같은 줄)**: 서식 글 config도 칸을 optional로 두고 측정 문맥의 `line_break_for`로 풀면 앱 기본을 따른다. 측정에서 스타일의 다른 칸이 필요하면 `measure_context::app_style()`을 읽는다(결정 1).
 - **hot_reload(R5, 같은 줄)**: 새 스타일 포인터를 두 자리에 주면 다음 배치에서 정책이 바뀌고 여러 줄 칸의 cache가 비워진다. 다시 읽기에서 따로 할 일이 없다.
 - **같은 라운드 다른 줄**: 이 노드는 `modal_host_element.*`, `zoom_view_element.*`, `ink_canvas_element.*`, `src/host/frame_state.*`, `src/win32/win32_window.cpp`, `src/android/android_app.cpp`, `src/ui/ui_interaction.*`, `include/luil/ui/ui_events.h`를 고치지 않는다. 그 파일의 문맥 자리는 새 칸의 기본값으로 그대로 컴파일된다. `ui_element.h`는 줄 3(ink)이 `zoom_source`(508행) 뒤 구역에 덧붙이고, 이 노드는 문맥 구조체 구역(`measure_context` 649행부터 `derive_draw_context` 선언까지)만 고친다. `ui_element.cpp`는 `derive_draw_context`와 새 `measure_context::app_style`·`line_break_for`(`arrange_context::app_style` 옆)만 고친다. 이 노드는 라이브러리 kind를 더하지 않는다.
-- **통합 몫**: `frame_state.cpp`의 `draw_frame`에 `.wrap_policy = frame_style(state).text.wrap_policy`를 `.metrics` 뒤에 잇는다. 다른 줄이 R2에 새로 짓는 측정·그리기 문맥(modal_host·ink가 여러 줄 글을 잰다면)에 `style`·`wrap_policy`를 잇는다. 색인(`docs/README.md`)에 이 문서 줄을 더한다.
+- **통합 몫**: `frame_state.cpp`의 `draw_frame`에 `.wrap_policy = frame_style(state).text.wrap_policy`를 `.metrics` 뒤에 잇는다. 다른 줄이 R2에 새로 짓는 측정·그리기 문맥(modal_host·ink가 여러 줄 글을 잰다면)에 `style`·`wrap_policy`를 잇는다. 색인(`docs/README.md`)에 이 문서 줄을 더한다. 줄 1과 합칠 때 `draw_frame`의 한 칸과 색인 줄을 더했고, modal host가 내용에게 높이를 묻는 측정 문맥에 `style`을 실어 확인 대화 상자의 본문이 앱 스타일의 정책으로 줄 수를 잰다. ink는 줄 3과 합칠 때 본다.
 - **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 소스, 데이터 파일, `assets/style.json`, 사례 표, test, 문서)을 먼저 내고 데모 커밋을 뒤에 쌓는다.
 - 구현 때 함께 고치는 문서: [줄 나눔](line-break-design.md) 136·137·164·166행과 공개 형식 절의 네 칸, [여러 줄 라벨](label-wrap-design.md)·[직접 그리는 글](text-block-design.md)·[자동 줄 넘김](text-area-wrap-design.md)의 칸 서술, [실행 중 스타일 읽기](style-sheet-design.md) 결정 5와 범위 밖의 "더하지 않는다" 서술(이 노드가 더했다로), [테마](concepts/theming.md)의 스타일 절, `ui_style.h`의 `text_style`·`ui_style::text` 주석(지금은 한 줄 도우미만 말한다).
 

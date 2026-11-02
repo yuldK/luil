@@ -99,7 +99,9 @@ namespace luil {
         if (config_.fit_height && measured_ != nullptr)
         {
             // 배율은 아래 배치와 같은 값이다. 잘못된 배율(0 이하)을 그대로 넘겨 내용이 엉뚱한 크기로 재지 않게 한다.
-            const measure_context measure { scale, context.measurer, context.metrics };
+            //  - 스타일도 싣는다. 본문 같은 여러 줄 글이 앱 스타일의 줄 나눔 정책(`text.wrap_policy`)으로 줄 수를 재야
+            //    배치에서 접는 줄과 높이가 맞는다.
+            const measure_context measure { scale, context.measurer, context.metrics, context.style };
             const std::optional<size_f> preferred { measured_->preferred_size(measure, logical_width) };
             if (preferred.has_value() && std::isfinite(preferred->height))
                 logical_height = preferred->height;

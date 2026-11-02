@@ -319,6 +319,7 @@ namespace {
             asked_width = available_width;
             asked_scale = context.scale;
             asked_measurer = context.measurer;
+            asked_style = context.style;
             return answer_;
         }
 
@@ -326,6 +327,7 @@ namespace {
         mutable float asked_width { 0.0f };
         mutable float asked_scale { 0.0f };
         mutable const luil::text_measurer* asked_measurer { nullptr };
+        mutable const luil::ui_style* asked_style { nullptr };
 
     private:
         std::optional<luil::size_f> answer_ {};
@@ -340,13 +342,13 @@ namespace {
     };
 
     // 내용을 넣고 `slot`(물리 픽셀)에 배치한 host다.
-    [[nodiscard]] placed_host place_sized(const luil::modal_host_config& config, const std::optional<luil::size_f> answer, const luil::rect_f& slot, const float scale, const luil::text_measurer* measurer = nullptr)
+    [[nodiscard]] placed_host place_sized(const luil::modal_host_config& config, const std::optional<luil::size_f> answer, const luil::rect_f& slot, const float scale, const luil::text_measurer* measurer = nullptr, const luil::ui_style* style = nullptr)
     {
         auto content { std::make_unique<sized_content>(sized_id, answer) };
         const sized_content* const observed { content.get() };
         auto host { std::make_unique<luil::modal_host_element>(config) };
         host->set_content(std::move(content));
-        host->arrange({ .slot = slot, .scale = scale, .measurer = measurer });
+        host->arrange({ .slot = slot, .scale = scale, .measurer = measurer, .style = style });
         return { std::move(host), observed };
     }
 }
@@ -359,14 +361,17 @@ TEST_CASE("A modal host that fits its height asks the content, at the width it w
     config.fit_height = true;
 
     const luil::text_measurer measurer { [](const std::u8string_view text, const float size) { return static_cast<float>(text.size()) * size; } };
-    const placed_host placed { place_sized(config, luil::size_f { 100.0f, 70.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f, &measurer) };
+    luil::ui_style style { luil::default_ui_style() };
+    style.text.wrap_policy = luil::line_break_policy::unicode;
+    const placed_host placed { place_sized(config, luil::size_f { 100.0f, 70.0f }, { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f, &measurer, &style) };
 
     // 높이는 내용의 답이고 폭은 설정이다. 가운데에 놓이는 것은 전과 같다.
     REQUIRE(placed.content->asks == 1);
     REQUIRE(placed.content->asked_width == 100.0f);
-    // 측정 문맥이 배치 문맥이다 — 같은 배율과 같은 측정기다.
+    // 측정 문맥이 배치 문맥이다 — 같은 배율과 같은 측정기, 같은 앱 스타일이다 (본문이 스타일의 줄 나눔 정책으로 잰다).
     REQUIRE(placed.content->asked_scale == 2.0f);
     REQUIRE(placed.content->asked_measurer == &measurer);
+    REQUIRE(placed.content->asked_style == &style);
     REQUIRE(placed.content->bounds().width == 200.0f);
     REQUIRE(placed.content->bounds().height == 140.0f);
     REQUIRE(placed.content->bounds().x == 100.0f);
