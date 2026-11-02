@@ -177,6 +177,8 @@ namespace luil {
     // 내장값은 assets/style.json에서 빌드 시점에 만들어진다 (`default_ui_style`).
     // 앱은 (1) 자기 JSON으로 내장값을 바꿔치거나(LUIL_STYLE), (2) 실행 시점에 값을 세워
     // `ui_frame::style`로 싣는다. 둘 다 같은 자리로 온다.
+    //  - 실행 시점 값을 JSON 글에서 얻으려면 `parse_ui_style`(ui_style_json.h)이다. LUIL_STYLE과 같은 스키마·판정이다.
+    //  - 키 목록은 cmake/style_keys.cmake 하나에 있다. 필드를 더하면 거기 한 행을 더한다.
     struct ui_style
     {
         neutral_color_palette dark {};

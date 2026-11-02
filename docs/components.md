@@ -10,6 +10,7 @@
 | UTF-8 텍스트 편집 | `text::text_edit_state` | [text/text_edit.h](../include/luil/text/text_edit.h) | [설명](concepts/text-editing.md) |
 | 테마·팔레트 | `color_theme`, `ui_color_palette`, `compose_palette` | [theme/ui_theme.h](../include/luil/theme/ui_theme.h) | [설명](concepts/theming.md) |
 | 앱 스타일(중립 색·tone·치수) | `ui_style`, `default_ui_style` | [theme/ui_style.h](../include/luil/theme/ui_style.h) | [설명](concepts/theming.md) |
+| 스타일 JSON 실행 중 읽기 | `parse_ui_style`, `style_parse_result`, `describe` | [theme/ui_style_json.h](../include/luil/theme/ui_style_json.h) | [설명](style-sheet-design.md) |
 | 불변 화면 트리 | `ui_tree` | [ui/ui_tree.h](../include/luil/ui/ui_tree.h) | [설명](concepts/immutable-tree.md) |
 | 포인터·키보드 입력 정책 | `interaction_policy` | [ui/ui_interaction.h](../include/luil/ui/ui_interaction.h) | [설명](concepts/interaction.md) |
 | 문자열·커스텀·마크다운 툴팁 | `set_tooltip`, `set_tooltip_content`, `make_markdown_tooltip` | [ui/ui_element.h](../include/luil/ui/ui_element.h) | [설명](tooltip-design.md) |

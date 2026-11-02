@@ -103,6 +103,7 @@ add_executable(luil_core_tests
     transition_tests.cpp
     ui_element_tests.cpp
     ui_interaction_tests.cpp
+    ui_style_json_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp
     undo_stack_tests.cpp
@@ -166,12 +167,40 @@ target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
         "${PROJECT_SOURCE_DIR}/examples"
-        "${LUIL_TEST_DIRECTORY}")
+        "${LUIL_TEST_DIRECTORY}"
+        # 스타일 파서 시험이 키 표(설치하지 않는 생성 헤더)를 직접 잰다.
+        "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
 target_link_libraries(luil_core_tests
     PRIVATE
         luil::luil_core
         luil_options
+        # 스타일 파서 시험이 공유 사례 표를 읽고 고친다. 공개 헤더에는 nlohmann 형이 없다.
+        "$<BUILD_INTERFACE:luil_nlohmann_json>"
         Catch2::Catch2WithMain)
+# 스타일 파서 시험이 읽는 파일을 실행 파일에 싣는다. 기기에는 소스 트리가 없다.
+#  - LUIL_STYLE이 가리킨 파일은 내장값과 견주고, assets/style.json은 공유 사례 표(style_cases.json)의 바탕이다.
+set(luil_tests_embedded_directory "${CMAKE_CURRENT_BINARY_DIR}/embedded")
+foreach(embedded
+    "${LUIL_STYLE}|luil_test_built_in_style"
+    "${PROJECT_SOURCE_DIR}/assets/style.json|luil_test_base_style"
+    "${CMAKE_CURRENT_SOURCE_DIR}/style_cases.json|luil_test_style_cases")
+    string(REGEX REPLACE "\\|.*$" "" embedded_input "${embedded}")
+    string(REGEX REPLACE "^.*\\|" "" embedded_symbol "${embedded}")
+    set(embedded_source "${luil_tests_embedded_directory}/${embedded_symbol}.cpp")
+    add_custom_command(
+        OUTPUT "${embedded_source}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${embedded_input}"
+            "-DOUTPUT_FILE=${embedded_source}"
+            "-DSYMBOL=${embedded_symbol}"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS
+            "${embedded_input}"
+            "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding ${embedded_symbol}"
+        VERBATIM)
+    target_sources(luil_core_tests PRIVATE "${embedded_source}")
+endforeach()
 # SVG·Lottie 진입점은 켠 구성에서 실제 모듈로 읽어 그리고, 끈 구성에서 "지원 안 함"으로 답한다.
 target_compile_definitions(luil_core_tests PRIVATE
     "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"

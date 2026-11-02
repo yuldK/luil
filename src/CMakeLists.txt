@@ -27,7 +27,10 @@ add_custom_command(
     COMMENT "Generating the accent catalog"
     VERBATIM)
 
-# 스타일(중립 색·tone·치수)도 같은 방식이다.
+# 스타일(중립 색·tone·치수)도 같은 방식이다. 키 목록은 데이터 파일(style_keys.cmake) 하나에 있고,
+# 같은 생성기가 기본값 헤더와 실행 중 파서의 키 표 헤더를 낸다.
+#  - 명령을 둘로 나눈다. 키 표는 LUIL_STYLE과 무관해서, 한 명령의 두 OUTPUT으로 두면 스타일 파일만 바뀌어도
+#    키 표가 낡은 출력으로 보여 빌드마다 생성과 파서 컴파일이 다시 돈다.
 add_custom_command(
     OUTPUT "${LUIL_GENERATED_STYLE}"
     COMMAND "${CMAKE_COMMAND}"
@@ -37,7 +40,18 @@ add_custom_command(
     DEPENDS
         "${LUIL_STYLE}"
         "${LUIL_CMAKE_DIRECTORY}/generate_style.cmake"
+        "${LUIL_CMAKE_DIRECTORY}/style_keys.cmake"
     COMMENT "Generating the style"
+    VERBATIM)
+add_custom_command(
+    OUTPUT "${LUIL_GENERATED_STYLE_KEYS}"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DKEYS_OUTPUT_FILE=${LUIL_GENERATED_STYLE_KEYS}"
+        -P "${LUIL_CMAKE_DIRECTORY}/generate_style.cmake"
+    DEPENDS
+        "${LUIL_CMAKE_DIRECTORY}/generate_style.cmake"
+        "${LUIL_CMAKE_DIRECTORY}/style_keys.cmake"
+    COMMENT "Generating the style key table"
     VERBATIM)
 
 # 파일은 IDE 필터 단위로 적고, 그렇게 모인 것이 곧 라이브러리의 source 목록이다
@@ -61,7 +75,8 @@ set(luil_files)
 luil_add_source_filter(luil_core_files "generated"
     "${LUIL_GENERATED_CODICONS}"
     "${LUIL_GENERATED_ACCENTS}"
-    "${LUIL_GENERATED_STYLE}")
+    "${LUIL_GENERATED_STYLE}"
+    "${LUIL_GENERATED_STYLE_KEYS}")
 
 # core: 판번이다.
 luil_add_source_filter(luil_core_files "core"
@@ -100,6 +115,8 @@ luil_add_source_filter(luil_core_files "theme"
     "${public_headers}/theme/appearance.h"
     theme/ui_style.cpp
     "${public_headers}/theme/ui_style.h"
+    theme/ui_style_json.cpp
+    "${public_headers}/theme/ui_style_json.h"
     theme/ui_theme.cpp
     "${public_headers}/theme/ui_theme.h")
 
@@ -600,7 +617,9 @@ target_include_directories(luil_core
         "$<BUILD_INTERFACE:${LUIL_GENERATED_INCLUDE_DIRECTORY}>"
         "$<INSTALL_INTERFACE:include>"
     PRIVATE
-        "${LUIL_SOURCE_DIRECTORY}")
+        "${LUIL_SOURCE_DIRECTORY}"
+        # 실행 중 스타일 파서의 키 표다. 설치하지 않는 생성 헤더라 PRIVATE에만 둔다.
+        "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
 target_link_libraries(luil_core
     PUBLIC
         # 소비자 요건(C++20·/utf-8)만 전파한다.
@@ -611,7 +630,11 @@ target_link_libraries(luil_core
         # 같은 검사(cmake/dependencies/skia.cmake)로 다시 만들어 잇는다.
         "$<BUILD_INTERFACE:luil_skia>"
     PRIVATE
-        luil_options)
+        luil_options
+        # 실행 중 스타일 파서(theme/ui_style_json.cpp)가 안쪽에서만 쓰는 JSON 파서다. 공개 헤더에 nlohmann 형이 없다.
+        # 정적 라이브러리라 PRIVATE 의존도 export의 링크 목록에 남으므로 감싼다 — 감싸지 않으면
+        # install(EXPORT)가 "export set에 없는 target"으로 선다 (아래 luil의 웹뷰 SDK와 같은 까닭).
+        "$<BUILD_INTERFACE:luil_nlohmann_json>")
 
 # 자산 checksum 검증은 빌드마다 한 번 실행한다.
 # 별도 target 대신 라이브러리의 빌드 전 단계에 붙여 솔루션 구성 요소를 늘리지 않는다.

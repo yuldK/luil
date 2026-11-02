@@ -3,6 +3,8 @@ include_guard(GLOBAL)
 # nlohmann/json은 header-only라 빌드할 것이 없다.
 # HTTP 응답의 JSON 본문이 이 타입으로 나가므로(`luil/net/http_body.h`) 공개 헤더가
 # 이 include 경로를 요구한다 — test 전용인 Catch2와 달리 라이브러리 구성마다 필요하다.
+#  - core도 안쪽에서 쓴다. 실행 중 스타일 파서(`src/theme/ui_style_json.cpp`)가 `luil_core`에 PRIVATE
+#    (`$<BUILD_INTERFACE:...>`)로 잇는다. core의 공개 헤더에는 nlohmann 형이 없다.
 #  - 공개 헤더가 들이는 것은 `<nlohmann/json_fwd.hpp>` 하나다. 본체는 값을 실제로
 #    읽는 곳에서 들인다 — umbrella 헤더 하나가 2만 줄을 끌고 오지 않는 길이다.
 #  - upstream의 CMakeLists는 들이지 않는다. 그쪽이 만드는 target·install 규칙은

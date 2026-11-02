@@ -44,7 +44,7 @@ tree = luil::make_arranged_tree(std::move(root), slot, scale, {}, nullptr, style
 
 `tabBar`는 빠져도 된다 — 앱이 이미 가진 옛 JSON이 그대로 빌드되고, 빠진 키는 struct의 기본값이다. 낯선 키와 모르는 값은 생성에서 막는다.
 
-다음 컴포넌트도 같은 모양으로 늘린다: `ui_style`에 칸 하나, `assets/style.json`과 `cmake/generate_style.cmake`에 같은 이름의 선택 객체 하나, 컴포넌트 config에 그 칸을 통째로 덮는 `std::optional` 하나, 배치에서 `context.app_style()`로 읽기. 칸에 들어가는 것은 앱이 화면 전체에서 통일하고 싶은 **모양의 선택**이다. 탭 폭처럼 막대마다 다른 배치 값은 config에 남는다.
+다음 컴포넌트도 같은 모양으로 늘린다: `ui_style`에 칸 하나, `assets/style.json`에 같은 이름의 선택 객체 하나와 키 표 데이터 파일(`cmake/style_keys.cmake`)의 `component_sections` 한 줄·필드 묶음 한 벌(생성기와 실행 중 파서는 고치지 않는다, [실행 중 스타일 읽기](style-sheet-design.md)), 컴포넌트 config에 그 칸을 통째로 덮는 `std::optional` 하나, 배치에서 `context.app_style()`로 읽기. 칸에 들어가는 것은 앱이 화면 전체에서 통일하고 싶은 **모양의 선택**이다. 탭 폭처럼 막대마다 다른 배치 값은 config에 남는다.
 
 ## 모양
 

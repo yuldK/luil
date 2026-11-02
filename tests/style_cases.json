@@ -1,0 +1,325 @@
+{
+    "about": "Shared cases of the style generator (tests/style_tests.cmake) and the runtime parser (tests/ui_style_json_tests.cpp). Each case edits assets/style.json (or replaces it with text), states whether the file is accepted, and for a rejected file the first error of the generator. A case is added here once and both sides run it.",
+    "cases": [
+        {
+            "name": "the built-in style",
+            "accept": true
+        },
+        {
+            "name": "a customized style",
+            "edits": [
+                { "op": "set", "path": [ "dark", "windowBackground" ], "value": "\"#1a1b26\"" },
+                { "op": "set", "path": [ "light", "divider" ], "value": "\"#10203080\"" },
+                { "op": "set", "path": [ "metrics", "controlCornerRadius" ], "value": "6.5" },
+                { "op": "set", "path": [ "tones", "pressed" ], "value": "1" },
+                { "op": "set", "path": [ "text", "lineBreak" ], "value": "\"paragraphs\"" },
+                { "op": "set", "path": [ "metrics", "fontWeights", "bodyText" ], "value": "\"medium\"" },
+                { "op": "set", "path": [ "metrics", "fontWeights", "title" ], "value": "\"extraBold\"" }
+            ],
+            "accept": true,
+            "expect": [
+                { "path": [ "dark", "windowBackground" ], "color": "#1a1b26" },
+                { "path": [ "light", "divider" ], "color": "#10203080" },
+                { "path": [ "metrics", "controlCornerRadius" ], "number": 6.5 },
+                { "path": [ "tones", "pressed" ], "number": 1 },
+                { "path": [ "metrics", "fontWeights", "bodyText" ], "name": "medium" },
+                { "path": [ "metrics", "fontWeights", "title" ], "name": "extraBold" },
+                { "path": [ "text", "lineBreak" ], "name": "paragraphs" }
+            ]
+        },
+        {
+            "name": "an uppercase color",
+            "edits": [ { "op": "set", "path": [ "dark", "windowBackground" ], "value": "\"#1A1B26\"" } ],
+            "accept": true,
+            "expect": [ { "path": [ "dark", "windowBackground" ], "color": "#1a1b26" } ]
+        },
+        {
+            "name": "a negative zero integer (read as 0)",
+            "edits": [ { "op": "set", "path": [ "tones", "pressed" ], "value": "-0" } ],
+            "accept": true,
+            "expect": [ { "path": [ "tones", "pressed" ], "number": 0 } ]
+        },
+        {
+            "name": "a number in exponent form",
+            "edits": [ { "op": "set", "path": [ "metrics", "controlCornerRadius" ], "value": "1e1" } ],
+            "accept": true,
+            "expect": [ { "path": [ "metrics", "controlCornerRadius" ], "number": 10.0 } ]
+        },
+        {
+            "name": "a tiny tone the generator sees in exponent form",
+            "edits": [ { "op": "set", "path": [ "tones", "pressed" ], "value": "0.00001" } ],
+            "accept": true,
+            "expect": [ { "path": [ "tones", "pressed" ], "number": 0.00001 } ]
+        },
+        {
+            "name": "a style without the text section",
+            "edits": [ { "op": "remove", "path": [ "text" ] } ],
+            "accept": true,
+            "expect": [ { "path": [ "text", "lineBreak" ], "default": true } ]
+        },
+        {
+            "name": "a style without font weights",
+            "edits": [ { "op": "remove", "path": [ "metrics", "fontWeights" ] } ],
+            "accept": true,
+            "expect": [ { "path": [ "metrics", "fontWeights", "selectedChoice" ], "default": true } ]
+        },
+        {
+            "name": "a style with some font weights",
+            "edits": [ { "op": "remove", "path": [ "metrics", "fontWeights", "selectedTab" ] } ],
+            "accept": true,
+            "expect": [ { "path": [ "metrics", "fontWeights", "selectedTab" ], "default": true } ]
+        },
+        {
+            "name": "a style without raisedBackground",
+            "edits": [
+                { "op": "remove", "path": [ "dark", "raisedBackground" ] },
+                { "op": "remove", "path": [ "light", "raisedBackground" ] }
+            ],
+            "accept": true,
+            "expect": [
+                { "path": [ "dark", "raisedBackground" ], "color": "#422427" },
+                { "path": [ "light", "raisedBackground" ], "color": "#fde7e9" }
+            ]
+        },
+        {
+            "name": "a style without thumbBackground",
+            "edits": [ { "op": "remove", "path": [ "dark", "thumbBackground" ] } ],
+            "accept": true,
+            "expect": [ { "path": [ "dark", "thumbBackground" ], "color": "#ffffff2d" } ]
+        },
+        {
+            "name": "a style without backdropBackground",
+            "edits": [ { "op": "remove", "path": [ "dark", "backdropBackground" ] } ],
+            "accept": true,
+            "expect": [ { "path": [ "dark", "backdropBackground" ], "color": "#1e1e1e" } ]
+        },
+        {
+            "name": "a style without syntax colors",
+            "edits": [
+                { "op": "remove", "path": [ "dark", "syntaxKeyword" ] },
+                { "op": "remove", "path": [ "dark", "syntaxString" ] },
+                { "op": "remove", "path": [ "dark", "syntaxComment" ] },
+                { "op": "remove", "path": [ "dark", "syntaxNumber" ] },
+                { "op": "remove", "path": [ "dark", "syntaxType" ] },
+                { "op": "remove", "path": [ "dark", "syntaxFunction" ] },
+                { "op": "remove", "path": [ "light", "syntaxKeyword" ] },
+                { "op": "remove", "path": [ "light", "syntaxString" ] },
+                { "op": "remove", "path": [ "light", "syntaxComment" ] },
+                { "op": "remove", "path": [ "light", "syntaxNumber" ] },
+                { "op": "remove", "path": [ "light", "syntaxType" ] },
+                { "op": "remove", "path": [ "light", "syntaxFunction" ] }
+            ],
+            "accept": true,
+            "expect": [
+                { "path": [ "dark", "syntaxKeyword" ], "color": "#ffffff" },
+                { "path": [ "dark", "syntaxString" ], "color": "#ffffff" },
+                { "path": [ "dark", "syntaxComment" ], "color": "#ffffff" },
+                { "path": [ "dark", "syntaxNumber" ], "color": "#ffffff" },
+                { "path": [ "dark", "syntaxType" ], "color": "#ffffff" },
+                { "path": [ "dark", "syntaxFunction" ], "color": "#ffffff" },
+                { "path": [ "light", "syntaxKeyword" ], "color": "#1f1f1f" },
+                { "path": [ "light", "syntaxString" ], "color": "#1f1f1f" },
+                { "path": [ "light", "syntaxComment" ], "color": "#1f1f1f" },
+                { "path": [ "light", "syntaxNumber" ], "color": "#1f1f1f" },
+                { "path": [ "light", "syntaxType" ], "color": "#1f1f1f" },
+                { "path": [ "light", "syntaxFunction" ], "color": "#1f1f1f" }
+            ]
+        },
+        {
+            "name": "a style without one syntax color",
+            "edits": [ { "op": "remove", "path": [ "dark", "syntaxType" ] } ],
+            "accept": true,
+            "expect": [
+                { "path": [ "dark", "syntaxType" ], "color": "#ffffff" },
+                { "path": [ "dark", "syntaxKeyword" ], "color": "#6cb2f2" },
+                { "path": [ "light", "syntaxType" ], "color": "#1d6c84" }
+            ]
+        },
+        {
+            "name": "a customized syntax color",
+            "edits": [ { "op": "set", "path": [ "dark", "syntaxComment" ], "value": "\"#11223344\"" } ],
+            "accept": true,
+            "expect": [ { "path": [ "dark", "syntaxComment" ], "color": "#11223344" } ]
+        },
+        {
+            "name": "a non-object root",
+            "text": "[]",
+            "accept": false,
+            "error": { "kind": "not_object", "path": "root", "key": "", "message": "root must be an object, got ARRAY" }
+        },
+        {
+            "name": "an empty object",
+            "text": "{}",
+            "accept": false,
+            "error": { "kind": "missing_key", "path": "root", "key": "dark", "message": "Missing key in root: dark" }
+        },
+        {
+            "name": "an unknown root key",
+            "edits": [ { "op": "set", "path": [ "extra" ], "value": "{}" } ],
+            "accept": false,
+            "error": { "kind": "unknown_key", "path": "root", "key": "extra", "message": "Unknown key in root: extra" }
+        },
+        {
+            "name": "a missing metrics object",
+            "edits": [ { "op": "remove", "path": [ "metrics" ] } ],
+            "accept": false,
+            "error": { "kind": "missing_key", "path": "root", "key": "metrics", "message": "Missing key in root: metrics" }
+        },
+        {
+            "name": "a theme that is not an object",
+            "edits": [ { "op": "set", "path": [ "dark" ], "value": "[]" } ],
+            "accept": false,
+            "error": { "kind": "not_object", "path": "dark", "key": "", "message": "dark must be an object, got ARRAY" }
+        },
+        {
+            "name": "a short color",
+            "edits": [ { "op": "set", "path": [ "dark", "windowBackground" ], "value": "\"#12345\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_color", "path": "dark", "key": "windowBackground", "message": "Invalid color at dark.windowBackground: #12345 (expected #rrggbb or #rrggbbaa)" }
+        },
+        {
+            "name": "a color without the hash",
+            "edits": [ { "op": "set", "path": [ "dark", "windowBackground" ], "value": "\"1e1e1e\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_color", "path": "dark", "key": "windowBackground", "message": "Invalid color at dark.windowBackground: 1e1e1e (expected #rrggbb or #rrggbbaa)" }
+        },
+        {
+            "name": "a color given as a number",
+            "edits": [ { "op": "set", "path": [ "dark", "windowBackground" ], "value": "5" } ],
+            "accept": false,
+            "error": { "kind": "wrong_type", "path": "dark", "key": "windowBackground", "message": "Expected a string at dark.windowBackground, got NUMBER" }
+        },
+        {
+            "name": "an unknown key (typo)",
+            "edits": [ { "op": "set", "path": [ "dark", "windowBackgrund" ], "value": "\"#1e1e1e\"" } ],
+            "accept": false,
+            "error": { "kind": "unknown_key", "path": "dark", "key": "windowBackgrund", "message": "Unknown key in dark: windowBackgrund" }
+        },
+        {
+            "name": "a missing neutral key",
+            "edits": [ { "op": "remove", "path": [ "dark", "noticeBackground" ] } ],
+            "accept": false,
+            "error": { "kind": "missing_key", "path": "dark", "key": "noticeBackground", "message": "Missing key in dark: noticeBackground" }
+        },
+        {
+            "name": "a missing caption key",
+            "edits": [ { "op": "remove", "path": [ "light", "caption", "closeButtonHoverForeground" ] } ],
+            "accept": false,
+            "error": { "kind": "missing_key", "path": "light.caption", "key": "closeButtonHoverForeground", "message": "Missing key in light.caption: closeButtonHoverForeground" }
+        },
+        {
+            "name": "a caption that is not an object",
+            "edits": [ { "op": "set", "path": [ "dark", "caption" ], "value": "\"x\"" } ],
+            "accept": false,
+            "error": { "kind": "not_object", "path": "dark.caption", "key": "", "message": "dark.caption must be an object, got STRING" }
+        },
+        {
+            "name": "a short optional color",
+            "edits": [ { "op": "set", "path": [ "dark", "raisedBackground" ], "value": "\"#38383\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_color", "path": "dark", "key": "raisedBackground", "message": "Invalid color at dark.raisedBackground: #38383 (expected #rrggbb or #rrggbbaa)" }
+        },
+        {
+            "name": "a short syntax color",
+            "edits": [ { "op": "set", "path": [ "light", "syntaxKeyword" ], "value": "\"#12345\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_color", "path": "light", "key": "syntaxKeyword", "message": "Invalid color at light.syntaxKeyword: #12345 (expected #rrggbb or #rrggbbaa)" }
+        },
+        {
+            "name": "a syntax color without the hash",
+            "edits": [ { "op": "set", "path": [ "dark", "syntaxString" ], "value": "\"dba184\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_color", "path": "dark", "key": "syntaxString", "message": "Invalid color at dark.syntaxString: dba184 (expected #rrggbb or #rrggbbaa)" }
+        },
+        {
+            "name": "an unknown syntax key (typo)",
+            "edits": [ { "op": "set", "path": [ "dark", "syntaxKeywrd" ], "value": "\"#6cb2f2\"" } ],
+            "accept": false,
+            "error": { "kind": "unknown_key", "path": "dark", "key": "syntaxKeywrd", "message": "Unknown key in dark: syntaxKeywrd" }
+        },
+        {
+            "name": "tones that are not an object",
+            "edits": [ { "op": "set", "path": [ "tones" ], "value": "1" } ],
+            "accept": false,
+            "error": { "kind": "not_object", "path": "tones", "key": "", "message": "tones must be an object, got NUMBER" }
+        },
+        {
+            "name": "a tone above 1",
+            "edits": [ { "op": "set", "path": [ "tones", "pressed" ], "value": "1.5" } ],
+            "accept": false,
+            "error": { "kind": "out_of_range", "path": "tones", "key": "pressed", "message": "Number out of range at tones.pressed: 1.5 (expected 0..1)" }
+        },
+        {
+            "name": "a tone given as a string",
+            "edits": [ { "op": "set", "path": [ "tones", "pressed" ], "value": "\"0.5\"" } ],
+            "accept": false,
+            "error": { "kind": "wrong_type", "path": "tones", "key": "pressed", "message": "Expected a number at tones.pressed, got STRING" }
+        },
+        {
+            "name": "a negative zero tone",
+            "edits": [ { "op": "set", "path": [ "tones", "pressed" ], "value": "-0.0" } ],
+            "accept": false,
+            "error": { "kind": "out_of_range", "path": "tones", "key": "pressed", "message": "Number out of range at tones.pressed: -0.0 (expected 0..1)" }
+        },
+        {
+            "name": "a negative metric",
+            "edits": [ { "op": "set", "path": [ "metrics", "bodyFontSize" ], "value": "-1" } ],
+            "accept": false,
+            "error": { "kind": "out_of_range", "path": "metrics", "key": "bodyFontSize", "message": "Number out of range at metrics.bodyFontSize: -1 (expected 0..1000)" }
+        },
+        {
+            "name": "a metric above 1000",
+            "edits": [ { "op": "set", "path": [ "metrics", "bodyFontSize" ], "value": "1001" } ],
+            "accept": false,
+            "error": { "kind": "out_of_range", "path": "metrics", "key": "bodyFontSize", "message": "Number out of range at metrics.bodyFontSize: 1001 (expected 0..1000)" }
+        },
+        {
+            "name": "an unknown font weight name",
+            "edits": [ { "op": "set", "path": [ "metrics", "fontWeights", "bodyText" ], "value": "\"heavy\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_value", "path": "metrics.fontWeights", "key": "bodyText", "message": "Invalid value at metrics.fontWeights.bodyText: heavy (expected one of thin, extraLight, light, regular, medium, semibold, bold, extraBold, black)" }
+        },
+        {
+            "name": "a font weight given as a number",
+            "edits": [ { "op": "set", "path": [ "metrics", "fontWeights", "bodyText" ], "value": "700" } ],
+            "accept": false,
+            "error": { "kind": "wrong_type", "path": "metrics.fontWeights", "key": "bodyText", "message": "Expected a string at metrics.fontWeights.bodyText, got NUMBER" }
+        },
+        {
+            "name": "an unknown font weight key (typo)",
+            "edits": [ { "op": "set", "path": [ "metrics", "fontWeights", "bodyTxt" ], "value": "\"bold\"" } ],
+            "accept": false,
+            "error": { "kind": "unknown_key", "path": "metrics.fontWeights", "key": "bodyTxt", "message": "Unknown key in metrics.fontWeights: bodyTxt" }
+        },
+        {
+            "name": "font weights given as a string",
+            "edits": [ { "op": "set", "path": [ "metrics", "fontWeights" ], "value": "\"bold\"" } ],
+            "accept": false,
+            "error": { "kind": "not_object", "path": "metrics.fontWeights", "key": "", "message": "metrics.fontWeights must be an object, got STRING" }
+        },
+        {
+            "name": "an unknown line break value",
+            "edits": [ { "op": "set", "path": [ "text", "lineBreak" ], "value": "\"newline\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_value", "path": "text", "key": "lineBreak", "message": "Invalid value at text.lineBreak: newline (expected one of space, symbol, paragraphs)" }
+        },
+        {
+            "name": "an unknown key in text (typo)",
+            "edits": [ { "op": "set", "path": [ "text", "lineBrake" ], "value": "\"space\"" } ],
+            "accept": false,
+            "error": { "kind": "unknown_key", "path": "text", "key": "lineBrake", "message": "Unknown key in text: lineBrake" }
+        },
+        {
+            "name": "a text section that is not an object",
+            "edits": [ { "op": "set", "path": [ "text" ], "value": "\"space\"" } ],
+            "accept": false,
+            "error": { "kind": "not_object", "path": "text", "key": "", "message": "text must be an object, got STRING" }
+        },
+        {
+            "name": "a text role for a tab bar background",
+            "edits": [ { "op": "set", "path": [ "tabBar", "barBackground" ], "value": "\"primaryForeground\"" } ],
+            "accept": false,
+            "error": { "kind": "invalid_value", "path": "tabBar", "key": "barBackground", "message": "Invalid value at tabBar.barBackground: primaryForeground (expected one of windowBackground, surfaceBackground, inputBackground, tooltipBackground, noticeBackground, captionBackground, buttonHoverBackground, accentSoft)" }
+        }
+    ]
+}

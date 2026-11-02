@@ -41,6 +41,7 @@ accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `sys
 
 - **빌드 시점** — 같은 스키마의 JSON을 `LUIL_STYLE`로 준다 ([자산 파이프라인](asset-pipeline.md)). 앱 브랜딩처럼 고정된 값이면 이것으로 충분하다.
 - **실행 시점** — `ui_style` 값을 세워 `ui_frame::style`에 `shared_ptr`로 싣는다. 비어 있으면 내장 스타일이다. 값을 계산해서 만드는 앱(OS 색에서 중립 색을 뽑는 경우 등)은 `compose_palette()`가 같은 규칙으로 팔레트를 접어 주므로 그리기 코드가 그것을 구별하지 못한다.
+  - 값을 파일에서 얻는 갈래도 있다. 앱이 스타일 JSON 글을 읽어 [`parse_ui_style`](../../include/luil/theme/ui_style_json.h)에 넘기면 `LUIL_STYLE`과 같은 스키마·판정·대신 값으로 `ui_style`이 나온다. 오류가 하나라도 있으면 값이 비고 오류 목록(`style_error`, `describe`의 영문 한 줄)이 온다. 앱은 쥔 스타일을 그대로 둔다. 읽은 값은 `ui_frame::style`과 배치(`make_arranged_tree`의 `style`)에 같은 포인터로 준다 ([실행 중 스타일 읽기](../style-sheet-design.md)).
 
 중립 색 가운데 `backdrop_background`(`backdropBackground`)는 창 배경 효과가 선 표면(주 창·보조 창·popup)의 바탕이다. 알파가 효과를 얼마나 비출지를 정하고, 효과가 서지 않은 창은 이 색을 쓰지 않는다([창 배경 효과](../backdrop-design.md)). 이 키가 없는 스타일은 `windowBackground`로 물러선다.
 
@@ -91,7 +92,7 @@ element가 `ui_color`를 앱에서 받는 자리는 라이브러리 어디에도
 - 고대비에서 접히는 방식을 정해야 하는 색: `high_contrast_palette_for()`가 역할마다 어떤 시스템 색으로 접을지 정한다. 선택자로 고른 색에는 그 자리가 없다.
 - 비활성 표시: element마다 알파를 발명하지 않고 `disabled_foreground` 하나를 쓴다.
 
-역할이 늘면 `ui_color_palette`와 합성 둘(`compose_palette`·`high_contrast_palette_for`)이 함께 늘어난다. 중립 역할이면 `neutral_color_palette`와 `assets/style.json`, 생성 script의 키 목록도 늘어난다. 그것을 같이 정할 수 없는 색이라면 그것은 아직 역할이 아니다.
+역할이 늘면 `ui_color_palette`와 합성 둘(`compose_palette`·`high_contrast_palette_for`)이 함께 늘어난다. 중립 역할이면 `neutral_color_palette`와 `assets/style.json`, 키 표 데이터 파일([`cmake/style_keys.cmake`](../../cmake/style_keys.cmake))의 한 행도 늘어난다. 생성기와 실행 중 파서가 그 한 행을 함께 읽는다. 그것을 같이 정할 수 없는 색이라면 그것은 아직 역할이 아니다.
 
 ## 글꼴 fallback
 

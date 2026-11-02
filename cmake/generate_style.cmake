@@ -1,16 +1,239 @@
 # 스타일 정의(assets/style.json)를 C++ 상수(`luil::generated::default_style`)로 바꾼다.
 # 두 테마의 중립 색, accent tone, 치수가 한 파일에 있다 — `ui_style` 하나가 곧 그 파일이다.
+#   cmake -DINPUT_FILE=<style.json> -DOUTPUT_FILE=<ui_style.h> -P generate_style.cmake
+#   cmake -DKEYS_OUTPUT_FILE=<ui_style_keys.h> -P generate_style.cmake
 #
-# 생성물은 `ui_style`의 지정 초기화라 키가 하나라도 빠지거나 낯선 키가 있으면 여기서
-# 막는다. 색은 `#rrggbb` 또는 `#rrggbbaa`다 — 중립 색에는 알파가 실린 역할
-# (구분선·보조 글자)이 있어 accent 카탈로그와 달리 알파를 받는다.
+# 키 목록은 데이터 파일(style_keys.cmake, `KEYS_FILE`로 바꿀 수 있다) 하나에 있다. 그것으로 두 헤더를 낸다.
+#  - 기본값 헤더는 `ui_style`의 지정 초기화라 키가 하나라도 빠지거나 낯선 키가 있으면 여기서 막는다.
+#  - 키 표 헤더는 실행 중 파서(`parse_ui_style`)가 도는 표다. 스타일 파일과 무관해 따로 낸다 — 앱이 LUIL_STYLE을
+#    바꿔도 파서는 다시 컴파일되지 않는다.
+# 색은 `#rrggbb` 또는 `#rrggbbaa`다 — 중립 색에는 알파가 실린 역할(구분선·보조 글자)이 있어 accent 카탈로그와
+# 달리 알파를 받는다.
+#
+# 오류 글은 실행 중 파서의 `describe`(src/theme/ui_style_json.cpp)와 글자까지 같다. 한쪽을 바꾸면 다른 쪽도 바꾼다 —
+# 공유 사례 표(tests/style_cases.json)의 `message`가 두 쪽을 함께 잰다.
+if(NOT DEFINED KEYS_FILE)
+    set(KEYS_FILE "${CMAKE_CURRENT_LIST_DIR}/style_keys.cmake")
+endif()
+include("${KEYS_FILE}")
+
+list(GET tone_range 0 tone_minimum)
+list(GET tone_range 1 tone_maximum)
+list(GET metric_range 0 metric_minimum)
+list(GET metric_range 1 metric_maximum)
+
+function(luil_style_keys_of output_variable field_pairs)
+    set(keys "")
+    foreach(pair IN LISTS field_pairs)
+        string(REGEX REPLACE "\\|.*$" "" key "${pair}")
+        list(APPEND keys "${key}")
+    endforeach()
+    set(${output_variable} "${keys}" PARENT_SCOPE)
+endfunction()
+
+# 짝은 `key|field`다 — `;`로 가르면 CMake 리스트가 짝을 두 원소로 풀어 버린다.
+function(luil_style_split_pair pair key_variable field_variable)
+    string(REGEX REPLACE "\\|.*$" "" key "${pair}")
+    string(REGEX REPLACE "^.*\\|" "" field "${pair}")
+    set(${key_variable} "${key}" PARENT_SCOPE)
+    set(${field_variable} "${field}" PARENT_SCOPE)
+endfunction()
+
+# camelCase를 snake_case로 바꾼다 (`selectedOrHovered` → `selected_or_hovered`).
+function(luil_style_snake_case output_variable text)
+    string(REGEX REPLACE "([A-Z])" "_\\1" snake "${text}")
+    string(TOLOWER "${snake}" snake)
+    set(${output_variable} "${snake}" PARENT_SCOPE)
+endfunction()
+
+# 대신할 키는 꼭 있는 키여야 한다. 선택 키를 대신하면 그 키도 빠질 수 있어 값이 비고, 표에서 대신할 필드가
+# 아직 채워지지 않은 자리를 가리키게 된다.
+luil_style_keys_of(required_neutral_keys "${neutral_fields}")
+foreach(spec IN LISTS neutral_optional_fields)
+    string(REPLACE "|" ";" parts "${spec}")
+    list(GET parts 0 key)
+    list(GET parts 2 fallback_key)
+    if(NOT fallback_key IN_LIST required_neutral_keys)
+        message(FATAL_ERROR "The fallback of ${key} must be a required neutral key: ${fallback_key}")
+    endif()
+endforeach()
+
+# 키 표 헤더다. 행 순서는 데이터 파일의 순서(struct 선언 순서)이고, 허용 값은 이름과 C++ 값의 짝으로 적는다 —
+# 목록의 오타(`palette_role`에 없는 역할)가 생성 때가 아니라 컴파일 때 드러난다.
+function(luil_style_write_keys output_file)
+    set(text "#pragma once\n\n")
+    string(APPEND text "// 스타일 키 표(cmake/style_keys.cmake)에서 생성된 파일이다. 직접 고치지 않는다.\n")
+    string(APPEND text "// 실행 중 파서(src/theme/ui_style_json.cpp)와 그 시험만 include한다. 설치하지 않는다.\n\n")
+    string(APPEND text "#include \"luil/theme/ui_style.h\"\n\n")
+    string(APPEND text "#include <cstddef>\n#include <span>\n#include <string_view>\n#include <tuple>\n\n")
+    string(APPEND text "namespace luil::generated::style_keys {\n")
+    string(APPEND text "    // 중립 색 한 행이다. `fallback`이 있으면 빠져도 되고, 빠지면 같은 테마의 그 필드 값이다.\n")
+    string(APPEND text "    struct color_row\n    {\n")
+    string(APPEND text "        std::string_view key;\n")
+    string(APPEND text "        ui_color neutral_color_palette::* field;\n")
+    string(APPEND text "        ui_color neutral_color_palette::* fallback;\n    };\n\n")
+    string(APPEND text "    template <class Section, class Value>\n    struct field_row\n    {\n")
+    string(APPEND text "        std::string_view key;\n        Value Section::* field;\n    };\n\n")
+    string(APPEND text "    template <class Enum>\n    struct enum_name\n    {\n")
+    string(APPEND text "        std::string_view name;\n        Enum value;\n    };\n\n")
+    string(APPEND text "    template <class Section, class Enum>\n    struct enum_row\n    {\n")
+    string(APPEND text "        std::string_view key;\n        Enum Section::* field;\n        std::span<const enum_name<Enum>> names;\n    };\n\n")
+    string(APPEND text "    // 컴포넌트 칸은 (JSON 키, ui_style의 칸, 행 묶음)이다. 행마다 enum 형이 달라 tuple이다.\n")
+    string(APPEND text "    template <class Section, class... Rows>\n    struct component\n    {\n")
+    string(APPEND text "        std::string_view key;\n        Section ui_style::* field;\n        std::tuple<Rows...> rows;\n    };\n\n")
+    string(APPEND text "    template <class Section, class Enum, std::size_t Count>\n")
+    string(APPEND text "    [[nodiscard]] constexpr enum_row<Section, Enum> make_enum_row(std::string_view key, Enum Section::* field, const enum_name<Enum> (&names)[Count]) noexcept\n    {\n")
+    string(APPEND text "        return { key, field, names };\n    }\n\n")
+    string(APPEND text "    template <class Section, class... Rows>\n")
+    string(APPEND text "    [[nodiscard]] constexpr component<Section, Rows...> make_component(std::string_view key, Section ui_style::* field, Rows... rows) noexcept\n    {\n")
+    string(APPEND text "        return { key, field, std::tuple<Rows...> { rows... } };\n    }\n\n")
+
+    string(APPEND text "    // 뿌리에 꼭 있는 키다. 그 밖에는 컴포넌트 칸만 받는다.\n")
+    string(APPEND text "    inline constexpr std::string_view root_required[] {\n")
+    foreach(key IN LISTS root_required_keys)
+        string(APPEND text "        \"${key}\",\n")
+    endforeach()
+    string(APPEND text "    };\n\n")
+
+    string(APPEND text "    inline constexpr color_row neutral[] {\n")
+    foreach(pair IN LISTS neutral_fields)
+        luil_style_split_pair("${pair}" key field)
+        string(APPEND text "        { \"${key}\", &neutral_color_palette::${field}, nullptr },\n")
+    endforeach()
+    foreach(spec IN LISTS neutral_optional_fields)
+        string(REPLACE "|" ";" parts "${spec}")
+        list(GET parts 0 key)
+        list(GET parts 1 field)
+        list(GET parts 2 fallback_key)
+        set(fallback_field "")
+        foreach(pair IN LISTS neutral_fields)
+            luil_style_split_pair("${pair}" required_key required_field)
+            if(required_key STREQUAL fallback_key)
+                set(fallback_field "${required_field}")
+            endif()
+        endforeach()
+        string(APPEND text "        { \"${key}\", &neutral_color_palette::${field}, &neutral_color_palette::${fallback_field} },\n")
+    endforeach()
+    string(APPEND text "    };\n\n")
+
+    string(APPEND text "    using caption_section = decltype(neutral_color_palette::caption);\n")
+    string(APPEND text "    inline constexpr std::string_view caption_key { \"caption\" };\n")
+    string(APPEND text "    inline constexpr field_row<caption_section, ui_color> caption[] {\n")
+    foreach(pair IN LISTS caption_fields)
+        luil_style_split_pair("${pair}" key field)
+        string(APPEND text "        { \"${key}\", &caption_section::${field} },\n")
+    endforeach()
+    string(APPEND text "    };\n\n")
+
+    string(APPEND text "    inline constexpr field_row<accent_tones, float> tones[] {\n")
+    foreach(pair IN LISTS tone_fields)
+        luil_style_split_pair("${pair}" key field)
+        string(APPEND text "        { \"${key}\", &accent_tones::${field} },\n")
+    endforeach()
+    string(APPEND text "    };\n")
+    string(APPEND text "    inline constexpr float tone_minimum { ${tone_minimum}.0f };\n")
+    string(APPEND text "    inline constexpr float tone_maximum { ${tone_maximum}.0f };\n\n")
+
+    string(APPEND text "    inline constexpr field_row<ui_metrics, float> metrics[] {\n")
+    foreach(pair IN LISTS metric_fields)
+        luil_style_split_pair("${pair}" key field)
+        string(APPEND text "        { \"${key}\", &ui_metrics::${field} },\n")
+    endforeach()
+    string(APPEND text "    };\n")
+    string(APPEND text "    inline constexpr float metric_minimum { ${metric_minimum}.0f };\n")
+    string(APPEND text "    inline constexpr float metric_maximum { ${metric_maximum}.0f };\n\n")
+
+    # enum 형마다 이름 표 하나다. 같은 형이 다른 목록으로 두 번 나오면 표가 둘이 되어야 하므로 막는다.
+    set(enum_types "")
+    foreach(specs_variable IN ITEMS font_weight_fields ${component_sections})
+        if(specs_variable MATCHES "\\|")
+            string(REPLACE "|" ";" parts "${specs_variable}")
+            list(GET parts 2 specs_variable)
+        endif()
+        foreach(spec IN LISTS ${specs_variable})
+            string(REPLACE "|" ";" parts "${spec}")
+            list(GET parts 2 enum_type)
+            list(GET parts 3 allowed)
+            if(enum_type IN_LIST enum_types)
+                if(NOT allowed STREQUAL "${enum_allowed_${enum_type}}")
+                    message(FATAL_ERROR "The enum ${enum_type} is listed with two different value lists")
+                endif()
+                continue()
+            endif()
+            list(APPEND enum_types "${enum_type}")
+            set(enum_allowed_${enum_type} "${allowed}")
+            string(APPEND text "    inline constexpr enum_name<${enum_type}> ${enum_type}_names[] {\n")
+            string(REPLACE "," ";" allowed "${allowed}")
+            foreach(name IN LISTS allowed)
+                luil_style_snake_case(value "${name}")
+                string(APPEND text "        { \"${name}\", ${enum_type}::${value} },\n")
+            endforeach()
+            string(APPEND text "    };\n")
+        endforeach()
+    endforeach()
+    string(APPEND text "\n")
+
+    string(APPEND text "    // `metrics.fontWeights`다. 칸이 빠지거나 키가 빠지면 struct의 기본값이다.\n")
+    string(APPEND text "    using font_weights_section = decltype(ui_metrics::font_weights);\n")
+    string(APPEND text "    inline constexpr std::string_view font_weights_key { \"fontWeights\" };\n")
+    string(APPEND text "    inline constexpr std::tuple font_weights {\n")
+    foreach(spec IN LISTS font_weight_fields)
+        string(REPLACE "|" ";" parts "${spec}")
+        list(GET parts 0 key)
+        list(GET parts 1 field)
+        list(GET parts 2 enum_type)
+        string(APPEND text "        make_enum_row(\"${key}\", &font_weights_section::${field}, ${enum_type}_names),\n")
+    endforeach()
+    string(REGEX REPLACE ",\n$" "\n" text "${text}")
+    string(APPEND text "    };\n\n")
+
+    string(APPEND text "    // 컴포넌트 칸이다. 칸이 빠지거나 키가 빠지면 struct의 기본값이다.\n")
+    foreach(section IN LISTS component_sections)
+        string(REPLACE "|" ";" parts "${section}")
+        list(GET parts 1 cpp_field)
+        string(APPEND text "    using ${cpp_field}_section = decltype(ui_style::${cpp_field});\n")
+    endforeach()
+    string(APPEND text "    inline constexpr std::tuple components {\n")
+    foreach(section IN LISTS component_sections)
+        string(REPLACE "|" ";" parts "${section}")
+        list(GET parts 0 json_key)
+        list(GET parts 1 cpp_field)
+        list(GET parts 2 fields_variable)
+        string(APPEND text "        make_component(\"${json_key}\", &ui_style::${cpp_field}")
+        foreach(spec IN LISTS ${fields_variable})
+            string(REPLACE "|" ";" parts "${spec}")
+            list(GET parts 0 key)
+            list(GET parts 1 field)
+            list(GET parts 2 enum_type)
+            string(APPEND text "\n            , make_enum_row(\"${key}\", &${cpp_field}_section::${field}, ${enum_type}_names)")
+        endforeach()
+        string(APPEND text "),\n")
+    endforeach()
+    string(REGEX REPLACE ",\n$" "\n" text "${text}")
+    string(APPEND text "    };\n}\n")
+
+    get_filename_component(output_directory "${output_file}" DIRECTORY)
+    file(MAKE_DIRECTORY "${output_directory}")
+    # 언제나 다시 쓴다. 이 명령은 데이터 파일이나 생성기가 바뀔 때만 돌고(LUIL_STYLE과 무관하다), 글이 같다고
+    # 건너뛰면 출력이 입력보다 낡아 보여 빌드마다 명령이 다시 돈다.
+    file(WRITE "${output_file}" "${text}")
+endfunction()
+
+if(DEFINED KEYS_OUTPUT_FILE)
+    luil_style_write_keys("${KEYS_OUTPUT_FILE}")
+    return()
+endif()
+
 if(NOT DEFINED INPUT_FILE OR NOT DEFINED OUTPUT_FILE)
-    message(FATAL_ERROR "INPUT_FILE and OUTPUT_FILE are required.")
+    message(FATAL_ERROR "INPUT_FILE and OUTPUT_FILE (or KEYS_OUTPUT_FILE) are required.")
 endif()
 file(READ "${INPUT_FILE}" style_json)
 string(JSON root_type ERROR_VARIABLE type_error TYPE "${style_json}")
-if(type_error OR NOT root_type STREQUAL "OBJECT")
-    message(FATAL_ERROR "The style file must be a JSON object: ${INPUT_FILE}\n${type_error}")
+if(type_error)
+    message(FATAL_ERROR "The style file is not valid JSON: ${INPUT_FILE}\n${type_error}")
+endif()
+if(NOT root_type STREQUAL "OBJECT")
+    message(FATAL_ERROR "root must be an object, got ${root_type}")
 endif()
 
 # 객체의 키가 기대한 목록과 정확히 같은지 본다.
@@ -37,8 +260,29 @@ function(luil_style_expect_keys object_json path expected_keys)
     endforeach()
 endfunction()
 
+# `parent_json`의 `key` 칸을 객체로 읽는다. 객체가 아니면 막는다 — 글이나 배열을 객체처럼 읽으면 CMake의 낯선 오류가 난다.
+function(luil_style_object output_variable parent_json path key)
+    string(JSON object_type TYPE "${parent_json}" "${key}")
+    if(NOT object_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "${path} must be an object, got ${object_type}")
+    endif()
+    string(JSON object_json GET "${parent_json}" "${key}")
+    set(${output_variable} "${object_json}" PARENT_SCOPE)
+endfunction()
+
+# 글이어야 하는 값(색·이름)을 읽는다. 숫자를 글로 읽으면 "잘못된 색"으로 보여 까닭이 흐려진다.
+function(luil_style_string output_variable object_json path key)
+    string(JSON value_type TYPE "${object_json}" "${key}")
+    if(NOT value_type STREQUAL "STRING")
+        message(FATAL_ERROR "Expected a string at ${path}.${key}, got ${value_type}")
+    endif()
+    string(JSON value GET "${object_json}" "${key}")
+    set(${output_variable} "${value}" PARENT_SCOPE)
+endfunction()
+
 # `#rrggbb`·`#rrggbbaa`를 ARGB 상수로 바꾼다. 알파를 생략하면 불투명이다.
-function(luil_style_color output_variable path color_text)
+function(luil_style_color output_variable object_json path key)
+    luil_style_string(color_text "${object_json}" "${path}" "${key}")
     if(color_text MATCHES "^#([0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])$")
         set(rgb "${CMAKE_MATCH_1}")
         set(alpha "FF")
@@ -46,109 +290,39 @@ function(luil_style_color output_variable path color_text)
         set(rgb "${CMAKE_MATCH_1}")
         set(alpha "${CMAKE_MATCH_2}")
     else()
-        message(FATAL_ERROR "Invalid color at ${path}: ${color_text} (expected #rrggbb or #rrggbbaa)")
+        message(FATAL_ERROR "Invalid color at ${path}.${key}: ${color_text} (expected #rrggbb or #rrggbbaa)")
     endif()
     string(TOUPPER "${alpha}${rgb}" digits)
     set(${output_variable} "0x${digits}u" PARENT_SCOPE)
 endfunction()
 
 # 0 이상의 실수를 float 리터럴로 바꾼다.
-function(luil_style_number output_variable path number_text minimum maximum)
-    if(NOT number_text MATCHES "^[0-9]+(\\.[0-9]+)?$")
-        message(FATAL_ERROR "Invalid number at ${path}: ${number_text}")
+#  - GET은 숫자를 다시 적은 글을 준다. 정수는 그대로, 실수는 17자리(`%.17g`, 정수 값이면 `.0`을 붙인다)다.
+#    `1e2`는 `100.0`, `-0`은 `0`이 되고, 아주 작은 실수는 지수 표기(`1.0000000000000001e-05`)로 온다.
+#  - 음수는 범위 밖이다. `-0.0`도 부호가 붙어 막는다 — 실행 중 파서도 부호로 본다.
+function(luil_style_number output_variable object_json path key minimum maximum)
+    # GET은 문자열 "0.5"와 숫자 0.5를 같은 글로 돌려주므로 형을 따로 본다.
+    string(JSON number_type TYPE "${object_json}" "${key}")
+    if(NOT number_type STREQUAL "NUMBER")
+        message(FATAL_ERROR "Expected a number at ${path}.${key}, got ${number_type}")
     endif()
-    if(number_text LESS minimum OR number_text GREATER maximum)
-        message(FATAL_ERROR "Number out of range at ${path}: ${number_text} (expected ${minimum}..${maximum})")
+    string(JSON number_text GET "${object_json}" "${key}")
+    if(NOT number_text MATCHES "^-?[0-9]+(\\.[0-9]+)?(e[-+][0-9]+)?$")
+        message(FATAL_ERROR "Invalid number at ${path}.${key}: ${number_text}")
     endif()
-    if(number_text MATCHES "\\.")
+    if(number_text MATCHES "^-" OR number_text LESS minimum OR number_text GREATER maximum)
+        message(FATAL_ERROR "Number out of range at ${path}.${key}: ${number_text} (expected ${minimum}..${maximum})")
+    endif()
+    if(number_text MATCHES "[.e]")
         set(${output_variable} "${number_text}f" PARENT_SCOPE)
     else()
         set(${output_variable} "${number_text}.0f" PARENT_SCOPE)
     endif()
 endfunction()
 
-# JSON 키와 C++ 필드의 짝이다. 순서가 곧 지정 초기화의 순서라 struct 선언과 같아야 한다.
-set(caption_fields
-    "background|background"
-    "foreground|foreground"
-    "buttonHoverBackground|button_hover_background"
-    "buttonHoverForeground|button_hover_foreground"
-    "closeButtonHoverBackground|close_button_hover_background"
-    "closeButtonHoverForeground|close_button_hover_foreground")
-set(neutral_fields
-    "windowBackground|window_background"
-    "surfaceBackground|surface_background"
-    "primaryForeground|primary_foreground"
-    "secondaryForeground|secondary_foreground"
-    "disabledForeground|disabled_foreground"
-    "divider|divider"
-    "inputBackground|input_background"
-    "inputBorder|input_border"
-    "controlBorder|control_border"
-    "groupBorder|group_border"
-    "warningAccent|warning_accent"
-    "errorAccent|error_accent"
-    "buttonHoverBackground|button_hover_background"
-    "buttonHoverForeground|button_hover_foreground"
-    "buttonPressedBackground|button_pressed_background"
-    "tooltipBackground|tooltip_background"
-    "tooltipBorder|tooltip_border"
-    "contentShadow|content_shadow"
-    "noticeBackground|notice_background")
-# 나중에 생긴 중립 역할이다. 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하므로 빠져도 된다.
-#  - 짝은 `key|field|대신할 key`다. 빠지면 같은 테마의 그 key 값을 쓴다 — 옛 JSON은 역할이 갈리기 전과 같은 색으로 그린다.
-#  - struct에서는 `neutral_fields`의 뒤, `caption`의 앞에 이 순서로 선다.
-set(neutral_optional_fields
-    "raisedBackground|raised_background|noticeBackground"
-    "thumbBackground|thumb_background|buttonPressedBackground"
-    "backdropBackground|backdrop_background|windowBackground"
-    # 구문 색이다. 옛 JSON은 본문색으로 그려 구문 색 없이 읽힌다.
-    "syntaxKeyword|syntax_keyword|primaryForeground"
-    "syntaxString|syntax_string|primaryForeground"
-    "syntaxComment|syntax_comment|primaryForeground"
-    "syntaxNumber|syntax_number|primaryForeground"
-    "syntaxType|syntax_type|primaryForeground"
-    "syntaxFunction|syntax_function|primaryForeground")
-set(tone_fields
-    "pressed|pressed"
-    "softButton|soft_button"
-    "softButtonHover|soft_button_hover"
-    "activeToggle|active_toggle"
-    "selection|selection"
-    "rowSelection|row_selection"
-    "dropTarget|drop_target"
-    "dangerButton|danger_button"
-    "dangerButtonHover|danger_button_hover"
-    "dangerButtonPressed|danger_button_pressed")
-set(metric_fields
-    "bodyFontSize|body_font_size"
-    "smallFontSize|small_font_size"
-    "controlCornerRadius|control_corner_radius"
-    "rowCornerRadius|row_corner_radius")
-
-function(luil_style_keys_of output_variable field_pairs)
-    set(keys "")
-    foreach(pair IN LISTS field_pairs)
-        string(REGEX REPLACE "\\|.*$" "" key "${pair}")
-        list(APPEND keys "${key}")
-    endforeach()
-    set(${output_variable} "${keys}" PARENT_SCOPE)
-endfunction()
-
-# 짝은 `key|field`다 — `;`로 가르면 CMake 리스트가 짝을 두 원소로 풀어 버린다.
-function(luil_style_split_pair pair key_variable field_variable)
-    string(REGEX REPLACE "\\|.*$" "" key "${pair}")
-    string(REGEX REPLACE "^.*\\|" "" field "${pair}")
-    set(${key_variable} "${key}" PARENT_SCOPE)
-    set(${field_variable} "${field}" PARENT_SCOPE)
-endfunction()
-
 # 한 테마의 중립 색을 `neutral_color_palette` 지정 초기화로 적는다.
 function(luil_style_neutral output_variable theme_key)
-    string(JSON theme_json ERROR_VARIABLE theme_error GET "${style_json}" "${theme_key}")
-    if(theme_error)
-        message(FATAL_ERROR "The style file has no ${theme_key} palette: ${theme_error}")
-    endif()
+    luil_style_object(theme_json "${style_json}" "${theme_key}" "${theme_key}")
     luil_style_keys_of(neutral_keys "${neutral_fields}")
     list(APPEND neutral_keys "caption")
     luil_style_keys_of(optional_keys "${neutral_optional_fields}")
@@ -157,8 +331,7 @@ function(luil_style_neutral output_variable theme_key)
     set(text "        .${theme_key} = {\n")
     foreach(pair IN LISTS neutral_fields)
         luil_style_split_pair("${pair}" key field)
-        string(JSON color_text GET "${theme_json}" "${key}")
-        luil_style_color(color "${theme_key}.${key}" "${color_text}")
+        luil_style_color(color "${theme_json}" "${theme_key}" "${key}")
         string(APPEND text "            .${field} = ${color},\n")
     endforeach()
     foreach(spec IN LISTS neutral_optional_fields)
@@ -169,20 +342,18 @@ function(luil_style_neutral output_variable theme_key)
         string(JSON color_text ERROR_VARIABLE absent GET "${theme_json}" "${key}")
         if(absent)
             set(key "${fallback_key}")
-            string(JSON color_text GET "${theme_json}" "${key}")
         endif()
-        luil_style_color(color "${theme_key}.${key}" "${color_text}")
+        luil_style_color(color "${theme_json}" "${theme_key}" "${key}")
         string(APPEND text "            .${field} = ${color},\n")
     endforeach()
 
-    string(JSON caption_json GET "${theme_json}" "caption")
+    luil_style_object(caption_json "${theme_json}" "${theme_key}.caption" "caption")
     luil_style_keys_of(caption_keys "${caption_fields}")
     luil_style_expect_keys("${caption_json}" "${theme_key}.caption" "${caption_keys}")
     string(APPEND text "            .caption = {\n")
     foreach(pair IN LISTS caption_fields)
         luil_style_split_pair("${pair}" key field)
-        string(JSON color_text GET "${caption_json}" "${key}")
-        luil_style_color(color "${theme_key}.caption.${key}" "${color_text}")
+        luil_style_color(color "${caption_json}" "${theme_key}.caption" "${key}")
         string(APPEND text "                .${field} = ${color},\n")
     endforeach()
     string(APPEND text "            },\n        },\n")
@@ -192,63 +363,17 @@ endfunction()
 # 숫자 객체(tones·metrics)를 지정 초기화로 적는다.
 #  - 여섯째 인자부터는 숫자가 아닌, 빠져도 되는 칸이다 (metrics의 `fontWeights`). 낯선 키 검사만 통과시키고 따로 적는다.
 function(luil_style_numbers output_variable object_key field_pairs minimum maximum)
-    string(JSON object_json ERROR_VARIABLE object_error GET "${style_json}" "${object_key}")
-    if(object_error)
-        message(FATAL_ERROR "The style file has no ${object_key} object: ${object_error}")
-    endif()
+    luil_style_object(object_json "${style_json}" "${object_key}" "${object_key}")
     luil_style_keys_of(keys "${field_pairs}")
     luil_style_expect_keys("${object_json}" "${object_key}" "${keys}" ${ARGN})
     set(text "        .${object_key} = {\n")
     foreach(pair IN LISTS field_pairs)
         luil_style_split_pair("${pair}" key field)
-        # GET은 문자열 "0.5"와 숫자 0.5를 같은 글로 돌려주므로 형을 따로 본다.
-        string(JSON number_type TYPE "${object_json}" "${key}")
-        if(NOT number_type STREQUAL "NUMBER")
-            message(FATAL_ERROR "Expected a number at ${object_key}.${key}, got ${number_type}")
-        endif()
-        string(JSON number_text GET "${object_json}" "${key}")
-        luil_style_number(number "${object_key}.${key}" "${number_text}" ${minimum} ${maximum})
+        luil_style_number(number "${object_json}" "${object_key}" "${key}" ${minimum} ${maximum})
         string(APPEND text "            .${field} = ${number},\n")
     endforeach()
     string(APPEND text "        },\n")
     set(${output_variable} "${text}" PARENT_SCOPE)
-endfunction()
-
-# 컴포넌트 스타일(`tabBar`·`popup`·`text`)은 **빠져도 된다** — 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하고,
-# 빠진 칸은 struct의 기본값(처음부터의 모양)이다. 낯선 키와 모르는 값은 여기서도 막는다.
-#  - 짝은 `key|field|enum type|허용 값들`이고 허용 값은 `,`로 적는다. JSON 값은 camelCase, C++ 값은 snake_case다.
-set(palette_roles "windowBackground,surfaceBackground,inputBackground,tooltipBackground,noticeBackground,captionBackground,buttonHoverBackground,accentSoft")
-set(tab_bar_fields
-    "variant|variant|tab_bar_variant|underline,connected,flat"
-    "closeVisibility|close_visibility|tab_close_visibility|always,selectedOrHovered"
-    "indicatorPlacement|indicator_placement|tab_indicator_placement|iconCorner,closeSlot"
-    "barBackground|bar_background|palette_role|${palette_roles}"
-    "selectedBackground|selected_background|palette_role|${palette_roles}")
-set(popup_fields
-    "corner|corner|popup_corner|system,round,roundSmall,square")
-set(text_fields
-    "lineBreak|line_break|single_line_break|space,symbol,paragraphs")
-# `metrics.fontWeights`다 (`ui_font_weights`). 값은 굵기의 이름이고 빠진 칸은 struct의 기본값이다.
-set(font_weight_names "thin,extraLight,light,regular,medium,semibold,bold,extraBold,black")
-set(font_weight_fields
-    "bodyText|body_text|font_weight|${font_weight_names}"
-    "smallText|small_text|font_weight|${font_weight_names}"
-    "buttonText|button_text|font_weight|${font_weight_names}"
-    "selectedTab|selected_tab|font_weight|${font_weight_names}"
-    "selectedChoice|selected_choice|font_weight|${font_weight_names}"
-    "title|title|font_weight|${font_weight_names}")
-
-# 컴포넌트 칸의 JSON 키와 C++ 필드, 그 필드 표다. 순서가 곧 지정 초기화의 순서라 struct 선언과 같아야 한다.
-set(component_sections
-    "tabBar|tab_bar|tab_bar_fields"
-    "popup|popup|popup_fields"
-    "text|text|text_fields")
-
-# camelCase를 snake_case로 바꾼다 (`selectedOrHovered` → `selected_or_hovered`).
-function(luil_style_snake_case output_variable text)
-    string(REGEX REPLACE "([A-Z])" "_\\1" snake "${text}")
-    string(TOLOWER "${snake}" snake)
-    set(${output_variable} "${snake}" PARENT_SCOPE)
 endfunction()
 
 # 컴포넌트 칸 하나를 지정 초기화로 적는다. 칸이 없으면 아무것도 적지 않는다 (struct의 기본값).
@@ -259,26 +384,14 @@ function(luil_style_enum_section output_variable parent_json path json_key cpp_f
         set(${output_variable} "" PARENT_SCOPE)
         return()
     endif()
-    if(NOT section_type STREQUAL "OBJECT")
-        message(FATAL_ERROR "${path} must be an object, got ${section_type}")
-    endif()
-    string(JSON section_json GET "${parent_json}" "${json_key}")
+    luil_style_object(section_json "${parent_json}" "${path}" "${json_key}")
     set(known_keys "")
     foreach(spec IN LISTS field_specs)
         string(REPLACE "|" ";" parts "${spec}")
         list(GET parts 0 key)
         list(APPEND known_keys "${key}")
     endforeach()
-    string(JSON count LENGTH "${section_json}")
-    if(count GREATER 0)
-        math(EXPR last "${count} - 1")
-        foreach(index RANGE 0 ${last})
-            string(JSON key MEMBER "${section_json}" ${index})
-            if(NOT key IN_LIST known_keys)
-                message(FATAL_ERROR "Unknown key in ${path}: ${key}")
-            endif()
-        endforeach()
-    endif()
+    luil_style_expect_keys("${section_json}" "${path}" "" ${known_keys})
     # 지정 초기화는 선언 순서라야 하므로 JSON 순서가 아니라 표의 순서로 적는다.
     set(text "${indent}.${cpp_field} = {\n")
     foreach(spec IN LISTS field_specs)
@@ -291,9 +404,11 @@ function(luil_style_enum_section output_variable parent_json path json_key cpp_f
         if(absent)
             continue()
         endif()
-        string(REPLACE "," ";" allowed "${allowed}")
-        if(NOT value IN_LIST allowed)
-            message(FATAL_ERROR "Invalid value at ${path}.${key}: ${value} (expected one of ${allowed})")
+        luil_style_string(value "${section_json}" "${path}" "${key}")
+        string(REPLACE "," ";" allowed_list "${allowed}")
+        if(NOT value IN_LIST allowed_list)
+            string(REPLACE "," ", " allowed_text "${allowed}")
+            message(FATAL_ERROR "Invalid value at ${path}.${key}: ${value} (expected one of ${allowed_text})")
         endif()
         luil_style_snake_case(enum_value "${value}")
         string(APPEND text "${indent}    .${field} = ${enum_type}::${enum_value},\n")
@@ -302,37 +417,34 @@ function(luil_style_enum_section output_variable parent_json path json_key cpp_f
     set(${output_variable} "${text}" PARENT_SCOPE)
 endfunction()
 
-function(luil_style_component output_variable json_key cpp_field field_specs)
-    luil_style_enum_section(text "${style_json}" "${json_key}" "${json_key}" "${cpp_field}" "${field_specs}" "        ")
-    set(${output_variable} "${text}" PARENT_SCOPE)
-endfunction()
-
-set(root_keys "dark;light;tones;metrics")
+set(root_keys ${root_required_keys})
 set(components_text "")
 foreach(section IN LISTS component_sections)
     string(REPLACE "|" ";" parts "${section}")
     list(GET parts 0 json_key)
     list(GET parts 1 cpp_field)
     list(GET parts 2 fields_variable)
-    string(JSON probe ERROR_VARIABLE absent GET "${style_json}" "${json_key}")
-    if(NOT absent)
-        list(APPEND root_keys "${json_key}")
-    endif()
-    luil_style_component(section_text "${json_key}" "${cpp_field}" "${${fields_variable}}")
-    string(APPEND components_text "${section_text}")
+    list(APPEND root_keys "${json_key}")
 endforeach()
-luil_style_expect_keys("${style_json}" "root" "${root_keys}")
+luil_style_expect_keys("${style_json}" "root" "${root_required_keys}" ${root_keys})
 luil_style_neutral(dark_text "dark")
 luil_style_neutral(light_text "light")
-# tone은 알파라 0~1이고, 치수는 논리 픽셀이라 위가 열려 있다 (상한은 실수 방지용이다).
-luil_style_numbers(tones_text "tones" "${tone_fields}" 0 1)
-luil_style_numbers(metrics_text "metrics" "${metric_fields}" 0 1000 "fontWeights")
+luil_style_numbers(tones_text "tones" "${tone_fields}" ${tone_minimum} ${tone_maximum})
+luil_style_numbers(metrics_text "metrics" "${metric_fields}" ${metric_minimum} ${metric_maximum} "fontWeights")
 # 굵기 묶음은 metrics의 마지막 칸이다 (struct 선언 순서). 닫는 줄 앞에 끼운다.
 string(JSON metrics_json GET "${style_json}" "metrics")
 luil_style_enum_section(weights_text "${metrics_json}" "metrics.fontWeights" "fontWeights" "font_weights" "${font_weight_fields}" "            ")
 if(NOT weights_text STREQUAL "")
     string(REGEX REPLACE "        },\n$" "${weights_text}        },\n" metrics_text "${metrics_text}")
 endif()
+foreach(section IN LISTS component_sections)
+    string(REPLACE "|" ";" parts "${section}")
+    list(GET parts 0 json_key)
+    list(GET parts 1 cpp_field)
+    list(GET parts 2 fields_variable)
+    luil_style_enum_section(section_text "${style_json}" "${json_key}" "${json_key}" "${cpp_field}" "${${fields_variable}}" "        ")
+    string(APPEND components_text "${section_text}")
+endforeach()
 
 set(output_text "#pragma once\n\n")
 string(APPEND output_text "// 스타일 JSON에서 생성된 파일이다. 직접 고치지 않는다.\n")
