@@ -29,4 +29,4 @@
 - 미래 시각: 해당 시각에 한 번 다시 그림
 - `now` 이하: 계속 움직이므로 짧은 주기로 다시 그림
 
-플랫폼은 모든 표면의 가장 이른 시각에 timer 하나를 걸고, render 뒤 다음 예고를 다시 계산한다. 앱 상태 전환은 `transition` 값과 `logic_driver::next_tick()`/`tick()`으로 처리한다. element는 전환의 소유자가 아니다.
+플랫폼은 모든 표면의 가장 이른 시각에 timer 하나를 걸고, render 뒤 다음 예고를 다시 계산한다. 앱 상태 전환은 `transition` 값과 `logic_driver::next_tick()`/`tick()`으로 처리한다. element는 전환의 소유자가 아니다. 앱은 새 전환의 길이를 `motion_duration`으로 거쳐 시스템의 움직임 줄이기(`window_metrics::reduce_motion`)를 지킨다.

@@ -110,6 +110,36 @@ namespace luil::android {
         return sizes;
     }
 
+    bool read_reduce_motion(JNIEnv& env, const jobject context)
+    {
+        const local_frame frame { env };
+        if (frame.ready() == false || context == nullptr)
+            return false;
+        const jclass context_type { env.FindClass("android/content/Context") };
+        if (context_type == nullptr || env.ExceptionCheck())
+            return false;
+        const jmethodID get_resolver { env.GetMethodID(context_type, "getContentResolver", "()Landroid/content/ContentResolver;") };
+        if (get_resolver == nullptr || env.ExceptionCheck())
+            return false;
+        const jobject resolver { env.CallObjectMethod(context, get_resolver) };
+        if (resolver == nullptr || env.ExceptionCheck())
+            return false;
+        const jclass global_type { env.FindClass("android/provider/Settings$Global") };
+        if (global_type == nullptr || env.ExceptionCheck())
+            return false;
+        // 값이 없으면 예외를 던지는 두 인자 짝이 아니라 기본값을 받는 짝을 쓴다. 기본값 1은 "움직임을 둔다"다.
+        const jmethodID get_float { env.GetStaticMethodID(global_type, "getFloat", "(Landroid/content/ContentResolver;Ljava/lang/String;F)F") };
+        if (get_float == nullptr || env.ExceptionCheck())
+            return false;
+        const jstring name { env.NewStringUTF("animator_duration_scale") };
+        if (name == nullptr || env.ExceptionCheck())
+            return false;
+        const jfloat scale { env.CallStaticFloatMethod(global_type, get_float, resolver, name, jfloat { 1.0f }) };
+        if (env.ExceptionCheck())
+            return false;
+        return scale <= 0.0f;
+    }
+
     touch_gesture_config apply_system_input_settings(touch_gesture_config config, const system_input_settings& settings) noexcept
     {
         config.long_press_time = settings.long_press_time;

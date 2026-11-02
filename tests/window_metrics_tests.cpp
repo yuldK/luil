@@ -102,6 +102,38 @@ TEST_CASE("Delegates written for three values keep working with the class hook",
     REQUIRE(quiet.make_metrics_message(metrics).empty());
 }
 
+TEST_CASE("Window metrics start without reduced motion and tell it apart", "[app][window][reduce_motion]")
+{
+    // 시스템 설정은 플랫폼이 채운다. 크기와 배율로 지은 값은 움직임을 둔다.
+    const luil::window_metrics metrics { luil::make_window_metrics(1080.0f, 2241.0f, 2.8125f) };
+    REQUIRE(metrics.reduce_motion == false);
+    // 이 칸만 다른 두 metrics는 같지 않다. 같은 값을 다시 알리지 않는 플랫폼의 걸러내기가 이 비교를 쓴다.
+    luil::window_metrics reduced { metrics };
+    REQUIRE(reduced == metrics);
+    reduced.reduce_motion = true;
+    REQUIRE(reduced != metrics);
+}
+
+TEST_CASE("The metrics hook carries reduced motion and old delegates keep working", "[app][window][reduce_motion]")
+{
+    luil::window_metrics metrics { luil::make_window_metrics(2316.0f, 1080.0f, 2.8125f) };
+    metrics.reduce_motion = true;
+    // 새 훅을 넓힌 앱은 참인 값을 그대로 받는다.
+    class_delegate fresh {};
+    luil::app_delegate& fresh_base { fresh };
+    const luil::app_message received { fresh_base.make_metrics_message(metrics) };
+    REQUIRE(received.get<luil::window_metrics>() != nullptr);
+    REQUIRE(received.get<luil::window_metrics>()->reduce_motion);
+    REQUIRE(*received.get<luil::window_metrics>() == metrics);
+    // 세 값짜리만 넓힌 앱은 이 칸을 받지 못하고 지금처럼 크기·배율만 받는다.
+    old_delegate old {};
+    luil::app_delegate& old_base { old };
+    const luil::app_message forwarded { old_base.make_metrics_message(metrics) };
+    REQUIRE(forwarded.get<metrics_intent>() != nullptr);
+    REQUIRE(forwarded.get<metrics_intent>()->width == 2316.0f);
+    REQUIRE(forwarded.get<metrics_intent>()->scale == 2.8125f);
+}
+
 TEST_CASE("The window surface reaches past the safe area", "[app][metrics]")
 {
     // 안전 영역 밖이 없으면 root 자리 그대로다 (Windows).
