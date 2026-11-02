@@ -2,6 +2,7 @@
 #include "demo/line_break_sample.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
+#include "mobile_demo/ink_page.h"
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
@@ -1165,4 +1166,136 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(mobile_demo::text_target_of_kind(mobile_demo::kind_text).has_value() == false);
+}
+
+namespace {
+    // 400x800 창에서 조립해 배치한 잉크 페이지다 (배율 1).
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> ink_tree(mobile_demo::ink_page& page)
+    {
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(page.build(400.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 400.0f, 800.0f }, 1.0f));
+    }
+
+    [[nodiscard]] std::u8string ink_text(mobile_demo::ink_page& page, const std::u8string& owner)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const label { tree->find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] luil::rect_f ink_canvas_bounds(mobile_demo::ink_page& page)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const canvas { tree->find({ luil::ui_element_kind::ink_canvas, u8"ink-canvas" }) };
+        REQUIRE(canvas != nullptr);
+        return canvas->bounds();
+    }
+
+    // 컨트롤러가 낸 앱 메시지를 페이지에 돌려준다. 돌려준 수를 돌려준다.
+    int deliver_ink(mobile_demo::ink_page& page, const std::vector<luil::input_action>& actions)
+    {
+        int delivered { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
+    }
+
+    // 한 접촉을 실제 입력 경로로 긋는다. 표본마다 tree를 다시 지어 앱 상태(진행 중 획)가 따라오는 길과 같다.
+    void stroke_ink(mobile_demo::ink_page& page, const luil::pointer_device device, const std::vector<luil::point_f>& points, const bool eraser = false)
+    {
+        luil::interaction_controller controller {};
+        const std::optional<luil::pen_sample> pen { device == luil::pointer_device::pen ? std::optional { luil::pen_sample { 0.6f, 0.0f, 0.0f, eraser } } : std::nullopt };
+        const time_point start {};
+        controller.set_tree(ink_tree(page));
+        luil::pointer_pressed_event pressed { points.front().x, points.front().y, luil::pointer_button::left, start };
+        pressed.device = device;
+        pressed.pointer_id = 4;
+        pressed.pen = pen;
+        static_cast<void>(deliver_ink(page, controller.process(pressed)));
+        for (std::size_t index { 1 }; index < points.size(); ++index)
+        {
+            controller.set_tree(ink_tree(page));
+            luil::pointer_moved_event moved { points[index].x, points[index].y, after_milliseconds(start, static_cast<int>(index) * 8) };
+            moved.device = device;
+            moved.pointer_id = 4;
+            moved.in_contact = true;
+            moved.pen = pen;
+            static_cast<void>(deliver_ink(page, controller.process(moved)));
+        }
+        luil::pointer_released_event released { points.back().x, points.back().y, luil::pointer_button::left, after_milliseconds(start, 200) };
+        released.device = device;
+        released.pointer_id = 4;
+        released.pen = pen;
+        static_cast<void>(deliver_ink(page, controller.process(released)));
+    }
+
+    int press_ink_button(mobile_demo::ink_page& page, const std::u8string& owner)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        return deliver_ink(page, controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, after_milliseconds(time_point {}, 40) }));
+    }
+}
+
+TEST_CASE("A pen stroke on the ink page counts the stroke and says it carried pressure", "[mobile-demo][ink]")
+{
+    mobile_demo::ink_page page {};
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 펜");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 없음");
+    const luil::rect_f box { ink_canvas_bounds(page) };
+    REQUIRE(box.width > 100.0f);
+    REQUIRE(box.height > 100.0f);
+    const float y { box.y + 60.0f };
+    stroke_ink(page, luil::pointer_device::pen, { { box.x + 20.0f, y }, { box.x + 60.0f, y + 5.0f }, { box.x + 100.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 1개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 펜, 압력 있음");
+    // 캔버스의 Value(UIA 요약)가 상태 줄과 같은 글이다.
+    const auto tree { ink_tree(page) };
+    const auto* const canvas { tree->find({ luil::ui_element_kind::ink_canvas, u8"ink-canvas" }) };
+    REQUIRE(canvas->accessibility().value == u8"획 1개");
+    REQUIRE(canvas->accessibility().name == u8"잉크 캔버스");
+
+    // 지우개 끝으로 그 획을 가로지르면 지워진다.
+    stroke_ink(page, luil::pointer_device::pen, { { box.x + 60.0f, y - 40.0f }, { box.x + 60.0f, y + 40.0f } }, true);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"지운 획 1");
+}
+
+TEST_CASE("The ink page buttons add sample strokes, switch tools and let fingers draw", "[mobile-demo][ink]")
+{
+    mobile_demo::ink_page page {};
+    // 견본 단추는 캔버스가 내는 것과 같은 메시지를 낸다 (UIA가 그리기 대신 되풀이한다).
+    REQUIRE(press_ink_button(page, u8"ink-sample") > 2);
+    REQUIRE(press_ink_button(page, u8"ink-sample") > 2);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 2개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 펜, 압력 있음");
+    REQUIRE(press_ink_button(page, u8"ink-clear") == 1);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+
+    REQUIRE(press_ink_button(page, u8"ink-tool-toggle") == 1);
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 지우개");
+    REQUIRE(press_ink_button(page, u8"ink-tool-toggle") == 1);
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 펜");
+
+    // 손가락은 켜기 전까지 그리지 않는다.
+    const luil::rect_f box { ink_canvas_bounds(page) };
+    const float y { box.y + 80.0f };
+    stroke_ink(page, luil::pointer_device::touch, { { box.x + 20.0f, y }, { box.x + 120.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(page.handle(luil::app_message { demo::ink_command_intent { demo::ink_command::toggle_touch } }));
+    stroke_ink(page, luil::pointer_device::touch, { { box.x + 20.0f, y }, { box.x + 120.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 1개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 손가락, 압력 없음");
 }

@@ -74,6 +74,9 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/tabs_page.h
     demo/zoom_page.cpp
     demo/zoom_page.h
+    demo/ink_page.cpp
+    demo/ink_page.h
+    demo/ink_sketch.h
     demo/theme_page.cpp
     demo/theme_page.h
     demo/toasts_page.cpp

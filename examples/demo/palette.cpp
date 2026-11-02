@@ -20,7 +20,7 @@ namespace demo {
         };
 
         // 사이드바와 같은 차례·이름이다.
-        constexpr std::array<page_entry, 16> pages {
+        constexpr std::array<page_entry, 17> pages {
             page_entry { page_overview, u8"시작 / 기능 색인" },
             page_entry { page_controls, u8"버튼과 컨트롤" },
             page_entry { page_basics, u8"입력과 다이얼로그" },
@@ -35,6 +35,7 @@ namespace demo {
             page_entry { page_network, u8"네트워크" },
             page_entry { page_webview, u8"웹뷰" },
             page_entry { page_zoom, u8"확대 보기" },
+            page_entry { page_ink, u8"잉크" },
             page_entry { page_theme, u8"모양과 색" },
             page_entry { page_workbench, u8"변경 작업대" },
         };

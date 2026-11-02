@@ -21,7 +21,7 @@
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme|workbench
+//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|ink|theme|workbench
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
@@ -34,6 +34,7 @@
 #include "demo/files_page.h"
 #include "demo/gallery_page.h"
 #include "demo/groups_page.h"
+#include "demo/ink_page.h"
 #include "demo/images_page.h"
 #include "demo/lists_page.h"
 #include "demo/network_page.h"
@@ -479,7 +480,7 @@ namespace demo {
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
                     || toasts_.handle(message) || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message)
-                    || zoom_.handle(message) || theme_.handle(message) || workbench_.handle(message))
+                    || zoom_.handle(message) || ink_.handle(message) || theme_.handle(message) || workbench_.handle(message))
                     return;
             }
 
@@ -809,6 +810,7 @@ namespace demo {
                 add_page(page_network, u8"네트워크");
                 add_page(page_webview, u8"웹뷰");
                 add_page(page_zoom, u8"확대 보기");
+                add_page(page_ink, u8"잉크");
                 add_page(page_theme, u8"모양과 색");
                 add_page(page_workbench, u8"변경 작업대");
                 navigation.selected = page_;
@@ -864,6 +866,8 @@ namespace demo {
                     return webview_.build(width, height, scale);
                 if (page_ == page_zoom)
                     return zoom_.build(width, height, scale);
+                if (page_ == page_ink)
+                    return ink_.build(width, height, scale);
                 if (page_ == page_theme)
                     return theme_.build(width, height, scale);
                 if (page_ == page_workbench)
@@ -887,6 +891,7 @@ namespace demo {
             file_dialog_purpose file_dialog_purpose_ { file_dialog_purpose::image };
             network_page network_ {};
             zoom_page zoom_ {};
+            ink_page ink_ {};
             command_palette_host palette_ {};
             // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).
             bool primary_instance_ { true };

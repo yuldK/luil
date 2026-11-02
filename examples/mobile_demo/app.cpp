@@ -33,7 +33,7 @@ namespace mobile_demo {
             char32_t icon { 0 };
         };
 
-        constexpr std::array<page_entry, 12> page_entries {
+        constexpr std::array<page_entry, 13> page_entries {
             page_entry { page_basics, u8"기본", u8"단추, 글 칸, 그림, dialog", luil::codicons::icon_home },
             page_entry { page_lists, u8"목록", u8"순서 바꾸기, tree, 가상 목록", luil::codicons::icon_list_unordered },
             page_entry { page_tabs, u8"탭", u8"쓸어 넘기기, 넘침 메뉴", luil::codicons::icon_files },
@@ -41,6 +41,7 @@ namespace mobile_demo {
             page_entry { page_toasts, u8"토스트", u8"알림과 실행 취소", luil::codicons::icon_bell },
             page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 분할 버튼, 길게 눌러 메뉴", luil::codicons::icon_menu },
             page_entry { page_zoom, u8"확대 보기", u8"두 손가락 확대와 이동", luil::codicons::icon_zoom_in },
+            page_entry { page_ink, u8"잉크", u8"스타일러스 필압 그리기와 지우개", luil::codicons::icon_pencil },
             page_entry { page_theme, u8"테마", u8"밝기, 키 컬러, 시스템 색", luil::codicons::icon_symbol_color },
             page_entry { page_sheets, u8"시트", u8"아래 시트, 옆 시트, 서랍", luil::codicons::icon_layout_panel },
             page_entry { page_device, u8"기기", u8"방향, 막대, 볼륨 키, 햅틱, 창 폭", luil::codicons::icon_device_mobile },
@@ -140,7 +141,7 @@ namespace mobile_demo {
         }
         // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다. 편집 메시지만 타입이 같고
         // target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
-        if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message)
+        if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message) || ink_.handle(message)
             || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
             || files_.handle(message))
             return;
@@ -281,6 +282,8 @@ namespace mobile_demo {
             return tabs_.build(width, height, scale);
         if (page == page_zoom)
             return zoom_.build(width, height, scale);
+        if (page == page_ink)
+            return ink_.build(width, height, scale);
         // 위에서 아래로 흘려 보는 페이지다.
         if (page == page_groups)
             return wrap_scroll(page, groups_.build(width, scale), height, scale);
