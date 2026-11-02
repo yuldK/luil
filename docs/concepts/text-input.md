@@ -54,6 +54,8 @@ IME 조합 중에는 확정 `text`를 바꾸지 않고 화면에 표시할 전�
 
 줄을 오가는 이동은 지금 caret의 자리(`text_span_bounds`)를 칸에 묻고, 위아래로 옮긴 자리를 포인터처럼 다시 묻는다(`offset_at_point`). 그래서 판정이 클릭과 한 길이다. 짧은 줄을 지나도 처음의 가로 자리를 기억하지는 않는다.
 
+편집하는 코드 글의 구간 색은 [`syntax_highlighter`](../../include/luil/ui/syntax_highlighter.h)가 만든다. 앱이 줄 하나를 칠하는 렉서를 주고, `apply_text_edit` 다음 같은 logic turn에서 `update`를 부르면 바뀐 줄부터 다시 칠한 구간이 `spans()`로 나온다. 그 구간을 `text_area_config::spans`에 넘긴다. 구간은 색(`text_color_role`의 구문 색 여섯 포함)과 굵기·기울임을 싣는다 ([구문 강조](../syntax-highlight-design.md)).
+
 세로 스크롤은 앱 상태다(`scroll_offset`·`scroll`·`scroll_to`). 칸 안의 `scroll_area_element`가 막대·휠·범위 다듬기를 맡는다. caret 따라가기는 controller가 한다. 입력 pump는 새 tree를 받을 때마다 `follow_text_caret()`을 부르고, 초점을 가진 여러 줄 칸의 **caret이나 글이 바뀌었을 때만** caret 줄을 창 안으로 들이는 스크롤 메시지를 낸다. 편집은 logic이 적용한 뒤에야 caret 자리가 정해지므로 그 결과가 실린 tree에서 하는 것이다. 휠로 caret에서 멀리 흘린 frame은 caret도 글도 그대로라 되돌아가지 않는다.
 
 IME 후보 창과 보조 기술의 글 자리는 `text_span_bounds`가 답한다. 구간이 시작하는 화면 줄에서의 자리이고, 여러 줄에 걸치면 그 줄의 끝까지다. UIA Text pattern의 줄 단위(`TextUnit_Line`)는 화면 줄(넘겨 접은 줄 포함)이고, 문단 단위는 줄 바꿈으로 나뉜 줄이다(`text_line_starts`).

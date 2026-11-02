@@ -1,10 +1,13 @@
 #include "luil/theme/ui_theme.h"
 
+#include "luil/theme/ui_style.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <set>
 #include <string>
@@ -340,6 +343,101 @@ TEST_CASE("Neutral palettes define the derived roles as translucent foreground",
         REQUIRE((palette.control_border & 0x00FFFFFFu) == (palette.primary_foreground & 0x00FFFFFFu));
         REQUIRE((palette.group_border & 0x00FFFFFFu) == (palette.primary_foreground & 0x00FFFFFFu));
     }
+}
+
+namespace {
+    // 위 색을 아래 바탕에 얹은 불투명 색이다. 입력 칸이 실제로 칠하는 바탕을 만든다.
+    [[nodiscard]] luil::ui_color composite_over(const luil::ui_color top, const luil::ui_color bottom) noexcept
+    {
+        const int alpha { static_cast<int>(top >> 24U) };
+        const auto mix = [&](const int shift) { return (channel(top, shift) * alpha + channel(bottom, shift) * (255 - alpha) + 127) / 255; };
+        return luil::make_ui_color(static_cast<std::uint8_t>(mix(16)), static_cast<std::uint8_t>(mix(8)), static_cast<std::uint8_t>(mix(0)));
+    }
+
+    constexpr luil::ui_color luil::ui_color_palette::* syntax_roles[] {
+        &luil::ui_color_palette::syntax_keyword,
+        &luil::ui_color_palette::syntax_string,
+        &luil::ui_color_palette::syntax_comment,
+        &luil::ui_color_palette::syntax_number,
+        &luil::ui_color_palette::syntax_type,
+        &luil::ui_color_palette::syntax_function,
+    };
+}
+
+TEST_CASE("Syntax colors keep WCAG AA contrast on every surface a code view draws on", "[theme][syntax]")
+{
+    // 코드 칸의 바탕은 창, 표면, 그 위에 입력 칸의 옅은 바탕을 얹은 색이다. 마지막이 입력 칸이 실제로 칠하는 색이다.
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::ui_color backgrounds[] {
+            palette.window_background,
+            palette.surface_background,
+            composite_over(palette.input_background, palette.window_background),
+            composite_over(palette.input_background, palette.surface_background),
+        };
+        for (const auto role : syntax_roles)
+        {
+            REQUIRE(opaque(palette.*role));
+            REQUIRE(palette.*role != palette.primary_foreground);
+            for (const luil::ui_color background : backgrounds)
+            {
+                INFO("color " << (palette.*role) << " on " << background << (theme == luil::color_theme::light ? " light" : " dark"));
+                REQUIRE(contrast_ratio(palette.*role, background) >= 4.5f);
+            }
+        }
+    }
+}
+
+TEST_CASE("Syntax colors tell the six roles apart in each theme and do not follow the key color", "[theme][syntax]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme, luil::accent_for(u8"blue")) };
+        std::set<luil::ui_color> distinct {};
+        for (const auto role : syntax_roles)
+            distinct.insert(palette.*role);
+        REQUIRE(distinct.size() == std::size(syntax_roles));
+        // 키 컬러는 경고·오류색처럼 구문 색을 바꾸지 못한다.
+        const luil::ui_color_palette other { luil::color_palette_for(theme, luil::accent_for(u8"amber")) };
+        for (const auto role : syntax_roles)
+            REQUIRE(palette.*role == other.*role);
+    }
+}
+
+TEST_CASE("High contrast folds the six syntax roles into the window foreground", "[theme][syntax]")
+{
+    luil::high_contrast_colors white {};
+    white.window_background = luil::make_ui_color(255, 255, 255);
+    white.window_foreground = luil::make_ui_color(0, 0, 0);
+    white.highlight_background = luil::make_ui_color(55, 0, 110);
+    white.highlight_foreground = luil::make_ui_color(255, 255, 255);
+    for (const luil::high_contrast_colors& colors : { luil::high_contrast_colors {}, white })
+    {
+        const luil::ui_color_palette palette { luil::high_contrast_palette_for(colors) };
+        for (const auto role : syntax_roles)
+            REQUIRE(palette.*role == colors.window_foreground);
+        // 본문과 같은 색이라 바탕 위의 대비가 본문 글자와 같다.
+        REQUIRE(contrast_ratio(palette.syntax_keyword, palette.window_background) >= 7.0f);
+    }
+}
+
+TEST_CASE("Composition moves the six syntax colors verbatim from the neutral palette", "[theme][syntax]")
+{
+    luil::neutral_color_palette neutral { luil::default_ui_style().dark };
+    neutral.syntax_keyword = luil::make_ui_color(1, 2, 3);
+    neutral.syntax_string = luil::make_ui_color(4, 5, 6);
+    neutral.syntax_comment = luil::make_ui_color(7, 8, 9);
+    neutral.syntax_number = luil::make_ui_color(10, 11, 12);
+    neutral.syntax_type = luil::make_ui_color(13, 14, 15);
+    neutral.syntax_function = luil::make_ui_color(16, 17, 18);
+    const luil::ui_color_palette palette { luil::compose_palette(neutral, luil::accent_for(u8"blue").dark) };
+    REQUIRE(palette.syntax_keyword == neutral.syntax_keyword);
+    REQUIRE(palette.syntax_string == neutral.syntax_string);
+    REQUIRE(palette.syntax_comment == neutral.syntax_comment);
+    REQUIRE(palette.syntax_number == neutral.syntax_number);
+    REQUIRE(palette.syntax_type == neutral.syntax_type);
+    REQUIRE(palette.syntax_function == neutral.syntax_function);
 }
 
 TEST_CASE("The theme preference resolves against high contrast and the OS setting", "[theme]")

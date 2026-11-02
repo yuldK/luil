@@ -111,6 +111,8 @@ namespace luil {
         std::function<input_action(float offset)> scroll_horizontal_to {};
         // 구간은 begin 순서이고 겹치지 않는다. 공유한 vector는 게시 뒤 고치지 않는다.
         //  - offset은 확정 글(`text_input_view::text`) 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
+        //  - 편집하는 코드 글의 구간은 `syntax_highlighter`(syntax_highlighter.h)가 편집마다 바뀐 줄부터 다시 칠해 만든다.
+        //    구문 색(`text_color_role::keyword`…`function`)과 굵기·기울임(`text_span::bold`·`italic`)을 싣는다.
         std::shared_ptr<const std::vector<text_span>> spans {};
         // `line` 오름차순이고 같은 줄이 둘 없다. 그리기가 줄마다 이분 탐색(`lower_bound`)으로 찾는다.
         std::shared_ptr<const std::vector<line_decoration>> lines {};

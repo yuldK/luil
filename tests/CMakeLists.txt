@@ -74,6 +74,8 @@ add_executable(luil_core_tests
     slider_element_tests.cpp
     split_handle_element_tests.cpp
     text_area_element_tests.cpp
+    text_change_tests.cpp
+    syntax_highlighter_tests.cpp
     text_link_tests.cpp
     stack_element_tests.cpp
     strip_element_tests.cpp

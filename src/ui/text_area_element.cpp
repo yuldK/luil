@@ -1,8 +1,10 @@
 #include "luil/ui/text_area_element.h"
 #include "luil/text/grapheme.h"
 #include "luil/text/text_edit.h"
+#include "ui/font_synthesis.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_link_element.h"
+#include "ui/text_span_color.h"
 
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
@@ -27,18 +29,6 @@ namespace luil {
     namespace {
         using text_line = text_area_element::line;
         using width_of = std::function<float(std::u8string_view)>;
-
-        ui_color span_foreground(const text_color_role role, const ui_color_palette& palette) noexcept
-        {
-            switch (role)
-            {
-            case text_color_role::secondary: return palette.secondary_foreground;
-            case text_color_role::accent: return palette.accent;
-            case text_color_role::warning: return palette.warning_accent;
-            case text_color_role::error: return palette.error_accent;
-            default: return palette.primary_foreground;
-            }
-        }
 
         ui_color span_background(const text_background_role role, const ui_color_palette& palette) noexcept
         {
@@ -470,16 +460,20 @@ namespace luil {
         if (displayed)
             shown = displayed_ranges<text_span>(displayed_text(), shift_of(value_), begin, end, query);
         for (const auto& span : displayed ? std::span<const text_span> { shown } : query(begin, end))
-            if (span.bold)
+            if (span.bold || span.italic)
             {
                 const auto from { std::max(span.begin, begin) - begin };
                 const auto to { std::min(span.end, end) - begin };
                 if (from >= to)
                     continue;
-                if (styles.empty() == false && styles.back().end == from)
+                // 이웃 항목은 굵기와 기울임이 모두 같을 때만 합친다. 하나라도 다르면 face가 달라 따로 배치한다.
+                if (styles.empty() == false
+                    && styles.back().end == from
+                    && styles.back().bold == span.bold
+                    && styles.back().italic == span.italic)
                     styles.back().end = to;
                 else
-                    styles.push_back({ from, to, true });
+                    styles.push_back({ from, to, span.bold, span.italic });
             }
         return styles;
     }
@@ -1028,9 +1022,11 @@ namespace luil {
                         const auto to { std::min(span.end, row.end) };
                         draw_piece(cursor, from, font, foreground.getColor());
                         // 배치가 없는 이 길은 caret·조각 자리를 보통 글꼴로 잰다. 진짜 Bold face는 폭이 달라 다음 조각과
-                        // 겹치므로, 폭을 바꾸지 않는 덧칠을 남긴다. 배치가 있는 길은 진짜 face다 (`fonts_for`).
+                        // 겹치므로, 폭을 바꾸지 않는 덧칠과 눕힘을 남긴다. 배치가 있는 길은 진짜 face다 (`fonts_for`).
                         SkFont styled_font { font };
                         styled_font.setEmbolden(span.bold);
+                        if (span.italic)
+                            styled_font.setSkewX(synthetic_skew);
                         draw_piece(from, to, styled_font, enabled() ? span_foreground(span.color, context.palette) : context.palette.disabled_foreground);
                         cursor = to;
                     }

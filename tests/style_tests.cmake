@@ -30,6 +30,14 @@ foreach(needle
     ".close_button_hover_background = 0xFFC42B1Cu"
     ".raised_background = 0xFF38383Cu"
     ".thumb_background = 0x29FFFFFFu"
+    ".syntax_keyword = 0xFF6CB2F2u"
+    ".syntax_string = 0xFFDBA184u"
+    ".syntax_comment = 0xFF8DBB78u"
+    ".syntax_number = 0xFFB5CEA8u"
+    ".syntax_type = 0xFF4EC9B0u"
+    ".syntax_function = 0xFFDCDCAAu"
+    ".syntax_keyword = 0xFF0000FFu"
+    ".syntax_function = 0xFF6E5320u"
     ".body_font_size = 12.0f"
     ".soft_button = 0.25f"
     ".selected_choice = font_weight::semibold"
@@ -115,8 +123,49 @@ string(FIND "${header}" ".backdrop_background = 0xFF1E1E1Eu" position)
 if(position EQUAL -1)
     message(FATAL_ERROR "A style without backdropBackground did not fall back to windowBackground")
 endif()
+# 구문 색(`syntaxKeyword`…`syntaxFunction`)도 빠져도 된다. 옛 JSON은 구문 색 없이 같은 테마의 본문색으로 그린다.
+set(syntax_keys syntaxKeyword syntaxString syntaxComment syntaxNumber syntaxType syntaxFunction)
+set(legacy "${style}")
+foreach(key IN LISTS syntax_keys)
+    string(JSON legacy REMOVE "${legacy}" dark ${key})
+    string(JSON legacy REMOVE "${legacy}" light ${key})
+endforeach()
+luil_expect_generation("${legacy}" TRUE "a style without syntax colors")
+file(READ "${output}" header)
+foreach(field syntax_keyword syntax_string syntax_comment syntax_number syntax_type syntax_function)
+    foreach(needle ".${field} = 0xFFFFFFFFu" ".${field} = 0xFF1F1F1Fu")
+        string(FIND "${header}" "${needle}" position)
+        if(position EQUAL -1)
+            message(FATAL_ERROR "A style without syntax colors did not fall back to primaryForeground: ${needle}")
+        endif()
+    endforeach()
+endforeach()
+# 하나만 빠지면 그 칸만 본문색이고 나머지는 JSON 값이다.
+string(JSON legacy REMOVE "${style}" dark syntaxType)
+luil_expect_generation("${legacy}" TRUE "a style without one syntax color")
+file(READ "${output}" header)
+foreach(needle ".syntax_type = 0xFFFFFFFFu" ".syntax_keyword = 0xFF6CB2F2u" ".syntax_type = 0xFF1D6C84u")
+    string(FIND "${header}" "${needle}" position)
+    if(position EQUAL -1)
+        message(FATAL_ERROR "A style without syntaxType lacks: ${needle}")
+    endif()
+endforeach()
+# 소비자가 바꾼 구문 색이 그대로 서고, 알파도 받는다.
+string(JSON custom SET "${style}" dark syntaxComment "\"#11223344\"")
+luil_expect_generation("${custom}" TRUE "a customized syntax color")
+file(READ "${output}" header)
+string(FIND "${header}" ".syntax_comment = 0x44112233u" position)
+if(position EQUAL -1)
+    message(FATAL_ERROR "A customized syntax color did not reach the header")
+endif()
 string(JSON broken SET "${style}" dark raisedBackground "\"#38383\"")
 luil_expect_generation("${broken}" FALSE "a short optional color")
+string(JSON broken SET "${style}" light syntaxKeyword "\"#12345\"")
+luil_expect_generation("${broken}" FALSE "a short syntax color")
+string(JSON broken SET "${style}" dark syntaxString "\"dba184\"")
+luil_expect_generation("${broken}" FALSE "a syntax color without the hash")
+string(JSON broken SET "${style}" dark syntaxKeywrd "\"#6cb2f2\"")
+luil_expect_generation("${broken}" FALSE "an unknown syntax key (typo)")
 
 # 어긋난 파일은 막는다.
 luil_expect_generation("[]" FALSE "a non-object root")

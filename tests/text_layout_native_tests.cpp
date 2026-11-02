@@ -296,3 +296,57 @@ TEST_CASE("Input and document queries agree with the arranged native text layout
     REQUIRE(bounds->width == Catch::Approx(original.size().width));
 
 }
+
+TEST_CASE("An italic span lays out as an italic style request and only the paragraph whose italic changed is shaped again", "[ui][text-layout][native][syntax]")
+{
+    if (luil::ui_text_shaping_enabled() == false)
+        SKIP("The configured application retains the legacy text input path");
+
+    // 기울임 구간의 배치 폭이 `styles { italic }` 요청의 폭과 같다. 굵기 구간과 같은 길이다.
+    const std::u8string text { u8"office text" };
+    luil::text_input_view view { .text = text };
+    luil::text_area_config config {};
+    config.wrap = false;
+    config.font_size = 20.0f;
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 6, luil::text_color_role::comment, false, luil::text_background_role::none, true } });
+    luil::text_area_element document { { luil::application_element_kind(2) }, view, config };
+    document.arrange({ { 0.0f, 0.0f, 500.0f, 100.0f } });
+    const auto italic { luil::make_text_layout({ .text = text, .font_size = 20.0f, .styles = { { 0, 6, false, true } } }) };
+    const auto upright { luil::make_text_layout({ .text = text, .font_size = 20.0f }) };
+    const auto start { document.text_span_bounds({ text, 0, 0, 0 }, luil::default_text_measurer()) };
+    const auto end { document.text_span_bounds({ text, 0, text.size(), text.size() }, luil::default_text_measurer()) };
+    REQUIRE(start.has_value());
+    REQUIRE(end.has_value());
+    REQUIRE(end->x - start->x == Catch::Approx(italic.size().width));
+    // 기울임과 굵기는 따로 쥔다. 굵은 구간의 폭이 기울임 구간의 폭을 대신하지 않는다.
+    const auto bold { luil::make_text_layout({ .text = text, .font_size = 20.0f, .styles = { { 0, 6, true, false } } }) };
+    REQUIRE(italic.size().width > 0.0f);
+    REQUIRE(upright.size().width > 0.0f);
+    REQUIRE(bold.size().width > 0.0f);
+
+    // 두 문단에서 둘째 문단의 기울임만 바뀌면 그 문단만 다시 shape한다.
+    luil::clear_text_layout_cache();
+    const std::u8string paragraphs { u8"alpha beta\ngamma delta" };
+    luil::text_input_view two { .text = paragraphs };
+    luil::text_area_config shared {};
+    shared.wrap = false;
+    shared.font_size = 20.0f;
+    shared.wrap_cache = std::make_shared<luil::text_area_wrap_cache>();
+    const auto misses_after = [&](const std::vector<luil::text_span>& spans) {
+        luil::text_area_config next { shared };
+        next.spans = std::make_shared<const std::vector<luil::text_span>>(spans);
+        const auto before { luil::text_layout_cache_usage().misses };
+        luil::text_area_element element { { luil::application_element_kind(3) }, two, std::move(next) };
+        element.arrange({ { 0.0f, 0.0f, 500.0f, 100.0f } });
+        return luil::text_layout_cache_usage().misses - before;
+    };
+    const auto cold { misses_after({}) };
+    const auto second_italic { misses_after({ { 11, 16, luil::text_color_role::comment, false, luil::text_background_role::none, true } }) };
+    REQUIRE(cold > 0u);
+    REQUIRE(second_italic > 0u);
+    REQUIRE(second_italic < cold);
+    // 같은 구간으로 다시 배치하면 아무것도 다시 shape하지 않는다.
+    REQUIRE(misses_after({ { 11, 16, luil::text_color_role::comment, false, luil::text_background_role::none, true } }) == 0u);
+    // 색만 바뀌면 배치에 걸리지 않는다. 구문 색은 캐시를 무효로 하지 않는다.
+    REQUIRE(misses_after({ { 11, 16, luil::text_color_role::keyword, false, luil::text_background_role::none, true } }) == 0u);
+}
