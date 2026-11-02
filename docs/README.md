@@ -90,6 +90,12 @@
 - [모바일 앱 바](app-bar-design.md)
 - [분할 버튼](split-button-design.md): 기본 동작 본체와 메뉴 화살표, 필드 popup 열림 규약
 - [정보 막대](info-bar-design.md): 닫을 때까지 남는 상태 알림과 토스트가 함께 쓰는 심각도
+- [라이브러리 기본 문구](default-text-design.md): 요소가 스스로 놓는 한국어 글을 한 헤더에 모으고 앱 글이 비었을 때만 쓴다
+- [확인 대화 상자](message-box-design.md): 제목·본문·표준 단추를 한 요소로 짓고 좁은 화면에서 단추를 쌓는다
+- [별점](rating-design.md): 별 단위·반 별 값과 보조 기술이 읽는 별 하나의 걸음
+- [실행 취소 stack](undo-stack-design.md): 앱 수준 되돌리기 걸음과 실행 취소 명령표
+- [실행 중 스타일 읽기](style-sheet-design.md): 스타일 JSON을 실행 중에 읽어 빌드 때와 같은 판정으로 받는다
+- [줄 나눔 정책 스타일 키](wrap-policy-key-design.md): 스타일 파일 한 줄로 여러 줄 글의 기본 줄 나눔 정책을 고른다
 
 ## 플랫폼과 콘텐츠
 

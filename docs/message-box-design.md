@@ -232,7 +232,7 @@ root.add(std::move(host));
 
 ## 확인
 
-자동 test는 데스크톱 `basics_page` 연결 하나만 빼고 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다. 지금 `basics_page`를 짓는 test는 없다. 두 데모 test가 컴파일하는 목록(`tests/CMakeLists.txt` 142~149·154~161행)에 `basics_page.cpp`가 없어서 치환이 기존 test를 깨지 않는다.
+자동 test는 데스크톱 `basics_page` 연결 하나만 빼고 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다. 설계할 때는 `basics_page`를 짓는 test가 없었다. 두 데모 test가 컴파일하는 목록(`tests/CMakeLists.txt` 142~149·154~161행)에 `basics_page.cpp`가 없어서 치환이 기존 test를 깨지 않는다.
 
 - `tests/message_box_tests.cpp`(고정 폭 측정기): 단추 id가 `message_box_button_id`와 같고 눌림이 `result(key)`를 한 번 내는지, `result`가 비면 메시지가 없는지; 역할이 모양과 `default_button`으로 번지는지(accept만 기본 버튼, destructive는 danger이고 기본 아님); 첫 초점이 Enter의 대상과 같고 destructive만 있을 때는 reject에 서며 Enter가 그 단추를 누르는지; Esc가 reject의 key(없고 단추 하나면 그 단추, 둘 다 없으면 앱으로 흐름)를 내고 `message_box_dismiss_message`와 같은지; `outside_dismisses`; Tab이 안을 벗어나지 않고 칸, 단추 순으로 도는지.
 - 같은 파일의 크기 단언: 본문 줄 수가 늘면 host가 정한 내용 높이가 늘고, 폭이 `width + 32`보다 좁으면 상자 폭이 `자리 폭 - 32`이고, 단추 폭의 합이 안쪽 폭과 같으면 행·1 더하면 쌓이며 쌓이면 폭 전체로 준 순서대로 서는지, 높이가 모자라면 본문 줄이 줄고 단추가 자리 안에 서는지, 배율 2의 물리 좌표; 접근성(host 이름, 본문 `static_text`, 단추·칸의 역할과 이름, `severity_name` 우선); 표준 단추의 key·역할·기본 문구·글 덮기.
