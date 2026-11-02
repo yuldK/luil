@@ -91,7 +91,8 @@ namespace mobile_demo {
         {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
-            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret && edit->request.target != target_memo)
+            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret && edit->request.target != target_memo
+                && edit->request.target != target_code)
                 return false;
             apply_edit(edit->request);
             return true;
@@ -99,7 +100,7 @@ namespace mobile_demo {
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
             if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_secret
-                && composition->event.target != target_memo)
+                && composition->event.target != target_memo && composition->event.target != target_code)
                 return false;
             apply_composition(composition->event);
             return true;
@@ -131,6 +132,16 @@ namespace mobile_demo {
             memo_scroll_ = std::max(0.0f, scroll_to->offset);
             return true;
         }
+        if (const auto* const scroll { message.get<code_scroll_intent>() }; scroll != nullptr)
+        {
+            code_scroll_ = std::max(0.0f, code_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<code_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            code_scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
         return false;
     }
 
@@ -144,6 +155,12 @@ namespace mobile_demo {
             luil::apply_text_edit(secret_, request);
         else if (request.target == target_memo)
             luil::apply_text_edit(memo_, request);
+        else if (request.target == target_code)
+        {
+            luil::apply_text_edit(code_, request);
+            // 편집을 적용한 같은 logic turn에서 구간을 다시 칠한다. 늦으면 칸이 한 frame 낡은 offset으로 그린다.
+            highlighter_.update(code_.text);
+        }
     }
 
     void basics_page::apply_composition(const luil::text_composition_event& event)
@@ -214,6 +231,12 @@ namespace mobile_demo {
         // 움직이는 그림도 같은 규칙으로 한 번만 읽는다. 한 편이 장 수만큼의 디코딩이다.
         if (films_read_ == false)
             read_films();
+        // 코드 칸의 구간이다. 처음 한 번 칠하고, 그 뒤는 편집이 닿을 때마다 `apply_edit`가 다시 칠한다.
+        if (code_painted_ == false)
+        {
+            code_painted_ = true;
+            highlighter_.update(code_.text);
+        }
 
         page_column column { u8"basics" };
         column.add(make_counter_row(), touch_height);
@@ -244,6 +267,29 @@ namespace mobile_demo {
         memo.scroll_to = [](const float offset) { return luil::make_app_action(memo_scroll_to_intent { offset }); };
         memo.wrap_cache = memo_wrap_;
         column.add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo_input }, make_input_view(memo_, target_memo), std::move(memo)), 96.0f);
+        column.gap(24.0f);
+
+        // 코드 칸이다. 소프트 키보드로 치면 편집한 줄부터 다시 칠한다. 상태 줄은 마지막 편집이 렉서에 보낸 줄 수까지 그린다.
+        column.note(u8"code", u8"코드 칸 (구문 강조 · 키워드는 굵게 · 주석은 기울임)");
+        column.gap(4.0f);
+        const auto code_spans { highlighter_.spans() };
+        luil::text_area_config code {};
+        code.placeholder = u8"코드 칸";
+        code.face = luil::text_face::code;
+        code.scroll_offset = code_scroll_;
+        code.scroll = [](const float delta) { return luil::make_app_action(code_scroll_intent { delta }); };
+        code.scroll_to = [](const float offset) { return luil::make_app_action(code_scroll_to_intent { offset }); };
+        code.wrap_cache = code_wrap_;
+        code.spans = code_spans;
+        column.add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_code_input }, make_input_view(code_, target_code), std::move(code)), 160.0f);
+        column.gap(4.0f);
+        // 상태 줄은 폭이 좁은 휴대폰에서 두 줄로 접는다.
+        luil::label_config code_status {};
+        code_status.text = demo::code_status_text(demo::count_code_spans(*code_spans), highlighter_.stats().relexed);
+        code_status.font_size = note_text_size;
+        code_status.color = luil::label_color_role::dim;
+        code_status.wrap = true;
+        column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"code-status" }, std::move(code_status)), 2.0f * note_line_height);
         column.gap(24.0f);
 
         // 그림 둘을 나란히 둔다. 칸은 폭의 절반씩이다.

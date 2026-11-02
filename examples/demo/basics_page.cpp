@@ -167,6 +167,16 @@ namespace demo {
             memo_scroll_ = std::max(0.0f, scroll_to->offset);
             return true;
         }
+        if (const auto* const scroll { message.get<code_scroll_intent>() }; scroll != nullptr)
+        {
+            code_scroll_ = std::max(0.0f, code_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<code_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            code_scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
         if (const auto* const link { message.get<open_link_intent>() }; link != nullptr)
         {
             // 라이브러리는 링크를 열지 않는다 — 여는 것은 앱이고, `open_url`은 허용한 scheme(http·https·mailto)만 연다.
@@ -188,14 +198,16 @@ namespace demo {
         {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
-            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_memo && edit->request.target != target_link_view)
+            if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_memo && edit->request.target != target_link_view
+                && edit->request.target != target_code)
                 return false;
             apply_edit(edit->request);
             return true;
         }
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
-            if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_memo)
+            if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_memo
+                && composition->event.target != target_code)
                 return false;
             apply_composition(composition->event);
             return true;
@@ -248,6 +260,12 @@ namespace demo {
             luil::apply_text_edit(memo_, request);
         else if (request.target == target_link_view)
             luil::apply_text_edit(link_view_, request);
+        else if (request.target == target_code)
+        {
+            luil::apply_text_edit(code_, request);
+            // 편집을 적용한 같은 logic turn에서 구간을 다시 칠한다. 늦으면 칸이 한 frame 낡은 offset으로 그린다.
+            highlighter_.update(code_.text);
+        }
     }
 
     void basics_page::apply_composition(const luil::text_composition_event& event)
@@ -323,6 +341,13 @@ namespace demo {
         // 디코딩이라, frame마다 읽으면 그 값이 장 수만큼 곱절로 든다.
         if (films_read_ == false)
             read_films();
+        // 코드 칸의 구간이다. 처음 한 번 칠하고, 그 뒤는 편집이 닿을 때마다 `apply_edit`가 다시 칠한다.
+        if (code_painted_ == false)
+        {
+            code_painted_ = true;
+            highlighter_.update(code_.text);
+        }
+        code_spans_ = highlighter_.spans();
 
         page_layout page { u8"basics" };
         page.heading(u8"입력과 다이얼로그", u8"IME 조합 · 여러 줄 편집 · 기본 버튼과 확인 흐름");
@@ -334,6 +359,8 @@ namespace demo {
         page.add(make_memo(), 118.0f);
         page.gap(16.0f);
         page.add(make_link_view(), 86.0f);
+        page.gap(16.0f);
+        page.add(make_code(), 202.0f);
         page.gap(22.0f);
         page.add(make_image_row(), 78.0f);
         page.gap(4.0f);
@@ -548,6 +575,28 @@ namespace demo {
         memo.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
         memo.link_hint = u8"Ctrl+클릭하여 열기";
         column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo_input }, make_input_view(memo_, target_memo), std::move(memo)), 96.0f);
+        return column;
+    }
+
+    std::unique_ptr<luil::stack_element> basics_page::make_code() const
+    {
+        // 편집하는 코드 글이다. 줄을 칠하는 렉서는 앱의 것(code_lexer.h)이고, 도우미가 편집이 닿은 줄부터 다시 칠한 구간을 칸에 건넨다.
+        // 상태 줄은 마지막 편집이 렉서에 보낸 줄 수까지 그려, 증분이 한 줄에서 끝나는지 화면으로 되읽는다.
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"input-code" }, luil::stack_config {}) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"code" }, u8"코드 칸 (구문 강조 · 키워드는 굵게 · 주석은 기울임 · 편집한 줄부터 다시 칠한다)", 11.0f, luil::label_color_role::primary), 18.0f);
+        column->add_gap(4.0f);
+        luil::text_area_config code {};
+        code.placeholder = u8"코드 칸";
+        code.face = luil::text_face::code;
+        code.scroll_offset = code_scroll_;
+        code.scroll = [](const float delta) { return luil::make_app_action(code_scroll_intent { delta }); };
+        code.scroll_to = [](const float offset) { return luil::make_app_action(code_scroll_to_intent { offset }); };
+        code.wrap_cache = code_wrap_;
+        code.spans = code_spans_;
+        column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_code_input }, make_input_view(code_, target_code), std::move(code)), 160.0f);
+        column->add_gap(4.0f);
+        const code_span_counts counts { code_spans_ != nullptr ? count_code_spans(*code_spans_) : code_span_counts {} };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"code-status" }, code_status_text(counts, highlighter_.stats().relexed), 11.0f, luil::label_color_role::dim), 16.0f);
         return column;
     }
 

@@ -4,10 +4,12 @@
 // 앱에 실린 그림(정지 한 장과 움직이는 둘), 화면을 덮는 확인 dialog
 // (캡션을 잡아 옮긴다).
 
+#include "demo/code_lexer.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/syntax_highlighter.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_interaction.h"
@@ -15,6 +17,7 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace mobile_demo {
     // 재생을 멈추고 다시 잇는 단추다.
@@ -66,6 +69,17 @@ namespace mobile_demo {
     };
 
     struct memo_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+
+    // 코드 칸의 세로 스크롤이다 (논리 픽셀). 위치는 앱 상태다.
+    struct code_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct code_scroll_to_intent
     {
         float offset { 0.0f };
     };
@@ -140,6 +154,12 @@ namespace mobile_demo {
         float memo_scroll_ { 0.0f };
         // 메모 칸이 접은 자리를 frame 사이에 쥔다. 바뀐 문단만 다시 잰다 (`text_area_wrap_cache`).
         std::shared_ptr<luil::text_area_wrap_cache> memo_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+        // 코드 칸의 글과 세로 스크롤이다. 구간은 도우미가 편집에 맞춰 다시 칠한다 (데스크톱 demo의 `code_lexer.h`를 함께 쓴다).
+        luil::text::text_edit_state code_ { .text = std::u8string { demo::code_sample } };
+        float code_scroll_ { 0.0f };
+        std::shared_ptr<luil::text_area_wrap_cache> code_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+        luil::syntax_highlighter highlighter_ { demo::code_highlighter_config() };
+        bool code_painted_ { false };
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
