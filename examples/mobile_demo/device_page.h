@@ -57,7 +57,7 @@ namespace mobile_demo {
     {
     public:
         bool handle(const luil::app_message& message);
-        // 창 metrics는 창 폭 등급을 보이려고 받는다.
+        // 창 metrics는 창 폭 등급과 움직임 줄이기를 보이려고 받는다.
         [[nodiscard]] page_content build(float width, float scale, const window_metrics_intent& window);
 
         // 셸이 frame에 싣는 요청이다.

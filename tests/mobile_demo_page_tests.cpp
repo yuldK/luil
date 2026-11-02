@@ -1,9 +1,11 @@
+#include "mobile_demo/device_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -19,6 +21,14 @@ namespace {
         auto root { std::make_unique<luil::root_element>() };
         page.add_overlay(*root, width, height, 1.0f, {});
         return luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, width, height }, 1.0f);
+    }
+
+    // 창 폭 400dp에서 조립해 배치한 기기 페이지다. 움직임 줄이기는 창 metrics가 싣는 값이다.
+    [[nodiscard]] luil::ui_tree device_tree(mobile_demo::device_page& page, const bool reduce_motion)
+    {
+        const mobile_demo::window_metrics_intent window { .width = 400.0f, .height = 800.0f, .scale = 1.0f, .reduce_motion = reduce_motion };
+        auto content { page.build(400.0f, 1.0f, window) };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, content.height }, 1.0f);
     }
 
     // 요청을 기록하고 사람이 고른 차례로 답한다. 실제 페이지의 send·cancel·응답 처리 경로를 그대로 쓴다.
@@ -77,6 +87,27 @@ namespace {
             return tree.find({ mobile_demo::kind_smb_entry, u8"smb-entry-" + name }) != nullptr;
         }
     };
+}
+
+TEST_CASE("The device page states whether the system reduces motion", "[mobile-demo][reduce_motion]")
+{
+    mobile_demo::device_page page {};
+    for (const bool reduced : { false, true })
+    {
+        CAPTURE(reduced);
+        const std::u8string_view expected { reduced ? std::u8string_view { u8"켜짐 · 도는 표시가 멈춘다" } : std::u8string_view { u8"꺼짐 · 도는 표시가 돈다" } };
+        const auto tree { device_tree(page, reduced) };
+        // UIA가 되읽는 이름이 화면의 글과 같다.
+        REQUIRE(tree.find({ mobile_demo::kind_text, u8"motion-heading" }) != nullptr);
+        const auto* const state { tree.find({ mobile_demo::kind_text, u8"motion-state" }) };
+        REQUIRE(state != nullptr);
+        REQUIRE(state->accessibility().name == expected);
+        // 상태 밑에 도는 표시가 선다. 멈춘 그림으로 서는 것은 시스템 값을 받는 쪽(draw_context)이 정한다.
+        const auto* const spinner { tree.find({ mobile_demo::kind_layout, u8"motion-spinner" }) };
+        REQUIRE(spinner != nullptr);
+        REQUIRE(spinner->accessibility().role == luil::access_role::progress);
+        REQUIRE(spinner->bounds().y > state->bounds().y);
+    }
 }
 
 TEST_CASE("The demo clears an interrupted adaptive sheet drag while preserving its stop and list", "[ui][sheet][mobile-demo]")

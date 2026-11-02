@@ -399,6 +399,6 @@ namespace mobile_demo {
 
     luil::app_message make_metrics_message(const luil::window_metrics& metrics)
     {
-        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class, luil::window_surface(metrics) } };
+        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class, luil::window_surface(metrics), metrics.reduce_motion } };
     }
 }
