@@ -10,6 +10,7 @@
 //   *_page.h / *_page.cpp       — 페이지 하나씩 (데스크톱 demo에서 옮겼다).
 
 #include "mobile_demo/app.h"
+#include "mobile_demo/basics_page.h"
 #include "mobile_demo/files_page.h"
 
 #include "luil/win32/win32_window.h"
@@ -45,6 +46,18 @@ namespace {
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
         {
             return mobile_demo::make_metrics_message(metrics);
+        }
+
+        // 기본 페이지의 클립보드 그림 붙여넣기다. 답은 `make_clipboard_data_message`로 온다.
+        void execute_app_ui_command(luil::app_host& host, const luil::app_ui_command& command) override
+        {
+            if (command.command == mobile_demo::command_paste_clipboard_image)
+                host.post_clipboard_request(luil::clipboard_data_paste_request {});
+        }
+
+        [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
+        {
+            return luil::app_message { mobile_demo::clipboard_image_intent { data } };
         }
 
     private:

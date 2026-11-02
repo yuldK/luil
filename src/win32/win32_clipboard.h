@@ -31,6 +31,35 @@ namespace luil::win32 {
     // 가장 긴 합법 경로(약 32K자)도 여유 있게 들어오는 크기다.
     inline constexpr std::size_t max_clipboard_text_chars { 64u * 1024u };
 
+    // 클립보드를 잡는다. 다른 프로세스가 쥐고 있으면 잠깐 물러났다 다시 잡는다 (`clipboard_open_attempts`).
+    // 끝내 못 잡으면 거짓이고, 부르는 쪽은 아무것도 바꾸지 않고 돌아간다.
+    [[nodiscard]] bool open_clipboard(HWND owner) noexcept;
+
+    // 열렸으면 반드시 닫는다 — 예외가 지나가도 `CloseClipboard`가 빠지지 않는다.
+    // 닫지 않으면 같은 데스크톱의 다른 앱이 다음 열기에서 실패한다.
+    //  - 글·파일·그림 클립보드가 같은 열기를 쓴다 (win32_image_clipboard.cpp).
+    struct scoped_clipboard final
+    {
+        explicit scoped_clipboard(HWND owner) noexcept;
+        scoped_clipboard(const scoped_clipboard&) = delete;
+        scoped_clipboard& operator=(const scoped_clipboard&) = delete;
+        ~scoped_clipboard();
+
+        bool open { false };
+    };
+
+    // 잠갔으면 반드시 푼다 — 시스템 소유 블록이라 놓아 주는 것까지가 읽기다.
+    struct scoped_global_lock final
+    {
+        explicit scoped_global_lock(HANDLE source) noexcept;
+        scoped_global_lock(const scoped_global_lock&) = delete;
+        scoped_global_lock& operator=(const scoped_global_lock&) = delete;
+        ~scoped_global_lock();
+
+        HANDLE handle { nullptr };
+        const void* memory { nullptr };
+    };
+
     // UTF-8 텍스트를 Win32 클립보드에 넣는다.
     // UI thread 전용이며 실패해도 앱 상태를 바꾸지 않으므로 성공 여부만 돌려준다.
     [[nodiscard]] bool copy_text_to_clipboard(HWND owner, std::u8string_view text) noexcept;
@@ -90,4 +119,24 @@ namespace luil::win32 {
     // 클립보드의 파일 목록과 뜻, 읽은 순간의 번호다. 파일 목록이 없거나 읽지 못하면 빈 목록이고, 뜻이 없으면 복사다.
     // 목록은 `max_dropped_paths`까지 읽는다 (파일 끌기와 같은 상한).
     [[nodiscard]] file_clipboard_content read_files_from_clipboard(HWND owner) noexcept;
+
+    // 한 클립에 넣을 형식 하나다 (형식 번호와 블록 바이트, image-clipboard-design.md).
+    struct clipboard_block
+    {
+        UINT format { 0 };
+        std::vector<std::byte> bytes {};
+    };
+
+    // `SetClipboardData`의 자리다. test가 실패하는 블록을 주입한다.
+    using set_clipboard_data_function = HANDLE(WINAPI*)(UINT format, HANDLE memory);
+
+    // 글을 `CF_UNICODETEXT` 블록(NUL로 끝나는 UTF-16)으로 짓는다. UTF-16으로 옮길 수 없으면 nullopt다.
+    [[nodiscard]] std::optional<std::vector<std::byte>> unicode_text_block(std::u8string_view text);
+
+    // 여러 형식을 **한 번 열어** 차례로 넣는다. `EmptyClipboard` 뒤 블록 순서대로 넣고, 받는 앱은 그 순서로 형식을 본다.
+    //  - 하나라도 `SetClipboardData`가 실패하면 넣은 것도 거둔다 (파일 목록의 "둘째가 실패하면 첫째도 거둔다"를 블록 수만큼
+    //    넓힌 것이다). 반쪽 클립이 남으면 받는 앱이 글만 붙이거나 그림만 붙여, 넣은 쪽이 고른 것과 다른 것이 붙는다.
+    //  - 형식이 0이거나 빈 블록이 섞이면 아무것도 넣지 않는다. 빈 목록도 거짓이다 (클립보드를 비우지 않는다).
+    //  - UI thread 전용이며 성공 여부만 돌려준다.
+    [[nodiscard]] bool put_clipboard_blocks(HWND owner, std::span<const clipboard_block> blocks, set_clipboard_data_function set_data = &SetClipboardData) noexcept;
 }

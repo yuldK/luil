@@ -27,7 +27,14 @@ namespace luil {
         bool haptics { false };
         // 작업 표시줄 단추에 진행률과 오버레이를 걸 수 있다 (`ui_frame::taskbar`, `ui_window::taskbar`). 참은 이 프로세스가
         // 요청을 셸에 낼 수 있다는 뜻이다 — 단추가 실제로 섰는지는 Win32의 `taskbar_report`가 말한다.
+        //  - 점프 목록(`taskbar_request::jump_list`)도 이 값을 따른다. 목록이 셸에 닿았는지는 Win32의 `jump_list_report`가 말한다.
         bool taskbar { false };
+        // OS 알림을 올릴 수 있다 (`show_notification`). Windows는 앱 식별이 서고 알림 개체를 얻었을 때 참이다. 사용자가
+        // 알림을 껐는지는 `notification_status`가 말한다.
+        bool notifications { false };
+        // 그림을 클립보드에 넣을 수 있다 (`clipboard_data_copy_request::image`, image-clipboard-design.md). Win32만 참이다.
+        // 거짓인 플랫폼(Android)은 글 칸만 넣으므로 앱이 "그림 복사"를 감춘다. 읽기는 모든 플랫폼이 한다.
+        bool clipboard_image_copy { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

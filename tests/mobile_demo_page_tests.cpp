@@ -13,6 +13,7 @@
 #include "mobile_demo/theme_page.h"
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
+#include "sample_image_bytes.h"
 
 #include "luil/ui/message_box.h"
 #include "luil/ui/rating_element.h"
@@ -2141,4 +2142,117 @@ TEST_CASE("A read-only mobile field hands Ctrl+Z and Ctrl+Y to the app and the l
     REQUIRE(kept.undo_count() == 0);
     REQUIRE(kept.redo_count() == 0);
     REQUIRE(kept.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 0회 · Ctrl+Y 0회");
+}
+
+TEST_CASE("The device page reads the notification permission, the send result and the launch id", "[mobile-demo][notification]")
+{
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform platform { previous };
+    platform.capabilities.notifications = true;
+    luil::set_ui_platform(platform);
+    const auto name_of = [](const luil::ui_tree& tree, const std::u8string& owner) {
+        const luil::ui_element* const element { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(element != nullptr);
+        return element->accessibility().name;
+    };
+
+    mobile_demo::device_page page {};
+    auto tree { device_tree(page, false) };
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 묻지 않아도 된다.");
+    REQUIRE(name_of(tree, u8"notification-result") == u8"알림 결과: 없음");
+    REQUIRE(name_of(tree, u8"notification-launch") == u8"알림으로 시작: 아니오");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" }) != nullptr);
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-ask" }) == nullptr);
+
+    // 권한이 없으면 묻기 단추가 선다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_permission_intent { luil::permission_state::denied } }));
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 아직 받지 못했다.");
+    const luil::ui_element* const ask { tree.find({ mobile_demo::kind_layout, u8"notification-ask" }) };
+    REQUIRE(ask != nullptr);
+    REQUIRE(ask->accessibility().name == u8"알림 권한 묻기");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_permission_intent { luil::permission_state::granted, true } }));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_send_intent { luil::platform_result { luil::platform_status::failed, u8"blocked", std::nullopt } } }));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_launch_intent { u8"mobile-demo-1" } }));
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 받았다 (방금 허락).");
+    REQUIRE(name_of(tree, u8"notification-result") == u8"알림 결과: 실패 · blocked");
+    REQUIRE(name_of(tree, u8"notification-launch") == u8"알림으로 시작: mobile-demo-1");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" })->accessibility().name == u8"알림 보내기");
+
+    // 능력이 없는 플랫폼은 단추 대신 이유를 보인다.
+    platform.capabilities.notifications = false;
+    luil::set_ui_platform(platform);
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-none") == u8"이 플랫폼은 OS 알림을 올리지 못한다.");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" }) == nullptr);
+    luil::set_ui_platform(previous);
+}
+
+namespace {
+    // 400dp 창에서 지은 기본 페이지의 tree다 (배율 1).
+    [[nodiscard]] luil::ui_tree clipboard_basics_tree(mobile_demo::basics_page& page)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    // 클립보드 붙여넣기 결과 줄의 이름이다. 화면의 글이 곧 UIA Name이다.
+    [[nodiscard]] std::u8string clipboard_basics_result(mobile_demo::basics_page& page)
+    {
+        const luil::ui_tree tree { clipboard_basics_tree(page) };
+        const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, u8"clipboard-image-result" }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    [[nodiscard]] luil::clipboard_data clipboard_basics_data(const luil::clipboard_image_format format, std::vector<std::uint8_t> bytes)
+    {
+        luil::clipboard_data data {};
+        data.image_format = format;
+        data.image = std::make_shared<const std::vector<std::uint8_t>>(std::move(bytes));
+        return data;
+    }
+}
+
+TEST_CASE("The basics page pastes a clipboard image and names what it read", "[mobile-demo][clipboard][image]")
+{
+    mobile_demo::basics_page page {};
+    {
+        const luil::ui_tree tree { clipboard_basics_tree(page) };
+        const luil::ui_element* const button { tree.find({ mobile_demo::kind_layout, u8"clipboard-image-paste" }) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name == u8"클립보드 그림 붙여넣기");
+    }
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 아직 없음");
+
+    // 그림이 없어도 답은 온다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { luil::clipboard_data { .text = u8"글만" } } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 그림 없음");
+
+    const std::vector<std::uint8_t> png { luil::testing::sample_quadrant_png.begin(), luil::testing::sample_quadrant_png.end() };
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::encoded, png) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 2×2 PNG");
+
+    // 24비트 1×1 DIB다 (40바이트 머리, 행은 4바이트).
+    std::vector<std::uint8_t> dib(44, 0u);
+    dib[0] = 40;
+    dib[4] = 1;
+    dib[8] = 1;
+    dib[12] = 1;
+    dib[14] = 24;
+    dib[40] = 0xFFu;
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::dib, dib) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 1×1 DIB");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::encoded, { 1, 2, 3 }) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 풀지 못함");
+
+    luil::clipboard_data large {};
+    large.image_format = luil::clipboard_image_format::encoded;
+    large.image_too_large = true;
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { large } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 너무 큼");
 }

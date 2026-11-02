@@ -19,6 +19,7 @@ TEST_CASE("The WM_APP numbers keep their values and never collide", "[win32][mes
     REQUIRE(luil::win32::app_ui_command_request_message == WM_APP + 3u);
     REQUIRE(luil::win32::clipboard_request_message == WM_APP + 4u);
     REQUIRE(luil::win32::access_dispatch_message == WM_APP + 5u);
+    REQUIRE(luil::win32::notification_event_message == WM_APP + 6u);
     STATIC_REQUIRE(luil::win32::app_message_numbers_valid());
 }
 
@@ -69,4 +70,17 @@ TEST_CASE("Allowing shell events never throws, even for a window that is not the
     REQUIRE(DestroyWindow(window) != FALSE);
     // 이미 파괴된 창은 필터를 걸지 못하지만 조용히 넘어간다.
     luil::win32::allow_shell_events(window);
+}
+
+TEST_CASE("Allowing instance messages never throws, even for a window that is not there", "[win32][messages]")
+{
+    STATIC_REQUIRE(noexcept(luil::win32::allow_instance_message(nullptr)));
+    luil::win32::allow_instance_message(nullptr);
+
+    const HWND window { create_plain_window() };
+    REQUIRE(window != nullptr);
+    luil::win32::allow_instance_message(window);
+    REQUIRE(DestroyWindow(window) != FALSE);
+    // 이미 파괴된 창은 필터를 걸지 못하지만 조용히 넘어간다.
+    luil::win32::allow_instance_message(window);
 }

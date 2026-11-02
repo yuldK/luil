@@ -236,6 +236,7 @@ namespace luil {
         //  - 소유된 창은 단추가 없어 읽지 않는다. 독립 창은 주 창(`ui_frame::taskbar`)과 따로 단추가 서므로 요청도 따로 건다.
         //  - 창이 사라지면 그 창의 기록과 아이콘도 함께 사라진다. 상태는 주 창처럼 알린다
         //    (`win32::taskbar_report::surface`가 이 창의 id다).
+        //  - 점프 목록(`taskbar_request::jump_list`)은 앱마다 하나라 이 창의 것은 읽지 않는다. 주 창의 것이 이 창 단추에도 보인다.
         taskbar_request taskbar {};
     };
 
@@ -299,6 +300,9 @@ namespace luil {
         // 같은 네트워크(LAN)의 기기에 연결한다 — 집 안 NAS의 SMB나 http. Android 17부터 targetSdk 37 이상인
         // 앱은 이것 없이 로컬 주소로 가는 연결이 막힌다 (`ACCESS_LOCAL_NETWORK`).
         local_network,
+        // OS 알림을 올린다 (os-notification-design.md). Android 13부터 targetSdk 33 이상인 앱은 이것 없이 알림이
+        // 보이지 않는다 (`POST_NOTIFICATIONS`). Windows는 늘 묻지 않는다. 끈 설정은 `notification_status`가 말한다.
+        notifications,
     };
 
     // 권한의 지금 상태다.
@@ -401,6 +405,7 @@ namespace luil {
         // 주 창의 작업 표시줄 단추에 바라는 진행률과 오버레이다 (taskbar-design.md). 기본값이면 셸을 만지지 않는다.
         //  - 주 창이 숨은 동안(`main_hidden`)은 단추가 없어 요청을 쥐기만 한다. 보이면 단추가 새로 서고 그때 한 번에 낸다.
         //  - 하지 못하는 플랫폼(Android)은 받고 무시한다. 독립 창은 `ui_window::taskbar`다.
+        //  - 점프 목록(`taskbar_request::jump_list`)은 이 칸의 것만 읽는다 (docs/jump-list-design.md).
         taskbar_request taskbar {};
         // 실행 중인 화면에 요소의 윤곽과 정보를 얹는 검사기다 (inspector-design.md). 기본값이면 아무것도 그리지 않는다.
         //  - 앱은 상태 하나로 켠다 (`inspector.enabled = state_.inspecting;`). 켜는 단축키는 앱이 정한다.

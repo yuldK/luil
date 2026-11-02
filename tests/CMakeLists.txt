@@ -23,6 +23,7 @@ add_executable(luil_core_tests
     check_element_tests.cpp
     theme_picker_tests.cpp
     choice_group_element_tests.cpp
+    clipboard_image_tests.cpp
     case_fold_tests.cpp
     command_palette_tests.cpp
     content_layout_tests.cpp
@@ -61,6 +62,7 @@ add_executable(luil_core_tests
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp
     multi_item_drag_tests.cpp
+    notification_queue_tests.cpp
     number_input_tests.cpp
     overlay_input_tests.cpp
     panel_element_tests.cpp
@@ -264,6 +266,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/file_watcher_android.cpp"
             file_watcher_tests.cpp)
+    # 설정 읽기의 JNI 흐름은 가짜 JNIEnv로 잠근다. 틀과 예외 거둠을 실패 지점마다 친다 (android_settings_tests.cpp).
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_settings.cpp"
+            android_settings_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES
@@ -425,6 +432,7 @@ add_executable(luil_tests
     backdrop_tests.cpp
     breadcrumb_tests.cpp
     caption_layout_tests.cpp
+    app_identity_tests.cpp
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp
     file_watcher_tests.cpp
@@ -436,6 +444,8 @@ add_executable(luil_tests
     http_media_type_tests.cpp
     http_text_transcode_tests.cpp
     image_decode_tests.cpp
+    instance_message_tests.cpp
+    jump_list_tests.cpp
     layered_placement_tests.cpp
     loopback_http_server.cpp
     loopback_http_server_tests.cpp
@@ -446,6 +456,7 @@ add_executable(luil_tests
     secret_store_tests.cpp
     surface_input_tests.cpp
     taskbar_button_tests.cpp
+    toast_payload_tests.cpp
     tsf_input_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp
@@ -454,6 +465,7 @@ add_executable(luil_tests
     webview_message_gate_tests.cpp
     win32_clipboard_tests.cpp
     win32_file_clipboard_tests.cpp
+    win32_image_clipboard_tests.cpp
     win32_drop_tests.cpp
     win32_fonts_tests.cpp
     win32_window_tests.cpp

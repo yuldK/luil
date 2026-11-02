@@ -15,6 +15,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <initializer_list>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -69,10 +70,50 @@ namespace mobile_demo {
         {
             return luil::decode_animated_image_bytes(bytes, { .max_height = 360 }, error);
         }
+
+        // 클립보드 그림 바이트의 형식 이름이다. Android의 그림 URI는 PNG만이 아니라 JPEG·WebP도 온다 — 앞 바이트로 가른다.
+        [[nodiscard]] std::u8string clipboard_image_form(const luil::clipboard_data& data)
+        {
+            if (data.image_format == luil::clipboard_image_format::dib)
+                return u8"DIB";
+            const std::span<const std::uint8_t> bytes { data.image != nullptr ? std::span<const std::uint8_t> { *data.image } : std::span<const std::uint8_t> {} };
+            const auto starts = [bytes](const std::initializer_list<std::uint8_t> prefix) {
+                return bytes.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), bytes.begin());
+            };
+            if (starts({ 0x89u, 0x50u, 0x4Eu, 0x47u }))
+                return u8"PNG";
+            if (starts({ 0xFFu, 0xD8u, 0xFFu }))
+                return u8"JPEG";
+            if (starts({ 0x47u, 0x49u, 0x46u }))
+                return u8"GIF";
+            if (bytes.size() >= 12u && starts({ 0x52u, 0x49u, 0x46u, 0x46u }) && bytes[8] == 0x57u && bytes[9] == 0x45u && bytes[10] == 0x42u && bytes[11] == 0x50u)
+                return u8"WebP";
+            return u8"그림";
+        }
+
+        // 붙여넣기 결과 줄의 글이다. 그림이 없거나 크거나 풀지 못한 것을 갈라 적는다.
+        [[nodiscard]] std::u8string clipboard_result_text(const luil::clipboard_data& data)
+        {
+            if (data.image_too_large)
+                return u8"붙여넣기 결과: 너무 큼";
+            if (data.image_format == luil::clipboard_image_format::none)
+                return u8"붙여넣기 결과: 그림 없음";
+            // 풀기는 logic thread의 몫이다. 크기만 적으므로 줄이지 않는다 (원본 상한은 디코더의 기본값이다).
+            luil::image_decode_error error {};
+            const luil::ui_image image { luil::decode_clipboard_image(data, {}, error) };
+            if (image.valid() == false)
+                return u8"붙여넣기 결과: 풀지 못함";
+            return u8"붙여넣기 결과: " + to_u8(image.width()) + u8"×" + to_u8(image.height()) + u8" " + clipboard_image_form(data);
+        }
     }
 
     bool basics_page::handle(const luil::app_message& message)
     {
+        if (const auto* const clipboard { message.get<clipboard_image_intent>() }; clipboard != nullptr)
+        {
+            clipboard_result_ = clipboard_result_text(clipboard->data);
+            return true;
+        }
         if (message.get<increment_intent>() != nullptr)
         {
             ++clicks_;
@@ -395,6 +436,17 @@ namespace mobile_demo {
             column.body(u8"picture-status", u8"그림을 읽지 못했다 — " + picture_error_.message);
         else
             column.note(u8"picture-status", u8"gradient.png " + to_u8(picture_.width()) + u8"×" + to_u8(picture_.height()) + u8" 픽셀");
+        column.gap(8.0f);
+        // 다른 앱이 복사해 둔 그림을 읽는다 (image-clipboard-design.md). 요청은 host의 일이라 앱 UI 명령으로 delegate에 넘기고,
+        // 답은 이 페이지가 풀어 크기와 꼴을 적는다. 그림을 넣는 길은 Android에 없어 붙여넣기만 둔다 (결정 7).
+        {
+            auto paste { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"clipboard-image-paste" }, luil::text_button_config { .text = u8"클립보드 그림 붙여넣기" }) };
+            paste->set_action(luil::ui_trigger::left_click,
+                [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_paste_clipboard_image } } }; });
+            column.add(std::move(paste), touch_height, std::min(width - 2.0f * page_padding, 240.0f));
+            column.gap(4.0f);
+            column.note(u8"clipboard-image-result", clipboard_result_);
+        }
         column.gap(20.0f);
 
         // 움직이는 그림 둘이다. 형식을 둘 다 세운다 (webp, gif). gif는 배경이 비쳐 테마를 바꾸면 같은

@@ -19,8 +19,13 @@
 //  - 작업 표시줄 구역은 주 창 단추와 독립 창(`independent`) 단추에 진행률과 오버레이를 거는 예다
 //    (taskbar-design.md). 요청은 앱 상태라 `make_taskbar_request`가 frame마다 그대로 싣고, 셸에 닿은 정도는
 //    라이브러리가 알리는 보고(`taskbar_report_intent`)로 되읽는다. 세 줄이 UIA로 읽힌다: 능력·요청·반영.
+//  - 둘째 인스턴스 구역은 같은 이름의 둘째 실행이 넘긴 인자와 작업 폴더를 한 줄로 보인다 (single-instance-args-design.md).
+//    라이브러리가 `window_delegate::on_instance_arguments`로 건넨 것을 셸이 `instance_arguments_intent`로 게시한다.
+//  - 점프 목록 줄은 작업 표시줄 단추의 오른쪽 클릭 목록에 작업 둘을 싣는 예다 (jump-list-design.md). 작업은 데모를
+//    `--send-to-first`로 띄워 떠 있는 데모의 둘째 인스턴스 줄에 닿는다. 두 줄이 UIA로 읽힌다: 요청·반영.
 
 #include "demo/common.h"
+#include "luil/app/platform_services.h"
 #include "luil/win32/app_host.h"
 #include "luil/win32/win32_window.h"
 
@@ -149,6 +154,24 @@ namespace demo {
         luil::win32::taskbar_report report {};
     };
 
+    // 점프 목록을 채우거나 비운다. 처음에는 손대지 않는다 (`taskbar_request::jump_list`가 비어 있다).
+    struct jump_list_fill_intent
+    {
+        bool fill { false };
+    };
+
+    // 라이브러리가 알린 점프 목록의 보고다 (`window_delegate::make_jump_list_message`).
+    struct jump_list_report_intent
+    {
+        luil::win32::jump_list_report report {};
+    };
+
+    // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다 (`window_delegate::on_instance_arguments`).
+    struct instance_arguments_intent
+    {
+        luil::instance_arguments arguments {};
+    };
+
     class windows_page
     {
     public:
@@ -164,7 +187,7 @@ namespace demo {
         // 같은 frame에서 make_windows가 만든 메뉴 버튼의 자리를 쓰므로 그 뒤에 불러야 한다.
         [[nodiscard]] std::vector<luil::win32::ui_popup> make_popups() const;
 
-        // 주 창 단추에 바라는 진행률과 오버레이다. 셸이 매 frame `ui_frame::taskbar`에 그대로 싣는다.
+        // 주 창 단추에 바라는 진행률과 오버레이, 점프 목록이다. 셸이 매 frame `ui_frame::taskbar`에 그대로 싣는다.
         [[nodiscard]] luil::taskbar_request make_taskbar_request() const;
 
         // 도구 창 메모 칸의 초점 요청이다. 한 번도 청하지 않았으면 없다.
@@ -202,6 +225,10 @@ namespace demo {
         [[nodiscard]] luil::taskbar_request make_taskbar_window_request() const;
         // 작업 표시줄 구역을 `column`에 더한다.
         void add_taskbar_section(luil::stack_element& column);
+        // 점프 목록 줄을 `column`에 더한다 (작업 표시줄 구역 끝).
+        void add_jump_list_section(luil::stack_element& column);
+        // 둘째 인스턴스 구역을 `column`에 더한다.
+        void add_instance_section(luil::stack_element& column);
         // 메뉴를 닫고 검색 상태도 함께 비운다.
         void close_tool_menu() noexcept;
 
@@ -231,6 +258,12 @@ namespace demo {
         // 마지막으로 받은 보고다. 요청이 기본값이던 단추는 보고가 없다.
         std::optional<luil::win32::taskbar_report> taskbar_report_ {};
         std::optional<luil::win32::taskbar_report> taskbar_window_report_ {};
+        // 점프 목록을 채웠는가다. 비어 있으면 손대지 않는다 (앞 실행이 지은 목록도 그대로다).
+        std::optional<bool> jump_list_filled_ {};
+        // 마지막으로 받은 점프 목록 보고다. 셸에 낸 일이 없으면 없다.
+        std::optional<luil::win32::jump_list_report> jump_list_report_ {};
+        // 마지막으로 받은 둘째 인스턴스의 인자다. 받은 적이 없으면 없다.
+        std::optional<luil::instance_arguments> instance_arguments_ {};
         luil::text::text_edit_state note_ {};
         // 도구 창 메뉴 안 검색 칸의 상태다.
         // 조합 상태는 창 안 메모 칸과 하나를 같이 쓴다 — target이 구분한다.

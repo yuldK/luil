@@ -4,9 +4,14 @@
 // 토스트 목록과 만료 판정은 여기(앱)가 소유하고, 다른 페이지도
 // toast_request_intent로 토스트를 띄울 수 있다.
 // 정보 막대가 열려 있는지는 앱 상태다. 막대는 닫기를 누르면 스스로 사라지지 않고, 이 페이지가 다음 frame에 막대를 짓지 않는다.
+// OS 알림 구역은 앱 창 밖 Windows 알림 센터에 올리고 바꾸고 거두는 예다 (os-notification-design.md).
+//  - 페이지는 요청(`os_notification_request_intent`)만 던진다. 셸(demo_main)이 `show_notification`·`close_notification`을 부르고
+//    결과·상태를 이 페이지에 돌려준다. 사용자가 누른 알림은 라이브러리가 `make_notification_message`로 알리고 셸이 사건으로 넘긴다.
+//  - 상태·결과·사건 세 줄이 label이라 UIA 이름으로 되읽힌다.
 
 #include "demo/common.h"
 
+#include "luil/app/notification.h"
 #include "luil/ui/severity.h"
 
 #include <array>
@@ -41,6 +46,40 @@ namespace demo {
     {
     };
 
+    // OS 알림 구역이 올리는 알림의 id다. 바꾸기와 거두기가 같은 알림을 가리킨다.
+    inline constexpr std::u8string_view os_notification_id { u8"demo-1" };
+
+    enum class os_notification_action
+    {
+        send,
+        replace,
+        close,
+    };
+
+    // OS 알림 단추를 눌렀다. 셸이 받아 OS를 부른다 (페이지는 플랫폼을 부르지 않는다).
+    struct os_notification_request_intent
+    {
+        os_notification_action action { os_notification_action::send };
+    };
+
+    // 셸이 읽은 지금 상태다 (`notification_status`). 시작할 때와 요청마다 온다.
+    struct os_notification_status_intent
+    {
+        luil::notification_availability availability { luil::notification_availability::unsupported };
+    };
+
+    // 마지막 요청의 답이다.
+    struct os_notification_result_intent
+    {
+        luil::platform_result result {};
+    };
+
+    // 라이브러리가 알린 알림 사건이다 (`app_delegate::make_notification_message`).
+    struct os_notification_event_intent
+    {
+        luil::notification_event event {};
+    };
+
     class toasts_page
     {
     public:
@@ -71,6 +110,8 @@ namespace demo {
         };
 
         void push(std::u8string text, luil::toast_severity severity, std::chrono::milliseconds duration);
+        // OS 알림 구역을 페이지에 더한다.
+        void add_os_notification_card(page_layout& page) const;
 
         std::vector<toast_entry> toasts_ {};
         int next_id_ { 0 };
@@ -79,5 +120,9 @@ namespace demo {
         std::array<bool, 4> bars_open_ { true, true, true, true };
         // 마지막으로 누른 막대의 동작이다. 비어 있으면 아직 없다.
         std::u8string last_bar_action_ {};
+        // OS 알림 구역이 보이는 셋이다. 받은 적이 없으면 비었다.
+        std::optional<luil::notification_availability> os_status_ {};
+        std::optional<luil::platform_result> os_result_ {};
+        std::optional<luil::notification_event> os_event_ {};
     };
 }

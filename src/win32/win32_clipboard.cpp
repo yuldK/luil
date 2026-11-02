@@ -13,59 +13,41 @@
 #include <vector>
 
 namespace luil::win32 {
-    namespace {
-        // 클립보드를 잡는다. 다른 프로세스가 쥐고 있으면 잠깐 물러났다 다시 잡는다.
-        // 끝내 못 잡으면 거짓이고, 부르는 쪽은 아무것도 바꾸지 않고 돌아간다.
-        [[nodiscard]] bool open_clipboard(const HWND owner) noexcept
+    bool open_clipboard(const HWND owner) noexcept
+    {
+        for (int attempt = 0; attempt < clipboard_open_attempts; ++attempt)
         {
-            for (int attempt = 0; attempt < clipboard_open_attempts; ++attempt)
-            {
-                if (OpenClipboard(owner) != FALSE)
-                    return true;
-                std::this_thread::sleep_for(std::chrono::milliseconds { clipboard_open_retry_ms });
-            }
-            return false;
+            if (OpenClipboard(owner) != FALSE)
+                return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds { clipboard_open_retry_ms });
         }
+        return false;
+    }
 
-        // 열렸으면 반드시 닫는다 — 예외가 지나가도 `CloseClipboard`가 빠지지 않는다.
-        // 닫지 않으면 같은 데스크톱의 다른 앱이 다음 열기에서 실패한다.
-        struct scoped_clipboard final
-        {
-            explicit scoped_clipboard(const HWND owner) noexcept
-                : open { open_clipboard(owner) }
-            {
-            }
-            scoped_clipboard(const scoped_clipboard&) = delete;
-            scoped_clipboard& operator=(const scoped_clipboard&) = delete;
-            ~scoped_clipboard()
-            {
-                if (open)
-                    CloseClipboard();
-            }
+    scoped_clipboard::scoped_clipboard(const HWND owner) noexcept
+        : open { open_clipboard(owner) }
+    {
+    }
 
-            bool open { false };
-        };
+    scoped_clipboard::~scoped_clipboard()
+    {
+        if (open)
+            CloseClipboard();
+    }
 
-        // 잠갔으면 반드시 푼다 — 시스템 소유 블록이라 놓아 주는 것까지가 읽기다.
-        struct scoped_global_lock final
-        {
-            explicit scoped_global_lock(const HANDLE source) noexcept
-                : handle { source }
-                , memory { GlobalLock(source) }
-            {
-            }
-            scoped_global_lock(const scoped_global_lock&) = delete;
-            scoped_global_lock& operator=(const scoped_global_lock&) = delete;
-            ~scoped_global_lock()
-            {
-                if (memory != nullptr)
-                    GlobalUnlock(handle);
-            }
+    scoped_global_lock::scoped_global_lock(const HANDLE source) noexcept
+        : handle { source }
+        , memory { GlobalLock(source) }
+    {
+    }
 
-            HANDLE handle { nullptr };
-            const void* memory { nullptr };
-        };
+    scoped_global_lock::~scoped_global_lock()
+    {
+        if (memory != nullptr)
+            GlobalUnlock(handle);
+    }
 
+    namespace {
         // 바이트를 담은 이동 가능 블록이다. 실패하면 nullptr다.
         [[nodiscard]] HGLOBAL global_from_bytes(const void* const data, const std::size_t bytes) noexcept
         {
@@ -388,6 +370,68 @@ namespace luil::win32 {
             content.paths.clear();
             content.intent = file_clipboard_intent::copy;
             return content;
+        }
+    }
+
+    std::optional<std::vector<std::byte>> unicode_text_block(const std::u8string_view text)
+    {
+        const utf_conversion_result<std::wstring> converted { utf8_to_utf16(text) };
+        if (converted.value.has_value() == false)
+            return std::nullopt;
+        const std::wstring& wide { *converted.value };
+        std::vector<std::byte> block((wide.size() + 1) * sizeof(wchar_t));
+        std::memcpy(block.data(), wide.c_str(), block.size());
+        return block;
+    }
+
+    bool put_clipboard_blocks(const HWND owner, const std::span<const clipboard_block> blocks, const set_clipboard_data_function set_data) noexcept
+    {
+        if (blocks.empty() || set_data == nullptr)
+            return false;
+        try
+        {
+            // 열기 전에 모두 짓는다. 연 동안에는 다른 앱이 기다리므로 그 사이를 짧게 둔다.
+            std::vector<HGLOBAL> storage(blocks.size(), nullptr);
+            const auto release = [&storage](const std::size_t from) {
+                for (std::size_t index = from; index < storage.size(); ++index)
+                    if (storage[index] != nullptr)
+                        GlobalFree(storage[index]);
+            };
+            for (std::size_t index = 0; index < blocks.size(); ++index)
+            {
+                storage[index] = blocks[index].format != 0 && blocks[index].bytes.empty() == false ? global_from_bytes(blocks[index].bytes.data(), blocks[index].bytes.size()) : nullptr;
+                if (storage[index] == nullptr)
+                {
+                    release(0);
+                    return false;
+                }
+            }
+
+            const scoped_clipboard clipboard { owner };
+            if (clipboard.open == false)
+            {
+                release(0);
+                return false;
+            }
+            EmptyClipboard();
+            for (std::size_t index = 0; index < storage.size(); ++index)
+            {
+                // 성공한 블록은 소유권이 시스템으로 넘어간다. 실패한 블록과 그 뒤의 것만 이쪽이 푼다.
+                if (set_data(blocks[index].format, storage[index]) != nullptr)
+                {
+                    storage[index] = nullptr;
+                    continue;
+                }
+                release(index);
+                // 반쪽 클립을 남기지 않는다 — 넣은 것을 비우면 시스템이 그 블록을 푼다.
+                EmptyClipboard();
+                return false;
+            }
+            return true;
+        }
+        catch (...)
+        {
+            return false;
         }
     }
 }

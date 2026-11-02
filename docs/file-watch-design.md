@@ -227,7 +227,7 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - `owned_handle`은 복제본이 없어 제자리에 두었던 것이다. 감시자가 폴더 핸들과 완료 포트에 쓰는 두 번째 사용자다. `platform_services_win32.cpp`는 자기 사본을 지우고 헤더를 쓴다.
 - `errno_failure`는 `platform_result`를 돌려줘 그대로는 옮길 수 없다. `make_last_error`처럼 글만 만들고(`errno`는 부른 바로 뒤에 읽는다), `platform_result` 래퍼는 `platform_services_android.cpp`에 남는다. 감시자는 이 글을 `std::u8string& error`에 쓴다.
 - 오류 문구와 호출 순서는 그대로다. 기존 `tests/platform_services_tests.cpp`가 무변경으로 통과해야 한다.
-- 범위 밖: `android_settings.cpp`의 `local_frame`. 소멸자에서 예외를 거두는 다른 뜻이다.
+- 범위 밖: `android_settings.cpp`의 `local_frame`. 이 노드 때는 소멸자에서 예외를 거두는 다른 뜻이었다. 뒤의 `local_frame` 노드가 `jni_local_frame`·`jni_failed`로 옮겼다.
 
 ## 다른 노드와의 약속
 

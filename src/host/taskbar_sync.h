@@ -3,6 +3,7 @@
 #include "luil/app/taskbar.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -86,5 +87,35 @@ namespace luil {
         // 마지막으로 낸 오버레이다. 그림을 복사해 쥐므로 몸통이 살아 있는 동안 포인터 비교가 같은 그림을 뜻한다.
         ui_image applied_icon_ {};
         std::u8string applied_description_ {};
+    };
+
+    // 점프 목록에 할 일이다 (docs/jump-list-design.md).
+    enum class jump_list_call_kind
+    {
+        // `list`의 작업으로 목록을 새로 짓는다.
+        commit,
+        // 이 앱의 목록을 지운다.
+        remove,
+    };
+
+    struct jump_list_call
+    {
+        jump_list_call_kind kind { jump_list_call_kind::commit };
+        taskbar_jump_list list {};
+    };
+
+    // 앱의 점프 목록 요청과 마지막으로 낸 목록을 견줘 셸에 할 일을 고른다. OS를 모른다.
+    //  - 단추와 무관하다. 목록은 앱 식별에 묶여 셸이 파일로 쥐므로 단추 생성·숨김을 기다리지 않는다.
+    //  - 처음에는 낸 것이 없다고 본다. 셸에는 읽는 길이 없어, 첫 요청은 앞 실행이 지은 목록과 같아도 한 번 낸다.
+    //  - 비어 있는 요청(`std::nullopt`)은 손대지 않는다는 뜻이라 할 일이 없고 마지막으로 낸 기록도 그대로 둔다.
+    //  - 할 일은 고르는 순간 낸 것으로 기록한다. 셸 호출이 실패해도 같은 요청으로 다시 하지 않는다.
+    class jump_list_sync
+    {
+    public:
+        [[nodiscard]] std::optional<jump_list_call> update(const std::optional<taskbar_jump_list>& wanted);
+
+    private:
+        // 마지막으로 낸 목록이다. 낸 적이 없으면 비었다. 작업이 없는 목록은 지운 것이다.
+        std::optional<taskbar_jump_list> applied_ {};
     };
 }

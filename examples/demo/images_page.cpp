@@ -1,5 +1,6 @@
 #include "demo/images_page.h"
 
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_encode.h"
@@ -7,6 +8,7 @@
 #include "luil/ui/panel_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/text_block.h"
+#include "luil/ui/ui_platform.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -18,6 +20,7 @@
 
 #include "luil/generated/codicons.h"
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <utility>
@@ -44,6 +47,9 @@ namespace demo {
         constexpr float thumbnail_row_height { 96.0f };
         // 데모가 흉내 내는 업로드 한도다.
         constexpr std::size_t webp_byte_limit { 200u * 1024u };
+        // 클립보드 줄의 단추 폭과 줄 높이다.
+        constexpr float clipboard_button_width { 120.0f };
+        constexpr float clipboard_row_height { 28.0f };
 
         [[nodiscard]] float clamp_width(const float value) noexcept
         {
@@ -227,6 +233,11 @@ namespace demo {
 
     bool images_page::handle(const luil::app_message& message)
     {
+        if (const auto* const data { message.get<image_clipboard_data_intent>() }; data != nullptr)
+        {
+            paste(data->data);
+            return true;
+        }
         const auto* const open { message.get<image_open_intent>() };
         if (open == nullptr)
             return false;
@@ -281,6 +292,92 @@ namespace demo {
         return true;
     }
 
+    std::optional<luil::clipboard_data_copy_request> images_page::make_copy_request()
+    {
+        if (animation_.valid() == false)
+            return std::nullopt;
+        luil::clipboard_data_copy_request request {};
+        request.text = picture_name_;
+        request.image = animation_.frame_image(0);
+        // PNG는 앱이 고른다. 창 계층은 인코더를 링크하지 않아 `CF_DIBV5`만 짓는다 — 브라우저·문서 편집기는 "PNG"를 먼저 본다.
+        std::u8string error {};
+        request.png = luil::encode_png(request.image, error);
+        if (request.png.empty())
+            clipboard_copy_ = u8"그림 복사: PNG를 짓지 못해 DIB만 보냈다";
+        else
+            clipboard_copy_ = u8"그림 복사: 보냈다 (" + to_u8(request.image.width()) + u8"×" + to_u8(request.image.height()) + u8", PNG "
+                + to_u8(static_cast<int>((request.png.size() + 1023u) / 1024u)) + u8" KB)";
+        return request;
+    }
+
+    void images_page::set_clipboard_has_image(const bool has_image) noexcept
+    {
+        clipboard_has_image_ = has_image;
+    }
+
+    void images_page::paste(const luil::clipboard_data& data)
+    {
+        if (data.image_too_large)
+        {
+            clipboard_result_ = u8"붙여넣기 결과: 너무 큼";
+            return;
+        }
+        if (data.image_format == luil::clipboard_image_format::none)
+        {
+            clipboard_result_ = u8"붙여넣기 결과: 그림 없음";
+            return;
+        }
+        // 풀기는 logic thread의 몫이다 (decode_image_bytes와 같은 규칙). 미리 보기 칸과 같은 상한으로 줄여 받는다.
+        luil::image_decode_options options {};
+        options.max_width = preview_pixel_limit;
+        options.max_height = preview_pixel_limit;
+        luil::image_decode_error error {};
+        const luil::ui_image image { luil::decode_clipboard_image(data, options, error) };
+        if (image.valid() == false)
+        {
+            clipboard_result_ = u8"붙여넣기 결과: 풀지 못함 (" + error.message + u8")";
+            return;
+        }
+        // 크기는 줄이기 전의 것이 아니라 받은 그림의 것이다. 상한보다 큰 그림은 줄인 크기로 적힌다.
+        const std::u8string form { data.image_format == luil::clipboard_image_format::encoded ? u8"PNG" : u8"DIB" };
+        clipboard_result_ = u8"붙여넣기 결과: " + to_u8(image.width()) + u8"×" + to_u8(image.height()) + u8" " + form;
+
+        // 붙인 그림은 연 그림처럼 미리 보기 칸에 선다. 한 장짜리 움직이는 그림으로 싸서 같은 자리를 쓴다.
+        const std::array<luil::ui_image, 1> frames { image };
+        const std::array<std::chrono::milliseconds, 1> durations { std::chrono::milliseconds { 1000 } };
+        animation_ = luil::make_animated_image(frames, durations, 1);
+        playback_ = luil::image_playback { .started = std::chrono::steady_clock::now() };
+        picture_name_ = u8"클립보드 그림";
+        picture_error_ = {};
+        frames_ = {};
+        middle_frame_ = {};
+        webp_summary_.clear();
+    }
+
+    std::unique_ptr<luil::ui_element> images_page::make_clipboard_row() const
+    {
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"images-clipboard" }, row_config) };
+
+        // 그림을 넣지 못하는 플랫폼이면 단추를 끈다 (`clipboard_image_copy`). 연 그림이 없어도 끈다.
+        const bool can_copy { animation_.valid() && luil::current_ui_platform().capabilities.clipboard_image_copy };
+        auto copy { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_image_preview, u8"clipboard-copy" }, luil::text_button_config { .text = u8"그림 복사" }) };
+        copy->set_action(luil::ui_trigger::left_click, luil::make_message_action(image_clipboard_copy_intent {}));
+        copy->set_enabled(can_copy);
+        row->add(std::move(copy), clipboard_button_width);
+        auto paste_button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_image_preview, u8"clipboard-paste" }, luil::text_button_config { .text = u8"그림 붙여넣기" }) };
+        paste_button->set_action(luil::ui_trigger::left_click, luil::make_message_action(image_clipboard_paste_intent {}));
+        row->add(std::move(paste_button), clipboard_button_width);
+
+        std::u8string has_image { u8"클립보드 그림: 알림 전" };
+        if (clipboard_has_image_.has_value())
+            has_image = *clipboard_has_image_ ? u8"클립보드 그림: 있음" : u8"클립보드 그림: 없음";
+        row->add_flexible(make_label(luil::ui_element_id { kind_text, u8"images-clipboard-has" }, has_image, 12.0f, luil::label_color_role::primary));
+        return row;
+    }
+
     std::unique_ptr<luil::ui_element> images_page::build(const float width, const float height, const float scale)
     {
         static_cast<void>(height);
@@ -306,6 +403,11 @@ namespace demo {
         column->add(make_status(), 16.0f);
         if (webp_summary_.empty() == false)
             column->add(make_label(luil::ui_element_id { kind_text, u8"images-webp" }, webp_summary_, 11.0f, luil::label_color_role::dim), 16.0f);
+        column->add_gap(10.0f);
+        column->add(make_clipboard_row(), clipboard_row_height);
+        column->add_gap(4.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"images-clipboard-result" }, clipboard_result_, 12.0f, luil::label_color_role::primary), 18.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"images-clipboard-copy" }, clipboard_copy_, 11.0f, luil::label_color_role::dim), 16.0f);
         return column;
     }
 

@@ -198,6 +198,27 @@ TEST_CASE("Reports reach the line of the window they name and closing forgets th
     REQUIRE(name_of(page_tree(page), u8"windows-taskbar-report") == u8"작업 표시줄 반영: 대기 중");
 }
 
+TEST_CASE("The instance line names the arguments and the working directory a second instance sent", "[windows-page][instance]")
+{
+    demo::windows_page page {};
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-arguments") == u8"둘째 인스턴스 인자: 없음");
+
+    luil::instance_arguments received {};
+    received.arguments = { u8"a.txt", u8"b c" };
+    received.working_directory = u8"C:\\work dir";
+    deliver(page, demo::instance_arguments_intent { received });
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-arguments") == u8"둘째 인스턴스 인자: 2개 [a.txt] [b c] · 작업 폴더 C:\\work dir");
+
+    // 다음에 받은 것이 앞의 것을 덮는다. 인자가 없어도 받은 것이라 없음과 다르다.
+    luil::instance_arguments none {};
+    none.working_directory = u8"D:\\";
+    deliver(page, demo::instance_arguments_intent { none });
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-arguments") == u8"둘째 인스턴스 인자: 0개 · 작업 폴더 D:\\");
+
+    // 구역의 안내 글도 읽힌다.
+    REQUIRE(name_of(page_tree(page), u8"windows-instance-hint").empty() == false);
+}
+
 TEST_CASE("The taskbar controls are buttons a person can read by name", "[windows-page][taskbar]")
 {
     demo::windows_page page {};
@@ -209,4 +230,66 @@ TEST_CASE("The taskbar controls are buttons a person can read by name", "[window
         REQUIRE(button->accessibility().name.empty() == false);
     }
     REQUIRE(tree.find({ demo::kind_layout, u8"windows-taskbar-value" }) != nullptr);
+}
+
+TEST_CASE("The jump list lines read the request and the report", "[windows-page][jump-list]")
+{
+    demo::windows_page page {};
+    {
+        const auto tree { page_tree(page) };
+        REQUIRE(name_of(tree, u8"windows-jump-list-request") == u8"점프 목록 요청: 손대지 않음");
+        REQUIRE(name_of(tree, u8"windows-jump-list-report") == u8"점프 목록 반영: 아직 보고 없음");
+        REQUIRE(name_of(tree, u8"windows-jump-list-hint").empty() == false);
+        for (const std::u8string_view key : { u8"jump-list-fill", u8"jump-list-clear" })
+        {
+            const luil::ui_element* const button { tree.find({ demo::kind_tool_toggle, std::u8string { key } }) };
+            REQUIRE(button != nullptr);
+            REQUIRE(button->accessibility().name.empty() == false);
+        }
+    }
+    // 누르기 전에는 셸의 목록을 만지지 않는다.
+    REQUIRE(page.make_taskbar_request().jump_list.has_value() == false);
+
+    deliver(page, demo::jump_list_fill_intent { true });
+    REQUIRE(name_of(page_tree(page), u8"windows-jump-list-request") == u8"점프 목록 요청: 작업 2개");
+    const luil::taskbar_request filled { page.make_taskbar_request() };
+    REQUIRE(filled.jump_list.has_value());
+    REQUIRE(filled.jump_list->tasks.size() == 2);
+    // 작업은 데모를 둘째로 띄워 떠 있는 데모에 인자를 넘긴다.
+    REQUIRE(filled.jump_list->tasks[0].title == u8"메모로 보내기");
+    REQUIRE(filled.jump_list->tasks[0].arguments == std::vector<std::u8string> { u8"--send-to-first", u8"jump:note" });
+    REQUIRE(filled.jump_list->tasks[1].arguments == std::vector<std::u8string> { u8"--send-to-first", u8"jump:image" });
+    REQUIRE(filled.jump_list->tasks[0].description.empty() == false);
+    // 같은 목록을 frame마다 실어도 값이 같아 셸은 한 번만 짓는다.
+    REQUIRE(page.make_taskbar_request().jump_list == filled.jump_list);
+
+    luil::win32::jump_list_report applied {};
+    applied.status = luil::win32::jump_list_status::applied;
+    applied.tasks = 2;
+    deliver(page, demo::jump_list_report_intent { applied });
+    REQUIRE(name_of(page_tree(page), u8"windows-jump-list-report") == u8"점프 목록 반영: 적용됨 · 작업 2개");
+
+    deliver(page, demo::jump_list_fill_intent { false });
+    REQUIRE(name_of(page_tree(page), u8"windows-jump-list-request") == u8"점프 목록 요청: 비움");
+    const luil::taskbar_request cleared { page.make_taskbar_request() };
+    REQUIRE(cleared.jump_list.has_value());
+    REQUIRE(cleared.jump_list->tasks.empty());
+
+    luil::win32::jump_list_report removed {};
+    removed.status = luil::win32::jump_list_status::removed;
+    deliver(page, demo::jump_list_report_intent { removed });
+    REQUIRE(name_of(page_tree(page), u8"windows-jump-list-report") == u8"점프 목록 반영: 지움");
+
+    luil::win32::jump_list_report failed {};
+    failed.status = luil::win32::jump_list_status::failed;
+    failed.error = u8"CommitList failed (HRESULT=0x80004005)";
+    deliver(page, demo::jump_list_report_intent { failed });
+    REQUIRE(name_of(page_tree(page), u8"windows-jump-list-report") == u8"점프 목록 반영: 실패 (CommitList failed (HRESULT=0x80004005))");
+
+    // 목록은 앱마다 하나라 독립 창의 요청에는 싣지 않는다.
+    deliver(page, demo::taskbar_window_toggle_intent { true });
+    const std::vector<luil::win32::ui_window> windows { page.make_windows() };
+    const luil::win32::ui_window* const window { find_window(windows, u8"taskbar-window") };
+    REQUIRE(window != nullptr);
+    REQUIRE(window->taskbar.jump_list.has_value() == false);
 }
