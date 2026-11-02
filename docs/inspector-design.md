@@ -217,7 +217,7 @@ elements 214  dup 0  unarranged 0
 
 ### Win32
 
-- 모든 표면(주 창, 보조 창, popup)이 `window_surface::build_frame`의 `apply_frame_appearance`(window_surface.cpp 811행, win32_window.cpp 2038행)를 지난다. 그 함수의 `state.style` 옆 한 줄(`state.inspector = frame != nullptr ? &frame->inspector : nullptr;`)이 모든 표면에 선다. `win32_window.cpp`는 줄 4의 파일이라 그 한 줄은 줄 4가 낸다([인자 넘기기](single-instance-args-design.md)가 그 몫을 맡는다). `ui_frame::inspector`와 `frame_state::inspector`는 이 브랜치에만 생긴다. 그래서 이 한 줄은 inspector가 main에 병합된 직후 통합 단계에서 줄 4 몫 커밋 하나로 낸다. 그 전에는 Win32에서 overlay가 그려지지 않으므로 Win32 래스터 밖 확인(UIA 데모, 사람 확인)은 그 커밋 뒤에 한다.
+- 모든 표면(주 창, 보조 창, popup)이 `window_surface::build_frame`의 `apply_frame_appearance`(window_surface.cpp 811행, win32_window.cpp 2038행)를 지난다. 그 함수의 `state.style` 옆 한 줄(`state.inspector = frame != nullptr ? &frame->inspector : nullptr;`)이 모든 표면에 선다. `win32_window.cpp`는 줄 4의 파일이라 그 한 줄은 줄 4가 냈다([인자 넘기기](single-instance-args-design.md)가 그 몫을 맡았다). `ui_frame::inspector`와 `frame_state::inspector`는 이 노드의 브랜치에만 있었다. 그래서 이 한 줄은 inspector를 병합한 직후 통합 단계에서 줄 4 몫 커밋 하나로 냈다. 그 커밋 전에는 Win32에서 overlay가 그려지지 않아 Win32 래스터 밖 확인(UIA 데모, 사람 확인)은 그 커밋 뒤에 했다.
 - 표면마다 자기 tree와 걸러진 interaction으로 따로 그린다. 작은 popup 창(메뉴)에는 윤곽만 선다. 캡처와 녹화도 `draw_frame`을 지나므로 overlay가 사진에 찍힌다. 앱이 켠 채 찍지 않는 것은 앱의 몫이다.
 - 고대비는 시스템 색을 읽은 팔레트라 윤곽은 hotlight와 창 글자색으로 선다. UIA provider는 tree만 읽으므로 켜도 달라지지 않는다. 별도 창(결정 1의 b)은 Win32 전용으로 열어 둔다.
 
