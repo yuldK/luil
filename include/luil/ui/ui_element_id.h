@@ -162,6 +162,10 @@ namespace luil {
         info_bar,
         info_bar_action,
         info_bar_close,
+        // 확인 대화 상자의 내용과 그 단추다 (`make_message_box`). 내용은 비공개 element이고 owner는 상자 설정의 owner다.
+        // 단추의 owner는 상자 owner와 단추 key 사이에 단위 구분자(U+001F)를 둔 것이다 (`message_box_button_id`).
+        message_box,
+        message_box_button,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

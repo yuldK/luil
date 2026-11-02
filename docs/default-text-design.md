@@ -161,7 +161,7 @@ controls.fit_label = u8"Fit";
 - 접근 이름 조각을 공백으로 잇는 것(심각도 낱말, 제목, 본문)은 어순 문장이 아니라 호출부에 둔다. R5가 자리 값으로 바꿀 때 함께 본다. 정보 막대의 `accessibility()`와 msg_box 호출부가 그 자리다.
 - 앱이 아니면 만들 수 없는 글(제목, 본문, 동작 글, 후보 라벨)은 기본값 없이 앱이 준다.
 
-**msg_box**(줄 1, 다음 문서). 표준 단추 helper가 기본 글(확인·취소 따위)을 낸다면 이 헤더에 함수를 더한다. 심각도 낱말은 `severity_name`을 쓴다. 대화 상자 캡션의 `dialog_caption_config::close_tooltip`은 "비면 없다" 계약을 바꾸지 않고, msg_box가 자기 층에서 기본값을 채워 내려보낸다(결정 4).
+**msg_box**(줄 1, [확인 대화 상자](message-box-design.md)). 표준 단추 helper는 넷(확인·취소·예·아니요)으로 닫았고 이 헤더에 `message_box_ok_label`·`message_box_cancel_label`·`message_box_yes_label`·`message_box_no_label`을 더했다. 심각도 낱말은 `severity_name`을 쓴다. 대화 상자는 캡션 바가 없는 모양(msg_box 결정 5의 a)이라 `dialog_caption_config::close_tooltip`의 기본값을 채워 내려보낼 일이 없다.
 
 **rating**(줄 1). 값 이름("별점 3 / 5" 꼴)은 값과 최댓값을 받는 함수로 이 헤더에 둔다. 앱이 덮을 칸은 위 규칙의 `std::function` 꼴이다.
 
@@ -187,7 +187,7 @@ controls.fit_label = u8"Fit";
 자동 test. 새로 바뀐 기대값은 없다. 이 정책은 한국어 기본값을 그대로 두므로 기존 test의 기대값을 바꾸지 않는다. 바꿔야 하는 test 목록은 비어 있다. 아래 기존 test가 회귀 잠금이다.
 
 - 그대로 통과해야 하는 것: `tests/info_bar_element_tests.cpp` 384~430행(심각도 낱말, 닫기 이름), `tests/accessibility_tests.cpp` 583·593행(막대 이름, 닫기)과 882·896행("저장 옵션"), `tests/uia_provider_tests.cpp` 990·1001행(`luil_tests`, Windows 전용), `tests/theme_picker_tests.cpp` 34행(config에 `name`을 주지 않고 "테마"를 단언), `tests/zoom_view_tests.cpp` 416~431행(자식 수만 센다).
-- `tests/default_text_tests.cpp`(새 파일, `luil_core_tests`): 열다섯 낱말이 비어 있지 않고 전과 같은 한국어인지, 심각도 넷의 대응, `text_or_default`가 빈 글에는 기본 문구를, 공백만 있는 글과 앱 글에는 그 글을 돌려주는지, `split_button_arrow_name(u8"저장") == u8"저장 옵션"`인지.
+- `tests/default_text_tests.cpp`(새 파일, `luil_core_tests`): 열다섯 낱말(msg_box의 표준 단추 넷을 더해 열아홉)이 비어 있지 않고 전과 같은 한국어인지, 심각도 넷의 대응, `text_or_default`가 빈 글에는 기본 문구를, 공백만 있는 글과 앱 글에는 그 글을 돌려주는지, `split_button_arrow_name(u8"저장") == u8"저장 옵션"`인지.
 - `tests/zoom_view_tests.cpp`에 덧붙임: 기본 이름이 축소·확대·맞춤인지, 세 칸을 덮으면 단추의 접근 이름이 그 글인지, 한 칸만 덮으면 나머지는 기본인지. 자식 순서는 축소, 배율 label, 확대, 맞춤이다.
 - `tests/theme_picker_tests.cpp`에 덧붙임: 기본 `theme_picker_config`·`accent_picker_config`의 `name`·`labels`가 비어 있는지(공개 헤더에 한국어가 없다), 요소는 "테마"·카드 낱말·"강조색"을 내는지, `labels` 한 칸만 덮어도 나머지는 기본인지, `name` 덮기.
 - `tests/combo_box_element_tests.cpp`에 덧붙임: 후보를 받는 중 popup tree의 `…:loading` 요소 이름이 기본 한국어이고 `loading_name`이 덮는지.

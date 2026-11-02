@@ -29,6 +29,12 @@ namespace luil::default_text {
     [[nodiscard]] std::u8string_view theme_picker_label(theme_preference preference) noexcept;  // 밝게·시스템·어둡게
     [[nodiscard]] std::u8string_view accent_picker_name() noexcept;  // 강조색
     [[nodiscard]] std::u8string_view combo_box_loading() noexcept;  // 추천 항목을 불러오는 중
+    // 표준 확인 대화 상자 단추의 글이다 (확인·취소·예·아니요). 공개 helper `luil::message_box_ok` 같은 함수가 글이 비었을 때 쓴다.
+    //  - 이름에 `_label`을 붙이는 까닭은 공개 helper와 이름이 같아 한정 없이 부르면 둘이 헷갈리기 때문이다.
+    [[nodiscard]] std::u8string_view message_box_ok_label() noexcept;  // 확인
+    [[nodiscard]] std::u8string_view message_box_cancel_label() noexcept;  // 취소
+    [[nodiscard]] std::u8string_view message_box_yes_label() noexcept;  // 예
+    [[nodiscard]] std::u8string_view message_box_no_label() noexcept;  // 아니요
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

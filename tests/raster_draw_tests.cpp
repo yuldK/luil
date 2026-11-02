@@ -9,6 +9,7 @@
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/message_box.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
@@ -38,6 +39,7 @@
 #include <cstdlib>
 #include <memory>
 #include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -1491,4 +1493,86 @@ TEST_CASE("An info bar draws a narrow bar's action button on its own line under 
     REQUIRE(frame.pixel_at(90, 120) == palette.raised_background);
     // 옆에 서던 자리는 비어 있다.
     REQUIRE(frame.pixel_at(450, 60) == palette.raised_background);
+}
+
+namespace {
+    // 확인 대화 상자를 그린다. 글은 비워 둔다 (이 축이 보는 것은 도형과 색이다). 화면은 800x400 물리 픽셀이고 배율은 2다.
+    //  - 상자는 논리 360 x 88(위 20 + 아래 20 + 단추 28 + 20 + 20)이라 물리 (40, 112)에서 720 x 176이다.
+    //  - 단추는 논리 88 폭이고 오른쪽 끝(논리 360)에 붙는다. 마지막 단추는 물리 x 544~720, 그 앞 단추는 352~528이다.
+    constexpr luil::rect_f message_box_last_button { 544.0f, 192.0f, 176.0f, 56.0f };
+    constexpr luil::rect_f message_box_previous_button { 352.0f, 192.0f, 176.0f, 56.0f };
+
+    [[nodiscard]] luil::testing::raster_frame draw_message_box(std::vector<luil::message_box_button> buttons, const luil::ui_color_palette& palette)
+    {
+        luil::message_box_config config {};
+        config.owner = u8"raster";
+        config.buttons = std::move(buttons);
+        config.result = [](const std::u8string_view) { return luil::input_action {}; };
+        std::unique_ptr<luil::modal_host_element> host { luil::make_message_box(std::move(config)) };
+        host->arrange({ { 0.0f, 0.0f, 800.0f, 400.0f }, raster_scale });
+        const luil::ui_tree tree { std::move(host) };
+        luil::testing::raster_frame frame { 800, 400, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    }
+}
+
+TEST_CASE("A message box stands on the surface color inside a one pixel divider border over the scrim", "[ui][raster][message-box]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light })
+    {
+        CAPTURE(theme);
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_cancel(), luil::message_box_ok() }, palette) };
+
+        // 몸은 표면 색이다. 단추가 서지 않는 왼쪽 위 안쪽이다.
+        REQUIRE(frame.pixel_at(120, 140) == palette.surface_background);
+        // 테는 몸 안쪽의 1 논리 픽셀(물리 2)이고 네 변 모두다. 테 색은 표면 위에 얹힌 `divider`다.
+        const luil::ui_color border { over(palette.divider, palette.surface_background) };
+        REQUIRE(border != palette.surface_background);
+        const std::array samples { frame.pixel_at(40, 200), frame.pixel_at(41, 200), frame.pixel_at(758, 200), frame.pixel_at(759, 200), frame.pixel_at(400, 112), frame.pixel_at(400, 113), frame.pixel_at(400, 286), frame.pixel_at(400, 287) };
+        for (const luil::ui_color sample : samples)
+        {
+            CAPTURE(sample, border);
+            REQUIRE(same_color(sample, border));
+        }
+        // 상자 밖은 scrim이다. 표면과도 창 바탕과도 다르다.
+        const luil::ui_color scrim { frame.pixel_at(10, 10) };
+        REQUIRE(scrim != palette.surface_background);
+        REQUIRE(scrim != palette.window_background);
+        REQUIRE(frame.pixel_at(30, 200) == scrim);
+    }
+}
+
+TEST_CASE("Only the last accept button is filled with the accent and a destructive one wears the danger fill", "[ui][raster][message-box]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+
+    SECTION("마지막 긍정 단추가 강조색 채움이고 거절은 채우지 않는다")
+    {
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_cancel(), luil::message_box_ok() }, palette) };
+        REQUIRE(frame.pixel_at(632, 220) == palette.accent);
+        REQUIRE(frame.count_color(message_box_last_button, palette.accent) > 176 * 56 / 2);
+        REQUIRE(frame.count_color(message_box_previous_button, palette.accent) == 0);
+        REQUIRE(frame.pixel_at(440, 220) != palette.surface_background);
+    }
+
+    SECTION("긍정이 둘이면 마지막만 채우고 앞의 것은 옅은 강조다")
+    {
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_yes(), luil::message_box_ok() }, palette) };
+        REQUIRE(frame.count_color(message_box_last_button, palette.accent) > 176 * 56 / 2);
+        REQUIRE(frame.count_color(message_box_previous_button, palette.accent) == 0);
+        REQUIRE(frame.pixel_at(440, 220) != palette.surface_background);
+    }
+
+    SECTION("위험한 단추는 강조색으로 채우지 않는다")
+    {
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_cancel(), luil::message_box_button { .key = u8"erase", .role = luil::message_box_role::destructive } }, palette) };
+        REQUIRE(frame.count_color(message_box_last_button, palette.accent) == 0);
+        REQUIRE(frame.count_color(message_box_previous_button, palette.accent) == 0);
+        // 옅은 오류색 바탕이 깔려 있다. 표면 색 그대로가 아니다.
+        REQUIRE(frame.pixel_at(632, 220) != palette.surface_background);
+        // 거절 단추의 보통 바탕과도 다르다.
+        REQUIRE(frame.pixel_at(632, 220) != frame.pixel_at(440, 220));
+    }
 }

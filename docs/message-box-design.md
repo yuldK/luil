@@ -65,6 +65,8 @@ struct message_box_config
 // Esc가 낼 결과다. 닫는 길이 없으면 nullopt다. 앱이 뒤로 가기(`ui_frame::back`)에 단다.
 [[nodiscard]] std::optional<input_action> message_box_dismiss_message(const message_box_config& config);
 [[nodiscard]] ui_element_id message_box_button_id(std::u8string_view owner, std::u8string_view key);
+[[nodiscard]] ui_element_id message_box_check_id(std::u8string_view owner);  // 확인 칸의 id (구현 중에 더했다, 결정 7)
+// 표준 단추의 key 상수다: message_box_ok_key·message_box_cancel_key·message_box_yes_key·message_box_no_key (u8"ok"·u8"cancel"·u8"yes"·u8"no")
 // 표준 단추다. 글이 비면 기본 문구(확인·취소·예·아니요)다. key는 ok·cancel·yes·no다 (`message_box_ok_key` 같은 상수도 둔다).
 [[nodiscard]] message_box_button message_box_ok(std::u8string text = {});  // accept
 [[nodiscard]] message_box_button message_box_cancel(std::u8string text = {});  // reject
@@ -108,14 +110,14 @@ root.add(std::move(host));
 | 글리프 | `severity`가 있을 때만. 24칸에 크기 20, `severity_color`와 `severity_glyph` |
 | 제목 | `body_font_size + 2`, 굵기는 스타일 `font_weights.title`, 줄을 바꾼다 |
 | 본문 | `body_font_size`, `body_text` 굵기, 줄을 바꾼다. 제목과 8 |
-| 확인 칸 | 본문과 12. `check_element::height_for`와 `control_size` 중 큰 높이 |
+| 확인 칸 | 본문과 12. `check_element::height_for`와 `control_size` 중 큰 높이의 줄. 칸은 그 줄의 세로 가운데에 서고 자기 높이를 지킨다 |
 | 단추 | 높이 `control_size`(0이면 28), 폭 `max(88, preferred_size)`, 사이 8, 글과 20 |
 
-높이는 `20 + 머리 + (칸이 있으면 12 + 칸) + 20 + 단추 영역 + 20`이다. 머리는 글리프 칸과 글 높이 중 큰 쪽이다.
+높이는 `20 + 머리 + (칸이 있으면 12 + 칸) + 20 + 단추 영역 + 20`이다. 머리는 글리프 칸과 글 높이 중 큰 쪽이다. 글 열(제목·본문·확인 칸)은 글리프 칸이 있으면 그 오른쪽 36 지점에서, 없으면 안쪽 여백에서 시작하고 단추 영역은 안쪽 폭 전체를 쓴다. 제목과 본문의 글 색은 둘 다 `primary_foreground`이고 크기와 굵기가 둘을 가른다(정보 막대와 같다). 제목이나 본문이 비면 그 몫과 사이 간격(8, 칸이 있으면 12)이 빠진다.
 
-**쌓기.** 단추 폭의 합에 8 × (개수 - 1)을 더한 값이 안쪽 폭 이하이면 한 행이고 오른쪽 끝에 붙인다. 넘치면 모두 안쪽 폭 전체로 쌓고 순서는 그대로 위에서 아래다. 경계(같으면 행)는 순수 함수가 정하고 test가 잠근다.
+**쌓기.** 단추 폭의 합에 8 × (개수 - 1)을 더한 값이 안쪽 폭 이하이면 한 행이고 오른쪽 끝에 붙인다. 넘치면 모두 안쪽 폭 전체로 쌓고 순서는 그대로 위에서 아래다. 경계(같으면 행)는 비공개 순수 함수 `message_box_stacks_buttons`가 정하고 test가 잠근다. 배율을 곱했다 나눈 폭이 한 부동소수점 단위 어긋나도 경계가 뒤집히지 않게 0.01 논리 픽셀의 여유를 둔다.
 
-**자리가 모자랄 때.** host가 높이를 자리 - 32로 자르면 내용은 그 높이를 받는다. 제목, 확인 칸, 단추는 줄이지 않고 본문의 줄 수를 줄여(`max_lines`) 마지막 줄을 `…`로 줄인다. 한 줄로도 모자라면 아래가 넘쳐 그려진다. 본문 스크롤은 없다. 접근 이름은 전체 본문이다.
+**자리가 모자랄 때.** host가 높이를 자리 - 32로 자르면 내용은 그 높이를 받는다. 제목, 확인 칸, 단추는 줄이지 않고 본문의 줄 수를 줄여(`max_lines`) 마지막 줄을 `…`로 줄인다. 한 줄로도 모자라면 아래가 넘쳐 그려진다. 본문 스크롤은 없다. 접근 이름은 전체 본문이다. 줄일 줄 수는 넘치는 높이를 본문 한 줄 높이로 나눈 올림이고 한 줄은 남긴다. 높이를 모르는 자리(0)는 자르지 않는다.
 
 **역할과 키.** 결정 3의 a다. 초점이 이기므로 첫 초점을 Enter의 대상과 같은 단추에 묶는다.
 
@@ -123,8 +125,8 @@ root.add(std::move(host));
 | --- | --- |
 | Enter | 초점이 선 element를 실행한다. 첫 초점이 Enter의 대상이라 뜨자마자 친 Enter는 그 대상이다 |
 | Enter의 대상 | 마지막 accept 단추(`default_button`, 강조 채움). destructive는 되지 않는다 |
-| 첫 초점(`focus_entry`) | 마지막 accept. 없으면 마지막 reject, 그것도 없으면 첫 단추. 테는 첫 Tab에서 선다 |
-| Esc | reject 단추의 key를 `result`에 넘긴다. reject가 없고 단추가 하나면 그 단추. 둘 다 없으면 Esc는 앱으로 흐른다 |
+| 첫 초점(`focus_entry`) | 마지막 accept. 없으면 마지막 reject, 그것도 없으면 첫 단추(역할이 모두 normal이거나 destructive뿐일 때). 테는 첫 Tab에서 선다 |
+| Esc | reject 단추(여럿이면 마지막)의 key를 `result`에 넘긴다. reject가 없고 단추가 하나면 그 단추. 둘 다 없으면 Esc는 앱으로 흐른다 |
 | 바깥 누름 | `outside_dismisses`가 참이고 Esc의 결과가 있으면 같은 결과. 아니면 흡수만 한다 |
 | 단추 눌림 | `result(그 key)` 하나다 |
 
@@ -141,7 +143,7 @@ root.add(std::move(host));
 
 **테마·움직임.** 색은 팔레트 역할뿐이고 표면의 `divider` 테가 고대비에서 경계를 남긴다. 움직임이 없어 움직임 줄이기와 무관하다.
 
-**kind.** `ui_element_id.h`의 `end_of_library_kinds` 바로 위에 `message_box`, `message_box_button`을 더한다. 단추의 owner는 상자 owner와 key 사이에 U+001F를 둔다(표의 부품 owner와 같은 꼴이다). 확인 칸은 기존 `check` kind에 같은 꼴의 owner다. test와 UIA 스크립트에 kind 숫자를 박지 않는다.
+**kind.** `ui_element_id.h`의 `end_of_library_kinds` 바로 위에 `message_box`, `message_box_button`을 더한다. 단추의 owner는 상자 owner와 key 사이에 U+001F를 둔다(표의 부품 owner와 같은 꼴이다). 확인 칸은 기존 `check` kind에 같은 꼴의 owner(끝 조각이 `check`)다. 둘 다 공개 helper `message_box_button_id`·`message_box_check_id`가 짓는다. test와 UIA 스크립트에 kind 숫자를 박지 않는다.
 
 ## 결정
 
@@ -150,14 +152,14 @@ root.add(std::move(host));
 - 길 a: 만들 때 재서 `content_height`에 넣는다. 되는 것: host를 건드리지 않는다. `command_palette_height`가 같은 모양이다. 대가: 호출자가 배율·측정기·치수를 그리기와 같게 넘겨야 한다. 두 데모는 측정기 없이 `host->arrange`로 배치하므로 만들 때의 문맥이 배치와 갈리면 줄 수가 달라져 글이 잘린다([ui_element.h](../include/luil/ui/ui_element.h)의 `measure_context` 주석이 경고한 점). 창 크기(폭 자르기)도 앱이 넘긴다.
 - 길 b: host가 배치할 때 내용에 묻는다(`fit_height`·`edge_margin`). 되는 것: 측정 문맥이 배치 문맥이라 갈릴 수 없다. 앱은 창 크기도 문맥도 넘기지 않고 직접 짠 대화 상자도 같은 옵션을 쓴다. 대가: 공유 요소를 고친다(약 40줄). "host는 크기를 재지 않는다"를 켠 host에 한해 개정한다. 고칠 곳은 `modal-dialog-design.md` 79·122행과 `modal_host_element.h` 74~76행 주석이다. 꺼진 host(기본)의 배치는 그대로고 기존 host test가 잠근다.
 - 길 c: 상자가 정적 `measure`를 공개하고 앱이 높이를 `modal_host_config`에 넣는다(`info_bar_element::measure` 모양). 되는 것: host 무변경이고 앱이 크기를 알아 끌기 offset을 다듬을 수 있다. 대가: a와 같은 문맥 어긋남이 남고 앱이 재기, 설정, 짓기 세 단계를 적는다.
-- 권장: b. 대가: 공유 요소 수정과 불변식 개정. 이번 라운드에 `modal_host_element.*`를 고치는 노드는 이 노드뿐이다. 승인 필요.
+- 권장: b. 대가: 공유 요소 수정과 불변식 개정. 이번 라운드에 `modal_host_element.*`를 고치는 노드는 이 노드뿐이다. 승인: 길 b (2026-11-02).
 
 **2. 결과 전달.** 질문: 눌림을 앱에 어떻게 알리는가.
 
 - 길 a: 단추마다 key·글·역할을 주고 눌림·Esc·바깥이 `result(key)` 하나를 부른다. 되는 것: 닫는 모든 길이 같은 메시지라 앱은 받아서 닫고 key로 가른다. 하나를 빼먹지 않는다. 라이브러리는 글을 모른다는 규칙에 맞고 `set_open`·`activate_link`처럼 factory 하나로 메시지를 짓는 기존 모양이다. 대가: 한 단추가 메시지를 둘 낼 수 없다. 앱이 처리기에서 둘을 한다.
 - 길 b: 표준 단추 열거(확인·취소·예·아니요·저장…)와 결과 enum. 되는 것: 흔한 경우가 한 줄이다. 대가: 열거에 없는 단추("초기화")는 따로 길이 필요하고 글은 번역 때문에 앱이 주입해야 해서 열거와 글이 두 겹이다. 열거가 늘면 기본 문구도 는다.
 - 길 c: 단추마다 `ui_action`을 앱이 준다. 되는 것: 기존 액션 관용구이고 한 단추가 메시지 여럿을 낸다. 대가: Esc·바깥이 어느 단추의 액션인지 정해야 하고 닫는 메시지를 단추마다 앱이 달아야 한다(지금 초기화의 두 메시지).
-- 권장: a. 대가: 한 결과에 메시지 하나. 표준 단추는 helper가 key·역할·기본 문구를 채운다. 승인 필요. [default-text 결정 1](default-text-design.md)이 enum 키(c)로 바뀌어도 `message_box_*`가 키 이름이 되어 호출부는 그대로다.
+- 권장: a. 대가: 한 결과에 메시지 하나. 표준 단추는 helper가 key·역할·기본 문구를 채운다. 승인: 길 a (2026-11-02). [default-text 결정 1](default-text-design.md)이 enum 키(c)로 바뀌어도 `message_box_*`가 키 이름이 되어 호출부는 그대로다.
 
 **3. 역할과 Enter·Esc·바깥·첫 초점.** 질문: 역할이 키와 초점에 어떻게 이어지는가. destructive가 Enter의 대상이 될 수 있는가.
 
@@ -178,7 +180,7 @@ root.add(std::move(host));
 - 길 a: 본문 안의 제목 줄이다. 캡션 바가 없다. 되는 것: 크기가 모두 내용에서 나오고(`dialog_caption_element`는 `preferred_size`가 없다) 끌기 offset과 그 다듬기가 앱에서 사라진다. 대가: 닫기 ×와 끌기가 없다(Esc, 바깥, reject 단추가 닫는다). 데모의 끌기 시연이 이 대화에서 빠진다.
 - 길 b: `dialog_caption_element`를 쓴다. 대가: 높이를 `height_for`로 따로 더하고, 끌린 offset을 앱이 다듬으려면 상자의 높이를 알아야 해서 결정 1의 b와 부딪힌다.
 - 길 c: a가 기본이고 `move`와 `offset_x/y`를 주면 캡션 바가 선다. 되는 것: 둘 다 된다. 대가: 칸이 늘고 `message_box_close`(닫기 ×의 기본 이름)가 default_text에 든다. 끝에 더하는 칸이라 나중에 더해도 호환된다.
-- 권장: a. 대가: 위의 × 와 끌기. `dialog_caption_element`의 예제 소비자는 두 데모의 이 대화뿐이라 치환하면 예제에서 끌기 시연이 사라지고 단위 test(`dialog_elements_tests.cpp`)만 남는다. 시연을 지키려면 데모에 직접 짠 두 번째 대화를 남긴다. [default-text 문서](default-text-design.md) 163행이 약속한 "msg_box의 닫기 기본값"은 a에서 쓸 일이 없다. 공개 칸의 모양과 데모 범위를 가르므로 승인 필요.
+- 권장: a. 대가: 위의 × 와 끌기. `dialog_caption_element`의 예제 소비자는 두 데모의 이 대화뿐이라 치환하면 예제에서 끌기 시연이 사라지고 단위 test(`dialog_elements_tests.cpp`)만 남는다. 시연을 지키려면 데모에 직접 짠 두 번째 대화를 남긴다. [default-text 문서](default-text-design.md) 163행이 약속한 "msg_box의 닫기 기본값"은 a에서 쓸 일이 없다. 공개 칸의 모양과 데모 범위를 가르는 결정이다. 승인: 길 a (2026-11-02).
 
 **6. 안에 담는 것.** 질문: 제목·본문·단추 밖에 무엇을 넣는가.
 
@@ -187,9 +189,21 @@ root.add(std::move(host));
 - 길 c: a에 접히는 세부 내용(markdown)까지. 대가: 접힘 상태·스크롤·높이 변화가 따라와 크기가 훨씬 커진다.
 - 권장: a. 대가: 위의 칸 규칙 하나. 권장대로 진행.
 
+## 구현에서 정한 결정
+
+구현하며 문서가 정하지 않았거나 모호했던 것이다. 모두 권장대로 진행한 것이 아니라 구현 중에 고른 것이라 따로 적는다(2026-11-03).
+
+**7. 공개 helper 둘과 key 상수.** `message_box_check_id`와 표준 key 상수 넷을 공개 형식에 더했다. 앱과 test가 단추 id는 helper로 얻는데 칸 id는 owner 꼴을 손으로 맞춰야 하는 비대칭을 없애고, `result`에서 표준 key를 가를 때 글자를 반복하지 않게 한다. 비공개로 두는 길도 있었으나 owner 꼴(U+001F)이 공개 계약이 되는 이상 짓는 함수도 공개가 맞다.
+
+**8. 글 열의 시작.** 글리프 칸(24 + 12)은 `severity`가 있을 때만 폭을 잡는다. 없으면 제목·본문·칸이 안쪽 여백(20)에서 시작한다. 있으면 셋 모두 36 오른쪽에서 시작하고 단추 영역만 안쪽 폭 전체를 쓴다. 위 치수 표의 "글 폭은 안쪽 폭에서 글리프 몫을 뺀 값"이 `severity`가 없을 때도 빼는지 모호했다. 글리프가 없는 상자가 빈 36을 남길 까닭이 없다.
+
+**9. 여럿일 때와 모두 위험할 때.** reject가 여럿이면 Esc·바깥 누름·첫 초점은 마지막 reject를 따른다(accept의 "마지막"과 같은 규칙으로 맞췄다). destructive만 있는 상자는 첫 단추에 초점이 서고 Enter의 대상은 없다. 결정 3의 "destructive는 첫 초점이 되지 않는다"는 다른 역할이 있을 때의 규칙이고, 역할이 하나뿐일 때 초점을 아예 두지 않으면 키보드 사용자가 Tab을 한 번 더 쳐야 해서 택하지 않았다.
+
+**10. 확인 칸의 줄.** 칸은 글 열의 왼쪽에 서고 `control_size` 줄 안에서 세로 가운데에 선다. `check_element`가 자기 높이(24)를 고정하므로 터치 앱이 44를 주어도 칸은 24이고 줄만 44가 된다. 칸의 누르는 자리가 줄 전체가 되게 하려면 `check_element`를 고쳐야 해서 이 노드의 범위 밖이다.
+
 ## 플랫폼
 
-**Win32.** 같은 표면 안 modal이라 `win32_window.cpp`·`window_surface.cpp`를 고치지 않는다. UIA는 host가 Dialog와 Name을, 단추가 Invoke를, 칸이 Toggle을 낸다. 고대비와 글자 크기는 위 규칙을 따른다.
+**Win32.** 같은 표면 안 modal이라 `win32_window.cpp`·`window_surface.cpp`를 고치지 않는다. UIA는 host가 Window(접근 역할 dialog는 ControlType Window로 간다, `uia_provider.cpp`)와 Name을, 단추가 Invoke를, 칸이 Toggle을 낸다. 고대비와 글자 크기는 위 규칙을 따른다.
 
 **Android.** Java 소스는 0줄이다. 코어 element라 JNI도 unsupported도 없다.
 
@@ -199,7 +213,7 @@ root.add(std::move(host));
 
 ## 다른 노드와의 약속
 
-- **default_text**(이 줄의 앞 노드). `default_text.h`에 `message_box_ok`·`message_box_cancel`·`message_box_yes`·`message_box_no` 넷을 더한다. 이름은 `<요소>_<부품>` 규칙이다. G6 정책 a에 따라 표준 단추의 글은 앱이 `text` 인자로 덮고 비면 이 기본 문구다. 심각도 낱말은 `severity_name`을 쓴다. 결정 5가 a면 `message_box_close`는 더하지 않는다. `verify_default_text`가 서면 `message_box.cpp`에도 한글 리터럴을 두지 않는다.
+- **default_text**(이 줄의 앞 노드). `default_text.h`에 `message_box_ok_label`·`message_box_cancel_label`·`message_box_yes_label`·`message_box_no_label` 넷을 더한다. 이름은 `<요소>_<부품>` 규칙이고 부품은 `_label`이다. 공개 helper `luil::message_box_ok`와 이름이 같으면 한정 없이 부를 때 둘이 헷갈려 접미사로 가른다(`message_box.cpp`는 그래도 늘 `default_text::`로 한정해 부른다). G6 정책 a에 따라 표준 단추의 글은 앱이 `text` 인자로 덮고 비면 이 기본 문구다. 심각도 낱말은 `severity_name`을 쓴다. 결정 5가 a면 `message_box_close`는 더하지 않는다. `verify_default_text`가 서면 `message_box.cpp`에도 한글 리터럴을 두지 않는다.
 - **info_bar**(R1). `ui_severity`와 `severity_paint.h`를 그대로 쓴다. [정보 막대 문서](info-bar-design.md) 201행이 넘긴 "글리프 칸과 접근 이름의 심각도 낱말"을 여기서 정했다. 글리프는 24칸에 20 크기이고 낱말은 화면에 그리지 않고 접근 이름 앞에 붙는다.
 - **split_button**(R1)의 필드 popup 열림 규약과는 겹치지 않는다. 앵커도 `set_open`도 `expanded`도 `ui_frame::popups`도 없고 대화 상자는 tree 안 modal이다. 닿는 것은 "열림은 앱 상태이고 닫는 모든 계기가 같은 메시지를 낸다"는 원칙뿐이고 여기서는 `result(key)`다. 열린 동안 여는 단추를 다시 눌러 되열리는 controller 한계도 해당 없다. 여는 단추가 scrim 뒤에 있다.
 - **modal_host**. 개정은 위 세 곳이다. `docs/modal-dialog-design.md`에 이 문서로 가는 링크와 `fit_height` 절을 더하는 일도 구현 커밋이 한다.
@@ -227,7 +241,7 @@ root.add(std::move(host));
 
 데모 칸(`examples/demo`, `examples/mobile_demo`의 기본 페이지). "카운터 초기화" 대화를 `make_message_box`로 바꾸고 "대화: 열림/닫힘"과 "마지막 결과: reset|cancel|없음" label을 그려 UIA가 되읽게 한다. 단추 셋과 긴 본문과 확인 칸을 가진 두 번째 대화를 더해 좁은 화면의 쌓임을 보인다. 연결 커밋이 첫 `basics_page` test(열기, 결과 메시지, 닫기)를 더한다. 모바일은 `tests/mobile_demo_page_tests.cpp`에 두고 `tests/CMakeLists.txt`의 모바일 데모 목록(141~151행)에 `basics_page.cpp`를 올린다. 이 페이지는 `mobile_demo_gradient_png` 같은 외부 기호 여섯을 부르는데, 기호는 앱 빌드가 [mobile_demo.cmake](../examples/mobile_demo/mobile_demo.cmake)에서 `cmake/embed_binary.cmake`로 만든 소스에 있어 core test에는 없다. 링크가 막히므로 `secret_store_stub.cpp`(150행)처럼 빈 바이트 대역(`tests/mobile_demo_assets_stub.cpp`)을 목록에 함께 올린다. 빈 바이트는 디코드 오류로 끝나고 페이지는 그 오류를 이미 다루므로(`load_demo_picture`, `read_films`) 대화 test는 그림 칸을 읽지 않는다. 빈 입력의 디코더 답은 구현 때 확인한다. 데스크톱 `basics_page.cpp`는 `<windows.h>`(`MAX_PATH`, 96행)와 비밀 저장소를 불러 `luil_core_tests`에 못 들어간다. Windows 전용 `luil_tests`의 `windows_page.cpp` 곁(415~418행 꼴)에 `basics_page.cpp`와 새 `tests/basics_page_tests.cpp`를 올려 같은 세 가지를 시험한다. 격리 데스크톱에서 luil-uia로 단추 이름과 Invoke를, 키 합성으로 Esc·Enter 결과를 읽는다.
 
-사람 확인: Narrator가 대화 이름을 읽고 본문과 단추를 순서대로 탐색하는지, 실기기의 좁은 화면·회전·긴 본문·제스처 막대 겹침, 밝은·어두운·고대비에서 표면 경계와 글리프 구분, 끌기 시연이 빠진 데모가 허용되는지.
+사람 확인: Narrator가 대화 Window의 이름을 읽고 본문과 단추를 순서대로 탐색하는지, 실기기의 좁은 화면·회전·긴 본문·제스처 막대 겹침, 밝은·어두운·고대비에서 표면 경계와 글리프 구분, 끌기 시연이 빠진 데모가 허용되는지.
 
 ## 범위 밖
 

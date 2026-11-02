@@ -52,6 +52,7 @@ add_executable(luil_core_tests
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
+    message_box_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp

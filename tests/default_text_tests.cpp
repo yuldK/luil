@@ -15,10 +15,10 @@ namespace {
 
 TEST_CASE("Every default text is a non-empty Korean word, the same as the ones the elements wrote themselves", "[ui][default-text]")
 {
-    // 요소마다 박혀 있던 낱말을 옮긴 것이라 글자가 전과 같아야 한다. 열다섯 낱말이다.
+    // 요소마다 박혀 있던 낱말을 옮긴 것이라 글자가 전과 같아야 한다. 열다섯 낱말에 확인 대화 상자의 표준 단추 넷을 더한 열아홉이다.
     // 분할 버튼의 이름은 문자열을 새로 짓는다. view로 들기 전에 수명을 잡아 둔다.
     const std::u8string arrow_name { luil::default_text::split_button_arrow_name(u8"저장") };
-    const std::array<std::pair<std::u8string_view, std::u8string_view>, 15> words {
+    const std::array<std::pair<std::u8string_view, std::u8string_view>, 19> words {
         std::pair { luil::default_text::info_bar_close(), std::u8string_view { u8"닫기" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::info), std::u8string_view { u8"정보" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::success), std::u8string_view { u8"성공" } },
@@ -34,6 +34,10 @@ TEST_CASE("Every default text is a non-empty Korean word, the same as the ones t
         std::pair { luil::default_text::theme_picker_label(luil::theme_preference::dark), std::u8string_view { u8"어둡게" } },
         std::pair { luil::default_text::accent_picker_name(), std::u8string_view { u8"강조색" } },
         std::pair { luil::default_text::combo_box_loading(), std::u8string_view { u8"추천 항목을 불러오는 중" } },
+        std::pair { luil::default_text::message_box_ok_label(), std::u8string_view { u8"확인" } },
+        std::pair { luil::default_text::message_box_cancel_label(), std::u8string_view { u8"취소" } },
+        std::pair { luil::default_text::message_box_yes_label(), std::u8string_view { u8"예" } },
+        std::pair { luil::default_text::message_box_no_label(), std::u8string_view { u8"아니요" } },
     };
     for (const auto& [text, expected] : words)
     {

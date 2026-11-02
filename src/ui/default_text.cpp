@@ -73,6 +73,26 @@ namespace luil::default_text {
         return u8"추천 항목을 불러오는 중";
     }
 
+    std::u8string_view message_box_ok_label() noexcept
+    {
+        return u8"확인";
+    }
+
+    std::u8string_view message_box_cancel_label() noexcept
+    {
+        return u8"취소";
+    }
+
+    std::u8string_view message_box_yes_label() noexcept
+    {
+        return u8"예";
+    }
+
+    std::u8string_view message_box_no_label() noexcept
+    {
+        return u8"아니요";
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;
