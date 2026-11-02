@@ -2,6 +2,7 @@
 #include "demo/line_break_sample.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
+#include "mobile_demo/lists_page.h"
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
@@ -178,6 +179,59 @@ namespace {
         controller.set_tree(tree);
         static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
         return deliver_actions(page, controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }));
+    }
+
+    // 400x800 창에서 조립해 배치한 목록 페이지다 (배율 1).
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> lists_tree(mobile_demo::lists_page& page)
+    {
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(page.build(400.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 400.0f, 800.0f }, 1.0f));
+    }
+
+    // UIA가 되읽는 이름이 화면의 글과 같다.
+    [[nodiscard]] std::u8string lists_text(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const label { tree->find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] bool lists_button_enabled(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        return button->enabled();
+    }
+
+    // 순서 목록의 항목이 위에서부터 서는 높이다. 행은 모두 tree에 담기므로 순서가 높이로 읽힌다.
+    [[nodiscard]] float list_row_top(const luil::ui_tree& tree, const int number)
+    {
+        const auto* const row { tree.find({ luil::ui_element_kind::list_row, u8"항목 " + mobile_demo::to_u8(number) }) };
+        REQUIRE(row != nullptr);
+        return row->bounds().y;
+    }
+
+    // 단추를 눌러 나온 메시지를 페이지에 돌려준다. 실제 입력 경로를 그대로 탄다. 돌려준 수를 돌려준다.
+    int press_list_button(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        int delivered { 0 };
+        for (const luil::input_action& action : controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }))
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
     }
 
     // 요청을 기록하고 사람이 고른 차례로 답한다. 실제 페이지의 send·cancel·응답 처리 경로를 그대로 쓴다.
@@ -1165,4 +1219,76 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(mobile_demo::text_target_of_kind(mobile_demo::kind_text).has_value() == false);
+}
+
+TEST_CASE("Undoing a reorder on the mobile list page brings back the earlier order and the buttons follow", "[mobile-demo][lists][undo]")
+{
+    mobile_demo::lists_page page {};
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음");
+    // 할 일이 없으면 꺼 둔다. 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.
+    REQUIRE(lists_button_enabled(page, u8"list-undo") == false);
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+    REQUIRE(press_list_button(page, u8"list-undo") == 0);
+
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 2));
+    }
+    // 항목 1을 항목 4 앞으로 끌어 놓는다.
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 4" });
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 2) < list_row_top(*tree, 3));
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 1));
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 4));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 1 · 다시 실행 0 · 다음: 순서 바꿈");
+    REQUIRE(lists_button_enabled(page, u8"list-undo"));
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+
+    // 단추가 되돌림 메시지를 낸다. 처음 순서로 돌아온다.
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 2));
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 4));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 1 · 다음: 없음");
+    REQUIRE(lists_button_enabled(page, u8"list-undo") == false);
+    REQUIRE(lists_button_enabled(page, u8"list-redo"));
+
+    // 다시 실행하면 옮긴 순서다.
+    REQUIRE(press_list_button(page, u8"list-redo") == 1);
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 1));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 1 · 다시 실행 0 · 다음: 순서 바꿈");
+}
+
+TEST_CASE("A new reorder after an undo clears the redo side and a reorder that moves nothing is not a step", "[mobile-demo][lists][undo]")
+{
+    mobile_demo::lists_page page {};
+    // 제자리로 놓거나 없는 항목을 옮기면 걸음이 없다.
+    deliver(page, mobile_demo::reorder_intent { u8"항목 2", u8"항목 2" });
+    deliver(page, mobile_demo::reorder_intent { u8"없는 항목", u8"항목 2" });
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 2" });
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음");
+
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 3" });
+    deliver(page, mobile_demo::reorder_intent { u8"항목 5", u8"항목 1" });
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 2 · 다시 실행 0 · 다음: 순서 바꿈");
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    REQUIRE(lists_button_enabled(page, u8"list-redo"));
+    deliver(page, mobile_demo::reorder_intent { u8"항목 6", u8"항목 1" });
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 2 · 다시 실행 0 · 다음: 순서 바꿈");
+
+    // 두 걸음을 모두 되돌리면 처음 순서다. 되돌림이 기록하지 않아 걸음이 늘지 않는다.
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    const auto tree { lists_tree(page) };
+    for (int number { 1 }; number < 8; ++number)
+        REQUIRE(list_row_top(*tree, number) < list_row_top(*tree, number + 1));
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 2 · 다음: 없음");
 }

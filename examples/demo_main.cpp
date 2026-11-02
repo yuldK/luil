@@ -470,6 +470,10 @@ namespace demo {
                         handle(luil::app_message { navigate_intent { run->id.substr(5) } });
                     else if (run->id == u8"view.sidebar")
                         handle(luil::app_message { sidebar_toggle_intent {} });
+                    else if (run->id == luil::undo_command_id && page_ == page_workbench)
+                        static_cast<void>(workbench_.handle(luil::app_message { workbench_undo_intent {} }));
+                    else if (run->id == luil::redo_command_id && page_ == page_workbench)
+                        static_cast<void>(workbench_.handle(luil::app_message { workbench_redo_intent {} }));
                     return;
                 }
                 if (palette_.handle(message))
@@ -638,7 +642,7 @@ namespace demo {
                 for (luil::win32::ui_popup& popup : windows_.make_popups())
                     frame->popups.push_back(std::move(popup));
                 // 명령 팔레트는 어느 페이지에서든 내용 영역 맨 위 가운데에 뜬다 (캡션이 위면 제목 표시줄 바로 아래).
-                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale))
+                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale, page_ == page_workbench ? workbench_.undo_state() : luil::undo_command_state { u8"실행 취소", u8"다시 실행", false, false }))
                     frame->popups.push_back(std::move(popup));
                 frame->file_dialog = file_dialog_;
                 // 주 창 작업 표시줄 단추의 진행률과 오버레이다. 독립 창의 것은 그 창(`ui_window::taskbar`)에 실린다.

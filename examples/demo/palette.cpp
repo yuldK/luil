@@ -40,13 +40,23 @@ namespace demo {
         };
     }
 
+    namespace {
+        // 판정용 표와 보이는 표가 같은 목록이고 실행 취소 두 항목의 글과 켜짐만 다르다.
+        [[nodiscard]] std::vector<luil::app_command> commands_with(luil::undo_command_state undo)
+        {
+            std::vector<luil::app_command> commands {};
+            for (const page_entry& page : pages)
+                commands.push_back({ .id = u8"page:" + std::u8string { page.key }, .label = u8"페이지 열기: " + std::u8string { page.label } });
+            commands.push_back({ .id = u8"view.sidebar", .label = u8"사이드바 접기·펴기", .shortcut = { luil::key_code::key_b, true } });
+            for (luil::app_command& command : luil::make_undo_commands(std::move(undo)))
+                commands.push_back(std::move(command));
+            return commands;
+        }
+    }
+
     std::vector<luil::app_command> palette_commands()
     {
-        std::vector<luil::app_command> commands {};
-        for (const page_entry& page : pages)
-            commands.push_back({ .id = u8"page:" + std::u8string { page.key }, .label = u8"페이지 열기: " + std::u8string { page.label } });
-        commands.push_back({ .id = u8"view.sidebar", .label = u8"사이드바 접기·펴기", .shortcut = { luil::key_code::key_b, true } });
-        return commands;
+        return commands_with({});
     }
 
     bool command_palette_host::handle(const luil::app_message& message)
@@ -93,7 +103,7 @@ namespace demo {
         return luil::focus_request { .id = focus_revision_, .surface = u8"palette", .target = luil::ui_element_id { luil::ui_element_kind::command_palette_search, u8"palette" } };
     }
 
-    std::vector<luil::win32::ui_popup> command_palette_host::make_popups(const float window_width, const float top, const float scale) const
+    std::vector<luil::win32::ui_popup> command_palette_host::make_popups(const float window_width, const float top, const float scale, const luil::undo_command_state& undo) const
     {
         std::vector<luil::win32::ui_popup> popups {};
         if (open_ == false)
@@ -101,7 +111,7 @@ namespace demo {
 
         luil::command_palette_config config {};
         config.owner = u8"palette";
-        config.commands = palette_commands();
+        config.commands = commands_with(undo);
         config.query = luil::make_text_input_view(query_, composition_, target_palette);
         config.placeholder = u8"명령 찾기";
         config.empty_label = u8"일치하는 명령 없음";

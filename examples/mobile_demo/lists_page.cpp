@@ -1,6 +1,7 @@
 #include "mobile_demo/lists_page.h"
 
 #include "luil/generated/codicons.h"
+#include "luil/ui/button_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/grouped_list_element.h"
 #include "luil/ui/list_element.h"
@@ -32,6 +33,10 @@ namespace mobile_demo {
         // 목록 셋을 나란히 둘 수 있는 폭이다 (논리 픽셀). 그보다 좁으면 하나씩 고른다.
         constexpr float wide_lists_width { 720.0f };
         constexpr float view_choice_height { 36.0f };
+        // 되돌리기 단추 둘과 그 아래 상태 글이 차지하는 높이와 단추의 폭·간격이다. 단추는 손가락 높이를 지킨다.
+        constexpr float history_button_width { 120.0f };
+        constexpr float history_gap { 8.0f };
+        constexpr float history_label_gap { 4.0f };
 
         // tree view가 보여 주는 고정 트리다 (pre-order).
         // 무엇이 펼쳐졌는지는 **앱 상태**이고, 목록에는 "지금 보이는 줄들"만 준다 —
@@ -251,18 +256,43 @@ namespace mobile_demo {
         {
             if (reorder->moved == reorder->target)
                 return true;
-            auto find = [this](const std::u8string& value) {
-                for (auto position = items_.begin(); position != items_.end(); ++position)
+            // 옮긴 결과를 먼저 새 순서로 만든다. 걸음은 옮기기 전과 후의 순서 전체를 든다.
+            std::vector<std::u8string> order { items_ };
+            auto find = [&order](const std::u8string& value) {
+                for (auto position = order.begin(); position != order.end(); ++position)
                     if (*position == value)
                         return position;
-                return items_.end();
+                return order.end();
             };
             const auto moved { find(reorder->moved) };
-            if (moved == items_.end())
+            if (moved == order.end())
                 return true;
             const std::u8string value { *moved };
-            items_.erase(moved);
-            items_.insert(find(reorder->target), value);
+            order.erase(moved);
+            order.insert(find(reorder->target), value);
+            if (order == items_)
+                return true;
+            std::size_t weight { 0 };
+            for (const std::u8string& item : items_)
+                weight += 2u * (sizeof(std::u8string) + item.size());
+            const luil::app_message redo { reorder_restore_intent { std::move(order) } };
+            // 처음 실행도 다시 실행과 같은 메시지를 적용한다. 재생 메시지는 기록하지 않으므로 걸음이 두 번 쌓이지 않는다.
+            history_.push({ .label = u8"순서 바꿈", .undo = luil::app_message { reorder_restore_intent { items_ } }, .redo = redo, .weight = weight });
+            return handle(redo);
+        }
+        if (const auto* const restore { message.get<reorder_restore_intent>() }; restore != nullptr)
+        {
+            items_ = restore->order;
+            return true;
+        }
+        if (message.get<list_undo_intent>() != nullptr)
+        {
+            static_cast<void>(history_.undo([this](const luil::app_message& step) { static_cast<void>(handle(step)); }));
+            return true;
+        }
+        if (message.get<list_redo_intent>() != nullptr)
+        {
+            static_cast<void>(history_.redo([this](const luil::app_message& step) { static_cast<void>(handle(step)); }));
             return true;
         }
         return false;
@@ -290,6 +320,12 @@ namespace mobile_demo {
             column->add_gap(8.0f);
             header_height = note_line_height + 8.0f;
         }
+        // 재배열을 되돌리는 단추와 기록의 상태다.
+        column->add(make_history_controls(), touch_height);
+        column->add_gap(history_label_gap);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"list-history" }, history_text(), note_text_size, luil::label_color_role::dim), note_line_height);
+        column->add_gap(8.0f);
+        header_height += touch_height + history_label_gap + note_line_height + 8.0f;
 
         // 두 판이 나머지를 나눠 갖고, 나눈 자리는 손잡이가 옮긴다.
         // 아래 판의 높이가 앱 상태이고 위 판이 나머지를 갖는다 (화면이 커지면 위가 먹는다).
@@ -314,6 +350,35 @@ namespace mobile_demo {
         column->add_gap(6.0f);
         column->add(make_grouped_section(grouped_height), grouped_height);
         return column;
+    }
+
+    std::unique_ptr<luil::ui_element> lists_page::make_history_controls() const
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = history_gap;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"list-history-controls" }, config) };
+        const auto history_button = [&row](std::u8string owner, std::u8string text, const char32_t glyph, luil::ui_action action, const bool enabled) {
+            luil::text_button_config button_config {};
+            button_config.text = std::move(text);
+            button_config.glyph = glyph;
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, std::move(button_config)) };
+            button->set_action(luil::ui_trigger::left_click, std::move(action));
+            // 할 일이 없으면 끈다. 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.
+            button->set_enabled(enabled);
+            row->add(std::move(button), history_button_width);
+        };
+        history_button(u8"list-undo", u8"되돌리기", luil::codicons::icon_discard, luil::make_message_action(list_undo_intent {}), history_.can_undo());
+        history_button(u8"list-redo", u8"다시 실행", luil::codicons::icon_redo, luil::make_message_action(list_redo_intent {}), history_.can_redo());
+        return row;
+    }
+
+    std::u8string lists_page::history_text() const
+    {
+        const std::u8string_view next { history_.undo_label() };
+        return u8"되돌리기 " + to_u8(static_cast<int>(history_.undo_count()))
+            + u8" · 다시 실행 " + to_u8(static_cast<int>(history_.redo_count()))
+            + u8" · 다음: " + (next.empty() ? std::u8string { u8"없음" } : std::u8string { next });
     }
 
     std::unique_ptr<luil::ui_element> lists_page::make_view_choice() const
