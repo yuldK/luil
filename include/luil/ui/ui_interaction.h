@@ -188,7 +188,7 @@ namespace luil {
         std::chrono::milliseconds long_press_time { 600 };
         // 같은 확대 보기의 두 접촉만 핀치로 잇는다. 원시 웹뷰 입력과는 별개다.
         bool pinch_enabled { true };
-        // 이전·현재 간격이 모두 이 거리 이상일 때만 비율을 만든다.
+        // 이전·현재 간격이 모두 이 거리 이상일 때만 비율과 각도를 만든다.
         float minimum_pinch_distance { 24.0f };
         // 길게 누르기로 우클릭 액션이 실제로 나갈 때 햅틱(`haptic_feedback::long_press`)을 한 번 낸다.
         //  - 대상에 우클릭 액션이 없거나 그 액션이 아무것도 내지 않으면 내지 않는다.
@@ -197,11 +197,16 @@ namespace luil {
         bool long_press_haptic { false };
         // 빠르게 쓸고 놓으면 최근 속도로 스크롤을 잇고 서서히 멈춘다.
         bool inertia_enabled { true };
+        // 같은 확대 보기의 핀치가 각도도 알린다 (rotate-gesture-design.md). 보기가 `rotate_by`를 줘야 선다.
+        //  - 진행 중에 끄면 그 접촉의 회전만 멈추고 핀치와 이동은 이어진다. 다시 켜도 되살아나지 않는다.
+        bool rotate_enabled { true };
+        // 두 접촉의 선이 쌓아 돈 각도(도)가 이만큼 되어야 회전이 선다. 유한한 양수여야 한다.
+        float minimum_rotation_angle { 6.0f };
 
         [[nodiscard]] bool operator==(const touch_gesture_config&) const noexcept = default;
     };
 
-    // 거리는 유한한 양수, 시간은 양수, 그리고 스크롤 시간 창이 길게 누르기보다 짧아야 한다.
+    // 거리와 회전 문턱 각도는 유한한 양수, 시간은 양수, 그리고 스크롤 시간 창이 길게 누르기보다 짧아야 한다.
     [[nodiscard]] bool valid_touch_gesture_config(const touch_gesture_config& config) noexcept;
 
     // 끄는 동안의 가장자리 자동 스크롤이다 (drag-auto-scroll-design.md).
@@ -611,6 +616,10 @@ namespace luil {
                 std::uint32_t id { 0 };
                 float x { 0.0f };
                 float y { 0.0f };
+                // 두 접촉의 선이 돈 각도의 부호째 합이다 (도). 문턱을 넘기 전에만 쌓는다.
+                float rotation_sum { 0.0f };
+                // 합이 문턱에 닿아 회전이 섰다. 그 쌍이 끝날 때까지 유지한다 (쌍의 것이라 하나를 떼면 둘 다 지워진다).
+                bool rotating { false };
             };
             std::optional<second_contact> second {};
             // 누른 자리의 활성 element다. 없으면 빈 곳(또는 비활성)을 누른 것이다.

@@ -60,6 +60,11 @@ namespace luil::testing {
         {
             float value { 1.0f };
         };
+        struct rotate_intent
+        {
+            float degrees { 0.0f };
+            zoom_point anchor {};
+        };
         struct command_intent
         {
             std::u8string command {};
@@ -143,6 +148,8 @@ send();
                     zoom_ = pan_by(zoom_config(), { 630.0f, 310.0f }, pan->delta);
                 else if (const auto* value { message.get<zoom_to_intent>() })
                     zoom_ = zoom_about(zoom_config(), { 630.0f, 310.0f }, value->value / zoom_.zoom, {});
+                else if (const auto* rotate { message.get<rotate_intent>() })
+                    zoom_ = rotate_about(zoom_config(), { 630.0f, 310.0f }, rotate->degrees, rotate->anchor);
                 else if (const auto* command { message.get<command_intent>() })
                 {
                     if (command->command == u8"pan")
@@ -253,6 +260,7 @@ send();
                 status["zoom"] = zoom_.zoom;
                 status["zoom_x"] = zoom_.origin.x;
                 status["zoom_y"] = zoom_.origin.y;
+                status["rotation"] = zoom_.rotation;
                 status["left"] = left_;
                 status["right"] = right_;
                 status["scroll"] = scroll_;
@@ -327,6 +335,8 @@ send();
                     .zoom_by = [](const float factor, const zoom_point anchor) { return make_app_action(zoom_intent { factor, anchor }); },
                     .pan_by = [](const zoom_point delta) { return make_app_action(pan_intent { delta }); },
                     .zoom_to = [](const float value) { return make_app_action(zoom_to_intent { value }); },
+                    .rotate_by = [](const float degrees, const zoom_point anchor) { return make_app_action(rotate_intent { degrees, anchor }); },
+                    .rotation = zoom_.rotation,
                 };
             }
             zoom_view_state zoom_ {};
