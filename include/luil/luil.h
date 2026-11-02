@@ -18,6 +18,7 @@
 #include "luil/text/font_style.h"
 #include "luil/text/fonts.h"
 #include "luil/text/grapheme.h"
+#include "luil/text/line_break.h"
 #include "luil/text/text_change.h"
 #include "luil/text/text_edit.h"
 #include "luil/text/utf8_text.h"

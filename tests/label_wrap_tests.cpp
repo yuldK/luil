@@ -115,3 +115,20 @@ TEST_CASE("A wrapping label breaks at the same places at any scale", "[ui][label
     // 높이는 논리 픽셀이라 배율과 상관없다.
     REQUIRE(single.height == doubled.height);
 }
+
+TEST_CASE("A wrapping label breaks after hyphens and slashes and keeps Korean words", "[ui][label][wrap][line-break]")
+{
+    // 42px면 한 줄에 일곱 글자다.
+    const luil::label_config hyphens { wrapping(u8"alpha-beta-gamma") };
+    const luil::label_wrap hyphen_wrap { luil::label_element::measure_wrap(hyphens, context_at(1.0f), 42.0f) };
+    REQUIRE(line_texts(hyphen_wrap, hyphens.text) == std::vector<std::u8string> { u8"alpha-", u8"beta-", u8"gamma" });
+    const luil::label_config address { wrapping(u8"see https://example.com/a/b") };
+    const luil::label_wrap address_wrap { luil::label_element::measure_wrap(address, context_at(1.0f), 84.0f) };
+    REQUIRE(line_texts(address_wrap, address.text) == std::vector<std::u8string> { u8"see https://", u8"example.com/a/", u8"b" });
+
+    // 한국어는 어절에서 바꾸고, 정책을 `unicode`로 열면 음절 사이에서도 바꾼다.
+    luil::label_config korean { wrapping(u8"설정을 저장했습니다") };
+    REQUIRE(line_texts(luil::label_element::measure_wrap(korean, context_at(1.0f), 36.0f), korean.text) == std::vector<std::u8string> { u8"설정을 ", u8"저장했습니다" });
+    korean.line_break = luil::text::line_break_policy::unicode;
+    REQUIRE(line_texts(luil::label_element::measure_wrap(korean, context_at(1.0f), 36.0f), korean.text) == std::vector<std::u8string> { u8"설정을 저장", u8"했습니다" });
+}

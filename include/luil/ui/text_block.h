@@ -71,9 +71,12 @@ namespace luil {
         text_vertical_align vertical { text_vertical_align::center };
         // 한 줄 글이 넘칠 때 줄이는 자리다. 여러 줄 글은 마지막 줄의 끝을 줄인다.
         text_elide elide { text_elide::end };
-        // 상자 폭에서 줄을 바꾼다. 규칙은 여러 줄 label과 같다 — 공백에서 먼저 바꾸고 긴 낱말은 글자소 경계에서
-        // 바꾼다. `\n`은 줄 바꿈이다. 거짓이면 한 줄이고 글 안의 줄바꿈은 `draw_text`의 규칙을 따른다.
+        // 상자 폭에서 줄을 바꾼다. 규칙은 여러 줄 label과 같다 — UAX #14의 후보(공백·하이픈·슬래시 뒤, 한자·가나
+        // 사이)에서 바꾸고, 후보가 없는 긴 낱말은 글자소 경계에서 바꾼다. `\n`은 줄 바꿈이다. 거짓이면 한 줄이고 글
+        // 안의 줄바꿈은 `draw_text`의 규칙을 따른다.
         bool wrap { false };
+        // 후보를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾼다.
+        text::line_break_policy line_break { text::line_break_policy::hangul_words };
         // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 보이는 줄이 남은 글을 한 줄로 펴서 끝을 `…`로 줄인다.
         std::size_t max_lines { 0 };
         // 한 줄의 높이다 (논리 픽셀). 0이면 label의 한 줄 높이(`text_line_height(size, 7)`)다.

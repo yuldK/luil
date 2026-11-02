@@ -1,6 +1,8 @@
 #include "luil/ui/text_layout.h"
 
 #include "luil/text/grapheme.h"
+#include "luil/text/line_break.h"
+#include "ui/line_fold.h"
 #include "ui/text_layout_internal.h"
 
 #include <algorithm>
@@ -180,6 +182,9 @@ namespace luil {
         // 접지 않으면 폭은 기하에 쓰이지 않는다. 남겨 두면 폭만 다른 같은 배치가 cache를 따로 채운다.
         if (request.wrap == false || std::isfinite(request.width) == false || request.width < 0.0f)
             request.width = 0.0f;
+        // 정책도 접을 때만 기하를 바꾼다. 한 줄 배치는 정책이 달라도 한 항목이다.
+        if (request.wrap == false)
+            request.line_break = text::line_break_policy::hangul_words;
         if (std::isfinite(request.line_height) == false || request.line_height < 0.0f)
             request.line_height = 0.0f;
     }
@@ -244,35 +249,26 @@ namespace luil {
                 bool approximate { false };
                 const auto stops { stops_of(content, full, approximate) };
                 const auto boundaries { boundaries_of(content) };
+                // 접어야 하는 문단에서만 후보를 구한다. 자리 고르기는 여러 줄 칸의 측정기 길과 같은 함수다.
+                const auto opportunities { text::line_break_opportunities(content, request.line_break) };
                 std::size_t first { 0 };
                 while (first + 1 < boundaries.size())
                 {
                     std::size_t fit { first + 1 };
                     while (fit + 1 < boundaries.size() && stops[fit + 1].x - stops[first].x <= request.width)
                         ++fit;
-                    std::size_t cut { boundaries[fit] };
-                    // 자르는 자리는 언제나 글자소 경계다. 공백 뒤 결합 부호는 공백과 한 글자소라
-                    // byte 단위로 건너면 그 부호가 어느 줄에도 속하지 않는다.
-                    while (cut < content.size() && content[cut] == u8' ')
-                        cut = *std::upper_bound(boundaries.begin(), boundaries.end(), cut);
-                    if (cut == boundaries[fit] && cut < content.size())
+                    const std::size_t start { boundaries[first] };
+                    line_fold fold { choose_line_fold(content, boundaries, opportunities, start, boundaries[fit]) };
+                    auto row { shape(content.substr(start, fold.cut - start), paragraph + start) };
+                    // 줄 경계 문맥으로 폭이 늘면 앞 후보로 물러서 다시 줄인다. 후보가 없으면 글자소로 물러선다.
+                    // 글자소 하나는 넘쳐도 보존하고, 매단 공백 때문에 넓어진 줄은 줄이지 않는다.
+                    while (row.width > request.width && fold.cut > boundaries[first + 1] && fold.hanging == false)
                     {
-                        const auto space { content.substr(boundaries[first], cut - boundaries[first]).find_last_of(u8' ') };
-                        if (space != std::u8string_view::npos)
-                            cut = *std::lower_bound(boundaries.begin(), boundaries.end(), boundaries[first] + space + 1);
+                        fold = previous_line_fold(content, boundaries, opportunities, start, fold.cut);
+                        row = shape(content.substr(start, fold.cut - start), paragraph + start);
                     }
-                    auto row { shape(content.substr(boundaries[first], cut - boundaries[first]), paragraph + boundaries[first]) };
-                    // 줄 경계 문맥으로 폭이 늘면 다시 줄인다. 글자소 하나는 넘쳐도 보존한다.
-                    while (row.width > request.width && cut > boundaries[first + 1] && content[cut - 1] != u8' ')
-                    {
-                        cut = *std::prev(std::lower_bound(boundaries.begin(), boundaries.end(), cut));
-                        row = shape(content.substr(boundaries[first], cut - boundaries[first]), paragraph + boundaries[first]);
-                    }
-                    std::size_t visible { cut };
-                    while (cut < content.size() && visible > boundaries[first] && content[visible - 1] == u8' ')
-                        --visible;
-                    append(paragraph + boundaries[first], paragraph + cut, cut < content.size(), std::move(row), paragraph + visible);
-                    first = static_cast<std::size_t>(std::lower_bound(boundaries.begin(), boundaries.end(), cut) - boundaries.begin());
+                    append(paragraph + start, paragraph + fold.cut, fold.cut < content.size(), std::move(row), paragraph + fold.visible);
+                    first = static_cast<std::size_t>(std::lower_bound(boundaries.begin(), boundaries.end(), fold.cut) - boundaries.begin());
                 }
             }
             if (newline == std::u8string_view::npos)

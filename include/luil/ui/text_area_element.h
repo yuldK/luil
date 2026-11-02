@@ -28,7 +28,7 @@ namespace luil {
     // 다시 접는다 — 수백 줄 메모에는 문제가 없지만 수십만 바이트 글에서는 키 하나에 한 frame을 넘긴다
     // (docs/text-area-wrap-design.md "비용"). 앱이 이것을 하나 쥐고 같은 칸의 설정(`text_area_config::wrap_cache`)에
     // frame마다 넘기면, 글이 같은 문단은 다시 재지 않는다.
-    //  - 접는 폭·글자 크기·배율·글꼴(표본 글의 폭)이 바뀌면 통째로 비운다.
+    //  - 접는 폭·글자 크기·배율·글꼴(표본 글의 폭)·줄 나눔 정책이 바뀌면 통째로 비운다.
     //  - Shaping 구성에서는 같은 글이라도 굵기 구간이 다르면 따로 쥔다. 굵기는 advance를 바꾸므로, 글로만 찾으면
     //    코드·diff의 `}`나 빈 줄처럼 되풀이되는 문단이 서로의 자리를 덮어 frame마다 다시 shape된다.
     //  - Shaping 구성에서는 보이는 화면 줄의 배치도 쥔다. 접지 않은 칸의 줄은 문단 전체라 전역 배치 cache의
@@ -78,6 +78,8 @@ namespace luil {
         float scale_ { 0.0f };
         float sample_width_ { 0.0f };
         bool wrap_ { true };
+        // 접은 자리를 고른 규칙이다. 바뀌면 문단의 접은 자리와 화면 줄의 배치를 함께 비운다.
+        text::line_break_policy line_break_ { text::line_break_policy::hangul_words };
         bool native_ { false };
         text_layout_face face_ { text_layout_face::ui };
         std::uint64_t font_revision_ { 0 };
@@ -104,6 +106,8 @@ namespace luil {
         // 읽기 전용에서도 선택·복사와 caret은 남는다.
         bool read_only { false };
         bool wrap { true };
+        // 접는 자리를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾼다. 바꾸면 `wrap_cache`가 통째로 비워진다.
+        text::line_break_policy line_break { text::line_break_policy::hangul_words };
         text_face face { text_face::ui };
         float font_size { 0.0f };
         float scroll_x { 0.0f };
@@ -151,7 +155,8 @@ namespace luil {
     //
     // **줄은 칸 폭에서 넘겨 접는다** (docs/text-area-wrap-design.md). 배치가 `arrange_context::measure_text`로
     // 줄을 접어 내용 높이를 정하고, 그리기·포인터 판정·IME 질의가 그 접은 줄을 그대로 쓴다.
-    //  - 낱말 사이(공백 뒤)에서 접는다. 한 낱말이 칸보다 길면 글자 사이에서 접는다. 공백은 윗줄 끝에 매달린다.
+    //  - UAX #14의 후보(공백·하이픈·슬래시 뒤, 한자·가나 사이)에서 접는다 (`text_area_config::line_break`). 후보가
+    //    없는 낱말이 칸보다 길면 글자소 사이에서 접는다. 공백(U+0020·U+3000 등)은 윗줄 끝에 매달린다.
     //  - 접는 폭은 흘리는 칸이면 막대 자리를 늘 뺀 폭이다. 막대가 서는 순간 글 전체가 다시 접히지 않는다.
     //  - 접은 자리의 offset은 윗줄의 끝이자 아랫줄의 처음이다. 기본은 아랫줄이고, 접은 줄의 End나 그 줄 끝을
     //    누르면 caret이 윗줄 끝에 붙는다 (`text_edit_state::caret_upstream`, `caret_at_point`).
