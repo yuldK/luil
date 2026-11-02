@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/app/app_host.h"
+#include "luil/app/notification.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/ui_element.h"
@@ -133,6 +134,17 @@ namespace luil {
         {
             static_cast<void>(permission);
             static_cast<void>(state);
+            return {};
+        }
+
+        // OS 알림에 사건이 있었다 (`show_notification`, os-notification-design.md). 반환 메시지는 app inbox로 간다.
+        // 빈 메시지는 게시하지 않는다.
+        //  - inbox가 차서 게시하지 못하면 라이브러리가 사건을 되돌려 두었다가 다음 frame 게시 때 다시 부른다. 그래서 같은 사건으로
+        //    두 번 이상 불릴 수 있다. 메시지만 짓고 다른 일을 하지 않는다.
+        //  - 눌림 사건 뒤 라이브러리가 보이는 주 창을 앞으로 세운다 (숨은 주 창은 그대로다).
+        [[nodiscard]] virtual app_message make_notification_message(const notification_event& event)
+        {
+            static_cast<void>(event);
             return {};
         }
     };

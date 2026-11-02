@@ -48,6 +48,13 @@ luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 
 - luil은 libsmb2를 고치지 않고 쓴다. 고쳐 쓰려면 고친 소스도 LGPL로 공개해야 한다.
 - 같은 저장소의 libdcerpc 부분은 BSD-2 라이선스다.
 
+## OS 알림
+
+[OS 알림](../os-notification-design.md)(`show_notification`)을 쓰는 앱이 지는 것이다.
+
+- Windows는 `window_config::identity`에 앱 식별(AUMID)을 준다. 라이브러리가 시작할 때 `HKCU\Software\Classes\AppUserModelId\<id>`를 쓰고 스스로 지우지 않는다. 앱의 제거 길에서 `close_all_notifications` 뒤 `win32::unregister_app_identity`를 부른다. 아이콘은 실행 파일 리소스가 아니라 PNG·ICO 파일의 절대 경로로 준다.
+- Android는 매니페스트에 `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`를 싣고, targetSdk 33 이상이면 `app_host::request_permission(app_permission::notifications)`으로 묻는다.
+
 ## HTTP와 웹뷰
 
 `luil::net::http_client`의 사용 여부는 앱이 정하지만 별도 선택 빌드 기능은 아니다. 응답을 앱 메시지로 옮겨 `app_host::post_app_message()`에 전달할 수 있다. 이 게시 함수는 어느 스레드에서든 호출 가능하며 포화 시 거절된 메시지는 `app_inbox_statistics()`로 관찰한다. 앱이 소유한 클라이언트는 host가 사라지기 전에 `stop()`으로 중지한다.

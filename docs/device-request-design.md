@@ -217,6 +217,12 @@ targetSdk 37 이상인 앱은 이것 없이 로컬 주소로 가는 TCP 연결�
   - 이미 "다시 묻지 않음"으로 거절한 권한처럼 시스템이 대화상자 없이 답하면 초점을 잃지 않는다. 물은 뒤 1초가
     지나도록 초점이 그대로면 그때 다시 읽은 상태를 답으로 알린다.
   - 설정 앱에서 권한을 바꾸고 돌아오면(`APP_CMD_RESUME`) 상태를 다시 읽는다. 묻는 중이 아니었으면 메시지는 없다.
+- **알림 권한.** `app_permission::notifications`는 [OS 알림](os-notification-design.md)이 쓴다. 기기와 앱의 targetSdk가
+  둘 다 33 이상일 때만 `POST_NOTIFICATIONS`를 묻고(`api_level_notification_permission`), 묻기와 답은 위의 로컬 네트워크와
+  같은 길이다. 앱의 매니페스트에 `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`가 있어야 한다
+  (mobile demo는 flavor 매니페스트에 둔다). targetSdk가 33보다 낮은 앱이 13 이상 기기에서 돌면 시스템이 첫 알림 채널을
+  만들 때 스스로 묻는다. 그때 권한은 `not_required`이고 답 전까지 `notification_status()`가 `blocked`다. Windows는 늘
+  `not_required`이고, 사용자가 끈 알림은 `notification_status()`가 말한다.
 - **Android 16의 시험 스위치는 따르지 않는다.** Android 16은 `adb shell am compat enable RESTRICT_LOCAL_NETWORK
   <패키지>`(재부팅 필요)로 같은 차단을 시험할 수 있지만, 그때 보는 권한은 `NEARBY_WIFI_DEVICES`라 실제 기기의
   동작과 다르다. 그래서 Android 16 기기에서는 `not_required`로 답한다.
@@ -232,7 +238,7 @@ targetSdk 37 이상인 앱은 이것 없이 로컬 주소로 가는 TCP 연결�
 | 길게 누르기 햅틱 | 메뉴가 열리는 세 자리에서 한 번, 짧은 탭·우클릭 없는 대상·빈 우클릭·자격 잃은 접촉·꺼진 설정·마우스에서는 없음 (controller test) |
 | 창 폭 등급 | 600·840 경계의 양쪽, 바꾼 경계, 뒤집힌 경계, 유한하지 않은 폭, 물리 폭과 배율로 지은 metrics, 세 값짜리만 넓힌 delegate로 이어지는 기본 구현 (core test) |
 | 안전 영역 밖 | 자식 문맥이 표면을 잇는다, 바깥 띠의 모양, 세로·가로 Android와 Windows의 표면 사각형 (core test). scrim 띠와 늘린 시트 바탕의 픽셀, 표면을 모를 때의 창 바탕 (raster test) |
-| 권한 | 기기·targetSdk 판에 따른 권한 이름(37·37만 묻는다, 읽지 못한 targetSdk), 묻는 길이 없으면 `not_required`·묻지 않음, 플랫폼 조회·묻기를 아무 thread에서, 플랫폼 예외는 `denied`·묻지 않음 (core·host test) |
+| 권한 | 기기·targetSdk 판에 따른 권한 이름(로컬 네트워크는 37·37, 알림은 33·33만 묻는다, 읽지 못한 targetSdk), 묻는 길이 없으면 `not_required`·묻지 않음, 플랫폼 조회·묻기를 아무 thread에서, 플랫폼 예외는 `denied`·묻지 않음 (core·host test) |
 | 햅틱 출력 | 다른 thread의 `perform_haptic`과 input thread의 `haptic_request`가 출력에 닿고 앱 inbox에는 가지 않음, 출력이 없으면 아무 일도 없음 (host test). 뜻별 상수와 API 수준별 물러섬 (core test) |
 
 기기 확인은 [Android 이식 계획](android-port-plan.md)의 "기기 요청" 절에 적는다.

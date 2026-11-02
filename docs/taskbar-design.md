@@ -212,7 +212,7 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 **`icon_from_image`.** `make_icon(const ui_image&, int size, std::u8string& error)`와 `HICON` 소유자 `owned_icon`이 이 파일에 있다. tray는 크기만 달리해 같은 함수를 쓴다.
 
-**앱 식별(AUMID).** taskbar는 세우지 않는다. 진행률·오버레이는 `HWND`에 거는 것이라 AUMID 없이 선다고 알려져 있다. 이 저장소에서는 실측 전이다. 빌드 폴더의 실행 파일로 데모에서 확인한다. 서지 않으면 os_notify(R2)의 앱 식별이 먼저 서야 하고, 그때 `window_config`에 필드가 붙는다.
+**앱 식별(AUMID).** taskbar는 세우지 않는다. 진행률·오버레이는 `HWND`에 거는 것이라 AUMID 없이 선다고 알려져 있다. 이 저장소에서는 실측 전이다. 빌드 폴더의 실행 파일로 데모에서 확인한다. 서지 않으면 os_notify(R2)의 앱 식별이 먼저 서야 하고, 그때 `window_config`에 필드가 붙는다. 앱 식별은 [OS 알림](os-notification-design.md)이 `window_config::identity`로 세웠다. 진행률·오버레이는 그 필드와 상관없이 `HWND`에 건다. 식별을 단 앱에서 진행률이 그대로 서는지는 그 문서의 사람 확인에 있다.
 
 **점프 목록.** G7(두 번째 인스턴스가 첫 인스턴스에 인자 넘기기)이 정해지고 앱 식별이 서면 `taskbar_request`에 `jump_list` 필드를 더한다. 같은 규약(바뀐 것만 다시 구성)이다. 작업은 인자 달린 새 프로세스라 G7 없이는 떠 있는 앱에 닿지 않고 창이 하나 더 뜬다. 인자 따옴표는 `win32::make_command_line`([command_line.h](../src/win32/command_line.h))을 쓰고, `ICustomDestinationList`는 `propsys`를 링크 목록에 더한다.
 
@@ -241,4 +241,4 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 - 썸네일 도구 막대 단추(결정 2), 썸네일 자르기·툴팁, 탭 썸네일.
 - `FlashWindowEx`로 주목을 끄는 것. 활성화 요청은 [나중에 서는 초점](deferred-focus-design.md)이 다룬다.
 - 숨은 주 창을 대신하는 표시(트레이 툴팁 등)와 알림 배지 숫자.
-- 앱 식별(AUMID) 설정, Android 런처 숏컷·배지.
+- Android 런처 숏컷·배지. 앱 식별(AUMID)은 [OS 알림](os-notification-design.md)이 세운다.

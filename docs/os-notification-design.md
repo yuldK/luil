@@ -87,26 +87,26 @@ namespace luil::win32 {
 
 | 파일 | 몫 |
 | --- | --- |
-| `src/host/notification_queue.h`·`.cpp` (core) | 사건 대기열, 되보내기와 유실 수(결정 8). OS 헤더가 없다 |
-| `src/win32/toast_payload.h`·`.cpp` | 토스트 XML을 짓는 순수 함수. 이스케이프·자르기·활성화 인자 |
-| `src/win32/app_identity.h`·`.cpp` | AUMID 검증, 레지스트리 쓰기·지우기, 활성화기 CLSID, 프로세스 AUMID |
-| `src/win32/notification_win32.cpp` | WinRT 호출, 이벤트 연결, 임시 그림, COM 활성화기 |
+| `src/host/notification_queue.h`·`.cpp` (core) | 사건 대기열, 되보내기와 유실 수(결정 8), 큐를 비우며 앱에 내는 `deliver_notification_events`. 두 플랫폼이 같이 쓰는 id 규칙·UTF-8 검사·자르기(`prepare_notification_text`)와 Android 요청 번호도 여기 둔다. OS 헤더가 없다 |
+| `src/win32/toast_payload.h`·`.cpp` | 토스트 XML을 짓는 순수 함수. 이스케이프·그림 주소·활성화 인자 |
+| `src/win32/app_identity.h`·`.cpp` | AUMID 검증, 레지스트리 항목 짓기·쓰기·지우기, 활성화기 CLSID |
+| `src/win32/notification_win32.h`·`.cpp` | 식별 적용(프로세스 AUMID), WinRT 호출, 이벤트 연결, 임시 그림, COM 활성화기. 헤더는 주 창이 잇는 비공개 자리다 |
 | `src/android/notification_android.cpp` | 채널·`Notification.Builder`·`PendingIntent`를 JNI로 부른다 |
 
 ## 규칙
 
-**올리기.** 아래 순서로 본다. id가 규칙 밖이거나 글이 잘못된 UTF-8이면 `failed`이고 OS를 부르지 않는다. 제목은 256, 본문은 1024 코드 포인트에서 자르고 끝에 `…`을 단다. 이 상한은 라이브러리가 정한 것이다. `notification_status()`가 `available`이 아니면 `blocked`·`permission_needed`는 `failed`, `unsupported`는 `unsupported`다(결정 9). 같은 id는 바꾸기다. Windows는 tag(id)와 group(`luil`), Android는 tag(id)와 번호 0이다. `close_notification`은 그 하나를, `close_all_notifications`는 이 앱의 것을 모두 거둔다. 앱이 거둔 알림은 사건이 없다.
+**올리기.** 아래 순서로 본다. id가 규칙 밖이거나 글이 잘못된 UTF-8이면 `failed`이고 OS를 부르지 않는다. 제목은 256, 본문은 1024 코드 포인트를 넘으면 앞의 255·1023개에 `…`을 달아 상한 안에 둔다. 이 상한은 라이브러리가 정한 것이다. `notification_status()`가 `available`이 아니면 `blocked`·`permission_needed`는 `failed`, `unsupported`는 `unsupported`다(결정 9). 같은 id는 바꾸기다. Windows는 tag(id)와 group(`luil`), Android는 tag(id)와 번호 0이다. `close_notification`은 그 하나를, `close_all_notifications`는 이 앱의 것을 모두 거둔다. 앱이 거둔 알림은 사건이 없다.
 
-**토스트 XML.** `toast_payload`가 글로 짓고 `XmlDocument::LoadXml`로 읽는다. 템플릿은 `ToastGeneric`이고 `<text>` 둘, 그림이 있으면 `<image placement="appLogoOverride">`, `silent`이면 `<audio silent="true"/>`다. 글의 `& < > " '`는 개체 참조로 바꾸고, XML 1.0이 받지 않는 제어 문자(탭·줄바꿈 밖의 U+0000~U+001F)는 뺀다. 짝 없는 surrogate는 UTF-8 검사에서 이미 걸린다. `launch` 속성에는 `luil:<id>`만 싣는다. 그림 주소는 `file:///` 절대 경로이고 공백·`#`·`%`를 백분율 부호화한다.
+**토스트 XML.** `toast_payload`가 글로 짓고 `XmlDocument::LoadXml`로 읽는다. 템플릿은 `ToastGeneric`이고 `<text>` 둘(본문이 비면 하나), 그림이 있으면 `<image placement="appLogoOverride">`, `silent`이면 `<audio silent="true"/>`다. 글의 `& < > " '`는 개체 참조로 바꾸고, XML 1.0이 받지 않는 글자(탭·줄바꿈·복귀 밖의 U+0000~U+001F, U+FFFE·U+FFFF)는 뺀다. 짝 없는 surrogate는 UTF-8 검사에서 이미 걸린다. `launch` 속성에는 `luil:<id>`만 싣는다. 그림 주소는 `file:///` 절대 경로이고 공백·`#`·`%`를 백분율 부호화한다.
 
-**thread.** 공개 함수는 어느 thread에서나 부른다. 부른 thread에 COM apartment가 없으면 프로세스에 MTA 사용 표를 한 번 올린다(`CoIncrementMTAUsage`). UI thread의 STA(`com_sta_scope`)에서는 그대로 부른다. 이 STA에서 WinRT 활성화 팩토리가 서는지는 알려진 동작이나 실측 전이다. Windows의 `Activated`·`Dismissed`·`Failed`는 thread 풀에서 온다. 그 처리기는 사건을 `notification_queue`에 넣고 주 창에 `notification_event_message`(`WM_APP + 6`, [window_messages.h](../src/win32/window_messages.h) 표 끝)를 게시하기만 한다. UI thread가 그 메시지에서 큐를 비우며 `make_notification_message`를 부르고 `post_app_message_ticketed`로 게시한다. 앱 상태를 thread 풀에서 만지는 길은 없다. 라이브러리는 올린 `ToastNotification`을 거둘 때까지 쥐어 처리기가 살아 있게 한다.
+**thread.** 공개 함수는 어느 thread에서나 부른다. 부른 thread에 COM apartment가 없으면 프로세스에 MTA 사용 표를 한 번 올린다(`CoIncrementMTAUsage`). UI thread의 STA(`com_sta_scope`)에서는 그대로 부른다. 이 STA에서 WinRT 활성화 팩토리가 서는지는 알려진 동작이나 실측 전이다. Windows의 `Activated`·`Dismissed`·`Failed`는 thread 풀에서 온다. 처리기는 `FtmBase`를 단 agile 개체라 STA로 마샬되지 않는다. 그 처리기는 사건을 `notification_queue`에 넣고 주 창에 `notification_event_message`(`WM_APP + 6`, [window_messages.h](../src/win32/window_messages.h) 표 끝)를 게시하기만 한다. UI thread가 그 메시지에서 큐를 비우며 `make_notification_message`를 부르고 `post_app_message_ticketed`로 게시한다. 앱 상태를 thread 풀에서 만지는 길은 없다. 라이브러리는 올린 `ToastNotification`을 거둘 때까지 쥐어 처리기가 살아 있게 한다. 이 전역 상태는 정적 소멸을 하지 않는다. 프로세스가 끝날 때의 정적 소멸은 COM이 내려간 뒤일 수 있어 그때 WinRT 개체를 놓지 않는다. 주 창이 사건을 받는 자리에서 떨어지면(`detach_notification_window`, host를 거두기 전) 쥔 토스트의 처리기를 푼다.
 
 **사건.** `Dismissed`의 까닭이 `UserCanceled`면 `dismissed`이고, `ApplicationHidden`(앱이 거둠)과 `TimedOut`(알림 센터로 옮겨 감)은 사건이 없다. `Failed`는 HRESULT 글을 실은 `failed`다. 눌림은 결정 4의 길로 온다. 눌림 사건 뒤 라이브러리는 보이는 주 창을 앞으로 세운다. 최소화는 되살린다. [인자 넘기기](single-instance-args-design.md) 결정 5와 같은 helper다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다. 알림 클릭이 앞으로 세울 권한을 주는지는 실측 전이다.
 
-**앱 식별(Windows).** `identity.id`가 있으면 `run_application_window`가 `application_window`를 짓기 전에 한다(창보다 먼저여야 작업 표시줄 묶음이 맞는다). id가 규칙 밖이면 시작 실패다(잘못된 터치 설정과 같다).
+**앱 식별(Windows).** `identity.id`가 있으면 `run_application_window`가 `application_window`를 짓기 전에 한다(창보다 먼저여야 작업 표시줄 묶음이 맞는다). id가 규칙 밖이면 시작 실패다(잘못된 터치 설정과 같다). 규칙은 1~128 UTF-16 코드 단위, 올바른 UTF-8, 공백·제어 문자·백슬래시 없음이다. 백슬래시는 레지스트리 키의 구분자라 id가 하위 키로 갈린다. smoke test(`window_config::smoke_test`)는 id를 검사만 하고 적용하지 않는다.
 
 1. `SetCurrentProcessExplicitAppUserModelID(id)`. 이 프로세스의 창은 모두 이 id로 묶인다.
-2. `HKCU\Software\Classes\AppUserModelId\<id>`에 `DisplayName`, `IconUri`(있으면), `CustomActivator`(`activator`면)를 쓴다. 값이 같으면 쓰지 않는다.
+2. `HKCU\Software\Classes\AppUserModelId\<id>`에 `DisplayName`, `IconUri`(있으면), `CustomActivator`(`activator`면)를 쓴다. 값이 같으면 쓰지 않는다. `DisplayName`은 `display_name`, 비면 caption 제목, 그것도 비면 id다. 이번 설정이 뺀 `IconUri`·`CustomActivator`는 앞 실행이 쓴 값을 지운다.
 3. `activator`면 `HKCU\Software\Classes\CLSID\{clsid}\LocalServer32`에 `"<실행 파일>" -luil-notification`을 쓴다. CLSID는 AUMID에서 이름 기반 UUID(v5)로 짓는다. 앱이 GUID를 고르지 않아 데모의 값을 베낀 두 앱이 부딪히지 않는다.
 
 쓰기에 실패하면 시작은 이어지고 `notification_status()`가 `unsupported`, `show_notification`이 그 오류 글로 `failed`다. 라이브러리는 항목을 스스로 지우지 않는다. 앱이 꺼진 뒤에도 알림 센터의 알림이 앱을 가리켜야 해서다. 지우는 것은 앱의 제거 길(`unregister_app_identity`)이다. 실행 파일을 옮기면 다음 실행이 경로를 고쳐 쓴다. `run_application_window` 전에 `show_notification`을 부르면 식별이 아직 없어 `unsupported`다.
@@ -140,7 +140,8 @@ namespace luil::win32 {
 - 길 a: 라이브러리가 시작마다 `HKCU\Software\Classes\AppUserModelId\<id>`를 쓴다(규칙). 되는 것: 바로가기와 설치기가 없어도 빌드 폴더의 실행 파일이 토스트를 올린다. 사용자 권한만 든다. 대가: 레지스트리 항목이 남고 앱이 제거 길에서 지워야 한다. 이 길로 패키지 없는 앱의 토스트가 서고 이름·아이콘이 맞는지는 실측 전이다. `IconUri`는 이미지 파일 경로만 받는다고 알려져 실행 파일 리소스를 못 가리킨다.
 - 길 b: 시작 메뉴에 `System.AppUserModel.ID`·`ToastActivatorCLSID`를 단 바로가기를 만든다. 되는 것: 오래된 문서의 길이라 Windows 10 초기 판에서도 선다고 알려져 있다. 대가: 휴대용 앱이 사용자 시작 메뉴를 어지럽히고 `propsys`·`IShellLink` 코드가 는다.
 - 길 c: 설치기가 하고 라이브러리는 id만 받는다. 대가: 개발 중과 휴대용 실행에는 알림이 없다.
-- 권장: a. 공통 대가로, 식별을 단 프로세스는 `SetCurrentProcessExplicitAppUserModelID`를 걸어 이전에 고정한 바로가기(속성 없음)와 단추가 갈린다. 사용자는 다시 고정한다. 대가: 남는 레지스트리 항목, 실측 전 가정 하나. **승인 필요.**
+- 권장: a. 공통 대가로, 식별을 단 프로세스는 `SetCurrentProcessExplicitAppUserModelID`를 걸어 이전에 고정한 바로가기(속성 없음)와 단추가 갈린다. 사용자는 다시 고정한다. 대가: 남는 레지스트리 항목, 실측 전 가정 하나. **승인: 길 a (2026-11-02).**
+- 실측(2026-11-03, 이 저장소의 개발 PC): 레지스트리 항목만 쓴 빌드 폴더의 test 실행 파일이 토스트를 올렸다. `notification_status()`가 `available`, `show_notification`이 `ok`였고, 프로세스가 끝난 뒤 Windows PowerShell의 `ToastNotificationManager.History.GetHistory(aumid)`가 1개(tag `live-1`, group `luil`)를 되읽었다. 바로가기 길(b)로 바꿀 까닭은 없었다. 이름과 아이콘이 배너에 맞게 보이는지는 사람 확인으로 남는다.
 
 **3. 활성화기 CLSID.** 질문: COM 활성화기의 CLSID를 누가 정하는가.
 - 길 a: AUMID에서 이름 기반 UUID(v5)로 짓는다. 되는 것: 같은 id면 늘 같고 앱이 GUID를 다루지 않는다. 대가: SHA-1 계산(advapi32의 CryptoAPI, 이미 링크됨)이 든다. AUMID를 바꾸면 CLSID도 바뀐다.
@@ -158,7 +159,7 @@ namespace luil::win32 {
 - 길 a: 되는 것: 레지스트리 CLSID와 COM 서버가 없다. 대가: 알림 센터가 앱보다 오래 살지 못한다. 앱이 꺼져 있으면 알림이 사라진다.
 - 길 b: 되는 것: 앱이 꺼져도 알림이 남고 누르면 앱이 뜬다. 떠 있으면 G7 길을 거치지 않는다. 대가: CLSID 레지스트리, 시작 표식 처리(`notification_launch`), `CoRegisterClassObject`·`CoRevokeClassObject` 수명. `Activate`가 UI thread로 오는지와 `-Embedding`이 붙는지는 실측 전이다. 첫째가 등록에 실패했거나 끝나는 중이면 COM이 새 프로세스를 띄운다. 그 프로세스가 둘째면 앱의 G7 길(`send_to_primary`)로 표식 인자가 첫째에 가고 눌림은 잃는다. 앱은 `notification_launch`로 그 인자를 걸러낸다.
 - 길 c: 되는 것: G7을 그대로 쓴다. 대가: 사용자 단위 URL scheme을 등록해 웹 페이지의 링크도 앱을 띄울 수 있고, 클릭마다 프로세스가 하나 섰다 진다.
-- 권장: b. G7 확정 때 "앱이 꺼진 뒤의 알림 클릭은 os_notify가 따로 진다"고 했다. 표시·바꾸기·거두기와 프로세스 안 사건(길 a의 코드)을 먼저 한 커밋으로 내고, 활성화기를 다음 커밋으로 얹는다. 활성화기 실측이 막히면 첫 커밋에서 멈추고 a로 돌아간다. 대가: 크기가 XL에 가깝다. **승인 필요.**
+- 권장: b. G7 확정 때 "앱이 꺼진 뒤의 알림 클릭은 os_notify가 따로 진다"고 했다. 표시·바꾸기·거두기와 프로세스 안 사건(길 a의 코드)을 먼저 한 커밋으로 내고, 활성화기를 다음 커밋으로 얹는다. 활성화기 실측이 막히면 첫 커밋에서 멈추고 a로 돌아간다. 대가: 크기가 XL에 가깝다. **승인: 길 b (2026-11-02).**
 
 **5. Android 클릭 payload.** 질문: 누른 알림을 Java 없이 어떻게 아는가.
 - 길 a: 앞으로 세우기 + 콜드 스타트 extra(규칙). 되는 것: 꺼진 앱은 정확한 id를 받는다. 대가: 살아 있는 앱을 누르면 앞으로 오지만 사건이 없다. 새 intent를 받으려면 `onNewIntent`가 든다. `GameActivityCallbacks`([GameActivity.h](../third_party/game-activity-prep/include/game-activity/GameActivity.h) 162~298줄)에 그 콜백이 없고 하위 클래스는 Java다. 그래서 unsupported다.
@@ -185,13 +186,18 @@ namespace luil::win32 {
 - 길 a: `show_notification`이 `failed`이고 까닭은 `notification_status()`가 말한다. 되는 것: 앱이 "알림이 꺼져 있다"를 보일 수 있다. 대가: Windows 집중 지원은 공개 API로 읽을 수 없어 `ok`인데 배너 없이 알림 센터로만 간다.
 - 길 b: 늘 `ok`이고 조회만 둔다. 대가: 앱이 조회를 잊으면 올린 줄 안다.
 - 길 c: `platform_status`에 값을 더한다. 대가: 모든 플랫폼 도구의 switch가 바뀐다.
-- 권장: a. Windows는 `ToastNotifier::get_Setting`이 `Enabled`가 아니면 `blocked`다. 대가: 집중 지원은 가리지 못한다. **권장대로 진행.**
+- 권장: a. Windows는 `ToastNotifier::get_Setting`이 `Enabled`가 아니면 `blocked`다. `get_Setting`이 실패하면(설정을 읽을 수 없는 구성) 막혔는지 알 수 없어 `available`로 보고 올린다. 대가: 집중 지원은 가리지 못한다. **권장대로 진행.**
 
 **10. 공개 API 모양.** 질문: 함수인가 객체인가, 사건은 어디로 오는가.
 - 길 a: 자유 함수 + `app_delegate` 훅. 되는 것: `open_url`·`make_permission_message`와 같은 모양이다. 콜드 스타트 사건처럼 앱 객체가 서기 전의 사건도 host가 들고 있다가 낸다. 대가: 프로세스 전역 상태(식별, 쥔 토스트)가 라이브러리 안에 하나 있다.
 - 길 b: `notification_center` 객체 + 훅. 대가: 앱이 객체 수명을 쥐어야 하는데 식별과 활성화기는 창 수명이라 둘이 어긋난다.
 - 길 c: 객체 + `deliver` 콜백([file_watcher](file-watch-design.md)와 같다). 대가: 사건이 thread 풀에서 앱 코드로 가고, 콜드 스타트 사건을 객체가 설 때까지 따로 쥐어야 한다.
 - 권장: a. 대가: 전역 상태 하나. **권장대로 진행.**
+
+**11. 활성화기를 끈 식별의 종료.** 질문: `app_identity::activator`가 거짓인 앱이 끝날 때 알림 센터의 알림을 어떻게 하는가. 설계 단계에 없던 질문이라 구현하며 정했다.
+- 길 a: 주 창이 사건 받는 자리에서 떨어질 때 이 앱의 알림을 모두 거둔다(`ClearWithId`). 결정 4 표의 길 a와 같은 동작이다. 되는 것: 누를 곳이 없는 알림이 남지 않는다. 대가: 앱이 꺼지면 알림이 사라진다.
+- 길 b: 그대로 둔다. 대가: 꺼진 앱의 알림을 눌러도 아무 일이 없다.
+- 고른 것: a. 활성화기를 끈 앱은 결정 4의 길 a를 고른 셈이라 그 길의 규칙을 그대로 따른다. 활성화기를 켠 앱(기본)은 거두지 않는다.
 
 ## 플랫폼
 
@@ -215,21 +221,21 @@ namespace luil::win32 {
 - **작업 표시줄.** 215줄의 "os_notify의 앱 식별이 먼저 서야 한다"를 구현 커밋이 이 문서로 잇고 244줄 범위 밖의 AUMID를 지운다. 식별을 단 앱에서 진행률이 그대로 서는지 사람 확인에 더한다. `WM_APP + 6`은 이 노드가 표의 첫 새 번호다.
 - **image_clip(줄 4, 다음).** `win32_window.cpp`와 `app_delegate.h`를 이 노드 뒤에 고친다. 훅은 이 노드의 것 뒤에 더한다. `notification_android.cpp`의 `ui_image`→Bitmap 변환이 필요하면 그 노드가 공용 헤더로 꺼낸다.
 - **줄 3 ink·inspector.** `android_app.cpp`의 함수가 다르다. ink는 `copy_motion`과 `start()`의 축 켜기(653~654줄)를, 이 노드는 `start()`의 538줄 한 줄과 다른 함수를 고친다. 콜드 스타트 읽기가 `start()` 밖이라 ink의 줄과 hunk가 붙지 않는다. 읽기를 `start()` 안에 두어야 하면 ink가 먼저 병합되고 이 노드가 그 위에 얹는다. 줄은 `return true;` 바로 앞에 두고 `if`에 중괄호를 더하지 않는다. inspector의 `win32_window.cpp` frame 칸 한 줄은 줄 4가 통합 단계에서 별도 커밋으로 내고([인자 넘기기](single-instance-args-design.md)가 맡는다) 이 노드 커밋에 섞지 않는다.
-- **G6.** 이 노드에는 라이브러리 기본 문구가 없다. 제목·본문은 앱이, 표시 이름은 앱이나 caption 제목이, 채널 이름은 앱 이름이 준다. [default-text](default-text-design.md) 규칙의 "앱이 아니면 만들 수 없는 글"이라 `default_text.h`를 include하지 않는다.
+- **G6.** 이 노드에는 라이브러리 기본 문구가 없다. 제목·본문은 앱이, 표시 이름은 앱이나 caption 제목이, 채널 이름은 앱 이름이 준다. [default-text](default-text-design.md) 규칙의 "앱이 아니면 만들 수 없는 글"이라 `default_text.h`를 include하지 않는다. default-text 문서는 다른 줄의 브랜치에 있어 통합 뒤 열리는 링크다.
 - **문서.** 구현 커밋이 [기기 요청](device-request-design.md) 권한 절에 알림 권한 한 문단, `docs/concepts/consumer-contract.md`에 매니페스트 `POST_NOTIFICATIONS` 한 줄을 더한다. `platform-services-design.md`는 고치지 않는다.
-- **데모 공용 파일.** `examples/demo/toasts_page.*`의 정보 막대 카드는 R1에서 이미 들어갔고(`make_info_bar`), 이번 라운드에 이 페이지를 고치는 줄은 이 노드뿐이다. `examples/demo_main.cpp`·`examples/mobile_demo/device_page.cpp`는 여러 줄이 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고 이 두 파일의 연결은 통합 때 직렬로 쌓는다. `docs/README.md` 색인도 통합 때 붙인다.
+- **데모 공용 파일.** `examples/demo/toasts_page.*`는 이번 라운드에 이 노드만 고친다. R1 info_bar 카드 아래에 OS 알림 구역을 더한다. `examples/demo_main.cpp`·`examples/mobile_demo/device_page.cpp`는 여러 줄이 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고 이 두 파일의 연결은 통합 때 직렬로 쌓는다. `docs/README.md` 색인도 통합 때 붙인다.
 
 ## 확인
 
-- `tests/toast_payload_tests.cpp`(`luil_tests`): `& < > " '` 이스케이프, 제어 문자 빼기, 탭·줄바꿈 유지, 제목·본문 자르기가 코드 포인트 경계와 `…`, `launch`에 `luil:<id>`만 실리는지, id 규칙(65자, 공백, 한글, 빈 값은 거절), `silent`의 audio 요소, 그림 경로의 `file:///`와 공백·`#`·`%` 부호화.
+- `tests/toast_payload_tests.cpp`(`luil_tests`): `& < > " '` 이스케이프, 제어 문자 빼기, 탭·줄바꿈 유지, `launch`에 `luil:<id>`만 실리는지와 활성화 인자에서 id 꺼내기, 본문이 비면 `<text>` 하나, `silent`의 audio 요소, 그림 경로의 `file:///`와 공백·`#`·`%` 부호화.
 - `tests/app_identity_tests.cpp`(`luil_tests`): AUMID 검증(128·129자, 공백), 레지스트리 경로와 값 구성, CLSID가 같은 id에서 같고 다른 id에서 다른지와 UUID v5 판·변형 비트. 등록·해제 왕복은 `luil.test.<pid>` id로 HKCU에 쓰고 test가 지운다. 시작할 때 남은 `luil.test.*`를 먼저 지운다. 값이 같으면 다시 쓰지 않는지, 없는 id의 해제가 `not_found`인지.
-- `tests/notification_queue_tests.cpp`(core): 순서 유지, 거절된 사건을 되돌려 다음에 먼저 내는지, 64개 상한에서 오래된 것을 버리고 `lost_before`에 세는지, 되보낸 뒤 수가 0으로 돌아오는지.
+- `tests/notification_queue_tests.cpp`(core): 순서 유지, 거절된 사건을 되돌려 다음에 먼저 내는지, 64개 상한에서 오래된 것을 버리고 `lost_before`에 세는지, 되보낸 뒤 수가 0으로 돌아오는지, 빈 메시지와 던지는 훅. 규칙이 core에 있어 id 규칙(65자, 공백, 한글, 빈 값은 거절), 제목·본문 자르기가 코드 포인트 경계와 `…`, 잘못된 UTF-8의 거절도 여기서 본다.
 - `tests/device_request_tests.cpp`(core, 추가): `notifications`가 API·targetSdk 32·33의 네 조합에서 33·33만 `POST_NOTIFICATIONS`인지. 기본 능력 단언에 `notifications == false`.
 - `tests/win32_window_tests.cpp`(추가, `run_placement_probe` 틀): 비공개 진입점으로 다른 thread에서 사건을 넣으면 delegate 훅이 창을 만든 thread에서 불리는지, 숨은 주 창이 보이지 않는지, `identity`가 규칙 밖이면 시작 실패인지. 토스트를 실제로 올리지 않는다.
 - 데모 `examples/demo/toasts_page.cpp`의 "OS 알림" 구역: 단추 `OS 알림 보내기`·`OS 알림 바꾸기`·`OS 알림 거두기`, label `OS 알림 상태: 사용 가능`, `OS 알림 결과: ok`, `OS 알림 사건: 없음`(받으면 `OS 알림 사건: 눌림 demo-1 · 꺼진 앱에서` 꼴). `demo_main.cpp`가 `identity`(id `luil.Demo`, 아이콘은 데모 assets의 PNG)를 싣고 훅을 페이지 intent로 넘긴다. `--unregister-app-identity` 플래그는 `unregister_app_identity`를 부르고 끝낸다. `tests/` 쪽 페이지 test가 intent를 직접 주어 label을 본다.
 - 모바일 데모 `device_page.cpp`의 "알림" 구역: 권한 상태 label(`로컬 네트워크 권한`과 같은 꼴), `알림 권한 묻기`·`알림 보내기` 단추, `알림으로 시작: 아니오`(콜드 스타트면 id) label. `tests/mobile_demo_page_tests.cpp`가 상태별 이름을 읽는다.
 - 실측 전 가정과 재는 법(구현 단계, 사용자 허락 뒤):
-  - 레지스트리 AUMID만으로 빌드 폴더의 데모가 토스트를 올리는가. `ToastNotificationHistory::GetHistory(aumid)`의 수를 되읽고, 이름·아이콘은 사람이 본다.
+  - 레지스트리 AUMID만으로 빌드 폴더의 데모가 토스트를 올리는가. `ToastNotificationHistory::GetHistory(aumid)`의 수를 되읽고, 이름·아이콘은 사람이 본다. 재 봤다(결정 2의 실측). 화면 입력 없이 재도록 `app_identity_tests.cpp`의 숨은 test 둘을 쓴다. `luil_tests "[.notification-live]"`가 `luil.test.live` 식별을 세우고 토스트 하나를 올린 뒤 알림 센터의 수를 찍고, Windows PowerShell 5.1의 WinRT 투영으로 같은 수를 되읽은 다음, `"[.notification-live-cleanup]"`이 알림을 거두고 `unregister_app_identity`로 레지스트리를 지운다. ctest는 이 둘을 돌리지 않는다.
   - `Activated`가 활성화기 유무에 따라 어느 길로 오는가, `Activate`가 UI thread로 오는가, `-Embedding`이 붙는가. 데모가 thread id와 명령 줄을 로그로 남긴다.
   - 클릭이 앞으로 세울 권한을 주는가. 다른 앱을 앞에 두고 누른다.
   - Android 런처 intent PendingIntent가 Activity를 하나로 두는가. 실기기에서 `dumpsys activity activities`의 GameActivity 수를 센다. 채널·제목·contentIntent는 `dumpsys notification --noredact`, 권한은 `pm grant`·`pm revoke`, 콜드 스타트 extra는 `am force-stop` 뒤 알림을 사람이 누른다.

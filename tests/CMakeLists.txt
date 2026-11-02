@@ -55,6 +55,7 @@ add_executable(luil_core_tests
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp
     multi_item_drag_tests.cpp
+    notification_queue_tests.cpp
     number_input_tests.cpp
     overlay_input_tests.cpp
     panel_element_tests.cpp
@@ -377,6 +378,7 @@ add_executable(luil_tests
     backdrop_tests.cpp
     breadcrumb_tests.cpp
     caption_layout_tests.cpp
+    app_identity_tests.cpp
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp
     file_watcher_tests.cpp
@@ -399,6 +401,7 @@ add_executable(luil_tests
     secret_store_tests.cpp
     surface_input_tests.cpp
     taskbar_button_tests.cpp
+    toast_payload_tests.cpp
     tsf_input_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp

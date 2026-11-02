@@ -352,6 +352,7 @@ luil_add_source_filter(luil_core_files "app"
     host/app_host.cpp
     host/menu_popup.cpp
     "${public_headers}/app/menu_popup.h"
+    "${public_headers}/app/notification.h"
     "${public_headers}/app/file_dialog.h"
     host/file_dialog_gate.h
     "${public_headers}/app/file_watcher.h"
@@ -385,6 +386,8 @@ luil_add_source_filter(luil_core_files "host"
     host/frame_state.h
     host/key_mapping.cpp
     host/key_mapping.h
+    host/notification_queue.cpp
+    host/notification_queue.h
     host/pointer_sequence.cpp
     host/overlay_input.cpp
     host/overlay_input.h
@@ -423,6 +426,12 @@ luil_add_source_filter(luil_files "win32/host"
     win32/instance_message.cpp
     win32/instance_message.h
     win32/platform_services_win32.cpp
+    win32/app_identity.cpp
+    win32/app_identity.h
+    win32/notification_win32.cpp
+    win32/notification_win32.h
+    win32/toast_payload.cpp
+    win32/toast_payload.h
     win32/file_watcher_win32.cpp
     win32/file_watcher_win32.h
     luil/url_scheme.cpp
@@ -661,6 +670,8 @@ if(LUIL_PLATFORM STREQUAL "windows")
             imm32
             ole32
             oleaut32
+            # OS 알림의 WinRT 활성화 팩토리다 (`RoGetActivationFactory`, os-notification-design.md).
+            runtimeobject
             shell32
             shcore
             uiautomationcore
@@ -723,6 +734,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/fail_fast.cpp
         android/main_thread.cpp
         android/main_thread.h
+        "${public_headers}/app/notification.h"
+        android/notification_android.cpp
         android/vulkan_device.cpp
         android/vulkan_device.h
         android/vulkan_memory_allocator.h

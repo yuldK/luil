@@ -7,6 +7,7 @@
 #include "host/surface_invalidate.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/webview_element.h"
+#include "win32/app_identity.h"
 #include "win32/backdrop.h"
 #include "win32/caption_surface.h"
 #include "win32/composition_device.h"
@@ -16,6 +17,7 @@
 #include "win32/file_dialog.h"
 #include "win32/instance_message.h"
 #include "win32/layered_placement.h"
+#include "win32/notification_win32.h"
 #include "win32/popup_surface.h"
 #include "win32/secondary_surface.h"
 #include "win32/skia_renderer.h"
@@ -828,6 +830,8 @@ namespace luil::win32 {
                     environment_.delegate->on_started(*host_);
                 // 앱이 둘째 인스턴스의 인자를 받을 준비가 됐다. 창을 보이기 전에 표식을 건다.
                 publish_instance_mark();
+                // OS 알림의 사건을 이 창이 받는다. 앱 객체가 서기 전에 온 사건은 대기열에 있다가 곧 나간다.
+                attach_notification_window(window_);
                 // 클립보드가 바뀌면 앱에 알린다 (잘라 둔 항목의 표시를 거둘 때를 안다).
                 // 실패해도 알림만 없을 뿐 클립보드 읽기·쓰기는 그대로다.
                 static_cast<void>(AddClipboardFormatListener(window_));
@@ -990,6 +994,9 @@ namespace luil::win32 {
                     refresh_backdrop();
                     // 창과 popup을 맞춘 뒤에 본다. 새 보조 창의 tree가 있어야 그 안의 칸이 섰는지 안다.
                     advance_focus_request();
+                    // inbox가 차서 되돌려 둔 알림 사건이다. logic이 frame을 냈으니 inbox에 자리가 났을 수 있다 (결정 8).
+                    if (notification_events().empty() == false)
+                        deliver_notification_events();
                     return 0;
                 }
                 case ui_command_request_message:
@@ -1064,6 +1071,8 @@ namespace luil::win32 {
                     {
                         // 거두기 전에 표식부터 지운다. 둘째가 이미 정리를 시작한 앱에 인자를 보내지 않는다.
                         clear_instance_mark();
+                        // 알림 사건도 더 받지 않는다. 늦게 온 사건은 대기열에 남아 앱에 가지 않는다.
+                        detach_notification_window(window_);
                         // 끝나는 창이 미뤄 둔 배치는 내지 않는다. 화면에 있는 그대로의 배치를 알린다.
                         deferred_placements_.clear();
                         post_window_placement();
@@ -1083,6 +1092,7 @@ namespace luil::win32 {
                     if (word_parameter != FALSE && host_ != nullptr)
                     {
                         clear_instance_mark();
+                        detach_notification_window(window_);
                         deferred_placements_.clear();
                         post_window_placement();
                         host_->shutdown();
@@ -1232,6 +1242,9 @@ namespace luil::win32 {
                 case WM_CLIPBOARDUPDATE:
                     post_clipboard_change();
                     return 0;
+                case notification_event_message:
+                    deliver_notification_events();
+                    return 0;
                 case WM_COPYDATA: {
                     // 같은 이름의 둘째 인스턴스가 보낸 인자다. 표식이 없거나 이 형식의 표식이 아닌 WM_COPYDATA는 기본 처리에 넘긴다.
                     const auto* const data { reinterpret_cast<const COPYDATASTRUCT*>(long_parameter) };
@@ -1249,6 +1262,7 @@ namespace luil::win32 {
                     if (host_ != nullptr)
                     {
                         clear_instance_mark();
+                        detach_notification_window(window_);
                         host_->shutdown();
                         host_.reset();
                     }
@@ -2176,16 +2190,19 @@ namespace luil::win32 {
             // 이 프로세스가 지금 실제로 하는 일을 플랫폼 성질로 게시한다. Win32의 `ui_platform`을 적는 유일한 자리다.
             //  - popup 모양 지원 (`ui_platform::rounded_popup_corners`). 앱은 이것으로 popup 안 tree의 반지름을 고른다.
             //  - 작업 표시줄 요청을 셸에 낼 수 있는가 (`capabilities.taskbar`). 개체를 만들 수 있었는가다.
+            //  - OS 알림을 올릴 수 있는가 (`capabilities.notifications`). 앱 식별이 서고 알림 개체를 얻었는가다.
             // 바뀐 때만 적는다. 새 능력은 `ui_platform_capabilities` 끝에 기본 거짓으로 더하고 여기에 한 줄을 더한다.
             void publish_platform()
             {
                 ui_platform platform { current_ui_platform() };
                 const bool rounded { rounded_popups() };
                 const bool taskbar { taskbar_.available() };
-                if (platform.rounded_popup_corners == rounded && platform.capabilities.taskbar == taskbar)
+                const bool notifications { notifications_available() };
+                if (platform.rounded_popup_corners == rounded && platform.capabilities.taskbar == taskbar && platform.capabilities.notifications == notifications)
                     return;
                 platform.rounded_popup_corners = rounded;
                 platform.capabilities.taskbar = taskbar;
+                platform.capabilities.notifications = notifications;
                 set_ui_platform(platform);
             }
 
@@ -3075,6 +3092,22 @@ namespace luil::win32 {
                 return accepted ? TRUE : FALSE;
             }
 
+            // 대기열의 OS 알림 사건을 앱에 낸다 (os-notification-design.md의 "thread"). UI thread에서만 부른다.
+            //  - 게시하지 못한 사건은 되돌려 다음 frame 게시(`snapshot_wake_message`) 때 다시 낸다.
+            //  - 눌림을 냈으면 보이는 주 창을 앞으로 세운다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다.
+            void deliver_notification_events()
+            {
+                if (host_ == nullptr)
+                    return;
+                const auto make = [this](const notification_event& event) { return environment_.delegate != nullptr ? environment_.delegate->make_notification_message(event) : app_message {}; };
+                const auto post = [this](app_message message) { return host_->post_app_message_ticketed(std::move(message)); };
+                const notification_delivery delivery { luil::deliver_notification_events(notification_events(), make, post) };
+                if (delivery.failed_calls > 0)
+                    report_runtime_error(u8"The notification delegate threw an exception.");
+                if (delivery.activated && IsWindowVisible(window_) != FALSE)
+                    bring_window_forward(window_);
+            }
+
             void report_runtime_error(const std::u8string& error) const noexcept
             {
                 const auto wide_error { utf8_to_utf16(error) };
@@ -3329,6 +3362,29 @@ namespace luil::win32 {
         {
             show_startup_error(error, config);
             return 1;
+        }
+
+        // 앱 식별은 창보다 먼저다. 창이 서는 순간 작업 표시줄이 프로세스의 AUMID로 단추를 묶는다.
+        //  - 규칙 밖의 id는 시작 실패다 (잘못된 터치 설정과 같다). 조용히 넘기면 앱은 알림이 서는 줄 안다.
+        //  - 레지스트리 쓰기 같은 OS 실패는 시작을 막지 않는다. 그때 알림이 `unsupported`이고 `show_notification`이 그 글을 든다.
+        if (config.identity.id.empty() == false)
+        {
+            if (app_identity_id_valid(config.identity.id) == false)
+            {
+                show_startup_error(u8"The app identity id must be 1 to 128 UTF-16 code units without spaces, control characters or backslashes.", config);
+                return 1;
+            }
+            if (config.smoke_test == false)
+            {
+                if (const platform_result applied { apply_app_identity(config.identity, config.caption.title) }; applied.ok() == false)
+                {
+                    if (const auto wide_error { utf8_to_utf16(applied.error) }; wide_error.value.has_value())
+                    {
+                        OutputDebugStringW(wide_error.value->c_str());
+                        OutputDebugStringW(L"\n");
+                    }
+                }
+            }
         }
 
         // 실행 module은 여기서 스스로 얻는다.

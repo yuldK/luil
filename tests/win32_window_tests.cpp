@@ -2,6 +2,7 @@
 #include "luil/ui/ui_tree.h"
 #include "luil/win32/win32_window.h"
 #include "win32/caption_surface.h"
+#include "win32/notification_win32.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -847,4 +848,170 @@ TEST_CASE("A hidden main window stays hidden after a second instance asks to bri
     REQUIRE(probe.sent.ok());
     REQUIRE(probe.received.size() == 1);
     REQUIRE(probe.hidden_after_send);
+}
+
+namespace {
+    constexpr const wchar_t* notification_class_name { L"Luil.Test.NotificationEvents" };
+
+    BOOL CALLBACK find_notification_window(const HWND window, const LPARAM parameter)
+    {
+        wchar_t name[class_name_capacity] {};
+        if (GetClassNameW(window, name, class_name_capacity) > 0 && std::wcscmp(name, notification_class_name) == 0)
+        {
+            *reinterpret_cast<HWND*>(parameter) = window;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    // 한 번의 실행에서 본 것이다. 넣는 thread와 창 thread가 나눠 쓰므로 실행이 끝나고 thread를 거둔 뒤에 읽는다.
+    struct notification_probe
+    {
+        DWORD ui_thread { 0 };
+        DWORD poster_thread { 0 };
+        std::vector<DWORD> hook_threads {};
+        std::vector<luil::notification_event> received {};
+        bool hidden_after_delivery { false };
+    };
+
+    // `on_started`에서 다른 thread를 띄워 사건 하나를 넣고, 훅이 불린 뒤 창을 닫는다. 토스트는 올리지 않는다.
+    class notification_delegate final : public luil::win32::window_delegate
+    {
+    public:
+        notification_delegate(notification_probe& probe, luil::notification_event event, const bool wait_until_hidden)
+            : probe_ { probe }
+            , event_ { std::move(event) }
+            , wait_until_hidden_ { wait_until_hidden }
+        {
+        }
+
+        notification_delegate(const notification_delegate&) = delete;
+        notification_delegate& operator=(const notification_delegate&) = delete;
+
+        ~notification_delegate()
+        {
+            join();
+        }
+
+        void join()
+        {
+            if (poster_.joinable())
+                poster_.join();
+        }
+
+        void on_started(luil::app_host&) override
+        {
+            probe_.ui_thread = GetCurrentThreadId();
+            EnumThreadWindows(GetCurrentThreadId(), &find_notification_window, reinterpret_cast<LPARAM>(&window_));
+            if (window_ == nullptr)
+                return;
+            poster_ = std::thread { [this] { post(); } };
+        }
+
+        [[nodiscard]] luil::app_message make_notification_message(const luil::notification_event& event) override
+        {
+            probe_.hook_threads.push_back(GetCurrentThreadId());
+            probe_.received.push_back(event);
+            delivered_.store(true);
+            return luil::app_message { event };
+        }
+
+    private:
+        void wait_until_visible(const bool visible) const
+        {
+            const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+            while ((IsWindowVisible(window_) != FALSE) != visible && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds { 5 });
+        }
+
+        void post()
+        {
+            probe_.poster_thread = GetCurrentThreadId();
+            if (wait_until_hidden_)
+            {
+                wait_until_visible(true);
+                wait_until_visible(false);
+            }
+            luil::win32::post_notification_event(event_);
+            const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+            while (delivered_.load() == false && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds { 5 });
+            // 창 thread가 사건 메시지를 다 처리할 때까지 기다린다. 보낸 메시지는 지금 처리 중인 메시지 뒤에 처리된다.
+            DWORD_PTR ignored { 0 };
+            static_cast<void>(SendMessageTimeoutW(window_, WM_NULL, 0, 0, SMTO_BLOCK, 3000, &ignored));
+            probe_.hidden_after_delivery = IsWindowVisible(window_) == FALSE;
+            PostMessageW(window_, WM_CLOSE, 0, 0);
+        }
+
+        notification_probe& probe_;
+        luil::notification_event event_ {};
+        bool wait_until_hidden_ { false };
+        HWND window_ { nullptr };
+        std::atomic<bool> delivered_ { false };
+        std::thread poster_ {};
+    };
+
+    [[nodiscard]] int run_notification_window(placement_driver& driver, notification_delegate& delegate)
+    {
+        luil::win32::enable_per_monitor_dpi_awareness();
+        const luil::win32::com_sta_scope com {};
+        luil::win32::window_config config {};
+        config.class_name = notification_class_name;
+        config.caption.title = u8"notification events";
+        config.renderer = luil::renderer_mode::cpu;
+        const int result { luil::win32::run_application_window(config, { &driver, nullptr, &delegate }) };
+        drain_quit_message();
+        delegate.join();
+        return result;
+    }
+}
+
+TEST_CASE("A notification event from another thread reaches the delegate on the window thread", "[win32][window][notification]")
+{
+    notification_probe probe {};
+    placement_driver driver {};
+    // 닫힘 사건이다. 눌림이면 라이브러리가 보이는 창을 앞으로 세워 test가 앞 창을 가져간다.
+    notification_delegate delegate { probe, { luil::notification_event_kind::dismissed, u8"from-pool" }, false };
+    REQUIRE(run_notification_window(driver, delegate) == 0);
+
+    REQUIRE(probe.received.size() == 1);
+    REQUIRE(probe.received.front().kind == luil::notification_event_kind::dismissed);
+    REQUIRE(probe.received.front().id == u8"from-pool");
+    REQUIRE(probe.hook_threads.size() == 1);
+    REQUIRE(probe.hook_threads.front() == probe.ui_thread);
+    REQUIRE(probe.hook_threads.front() != probe.poster_thread);
+    // 창이 닫히면 대기열에 남은 것이 없다.
+    REQUIRE(luil::win32::notification_events().empty());
+}
+
+TEST_CASE("A hidden main window stays hidden after a notification is pressed", "[win32][window][notification]")
+{
+    notification_probe probe {};
+    placement_driver driver {};
+    driver.main_hidden = true;
+    notification_delegate delegate { probe, { luil::notification_event_kind::activated, u8"pressed" }, true };
+    REQUIRE(run_notification_window(driver, delegate) == 0);
+
+    REQUIRE(probe.received.size() == 1);
+    REQUIRE(probe.received.front().kind == luil::notification_event_kind::activated);
+    REQUIRE(probe.hidden_after_delivery);
+}
+
+TEST_CASE("An app identity outside the rules stops the window from starting", "[win32][window][notification]")
+{
+    for (const std::u8string id : { std::u8string { u8"two words" }, std::u8string(129, u8'a'), std::u8string { u8"a\b" } })
+    {
+        luil::win32::window_config config { make_test_config() };
+        // smoke는 시작 실패 상자를 띄우지 않는다. 식별은 검사만 하고 레지스트리에 쓰지 않는다.
+        config.identity.id = id;
+        REQUIRE(luil::win32::run_application_window(config, {}) == 1);
+        REQUIRE(windows_of_class(test_class_name) == 0);
+    }
+    // 규칙 안의 id는 smoke에서 검사만 하고 지나간다.
+    luil::win32::window_config config { make_test_config() };
+    config.identity.id = u8"luil.test.smoke";
+    const int result { luil::win32::run_application_window(config, {}) };
+    drain_quit_message();
+    REQUIRE((result == 0 || result == direct3d_unavailable_exit_code));
+    REQUIRE(luil::notification_status() == luil::notification_availability::unsupported);
 }

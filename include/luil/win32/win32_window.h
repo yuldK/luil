@@ -178,6 +178,30 @@ namespace luil::win32 {
         [[nodiscard]] bool operator==(const taskbar_report&) const = default;
     };
 
+    // 앱 식별(AUMID)이다 (docs/os-notification-design.md). OS 알림(`show_notification`)이 이것으로 선다.
+    //  - id가 있으면 `run_application_window`가 창보다 먼저 프로세스에 AUMID를 걸고(`SetCurrentProcessExplicitAppUserModelID`)
+    //    `HKCU\Software\Classes\AppUserModelId\<id>`에 표시 이름·아이콘을 쓴다. 바로가기와 설치기가 없어도 빌드 폴더의
+    //    실행 파일이 알림을 올린다.
+    //  - 이 프로세스의 창은 모두 이 id로 작업 표시줄에 묶인다. 식별 없이 고정한 옛 단추와는 갈려 사용자가 다시 고정한다.
+    //  - 라이브러리는 항목을 스스로 지우지 않는다. 앱이 꺼진 뒤에도 알림 센터의 알림이 앱을 가리켜야 해서다.
+    //    지우는 것은 앱의 제거 길이다 (`unregister_app_identity`).
+    struct app_identity
+    {
+        // AUMID다. 비면 앱 식별을 세우지 않는다. 128자(UTF-16) 이하, 공백·제어 문자·백슬래시 없음, `회사.제품` 꼴을 권한다.
+        //  - 규칙 밖이면 창이 시작하지 않는다 (시작 실패로 알린다).
+        std::u8string id {};
+        // 알림에 보이는 앱 이름이다. 비면 `caption.title`이다.
+        std::u8string display_name {};
+        // 앱 아이콘 파일(.png·.ico)의 절대 경로다. 비면 적지 않는다. 실행 파일 리소스는 가리킬 수 없다.
+        std::u8string icon_path {};
+        // 꺼진 앱도 알림 클릭으로 띄운다 (COM 활성화기, 결정 4).
+        bool activator { true };
+    };
+
+    // 앱 식별의 레지스트리 항목을 지운다. 앱의 제거 길에서 부른다. 없으면 `not_found`, id가 규칙 밖이면 `failed`다.
+    //  - 알림 센터에 남은 알림은 거두지 않는다. 먼저 `close_all_notifications`를 부른다.
+    [[nodiscard]] platform_result unregister_app_identity(std::u8string_view id);
+
     // 창의 겉모습과 정책이다.
     // 값만 바꾸면 되도록 한곳에 모아 둔다 (단위를 별도로 적지 않은 크기는 논리 96 DPI 기준 px).
     struct window_config
@@ -249,6 +273,9 @@ namespace luil::win32 {
         // 비어 있거나 무시된 배치는 기존 initial_position·initial_width·initial_height를 따른다.
         // STARTUPINFO의 비활성·최소화·숨김 실행 정책은 유지한다.
         std::optional<window_placement> initial_placement {};
+        // 앱 식별이다. 비어 있으면 지금처럼 세우지 않고, OS 알림은 `unsupported`다.
+        //  - smoke test(`smoke_test`)는 id를 검사만 하고 적용하지 않는다.
+        app_identity identity {};
     };
 
     // 앱이 UI thread에 꽂는 훅이다.

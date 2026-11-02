@@ -19,6 +19,7 @@ TEST_CASE("The WM_APP numbers keep their values and never collide", "[win32][mes
     REQUIRE(luil::win32::app_ui_command_request_message == WM_APP + 3u);
     REQUIRE(luil::win32::clipboard_request_message == WM_APP + 4u);
     REQUIRE(luil::win32::access_dispatch_message == WM_APP + 5u);
+    REQUIRE(luil::win32::notification_event_message == WM_APP + 6u);
     STATIC_REQUIRE(luil::win32::app_message_numbers_valid());
 }
 

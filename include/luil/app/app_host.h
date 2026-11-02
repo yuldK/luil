@@ -298,6 +298,9 @@ namespace luil {
         // 같은 네트워크(LAN)의 기기에 연결한다 — 집 안 NAS의 SMB나 http. Android 17부터 targetSdk 37 이상인
         // 앱은 이것 없이 로컬 주소로 가는 연결이 막힌다 (`ACCESS_LOCAL_NETWORK`).
         local_network,
+        // OS 알림을 올린다 (os-notification-design.md). Android 13부터 targetSdk 33 이상인 앱은 이것 없이 알림이
+        // 보이지 않는다 (`POST_NOTIFICATIONS`). Windows는 늘 묻지 않는다. 끈 설정은 `notification_status`가 말한다.
+        notifications,
     };
 
     // 권한의 지금 상태다.

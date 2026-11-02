@@ -8,7 +8,7 @@
 namespace luil::win32 {
     // 창이 앱 안에서 주고받는 `WM_APP` 번호표다 (docs/taskbar-design.md).
     // 번호가 한 창에서 겹치면 안 되므로 받는 창이 같은 번호끼리 한 곳에 모은다.
-    //  - 새 번호는 +6부터 표 끝에만 더하고, 받는 창을 아래 주석에 적는다.
+    //  - 새 번호는 +7부터 표 끝에만 더하고, 받는 창을 아래 주석에 적는다.
     //  - `SetTimer` 번호는 여기 없다 (win32_window.cpp의 1·2·4, window_surface.cpp의 3).
 
     // 주 창. wake 신호다. frame slot과 interaction slot의 signal callback이 게시한다.
@@ -24,6 +24,9 @@ namespace luil::win32 {
     // `UiaRaiseAutomationEvent` 안까지). 거기서 곧바로 창 명령을 실행하면 그리는 도중에 창이 죽을 수 있어, 큐에 담고
     // 신호만 보낸다 (accessibility-action-design.md).
     inline constexpr UINT access_dispatch_message { WM_APP + 5 };
+    // 주 창. OS 알림의 사건(누름·닫음·실패)이 대기열에 들었다는 신호다. thread 풀의 처리기가 게시하고 내용은 대기열이 나른다
+    // (os-notification-design.md).
+    inline constexpr UINT notification_event_message { WM_APP + 6 };
 
     // 번호가 서로 다르고 앱이 쓸 수 있는 대역(`WM_APP`~0xBFFF) 안인가다.
     [[nodiscard]] constexpr bool app_message_numbers_valid() noexcept
@@ -34,6 +37,7 @@ namespace luil::win32 {
             app_ui_command_request_message,
             clipboard_request_message,
             access_dispatch_message,
+            notification_event_message,
         };
         for (std::size_t index = 0; index < std::size(numbers); ++index)
         {
