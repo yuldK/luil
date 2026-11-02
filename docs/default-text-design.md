@@ -152,7 +152,7 @@ controls.fit_label = u8"Fit";
 
 ## 다른 노드와의 약속
 
-**새 요소가 따를 규칙**(msg_box, rating, undo_stack). 이 문서가 세운다.
+**새 요소가 따를 규칙**(msg_box, rating, ink, undo_stack). 이 문서가 세운다.
 
 - 칸 이름은 쓰임으로 가른다. `*_label`은 화면에 보이고 접근 이름도 되는 글, `*_name`은 읽히기만 하는 글, `*_tooltip`은 글리프 단추의 툴팁이자 이름이다. 화면 글과 접근 이름이 같은 낱말이면 칸 하나로 받고 요소가 둘 다 세운다(결정 6). 새 칸은 구조체 끝에 더한다.
 - 기본값이 서는 자리와 빈 값 판정(`empty()`뿐)은 위 규칙을 따른다. 칸 주석에 "비면 기본 문구(…)"로 낱말을 적고 공개 헤더에는 한국어 값을 두지 않는다.
@@ -165,6 +165,8 @@ controls.fit_label = u8"Fit";
 **rating**(줄 1). 값 이름("별점 3 / 5" 꼴)은 값과 최댓값을 받는 함수로 이 헤더에 둔다. 앱이 덮을 칸은 위 규칙의 `std::function` 꼴이다.
 
 **undo_stack**(줄 2). 그 브랜치에는 이 헤더가 아직 없다. 새 한국어 리터럴을 만들지 않고 "실행 취소: …" 같은 라벨 문장은 `std::u8string` 인자로 받는다. 기본 문구가 꼭 필요해지면 통합 뒤 이 헤더에 함수를 더하는 후속으로 한다.
+
+**ink**(줄 3, 같은 라운드). 캔버스의 기본 이름(잉크 캔버스)과 획 수 요약(획 N개)을 이 헤더에 함수 둘로 더한다. `ink_canvas_name()`은 `std::u8string_view`를, `ink_canvas_summary(count)`는 수가 끼는 문장이라 `std::u8string`을 돌려준다. 앱이 덮는 칸은 `ink_canvas_config`의 `access_name`과 `std::function<std::u8string(std::size_t strokes)>` 꼴의 `access_summary`다. 줄 3은 이 헤더가 main에 들어온 뒤 병합한다. 같은 `default_text.h`·`default_text.cpp`의 끝에 함수를 덧붙이는 병합이고, `verify_default_text`가 서면 `ink_canvas_element.cpp`에도 한글 리터럴을 두지 않는다. R5에서 요약은 복수형 항목이 된다.
 
 **R5 i18n.** 함수 이름이 키 이름의 출처다. 호출부는 바꾸지 않고 `default_text.cpp`의 몸통을 표 조회로 바꾼다. 인자가 있는 문구는 자리 값 문장으로 바꾼다. 편집 메뉴의 `bool korean`, 강조색 이름 25개, 시스템 강조색 라벨은 R5가 같은 표로 흡수한다.
 
@@ -191,7 +193,7 @@ controls.fit_label = u8"Fit";
 - 검사 하나를 더한다(권장, 크기 S). `cmake/verify_default_text.cmake`를 `verify_core_portability.cmake`처럼 `tests/CMakeLists.txt`에 등록하고, `src/ui`의 `.cpp`와 `include/luil/ui`의 `.h`에서 한글이 든 문자열 리터럴(주석 제외)을 찾는다. 예외는 `default_text.cpp`와 `text_area_element.cpp`의 측정 견본 한 줄이다. 다음 노드가 헤더 밖에 한국어를 박는 것을 막는다.
 - 새 test는 모두 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다.
 
-데모(`examples/demo`, `examples/mobile_demo`의 확대 보기 페이지): "줌 단추 글: 기본/English" label과 바꾸는 단추 하나를 놓는다. English면 `zoom_controls_config`에 `Zoom out`·`Zoom in`·`Fit`을 준다. 격리 데스크톱에서 luil-uia로 단추 이름을 읽고(기본은 축소·확대·맞춤), 바꾸는 단추를 Invoke한 뒤 이름이 바뀌는지 되읽는다. 테마 페이지의 묶음 이름(테마, 강조색)과 카드 낱말, 토스트 페이지의 정보 막대와 팝업 페이지의 분할 버튼 이름이 전과 같은지도 읽는다. `demo_gallery_tests.cpp`·`mobile_demo_page_tests.cpp`가 페이지 짓기를 지킨다.
+데모(`examples/demo`, `examples/mobile_demo`의 확대 보기 페이지): "줌 단추 글: 기본/English" label과 바꾸는 단추 하나를 놓는다. English면 `zoom_controls_config`에 `Zoom out`·`Zoom in`·`Fit`을 준다. 격리 데스크톱에서 luil-uia로 단추 이름을 읽고(기본은 축소·확대·맞춤), 바꾸는 단추를 Invoke한 뒤 이름이 바뀌는지 되읽는다. 테마 페이지의 묶음 이름(테마, 강조색)과 카드 낱말, 토스트 페이지의 정보 막대와 팝업 페이지의 분할 버튼 이름이 전과 같은지도 읽는다. 모바일 확대 보기 페이지의 짓기는 `mobile_demo_page_tests.cpp`가 지킨다. 데스크톱 확대 보기 페이지(`examples/demo/zoom_page.cpp`)는 지금 어느 test 대상에도 없다(`tests/CMakeLists.txt`의 데스크톱 목록 153~162행). 그래서 데모 연결 커밋이 이 파일을 그 목록에 올리고 `demo_gallery_tests.cpp`에 바꾸는 단추의 test를 더한다. 이 파일은 luil과 Skia 헤더만 include해서 core test에 올릴 수 있어 보이고, 링크는 구현 때 확인한다. 줌 단추의 기본 이름과 덮기는 이 노드가 `zoom_view_tests.cpp`에 더하는 test가 지킨다.
 
 사람 확인: 새 한국어 글("추천 항목을 불러오는 중")의 교정, 실기기에서 영어 줌 단추 글이 56 폭 단추 안에서 줄어드는 모양, 영어 폰에서 편집 메뉴만 영어인 어긋남이 문서의 한계와 같은지.
 
