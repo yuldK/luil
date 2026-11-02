@@ -6,6 +6,7 @@
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
+#include "mobile_demo/theme_page.h"
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
 
@@ -17,6 +18,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +27,10 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+// 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt). 스타일 파일 견본의 바탕으로 준다.
+extern const std::uint8_t luil_test_base_style[];
+extern const std::size_t luil_test_base_style_size;
 
 namespace {
     using time_point = std::chrono::steady_clock::time_point;
@@ -1291,4 +1298,37 @@ TEST_CASE("A new reorder after an undo clears the redo side and a reorder that m
     for (int number { 1 }; number < 8; ++number)
         REQUIRE(list_row_top(*tree, number) < list_row_top(*tree, number + 1));
     REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 2 · 다음: 없음");
+}
+
+TEST_CASE("The mobile theme page applies a sample style and keeps it when a broken sample is refused", "[mobile-demo][style_json]")
+{
+    // 글 칸 대신 견본 단추만 있다. 받은 견본은 셸이 frame과 본문 배치에 실을 스타일이 되고, 막힌 견본은 그것을 그대로 둔다.
+    const std::u8string source { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    mobile_demo::theme_page page { source };
+    const auto status = [&page] {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
+        for (const char8_t* const owner : { u8"theme-style-sample-background", u8"theme-style-sample-unknown", u8"theme-style-sample-broken", u8"theme-style-reset" })
+            REQUIRE(tree.find({ mobile_demo::kind_style_sheet_button, owner }) != nullptr);
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, u8"theme-style-status" }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    };
+    REQUIRE(status() == u8"내장값 · dark.windowBackground #1e1e1e");
+
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_background });
+    REQUIRE(status() == u8"적용됨 · 오류 0 · dark.windowBackground #1a1b26");
+    const std::shared_ptr<const luil::ui_style> applied { page.style() };
+    REQUIRE(applied != nullptr);
+    REQUIRE(applied->metrics.control_corner_radius == 8.0f);
+
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::sample_broken });
+    REQUIRE(status().starts_with(u8"거부 · 오류 1 · Invalid JSON at byte "));
+    REQUIRE(status().ends_with(u8" · 이전 스타일 유지"));
+    REQUIRE(page.style() == applied);
+
+    deliver(page, demo::style_sheet_intent { demo::style_sheet_action::reset });
+    REQUIRE(status() == u8"내장값 · dark.windowBackground #1e1e1e");
+    REQUIRE(page.style() == nullptr);
 }

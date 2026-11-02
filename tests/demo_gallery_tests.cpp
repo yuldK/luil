@@ -12,12 +12,18 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
+
+// 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt).
+extern const std::uint8_t luil_test_base_style[];
+extern const std::size_t luil_test_base_style_size;
 
 namespace {
     [[nodiscard]] luil::ui_tree arranged(std::unique_ptr<luil::ui_element> root, const float width = 800.0f, const float height = 600.0f)
@@ -453,6 +459,7 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
         { demo::kind_link_view_input, demo::target_link_view },
         { demo::kind_code_input, demo::target_code },
         { demo::kind_line_break_input, demo::target_line_break },
+        { demo::kind_style_json_input, demo::target_style_json },
         { demo::kind_tool_note_input, demo::target_tool_note },
         { demo::kind_dropdown_search_input, demo::target_dropdown_search },
         { demo::kind_tool_menu_search_input, demo::target_tool_menu_search },
@@ -471,4 +478,58 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(demo::text_target_of_kind(demo::kind_text).has_value() == false);
+}
+
+TEST_CASE("The theme page reads a style file and keeps the earlier style when one is refused", "[demo][style_json]")
+{
+    // 데모 빌드가 실은 파일 글 대신 시험 실행 파일에 실은 assets/style.json을 바탕으로 준다 (ui_style_json_tests.cpp와 같은 것).
+    const std::u8string source { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    demo::theme_page page { source };
+    const auto status = [&page] {
+        return label_text(arranged(page.build(800.0f, 600.0f, 1.0f)), u8"theme-style-status");
+    };
+    const auto field_text = [&page] {
+        const auto tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+        const luil::ui_element* const field { tree.find({ demo::kind_style_json_input, u8"theme-style-json" }) };
+        REQUIRE(field != nullptr);
+        return field->accessibility().value;
+    };
+    REQUIRE(status() == u8"내장값 · dark.windowBackground #1e1e1e");
+    REQUIRE(page.style() == nullptr);
+    REQUIRE(field_text() == source);
+
+    // 받은 견본은 칸에 실리고 셸이 실을 스타일이 된다.
+    send(page, demo::style_sheet_intent { demo::style_sheet_action::sample_background });
+    REQUIRE(status() == u8"적용됨 · 오류 0 · dark.windowBackground #1a1b26");
+    const std::shared_ptr<const luil::ui_style> applied { page.style() };
+    REQUIRE(applied != nullptr);
+    REQUIRE(applied->dark.window_background == luil::make_ui_color(0x1a, 0x1b, 0x26));
+    REQUIRE(applied->light.window_background == luil::make_ui_color(0xe8, 0xea, 0xf2));
+    REQUIRE(applied->metrics.control_corner_radius == 8.0f);
+    REQUIRE(field_text() == demo::style_sheet_sample(source, demo::style_sheet_action::sample_background));
+
+    // 막힌 견본은 오류 글을 말하고 쥔 스타일(같은 포인터)을 그대로 둔다.
+    send(page, demo::style_sheet_intent { demo::style_sheet_action::sample_unknown_key });
+    REQUIRE(status() == u8"거부 · 오류 1 · Unknown key in dark: windowBackgrund · 이전 스타일 유지");
+    REQUIRE(page.style() == applied);
+    send(page, demo::style_sheet_intent { demo::style_sheet_action::sample_broken });
+    REQUIRE(status().starts_with(u8"거부 · 오류 1 · Invalid JSON at byte "));
+    REQUIRE(page.style() == applied);
+
+    // 칸을 고쳐 적용하면 그 값이다 (UIA의 SetValue와 같은 편집 길이다).
+    luil::text_edit_request request {};
+    request.target = demo::target_style_json;
+    request.command = luil::text::text_edit_command::replace_all;
+    request.text = source;
+    request.text.replace(request.text.find(u8"#1e1e1e"), 7, u8"#203040");
+    send(page, demo::edit_intent { request });
+    send(page, demo::style_sheet_intent { demo::style_sheet_action::apply });
+    REQUIRE(status() == u8"적용됨 · 오류 0 · dark.windowBackground #203040");
+    REQUIRE(page.style() != applied);
+
+    // 내장값으로 돌아가면 쥔 스타일이 비고 칸이 내장 파일 글이다.
+    send(page, demo::style_sheet_intent { demo::style_sheet_action::reset });
+    REQUIRE(status() == u8"내장값 · dark.windowBackground #1e1e1e");
+    REQUIRE(page.style() == nullptr);
+    REQUIRE(field_text() == source);
 }

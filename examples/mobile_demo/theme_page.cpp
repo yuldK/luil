@@ -2,6 +2,9 @@
 
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/font_scale.h"
+#include "luil/ui/label_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/wrap_element.h"
 
@@ -61,8 +64,22 @@ namespace mobile_demo {
         };
     }
 
+    theme_page::theme_page(std::u8string style_source)
+        : style_sheet_ { std::move(style_source) }
+    {
+    }
+
     bool theme_page::handle(const luil::app_message& message)
     {
+        if (const auto* const sheet { message.get<demo::style_sheet_intent>() }; sheet != nullptr)
+        {
+            // 견본은 곧바로 읽는다. 막히면 쥔 스타일이 그대로라 화면은 이전 스타일로 남는다.
+            if (sheet->action == demo::style_sheet_action::reset)
+                style_sheet_.reset();
+            else
+                style_sheet_.apply(demo::style_sheet_sample(style_sheet_.source(), sheet->action));
+            return true;
+        }
         if (const auto* const theme { message.get<theme_intent>() }; theme != nullptr)
         {
             appearance_.theme = theme->theme;
@@ -142,6 +159,43 @@ namespace mobile_demo {
         }
         // 줄 수는 폭에서 나오는 산수라 tree를 짓기 전에 높이를 알 수 있다.
         column.add(std::move(grid), luil::wrap_height_for(swatches, width - 2.0f * page_padding, accents.size()));
+        column.gap(20.0f);
+
+        // 스타일 파일이다. 견본을 실행 중에 읽어, 받으면 셸이 frame과 본문 배치에 같은 포인터로 싣고 막히면 이전 스타일이 남는다.
+        column.note(u8"theme-style-hint", u8"스타일 파일 (견본을 실행 중에 읽는다)");
+        column.gap(8.0f);
+        struct style_button
+        {
+            std::u8string_view owner {};
+            std::u8string_view text {};
+            demo::style_sheet_action action { demo::style_sheet_action::reset };
+        };
+        constexpr style_button buttons[] {
+            { u8"theme-style-sample-background", u8"견본: 창 바탕 바꿈", demo::style_sheet_action::sample_background },
+            { u8"theme-style-sample-unknown", u8"견본: 낯선 키", demo::style_sheet_action::sample_unknown_key },
+            { u8"theme-style-sample-broken", u8"견본: 괄호 없음", demo::style_sheet_action::sample_broken },
+            { u8"theme-style-reset", u8"내장값으로", demo::style_sheet_action::reset },
+        };
+        // 손가락으로 누를 단추라 높이를 넉넉히 둔다.
+        constexpr float style_button_height { 44.0f };
+        const float button_width { std::min(width - 2.0f * page_padding, 320.0f) };
+        for (const style_button& button : buttons)
+        {
+            const luil::ui_element_id id { kind_style_sheet_button, std::u8string { button.owner } };
+            auto element { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .text = std::u8string { button.text } }) };
+            element->set_action(luil::ui_trigger::left_click, luil::make_message_action(demo::style_sheet_intent { button.action }));
+            column.add(std::move(element), style_button_height, button_width);
+            column.gap(8.0f);
+        }
+        // 결과 줄이다. 거부의 오류 글이 길어 폭에서 줄을 바꾼다.
+        luil::label_config status {};
+        status.text = style_sheet_.status();
+        status.font_size = note_text_size;
+        status.color = luil::label_color_role::dim;
+        status.wrap = true;
+        status.max_lines = 3;
+        column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"theme-style-status" }, std::move(status)),
+            3.0f * luil::text_line_height(note_text_size, note_line_height - note_text_size));
         return column.finish();
     }
 }

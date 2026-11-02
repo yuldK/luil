@@ -76,6 +76,7 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/zoom_page.h
     demo/theme_page.cpp
     demo/theme_page.h
+    demo/style_sheet_sample.h
     demo/toasts_page.cpp
     demo/toasts_page.h
     demo/webview_page.cpp
@@ -93,6 +94,21 @@ luil_add_source_filter(luil_demo_files "loopback"
     "${LUIL_TEST_DIRECTORY}/loopback_http_server.h"
     "${LUIL_TEST_DIRECTORY}/loopback_socket.h"
     "${LUIL_TEST_DIRECTORY}/loopback_socket_win32.cpp")
+# 테마 페이지의 스타일 파일 묶음이 처음 싣는 글이다. 이 빌드가 구운 파일(LUIL_STYLE)을 그대로 싣는다 —
+# 칸의 글을 읽은 값과 내장값이 같은 파일에서 나온다 (style-sheet-design.md).
+set(luil_demo_style_source "${CMAKE_CURRENT_BINARY_DIR}/demo_generated/luil_demo_style_json.cpp")
+add_custom_command(
+    OUTPUT "${luil_demo_style_source}"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT_FILE=${LUIL_STYLE}"
+        "-DOUTPUT_FILE=${luil_demo_style_source}"
+        "-DSYMBOL=luil_demo_style_json"
+        -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+    DEPENDS "${LUIL_STYLE}" "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+    COMMENT "Embedding the style file for the demo"
+    VERBATIM)
+luil_add_source_filter(luil_demo_files "generated"
+    "${luil_demo_style_source}")
 add_executable(luil_demo WIN32
     ${luil_example_resource}
     ${luil_demo_files})

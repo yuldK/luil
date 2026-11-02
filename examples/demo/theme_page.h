@@ -1,14 +1,20 @@
 #pragma once
 
-// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그.
+// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그, 실행 중에 읽는 스타일 파일.
 // 고른 값은 frame에 실려 가고 실제 팔레트 선택은 UI thread가 한다.
 
 #include "demo/common.h"
+#include "demo/style_sheet_sample.h"
+#include "luil/text/text_edit.h"
 #include "luil/theme/appearance.h"
+#include "luil/ui/text_area_element.h"
+#include "luil/ui/text_input_state.h"
 #include "luil/win32/win32_window.h"
 
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace demo {
@@ -69,9 +75,24 @@ namespace demo {
         bool open { false };
     };
 
+    // 스타일 JSON 칸의 흘림이다 (논리 픽셀).
+    struct style_json_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct style_json_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+
     class theme_page
     {
     public:
+        // `style_source`는 스타일 파일 묶음이 처음 싣는 글이다. 데모 빌드가 실은 LUIL_STYLE 글이고, 견본의 바탕이다.
+        explicit theme_page(std::u8string style_source = {});
+
+        // 편집 메시지(edit_intent·composition_intent)는 스타일 JSON 칸(`target_style_json`)의 것만 받는다.
         bool handle(const luil::app_message& message);
         [[nodiscard]] std::unique_ptr<luil::ui_element> build(float width, float height, float scale);
 
@@ -85,6 +106,12 @@ namespace demo {
         [[nodiscard]] luil::window_backdrop backdrop() const noexcept
         {
             return backdrop_;
+        }
+
+        // 셸이 frame(`ui_frame::style`)과 주 tree 배치에 같은 포인터로 싣는 스타일이다. 비어 있으면 내장 스타일이다.
+        [[nodiscard]] const std::shared_ptr<const luil::ui_style>& style() const noexcept
+        {
+            return style_sheet_.style();
         }
 
         // 배경 효과를 고르고 시작한다 (`--backdrop=`).
@@ -105,6 +132,17 @@ namespace demo {
 
     private:
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_sample_tree() const;
+        // 스타일 파일 묶음이다. 칸·단추 줄·상태 줄을 카드에 담는다.
+        void add_style_sheet(page_layout& page) const;
+        void handle_style_sheet(style_sheet_action action);
+        // 칸의 글을 통째로 바꾼다. 실행 취소 한 덩어리다.
+        void set_style_text(std::u8string_view text);
+
+        style_sheet_state style_sheet_ {};
+        luil::text::text_edit_state style_json_ {};
+        std::optional<luil::text_composition_event> style_composition_ {};
+        float style_json_scroll_ { 0.0f };
+        std::shared_ptr<luil::text_area_wrap_cache> style_json_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
 
         luil::appearance_settings appearance_ {};
         luil::window_backdrop backdrop_ { luil::window_backdrop::none };

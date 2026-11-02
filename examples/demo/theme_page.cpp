@@ -5,9 +5,12 @@
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
+#include "luil/ui/stack_element.h"
 #include "luil/ui/theme_picker_element.h"
+#include "luil/ui/ui_interaction.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 
 namespace demo {
@@ -95,11 +98,51 @@ namespace demo {
         }
     }
 
+    theme_page::theme_page(std::u8string style_source)
+        : style_sheet_ { std::move(style_source) }
+    {
+        style_json_.text = style_sheet_.source();
+    }
+
     bool theme_page::handle(const luil::app_message& message)
     {
         if (const auto* const scroll { message.get<theme_scroll_intent>() }; scroll != nullptr)
         {
             scroll_ = std::max(0.0f, scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const sheet { message.get<style_sheet_intent>() }; sheet != nullptr)
+        {
+            handle_style_sheet(sheet->action);
+            return true;
+        }
+        if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
+        {
+            // 남의 칸이면 다음 페이지가 받는다.
+            if (edit->request.target != target_style_json)
+                return false;
+            luil::apply_text_edit(style_json_, edit->request);
+            return true;
+        }
+        if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
+        {
+            if (composition->event.target != target_style_json)
+                return false;
+            // 조합이 끝나면 표시 상태를 버린다. 확정된 글은 별도의 편집 요청으로 이미 들어왔다.
+            if (composition->event.composing)
+                style_composition_ = composition->event;
+            else
+                style_composition_.reset();
+            return true;
+        }
+        if (const auto* const scroll { message.get<style_json_scroll_intent>() }; scroll != nullptr)
+        {
+            style_json_scroll_ = std::max(0.0f, style_json_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll { message.get<style_json_scroll_to_intent>() }; scroll != nullptr)
+        {
+            style_json_scroll_ = std::max(0.0f, scroll->offset);
             return true;
         }
         if (const auto* const theme { message.get<theme_intent>() }; theme != nullptr)
@@ -157,6 +200,99 @@ namespace demo {
             return true;
         }
         return false;
+    }
+
+    void theme_page::handle_style_sheet(const style_sheet_action action)
+    {
+        switch (action)
+        {
+        case style_sheet_action::apply:
+            style_sheet_.apply(style_json_.text);
+            break;
+        case style_sheet_action::reset:
+            style_sheet_.reset();
+            set_style_text(style_sheet_.source());
+            break;
+        default:
+            // 견본은 칸에 글을 싣고 곧바로 읽는다. 막힌 견본도 칸에 남아 고칠 곳을 칸에서 본다.
+            set_style_text(style_sheet_sample(style_sheet_.source(), action));
+            style_sheet_.apply(style_json_.text);
+            break;
+        }
+    }
+
+    void theme_page::set_style_text(const std::u8string_view text)
+    {
+        luil::text_edit_request request {};
+        request.target = target_style_json;
+        request.command = luil::text::text_edit_command::replace_all;
+        request.text = std::u8string { text };
+        request.offset = 0;
+        luil::apply_text_edit(style_json_, request);
+        style_json_scroll_ = 0.0f;
+    }
+
+    void theme_page::add_style_sheet(page_layout& page) const
+    {
+        // 스타일 JSON을 실행 중에 읽는다. 받으면 셸이 frame과 주 tree 배치에 같은 포인터로 싣고, 막히면 이전 스타일이 남는다.
+        page.begin_card(u8"스타일 파일", u8"스타일 JSON을 실행 중에 읽습니다. 오류가 하나라도 있으면 이전 스타일을 그대로 둡니다.");
+        luil::text_area_config area {};
+        area.placeholder = u8"스타일 JSON";
+        area.face = luil::text_face::code;
+        area.scroll_offset = style_json_scroll_;
+        area.scroll = [](const float delta) { return luil::make_app_action(style_json_scroll_intent { delta }); };
+        area.scroll_to = [](const float offset) { return luil::make_app_action(style_json_scroll_to_intent { offset }); };
+        area.wrap_cache = style_json_wrap_;
+        page.add(
+            std::make_unique<luil::text_area_element>(
+                luil::ui_element_id { kind_style_json_input, u8"theme-style-json" }, luil::make_text_input_view(style_json_, style_composition_, target_style_json), std::move(area)),
+            180.0f);
+        page.gap(8.0f);
+
+        // 단추 다섯이다. 견본 셋은 칸에 글을 싣고 곧바로 읽는다.
+        struct style_button
+        {
+            std::u8string_view owner {};
+            std::u8string_view text {};
+            style_sheet_action action { style_sheet_action::apply };
+        };
+        constexpr style_button rows[][3] {
+            {
+                { u8"theme-style-apply", u8"적용", style_sheet_action::apply },
+                { u8"theme-style-reset", u8"내장값으로", style_sheet_action::reset },
+                {},
+            },
+            {
+                { u8"theme-style-sample-background", u8"견본: 창 바탕 바꿈", style_sheet_action::sample_background },
+                { u8"theme-style-sample-unknown", u8"견본: 낯선 키", style_sheet_action::sample_unknown_key },
+                { u8"theme-style-sample-broken", u8"견본: 괄호 없음", style_sheet_action::sample_broken },
+            },
+        };
+        constexpr float button_width { 150.0f };
+        constexpr float button_height { 26.0f };
+        for (const auto& buttons : rows)
+        {
+            luil::stack_config row_config {};
+            row_config.direction = luil::stack_direction::row;
+            row_config.spacing = 8.0f;
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, std::u8string { buttons[0].owner } + u8"-row" }, row_config) };
+            for (const style_button& button : buttons)
+            {
+                if (button.owner.empty())
+                    continue;
+                luil::text_button_config config {};
+                config.text = std::u8string { button.text };
+                auto element { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, std::u8string { button.owner } }, std::move(config)) };
+                element->set_cursor(luil::ui_cursor::hand);
+                element->set_action(luil::ui_trigger::left_click, luil::make_message_action(style_sheet_intent { button.action }));
+                row->add(std::move(element), button_width);
+            }
+            page.add(std::move(row), button_height);
+            page.gap(6.0f);
+        }
+        page.gap(4.0f);
+        page.add(make_label({ kind_text, u8"theme-style-status" }, style_sheet_.status(), 11.0f, luil::label_color_role::dim), 18.0f);
+        page.end_card();
     }
 
     std::vector<luil::win32::ui_window> theme_page::make_windows() const
@@ -311,6 +447,8 @@ namespace demo {
         sample_menu_button_ = menu_button.get();
         page.add(std::move(menu_button), { .length = 26.0f, .cross_length = 140.0f });
         page.end_card();
+
+        add_style_sheet(page);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(theme_scroll_intent { delta }); });
     }
 }

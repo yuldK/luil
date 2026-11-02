@@ -56,5 +56,18 @@ function(luil_mobile_demo_sources out_var)
             VERBATIM)
         list(APPEND sources "${output}")
     endforeach()
+    # 테마 페이지의 스타일 파일 견본의 바탕이다. 이 빌드가 구운 파일(LUIL_STYLE)을 그대로 싣는다.
+    set(output "${generated}/mobile_demo_style_json.cpp")
+    add_custom_command(
+        OUTPUT "${output}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${LUIL_STYLE}"
+            "-DOUTPUT_FILE=${output}"
+            "-DSYMBOL=mobile_demo_style_json"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS "${LUIL_STYLE}" "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding the style file for the mobile demo"
+        VERBATIM)
+    list(APPEND sources "${output}" "${directory}/../demo/style_sheet_sample.h")
     set(${out_var} ${sources} PARENT_SCOPE)
 endfunction()

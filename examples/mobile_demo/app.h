@@ -8,6 +8,7 @@
 //  - 넓은 화면(태블릿, 휴대폰 가로)에서는 왼쪽에 목록, 오른쪽에 고른 페이지가 선다.
 //  - 페이지의 상태는 셸이 아니라 페이지가 든다. 화면을 돌려 꼴이 바뀌어도 그대로다.
 
+#include "mobile_demo/assets.h"
 #include "mobile_demo/basics_page.h"
 #include "mobile_demo/common.h"
 #include "mobile_demo/device_page.h"
@@ -69,7 +70,7 @@ namespace mobile_demo {
         toasts_page toasts_ {};
         popups_page popups_ {};
         zoom_page zoom_ {};
-        theme_page theme_ {};
+        theme_page theme_ { std::u8string { style_json() } };
         device_page device_ {};
         sheets_page sheets_ {};
         smb_page smb_ {};

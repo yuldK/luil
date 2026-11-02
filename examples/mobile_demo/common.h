@@ -47,6 +47,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_code_input { luil::application_element_kind(43) };
     // 줄 나눔 정책을 시연하는 여러 줄 칸이다 (demo/line_break_sample.h).
     constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(44) };
+    // 테마 페이지의 스타일 파일 단추다 (demo/style_sheet_sample.h). 단추마다 owner가 갈린다.
+    constexpr luil::ui_element_kind kind_style_sheet_button { luil::application_element_kind(45) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     constexpr luil::ui_element_kind kind_dialog { luil::application_element_kind(12) };
