@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -1314,4 +1315,49 @@ TEST_CASE("Without a rotation message Shift with an arrow still pans", "[zoom][r
     REQUIRE(read(actions[0]).delta.x == 32.0f);
     REQUIRE(read(actions[0]).degrees == 0.0f);
     REQUIRE(controller.process(luil::key_pressed_event { .key = luil::key_code::home, .shift = true }).empty());
+}
+
+TEST_CASE("Zoom control buttons are named in the default language and the app can name each of them", "[zoom][default-text]")
+{
+    auto settings { config() };
+    settings.content_bounds = luil::rect_f { 0.0f, 0.0f, 400.0f, 200.0f };
+    // 단추의 글이 곧 접근 이름이다. 자식 순서는 축소, 배율 label, 확대, 맞춤이다.
+    const auto button_names = [](const luil::zoom_controls_config& controls) {
+        const luil::zoom_controls_element element { controls };
+        REQUIRE(element.children().size() == 4);
+        REQUIRE(element.children()[0]->id().kind == luil::ui_element_kind::zoom_decrease);
+        REQUIRE(element.children()[1]->id().kind == luil::ui_element_kind::zoom_label);
+        REQUIRE(element.children()[2]->id().kind == luil::ui_element_kind::zoom_increase);
+        REQUIRE(element.children()[3]->id().kind == luil::ui_element_kind::zoom_fit);
+        return std::vector<std::u8string> { element.children()[0]->accessibility().name, element.children()[2]->accessibility().name, element.children()[3]->accessibility().name };
+    };
+
+    luil::zoom_controls_config controls { .view = settings, .viewport = { 240.0f, 240.0f } };
+    REQUIRE(button_names(controls) == std::vector<std::u8string> { u8"축소", u8"확대", u8"맞춤" });
+
+    // 영어 앱은 세 칸을 채운다.
+    controls.decrease_label = u8"Zoom out";
+    controls.increase_label = u8"Zoom in";
+    controls.fit_label = u8"Fit";
+    REQUIRE(button_names(controls) == std::vector<std::u8string> { u8"Zoom out", u8"Zoom in", u8"Fit" });
+
+    // 칸마다 따로 판정한다. 하나만 덮으면 나머지는 기본이다.
+    controls.decrease_label.clear();
+    controls.fit_label.clear();
+    REQUIRE(button_names(controls) == std::vector<std::u8string> { u8"축소", u8"Zoom in", u8"맞춤" });
+    controls.increase_label.clear();
+    controls.fit_label = u8"Fit";
+    REQUIRE(button_names(controls) == std::vector<std::u8string> { u8"축소", u8"확대", u8"Fit" });
+}
+
+TEST_CASE("Zoom controls without content bounds leave the fit label unused and keep the other buttons named", "[zoom][default-text]")
+{
+    auto settings { config() };
+    luil::zoom_controls_config controls { .view = settings, .decrease_label = u8"Zoom out", .increase_label = u8"Zoom in" };
+    const luil::zoom_controls_element element { controls };
+    // 맞춤은 내용 경계를 받은 때만 선다. 칸을 채워도 단추가 늘지 않는다.
+    REQUIRE(element.children().size() == 3);
+    REQUIRE(element.children()[0]->accessibility().name == u8"Zoom out");
+    REQUIRE(element.children()[2]->accessibility().name == u8"Zoom in");
+    REQUIRE(element.children()[0]->accessibility().role == luil::access_role::button);
 }

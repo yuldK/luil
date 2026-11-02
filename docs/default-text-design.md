@@ -77,15 +77,15 @@ controls.fit_label = u8"Fit";
 | `zoom_view_element.cpp` 438·443·446행 | 축소·확대·맞춤 | 옮긴다. 칸 셋을 더한다(결정 6) |
 | `theme_picker_element.h` 18·20·51행 | 공개 헤더의 한국어 기본값 | 옮긴다. 헤더는 비우고 생성자가 채운다(결정 3) |
 | `combo_box_element.cpp` 164행 | 영어 "Loading suggestions" | 옮긴다. 한국어로 바꾸고 칸을 더한다(결정 5) |
-| `ui_theme.cpp` 376행 | 시스템 강조색의 라벨 "시스템" | 그대로 둔다. `src/theme`은 `src/ui`·`src/host`의 비공개 헤더를 include하는 곳이 없는 아래 층이다. 이 헤더를 부르면 층이 뒤집힌다. R5의 표가 아래 층(조사 계획은 `src/text`)에 서면 그때 옮긴다 |
+| `src/theme/ui_theme.cpp` 376행 | 시스템 강조색의 라벨 "시스템" | 그대로 둔다. `src/theme`은 `src/ui`·`src/host`의 비공개 헤더를 include하는 곳이 없는 아래 층이다. 이 헤더를 부르면 층이 뒤집힌다. R5의 표가 아래 층(조사 계획은 `src/text`)에 서면 그때 옮긴다 |
 | `assets/accents.json` 라벨 25개 | 빌드 때 생성되는 카탈로그 자료 | 그대로 둔다. 카탈로그는 소비자가 `LUIL_ACCENT_CATALOG`로 통째 바꾸는 자료이고, 표에 넣을지는 R5 B가 정한다(G6) |
-| `text_edit_menu.cpp` 25~30행 | 편집 메뉴 여섯 쌍. 이미 `korean` 인자로 OS 언어를 가름 | 그대로 둔다. 한국어 반쪽만 옮기면 영어가 사라진다. R5가 `bool korean`째 표 조회로 바꾼다 |
+| `src/host/text_edit_menu.cpp` 25~30행 | 편집 메뉴 여섯 쌍. 이미 `korean` 인자로 OS 언어를 가름 | 그대로 둔다. 한국어 반쪽만 옮기면 영어가 사라진다. R5가 `bool korean`째 표 조회로 바꾼다 |
 | 캡션·대화 상자 닫기·사이드바·탭 막대·이동 경로·트리 상태 줄·숫자 칸 증감과 지우기 툴팁·오류 글·명령 팔레트 글 | 앱이 주고 비면 없다 | 그대로 둔다(결정 4) |
 | `commands.cpp` 키 이름, 디코드·플랫폼 진단 영어 글, `text_area_element.cpp` 544행 측정 견본 | 단축키 왕복 이름, 개발자용 진단, 글자 높이 재기 | 대상이 아니다 |
 
 **기본값이 서는 자리.** 라이브러리가 스스로 화면이나 접근 tree에 글을 놓고 앱이 줄 config 칸이 있는 곳이다. 칸이 없으면 칸을 더한다. 제목·본문·동작 글처럼 앱이 아니면 만들 수 없는 글에는 기본값이 없다.
 
-**빈 값 판정.** `std::u8string::empty()`뿐이다. 공백만 있는 글은 앱의 글이다. 판정은 글을 쓰는 자리에서 한다. 정보 막대와 분할 버튼은 지금처럼 이름을 짓는 자리에서 `text_or_default`를 부르고, 테마 고르기는 생성자가 `config_`의 빈 칸을 채운다. `labels`는 칸마다 판정해 하나만 덮어도 된다.
+**빈 값 판정.** `std::u8string::empty()`뿐이다. 공백만 있는 글은 앱의 글이다. 판정은 글을 쓰는 자리에서 한다. 정보 막대·줌 단추·콤보 상자는 이름을 짓는 자리에서 `text_or_default`를 부르고, 테마 고르기는 생성자가 `config_`의 빈 칸을 채운다. 분할 버튼은 같은 판정(`empty()`)을 하되 기본 이름이 문자열을 짓는 함수라 앱 이름이 비었을 때만 `split_button_arrow_name`을 부른다. `labels`는 칸마다 판정해 하나만 덮어도 된다.
 
 **언어.** OS 언어를 읽지 않는다. 기본 문구는 늘 한국어다. 편집 메뉴(Android)만 OS 언어를 따르는 어긋남이 R5까지 남는다.
 
@@ -102,7 +102,7 @@ controls.fit_label = u8"Fit";
 - 길 a: 문자열 상수 묶음(`inline constexpr std::u8string_view`). 되는 것: 지금 정보 막대의 꼴 그대로라 옮기기만 하면 되고 선언이 가장 짧다. 대가: R5가 언어별 조회로 바꾸려면 상수를 쓰는 호출부를 모두 함수 호출로 고쳐야 한다. 심각도 낱말처럼 값을 골라야 하는 곳은 어차피 함수가 따로 선다.
 - 길 b: 낱말마다 함수. 되는 것: R5가 .cpp의 몸통만 표 조회로 바꾸고 호출부는 그대로다. 인자가 있는 문구(심각도, 분할 버튼 이름, 뒤에 올 rating의 값 이름)도 같은 모양으로 선다. 대가: 낱말 하나에 선언 하나와 정의 하나가 들고 새 낱말은 두 곳을 고친다.
 - 길 c: enum 키와 조회 함수 하나. 되는 것: 낱말을 더하는 일이 enum 한 줄과 배열 한 줄이고 R5 표와 한 줄씩 맞는다. 대가: R5의 키 이름과 표 모양을 지금 미리 박는다. 공개 표 API가 아직 설계 전이라 어긋나면 enum을 다시 짠다. 인자가 있는 문구는 함수로 따로 서서 모양이 둘로 갈린다.
-- 권장: b. 대가: 위의 두 곳 수정. R5가 키 스키마를 먼저 정한다면 c가 낫다. 비공개라 앱에는 닿지 않지만 msg_box·rating 문서가 이 모양을 그대로 따라 쓰고 R5가 갈아 끼울 기준이 된다. 승인 필요.
+- 권장: b. 대가: 위의 두 곳 수정. R5가 키 스키마를 먼저 정한다면 c가 낫다. 비공개라 앱에는 닿지 않지만 msg_box·rating 문서가 이 모양을 그대로 따라 쓰고 R5가 갈아 끼울 기준이 된다. 승인: 길 b (2026-11-02).
 
 **2. 어순이 박힌 분할 버튼 이름.** 질문: " 옵션"처럼 어순이 코드에 박힌 곳을 R5의 자리 값이 풀 때까지 어떻게 두는가.
 
@@ -158,6 +158,7 @@ controls.fit_label = u8"Fit";
 - 기본값이 서는 자리와 빈 값 판정(`empty()`뿐)은 위 규칙을 따른다. 칸 주석에 "비면 기본 문구(…)"로 낱말을 적고 공개 헤더에는 한국어 값을 두지 않는다.
 - 요소 `.cpp`와 공개 헤더에 한국어 문자열 리터럴을 두지 않는다. 기본 문구가 필요하면 이 헤더에 함수를 더한다. 이름은 `<요소>_<부품>`이고, 여러 요소가 같은 낱말 집합을 쓰면 낱말 이름(`severity_name`)으로 둔다. 같은 한국어 낱말이라도 쓰임이 다르면 함수를 따로 둔다. 번역이 갈릴 수 있어서다.
 - 수·이름이 끼는 문장은 인자를 받는 함수로 둔다. 어순은 그 함수 안에만 있다. 앱이 통째로 바꾸게 하려면 `std::function<std::u8string(…)>` 칸을 더하고, 비면 헤더 함수를 쓴다.
+- 접근 이름 조각을 공백으로 잇는 것(심각도 낱말, 제목, 본문)은 어순 문장이 아니라 호출부에 둔다. R5가 자리 값으로 바꿀 때 함께 본다. 정보 막대의 `accessibility()`와 msg_box 호출부가 그 자리다.
 - 앱이 아니면 만들 수 없는 글(제목, 본문, 동작 글, 후보 라벨)은 기본값 없이 앱이 준다.
 
 **msg_box**(줄 1, 다음 문서). 표준 단추 helper가 기본 글(확인·취소 따위)을 낸다면 이 헤더에 함수를 더한다. 심각도 낱말은 `severity_name`을 쓴다. 대화 상자 캡션의 `dialog_caption_config::close_tooltip`은 "비면 없다" 계약을 바꾸지 않고, msg_box가 자기 층에서 기본값을 채워 내려보낸다(결정 4).
@@ -170,7 +171,7 @@ controls.fit_label = u8"Fit";
 
 **R5 i18n.** 함수 이름이 키 이름의 출처다. 호출부는 바꾸지 않고 `default_text.cpp`의 몸통을 표 조회로 바꾼다. 인자가 있는 문구는 자리 값 문장으로 바꾼다. 편집 메뉴의 `bool korean`, 강조색 이름 25개, 시스템 강조색 라벨은 R5가 같은 표로 흡수한다.
 
-**R1에서 미룬 것을 닫는다.** 구현 커밋이 아래 줄을 고친다. 이 단계에서는 R1 문서를 고치지 않는다.
+**R1에서 미룬 것을 닫는다.** 구현 커밋이 아래 줄을 고쳤다. 각 문서는 그 한두 줄만 바뀐다.
 
 | 위치 | 닫는 방법 |
 | --- | --- |
@@ -190,10 +191,12 @@ controls.fit_label = u8"Fit";
 - `tests/zoom_view_tests.cpp`에 덧붙임: 기본 이름이 축소·확대·맞춤인지, 세 칸을 덮으면 단추의 접근 이름이 그 글인지, 한 칸만 덮으면 나머지는 기본인지. 자식 순서는 축소, 배율 label, 확대, 맞춤이다.
 - `tests/theme_picker_tests.cpp`에 덧붙임: 기본 `theme_picker_config`·`accent_picker_config`의 `name`·`labels`가 비어 있는지(공개 헤더에 한국어가 없다), 요소는 "테마"·카드 낱말·"강조색"을 내는지, `labels` 한 칸만 덮어도 나머지는 기본인지, `name` 덮기.
 - `tests/combo_box_element_tests.cpp`에 덧붙임: 후보를 받는 중 popup tree의 `…:loading` 요소 이름이 기본 한국어이고 `loading_name`이 덮는지.
-- 검사 하나를 더한다(권장, 크기 S). `cmake/verify_default_text.cmake`를 `verify_core_portability.cmake`처럼 `tests/CMakeLists.txt`에 등록하고, `src/ui`의 `.cpp`와 `include/luil/ui`의 `.h`에서 한글이 든 문자열 리터럴(주석 제외)을 찾는다. 예외는 `default_text.cpp`와 `text_area_element.cpp`의 측정 견본 한 줄이다. 다음 노드가 헤더 밖에 한국어를 박는 것을 막는다.
+- 검사 하나를 더한다(권장, 크기 S). `cmake/verify_default_text.cmake`를 `verify_core_portability.cmake`처럼 `tests/CMakeLists.txt`에 `luil_default_text`로 등록하고, `src/ui`의 `.cpp`와 `include/luil/ui`의 `.h`에서 한글이 든 코드 줄(주석 제외)을 찾는다. 다음 노드가 헤더 밖에 한국어를 박는 것을 막는다.
+  - 주석은 `//`만 본다. 한글 판정은 UTF-8 바이트 범위로 하므로 `·`나 `…` 같은 다른 비ASCII 글자는 걸리지 않는다. 문자열이 아닌 코드 줄의 한글(문자 리터럴 따위)도 위반이다. 식별자는 ASCII뿐이라 다른 경우가 없다.
+  - 예외는 둘이다. `default_text.cpp`는 파일째 건너뛴다. `text_area_element.cpp`는 측정 견본 리터럴 `u8"Wg 0가"` 하나만 허용한다. 리터럴을 그대로 적은 허용이라 그 파일에 둘째 한글 리터럴이 늘면 위반으로 남는다.
 - 새 test는 모두 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다.
 
-데모(`examples/demo`, `examples/mobile_demo`의 확대 보기 페이지): "줌 단추 글: 기본/English" label과 바꾸는 단추 하나를 놓는다. English면 `zoom_controls_config`에 `Zoom out`·`Zoom in`·`Fit`을 준다. 격리 데스크톱에서 luil-uia로 단추 이름을 읽고(기본은 축소·확대·맞춤), 바꾸는 단추를 Invoke한 뒤 이름이 바뀌는지 되읽는다. 테마 페이지의 묶음 이름(테마, 강조색)과 카드 낱말, 토스트 페이지의 정보 막대와 팝업 페이지의 분할 버튼 이름이 전과 같은지도 읽는다. 모바일 확대 보기 페이지의 짓기는 `mobile_demo_page_tests.cpp`가 지킨다. 데스크톱 확대 보기 페이지(`examples/demo/zoom_page.cpp`)는 지금 어느 test 대상에도 없다(`tests/CMakeLists.txt`의 데스크톱 목록 153~162행). 그래서 데모 연결 커밋이 이 파일을 그 목록에 올리고 `demo_gallery_tests.cpp`에 바꾸는 단추의 test를 더한다. 이 파일은 luil과 Skia 헤더만 include해서 core test에 올릴 수 있어 보이고, 링크는 구현 때 확인한다. 줌 단추의 기본 이름과 덮기는 이 노드가 `zoom_view_tests.cpp`에 더하는 test가 지킨다.
+데모(`examples/demo`, `examples/mobile_demo`의 확대 보기 페이지): "줌 단추 글: 기본/English" label(`zoom-label-language`)과 바꾸는 단추 하나(`zoom-label-toggle`, 글은 "줌 단추 글 바꾸기")를 놓는다. English면 `zoom_controls_config`에 `Zoom out`·`Zoom in`·`Fit`을 준다. 바꾸는 메시지(`zoom_labels_intent`)는 눌렀을 때의 반대 언어를 절대 값으로 담는다. 데스크톱은 첫 단추 줄의 폭·높이 맞춤 오른쪽에 놓아 보기 높이 식을 건드리지 않고, 모바일은 폭이 좁아 회전 줄 아래에 새 줄을 더하고 머리 높이 식의 단추 줄 수와 간격 수를 하나씩 올린다. 격리 데스크톱에서 luil-uia로 단추 이름을 읽고(기본은 축소·확대·맞춤), 바꾸는 단추를 Invoke한 뒤 이름이 바뀌는지 되읽는다. 테마 페이지의 묶음 이름(테마, 강조색)과 카드 낱말, 토스트 페이지의 정보 막대와 팝업 페이지의 분할 버튼 이름이 전과 같은지도 읽는다. 모바일 확대 보기 페이지의 짓기는 `mobile_demo_page_tests.cpp`가 지킨다. 데스크톱 확대 보기 페이지(`examples/demo/zoom_page.cpp`)는 지금 어느 test 대상에도 없다(`tests/CMakeLists.txt`의 데스크톱 목록 153~162행). 그래서 데모 연결 커밋이 이 파일을 그 목록에 올리고 `demo_gallery_tests.cpp`에 바꾸는 단추의 test를 더한다. 이 파일은 luil과 Skia 헤더만 include해서 core test에 올릴 수 있어 보이고, 링크는 구현 때 확인한다. 줌 단추의 기본 이름과 덮기는 이 노드가 `zoom_view_tests.cpp`에 더하는 test가 지킨다.
 
 사람 확인: 새 한국어 글("추천 항목을 불러오는 중")의 교정, 실기기에서 영어 줌 단추 글이 56 폭 단추 안에서 줄어드는 모양, 영어 폰에서 편집 메뉴만 영어인 어긋남이 문서의 한계와 같은지.
 

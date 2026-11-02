@@ -2,6 +2,7 @@
 
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/label_element.h"
+#include "ui/default_text.h"
 
 #include <algorithm>
 #include <array>
@@ -423,7 +424,9 @@ namespace luil {
         if (valid_config(config.view) == false)
             throw std::invalid_argument { "Invalid zoom controls configuration" };
         set_clip_children(true);
-        const auto button = [this, &config](const ui_element_kind kind, const std::u8string text, ui_action action, const bool enabled) {
+        // 글은 앱이 준 칸이고 비면 기본 문구다. 단추의 글이 곧 접근 이름이다.
+        const auto button = [this, &config](const ui_element_kind kind, const std::u8string& configured, const std::u8string_view fallback, ui_action action, const bool enabled) {
+            const std::u8string text { default_text::text_or_default(configured, fallback) };
             auto element { std::make_unique<text_button_element>(ui_element_id { kind, config.view.owner }, text_button_config { .text = text }) };
             element->set_access_name(text);
             element->set_action(ui_trigger::left_click, std::move(action));
@@ -435,15 +438,15 @@ namespace luil {
                 return {};
             return [change, factor](const ui_action_context&) -> std::vector<input_action> { return { change(factor, {}) }; };
         };
-        button(ui_element_kind::zoom_decrease, u8"축소", zoom_action(1.0f / 1.2f), config.view.zoom_by != nullptr && config.view.zoom > config.view.minimum_zoom);
+        button(ui_element_kind::zoom_decrease, config.decrease_label, default_text::zoom_decrease(), zoom_action(1.0f / 1.2f), config.view.zoom_by != nullptr && config.view.zoom > config.view.minimum_zoom);
         std::string percent { std::to_string(std::round(static_cast<double>(std::clamp(config.view.zoom, config.view.minimum_zoom, config.view.maximum_zoom)) * 100.0)) };
         percent.resize(percent.find('.'));
         percent += "%";
         add_child(std::make_unique<label_element>(ui_element_id { ui_element_kind::zoom_label, config.view.owner }, label_config { .text = std::u8string { percent.begin(), percent.end() } }));
-        button(ui_element_kind::zoom_increase, u8"확대", zoom_action(1.2f), config.view.zoom_by != nullptr && config.view.zoom < config.view.maximum_zoom);
+        button(ui_element_kind::zoom_increase, config.increase_label, default_text::zoom_increase(), zoom_action(1.2f), config.view.zoom_by != nullptr && config.view.zoom < config.view.maximum_zoom);
         if (config.view.content_bounds.has_value())
             button(
-                ui_element_kind::zoom_fit, u8"맞춤", [config](const ui_action_context&) { return fit_actions(config.view, config.viewport, config.fit_margin, config.maximum_fit_zoom); },
+                ui_element_kind::zoom_fit, config.fit_label, default_text::zoom_fit(), [config](const ui_action_context&) { return fit_actions(config.view, config.viewport, config.fit_margin, config.maximum_fit_zoom); },
                 config.view.zoom_by != nullptr && config.view.pan_by != nullptr);
     }
 

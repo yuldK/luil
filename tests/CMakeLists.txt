@@ -27,6 +27,7 @@ add_executable(luil_core_tests
     command_palette_tests.cpp
     content_layout_tests.cpp
     cursor_idle_tests.cpp
+    default_text_tests.cpp
     dialog_elements_tests.cpp
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
@@ -512,6 +513,14 @@ add_test(NAME luil_core_portability
         "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_core_portability.cmake")
+
+# 요소의 .cpp와 공개 헤더에 한글이 박혀 있지 않은지 본다.
+# 기본 문구는 src/ui/default_text.cpp 한곳이다 (script에 이유가 있다).
+add_test(NAME luil_default_text
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
+        "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
+        -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
 
 # PowerShell은 script가 돌 때 PATH에서 찾는다 (run_style_check.cmake에 이유가 있다).
 add_test(NAME luil_source_style

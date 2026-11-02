@@ -126,6 +126,8 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     "${public_headers}/ui/ui_platform.h"
     ui/font_scale.cpp
     "${public_headers}/ui/font_scale.h"
+    ui/default_text.cpp
+    ui/default_text.h
     ui/ui_tree.cpp
     "${public_headers}/ui/ui_tree.h")
 

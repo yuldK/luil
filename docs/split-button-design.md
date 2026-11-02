@@ -230,7 +230,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - **teaching_tip**은 `field_popup.h`에 방향을 더해 늘린다. 이 노드가 아래 한 방향의 시그니처를 세운다.
 - `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.cpp`는 date_picker·teaching_tip과 겹친다. 이 노드가 `open_popup_` 하나로 바꾸고 뒤 노드는 그 값을 쓴다.
 - `ui_element_id.h`의 kind 추가는 병렬 노드와 같은 자리라 통합 때 줄 충돌이 난다. AutomationId는 kind의 수라 병합 순서가 번호를 정한다. test와 luil-uia 스크립트는 번호를 박지 않는다.
-- 접근 이름 기본 문구(" 옵션")는 라이브러리 문자열 정책(G6)이 정해지면 그 문자열 헤더로 옮긴다. `text_button_background`를 꺼내도 동작은 같고 기존 raster test가 지킨다.
+- 접근 이름 기본 문구(" 옵션")는 [default-text-design.md](default-text-design.md)의 헤더로 옮겼다. 분할 버튼 화살표의 이름은 `split_button_arrow_name`이 짓는다. `text_button_background`를 꺼내도 동작은 같고 기존 raster test가 지킨다.
 
 ## 확인
 

@@ -15,9 +15,10 @@ namespace luil {
     {
         std::u8string owner {};
         theme_preference selected { theme_preference::system };
-        std::u8string name { u8"테마" };
-        // 밝게·시스템·어둡게 순서다. 표시 언어는 앱이 정한다.
-        std::array<std::u8string, 3> labels { u8"밝게", u8"시스템", u8"어둡게" };
+        // 묶음의 접근 이름이다. 비면 기본 문구("테마")다.
+        std::u8string name {};
+        // 밝게·시스템·어둡게 순서다. 표시 언어는 앱이 정한다. 칸마다 비면 기본 낱말이라 하나만 덮어도 된다.
+        std::array<std::u8string, 3> labels {};
         std::function<input_action(theme_preference)> select {};
         std::u8string accent_id { default_accent_id };
         // 카드 한 장의 폭과 미리 보기 높이, 카드 사이 간격이다 (논리 픽셀).
@@ -48,7 +49,8 @@ namespace luil {
     {
         std::u8string owner {};
         std::u8string selected { default_accent_id };
-        std::u8string name { u8"강조색" };
+        // 묶음의 접근 이름이다. 비면 기본 문구("강조색")다.
+        std::u8string name {};
         bool include_system { true };
         std::function<input_action(const std::u8string&)> select {};
     };

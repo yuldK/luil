@@ -204,7 +204,7 @@ column.add_fit(std::make_unique<luil::info_bar_element>(std::move(bar)));  // �
 - **syntax·style_sheet**(줄 2)는 결정 1이 b일 때만 `ui_theme.h`·`ui_theme.cpp`·`generate_style.cmake`·`style.json`에서 겹친다. a면 겹치지 않는다.
 - **os_notify**(줄 4 R2)와 `examples/demo/toasts_page.*`를 함께 고친다. 이 노드는 카드를 더하기만 한다.
 - **split_button**과 같은 줄이라 병합 순서가 정해져 있다. `ui_element_id.h`의 kind 추가가 같은 자리이고 AutomationId는 kind의 수다. test와 luil-uia 스크립트는 번호를 박지 않는다.
-- 기본 문구("닫기", 심각도 낱말)는 라이브러리 문자열 정책(G6)이 정해지면 그 문자열 헤더로 옮긴다. 분할 버튼의 기본 문구와 같은 취급이다.
+- 기본 문구("닫기", 심각도 낱말)는 [default-text-design.md](default-text-design.md)의 헤더로 옮겼다. 분할 버튼의 기본 문구와 같은 취급이다.
 - `badge_paint.cpp`의 `tone_glyph`를 helper로 잇는 정리는 이 노드에서 하지 않는다.
 
 ## 확인
