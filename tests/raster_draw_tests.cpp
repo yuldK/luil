@@ -13,6 +13,7 @@
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
 #include "luil/ui/slider_element.h"
@@ -1575,4 +1576,164 @@ TEST_CASE("Only the last accept button is filled with the accent and a destructi
         // 거절 단추의 보통 바탕과도 다르다.
         REQUIRE(frame.pixel_at(632, 220) != frame.pixel_at(440, 220));
     }
+}
+
+namespace {
+    // 별 다섯짜리 별점이다. 배율 2에서 칸이 56이라 폭 280, 슬롯 300 x 60 안에서 왼쪽에 붙는다.
+    // 별 `n`(1부터)의 칸은 x 56(n-1)..56n이고 별의 가로 폭은 칸보다 16 작은 40이다. 가운데는 (56n-28, 30)이다.
+    [[nodiscard]] luil::ui_tree make_rating_tree(const float value, const luil::rating_precision precision = luil::rating_precision::whole, const bool display_only = false)
+    {
+        luil::rating_config config {};
+        config.owner = u8"stars";
+        config.value = value;
+        config.precision = precision;
+        if (display_only == false)
+            config.change_to = [](const float) { return luil::input_action {}; };
+        return luil::make_arranged_tree(std::make_unique<luil::rating_element>(std::move(config)), { 0.0f, 0.0f, 300.0f, 60.0f }, raster_scale);
+    }
+
+    [[nodiscard]] luil::ui_element_id rating_cell(const char8_t digit)
+    {
+        std::u8string owner { u8"stars" };
+        owner += u8'\u001f';
+        owner += digit;
+        return { luil::ui_element_kind::rating_cell, std::move(owner) };
+    }
+
+    [[nodiscard]] int star_center_x(const int number)
+    {
+        return 56 * number - 28;
+    }
+
+    // 영역 안에서 기대한 색에 가까운 픽셀 수다. 보조 글자색은 알파가 있어 선이 바탕과 섞여 그려지므로 `over`로 섞은 색을 준다.
+    [[nodiscard]] int count_near(const luil::testing::raster_frame& frame, const luil::rect_f& area, const luil::ui_color expected)
+    {
+        int count { 0 };
+        for (int y = static_cast<int>(area.y); y < static_cast<int>(area.y + area.height); ++y)
+        {
+            for (int x = static_cast<int>(area.x); x < static_cast<int>(area.x + area.width); ++x)
+            {
+                if (same_color(frame.pixel_at(x, y), expected))
+                    ++count;
+            }
+        }
+        return count;
+    }
+}
+
+TEST_CASE("Filled stars are the accent face and empty stars are a line", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_tree tree { make_rating_tree(2.0f) };
+    luil::testing::raster_frame frame { 300, 60, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+
+    // 채운 별은 면이다. 가운데가 accent이고 선 색은 없다.
+    REQUIRE(frame.pixel_at(star_center_x(1), 30) == palette.accent);
+    REQUIRE(frame.pixel_at(star_center_x(2), 30) == palette.accent);
+    const luil::ui_color outline { over(palette.secondary_foreground, palette.window_background) };
+    REQUIRE(outline != palette.window_background);
+    REQUIRE(count_near(frame, { 0.0f, 0.0f, 112.0f, 60.0f }, outline) == 0);
+    // 빈 별은 선이다. 가운데가 바탕이고 둘레에 secondary_foreground 선이 선다.
+    REQUIRE(frame.pixel_at(star_center_x(3), 30) == palette.window_background);
+    REQUIRE(frame.pixel_at(star_center_x(5), 30) == palette.window_background);
+    REQUIRE(count_near(frame, { 112.0f, 0.0f, 56.0f, 60.0f }, outline) > 0);
+    REQUIRE(frame.count_color({ 112.0f, 0.0f, 56.0f, 60.0f }, palette.accent) == 0);
+    // 슬롯의 남는 자리(별 줄 밖)에는 아무것도 그리지 않는다.
+    REQUIRE(frame.pixel_at(290, 30) == palette.window_background);
+}
+
+TEST_CASE("A fractional value fills only part of the last star", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // 4.3이면 별 넷과 다섯째의 30%다. 다섯째 별의 가로 폭은 x 232..272이고 30% 지점이 244다.
+    const luil::ui_tree tree { make_rating_tree(4.3f) };
+    luil::testing::raster_frame frame { 300, 60, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    REQUIRE(frame.pixel_at(star_center_x(4), 30) == palette.accent);
+    REQUIRE(frame.count_color({ 232.0f, 0.0f, 12.0f, 60.0f }, palette.accent) > 0);
+    REQUIRE(frame.count_color({ 248.0f, 0.0f, 32.0f, 60.0f }, palette.accent) == 0);
+    // 나머지 70%는 빈 별의 선이다.
+    REQUIRE(count_near(frame, { 248.0f, 0.0f, 32.0f, 60.0f }, over(palette.secondary_foreground, palette.window_background)) > 0);
+    REQUIRE(frame.pixel_at(star_center_x(5), 30) == palette.window_background);
+
+    // 반 별은 별을 정확히 절반으로 가른다. 셋째 별의 폭은 x 120..160이고 가운데가 140이다.
+    const luil::ui_tree half_tree { make_rating_tree(2.5f, luil::rating_precision::half) };
+    luil::testing::raster_frame half { 300, 60, palette, raster_scale };
+    half.draw(half_tree, luil::interaction_snapshot {});
+    REQUIRE(half.count_color({ 120.0f, 0.0f, 18.0f, 60.0f }, palette.accent) > 0);
+    REQUIRE(half.count_color({ 142.0f, 0.0f, 20.0f, 60.0f }, palette.accent) == 0);
+}
+
+TEST_CASE("A star the pointer is over previews its value in the hover accent", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    REQUIRE(palette.accent_hover != palette.accent);
+    const luil::ui_tree tree { make_rating_tree(1.0f) };
+
+    // 칸 3 위에서는 별 셋이 accent_hover로 채워진다. 지금 값(1)의 accent는 남지 않는다.
+    luil::interaction_snapshot hovering {};
+    hovering.hovered = rating_cell(u8'3');
+    luil::testing::raster_frame preview { 300, 60, palette, raster_scale };
+    preview.draw(tree, hovering);
+    REQUIRE(preview.pixel_at(star_center_x(1), 30) == palette.accent_hover);
+    REQUIRE(preview.pixel_at(star_center_x(3), 30) == palette.accent_hover);
+    REQUIRE(preview.pixel_at(star_center_x(4), 30) == palette.window_background);
+    REQUIRE(preview.count_color({ 0.0f, 0.0f, 300.0f, 60.0f }, palette.accent) == 0);
+
+    // 칸의 값이 현재 값보다 작으면 사이의 별이 빈 별로 돌아간다.
+    const luil::ui_tree high { make_rating_tree(4.0f) };
+    luil::testing::raster_frame lower { 300, 60, palette, raster_scale };
+    lower.draw(high, hovering);
+    REQUIRE(lower.pixel_at(star_center_x(3), 30) == palette.accent_hover);
+    REQUIRE(lower.pixel_at(star_center_x(4), 30) == palette.window_background);
+
+    // 반 별의 칸 하나는 반 별이다. 칸 5는 2.5다.
+    const luil::ui_tree half_tree { make_rating_tree(0.0f, luil::rating_precision::half) };
+    luil::interaction_snapshot half_hover {};
+    half_hover.hovered = rating_cell(u8'5');
+    luil::testing::raster_frame half { 300, 60, palette, raster_scale };
+    half.draw(half_tree, half_hover);
+    REQUIRE(half.pixel_at(star_center_x(2), 30) == palette.accent_hover);
+    REQUIRE(half.count_color({ 120.0f, 0.0f, 18.0f, 60.0f }, palette.accent_hover) > 0);
+    REQUIRE(half.count_color({ 142.0f, 0.0f, 20.0f, 60.0f }, palette.accent_hover) == 0);
+
+    // 누른 동안은 미리 보기를 끄고 값을 그린다. 끌기가 서면 hover가 누른 칸에 머물기 때문이다.
+    luil::interaction_snapshot pressing {};
+    pressing.hovered = rating_cell(u8'3');
+    pressing.pressed = rating_cell(u8'3');
+    luil::testing::raster_frame held { 300, 60, palette, raster_scale };
+    held.draw(tree, pressing);
+    REQUIRE(held.pixel_at(star_center_x(1), 30) == palette.accent);
+    REQUIRE(held.pixel_at(star_center_x(3), 30) == palette.window_background);
+}
+
+TEST_CASE("A display only or disabled rating never previews and a disabled one is gray", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::interaction_snapshot hovering {};
+    hovering.hovered = rating_cell(u8'3');
+
+    // 표시 전용에는 칸이 없다. 같은 id가 와도 미리 보기가 서지 않는다.
+    const luil::ui_tree display { make_rating_tree(2.0f, luil::rating_precision::whole, true) };
+    luil::testing::raster_frame shown { 300, 60, palette, raster_scale };
+    shown.draw(display, hovering);
+    REQUIRE(shown.pixel_at(star_center_x(2), 30) == palette.accent);
+    REQUIRE(shown.pixel_at(star_center_x(3), 30) == palette.window_background);
+
+    luil::rating_config config {};
+    config.owner = u8"stars";
+    config.value = 2.0f;
+    config.change_to = [](const float) { return luil::input_action {}; };
+    auto rating { std::make_unique<luil::rating_element>(std::move(config)) };
+    rating->set_enabled(false);
+    const luil::ui_tree disabled { luil::make_arranged_tree(std::move(rating), { 0.0f, 0.0f, 300.0f, 60.0f }, raster_scale) };
+    luil::testing::raster_frame gray { 300, 60, palette, raster_scale };
+    gray.draw(disabled, hovering);
+    // 채움과 선이 모두 비활성 색이다. 비활성 색은 알파가 있어 바탕과 섞인다. 미리 보기는 서지 않는다.
+    const luil::ui_color gray_color { over(palette.disabled_foreground, palette.window_background) };
+    REQUIRE(same_color(gray.pixel_at(star_center_x(2), 30), gray_color));
+    REQUIRE(gray.pixel_at(star_center_x(3), 30) == palette.window_background);
+    REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, gray_color) > 0);
+    REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, over(palette.secondary_foreground, palette.window_background)) == 0);
 }

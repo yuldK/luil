@@ -16,6 +16,7 @@
 #include "luil/ui/menu_element.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/progress_element.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scrollbar_element.h"
 #include "luil/ui/slider_element.h"
@@ -241,6 +242,41 @@ TEST_CASE("A slider reads its range and clamped value", "[ui][access]")
     REQUIRE(info.range->maximum == 10.0f);
     // 범위 밖 값은 그리기와 같은 함수로 잘린다.
     REQUIRE(info.range->value == 10.0f);
+}
+
+TEST_CASE("A slider and a scrollbar leave the announced step and page at zero", "[ui][access]")
+{
+    // 걸음을 알리는 것은 값이 이산인 요소뿐이다. 델타로 움직이는 막대는 0을 알려 UIA의 SmallChange·LargeChange가 지금처럼 0이다.
+    const luil::slider_element slider { luil::ui_element_id { kind_item, u8"volume" }, { .minimum = 0.0f, .maximum = 10.0f, .value = 3.0f } };
+    REQUIRE(slider.accessibility().range->step == 0.0f);
+    REQUIRE(slider.accessibility().range->page == 0.0f);
+    const luil::scrollbar_element bar { luil::ui_element_id { kind_item, u8"log" }, { .content_height = 400.0f, .viewport_height = 100.0f, .scroll_offset = 50.0f } };
+    REQUIRE(bar.accessibility().range->step == 0.0f);
+    REQUIRE(bar.accessibility().range->page == 0.0f);
+    const luil::progress_element progress { luil::ui_element_id { kind_item, u8"load" }, { .value = 0.5f } };
+    REQUIRE(progress.accessibility().range->step == 0.0f);
+    REQUIRE(progress.accessibility().range->page == 0.0f);
+
+    // 같은 범위라도 걸음이 다르면 다른 정보다 (변화 알림이 걸음의 변화도 본다).
+    REQUIRE((luil::access_range { 0.0f, 5.0f, 3.0f } == luil::access_range { 0.0f, 5.0f, 3.0f, 1.0f, 1.0f }) == false);
+}
+
+TEST_CASE("A rating is one slider node in the access tree whose cells fold away", "[ui][access][rating]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    luil::rating_config config {};
+    config.owner = u8"review";
+    config.value = 3.0f;
+    config.change_to = [](const float value) { return luil::make_app_action(access_value_intent { value }); };
+    root->add(std::make_unique<luil::rating_element>(std::move(config)));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    REQUIRE(snapshot.entries.size() == 1u);
+    REQUIRE(snapshot.entries[0].id == luil::ui_element_id { luil::ui_element_kind::rating, u8"review" });
+    REQUIRE(snapshot.entries[0].info.role == luil::access_role::slider);
+    REQUIRE(snapshot.entries[0].info.range == luil::access_range { 0.0f, 5.0f, 3.0f, 1.0f, 1.0f });
+    REQUIRE(snapshot.entries[0].info.value == u8"3 / 5");
 }
 
 TEST_CASE("A scrollbar reads how far it can scroll", "[ui][access]")

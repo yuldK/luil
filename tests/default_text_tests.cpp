@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -15,10 +16,10 @@ namespace {
 
 TEST_CASE("Every default text is a non-empty Korean word, the same as the ones the elements wrote themselves", "[ui][default-text]")
 {
-    // 요소마다 박혀 있던 낱말을 옮긴 것이라 글자가 전과 같아야 한다. 열다섯 낱말에 확인 대화 상자의 표준 단추 넷을 더한 열아홉이다.
+    // 요소마다 박혀 있던 낱말을 옮긴 것이라 글자가 전과 같아야 한다. 열다섯 낱말에 확인 대화 상자의 표준 단추 넷과 별점의 이름을 더한 스물이다.
     // 분할 버튼의 이름은 문자열을 새로 짓는다. view로 들기 전에 수명을 잡아 둔다.
     const std::u8string arrow_name { luil::default_text::split_button_arrow_name(u8"저장") };
-    const std::array<std::pair<std::u8string_view, std::u8string_view>, 19> words {
+    const std::array<std::pair<std::u8string_view, std::u8string_view>, 20> words {
         std::pair { luil::default_text::info_bar_close(), std::u8string_view { u8"닫기" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::info), std::u8string_view { u8"정보" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::success), std::u8string_view { u8"성공" } },
@@ -38,6 +39,7 @@ TEST_CASE("Every default text is a non-empty Korean word, the same as the ones t
         std::pair { luil::default_text::message_box_cancel_label(), std::u8string_view { u8"취소" } },
         std::pair { luil::default_text::message_box_yes_label(), std::u8string_view { u8"예" } },
         std::pair { luil::default_text::message_box_no_label(), std::u8string_view { u8"아니요" } },
+        std::pair { luil::default_text::rating_name(), std::u8string_view { u8"별점" } },
     };
     for (const auto& [text, expected] : words)
     {
@@ -84,4 +86,22 @@ TEST_CASE("The split button arrow name keeps the word order in one place", "[ui]
     REQUIRE(luil::default_text::split_button_arrow_name(u8"Save") == u8"Save 옵션");
     // 본체 이름이 비어도 앞 공백이 든 채 그대로다 (분할 버튼이 비어 있던 때의 동작).
     REQUIRE(luil::default_text::split_button_arrow_name({}) == u8" 옵션");
+}
+
+TEST_CASE("The rating value name builds digits itself and keeps one decimal at most", "[ui][default-text]")
+{
+    REQUIRE(luil::default_text::rating_value_name(3.0f, 5) == u8"3 / 5");
+    REQUIRE(luil::default_text::rating_value_name(0.0f, 5) == u8"0 / 5");
+    REQUIRE(luil::default_text::rating_value_name(3.5f, 5) == u8"3.5 / 5");
+    REQUIRE(luil::default_text::rating_value_name(4.3f, 5) == u8"4.3 / 5");
+    // 소수 둘째 자리는 반올림한다. 소수 첫째 자리가 0이 되면 정수로 읽는다.
+    REQUIRE(luil::default_text::rating_value_name(4.26f, 5) == u8"4.3 / 5");
+    REQUIRE(luil::default_text::rating_value_name(4.96f, 5) == u8"5 / 5");
+    REQUIRE(luil::default_text::rating_value_name(4.04f, 5) == u8"4 / 5");
+    // 두 자리 수 별 수도 그대로 읽는다.
+    REQUIRE(luil::default_text::rating_value_name(12.0f, 20) == u8"12 / 20");
+    // 범위 밖과 NaN은 가장자리로 읽는다.
+    REQUIRE(luil::default_text::rating_value_name(-1.0f, 5) == u8"0 / 5");
+    REQUIRE(luil::default_text::rating_value_name(9.0f, 5) == u8"5 / 5");
+    REQUIRE(luil::default_text::rating_value_name(std::numeric_limits<float>::quiet_NaN(), 5) == u8"0 / 5");
 }

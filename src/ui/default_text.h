@@ -3,6 +3,7 @@
 #include "luil/theme/appearance.h"
 #include "luil/ui/severity.h"
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -35,6 +36,12 @@ namespace luil::default_text {
     [[nodiscard]] std::u8string_view message_box_cancel_label() noexcept;  // 취소
     [[nodiscard]] std::u8string_view message_box_yes_label() noexcept;  // 예
     [[nodiscard]] std::u8string_view message_box_no_label() noexcept;  // 아니요
+    // 별점의 기본 접근 이름이다 (별점).
+    [[nodiscard]] std::u8string_view rating_name() noexcept;
+    // 별점의 기본 접근 값 글이다 ("3 / 5", 소수 첫째 자리가 있으면 "3.5 / 5"). 값과 최댓값을 받는 함수라 문자열을 새로 짓는다.
+    //  - 값을 10배 반올림한 정수로 정수부와 소수 첫째 자리를 지어 로케일과 부동소수 서식 함수에 달리지 않게 한다.
+    //    숫자 서식(자릿점, 숫자 모양)은 R5 몫이다.
+    [[nodiscard]] std::u8string rating_value_name(float value, std::size_t count);
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

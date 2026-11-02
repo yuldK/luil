@@ -207,6 +207,8 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/field_popup.h"
     ui/slider_element.cpp
     "${public_headers}/ui/slider_element.h"
+    ui/rating_element.cpp
+    "${public_headers}/ui/rating_element.h"
     ui/split_button_element.cpp
     "${public_headers}/ui/split_button_element.h")
 

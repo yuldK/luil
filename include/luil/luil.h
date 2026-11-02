@@ -67,6 +67,7 @@
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/root_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scroll_view_element.h"

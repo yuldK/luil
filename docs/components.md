@@ -32,6 +32,7 @@
 | 진행률 | `progress_element` | [ui/progress_element.h](../include/luil/ui/progress_element.h) | [설명](value-step-design.md) |
 | 상태 배지 | `badge_element` | [ui/badge_element.h](../include/luil/ui/badge_element.h) | [설명](concepts/ui-element.md) |
 | 값 조절 | `slider_element` | [ui/slider_element.h](../include/luil/ui/slider_element.h) | [설명](value-step-design.md) · [자석](slider-magnet-design.md) |
+| 별점(별 몇 개로 점수 매기기, 같은 모양으로 평균 보이기) | `rating_element`, `rating_config`, `rating_precision` | [ui/rating_element.h](../include/luil/ui/rating_element.h) | [설명](rating-design.md) |
 | 세로·가로 배치 | `stack_element` | [ui/stack_element.h](../include/luil/ui/stack_element.h) | [설명](stack-expressiveness-design.md) |
 | 줄바꿈 배치 | `wrap_element` | [ui/wrap_element.h](../include/luil/ui/wrap_element.h) | [설명](stack-expressiveness-design.md) |
 | 행·열 칸 배치 (폼) | `grid_element` | [ui/grid_element.h](../include/luil/ui/grid_element.h) | [설명](stack-expressiveness-design.md#grid) |

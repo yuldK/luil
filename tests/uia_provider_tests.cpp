@@ -8,6 +8,7 @@
 #include "luil/ui/info_bar_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/text_area_element.h"
@@ -1188,6 +1189,233 @@ TEST_CASE("A slider without an absolute factory is read-only through UIA", "[win
     REQUIRE(host.dispatched.empty());
 
     slider->Release();
+    root->Release();
+}
+
+namespace {
+    // 별점 하나를 담은 화면이다. 슬롯은 폭 200이라 별 다섯(28씩 140)이 왼쪽에 서고 칸이 다섯 선다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_rating_tree(
+        const float value, const bool editable = true, const bool clearable = true, const luil::rating_precision precision = luil::rating_precision::whole)
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::rating_config config {};
+        config.owner = u8"review";
+        config.value = value;
+        config.clearable = clearable;
+        config.precision = precision;
+        if (editable)
+            config.change_to = [](const float target) { return luil::make_app_action(probe_value_intent { target }); };
+        page->add(std::make_unique<luil::rating_element>(std::move(config)));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    }
+
+    const luil::ui_element_id rating_id { luil::ui_element_kind::rating, u8"review" };
+}
+
+TEST_CASE("A rating serves range value and value patterns with the step of a star", "[win32][uia][rating]")
+{
+    fake_uia_host host {};
+    host.tree = make_rating_tree(3.0f);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const rating { root->make_element_provider(rating_id) };
+
+    // 범위 값이다. 값과 경계와 읽기 전용 여부를 낸다.
+    double number { -1.0 };
+    REQUIRE(rating->get_Value(&number) == S_OK);
+    REQUIRE(number == 3.0);
+    REQUIRE(rating->get_Minimum(&number) == S_OK);
+    REQUIRE(number == 0.0);
+    REQUIRE(rating->get_Maximum(&number) == S_OK);
+    REQUIRE(number == 5.0);
+    BOOL read_only { TRUE };
+    REQUIRE(rating->get_IsReadOnly(&read_only) == S_OK);
+    REQUIRE(read_only == FALSE);
+    // 걸음과 한 별이 SmallChange·LargeChange로 나온다.
+    REQUIRE(rating->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 1.0);
+    REQUIRE(rating->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 1.0);
+
+    // 값 글이 비지 않아 Value 패턴도 함께 선다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(rating->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IValueProvider* text { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IValueProvider), reinterpret_cast<void**>(&text)) == S_OK);
+    BSTR spoken { nullptr };
+    REQUIRE(text->get_Value(&spoken) == S_OK);
+    REQUIRE(std::wstring { spoken, SysStringLen(spoken) } == L"3 / 5");
+    SysFreeString(spoken);
+    // 글로 값을 정할 수는 없다. 텍스트 칸이 아니다.
+    REQUIRE(text->SetValue(L"4") == E_ACCESSDENIED);
+    text->Release();
+    pattern->Release();
+
+    // 이름은 기본 문구다.
+    REQUIRE(read_text_property(*rating, UIA_NamePropertyId) == L"별점");
+
+    rating->Release();
+    root->Release();
+}
+
+TEST_CASE("A half star rating announces half a star as its small change", "[win32][uia][rating]")
+{
+    fake_uia_host host {};
+    host.tree = make_rating_tree(3.5f, true, true, luil::rating_precision::half);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const rating { root->make_element_provider(rating_id) };
+
+    double number { -1.0 };
+    REQUIRE(rating->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 0.5);
+    REQUIRE(rating->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 1.0);
+
+    rating->Release();
+    root->Release();
+}
+
+TEST_CASE("A slider still announces no step and the change getters need a live element", "[win32][uia][rating]")
+{
+    fake_uia_host host {};
+    host.tree = make_page_tree(3.0f);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const slider { root->make_element_provider({ kind_item, u8"volume" }) };
+
+    // 델타로 움직이는 막대는 걸음을 채우지 않아 지금처럼 0이다.
+    double number { -1.0 };
+    REQUIRE(slider->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 0.0);
+    REQUIRE(slider->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 0.0);
+    // 범위가 없는 요소도 0이다.
+    luil::win32::uia_element_provider* const label { root->make_element_provider({ kind_item, u8"hint" }) };
+    number = -1.0;
+    REQUIRE(label->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 0.0);
+    label->Release();
+
+    // 요소가 tree에서 사라지면 알린다.
+    host.tree = make_rating_tree(3.0f);
+    REQUIRE(slider->get_SmallChange(&number) == static_cast<HRESULT>(UIA_E_ELEMENTNOTAVAILABLE));
+    REQUIRE(slider->get_LargeChange(&number) == static_cast<HRESULT>(UIA_E_ELEMENTNOTAVAILABLE));
+
+    slider->Release();
+    root->Release();
+}
+
+TEST_CASE("Setting a rating value through UIA rounds to a star and refuses the out of range", "[win32][uia][rating]")
+{
+    fake_uia_host host {};
+    host.tree = make_rating_tree(3.0f);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const rating { root->make_element_provider(rating_id) };
+
+    // 격자 값은 그대로, 사이 값은 가장 가까운 별로 간다. 같은 거리면 큰 쪽이다.
+    REQUIRE(rating->SetValue(5.0) == S_OK);
+    REQUIRE(dispatched_value(host) == 5.0f);
+    host.dispatched.clear();
+    REQUIRE(rating->SetValue(4.2) == S_OK);
+    REQUIRE(dispatched_value(host) == 4.0f);
+    host.dispatched.clear();
+    REQUIRE(rating->SetValue(1.5) == S_OK);
+    REQUIRE(dispatched_value(host) == 2.0f);
+    host.dispatched.clear();
+    // 지울 수 있으면 0도 값이다.
+    REQUIRE(rating->SetValue(0.0) == S_OK);
+    REQUIRE(dispatched_value(host) == 0.0f);
+
+    // 범위 밖은 자르지 않고 인자 오류다.
+    host.dispatched.clear();
+    REQUIRE(rating->SetValue(6.0) == E_INVALIDARG);
+    REQUIRE(rating->SetValue(-1.0) == E_INVALIDARG);
+    REQUIRE(host.dispatched.empty());
+    // 반올림한 값이 현재 값이면 할 일이 없다 (거절이 아니다).
+    REQUIRE(rating->SetValue(3.0) == S_OK);
+    REQUIRE(rating->SetValue(3.3) == S_OK);
+    REQUIRE(host.dispatched.empty());
+
+    rating->Release();
+    root->Release();
+}
+
+TEST_CASE("A rating that cannot be cleared refuses zero once it has a value", "[win32][uia][rating]")
+{
+    fake_uia_host host {};
+    host.tree = make_rating_tree(3.0f, true, false);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const rating { root->make_element_provider(rating_id) };
+
+    // 최소가 한 걸음이라 provider가 범위 밖으로 거절한다.
+    double number { -1.0 };
+    REQUIRE(rating->get_Minimum(&number) == S_OK);
+    REQUIRE(number == 1.0);
+    REQUIRE(rating->SetValue(0.0) == E_INVALIDARG);
+    REQUIRE(host.dispatched.empty());
+    REQUIRE(rating->SetValue(1.0) == S_OK);
+    REQUIRE(dispatched_value(host) == 1.0f);
+
+    // 아직 매기지 않았으면 최소가 0이다.
+    host.tree = make_rating_tree(0.0f, true, false);
+    REQUIRE(rating->get_Minimum(&number) == S_OK);
+    REQUIRE(number == 0.0);
+
+    rating->Release();
+    root->Release();
+}
+
+TEST_CASE("A display only rating is read only through UIA", "[win32][uia][rating]")
+{
+    fake_uia_host host {};
+    host.tree = make_rating_tree(4.3f, false);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const rating { root->make_element_provider(rating_id) };
+
+    double number { -1.0 };
+    REQUIRE(rating->get_Value(&number) == S_OK);
+    REQUIRE(static_cast<float>(number) == 4.3f);
+    BOOL read_only { FALSE };
+    REQUIRE(rating->get_IsReadOnly(&read_only) == S_OK);
+    REQUIRE(read_only == TRUE);
+    REQUIRE(rating->SetValue(4.0) == E_ACCESSDENIED);
+    REQUIRE(host.dispatched.empty());
+    // 평균 값 글도 읽힌다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(rating->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IValueProvider* text { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IValueProvider), reinterpret_cast<void**>(&text)) == S_OK);
+    BSTR spoken { nullptr };
+    REQUIRE(text->get_Value(&spoken) == S_OK);
+    REQUIRE(std::wstring { spoken, SysStringLen(spoken) } == L"4.3 / 5");
+    SysFreeString(spoken);
+    text->Release();
+    pattern->Release();
+
+    rating->Release();
+    root->Release();
+}
+
+TEST_CASE("The cells of a rating are not children in the UIA tree", "[win32][uia][rating]")
+{
+    fake_uia_host host {};
+    host.tree = make_rating_tree(3.0f);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+
+    // 구조인 root panel이 접혀 별점이 표면 root의 유일한 자식이다. 칸은 역할이 없어 접힌다.
+    IRawElementProviderFragment* first { nullptr };
+    REQUIRE(root->Navigate(NavigateDirection_FirstChild, &first) == S_OK);
+    REQUIRE(first != nullptr);
+    auto* const rating { static_cast<luil::win32::uia_element_provider*>(first) };
+    REQUIRE(rating->element_id() == rating_id);
+    IRawElementProviderFragment* child { nullptr };
+    REQUIRE(rating->Navigate(NavigateDirection_FirstChild, &child) == S_OK);
+    REQUIRE(child == nullptr);
+    IRawElementProviderFragment* sibling { nullptr };
+    REQUIRE(rating->Navigate(NavigateDirection_NextSibling, &sibling) == S_OK);
+    REQUIRE(sibling == nullptr);
+
+    rating->Release();
     root->Release();
 }
 
