@@ -51,7 +51,7 @@
 | 탭 모양·상태 표시·가운데 버튼 닫기·줄이기·한 탭씩 넘기기·견본 | `tab_bar_style`, `tab_indicator`, `tab_bar_preview` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](tab-bar-style-design.md) |
 | 시각적 테마·강조색 선택 | theme_picker_element, accent_picker_element | [ui/theme_picker_element.h](../include/luil/ui/theme_picker_element.h) | [사용 예](demo-guide.md) |
 | 독립 토글 버튼·토글 칩 | check_style::toggle_button, check_style::toggle_chip | [ui/check_element.h](../include/luil/ui/check_element.h) | [사용 예](demo-guide.md) |
-| 메뉴 팝업 조립 | make_menu_popup | [app/menu_popup.h](../include/luil/app/menu_popup.h) | [사용 예](demo-guide.md) |
+| 메뉴 팝업 조립(필드 아래 앵커 `below` 포함) | make_menu_popup | [app/menu_popup.h](../include/luil/app/menu_popup.h) | [사용 예](demo-guide.md) |
 | 선택 묶음(라디오 행·트랙 위에 판이 뜨는 segmented, 맞춤·채움 폭) | `choice_group_element`, `choice_width` | [ui/choice_group_element.h](../include/luil/ui/choice_group_element.h) | [설명](focus-group-design.md) |
 | 명령표·단축키 | `app_command`, `match_command` | [ui/commands.h](../include/luil/ui/commands.h) | [설명](popup-anchor-design.md) |
 | 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | [설명](popup-overlay-design.md) |
@@ -59,6 +59,8 @@
 | 파일·폴더 선택 | `file_dialog_request` | [app/file_dialog.h](../include/luil/app/file_dialog.h) | [설명](file-dialog-design.md) |
 | 편집형 콤보 | `combo_box_element` | [ui/combo_box_element.h](../include/luil/ui/combo_box_element.h) | [설명](combo-box-design.md) |
 | 드롭다운 | `dropdown_element` | [ui/dropdown_element.h](../include/luil/ui/dropdown_element.h) | [설명](popup-overlay-design.md) |
+| 분할 버튼(본체 동작과 메뉴 열기) | `split_button_element`, `split_button_config` | [ui/split_button_element.h](../include/luil/ui/split_button_element.h) | [설명](split-button-design.md) |
+| 필드 아래 popup 자리·여는 키 | `place_field_popup`, `field_popup_key_handler` | [ui/field_popup.h](../include/luil/ui/field_popup.h) | [설명](split-button-design.md#필드-popup-열림-규약) |
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |
 | 아래 시트·옆 시트·서랍 | `sheet_host_element` | [ui/sheet_host_element.h](../include/luil/ui/sheet_host_element.h) | [설명](sheet-design.md) |
 | 창 캡션 | `caption_element` | [ui/caption_element.h](../include/luil/ui/caption_element.h) | [설명](caption-button-design.md) |

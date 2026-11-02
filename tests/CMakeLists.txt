@@ -31,6 +31,7 @@ add_executable(luil_core_tests
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
     fence_wait_tests.cpp
+    field_popup_tests.cpp
     focus_request_tests.cpp
     font_scale_tests.cpp
     group_element_tests.cpp
@@ -72,6 +73,7 @@ add_executable(luil_core_tests
     sidebar_element_tests.cpp
     single_line_text_tests.cpp
     slider_element_tests.cpp
+    split_button_element_tests.cpp
     split_handle_element_tests.cpp
     text_area_element_tests.cpp
     text_link_tests.cpp
