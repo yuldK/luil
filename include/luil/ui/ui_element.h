@@ -527,6 +527,59 @@ namespace luil {
         std::function<input_action(float degrees, zoom_point anchor)> rotate_by {};
     };
 
+    // 잉크 접촉 하나의 단계다 (ink-design.md).
+    enum class ink_phase
+    {
+        begin,
+        extend,
+        end,
+        cancel,
+    };
+
+    // 표본 하나다. 좌표는 표면 client 물리 픽셀이다 (이벤트와 같다).
+    //  - pressure는 0~1이고, 장치가 알리지 않으면(마우스·터치·압력 없는 펜) 비어 있다.
+    //  - 기울기는 도(-90~90)이고 W3C Pointer Events의 tiltX·tiltY와 같다. 모르면 0이다.
+    struct ink_sample
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+        std::chrono::steady_clock::time_point time {};
+        std::optional<float> pressure {};
+        float tilt_x { 0.0f };
+        float tilt_y { 0.0f };
+
+        [[nodiscard]] bool operator==(const ink_sample&) const noexcept = default;
+    };
+
+    // `eraser`는 지우개 끝의 접촉이다. `interrupted`는 `end`가 정상적인 뗌이 아니라는 뜻이다
+    // (입력 큐 유실, 접촉 중 배럴 전환). 받은 표본까지가 획이다. cancel의 `sample`에는 뜻이 없다.
+    //  - `previous`는 직전에 건넨 표본이다. begin이면 `sample`과 같다. 지우개가 두 표본 사이의 선분을 쓸 때 쓴다.
+    //    tree는 표본마다 새로 서서 받는 쪽이 직전 자리를 들 수 없다.
+    struct ink_input
+    {
+        ink_phase phase { ink_phase::begin };
+        pointer_device device { pointer_device::pen };
+        std::uint32_t pointer_id { 0 };
+        bool eraser { false };
+        bool interrupted { false };
+        ink_sample sample {};
+        ink_sample previous {};
+    };
+
+    // 접촉 하나를 처음부터 끝까지 받는 역할이다 (ink-design.md). 콜백은 input thread에서 부른다 (최신 tree의 factory).
+    //  - 기본은 펜만 받는다. `mouse`·`touch`를 켜면 마우스 왼쪽 버튼과 손가락도 받는다. 끈 장치에는 일반 요소다.
+    //    손가락은 감싼 창의 스크롤과 확대 보기의 이동·핀치를 한다.
+    //  - `eraser`가 거짓이면 지우개 접촉은 일반 컨트롤처럼 삼킨다.
+    //  - 접촉을 쥐는 자리는 누름 대상 찾기 뒤, 확대 보기 이동 앞이다. 위에 놓인 자식 단추가 먼저 hit한다.
+    //  - 이동마다 최신 tree에서 같은 id를 다시 찾는다. 사라졌거나 숨었거나 비활성이면 `cancel`을 내고 접촉의 나머지를 삼킨다.
+    struct ink_source
+    {
+        std::function<std::vector<input_action>(const ink_input&)> on_ink {};
+        bool mouse { false };
+        bool touch { false };
+        bool eraser { true };
+    };
+
     struct scroll_source
     {
         // 스크롤 위치를 이만큼 옮기자는 메시지다 (delta는 논리 픽셀).
@@ -1011,6 +1064,8 @@ namespace luil {
         // 휠과 초점 되살리기가 표 없이 이 값으로 임자를 찾는다.
         [[nodiscard]] const scroll_source* scroll() const noexcept;
         [[nodiscard]] const zoom_source* zoom() const noexcept;
+        // 접촉 하나를 통째로 받는 잉크 역할이다 (`ink_source`). 없으면 nullptr다.
+        [[nodiscard]] const ink_source* ink() const noexcept;
         // 안쪽 창의 끝에서 터치 끌기를 넘겨받는 역할이다. 없으면 nullptr다.
         [[nodiscard]] const pan_handoff_target* pan_handoff() const noexcept;
         // 초점을 가진 채 글자로 자기 모델을 찾는 역할이다. 없으면 nullptr다.
@@ -1163,6 +1218,8 @@ namespace luil {
         // `scroll_delta_to_reveal`을 재정의한 컨테이너와 짝이 되는 값이다.
         void set_scroll_source(std::optional<scroll_source> source);
         void set_zoom_source(std::optional<zoom_source> source);
+        // 펜 접촉을 처음부터 끝까지 받는다 (잉크 캔버스). 세우면 hit test의 대상이 된다.
+        void set_ink_source(std::optional<ink_source> source);
         void set_pan_handoff(std::optional<pan_handoff_target> target);
         // 글자 탐색이 이 element의 모델을 묻게 한다 (가상 목록).
         void set_key_search_target(std::optional<key_search_target> target);
@@ -1383,6 +1440,7 @@ namespace luil {
         std::optional<key_step_target> key_step_target_ {};
         std::optional<scroll_source> scroll_source_ {};
         std::optional<zoom_source> zoom_source_ {};
+        std::optional<ink_source> ink_source_ {};
         std::optional<pan_handoff_target> pan_handoff_ {};
         std::optional<key_search_target> key_search_target_ {};
         std::optional<key_capture_target> key_capture_target_ {};

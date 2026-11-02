@@ -42,6 +42,8 @@ add_executable(luil_core_tests
     image_element_tests.cpp
     image_encode_tests.cpp
     info_bar_element_tests.cpp
+    ink_canvas_tests.cpp
+    ink_stroke_tests.cpp
     item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp

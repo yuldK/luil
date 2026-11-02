@@ -116,6 +116,31 @@ namespace luil::win32 {
         return now - std::chrono::milliseconds { age };
     }
 
+    pen_values pen_values_of(const POINTER_PEN_INFO& pen) noexcept
+    {
+        pen_values values {};
+        if ((pen.penMask & PEN_MASK_PRESSURE) != 0)
+            values.pressure = static_cast<float>(pen.pressure) / 1024.0f;
+        if ((pen.penMask & PEN_MASK_TILT_X) != 0)
+            values.tilt_x = static_cast<float>(pen.tiltX);
+        if ((pen.penMask & PEN_MASK_TILT_Y) != 0)
+            values.tilt_y = static_cast<float>(pen.tiltY);
+        return values;
+    }
+
+    std::vector<std::size_t> pen_history_order(const std::span<const POINTER_PEN_INFO> entries, const std::optional<std::uint32_t> last_frame)
+    {
+        std::vector<std::size_t> order {};
+        for (std::size_t index { entries.size() }; index > 1; --index)
+        {
+            const std::uint32_t frame { entries[index - 1].pointerInfo.frameId };
+            if (last_frame.has_value() && static_cast<std::int32_t>(frame - *last_frame) <= 0)
+                continue;
+            order.push_back(index - 1);
+        }
+        return order;
+    }
+
     pointer_button pointer_button_of(const UINT message) noexcept
     {
         if (message == WM_MBUTTONDOWN || message == WM_MBUTTONDBLCLK || message == WM_MBUTTONUP)

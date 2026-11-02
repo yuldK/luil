@@ -212,7 +212,12 @@ namespace luil::android {
             for (std::uint32_t index { 0 }; index < event.pointerCount; ++index)
             {
                 const GameActivityPointerAxes& axes { event.pointers[index] };
-                input.current.pointers.push_back({ axes.id, axes.toolType, GameActivityPointerAxes_getX(&axes), GameActivityPointerAxes_getY(&axes) });
+                motion_pointer pointer { axes.id, axes.toolType, GameActivityPointerAxes_getX(&axes), GameActivityPointerAxes_getY(&axes) };
+                // 펜의 압력·기울기는 `start`가 켠 축이다 (ink-input-design.md).
+                pointer.pressure = GameActivityPointerAxes_getAxisValue(&axes, AMOTION_EVENT_AXIS_PRESSURE);
+                pointer.tilt = GameActivityPointerAxes_getAxisValue(&axes, AMOTION_EVENT_AXIS_TILT);
+                pointer.orientation = GameActivityPointerAxes_getAxisValue(&axes, AMOTION_EVENT_AXIS_ORIENTATION);
+                input.current.pointers.push_back(pointer);
             }
             if (event.pointerCount > 0)
             {
@@ -228,7 +233,12 @@ namespace luil::android {
                     const int pointer { static_cast<int>(index) };
                     const float x { GameActivityMotionEvent_getHistoricalX(&event, pointer, position) };
                     const float y { GameActivityMotionEvent_getHistoricalY(&event, pointer, position) };
-                    frame.pointers.push_back({ event.pointers[index].id, event.pointers[index].toolType, x, y });
+                    motion_pointer past { event.pointers[index].id, event.pointers[index].toolType, x, y };
+                    // 인자 순서는 축이 먼저다 (GameActivityEvents.h).
+                    past.pressure = GameActivityMotionEvent_getHistoricalAxisValue(&event, AMOTION_EVENT_AXIS_PRESSURE, pointer, position);
+                    past.tilt = GameActivityMotionEvent_getHistoricalAxisValue(&event, AMOTION_EVENT_AXIS_TILT, pointer, position);
+                    past.orientation = GameActivityMotionEvent_getHistoricalAxisValue(&event, AMOTION_EVENT_AXIS_ORIENTATION, pointer, position);
+                    frame.pointers.push_back(past);
                 }
                 input.history.push_back(std::move(frame));
             }
@@ -652,6 +662,10 @@ namespace luil::android {
                 // 휠 값은 켠 축만 GameActivity가 옮겨 준다.
                 GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_VSCROLL);
                 GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HSCROLL);
+                // 펜의 압력·기울기도 켠 축만 온다 (ink-input-design.md). 켜기는 프로세스 전체 설정이다.
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_PRESSURE);
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_TILT);
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_ORIENTATION);
 
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);

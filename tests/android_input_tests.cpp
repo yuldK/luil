@@ -8,7 +8,9 @@
 #include <time.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <variant>
 #include <vector>
 
@@ -179,7 +181,7 @@ TEST_CASE("A system cancel ends every contact without a release", "[android][inp
     REQUIRE(translator.translate(motion(AMOTION_EVENT_ACTION_MOVE, 20, { finger(0, 30.0f, 110.0f) }), phone).empty());
 }
 
-TEST_CASE("A pen hovers, right clicks with the barrel and swallows the eraser", "[android][input]")
+TEST_CASE("A pen hovers, right clicks with the barrel and marks the eraser", "[android][input]")
 {
     luil::android::input_translator translator {};
     luil::android::motion_input hover { motion(AMOTION_EVENT_ACTION_HOVER_MOVE, 0, { { 2, AMOTION_EVENT_TOOL_TYPE_STYLUS, 30.0f, 140.0f } }) };
@@ -196,12 +198,57 @@ TEST_CASE("A pen hovers, right clicks with the barrel and swallows the eraser", 
     events = translator.translate(motion(AMOTION_EVENT_ACTION_UP, 20, { { 2, AMOTION_EVENT_TOOL_TYPE_STYLUS, 30.0f, 140.0f } }), phone);
     REQUIRE(as<luil::pointer_released_event>(events[0]).button == luil::pointer_button::right);
 
-    REQUIRE(translator.translate(motion(AMOTION_EVENT_ACTION_DOWN, 30, { { 2, AMOTION_EVENT_TOOL_TYPE_ERASER, 30.0f, 140.0f } }), phone).empty());
-    REQUIRE(translator.translate(motion(AMOTION_EVENT_ACTION_UP, 40, { { 2, AMOTION_EVENT_TOOL_TYPE_ERASER, 30.0f, 140.0f } }), phone).empty());
+    // 지우개 끝은 표식을 단 누름·뗌이다. 일반 컨트롤의 삼킴은 controller가 한다.
+    events = translator.translate(motion(AMOTION_EVENT_ACTION_DOWN, 30, { { 2, AMOTION_EVENT_TOOL_TYPE_ERASER, 30.0f, 140.0f } }), phone);
+    REQUIRE(events.size() == 1u);
+    REQUIRE(as<luil::pointer_pressed_event>(events[0]).pen->eraser);
+    REQUIRE(as<luil::pointer_pressed_event>(events[0]).button == luil::pointer_button::left);
+    events = translator.translate(motion(AMOTION_EVENT_ACTION_UP, 40, { { 2, AMOTION_EVENT_TOOL_TYPE_ERASER, 30.0f, 140.0f } }), phone);
+    REQUIRE(events.size() == 1u);
+    REQUIRE(as<luil::pointer_released_event>(events[0]).pen->eraser);
 
     events = translator.translate(motion(AMOTION_EVENT_ACTION_HOVER_EXIT, 50, { { 2, AMOTION_EVENT_TOOL_TYPE_STYLUS, 30.0f, 140.0f } }), phone);
     REQUIRE(events.size() == 1u);
     REQUIRE(as<luil::pointer_left_event>(events[0]).device == luil::pointer_device::pen);
+}
+
+TEST_CASE("A pen carries folded pressure, polar tilt and historical axes in order", "[android][input][ink]")
+{
+    constexpr float pi { 3.14159265358979f };
+    // θ 45도·φ 90도면 오른쪽으로 45도 누운 것이다.
+    const luil::android::pen_tilt right { luil::android::pen_tilt_of(pi / 4.0f, pi / 2.0f) };
+    REQUIRE(std::abs(right.x - 45.0f) < 0.01f);
+    REQUIRE(std::abs(right.y) < 0.01f);
+    // φ 0이면 tilt_y만 선다 (−tan θ · cos φ).
+    const luil::android::pen_tilt toward { luil::android::pen_tilt_of(pi / 4.0f, 0.0f) };
+    REQUIRE(std::abs(toward.x) < 0.01f);
+    REQUIRE(std::abs(toward.y + 45.0f) < 0.01f);
+    // θ 90도는 ±90에 닿는다. 유한하지 않은 값은 0이다.
+    REQUIRE(std::abs(std::abs(luil::android::pen_tilt_of(pi / 2.0f, pi / 2.0f).x) - 90.0f) < 0.01f);
+    REQUIRE(luil::android::pen_tilt_of(std::numeric_limits<float>::quiet_NaN(), 0.0f).x == 0.0f);
+
+    luil::android::input_translator translator {};
+    luil::android::motion_input down { motion(AMOTION_EVENT_ACTION_DOWN, 0, { { 3, AMOTION_EVENT_TOOL_TYPE_STYLUS, 30.0f, 140.0f, 1.2f, pi / 4.0f, pi / 2.0f } }) };
+    auto events { translator.translate(down, phone) };
+    const auto& pressed { as<luil::pointer_pressed_event>(events[0]) };
+    // 1을 넘는 압력은 1로 접는다.
+    REQUIRE(pressed.pen->pressure == 1.0f);
+    REQUIRE(std::abs(pressed.pen->tilt_x - 45.0f) < 0.01f);
+
+    // 과거 표본의 축 값이 오래된 것부터 이동 하나씩으로 나간다.
+    luil::android::motion_input move { motion(AMOTION_EVENT_ACTION_MOVE, 30, { { 3, AMOTION_EVENT_TOOL_TYPE_STYLUS, 60.0f, 140.0f, 0.6f, 0.0f, 0.0f } }) };
+    move.history.push_back({ 10, { { 3, AMOTION_EVENT_TOOL_TYPE_STYLUS, 40.0f, 140.0f, 0.2f, 0.0f, 0.0f } } });
+    move.history.push_back({ 20, { { 3, AMOTION_EVENT_TOOL_TYPE_STYLUS, 50.0f, 140.0f, 0.4f, 0.0f, 0.0f } } });
+    events = translator.translate(move, phone);
+    REQUIRE(events.size() == 3u);
+    REQUIRE(as<luil::pointer_moved_event>(events[0]).pen->pressure == 0.2f);
+    REQUIRE(as<luil::pointer_moved_event>(events[1]).pen->pressure == 0.4f);
+    REQUIRE(as<luil::pointer_moved_event>(events[2]).pen->pressure == 0.6f);
+    REQUIRE(as<luil::pointer_moved_event>(events[0]).x == 40.0f);
+
+    // 손가락에는 펜 값이 없다.
+    events = translator.translate(motion(AMOTION_EVENT_ACTION_DOWN, 40, { finger(5, 10.0f, 110.0f) }), phone);
+    REQUIRE(as<luil::pointer_pressed_event>(events[0]).pen.has_value() == false);
 }
 
 TEST_CASE("A mouse presses with buttons and scrolls in wheel detents", "[android][input]")
