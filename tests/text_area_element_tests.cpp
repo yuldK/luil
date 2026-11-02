@@ -1,8 +1,12 @@
 #include "luil/ui/text_area_element.h"
 
+#include "raster_probe.h"
+
+#include "luil/theme/ui_theme.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
+#include "ui/text_span_color.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -745,4 +749,121 @@ TEST_CASE("Repeated paragraphs with different bold spans keep their geometry acr
         }
         REQUIRE(config.wrap_cache->size() == 1u);
     }
+}
+
+TEST_CASE("Syntax and italic spans do not move the lines, the line rects or the span bounds of a text area", "[ui][text-area][syntax]")
+{
+    // 주입한 측정기는 굵기와 기울임을 재지 않으므로, 구간이 있는 칸의 기하는 구간 없는 칸과 같아야 한다.
+    const std::u8string text { u8"if (x) {\n    return 12; // done\n}" };
+    auto config { scrolling_config() };
+    const auto plain { wrapped_tree(view_of(text, 0), config) };
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> {
+        { 0, 2, luil::text_color_role::keyword, true },
+        { 18, 24, luil::text_color_role::keyword, true },
+        { 25, 27, luil::text_color_role::number },
+        { 29, 36, luil::text_color_role::comment, false, luil::text_background_role::none, true },
+    });
+    const auto styled { wrapped_tree(view_of(text, 0), config) };
+    REQUIRE(memo_of(*styled).lines() == memo_of(*plain).lines());
+    REQUIRE(memo_of(*styled).content_width() == memo_of(*plain).content_width());
+    for (std::size_t line { 0 }; line < 3u; ++line)
+    {
+        const auto expected { memo_of(*plain).line_rect(line) };
+        const auto actual { memo_of(*styled).line_rect(line) };
+        REQUIRE(expected.has_value());
+        REQUIRE(actual.has_value());
+        REQUIRE(actual->x == expected->x);
+        REQUIRE(actual->y == expected->y);
+        REQUIRE(actual->width == expected->width);
+        REQUIRE(actual->height == expected->height);
+    }
+    for (std::size_t at { 0 }; at <= text.size(); ++at)
+    {
+        const auto expected { memo_of(*plain).text_span_bounds({ text, at, at, at }, fixed_width) };
+        const auto actual { memo_of(*styled).text_span_bounds({ text, at, at, at }, fixed_width) };
+        REQUIRE(expected.has_value());
+        REQUIRE(actual.has_value());
+        REQUIRE(actual->x == expected->x);
+        REQUIRE(actual->y == expected->y);
+        REQUIRE(actual->width == expected->width);
+    }
+}
+
+TEST_CASE("Each text color role reads its own palette slot", "[ui][text-area][syntax]")
+{
+    luil::ui_color_palette palette {};
+    palette.primary_foreground = 0xFF000001u;
+    palette.secondary_foreground = 0xFF000002u;
+    palette.accent = 0xFF000003u;
+    palette.warning_accent = 0xFF000004u;
+    palette.error_accent = 0xFF000005u;
+    palette.syntax_keyword = 0xFF000006u;
+    palette.syntax_string = 0xFF000007u;
+    palette.syntax_comment = 0xFF000008u;
+    palette.syntax_number = 0xFF000009u;
+    palette.syntax_type = 0xFF00000Au;
+    palette.syntax_function = 0xFF00000Bu;
+    REQUIRE(luil::span_foreground(luil::text_color_role::primary, palette) == palette.primary_foreground);
+    REQUIRE(luil::span_foreground(luil::text_color_role::secondary, palette) == palette.secondary_foreground);
+    REQUIRE(luil::span_foreground(luil::text_color_role::accent, palette) == palette.accent);
+    REQUIRE(luil::span_foreground(luil::text_color_role::warning, palette) == palette.warning_accent);
+    REQUIRE(luil::span_foreground(luil::text_color_role::error, palette) == palette.error_accent);
+    REQUIRE(luil::span_foreground(luil::text_color_role::keyword, palette) == palette.syntax_keyword);
+    REQUIRE(luil::span_foreground(luil::text_color_role::string, palette) == palette.syntax_string);
+    REQUIRE(luil::span_foreground(luil::text_color_role::comment, palette) == palette.syntax_comment);
+    REQUIRE(luil::span_foreground(luil::text_color_role::number, palette) == palette.syntax_number);
+    REQUIRE(luil::span_foreground(luil::text_color_role::type, palette) == palette.syntax_type);
+    REQUIRE(luil::span_foreground(luil::text_color_role::function, palette) == palette.syntax_function);
+    // 모르는 값은 본문색이다. 역할이 앞으로 늘어도 글이 사라지지 않는다.
+    REQUIRE(luil::span_foreground(static_cast<luil::text_color_role>(99), palette) == palette.primary_foreground);
+
+    // 고대비는 여섯 구문 역할을 모두 창 글자색으로 접는다. 색에 실린 뜻이 사라져도 글은 남는다.
+    const luil::ui_color_palette high_contrast { luil::color_palette_for(luil::color_theme::high_contrast) };
+    for (const auto role : { luil::text_color_role::keyword, luil::text_color_role::string, luil::text_color_role::comment, luil::text_color_role::number, luil::text_color_role::type, luil::text_color_role::function })
+        REQUIRE(luil::span_foreground(role, high_contrast) == high_contrast.primary_foreground);
+}
+
+TEST_CASE("A syntax span in front of a composition keeps its place after the composition text", "[ui][text-area][syntax][raster]")
+{
+    // 조합 중에는 확정 글 기준의 구간이 조합 글만큼 밀려 그려진다. core test에는 글꼴이 없어 글자색은 못 보므로, 줄 바꿈 칸을
+    // 덮는 바탕 구간(폭이 글꼴에 매이지 않는 4 논리 픽셀)으로 본다.
+    //  - 확정 글은 "ab\ncd"이고 조합 글 "XYZ"가 offset 1에 끼어 표시 문서는 "aXYZb\ncd"다.
+    //  - 확정 글의 [1, 3)은 "b"와 줄 바꿈이다. 밀려 그리면 표시 문서의 [4, 6)이라 첫 줄의 줄 바꿈 칸이 칠해진다.
+    //    밀지 않으면 [1, 3)은 "XY"라 폭 0인 글꼴에서는 아무것도 칠하지 않는다.
+    luil::text_input_view view { view_of(u8"ab\ncd", 1) };
+    view.composing = true;
+    view.composition_text = u8"aXYZb\ncd";
+    view.composition_caret = 4;
+    view.composing_begin = 1;
+    view.composing_end = 4;
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const auto drawn = [&](std::shared_ptr<const std::vector<luil::text_span>> spans) {
+        luil::text_area_config config {};
+        config.spans = std::move(spans);
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view, std::move(config)), { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        luil::testing::raster_frame frame { 400, 200, palette };
+        frame.draw(tree, luil::interaction_snapshot {});
+        std::vector<luil::ui_color> pixels {};
+        for (int y { 0 }; y < 200; ++y)
+            for (int x { 0 }; x < 400; ++x)
+                pixels.push_back(frame.pixel_at(x, y));
+        return pixels;
+    };
+    const auto without { drawn(nullptr) };
+    const std::vector<luil::text_span> newline_cell_spans {
+        { 1, 3, luil::text_color_role::keyword, false, luil::text_background_role::added },
+    };
+    const auto newline_cell { drawn(std::make_shared<const std::vector<luil::text_span>>(newline_cell_spans)) };
+    REQUIRE(newline_cell != without);
+    // 글자 칸의 폭은 0이라(글꼴이 없다) "b"만 덮는 구간은 아무것도 칠하지 않는다. 위 차이가 줄 바꿈 칸에서 온다는 대조다.
+    const std::vector<luil::text_span> letter_spans {
+        { 1, 2, luil::text_color_role::keyword, false, luil::text_background_role::added },
+    };
+    REQUIRE(drawn(std::make_shared<const std::vector<luil::text_span>>(letter_spans)) == without);
+    // 구문 색 구간이어도 글 밖의 구간은 아무것도 칠하지 않는다.
+    const std::vector<luil::text_span> beyond_spans {
+        { 40, 50, luil::text_color_role::keyword, false, luil::text_background_role::added },
+    };
+    const auto beyond { drawn(std::make_shared<const std::vector<luil::text_span>>(beyond_spans)) };
+    REQUIRE(beyond == without);
 }

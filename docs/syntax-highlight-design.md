@@ -14,10 +14,20 @@
 ### 구간과 색 ([text_document.h](../include/luil/ui/text_document.h))
 
 ```cpp
-enum class text_color_role {
-    primary, secondary, accent, warning, error,
+enum class text_color_role
+{
+    primary,
+    secondary,
+    accent,
+    warning,
+    error,
     // 구문 색이다. 팔레트의 `syntax_*` 역할로 칠한다.
-    keyword, string, comment, number, type, function
+    keyword,
+    string,
+    comment,
+    number,
+    type,
+    function,
 };
 
 struct text_span
@@ -33,7 +43,7 @@ struct text_span
 ```cpp
 // 줄 하나를 칠한다. 줄 바꿈은 `line`에 들지 않는다.
 //  - `state`는 윗줄이 끝난 뒤의 상태이고, 첫 줄은 `initial_state`다.
-//  - 구간은 줄 처음 기준 offset으로 `spans`에 더한다.
+//  - 구간은 줄 처음 기준 offset으로 `spans`에 더한다 (`spans`는 비워서 건넨다).
 //  - 돌려주는 값은 이 줄이 끝난 뒤의 상태다.
 // (줄 글, 입력 상태)의 순수 함수여야 한다. 줄 번호나 밖의 값을 읽지 않는다.
 using syntax_line_lexer = std::function<int(std::u8string_view line, int state, std::vector<text_span>& spans)>;
@@ -42,6 +52,7 @@ inline constexpr std::chrono::microseconds syntax_unlimited_budget { std::chrono
 
 struct syntax_highlighter_config
 {
+    // 비어 있으면 아무 구간도 칠하지 않는다.
     syntax_line_lexer lexer {};
     int initial_state { 0 };
     // 이보다 긴 줄은 렉서에 보내지 않고, 구간 없이 입력 상태를 그대로 다음 줄에 넘긴다.
@@ -52,7 +63,7 @@ struct syntax_highlight_stats
 {
     std::size_t lines { 0 };
     std::size_t spans { 0 };
-    // 마지막 `update`·`advance`가 렉서에 보낸 줄 수다 (test·진단용).
+    // 마지막 `update`·`advance`가 렉서에 보낸 줄 수다 (test·진단용). `max_line_size`를 넘어 건너뛴 줄은 세지 않는다.
     std::size_t relexed { 0 };
 };
 
@@ -63,6 +74,7 @@ public:
     // 글이 바뀐 뒤 부른다. 지난 호출의 글과 견주어 바뀐 줄부터 다시 칠한다.
     // 편집이 닿은 줄은 늘 칠한다. 그 뒤(꼬리)는 `budget` 안에서만 칠하고 남기면 `pending()`이 참이다.
     void update(std::u8string_view text, std::chrono::microseconds budget = syntax_unlimited_budget);
+    // 남은 일을 이어 받는다. 예산이 아무리 작아도 대기 중인 첫 줄은 칠한다.
     void advance(std::chrono::microseconds budget);
     [[nodiscard]] bool pending() const noexcept;
     // 다른 문서를 열 때 앞 문서의 줄 기록을 버린다.
@@ -83,7 +95,13 @@ namespace luil::text {
         std::size_t offset { 0 };
         std::size_t removed { 0 };
         std::size_t inserted { 0 };
-        [[nodiscard]] constexpr bool empty() const noexcept { return removed == 0 && inserted == 0; }
+
+        [[nodiscard]] constexpr bool empty() const noexcept
+        {
+            return removed == 0 && inserted == 0;
+        }
+
+        [[nodiscard]] constexpr bool operator==(const text_change&) const noexcept = default;
     };
 
     [[nodiscard]] text_change text_change_between(std::u8string_view before, std::u8string_view after) noexcept;
@@ -92,7 +110,7 @@ namespace luil::text {
 
 ### 팔레트
 
-여섯 역할은 `neutral_color_palette`의 중립 색이다. 키 컬러와 무관하고, `warning_accent`·`error_accent`처럼 `compose_palette`가 그대로 옮긴다. 값은 초안이다.
+여섯 역할은 `neutral_color_palette`의 중립 색이다. 키 컬러와 무관하고, `warning_accent`·`error_accent`처럼 `compose_palette`가 그대로 옮긴다. 값은 초안 그대로 `assets/style.json`에 들어갔다.
 
 | 역할 | JSON 키 | 팔레트 칸 | 다크 | 라이트 |
 | --- | --- | --- | --- | --- |
@@ -104,7 +122,7 @@ namespace luil::text {
 | `function` | `syntaxFunction` | `syntax_function` | `#dcdcaa` | `#6e5320` |
 
 - 여섯 키는 모두 `neutral_optional_fields`의 행이다(`key|field|fallback`). 빠진 키는 같은 테마의 `primaryForeground`로 채운다. 앱이 LUIL_STYLE로 준 옛 JSON은 구문 색 없이 본문색으로 그린다.
-- 초안 값을 창 바탕, 표면 바탕, 그 위에 `input_background`를 합성한 바탕에 대 보면 모두 약 4.8:1 이상이다. 마지막이 입력 칸이 실제로 칠하는 색이다. 최종 값은 구현에서 대비 test로 고정한다.
+- 값을 창 바탕, 표면 바탕, 그 위에 `input_background`를 합성한 바탕에 대 보면 모두 약 4.8:1 이상이다. 합성 바탕이 입력 칸이 실제로 칠하는 색이다. 창 바탕에 합성한 색까지 네 바탕에서 4.5:1 이상인 것을 `tests/ui_theme_tests.cpp`가 잠근다.
 
 구현은 [syntax_highlighter.cpp](../src/ui/syntax_highlighter.cpp)와 [text_change.cpp](../src/text/text_change.cpp)에 둔다. 둘 다 Skia와 플랫폼을 모르는 core다.
 
@@ -121,11 +139,11 @@ namespace luil::text {
 
 **증분**
 1. `text_change_between(지난 글, 새 글)`로 바뀐 구간을 얻는다. 비어 있으면 아무 일도 없다.
-2. 바뀐 구간이 시작하는 줄부터, 새 글에서 바뀐 구간의 끝이 든 줄까지 렉서에 보낸다.
-3. 그 뒤 줄은 앞 줄이 끝난 상태가 지난번 그 줄을 칠할 때와 같아지는 줄에서 멈춘다. 한 줄 안의 편집은 보통 그 줄 하나로 끝난다. 여러 줄 주석을 열고 닫는 편집은 상태가 되돌아오는 줄까지 간다.
+2. 바뀐 구간이 시작하는 줄부터, 새 글에서 바뀐 구간의 끝이 든 줄까지 렉서에 보낸다. 바뀐 구간이 줄 처음에서 시작하고 윗줄이 홀로 선 CR로 끝나면 윗줄도 보낸다. 편집이 그 CR을 CRLF로 잇거나 가르기 때문이다.
+3. 그 뒤 줄은 앞 줄이 끝난 상태가 지난번 그 줄을 칠할 때 받은 입력 상태와 같아지는 줄에서 멈춘다. 한 줄 안의 편집은 보통 그 줄 하나로 끝난다. 여러 줄 주석을 열고 닫는 편집은 상태가 되돌아오는 줄까지 간다.
 4. 멈춘 뒤의 구간은 다시 칠하지 않고 `inserted - removed`만큼 옮겨 쓴다.
 
-도우미는 지난 글을 한 벌 쥐고 편집마다 splice한다. 줄마다 길이·끝 상태·구간 수를 쥐고, 구간은 줄 순서의 평면 vector 하나에 문서 offset으로 쥔다. 메모리는 글 크기에 줄당 16바이트, 구간당 32바이트쯤이다.
+도우미는 지난 글을 한 벌 쥐고 편집마다 splice한다. 줄마다 길이·입력 상태·끝 상태·구간 수를 쥐고, 구간은 줄 순서의 평면 vector 하나에 문서 offset으로 쥔다. 멈출 줄을 찾으려면 줄이 칠할 때 받은 입력 상태를 알아야 해서 처음 안(길이·끝 상태·구간 수)에 입력 상태가 하나 더해졌다. 메모리는 글 크기에 줄당 24바이트, 구간당 32바이트쯤이다.
 
 **게시**
 - 새 vector는 `spans()`가 부를 때 짓는다. 한 turn에 `update`가 여러 번이어도 한 번만 쓴다.
@@ -136,6 +154,9 @@ namespace luil::text {
 - `update`의 `budget`을 주면 편집이 닿은 줄까지는 늘 칠하고, 꼬리와 첫 불러오기는 예산 안에서만 칠한다. 남은 일은 `pending()`이 알리고 `advance`가 이어 받는다.
 - 아직 칠하지 않은 줄의 구간은 지난 색이 남는다. offset은 늘 현재 글에 맞고 낡는 것은 색의 뜻뿐이다. 처음 열 때는 남은 색이 없어 맨 위부터 차례로 색이 든다.
 - 예산을 주지 않으면 늘 수렴까지 칠한다. 기본이 이것이다.
+- 칠하지 못한 자리는 줄 번호의 오름차순 목록으로 쥔다. 목록의 줄은 앞 줄과 이어지지 않을 수 있는 줄이다. 칠하다가 입력 상태가 지난번과 같은 줄을 만나면 그 줄을 지나 다음 목록 줄로 건너뛴다.
+- 대기 중에 편집이 오면 그 편집이 닿은 줄의 상태가 앞 줄들에 기대므로, 대기 중인 줄 가운데 편집보다 앞선 것도 함께 칠한다. 편집이 닿은 줄의 색이 틀리게 굳지 않기 위해서다. 그 앞 대기분이 길면 이 편집의 비용에 든다.
+- `advance`는 예산이 아무리 작아도 대기 중인 첫 줄은 칠한다. 앱이 틱마다 작은 예산으로 불러도 끝내 수렴한다.
 
 **편집과 칸의 순서**
 - 앱은 `apply_text_edit` 다음에 `update`를 같은 logic turn에서 부르고, 트리를 짓는 쪽이 `spans()`를 `text_area_config::spans`에 넘긴다. `update`가 늦으면 칸이 한 frame 낡은 offset으로 그린다. 칸은 구간을 글 끝으로 자르고 코드포인트 처음으로 당겨 깨지지는 않지만, 엉뚱한 글자에 색이 얹힌다.
@@ -156,46 +177,40 @@ namespace luil::text {
 
 ## 결정
 
-**1. 토큰 색을 어디서 오게 하나.**
-- a. 앱이 기존 다섯 역할에 매핑한다: 코드가 늘지 않는다. `warning`·`error`가 오류색이라 키워드가 경고로 읽히고, 토큰을 셋 넘게 가를 수 없다.
-- b. 구문 역할 여섯을 팔레트에 더한다: 테마마다 맞춘 색, 고대비 접기, 대비 test를 얻는다. 공용 팔레트 파이프라인(구조체 둘, JSON, 생성기, 합성, 고대비)을 만진다.
-- c. 앱이 임의 `ui_color`를 준다: 가장 자유롭다. X5의 임의 색 금지를 깨고 테마·고대비를 앱이 모두 맡는다.
-- 권장 b. 대가: 역할이 여섯으로 고정이다. 연산자나 전처리 같은 것은 가까운 역할에 합친다. 역할을 더할 때마다 같은 여섯 군데를 다시 고친다.
-- **승인 필요**
+**1. 토큰 색의 출처.** 질문: 토큰 색을 어디서 오게 하나.
+- 길 a: 앱이 기존 다섯 역할에 매핑한다. 코드가 늘지 않는다. `warning`·`error`가 오류색이라 키워드가 경고로 읽히고, 토큰을 셋 넘게 가를 수 없다.
+- 길 b: 구문 역할 여섯을 팔레트에 더한다. 테마마다 맞춘 색, 고대비 접기, 대비 test를 얻는다. 공용 팔레트 파이프라인(구조체 둘, JSON, 생성기, 합성, 고대비)을 만진다.
+- 길 c: 앱이 임의 `ui_color`를 준다. 가장 자유롭다. X5의 임의 색 금지를 깨고 테마·고대비를 앱이 모두 맡는다.
+- 권장: b. 대가: 역할이 여섯으로 고정이다. 연산자나 전처리 같은 것은 가까운 역할에 합친다. 역할을 더할 때마다 같은 여섯 군데를 다시 고친다. **승인: 길 b (2026-11-02).**
 
-**2. 주석용 기울임을 `text_span`에 더하나.**
-- a. 더하지 않는다: 필드 변경이 없다. 고대비에서 색이 모이면 주석이 코드와 같아진다.
-- b. `text_span::italic`: 고대비에서도 남는 단서다. rich_edit가 같은 필드를 쓴다.
-- c. 팔레트가 역할마다 모양을 정한다(`comment`는 늘 기울임): 앱이 끌 수 없다.
-- 권장 b. 대가: 기울임 구간은 배치에 걸려 글 폭과 배치 cache 항목이 는다. 진짜 Italic face가 없는 글꼴은 눕힘으로 메운다.
-- **권장대로 진행**
+**2. 주석용 기울임.** 질문: 주석용 기울임을 `text_span`에 더하나.
+- 길 a: 더하지 않는다. 필드 변경이 없다. 고대비에서 색이 모이면 주석이 코드와 같아진다.
+- 길 b: `text_span::italic`을 더한다. 고대비에서도 남는 단서다. rich_edit가 같은 필드를 쓴다.
+- 길 c: 팔레트가 역할마다 모양을 정한다(`comment`는 늘 기울임). 앱이 끌 수 없다.
+- 권장: b. 대가: 기울임 구간은 배치에 걸려 글 폭과 배치 cache 항목이 는다. 진짜 Italic face가 없는 글꼴은 눕힘으로 메운다. **권장대로 진행.**
 
-**3. 도우미 계약.**
-- a. 줄 단위와 상태 정수 콜백(`QSyntaxHighlighter` 방식): 증분이 줄 단위로 닫히고 렉서가 작다.
-- b. 보이는 범위 질의: 칸이 묻는 범위만 칠한다. 줄 상태 때문에 보이는 범위 앞을 어차피 칠하거나 중간 상태를 따로 쥐어야 하고, 칸이 도우미를 알게 된다.
-- c. 전체 렉서(`std::vector<text_span>(std::u8string_view)`): 가장 단순하다. 증분이 없고 지금 앱이 하는 일 그대로다. 도우미 없이도 되는 길이라 남겨 둔다.
-- 권장 a. 대가: 렉서가 줄 사이 문맥을 정수 하나에 담는 상태 기계여야 한다. 깊이가 정해지지 않은 중첩처럼 정수에 안 들어가는 문법은 c로 간다.
-- **승인 필요**
+**3. 도우미 계약.** 질문: 렉서와 도우미가 무엇을 주고받나.
+- 길 a: 줄 단위와 상태 정수 콜백(`QSyntaxHighlighter` 방식). 증분이 줄 단위로 닫히고 렉서가 작다.
+- 길 b: 보이는 범위 질의. 칸이 묻는 범위만 칠한다. 줄 상태 때문에 보이는 범위 앞을 어차피 칠하거나 중간 상태를 따로 쥐어야 하고, 칸이 도우미를 알게 된다.
+- 길 c: 전체 렉서(`std::vector<text_span>(std::u8string_view)`). 가장 단순하다. 증분이 없고 지금 앱이 하는 일 그대로다. 도우미 없이도 되는 길이라 남겨 둔다.
+- 권장: a. 대가: 렉서가 줄 사이 문맥을 정수 하나에 담는 상태 기계여야 한다. 깊이가 정해지지 않은 중첩처럼 정수에 안 들어가는 문법은 c로 간다. **승인: 길 a (2026-11-02).**
 
-**4. 편집 알림.**
-- a. 이전·새 글의 공통 접두·접미 비교: 공개 API가 늘지 않고 어떤 편집 경로든 같은 답을 낸다. `replace_all`도 처리한다.
-- b. `text_edit_state`에 변경 기록: 비교는 없다. 모든 변경 함수에 걸치고, `replace_all`·undo·`set_text`는 글 전체를 바꿔 기록이 결국 비교가 된다. 한 turn에 편집이 여럿이면 누적·초기화 규칙이 든다. `text_edit.h`를 만지는 rich_edit와 부딪힌다.
-- c. 앱이 변경 구간을 알린다: 가장 싸다. 앱이 IME, UIA 쓰기, 붙여넣기, 되돌리기를 모두 알아야 하고 하나만 빠져도 낡은 색이 남는다.
-- 권장 a. 대가: 비교가 바뀐 곳의 앞뒤 길이에 비례한다(최악은 글 전체를 한 번 훑는다). 도우미가 지난 글의 사본을 쥔다. 20MB에서 계측한다.
-- **권장대로 진행**
+**4. 편집 알림.** 질문: 도우미가 편집이 닿은 구간을 어떻게 아나.
+- 길 a: 이전·새 글의 공통 접두·접미 비교. 공개 API가 늘지 않고 어떤 편집 경로든 같은 답을 낸다. `replace_all`도 처리한다.
+- 길 b: `text_edit_state`에 변경 기록. 비교는 없다. 모든 변경 함수에 걸치고, `replace_all`·undo·`set_text`는 글 전체를 바꿔 기록이 결국 비교가 된다. 한 turn에 편집이 여럿이면 누적·초기화 규칙이 든다. `text_edit.h`를 만지는 rich_edit와 부딪힌다.
+- 길 c: 앱이 변경 구간을 알린다. 가장 싸다. 앱이 IME, UIA 쓰기, 붙여넣기, 되돌리기를 모두 알아야 하고 하나만 빠져도 낡은 색이 남는다.
+- 권장: a. 대가: 비교가 바뀐 곳의 앞뒤 길이에 비례한다(최악은 글 전체를 한 번 훑는다). 도우미가 지난 글의 사본을 쥔다. 20MB에서 계측한다. **권장대로 진행.**
 
-**5. 출력 형태.**
-- a. 편집마다 새 `shared_ptr<const std::vector<text_span>>`: 칸과 구간 계약이 그대로다. 구간 수에 비례해 쓴다.
-- b. 칸이 구간 공급 함수를 받는다(줄 상대 offset을 쥐고 보이는 범위만 답한다): 복사가 없다. 칸의 설정이 둘이 되고 `metric_styles`·그리기·`text_span_bounds`가 바뀐다. 공급 함수가 logic과 UI thread에서 불려 불변 보장을 도우미가 진다.
-- 권장 a. 대가: 20MB·50만 구간에서 편집마다 16MB를 쓴다. 칸이 frame마다 글 전체를 훑는 몫(2.5MB에 3ms, [여러 줄 칸의 자동 줄 넘김](text-area-wrap-design.md))은 글 크기에 비례해 20MB에서 이미 한 frame을 넘을 것이라 복사가 새 한계가 되지는 않을 것이다. 계측으로 확인하고, 느리면 b를 후속으로 더한다.
-- **권장대로 진행**
+**5. 출력 형태.** 질문: 도우미가 칸에 구간을 어떤 모양으로 건네나.
+- 길 a: 편집마다 새 `shared_ptr<const std::vector<text_span>>`. 칸과 구간 계약이 그대로다. 구간 수에 비례해 쓴다.
+- 길 b: 칸이 구간 공급 함수를 받는다(줄 상대 offset을 쥐고 보이는 범위만 답한다). 복사가 없다. 칸의 설정이 둘이 되고 `metric_styles`·그리기·`text_span_bounds`가 바뀐다. 공급 함수가 logic과 UI thread에서 불려 불변 보장을 도우미가 진다.
+- 권장: a. 대가: 20MB·50만 구간에서 편집마다 16MB를 쓴다. 칸이 frame마다 글 전체를 훑는 몫(2.5MB에 3ms, [여러 줄 칸의 자동 줄 넘김](text-area-wrap-design.md))은 글 크기에 비례해 20MB에서 이미 한 frame을 넘을 것이라 복사가 새 한계가 되지는 않을 것이다. 계측으로 확인하고, 느리면 b를 후속으로 더한다. **권장대로 진행.**
 
-**6. 20MB에서 동기 전체 재칠인가 시간 예산인가.**
-- a. 동기: 단순하고 늘 맞다. 맨 위에 `/*`를 치는 편집과 첫 불러오기가 문서 전체의 렉서 시간만큼 멈춘다.
-- b. 시간 예산: 편집이 닿은 줄은 동기, 꼬리와 첫 불러오기는 예산만큼. 칠하기 전까지 낡은 색이 남고, 앱이 틱마다 `advance`를 부른다.
-- c. 앱의 작업 thread: 도우미를 그 thread가 소유하고 구간만 logic에 넘긴다. 도우미 코드는 그대로이고, 구간을 logic으로 넘기는 복사와 순서는 앱이 맡는다.
-- 권장: `update`의 인자 하나로 a와 b를 함께 지원한다(기본은 예산 없음, 곧 a). 대가: `pending`과 낡은 색이라는 상태가 늘어 시험 표가 커진다. 계측하기 전에는 예산을 켜지 않는다.
-- **권장대로 진행**
+**6. 20MB에서의 재칠.** 질문: 20MB에서 동기 전체 재칠인가 시간 예산인가.
+- 길 a: 동기. 단순하고 늘 맞다. 맨 위에 `/*`를 치는 편집과 첫 불러오기가 문서 전체의 렉서 시간만큼 멈춘다.
+- 길 b: 시간 예산. 편집이 닿은 줄은 동기, 꼬리와 첫 불러오기는 예산만큼. 칠하기 전까지 낡은 색이 남고, 앱이 틱마다 `advance`를 부른다.
+- 길 c: 앱의 작업 thread. 도우미를 그 thread가 소유하고 구간만 logic에 넘긴다. 도우미 코드는 그대로이고, 구간을 logic으로 넘기는 복사와 순서는 앱이 맡는다.
+- 권장: `update`의 인자 하나로 a와 b를 함께 지원한다(기본은 예산 없음, 곧 a). 대가: `pending`과 낡은 색이라는 상태가 늘어 시험 표가 커진다. 계측하기 전에는 예산을 켜지 않는다. **권장대로 진행.**
 
 ## 플랫폼
 
@@ -213,18 +228,18 @@ namespace luil::text {
 
 자동 test:
 
-- `tests/text_change_tests.cpp`(`luil_core_tests`): 처음·가운데·끝의 삽입·삭제·교체, 같은 글이 `empty()`인지, `aa`에서 `aaa`처럼 접두와 접미가 겹치는 경우, `가`(EA B0 80)에서 `각`(EA B0 81)처럼 접두가 코드포인트 한가운데서 끝나는 경우의 경계, 깨진 UTF-8에서도 범위를 벗어나지 않는지, 빈 글.
+- `tests/text_change_tests.cpp`(`luil_core_tests`): 처음·가운데·끝의 삽입·삭제·교체, 같은 글이 `empty()`인지, `aa`에서 `aaa`처럼 접두와 접미가 겹치는 경우, `가`(EA B0 80)에서 `각`(EA B0 81)처럼 접두가 코드포인트 한가운데서 끝나는 경우와 접미가 한가운데서 시작하는 경우의 경계, 무작위 글에서 변경의 양 끝이 두 글 모두 코드포인트 경계인지, 깨진 UTF-8에서도 범위를 벗어나지 않는지, 빈 글, 64바이트 블록 비교의 경계.
 - `tests/syntax_highlighter_tests.cpp`(`luil_core_tests`):
   - 무작위 편집(삽입·삭제·`replace_all`·undo·`text_edit_set_text`) 뒤에 증분 결과가 같은 글을 처음부터 칠한 결과와 구간까지 같은지;
   - 구간 불변식(begin 순서, 겹침 없음, 비어 있지 않음, 글자소 경계);
   - 한 줄 편집의 `stats().relexed`가 1인지, `/*`를 열면 뒤 줄이 바뀌고 `*/`로 닫으면 상태가 되돌아오는 줄에서 멈추는지;
   - 줄 병합·분할, CRLF·홀로 선 CR, `max_line_size`, 순서를 어기거나 겹치거나 글자소를 가르는 렉서 출력의 다듬기;
-  - 예산을 0으로 준 `update`가 `pending()`이고 `advance`를 거듭하면 전체 칠과 같아지는지, 대기 중 편집이 맞게 이어지는지;
+  - 예산을 0으로 준 `update`가 `pending()`이고 `advance`를 거듭하면 전체 칠과 같아지는지, 대기 중 편집이 맞게 이어지는지, 무작위 편집과 무작위 예산 뒤에 끝내 처음부터 칠한 결과와 같아지는지(대기 중에도 구간이 현재 글에 맞는지);
   - 구간이 그대로면 `spans()`가 같은 포인터인지.
-  - 20MB·50만 줄 계측: 한 글자 편집(수렴), 상태를 뒤집는 편집, 첫 칠하기. 시간은 단언하지 않고 출력해 이 문서 아래에 기록한다.
-- `tests/text_area_element_tests.cpp`(`luil_core_tests`): 기울임 구간이 있는 칸의 `lines()`·`line_rect`가 구간 없는 칸과 같은지(주입 측정기는 기울임을 재지 않는다), 구문 색 구간이 조합 글만큼 옮겨 읽히는지, 여섯 역할이 `span_foreground`로 각 팔레트 칸에 가는지.
-- `tests/ui_theme_tests.cpp`(`luil_core_tests`): 여섯 역할이 두 테마에서 대비 4.5:1 이상인지, 고대비(검정·흰)에서 모두 `window_foreground`인지.
-- `tests/style_tests.cmake`(CMake script 시험): 여섯 키의 생성, 빠진 키가 `primaryForeground`로 채워지는지, 잘못된 색을 막는지. `tests/ui_style_tests.cpp`(`luil_core_tests`): 내장 JSON과 생성값이 같은지.
+  - 20MB·50만 줄 계측(숨김 test, `luil_core_tests "[benchmark][syntax]"`): `text_change_between`, 한 글자 편집(수렴), 상태를 뒤집는 편집, 첫 칠하기, 예산 0의 편집과 조각 이어 받기. 시간은 단언하지 않고 출력해 아래 "계측"에 기록한다.
+- `tests/text_area_element_tests.cpp`(`luil_core_tests`): 구문·기울임 구간이 있는 칸의 `lines()`·`line_rect`·`text_span_bounds`가 구간 없는 칸과 같은지(주입 측정기는 기울임을 재지 않는다), 구문 구간이 조합 글만큼 옮겨 읽히는지, 여섯 역할이 `span_foreground`로 각 팔레트 칸에 가는지. 조합 글만큼 옮겨 읽는지는 core test에 글꼴이 없어 글자색을 못 보므로, 줄 바꿈 칸을 덮는 바탕 구간(폭이 글꼴에 매이지 않는 4 논리 픽셀)을 raster로 본다.
+- `tests/ui_theme_tests.cpp`(`luil_core_tests`): 여섯 역할이 두 테마의 창, 표면, 그 위에 `input_background`를 합성한 두 바탕에서 대비 4.5:1 이상인지, 한 테마에서 여섯이 서로 다른지와 키 컬러를 따르지 않는지, 고대비(검정·흰)에서 모두 `window_foreground`인지, `compose_palette`가 그대로 옮기는지.
+- `tests/style_tests.cmake`(CMake script 시험): 여섯 키의 생성, 빠진 키가 `primaryForeground`로 채워지는지(여섯 모두 빠진 경우와 하나만 빠진 경우), 알파가 실린 색, 잘못된 색과 오타 키를 막는지. `tests/ui_style_tests.cpp`(`luil_core_tests`): 내장 JSON과 생성값이 같은지, 앱 스타일의 구문 색이 팔레트에 닿는지.
 - `tests/text_layout_native_tests.cpp`(`luil_tests`, Windows 실제 글꼴): 기울임 구간의 배치 폭이 `styles { italic }` 요청과 같은지, 기울임만 바뀐 문단만 다시 shape되는지. core raster는 글꼴이 없어 글자색을 못 본다.
 
 데모 칸 (상태를 label로 그려 UIA로 되읽는다):
@@ -238,6 +253,25 @@ namespace luil::text {
 - 큰 파일에서 타이핑 지연을 체감으로 본다.
 - Windows 한글 IME로 조합하고 확정하는 동안 색이 한 frame도 어긋나지 않는지 본다.
 - 실기기에서 소프트 키보드(한글 조합 포함)로 치는 동안 색 깜빡임과 낡은 구간이 없는지 본다.
+
+## 계측
+
+20MB, 50만 줄(줄마다 구간 둘, 글 22,000,000바이트)로 잰 값이다. 숨김 test가 시간을 출력만 하고 단언하지 않는다(`luil_core_tests "[benchmark][syntax]"`). **Debug 구성**(최적화 없음, MSVC)에서 잰 값이라 Release의 상한 어림으로만 읽는다. 렉서는 test의 작은 C 모양 렉서다.
+
+| 일 | 시간 | 렉서에 보낸 줄 |
+| --- | --- | --- |
+| 첫 칠하기(동기, 구간 100만 개) | 약 1,450ms | 500,000 |
+| 첫 `spans()` 게시(구간 32MB 복사) | 약 7ms | |
+| 두 글의 비교(`text_change_between`, 한가운데 한 글자) | 약 2.5ms | |
+| 한가운데 한 글자 편집(수렴) | `update` 약 55ms, 게시 약 8ms | 1 |
+| 맨 위에 `/*`(문서 전체의 상태를 뒤집음) | `update` 약 420ms, 게시 약 4ms | 500,001 |
+| 같은 편집을 예산 0으로 받음 | `update` 약 42ms | 1 (나머지는 대기) |
+| 위 대기분을 8ms 조각으로 이어 받음 | 모두 합쳐 약 1,500ms | 500,000 |
+
+- 결정 5(출력 형태)의 가정은 맞았다. 게시 복사는 32MB에 약 8ms이고 편집 `update`(약 55ms)의 한 몫이라 복사가 새 한계가 되지 않았다. 구간 공급 함수(5의 b)는 후속으로 미룬다.
+- 결정 4(편집 알림)의 비교 비용은 20MB에서 글 전체를 한 번 훑는 몫이다. 편집이 한가운데면 앞뒤 접두·접미를 모두 훑는다.
+- 예산 조각(8ms)으로 이어 받은 합계가 동기로 뒤집은 값(약 420ms)보다 긴 것은 조각마다 칠한 구간을 평면 vector에 바꿔 넣으며 뒤쪽 구간을 한 번 옮기는 비용과, 칠한 줄에 구간이 둘로 늘어난 몫이 더해져서다. 이 합은 한 번의 지연이 아니라 여러 frame에 나뉘어 낸다.
+- 메모리: 지난 글 사본 22MB, 줄 기록 12MB(줄당 24바이트), 구간 32MB(구간당 32바이트), 게시한 vector 32MB(편집 뒤 `spans()`를 부르면 한 벌 더).
 
 ## 범위 밖
 

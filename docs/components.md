@@ -24,6 +24,8 @@
 | 직접 그리는 글(정렬·줄 바꿈·테두리) | `draw_text_block`, `measure_text_block`, `make_text_font` | [ui/text_block.h](../include/luil/ui/text_block.h) | [설명](text-block-design.md) |
 | 텍스트 배치·caret·선택 질의 | `text_layout` | [ui/text_layout.h](../include/luil/ui/text_layout.h) | [설명](text-layout-design.md) |
 | 여러 줄 텍스트 입력 | `text_area_element` | [ui/text_area_element.h](../include/luil/ui/text_area_element.h) | [설명](concepts/text-input.md) · [링크](text-link-design.md) |
+| 구문 강조(편집에 맞춰 줄 단위로 다시 칠하는 구간) | `syntax_highlighter`, `syntax_line_lexer`, `text_span`, `text_color_role` | [ui/syntax_highlighter.h](../include/luil/ui/syntax_highlighter.h) · [ui/text_document.h](../include/luil/ui/text_document.h) | [설명](syntax-highlight-design.md) |
+| 두 글의 바뀐 구간 | `text::text_change_between` | [text/text_change.h](../include/luil/text/text_change.h) | [설명](syntax-highlight-design.md) |
 | 체크(삼상 포함)·라디오·스위치 | `check_element`, `aggregate_check` | [ui/check_element.h](../include/luil/ui/check_element.h) | [설명](keyboard-focus-design.md) |
 | 불확정 진행 | `spinner_element` | [ui/spinner_element.h](../include/luil/ui/spinner_element.h) | [설명](concepts/ui-element.md) |
 | 진행률 | `progress_element` | [ui/progress_element.h](../include/luil/ui/progress_element.h) | [설명](value-step-design.md) |

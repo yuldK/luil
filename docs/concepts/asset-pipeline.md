@@ -56,6 +56,7 @@ add_subdirectory(luil)
 | --- | --- | --- |
 | `raisedBackground` | 배지·고정되는 묶음 머리행·토스트의 몸에 까는 뜻 없는 바탕 | `noticeBackground` (전과 같은 색이다. 붉은 notice 바탕을 걷어내려면 이 키를 적는다) |
 | `thumbBackground` | 선택 묶음에서 고른 칸이 트랙 위에 뜨는 판. 트랙(`inputBackground`)보다 밝아야 한다 | `buttonPressedBackground` |
+| `syntaxKeyword` · `syntaxString` · `syntaxComment` · `syntaxNumber` · `syntaxType` · `syntaxFunction` | 코드 칸의 구문 색 여섯 역할 (`text_color_role`의 keyword·string·comment·number·type·function). 키 컬러와 무관하다 | `primaryForeground` (옛 JSON은 구문 색 없이 본문색으로 그린다) |
 
 컴포넌트 스타일 객체(`tabBar`, `popup`, `text`)는 예외로 **빠져도 된다**. 이 객체가 생기기 전의 JSON이 그대로 빌드되어야 하므로, 객체가 없거나 그 안의 키가 빠지면 struct의 기본값이다. 값은 enum 이름(camelCase, 예: `"connected"`, `"selectedOrHovered"`)과 팔레트 역할 이름(`"windowBackground"` 같은 것)이고, 낯선 키와 모르는 값은 여전히 생성을 멈춘다 ([탭 막대 스타일](../tab-bar-style-design.md)).
 
