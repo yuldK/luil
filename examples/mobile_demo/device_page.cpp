@@ -129,6 +129,22 @@ namespace mobile_demo {
             local_network_answered_ = local_network_answered_ || local->answered;
             return true;
         }
+        if (const auto* const permission { message.get<notification_permission_intent>() }; permission != nullptr)
+        {
+            notifications_ = permission->state;
+            notifications_answered_ = notifications_answered_ || permission->answered;
+            return true;
+        }
+        if (const auto* const sent { message.get<notification_send_intent>() }; sent != nullptr)
+        {
+            notification_sent_ = sent->result;
+            return true;
+        }
+        if (const auto* const launch { message.get<notification_launch_intent>() }; launch != nullptr)
+        {
+            notification_launch_ = launch->id;
+            return true;
+        }
         return false;
     }
 
@@ -289,6 +305,43 @@ namespace mobile_demo {
                 [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_request_local_network } } }; });
             column.add(std::move(ask), touch_height);
             break;
+        }
+
+        // OS 알림이다 (os-notification-design.md). 알림 창에 올리고, 꺼진 앱에서 누르면 그 id로 앱이 뜬다.
+        column.gap(20.0f);
+        column.heading(u8"notification-heading", u8"알림");
+        if (capabilities.notifications == false)
+            column.note(u8"notification-none", u8"이 플랫폼은 OS 알림을 올리지 못한다.");
+        else
+        {
+            switch (notifications_)
+            {
+            case luil::permission_state::not_required:
+                column.note(u8"notification-state", u8"알림 권한: 묻지 않아도 된다.");
+                break;
+            case luil::permission_state::granted:
+                column.note(u8"notification-state", notifications_answered_ ? u8"알림 권한: 받았다 (방금 허락)." : u8"알림 권한: 받았다.");
+                break;
+            case luil::permission_state::denied:
+                column.note(u8"notification-state", notifications_answered_ ? u8"알림 권한: 받지 못했다 (거절)." : u8"알림 권한: 아직 받지 못했다.");
+                column.gap(8.0f);
+                auto ask { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"notification-ask" }, luil::text_button_config { .text = u8"알림 권한 묻기" }) };
+                ask->set_action(luil::ui_trigger::left_click,
+                    [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_request_notifications } } }; });
+                column.add(std::move(ask), touch_height);
+                break;
+            }
+            column.gap(8.0f);
+            // 올리기는 앱 UI 명령으로 delegate에 넘긴다. 페이지는 플랫폼을 부르지 않는다.
+            auto send { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"notification-send" }, luil::text_button_config { .text = u8"알림 보내기" }) };
+            send->set_action(luil::ui_trigger::left_click,
+                [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_send_notification } } }; });
+            column.add(std::move(send), touch_height);
+            std::u8string sent { u8"알림 결과: 없음" };
+            if (notification_sent_.has_value())
+                sent = notification_sent_->ok() ? std::u8string { u8"알림 결과: ok" } : u8"알림 결과: 실패 · " + notification_sent_->error;
+            column.note(u8"notification-result", std::move(sent));
+            column.note(u8"notification-launch", u8"알림으로 시작: " + (notification_launch_.empty() ? std::u8string { u8"아니오" } : notification_launch_));
         }
 
         // 비밀 저장소다. Keystore의 AES-GCM 키로 암호화해 앱 내부 파일에 둔다 (Java 0줄, JNI).

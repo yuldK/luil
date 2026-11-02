@@ -26,6 +26,10 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 
 창 페이지의 "둘째 인스턴스 인자" 줄은 같은 이름의 둘째 실행이 넘긴 명령 줄 인자와 작업 폴더를 보인다([둘째 인스턴스의 인자 넘기기](single-instance-args-design.md)). 데모를 띄워 둔 채 `luil_demo.exe --send-to-first a.txt "b c"`를 한 번 더 실행하면 둘째는 창을 띄우지 않고 플래그를 뺀 인자를 첫째에 보내고 끝난다. 종료 코드는 받았으면 0, 먼저 뜬 데모가 없으면 3, 그 밖의 실패는 4다. 첫째의 줄은 `둘째 인스턴스 인자: 2개 [a.txt] [b c] · 작업 폴더 <경로>`로 바뀌고 첫째 창이 앞으로 선다. 플래그가 없으면 둘째도 평소처럼 뜬다.
 
+토스트 페이지(`--page=toasts`) 맨 아래의 "OS 알림" 구역은 앱 창 밖 Windows 알림 센터에 알림을 올린다([OS 알림](os-notification-design.md)). `OS 알림 보내기`는 id `demo-1`의 알림을 그림과 함께 올리고, `OS 알림 바꾸기`는 같은 id를 소리 없이 다른 본문으로 바꾸며, `OS 알림 거두기`는 그 알림을 거둔다. 세 줄이 UIA 이름으로 읽힌다: `OS 알림 상태: 사용 가능`, `OS 알림 결과: ok`, `OS 알림 사건: 없음`. 알림을 누르면 사건 줄이 `OS 알림 사건: 눌림 demo-1`로 바뀌고 데모가 앞으로 온다. 데모를 끈 뒤 알림 센터에서 누르면 데모가 새로 뜨고 `눌림 demo-1 · 꺼진 앱에서`다.
+데모는 시작할 때마다 앱 식별 `luil.Demo`를 `HKCU\Software\Classes\AppUserModelId`와 활성화기 CLSID 아래에 쓴다. `luil_demo.exe --unregister-app-identity`는 창을 띄우지 않고 그 항목을 지운다. 종료 코드는 지웠으면 0, 없으면 3, 그 밖의 실패는 4다. 알림 센터에 남은 데모 알림은 그 전에 `OS 알림 거두기`로 거둔다.
+모바일 데모의 기기 페이지 "알림" 구역은 알림 권한 상태(`알림 권한: ...`), `알림 권한 묻기`(권한이 없을 때)·`알림 보내기` 단추, `알림 결과`와 `알림으로 시작: 아니오`(꺼진 앱을 알림으로 띄웠으면 그 id) 줄을 보인다.
+
 ## 바로 가져갈 공용 기능
 
 | 기능 | 공개 API | 예제 |
@@ -37,6 +41,7 @@ luil_demo를 열면 기능 색인에서 각 예제로 바로 이동할 수 있�
 | 메뉴 팝업의 측정·배치 | make_menu_popup | [메뉴](../examples/demo/popups_page.cpp) |
 | 분할 버튼과 드롭다운 단추, 필드 아래에 놓고 위로 뒤집히는 메뉴 | split_button_element, menu_popup_config::below, place_field_popup | [메뉴](../examples/demo/popups_page.cpp) |
 | 닫기 전까지 남는 정보 막대, 폭에서 높이를 재서 담기 | info_bar_element, info_bar_element::measure, ui_severity | [토스트](../examples/demo/toasts_page.cpp) |
+| 앱 창 밖 OS 알림 올리기·바꾸기·거두기와 눌림 사건 | show_notification, close_notification, app_delegate::make_notification_message, window_config::identity | [토스트](../examples/demo/toasts_page.cpp) |
 | 명령과 단축키의 공통 정의 | app_command, match_command, menu_item_from | [탭](../examples/demo/tabs_page.cpp) |
 | 앞·뒤 삽입으로 탭 이동 | tab_bar_config::move | [탭](../examples/demo/tabs_page.cpp) |
 | 창 밖으로 분리·다시 합치기 | tab_bar_config::unclaimed_drop, receive, ui_window | [탭](../examples/demo/tabs_page.cpp) |

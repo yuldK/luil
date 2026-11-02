@@ -472,3 +472,60 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(demo::text_target_of_kind(demo::kind_text).has_value() == false);
 }
+
+TEST_CASE("The OS notification card reads the state, the result and the event the shell hands it", "[demo][toasts][notification]")
+{
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    REQUIRE(label_text(tree, u8"os-notification-status") == u8"OS 알림 상태: 확인 전");
+    REQUIRE(label_text(tree, u8"os-notification-result") == u8"OS 알림 결과: 없음");
+    REQUIRE(label_text(tree, u8"os-notification-event") == u8"OS 알림 사건: 없음");
+    REQUIRE(label_text(tree, u8"os-notification-hint").empty() == false);
+
+    send(page, demo::os_notification_status_intent { luil::notification_availability::available });
+    send(page, demo::os_notification_result_intent { luil::platform_result { luil::platform_status::ok, {}, std::nullopt } });
+    luil::notification_event pressed { luil::notification_event_kind::activated, u8"demo-1" };
+    pressed.launched = true;
+    send(page, demo::os_notification_event_intent { pressed });
+    tree = toasts_tree(page);
+    REQUIRE(label_text(tree, u8"os-notification-status") == u8"OS 알림 상태: 사용 가능");
+    REQUIRE(label_text(tree, u8"os-notification-result") == u8"OS 알림 결과: ok");
+    REQUIRE(label_text(tree, u8"os-notification-event") == u8"OS 알림 사건: 눌림 demo-1 · 꺼진 앱에서");
+
+    // 꺼진 알림과 실패, 사용자가 닫은 사건과 앞서 버린 수다.
+    send(page, demo::os_notification_status_intent { luil::notification_availability::blocked });
+    send(page, demo::os_notification_result_intent { luil::platform_result { luil::platform_status::failed, u8"turned off", std::nullopt } });
+    luil::notification_event dismissed { luil::notification_event_kind::dismissed, u8"demo-1" };
+    dismissed.lost_before = 2;
+    send(page, demo::os_notification_event_intent { dismissed });
+    tree = toasts_tree(page);
+    REQUIRE(label_text(tree, u8"os-notification-status") == u8"OS 알림 상태: 꺼짐");
+    REQUIRE(label_text(tree, u8"os-notification-result") == u8"OS 알림 결과: failed · turned off");
+    REQUIRE(label_text(tree, u8"os-notification-event") == u8"OS 알림 사건: 닫음 demo-1 · 앞서 버린 사건 2개");
+}
+
+TEST_CASE("The OS notification buttons ask the shell to send, replace and close the same notification", "[demo][toasts][notification]")
+{
+    demo::toasts_page page {};
+    const auto tree { toasts_tree(page) };
+    const std::pair<std::u8string_view, demo::os_notification_action> buttons[] {
+        { u8"os-notification-send", demo::os_notification_action::send },
+        { u8"os-notification-replace", demo::os_notification_action::replace },
+        { u8"os-notification-close", demo::os_notification_action::close },
+    };
+    for (const auto& [owner, action] : buttons)
+    {
+        const luil::ui_element_id id { demo::kind_toast_trigger, std::u8string { owner } };
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name.starts_with(u8"OS 알림 "));
+        const luil::ui_action* const pressed { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(pressed != nullptr);
+        const luil::input_action result { first_action((*pressed)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        const auto* const request { std::get<luil::app_message>(result).get<demo::os_notification_request_intent>() };
+        REQUIRE(request != nullptr);
+        REQUIRE(request->action == action);
+        // 요청은 셸의 몫이라 페이지가 받지 않는다.
+        REQUIRE(page.handle(std::get<luil::app_message>(result)) == false);
+    }
+}

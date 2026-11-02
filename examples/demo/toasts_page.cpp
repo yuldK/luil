@@ -47,6 +47,73 @@ namespace demo {
             return static_cast<std::size_t>(severity);
         }
 
+        [[nodiscard]] std::u8string availability_text(const std::optional<luil::notification_availability>& availability)
+        {
+            if (availability.has_value() == false)
+                return u8"확인 전";
+            switch (*availability)
+            {
+            case luil::notification_availability::available:
+                return u8"사용 가능";
+            case luil::notification_availability::blocked:
+                return u8"꺼짐";
+            case luil::notification_availability::permission_needed:
+                return u8"권한 필요";
+            case luil::notification_availability::unsupported:
+                break;
+            }
+            return u8"지원 안 함";
+        }
+
+        // 답의 갈래 이름은 API 값 그대로 적는다. 실패 글은 OS가 준 진단이라 뒤에 붙인다.
+        [[nodiscard]] std::u8string result_text(const std::optional<luil::platform_result>& result)
+        {
+            if (result.has_value() == false)
+                return u8"없음";
+            std::u8string text {};
+            switch (result->status)
+            {
+            case luil::platform_status::ok:
+                return u8"ok";
+            case luil::platform_status::not_found:
+                text = u8"not_found";
+                break;
+            case luil::platform_status::unsupported:
+                text = u8"unsupported";
+                break;
+            case luil::platform_status::failed:
+                text = u8"failed";
+                break;
+            }
+            if (result->error.empty() == false)
+                text += u8" · " + result->error;
+            return text;
+        }
+
+        [[nodiscard]] std::u8string event_text(const std::optional<luil::notification_event>& event)
+        {
+            if (event.has_value() == false)
+                return u8"없음";
+            std::u8string text {};
+            switch (event->kind)
+            {
+            case luil::notification_event_kind::activated:
+                text = u8"눌림 " + event->id;
+                if (event->launched)
+                    text += u8" · 꺼진 앱에서";
+                break;
+            case luil::notification_event_kind::dismissed:
+                text = u8"닫음 " + event->id;
+                break;
+            case luil::notification_event_kind::failed:
+                text = u8"실패 " + event->id + u8" · " + event->error;
+                break;
+            }
+            if (event->lost_before > 0)
+                text += u8" · 앞서 버린 사건 " + to_u8(static_cast<int>(event->lost_before)) + u8"개";
+            return text;
+        }
+
         [[nodiscard]] luil::info_bar_config make_info_bar(const luil::ui_severity severity)
         {
             const bar_text text { bar_text_of(severity) };
@@ -81,6 +148,21 @@ namespace demo {
             // 닫는 것은 막대가 아니라 앱이다. 다음 frame에 이 막대를 짓지 않는다.
             if (bar->close)
                 bars_open_[bar_index(bar->severity)] = false;
+            return true;
+        }
+        if (const auto* const status { message.get<os_notification_status_intent>() }; status != nullptr)
+        {
+            os_status_ = status->availability;
+            return true;
+        }
+        if (const auto* const result { message.get<os_notification_result_intent>() }; result != nullptr)
+        {
+            os_result_ = result->result;
+            return true;
+        }
+        if (const auto* const event { message.get<os_notification_event_intent>() }; event != nullptr)
+        {
+            os_event_ = event->event;
             return true;
         }
         if (message.get<info_bar_reopen_intent>() != nullptr)
@@ -233,7 +315,35 @@ namespace demo {
             page.add(std::move(reopen_row), luil::text_button_height);
         }
         page.end_card();
+
+        add_os_notification_card(page);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(toasts_scroll_intent { delta }); });
+    }
+
+    void toasts_page::add_os_notification_card(page_layout& page) const
+    {
+        page.begin_card(u8"OS 알림", u8"앱 창 밖 Windows 알림 센터에 올립니다. 알림을 누르면 데모가 앞으로 오고 사건 줄이 바뀝니다.");
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"os-notification-buttons" }, row_config) };
+        const auto add_button = [&row](std::u8string owner, std::u8string label, const os_notification_action action) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_toast_trigger, std::move(owner) }, luil::text_button_config { .text = std::move(label) }) };
+            button->set_cursor(luil::ui_cursor::hand);
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(os_notification_request_intent { action }));
+            row->add_fit(std::move(button));
+        };
+        add_button(u8"os-notification-send", u8"OS 알림 보내기", os_notification_action::send);
+        add_button(u8"os-notification-replace", u8"OS 알림 바꾸기", os_notification_action::replace);
+        add_button(u8"os-notification-close", u8"OS 알림 거두기", os_notification_action::close);
+        page.add(std::move(row), luil::text_button_height);
+        page.gap(8.0f);
+        page.add(make_label({ kind_text, u8"os-notification-status" }, u8"OS 알림 상태: " + availability_text(os_status_), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.add(make_label({ kind_text, u8"os-notification-result" }, u8"OS 알림 결과: " + result_text(os_result_), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.add(make_label({ kind_text, u8"os-notification-event" }, u8"OS 알림 사건: " + event_text(os_event_), 12.0f, luil::label_color_role::dim), 22.0f);
+        // 데모는 시작할 때마다 앱 식별 `luil.Demo`를 HKCU에 쓴다. 지우는 길을 함께 적는다.
+        page.add(make_label({ kind_text, u8"os-notification-hint" }, u8"앱 식별 luil.Demo를 HKCU에 씁니다. 지우려면 luil_demo.exe --unregister-app-identity로 띄웁니다.", 11.0f, luil::label_color_role::dim), 22.0f);
+        page.end_card();
     }
 
     std::unique_ptr<luil::ui_element> toasts_page::make_overlay()

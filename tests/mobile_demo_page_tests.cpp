@@ -1166,3 +1166,49 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(mobile_demo::text_target_of_kind(mobile_demo::kind_text).has_value() == false);
 }
+
+TEST_CASE("The device page reads the notification permission, the send result and the launch id", "[mobile-demo][notification]")
+{
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform platform { previous };
+    platform.capabilities.notifications = true;
+    luil::set_ui_platform(platform);
+    const auto name_of = [](const luil::ui_tree& tree, const std::u8string& owner) {
+        const luil::ui_element* const element { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(element != nullptr);
+        return element->accessibility().name;
+    };
+
+    mobile_demo::device_page page {};
+    auto tree { device_tree(page, false) };
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 묻지 않아도 된다.");
+    REQUIRE(name_of(tree, u8"notification-result") == u8"알림 결과: 없음");
+    REQUIRE(name_of(tree, u8"notification-launch") == u8"알림으로 시작: 아니오");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" }) != nullptr);
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-ask" }) == nullptr);
+
+    // 권한이 없으면 묻기 단추가 선다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_permission_intent { luil::permission_state::denied } }));
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 아직 받지 못했다.");
+    const luil::ui_element* const ask { tree.find({ mobile_demo::kind_layout, u8"notification-ask" }) };
+    REQUIRE(ask != nullptr);
+    REQUIRE(ask->accessibility().name == u8"알림 권한 묻기");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_permission_intent { luil::permission_state::granted, true } }));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_send_intent { luil::platform_result { luil::platform_status::failed, u8"blocked", std::nullopt } } }));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_launch_intent { u8"mobile-demo-1" } }));
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 받았다 (방금 허락).");
+    REQUIRE(name_of(tree, u8"notification-result") == u8"알림 결과: 실패 · blocked");
+    REQUIRE(name_of(tree, u8"notification-launch") == u8"알림으로 시작: mobile-demo-1");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" })->accessibility().name == u8"알림 보내기");
+
+    // 능력이 없는 플랫폼은 단추 대신 이유를 보인다.
+    platform.capabilities.notifications = false;
+    luil::set_ui_platform(platform);
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-none") == u8"이 플랫폼은 OS 알림을 올리지 못한다.");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" }) == nullptr);
+    luil::set_ui_platform(previous);
+}

@@ -30,6 +30,9 @@
 //       --backdrop=none|mica|mica_alt|acrylic (주 창 배경 효과의 처음 값 — 테마 페이지의 고르기와 같다)
 //       --send-to-first (둘째 실행이 창을 띄우지 않고, 이 플래그를 뺀 나머지 인자와 작업 폴더를 먼저 뜬 데모에 보내고 끝낸다.
 //                       종료 코드는 받았으면 0, 먼저 뜬 데모가 없으면 3, 그 밖의 실패는 4다. 받은 인자는 창 페이지의 "둘째 인스턴스 인자" 줄에 보인다)
+//       --unregister-app-identity (창을 띄우지 않고 데모의 앱 식별 `luil.Demo`의 HKCU 항목을 지우고 끝낸다. 지웠으면 0, 없으면 3, 실패는 4다)
+//  - 데모는 시작할 때마다 앱 식별 `luil.Demo`를 HKCU에 쓴다 (토스트 페이지의 OS 알림 구역, os-notification-design.md).
+//    꺼진 데모의 알림을 누르면 COM이 `-luil-notification`(과 `-Embedding`)을 붙여 데모를 띄운다. 그 표식은 인자 읽기에서 거른다.
 
 #include "demo/basics_page.h"
 #include "demo/common.h"
@@ -50,8 +53,10 @@
 #include "demo/workbench_page.h"
 #include "demo/zoom_page.h"
 
+#include "luil/app/notification.h"
 #include "luil/app/platform_services.h"
 #include "luil/net/http_client.h"
+#include "luil/ui/image_decode.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/command_palette.h"
@@ -80,6 +85,7 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -91,6 +97,19 @@ namespace demo {
         // 사이드바의 처음 폭과 접힌 폭이다 (논리 픽셀).
         constexpr float sidebar_default_width { 200.0f };
         constexpr float sidebar_collapsed_width { 44.0f };
+
+        // 데모의 앱 식별이다 (`window_config::identity`). `--unregister-app-identity`가 같은 id를 지운다.
+        constexpr std::u8string_view demo_app_identity { u8"luil.Demo" };
+
+        // 실행 파일이 있는 폴더다. 읽지 못하면 빈 경로다.
+        [[nodiscard]] std::filesystem::path executable_directory()
+        {
+            wchar_t buffer[MAX_PATH] {};
+            const DWORD length { GetModuleFileNameW(nullptr, buffer, MAX_PATH) };
+            if (length == 0 || length >= MAX_PATH)
+                return {};
+            return std::filesystem::path { std::wstring { buffer, length } }.parent_path();
+        }
 
         // --- 창 배치의 저장·복원 ---
         // 라이브러리는 배치를 보고하고(placement_intent) 요청을 적용할 뿐
@@ -269,6 +288,31 @@ namespace demo {
                 live_client_.store(client_.get());
             }
 
+            // OS 알림 단추 하나를 OS에 옮기고 답과 지금 상태를 토스트 페이지에 넘긴다. logic thread에서 돈다.
+            //  - 보내기와 바꾸기는 같은 id라 바꾸기가 알림 센터의 그 알림을 바꾼다. 보내기만 그림을 싣는다.
+            void run_os_notification(const os_notification_action action)
+            {
+                luil::platform_result result {};
+                if (action == os_notification_action::close)
+                    result = luil::close_notification(os_notification_id);
+                else
+                {
+                    luil::notification value {};
+                    value.id = std::u8string { os_notification_id };
+                    value.title = u8"luil 데모";
+                    value.body = action == os_notification_action::send ? u8"알림 센터에 올린 알림입니다. 누르면 데모가 앞으로 옵니다." : u8"같은 id로 바꾼 알림입니다. 소리 없이 올렸습니다.";
+                    value.silent = action == os_notification_action::replace;
+                    if (action == os_notification_action::send)
+                    {
+                        luil::image_decode_error error {};
+                        value.image = luil::load_image_file((executable_directory() / L"assets" / L"gradient.png").u8string(), error);
+                    }
+                    result = luil::show_notification(value);
+                }
+                static_cast<void>(toasts_.handle(luil::app_message { os_notification_result_intent { std::move(result) } }));
+                static_cast<void>(toasts_.handle(luil::app_message { os_notification_status_intent { luil::notification_status() } }));
+            }
+
             void handle(luil::app_message message) override
             {
                 // 네트워크 메시지는 셸이 먼저 받는다 — client를 든 것이 셸이고
@@ -281,6 +325,12 @@ namespace demo {
                 if (message.get<network_cancel_intent>() != nullptr)
                 {
                     cancel_network_request();
+                    return;
+                }
+                // OS 알림은 셸이 부른다. 토스트 페이지는 답과 지금 상태만 받아 그린다.
+                if (const auto* const request { message.get<os_notification_request_intent>() }; request != nullptr)
+                {
+                    run_os_notification(request->action);
                     return;
                 }
                 if (const auto* const beat { message.get<network_heartbeat_intent>() }; beat != nullptr)
@@ -1040,6 +1090,14 @@ namespace demo {
             void on_started(luil::win32::app_host& host) override
             {
                 driver_.bind_host(host);
+                // 앱 식별은 창보다 먼저 섰다. 토스트 페이지의 상태 줄이 처음부터 이 값을 보인다.
+                host.post_app_message(luil::app_message { os_notification_status_intent { luil::notification_status() } });
+            }
+
+            // 사용자가 OS 알림을 누르거나 닫았다. 토스트 페이지가 사건 줄로 보인다.
+            [[nodiscard]] luil::app_message make_notification_message(const luil::notification_event& event) override
+            {
+                return luil::app_message { os_notification_event_intent { event } };
             }
 
             [[nodiscard]] luil::app_message make_file_dialog_message(const luil::file_dialog_result& result) override
@@ -1092,6 +1150,9 @@ namespace demo {
             //    앞으로 세우기는 라이브러리가 콜백 뒤에 한다.
             [[nodiscard]] bool on_instance_arguments(luil::win32::app_host& host, const luil::instance_arguments& arguments) override
             {
+                // 이 데모가 끝나는 중에 COM이 띄운 둘째가 알림 표식을 넘길 수 있다. 파일 인자가 아니라 받기만 하고 보이지 않는다.
+                if (luil::notification_launch(arguments.arguments))
+                    return true;
                 return host.post_app_message_ticketed(luil::app_message { instance_arguments_intent { arguments } }) != 0;
             }
 
@@ -1122,6 +1183,33 @@ namespace {
         if (result.ok())
             return 0;
         return result.status == luil::platform_status::not_found ? 3 : 4;
+    }
+
+    // `--unregister-app-identity`가 있으면 데모의 앱 식별을 지우고 종료 코드를 돌려준다. 없으면 빈 값이다.
+    //  - 종료 코드: 지웠으면 0, 지울 항목이 없으면 3, 그 밖의 실패는 4다. 알림 센터에 남은 데모 알림은 거두지 않는다.
+    [[nodiscard]] std::optional<int> unregister_identity(const std::vector<std::u8string>& arguments)
+    {
+        bool requested { false };
+        for (std::size_t index = 1; index < arguments.size(); ++index)
+            requested = requested || arguments[index] == u8"--unregister-app-identity";
+        if (requested == false)
+            return std::nullopt;
+        const luil::platform_result result { luil::win32::unregister_app_identity(demo::demo_app_identity) };
+        if (result.ok())
+            return 0;
+        return result.status == luil::platform_status::not_found ? 3 : 4;
+    }
+
+    // 알림 클릭으로 뜬 실행의 표식(`-luil-notification`·`-Embedding`)을 뺀 인자다. `parse_arguments`는 모르는 인자를 거절한다.
+    [[nodiscard]] std::vector<std::u8string> without_notification_flags(const std::vector<std::u8string>& arguments)
+    {
+        std::vector<std::u8string> kept {};
+        for (const std::u8string& argument : arguments)
+        {
+            if (luil::notification_launch(std::span<const std::u8string> { &argument, 1 }) == false)
+                kept.push_back(argument);
+        }
+        return kept;
     }
 
     [[nodiscard]] bool parse_arguments(
@@ -1197,6 +1285,9 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     // 인자를 첫째에 넘기는 일만 하는 둘째는 창을 띄우지 않고 끝낸다.
     if (const std::optional<int> sent { send_to_first_instance(instance, *arguments) }; sent.has_value())
         return *sent;
+    // 앱 식별을 지우는 일만 하는 실행도 창을 띄우지 않는다.
+    if (const std::optional<int> removed { unregister_identity(*arguments) }; removed.has_value())
+        return *removed;
     luil::win32::window_config config {};
     config.class_name = L"Luil.Demo.Window";
     config.caption = demo::make_caption_config(instance.primary());
@@ -1212,8 +1303,13 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     std::u8string start_page {};
     bool caption_bottom { false };
     luil::window_backdrop backdrop { luil::window_backdrop::none };
-    if (parse_arguments(*arguments, config, start_page, caption_bottom, backdrop) == false)
+    if (parse_arguments(without_notification_flags(*arguments), config, start_page, caption_bottom, backdrop) == false)
         return 2;
+    // OS 알림이 쓰는 앱 식별이다. 아이콘은 실행 파일 옆 assets의 PNG다 (IconUri는 실행 파일 리소스를 가리키지 못한다).
+    config.identity.id = std::u8string { demo::demo_app_identity };
+    config.identity.display_name = u8"luil 데모";
+    if (const std::filesystem::path directory { demo::executable_directory() }; directory.empty() == false)
+        config.identity.icon_path = (directory / L"assets" / L"gradient.png").u8string();
 
     // 지난 실행이 갈무리한 배치를 되돌린다.
     // --position이 있으면 그쪽이 이긴다 — 명시한 자리를 저장된 자리가 덮지 않는다.
