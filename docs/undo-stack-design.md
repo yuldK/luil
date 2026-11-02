@@ -205,7 +205,7 @@ else if (message.get<undo_requested>() != nullptr)
 - **style_sheet**(같은 줄의 다음): 기능 파일은 겹치지 않는다. 목록 파일 셋에 줄을 더하는 것만 겹친다. `src/CMakeLists.txt`(이 노드는 `ui/foundation` 필터의 소스 줄, style_sheet는 core 링크와 파서 소스), `tests/CMakeLists.txt`, `include/luil/luil.h`다. 모두 줄을 더하는 병합이라 기계적이다.
 - **ink**(줄 3, 같은 라운드): 획 되돌리기를 이 stack에 올릴 수 있다. 서로 기대지 않으며 ink 설계가 절대 값 규칙과 합치기 키를 따른다. 이 노드는 `ui_events.h`·`ui_interaction.cpp`를 고치지 않는다.
 - **rich_edit·hotkey·menu_bar**(R3): 칸의 기록은 칸의 것이라(결정 3) 서식 되돌리기를 `text_edit_state`에 넣어도 이 stack과 따로 간다. hotkey가 `key_chord`를 고치므로 `make_undo_commands`는 지정 초기화(`.key`, `.control`, `.shift`)로 짓는다. menu_bar의 편집 메뉴는 그 결과를 `menu_item_from`으로 짓고 글은 앱이 준다.
-- **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 구현, test, 문서)을 먼저 내고 데모 연결 커밋은 통합 때 직렬로 쌓는다. 고치는 데모 파일은 `examples/demo`의 `workbench_page.*`·`palette.*`·`demo_main.cpp`와 `examples/mobile_demo/lists_page.*`다. `demo_main.cpp`는 여러 줄이 고치는 파일이라 `palette_run_intent` 갈래와 `make_frame`의 팔레트 popup 호출 한 줄만 바꾼다. 단축키는 `on_key`가 `palette_commands()`로 이미 맞추므로 `on_key`는 그대로다.
+- **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 구현, test, 문서)을 먼저 내고 데모 연결 커밋은 통합 때 직렬로 쌓는다. 고치는 데모 파일은 `examples/demo`의 `workbench_page.*`·`palette.*`·`demo_main.cpp`와 `examples/mobile_demo/lists_page.*`다. `demo_main.cpp`는 여러 줄이 고치는 파일이라 `palette_run_intent` 갈래와 `make_frame`의 팔레트 popup 호출 한 줄만 바꾼다. 단축키는 `on_key`가 `palette_commands()`로 이미 맞추므로 `on_key`는 그대로다. `tests/CMakeLists.txt`에는 라이브러리 커밋의 `undo_stack_tests.cpp` 줄 말고도 연결 커밋이 모바일 데모 목록에 `lists_page.cpp` 한 줄을 더한다(확인 절).
 - `tests/key_propagation_tests.cpp` 끝에 TEST_CASE 둘을 더한다. 같은 파일을 더하는 줄 3의 노드와는 끝에 덧붙이는 병합이다.
 - 문서는 `docs/components.md`에 표 한 줄, `concepts/app-message.md`에 되돌림 메시지 한 절, `concepts/text-editing.md`에 칸과 앱 stack의 경계 한 문단을 더한다. 색인(`docs/README.md`)은 통합 때 붙인다.
 
@@ -222,7 +222,7 @@ else if (message.get<undo_requested>() != nullptr)
   - 저장 지점: 처음 참, `push` 뒤 거짓, `undo`로 돌아오면 참인지. redo 쪽 저장 지점이 `push`로 지워지거나 맨 아래 걸음이 버려져 걸음 밖으로 나가면 `set_clean` 전까지 거짓인지. `clear` 뒤 참인지;
   - 명령 helper: id·단축키 묶음(Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z)·범위. `match_command`가 세 키에 id를 돌려주고 Ctrl+Z와 Ctrl+Shift+Z가 서로 맞지 않는지. `can_undo`가 거짓이면 맞지 않는지. `find_conflicts`에 새 충돌이 없는지.
 - `tests/key_propagation_tests.cpp`(끝에 둘): 텍스트 칸 초점의 Ctrl+Z가 `text_edit_command::undo` 하나를 내고 정책의 `on_key`를 부르지 않는지. 단추 초점의 Ctrl+Z는 정책의 `on_key`가 받는지. 읽기 전용 칸의 삼킴은 `text_area_element_tests.cpp`가 이미 잠근다.
-- `tests/workbench_page_tests.cpp`: 체크·스테이지·버리기·열 폭을 되돌리고 다시 실행하면 처음 상태와 같은지, 새 동작이 redo를 비우는지, 같은 열의 연속 조절이 한 걸음인지, 커밋이 stack을 비우는지. `tests/mobile_demo_page_tests.cpp`: 재배열을 되돌리면 이전 순서인지.
+- `tests/workbench_page_tests.cpp`: 체크·스테이지·버리기·열 폭을 되돌리고 다시 실행하면 처음 상태와 같은지, 새 동작이 redo를 비우는지, 같은 열의 연속 조절이 한 걸음인지, 커밋이 stack을 비우는지. `tests/mobile_demo_page_tests.cpp`: 재배열을 되돌리면 이전 순서인지. 이 test가 읽는 `examples/mobile_demo/lists_page.cpp`는 `luil_core_tests`의 모바일 데모 목록(`tests/CMakeLists.txt` 141~151행)에 없어서 연결 커밋이 목록에 올린다. 그 파일은 luil 헤더와 `mobile_demo/common.h`만 부르고 `common.cpp`는 목록에 이미 있어 대역이 필요하지 않을 것으로 보며, 링크는 구현 때 확인한다. 데스크톱 `workbench_page.cpp`는 이미 등록돼 있다(155~156행).
 - `luil_umbrella_header`(우산 헤더에 두 헤더), `luil_core_portability`, `luil_source_style`.
 
 데모. 상태를 label로 그려 `luil-uia`로 되읽는다.
