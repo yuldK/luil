@@ -55,8 +55,8 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/sidebar_element.h"
+#include "luil/ui/spring.h"
 #include "luil/ui/stack_element.h"
-#include "luil/ui/transition.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/win32/win32_window.h"
 
@@ -369,6 +369,9 @@ namespace demo {
                 }
                 if (const auto* const metrics { message.get<window_metrics_intent>() }; metrics != nullptr)
                 {
+                    // 도는 중에 움직임 줄이기가 켜지면 끝 폭에 붙인다. 두면 남은 시간만큼 더 돌고 끝난다.
+                    if (metrics->reduce_motion && metrics_.reduce_motion == false)
+                        sidebar_motion_ = luil::spring_at_rest(target_sidebar_width());
                     metrics_ = *metrics;
                     return;
                 }
@@ -390,10 +393,10 @@ namespace demo {
                 if (message.get<sidebar_toggle_intent>() != nullptr)
                 {
                     sidebar_collapsed_ = sidebar_collapsed_ == false;
-                    // **지금 폭에서** 새 목표로 이어 출발한다. 반쯤 접힌 채 다시
-                    // 눌러도 끝값으로 튀었다 오지 않는다 (transition_to의 몫이다).
+                    // **지금 폭과 속도에서** 새 목표로 이어 출발한다. 반쯤 접힌 채 다시
+                    // 눌러도 끝값으로 튀거나 멈칫하지 않는다 (spring_to의 몫이다).
                     //  - 시계를 읽는 것은 앱이다. 라이브러리는 시각을 인자로 받을 뿐이다.
-                    sidebar_motion_ = luil::transition_to(sidebar_motion_, target_sidebar_width(), std::chrono::steady_clock::now());
+                    sidebar_motion_ = luil::spring_to(sidebar_motion_, target_sidebar_width(), std::chrono::steady_clock::now(), luil::spring_smooth, metrics_.reduce_motion);
                     return;
                 }
                 if (const auto* const resize { message.get<sidebar_resize_intent>() }; resize != nullptr)
@@ -405,7 +408,7 @@ namespace demo {
                         sidebar_width_ = 360.0f;
                     // 손으로 끄는 동안은 전환하지 않는다 — 손이 이미 그 자리를 정하고
                     // 있어서, 뒤따라오는 애니메이션은 지연으로만 느껴진다.
-                    sidebar_motion_ = luil::transition { sidebar_width_, sidebar_width_, {}, std::chrono::milliseconds { 0 } };
+                    sidebar_motion_ = luil::spring_at_rest(sidebar_width_);
                     return;
                 }
                 if (message.get<sidebar_resize_finish_intent>() != nullptr)
@@ -552,7 +555,9 @@ namespace demo {
                 }
 
                 // 캡션 아래는 사이드바 + 현재 페이지의 가로 stack이다.
-                const luil::sidebar_config sidebar_config { make_sidebar_config() };
+                //  - 사이드바 폭은 이 frame을 지은 시각의 스프링 값이다. 다음 예고(`next_tick`)도 이 시각에서 센다.
+                frame_time_ = std::chrono::steady_clock::now();
+                const luil::sidebar_config sidebar_config { make_sidebar_config(frame_time_) };
                 const float sidebar_width { luil::sidebar_element::width_for(sidebar_config) };
                 const float content_width { width / scale - sidebar_width };
                 const float content_height { (height - caption_height) / scale };
@@ -564,6 +569,19 @@ namespace demo {
                 shell->add_flexible(build_page(content_width, content_height, scale));
                 shell->arrange({ { 0.0f, content_top, width, height - caption_height }, scale });
                 root->add(std::move(shell));
+
+                // 사이드바 접힘 스프링의 상태다. 접힌 동안은 사이드바 내용이 없어서 이 label이 폭을 말한다.
+                {
+                    constexpr float motion_label_width { 160.0f };
+                    constexpr float motion_label_height { 18.0f };
+                    const bool moving { luil::spring_finished(sidebar_motion_, frame_time_) == false };
+                    std::u8string motion_text { u8"도는 중" };
+                    if (moving == false)
+                        motion_text = u8"사이드바 " + to_u8(static_cast<int>(std::lround(sidebar_width))) + u8" · 멈춤";
+                    auto motion { make_label(luil::ui_element_id { kind_text, u8"sidebar-motion" }, std::move(motion_text), 11.0f, luil::label_color_role::dim) };
+                    motion->arrange({ { 6.0f * scale, content_top + (content_height - motion_label_height - 4.0f) * scale, motion_label_width * scale, motion_label_height * scale }, scale });
+                    root->add(std::move(motion));
+                }
 
                 // 오버레이들: dialog는 화면을 덮고 토스트는 오른쪽 아래에 쌓인다.
                 basics_.add_overlay(*root, width, height, scale);
@@ -656,7 +674,9 @@ namespace demo {
             [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() override
             {
                 std::optional<std::chrono::steady_clock::time_point> next { toasts_.next_expiry() };
-                for (const std::optional<std::chrono::steady_clock::time_point> other : { luil::transition_next_update(sidebar_motion_, std::chrono::steady_clock::now()), workbench_.next_due() })
+                // 접힘 스프링은 마지막으로 지은 frame의 시각에서 센다. 그 frame이 도는 중이었다면 한 frame 뒤에 하나를 더 지어
+                // 멈춘 모습으로 끝낸다 (지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다).
+                for (const std::optional<std::chrono::steady_clock::time_point> other : { luil::spring_next_update(sidebar_motion_, frame_time_), workbench_.next_due() })
                     if (other.has_value() && (next.has_value() == false || *other < *next))
                         next = other;
                 return next;
@@ -742,15 +762,15 @@ namespace demo {
                 return sidebar_collapsed_ ? sidebar_collapsed_width : sidebar_width_;
             }
 
-            [[nodiscard]] luil::sidebar_config make_sidebar_config() const
+            [[nodiscard]] luil::sidebar_config make_sidebar_config(const std::chrono::steady_clock::time_point now) const
             {
                 luil::sidebar_config config {};
                 config.owner = u8"navigation";
                 config.expanded_width = sidebar_width_;
                 config.collapsed_width = sidebar_collapsed_width;
                 config.collapsed = sidebar_collapsed_;
-                // 지금 폭은 전환이 답한다. 끝나 있으면 목표와 같은 값이다.
-                config.width = luil::transition_value(sidebar_motion_, std::chrono::steady_clock::now());
+                // 지금 폭은 스프링이 답한다. 끝나 있으면 목표와 같은 값이다.
+                config.width = luil::spring_value(sidebar_motion_, now);
                 config.toggle_tooltip = sidebar_collapsed_ ? u8"펼친다" : u8"접는다";
                 config.toggle = luil::make_message_action(sidebar_toggle_intent {});
                 config.resize = [](const float delta) { return luil::make_app_action(sidebar_resize_intent { delta }); };
@@ -907,9 +927,11 @@ namespace demo {
             // 손잡이를 놓았을 때 저장한 폭과 그 횟수다 (`sidebar_config::resize_finish`의 시연).
             float saved_sidebar_width_ { sidebar_default_width };
             int sidebar_resize_finishes_ { 0 };
-            // 접힘 전환이다 (앱 상태).
+            // 접힘 스프링이다 (앱 상태).
             // 라이브러리는 이것을 들고 있지 않고, 지금 폭만 물어 사이드바에 넘긴다.
-            luil::transition sidebar_motion_ { sidebar_default_width, sidebar_default_width, {}, std::chrono::milliseconds { 0 } };
+            luil::spring sidebar_motion_ { luil::spring_at_rest(sidebar_default_width) };
+            // 마지막으로 지은 frame의 시각이다. 시간이 흘러야 바뀌는 상태의 다음 예고를 이 시각에서 센다.
+            std::chrono::steady_clock::time_point frame_time_ {};
             window_metrics_intent metrics_ {};
             std::atomic<bool> closed_ { false };
         };
@@ -1048,9 +1070,9 @@ namespace demo {
                 return luil::app_message { result };
             }
 
-            [[nodiscard]] luil::app_message make_window_metrics_message(const float width, const float height, const float scale) override
+            [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
             {
-                return luil::app_message { window_metrics_intent { width, height, scale } };
+                return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.reduce_motion } };
             }
 
             [[nodiscard]] luil::app_message make_backdrop_message(const luil::win32::backdrop_report& report) override

@@ -103,6 +103,8 @@ namespace mobile_demo {
         if (const auto* const metrics { message.get<window_metrics_intent>() }; metrics != nullptr)
         {
             metrics_ = *metrics;
+            // 시트 페이지는 metrics 메시지를 보지 못하므로 셸이 움직임 줄이기만 넘긴다.
+            sheets_.set_reduce_motion(metrics->reduce_motion);
             return;
         }
         if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
@@ -155,6 +157,8 @@ namespace mobile_demo {
 
     std::shared_ptr<const luil::ui_frame> mobile_driver::make_frame()
     {
+        // 이 frame을 지은 시각이다. 놓은 뒤 도는 시트의 지금 값과 다음 예고(`next_tick`)가 같은 시각에서 센다.
+        frame_time_ = std::chrono::steady_clock::now();
         const float scale { metrics_.scale > 0.0f ? metrics_.scale : 1.0f };
         const float width { metrics_.width > 0.0f ? metrics_.width : 480.0f };
         const float height { metrics_.height > 0.0f ? metrics_.height : 800.0f };
@@ -223,7 +227,7 @@ namespace mobile_demo {
             basics_.add_overlay(*root, width, height, scale, metrics_.surface);
         // 시트는 창 전체에 겹친다. 열림은 페이지의 상태라 회전·화면 분할 뒤에도 다시 선다.
         if (shown == page_sheets)
-            sheets_.add_overlay(*root, width, height, scale, metrics_.surface);
+            sheets_.add_overlay(*root, width, height, scale, metrics_.surface, frame_time_);
         if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
         {
             toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
@@ -320,7 +324,12 @@ namespace mobile_demo {
 
     std::optional<std::chrono::steady_clock::time_point> mobile_driver::next_tick()
     {
-        return toasts_.next_expiry();
+        std::optional<std::chrono::steady_clock::time_point> next { toasts_.next_expiry() };
+        // 놓은 뒤 도는 시트다. 마지막으로 지은 frame의 시각에서 센다. 그 frame이 도는 중이었다면 한 frame 뒤에 하나를 더 지어
+        // 멈춘 모습으로 끝낸다 (지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다).
+        if (const auto sheet { sheets_.next_update(frame_time_) }; sheet.has_value() && (next.has_value() == false || *sheet < *next))
+            next = sheet;
+        return next;
     }
 
     void mobile_driver::tick(std::chrono::steady_clock::time_point)
@@ -401,6 +410,6 @@ namespace mobile_demo {
 
     luil::app_message make_metrics_message(const luil::window_metrics& metrics)
     {
-        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class, luil::window_surface(metrics) } };
+        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class, luil::window_surface(metrics), metrics.reduce_motion } };
     }
 }

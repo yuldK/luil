@@ -20,6 +20,7 @@ namespace {
         luil::zoom_point anchor {};
         luil::zoom_point delta {};
         float value { 0.0f };
+        float degrees { 0.0f };
     };
 
     const request& read(const luil::input_action& action)
@@ -858,4 +859,459 @@ TEST_CASE("Fit actions reach the fitted state through zoom then pan", "[zoom][fi
     REQUIRE(luil::zoom_fit_actions(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::width).empty());
     settings.pan_by = {};
     REQUIRE(luil::zoom_fit_actions(settings, viewport, 20.0f, 4.0f, luil::zoom_fit::height).empty());
+}
+
+namespace {
+    // 회전 메시지를 켠 보기다. 나머지는 `config()`와 같다.
+    luil::zoom_view_config rotating_config(const float rotation = 0.0f)
+    {
+        auto settings { config() };
+        settings.rotate_by = [](const float degrees, const luil::zoom_point anchor) { return luil::make_app_action(request { .anchor = anchor, .degrees = degrees }); };
+        settings.rotation = rotation;
+        return settings;
+    }
+
+    std::shared_ptr<const luil::ui_tree> rotating_tree(const luil::zoom_view_config& settings)
+    {
+        auto view { std::make_unique<luil::zoom_view_element>(settings) };
+        view->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 1.0f });
+        return std::make_shared<const luil::ui_tree>(std::move(view));
+    }
+
+    // 두 손가락이 (100, 100)과 (200, 100)에 내려 있는 보기다.
+    void press_pair(luil::interaction_controller& controller)
+    {
+        static_cast<void>(controller.process(press(1, 100.0f)));
+        static_cast<void>(controller.process(press(2, 200.0f)));
+    }
+
+    void focus_view(luil::interaction_controller& controller)
+    {
+        static_cast<void>(controller.process(luil::access_focus_event { .target = { luil::ui_element_kind::zoom_view, u8"view" } }));
+    }
+
+    // 화면의 점 아래에 있는 내용 좌표다 (`origin + zoom × R(rotation) p`의 역).
+    luil::zoom_point content_under(const luil::zoom_view_state& state, const luil::zoom_point screen)
+    {
+        return luil::rotate_point({ (screen.x - state.origin.x) / state.zoom, (screen.y - state.origin.y) / state.zoom }, -state.rotation);
+    }
+
+    int rotations_in(const std::vector<luil::input_action>& actions)
+    {
+        int count { 0 };
+        for (const luil::input_action& action : actions)
+            if (read(action).degrees != 0.0f)
+                ++count;
+        return count;
+    }
+}
+
+TEST_CASE("Rotating about an anchor keeps the content under it in place", "[zoom][rotate]")
+{
+    const luil::zoom_point viewport { 400.0f, 400.0f };
+    const luil::zoom_point anchors[] { { 0.0f, 0.0f }, { 80.0f, -30.0f }, { -150.0f, 120.0f } };
+    for (const float zoom : { 0.5f, 1.0f, 2.5f })
+        for (const float rotation : { 0.0f, 30.0f, -120.0f, 170.0f })
+            for (const float degrees : { 7.0f, -45.0f, 200.0f, 90.0f })
+                for (const luil::zoom_point anchor : anchors)
+                {
+                    auto settings { config() };
+                    settings.zoom = zoom;
+                    settings.origin = { 25.0f, -40.0f };
+                    settings.rotation = rotation;
+                    const luil::zoom_view_state before { luil::zoom_about(settings, viewport, 1.0f, {}) };
+                    const luil::zoom_view_state after { luil::rotate_about(settings, viewport, degrees, anchor) };
+                    const luil::zoom_point under_before { content_under(before, anchor) };
+                    const luil::zoom_point under_after { content_under(after, anchor) };
+                    REQUIRE(under_after.x == Catch::Approx(under_before.x).margin(1.0e-2));
+                    REQUIRE(under_after.y == Catch::Approx(under_before.y).margin(1.0e-2));
+                    REQUIRE(after.zoom == before.zoom);
+                    REQUIRE(after.rotation > -180.0f);
+                    REQUIRE(after.rotation <= 180.0f);
+                }
+}
+
+TEST_CASE("Rotation is clockwise and folds into (-180, 180]", "[zoom][rotate]")
+{
+    const luil::zoom_point viewport { 400.0f, 400.0f };
+    auto settings { rotating_config(170.0f) };
+    REQUIRE(luil::rotate_about(settings, viewport, 20.0f, {}).rotation == Catch::Approx(-170.0f));
+    // 170 - 350 = -180은 180으로 접는다.
+    REQUIRE(luil::rotate_about(settings, viewport, -350.0f, {}).rotation == 180.0f);
+    settings.rotation = 0.0f;
+    REQUIRE(luil::rotate_about(settings, viewport, 180.0f, {}).rotation == 180.0f);
+    REQUIRE(luil::rotate_about(settings, viewport, -180.0f, {}).rotation == 180.0f);
+    REQUIRE(luil::rotate_about(settings, viewport, 90.0f, {}).rotation == 90.0f);
+    REQUIRE(luil::rotate_about(settings, viewport, -90.0f, {}).rotation == -90.0f);
+    // 시계 방향이다: 기준점 왼쪽 100에 있던 원점이 기준점 위쪽 100으로 간다.
+    const luil::zoom_view_state turned { luil::rotate_about(settings, viewport, 90.0f, { 100.0f, 0.0f }) };
+    REQUIRE(turned.origin == luil::zoom_point { 100.0f, -100.0f });
+}
+
+TEST_CASE("A turn that is not one leaves the state as it is", "[zoom][rotate]")
+{
+    const luil::zoom_point viewport { 400.0f, 400.0f };
+    auto settings { config() };
+    settings.zoom = 2.0f;
+    settings.origin = { 10.0f, -20.0f };
+    settings.rotation = 33.0f;
+    const luil::zoom_view_state current { luil::zoom_about(settings, viewport, 1.0f, {}) };
+    const float nan { std::numeric_limits<float>::quiet_NaN() };
+    const float infinity { std::numeric_limits<float>::infinity() };
+    for (const float degrees : { 0.0f, 360.0f, -720.0f, nan, infinity, -infinity })
+    {
+        const luil::zoom_view_state same { luil::rotate_about(settings, viewport, degrees, { 5.0f, 5.0f }) };
+        REQUIRE(same.zoom == current.zoom);
+        REQUIRE(same.origin == current.origin);
+        REQUIRE(same.rotation == current.rotation);
+    }
+    REQUIRE(luil::rotate_about(settings, viewport, 15.0f, { nan, 0.0f }).origin == current.origin);
+    REQUIRE(luil::rotate_about(settings, viewport, 15.0f, { 0.0f, infinity }).rotation == current.rotation);
+}
+
+TEST_CASE("Rotate point turns about the origin and its inverse comes back", "[zoom][rotate]")
+{
+    REQUIRE(luil::rotate_point({ 1.0f, 0.0f }, 90.0f) == luil::zoom_point { 0.0f, 1.0f });
+    REQUIRE(luil::rotate_point({ 0.0f, 1.0f }, 90.0f) == luil::zoom_point { -1.0f, 0.0f });
+    REQUIRE(luil::rotate_point({ 3.0f, -4.0f }, 180.0f) == luil::zoom_point { -3.0f, 4.0f });
+    REQUIRE(luil::rotate_point({ 3.0f, -4.0f }, 0.0f) == luil::zoom_point { 3.0f, -4.0f });
+    REQUIRE(luil::rotate_point({ 3.0f, -4.0f }, std::numeric_limits<float>::quiet_NaN()) == luil::zoom_point { 3.0f, -4.0f });
+    for (const float degrees : { 15.0f, -37.5f, 123.0f, 179.0f })
+    {
+        const luil::zoom_point back { luil::rotate_point(luil::rotate_point({ 12.0f, -7.0f }, degrees), -degrees) };
+        REQUIRE(back.x == Catch::Approx(12.0f).margin(1.0e-4));
+        REQUIRE(back.y == Catch::Approx(-7.0f).margin(1.0e-4));
+    }
+}
+
+TEST_CASE("Rotated bounds enclose the four turned corners", "[zoom][rotate]")
+{
+    const luil::rect_f page { -50.0f, -25.0f, 100.0f, 50.0f };
+    REQUIRE(luil::rotated_bounds(page, 0.0f).x == page.x);
+    REQUIRE(luil::rotated_bounds(page, 0.0f).width == page.width);
+    REQUIRE(luil::rotated_bounds(page, 360.0f).height == page.height);
+    REQUIRE(luil::rotated_bounds(page, std::numeric_limits<float>::infinity()).width == page.width);
+    const luil::rect_f quarter { luil::rotated_bounds(page, 90.0f) };
+    REQUIRE(quarter.x == -25.0f);
+    REQUIRE(quarter.y == -50.0f);
+    REQUIRE(quarter.width == 50.0f);
+    REQUIRE(quarter.height == 100.0f);
+    const luil::rect_f half { luil::rotated_bounds(page, 180.0f) };
+    REQUIRE(half.x == -50.0f);
+    REQUIRE(half.width == 100.0f);
+    const luil::rect_f diagonal { luil::rotated_bounds({ -50.0f, -50.0f, 100.0f, 100.0f }, 45.0f) };
+    REQUIRE(diagonal.width == Catch::Approx(141.421f).margin(1.0e-2));
+    REQUIRE(diagonal.height == Catch::Approx(141.421f).margin(1.0e-2));
+    REQUIRE(diagonal.x == Catch::Approx(-70.711f).margin(1.0e-2));
+}
+
+TEST_CASE("The existing helpers keep the rotation and the element reports it folded", "[zoom][rotate]")
+{
+    auto settings { config() };
+    settings.rotation = 45.0f;
+    settings.content_bounds = luil::rect_f { -100.0f, -100.0f, 200.0f, 200.0f };
+    const luil::zoom_point viewport { 240.0f, 240.0f };
+    REQUIRE(luil::zoom_about(settings, viewport, 2.0f, { 10.0f, 10.0f }).rotation == 45.0f);
+    REQUIRE(luil::pan_by(settings, viewport, { 5.0f, 5.0f }).rotation == 45.0f);
+    REQUIRE(luil::zoom_to_fit(settings, viewport).rotation == 45.0f);
+    // 접지 않은 각도는 접어서 돌려준다.
+    settings.rotation = 540.0f;
+    REQUIRE(luil::zoom_about(settings, viewport, 1.0f, {}).rotation == 180.0f);
+    settings.rotation = -90.0f;
+    auto view { std::make_unique<luil::zoom_view_element>(settings) };
+    view->arrange({ { 0.0f, 0.0f, 240.0f, 240.0f }, 1.0f });
+    REQUIRE(view->state().rotation == -90.0f);
+    // 접근성이 읽는 값은 각도가 아니라 배율 그대로다.
+    REQUIRE(view->accessibility().range == luil::access_range { 0.1f, 10.0f, view->state().zoom });
+    // 앞 두 필드만 채운 기존 초기화는 0도다.
+    REQUIRE(luil::zoom_view_state { 1.0f, {} }.rotation == 0.0f);
+}
+
+TEST_CASE("A zoom view refuses a rotation that is not a number or a step out of range", "[zoom][rotate]")
+{
+    const float nan { std::numeric_limits<float>::quiet_NaN() };
+    const float infinity { std::numeric_limits<float>::infinity() };
+    auto settings { config() };
+    settings.rotation = nan;
+    REQUIRE_THROWS_AS(luil::zoom_view_element { settings }, std::invalid_argument);
+    settings.rotation = infinity;
+    REQUIRE_THROWS_AS(luil::zoom_view_element { settings }, std::invalid_argument);
+    for (const float step : { 0.0f, -15.0f, 180.5f, nan, infinity })
+    {
+        settings = config();
+        settings.rotation_step = step;
+        REQUIRE_THROWS_AS(luil::zoom_view_element { settings }, std::invalid_argument);
+    }
+    settings = config();
+    settings.rotation_step = 180.0f;
+    REQUIRE_NOTHROW(luil::zoom_view_element { settings });
+    settings.rotation = 720.0f;
+    REQUIRE_NOTHROW(luil::zoom_view_element { settings });
+}
+
+TEST_CASE("A zoom view places its content by the bounds the app gives it", "[zoom][rotate]")
+{
+    // 돌리지 않은 경계는 {-100, -50, 200, 100}이다. 앱이 90도로 돌린 상자를 주면 내용은 그 상자의 slot을 받는다.
+    auto settings { config() };
+    settings.rotation = 90.0f;
+    settings.content_bounds = luil::rotated_bounds({ -100.0f, -50.0f, 200.0f, 100.0f }, 90.0f);
+    auto view { std::make_unique<luil::zoom_view_element>(settings) };
+    auto item { std::make_unique<content>() };
+    const auto* const observed { item.get() };
+    view->set_content(std::move(item));
+    view->arrange({ { 0.0f, 0.0f, 400.0f, 400.0f }, 1.0f });
+    REQUIRE(observed->bounds().x == 150.0f);
+    REQUIRE(observed->bounds().y == 100.0f);
+    REQUIRE(observed->bounds().width == 100.0f);
+    REQUIRE(observed->bounds().height == 200.0f);
+    // 내용 원점의 화면 자리는 slot에서 돌린 경계의 왼쪽 위를 뺀 곳이다: 창 가운데다.
+    REQUIRE(observed->bounds().x - settings.content_bounds->x == 200.0f);
+    REQUIRE(observed->bounds().y - settings.content_bounds->y == 200.0f);
+}
+
+TEST_CASE("A pinch sends pan then zoom then rotation about the same midpoint", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(rotating_config()));
+    press_pair(controller);
+    // 둘째가 (200, 100)에서 (200, 120)으로 가면 선이 atan(0.2) = 11.31도 시계 방향으로 돈다.
+    const auto actions { controller.process(move(2, 200.0f, 120.0f)) };
+    REQUIRE(actions.size() == 3);
+    REQUIRE(read(actions[0]).delta == luil::zoom_point { 0.0f, 10.0f });
+    REQUIRE(read(actions[1]).factor == Catch::Approx(1.0198f).margin(1.0e-3));
+    REQUIRE(read(actions[2]).degrees == Catch::Approx(11.3099f).margin(1.0e-3));
+    REQUIRE(read(actions[2]).anchor == read(actions[1]).anchor);
+    REQUIRE(read(actions[2]).anchor == luil::zoom_point { -50.0f, -90.0f });
+}
+
+TEST_CASE("Rotation stands only after the angle adds up to the threshold and then sends it whole", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(rotating_config()));
+    press_pair(controller);
+    // 5.71도는 문턱(6도) 밑이다. 확대와 이동은 그대로 나간다.
+    auto actions { controller.process(move(2, 200.0f, 110.0f)) };
+    REQUIRE(actions.size() == 2);
+    REQUIRE(rotations_in(actions) == 0);
+    // 쌓은 합이 6.28도가 되는 이벤트가 합 전체를 한 번에 보낸다.
+    actions = controller.process(move(2, 200.0f, 111.0f));
+    REQUIRE(rotations_in(actions) == 1);
+    REQUIRE(read(actions.back()).degrees == Catch::Approx(6.2773f).margin(1.0e-3));
+    // 선 뒤에는 이벤트마다 그 이벤트의 각도만 보낸다. atan(0.21) - atan(0.11) = 5.58도다.
+    actions = controller.process(move(2, 200.0f, 121.0f));
+    REQUIRE(rotations_in(actions) == 1);
+    REQUIRE(read(actions.back()).degrees == Catch::Approx(5.5825f).margin(1.0e-3));
+    // 반대로 돌면 음수다. 서 있는 동안은 작은 각도도 문턱 없이 나간다.
+    actions = controller.process(move(2, 200.0f, 120.0f));
+    REQUIRE(read(actions.back()).degrees < 0.0f);
+}
+
+TEST_CASE("Angles that cancel before the threshold never send a rotation", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(rotating_config()));
+    press_pair(controller);
+    REQUIRE(rotations_in(controller.process(move(2, 200.0f, 110.0f))) == 0);
+    // 반대로 흔들어 합이 0으로 돌아온다. 절댓값을 쌓지 않는다.
+    REQUIRE(rotations_in(controller.process(move(2, 200.0f, 100.0f))) == 0);
+    // 새로 6.28도를 쌓아야 선다. 앞의 5.71도가 남아 있었다면 12도가 나갔을 것이다.
+    const auto actions { controller.process(move(2, 200.0f, 111.0f)) };
+    REQUIRE(rotations_in(actions) == 1);
+    REQUIRE(read(actions.back()).degrees == Catch::Approx(6.2773f).margin(1.0e-3));
+}
+
+TEST_CASE("A line crossing the leftward direction turns by a small angle", "[zoom][pinch][rotate]")
+{
+    luil::touch_gesture_config touch {};
+    touch.minimum_rotation_angle = 1.0f;
+    luil::interaction_controller controller {};
+    REQUIRE(controller.set_touch_config(touch));
+    controller.set_tree(rotating_tree(rotating_config()));
+    static_cast<void>(controller.process(press(1, 200.0f)));
+    static_cast<void>(controller.process(press(2, 100.0f, 99.0f)));
+    // (-100, -1)에서 (-100, 1)로 넘어간다. 358.9도가 아니라 -1.15도다.
+    const auto actions { controller.process(move(2, 100.0f, 101.0f)) };
+    REQUIRE(rotations_in(actions) == 1);
+    REQUIRE(read(actions.back()).degrees == Catch::Approx(-1.1459f).margin(1.0e-3));
+}
+
+TEST_CASE("Touches closer than the pinch distance do not add up an angle", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(rotating_config()));
+    static_cast<void>(controller.process(press(1, 100.0f)));
+    static_cast<void>(controller.process(press(2, 110.0f)));
+    // 10 논리 픽셀 간격에서 선이 50도 돌아도 쌓지 않는다.
+    REQUIRE(rotations_in(controller.process(move(2, 110.0f, 112.0f))) == 0);
+    // 간격이 24를 넘은 첫 이동은 이전 간격이 가까워서 새 기준만 선다.
+    REQUIRE(rotations_in(controller.process(move(2, 200.0f, 100.0f))) == 0);
+    // 이제 둘 다 떨어졌다. 50도가 섞이지 않은 11.31도만 나간다.
+    const auto actions { controller.process(move(2, 200.0f, 120.0f)) };
+    REQUIRE(rotations_in(actions) == 1);
+    REQUIRE(read(actions.back()).degrees == Catch::Approx(11.3099f).margin(1.0e-3));
+}
+
+TEST_CASE("Lifting one finger clears the angle and a new second finger starts from zero", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(rotating_config()));
+    press_pair(controller);
+    REQUIRE(rotations_in(controller.process(move(2, 200.0f, 110.0f))) == 0);
+    REQUIRE(controller.process(release(1, 100.0f)).empty());
+    // 남은 손가락은 이동만 잇는다.
+    const auto alone { controller.process(move(2, 210.0f, 110.0f)) };
+    REQUIRE(alone.size() == 1);
+    REQUIRE(rotations_in(alone) == 0);
+    // 새 둘째가 합류한다. 앞의 +5.71도가 남아 있었다면 -6.28도와 합쳐 문턱을 넘지 못했을 것이다.
+    static_cast<void>(controller.process(press(3, 110.0f, 110.0f)));
+    const auto actions { controller.process(move(3, 110.0f, 121.0f)) };
+    REQUIRE(rotations_in(actions) == 1);
+    REQUIRE(read(actions.back()).degrees == Catch::Approx(-6.2773f).margin(1.0e-3));
+}
+
+TEST_CASE("A view without a rotation message only pinches", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(config()));
+    press_pair(controller);
+    const auto actions { controller.process(move(2, 200.0f, 140.0f)) };
+    REQUIRE(actions.size() == 2);
+    REQUIRE(rotations_in(actions) == 0);
+}
+
+TEST_CASE("Losing the rotation message in the middle of a pinch stops only the rotation", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(rotating_config()));
+    press_pair(controller);
+    REQUIRE(rotations_in(controller.process(move(2, 200.0f, 120.0f))) == 1);
+    controller.set_tree(rotating_tree(config()));
+    const auto actions { controller.process(move(2, 200.0f, 140.0f)) };
+    REQUIRE(actions.size() == 2);
+    REQUIRE(rotations_in(actions) == 0);
+    // 접촉은 취소되지 않았다.
+    REQUIRE(controller.process(move(2, 200.0f, 150.0f)).size() == 2);
+}
+
+TEST_CASE("Turning rotation off stops the rotation of the pair in progress and the pinch goes on", "[zoom][pinch][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(rotating_config()));
+    press_pair(controller);
+    REQUIRE(rotations_in(controller.process(move(2, 200.0f, 120.0f))) == 1);
+    luil::touch_gesture_config touch {};
+    touch.rotate_enabled = false;
+    REQUIRE(controller.set_touch_config(touch));
+    auto actions { controller.process(move(2, 200.0f, 140.0f)) };
+    REQUIRE(actions.size() == 2);
+    REQUIRE(rotations_in(actions) == 0);
+    // 다시 켜도 그 쌍은 되살아나지 않는다.
+    REQUIRE(controller.set_touch_config({}));
+    actions = controller.process(move(2, 200.0f, 160.0f));
+    REQUIRE(actions.size() == 2);
+    REQUIRE(rotations_in(actions) == 0);
+    // 꺼 둔 채 시작한 쌍도 회전하지 않는다. 핀치는 선다.
+    static_cast<void>(controller.cancel_dropped_gestures());
+    REQUIRE(controller.set_touch_config(touch));
+    press_pair(controller);
+    actions = controller.process(move(2, 200.0f, 140.0f));
+    REQUIRE(actions.size() == 2);
+    REQUIRE(rotations_in(actions) == 0);
+    // 핀치를 끄면 지금처럼 두 접촉을 함께 취소한다.
+    touch.pinch_enabled = false;
+    REQUIRE(controller.set_touch_config(touch));
+    REQUIRE(controller.process(move(2, 200.0f, 160.0f)).empty());
+}
+
+TEST_CASE("A rejected rotation threshold keeps the settings it found", "[zoom][pinch][rotate]")
+{
+    luil::touch_gesture_config touch {};
+    touch.minimum_rotation_angle = 20.0f;
+    luil::interaction_controller controller {};
+    REQUIRE(controller.set_touch_config(touch));
+    touch.minimum_rotation_angle = 0.0f;
+    REQUIRE(controller.set_touch_config(touch) == false);
+    touch.minimum_rotation_angle = std::numeric_limits<float>::quiet_NaN();
+    REQUIRE(controller.set_touch_config(touch) == false);
+    controller.set_tree(rotating_tree(rotating_config()));
+    press_pair(controller);
+    // 11.31도는 20도 문턱 밑이다.
+    REQUIRE(rotations_in(controller.process(move(2, 200.0f, 120.0f))) == 0);
+    // 그 위로 돌리면 선다. 쌓은 합은 atan(0.4) = 21.8도다.
+    const auto actions { controller.process(move(2, 200.0f, 140.0f)) };
+    REQUIRE(rotations_in(actions) == 1);
+    REQUIRE(read(actions.back()).degrees == Catch::Approx(21.8014f).margin(1.0e-3));
+}
+
+TEST_CASE("Cancellation and a dropped queue take both rotating touches", "[zoom][pinch][rotate]")
+{
+    for (int cause { 0 }; cause < 2; ++cause)
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(rotating_tree(rotating_config()));
+        press_pair(controller);
+        REQUIRE(rotations_in(controller.process(move(2, 200.0f, 120.0f))) == 1);
+        if (cause == 0)
+            static_cast<void>(controller.cancel_dropped_gestures());
+        else
+            static_cast<void>(controller.process(luil::pointer_cancelled_event { .device = luil::pointer_device::touch, .pointer_id = 2 }));
+        REQUIRE(controller.process(move(2, 200.0f, 140.0f)).empty());
+        REQUIRE(controller.process(move(1, 110.0f)).empty());
+    }
+}
+
+TEST_CASE("Shift with a left or right arrow turns by the step and Shift Home returns to zero", "[zoom][rotate]")
+{
+    auto settings { rotating_config(40.0f) };
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(settings));
+    focus_view(controller);
+    auto actions { controller.process(luil::key_pressed_event { .key = luil::key_code::arrow_left, .shift = true }) };
+    REQUIRE(actions.size() == 1);
+    REQUIRE(read(actions[0]).degrees == -15.0f);
+    REQUIRE(read(actions[0]).anchor == luil::zoom_point {});
+    actions = controller.process(luil::key_pressed_event { .key = luil::key_code::arrow_right, .shift = true });
+    REQUIRE(read(actions[0]).degrees == 15.0f);
+    actions = controller.process(luil::key_pressed_event { .key = luil::key_code::home, .shift = true });
+    REQUIRE(actions.size() == 1);
+    REQUIRE(read(actions[0]).degrees == -40.0f);
+    // 걸음은 보기가 정한다.
+    settings.rotation_step = 30.0f;
+    controller.set_tree(rotating_tree(settings));
+    focus_view(controller);
+    actions = controller.process(luil::key_pressed_event { .key = luil::key_code::arrow_right, .shift = true });
+    REQUIRE(read(actions[0]).degrees == 30.0f);
+    // 다른 키는 그대로다. Shift 없는 화살표는 이동이고, Shift+위도 이동으로 남는다.
+    actions = controller.process(luil::key_pressed_event { .key = luil::key_code::arrow_left });
+    REQUIRE(read(actions[0]).delta.x == 32.0f);
+    actions = controller.process(luil::key_pressed_event { .key = luil::key_code::arrow_up, .shift = true });
+    REQUIRE(read(actions[0]).delta.y == 32.0f);
+    // Ctrl이 든 키는 앱 단축키로 남는다.
+    REQUIRE(controller.process(luil::key_pressed_event { .key = luil::key_code::arrow_left, .control = true, .shift = true }).empty());
+    REQUIRE(controller.process(luil::key_pressed_event { .key = luil::key_code::home, .control = true, .shift = true }).empty());
+}
+
+TEST_CASE("Shift Home at zero degrees is taken by the view and sends nothing", "[zoom][rotate]")
+{
+    const auto view { rotating_tree(rotating_config()) };
+    const luil::zoom_source* const source { view->root()->zoom() };
+    REQUIRE(source != nullptr);
+    REQUIRE(source->rotate_by != nullptr);
+    const auto handled { source->on_key(luil::key_pressed_event { .key = luil::key_code::home, .shift = true }) };
+    REQUIRE(handled.has_value());
+    REQUIRE(handled->empty());
+    // Shift 없는 Home은 보기의 것이 아니다.
+    REQUIRE(source->on_key(luil::key_pressed_event { .key = luil::key_code::home }).has_value() == false);
+}
+
+TEST_CASE("Without a rotation message Shift with an arrow still pans", "[zoom][rotate]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(rotating_tree(config()));
+    focus_view(controller);
+    auto actions { controller.process(luil::key_pressed_event { .key = luil::key_code::arrow_left, .shift = true }) };
+    REQUIRE(actions.size() == 1);
+    REQUIRE(read(actions[0]).delta.x == 32.0f);
+    REQUIRE(read(actions[0]).degrees == 0.0f);
+    REQUIRE(controller.process(luil::key_pressed_event { .key = luil::key_code::home, .shift = true }).empty());
 }

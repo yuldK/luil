@@ -1332,6 +1332,11 @@ TEST_CASE("Touch settings change at run time and reject bad values", "[ui][inter
     invalid = {};
     invalid.press_move_tolerance = 0.0f;
     REQUIRE(controller.set_touch_config(invalid) == false);
+    // 회전 문턱이 잘못이면 다른 칸이 맞아도 설정 전체가 거절된다. 아래의 스크롤이 직전(기본) 값으로 서 있다.
+    invalid = {};
+    invalid.pan_enabled = false;
+    invalid.minimum_rotation_angle = 0.0f;
+    REQUIRE(controller.set_touch_config(invalid) == false);
 
     // 스크롤을 끄면 대기 중인 접촉이 취소되고 남은 이벤트는 삼켜진다.
     static_cast<void>(controller.process(touch_press(60.0f, 120.0f, 0)));
@@ -1415,6 +1420,30 @@ TEST_CASE("Touch settings are validated", "[ui][interaction][touch]")
     config = {};
     config.pan_start_time = config.long_press_time;
     REQUIRE(luil::valid_touch_gesture_config(config) == false);
+
+    // 회전 문턱은 핀치 거리와 같은 규칙이다: 유한한 양수여야 한다.
+    config = {};
+    REQUIRE(config.rotate_enabled);
+    REQUIRE(config.minimum_rotation_angle == 6.0f);
+    for (const float angle : { 0.0f, -6.0f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() })
+    {
+        config.minimum_rotation_angle = angle;
+        REQUIRE(luil::valid_touch_gesture_config(config) == false);
+    }
+    config.minimum_rotation_angle = 0.5f;
+    REQUIRE(luil::valid_touch_gesture_config(config));
+    // 끄는 것은 bool이다. 끈 설정은 문턱이 있어도 유효하다.
+    config.rotate_enabled = false;
+    REQUIRE(luil::valid_touch_gesture_config(config));
+
+    // 새 필드가 같음 비교에 들어 있다.
+    luil::touch_gesture_config other {};
+    REQUIRE(other == luil::touch_gesture_config {});
+    other.rotate_enabled = false;
+    REQUIRE(other != luil::touch_gesture_config {});
+    other = {};
+    other.minimum_rotation_angle = 7.0f;
+    REQUIRE(other != luil::touch_gesture_config {});
 }
 
 TEST_CASE("An overflowing strip with a scroll factory flows horizontally", "[ui][strip][touch]")

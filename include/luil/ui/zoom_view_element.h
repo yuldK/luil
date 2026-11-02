@@ -7,6 +7,8 @@ namespace luil {
     {
         float zoom { 1.0f };
         zoom_point origin {};
+        // 도다. 시계 방향이 양수이고 (-180, 180]로 접는다. 앞 두 필드만 채운 기존 초기화는 0도다.
+        float rotation { 0.0f };
     };
 
     // 내용 경계(`content_bounds`)로 위치를 다듬는 방식이다.
@@ -45,6 +47,8 @@ namespace luil {
     };
 
     // 원점·기준점·이동량은 창 가운데 기준 논리 픽셀이다. 내용 경계만 내용 좌표다.
+    //  - 내용 좌표 `p`의 위치는 `origin + zoom × R(rotation) p`다. `R`은 화면(아래가 +y)에서 양수가 시계 방향인 회전이고, 중심은
+    //    내용 좌표의 원점이다 (rotate-gesture-design.md).
     struct zoom_view_config
     {
         std::u8string owner {};
@@ -64,6 +68,13 @@ namespace luil {
         zoom_edge_swipe_config edge_swipe_config {};
         // 터치의 두 번 탭으로 기준 배율과 확대를 오간다. 기본은 끈다.
         zoom_double_tap double_tap {};
+        // 두 손가락과 키(Shift+←/→/Home)가 내용을 돌리자는 메시지다 (`zoom_source::rotate_by`와 같다). 비어 있으면 회전이 없고
+        // 핀치와 Shift+화살표(이동)는 지금과 같다. 보기는 내용을 돌려 주지 않는다. 돌려 그리는 것은 내용 요소의 몫이다.
+        std::function<input_action(float degrees, zoom_point anchor)> rotate_by {};
+        // 앱이 든 지금 각도다 (도). 보기는 배치·그리기에 쓰지 않고 `state()`와 키의 0도 복귀가 읽는다.
+        float rotation { 0.0f };
+        // 키 한 번의 각도다 (도). 유한한 양수이고 180 이하여야 한다.
+        float rotation_step { 15.0f };
     };
 
     [[nodiscard]] zoom_view_state zoom_about(const zoom_view_config& config, zoom_point viewport, float factor, zoom_point anchor) noexcept;
@@ -74,6 +85,16 @@ namespace luil {
     // 지금 상태에서 `zoom_to_fit`의 상태로 가는 메시지다 (`zoom_by` 다음 `pan_by`). 맞춤 단추와 두 번 탭이 쓰는 그 계산이다.
     //  - 내용 경계나 두 메시지가 없으면 빈 목록이다. 이미 그 상태면 빈 목록이다.
     [[nodiscard]] std::vector<input_action> zoom_fit_actions(const zoom_view_config& config, zoom_point viewport, float margin = 16.0f, float maximum_fit_zoom = 1.0f, zoom_fit axis = zoom_fit::whole);
+    // 기준점 아래의 내용을 두고 `degrees`만큼 돌린 상태다. 원점은 `origin' = anchor - R(degrees)(anchor - origin)`로 움직이고
+    // `rotation`은 접은 합이다. 배율과 지금 각도에 상관없이 기준점 아래의 내용은 제자리다.
+    //  - 0도(360의 배수)와 유한하지 않은 각도·기준점은 지금 상태다.
+    //  - 경계를 다듬지 않는다. 각도가 바뀌면 `rotated_bounds`도 바뀌므로, 다듬기는 새 각도의 경계를 담은 config로
+    //    `zoom_about(config, viewport, 1.0f, {})`를 불러 한다.
+    [[nodiscard]] zoom_view_state rotate_about(const zoom_view_config& config, zoom_point viewport, float degrees, zoom_point anchor) noexcept;
+    // 원점 둘레로 `degrees`만큼 돌린 점이다. 누른 점을 내용 쪽으로 되돌릴 때는 `-degrees`를 준다. 유한하지 않은 각도는 점 그대로다.
+    [[nodiscard]] zoom_point rotate_point(zoom_point point, float degrees) noexcept;
+    // 네 꼭짓점을 원점 둘레로 돌린 경계 상자다. 0도면 그대로다. 앱이 이것을 `content_bounds`에 준다.
+    [[nodiscard]] rect_f rotated_bounds(const rect_f& bounds, float degrees) noexcept;
     // `pan_by`가 경계 다듬기로 버리는 몫이다 (`delta` − 실제로 옮겨진 몫). 축마다 따로다.
     [[nodiscard]] zoom_point pan_blocked(const zoom_view_config& config, zoom_point viewport, zoom_point delta) noexcept;
     // 접촉 하나의 옮겨진 몫·막힌 몫·뗄 때의 속도로 경계 쓸기를 판정한다 (`zoom_edge_swipe_config`의 세 기준).
