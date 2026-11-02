@@ -7,6 +7,7 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
 #include "demo/common.h"
+#include "demo/readonly_undo_keys.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
@@ -211,6 +212,8 @@ namespace demo {
         };
         // 마지막으로 링크를 연 결과 한 줄이다. 아직 열지 않았으면 비었다.
         std::u8string link_report_ {};
+        // 안내 칸에 초점이 있는 채 앱 on_key에 닿은 Ctrl+Z·Ctrl+Y의 횟수다. 읽기 전용 칸은 이 키를 삼키지 않고 넘긴다.
+        readonly_undo_keys undo_keys_ {};
         // 코드 칸의 글과 세로 스크롤이다. 구간은 도우미가 편집에 맞춰 다시 칠한다.
         luil::text::text_edit_state code_ { .text = std::u8string { code_sample } };
         float code_scroll_ { 0.0f };

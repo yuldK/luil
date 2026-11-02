@@ -21,7 +21,7 @@
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme|workbench
+//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|ink|inspector|theme|workbench
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
@@ -34,11 +34,14 @@
 #include "demo/files_page.h"
 #include "demo/gallery_page.h"
 #include "demo/groups_page.h"
+#include "demo/ink_page.h"
 #include "demo/images_page.h"
+#include "demo/inspector_page.h"
 #include "demo/lists_page.h"
 #include "demo/network_page.h"
 #include "demo/palette.h"
 #include "demo/popups_page.h"
+#include "demo/readonly_undo_keys.h"
 #include "demo/tabs_page.h"
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
@@ -487,7 +490,7 @@ namespace demo {
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
                     || toasts_.handle(message) || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message)
-                    || zoom_.handle(message) || theme_.handle(message) || workbench_.handle(message))
+                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message))
                     return;
             }
 
@@ -611,6 +614,8 @@ namespace demo {
                 // 테마 페이지가 실행 중에 읽은 스타일이다. 비어 있으면 내장 스타일이다. 위의 캡션·본문 배치에 준 것과 같은 포인터다 —
                 // 팔레트·그리기 치수는 이쪽에서, 컴포넌트 칸·글 크기는 배치에서 읽어 한쪽만 주면 잰 폭과 그린 글이 어긋난다.
                 frame->style = theme_.style();
+                // 검사기는 페이지의 상태 하나로 켠다. 어느 페이지를 보든 켠 채 다른 페이지를 들여다볼 수 있다.
+                frame->inspector = inspector_.config();
                 // 코드 글꼴은 이름을 줘야 고정폭이 된다. 비워 두면 내장 UI 글꼴이다 (appearance.h).
                 // 변경 작업대의 차이 보기가 이 글꼴로 열을 맞춘다. Windows에 늘 있는 Consolas다.
                 frame->fonts.code_family = u8"Consolas";
@@ -822,6 +827,8 @@ namespace demo {
                 add_page(page_network, u8"네트워크");
                 add_page(page_webview, u8"웹뷰");
                 add_page(page_zoom, u8"확대 보기");
+                add_page(page_ink, u8"잉크");
+                add_page(page_inspector, u8"검사기");
                 add_page(page_theme, u8"모양과 색");
                 add_page(page_workbench, u8"변경 작업대");
                 navigation.selected = page_;
@@ -877,6 +884,10 @@ namespace demo {
                     return webview_.build(width, height, scale);
                 if (page_ == page_zoom)
                     return zoom_.build(width, height, scale);
+                if (page_ == page_ink)
+                    return ink_.build(width, height, scale);
+                if (page_ == page_inspector)
+                    return inspector_.build(width, height, scale);
                 if (page_ == page_theme)
                     return theme_.build(width, height, scale);
                 if (page_ == page_workbench)
@@ -900,6 +911,8 @@ namespace demo {
             file_dialog_purpose file_dialog_purpose_ { file_dialog_purpose::image };
             network_page network_ {};
             zoom_page zoom_ {};
+            ink_page ink_ {};
+            inspector_page inspector_ {};
             command_palette_host palette_ {};
             // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).
             bool primary_instance_ { true };
@@ -1025,11 +1038,17 @@ namespace demo {
                 return luil::route_reveal(tree, focused);
             }
 
-            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot&) override
+            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
             {
+                // 읽기 전용 안내 칸에 초점이 있는 채 닿은 Ctrl+Z·Ctrl+Y다. 칸이 삼키지 않고 넘긴 키를 기본 페이지가 센다.
+                if (const auto undo { readonly_undo_key_of(event, snapshot, kind_link_view_input) }; undo.has_value())
+                    return { luil::make_app_action(*undo) };
                 // 팔레트를 여는 단축키와 팔레트 명령의 단축키(Ctrl+B)다. 팔레트에 보이는 단축키 열과 같은 명령표로 맞춘다.
                 if (luil::chord_of(event) == palette_shortcut)
                     return { luil::make_app_action(palette_open_intent {}) };
+                // 검사기를 켜고 끈다. 검사기 페이지의 단추와 같은 메시지다.
+                if (luil::chord_of(event) == inspector_shortcut)
+                    return { luil::make_app_action(inspector_command_intent { inspector_command::toggle }) };
                 if (const auto id { luil::match_command(palette_commands(), event, luil::command_scope::window) }; id.has_value())
                     return { luil::make_app_action(palette_run_intent { *id }) };
                 return tabs_page::route_key(tree, event);

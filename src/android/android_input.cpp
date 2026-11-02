@@ -6,6 +6,8 @@
 #include <android/keycodes.h>
 
 #include <algorithm>
+#include <cmath>
+#include <numbers>
 #include <utility>
 
 namespace luil::android {
@@ -146,6 +148,18 @@ namespace luil::android {
         }
     }
 
+    pen_tilt pen_tilt_of(const float tilt, const float orientation) noexcept
+    {
+        if (std::isfinite(tilt) == false || std::isfinite(orientation) == false)
+            return {};
+        constexpr double degrees_per_radian { 180.0 / std::numbers::pi };
+        // θ가 90도(펜이 누운 것)면 tan이 무한이라 atan이 ±90도로 닿는다. 그 축의 부호만 남는다.
+        const double slope { std::tan(static_cast<double>(tilt)) };
+        const double across { slope * std::sin(static_cast<double>(orientation)) };
+        const double toward { -slope * std::cos(static_cast<double>(orientation)) };
+        return { static_cast<float>(std::atan(across) * degrees_per_radian), static_cast<float>(std::atan(toward) * degrees_per_radian) };
+    }
+
     std::chrono::steady_clock::time_point event_time(const std::int64_t nanoseconds) noexcept
     {
         return std::chrono::steady_clock::time_point { std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::nanoseconds { nanoseconds }) };
@@ -186,6 +200,14 @@ namespace luil::android {
             sample.y = pointer.y - mapping.origin_y;
             sample.scale = mapping.scale;
             sample.time = event_time(frame.time_ns);
+            // 펜만 압력과 기울기를 싣는다. 압력은 추적기가 0~1로 접는다.
+            if (sample.device == pointer_device::pen)
+            {
+                sample.pressure = pointer.pressure;
+                const pen_tilt tilt { pen_tilt_of(pointer.tilt, pointer.orientation) };
+                sample.tilt_x = tilt.x;
+                sample.tilt_y = tilt.y;
+            }
             return sample;
         };
 

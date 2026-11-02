@@ -481,6 +481,8 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> follow_text_caret();
         // 새 tree를 받은 뒤 머무름과 hover 영역을 다시 본다. 포인터가 머문 채 덮개가 서거나 영역이 사라졌으면
         // 끝·나감을, 영역이 새로 섰으면 들어옴을 낸다 (hover-dwell-design.md). 입력 pump가 tree를 받을 때마다 부른다.
+        //  - 잉크 캔버스가 쥔 접촉의 캔버스(나 그 표면)가 새 tree에서 사라졌으면 여기서 `cancel`을 낸다 (ink-design.md).
+        //    표면이 사라지면 그 접촉의 이벤트가 더 오지 않아, 다음 이동을 기다리면 진행 중 획이 남는다.
         [[nodiscard]] std::vector<input_action> refresh_hover_tracking();
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
@@ -961,6 +963,43 @@ namespace luil {
             float y { 0.0f };
         };
         std::optional<middle_press> middle_press_ {};
+        // 잉크 캔버스가 쥔 접촉이다 (`ink_source`, ink-design.md). 펜·마우스·손가락 모두 이 하나가 든다.
+        //  - 역할은 이동마다 최신 tree에서 같은 id로 다시 찾는다. `held`는 마지막으로 찾은 역할이다. 캔버스가 사라졌을 때
+        //    그 factory로 `cancel`을 낸다.
+        struct ink_contact
+        {
+            ui_element_id id {};
+            std::u8string surface {};
+            pointer_device device { pointer_device::pen };
+            std::uint32_t pointer_id { 0 };
+            bool eraser { false };
+            ink_source held {};
+            ink_sample last {};
+        };
+        std::optional<ink_contact> ink_contact_ {};
+        // 상태를 바꾸지 않고 삼키는 접촉이다 (ink-input-design.md의 지우개 삼킴과 끊긴 잉크 접촉의 나머지).
+        //  - 뗌·취소에 지운다. 같은 포인터의 새 누름도 지운다. 다만 `next_press`면 그 누름(배럴 전환 뒤 다시 누름)까지 삼킨다.
+        //  - 이동은 펜·손가락의 접촉 이동만 삼킨다. 마우스는 이동이 버튼을 싣지 않아 hover로 흘린다.
+        struct swallowed_contact
+        {
+            pointer_device device { pointer_device::pen };
+            std::uint32_t pointer_id { 0 };
+            std::u8string surface {};
+            bool next_press { false };
+        };
+        std::vector<swallowed_contact> swallowed_ {};
+        // 이 이벤트가 삼킬 접촉의 것인가다. 누름이면 지우개 누름의 임자를 가려 일반 컨트롤 위면 삼킬 접촉으로 적는다.
+        [[nodiscard]] bool swallow(const raw_input_event& event);
+        // 이 누름을 잉크 접촉으로 받을 역할이다. 그 장치·지우개를 받지 않으면 nullptr다.
+        [[nodiscard]] static const ink_source* ink_for(const ui_element& element, const pointer_pressed_event& event) noexcept;
+        // 쥔 잉크 접촉의 캔버스를 최신 tree에서 찾는다. 사라졌거나 숨었거나 비활성이거나 그 장치를 받지 않게 됐으면 nullptr다.
+        [[nodiscard]] const ui_element* live_ink(const ink_contact& contact) const;
+        [[nodiscard]] std::vector<input_action> begin_ink(const ui_tree& tree, const ui_element& canvas, const ink_source& source, const pointer_pressed_event& event);
+        [[nodiscard]] std::vector<input_action> move_ink(const pointer_moved_event& event);
+        [[nodiscard]] std::vector<input_action> release_ink(const pointer_released_event& event);
+        // 쥔 잉크 접촉을 닫는다. `cancel`이거나 받은 표본까지의 `end`+`interrupted`다.
+        //  - `swallow_rest`면 그 접촉의 남은 이벤트를 삼킨다 (`next_press`면 바로 뒤의 다시 누름까지). 뗌으로 끝난 접촉은 남은 것이 없다.
+        [[nodiscard]] std::vector<input_action> close_ink(ink_phase phase, bool swallow_rest, bool next_press = false);
         // 칸으로 넘기는 창(`scroll_source::step`)에 쌓인 휠이다 (120 = 한 칸, 부호는 흘림 방향).
         //  - 다른 창으로 옮겨 가거나 방향이 바뀌면 버린다 — 반대로 굴린 몫이 앞의 몫을 갚으면 첫 칸이 늦게 선다.
         struct wheel_steps

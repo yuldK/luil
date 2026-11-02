@@ -638,8 +638,17 @@ TEST_CASE("Read only documents keep selection and copy while suppressing edits",
     REQUIRE(memo_of(*tree).text_input()->read_only);
     REQUIRE(controller.process(luil::character_typed_event { U'z' }).empty());
     REQUIRE(controller.process(luil::character_typed_event { U'\b' }).empty());
-    for (const auto key : { luil::key_code::key_x, luil::key_code::key_v, luil::key_code::key_z, luil::key_code::key_y })
+    for (const auto key : { luil::key_code::key_x, luil::key_code::key_v })
         REQUIRE(controller.process(luil::key_pressed_event { key, true }).empty());
+    REQUIRE(policy.unhandled.empty());
+    // Ctrl+Z·Ctrl+Y(Shift 포함)는 칸이 되돌리기를 내지 않고 칸 밖으로 넘겨, 앱 on_key가 받는다.
+    for (const bool shift : { false, true })
+    {
+        for (const auto code : { luil::key_code::key_z, luil::key_code::key_y })
+            REQUIRE(controller.process(key(code, shift, true)).empty());
+    }
+    REQUIRE(policy.unhandled == std::vector<luil::key_code> { luil::key_code::key_z, luil::key_code::key_y, luil::key_code::key_z, luil::key_code::key_y });
+    policy.unhandled.clear();
     const auto copied { controller.process(luil::key_pressed_event { luil::key_code::key_c, true }) };
     REQUIRE(copied.size() == 1u);
     REQUIRE(std::get<luil::clipboard_copy_request>(copied.front()).text == u8"abc");

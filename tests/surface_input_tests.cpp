@@ -2,8 +2,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
+#include <cstddef>
+#include <optional>
+#include <span>
 #include <variant>
+#include <vector>
 
 namespace {
     using namespace luil;
@@ -206,6 +211,40 @@ TEST_CASE("Pointer times move onto the steady clock", "[surface-input][touch]")
     REQUIRE(pointer_tick_time(0xFFFF'FFF0u, 0x0000'0010u, now) == now - std::chrono::milliseconds { 32 });
     REQUIRE(pointer_tick_time(1'000u, 1'200u, now) == now - std::chrono::milliseconds { 200 });
     REQUIRE(pointer_tick_time(1'300u, 1'200u, now) == now);
+}
+
+TEST_CASE("Pen values follow the mask and history goes oldest first without repeats", "[surface-input][pen][ink]")
+{
+    POINTER_PEN_INFO pen {};
+    pen.pressure = 512;
+    pen.tiltX = 10;
+    pen.tiltY = -20;
+    // 마스크가 없으면 압력은 모르는 것이고 기울기는 0이다 (합성 입력·원격 연결).
+    REQUIRE(pen_values_of(pen) == pen_values {});
+    pen.penMask = PEN_MASK_PRESSURE | PEN_MASK_TILT_X | PEN_MASK_TILT_Y;
+    const pen_values values { pen_values_of(pen) };
+    REQUIRE(values.pressure == 0.5f);
+    REQUIRE(values.tilt_x == 10.0f);
+    REQUIRE(values.tilt_y == -20.0f);
+
+    // 기록은 최근 것이 앞이고 0번이 현재 표본이다. 보낼 것은 1번부터 오래된 것 순서다.
+    std::array<POINTER_PEN_INFO, 4> history {};
+    history[0].pointerInfo.frameId = 13;
+    history[1].pointerInfo.frameId = 12;
+    history[2].pointerInfo.frameId = 11;
+    history[3].pointerInfo.frameId = 10;
+    REQUIRE(pen_history_order(history, std::nullopt) == std::vector<std::size_t> { 3, 2, 1 });
+    // 이미 보낸 frameId(11)와 그 앞은 거른다.
+    REQUIRE(pen_history_order(history, 11u) == std::vector<std::size_t> { 1 });
+    REQUIRE(pen_history_order(history, 13u).empty());
+    // 현재 표본만 있으면 보낼 기록이 없다.
+    REQUIRE(pen_history_order(std::span { history.data(), 1 }, std::nullopt).empty());
+    // frameId가 32비트 경계를 넘어도 순서가 맞다.
+    history[0].pointerInfo.frameId = 1;
+    history[1].pointerInfo.frameId = 0;
+    history[2].pointerInfo.frameId = 0xFFFF'FFFFu;
+    history[3].pointerInfo.frameId = 0xFFFF'FFFEu;
+    REQUIRE(pen_history_order(history, 0xFFFF'FFFEu) == std::vector<std::size_t> { 2, 1 });
 }
 
 TEST_CASE("Mouse presses, moves and releases carry Ctrl, Shift and Alt", "[surface-input][modifiers]")

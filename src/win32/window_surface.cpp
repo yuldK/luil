@@ -1154,7 +1154,10 @@ namespace luil::win32 {
         const std::uint32_t pointer_id { GET_POINTERID_WPARAM(word_parameter) };
         // 새 접촉은 언제나 새 시퀀스다. 캡처를 잃고 UP을 받지 못한 옛 기록을 지운다.
         if (message == WM_POINTERDOWN)
+        {
             std::erase_if(pointer_owners_, [pointer_id](const auto& value) { return value.first == pointer_id; });
+            std::erase_if(pen_frames_, [pointer_id](const auto& value) { return value.first == pointer_id; });
+        }
         const auto owner_it { std::find_if(pointer_owners_.begin(), pointer_owners_.end(), [pointer_id](const auto& value) { return value.first == pointer_id; }) };
         const std::optional<pointer_owner> owner { owner_it != pointer_owners_.end() ? std::optional<pointer_owner> { owner_it->second } : std::nullopt };
         const auto forget = [this, pointer_id] { std::erase_if(pointer_owners_, [pointer_id](const auto& value) { return value.first == pointer_id; }); };
@@ -1262,14 +1265,18 @@ namespace luil::win32 {
 
         // 시각은 OS가 기록한 값을 공통 단조 시계로 옮긴다 — 큐에서 기다린 시간을
         // 접촉 시간으로 오인하면 빠른 쓸기가 길게 누르기가 된다.
+        //  - 합쳐 온 과거 표본도 자기 기록 시각으로 옮기므로 같은 기준을 한 번 읽어 둔다.
         const std::chrono::steady_clock::time_point now { std::chrono::steady_clock::now() };
         LARGE_INTEGER now_count {};
         LARGE_INTEGER frequency {};
-        std::chrono::steady_clock::time_point time { now };
-        if (input.info.PerformanceCount != 0u && QueryPerformanceCounter(&now_count) != FALSE && QueryPerformanceFrequency(&frequency) != FALSE)
-            time = pointer_counter_time(input.info.PerformanceCount, static_cast<std::uint64_t>(now_count.QuadPart), static_cast<std::uint64_t>(frequency.QuadPart), now);
-        else
-            time = pointer_tick_time(input.info.dwTime, GetTickCount(), now);
+        const bool counter { QueryPerformanceCounter(&now_count) != FALSE && QueryPerformanceFrequency(&frequency) != FALSE };
+        const DWORD now_tick { GetTickCount() };
+        const auto time_of = [&](const POINTER_INFO& info) {
+            if (info.PerformanceCount != 0u && counter)
+                return pointer_counter_time(info.PerformanceCount, static_cast<std::uint64_t>(now_count.QuadPart), static_cast<std::uint64_t>(frequency.QuadPart), now);
+            return pointer_tick_time(info.dwTime, now_tick, now);
+        };
+        const std::chrono::steady_clock::time_point time { time_of(input.info) };
 
         // 추적기가 쓰지 않는 메시지(ENTER)는 시퀀스를 소비만 하고 이벤트를 내지 않는다.
         const std::optional<pointer_phase> phase { pointer_phase_of(message) };
@@ -1290,6 +1297,43 @@ namespace luil::win32 {
         sample.scale = static_cast<float>(dpi_) / 96.0F;
         sample.time = time;
         sample.surface = id_;
+        if (type == PT_PEN)
+        {
+            const pen_values pen { pen_values_of(input.pen) };
+            sample.pressure = pen.pressure;
+            sample.tilt_x = pen.tilt_x;
+            sample.tilt_y = pen.tilt_y;
+        }
+        const auto frame_it { std::find_if(pen_frames_.begin(), pen_frames_.end(), [pointer_id](const auto& value) { return value.first == pointer_id; }) };
+        // 쥔 펜 접촉의 이동이면 합쳐 온 과거 표본을 현재 표본 앞에 오래된 것부터 보낸다 (ink-input-design.md).
+        //  - 자리와 시각만 그 표본의 것이고 나머지(버튼·수식 키)는 현재 표본의 값이다. 기록 조회가 실패하면 현재 표본만이다.
+        if (host != nullptr && type == PT_PEN && message == WM_POINTERUPDATE && contact && pointer_tracker_.in_contact(pointer_id) && input.info.historyCount > 1)
+        {
+            std::vector<POINTER_PEN_INFO> history(input.info.historyCount);
+            UINT32 count { input.info.historyCount };
+            if (GetPointerPenInfoHistory(pointer_id, &count, history.data()) != FALSE)
+            {
+                history.resize(std::min<std::size_t>(count, history.size()));
+                const std::optional<std::uint32_t> last_frame { frame_it != pen_frames_.end() ? std::optional<std::uint32_t> { frame_it->second } : std::nullopt };
+                for (const std::size_t index : pen_history_order(history, last_frame))
+                {
+                    const POINTER_PEN_INFO& entry { history[index] };
+                    pointer_sample past { sample };
+                    past.x = static_cast<float>(entry.pointerInfo.ptPixelLocation.x + input.screen_to_client.x);
+                    past.y = static_cast<float>(entry.pointerInfo.ptPixelLocation.y + input.screen_to_client.y);
+                    past.time = time_of(entry.pointerInfo);
+                    const pen_values values { pen_values_of(entry) };
+                    past.pressure = values.pressure;
+                    past.tilt_x = values.tilt_x;
+                    past.tilt_y = values.tilt_y;
+                    for (raw_input_event& event : pointer_tracker_.accept(past))
+                    {
+                        annotate_pointer_event(event, entry.pointerInfo.ptPixelLocation, true);
+                        host->post_raw_input(std::move(event));
+                    }
+                }
+            }
+        }
         if (host != nullptr && phase.has_value())
             for (raw_input_event& event : pointer_tracker_.accept(sample))
             {
@@ -1298,8 +1342,18 @@ namespace luil::win32 {
                 annotate_pointer_event(event, input.info.ptPixelLocation, true);
                 host->post_raw_input(std::move(event));
             }
+        if (type == PT_PEN)
+        {
+            if (frame_it != pen_frames_.end())
+                frame_it->second = input.info.frameId;
+            else
+                pen_frames_.emplace_back(pointer_id, input.info.frameId);
+        }
         if (ends)
+        {
             forget();
+            std::erase_if(pen_frames_, [pointer_id](const auto& value) { return value.first == pointer_id; });
+        }
         // 펜은 메시지를 소비하므로 마우스 변환이 없다 — 커서를 여기서 맞춘다.
         if (type == PT_PEN && message == WM_POINTERUPDATE)
         {

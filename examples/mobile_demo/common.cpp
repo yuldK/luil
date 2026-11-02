@@ -32,6 +32,8 @@ namespace mobile_demo {
             return target_code;
         if (kind == kind_line_break_input)
             return target_line_break;
+        if (kind == kind_readonly_input)
+            return target_readonly;
         // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다 (popup-ime-design.md).
         if (kind == kind_dropdown_search_input)
             return target_dropdown_search;

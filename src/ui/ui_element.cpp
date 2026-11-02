@@ -222,6 +222,16 @@ namespace luil {
         zoom_source_ = std::move(source);
     }
 
+    const ink_source* ui_element::ink() const noexcept
+    {
+        return ink_source_.has_value() ? &*ink_source_ : nullptr;
+    }
+
+    void ui_element::set_ink_source(std::optional<ink_source> source)
+    {
+        ink_source_ = std::move(source);
+    }
+
     const scroll_source* ui_element::scroll() const noexcept
     {
         return scroll_source_.has_value() ? &*scroll_source_ : nullptr;
@@ -255,6 +265,9 @@ namespace luil {
     bool ui_element::interactive() const noexcept
     {
         if (has_tooltip() || cursor_ != ui_cursor::inherit || drag_source_.has_value() || drop_target_.has_value() || pointer_drag_target_.has_value())
+            return true;
+        // 잉크 캔버스는 액션 없이 펜 접촉만 받는다. hit가 되지 않으면 누름 대상 찾기가 그 뒤의 것을 집는다.
+        if (ink_source_.has_value())
             return true;
         // 머무름도 hover에만 필요한 역할이라 hit가 되어야 뜻이 생긴다 — 액션 없는 카드가 포인터를 받지 못하면 머무름이 영영
         // 차지 않는다. hover 영역은 반대로 hit를 받지 않는 것이 계약이라 여기 넣지 않는다.

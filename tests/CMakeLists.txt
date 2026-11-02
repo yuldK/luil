@@ -43,6 +43,9 @@ add_executable(luil_core_tests
     image_element_tests.cpp
     image_encode_tests.cpp
     info_bar_element_tests.cpp
+    ink_canvas_tests.cpp
+    ink_stroke_tests.cpp
+    inspector_overlay_tests.cpp
     item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
@@ -106,6 +109,7 @@ add_executable(luil_core_tests
     touch_input_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
+    ui_inspect_tests.cpp
     ui_interaction_tests.cpp
     ui_style_json_tests.cpp
     ui_style_tests.cpp
@@ -141,8 +145,8 @@ target_sources(luil_core_tests PRIVATE
     dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
-# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 파일 감시 묶음의 표시, 테마 페이지의
-# 스타일 파일 견본도 서버·감시자 없이 검증한다.
+# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지와 검사기 페이지의 상태 줄, 파일 감시 묶음의 표시,
+# 테마 페이지의 스타일 파일 견본도 서버·감시자 없이 검증한다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
 # 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
 target_sources(luil_core_tests PRIVATE
@@ -150,6 +154,8 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/device_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/files_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/ink_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/inspector_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/lists_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
@@ -167,6 +173,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/workbench_page.cpp"
     workbench_page_tests.cpp
     "${PROJECT_SOURCE_DIR}/examples/demo/gallery_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/inspector_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"

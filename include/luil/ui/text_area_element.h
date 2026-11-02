@@ -104,6 +104,8 @@ namespace luil {
         //  - 없으면 배치가 frame마다 글 전체를 접는다. 결과는 같다.
         std::shared_ptr<text_area_wrap_cache> wrap_cache {};
         // 읽기 전용에서도 선택·복사와 caret은 남는다.
+        //  - 글을 바꾸는 키(Ctrl+X·Ctrl+V·Delete·Enter·Shift+Insert)는 칸이 삼킨다. Ctrl+Z·Ctrl+Y는 칸에 되돌릴 글이 없어
+        //    삼키지 않고 칸 밖으로 흘러 앱 `on_key`가 받는다 (key-propagation-design.md).
         bool read_only { false };
         bool wrap { true };
         // 접는 자리를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다 (배치 문맥의 `style`,

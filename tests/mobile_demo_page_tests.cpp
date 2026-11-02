@@ -1,8 +1,11 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
+#include "demo/readonly_undo_keys.h"
 #include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
+#include "mobile_demo/ink_page.h"
+#include "mobile_demo/inspector_page.h"
 #include "mobile_demo/lists_page.h"
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
@@ -16,6 +19,8 @@
 #include "luil/ui/root_element.h"
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/strip_element.h"
+#include "luil/ui/text_area_element.h"
+#include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
 
@@ -1272,6 +1277,7 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
         { mobile_demo::kind_memo_input, mobile_demo::target_memo },
         { mobile_demo::kind_code_input, mobile_demo::target_code },
         { mobile_demo::kind_line_break_input, mobile_demo::target_line_break },
+        { mobile_demo::kind_readonly_input, mobile_demo::target_readonly },
         { mobile_demo::kind_dropdown_search_input, mobile_demo::target_dropdown_search },
         { mobile_demo::kind_smb_address_input, mobile_demo::target_smb_address },
         { mobile_demo::kind_smb_user_input, mobile_demo::target_smb_user },
@@ -1766,4 +1772,373 @@ TEST_CASE("The mobile theme page wrap sample switches the policy of a label that
     luil::label_config chosen { label };
     chosen.line_break = luil::line_break_policy::hangul_words;
     REQUIRE(demo::measure_style_wrap_status(chosen, &unicode_style, 1.0f, &measurer) == words);
+}
+
+namespace {
+    // 400x800 창에서 조립해 배치한 잉크 페이지다 (배율 1).
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> ink_tree(mobile_demo::ink_page& page)
+    {
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(page.build(400.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 400.0f, 800.0f }, 1.0f));
+    }
+
+    [[nodiscard]] std::u8string ink_text(mobile_demo::ink_page& page, const std::u8string& owner)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const label { tree->find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] luil::rect_f ink_canvas_bounds(mobile_demo::ink_page& page)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const canvas { tree->find({ luil::ui_element_kind::ink_canvas, u8"ink-canvas" }) };
+        REQUIRE(canvas != nullptr);
+        return canvas->bounds();
+    }
+
+    // 컨트롤러가 낸 앱 메시지를 페이지에 돌려준다. 돌려준 수를 돌려준다.
+    int deliver_ink(mobile_demo::ink_page& page, const std::vector<luil::input_action>& actions)
+    {
+        int delivered { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
+    }
+
+    // 한 접촉을 실제 입력 경로로 긋는다. 표본마다 tree를 다시 지어 앱 상태(진행 중 획)가 따라오는 길과 같다.
+    void stroke_ink(mobile_demo::ink_page& page, const luil::pointer_device device, const std::vector<luil::point_f>& points, const bool eraser = false)
+    {
+        luil::interaction_controller controller {};
+        const std::optional<luil::pen_sample> pen { device == luil::pointer_device::pen ? std::optional { luil::pen_sample { 0.6f, 0.0f, 0.0f, eraser } } : std::nullopt };
+        const time_point start {};
+        controller.set_tree(ink_tree(page));
+        luil::pointer_pressed_event pressed { points.front().x, points.front().y, luil::pointer_button::left, start };
+        pressed.device = device;
+        pressed.pointer_id = 4;
+        pressed.pen = pen;
+        static_cast<void>(deliver_ink(page, controller.process(pressed)));
+        for (std::size_t index { 1 }; index < points.size(); ++index)
+        {
+            controller.set_tree(ink_tree(page));
+            luil::pointer_moved_event moved { points[index].x, points[index].y, after_milliseconds(start, static_cast<int>(index) * 8) };
+            moved.device = device;
+            moved.pointer_id = 4;
+            moved.in_contact = true;
+            moved.pen = pen;
+            static_cast<void>(deliver_ink(page, controller.process(moved)));
+        }
+        luil::pointer_released_event released { points.back().x, points.back().y, luil::pointer_button::left, after_milliseconds(start, 200) };
+        released.device = device;
+        released.pointer_id = 4;
+        released.pen = pen;
+        static_cast<void>(deliver_ink(page, controller.process(released)));
+    }
+
+    int press_ink_button(mobile_demo::ink_page& page, const std::u8string& owner)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        return deliver_ink(page, controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, after_milliseconds(time_point {}, 40) }));
+    }
+}
+
+TEST_CASE("A pen stroke on the ink page counts the stroke and says it carried pressure", "[mobile-demo][ink]")
+{
+    mobile_demo::ink_page page {};
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 펜");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 없음");
+    const luil::rect_f box { ink_canvas_bounds(page) };
+    REQUIRE(box.width > 100.0f);
+    REQUIRE(box.height > 100.0f);
+    const float y { box.y + 60.0f };
+    stroke_ink(page, luil::pointer_device::pen, { { box.x + 20.0f, y }, { box.x + 60.0f, y + 5.0f }, { box.x + 100.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 1개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 펜, 압력 있음");
+    // 캔버스의 Value(UIA 요약)가 상태 줄과 같은 글이다.
+    const auto tree { ink_tree(page) };
+    const auto* const canvas { tree->find({ luil::ui_element_kind::ink_canvas, u8"ink-canvas" }) };
+    REQUIRE(canvas->accessibility().value == u8"획 1개");
+    REQUIRE(canvas->accessibility().name == u8"잉크 캔버스");
+
+    // 지우개 끝으로 그 획을 가로지르면 지워진다.
+    stroke_ink(page, luil::pointer_device::pen, { { box.x + 60.0f, y - 40.0f }, { box.x + 60.0f, y + 40.0f } }, true);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"지운 획 1");
+}
+
+TEST_CASE("The ink page buttons add sample strokes, switch tools and let fingers draw", "[mobile-demo][ink]")
+{
+    mobile_demo::ink_page page {};
+    // 견본 단추는 캔버스가 내는 것과 같은 메시지를 낸다 (UIA가 그리기 대신 되풀이한다).
+    REQUIRE(press_ink_button(page, u8"ink-sample") > 2);
+    REQUIRE(press_ink_button(page, u8"ink-sample") > 2);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 2개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 펜, 압력 있음");
+    REQUIRE(press_ink_button(page, u8"ink-clear") == 1);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+
+    REQUIRE(press_ink_button(page, u8"ink-tool-toggle") == 1);
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 지우개");
+    REQUIRE(press_ink_button(page, u8"ink-tool-toggle") == 1);
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 펜");
+
+    // 손가락은 켜기 전까지 그리지 않는다.
+    const luil::rect_f box { ink_canvas_bounds(page) };
+    const float y { box.y + 80.0f };
+    stroke_ink(page, luil::pointer_device::touch, { { box.x + 20.0f, y }, { box.x + 120.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(page.handle(luil::app_message { demo::ink_command_intent { demo::ink_command::toggle_touch } }));
+    stroke_ink(page, luil::pointer_device::touch, { { box.x + 20.0f, y }, { box.x + 120.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 1개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 손가락, 압력 없음");
+}
+
+namespace {
+    // 폭 400의 휴대폰 화면에서 조립해 배치한 검사기 페이지다 (배율 1). 높이는 페이지 내용 높이다.
+    [[nodiscard]] luil::ui_tree inspector_tree(mobile_demo::inspector_page& page)
+    {
+        mobile_demo::page_content content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] std::u8string inspector_label(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] std::u8string inspector_button(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const button { tree.find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+
+    [[nodiscard]] std::u8string inspector_number(const std::size_t value)
+    {
+        const std::string digits { std::to_string(value) };
+        return std::u8string { digits.begin(), digits.end() };
+    }
+
+    // 손가락 탭이 단추에서 낸 앱 메시지를 페이지에 돌려준다. 돌려준 수를 돌려준다.
+    int tap_inspector_button(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const auto tree { std::make_shared<const luil::ui_tree>(inspector_tree(page)) };
+        const luil::ui_element* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        int delivered { 0 };
+        for (const luil::input_action& action : controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, after_milliseconds(time_point {}, 40) }))
+        {
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        }
+        return delivered;
+    }
+}
+
+TEST_CASE("The inspector page starts off and counts the elements of its own tree", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    const luil::ui_tree tree { inspector_tree(page) };
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: focused");
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: 없음");
+    const std::size_t elements { luil::inspect_nodes(tree).size() };
+    REQUIRE(elements > 20);
+    REQUIRE(inspector_label(page, u8"inspector-count") == u8"요소 " + inspector_number(elements) + u8"개");
+    // 꺼져 있으면 frame에 켜지 않은 설정이 실린다.
+    REQUIRE(page.config().enabled == false);
+}
+
+TEST_CASE("The inspector buttons switch it on, move the ancestor level and toggle the extras", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 켬");
+    REQUIRE(page.config().enabled);
+    REQUIRE(page.config().pick == luil::inspector_pick::focused);
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 2");
+    REQUIRE(page.config().ancestor_levels == 2);
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    // 0 아래로는 내려가지 않는다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 끔");
+    REQUIRE(tap_inspector_button(page, u8"inspector-outline") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 켬");
+    REQUIRE(page.config().outline_all);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 끔");
+    REQUIRE(tap_inspector_button(page, u8"inspector-palette") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
+    REQUIRE(page.config().show_palette);
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
+    REQUIRE(page.config().enabled == false);
+}
+
+TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    // 선택이 없을 때 다음은 뿌리(페이지 기둥)다. 집는 길이 선택으로 바뀐다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: selected");
+    REQUIRE(page.config().pick == luil::inspector_pick::selected);
+    REQUIRE(page.config().selected == luil::ui_element_id { mobile_demo::kind_layout, u8"inspector-page" });
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-child") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-help");
+    REQUIRE(tap_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-state");
+    REQUIRE(tap_inspector_button(page, u8"inspector-prev") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-help");
+    REQUIRE(tap_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+    // 뿌리 위로는 갈 곳이 없어 선택이 그대로다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+
+    // 끄고 다시 켜면 처음 모습이다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: 없음");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: focused");
+}
+
+TEST_CASE("The inspector names the demo kinds and reads the sample's inner padding", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    const luil::inspector_config config { page.config() };
+    REQUIRE(luil::kind_display_name(mobile_demo::kind_layout, config) == u8"layout");
+    REQUIRE(luil::kind_display_name(mobile_demo::kind_text, config) == u8"text");
+    REQUIRE(luil::kind_display_name(luil::ui_element_kind::ink_canvas, config) == u8"ink_canvas");
+
+    const luil::ui_tree tree { inspector_tree(page) };
+    const luil::ui_element* const stack { tree.find({ mobile_demo::kind_layout, u8"inspector-sample-stack" }) };
+    REQUIRE(stack != nullptr);
+    const std::u8string text { luil::describe_element(tree, *stack, 1.0f, config) };
+    REQUIRE(text.starts_with(u8"layout:inspector-sample-stack  "));
+    // 견본 stack의 안쪽 여백 위 8, 오른쪽 12, 아래 8, 왼쪽 12다.
+    REQUIRE(text.find(u8"  inset 8 12 8 12\n") != std::u8string::npos);
+
+    // 조상 한 단계를 올리면 견본 stack에서 그것을 감싼 panel이 집힌다.
+    luil::inspector_config picking { config };
+    picking.enabled = true;
+    picking.pick = luil::inspector_pick::selected;
+    picking.selected = stack->id();
+    picking.ancestor_levels = 1;
+    const luil::interaction_snapshot interaction {};
+    const luil::ui_element* const picked { luil::pick_inspected(tree, interaction, picking) };
+    REQUIRE(picked != nullptr);
+    REQUIRE(picked->id() == luil::ui_element_id { mobile_demo::kind_layout, u8"inspector-sample" });
+}
+
+namespace {
+    // 모바일 데모 앱이 on_key에서 하는 일과 같은 정책이다. 읽기 전용 안내 칸에 초점이 있는 채 닿은 되돌리기 키를 메시지로 바꾼다.
+    class undo_key_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+        {
+            return mobile_demo::text_target_of_kind(kind);
+        }
+
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
+        {
+            if (const auto undo { demo::readonly_undo_key_of(event, snapshot, mobile_demo::kind_readonly_input) }; undo.has_value())
+                return { luil::make_app_action(*undo) };
+            return {};
+        }
+    };
+
+    [[nodiscard]] luil::key_pressed_event undo_chord(const luil::key_code code, const bool control, const bool shift = false)
+    {
+        luil::key_pressed_event event { code };
+        event.control = control;
+        event.shift = shift;
+        return event;
+    }
+
+    // 안내 칸 하나를 든 tree에서 칸을 눌러 초점을 주고 되돌리기 키와 그 밖의 키를 보낸 뒤, 앱이 센 값이다.
+    [[nodiscard]] demo::readonly_undo_keys press_undo_keys(const bool read_only)
+    {
+        undo_key_policy policy {};
+        luil::interaction_controller controller { &policy };
+        luil::text_input_view view {};
+        view.text = u8"읽기 전용 안내";
+        luil::text_area_config config {};
+        config.read_only = read_only;
+        auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { mobile_demo::kind_readonly_input }, std::move(view), std::move(config)) };
+        controller.set_tree(std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(area), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f)));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 12.0f, luil::pointer_button::left, time_point {} }));
+        static_cast<void>(controller.process(luil::pointer_released_event { 20.0f, 12.0f, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 5 } }));
+        REQUIRE(controller.snapshot().focused_input.kind == mobile_demo::kind_readonly_input);
+
+        demo::readonly_undo_keys counts {};
+        const luil::key_pressed_event keys[] {
+            undo_chord(luil::key_code::key_z, true),
+            undo_chord(luil::key_code::key_y, true),
+            undo_chord(luil::key_code::key_z, true, true),
+            // 수식 키 없는 z와 다른 Ctrl 키는 되돌리기가 아니다.
+            undo_chord(luil::key_code::key_z, false),
+            undo_chord(luil::key_code::key_x, true),
+        };
+        for (const luil::key_pressed_event& event : keys)
+        {
+            for (const luil::input_action& action : controller.process(event))
+            {
+                if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                    static_cast<void>(counts.handle(*message));
+            }
+        }
+        return counts;
+    }
+}
+
+TEST_CASE("A read-only mobile field hands Ctrl+Z and Ctrl+Y to the app and the label counts them", "[mobile-demo][read-only]")
+{
+    // Ctrl+Z 하나, Ctrl+Y 하나, Ctrl+Shift+Z 하나(다시 실행)가 앱 on_key에 닿는다.
+    const demo::readonly_undo_keys passed { press_undo_keys(true) };
+    REQUIRE(passed.undo_count() == 1);
+    REQUIRE(passed.redo_count() == 2);
+    REQUIRE(passed.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 1회 · Ctrl+Y 2회");
+
+    // 같은 칸이 편집 칸이면 칸이 되돌리기를 가져가 앱까지 오지 않는다.
+    const demo::readonly_undo_keys kept { press_undo_keys(false) };
+    REQUIRE(kept.undo_count() == 0);
+    REQUIRE(kept.redo_count() == 0);
+    REQUIRE(kept.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 0회 · Ctrl+Y 0회");
 }

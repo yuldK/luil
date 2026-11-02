@@ -10,6 +10,7 @@
 #include "luil/ui/app_message.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/ui_events.h"
+#include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"
@@ -401,6 +402,10 @@ namespace luil {
         //  - 주 창이 숨은 동안(`main_hidden`)은 단추가 없어 요청을 쥐기만 한다. 보이면 단추가 새로 서고 그때 한 번에 낸다.
         //  - 하지 못하는 플랫폼(Android)은 받고 무시한다. 독립 창은 `ui_window::taskbar`다.
         taskbar_request taskbar {};
+        // 실행 중인 화면에 요소의 윤곽과 정보를 얹는 검사기다 (inspector-design.md). 기본값이면 아무것도 그리지 않는다.
+        //  - 앱은 상태 하나로 켠다 (`inspector.enabled = state_.inspecting;`). 켜는 단축키는 앱이 정한다.
+        //  - 그리기만 한다. 켠다고 다시 그릴 계기가 늘지 않고 접근성 tree, 입력, 초점에 닿지 않는다.
+        inspector_config inspector {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };

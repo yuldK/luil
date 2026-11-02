@@ -17,7 +17,21 @@ namespace luil::android {
         std::int32_t tool_type { 0 };
         float x { 0.0f };
         float y { 0.0f };
+        // Android 축 값 그대로다 (`AMOTION_EVENT_AXIS_PRESSURE`·`TILT`·`ORIENTATION`, 각도는 라디안).
+        //  - 켠 축만 GameActivity가 옮긴다. 손가락의 압력은 펜이 아니라 쓰지 않는다.
+        float pressure { 1.0f };
+        float tilt { 0.0f };
+        float orientation { 0.0f };
     };
+
+    // 펜의 극좌표 기울기(`AXIS_TILT` θ, `AXIS_ORIENTATION` φ, 라디안)를 W3C의 두 축(도)으로 옮긴다 (ink-input-design.md).
+    //  - `tilt_x = atan(tan θ · sin φ)`, `tilt_y = atan(−tan θ · cos φ)`이다. θ가 90도면 ±90이다. 유한하지 않으면 0이다.
+    struct pen_tilt
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+    [[nodiscard]] pen_tilt pen_tilt_of(float tilt, float orientation) noexcept;
 
     // 한 시각의 모든 포인터다.
     struct motion_frame
@@ -98,7 +112,8 @@ namespace luil::android {
 
     // Android 입력을 luil 입력 이벤트로 옮긴다 (touch-pen-input-design.md).
     //  - 손가락·펜은 Win32와 같은 접촉 추적기(`pointer_sequence_tracker`)를 거친다. 배럴
-    //    버튼은 우클릭, 지우개 끝은 삼키기, 펜 호버는 접촉 없는 이동이다.
+    //    버튼은 우클릭, 지우개 끝은 표식을 단 접촉(일반 컨트롤은 controller가 삼킨다), 펜 호버는 접촉 없는 이동이다.
+    //    펜은 압력(0~1로 접는다)과 기울기(`pen_tilt_of`)를 싣는다.
     //  - 마우스는 버튼 동작(`ACTION_BUTTON_PRESS`·`RELEASE`)으로 누름을 만들고 휠은 120 단위로
     //    옮긴다.
     //  - 창도 시계도 모른다. UI thread에서만 쓴다.

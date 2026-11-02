@@ -51,6 +51,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_dialog_details_open { luil::application_element_kind(45) };
     // 테마 페이지의 스타일 파일 단추다 (demo/style_sheet_sample.h). 단추마다 owner가 갈린다.
     constexpr luil::ui_element_kind kind_style_sheet_button { luil::application_element_kind(46) };
+    // 읽기 전용 안내 칸이다 (`text_area_element`). 하드웨어 키보드의 Ctrl+Z·Ctrl+Y가 칸을 지나 앱 on_key에 닿는지 본다.
+    constexpr luil::ui_element_kind kind_readonly_input { luil::application_element_kind(47) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     // 확인 대화 상자의 scrim·내용·단추는 라이브러리 kind(modal_host·message_box·message_box_button)가 짓는다.
@@ -95,6 +97,7 @@ namespace mobile_demo {
     constexpr luil::text_input_target target_smb_address { static_cast<luil::text_input_target>(10) };
     constexpr luil::text_input_target target_smb_user { static_cast<luil::text_input_target>(11) };
     constexpr luil::text_input_target target_smb_password { static_cast<luil::text_input_target>(12) };
+    constexpr luil::text_input_target target_readonly { static_cast<luil::text_input_target>(13) };
 
     // --- 페이지 키 ---
     inline constexpr std::u8string_view page_basics { u8"basics" };
@@ -104,6 +107,8 @@ namespace mobile_demo {
     inline constexpr std::u8string_view page_toasts { u8"toasts" };
     inline constexpr std::u8string_view page_popups { u8"popups" };
     inline constexpr std::u8string_view page_zoom { u8"zoom" };
+    inline constexpr std::u8string_view page_ink { u8"ink" };
+    inline constexpr std::u8string_view page_inspector { u8"inspector" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
     inline constexpr std::u8string_view page_device { u8"device" };
     inline constexpr std::u8string_view page_sheets { u8"sheets" };

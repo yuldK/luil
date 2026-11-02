@@ -646,6 +646,8 @@ namespace luil::win32 {
             discarded,
         };
         std::vector<std::pair<std::uint32_t, pointer_owner>> pointer_owners_ {};
+        // 펜 포인터마다 마지막으로 추적기에 보낸 `frameId`다. 합쳐 온 과거 표본에서 이미 보낸 것을 거른다 (ink-input-design.md).
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> pen_frames_ {};
         pointer_sequence_tracker pointer_tracker_ {};
         // 웹뷰 위에 떠 있는 펜이다. 그리로 넘어갈 때 우리 hover를 한 번 거둔다.
         std::vector<std::uint32_t> webview_pen_hovers_ {};

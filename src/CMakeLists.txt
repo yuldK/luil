@@ -150,7 +150,11 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/default_text.cpp
     ui/default_text.h
     ui/ui_tree.cpp
-    "${public_headers}/ui/ui_tree.h")
+    "${public_headers}/ui/ui_tree.h"
+    ui/inspect_geometry.h
+    ui/inspect_names.cpp
+    ui/ui_inspect.cpp
+    "${public_headers}/ui/ui_inspect.h")
 
 # 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
 luil_add_source_filter(luil_core_files "ui/interaction"
@@ -243,6 +247,11 @@ luil_add_source_filter(luil_core_files "ui/content"
     ui/badge_paint.h
     ui/info_bar_element.cpp
     "${public_headers}/ui/info_bar_element.h"
+    ui/ink.cpp
+    ui/ink_backing.h
+    "${public_headers}/ui/ink.h"
+    ui/ink_canvas_element.cpp
+    "${public_headers}/ui/ink_canvas_element.h"
     ui/severity_paint.cpp
     ui/severity_paint.h
     "${public_headers}/ui/severity.h"
@@ -412,6 +421,8 @@ luil_add_source_filter(luil_core_files "host"
     host/focus_request_tracker.h
     host/frame_state.cpp
     host/frame_state.h
+    host/inspector_overlay.cpp
+    host/inspector_overlay.h
     host/key_mapping.cpp
     host/key_mapping.h
     host/pointer_sequence.cpp

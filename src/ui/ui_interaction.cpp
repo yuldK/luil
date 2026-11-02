@@ -222,6 +222,8 @@ namespace luil {
             cancel_touch();
         if (inertia_.has_value() && surface_tree(inertia_->surface) == nullptr)
             inertia_.reset();
+        // 사라진 표면의 접촉은 이벤트가 더 오지 않는다. 쥔 잉크 접촉은 `refresh_hover_tracking`이 `cancel`로 닫는다.
+        std::erase_if(swallowed_, [this](const swallowed_contact& value) { return surface_tree(value.surface) == nullptr; });
         if (pointer_contact_.has_value() && surface_tree(pointer_contact_->surface) == nullptr)
             cancel_pointer_gesture();
         if (pressed_surface_.empty() == false && surface_tree(pressed_surface_) == nullptr)
@@ -257,6 +259,10 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process(const raw_input_event& event)
     {
+        // 일반 컨트롤 위의 지우개 접촉과 끊긴 잉크 접촉의 나머지는 **어떤 상태도** 바꾸지 않는다 (ink-input-design.md).
+        // tooltip·관성·터치 조작·초점·누름 표시·hover가 모두 이 뒤에 있어 맨 앞에서 거른다.
+        if (swallow(event))
+            return {};
         if (auto actions { process_tooltip_event(event) }; actions.has_value())
             return std::move(*actions);
         // 활성 표면은 `update_focus`의 **전제**라 그보다 먼저 선다.
@@ -477,6 +483,9 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_move(const pointer_moved_event& event)
     {
+        // 잉크 캔버스가 쥔 접촉의 이동은 전부 그 캔버스의 것이다. hover도 바꾸지 않는다.
+        if (ink_contact_.has_value() && ink_contact_->device == event.device && ink_contact_->pointer_id == event.pointer_id && ink_contact_->surface == event.surface)
+            return move_ink(event);
         // 터치는 hover를 남기지 않는다. 포인터 자리의 기억도 마우스·펜의 것이다.
         if (event.device == pointer_device::touch)
             return process_touch_move(event);
@@ -1223,6 +1232,16 @@ namespace luil {
                 middle_press_ = middle_press { hit->id(), event.surface, event.device, event.pointer_id, event.x, event.y };
             return {};
         }
+        // 마우스·펜의 새 누름은 진행 중인 잉크 접촉을 거둔다 (손바닥이 먼저 닿아 시작한 터치 획도 펜이 닿는 순간 `cancel`이다).
+        //  - 거둔 접촉의 나머지는 삼킨다. 같은 포인터의 새 접촉이면(뗌을 잃었다) 삼킬 것이 이 누름의 것이라 적지 않는다.
+        if (event.device != pointer_device::touch && ink_contact_.has_value())
+        {
+            std::vector<input_action> actions { close_ink(ink_phase::cancel, true) };
+            std::erase_if(swallowed_, [&event](const swallowed_contact& value) { return value.device == event.device && value.pointer_id == event.pointer_id && value.surface == event.surface; });
+            for (input_action& action : process_press(event))
+                actions.push_back(std::move(action));
+            return actions;
+        }
         inertia_.reset();
         if (event.device == pointer_device::touch)
             return process_touch_press(event);
@@ -1248,6 +1267,9 @@ namespace luil {
             clear_focus();
             return {};
         }
+        // 잉크 캔버스는 누름 대상 찾기 뒤, 확대 보기 이동 앞에서 접촉을 쥔다. 클릭·끌기·길게 누르기를 만들지 않는다.
+        if (const ink_source* const ink { ink_for(*hit, event) }; ink != nullptr)
+            return begin_ink(*tree, *hit, *ink, event);
         pressed_surface_ = event.surface;
         pressed_modifiers_ = modifiers_of(event);
         pointer_contact_ = pointer_contact { event.device, event.pointer_id, event.surface, event.button };
@@ -1402,6 +1424,9 @@ namespace luil {
                 return {};
             return run_trigger(*hit, ui_trigger::middle_click, event.x, event.y, modifiers_of(event));
         }
+        if (ink_contact_.has_value() && ink_contact_->device == event.device && ink_contact_->pointer_id == event.pointer_id && ink_contact_->surface == event.surface
+            && event.button == pointer_button::left)
+            return release_ink(event);
         if (event.device == pointer_device::touch)
             return process_touch_release(event);
         // 터치가 조작을 쥔 동안의 마우스·펜 뗌은 짝인 누름이 없다
@@ -1610,7 +1635,10 @@ namespace luil {
     bool interaction_controller::pointer_gesture_active() const noexcept
     {
         const bool internal_drag { snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() };
-        return pointer_contact_.has_value() || pressed_id_ != ui_element_id {} || text_drag_id_ != ui_element_id {} || pointer_drag_id_ != ui_element_id {} || internal_drag;
+        // 잉크 접촉도 조작이다. 그리는 동안의 터치 누름(둘째 손가락, 펜이 쥔 동안의 손가락)은 삼킨다.
+        return pointer_contact_.has_value() || pressed_id_ != ui_element_id {} || text_drag_id_ != ui_element_id {} || pointer_drag_id_ != ui_element_id {} || internal_drag
+            || ink_contact_.has_value()
+        ;
     }
 
     std::optional<pan_target> interaction_controller::resolve_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
@@ -1674,6 +1702,11 @@ namespace luil {
         // 안 된다 — 탭이 확정되는 뗌에서 옮긴다.
         //  - 편집 칸 안 링크의 탭은 caret이다. 터치에는 Ctrl이 없으므로 링크는 길게 누름의 편집 메뉴로 연다.
         const ui_element* const hit { press_target(*tree, tree->hit_test(event.x, event.y), false) };
+        // 손가락을 받는 잉크 캔버스는 `pointer_drag()`처럼 누르는 즉시 쥐고 스크롤 후보가 아니다. 확대 보기 이동보다 앞선다.
+        // 손가락을 받지 않는 캔버스는 일반 요소라 아래 조건을 지나 보기 이동·감싼 창의 스크롤이 된다.
+        if (hit != nullptr && hit->enabled())
+            if (const ink_source* const ink { ink_for(*hit, event) }; ink != nullptr)
+                return begin_ink(*tree, *hit, *ink, event);
         const ui_element* const view { zoom_owner_at(*tree, event.x, event.y) };
         if (view != nullptr && (hit == nullptr || (hit->enabled() && hit->pointer_drag() == nullptr && hit->drag() == nullptr)) && view->zoom()->pan_by)
         {
@@ -2177,6 +2210,9 @@ namespace luil {
     std::vector<input_action> interaction_controller::refresh_hover_tracking()
     {
         std::vector<input_action> actions {};
+        // 쥔 잉크 캔버스가 새 tree에서 사라졌으면 지금 거둔다. 표면이 사라지면 그 접촉의 이벤트가 더 오지 않는다.
+        if (ink_contact_.has_value() && live_ink(*ink_contact_) == nullptr)
+            actions = close_ink(ink_phase::cancel, true);
         update_dwell(nullptr, actions);
         if (pointer_inside_)
             update_hover_regions(pointer_moved_event { last_pointer_x_, last_pointer_y_, last_pointer_time_, last_pointer_surface_ }, actions);
@@ -2776,6 +2812,9 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::process_cancel(const pointer_cancelled_event& event)
     {
+        // 배럴 전환의 취소는 그리던 획을 받은 표본까지로 닫고 바로 뒤의 다시 누름까지 삼킨다. 시스템 취소(손바닥 판정)는 버린다.
+        if (ink_contact_.has_value() && ink_contact_->device == event.device && ink_contact_->pointer_id == event.pointer_id && ink_contact_->surface == event.surface)
+            return close_ink(event.button_switch ? ink_phase::end : ink_phase::cancel, event.button_switch, event.button_switch);
         if (event.device == pointer_device::touch)
         {
             if (touch_.has_value() && touch_->surface == event.surface && (touch_->id == event.pointer_id || (touch_->second.has_value() && touch_->second->id == event.pointer_id)))
@@ -2796,6 +2835,167 @@ namespace luil {
         std::vector<input_action> actions { end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_) };
         cancel_pointer_gesture();
         return actions;
+    }
+
+    bool interaction_controller::swallow(const raw_input_event& event)
+    {
+        const auto find = [this](const pointer_device device, const std::uint32_t pointer_id, const std::u8string& surface) {
+            return std::ranges::find_if(swallowed_, [&](const swallowed_contact& value) { return value.device == device && value.pointer_id == pointer_id && value.surface == surface; });
+        };
+        if (const auto* const pressed { std::get_if<pointer_pressed_event>(&event) }; pressed != nullptr)
+        {
+            // 같은 포인터의 새 누름은 새 접촉이다. 배럴 전환 뒤의 다시 누름만 끊긴 접촉의 나머지다.
+            if (const auto found { find(pressed->device, pressed->pointer_id, pressed->surface) }; found != swallowed_.end())
+            {
+                if (found->next_press)
+                {
+                    found->next_press = false;
+                    return true;
+                }
+                swallowed_.erase(found);
+            }
+            if (pressed->pen.has_value() == false || pressed->pen->eraser == false)
+                return false;
+            // 지우개 누름의 임자를 tree를 아는 이 자리가 가린다. 지우개를 받는 잉크 캔버스만 받고 나머지는 삼킨다.
+            const ui_tree* const tree { surface_tree(pressed->surface) };
+            const ui_element* const hit { tree != nullptr ? press_target(*tree, tree->hit_test(pressed->x, pressed->y), pressed->control) : nullptr };
+            if (hit != nullptr && hit->enabled() && ink_for(*hit, *pressed) != nullptr)
+                return false;
+            swallowed_.push_back(swallowed_contact { pressed->device, pressed->pointer_id, pressed->surface, false });
+            return true;
+        }
+        if (const auto* const moved { std::get_if<pointer_moved_event>(&event) }; moved != nullptr)
+            return moved->device != pointer_device::mouse && moved->in_contact && find(moved->device, moved->pointer_id, moved->surface) != swallowed_.end();
+        if (const auto* const released { std::get_if<pointer_released_event>(&event) }; released != nullptr)
+        {
+            const auto found { find(released->device, released->pointer_id, released->surface) };
+            if (found == swallowed_.end() || released->button == pointer_button::middle)
+                return false;
+            swallowed_.erase(found);
+            return true;
+        }
+        if (const auto* const cancelled { std::get_if<pointer_cancelled_event>(&event) }; cancelled != nullptr)
+        {
+            const auto found { find(cancelled->device, cancelled->pointer_id, cancelled->surface) };
+            if (found == swallowed_.end())
+                return false;
+            // 삼키던 지우개 접촉에는 배럴 전환이 없다. 끊긴 잉크 접촉의 배럴 전환은 다시 누름이 뒤따른다.
+            if (cancelled->button_switch)
+                found->next_press = true;
+            else
+                swallowed_.erase(found);
+            return true;
+        }
+        return false;
+    }
+
+    const ink_source* interaction_controller::ink_for(const ui_element& element, const pointer_pressed_event& event) noexcept
+    {
+        const ink_source* const source { element.ink() };
+        if (source == nullptr || source->on_ink == nullptr || event.button != pointer_button::left)
+            return nullptr;
+        if (event.pen.has_value() && event.pen->eraser)
+            return source->eraser ? source : nullptr;
+        switch (event.device)
+        {
+        case pointer_device::pen:
+            return source;
+        case pointer_device::mouse:
+            return source->mouse ? source : nullptr;
+        case pointer_device::touch:
+            return source->touch ? source : nullptr;
+        }
+        return nullptr;
+    }
+
+    const ui_element* interaction_controller::live_ink(const ink_contact& contact) const
+    {
+        const ui_tree* const tree { surface_tree(contact.surface) };
+        const ui_element* const canvas { tree != nullptr ? tree->find(contact.id) : nullptr };
+        if (canvas == nullptr || canvas->enabled() == false || tree->visibly_contains(contact.id) == false || tree->within_focus_trap(contact.id) == false)
+            return nullptr;
+        const ink_source* const source { canvas->ink() };
+        if (source == nullptr || source->on_ink == nullptr)
+            return nullptr;
+        // 접촉 중에 캔버스가 그 장치를 받지 않게 됐으면 사라진 것과 같다.
+        const bool accepts { contact.eraser ? source->eraser
+            : contact.device == pointer_device::mouse ? source->mouse
+            : contact.device == pointer_device::touch ? source->touch
+                                                     : true
+        };
+        return accepts ? canvas : nullptr;
+    }
+
+    namespace {
+        template<typename event_type>
+        [[nodiscard]] ink_sample ink_sample_of(const event_type& event) noexcept
+        {
+            ink_sample sample { event.x, event.y, event.time };
+            if (event.pen.has_value())
+            {
+                sample.pressure = event.pen->pressure;
+                sample.tilt_x = event.pen->tilt_x;
+                sample.tilt_y = event.pen->tilt_y;
+            }
+            return sample;
+        }
+    }
+
+    std::vector<input_action> interaction_controller::begin_ink(const ui_tree& tree, const ui_element& canvas, const ink_source& source, const pointer_pressed_event& event)
+    {
+        // 누름 관찰과 텍스트 초점은 다른 누름과 같다. 접촉을 누르는 즉시 쥐므로 터치도 이때 초점을 옮긴다.
+        std::vector<input_action> actions {};
+        if (policy_ != nullptr)
+            actions = policy_->on_press(tree, canvas, event);
+        apply_press_focus(tree, &canvas, event.surface, event.time);
+        snapshot_.pointer_control = event.control;
+        const bool eraser { event.pen.has_value() && event.pen->eraser };
+        const ink_sample sample { ink_sample_of(event) };
+        ink_contact_ = ink_contact { canvas.id(), event.surface, event.device, event.pointer_id, eraser, source, sample };
+        const ink_input input { ink_phase::begin, event.device, event.pointer_id, eraser, false, sample, sample };
+        for (input_action& action : ink_contact_->held.on_ink(input))
+            actions.push_back(std::move(action));
+        return actions;
+    }
+
+    std::vector<input_action> interaction_controller::move_ink(const pointer_moved_event& event)
+    {
+        const ui_element* const canvas { live_ink(*ink_contact_) };
+        if (canvas == nullptr)
+            return close_ink(ink_phase::cancel, true);
+        ink_contact_->held = *canvas->ink();
+        const ink_sample sample { ink_sample_of(event) };
+        const ink_input input { ink_phase::extend, ink_contact_->device, ink_contact_->pointer_id, ink_contact_->eraser, false, sample, ink_contact_->last };
+        ink_contact_->last = sample;
+        return ink_contact_->held.on_ink(input);
+    }
+
+    std::vector<input_action> interaction_controller::release_ink(const pointer_released_event& event)
+    {
+        // 마우스 캡처를 잃은 뗌은 시스템 취소다. 뗌으로 끝난 접촉은 남은 이벤트가 없다.
+        const ui_element* const canvas { live_ink(*ink_contact_) };
+        if (event.cancelled || canvas == nullptr)
+            return close_ink(ink_phase::cancel, false);
+        const ink_source source { *canvas->ink() };
+        const ink_sample sample { ink_sample_of(event) };
+        const ink_input input { ink_phase::end, ink_contact_->device, ink_contact_->pointer_id, ink_contact_->eraser, false, sample, ink_contact_->last };
+        ink_contact_.reset();
+        return source.on_ink(input);
+    }
+
+    std::vector<input_action> interaction_controller::close_ink(const ink_phase phase, const bool swallow_rest, const bool next_press)
+    {
+        if (ink_contact_.has_value() == false)
+            return {};
+        ink_contact contact { std::move(*ink_contact_) };
+        ink_contact_.reset();
+        // 캔버스가 남아 있으면 최신 factory로, 사라졌으면 마지막으로 찾은 것으로 알린다.
+        if (const ui_element* const canvas { live_ink(contact) }; canvas != nullptr)
+            contact.held = *canvas->ink();
+        if (swallow_rest)
+            swallowed_.push_back(swallowed_contact { contact.device, contact.pointer_id, contact.surface, next_press });
+        const ink_input input { phase, contact.device, contact.pointer_id, contact.eraser, phase == ink_phase::end, contact.last, contact.last };
+        return contact.held.on_ink != nullptr ? contact.held.on_ink(input) : std::vector<input_action> {};
     }
 
     void interaction_controller::cancel_pointer_gesture() noexcept
@@ -3106,7 +3306,11 @@ namespace luil {
             return std::nullopt;
         if (value.read_only)
         {
-            const bool clipboard_edit { primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x || event.key == key_code::key_z || event.key == key_code::key_y) };
+            // 읽기 전용 칸에는 칸 자신의 되돌릴 글이 없다. Ctrl+Z·Ctrl+Y(Shift 포함)는 삼키지 않고 칸 밖으로 넘겨
+            // 앱 on_key가 받게 한다. 삼키면 문서 보기에 초점이 있는 동안 앱의 실행 취소 stack이 키를 잃는다.
+            if (primary_shortcut && (event.key == key_code::key_z || event.key == key_code::key_y))
+                return std::nullopt;
+            const bool clipboard_edit { primary_shortcut && (event.key == key_code::key_v || event.key == key_code::key_x) };
             const bool enter_edit { event.key == key_code::enter && event.shortcut_modifier_down() == false };
             const bool edits { event.key == key_code::delete_forward || enter_edit || (event.key == key_code::insert && event.shift) || clipboard_edit };
             if (edits)
@@ -4300,13 +4504,12 @@ namespace luil {
     {
         dismiss_tooltip();
         inertia_.reset();
+        // 그리던 획은 받은 표본까지로 닫는다 (`end`+`interrupted`). 유실분에 뗌이 있었을 수 있어 남은 이벤트는 삼킨다.
+        std::vector<input_action> actions { close_ink(ink_phase::end, true) };
         // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
         // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.
-        std::vector<input_action> actions {};
-        if (touch_.has_value())
-            actions = end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {});
-        else
-            actions = end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_);
+        for (input_action& action : touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {}) : end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_))
+            actions.push_back(std::move(action));
         // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
         touch_.reset();
         last_view_tap_.reset();

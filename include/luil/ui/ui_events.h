@@ -62,6 +62,20 @@ namespace luil {
         [[nodiscard]] bool operator==(const pointer_over&) const noexcept = default;
     };
 
+    // 펜 하나의 표본 값이다 (ink-input-design.md). 펜이 낸 이동·누름·뗌만 싣는다.
+    //  - pressure는 0~1이다. 장치가 알리지 않으면(Win32 `PEN_MASK_PRESSURE`가 없다) 비어 있다. 펜 hover의 압력은 0이다.
+    //  - 기울기는 도(-90~90)이고 W3C Pointer Events의 tiltX·tiltY와 같다. 오른쪽·사용자 쪽으로 눕힌 것이 양수다.
+    //  - eraser는 지우개 끝이다. hover에도 실린다. 접촉이면 일반 컨트롤은 실행하지 않는다 (잉크 캔버스만 받는다).
+    struct pen_sample
+    {
+        std::optional<float> pressure {};
+        float tilt_x { 0.0f };
+        float tilt_y { 0.0f };
+        bool eraser { false };
+
+        [[nodiscard]] bool operator==(const pen_sample&) const noexcept = default;
+    };
+
     // Win32 메시지의 최소 복사다.
     // `HWND`와 lparam 원문은 담지 않는다.
     // time은 UI thread가 기록하며 더블 클릭·tooltip·길게 누르기 판정의 기준이다.
@@ -96,6 +110,8 @@ namespace luil {
         std::optional<pointer_over> over {};
         // 커스텀 툴팁의 논리 좌표와 표면 좌표를 잇는 배율이다.
         float scale { 1.0f };
+        // 펜의 표본 값이다 (`pen_sample`). 마우스·터치는 비어 있다. 앞 필드만 채운 기존 초기화가 그대로 펜 값 없음이다.
+        std::optional<pen_sample> pen {};
     };
 
     struct pointer_pressed_event
@@ -117,6 +133,8 @@ namespace luil {
         //  - 뒤에 두는 까닭은 장치 정보와 같다 — 앞 필드만 채운 기존 초기화가 그대로 "수식 키 없음"이다.
         bool control { false };
         bool alt { false };
+        // 펜의 표본 값이다 (`pen_sample`). 마우스·터치는 비어 있다.
+        std::optional<pen_sample> pen {};
     };
 
     struct pointer_released_event
@@ -143,6 +161,8 @@ namespace luil {
         //  - 받는 대상 없이 끝난 끌기를 앱이 놓은 자리에 새 창으로 세울 때 쓴다 (`drag_source::on_unclaimed_drop`).
         std::optional<screen_point> screen {};
         std::optional<pointer_over> over {};
+        // 펜의 표본 값이다 (`pen_sample`). 마우스·터치는 비어 있다.
+        std::optional<pen_sample> pen {};
     };
 
     // 터치·펜 접촉이 정상적인 뗌 없이 끝났다 (캡처 상실·OS 취소·접촉 중 버튼 전환).
@@ -154,6 +174,9 @@ namespace luil {
         std::uint32_t pointer_id { 0 };
         std::u8string surface {};
         std::chrono::steady_clock::time_point time {};
+        // 접촉 중 배럴 버튼이 바뀌어 거둔 취소다. 바로 뒤에 같은 포인터의 새 누름이 온다.
+        //  - 잉크 캔버스는 이 취소를 그리던 획의 끝(`interrupted`)으로 받고, 시스템 취소(손바닥 판정·캡처 상실)는 버린다.
+        bool button_switch { false };
     };
 
     // 포인터가 이 표면의 창을 벗어났다.

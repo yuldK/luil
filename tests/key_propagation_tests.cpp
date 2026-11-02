@@ -416,3 +416,140 @@ TEST_CASE("Ctrl Z with a button focused reaches the app policy for its undo stac
     REQUIRE(intent_at(actions, 0) != nullptr);
     REQUIRE(intent_at(actions, 0)->by == u8"policy");
 }
+
+namespace {
+    // 읽기 전용 글 칸이다. test_text_input과 같고 text_input 스냅숏만 읽기 전용이다.
+    class test_read_only_input final : public luil::ui_element
+    {
+    public:
+        using ui_element::ui_element;
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+
+        [[nodiscard]] std::optional<std::size_t> offset_at(const float, const luil::text_measurer&) const override
+        {
+            return 0u;
+        }
+
+        [[nodiscard]] std::optional<luil::text_input_snapshot> text_input() const override
+        {
+            luil::text_input_snapshot snapshot { u8"abc", 0u, 0u };
+            snapshot.read_only = true;
+            return snapshot;
+        }
+    };
+
+    // root ⊃ 목록 ⊃ 글 칸이다. 목록의 처리기는 묻힌 횟수만 센다.
+    template<typename Input>
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> text_box_tree(int* const list_calls)
+    {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        auto list { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"list" }) };
+        list->arrange({ { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f });
+        list->set_key_handler(select_all_handler(u8"list", list_calls));
+        auto box { std::make_unique<Input>(luil::ui_element_id { kind_query_input, u8"query" }) };
+        box->arrange({ { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f });
+        box->set_action(luil::ui_trigger::left_click, no_op_action());
+        list->add(std::move(box));
+        root->add(std::move(list));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
+    }
+
+    void focus_text_box(luil::interaction_controller& controller)
+    {
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 12.0f, luil::pointer_button::left, at(0) }));
+        static_cast<void>(controller.process(luil::pointer_released_event { 20.0f, 12.0f, luil::pointer_button::left, at(5) }));
+        REQUIRE(controller.snapshot().focused_input == luil::ui_element_id { kind_query_input, u8"query" });
+    }
+
+    [[nodiscard]] luil::key_pressed_event ctrl_key(const luil::key_code code, const int milliseconds, const bool shift = false)
+    {
+        luil::key_pressed_event event { code };
+        event.control = true;
+        event.shift = shift;
+        event.time = at(milliseconds);
+        return event;
+    }
+}
+
+TEST_CASE("Ctrl+Z and Ctrl+Y reach the app on_key while a read-only text box has focus", "[ui][interaction][keys][read-only]")
+{
+    struct chord
+    {
+        luil::key_code key {};
+        bool shift {};
+    };
+    // 읽기 전용 칸에는 칸 자신의 되돌릴 글이 없다. 되돌리기 키는 칸을 지나 목록을 거쳐 앱 정책까지 닿는다.
+    {
+        int list_calls { 0 };
+        recording_policy policy {};
+        luil::interaction_controller controller { &policy };
+        controller.set_tree(text_box_tree<test_read_only_input>(&list_calls));
+        focus_text_box(controller);
+
+        int expected { 0 };
+        for (const chord each : { chord { luil::key_code::key_z, false }, chord { luil::key_code::key_y, false }, chord { luil::key_code::key_z, true } })
+        {
+            const std::vector<luil::input_action> actions { controller.process(ctrl_key(each.key, 10 + expected, each.shift)) };
+            ++expected;
+            REQUIRE(intent_at(actions, 0) != nullptr);
+            REQUIRE(intent_at(actions, 0)->by == u8"policy");
+            REQUIRE(policy.keys == expected);
+            REQUIRE(list_calls == expected);
+        }
+        // 칸은 되돌리기 명령을 내지 않았다.
+        REQUIRE(policy.last_edit.command != luil::text::text_edit_command::undo);
+        REQUIRE(policy.last_edit.command != luil::text::text_edit_command::redo);
+
+        // 글을 바꾸는 나머지 키는 지금처럼 칸에서 끝난다.
+        const luil::key_pressed_event edits[] {
+            ctrl_key(luil::key_code::key_x, 20),
+            ctrl_key(luil::key_code::key_v, 21),
+            luil::key_pressed_event { .key = luil::key_code::delete_forward, .time = at(22) },
+            luil::key_pressed_event { .key = luil::key_code::insert, .shift = true, .time = at(23) },
+        };
+        for (const luil::key_pressed_event& event : edits)
+            REQUIRE(controller.process(event).empty());
+        REQUIRE(policy.keys == expected);
+        REQUIRE(list_calls == expected);
+    }
+
+    // 편집 칸은 그대로 자기 되돌리기를 낸다. 앱 정책까지 가지 않는다.
+    {
+        int list_calls { 0 };
+        recording_policy policy {};
+        luil::interaction_controller controller { &policy };
+        controller.set_tree(text_box_tree<test_text_input>(&list_calls));
+        focus_text_box(controller);
+
+        struct own_undo
+        {
+            luil::key_code key;
+            bool shift;
+            luil::text::text_edit_command command;
+        };
+        const own_undo edits[] {
+            { luil::key_code::key_z, false, luil::text::text_edit_command::undo },
+            { luil::key_code::key_z, true, luil::text::text_edit_command::redo },
+            { luil::key_code::key_y, false, luil::text::text_edit_command::redo },
+        };
+        int milliseconds { 10 };
+        for (const own_undo& each : edits)
+        {
+            const std::vector<luil::input_action> actions { controller.process(ctrl_key(each.key, milliseconds++, each.shift)) };
+            REQUIRE(intent_at(actions, 0) != nullptr);
+            REQUIRE(intent_at(actions, 0)->by == u8"text");
+            REQUIRE(policy.last_edit.command == each.command);
+        }
+        REQUIRE(policy.keys == 0);
+        REQUIRE(list_calls == 0);
+    }
+}
