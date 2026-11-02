@@ -522,6 +522,9 @@ namespace luil {
         // 두 번 탭 확대의 액션이다. 기준점은 둘째 탭의 자리다 (보기 가운데 기준 논리 픽셀). 비어 있으면 두 번 탭은
         // 확대가 아니다.
         std::function<std::vector<input_action>(zoom_point anchor)> double_tap {};
+        // 내용을 `degrees`만큼 돌리자는 메시지다 (rotate-gesture-design.md). 시계 방향이 양수인 도이고, 기준점은 `zoom_by`와
+        // 같다 (보기 가운데 기준 논리 픽셀). 비어 있으면 controller가 두 접촉의 선이 돈 각도를 재지도 않는다.
+        std::function<input_action(float degrees, zoom_point anchor)> rotate_by {};
     };
 
     struct scroll_source

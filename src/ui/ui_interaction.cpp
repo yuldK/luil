@@ -13,6 +13,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <thread>
 #include <utility>
@@ -94,6 +95,15 @@ namespace luil {
             const float delta_x { to_x - from_x };
             const float delta_y { to_y - from_y };
             return std::sqrt(delta_x * delta_x + delta_y * delta_y);
+        }
+
+        // 두 접촉을 잇는 선이 `from`에서 `to`로 돈 각도다 (도, 시계 방향이 양수, (-180, 180]).
+        // 외적과 내적으로 재서 왼쪽을 가리키는 방향(±180도)을 건너도 작은 값이다.
+        [[nodiscard]] float line_turn_degrees(const float from_x, const float from_y, const float to_x, const float to_y) noexcept
+        {
+            const double cross { static_cast<double>(from_x) * to_y - static_cast<double>(from_y) * to_x };
+            const double dot { static_cast<double>(from_x) * to_x + static_cast<double>(from_y) * to_y };
+            return static_cast<float>(std::atan2(cross, dot) * 180.0 / std::numbers::pi);
         }
 
         // 텍스트 칸 안 링크(`inline_link`)를 담은 가장 가까운 글 칸이다. 없으면 nullptr다.
@@ -1049,7 +1059,8 @@ namespace luil {
     bool valid_touch_gesture_config(const touch_gesture_config& config) noexcept
     {
         const auto distance = [](const float value) { return std::isfinite(value) && value > 0.0f; };
-        return distance(config.minimum_pinch_distance) && distance(config.pan_start_distance) && distance(config.press_move_tolerance) && config.pan_start_time.count() > 0
+        return distance(config.minimum_pinch_distance) && distance(config.minimum_rotation_angle) && distance(config.pan_start_distance) && distance(config.press_move_tolerance)
+            && config.pan_start_time.count() > 0
             && config.long_press_time.count() > 0 && config.pan_start_time < config.long_press_time;
     }
 
@@ -1759,6 +1770,9 @@ namespace luil {
                 const float old_x { (contact.last_x + contact.second->x) / 2.0f };
                 const float old_y { (contact.last_y + contact.second->y) / 2.0f };
                 const float old_distance { distance_between(contact.last_x, contact.last_y, contact.second->x, contact.second->y) / scale };
+                // 이전 방향도 이동을 반영하기 전의 두 점에서 얻는다. 거리와 같은 방식이라 저장하는 필드가 없다.
+                const float old_line_x { contact.second->x - contact.last_x };
+                const float old_line_y { contact.second->y - contact.last_y };
                 if (event.pointer_id == contact.id)
                 {
                     contact.last_x = event.x;
@@ -1776,11 +1790,26 @@ namespace luil {
                 if (delta != zoom_point {})
                     actions.push_back(source.pan_by(delta));
                 // 서로 거의 겹친 접촉은 이동만 한다. 떨어진 뒤의 첫 이동에서 새 기준이 선다.
-                if (old_distance >= contact.config.minimum_pinch_distance && distance >= contact.config.minimum_pinch_distance && distance != old_distance)
+                if (old_distance >= contact.config.minimum_pinch_distance && distance >= contact.config.minimum_pinch_distance)
                 {
                     const rect_f& box { owner->bounds() };
                     const zoom_point anchor { (x - box.x - box.width / 2.0f) / scale, (y - box.y - box.height / 2.0f) / scale };
-                    actions.push_back(source.zoom_by(distance / old_distance, anchor));
+                    if (distance != old_distance)
+                        actions.push_back(source.zoom_by(distance / old_distance, anchor));
+                    // 선이 돈 각도를 부호째 쌓는다. 합이 문턱에 닿는 이벤트가 쌓은 전체를 한 번에 보내고, 그 뒤는 이벤트마다 보낸다.
+                    if (source.rotate_by != nullptr && contact.config.rotate_enabled)
+                    {
+                        touch_contact::second_contact& pair { *contact.second };
+                        float degrees { line_turn_degrees(old_line_x, old_line_y, contact.second->x - contact.last_x, contact.second->y - contact.last_y) };
+                        if (pair.rotating == false)
+                        {
+                            pair.rotation_sum += degrees;
+                            pair.rotating = std::abs(pair.rotation_sum) >= contact.config.minimum_rotation_angle;
+                            degrees = pair.rotating ? pair.rotation_sum : 0.0f;
+                        }
+                        if (degrees != 0.0f)
+                            actions.push_back(source.rotate_by(degrees, anchor));
+                    }
                 }
             }
             else
@@ -2914,6 +2943,9 @@ namespace luil {
             const bool pinch_off { touch_->config.pinch_enabled && config.pinch_enabled == false && phase == touch_phase::pinching };
             if (config.pinch_enabled == false)
                 touch_->config.pinch_enabled = false;
+            // 회전만 멈춘다. 핀치와 이동은 이어지고, 다시 켜도 이 접촉의 회전은 되살아나지 않는다.
+            if (config.rotate_enabled == false)
+                touch_->config.rotate_enabled = false;
             if (pan_off || long_press_off || pinch_off)
                 cancel_touch();
         }
