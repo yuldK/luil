@@ -7,15 +7,24 @@
 #include "include/core/SkPaint.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace demo {
     namespace {
+        // 도면 전체의 경계다 (내용 좌표, 가운데가 원점). 돌리면 앱이 이것의 `rotated_bounds`를 보기에 준다.
+        const luil::rect_f page_bounds { -500.0f, -350.0f, 1000.0f, 700.0f };
+        // 단추 줄의 높이와 줄 사이 간격이다 (논리 픽셀).
+        constexpr float controls_height { 34.0f };
+        constexpr float row_spacing { 8.0f };
+
+        // 노드의 글자는 선 채 자리만 돌고 격자는 돌려 그린다 (rotate-gesture-design.md의 결정 1, 길 a).
         class diagram final : public luil::ui_element
         {
         public:
-            diagram()
+            explicit diagram(const float rotation)
                 : ui_element { { kind_layout, u8"diagram" } }
+                , rotation_ { rotation }
             {
                 for (int index { 0 }; index < 4; ++index)
                     add_child(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, to_u8(index) },
@@ -31,11 +40,15 @@ namespace demo {
             {
                 set_bounds(context.slot);
                 scale_ = context.scale;
+                // slot은 돌린 경계의 자리다. 내용 원점의 화면 자리는 거기서 돌린 경계의 왼쪽 위를 뺀 곳이다.
+                const luil::rect_f turned { luil::rotated_bounds(page_bounds, rotation_) };
+                origin_ = { context.slot.x - turned.x * scale_, context.slot.y - turned.y * scale_ };
                 int index { 0 };
                 for (const auto& child : children())
                 {
-                    child->arrange(
-                        context.for_child({ context.slot.x + (200.0f + index * 160.0f) * scale_, context.slot.y + (index % 2 == 0 ? 250.0f : 380.0f) * scale_, 120.0f * scale_, 60.0f * scale_ }));
+                    // 가운데만 돌리고 글자는 세운 채 둔다. 회전한 자리의 축 정렬 slot이라 hit test와 접근성 bounds가 그대로 맞는다.
+                    const luil::zoom_point center { luil::rotate_point({ -240.0f + index * 160.0f, index % 2 == 0 ? -70.0f : 60.0f }, rotation_) };
+                    child->arrange(context.for_child({ origin_.x + center.x * scale_ - 60.0f * scale_, origin_.y + center.y * scale_ - 30.0f * scale_, 120.0f * scale_, 60.0f * scale_ }));
                     ++index;
                 }
             }
@@ -44,16 +57,24 @@ namespace demo {
                 SkPaint paint {};
                 paint.setColor(context.palette.divider);
                 paint.setStrokeWidth(scale_);
-                const auto box { bounds() };
-                for (int x { 0 }; x <= 1000; x += 50)
-                    context.canvas.drawLine(box.x + x * scale_, box.y, box.x + x * scale_, box.y + box.height, paint);
-                for (int y { 0 }; y <= 700; y += 50)
-                    context.canvas.drawLine(box.x, box.y + y * scale_, box.x + box.width, box.y + y * scale_, paint);
+                // 격자만 돌려 그린다: 원점을 옮기고 돌린 캔버스 위에 내용 좌표대로 긋는다.
+                context.canvas.save();
+                context.canvas.translate(origin_.x, origin_.y);
+                context.canvas.rotate(rotation_);
+                const float right { page_bounds.x + page_bounds.width };
+                const float bottom { page_bounds.y + page_bounds.height };
+                for (float x { page_bounds.x }; x <= right; x += 50.0f)
+                    context.canvas.drawLine(x * scale_, page_bounds.y * scale_, x * scale_, bottom * scale_, paint);
+                for (float y { page_bounds.y }; y <= bottom; y += 50.0f)
+                    context.canvas.drawLine(page_bounds.x * scale_, y * scale_, right * scale_, y * scale_, paint);
+                context.canvas.restore();
                 draw_children(context, interaction);
             }
 
         private:
+            float rotation_ { 0.0f };
             float scale_ { 1.0f };
+            luil::zoom_point origin_ {};
         };
     }
 
@@ -65,10 +86,12 @@ namespace demo {
             .origin = state_.origin,
             .minimum_zoom = 0.1f,
             .maximum_zoom = 5.0f,
-            .content_bounds = luil::rect_f { -500.0f, -350.0f, 1000.0f, 700.0f },
+            .content_bounds = luil::rotated_bounds(page_bounds, state_.rotation),
             .zoom_by = [](const float factor, const luil::zoom_point anchor) { return luil::make_app_action(zoom_intent { factor, anchor }); },
             .pan_by = [](const luil::zoom_point delta) { return luil::make_app_action(pan_intent { delta }); },
             .zoom_to = [](const float value) { return luil::make_app_action(zoom_to_intent { value }); },
+            .rotate_by = [](const float degrees, const luil::zoom_point anchor) { return luil::make_app_action(rotate_intent { degrees, anchor }); },
+            .rotation = state_.rotation,
         };
     }
 
@@ -80,6 +103,8 @@ namespace demo {
             state_ = luil::pan_by(config(), viewport_, pan->delta);
         else if (const auto* const target { message.get<zoom_to_intent>() }; target != nullptr)
             state_ = luil::zoom_about(config(), viewport_, target->value / state_.zoom, {});
+        else if (const auto* const rotate { message.get<rotate_intent>() }; rotate != nullptr)
+            state_ = luil::rotate_about(config(), viewport_, rotate->degrees, rotate->anchor);
         else
             return false;
         return true;
@@ -88,11 +113,13 @@ namespace demo {
     std::unique_ptr<luil::ui_element> zoom_page::build(const float width, const float height, const float scale)
     {
         static_cast<void>(scale);
-        viewport_ = { std::max(0.0f, width - 32.0f), std::max(0.0f, height - 110.0f) };
+        // 위아래 여백 32, 설명 28, 단추 줄 둘, 사이 간격 셋이다.
+        viewport_ = { std::max(0.0f, width - 32.0f), std::max(0.0f, height - (32.0f + 28.0f + 2.0f * controls_height + 3.0f * row_spacing)) };
         state_ = luil::zoom_about(config(), viewport_, 1.0f, {});
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-page" }, luil::stack_config { .spacing = 8.0f, .padding = luil::edge_insets::all(16.0f) }) };
         column->add(
-            make_label({ kind_text, u8"zoom-help" }, u8"휠·두 손가락: 확대 / 빈 곳 끌기: 이동 / 초점에서 +, -, 0, 화살표, Page / 멈추면 커서가 숨습니다", 12.0f, luil::label_color_role::primary),
+            make_label({ kind_text, u8"zoom-help" }, u8"휠·두 손가락: 확대·회전 / 빈 곳 끌기: 이동 / 초점에서 +, -, 0, 화살표, Page, Shift+←→·Home: 회전 / 멈추면 커서가 숨습니다", 12.0f,
+                luil::label_color_role::primary),
             28.0f);
         // 축 맞춤 단추 둘이다 (image-frames-scaling-design.md). 계산은 라이브러리의 `zoom_fit_actions`이고 단추 글은 앱이 단다.
         //  - 맞추지 않는 축은 지금 창 가운데에 있는 도면 자리를 지킨다.
@@ -109,12 +136,32 @@ namespace demo {
         };
         controls->add(fit_button(u8"zoom-fit-width", u8"폭 맞춤", luil::zoom_fit::width), 72.0f);
         controls->add(fit_button(u8"zoom-fit-height", u8"높이 맞춤", luil::zoom_fit::height), 80.0f);
-        column->add(std::move(controls), 34.0f);
+        column->add(std::move(controls), controls_height);
+        // 회전 단추 셋과 지금 각도다. 단추는 키(Shift+←/→/Home)와 같은 `rotate_by` 메시지를 보내 UIA가 Invoke로 되풀이한다.
+        //  - 0도 복귀는 지금 각도를 되돌리는 상대 각도다. 이미 0도면 키처럼 메시지가 없다.
+        luil::stack_config rotation_controls_config {};
+        rotation_controls_config.direction = luil::stack_direction::row;
+        rotation_controls_config.spacing = 8.0f;
+        auto rotation_controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-rotation-controls" }, rotation_controls_config) };
+        const luil::zoom_view_config settings { config() };
+        const auto rotate_button = [&settings](std::u8string owner, std::u8string text, const float degrees) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, luil::text_button_config { .text = std::move(text) }) };
+            button->set_action(luil::ui_trigger::left_click, [view = settings, degrees](const luil::ui_action_context&) {
+                return degrees != 0.0f ? std::vector<luil::input_action> { view.rotate_by(degrees, {}) } : std::vector<luil::input_action> {};
+            });
+            return button;
+        };
+        rotation_controls->add(rotate_button(u8"zoom-rotate-left", u8"-15°", -settings.rotation_step), 56.0f);
+        rotation_controls->add(rotate_button(u8"zoom-rotate-right", u8"+15°", settings.rotation_step), 56.0f);
+        rotation_controls->add(rotate_button(u8"zoom-rotate-reset", u8"0°", -state_.rotation), 48.0f);
+        rotation_controls->add(
+            make_label({ kind_text, u8"zoom-rotation" }, u8"회전 " + to_u8(static_cast<int>(std::lround(state_.rotation))) + u8"°", 13.0f, luil::label_color_role::primary), 120.0f);
+        column->add(std::move(rotation_controls), controls_height);
         auto view { std::make_unique<luil::zoom_view_element>(config()) };
         view->set_access_name(u8"도면 확대 보기");
         // 그림 위에서 포인터가 1.5초 멈추면 커서를 감춘다. 움직이거나 누르면 곧바로 돌아온다.
         view->set_cursor_idle_hide(std::chrono::milliseconds { 1500 });
-        view->set_content(std::make_unique<diagram>());
+        view->set_content(std::make_unique<diagram>(state_.rotation));
         column->add_flexible(std::move(view));
         return column;
     }
