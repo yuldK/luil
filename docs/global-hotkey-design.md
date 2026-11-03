@@ -85,6 +85,7 @@ namespace luil::win32 {
 - `MOD_NOREPEAT`는 늘 켠다. 자동 반복이 필요한 소비자가 생기면 `repeat` 칸을 끝에 더한다(범위 밖).
 - 라이브러리는 눌림에서 창을 앞으로 세우지 않는다. 앱이 `main_hidden`을 끄고 `focus_request::activate`를 싣는다. 눌린 프로세스에 앞으로 설 권한이 남는다고 알려져 있으나 frame이 늦게 와도 남는지는 사람 확인에서 본다.
 - 앱이 앞에 있어도 같은 길이다. 걸린 조합은 OS가 키 입력 단계에서 가져가 `WM_KEYDOWN`이 오지 않는다. 같은 조합을 `app_command`로도 둔 앱은 앱 안 쪽이 죽으므로 앱이 먼저 견준다(`effective_shortcuts`). 합성 `key_pressed_event`는 없다(결정 4).
+- Alt+글자를 전역으로 걸면 메뉴 막대(`menu-bar-design.md`)의 같은 접근 키는 그 동안 열리지 않는다. OS가 글자 키를 가져가 막대가 받지 못한다. 앱이 겹치지 않게 고른다.
 
 **키.** 걸 키는 `key_code`이고 VK는 `win32_virtual_from_key`가 낸다.
 
@@ -113,41 +114,48 @@ namespace luil::win32 {
 ## 결정
 
 **1. 조합의 모양.** 질문: 전역 단축키의 수정자를 어디까지 받는가.
+
 - 길 a: `key_chord` 그대로(Ctrl·Shift·Alt). 되는 것: 앱 안 단축키와 같은 형이라 `parse_shortcut`·`shortcut_label`·키 잡기 칸이 그대로 통한다. `commands.h`·`commands.cpp`와 왕복 test(89키×8조합)를 건드리지 않는다. 대가: Windows 키 조합을 못 건다. `RegisterHotKey` 문서가 Windows 키 조합을 OS 몫으로 둔다고 알려져 있고 많은 조합이 이미 셸에 걸려 있다.
 - 길 b: `key_chord`에 `bool meta`를 더한다. 되는 것: Windows 키 조합이 앱 안·밖 모두 표현된다(`key_pressed_event::meta`는 이미 있다, ui_events.h 487줄). 대가: `matches`(commands.cpp 13줄은 `event.meta == false`를 요구한다)·`shortcut_label`·`parse_shortcut`·`find_conflicts`가 움직이고 왕복 test가 16조합이 된다. 앱 안에서는 Windows 키 조합이 OS에 먼저 가 거의 오지 않아 얻는 것이 전역 쪽에만 있다.
 - 길 c: `global_hotkey::windows` 칸을 따로 둔다. 되는 것: `key_chord`와 그 test를 건드리지 않고 Windows 키 조합이 된다. 대가: 칸이 chord 밖이라 문자열 왕복과 키 잡기 칸이 Windows 키를 모른다. 앱이 둘을 따로 저장한다.
 - 권장: a. b·c는 나중에도 끝에 칸을 더하는 길로 열려 있다(`key_chord`를 지정 초기화로 지은 곳이 있어 끝 칸이 깨지 않는다, undo_commands.cpp 15줄). 이 길이면 실행 취소 문서가 hotkey 몫으로 둔 `key_chord` 변경은 일어나지 않는다. 대가: Windows 키 조합이 필요한 앱은 당장 못 쓴다. **승인 필요.**
 
 **2. 키를 가르는 기준.** 질문: 배열이 달라도 같은 자리의 키를 거는가.
+
 - 길 a: VK 기준. 되는 것: 앱 안 키 이벤트와 같은 VK라 키 잡기 칸이 잡은 chord가 그대로 걸린다. 새 표는 역표 하나다. 대가: 걸린 뒤 배열을 바꾸면 같은 VK가 다른 글자일 수 있고, 구두점 조합이 비미국 배열에서 기대한 자리가 아닐 수 있다.
 - 길 b: 스캔 코드로 자리를 정하고 지금 배열의 VK로 바꿔 건다. 되는 것: 자리가 고정된다. 대가: 앱 안 경로(VK)와 어긋나 같은 chord가 안과 밖에서 다른 키를 뜻한다. `WM_INPUTLANGCHANGE`마다 다시 걸어야 하고 배열 의존 test가 든다.
 - 권장: a. 대가: 배열을 바꾼 뒤의 어긋남은 알려진 한계로 둔다. **권장대로 진행.**
 
 **3. 눌림을 넘기는 길.** 질문: 눌림을 앱에 어떻게 주는가.
+
 - 길 a: `global_hotkey::pressed` 함수(`input_action`을 낸다). 되는 것: 걸기와 동작이 한 곳이고 `tray_icon::activate`·`ui_frame::close`와 같은 모양이다([알림 영역 아이콘](tray-icon-design.md) 결정 5). delegate를 넓히지 않고 앱 메시지도 `ui_command`도 낸다. 대가: frame 값에 함수가 든다. 노드 설명이 처음 적은 `app_delegate` 알림에서 한 걸음 벗어난다.
 - 길 b: `window_delegate::make_hotkey_message`가 보고와 눌림을 함께 받는다. 되는 것: 훅이 하나이고 frame에 함수가 없다. 대가: 앱 메시지만 낼 수 있고 id를 메시지로 바꾸는 코드가 delegate에 따로 선다. 걸기와 동작이 갈린다.
 - 길 c: `app_delegate`의 새 훅. 되는 것: 노드 설명의 모양이다. 대가: Android가 부르지 않는 훅이 플랫폼 중립 자리에 선다(알림 영역 아이콘 결정 5가 같은 까닭으로 물렸다).
-- 권장: a. 그 결정과 함께 움직인다(그쪽이 바뀌면 이쪽도 따른다). 대가: frame의 함수 하나. **승인 필요.**
+- 권장: a. 그 결정과 함께 움직인다(그쪽이 바뀌면 이쪽도 따른다). 대가: frame의 함수 하나. **권장대로 진행.** [알림 영역 아이콘](tray-icon-design.md) 결정 5와 같은 모양이라 따로 묻지 않는다.
 
 **4. 앱이 앞에 있을 때.** 질문: 걸린 조합이 앱이 앞일 때도 같은 길인가.
+
 - 길 a: 늘 `pressed`로만. 되는 것: 길이 하나이고 같은 조합을 앱 안 단축키로 쓰지 않으면 영향이 없다. 대가: 같은 조합을 `app_command`로도 둔 앱은 앱 안 쪽이 죽는다. 앱이 먼저 견준다.
 - 길 b: 앱이 활성일 때 합성 `key_pressed_event`도 낸다. 되는 것: 앱 안 단축키가 그대로 선다. 대가: OS가 가져간 키를 되살려 `pressed`와 두 번 일하게 되고 어느 쪽이 이기는지의 규칙이 든다. 텍스트 칸에서 눌렀을 때 위험하다.
 - 길 c: 앱이 활성일 때는 풀고 비활성일 때만 건다. 되는 것: 앱 안은 원래대로이고 밖에서만 전역이다. 대가: 활성 전환마다 풀고 거는 일이 생기고 풀린 사이 다른 프로그램이 조합을 잡아 되걸기가 실패한다. `WM_ACTIVATE` 순서에 기댄다.
 - 권장: a. 대가: 겹치는 조합은 앱의 몫이다. **권장대로 진행.**
 
 **5. 결과 보고의 거칠기.** 질문: 못 걸었을 때 앱이 무엇을 아는가.
+
 - 길 a: 일곱 값(위 enum). 되는 것: 앱이 사용자 글을 값마다 달리 쓴다("다른 프로그램이 쓰고 있다", "Ctrl이나 Alt를 함께 누르라"). 대가: 값이 많다.
 - 길 b: 성공·실패 둘. 되는 것: 단순하다. 대가: 충돌과 모양 잘못을 가르지 못하고 까닭이 영문 `error`뿐이다.
-- 길 c: 알리지 않는다. 대가: 안 되는 까닭을 사용자도 앱도 모른다.
+- 길 c: 알리지 않는다. 되는 것: 공개 타입 둘과 가상 함수가 늘지 않는다. 대가: 안 되는 까닭을 사용자도 앱도 모른다.
 - 권장: a. 대가: 값 일곱과 타입 둘. **권장대로 진행.**
 
 **6. 충돌 뒤 다시 걸기.** 질문: 다른 프로그램이 조합을 놓은 뒤 어떻게 다시 거는가.
+
 - 길 a: 주 창이 활성화될 때 한 번. 되는 것: 앱 코드가 없다. 사용자가 다른 프로그램을 끄고 이 창을 열면 자리를 잡는다. 대가: 활성화가 없는 트레이 앱은 충돌이 풀려도 다음 활성화나 요청 변화까지 모른다.
 - 길 b: `global_hotkey::retry`(번호)를 두고 바뀌면 다시 건다. 되는 것: 앱이 "다시 시도" 단추로 정확히 부른다. 대가: 칸과 앱 상태가 하나 는다. frame은 가장 새 것만 읽혀 "한 frame 빼고 다시 싣기"가 다시 걸기를 보장하지 못해 칸이 필요하다.
-- 길 c: 다시 걸지 않는다. 대가: 앱을 다시 켜거나 chord를 바꿀 때까지 안 된다.
+- 길 c: 다시 걸지 않는다. 되는 것: 다시 걸기 규칙과 상태가 없다. 대가: 앱을 다시 켜거나 chord를 바꿀 때까지 안 된다.
 - 권장: a. b는 끝에 칸을 더해 나중에 낼 수 있다. 대가: 활성화 없는 앱은 늦게 안다. **권장대로 진행.**
 
 **7. 막는 조합.** 질문: 시스템 전체 입력을 해칠 조합을 누가 막는가.
+
 - 길 a: 라이브러리가 `reserved`·`needs_modifier`를 걸러낸다. 되는 것: 앱 실수가 사용자 PC 전체의 입력 장애가 되지 않는다. 대가: 수정자 없는 글자 키를 정말 가로채야 하는 도구는 못 쓴다.
 - 길 b: OS에 맡긴다. 되는 것: 제한이 없다. 대가: `Shift+A`나 Space를 걸면 그 키가 시스템 전체에서 앱으로만 가고, 앱이 죽어도 OS가 풀 때까지 이어진다.
 - 길 c: 모든 조합에 Ctrl이나 Alt를 요구한다. 되는 것: 규칙이 단순하다. 대가: F키·미디어 키 같은 정당한 단독 키를 막는다.
@@ -182,9 +190,9 @@ namespace luil::win32 {
 | `app_host.h`·`luil.h` include | `tray_icon.h` | 그 뒤 `global_hotkey.h` |
 
 - 받는 창은 tray가 정한 주 창이다. 새 창도 새 메시지 번호도 만들지 않는다.
-- `win32_window.cpp`에서 hotkey가 고치는 자리: 새 함수 `synchronize_hotkeys`·`handle_hotkey`·`post_hotkey_report`, 멤버 `hotkeys_`. `snapshot_wake_message`(950줄)의 `synchronize_tray()` 다음 줄. 새 `case WM_HOTKEY`. 이미 있는 `case WM_ACTIVATE`(1109줄)의 `WA_INACTIVE`가 아닌 가지(다시 걸기). `WM_CLOSE`(1070줄)·`WM_ENDSESSION`(1094줄)·`WM_DESTROY`(1262줄)의 tray 지우기 옆. `publish_platform()`(2229줄). tray의 `WM_DISPLAYCHANGE`·`WM_SETTINGCHANGE` 가지는 건드리지 않는다.
+- `win32_window.cpp`에서 hotkey가 고치는 자리: 새 함수 `synchronize_hotkeys`·`handle_hotkey`·`post_hotkey_report`, 멤버 `hotkeys_`. `snapshot_wake_message`(950줄)의 `synchronize_tray()` 다음 줄. 새 `case WM_HOTKEY`(`cancel_alt_tap` 호출은 아래 줄 3 약속). 이미 있는 `case WM_ACTIVATE`(1109줄)의 `WA_INACTIVE`가 아닌 가지(다시 걸기). `WM_CLOSE`(1070줄)·`WM_ENDSESSION`(1094줄)·`WM_DESTROY`(1262줄)의 tray 지우기 옆. `publish_platform()`(2229줄). tray의 `WM_DISPLAYCHANGE`·`WM_SETTINGCHANGE` 가지는 건드리지 않는다.
 
-**줄 3 menu_bar.** `surface_input.cpp`·`window_surface.cpp`·`ui_interaction.*`를 고치지 않는다. 역표는 `key_mapping`에 있어 menu_bar와 같은 파일이 없다. 겹치는 일이 하나 있다. menu_bar의 Alt 단독 판정은 "Alt를 누른 뒤 뗄 때까지 다른 키가 없었다"인데, 걸린 Alt 조합의 글자 키는 OS가 가져가 창에 오지 않는다. 앱이 앞일 때 Alt 조합을 누르고 떼면 판정이 Alt 단독으로 읽혀 막대가 켜질 수 있다(비슷한 현상이 알려져 있다, 실측 전). 약속: menu_bar는 그 판정을 지우는 한 줄 호출을 `window_surface`에 내고(이름은 menu_bar 문서가 정한다), hotkey의 `case WM_HOTKEY`가 그것을 부른다. menu_bar가 그 호출을 내지 않으면 hotkey 구현 커밋은 호출 없이 들어가고 통합이 한 줄로 잇는다.
+**줄 3 menu_bar.** `surface_input.cpp`·`window_surface.cpp`·`ui_interaction.*`를 고치지 않는다. 역표는 `key_mapping`에 있어 menu_bar와 같은 파일이 없다. 겹치는 일이 하나 있다. menu_bar의 Alt 단독 판정은 "Alt를 누른 뒤 뗄 때까지 다른 키가 없었다"인데, 걸린 Alt 조합의 글자 키는 OS가 가져가 창에 오지 않는다. 앱이 앞일 때 Alt 조합을 누르고 떼면 판정이 Alt 단독으로 읽혀 막대가 켜질 수 있다(비슷한 현상이 알려져 있다, 실측 전). 약속: menu_bar가 `window_surface::cancel_alt_tap()`(공개 멤버, 무장을 지운다. `menu-bar-design.md`)을 낸다. 무장은 키보드 초점 표면에 서는데 그 표면은 보조 창일 수 있고 `WM_HOTKEY`는 주 창으로만 온다. 그래서 `case WM_HOTKEY`는 눌림을 보내기 전에 주 창과 모든 보조 창 표면(`main_`·`windows_`)의 `cancel_alt_tap()`을 부른다. 함수가 줄 3에 있으므로 이 호출은 통합 커밋이 menu_bar 뒤에 낸다. 그 전의 hotkey 구현 커밋은 호출 없이 들어간다.
 
 **줄 1·2.** frozen_col·color_picker·rich_edit와 같은 파일을 고치지 않는다.
 
@@ -196,14 +204,14 @@ namespace luil::win32 {
 
 ## 확인
 
-- `tests/hotkey_sync_tests.cpp`(새 파일, core, `luil_core_tests`): 빈 목록은 호출 없음. 처음 싣으면 걸기 하나, 같은 목록은 호출 없음. chord가 바뀌면 풀기 다음 새 번호로 걸기(번호를 다시 쓰지 않음). 빼면 풀기. 두 id가 조합을 맞바꾸는 frame은 풀기가 모두 먼저. 같은 목록의 같은 조합은 뒤 항목이 `conflict`. 빈·겹친 id는 `invalid_id`. `none`·`zoom_in`·`volume_up`·수정자 VK·범위 밖 대역은 `invalid_key`. `system_reserved_chord`와 F12는 `reserved`. 글자·이동·편집 키가 수정자 없음·Shift만이면 `needs_modifier`, F1~F11과 F13~F24 단독은 통과, 그 밖의 대역은 Ctrl·Alt가 필요. 실패를 알리면 같은 요청으로 다시 걸지 않고 `reactivated()` 뒤의 `update`에서만 다시. 키 잡기 중에는 모두 풀고 끝나면 다시 걸며 그 사이 보고가 없음. 0xBFFF 다음 1로 돌아 살아 있는 번호를 건너뜀. `win32_virtual_from_key`가 `named_key_from_win32_virtual`·`platform_key_of`와 왕복.
-- `tests/global_hotkey_tests.cpp`(새 파일, `luil_tests`): 모든 VK(1~0xFE)를 앱 안 경로(`named_key_from_virtual`, 없으면 `modified_key_from_virtual`)에 먹여 나온 키를 `win32_virtual_from_key`로 되돌려 같은 VK인지, 반대로 이름 키마다 거꾸로 가도 같은 키인지 본다(어긋나면 VK 값이 메시지에 나온다). chord → `MOD_*`·VK 변환. 가짜 seam으로 `ERROR_HOTKEY_ALREADY_REGISTERED` → `conflict`, 다른 오류 → `failed`(`error`에 번호). 진짜 `RegisterHotKey`로 드문 조합(Ctrl+Alt+Shift+F13~F18, test마다 하나)을 숨은 창에 걸고 둘째 창이 같은 조합을 걸면 실패하는지, 목록에서 빼면 둘째가 성공하는지, 끝에 모두 푸는지. ctest가 test를 병렬로 돌려도 부딪히지 않게 test마다 키가 다르다. 창 프로시저 길은 [win32_window_tests.cpp](../tests/win32_window_tests.cpp) 969줄의 알림 test와 같은 틀(`run_application_window`, 조합을 실은 frame을 주는 driver, 보고를 받는 delegate)이다. 등록 보고가 오면 다른 thread가 `PostMessageW(WM_HOTKEY, 1, ...)`를 보내 `pressed`가 앱 메시지로 닿는지, 장부에 없는 번호는 무시하는지, 목록에서 뺀 뒤 번호 1이 무시되는지, 창이 닫힌 뒤 같은 조합을 걸 수 있는지(풀렸는지)를 본다. OS의 실제 키 경로가 아니라 창 프로시저 경로만 본다.
+- `tests/hotkey_sync_tests.cpp`(새 파일, core, `luil_core_tests`): 빈 목록은 호출 없음. 처음 싣으면 걸기 하나, 같은 목록은 호출 없음. chord가 바뀌면 풀기 다음 새 번호로 걸기(번호를 다시 쓰지 않음). 빼면 풀기. 두 id가 조합을 맞바꾸는 frame은 풀기가 모두 먼저. 같은 목록의 같은 조합은 뒤 항목이 `conflict`. 빈·겹친 id는 `invalid_id`. `none`·`zoom_in`·`volume_up`·수정자 VK·범위 밖 대역은 `invalid_key`. `alt_tap`도 `invalid_key`다(키는 menu_bar가 더하므로 단언은 통합 커밋이 menu_bar 뒤에 이 파일 끝에 더한다). `system_reserved_chord`와 F12는 `reserved`. 글자·이동·편집 키가 수정자 없음·Shift만이면 `needs_modifier`, F1~F11과 F13~F24 단독은 통과, 그 밖의 대역은 Ctrl·Alt가 필요. 실패를 알리면 같은 요청으로 다시 걸지 않고 `reactivated()` 뒤의 `update`에서만 다시. 키 잡기 중에는 모두 풀고 끝나면 다시 걸며 그 사이 보고가 없음. 0xBFFF 다음 1로 돌아 살아 있는 번호를 건너뜀. `win32_virtual_from_key`가 `named_key_from_win32_virtual`·`platform_key_of`와 왕복.
+- `tests/global_hotkey_tests.cpp`(새 파일, `luil_tests`): 모든 VK(1~0xFE)를 앱 안 경로(`named_key_from_virtual`, 없으면 `modified_key_from_virtual`)에 먹여 나온 키를 `win32_virtual_from_key`로 되돌려 같은 VK인지, 반대로 이름 키(`shortcut_label`이 빈 키는 뺀다. VK가 없는 `alt_tap`이 빠진다)마다 거꾸로 가도 같은 키인지 본다(어긋나면 VK 값이 메시지에 나온다). chord → `MOD_*`·VK 변환. 가짜 seam으로 `ERROR_HOTKEY_ALREADY_REGISTERED` → `conflict`, 다른 오류 → `failed`(`error`에 번호). 진짜 `RegisterHotKey`로 드문 조합(Ctrl+Alt+Shift+F13~F18, test마다 하나)을 숨은 창에 걸고 둘째 창이 같은 조합을 걸면 실패하는지, 목록에서 빼면 둘째가 성공하는지, 끝에 모두 푸는지. ctest가 test를 병렬로 돌려도 부딪히지 않게 test마다 키가 다르다. 창 프로시저 길은 [win32_window_tests.cpp](../tests/win32_window_tests.cpp) 969줄의 알림 test와 같은 틀(`run_application_window`, 조합을 실은 frame을 주는 driver, 보고를 받는 delegate)이다. 등록 보고가 오면 다른 thread가 `PostMessageW(WM_HOTKEY, 1, ...)`를 보내 `pressed`가 앱 메시지로 닿는지, 장부에 없는 번호는 무시하는지, 목록에서 뺀 뒤 번호 1이 무시되는지, 창이 닫힌 뒤 같은 조합을 걸 수 있는지(풀렸는지)를 본다. OS의 실제 키 경로가 아니라 창 프로시저 경로만 본다.
 - `tests/device_request_tests.cpp`(38~44줄)의 기본 능력 단언에 `global_hotkeys == false`를 더한다. `tests/window_messages_tests.cpp`는 번호표가 그대로라 고치지 않는다.
 - `tests/windows_page_tests.cpp`(추가): 전역 단축키 구역의 줄 이름, 켜기·끄기·충돌 시험이 요청에 닿는지, 눌림 intent와 보고 intent가 줄에 닿는지.
 - 데모 `examples/demo/windows_page.cpp`의 "전역 단축키" 구역: 단추 `전역 단축키 켜기`·`전역 단축키 끄기`·`충돌 시험 켜기`(같은 조합의 둘째 id를 더한다)와 토글 `눌리면 창 앞으로`. 조합은 충돌이 드문 `Ctrl+Alt+Shift+F11`이다. label 넷이 UIA로 읽힌다: 능력 `전역 단축키 능력: 있음`, 요청 `전역 단축키 요청: 켬 · Ctrl+Alt+Shift+F11`, 반영 `전역 단축키 반영: 등록됨`(`충돌`·`예약된 조합`·`수정자 필요`·`실패 (<진단>)`·`끔`), 눌림 `전역 단축키 눌림: 0번`. 둘째 id를 더하면 반영 줄이 `충돌 (demo-extra)`을 함께 보인다. 눌림 intent는 횟수를 올리고 토글이 켜져 있으면 `main_hidden`을 끄고 `focus_request::activate`를 싣는다.
 - `examples/mobile_demo/device_page.cpp`는 `capabilities.global_hotkeys == false`일 때 `hotkeys-none`("이 플랫폼에는 전역 단축키가 없다.")을 보인다. `tests/mobile_demo_page_tests.cpp`(core)가 이름을 읽는다.
 - 격리 데스크톱에서 UIA로 되읽는 것은 걸림(`등록됨`)과 같은 목록의 충돌(`충돌`), 끄면 `끔`까지다. 진짜 키를 눌러 `WM_HOTKEY`가 오는 길은 입력 데스크톱에서만 서서 격리 데스크톱으로 재지 못하고, `SendInput`은 사용자의 데스크톱에 닿으므로 쓰지 않는다. 핫키 표가 데스크톱 단위라 격리 데스크톱의 등록이 사용자의 키를 막지 않는다고 보지만 실측 전이다. 실제 `RegisterHotKey`를 부르는 test도 개발자 PC의 키를 잠깐 쥐므로 위의 드문 조합만 쓴다.
-- 사람 확인: 다른 앱이 앞일 때·창을 최소화했을 때·`main_hidden`일 때 조합을 누르면 눌림이 늘고 키가 앞 앱으로 새지 않는지. 앱이 앞일 때도 `pressed`로만 오는지. 다른 프로그램이 같은 조합을 쓰는 중에 `충돌`이 보이고, 그 프로그램을 끄고 이 창을 활성화하면 `등록됨`으로 바뀌는지. 키 잡기 칸(버튼과 컨트롤 페이지의 단축키 잡기)에서 걸린 조합을 눌러도 칸이 받는지. 눌림에서 숨은 창이 앞으로 서는지(앞으로 설 권한). 관리자 권한 창이 앞일 때·잠금 화면·UAC 보안 데스크톱(안 오는 것이 정상). 한국어 자판에서 구두점 조합과 배열을 바꾼 뒤. Alt가 든 조합을 앱이 앞일 때 눌러 메뉴 모드나 메뉴 막대가 켜지지 않는지(menu_bar 뒤). 앱을 끝낸 뒤, 비정상 종료한 뒤 다른 프로그램이 같은 조합을 걸 수 있는지. 같은 앱의 둘째 인스턴스가 같은 조합을 걸 때 `충돌`인지. 원격 데스크톱 세션.
+- 사람 확인: 다른 앱이 앞일 때·창을 최소화했을 때·`main_hidden`일 때 조합을 누르면 눌림이 늘고 키가 앞 앱으로 새지 않는지. 앱이 앞일 때도 `pressed`로만 오는지. 다른 프로그램이 같은 조합을 쓰는 중에 `충돌`이 보이고, 그 프로그램을 끄고 이 창을 활성화하면 `등록됨`으로 바뀌는지. 키 잡기 칸(버튼과 컨트롤 페이지의 단축키 잡기)에서 걸린 조합을 눌러도 칸이 받는지. 눌림에서 숨은 창이 앞으로 서는지(앞으로 설 권한). 관리자 권한 창이 앞일 때·잠금 화면·UAC 보안 데스크톱(안 오는 것이 정상). 한국어 자판에서 구두점 조합과 배열을 바꾼 뒤. Alt가 든 조합을 앱이 앞일 때(초점이 보조 창일 때도) 눌러 메뉴 모드나 메뉴 막대가 켜지지 않는지(menu_bar 뒤). 앱을 끝낸 뒤, 비정상 종료한 뒤 다른 프로그램이 같은 조합을 걸 수 있는지. 같은 앱의 둘째 인스턴스가 같은 조합을 걸 때 `충돌`인지. 원격 데스크톱 세션.
 
 ## 범위 밖
 

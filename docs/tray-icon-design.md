@@ -125,7 +125,7 @@ namespace luil::win32 {
 
 **메뉴.** 결정 1의 길 a다. `WM_CONTEXTMENU`에서 그 순간의 frame에 `menu`가 있으면 띄운다.
 
-- `make_tray_menu`가 `menu_item_config`를 `CreatePopupMenu`·`AppendMenuW`로 옮긴다. `separator_above`는 앞의 `MF_SEPARATOR`, `enabled == false`는 `MF_GRAYED`, `check`·`radio`의 `checked`는 `MF_CHECKED`(라디오는 `MFT_RADIOCHECK`), `children`은 하위 메뉴, `shortcut_text`는 `label\t단축키`다. 글의 `&`는 `&&`로 바꿔 밑줄 글자로 읽히지 않게 한다. `icon` 글리프와 `owner`·`open_submenu`는 쓰지 않는다. 명령 번호는 펼친 항목 순서 + 1이고 그 번호로 키를 찾는다.
+- `make_tray_menu`가 `menu_item_config`를 `CreatePopupMenu`·`AppendMenuW`로 옮긴다. `separator_above`는 앞의 `MF_SEPARATOR`, `enabled == false`는 `MF_GRAYED`, `check`·`radio`의 `checked`는 `MF_CHECKED`(라디오는 `MFT_RADIOCHECK`), `children`은 하위 메뉴, `shortcut_text`는 `label\t단축키`다. 글의 `&`는 `&&`로 바꿔 밑줄 글자로 읽히지 않게 한다. `access_key`가 든 항목은 아래 줄 3 약속의 규칙으로 `&`를 둔다. `icon` 글리프와 `owner`·`open_submenu`는 쓰지 않는다. 명령 번호는 펼친 항목 순서 + 1이고 그 번호로 키를 찾는다.
 - 띄우기는 `SetForegroundWindow(주 창)` → `TrackPopupMenuEx(TPM_RETURNCMD | TPM_RIGHTBUTTON, 콜백 좌표)` → `PostMessageW(주 창, WM_NULL)`이다. 앞으로 세우지 않으면 바깥을 눌러도 메뉴가 닫히지 않는 것이 이 API의 알려진 규칙이다. 숨은 주 창에서 앞으로 세우기가 서는지는 사람 확인에서 본다.
 - 메뉴가 떠 있는 동안 UI thread는 메뉴의 modal 루프에서 메시지를 계속 푼다. 고른 키는 연 순간의 `menu_config` 사본의 `select`로 낸다. 그 사이 frame에서 `tray`가 빠지면 `EndMenu()`로 닫는다.
 - 메뉴는 OS가 그린다. 배율·고대비·키보드 탐색·보조 기술은 OS 메뉴의 것이다. 문서화된 길로는 다크 모드를 따르지 않아 어두운 테마에서도 밝게 선다.
@@ -135,48 +135,56 @@ namespace luil::win32 {
 ## 결정
 
 **1. 오른쪽 클릭 메뉴.** 질문: 메뉴를 누가 무엇으로 띄우는가.
+
 - 길 a: 라이브러리가 `tray_icon::menu`(`menu_config`)를 시스템 `HMENU`로 옮겨 `TrackPopupMenuEx`로 띄운다. 되는 것: 앞으로 세우기·바깥 눌러 닫기·모니터와 배율·키보드·보조 기술·고대비를 OS가 맡는다. 숨은 주 창으로도 선다. popup 계층과 줄 3의 controller를 건드리지 않는다. 대가: 모양이 luil 메뉴와 다르다(테마 색·모서리·배경 효과 없음, 다크 모드에서 밝음). 항목 아이콘 글리프가 빠진다.
 - 길 b: luil `menu_popup`을 화면 좌표에 띄운다. 되는 것: 앱 테마와 같은 메뉴다. 대가: `ui_popup`에 화면 앵커를 더하고, 활성화되지 않는 popup이 다른 앱을 누를 때 닫히게 하고, 숨은 주 창을 앵커로 쓰는 길을 popup 대조·popup 표면·`win32_window.cpp`의 popup 구간에 새로 짠다. 메뉴 키보드 탐색은 controller를 지나 이번 라운드 줄 3 menu_bar와 같은 자리를 고친다. 크기가 L로 커진다.
 - 길 c: 메뉴 없이 `context` 사건만 넘긴다. 되는 것: 가장 짧다. 대가: 공개 API에 `HWND`가 없고 화면 앵커 popup도 없어 앱이 메뉴를 띄울 길이 사실상 없다.
 - 권장: a. 칸은 `menu_config`라 나중에 b를 세워도 앱 코드는 그대로다. 대가: 모양이 luil 메뉴와 다르고 다크 모드에서 밝다. **승인 필요.**
 
 **2. 콜백을 받는 창.** 질문: 셸의 콜백과 방송을 어느 창이 받는가.
+
 - 길 a: 주 창 `HWND`. 되는 것: [작업 표시줄](taskbar-design.md) 약속("tray는 이 길로 주 창에서 받는다")과 같고 `handle_shell_event`에 가지 하나다. 주 창은 숨어도 앱이 끝날 때까지 산다. hotkey의 `WM_HOTKEY`도 같은 창으로 온다. 대가: 주 창 프로시저에 case가 하나 는다. 숨은 창을 앞으로 세우는 일은 실측한다.
 - 길 b: 따로 숨은 최상위 창. 되는 것: 주 창과 수명이 갈린다. 대가: 창 클래스와 프로시저가 하나 더 들고, 사건을 결국 `application_window`로 넘긴다. R1 약속과 UIPI 허용을 다시 건다.
-- 길 c: 메시지 전용 창(`HWND_MESSAGE`). 대가: 방송을 받지 못해 탐색기 재시작 뒤 아이콘을 잃는다.
+- 길 c: 메시지 전용 창(`HWND_MESSAGE`). 되는 것: 보이는 창이 아니라 작업 표시줄과 창 목록에 서지 않고 주 창과 수명이 갈린다. 대가: 방송을 받지 못해 탐색기 재시작 뒤 아이콘을 잃는다.
 - 권장: a. 대가: 주 창 프로시저에 case 하나. **권장대로 진행.**
 
 **3. 아이콘 식별.** 질문: 셸에 아이콘을 무엇으로 알리는가.
+
 - 길 a: `HWND` + `uID` 1. 되는 것: 앱 식별과 무관하게 선다. 실행 파일을 옮겨도 막히지 않는다. 대가: Windows 11의 "늘 보이기" 설정이 실행 파일 경로와 `uID`에 묶인다고 알려져 있다(실측 전).
 - 길 b: `NIF_GUID`를 `window_config::identity.id`에서 `name_based_uuid`(판 5)로 짓는다. 되는 것: 앱이 GUID를 고르지 않고 창이 바뀌어도 같은 아이콘이다. 대가: 셸이 GUID를 실행 파일 경로에 묶어, 빌드 폴더와 설치본처럼 경로가 다른 같은 앱은 `NIM_ADD`가 실패한다. 식별 없는 앱은 쓸 수 없다.
-- 길 c: 앱이 GUID를 준다. 대가: 길 b의 경로 제약이 그대로이고 예제를 베낀 두 앱이 부딪힌다.
+- 길 c: 앱이 GUID를 준다. 되는 것: 앱이 식별을 고르므로 `window_config::identity` 없이도 서고 창이 바뀌어도 같은 아이콘이다. 대가: 길 b의 경로 제약이 그대로이고 예제를 베낀 두 앱이 부딪힌다.
 - 권장: a. 대가: 사용자 설정이 경로에 묶인다. **권장대로 진행.**
 
 **4. 그림의 원천과 변형.** 질문: 그림과 테마·고대비 변형을 누가 고르는가.
+
 - 길 a: `ui_image` 셋(기본·밝은 작업 표시줄·고대비)을 받아 라이브러리가 고르고, 다 비면 창 아이콘 리소스다. 되는 것: 앱이 모르는 작업 표시줄 테마를 라이브러리가 읽는다. 지은 그림(숫자 배지)도 쓴다. 대가: 칸이 셋이고 `SystemUsesLightTheme` 읽기가 는다.
 - 길 b: `ui_image` 하나. 되는 것: 칸이 하나다. 대가: frame의 테마는 앱 모드라 작업 표시줄이 어두운데 앱이 밝은 경우를 앱이 가리지 못한다.
 - 길 c: 리소스 id나 `.ico` 경로만. 되는 것: OS가 크기별 그림을 고른다. 대가: 실행 중 지은 그림을 못 쓴다.
 - 권장: a. [작업 표시줄](taskbar-design.md) 결정 4와 같은 원천이다. 대가: 칸 셋과 레지스트리 값 하나. **권장대로 진행.**
 
 **5. 사건을 넘기는 길.** 질문: 누름·메뉴 요청을 앱에 어떻게 주는가.
+
 - 길 a: `tray_icon::activate` 함수(`input_action`을 낸다). 되는 것: `ui_frame::close`·`menu_config::select`와 같은 모양이다. delegate를 넓히지 않는다. 대가: frame 값에 함수가 하나 든다.
-- 길 b: `window_delegate::make_tray_event_message`. 대가: 앱이 사건을 메시지로 바꾸는 코드를 delegate에 따로 둔다. 메뉴 선택(`select`)과 길이 갈린다.
-- 길 c: `app_delegate`의 훅. 대가: Android가 부르지 않는 훅이 플랫폼 중립 자리에 선다.
+- 길 b: `window_delegate::make_tray_event_message`. 되는 것: 사건이 보고 훅(`make_tray_message`)과 같은 delegate에서 앱 메시지가 되고 frame 값에 함수가 늘지 않는다. 대가: 앱이 사건을 메시지로 바꾸는 코드를 delegate에 따로 둔다. 메뉴 선택(`select`)과 길이 갈린다.
+- 길 c: `app_delegate`의 훅. 되는 것: 앱이 이미 구현한 `app_delegate` 한 곳에서 받고 frame 값에 함수가 늘지 않는다. 대가: Android가 부르지 않는 훅이 플랫폼 중립 자리에 선다.
 - 권장: a. 대가: frame의 함수 하나. **권장대로 진행.**
 
 **6. 아이콘 수.** 질문: 한 앱이 몇 개를 세우는가.
+
 - 길 a: 하나(`std::optional<tray_icon>`). 되는 것: `uID`가 1로 고정되고 대조가 짧다. 대가: 여러 개가 필요해지면 칸의 형식을 바꾼다.
 - 길 b: id를 단 `std::vector<tray_icon>`. 되는 것: popup·창과 같은 목록이다. 대가: id → `uID` 표를 실행 내내 쥐고 탐색기 재시작 뒤 같은 번호로 다시 단다.
 - 권장: a. 소비자 없이 정하면 틀리기 쉬운 모양이다. 대가: 넓힐 때 형식이 바뀐다. **권장대로 진행.**
 
 **7. 상태 보고.** 질문: 셸에 닿았는지 앱이 아는가.
+
 - 길 a: `window_delegate::make_tray_message(const tray_report&)`가 상태가 바뀔 때 한 번 알린다. 되는 것: 데모와 UIA가 `waiting`·`shown`·`failed`를 되읽는다. `taskbar_report`와 같은 모양이다. 대가: 공개 타입 둘과 가상 함수 하나.
-- 길 b: 알리지 않는다. 대가: 탐색기가 없을 때와 실패가 디버거 출력에만 남는다.
+- 길 b: 알리지 않는다. 되는 것: 공개 타입 둘과 가상 함수 하나가 늘지 않는다. 대가: 탐색기가 없을 때와 실패가 디버거 출력에만 남는다.
 - 권장: a. 대가: 타입 둘과 가상 함수 하나. **권장대로 진행.**
 
 **8. 닫으면 트레이로.** 질문: 라이브러리가 이 정책을 주는가.
+
 - 길 a: 주지 않는다. 앱이 `ui_frame::close`에서 `main_hidden`을 켠다. 되는 것: 지금 구조 그대로이고 끝내기·숨기기를 앱이 고른다. 대가: 트레이 앱마다 몇 줄을 쓴다.
-- 길 b: `tray_icon::hide_on_close`. 대가: 닫기·숨기기·끝내기 규칙이 두 자리에 갈린다.
+- 길 b: `tray_icon::hide_on_close`. 되는 것: 앱 코드 없이 닫기가 트레이로 숨기기가 된다. 대가: 닫기·숨기기·끝내기 규칙이 두 자리에 갈린다.
 - 권장: a. 대가: 앱의 몇 줄. **권장대로 진행.**
 
 ## 플랫폼
@@ -212,7 +220,7 @@ namespace luil::win32 {
 
 **R1·R2 파일.** `icon_from_image`·`window_messages`의 `shell_event`·`allow_shell_events`·`taskbar_button`은 고치지 않고 쓴다. `handle_shell_event`의 "`taskbar_created` 방송은 이 노드가 쓰지 않는다 (tray가 쓴다)" 주석은 구현 커밋이 실제 가지로 바꾼다. 구현 커밋은 [taskbar-design.md](taskbar-design.md)의 결정 6·범위 밖 "숨은 주 창을 대신하는 표시"를 이 문서로 잇는다. 진행률은 앱이 `tooltip`에, 배지 숫자는 앱이 그린 `icon`에 싣는다. [os-notification-design.md](os-notification-design.md) 결정 1의 길 c(풍선)도 이 문서의 "풍선" 규칙으로 잇는다. 앱 식별은 읽지 않는다(결정 3).
 
-**줄 3 menu_bar.** 이 노드는 `ui_interaction.*`·`window_surface.cpp`·`surface_input.cpp`를 고치지 않는다(길 a). `menu_item_config`는 읽기만 한다. menu_bar가 그 구조체에 칸(밑줄 글자 등)을 더하면 통합 때 `make_tray_menu`가 그 칸을 `&` 표기로 옮길지 정한다. 그 전까지 글의 `&`는 `&&`로 바꾼다.
+**줄 3 menu_bar.** 이 노드는 `ui_interaction.*`·`window_surface.cpp`·`surface_input.cpp`를 고치지 않는다(길 a). 트레이 메뉴는 시스템 `HMENU`라 `menu-focus-fixes-design.md`의 X-4와 무관하다. `menu_item_config`는 읽기만 하되, `menu-bar-design.md`가 더하는 `access_key`(`char32_t`, 영문자나 숫자 하나, 대소문자 무시)는 `make_tray_menu`가 옮긴다. `access_key`가 라벨에 있으면 처음 나오는 그 글자 앞에 `&`를 두고, 없으면 라벨 뒤에 `(&F)` 꼴로 붙인다(막대 문서의 "(F)" 덧붙임과 같다). 그 밖의 `&`는 `&&`다. 칸이 줄 3에 있으므로 구현은 통합 커밋이 menu_bar 뒤에 내고 `tray_icon_tests`의 `GetMenuItemInfoW` 되읽기에 단언을 더한다. 그 전까지는 글의 `&`를 모두 `&&`로 바꾼다.
 
 **검사기·기본 문구.** 새 요소가 없어 `ui_element_id`의 kind, `inspect_names.cpp`의 case, `default_text`의 함수를 더하지 않는다.
 
@@ -221,7 +229,7 @@ namespace luil::win32 {
 ## 확인
 
 - `tests/tray_sync_tests.cpp`(core, `luil_core_tests`): 비어 있음은 호출 없음. 처음 실으면 더하기와 판 4. 같은 요청은 호출 없음. 툴팁만·그림만 바뀌면 그 칸의 바꾸기. 밝기·고대비가 바뀌어 고른 그림이 바뀌면 바꾸기, 같은 그림으로 물러서면 없음. 아이콘 크기가 바뀌면 바꾸기. 빼면 지우기. 더하기 실패는 `waiting`이고 다음 요청 변화에는 다시 더하지 않으며 `shell_restarted`에서 다시 더한다. 시간 초과 실패는 바꾸기를 한 번 해 보고, 그것도 실패하면 다음 요청 변화에서 다시 더한다. 재시작 때 요청이 없으면 호출 없음. 바꾸기 실패를 같은 요청으로 다시 하지 않음.
-- `tests/tray_icon_tests.cpp`(새 파일, `luil_tests`): 가짜 `Shell_NotifyIconW`로 `NOTIFYICONDATAW`의 `cbSize`·`hWnd`·`uID`·플래그·콜백 번호·`uVersion`을 본다. 툴팁 127 자르기가 서로게이트 쌍을 가르지 않는지, 잘못된 UTF-8이 제목으로 물러서는지. `tray_event_of`의 표(다른 `uID`와 모르는 사건은 없음, 좌표). 겹친 `NIN_KEYSELECT` 버리기. `make_tray_menu`를 `GetMenuItemInfoW`로 되읽어 글·`&&`·탭 단축키·흐림·체크·라디오·구분선·하위 메뉴·번호 → 키를 본다. 숨은 창에 진짜 `tray_callback_message`를 보내 `activate`에 닿는지(창 프로시저 길만). 빈 그림이면 창 아이콘 리소스를 그 크기로 읽는지.
+- `tests/tray_icon_tests.cpp`(새 파일, `luil_tests`): 가짜 `Shell_NotifyIconW`로 `NOTIFYICONDATAW`의 `cbSize`·`hWnd`·`uID`·플래그·콜백 번호·`uVersion`을 본다. 툴팁 127 자르기가 서로게이트 쌍을 가르지 않는지, 잘못된 UTF-8이 제목으로 물러서는지. `tray_event_of`의 표(다른 `uID`와 모르는 사건은 없음, 좌표). 겹친 `NIN_KEYSELECT` 버리기. `make_tray_menu`를 `GetMenuItemInfoW`로 되읽어 글·`&&`·탭 단축키·흐림·체크·라디오·구분선·하위 메뉴·번호 → 키를 본다. `access_key`가 든 항목의 `&` 자리와 `(&F)` 덧붙임은 menu_bar 뒤 통합 커밋이 더한다. 숨은 창에 진짜 `tray_callback_message`를 보내 `activate`에 닿는지(창 프로시저 길만). 빈 그림이면 창 아이콘 리소스를 그 크기로 읽는지.
 - `tests/window_messages_tests.cpp`(추가): +7이 다른 번호와 다르다. `tests/device_request_tests.cpp`의 기본 능력 단언에 `tray == false`를 더한다.
 - `tests/windows_page_tests.cpp`(추가): 알림 영역 구역의 줄 이름, 켜기·끄기·그림 바꾸기가 요청에 닿는지, 사건 intent와 보고 intent가 줄에 닿는지.
 - 데모 `examples/demo/windows_page.cpp`의 "알림 영역" 구역: 단추 `트레이 아이콘 켜기`·`트레이 아이콘 끄기`·`트레이 그림 바꾸기`(`make_rgba_image`로 지은 두 색 원). 메뉴는 `창 보이기`·`주 창 숨기기`·`끝내기`(`ui_command::application_exit`)이고 숨기기는 보고가 `shown`일 때만 켠다. label 넷이 UIA로 읽힌다: 능력 `트레이 능력: 있음`, 요청 `트레이 요청: 켬 · 그림 1 · 메뉴 있음`, 반영 `트레이 반영: 보임`(`대기 중`·`끔`·`실패 (<진단>)`), 사건 `트레이 사건: 고름 · 키보드`(`두 번 클릭`, `메뉴: 창 보이기`).
