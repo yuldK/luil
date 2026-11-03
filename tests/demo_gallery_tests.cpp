@@ -871,6 +871,12 @@ TEST_CASE("The inspector buttons run the same actions a UIA invoke would", "[dem
     REQUIRE(press_inspector_button(page, u8"inspector-palette") == 1);
     REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
     REQUIRE(page.config().show_palette);
+
+    // 끄고 다시 켜면 조상 단계도 처음 모습인 0이다.
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(page.config().ancestor_levels == 0);
 }
 
 TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[demo][inspector]")

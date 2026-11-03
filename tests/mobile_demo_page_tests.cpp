@@ -2016,9 +2016,14 @@ TEST_CASE("The inspector buttons switch it on, move the ancestor level and toggl
     REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
     REQUIRE(page.config().show_palette);
 
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
     REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
     REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
     REQUIRE(page.config().enabled == false);
+    // 다시 켜면 조상 단계도 처음 모습인 0이다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(page.config().ancestor_levels == 0);
 }
 
 TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[mobile-demo][inspector]")

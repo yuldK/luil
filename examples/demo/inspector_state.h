@@ -56,10 +56,11 @@ namespace demo {
             {
             case inspector_command::toggle:
                 inspecting_ = inspecting_ == false;
-                // 켤 때마다 처음 모습이다. 선택은 비우고 집는 길은 기본 길로 돌아간다.
+                // 켤 때마다 처음 모습이다. 선택은 비우고 집는 길은 기본 길로, 조상 단계는 0으로 돌아간다.
                 if (inspecting_)
                 {
                     pick_ = base_pick_;
+                    levels_ = 0;
                     selected_ = {};
                 }
                 break;
