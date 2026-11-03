@@ -120,7 +120,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - 본체의 ↓는 앱으로 흐른다. 목록 안 버튼의 ↓까지 가로채지 않는다.
 - Alt 조합은 값 단계·묶음 단계가 앱 단축키로 흘려보내므로 처리기 단계에서 받는다. Ctrl·Shift·Meta가 함께면 받지 않는다. Alt+F4는 시스템 몫이라 오지 않는다.
 - 드롭다운 단추(본체 없음)는 한 절반이 Enter·Space·↓·Alt+↓·F4를 모두 받는다.
-- 화살표에 초점이 있을 때의 Tab은 다음 자리가 아니라 Tab 순서의 처음으로 간다. `move_focus`(`ui_interaction.cpp`)가 묶음의 대표가 아닌 구성원을 순서에서 찾지 못해 처음에서 시작하기 때문이다. `choice_group_element`의 선택하지 않은 칸에서도 같다. controller의 몫이라 이 노드에서 고치지 않는다. 본체에서의 Tab은 다음 자리로 간다.
+- 화살표에 초점이 있을 때의 Tab도 다음 자리로 간다. 처음에는 `move_focus`(`ui_interaction.cpp`)가 묶음의 대표가 아닌 구성원을 순서에서 찾지 못해 Tab 순서의 처음으로 갔다. `choice_group_element`의 선택하지 않은 칸에서도 같았다. R3에서 고쳤다. `move_focus`가 `ui_tree::focus_stop_of`로 그 자리를 접은 묶음의 대표에서 센다([menu-focus-fixes-design.md](menu-focus-fixes-design.md)의 X-3).
 
 **접근성.** root는 `none`이라 접근 tree에서 접히고(`collect_access_children`) 두 절반이 형제로 선다.
 
@@ -142,7 +142,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 | --- | --- |
 | 바깥 누름·휠·Esc·창 이동·크기 변경·활성 전환 | popup의 `dismiss` factory. 메뉴는 어느 계기에도 닫는다. 글을 치는 popup만 이동·활성 전환에 남긴다(데모 검색 드롭다운) |
 | 항목 선택 | `menu_config::after_select` |
-| 필드를 다시 누름 | 클릭이 `set_open(!open)`을 낸다 |
+| 필드를 다시 누름 | 클릭이 누를 때의 `set_open(!open)`을 낸다(열려 있었으면 닫는다) |
 | 보조 기술 | `collapse` |
 | 키보드 초점이 필드를 떠남 | 열린 동안에만 root에 `set_focus_leave_action`을 단다(콤보와 같다) |
 
@@ -163,7 +163,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - `start`는 popup 왼쪽을 필드 왼쪽에, `end`는 popup 오른쪽을 필드 오른쪽에 맞춘다. 가로는 `limit` 안으로 민다.
 - `limit`은 앱이 준다. Android는 내용 영역이고 Win32는 창 client다. 작업 영역은 host만 알기 때문에, Win32에서 창 밖으로 걸칠 수 있던 popup도 이 helper는 창 안에 둔다.
 
-**열린 동안 필드를 누를 때.** 바깥 누름이 먼저 `set_open(false)`를 내고(`window_surface.cpp`) 클릭이 이어진다. 클릭은 뗄 때의 tree에서 액션을 꺼낸다(`ui_interaction.cpp`의 뗌 처리). 그 사이 `open == false` frame이 게시되면 클릭이 `set_open(true)`를 내 되열릴 수 있다. `dropdown_element`도 같은 모양이다. 고칠 자리는 controller라 이 노드에서 하지 않는다. 확인 test가 현재 동작을 재현해 잠갔고 결과는 다음과 같다. `open == true` tree에서 화살표를 눌러 두고 `open == false` tree를 게시한 뒤 떼면 `set_open(true)`가 나간다. 게시가 없으면 같은 누름은 `set_open(false)`다. 닫으려던 누름이 도로 여는 쪽은 앞의 경우뿐이다.
+**열린 동안 필드를 누를 때.** 바깥 누름이 먼저 `set_open(false)`를 내고(`window_surface.cpp`) 클릭이 이어진다. 처음에는 클릭이 뗄 때의 tree에서 액션을 꺼내, 그 사이 `open == false` frame이 게시되면 `set_open(true)`를 내 되열렸다. `dropdown_element`도 같은 모양이었다. R3에서 고쳤다. 누를 때 펼쳐 있던 요소의 클릭은 누를 때의 tree의 액션이라 `set_open(false)`다([menu-focus-fixes-design.md](menu-focus-fixes-design.md)의 X-4). 게시가 있든 없든 같은 누름은 닫는다.
 
 ## 결정
 
@@ -240,7 +240,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
   - controller에 키를 넣어 Alt+↓·F4는 어느 쪽에서나, ↓는 화살표에서만 열고 본체의 ↓는 앱 정책까지 가는지;
   - 열려 있으면 Alt+↓가 삼켜지고 Ctrl·Shift 조합은 `nullopt`인지, Tab 한 자리와 ←/→ 순환, 본체가 꺼지면 화살표가 자리인지;
   - 열린 동안에만 초점 떠남 훅이 서고 초점이 떠나면 `set_open(false)`가 나가는지;
-  - 열린 동안 화살표를 누르고 `open == false` frame이 게시된 뒤 뗐을 때 되열리는지를 현재 동작 그대로 잠근다.
+  - 열린 동안 화살표를 누르고 `open == false` frame이 게시된 뒤 떼도 `set_open(false)`로 닫히는지(R3에서 뒤집었다).
 - `tests/field_popup_tests.cpp`: 아래 기본 자리, 아래가 넘칠 때 뒤집기, 위도 안 들어가면 아래 유지, `end` 정렬과 가로 밀기, 배율 2의 논리 좌표, 키 처리기가 받는 키와 받지 않는 키.
 - `tests/popup_reconcile_tests.cpp`: `menu_popup_config::below`가 크기를 잰 뒤 `x`·`y`를 정하는지.
 - `tests/accessibility_tests.cpp`: root가 접히고 두 절반이 형제인지, 본체와 화살표의 info(`expanded`), expand·collapse가 절대 메시지인지.

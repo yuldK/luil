@@ -1339,6 +1339,9 @@ namespace luil {
         pressed_x_ = event.x;
         pressed_y_ = event.y;
         drag_candidate_ = event.button == pointer_button::left && hit->drag() != nullptr;
+        // 펼쳐 있는 element의 클릭은 누를 때의 것이다 (`pressed_open_tree_`). 위의 `cancel_pointer_gesture`가 옛 값을 이미 지웠다.
+        if (event.button == pointer_button::left)
+            pressed_open_tree_ = open_press_tree(event.surface, *hit);
         if (event.button == pointer_button::left)
         {
             snapshot_.pressed = hit->id();
@@ -1534,6 +1537,7 @@ namespace luil {
         const ui_element* const hit { press_target(*tree, tree->hit_test(event.x, event.y), event.control) };
         const ui_element_id pressed { pressed_id_ };
         const pointer_button pressed_button { pressed_button_ };
+        const std::shared_ptr<const ui_tree> pressed_tree { std::move(pressed_open_tree_) };
         clear_press();
 
         // 클릭은 같은 대상 위에서의 누름과 뗌이다.
@@ -1569,6 +1573,9 @@ namespace luil {
             last_click_x_ = event.x;
             last_click_y_ = event.y;
         }
+        // 누를 때 펼쳐 있던 element의 왼쪽 클릭은 그때의 액션이다. 더블 클릭은 그대로 뗌 tree의 것이다.
+        if (trigger == ui_trigger::left_click)
+            return run_left_click(*hit, pressed_tree.get(), event.x, event.y, modifiers_of(event));
         return run_trigger(*hit, trigger, event.x, event.y, modifiers_of(event));
     }
 
@@ -1726,6 +1733,7 @@ namespace luil {
             return {};
         }
         contact.target = hit->id();
+        contact.open_tree = open_press_tree(event.surface, *hit);
         pressed_modifiers_ = contact.modifiers;
         // 누름 관찰은 터치도 누르는 순간이다. 탭이 될지 스크롤이 될지는 아직 모른다.
         std::vector<input_action> actions {};
@@ -2807,6 +2815,9 @@ namespace luil {
         }
         else
             remember();
+        // 누를 때 펼쳐 있던 대상의 탭은 그때의 액션이다 (마우스와 같다). 숨은 부품 대신 조상이 받은 탭은 누른 대상이 아니라 그대로다.
+        if (trigger == ui_trigger::left_click && target->id() == contact.target)
+            return run_left_click(*target, contact.open_tree.get(), event.x, event.y, modifiers_of(event));
         return run_trigger(*target, trigger, event.x, event.y, modifiers_of(event));
     }
 
@@ -3781,6 +3792,26 @@ namespace luil {
         return (*action)(action_context(element.id(), x, y, modifiers));
     }
 
+    std::shared_ptr<const ui_tree> interaction_controller::open_press_tree(const std::u8string& surface, const ui_element& hit) const
+    {
+        // 누를 수 없는 element는 쥘 것이 없다. 접근 정보는 그 뒤에 읽는다 (누름마다 한 번이다).
+        if (hit.action(ui_trigger::left_click) == nullptr || hit.accessibility().expanded != true)
+            return {};
+        if (surface.empty())
+            return tree_;
+        for (const auto& [id, tree] : surface_trees_)
+            if (id == surface)
+                return tree;
+        return {};
+    }
+
+    std::vector<input_action> interaction_controller::run_left_click(const ui_element& hit, const ui_tree* const pressed_tree, const float x, const float y, const modifier_keys modifiers)
+    {
+        // 클릭 판정(같은 id 위에서 뗐는가, 활성인가)은 뗌 tree가 이미 했다. 바꾸는 것은 낼 액션뿐이다.
+        const ui_element* const pressed { pressed_tree != nullptr ? pressed_tree->find(hit.id()) : nullptr };
+        return run_trigger(pressed != nullptr ? *pressed : hit, ui_trigger::left_click, x, y, modifiers);
+    }
+
     ui_action_context interaction_controller::action_context(const ui_element_id& element, const float x, const float y, const modifier_keys modifiers)
     {
         return ui_action_context { element, x, y, modifiers.control, modifiers.shift, modifiers.alt };
@@ -4072,13 +4103,22 @@ namespace luil {
 
         // 초점이 없거나 지금 목록에 없으면 끝에서 시작한다.
         // 있으면 한 칸 옮기고 끝에서 처음으로 돈다.
+        //  - 묶음의 대표가 아닌 구성원(분할 버튼의 화살표, 고르지 않은 칸)은 목록에 없다. 그 자리를 접은 묶음의
+        //    대표에서 센다 (`ui_tree::focus_stop_of`). 그래야 Tab이 묶음을 떠나 다음 자리로 간다 (menu-focus-fixes-design.md).
+        //  - 앱 정책이 그 대표마저 걸렀으면 여전히 끝에서 시작한다.
         std::size_t next { forward ? 0u : order.size() - 1u };
         if (has_focus)
-            if (const auto found { std::find(order.begin(), order.end(), snapshot_.focused) }; found != order.end())
+        {
+            auto found { std::find(order.begin(), order.end(), snapshot_.focused) };
+            if (found == order.end())
+                if (const std::optional<ui_element_id> stop { tree->focus_stop_of(snapshot_.focused) }; stop.has_value())
+                    found = std::find(order.begin(), order.end(), *stop);
+            if (found != order.end())
             {
                 const std::size_t index { static_cast<std::size_t>(found - order.begin()) };
                 next = forward ? (index + 1u) % order.size() : (index + order.size() - 1u) % order.size();
             }
+        }
 
         set_keyboard_focus(surface, order[next], time);
         return true;
@@ -4496,6 +4536,7 @@ namespace luil {
         pressed_button_ = pointer_button::none;
         pressed_surface_.clear();
         drag_candidate_ = false;
+        pressed_open_tree_.reset();
         snapshot_.pressed = {};
         snapshot_.pressed_surface.clear();
     }
