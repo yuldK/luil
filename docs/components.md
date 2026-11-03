@@ -97,6 +97,7 @@
 | 알림 영역(트레이) 아이콘과 그 사건·시스템 메뉴 | `tray_icon`, `ui_frame::tray`, `tray_icon::activate`, `win32::window_delegate::make_tray_message` | [app/tray_icon.h](../include/luil/app/tray_icon.h) | [설명](tray-icon-design.md) |
 | 앱이 뒤에 있어도 받는 전역 단축키와 걸린 결과 | `global_hotkey`, `ui_frame::hotkeys`, `global_hotkey::pressed`, `win32::hotkey_report`, `win32::window_delegate::make_hotkey_message` | [app/global_hotkey.h](../include/luil/app/global_hotkey.h) | [설명](global-hotkey-design.md) |
 | 둘째 인스턴스의 인자 넘기기 | `single_instance::send_to_primary`, `instance_arguments`, `window_delegate::on_instance_arguments` | [app/platform_services.h](../include/luil/app/platform_services.h) | [설명](single-instance-args-design.md) |
+| 자동 업데이트의 확인·서명 확인·덩이 받기 | `updater`, `updater_config`, `update_key`, `update_status` | [app/updater.h](../include/luil/app/updater.h) | [설명](auto-update-design.md) |
 | 웹 콘텐츠 자리와 접근성 | `webview_element` | [ui/webview_element.h](../include/luil/ui/webview_element.h) | [설명](webview-composition-design.md) |
 | 웹뷰 구성·정책·명령 | `ui_webview`, `webview_policy` | [app/webview.h](../include/luil/app/webview.h) | [설명](webview-composition-design.md) |
 

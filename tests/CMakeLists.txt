@@ -155,6 +155,11 @@ target_sources(luil_core_tests PRIVATE
     dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
+# 자동 업데이트의 봉투·매니페스트·판·서명 꼴·SPKI 머리·상태 파일 규칙이다. 고정 서명 자료는 openssl로 한 번 지어 커밋했다
+# (update_fixtures.cpp). 암호 API 없이 돈다.
+target_sources(luil_core_tests PRIVATE
+    update_fixtures.cpp
+    update_manifest_tests.cpp)
 # 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지와 검사기 페이지의 상태 줄, 파일 감시 묶음의 표시,
 # 테마 페이지의 스타일 파일 견본도 서버·감시자 없이 검증한다. 첫 화면의 페이지 목록 칸이 내는 접근 이름과 실행도 같은 목록에 오른다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
@@ -328,6 +333,16 @@ if(LUIL_PLATFORM STREQUAL "android")
         loopback_http_server.cpp
         loopback_http_server_tests.cpp
         loopback_socket_posix.cpp)
+    # 자동 업데이트의 확인을 같은 JVM 안에서 돈다. 서명 확인이 JNI의 java.security를 부르고, 상태 파일과 잠금이 플랫폼 도구를
+    # 쓴다 (플랫폼 도구는 주소 열기에 쓰는 UTF-8 변환을 함께 끌어온다). 미리 서명한 봉투만 쓴다. Android는 받지 않는다.
+    target_sources(luil_net_tests PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/update_crypto_android.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/luil/url_scheme.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/updater.cpp"
+        update_fixtures.cpp
+        updater_tests.cpp)
     target_include_directories(luil_net_tests
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}"
@@ -508,6 +523,12 @@ add_executable(luil_tests
     # 데스크톱 데모의 기본 페이지도 <windows.h>와 비밀 저장소를 불러 Windows 전용 test에서 읽는다. 확인 대화의 열기·결과·닫기를 검증한다.
     "${PROJECT_SOURCE_DIR}/examples/demo/basics_page.cpp"
     basics_page_tests.cpp)
+# 자동 업데이트의 CNG 암호와 되돌이 서버로 끝까지 도는 상태 기계다. 시험 서명(update_test_signing.cpp)만 시험 키의 비밀 값을 들인다.
+target_sources(luil_tests PRIVATE
+    update_crypto_tests.cpp
+    update_fixtures.cpp
+    update_test_signing.cpp
+    updater_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"

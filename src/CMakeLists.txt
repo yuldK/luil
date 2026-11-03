@@ -421,7 +421,8 @@ luil_add_source_filter(luil_core_files "app"
     "${public_headers}/app/taskbar.h"
     "${public_headers}/app/tray_icon.h"
     "${public_headers}/app/global_hotkey.h"
-    "${public_headers}/app/webview.h")
+    "${public_headers}/app/webview.h"
+    "${public_headers}/app/updater.h")
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
@@ -470,7 +471,10 @@ luil_add_source_filter(luil_core_files "host"
     host/taskbar_sync.h
     host/text_input_host.h
     host/tray_sync.cpp
-    host/tray_sync.h)
+    host/tray_sync.h
+    # 자동 업데이트의 봉투·매니페스트 읽기, 판 비교, 서명 꼴 바꾸기, 상태 파일이다 (auto-update-design.md).
+    host/update_manifest.cpp
+    host/update_manifest.h)
 
 # 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.
 luil_add_source_filter(luil_files "umbrella"
@@ -668,6 +672,12 @@ luil_add_source_filter(luil_files "net/winhttp"
     net/winhttp/winhttp_error.cpp
     net/winhttp/winhttp_error.h)
 
+# net/update: 자동 업데이트의 상태 기계와 CNG 암호다 (auto-update-design.md). 상태 기계는 두 플랫폼 묶음에 같이 든다.
+luil_add_source_filter(luil_files "net/update"
+    net/update_crypto.h
+    net/updater.cpp
+    win32/update_crypto_win32.cpp)
+
 # 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
 # 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만
 # target으로 긋는다.
@@ -741,6 +751,8 @@ if(LUIL_PLATFORM STREQUAL "windows")
             # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.
             # 비밀 저장소의 자격 증명 관리자 API다 (CredWriteW 등, secret-store-design.md).
             advapi32
+            # 자동 업데이트의 SHA-256과 ECDSA P-256 확인이다 (CNG, auto-update-design.md).
+            bcrypt
             d3d12
             # Direct3D 제시가 창이 아니라 합성에 붙는다
             # (webview-composition-design.md).
@@ -856,6 +868,11 @@ if(LUIL_PLATFORM STREQUAL "android")
     else()
         luil_add_source_filter(luil_android_files "net" net/smb_client_unsupported.cpp)
     endif()
+    # 자동 업데이트의 상태 기계와 JNI java.security 서명 확인이다 (auto-update-design.md). Android는 확인만 하고 받지 않는다.
+    luil_add_source_filter(luil_android_files "net/update"
+        android/update_crypto_android.cpp
+        net/update_crypto.h
+        net/updater.cpp)
 
     add_library(luil STATIC ${luil_android_files})
     add_library(luil::luil ALIAS luil)
