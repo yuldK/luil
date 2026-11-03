@@ -365,6 +365,7 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     ui/syntax_highlighter.cpp
     "${public_headers}/ui/syntax_highlighter.h"
     ui/rich_text.cpp
+    ui/rich_text_html.cpp
     "${public_headers}/ui/rich_text.h"
     ui/rich_text_commands.cpp
     "${public_headers}/ui/rich_text_commands.h"

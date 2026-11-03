@@ -92,6 +92,7 @@ add_executable(luil_core_tests
     text_change_tests.cpp
     text_format_tests.cpp
     rich_text_tests.cpp
+    rich_text_html_tests.cpp
     syntax_highlighter_tests.cpp
     text_link_tests.cpp
     stack_element_tests.cpp

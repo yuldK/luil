@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -278,4 +279,124 @@ TEST_CASE("Ctrl+B in a focused text area reaches the key handler on the area", "
     // 맞지 않는 Ctrl 조합은 처리기를 지나 앱 on_key로 흐른다.
     static_cast<void>(controller.process(control(luil::key_code::key_q)));
     REQUIRE(policy.unhandled == std::vector<luil::key_code> { luil::key_code::key_q });
+}
+
+TEST_CASE("A rich text copy request carries the selected text and its HTML", "[ui][rich-text][clipboard]")
+{
+    // "ab cd"의 "b c"를 고른다. 굵게는 [0, 2)라 조각의 첫 글자만 굵다.
+    luil::text::text_format format {};
+    format.runs = { { 0, 2, text_mark::bold } };
+    format.links = { { 3, 5, u8"https://example.com/" } };
+    luil::text::text_edit_state state { formatted(u8"ab cd", format) };
+    select(state, 1, 4);
+    const luil::clipboard_data_copy_request request { luil::rich_text_copy_request(state) };
+    REQUIRE(request.text == u8"b c");
+    REQUIRE(request.html == u8"<span style=\"white-space: pre-wrap;\"><b>b</b> <a href=\"https://example.com/\">c</a></span>");
+    REQUIRE(request.image.valid() == false);
+    REQUIRE(request.png.empty());
+    const luil::rich_text_fragment back { luil::rich_text_from_html(request.html) };
+    REQUIRE(back.text == u8"b c");
+    REQUIRE(back.format.runs == std::vector<luil::text::text_mark_run> { { 0, 1, text_mark::bold } });
+    REQUIRE(back.format.links == std::vector<luil::text::text_format_link> { { 2, 3, u8"https://example.com/" } });
+
+    // 고른 구간이 없으면 빈 요청이다. 서식 없는 글도 HTML을 싣는다.
+    luil::text::text_edit_place_caret(state, 2, false);
+    REQUIRE(luil::rich_text_copy_request(state) == luil::clipboard_data_copy_request {});
+    luil::text::text_edit_state plain {};
+    luil::text::text_edit_set_text(plain, u8"x  y", false);
+    luil::text::text_edit_select_all(plain);
+    REQUIRE(luil::rich_text_copy_request(plain).html == u8"<span style=\"white-space: pre-wrap;\">x  y</span>");
+}
+
+TEST_CASE("Rich text paste inserts the filtered HTML, the plain text or nothing", "[ui][rich-text][clipboard]")
+{
+    luil::clipboard_data data {};
+    data.text = u8"bold and link";
+    data.html = u8"<b>bold</b> and <a href=\"https://example.com/\">link</a><script>x</script>";
+
+    // HTML은 걸러 자기 서식째 넣는다. 한 걸음으로 되돌아간다.
+    luil::text::text_edit_state state { formatted(u8"[]", {}) };
+    luil::text::text_edit_place_caret(state, 1, false);
+    REQUIRE(luil::rich_text_paste(state, data));
+    REQUIRE(state.text == u8"[bold and link]");
+    REQUIRE(state.caret == 14);
+    REQUIRE(state.format != nullptr);
+    REQUIRE(state.format->runs == std::vector<luil::text::text_mark_run> { { 1, 5, text_mark::bold } });
+    REQUIRE(state.format->links == std::vector<luil::text::text_format_link> { { 10, 14, u8"https://example.com/" } });
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text == u8"[]");
+    REQUIRE((state.format == nullptr || *state.format == luil::text::text_format {}));
+
+    // 서식 없이 붙이면 글을 넣는다. 넣은 글은 앞 글자의 서식을 이어받는다.
+    luil::text::text_format bold {};
+    bold.runs = { { 0, 1, text_mark::bold } };
+    luil::text::text_edit_state typed { formatted(u8"B", bold) };
+    luil::text::text_edit_place_caret(typed, 1, false);
+    REQUIRE(luil::rich_text_paste(typed, data, true));
+    REQUIRE(typed.text == u8"Bbold and link");
+    REQUIRE(typed.format->runs == std::vector<luil::text::text_mark_run> { { 0, 14, text_mark::bold } });
+    REQUIRE(typed.format->links.empty());
+    REQUIRE(luil::text::text_edit_undo(typed));
+    REQUIRE(typed.text == u8"B");
+
+    // HTML이 없거나 거른 조각이 비면 글로 물러선다.
+    luil::clipboard_data text_only {};
+    text_only.text = u8"line\r\nnext";
+    luil::text::text_edit_state fallback {};
+    REQUIRE(luil::rich_text_paste(fallback, text_only));
+    REQUIRE(fallback.text == u8"line\r\nnext");
+    luil::clipboard_data broken { text_only };
+    broken.html = std::u8string { u8"<b>" } + char8_t { 0xFF } + u8"</b>";
+    luil::text::text_edit_state broken_state {};
+    REQUIRE(luil::rich_text_paste(broken_state, broken));
+    REQUIRE(broken_state.text == u8"line\r\nnext");
+    REQUIRE((broken_state.format == nullptr || broken_state.format->runs.empty()));
+
+    // 그림만 든 답은 아무것도 넣지 않는다. 그림을 감싼 HTML만 있어도 같다.
+    luil::clipboard_data image {};
+    image.image_format = luil::clipboard_image_format::encoded;
+    image.image = std::make_shared<const std::vector<std::uint8_t>>(std::vector<std::uint8_t> { 1, 2, 3 });
+    image.html = u8"<img src=\"x.png\">";
+    luil::text::text_edit_state untouched { formatted(u8"keep", {}) };
+    REQUIRE(luil::rich_text_paste(untouched, image) == false);
+    REQUIRE(untouched.text == u8"keep");
+    REQUIRE(untouched.undo.empty());
+    // 글과 그림이 함께 오면 글만 넣는다.
+    image.text = u8"caption";
+    REQUIRE(luil::rich_text_paste(untouched, image));
+    REQUIRE(untouched.text == u8"captionkeep");
+}
+
+TEST_CASE("The rich text key handler maps the standard clipboard keys before the command table", "[ui][rich-text][clipboard]")
+{
+    const luil::key_handler handler { luil::make_rich_text_key_handler(luil::make_rich_text_commands({}), format_action) };
+    REQUIRE(handler != nullptr);
+    const auto command_of = [&handler](const luil::key_code key, const bool control, const bool shift) -> std::optional<luil::rich_text_command> {
+        luil::key_pressed_event event { key };
+        event.control = control;
+        event.shift = shift;
+        const auto actions { handler(event) };
+        if (actions.has_value() == false)
+            return std::nullopt;
+        return command_in(*actions);
+    };
+    REQUIRE(command_of(luil::key_code::key_c, true, false) == luil::rich_text_command::copy);
+    REQUIRE(command_of(luil::key_code::key_c, true, true) == luil::rich_text_command::copy);
+    REQUIRE(command_of(luil::key_code::insert, true, false) == luil::rich_text_command::copy);
+    REQUIRE(command_of(luil::key_code::key_x, true, false) == luil::rich_text_command::cut);
+    REQUIRE(command_of(luil::key_code::key_x, true, true) == luil::rich_text_command::cut);
+    REQUIRE(command_of(luil::key_code::delete_forward, false, true) == luil::rich_text_command::cut);
+    REQUIRE(command_of(luil::key_code::key_v, true, false) == luil::rich_text_command::paste);
+    REQUIRE(command_of(luil::key_code::insert, false, true) == luil::rich_text_command::paste);
+    REQUIRE(command_of(luil::key_code::key_v, true, true) == luil::rich_text_command::paste_plain);
+    // 수정자가 다르면 편집 키가 아니다. Ctrl+Delete는 낱말 지우기라 칸의 것이다.
+    REQUIRE(command_of(luil::key_code::key_c, false, false).has_value() == false);
+    REQUIRE(command_of(luil::key_code::delete_forward, true, true).has_value() == false);
+    REQUIRE(command_of(luil::key_code::insert, true, true).has_value() == false);
+    luil::key_pressed_event alt_copy { luil::key_code::key_c };
+    alt_copy.control = true;
+    alt_copy.alt = true;
+    REQUIRE(handler(alt_copy).has_value() == false);
+    // 명령표의 키는 그대로다.
+    REQUIRE(command_of(luil::key_code::key_b, true, false) == luil::rich_text_command::bold);
 }

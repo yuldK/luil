@@ -698,8 +698,8 @@ namespace luil {
     // 글과 그림을 **한 클립에** 넣는다 (image-clipboard-design.md). 하나씩 넣으면 뒤의 것이 앞의 것을 지운다.
     // 실제 클립보드 접근은 UI thread의 몫이다 — logic thread에서 `app_host::post_clipboard_request`로 넣는다.
     //  - 빈 칸의 형식은 넣지 않고, 모두 비면 아무 일도 없다. 넣은 결과는 돌아오지 않는다 (글·파일 복사와 같다).
-    //  - Win32는 "PNG", `CF_DIBV5`, `CF_UNICODETEXT` 순으로 넣고, 하나라도 실패하면 넣은 것도 거둔다.
-    //  - 그림을 넣지 못하는 플랫폼(Android)은 글 칸만 넣는다 (`ui_platform_capabilities::clipboard_image_copy`).
+    //  - Win32는 "PNG", `CF_DIBV5`, "HTML Format", `CF_UNICODETEXT` 순으로 넣고, 하나라도 실패하면 넣은 것도 거둔다.
+    //  - 그림을 넣지 못하는 플랫폼(Android)은 글과 HTML 칸만 넣는다 (`ui_platform_capabilities::clipboard_image_copy`).
     struct clipboard_data_copy_request
     {
         std::u8string text {};
@@ -709,6 +709,9 @@ namespace luil {
         //  - 창 계층은 인코더를 링크하지 않는다. PNG를 원하는 앱만 logic thread에서 짓는다.
         //  - 앞 8바이트가 PNG 서명이 아니면 버린다.
         std::vector<std::uint8_t> png {};
+        // 조각 HTML(UTF-8, 문서 머리 없음)이다 (`rich_text_to_html`, docs/rich-edit-exchange-design.md). 비면 HTML 형식을 넣지 않는다.
+        //  - Win32는 "HTML Format"(CF_HTML 머리를 붙인 블록), Android는 `ClipData.newHtmlText`로 글과 한 항목에 넣는다.
+        std::u8string html {};
 
         // 그림은 같은 값(같은 backing)인가로 견준다.
         [[nodiscard]] bool operator==(const clipboard_data_copy_request& other) const noexcept;
@@ -739,13 +742,17 @@ namespace luil {
         std::uint32_t tag { 0 };
         // 읽은 순간의 클립보드 번호다 (Win32 `GetClipboardSequenceNumber`). Android는 0이다.
         std::uint32_t sequence { 0 };
+        // 클립의 HTML 조각이다 (Win32 "HTML Format"의 조각, Android 항목의 `getHtmlText`). 비면 없었거나 읽지 못했다.
+        //  - 거르지 않은 남의 HTML이다. 서식으로 읽을 때는 `rich_text_from_html`이 거른다.
+        std::u8string html {};
 
         [[nodiscard]] bool operator==(const clipboard_data&) const noexcept = default;
     };
 
     inline bool clipboard_data_copy_request::operator==(const clipboard_data_copy_request& other) const noexcept
     {
-        return text == other.text && image.backing() == other.image.backing() && image.width() == other.image.width() && image.height() == other.image.height() && png == other.png;
+        return text == other.text && image.backing() == other.image.backing() && image.width() == other.image.width() && image.height() == other.image.height() && png == other.png
+            && html == other.html;
     }
 
     // UI thread만 다룰 수 있는 클립보드 요청이다.

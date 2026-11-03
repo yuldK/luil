@@ -786,6 +786,7 @@ namespace luil {
         snapshot.read_only = config_.read_only;
         snapshot.caret_upstream = value_.caret_upstream;
         snapshot.spans = config_.spans.get();
+        snapshot.clipboard_keys_to_parent = config_.clipboard_keys_to_parent;
         // caret이 링크 안이거나 바로 뒤면 그 링크다 — 링크 끝 글자를 누르면 caret이 링크 뒤에 선다.
         if (config_.links != nullptr && value_.composing == false)
         {

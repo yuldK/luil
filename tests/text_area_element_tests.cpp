@@ -990,3 +990,14 @@ TEST_CASE("A code span paints the raised background behind its text", "[ui][text
     const luil::ui_color_palette high_contrast { luil::color_palette_for(luil::color_theme::high_contrast) };
     REQUIRE(high_contrast.raised_background == high_contrast.window_background);
 }
+
+TEST_CASE("A text area hands its clipboard key flag to the text input snapshot", "[ui][text-area][rich-text]")
+{
+    // 서식 칸은 복사·붙여넣기 키를 key handler로 넘긴다. controller가 snapshot의 이 칸을 본다 (docs/rich-edit-exchange-design.md).
+    luil::text_area_config config {};
+    config.clipboard_keys_to_parent = true;
+    const auto tree { memo_tree(view_of(u8"abc", 0), config) };
+    REQUIRE(memo_of(*tree).text_input()->clipboard_keys_to_parent);
+    const auto plain { memo_tree(view_of(u8"abc", 0)) };
+    REQUIRE(memo_of(*plain).text_input()->clipboard_keys_to_parent == false);
+}

@@ -62,17 +62,17 @@ bool clipboard_keys_to_parent { false };
 **쓰기(복사·저장).**
 
 - 서식이 같은 조각마다 끊어 태그를 열고 닫는다. 바깥부터 `<a href>`, `<code>`, `<b>`, `<i>`, `<u>` 차례다. 겹침을 다시 짜지 않으므로 늘 바르게 닫힌다.
-- 글의 `&`·`<`·`>`, 속성의 `"`를 이스케이프하고 줄 바꿈은 `<br>`이다. 공백 여럿과 탭은 `white-space: pre-wrap`을 건 바깥 `<span>` 하나로 지킨다.
+- 글의 `&`·`<`·`>`, 속성의 `"`를 이스케이프하고 줄 바꿈은 `<br>`이다. CR은 `&#13;`로 써서 읽기가 글자 그대로 되돌린다(Windows 붙여넣기가 남긴 CR LF도 왕복한다). 공백 여럿과 탭은 `white-space: pre-wrap`을 건 바깥 `<span>` 하나로 지킨다. 빈 글은 빈 HTML이다.
 - 왕복: `rich_text_from_html(rich_text_to_html(t, f))`는 1단계 서식에서 `{ t, f }`와 같다.
 
 **읽기(붙여넣기·불러오기).**
 
 - 서식: `b`·`strong`은 굵게, `i`·`em`은 기울임, `u`·`ins`는 밑줄, `code`·`kbd`·`samp`·`tt`는 코드다. `style` 속성은 `font-weight`(bold, bolder, 600 이상은 켬, normal·400은 끔), `font-style`(italic, oblique), `text-decoration`·`text-decoration-line`(underline, none), `white-space`(pre, pre-wrap은 공백을 지킨다)만 읽고, 태그보다 앞선다. 문서 편집기는 굵게를 `style`로만 싣거나 감싸는 `<b>`를 `font-weight: normal`로 끄기 때문이다.
 - 링크: `a`의 `href`가 `http:`·`https:`·`mailto:`(대소문자 무시, 앞뒤 공백 무시)일 때만 링크다. 다른 scheme(`javascript:`, `data:`, `file:`)과 scheme 없는 상대 주소는 링크 없이 글만 남긴다.
-- 구조: `br`은 줄 바꿈이다. `p`·`div`·`li`·`h1`~`h6`·`blockquote`·`pre`·`tr`은 블록이라 앞뒤에 줄 바꿈 하나를 둔다(겹치지 않는다). `td`·`th` 사이는 탭이다. 블록의 모양(제목 크기, 목록 기호)은 1단계에 버린다.
-- 버림: `script`·`style`·`head`·`title`·`template`·`noscript`·`svg`·`math`·`iframe`·`object`는 내용째 버린다. `img`는 버린다(대체 글도 넣지 않는다). 주석, `<!doctype>`, CDATA, 처리 지시는 버린다. 그 밖의 모르는 요소는 태그만 버리고 글을 남긴다.
-- 글: 문자 참조는 숫자 꼴과 `amp`·`lt`·`gt`·`quot`·`apos`·`nbsp`를 푼다. 모르는 이름은 글 그대로다. `pre`와 공백을 지키는 `white-space` 밖의 공백 여럿은 하나로 접고 블록 가장자리의 공백은 버린다.
-- 한도: `max_bytes`를 넘거나 깨진 UTF-8이면 HTML을 버리고 `clipboard_data::text`로 물러선다. `max_depth`보다 깊은 요소는 서식 없이 글만 읽는다. 읽기는 바깥 주소를 풀거나 가져오지 않는다.
+- 구조: `br`은 줄 바꿈이고 그 자리의 서식과 링크를 받는다. `p`·`div`·`li`·`h1`~`h6`·`blockquote`·`pre`·`tr`과 `ul`·`ol`·`table`·`dl`·`dt`·`dd`·`section`·`article`·`header`·`footer`는 블록이라 앞뒤에 줄 바꿈 하나를 둔다(겹치지 않고, 서식이 없고, 글이 이어질 때만 나온다). `hr`은 블록 경계다. `td`·`th` 사이는 탭이다. 블록의 모양(제목 크기, 목록 기호)은 1단계에 버린다.
+- 버림: `script`·`style`·`head`·`title`·`template`·`noscript`·`svg`·`math`·`iframe`·`object`는 내용째 버린다. 내용이 글인 `script`·`style`·`title`·`iframe`·`noscript`(와 `xmp`·`noembed`·`noframes`)는 닫는 태그까지 글자 그대로 건너뛰고, 내용이 markup인 `head`·`template`·`svg`·`math`·`object`는 숨긴 채 짝을 맞춘다. `body`가 열리면 닫지 않은 `head`를 닫는다. `img`는 버린다(대체 글도 넣지 않는다). 주석, `<!doctype>`, CDATA, 처리 지시는 버린다. 그 밖의 모르는 요소는 태그만 버리고 글을 남긴다(`style`은 읽는다). 스스로 닫은 태그(`<b/>`)는 열지 않는다.
+- 글: 문자 참조는 숫자 꼴과 `amp`·`lt`·`gt`·`quot`·`apos`·`nbsp`(U+00A0)를 푼다. 모르는 이름과 `;` 없는 이름은 글 그대로이고, 0·surrogate·`U+10FFFF` 밖의 숫자는 U+FFFD다. 참조가 낸 글자는 공백 접기를 받지 않는다. `pre`와 공백을 지키는 `white-space` 밖의 공백 여럿은 하나로 접고(처음 만난 공백 자리의 서식과 링크를 받는다) 줄 처음과 블록 가장자리의 공백은 버린다. 지키는 공백의 CR LF와 CR은 줄 바꿈 하나다.
+- 한도: `max_bytes`를 넘거나 깨진 UTF-8이면 HTML을 버리고 `clipboard_data::text`로 물러선다. `max_depth`보다 깊은 요소는 서식 없이 글만 읽는다. 그런 요소는 스택에 올리지 않고 수만 세며(닫는 태그 하나가 하나를 지운다), 숨길 요소는 닫는 태그까지 건너뛴다. 끝나지 않은 태그·따옴표를 만나면 거기서 멈춘다. 읽기는 바깥 주소를 풀거나 가져오지 않는다.
 - 붙여넣은 조각은 자기 서식을 그대로 가진다(`text_edit_insert_formatted`, 실행 취소 한 덩어리). 주변 서식과 섞지 않는다. 서식 없이 붙이는 길은 `paste_plain`이다.
 
 **그림.** `clipboard_data`에 그림만 있으면 `rich_text_paste`는 거짓을 돌려주고 아무것도 넣지 않는다. 글과 그림이 함께 오면 글만 넣는다. 그림이 필요한 앱은 같은 답에서 `decode_clipboard_image`로 따로 읽는다. 인라인 그림은 1단계에 없다.
@@ -84,7 +84,7 @@ bool clipboard_keys_to_parent { false };
 - 길 a: 칸의 플래그로 키를 `key_handler`에 넘기고, logic thread가 `clipboard_data_*` 요청을 짓는다(이 문서). 되는 것: 서식과 기록이 있는 logic thread에서 HTML을 짓는다. `win32_window.cpp`의 여러 형식 분기(1888~1910행)와 Android 분기가 이미 있어 줄 4 파일을 고치지 않는다. 줄 3은 세 줄 남짓의 갈래 하나다. 대가: 줄 3과 병합 차례가 묶이고, 갈래가 들어오기 전까지 키로는 평문이다.
 - 길 b: `input_action` 끝에 `clipboard_data_copy_request`를 더하고([그림 클립보드](image-clipboard-design.md) 결정 6의 b) controller가 snapshot의 서식으로 HTML을 짓는다. 붙여넣기는 `text_edit_request`에 서식 조각을 싣는다. 되는 것: 앱 메시지 한 단계가 없다. 대가: controller가 HTML 쓰기를 알게 되고, 붙여넣기가 `apply_text_edit`(줄 3)와 `win32_window.cpp`(줄 4)의 붙여넣기 분기를 함께 고친다.
 - 길 c: 1단계는 평문만 키로 하고 서식 복사는 앱의 단추·메뉴 명령으로만 한다. 되는 것: 다른 줄 파일을 고치지 않는다. 대가: Ctrl+C로 복사한 서식이 사라지는 것이 기본 동작이 되어 서식 칸의 뜻이 약해진다.
-- 권장: a. 대가: 위의 병합 차례다. 갈래가 늦어도 평문으로 물러서므로 소리 없이 버려지는 요청이 없다. **승인 필요.**
+- 권장: a. 대가: 위의 병합 차례다. 갈래가 늦어도 평문으로 물러서므로 소리 없이 버려지는 요청이 없다. **승인: 길 a (2026-11-03).**
 
 **8. 교환 형식.** 질문: 어떤 클립보드 형식을 넣고 읽는가.
 
@@ -107,19 +107,25 @@ bool clipboard_keys_to_parent { false };
 - 길 c: 자체 JSON(글, `runs`, `links`). 되는 것: 정확하고 2단계 블록을 더하기 쉽다. 대가: 다른 프로그램이 열지 못하고, 서식 값은 공개 구조체라 앱이 스스로 지을 수 있는 것을 라이브러리가 하나 더 든다.
 - 권장: a. 대가: 위의 원문 편집이다. **권장대로 진행.**
 
+**구현 결정 C. 고정 키 판정은 공개하지 않는다.** 복사·붙여넣기 키를 명령으로 옮기는 판정은 `rich_text_commands.cpp` 안의 함수이고 `make_rich_text_key_handler`가 명령표보다 먼저 부른다. 앱이 볼 것은 처리기가 내는 `copy`·`cut`·`paste`·`paste_plain` 메시지뿐이다. 판정을 공개하면 사용자가 다시 정하지 않는 키를 앱이 따로 다룰 자리가 생겨 두 칸의 키가 갈린다.
+
+**구현 결정 D. Win32 HTML 읽기 상한.** `win32_image_clipboard.h`의 `max_clipboard_html_bytes`(16 MiB, `rich_text_html_limits::max_bytes`와 같은 값)를 넘는 조각은 UI thread에서 복사하지 않고 `html`을 비운다. 다른 프로세스가 정한 블록 크기라 상한이 없으면 붙여넣기 한 번이 UI thread에서 그만큼을 잡는다. 붙여넣기는 글로 물러선다. Android는 framework가 이미 Java 글로 들고 있어 따로 자르지 않는다.
+
+**구현 결정 E. 데모의 클립보드 요청.** 견본(`examples/demo/rich_text_sample.h`)이 복사·붙여넣기 명령을 받으면 요청(`clipboard_data_copy_request`나 표식 단 `clipboard_data_paste_request`)을 지어 쥐고, host를 쥔 셸이 같은 logic turn에 `take_clipboard_request`로 가져가 넣는다. 붙여넣기 답은 셸의 `make_clipboard_data_message`가 표식(`rich_text_clipboard_tag`)으로 갈라 `rich_text_clipboard_intent`로 짓는다. 모바일 driver는 host를 몰라 delegate가 `on_started`에서 `clipboard_host_intent { &host }`를 한 번 보낸다(데스크톱 셸이 `host_`를 쥐는 것과 같은 수명). 다른 길은 앱 UI 명령의 인자에 HTML을 싣는 것인데, 잘라내기가 두 메시지로 갈리고 글을 HTML에서 다시 꺼내야 한다.
+
 ## 플랫폼
 
-**Win32.** `win32_image_clipboard.cpp`의 `clipboard_data_blocks`가 `html`이 있으면 "HTML Format" 블록을 `CF_UNICODETEXT` 앞에 더한다. 넣는 차례는 "PNG", `CF_DIBV5`, "HTML Format", `CF_UNICODETEXT`이고 하나라도 실패하면 거두는 `put_clipboard_blocks` 규칙이 그대로다. 블록은 `Version:0.9`와 `StartHTML`·`EndHTML`·`StartFragment`·`EndFragment` 머리 뒤에 `<!--StartFragment-->` 주석으로 감싼 조각이다. `read_clipboard_data`는 같은 한 번 열기 안에서 그 형식을 읽어 머리의 조각 offset을 `GlobalSize` 범위 안에서 확인하고, 조각이 없으면 `StartHTML`~`EndHTML`을 쓴다. 머리 짓기와 풀기는 순수 함수(`cf_html_block`, `cf_html_fragment`)로 두어 test가 직접 본다. `win32_window.cpp`와 `win32_clipboard.cpp`는 고치지 않는다.
+**Win32.** `win32_image_clipboard.cpp`의 `clipboard_data_blocks`가 `html`이 있으면 "HTML Format" 블록을 `CF_UNICODETEXT` 앞에 더한다. 넣는 차례는 "PNG", `CF_DIBV5`, "HTML Format", `CF_UNICODETEXT`이고 하나라도 실패하면 거두는 `put_clipboard_blocks` 규칙이 그대로다. 블록은 `Version:0.9`와 `StartHTML`·`EndHTML`·`StartFragment`·`EndFragment` 머리(열 자리 0 채움이라 머리 길이가 값과 상관없다, UTF-8 바이트 offset) 뒤에 `<html><body>`와 `<!--StartFragment-->`·`<!--EndFragment-->` 주석으로 감싼 조각이고, 끝에 NUL 한 바이트를 붙인다(`EndHTML`은 그 앞). `read_clipboard_data`는 같은 한 번 열기 안에서 그 형식을 읽어 머리의 조각 offset을 `GlobalSize` 범위(첫 NUL까지) 안에서 확인하고, 조각 offset이 없거나 맞지 않으면 `StartHTML`~`EndHTML`을 쓴다(`EndHTML:-1`은 블록 끝). 머리는 CRLF·LF 줄을 모두 읽고 `SourceURL` 같은 모르는 키는 넘긴다. 둘 다 맞지 않거나 깨진 UTF-8이면 `html`을 비운다. 머리 짓기와 풀기는 순수 함수(`cf_html_block`, `cf_html_fragment`)로 두어 test가 직접 본다. `win32_window.cpp`와 `win32_clipboard.cpp`는 고치지 않는다.
 
-**Android.** Java 소스는 0줄이다. `android_clipboard.cpp`가 `ClipData.newHtmlText(label, text, html)`(API 16) 정적 메서드를 JNI로 불러 글과 HTML을 한 항목에 넣고, 읽기는 항목의 `getHtmlText()`를 부른다. 둘 다 기존 framework 클래스를 부르는 것이라 Java 클래스를 쓰지 않는다. `android_app.cpp`의 `clipboard_data_copy_request` 분기(1742행)는 `copy_text_to_clipboard` 대신 글과 HTML을 받는 새 함수 하나를 부르는 한 줄만 바뀐다. 터치 편집 메뉴의 복사·붙여넣기는 평문 그대로다. 메뉴의 실행(`android_app.cpp` 1290행 `execute_edit_menu`)이 controller를 거치지 않고 고른 글을 `copy_text_to_clipboard`로 넣고 붙여넣기를 `clipboard_paste_request`로 바로 실행하므로 칸의 플래그가 닿지 않는다. unsupported로 둘 부분은 없다.
+**Android.** Java 소스는 0줄이다. `android_clipboard.cpp`가 `ClipData.newHtmlText(label, text, html)`(API 16) 정적 메서드를 JNI로 불러 글과 HTML을 한 항목에 넣는 `copy_rich_text_to_clipboard`를 두고(HTML이 비면 `copy_text_to_clipboard`), 읽기(`read_clipboard_data`)는 글을 집은 그 항목의 `getHtmlText()`를 함께 부른다. 둘 다 기존 framework 클래스를 부르는 것이라 Java 클래스를 쓰지 않는다. `android_app.cpp`의 `clipboard_data_copy_request` 분기(1742행)는 `copy_text_to_clipboard` 대신 그 새 함수를 부르는 한 줄만 바뀌는데, 이 노드의 브랜치는 `android_app.cpp`를 고치지 않으므로 그 한 줄은 통합 커밋이 낸다. 그때까지 Android의 여러 형식 복사는 지금처럼 글만 넣고, 읽기는 이 브랜치에서 이미 HTML을 싣는다. 터치 편집 메뉴의 복사·붙여넣기는 평문 그대로다. 메뉴의 실행(`android_app.cpp` 1290행 `execute_edit_menu`)이 controller를 거치지 않고 고른 글을 `copy_text_to_clipboard`로 넣고 붙여넣기를 `clipboard_paste_request`로 바로 실행하므로 칸의 플래그가 닿지 않는다. unsupported로 둘 부분은 없다.
 
 ## 다른 노드와의 약속
 
 - **줄 3(controller).** `process_text_input_key`에 갈래 하나: snapshot의 `clipboard_keys_to_parent`가 참이고 `secret`이 아니면 위의 복사·잘라내기·붙여넣기 조합에 nullopt를 돌려준다. 읽기 전용 갈래 뒤, `multiline` 갈래 앞이다. 필드는 이 노드가 `ui_element.h`의 `text_input_snapshot` 끝과 `text_area_config` 끝에 더하므로, 통합 때 줄 2를 먼저 합치고 줄 3의 갈래 커밋과 그 test(`tests/key_propagation_tests.cpp` 끝)를 그 뒤에 쌓는다. `navigation_keys_to_parent`(ui_element.h 160행)와 같은 꼴이다.
 - **그림 클립보드(R2).** 그 문서가 이 노드에 남긴 것을 닫는다([image-clipboard-design.md](image-clipboard-design.md) 205행). `html`은 두 구조체 끝에 더하고(앞 구조체의 손으로 쓴 `operator==`에도 한 칸) 기존 칸은 그대로다. `rtf`는 결정 8로 더하지 않는다. 입력 thread에서 짓는 여러 형식 복사(그 문서 결정 6의 b)는 결정 7로 하지 않는다. 그림 붙여넣기는 1단계에 넣지 않는다.
-- **줄 4(tray·hotkey).** `win32_window.cpp`·`app_delegate.h`·`app_host.h`·`ui_platform.h`를 고치지 않는다. HTML은 두 플랫폼 모두 다뤄 능력 칸이 늘지 않는다. `android_app.cpp`는 위의 분기 한 줄만이고 줄 4가 같은 파일을 고치면 다른 함수다.
+- **줄 4(tray·hotkey).** `win32_window.cpp`·`app_delegate.h`·`app_host.h`·`ui_platform.h`를 고치지 않는다. HTML은 두 플랫폼 모두 다뤄 능력 칸이 늘지 않는다. `android_app.cpp`는 위의 분기 한 줄만이고(통합 커밋이 낸다) 줄 4가 같은 파일을 고치면 다른 함수다.
 - **R4 markup.** R4 markup이 서식 글을 선언하면 `rich_text_from_html`로 HTML 조각을 읽는 길을 쓸 수 있다(core 코드라 바로 부를 수 있다). 꼴은 그 문서가 정한다.
-- **데모는 따로 커밋한다.** [서식 있는 글 편집](rich-edit-design.md)의 데모 페이지가 복사·붙여넣기 단추와 클립보드 답 연결(`make_clipboard_data_message`의 tag)을 함께 가진다. `examples/demo_main.cpp`의 delegate 갈래 한 줄은 통합 때 직렬로 쌓는다.
+- **데모는 따로 커밋한다.** [서식 있는 글 편집](rich-edit-design.md)의 데모 페이지가 복사·붙여넣기 단추와 클립보드 답 연결(`make_clipboard_data_message`의 tag)을 함께 가진다. 이 노드의 데모 커밋이 `examples/demo_main.cpp`의 delegate 갈래 한 줄과 페이지 처리 앞의 요청 넣기, `examples/mobile_demo/app.*`·`main.cpp`·`android_main.cpp`의 host 전달(구현 결정 E)을 함께 내고, 통합 때 다른 줄의 같은 파일 변경 뒤에 직렬로 쌓는다.
 
 ## 확인
 
@@ -128,10 +134,12 @@ bool clipboard_keys_to_parent { false };
 - `tests/rich_text_html_tests.cpp`(luil_core_tests, 새 파일): 쓰기·읽기 왕복이 같은 값인지, 이스케이프와 `<br>`, 서식 경계마다 바르게 닫히는지, `style`이 태그보다 앞서는지(`<b style="font-weight:normal">`), 허용 scheme만 링크인지, 버리는 요소의 내용이 사라지는지, 블록·표의 줄 바꿈과 탭, 문자 참조, 공백 접기와 `pre`, `max_bytes`·`max_depth`·깨진 UTF-8에서 물러서는지.
 - `tests/rich_text_tests.cpp`(luil_core_tests, 끝에 더함): `rich_text_copy_request`가 고른 구간의 글·HTML을 싣는지, `rich_text_paste`가 HTML·글·`plain`·그림만 있는 답에서 각각 무엇을 넣고 한 걸음으로 되돌아가는지, key handler가 고정 조합을 `copy`·`cut`·`paste`·`paste_plain`으로 옮기는지.
 - `tests/clipboard_image_tests.cpp`(luil_core_tests, 끝에 더함): `html`만 다른 두 `clipboard_data_copy_request`가 같지 않고 `html`이 같으면 같은지. 손으로 쓴 `operator==`가 새 칸을 보는지를 잠근다.
-- `tests/win32_image_clipboard_tests.cpp`(luil_tests): `cf_html_block` 머리 offset이 맞는지, `cf_html_fragment`가 잘리거나 범위 밖인 offset을 거절하는지. `[system]` 태그 test가 실제 클립보드에 글·HTML을 넣고 되읽어 같은지(일반 ctest 밖).
+- `tests/win32_image_clipboard_tests.cpp`(luil_tests): `cf_html_block` 머리 offset이 맞는지, `cf_html_fragment`가 잘리거나 범위 밖인 offset을 거절하는지, `EndHTML:-1`·LF 머리·첫 NUL 뒤 바이트, 블록 차례("PNG", `CF_DIBV5`, "HTML Format", `CF_UNICODETEXT`). `[system]` 태그 test가 실제 클립보드에 글·HTML을 넣고 되읽어 같은지. 기존 `[system]` test처럼 일반 ctest 안에서 돌고, 시작 전 클립보드의 글과 HTML을 쥐었다 끝에 되돌린다.
+- `tests/text_area_element_tests.cpp`(luil_core_tests, 끝에 더함): `clipboard_keys_to_parent`가 `text_input()`에 실리는지.
 - Android: JNI 길은 구현 때 `.cpp`를 묶은 확인 프로그램을 `run-as`로 실기기에서 돌려 `newHtmlText`로 넣고 `getHtmlText`로 되읽는다.
+- `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`(luil_core_tests, 끝에 더함): 단추 이름, 복사 요청의 글·HTML, 붙여넣기 요청의 표식, 답을 넣은 뒤의 `rich-clipboard`·`rich-state`, 실행 취소, 칸 처리기의 Ctrl+C·Ctrl+Shift+V.
 
-데모. 데스크톱 서식 페이지에 단추 `rich-copy`·`rich-paste`와 label `rich-clipboard`("HTML 412바이트 · 굵게 2 · 링크 1")를 둔다. UIA(격리 데스크톱)로 범위를 골라 `rich-copy`를 Invoke하고 `rich-paste` 뒤 `rich-state`의 구간 수가 늘어나는지 읽는다. 키는 PostMessage로 Ctrl+C·Ctrl+V를 보낸다(줄 3 갈래가 들어온 뒤의 기대다).
+데모. 데스크톱 서식 페이지에 단추 `rich-copy`("서식 복사")·`rich-paste`("서식 붙여넣기")와 label `rich-clipboard`("복사 · HTML 412바이트 · 굵게 2 · 링크 1", 붙여넣기 뒤에는 "붙여넣기 · …"나 "붙여넣기 · 글만")를 둔다. 수는 실은 HTML을 다시 거른 값이라 왕복을 함께 보인다. UIA(격리 데스크톱)로 범위를 골라 `rich-copy`를 Invoke하고 `rich-paste` 뒤 `rich-state`의 구간 수가 늘어나는지 읽는다. 키는 PostMessage로 Ctrl+C·Ctrl+V를 보낸다(줄 3 갈래가 들어온 뒤의 기대다). 모바일 기본 페이지의 서식 칸 아래에도 같은 단추 둘과 `rich-clipboard`를 둔다.
 
 사람 확인.
 

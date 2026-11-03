@@ -19,6 +19,41 @@ namespace luil {
                 .checkable = checkable,
             };
         }
+
+        // 칸이 넘긴 복사·잘라내기·붙여넣기 키다 (docs/rich-edit-exchange-design.md). 명령표와 따로 고정이다.
+        //  - Ctrl+C·X·V(Shift 포함, Ctrl+Shift+V는 서식 없이 붙이기), Ctrl+Insert, Shift+Insert, Shift+Delete다.
+        [[nodiscard]] std::optional<rich_text_command> rich_text_clipboard_command_of(const key_pressed_event& event) noexcept
+        {
+            if (event.alt || event.meta)
+                return std::nullopt;
+            const bool primary { event.primary_shortcut_down() };
+            if (primary)
+            {
+                switch (event.key)
+                {
+                case key_code::key_c:
+                    return rich_text_command::copy;
+                case key_code::key_x:
+                    return rich_text_command::cut;
+                case key_code::key_v:
+                    return event.shift ? rich_text_command::paste_plain : rich_text_command::paste;
+                case key_code::insert:
+                    if (event.shift)
+                        return std::nullopt;
+                    return rich_text_command::copy;
+                default:
+                    return std::nullopt;
+                }
+            }
+            if (event.shift && event.control == false)
+            {
+                if (event.key == key_code::insert)
+                    return rich_text_command::paste;
+                if (event.key == key_code::delete_forward)
+                    return rich_text_command::cut;
+            }
+            return std::nullopt;
+        }
     }
 
     std::vector<app_command> make_rich_text_commands(const rich_text_state& state, const rich_text_command_labels& labels)
@@ -56,6 +91,9 @@ namespace luil {
         if (make_action == nullptr)
             return {};
         return [commands = std::move(commands), make_action = std::move(make_action)](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
+            // 편집의 표준 키는 명령표보다 먼저 본다. 사용자가 다시 정하지 않는다.
+            if (const std::optional<rich_text_command> clipboard { rich_text_clipboard_command_of(event) }; clipboard.has_value())
+                return std::vector<input_action> { make_action(*clipboard) };
             const std::optional<std::u8string> id { match_command(commands, event, command_scope::focused) };
             if (id.has_value() == false)
                 return std::nullopt;

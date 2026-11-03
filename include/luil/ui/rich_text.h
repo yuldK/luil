@@ -3,8 +3,11 @@
 #include "luil/text/text_edit.h"
 #include "luil/text/text_format.h"
 #include "luil/ui/text_document.h"
+#include "luil/ui/ui_events.h"
 
+#include <cstddef>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -74,4 +77,44 @@ namespace luil {
         std::shared_ptr<const std::vector<text_span>> spans_ {};
         std::shared_ptr<const std::vector<text_link>> links_ {};
     };
+
+    // 서식 있는 글 조각이다. `format`의 offset은 `text` 기준이다 (`rich_text_from_html`).
+    struct rich_text_fragment
+    {
+        std::u8string text {};
+        text::text_format format {};
+
+        [[nodiscard]] bool operator==(const rich_text_fragment&) const = default;
+    };
+
+    // 남의 HTML을 읽을 때의 한도다.
+    struct rich_text_html_limits
+    {
+        // 넘으면 HTML을 버리고 글로 물러선다 (빈 조각).
+        std::size_t max_bytes { std::size_t { 16 } * 1024 * 1024 };
+        // 더 깊은 요소는 서식 없이 글만 읽는다. 깊이를 세는 데 메모리를 쓰지 않는다.
+        std::size_t max_depth { 256 };
+    };
+
+    // 글을 조각 HTML로 쓴다 (복사·저장, docs/rich-edit-exchange-design.md).
+    //  - 문서 머리 없이 `white-space: pre-wrap`을 건 바깥 `<span>` 하나와 `<b>`·`<i>`·`<u>`·`<code>`·`<a href>`·`<br>`만 쓴다.
+    //  - 서식이 같은 조각마다 태그를 열고 닫는다. 바깥부터 `<a>`, `<code>`, `<b>`, `<i>`, `<u>` 차례라 늘 바르게 닫힌다.
+    //  - 글의 `&`·`<`·`>`, 주소의 `&`·`<`·`>`·`"`를 이스케이프한다. 줄 바꿈은 `<br>`이다. 빈 글은 빈 HTML이다.
+    //  - `rich_text_from_html(rich_text_to_html(t, f))`는 `{ t, f }`다 (`f`가 `text_format`의 불변식을 지킬 때).
+    [[nodiscard]] std::u8string rich_text_to_html(std::u8string_view text, const text::text_format& format);
+
+    // HTML을 걸러 서식 있는 글로 읽는다 (붙여넣기·불러오기). 허용 밖의 요소는 버리거나 글만 남기고, 바깥 자원을 읽지 않는다.
+    //  - 서식은 굵게·기울임·밑줄·코드와 `http:`·`https:`·`mailto:` 링크뿐이다. `style`의 굵기·기울임·밑줄·공백 규칙이 태그보다 앞선다.
+    //  - 블록은 줄 바꿈, 표 칸 사이는 탭이다. 스크립트·스타일·문서 머리 같은 요소는 내용째, 그림·주석은 버린다.
+    //  - `max_bytes`를 넘거나 깨진 UTF-8이면 빈 조각이다.
+    [[nodiscard]] rich_text_fragment rich_text_from_html(std::u8string_view html, const rich_text_html_limits& limits = {});
+
+    // 고른 구간의 글과 HTML을 한 클립에 넣는 요청이다 (`app_host::post_clipboard_request`). 고른 구간이 없으면 빈 요청이다.
+    [[nodiscard]] clipboard_data_copy_request rich_text_copy_request(const text::text_edit_state& state);
+
+    // 클립보드 답(`clipboard_data`)을 caret에 넣는다. 넣었으면 참이다. 실행 취소 한 덩어리다.
+    //  - `plain`이거나 HTML이 없으면 글을 넣는다 (넣은 글의 서식 규칙을 따른다).
+    //  - 아니면 거른 조각을 자기 서식째 넣는다 (`text_edit_insert_formatted`). 거른 조각이 비면(한도, 깨진 UTF-8) 글로 물러선다.
+    //  - 그림은 넣지 않는다. 그림만 든 답에는 거짓이고 아무것도 바꾸지 않는다.
+    bool rich_text_paste(text::text_edit_state& state, const clipboard_data& data, bool plain = false);
 }
