@@ -257,6 +257,11 @@ namespace demo {
     {
     };
 
+    // 경로 열 고정을 뒤집는다. 보기 상태라 실행 취소 걸음을 만들지 않는다.
+    struct workbench_freeze_intent
+    {
+    };
+
     // 걸음이 싣는 재생 전용 메시지다. 사용자 동작은 걸음을 쌓은 뒤 다시 실행과 같은 메시지를 적용하므로 처음 실행과 다시 실행이
     // 한 길이고, 모두 절대 값을 담는다.
     struct workbench_staged_entry
@@ -346,6 +351,8 @@ namespace demo {
         void commit_step(luil::undo_step step);
         // 실행 취소 기록의 상태를 말하는 글이다 ("되돌리기 2 · 다시 실행 1 · 다음: 변경 버리기 · 저장 지점 일치").
         [[nodiscard]] std::u8string history_text() const;
+        // 경로 열 고정의 상태를 말하는 글이다 ("고정 열 1: 경로"). 서 있는지는 창 폭에 달려 이 글이 말하지 않는다.
+        [[nodiscard]] std::u8string freeze_text() const;
         // 보기에 띄울 문서(불러온 패치, 없으면 표의 커서 행)가 바뀌었으면 글·장식을 다시 짓는다.
         void refresh_diff();
         // 찾는 글이 바뀌었으면 찾은 곳을 다시 모으고 참을 돌려준다.
@@ -384,6 +391,8 @@ namespace demo {
         luil::item_selection selection_ {};
         float changes_scroll_ { 0.0f };
         float changes_scroll_x_ { 0.0f };
+        // 경로 열을 가로 스크롤에서 고정하는가. 보기 상태라 실행 취소 기록에 들지 않는다.
+        bool freeze_path_ { false };
         bool menu_open_ { false };
         float menu_x_ { 0.0f };
         float menu_y_ { 0.0f };

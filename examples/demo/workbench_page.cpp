@@ -270,10 +270,12 @@ namespace demo {
         }
 
         // 경로 열은 가운데를 줄인다. 좁혀도 폴더의 시작과 파일 이름이 함께 남는다.
+        // 폴더 열은 가로로 흘릴 거리를 만든다. 경로 열을 고정하면 이 열이 경로 열 밑으로 지나가지 않고 옆으로 흐른다.
         columns_ = {
             { .key = u8"path", .header = u8"경로", .width = 340.0f, .min_width = 120.0f, .elide = luil::text_elide::middle },
             { .key = u8"status", .header = u8"상태", .width = 90.0f },
             { .key = u8"size", .header = u8"크기", .width = 100.0f, .align = luil::column_align::end },
+            { .key = u8"folder", .header = u8"폴더", .width = 300.0f, .min_width = 80.0f, .elide = luil::text_elide::middle, .sortable = false },
         };
         const std::vector<luil::virtual_list_item> items { change_items() };
         selection_ = luil::selection_reconcile(selection_, {}, items);
@@ -557,6 +559,11 @@ namespace demo {
             + u8" · 저장 지점 " + (history_.clean() ? u8"일치" : u8"다름");
     }
 
+    std::u8string workbench_page::freeze_text() const
+    {
+        return freeze_path_ ? u8"고정 열 1: 경로" : u8"고정 열 없음";
+    }
+
     luil::undo_command_state workbench_page::undo_state() const
     {
         // 최종 글은 앱이 잇는다. 라이브러리는 기본 문구를 두지 않는다.
@@ -794,6 +801,11 @@ namespace demo {
         if (message.get<workbench_mark_saved_intent>() != nullptr)
         {
             history_.set_clean();
+            return true;
+        }
+        if (message.get<workbench_freeze_intent>() != nullptr)
+        {
+            freeze_path_ = !freeze_path_;
             return true;
         }
         // 걸음이 싣는 재생 메시지다. 모두 절대 값이라 몇 번을 받아도 결과가 같다.
@@ -1092,6 +1104,17 @@ namespace demo {
         saved->set_tooltip(u8"지금 자리를 저장 지점으로 삼는다");
         row->add_fit(std::move(saved));
 
+        // 경로 열 고정이다. 눌러도 실행 취소 걸음은 쌓이지 않는다 (보기 상태). 서 있는지는 창이 넓어야 하므로 UIA로 되읽는다.
+        luil::check_config freeze_config {};
+        freeze_config.owner = u8"workbench-freeze";
+        freeze_config.style = luil::check_style::toggle_switch;
+        freeze_config.label = u8"경로 열 고정";
+        freeze_config.checked = freeze_path_;
+        freeze_config.toggle = luil::make_message_action(workbench_freeze_intent {});
+        freeze_config.tooltip = u8"가로로 흘려도 경로 열을 제자리에 둔다";
+        row->add_fit(std::make_unique<luil::check_element>(std::move(freeze_config)));
+        row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"workbench-freeze-state"), luil::label_config { .text = freeze_text(), .color = luil::label_color_role::dim }));
+
         row->add_flexible(std::make_unique<luil::label_element>(workbench_id(u8"workbench-history"), luil::label_config { .text = history_text(), .color = luil::label_color_role::dim }));
         return row;
     }
@@ -1194,6 +1217,8 @@ namespace demo {
                 return found->status;
             if (column.key == u8"size")
                 return size_text(found->size);
+            if (column.key == u8"folder")
+                return found->path.substr(0, found->path.rfind(u8'/') == std::u8string::npos ? 0u : found->path.rfind(u8'/'));
             return found->path;
         };
         table.check_column = u8"path";
@@ -1203,6 +1228,7 @@ namespace demo {
         };
         table.toggle_check = [](const std::u8string& key) { return luil::make_app_action(workbench_change_check_intent { key }); };
         table.scroll_x = changes_scroll_x_;
+        table.frozen_columns = freeze_path_ ? 1u : 0u;
         table.scroll_horizontal = [](const float delta) { return luil::make_app_action(workbench_change_scroll_x_intent { delta }); };
         table.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(workbench_change_scroll_x_to_intent { offset }); };
         table.sort_request = [](const std::u8string& column) { return luil::make_app_action(workbench_sort_intent { column }); };

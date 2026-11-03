@@ -121,11 +121,11 @@ namespace {
         return staged;
     }
 
-    // 단추를 눌러 나온 메시지를 페이지에 돌려준다. 실제 입력 경로를 그대로 탄다. 돌려준 수를 돌려준다.
-    int press(demo::workbench_page& page, const std::u8string& owner)
+    // 요소를 눌러 나온 메시지를 페이지에 돌려준다. 실제 입력 경로를 그대로 탄다. 돌려준 수를 돌려준다.
+    int press_element(demo::workbench_page& page, const luil::ui_element_id& id)
     {
         const auto tree { std::make_shared<const luil::ui_tree>(published(page)) };
-        const luil::ui_element* const button { tree->find(workbench(owner)) };
+        const luil::ui_element* const button { tree->find(id) };
         REQUIRE(button != nullptr);
         const luil::rect_f box { button->bounds() };
         const float x { box.x + box.width / 2.0f };
@@ -142,6 +142,23 @@ namespace {
                 ++delivered;
             }
         return delivered;
+    }
+
+    // 단추를 눌러 나온 메시지를 페이지에 돌려준다.
+    int press(demo::workbench_page& page, const std::u8string& owner)
+    {
+        return press_element(page, workbench(owner));
+    }
+
+    // 경로 열 고정의 상태 글이다. UIA가 되읽는 이름과 같다.
+    [[nodiscard]] std::u8string freeze_state_of(demo::workbench_page& page)
+    {
+        return published(page).find(workbench(u8"workbench-freeze-state"))->accessibility().name;
+    }
+
+    [[nodiscard]] luil::ui_element_id freeze_toggle()
+    {
+        return { luil::ui_element_kind::check, u8"workbench-freeze" };
     }
 
     void discard_row(demo::workbench_page& page, const std::u8string& key)
@@ -445,4 +462,80 @@ TEST_CASE("The undo state names the next step for the palette and the menu", "[d
 
     // 단추의 툴팁은 같은 명령표의 글과 단축키다.
     REQUIRE(published(page).find(workbench(u8"workbench-redo"))->tooltip() == u8"다시 실행: 스테이지 바꿈 (Ctrl+Y)");
+}
+
+TEST_CASE("The freeze toggle pins the path column as a view state and makes no undo step", "[demo][workbench][frozen]")
+{
+    demo::workbench_page page {};
+    const std::u8string before { history_of(page) };
+    {
+        const luil::ui_tree tree { published(page) };
+        REQUIRE(tree.duplicate_ids().empty());
+        REQUIRE(tree.unarranged().empty());
+        REQUIRE(changes(tree).config().frozen_columns == 0u);
+        REQUIRE(changes(tree).config().columns.front().key == u8"path");
+        REQUIRE(tree.find(freeze_toggle())->accessibility().checked == false);
+    }
+    REQUIRE(freeze_state_of(page) == u8"고정 열 없음");
+
+    // 실제 입력 경로로 켠다. 상태 글이 바뀌고 표가 앞 한 열을 고정한다.
+    REQUIRE(press_element(page, freeze_toggle()) == 1);
+    {
+        const luil::ui_tree tree { published(page) };
+        REQUIRE(tree.duplicate_ids().empty());
+        REQUIRE(changes(tree).config().frozen_columns == 1u);
+        REQUIRE(tree.find(freeze_toggle())->accessibility().checked == true);
+    }
+    REQUIRE(freeze_state_of(page) == u8"고정 열 1: 경로");
+
+    // 보기 상태라 실행 취소 걸음이 늘지 않는다.
+    REQUIRE(history_of(page) == before);
+    REQUIRE(enabled(page, u8"workbench-undo") == false);
+
+    REQUIRE(press_element(page, freeze_toggle()) == 1);
+    REQUIRE(freeze_state_of(page) == u8"고정 열 없음");
+    REQUIRE(history_of(page) == before);
+}
+
+TEST_CASE("A frozen path column stays while the others flow and its width drag is still one undo step", "[demo][workbench][frozen][undo]")
+{
+    demo::workbench_page page {};
+    REQUIRE(page.handle(luil::app_message { demo::workbench_freeze_intent {} }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_scroll_x_intent { 60.0f } }));
+    const std::u8string header_owner { u8"workbench-changes" };
+    const auto header_cell = [&header_owner](const std::u8string& key) { return luil::ui_element_id { luil::ui_element_kind::table_header_cell, header_owner + key }; };
+    const auto grip = [&header_owner](const std::u8string& key) { return luil::ui_element_id { luil::ui_element_kind::table_column_grip, header_owner + key }; };
+
+    const auto tree { std::make_shared<const luil::ui_tree>(published(page)) };
+    const luil::table_element& table { changes(*tree) };
+    // 열 합(830)이 표보다 넓어 흐르고, 창이 넓어 고정이 선다.
+    REQUIRE(table.content_width() > table.viewport_width());
+    REQUIRE(table.frozen_columns() == 1u);
+    REQUIRE(table.scroll_x() == 60.0f);
+    const float edge { tree->find(header_cell(u8"path"))->bounds().x };
+    const float status_edge { tree->find(header_cell(u8"status"))->bounds().x };
+    // 경로 열은 제자리이고(스크롤 0일 때의 자리) 나머지는 60만큼 밀렸다.
+    REQUIRE(status_edge - edge == 340.0f - 60.0f);
+
+    // 고정된 경로 열의 경계를 끌어 넓히면 폭이 바뀌고 끌기 하나가 걸음 하나다.
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    const luil::rect_f box { tree->find(grip(u8"path"))->bounds() };
+    const float x { box.x + box.width / 2.0f };
+    const float y { box.y + box.height / 2.0f };
+    using time_point = std::chrono::steady_clock::time_point;
+    const auto deliver = [&page](const std::vector<luil::input_action>& actions) {
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(page.handle(*message));
+    };
+    const float first_width { column_width(page, u8"path") };
+    deliver(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+    deliver(controller.process(luil::pointer_moved_event { x + 6.0f, y, time_point {} + std::chrono::milliseconds { 10 } }));
+    deliver(controller.process(luil::pointer_moved_event { x + 12.0f, y, time_point {} + std::chrono::milliseconds { 20 } }));
+    deliver(controller.process(luil::pointer_released_event { x + 12.0f, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 30 } }));
+    REQUIRE(column_width(page, u8"path") == first_width + 12.0f);
+    REQUIRE(history_of(page).starts_with(u8"되돌리기 1 "));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
+    REQUIRE(column_width(page, u8"path") == first_width);
 }
