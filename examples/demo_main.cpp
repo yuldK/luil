@@ -510,8 +510,12 @@ namespace demo {
                 if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
                 {
                     // 떠나는 화면은 `page_`가 아직 옛 값일 때 짓는다. 도는 중에 또 바뀌면 들어오던 화면을 다시 지어 새 전환이다.
+                    //  - 안내 풍선은 대상 가지가 있는 페이지에만 선다. 떠나는 화면을 짓기 전에 닫아 그 화면의 상태 줄도 닫힘을 그린다.
                     if (navigate->page != page_)
+                    {
+                        toasts_.close_tip();
                         page_motion_ = make_page_motion(navigate->page);
+                    }
                     page_ = navigate->page;
                     // 페이지를 떠나면 그 페이지의 popup도 닫는다.
                     tabs_.close_popups();
@@ -889,7 +893,7 @@ namespace demo {
                 // 앱이 뒤에 있어도 받는 전역 단축키다. 눌림은 항목의 `pressed`가 앱 메시지로 돌려준다.
                 frame->hotkeys = windows_.make_hotkeys_request();
                 frame->main_hidden = windows_.main_hidden();
-                // 초점 요청은 세 곳(도구 창 페이지·명령 팔레트·색 칸 popup)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
+                // 초점 요청은 네 곳(도구 창 페이지·명령 팔레트·색 칸 popup·안내 풍선)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
                 // 쪽의 요청을 셸 번호로 다시 매겨 싣는다 — 팔레트를 닫았다고 도구 창의 지난 요청이 되살아나지 않는다.
                 if (const auto request { windows_.make_focus_request() }; request.has_value() && request->id != seen_tool_focus_)
                 {
@@ -910,6 +914,13 @@ namespace demo {
                     focus_ = *request;
                     focus_->id = ++focus_revision_;
                     popups_focus_id_ = focus_->id;
+                }
+                // 비modal 안내 풍선은 가둠이 없어 열 때와 닫을 때 페이지가 초점을 옮겨 달라고 한다.
+                if (const auto request { toasts_.make_focus_request() }; request.has_value() && request->id != seen_toasts_focus_)
+                {
+                    seen_toasts_focus_ = request->id;
+                    focus_ = *request;
+                    focus_->id = ++focus_revision_;
                 }
                 frame->focus = focus_;
                 frame->focus_report = [](const std::uint64_t id, const luil::focus_request_outcome outcome) { return luil::app_message { tool_focus_report_intent { id, outcome } }; };
@@ -1179,7 +1190,7 @@ namespace demo {
             shell_menu shell_menu_ {};
             // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).
             bool primary_instance_ { true };
-            // 셸이 실은 마지막 초점 요청과, 세 요청원의 마지막으로 본 번호다.
+            // 셸이 실은 마지막 초점 요청과, 네 요청원의 마지막으로 본 번호다.
             std::optional<luil::focus_request> focus_ {};
             std::uint64_t focus_revision_ { 0 };
             std::uint64_t seen_tool_focus_ { 0 };
@@ -1187,6 +1198,7 @@ namespace demo {
             std::uint64_t palette_focus_id_ { 0 };
             std::uint64_t seen_popups_focus_ { 0 };
             std::uint64_t popups_focus_id_ { 0 };
+            std::uint64_t seen_toasts_focus_ { 0 };
             theme_page theme_ {
                 std::u8string { reinterpret_cast<const char8_t*>(luil_demo_style_json), luil_demo_style_json_size },
                 std::u8string { reinterpret_cast<const char8_t*>(luil_demo_markup_xml), luil_demo_markup_xml_size },

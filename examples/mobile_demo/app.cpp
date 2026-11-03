@@ -45,8 +45,12 @@ namespace mobile_demo {
         if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
         {
             // 떠나는 본문은 `page_`가 아직 옛 값일 때 짓는다. 목록에서 페이지로 들어가는 것은 앞으로다.
+            //  - 안내 풍선은 대상이 있는 페이지에만 선다. 떠나는 본문을 짓기 전에 닫아 그 본문의 설명도 닫힘을 그린다.
             if (navigate->page != page_)
+            {
+                toasts_.close_tip();
                 page_motion_ = make_page_motion(navigate->page, luil::page_transition_direction::forward);
+            }
             page_ = navigate->page;
             // 페이지를 떠나면 그 페이지의 popup도 닫는다.
             close_popups();
@@ -56,7 +60,10 @@ namespace mobile_demo {
         {
             // 앱 바의 뒤로 단추와 시스템 뒤로 가기는 뒤로다.
             if (page_.empty() == false)
+            {
+                toasts_.close_tip();
                 page_motion_ = make_page_motion({}, luil::page_transition_direction::backward);
+            }
             page_.clear();
             close_popups();
             return;
@@ -245,12 +252,14 @@ namespace mobile_demo {
         // 날짜 칸 popup의 초점 요청이다. 이 페이지만 요청을 내므로 번호를 그대로 싣는다.
         if (shown == page_popups)
             frame->focus = popups_.make_focus_request();
-        // 뒤로 가기는 열린 dialog를 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
+        // 뒤로 가기는 열린 dialog·시트·안내 풍선을 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
         // 두어 플랫폼의 기본 동작(앱을 떠나기)을 받는다. popup은 host가 그보다 먼저 닫는다.
         if (shown == page_basics && basics_.dialog_open())
             frame->back = [action = basics_.back_action()] { return action; };
         else if (shown == page_sheets && sheets_.sheet_open())
             frame->back = [action = sheets_.back_action()] { return action; };
+        else if (shown == page_toasts && toasts_.tip_open())
+            frame->back = [action = toasts_.back_action()] { return action; };
         else if (nested)
             frame->back = [] { return luil::make_app_action(back_intent {}); };
         return frame;

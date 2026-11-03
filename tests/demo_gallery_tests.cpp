@@ -2090,6 +2090,26 @@ TEST_CASE("Scrolling the new feature button away leaves the teaching tip without
     REQUIRE(page.make_overlay() == nullptr);
 }
 
+TEST_CASE("Leaving the toasts page closes the teaching tip before the departing screen is built", "[demo][toasts][teaching-tip]")
+{
+    // 셸의 차례다 (demo_main.cpp `navigate_intent`). 풍선을 닫고, 화면 전환의 떠나는 화면을 짓고, 다음 frame은 다른 페이지다.
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    press(page, tree, tip_open_modeless_id);
+    const std::optional<luil::focus_request> opened { page.make_focus_request() };
+    REQUIRE(opened.has_value());
+    tree = toasts_tree(page);
+    static_cast<void>(tip_overlay(page));
+
+    page.close_tip();
+    const luil::ui_tree departing { toasts_tree(page) };
+    REQUIRE(tip_state(departing) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    // 떠나는 화면을 지은 가지는 다음 frame의 오버레이가 쓰지 않고 잊는다. 연 단추로 돌아가는 초점 요청도 새로 내지 않는다.
+    REQUIRE(page.make_overlay() == nullptr);
+    REQUIRE(page.next_expiry().has_value() == false);
+    REQUIRE(page.make_focus_request()->id == opened->id);
+}
+
 TEST_CASE("The theme page builds the markup sample and keeps the earlier template when a sample is refused", "[demo][markup]")
 {
     // 데모 빌드가 실은 견본 글 대신 시험 실행 파일에 실은 같은 파일을 준다 (docs/markup-design.md 확인 절).

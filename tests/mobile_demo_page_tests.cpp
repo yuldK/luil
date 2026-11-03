@@ -2797,6 +2797,28 @@ TEST_CASE("Scrolling the mobile new feature button away leaves the teaching tip 
     REQUIRE(page.make_overlay(nullptr) == nullptr);
 }
 
+TEST_CASE("Leaving the mobile toasts page closes the teaching tip before the departing screen is built", "[ui][teaching-tip][mobile-demo]")
+{
+    // 셸의 차례다 (app.cpp `navigate_intent`·`back_intent`). 풍선을 닫고, 떠나는 본문을 짓고, 다음 frame은 다른 페이지다.
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f) };
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+    screen = scrolled_toasts(page, 0.0f);
+    static_cast<void>(mobile_tip_overlay(page, screen));
+    REQUIRE(page.tip_open());
+
+    page.close_tip();
+    REQUIRE(page.tip_open() == false);
+    const luil::ui_tree departing { scrolled_toasts(page, 0.0f) };
+    REQUIRE(mobile_tip_state(departing) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    // 다른 페이지의 frame에는 풍선이 서지 않고 한 frame을 더 청하지도 않는다.
+    auto other { std::make_unique<luil::root_element>() };
+    const luil::ui_tree elsewhere { luil::make_arranged_tree(std::move(other), { 0.0f, 0.0f, 400.0f, 700.0f }, 1.0f) };
+    REQUIRE(page.make_overlay(elsewhere.root()) == nullptr);
+    REQUIRE(page.next_expiry().has_value() == false);
+}
+
 TEST_CASE("The mobile theme page builds the markup sample and keeps the earlier template when a sample is refused", "[mobile-demo][markup]")
 {
     // 글 칸 대신 견본 단추만 있고 slot에는 C++가 지은 label이 든다 (docs/markup-design.md 확인 절).
