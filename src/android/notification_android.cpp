@@ -4,6 +4,7 @@
 #include "android/android_window_control.h"
 #include "android/device_request.h"
 #include "android/java_vm.h"
+#include "android/notification_icon.h"
 #include "host/notification_queue.h"
 #include "luil/ui/image_decode.h"
 #include "ui/image_pixels.h"
@@ -180,23 +181,6 @@ namespace luil {
                 if (field == nullptr)
                     return nullptr;
                 return checked(env_.GetStaticObjectField(type, field));
-            }
-
-            [[nodiscard]] std::optional<jint> int_field(const jobject target, const char* const name)
-            {
-                if (failed_ || target == nullptr)
-                {
-                    failed_ = true;
-                    return std::nullopt;
-                }
-                const jfieldID field { checked(env_.GetFieldID(env_.GetObjectClass(target), name, "I")) };
-                if (field == nullptr)
-                    return std::nullopt;
-                const jint value { env_.GetIntField(target, field) };
-                failed_ = jni_failed(env_);
-                if (failed_)
-                    return std::nullopt;
-                return value;
             }
 
         private:
@@ -405,14 +389,24 @@ namespace luil {
             return { platform_status::unsupported, u8"The notification manager is not available.", std::nullopt };
         }
 
-        const jobject info { calls.object(context, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;") };
-        const std::optional<jint> icon { calls.int_field(info, "icon") };
+        // 작은 아이콘은 앱 아이콘이고, 앱에 아이콘이 없으면 framework 자원이다 (notification_icon.h).
+        //  - 단색 실루엣으로 그려져 앱 아이콘의 모양이 뭉개질 수 있으나 앱 자원을 모르는 라이브러리가 고를 수 있는 값은 이것뿐이다.
+        const android::small_icon_choice icon { android::read_notification_small_icon(calls.env(), context) };
+        switch (icon.source)
+        {
+        case android::small_icon_source::app:
+        case android::small_icon_source::framework:
+            break;
+        case android::small_icon_source::unreadable:
+            return failure(u8"Failed to read the app icon for the notification.");
+        case android::small_icon_source::missing:
+            return failure(u8"The app has no icon (android:icon) and the framework icon android.R.drawable.ic_dialog_info is not available.");
+        }
         const jstring id { calls.string(channel_id) };
         const jobject builder { calls.construct(calls.find_class("android/app/Notification$Builder"), "(Landroid/content/Context;Ljava/lang/String;)V", context, id) };
-        if (calls.failed() || icon.has_value() == false)
+        if (calls.failed())
             return failure(u8"Failed to start the notification builder.");
-        // 작은 아이콘은 앱 아이콘이다. 단색 실루엣으로 그려져 모양이 뭉개질 수 있으나 앱 자원을 모르는 라이브러리가 고를 수 있는 유일한 값이다.
-        static_cast<void>(calls.object(builder, "setSmallIcon", "(I)Landroid/app/Notification$Builder;", *icon));
+        static_cast<void>(calls.object(builder, "setSmallIcon", "(I)Landroid/app/Notification$Builder;", icon.id));
         const jstring title { calls.string(text->title) };
         static_cast<void>(calls.object(builder, "setContentTitle", builder_signature_text, title));
         if (text->body.empty() == false)

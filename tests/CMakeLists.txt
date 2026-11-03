@@ -271,6 +271,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/android_settings.cpp"
             android_settings_tests.cpp)
+    # 알림 작은 아이콘 고르기도 같은 가짜 JNIEnv 길로 잠근다. 앱 아이콘이 없는 앱의 framework 갈음까지 친다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/notification_icon.cpp"
+            android_notification_icon_tests.cpp)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES

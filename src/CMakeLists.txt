@@ -789,6 +789,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/main_thread.h
         "${public_headers}/app/notification.h"
         android/notification_android.cpp
+        android/notification_icon.cpp
+        android/notification_icon.h
         android/vulkan_device.cpp
         android/vulkan_device.h
         android/vulkan_memory_allocator.h
