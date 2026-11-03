@@ -1151,3 +1151,118 @@ TEST_CASE("Ctrl+B on the rich text editor reaches the page as the bold command",
     // 칸 밖의 키는 소비하지 않는다.
     REQUIRE((*handler)(luil::key_pressed_event { luil::key_code::key_b }).has_value() == false);
 }
+
+namespace {
+    [[nodiscard]] std::string rich_clipboard(demo::rich_text_page& page)
+    {
+        return narrow(label_text(arranged(page.build(800.0f, 600.0f, 1.0f)), u8"rich-clipboard"));
+    }
+
+    // 서식 복사·붙여넣기 단추를 눌러 나온 메시지를 페이지에 넘긴다.
+    void press_rich_button(demo::rich_text_page& page, const std::u8string& owner, const std::u8string_view name)
+    {
+        const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+        const luil::ui_element_id id { demo::kind_layout, owner };
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name == name);
+        REQUIRE(button->preserves_pointer_focus());
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+
+    [[nodiscard]] std::string number_text(const std::size_t value)
+    {
+        return std::to_string(value);
+    }
+}
+
+TEST_CASE("The rich text page copies and pastes formatted text through clipboard requests", "[demo][rich-text][clipboard]")
+{
+    demo::rich_text_page page {};
+    REQUIRE(rich_clipboard(page) == narrow(u8"복사·붙여넣기 전"));
+    {
+        // 서식 칸은 복사·붙여넣기 키를 키 처리기로 넘긴다.
+        const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+        const luil::ui_element* const editor { tree.find({ demo::kind_rich_editor_input, u8"rich-editor" }) };
+        REQUIRE(editor != nullptr);
+        REQUIRE(editor->text_input()->clipboard_keys_to_parent);
+    }
+
+    // 고른 곳이 없으면 넣을 것이 없다.
+    press_rich_button(page, u8"rich-copy", u8"서식 복사");
+    REQUIRE(page.take_clipboard_request().has_value() == false);
+    REQUIRE(rich_clipboard(page) == narrow(u8"복사할 글 없음"));
+
+    // 모두 골라 복사하면 글과 HTML을 한 클립에 넣는 요청이 한 번 나온다. 견본의 굵게 구간은 하나, 링크도 하나다.
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    press_rich_button(page, u8"rich-copy", u8"서식 복사");
+    std::optional<luil::clipboard_request> request { page.take_clipboard_request() };
+    REQUIRE(request.has_value());
+    REQUIRE(page.take_clipboard_request().has_value() == false);
+    REQUIRE(std::holds_alternative<luil::clipboard_data_copy_request>(*request));
+    // 아래에서 요청 칸을 다시 쓰므로 값으로 옮겨 둔다.
+    const luil::clipboard_data_copy_request copied { std::get<luil::clipboard_data_copy_request>(*request) };
+    const luil::clipboard_data_copy_request* const copy { &copied };
+    const luil::text::text_edit_state& state { page.sample().state() };
+    REQUIRE(copy->text == state.text);
+    REQUIRE(copy->html == luil::rich_text_to_html(state.text, *state.format));
+    const std::size_t html_bytes { copy->html.size() };
+    REQUIRE(rich_clipboard(page) == narrow(u8"복사 · HTML ") + number_text(html_bytes) + narrow(u8"바이트 · 굵게 1 · 링크 1"));
+
+    // 끝에 붙여넣는다. 요청은 표식을 단 읽기이고, 답은 표식으로 갈라 온다.
+    send_rich_edit(page, luil::text::text_edit_command::move_right);
+    press_rich_button(page, u8"rich-paste", u8"서식 붙여넣기");
+    request = page.take_clipboard_request();
+    REQUIRE(request.has_value());
+    const auto* const paste { std::get_if<luil::clipboard_data_paste_request>(&*request) };
+    REQUIRE(paste != nullptr);
+    REQUIRE(paste->tag == demo::rich_text_clipboard_tag);
+    luil::clipboard_data answer {};
+    answer.tag = paste->tag;
+    answer.text = copy->text;
+    answer.html = copy->html;
+    send(page, demo::rich_text_clipboard_intent { answer });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣기 · HTML ") + number_text(html_bytes) + narrow(u8"바이트 · 굵게 1 · 링크 1"));
+    REQUIRE(rich_state(page).ends_with(narrow(u8"구간 8 · 링크 2 · 되돌리기 1")));
+    // 붙인 조각은 한 걸음으로 되돌아간다.
+    send_rich_edit(page, luil::text::text_edit_command::undo);
+    REQUIRE(rich_state(page).ends_with(narrow(u8"구간 4 · 링크 1 · 되돌리기 0")));
+
+    // HTML이 없는 답은 글로 물러선다.
+    luil::clipboard_data plain {};
+    plain.tag = demo::rich_text_clipboard_tag;
+    plain.text = u8"글";
+    send(page, demo::rich_text_clipboard_intent { plain });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣기 · 글만"));
+    send(page, demo::rich_text_clipboard_intent { luil::clipboard_data {} });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣을 글 없음"));
+}
+
+TEST_CASE("Ctrl+C and Ctrl+Shift+V on the rich text editor reach the page as clipboard commands", "[demo][rich-text][clipboard]")
+{
+    demo::rich_text_page page {};
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+    const luil::key_handler* const handler { tree.find({ demo::kind_rich_editor_input, u8"rich-editor" })->key_handler_of() };
+    REQUIRE(handler != nullptr);
+    luil::key_pressed_event copy { luil::key_code::key_c };
+    copy.control = true;
+    REQUIRE(page.handle(std::get<luil::app_message>(first_action(*(*handler)(copy)))));
+    REQUIRE(page.take_clipboard_request().has_value());
+    luil::key_pressed_event plain { luil::key_code::key_v };
+    plain.control = true;
+    plain.shift = true;
+    REQUIRE(page.handle(std::get<luil::app_message>(first_action(*(*handler)(plain)))));
+    REQUIRE(std::holds_alternative<luil::clipboard_data_paste_request>(*page.take_clipboard_request()));
+    // 서식 없이 붙이면 HTML이 있어도 글을 넣는다.
+    luil::clipboard_data answer {};
+    answer.tag = demo::rich_text_clipboard_tag;
+    answer.text = u8"평문";
+    answer.html = u8"<b>굵게</b>";
+    send(page, demo::rich_text_clipboard_intent { answer });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣기 · 글만"));
+    REQUIRE(page.sample().state().text.starts_with(u8"평문"));
+}

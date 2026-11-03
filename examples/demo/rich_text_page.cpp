@@ -10,6 +10,7 @@ namespace demo {
         // 서식 칸의 높이와 토글 사이 간격이다 (논리 픽셀). 토글 줄은 글자 버튼 높이다.
         constexpr float editor_height { 160.0f };
         constexpr float toolbar_spacing { 6.0f };
+        constexpr float clipboard_button_width { 120.0f };
     }
 
     bool rich_text_page::handle(const luil::app_message& message)
@@ -47,7 +48,7 @@ namespace demo {
         static_cast<void>(height);
         static_cast<void>(scale);
         page_layout page { u8"rich-text" };
-        page.heading(u8"서식 있는 글", u8"굵게 · 기울임 · 밑줄 · 코드 · 링크 · 서식 실행 취소");
+        page.heading(u8"서식 있는 글", u8"굵게 · 기울임 · 밑줄 · 코드 · 링크 · 서식 실행 취소 · 서식 복사와 붙여넣기");
         page.add(make_label(luil::ui_element_id { kind_text, u8"rich-help" }, u8"범위를 골라 토글이나 Ctrl+B·I·U·K를 누른다. 고른 곳 없이 누르면 다음에 칠 글자의 서식이다.", 11.0f, luil::label_color_role::dim),
             18.0f);
         page.gap(6.0f);
@@ -56,6 +57,10 @@ namespace demo {
         page.add(sample_.make_editor(kind_rich_editor_input, luil::make_text_input_view(sample_.state(), composition_, target_rich_editor)), editor_height);
         page.gap(6.0f);
         page.add(make_label(luil::ui_element_id { kind_text, u8"rich-state" }, sample_.status_text(), 11.0f, luil::label_color_role::dim), 16.0f);
+        page.gap(8.0f);
+        page.add(sample_.make_clipboard_buttons(kind_layout, toolbar_spacing, clipboard_button_width), luil::text_button_height);
+        page.gap(6.0f);
+        page.add(make_label(luil::ui_element_id { kind_text, u8"rich-clipboard" }, sample_.clipboard_text(), 11.0f, luil::label_color_role::dim), 16.0f);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(rich_text_page_scroll_intent { delta }); });
     }
 }

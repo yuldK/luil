@@ -337,6 +337,11 @@ namespace mobile_demo {
         column.gap(4.0f);
         column.note(u8"rich-state", rich_text_.marks_text());
         column.note(u8"rich-count", rich_text_.counts_text());
+        // 서식 복사·붙여넣기다 (rich-edit-exchange-design.md). 요청은 셸이 host에 넣고, 붙여넣기 답은 표식으로 이 칸에 온다.
+        column.gap(8.0f);
+        column.add(rich_text_.make_clipboard_buttons(kind_layout, 8.0f, std::min((width - 2.0f * page_padding - 8.0f) / 2.0f, 160.0f)), touch_height);
+        column.gap(4.0f);
+        column.note(u8"rich-clipboard", rich_text_.clipboard_text());
         column.gap(20.0f);
 
         // 텍스트 칸 셋이다. 휴대폰은 좁아 위아래로 쌓는다.

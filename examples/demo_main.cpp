@@ -558,12 +558,21 @@ namespace demo {
                 if (const auto* const changed { message.get<files_clipboard_changed_intent>() }; changed != nullptr)
                     images_.set_clipboard_has_image(changed->change.has_image);
 
+                // 서식 있는 글 페이지다 (rich-edit-exchange-design.md). 복사·붙여넣기는 페이지가 클립보드 요청을 지어 쥐고, 셸이
+                // 여기(logic thread)서 가져가 host에 넣는다. 편집 메시지는 target이 다르면 거짓이라 다음 페이지가 받는다.
+                if (rich_text_.handle(message))
+                {
+                    if (std::optional<luil::clipboard_request> request { rich_text_.take_clipboard_request() }; request.has_value())
+                        if (luil::app_host* const host { host_.load() }; host != nullptr)
+                            host->post_clipboard_request(std::move(*request));
+                    return;
+                }
+
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
                     || toasts_.handle(message) || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message)
-                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message)
-                    || rich_text_.handle(message))
+                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message))
                     return;
             }
 
@@ -1200,9 +1209,11 @@ namespace demo {
                 return luil::app_message { files_clipboard_changed_intent { change } };
             }
 
-            // 클립보드의 글과 그림이다. 이미지 페이지가 받아 logic thread에서 푼다.
+            // 클립보드의 글과 그림이다. 이미지 페이지가 받아 logic thread에서 푼다. 서식 글 페이지가 청한 답은 표식으로 가른다.
             [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
             {
+                if (data.tag == rich_text_clipboard_tag)
+                    return luil::app_message { rich_text_clipboard_intent { data } };
                 return luil::app_message { image_clipboard_data_intent { data } };
             }
 

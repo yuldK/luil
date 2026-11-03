@@ -3,6 +3,8 @@
 // 서식 있는 글 페이지다 (docs/rich-edit-design.md). 서식 칸 하나와 서식 토글 다섯, 상태 글 한 줄이다.
 //  - 칸·토글·상태 글은 모바일 데모와 함께 쓰는 `rich_text_sample`이 짓는다.
 //  - 상태 글(`rich-state`)이 켜짐·구간 수·링크 수·되돌리기 수를 그려 UIA Name으로 되읽는다.
+//  - 서식 복사·붙여넣기 단추(`rich-copy`·`rich-paste`)와 교환 상태 글(`rich-clipboard`)이 있다 (docs/rich-edit-exchange-design.md).
+//    클립보드 요청은 셸이 `take_clipboard_request`로 가져가 host에 넣는다.
 
 #include "demo/common.h"
 #include "demo/rich_text_sample.h"
@@ -26,6 +28,11 @@ namespace demo {
         [[nodiscard]] const rich_text_sample& sample() const noexcept
         {
             return sample_;
+        }
+
+        [[nodiscard]] std::optional<luil::clipboard_request> take_clipboard_request()
+        {
+            return sample_.take_clipboard_request();
         }
 
     private:

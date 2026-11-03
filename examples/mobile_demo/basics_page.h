@@ -152,6 +152,12 @@ namespace mobile_demo {
         // 뒤로 가기가 낼 메시지다. Esc와 바깥 누름이 내는 결과와 같다 (`luil::message_box_dismiss_message`).
         [[nodiscard]] luil::input_action back_action() const;
 
+        // 서식 칸의 복사·붙여넣기가 쥐어 둔 클립보드 요청이다 (rich-edit-exchange-design.md). 셸이 가져가 host에 넣는다.
+        [[nodiscard]] std::optional<luil::clipboard_request> take_clipboard_request()
+        {
+            return rich_text_.take_clipboard_request();
+        }
+
     private:
         void apply_edit(const luil::text_edit_request& request);
         void apply_composition(const luil::text_composition_event& event);

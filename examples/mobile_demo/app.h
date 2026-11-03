@@ -44,6 +44,13 @@ namespace mobile_demo {
         float delta { 0.0f };
     };
 
+    // logic thread가 클립보드 요청을 넣을 host다. delegate가 시작할 때 한 번 보낸다. host는 logic thread보다 오래 산다.
+    //  - 서식 칸의 복사는 글과 HTML을 logic thread에서 짓는다 (rich-edit-exchange-design.md). 요청은 host만 넣는다.
+    struct clipboard_host_intent
+    {
+        luil::app_host* host { nullptr };
+    };
+
     // --- logic thread ---
     class mobile_driver final : public luil::logic_driver
     {
@@ -88,6 +95,8 @@ namespace mobile_demo {
         // 마지막으로 지은 frame의 시각이다. 시간이 흘러야 바뀌는 상태의 다음 예고를 이 시각에서 센다.
         std::chrono::steady_clock::time_point frame_time_ {};
         std::atomic<bool> closed_ { false };
+        // 클립보드 요청을 넣을 host다 (`clipboard_host_intent`). 받기 전에는 요청을 버린다.
+        luil::app_host* host_ { nullptr };
     };
 
     // --- input thread ---
