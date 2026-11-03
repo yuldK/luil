@@ -1633,3 +1633,78 @@ TEST_CASE("A demo shell menu opens under its item, records the command and hands
     const luil::ui_tree moved { shell_bar_tree(menu) };
     REQUIRE(menu.make_popups(*luil::active_menu_bar(moved), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, false, luil::theme_preference::dark).size() == 1u);
 }
+
+namespace {
+    // 서식 칸에 초점을 주는 정책이다. 칸이 넘긴 키는 칸에 단 처리기가 받는다.
+    class rich_key_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+        {
+            return demo::text_target_of_kind(kind);
+        }
+    };
+
+    // 컨트롤러가 낸 앱 메시지를 페이지에 넘긴다. 평문 복사·붙여넣기 요청이 섞였으면 참이다.
+    [[nodiscard]] bool deliver_rich_keys(demo::rich_text_page& page, const std::vector<luil::input_action>& actions)
+    {
+        bool plain { false };
+        for (const luil::input_action& action : actions)
+        {
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                static_cast<void>(page.handle(*message));
+            else if (std::holds_alternative<luil::clipboard_copy_request>(action) || std::holds_alternative<luil::clipboard_paste_request>(action))
+                plain = true;
+        }
+        return plain;
+    }
+
+    [[nodiscard]] luil::key_pressed_event rich_chord(const luil::key_code code, const bool control, const bool shift)
+    {
+        luil::key_pressed_event event { code };
+        event.control = control;
+        event.shift = shift;
+        return event;
+    }
+}
+
+TEST_CASE("Clipboard keys in the focused rich text editor copy and paste with the formatting", "[demo][rich-text][clipboard]")
+{
+    demo::rich_text_page page {};
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    auto tree { std::make_shared<const luil::ui_tree>(arranged(page.build(800.0f, 600.0f, 1.0f))) };
+    const luil::ui_element* const editor { tree->find({ demo::kind_rich_editor_input, u8"rich-editor" }) };
+    REQUIRE(editor != nullptr);
+    const luil::rect_f box { editor->bounds() };
+    rich_key_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(tree);
+    const float x { box.x + box.width * 0.5f };
+    const float y { box.y + box.height * 0.5f };
+    static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, std::chrono::steady_clock::time_point {} }));
+    static_cast<void>(controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { 5 } }));
+    REQUIRE(controller.snapshot().focused_input.kind == demo::kind_rich_editor_input);
+
+    // 칸이 키를 쓰지 않고 처리기로 넘겨 복사는 글과 HTML을 한 클립에 넣는 요청이다. 누름이 낸 caret 이동은 페이지에 주지 않아 모두 고른 채다.
+    REQUIRE(deliver_rich_keys(page, controller.process(rich_chord(luil::key_code::key_c, true, false))) == false);
+    std::optional<luil::clipboard_request> request { page.take_clipboard_request() };
+    REQUIRE(request.has_value());
+    const auto* const copy { std::get_if<luil::clipboard_data_copy_request>(&*request) };
+    REQUIRE(copy != nullptr);
+    REQUIRE(copy->html.empty() == false);
+
+    // Ctrl+Insert도 같은 서식 복사이고, Ctrl+V와 Shift+Insert는 표식을 단 읽기다.
+    REQUIRE(deliver_rich_keys(page, controller.process(rich_chord(luil::key_code::insert, true, false))) == false);
+    request = page.take_clipboard_request();
+    REQUIRE(request.has_value());
+    REQUIRE(std::holds_alternative<luil::clipboard_data_copy_request>(*request));
+    for (const luil::key_pressed_event& paste : { rich_chord(luil::key_code::key_v, true, false), rich_chord(luil::key_code::insert, false, true) })
+    {
+        REQUIRE(deliver_rich_keys(page, controller.process(paste)) == false);
+        request = page.take_clipboard_request();
+        REQUIRE(request.has_value());
+        const auto* const read { std::get_if<luil::clipboard_data_paste_request>(&*request) };
+        REQUIRE(read != nullptr);
+        REQUIRE(read->tag == demo::rich_text_clipboard_tag);
+    }
+}

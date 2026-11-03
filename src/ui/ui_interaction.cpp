@@ -3351,6 +3351,17 @@ namespace luil {
             if (edits)
                 return std::vector<input_action> {};
         }
+        // 서식 칸은 복사·잘라내기·붙여넣기 키를 쓰지 않고 칸에 단 `key_handler`로 넘긴다. 처리기가 서식째 옮긴다.
+        //  - 읽기 전용 칸이 Ctrl+X·Ctrl+V를 삼키는 갈래는 바로 위라 그대로다.
+        //  - 암호 칸은 서식 칸이 아니다. 플래그가 서도 아래 길이 지금처럼 복사를 막는다.
+        if (value.clipboard_keys_to_parent && value.secret == false)
+        {
+            const bool clipboard_letter { primary_shortcut && (event.key == key_code::key_c || event.key == key_code::key_x || event.key == key_code::key_v) };
+            const bool clipboard_insert { event.key == key_code::insert && (event.control || event.shift) };
+            const bool clipboard_cut { event.key == key_code::delete_forward && event.shift && event.control == false };
+            if (clipboard_letter || clipboard_insert || clipboard_cut)
+                return std::nullopt;
+        }
         // 암호 칸의 낱말 이동은 칸 끝으로 간다. 낱말 경계가 공백 자리를 알린다.
         const bool whole_line { word_navigation && value.secret };
 
