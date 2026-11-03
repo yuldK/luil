@@ -57,6 +57,10 @@
 - **시스템 예약 키는 보여 주기만 한다.** `system_reserved_chord`가 Alt+F4·Alt+Tab·Alt+Esc·Ctrl+Esc·Alt+Space·Ctrl+Alt+Delete를 알아본다. 잡는 칸은 그것을 받아도 단축키로 정하지 말고 예약 키라고 보여 준다. 그 가운데 Alt+Tab·Ctrl+Alt+Delete·Windows 키 조합은 OS가 먼저 가져가 아예 오지 않는다.
 - 표식은 초점이 바뀔 때만 달라진다. controller가 이벤트마다 한 곳에서 다시 센다.
 
+## 앱이 뒤에 있을 때
+
+앱 안 단축키는 앱이 앞에 있을 때만 온다. 앱이 뒤에 있거나 창이 숨어 있어도 받는 키 조합은 [전역 단축키](global-hotkey-design.md)가 같은 `key_chord`로 건다. `Ctrl`·`Shift`·`Alt`만 쓰고 걸린 조합은 키 잡기 칸이 초점을 가진 동안 풀려 칸이 받는다. `host/key_mapping`에는 `key_code`를 Win32 가상 키로 되돌리는 `win32_virtual_from_key`가 더해졌다.
+
 ## 검증
 
 - `tests/keyboard_shortcut_tests.cpp`: 이름 있는 89개 키 × 수정자 8조합의 왕복, 구두점·키패드·별칭 해석과 거절, Win32·Android 표가 같은 이름으로 모임, 여러 단축키의 맞춤·사용자 재정의·충돌, tooltip 글, 예약 키, 키 잡기 칸이 Tab·Esc·단축키를 먼저 받고 글자를 버림, 잡기를 떠나면 끝남, 텍스트 칸의 Backspace가 앱 단축키로 새지 않음.

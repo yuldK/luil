@@ -23,12 +23,22 @@
 //    라이브러리가 `window_delegate::on_instance_arguments`로 건넨 것을 셸이 `instance_arguments_intent`로 게시한다.
 //  - 점프 목록 줄은 작업 표시줄 단추의 오른쪽 클릭 목록에 작업 둘을 싣는 예다 (jump-list-design.md). 작업은 데모를
 //    `--send-to-first`로 띄워 떠 있는 데모의 둘째 인스턴스 줄에 닿는다. 두 줄이 UIA로 읽힌다: 요청·반영.
+//  - 알림 영역 구역은 트레이 아이콘을 세우고 그림을 바꾸고 그 사건을 받는 예다 (tray-icon-design.md). 아이콘의 메뉴는
+//    시스템 메뉴로 뜨고 `창 보이기`·`주 창 숨기기`·`끝내기`가 있다. 주 창을 숨기는 것은 앱 상태라 `main_hidden`을 셸이
+//    frame에 싣는다. 네 줄이 UIA로 읽힌다: 능력·요청·반영·사건.
+//  - 전역 단축키 구역은 앱이 뒤에 있어도 받는 키 조합(`Ctrl+Shift+Alt+F11`)을 걸고 그 눌림을 세는 예다 (global-hotkey-design.md).
+//    둘째 id를 같은 조합으로 더하는 충돌 시험은 같은 목록의 앞 항목이 이겨 둘째가 충돌로 보고되는 것을 보인다. 눌렸을 때
+//    창을 앞으로 세우는 것은 앱 몫이라 `main_hidden`과 활성화 초점 요청을 앱 상태로 싣는다. 네 줄이 UIA로 읽힌다: 능력·요청·반영·눌림.
+//  - 본문 전체가 흘리는 영역에 든다 (scroll-area-design.md). 구역을 모두 쌓으면 기본 창(1280 x 720)보다 길어
+//    맨 아래 구역이 잘렸다. 영역의 내용 높이는 담긴 줄에서 읽으므로 구역이 줄을 더해도 그대로 흐른다.
+//    위쪽에 고정한 줄 `페이지 흘림: <흘린 양> / <흘릴 수 있는 최대>`(논리 픽셀)가 UIA로 읽힌다.
 
 #include "demo/common.h"
 #include "luil/app/platform_services.h"
 #include "luil/win32/app_host.h"
 #include "luil/win32/win32_window.h"
 
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -108,6 +118,18 @@ namespace demo {
         std::u8string path {};
     };
 
+    // 페이지 본문을 흘린다 (논리 픽셀, 양수면 내용이 위로 간다). 휠·막대·초점 되살리기가 같은 메시지를 낸다.
+    struct windows_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    // 페이지 본문을 이 자리로 옮긴다 (논리 픽셀). 보조 기술이 자리를 정할 때 온다.
+    struct windows_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+
     // --- 작업 표시줄 구역의 메시지 ---
     // 주 창 단추의 진행 상태를 고른다. 값은 따로 정한다 (`taskbar_value_intent`).
     struct taskbar_state_intent
@@ -172,6 +194,66 @@ namespace demo {
         luil::instance_arguments arguments {};
     };
 
+    // --- 알림 영역 구역의 메시지 ---
+    // 트레이 아이콘을 켜고 끈다. 끄면 숨긴 주 창도 다시 보인다 (아이콘 없이 숨은 창을 되살릴 길이 없다).
+    struct tray_toggle_intent
+    {
+        bool on { false };
+    };
+
+    // 아이콘 그림을 다른 색 원으로 바꾼다.
+    struct tray_picture_intent
+    {
+    };
+
+    // 아이콘의 사건이다 (`tray_icon::activate`). 누름·두 번 누름이 온다. 메뉴가 있어 오른쪽 클릭은 오지 않는다.
+    struct tray_event_intent
+    {
+        luil::tray_icon_event event {};
+    };
+
+    // 아이콘 메뉴에서 고른 항목이다 (`menu_config::select`). 끝내기는 메시지가 아니라 `ui_command`라 여기 오지 않는다.
+    struct tray_menu_intent
+    {
+        std::u8string key {};
+    };
+
+    // 라이브러리가 알린 알림 영역 아이콘의 상태다 (`window_delegate::make_tray_message`).
+    struct tray_report_intent
+    {
+        luil::win32::tray_report report {};
+    };
+
+    // --- 전역 단축키 구역의 메시지 ---
+    // 전역 단축키를 켜고 끈다. 끄면 충돌 시험도 함께 끈다.
+    struct hotkey_toggle_intent
+    {
+        bool on { false };
+    };
+
+    // 같은 조합의 둘째 id를 목록에 더한다. 앞 항목이 이겨 둘째는 충돌로 보고된다. 켜져 있을 때만 받는다.
+    struct hotkey_conflict_intent
+    {
+    };
+
+    // 눌렸을 때 주 창을 앞으로 세울지 정한다.
+    struct hotkey_front_intent
+    {
+        bool on { false };
+    };
+
+    // 전역 단축키가 눌렸다 (`global_hotkey::pressed`).
+    struct hotkey_pressed_intent
+    {
+        std::u8string id {};
+    };
+
+    // 라이브러리가 알린 전역 단축키 하나의 걸어 본 결과다 (`window_delegate::make_hotkey_message`).
+    struct hotkey_report_intent
+    {
+        luil::win32::hotkey_report report {};
+    };
+
     class windows_page
     {
     public:
@@ -190,7 +272,22 @@ namespace demo {
         // 주 창 단추에 바라는 진행률과 오버레이, 점프 목록이다. 셸이 매 frame `ui_frame::taskbar`에 그대로 싣는다.
         [[nodiscard]] luil::taskbar_request make_taskbar_request() const;
 
-        // 도구 창 메모 칸의 초점 요청이다. 한 번도 청하지 않았으면 없다.
+        // 알림 영역 아이콘이다. 끈 동안은 없다. 셸이 매 frame `ui_frame::tray`에 그대로 싣는다.
+        //  - 그림은 페이지가 쥔 것을 frame마다 같이 실어 셸에 다시 내지 않는다. 메뉴와 사건 함수는 매번 새로 짓는다.
+        [[nodiscard]] std::optional<luil::tray_icon> make_tray_request() const;
+
+        // 전역 단축키 목록이다. 끈 동안은 비어 있다. 셸이 매 frame `ui_frame::hotkeys`에 그대로 싣는다.
+        //  - 눌림 함수는 매번 새로 짓는다. 라이브러리는 id와 조합만 견주고 눌림 함수는 눌릴 때 그 순간의 frame에서 읽는다.
+        [[nodiscard]] std::vector<luil::global_hotkey> make_hotkeys_request() const;
+
+        // 트레이 메뉴로 주 창을 숨겼는가다. 셸이 매 frame `ui_frame::main_hidden`에 그대로 싣는다.
+        [[nodiscard]] bool main_hidden() const noexcept
+        {
+            return tray_hidden_;
+        }
+
+        // 마지막으로 청한 초점 요청이다: 도구 창 메모 칸, 또는 트레이 메뉴의 `창 보이기`가 청한 주 창 활성화다.
+        // 한 번도 청하지 않았으면 없다.
         //  - 같은 번호를 frame마다 실어도 luil은 한 번만 이행한다.
         [[nodiscard]] std::optional<luil::focus_request> make_focus_request() const;
 
@@ -219,6 +316,10 @@ namespace demo {
         }
 
     private:
+        // 본문의 줄들을 쌓는다. 구역을 더하는 자리는 여기다.
+        [[nodiscard]] std::unique_ptr<luil::stack_element> build_content();
+        // 쌓은 본문을 흘리는 영역에 담고 위쪽에 흘림 상태 줄을 붙인다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_scroll_page(std::unique_ptr<luil::stack_element> content, float width, float height, float scale);
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_tool_tree();
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_taskbar_window_tree();
         // 독립 창 단추에 바라는 진행률이다. 값은 60%로 고정하고 상태만 돌린다.
@@ -229,6 +330,10 @@ namespace demo {
         void add_jump_list_section(luil::stack_element& column);
         // 둘째 인스턴스 구역을 `column`에 더한다.
         void add_instance_section(luil::stack_element& column);
+        // 알림 영역 구역을 `column`에 더한다 (점프 목록 줄 뒤).
+        void add_tray_section(luil::stack_element& column);
+        // 전역 단축키 구역을 `column`에 더한다 (알림 영역 구역 뒤, 본문 끝).
+        void add_hotkey_section(luil::stack_element& column);
         // 메뉴를 닫고 검색 상태도 함께 비운다.
         void close_tool_menu() noexcept;
 
@@ -236,8 +341,12 @@ namespace demo {
         bool tool_menu_open_ { false };
         bool caption_bottom_ { false };
         bool layered_ { false };
+        // 본문이 흘러간 양이다 (논리 픽셀). 창이 커져 흘릴 것이 줄면 `make_scroll_page`가 범위 안으로 되돌린다.
+        float scroll_ { 0.0f };
         // 메모 칸 초점 요청의 번호다. 청할 때마다 하나씩 올린다.
         std::uint64_t focus_revision_ { 0 };
+        // 마지막 초점 요청이 주 창 활성화(트레이 메뉴의 `창 보이기`)인가다. 아니면 도구 창 메모 칸이다.
+        bool focus_main_ { false };
         // 플랫폼 도구를 마지막으로 부른 결과 한 줄이다.
         std::u8string platform_report_ {};
         // 이번 frame이 만든 도구 창의 메뉴 버튼이다.
@@ -264,6 +373,26 @@ namespace demo {
         std::optional<luil::win32::jump_list_report> jump_list_report_ {};
         // 마지막으로 받은 둘째 인스턴스의 인자다. 받은 적이 없으면 없다.
         std::optional<luil::instance_arguments> instance_arguments_ {};
+        // 알림 영역 구역의 상태다 (모두 앱 상태다).
+        bool tray_on_ { false };
+        // 고른 그림의 자리다 (0이나 1).
+        int tray_picture_ { 0 };
+        // 두 색 원이다. 처음 켤 때 한 번 짓고 frame마다 같은 것을 싣는다.
+        std::array<luil::ui_image, 2> tray_pictures_ {};
+        bool tray_hidden_ { false };
+        // 마지막으로 받은 보고다. 아이콘을 켠 적이 없으면 없다.
+        std::optional<luil::win32::tray_report> tray_report_ {};
+        // 마지막 사건을 화면 글로 옮긴 것이다. 받은 적이 없으면 비었다.
+        std::u8string tray_event_ {};
+        // 전역 단축키 구역의 상태다 (모두 앱 상태다).
+        bool hotkey_on_ { false };
+        // 같은 조합의 둘째 id를 목록에 더했는가다.
+        bool hotkey_conflict_ { false };
+        // 눌렸을 때 주 창을 앞으로 세우는가다.
+        bool hotkey_front_ { false };
+        int hotkey_presses_ { 0 };
+        // id마다 마지막으로 받은 보고다. 끄면 비운다.
+        std::vector<luil::win32::hotkey_report> hotkey_reports_ {};
         luil::text::text_edit_state note_ {};
         // 도구 창 메뉴 안 검색 칸의 상태다.
         // 조합 상태는 창 안 메모 칸과 하나를 같이 쓴다 — target이 구분한다.

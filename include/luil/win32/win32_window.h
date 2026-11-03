@@ -205,6 +205,64 @@ namespace luil::win32 {
         [[nodiscard]] bool operator==(const jump_list_report&) const = default;
     };
 
+    // 알림 영역 아이콘(`ui_frame::tray`)에 앱의 요청이 닿은 정도다 (docs/tray-icon-design.md).
+    enum class tray_status
+    {
+        // 요청이 없다. 셸에 걸린 것이 없다.
+        off,
+        // 요청이 있으나 셸이 받지 않았다 (탐색기가 아직 없다). `TaskbarCreated`를 기다린다.
+        waiting,
+        // 아이콘이 섰다. Windows 11은 넘침 칸에 숨어 있을 수 있다.
+        shown,
+        // 셸 호출이나 그림 변환이 실패했거나 툴팁이 올바른 UTF-8이 아니다. `error`가 그 까닭이다.
+        failed,
+    };
+
+    // 알림 영역 아이콘의 상태 보고다. 상태가 바뀔 때 한 번 알린다.
+    //  - 셸에는 읽는 길이 없어 `shown`은 호출이 오류 없이 끝났다는 뜻이다. 알림 영역에 실제로 보이는 모양은 사람이 본다.
+    //  - 실패는 다음 셸 호출(요청 변화나 탐색기 재시작)까지 남는다. 같은 요청으로 다시 하지 않는다.
+    struct tray_report
+    {
+        tray_status status { tray_status::off };
+        // `failed`일 때 첫 실패의 영문 진단이다. 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const tray_report&) const = default;
+    };
+
+    // 전역 단축키(`ui_frame::hotkeys`) 하나를 걸어 본 결과다 (docs/global-hotkey-design.md).
+    enum class hotkey_status
+    {
+        // 걸렸다. 같은 요청이 이어지는 동안 눌림이 `global_hotkey::pressed`로 온다.
+        registered,
+        // 다른 프로그램이나 같은 목록의 앞 항목이 이미 쓰는 조합이다 (`ERROR_HOTKEY_ALREADY_REGISTERED`).
+        conflict,
+        // OS가 예약한 조합이다 (`system_reserved_chord`와 F12). OS를 부르지 않고 걸렀다.
+        reserved,
+        // 글자·이동·편집 키는 Ctrl이나 Alt와 함께여야 한다. 수정자 없이 걸면 그 키가 시스템 전체에서 앱으로만 간다.
+        needs_modifier,
+        // 키가 없거나 Win32 가상 키로 옮길 수 없다 (`key_code::none`, 수정자 키, 휴대폰 키).
+        invalid_key,
+        // id가 비었거나 앞 항목과 겹친다.
+        invalid_id,
+        // 그 밖의 OS 실패다. `error`에 까닭이 있다.
+        failed,
+    };
+
+    // 전역 단축키 하나의 시도 결과다. 항목마다 결과가 바뀔 때 한 번 알린다.
+    //  - 처음 건 시도, 조합을 바꾼 시도, 다시 걸어 결과가 달라진 때다. 목록에서 뺀 항목은 알리지 않는다.
+    //  - `conflict`와 `failed`는 요청이 같으면 frame마다 다시 걸지 않는다. 주 창이 활성화될 때 한 번 다시 건다.
+    struct hotkey_report
+    {
+        // 결과가 가리키는 `global_hotkey::id`다. `invalid_id`가 빈 id를 알릴 때는 비었다.
+        std::u8string id {};
+        hotkey_status status { hotkey_status::registered };
+        // `failed`일 때의 영문 진단이다. 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const hotkey_report&) const = default;
+    };
+
     // 앱 식별(AUMID)이다 (docs/os-notification-design.md). OS 알림(`show_notification`)이 이것으로 선다.
     //  - id가 있으면 `run_application_window`가 창보다 먼저 프로세스에 AUMID를 걸고(`SetCurrentProcessExplicitAppUserModelID`)
     //    `HKCU\Software\Classes\AppUserModelId\<id>`에 표시 이름·아이콘을 쓴다. 바로가기와 설치기가 없어도 빌드 폴더의
@@ -374,6 +432,22 @@ namespace luil::win32 {
             static_cast<void>(host);
             static_cast<void>(arguments);
             return false;
+        }
+
+        // 알림 영역 아이콘의 상태가 바뀌었다 (`make_taskbar_message`와 같은 모양이다). 빈 메시지는 게시하지 않는다.
+        // 아이콘의 사건(누름·메뉴)은 여기가 아니라 `tray_icon::activate`로 온다.
+        [[nodiscard]] virtual app_message make_tray_message(const tray_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 전역 단축키 하나를 걸어 본 결과가 정해졌다 (`make_tray_message`와 같은 모양이다). 빈 메시지는 게시하지 않는다.
+        // 항목마다 한 번씩 불린다. 눌림은 여기가 아니라 `global_hotkey::pressed`로 온다.
+        [[nodiscard]] virtual app_message make_hotkey_message(const hotkey_report& report)
+        {
+            static_cast<void>(report);
+            return {};
         }
     };
 

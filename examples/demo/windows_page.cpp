@@ -3,8 +3,11 @@
 #include "luil/app/platform_services.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/caption_element.h"
+#include "luil/ui/check_element.h"
+#include "luil/ui/commands.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_platform.h"
@@ -30,6 +33,12 @@ namespace demo {
         constexpr float tool_initial_y { 90.0f };
         // 도구 창 안 메뉴의 너비다 (논리 픽셀).
         constexpr float tool_menu_width { 180.0f };
+
+        // 페이지 위쪽에 고정한 흘림 상태 줄이다 (논리 픽셀).
+        // 본문은 이 줄 아래의 영역에서 흐르므로 영역이 받는 높이는 페이지 높이에서 이 줄을 뺀 값이다.
+        constexpr luil::edge_insets scroll_status_padding { 24.0f, 8.0f, 24.0f, 4.0f };
+        constexpr float scroll_status_line_height { 18.0f };
+        constexpr float scroll_status_height { scroll_status_padding.top + scroll_status_line_height + scroll_status_padding.bottom };
 
         // 작업 표시줄 구역이다 (논리 픽셀).
         // 독립 창은 만들 때 한 번만 이 크기와 자리를 쓴다.
@@ -239,6 +248,129 @@ namespace demo {
             return caption;
         }
 
+        // 알림 영역 아이콘의 원이다. 두 그림이 색으로 갈린다. 실행 중에 지은 그림이라 실행 파일 리소스에 기대지 않는다.
+        //  - 셸이 알림 영역 크기(배율에 따라 16~32)로 맞춘다.
+        [[nodiscard]] luil::ui_image make_tray_picture(const std::uint8_t red, const std::uint8_t green, const std::uint8_t blue)
+        {
+            constexpr int size { 32 };
+            constexpr float radius { 14.0f };
+            std::vector<std::uint8_t> pixels(static_cast<std::size_t>(size) * size * 4, 0);
+            for (int y = 0; y < size; ++y)
+            {
+                for (int x = 0; x < size; ++x)
+                {
+                    const float dx { static_cast<float>(x) + 0.5f - static_cast<float>(size) / 2.0f };
+                    const float dy { static_cast<float>(y) + 0.5f - static_cast<float>(size) / 2.0f };
+                    const float coverage { std::clamp(radius + 0.5f - std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f) };
+                    std::uint8_t* const pixel { pixels.data() + (static_cast<std::size_t>(y) * size + x) * 4 };
+                    pixel[0] = red;
+                    pixel[1] = green;
+                    pixel[2] = blue;
+                    pixel[3] = static_cast<std::uint8_t>(std::lround(coverage * 255.0f));
+                }
+            }
+            return luil::make_rgba_image(size, size, pixels);
+        }
+
+        [[nodiscard]] std::u8string tray_report_text(const std::optional<luil::win32::tray_report>& report)
+        {
+            if (report.has_value() == false)
+                return u8"아직 보고 없음";
+            std::u8string text {};
+            switch (report->status)
+            {
+            case luil::win32::tray_status::waiting:
+                text = u8"대기 중";
+                break;
+            case luil::win32::tray_status::shown:
+                text = u8"보임";
+                break;
+            case luil::win32::tray_status::failed:
+                text = u8"실패";
+                break;
+            case luil::win32::tray_status::off:
+            default:
+                text = u8"끔";
+                break;
+            }
+            if (report->error.empty() == false)
+                text += u8" (" + report->error + u8")";
+            return text;
+        }
+
+        // 데모가 거는 전역 단축키의 조합이다. 세 수정자와 F11이라 다른 프로그램과 겹치기 어렵다.
+        [[nodiscard]] luil::key_chord hotkey_chord()
+        {
+            return luil::key_chord { luil::key_code::f11, true, true, true };
+        }
+
+        // 걸려는 id다. 둘째는 같은 조합이라 같은 목록의 앞 항목(첫째)이 이긴다.
+        constexpr std::u8string_view hotkey_main_id { u8"demo" };
+        constexpr std::u8string_view hotkey_extra_id { u8"demo-extra" };
+
+        // 보고 하나의 상태를 한마디로 옮긴다. 실패의 영문 진단은 부르는 쪽이 덧붙인다.
+        [[nodiscard]] std::u8string hotkey_status_text(const luil::win32::hotkey_status status)
+        {
+            switch (status)
+            {
+            case luil::win32::hotkey_status::registered:
+                return u8"등록됨";
+            case luil::win32::hotkey_status::conflict:
+                return u8"충돌";
+            case luil::win32::hotkey_status::reserved:
+                return u8"예약된 조합";
+            case luil::win32::hotkey_status::needs_modifier:
+                return u8"수정자 필요";
+            case luil::win32::hotkey_status::invalid_key:
+                return u8"쓸 수 없는 키";
+            case luil::win32::hotkey_status::invalid_id:
+                return u8"쓸 수 없는 id";
+            case luil::win32::hotkey_status::failed:
+            default:
+                return u8"실패";
+            }
+        }
+
+        [[nodiscard]] const luil::win32::hotkey_report* hotkey_report_of(const std::vector<luil::win32::hotkey_report>& reports, const std::u8string_view id)
+        {
+            for (const luil::win32::hotkey_report& report : reports)
+            {
+                if (report.id == id)
+                    return &report;
+            }
+            return nullptr;
+        }
+
+        // 반영 줄의 글이다: `등록됨`. 둘째 id가 있으면 ` · 충돌 (demo-extra)`가 이어진다. 끈 동안은 `끔`이다.
+        [[nodiscard]] std::u8string hotkey_report_text(const bool on, const std::vector<luil::win32::hotkey_report>& reports)
+        {
+            if (on == false)
+                return u8"끔";
+            const luil::win32::hotkey_report* const main_report { hotkey_report_of(reports, hotkey_main_id) };
+            if (main_report == nullptr)
+                return u8"아직 보고 없음";
+            std::u8string text { hotkey_status_text(main_report->status) };
+            if (main_report->error.empty() == false)
+                text += u8" (" + main_report->error + u8")";
+            if (const luil::win32::hotkey_report* const extra { hotkey_report_of(reports, hotkey_extra_id) }; extra != nullptr)
+                text += u8" · " + hotkey_status_text(extra->status) + u8" (" + std::u8string { hotkey_extra_id } + u8")";
+            return text;
+        }
+
+        [[nodiscard]] std::u8string tray_event_text(const luil::tray_icon_event& event)
+        {
+            switch (event.action)
+            {
+            case luil::tray_icon_action::double_click:
+                return u8"두 번 클릭";
+            case luil::tray_icon_action::context:
+                return u8"오른쪽 클릭";
+            case luil::tray_icon_action::select:
+            default:
+                return event.keyboard ? u8"고름 · 키보드" : u8"고름";
+            }
+        }
+
         // 도구 창 메뉴의 항목이다 (검색 칸이 좁히기 전의 전부).
         [[nodiscard]] std::vector<luil::menu_item_config> tool_menu_items()
         {
@@ -259,6 +391,9 @@ namespace demo {
     {
         if (focus_revision_ == 0)
             return std::nullopt;
+        // 트레이에서 되살린 주 창을 앞으로 세운다. 라이브러리는 사건에서 창을 세우지 않는다 (tray-icon-design.md).
+        if (focus_main_)
+            return luil::focus_request { .id = focus_revision_, .activate = true };
         return luil::focus_request {
             .id = focus_revision_,
             .surface = u8"tool",
@@ -269,6 +404,18 @@ namespace demo {
 
     bool windows_page::handle(const luil::app_message& message)
     {
+        // 위치는 0 아래로 내려가지 않는다. 위쪽 끝은 여기서, 아래쪽 끝은 페이지를 지을 때 다듬는다
+        // (창 높이를 아는 것이 그때뿐이다).
+        if (const auto* const scroll { message.get<windows_scroll_intent>() }; scroll != nullptr)
+        {
+            scroll_ = std::max(0.0f, scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<windows_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
         // 플랫폼 도구는 logic thread에서 부른다. 탐색기와 메모장은 따로 뜨는 창이라 이쪽은 결과만 적는다.
         if (message.get<reveal_executable_intent>() != nullptr)
         {
@@ -290,6 +437,7 @@ namespace demo {
             if (tool_open_ == false)
                 tool_metrics_ = {};
             tool_open_ = true;
+            focus_main_ = false;
             ++focus_revision_;
             return true;
         }
@@ -397,6 +545,98 @@ namespace demo {
             instance_arguments_ = received->arguments;
             return true;
         }
+        if (const auto* const toggle { message.get<tray_toggle_intent>() }; toggle != nullptr)
+        {
+            if (toggle->on && tray_pictures_[0].valid() == false)
+                tray_pictures_ = { make_tray_picture(52, 120, 220), make_tray_picture(40, 170, 90) };
+            tray_on_ = toggle->on;
+            // 아이콘이 없으면 숨은 주 창을 되살릴 길이 없다.
+            if (tray_on_ == false)
+                tray_hidden_ = false;
+            return true;
+        }
+        if (message.get<tray_picture_intent>() != nullptr)
+        {
+            tray_picture_ = 1 - tray_picture_;
+            return true;
+        }
+        if (const auto* const event { message.get<tray_event_intent>() }; event != nullptr)
+        {
+            tray_event_ = tray_event_text(event->event);
+            return true;
+        }
+        if (const auto* const menu { message.get<tray_menu_intent>() }; menu != nullptr)
+        {
+            if (menu->key == u8"show")
+            {
+                tray_hidden_ = false;
+                focus_main_ = true;
+                ++focus_revision_;
+                tray_event_ = u8"메뉴: 창 보이기";
+            }
+            else if (menu->key == u8"hide")
+            {
+                // 아이콘이 서 있을 때만 숨긴다. 메뉴 항목도 그때만 켜져 있다.
+                if (tray_report_.has_value() && tray_report_->status == luil::win32::tray_status::shown)
+                    tray_hidden_ = true;
+                tray_event_ = u8"메뉴: 주 창 숨기기";
+            }
+            return true;
+        }
+        if (const auto* const report { message.get<tray_report_intent>() }; report != nullptr)
+        {
+            tray_report_ = report->report;
+            // 아이콘이 내려가면 숨은 주 창을 되살린다.
+            if (report->report.status != luil::win32::tray_status::shown)
+                tray_hidden_ = false;
+            return true;
+        }
+        if (const auto* const toggle { message.get<hotkey_toggle_intent>() }; toggle != nullptr)
+        {
+            hotkey_on_ = toggle->on;
+            // 끄면 충돌 시험과 지난 보고도 비운다. 다시 켜면 처음 건 시도로 새로 보고된다.
+            if (toggle->on == false)
+            {
+                hotkey_conflict_ = false;
+                hotkey_reports_.clear();
+            }
+            return true;
+        }
+        if (message.get<hotkey_conflict_intent>() != nullptr)
+        {
+            if (hotkey_on_)
+                hotkey_conflict_ = true;
+            return true;
+        }
+        if (const auto* const front { message.get<hotkey_front_intent>() }; front != nullptr)
+        {
+            hotkey_front_ = front->on;
+            return true;
+        }
+        if (message.get<hotkey_pressed_intent>() != nullptr)
+        {
+            ++hotkey_presses_;
+            // 라이브러리는 눌림에서 창을 앞으로 세우지 않는다. 앱이 숨김을 끄고 활성화를 청한다 (트레이 메뉴의 `창 보이기`와 같은 길).
+            if (hotkey_front_)
+            {
+                tray_hidden_ = false;
+                focus_main_ = true;
+                ++focus_revision_;
+            }
+            return true;
+        }
+        if (const auto* const report { message.get<hotkey_report_intent>() }; report != nullptr)
+        {
+            // 끈 뒤에 늦게 온 보고는 버린다. 항목마다 마지막 보고만 둔다.
+            if (hotkey_on_ == false)
+                return true;
+            const auto found { std::find_if(hotkey_reports_.begin(), hotkey_reports_.end(), [report](const luil::win32::hotkey_report& item) { return item.id == report->report.id; }) };
+            if (found != hotkey_reports_.end())
+                *found = report->report;
+            else
+                hotkey_reports_.push_back(report->report);
+            return true;
+        }
         // 창 안 메모 칸과 메뉴 안 검색 칸이 같은 메시지 타입을 나눠 쓴다.
         // 어느 칸인지는 target이 정한다 — popup 안이라고 다른 경로가 아니다.
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
@@ -438,9 +678,48 @@ namespace demo {
 
     std::unique_ptr<luil::ui_element> windows_page::build(const float width, const float height, const float scale)
     {
-        static_cast<void>(width);
-        static_cast<void>(height);
-        static_cast<void>(scale);
+        return make_scroll_page(build_content(), width, height, scale);
+    }
+
+    std::unique_ptr<luil::ui_element> windows_page::make_scroll_page(std::unique_ptr<luil::stack_element> content, const float width, const float height, const float scale)
+    {
+        // 내용 높이는 담긴 줄에서 읽는다. 구역이 줄을 더해도 손으로 센 합이 어긋날 일이 없다.
+        //  - 줄은 모두 고정 길이라 글 측정기는 이 높이에 닿지 않는다. 맞춤 줄을 더해도 같은 식이 센다.
+        const luil::measure_context measure { .scale = scale };
+        const float content_height { content->preferred_size(measure, std::max(0.0f, width - luil::scroll_area_bar_width)).value_or(luil::size_f {}).height };
+        const float viewport_height { std::max(0.0f, height - scroll_status_height) };
+        // 창이 커져 흘릴 것이 줄었으면 쌓인 위치도 되돌린다. 그대로 두면 끝에서 돌린 휠이 보이지 않는 곳에 쌓여
+        // 되돌릴 때 아무 일도 없는 것처럼 보인다.
+        scroll_ = luil::clamp_scroll(content_height, viewport_height, scroll_);
+
+        luil::scroll_area_config area_config {};
+        area_config.owner = u8"windows";
+        area_config.content_height = content_height;
+        area_config.scroll_offset = scroll_;
+        area_config.scroll = [](const float delta) { return luil::make_app_action(windows_scroll_intent { delta }); };
+        area_config.scroll_to = [](const float offset) { return luil::make_app_action(windows_scroll_to_intent { offset }); };
+        // 막대 자리를 늘 지킨다. 구역이 늘고 줄어도 글의 폭이 흔들리지 않는다.
+        area_config.bar = luil::scrollbar_visibility::always;
+        auto area { std::make_unique<luil::scroll_area_element>(std::move(area_config)) };
+        area->set_content(std::move(content));
+
+        // 상태 줄은 영역 밖에 고정한다. 흘려도 읽히고, 화면 밖으로 간 구역을 UIA가 찾을 때도 같은 이름이다.
+        const float maximum_scroll { std::max(0.0f, content_height - viewport_height) };
+        std::u8string status_text { u8"페이지 흘림: " + to_u8(static_cast<int>(std::lround(scroll_))) + u8" / " + to_u8(static_cast<int>(std::lround(maximum_scroll))) };
+        luil::stack_config status_config {};
+        status_config.padding = scroll_status_padding;
+        auto status { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-scroll-status" }, status_config) };
+        status->add(make_label(luil::ui_element_id { kind_text, u8"windows-scroll" }, std::move(status_text), 11.0f, luil::label_color_role::dim), scroll_status_line_height);
+
+        luil::stack_config page_config {};
+        auto page { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-page" }, page_config) };
+        page->add(std::move(status), scroll_status_height);
+        page->add_flexible(std::move(area));
+        return page;
+    }
+
+    std::unique_ptr<luil::stack_element> windows_page::build_content()
+    {
         luil::stack_config config {};
         config.padding = luil::edge_insets::all(24.0f);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows" }, config) };
@@ -667,6 +946,126 @@ namespace demo {
         controls->add(make_taskbar_button(u8"jump-list-fill", u8"점프 목록 채우기", filled, luil::make_message_action(jump_list_fill_intent { true })), 130.0f);
         controls->add(make_taskbar_button(u8"jump-list-clear", u8"점프 목록 비우기", cleared, luil::make_message_action(jump_list_fill_intent { false })), 130.0f);
         column.add(std::move(controls), 26.0f);
+        add_tray_section(column);
+    }
+
+    std::optional<luil::tray_icon> windows_page::make_tray_request() const
+    {
+        if (tray_on_ == false || tray_pictures_[0].valid() == false)
+            return std::nullopt;
+        luil::tray_icon icon {};
+        icon.icon = tray_pictures_[static_cast<std::size_t>(tray_picture_)];
+        icon.tooltip = u8"luil 데모 · 그림 " + to_u8(tray_picture_ + 1);
+        const bool shown { tray_report_.has_value() && tray_report_->status == luil::win32::tray_status::shown };
+        luil::menu_config menu {};
+        menu.owner = u8"tray";
+        menu.items.push_back({ .key = u8"show", .label = u8"창 보이기" });
+        menu.items.push_back({ .key = u8"hide", .label = u8"주 창 숨기기", .enabled = shown && tray_hidden_ == false });
+        menu.items.push_back({ .key = u8"exit", .label = u8"끝내기", .separator_above = true });
+        // 끝내기는 창 명령이라 logic thread를 지나지 않는다. 닫힘 훅이 있어도 비켜 간다.
+        menu.select = [](const std::u8string& key) {
+            if (key == u8"exit")
+                return luil::input_action { luil::ui_command::application_exit };
+            return luil::make_app_action(tray_menu_intent { key });
+        };
+        icon.menu = std::move(menu);
+        icon.activate = [](const luil::tray_icon_event& event) { return luil::make_app_action(tray_event_intent { event }); };
+        return icon;
+    }
+
+    void windows_page::add_tray_section(luil::stack_element& column)
+    {
+        column.add_gap(18.0f);
+        const std::u8string hint { u8"알림 영역에 데모 아이콘을 세운다. 오른쪽 클릭하면 시스템 메뉴가 뜬다. Windows 11은 넘침 칸에 둘 수 있다." };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-tray-hint" }, hint, 11.0f, luil::label_color_role::dim), 18.0f);
+        column.add_gap(4.0f);
+        // 네 줄이 UIA로 읽힌다: 이 프로세스가 아이콘을 세울 수 있는가, 앱이 바라는 것, 셸에 닿은 정도, 마지막 사건.
+        const bool capable { luil::current_ui_platform().capabilities.tray };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-tray-capability" }, capable ? u8"트레이 능력: 있음" : u8"트레이 능력: 없음", 12.0f, luil::label_color_role::primary), 18.0f);
+        const std::u8string request { tray_on_ ? u8"켬 · 그림 " + to_u8(tray_picture_ + 1) + u8" · 메뉴 있음" : u8"끔" };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-tray-request" }, u8"트레이 요청: " + request, 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-tray-report" }, u8"트레이 반영: " + tray_report_text(tray_report_), 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-tray-event" }, u8"트레이 사건: " + (tray_event_.empty() ? std::u8string { u8"없음" } : tray_event_), 12.0f,
+                       luil::label_color_role::primary),
+            18.0f);
+        column.add_gap(6.0f);
+
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        // 셋을 한 줄에 두면 기본 창의 200% 배율에서 오른쪽이 잘린다. 그림 바꾸기는 다음 줄에 둔다.
+        auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-tray-controls" }, row_config) };
+        controls->add(make_taskbar_button(u8"tray-on", u8"트레이 아이콘 켜기", tray_on_, luil::make_message_action(tray_toggle_intent { true })), 140.0f);
+        controls->add(make_taskbar_button(u8"tray-off", u8"트레이 아이콘 끄기", false, luil::make_message_action(tray_toggle_intent { false })), 140.0f);
+        column.add(std::move(controls), 26.0f);
+        column.add_gap(6.0f);
+        column.add(make_taskbar_button(u8"tray-picture", u8"트레이 그림 바꾸기", false, luil::make_message_action(tray_picture_intent {})), { .length = 26.0f, .cross_length = 140.0f });
+        add_hotkey_section(column);
+    }
+
+    std::vector<luil::global_hotkey> windows_page::make_hotkeys_request() const
+    {
+        std::vector<luil::global_hotkey> hotkeys {};
+        if (hotkey_on_ == false)
+            return hotkeys;
+        const auto make_hotkey = [](const std::u8string_view id) {
+            luil::global_hotkey hotkey {};
+            hotkey.id = std::u8string { id };
+            hotkey.chord = hotkey_chord();
+            hotkey.pressed = [id = std::u8string { id }] { return luil::make_app_action(hotkey_pressed_intent { id }); };
+            return hotkey;
+        };
+        hotkeys.push_back(make_hotkey(hotkey_main_id));
+        // 같은 조합의 둘째 id다. 목록에서 앞 항목이 이기므로 OS를 부르지 않고 충돌로 보고된다.
+        if (hotkey_conflict_)
+            hotkeys.push_back(make_hotkey(hotkey_extra_id));
+        return hotkeys;
+    }
+
+    void windows_page::add_hotkey_section(luil::stack_element& column)
+    {
+        column.add_gap(18.0f);
+        const std::u8string hint { u8"앱이 뒤에 있거나 창이 숨어 있어도 Ctrl+Shift+Alt+F11을 받는다. 다른 프로그램이 쓰는 조합은 걸리지 않고 충돌로 보인다." };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-hint" }, hint, 11.0f, luil::label_color_role::dim), 18.0f);
+        column.add_gap(4.0f);
+        // 네 줄이 UIA로 읽힌다: 이 프로세스가 걸 수 있는가, 앱이 바라는 것, OS에 닿은 정도, 눌린 횟수.
+        const bool capable { luil::current_ui_platform().capabilities.global_hotkeys };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-capability" }, capable ? u8"전역 단축키 능력: 있음" : u8"전역 단축키 능력: 없음", 12.0f, luil::label_color_role::primary),
+            18.0f);
+        std::u8string request { u8"끔" };
+        if (hotkey_on_)
+        {
+            request = u8"켬 · " + luil::shortcut_label(hotkey_chord());
+            if (hotkey_conflict_)
+                request += u8" · 충돌 시험";
+        }
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-request" }, u8"전역 단축키 요청: " + request, 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-report" }, u8"전역 단축키 반영: " + hotkey_report_text(hotkey_on_, hotkey_reports_), 12.0f, luil::label_color_role::primary),
+            18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-pressed" }, u8"전역 단축키 눌림: " + to_u8(hotkey_presses_) + u8"번", 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add_gap(6.0f);
+
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-hotkey-controls" }, row_config) };
+        controls->add(make_taskbar_button(u8"hotkey-on", u8"전역 단축키 켜기", hotkey_on_, luil::make_message_action(hotkey_toggle_intent { true })), 140.0f);
+        controls->add(make_taskbar_button(u8"hotkey-off", u8"전역 단축키 끄기", false, luil::make_message_action(hotkey_toggle_intent { false })), 140.0f);
+        column.add(std::move(controls), 26.0f);
+        column.add_gap(6.0f);
+
+        // 확인란은 스스로 바뀌지 않는다. 바뀐 뒤의 상태를 실은 액션을 매 frame 새로 싣는다.
+        luil::check_config front {};
+        front.owner = u8"hotkey-front";
+        front.style = luil::check_style::checkbox;
+        front.label = u8"눌리면 창 앞으로";
+        front.checked = hotkey_front_;
+        front.tooltip = u8"켜면 눌릴 때 숨은 주 창을 되살려 앞으로 세운다. 라이브러리는 창을 세우지 않는다";
+        front.toggle = luil::make_message_action(hotkey_front_intent { hotkey_front_ == false });
+        column.add(std::make_unique<luil::check_element>(std::move(front)), luil::check_row_height);
+        column.add_gap(6.0f);
+        // 마지막 단추다. 같은 조합의 둘째 id를 더한다. 끄기가 되돌린다.
+        column.add(make_taskbar_button(u8"hotkey-conflict", u8"충돌 시험 켜기", hotkey_conflict_, luil::make_message_action(hotkey_conflict_intent {})), { .length = 26.0f, .cross_length = 140.0f });
     }
 
     std::vector<luil::win32::ui_window> windows_page::make_windows()

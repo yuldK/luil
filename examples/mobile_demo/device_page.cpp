@@ -284,6 +284,22 @@ namespace mobile_demo {
         else
             column.note(u8"taskbar-note", u8"창 단추에 진행률과 오버레이를 걸 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
 
+        // 알림 영역 아이콘도 데스크톱의 것이다 (tray-icon-design.md). 요청(`ui_frame::tray`)은 실을 수 있고 하지 못하는 플랫폼은 받기만 한다.
+        column.gap(20.0f);
+        column.heading(u8"tray-heading", u8"알림 영역 아이콘");
+        if (capabilities.tray == false)
+            column.note(u8"tray-none", u8"이 플랫폼에는 알림 영역 아이콘이 없다. 알림은 OS 알림이 맡는다.");
+        else
+            column.note(u8"tray-note", u8"알림 영역에 아이콘을 세울 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
+
+        // 앱이 뒤에 있을 때 받는 전역 단축키도 데스크톱의 것이다 (global-hotkey-design.md). 요청(`ui_frame::hotkeys`)은 실을 수 있고 하지 못하는 플랫폼은 받기만 한다.
+        column.gap(20.0f);
+        column.heading(u8"hotkeys-heading", u8"전역 단축키");
+        if (capabilities.global_hotkeys == false)
+            column.note(u8"hotkeys-none", u8"이 플랫폼에는 전역 단축키가 없다.");
+        else
+            column.note(u8"hotkeys-note", u8"앱이 뒤에 있어도 받는 키 조합을 걸 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
+
         // 집 안 NAS 같은 같은 네트워크의 기기에 붙으려면 Android 17부터 이 권한이 있어야 한다.
         column.gap(20.0f);
         column.heading(u8"local-network-heading", u8"로컬 네트워크 권한");

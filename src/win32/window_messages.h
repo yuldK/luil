@@ -8,7 +8,7 @@
 namespace luil::win32 {
     // 창이 앱 안에서 주고받는 `WM_APP` 번호표다 (docs/taskbar-design.md).
     // 번호가 한 창에서 겹치면 안 되므로 받는 창이 같은 번호끼리 한 곳에 모은다.
-    //  - 새 번호는 +7부터 표 끝에만 더하고, 받는 창을 아래 주석에 적는다.
+    //  - 새 번호는 +8부터 표 끝에만 더하고, 받는 창을 아래 주석에 적는다.
     //  - `SetTimer` 번호는 여기 없다 (win32_window.cpp의 1·2·4, window_surface.cpp의 3).
 
     // 주 창. wake 신호다. frame slot과 interaction slot의 signal callback이 게시한다.
@@ -27,6 +27,9 @@ namespace luil::win32 {
     // 주 창. OS 알림의 사건(누름·닫음·실패)이 대기열에 들었다는 신호다. thread 풀의 처리기가 게시하고 내용은 대기열이 나른다
     // (os-notification-design.md).
     inline constexpr UINT notification_event_message { WM_APP + 6 };
+    // 주 창. 알림 영역 아이콘의 셸 콜백이다 (tray-icon-design.md). NOTIFYICON_VERSION_4라 lParam의 아래 낱말이 사건, 위 낱말이
+    // 아이콘 번호이고 wParam이 화면 좌표다.
+    inline constexpr UINT tray_callback_message { WM_APP + 7 };
 
     // 번호가 서로 다르고 앱이 쓸 수 있는 대역(`WM_APP`~0xBFFF) 안인가다.
     [[nodiscard]] constexpr bool app_message_numbers_valid() noexcept
@@ -38,6 +41,7 @@ namespace luil::win32 {
             clipboard_request_message,
             access_dispatch_message,
             notification_event_message,
+            tray_callback_message,
         };
         for (std::size_t index = 0; index < std::size(numbers); ++index)
         {
@@ -80,4 +84,8 @@ namespace luil::win32 {
     // 셸 메시지와 달리 값을 싣는다. 그래서 늘 걸지 않고 앱이 `window_environment::instance_from_lower_integrity`를 켰을 때만
     // 건다 (docs/single-instance-args-design.md 결정 6). 실패해도 낮은 권한 둘째가 접근 거부를 받을 뿐이라 조용히 넘어간다.
     void allow_instance_message(HWND window) noexcept;
+
+    // 관리자 권한으로 도는 앱이 낮은 권한의 탐색기가 보내는 알림 영역 콜백(`tray_callback_message`)을 받게 한다 (UIPI).
+    // 콜백은 사건 번호와 좌표만 싣는다. 실패해도 관리자 권한 앱의 사건이 안 올 뿐이라 조용히 넘어간다.
+    void allow_tray_callback(HWND window) noexcept;
 }

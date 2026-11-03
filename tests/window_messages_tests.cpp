@@ -20,6 +20,7 @@ TEST_CASE("The WM_APP numbers keep their values and never collide", "[win32][mes
     REQUIRE(luil::win32::clipboard_request_message == WM_APP + 4u);
     REQUIRE(luil::win32::access_dispatch_message == WM_APP + 5u);
     REQUIRE(luil::win32::notification_event_message == WM_APP + 6u);
+    REQUIRE(luil::win32::tray_callback_message == WM_APP + 7u);
     STATIC_REQUIRE(luil::win32::app_message_numbers_valid());
 }
 
@@ -55,6 +56,7 @@ TEST_CASE("A message maps to the shell event it announces", "[win32][messages]")
     REQUIRE(shell_event_of(WM_NULL) == shell_event::none);
     REQUIRE(shell_event_of(WM_SETTINGCHANGE) == shell_event::none);
     REQUIRE(shell_event_of(luil::win32::snapshot_wake_message) == shell_event::none);
+    REQUIRE(shell_event_of(luil::win32::tray_callback_message) == shell_event::none);
     // 등록 번호여도 셸의 것이 아니면 아니다.
     REQUIRE(shell_event_of(RegisterWindowMessageW(L"Luil.Test.NotAShellMessage")) == shell_event::none);
 }
@@ -83,4 +85,17 @@ TEST_CASE("Allowing instance messages never throws, even for a window that is no
     REQUIRE(DestroyWindow(window) != FALSE);
     // 이미 파괴된 창은 필터를 걸지 못하지만 조용히 넘어간다.
     luil::win32::allow_instance_message(window);
+}
+
+TEST_CASE("Allowing the tray callback never throws, even for a window that is not there", "[win32][messages][tray]")
+{
+    STATIC_REQUIRE(noexcept(luil::win32::allow_tray_callback(nullptr)));
+    luil::win32::allow_tray_callback(nullptr);
+
+    const HWND window { create_plain_window() };
+    REQUIRE(window != nullptr);
+    luil::win32::allow_tray_callback(window);
+    REQUIRE(DestroyWindow(window) != FALSE);
+    // 이미 파괴된 창은 필터를 걸지 못하지만 조용히 넘어간다.
+    luil::win32::allow_tray_callback(window);
 }

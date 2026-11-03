@@ -22,7 +22,7 @@ namespace luil::android {
                 return nullptr;
             const jclass type { env.GetObjectClass(target) };
             const jmethodID method { env.GetMethodID(type, name, signature) };
-            if (method == nullptr || jni_failed(env))
+            if (jni_failed(env) || method == nullptr)
                 return nullptr;
             const jobject result { env.CallObjectMethod(target, method) };
             return jni_failed(env) ? nullptr : result;
@@ -35,7 +35,7 @@ namespace luil::android {
                 return std::nullopt;
             const jclass type { env.GetObjectClass(target) };
             const jmethodID method { env.GetMethodID(type, name, "()I") };
-            if (method == nullptr || jni_failed(env))
+            if (jni_failed(env) || method == nullptr)
                 return std::nullopt;
             const jint result { env.CallIntMethod(target, method) };
             if (jni_failed(env))
@@ -64,7 +64,7 @@ namespace luil::android {
                 return false;
             const jclass type { env.GetObjectClass(configuration) };
             const jfieldID field { env.GetFieldID(type, "orientation", "I") };
-            if (field == nullptr || jni_failed(env))
+            if (jni_failed(env) || field == nullptr)
                 return false;
             return env.GetIntField(configuration, field) == configuration_landscape;
         }
@@ -89,7 +89,7 @@ namespace luil::android {
 
         const jclass type { env.GetObjectClass(activity) };
         const jmethodID set_requested { env.GetMethodID(type, "setRequestedOrientation", "(I)V") };
-        if (set_requested == nullptr || jni_failed(env))
+        if (jni_failed(env) || set_requested == nullptr)
             return;
         env.CallVoidMethod(activity, set_requested, static_cast<jint>(value));
         if (jni_failed(env))
@@ -107,10 +107,10 @@ namespace luil::android {
         if (decor == nullptr)
             return;
         const jclass view_type { env.FindClass("android/view/View") };
-        if (view_type == nullptr || jni_failed(env))
+        if (jni_failed(env) || view_type == nullptr)
             return;
         const jmethodID perform { env.GetMethodID(view_type, "performHapticFeedback", "(I)Z") };
-        if (perform == nullptr || jni_failed(env))
+        if (jni_failed(env) || perform == nullptr)
             return;
         const jboolean performed { env.CallBooleanMethod(decor, perform, static_cast<jint>(constant)) };
         if (jni_failed(env))
@@ -134,12 +134,12 @@ namespace luil::android {
             const jobject controller { call_object(env, window, "getInsetsController", "()Landroid/view/WindowInsetsController;") };
             const jclass types { env.FindClass("android/view/WindowInsets$Type") };
             const jclass controller_type { env.FindClass("android/view/WindowInsetsController") };
-            if (controller == nullptr || types == nullptr || controller_type == nullptr || jni_failed(env))
+            if (jni_failed(env) || controller == nullptr || types == nullptr || controller_type == nullptr)
                 return;
             const jmethodID system_bars { env.GetStaticMethodID(types, "systemBars", "()I") };
             const jmethodID set_behavior { env.GetMethodID(controller_type, "setSystemBarsBehavior", "(I)V") };
             const jmethodID change { env.GetMethodID(controller_type, hide ? "hide" : "show", "(I)V") };
-            if (system_bars == nullptr || set_behavior == nullptr || change == nullptr || jni_failed(env))
+            if (jni_failed(env) || system_bars == nullptr || set_behavior == nullptr || change == nullptr)
                 return;
             const jint bars { env.CallStaticIntMethod(types, system_bars) };
             if (jni_failed(env))
@@ -164,7 +164,7 @@ namespace luil::android {
             return;
         const jclass view_type { env.GetObjectClass(decor) };
         const jmethodID set_flags { env.GetMethodID(view_type, "setSystemUiVisibility", "(I)V") };
-        if (set_flags == nullptr || jni_failed(env))
+        if (jni_failed(env) || set_flags == nullptr)
             return;
         env.CallVoidMethod(decor, set_flags, hide ? (*flags | immersive_flags) : (*flags & ~immersive_flags));
         static_cast<void>(jni_failed(env));
@@ -178,7 +178,7 @@ namespace luil::android {
         if (info == nullptr)
             return 0;
         const jfieldID field { env.GetFieldID(env.GetObjectClass(info), "targetSdkVersion", "I") };
-        if (field == nullptr || jni_failed(env))
+        if (jni_failed(env) || field == nullptr)
             return 0;
         const jint value { env.GetIntField(info, field) };
         return jni_failed(env) ? 0 : static_cast<int>(value);
@@ -191,10 +191,10 @@ namespace luil::android {
             return false;
         const jclass type { env.GetObjectClass(activity) };
         const jmethodID check { env.GetMethodID(type, "checkSelfPermission", "(Ljava/lang/String;)I") };
-        if (check == nullptr || jni_failed(env))
+        if (jni_failed(env) || check == nullptr)
             return false;
         const jstring name { env.NewStringUTF(permission) };
-        if (name == nullptr || jni_failed(env))
+        if (jni_failed(env) || name == nullptr)
             return false;
         // `PackageManager.PERMISSION_GRANTED`는 0이다.
         const jint result { env.CallIntMethod(activity, check, name) };
@@ -209,11 +209,11 @@ namespace luil::android {
         const jclass type { env.GetObjectClass(activity) };
         const jmethodID request { env.GetMethodID(type, "requestPermissions", "([Ljava/lang/String;I)V") };
         const jclass string_type { env.FindClass("java/lang/String") };
-        if (request == nullptr || string_type == nullptr || jni_failed(env))
+        if (jni_failed(env) || request == nullptr || string_type == nullptr)
             return;
         const jstring name { env.NewStringUTF(permission) };
         const jobjectArray names { name != nullptr ? env.NewObjectArray(1, string_type, name) : nullptr };
-        if (names == nullptr || jni_failed(env))
+        if (jni_failed(env) || names == nullptr)
             return;
         // 요청 번호는 결과 콜백이 쓰는 것이라 우리에게는 뜻이 없다. 하위 16비트 안의 값이면 된다.
         constexpr jint request_code { 0x4c4e };
