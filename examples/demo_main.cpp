@@ -57,9 +57,11 @@
 #include "demo/workbench_page.h"
 #include "demo/zoom_page.h"
 #include "demo/rich_text_page.h"
+#include "update_fixtures.h"
 
 #include "luil/app/notification.h"
 #include "luil/app/platform_services.h"
+#include "luil/app/updater.h"
 #include "luil/net/http_client.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/caption_element.h"
@@ -134,6 +136,16 @@ namespace demo {
             if (length == 0 || length >= MAX_PATH)
                 return {};
             return std::filesystem::path { buffer } / L"luil-demo" / L"placement.txt";
+        }
+
+        // 자동 업데이트 구역이 받은 파일을 두는 폴더다 (`%LOCALAPPDATA%\luil-demo\update\`). 읽지 못하면 빈 경로이고 구역이 잠긴다.
+        [[nodiscard]] std::filesystem::path update_directory()
+        {
+            wchar_t buffer[MAX_PATH] {};
+            const DWORD length { GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, MAX_PATH) };
+            if (length == 0 || length >= MAX_PATH)
+                return {};
+            return std::filesystem::path { buffer } / L"luil-demo" / L"update";
         }
 
         // "x,y,width,height,max,full"을 배치로 읽는다 (십진 정수 여섯, max·full은 0·1).
@@ -273,7 +285,7 @@ namespace demo {
             void start() override
             {
                 server_ = std::make_unique<luil::testing::loopback_http_server>();
-                server_->set_handler(make_network_handler());
+                server_->set_handler(make_network_handler(network_.update_serve_flags()));
                 if (server_->port() != 0)
                 {
                     network_.set_base_url(server_->url(""));
@@ -295,6 +307,55 @@ namespace demo {
                 };
                 client_ = luil::net::http_client::create(std::move(config), client_error_);
                 live_client_.store(client_.get());
+                start_updater();
+            }
+
+            // 자동 업데이트 구역의 `updater`다. 되돌이 서버의 미리 서명한 봉투를 시험 키로 확인한다 (tests/update_fixtures.h).
+            //  - 시험 키의 비밀 값은 들이지 않는다. 데모는 서명하지 않고 미리 서명한 바이트만 낸다.
+            void start_updater()
+            {
+                const std::filesystem::path folder { update_directory() };
+                if (server_ == nullptr || server_->port() == 0 || folder.empty())
+                {
+                    network_.set_updater(false, u8"The loopback server or the download folder is missing.");
+                    return;
+                }
+                luil::updater_config config {};
+                config.app_id = luil::testing::update_fixture_app;
+                config.manifest_url = server_->url(network_update_manifest_path);
+                config.channel = luil::testing::update_fixture_channel;
+                config.current_version = network_update_current_version;
+                config.keys.push_back(luil::update_key { std::u8string { luil::testing::update_fixture_key_id }, std::u8string { luil::testing::update_fixture_key_spki } });
+                config.download_directory = folder.u8string();
+                config.download_chunk_bytes = network_update_chunk_bytes;
+                config.user_agent = u8"luil-demo";
+                // 되돌이 주소라 시스템 proxy를 타지 않는다 (위 client와 같다).
+                config.use_system_proxy = false;
+                // **updater의 thread에서 불린다.** 값을 logic thread로 나르는 것 하나다.
+                config.report = [this](const luil::update_status& status) {
+                    if (luil::win32::app_host* const host { host_.load() }; host != nullptr)
+                        host->post_app_message(luil::app_message { network_update_status_intent { status } });
+                };
+                std::u8string error {};
+                updater_ = luil::updater::create(std::move(config), error);
+                live_updater_.store(updater_.get());
+                network_.set_updater(updater_ != nullptr, std::move(error));
+            }
+
+            // `받은 파일 지우기`다. 폴더를 통째로 비우고 다시 세운다 (상태 파일의 sequence도 함께 지워진다).
+            void clear_update_folder()
+            {
+                const std::filesystem::path folder { update_directory() };
+                std::error_code code {};
+                std::filesystem::remove_all(folder, code);
+                if (code.value() == 0)
+                    std::filesystem::create_directories(folder, code);
+                if (code.value() != 0)
+                {
+                    network_.note_update_cleared(false, u8"Failed to clear the download folder (error " + to_u8(code.value()) + u8").");
+                    return;
+                }
+                network_.note_update_cleared(true, {});
             }
 
             // OS 알림 단추 하나를 OS에 옮기고 답과 지금 상태를 토스트 페이지에 넘긴다. logic thread에서 돈다.
@@ -334,6 +395,28 @@ namespace demo {
                 if (message.get<network_cancel_intent>() != nullptr)
                 {
                     cancel_network_request();
+                    return;
+                }
+                // 자동 업데이트 구역의 단추다. `updater`는 셸이 든다. 거절이면 답이 오지 않으므로 그 까닭을 바로 싣는다.
+                if (message.get<network_update_check_intent>() != nullptr || message.get<network_update_download_intent>() != nullptr)
+                {
+                    std::u8string error {};
+                    const bool check { message.get<network_update_check_intent>() != nullptr };
+                    if (updater_ == nullptr)
+                        network_.note_update_refused(u8"The updater did not start.");
+                    else if ((check ? updater_->check(error) : updater_->download(error)) == false)
+                        network_.note_update_refused(std::move(error));
+                    return;
+                }
+                if (message.get<network_update_cancel_intent>() != nullptr)
+                {
+                    if (updater_ != nullptr)
+                        updater_->cancel();
+                    return;
+                }
+                if (message.get<network_update_clear_intent>() != nullptr)
+                {
+                    clear_update_folder();
                     return;
                 }
                 // OS 알림은 셸이 부른다. 토스트 페이지는 답과 지금 상태만 받아 그린다.
@@ -603,6 +686,8 @@ namespace demo {
             {
                 if (luil::net::http_client* const client { live_client_.load() }; client != nullptr)
                     client->cancel_all();
+                if (luil::updater* const updater { live_updater_.load() }; updater != nullptr)
+                    updater->cancel();
             }
 
             // 종료 3단계다 (threading-model.md). 이 줄 뒤로는 배출구가 다시
@@ -611,6 +696,9 @@ namespace demo {
             {
                 if (luil::net::http_client* const client { live_client_.load() }; client != nullptr)
                     client->stop();
+                // 되돌이 서버보다 먼저다. 이 줄 뒤로 `report`가 불리지 않는다.
+                if (luil::updater* const updater { live_updater_.load() }; updater != nullptr)
+                    updater->stop();
                 files_.stop_watcher();
                 if (luil::testing::loopback_http_server* const server { live_server_.load() }; server != nullptr)
                     server->stop();
@@ -789,6 +877,9 @@ namespace demo {
                 frame->file_dialog = file_dialog_;
                 // 주 창 작업 표시줄 단추의 진행률과 오버레이다. 독립 창의 것은 그 창(`ui_window::taskbar`)에 실린다.
                 frame->taskbar = windows_.make_taskbar_request();
+                // 자동 업데이트가 받는 동안의 진행률이다. 그 단계가 아니면 창 페이지의 요청이 그대로다.
+                if (const std::optional<luil::taskbar_progress> progress { network_.update_taskbar_progress() }; progress.has_value())
+                    frame->taskbar.progress = *progress;
                 // 알림 영역 아이콘과, 그 메뉴로 숨긴 주 창이다. 숨기는 것은 앱 상태라 페이지가 쥔다.
                 frame->tray = windows_.make_tray_request();
                 // 앱이 뒤에 있어도 받는 전역 단축키다. 눌림은 항목의 `pressed`가 앱 메시지로 돌려준다.
@@ -1094,6 +1185,9 @@ namespace demo {
             // 셸이 아는 표 둘이다 (취소가 겨눌 자리 — 페이지의 것과 같은 값이다).
             luil::net::http_ticket network_pending_ {};
             luil::net::http_ticket network_heartbeat_ {};
+            // 자동 업데이트 구역의 흐름이다. client와 같이 logic thread가 소유하고 UI thread는 원자적 손잡이로 본다.
+            std::unique_ptr<luil::updater> updater_ {};
+            std::atomic<luil::updater*> live_updater_ { nullptr };
 
             // 복원할 배치와 마지막으로 보고된 배치다.
             // 하나는 시작에 쓰고 하나는 종료 저장에 쓴다.

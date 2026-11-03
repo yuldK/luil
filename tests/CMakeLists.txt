@@ -529,6 +529,11 @@ target_sources(luil_tests PRIVATE
     update_fixtures.cpp
     update_test_signing.cpp
     updater_tests.cpp)
+# 데스크톱 데모 네트워크 페이지의 자동 업데이트 구역이다. 단계가 상태 줄의 글과 작업 표시줄 진행률로 옮겨지는지, 확인란이 데모 서버의
+# 변조를 시키는지 본다 (페이지가 <windows.h>를 불러 Windows 전용 test에서 읽는다).
+target_sources(luil_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/examples/demo/network_page.cpp"
+    network_page_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
