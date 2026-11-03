@@ -92,6 +92,9 @@ std::u8string_view info_bar_close() noexcept
 
 **한글 검사를 넓힌다.** 흡수 뒤 `src`·`include`의 코드 줄 한글은 `text_area_element.cpp` 547행의 측정 견본 하나뿐이다(이 문서를 쓰며 주석 밖 줄을 센 값). 검사 목록을 `src`와 `include` 전체로 넓히고 `default_text.cpp`의 파일 예외를 뺀다. 한국어는 `assets/strings/ko.json`과 `accents.json`에만 산다.
 
+- 넓힘 커밋이 [verify_default_text.cmake](../cmake/verify_default_text.cmake)에 선택 인자 둘을 함께 들인다. `CHECKED_DIRECTORIES`(없으면 `src`·`include` 전체, 지금 13~15행 자리)와 `TEXT_FILE`(문구 파일 예외, 없으면 예외 파일이 없다. 지금 52~55행 자리)이다. 이 파일은 이번 라운드에 줄 4만 고친다. 줄 1은 그 두 인자로 차트 검사(`luil_chart_default_text`, `chart/src`·`chart/include`)를 등록할 뿐 스크립트를 고치지 않는다. core 검사는 인자 없이 `src`·`include`만 본다.
+- 통합 순서는 줄 1 문서와 같다. 표·흡수(줄 4) → 차트 라이브러리(줄 1) → 차트 표 전환(줄 1) → 한글 검사 넓힘(줄 4) → 차트 검사 등록(줄 1)이다.
+
 ## 결정
 
 확정(2026-11-04): G6-locale b. 공개 질의 하나로 주 첫 요일만 OS에서 읽는다. 기본값은 일요일 그대로이고 앱이 결과를 달력 설정에 넣는다. 날짜 꼴의 OS 기본은 넣지 않고 R4 달력 문서의 약속을 고쳐 닫는다.
@@ -116,14 +119,14 @@ std::u8string_view info_bar_close() noexcept
 
 - 길 a: `platform_services.h` 끝의 함수, 답은 `std::optional<std::chrono::weekday>`. 되는 것: 플랫폼 도구 묶음에 들고 줄 4의 파일이다. 앱이 부를 때만 OS를 읽어 test가 PC마다 갈리지 않는다. 대가: 그 헤더의 다른 함수와 달리 `platform_result`가 아니다. 값 하나를 묻는 질의라 `url_scheme_allowed`처럼 값으로 답한다.
 - 길 b: `ui_platform` 칸(호스트가 시작 때 읽어 싣는다). 되는 것: 앱이 함수를 부르지 않는다. 대가: 호스트가 늘 OS를 읽고, Android Activity가 다시 설 때 거둬야 한다. `ui_platform.h`를 고친다.
-- 길 c: `string_table.h`에 두고 호스트 갈고리로 채운다(글꼴 registry 꼴). 대가: core에 플랫폼 갈고리가 하나 는다.
+- 길 c: `string_table.h`에 두고 호스트 갈고리로 채운다(글꼴 registry 꼴). 되는 것: 첫 요일도 라이브러리 표와 같은 길로 읽는다. 대가: core에 플랫폼 갈고리가 하나 는다.
 - 권장: a. 대가: 위의 답 꼴이다. 권장대로 진행.
 
 **4. 강조색 이름 25개.** 질문: 카탈로그의 이름을 언어마다 다르게 하는가.
 
 - 길 a: `label`에 언어 맵을 받고 `accent_label`로 고른다(위 규칙). 되는 것: 영어로 정한 앱의 테마 고르기가 모두 영어다. 소비자 카탈로그가 자기 언어를 함께 싣는다. 글 하나인 옛 카탈로그도 그대로 빌드된다. 대가: 생성기와 그 test, 25개 항목, 공개 함수 하나가 바뀐다.
 - 길 b: 그대로 둔다. 되는 것: 바뀌는 것이 없다. 대가: 영어 앱에서 강조색 이름만 "블루"로 남는다. 앱이 고칠 길이 카탈로그를 한 언어로 통째 바꾸는 것뿐이다.
-- 길 c: 문자열 표의 키(`accent_blue`)로 옮긴다. 대가: 카탈로그의 id가 표의 키 목록에 묶여 소비자가 카탈로그를 바꾸면 라이브러리 표까지 바꾼다.
+- 길 c: 문자열 표의 키(`accent_blue`)로 옮긴다. 되는 것: 강조색 이름이 번역 키 하나로 모인다. 대가: 카탈로그의 id가 표의 키 목록에 묶여 소비자가 카탈로그를 바꾸면 라이브러리 표까지 바꾼다.
 - 권장: a. 대가: 위의 생성기 고침이다. 권장대로 진행.
 
 **5. 접근 이름 조각 잇기.** 질문: 정보 막대와 msg_box가 공백으로 잇는 조각을 자리 값 문장으로 바꾸는가(default-text-design.md 161행).
@@ -136,7 +139,7 @@ std::u8string_view info_bar_close() noexcept
 
 **Win32.** 첫 요일과 표시 언어는 [platform_services_win32.cpp](../src/win32/platform_services_win32.cpp)에 둔다. 값을 바꾸는 순수 함수(0~6을 요일로)는 `luil_tests`가 친다. 표시 언어를 바꾸면 다시 로그인해야 한다. 지역 설정의 첫 요일은 다음 질의부터 바뀐다. `win32_window.cpp`는 고치지 않는다.
 
-**Android.** Java 소스는 0줄이다. 첫 요일은 기존 framework 클래스 `java.util.Calendar`를 JNI로 부른다(`FindClass` 선례 android_app.cpp 575행). JNI 흐름은 비공개 함수 `read_first_weekday(JNIEnv&)` 하나에 두고 [platform_services_android.cpp](../src/android/platform_services_android.cpp)가 `jni_thread_scope`와 `jni_local_frame`(java_vm.h)으로 부른다. 그래서 어느 thread에서나 된다. `jni_failed`는 nullptr 검사 앞에 둔다(`luil_jni_order`). 실패 지점마다 예외를 거두는지는 가짜 JNIEnv test가 친다(android_settings_tests.cpp와 같은 길). 표시 언어는 JNI 없이 `AConfiguration` 값이다. Android의 luil에는 접근성 계층이 없다. 폰에 보이는 바뀜은 편집 메뉴, 날짜 칸, 달력, 테마 카드의 글이다. unsupported인 부분은 없다.
+**Android.** Java 소스는 0줄이다. 첫 요일은 기존 framework 클래스 `java.util.Calendar`를 JNI로 부른다(`FindClass` 선례 android_app.cpp 575행). JNI 흐름은 새 비공개 파일 `src/android/android_locale.cpp`·`.h`의 함수 `read_first_weekday(JNIEnv&)` 하나에 두고 [platform_services_android.cpp](../src/android/platform_services_android.cpp)가 `jni_thread_scope`와 `jni_local_frame`(java_vm.h)으로 부른다. 따로 둔 까닭은 `android_settings.cpp`처럼 이 파일만 `luil_core_tests`에 실어 가짜 JNIEnv로 치기 위해서다. `platform_services_android.cpp`는 core test에 들지 않는다. 그래서 어느 thread에서나 된다. `jni_failed`는 nullptr 검사 앞에 둔다(`luil_jni_order`). 실패 지점마다 예외를 거두는지는 가짜 JNIEnv test가 친다(android_settings_tests.cpp와 같은 길). 표시 언어는 JNI 없이 `AConfiguration` 값이다. Android의 luil에는 접근성 계층이 없다. 폰에 보이는 바뀜은 편집 메뉴, 날짜 칸, 달력, 테마 카드의 글이다. unsupported인 부분은 없다.
 
 ## 다른 노드와의 약속
 
@@ -151,7 +154,7 @@ std::u8string_view info_bar_close() noexcept
 | default-text-design.md 80~82·90·151행 | 세 판정을 "옮겼다"로, 언어 규칙을 `set_text_languages`로 |
 | [calendar_element.h](../include/luil/ui/calendar_element.h) 56행 주석 | "기본은 일요일이다. OS를 읽지 않는다. 앱은 `user_first_weekday`의 값을 넣는다" |
 | rating-design.md 262행 | "언어별 문장은 R5 표, 숫자 서식은 범위 C" |
-| page-transition-design.md 218행 | 오른쪽에서 왼쪽 쓰기의 쪽은 i18n이 아니라 화면 전환 노드의 후속 칸이다. 지금 칸은 forward·backward뿐이고 backward는 확대 쪽까지 바꾸므로([page_transition.h](../include/luil/ui/page_transition.h) 31·67행) 쪽만 뒤집는 칸이 따로 든다 |
+| page-transition-design.md 218행 | 오른쪽에서 왼쪽 쓰기의 쪽은 i18n이 아니라 화면 전환 노드의 후속 칸이다. 지금 칸은 forward·backward뿐이고 backward는 확대 쪽까지 바꾸므로([page_transition.h](../include/luil/ui/page_transition.h) 31·67행) 쪽만 뒤집는 칸이 따로 든다. 같은 줄의 R5 hot_reload 절은 [핫 리로드](hot-reload-design.md)의 약속대로 "hot_reload는 이 요소를 쓰지 않는다. 다시 읽기는 같은 자리의 포인터를 바꾼다."로 함께 닫는다. 이 줄은 줄 4만 고친다 |
 
 **닫는 약속.** 고칠 글은 없고 이 문서로 닫는다.
 
@@ -163,9 +166,9 @@ std::u8string_view info_bar_close() noexcept
 **같은 라운드의 다른 줄.**
 
 - **줄 1.** `calendar_element.h` 주석 한 줄과 `theme_picker_element.cpp` 72행 한 줄을 줄 4가 고친다. 이번 라운드에 줄 1의 차트는 두 파일을 열지 않는다. `default_text.h`·`.cpp`는 줄 4가 몸통을 바꾼다. 다른 줄이 낱말을 더하면 함수는 끝에, 키는 `ko.json`·`en.json`에 함께 더한다. 차트는 자기 표를 쓴다([문자열 표](i18n-design.md)의 약속).
-- **줄 2.** 닿는 파일이 없다. hot_reload는 표를 다시 읽지 않는다.
+- **줄 2.** 닿는 코드 파일이 없다. hot_reload는 표를 다시 읽지 않는다. page-transition-design.md 218행과 markup-binding-design.md 251행은 한 줄에 R5 hot_reload 절이 함께 있어 줄 4가 고치고, 그 절은 [핫 리로드](hot-reload-design.md)가 준 글로 닫는다.
 - **줄 3.** R5 노드가 없다. 위의 page-transition 문서 한 줄은 문서만 고친다.
-- **고치는 줄 4 파일.** `platform_services.h`, `platform_services_win32.cpp`, `platform_services_android.cpp`, `android_app.cpp`(1286행 호출), `src/host/text_edit_menu.*`, `src/theme/ui_theme.cpp`, `ui_theme.h`(선언 한 줄), `generate_accents.cmake`, `assets/accents.json`, `verify_default_text.cmake`, `src/ui/default_text.cpp`다.
+- **고치는 줄 4 파일.** `platform_services.h`, `platform_services_win32.cpp`, `platform_services_android.cpp`, `android_app.cpp`(1286행 호출), `src/host/text_edit_menu.*`, `src/theme/ui_theme.cpp`, `ui_theme.h`(선언 한 줄), `generate_accents.cmake`, `assets/accents.json`, `verify_default_text.cmake`(선택 인자 둘을 함께 들인다. 줄 1은 그 인자를 쓰기만 한다), `src/ui/default_text.cpp`, 새 `src/android/android_locale.cpp`·`.h`와 `tests/android_locale_tests.cpp`다. 목록 파일의 자리는 [문자열 표](i18n-design.md)의 공용 파일 표다.
 
 ## 확인
 
@@ -176,15 +179,16 @@ std::u8string_view info_bar_close() noexcept
 - `tests/theme_picker_tests.cpp`·`accessibility_tests.cpp`: 기본은 그대로("테마", 25개 이름). en에서 "Theme", 강조색 툴팁 "Blue", 시스템 항목 "System".
 - `tests/accent_catalog_tests.cmake`: 언어 맵을 받고 `ko` 없는 맵, 틀린 태그를 막는다. 글 하나인 항목도 받는다.
 - `tests/platform_services_tests.cpp`(`luil_tests`, Windows): `user_first_weekday`가 비었거나 `ok()`이고 같은 PC의 `GetLocaleInfoEx`와 맞는지, 0~6 바꿈 함수. 결정 2면 `user_ui_languages`의 태그 꼴. 값 자체는 단언하지 않는다(PC마다 다르다).
-- Android 기기(`luil_core_tests`): `read_first_weekday`의 가짜 JNIEnv test가 실패 지점마다 빈 값과 예외 거둠을 친다. 1~7 바꿈.
+- Android 기기(`luil_core_tests`, 새 `tests/android_locale_tests.cpp`): `read_first_weekday`의 가짜 JNIEnv test가 실패 지점마다 빈 값과 예외 거둠을 친다. 1~7 바꿈.
 - `luil_default_text`(넓힌 목록), `luil_jni_order`, `luil_source_style`, 전체 CTest.
 
 데모. 라이브러리 커밋 뒤의 연결 커밋이다.
 
-- 데스크톱 갤러리 페이지의 언어 고르기(`gallery/language`, 시스템·한국어·English)가 지금은 값만 쥔다([gallery_page.cpp](../examples/demo/gallery_page.cpp) 400~409행). 이것을 `set_text_languages`에 잇는다. 시스템은 결정 2면 `user_ui_languages()`, 아니면 빈 목록이다. 테마 페이지 카드 제목은 `accent_label`을 쓴다.
-- 팝업 페이지에 체크 `date-os-first-day`("OS 첫 요일")와 label `date-first-day`("주 첫 요일: …")를 둔다. 기본은 꺼져 일요일이라 기존 UIA 확인이 그대로다.
-- 모바일 데모 기기 페이지에 label `device-first-weekday`와 `device-ui-language`를 둔다.
-- 격리 데스크톱 luil-uia(UIA3)로 English를 Select한 뒤 되읽는다. 테마 묶음 이름 "Theme"와 카드 "Light"·"System"·"Dark", 강조색 이름 "Blue", 날짜 칸(`popups/date-field`)의 placeholder "Select date", 인라인 달력(`popups/calendar`) 격자 이름 "November 2026" 꼴. 한국어로 돌려 "테마"·"날짜 선택"을 다시 읽는다. 체크를 켜면 달력 첫 칸 이름의 요일이 이 PC의 첫 요일과 같은지 본다.
+- 페이지와 셸을 나눈다. 데스크톱 `gallery_page.cpp`·`popups_page.cpp`와 모바일 `device_page.cpp`는 `luil_core_tests`에 직접 컴파일되고([tests/CMakeLists.txt](../tests/CMakeLists.txt) 178·201·205행) 그 실행 파일은 `luil_core`만 링크한다. `user_first_weekday`·`user_ui_languages`는 `platform_services_win32.cpp`·`platform_services_android.cpp`에 정의되므로 페이지가 부르면 Windows와 Android 모두 그 링크가 깨진다. 그래서 OS 값은 core test에 들지 않는 셸이 읽어 앱 메시지로 페이지에 넣는다. 데스크톱은 `demo_main.cpp`의 `demo_driver`가 시작할 때(`bind_host` 338행 곁) 읽는다. 데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 다시 읽지 않는다. 모바일은 `android_main.cpp`·`main.cpp`의 `on_started`와, Android가 앞으로 올 때 메시지를 짓는 `make_lifecycle_message`(android_main.cpp 81행)에서 읽는다. 페이지는 받은 값만 그린다. 대역 파일은 두지 않으므로 `tests/CMakeLists.txt`의 데모 묶음은 고치지 않는다.
+- 데스크톱 갤러리 페이지의 언어 고르기(`gallery/language`, 시스템·한국어·English)가 지금은 값만 쥔다([gallery_page.cpp](../examples/demo/gallery_page.cpp) 400~409행). 이것을 `set_text_languages`에 잇는 일도 셸이 한다. `demo_driver`가 `gallery_choice_intent`의 `language` 값을 페이지에 넘기기 전에 보고 `set_text_languages`를 부른다. 시스템은 결정 2면 셸이 읽어 둔 `user_ui_languages()` 목록, 아니면 빈 목록이다. 그래서 `demo_gallery_tests`는 전역 언어를 건드리지 않고 guard도 필요 없다. 테마 페이지 카드 제목은 `accent_label`을 쓴다.
+- 팝업 페이지에 체크 `date-os-first-day`("OS 첫 요일")와 label `date-first-day`("주 첫 요일: …")를 둔다. 체크를 켜면 셸이 넣어 둔 첫 요일 값을 달력 설정에 쓴다. 기본은 꺼져 일요일이라 기존 UIA 확인이 그대로다.
+- 모바일 데모 기기 페이지에 label `device-first-weekday`와 `device-ui-language`를 둔다. 값은 위의 셸 메시지로 온다.
+- 격리 데스크톱 luil-uia(UIA3)로 English를 Select한 뒤 되읽는다. 테마 묶음 이름 "Theme"와 카드 "Light"·"System"·"Dark", 강조색 이름 "Blue", 날짜 칸(`popups/date-field`)의 placeholder "Select date", 인라인 달력(`popups/calendar`) 격자 이름 "November 2026" 꼴. 한국어로 돌려 "테마"·"날짜 선택"을 다시 읽는다. 체크를 켜면 달력 첫 칸 이름의 요일이 이 PC의 첫 요일과 같은지 본다. 그 값은 셸이 넣은 메시지 경로로 온 것이다.
 
 이 PC 흔적. 설계 단계라 실행하지 않았다. 아래는 코드에서 센 값이다.
 

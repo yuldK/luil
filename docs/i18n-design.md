@@ -185,14 +185,14 @@ label.text = app_strings::format(strings_, app_strings::key::files_selected, cou
 
 - 길 a: 프로세스 전역의 선호 목록(`set_text_languages`). 되는 것: `default_text` 함수가 인자 없이 언어를 안다. 확정된 "호출부 그대로"(default-text-design.md 174행)를 지킨다. frame 밖에서 짓는 Android 편집 메뉴도 같은 값을 본다. 대가: "상태는 앱 것"에 전역 하나가 는다. 시스템 강조색·플랫폼 값과 같은 꼴이라 새 종류의 전역은 아니다. test는 바꾼 언어를 되돌린다.
 - 길 b: `ui_frame` 칸. 되는 것: 상태가 frame에 실린다. 대가: 요소 생성자는 frame을 받지 않는다. 기본 문구 46개의 호출부와 요소마다 문맥 전달을 고친다. 확정과 어긋난다.
-- 길 c: 요소 config마다 언어 칸. 대가: 칸이 요소 수만큼 늘고 앱이 모두 채운다.
+- 길 c: 요소 config마다 언어 칸. 되는 것: 요소마다 다른 언어를 줄 수 있다. 대가: 칸이 요소 수만큼 늘고 앱이 모두 채운다.
 - 권장: a. 대가: 위의 전역 하나다. 권장대로 진행.
 
 **5. 라이브러리 표와 앱 표.** 질문: 앱의 문장과 라이브러리 문장을 한 표에 두는가.
 
 - 길 a: 따로 둔다. 앱 표는 설치되는 CMake 함수로 앱이 짓고, 라이브러리 표는 `LUIL_STRINGS` 폴더로 통째 바꾼다. 되는 것: 앱 키가 라이브러리 키 검사에 걸리지 않는다. 차트 같은 선택 라이브러리도 같은 함수로 자기 표를 짓는다. 소비자가 라이브러리 문구에 언어를 더할 길이 있다. 대가: 공개 CMake 함수 하나와 캐시 변수 하나가 는다. 앱은 표 둘을 같은 목록으로 고른다.
 - 길 b: 앱 표만 둔다. 라이브러리 표는 저장소의 두 언어로 고정이다. 되는 것: 캐시 변수가 없다. 대가: 일본어 앱은 라이브러리 기본 문구를 칸마다 채운다.
-- 길 c: 앱 키를 라이브러리 표에 합친다. 대가: 앱 키가 `luil_core`에 구워져 앱마다 luil을 다시 빌드한다. 키 이름이 겹친다.
+- 길 c: 앱 키를 라이브러리 표에 합친다. 되는 것: 표가 하나라 앱이 따로 지을 것이 없다. 대가: 앱 키가 `luil_core`에 구워져 앱마다 luil을 다시 빌드한다. 키 이름이 겹친다.
 - 권장: a. 대가: 위의 함수와 변수다. 권장대로 진행.
 
 **6. 마크업의 `{t:key}`.** 질문: 마크업 속성 값에서 표를 바로 찾는 꼴을 이번에 여는가. 마크업 바인딩은 `{` 안의 `:`를 이 노드를 위해 비워 두었다(markup-binding-design.md 127·229행, [ui_markup_vocabulary.cpp](../src/ui/ui_markup_vocabulary.cpp) 499행).
@@ -211,15 +211,16 @@ label.text = app_strings::format(strings_, app_strings::key::files_selected, cou
 
 - **흡수와 지역 질의(같은 줄, 같은 라운드).** [그 문서](i18n-adoption-design.md)가 이 표의 첫 소비자다. 라이브러리 커밋은 이 문서의 표·생성기 커밋 다음에 쌓는다.
 - **hot_reload(줄 2).** 확정 N6 a대로 문자열 표를 다시 읽지 않는다. 언어 바꿈은 다시 읽기가 아니라 앱 메시지다. 결정 6이 b면 다시 읽은 마크업의 번역 글도 앱의 값 표에서 온다. 줄 4는 hot_reload에 플랫폼 질의를 내지 않는다. Android 앱 폴더 경로는 앱이 `android_main`에서 읽는다(확정 N6-android a).
-- **markup(줄 2 파일).** 결정 6이 a면 위의 칸 하나와 `t:` 읽기를 줄 2가 하고, 데모 연결 커밋이 앱의 조회 함수를 잇는다. b면 `ui_markup_vocabulary.cpp` 499행의 주석과 [markup-binding-design.md](markup-binding-design.md) 127·229·251행을 "마크업 후속"으로 고친다(줄 4의 문서 커밋, 코드 주석은 줄 2가 다음에 그 파일을 열 때).
-- **chart(줄 1, core 밖 선택 라이브러리).** 차트는 비공개 `default_text`를 쓰지 않는다. 자기 원본(`ko.json`·`en.json`)을 두고 `luil_add_string_table`로 자기 target에 표를 짓는다. 언어는 라이브러리와 같은 선호 목록(`text_languages()`, 비었으면 빈 목록)으로 `select_strings`가 고른다. 키는 `<부품>` 낱말 이름(`chart_name`, `chart_summary`)이고 요약 같은 수 문장은 범주 객체다. 눈금 숫자는 숫자 서식이 없으므로(범위 C) 차트의 규칙대로 짓는다. 두 줄은 같은 기점에서 나란히 가므로, 줄 1은 R5 안에서 이 헤더를 기다리지 않고 낱말마다 함수인 비공개 파일(default_text 꼴, 한국어)로 시작한다. 통합 때 이 줄의 라이브러리 커밋 뒤에 그 몸통을 차트 표 조회로 바꾸는 커밋 하나를 쌓는다. 한글 검사를 넓히는 커밋(흡수 문서)은 그 뒤다. 차트 소스 폴더는 그 검사의 목록에 더한다.
+- **markup(줄 2 파일).** 결정 6이 a면 위의 칸 하나와 `t:` 읽기를 줄 2가 hot_reload와 다른 커밋으로 하고([핫 리로드](hot-reload-design.md)의 약속), 데모 연결 커밋이 앱의 조회 함수를 잇는다. b면 `ui_markup_vocabulary.cpp` 499행의 주석과 [markup-binding-design.md](markup-binding-design.md) 127·229행을 "마크업 후속"으로 고친다(줄 4의 문서 커밋, 코드 주석은 줄 2가 다음에 그 파일을 열 때). markup-binding-design.md 251행은 어느 길이든 줄 4가 고친다. 그 줄에는 R5 hot_reload 절이 함께 있어 줄 2가 따로 고치면 같은 줄을 두 줄이 고친다. i18n 절은 a면 "`{t:key}`로 열었다", b면 "마크업 후속"으로 바꾸고, hot_reload 절은 핫 리로드 문서가 준 글 "다시 읽기의 감시와 디바운스는 [핫 리로드](hot-reload-design.md)가 닫았다."로 함께 닫는다.
+- **chart(줄 1, core 밖 선택 라이브러리).** 차트는 비공개 `default_text`를 쓰지 않는다. 자기 원본(`ko.json`·`en.json`)을 두고 `luil_add_string_table`로 자기 target에 표를 짓는다. 차트 표는 `BASE ko`로 짓는다. 그래서 선호 목록이 비면 라이브러리 기본 문구처럼 한국어다(G6 정책 a). 언어는 라이브러리와 같은 선호 목록(`text_languages()`, 비었으면 빈 목록)으로 `select_strings`가 고른다. `text_languages()`는 mutex 아래에서 목록을 복사하므로 문구 함수마다 부르지 않는다. 요소를 지을 때 한 번 골라 그 요소의 문구에 쓴다. 비용은 frame마다 차트 요소 수만큼의 짧은 벡터 복사다. 앱이 언어를 바꾸는 앱 메시지에서 고른 `string_lookup`을 config로 받는 칸을 둘지는 줄 1이 정한다. 키는 `<부품>` 낱말 이름(`chart_name`, `chart_summary`)이고 요약 같은 수 문장은 범주 객체다. 눈금 숫자는 숫자 서식이 없으므로(범위 C) 차트의 규칙대로 짓는다. 두 줄은 같은 기점에서 나란히 가므로, 줄 1은 R5 안에서 이 헤더를 기다리지 않고 낱말마다 함수인 비공개 파일(default_text 꼴, 한국어)로 시작한다. 그 몸통을 차트 표 조회로 바꾸는 전환 커밋은 줄 1이 쓴다. 통합 순서는 줄 1 문서와 같다. 표·흡수(줄 4) → 차트 라이브러리(줄 1) → 차트 표 전환(줄 1) → 한글 검사 넓힘(줄 4, 흡수 문서) → 차트 검사 등록(줄 1)이다. 차트는 자기 test(`luil_chart_default_text`)로 `chart/src`·`chart/include`를 넘긴다. core 검사(`luil_default_text`)는 `src`·`include`만 본다.
 - **공용 파일의 자리.** 모두 끝에 덧붙이고 다른 줄의 자리를 고치지 않는다.
 
 | 파일 | 줄 4가 더하는 자리 |
 | --- | --- |
 | [CMakeLists.txt](../CMakeLists.txt) | 76행(`LUIL_GENERATED_STYLE_KEYS`) 뒤에 `LUIL_STRINGS`·`LUIL_GENERATED_STRINGS`. 446행(`generate_notices.cmake` include) 뒤에 `string_table.cmake` include |
-| [src/CMakeLists.txt](../src/CMakeLists.txt) | 55행(키 표 명령) 뒤에 생성 명령, 75~79행 `generated` 묶음 끝, 93~113행 `text` 묶음 끝 |
-| [tests/CMakeLists.txt](../tests/CMakeLists.txt) | `luil_core_tests` 목록 끝, 462~464행(`luil_style`) 뒤에 `luil_strings`, 시험 표의 `luil_add_string_table` 한 줄 |
+| [src/CMakeLists.txt](../src/CMakeLists.txt) | 55행(키 표 명령) 뒤에 생성 명령, 75~79행 `generated` 묶음 끝, 93~113행 `text` 묶음 끝. Android `"android"` 묶음(827~868행) 안 `android/android_input.h`(836행) 뒤에 `android/android_locale.cpp`·`.h`(흡수 문서의 첫 요일 JNI). 줄 2는 이 묶음이 아니라 `"net/update"` 묶음 뒤에 새 묶음을 둔다 |
+| [tests/CMakeLists.txt](../tests/CMakeLists.txt) | `luil_core_tests` 목록 끝, 462~464행(`luil_style`) 뒤에 `luil_strings`, 시험 표의 `luil_add_string_table` 한 줄. Android 블록에서는 `android_jni_order` 묶음(309~313행) 뒤, 314행 `log` 링크 주석 앞에 `android_locale.cpp`와 `android_locale_tests.cpp`를 싣는 새 `target_sources`. 줄 2는 inotify 묶음(292~296행) 바로 뒤에 넣으므로 자리가 갈린다 |
+| `tests/package_consumer/CMakeLists.txt`, `tests/package_consumer/main.cpp`, 새 `tests/package_consumer/strings/ko.json` | CMakeLists.txt 끝에 `luil_add_string_table` 한 줄, main.cpp에 생성 헤더 include와 `format` 단언 하나. 줄 1의 차트 갈래도 같은 두 파일 끝에 붙으므로 통합 때 줄 4 뒤에 줄 1을 쌓는다 |
 | `cmake/install.cmake`, `cmake/luil-config.cmake.in` | 60~66행 `install(FILES)` 끝 두 파일, `generate_notices.cmake` include 뒤 한 줄 |
 | [include/luil/luil.h](../include/luil/luil.h) | `text` 묶음(17~25행)의 글자 차례 자리 |
 
@@ -232,7 +233,7 @@ label.text = app_strings::format(strings_, app_strings::key::files_selected, cou
 - `tests/string_table_tests.cpp`(새 파일, `luil_core_tests`, Windows와 Android 기기). 시험 표 `tests/strings/en.json`·`ko.json`·`fr.json`을 `luil_add_string_table`로 지어 쓴다(공개 함수를 저장소 안에서 먼저 쓴다). 고르기: `en-US`가 `en`, `zh-Hant-TW`가 `zh-Hant`, `zh` 차례, 대소문자와 `_`, 목록의 둘째 태그, 빈 목록과 모르는 태그는 기본 언어. 조회: 범위 밖 키는 빈 글, 복수형 키의 `text`는 other 꼴, `find`. 채우기: 이름 둘, 같은 이름 두 번, 빠진 인자는 `{이름}` 그대로, `{{`·`}}`, 수 0·음수·`INT64_MIN`. 복수: other 규칙은 늘 other, one 규칙은 1과 -1이 one, 0·2·1000000은 other, 빈 one 꼴은 other로 물러섬.
 - `set_text_languages`를 바꾸는 test는 끝에서 되돌리는 guard를 쓴다. 전역이라 다른 test에 새지 않게 한다. 정하지 않은 상태와 빈 목록이 모두 한국어인지 본다.
 - `tests/string_table_tests.cmake`(새 파일, `luil_strings`, `cmake -P`, [accent_catalog_tests.cmake](../tests/accent_catalog_tests.cmake) 방식). 막는 원본: 깨진 JSON, 파일 이름과 `language`가 다름, 모르는 `plural`, 언어 사이 키 빠짐과 남음, 꼴이 다름, 범주 빠짐과 남는 범주, 짝 없는 괄호, 밝히지 않은 자리 값 이름, `count` 없는 범주 객체, 예약어 키, 기본 언어 파일 없음. 받는 원본: 따옴표·역슬래시·줄 바꿈·탭이 든 글이 이스케이프된 헤더, 같은 원본이 같은 헤더인지.
-- `tests/install_consumer.cmake`: 설치본에서 `luil_add_string_table`이 서고 그 헤더가 컴파일되는지.
+- 설치본 소비자: `tests/package_consumer/CMakeLists.txt`가 `luil_add_string_table`로 견본 표(`strings/ko.json`)를 짓고 `main.cpp`가 생성 헤더로 `format` 한 줄을 단언한다. 실행기 `tests/install_consumer.cmake`는 그대로다(설치, 구성, 빌드, 실행만 한다). `main.cpp`가 `<windows.h>`를 쓰고 실행기가 `.exe`를 돌리므로 이 확인은 Windows만이다.
 - `luil_core_portability`, `luil_umbrella_header`, `luil_source_style`, 전체 CTest.
 
 데모와 사람 확인은 [흡수 문서](i18n-adoption-design.md)의 확인 절이다. 표만으로는 화면에 보이는 것이 없다.
