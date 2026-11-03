@@ -44,6 +44,9 @@
 // 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt). 스타일 파일 견본의 바탕으로 준다.
 extern const std::uint8_t luil_test_base_style[];
 extern const std::size_t luil_test_base_style_size;
+// 마크업 견본이다 (examples/demo/assets/markup_sample.xml). 테마 페이지의 마크업 묶음이 처음 읽는다.
+extern const std::uint8_t luil_test_markup_sample[];
+extern const std::size_t luil_test_markup_sample_size;
 
 namespace {
     using time_point = std::chrono::steady_clock::time_point;
@@ -2598,4 +2601,52 @@ TEST_CASE("The mobile first screen stands no menu bar", "[mobile-demo][menu-bar]
     const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
     REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar).empty());
     REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar_item).empty());
+}
+
+TEST_CASE("The mobile theme page builds the markup sample and keeps the earlier template when a sample is refused", "[mobile-demo][markup]")
+{
+    // 글 칸 대신 견본 단추만 있고 slot에는 C++가 지은 label이 든다 (docs/markup-design.md 확인 절).
+    const std::u8string style { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    const std::u8string markup { reinterpret_cast<const char8_t*>(luil_test_markup_sample), luil_test_markup_sample_size };
+    mobile_demo::theme_page page { style, markup };
+    const auto tree_of = [&page] {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    };
+    const auto status = [](const luil::ui_tree& tree) {
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, u8"markup-status" }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    };
+    const auto press = [&page](const luil::ui_tree& tree, const luil::ui_element_id& id) {
+        const luil::ui_element* const element { tree.find(id) };
+        REQUIRE(element != nullptr);
+        const luil::ui_action* const action { element->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        for (const luil::input_action& made : (*action)({ id, 0.0f, 0.0f }))
+            REQUIRE(page.handle(std::get<luil::app_message>(made)));
+    };
+    luil::ui_tree tree { tree_of() };
+    REQUIRE(tree.unarranged().empty());
+    REQUIRE(status(tree) == u8"펼침 · 요소 7 · 오류 0");
+    for (const char8_t* const owner : { u8"markup-reload", u8"markup-sample-unknown", u8"markup-sample-broken", u8"markup-sample-value" })
+        REQUIRE(tree.find({ mobile_demo::kind_markup_button, owner }) != nullptr);
+    REQUIRE(tree.find({ mobile_demo::kind_text, u8"markup-search" })->accessibility().name == u8"slot: C++가 지은 칸");
+
+    press(tree, { luil::ui_element_kind::check, u8"markup-list" });
+    tree = tree_of();
+    REQUIRE(status(tree) == u8"펼침 · 요소 10 · 오류 0");
+    REQUIRE(tree.find({ luil::ui_element_kind::markup_node, u8"markup-item\x1Fplum" }) != nullptr);
+
+    press(tree, { mobile_demo::kind_markup_button, u8"markup-sample-unknown" });
+    tree = tree_of();
+    REQUIRE(status(tree) == u8"거부 · 오류 1 · 4:61 Unknown attribute on label: colr · 이전 틀 유지");
+    REQUIRE(tree.find({ luil::ui_element_kind::markup_node, u8"markup-item\x1Fplum" }) != nullptr);
+    press(tree, { mobile_demo::kind_markup_button, u8"markup-sample-value" });
+    tree = tree_of();
+    REQUIRE(status(tree) == u8"펼침 · 요소 10 · 오류 1 · 4:28 Unknown value: cuont");
+    press(tree, { mobile_demo::kind_markup_button, u8"markup-reload" });
+    tree = tree_of();
+    REQUIRE(status(tree) == u8"펼침 · 요소 10 · 오류 0");
 }

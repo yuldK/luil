@@ -100,6 +100,9 @@
 // 데모 빌드가 실은 스타일 파일 글이다 (LUIL_STYLE, cmake/embed_binary.cmake). 테마 페이지의 스타일 파일 묶음이 처음 싣는다.
 extern const std::uint8_t luil_demo_style_json[];
 extern const std::size_t luil_demo_style_json_size;
+// 데모 빌드가 실은 마크업 견본 글이다 (examples/demo/assets/markup_sample.xml). 테마 페이지의 마크업 묶음이 처음 읽는다.
+extern const std::uint8_t luil_demo_markup_xml[];
+extern const std::size_t luil_demo_markup_xml_size;
 
 namespace demo {
     namespace {
@@ -1067,7 +1070,10 @@ namespace demo {
             std::uint64_t palette_focus_id_ { 0 };
             std::uint64_t seen_popups_focus_ { 0 };
             std::uint64_t popups_focus_id_ { 0 };
-            theme_page theme_ { std::u8string { reinterpret_cast<const char8_t*>(luil_demo_style_json), luil_demo_style_json_size } };
+            theme_page theme_ {
+                std::u8string { reinterpret_cast<const char8_t*>(luil_demo_style_json), luil_demo_style_json_size },
+                std::u8string { reinterpret_cast<const char8_t*>(luil_demo_markup_xml), luil_demo_markup_xml_size },
+            };
             webview_page webview_ {};
             workbench_page workbench_ {};
             rich_text_page rich_text_ {};

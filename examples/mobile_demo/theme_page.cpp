@@ -65,8 +65,9 @@ namespace mobile_demo {
         };
     }
 
-    theme_page::theme_page(std::u8string style_source)
+    theme_page::theme_page(std::u8string style_source, std::u8string markup_source)
         : style_sheet_ { std::move(style_source) }
+        , markup_ { std::move(markup_source) }
     {
     }
 
@@ -81,6 +82,8 @@ namespace mobile_demo {
                 style_sheet_.apply(demo::style_sheet_sample(style_sheet_.source(), sheet->action));
             return true;
         }
+        if (markup_.handle(message))
+            return true;
         if (const auto* const theme { message.get<theme_intent>() }; theme != nullptr)
         {
             appearance_.theme = theme->theme;
@@ -214,6 +217,60 @@ namespace mobile_demo {
         column.gap(6.0f);
         column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"theme-wrap-status" }, std::move(wrap_status)),
             2.0f * luil::text_line_height(note_text_size, note_line_height - note_text_size));
+        column.gap(20.0f);
+
+        // 화면 마크업이다. 견본 글을 실행 중에 읽어 frame마다 이 페이지의 상태로 펼친다. 읽기가 막히면 쥔 틀이 남는다.
+        //  - 모바일에는 글 칸이 없어 slot에 C++가 지은 label을 담는다. 견본 단추만 있다 (markup-design.md 확인 절).
+        column.note(u8"theme-markup-hint", u8"마크업 (견본을 실행 중에 읽는다)");
+        column.gap(8.0f);
+        const std::vector<luil::inspector_kind_name> kinds { { kind_layout, u8"layout" }, { kind_text, u8"text" } };
+        const auto make_slot = [](const std::u8string_view name, const luil::ui_markup_scope&) -> std::unique_ptr<luil::ui_element> {
+            if (name != u8"search")
+                return nullptr;
+            luil::label_config slot {};
+            slot.text = u8"slot: C++가 지은 칸";
+            slot.font_size = note_text_size;
+            slot.color = luil::label_color_role::dim;
+            return std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"markup-search" }, std::move(slot));
+        };
+        demo::markup_sample_state::built_branch branch { markup_.build(kinds, make_slot) };
+        if (branch.element != nullptr)
+        {
+            // 가지의 높이는 펼친 뿌리에게 묻는다. 반복 단추 줄이 나고 사라지면 페이지도 따라 줄어든다.
+            const luil::measure_context measure { .scale = scale, .style = style };
+            const std::optional<luil::size_f> size { branch.element->preferred_size(measure, width - 2.0f * page_padding) };
+            column.add(std::move(branch.element), size.has_value() ? size->height : 0.0f);
+            column.gap(12.0f);
+        }
+        struct markup_button
+        {
+            std::u8string_view owner {};
+            std::u8string_view text {};
+            demo::markup_sample_action action { demo::markup_sample_action::reload };
+        };
+        constexpr markup_button markup_buttons[] {
+            { u8"markup-reload", u8"다시 읽기", demo::markup_sample_action::reload },
+            { u8"markup-sample-unknown", u8"견본: 모르는 속성", demo::markup_sample_action::sample_unknown_attribute },
+            { u8"markup-sample-broken", u8"견본: 닫지 않은 태그", demo::markup_sample_action::sample_broken },
+            { u8"markup-sample-value", u8"견본: 없는 값", demo::markup_sample_action::sample_missing_value },
+        };
+        for (const markup_button& button : markup_buttons)
+        {
+            const luil::ui_element_id id { kind_markup_button, std::u8string { button.owner } };
+            auto element { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .text = std::u8string { button.text } }) };
+            element->set_action(luil::ui_trigger::left_click, luil::make_message_action(demo::markup_sample_intent { button.action }));
+            column.add(std::move(element), style_button_height, button_width);
+            column.gap(8.0f);
+        }
+        // 결과 줄이다. 거부의 오류 글이 길어 폭에서 줄을 바꾼다.
+        luil::label_config markup_status {};
+        markup_status.text = std::move(branch.status);
+        markup_status.font_size = note_text_size;
+        markup_status.color = luil::label_color_role::dim;
+        markup_status.wrap = true;
+        markup_status.max_lines = 3;
+        column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"markup-status" }, std::move(markup_status)),
+            3.0f * luil::text_line_height(note_text_size, note_line_height - note_text_size));
         return column.finish();
     }
 }

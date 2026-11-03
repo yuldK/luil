@@ -79,5 +79,18 @@ function(luil_mobile_demo_sources out_var)
         COMMENT "Embedding the style file for the mobile demo"
         VERBATIM)
     list(APPEND sources "${output}" "${directory}/../demo/style_sheet_sample.h")
+    # 테마 페이지의 마크업 묶음이 처음 읽는 견본 글이다. 데스크톱 demo와 같은 파일이다.
+    set(output "${generated}/mobile_demo_markup_xml.cpp")
+    add_custom_command(
+        OUTPUT "${output}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${directory}/../demo/assets/markup_sample.xml"
+            "-DOUTPUT_FILE=${output}"
+            "-DSYMBOL=mobile_demo_markup_xml"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS "${directory}/../demo/assets/markup_sample.xml" "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding the markup sample for the mobile demo"
+        VERBATIM)
+    list(APPEND sources "${output}" "${directory}/../demo/markup_sample.h")
     set(${out_var} ${sources} PARENT_SCOPE)
 endfunction()

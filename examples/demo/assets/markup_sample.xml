@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 테마 페이지의 마크업 견본이다. 데모 빌드가 실행 파일에 싣는다 (docs/markup-design.md 확인 절). -->
+<stack id="markup-branch" direction="column" spacing="8">
+  <label id="markup-count" text="{countText}" fontSize="13" color="primary"/>
+  <stack id="markup-actions" kind="layout" direction="row" spacing="8" length="28">
+    <textButton id="markup-more" text="하나 더" action="increment" length="120"/>
+    <check id="markup-list" label="목록 보기" checked="{showList}" action="toggleList" fit="true"/>
+  </stack>
+  <if test="{showList}">
+    <stack id="markup-items" kind="layout" direction="row" spacing="8" length="28">
+      <for each="{items}" as="item" key="{item.key}">
+        <textButton id="markup-item" text="{item.title}" selected="{item.selected}" action="select" argument="{item.key}" length="96"/>
+      </for>
+    </stack>
+  </if>
+  <unless test="{showList}">
+    <label id="markup-list-hint" text="목록 보기를 켜면 반복 단추 셋이 납니다." fontSize="11" color="dim"/>
+  </unless>
+  <slot name="search" length="28"/>
+</stack>

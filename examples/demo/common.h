@@ -93,6 +93,8 @@ namespace demo {
     constexpr luil::ui_element_kind kind_popups_color_hex_input { luil::application_element_kind(68) };
     // 서식 있는 글 페이지의 서식 칸이다 (`rich_text_sample.h`).
     constexpr luil::ui_element_kind kind_rich_editor_input { luil::application_element_kind(69) };
+    // 테마 페이지 마크업 묶음의 slot에 C++가 짓는 한 줄 칸이다 (markup_sample.h).
+    constexpr luil::ui_element_kind kind_markup_search_input { luil::application_element_kind(70) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
@@ -122,6 +124,7 @@ namespace demo {
     constexpr luil::text_input_target target_gallery_color_hex { static_cast<luil::text_input_target>(17) };
     constexpr luil::text_input_target target_popups_color_hex { static_cast<luil::text_input_target>(18) };
     constexpr luil::text_input_target target_rich_editor { static_cast<luil::text_input_target>(19) };
+    constexpr luil::text_input_target target_markup_search { static_cast<luil::text_input_target>(20) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.

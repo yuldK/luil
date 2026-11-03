@@ -39,6 +39,9 @@
 // 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt).
 extern const std::uint8_t luil_test_base_style[];
 extern const std::size_t luil_test_base_style_size;
+// 시험 실행 파일에 실은 마크업 견본이다 (examples/demo/assets/markup_sample.xml). 데모 빌드가 실은 것과 같은 파일이다.
+extern const std::uint8_t luil_test_markup_sample[];
+extern const std::size_t luil_test_markup_sample_size;
 #include <vector>
 
 namespace {
@@ -1712,4 +1715,87 @@ TEST_CASE("Clipboard keys in the focused rich text editor copy and paste with th
         REQUIRE(read != nullptr);
         REQUIRE(read->tag == demo::rich_text_clipboard_tag);
     }
+}
+
+TEST_CASE("The theme page builds the markup sample and keeps the earlier template when a sample is refused", "[demo][markup]")
+{
+    // 데모 빌드가 실은 견본 글 대신 시험 실행 파일에 실은 같은 파일을 준다 (docs/markup-design.md 확인 절).
+    const std::u8string style { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    const std::u8string markup { reinterpret_cast<const char8_t*>(luil_test_markup_sample), luil_test_markup_sample_size };
+    demo::theme_page page { style, markup };
+    const auto tree_of = [&page] {
+        return arranged(page.build(800.0f, 4000.0f, 1.0f), 800.0f, 4000.0f);
+    };
+    const auto node = [](std::u8string owner) {
+        return luil::ui_element_id { luil::ui_element_kind::markup_node, std::move(owner) };
+    };
+    const auto item = [&node](const std::u8string_view key) {
+        return node(u8"markup-item\x1F" + std::u8string { key });
+    };
+    // 가지의 단추는 마크업이 지은 액션을 그대로 돌린다. 메시지는 이 페이지가 받는다.
+    const auto press = [&page](const luil::ui_tree& tree, const luil::ui_element_id& id) {
+        const luil::ui_element* const element { tree.find(id) };
+        REQUIRE(element != nullptr);
+        const luil::ui_action* const action { element->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        for (const luil::input_action& made : (*action)({ id, 0.0f, 0.0f }))
+            REQUIRE(page.handle(std::get<luil::app_message>(made)));
+    };
+
+    luil::ui_tree tree { tree_of() };
+    REQUIRE(tree.unarranged().empty());
+    REQUIRE(label_text(tree, u8"markup-status") == u8"펼침 · 요소 7 · 오류 0");
+    REQUIRE(tree.find(node(u8"markup-count"))->accessibility().name == u8"누른 횟수 0");
+    // `kind="layout"`은 검사기와 같은 이름표로 이 데모의 kind가 된다. slot은 C++가 지은 편집 칸이고 편집 대상이 등록돼 있다.
+    REQUIRE(tree.find({ demo::kind_layout, u8"markup-actions" }) != nullptr);
+    REQUIRE(tree.find({ demo::kind_markup_search_input, u8"markup-search" }) != nullptr);
+    REQUIRE(demo::text_target_of_kind(demo::kind_markup_search_input) == demo::target_markup_search);
+    REQUIRE(tree.find(item(u8"apple")) == nullptr);
+
+    press(tree, node(u8"markup-more"));
+    tree = tree_of();
+    REQUIRE(tree.find(node(u8"markup-count"))->accessibility().name == u8"누른 횟수 1");
+
+    // 목록 보기를 켜면 반복 단추 셋이 key로 갈린 owner로 난다.
+    press(tree, { luil::ui_element_kind::check, u8"markup-list" });
+    tree = tree_of();
+    REQUIRE(label_text(tree, u8"markup-status") == u8"펼침 · 요소 10 · 오류 0");
+    for (const std::u8string_view key : demo::markup_sample_state::item_keys())
+        REQUIRE(tree.find(item(key)) != nullptr);
+    REQUIRE(tree.find(node(u8"markup-list-hint")) == nullptr);
+    press(tree, item(u8"pear"));
+    tree = tree_of();
+    REQUIRE(tree.find(item(u8"pear"))->accessibility().selected == true);
+    REQUIRE(tree.find(item(u8"apple"))->accessibility().selected == false);
+
+    // 막힌 견본은 오류 글을 말하고 쥔 틀을 그대로 둔다. 가지는 이전 틀로 선다.
+    send(page, demo::markup_sample_intent { demo::markup_sample_action::sample_unknown_attribute });
+    tree = tree_of();
+    REQUIRE(label_text(tree, u8"markup-status") == u8"거부 · 오류 1 · 4:61 Unknown attribute on label: colr · 이전 틀 유지");
+    REQUIRE(tree.find(item(u8"plum")) != nullptr);
+    send(page, demo::markup_sample_intent { demo::markup_sample_action::sample_broken });
+    tree = tree_of();
+    REQUIRE(label_text(tree, u8"markup-status") == u8"거부 · 오류 1 · 3:1 Syntax error in stack · 이전 틀 유지");
+    REQUIRE(tree.find(node(u8"markup-count"))->accessibility().name == u8"누른 횟수 1");
+
+    // 없는 값은 읽기가 받고 펼칠 때 오류다. 가지는 서고 그 속성만 빈다.
+    send(page, demo::markup_sample_intent { demo::markup_sample_action::sample_missing_value });
+    tree = tree_of();
+    REQUIRE(label_text(tree, u8"markup-status") == u8"펼침 · 요소 10 · 오류 1 · 4:28 Unknown value: cuont");
+    REQUIRE(tree.find(node(u8"markup-count"))->accessibility().name.empty());
+
+    // 다시 읽으면 견본 글 그대로다. 앱 상태는 logic에 있어 틀을 바꿔도 남는다.
+    send(page, demo::markup_sample_intent { demo::markup_sample_action::reload });
+    tree = tree_of();
+    REQUIRE(label_text(tree, u8"markup-status") == u8"펼침 · 요소 10 · 오류 0");
+    REQUIRE(tree.find(node(u8"markup-count"))->accessibility().name == u8"누른 횟수 1");
+
+    // slot의 칸은 여느 편집 칸처럼 편집 메시지를 받는다.
+    luil::text_edit_request request {};
+    request.target = demo::target_markup_search;
+    request.command = luil::text::text_edit_command::replace_all;
+    request.text = u8"사과";
+    send(page, demo::edit_intent { request });
+    tree = tree_of();
+    REQUIRE(tree.find({ demo::kind_markup_search_input, u8"markup-search" })->accessibility().value == u8"사과");
 }

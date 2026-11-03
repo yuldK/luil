@@ -1,8 +1,9 @@
 #pragma once
 
-// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그, 실행 중에 읽는 스타일 파일.
+// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그, 실행 중에 읽는 스타일 파일과 화면 마크업.
 // 고른 값은 frame에 실려 가고 실제 팔레트 선택은 UI thread가 한다.
 
+#include "demo/markup_sample.h"
 #include "demo/style_sheet_sample.h"
 #include "luil/theme/appearance.h"
 #include "mobile_demo/common.h"
@@ -26,9 +27,11 @@ namespace mobile_demo {
     {
     public:
         // `style_source`는 스타일 파일 견본의 바탕 글이다. 앱이 실은 LUIL_STYLE 글이다 (assets.h).
-        explicit theme_page(std::u8string style_source = {});
+        // `markup_source`는 마크업 묶음이 처음 읽는 글이다. 앱이 실은 마크업 견본이다 (assets.h).
+        explicit theme_page(std::u8string style_source = {}, std::u8string markup_source = {});
 
         // 스타일 파일 묶음의 메시지(`demo::style_sheet_intent`)도 받는다. 모바일에는 글 칸 대신 견본 단추만 있다.
+        // 마크업 묶음의 견본 단추와 가지의 사건(`demo::markup_sample_intent` 등)도 받는다.
         bool handle(const luil::app_message& message);
         [[nodiscard]] page_content build(float width, float scale);
 
@@ -47,5 +50,6 @@ namespace mobile_demo {
     private:
         luil::appearance_settings appearance_ {};
         demo::style_sheet_state style_sheet_ {};
+        demo::markup_sample_state markup_ {};
     };
 }

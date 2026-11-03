@@ -11,8 +11,10 @@
 #include "luil/ui/ui_interaction.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace demo {
     namespace {
@@ -99,8 +101,9 @@ namespace demo {
         }
     }
 
-    theme_page::theme_page(std::u8string style_source)
+    theme_page::theme_page(std::u8string style_source, std::u8string markup_source)
         : style_sheet_ { std::move(style_source) }
+        , markup_ { std::move(markup_source) }
     {
         style_json_.text = style_sheet_.source();
     }
@@ -117,8 +120,16 @@ namespace demo {
             handle_style_sheet(sheet->action);
             return true;
         }
+        // 마크업 묶음의 견본 단추와 가지의 사건이다.
+        if (markup_.handle(message))
+            return true;
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
         {
+            if (edit->request.target == target_markup_search)
+            {
+                luil::apply_text_edit(markup_search_, edit->request);
+                return true;
+            }
             // 남의 칸이면 다음 페이지가 받는다.
             if (edit->request.target != target_style_json)
                 return false;
@@ -127,13 +138,18 @@ namespace demo {
         }
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
-            if (composition->event.target != target_style_json)
+            std::optional<luil::text_composition_event>* held { nullptr };
+            if (composition->event.target == target_style_json)
+                held = &style_composition_;
+            else if (composition->event.target == target_markup_search)
+                held = &markup_search_composition_;
+            if (held == nullptr)
                 return false;
             // 조합이 끝나면 표시 상태를 버린다. 확정된 글은 별도의 편집 요청으로 이미 들어왔다.
             if (composition->event.composing)
-                style_composition_ = composition->event;
+                *held = composition->event;
             else
-                style_composition_.reset();
+                held->reset();
             return true;
         }
         if (const auto* const scroll { message.get<style_json_scroll_intent>() }; scroll != nullptr)
@@ -312,6 +328,73 @@ namespace demo {
         page.end_card();
     }
 
+    void theme_page::add_markup(page_layout& page, const float width, const float scale) const
+    {
+        // 화면 마크업을 실행 중에 읽어 frame마다 이 페이지의 상태로 펼친다. 읽기가 막히면 쥔 틀이 남아 가지가 그대로 선다.
+        page.begin_card(u8"마크업", u8"화면 마크업을 실행 중에 읽어 펼칩니다. 읽기에 오류가 하나라도 있으면 이전 틀을 그대로 둡니다.");
+        // 검사기에 주는 것과 같은 이름표다 (inspector_page.cpp). 견본의 `kind="layout"`이 이 앱 kind가 된다.
+        const std::vector<luil::inspector_kind_name> kinds { { kind_layout, u8"layout" }, { kind_text, u8"text" } };
+        // 편집 칸은 앱의 편집 상태와 대상이 있어야 서므로 마크업 어휘에 없다. slot 자리에 C++가 짓는다.
+        const auto make_slot = [this](const std::u8string_view name, const luil::ui_markup_scope&) -> std::unique_ptr<luil::ui_element> {
+            if (name != u8"search")
+                return nullptr;
+            luil::text_input_config config {};
+            config.placeholder = u8"slot: C++가 지은 한 줄 칸";
+            return std::make_unique<luil::text_input_element>(
+                luil::ui_element_id { kind_markup_search_input, u8"markup-search" }, luil::make_text_input_view(markup_search_, markup_search_composition_, target_markup_search), std::move(config));
+        };
+        markup_sample_state::built_branch branch { markup_.build(kinds, make_slot) };
+        if (branch.element != nullptr)
+        {
+            // 가지의 높이는 펼친 뿌리에게 묻는다. 반복 단추 줄이 나고 사라지면 카드도 따라 줄어든다.
+            const luil::measure_context measure { .scale = scale, .style = style_sheet_.style().get() };
+            const std::optional<luil::size_f> size { branch.element->preferred_size(measure, page_layout::card_content_width(width)) };
+            page.add(std::move(branch.element), size.has_value() ? size->height : 0.0f);
+            page.gap(10.0f);
+        }
+
+        // 다시 읽기와 견본 셋이다. 견본은 바탕 글을 고쳐 곧바로 읽는다.
+        struct markup_button
+        {
+            std::u8string_view owner {};
+            std::u8string_view text {};
+            markup_sample_action action { markup_sample_action::reload };
+        };
+        constexpr markup_button rows[][2] {
+            {
+                { u8"markup-reload", u8"다시 읽기", markup_sample_action::reload },
+                { u8"markup-sample-unknown", u8"견본: 모르는 속성", markup_sample_action::sample_unknown_attribute },
+            },
+            {
+                { u8"markup-sample-broken", u8"견본: 닫지 않은 태그", markup_sample_action::sample_broken },
+                { u8"markup-sample-value", u8"견본: 없는 값", markup_sample_action::sample_missing_value },
+            },
+        };
+        constexpr float button_width { 150.0f };
+        constexpr float button_height { 26.0f };
+        for (const auto& buttons : rows)
+        {
+            luil::stack_config row_config {};
+            row_config.direction = luil::stack_direction::row;
+            row_config.spacing = 8.0f;
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, std::u8string { buttons[0].owner } + u8"-row" }, row_config) };
+            for (const markup_button& button : buttons)
+            {
+                luil::text_button_config config {};
+                config.text = std::u8string { button.text };
+                auto element { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, std::u8string { button.owner } }, std::move(config)) };
+                element->set_cursor(luil::ui_cursor::hand);
+                element->set_action(luil::ui_trigger::left_click, luil::make_message_action(markup_sample_intent { button.action }));
+                row->add(std::move(element), button_width);
+            }
+            page.add(std::move(row), button_height);
+            page.gap(6.0f);
+        }
+        page.gap(4.0f);
+        page.add(make_label({ kind_text, u8"markup-status" }, branch.status, 11.0f, luil::label_color_role::dim), 18.0f);
+        page.end_card();
+    }
+
     std::vector<luil::win32::ui_window> theme_page::make_windows() const
     {
         std::vector<luil::win32::ui_window> windows {};
@@ -465,6 +548,7 @@ namespace demo {
         page.end_card();
 
         add_style_sheet(page, scale);
+        add_markup(page, width, scale);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(theme_scroll_intent { delta }); });
     }
 }
