@@ -185,7 +185,7 @@ TEST_CASE("Every Win32 virtual key the app path turns into a key maps back to it
 
 TEST_CASE("Every named key with a label maps to a virtual key the app path reads back as the same key", "[win32][hotkey][key-mapping]")
 {
-    // VK가 없는 이름 키(앞으로 더해질 `alt_tap` 따위)는 글이 비어 여기서 빠진다.
+    // VK가 없는 이름 키(메뉴 막대의 `alt_tap` 따위)는 글이 비어 여기서 빠진다.
     std::size_t checked { 0 };
     for (std::uint32_t value = 1; value < static_cast<std::uint32_t>(key_code::first_platform_key); ++value)
     {
@@ -691,4 +691,20 @@ TEST_CASE("Live hotkeys are registered, collide between windows and are released
     REQUIRE(third_reports[0].status == hotkey_status::registered);
     REQUIRE(base.ok);
     REQUIRE(after.ok);
+}
+
+TEST_CASE("A hotkey host rejects the Alt tap of the menu bar without calling the OS", "[win32][hotkey][menu-bar]")
+{
+    // `alt_tap`은 VK가 없는 이름 키다. 라벨이 비어 위의 왕복 test에서 빠지고, 걸려 하면 OS를 부르지 않고 거절한다.
+    REQUIRE(luil::shortcut_label(key_chord { key_code::alt_tap }).empty());
+    REQUIRE(luil::win32_virtual_from_key(key_code::alt_tap) == 0);
+    fake_os os {};
+    const plain_window window {};
+    hotkey_host host {};
+    host.configure(window.get(), os.api());
+    const std::vector<global_hotkey> wanted { make_hotkey(u8"menu", key_chord { key_code::alt_tap, true, false, true }) };
+    const std::vector<hotkey_report> reports { host.apply(wanted, false) };
+    REQUIRE(reports.size() == 1);
+    REQUIRE(reports[0] == hotkey_report { .id = u8"menu", .status = hotkey_status::invalid_key });
+    REQUIRE(os.adds.load() == 0);
 }

@@ -712,3 +712,22 @@ TEST_CASE("Keys that are not keys have no virtual key", "[hotkey][key-mapping]")
     REQUIRE(luil::win32_virtual_from_key(key_code::volume_up) == 0);
     REQUIRE(luil::win32_virtual_from_key(key_code::volume_down) == 0);
 }
+
+TEST_CASE("The Alt tap of the menu bar has no virtual key and is never a hotkey", "[hotkey][sync][menu-bar]")
+{
+    // `alt_tap`은 메뉴 막대가 Alt 단독 뗌에 더한 이름 키다 (docs/menu-bar-design.md). VK가 없어 OS에 걸 수 없다.
+    REQUIRE(luil::win32_virtual_from_key(key_code::alt_tap) == 0);
+    for (const bool control : { false, true })
+    {
+        for (const bool shift : { false, true })
+        {
+            for (const bool alt : { false, true })
+                REQUIRE(luil::classify_hotkey_chord(with(key_code::alt_tap, control, shift, alt)) == hotkey_state::invalid_key);
+        }
+    }
+
+    hotkey_sync sync {};
+    const applied result { run_update(sync, { make_hotkey(u8"menu", with(key_code::alt_tap, true, false, true)) }) };
+    REQUIRE(describe(result.calls) == "none");
+    REQUIRE(describe(result.decisions) == "menu=invalid_key");
+}

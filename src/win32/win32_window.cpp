@@ -1146,6 +1146,11 @@ namespace luil::win32 {
                     }
                     break;
                 case WM_HOTKEY:
+                    // 건 Alt 조합의 글자 키는 OS가 가져가 창에 오지 않는다. 풀지 않으면 뒤이은 Alt 뗌이 메뉴 막대를 세운다.
+                    //  - 무장은 키보드 초점 표면에 서고 그 표면은 보조 창일 수 있다. 이 알림은 주 창으로만 와서 모두 푼다.
+                    main_.cancel_alt_tap();
+                    for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                        secondary->cancel_alt_tap();
                     handle_hotkey(word_parameter);
                     return 0;
                 case WM_WINDOWPOSCHANGING: {
