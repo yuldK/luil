@@ -7,8 +7,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -86,10 +88,12 @@ namespace {
         return *area;
     }
 
-    // 맨 아래 구역의 단추다 (점프 목록 줄 끝).
+    // 맨 아래 구역의 단추다 (알림 영역 줄 끝).
+    constexpr std::u8string_view bottom_button_key { u8"tray-picture" };
+
     [[nodiscard]] const luil::ui_element& bottom_button_of(const luil::ui_tree& tree)
     {
-        const luil::ui_element* const button { tree.find(luil::ui_element_id { demo::kind_tool_toggle, u8"jump-list-clear" }) };
+        const luil::ui_element* const button { tree.find(luil::ui_element_id { demo::kind_tool_toggle, std::u8string { bottom_button_key } }) };
         REQUIRE(button != nullptr);
         return *button;
     }
@@ -356,7 +360,7 @@ TEST_CASE("The jump list lines read the request and the report", "[windows-page]
 
 TEST_CASE("The page body scrolls so the bottom section is reachable at the default window size", "[windows-page][scroll]")
 {
-    // 구역을 모두 쌓은 높이는 기본 창보다 길다. 흘리지 못하던 때는 맨 아래 점프 목록 줄이 잘렸다.
+    // 구역을 모두 쌓은 높이는 기본 창보다 길다. 흘리지 못하던 때는 맨 아래 구역이 잘렸다.
     // 배율이 커도 같은 창이 논리 픽셀로 작아질 뿐이라 어느 배율에서나 닿아야 한다.
     for (const float scale : { 1.0f, 1.25f, 1.5f, 2.0f })
     {
@@ -432,7 +436,7 @@ TEST_CASE("The wheel and the focus reveal find the page body without a routing t
         REQUIRE(scroll_area_of(tree).metrics().scroll_offset > 0.0f);
 
         // 가려진 단추에 초점이 가면 그 단추를 들이는 만큼 흐른다.
-        const luil::ui_element_id bottom_id { demo::kind_tool_toggle, u8"jump-list-clear" };
+        const luil::ui_element_id bottom_id { demo::kind_tool_toggle, std::u8string { bottom_button_key } };
         const std::vector<luil::input_action> reveal { luil::route_reveal(tree, bottom_id) };
         const demo::windows_scroll_intent* const scroll { single_scroll(reveal) };
         REQUIRE(scroll != nullptr);
@@ -442,7 +446,7 @@ TEST_CASE("The wheel and the focus reveal find the page body without a routing t
     const auto tree { sized_page_tree(page, size, 1.0f) };
     REQUIRE(tree.visible_bounds(bottom_button_of(tree)).has_value());
     // 이미 보이면 되살릴 것이 없다.
-    REQUIRE(luil::route_reveal(tree, luil::ui_element_id { demo::kind_tool_toggle, u8"jump-list-clear" }).empty());
+    REQUIRE(luil::route_reveal(tree, luil::ui_element_id { demo::kind_tool_toggle, std::u8string { bottom_button_key } }).empty());
 }
 
 TEST_CASE("The scroll position follows the window and never leaves its range", "[windows-page][scroll]")
@@ -484,4 +488,170 @@ TEST_CASE("The page keeps the status labels it had before it scrolled", "[window
     REQUIRE(name_of(tree, u8"windows-instance-arguments") == u8"둘째 인스턴스 인자: 없음");
     REQUIRE(name_of(tree, u8"windows-jump-list-request") == u8"점프 목록 요청: 손대지 않음");
     REQUIRE(tree.find(luil::ui_element_id { demo::kind_tool_toggle }) != nullptr);
+}
+
+namespace {
+    // 메시지 하나를 담은 input_action에서 그 메시지를 꺼낸다.
+    [[nodiscard]] luil::app_message message_of(const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        return *message;
+    }
+
+    [[nodiscard]] luil::win32::tray_report tray_report_with(const luil::win32::tray_status status, std::u8string error = {})
+    {
+        luil::win32::tray_report report {};
+        report.status = status;
+        report.error = std::move(error);
+        return report;
+    }
+}
+
+TEST_CASE("The tray section reads its capability, request, report and event as four lines", "[windows-page][tray]")
+{
+    demo::windows_page page {};
+    {
+        const platform_scope scope { luil::ui_platform {} };
+        const auto tree { page_tree(page) };
+        REQUIRE(name_of(tree, u8"windows-tray-capability") == u8"트레이 능력: 없음");
+        REQUIRE(name_of(tree, u8"windows-tray-request") == u8"트레이 요청: 끔");
+        REQUIRE(name_of(tree, u8"windows-tray-report") == u8"트레이 반영: 아직 보고 없음");
+        REQUIRE(name_of(tree, u8"windows-tray-event") == u8"트레이 사건: 없음");
+    }
+    {
+        luil::ui_platform desktop {};
+        desktop.capabilities.tray = true;
+        const platform_scope scope { desktop };
+        REQUIRE(name_of(page_tree(page), u8"windows-tray-capability") == u8"트레이 능력: 있음");
+    }
+    REQUIRE(page.make_tray_request().has_value() == false);
+    REQUIRE(page.main_hidden() == false);
+}
+
+TEST_CASE("The tray buttons reach the request and keep the same picture every frame", "[windows-page][tray]")
+{
+    demo::windows_page page {};
+    deliver(page, demo::tray_toggle_intent { true });
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-request") == u8"트레이 요청: 켬 · 그림 1 · 메뉴 있음");
+    const std::optional<luil::tray_icon> first { page.make_tray_request() };
+    REQUIRE(first.has_value());
+    REQUIRE(first->icon.valid());
+    REQUIRE(first->tooltip == u8"luil 데모 · 그림 1");
+    REQUIRE(first->menu.has_value());
+    REQUIRE(first->menu->items.size() == 3);
+    REQUIRE(first->menu->items[0].label == u8"창 보이기");
+    REQUIRE(first->menu->items[1].label == u8"주 창 숨기기");
+    REQUIRE(first->menu->items[2].label == u8"끝내기");
+    REQUIRE(first->menu->items[2].separator_above);
+    REQUIRE(first->activate != nullptr);
+    // 같은 그림을 frame마다 실어야 셸에 다시 내지 않는다.
+    REQUIRE(page.make_tray_request()->icon.backing() == first->icon.backing());
+
+    deliver(page, demo::tray_picture_intent {});
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-request") == u8"트레이 요청: 켬 · 그림 2 · 메뉴 있음");
+    const std::optional<luil::tray_icon> second { page.make_tray_request() };
+    REQUIRE(second->icon.backing() != first->icon.backing());
+    REQUIRE(second->tooltip == u8"luil 데모 · 그림 2");
+    deliver(page, demo::tray_picture_intent {});
+    REQUIRE(page.make_tray_request()->icon.backing() == first->icon.backing());
+
+    deliver(page, demo::tray_toggle_intent { false });
+    REQUIRE(page.make_tray_request().has_value() == false);
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-request") == u8"트레이 요청: 끔");
+}
+
+TEST_CASE("Tray reports and events reach their lines", "[windows-page][tray]")
+{
+    demo::windows_page page {};
+    deliver(page, demo::tray_toggle_intent { true });
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::waiting) });
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-report") == u8"트레이 반영: 대기 중");
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::failed, u8"boom") });
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-report") == u8"트레이 반영: 실패 (boom)");
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::off) });
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-report") == u8"트레이 반영: 끔");
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::shown) });
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-report") == u8"트레이 반영: 보임");
+
+    // 사건은 아이콘의 `activate`가 낸 메시지로 온다.
+    const std::optional<luil::tray_icon> icon { page.make_tray_request() };
+    deliver(page, message_of(icon->activate(luil::tray_icon_event { .action = luil::tray_icon_action::select, .keyboard = true })));
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-event") == u8"트레이 사건: 고름 · 키보드");
+    deliver(page, message_of(icon->activate(luil::tray_icon_event { .action = luil::tray_icon_action::select })));
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-event") == u8"트레이 사건: 고름");
+    deliver(page, message_of(icon->activate(luil::tray_icon_event { .action = luil::tray_icon_action::double_click })));
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-event") == u8"트레이 사건: 두 번 클릭");
+}
+
+TEST_CASE("The tray menu hides and shows the main window and ends the app", "[windows-page][tray]")
+{
+    demo::windows_page page {};
+    deliver(page, demo::tray_toggle_intent { true });
+    // 아이콘이 서기 전에는 숨기기가 꺼져 있다. 숨기면 되살릴 길이 없다.
+    REQUIRE(page.make_tray_request()->menu->items[1].enabled == false);
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::shown) });
+    REQUIRE(page.make_tray_request()->menu->items[1].enabled);
+
+    const luil::menu_message_factory select { page.make_tray_request()->menu->select };
+    deliver(page, message_of(select(u8"hide")));
+    REQUIRE(page.main_hidden());
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-event") == u8"트레이 사건: 메뉴: 주 창 숨기기");
+    REQUIRE(page.make_tray_request()->menu->items[1].enabled == false);
+
+    deliver(page, message_of(select(u8"show")));
+    REQUIRE(page.main_hidden() == false);
+    REQUIRE(name_of(page_tree(page), u8"windows-tray-event") == u8"트레이 사건: 메뉴: 창 보이기");
+    // 되살린 주 창을 앞으로 세운다. 라이브러리는 사건에서 창을 세우지 않는다.
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface.empty());
+    REQUIRE(focus->activate);
+    REQUIRE(focus->target == luil::ui_element_id {});
+
+    // 끝내기는 창 명령이다. 닫힘 훅을 비켜 간다.
+    const luil::input_action exit { select(u8"exit") };
+    const auto* const command { std::get_if<luil::ui_command>(&exit) };
+    REQUIRE(command != nullptr);
+    REQUIRE(*command == luil::ui_command::application_exit);
+
+    // 아이콘이 내려가거나 끄면 숨은 주 창이 되살아난다.
+    deliver(page, message_of(select(u8"hide")));
+    REQUIRE(page.main_hidden());
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::waiting) });
+    REQUIRE(page.main_hidden() == false);
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::shown) });
+    deliver(page, message_of(select(u8"hide")));
+    deliver(page, demo::tray_toggle_intent { false });
+    REQUIRE(page.main_hidden() == false);
+}
+
+TEST_CASE("The tray focus request gives way to a later tool window request", "[windows-page][tray]")
+{
+    demo::windows_page page {};
+    deliver(page, demo::tray_toggle_intent { true });
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::shown) });
+    deliver(page, message_of(page.make_tray_request()->menu->select(u8"show")));
+    const std::uint64_t main_id { page.make_focus_request()->id };
+    deliver(page, demo::tool_focus_intent {});
+    const std::optional<luil::focus_request> tool { page.make_focus_request() };
+    REQUIRE(tool->id > main_id);
+    REQUIRE(tool->surface == u8"tool");
+}
+
+TEST_CASE("The tray controls are buttons a person can read by name", "[windows-page][tray]")
+{
+    demo::windows_page page {};
+    const auto tree { page_tree(page) };
+    const std::pair<std::u8string_view, std::u8string_view> buttons[] {
+        { u8"tray-on", u8"트레이 아이콘 켜기" },
+        { u8"tray-off", u8"트레이 아이콘 끄기" },
+        { u8"tray-picture", u8"트레이 그림 바꾸기" },
+    };
+    for (const auto& [key, name] : buttons)
+    {
+        const luil::ui_element* const button { tree.find({ demo::kind_tool_toggle, std::u8string { key } }) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name == name);
+    }
 }

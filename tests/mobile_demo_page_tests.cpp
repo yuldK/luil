@@ -362,6 +362,36 @@ TEST_CASE("The device page says whether the platform has a taskbar", "[mobile-de
     luil::set_ui_platform(previous);
 }
 
+TEST_CASE("The device page says whether the platform has a tray icon", "[mobile-demo][tray]")
+{
+    // 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    mobile_demo::device_page page {};
+    for (const bool capable : { false, true })
+    {
+        CAPTURE(capable);
+        luil::ui_platform platform { previous };
+        platform.capabilities.tray = capable;
+        luil::set_ui_platform(platform);
+        const auto tree { device_tree(page, false) };
+        REQUIRE(tree.find({ mobile_demo::kind_text, u8"tray-heading" }) != nullptr);
+        const auto* const none { tree.find({ mobile_demo::kind_text, u8"tray-none" }) };
+        const auto* const note { tree.find({ mobile_demo::kind_text, u8"tray-note" }) };
+        if (capable)
+        {
+            REQUIRE(none == nullptr);
+            REQUIRE(note != nullptr);
+        }
+        else
+        {
+            REQUIRE(note == nullptr);
+            REQUIRE(none != nullptr);
+            REQUIRE(none->accessibility().name == u8"이 플랫폼에는 알림 영역 아이콘이 없다. 알림은 OS 알림이 맡는다.");
+        }
+    }
+    luil::set_ui_platform(previous);
+}
+
 TEST_CASE("The demo clears an interrupted adaptive sheet drag while preserving its stop and list", "[ui][sheet][mobile-demo]")
 {
     for (const auto detent : { luil::sheet_detent::half, luil::sheet_detent::full })
