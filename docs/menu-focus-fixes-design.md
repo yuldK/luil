@@ -96,7 +96,7 @@ controller에는 공개 형식이 늘지 않는다. 비공개 상태에 두 칸�
 - `tests/split_button_element_tests.cpp`(luil_core_tests): 잠근 test를 뒤집는다. `open == true` tree에서 누르고 `open == false` tree를 게시한 뒤 떼면 `set_open(false)`다. 게시가 없을 때의 `set_open(false)`는 기존 test가 잠근다. 닫힌 화살표를 누르는 사이 열린 tree가 게시되면 지금처럼 뗌 tree의 것인지도 본다. 화살표에서 Tab·Shift+Tab이 다음 단추로 가고, 열린 동안이면 떠남 훅이 닫는지를 더한다.
 - `tests/dropdown_element_tests.cpp`(luil_core_tests): 드롭다운도 같은 경쟁에서 닫히는지, 게시가 없어도 닫히는지, 닫힌 칸은 여는지. 마우스와 터치 탭 둘 다다.
 - `tests/submenu_tests.cpp`(luil_core_tests): 하위 메뉴를 연 항목의 클릭이 그대로 `open_submenu`인지.
-- 데모: 기존 popups 페이지의 분할 버튼·드롭다운이 시연이다. "저장 메뉴 열림" label을 UIA로 되읽으며 격리 데스크톱에서 화살표를 두 번 Invoke한다. 다시 누르기의 경쟁 자체는 합성 입력으로 재현하기 어려워 사람 확인이다.
+- 데모: 기존 popups 페이지의 분할 버튼·드롭다운이 시연이다. "저장 메뉴 열림" label을 UIA로 되읽으며 격리 데스크톱에서 화살표를 Expand한 뒤 Collapse한다(화살표는 `expanded`를 알려 Invoke가 아니라 ExpandCollapse로 선다). 다시 누르기의 경쟁 자체는 합성 입력으로 재현하기 어려워 사람 확인이다.
 - 사람 확인: 실제 마우스로 열린 드롭다운·분할 버튼 화살표를 빠르게 다시 눌러 닫히는지, 실기기 터치로 같은 동작, 키보드로 분할 버튼 화살표에서 Tab이 다음 단추로 가는지.
 
 ## 범위 밖
