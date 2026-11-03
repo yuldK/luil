@@ -416,6 +416,24 @@ TEST_CASE("The status line stays outside the scrolling body", "[windows-page][sc
     REQUIRE(bottom.visible_bounds(*label_bottom).has_value());
 }
 
+TEST_CASE("The page body and its scroll bar read the same name", "[windows-page][scroll]")
+{
+    // 막대는 영역이 세우는 부품이라 앱이 이름을 줄 수 없고 영역의 이름을 물려받는다. 영역에 이름이 없으면 막대가 이름 없이 읽힌다.
+    demo::windows_page page {};
+    for (const bool scrolled : { false, true })
+    {
+        CAPTURE(scrolled);
+        if (scrolled)
+            deliver(page, demo::windows_scroll_intent { 100000.0f });
+        const auto tree { sized_page_tree(page, default_page_size(1.0f), 1.0f) };
+        const luil::scroll_area_element& area { scroll_area_of(tree) };
+        REQUIRE(area.access_name() == u8"창 페이지 본문");
+        const luil::ui_element* const bar { tree.find(luil::ui_element_id { luil::ui_element_kind::scroll_area_bar, u8"windows" }) };
+        REQUIRE(bar != nullptr);
+        REQUIRE(bar->accessibility().name == u8"창 페이지 본문");
+    }
+}
+
 TEST_CASE("The wheel and the focus reveal find the page body without a routing table", "[windows-page][scroll]")
 {
     // 셸의 `on_wheel`·`on_focus_moved`는 표에 없는 컨테이너를 `route_wheel`·`route_reveal`의 표 없는 짝에 맡긴다.

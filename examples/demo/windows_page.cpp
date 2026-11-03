@@ -700,6 +700,8 @@ namespace demo {
         // 막대 자리를 늘 지킨다. 구역이 늘고 줄어도 글의 폭이 흔들리지 않는다.
         area_config.bar = luil::scrollbar_visibility::always;
         auto area { std::make_unique<luil::scroll_area_element>(std::move(area_config)) };
+        // 막대는 영역의 이름을 물려받는다. 이름이 없으면 막대가 이름 없이 읽혀 보조 기술이 owner로 찾아야 한다.
+        area->set_access_name(u8"창 페이지 본문");
         area->set_content(std::move(content));
 
         // 상태 줄은 영역 밖에 고정한다. 흘려도 읽히고, 화면 밖으로 간 구역을 UIA가 찾을 때도 같은 이름이다.

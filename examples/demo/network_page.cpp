@@ -818,6 +818,8 @@ namespace demo {
         // 변화량이 겹쳐 쌓여 보조 기술이 겨눈 자리에 서지 못한다.
         config.scroll_to = [](const float offset) { return luil::make_app_action(network_preview_scroll_to_intent { offset }); };
         auto view { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        // 막대는 영역의 이름을 물려받는다. 이름이 없으면 막대가 이름 없이 읽힌다.
+        view->set_access_name(u8"응답 미리보기");
 
         luil::stack_config inner {};
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-lines" }, inner) };
