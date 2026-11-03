@@ -8,6 +8,7 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
 #include "demo/readonly_undo_keys.h"
+#include "demo/rich_text_sample.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/clipboard_image.h"
 #include "luil/ui/image_decode.h"
@@ -222,6 +223,8 @@ namespace mobile_demo {
             .text = u8"이 칸은 읽기 전용이다. 선택과 복사만 된다. 하드웨어 키보드로 이 칸에 초점을 두고 Ctrl+Z나 Ctrl+Y를 누르면 칸이 삼키지 않고 앱으로 넘긴다.",
         };
         demo::readonly_undo_keys undo_keys_ {};
+        // 서식 있는 글 칸과 그 토글·상태 글이다 (데스크톱 서식 페이지와 같은 견본).
+        demo::rich_text_sample rich_text_ {};
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };

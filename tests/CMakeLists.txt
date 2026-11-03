@@ -181,6 +181,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/rich_text_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/zoom_page.cpp"
     demo_gallery_tests.cpp)

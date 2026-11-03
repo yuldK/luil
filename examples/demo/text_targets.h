@@ -27,6 +27,8 @@ namespace demo {
             return target_line_break;
         if (kind == kind_style_json_input)
             return target_style_json;
+        if (kind == kind_rich_editor_input)
+            return target_rich_editor;
         if (kind == kind_tool_note_input)
             return target_tool_note;
         // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다.

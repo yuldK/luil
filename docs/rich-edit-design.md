@@ -226,7 +226,7 @@ struct rich_text_command_labels { std::u8string bold {}, italic {}, underline {}
 데모. 상태를 label로 그려 `luil-uia`로 되읽는다.
 
 - 데스크톱 새 페이지 `examples/demo/rich_text_page.*`: 서식 칸 `rich-editor`, 도구 막대 토글 `rich-bold`·`rich-italic`·`rich-underline`·`rich-code`·`rich-link`, label `rich-state`("굵게 켜짐 · 기울임 꺼짐 · 밑줄 꺼짐 · 코드 꺼짐 · 링크 꺼짐 · 구간 3 · 링크 1 · 되돌리기 2"). 앞의 다섯은 `rich_text_state_of`이고 뒤의 셋은 서식 구간 수, 링크 수, 칸 기록의 되돌리기 수다. `rich-link`는 대화 상자 없이 고정 주소(`https://example.com/`)를 걸고, 켜져 있으면 걷는다. UIA(격리 데스크톱)로 칸에 글을 넣고 범위를 골라 토글을 Toggle한 뒤 label과 Text 패턴의 `FontWeight`를 읽는다. PostMessage 키로 Ctrl+B·Ctrl+Z를 보내 서식이 켜졌다 되돌아오는지 읽는다.
-- 모바일 데모 `examples/mobile_demo/basics_page.*`: 같은 칸과 손가락 높이 토글, 같은 label. 별점·색 고르기 줄 뒤에 둔다. 데모 연결은 줄 1 데모 커밋 뒤에 쌓는다. Windows 창은 UIA로 읽고 Android는 사람이 화면으로 읽는다.
+- 모바일 데모 `examples/mobile_demo/basics_page.*`: 같은 칸과 같은 토글. 토글은 글자 버튼 모양이라 높이가 `text_button_height`로 정해져 손가락 높이(44)가 아니다. 상태 글은 한 줄 label에 다 들지 않아 `rich-state`(켜짐 다섯)와 `rich-count`(구간·링크·되돌리기) 두 줄로 나눈다. 별점·색 고르기 줄 뒤에 둔다. 데모 연결은 줄 1 데모 커밋 뒤에 쌓는다. Windows 창은 UIA로 읽고 Android는 사람이 화면으로 읽는다.
 
 사람 확인.
 

@@ -21,7 +21,7 @@
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|ink|inspector|theme|workbench
+//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|ink|inspector|theme|workbench|rich-text
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
@@ -55,6 +55,7 @@
 #include "demo/windows_page.h"
 #include "demo/workbench_page.h"
 #include "demo/zoom_page.h"
+#include "demo/rich_text_page.h"
 
 #include "luil/app/notification.h"
 #include "luil/app/platform_services.h"
@@ -561,7 +562,8 @@ namespace demo {
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
                     || toasts_.handle(message) || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message)
-                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message))
+                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message)
+                    || rich_text_.handle(message))
                     return;
             }
 
@@ -902,6 +904,7 @@ namespace demo {
                 add_page(page_inspector, u8"검사기");
                 add_page(page_theme, u8"모양과 색");
                 add_page(page_workbench, u8"변경 작업대");
+                add_page(page_rich_text, u8"서식 있는 글");
                 navigation.selected = page_;
                 navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
 
@@ -963,6 +966,8 @@ namespace demo {
                     return theme_.build(width, height, scale);
                 if (page_ == page_workbench)
                     return workbench_.build(width, height, scale);
+                if (page_ == page_rich_text)
+                    return rich_text_.build(width, height, scale);
                 return basics_.build(width, height, scale);
             }
 
@@ -996,6 +1001,7 @@ namespace demo {
             theme_page theme_ { std::u8string { reinterpret_cast<const char8_t*>(luil_demo_style_json), luil_demo_style_json_size } };
             webview_page webview_ {};
             workbench_page workbench_ {};
+            rich_text_page rich_text_ {};
 
             // --- 네트워크 페이지가 기대는 조각들 ---
             // 되돌이 서버와 client는 **셸이 든다.** 페이지는 메시지만 주고받는다.
