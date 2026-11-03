@@ -74,6 +74,8 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/popups_page.cpp
     demo/popups_page.h
     demo/readonly_undo_keys.h
+    demo/shell_menu.cpp
+    demo/shell_menu.h
     demo/tabs_page.cpp
     demo/tabs_page.h
     demo/zoom_page.cpp

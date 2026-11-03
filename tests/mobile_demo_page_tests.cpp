@@ -2325,3 +2325,14 @@ TEST_CASE("The basics page pastes a clipboard image and names what it read", "[m
     REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { large } }));
     REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 너무 큼");
 }
+
+TEST_CASE("The mobile first screen stands no menu bar", "[mobile-demo][menu-bar]")
+{
+    // 메뉴 막대는 데스크톱 chrome이다. 휴대폰 화면에는 서지 않는다 (docs/menu-bar-design.md의 결정 7).
+    mobile_demo::basics_page page {};
+    auto content { page.build(400.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
+    REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar).empty());
+    REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar_item).empty());
+}
