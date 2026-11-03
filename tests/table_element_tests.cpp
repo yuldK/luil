@@ -902,6 +902,9 @@ TEST_CASE("A frozen column stays put while the others flow and every part shares
         REQUIRE(view.table->frozen_columns() == 1u);
         REQUIRE(view.table->frozen_width() == 100.0f);
         REQUIRE(view.table->scroll_x() == 40.0f);
+        // 끌기 자동 스크롤의 왼쪽 띠가 고정 경계에 서도록 가로 창이 고정 폭(논리)을 싣는다.
+        REQUIRE(view.table->scroll() != nullptr);
+        REQUIRE(view.table->scroll()->leading_inset == 100.0f);
 
         for (std::size_t index = 0; index < 4u; ++index)
         {
@@ -940,6 +943,7 @@ TEST_CASE("A freeze lets go when the window leaves less than one key step and re
     REQUIRE(narrow.table->frozen_columns() == 0u);
     REQUIRE(narrow.table->frozen_width() == 0.0f);
     REQUIRE(narrow.table->scroll_x() == 20.0f);
+    REQUIRE(narrow.table->scroll()->leading_inset == 0.0f);
     // 머리글이 스크롤을 따라 움직인다. 레인은 서 있되 머리글과 행 전체를 덮는다 (구조는 창 폭과 무관하다).
     REQUIRE(find(*narrow.tree, { luil::ui_element_kind::table_header_cell, part(u8"name") }).bounds().x == -20.0f);
     REQUIRE(find(*narrow.tree, { kind_cell, u8"row-a/name" }).bounds().x == -20.0f);
@@ -952,12 +956,14 @@ TEST_CASE("A freeze lets go when the window leaves less than one key step and re
     // 넓히면 고정이 돌아온다.
     const table_view wide { arrange_table(config, 200.0f) };
     REQUIRE(wide.table->frozen_columns() == 1u);
+    REQUIRE(wide.table->scroll()->leading_inset == 100.0f);
     REQUIRE(find(*wide.tree, { luil::ui_element_kind::table_header_cell, part(u8"name") }).bounds().x == 0.0f);
 
     // 가로 막대의 판정과 값은 고정 열이 없을 때와 같다 (열 폭의 합으로 정해져 고정과 맞물려 돌지 않는다).
     luil::table_config plain_config { frozen_config(0u) };
     plain_config.scroll_x = 20.0f;
     const table_view plain { arrange_table(std::move(plain_config), 200.0f) };
+    REQUIRE(plain.table->scroll()->leading_inset == 0.0f);
     REQUIRE(wide.table->content_width() == plain.table->content_width());
     REQUIRE(wide.table->scroll_x() == plain.table->scroll_x());
     REQUIRE(wide.table->horizontal_bar() != nullptr);

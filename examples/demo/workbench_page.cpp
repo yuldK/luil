@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -808,6 +809,20 @@ namespace demo {
             freeze_path_ = !freeze_path_;
             return true;
         }
+        // 고정 구역을 넘는 놓기는 표가 받지 않으므로 경로 열은 고정된 동안 맨 앞에 남는다.
+        if (const auto* const reorder { message.get<workbench_reorder_column_intent>() }; reorder != nullptr)
+        {
+            const auto key_is = [](const std::u8string& key) {
+                return [key](const luil::table_column& column) { return column.key == key; };
+            };
+            const auto moved { std::find_if(columns_.begin(), columns_.end(), key_is(reorder->moved)) };
+            if (reorder->moved == reorder->target || moved == columns_.end())
+                return true;
+            const luil::table_column value { *moved };
+            columns_.erase(moved);
+            columns_.insert(std::find_if(columns_.begin(), columns_.end(), key_is(reorder->target)), value);
+            return true;
+        }
         // 걸음이 싣는 재생 메시지다. 모두 절대 값이라 몇 번을 받아도 결과가 같다.
         if (const auto* const staged { message.get<workbench_set_staged_intent>() }; staged != nullptr)
         {
@@ -1114,6 +1129,10 @@ namespace demo {
         freeze_config.tooltip = u8"가로로 흘려도 경로 열을 제자리에 둔다";
         row->add_fit(std::make_unique<luil::check_element>(std::move(freeze_config)));
         row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"workbench-freeze-state"), luil::label_config { .text = freeze_text(), .color = luil::label_color_role::dim }));
+        // 끌기 자동 스크롤이 흘린 거리를 되읽는 자리다 (앱이 든 가로 위치, 논리 픽셀).
+        row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"workbench-scroll-x-state")
+            , luil::label_config { .text = u8"가로 위치 " + to_u8(static_cast<int>(std::lround(changes_scroll_x_))), .color = luil::label_color_role::dim }
+        ));
 
         row->add_flexible(std::make_unique<luil::label_element>(workbench_id(u8"workbench-history"), luil::label_config { .text = history_text(), .color = luil::label_color_role::dim }));
         return row;
@@ -1231,6 +1250,8 @@ namespace demo {
         table.frozen_columns = freeze_path_ ? 1u : 0u;
         table.scroll_horizontal = [](const float delta) { return luil::make_app_action(workbench_change_scroll_x_intent { delta }); };
         table.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(workbench_change_scroll_x_to_intent { offset }); };
+        // 머리글 칸 끌기가 끌기 자동 스크롤을 부른다. 경로 열을 고정하면 왼쪽 띠가 고정 경계에 선다.
+        table.reorder_column = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(workbench_reorder_column_intent { moved, target }); };
         table.sort_request = [](const std::u8string& column) { return luil::make_app_action(workbench_sort_intent { column }); };
         table.resize_column = [](const std::u8string& column, const float delta) { return luil::make_app_action(workbench_resize_intent { column, delta }); };
         table.resize_column_end = [](const std::u8string& column) { return luil::make_app_action(workbench_resize_end_intent { column }); };

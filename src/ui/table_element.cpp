@@ -1061,6 +1061,8 @@ namespace luil {
             source.scale = scale;
             source.at_start = scroll_x_ <= 0.0f;
             source.at_end = scroll_x_ >= std::max(0.0f, content_width_ - viewport_width_);
+            // 끌기 자동 스크롤의 왼쪽 띠가 고정 경계에 선다. 고정이 서지 않은 배치에서는 0이다.
+            source.leading_inset = frozen_width_;
             source.scroll = [scroll = config_.scroll_horizontal, current = scroll_x_, content = content_width_, viewport = viewport_width_](const float delta) {
                 // 범위 밖으로 가는 몫은 잘라 낸다. 앱이 다듬지 않아도 머리글과 본문이 빈 자리로 흐르지 않는다.
                 return scroll(table_clamp_scroll(current + delta, content, viewport) - current);

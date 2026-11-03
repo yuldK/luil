@@ -539,3 +539,57 @@ TEST_CASE("A frozen path column stays while the others flow and its width drag i
     REQUIRE(page.handle(luil::app_message { demo::workbench_undo_intent {} }));
     REQUIRE(column_width(page, u8"path") == first_width);
 }
+
+TEST_CASE("Dragging a header cell to just past the frozen path column flows left and drops in the flowing zone", "[demo][workbench][frozen][auto-scroll]")
+{
+    demo::workbench_page page {};
+    REQUIRE(page.handle(luil::app_message { demo::workbench_freeze_intent {} }));
+    REQUIRE(page.handle(luil::app_message { demo::workbench_change_scroll_x_intent { 60.0f } }));
+    const std::u8string header_owner { u8"workbench-changes\u001f" };
+    const auto header_cell = [&header_owner](const std::u8string& key) { return luil::ui_element_id { luil::ui_element_kind::table_header_cell, header_owner + key }; };
+    const auto scroll_state = [&page] { return published(page).find(workbench(u8"workbench-scroll-x-state"))->accessibility().name; };
+    REQUIRE(scroll_state() == u8"가로 위치 60");
+
+    const auto tree { std::make_shared<const luil::ui_tree>(published(page)) };
+    const luil::table_element& table { changes(*tree) };
+    REQUIRE(table.frozen_columns() == 1u);
+    REQUIRE(table.scroll() != nullptr);
+    REQUIRE(table.scroll()->leading_inset == table.frozen_width());
+
+    // 폴더 머리글 칸을 쥐고 고정 경계 바로 오른쪽(흐르는 상태 칸 위)으로 끈다. 띠가 표의 왼쪽 끝이면 여기는 띠 밖이다.
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    REQUIRE(tree->find(header_cell(u8"folder")) != nullptr);
+    const luil::rect_f folder { tree->find(header_cell(u8"folder"))->bounds() };
+    const float y { folder.y + folder.height / 2.0f };
+    const float edge { table.bounds().x + table.frozen_width() };
+    using time_point = std::chrono::steady_clock::time_point;
+    const auto at_ms = [](const int milliseconds) { return time_point {} + std::chrono::milliseconds { milliseconds }; };
+    const auto deliver = [&page](const std::vector<luil::input_action>& actions) {
+        int scrolled { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                scrolled += message->get<demo::workbench_change_scroll_x_intent>() != nullptr ? 1 : 0;
+            }
+        return scrolled;
+    };
+    deliver(controller.process(luil::pointer_pressed_event { folder.x + 40.0f, y, luil::pointer_button::left, at_ms(0) }));
+    deliver(controller.process(luil::pointer_moved_event { folder.x + 20.0f, y, at_ms(10) }));
+    deliver(controller.process(luil::pointer_moved_event { edge + 4.0f, y, at_ms(20) }));
+    REQUIRE(controller.snapshot().drag.has_value());
+    REQUIRE(controller.next_deadline().has_value());
+    REQUIRE(deliver(controller.advance(at_ms(100))) == 1);
+    REQUIRE(scroll_state() != u8"가로 위치 60");
+    REQUIRE(changes(published(page)).scroll_x() < 60.0f);
+
+    // 흐르는 상태 칸 위에 놓으면 폴더 열이 그 자리로 간다. 경로 열은 고정 구역이라 맨 앞에 남는다.
+    deliver(controller.process(luil::pointer_released_event { edge + 4.0f, y, luil::pointer_button::left, at_ms(110) }));
+    const luil::ui_tree dropped { published(page) };
+    const std::vector<luil::table_column>& columns { changes(dropped).config().columns };
+    REQUIRE(columns.size() == 4u);
+    REQUIRE(columns[0].key == u8"path");
+    REQUIRE(columns[1].key == u8"folder");
+    REQUIRE(columns[2].key == u8"status");
+}

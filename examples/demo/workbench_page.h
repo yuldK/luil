@@ -137,6 +137,13 @@ namespace demo {
         float offset { 0.0f };
     };
 
+    // 머리글 칸을 끌어 다른 머리글 칸에 놓았다. 옮긴 열이 대상 열의 자리로 간다 (보기 상태라 걸음이 쌓이지 않는다).
+    struct workbench_reorder_column_intent
+    {
+        std::u8string moved {};
+        std::u8string target {};
+    };
+
     // 행을 우클릭했다. 메뉴는 그 자리에 선다 (물리 픽셀).
     struct workbench_menu_intent
     {
