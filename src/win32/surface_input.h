@@ -109,4 +109,35 @@ namespace luil::win32 {
     // 영문자·숫자는 공통 이름 키로, 나머지는 platform 대역으로 나른다.
     //  - 어떤 키가 문자를 만드는지는 layout이 아는 값이라 창이 조회해 넘긴다.
     [[nodiscard]] key_code modified_key_from_virtual(WPARAM virtual_key, bool control, bool alt, bool character_key) noexcept;
+
+    // Alt를 홀로 눌렀다 뗐는지 지켜본다 (docs/menu-bar-design.md의 Win32 절). 창도 시계도 모른다.
+    //  - 무장: Alt(`VK_MENU`)의 첫 누름이고, Ctrl이 함께가 아니고(AltGr), 막대가 키를 받을 수 있을 때다 (`eligible`).
+    //    누르고 있는 동안의 자동 반복(bit 30)은 무장도 풀기도 하지 않는다.
+    //  - 풀기: 다른 키의 누름, 마우스 누름, 창의 비활성화, 전역 단축키 눌림(`cancel`). 전역 단축키로 건 Alt 조합은
+    //    OS가 글자 키를 가져가 창에 Alt의 누름과 뗌만 온다. 풀지 않으면 Alt 단독으로 읽힌다.
+    //  - 뗌: 무장한 채 Alt를 떼면 참이다 (`key_code::alt_tap`을 보낸다). 어느 쪽이든 무장은 풀린다.
+    class alt_tap_tracker
+    {
+    public:
+        // `WM_SYSKEYDOWN`·`WM_KEYDOWN` 하나다. `repeat`는 lparam의 bit 30이다.
+        void key_down(WPARAM virtual_key, bool repeat, bool control, bool eligible) noexcept;
+        // `WM_SYSKEYUP`·`WM_KEYUP` 하나다. Alt 단독이 끝났으면 참이다.
+        [[nodiscard]] bool key_up(WPARAM virtual_key) noexcept;
+        void cancel() noexcept;
+
+        [[nodiscard]] bool armed() const noexcept
+        {
+            return armed_;
+        }
+
+    private:
+        bool armed_ { false };
+    };
+
+    // 시스템 키 메시지(`WM_SYSKEYUP`·`WM_SYSCHAR`)를 `DefWindowProc`에 넘기지 않고 삼킬지다.
+    //  - 키 잡기 중(`capturing`)이면 둘 다 삼킨다. Alt를 떼면 메뉴 모드(SC_KEYMENU)로 들어가 다음 키를 OS가 가져간다.
+    //  - 막대가 있으면(`menu_bar`) Alt·F10의 뗌을 삼켜 메뉴 모드를 막고, Alt+글자의 `WM_SYSCHAR`도 삼켜 메뉴 없는 창의
+    //    경고음을 막는다. Alt+Space(시스템 메뉴)의 `WM_SYSCHAR`는 넘긴다.
+    //  - 그 밖에는 지금처럼 OS의 것이다.
+    [[nodiscard]] bool swallow_system_key(UINT message, WPARAM word_parameter, bool menu_bar, bool capturing) noexcept;
 }

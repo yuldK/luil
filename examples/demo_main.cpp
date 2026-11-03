@@ -47,6 +47,7 @@
 #include "demo/palette.h"
 #include "demo/popups_page.h"
 #include "demo/readonly_undo_keys.h"
+#include "demo/shell_menu.h"
 #include "demo/tabs_page.h"
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
@@ -539,6 +540,23 @@ namespace demo {
                 if (palette_.handle(message))
                     return;
 
+                // 메뉴 막대다. 막대가 고른 셸 명령(사이드바·테마)은 단축키·팔레트와 같은 메시지로 잇는다.
+                if (shell_menu_.handle(message))
+                {
+                    if (const std::optional<std::u8string> command { shell_menu_.take_command() }; command.has_value())
+                    {
+                        if (*command == shell_menu_sidebar)
+                            handle(luil::app_message { sidebar_toggle_intent {} });
+                        else if (*command == shell_menu_theme_light)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::light } }));
+                        else if (*command == shell_menu_theme_system)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::system } }));
+                        else if (*command == shell_menu_theme_dark)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::dark } }));
+                    }
+                    return;
+                }
+
                 // 그림 클립보드다 (image-clipboard-design.md). 클립보드는 UI thread의 몫이라 요청은 host에 넣고, 그림과 PNG는
                 // 앱 상태라 여기(logic thread)서 짓는다. 페이지는 host를 모른다.
                 if (message.get<image_clipboard_copy_intent>() != nullptr)
@@ -626,7 +644,11 @@ namespace demo {
                 // 라이브러리는 게시된 tree에서 캡션이 선 자리를 읽어 판정한다 (caption-button-design.md).
                 const bool caption_bottom { windows_.caption_at_bottom() };
                 const float caption_top { caption_bottom ? height - caption_height : 0.0f };
-                const float content_top { caption_bottom ? 0.0f : caption_height };
+                // 메뉴 막대는 caption 아래 별도 줄이다 (caption이 아래면 창 위). 본문을 그만큼 내린다 (docs/menu-bar-design.md).
+                //  - 막대는 앱 내용이라 전체 화면에서도 남는다. caption만 접힌다.
+                const float menu_bar_row { luil::menu_bar_height * scale };
+                const float menu_bar_top { caption_bottom ? 0.0f : caption_height };
+                const float content_top { menu_bar_top + menu_bar_row };
                 if (placement_.fullscreen == false)
                 {
                     auto caption { std::make_unique<luil::caption_element>(caption_config) };
@@ -658,15 +680,34 @@ namespace demo {
                 const luil::sidebar_config sidebar_config { make_sidebar_config(frame_time_) };
                 const float sidebar_width { luil::sidebar_element::width_for(sidebar_config) };
                 const float content_width { width / scale - sidebar_width };
-                const float content_height { (height - caption_height) / scale };
+                const float content_height { (height - caption_height - menu_bar_row) / scale };
 
                 luil::stack_config shell_config {};
                 shell_config.direction = luil::stack_direction::row;
                 auto shell { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, shell_config) };
                 shell->add(std::make_unique<luil::sidebar_element>(sidebar_config, sidebar_collapsed_ ? nullptr : make_navigation()), sidebar_width);
                 shell->add_flexible(build_page(content_width, content_height, scale));
-                shell->arrange({ .slot = { 0.0f, content_top, width, height - caption_height }, .scale = scale, .style = style });
+                shell->arrange({ .slot = { 0.0f, content_top, width, height - caption_height - menu_bar_row }, .scale = scale, .style = style });
                 root->add(std::move(shell));
+
+                // 막대와 그 오른쪽 상태 label 둘이다. 막대는 메뉴 popup의 자리를 정하므로 아래에서 다시 읽는다.
+                const luil::menu_bar_element* menu_bar { nullptr };
+                {
+                    constexpr float state_label_width { 150.0f };
+                    constexpr float last_label_width { 220.0f };
+                    constexpr float label_gap { 12.0f };
+                    const float labels_width { (state_label_width + last_label_width + label_gap * 2.0f) * scale };
+                    auto bar { shell_menu_.make_bar() };
+                    bar->arrange({ .slot = { 0.0f, menu_bar_top, std::max(0.0f, width - labels_width), menu_bar_row }, .scale = scale, .style = style });
+                    menu_bar = bar.get();
+                    root->add(std::move(bar));
+                    auto state { shell_menu_.make_state_label() };
+                    state->arrange({ { width - labels_width + label_gap * scale, menu_bar_top, state_label_width * scale, menu_bar_row }, scale });
+                    root->add(std::move(state));
+                    auto last { shell_menu_.make_last_label() };
+                    last->arrange({ { width - (last_label_width + label_gap) * scale, menu_bar_top, last_label_width * scale, menu_bar_row }, scale });
+                    root->add(std::move(last));
+                }
 
                 // 사이드바 접힘 스프링의 상태다. 접힌 동안은 사이드바 내용이 없어서 이 label이 폭을 말한다.
                 {
@@ -720,6 +761,10 @@ namespace demo {
                     frame->popups.push_back(std::move(popup));
                 for (luil::win32::ui_popup& popup : theme_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
+                // 메뉴 막대의 메뉴는 이번 frame에 배치한 항목 아래에 선다. 보기 메뉴는 사이드바와 테마의 지금 상태를 그린다.
+                if (menu_bar != nullptr)
+                    for (luil::win32::ui_popup& popup : shell_menu_.make_popups(*menu_bar, scale, { 0.0f, 0.0f, width, height }, sidebar_collapsed_ == false, theme_.appearance().theme))
+                        frame->popups.push_back(std::move(popup));
                 // 도구 창은 페이지의 일부가 아니라 어느 페이지에서든 열려 있다.
                 for (luil::ui_window& window : tabs_.make_windows())
                     frame->windows.push_back(std::move(window));
@@ -1006,6 +1051,7 @@ namespace demo {
             ink_page ink_ {};
             inspector_page inspector_ {};
             command_palette_host palette_ {};
+            shell_menu shell_menu_ {};
             // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).
             bool primary_instance_ { true };
             // 셸이 실은 마지막 초점 요청과, 세 요청원의 마지막으로 본 번호다.

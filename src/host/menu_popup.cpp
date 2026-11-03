@@ -3,8 +3,11 @@
 #include "luil/ui/ui_tree.h"
 
 #include <cmath>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <utility>
+#include <vector>
 
 namespace luil {
     ui_popup make_menu_popup(menu_config menu, menu_popup_config config)
@@ -39,5 +42,25 @@ namespace luil {
         auto root { std::make_unique<menu_element>(std::move(menu)) };
         popup.tree = std::make_shared<const ui_tree>(make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
         return popup;
+    }
+
+    ui_popup make_menu_bar_popup(const menu_bar_element& bar, menu_config menu, menu_popup_config popup, const rect_f limit)
+    {
+        const menu_bar_state state { bar.config().state };
+        const std::function<input_action(const menu_bar_state&)>& set_state { bar.config().set_state };
+        // 열린 메뉴의 이름이 곧 항목 키다. controller가 막대 메뉴가 바뀐 것(←/→)을 이 owner로 안다.
+        menu.owner = state.current;
+        if (set_state != nullptr)
+        {
+            if (menu.after_select == nullptr)
+                menu.after_select = [set_state](const ui_action_context&) { return std::vector<input_action> { set_state(menu_bar_state {}) }; };
+            // Esc는 메뉴만 닫고 막대는 선 채 남긴다. 그 밖의 닫힘(바깥 누름·창 비활성·이동)은 막대도 쉬게 한다.
+            popup.dismiss = [set_state, state](const popup_dismiss_reason reason) {
+                return set_state(reason == popup_dismiss_reason::escape_key ? menu_bar_state { state.current, false, state.keyboard } : menu_bar_state {});
+            };
+        }
+        if (const std::optional<rect_f> item { bar.item_bounds(state.current) }; item.has_value())
+            popup.below = field_popup_anchor { .field = *item, .limit = limit, .gap = 0.0f };
+        return make_menu_popup(std::move(menu), std::move(popup));
     }
 }

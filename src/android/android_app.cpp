@@ -1204,8 +1204,10 @@ namespace luil::android {
                     // Esc가 popup을 닫았으면 키를 삼킨다 (Win32와 같다).
                     if (key.keyCode == AKEYCODE_ESCAPE && key.action == AKEY_EVENT_ACTION_DOWN && dismiss_popups(popup_dismiss_reason::escape_key))
                         continue;
-                    // 키 잡기 칸이 초점을 가졌으면 글자 키도 키로 보낸다 (`ui_element::set_key_capture`).
-                    input_.set_key_capture(host_->acquire_interaction().key_capture);
+                    // 키 잡기 칸이 초점을 가졌거나 메뉴 막대가 선 동안은 글자 키도 키로 보낸다 (`ui_element::set_key_capture`,
+                    // `interaction_snapshot::menu_keys`).
+                    const interaction_snapshot interaction { host_->acquire_interaction() };
+                    input_.set_key_capture(interaction.key_capture || interaction.menu_keys);
                     post_events(input_.translate(copy_key(key)));
                 }
                 android_app_clear_motion_events(inputs);

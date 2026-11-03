@@ -185,6 +185,10 @@ namespace luil {
         color_picker_bar,
         color_picker_preset,
         color_field,
+        // 메뉴 막대다 (`menu_bar_element`). owner는 막대 설정의 owner다.
+        menu_bar,
+        // 메뉴 막대의 항목 하나다. owner는 항목 키다 (`menu_bar_item_config::key`).
+        menu_bar_item,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

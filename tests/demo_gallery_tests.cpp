@@ -4,6 +4,7 @@
 #include "demo/popups_page.h"
 #include "demo/readonly_undo_keys.h"
 #include "demo/rich_text_page.h"
+#include "demo/shell_menu.h"
 #include "demo/tabs_page.h"
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
@@ -13,7 +14,9 @@
 #include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/color_picker_element.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/root_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/ui_inspect.h"
@@ -1101,6 +1104,12 @@ TEST_CASE("The inspector buttons run the same actions a UIA invoke would", "[dem
     REQUIRE(press_inspector_button(page, u8"inspector-palette") == 1);
     REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
     REQUIRE(page.config().show_palette);
+
+    // 끄고 다시 켜면 조상 단계도 처음 모습인 0이다.
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(page.config().ancestor_levels == 0);
 }
 
 TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[demo][inspector]")
@@ -1493,4 +1502,134 @@ TEST_CASE("Ctrl+C and Ctrl+Shift+V on the rich text editor reach the page as cli
     send(page, demo::rich_text_clipboard_intent { answer });
     REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣기 · 글만"));
     REQUIRE(page.sample().state().text.starts_with(u8"평문"));
+}
+
+namespace {
+    [[nodiscard]] std::optional<luil::menu_bar_state> shell_bar_state(const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                if (const auto* const intent { message->get<demo::shell_menu_state_intent>() }; intent != nullptr)
+                    return intent->state;
+        return std::nullopt;
+    }
+
+    // 막대를 (0, 32)에 세운 tree다. 데모 셸처럼 caption 아래 줄이다.
+    [[nodiscard]] luil::ui_tree shell_bar_tree(const demo::shell_menu& menu)
+    {
+        auto root { std::make_unique<luil::root_element>() };
+        auto bar { menu.make_bar() };
+        bar->arrange({ .slot = { 0.0f, 32.0f, 500.0f, luil::menu_bar_height }, .scale = 1.0f });
+        root->add(std::move(bar));
+        auto state { menu.make_state_label() };
+        state->arrange({ { 520.0f, 32.0f, 150.0f, luil::menu_bar_height }, 1.0f });
+        root->add(std::move(state));
+        auto last { menu.make_last_label() };
+        last->arrange({ { 680.0f, 32.0f, 220.0f, luil::menu_bar_height }, 1.0f });
+        root->add(std::move(last));
+        return luil::ui_tree { std::move(root) };
+    }
+
+    [[nodiscard]] std::u8string shell_label(const luil::ui_tree& tree, const std::u8string& owner)
+    {
+        const luil::ui_element* const label { tree.find({ demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+}
+
+TEST_CASE("The demo shell menu bar has File, Edit and View with access keys and state labels", "[demo][menu-bar]")
+{
+    demo::shell_menu menu {};
+    const luil::ui_tree tree { shell_bar_tree(menu) };
+    const auto* const bar { luil::active_menu_bar(tree) };
+    REQUIRE(bar != nullptr);
+    REQUIRE(bar->accessibility().role == luil::access_role::menu_bar);
+    REQUIRE(bar->accessibility().name == u8"메뉴 막대");
+    struct expected_item
+    {
+        std::u8string key {};
+        std::u8string name {};
+        std::u8string access_key {};
+    };
+    for (const expected_item& item : { expected_item { u8"file", u8"파일", u8"Alt+F" }, expected_item { u8"edit", u8"편집", u8"Alt+E" }, expected_item { u8"view", u8"보기", u8"Alt+V" } })
+    {
+        const luil::ui_element* const found { tree.find({ luil::ui_element_kind::menu_bar_item, item.key }) };
+        REQUIRE(found != nullptr);
+        REQUIRE(found->accessibility().name == item.name);
+        REQUIRE(found->accessibility().access_key == item.access_key);
+        REQUIRE(found->accessibility().expanded == false);
+    }
+    REQUIRE(shell_label(tree, u8"shell-menu-state") == u8"메뉴 막대: 쉼");
+    REQUIRE(shell_label(tree, u8"shell-menu-last") == u8"마지막 메뉴 명령: 없음");
+}
+
+TEST_CASE("The demo shell menu labels follow the bar state from the keyboard and the pointer", "[demo][menu-bar]")
+{
+    demo::shell_menu menu {};
+    luil::interaction_controller controller {};
+    controller.set_tree(std::make_shared<const luil::ui_tree>(shell_bar_tree(menu)));
+    const std::optional<luil::menu_bar_state> raised { shell_bar_state(controller.process(luil::key_pressed_event { luil::key_code::alt_tap })) };
+    REQUIRE(raised == luil::menu_bar_state { u8"file", false, true });
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { *raised } }));
+    REQUIRE(menu.state_text() == u8"파일 · 키보드");
+
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"edit", true, false } } }));
+    REQUIRE(menu.state_text() == u8"편집 열림 · 포인터");
+    const luil::ui_tree open { shell_bar_tree(menu) };
+    REQUIRE(shell_label(open, u8"shell-menu-state") == u8"편집 열림 · 포인터");
+    REQUIRE(open.find({ luil::ui_element_kind::menu_bar_item, u8"edit" })->accessibility().expanded == true);
+
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent {} }));
+    REQUIRE(menu.state_text() == u8"메뉴 막대: 쉼");
+}
+
+TEST_CASE("A demo shell menu opens under its item, records the command and hands shell commands over", "[demo][menu-bar]")
+{
+    demo::shell_menu menu {};
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"edit", true, true } } }));
+    {
+        const luil::ui_tree tree { shell_bar_tree(menu) };
+        const std::vector<luil::ui_popup> popups { menu.make_popups(*luil::active_menu_bar(tree), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, true, luil::theme_preference::system) };
+        REQUIRE(popups.size() == 1u);
+        const luil::rect_f edit { *luil::active_menu_bar(tree)->item_bounds(u8"edit") };
+        REQUIRE(popups[0].x == edit.x);
+        REQUIRE(popups[0].y == edit.y + edit.height);
+        // 편집 메뉴는 접근 키가 붙은 다섯 명령이다.
+        const auto* const undo { popups[0].tree->find({ luil::ui_element_kind::menu_item, u8"edit.undo" }) };
+        REQUIRE(undo != nullptr);
+        REQUIRE(undo->accessibility().access_key == u8"U");
+        REQUIRE(popups[0].tree->ids_of_kind(luil::ui_element_kind::menu_item).size() == 5u);
+        // Esc는 메뉴만 닫고 막대는 선 채 남는다.
+        REQUIRE(shell_bar_state({ popups[0].dismiss(luil::popup_dismiss_reason::escape_key) }) == luil::menu_bar_state { u8"edit", false, true });
+        // 고르면 명령이 실리고 막대가 쉰다.
+        const std::vector<luil::input_action> chosen { (*undo->action(luil::ui_trigger::left_click))({ undo->id() }) };
+        for (const luil::input_action& action : chosen)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(menu.handle(*message));
+    }
+    REQUIRE(menu.last_command_text() == u8"마지막 메뉴 명령: 실행 취소");
+    REQUIRE(menu.state_text() == u8"메뉴 막대: 쉼");
+    REQUIRE(menu.take_command().has_value() == false);
+
+    // 보기 메뉴의 사이드바는 셸 명령이고, 테마 하위 메뉴는 부모 popup 기준 자리에 선다.
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"view", true, true } } }));
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_submenu_intent { u8"view.theme" } }));
+    const luil::ui_tree tree { shell_bar_tree(menu) };
+    const std::vector<luil::ui_popup> popups { menu.make_popups(*luil::active_menu_bar(tree), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, false, luil::theme_preference::dark) };
+    REQUIRE(popups.size() == 2u);
+    const auto* const sidebar { popups[0].tree->find({ luil::ui_element_kind::menu_item, u8"view.sidebar" }) };
+    REQUIRE(sidebar->accessibility().checked == false);
+    REQUIRE(popups[1].anchor == popups[0].id);
+    REQUIRE(popups[1].x == popups[0].width);
+    const auto* const dark { popups[1].tree->find({ luil::ui_element_kind::menu_item, u8"theme.dark" }) };
+    REQUIRE(dark->accessibility().selected == true);
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_select_intent { u8"view.sidebar" } }));
+    REQUIRE(menu.take_command() == std::u8string { u8"view.sidebar" });
+    REQUIRE(menu.take_command().has_value() == false);
+    REQUIRE(menu.last_command_text() == u8"마지막 메뉴 명령: 사이드바");
+    // 다른 메뉴로 옮기면 열린 하위 메뉴가 닫힌다.
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"file", true, true } } }));
+    const luil::ui_tree moved { shell_bar_tree(menu) };
+    REQUIRE(menu.make_popups(*luil::active_menu_bar(moved), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, false, luil::theme_preference::dark).size() == 1u);
 }

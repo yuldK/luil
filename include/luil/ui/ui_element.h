@@ -996,6 +996,11 @@ namespace luil {
         //  - 편집 칸의 링크가 "지금 누르면 열린다"를 손 모양과 굵은 밑줄로 보이는 근거다 (Ctrl+누름만 링크의 것이다).
         //  - 포인터를 움직이지 않고 Ctrl만 누르고 떼도 바뀌도록 Windows 표면이 그 자리의 이동을 다시 알린다.
         bool pointer_control { false };
+        // 메뉴 막대가 서 있거나 열려 있다 (`menu_bar_state::current`가 비지 않았다, docs/menu-bar-design.md).
+        //  - 플랫폼이 읽는다. 키 잡기처럼 수식 키 없는 글자 키도 키로 보내고 입력기(TIP)에 먼저 주지 않는다. 같은 글자의
+        //    문자 입력은 controller가 버린다.
+        //  - 막대 상태는 tree로 오므로 tree를 받을 때도 다시 센다.
+        bool menu_keys { false };
 
         [[nodiscard]] bool operator==(const interaction_snapshot&) const = default;
     };

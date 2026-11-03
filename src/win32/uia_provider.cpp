@@ -108,6 +108,8 @@ namespace luil::win32 {
             // 이동 길잡이에는 ControlType이 없다. Group에 navigation 랜드마크(LandmarkType)를 단다.
             case access_role::navigation:
                 return UIA_GroupControlTypeId;
+            case access_role::menu_bar:
+                return UIA_MenuBarControlTypeId;
             default:
                 return UIA_PaneControlTypeId;
             }
@@ -1242,6 +1244,16 @@ namespace luil::win32 {
                 if (element->accessibility().role == access_role::navigation)
                     set_int(*result, UIA_NavigationLandmarkTypeId);
                 break;
+            case UIA_AccessKeyPropertyId: {
+                // 메뉴 막대 항목의 "Alt+F"다. 없는 요소는 비워 UIA 기본(빈 글)을 따른다.
+                const access_info info { element->accessibility() };
+                if (info.access_key.empty() == false)
+                {
+                    result->vt = VT_BSTR;
+                    result->bstrVal = bstr_from_utf8(info.access_key);
+                }
+                break;
+            }
             default:
                 break;
             }

@@ -381,6 +381,11 @@ namespace luil::win32 {
             return recording_;
         }
 
+        // Alt 단독의 무장을 푼다 (docs/menu-bar-design.md의 Win32 절). 전역 단축키(`RegisterHotKey`)로 건 Alt 조합은
+        // OS가 글자 키를 가져가 창에 Alt의 누름과 뗌만 오므로, 그 눌림(`WM_HOTKEY`)을 받은 쪽이 키보드 초점 표면을 포함한
+        // 모든 표면에 부른다. 풀지 않으면 뗌이 Alt 단독으로 읽혀 막대가 선다.
+        void cancel_alt_tap() noexcept;
+
     protected:
         // 이 표면 위의 입력이 popup 밖 입력인가다.
         // popup 자신만 거짓이다 — 자기 위 클릭은 popup 안 클릭이다.
@@ -446,6 +451,16 @@ namespace luil::win32 {
         std::optional<screen_bounds> next_placement_ {};
 
     private:
+        // 메뉴 막대가 선 동안이다 (발행된 `interaction_snapshot::menu_keys`).
+        [[nodiscard]] bool menu_keys_active() const;
+        // 이 표면의 게시된 tree에 키를 받을 메뉴 막대가 있다 (`active_menu_bar`).
+        [[nodiscard]] bool menu_bar_present() const;
+        // Alt 단독(`key_code::alt_tap`)을 이 표면의 키로 보낸다.
+        void post_alt_tap();
+
+        // Alt 단독의 무장이다. 키보드 초점 표면에 선다.
+        alt_tap_tracker alt_tap_ {};
+
         // 세워 둔 frame을 raster bitmap에 그린다 (찍기와 녹화가 함께 쓴다).
         [[nodiscard]] bool draw_to_bitmap(const frame_state& state, SkBitmap& image, std::u8string& error);
         // 녹화 중이면 이 frame을 모은다. 그린 뒤에 부른다.

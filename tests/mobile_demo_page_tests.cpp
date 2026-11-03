@@ -2142,9 +2142,14 @@ TEST_CASE("The inspector buttons switch it on, move the ancestor level and toggl
     REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
     REQUIRE(page.config().show_palette);
 
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
     REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
     REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
     REQUIRE(page.config().enabled == false);
+    // 다시 켜면 조상 단계도 처음 모습인 0이다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(page.config().ancestor_levels == 0);
 }
 
 TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[mobile-demo][inspector]")
@@ -2498,4 +2503,15 @@ TEST_CASE("The mobile basics page names its rich clipboard buttons and hands the
     answer.html = copy->html;
     deliver(page, demo::rich_text_clipboard_intent { answer });
     REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-clipboard").starts_with(u8"붙여넣기 · HTML "));
+}
+
+TEST_CASE("The mobile first screen stands no menu bar", "[mobile-demo][menu-bar]")
+{
+    // 메뉴 막대는 데스크톱 chrome이다. 휴대폰 화면에는 서지 않는다 (docs/menu-bar-design.md의 결정 7).
+    mobile_demo::basics_page page {};
+    auto content { page.build(400.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
+    REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar).empty());
+    REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar_item).empty());
 }

@@ -19,6 +19,7 @@
 
 namespace luil {
     class menu_element;
+    class menu_bar_element;
     // 텍스트 편집 한 동작이다.
     // controller가 만들고 policy가 앱 메시지로 바꾼다.
     struct text_edit_request
@@ -626,6 +627,9 @@ namespace luil {
             std::optional<second_contact> second {};
             // 누른 자리의 활성 element다. 없으면 빈 곳(또는 비활성)을 누른 것이다.
             ui_element_id target {};
+            // 누를 때 대상이 펼쳐 있었으면 그 표면의 tree다 (`pressed_open_tree_`의 터치 짝). 탭은 이 tree의 액션을 낸다.
+            //  - 접촉에 둔다. 탭이 확정되기 앞에서 `clear_press`가 불리고, 접촉은 뗌·취소와 함께 버려진다.
+            std::shared_ptr<const ui_tree> open_tree {};
             // 경계 쓸기를 알리는 확대 보기 위의 접촉이면 그 기록이다.
             std::optional<view_edge_track> edge {};
             // 둘째 손가락이 한 번이라도 합류했다. 핀치가 섞인 접촉은 탭이 아니다.
@@ -775,11 +779,28 @@ namespace luil {
         // 메뉴가 갖는 키(↑/↓/Enter/Esc)면 그 결과고, 아니면 nullopt라 호출자가
         // 메뉴 안의 텍스트 박스에게 넘긴다.
         //  - 강조를 세우면 그 메뉴가 사는 표면도 함께 세운다 (`menu_surface`).
-        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host);
+        //  - `bar`는 이 메뉴를 연 메뉴 막대다 (열린 막대가 없으면 nullptr). 깊이 0에서 메뉴가 쓰지 않은 ←/→와 Esc가 막대로 간다.
+        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host, const menu_bar_element* bar);
+        // 막대에서 연 메뉴 안의 접근 키다 (`menu_item_config::access_key`). 맞는 항목이 없거나 막대가 쉬면 nullopt다.
+        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_access_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host);
+        // 키를 받을 메뉴 막대와 그 표면이다 (docs/menu-bar-design.md). 없으면 `bar`가 nullptr다.
+        struct menu_bar_location
+        {
+            const menu_bar_element* bar { nullptr };
+            std::u8string surface {};
+        };
+        // 키가 온 표면의 tree가 먼저이고 없으면 초점 표면의 tree다.
+        [[nodiscard]] menu_bar_location key_menu_bar(const std::u8string& surface) const;
+        // 활성 표면의 tree가 먼저이고 없으면 주 tree다. 키 없이 막대를 보는 자리(tree 교체·누름·창 비활성)가 쓴다.
+        [[nodiscard]] menu_bar_location shown_menu_bar() const;
         // 메뉴 container가 있는 자리다.
         // 주 tree와 popup tree를 차례로 보고 없으면 tree가 nullptr다 (메뉴가 닫혀 있다).
         [[nodiscard]] menu_location find_menu(const menu_kinds& kinds) const;
         [[nodiscard]] std::vector<input_action> run_trigger(const ui_element& element, ui_trigger trigger, float x, float y, modifier_keys modifiers);
+        // 누른 element가 펼쳐 있고 누를 수 있으면 그 표면의 tree다 (`pressed_open_tree_`). 아니면 비어 있다.
+        [[nodiscard]] std::shared_ptr<const ui_tree> open_press_tree(const std::u8string& surface, const ui_element& hit) const;
+        // 클릭이 선 뗌의 왼쪽 클릭이다. `pressed_tree`에 같은 id의 element가 있으면 그것의 액션이고, 없으면 `hit`의 것이다.
+        [[nodiscard]] std::vector<input_action> run_left_click(const ui_element& hit, const ui_tree* pressed_tree, float x, float y, modifier_keys modifiers);
         // 칸으로 넘기는 창(`scroll_source::step`)의 휠이다. 그런 창이 아니면 nullopt다.
         [[nodiscard]] std::optional<std::vector<input_action>> step_wheel(const ui_tree& tree, const mouse_wheel_event& event);
         // 초점을 가진 텍스트 박스의 키 처리다.
@@ -941,6 +962,13 @@ namespace luil {
         float pressed_x_ { 0.0f };
         float pressed_y_ { 0.0f };
         bool drag_candidate_ { false };
+        // 누를 때 펼쳐 있던 element(`access_info::expanded`가 참)를 누른 표면의 tree다 (menu-focus-fixes-design.md의 X-4).
+        //  - 그 누름의 왼쪽 클릭은 뗌 tree가 아니라 이 tree의 같은 element의 액션이다. 열린 tree가 지은 액션은
+        //    `set_open(false)`라, 누르는 사이 닫힌 frame이 게시되어도 닫으려던 누름이 도로 열지 않는다.
+        //  - 액션만 떼어 쥐지 않는다. element를 가리키는 람다(`[this]`)가 옛 tree와 함께 사라지기 때문이다.
+        //    누르는 동안 tree 한 벌을 쥐는 것은 `tooltip_pressed_content_`와 같다.
+        //  - 펼치지 않은 element의 누름에서는 비어 있고 클릭은 지금처럼 뗌 tree의 것이다. `clear_press`가 함께 지운다.
+        std::shared_ptr<const ui_tree> pressed_open_tree_ {};
         // 누름 표시가 내부 끌기로 바뀌어도 시퀀스 소유권은 뗌·취소까지 남는다.
         // 다른 장치의 hover나 늦은 뗌이 잡은 조작을 움직이거나 끝내면 안 된다.
         struct pointer_contact
@@ -1089,6 +1117,8 @@ namespace luil {
         // 키보드(→·Enter)가 하위 메뉴를 열었다. 그 메뉴가 서면 첫 활성 항목을 강조한다 — hover로 연 메뉴는
         // 강조 없이 선다 (Windows 메뉴의 갈래다).
         bool submenu_opened_by_key_ { false };
+        // 지난번에 본 메뉴 막대의 깊이 0 메뉴의 owner(항목 키)다. 바뀌면(←/→·hover·Alt+글자) 새 메뉴라 강조를 다시 세운다.
+        std::u8string menu_bar_menu_ {};
 
         // 마지막으로 본 포인터 위치·시각·표면이다.
         // 포인터가 머문 채 내용만 스크롤되면 (휠) 새

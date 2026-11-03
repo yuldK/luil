@@ -59,6 +59,7 @@ add_executable(luil_core_tests
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
+    menu_bar_tests.cpp
     message_box_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
@@ -187,6 +188,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/rich_text_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/shell_menu.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/zoom_page.cpp"
     demo_gallery_tests.cpp)
@@ -463,6 +465,7 @@ add_executable(luil_tests
     loopback_http_server.cpp
     loopback_http_server_tests.cpp
     loopback_socket_win32.cpp
+    menu_bar_native_tests.cpp
     raster_probe.cpp
     secondary_surface_tests.cpp
     platform_services_tests.cpp

@@ -237,4 +237,42 @@ namespace luil::win32 {
             return named;
         return platform_key_code(static_cast<std::uint32_t>(virtual_key));
     }
+
+    void alt_tap_tracker::key_down(const WPARAM virtual_key, const bool repeat, const bool control, const bool eligible) noexcept
+    {
+        if (virtual_key != VK_MENU)
+        {
+            armed_ = false;
+            return;
+        }
+        // 누르고 있는 Alt의 반복은 같은 누름이다. 무장한 채로, 풀린 채로 둔다.
+        if (repeat)
+            return;
+        armed_ = eligible && control == false;
+    }
+
+    bool alt_tap_tracker::key_up(const WPARAM virtual_key) noexcept
+    {
+        if (virtual_key != VK_MENU)
+            return false;
+        return std::exchange(armed_, false);
+    }
+
+    void alt_tap_tracker::cancel() noexcept
+    {
+        armed_ = false;
+    }
+
+    bool swallow_system_key(const UINT message, const WPARAM word_parameter, const bool menu_bar, const bool capturing) noexcept
+    {
+        if (message != WM_SYSKEYUP && message != WM_SYSCHAR)
+            return false;
+        if (capturing)
+            return true;
+        if (menu_bar == false)
+            return false;
+        if (message == WM_SYSKEYUP)
+            return word_parameter == VK_MENU || word_parameter == VK_F10;
+        return word_parameter != L' ';
+    }
 }

@@ -2,6 +2,7 @@
 
 #include "host/font_registry.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/webview_element.h"
 #include "win32/embedded_assets.h"
 #include "win32/surface_input.h"
@@ -540,6 +541,10 @@ namespace luil::win32 {
             context_.handle_shell_event(id_, event);
             return LRESULT { 0 };
         }
+        // 마우스·펜·터치의 누름은 Alt 단독의 무장을 푼다. Alt를 쥔 채 누른 것은 Alt 단독이 아니다.
+        if (message == WM_POINTERDOWN || message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN || message == WM_LBUTTONDBLCLK
+            || message == WM_RBUTTONDBLCLK || message == WM_MBUTTONDBLCLK)
+            alt_tap_.cancel();
         switch (message)
         {
         case WM_POINTERDOWN:
@@ -641,6 +646,7 @@ namespace luil::win32 {
             hide_idle_cursor();
             return LRESULT { 0 };
         case WM_KEYUP:
+            static_cast<void>(alt_tap_.key_up(word_parameter));
             if (word_parameter == VK_CONTROL)
                 post_control_move(false);
             // TIP이 먼저 볼 기회를 준다.
@@ -649,11 +655,14 @@ namespace luil::win32 {
                 return LRESULT { 0 };
             return std::nullopt;
         case WM_KEYDOWN:
+            // Alt가 아닌 키의 누름은 Alt 단독의 무장을 푼다. Ctrl을 쥔 채 누른 Alt도 여기로 와 무장하지 않는다.
+            alt_tap_.key_down(word_parameter, (long_parameter & (LPARAM { 1 } << 30)) != 0, true, false);
             if (word_parameter == VK_CONTROL && (long_parameter & (LPARAM { 1 } << 30)) == 0)
                 post_control_move(true);
             // 조합 키는 TIP의 것이다.
             // 먹지 않은 키만 앱의 단축키로 간다.
-            if (text_input_ != nullptr && text_input_->handle_key(message, word_parameter, long_parameter))
+            //  - 메뉴 막대가 선 동안(`menu_keys`)은 TIP에 먼저 주지 않는다. 글자 키가 막대·메뉴의 접근 키다.
+            if (text_input_ != nullptr && menu_keys_active() == false && text_input_->handle_key(message, word_parameter, long_parameter))
                 return LRESULT { 0 };
             // popup이 떠 있는 동안의 Esc는 popup을 닫는 뜻이 먼저다.
             // 닫자는 메시지를 냈으면 키를 삼켜 앱 라우팅으로 가지 않는다.
@@ -669,13 +678,30 @@ namespace luil::win32 {
             // Alt+F4는 창 닫기라 삼키지 않고 시스템에 맡긴다.
             //  - 키 잡기 모드에서는 Alt+F4·Alt+Space도 잡는 칸의 것이다. 단축키를 고르다 창이 닫히면 안 된다.
             //    잡는 칸은 그것이 시스템 예약 키라는 것을 보여 준다 (`system_reserved_chord`).
-            if ((word_parameter != VK_F4 || key_capturing()) && post_key_event(word_parameter, long_parameter))
-                return LRESULT { 0 };
+            //  - 막대가 있는 창의 Alt는 Alt 단독의 무장이다 (`alt_tap_tracker`). 막대를 세울 키(F10, Alt+글자)는 보내기 전에
+            //    조합을 확정한다. 막대가 서면 글자가 입력기로 가지 않아 조합이 반쯤 남는다.
+            {
+                const bool menu_bar { menu_bar_present() };
+                const bool capturing { key_capturing() };
+                alt_tap_.key_down(word_parameter, (long_parameter & (LPARAM { 1 } << 30)) != 0, (GetKeyState(VK_CONTROL) & 0x8000) != 0, menu_bar && capturing == false);
+                if (menu_bar && capturing == false
+                    && (word_parameter == VK_F10 || (word_parameter >= 'A' && word_parameter <= 'Z') || (word_parameter >= '0' && word_parameter <= '9')))
+                    commit_composition_before_press();
+                if ((word_parameter != VK_F4 || capturing) && post_key_event(word_parameter, long_parameter))
+                    return LRESULT { 0 };
+            }
             return std::nullopt;
         case WM_SYSKEYUP:
         case WM_SYSCHAR:
-            // 키 잡기 모드에서 Alt를 떼면 메뉴 모드(SC_KEYMENU)로 들어가 다음 키를 OS가 가져간다. 그것을 막는다.
-            if (key_capturing())
+            // Alt를 홀로 뗐으면 막대를 세우는 키를 보낸다. 조합 중이면 먼저 확정한다 (누름 전 확정과 같다).
+            if (message == WM_SYSKEYUP && alt_tap_.key_up(word_parameter))
+            {
+                commit_composition_before_press();
+                post_alt_tap();
+            }
+            // 키 잡기 모드와 막대가 있는 창에서 Alt를 떼면 메뉴 모드(SC_KEYMENU)로 들어가 다음 키를 OS가 가져간다. 그것을 막는다.
+            // 막대가 있으면 Alt+글자의 `WM_SYSCHAR`도 삼켜 경고음을 막는다 (`swallow_system_key`).
+            if (swallow_system_key(message, word_parameter, menu_bar_present(), key_capturing()))
                 return LRESULT { 0 };
             return std::nullopt;
         case WM_IME_SETCONTEXT:
@@ -727,6 +753,8 @@ namespace luil::win32 {
             }
             // 초점을 잃은 창 위의 커서는 다른 창의 일을 보러 가는 중이다. 감춘 채 두지 않는다.
             reveal_idle_cursor(true);
+            // 쥔 Alt의 뗌은 다른 창에서 난다. 돌아와 받은 뗌을 Alt 단독으로 읽지 않는다.
+            alt_tap_.cancel();
             // 먼저 이전 target이 살아 있을 때 실제 TSF composition을 끝낸다.
             // 그 뒤 input thread에도 알려 이 표면의 text focus를 거둔다.
             if (text_input_ != nullptr)
@@ -831,7 +859,13 @@ namespace luil::win32 {
 
         // 초점 변화는 언제나 발행본 게시로 오고 게시는 모든 표면을 깨우므로,
         // 그리는 길이 곧 알리는 길이다 (accessibility-design.md).
-        announce_accessibility_focus(state.interaction.focused);
+        //  - 메뉴 막대가 키보드로 선 동안은 그 항목이 알릴 자리다. 키보드 초점(텍스트 칸)은 그대로이고 막대가 쉬면
+        //    다시 그 자리를 알린다. 열린 메뉴 안의 강조는 지금처럼 알리지 않는다.
+        ui_element_id announced { state.interaction.focused };
+        if (const menu_bar_element* const bar { state.tree != nullptr ? active_menu_bar(*state.tree) : nullptr };
+            bar != nullptr && bar->config().state.keyboard && bar->config().state.current.empty() == false)
+            announced = ui_element_id { ui_element_kind::menu_bar_item, bar->config().state.current };
+        announce_accessibility_focus(announced);
         // 웹뷰를 자리에 앉히고 비울 자리를 받는다. **`prepare_frame` 뒤라야 한다** —
         // 주 표면은 자기 tree를 거기서 집으므로, 앞에 두면 한 frame 낡은 tree에서
         // 자리표를 찾게 된다.
@@ -1404,7 +1438,8 @@ namespace luil::win32 {
             // 문자를 만드는 키인지는 layout이 안다 (번역은 layout을 모른다).
             // 죽은 키(dead key) 표시 비트는 무시한다.
             //  - 키 잡기 모드에서는 글자 키도 수정자 없이 키로 보낸다. 잡는 칸이 "N" 하나도 받아야 한다.
-            const bool character_key { key_capturing() == false && (MapVirtualKeyW(static_cast<UINT>(virtual_key), MAPVK_VK_TO_CHAR) & 0x7FFFFFFFu) != 0 };
+            //  - 메뉴 막대가 선 동안도 같다. 수식 키 없는 글자가 막대·메뉴의 접근 키다 (같은 글자의 문자는 controller가 버린다).
+            const bool character_key { key_capturing() == false && menu_keys_active() == false && (MapVirtualKeyW(static_cast<UINT>(virtual_key), MAPVK_VK_TO_CHAR) & 0x7FFFFFFFu) != 0 };
             key = modified_key_from_virtual(virtual_key, control, alt, character_key);
         }
         if (key == key_code::none)
@@ -1498,6 +1533,35 @@ namespace luil::win32 {
     {
         app_host* const host { context_.host() };
         return host != nullptr && host->acquire_interaction().key_capture;
+    }
+
+    bool window_surface::menu_keys_active() const
+    {
+        app_host* const host { context_.host() };
+        return host != nullptr && host->acquire_interaction().menu_keys;
+    }
+
+    bool window_surface::menu_bar_present() const
+    {
+        // 모드는 발행된 상호작용을 보고(`key_capturing`), 막대가 있는지는 게시된 tree를 본다 (`caption_band_in`처럼).
+        return tree_ != nullptr && active_menu_bar(*tree_) != nullptr;
+    }
+
+    void window_surface::cancel_alt_tap() noexcept
+    {
+        alt_tap_.cancel();
+    }
+
+    void window_surface::post_alt_tap()
+    {
+        app_host* const host { context_.host() };
+        if (host == nullptr)
+            return;
+        // Alt를 뗀 뒤라 Alt는 눌려 있지 않다. 다른 수식 키가 함께였다면 무장이 이미 풀렸다.
+        key_pressed_event event { key_code::alt_tap };
+        event.time = std::chrono::steady_clock::now();
+        event.surface = id_;
+        host->post_raw_input(std::move(event));
     }
 
     void window_surface::note_pointer_activity(const std::optional<POINT> client_position, const bool pressed)
