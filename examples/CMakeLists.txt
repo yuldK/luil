@@ -107,6 +107,10 @@ luil_add_source_filter(luil_demo_files "loopback"
     "${LUIL_TEST_DIRECTORY}/loopback_http_server.h"
     "${LUIL_TEST_DIRECTORY}/loopback_socket.h"
     "${LUIL_TEST_DIRECTORY}/loopback_socket_win32.cpp")
+# 자동 업데이트 구역이 내는 미리 서명한 봉투와 고정 asset이다. test의 고정 자료를 같은 파일 그대로 컴파일한다 (시험 키의 비밀 값은 들이지 않는다).
+luil_add_source_filter(luil_demo_files "update"
+    "${LUIL_TEST_DIRECTORY}/update_fixtures.cpp"
+    "${LUIL_TEST_DIRECTORY}/update_fixtures.h")
 # 테마 페이지의 스타일 파일 묶음이 처음 싣는 글이다. 이 빌드가 구운 파일(LUIL_STYLE)을 그대로 싣는다 —
 # 칸의 글을 읽은 값과 내장값이 같은 파일에서 나온다 (style-sheet-design.md).
 set(luil_demo_style_source "${CMAKE_CURRENT_BINARY_DIR}/demo_generated/luil_demo_style_json.cpp")

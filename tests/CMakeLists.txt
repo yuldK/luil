@@ -162,9 +162,15 @@ target_sources(luil_core_tests PRIVATE
     dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
+# 자동 업데이트의 봉투·매니페스트·판·서명 꼴·SPKI 머리·상태 파일 규칙이다. 고정 서명 자료는 openssl로 한 번 지어 커밋했다
+# (update_fixtures.cpp). 암호 API 없이 돈다.
+target_sources(luil_core_tests PRIVATE
+    update_fixtures.cpp
+    update_manifest_tests.cpp)
 # 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지와 검사기 페이지의 상태 줄, 파일 감시 묶음의 표시,
 # 테마 페이지의 스타일 파일 견본도 서버·감시자 없이 검증한다. 첫 화면의 페이지 목록 칸이 내는 접근 이름과 실행도 같은 목록에 오른다.
-# 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
+# 기기 페이지는 비밀 저장소와 자동 업데이트의 적용 방식을 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다
+# (secret_store_stub.cpp, update_apply_stub.cpp).
 # 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/basics_page.cpp"
@@ -183,6 +189,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/zoom_page.cpp"
     mobile_demo_assets_stub.cpp
     secret_store_stub.cpp
+    update_apply_stub.cpp
     mobile_demo_page_list_tests.cpp
     mobile_demo_page_tests.cpp)
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
@@ -297,7 +304,7 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/notification_icon.cpp"
             android_notification_icon_tests.cpp)
-    # 시스템 색·대비·막대·햅틱·권한의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 연 뒤 지점마다 실패를 친다
+    # 시스템 색·대비·막대·햅틱·권한의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 여는 첫 호출부터 지점마다 실패를 친다
     # (android_jni_order_tests.cpp). 자리 전체의 검사 순서는 호스트의 luil_jni_order가 본다.
     target_sources(luil_core_tests
         PRIVATE
@@ -337,6 +344,18 @@ if(LUIL_PLATFORM STREQUAL "android")
         loopback_http_server.cpp
         loopback_http_server_tests.cpp
         loopback_socket_posix.cpp)
+    # 자동 업데이트의 확인을 같은 JVM 안에서 돈다. 서명 확인이 JNI의 java.security를 부르고, 상태 파일과 잠금이 플랫폼 도구를
+    # 쓴다 (플랫폼 도구는 주소 열기에 쓰는 UTF-8 변환을 함께 끌어온다). 미리 서명한 봉투만 쓴다. Android는 받지 않는다.
+    # 적용(스토어 열기)은 상태 기계가 부르므로 링크하지만, GameActivity가 없는 이 JVM에서는 열리지 않아 돌리지 않는다.
+    target_sources(luil_net_tests PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/update_apply_android.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/update_crypto_android.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/luil/url_scheme.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/updater.cpp"
+        update_fixtures.cpp
+        updater_tests.cpp)
     target_include_directories(luil_net_tests
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}"
@@ -517,6 +536,19 @@ add_executable(luil_tests
     # 데스크톱 데모의 기본 페이지도 <windows.h>와 비밀 저장소를 불러 Windows 전용 test에서 읽는다. 확인 대화의 열기·결과·닫기를 검증한다.
     "${PROJECT_SOURCE_DIR}/examples/demo/basics_page.cpp"
     basics_page_tests.cpp)
+# 자동 업데이트의 CNG 암호와 되돌이 서버로 끝까지 도는 상태 기계다. 시험 서명(update_test_signing.cpp)만 시험 키의 비밀 값을 들인다.
+# 적용은 시험 앱(luil_update_probe) 사본을 임시 폴더에서 띄우고 바꾸고 되돌린다. test 프로세스 자신은 적용의 대상이 되지 않는다.
+target_sources(luil_tests PRIVATE
+    update_apply_tests.cpp
+    update_crypto_tests.cpp
+    update_fixtures.cpp
+    update_test_signing.cpp
+    updater_tests.cpp)
+# 데스크톱 데모 네트워크 페이지의 자동 업데이트 구역이다. 단계가 상태 줄의 글과 작업 표시줄 진행률로 옮겨지는지, 확인란이 데모 서버의
+# 변조를 시키는지 본다 (페이지가 <windows.h>를 불러 Windows 전용 test에서 읽는다).
+target_sources(luil_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/examples/demo/network_page.cpp"
+    network_page_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
@@ -670,6 +702,21 @@ luil_set_ide_folder("Tests"
     luil_core_tests
     luil_messaging_asan_tests
     luil_tests)
+
+# 자동 업데이트 적용 test가 띄우는 시험 앱이다 (auto-update-apply-design.md의 확인 절). test가 사본 끝에 판 표지를 붙여
+# 옛 판·새 판으로 띄우고, 도우미 실행은 `run_update_helper`가 평소 길보다 먼저 가른다. luil_tests 옆에 놓여 test가 거기서 찾는다.
+add_executable(luil_update_probe WIN32
+    "${luil_tests_resource}"
+    update_fixtures.cpp
+    update_probe_main.cpp)
+target_include_directories(luil_update_probe
+    PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}"
+        "${LUIL_TEST_DIRECTORY}")
+target_link_libraries(luil_update_probe PRIVATE luil::luil luil_options)
+luil_disable_automatic_windows_manifest(luil_update_probe)
+luil_set_ide_folder("Tests" luil_update_probe)
+add_dependencies(luil_tests luil_update_probe)
 
 # 위·왼쪽 끝 크기 변경에서 아래·오른쪽 내용이 한 합성이라도 튀는지 합성된 화면을 캡처해 본다
 # (layered-presentation-design.md). 사람의 입력 데스크톱에 창을 띄우므로 LUIL_SCREEN_TESTS=1일 때만 돌고,

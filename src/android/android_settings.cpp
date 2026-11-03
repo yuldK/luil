@@ -7,7 +7,7 @@
 
 namespace luil::android {
     // 실패 검사는 `jni_failed`를 nullptr 검사보다 앞에 둔다. nullptr 검사가 먼저 걸리면 예외를 거두지 못하고
-    // 돌아가서, 호출한 쪽의 다음 JNI 호출이 깨진다. 틀을 얻지 못한 경우도 같은 자리에서 거둔다.
+    // 돌아가서, 호출한 쪽의 다음 JNI 호출이 깨진다. 틀을 얻지 못한 경우의 예외는 `jni_local_frame`의 생성자가 거둔다.
     std::optional<system_input_settings> read_system_input_settings(JNIEnv& env, const jobject context, const float density)
     {
         const jni_local_frame frame { env };

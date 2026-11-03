@@ -109,23 +109,6 @@ namespace luil::win32 {
         return links;
     }
 
-    std::wstring current_executable_path()
-    {
-        std::wstring executable(MAX_PATH, L'\0');
-        for (;;)
-        {
-            const DWORD written { GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())) };
-            if (written == 0)
-                return {};
-            if (written < executable.size())
-            {
-                executable.resize(written);
-                return executable;
-            }
-            executable.resize(executable.size() * 2);
-        }
-    }
-
     HRESULT make_shell_link(const jump_task_link& link, ComPtr<IShellLinkW>& result)
     {
         ComPtr<IShellLinkW> shell_link {};

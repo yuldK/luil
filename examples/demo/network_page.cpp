@@ -6,13 +6,16 @@
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/strip_element.h"
+#include "update_fixtures.h"
 
 #include <nlohmann/json.hpp>
 
 #include <windows.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -31,6 +34,23 @@ namespace demo {
         // 한 줄에서 담아 둘 바이트 상한이다. 흘리는 창이 가로로 잘라 주지만,
         // 잘릴 글을 tree에 싣는 것은 그리기가 아니라 메모리의 문제다.
         constexpr std::size_t preview_line_bytes { 400 };
+        // 자동 업데이트 구역의 줄 높이와 줄 사이다. 구역 높이는 제목·단추·확인란·상태·진단·적용 방식 여섯 줄을 쌓은 값이다.
+        constexpr float update_line_height { 18.0f };
+        constexpr float update_section_spacing { 6.0f };
+        constexpr float update_section_height { update_line_height * 4.0f + 28.0f + luil::check_row_height + update_section_spacing * 5.0f };
+
+        // 이 플랫폼의 적용 방식을 사람 글로 옮긴다 (auto-update-apply-design.md).
+        [[nodiscard]] std::u8string_view apply_mode_text(const luil::update_apply_mode mode) noexcept
+        {
+            switch (mode)
+            {
+            case luil::update_apply_mode::replace_executable:
+                return u8"실행 파일 바꾸기";
+            case luil::update_apply_mode::open_store:
+                return u8"스토어 열기";
+            }
+            return u8"실행 파일 바꾸기";
+        }
 
         // 미리 놓은 과녁 하나다 (단추의 글, 서버의 길, 동사).
         struct preset_target
@@ -274,13 +294,123 @@ namespace demo {
             return response;
         }
 
+        // 자동 업데이트 구역의 asset 덩이마다 머리 앞에서 쉬는 시간이다. 3 MiB를 512 KiB로 받으면 여섯 번이라 진행이 눈에 보인다.
+        constexpr std::chrono::milliseconds update_chunk_delay { 300 };
+
+        // 고정 봉투와 asset이다. 처리기가 한 번 지어 든다 (요청마다 3 MiB를 다시 짓지 않는다).
+        struct update_assets
+        {
+            std::string envelope {};
+            std::string broken_envelope {};
+            std::vector<std::uint8_t> asset {};
+            std::vector<std::uint8_t> tampered {};
+        };
+
+        [[nodiscard]] std::string ascii(const std::u8string_view text)
+        {
+            return std::string { reinterpret_cast<const char*>(text.data()), text.size() };
+        }
+
+        [[nodiscard]] std::shared_ptr<const update_assets> make_update_assets()
+        {
+            auto assets { std::make_shared<update_assets>() };
+            assets->envelope = ascii(luil::testing::update_fixture_envelope(true));
+            assets->broken_envelope = ascii(luil::testing::update_fixture_broken_signature_envelope());
+            assets->asset = luil::testing::update_fixture_asset();
+            assets->tampered = assets->asset;
+            // 가운데 한 바이트다. 크기는 그대로라 끝의 해시만 잡는다.
+            assets->tampered[assets->tampered.size() / 2] ^= 0x01;
+            return assets;
+        }
+
+        // `Range: bytes=a-b`에 206으로, 없거나 무시하라면 200으로 답한다.
+        [[nodiscard]] luil::testing::loopback_response make_update_asset_response(
+            const luil::testing::loopback_request& request, const std::vector<std::uint8_t>& asset, const bool ignore_range)
+        {
+            luil::testing::loopback_response response {};
+            response.headers.push_back({ "Content-Type", "application/octet-stream" });
+            response.delay_before_headers = update_chunk_delay;
+            std::uint64_t first { 0 };
+            std::uint64_t last { asset.size() - 1 };
+            const std::string range { request.header("range").value_or(std::string {}) };
+            constexpr std::string_view prefix { "bytes=" };
+            const std::size_t dash { range.find('-') };
+            if (ignore_range == false && range.starts_with(prefix) && dash != std::string::npos)
+            {
+                const auto [first_end, first_code] { std::from_chars(range.data() + prefix.size(), range.data() + dash, first) };
+                const auto [last_end, last_code] { std::from_chars(range.data() + dash + 1, range.data() + range.size(), last) };
+                if (first_code != std::errc {} || last_code != std::errc {} || first >= asset.size() || last < first)
+                {
+                    response.status = 416;
+                    return response;
+                }
+                last = std::min<std::uint64_t>(last, asset.size() - 1);
+                response.status = 206;
+                response.headers.push_back({ "Content-Range", "bytes " + std::to_string(first) + "-" + std::to_string(last) + "/" + std::to_string(asset.size()) });
+            }
+            response.body.assign(asset.begin() + static_cast<std::ptrdiff_t>(first), asset.begin() + static_cast<std::ptrdiff_t>(last + 1));
+            return response;
+        }
+
+        [[nodiscard]] std::u8string_view update_failure_name(const luil::update_failure failure) noexcept
+        {
+            switch (failure)
+            {
+            case luil::update_failure::none:
+                return u8"none";
+            case luil::update_failure::network:
+                return u8"network";
+            case luil::update_failure::http_status:
+                return u8"http_status";
+            case luil::update_failure::manifest_invalid:
+                return u8"manifest_invalid";
+            case luil::update_failure::signature_invalid:
+                return u8"signature_invalid";
+            case luil::update_failure::manifest_mismatch:
+                return u8"manifest_mismatch";
+            case luil::update_failure::replayed:
+                return u8"replayed";
+            case luil::update_failure::no_asset:
+                return u8"no_asset";
+            case luil::update_failure::too_large:
+                return u8"too_large";
+            case luil::update_failure::range_unsupported:
+                return u8"range_unsupported";
+            case luil::update_failure::hash_mismatch:
+                return u8"hash_mismatch";
+            case luil::update_failure::disk:
+                return u8"disk";
+            case luil::update_failure::busy:
+                return u8"busy";
+            case luil::update_failure::not_writable:
+                return u8"not_writable";
+            case luil::update_failure::launch_failed:
+                return u8"launch_failed";
+            case luil::update_failure::unsupported:
+                return u8"unsupported";
+            case luil::update_failure::cancelled:
+                return u8"cancelled";
+            case luil::update_failure::stopped:
+                return u8"stopped";
+            }
+            return u8"?";
+        }
+
+        // MiB를 소수 한 자리로 적는다 ("1.5"). 반올림한다.
+        [[nodiscard]] std::u8string mib_text(const std::uint64_t bytes)
+        {
+            constexpr std::uint64_t mib { 1024u * 1024u };
+            const std::uint64_t tenths { (bytes * 10u + mib / 2u) / mib };
+            return to_u8_number(tenths / 10u) + u8"." + to_u8_number(tenths % 10u);
+        }
+
         // "한글 텍스트"를 euc-kr(cp949)로 손수 적은 바이트다.
         // 소스가 UTF-8이라 이 글자들을 그냥 적으면 UTF-8로 나간다 — 다른 charset이
         // 실제로 읽히는 것을 보이려면 바이트를 손으로 적는 수밖에 없다.
         constexpr std::array<std::uint8_t, 11> euc_kr_sample { 0xC7, 0xD1, 0xB1, 0xDB, 0x20, 0xC5, 0xD8, 0xBD, 0xBA, 0xC6, 0xAE };
     }
 
-    std::function<luil::testing::loopback_response(const luil::testing::loopback_request&)> make_network_handler()
+    std::function<luil::testing::loopback_response(const luil::testing::loopback_request&)> make_network_handler(std::shared_ptr<const network_update_serve_flags> flags)
     {
         // 그림은 **한 번** 읽어 handler가 든다. 요청마다 디스크를 두드리면
         // 되돌이 서버가 재는 것이 우리 파일 시스템이 된다.
@@ -288,8 +418,10 @@ namespace demo {
         const auto spinner { std::make_shared<const std::vector<std::uint8_t>>(read_asset(L"spinner.gif")) };
         // 회차는 서버 thread에서 오르므로 원자적으로 센다.
         const auto rounds { std::make_shared<std::atomic<std::uint64_t>>(0) };
+        const std::shared_ptr<const update_assets> update { make_update_assets() };
+        const std::string asset_path { "/update/" + ascii(luil::testing::update_fixture_asset_name) };
 
-        return [gradient, spinner, rounds](const luil::testing::loopback_request& request) -> luil::testing::loopback_response {
+        return [gradient, spinner, rounds, update, asset_path, flags](const luil::testing::loopback_request& request) -> luil::testing::loopback_response {
             const std::size_t query { request.target.find('?') };
             const std::string path { request.target.substr(0, query == std::string::npos ? request.target.size() : query) };
 
@@ -378,6 +510,18 @@ namespace demo {
             }
             if (path == "/missing")
                 return make_missing_response(R"({"type":"about:blank","title":"Not Found","detail":"이 길은 없다"})");
+            // 자동 업데이트 구역이다. 봉투는 미리 서명한 것이고, 확인란이 변조를 시킨다.
+            if (path == network_update_manifest_path)
+            {
+                const bool broken { flags != nullptr && flags->break_signature.load() };
+                return make_text_response("application/json", broken ? update->broken_envelope : update->envelope);
+            }
+            if (path == asset_path)
+            {
+                const bool tamper { flags != nullptr && flags->tamper_asset.load() };
+                const bool ignore_range { flags != nullptr && flags->ignore_range.load() };
+                return make_update_asset_response(request, tamper ? update->tampered : update->asset, ignore_range);
+            }
             if (path == "/beat")
             {
                 const std::uint64_t round { rounds->fetch_add(1) + 1 };
@@ -434,6 +578,33 @@ namespace demo {
                 preview_scroll_ = 0.0f;
             return true;
         }
+        if (const auto* const update { message.get<network_update_status_intent>() }; update != nullptr)
+        {
+            update_ = update->status;
+            update_note_.clear();
+            // 받을 판은 확인이 내준 뒤부터 다음 확인 전까지 있다. 받다 실패해도 그대로라 다시 받으면 잇는다.
+            if (update_.phase == luil::update_phase::checking)
+                update_offered_ = false;
+            if (update_.phase == luil::update_phase::available || update_.phase == luil::update_phase::ready)
+                update_offered_ = true;
+            return true;
+        }
+        if (const auto* const flag { message.get<network_update_flag_intent>() }; flag != nullptr)
+        {
+            switch (flag->flag)
+            {
+            case network_update_flag::tamper_asset:
+                serve_flags_->tamper_asset.store(flag->on);
+                break;
+            case network_update_flag::break_signature:
+                serve_flags_->break_signature.store(flag->on);
+                break;
+            case network_update_flag::ignore_range:
+                serve_flags_->ignore_range.store(flag->on);
+                break;
+            }
+            return true;
+        }
         if (const auto* const preview_to { message.get<network_preview_scroll_to_intent>() }; preview_to != nullptr)
         {
             // 절대 자리는 그대로 받는다. 위쪽 한계만 다듬고 아래쪽은 영역의
@@ -459,6 +630,98 @@ namespace demo {
     void network_page::set_in_flight(const std::size_t count) noexcept
     {
         in_flight_ = count;
+    }
+
+    std::shared_ptr<const network_update_serve_flags> network_page::update_serve_flags() const
+    {
+        return serve_flags_;
+    }
+
+    void network_page::set_updater(const bool ready, std::u8string error)
+    {
+        updater_ready_ = ready;
+        update_note_ = std::move(error);
+    }
+
+    void network_page::note_update_refused(std::u8string error)
+    {
+        update_note_ = std::move(error);
+    }
+
+    void network_page::note_update_cleared(const bool ok, std::u8string error)
+    {
+        if (ok)
+        {
+            // 폴더를 비웠으니 받아 둔 것도 기록도 없다. 처음 상태로 돌아간다.
+            update_ = luil::update_status {};
+            update_offered_ = false;
+            update_note_ = u8"받은 파일을 지웠다.";
+            return;
+        }
+        update_note_ = std::move(error);
+    }
+
+    bool network_page::update_busy() const noexcept
+    {
+        return update_.phase == luil::update_phase::checking || update_.phase == luil::update_phase::downloading || update_.phase == luil::update_phase::verifying
+            || update_.phase == luil::update_phase::applying;
+    }
+
+    std::optional<luil::taskbar_progress> network_page::update_taskbar_progress() const
+    {
+        // 라이브러리는 작업 표시줄을 만지지 않는다. 앱이 단계를 진행률로 옮긴다 (auto-update-design.md의 진행 표시).
+        switch (update_.phase)
+        {
+        case luil::update_phase::downloading:
+        {
+            const float value { update_.total == 0 ? 0.0f : static_cast<float>(static_cast<double>(update_.received) / static_cast<double>(update_.total)) };
+            return luil::taskbar_progress { luil::taskbar_progress_state::normal, value };
+        }
+        case luil::update_phase::checking:
+        case luil::update_phase::verifying:
+            return luil::taskbar_progress { luil::taskbar_progress_state::indeterminate, 0.0f };
+        case luil::update_phase::failed:
+            return luil::taskbar_progress { luil::taskbar_progress_state::error, 1.0f };
+        case luil::update_phase::idle:
+        case luil::update_phase::up_to_date:
+        case luil::update_phase::available:
+        case luil::update_phase::ready:
+        case luil::update_phase::applying:
+        case luil::update_phase::handed_off:
+            break;
+        }
+        return std::nullopt;
+    }
+
+    std::u8string network_page::update_status_text() const
+    {
+        std::u8string text { u8"업데이트 상태: " };
+        switch (update_.phase)
+        {
+        case luil::update_phase::idle:
+            return text + u8"대기";
+        case luil::update_phase::checking:
+            return text + u8"확인 중";
+        case luil::update_phase::up_to_date:
+            return text + u8"최신 판";
+        case luil::update_phase::available:
+            if (update_.offer.has_value() == false)
+                return text + u8"새 판";
+            return text + u8"새 판 " + update_.offer->version + u8" · " + mib_text(update_.offer->size) + u8" MiB";
+        case luil::update_phase::downloading:
+            return text + u8"받는 중 " + mib_text(update_.received) + u8"/" + mib_text(update_.total) + u8" MiB";
+        case luil::update_phase::verifying:
+            return text + u8"검증 중";
+        case luil::update_phase::ready:
+            return text + u8"준비됨";
+        case luil::update_phase::applying:
+            return text + u8"적용 중";
+        case luil::update_phase::handed_off:
+            return text + u8"넘겼다";
+        case luil::update_phase::failed:
+            return text + u8"실패 (" + std::u8string { update_failure_name(update_.failure) } + u8")";
+        }
+        return text;
     }
 
     void network_page::note_sent(const network_send_intent& request, const luil::net::http_ticket ticket, const std::u8string& error)
@@ -669,6 +932,8 @@ namespace demo {
         column->add_gap(10.0f);
         column->add(make_control_row(), luil::check_row_height);
         column->add_gap(14.0f);
+        column->add(make_update_section(), update_section_height);
+        column->add_gap(14.0f);
         column->add(make_label(luil::ui_element_id { kind_text, u8"network-header" }, header_text(), 12.0f, luil::label_color_role::primary), 18.0f);
         column->add_gap(6.0f);
         column->add_flexible(make_preview());
@@ -777,6 +1042,71 @@ namespace demo {
         return row;
     }
 
+    std::unique_ptr<luil::ui_element> network_page::make_update_section() const
+    {
+        luil::stack_config config {};
+        config.spacing = update_section_spacing;
+        auto section { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-update" }, config) };
+        section->add(make_label(luil::ui_element_id { kind_text, u8"network-update-title" }, u8"자동 업데이트", 12.0f, luil::label_color_role::primary), update_line_height);
+
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto buttons { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-update-buttons" }, row_config) };
+        const bool busy { update_busy() };
+        // 단추는 과녁 단추와 같은 kind를 owner로 가른다.
+        const auto add_button {
+            [&buttons](const std::u8string_view owner, const std::u8string_view label, const std::u8string_view tooltip, const bool enabled, luil::ui_action action) {
+                auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_network_target, std::u8string { owner } }, luil::text_button_config { .text = std::u8string { label } }) };
+                button->set_cursor(luil::ui_cursor::hand);
+                button->set_tooltip(std::u8string { tooltip });
+                button->set_enabled(enabled);
+                if (enabled)
+                    button->set_action(luil::ui_trigger::left_click, std::move(action));
+                buttons->add(std::move(button), label_width(label));
+            },
+        };
+        add_button(u8"update-check", u8"업데이트 확인", u8"되돌이 서버의 서명한 매니페스트를 받아 확인한다", updater_ready_ && busy == false,
+            luil::make_message_action(network_update_check_intent {})
+        );
+        add_button(u8"update-download", u8"내려받기", u8"새 판을 512 KiB 덩이로 받고 SHA-256을 맞춘다", updater_ready_ && busy == false && update_offered_,
+            luil::make_message_action(network_update_download_intent {})
+        );
+        add_button(u8"update-cancel", u8"취소", u8"하던 확인·받기를 접는다 (받던 파일은 남는다)", updater_ready_ && busy, luil::make_message_action(network_update_cancel_intent {}));
+        add_button(u8"update-clear", u8"받은 파일 지우기", u8"%LOCALAPPDATA%\\luil-demo\\update 폴더를 비운다", updater_ready_ && busy == false,
+            luil::make_message_action(network_update_clear_intent {})
+        );
+        section->add(std::move(buttons), 28.0f);
+
+        auto checks { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-update-flags" }, row_config) };
+        const auto add_check {
+            [&checks](const std::u8string_view owner, const std::u8string_view label, const std::u8string_view tooltip, const network_update_flag flag, const bool on) {
+                luil::check_config check {};
+                check.owner = std::u8string { owner };
+                check.style = luil::check_style::checkbox;
+                check.label = std::u8string { label };
+                check.checked = on;
+                check.tooltip = std::u8string { tooltip };
+                check.toggle = luil::make_message_action(network_update_flag_intent { flag, on == false });
+                checks->add(std::make_unique<luil::check_element>(std::move(check)), label_width(label) + 24.0f);
+            },
+        };
+        add_check(u8"update-tamper", u8"변조된 파일 내기", u8"서버가 asset 한 바이트를 바꿔 낸다", network_update_flag::tamper_asset, serve_flags_->tamper_asset.load());
+        add_check(u8"update-break", u8"서명 깨기", u8"서버가 봉투의 서명 한 바이트를 바꿔 낸다", network_update_flag::break_signature, serve_flags_->break_signature.load());
+        add_check(u8"update-range", u8"Range 무시", u8"서버가 Range를 무시하고 파일 전체를 200으로 낸다", network_update_flag::ignore_range, serve_flags_->ignore_range.load());
+        section->add(std::move(checks), luil::check_row_height);
+
+        section->add(make_label(luil::ui_element_id { kind_text, u8"network-update-status" }, update_status_text(), 12.0f, luil::label_color_role::primary), update_line_height);
+        std::u8string note { update_note_.empty() ? update_.error : update_note_ };
+        if (note.empty())
+            note = u8"받는 자리: %LOCALAPPDATA%\\luil-demo\\update";
+        section->add(make_label(luil::ui_element_id { kind_text, u8"network-update-note" }, u8"업데이트 진단: " + note, 11.0f, luil::label_color_role::dim), update_line_height);
+        // 적용은 시연하지 않는다. 돌고 있는 데모의 실행 파일을 바꾸지 않기 위해서다. 적용 흐름은 update_apply_tests의 시험 앱이 돈다.
+        const std::u8string apply_mode { u8"업데이트 적용 방식: " + std::u8string { apply_mode_text(luil::platform_update_apply_mode()) } };
+        section->add(make_label(luil::ui_element_id { kind_text, u8"network-update-apply-mode" }, apply_mode, 11.0f, luil::label_color_role::dim), update_line_height);
+        return section;
+    }
+
     std::unique_ptr<luil::ui_element> network_page::make_preview() const
     {
         luil::panel_config config {};
@@ -818,6 +1148,8 @@ namespace demo {
         // 변화량이 겹쳐 쌓여 보조 기술이 겨눈 자리에 서지 못한다.
         config.scroll_to = [](const float offset) { return luil::make_app_action(network_preview_scroll_to_intent { offset }); };
         auto view { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        // 막대는 영역의 이름을 물려받는다. 이름이 없으면 막대가 이름 없이 읽힌다.
+        view->set_access_name(u8"응답 미리보기");
 
         luil::stack_config inner {};
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-lines" }, inner) };

@@ -341,8 +341,9 @@ namespace demo {
             return nullptr;
         }
 
-        // 반영 줄의 글이다: `등록됨`. 둘째 id가 있으면 ` · 충돌 (demo-extra)`가 이어진다. 끈 동안은 `끔`이다.
-        [[nodiscard]] std::u8string hotkey_report_text(const bool on, const std::vector<luil::win32::hotkey_report>& reports)
+        // 반영 줄의 글이다: `등록됨`. 충돌 시험 중이고 둘째 id의 보고가 있으면 ` · 충돌 (demo-extra)`가 이어진다. 끈 동안은 `끔`이다.
+        //  - 보고는 끌 때 지우지 않아 지난 충돌 시험의 둘째 id 보고가 남을 수 있다. 시험이 꺼져 있으면 그 보고는 그리지 않는다.
+        [[nodiscard]] std::u8string hotkey_report_text(const bool on, const bool conflict, const std::vector<luil::win32::hotkey_report>& reports)
         {
             if (on == false)
                 return u8"끔";
@@ -352,7 +353,7 @@ namespace demo {
             std::u8string text { hotkey_status_text(main_report->status) };
             if (main_report->error.empty() == false)
                 text += u8" (" + main_report->error + u8")";
-            if (const luil::win32::hotkey_report* const extra { hotkey_report_of(reports, hotkey_extra_id) }; extra != nullptr)
+            if (const luil::win32::hotkey_report* const extra { conflict ? hotkey_report_of(reports, hotkey_extra_id) : nullptr }; extra != nullptr)
                 text += u8" · " + hotkey_status_text(extra->status) + u8" (" + std::u8string { hotkey_extra_id } + u8")";
             return text;
         }
@@ -594,12 +595,10 @@ namespace demo {
         if (const auto* const toggle { message.get<hotkey_toggle_intent>() }; toggle != nullptr)
         {
             hotkey_on_ = toggle->on;
-            // 끄면 충돌 시험과 지난 보고도 비운다. 다시 켜면 처음 건 시도로 새로 보고된다.
+            // 끄면 충돌 시험을 끈다. 지난 보고는 지우지 않고 반영 줄이 `끔`으로만 그린다. 빠르게 끄고 켜면 두 번의 바뀜이 한
+            // wake에 묶여 목록이 그대로라, 라이브러리가 새 보고를 내지 않는다. 지웠다면 반영 줄이 `아직 보고 없음`에 머문다.
             if (toggle->on == false)
-            {
                 hotkey_conflict_ = false;
-                hotkey_reports_.clear();
-            }
             return true;
         }
         if (message.get<hotkey_conflict_intent>() != nullptr)
@@ -701,6 +700,8 @@ namespace demo {
         // 막대 자리를 늘 지킨다. 구역이 늘고 줄어도 글의 폭이 흔들리지 않는다.
         area_config.bar = luil::scrollbar_visibility::always;
         auto area { std::make_unique<luil::scroll_area_element>(std::move(area_config)) };
+        // 막대는 영역의 이름을 물려받는다. 이름이 없으면 막대가 이름 없이 읽혀 보조 기술이 owner로 찾아야 한다.
+        area->set_access_name(u8"창 페이지 본문");
         area->set_content(std::move(content));
 
         // 상태 줄은 영역 밖에 고정한다. 흘려도 읽히고, 화면 밖으로 간 구역을 UIA가 찾을 때도 같은 이름이다.
@@ -1040,7 +1041,7 @@ namespace demo {
                 request += u8" · 충돌 시험";
         }
         column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-request" }, u8"전역 단축키 요청: " + request, 12.0f, luil::label_color_role::primary), 18.0f);
-        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-report" }, u8"전역 단축키 반영: " + hotkey_report_text(hotkey_on_, hotkey_reports_), 12.0f, luil::label_color_role::primary),
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-report" }, u8"전역 단축키 반영: " + hotkey_report_text(hotkey_on_, hotkey_conflict_, hotkey_reports_), 12.0f, luil::label_color_role::primary),
             18.0f);
         column.add(make_label(luil::ui_element_id { kind_text, u8"windows-hotkey-pressed" }, u8"전역 단축키 눌림: " + to_u8(hotkey_presses_) + u8"번", 12.0f, luil::label_color_role::primary), 18.0f);
         column.add_gap(6.0f);

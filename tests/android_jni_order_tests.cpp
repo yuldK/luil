@@ -1,5 +1,6 @@
 #include "android/android_system_theme.h"
 #include "android/android_window_control.h"
+#include "android/java_vm.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -11,8 +12,8 @@
 
 // 가짜 JNIEnv로 시스템 색·대비·막대·햅틱·권한 읽기와 쓰기의 JNI 흐름을 잠근다 (android_settings_tests.cpp와 같은 틀).
 //  - 실패 지점 번호의 호출 하나가 예외를 남기고 null이나 0을 돌려준다. 지점을 바꿔 가며 모두 친다.
-//  - 틀을 연 첫 호출(지점 1)은 치지 않는다. `frame.pushed() == false`만 보고 돌아가는 자리는 예외를 거두지 않는데,
-//    그 자리의 틀 확인은 이번 순서 바꾸기의 범위 밖이라 보고에 남긴다.
+//  - 틀을 여는 첫 호출(지점 1)도 친다. `frame.pushed() == false`만 보고 돌아가는 자리가 많아, 틀을 얻지 못했을 때 남은 예외는
+//    `jni_local_frame`의 생성자가 거둔다. 호출부마다 거두지 않아도 예외가 남지 않는지를 모든 읽기와 쓰기에서 본다.
 //  - 검사 없이 값을 읽는 `GetIntField`·`GetStaticIntField`는 실패를 주입하지 않는다. 주입하면 호출한 쪽이
 //    예외가 남은 채 다음 호출을 해, 이 test가 잡으려는 자리가 아닌 곳에서 먼저 깨진다.
 //  - 검사 한 번 앞에 JNI 호출이 여럿 이어지는 읽기(시스템 막대·아이콘, 고대비, 권한 요청)는 예외가 남은 채 다음 호출을 부른다.
@@ -298,16 +299,19 @@ namespace {
     }
 
     // 성공한 한 번을 기준으로 실패 지점을 모두 친다. 답은 `failure_answer`이고, 예외는 남지 않고, 틀은 닫혀야 한다.
+    //  - 지점 1은 틀을 여는 호출이다. 틀을 얻지 못한 호출은 다른 JNI 호출을 하지 않고 돌아가야 한다.
     //  - `batched`가 참이면 예외가 남은 채 부른 호출 수는 보지 않는다 (파일 머리의 묶음 호출 설명).
     template <typename Run>
     void check_failure_points(Run&& run, const outcome& success, const int failure_answer, const bool batched)
     {
-        for (int point { 2 }; point <= success.state.calls; ++point)
+        for (int point { 1 }; point <= success.state.calls; ++point)
         {
             INFO("failure point " << point);
             const outcome failing { run_once(run, point) };
             CHECK(failing.answer == failure_answer);
             CHECK_FALSE(failing.state.pending);
+            if (point == 1)
+                CHECK(failing.state.calls == 1);
             if (batched == false)
                 CHECK(failing.state.calls_while_pending == 0);
             CHECK(failing.state.popped == failing.state.pushed);
@@ -441,4 +445,32 @@ TEST_CASE("Screen orientation leaves no pending exception when any JNI call fail
     REQUIRE(success.state.calls > 1);
     CHECK(success.state.void_calls == 1);
     check_failure_points(run, success, 0, false);
+}
+
+TEST_CASE("A local frame that cannot open clears the exception it left", "[android][jni_order]")
+{
+    fake_env failing { 1 };
+    {
+        const luil::android::jni_local_frame frame { failing.env() };
+        CHECK_FALSE(frame.pushed());
+        // 틀을 얻지 못하면 `OutOfMemoryError`가 남는다. 호출부가 `pushed()`만 보고 돌아가도 예외가 남지 않아야 한다.
+        CHECK_FALSE(failing.state().pending);
+    }
+    CHECK(failing.state().calls == 1);
+    CHECK(failing.state().pushed == 0);
+    CHECK(failing.state().popped == 0);
+    CHECK(failing.state().calls_while_pending == 0);
+}
+
+TEST_CASE("A local frame that opens is popped once and leaves no exception", "[android][jni_order]")
+{
+    fake_env opening {};
+    {
+        const luil::android::jni_local_frame frame { opening.env() };
+        CHECK(frame.pushed());
+        CHECK_FALSE(opening.state().pending);
+        CHECK(opening.state().popped == 0);
+    }
+    CHECK(opening.state().pushed == 1);
+    CHECK(opening.state().popped == 1);
 }
