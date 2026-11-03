@@ -1,16 +1,18 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
-// 자동 업데이트의 확인·신뢰·받기다 (docs/auto-update-design.md).
+// 자동 업데이트의 확인·신뢰·받기·적용이다 (docs/auto-update-design.md, docs/auto-update-apply-design.md).
 //  - 서버의 봉투 하나를 받아 ECDSA P-256 서명을 OS 암호 API로 확인한 뒤에만 매니페스트를 읽는다.
-//  - Win32는 실행 파일을 덩이로 받아 SHA-256을 맞춘다. Android는 확인만 하고 받지 않는다.
-//  - 적용(`apply`·`last_apply`와 그 값들)은 docs/auto-update-apply-design.md가 이 헤더에 더한다.
+//  - Win32는 실행 파일을 덩이로 받아 SHA-256을 맞추고, 받은 새 exe를 도우미로 띄워 옛 exe를 같은 경로에서 바꾼다.
+//  - Android는 확인만 하고 받지 않는다. 적용은 스토어 페이지를 연다.
 namespace luil {
     // 앱에 박는 서명 확인 키다. 키를 바꾸는 동안 둘 이상을 싣는다.
     struct update_key
@@ -131,14 +133,69 @@ namespace luil {
         // Android 적용이 열어도 되는 scheme이다. 확인도 `store_url`을 이것으로 거른다.
         std::vector<std::u8string> store_schemes { u8"https", u8"market" };
         // 단계가 바뀔 때와 받은 덩이마다 **updater의 thread**에서 불린다. 짧아야 하고 앱은 `post_app_message`로 나른다.
-        //  - 여기서 `check`·`download`·`cancel`을 불러도 된다. `stop`은 부르면 안 된다 (자기 thread를 기다리게 된다).
+        //  - 여기서 `check`·`download`·`apply`·`cancel`을 불러도 된다. `stop`은 부르면 안 된다 (자기 thread를 기다리게 된다).
         //  - 던지면 삼킨다. 계약은 던지지 않는 것이다.
         std::function<void(const update_status&)> report {};
     };
 
-    // 갱신 흐름 하나다. 확인·받기를 자기 thread와 자기 `http_client`로 몬다.
+    // 적용 한 번의 선택이다 (docs/auto-update-apply-design.md).
+    struct update_apply_options
+    {
+        // 거짓이면 바꾸기만 하고 띄우지 않는다 (앱이 끝날 때 적용). 띄우지 않으니 새 판을 지켜보지도 않는다.
+        bool restart { true };
+        // 다시 띄울 때 실행 파일 뒤에 붙일 인자다. 라이브러리는 더하지 않는다.
+        std::vector<std::u8string> restart_arguments {};
+        // 도우미가 앱의 종료를 기다리는 시한이다. 0보다 커야 한다.
+        std::chrono::milliseconds parent_timeout { 60000 };
+        // 다시 띄운 새 판을 지켜보는 시간이다 (결정 9). 0이면 지켜보지 않고 되돌리지도 않는다.
+        std::chrono::milliseconds confirm_timeout { 30000 };
+    };
+
+    enum class update_apply_outcome
+    {
+        // 바꾸었다. 다시 띄웠으면 그 판이 확인 전에 쓰러지지 않았다.
+        replaced,
+        // 바꾼 판이 확인 전에 0이 아닌 코드로 끝나 옛 exe로 되돌렸다. 그 판은 건너뛸 판으로 남았다.
+        rolled_back,
+        // 바꾸지 못했다. 옛 exe가 그대로다. `restart`였으면 옛 exe를 다시 띄웠다.
+        replace_failed,
+        // 앱이 `parent_timeout` 안에 끝나지 않았다. 아무것도 바꾸지도 띄우지도 않았다.
+        parent_timeout,
+    };
+
+    // 지난 적용에서 도우미가 남긴 결과다. `updater::create`가 받기 폴더에서 읽고 지운다.
+    struct update_apply_result
+    {
+        update_apply_outcome outcome { update_apply_outcome::replaced };
+        std::u8string from_version {};
+        std::u8string to_version {};
+        // 영문 진단이다. `replaced`면 대개 비었다.
+        std::u8string error {};
+    };
+
+    enum class update_apply_mode
+    {
+        // 받은 실행 파일로 옛 실행 파일을 바꾼다 (Win32).
+        replace_executable,
+        // 스토어 페이지를 연다 (Android).
+        open_store,
+    };
+
+    // 이 플랫폼의 적용 방식이다. 창이 없어도 답한다.
+    [[nodiscard]] update_apply_mode platform_update_apply_mode() noexcept;
+
+    // 도우미 실행이면 적용을 하고 종료 코드를 준다. 아니면 비었다. Android는 늘 비었다.
+    //  - `arguments`는 `win32::command_line_arguments()` 그대로다 (`[0]`이 실행 파일).
+    //  - `wWinMain`에서 `command_line_arguments()` 바로 뒤, `single_instance`·`send_to_primary`·알림 실행 갈래보다 먼저 부른다.
+    //  - 도우미는 창·`single_instance`·앱 식별의 레지스트리·COM 활성화기를 세우지 않는다. 그 전에 끝난다.
+    //  - 종료 코드는 바꾸었으면 0, 바꾸지 못했거나 되돌렸으면 1, 표식은 있는데 인자가 틀리면 2다(아무것도 바꾸지 않는다).
+    [[nodiscard]] std::optional<int> run_update_helper(std::span<const std::u8string> arguments);
+
+    // 갱신 흐름 하나다. 확인·받기·적용을 자기 thread와 자기 `http_client`로 몬다.
     //  - 라이브러리는 스스로 확인하거나 받지 않는다. 언제 부를지는 앱이 정한다. 일은 한 번에 하나다.
     //  - 종료 순서는 `http_client`와 같다. `logic_driver::cancel()`에서 `cancel()`, `stop_workers()`에서 `stop()`이다.
+    //  - **앱은 시작할 때 `updater`를 만든다.** 새 판의 `create`가 도우미에게 확인을 남긴다. 늦게 만들면
+    //    `confirm_timeout` 안에 확인이 서지 않아, 다른 까닭으로 곧 0이 아닌 코드로 끝나는 판이 잘못 되돌려질 수 있다.
     class updater
     {
     public:
@@ -150,6 +207,8 @@ namespace luil {
         ~updater();
 
         // 실패하면 null이고 `error`에 까닭을 적는다 (`http_client::create`와 같다).
+        //  - 받기 폴더에 지난 적용의 결과가 있으면 읽어 지우고 `last_apply`로 낸다. 지켜보는 도우미에게 확인을 남긴다.
+        //  - 그 결과를 이미 읽은 지난 시작이 남긴 것(옛 exe 옆의 `.old`·`.tmp`, 받아 둔 exe)은 여기서 지운다.
         [[nodiscard]] static std::unique_ptr<updater> create(updater_config configuration, std::u8string& error);
 
         // 어느 thread에서나 부른다. 받아들이면 참이고 결과는 `report`로 온다 (`checking`부터).
@@ -162,6 +221,15 @@ namespace luil {
         void cancel() noexcept;
         // 멱등이고 어느 thread에서나 부른다(`report` 안은 빼고). 돌아온 뒤 `report`는 불리지 않는다.
         void stop() noexcept;
+
+        // 적용한다. 받아들이면 참이고 `applying` 뒤 `handed_off`나 `failed`가 `report`로 온다.
+        //  - Win32는 마지막 일이 `ready`로 끝났을 때 받는다. 받은 exe의 해시와 실행 파일 폴더의 쓰기를 다시 보고 도우미를 띄운다.
+        //    `handed_off` 뒤로 이 updater는 일을 받지 않는다. 앱은 저장을 마치고 끝난다(`ui_command::application_exit`).
+        //  - Android는 마지막 확인이 판을 내주었을 때 받고 `store_url`을 연다. 사용자가 단추를 누른 때 부른다
+        //    (앞에 보이지 않는 앱이 띄운 화면은 OS가 막는다). 열린 뒤에도 앱은 그대로 돌아 다시 확인할 수 있다.
+        [[nodiscard]] bool apply(const update_apply_options& options, std::u8string& error);
+        // `create`가 받기 폴더에서 읽은 지난 적용의 결과다. 없었으면 비었다. Android는 늘 비었다.
+        [[nodiscard]] std::optional<update_apply_result> last_apply() const;
 
     private:
         struct engine;

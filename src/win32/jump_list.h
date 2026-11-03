@@ -2,6 +2,8 @@
 
 #include "host/taskbar_sync.h"
 #include "luil/win32/win32_window.h"
+// 링크가 가리킬 실행 파일은 `current_executable_path`가 읽는다. 창과 test가 이 헤더만 들여 부르므로 함께 든다.
+#include "win32/executable_path.h"
 
 #include <windows.h>
 
@@ -47,9 +49,6 @@ namespace luil::win32 {
     //  - 제목이 비었거나, 글이 잘못된 UTF-8이거나 NUL을 품었거나, 인자 줄·설명이 `jump_task_text_limit`를 넘거나,
     //    아이콘 경로가 `MAX_PATH` 이상이면 규칙 밖이다. 실행 파일 경로가 비어도 그렇다.
     [[nodiscard]] std::optional<std::vector<jump_task_link>> make_jump_task_links(const taskbar_jump_list& list, std::wstring_view executable, std::u8string& error);
-
-    // 이 프로세스 실행 파일의 절대 경로다. 읽지 못하면 비었다.
-    [[nodiscard]] std::wstring current_executable_path();
 
     // 링크 값으로 셸 링크 개체를 짓는다. 제목은 링크의 속성 저장소에 싣는다.
     [[nodiscard]] HRESULT make_shell_link(const jump_task_link& link, Microsoft::WRL::ComPtr<IShellLinkW>& result);

@@ -1,6 +1,6 @@
 # 자동 업데이트
 
-앱이 새 판이 있는지 묻고, 받고, 받은 것이 진짜인지 확인하고, 적용하는 길이다. 서버에 둔 서명한 매니페스트를 받아 ECDSA P-256 서명을 OS 암호 API로 확인하고, 실행 파일을 덩이로 나눠 받으며 SHA-256을 맞춘다. 적용은 Win32에서 새 exe가 도우미로 떠 옛 exe를 바꾸고 다시 띄우며, Android에서 스토어 페이지를 연다. 이 문서는 확인·신뢰·내려받기와 공개 형식의 몸통을 맡고 적용은 [자동 업데이트 적용](auto-update-apply-design.md)이 맡는다. 공개 형식은 새 헤더 `include/luil/app/updater.h`의 `updater`·`updater_config`·`update_key`·`update_status`(`update_phase`·`update_failure`·`update_offer`)와 적용 문서의 `update_apply_options`·`update_apply_result`·`platform_update_apply_mode`·`run_update_helper`다. 앞의 것은 이 문서의 구현 커밋이 세웠고, 적용 쪽 선언은 적용 문서의 구현이 같은 헤더에 더한다.
+앱이 새 판이 있는지 묻고, 받고, 받은 것이 진짜인지 확인하고, 적용하는 길이다. 서버에 둔 서명한 매니페스트를 받아 ECDSA P-256 서명을 OS 암호 API로 확인하고, 실행 파일을 덩이로 나눠 받으며 SHA-256을 맞춘다. 적용은 Win32에서 새 exe가 도우미로 떠 옛 exe를 바꾸고 다시 띄우며, Android에서 스토어 페이지를 연다. 이 문서는 확인·신뢰·내려받기와 공개 형식의 몸통을 맡고 적용은 [자동 업데이트 적용](auto-update-apply-design.md)이 맡는다. 공개 형식은 새 헤더 `include/luil/app/updater.h`의 `updater`·`updater_config`·`update_key`·`update_status`(`update_phase`·`update_failure`·`update_offer`)와 적용 문서의 `update_apply_options`·`update_apply_result`·`platform_update_apply_mode`·`run_update_helper`다. 앞의 것은 이 문서의 구현 커밋이 세웠고, 적용 쪽 선언은 적용 문서의 구현이 같은 헤더에 더했다.
 
 ## 문제
 
@@ -85,7 +85,7 @@ namespace luil {
         void cancel() noexcept; // 하던 일을 접고 failed·cancelled로 알린다. 받던 파일은 남아 다음 download가 잇는다
         void stop() noexcept;   // 멱등이다. 돌아온 뒤 `report`는 불리지 않는다
 
-        // 아래 둘은 적용 문서의 구현이 더한다.
+        // 적용이다 (적용 문서).
         [[nodiscard]] bool apply(const update_apply_options& options, std::u8string& error);
         [[nodiscard]] std::optional<update_apply_result> last_apply() const;
     };
@@ -130,8 +130,8 @@ namespace luil {
 2. 봉투를 읽는다. `format`, `payload`, 1~8개의 `signatures`가 없거나 꼴이 틀리면 `manifest_invalid`다.
 3. 서명을 본다. 차례대로 `key`가 `keys`에 있는 항목만 확인하고 하나라도 맞으면 지난다. 없으면 `signature_invalid`이고 진단이 "아는 키가 없다"와 "맞지 않는다"를 가른다. **payload는 서명을 지난 뒤에만 JSON으로 읽는다.**
 4. payload를 읽는다. 칸이 없거나 꼴이 틀리면 `manifest_invalid`, `app`·`channel`이 config와 다르면 `manifest_mismatch`, `sequence`가 상태 파일의 값보다 작으면 `replayed`다(결정 4). 같은 값은 같은 매니페스트를 다시 받은 것이라 지난다. 지나면 더 큰 `sequence`를 적고, 적지 못하면 `disk`다. 판이 같거나 낮아도 적는다. 읽지 못하거나 꼴이 틀린 상태 파일은 없는 것(0)으로 본다(이 PC의 파일을 쓸 수 있는 사람은 어차피 폴더를 지울 수 있다, 결정 4의 대가). 모르는 칸은 넘긴다(뒤 판 호환).
-5. 판을 견준다. `version`이 `current_version`보다 크고 되돌림으로 건너뛴 판(적용 문서 결정 9)이 아니면 `available`이다. 같거나 낮으면 `up_to_date`다. 낮은 판은 어떤 경우에도 내주지 않는다.
-6. 이 빌드의 플랫폼 칸이 없으면 `no_asset`, `size`가 `max_asset_bytes`보다 크면 `too_large`다. Win32는 실행 파일 폴더에 쓸 수 있는지 보고 막혔으면 `not_writable`이다(적용 문서 결정 10, 그 쓰기 시험은 적용 문서의 구현이 `update_apply_win32.cpp`와 함께 더한다). 셋 다 `offer`를 실어 앱이 다른 길(`notes_url`)을 보인다. Android는 `store_url`이 `store_schemes` 밖이면 `manifest_invalid`다. Win32는 asset 주소가 아래 규칙 밖이면 `manifest_invalid`다.
+5. 판을 견준다. `version`이 `current_version`보다 크고, 상태 파일에 되돌림으로 건너뛴 판(적용 문서 결정 9)이 있으면 그보다도 커야 `available`이다. 그 밖은 `up_to_date`다. 낮은 판은 어떤 경우에도 내주지 않는다.
+6. 이 빌드의 플랫폼 칸이 없으면 `no_asset`, `size`가 `max_asset_bytes`보다 크면 `too_large`다. Win32는 실행 파일 폴더에 쓸 수 있는지 보고 막혔으면 `not_writable`이다(적용 문서 결정 10, `update_apply_win32.cpp`의 `executable_folder_writable`). 셋 다 `offer`를 실어 앱이 다른 길(`notes_url`)을 보인다. Android는 `store_url`이 `store_schemes` 밖이면 `manifest_invalid`다. Win32는 asset 주소가 아래 규칙 밖이면 `manifest_invalid`다.
 7. Win32는 받아 둔 `<sha256>.exe`가 있으면 `verifying`을 알리고 그 바이트를 해시해 같으면 요청 없이 `ready`, 다르면 지우고 `available`이다.
 
 **주소.** 매니페스트와 asset은 https다. http는 되돌이 host(`127.0.0.1`·`::1`·`localhost`)만 받는다(test와 데모). 서명이 내용을 지키지만 평문은 이 PC가 어느 판인지 드러낸다. asset `url`은 절대 주소이거나 `/`·`?`·`#`·`:`가 없는 이름 하나다. 이름이면 매니페스트 답의 `final_url`에서 마지막 경로 조각을 그 이름으로 바꾼다. 재지정은 `http_client` 규칙 그대로다(https에서 http로 따라가지 않는다).
@@ -235,9 +235,9 @@ openssl base64 -A -in payload.json                                          봉�
 ## 다른 노드와의 약속
 
 - **적용 문서.** 같은 노드다. 단계 `applying`·`handed_off`, 실패 `not_writable`·`launch_failed`, 상태 파일의 건너뛴 판, 결과 파일과 `last_apply`의 규칙은 그쪽이 정한다. [단일 인스턴스](single-instance-args-design.md) 185줄은 그쪽이 닫는다.
-  - 이 문서의 구현이 둔 것: 단계·실패 enum의 적용 값(`applying`·`handed_off`·`not_writable`·`launch_failed`)과 `updater_config::store_schemes`는 이미 있다. 적용 쪽 선언(`update_apply_options`·`update_apply_result`·`update_apply_mode`·`updater::apply`·`updater::last_apply`·`platform_update_apply_mode`·`run_update_helper`)과 `create`의 결과 파일 읽기는 적용 구현이 같은 헤더와 `updater.cpp`에 더한다.
-  - 확인 6의 쓰기 시험(`not_writable`)은 적용 구현이 `executable_folder_writable`과 함께 `updater.cpp`의 확인 끝에 건다.
-  - 상태 파일은 지금 `sequence`만 쓴다(`serialize_update_state`). 건너뛸 판을 더할 때 그 칸을 `update_state`와 짓기·읽기에 함께 더해야 `sequence`를 적을 때 지워지지 않는다.
+  - 이 문서의 구현이 둔 것: 단계·실패 enum의 적용 값(`applying`·`handed_off`·`not_writable`·`launch_failed`)과 `updater_config::store_schemes`다. 적용 쪽 선언(`update_apply_options`·`update_apply_result`·`update_apply_mode`·`updater::apply`·`updater::last_apply`·`platform_update_apply_mode`·`run_update_helper`)과 `create`의 결과 파일 읽기는 적용 구현이 같은 헤더와 `updater.cpp`에 더했다.
+  - 확인 6의 쓰기 시험(`not_writable`)은 적용 구현이 `update_target_writable`(Win32는 `executable_folder_writable`)로 `updater.cpp`의 확인 끝에 걸었다.
+  - 상태 파일에 건너뛸 판(`skipped_version`)이 더해졌다. `sequence`를 적을 때 읽은 `skipped_version`을 그대로 다시 쓰고, 도우미는 읽은 `sequence`를 그대로 다시 쓴다. 판 규칙 밖의 `skipped_version`은 꼴이 틀린 상태 파일이다.
 - **HTTP client.** 고치지 않는다(결정 5 a). `Range` 헤더, `decompress`, `assume_kind`, 요청별 `max_body_bytes`, `final_url`을 그대로 쓴다. 결정 5가 c로 바뀌면 `http_message.h`와 두 백엔드를 이 노드가 고친다(줄 4 파일).
 - **줄 2 markup.** core의 nlohmann 링크는 style_sheet(G5)가 세웠다. 이 노드는 core 소스 묶음에 파일을 더할 뿐이고 링크 줄은 고치지 않는다. 같은 `src/CMakeLists.txt`의 다른 묶음이라 병합이 기계적이다.
 - **공유 꼬리 파일.** `app_host.h`(ui_frame)·`app_delegate.h`·`ui_platform.h`·`ui_events.h`·`accessibility.h`·`uia_provider.cpp`를 고치지 않는다. 작업 표시줄(R1)의 `taskbar.h`도 고치지 않고 앱이 `update_status`를 진행률로 옮긴다(규칙). 새 kind가 없어 `ui_element_id.h`, `inspect_names.cpp`, `tests/ui_element_tests.cpp`의 `last[]`, `default_text`를 고치지 않는다. `luil.h`에 include 한 줄, `src/CMakeLists.txt`에 core·Win32·Android 묶음의 파일과 `bcrypt`, `tests/CMakeLists.txt`에 test 파일을 끝에 더한다.

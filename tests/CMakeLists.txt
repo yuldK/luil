@@ -335,9 +335,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         loopback_socket_posix.cpp)
     # 자동 업데이트의 확인을 같은 JVM 안에서 돈다. 서명 확인이 JNI의 java.security를 부르고, 상태 파일과 잠금이 플랫폼 도구를
     # 쓴다 (플랫폼 도구는 주소 열기에 쓰는 UTF-8 변환을 함께 끌어온다). 미리 서명한 봉투만 쓴다. Android는 받지 않는다.
+    # 적용(스토어 열기)은 상태 기계가 부르므로 링크하지만, GameActivity가 없는 이 JVM에서는 열리지 않아 돌리지 않는다.
     target_sources(luil_net_tests PRIVATE
         "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/update_apply_android.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/update_crypto_android.cpp"
         "${LUIL_SOURCE_DIRECTORY}/luil/url_scheme.cpp"
         "${LUIL_SOURCE_DIRECTORY}/net/updater.cpp"
@@ -524,7 +526,9 @@ add_executable(luil_tests
     "${PROJECT_SOURCE_DIR}/examples/demo/basics_page.cpp"
     basics_page_tests.cpp)
 # 자동 업데이트의 CNG 암호와 되돌이 서버로 끝까지 도는 상태 기계다. 시험 서명(update_test_signing.cpp)만 시험 키의 비밀 값을 들인다.
+# 적용은 시험 앱(luil_update_probe) 사본을 임시 폴더에서 띄우고 바꾸고 되돌린다. test 프로세스 자신은 적용의 대상이 되지 않는다.
 target_sources(luil_tests PRIVATE
+    update_apply_tests.cpp
     update_crypto_tests.cpp
     update_fixtures.cpp
     update_test_signing.cpp
@@ -687,6 +691,21 @@ luil_set_ide_folder("Tests"
     luil_core_tests
     luil_messaging_asan_tests
     luil_tests)
+
+# 자동 업데이트 적용 test가 띄우는 시험 앱이다 (auto-update-apply-design.md의 확인 절). test가 사본 끝에 판 표지를 붙여
+# 옛 판·새 판으로 띄우고, 도우미 실행은 `run_update_helper`가 평소 길보다 먼저 가른다. luil_tests 옆에 놓여 test가 거기서 찾는다.
+add_executable(luil_update_probe WIN32
+    "${luil_tests_resource}"
+    update_fixtures.cpp
+    update_probe_main.cpp)
+target_include_directories(luil_update_probe
+    PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}"
+        "${LUIL_TEST_DIRECTORY}")
+target_link_libraries(luil_update_probe PRIVATE luil::luil luil_options)
+luil_disable_automatic_windows_manifest(luil_update_probe)
+luil_set_ide_folder("Tests" luil_update_probe)
+add_dependencies(luil_tests luil_update_probe)
 
 # 위·왼쪽 끝 크기 변경에서 아래·오른쪽 내용이 한 합성이라도 튀는지 합성된 화면을 캡처해 본다
 # (layered-presentation-design.md). 사람의 입력 데스크톱에 창을 띄우므로 LUIL_SCREEN_TESTS=1일 때만 돌고,

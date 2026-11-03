@@ -317,6 +317,15 @@ TEST_CASE("an update manifest is judged against this computer", "[update][manife
     CHECK(luil::judge_update_manifest(*bare, plain) == luil::update_verdict::no_asset);
     plain.current = version_of(u8"1.2");
     CHECK(luil::judge_update_manifest(*bare, plain) == luil::update_verdict::up_to_date);
+
+    // 되돌린 판(적용 문서 결정 9)과 그보다 낮은 판은 내주지 않고, 더 새 판은 내준다.
+    other = base;
+    other.skipped = version_of(u8"1.0.1");
+    CHECK(luil::judge_update_manifest(*manifest, other) == luil::update_verdict::up_to_date);
+    other.skipped = version_of(u8"1.0.2");
+    CHECK(luil::judge_update_manifest(*manifest, other) == luil::update_verdict::up_to_date);
+    other.skipped = version_of(u8"1.0.0.9");
+    CHECK(luil::judge_update_manifest(*manifest, other) == luil::update_verdict::available);
 }
 
 TEST_CASE("each update platform has its manifest key", "[update][manifest]")
@@ -469,10 +478,16 @@ TEST_CASE("content ranges parse only the exact byte form", "[update][manifest]")
 
 TEST_CASE("the update state file round trips", "[update][manifest]")
 {
-    const std::vector<std::uint8_t> bytes { luil::serialize_update_state(luil::update_state { 42 }) };
+    const std::vector<std::uint8_t> bytes { luil::serialize_update_state(luil::update_state { 42, {} }) };
     const std::optional<luil::update_state> state { luil::parse_update_state(bytes) };
     REQUIRE(state.has_value());
     CHECK(state->sequence == 42);
+    CHECK(state->skipped_version.empty());
+    // 되돌림이 남긴 건너뛸 판도 왕복한다. 판 규칙 밖이면 꼴이 틀린 상태 파일이다.
+    const luil::update_state skipped { 42, u8"1.0.1" };
+    CHECK(luil::parse_update_state(luil::serialize_update_state(skipped)) == std::optional<luil::update_state> { skipped });
+    CHECK(luil::parse_update_state(bytes_of(u8"{\"format\":1,\"sequence\":9,\"skipped_version\":\"1.x\"}")).has_value() == false);
+    CHECK(luil::parse_update_state(bytes_of(u8"{\"format\":1,\"sequence\":9,\"skipped_version\":3}")).has_value() == false);
     CHECK(luil::parse_update_state(bytes_of(u8"{\"format\":1,\"sequence\":9,\"later\":\"x\"}"))->sequence == 9);
     CHECK(luil::parse_update_state(bytes_of(u8"{\"format\":1}")).has_value() == false);
     CHECK(luil::parse_update_state(bytes_of(u8"{\"sequence\":-1}")).has_value() == false);
@@ -484,4 +499,162 @@ TEST_CASE("the fixture asset follows its formula", "[update][manifest]")
 {
     const std::vector<std::uint8_t> asset { luil::testing::update_fixture_asset(16) };
     CHECK(asset == std::vector<std::uint8_t> { 0x00, 0x9e, 0x3c, 0xda, 0x78, 0x17, 0xb5, 0x53, 0xf1, 0x8f, 0x2e, 0xcc, 0x6a, 0x08, 0xa7, 0x45 });
+}
+
+namespace {
+    [[nodiscard]] luil::update_helper_arguments sample_helper_arguments()
+    {
+        luil::update_helper_arguments arguments {};
+        arguments.old_executable = u8"C:\\Users\\사용자\\My \"Apps\"\\편집기.exe";
+        arguments.parent_handle = 0x1a4;
+        arguments.download_directory = u8"C:\\Users\\사용자\\AppData\\Local\\편집기 update\\";
+        arguments.sha256 = *luil::parse_update_digest(luil::testing::update_fixture_asset_sha256);
+        arguments.from_version = u8"1.0.0";
+        arguments.to_version = u8"1.0.1";
+        arguments.parent_timeout_ms = 60000;
+        arguments.confirm_timeout_ms = 30000;
+        arguments.restart = true;
+        arguments.restart_arguments = { u8"--page", u8"network" };
+        return arguments;
+    }
+
+    // 실행 파일 이름을 앞에 붙여 `command_line_arguments()`가 주는 꼴로 만든다.
+    [[nodiscard]] std::vector<std::u8string> helper_line(const luil::update_helper_arguments& arguments)
+    {
+        std::vector<std::u8string> line { u8"C:\\new\\0123.exe" };
+        const std::vector<std::u8string> tail { luil::make_update_helper_arguments(arguments) };
+        line.insert(line.end(), tail.begin(), tail.end());
+        return line;
+    }
+
+    [[nodiscard]] luil::update_helper_parse_result parse_line(const std::vector<std::u8string>& line)
+    {
+        return luil::parse_update_helper_arguments(line);
+    }
+}
+
+TEST_CASE("update helper arguments round trip", "[update][manifest][update_apply]")
+{
+    luil::update_helper_arguments arguments { sample_helper_arguments() };
+    const std::vector<std::u8string> line { helper_line(arguments) };
+    REQUIRE(line.size() == 13 + arguments.restart_arguments.size());
+    CHECK(line[1] == u8"-luil-update-apply");
+    CHECK(line[2] == u8"1");
+    CHECK(line[4] == u8"1a4");
+    CHECK(line[12] == u8"--");
+    luil::update_helper_parse_result parsed { parse_line(line) };
+    REQUIRE(parsed.kind == luil::update_helper_parse::helper);
+    CHECK(parsed.arguments == arguments);
+
+    // 다시 띄울 인자가 없거나, 빈 글이거나, `--` 뒤에 표식과 같은 글이 와도 그대로 돌아온다.
+    const std::vector<std::vector<std::u8string>> restarts {
+        std::vector<std::u8string> {},
+        std::vector<std::u8string> { u8"" },
+        std::vector<std::u8string> { u8"-luil-update-apply", u8"--", u8"1" },
+        std::vector<std::u8string> { u8"빈칸 든 인자", u8"say \"hi\"" },
+    };
+    for (const std::vector<std::u8string>& restart : restarts)
+    {
+        arguments.restart_arguments = restart;
+        arguments.restart = restart.empty() == false;
+        parsed = parse_line(helper_line(arguments));
+        REQUIRE(parsed.kind == luil::update_helper_parse::helper);
+        CHECK(parsed.arguments == arguments);
+    }
+    arguments.confirm_timeout_ms = 0;
+    arguments.parent_handle = 0xffffffffffffffffull;
+    CHECK(parse_line(helper_line(arguments)).arguments == arguments);
+}
+
+TEST_CASE("arguments without the helper marker are not a helper run", "[update][manifest][update_apply]")
+{
+    CHECK(parse_line({}).kind == luil::update_helper_parse::not_helper);
+    CHECK(parse_line({ u8"app.exe" }).kind == luil::update_helper_parse::not_helper);
+    CHECK(parse_line({ u8"app.exe", u8"--page", u8"network" }).kind == luil::update_helper_parse::not_helper);
+    // 표식은 둘째 칸에서만 본다. 앱의 인자 뒤에 같은 글이 와도 평소 시작이다.
+    CHECK(parse_line({ u8"app.exe", u8"--", u8"-luil-update-apply" }).kind == luil::update_helper_parse::not_helper);
+    CHECK(parse_line({ u8"app.exe", u8"-LUIL-UPDATE-APPLY" }).kind == luil::update_helper_parse::not_helper);
+}
+
+TEST_CASE("malformed update helper arguments are refused", "[update][manifest][update_apply]")
+{
+    const std::vector<std::u8string> good { helper_line(sample_helper_arguments()) };
+    REQUIRE(parse_line(good).kind == luil::update_helper_parse::helper);
+    const auto refused = [&good](const std::size_t index, const std::u8string_view value) {
+        std::vector<std::u8string> line { good };
+        line[index] = value;
+        const luil::update_helper_parse_result parsed { parse_line(line) };
+        CHECK(parsed.kind == luil::update_helper_parse::malformed);
+        CHECK(parsed.error.empty() == false);
+    };
+    // 꼴 번호
+    refused(2, u8"2");
+    refused(2, u8"");
+    // 빈 칸
+    refused(3, u8"");
+    refused(5, u8"");
+    // 손잡이는 앞자리 0 없는 소문자 16진 1~16자, 0이 아니다
+    for (const std::u8string_view handle : { u8"", u8"0", u8"01a4", u8"1A4", u8"0x1a4", u8"g", u8"10000000000000000" })
+        refused(4, handle);
+    // 해시·판
+    refused(6, u8"689EAD2B477045595DD62D682932723DEEBCFD922B9FA00FC55AA3AAA64E7E50");
+    refused(6, u8"abc");
+    refused(7, u8"1.0.0-beta");
+    refused(8, u8"");
+    // 시한: 부모 시한은 0보다 크고, 앞자리 0과 Win32 대기의 끝없음은 받지 않는다
+    for (const std::u8string_view timeout : { u8"0", u8"", u8"010", u8"-1", u8"4294967295", u8"1e3" })
+        refused(9, timeout);
+    refused(10, u8"4294967295");
+    refused(10, u8"x");
+    // 다시 띄우기는 0과 1만
+    refused(11, u8"yes");
+    refused(11, u8"");
+    // `--` 자리에 남는 칸이 오거나 칸이 모자라다
+    refused(12, u8"extra");
+    const std::vector<std::u8string> shorter { good.begin(), good.begin() + 12 };
+    CHECK(parse_line(shorter).kind == luil::update_helper_parse::malformed);
+    std::vector<std::u8string> longer { good.begin(), good.begin() + 12 };
+    longer.push_back(u8"extra");
+    longer.push_back(u8"--");
+    CHECK(parse_line(longer).kind == luil::update_helper_parse::malformed);
+    std::vector<std::u8string> with_nul { good };
+    with_nul[3] = std::u8string { u8"a" } + u8'\0' + u8"b";
+    CHECK(parse_line(with_nul).kind == luil::update_helper_parse::malformed);
+}
+
+TEST_CASE("the update apply result file round trips", "[update][manifest][update_apply]")
+{
+    for (const luil::update_apply_outcome outcome :
+        { luil::update_apply_outcome::replaced, luil::update_apply_outcome::rolled_back, luil::update_apply_outcome::replace_failed, luil::update_apply_outcome::parent_timeout })
+    {
+        luil::update_apply_record record {};
+        record.result.outcome = outcome;
+        record.result.from_version = u8"1.0.0";
+        record.result.to_version = u8"1.0.1";
+        record.result.error = u8"The new version exited with code 3 before confirming.";
+        record.sha256 = *luil::parse_update_digest(luil::testing::update_fixture_asset_sha256);
+        const std::optional<luil::update_apply_record> read { luil::parse_update_apply_record(luil::serialize_update_apply_record(record)) };
+        REQUIRE(read.has_value());
+        CHECK(read->result.outcome == outcome);
+        CHECK(read->result.from_version == record.result.from_version);
+        CHECK(read->result.to_version == record.result.to_version);
+        CHECK(read->result.error == record.result.error);
+        CHECK(read->sha256 == record.sha256);
+    }
+    CHECK(luil::update_apply_outcome_name(luil::update_apply_outcome::rolled_back) == u8"rolled_back");
+    CHECK(luil::update_apply_outcome_name(luil::update_apply_outcome::parent_timeout) == u8"parent_timeout");
+
+    const std::u8string digest { luil::testing::update_fixture_asset_sha256 };
+    const auto record_of = [&digest](const std::u8string_view outcome, const std::u8string_view extra) {
+        return bytes_of(u8"{\"format\":1,\"outcome\":\"" + std::u8string { outcome } + u8"\",\"from\":\"1.0.0\",\"to\":\"1.0.1\",\"sha256\":\"" + digest + u8"\""
+            + std::u8string { extra } + u8"}");
+    };
+    CHECK(luil::parse_update_apply_record(record_of(u8"replaced", u8",\"error\":\"\",\"later\":1")).has_value());
+    // 모르는 결과, 빠진 칸, 다른 꼴 번호는 읽지 않는다.
+    CHECK(luil::parse_update_apply_record(record_of(u8"installed", u8",\"error\":\"\"")).has_value() == false);
+    CHECK(luil::parse_update_apply_record(record_of(u8"replaced", u8"")).has_value() == false);
+    const std::u8string later_format { u8"{\"format\":2,\"outcome\":\"replaced\",\"from\":\"1\",\"to\":\"2\",\"sha256\":\"" + digest + u8"\",\"error\":\"\"}" };
+    CHECK(luil::parse_update_apply_record(bytes_of(later_format)).has_value() == false);
+    CHECK(luil::parse_update_apply_record(bytes_of(u8"not json")).has_value() == false);
+    CHECK(luil::parse_update_apply_record({}).has_value() == false);
 }

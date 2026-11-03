@@ -217,6 +217,50 @@ namespace luil {
             text.append(digits.begin(), digits.end());
         }
 
+        [[nodiscard]] std::u8string decimal_number(const std::uint64_t value)
+        {
+            std::u8string text {};
+            append_number(text, value);
+            return text;
+        }
+
+        // 앞자리 0 없는 소문자 16진이다.
+        [[nodiscard]] std::u8string hex_number(const std::uint64_t value)
+        {
+            char buffer[16] {};
+            const auto [end, code] { std::to_chars(buffer, buffer + sizeof(buffer), value, 16) };
+            static_cast<void>(code);
+            return std::u8string { reinterpret_cast<const char8_t*>(buffer), static_cast<std::size_t>(end - buffer) };
+        }
+
+        // 소문자 16진 1~16자, 앞자리 0 없음이다.
+        [[nodiscard]] std::optional<std::uint64_t> parse_hex_number(const std::u8string_view text) noexcept
+        {
+            if (text.empty() || text.size() > 16 || (text.size() > 1 && text.front() == u8'0'))
+                return std::nullopt;
+            std::uint64_t value { 0 };
+            for (const char8_t character : text)
+            {
+                const int digit { hex_value(character) };
+                if (digit < 0)
+                    return std::nullopt;
+                value = (value << 4) | static_cast<std::uint64_t>(digit);
+            }
+            return value;
+        }
+
+        [[nodiscard]] std::string to_ascii(const std::u8string_view text)
+        {
+            return std::string { reinterpret_cast<const char*>(text.data()), text.size() };
+        }
+
+        // 잘못된 UTF-8이 섞여도 던지지 않고 바꿔 적는다. 진단 글은 OS가 준 것을 옮길 수 있다.
+        [[nodiscard]] std::vector<std::uint8_t> dump_bytes(const nlohmann::json& root)
+        {
+            const std::string text { root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace) };
+            return std::vector<std::uint8_t> { text.begin(), text.end() };
+        }
+
         // 서명된 asset 칸 하나다. `windows`면 url·size·sha256, 아니면 store_url이다.
         [[nodiscard]] std::optional<update_asset> parse_asset(const nlohmann::json& value, const bool windows, const std::u8string_view key, std::u8string& error)
         {
@@ -651,6 +695,9 @@ namespace luil {
         // 낮은 판은 어떤 경우에도 내주지 않는다.
         if ((manifest.version > judgement.current) == false)
             return update_verdict::up_to_date;
+        // 되돌린 판은 더 새 판이 나올 때까지 내주지 않는다 (적용 문서 결정 9).
+        if (judgement.skipped.has_value() && (manifest.version > *judgement.skipped) == false)
+            return update_verdict::up_to_date;
         const std::optional<update_asset>& asset { manifest.asset(judgement.platform) };
         if (asset.has_value() == false)
             return update_verdict::no_asset;
@@ -735,7 +782,16 @@ namespace luil {
         const std::optional<std::uint64_t> sequence { unsigned_member(*root, "sequence") };
         if (sequence.has_value() == false)
             return std::nullopt;
-        return update_state { *sequence };
+        update_state state { *sequence, {} };
+        if (const nlohmann::json* const skipped { member(*root, "skipped_version") }; skipped != nullptr)
+        {
+            if (skipped->is_string() == false)
+                return std::nullopt;
+            state.skipped_version = from_json_string(*skipped);
+            if (parse_update_version(state.skipped_version).has_value() == false)
+                return std::nullopt;
+        }
+        return state;
     }
 
     std::vector<std::uint8_t> serialize_update_state(const update_state& state)
@@ -743,7 +799,142 @@ namespace luil {
         nlohmann::json root {};
         root["format"] = 1;
         root["sequence"] = state.sequence;
-        const std::string text { root.dump() };
-        return std::vector<std::uint8_t> { text.begin(), text.end() };
+        if (state.skipped_version.empty() == false)
+            root["skipped_version"] = to_ascii(state.skipped_version);
+        return dump_bytes(root);
+    }
+
+    std::vector<std::u8string> make_update_helper_arguments(const update_helper_arguments& arguments)
+    {
+        std::vector<std::u8string> list {};
+        list.reserve(12 + arguments.restart_arguments.size());
+        list.emplace_back(update_helper_flag);
+        list.emplace_back(update_helper_format);
+        list.push_back(arguments.old_executable);
+        list.push_back(hex_number(arguments.parent_handle));
+        list.push_back(arguments.download_directory);
+        list.push_back(format_update_digest(arguments.sha256));
+        list.push_back(arguments.from_version);
+        list.push_back(arguments.to_version);
+        list.push_back(decimal_number(arguments.parent_timeout_ms));
+        list.push_back(decimal_number(arguments.confirm_timeout_ms));
+        list.emplace_back(arguments.restart ? u8"1" : u8"0");
+        list.emplace_back(update_helper_separator);
+        list.insert(list.end(), arguments.restart_arguments.begin(), arguments.restart_arguments.end());
+        return list;
+    }
+
+    update_helper_parse_result parse_update_helper_arguments(const std::span<const std::u8string> arguments)
+    {
+        update_helper_parse_result result {};
+        if (arguments.size() < 2 || arguments[1] != update_helper_flag)
+            return result;
+        result.kind = update_helper_parse::malformed;
+        // 고정 칸은 [0] 실행 파일, [1] 표식, [2] 꼴 번호, [3]~[11] 값 아홉, [12] `--`다.
+        constexpr std::size_t separator_index { 12 };
+        if (arguments.size() < 3 || arguments[2] != update_helper_format)
+        {
+            result.error = u8"The update helper arguments use an unknown format number.";
+            return result;
+        }
+        if (arguments.size() <= separator_index || arguments[separator_index] != update_helper_separator)
+        {
+            result.error = u8"The update helper arguments have missing or extra fields before --.";
+            return result;
+        }
+        update_helper_arguments& value { result.arguments };
+        value.old_executable = arguments[3];
+        value.download_directory = arguments[5];
+        value.from_version = arguments[7];
+        value.to_version = arguments[8];
+        const std::optional<std::uint64_t> handle { parse_hex_number(arguments[4]) };
+        const std::optional<update_digest> digest { parse_update_digest(arguments[6]) };
+        std::uint64_t parent_ms { 0 };
+        std::uint64_t confirm_ms { 0 };
+        const bool timeouts_valid {
+            unsigned_text(arguments[9], parent_ms) && unsigned_text(arguments[10], confirm_ms) && parent_ms > 0 && parent_ms <= update_helper_maximum_timeout_ms
+            && confirm_ms <= update_helper_maximum_timeout_ms
+        };
+        const bool restart_valid { arguments[11] == u8"0" || arguments[11] == u8"1" };
+        if (value.old_executable.empty() || value.download_directory.empty() || value.old_executable.find(u8'\0') != std::u8string::npos
+            || value.download_directory.find(u8'\0') != std::u8string::npos || handle.has_value() == false || *handle == 0 || digest.has_value() == false
+            || parse_update_version(value.from_version).has_value() == false || parse_update_version(value.to_version).has_value() == false || timeouts_valid == false
+            || restart_valid == false)
+        {
+            result.error = u8"The update helper arguments have an empty or malformed field.";
+            return result;
+        }
+        value.parent_handle = *handle;
+        value.sha256 = *digest;
+        value.parent_timeout_ms = parent_ms;
+        value.confirm_timeout_ms = confirm_ms;
+        value.restart = arguments[11] == u8"1";
+        value.restart_arguments.assign(arguments.begin() + static_cast<std::ptrdiff_t>(separator_index + 1), arguments.end());
+        result.kind = update_helper_parse::helper;
+        return result;
+    }
+
+    std::u8string_view update_apply_outcome_name(const update_apply_outcome outcome) noexcept
+    {
+        switch (outcome)
+        {
+        case update_apply_outcome::replaced:
+            return u8"replaced";
+        case update_apply_outcome::rolled_back:
+            return u8"rolled_back";
+        case update_apply_outcome::replace_failed:
+            return u8"replace_failed";
+        case update_apply_outcome::parent_timeout:
+            return u8"parent_timeout";
+        }
+        return u8"replaced";
+    }
+
+    std::optional<update_apply_record> parse_update_apply_record(const std::span<const std::uint8_t> bytes)
+    {
+        std::u8string ignored {};
+        const std::optional<nlohmann::json> root { parse_json(bytes, u8"The update apply result", ignored) };
+        if (root.has_value() == false)
+            return std::nullopt;
+        const std::optional<std::uint64_t> format { unsigned_member(*root, "format") };
+        const std::optional<std::u8string> outcome_text { string_member(*root, "outcome") };
+        const std::optional<std::u8string> from { string_member(*root, "from") };
+        const std::optional<std::u8string> to { string_member(*root, "to") };
+        const std::optional<std::u8string> digest_text { string_member(*root, "sha256") };
+        const std::optional<std::u8string> error { string_member(*root, "error") };
+        const std::optional<update_digest> digest { digest_text.has_value() ? parse_update_digest(*digest_text) : std::nullopt };
+        if (format.has_value() == false || *format != 1 || outcome_text.has_value() == false || from.has_value() == false || to.has_value() == false
+            || digest.has_value() == false || error.has_value() == false)
+            return std::nullopt;
+        update_apply_record record {};
+        bool known { false };
+        for (const update_apply_outcome outcome :
+            { update_apply_outcome::replaced, update_apply_outcome::rolled_back, update_apply_outcome::replace_failed, update_apply_outcome::parent_timeout })
+        {
+            if (*outcome_text == update_apply_outcome_name(outcome))
+            {
+                record.result.outcome = outcome;
+                known = true;
+            }
+        }
+        if (known == false)
+            return std::nullopt;
+        record.result.from_version = *from;
+        record.result.to_version = *to;
+        record.result.error = *error;
+        record.sha256 = *digest;
+        return record;
+    }
+
+    std::vector<std::uint8_t> serialize_update_apply_record(const update_apply_record& record)
+    {
+        nlohmann::json root {};
+        root["format"] = 1;
+        root["outcome"] = to_ascii(update_apply_outcome_name(record.result.outcome));
+        root["from"] = to_ascii(record.result.from_version);
+        root["to"] = to_ascii(record.result.to_version);
+        root["sha256"] = to_ascii(format_update_digest(record.sha256));
+        root["error"] = to_ascii(record.result.error);
+        return dump_bytes(root);
     }
 }

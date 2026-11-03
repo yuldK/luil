@@ -700,6 +700,42 @@ TEST_CASE("no report arrives after stop returns", "[update][updater]")
     CHECK(sink.late() == 0);
 }
 
+TEST_CASE("apply is refused before there is something to apply", "[update][updater][update_apply]")
+{
+    update_server server {};
+    REQUIRE(server.listening());
+    scratch_folder folder {};
+    report_sink sink {};
+    std::unique_ptr<luil::updater> updater { make_updater(make_config(server, folder, sink)) };
+    std::u8string error {};
+    CHECK(updater->apply(luil::update_apply_options {}, error) == false);
+    CHECK(error.empty() == false);
+    CHECK(updater->last_apply().has_value() == false);
+    // 시한이 규칙 밖이면 단계와 상관없이 거절한다.
+    luil::update_apply_options wrong {};
+    wrong.parent_timeout = std::chrono::milliseconds::zero();
+    error.clear();
+    CHECK(updater->apply(wrong, error) == false);
+    CHECK(contains(error, u8"parent_timeout"));
+    CHECK(sink.size() == 0);
+}
+
+TEST_CASE("a rolled back version is not offered and survives the sequence record", "[update][updater][update_apply]")
+{
+    update_server server {};
+    REQUIRE(server.listening());
+    scratch_folder folder {};
+    report_sink sink {};
+    // 되돌림이 남긴 건너뛸 판이다. 그 판은 더 새 판이 나올 때까지 내주지 않는다.
+    write_file(folder.file(u8"update-state.json"), luil::serialize_update_state(luil::update_state { 0, std::u8string { luil::testing::update_fixture_version } }));
+    std::unique_ptr<luil::updater> updater { make_updater(make_config(server, folder, sink)) };
+    CHECK(run_check(*updater, sink).phase == update_phase::up_to_date);
+    const std::optional<luil::update_state> state { luil::parse_update_state(read_file(folder.file(u8"update-state.json"))) };
+    REQUIRE(state.has_value());
+    CHECK(state->sequence == luil::testing::update_fixture_sequence);
+    CHECK(state->skipped_version == luil::testing::update_fixture_version);
+}
+
 #if defined(__ANDROID__)
 TEST_CASE("Android checks but does not download", "[update][updater][android]")
 {
@@ -1014,5 +1050,130 @@ TEST_CASE("cancel stops a download and the next download continues it", "[update
     server.set_asset_delay(0ms);
     CHECK(run_download(*updater, sink).phase == update_phase::ready);
     CHECK(read_file(ready_file(folder)) == luil::testing::update_fixture_asset());
+}
+
+namespace {
+    [[nodiscard]] luil::update_digest fixture_digest()
+    {
+        const std::optional<luil::update_digest> digest { luil::parse_update_digest(luil::testing::update_fixture_asset_sha256) };
+        REQUIRE(digest.has_value());
+        return *digest;
+    }
+
+    void write_apply_result(const scratch_folder& folder, const luil::update_apply_outcome outcome)
+    {
+        luil::update_apply_record record {};
+        record.result.outcome = outcome;
+        record.result.from_version = u8"1.0.0";
+        record.result.to_version = u8"1.0.1";
+        record.sha256 = fixture_digest();
+        write_file(folder.file(u8"apply-result.json"), luil::serialize_update_apply_record(record));
+    }
+
+    [[nodiscard]] update_status run_apply(luil::updater& updater, report_sink& sink)
+    {
+        const std::size_t from { sink.size() };
+        std::u8string error {};
+        const bool accepted { updater.apply(luil::update_apply_options {}, error) };
+        INFO(ascii(error));
+        REQUIRE(accepted);
+        const std::optional<update_status> status { sink.wait_terminal(from) };
+        REQUIRE(status.has_value());
+        return *status;
+    }
+}
+
+TEST_CASE("create reads a waiting apply result and confirms it to the helper", "[update][updater][update_apply]")
+{
+    update_server server {};
+    REQUIRE(server.listening());
+    scratch_folder folder {};
+    report_sink sink {};
+    write_apply_result(folder, luil::update_apply_outcome::replaced);
+    write_file(ready_file(folder), luil::testing::update_fixture_asset(16));
+    {
+        std::unique_ptr<luil::updater> updater { make_updater(make_config(server, folder, sink)) };
+        const std::optional<luil::update_apply_result> last { updater->last_apply() };
+        REQUIRE(last.has_value());
+        CHECK(last->outcome == luil::update_apply_outcome::replaced);
+        CHECK(last->from_version == u8"1.0.0");
+        CHECK(last->to_version == u8"1.0.1");
+        CHECK(std::filesystem::exists(folder.file(u8"apply-result.json")) == false);
+        // 지켜보는 도우미는 이 내용이 자기 sha256과 같으면 확인으로 본다.
+        CHECK(read_file(folder.file(u8"apply-confirmed")) == luil::testing::update_fixture_bytes(luil::testing::update_fixture_asset_sha256));
+        // 받아 둔 exe는 도우미의 이미지라 이 시작에는 남긴다.
+        CHECK(std::filesystem::exists(ready_file(folder)));
+    }
+    // 결과를 이미 읽은 다음 시작이 남은 것을 지운다.
+    std::unique_ptr<luil::updater> next { make_updater(make_config(server, folder, sink)) };
+    CHECK(next->last_apply().has_value() == false);
+    CHECK(std::filesystem::exists(ready_file(folder)) == false);
+    CHECK(std::filesystem::exists(folder.file(u8"apply-confirmed")) == false);
+    CHECK(sink.size() == 0);
+}
+
+TEST_CASE("create keeps the download after an apply that changed nothing", "[update][updater][update_apply]")
+{
+    update_server server {};
+    REQUIRE(server.listening());
+    scratch_folder folder {};
+    report_sink sink {};
+    write_apply_result(folder, luil::update_apply_outcome::replace_failed);
+    write_file(ready_file(folder), luil::testing::update_fixture_asset(16));
+    {
+        std::unique_ptr<luil::updater> updater { make_updater(make_config(server, folder, sink)) };
+        REQUIRE(updater->last_apply().has_value());
+        CHECK(updater->last_apply()->outcome == luil::update_apply_outcome::replace_failed);
+        // 바꾸지 못한 적용은 지켜보는 도우미가 없어 확인을 남기지 않는다. 받은 파일로 다시 적용할 수 있다.
+        CHECK(std::filesystem::exists(folder.file(u8"apply-confirmed")) == false);
+    }
+    std::unique_ptr<luil::updater> next { make_updater(make_config(server, folder, sink)) };
+    CHECK(std::filesystem::exists(ready_file(folder)));
+
+    // 읽지 못하는 결과 파일은 지우고 없는 것으로 본다.
+    write_file(folder.file(u8"apply-result.json"), luil::testing::update_fixture_bytes(u8"not json"));
+    std::unique_ptr<luil::updater> broken { make_updater(make_config(server, folder, sink)) };
+    CHECK(broken->last_apply().has_value() == false);
+    CHECK(std::filesystem::exists(folder.file(u8"apply-result.json")) == false);
+}
+
+TEST_CASE("an apply whose download changed after verifying is a hash mismatch", "[update][updater][update_apply]")
+{
+    update_server server {};
+    REQUIRE(server.listening());
+    scratch_folder folder {};
+    report_sink sink {};
+    std::unique_ptr<luil::updater> updater { make_updater(make_config(server, folder, sink)) };
+    REQUIRE(run_check(*updater, sink).phase == update_phase::available);
+    REQUIRE(run_download(*updater, sink).phase == update_phase::ready);
+    std::vector<std::uint8_t> changed { luil::testing::update_fixture_asset() };
+    changed.back() ^= 0x01;
+    write_file(ready_file(folder), changed);
+    const std::size_t from { sink.size() };
+    const update_status status { run_apply(*updater, sink) };
+    CHECK(status.failure == update_failure::hash_mismatch);
+    CHECK(phases_from(sink, from) == std::vector<update_phase> { update_phase::applying, update_phase::failed });
+    CHECK(std::filesystem::exists(ready_file(folder)) == false);
+    // 실패한 적용 뒤에는 다시 받아야 적용한다.
+    std::u8string error {};
+    CHECK(updater->apply(luil::update_apply_options {}, error) == false);
+}
+
+TEST_CASE("an apply whose download is not an executable fails to launch", "[update][updater][update_apply]")
+{
+    // 고정 asset은 실행 파일이 아니라 도우미로 뜨지 못한다. 그래서 이 test 프로세스를 대상으로 삼는 도우미는 서지 않는다.
+    update_server server {};
+    REQUIRE(server.listening());
+    scratch_folder folder {};
+    report_sink sink {};
+    std::unique_ptr<luil::updater> updater { make_updater(make_config(server, folder, sink)) };
+    REQUIRE(run_check(*updater, sink).phase == update_phase::available);
+    REQUIRE(run_download(*updater, sink).phase == update_phase::ready);
+    const update_status status { run_apply(*updater, sink) };
+    CHECK(status.failure == update_failure::launch_failed);
+    CHECK(status.error.empty() == false);
+    // 띄우지 못했으니 일을 계속 받는다. 받은 파일도 남는다.
+    CHECK(std::filesystem::exists(ready_file(folder)));
+    CHECK(run_check(*updater, sink).phase == update_phase::ready);
 }
 #endif

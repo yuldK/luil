@@ -492,6 +492,8 @@ luil_add_source_filter(luil_files "win32/host"
     win32/secret_store_win32.cpp
     "${public_headers}/app/platform_services.h"
     win32/command_line.h
+    win32/executable_path.cpp
+    win32/executable_path.h
     win32/owned_handle.h
     win32/instance_message.cpp
     win32/instance_message.h
@@ -672,10 +674,14 @@ luil_add_source_filter(luil_files "net/winhttp"
     net/winhttp/winhttp_error.cpp
     net/winhttp/winhttp_error.h)
 
-# net/update: 자동 업데이트의 상태 기계와 CNG 암호다 (auto-update-design.md). 상태 기계는 두 플랫폼 묶음에 같이 든다.
+# net/update: 자동 업데이트의 상태 기계와 CNG 암호, 도우미로 실행 파일을 바꾸는 적용이다 (auto-update-design.md,
+# auto-update-apply-design.md). 상태 기계는 두 플랫폼 묶음에 같이 든다.
 luil_add_source_filter(luil_files "net/update"
+    net/update_apply.h
     net/update_crypto.h
     net/updater.cpp
+    win32/update_apply_win32.cpp
+    win32/update_apply_win32.h
     win32/update_crypto_win32.cpp)
 
 # 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
@@ -869,8 +875,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         luil_add_source_filter(luil_android_files "net" net/smb_client_unsupported.cpp)
     endif()
     # 자동 업데이트의 상태 기계와 JNI java.security 서명 확인이다 (auto-update-design.md). Android는 확인만 하고 받지 않는다.
+    # 적용은 스토어 주소를 여는 것이 전부다 (auto-update-apply-design.md).
     luil_add_source_filter(luil_android_files "net/update"
+        android/update_apply_android.cpp
         android/update_crypto_android.cpp
+        net/update_apply.h
         net/update_crypto.h
         net/updater.cpp)
 

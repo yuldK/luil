@@ -5,6 +5,7 @@
 #include "luil/net/http_body.h"
 #include "luil/net/http_client.h"
 #include "luil/net/http_message.h"
+#include "net/update_apply.h"
 #include "net/update_crypto.h"
 
 #include <algorithm>
@@ -39,8 +40,6 @@ namespace luil {
         constexpr std::size_t manifest_body_limit { 1024u * 1024u };
         constexpr std::size_t hash_block_bytes { 1024u * 1024u };
         constexpr std::chrono::milliseconds chunk_total_timeout { 5 * 60 * 1000 };
-        constexpr std::u8string_view state_file_name { u8"update-state.json" };
-        constexpr std::u8string_view lock_file_name { u8"update.lock" };
 
         [[nodiscard]] bool downloads_supported() noexcept
         {
@@ -98,6 +97,73 @@ namespace luil {
             stopped,
             failed,
         };
+
+        [[nodiscard]] std::optional<update_digest> read_confirm_digest(const std::filesystem::path& path)
+        {
+            const std::vector<std::uint8_t> bytes { read_small_file(path) };
+            return parse_update_digest(std::u8string_view { reinterpret_cast<const char8_t*>(bytes.data()), bytes.size() });
+        }
+
+        // 결과를 이미 읽은 지난 시작이 남긴 확인 표지를 보고, 그 적용이 남긴 파일을 지운다 (적용 문서의 결과 전달).
+        //  - 받아 둔 `<sha256>.exe`는 도우미의 이미지라 그 시작에는 쓰이는 중이었다.
+        //  - 옛 exe 옆의 `.old`는 도우미가 지켜보는 동안 되돌리기에 썼고, `.<pid>.tmp`는 끊긴 도우미가 남겼을 수 있다.
+        //  - 표지가 없으면 아무것도 지우지 않는다. 실행 파일 옆의 파일은 이 라이브러리가 남긴 것이 확실할 때만 건드린다.
+        void remove_apply_leftovers(const std::filesystem::path& directory, const std::filesystem::path& confirm_path)
+        {
+            std::error_code code {};
+            if (std::filesystem::exists(confirm_path, code) == false)
+                return;
+            if (const std::optional<update_digest> digest { read_confirm_digest(confirm_path) }; digest.has_value())
+                std::filesystem::remove(file_in(directory, format_update_digest(*digest) + u8".exe"), code);
+            if (const std::filesystem::path target { net::update_target_path() }; target.empty() == false)
+            {
+                const std::u8string name { target.filename().u8string() };
+                std::filesystem::remove(target.parent_path() / std::filesystem::path { name + u8".old" }, code);
+                const std::u8string prefix { name + u8"." };
+                constexpr std::u8string_view suffix { u8".tmp" };
+                std::vector<std::filesystem::path> temporaries {};
+                for (std::filesystem::directory_iterator entry { target.parent_path(), code }, end {}; code.value() == 0 && entry != end; entry.increment(code))
+                {
+                    const std::u8string file { entry->path().filename().u8string() };
+                    if (file.size() <= prefix.size() + suffix.size() || file.starts_with(prefix) == false || file.ends_with(suffix) == false)
+                        continue;
+                    const std::u8string_view middle { std::u8string_view { file }.substr(prefix.size(), file.size() - prefix.size() - suffix.size()) };
+                    if (std::all_of(middle.begin(), middle.end(), [](const char8_t character) { return character >= u8'0' && character <= u8'9'; }))
+                        temporaries.push_back(entry->path());
+                }
+                for (const std::filesystem::path& temporary : temporaries)
+                    std::filesystem::remove(temporary, code);
+            }
+            std::filesystem::remove(confirm_path, code);
+        }
+
+        // 지난 적용의 결과를 읽어 지우고, 바꾸었거나 되돌린 적용이면 확인 표지를 쓴다. 결과가 없으면 남은 파일을 지운다.
+        [[nodiscard]] std::optional<update_apply_result> take_apply_result(const std::filesystem::path& directory)
+        {
+            std::error_code code {};
+            const std::filesystem::path result_path { file_in(directory, update_apply_result_file) };
+            const std::filesystem::path confirm_path { file_in(directory, update_apply_confirm_file) };
+            if (std::filesystem::exists(result_path, code) == false)
+            {
+                remove_apply_leftovers(directory, confirm_path);
+                return std::nullopt;
+            }
+            const std::optional<update_apply_record> record { parse_update_apply_record(read_small_file(result_path)) };
+            // 지운 뒤에 확인을 쓴다. 그 사이에 쓰러지면 도우미가 확인을 보지 못해 되돌린다. 쓰러진 판이니 그것이 맞다.
+            std::filesystem::remove(result_path, code);
+            if (record.has_value() == false)
+                return std::nullopt;
+            if (record->result.outcome == update_apply_outcome::replaced || record->result.outcome == update_apply_outcome::rolled_back)
+            {
+                // 그 전 적용의 표지가 남았으면 그것이 가리키던 받아 둔 exe를 먼저 지운다. 표지를 덮으면 그 이름을 잃는다.
+                if (const std::optional<update_digest> previous { read_confirm_digest(confirm_path) }; previous.has_value() && *previous != record->sha256)
+                    std::filesystem::remove(file_in(directory, format_update_digest(*previous) + u8".exe"), code);
+                const std::u8string text { format_update_digest(record->sha256) };
+                const std::vector<std::uint8_t> bytes { text.begin(), text.end() };
+                static_cast<void>(replace_file_atomically(confirm_path.u8string(), bytes));
+            }
+            return record->result;
+        }
     }
 
     struct updater::engine
@@ -110,16 +176,22 @@ namespace luil {
         std::filesystem::path directory {};
         std::unique_ptr<net::http_client> client {};
         std::thread worker {};
+        // `create`가 받기 폴더에서 읽은 지난 적용의 결과다.
+        std::optional<update_apply_result> last_result {};
 
         // --- `mutex` 아래 ---
         std::mutex mutex {};
         std::condition_variable wake {};
         std::deque<std::function<void()>> tasks {};
         bool quitting { false };
-        // `check`·`download`를 받아들인 뒤 끝 단계를 알릴 때까지다.
+        // `check`·`download`·`apply`를 받아들인 뒤 끝 단계를 알릴 때까지다.
         bool busy { false };
-        // 마지막 확인이 받을 판을 내주었다 (`download`의 조건).
+        // 마지막 확인이 판을 내주었다 (`download`와 Android `apply`의 조건).
         bool has_offer { false };
+        // 마지막 일이 `ready`로 끝났다 (Win32 `apply`의 조건).
+        bool ready { false };
+        // Win32 도우미를 띄웠다. 이 뒤로 일을 받지 않는다.
+        bool handed_off { false };
         net::http_ticket in_flight {};
         std::thread::id worker_id {};
 
@@ -141,12 +213,18 @@ namespace luil {
             std::u8string url {};
             std::uint64_t size { 0 };
             update_digest sha256 {};
+            std::u8string version {};
         };
 
         update_status status {};
         download_plan plan {};
+        // Android가 적용 때 열 주소다. 마지막 확인이 내준 판의 것이다.
+        std::u8string store_url {};
         waiting waiting_for { waiting::none };
         std::optional<file_lock> lock {};
+        // 도우미를 띄운 뒤 쥐는 `update.lock`이다. 이 updater가 없어질 때까지 놓지 않는다 (`finish`·`stop`이 놓지 않는다).
+        //  - 도우미는 부모가 끝난 뒤에 잡으므로, 그 사이 같은 폴더를 다른 updater가 쓰지 않게 한다.
+        std::optional<file_lock> handoff_lock {};
         std::ofstream part {};
         std::optional<net::update_sha256> hasher {};
         std::uint64_t received { 0 };
@@ -195,7 +273,7 @@ namespace luil {
 
         [[nodiscard]] std::filesystem::path state_path() const
         {
-            return file_in(directory, state_file_name);
+            return file_in(directory, update_state_file);
         }
 
         [[nodiscard]] std::filesystem::path ready_path() const
@@ -241,6 +319,7 @@ namespace luil {
             {
                 const std::lock_guard guard { mutex };
                 busy = false;
+                ready = phase == update_phase::ready;
                 in_flight = {};
             }
             // `stopped`는 `stop` 중의 끊김이라 알리지 않는다 (그 뒤로 `report`가 없다는 계약).
@@ -509,6 +588,8 @@ namespace luil {
             judgement.channel = config.channel;
             judgement.seen_sequence = state.sequence;
             judgement.current = current;
+            if (state.skipped_version.empty() == false)
+                judgement.skipped = parse_update_version(state.skipped_version);
             judgement.platform = current_update_platform();
             judgement.max_asset_bytes = config.max_asset_bytes;
             const update_verdict verdict { judge_update_manifest(*manifest, judgement) };
@@ -522,10 +603,10 @@ namespace luil {
                 finish(update_phase::failed, update_failure::replayed, u8"The manifest sequence is lower than one this computer has seen.");
                 return;
             }
-            // 지난 매니페스트의 `sequence`를 적는다. 판이 같거나 낮아도 적는다.
+            // 지난 매니페스트의 `sequence`를 적는다. 판이 같거나 낮아도 적는다. 건너뛸 판은 읽은 그대로 남긴다.
             if (manifest->sequence > state.sequence)
             {
-                const std::vector<std::uint8_t> bytes { serialize_update_state(update_state { manifest->sequence }) };
+                const std::vector<std::uint8_t> bytes { serialize_update_state(update_state { manifest->sequence, state.skipped_version }) };
                 if (const platform_result written { replace_file_atomically(state_path().u8string(), bytes) }; written.ok() == false)
                 {
                     finish(update_phase::failed, update_failure::disk, written.error);
@@ -567,7 +648,19 @@ namespace luil {
                     finish(update_phase::failed, update_failure::manifest_invalid, u8"The store address uses a scheme the app does not allow.");
                     return;
                 }
+                store_url = asset->store_url;
+                {
+                    const std::lock_guard guard { mutex };
+                    has_offer = true;
+                }
                 finish(update_phase::available, update_failure::none, {});
+                return;
+            }
+
+            // 바꿀 수 없는 자리면 받기 전에 안다 (적용 문서 결정 10). 앱은 `notes_url`이나 설치기 주소를 연다.
+            if (std::u8string writable_error {}; net::update_target_writable(writable_error) == false)
+            {
+                finish(update_phase::failed, update_failure::not_writable, std::move(writable_error));
                 return;
             }
 
@@ -577,7 +670,7 @@ namespace luil {
                 finish(update_phase::failed, update_failure::manifest_invalid, u8"The asset address is not https or a single file name.");
                 return;
             }
-            plan = download_plan { *url, asset->size, asset->sha256 };
+            plan = download_plan { *url, asset->size, asset->sha256, manifest->version_text };
             status.total = plan.size;
             {
                 const std::lock_guard guard { mutex };
@@ -599,7 +692,7 @@ namespace luil {
             status.total = plan.size;
             if (interrupted())
                 return;
-            lock.emplace(file_in(directory, lock_file_name).u8string());
+            lock.emplace(file_in(directory, update_lock_file).u8string());
             if (lock->locked() == false)
             {
                 std::u8string message { u8"Another updater holds update.lock in the download folder." };
@@ -766,6 +859,92 @@ namespace luil {
             finish(update_phase::ready, update_failure::none, {});
         }
 
+        // --- 적용 (적용 문서) ---
+
+        void start_apply(const update_apply_options& options)
+        {
+            status.phase = update_phase::applying;
+            status.failure = update_failure::none;
+            status.error.clear();
+            status.http_status = 0;
+            emit();
+            if (interrupted())
+                return;
+            net::update_handoff handoff {};
+            handoff.download_directory = directory;
+            handoff.from_version = config.current_version;
+            handoff.options = options;
+            std::u8string error {};
+            if (downloads_supported() == false)
+            {
+                // Android는 스토어 페이지를 연다. 설치와 그 결과는 스토어의 몫이고 앱은 그대로 돈다.
+                handoff.store_url = store_url;
+                handoff.store_schemes = config.store_schemes;
+                if (net::hand_off_update(handoff, error) == false)
+                {
+                    finish(update_phase::failed, update_failure::launch_failed, std::move(error));
+                    return;
+                }
+                finish(update_phase::handed_off, update_failure::none, {});
+                return;
+            }
+
+            lock.emplace(file_in(directory, update_lock_file).u8string());
+            if (lock->locked() == false)
+            {
+                std::u8string message { u8"Another updater holds update.lock in the download folder." };
+                if (lock->status().error.empty() == false)
+                    message += u8" " + lock->status().error;
+                finish(update_phase::failed, update_failure::busy, std::move(message));
+                return;
+            }
+            // 확인한 뒤에 누가 받아 둔 exe를 바꾸었으면 띄우지 않는다. 다른 바이트는 쓸 수 없어 지운다.
+            const std::filesystem::path path { ready_path() };
+            std::error_code code {};
+            const std::uintmax_t size { std::filesystem::file_size(path, code) };
+            bool same { false };
+            if (code.value() == 0 && size == plan.size)
+            {
+                net::update_sha256 checker {};
+                const feed_outcome outcome { checker.valid() ? feed_file(path, plan.size, checker, error) : feed_outcome::failed };
+                if (outcome != feed_outcome::done)
+                {
+                    finish_feed(outcome, error.empty() ? checker.error() : std::move(error));
+                    return;
+                }
+                const std::optional<update_digest> digest { checker.finish() };
+                same = digest.has_value() && *digest == plan.sha256;
+            }
+            if (same == false)
+            {
+                std::filesystem::remove(path, code);
+                finish(update_phase::failed, update_failure::hash_mismatch, u8"The downloaded executable is missing or changed since it was verified.");
+                return;
+            }
+            // 확인 때 본 쓰기를 다시 본다. 그 사이 권한이 바뀌었을 수 있다.
+            if (net::update_target_writable(error) == false)
+            {
+                finish(update_phase::failed, update_failure::not_writable, std::move(error));
+                return;
+            }
+            handoff.ready_file = path;
+            handoff.sha256 = plan.sha256;
+            handoff.to_version = plan.version;
+            if (net::hand_off_update(handoff, error) == false)
+            {
+                finish(update_phase::failed, update_failure::launch_failed, std::move(error));
+                return;
+            }
+            // 잠금은 이 updater가 없어질 때까지 쥔다. 도우미는 앱이 끝난 뒤에 잡는다.
+            handoff_lock = std::move(lock);
+            lock.reset();
+            {
+                const std::lock_guard guard { mutex };
+                handed_off = true;
+            }
+            finish(update_phase::handed_off, update_failure::none, {});
+        }
+
         void on_response(const net::http_response& response)
         {
             {
@@ -851,6 +1030,10 @@ namespace luil {
             return nullptr;
         }
         owned->current = *current;
+        // 지난 적용의 결과를 읽는다. 지켜보는 도우미가 있으면 여기서 남기는 확인이 그것을 끝낸다 (적용 문서 결정 9).
+        //  - Android는 도우미가 없어 결과도 없다.
+        if (downloads_supported())
+            owned->last_result = take_apply_result(owned->directory);
 
         engine* const raw { owned.get() };
         net::http_client_config client_config {};
@@ -886,6 +1069,11 @@ namespace luil {
                 error = u8"The updater is stopped.";
                 return false;
             }
+            if (state.handed_off)
+            {
+                error = u8"The updater handed the update to its helper; the app should exit.";
+                return false;
+            }
             if (state.busy)
             {
                 error = u8"The updater is already working.";
@@ -893,6 +1081,7 @@ namespace luil {
             }
             state.busy = true;
             state.has_offer = false;
+            state.ready = false;
             state.cancel_requested.store(false);
             state.tasks.push_back([&state] { state.start_check(); });
         }
@@ -915,6 +1104,11 @@ namespace luil {
                 error = u8"The updater is stopped.";
                 return false;
             }
+            if (state.handed_off)
+            {
+                error = u8"The updater handed the update to its helper; the app should exit.";
+                return false;
+            }
             if (state.busy)
             {
                 error = u8"The updater is already working.";
@@ -926,11 +1120,65 @@ namespace luil {
                 return false;
             }
             state.busy = true;
+            state.ready = false;
             state.cancel_requested.store(false);
             state.tasks.push_back([&state] { state.start_download(); });
         }
         state.wake.notify_one();
         return true;
+    }
+
+    bool updater::apply(const update_apply_options& options, std::u8string& error)
+    {
+        if (options.parent_timeout <= std::chrono::milliseconds::zero() || options.confirm_timeout < std::chrono::milliseconds::zero()
+            || options.parent_timeout.count() > static_cast<long long>(update_helper_maximum_timeout_ms)
+            || options.confirm_timeout.count() > static_cast<long long>(update_helper_maximum_timeout_ms))
+        {
+            error = u8"parent_timeout must be positive, confirm_timeout must not be negative, and both must fit a Win32 wait.";
+            return false;
+        }
+        engine& state { *engine_ };
+        {
+            const std::lock_guard guard { state.mutex };
+            if (state.quitting || state.stopping.load())
+            {
+                error = u8"The updater is stopped.";
+                return false;
+            }
+            if (state.handed_off)
+            {
+                error = u8"The updater already handed the update to its helper.";
+                return false;
+            }
+            if (state.busy)
+            {
+                error = u8"The updater is already working.";
+                return false;
+            }
+            // Win32는 확인한 받은 파일이 있어야 하고, Android는 내준 판이 있어야 한다.
+            if (downloads_supported() && state.ready == false)
+            {
+                error = u8"There is no verified download to apply; download first.";
+                return false;
+            }
+            if (downloads_supported() == false && state.has_offer == false)
+            {
+                error = u8"There is no offered version to apply; check first.";
+                return false;
+            }
+            state.busy = true;
+            state.ready = false;
+            state.cancel_requested.store(false);
+            state.tasks.push_back([&state, options] { state.start_apply(options); });
+        }
+        state.wake.notify_one();
+        return true;
+    }
+
+    std::optional<update_apply_result> updater::last_apply() const
+    {
+        // `create`가 채운 뒤로 바뀌지 않는다.
+        return engine_->last_result;
     }
 
     void updater::cancel() noexcept

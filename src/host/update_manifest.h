@@ -159,6 +159,8 @@ namespace luil {
         // 상태 파일이 기억하는 가장 큰 `sequence`다.
         std::uint64_t seen_sequence { 0 };
         update_version current {};
+        // 되돌림으로 건너뛴 판이다 (적용 문서 결정 9). 이 판보다 크지 않은 판은 `up_to_date`다.
+        std::optional<update_version> skipped {};
         update_platform platform { update_platform::windows_x64 };
         std::uint64_t max_asset_bytes { 0 };
     };
@@ -187,15 +189,95 @@ namespace luil {
     // `Range` 요청 헤더의 값이다 (`bytes=<first>-<last>`).
     [[nodiscard]] std::u8string make_update_range(std::uint64_t first, std::uint64_t last);
 
-    // --- 상태 파일 `update-state.json` (결정 4 길 b) ---
+    // --- 상태 파일 `update-state.json` (결정 4 길 b, 적용 문서 결정 9) ---
+
+    inline constexpr std::u8string_view update_state_file { u8"update-state.json" };
+    inline constexpr std::u8string_view update_lock_file { u8"update.lock" };
 
     struct update_state
     {
         // 서명을 지난 매니페스트 가운데 가장 큰 `sequence`다.
         std::uint64_t sequence { 0 };
+        // 되돌림으로 건너뛸 판이다. 비었으면 없다. 쓰는 쪽은 읽은 값을 고쳐 다시 써서 다른 칸을 지우지 않는다.
+        std::u8string skipped_version {};
+
+        [[nodiscard]] bool operator==(const update_state&) const = default;
     };
 
-    // 꼴이 틀리면 비었다. 모르는 칸은 넘긴다.
+    // 꼴이 틀리면 비었다. `skipped_version`이 있는데 판 규칙 밖이어도 꼴이 틀린 것이다. 모르는 칸은 넘긴다.
     [[nodiscard]] std::optional<update_state> parse_update_state(std::span<const std::uint8_t> bytes);
     [[nodiscard]] std::vector<std::uint8_t> serialize_update_state(const update_state& state);
+
+    // --- 적용의 도우미 인자 (적용 문서) ---
+
+    // 도우미 실행의 표식이다. 알림의 `-luil-notification`·`-Embedding`과 겹치지 않는다.
+    inline constexpr std::u8string_view update_helper_flag { u8"-luil-update-apply" };
+    // 표식 다음 칸의 인자 꼴 번호다. 꼴을 바꾸면 올린다.
+    inline constexpr std::u8string_view update_helper_format { u8"1" };
+    // 고정 칸 뒤, 다시 띄울 인자 앞의 칸이다.
+    inline constexpr std::u8string_view update_helper_separator { u8"--" };
+    // 시한의 상한이다 (ms). 그 위는 Win32 대기의 "끝없이"와 겹친다.
+    inline constexpr std::uint64_t update_helper_maximum_timeout_ms { 0xFFFFFFFEull };
+
+    // `"<새 exe>" -luil-update-apply 1 <옛 exe> <부모 손잡이 16진> <받기 폴더> <sha256> <from> <to> <parent ms> <confirm ms> <0|1> -- <다시 띄울 인자...>`
+    struct update_helper_arguments
+    {
+        std::u8string old_executable {};
+        // 부모가 상속해 준 자기 프로세스 손잡이의 값이다. 자식에서도 같은 값이다.
+        std::uint64_t parent_handle { 0 };
+        std::u8string download_directory {};
+        update_digest sha256 {};
+        std::u8string from_version {};
+        std::u8string to_version {};
+        std::uint64_t parent_timeout_ms { 0 };
+        std::uint64_t confirm_timeout_ms { 0 };
+        bool restart { true };
+        std::vector<std::u8string> restart_arguments {};
+
+        [[nodiscard]] bool operator==(const update_helper_arguments&) const = default;
+    };
+
+    // 실행 파일 뒤에 붙일 인자다 (표식부터 다시 띄울 인자까지). 따옴표는 붙이지 않는다 (Win32의 `make_command_line`이 붙인다).
+    [[nodiscard]] std::vector<std::u8string> make_update_helper_arguments(const update_helper_arguments& arguments);
+
+    enum class update_helper_parse
+    {
+        // `[1]`이 표식이 아니다. 평소 시작이다.
+        not_helper,
+        // 표식은 있는데 나머지가 틀렸다.
+        malformed,
+        helper,
+    };
+
+    struct update_helper_parse_result
+    {
+        update_helper_parse kind { update_helper_parse::not_helper };
+        update_helper_arguments arguments {};
+        std::u8string error {};
+    };
+
+    // `arguments[0]`은 실행 파일이다. 틀린 꼴 번호, 빈 칸, 판·해시·손잡이·시한의 꼴, `--` 자리의 남는 칸은 `malformed`다.
+    //  - `--` 뒤는 무엇이든(빈 글, 표식과 같은 글도) 다시 띄울 인자다.
+    [[nodiscard]] update_helper_parse_result parse_update_helper_arguments(std::span<const std::u8string> arguments);
+
+    // --- 적용의 결과 파일과 확인 표지 (적용 문서의 결과 전달) ---
+
+    // 도우미가 다시 띄우기 전에 받기 폴더에 쓰고 다음 시작의 `updater::create`가 읽고 지운다.
+    inline constexpr std::u8string_view update_apply_result_file { u8"apply-result.json" };
+    // 결과를 읽은 `create`가 쓴다. 내용은 적용한 exe의 sha256(16진 64자)이다.
+    //  - 지켜보는 도우미는 이 내용이 자기 sha256과 같으면 확인으로 본다. 지난 적용의 표지와 섞이지 않는다.
+    //  - 그다음 시작의 `create`는 이것을 보고 그 sha256의 받아 둔 exe와 옛 exe 옆의 `.old`·`.tmp`를 지운 뒤 이것도 지운다.
+    inline constexpr std::u8string_view update_apply_confirm_file { u8"apply-confirmed" };
+
+    struct update_apply_record
+    {
+        update_apply_result result {};
+        // 적용한(하려던) 받아 둔 exe의 해시다. 확인 표지와 지울 파일을 고른다.
+        update_digest sha256 {};
+    };
+
+    [[nodiscard]] std::u8string_view update_apply_outcome_name(update_apply_outcome outcome) noexcept;
+    // 꼴이 틀리면 비었다. 모르는 칸은 넘긴다.
+    [[nodiscard]] std::optional<update_apply_record> parse_update_apply_record(std::span<const std::uint8_t> bytes);
+    [[nodiscard]] std::vector<std::uint8_t> serialize_update_apply_record(const update_apply_record& record);
 }

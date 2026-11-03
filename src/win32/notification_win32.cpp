@@ -4,6 +4,7 @@
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_encode.h"
 #include "win32/app_identity.h"
+#include "win32/executable_path.h"
 #include "win32/toast_payload.h"
 #include "win32/utf8.h"
 #include "win32/win32_error.h"
@@ -613,22 +614,8 @@ namespace luil::win32 {
     platform_result apply_app_identity(const app_identity& identity, const std::u8string_view fallback_display_name)
     {
         // 활성화기 명령 줄이 이 실행 파일을 가리킨다. 실행 파일을 옮기면 다음 실행이 고쳐 쓴다.
-        std::wstring executable(MAX_PATH, L'\0');
-        for (;;)
-        {
-            const DWORD written { GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())) };
-            if (written == 0)
-            {
-                executable.clear();
-                break;
-            }
-            if (written < executable.size())
-            {
-                executable.resize(written);
-                break;
-            }
-            executable.resize(executable.size() * 2);
-        }
+        //  - 자동 업데이트의 적용은 같은 경로에서 바꾸므로 고쳐 쓸 것이 없다 (auto-update-apply-design.md).
+        const std::wstring executable { current_executable_path() };
         const std::optional<identity_registry> registry { make_identity_registry(identity, fallback_display_name, executable) };
         const std::optional<std::wstring> aumid { utf8_to_utf16(identity.id).value };
         if (registry.has_value() == false || aumid.has_value() == false)
