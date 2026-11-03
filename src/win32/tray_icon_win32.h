@@ -132,7 +132,9 @@ namespace luil::win32 {
     };
 
     // 메뉴 항목 하나의 글이다. `&`는 `&&`로 바꿔 밑줄 글자로 읽히지 않게 하고, 단축키 글은 탭 뒤에 둔다.
-    [[nodiscard]] std::wstring tray_menu_text(std::u8string_view label, std::u8string_view shortcut);
+    //  - 접근 키(`menu_item_config::access_key`)가 라벨에 있으면 처음 나오는 그 글자 앞에 `&`를 두고, 없으면 라벨 뒤에
+    //    "(&F)"를 붙인다. 영문자·숫자가 아닌 접근 키는 없는 것이다.
+    [[nodiscard]] std::wstring tray_menu_text(std::u8string_view label, std::u8string_view shortcut, char32_t access_key = 0);
 
     // `menu_config::items`를 `CreatePopupMenu`·`InsertMenuItemW`로 옮긴다 (docs/tray-icon-design.md의 "메뉴").
     //  - 앞 항목이 있을 때만 `separator_above`가 구분선이다. 맨 위 구분선은 시스템 메뉴에서 빈 줄로만 보인다.

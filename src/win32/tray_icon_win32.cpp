@@ -1,5 +1,6 @@
 #include "win32/tray_icon_win32.h"
 
+#include "ui/access_key.h"
 #include "win32/utf8.h"
 #include "win32/win32_error.h"
 #include "win32/window_messages.h"
@@ -88,7 +89,7 @@ namespace luil::win32 {
                         ++position;
                 }
                 keys.push_back(item.key);
-                std::wstring text { tray_menu_text(item.label, item.shortcut_text) };
+                std::wstring text { tray_menu_text(item.label, item.shortcut_text, item.access_key) };
                 MENUITEMINFOW information {};
                 information.cbSize = sizeof(information);
                 information.fMask = MIIM_FTYPE | MIIM_STATE | MIIM_STRING | MIIM_ID;
@@ -210,26 +211,42 @@ namespace luil::win32 {
         return keys[command - 1];
     }
 
-    std::wstring tray_menu_text(const std::u8string_view label, const std::u8string_view shortcut)
+    std::wstring tray_menu_text(const std::u8string_view label, const std::u8string_view shortcut, const char32_t access_key)
     {
-        std::u8string joined { label };
+        // `&`와 접근 키는 ASCII라 UTF-8 글에서 바로 끼운다. 접근 키 글자 앞의 `&` 하나만 밑줄 표시다.
+        const std::optional<std::size_t> marked { access_key_offset(label, access_key) };
+        const char32_t glyph { access_key_glyph(access_key) };
+        std::u8string joined {};
+        joined.reserve(label.size() + shortcut.size() + 8);
+        for (std::size_t index = 0; index < label.size(); ++index)
+        {
+            if (marked == index)
+                joined += u8'&';
+            joined += label[index];
+            if (label[index] == u8'&')
+                joined += u8'&';
+        }
+        // 글자가 라벨에 없으면 막대의 메뉴처럼 라벨 뒤에 "(F)"를 붙이고 그 글자에 밑줄을 둔다.
+        if (glyph != 0 && marked.has_value() == false)
+        {
+            joined += u8"(&";
+            joined += static_cast<char8_t>(glyph);
+            joined += u8')';
+        }
         if (shortcut.empty() == false)
         {
             joined += u8'\t';
-            joined += shortcut;
+            for (const char8_t character : shortcut)
+            {
+                joined += character;
+                if (character == u8'&')
+                    joined += u8'&';
+            }
         }
-        const auto converted { utf8_to_utf16(joined) };
+        auto converted { utf8_to_utf16(joined) };
         if (converted.value.has_value() == false)
             return {};
-        std::wstring text {};
-        text.reserve(converted.value->size());
-        for (const wchar_t character : *converted.value)
-        {
-            text.push_back(character);
-            if (character == L'&')
-                text.push_back(L'&');
-        }
-        return text;
+        return std::move(*converted.value);
     }
 
     tray_menu make_tray_menu(const menu_config& config)

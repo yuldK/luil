@@ -706,3 +706,32 @@ TEST_CASE("A live tray icon is added and deleted", "[.tray-live]")
     REQUIRE(removed->status == tray_status::off);
     REQUIRE(second_delete.ok == false);
 }
+
+TEST_CASE("The access keys of the tray menu items become the system menu underline", "[win32][tray][menu-bar]")
+{
+    // 접근 키가 라벨에 있으면 처음 나오는 그 글자 앞에 `&`, 없으면 라벨 뒤의 "(&F)"다. 그 밖의 `&`는 `&&`다.
+    luil::menu_config config {};
+    config.items.push_back({ .key = u8"file", .label = u8"File", .access_key = U'f' });
+    config.items.push_back({ .key = u8"save", .label = u8"Save & exit", .access_key = U'X' });
+    config.items.push_back({ .key = u8"view", .label = u8"보기", .access_key = U'v' });
+    config.items.push_back({ .key = u8"copy", .label = u8"Copy", .shortcut_text = u8"Ctrl+C", .access_key = U'c' });
+    config.items.push_back({ .key = u8"none", .label = u8"Help", .access_key = U'?' });
+    luil::menu_item_config more { .key = u8"more", .label = u8"More", .access_key = U'm' };
+    more.children.push_back({ .key = u8"second", .label = u8"Page 2", .access_key = U'2' });
+    config.items.push_back(std::move(more));
+
+    const luil::win32::tray_menu built { luil::win32::make_tray_menu(config) };
+    const HMENU menu { built.menu.get() };
+    REQUIRE(menu != nullptr);
+    REQUIRE(read_menu_item(menu, 0).text == L"&File");
+    REQUIRE(read_menu_item(menu, 1).text == L"Save && e&xit");
+    REQUIRE(read_menu_item(menu, 2).text == L"\uBCF4\uAE30(&V)");
+    REQUIRE(read_menu_item(menu, 3).text == L"&Copy\tCtrl+C");
+    // 영문자·숫자가 아닌 접근 키는 없는 것이다.
+    REQUIRE(read_menu_item(menu, 4).text == L"Help");
+    const menu_item nested { read_menu_item(menu, 5) };
+    REQUIRE(nested.text == L"&More");
+    REQUIRE(nested.submenu != nullptr);
+    REQUIRE(read_menu_item(nested.submenu, 0).text == L"Page &2");
+    REQUIRE(luil::win32::tray_menu_text(u8"A & B", {}) == L"A && B");
+}
