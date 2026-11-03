@@ -85,6 +85,7 @@
 - [시트와 서랍](sheet-design.md)
 - [스프링](spring-design.md): 손을 뗀 속도에서 이어 목표까지 값을 움직인다
 - [움직임 줄이기 연결](reduce-motion-design.md): 시스템 설정을 앱이 든 전환과 Android까지 잇는다
+- [화면 전환](page-transition-design.md): 페이지를 바꿀 때 떠나는 화면과 새 화면을 함께 밀거나 옅게 하고 도는 동안 포인터를 막는다
 - [문자열·커스텀·마크다운 툴팁](tooltip-design.md)
 - [Caption 버튼 구성](caption-button-design.md)
 - [탭 막대 스타일과 공용 스타일](tab-bar-style-design.md)
@@ -141,6 +142,8 @@
 - [움직이는 이미지](image-anim-design.md)
 - [SVG와 Lottie](vector-image-design.md) — `LUIL_ENABLE_SVG`·`LUIL_ENABLE_LOTTIE`
 - [HTTP client](http-client-design.md)
+- [자동 업데이트](auto-update-design.md): 서명한 매니페스트로 새 판을 확인하고 덩이로 나눠 받아 해시를 맞춘다
+- [자동 업데이트 적용](auto-update-apply-design.md): 받은 새 판을 도우미로 띄워 같은 경로의 실행 파일을 바꾸고 실패하면 되돌린다. Android는 스토어를 연다
 - [SMB client](smb-client-design.md) — Android 전용, `LUIL_ENABLE_SMB`
 - [WebView2 composition hosting](webview-composition-design.md)
 - [Raster 그리기 test](raster-test-design.md)
