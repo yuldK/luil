@@ -530,8 +530,8 @@ TEST_CASE("The desktop zoom page switches its button names between the default l
     // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
     press_zoom_labels(page, tree);
     tree = zoom_tree(page);
-    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"Zoom out");
-    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"Zoom in");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"Out");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"In");
     REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"Fit");
     REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: English");
 
@@ -562,6 +562,40 @@ TEST_CASE("The desktop zoom page puts the language switch after the fit buttons 
     REQUIRE(language->bounds().x >= toggle->bounds().x + toggle->bounds().width);
     REQUIRE(language->bounds().x + language->bounds().width <= 800.0f);
     REQUIRE(toggle->bounds().y == Catch::Approx(controls->bounds().y));
+}
+
+namespace {
+    // 글꼴이 넓은 쪽을 본뜬 측정기다: 로마자는 글자 크기의 0.6배, 그 밖(한글)은 1배. 이 폭이면 56dp 단추에 글꼴 배율 1.1에서
+    // 일곱 글자쯤 들어, 실기기에서 "Zoom out"이 "Zoom o…"로 잘린 것과 맞는다. 설치 글꼴에 기대지 않아 어느 기기에서나 같다.
+    [[nodiscard]] float wide_sans_width(const std::u8string_view text, const float pixel_size)
+    {
+        float em { 0.0f };
+        for (const char8_t byte : text)
+        {
+            if ((byte & 0xC0u) == 0x80u)
+                continue;
+            em += byte < 0x80u ? 0.6f : 1.0f;
+        }
+        return em * pixel_size;
+    }
+
+    const luil::text_measurer wide_sans_measurer { wide_sans_width };
+}
+
+TEST_CASE("The English zoom button names of the desktop page fit their buttons at a 1.1 font scale", "[demo][zoom][default-text]")
+{
+    // 줌 단추의 폭은 라이브러리가 정한다(56dp). 영어 글이 길면 "Zoom o…"로 잘리므로 데모는 짧은 글을 쓴다.
+    demo::zoom_page page {};
+    send(page, demo::zoom_labels_intent { true });
+    const auto tree { zoom_tree(page) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    for (const luil::ui_element_kind kind : { luil::ui_element_kind::zoom_decrease, luil::ui_element_kind::zoom_increase, luil::ui_element_kind::zoom_fit })
+    {
+        const luil::ui_element* const button { tree.find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        const float text_width { measure.text_width(button->accessibility().name, measure.style_metrics().body_font_size) };
+        REQUIRE(text_width * 1.1f <= button->bounds().width);
+    }
 }
 
 namespace {

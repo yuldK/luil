@@ -216,6 +216,10 @@ namespace mobile_demo {
         void gap(float height);
         // 회색 설명 한 줄, 본문 한 줄, 머리글 한 줄이다.
         void note(std::u8string owner, std::u8string text);
+        // 폭에서 줄을 바꾸는 회색 설명이다. 한 줄 `note`는 좁은 화면(384dp에 글꼴 배율 1.1)에서 긴 설명의 끝이 말줄임으로
+        // 잘리므로, 긴 설명은 이쪽을 쓴다. 높이는 `page_width`(페이지 전체 폭)에서 바꾼 줄 수만큼 잡는다.
+        //  - `measurer`는 글 폭을 재는 쪽이다. 비면 설치 글꼴로 잰다. 글꼴이 없는 test가 고정 폭 측정기를 넣는다.
+        void wrapped_note(std::u8string owner, std::u8string text, float page_width, float scale, const luil::text_measurer* measurer = nullptr);
         void body(std::u8string owner, std::u8string text);
         void heading(std::u8string owner, std::u8string text);
 
@@ -223,6 +227,7 @@ namespace mobile_demo {
 
     private:
         std::unique_ptr<luil::stack_element> column_ {};
+        float padding_ { page_padding };
         float height_ { 0.0f };
     };
 

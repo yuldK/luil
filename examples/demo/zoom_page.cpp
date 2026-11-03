@@ -130,11 +130,12 @@ namespace demo {
         controls_config.spacing = 8.0f;
         auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-controls" }, controls_config) };
         // 영어 앱은 세 칸을 채운다. 비워 두면 단추 이름이 기본 문구(축소·확대·맞춤)다.
+        // 단추 폭이 56dp로 정해져 있어 "Zoom out"은 잘린다. 모바일 데모와 같이 세 글자 안팎으로 짧게 쓴다.
         luil::zoom_controls_config zoom_buttons { .view = config(), .viewport = viewport_ };
         if (english_labels_)
         {
-            zoom_buttons.decrease_label = u8"Zoom out";
-            zoom_buttons.increase_label = u8"Zoom in";
+            zoom_buttons.decrease_label = u8"Out";
+            zoom_buttons.increase_label = u8"In";
             zoom_buttons.fit_label = u8"Fit";
         }
 

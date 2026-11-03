@@ -306,7 +306,7 @@ namespace mobile_demo {
         column.gap(12.0f);
 
         // 별점이다. 탭이 칸의 값이고 같은 별을 다시 탭하면 지운다. 손가락으로 훑으면 별이 따라온다.
-        column.note(u8"rating-title", u8"별점 (탭하거나 훑어서 매기고, 같은 별을 다시 탭하면 지웁니다)");
+        column.wrapped_note(u8"rating-title", u8"별점 (탭하거나 훑어서 매기고, 같은 별을 다시 탭하면 지웁니다)", width, scale);
         column.gap(4.0f);
         const luil::rating_config stars { make_stars_config() };
         column.add(std::make_unique<luil::rating_element>(stars), luil::rating_element::height_for(stars), luil::rating_element::width_for(stars));
@@ -408,7 +408,7 @@ namespace mobile_demo {
 
         // 읽기 전용 안내 칸이다. 하드웨어 키보드로 칸에 초점을 두고 Ctrl+Z나 Ctrl+Y를 누르면 칸이 삼키지 않고 앱 on_key로
         // 넘기고, 상태 줄이 그 횟수를 센다.
-        column.note(u8"readonly", u8"읽기 전용 칸 (하드웨어 키보드의 Ctrl+Z·Ctrl+Y는 앱으로 넘어간다)");
+        column.wrapped_note(u8"readonly", u8"읽기 전용 칸 (하드웨어 키보드의 Ctrl+Z·Ctrl+Y는 앱으로 넘어간다)", width, scale);
         column.gap(4.0f);
         {
             luil::text_area_config readonly {};
@@ -467,7 +467,7 @@ namespace mobile_demo {
         }
         column.gap(24.0f);
 
-        column.note(u8"basics-hint", u8"확인 대화 상자는 뒤로 가기나 바깥을 눌러 닫는다. 초기화 대화는 취소에 초점이 선다.");
+        column.wrapped_note(u8"basics-hint", u8"확인 대화 상자는 뒤로 가기나 바깥을 눌러 닫는다. 초기화 대화는 취소에 초점이 선다.", width, scale);
         column.gap(8.0f);
         auto open { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_open }, luil::text_button_config { .text = u8"카운터 초기화" }) };
         open->set_tooltip(u8"확인 대화 상자를 연다");

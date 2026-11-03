@@ -1161,8 +1161,8 @@ TEST_CASE("The zoom page names its buttons in the default language until the but
 
     // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
     REQUIRE(press_zoom_button(page, u8"zoom-label-toggle") == 1);
-    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"Zoom out");
-    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"Zoom in");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"Out");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"In");
     REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"Fit");
     REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: English");
 
@@ -1192,6 +1192,40 @@ TEST_CASE("The language row of the zoom page fits the 400dp window below the rot
     REQUIRE(toggle->bounds().x + toggle->bounds().width <= language->bounds().x);
     REQUIRE(language->bounds().x + language->bounds().width <= 400.0f);
     REQUIRE(toggle->bounds().y + toggle->bounds().height <= view->bounds().y);
+}
+
+namespace {
+    // 글꼴이 넓은 쪽을 본뜬 측정기다: 로마자는 글자 크기의 0.6배, 그 밖(한글)은 1배. 이 폭이면 56dp 단추에 글꼴 배율 1.1에서
+    // 일곱 글자쯤 들어, 실기기에서 "Zoom out"이 "Zoom o…"로 잘린 것과 맞는다. 설치 글꼴에 기대지 않아 어느 기기에서나 같다.
+    [[nodiscard]] float wide_sans_width(const std::u8string_view text, const float pixel_size)
+    {
+        float em { 0.0f };
+        for (const char8_t byte : text)
+        {
+            if ((byte & 0xC0u) == 0x80u)
+                continue;
+            em += byte < 0x80u ? 0.6f : 1.0f;
+        }
+        return em * pixel_size;
+    }
+
+    const luil::text_measurer wide_sans_measurer { wide_sans_width };
+}
+
+TEST_CASE("The English zoom button names fit their buttons at a 1.1 font scale", "[mobile-demo][zoom][default-text]")
+{
+    // 줌 단추의 폭은 라이브러리가 정한다(56dp). 영어 글이 길면 "Zoom o…"로 잘리므로 데모는 짧은 글을 쓴다.
+    mobile_demo::zoom_page page {};
+    REQUIRE(page.handle(luil::app_message { mobile_demo::zoom_labels_intent { true } }));
+    const auto tree { zoom_tree(page) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    for (const luil::ui_element_kind kind : { luil::ui_element_kind::zoom_decrease, luil::ui_element_kind::zoom_increase, luil::ui_element_kind::zoom_fit })
+    {
+        const luil::ui_element* const button { tree->find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        const float text_width { measure.text_width(button->accessibility().name, measure.style_metrics().body_font_size) };
+        REQUIRE(text_width * 1.1f <= button->bounds().width);
+    }
 }
 
 namespace {
@@ -1522,6 +1556,52 @@ namespace {
             if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr && message->get<mobile_demo::rating_scroll_intent>() != nullptr)
                 return true;
         return false;
+    }
+}
+
+TEST_CASE("A wrapped note reserves the height of the lines it breaks into", "[mobile-demo][common]")
+{
+    // 한 줄 설명은 좁은 화면에서 끝이 말줄임으로 잘렸다. 줄을 바꾸는 설명은 칸이 바꾼 줄을 모두 담을 높이를 잡는다.
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const std::u8string long_text { u8"alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron" };
+
+    mobile_demo::page_column column { u8"notes", 0.0f };
+    column.wrapped_note(u8"long", long_text, 288.0f, 1.0f, &wide_sans_measurer);
+    column.wrapped_note(u8"short", u8"short", 288.0f, 1.0f, &wide_sans_measurer);
+    mobile_demo::page_content content { column.finish() };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 288.0f, height }, 1.0f) };
+
+    const luil::ui_element* const long_note { tree.find({ mobile_demo::kind_text, u8"long" }) };
+    const luil::ui_element* const short_note { tree.find({ mobile_demo::kind_text, u8"short" }) };
+    REQUIRE(long_note != nullptr);
+    REQUIRE(short_note != nullptr);
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    // 긴 글은 여러 줄이 되고, 칸의 높이가 그 줄들을 모두 담는다.
+    const std::optional<luil::size_f> wrapped { long_note->preferred_size(measure, 288.0f) };
+    REQUIRE(wrapped.has_value());
+    REQUIRE(wrapped->height >= 2.0f * line);
+    REQUIRE(long_note->bounds().height >= wrapped->height);
+    // 한 줄이면 한 줄 설명(`note`)과 같은 높이를 지켜 위아래 간격이 그대로다.
+    REQUIRE(short_note->bounds().height == luil::text_line_height(mobile_demo::note_text_size, mobile_demo::note_line_height - mobile_demo::note_text_size));
+}
+
+TEST_CASE("The long notes of the basics page break lines instead of ending in an ellipsis", "[mobile-demo][basics]")
+{
+    // 폭 320dp 쪽은 어느 글꼴에서나 두 줄 이상이 된다. 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다.
+    mobile_demo::basics_page page {};
+    auto content { page.build(320.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    for (const std::u8string& owner : { std::u8string { u8"rating-title" }, std::u8string { u8"readonly" }, std::u8string { u8"basics-hint" } })
+    {
+        const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(note != nullptr);
+        const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+        REQUIRE(wrapped.has_value());
+        REQUIRE(wrapped->height >= 2.0f * line);
     }
 }
 
