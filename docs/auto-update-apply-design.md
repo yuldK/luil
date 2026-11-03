@@ -63,7 +63,7 @@ const luil::single_instance instance { u8"my-app" };
 "<받아 둔 새 exe>" -luil-update-apply 1 <옛 exe> <부모 손잡이 16진> <받기 폴더> <sha256> <from> <to> <parent ms> <confirm ms> <0|1> -- <다시 띄울 인자...>
 ```
 
-비공개 파일은 넷이다. `src/win32/update_apply_win32.h`·`.cpp`는 앱 쪽 `launch_update_helper`, 도우미 `run_update_helper`, 쓰기 시험 `executable_folder_writable`이다. `src/win32/executable_path.h`·`.cpp`는 [jump_list.h](../src/win32/jump_list.h) 52줄의 `current_executable_path`를 옮긴 것이고 notification_win32.cpp 615~631줄의 같은 고리도 이것으로 바꾼다. 공개하지 않는다. 앱은 경로를 쓸 일이 없고 도우미는 같은 exe의 내부 함수를 부른다. `src/android/update_apply_android.cpp`는 스토어 열기다. 인자와 결과 파일의 짓기·읽기는 core의 `update_manifest`에 있다.
+비공개 파일은 넷이다. `src/win32/update_apply_win32.h`·`.cpp`는 앱 쪽 `launch_update_helper`, 도우미 `run_update_helper`, 쓰기 시험 `executable_folder_writable`이다. `src/win32/executable_path.h`·`.cpp`는 [jump_list.h](../src/win32/jump_list.h) 52줄의 `current_executable_path`를 옮긴 것이고 notification_win32.cpp 615~631줄의 같은 고리도 이것으로 바꾼다. `jump_list.h`는 `executable_path.h`를 include한다. 그래서 `jump_list.h`만 include하는 [win32_window.cpp](../src/win32/win32_window.cpp) 736줄과 [jump_list_tests.cpp](../tests/jump_list_tests.cpp) 451·487줄의 호출은 그대로 컴파일된다(같은 `luil::win32` 이름과 서명). 공개하지 않는다. 앱은 경로를 쓸 일이 없고 도우미는 같은 exe의 내부 함수를 부른다. `src/android/update_apply_android.cpp`는 스토어 열기다. 인자와 결과 파일의 짓기·읽기는 core의 `update_manifest`에 있다.
 
 ## 규칙
 
@@ -79,17 +79,17 @@ const luil::single_instance instance { u8"my-app" };
 **도우미(Win32).** `run_update_helper(arguments)`가 한다.
 
 1. `arguments[1]`이 `-luil-update-apply`가 아니면 비었다(평소 시작). 표식은 있는데 나머지가 틀리면 아무것도 바꾸지 않고 2를 준다.
-2. 부모 손잡이를 `parent_timeout`까지 `WaitForSingleObject`로 기다린다. 넘으면 `parent_timeout`을 남기고 다시 띄우지 않는다. 옛 앱이 살아 있어 띄우면 둘째가 된다.
+2. 부모 손잡이를 `parent_timeout`까지 `WaitForSingleObject`로 기다린다. 넘으면 결과 `parent_timeout`을 쓰고(7의 방법) 다시 띄우지 않는다. 옛 앱이 살아 있어 띄우면 둘째가 된다.
 3. `update.lock`을 쥔다. 부모가 쥐던 것은 그 프로세스가 끝날 때 풀렸다. 못 쥐면 250 ms마다 5초까지 다시 한다.
 4. 자기 이미지(곧 받아 둔 새 exe)를 옛 exe 폴더의 `<이름>.<pid>.tmp`로 복사하고 디스크까지 내린 뒤 해시를 맞춘다.
 5. 옛 exe를 `<이름>.old`로 복사한다. 옛 exe는 제자리에 그대로다.
-6. `MoveFileExW(tmp, 옛 exe, REPLACE_EXISTING | WRITE_THROUGH)`로 한 번에 바꾼다. 공유 위반과 접근 거부는 250 ms마다 10초까지 다시 한다(백신 검사가 잠깐 쥘 수 있다). 끝내 안 되면 tmp를 지우고 `replace_failed`를 남긴다. 옛 exe는 그대로다.
-7. `restart`면 옛 exe 경로로 `restart_arguments`를 붙여 띄우고 `AllowSetForegroundWindow`를 건다. 바꾸지 못했어도 옛 exe를 띄워 사용자가 앱을 잃지 않는다. 바꾸었으면 결정 9대로 지켜본다.
-8. 결과 파일 `<받기 폴더>/apply-result.json`을 `replace_file_atomically`로 쓰고 끝난다.
+6. `MoveFileExW(tmp, 옛 exe, REPLACE_EXISTING | WRITE_THROUGH)`로 한 번에 바꾼다. 공유 위반과 접근 거부는 250 ms마다 10초까지 다시 한다(백신 검사가 잠깐 쥘 수 있다). 끝내 안 되면 tmp를 지운다. 옛 exe는 그대로다.
+7. **다시 띄우기 전에** 결과 파일 `<받기 폴더>/apply-result.json`을 `replace_file_atomically`로 쓰고 `update.lock`을 놓는다. 바꾸었으면 `replaced`(확인 대기), 못 바꾸었으면 `replace_failed`다. 그래서 다시 띄운 앱의 `create`가 늘 결과를 읽고 받기·적용이 `busy`가 되지 않는다.
+8. `restart`면 옛 exe 경로로 `restart_arguments`를 붙여 띄우고 `AllowSetForegroundWindow`를 건다. 바꾸지 못했어도 옛 exe를 띄워 사용자가 앱을 잃지 않는다. 바꾸었으면 결정 9대로 지켜본다. 되돌리면 옛 exe를 다시 띄우기 전에 결과 파일을 `rolled_back`으로 덮어 쓴다. 그 뒤 끝난다.
 
-어디서 꺼져도 옛 exe 자리는 옛 것 전체이거나 새 것 전체다. 바꾸는 것이 6의 이름 바꾸기 하나라서다. `ReplaceFileW`와 "옛 것을 먼저 비키기"는 쓰지 않는다. 앞의 것은 실패 갈래마다 남는 이름이 달라 되돌리기가 길고, 뒤의 것은 두 이름 바꾸기 사이에 꺼지면 exe가 없다. 남은 `.tmp`·`.old`는 다음 `updater::create`가 결과를 본 뒤 지운다.
+어디서 꺼져도 옛 exe 자리는 옛 것 전체이거나 새 것 전체다. 바꾸는 것이 6의 이름 바꾸기 하나라서다. `ReplaceFileW`와 "옛 것을 먼저 비키기"는 쓰지 않는다. 앞의 것은 실패 갈래마다 남는 이름이 달라 되돌리기가 길고, 뒤의 것은 두 이름 바꾸기 사이에 꺼지면 exe가 없다. 남은 `.tmp`·`.old`와 받아 둔 exe는 결과를 이미 읽은 뒤의 `updater::create`, 곧 그다음 시작이 지운다.
 
-**결과 전달.** 결과는 인자가 아니라 받기 폴더의 파일이다. 다시 띄운 앱의 인자는 앱이 준 그대로라 앱의 인자 읽기(데모의 `parse_arguments`는 모르는 인자를 거절한다)가 바뀌지 않는다. 새 프로세스의 `updater::create`가 `apply-result.json`을 읽어 지우고 `last_apply()`로 낸다. 같은 자리에서 지켜보는 도우미에게 `apply-confirmed`를 쓴다. `replaced`면 `.old`와 받아 둔 파일을 지운다. 받기 폴더는 판이 바뀌어도 같은 경로여야 한다.
+**결과 전달.** 결과는 인자가 아니라 받기 폴더의 파일이다. 다시 띄운 앱의 인자는 앱이 준 그대로라 앱의 인자 읽기(데모의 `parse_arguments`는 모르는 인자를 거절한다)가 바뀌지 않는다. 다시 띄운 앱의 `updater::create`는 도우미가 띄우기 전에 써 둔 확인 대기 결과를 읽어 지우고 `last_apply()`로 내며, 같은 자리에서 지켜보는 도우미에게 `apply-confirmed`를 쓴다. 이때 도우미가 아직 살아 있어 되돌리기에 쓸 `.old`와 자기 이미지인 받아 둔 exe는 지우지 않는다. 그 둘은 다음 시작의 `create`가 지운다. 계약: **앱은 시작할 때 `updater`를 만든다.** 늦게 만들면 `confirm_timeout` 안에 확인이 서지 않아 결정 9가 잘못 되돌릴 수 있다. 받기 폴더는 판이 바뀌어도 같은 경로여야 한다.
 
 **단일 인스턴스와의 약속(G7).**
 
@@ -128,7 +128,7 @@ const luil::single_instance instance { u8"my-app" };
 - 길 a: 도우미가 다시 띄운 프로세스를 `confirm_timeout` 동안 지켜본다. `apply-confirmed`가 서거나(새 판의 `updater::create`), 종료 코드 0으로 끝나거나, 시간이 지나면 성공이다. 확인 전에 0이 아닌 코드로 끝나면 `.old`를 `MoveFileExW`로 되돌리고 옛 exe를 다시 띄우며 `rolled_back`과 그 판을 상태 파일의 건너뛸 판으로 남긴다. 그 판은 더 새 판이 나올 때까지 `available`이 되지 않는다. 되는 것: 쓰러지는 판이 사용자 PC에 남지 않고 같은 판을 되풀이해 받지 않는다. 대가: 도우미가 30초 더 산다. `updater`를 늦게 만들면서 다른 까닭으로 곧 0이 아닌 코드로 끝나는 앱은 잘못 되돌려질 수 있다.
 - 길 b: 되돌리지 않고 `.old`만 남긴다. 되는 것: 도우미가 짧다. 대가: 쓰러지는 판은 사람이 손으로 되돌린다.
 - 길 c: `updater::rollback()`을 공개하고 새 판의 앱이 문제를 알면 부른다. 되는 것: 앱이 고른다. 대가: 시작 전에 쓰러지는 판은 부를 기회가 없다.
-- 권장: a. 대가: 위의 잘못 되돌림이다. 앱은 시작 때 `updater`를 만든다. `restart = false`는 띄우지 않아 지켜보지 않는다. **권장대로 진행.**
+- 권장: a. 대가: 위의 잘못 되돌림이다. 그래서 "앱은 시작할 때 `updater`를 만든다"를 계약으로 둔다(결과 전달). `restart = false`는 띄우지 않아 지켜보지 않는다. 사용자 PC에서 보이는 갱신 정책이라 **승인 필요.**
 
 **10. 쓸 수 없는 설치 자리.** 질문: 실행 파일 폴더에 쓸 수 없으면 어떻게 하는가.
 
@@ -145,7 +145,7 @@ const luil::single_instance instance { u8"my-app" };
 - `win32_window.cpp`는 고치지 않는다. 도우미는 `run_application_window` 전에 끝나고 앱의 종료는 기존 `application_exit`다. `ui_platform_capabilities`에도 칸을 더하지 않는다. 적용 방식은 창과 무관해 `platform_update_apply_mode`가 답한다.
 - 관리자 권한으로 도는 앱의 도우미는 그 권한을 물려받고 다시 띄운 앱도 같은 권한이다.
 - WinHTTP로 받은 파일에는 인터넷 출처 표식(`Zone.Identifier`)이 붙지 않는다고 알려져 있다. 백신과 SmartScreen이 사용자 폴더의 새 exe와 바꾼 exe를 어떻게 다루는지는 사람 확인이다.
-- 받기 폴더의 도우미 파일은 다시 띄운 앱의 `create`가 지운다. 도우미가 아직 지켜보는 중이면 다음 시작이 지운다.
+- 받기 폴더의 결과 파일은 다시 띄운 앱의 `create`가 읽고 지운다. `.old`·`.tmp`와 받아 둔 exe는 도우미가 지켜보는 동안 쓰일 수 있어 다음 시작의 `create`가 지운다.
 
 ### Android
 
@@ -155,7 +155,7 @@ const luil::single_instance instance { u8"my-app" };
 ## 다른 노드와의 약속
 
 - **단일 인스턴스(R2 G7).** 위 규칙이다. [단일 인스턴스](single-instance-args-design.md) 185줄의 "새 프로세스가 첫째라 이 길을 쓰지 않을 수 있다(추측)"를 이 문서가 닫는다. 쓰지 않는다. 구현 커밋이 그 줄을 이 문서로 잇는 말로 고친다.
-- **os_notify·점프 목록(R2).** 경로를 지켜 레지스트리와 셸 링크를 고치지 않는다. `current_executable_path`를 `src/win32/executable_path.h`로 옮기고 `jump_list.h`·`.cpp`와 `notification_win32.cpp`가 그것을 쓴다(같은 줄 파일, 동작 그대로).
+- **os_notify·점프 목록(R2).** 경로를 지켜 레지스트리와 셸 링크를 고치지 않는다. `current_executable_path`를 `src/win32/executable_path.h`로 옮기고 `jump_list.h`·`.cpp`와 `notification_win32.cpp`가 그것을 쓴다(같은 줄 파일, 동작 그대로). `jump_list.h`가 `executable_path.h`를 include해 `win32_window.cpp` 736줄과 `tests/jump_list_tests.cpp` 451·487줄의 호출은 고치지 않는다.
 - **데모.** `examples/demo_main.cpp`의 `wWinMain`에서 인자 읽기(1430~1432줄) 뒤, `single_instance`(1436줄) 앞에 `run_update_helper` 갈래 하나다. 데모 연결 커밋에 넣고 통합 때 직렬로 쌓는다.
 - **줄 1·2·3.** 같은 파일이 없다. 컨트롤러, `window_surface.cpp`·`surface_input.cpp`, `win32_window.cpp`를 고치지 않는다.
 
@@ -174,8 +174,8 @@ const luil::single_instance instance { u8"my-app" };
 
 - `tests/update_manifest_tests.cpp`(core, `luil_core_tests`)에 더한다: 도우미 인자 짓기·읽기 왕복(빈칸·따옴표·한글 경로, 다시 띄울 인자 없음과 빈 인자, `--` 뒤의 `-luil-update-apply`), 틀린 판 번호·빈 칸·남는 칸의 거절, 결과 파일과 건너뛸 판의 왕복.
 - `luil_update_probe`(새 시험 실행 파일, `tests/update_probe_main.cpp`, `luil`을 링크한다): `wWinMain`이 `run_update_helper`를 먼저 부른다. 평소 시작이면 `single_instance`를 만든 뒤 자기 파일 끝의 판 표지(test가 사본 끝에 붙인 `luil-probe-version:2`. PE 뒤에 덧붙인 바이트는 실행에 닿지 않는다고 알려져 있다)와 인자, 첫째 여부를 시작 기록에 쓴다. `--apply`면 비공개 `launch_update_helper`로 도우미를 띄우고 끝난다. `--exit <코드>`면 그 코드로 끝난다. `--window`면 판을 label로 그리는 창을 띄운다(사람 확인용).
-- `tests/update_apply_tests.cpp`(새 파일, `luil_tests`): 옛 probe에서 도우미를 거쳐 다시 띄우기까지 옛 경로의 바이트가 새 사본과 같고 결과가 `replaced`인지, 다시 띄운 probe가 첫째이고 인자가 준 그대로인지, 도우미의 시작 기록이 없는지(평소 길을 타지 않았다). `restart = false`면 띄우지 않는다. 부모가 시한보다 늦게 끝나면 `parent_timeout`이고 바뀐 것도 띄운 것도 없다. test가 옛 exe를 공유 없이 열어 두면 다시 하기 뒤 `replace_failed`이고 옛 exe가 다시 뜬다. 새 판이 확인 전에 3으로 끝나면 `rolled_back`이고 옛 바이트로 돌아오며 건너뛸 판이 적힌다. 0으로 끝나면 `replaced`다. 쓰기를 ACL로 막은 임시 폴더는 `not_writable`이다. 틀린 도우미 인자는 2이고 아무것도 바뀌지 않는다. 표식 없는 인자는 비었다. 한 test는 되돌이 서버와 `updater`로 확인·받기·적용을 끝까지 돈다.
-- `tests/updater_tests.cpp`(앞 문서)에 더한다: `ready`가 아닌 `apply`는 거짓, `handed_off` 뒤 `check`는 거짓, `create`가 결과 파일을 읽어 지우고 `last_apply`를 내며 `apply-confirmed`를 쓰는지.
+- `tests/update_apply_tests.cpp`(새 파일, `luil_tests`): 옛 probe에서 도우미를 거쳐 다시 띄우기까지 옛 경로의 바이트가 새 사본과 같은지, 다시 띄운 probe가 첫째이고 인자가 준 그대로이며 그 probe의 `last_apply`가 `replaced`이고 받기가 `busy`가 아닌지(`update.lock`을 쥔다), 도우미의 시작 기록이 없는지(평소 길을 타지 않았다). `restart = false`면 띄우지 않는다. 부모가 시한보다 늦게 끝나면 `parent_timeout`이고 바뀐 것도 띄운 것도 없다. test가 옛 exe를 공유 없이 열어 두면 다시 하기 뒤 `replace_failed`이고 옛 exe가 다시 뜬다. 새 판이 확인 전에 3으로 끝나면 `rolled_back`이고 옛 바이트로 돌아오며 건너뛸 판이 적힌다. 0으로 끝나면 `replaced`다. 쓰기를 ACL로 막은 임시 폴더는 `not_writable`이다. 틀린 도우미 인자는 2이고 아무것도 바뀌지 않는다. 표식 없는 인자는 비었다. 한 test는 되돌이 서버와 `updater`로 확인·받기·적용을 끝까지 돈다.
+- `tests/updater_tests.cpp`(앞 문서)에 더한다: `ready`가 아닌 `apply`는 거짓, `handed_off` 뒤 `check`는 거짓, `create`가 확인 대기 결과 파일을 읽어 지우고 `last_apply`를 내며 `apply-confirmed`를 쓰되 `.old`와 받아 둔 exe는 남기는지, 결과를 이미 읽은 다음 `create`가 그 둘을 지우는지.
 - 숨은 `[.update-live]`(`luil_tests`)가 `--window` probe로 같은 흐름을 사람 앞에서 돈다. ctest에서는 돌리지 않는다.
 - 데모는 적용하지 않는다. 빌드 폴더의 데모 실행 파일을 덮지 않기 위해서다. 데모 네트워크 페이지에 label `업데이트 적용 방식: 실행 파일 바꾸기`, 모바일 데모 `device_page.cpp`에 `업데이트 적용 방식: 스토어 열기`를 둔다. `tests/mobile_demo_page_tests.cpp`(core)가 이름을 읽는다.
 - 사람 확인: `[.update-live]`로 다시 띄운 창이 앞에 서는지, 작업 표시줄 단추와 고정한 바로가기가 새 판을 가리키는지, 알림을 눌러 새 판이 뜨는지, 백신·SmartScreen이 사용자 폴더의 새 exe와 바꾼 exe를 어떻게 다루는지(서명한 빌드와 안 한 빌드), Program Files 설치의 `not_writable` 흐름, 적용 중 도우미를 강제로 끝낸 뒤에도 앱이 뜨는지, Android 실기기에서 스토어 주소가 스토어 앱으로 열리는지.
