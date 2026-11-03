@@ -4,7 +4,9 @@
 #include "luil/app/updater.h"
 
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
+#include <span>
 #include <string>
 
 // 자동 업데이트 적용의 Win32 쪽이다 (docs/auto-update-apply-design.md).
@@ -30,7 +32,14 @@ namespace luil::win32 {
     // 자기 프로세스 손잡이를 `SYNCHRONIZE`·상속 가능으로 복제해 손잡이 목록 속성으로 그 하나만 물려 도우미를 띄운다 (결정 8).
     //  - 작업 폴더는 이 프로세스의 것이다. 띄웠으면 `AllowSetForegroundWindow(도우미)`를 걸고 참이다.
     //  - 시한이 규칙 밖이거나 인자에 NUL이 있거나 띄우지 못하면 거짓이고 `error`에 까닭을 적는다.
+    //  - 받은 exe의 머리가 `runnable_executable_header`를 지나지 못하면 OS에 넘기지 않고 거짓이다.
     [[nodiscard]] bool launch_update_helper(const update_helper_launch& launch, std::u8string& error);
+
+    // 파일 앞쪽 바이트가 이 빌드가 띄울 수 있는 Windows 실행 파일의 머리인가다 (MZ, PE 서명, 이 빌드와 같은 Machine, DLL이 아닌 실행 이미지).
+    //  - 도우미로 띄우기 전에 거른다. PE가 아닌 파일을 `CreateProcessW`에 넘기면 OS가 사용자 화면에 "지원되지 않는 16비트 응용
+    //    프로그램" 같은 상자를 띄운다. 해시가 맞아도 배포한 쪽이 틀린 파일을 올렸을 수 있다.
+    //  - 아니면 거짓이고 `error`에 까닭을 적는다. `header`에는 PE 머리까지 들어 있어야 한다.
+    [[nodiscard]] bool runnable_executable_header(std::span<const std::byte> header, std::u8string& error);
 
     // 폴더에 `CREATE_NEW | FILE_FLAG_DELETE_ON_CLOSE`로 시험 파일을 만들어 본다 (결정 10). 만들었으면 참이다. 시험 파일은 남지 않는다.
     [[nodiscard]] bool folder_writable(const std::filesystem::path& folder, std::u8string& error);

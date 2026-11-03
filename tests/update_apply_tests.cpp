@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -738,4 +739,71 @@ TEST_CASE("a windowed probe hands over to the new version in front of a person",
     const std::vector<probe_start> starts { read_starts(scratch.log()) };
     REQUIRE(starts.size() == 2);
     CHECK(starts[1].last_apply == u8"replaced");
+}
+
+namespace {
+    // 이 test 실행 파일의 앞 64 KiB다. 같은 빌드의 실행 파일이라 머리 검사를 지나야 한다.
+    [[nodiscard]] std::vector<std::byte> own_executable_header()
+    {
+        std::ifstream file { std::filesystem::path { luil::win32::current_executable_path() }, std::ios::binary };
+        // 중괄호는 초기값 목록이 되어 크기를 줄 수 없다.
+        std::vector<std::byte> bytes(64 * 1024);
+        if (file.is_open() == false)
+            return {};
+        file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        bytes.resize(static_cast<std::size_t>(file.gcount()));
+        return bytes;
+    }
+
+    // `header` 사본의 `offset` 자리에 `value`를 쓴다.
+    template <typename value_type>
+    [[nodiscard]] std::vector<std::byte> with_value(const std::vector<std::byte>& header, const std::size_t offset, const value_type value)
+    {
+        std::vector<std::byte> copy { header };
+        std::memcpy(copy.data() + offset, &value, sizeof(value));
+        return copy;
+    }
+}
+
+TEST_CASE("the helper launch refuses a file Windows cannot run before the OS sees it", "[update][update_apply]")
+{
+    // 실행 파일이 아닌 받은 파일은 OS에 넘기지 않는다. 넘기면 OS가 사용자 화면에 "지원되지 않는 16비트 응용 프로그램" 상자를 띄운다.
+    const std::vector<std::byte> own { own_executable_header() };
+    REQUIRE(own.size() >= sizeof(IMAGE_DOS_HEADER));
+    std::u8string error {};
+    CHECK(luil::win32::runnable_executable_header(own, error));
+    CHECK(error.empty());
+
+    IMAGE_DOS_HEADER dos {};
+    std::memcpy(&dos, own.data(), sizeof(dos));
+    REQUIRE(dos.e_lfanew > 0);
+    const std::size_t nt { static_cast<std::size_t>(dos.e_lfanew) };
+    const std::size_t machine { nt + sizeof(DWORD) + offsetof(IMAGE_FILE_HEADER, Machine) };
+    const std::size_t characteristics { nt + sizeof(DWORD) + offsetof(IMAGE_FILE_HEADER, Characteristics) };
+    REQUIRE(characteristics + sizeof(WORD) <= own.size());
+    WORD own_machine { 0 };
+    WORD own_characteristics { 0 };
+    std::memcpy(&own_machine, own.data() + machine, sizeof(own_machine));
+    std::memcpy(&own_characteristics, own.data() + characteristics, sizeof(own_characteristics));
+
+    const auto refused {
+        [](const std::span<const std::byte> header, const std::u8string_view reason) {
+            std::u8string why {};
+            const bool runnable { luil::win32::runnable_executable_header(header, why) };
+            INFO(ascii(why));
+            CHECK(runnable == false);
+            CHECK(why.find(reason) != std::u8string::npos);
+        },
+    };
+
+    refused({}, u8"shorter than an MZ header");
+    const std::vector<std::uint8_t> asset { luil::testing::update_fixture_asset() };
+    refused(std::as_bytes(std::span { asset }), u8"does not start with MZ");
+    refused(with_value(own, offsetof(IMAGE_DOS_HEADER, e_lfanew), static_cast<LONG>(own.size())), u8"PE header is missing");
+    refused(with_value(own, offsetof(IMAGE_DOS_HEADER, e_lfanew), static_cast<LONG>(-4)), u8"PE header is missing");
+    refused(with_value(own, nt, static_cast<DWORD>(0)), u8"PE signature is missing");
+    const WORD other_machine { static_cast<WORD>(own_machine == IMAGE_FILE_MACHINE_AMD64 ? IMAGE_FILE_MACHINE_ARM64 : IMAGE_FILE_MACHINE_AMD64) };
+    refused(with_value(own, machine, other_machine), u8"another machine");
+    refused(with_value(own, characteristics, static_cast<WORD>(own_characteristics | IMAGE_FILE_DLL)), u8"not an executable image");
+    refused(with_value(own, characteristics, static_cast<WORD>(own_characteristics & ~IMAGE_FILE_EXECUTABLE_IMAGE)), u8"not an executable image");
 }

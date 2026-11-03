@@ -1162,6 +1162,7 @@ TEST_CASE("an apply whose download changed after verifying is a hash mismatch", 
 TEST_CASE("an apply whose download is not an executable fails to launch", "[update][updater][update_apply]")
 {
     // 고정 asset은 실행 파일이 아니라 도우미로 뜨지 못한다. 그래서 이 test 프로세스를 대상으로 삼는 도우미는 서지 않는다.
+    // 머리 검사가 OS에 넘기기 전에 거른다. 넘기면 OS가 사용자 화면에 "지원되지 않는 16비트 응용 프로그램" 상자를 띄운다.
     update_server server {};
     REQUIRE(server.listening());
     scratch_folder folder {};
@@ -1171,7 +1172,8 @@ TEST_CASE("an apply whose download is not an executable fails to launch", "[upda
     REQUIRE(run_download(*updater, sink).phase == update_phase::ready);
     const update_status status { run_apply(*updater, sink) };
     CHECK(status.failure == update_failure::launch_failed);
-    CHECK(status.error.empty() == false);
+    INFO(ascii(status.error));
+    CHECK(status.error.find(u8"not a Windows executable") != std::u8string::npos);
     // 띄우지 못했으니 일을 계속 받는다. 받은 파일도 남는다.
     CHECK(std::filesystem::exists(ready_file(folder)));
     CHECK(run_check(*updater, sink).phase == update_phase::ready);

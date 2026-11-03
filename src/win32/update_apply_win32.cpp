@@ -16,8 +16,10 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -55,6 +57,31 @@ namespace luil {
         [[nodiscard]] std::chrono::milliseconds clamp_wait(const std::chrono::milliseconds value) noexcept
         {
             return std::clamp(value, std::chrono::milliseconds::zero(), std::chrono::milliseconds { static_cast<long long>(update_helper_maximum_timeout_ms) });
+        }
+
+        // 이 빌드의 Machine이다. 새 판은 같은 자리에서 같은 꼴로 떠야 한다.
+#if defined(_M_ARM64)
+        constexpr WORD running_machine { IMAGE_FILE_MACHINE_ARM64 };
+#elif defined(_M_X64)
+        constexpr WORD running_machine { IMAGE_FILE_MACHINE_AMD64 };
+#else
+        constexpr WORD running_machine { IMAGE_FILE_MACHINE_I386 };
+#endif
+
+        // 받은 파일의 앞쪽이다. PE 머리 자리(`e_lfanew`)는 대개 첫 몇백 바이트 안이라 64 KiB면 넉넉하다.
+        [[nodiscard]] std::optional<std::vector<std::byte>> read_executable_header(const std::filesystem::path& file, std::u8string& error)
+        {
+            std::ifstream stream { file, std::ios::binary };
+            if (stream.is_open() == false)
+            {
+                error = u8"Failed to open the downloaded executable to read its header.";
+                return std::nullopt;
+            }
+            // 중괄호는 초기값 목록이 되어 크기를 줄 수 없다.
+            std::vector<std::byte> bytes(64 * 1024);
+            stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            bytes.resize(static_cast<std::size_t>(stream.gcount()));
+            return bytes;
         }
 
         struct started_process
@@ -116,6 +143,7 @@ namespace luil {
             PROCESS_INFORMATION information {};
             // PE가 아닌 파일을 띄우면 OS가 hard error 대화 상자("지원되지 않는 16비트 응용 프로그램")를 띄우고 이 호출이 그 상자가
             // 닫힐 때까지 돌아오지 않는다. updater thread가 멈춰 launch_failed를 보고하지 못하고 앱 종료의 join도 끝나지 않는다.
+            // 받은 파일은 `launch_update_helper`가 머리를 먼저 거르지만, 머리 검사가 보지 않는 꼴이 남을 수 있어 여기서도 막는다.
             // 이 thread의 오류 방식만 바꿔 상자 없이 실패로 돌아오게 한다. 프로세스 전체 방식은 다른 thread와 자식이 물려받아 건드리지 않는다.
             DWORD previous_mode { 0 };
             const bool mode_set { SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previous_mode) != FALSE };
@@ -449,6 +477,55 @@ namespace luil {
     }
 
     namespace win32 {
+        bool runnable_executable_header(const std::span<const std::byte> header, std::u8string& error)
+        {
+            IMAGE_DOS_HEADER dos {};
+            if (header.size() < sizeof(dos))
+            {
+                error = u8"The downloaded file is not a Windows executable: it is shorter than an MZ header.";
+                return false;
+            }
+            std::memcpy(&dos, header.data(), sizeof(dos));
+            if (dos.e_magic != IMAGE_DOS_SIGNATURE)
+            {
+                error = u8"The downloaded file is not a Windows executable: it does not start with MZ.";
+                return false;
+            }
+            // 음수나 바이트 열 밖의 자리는 PE 머리가 없는 것과 같다.
+            const std::uint64_t nt_offset {
+                dos.e_lfanew < 0 ? std::numeric_limits<std::uint64_t>::max() : static_cast<std::uint64_t>(dos.e_lfanew)
+            };
+            constexpr std::uint64_t nt_size { sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) };
+            if (nt_offset > header.size()
+                || header.size() - nt_offset < nt_size)
+            {
+                error = u8"The downloaded file is not a Windows executable: its PE header is missing.";
+                return false;
+            }
+            DWORD signature { 0 };
+            IMAGE_FILE_HEADER file {};
+            const std::byte* const nt { header.data() + static_cast<std::size_t>(nt_offset) };
+            std::memcpy(&signature, nt, sizeof(signature));
+            std::memcpy(&file, nt + sizeof(signature), sizeof(file));
+            if (signature != IMAGE_NT_SIGNATURE)
+            {
+                error = u8"The downloaded file is not a Windows executable: its PE signature is missing.";
+                return false;
+            }
+            if (file.Machine != running_machine)
+            {
+                error = u8"The downloaded executable is built for another machine than this app.";
+                return false;
+            }
+            if ((file.Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE) == 0
+                || (file.Characteristics & IMAGE_FILE_DLL) != 0)
+            {
+                error = u8"The downloaded file is not an executable image.";
+                return false;
+            }
+            return true;
+        }
+
         bool launch_update_helper(const update_helper_launch& launch, std::u8string& error)
         {
             const std::chrono::milliseconds parent_timeout { clamp_wait(launch.options.parent_timeout) };
@@ -459,6 +536,11 @@ namespace luil {
                 error = u8"parent_timeout must be positive, confirm_timeout must not be negative, and both must fit a Win32 wait.";
                 return false;
             }
+            // OS에 넘기기 전에 머리를 본다. PE가 아닌 파일은 OS가 사용자 화면에 상자를 띄운다.
+            const std::optional<std::vector<std::byte>> header { read_executable_header(launch.helper_executable, error) };
+            if (header.has_value() == false
+                || runnable_executable_header(*header, error) == false)
+                return false;
             HANDLE duplicated { nullptr };
             if (DuplicateHandle(GetCurrentProcess(), GetCurrentProcess(), GetCurrentProcess(), &duplicated, SYNCHRONIZE, TRUE, 0) == FALSE)
             {
