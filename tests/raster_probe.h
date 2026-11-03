@@ -5,6 +5,8 @@
 #include "luil/ui/ui_tree.h"
 
 #include "include/core/SkBitmap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypeface.h"
 
 #include <chrono>
 
@@ -45,6 +47,9 @@ namespace luil::testing {
         void set_metrics(const ui_metrics& metrics) noexcept;
         // 그리기에 줄 테마다 (`draw_context::theme`). 기본은 dark다. 고대비를 묻는 element의 축이 바꾼다.
         void set_theme(color_theme theme) noexcept;
+        // 그리기에 줄 UI·코드 글꼴이다 (`draw_context::ui_typeface`·`code_typeface`). 기본은 없다.
+        //  - 글자 가장자리 픽셀을 보는 축이 직접 지은 글꼴을 싣는다. core test에는 OS 글꼴이 없다.
+        void set_typeface(sk_sp<SkTypeface> typeface) noexcept;
 
         // 물리 픽셀 하나의 색이다 (알파를 푼 ARGB — `ui_color`와 같은 배치다).
         // 화면 밖이면 0이다.
@@ -59,6 +64,7 @@ namespace luil::testing {
         ui_metrics metrics_ {};
         color_theme theme_ { color_theme::dark };
         float scale_ { 2.0f };
+        sk_sp<SkTypeface> typeface_ {};
         SkBitmap pixels_ {};
     };
 }

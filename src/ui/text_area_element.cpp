@@ -1047,7 +1047,18 @@ namespace luil {
                     }
                     draw_piece(cursor, row.end, font, foreground.getColor());
                 };
-                draw_content(std::nullopt);
+                // 고른 구간의 글자는 맨 끝에서 고른 글자색으로 한 번만 그린다. 그 구간에 구문색·링크색·검색색 글자를 먼저
+                // 그려 두면 같은 글자가 한 번 더 그려져 글자 가장자리의 반투명 픽셀에 먼저 그린 색이 비치고 글자가 굵어 보인다.
+                // 그래서 앞의 글자 그리기는 고른 구간을 뺀 자리에만 그린다.
+                const bool selected_text { selection.has_value() && enabled() && (styled.empty() == false || highlights.empty() == false || context.palette.selection_foreground != context.palette.primary_foreground) };
+                const auto draw_outside_selection = [&](const std::optional<ui_color> override_color) {
+                    context.canvas.save();
+                    if (selected_text)
+                        context.canvas.clipRect(*selection, SkClipOp::kDifference);
+                    draw_content(override_color);
+                    context.canvas.restore();
+                };
+                draw_outside_selection(std::nullopt);
                 // 밑줄 구간은 글자 아래 1 논리 픽셀 선을 그 구간의 글자색으로 긋는다. 링크 밑줄과 같은 자리이고, 줄 바꿈 칸은
                 // 긋지 않는다 (글자 아래의 선이다).
                 for (const auto& span : styled)
@@ -1070,7 +1081,7 @@ namespace luil {
                     {
                         context.canvas.save();
                         context.canvas.clipRect(link_box);
-                        draw_content(context.palette.accent);
+                        draw_outside_selection(context.palette.accent);
                         context.canvas.restore();
                     }
                     const bool emphasized { element != nullptr && element->emphasized(interaction) };
@@ -1081,11 +1092,12 @@ namespace luil {
                 {
                     context.canvas.save();
                     context.canvas.clipRect(range_rect(match.begin, match.end));
-                    draw_content(context.palette.document_search_foreground);
+                    draw_outside_selection(context.palette.document_search_foreground);
                     context.canvas.restore();
                 }
-                // 고른 구간의 글자는 그 바탕의 짝이다 (한 줄 칸과 같은 규칙 — 고대비에서만 바뀐다).
-                if (selection.has_value() && enabled() && (styled.empty() == false || highlights.empty() == false || context.palette.selection_foreground != context.palette.primary_foreground))
+                // 고른 구간의 글자는 그 바탕의 짝이다 (한 줄 칸과 같은 규칙으로 고대비에서만 본문색과 다르다). 밑줄과 링크 밑줄은
+                // 고른 구간 안에서도 남고, 링크색·검색색 글자는 이 글자색이 대신한다.
+                if (selected_text)
                 {
                     context.canvas.save();
                     context.canvas.clipRect(*selection);
