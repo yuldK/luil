@@ -8,7 +8,7 @@
 
 앱이 색 고르기를 만들려면 색 계산부터 그리기까지 모두 짓는다.
 
-- 색 계산이 없다. HSV 변환과 16진 읽기·쓰기가 저장소에 없다. [색 공간과 16진 색](color-space-design.md)이 푼다.
+- 색 계산이 없다. HSV 변환과 공개 16진 함수가 없다(16진은 비공개로 스타일 읽기·검사기·데모가 각자 짓는다). [색 공간과 16진 색](color-space-design.md)이 푼다.
 - 그라디언트를 그리는 요소가 없다. `src`에 `SkShader`를 쓰는 곳이 없고 slider 트랙은 단색이다. `SkShaders::LinearGradient`는 두 패키지의 `include/effects/SkGradient.h`에 있고, 그 기호가 Windows `skia.lib`와 Android `libskia.a`에 있음을 글자열로 확인했다(빌드는 하지 않았다).
 - 2차원 끌기와 키가 없다. `slider_element`는 가로 한 축이고 끌기와 키는 델타다([slider_element.h](../include/luil/ui/slider_element.h) 11~16행). 판은 x·y 두 값을 절대로 낸다. 두 축 키 조합의 선례는 가상 목록 격자다([virtual_list_element.cpp](../src/ui/virtual_list_element.cpp) 540행 ←→ 처리기, 576행 세로 `key_step_target`).
 - 보조 기술의 범위 값은 노드마다 하나다(`access_info::range`, [uia_provider.cpp](../src/win32/uia_provider.cpp) 942행). 판은 값이 둘이다.
@@ -232,7 +232,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 - `tests/raster_draw_tests.cpp`. 배율 2에서 판의 왼쪽 위 흰색, 오른쪽 위 순색, 아래 검정, 가운데 `color_from_hsv({ h, 0.5, 0.5 })`를 허용치 2로(투명 정지점이 검정이면 가운데가 회색으로 틀린다), 색상 막대의 정지점 색, 알파 막대의 체커, 손잡이 테가 밝은 색 위 검정·어두운 색 위 흰색인지, 고대비 팔레트에서 판이 실제 색이고 둘레가 `window_foreground`인지.
 - `tests/uia_provider_tests.cpp`(`luil_tests`, Windows). 판은 Value만 있고 RangeValue가 없다. 막대의 SmallChange·LargeChange가 1·10이다. root의 `SetValue`는 `E_ACCESSDENIED`다. 색 칸의 Expand가 `set_open(true)`다.
 
-데모 칸. 갤러리 컨트롤 페이지의 "색 고르기" 카드가 알파와 견본 넷과 16진 칸을 단 인라인 본체(owner `gallery/color`)와 label `gallery/color-value`("색: #3366FF80 · 색상 220° · 채도 80% · 명도 100% · 알파 50%")를 보인다. popups 페이지는 색 칸(owner `popups/color-field`)과 label `popups/color-state`("색 칸: 닫힘 · #3366FF")를 둔다. 모바일 기본 페이지는 별점 줄 뒤에 폭에 맞춘 판과 `bar_height` 32의 본체(owner `color`)와 label `color-value`를 더한다. 격리 데스크톱에서 luil-uia로 막대 `SetValue`, 16진 칸 `SetValue`, root와 label 되읽기, 색 칸 Expand 뒤 판에 초점이 섰는지, Esc 뒤 칸으로 돌아왔는지를 본다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다. 두 데모 칸의 조립과 intent는 `tests/demo_gallery_tests.cpp`와 `tests/mobile_demo_page_tests.cpp`가 잡는다.
+데모 칸. 갤러리 컨트롤 페이지의 "색 고르기" 카드가 알파와 견본 넷과 16진 칸을 단 인라인 본체(owner `gallery/color`)와 label `gallery/color-value`("색: #3366FF80 · 색상 220° · 채도 80% · 명도 100% · 알파 50%")를 보인다. 이 label의 16진 글은 `format_hex_color`라 대문자여서, 같은 데모의 `style_color_text`(소문자 `#rrggbb[aa]`, 테마 페이지의 스타일 파일 상태 줄)와 글을 견주지 않는다. popups 페이지는 색 칸(owner `popups/color-field`)과 label `popups/color-state`("색 칸: 닫힘 · #3366FF")를 둔다. 모바일 기본 페이지는 별점 줄 뒤에 폭에 맞춘 판과 `bar_height` 32의 본체(owner `color`)와 label `color-value`를 더한다. 격리 데스크톱에서 luil-uia로 막대 `SetValue`, 16진 칸 `SetValue`, root와 label 되읽기, 색 칸 Expand 뒤 판에 초점이 섰는지, Esc 뒤 칸으로 돌아왔는지를 본다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다. 두 데모 칸의 조립과 intent는 `tests/demo_gallery_tests.cpp`와 `tests/mobile_demo_page_tests.cpp`가 잡는다.
 
 사람 확인: 판과 막대의 끌기 느낌과 마우스 누름의 지연, 실기기에서 판 위 쓸기가 스크롤하고 잠깐 눌러 끄는 느낌, Vulkan·CPU에서 그라디언트 색, 밝은·어두운·고대비에서 손잡이와 둘레, Narrator가 판의 두 값과 막대를 읽는 방식, 배율 150%·200%에서 popup 자리.
 

@@ -6,7 +6,7 @@
 
 ## 문제
 
-- 색 계산이 없다. [ui_theme.h](../include/luil/theme/ui_theme.h)에는 `ui_color`(0xAARRGGBB, 11행), `make_ui_color`(22행), `with_alpha`(30행), `relative_luminance`(40행), `is_dark_background`(42행)뿐이다. HSV 변환과 16진 읽기·쓰기는 저장소 어디에도 없다.
+- 색 계산이 없다. [ui_theme.h](../include/luil/theme/ui_theme.h)에는 `ui_color`(0xAARRGGBB, 11행), `make_ui_color`(22행), `with_alpha`(30행), `relative_luminance`(40행), `is_dark_background`(42행)뿐이다. HSV 변환과 공개 16진 함수가 없다. 16진은 비공개로 셋이 각자 짓는다. [ui_style_json.cpp](../src/theme/ui_style_json.cpp) `read_color`(303행)는 스타일 파일의 `#RRGGBB`·`#RRGGBBAA`(알파 뒤)만 엄격히 읽고, [inspector_overlay.cpp](../src/host/inspector_overlay.cpp) `append_hex`(98행)는 검사기 팔레트에 `#AARRGGBB` 아홉 자를 대문자로 쓰며, [style_sheet_sample.h](../examples/demo/style_sheet_sample.h) `style_color_text`(137행)는 데모에 소문자 `#rrggbb[aa]`를 쓴다.
 - 지각 균일 공간은 비공개다. OKLab 변환(`oklab_from`, `linear_rgb_from`)은 [ui_theme.cpp](../src/theme/ui_theme.cpp) 50~130행의 익명 이름공간에 있고 강조색 합성(367행)만 쓴다.
 - 앱이 색을 글로 받으면 검사를 앱마다 짓는다. 숫자 칸은 `check_number_input`과 `number_input_filter`를 갖지만([number_input.h](../include/luil/ui/number_input.h) 54·68행) 색 글에는 짝이 없다.
 
@@ -71,10 +71,10 @@ struct hex_color_check
 
 **2. 알파와 8자리 순서.** 질문: 알파를 어떻게 켜고 8자리를 어느 순서로 쓰는가.
 
-- 길 a: `alpha` 인자(색 고르기 설정, 기본 끔)이고 8자리는 `#RRGGBBAA`. 되는 것: CSS와 같은 순서라 웹에서 복사한 색이 그대로 읽힌다. 끄면 막대도 8자리도 없다. 대가: 코드의 `ui_color` 리터럴(0xAARRGGBB)과 순서가 다르다.
-- 길 b: `#AARRGGBB`. 되는 것: `ui_color`와 같은 순서다. 대가: 웹의 8자리 색이 다른 색으로 읽힌다.
+- 길 a: `alpha` 인자(색 고르기 설정, 기본 끔)이고 8자리는 `#RRGGBBAA`. 되는 것: CSS와 같은 순서라 웹에서 복사한 색이 그대로 읽히고, 스타일 파일의 `#RRGGBBAA`(`read_color`)와도 같은 순서다. 끄면 막대도 8자리도 없다. 대가: 코드의 `ui_color` 리터럴(0xAARRGGBB)과 순서가 다르고, 검사기 표시(`append_hex`)는 `#AARRGGBB`라 어긋난다.
+- 길 b: `#AARRGGBB`. 되는 것: `ui_color`와 검사기 표시(`append_hex`)와 같은 순서다. 대가: 웹과 스타일 파일(`read_color`)의 8자리 색이 다른 색으로 읽힌다.
 - 길 c: 늘 알파. 되는 것: 설정이 없다. 대가: 투명을 다루지 않는 앱에 막대와 체커가 선다.
-- 권장: a. 대가: 위의 리터럴 순서다. 권장대로 진행.
+- 권장: a. 대가: 위의 리터럴 순서와 검사기 표시와의 어긋남이다. 권장대로 진행.
 
 ## 플랫폼
 
@@ -85,6 +85,7 @@ struct hex_color_check
 - **color_picker(같은 문서 짝).** 요소는 이 함수만으로 색을 짓는다. 판과 막대의 값은 `hsv_color`이고 견본 칸과 16진 확정은 `hsv_from_color(색, 지금 값)`이다.
 - **강조색 합성.** `ui_theme.cpp`를 고치지 않는다. 결정 1이 c가 되면 그 파일의 OKLab 변환을 공개해야 해서 팔레트 합성(`compose_palette`)과 같은 파일을 고친다.
 - **숫자 칸.** `number_input.h`를 고치지 않는다. RGB 숫자 칸이 필요한 앱은 `number_input_range { 0, 255 }`로 둔다.
+- **스타일 읽기·검사기·데모.** 새 `check_hex_color`는 스타일 읽기(`style_error_kind::invalid_color`를 내는 비공개 `read_color`)를 대신하지 않는다. 스타일 파일은 `#`가 꼭 있고 6·8자리만 받으며 오류를 `style_error`로 모은다. 검사기 `append_hex`와 데모 `style_color_text`의 쓰기도 이번에 고치지 않는다.
 
 ## 확인
 
