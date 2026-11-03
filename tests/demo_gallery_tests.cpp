@@ -13,6 +13,7 @@
 
 #include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
@@ -1738,4 +1739,184 @@ TEST_CASE("Clipboard keys in the focused rich text editor copy and paste with th
         REQUIRE(read != nullptr);
         REQUIRE(read->tag == demo::rich_text_clipboard_tag);
     }
+}
+
+namespace {
+    const luil::ui_element_id date_field_id { luil::ui_element_kind::date_field, u8"popups/date-field" };
+
+    [[nodiscard]] std::chrono::year_month_day demo_date(const int year, const unsigned month, const unsigned day)
+    {
+        return { std::chrono::year { year }, std::chrono::month { month }, std::chrono::day { day } };
+    }
+
+    [[nodiscard]] std::optional<luil::ui_popup> date_popup_of(const demo::popups_page& page)
+    {
+        for (luil::ui_popup& popup : page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }))
+            if (popup.id == u8"date-popup")
+                return std::move(popup);
+        return std::nullopt;
+    }
+
+    // 액션 여럿을 차례로 페이지에 전한다 (커서가 아닌 날의 클릭은 커서 다음 고르기다).
+    template<typename Page>
+    void deliver_all(Page& page, const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            deliver_action(page, action);
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> click_of(const luil::ui_element& element)
+    {
+        REQUIRE(element.action(luil::ui_trigger::left_click) != nullptr);
+        return (*element.action(luil::ui_trigger::left_click))({ element.id() });
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> grid_key(const luil::ui_tree& tree, const std::u8string& owner, const luil::key_code code)
+    {
+        const luil::ui_element* const grid { tree.find({ luil::ui_element_kind::calendar_grid, owner }) };
+        REQUIRE(grid != nullptr);
+        REQUIRE(grid->key_handler_of() != nullptr);
+        luil::key_pressed_event event {};
+        event.key = code;
+        const std::optional<std::vector<luil::input_action>> actions { (*grid->key_handler_of())(event) };
+        REQUIRE(actions.has_value());
+        return *actions;
+    }
+}
+
+TEST_CASE("The date field opens a calendar popup under it and asks to focus the cursor day", "[demo][popups][date-picker]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 3일");
+    const luil::ui_element* const field { tree.find(date_field_id) };
+    REQUIRE(field != nullptr);
+    REQUIRE(field->accessibility().name == u8"마감 날짜");
+    REQUIRE(field->accessibility().value == u8"2026년 11월 3일");
+    REQUIRE(field->accessibility().expanded == false);
+
+    // 누르면 여는 메시지이고, 열면 popup 표면의 커서 날(고른 날)로 초점을 옮기는 요청이 실린다.
+    deliver_action(page, first_action((*field->action(luil::ui_trigger::left_click))({ field->id() })));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface == u8"date-popup");
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 11, 3)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 열림 · 2026년 11월 3일");
+    REQUIRE(tree.find(date_field_id)->accessibility().expanded == true);
+    const luil::rect_f bounds { tree.find(date_field_id)->bounds() };
+    const std::optional<luil::ui_popup> popup { date_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->x == bounds.x);
+    REQUIRE(popup->y == bounds.y + bounds.height + 2.0f);
+    const luil::ui_element* const cursor { popup->tree->find(focus->target) };
+    REQUIRE(cursor != nullptr);
+    REQUIRE(cursor->focusable());
+    REQUIRE(cursor->accessibility().selected == true);
+    // 한 번에 하나만 뜬다.
+    REQUIRE(page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }).size() == 1u);
+
+    // 글 칸이 없어 창 이동에도 닫는다. 초점은 옮기지 않는다.
+    deliver_action(page, popup->dismiss(luil::popup_dismiss_reason::surface_moved));
+    REQUIRE(date_popup_of(page).has_value() == false);
+    REQUIRE(page.make_focus_request()->id == focus->id);
+
+    // 다시 열고 Esc로 닫으면 칸으로 돌아오는 초점 요청을 한 번 더 싣는다. 값은 그대로다.
+    send(page, demo::date_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    const std::uint64_t reopened { page.make_focus_request()->id };
+    REQUIRE(reopened == focus->id + 1u);
+    deliver_action(page, date_popup_of(page)->dismiss(luil::popup_dismiss_reason::escape_key));
+    const std::optional<luil::focus_request> back { page.make_focus_request() };
+    REQUIRE(back->id == reopened + 1u);
+    REQUIRE(back->surface.empty());
+    REQUIRE(back->target == date_field_id);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 3일");
+}
+
+TEST_CASE("The popup cursor moves with the focus, the month buttons keep it and choosing a day closes it", "[demo][popups][date-picker]")
+{
+    demo::popups_page page {};
+    send(page, demo::date_field_intent { true });
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    std::optional<luil::ui_popup> popup { date_popup_of(page) };
+    REQUIRE(popup.has_value());
+
+    // 화살표는 커서를 옮기고 그 날로 초점 요청을 싣는다. 새 popup에서 그 날이 Tab 자리다.
+    const std::uint64_t opened { page.make_focus_request()->id };
+    deliver_all(page, grid_key(*popup->tree, u8"popups/date", luil::key_code::arrow_right));
+    std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus->id == opened + 1u);
+    REQUIRE(focus->surface == u8"date-popup");
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 11, 4)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    popup = date_popup_of(page);
+    REQUIRE(popup->tree->find(focus->target)->tab_stop());
+
+    // 다음 달 단추는 커서만 옮긴다. 초점 요청이 없어 초점이 단추에 남는다.
+    const luil::ui_element* const next { popup->tree->find({ luil::ui_element_kind::calendar_nav, color_part(u8"popups/date", u8"next") }) };
+    REQUIRE(next != nullptr);
+    deliver_all(page, click_of(*next));
+    REQUIRE(page.make_focus_request()->id == focus->id);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    popup = date_popup_of(page);
+    REQUIRE(popup->tree->find({ luil::ui_element_kind::calendar_grid, u8"popups/date" })->accessibility().name == u8"2026년 12월");
+
+    // 커서가 아닌 날을 누르면 커서를 옮긴 뒤 고른다. 고르면 값이 바뀌고 닫히고 칸으로 초점이 돌아온다.
+    const luil::ui_element* const day { popup->tree->find(luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 12, 18))) };
+    REQUIRE(day != nullptr);
+    deliver_all(page, click_of(*day));
+    focus = page.make_focus_request();
+    REQUIRE(focus->surface.empty());
+    REQUIRE(focus->target == date_field_id);
+    REQUIRE(date_popup_of(page).has_value() == false);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 12월 18일");
+    REQUIRE(tree.find(date_field_id)->accessibility().value == u8"2026년 12월 18일");
+
+    // 다시 열면 커서가 고른 날에서 시작한다. 다른 칸을 열면 날짜 칸 popup은 닫힌다.
+    send(page, demo::date_field_intent { true });
+    REQUIRE(page.make_focus_request()->target == luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 12, 18)));
+    send(page, demo::field_menu_intent { u8"save", true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 12월 18일");
+    REQUIRE(date_popup_of(page).has_value() == false);
+}
+
+TEST_CASE("The inline calendar reads its chosen day and cursor back and blocks the weekend", "[demo][popups][date-picker]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/calendar-state") == u8"고른 날: 2026-11-03 · 커서: 2026-11-10");
+    const luil::ui_element* const calendar { tree.find({ luil::ui_element_kind::calendar, u8"popups/calendar" }) };
+    REQUIRE(calendar != nullptr);
+    REQUIRE(calendar->accessibility().name == u8"달력");
+    const auto inline_day = [&tree](const unsigned month, const unsigned day) {
+        const luil::ui_element* const found { tree.find(luil::calendar_element::day_id(u8"popups/calendar", demo_date(2026, month, day))) };
+        REQUIRE(found != nullptr);
+        return found;
+    };
+    REQUIRE(inline_day(11, 3)->accessibility().name == u8"2026년 11월 3일 화요일, 오늘");
+    REQUIRE(inline_day(11, 7)->accessibility().name == u8"2026년 11월 7일 토요일, 고를 수 없음");
+    REQUIRE(inline_day(11, 7)->action(luil::ui_trigger::left_click) == nullptr);
+    REQUIRE(inline_day(11, 10)->tab_stop());
+
+    // 키는 인라인 달력의 커서를 옮기고 주 창의 그 날로 초점을 옮긴다.
+    deliver_all(page, grid_key(tree, u8"popups/calendar", luil::key_code::arrow_down));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface.empty());
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"popups/calendar", demo_date(2026, 11, 17)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/calendar-state") == u8"고른 날: 2026-11-03 · 커서: 2026-11-17");
+
+    // 평일을 누르면 커서와 고른 날이 그 날이다. 범위(오늘 뒤 60일) 끝에서는 멈춘다.
+    deliver_all(page, click_of(*inline_day(11, 12)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/calendar-state") == u8"고른 날: 2026-11-12 · 커서: 2026-11-12");
+    REQUIRE(inline_day(11, 12)->accessibility().selected == true);
+    send(page, demo::date_move_intent { u8"popups/calendar", demo_date(2027, 1, 2) });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(grid_key(tree, u8"popups/calendar", luil::key_code::arrow_right).empty());
 }

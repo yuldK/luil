@@ -77,7 +77,8 @@ namespace mobile_demo {
         tabs_page tabs_ {};
         groups_page groups_ {};
         toasts_page toasts_ {};
-        popups_page popups_ {};
+        // 오늘은 시작할 때 한 번 읽어 날짜 칸에 준다 (라이브러리는 시계를 읽지 않는다).
+        popups_page popups_ { popups_page::local_today() };
         zoom_page zoom_ {};
         ink_page ink_ {};
         inspector_page inspector_ {};

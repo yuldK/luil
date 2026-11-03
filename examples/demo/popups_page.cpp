@@ -1,8 +1,10 @@
 #include "demo/popups_page.h"
 
 #include "luil/app/color_picker_popup.h"
+#include "luil/app/date_picker_popup.h"
 #include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -14,6 +16,7 @@
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_tree.h"
 #include <algorithm>
+#include <ctime>
 
 #include <utility>
 
@@ -28,6 +31,39 @@ namespace demo {
         inline constexpr std::u8string_view color_popup_id { u8"color-popup" };
         inline constexpr std::u8string_view color_picker_owner { u8"popups/color" };
         inline constexpr std::u8string_view color_field_owner { u8"popups/color-field" };
+        // 날짜 칸 popup의 임자와 popup id, 그 안 달력의 owner, 칸의 owner, 인라인 달력의 owner다.
+        inline constexpr std::u8string_view date_owner { u8"date-field" };
+        inline constexpr std::u8string_view date_popup_id { u8"date-popup" };
+        inline constexpr std::u8string_view date_calendar_owner { u8"popups/date" };
+        inline constexpr std::u8string_view date_field_owner { u8"popups/date-field" };
+        inline constexpr std::u8string_view inline_calendar_owner { u8"popups/calendar" };
+        // test가 쓰는 고정 오늘이다.
+        constexpr std::chrono::year_month_day fixed_today { std::chrono::year { 2026 }, std::chrono::November, std::chrono::day { 3 } };
+
+        // "2026년 11월 3일"이다. 날짜 칸이 그리는 기본 글과 같은 꼴로 label을 짓는다.
+        [[nodiscard]] std::u8string korean_date(const std::chrono::year_month_day day)
+        {
+            const int month { static_cast<int>(static_cast<unsigned>(day.month())) };
+            const int date { static_cast<int>(static_cast<unsigned>(day.day())) };
+            return to_u8(static_cast<int>(day.year())) + u8"년 " + to_u8(month) + u8"월 " + to_u8(date) + u8"일";
+        }
+
+        [[nodiscard]] bool weekday_only(const std::chrono::year_month_day day)
+        {
+            const std::chrono::weekday weekday { std::chrono::sys_days { day } };
+            return weekday != std::chrono::Saturday && weekday != std::chrono::Sunday;
+        }
+
+        // 달력 하나의 커서·단추·고르기 메시지다. `owner`가 어느 달력인지 가른다.
+        [[nodiscard]] luil::calendar_config calendar_messages(const std::u8string_view owner)
+        {
+            luil::calendar_config calendar {};
+            calendar.owner = std::u8string { owner };
+            calendar.select = [owner](const std::chrono::year_month_day day) { return luil::make_app_action(date_select_intent { std::u8string { owner }, day }); };
+            calendar.move_to = [owner](const std::chrono::year_month_day day) { return luil::make_app_action(date_move_intent { std::u8string { owner }, day }); };
+            calendar.turn_month = [owner](const std::chrono::year_month_day day) { return luil::make_app_action(date_turn_intent { std::u8string { owner }, day }); };
+            return calendar;
+        }
 
         // 필드 메뉴의 항목 키가 마지막 동작 label에 적히는 글이다.
         [[nodiscard]] std::u8string field_menu_action_text(const std::u8string_view key)
@@ -61,6 +97,41 @@ namespace demo {
             popup.border = border;
             return luil::make_menu_popup(std::move(menu), std::move(popup));
         }
+    }
+
+    popups_page::popups_page() noexcept
+        : popups_page { fixed_today }
+    {
+    }
+
+    popups_page::popups_page(const std::chrono::year_month_day today) noexcept
+        : today_ { today.ok() ? today : fixed_today }
+    {
+        // 날짜 칸은 오늘을 고른 채로, 인라인 달력은 오늘을 고르고 커서를 한 주 뒤에 둔 채로 시작한다.
+        const std::chrono::sys_days now { today_ };
+        date_value_ = today_;
+        date_cursor_ = today_;
+        calendar_value_ = today_;
+        calendar_bounds_ = { std::chrono::year_month_day { now - std::chrono::days { 30 } }, std::chrono::year_month_day { now + std::chrono::days { 60 } } };
+        calendar_cursor_ = std::chrono::year_month_day { now + std::chrono::days { 7 } };
+    }
+
+    std::chrono::year_month_day popups_page::local_today() noexcept
+    {
+        // 데모가 시작할 때 한 번 읽는다. 자정을 넘겨도 바꾸지 않는다 (데모라 다시 읽을 까닭이 없다).
+        const std::time_t now { std::time(nullptr) };
+        std::tm local {};
+        // 이 페이지는 Android의 기기 test에도 실려 빌드된다. 그쪽은 POSIX `localtime_r`이다.
+#if defined(_WIN32)
+        if (localtime_s(&local, &now) != 0)
+            return fixed_today;
+#else
+        if (localtime_r(&now, &local) == nullptr)
+            return fixed_today;
+#endif
+        const std::chrono::year year { local.tm_year + 1900 };
+        const std::chrono::month month { static_cast<unsigned>(local.tm_mon + 1) };
+        return std::chrono::year_month_day { year, month, std::chrono::day { static_cast<unsigned>(local.tm_mday) } };
     }
 
     void popups_page::show_popup(std::u8string owner)
@@ -229,6 +300,77 @@ namespace demo {
             commit_color_hex();
             return true;
         }
+        // 날짜 칸이다. 열면 커서를 시작 커서로 두고 popup의 커서 날로 초점을 옮긴다. 다시 누른 닫기는 초점을 옮기지 않는다.
+        if (const auto* const date { message.get<date_field_intent>() }; date != nullptr)
+        {
+            if (date->open)
+            {
+                if (open_popup_ != date_owner)
+                {
+                    show_popup(std::u8string { date_owner });
+                    date_cursor_ = luil::calendar_start_cursor(date_value_, today_, {});
+                    request_focus(std::u8string { date_popup_id }, luil::calendar_element::day_id(date_calendar_owner, date_cursor_));
+                }
+            }
+            else
+                close_popup(date_owner);
+            return true;
+        }
+        if (const auto* const dismiss { message.get<date_field_dismiss_intent>() }; dismiss != nullptr)
+        {
+            if (open_popup_ != date_owner)
+                return true;
+            close_popup(date_owner);
+            // Esc로 닫았을 때만 칸으로 돌린다. 다른 계기는 누른 자리가 초점을 가진다. 초안이 없어 값은 그대로다.
+            if (dismiss->reason == luil::popup_dismiss_reason::escape_key)
+                request_focus({}, luil::ui_element_id { luil::ui_element_kind::date_field, std::u8string { date_field_owner } });
+            return true;
+        }
+        // 달력의 커서다. 커서를 옮기고 그 날로 초점 요청을 싣는다.
+        if (const auto* const move { message.get<date_move_intent>() }; move != nullptr)
+        {
+            if (move->owner == date_calendar_owner)
+            {
+                if (open_popup_ != date_owner)
+                    return true;
+                date_cursor_ = move->day;
+                request_focus(std::u8string { date_popup_id }, luil::calendar_element::day_id(date_calendar_owner, move->day));
+            }
+            else
+            {
+                calendar_cursor_ = move->day;
+                request_focus({}, luil::calendar_element::day_id(inline_calendar_owner, move->day));
+            }
+            return true;
+        }
+        // 단추의 달 넘기기는 커서만 옮긴다. 초점 요청이 없어 초점이 단추에 남는다 (날짜 고르기 결정 8).
+        if (const auto* const turn { message.get<date_turn_intent>() }; turn != nullptr)
+        {
+            if (turn->owner == date_calendar_owner)
+                date_cursor_ = turn->day;
+            else
+                calendar_cursor_ = turn->day;
+            return true;
+        }
+        // 날 고르기다. popup이면 값을 바꾸고 닫고 칸으로 초점을 돌린다. 인라인이면 값만 바꾼다 (커서는 클릭의 `move_to`가 옮겼다).
+        if (const auto* const select { message.get<date_select_intent>() }; select != nullptr)
+        {
+            if (select->owner == date_calendar_owner)
+            {
+                if (open_popup_ != date_owner)
+                    return true;
+                date_value_ = select->day;
+                date_cursor_ = select->day;
+                close_popup(date_owner);
+                request_focus({}, luil::ui_element_id { luil::ui_element_kind::date_field, std::u8string { date_field_owner } });
+            }
+            else
+            {
+                calendar_value_ = select->day;
+                calendar_cursor_ = select->day;
+            }
+            return true;
+        }
         if (const auto* const picked { message.get<field_menu_select_intent>() }; picked != nullptr)
         {
             last_action_ = field_menu_action_text(picked->key);
@@ -296,6 +438,7 @@ namespace demo {
         split_ = nullptr;
         send_ = nullptr;
         color_field_ = nullptr;
+        date_field_ = nullptr;
         page_layout page { u8"popups" };
         page.heading(u8"메뉴와 팝업", u8"우클릭 또는 Shift+F10으로 문서 작업을 열고, 선택 결과를 확인하세요.");
 
@@ -406,6 +549,39 @@ namespace demo {
         page.gap(8.0f);
         const std::u8string color_state { std::u8string { u8"색 칸: " } + (open_popup_ == color_owner ? u8"열림" : u8"닫힘") + u8" · " + luil::format_hex_color(luil::color_from_hsv(field_color_), false) };
         page.add(make_label({ kind_text, u8"popups/color-state" }, color_state, 12.0f, luil::label_color_role::dim), 22.0f);
+        page.gap(16.0f);
+
+        // 날짜 칸이다. 누르면(Alt+↓·F4·↓도) 칸 아래에 달력 popup이 뜨고 초점이 커서 날로 간다. Esc나 날 고르기로 닫으면 칸으로 돌아온다.
+        page.add(make_label({ kind_text, u8"date-field-title" }, u8"날짜 칸 (popup 달력에서 화살표·Page·Home·End로 고르기)", 15.0f, luil::label_color_role::primary), 28.0f);
+        luil::date_field_config date {};
+        date.owner = std::u8string { date_field_owner };
+        date.value = date_value_;
+        date.open = open_popup_ == date_owner;
+        date.set_open = [](const bool open) { return luil::make_app_action(date_field_intent { open }); };
+        date.name = u8"마감 날짜";
+        auto date_field { std::make_unique<luil::date_field_element>(std::move(date)) };
+        date_field_ = date_field.get();
+        page.add(std::move(date_field), luil::stack_item { .length = luil::dropdown_height, .cross_length = field_button_width });
+        page.gap(8.0f);
+        const std::u8string date_shown { date_value_.has_value() ? korean_date(*date_value_) : std::u8string { u8"없음" } };
+        const std::u8string date_state { std::u8string { u8"날짜 칸: " } + (open_popup_ == date_owner ? u8"열림" : u8"닫힘") + u8" · " + date_shown };
+        page.add(make_label({ kind_text, u8"popups/date-state" }, date_state, 12.0f, luil::label_color_role::dim), 22.0f);
+        page.gap(16.0f);
+
+        // 인라인 달력이다. 범위(오늘 앞 30일, 뒤 60일) 밖과 주말은 고를 수 없다. 커서와 고른 날은 label로도 그린다.
+        page.add(make_label({ kind_text, u8"calendar-title" }, u8"인라인 달력 (주말과 범위 밖은 고를 수 없음)", 15.0f, luil::label_color_role::primary), 28.0f);
+        luil::calendar_config calendar { calendar_messages(inline_calendar_owner) };
+        calendar.value = calendar_value_;
+        calendar.cursor = calendar_cursor_;
+        calendar.today = today_;
+        calendar.bounds = calendar_bounds_;
+        calendar.available = weekday_only;
+        const luil::size_f calendar_size { luil::calendar_element::size_for(calendar) };
+        page.add(std::make_unique<luil::calendar_element>(std::move(calendar)), luil::stack_item { .length = calendar_size.height, .cross_length = calendar_size.width });
+        page.gap(8.0f);
+        const std::u8string chosen { calendar_value_.has_value() ? luil::format_iso_date(*calendar_value_) : std::u8string { u8"없음" } };
+        const std::u8string calendar_state { u8"고른 날: " + chosen + u8" · 커서: " + luil::format_iso_date(calendar_cursor_) };
+        page.add(make_label({ kind_text, u8"popups/calendar-state" }, calendar_state, 12.0f, luil::label_color_role::dim), 22.0f);
         page.gap(16.0f);
 
         // popup 창의 모양이다. 앱마다 고르는 렌더링 선택지이고, 고르지 않으면 OS 기본이다. 둥근 모서리를 못 쓰는 OS·원격
@@ -531,6 +707,23 @@ namespace demo {
             };
             popup.corner = corner_;
             popups.push_back(luil::make_color_picker_popup(std::move(picker), std::move(popup)));
+        }
+
+        if (open_popup_ == date_owner && date_field_ != nullptr)
+        {
+            luil::calendar_config calendar { calendar_messages(date_calendar_owner) };
+            calendar.value = date_value_;
+            calendar.cursor = date_cursor_;
+            calendar.today = today_;
+
+            luil::date_picker_popup_config popup {};
+            popup.id = std::u8string { date_popup_id };
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = date_field_->bounds(), .limit = surface };
+            // 글 칸이 없어 글을 치는 popup이 아니다. 창 이동·활성 전환을 포함한 모든 계기에 닫는다.
+            popup.dismiss = [](const luil::popup_dismiss_reason reason) { return luil::make_app_action(date_field_dismiss_intent { reason }); };
+            popup.corner = corner_;
+            popups.push_back(luil::make_date_picker_popup(std::move(calendar), std::move(popup)));
         }
 
         if (open_popup_ == u8"card")

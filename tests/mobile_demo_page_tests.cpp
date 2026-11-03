@@ -16,6 +16,7 @@
 #include "mobile_demo/zoom_page.h"
 #include "sample_image_bytes.h"
 
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/message_box.h"
 #include "luil/ui/rating_element.h"
@@ -2598,4 +2599,60 @@ TEST_CASE("The mobile first screen stands no menu bar", "[mobile-demo][menu-bar]
     const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
     REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar).empty());
     REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar_item).empty());
+}
+
+TEST_CASE("The mobile date field opens a finger sized calendar and choosing a day closes it", "[ui][date-picker][mobile-demo]")
+{
+    const auto date = [](const unsigned month, const unsigned day) { return std::chrono::year_month_day { std::chrono::year { 2026 }, std::chrono::month { month }, std::chrono::day { day } }; };
+    const luil::ui_element_id field_id { luil::ui_element_kind::date_field, u8"date-field" };
+    mobile_demo::popups_page page {};
+    auto screen { build_popups_screen(page) };
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 3일");
+    const luil::ui_element* const field { screen.tree.find(field_id) };
+    REQUIRE(field != nullptr);
+    // 손가락으로 누르는 칸이라 높이가 터치 영역이다.
+    REQUIRE(field->bounds().height == mobile_demo::touch_height);
+    REQUIRE(field->accessibility().name == u8"마감 날짜");
+    REQUIRE(page.make_focus_request().has_value() == false);
+
+    // 누르면 열리고 popup의 커서 날로 초점 요청이 실린다. 달력 칸은 44라 popup 폭이 7칸과 여백이다.
+    const auto pressed { (*field->action(luil::ui_trigger::left_click))({ field->id(), 0.0f, 0.0f }) };
+    deliver(page, std::get<luil::app_message>(pressed.front()));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface == u8"date-popup");
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"date", date(11, 3)));
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 열림 · 2026년 11월 3일");
+    const luil::rect_f bounds { screen.tree.find(field_id)->bounds() };
+    auto popups { page.make_popups(1.0f, { 0.0f, 0.0f, 400.0f, 2000.0f }) };
+    REQUIRE(popups.size() == 1u);
+    REQUIRE(popups.front().id == u8"date-popup");
+    REQUIRE(popups.front().width == 44.0f * 7.0f + 16.0f);
+    REQUIRE(popups.front().x == bounds.x);
+    REQUIRE(popups.front().y == bounds.y + bounds.height + 2.0f);
+    const luil::ui_element* const day { popups.front().tree->find(luil::calendar_element::day_id(u8"date", date(11, 20))) };
+    REQUIRE(day != nullptr);
+    REQUIRE(day->bounds().width == 44.0f);
+
+    // 날을 누르면 커서를 옮긴 뒤 고르고, 닫히고, 칸으로 초점이 돌아온다.
+    for (const luil::input_action& action : (*day->action(luil::ui_trigger::left_click))({ day->id(), 0.0f, 0.0f }))
+        deliver(page, std::get<luil::app_message>(action));
+    const std::optional<luil::focus_request> back { page.make_focus_request() };
+    REQUIRE(back->id == focus->id + 2u);
+    REQUIRE(back->surface.empty());
+    REQUIRE(back->target == field_id);
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 20일");
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+
+    // 바깥 누름 닫기는 초점을 옮기지 않는다.
+    deliver(page, mobile_demo::date_field_intent { true });
+    screen = build_popups_screen(page);
+    const std::uint64_t opened { page.make_focus_request()->id };
+    popups = page.make_popups(1.0f, screen.surface());
+    REQUIRE(popups.size() == 1u);
+    deliver(page, std::get<luil::app_message>(popups.front().dismiss(luil::popup_dismiss_reason::pointer_press_outside)));
+    REQUIRE(page.make_focus_request()->id == opened);
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
 }

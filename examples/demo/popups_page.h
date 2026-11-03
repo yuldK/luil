@@ -9,15 +9,19 @@
 //  - 분할 버튼("저장")과 드롭다운 단추("보내기"): 본체를 누르면 동작이 나가고 화살표를 누르면 필드 아래에
 //    메뉴가 뜬다. 자리는 `menu_popup_config::below`가 정하고 아래가 모자라면 위로 뒤집힌다
 //    (split-button-design.md).
+//  - 날짜 칸과 인라인 달력: 칸을 누르면 아래에 달력 popup이 뜨고 초점이 커서 날로 간다. 화살표·Page·Home·End가 커서를 옮기고
+//    Enter·누름이 고른다. Esc나 날 고르기로 닫으면 칸으로 돌아온다 (date-picker-design.md).
 // 떠 있는 popup은 한 번에 하나다. 어느 필드의 것인지를 `open_popup_` 하나가 들고 있어 둘이 함께 열릴 수 없다.
 // popup은 창 경계를 넘을 수 있고, 닫힘 계기는 **이유와 함께** 온다: 컨텍스트
 // 메뉴는 어느 계기에도 닫히지만, 검색 중인 드롭다운은 창 이동·활성 전환에는
 // 남는다 — 잠깐 다른 창을 봤다고 치던 글이 사라지면 안 되기 때문이다.
 
 #include "demo/common.h"
+#include "luil/ui/calendar_date.h"
 #include "luil/ui/color_space.h"
 #include "luil/win32/app_host.h"
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -100,6 +104,38 @@ namespace demo {
     {
     };
 
+    // 날짜 칸의 popup을 이 상태로 하라는 절대 메시지다 (`date_field_config::set_open`). 열면 커서를 시작 커서로 두고 초점을 옮긴다.
+    struct date_field_intent
+    {
+        bool open { false };
+    };
+
+    // 날짜 칸 popup의 닫힘 계기다. 글 칸이 없어 모든 계기에 닫고, Esc로 닫으면 초점을 칸으로 돌린다.
+    struct date_field_dismiss_intent
+    {
+        luil::popup_dismiss_reason reason { luil::popup_dismiss_reason::pointer_press_outside };
+    };
+
+    // 달력의 커서·단추·고르기다. `owner`는 어느 달력인가다 (popup 안의 것이 "popups/date", 인라인이 "popups/calendar").
+    //  - 커서(`move_to`)는 커서를 옮기고 그 날로 초점 요청을 싣는다. 단추(`turn_month`)는 커서만 옮겨 초점이 단추에 남는다.
+    struct date_move_intent
+    {
+        std::u8string owner {};
+        std::chrono::year_month_day day {};
+    };
+
+    struct date_turn_intent
+    {
+        std::u8string owner {};
+        std::chrono::year_month_day day {};
+    };
+
+    struct date_select_intent
+    {
+        std::u8string owner {};
+        std::chrono::year_month_day day {};
+    };
+
     // popup 모양을 골랐다 (`setting`은 "corner"·"border", `value`는 고른 값).
     struct popup_shape_intent
     {
@@ -110,6 +146,13 @@ namespace demo {
     class popups_page
     {
     public:
+        // 오늘은 고정 날(2026-11-03)이다. test가 이것을 쓴다. 데모는 시작할 때 `local_today()`를 한 번 읽어 준다.
+        popups_page() noexcept;
+        explicit popups_page(std::chrono::year_month_day today) noexcept;
+
+        // 이 PC의 지역 시각으로 본 오늘이다 (Win32 `localtime_s`, 기기 test로 Android에 실릴 때는 `localtime_r`). 시간대 계산은 하지 않는다.
+        [[nodiscard]] static std::chrono::year_month_day local_today() noexcept;
+
         bool handle(const luil::app_message& message);
         [[nodiscard]] std::unique_ptr<luil::ui_element> build(float width, float height, float scale);
 
@@ -122,6 +165,7 @@ namespace demo {
         void close_popups();
 
         // 색 칸 popup을 열 때 판으로, Esc로 닫을 때 칸으로 초점을 옮기는 요청이다. 번호가 바뀔 때만 새 요청이다.
+        //  - 날짜 칸 popup은 열 때와 커서를 옮길 때 커서 날로, Esc·날 고르기로 닫을 때 칸으로 옮긴다. 인라인 달력은 커서 날로 옮긴다.
         [[nodiscard]] std::optional<luil::focus_request> make_focus_request() const;
 
     private:
@@ -169,6 +213,15 @@ namespace demo {
         luil::text::text_edit_state field_hex_ {};
         std::optional<luil::text_composition_event> field_composition_ {};
         bool field_hex_invalid_ { false };
+        // 날짜 칸과 인라인 달력이다. 오늘은 앱이 준다 (라이브러리는 시계를 읽지 않는다).
+        //  - 인라인 달력은 오늘 앞 30일부터 뒤 60일까지이고 주말을 고를 수 없다.
+        std::chrono::year_month_day today_ {};
+        std::optional<std::chrono::year_month_day> date_value_ {};
+        std::chrono::year_month_day date_cursor_ {};
+        std::optional<std::chrono::year_month_day> calendar_value_ {};
+        std::chrono::year_month_day calendar_cursor_ {};
+        luil::calendar_bounds calendar_bounds_ {};
+        const luil::ui_element* date_field_ { nullptr };
         // 마지막 초점 요청이다. 열 때와 Esc로 닫을 때 번호를 올린다.
         std::uint64_t focus_revision_ { 0 };
         std::u8string focus_surface_ {};
