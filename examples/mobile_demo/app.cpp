@@ -114,6 +114,7 @@ namespace mobile_demo {
 
     luil::page_transition mobile_driver::make_page_motion(const std::u8string& next, const luil::page_transition_direction direction)
     {
+        page_motion_pending_ = false;
         if (device_.page_transition_enabled() == false || metrics_.reduce_motion || motion_slot_.width <= 0.0f || motion_slot_.height <= 0.0f)
             return {};
         const bool wide { metrics_.width_class != luil::window_width_class::compact };
@@ -133,6 +134,8 @@ namespace mobile_demo {
         style.effect = wide ? luil::page_transition_effect::fade : luil::page_transition_effect::slide;
         style.axis = luil::page_transition_axis::horizontal;
         style.direction = direction;
+        // 시작 시각은 다음 frame이 들어오는 본문을 지은 뒤 다시 적는다 (`page_motion_pending_`).
+        page_motion_pending_ = true;
         return luil::start_page_transition(std::move(tree), style, std::chrono::steady_clock::now(), metrics_.reduce_motion);
     }
 
@@ -191,9 +194,21 @@ namespace mobile_demo {
         const float body_width { width / scale };
         const float body_height { (height - top) / scale };
         // 기기 페이지의 전환 label이 읽는 상태다. 도는 동안은 tree를 다시 짓지 않으므로 시작 frame의 값이 끝 tick까지 남는다.
-        device_.set_page_transition_turning(page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, frame_time_) == false);
+        //  - 시작 시각을 아직 적지 않은 전환은 이 frame에서 시작하므로 도는 중이다.
+        device_.set_page_transition_turning(
+            page_motion_.prior != nullptr
+            && (page_motion_pending_ || luil::page_transition_finished(page_motion_, frame_time_) == false)
+        );
         // 바뀌는 자리는 늘 화면 전환 요소로 감싼다. 떠나는 화면이 없으면 새 화면만 그리는 껍질이다.
+        //  - 들어오는 본문(인자)을 다 지은 뒤 새 전환의 시작 시각을 적는다. 요소는 전환을 만들 때 복사하므로 그 앞이어야 한다.
+        //    처음 가는 무거운 페이지는 짓는 데 전환 길이보다 오래 걸려, 메시지 시각에서 세면 첫 그림에 이미 끝나 밀기가 보이지 않는다.
+        //    배치와 첫 그리기에 드는 시간은 이 시각 뒤라 세지 않는다.
         const auto wrap = [this](std::unique_ptr<luil::ui_element> content) {
+            if (page_motion_pending_)
+            {
+                page_motion_.started = std::chrono::steady_clock::now();
+                page_motion_pending_ = false;
+            }
             return std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", page_motion_ }, std::move(content));
         };
         std::unique_ptr<luil::ui_element> body {};
@@ -352,7 +367,8 @@ namespace mobile_demo {
     {
         toasts_.prune();
         // 끝난 전환은 놓는다. 다음 frame은 prior 없는 tree라 덮개가 걷혀 손가락이 풀린다.
-        if (page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, now))
+        //  - 시작 시각을 아직 적지 않은 전환은 메시지 시각에서 센 끝이라 놓지 않는다.
+        if (page_motion_.prior != nullptr && page_motion_pending_ == false && luil::page_transition_finished(page_motion_, now))
             page_motion_ = {};
     }
 

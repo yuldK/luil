@@ -102,6 +102,9 @@ namespace mobile_demo {
         std::chrono::steady_clock::time_point frame_time_ {};
         // 페이지 전환이다 (앱 상태). 감싼 자리(좁은 화면은 본문 전체, 넓은 화면은 오른쪽 판)와 배율, 그때의 꼴을 지난 frame에서 적어 둔다.
         luil::page_transition page_motion_ {};
+        // 지은 전환의 시작 시각을 아직 정하지 않았는가다. 들어오는 본문을 지은 뒤 그 frame에서 시작 시각을 적는다.
+        //  - 처음 가는 무거운 페이지는 짓는 데 전환 길이보다 오래 걸려, 메시지 시각에서 세면 첫 그림에 이미 끝나 있다.
+        bool page_motion_pending_ { false };
         luil::rect_f motion_slot_ {};
         float motion_scale_ { 1.0f };
         bool motion_wide_ { false };
