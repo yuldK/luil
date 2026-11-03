@@ -276,6 +276,15 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/notification_icon.cpp"
             android_notification_icon_tests.cpp)
+    # 시스템 색·대비·막대·햅틱·권한의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 연 뒤 지점마다 실패를 친다
+    # (android_jni_order_tests.cpp). 자리 전체의 검사 순서는 호스트의 luil_jni_order가 본다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_system_theme.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/android_window_control.cpp"
+            android_jni_order_tests.cpp)
+    # 창 조절의 원본이 로그를 쓴다 (`__android_log_print`).
+    target_link_libraries(luil_core_tests PRIVATE log)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES
@@ -588,6 +597,13 @@ add_test(NAME luil_default_text
         "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
+
+# JNI 실패 검사(`jni_failed`)는 `||` 체인의 맨 앞에 둔다. nullptr 검사가 먼저면 예외가 남은 채 돌아간다.
+# 기기 test는 자리의 일부만 치므로 전체 자리를 여기서 본다 (script에 이유가 있다).
+add_test(NAME luil_jni_order
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
+        -P "${LUIL_CMAKE_DIRECTORY}/verify_jni_order.cmake")
 
 # PowerShell은 script가 돌 때 PATH에서 찾는다 (run_style_check.cmake에 이유가 있다).
 add_test(NAME luil_source_style

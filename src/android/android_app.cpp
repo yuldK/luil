@@ -1078,17 +1078,17 @@ namespace luil::android {
                 const jobject activity { app_->activity->javaGameActivity };
                 const jclass activity_type { env.GetObjectClass(activity) };
                 const jmethodID get_intent { env.GetMethodID(activity_type, "getIntent", "()Landroid/content/Intent;") };
-                if (get_intent == nullptr || jni_failed(env))
+                if (jni_failed(env) || get_intent == nullptr)
                     return;
                 const jobject intent { env.CallObjectMethod(activity, get_intent) };
-                if (intent == nullptr || jni_failed(env))
+                if (jni_failed(env) || intent == nullptr)
                     return;
                 const jclass intent_type { env.GetObjectClass(intent) };
                 const jmethodID get_extra { env.GetMethodID(intent_type, "getStringExtra", "(Ljava/lang/String;)Ljava/lang/String;") };
                 const jmethodID remove_extra { env.GetMethodID(intent_type, "removeExtra", "(Ljava/lang/String;)V") };
                 const jmethodID get_flags { env.GetMethodID(intent_type, "getFlags", "()I") };
                 const jstring name { env.NewStringUTF(notification_extra_name) };
-                if (get_extra == nullptr || remove_extra == nullptr || get_flags == nullptr || name == nullptr || jni_failed(env))
+                if (jni_failed(env) || get_extra == nullptr || remove_extra == nullptr || get_flags == nullptr || name == nullptr)
                     return;
                 const auto value { static_cast<jstring>(env.CallObjectMethod(intent, get_extra, name)) };
                 if (jni_failed(env) || value == nullptr)

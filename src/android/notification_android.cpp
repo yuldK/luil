@@ -323,7 +323,7 @@ namespace luil {
             }
             JNIEnv& env { calls.env() };
             const jintArray array { env.NewIntArray(static_cast<jsize>(colors.size())) };
-            if (array == nullptr || jni_failed(env))
+            if (jni_failed(env) || array == nullptr)
                 return nullptr;
             env.SetIntArrayRegion(array, 0, static_cast<jsize>(colors.size()), colors.data());
             if (jni_failed(env))
