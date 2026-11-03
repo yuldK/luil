@@ -19,6 +19,7 @@
 #include "luil/ui/menu_element.h"
 #include "luil/ui/root_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/teaching_tip_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
@@ -1919,4 +1920,145 @@ TEST_CASE("The inline calendar reads its chosen day and cursor back and blocks t
     send(page, demo::date_move_intent { u8"popups/calendar", demo_date(2027, 1, 2) });
     tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
     REQUIRE(grid_key(tree, u8"popups/calendar", luil::key_code::arrow_right).empty());
+}
+
+namespace {
+    const luil::ui_element_id tip_root_id { luil::ui_element_kind::teaching_tip, u8"toasts/tip" };
+    const luil::ui_element_id tip_open_modal_id { demo::kind_toast_trigger, u8"toasts/tip-open-modal" };
+    const luil::ui_element_id tip_open_modeless_id { demo::kind_toast_trigger, u8"toasts/tip-open-modeless" };
+
+    // 이번 build의 가지를 살려 둔 채 오버레이를 짓고 창 전체로 배치한 tree다. 풍선이 없으면 빈 root다.
+    [[nodiscard]] luil::ui_tree tip_overlay(demo::toasts_page& page, const float height = 2000.0f)
+    {
+        auto overlay { page.make_overlay() };
+        if (overlay == nullptr)
+            overlay = std::make_unique<luil::root_element>();
+        return luil::make_arranged_tree(std::move(overlay), { 0.0f, 0.0f, 800.0f, height }, 1.0f);
+    }
+
+    // 풍선 tree에 선 단추나 root의 액션 메시지를 페이지에 넘긴다.
+    void run(demo::toasts_page& page, const luil::ui_action* const action, const luil::ui_element_id& id)
+    {
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+
+    [[nodiscard]] std::u8string tip_state(const luil::ui_tree& tree)
+    {
+        return label_text(tree, u8"toasts/tip-state");
+    }
+}
+
+TEST_CASE("The toasts page opens a modal teaching tip under the new feature button and reads its state", "[demo][toasts][teaching-tip]")
+{
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    REQUIRE(tree.find(demo::tip_target_id()) != nullptr);
+    REQUIRE(page.make_overlay() == nullptr);
+
+    press(page, tree, tip_open_modal_id);
+    REQUIRE(page.tip_open());
+    tree = toasts_tree(page);
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        const luil::ui_element* const tip { overlay.find(tip_root_id) };
+        REQUIRE(tip != nullptr);
+        REQUIRE(tip->accessibility().role == luil::access_role::dialog);
+        REQUIRE(tip->focus_return() == tip_open_modal_id);
+        REQUIRE(overlay.focus_trap() == tip);
+        // 풍선은 대상 아래에 선다.
+        const luil::rect_f target { tree.find(demo::tip_target_id())->bounds() };
+        const luil::rect_f body { overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"toasts/tip" })->bounds() };
+        REQUIRE(body.y >= target.y + target.height);
+        // 처음 지은 label은 대상을 찾기 전의 것이라 한 frame을 더 청한다.
+        REQUIRE(page.next_expiry().has_value());
+    }
+    tree = toasts_tree(page);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 없음");
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        REQUIRE(page.next_expiry().has_value() == false);
+        // 덮개는 초점 요청을 내지 않는다. 가둠의 진입과 복귀가 옮긴다.
+        REQUIRE(page.make_focus_request().has_value() == false);
+        // Esc는 가둠의 dismiss다.
+        run(page, overlay.find(tip_root_id)->dismiss_action(), tip_root_id);
+    }
+    tree = toasts_tree(page);
+    REQUIRE(page.tip_open() == false);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: Esc");
+    REQUIRE(page.make_overlay() == nullptr);
+
+    // 덮개 누름과 행동 단추도 닫는다. 늦게 온 닫기는 기록을 덮지 않는다.
+    press(page, tree, tip_open_modal_id);
+    tree = toasts_tree(page);
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        const luil::ui_element_id scrim { luil::ui_element_kind::teaching_tip_scrim, u8"toasts/tip" };
+        run(page, overlay.find(scrim)->action(luil::ui_trigger::left_click), scrim);
+        tree = toasts_tree(page);
+        REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 바깥 누름");
+        const luil::ui_element_id primary { luil::teaching_tip_element::primary_id(demo::tip_owner) };
+        run(page, overlay.find(primary)->action(luil::ui_trigger::left_click), primary);
+    }
+    tree = toasts_tree(page);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 바깥 누름");
+}
+
+TEST_CASE("A modeless teaching tip on the toasts page moves the focus to primary and back to its opener", "[demo][toasts][teaching-tip]")
+{
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    press(page, tree, tip_open_modeless_id);
+    const std::optional<luil::focus_request> opened { page.make_focus_request() };
+    REQUIRE(opened.has_value());
+    REQUIRE(opened->target == luil::teaching_tip_element::primary_id(demo::tip_owner));
+    tree = toasts_tree(page);
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        const luil::ui_element* const tip { overlay.find(tip_root_id) };
+        REQUIRE(tip->accessibility().role == luil::access_role::pane);
+        REQUIRE(overlay.focus_trap() == nullptr);
+        REQUIRE(tip->dismiss_action() == nullptr);
+        REQUIRE(overlay.find({ luil::ui_element_kind::teaching_tip_scrim, u8"toasts/tip" }) == nullptr);
+        const luil::ui_element_id close { luil::teaching_tip_element::close_id(demo::tip_owner) };
+        run(page, overlay.find(close)->action(luil::ui_trigger::left_click), close);
+    }
+    // 닫으면 연 단추로 돌아간다. 새 번호의 요청이다.
+    const std::optional<luil::focus_request> closed { page.make_focus_request() };
+    REQUIRE(closed.has_value());
+    REQUIRE(closed->id > opened->id);
+    REQUIRE(closed->target == tip_open_modeless_id);
+    tree = toasts_tree(page);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 닫기 단추");
+}
+
+TEST_CASE("Scrolling the new feature button away leaves the teaching tip without a target", "[demo][toasts][teaching-tip]")
+{
+    demo::toasts_page page {};
+    const auto short_tree = [&page] { return arranged(page.build(800.0f, 400.0f, 1.0f), 800.0f, 400.0f); };
+    auto tree { short_tree() };
+    press(page, tree, tip_open_modal_id);
+    tree = short_tree();
+    static_cast<void>(tip_overlay(page, 400.0f));
+    tree = short_tree();
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 없음");
+    static_cast<void>(tip_overlay(page, 400.0f));
+
+    // 흘려 대상을 창 밖으로 내보내면 그 frame의 풍선은 꼬리 없이 가운데에 서고, 다음 frame의 label이 그것을 적는다.
+    send(page, demo::toasts_scroll_intent { 1000.0f });
+    tree = short_tree();
+    {
+        const luil::ui_tree overlay { tip_overlay(page, 400.0f) };
+        REQUIRE(page.next_expiry().has_value());
+        const luil::rect_f body { overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"toasts/tip" })->bounds() };
+        REQUIRE(body.x + body.width / 2.0f == Catch::Approx(400.0f));
+    }
+    tree = short_tree();
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 열림(덮개) · 방향: 대상 없음 · 마지막 닫힘: 없음");
+
+    // 페이지를 떠나며 셸이 닫으면 풍선은 서지 않는다.
+    page.close_tip();
+    REQUIRE(page.make_overlay() == nullptr);
 }

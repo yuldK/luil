@@ -169,7 +169,8 @@ namespace mobile_demo {
         // 시트는 창 전체에 겹친다. 열림은 페이지의 상태라 회전·화면 분할 뒤에도 다시 선다.
         if (shown == page_sheets)
             sheets_.add_overlay(*root, width, height, scale, metrics_.surface, frame_time_);
-        if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
+        // 안내 풍선은 이번 frame에 배치한 root에서 대상의 보이는 자리를 찾는다.
+        if (auto toasts { toasts_.make_overlay(root.get()) }; toasts != nullptr)
         {
             toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
             root->add(std::move(toasts));

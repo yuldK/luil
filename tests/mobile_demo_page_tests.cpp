@@ -21,8 +21,10 @@
 #include "luil/ui/message_box.h"
 #include "luil/ui/rating_element.h"
 #include "luil/ui/root_element.h"
+#include "luil/ui/scroll_view_element.h"
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/strip_element.h"
+#include "luil/ui/teaching_tip_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
@@ -2655,4 +2657,101 @@ TEST_CASE("The mobile date field opens a finger sized calendar and choosing a da
     deliver(page, std::get<luil::app_message>(popups.front().dismiss(luil::popup_dismiss_reason::pointer_press_outside)));
     REQUIRE(page.make_focus_request()->id == opened);
     REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+}
+
+namespace {
+    const luil::ui_element_id mobile_tip_root { luil::ui_element_kind::teaching_tip, u8"tip" };
+
+    // 셸처럼 흘리는 창에 담아 높이 `height`로 배치한 토스트 페이지다. 흘린 양은 `offset`이다.
+    [[nodiscard]] luil::ui_tree scrolled_toasts(mobile_demo::toasts_page& page, const float offset, const float height = 700.0f)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { mobile_demo::kind_layout, u8"toasts-scroll" }, luil::scroll_view_config { content.height, offset }) };
+        view->set_content(std::move(content.element));
+        return luil::make_arranged_tree(std::move(view), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] luil::ui_tree mobile_tip_overlay(mobile_demo::toasts_page& page, const luil::ui_tree& screen, const float height = 700.0f)
+    {
+        auto overlay { page.make_overlay(screen.root()) };
+        if (overlay == nullptr)
+            overlay = std::make_unique<luil::root_element>();
+        return luil::make_arranged_tree(std::move(overlay), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] std::u8string mobile_tip_state(const luil::ui_tree& tree)
+    {
+        const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, u8"tip-state" }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    void run_tip(mobile_demo::toasts_page& page, const luil::ui_action* const action, const luil::ui_element_id& id)
+    {
+        REQUIRE(action != nullptr);
+        const auto pressed { (*action)(luil::ui_action_context { id, 0.0f, 0.0f }) };
+        REQUIRE(pressed.size() == 1u);
+        deliver(page, std::get<luil::app_message>(pressed.front()));
+    }
+}
+
+TEST_CASE("The mobile toasts page opens a finger sized teaching tip and back closes it", "[ui][teaching-tip][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f) };
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    REQUIRE(opener != nullptr);
+    REQUIRE(opener->bounds().height == mobile_demo::touch_height);
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+    REQUIRE(page.tip_open());
+
+    screen = scrolled_toasts(page, 0.0f);
+    {
+        const luil::ui_tree overlay { mobile_tip_overlay(page, screen) };
+        const luil::ui_element* const tip { overlay.find(mobile_tip_root) };
+        REQUIRE(tip != nullptr);
+        REQUIRE(tip->accessibility().role == luil::access_role::dialog);
+        // 손가락 칸이다. 닫기는 44 정사각이고 행동 단추도 44 높이다.
+        const luil::rect_f close { overlay.find(luil::teaching_tip_element::close_id(mobile_demo::tip_owner))->bounds() };
+        REQUIRE(close.width == mobile_demo::touch_height);
+        REQUIRE(close.height == mobile_demo::touch_height);
+        REQUIRE(overlay.find(luil::teaching_tip_element::primary_id(mobile_demo::tip_owner))->bounds().height == mobile_demo::touch_height);
+        // 대상 아래에 선다.
+        const luil::rect_f target { screen.find(mobile_demo::tip_target_id())->bounds() };
+        REQUIRE(overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"tip" })->bounds().y >= target.y + target.height);
+    }
+    screen = scrolled_toasts(page, 0.0f);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 없음");
+    static_cast<void>(mobile_tip_overlay(page, screen));
+    REQUIRE(page.next_expiry().has_value() == false);
+
+    // 뒤로 가기는 셸이 frame에 싣는 메시지로 닫는다.
+    deliver(page, std::get<luil::app_message>(page.back_action()));
+    screen = scrolled_toasts(page, 0.0f);
+    REQUIRE(page.tip_open() == false);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 뒤로 가기");
+}
+
+TEST_CASE("Scrolling the mobile new feature button away leaves the teaching tip without a target", "[ui][teaching-tip][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f, 300.0f) };
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modeless" }) };
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+
+    // 흘려 대상을 창 밖으로 내보낸다. 그 frame의 풍선은 대상이 없고 다음 frame의 설명이 적는다.
+    screen = scrolled_toasts(page, 900.0f, 300.0f);
+    {
+        const luil::ui_tree overlay { mobile_tip_overlay(page, screen, 300.0f) };
+        REQUIRE(overlay.find(mobile_tip_root)->accessibility().role == luil::access_role::pane);
+    }
+    screen = scrolled_toasts(page, 900.0f, 300.0f);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 열림(비modal) · 방향: 대상 없음 · 마지막 닫힘: 없음");
+
+    // 다른 페이지에 있는 동안(설명을 짓지 않는 frame)에는 한 frame을 더 청하지 않는다.
+    static_cast<void>(page.make_overlay(nullptr));
+    REQUIRE(page.next_expiry().has_value() == false);
+    page.close_tip();
+    REQUIRE(page.make_overlay(nullptr) == nullptr);
 }
