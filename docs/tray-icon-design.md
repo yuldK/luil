@@ -96,7 +96,7 @@ namespace luil::win32 {
 - 식별은 주 창 `HWND`와 `uID` 1이다. `NIF_GUID`는 쓰지 않는다 (결정 3).
 - 더하기의 플래그는 `NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP`이다. NOTIFYICON_VERSION_4는 `NIF_SHOWTIP`이 없으면 표준 툴팁을 띄우지 않는다. 바꾸기에서 빠지면 툴팁이 꺼질 수 있어(실측 전) 바꾸기에도 늘 싣는다. 콜백 번호는 `tray_callback_message`(`WM_APP + 7`, 주 창)다.
 - `NIM_ADD`가 실패하면(자동 시작 직후라 탐색기가 없는 경우) `waiting`이다. 다음 `TaskbarCreated`에서 다시 더한다. 그 사이 요청이 바뀌어도 다시 더하지 않는다. `waiting`의 까닭은 `error`에 적지 않는다. `MODIFY`·`DELETE` 실패는 `failed`로 한 번 알리고 재시도하지 않는다. 실패는 다음 셸 호출까지 보고에 남는다.
-- 탐색기가 바빠 `NIM_ADD`가 `ERROR_TIMEOUT`으로 실패해도 아이콘은 섰을 수 있다고 알려져 있다(실측 전). 이때는 방송이 오지 않으므로 곧바로 `NIM_MODIFY`를 한 번 해 보고, 성공하면 선 것으로 본다. 실패하면 `waiting`으로 두고 다음 요청 변화에서 다시 더한다.
+- 탐색기가 바빠 `NIM_ADD`가 `ERROR_TIMEOUT`으로 실패해도 아이콘은 섰을 수 있다고 알려져 있다(실측 전). 이때는 방송이 오지 않으므로 곧바로 `NIM_MODIFY`를 한 번 해 보고, 성공하면 선 것으로 본다. 셸은 마지막 오류를 HRESULT 꼴로 남기기도 해서(실측: 없는 아이콘을 지우면 `0x80004005`) `ERROR_TIMEOUT`과 `HRESULT_FROM_WIN32(ERROR_TIMEOUT)`을 다 시간 초과로 본다. 실패하면 `waiting`으로 두고 다음 요청 변화에서 다시 더한다.
 - `TaskbarCreated`가 오면 적용 기록을 지우고 요청이 있으면 처음부터 다시 더한다. `HWND_BROADCAST`는 숨은 소유자 없는 최상위 창에도 간다고 알려져 있어 숨은 주 창도 받는다고 본다(사람 확인). 여러 번 와도 같은 일을 한다.
 - 관리자 권한으로 도는 앱은 탐색기가 보내는 콜백이 UIPI에 막힌다. `create()`가 `allow_shell_events` 다음에 `tray_callback_message`도 `ChangeWindowMessageFilterEx(MSGFLT_ALLOW)`로 연다(`window_messages.h`의 `allow_tray_callback`). 콜백은 사건 번호와 좌표만 싣는다.
 - 끝날 때 `NIM_DELETE`한다. `WM_CLOSE`·`WM_ENDSESSION`에서 `clear_instance_mark()` 옆이고, `WM_DESTROY`는 host가 이미 없어도 지운다(이미 지웠으면 할 일이 없다). 지우지 않으면 마우스가 지나갈 때까지 유령 아이콘이 남는다.

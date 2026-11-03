@@ -276,7 +276,17 @@ TEST_CASE("A timed out tray add is probed with a modify", "[win32][tray]")
 {
     const plain_window window {};
     fake_shell shell {};
-    shell.results.push_back(tray_shell_result { .ok = false, .error = ERROR_TIMEOUT });
+    // 셸은 마지막 오류를 Win32 코드로도, HRESULT 꼴로도 남긴다. 둘 다 시간 초과다.
+    DWORD timeout { ERROR_TIMEOUT };
+    SECTION("A Win32 code")
+    {
+        timeout = ERROR_TIMEOUT;
+    }
+    SECTION("An HRESULT")
+    {
+        timeout = static_cast<DWORD>(HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+    }
+    shell.results.push_back(tray_shell_result { .ok = false, .error = timeout });
     tray_icon_host host {};
     configure(host, window.get(), shell);
 

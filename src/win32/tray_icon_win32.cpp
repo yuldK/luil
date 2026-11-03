@@ -34,6 +34,15 @@ namespace luil::win32 {
             return tray_status::off;
         }
 
+        // 셸이 시간 안에 답하지 않았는가다. 셸은 마지막 오류를 Win32 코드가 아니라 HRESULT 꼴로 남기기도 해서
+        // (실측: 없는 아이콘을 지우면 0x80004005) 두 꼴을 다 받는다.
+        [[nodiscard]] bool timed_out(const DWORD error) noexcept
+        {
+            return error == ERROR_TIMEOUT
+                || error == static_cast<DWORD>(HRESULT_FROM_WIN32(ERROR_TIMEOUT))
+            ;
+        }
+
         // 작업 표시줄이 밝은 테마인가다. 앱 모드(`AppsUseLightTheme`)와 따로 정해진다. 값이 없으면 어둡다.
         [[nodiscard]] bool read_light_taskbar() noexcept
         {
@@ -381,7 +390,7 @@ namespace luil::win32 {
             // 더하기 실패는 탐색기가 아직 없거나 바쁜 것이라 `waiting`이 말한다. 까닭은 바꾸기 실패만 적는다.
             if (adding == false)
                 fail(u8"Failed to modify the tray icon.", result.error);
-            return result.error == ERROR_TIMEOUT ? tray_call_outcome::timed_out : tray_call_outcome::failed;
+            return timed_out(result.error) ? tray_call_outcome::timed_out : tray_call_outcome::failed;
         }
         if (next.valid())
             icon_ = std::move(next);
