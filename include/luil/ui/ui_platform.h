@@ -38,6 +38,9 @@ namespace luil {
         // 알림 영역에 아이콘을 세울 수 있다 (`ui_frame::tray`, tray-icon-design.md). Win32에서 주 창이 섰으면 참이다.
         // 탐색기가 아직 없어도 참이고, 아이콘이 실제로 섰는지는 Win32의 `tray_report`가 말한다.
         bool tray { false };
+        // 앱이 뒤에 있어도 받는 전역 단축키를 걸 수 있다 (`ui_frame::hotkeys`, global-hotkey-design.md). Win32에서 주 창이 섰으면 참이다.
+        // 조합이 실제로 걸렸는지는 Win32의 `hotkey_report`가 항목마다 말한다 (다른 프로그램이 쓰는 조합은 걸리지 않는다).
+        bool global_hotkeys { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

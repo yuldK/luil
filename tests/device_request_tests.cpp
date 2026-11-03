@@ -43,6 +43,7 @@ TEST_CASE("A platform does no device requests unless its host says it can", "[ui
     REQUIRE(luil::current_ui_platform().capabilities.taskbar == false);
     REQUIRE(luil::current_ui_platform().capabilities.notifications == false);
     REQUIRE(luil::current_ui_platform().capabilities.tray == false);
+    REQUIRE(luil::current_ui_platform().capabilities.global_hotkeys == false);
 
     const luil::ui_platform mobile {
         .form_factor = luil::ui_form_factor::mobile,

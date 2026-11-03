@@ -403,6 +403,7 @@ luil_add_source_filter(luil_core_files "app"
     "${public_headers}/app/renderer_policy.h"
     "${public_headers}/app/taskbar.h"
     "${public_headers}/app/tray_icon.h"
+    "${public_headers}/app/global_hotkey.h"
     "${public_headers}/app/webview.h")
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
@@ -426,6 +427,8 @@ luil_add_source_filter(luil_core_files "host"
     host/focus_request_tracker.h
     host/frame_state.cpp
     host/frame_state.h
+    host/hotkey_sync.cpp
+    host/hotkey_sync.h
     host/inspector_overlay.cpp
     host/inspector_overlay.h
     host/key_mapping.cpp
@@ -493,7 +496,10 @@ luil_add_source_filter(luil_files "win32/host"
 # 작업 표시줄 단추다 (taskbar-design.md). 어떤 호출을 할지는 core의 host/taskbar_sync가 고르고, 여기는
 # ITaskbarList3 호출과 창별 아이콘 핸들만 쥔다. 점프 목록(jump-list-design.md)은 ICustomDestinationList로 같은 자리에서 낸다.
 # 알림 영역 아이콘(tray-icon-design.md)도 같은 그림 변환을 쓰고, 어떤 호출을 할지는 core의 host/tray_sync가 고른다.
+# 전역 단축키(global-hotkey-design.md)는 RegisterHotKey 호출만 여기서 하고, 어떤 호출을 할지는 core의 host/hotkey_sync가 고른다.
 luil_add_source_filter(luil_files "win32/taskbar"
+    win32/hotkey_win32.cpp
+    win32/hotkey_win32.h
     win32/icon_from_image.cpp
     win32/icon_from_image.h
     win32/jump_list.cpp

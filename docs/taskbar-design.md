@@ -194,7 +194,7 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 - 새 번호는 +6부터 표 끝에만 더한다. 받는 창을 표에 적는다. 같은 창이 받는 번호끼리 겹치면 안 된다.
 - `static_assert`가 값이 서로 다르고 `WM_APP`~`0xBFFF` 안인지 본다. 이 노드는 새 번호를 쓰지 않는다.
-- hotkey가 `RegisterHotKey`를 고르면 `WM_HOTKEY`는 시스템 번호라 표에 넣지 않는다.
+- hotkey가 `RegisterHotKey`를 고르면 `WM_HOTKEY`는 시스템 번호라 표에 넣지 않는다. [전역 단축키](global-hotkey-design.md)가 그 길을 골랐고 표는 그대로다.
 - `SetTimer` 번호(1·2·4는 `win32_window.cpp`, 3은 `window_surface.cpp`)는 이번에 옮기지 않는다. 새 타이머가 필요한 노드가 같은 헤더에 더한다.
 
 **등록 메시지 길.** 이름은 `RegisterWindowMessageW`로 한 번 등록한다. `shell_event`는 지금 `taskbar_button_created`와 `taskbar_created`다.

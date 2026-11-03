@@ -96,4 +96,111 @@ namespace luil {
             return static_cast<key_code>(static_cast<std::uint32_t>(key_code::numpad_0) + static_cast<std::uint32_t>(key_code_value - 144));
         return key_code::none;
     }
+
+    std::uint32_t win32_virtual_from_key(const key_code key) noexcept
+    {
+        // 영문자·숫자는 VK가 ASCII와 같고, 플랫폼 대역은 값에서 대역의 시작을 뺀 것이 VK다.
+        if (const std::uint32_t platform { platform_key_of(key) }; platform != 0)
+        {
+            // 수정자 키는 걸 키가 아니다 (앱 안 경로도 수정자 키를 사건으로 삼지 않는다). 0xFF는 VK가 아니다.
+            const bool modifier { (platform >= 0x10 && platform <= 0x12) || platform == 0x5B || platform == 0x5C || (platform >= 0xA0 && platform <= 0xA5) };
+            return (modifier || platform > 0xFE) ? 0u : platform;
+        }
+        // winuser.h의 VK_* 값이다. F5는 이름 키 사이에 있어 순서로 셀 수 없으므로 하나씩 적는다.
+        switch (key)
+        {
+        case key_code::backspace:
+            return 0x08; // VK_BACK
+        case key_code::tab:
+            return 0x09; // VK_TAB
+        case key_code::enter:
+            return 0x0D; // VK_RETURN
+        case key_code::escape:
+            return 0x1B; // VK_ESCAPE
+        case key_code::space:
+            return 0x20; // VK_SPACE
+        case key_code::page_up:
+            return 0x21; // VK_PRIOR
+        case key_code::page_down:
+            return 0x22; // VK_NEXT
+        case key_code::end:
+            return 0x23; // VK_END
+        case key_code::home:
+            return 0x24; // VK_HOME
+        case key_code::arrow_left:
+            return 0x25; // VK_LEFT
+        case key_code::arrow_up:
+            return 0x26; // VK_UP
+        case key_code::arrow_right:
+            return 0x27; // VK_RIGHT
+        case key_code::arrow_down:
+            return 0x28; // VK_DOWN
+        case key_code::insert:
+            return 0x2D; // VK_INSERT
+        case key_code::delete_forward:
+            return 0x2E; // VK_DELETE
+        case key_code::numpad_multiply:
+            return 0x6A; // VK_MULTIPLY
+        case key_code::numpad_add:
+            return 0x6B; // VK_ADD
+        case key_code::numpad_subtract:
+            return 0x6D; // VK_SUBTRACT
+        case key_code::numpad_decimal:
+            return 0x6E; // VK_DECIMAL
+        case key_code::numpad_divide:
+            return 0x6F; // VK_DIVIDE
+        case key_code::f1:
+            return 0x70;
+        case key_code::f2:
+            return 0x71;
+        case key_code::f3:
+            return 0x72;
+        case key_code::f4:
+            return 0x73;
+        case key_code::f5:
+            return 0x74;
+        case key_code::f6:
+            return 0x75;
+        case key_code::f7:
+            return 0x76;
+        case key_code::f8:
+            return 0x77;
+        case key_code::f9:
+            return 0x78;
+        case key_code::f10:
+            return 0x79;
+        case key_code::f11:
+            return 0x7A;
+        case key_code::f12:
+            return 0x7B;
+        case key_code::semicolon:
+            return 0xBA; // VK_OEM_1
+        case key_code::equal:
+            return 0xBB; // VK_OEM_PLUS
+        case key_code::comma:
+            return 0xBC; // VK_OEM_COMMA
+        case key_code::minus:
+            return 0xBD; // VK_OEM_MINUS
+        case key_code::period:
+            return 0xBE; // VK_OEM_PERIOD
+        case key_code::slash:
+            return 0xBF; // VK_OEM_2
+        case key_code::grave:
+            return 0xC0; // VK_OEM_3
+        case key_code::bracket_left:
+            return 0xDB; // VK_OEM_4
+        case key_code::backslash:
+            return 0xDC; // VK_OEM_5
+        case key_code::bracket_right:
+            return 0xDD; // VK_OEM_6
+        case key_code::quote:
+            return 0xDE; // VK_OEM_7
+        default:
+            break;
+        }
+        // VK_NUMPAD0..VK_NUMPAD9다. 열 개가 이어진 이름이다.
+        if (key >= key_code::numpad_0 && key <= key_code::numpad_9)
+            return 0x60u + (static_cast<std::uint32_t>(key) - static_cast<std::uint32_t>(key_code::numpad_0));
+        return 0;
+    }
 }

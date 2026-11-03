@@ -100,6 +100,7 @@ add_executable(luil_core_tests
     tab_bar_style_tests.cpp
     taskbar_sync_tests.cpp
     tray_sync_tests.cpp
+    hotkey_sync_tests.cpp
     table_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
@@ -453,6 +454,7 @@ add_executable(luil_tests
     file_watcher_tests.cpp
     font_fallback_tests.cpp
     font_style_native_tests.cpp
+    global_hotkey_tests.cpp
     glyph_element_tests.cpp
     http_body_tests.cpp
     http_client_tests.cpp
