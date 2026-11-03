@@ -288,7 +288,7 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/notification_icon.cpp"
             android_notification_icon_tests.cpp)
-    # 시스템 색·대비·막대·햅틱·권한의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 연 뒤 지점마다 실패를 친다
+    # 시스템 색·대비·막대·햅틱·권한의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 여는 첫 호출부터 지점마다 실패를 친다
     # (android_jni_order_tests.cpp). 자리 전체의 검사 순서는 호스트의 luil_jni_order가 본다.
     target_sources(luil_core_tests
         PRIVATE
