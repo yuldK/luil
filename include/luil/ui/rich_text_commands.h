@@ -47,7 +47,7 @@ namespace luil {
     //  - 칸이 쓰지 않는 Ctrl+B·I·U·K는 칸의 처리기에 닿는다. 명령표를 `match_command`(범위 `focused`)로 맞추고
     //    `make_action`이 지은 앱 메시지 하나를 낸다. 맞지 않는 키는 소비하지 않는다 (위로 흐른다).
     //  - 명령표는 정적 판정용 표다. 사용자 단축키를 반영하려면 앱이 `user_shortcuts`를 채운 표를 넘긴다.
-    //  - 명령표와 따로, 편집의 표준 키를 먼저 본다 (docs/rich-edit-exchange-design.md). Ctrl+C·Ctrl+Insert는 `copy`, Ctrl+X·Shift+Delete는
+    //  - 명령표와 따로, 편집의 표준 키를 먼저 본다 (docs/rich-edit-exchange-design.md). Ctrl+C·Ctrl+Insert(Shift 포함)는 `copy`, Ctrl+X·Shift+Delete는
     //    `cut`, Ctrl+V·Shift+Insert는 `paste`, Ctrl+Shift+V는 `paste_plain`이다 (Ctrl+Shift+C·X도 복사·잘라내기). 사용자가 다시 정하지 않는다.
     //  - 칸은 `text_area_config::clipboard_keys_to_parent`를 켠 때만 이 키를 처리기에 넘긴다. 끈 칸은 지금처럼 평문으로 복사한다.
     [[nodiscard]] key_handler make_rich_text_key_handler(std::vector<app_command> commands, std::function<input_action(rich_text_command)> make_action);

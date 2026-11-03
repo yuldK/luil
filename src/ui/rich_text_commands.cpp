@@ -21,7 +21,7 @@ namespace luil {
         }
 
         // 칸이 넘긴 복사·잘라내기·붙여넣기 키다 (docs/rich-edit-exchange-design.md). 명령표와 따로 고정이다.
-        //  - Ctrl+C·X·V(Shift 포함, Ctrl+Shift+V는 서식 없이 붙이기), Ctrl+Insert, Shift+Insert, Shift+Delete다.
+        //  - Ctrl+C·X·V(Shift 포함, Ctrl+Shift+V는 서식 없이 붙이기), Ctrl+Insert(Shift 포함), Shift+Insert, Shift+Delete다.
         [[nodiscard]] std::optional<rich_text_command> rich_text_clipboard_command_of(const key_pressed_event& event) noexcept
         {
             if (event.alt || event.meta)
@@ -38,8 +38,8 @@ namespace luil {
                 case key_code::key_v:
                     return event.shift ? rich_text_command::paste_plain : rich_text_command::paste;
                 case key_code::insert:
-                    if (event.shift)
-                        return std::nullopt;
+                    // controller가 Insert에 Ctrl이나 Shift가 서면 칸 밖으로 넘긴다. 플래그 없는 칸의 Insert 갈래가
+                    // Ctrl을 먼저 보듯 Ctrl+Insert는 Shift와 상관없이 복사이고, 넘어온 키를 버려 흘리지 않는다.
                     return rich_text_command::copy;
                 default:
                     return std::nullopt;

@@ -54,8 +54,9 @@ bool clipboard_keys_to_parent { false };
 
 **키 경로.**
 
-- `clipboard_keys_to_parent`인 칸에서는 Ctrl+C·Ctrl+X·Ctrl+V(Shift 포함), Ctrl+Insert, Shift+Insert, Shift+Delete가 4단계에서 소비되지 않고 8단계 `key_handler`로 간다. 이 갈래는 controller의 것이라 줄 3이 낸다(약속 절). 읽기 전용 칸이 Ctrl+X·Ctrl+V를 삼키는 갈래는 그 앞이라 그대로다.
+- `clipboard_keys_to_parent`인 칸에서는 Ctrl+C·Ctrl+X·Ctrl+V(Shift 포함), Ctrl+Insert(Shift 포함), Shift+Insert, Shift+Delete가 4단계에서 소비되지 않고 8단계 `key_handler`로 간다. 이 갈래는 controller의 것이라 줄 3이 낸다(약속 절). 읽기 전용 칸이 Ctrl+X·Ctrl+V를 삼키는 갈래는 그 앞이라 그대로다.
 - `make_rich_text_key_handler`는 명령표와 별도로 위의 고정 조합을 `copy`·`cut`·`paste`로, Ctrl+Shift+V를 `paste_plain`으로 옮긴다. 이 조합은 사용자가 다시 정하지 않는다(편집의 표준 키다).
+- Ctrl+Insert는 Shift와 상관없이 `copy`다. controller가 Insert에 Ctrl이나 Shift가 서면 칸 밖으로 넘기므로 Ctrl+Shift+Insert도 처리기에 닿고, 플래그 없는 칸의 Insert 갈래가 Ctrl을 먼저 보는 것과 같은 규칙으로 복사한다. 처리기가 버리면 그 키가 아무에게도 가지 않고 위로 흐르기만 한다.
 - 줄 3의 갈래가 들어오기 전이나 플래그를 끈 칸은 지금 길 그대로다. 복사는 평문이고, 붙여넣은 글은 넣은 글의 서식 규칙(앞 글자를 이어받음)을 따른다. 깨지는 것은 없고 서식만 빠진다.
 - 암호 칸은 서식 칸이 아니다. 플래그를 세워도 칸이 `secret`이면 controller가 지금처럼 복사를 막는다.
 

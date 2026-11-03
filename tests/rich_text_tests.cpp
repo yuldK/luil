@@ -392,7 +392,8 @@ TEST_CASE("The rich text key handler maps the standard clipboard keys before the
     // 수정자가 다르면 편집 키가 아니다. Ctrl+Delete는 낱말 지우기라 칸의 것이다.
     REQUIRE(command_of(luil::key_code::key_c, false, false).has_value() == false);
     REQUIRE(command_of(luil::key_code::delete_forward, true, true).has_value() == false);
-    REQUIRE(command_of(luil::key_code::insert, true, true).has_value() == false);
+    // 칸이 Ctrl이나 Shift가 선 Insert를 모두 넘기므로 Ctrl+Shift+Insert도 복사다 (플래그 없는 칸의 Insert 갈래와 같은 규칙).
+    REQUIRE(command_of(luil::key_code::insert, true, true) == luil::rich_text_command::copy);
     luil::key_pressed_event alt_copy { luil::key_code::key_c };
     alt_copy.control = true;
     alt_copy.alt = true;

@@ -1698,6 +1698,11 @@ TEST_CASE("Clipboard keys in the focused rich text editor copy and paste with th
     request = page.take_clipboard_request();
     REQUIRE(request.has_value());
     REQUIRE(std::holds_alternative<luil::clipboard_data_copy_request>(*request));
+    // Shift가 함께 서도 칸이 넘기는 키이고 처리기가 같은 복사로 받는다. 버리면 이 키가 어디에도 닿지 않는다.
+    REQUIRE(deliver_rich_keys(page, controller.process(rich_chord(luil::key_code::insert, true, true))) == false);
+    request = page.take_clipboard_request();
+    REQUIRE(request.has_value());
+    REQUIRE(std::holds_alternative<luil::clipboard_data_copy_request>(*request));
     for (const luil::key_pressed_event& paste : { rich_chord(luil::key_code::key_v, true, false), rich_chord(luil::key_code::insert, false, true) })
     {
         REQUIRE(deliver_rich_keys(page, controller.process(paste)) == false);
