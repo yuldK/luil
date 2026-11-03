@@ -700,3 +700,29 @@ TEST_CASE("The popup is the picker size plus padding placed under the field", "[
     const luil::ui_popup above { luil::make_color_picker_popup(make_full_config(), config) };
     REQUIRE(above.y == (1400.0f - 4.0f - 336.0f * 2.0f) / 2.0f);
 }
+
+TEST_CASE("Pressing the open field closes it even once the closed frame is published before the release", "[ui][color-picker][color-field][reopen]")
+{
+    // 열린 동안 칸을 누르면 바깥 누름이 먼저 닫고, 뗌 전에 `open == false` frame이 게시될 수 있다.
+    // 펼쳐 있던 칸의 클릭은 누를 때의 tree의 액션이라 닫힌다 (menu-focus-fixes-design.md의 X-4). 다시 열리지 않는다.
+    const auto field_tree = [](const bool open) {
+        auto field { std::make_unique<luil::color_field_element>(make_field(open)) };
+        field->arrange({ { 0.0f, 0.0f, 160.0f, luil::dropdown_height }, 1.0f });
+        return make_tree(std::move(field));
+    };
+    luil::interaction_controller controller {};
+    controller.set_tree(field_tree(true));
+    std::vector<bool> opens { opens_of(controller.process(press(40.0f, 14.0f, 0))) };
+    controller.set_tree(field_tree(false));
+    for (const bool value : opens_of(controller.process(release(40.0f, 14.0f, 10))))
+        opens.push_back(value);
+    REQUIRE(opens == std::vector<bool> { false });
+
+    // 닫힌 칸의 누름은 지금처럼 뗌 tree의 것이다. 누르는 사이 열린 frame이 게시되면 그 tree의 `set_open(false)`다.
+    controller.set_tree(field_tree(false));
+    opens = opens_of(controller.process(press(40.0f, 14.0f, 1000)));
+    controller.set_tree(field_tree(true));
+    for (const bool value : opens_of(controller.process(release(40.0f, 14.0f, 1010))))
+        opens.push_back(value);
+    REQUIRE(opens == std::vector<bool> { false });
+}
