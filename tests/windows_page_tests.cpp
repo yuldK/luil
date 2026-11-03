@@ -88,8 +88,8 @@ namespace {
         return *area;
     }
 
-    // 맨 아래 구역의 단추다 (알림 영역 줄 끝).
-    constexpr std::u8string_view bottom_button_key { u8"tray-picture" };
+    // 맨 아래 구역의 단추다 (전역 단축키 줄 끝).
+    constexpr std::u8string_view bottom_button_key { u8"hotkey-conflict" };
 
     [[nodiscard]] const luil::ui_element& bottom_button_of(const luil::ui_tree& tree)
     {
@@ -654,4 +654,151 @@ TEST_CASE("The tray controls are buttons a person can read by name", "[windows-p
         REQUIRE(button != nullptr);
         REQUIRE(button->accessibility().name == name);
     }
+}
+
+namespace {
+    [[nodiscard]] luil::win32::hotkey_report hotkey_report_with(std::u8string id, const luil::win32::hotkey_status status, std::u8string error = {})
+    {
+        luil::win32::hotkey_report report {};
+        report.id = std::move(id);
+        report.status = status;
+        report.error = std::move(error);
+        return report;
+    }
+}
+
+TEST_CASE("The hotkey section reads its capability, request, report and pressed count as four lines", "[windows-page][hotkey]")
+{
+    demo::windows_page page {};
+    {
+        const platform_scope scope { luil::ui_platform {} };
+        const auto tree { page_tree(page) };
+        REQUIRE(name_of(tree, u8"windows-hotkey-capability") == u8"전역 단축키 능력: 없음");
+        REQUIRE(name_of(tree, u8"windows-hotkey-request") == u8"전역 단축키 요청: 끔");
+        REQUIRE(name_of(tree, u8"windows-hotkey-report") == u8"전역 단축키 반영: 끔");
+        REQUIRE(name_of(tree, u8"windows-hotkey-pressed") == u8"전역 단축키 눌림: 0번");
+    }
+    {
+        luil::ui_platform desktop {};
+        desktop.capabilities.global_hotkeys = true;
+        const platform_scope scope { desktop };
+        REQUIRE(name_of(page_tree(page), u8"windows-hotkey-capability") == u8"전역 단축키 능력: 있음");
+    }
+    REQUIRE(page.make_hotkeys_request().empty());
+}
+
+TEST_CASE("The hotkey buttons reach the request and the conflict test adds a second id with the same chord", "[windows-page][hotkey]")
+{
+    demo::windows_page page {};
+    // 켜기 전에는 충돌 시험을 받지 않는다.
+    deliver(page, demo::hotkey_conflict_intent {});
+    REQUIRE(page.make_hotkeys_request().empty());
+
+    deliver(page, demo::hotkey_toggle_intent { true });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-request") == u8"전역 단축키 요청: 켬 · Ctrl+Shift+Alt+F11");
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 아직 보고 없음");
+    std::vector<luil::global_hotkey> hotkeys { page.make_hotkeys_request() };
+    REQUIRE(hotkeys.size() == 1);
+    REQUIRE(hotkeys[0].id == u8"demo");
+    REQUIRE(hotkeys[0].chord == luil::key_chord { luil::key_code::f11, true, true, true });
+    REQUIRE(hotkeys[0].pressed != nullptr);
+
+    deliver(page, demo::hotkey_conflict_intent {});
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-request") == u8"전역 단축키 요청: 켬 · Ctrl+Shift+Alt+F11 · 충돌 시험");
+    hotkeys = page.make_hotkeys_request();
+    REQUIRE(hotkeys.size() == 2);
+    REQUIRE(hotkeys[1].id == u8"demo-extra");
+    // 앞 항목이 이기려면 같은 조합이어야 한다.
+    REQUIRE(hotkeys[1].chord == hotkeys[0].chord);
+
+    // 끄면 목록이 비고 충돌 시험도 꺼진다.
+    deliver(page, demo::hotkey_toggle_intent { false });
+    REQUIRE(page.make_hotkeys_request().empty());
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-request") == u8"전역 단축키 요청: 끔");
+    deliver(page, demo::hotkey_toggle_intent { true });
+    REQUIRE(page.make_hotkeys_request().size() == 1);
+}
+
+TEST_CASE("Hotkey reports reach the report line and the second id rides beside the first", "[windows-page][hotkey]")
+{
+    demo::windows_page page {};
+    deliver(page, demo::hotkey_toggle_intent { true });
+    const std::pair<luil::win32::hotkey_status, std::u8string_view> texts[] {
+        { luil::win32::hotkey_status::registered, u8"등록됨" },
+        { luil::win32::hotkey_status::conflict, u8"충돌" },
+        { luil::win32::hotkey_status::reserved, u8"예약된 조합" },
+        { luil::win32::hotkey_status::needs_modifier, u8"수정자 필요" },
+        { luil::win32::hotkey_status::invalid_key, u8"쓸 수 없는 키" },
+        { luil::win32::hotkey_status::invalid_id, u8"쓸 수 없는 id" },
+    };
+
+    for (const auto& [status, text] : texts)
+    {
+        deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", status) });
+        REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: " + std::u8string { text });
+    }
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::failed, u8"boom") });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 실패 (boom)");
+
+    // 같은 id의 새 보고가 앞 것을 덮고, 둘째 id의 보고는 옆에 붙는다.
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::registered) });
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo-extra", luil::win32::hotkey_status::conflict) });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 등록됨 · 충돌 (demo-extra)");
+
+    // 끄면 `끔`이고 늦게 온 보고는 버린다. 다시 켜면 보고를 기다린다.
+    deliver(page, demo::hotkey_toggle_intent { false });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 끔");
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::registered) });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 끔");
+    deliver(page, demo::hotkey_toggle_intent { true });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 아직 보고 없음");
+}
+
+TEST_CASE("A hotkey press counts and the front toggle brings the hidden main window back", "[windows-page][hotkey]")
+{
+    demo::windows_page page {};
+    deliver(page, demo::hotkey_toggle_intent { true });
+    deliver(page, message_of(page.make_hotkeys_request()[0].pressed()));
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-pressed") == u8"전역 단축키 눌림: 1번");
+    // 눌러도 창은 건드리지 않는다.
+    REQUIRE(page.make_focus_request().has_value() == false);
+
+    // 트레이 메뉴로 숨긴 주 창이다.
+    deliver(page, demo::tray_toggle_intent { true });
+    deliver(page, demo::tray_report_intent { tray_report_with(luil::win32::tray_status::shown) });
+    deliver(page, message_of(page.make_tray_request()->menu->select(u8"hide")));
+    REQUIRE(page.main_hidden());
+    deliver(page, message_of(page.make_hotkeys_request()[0].pressed()));
+    REQUIRE(page.main_hidden());
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-pressed") == u8"전역 단축키 눌림: 2번");
+
+    deliver(page, demo::hotkey_front_intent { true });
+    deliver(page, message_of(page.make_hotkeys_request()[0].pressed()));
+    REQUIRE(page.main_hidden() == false);
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface.empty());
+    REQUIRE(focus->activate);
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-pressed") == u8"전역 단축키 눌림: 3번");
+}
+
+TEST_CASE("The hotkey controls are buttons and a checkbox a person can read by name", "[windows-page][hotkey]")
+{
+    demo::windows_page page {};
+    const auto tree { page_tree(page) };
+    const std::pair<std::u8string_view, std::u8string_view> buttons[] {
+        { u8"hotkey-on", u8"전역 단축키 켜기" },
+        { u8"hotkey-off", u8"전역 단축키 끄기" },
+        { u8"hotkey-conflict", u8"충돌 시험 켜기" },
+    };
+
+    for (const auto& [key, name] : buttons)
+    {
+        const luil::ui_element* const button { tree.find({ demo::kind_tool_toggle, std::u8string { key } }) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name == name);
+    }
+    const luil::ui_element* const front { tree.find({ luil::ui_element_kind::check, u8"hotkey-front" }) };
+    REQUIRE(front != nullptr);
+    REQUIRE(front->accessibility().name == u8"눌리면 창 앞으로");
 }

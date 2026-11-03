@@ -26,6 +26,9 @@
 //  - 알림 영역 구역은 트레이 아이콘을 세우고 그림을 바꾸고 그 사건을 받는 예다 (tray-icon-design.md). 아이콘의 메뉴는
 //    시스템 메뉴로 뜨고 `창 보이기`·`주 창 숨기기`·`끝내기`가 있다. 주 창을 숨기는 것은 앱 상태라 `main_hidden`을 셸이
 //    frame에 싣는다. 네 줄이 UIA로 읽힌다: 능력·요청·반영·사건.
+//  - 전역 단축키 구역은 앱이 뒤에 있어도 받는 키 조합(`Ctrl+Shift+Alt+F11`)을 걸고 그 눌림을 세는 예다 (global-hotkey-design.md).
+//    둘째 id를 같은 조합으로 더하는 충돌 시험은 같은 목록의 앞 항목이 이겨 둘째가 충돌로 보고되는 것을 보인다. 눌렸을 때
+//    창을 앞으로 세우는 것은 앱 몫이라 `main_hidden`과 활성화 초점 요청을 앱 상태로 싣는다. 네 줄이 UIA로 읽힌다: 능력·요청·반영·눌림.
 //  - 본문 전체가 흘리는 영역에 든다 (scroll-area-design.md). 구역을 모두 쌓으면 기본 창(1280 x 720)보다 길어
 //    맨 아래 구역이 잘렸다. 영역의 내용 높이는 담긴 줄에서 읽으므로 구역이 줄을 더해도 그대로 흐른다.
 //    위쪽에 고정한 줄 `페이지 흘림: <흘린 양> / <흘릴 수 있는 최대>`(논리 픽셀)가 UIA로 읽힌다.
@@ -221,6 +224,36 @@ namespace demo {
         luil::win32::tray_report report {};
     };
 
+    // --- 전역 단축키 구역의 메시지 ---
+    // 전역 단축키를 켜고 끈다. 끄면 충돌 시험도 함께 끈다.
+    struct hotkey_toggle_intent
+    {
+        bool on { false };
+    };
+
+    // 같은 조합의 둘째 id를 목록에 더한다. 앞 항목이 이겨 둘째는 충돌로 보고된다. 켜져 있을 때만 받는다.
+    struct hotkey_conflict_intent
+    {
+    };
+
+    // 눌렸을 때 주 창을 앞으로 세울지 정한다.
+    struct hotkey_front_intent
+    {
+        bool on { false };
+    };
+
+    // 전역 단축키가 눌렸다 (`global_hotkey::pressed`).
+    struct hotkey_pressed_intent
+    {
+        std::u8string id {};
+    };
+
+    // 라이브러리가 알린 전역 단축키 하나의 걸어 본 결과다 (`window_delegate::make_hotkey_message`).
+    struct hotkey_report_intent
+    {
+        luil::win32::hotkey_report report {};
+    };
+
     class windows_page
     {
     public:
@@ -242,6 +275,10 @@ namespace demo {
         // 알림 영역 아이콘이다. 끈 동안은 없다. 셸이 매 frame `ui_frame::tray`에 그대로 싣는다.
         //  - 그림은 페이지가 쥔 것을 frame마다 같이 실어 셸에 다시 내지 않는다. 메뉴와 사건 함수는 매번 새로 짓는다.
         [[nodiscard]] std::optional<luil::tray_icon> make_tray_request() const;
+
+        // 전역 단축키 목록이다. 끈 동안은 비어 있다. 셸이 매 frame `ui_frame::hotkeys`에 그대로 싣는다.
+        //  - 눌림 함수는 매번 새로 짓는다. 라이브러리는 id와 조합만 견주고 눌림 함수는 눌릴 때 그 순간의 frame에서 읽는다.
+        [[nodiscard]] std::vector<luil::global_hotkey> make_hotkeys_request() const;
 
         // 트레이 메뉴로 주 창을 숨겼는가다. 셸이 매 frame `ui_frame::main_hidden`에 그대로 싣는다.
         [[nodiscard]] bool main_hidden() const noexcept
@@ -293,8 +330,10 @@ namespace demo {
         void add_jump_list_section(luil::stack_element& column);
         // 둘째 인스턴스 구역을 `column`에 더한다.
         void add_instance_section(luil::stack_element& column);
-        // 알림 영역 구역을 `column`에 더한다 (점프 목록 줄 뒤, 본문 끝).
+        // 알림 영역 구역을 `column`에 더한다 (점프 목록 줄 뒤).
         void add_tray_section(luil::stack_element& column);
+        // 전역 단축키 구역을 `column`에 더한다 (알림 영역 구역 뒤, 본문 끝).
+        void add_hotkey_section(luil::stack_element& column);
         // 메뉴를 닫고 검색 상태도 함께 비운다.
         void close_tool_menu() noexcept;
 
@@ -345,6 +384,15 @@ namespace demo {
         std::optional<luil::win32::tray_report> tray_report_ {};
         // 마지막 사건을 화면 글로 옮긴 것이다. 받은 적이 없으면 비었다.
         std::u8string tray_event_ {};
+        // 전역 단축키 구역의 상태다 (모두 앱 상태다).
+        bool hotkey_on_ { false };
+        // 같은 조합의 둘째 id를 목록에 더했는가다.
+        bool hotkey_conflict_ { false };
+        // 눌렸을 때 주 창을 앞으로 세우는가다.
+        bool hotkey_front_ { false };
+        int hotkey_presses_ { 0 };
+        // id마다 마지막으로 받은 보고다. 끄면 비운다.
+        std::vector<luil::win32::hotkey_report> hotkey_reports_ {};
         luil::text::text_edit_state note_ {};
         // 도구 창 메뉴 안 검색 칸의 상태다.
         // 조합 상태는 창 안 메모 칸과 하나를 같이 쓴다 — target이 구분한다.

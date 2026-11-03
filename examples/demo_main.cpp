@@ -734,6 +734,8 @@ namespace demo {
                 frame->taskbar = windows_.make_taskbar_request();
                 // 알림 영역 아이콘과, 그 메뉴로 숨긴 주 창이다. 숨기는 것은 앱 상태라 페이지가 쥔다.
                 frame->tray = windows_.make_tray_request();
+                // 앱이 뒤에 있어도 받는 전역 단축키다. 눌림은 항목의 `pressed`가 앱 메시지로 돌려준다.
+                frame->hotkeys = windows_.make_hotkeys_request();
                 frame->main_hidden = windows_.main_hidden();
                 // 초점 요청은 두 곳(도구 창 페이지·명령 팔레트)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
                 // 쪽의 요청을 셸 번호로 다시 매겨 싣는다 — 팔레트를 닫았다고 도구 창의 지난 요청이 되살아나지 않는다.
@@ -1185,6 +1187,12 @@ namespace demo {
             [[nodiscard]] luil::app_message make_tray_message(const luil::win32::tray_report& report) override
             {
                 return luil::app_message { tray_report_intent { report } };
+            }
+
+            // 전역 단축키를 걸어 본 결과도 창 페이지의 반영 줄이 읽는다.
+            [[nodiscard]] luil::app_message make_hotkey_message(const luil::win32::hotkey_report& report) override
+            {
+                return luil::app_message { hotkey_report_intent { report } };
             }
 
             [[nodiscard]] luil::app_message make_window_placement_message(const luil::win32::window_placement& placement) override
