@@ -1310,6 +1310,119 @@ TEST_CASE("A slider still announces no step and the change getters need a live e
     root->Release();
 }
 
+namespace {
+    // 범위만 내주는 element다. 경계·값·걸음을 정한 그대로 알린다.
+    class range_probe final : public luil::ui_element
+    {
+    public:
+        range_probe(luil::ui_element_id id, const luil::access_range range)
+            : ui_element { std::move(id) }
+            , range_ { range }
+        {
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+
+        [[nodiscard]] luil::access_info accessibility() const override
+        {
+            luil::access_info info { .role = luil::access_role::slider, .name = u8"probe" };
+            info.range = range_;
+            return info;
+        }
+
+    private:
+        luil::access_range range_ {};
+    };
+}
+
+TEST_CASE("A display only rating hands its fractional average to UIA as the decimal the app wrote", "[win32][uia][rating]")
+{
+    // 평균 별점은 float 4.3이다. 이진 오차를 그대로 double로 옮기면 4.30000019로 읽힌다.
+    fake_uia_host host {};
+    host.tree = make_rating_tree(4.3f, false);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const rating { root->make_element_provider(rating_id) };
+
+    double number { -1.0 };
+    REQUIRE(rating->get_Value(&number) == S_OK);
+    REQUIRE(number == 4.3);
+    REQUIRE(rating->get_Minimum(&number) == S_OK);
+    REQUIRE(number == 0.0);
+    REQUIRE(rating->get_Maximum(&number) == S_OK);
+    REQUIRE(number == 5.0);
+    BOOL read_only { FALSE };
+    REQUIRE(rating->get_IsReadOnly(&read_only) == S_OK);
+    REQUIRE(read_only == TRUE);
+
+    rating->Release();
+    root->Release();
+}
+
+TEST_CASE("Every range value getter hands a float to UIA as its shortest decimal", "[win32][uia]")
+{
+    auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    page->add(std::make_unique<range_probe>(luil::ui_element_id { kind_item, u8"level" }, luil::access_range { .minimum = 0.1f, .maximum = 4.3f, .value = 2.7f, .step = 0.1f, .page = 0.3f }));
+    fake_uia_host host {};
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const level { root->make_element_provider({ kind_item, u8"level" }) };
+
+    double number { -1.0 };
+    REQUIRE(level->get_Value(&number) == S_OK);
+    REQUIRE(number == 2.7);
+    REQUIRE(level->get_Minimum(&number) == S_OK);
+    REQUIRE(number == 0.1);
+    REQUIRE(level->get_Maximum(&number) == S_OK);
+    REQUIRE(number == 4.3);
+    REQUIRE(level->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 0.1);
+    REQUIRE(level->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 0.3);
+
+    // 읽은 경계를 그대로 되돌려 정하는 값은 범위 안이다. 밖은 여전히 인자 오류다.
+    // 이 요소는 값을 받을 액션이 없어 범위 안의 값이 접근 거부로 끝난다.
+    REQUIRE(level->SetValue(0.1) == E_ACCESSDENIED);
+    REQUIRE(level->SetValue(4.3) == E_ACCESSDENIED);
+    REQUIRE(level->SetValue(0.09) == E_INVALIDARG);
+    REQUIRE(level->SetValue(4.31) == E_INVALIDARG);
+
+    level->Release();
+    root->Release();
+}
+
+TEST_CASE("A range value change event carries the decimal the app wrote", "[win32][uia]")
+{
+    const auto make_level_tree = [](const float level) {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        root->add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_item, u8"level" }, luil::slider_config { .minimum = 0.0f, .maximum = 10.0f, .value = level }));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    };
+
+    fake_uia_host host {};
+    host.tree = make_level_tree(4.3f);
+    const luil::access_snapshot before { luil::make_access_snapshot(*host.tree) };
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    recording_event_sink sink {};
+    sink.root = static_cast<IRawElementProviderSimple*>(root);
+    root->set_event_sink_for_test(sink);
+
+    host.tree = make_level_tree(4.4f);
+    root->announce_changes(luil::diff_access_snapshots(before, luil::make_access_snapshot(*host.tree)));
+    REQUIRE(sink.records.size() == 1u);
+    REQUIRE(sink.records[0].property == UIA_RangeValueValuePropertyId);
+    REQUIRE(sink.records[0].old_number == 4.3);
+    REQUIRE(sink.records[0].new_number == 4.4);
+
+    root->Release();
+}
+
 TEST_CASE("Setting a rating value through UIA rounds to a star and refuses the out of range", "[win32][uia][rating]")
 {
     fake_uia_host host {};
