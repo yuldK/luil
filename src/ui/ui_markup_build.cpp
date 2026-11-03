@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 // 화면 마크업의 펼치기다 (docs/markup-binding-design.md).
 //  - 속성은 요소의 기본값 위에 표의 행 순서대로 다시 건다. 적은 값은 그대로, 바인딩은 찾은 값으로 건다. 적은 값만 건 값
@@ -69,6 +71,14 @@ namespace luil {
                     return result;
                 std::unique_ptr<ui_element> root { make_element(0) };
                 ++built_;
+                // 깊은 틀은 펼치지 않는다. 지은 tree를 버리는 해제가 자식을 따라 재귀해 호출 스택을 넘칠 수 있다.
+                if (const std::optional<std::size_t> deep { first_beyond_depth() }; deep.has_value())
+                {
+                    result.element = std::move(root);
+                    result.errors.push_back(ui_markup_error_at(ui_markup_error_kind::too_large, document_.nodes[*deep].at, {}, u8"max_depth", ui_markup_decimal(ui_markup_build_max_depth)));
+                    result.built = built_;
+                    return result;
+                }
                 if (is_container(document_.nodes.front().tag))
                 {
                     frames_.push_back({ .node = 0, .element = std::move(root) });
@@ -115,6 +125,24 @@ namespace luil {
             [[nodiscard]] static bool is_structural(const ui_markup_tag tag) noexcept
             {
                 return tag == ui_markup_tag::for_each || tag == ui_markup_tag::if_true || tag == ui_markup_tag::unless_true;
+            }
+
+            // 깊이가 `ui_markup_build_max_depth`를 넘는 첫 노드다 (글 차례). 셈은 읽기와 같다.
+            [[nodiscard]] std::optional<std::size_t> first_beyond_depth() const
+            {
+                // 노드와 그 깊이다. 자식을 거꾸로 쌓아 글 차례로 꺼낸다.
+                std::vector<std::pair<std::size_t, std::size_t>> pending { { 0, 1 } };
+                while (pending.empty() == false)
+                {
+                    const auto [index, depth] { pending.back() };
+                    pending.pop_back();
+                    if (depth > ui_markup_build_max_depth)
+                        return index;
+                    const std::vector<std::size_t>& children { document_.nodes[index].children };
+                    for (auto child { children.rbegin() }; child != children.rend(); ++child)
+                        pending.emplace_back(*child, depth + 1);
+                }
+                return std::nullopt;
             }
 
             [[nodiscard]] std::unique_ptr<ui_element> walk()

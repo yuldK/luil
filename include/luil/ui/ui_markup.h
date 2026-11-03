@@ -27,13 +27,18 @@ namespace luil {
         // 글의 바이트 수다 (맨 앞의 BOM 포함). 넘으면 읽지 않는다.
         std::size_t max_bytes { std::size_t { 1 } * 1024 * 1024 };
         // 요소 중첩이다. 뿌리가 1단이고 `for`·`if`·`unless`도 한 단이다.
-        //  - 읽기만 하는 틀은 크게 올려도 된다. 펼칠 틀은 지은 tree의 해제가 재귀하므로 수백 안에 둔다 (`build_ui_markup`).
+        //  - 읽기만 하는 틀은 크게 올려도 된다. 펼치기는 `ui_markup_build_max_depth`를 넘는 틀을 펼치지 않는다 (`build_ui_markup`).
         std::size_t max_depth { 64 };
         // 틀의 요소 수다 (구조 요소 포함, 글과 주석은 세지 않는다).
         std::size_t max_nodes { 10000 };
         // 한 번 펼칠 때 짓는 element 수다. 틀이 쥐고 펼칠 때 쓴다.
         std::size_t max_built { 50000 };
     };
+
+    // 펼칠 틀의 깊이 상한이다. 셈은 `ui_markup_limits::max_depth`와 같다 (뿌리가 1단이고 구조 요소도 한 단).
+    //  - 지은 element tree를 버리는 해제가 자식을 따라 재귀해, 깊이 수천의 tree는 버릴 때 호출 스택을 넘친다 (Debug 빌드 2000단).
+    //    읽기 한도를 이보다 크게 올린 틀도 읽을 수는 있지만, 펼치면 뿌리만 서고 `too_large` 하나가 남는다.
+    inline constexpr std::size_t ui_markup_build_max_depth { 256 };
 
     // 읽은 틀이다. 이름·속성·수·자리를 모두 확인하고 enum과 수를 C++ 값으로 바꿔 둔 불변 값이다. 속은 비공개다.
     //  - 불변이라 thread 사이에 `shared_ptr<const ui_markup_document>`로 나눠 쥔다.
@@ -200,8 +205,9 @@ namespace luil {
 
     // 틀을 앱 값으로 펼친다. 앱 함수를 부르므로 logic thread(`make_frame`)에서 부른다.
     //  - 펼치기는 재귀하지 않는다. 앱이 `max_depth`를 크게 올린 틀도 펼치는 동안의 호출 깊이가 글을 따라 깊어지지 않는다.
-    //  - 지은 element tree를 버리는 해제는 자식을 따라 재귀한다 (docs/markup-binding-design.md). 깊이 수천의 틀은 펼침이 아니라
-    //    tree를 버릴 때 호출 스택에 닿는다(Debug 빌드 2000단에서 넘쳤다). 펼칠 틀의 `max_depth`는 수백(시험한 깊이 256) 안에 둔다.
+    //  - 지은 element tree를 버리는 해제는 자식을 따라 재귀한다 (docs/markup-binding-design.md). 그래서 깊이가
+    //    `ui_markup_build_max_depth`를 넘는 틀은 펼치지 않는다. 뿌리만 서고 `too_large`(이름 `max_depth`, 값은 상한) 하나가 남는다.
+    //    자리는 처음으로 상한을 넘은 노드다.
     //  - 뿌리는 늘 선다. 그 밖의 element가 `max_built`에 닿으면 `too_many_built` 하나를 남기고 그 뒤를 짓지 않는다.
     [[nodiscard]] ui_markup_build_result build_ui_markup(const ui_markup_document& document, const ui_markup_context& context);
 }

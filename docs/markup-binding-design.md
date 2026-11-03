@@ -138,7 +138,7 @@ const luil::ui_markup_context context {
 - `<if test="{x}">`는 참일 때, `<unless test="{x}">`는 거짓일 때 자식들을 펼친다. `test`는 참거짓 값 하나다. 비교·부정·논리식은 없고 앱이 참거짓을 지어 넣는다.
 - 구조 요소는 element를 짓지 않는다. 자식들이 부모의 자식 자리에 차례로 든다. 겹쳐도 된다(`for` 안의 `if`).
 - 한 번 펼치기에서 지은 element가 `max_built`를 넘으면 `too_many_built` 하나를 남기고 그 뒤를 짓지 않는다. 뿌리는 늘 서고 수에 든다. 구조 요소와 `gap`은 세지 않고 slot이 돌려준 요소는 센다.
-- 펼치기는 재귀하지 않고 쌓은 frame으로 돈다(읽기와 같은 까닭). element의 해제는 자식을 따라 재귀하므로, 앱이 `max_depth`를 수천으로 올린 틀은 펼침이 아니라 tree를 버릴 때 호출 스택에 닿는다(Debug 빌드 2000단에서 넘쳤다).
+- 펼치기는 재귀하지 않고 쌓은 frame으로 돈다(읽기와 같은 까닭). element의 해제는 자식을 따라 재귀하므로, 앱이 `max_depth`를 수천으로 올린 틀은 펼침이 아니라 tree를 버릴 때 호출 스택에 닿는다(Debug 빌드 2000단에서 넘쳤다). 그래서 펼치기는 깊이 상한 `ui_markup_build_max_depth`(256, 셈은 `max_depth`와 같다)를 넘는 틀을 펼치지 않는다. 뿌리만 서고 `too_large`(이름 `max_depth`, 값 256) 하나를 남기며, 자리는 처음으로 넘은 노드다. 읽기는 앱이 올린 한도까지 그대로 받는다(사용자 결정 2026-11-04, 해제를 반복으로 바꾸는 길과 계약만 두는 길보다 골랐다).
 
 **id와 owner(결정 6).**
 
@@ -235,7 +235,7 @@ const luil::ui_markup_context context {
 자동 test. 모두 `tests/ui_markup_tests.cpp`(`luil_core_tests`, Windows와 Android 기기)이다.
 
 - 값: 값 표를 바꾼 다음 펼침에 새 값이 나오는지. 형 틀림과 없는 이름이 빈 값과 오류 하나인지. 글 끼우기와 `{{`·`}}`, `{` 안의 `:`가 막히는지. 바인딩한 `padding`이 적은 `paddingLeft`를 덮지 않는지(행 순서), 범위 밖의 바인딩 수가 형 오류이고 0~1 속성은 잘리는지.
-- 반복과 조건: owner가 `id`, U+001F, key 순인지, 겹친 반복, 빈 목록, key 겹침이 `duplicate_key`와 `duplicate_ids()`에 함께 남는지. `if`·`unless`가 고른 가지만 짓는지(값이 없으면 `unless`의 가지가 선다). `max_built`에서 `too_many_built` 하나로 멈추는지. 기본 한도보다 깊은 틀(256단)을 재귀 없이 펼치는지.
+- 반복과 조건: owner가 `id`, U+001F, key 순인지, 겹친 반복, 빈 목록, key 겹침이 `duplicate_key`와 `duplicate_ids()`에 함께 남는지. `if`·`unless`가 고른 가지만 짓는지(값이 없으면 `unless`의 가지가 선다). `max_built`에서 `too_many_built` 하나로 멈추는지. 기본 한도보다 깊은 틀(256단)을 재귀 없이 펼치는지, 상한을 넘는 틀(257단)은 뿌리만 서고 `too_large` 하나인지.
 - 사건: 펼칠 때 `make_action`이 이름·인자·id로 요소마다 한 번 불리고, 지은 `ui_action`이 그 값을 돌려주며, 액션을 돌릴 때 앱 함수가 다시 불리지 않는지. 빈 값이면 단추가 비활성이고 체크가 누를 수 없는지.
 - id·kind: `kind` 이름이 앱 kind로, 없으면 `markup_node`로 서는지. `unknown_kind`, `owner_prefix`, 이름 없는 요소의 자리 owner가 frame 사이에 같은지.
 - slot: scope가 반복 변수를 보는지, nullptr이면 `unknown_slot`이고 자리가 비는지.

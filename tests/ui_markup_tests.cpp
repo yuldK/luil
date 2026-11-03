@@ -826,8 +826,8 @@ TEST_CASE("Markup stops at max_built with one error", "[ui][markup][binding]")
 TEST_CASE("Markup builds walk deep templates without recursion", "[ui][markup][binding]")
 {
     // 앱이 깊이 한도를 올린 틀도 펼치기는 쌓은 frame으로 돈다 (읽기와 같은 까닭). element의 해제는 자식을 따라 재귀해
-    // Debug 빌드에서 2000단이면 호출 스택을 넘긴다. 이 시험은 기본 한도(64)의 네 배에서 멈춘다.
-    constexpr std::size_t depth { 256 };
+    // Debug 빌드에서 2000단이면 호출 스택을 넘긴다. 그래서 펼치기의 깊이 상한(256)까지만 짓고, 이 시험은 그 상한에서 돈다.
+    constexpr std::size_t depth { luil::ui_markup_build_max_depth };
     std::u8string text {};
     for (std::size_t index { 0 }; index < depth; ++index)
         text += u8"<stack>";
@@ -846,6 +846,34 @@ TEST_CASE("Markup builds walk deep templates without recursion", "[ui][markup][b
     element = element->children().front().get();
     REQUIRE(element->id() == node_id(u8"/0"));
     REQUIRE(element->children().front()->id() == node_id(u8"/0/0"));
+}
+
+TEST_CASE("Markup builds do not expand templates deeper than the build depth cap", "[ui][markup][binding]")
+{
+    // 읽기 한도를 올린 틀은 읽을 수 있다. 펼치면 뿌리만 서고 too_large 하나다. 깊은 tree를 짓지 않아 버릴 때 스택을 넘지 않는다.
+    constexpr std::size_t depth { luil::ui_markup_build_max_depth + 1 };
+    std::u8string text {};
+    for (std::size_t index { 0 }; index < depth; ++index)
+        text += u8"<stack>";
+    for (std::size_t index { 0 }; index < depth; ++index)
+        text += u8"</stack>";
+    luil::ui_markup_limits limits {};
+    limits.max_depth = depth;
+    limits.max_nodes = depth;
+    const auto document { template_of(text, limits) };
+    const luil::ui_markup_build_result built { luil::build_ui_markup(*document, {}) };
+    REQUIRE(built.element != nullptr);
+    CHECK(built.element->children().empty());
+    CHECK(built.built == 1);
+    REQUIRE(built.errors.size() == 1);
+    const luil::ui_markup_error& error { built.errors.front() };
+    CHECK(error.kind == luil::ui_markup_error_kind::too_large);
+    CHECK(error.name == u8"max_depth");
+    CHECK(error.value == u8"256");
+    CHECK(error.path.empty());
+    // 처음으로 상한을 넘은 노드, 곧 257번째 `<stack>`의 자리다.
+    CHECK(error.offset == (depth - 1) * std::u8string_view { u8"<stack>" }.size());
+    CHECK(luil::describe(error).find(u8"Markup exceeds max_depth (256)") != std::u8string::npos);
 }
 
 TEST_CASE("Markup actions are made once while building", "[ui][markup][binding][action]")
