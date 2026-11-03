@@ -66,6 +66,7 @@
 | 명령표·단축키 | `app_command`, `match_command` | [ui/commands.h](../include/luil/ui/commands.h) | [설명](popup-anchor-design.md) |
 | 앱 수준 실행 취소·다시 실행 (되돌림 메시지 쌍, 합치기, 묶음, 저장 지점, 명령표) | `undo_stack`, `undo_macro`, `make_undo_commands` | [ui/undo_stack.h](../include/luil/ui/undo_stack.h), [ui/undo_commands.h](../include/luil/ui/undo_commands.h) | [설명](undo-stack-design.md) |
 | 메뉴 | `menu_element` | [ui/menu_element.h](../include/luil/ui/menu_element.h) | [설명](popup-overlay-design.md) |
+| 창 위 메뉴 막대(Alt·F10·접근 키, 이웃 메뉴로 옮기기) | `menu_bar_element`, `menu_bar_config`, `menu_bar_state`, `make_menu_bar_popup`, `menu_item_config::access_key` | [ui/menu_bar_element.h](../include/luil/ui/menu_bar_element.h) · [app/menu_popup.h](../include/luil/app/menu_popup.h) | [설명](menu-bar-design.md) |
 | 회전 진행 표시 | `spinner_element` | [ui/spinner_element.h](../include/luil/ui/spinner_element.h) | [설명](ui-foundation-design.md) |
 | 파일·폴더 선택 | `file_dialog_request` | [app/file_dialog.h](../include/luil/app/file_dialog.h) | [설명](file-dialog-design.md) |
 | 편집형 콤보 | `combo_box_element` | [ui/combo_box_element.h](../include/luil/ui/combo_box_element.h) | [설명](combo-box-design.md) |

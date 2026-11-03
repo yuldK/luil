@@ -237,7 +237,7 @@ namespace luil::win32 {
 
 **R1·R2 파일.** `icon_from_image`·`window_messages`의 `shell_event`·`allow_shell_events`·`taskbar_button`은 고치지 않고 쓴다. `handle_shell_event`의 "`taskbar_created` 방송은 이 노드가 쓰지 않는다 (tray가 쓴다)" 주석은 구현 커밋이 실제 가지로 바꾼다. 구현 커밋은 [taskbar-design.md](taskbar-design.md)의 결정 6·범위 밖 "숨은 주 창을 대신하는 표시"를 이 문서로 잇는다. 진행률은 앱이 `tooltip`에, 배지 숫자는 앱이 그린 `icon`에 싣는다. [os-notification-design.md](os-notification-design.md) 결정 1의 길 c(풍선)도 이 문서의 "풍선" 규칙으로 잇는다. 앱 식별은 읽지 않는다(결정 3).
 
-**줄 3 menu_bar.** 이 노드는 `ui_interaction.*`·`window_surface.cpp`·`surface_input.cpp`를 고치지 않는다(길 a). 트레이 메뉴는 시스템 `HMENU`라 `menu-focus-fixes-design.md`의 X-4와 무관하다. `menu_item_config`는 읽기만 하되, `menu-bar-design.md`가 더하는 `access_key`(`char32_t`, 영문자나 숫자 하나, 대소문자 무시)는 `make_tray_menu`가 옮긴다. `access_key`가 라벨에 있으면 처음 나오는 그 글자 앞에 `&`를 두고, 없으면 라벨 뒤에 `(&F)` 꼴로 붙인다(막대 문서의 "(F)" 덧붙임과 같다). 그 밖의 `&`는 `&&`다. 칸이 줄 3에 있으므로 구현은 통합 커밋이 menu_bar 뒤에 내고 `tray_icon_tests`의 `GetMenuItemInfoW` 되읽기에 단언을 더한다. 그 전까지는 글의 `&`를 모두 `&&`로 바꾼다.
+**줄 3 menu_bar.** 이 노드는 `ui_interaction.*`·`window_surface.cpp`·`surface_input.cpp`를 고치지 않는다(길 a). 트레이 메뉴는 시스템 `HMENU`라 `menu-focus-fixes-design.md`의 X-4와 무관하다. `menu_item_config`는 읽기만 하되, `menu-bar-design.md`가 더하는 `access_key`(`char32_t`, 영문자나 숫자 하나, 대소문자 무시)는 `make_tray_menu`가 옮긴다. `access_key`가 라벨에 있으면 처음 나오는 그 글자 앞에 `&`를 두고, 없으면 라벨 뒤에 `(&F)` 꼴로 붙인다(막대 문서의 "(F)" 덧붙임과 같다). 그 밖의 `&`는 `&&`다. 칸이 줄 3에 있으므로 구현은 R3 통합 커밋이 menu_bar 뒤에 냈다(`tray_menu_text`의 셋째 인자). `tray_icon_tests`의 `GetMenuItemInfoW` 되읽기 test가 라벨 안 글자, 덧붙인 괄호, 단축키 글, 하위 메뉴의 `&` 자리를 본다. 영문자·숫자가 아닌 접근 키는 없는 것이다.
 
 **검사기·기본 문구.** 새 요소가 없어 `ui_element_id`의 kind, `inspect_names.cpp`의 case, `default_text`의 함수를 더하지 않는다.
 
