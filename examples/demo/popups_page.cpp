@@ -1,8 +1,10 @@
 #include "demo/popups_page.h"
 
+#include "luil/app/color_picker_popup.h"
 #include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/markdown_element.h"
 
@@ -21,6 +23,11 @@ namespace demo {
         // 분할 버튼과 드롭다운 단추의 폭이다 (논리 픽셀). 분할 버튼은 이 가운데 화살표 몫(28)이 오른쪽에 선다.
         constexpr float field_button_width { 160.0f };
         inline constexpr std::u8string_view presentation_values[] { u8"자세히", u8"간결하게" };
+        // 색 칸 popup의 임자(`open_popup_`)와 popup id, 그 안 색 고르기의 owner다.
+        inline constexpr std::u8string_view color_owner { u8"color-field" };
+        inline constexpr std::u8string_view color_popup_id { u8"color-popup" };
+        inline constexpr std::u8string_view color_picker_owner { u8"popups/color" };
+        inline constexpr std::u8string_view color_field_owner { u8"popups/color-field" };
 
         // 필드 메뉴의 항목 키가 마지막 동작 label에 적히는 글이다.
         [[nodiscard]] std::u8string field_menu_action_text(const std::u8string_view key)
@@ -70,6 +77,54 @@ namespace demo {
     {
         if (open_popup_ == owner)
             show_popup({});
+    }
+
+    void popups_page::close_popups()
+    {
+        if (open_popup_ == color_owner)
+            commit_color_hex();
+        open_popup_.clear();
+        search_ = {};
+        composition_.reset();
+    }
+
+    void popups_page::commit_color_hex()
+    {
+        // 읽히면 지금 값을 keep으로 넘겨 회색·검정에서도 색상과 채도를 지킨다.
+        const luil::hex_color_check check { luil::check_hex_color(field_hex_.text, false) };
+        field_hex_invalid_ = check.valid() == false;
+        if (check.valid())
+        {
+            field_color_ = luil::hsv_from_color(*check.color, field_color_);
+            reset_color_hex();
+        }
+    }
+
+    void popups_page::reset_color_hex()
+    {
+        luil::text_edit_request request {};
+        request.target = target_popups_color_hex;
+        request.command = luil::text::text_edit_command::replace_all;
+        request.text = luil::format_hex_color(luil::color_from_hsv(field_color_), false);
+        request.offset = request.text.size();
+        luil::apply_text_edit(field_hex_, request);
+        field_composition_.reset();
+        field_hex_invalid_ = false;
+    }
+
+    void popups_page::request_focus(std::u8string surface, luil::ui_element_id target)
+    {
+        ++focus_revision_;
+        focus_surface_ = std::move(surface);
+        focus_target_ = std::move(target);
+    }
+
+    std::optional<luil::focus_request> popups_page::make_focus_request() const
+    {
+        if (focus_revision_ == 0)
+            return std::nullopt;
+        // popup은 활성화를 받지 않는 표면이라 초점만 옮긴다. popup이 서는 frame을 기다린다 (timeout).
+        return luil::focus_request { .id = focus_revision_, .surface = focus_surface_, .target = focus_target_ };
     }
 
     bool popups_page::handle(const luil::app_message& message)
@@ -129,6 +184,47 @@ namespace demo {
                 close_popup(menu->owner);
             return true;
         }
+        // 색 칸이다. 열면 초안을 지금 색의 글로 다시 쓰고 판으로 초점을 옮긴다. 닫는 모든 길은 초안을 먼저 확정한다.
+        if (const auto* const field { message.get<color_field_intent>() }; field != nullptr)
+        {
+            if (field->open)
+            {
+                if (open_popup_ != color_owner)
+                {
+                    show_popup(std::u8string { color_owner });
+                    reset_color_hex();
+                    request_focus(std::u8string { color_popup_id }, luil::color_picker_element::plane_id(color_picker_owner));
+                }
+            }
+            else if (open_popup_ == color_owner)
+            {
+                commit_color_hex();
+                close_popup(color_owner);
+            }
+            return true;
+        }
+        if (const auto* const dismiss { message.get<color_field_dismiss_intent>() }; dismiss != nullptr)
+        {
+            if (open_popup_ != color_owner)
+                return true;
+            commit_color_hex();
+            close_popup(color_owner);
+            // popup이 사라지면 그 안의 초점은 지워질 뿐이다. Esc로 닫았을 때만 칸으로 돌린다. 다른 계기는 누른 자리가 초점을 가진다.
+            if (dismiss->reason == luil::popup_dismiss_reason::escape_key)
+                request_focus({}, luil::ui_element_id { luil::ui_element_kind::color_field, std::u8string { color_field_owner } });
+            return true;
+        }
+        if (const auto* const color { message.get<color_field_value_intent>() }; color != nullptr)
+        {
+            field_color_ = luil::clamp_hsv(color->value);
+            reset_color_hex();
+            return true;
+        }
+        if (message.get<color_field_commit_intent>() != nullptr)
+        {
+            commit_color_hex();
+            return true;
+        }
         if (const auto* const picked { message.get<field_menu_select_intent>() }; picked != nullptr)
         {
             last_action_ = field_menu_action_text(picked->key);
@@ -143,6 +239,12 @@ namespace demo {
         // popup 안이라고 다른 경로가 아니다 — target으로 자기 것만 갖는다.
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
         {
+            // 색 칸 popup의 16진 칸은 16진 글자만 받는다.
+            if (edit->request.target == target_popups_color_hex)
+            {
+                luil::apply_text_edit(field_hex_, edit->request, luil::hex_color_filter());
+                return true;
+            }
             if (edit->request.target != target_dropdown_search)
                 return false;
             luil::apply_text_edit(search_, edit->request);
@@ -150,6 +252,14 @@ namespace demo {
         }
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
+            if (composition->event.target == target_popups_color_hex)
+            {
+                if (composition->event.composing)
+                    field_composition_ = composition->event;
+                else
+                    field_composition_.reset();
+                return true;
+            }
             if (composition->event.target != target_dropdown_search)
                 return false;
             if (composition->event.composing)
@@ -181,6 +291,7 @@ namespace demo {
         dropdown_ = nullptr;
         split_ = nullptr;
         send_ = nullptr;
+        color_field_ = nullptr;
         page_layout page { u8"popups" };
         page.heading(u8"메뉴와 팝업", u8"우클릭 또는 Shift+F10으로 문서 작업을 열고, 선택 결과를 확인하세요.");
 
@@ -275,6 +386,22 @@ namespace demo {
         page.add(make_label({ kind_text, u8"split-state-save" }, state_text(u8"save", u8"저장"), 12.0f, luil::label_color_role::dim), 22.0f);
         page.add(make_label({ kind_text, u8"split-state-send" }, state_text(u8"send", u8"보내기"), 12.0f, luil::label_color_role::dim), 22.0f);
         page.add(make_label({ kind_text, u8"split-last-action" }, std::u8string { u8"마지막 동작: " } + (last_action_.empty() ? std::u8string { u8"없음" } : last_action_), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.gap(16.0f);
+
+        // 색 칸이다. 누르면(Alt+↓·F4·↓도) 칸 아래에 색 고르기 popup이 뜨고 초점이 판으로 간다. Esc로 닫으면 칸으로 돌아온다.
+        page.add(make_label({ kind_text, u8"color-field-title" }, u8"색 칸 (popup에서 판·막대·16진 칸으로 고르기)", 15.0f, luil::label_color_role::primary), 28.0f);
+        luil::color_field_config color {};
+        color.owner = std::u8string { color_field_owner };
+        color.value = field_color_;
+        color.open = open_popup_ == color_owner;
+        color.set_open = [](const bool open) { return luil::make_app_action(color_field_intent { open }); };
+        color.name = u8"글자 색";
+        auto color_field { std::make_unique<luil::color_field_element>(std::move(color)) };
+        color_field_ = color_field.get();
+        page.add(std::move(color_field), luil::stack_item { .length = luil::dropdown_height, .cross_length = field_button_width });
+        page.gap(8.0f);
+        const std::u8string color_state { std::u8string { u8"색 칸: " } + (open_popup_ == color_owner ? u8"열림" : u8"닫힘") + u8" · " + luil::format_hex_color(luil::color_from_hsv(field_color_), false) };
+        page.add(make_label({ kind_text, u8"popups/color-state" }, color_state, 12.0f, luil::label_color_role::dim), 22.0f);
         page.gap(16.0f);
 
         // popup 창의 모양이다. 앱마다 고르는 렌더링 선택지이고, 고르지 않으면 OS 기본이다. 둥근 모서리를 못 쓰는 OS·원격
@@ -372,6 +499,34 @@ namespace demo {
             items.push_back({ u8"mail", u8"메일로 보내기", luil::codicons::icon_mail });
             items.push_back({ u8"link", u8"링크 복사", luil::codicons::icon_link });
             popups.push_back(make_field_menu(u8"send", std::move(items), send_->bounds(), surface, scale, corner_, popup_border_));
+        }
+
+        if (open_popup_ == color_owner && color_field_ != nullptr)
+        {
+            luil::color_picker_config picker {};
+            picker.owner = std::u8string { color_picker_owner };
+            picker.value = field_color_;
+            picker.change_to = [](const luil::hsv_color value) { return luil::make_app_action(color_field_value_intent { value }); };
+            picker.hex = luil::color_picker_hex {
+                .id = { kind_popups_color_hex_input, u8"popups/color-hex" },
+                .value = luil::make_text_input_view(field_hex_, field_composition_, target_popups_color_hex),
+                .invalid = field_hex_invalid_,
+                .commit = luil::make_message_action(color_field_commit_intent {}),
+            };
+            picker.presets = { { luil::make_ui_color(0x33, 0x66, 0xFF), u8"파랑" }, { luil::make_ui_color(0xE5, 0x39, 0x35), u8"빨강" }, { luil::make_ui_color(0x80, 0x80, 0x80), u8"회색" } };
+
+            luil::color_picker_popup_config popup {};
+            popup.id = std::u8string { color_popup_id };
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = color_field_->bounds(), .limit = surface };
+            // 16진 칸을 실은 popup은 글을 치는 popup이다. 창 이동·활성 전환에는 남는다 (검색 칸이 있는 드롭다운과 같다).
+            popup.dismiss = [](const luil::popup_dismiss_reason reason) {
+                if (search_popup_stays(reason))
+                    return luil::input_action {};
+                return luil::make_app_action(color_field_dismiss_intent { reason });
+            };
+            popup.corner = corner_;
+            popups.push_back(luil::make_color_picker_popup(std::move(picker), std::move(popup)));
         }
 
         if (open_popup_ == u8"card")

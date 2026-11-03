@@ -502,8 +502,8 @@ namespace demo {
                 // 초점 요청의 결과는 셸이 토스트로 알린다. 덮어쓴 요청은 새 요청이 이어받아 말하지 않는다.
                 if (const auto* const focus_report { message.get<tool_focus_report_intent>() }; focus_report != nullptr)
                 {
-                    // 팔레트의 초점 요청은 알리지 않는다 — 열면 곧바로 칸에 초점이 서는 것이 보인다.
-                    if (focus_report->id == palette_focus_id_)
+                    // 팔레트와 색 칸 popup의 초점 요청은 알리지 않는다 — 열면 곧바로 칸·판에 초점이 서는 것이 보인다.
+                    if (focus_report->id == palette_focus_id_ || focus_report->id == popups_focus_id_)
                         return;
                     if (focus_report->outcome == luil::focus_request_outcome::fulfilled)
                         static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"도구 창 메모 칸으로 초점을 옮겼습니다.", luil::toast_severity::success } }));
@@ -732,7 +732,7 @@ namespace demo {
                 frame->file_dialog = file_dialog_;
                 // 주 창 작업 표시줄 단추의 진행률과 오버레이다. 독립 창의 것은 그 창(`ui_window::taskbar`)에 실린다.
                 frame->taskbar = windows_.make_taskbar_request();
-                // 초점 요청은 두 곳(도구 창 페이지·명령 팔레트)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
+                // 초점 요청은 세 곳(도구 창 페이지·명령 팔레트·색 칸 popup)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
                 // 쪽의 요청을 셸 번호로 다시 매겨 싣는다 — 팔레트를 닫았다고 도구 창의 지난 요청이 되살아나지 않는다.
                 if (const auto request { windows_.make_focus_request() }; request.has_value() && request->id != seen_tool_focus_)
                 {
@@ -746,6 +746,13 @@ namespace demo {
                     focus_ = *request;
                     focus_->id = ++focus_revision_;
                     palette_focus_id_ = focus_->id;
+                }
+                if (const auto request { popups_.make_focus_request() }; request.has_value() && request->id != seen_popups_focus_)
+                {
+                    seen_popups_focus_ = request->id;
+                    focus_ = *request;
+                    focus_->id = ++focus_revision_;
+                    popups_focus_id_ = focus_->id;
                 }
                 frame->focus = focus_;
                 frame->focus_report = [](const std::uint64_t id, const luil::focus_request_outcome outcome) { return luil::app_message { tool_focus_report_intent { id, outcome } }; };
@@ -987,12 +994,14 @@ namespace demo {
             command_palette_host palette_ {};
             // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).
             bool primary_instance_ { true };
-            // 셸이 실은 마지막 초점 요청과, 두 요청원의 마지막으로 본 번호다.
+            // 셸이 실은 마지막 초점 요청과, 세 요청원의 마지막으로 본 번호다.
             std::optional<luil::focus_request> focus_ {};
             std::uint64_t focus_revision_ { 0 };
             std::uint64_t seen_tool_focus_ { 0 };
             std::uint64_t seen_palette_focus_ { 0 };
             std::uint64_t palette_focus_id_ { 0 };
+            std::uint64_t seen_popups_focus_ { 0 };
+            std::uint64_t popups_focus_id_ { 0 };
             theme_page theme_ { std::u8string { reinterpret_cast<const char8_t*>(luil_demo_style_json), luil_demo_style_json_size } };
             webview_page webview_ {};
             workbench_page workbench_ {};

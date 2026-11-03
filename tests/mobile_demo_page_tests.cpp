@@ -15,6 +15,7 @@
 #include "mobile_demo/zoom_page.h"
 #include "sample_image_bytes.h"
 
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/message_box.h"
 #include "luil/ui/rating_element.h"
 #include "luil/ui/root_element.h"
@@ -1313,6 +1314,7 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
         { mobile_demo::kind_code_input, mobile_demo::target_code },
         { mobile_demo::kind_line_break_input, mobile_demo::target_line_break },
         { mobile_demo::kind_readonly_input, mobile_demo::target_readonly },
+        { mobile_demo::kind_color_hex_input, mobile_demo::target_color_hex },
         { mobile_demo::kind_dropdown_search_input, mobile_demo::target_dropdown_search },
         { mobile_demo::kind_smb_address_input, mobile_demo::target_smb_address },
         { mobile_demo::kind_smb_user_input, mobile_demo::target_smb_user },
@@ -1632,6 +1634,48 @@ TEST_CASE("The mobile rating row has finger sized stars and reads its value back
     // 범위 밖 값은 앱이 자른다.
     deliver(page, mobile_demo::rating_intent { u8"stars", 9.0f });
     REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 5 / 5");
+}
+
+TEST_CASE("The mobile color row fits the plane to the page and raises the bars for fingers", "[mobile-demo][basics][color-picker]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #3366FF80");
+    const auto tree { basics_tree(page) };
+    // 폭 400에 여백 16씩이라 판은 368이다. 막대는 32다.
+    const luil::ui_element* const plane { tree->find(luil::color_picker_element::plane_id(u8"color")) };
+    REQUIRE(plane != nullptr);
+    REQUIRE(plane->bounds().width == 368.0f);
+    REQUIRE(plane->bounds().height == 368.0f);
+    std::u8string hue_owner { u8"color" };
+    hue_owner += u8'\u001f';
+    hue_owner += u8"hue";
+    const luil::ui_element* const hue { tree->find({ luil::ui_element_kind::color_picker_bar, hue_owner }) };
+    REQUIRE(hue != nullptr);
+    REQUIRE(hue->bounds().height == 32.0f);
+    REQUIRE(hue->bounds().y == plane->bounds().y + 368.0f + 8.0f);
+    // 판은 시작 거리를 둔 끌기라 쓸기가 페이지를 흘린다.
+    REQUIRE(plane->pointer_drag() != nullptr);
+    REQUIRE(plane->pointer_drag()->start_distance == luil::color_picker_drag_start_distance);
+    const luil::ui_element* const hex { tree->find({ mobile_demo::kind_color_hex_input, u8"color-hex" }) };
+    REQUIRE(hex != nullptr);
+    REQUIRE(hex->accessibility().value == u8"#3366FF80");
+
+    // 판을 탭한 메시지가 label과 16진 칸을 함께 바꾼다.
+    const luil::rect_f box { plane->bounds() };
+    const luil::ui_action* const tap { plane->action(luil::ui_trigger::left_click) };
+    REQUIRE(tap != nullptr);
+    deliver_actions(page, (*tap)({ plane->id(), box.x + box.width, box.y + box.height }));
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #00000080");
+
+    // 키보드의 확정 단추로 16진 초안을 확정한다. 회색에서도 색상은 지킨다.
+    luil::text_edit_request request {};
+    request.target = mobile_demo::target_color_hex;
+    request.command = luil::text::text_edit_command::replace_all;
+    request.text = u8"#ff0000";
+    request.offset = request.text.size();
+    deliver(page, mobile_demo::edit_intent { request });
+    deliver(page, mobile_demo::color_commit_intent {});
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #FF0000FF");
 }
 
 TEST_CASE("Tapping a mobile star rates it and tapping it again clears it", "[mobile-demo][basics][rating]")

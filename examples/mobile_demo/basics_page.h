@@ -10,6 +10,7 @@
 #include "demo/readonly_undo_keys.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/clipboard_image.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/message_box.h"
@@ -78,6 +79,17 @@ namespace mobile_demo {
     {
         std::u8string key {};
         float value { 0.0f };
+    };
+
+    // 색 고르기의 값이다 (`color_picker_config::change_to`). 절대 값이다.
+    struct color_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    // 색 고르기의 16진 칸을 확정한다 (칸을 떠날 때와 키보드의 확정 단추).
+    struct color_commit_intent
+    {
     };
 
     // 별 열을 담은 가로로 흐르는 창의 스크롤이다 (논리 픽셀, 양수는 내용이 왼쪽으로). 위치는 앱 상태다.
@@ -165,6 +177,10 @@ namespace mobile_demo {
         [[nodiscard]] luil::rating_config make_stars_config() const;
         [[nodiscard]] luil::rating_config make_strip_rating_config() const;
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_rating_strip() const;
+        // 색 고르기의 설정이다. 판은 페이지 폭에 맞춘다.
+        [[nodiscard]] luil::color_picker_config make_color_config(float width) const;
+        // 16진 초안을 지금 색의 글로 다시 쓴다.
+        void reset_color_hex();
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_pair_row(std::u8string owner, std::unique_ptr<luil::ui_element> left, std::unique_ptr<luil::ui_element> right) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_picture(std::u8string owner, std::u8string label, luil::image_fit fit, std::u8string description) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_film(std::u8string owner, std::u8string label, const luil::ui_animated_image& film, std::u8string description) const;
@@ -231,6 +247,10 @@ namespace mobile_demo {
         // 별 열을 담은 창이 흘러간 양과, 끝까지 흘린 값이다 (논리 픽셀). 끝은 창의 폭에 달려 조립할 때 안다.
         float rating_scroll_ { 0.0f };
         float rating_scroll_limit_ { 0.0f };
+        // 색 고르기의 값과 16진 칸의 초안이다. 값은 HSV로 든다 (color-space-design.md).
+        luil::hsv_color color_ { 225.0f, 0.8f, 1.0f, 0.5f };
+        luil::text::text_edit_state color_hex_ { .text = u8"#3366FF80" };
+        bool color_hex_invalid_ { false };
         dialog_kind dialog_ { dialog_kind::none };
         // 마지막으로 닫은 결과의 key다. 아직 닫은 적이 없으면 비었다.
         std::u8string dialog_result_ {};

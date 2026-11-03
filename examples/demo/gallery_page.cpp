@@ -5,6 +5,7 @@
 #include "luil/ui/breadcrumb_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/grid_element.h"
 #include "luil/ui/label_element.h"
@@ -71,6 +72,32 @@ namespace demo {
             return text + u8" / " + to_u8(count);
         }
 
+        // 색 고르기의 처음 값이다. 8비트로 #3366FF80이다.
+        constexpr luil::hsv_color color_start { 225.0f, 0.8f, 1.0f, 0.5f };
+
+        [[nodiscard]] int percent_of(const float unit)
+        {
+            return static_cast<int>(std::lround(unit * 100.0f));
+        }
+
+        // "색: #3366FF80 · 색상 225° · 채도 80% · 명도 100% · 알파 50%"다. 16진 글은 `format_hex_color`라 대문자다.
+        [[nodiscard]] std::u8string color_text(const luil::hsv_color& color)
+        {
+            return u8"색: " + luil::format_hex_color(luil::color_from_hsv(color), true) + u8" · 색상 " + to_u8(static_cast<int>(std::lround(color.hue))) + u8"° · 채도 "
+                + to_u8(percent_of(color.saturation)) + u8"% · 명도 " + to_u8(percent_of(color.value)) + u8"% · 알파 " + to_u8(percent_of(color.alpha)) + u8"%";
+        }
+
+        // 초안 전체를 바꾼다. 색이 바뀌면 16진 칸이 그 색의 글로 돌아간다.
+        void replace_text(luil::text::text_edit_state& state, const std::u8string_view text, const luil::text_input_target target)
+        {
+            luil::text_edit_request request {};
+            request.target = target;
+            request.command = luil::text::text_edit_command::replace_all;
+            request.text = std::u8string { text };
+            request.offset = request.text.size();
+            luil::apply_text_edit(state, request);
+        }
+
         [[nodiscard]] luil::input_action follow_link(const std::u8string_view destination)
         {
             if (destination == u8"app:theme")
@@ -111,8 +138,51 @@ namespace demo {
         }
     }
 
+    gallery_page::gallery_page()
+    {
+        replace_text(color_hex_, luil::format_hex_color(luil::color_from_hsv(color_), true), target_gallery_color_hex);
+    }
+
     bool gallery_page::handle(const luil::app_message& message)
     {
+        if (const auto* const color { message.get<gallery_color_intent>() }; color != nullptr)
+        {
+            // 범위 다듬기는 값을 가진 앱의 몫이다. 16진 칸은 그 색의 글로 다시 쓴다.
+            color_ = luil::clamp_hsv(color->value);
+            replace_text(color_hex_, luil::format_hex_color(luil::color_from_hsv(color_), true), target_gallery_color_hex);
+            color_hex_invalid_ = false;
+            return true;
+        }
+        if (message.get<gallery_color_commit_intent>() != nullptr)
+        {
+            // 읽히면 지금 값을 keep으로 넘겨 회색·검정에서도 색상과 채도를 지킨다. 읽히지 않으면 칸을 붉게 둔다.
+            const luil::hex_color_check check { luil::check_hex_color(color_hex_.text, true) };
+            color_hex_invalid_ = check.valid() == false;
+            if (check.valid())
+            {
+                color_ = luil::hsv_from_color(*check.color, color_);
+                replace_text(color_hex_, luil::format_hex_color(luil::color_from_hsv(color_), true), target_gallery_color_hex);
+            }
+            return true;
+        }
+        if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
+        {
+            // 남의 칸이면 다음 페이지가 받는다. 넣는 글은 16진 글자만 남긴다.
+            if (edit->request.target != target_gallery_color_hex)
+                return false;
+            luil::apply_text_edit(color_hex_, edit->request, luil::hex_color_filter());
+            return true;
+        }
+        if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
+        {
+            if (composition->event.target != target_gallery_color_hex)
+                return false;
+            if (composition->event.composing)
+                color_composition_ = composition->event;
+            else
+                color_composition_.reset();
+            return true;
+        }
         if (const auto* const toggle { message.get<gallery_toggle_intent>() }; toggle != nullptr)
         {
             if (toggle->key == u8"autosave")
@@ -196,6 +266,9 @@ namespace demo {
             position_ = 400.0f;
             rating_whole_ = 3.0f;
             rating_half_ = 3.5f;
+            color_ = color_start;
+            replace_text(color_hex_, luil::format_hex_color(luil::color_from_hsv(color_), true), target_gallery_color_hex);
+            color_hex_invalid_ = false;
             choice_ = u8"comfortable";
             language_ = u8"system";
             return true;
@@ -379,6 +452,30 @@ namespace demo {
         auto rating_actions { row(u8"gallery/rating-actions") };
         rating_actions->add_fit(button(u8"gallery/rating-reset", u8"별점 초기화", luil::text_button_visual::normal, luil::make_message_action(gallery_rating_intent { u8"reset", 0.0f })));
         page.add(std::move(rating_actions), luil::text_button_height);
+        page.end_card();
+
+        // 색 고르기: 판·막대·견본·16진 칸을 한 본체에 담는다. 값은 label로도 그려 화면과 보조 기술이 같은 말을 한다.
+        page.begin_card(u8"색 고르기", u8"판을 누르거나 끌고 막대와 화살표 키로 고릅니다. 16진 칸은 Enter나 칸을 떠날 때 확정합니다.");
+        luil::color_picker_config picker {};
+        picker.owner = u8"gallery/color";
+        picker.value = color_;
+        picker.alpha = true;
+        picker.change_to = [](const luil::hsv_color value) { return luil::make_app_action(gallery_color_intent { value }); };
+        picker.hex = luil::color_picker_hex {
+            .id = { kind_gallery_color_hex_input, u8"gallery/color-hex" },
+            .value = luil::make_text_input_view(color_hex_, color_composition_, target_gallery_color_hex),
+            .invalid = color_hex_invalid_,
+            .commit = luil::make_message_action(gallery_color_commit_intent {}),
+        };
+        // 첫 견본은 처음 색이다. 원래 색 되돌리기를 앱이 이렇게 준다.
+        picker.presets = {
+            { luil::color_from_hsv(color_start), u8"처음 색" }, { luil::make_ui_color(0xE5, 0x39, 0x35), u8"빨강" },
+            { luil::make_ui_color(0x80, 0x80, 0x80), u8"회색" }, { luil::make_ui_color(0, 0, 0, 0), u8"투명" }
+        };
+        const luil::size_f picker_size { luil::color_picker_element::size_for(picker) };
+        page.add(std::make_unique<luil::color_picker_element>(std::move(picker)), luil::stack_item { .length = picker_size.height, .cross_length = picker_size.width });
+        page.gap(8.0f);
+        page.add(make_label({ kind_text, u8"gallery/color-value" }, color_text(color_), 13.0f, luil::label_color_role::primary), 24.0f);
         page.end_card();
 
         // 자석 막대: 앱이 정한 지점 근처에서 손잡이가 붙고, Ctrl을 누른 채 끌면 자석 없이 놓는다.
