@@ -27,6 +27,7 @@ inline constexpr float color_picker_gap { 8.0f };
 inline constexpr float color_picker_swatch_size { 32.0f };
 inline constexpr float color_picker_preset_size { 24.0f };
 inline constexpr float color_picker_hex_width { 96.0f };
+inline constexpr float color_picker_hex_height { 28.0f };  // 견본 줄의 세로 가운데 (구현에서 더했다)
 inline constexpr float color_picker_drag_start_distance { 6.0f };  // 물리 픽셀 (결정 5)
 
 struct color_picker_preset { ui_color color { 0 }; std::u8string name {}; };  // 이름이 비면 16진 글
@@ -35,7 +36,7 @@ struct color_picker_hex
     ui_element_id id {};  // 앱 kind다. 앱 정책의 text_target_of가 편집 대상으로 옮긴다 (결정 2)
     text_input_view value {};  // 앱의 초안이다
     bool invalid { false };  // 앱이 check_hex_color로 정한다
-    ui_action commit {};  // 같은 표면 안에서 칸을 떠날 때 낸다. popup이 닫힐 때는 앱이 dismiss에서 확정한다
+    ui_action commit {};  // 같은 표면 안에서 칸을 떠날 때와 Enter(Android 확정 단추)에 낸다 (결정 8). popup이 닫힐 때는 앱이 dismiss에서 확정한다
     std::u8string name {};  // 비면 기본 문구
 };
 struct color_picker_config
@@ -85,6 +86,7 @@ public:
 };
 
 // include/luil/app/color_picker_popup.h (make_menu_popup과 같은 꼴, 정의는 src/host/color_picker_popup.cpp)
+inline constexpr float color_picker_popup_padding { 8.0f };  // 본체를 두르는 여백 (구현에서 더했다)
 struct color_picker_popup_config
 {
     std::u8string id {}, anchor {};
@@ -103,7 +105,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 
 **구성.** root(`color_picker`)가 견본을 직접 그리고 `draw_children`을 부른다. 자식은 판(`color_picker_plane`), 색상 막대와 알파 막대(`color_picker_bar`), 견본 칸(`color_picker_preset`), 앱 id의 16진 칸(`text_input_element`, [combo_box_element.cpp](../src/ui/combo_box_element.cpp) 41행처럼 앱이 준 id를 쓴다)이다. owner는 `owner`, U+001F, `plane`·`hue`·`alpha`·견본 번호(1부터) 순이다. 세로로 판, 색상 막대, 알파 막대, 견본과 16진 칸의 줄, 견본 칸 줄이 `color_picker_gap`을 두고 선다. 견본 칸은 폭에 맞춰 다음 줄로 넘긴다. 비활성은 앱이 root에 거는 `set_enabled(false)`이고 자식이 arrange에서 따라간다(별점 결정 12).
 
-**값과 메시지.** 메시지는 `change_to(hsv_color)` 하나다(결정 1). 부분은 자기 채널만 바꾸고 나머지는 그 frame의 `value`에서 옮긴다. 판은 채도와 명도, 막대는 색상이나 알파, 견본 칸은 `hsv_from_color(견본, value)`다. 끌기는 자기 채널의 지금 값을 읽지 않는다. 앞뒤 포인터의 값이 같으면 메시지가 없다. 키는 지금 값에서 한 걸음이다. 범위는 `clamp_hsv`로 자르고 8비트 색은 `color_from_hsv`로만 짓는다. 16진 확정은 앱이 `hsv_from_color(색, 지금 값)`로 받아 회색·검정에서도 색상을 지킨다. 앱은 `change_to`를 받을 때 16진 초안을 `format_hex_color`로 다시 쓴다.
+**값과 메시지.** 메시지는 `change_to(hsv_color)` 하나다(결정 1). 부분은 자기 채널만 바꾸고 나머지는 그 frame의 `value`에서 옮긴다. 판은 채도와 명도, 막대는 색상이나 알파, 견본 칸은 `hsv_from_color(견본, value)`다. 끌기는 자기 채널의 지금 값을 읽지 않는다. 앞뒤 포인터의 값이 같으면 메시지가 없다. 키는 지금 값에서 한 걸음이고, 값이 격자 사이면 이웃 격자점으로 간다(별점과 같다). 클릭은 뗀 자리의 값이다. 범위는 `clamp_hsv`로 자르고 8비트 색은 `color_from_hsv`로만 짓는다. 16진 확정은 앱이 `hsv_from_color(색, 지금 값)`로 받아 회색·검정에서도 색상을 지킨다. 앱은 `change_to`를 받을 때 16진 초안을 `format_hex_color`로 다시 쓴다.
 
 **입력.**
 
@@ -116,6 +118,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 
 - 판의 ↑↓·Page·Home·End는 세로 `key_step_target`(`up_increases`), ←→는 `set_key_handler`다. 가상 목록 격자의 조합이다. 막대는 가로 `key_step_target`이다.
 - 끝에 닿은 키는 빈 목록으로 삼킨다. Ctrl·Alt를 든 키는 앱 단축키로 흐른다([값 조절](value-step-design.md)).
+- 16진 칸은 같은 표면 안에서 떠날 때와 수식 키 없는 Enter에 `commit`을 낸다(결정 8). Enter는 칸의 키 처리기가 받는다. 한 줄 칸이 쓰지 않은 Enter가 조상 전파의 첫 자리인 칸에 온다.
 - Tab 자리는 판, 색상 막대, 알파 막대, 16진 칸, 견본 칸 줄(가로 `set_focus_group`, 한 자리) 순이다. root는 자리가 아니다. 커서는 `ui_cursor`에 십자가 없어 손 모양이다.
 
 **접근성.** 키보드 초점이 서는 노드가 곧 보조 기술이 보는 노드다.
@@ -155,14 +158,14 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 - 길 a: 앱이 준 id(앱 kind)로 `text_input_element`를 품는다. 거르기·검사·쓰기는 순수 함수다. 되는 것: 콤보의 선례대로 자리·폭·오류 테두리·접근 이름이 한 컨트롤 안에서 서고 popup에 한 덩어리로 실린다. 날짜 칸(R4)의 시·분 칸도 같은 길을 쓸 수 있다. 대가: 앱은 여전히 초안을 들고 정책 `text_target_of`에 한 줄, `apply_text_edit`에 `hex_color_filter`를 준다. 설정 칸이 하나 늘고 popup에 IME 칸이 선다.
 - 길 b: 순수 함수만 주고 앱이 칸을 옆에 둔다(숫자 칸의 선례). 되는 것: 요소가 글 편집과 무관하다. 대가: 앱마다 칸 자리·이름·popup 크기를 맞추고, 16진 칸이 popup에 들어갈 자리를 앱이 계산한다.
 - 길 c: 16진 없음. 되는 것: 요소와 앱 모두 글 편집이 없다. 대가: 정확한 색을 넣을 길이 보조 기술에도 없다.
-- 권장: a. 대가: 위의 설정 칸과 앱의 한 줄이다. 승인 필요.
+- 권장: a. 대가: 위의 설정 칸과 앱의 한 줄이다. 승인: 길 a (2026-11-03).
 
 **3. 놓는 자리와 popup 초점.** 질문: popup을 지원하는가, 열린 동안 키보드 초점은 어디에 두는가.
 
 - 길 a: 인라인 본체만. 되는 것: 새 popup helper와 칸이 없다. 대가: 칸에 붙여 여는 흔한 꼴을 앱이 `ui_popup`·자리·초점까지 짓는다.
 - 길 b: 인라인 본체, 색 칸, `make_color_picker_popup`, 열 때 초점을 판으로 옮긴다. 되는 것: 열자마자 화살표가 판을 움직이고 화면 읽기가 판을 읽는다. 초점 요청은 popup 표면을 받고(데모 명령 팔레트, [palette.cpp](../examples/demo/palette.cpp) 105행) Android도 overlay에서 이행한다([android_app.cpp](../src/android/android_app.cpp) 1434행). controller를 고치지 않는다. 대가: popup이 사라지면 초점이 지워지므로 Esc 뒤 칸으로 돌리는 요청을 앱이 싣는다. kind 하나와 helper 헤더 하나가 는다.
 - 길 c: b와 같되 초점을 칸에 두고 칸의 키 처리기가 판을 움직인다(메뉴 꼴). 되는 것: 되돌릴 초점이 없다. 대가: 막대·견본·16진 칸에 키로 닿지 못하고 보조 기술은 칸만 읽는다.
-- 권장: b. 날짜 칸(R4)이 이 초점 규약을 따른다. 대가: 위의 되돌림 요청이다. 승인 필요.
+- 권장: b. 날짜 칸(R4)이 이 초점 규약을 따른다. 대가: 위의 되돌림 요청이다. 승인: 길 b (2026-11-03).
 
 **4. 판의 접근성.** 질문: 값이 둘인 판을 어떻게 알리는가.
 
@@ -176,6 +179,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 - 길 a: 세 부분 모두 시작 거리 6 물리 픽셀(별점과 같다). 되는 것: 터치에서 판 위 쓸기가 감싼 창을 흘리고, 탭과 클릭이 그 자리 값이다([touch-pen-input-design.md](touch-pen-input-design.md) 154행). 대가: 마우스로 눌러도 떼거나 6을 넘기 전까지 손잡이가 오지 않는다. 판을 끌려면 터치에서 잠깐 눌러야 한다.
 - 길 b: slider처럼 0. 되는 것: 누르는 순간 움직인다. 대가: 판이 화면을 크게 덮는 모바일에서 판 위의 쓸기가 스크롤하지 못한다.
 - 길 c: 판 6, 막대 0. 되는 것: 막대는 즉각이다. 대가: 규칙이 둘이고 막대 위 쓸기도 스크롤하지 못한다.
+- 길 d: 마우스·펜은 0, 터치만 6(포인터 종류로 가른다). 되는 것: 마우스로 누르는 순간 손잡이가 오고 터치의 쓸기는 창을 흘린다. 대가: 지금은 가를 수 없다. `pointer_drag_target::start_distance`는 칸 하나이고 터치는 그 픽셀 값 대신 0보다 큰지만 본다([ui_element.h](../include/luil/ui/ui_element.h) 369~379행). 가르려면 그 공유 형식과 `ui_interaction.cpp`에 포인터 종류별 칸을 더해야 하고, 두 파일은 줄 3의 것이다.
 - 권장: a. 대가: 위의 지연이다. 실기기에서 확인한다. 권장대로 진행.
 
 **6. 미리 정한 견본.** 질문: 견본 칸 줄을 컨트롤에 두는가.
@@ -191,6 +195,12 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 - 길 b: CPU에서 색상마다 그림을 지어 `ui_image`로 그린다. 되는 것: 셰이더가 없다. 대가: 색상이 바뀔 때마다 판 크기의 픽셀을 다시 지어 끌기마다 비용이 든다.
 - 권장: a. 대가: 위의 첫 실측이다. 구현 첫 걸음에서 두 렌더러를 잰다. 어긋나면 b로 간다. 권장대로 진행.
 
+**8. 16진 칸의 Enter.** 질문: 칸을 떠나지 않고 확정하는 키를 두는가(구현에서 정했다).
+
+- 길 a: 수식 키 없는 Enter와 Android 확정 단추(`text_input_config::submit`)가 `commit`을 낸다. 되는 것: 글을 치고 Enter로 곧바로 색이 바뀐다. 칸에 머물러 이어 고칠 수 있다. 대가: 칸에 초점이 있는 동안 Enter가 기본 단추로 가지 않는다.
+- 길 b: 떠날 때만 확정한다. 되는 것: 규칙이 하나다. 대가: popup 안에서 확정하려면 Tab을 쳐야 하고, Android 확정 단추는 초점을 옮기지 않아 확정하지 못한다.
+- 권장: a. 대가: 위의 기본 단추다. 권장대로 진행.
+
 ## 플랫폼
 
 **Win32.** `win32_window.cpp`·`window_surface.cpp`·`uia_provider.cpp`·`accessibility.h`를 고치지 않는다. UIA는 root에 Value(읽기 전용), 판에 Value, 막대에 RangeValue(SmallChange·LargeChange 포함), 색 칸에 ExpandCollapse와 Value를 낸다. popup은 활성화를 받지 않는 별도 창이라 키는 앵커 창에서 오고 논리 초점이 popup tree로 보낸다. popup 안 16진 칸의 IME는 [popup-ime-design.md](popup-ime-design.md)의 길이다.
@@ -203,13 +213,13 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 
 ## 다른 노드와의 약속
 
-- **frozen_col(같은 줄 앞).** 겹치는 파일은 `ui_element_id.h`와 `src/ui/inspect_names.cpp`뿐이고 같은 줄이라 차례로 쌓는다. kind 다섯은 `table_row_lane` 뒤, `end_of_library_kinds` 바로 위에 두고 `library_kind_name`의 case는 같은 커밋에 끝에 더한다. [ui_element_tests.cpp](../tests/ui_element_tests.cpp) 84행 `last[]`는 병합 때 맞춘다. kind 숫자를 test·UIA 스크립트에 박지 않는다.
-- **줄 3(X-3·X-4·menu_bar).** `ui_interaction.cpp`·`.h`를 고치지 않는다. 색 칸이 `expanded`를 알려 X-4를 받는다. 줄 3의 `menu-focus-fixes-design.md`(통합 뒤 이 폴더에 선다) 76행이 색 고르개는 따로 할 일이 없다고 적었다. 견본 칸 줄은 묶음이라 X-3이 대표가 아닌 칸의 Tab을 고친다. menu_bar의 kind 둘과 `menu_bar_name`도 같은 두 파일과 `default_text` 끝에 붙어 병합은 기계적이다.
+- **frozen_col(같은 줄 앞).** 겹치는 파일은 `ui_element_id.h`와 `src/ui/inspect_names.cpp`뿐이고 같은 줄이라 차례로 쌓는다. kind 다섯은 `table_row_lane` 뒤, `end_of_library_kinds` 바로 위에 두고 `library_kind_name`의 case는 같은 커밋에 끝에 더한다. [ui_element_tests.cpp](../tests/ui_element_tests.cpp) 84행 `last[]`는 이 노드가 `color_field`를 더했다. 병합 때 다른 줄의 마지막 kind와 함께 다시 맞춘다. kind 숫자를 test·UIA 스크립트에 박지 않는다.
+- **줄 3(X-3·X-4·menu_bar).** `ui_interaction.cpp`·`.h`를 고치지 않는다. 색 칸이 `expanded`를 알려 X-4를 받는다. 열린 칸을 누르고 게시가 낀 뒤 떼는 경우의 test는 X-4가 들어온 R3 통합 때 통합 커밋이 `tests/color_picker_element_tests.cpp`에 더한다. 줄 3의 `menu-focus-fixes-design.md`(통합 뒤 이 폴더에 선다) 76행이 색 고르개는 따로 할 일이 없다고 적었다. 견본 칸 줄은 묶음이라 X-3이 대표가 아닌 칸의 Tab을 고친다. menu_bar의 kind 둘과 `menu_bar_name`도 같은 두 파일과 `default_text` 끝에 붙어 병합은 기계적이다.
 - **줄 2(rich_edit).** 그 줄의 파일(`text_edit.h`, `text_document.h`, `text_area_element.*`, `text_layout.*`, 클립보드)을 고치지 않는다. `text_input_element`는 그대로 쓴다. `default_text.h/.cpp` 끝에 함께 붙는다.
 - **줄 4(tray·hotkey).** `win32_window.cpp`·`app_host.h`·`app_delegate.h`·`ui_platform.h`를 고치지 않는다. 새 헤더 `color_picker_popup.h`는 `menu_popup.h` 곁의 새 파일이다.
 - **default_text.** 끝에 `color_picker_name()`(색), `color_picker_plane_name()`(채도와 명도), `color_picker_plane_value(s, v)`("채도 40%, 명도 80%", 백분율은 lround 정수), `color_picker_hue_name()`(색상), `color_picker_alpha_name()`(불투명도), `color_picker_hex_name()`(16진 색)을 더한다.
 - **date_picker(R4).** 결정 3의 초점 규약, 결정 2의 칸 품기, 판의 두 축 키 조합을 따른다.
-- **데모.** 라이브러리 커밋과 데모 연결 커밋을 나누고 연결은 통합 때 직렬로 쌓는다. 갤러리 `build_controls`의 별점 카드 뒤, `examples/demo/popups_page.*`의 `open_popup_`, 모바일 `basics_page.cpp`의 별점 줄 뒤, 16진 칸의 앱 kind는 `examples/demo/common.h` 끝과 [text_targets.h](../examples/demo/text_targets.h)다.
+- **데모.** 라이브러리 커밋과 데모 연결 커밋을 나누고 연결은 통합 때 직렬로 쌓는다. 갤러리 `build_controls`의 별점 카드 뒤, `examples/demo/popups_page.*`의 `open_popup_`, 모바일 `basics_page.cpp`의 별점 줄 뒤, 16진 칸의 앱 kind는 `examples/demo/common.h` 끝과 [text_targets.h](../examples/demo/text_targets.h)다. 갤러리와 popups 페이지가 칸을 하나씩 가져 kind와 편집 대상이 둘이다(편집 메시지가 대상으로만 갈려 한 kind면 앞 페이지가 다 가져간다).
 
 **미룬 것을 닫는다.** 이 단계에서는 기존 문서를 고치지 않고 구현 커밋이 고친다.
 
@@ -227,12 +237,12 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 자동 test는 UIA 하나만 빼고 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다.
 
 - 색 계산의 test(`tests/color_space_tests.cpp`)는 [색 공간과 16진 색](color-space-design.md)에 있다.
-- `tests/color_picker_element_tests.cpp`(새 파일). 자식 id와 owner, `size_for`, 배율 2의 `value_at_plane` 네 모서리와 밖 자르기, 클릭은 그 자리 값을 한 번, 시작 거리 안의 뗌은 클릭이고 넘으면 누른 자리 값과 이동 값을 내며 같은 값의 이동은 메시지가 없다. 판 끌기 메시지가 build 때의 색상·알파를 담는다. 키는 표의 걸음, 끝의 빈 목록, Ctrl 조합 nullopt. `change_to`가 없으면 Tab 자리도 끌기도 없다. 비활성에서 말이 없다. 견본 칸이 `hsv_from_color`를 낸다. 16진 칸이 앱 kind이고 같은 표면 안에서 떠날 때 `commit`을 낸다. popup이 닫힌 경우는 데모 test가 닫는 메시지에서 초안이 확정되는지 잡는다. 색 칸의 클릭·Alt+↓·F4·↓와 열린 동안의 초점 떠남 훅. 열린 동안 칸을 누르고 게시 없이 떼면 `set_open(false)`다. 게시가 낀 경우는 X-4가 main에 들어온 뒤 통합 커밋이 같은 파일에 더한다. `make_color_picker_popup`의 크기와 아래 자리, 뒤집기.
-- `tests/accessibility_tests.cpp`에 tree 모양(root group 아래 판·막대·16진·견본 칸), 막대의 범위와 `step`·`page`, `set_value`가 그 채널만 바꾸는지. `tests/default_text_tests.cpp`에 여섯 함수. `tests/ui_element_tests.cpp`의 `last[]`는 병합 때.
+- `tests/color_picker_element_tests.cpp`(새 파일). 자식 id와 owner, `size_for`, 배율 2의 `value_at_plane` 네 모서리와 밖 자르기, 클릭은 그 자리 값을 한 번, 시작 거리 안의 뗌은 클릭이고 넘으면 누른 자리 값과 이동 값을 내며 같은 값의 이동은 메시지가 없다. 판 끌기 메시지가 build 때의 색상·알파를 담는다. 키는 표의 걸음, 끝의 빈 목록, Ctrl 조합 nullopt. `change_to`가 없으면 Tab 자리도 끌기도 없다. 비활성에서 말이 없다. 견본 칸이 `hsv_from_color`를 낸다. 16진 칸이 앱 kind이고 같은 표면 안에서 떠날 때 `commit`을 낸다. popup이 닫힌 경우는 데모 test가 닫는 메시지에서 초안이 확정되는지 잡는다. 색 칸의 클릭·Alt+↓·F4·↓와 열린 동안의 초점 떠남 훅. 열린 동안 칸을 누르고 게시 없이 떼면 `set_open(false)`다. 게시가 낀 경우는 X-4가 들어온 R3 통합 때 통합 커밋이 같은 파일에 더한다. `make_color_picker_popup`의 크기와 아래 자리, 뒤집기.
+- `tests/accessibility_tests.cpp`에 tree 모양(root group 아래 판·막대·16진·견본 칸), 막대의 범위와 `step`·`page`, `set_value`가 그 채널만 바꾸는지. `tests/default_text_tests.cpp`에 여섯 함수. `tests/ui_element_tests.cpp`의 `last[]`는 이 노드가 `color_field`로 맞춘다.
 - `tests/raster_draw_tests.cpp`. 배율 2에서 판의 왼쪽 위 흰색, 오른쪽 위 순색, 아래 검정, 가운데 `color_from_hsv({ h, 0.5, 0.5 })`를 허용치 2로(투명 정지점이 검정이면 가운데가 회색으로 틀린다), 색상 막대의 정지점 색, 알파 막대의 체커, 손잡이 테가 밝은 색 위 검정·어두운 색 위 흰색인지, 고대비 팔레트에서 판이 실제 색이고 둘레가 `window_foreground`인지.
 - `tests/uia_provider_tests.cpp`(`luil_tests`, Windows). 판은 Value만 있고 RangeValue가 없다. 막대의 SmallChange·LargeChange가 1·10이다. root의 `SetValue`는 `E_ACCESSDENIED`다. 색 칸의 Expand가 `set_open(true)`다.
 
-데모 칸. 갤러리 컨트롤 페이지의 "색 고르기" 카드가 알파와 견본 넷과 16진 칸을 단 인라인 본체(owner `gallery/color`)와 label `gallery/color-value`("색: #3366FF80 · 색상 220° · 채도 80% · 명도 100% · 알파 50%")를 보인다. 이 label의 16진 글은 `format_hex_color`라 대문자여서, 같은 데모의 `style_color_text`(소문자 `#rrggbb[aa]`, 테마 페이지의 스타일 파일 상태 줄)와 글을 견주지 않는다. popups 페이지는 색 칸(owner `popups/color-field`)과 label `popups/color-state`("색 칸: 닫힘 · #3366FF")를 둔다. 모바일 기본 페이지는 별점 줄 뒤에 폭에 맞춘 판과 `bar_height` 32의 본체(owner `color`)와 label `color-value`를 더한다. 격리 데스크톱에서 luil-uia로 막대 `SetValue`, 16진 칸 `SetValue`, root와 label 되읽기, 색 칸 Expand 뒤 판에 초점이 섰는지, Esc 뒤 칸으로 돌아왔는지를 본다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다. 두 데모 칸의 조립과 intent는 `tests/demo_gallery_tests.cpp`와 `tests/mobile_demo_page_tests.cpp`가 잡는다.
+데모 칸. 갤러리 컨트롤 페이지의 "색 고르기" 카드가 알파와 견본 넷과 16진 칸을 단 인라인 본체(owner `gallery/color`)와 label `gallery/color-value`("색: #3366FF80 · 색상 225° · 채도 80% · 명도 100% · 알파 50%". 220°는 #3377FF라 처음 값을 225°로 둔다)를 보인다. 이 label의 16진 글은 `format_hex_color`라 대문자여서, 같은 데모의 `style_color_text`(소문자 `#rrggbb[aa]`, 테마 페이지의 스타일 파일 상태 줄)와 글을 견주지 않는다. popups 페이지는 색 칸(owner `popups/color-field`)과 label `popups/color-state`("색 칸: 닫힘 · #3366FF")를 둔다. 모바일 기본 페이지는 별점 줄 뒤에 폭에 맞춘 판과 `bar_height` 32의 본체(owner `color`)와 label `color-value`를 더한다. 격리 데스크톱에서 luil-uia로 막대 `SetValue`, 16진 칸 `SetValue`, root와 label 되읽기, 색 칸 Expand 뒤 판에 초점이 섰는지, Esc 뒤 칸으로 돌아왔는지를 본다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다. 두 데모 칸의 조립과 intent는 `tests/demo_gallery_tests.cpp`와 `tests/mobile_demo_page_tests.cpp`가 잡는다.
 
 사람 확인: 판과 막대의 끌기 느낌과 마우스 누름의 지연, 실기기에서 판 위 쓸기가 스크롤하고 잠깐 눌러 끄는 느낌, Vulkan·CPU에서 그라디언트 색, 밝은·어두운·고대비에서 손잡이와 둘레, Narrator가 판의 두 값과 막대를 읽는 방식, 배율 150%·200%에서 popup 자리.
 

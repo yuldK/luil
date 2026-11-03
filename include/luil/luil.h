@@ -41,6 +41,8 @@
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/clipboard_image.h"
+#include "luil/ui/color_picker_element.h"
+#include "luil/ui/color_space.h"
 #include "luil/ui/combo_box_element.h"
 #include "luil/ui/command_palette.h"
 #include "luil/ui/commands.h"
@@ -118,6 +120,7 @@
 // 플랫폼을 가리지 않는 앱 계약이다 (스레드 조립, frame, 렌더러 정책, 웹뷰 값).
 #include "luil/app/app_delegate.h"
 #include "luil/app/app_host.h"
+#include "luil/app/color_picker_popup.h"
 #include "luil/app/file_dialog.h"
 #include "luil/app/file_watcher.h"
 #include "luil/app/menu_popup.h"

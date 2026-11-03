@@ -234,6 +234,8 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/slider_element.h"
     ui/rating_element.cpp
     "${public_headers}/ui/rating_element.h"
+    ui/color_picker_element.cpp
+    "${public_headers}/ui/color_picker_element.h"
     ui/split_button_element.cpp
     "${public_headers}/ui/split_button_element.h")
 
@@ -350,6 +352,8 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     ui/text_button_paint.h
     ui/number_input.cpp
     "${public_headers}/ui/number_input.h"
+    ui/color_space.cpp
+    "${public_headers}/ui/color_space.h"
     ui/command_palette.cpp
     "${public_headers}/ui/command_palette.h"
     ui/text_document.cpp
@@ -393,6 +397,8 @@ luil_add_source_filter(luil_core_files "app"
     host/app_host.cpp
     host/menu_popup.cpp
     "${public_headers}/app/menu_popup.h"
+    host/color_picker_popup.cpp
+    "${public_headers}/app/color_picker_popup.h"
     "${public_headers}/app/notification.h"
     "${public_headers}/app/file_dialog.h"
     host/file_dialog_gate.h

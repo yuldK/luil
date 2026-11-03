@@ -24,6 +24,8 @@ add_executable(luil_core_tests
     theme_picker_tests.cpp
     choice_group_element_tests.cpp
     clipboard_image_tests.cpp
+    color_picker_element_tests.cpp
+    color_space_tests.cpp
     case_fold_tests.cpp
     command_palette_tests.cpp
     content_layout_tests.cpp

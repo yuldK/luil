@@ -177,6 +177,14 @@ namespace luil {
         // 행 레인의 owner는 표 owner와 행 키를, 머리글 레인의 owner는 표 owner와 "lane"을 단위 구분자(U+001F)로 이은 것이다.
         table_header_lane,
         table_row_lane,
+        // 색 고르기와 그 부분, 색 칸이다 (`color_picker_element`·`color_field_element`). root는 group이고 지금 색의 견본을 그린다.
+        // 판(채도·명도)과 막대(색상·알파)는 slider이고, 견본 칸은 단추다. 부분의 owner는 고르기 owner, 단위 구분자(U+001F),
+        // `plane`·`hue`·`alpha`·견본 번호(1부터 십진수) 순이다. 색 칸의 owner는 칸 설정의 owner다.
+        color_picker,
+        color_picker_plane,
+        color_picker_bar,
+        color_picker_preset,
+        color_field,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

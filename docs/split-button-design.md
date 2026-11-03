@@ -153,7 +153,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 
 - Alt+↓는 Alt만 눌렸을 때, F4는 수식 키 없이 `set_open(true)`를 낸다. `down_opens`가 참이면 수식 키 없는 ↓도 연다. 화살표 단추처럼 ↓가 달리 쓰이지 않는 자리에 준다.
 - 이미 열려 있으면 그 키들을 빈 목록으로 삼켜 앱 단축키로 새지 않게 한다. 그 밖의 키는 `std::nullopt`다.
-- 메뉴가 열려도 키보드 초점은 필드에 남는다. 메뉴 항목은 초점을 받지 않고(`set_tab_stop(false)`) 강조는 따로 선다. 닫힌 뒤에도 초점은 그 자리다. 메뉴가 아닌 popup(달력·색 고르개)의 키 경로는 그 노드가 정한다.
+- 메뉴가 열려도 키보드 초점은 필드에 남는다. 메뉴 항목은 초점을 받지 않고(`set_tab_stop(false)`) 강조는 따로 선다. 닫힌 뒤에도 초점은 그 자리다. 메뉴가 아닌 popup(달력·색 고르개)의 키 경로는 그 노드가 정한다. 색 고르개는 열 때 초점을 popup 표면의 판으로 옮기고 Esc로 닫으면 칸으로 돌린다([색 고르기](color-picker-design.md) 결정 3). 날짜 칸(R4)이 같은 규약을 따른다.
 
 **한 번에 하나만.** 라이브러리가 강제하지 못한다. popup 목록이 앱 상태이기 때문이다. 앱이 어느 필드의 `set_open(true)`를 처리할 때 다른 anchored popup의 열림을 모두 지운다. 지금 데모는 `dropdown_toggle_intent`가 `menu_open_`을, `card_menu_intent`가 `close_dropdown()`을 부르는 식으로 짝마다 적었다. 이 노드를 더하면서 열린 필드의 owner 하나(`open_popup_`)를 두는 식으로 바꾼다. 값이 하나라 둘이 함께 열릴 수 없다.
 

@@ -3,6 +3,7 @@
 #include "luil/ui/app_message.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/group_element.h"
 #include "luil/ui/info_bar_element.h"
@@ -1307,6 +1308,151 @@ TEST_CASE("A slider still announces no step and the change getters need a live e
     REQUIRE(slider->get_LargeChange(&number) == static_cast<HRESULT>(UIA_E_ELEMENTNOTAVAILABLE));
 
     slider->Release();
+    root->Release();
+}
+
+namespace {
+    struct probe_color_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    // 알파를 켠 색 고르기와 닫힌 색 칸을 담은 화면이다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_color_tree(const bool open = false)
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::color_picker_config picker {};
+        picker.owner = u8"paint";
+        picker.value = { 225.0f, 0.8f, 1.0f, 0.5f };
+        picker.alpha = true;
+        picker.change_to = [](const luil::hsv_color value) { return luil::make_app_action(probe_color_intent { value }); };
+        page->add(std::make_unique<luil::color_picker_element>(std::move(picker)));
+        luil::color_field_config field {};
+        field.owner = u8"swatch";
+        field.value = { 225.0f, 0.8f, 1.0f, 0.5f };
+        field.open = open;
+        field.set_open = [](const bool state) { return luil::make_app_action(probe_state_intent { state }); };
+        page->add(std::make_unique<luil::color_field_element>(std::move(field)));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f));
+    }
+
+    [[nodiscard]] std::u8string paint_part(const std::u8string_view name)
+    {
+        std::u8string owner { u8"paint" };
+        owner += u8'\u001f';
+        owner += name;
+        return owner;
+    }
+}
+
+TEST_CASE("The color plane serves only a value and the bars serve a range with their steps", "[win32][uia][color-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_color_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const plane { root->make_element_provider(luil::color_picker_element::plane_id(u8"paint")) };
+    luil::win32::uia_element_provider* const hue { root->make_element_provider({ luil::ui_element_kind::color_picker_bar, paint_part(u8"hue") }) };
+    luil::win32::uia_element_provider* const alpha { root->make_element_provider({ luil::ui_element_kind::color_picker_bar, paint_part(u8"alpha") }) };
+
+    // 판은 두 값을 글로만 알린다. RangeValue가 서지 않는다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(plane->GetPatternProvider(UIA_RangeValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern == nullptr);
+    REQUIRE(plane->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    pattern->Release();
+    pattern = nullptr;
+    REQUIRE(read_text_property(*plane, UIA_NamePropertyId) == L"채도와 명도");
+
+    // 막대의 걸음은 1과 10이다. 값은 색상의 도와 알파의 백분율이다.
+    double number { -1.0 };
+    REQUIRE(hue->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 1.0);
+    REQUIRE(hue->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 10.0);
+    REQUIRE(hue->get_Value(&number) == S_OK);
+    REQUIRE(number == 225.0);
+    REQUIRE(hue->get_Maximum(&number) == S_OK);
+    REQUIRE(number == 360.0);
+    REQUIRE(alpha->get_Value(&number) == S_OK);
+    REQUIRE(number == 50.0);
+    REQUIRE(alpha->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 10.0);
+    BOOL read_only { TRUE };
+    REQUIRE(hue->get_IsReadOnly(&read_only) == S_OK);
+    REQUIRE(read_only == FALSE);
+
+    // 값 정하기는 그 채널만 바꾼 절대 메시지다.
+    REQUIRE(hue->SetValue(90.0) == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<probe_color_intent>() != nullptr);
+    REQUIRE(message->get<probe_color_intent>()->value == luil::hsv_color { 90.0f, 0.8f, 1.0f, 0.5f });
+
+    alpha->Release();
+    hue->Release();
+    plane->Release();
+    root->Release();
+}
+
+TEST_CASE("The color picker root reads its hex value and refuses to take one as text", "[win32][uia][color-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_color_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const picker { root->make_element_provider({ luil::ui_element_kind::color_picker, u8"paint" }) };
+
+    IUnknown* pattern { nullptr };
+    REQUIRE(picker->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IValueProvider* text { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IValueProvider), reinterpret_cast<void**>(&text)) == S_OK);
+    BSTR spoken { nullptr };
+    REQUIRE(text->get_Value(&spoken) == S_OK);
+    REQUIRE(std::wstring { spoken, SysStringLen(spoken) } == L"#3366FF80");
+    SysFreeString(spoken);
+    // 글로 색을 정하는 길은 16진 칸이다. root는 읽기 전용이다.
+    REQUIRE(text->SetValue(L"#000000") == E_ACCESSDENIED);
+    REQUIRE(host.dispatched.empty());
+    text->Release();
+    pattern->Release();
+    REQUIRE(read_text_property(*picker, UIA_NamePropertyId) == L"색");
+
+    picker->Release();
+    root->Release();
+}
+
+TEST_CASE("The color field expands by a target state message", "[win32][uia][color-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_color_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const field { root->make_element_provider({ luil::ui_element_kind::color_field, u8"swatch" }) };
+
+    ExpandCollapseState state { ExpandCollapseState_Expanded };
+    REQUIRE(field->get_ExpandCollapseState(&state) == S_OK);
+    REQUIRE(state == ExpandCollapseState_Collapsed);
+    REQUIRE(field->Expand() == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<probe_state_intent>() != nullptr);
+    REQUIRE(message->get<probe_state_intent>()->state == true);
+    // 값은 16진 글이다 (알파를 끈 칸이라 여섯 자리다).
+    IUnknown* pattern { nullptr };
+    REQUIRE(field->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IValueProvider* text { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IValueProvider), reinterpret_cast<void**>(&text)) == S_OK);
+    BSTR spoken { nullptr };
+    REQUIRE(text->get_Value(&spoken) == S_OK);
+    REQUIRE(std::wstring { spoken, SysStringLen(spoken) } == L"#3366FF");
+    SysFreeString(spoken);
+    text->Release();
+    pattern->Release();
+
+    field->Release();
     root->Release();
 }
 

@@ -160,6 +160,43 @@ namespace luil::default_text {
         return summary;
     }
 
+    std::u8string_view color_picker_name() noexcept
+    {
+        return u8"색";
+    }
+
+    std::u8string_view color_picker_plane_name() noexcept
+    {
+        return u8"채도와 명도";
+    }
+
+    std::u8string color_picker_plane_value(const float saturation, const float value)
+    {
+        // NaN은 "0보다 크다"가 거짓이라 0이다. 1 위는 100%다.
+        const auto percent = [](const float unit) { return static_cast<std::size_t>(std::lround((unit > 0.0f ? std::min(unit, 1.0f) : 0.0f) * 100.0f)); };
+        std::u8string text { u8"채도 " };
+        append_number(text, percent(saturation));
+        text += u8"%, 명도 ";
+        append_number(text, percent(value));
+        text += u8'%';
+        return text;
+    }
+
+    std::u8string_view color_picker_hue_name() noexcept
+    {
+        return u8"색상";
+    }
+
+    std::u8string_view color_picker_alpha_name() noexcept
+    {
+        return u8"불투명도";
+    }
+
+    std::u8string_view color_picker_hex_name() noexcept
+    {
+        return u8"16진 색";
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;
