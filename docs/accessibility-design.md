@@ -86,6 +86,8 @@ Provider는 `ProviderOptions_ServerSideProvider | ProviderOptions_UseComThreadin
 
 `BoundingRectangle`은 ancestor clipping이 반영된 `ui_tree::visible_bounds`에서 시작한다. Provider는 physical client-pixel rectangle을 screen coordinate로 변환한다. Arranged bounds가 이미 physical pixel이므로 display scale을 다시 적용하지 않는다.
 
+`IsOffscreen`도 같은 `visible_bounds`로 정한다. 조상이 통째로 잘라 보이는 자리가 없으면(nullopt이거나 넓이가 0) 참이다. 고정 열 아래로 흐른 칸, 왼쪽 밖으로 흘린 머리글이 그렇다. UIA는 빈 rectangle에서 화면 밖을 정하지 않고 기본값(거짓)을 내므로 provider가 답한다. 보이는 element는 값을 비워 UIA 기본값에 맡긴다.
+
 `ElementProviderFromPoint`는 `access_element_at`을 사용한다. 이 검색은 일반 interaction hit testing과 달리 label이나 progress indicator 같은 읽기 전용 element도 반환할 수 있다. Modal scrim 같은 hit-opaque overlay를 만나면 검색을 중단해 그 아래 content를 해당 지점에 공개하지 않는다.
 
 Clip되거나 hidden인 element의 rectangle은 비어 있다. Scroll viewport 밖의 content는 focus가 화면에 나타낼 수 있다면 keyboard와 automation에서 논리적으로 도달 가능할 수 있다.

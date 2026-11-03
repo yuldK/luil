@@ -1827,6 +1827,74 @@ TEST_CASE("A UIA bounding rectangle is the clipped client rectangle", "[win32][u
     root->Release();
 }
 
+namespace {
+    // 자식을 자기 아래(y 60)에 두고 자기 높이(40)로 자르는 컨테이너다. 자식은 통째로 잘려 보이지 않는다.
+    class clipping_strip final : public luil::ui_element
+    {
+    public:
+        explicit clipping_strip(luil::ui_element_id id)
+            : ui_element { std::move(id) }
+        {
+            set_clip_children(true);
+        }
+
+        void add(std::unique_ptr<ui_element> child)
+        {
+            add_child(std::move(child));
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds({ context.slot.x, context.slot.y, context.slot.width, 40.0f });
+            luil::arrange_context below { context };
+            below.slot = { context.slot.x, context.slot.y + 60.0f, context.slot.width, 30.0f };
+            for (const std::unique_ptr<ui_element>& child : children())
+                child->arrange(below);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+    };
+}
+
+TEST_CASE("A built element clipped out of view reads as offscreen", "[win32][uia]")
+{
+    // 흘러 통째로 가려진 칸(고정 열 아래의 칸, 왼쪽 밖으로 흘린 머리글)은 사각형이 비어 있다. UIA는 빈 사각형에서
+    // IsOffscreen을 정하지 않고 기본값(거짓)을 내므로 provider가 답한다. 보이는 칸은 지금처럼 UIA 기본값에 맡긴다.
+    fake_uia_host host {};
+    auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    auto strip { std::make_unique<clipping_strip>(luil::ui_element_id { kind_panel, u8"strip" }) };
+    luil::label_config hidden {};
+    hidden.text = u8"가려짐";
+    strip->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"hidden" }, std::move(hidden)));
+    page->add(std::move(strip));
+    luil::label_config visible {};
+    visible.text = u8"보임";
+    page->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"visible" }, std::move(visible)));
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const label { root->make_element_provider({ kind_item, u8"hidden" }) };
+    luil::win32::uia_element_provider* const shown_label { root->make_element_provider({ kind_item, u8"visible" }) };
+
+    UiaRect rect { 1.0, 1.0, 1.0, 1.0 };
+    REQUIRE(label->get_BoundingRectangle(&rect) == S_OK);
+    REQUIRE(rect.width == 0.0);
+    REQUIRE(rect.height == 0.0);
+    VARIANT offscreen {};
+    REQUIRE(label->GetPropertyValue(UIA_IsOffscreenPropertyId, &offscreen) == S_OK);
+    REQUIRE(offscreen.vt == VT_BOOL);
+    REQUIRE(offscreen.boolVal == VARIANT_TRUE);
+
+    VARIANT shown {};
+    REQUIRE(shown_label->GetPropertyValue(UIA_IsOffscreenPropertyId, &shown) == S_OK);
+    REQUIRE(shown.vt == VT_EMPTY);
+
+    shown_label->Release();
+    label->Release();
+    root->Release();
+}
+
 TEST_CASE("A cached provider cannot execute under a parent hidden in the new frame", "[win32][uia]")
 {
     fake_uia_host host {};

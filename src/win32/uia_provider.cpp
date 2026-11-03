@@ -1228,11 +1228,21 @@ namespace luil::win32 {
                 set_bool(*result, host != nullptr && host->accessibility_focus() == id_);
                 break;
             }
-            case UIA_IsOffscreenPropertyId:
-                // 지어지지 않은 항목은 화면에 없다. 지어진 요소는 UIA가 사각형에서 정한다.
+            case UIA_IsOffscreenPropertyId: {
+                // 지어지지 않은 항목은 화면에 없다. 지어진 요소도 조상이 통째로 잘랐으면(고정 열 아래로 흐른 칸, 왼쪽 밖으로
+                // 흘린 머리글) 화면에 없다. `get_BoundingRectangle`과 같은 값(`visible_bounds`)으로 정한다.
+                //  - UIA는 빈 사각형에서 화면 밖을 정하지 않고 기본값(거짓)을 낸다. 그래서 여기서 답한다.
+                //  - 보이는 요소는 비워 UIA 기본값에 맡긴다. 창이 화면 밖으로 나간 경우 같은 판정은 UIA의 것이다.
                 if (probe != nullptr)
+                {
+                    set_bool(*result, true);
+                    break;
+                }
+                const std::optional<rect_f> shown { tree->visible_bounds(*element) };
+                if (shown.has_value() == false || shown->width <= 0.0f || shown->height <= 0.0f)
                     set_bool(*result, true);
                 break;
+            }
             case UIA_IsControlElementPropertyId:
             case UIA_IsContentElementPropertyId:
                 set_bool(*result, true);
