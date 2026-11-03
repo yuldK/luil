@@ -173,6 +173,10 @@ namespace luil {
         rating_cell,
         // 펜 잉크 캔버스다 (`ink_canvas_element`). owner는 캔버스 설정의 owner다.
         ink_canvas,
+        // 표의 머리글과 행에서 흐르는 열을 담아 고정 구역 밖으로 자르는 레인이다 (`table_element`의 고정 열). 구조일 뿐이다.
+        // 행 레인의 owner는 표 owner와 행 키를, 머리글 레인의 owner는 표 owner와 "lane"을 단위 구분자(U+001F)로 이은 것이다.
+        table_header_lane,
+        table_row_lane,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

@@ -41,6 +41,8 @@ class table_element
     // 이번 배치에 서 있는 고정 열 수와 폭 (논리 픽셀)이다. 고정이 없거나 풀렸으면 0이다. arrange 뒤에 유효하다.
     [[nodiscard]] std::size_t frozen_columns() const noexcept;
     [[nodiscard]] float frozen_width() const noexcept;
+    // 가로 창 폭이다 (논리 픽셀, 세로 막대를 뺀 본문의 폭). arrange 뒤에 유효하다. 고정 열 손잡이의 한도가 이 값으로 잰다.
+    [[nodiscard]] float viewport_width() const noexcept;
     // 칸 안 컨트롤에 초점이 갈 때 흐르는 창으로 들이는 변화량이다 (결정 8). 왼쪽 끝이 경계 이상인 대상에만 답하고 나머지는 0이다.
     [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
 };
@@ -60,12 +62,12 @@ table_row_lane,
 - 스크롤 값과 범위가 같다. 흐르는 창이 보이는 내용은 `[F + s, viewport + s]`이고 끝까지 흘리면 마지막 열의 끝이 창 끝에 닿으므로 최대값은 고정 유무와 상관없이 `content_width - viewport_width`다. `table_clamp_scroll`, `scroll_source`(table_element.cpp 805~817행), 가로 막대의 `set_metrics`, `scroll_horizontal_to`가 바뀌지 않는다.
 - 경계 `edge = slot.x + F * scale`은 한 식이다. 머리글·행·경계선·들이기가 같은 값을 쓴다. 분수 배율에서 마지막 고정 칸의 오른쪽 끝과 레인의 왼쪽 끝 사이에 한 픽셀 이음매가 생기지 않는다.
 
-**자르기와 자식 순서.** 레인은 구성 때 정한 수 `n`(`frozen_columns`를 열 수로 다듬은 값)이 `0 < n < 열 수`일 때만 선다. 창 폭이 레인의 있고 없음을 정하지 않으므로 tree 모양이 frame마다 달라지지 않는다. `n`이 0이면 tree 모양과 그림이 지금과 같다.
+**자르기와 자식 순서.** 레인은 구성 때 정한 수 `n`(`frozen_columns`를 열 수로 다듬은 값)이 `0 < n < 열 수`일 때만 선다. 창 폭이 레인의 있고 없음을 정하지 않으므로 tree 모양이 frame마다 달라지지 않는다. `n`이 0이면 tree 모양과 그림이 지금과 같다. `n`이 열 수 이상이면 흐르는 열이 없어 레인도 경계선도 서지 않고 tree 모양은 `n`이 0일 때와 같다.
 
 - 레인은 `clip_children`이고 bounds는 `[edge, 행(머리글)의 오른쪽 끝]`이다. 레인은 자기 자리만 정하고 부품 배치는 행과 머리글이 한다.
 - 행의 자식 순서는 고정 부품(칸·삼각형·체크), 레인(흐르는 부품)이다. Tab 순서가 tree 앞에서 뒤라([ui_tree.cpp](../src/ui/ui_tree.cpp) 403~420행) 열 순서와 맞는다. 두 구역은 겹치지 않아 hit 우선순위와 무관하다.
-- 머리글의 자식 순서는 레인(흐르는 칸, 흐르는 손잡이), 고정 칸, 고정 손잡이다. hit와 접근 질의는 뒤 자식이 이기므로, 경계에 걸친 마지막 고정 열 손잡이의 흐르는 쪽 절반(`table_grip_width / 2`)이 흐르는 칸을 이긴다. 머리글의 부품은 Tab 자리가 아니라 순서가 초점에 닿지 않는다.
-- 행은 `places_`(304행)로, 머리글은 칸 뒤 손잡이 인덱스 산술(501~508행)로 부품의 열을 찾는다. 둘 다 부품마다 (구역, 열, 쓰임)을 든 표로 바꾼다.
+- 머리글의 자식 순서는 고정 칸, 레인(흐르는 칸, 흐르는 손잡이), 고정 손잡이다. hit와 접근 질의는 뒤 자식이 이기므로, 경계에 걸친 마지막 고정 열 손잡이의 흐르는 쪽 절반(`table_grip_width / 2`)이 흐르는 칸을 이긴다. 머리글의 부품은 Tab 자리가 아니라 순서가 초점에 닿지 않는다. 칸(HeaderItem)이 손잡이보다 앞이고 칸끼리는 열 순서라 보조 기술이 읽는 머리글 칸의 순서는 고정이 없을 때와 같다. 레인을 맨 앞에 두면 접근 트리가 레인을 접어 흐르는 칸이 고정 칸보다 앞서 읽히므로 이 순서로 한다.
+- 행은 `places_`(304행)로, 머리글은 칸 뒤 손잡이 인덱스 산술(501~508행)로 부품의 열을 찾는다. 둘 다 부품마다 (부품, 열, 쓰임)을 든 표로 바꾼다. 흐르는 열의 부품은 레인의 자식이라 자식 인덱스가 아니라 부품 포인터를 든다. 구역은 열이 `n` 이상인가로 가른다.
 - 행 글은 고정 열과 흐르는 열을 구역 사각형으로 따로 `clipRect`해 그린다. 셀 커서 테(`draw_cell_cursor`)도 칸이 속한 구역 안에서만 그린다. 레인의 `accessibility()`는 `{}`(역할 `none`)다.
 
 **고정이 풀릴 때.** `arrange`가 `viewport_width_`를 정한 뒤(800행 다음) 한 번 `table_frozen_fits`를 묻는다. 거짓이면 그 배치에서 `frozen_columns()`는 0이고 레인 bounds는 행 전체이며 고정 열도 `scroll_x_`를 따라 흐른다. 가로 막대 판정은 열 폭의 합으로 하므로 고정과 맞물려 돌지 않는다. 창이 넓어지면 고정이 돌아온다. `scroll_x`는 앱 상태 그대로다.
@@ -89,7 +91,7 @@ table_row_lane,
 
 **접근성.**
 
-- 레인은 `none`이라 `collect_access_children`(accessibility.cpp 25행)이 접고 자식이 그 자리로 오른다. DataGrid·Header·HeaderItem·DataItem의 부모와 순서, 이름, 자동화 id(`kind:owner`)가 `n`이 0일 때와 같다.
+- 레인은 `none`이라 `collect_access_children`(accessibility.cpp 25행)이 접고 자식이 그 자리로 오른다. DataGrid·Header·HeaderItem·DataItem의 부모와 순서, 이름, 자동화 id(`kind:owner`)가 `n`이 0일 때와 같다. 하나 다른 것은 머리글 손잡이(Handle) 형제의 순서다: 흐르는 열의 손잡이가 고정 열의 손잡이보다 앞선다.
 - 가려진 흐르는 칸은 `visible_bounds`가 레인 clip 밖이라 nullopt이고 UIA에서 화면 밖으로 읽힌다. 일부만 가려지면 교집합이다. 고정 구역 좌표의 접근 질의는 고정 칸과 행이 답한다.
 - 고정이라는 사실은 알리지 않는다(결정 7). `access_info`에 칸을 더하지 않는다. 가로 막대의 RangeValue와 `SetValue` 규약은 같다.
 - 칸 안 컨트롤의 UIA ScrollIntoView([uia_provider.cpp](../src/win32/uia_provider.cpp) 1315행)는 `route_reveal`을 거치므로 결정 8을 그대로 받는다.
@@ -103,7 +105,7 @@ table_row_lane,
 - 길 a: `table_config::frozen_columns`, 앞에서 N개. 되는 것: 고정이 늘 앞쪽 연속 구간이라 고정 사이에 흐르는 열이 끼는 모순이 없다. 고정 폭이 `table_column_spans` 앞 N칸의 합이고 설정이 한 줄이다. 대가: 앞 열을 숨기거나(앱이 `columns`에서 뺀다. table-design.md 43행) 앞 열의 순서를 바꾸는 앱이 N을 함께 맞춰야 한다. 안 맞추면 옆의 흐르는 열이 말없이 고정이 된다.
 - 길 b: `table_column::frozen`, 열마다. 되는 것: 표시가 열 모델과 함께 숨김·순서 바꾸기·저장한 배치를 따라간다. 대가: 연속이 아닌 표시(고정, 흐름, 고정)를 풀어야 한다. 앞에서 이어진 구간만 고정이라는 규칙이 앱이 쓴 표시를 말없이 버린다. 순서 바꾸기 판정도 인덱스가 아니라 표시를 읽는다.
 - 길 c: 열마다 `table_pin { none, start, end }`. 되는 것: 오른쪽 고정까지 한 모양에서 자란다. 대가: 쓰지 않는 `end`의 규칙(구역 셋, 레인 둘, 양쪽 들이기)을 미리 정해야 하고 결정 5와 겹쳐 이번 단계가 커진다.
-- 권장: a. 대가: 앞 열을 빼거나 옮기는 앱이 N을 맞춘다. 승인 필요.
+- 권장: a. 대가: 앞 열을 빼거나 옮기는 앱이 N을 맞춘다. 승인: 길 a (2026-11-03).
 
 **2. 자르는 구조.** 질문: 흐르는 칸이 고정 구역에 번지지 않게 어디서 자르는가.
 
@@ -172,7 +174,7 @@ table_row_lane,
 
 | 위치 | 닫는 방법 |
 | --- | --- |
-| table-design.md 105행 | "고정 열"을 빼고 이 문서로 잇는다. 22~34행 "열과 가로 자리"에 이 문서를 가리키는 문장을 더한다 |
+| table-design.md 105행 | "고정 열"을 빼고 이 문서로 잇는다. 22~34행 "열과 가로 자리"에 이 문서를 가리키는 문장을 더한다. 입력 절에는 결정 8이 고정 없는 표의 동작도 바꾼다는 한 줄(오른쪽 밖에 숨은 칸 안 컨트롤에 초점이 가면 표가 흐른다)을 적는다 |
 | table_element.h 194행 주석 | 아직 없는 것의 목록에서 "고정 열"을 지운다 |
 | table_element.h 105행 `scroll_x` 주석 | 고정 열이 있으면 흐르는 열만 이만큼 간다고 더한다 |
 
@@ -180,13 +182,13 @@ table_row_lane,
 
 자동 test는 모두 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다. UIA 번역 코드를 고치지 않고 레인은 코어에서 접히므로 `luil_tests`는 바뀌지 않는다.
 
-- `tests/table_element_tests.cpp`. 순수 함수: `table_frozen_width`(앞 N, N이 열 수보다 큼, 음수 폭 0), `table_frozen_fits`의 경계, `table_reveal_delta`(왼쪽 밖·오른쪽 밖·창보다 넓음·이미 보임, 고정 폭 0이면 기존 `reveal_delta` 값과 같음). 배치: 고정 1열에 `scroll_x` 40을 배율 1·1.5·2에서 주면 고정 머리글 칸과 행 칸의 x가 변하지 않고 흐르는 칸만 `-40 * scale`만큼 움직이며, 머리글 칸과 행 칸의 bounds가 같고, 레인의 왼쪽이 마지막 고정 칸의 오른쪽과 같고, `duplicate_ids`·`unarranged`가 비어 있다. `frozen_columns`가 0이면 두 레인 kind가 tree에 없다. 기존 케이스는 모두 고치지 않고 통과한다.
-- 같은 파일의 hit와 접근성. 누를 수 있게 동작 하나를 단 `cell_probe`로, 흐르는 칸을 고정 구역 아래로 보낸 `scroll_x`에서 고정 구역 좌표의 hit가 고정 칸이고, 경계 손잡이의 흐르는 쪽 절반이 손잡이로 잡히며, 가려진 흐르는 칸의 손잡이는 잡히지 않는다. 같은 자리의 `find_access_at`, 가려진 칸의 `visible_bounds` nullopt, 일부 가림의 교집합, DataGrid·HeaderItem의 역할과 이름 불변.
-- 같은 파일의 입력. 셀 커서가 흐르는 열로 갈 때 `scroll_x_intent`의 변화량이 고정 폭을 뺀 창 기준이고 고정 열로 갈 때는 스크롤 메시지가 없다. F2도 같다. 구역 경계를 넘는 놓기는 `accepts`가 거짓이고 같은 구역은 참이다. 고정 열의 넓힘이 한도에서 멈추고 줄임은 `min_width`까지며 끝 알림이 한 번이다. 창이 좁으면 `frozen_columns()`가 0이고 머리글이 스크롤을 따라 움직이며, 넓히면 돌아온다. 가로 막대의 `content_width`·`viewport_width`·값이 `frozen_columns` 0과 같다. `scroll_delta_to_reveal`은 경계 왼쪽에 걸친 대상과 이미 보이는 대상에 0이고 오른쪽에 숨은 칸에 변화량을 낸다. 본문·행·머리글 id로 `route_reveal`을 불러도 `frozen_columns`가 1이고 `scroll_x`가 0보다 클 때 빈 목록이다.
-- 같은 파일의 raster(`raster_probe.h`). 색을 채우는 probe를 칸에 두고 배율 2에서 고정 구역에 흐르는 칸의 색이 한 픽셀도 없고 흐르는 구역에는 있으며, 경계 x에 `divider` 색이 선다.
-- `tests/workbench_page_tests.cpp` 한 케이스. 고정 토글 intent가 `frozen_columns`를 1로 하고 상태 글이 바뀌며 실행 취소 걸음이 늘지 않는다.
+- `tests/table_element_tests.cpp`. 순수 함수: `table_frozen_width`(앞 N, N이 열 수보다 큼, 음수 폭 0), `table_frozen_fits`의 경계, `table_reveal_delta`(왼쪽 밖·오른쪽 밖·창보다 넓음·이미 보임, 고정 폭 0이면 기존 `reveal_delta` 값과 같음). 배치: 고정 1열에 `scroll_x` 40을 배율 1·1.5·2에서 주면 고정 머리글 칸과 행 칸의 x가 변하지 않고 흐르는 칸만 `-40 * scale`만큼 움직이며, 머리글 칸과 행 칸의 bounds가 같고, 레인의 왼쪽이 마지막 고정 칸의 오른쪽과 같고, `duplicate_ids`·`unarranged`가 비어 있다. `frozen_columns`가 0이면 두 레인 kind가 tree에 없고 머리글은 칸들 뒤에 손잡이들, 행은 칸들이다. 열 수 이상으로 고정해도 레인이 서지 않는다. 창이 좁아 고정이 풀린 배치는 고정이 없는 표와 칸 자리가 같고 그림이 한 픽셀도 다르지 않다 (레인은 서 있되 행 전체를 덮는다). 기존 케이스는 모두 고치지 않고 통과한다.
+- 같은 파일의 hit와 접근성. 누를 수 있고 이름이 있는 probe로, 흐르는 칸을 고정 구역 아래로 보낸 `scroll_x`에서 고정 구역 좌표의 hit가 고정 칸이고, 경계 손잡이의 흐르는 쪽 절반이 손잡이로 잡히며, 가려진 흐르는 칸의 손잡이는 잡히지 않는다. 같은 자리의 `access_element_at`, 가려진 칸의 `visible_bounds` nullopt, 일부 가림의 교집합, DataGrid·HeaderItem의 역할과 이름 불변.
+- 같은 파일의 입력. 셀 커서가 흐르는 열로 갈 때 `scroll_x_intent`의 변화량이 고정 폭을 뺀 창 기준이고 고정 열로 갈 때는 스크롤 메시지가 없다. F2도 같다. 구역 경계를 넘는 놓기는 `accepts`가 거짓이고 같은 구역은 참이다. 고정 열의 넓힘이 한도에서 멈추고 줄임은 `min_width`까지며 끝 알림이 한 번이다. 창이 좁으면 `frozen_columns()`가 0이고 머리글이 스크롤을 따라 움직이며, 넓히면 돌아온다. 가로 막대의 `content_width`·`viewport_width`·값이 `frozen_columns` 0과 같다. `scroll_delta_to_reveal`은 경계 왼쪽에 걸친 대상과 이미 보이는 대상에 0이고 오른쪽에 숨은 칸에 변화량을 낸다. 본문·행·머리글 id로 `route_reveal`을 불러도 `frozen_columns`가 1이고 `scroll_x`가 0보다 클 때 빈 목록이다. `frozen_columns`가 0인 표에서도 같다: 오른쪽 밖 칸의 컨트롤로 `route_reveal`하면 변화량이 고정 폭 0의 `table_reveal_delta`(고정 없는 표의 들이기 값)와 같고, 본문·행·머리글 id에는 빈 목록이다 (결정 8이 바꾸는 고정 없는 표의 동작을 잠근다).
+- 같은 파일의 raster(`raster_probe.h`). 색을 채우는 probe를 칸에 두고 배율 2에서 고정 구역에 흐르는 칸의 색이 한 픽셀도 없고 흐르는 구역에는 있으며, 경계 x에 `divider` 색이 선다. `divider`는 알파가 있어 바탕과 섞인 색(`over`)을 본다.
+- `tests/workbench_page_tests.cpp` 두 케이스. 고정 토글을 실제 입력 경로로 누르면 `frozen_columns`가 1이 되고 상태 글이 바뀌며 실행 취소 걸음이 늘지 않는다. 고정을 켠 채 경로 열 경계를 끌면 걸음 하나로 합쳐지고 되돌려진다.
 
-데모 칸(`examples/demo` 작업대). 넓은 창에서는 열 합 530이 표 안에 들어가 흐를 일이 없으므로 `columns_`에 폭 300의 "폴더" 열(경로의 폴더 부분)을 더한다. 기록 줄에 토글 `workbench-freeze`(경로 열 고정)와 상태 label `workbench-freeze-state`(예: "고정 열 1: 경로")를 둔다. 켜면 `frozen_columns`가 1이 된다. 서 있는지는 상태 글이 아니라 UIA로 되읽는다. 가로 막대에 `SetValue`를 준 뒤 "경로" 머리글 칸의 BoundingRectangle x가 그대로고 나머지 열은 움직이며 가려진 칸이 화면 밖으로 읽혀야 한다. `mobile_demo`에는 칸이 없다.
+데모 칸(`examples/demo` 작업대). 넓은 창에서는 열 합 530이 표 안에 들어가 흐를 일이 없으므로 `columns_`에 폭 300의 "폴더" 열(경로의 폴더 부분)을 더한다. 폴더 열은 맨 끝에 두어 기존 열의 차례가 바뀌지 않고 정렬 대상이 아니다. 기록 줄에 토글 `workbench-freeze`(경로 열 고정, `check_element` 스위치이고 UIA 이름은 "경로 열 고정")와 상태 label `workbench-freeze-state`("고정 열 1: 경로" 또는 "고정 열 없음")를 둔다. 켜면 `frozen_columns`가 1이 된다. 서 있는지는 상태 글이 아니라 UIA로 되읽는다. 가로 막대에 `SetValue`를 준 뒤 "경로" 머리글 칸의 BoundingRectangle x가 그대로고 나머지 열은 움직이며 가려진 칸이 화면 밖으로 읽혀야 한다. `mobile_demo`에는 칸이 없다.
 
 사람 확인: 배율 150%·200%에서 경계선과 이음매, 고대비에서 경계선, 터치 PC의 가로 팬이 고정 열을 두고 흐르는지, Narrator가 머리글과 칸을 열 순서대로 읽는지. UIA 되읽기에 실제 입력이 필요하면 격리 데스크톱에서 먼저 요청하고 허락한 시간만 쓴다.
 
