@@ -11,9 +11,16 @@ namespace demo {
     namespace {
         // 하위 메뉴를 담는 보기 메뉴 항목의 키다.
         constexpr std::u8string_view theme_submenu { u8"view.theme" };
-        // 막대 메뉴와 하위 메뉴의 popup id다. 하위 메뉴는 부모 popup 기준 자리에 선다.
+        constexpr std::u8string_view page_transition_submenu { u8"view.page-transition" };
+        // 막대 메뉴의 popup id다. 하위 메뉴는 부모 popup 기준 자리에 서고 id는 `submenu_popup_id`가 짓는다.
         constexpr std::u8string_view bar_popup_id { u8"shell-menu" };
-        constexpr std::u8string_view theme_popup_id { u8"shell-menu-theme" };
+
+        // 하위 메뉴의 popup id다. "view.theme"이면 "shell-menu-theme"이다.
+        [[nodiscard]] std::u8string submenu_popup_id(const std::u8string_view key)
+        {
+            const std::size_t dot { key.find(u8'.') };
+            return std::u8string { bar_popup_id } + u8"-" + std::u8string { dot == std::u8string_view::npos ? key : key.substr(dot + 1) };
+        }
 
         struct command_name
         {
@@ -35,6 +42,11 @@ namespace demo {
             { shell_menu_theme_light, u8"밝게" },
             { shell_menu_theme_system, u8"시스템" },
             { shell_menu_theme_dark, u8"어둡게" },
+            { shell_menu_page_transition_none, u8"없음" },
+            { shell_menu_page_transition_slide, u8"밀기" },
+            { shell_menu_page_transition_fade, u8"옅어짐" },
+            { shell_menu_page_transition_zoom, u8"확대" },
+            { shell_menu_page_transition_spring, u8"스프링 밀기" },
         };
 
         [[nodiscard]] std::u8string_view label_of(const std::u8string_view key) noexcept
@@ -61,7 +73,7 @@ namespace demo {
             return { .key = std::u8string { key }, .label = std::u8string { label_of(key) }, .shortcut_text = std::move(shortcut), .access_key = access_key };
         }
 
-        [[nodiscard]] std::vector<luil::menu_item_config> items_of(const std::u8string_view menu, const bool sidebar_visible, const luil::theme_preference theme)
+        [[nodiscard]] std::vector<luil::menu_item_config> items_of(const std::u8string_view menu, const bool sidebar_visible, const luil::theme_preference theme, const std::u8string_view page_transition)
         {
             if (menu == u8"file")
                 return { command(u8"file.new", U'n', u8"Ctrl+N"), command(u8"file.open", U'o', u8"Ctrl+O"), command(u8"file.save", U's', u8"Ctrl+S") };
@@ -95,7 +107,25 @@ namespace demo {
                 radio(shell_menu_theme_system, U's', luil::theme_preference::system),
                 radio(shell_menu_theme_dark, U'd', luil::theme_preference::dark),
             };
-            return { std::move(sidebar), std::move(themes) };
+            // 페이지를 바꿀 때의 전환이다. 고른 것이 라디오로 선다.
+            const auto transition = [page_transition](const std::u8string_view key, const char32_t access_key) {
+                luil::menu_item_config item { command(key, access_key) };
+                item.kind = luil::menu_item_kind::radio;
+                item.checked = page_transition == key;
+                return item;
+            };
+            luil::menu_item_config transitions {};
+            transitions.key = std::u8string { page_transition_submenu };
+            transitions.label = u8"페이지 전환";
+            transitions.access_key = U'p';
+            transitions.children = {
+                transition(shell_menu_page_transition_none, U'n'),
+                transition(shell_menu_page_transition_slide, U's'),
+                transition(shell_menu_page_transition_fade, U'f'),
+                transition(shell_menu_page_transition_zoom, U'z'),
+                transition(shell_menu_page_transition_spring, U'p'),
+            };
+            return { std::move(sidebar), std::move(themes), std::move(transitions) };
         }
     }
 
@@ -117,7 +147,7 @@ namespace demo {
         if (const auto* const select { message.get<shell_menu_select_intent>() }; select != nullptr)
         {
             last_command_ = select->key;
-            if (select->key == shell_menu_sidebar || select->key.starts_with(u8"theme."))
+            if (select->key == shell_menu_sidebar || select->key.starts_with(u8"theme.") || select->key.starts_with(shell_menu_page_transition_prefix))
                 pending_ = select->key;
             return true;
         }
@@ -175,12 +205,13 @@ namespace demo {
         return make_label({ kind_text, u8"shell-menu-last" }, last_command_text(), 11.0f, luil::label_color_role::dim);
     }
 
-    std::vector<luil::ui_popup> shell_menu::make_popups(const luil::menu_bar_element& bar, const float scale, const luil::rect_f& limit, const bool sidebar_visible, const luil::theme_preference theme) const
+    std::vector<luil::ui_popup> shell_menu::make_popups(
+        const luil::menu_bar_element& bar, const float scale, const luil::rect_f& limit, const bool sidebar_visible, const luil::theme_preference theme, const std::u8string_view page_transition) const
     {
         std::vector<luil::ui_popup> popups {};
         if (state_.open == false || state_.current.empty())
             return popups;
-        std::vector<luil::menu_item_config> items { items_of(state_.current, sidebar_visible, theme) };
+        std::vector<luil::menu_item_config> items { items_of(state_.current, sidebar_visible, theme, page_transition) };
         if (items.empty())
             return popups;
 
@@ -198,7 +229,7 @@ namespace demo {
         config.scale = scale;
         luil::ui_popup top { luil::make_menu_bar_popup(bar, std::move(menu), std::move(config), limit) };
 
-        if (submenu_ == theme_submenu)
+        if (submenu_.empty() == false)
         {
             // 하위 메뉴는 부모 popup 기준 자리에 선다. 붙는 항목의 위 끝까지의 높이를 앞 항목들로 센다.
             float submenu_y { luil::menu_padding };
@@ -206,10 +237,11 @@ namespace demo {
             {
                 if (item.separator_above)
                     submenu_y += luil::menu_separator_height;
-                if (item.key == theme_submenu)
+                if (item.key == submenu_ && item.children.empty() == false)
                 {
+                    const std::u8string popup_id { submenu_popup_id(item.key) };
                     luil::menu_config child {};
-                    child.owner = u8"shell-menu-theme";
+                    child.owner = popup_id;
                     child.items = item.children;
                     child.select = select;
                     // 고르면 하위 메뉴와 막대가 함께 닫힌다.
@@ -217,9 +249,9 @@ namespace demo {
                     child.close_submenu = luil::make_message_action(shell_menu_submenu_intent {});
                     child.depth = 1;
                     child.parent_surface = std::u8string { bar_popup_id };
-                    child.anchor_key = std::u8string { theme_submenu };
+                    child.anchor_key = item.key;
                     luil::menu_popup_config child_popup {};
-                    child_popup.id = std::u8string { theme_popup_id };
+                    child_popup.id = popup_id;
                     child_popup.anchor = std::u8string { bar_popup_id };
                     child_popup.x = top.width;
                     child_popup.y = submenu_y - luil::menu_padding;

@@ -333,6 +333,44 @@ TEST_CASE("The device page states whether the system reduces motion", "[mobile-d
     }
 }
 
+TEST_CASE("The device page switches page transitions and states whether one is turning", "[mobile-demo][page-transition]")
+{
+    mobile_demo::device_page page {};
+    REQUIRE(page.page_transition_enabled());
+    for (const bool turning : { false, true })
+    {
+        CAPTURE(turning);
+        page.set_page_transition_turning(turning);
+        const auto tree { device_tree(page, false) };
+        const auto* const toggle { tree.find({ luil::ui_element_kind::check, u8"page-transition" }) };
+        REQUIRE(toggle != nullptr);
+        REQUIRE(toggle->accessibility().name == u8"페이지 전환");
+        REQUIRE(toggle->accessibility().checked == true);
+        const auto* const state { tree.find({ mobile_demo::kind_text, u8"page-transition-state" }) };
+        REQUIRE(state != nullptr);
+        // UIA가 되읽는 이름이 화면의 글과 같다.
+        REQUIRE(state->accessibility().name == (turning ? u8"페이지 전환: 켜짐 · 도는 중" : u8"페이지 전환: 켜짐 · 멈춤"));
+        // 움직임 줄이기 칸 아래에 선다.
+        REQUIRE(state->bounds().y > tree.find({ mobile_demo::kind_layout, u8"motion-spinner" })->bounds().y);
+    }
+
+    // 스위치를 누르면 끈다. 끈 동안은 도는 중이라도 "꺼짐"이다.
+    {
+        const auto tree { device_tree(page, false) };
+        const auto* const toggle { tree.find({ luil::ui_element_kind::check, u8"page-transition" }) };
+        const std::vector<luil::input_action> actions { (*toggle->action(luil::ui_trigger::left_click))({ toggle->id() }) };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(page.handle(*message));
+    }
+    REQUIRE(page.page_transition_enabled() == false);
+    const auto off { device_tree(page, false) };
+    REQUIRE(off.find({ luil::ui_element_kind::check, u8"page-transition" })->accessibility().checked == false);
+    REQUIRE(off.find({ mobile_demo::kind_text, u8"page-transition-state" })->accessibility().name == u8"페이지 전환: 꺼짐");
+    REQUIRE(page.handle(luil::app_message { mobile_demo::page_transition_toggle_intent { true } }));
+    REQUIRE(page.page_transition_enabled());
+}
+
 TEST_CASE("The device page says whether the platform has a taskbar", "[mobile-demo][taskbar]")
 {
     // 성질은 프로세스 전역이라 시험 뒤에 되돌린다.

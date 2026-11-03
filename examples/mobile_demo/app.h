@@ -27,6 +27,7 @@
 
 #include "luil/app/app_delegate.h"
 #include "luil/app/app_host.h"
+#include "luil/ui/page_transition.h"
 
 #include <atomic>
 #include <chrono>
@@ -67,6 +68,10 @@ namespace mobile_demo {
 
     private:
         void close_popups();
+        // 지금 본문에서 `next` 페이지(빈 글은 목록)로 가는 전환이다. 떠나는 본문을 지난 frame의 자리와 배율로 따로 짓는다.
+        [[nodiscard]] luil::page_transition make_page_motion(const std::u8string& next, luil::page_transition_direction direction);
+        // 좁은 화면은 목록 또는 페이지 하나, 넓은 화면은 오른쪽 판의 페이지다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_body_page(const std::u8string& page, bool wide, float width, float height, float scale);
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_navigation(float width, float height, float scale, bool highlight);
         // 페이지 하나를 그 자리에 맞춰 짓는다. 흘려 보는 페이지는 scroll view에 담는다.
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_page(const std::u8string& page, float width, float height, float scale);
@@ -94,6 +99,11 @@ namespace mobile_demo {
         window_metrics_intent metrics_ {};
         // 마지막으로 지은 frame의 시각이다. 시간이 흘러야 바뀌는 상태의 다음 예고를 이 시각에서 센다.
         std::chrono::steady_clock::time_point frame_time_ {};
+        // 페이지 전환이다 (앱 상태). 감싼 자리(좁은 화면은 본문 전체, 넓은 화면은 오른쪽 판)와 배율, 그때의 꼴을 지난 frame에서 적어 둔다.
+        luil::page_transition page_motion_ {};
+        luil::rect_f motion_slot_ {};
+        float motion_scale_ { 1.0f };
+        bool motion_wide_ { false };
         std::atomic<bool> closed_ { false };
         // 클립보드 요청을 넣을 host다 (`clipboard_host_intent`). 받기 전에는 요청을 버린다.
         luil::app_host* host_ { nullptr };

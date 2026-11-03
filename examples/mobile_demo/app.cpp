@@ -4,6 +4,7 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/app_bar_element.h"
 #include "luil/ui/caption_element.h"
+#include "luil/ui/page_transition_element.h"
 #include "luil/ui/scroll_view_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_platform.h"
@@ -27,6 +28,10 @@ namespace mobile_demo {
         }
         if (const auto* const metrics { message.get<window_metrics_intent>() }; metrics != nullptr)
         {
+            // 전환은 움직임 줄이기가 켜지거나 창 크기·배율·폭 등급이 바뀌면(회전·화면 분할) 놓는다 (page-transition-design.md 결정 5).
+            if ((metrics->reduce_motion && metrics_.reduce_motion == false) || metrics->width != metrics_.width || metrics->height != metrics_.height
+                || metrics->scale != metrics_.scale || metrics->width_class != metrics_.width_class)
+                page_motion_ = {};
             metrics_ = *metrics;
             // 시트 페이지는 metrics 메시지를 보지 못하므로 셸이 움직임 줄이기만 넘긴다.
             sheets_.set_reduce_motion(metrics->reduce_motion);
@@ -39,6 +44,9 @@ namespace mobile_demo {
         }
         if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
         {
+            // 떠나는 본문은 `page_`가 아직 옛 값일 때 짓는다. 목록에서 페이지로 들어가는 것은 앞으로다.
+            if (navigate->page != page_)
+                page_motion_ = make_page_motion(navigate->page, luil::page_transition_direction::forward);
             page_ = navigate->page;
             // 페이지를 떠나면 그 페이지의 popup도 닫는다.
             close_popups();
@@ -46,6 +54,9 @@ namespace mobile_demo {
         }
         if (message.get<back_intent>() != nullptr)
         {
+            // 앱 바의 뒤로 단추와 시스템 뒤로 가기는 뒤로다.
+            if (page_.empty() == false)
+                page_motion_ = make_page_motion({}, luil::page_transition_direction::backward);
             page_.clear();
             close_popups();
             return;
@@ -92,6 +103,37 @@ namespace mobile_demo {
     {
         tabs_.close_popups();
         popups_.close_popups();
+    }
+
+    luil::page_transition mobile_driver::make_page_motion(const std::u8string& next, const luil::page_transition_direction direction)
+    {
+        if (device_.page_transition_enabled() == false || metrics_.reduce_motion || motion_slot_.width <= 0.0f || motion_slot_.height <= 0.0f)
+            return {};
+        const bool wide { metrics_.width_class != luil::window_width_class::compact };
+        // 지난 frame과 꼴이 다르면(회전 직후) 자리가 맞지 않아 짓지 않는다.
+        if (wide != motion_wide_)
+            return {};
+        // 넓은 화면의 오른쪽 판은 비어 있으면 첫 페이지를 보인다. 같은 페이지로 가는 것이면 바뀌는 것이 없다.
+        const std::u8string shown { page_.empty() && wide ? std::u8string { page_basics } : page_ };
+        const std::u8string coming { next.empty() && wide ? std::u8string { page_basics } : next };
+        if (shown == coming)
+            return {};
+        const float scale { motion_scale_ };
+        auto prior { make_body_page(shown, wide, motion_slot_.width / scale, motion_slot_.height / scale, scale) };
+        auto tree { std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(prior), motion_slot_, scale, {}, nullptr, theme_.style().get())) };
+        // 좁은 화면은 목록 → 페이지를 가로로 민다. 넓은 화면의 오른쪽 판은 자리가 그대로라 옅어짐이다.
+        luil::page_transition_style style {};
+        style.effect = wide ? luil::page_transition_effect::fade : luil::page_transition_effect::slide;
+        style.axis = luil::page_transition_axis::horizontal;
+        style.direction = direction;
+        return luil::start_page_transition(std::move(tree), style, std::chrono::steady_clock::now(), metrics_.reduce_motion);
+    }
+
+    std::unique_ptr<luil::ui_element> mobile_driver::make_body_page(const std::u8string& page, const bool wide, const float width, const float height, const float scale)
+    {
+        if (wide == false && page.empty())
+            return make_navigation(width, height, scale, false);
+        return make_page(page, width, height, scale);
     }
 
     std::shared_ptr<const luil::ui_frame> mobile_driver::make_frame()
@@ -141,25 +183,35 @@ namespace mobile_demo {
 
         const float body_width { width / scale };
         const float body_height { (height - top) / scale };
+        // 기기 페이지의 전환 label이 읽는 상태다. 도는 동안은 tree를 다시 짓지 않으므로 시작 frame의 값이 끝 tick까지 남는다.
+        device_.set_page_transition_turning(page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, frame_time_) == false);
+        // 바뀌는 자리는 늘 화면 전환 요소로 감싼다. 떠나는 화면이 없으면 새 화면만 그리는 껍질이다.
+        const auto wrap = [this](std::unique_ptr<luil::ui_element> content) {
+            return std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", page_motion_ }, std::move(content));
+        };
         std::unique_ptr<luil::ui_element> body {};
+        const luil::ui_element* moving { nullptr };
         if (wide)
         {
             luil::stack_config row_config {};
             row_config.direction = luil::stack_direction::row;
             auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"two-pane" }, row_config) };
             row->add(make_navigation(navigation_width, body_height, scale, true), navigation_width);
-            row->add_flexible(make_page(shown, body_width - navigation_width, body_height, scale));
+            auto pane { wrap(make_page(shown, body_width - navigation_width, body_height, scale)) };
+            moving = pane.get();
+            row->add_flexible(std::move(pane));
             body = std::move(row);
-        }
-        else if (page_.empty())
-        {
-            body = make_navigation(body_width, body_height, scale, false);
         }
         else
         {
-            body = make_page(page_, body_width, body_height, scale);
+            body = wrap(make_body_page(page_, false, body_width, body_height, scale));
+            moving = body.get();
         }
         body->arrange({ .slot = { 0.0f, top, width, height - top }, .scale = scale, .style = style });
+        // 다음 이동에서 떠나는 화면을 이 자리와 배율로 짓는다.
+        motion_slot_ = moving->bounds();
+        motion_scale_ = scale;
+        motion_wide_ = wide;
         root->add(std::move(body));
 
         // 오버레이들: dialog는 화면을 덮고 토스트는 아래쪽에 쌓인다.
@@ -275,12 +327,18 @@ namespace mobile_demo {
         // 멈춘 모습으로 끝낸다 (지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다).
         if (const auto sheet { sheets_.next_update(frame_time_) }; sheet.has_value() && (next.has_value() == false || *sheet < *next))
             next = sheet;
+        // 페이지 전환은 끝 시각 하나를 싣는다. 도는 동안의 frame은 요소의 예고가 다시 그린다.
+        if (const auto end { luil::page_transition_end(page_motion_) }; end.has_value() && (next.has_value() == false || *end < *next))
+            next = end;
         return next;
     }
 
-    void mobile_driver::tick(std::chrono::steady_clock::time_point)
+    void mobile_driver::tick(const std::chrono::steady_clock::time_point now)
     {
         toasts_.prune();
+        // 끝난 전환은 놓는다. 다음 frame은 prior 없는 tree라 덮개가 걷혀 손가락이 풀린다.
+        if (page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, now))
+            page_motion_ = {};
     }
 
     // 표는 page test가 함께 보도록 `common.cpp`에 둔다.
