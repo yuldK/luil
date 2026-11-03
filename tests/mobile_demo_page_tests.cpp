@@ -1659,7 +1659,7 @@ TEST_CASE("The long notes of the basics page break lines instead of ending in an
     const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
     const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
     const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
-    for (const std::u8string& owner : { std::u8string { u8"rating-title" }, std::u8string { u8"readonly" }, std::u8string { u8"basics-hint" } })
+    for (const std::u8string& owner : { std::u8string { u8"rating-title" }, std::u8string { u8"color-title" }, std::u8string { u8"line-break" }, std::u8string { u8"readonly" }, std::u8string { u8"basics-hint" } })
     {
         const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, owner }) };
         REQUIRE(note != nullptr);
