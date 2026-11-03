@@ -402,6 +402,7 @@ luil_add_source_filter(luil_core_files "app"
     host/renderer_policy.cpp
     "${public_headers}/app/renderer_policy.h"
     "${public_headers}/app/taskbar.h"
+    "${public_headers}/app/tray_icon.h"
     "${public_headers}/app/webview.h")
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
@@ -447,7 +448,9 @@ luil_add_source_filter(luil_core_files "host"
     host/surface_invalidate.h
     host/taskbar_sync.cpp
     host/taskbar_sync.h
-    host/text_input_host.h)
+    host/text_input_host.h
+    host/tray_sync.cpp
+    host/tray_sync.h)
 
 # 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.
 luil_add_source_filter(luil_files "umbrella"
@@ -489,13 +492,16 @@ luil_add_source_filter(luil_files "win32/host"
 
 # 작업 표시줄 단추다 (taskbar-design.md). 어떤 호출을 할지는 core의 host/taskbar_sync가 고르고, 여기는
 # ITaskbarList3 호출과 창별 아이콘 핸들만 쥔다. 점프 목록(jump-list-design.md)은 ICustomDestinationList로 같은 자리에서 낸다.
+# 알림 영역 아이콘(tray-icon-design.md)도 같은 그림 변환을 쓰고, 어떤 호출을 할지는 core의 host/tray_sync가 고른다.
 luil_add_source_filter(luil_files "win32/taskbar"
     win32/icon_from_image.cpp
     win32/icon_from_image.h
     win32/jump_list.cpp
     win32/jump_list.h
     win32/taskbar_button.cpp
-    win32/taskbar_button.h)
+    win32/taskbar_button.h
+    win32/tray_icon_win32.cpp
+    win32/tray_icon_win32.h)
 
 # Direct3D 렌더러다. 끈 구성은 "없음"을 돌려주는 stub을 대신 컴파일한다 —
 # Ganesh를 부르는 파일이 이것 하나라, 빠지면 링커가 Skia의 GPU 코드를 걷어 낸다.

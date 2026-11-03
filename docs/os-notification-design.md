@@ -133,7 +133,7 @@ namespace luil::win32 {
 **1. Windows 구현 길.** 질문: 토스트를 무엇으로 올리는가.
 - 길 a: Windows SDK의 WinRT `Windows.UI.Notifications`를 ABI 헤더와 WRL로 직접 부른다. 되는 것: 최소 SDK 10.0.22621.0(CMakeLists.txt 33줄)에 `winrt/windows.ui.notifications.h`·`um/NotificationActivationCallback.h`가 있다. 런타임 재배포가 없고 정적 런타임(`/MT`, CMakeLists.txt 8줄)과 맞는다. COM은 이미 `ComPtr`를 쓴다. 대가: 코드가 장황하다. 링크 목록에 `runtimeobject`가 는다.
 - 길 b: Windows App SDK의 `AppNotificationManager`. 대가: 런타임 설치와 NuGet 부트스트랩이 들어 luil의 받는 방침과 맞지 않는다.
-- 길 c: `Shell_NotifyIcon` 풍선. 되는 것: AUMID가 없어도 된다. 대가: 트레이 아이콘(R3 tray)이 먼저 서야 하고 그림·갱신·사건이 빈약하다.
+- 길 c: `Shell_NotifyIcon` 풍선. 되는 것: AUMID가 없어도 된다. 대가: 트레이 아이콘(R3 tray)이 먼저 서야 하고 그림·갱신·사건이 빈약하다. [알림 영역 아이콘](tray-icon-design.md)은 이 결정을 따라 풍선(`NIF_INFO`)을 쓰지 않는다.
 - 권장: a. C++/WinRT 헤더는 예외로 오류를 알리고 컴파일이 무거워 ABI로 간다. 대가: 장황한 코드와 링크 하나. **권장대로 진행.**
 
 **2. 앱 식별 등록.** 질문: AUMID·표시 이름·아이콘을 OS에 누가 어떻게 알리는가.

@@ -99,6 +99,7 @@ add_executable(luil_core_tests
     tab_bar_element_tests.cpp
     tab_bar_style_tests.cpp
     taskbar_sync_tests.cpp
+    tray_sync_tests.cpp
     table_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
@@ -471,6 +472,7 @@ add_executable(luil_tests
     surface_input_tests.cpp
     taskbar_button_tests.cpp
     toast_payload_tests.cpp
+    tray_icon_tests.cpp
     tsf_input_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp

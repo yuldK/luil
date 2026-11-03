@@ -24,6 +24,7 @@
 #include "win32/skia_renderer.h"
 #include "win32/surface_input.h"
 #include "win32/taskbar_button.h"
+#include "win32/tray_icon_win32.h"
 #include "win32/utf8.h"
 #include "win32/webview_host.h"
 #include "win32/webview_layout.h"
@@ -598,9 +599,19 @@ namespace luil::win32 {
 
             // 셸이 단추를 만들었다고 알렸다. 새 단추에는 아무것도 걸려 있지 않으므로 지금 요청을 처음부터 다시 낸다.
             //  - 탐색기가 다시 뜰 때도 같은 메시지가 와서 같은 길로 복원된다.
-            //  - `taskbar_created` 방송은 이 노드가 쓰지 않는다 (tray가 쓴다).
+            //  - `taskbar_created` 방송은 알림 영역 아이콘의 것이다 (tray-icon-design.md). 새 알림 영역에는 아무것도 없으므로
+            //    적용 기록을 지우고 요청을 처음부터 다시 더한다. 방송은 최상위 창마다 오므로 주 창의 것만 본다.
             void handle_shell_event(const std::u8string& surface, const shell_event event) override
             {
+                if (event == shell_event::taskbar_created)
+                {
+                    if (surface.empty())
+                    {
+                        tray_.shell_restarted();
+                        synchronize_tray();
+                    }
+                    return;
+                }
                 if (event != shell_event::taskbar_button_created)
                     return;
                 HWND handle { nullptr };
@@ -701,6 +712,9 @@ namespace luil::win32 {
                 }
                 // 셸이 단추를 만들면 보내는 등록 메시지를 관리자 권한에서도 받게 한다.
                 allow_shell_events(window_);
+                // 알림 영역 아이콘의 콜백도 같다 (tray-icon-design.md). 아이콘은 frame이 실을 때 선다.
+                allow_tray_callback(window_);
+                tray_.configure(window_, instance_, config_.icon_resource, config_.caption.title, tray_shell_for_new_windows());
                 caption_surface::apply_dwm_frame(window_, window_display_mode::normal);
                 // DWM이 모서리 선택을 받는 판인지 주 창에 기본값을 걸어 묻는다 — 기본값이라 주 창 모양은 그대로다.
                 // 받지 않는 판(Windows 10 이하)은 실패를 돌려주고 popup은 직각으로 물러선다.
@@ -956,6 +970,7 @@ namespace luil::win32 {
                     std::vector<surface_content> contents { synchronize_windows() };
                     // 독립 창의 단추는 창이 선 뒤에 걸 수 있다.
                     synchronize_taskbar();
+                    synchronize_tray();
                     synchronize_webviews();
                     for (surface_content& popup_content : synchronize_popups())
                         contents.push_back(std::move(popup_content));
@@ -1078,6 +1093,8 @@ namespace luil::win32 {
                     {
                         // 거두기 전에 표식부터 지운다. 둘째가 이미 정리를 시작한 앱에 인자를 보내지 않는다.
                         clear_instance_mark();
+                        // 알림 영역 아이콘도 지운다. 두면 마우스가 지나갈 때까지 유령 아이콘이 남는다.
+                        static_cast<void>(tray_.remove());
                         // 알림 사건도 더 받지 않는다. 늦게 온 사건은 대기열에 남아 앱에 가지 않는다.
                         detach_notification_window(window_);
                         // 끝나는 창이 미뤄 둔 배치는 내지 않는다. 화면에 있는 그대로의 배치를 알린다.
@@ -1099,6 +1116,7 @@ namespace luil::win32 {
                     if (word_parameter != FALSE && host_ != nullptr)
                     {
                         clear_instance_mark();
+                        static_cast<void>(tray_.remove());
                         detach_notification_window(window_);
                         deferred_placements_.clear();
                         post_window_placement();
@@ -1196,6 +1214,7 @@ namespace luil::win32 {
                     //    popup이 낡은 채로 남는다.
                     invalidate_surfaces(surfaces_to_repaint(synchronize_popups(), false));
                     InvalidateRect(window_, nullptr, FALSE);
+                    refresh_tray_appearance();
                     return 0;
                 }
                 case WM_DISPLAYCHANGE:
@@ -1213,6 +1232,8 @@ namespace luil::win32 {
                     //    나간 창을 다듬는 것은 이미 OS가 한다.
                     if (main_.fullscreen())
                         static_cast<void>(main_.reapply_fullscreen_bounds());
+                    // 주 모니터의 배율이 바뀌었을 수 있다. 알림 영역 그림의 크기가 그것을 따른다.
+                    refresh_tray_appearance();
                     return 0;
                 case WM_FONTCHANGE:
                     // 글꼴이 설치·삭제되면 캐시의 해석 결과를 비운다.
@@ -1232,6 +1253,8 @@ namespace luil::win32 {
                     // 투명 효과·고대비가 바뀌면 배경 효과가 서는지도 바뀐다.
                     transparency_enabled_ = read_transparency_enabled();
                     refresh_backdrop();
+                    // 작업 표시줄 밝기·고대비가 바뀌면 알림 영역 그림도 다시 고른다.
+                    refresh_tray_appearance();
                     invalidate_all_surfaces();
                     // 움직임 줄이기는 앱의 상태에도 닿는다 (앱이 든 전환·스프링). 그리기에 닿는 갱신을 마친 뒤, 값이 달라졌을
                     // 때만 알린다 — 이 메시지는 이 설정이 아닌 일로도 자주 온다.
@@ -1251,6 +1274,9 @@ namespace luil::win32 {
                     return 0;
                 case notification_event_message:
                     deliver_notification_events();
+                    return 0;
+                case tray_callback_message:
+                    handle_tray_callback(word_parameter, long_parameter);
                     return 0;
                 case WM_COPYDATA: {
                     // 같은 이름의 둘째 인스턴스가 보낸 인자다. 표식이 없거나 이 형식의 표식이 아닌 WM_COPYDATA는 기본 처리에 넘긴다.
@@ -1273,6 +1299,8 @@ namespace luil::win32 {
                         host_->shutdown();
                         host_.reset();
                     }
+                    // 닫기를 거치지 않은 파괴 경로에서도 알림 영역 아이콘을 지운다. 이미 지웠으면 할 일이 없다.
+                    static_cast<void>(tray_.remove());
                     destroy_all_popups();
                     destroy_all_secondary_windows();
                     // 창이 사라지면 단추에 걸린 오버레이 아이콘도 더는 쓸 데가 없다.
@@ -2225,6 +2253,8 @@ namespace luil::win32 {
             //  - 작업 표시줄 요청을 셸에 낼 수 있는가 (`capabilities.taskbar`). 개체를 만들 수 있었는가다.
             //  - OS 알림을 올릴 수 있는가 (`capabilities.notifications`). 앱 식별이 서고 알림 개체를 얻었는가다.
             //  - 그림을 클립보드에 넣을 수 있는가 (`capabilities.clipboard_image_copy`). Win32는 늘 참이다.
+            //  - 알림 영역에 아이콘을 세울 수 있는가 (`capabilities.tray`). 주 창이 섰으면 늘 참이다. 늘 참인 칸은 아래 조건에
+            //    항을 더하지 않아도 된다. `clipboard_image_copy`가 첫 게시의 표지라 첫 호출에서 함께 적힌다.
             // 바뀐 때만 적는다. 새 능력은 `ui_platform_capabilities` 끝에 기본 거짓으로 더하고 여기에 한 줄을 더한다.
             void publish_platform()
             {
@@ -2239,6 +2269,7 @@ namespace luil::win32 {
                 platform.capabilities.taskbar = taskbar;
                 platform.capabilities.notifications = notifications;
                 platform.capabilities.clipboard_image_copy = true;
+                platform.capabilities.tray = true;
                 set_ui_platform(platform);
             }
 
@@ -2906,6 +2937,107 @@ namespace luil::win32 {
                 }
             }
 
+            // frame이 실은 알림 영역 아이콘을 셸에 맞춘다 (tray-icon-design.md). 게시 wake·탐색기 재시작·환경 변화가 부른다.
+            //  - 주 창이 숨은 동안에도 선다. 아이콘은 창 표면과 무관하다.
+            //  - 메뉴가 떠 있는데 아이콘이 빠졌으면 메뉴를 닫는다. 메뉴의 modal 루프 안에서도 이 메시지는 풀린다.
+            void synchronize_tray()
+            {
+                if (host_ == nullptr || window_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr)
+                    return;
+                if (tray_menu_open_ && frame->tray.has_value() == false)
+                    static_cast<void>(EndMenu());
+                post_tray_report(tray_.apply(frame->tray));
+            }
+
+            // 고대비·작업 표시줄 밝기·주 모니터 배율을 다시 읽고, 바뀌었으면 알림 영역 그림을 다시 고른다.
+            void refresh_tray_appearance()
+            {
+                const tray_appearance appearance { read_tray_appearance() };
+                if (appearance == tray_.appearance())
+                    return;
+                tray_.set_appearance(appearance);
+                synchronize_tray();
+            }
+
+            // 셸의 알림 영역 콜백이다. 사건은 그 순간의 frame이 실은 것으로 낸다 (메뉴와 `activate`는 견주지 않는다).
+            //  - 라이브러리는 창을 앞으로 세우지 않는다. 앱이 `main_hidden`을 끄고 활성화를 싣는다.
+            void handle_tray_callback(const WPARAM word_parameter, const LPARAM long_parameter)
+            {
+                if (host_ == nullptr)
+                    return;
+                const std::optional<tray_icon_event> event { tray_.receive(word_parameter, long_parameter) };
+                if (event.has_value() == false)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr || frame->tray.has_value() == false)
+                    return;
+                if (event->action == tray_icon_action::context && frame->tray->menu.has_value())
+                {
+                    show_tray_menu(*frame->tray->menu, event->point);
+                    return;
+                }
+                if (frame->tray->activate == nullptr)
+                    return;
+                try
+                {
+                    dispatch_action(frame->tray->activate(*event));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The tray icon action threw an exception.");
+                }
+            }
+
+            // 알림 영역 아이콘의 메뉴를 시스템 메뉴로 띄운다 (결정 1의 길 a). 고른 키는 연 순간의 설정 사본의 `select`로 낸다.
+            //  - 앞으로 세우지 않으면 바깥을 눌러도 메뉴가 닫히지 않는다. 닫은 뒤 빈 메시지를 보내야 다음 메뉴가 곧바로
+            //    닫히지 않는다. 둘 다 이 API의 알려진 규칙이다.
+            //  - 떠 있는 동안 UI thread는 메뉴의 modal 루프에서 이 창의 메시지를 계속 푼다. 그 사이 창이 끝났을 수 있어
+            //    돌아온 뒤 다시 본다.
+            void show_tray_menu(const menu_config menu, const screen_point point)
+            {
+                if (tray_menu_open_ || window_ == nullptr)
+                    return;
+                const tray_menu built { make_tray_menu(menu) };
+                if (built.menu.get() == nullptr)
+                    return;
+                SetForegroundWindow(window_);
+                tray_menu_open_ = true;
+                const UINT command { static_cast<UINT>(TrackPopupMenuEx(built.menu.get(), TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, window_, nullptr)) };
+                tray_menu_open_ = false;
+                if (window_ == nullptr)
+                    return;
+                PostMessageW(window_, WM_NULL, 0, 0);
+                const std::optional<std::u8string> key { built.key_of(command) };
+                if (host_ == nullptr || key.has_value() == false || menu.select == nullptr)
+                    return;
+                try
+                {
+                    dispatch_action(menu.select(*key));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The tray menu action threw an exception.");
+                }
+            }
+
+            void post_tray_report(const std::optional<tray_report>& report)
+            {
+                if (report.has_value() == false || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                try
+                {
+                    if (app_message message { environment_.delegate->make_tray_message(*report) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The tray delegate threw an exception.");
+                }
+            }
+
             void post_jump_list_report(const std::optional<jump_list_report>& report)
             {
                 if (report.has_value() == false || host_ == nullptr || environment_.delegate == nullptr)
@@ -3216,6 +3348,10 @@ namespace luil::win32 {
             taskbar_button taskbar_ {};
             // 작업 표시줄 점프 목록을 셸에 내는 자리다. 목록은 셸이 파일로 쥐므로 창이 사라져도 놓을 것이 없다.
             jump_list_writer jump_list_ {};
+            // 알림 영역 아이콘이다 (tray-icon-design.md). 주 창을 만들 때 창과 셸 호출을 받는다. 그림 핸들을 쥔다.
+            tray_icon_host tray_ {};
+            // 알림 영역 메뉴가 떠 있다 (`show_tray_menu`의 modal 루프 안이다).
+            bool tray_menu_open_ { false };
             // update timer가 깨울 표면들이다.
             // "그 시각을 답한 표면"을 timer와 함께 들고 있는 것이 표면별 다시 그리기의
             // 절반이다 — 나머지 절반은 frame 대조가 낸다 (rendering.md).

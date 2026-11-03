@@ -3,6 +3,7 @@
 #include "luil/app/webview.h"
 #include "luil/app/file_dialog.h"
 #include "luil/app/taskbar.h"
+#include "luil/app/tray_icon.h"
 #include "luil/messaging/channel.h"
 #include "luil/messaging/latest_slot.h"
 #include "luil/theme/appearance.h"
@@ -411,6 +412,10 @@ namespace luil {
         //  - 앱은 상태 하나로 켠다 (`inspector.enabled = state_.inspecting;`). 켜는 단축키는 앱이 정한다.
         //  - 그리기만 한다. 켠다고 다시 그릴 계기가 늘지 않고 접근성 tree, 입력, 초점에 닿지 않는다.
         inspector_config inspector {};
+        // 알림 영역(트레이) 아이콘이다 (tray-icon-design.md). 비면 아이콘이 없다 (기본).
+        //  - 주 창이 숨은 동안(`main_hidden`)에도 선다. 주 창을 숨기고 트레이에서 되살리는 앱이 쓴다.
+        //  - 하지 못하는 플랫폼(Android)은 받고 무시한다 (`ui_platform::capabilities::tray`).
+        std::optional<tray_icon> tray {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
     };

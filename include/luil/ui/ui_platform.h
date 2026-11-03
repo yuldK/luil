@@ -35,6 +35,9 @@ namespace luil {
         // 그림을 클립보드에 넣을 수 있다 (`clipboard_data_copy_request::image`, image-clipboard-design.md). Win32만 참이다.
         // 거짓인 플랫폼(Android)은 글 칸만 넣으므로 앱이 "그림 복사"를 감춘다. 읽기는 모든 플랫폼이 한다.
         bool clipboard_image_copy { false };
+        // 알림 영역에 아이콘을 세울 수 있다 (`ui_frame::tray`, tray-icon-design.md). Win32에서 주 창이 섰으면 참이다.
+        // 탐색기가 아직 없어도 참이고, 아이콘이 실제로 섰는지는 Win32의 `tray_report`가 말한다.
+        bool tray { false };
 
         [[nodiscard]] bool operator==(const ui_platform_capabilities&) const noexcept = default;
     };

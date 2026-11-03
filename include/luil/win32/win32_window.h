@@ -205,6 +205,31 @@ namespace luil::win32 {
         [[nodiscard]] bool operator==(const jump_list_report&) const = default;
     };
 
+    // 알림 영역 아이콘(`ui_frame::tray`)에 앱의 요청이 닿은 정도다 (docs/tray-icon-design.md).
+    enum class tray_status
+    {
+        // 요청이 없다. 셸에 걸린 것이 없다.
+        off,
+        // 요청이 있으나 셸이 받지 않았다 (탐색기가 아직 없다). `TaskbarCreated`를 기다린다.
+        waiting,
+        // 아이콘이 섰다. Windows 11은 넘침 칸에 숨어 있을 수 있다.
+        shown,
+        // 셸 호출이나 그림 변환이 실패했거나 툴팁이 올바른 UTF-8이 아니다. `error`가 그 까닭이다.
+        failed,
+    };
+
+    // 알림 영역 아이콘의 상태 보고다. 상태가 바뀔 때 한 번 알린다.
+    //  - 셸에는 읽는 길이 없어 `shown`은 호출이 오류 없이 끝났다는 뜻이다. 알림 영역에 실제로 보이는 모양은 사람이 본다.
+    //  - 실패는 다음 셸 호출(요청 변화나 탐색기 재시작)까지 남는다. 같은 요청으로 다시 하지 않는다.
+    struct tray_report
+    {
+        tray_status status { tray_status::off };
+        // `failed`일 때 첫 실패의 영문 진단이다. 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const tray_report&) const = default;
+    };
+
     // 앱 식별(AUMID)이다 (docs/os-notification-design.md). OS 알림(`show_notification`)이 이것으로 선다.
     //  - id가 있으면 `run_application_window`가 창보다 먼저 프로세스에 AUMID를 걸고(`SetCurrentProcessExplicitAppUserModelID`)
     //    `HKCU\Software\Classes\AppUserModelId\<id>`에 표시 이름·아이콘을 쓴다. 바로가기와 설치기가 없어도 빌드 폴더의
@@ -374,6 +399,14 @@ namespace luil::win32 {
             static_cast<void>(host);
             static_cast<void>(arguments);
             return false;
+        }
+
+        // 알림 영역 아이콘의 상태가 바뀌었다 (`make_taskbar_message`와 같은 모양이다). 빈 메시지는 게시하지 않는다.
+        // 아이콘의 사건(누름·메뉴)은 여기가 아니라 `tray_icon::activate`로 온다.
+        [[nodiscard]] virtual app_message make_tray_message(const tray_report& report)
+        {
+            static_cast<void>(report);
+            return {};
         }
     };
 

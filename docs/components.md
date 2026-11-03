@@ -89,6 +89,7 @@
 | 작업 표시줄 진행률과 오버레이 | `taskbar_request`, `ui_frame::taskbar`, `ui_window::taskbar` | [app/taskbar.h](../include/luil/app/taskbar.h) | [설명](taskbar-design.md) |
 | OS 알림(Windows 토스트·Android 알림)과 눌림 사건, 앱 식별 | `show_notification`, `notification_status`, `app_delegate::make_notification_message`, `win32::window_config::identity` | [app/notification.h](../include/luil/app/notification.h) | [설명](os-notification-design.md) |
 | 작업 표시줄 점프 목록의 작업 | `taskbar_request::jump_list`, `taskbar_jump_task`, `win32::window_delegate::make_jump_list_message` | [app/taskbar.h](../include/luil/app/taskbar.h) | [설명](jump-list-design.md) |
+| 알림 영역(트레이) 아이콘과 그 사건·시스템 메뉴 | `tray_icon`, `ui_frame::tray`, `tray_icon::activate`, `win32::window_delegate::make_tray_message` | [app/tray_icon.h](../include/luil/app/tray_icon.h) | [설명](tray-icon-design.md) |
 | 둘째 인스턴스의 인자 넘기기 | `single_instance::send_to_primary`, `instance_arguments`, `window_delegate::on_instance_arguments` | [app/platform_services.h](../include/luil/app/platform_services.h) | [설명](single-instance-args-design.md) |
 | 웹 콘텐츠 자리와 접근성 | `webview_element` | [ui/webview_element.h](../include/luil/ui/webview_element.h) | [설명](webview-composition-design.md) |
 | 웹뷰 구성·정책·명령 | `ui_webview`, `webview_policy` | [app/webview.h](../include/luil/app/webview.h) | [설명](webview-composition-design.md) |

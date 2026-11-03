@@ -59,4 +59,11 @@ namespace luil::win32 {
             return;
         static_cast<void>(ChangeWindowMessageFilterEx(window, WM_COPYDATA, MSGFLT_ALLOW, nullptr));
     }
+
+    void allow_tray_callback(const HWND window) noexcept
+    {
+        if (window == nullptr)
+            return;
+        static_cast<void>(ChangeWindowMessageFilterEx(window, tray_callback_message, MSGFLT_ALLOW, nullptr));
+    }
 }

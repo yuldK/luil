@@ -126,6 +126,7 @@
 #include "luil/app/renderer_policy.h"
 #include "luil/app/secret_store.h"
 #include "luil/app/taskbar.h"
+#include "luil/app/tray_icon.h"
 #include "luil/app/webview.h"
 
 // Win32 platform 조립이다 (창 실행).
