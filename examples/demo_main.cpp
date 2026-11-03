@@ -916,7 +916,8 @@ namespace demo {
                 basics_.add_overlay(*root, width, height, scale);
                 if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
                 {
-                    toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
+                    // 풍선은 배치 때 글을 잰다. frame에 싣는 스타일과 같은 포인터라야 테마 페이지의 글자 크기에서 잰 줄과 그린 글이 맞는다.
+                    toasts->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .style = style });
                     root->add(std::move(toasts));
                 }
 

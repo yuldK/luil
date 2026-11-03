@@ -231,7 +231,8 @@ namespace mobile_demo {
         // 안내 풍선은 이번 frame에 배치한 root에서 대상의 보이는 자리를 찾는다.
         if (auto toasts { toasts_.make_overlay(root.get()) }; toasts != nullptr)
         {
-            toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
+            // 풍선은 배치 때 글을 잰다. frame에 싣는 스타일과 같은 포인터라야 잰 줄과 그린 글이 맞는다.
+            toasts->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .style = style });
             root->add(std::move(toasts));
         }
 
