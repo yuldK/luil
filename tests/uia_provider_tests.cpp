@@ -14,6 +14,7 @@
 #include "luil/ui/rating_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/split_button_element.h"
+#include "luil/ui/teaching_tip_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_element.h"
@@ -3494,4 +3495,52 @@ TEST_CASE("The calendar grid serves the chosen day as its selection and a day se
     chosen->Release();
     grid->Release();
     root->Release();
+}
+
+namespace {
+    // 덮개 풍선과 비modal 풍선의 화면이다. 닫기는 `dismiss(close_button)`을 tag로 나른다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_tip_tree(const bool modal)
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::teaching_tip_config config {};
+        config.owner = u8"tip";
+        config.title = u8"새 기능";
+        config.modal = modal;
+        config.primary = luil::teaching_tip_button { u8"써 보기", tagged_action(u8"try") };
+        config.dismiss = [](const luil::teaching_tip_dismiss_reason reason) {
+            return luil::make_app_action(probe_intent { reason == luil::teaching_tip_dismiss_reason::close_button ? u8"close-button" : u8"other" });
+        };
+        page->add(std::make_unique<luil::teaching_tip_element>(std::move(config)));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f));
+    }
+}
+
+TEST_CASE("A teaching tip is a UIA Window when modal and a Pane when not, and its close button carries the close reason", "[win32][uia][teaching-tip]")
+{
+    for (const bool modal : { true, false })
+    {
+        CAPTURE(modal);
+        fake_uia_host host {};
+        host.tree = make_tip_tree(modal);
+        auto* const root { new luil::win32::uia_root_provider { host } };
+        luil::win32::uia_element_provider* const tip { root->make_element_provider({ luil::ui_element_kind::teaching_tip, u8"tip" }) };
+        luil::win32::uia_element_provider* const close { root->make_element_provider(luil::teaching_tip_element::close_id(u8"tip")) };
+        luil::win32::uia_element_provider* const primary { root->make_element_provider(luil::teaching_tip_element::primary_id(u8"tip")) };
+
+        REQUIRE(read_int_property(*tip, UIA_ControlTypePropertyId) == (modal ? UIA_WindowControlTypeId : UIA_PaneControlTypeId));
+        REQUIRE(read_text_property(*tip, UIA_NamePropertyId) == L"새 기능");
+        REQUIRE(read_int_property(*close, UIA_ControlTypePropertyId) == UIA_ButtonControlTypeId);
+        REQUIRE(read_text_property(*close, UIA_NamePropertyId) == L"닫기");
+        REQUIRE(close->Invoke() == S_OK);
+        REQUIRE(dispatched_tag(host) == u8"close-button");
+        host.dispatched.clear();
+        REQUIRE(read_text_property(*primary, UIA_NamePropertyId) == L"써 보기");
+        REQUIRE(primary->Invoke() == S_OK);
+        REQUIRE(dispatched_tag(host) == u8"try");
+
+        primary->Release();
+        close->Release();
+        tip->Release();
+        root->Release();
+    }
 }

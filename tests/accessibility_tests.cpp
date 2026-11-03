@@ -26,6 +26,7 @@
 #include "luil/ui/split_handle_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/teaching_tip_element.h"
 #include "luil/ui/toast_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_interaction.h"
@@ -33,6 +34,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -1700,4 +1702,83 @@ TEST_CASE("Selecting a day plans its click and an already chosen day does nothin
     REQUIRE(message->get<access_day_intent>()->day == access_date(11, 12));
     // 고를 수 없는 날은 클릭이 없다.
     REQUIRE(day_of(7)->action(luil::ui_trigger::left_click) == nullptr);
+}
+
+namespace {
+    struct access_tip_intent
+    {
+    };
+
+    // 제목·본문·설명 있는 그림·두 단추·닫기가 다 있는 안내 풍선이다. 그림은 2x1 픽셀이다.
+    [[nodiscard]] luil::teaching_tip_config access_tip_config()
+    {
+        const std::array<std::uint8_t, 8> pixels { 255, 0, 0, 255, 0, 0, 255, 255 };
+        luil::teaching_tip_config config {};
+        config.owner = u8"tip";
+        config.title = u8"New";
+        config.body = u8"Body text";
+        config.image = luil::image_config { .image = luil::make_rgba_image(2, 1, pixels), .description = u8"Picture" };
+        config.primary = luil::teaching_tip_button { u8"Try", luil::make_message_action(access_tip_intent {}) };
+        config.secondary = luil::teaching_tip_button { u8"Later", luil::make_message_action(access_tip_intent {}) };
+        config.dismiss = [](const luil::teaching_tip_dismiss_reason) { return luil::make_app_action(access_tip_intent {}); };
+        return config;
+    }
+}
+
+TEST_CASE("A teaching tip is a dialog or a pane over its body text, its picture and its buttons", "[ui][access][teaching-tip]")
+{
+    for (const bool modal : { true, false })
+    {
+        CAPTURE(modal);
+        luil::teaching_tip_config config { access_tip_config() };
+        config.modal = modal;
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        root->add(std::make_unique<luil::teaching_tip_element>(std::move(config)));
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f) };
+
+        // 덮개는 접근 tree에 서지 않는다. 몸은 본문 글이고 그림과 단추는 그 아래다.
+        const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+        const luil::ui_element_id tip { luil::ui_element_kind::teaching_tip, u8"tip" };
+        const luil::ui_element_id body { luil::ui_element_kind::teaching_tip_body, u8"tip" };
+        REQUIRE(snapshot.entries.size() == 6u);
+        REQUIRE(snapshot.entries[0].id == tip);
+        REQUIRE(snapshot.entries[0].info == luil::access_info { .role = modal ? luil::access_role::dialog : luil::access_role::pane, .name = u8"New" });
+        REQUIRE(snapshot.entries[1].id == body);
+        REQUIRE(snapshot.entries[1].parent == tip);
+        REQUIRE(snapshot.entries[1].info == luil::access_info { .role = luil::access_role::static_text, .name = u8"Body text" });
+        REQUIRE(snapshot.entries[2].info == luil::access_info { .role = luil::access_role::image, .name = u8"Picture" });
+        REQUIRE(snapshot.entries[2].parent == body);
+        REQUIRE(snapshot.entries[3].id == luil::teaching_tip_element::close_id(u8"tip"));
+        REQUIRE(snapshot.entries[3].info == luil::access_info { .role = luil::access_role::button, .name = u8"닫기" });
+        REQUIRE(snapshot.entries[4].info == luil::access_info { .role = luil::access_role::button, .name = u8"Try" });
+        REQUIRE(snapshot.entries[5].info == luil::access_info { .role = luil::access_role::button, .name = u8"Later" });
+        for (std::size_t index { 3 }; index < snapshot.entries.size(); ++index)
+            REQUIRE(snapshot.entries[index].parent == body);
+    }
+}
+
+TEST_CASE("A teaching tip is named by its name, then its title, then the default word", "[ui][access][teaching-tip]")
+{
+    luil::teaching_tip_config config { access_tip_config() };
+    config.name = u8"Tip";
+    REQUIRE(luil::teaching_tip_element { config }.accessibility().name == u8"Tip");
+    config.name.clear();
+    REQUIRE(luil::teaching_tip_element { config }.accessibility().name == u8"New");
+    config.title.clear();
+    REQUIRE(luil::teaching_tip_element { config }.accessibility().name == u8"안내");
+
+    // 본문이 없으면 몸은 구조다. 설명 없는 그림은 장식이라 읽히지 않는다. 닫기 이름은 앱이 덮을 수 있다.
+    config.body.clear();
+    config.image->description.clear();
+    config.close_tooltip = u8"Dismiss";
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::teaching_tip_element>(std::move(config)));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f) };
+    REQUIRE(tree.find({ luil::ui_element_kind::teaching_tip_body, u8"tip" })->accessibility().role == luil::access_role::none);
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    REQUIRE(snapshot.entries.size() == 4u);
+    REQUIRE(snapshot.entries[1].id == luil::teaching_tip_element::close_id(u8"tip"));
+    REQUIRE(snapshot.entries[1].parent == luil::ui_element_id { luil::ui_element_kind::teaching_tip, u8"tip" });
+    REQUIRE(snapshot.entries[1].info.name == u8"Dismiss");
+    REQUIRE(tree.find(luil::teaching_tip_element::close_id(u8"tip"))->tooltip() == u8"Dismiss");
 }

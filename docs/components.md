@@ -84,6 +84,7 @@
 | 플랫폼 성질 | `ui_platform`, `current_ui_platform` | [ui/ui_platform.h](../include/luil/ui/ui_platform.h) | [설명](app-bar-design.md) |
 | 알림과 만료 | `toast_stack_element` | [ui/toast_element.h](../include/luil/ui/toast_element.h) | [설명](concepts/ui-element.md) |
 | 남아 있는 상태 알림(심각도 글리프·제목·줄이 바뀌는 본문·동작·닫기) | `info_bar_element`, `info_bar_config` | [ui/info_bar_element.h](../include/luil/ui/info_bar_element.h) | [설명](info-bar-design.md) |
+| 대상을 꼬리로 가리키는 상주 안내(덮개·비modal, 행동 단추 둘, 네 방향 자리) | `teaching_tip_element`, `teaching_tip_target`, `place_field_popup_at_side` | [ui/teaching_tip_element.h](../include/luil/ui/teaching_tip_element.h) · [ui/field_popup.h](../include/luil/ui/field_popup.h) | [설명](teaching-tip-design.md) |
 | 알림 심각도(토스트·정보 막대 공용) | `ui_severity` | [ui/severity.h](../include/luil/ui/severity.h) | [설명](info-bar-design.md) |
 | 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
 | 펜 잉크 캔버스(필압 획 그리기·지우개·내보내기) | `ink_canvas_element`, `ink_layer`, `make_ink_stroke`, `simplify_ink_points`, `render_ink_image` | [ui/ink_canvas_element.h](../include/luil/ui/ink_canvas_element.h) · [ui/ink.h](../include/luil/ui/ink.h) | [설명](ink-design.md) · [입력](ink-input-design.md) |

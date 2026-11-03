@@ -98,6 +98,7 @@
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/syntax_highlighter.h"
 #include "luil/ui/table_element.h"
+#include "luil/ui/teaching_tip_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_block.h"
 #include "luil/ui/text_document.h"

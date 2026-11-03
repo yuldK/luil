@@ -250,7 +250,7 @@ else points_.clear(); // cancel
 - **image_clip(줄 4)**: 클립보드는 그 노드의 것이다. ink는 `render_ink_image`로 `ui_image`를 내줄 뿐이다. `ui_events.h`에서 ink는 `pointer_*_event` 구조체 끝만, image_clip은 include 한 줄, `clipboard_change` 끝, 새 구조체, `clipboard_request` 끝만 고친다(`input_action`은 안 고친다). `android_app.cpp`에서 ink는 `copy_motion`과 `start`의 축 켜기 줄만, image_clip은 `execute_clipboard`만 고친다.
 - **os_notify·인자 넘기기(줄 4)**: `android_app.cpp`에서 os_notify는 권한 읽기와 `APP_CMD_GAINED_FOCUS` 분기, `start()`의 능력 한 줄(538줄)을 고친다. 축 켜기(653~654줄)와 떨어져 있고 콜드 스타트 읽기는 `start()` 밖이다. 읽기가 `start()` 안으로 오면 ink가 먼저 병합되고 os_notify가 그 위에 얹는다([OS 알림](os-notification-design.md)의 약속). `window_surface.cpp`·`.h`는 이번 라운드에 ink만 고친다. 인자 넘기기는 받는 자리를 `win32_window.cpp` 주 창에 둔다.
 - **inspector(줄 3, 다음 문서)**: ink만 `ui_element_id.h`의 `end_of_library_kinds` 위에 kind(`ink_canvas`)를 더한다. inspector는 kind를 더하지 않는다. 같은 줄에서 ink가 먼저 들어가므로 inspector의 이름표(`src/ui/inspect_names.cpp`)가 `ink_canvas`를 처음부터 채운다. 줄 1의 kind가 이름표보다 늦게 병합되면 그 병합 커밋이 case를 더한다([검사기](inspector-design.md)의 약속). kind 숫자를 test와 UIA 스크립트에 박지 않는다.
-- **menu_bar·rich_edit(R3)·teaching_tip(R4)**: 같은 controller 파일이라 ink 뒤에 직렬로 한다. ink는 `raw_input_event` variant와 키 경로를 고치지 않는다.
+- **menu_bar·rich_edit(R3)·teaching_tip(R4)**: 같은 controller 파일이라 ink 뒤에 직렬로 한다. teaching_tip은 controller를 고치지 않아 이 직렬에서 빠졌다([안내 풍선](teaching-tip-design.md)). ink는 `raw_input_event` variant와 키 경로를 고치지 않는다.
 - **데모**: 라이브러리 커밋과 데모 연결 커밋을 나눈다. `examples/demo_main.cpp`·`examples/mobile_demo/app.cpp`의 페이지 등록은 이 브랜치의 데모 커밋에 있고, 통합 때 다른 줄의 등록과 직렬로 쌓는다.
 
 ## 확인

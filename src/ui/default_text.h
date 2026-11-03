@@ -87,6 +87,10 @@ namespace luil::default_text {
     // 날 이름 뒤 꼬리의 낱말이다 (", 오늘"·", 고를 수 없음"의 낱말). 잇는 차례와 쉼표는 요소가 정한다.
     [[nodiscard]] std::u8string_view calendar_today() noexcept;  // 오늘
     [[nodiscard]] std::u8string_view calendar_unavailable() noexcept;  // 고를 수 없음
+    // 안내 풍선의 기본 접근 이름과 닫기 단추의 툴팁·이름이다 (docs/teaching-tip-design.md). 정보 막대의 닫기와 같은 낱말이지만
+    // 요소마다 함수를 둔다.
+    [[nodiscard]] std::u8string_view teaching_tip_name() noexcept;  // 안내
+    [[nodiscard]] std::u8string_view teaching_tip_close() noexcept;  // 닫기
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

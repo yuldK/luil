@@ -91,7 +91,7 @@ enum class calendar_move
 ## 다른 노드와의 약속
 
 - **R5 i18n.** 이 문서의 `default_text` 함수 몸통을 표 조회로 바꾸고, 주 시작 요일과 날짜 형식의 OS 기본을 결정 2의 길 b로 더한다. `calendar_text`·`format`·`first_day` 칸과 호출부는 그대로다. default-text-design.md 208행의 "날짜 서식은 R5"를 "한국어 기본은 지금, 지역 서식은 R5"로 닫는다.
-- **default_text.** 열한 함수를 끝에 더한다. 같은 줄 뒤 teaching_tip도 끝에 붙어 병합은 기계적이다. 한글은 `default_text.cpp`에만 둔다(`luil_default_text` 검사).
+- **default_text.** 열한 함수를 끝에 더한다. 같은 줄 뒤 teaching_tip도 끝에 두 함수(`teaching_tip_name`·`teaching_tip_close`)를 붙여 병합은 기계적이다. 한글은 `default_text.cpp`에만 둔다(`luil_default_text` 검사).
 - **markup(줄 2)·auto_update(줄 4).** 겹치는 파일이 없다.
 
 ## 확인

@@ -323,6 +323,16 @@ namespace luil::default_text {
         return u8"고를 수 없음";
     }
 
+    std::u8string_view teaching_tip_name() noexcept
+    {
+        return u8"안내";
+    }
+
+    std::u8string_view teaching_tip_close() noexcept
+    {
+        return u8"닫기";
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;

@@ -69,7 +69,7 @@ struct teaching_tip_config
     std::u8string title {}, body {};  // 둘 다 폭에서 줄을 바꾼다
     std::optional<image_config> image {};  // 풍선 위쪽의 그림. 폭은 안쪽 폭, 높이는 그림 비율 (최대 160)
     std::optional<teaching_tip_button> primary {}, secondary {};  // 결정 7
-    std::function<input_action(teaching_tip_dismiss_reason)> dismiss {};  // 비면 닫기 단추가 없고 Esc·덮개는 흡수만 한다
+    std::function<input_action(teaching_tip_dismiss_reason)> dismiss {};  // 비면 닫기 단추가 없다. 덮개는 누름만 흡수하고 Esc는 앱으로 흐른다(가둠에 dismiss 액션이 없을 때의 controller 규칙)
     std::u8string name {};  // 접근 이름. 비면 title, 둘 다 비면 기본 문구 (안내)
     std::u8string close_tooltip {};  // 닫기 단추의 툴팁이자 이름. 비면 기본 문구 (닫기)
     ui_element_id focus_return {};  // modal이 닫힌 뒤 돌아갈 바깥 자리 (modal_host_config와 같다)
@@ -106,7 +106,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 
 ## 규칙
 
-**구성.** root(`teaching_tip`)는 앱이 준 자리 전체를 bounds로 받는다. 앱은 modal host처럼 창 전체로 배치해 root 끝에 담는다. 자식은 차례로 덮개(`teaching_tip_scrim`, modal일 때만)와 몸(`teaching_tip_body`)이다. 몸이 풍선과 꼬리, 제목, 본문을 직접 그리고(msg_box 내용과 같은 꼴) 자식으로 그림(`image_element`), 닫기, 행동 단추를 둔다. 몸은 `hit_opaque`라 빈 자리 누름이 덮개나 뒤로 새지 않는다(modal_host_element.cpp 57행). 단추의 owner는 `owner`, U+001F, `close`·`primary`·`secondary`다.
+**구성.** root(`teaching_tip`)는 앱이 준 자리 전체를 bounds로 받는다. 앱은 modal host처럼 창 전체로 배치해 root 끝에 담는다. 자식은 차례로 덮개(`teaching_tip_scrim`, modal일 때만)와 몸(`teaching_tip_body`)이다. 몸이 풍선과 꼬리, 제목, 본문을 직접 그리고(msg_box 내용과 같은 꼴) 자식으로 그림(`image_element`), 닫기, 행동 단추를 둔다. 위에서 아래로 그림, 머리 줄(제목과 닫기), 본문, 단추 줄이고 안쪽 여백은 12다(결정 8). 몸은 `hit_opaque`라 빈 자리 누름이 덮개나 뒤로 새지 않는다(modal_host_element.cpp 57행). 단추의 owner는 `owner`, U+001F, `close`·`primary`·`secondary`다.
 
 **자리.**
 
@@ -118,7 +118,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 **덮개(modal 참, 기본).**
 
 - root에 `set_focus_trap(true)`, `dismiss`가 있으면 `set_dismiss_action`(Esc는 `escape`), `set_focus_entry`, `set_focus_return`을 건다. [sheet_host_element.cpp](../src/ui/sheet_host_element.cpp) 271~278행과 같은 셋이다. 진입은 `primary`, 없으면 `secondary`, 없으면 닫기다. 진입이 비면 자동 초점이 없다(ui_element.h 1130~1137행, [ui_interaction.cpp](../src/ui/ui_interaction.cpp) 4570~4575행).
-- 덮개는 투명 panel이고 root 자리 전체를 덮는다. `hit_opaque`라 누름과 휠을 흡수하고([ui_element.cpp](../src/ui/ui_element.cpp) 586행, ui_interaction.cpp 993~996행) 누르면 `dismiss(outside)`다. 대상 위를 눌러도 대상은 눌리지 않는다.
+- 덮개는 투명 panel이고(panel의 빈 바탕 선택자는 `surface_background`라 알파 0 색을 고른다) root 자리 전체를 덮는다. `hit_opaque`라 누름과 휠을 흡수하고([ui_element.cpp](../src/ui/ui_element.cpp) 586행, ui_interaction.cpp 993~996행) 누르면 `dismiss(outside)`다. 대상 위를 눌러도 대상은 눌리지 않는다.
 - Esc는 가둠의 것이다. 처리기 키 뒤에 와서(ui_interaction.cpp 3590~3597행) tree의 가둠을 찾는다(3654~3671행). 풍선에는 글 칸이 없어 Esc를 먼저 쓰는 처리기가 없다.
 - 가둠은 pre-order의 마지막 보이는 것이다(ui_tree.cpp 363~374행). 한 번에 하나만 띄우고 다른 modal과 겹치지 않게 하는 것은 앱 몫이다.
 
@@ -130,7 +130,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 
 **단추.**
 
-- 닫기는 정보 막대와 같은 `button_element`(`icon_close`, role `toolbar`, 손 모양 커서, Tab 자리, 한 변 24)이고 풍선 오른쪽 위에 선다. 누르면 `dismiss(close_button)`이다.
+- 닫기는 정보 막대와 같은 `button_element`(`icon_close`, role `toolbar`, 손 모양 커서, Tab 자리, 한 변 24)이고 머리 줄 오른쪽 위에 선다. 그림이 없으면 풍선 오른쪽 위다(결정 8). 누르면 `dismiss(close_button)`이다.
 - 행동 단추는 `text_button_element`이고 `primary`는 accent, `secondary`는 normal이다. danger는 없다. 되돌릴 수 없는 일을 묻는 자리는 msg_box다. 기본 버튼(`default_button`)은 세우지 않는다. modal 진입이 primary라 Enter가 그 단추로 간다. 줄은 오른쪽 정렬이고 폭이 모자라면 세로로 쌓는다. 누름은 앱 액션이고 닫지 않는다. 닫을지는 앱이 정한다.
 - Tab 순서는 그리기 순서다. 닫기, primary, secondary 순이다.
 
@@ -156,7 +156,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 - 길 a: 앱이 `target`으로 준다. 대상을 먼저 배치해 root에 담는 앱([demo_main.cpp](../examples/demo_main.cpp) 690~731행)은 그 가지에서 `teaching_tip_target(가지, id)`로 같은 frame의 보이는 자리를 얻는다. tree를 `make_arranged_tree` 한 번으로 짓는 앱은 게시된 tree의 `find`·`visible_bounds`로 앞 frame 자리를 준다. 되는 것: 필드 popup(`field_popup_anchor::field`)과 같은 꼴이다. `ui_tree.*`·controller·host를 고치지 않는다. 스크롤에 잘린 대상과 사라진 대상을 helper가 nullopt로 알려 앱이 닫을지 정한다. 대가: 앱이 가지 포인터나 앞 tree를 들고, 한 번에 배치하는 앱은 창 크기·스크롤이 바뀌는 frame에 한 frame 늦는다.
 - 길 b: 풍선 host가 화면 내용을 감싸(`set_content`) 먼저 배치하고 그 안에서 id로 찾는다. 되는 것: 앱이 사각형을 다루지 않고 늘 같은 frame이다. 대가: 대상이 host 안에 있어야 하고 덮개가 host 자리만 덮는다. 앱이 따로 배치하던 가지를 host가 다시 배치하면 가상 목록이 첫 배치로 굳는다([virtual_list_element.h](../include/luil/ui/virtual_list_element.h) 446~448행). 화면 내용을 품은 host는 "tip은 이전 화면 tree에 넣지 않는다"는 page_anim의 약속과 부딪힌다.
 - 길 c: `make_arranged_tree`가 배치 뒤 id를 풀어 풍선을 다시 놓는 둘째 단계를 둔다. 되는 것: 앱은 id만 주고 같은 frame이다. 대가: `ui_tree.cpp`와 host 두 곳의 frame 경로를 고치는 tree 수준 기능이고, 손으로 배치해 담는 앱 꼴에는 따로 길이 필요하다.
-- 권장: a. 대가: 위의 앱 몫과 한 frame 늦음이다. 승인 필요.
+- 권장: a. 대가: 위의 앱 몫과 한 frame 늦음이다. 승인: 길 a (2026-11-03).
 
 **2. 대상이 보이지 않을 때.** 질문: `target`이 비거나 자리와 겹치지 않으면(스크롤로 잘림, tree에서 빠짐) 어떻게 하는가.
 
@@ -196,6 +196,16 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 - 길 b: `std::vector<teaching_tip_button>`(셋째부터 버림)과 key. 되는 것: msg_box 단추와 꼴이 같다. 대가: 버리는 규칙과 key 중복을 문서로 막는다.
 - 권장: a. 대가: 위. 권장대로 진행.
 
+**8. 그림과 닫기 단추의 자리(구현 중 정함).** 질문: 그림이 있을 때 닫기 단추는 어디 서는가.
+
+- 길 a: 그림이 맨 위이고 닫기는 그 아래 머리 줄 오른쪽에 제목과 나란히 선다. 제목 첫 줄은 닫기의 세로 가운데에 맞춘다. 되는 것: 그림 색과 상관없이 닫기 글리프가 풍선 바탕 위에 서고 자리 계산이 줄 하나다. 대가: 그림이 있으면 닫기가 풍선의 맨 위가 아니다.
+- 길 b: 닫기를 그림 오른쪽 위에 겹친다. 되는 것: 늘 풍선 오른쪽 위다. 대가: 밝은 그림 위에서 도구 막대 글리프가 묻히고, 겹친 단추의 hover 바탕을 따로 정해야 한다.
+- 고름: a.
+
+**9. 데모가 대상을 찾는 자리(구현 중 정함).** 질문: 데모의 `make_overlay`는 어느 가지에서 대상을 찾는가.
+
+- 고름: 데스크톱은 toasts 페이지가 build에서 만든 스크롤 가지를 들고, 모바일은 셸이 `make_overlay(root.get())`로 이번 frame의 root를 넘긴다. 모바일은 셸이 페이지를 흘리는 창에 담아 페이지가 자르는 조상을 들지 않기 때문이다. 어느 쪽이든 쓴 뒤 잊는다. 상태 label은 build에서 짓고 대상은 그 뒤 `make_overlay`에서 찾으므로 label의 "대상 없음"은 한 frame 늦다. 페이지는 label이 그 frame의 답과 다르면 `next_expiry`로 지금을 답해 한 frame을 더 짓는다. 페이지를 짓지 않은 frame에는 청하지 않는다.
+
 ## 플랫폼
 
 **Win32.** tree 안 요소라 `win32_window.cpp`·`window_surface.cpp`·`uia_provider.cpp`를 고치지 않는다. UIA는 root가 Window 또는 Pane과 Name을, 단추가 Invoke를 낸다. 풍선은 창 client 안에만 그리고 popup 배경 효과(아크릴)를 쓰지 않는다.
@@ -205,12 +215,12 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 ## 다른 노드와의 약속
 
 - **date_picker(R4, 같은 줄 앞).** `ui_element_id.h`(`date_field` 뒤), `inspect_names.cpp` case 여섯, `default_text.h/.cpp` 끝에 차례로 쌓는다. [ui_element_tests.cpp](../tests/ui_element_tests.cpp) 84행 `last[]`는 `teaching_tip_action`으로 맞추고 병합 때 다른 줄의 마지막 kind와 다시 맞춘다. kind 숫자를 test·UIA 스크립트에 박지 않는다. popups 페이지는 date_picker의 것이고 이 노드는 toasts 페이지에 싣는다. `field_popup.h`는 date_picker가 고치지 않으므로(date-picker-design.md 201행) 이 노드만 끝에 더한다.
-- **줄 3(page_anim).** `ui_interaction.*`, `transition.h`·`spring.h`, 움직임 줄이기 연결을 고치지 않고 읽기만 한다. [page-transition-design.md](page-transition-design.md) 217행대로 풍선은 이전 화면 tree에 넣지 않고, 화면이 바뀌면 앱이 닫는다. 데모의 페이지 바꿈 자리는 그 줄이 고친다. 이 노드의 데모 연결은 page_anim의 `navigate_intent`·`back_intent` 변경 뒤에 쌓고, 이전 화면을 짓기 전에 풍선을 닫는다.
+- **줄 3(page_anim).** `ui_interaction.*`, `transition.h`·`spring.h`, 움직임 줄이기 연결을 고치지 않고 읽기만 한다. [page-transition-design.md](page-transition-design.md) 217행대로 풍선은 이전 화면 tree에 넣지 않고, 화면이 바뀌면 앱이 닫는다. 데모의 페이지 바꿈 자리는 그 줄이 고친다. 이 노드의 데모 연결은 page_anim의 `navigate_intent`·`back_intent` 변경 뒤에 쌓고, 이전 화면을 짓기 전에 풍선을 닫는다. 새 화면에서 바로 여는 안내는 `page_transition_end` 뒤에 연다. 전환 중에는 대상이 최종 자리에 있고 그림만 움직여 꼬리가 잠깐 어긋나 보이고, modal이면 덮개가 전환 위에 선다. page-transition-design.md 링크는 통합 때 줄 3 문서가 들어오면 풀린다.
 - **줄 2(markup)와 R5 chart.** markup 1단계 어휘에 들지 않고 이 노드가 들어온 뒤 어휘 행으로 더한다. chart의 값 상자는 `place_field_popup_at_side`를 쓸 수 있다.
 - **줄 4.** `app_host.h`·`ui_platform.h`·`win32_window.cpp`·`window_surface.cpp`를 고치지 않는다. `ui_frame::back`과 `focus`는 있는 칸이다. `ui_events.h`·`accessibility.h`·`uia_provider.cpp`도 고치지 않는다.
 - **데모.** 라이브러리 커밋과 데모 연결 커밋을 나누고, 연결은 통합 때 직렬로 쌓는다. `make_overlay`는 어느 페이지에서나 불리고(demo_main.cpp 727행, 모바일 app.cpp 172행) 대상 포인터는 toasts 페이지 build에서 오므로, 페이지를 떠날 때 풍선을 닫아야 낡은 포인터가 남지 않는다. [demo_main.cpp](../examples/demo_main.cpp)의 `navigate_intent` 갈래(441~449행)에 닫기 한 줄, 모바일 `app.cpp`의 `close_popups`(91~95행, `navigate_intent`·`back_intent` 갈래가 부른다)에 한 줄, `back` 갈래(195~199행)에 한 줄이 는다. 명령으로 연 비modal 풍선에 초점 요청을 쓰면 demo_main.cpp 798~818행 초점 요청 합치기에 toasts 갈래가 하나 는다.
 
-**미룬 것을 닫는다.** 이 단계에서는 기존 문서를 고치지 않고 구현 커밋이 고친다.
+**미룬 것을 닫는다.** 설계 단계에서는 기존 문서를 고치지 않았고 구현 커밋이 고쳤다.
 
 | 위치 | 닫는 방법 |
 | --- | --- |
@@ -228,13 +238,13 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 자동 test는 UIA 하나만 빼고 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다.
 
 - `tests/field_popup_tests.cpp`. 네 방향, 뒤집기 순서(바라는 방향, 반대, 남은 둘), 다른 축 가운데 맞춤과 밀기, `fits` 거짓, 배율 2에서 논리 값, 잘못된 배율. `place_field_popup`의 기존 단언은 그대로 통과.
-- `tests/teaching_tip_element_tests.cpp`(새 파일). `place`의 방향별 풍선·꼬리 자리, 꼬리 밑변 물림, 대상 없음과 자리 밖 대상의 가운데·꼬리 없음, 폭 자름과 본문 줄 줄임, 배율 1·1.5·2에서 같은 논리 자리. 자식 id, `dismiss`가 비면 닫기 없음, 글과 액션이 다 있어야 행동 단추. `teaching_tip_target`의 숨은 가지·자르는 조상·스크롤 창 밖·없는 id와 `ui_tree::visible_bounds`와 같은 답. controller로 modal 진입(primary)·Tab 가둠·Esc의 `escape`·덮개 누름의 `outside`와 대상 미실행·닫힌 뒤 `focus_return`, 비modal의 초점 그대로·Tab 끝 자리·풍선 안·밖 Esc 모두 `dismiss` 없이 policy `on_key`로 흐름·뒤 화면 클릭. `next_update`는 나타나는 동안만이고 움직임 줄이기면 없다.
+- `tests/teaching_tip_element_tests.cpp`(새 파일). `place`의 방향별 풍선·꼬리 자리, 꼬리 밑변 물림, 대상 없음과 자리 밖 대상의 가운데·꼬리 없음, 폭 자름과 본문 줄 줄임, 배율 1·1.5·2에서 같은 논리 자리. 자식 id, `dismiss`가 비면 닫기 없음, 글과 액션이 다 있어야 행동 단추. `teaching_tip_target`의 자르는 조상·스크롤 창 밖·없는 id는 `ui_tree::visible_bounds`와 같은 답, 숨은 가지는 helper만 nullopt(`visible_bounds`는 숨김을 보지 않아 견주지 않는 따로 된 test). controller로 modal 진입(primary)·Tab 가둠·Esc의 `escape`·덮개 누름의 `outside`와 대상 미실행·닫힌 뒤 `focus_return`, 비modal의 초점 그대로·Tab 끝 자리·풍선 안·밖 Esc 모두 `dismiss` 없이 policy `on_key`로 흐름·뒤 화면 클릭. `next_update`는 나타나는 동안만이고 움직임 줄이기면 없다.
 - `tests/accessibility_tests.cpp`. dialog·pane, 이름 우선순위(name, title, 기본 문구), 몸의 static_text, 단추. `tests/ui_element_tests.cpp`의 `last[]`.
 - `tests/raster_draw_tests.cpp`. 배율 2에서 꼬리가 몸과 같은 바탕으로 이어지는지, 테가 꼬리까지 도는지, 고대비 팔레트, 나타나는 중간의 투명도.
 - `tests/uia_provider_tests.cpp`(`luil_tests`, Windows). Window·Pane ControlType, 닫기 Invoke가 `dismiss(close_button)`을 나르는지.
-- `tests/demo_gallery_tests.cpp`와 `tests/mobile_demo_page_tests.cpp`. 두 모드로 열고 닫는 메시지와 상태 label, 대상을 흘려 내보냈을 때 label의 "대상 없음".
+- `tests/demo_gallery_tests.cpp`와 `tests/mobile_demo_page_tests.cpp`. 두 모드로 열고 닫는 메시지와 상태 label, 비modal의 초점 요청, 뒤로 가기, 대상을 흘려 내보냈을 때 label의 "대상 없음".
 
-데모 칸. 데스크톱 toasts 페이지에 대상 단추(owner `toasts/tip-target`, "새 기능"), 여는 단추 둘(`toasts/tip-open-modal`·`toasts/tip-open-modeless`), label `toasts/tip-state`("안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 닫기 단추")를 둔다. 페이지는 build에서 대상 가지 포인터를 들고(popups_page.h 162행 `dropdown_`과 같은 꼴) `make_overlay`가 토스트 더미와 함께 풍선을 낸다. root에 담는 자리(demo_main.cpp 727행, 모바일 app.cpp 172~175행)는 그대로다. 모바일 toasts 페이지는 같은 칸(owner `tip-target`, label `tip-state`)에 `control_size` 44와 뒤로 가기 닫힘을 둔다. 격리 데스크톱에서 luil-uia로 여는 단추 Invoke 뒤 Window·Pane과 초점, 닫기 Invoke와 PostMessage Esc 뒤 label을 되읽는다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다.
+데모 칸. 데스크톱 toasts 페이지 첫 구역에 대상 단추(owner `toasts/tip-target`, "새 기능"), 여는 단추 둘(`toasts/tip-open-modal`·`toasts/tip-open-modeless`), label `toasts/tip-state`("안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 닫기 단추")를 둔다. 방향은 바라는 방향이고 대상을 찾지 못한 frame 뒤에는 "대상 없음", 닫혀 있으면 "없음"이다. 행동 단추 둘도 이 데모에서는 풍선을 닫고 그 글을 마지막 닫힘에 적는다. 페이지는 build에서 대상 가지 포인터를 들고(popups_page.h 162행 `dropdown_`과 같은 꼴) `make_overlay`가 토스트 더미와 함께 풍선을 낸다(둘 다 있으면 `layer_element`에 풍선을 뒤로 담는다). root에 담는 자리(demo_main.cpp 727행, 모바일 app.cpp 172~175행)는 그대로이고 모바일 호출만 root를 넘긴다(결정 9). 모바일 toasts 페이지는 같은 칸(owner `tip-target`, `tip-open-modal`·`tip-open-modeless`, 설명 `tip-state`)에 `control_size` 44와 뒤로 가기 닫힘(`back_action`)을 둔다. 두 페이지 모두 셸이 부를 `close_tip`·`tip_open`을, 데스크톱은 `make_focus_request`도 낸다. 격리 데스크톱에서 luil-uia로 여는 단추 Invoke 뒤 Window·Pane과 초점, 닫기 Invoke와 PostMessage Esc 뒤 label을 되읽는다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다.
 
 사람 확인: 꼬리가 대상을 바로 가리키는지와 창 가장자리 뒤집기, 배율 100%·150%·200%와 큰 글자, 밝은·어두운·고대비의 테와 꼬리, Narrator가 열 때 창 이름과 본문을 읽는 방식, 실기기에서 덮개 탭·뒤로 가기·회전 뒤 자리.
 

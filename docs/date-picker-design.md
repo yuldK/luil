@@ -205,7 +205,7 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 ## 다른 노드와의 약속
 
 - **color_picker(R3, 같은 줄 앞).** 결정 3의 초점 규약을 따르고 날 고르기에도 되돌림을 더한다. 결정 2의 칸 품기는 결정 1이 길 a라 쓰지 않는다. 두 축 키 조합 대신 격자 처리기 하나를 쓴다(결정 2). `color_picker_popup.h` 곁에 새 헤더를 두고 `field_popup.h`는 고치지 않는다.
-- **teaching_tip(R4, 같은 줄 뒤).** 겹치는 파일은 `ui_element_id.h`, `inspect_names.cpp`, `default_text.h/.cpp`이고 같은 줄이라 차례로 쌓는다. 데모는 이 노드가 `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.*`를 가진다. teaching_tip은 다른 페이지에 싣는다(split-button-design.md 231행의 겹침을 여기서 가른다).
+- **teaching_tip(R4, 같은 줄 뒤).** 겹치는 파일은 `ui_element_id.h`, `inspect_names.cpp`, `default_text.h/.cpp`이고 같은 줄이라 차례로 쌓는다. 데모는 이 노드가 `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.*`를 가진다. teaching_tip은 toasts 페이지에 싣는다(split-button-design.md 231행의 겹침을 여기서 가른다).
 - **줄 3(page_anim).** `ui_interaction.cpp`·`.h`와 `transition.h`·`spring.h`를 고치지 않는다. 달 넘김 전환은 그리지 않는다. 결정 2의 길 c는 고르지 않으므로 그 줄과의 약속이 없다.
 - **줄 4(auto_update).** `win32_window.cpp`·`app_host.h`·`ui_platform.h`·`platform_services*`를 고치지 않는다. 지역 질의를 더하지 않는 까닭이다([달력 날짜 계산과 문구](calendar-date-design.md) 결정 2).
 - **kind.** 다섯 kind는 `menu_bar_item` 뒤, `end_of_library_kinds` 바로 위에 두고 `library_kind_name`의 case를 같은 커밋에 끝에 더한다. [ui_element_tests.cpp](../tests/ui_element_tests.cpp) 84행 `last[]`는 이 노드가 `date_field`로 맞추고 병합 때 다른 줄의 마지막 kind와 다시 맞춘다. kind 숫자를 test·UIA 스크립트에 박지 않는다.
@@ -216,7 +216,7 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 
 | 고친 위치 | 고친 내용 |
 | --- | --- |
-| split-button-design.md 156·231행 | 날짜 칸은 열 때 초점을 popup의 커서 날로 옮기고 Esc·날 고르기로 칸에 돌린다. popups 페이지는 이 노드가 쓰고 teaching_tip은 다른 페이지로 간다 |
+| split-button-design.md 156·231행 | 날짜 칸은 열 때 초점을 popup의 커서 날로 옮기고 Esc·날 고르기로 칸에 돌린다. popups 페이지는 이 노드가 쓰고 teaching_tip은 toasts 페이지로 간다 |
 | color-picker-design.md 158·168·221행 | 시·분 칸은 내지 않았다(결정 1). 초점 규약은 따르고 날 고르기에도 되돌림을 싣는다. 키 조합 대신 격자 처리기다(결정 2) |
 | default-text-design.md 208행 | 한국어 기본 날짜 문구는 지금 두고 지역 서식은 R5로 남긴다 |
 | components.md | 날짜 고르기와 달력 날짜 계산 행을 더한다 |

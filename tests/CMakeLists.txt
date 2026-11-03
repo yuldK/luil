@@ -111,6 +111,7 @@ add_executable(luil_core_tests
     tray_sync_tests.cpp
     hotkey_sync_tests.cpp
     table_element_tests.cpp
+    teaching_tip_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
     grapheme_tests.cpp

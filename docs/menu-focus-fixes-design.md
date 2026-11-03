@@ -101,7 +101,7 @@ controller에는 공개 형식이 늘지 않는다. 비공개 상태에 네 칸�
 - **menu_bar(같은 줄, 뒤)**: 막대 항목이 `expanded`를 알리므로 열린 항목을 다시 누르면 X-4 규칙으로 닫힌다. 막대 항목은 Tab 자리가 아니라 X-3과는 무관하다.
 - **split_button(R1)**: [split-button-design.md](split-button-design.md)의 Tab 문단과 "열린 동안 필드를 누를 때" 문단은 구현 커밋에서 "고쳤다"로 바꾼다. 잠근 test는 `set_open(false)`를 기대하도록 뒤집는다.
 - **color_picker·date_picker(줄 1, R3·R4)**: 필드가 `expanded`를 알리면 따로 할 일이 없다. controller를 고치지 않는다.
-- **teaching_tip(R4)**: 같은 controller 파일이다. 이 고침이 들어간 뒤에 시작한다.
+- **teaching_tip(R4)**: 같은 controller 파일이다. 이 고침이 들어간 뒤에 시작한다. teaching_tip은 controller를 고치지 않아 직렬이 풀렸다([안내 풍선](teaching-tip-design.md)).
 
 ## 확인
 

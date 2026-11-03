@@ -174,3 +174,11 @@ TEST_CASE("The calendar words are Korean and the dates build their digits withou
         REQUIRE(luil::default_text::calendar_weekday_short(std::chrono::weekday { index }) == weekdays[index]);
     REQUIRE(luil::default_text::calendar_weekday_short(std::chrono::weekday { 9 }).empty());
 }
+
+TEST_CASE("The teaching tip words are its own functions even where the word matches the info bar", "[ui][default-text][teaching-tip]")
+{
+    // 안내 풍선의 두 함수다 (teaching-tip-design.md). 닫기는 정보 막대와 같은 낱말이지만 요소마다 함수를 둔다.
+    REQUIRE(luil::default_text::teaching_tip_name() == u8"안내");
+    REQUIRE(luil::default_text::teaching_tip_close() == u8"닫기");
+    REQUIRE(luil::default_text::teaching_tip_close() == luil::default_text::info_bar_close());
+}
