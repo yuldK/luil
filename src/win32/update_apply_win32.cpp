@@ -114,10 +114,17 @@ namespace luil {
                 inherit_handles = TRUE;
             }
             PROCESS_INFORMATION information {};
+            // PE가 아닌 파일을 띄우면 OS가 hard error 대화 상자("지원되지 않는 16비트 응용 프로그램")를 띄우고 이 호출이 그 상자가
+            // 닫힐 때까지 돌아오지 않는다. updater thread가 멈춰 launch_failed를 보고하지 못하고 앱 종료의 join도 끝나지 않는다.
+            // 이 thread의 오류 방식만 바꿔 상자 없이 실패로 돌아오게 한다. 프로세스 전체 방식은 다른 thread와 자식이 물려받아 건드리지 않는다.
+            DWORD previous_mode { 0 };
+            const bool mode_set { SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previous_mode) != FALSE };
             const BOOL created {
                 CreateProcessW(executable.c_str(), command_line.data(), nullptr, nullptr, inherit_handles, flags, nullptr, nullptr, &startup.StartupInfo, &information),
             };
             const DWORD created_error { GetLastError() };
+            if (mode_set)
+                static_cast<void>(SetThreadErrorMode(previous_mode, nullptr));
             if (startup.lpAttributeList != nullptr)
                 DeleteProcThreadAttributeList(startup.lpAttributeList);
             if (created == FALSE)
