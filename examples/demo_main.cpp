@@ -505,7 +505,8 @@ namespace demo {
                 if (const auto* const focus_report { message.get<tool_focus_report_intent>() }; focus_report != nullptr)
                 {
                     // 팔레트와 색 칸 popup의 초점 요청은 알리지 않는다 — 열면 곧바로 칸·판에 초점이 서는 것이 보인다.
-                    if (focus_report->id == palette_focus_id_ || focus_report->id == popups_focus_id_)
+                    // 도구 창 페이지의 주 창 활성화(트레이 `창 보이기`, 단축키 `창 앞으로`)도 메모 칸으로 옮긴 것이 아니라 알리지 않는다.
+                    if (focus_report->id == palette_focus_id_ || focus_report->id == popups_focus_id_ || focus_report->id == main_focus_id_)
                         return;
                     if (focus_report->outcome == luil::focus_request_outcome::fulfilled)
                         static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"도구 창 메모 칸으로 초점을 옮겼습니다.", luil::toast_severity::success } }));
@@ -800,6 +801,9 @@ namespace demo {
                     seen_tool_focus_ = request->id;
                     focus_ = *request;
                     focus_->id = ++focus_revision_;
+                    // target이 없으면 주 창만 활성화하는 요청이다. 그 결과는 메모 칸 토스트로 알리지 않는다.
+                    if (request->target == luil::ui_element_id {})
+                        main_focus_id_ = focus_->id;
                 }
                 if (const auto request { palette_.make_focus_request() }; request.has_value() && request->id != seen_palette_focus_)
                 {
@@ -1063,6 +1067,8 @@ namespace demo {
             std::optional<luil::focus_request> focus_ {};
             std::uint64_t focus_revision_ { 0 };
             std::uint64_t seen_tool_focus_ { 0 };
+            // 도구 창 페이지가 낸 요청 가운데 target이 없는 주 창 활성화의 셸 번호다.
+            std::uint64_t main_focus_id_ { 0 };
             std::uint64_t seen_palette_focus_ { 0 };
             std::uint64_t palette_focus_id_ { 0 };
             std::uint64_t seen_popups_focus_ { 0 };

@@ -637,6 +637,8 @@ TEST_CASE("The tray focus request gives way to a later tool window request", "[w
     const std::optional<luil::focus_request> tool { page.make_focus_request() };
     REQUIRE(tool->id > main_id);
     REQUIRE(tool->surface == u8"tool");
+    // 셸은 target이 없는 요청(주 창 활성화)만 결과 토스트를 건너뛴다. 메모 칸으로 가는 요청은 target을 싣는다.
+    REQUIRE(tool->target == luil::ui_element_id { demo::kind_tool_note_input });
 }
 
 TEST_CASE("The tray controls are buttons a person can read by name", "[windows-page][tray]")
@@ -740,18 +742,47 @@ TEST_CASE("Hotkey reports reach the report line and the second id rides beside t
     deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::failed, u8"boom") });
     REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 실패 (boom)");
 
-    // 같은 id의 새 보고가 앞 것을 덮고, 둘째 id의 보고는 옆에 붙는다.
+    // 같은 id의 새 보고가 앞 것을 덮고, 둘째 id의 보고는 옆에 붙는다. 둘째 id는 충돌 시험 중에만 보인다.
     deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::registered) });
     deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo-extra", luil::win32::hotkey_status::conflict) });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 등록됨");
+    deliver(page, demo::hotkey_conflict_intent {});
     REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 등록됨 · 충돌 (demo-extra)");
 
-    // 끄면 `끔`이고 늦게 온 보고는 버린다. 다시 켜면 보고를 기다린다.
+    // 끄면 `끔`이고 늦게 온 보고는 버린다. 다시 켜면 끄기 전의 마지막 보고가 그대로 남는다.
     deliver(page, demo::hotkey_toggle_intent { false });
     REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 끔");
-    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::registered) });
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::conflict) });
     REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 끔");
     deliver(page, demo::hotkey_toggle_intent { true });
-    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 아직 보고 없음");
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 등록됨");
+}
+
+TEST_CASE("Turning the hotkeys off and on again keeps the last report on the line", "[windows-page][hotkey]")
+{
+    // 빠르게 끄고 켜면 라이브러리가 새 보고를 내지 않는다. 지난 보고를 지웠다면 반영 줄이 `아직 보고 없음`에 머문다.
+    demo::windows_page page {};
+    deliver(page, demo::hotkey_toggle_intent { true });
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::registered) });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 등록됨");
+
+    deliver(page, demo::hotkey_toggle_intent { false });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 끔");
+    deliver(page, demo::hotkey_toggle_intent { true });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 등록됨");
+
+    // 새 보고가 오면 그것이 지난 보고를 덮는다.
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo", luil::win32::hotkey_status::conflict) });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 충돌");
+
+    // 충돌 시험은 끄면 꺼진다. 지난 시험의 둘째 id 보고가 남아도 시험을 다시 켜기 전에는 그리지 않는다.
+    deliver(page, demo::hotkey_conflict_intent {});
+    deliver(page, demo::hotkey_report_intent { hotkey_report_with(u8"demo-extra", luil::win32::hotkey_status::conflict) });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 충돌 · 충돌 (demo-extra)");
+    deliver(page, demo::hotkey_toggle_intent { false });
+    deliver(page, demo::hotkey_toggle_intent { true });
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-request") == u8"전역 단축키 요청: 켬 · Ctrl+Shift+Alt+F11");
+    REQUIRE(name_of(page_tree(page), u8"windows-hotkey-report") == u8"전역 단축키 반영: 충돌");
 }
 
 TEST_CASE("A hotkey press counts and the front toggle brings the hidden main window back", "[windows-page][hotkey]")
@@ -779,6 +810,8 @@ TEST_CASE("A hotkey press counts and the front toggle brings the hidden main win
     REQUIRE(focus.has_value());
     REQUIRE(focus->surface.empty());
     REQUIRE(focus->activate);
+    // target이 없는 요청이라 셸이 메모 칸 토스트를 건너뛴다.
+    REQUIRE(focus->target == luil::ui_element_id {});
     REQUIRE(name_of(page_tree(page), u8"windows-hotkey-pressed") == u8"전역 단축키 눌림: 3번");
 }
 

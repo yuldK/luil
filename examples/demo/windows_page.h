@@ -391,7 +391,7 @@ namespace demo {
         // 눌렸을 때 주 창을 앞으로 세우는가다.
         bool hotkey_front_ { false };
         int hotkey_presses_ { 0 };
-        // id마다 마지막으로 받은 보고다. 끄면 비운다.
+        // id마다 마지막으로 받은 보고다. 끄고 켜도 지우지 않는다 (까닭은 `hotkey_toggle_intent`를 받는 자리에 있다).
         std::vector<luil::win32::hotkey_report> hotkey_reports_ {};
         luil::text::text_edit_state note_ {};
         // 도구 창 메뉴 안 검색 칸의 상태다.
