@@ -1737,11 +1737,11 @@ namespace luil::android {
                         log_error(u8"Failed to copy the text to the clipboard.");
                     return;
                 }
-                // 그림은 넣지 못한다 (결정 7, Java 0줄). 글 칸만 넣고 그림은 버린다 — `clipboard_image_copy`가 거짓이라 앱이 그림
-                // 복사를 감출 수 있다.
+                // 그림은 넣지 못한다 (결정 7, Java 0줄). 글과 HTML 칸만 넣고 그림은 버린다 — `clipboard_image_copy`가 거짓이라 앱이 그림
+                // 복사를 감출 수 있다. HTML이 비면 글만 넣는다 (rich-edit-exchange-design.md).
                 if (const auto* const data { std::get_if<clipboard_data_copy_request>(&request) }; data != nullptr)
                 {
-                    if (data->text.empty() == false && copy_text_to_clipboard(*jni_, context, data->text) == false)
+                    if (data->text.empty() == false && copy_rich_text_to_clipboard(*jni_, context, data->text, data->html) == false)
                         log_error(u8"Failed to copy the text to the clipboard.");
                     return;
                 }
