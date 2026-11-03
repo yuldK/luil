@@ -124,7 +124,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 - 넘기는 순간은 페이지를 바꾸는 메시지를 처리할 때 한 번이다. 놓는 순간은 `tick`에서 `page_transition_finished`가 참일 때, 새 전환이 덮을 때(결정 4), 움직임 줄이기가 켜질 때다. 놓기 전까지 이전 화면의 그림·글 배치 cache가 산다.
 - `shared_ptr<const ui_tree>`라 logic thread가 짓고 UI thread가 읽기만 한다. tooltip 내용과 같은 규칙이다.
 
-**곡선.** 길이는 `easing(clamp((now - started) / duration, 0, 1))`이고 끝은 `started + duration`이다. 스프링은 `spring { 0, 1, started, config, velocity }`를 `spring_value`로 묻고 끝은 `spring_rest_time`이다. 허용치는 0.001을 넘지 않게 쓰고 진행은 [0, 1]로 자른다(결정 6). 두 곡선 모두 시작 전이면 0이다. 움직이지 않는 곡선은 결정 7을 따른다.
+**곡선.** 길이는 `easing(clamp((now - started) / duration, 0, 1))`이고 끝은 `started + duration`이다. 스프링은 `spring { 0, 1, started, config, velocity }`를 `spring_value`로 묻고 끝은 `spring_rest_time`이다. 허용치는 0.001을 넘지 않게 쓰고 진행은 [0, 1]로 자른다(결정 6). 두 곡선 모두 시작 전이면 0이다. 움직이지 않는 곡선은 결정 7을 따른다. `started`는 앱이 적으므로, 그 뒤 새 화면의 배치와 첫 그리기가 길면 첫 그림이 이미 진행 중간이다(실기기 Debug에서 움직이는 그림이 든 페이지는 첫 그림이 약 60% 진행이었다. 데모 셸은 본문을 지은 직후에 적는다). 한계로 두고 Release에서 잰다(사용자 결정 2026-11-04).
 
 **입력과 초점.**
 
