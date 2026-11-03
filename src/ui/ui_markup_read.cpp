@@ -836,7 +836,7 @@ namespace luil {
         case ui_markup_error_kind::unknown_value:
             return text + u8"Unknown value: " + error.name;
         case ui_markup_error_kind::wrong_value_type:
-            return text + u8"Wrong value type for " + error.name + u8" on " + element;
+            return text + u8"Wrong value type for " + error.name + u8" on " + element + u8": " + error.value;
         case ui_markup_error_kind::unknown_action:
             return text + u8"Unknown action: " + error.name;
         case ui_markup_error_kind::unknown_slot:

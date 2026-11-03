@@ -189,7 +189,7 @@ root->add(std::move(built.element));
 - **inspector(R2).** `markup_node`의 이름표 case를 같은 커밋에 더한다([inspect_names.cpp](../src/ui/inspect_names.cpp) 4~8행). `kind` 속성의 이름표는 검사기의 `kind_names`와 같은 형·같은 값이다(바인딩 문서 결정 6).
 - **file_watch·hot_reload(R1·R5).** [파일 감시](file-watch-design.md) 234행대로 이 노드는 감시하지 않고 파일도 읽지 않는다. 다시 읽기의 약속은 바인딩 문서에 있다.
 - **같은 라운드 다른 줄.** `ui_interaction.*`, `win32_window.cpp`, `window_surface.cpp`, `ui_events.h`, `accessibility.h`, `uia_provider.cpp`, `transition.h`·`spring.h`, `app_host.h`·`app_delegate.h`·`ui_platform.h`, `field_popup.h`를 고치지 않는다. 겹치는 곳은 덧붙임뿐이다. `ui_element_id.h`(`end_of_library_kinds` 위 한 줄, 줄 1의 date_picker·teaching_tip과 줄 3의 page_anim도 더할 수 있다), `inspect_names.cpp`(끝의 case), `src/CMakeLists.txt`(`ui` 소스 줄), `tests/CMakeLists.txt`, `include/luil/luil.h`다. 병합은 기계적이고 `tests/ui_element_tests.cpp`의 `last[]`는 통합 때 마지막 kind로 맞춘다. date_picker·teaching_tip은 1단계 어휘에 들지 않는다. 그 노드가 들어온 뒤 어휘 행으로 더한다.
-- **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 읽기·어휘·펼치기 소스, kind와 이름표, test, 문서) 뒤에 데모 연결 커밋을 낸다. 고치는 데모 파일은 `examples/demo/theme_page.*`·`markup_sample.h`(새 파일)·`assets/markup_sample.xml`(새 파일)·`common.h`(kind)·`text_targets.h`(slot의 칸), `examples/CMakeLists.txt`(싣기), `examples/mobile_demo/theme_page.*`·`assets.h`·`common.h`·`mobile_demo.cmake`와 `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`다. 통합 때 다른 줄의 데모 변경(특히 page_anim의 페이지 바꿈) 뒤에 직렬로 쌓는다.
+- **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 읽기·어휘·펼치기 소스, kind와 이름표, test, 문서) 뒤에 데모 연결 커밋을 낸다. 고치는 데모 파일은 `examples/demo/theme_page.*`·`markup_sample.h`(새 파일)·`assets/markup_sample.xml`(새 파일)·`common.h`(kind)·`text_targets.h`(slot의 칸), `examples/demo_main.cpp`(실은 글을 넘긴다), `examples/CMakeLists.txt`(싣기), `examples/mobile_demo/theme_page.*`·`assets.h`·`app.h`·`common.h`·`mobile_demo.cmake`와 `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`·`tests/CMakeLists.txt`(시험 실행 파일에 견본을 싣는다)다. 통합 때 다른 줄의 데모 변경(특히 page_anim의 페이지 바꿈) 뒤에 직렬로 쌓는다.
 - 통합 때 함께 고치는 문서: [구성 요소](components.md) 한 행과 색인(`docs/README.md`).
 
 ## 확인
@@ -206,9 +206,9 @@ root->add(std::move(built.element));
 데모(바인딩 노드). 상태를 label로 그려 `luil-uia`로 되읽는다.
 
 - 견본 묶음 `examples/demo/markup_sample.h`(새 파일, 두 데모와 page test가 함께 쓴다, `style_sheet_sample.h`의 선례)와 견본 글 `examples/demo/assets/markup_sample.xml`(데모 빌드가 `embed_binary.cmake`로 싣는다)이다.
-- 데스크톱 테마 페이지의 "스타일 파일" 묶음 아래에 "마크업" 묶음을 둔다. 둘 다 R5 hot_reload가 다시 읽을 파일이라 한 자리에 둔다. 묶음 안의 가지가 견본 글을 펼친 것이다. label `markup-count`("누른 횟수 0"), 단추 `markup-more`, 체크 `markup-list`, 반복 단추 셋(`markup-item`과 key), slot `markup-search`(C++가 짓는 한 줄 칸)다. 가지 밖(C++)에 단추 `markup-reload`("다시 읽기")·`markup-sample-unknown`("견본: 모르는 속성")·`markup-sample-broken`("견본: 닫지 않은 태그")·`markup-sample-value`("견본: 없는 값")와 label `markup-status`를 둔다.
-- `markup-status`는 "펼침 · 요소 14 · 오류 0", "거부 · 오류 1 · 4:21 Unknown attribute on label: colr · 이전 틀 유지", "펼침 · 요소 14 · 오류 1 · 3:21 Unknown value: cuont"처럼 말한다.
-- 모바일 데모 테마 페이지에 같은 묶음을 둔다(slot의 칸 없이 견본 단추만).
+- 데스크톱 테마 페이지의 "스타일 파일" 묶음 아래에 "마크업" 묶음을 둔다. 둘 다 R5 hot_reload가 다시 읽을 파일이라 한 자리에 둔다. 묶음 안의 가지가 견본 글을 펼친 것이다. label `markup-count`("누른 횟수 0"), 단추 `markup-more`, 체크 `markup-list`, 반복 단추 셋(`markup-item`과 key `apple`·`pear`·`plum`, 누르면 고른 항목이 된다), 목록이 꺼졌을 때의 안내 label `markup-list-hint`(`unless`), slot `markup-search`(C++가 짓는 한 줄 칸)다. 단추 줄 stack은 `kind="layout"`이라 검사기와 같은 이름표로 데모의 kind가 된다. 가지 밖(C++)에 단추 `markup-reload`("다시 읽기")·`markup-sample-unknown`("견본: 모르는 속성")·`markup-sample-broken`("견본: 닫지 않은 태그")·`markup-sample-value`("견본: 없는 값")와 label `markup-status`를 둔다.
+- `markup-status`는 "펼침 · 요소 7 · 오류 0"(목록을 켜면 요소 10), "거부 · 오류 1 · 4:61 Unknown attribute on label: colr · 이전 틀 유지", "거부 · 오류 1 · 3:1 Syntax error in stack · 이전 틀 유지", "펼침 · 요소 10 · 오류 1 · 4:28 Unknown value: cuont"처럼 말한다. 요소 수는 `ui_markup_build_result::built`이고 줄·열은 `describe`의 것이다.
+- 모바일 데모 테마 페이지에 같은 묶음을 둔다. 글 칸이 없어 slot에는 C++가 지은 label(`markup-search`, "slot: C++가 지은 칸")을 담고 견본 단추 넷만 둔다.
 - UIA(격리 데스크톱): `markup-more`를 Invoke해 `markup-count`가 바뀌는지, 견본을 Invoke한 뒤 `markup-status`가 거부를 말하고 가지가 이전 틀 그대로인지, `markup-list`를 Toggle해 반복 단추 셋이 나고 사라지는지 읽는다. 모바일 데모(Windows 창)도 같은 label을 읽는다. Android에서는 사람이 화면으로 읽는다.
 
 사람 확인.

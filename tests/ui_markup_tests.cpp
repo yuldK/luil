@@ -3,20 +3,36 @@
 #include "luil/generated/ui_style_keys.h"
 #include "luil/theme/ui_style.h"
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/check_element.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/label_element.h"
+#include "luil/ui/panel_element.h"
+#include "luil/ui/progress_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_tree.h"
+#include "luil/ui/wrap_element.h"
+#include "raster_probe.h"
 #include "ui/ui_markup_document.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <cstddef>
+#include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
 // 화면 마크업의 어휘다 (docs/markup-design.md 어휘 절). 읽을 때 이름·enum·수·자리·id 꼴을 모두 확인하고, 적은 값은 C++ 값으로
-// 바꿔 둔다. 펼치기(값 바인딩, 같은 화면 견줌, 견본 픽셀)는 바인딩 노드의 시험이다 (docs/markup-binding-design.md).
+// 바꿔 둔다. 뒤쪽 절은 펼치기(값 바인딩, 반복과 조건, 사건, id, slot, 오류, 같은 화면 견줌, 견본 픽셀)다
+// (docs/markup-binding-design.md).
 namespace {
     using luil::ui_markup_error_kind;
     namespace keys = luil::generated::style_keys;
@@ -514,4 +530,636 @@ TEST_CASE("Markup collects every vocabulary error in text order", "[ui][markup][
     // 같은 이름의 형제는 `[n]`(1부터)이다.
     const luil::ui_markup_error sibling { only_error(u8"<stack><stack/><stack><label colr=\"x\"/></stack></stack>") };
     REQUIRE(narrow(sibling.path) == "stack/stack[2]/label");
+}
+
+// --- 펼치기 (docs/markup-binding-design.md) ---
+
+namespace {
+    // test 정의 kind다. 앱이 자기 kind를 정하는 것과 같은 길이다.
+    constexpr luil::ui_element_kind kind_app_panel { luil::application_element_kind(5) };
+    constexpr luil::ui_element_kind kind_app_label { luil::application_element_kind(6) };
+
+    constexpr char8_t separator { u8'\x1F' };
+
+    // 앱 메시지의 대역이다. 사건 이름과 인자를 그대로 싣는다.
+    struct markup_intent
+    {
+        std::u8string name {};
+        std::u8string argument {};
+    };
+
+    [[nodiscard]] std::shared_ptr<const luil::ui_markup_document> template_of(const std::u8string_view text, const luil::ui_markup_limits& limits = {})
+    {
+        const luil::ui_markup_parse_result result { luil::parse_ui_markup(text, limits) };
+        INFO(narrow(text));
+        INFO(described(result));
+        REQUIRE(result.ok());
+        return result.document;
+    }
+
+    [[nodiscard]] std::string described(const std::vector<luil::ui_markup_error>& errors)
+    {
+        std::string text {};
+        for (const luil::ui_markup_error& error : errors)
+            text += narrow(luil::describe(error)) + "\n";
+        return text;
+    }
+
+    // 펼친 뿌리를 그 자리에 배치한 tree다 (배율 1).
+    [[nodiscard]] luil::ui_tree arranged(std::unique_ptr<luil::ui_element> root, const float width = 400.0f, const float height = 300.0f)
+    {
+        REQUIRE(root != nullptr);
+        return luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, width, height }, 1.0f);
+    }
+
+    [[nodiscard]] luil::ui_element_id node_id(std::u8string owner)
+    {
+        return { luil::ui_element_kind::markup_node, std::move(owner) };
+    }
+
+    [[nodiscard]] std::u8string joined(const std::u8string_view first, const std::u8string_view second)
+    {
+        std::u8string owner { first };
+        owner.push_back(separator);
+        owner += second;
+        return owner;
+    }
+
+    [[nodiscard]] std::u8string text_of(const luil::ui_tree& tree, const luil::ui_element_id& id)
+    {
+        const luil::ui_element* const element { tree.find(id) };
+        INFO("owner " << narrow(id.owner));
+        REQUIRE(element != nullptr);
+        return element->accessibility().name;
+    }
+
+    // 항목 표 하나다 (key와 title).
+    [[nodiscard]] luil::ui_markup_scope row_scope(const std::u8string_view key, const std::u8string_view title)
+    {
+        luil::ui_markup_scope row {};
+        row.set(u8"key", std::u8string { key }).set(u8"title", std::u8string { title });
+        return row;
+    }
+
+    [[nodiscard]] luil::ui_markup_list rows_of(std::vector<luil::ui_markup_scope> rows)
+    {
+        return std::make_shared<const std::vector<luil::ui_markup_scope>>(std::move(rows));
+    }
+
+    [[nodiscard]] std::vector<luil::ui_markup_error_kind> kinds_of(const std::vector<luil::ui_markup_error>& errors)
+    {
+        std::vector<luil::ui_markup_error_kind> kinds {};
+        for (const luil::ui_markup_error& error : errors)
+            kinds.push_back(error.kind);
+        return kinds;
+    }
+
+    // 액션을 한 번 돌린 메시지다.
+    [[nodiscard]] std::vector<luil::input_action> run(const luil::ui_element& element)
+    {
+        const luil::ui_action* const action { element.action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        return (*action)(luil::ui_action_context { .element = element.id() });
+    }
+
+    [[nodiscard]] const markup_intent& intent_of(const luil::input_action& action)
+    {
+        const luil::app_message* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        const markup_intent* const intent { message->get<markup_intent>() };
+        REQUIRE(intent != nullptr);
+        return *intent;
+    }
+
+    // 사건 이름을 그대로 실은 메시지로 바꾸는 앱 함수다. `unknown`으로 시작하는 이름은 모른다.
+    [[nodiscard]] luil::input_action echo_action(const luil::ui_markup_action& action)
+    {
+        if (action.name.starts_with(u8"unknown"))
+            return {};
+        return luil::make_app_action(markup_intent { std::u8string { action.name }, std::u8string { action.argument } });
+    }
+}
+
+TEST_CASE("Markup bindings read the values of each build", "[ui][markup][binding]")
+{
+    const auto document { template_of(
+        u8"<stack id=\"root\">"
+        u8"<label id=\"count\" text=\"누른 횟수: {count}\" length=\"20\"/>"
+        u8"<label id=\"braces\" text=\"{{{count}}}\" length=\"20\"/>"
+        u8"<label id=\"shown\" text=\"보임\" visible=\"{shown}\" length=\"20\"/>"
+        u8"</stack>")
+    };
+    luil::ui_markup_scope values {};
+    values.set(u8"count", std::u8string { u8"3" }).set(u8"shown", true);
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, { .values = &values }) };
+    INFO(described(built.errors));
+    REQUIRE(built.errors.empty());
+    REQUIRE(built.built == 4);
+    luil::ui_tree tree { arranged(std::move(built.element)) };
+    REQUIRE(text_of(tree, node_id(u8"count")) == u8"누른 횟수: 3");
+    // `{{`·`}}`는 글자다.
+    REQUIRE(text_of(tree, node_id(u8"braces")) == u8"{3}");
+    REQUIRE(tree.find(node_id(u8"shown"))->visible());
+
+    // 표를 바꾸면 다음 펼침이 새 값이다. 같은 이름은 덮어쓴다.
+    values.set(u8"count", std::u8string { u8"4" }).set(u8"shown", false);
+    tree = arranged(luil::build_ui_markup(*document, { .values = &values }).element);
+    REQUIRE(text_of(tree, node_id(u8"count")) == u8"누른 횟수: 4");
+    REQUIRE(tree.find(node_id(u8"shown"))->visible() == false);
+
+    // 형이 틀리면 그 속성은 빈 값이고 오류 하나다. 수를 글로 바꾸지 않는다.
+    luil::ui_markup_scope wrong {};
+    wrong.set(u8"count", 3.0).set(u8"shown", std::u8string { u8"true" });
+    built = luil::build_ui_markup(*document, { .values = &wrong });
+    INFO(described(built.errors));
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::wrong_value_type, ui_markup_error_kind::wrong_value_type, ui_markup_error_kind::wrong_value_type });
+    REQUIRE(narrow(built.errors.front().name) == "text");
+    REQUIRE(narrow(built.errors.front().value) == "count");
+    tree = arranged(std::move(built.element));
+    REQUIRE(text_of(tree, node_id(u8"count")).empty());
+    REQUIRE(tree.find(node_id(u8"shown"))->visible() == false);
+
+    // 없는 이름도 빈 값으로 선다. 요소는 그대로 선다.
+    const luil::ui_markup_scope empty {};
+    built = luil::build_ui_markup(*document, { .values = &empty });
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::unknown_value, ui_markup_error_kind::unknown_value, ui_markup_error_kind::unknown_value });
+    REQUIRE(narrow(built.errors.front().name) == "count");
+    REQUIRE(built.built == 4);
+    // 값 표가 없어도 같다.
+    REQUIRE(luil::build_ui_markup(*document, {}).errors == built.errors);
+
+    // `{` 안의 `:`는 앞으로의 접두를 위해 비워 둔다 (읽을 때 막는다).
+    require_error(u8"<stack><label text=\"{t:key}\" length=\"20\"/></stack>", ui_markup_error_kind::invalid_value, "text");
+}
+
+TEST_CASE("Markup builds attributes in row order with bound values", "[ui][markup][binding]")
+{
+    // 바인딩한 `padding`(네 변)이 뒤에 적은 `paddingLeft`를 덮지 않는다. 행 순서대로 다시 걸기 때문이다.
+    const auto document { template_of(u8"<stack id=\"root\" paddingLeft=\"3\" padding=\"{pad}\"><label id=\"a\" text=\"a\" length=\"10\"/></stack>") };
+    luil::ui_markup_scope values {};
+    values.set(u8"pad", 10.0);
+    const luil::ui_tree tree { arranged(luil::build_ui_markup(*document, { .values = &values }).element, 200.0f, 100.0f) };
+    const luil::rect_f bounds { tree.find(node_id(u8"a"))->bounds() };
+    REQUIRE(bounds.x == 3.0f);
+    REQUIRE(bounds.y == 10.0f);
+    REQUIRE(bounds.width == 200.0f - 13.0f);
+
+    // 수가 그 속성의 범위 밖이면 형 오류이고 요소의 기본값이 남는다. 0~1 속성은 요소처럼 자른다.
+    const auto ranged { template_of(
+        u8"<stack id=\"root\">"
+        u8"<label id=\"l\" text=\"x\" fontSize=\"{size}\" maxLines=\"{lines}\" length=\"10\"/>"
+        u8"<progress id=\"p\" value=\"{done}\" length=\"4\"/>"
+        u8"</stack>")
+    };
+    luil::ui_markup_scope wild {};
+    wild.set(u8"size", 0.0).set(u8"lines", -1.0).set(u8"done", 2.0);
+    const luil::ui_markup_build_result built { luil::build_ui_markup(*ranged, { .values = &wild }) };
+    INFO(described(built.errors));
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::wrong_value_type, ui_markup_error_kind::wrong_value_type });
+    REQUIRE(narrow(built.errors[0].name) == "fontSize");
+    REQUIRE(narrow(built.errors[1].name) == "maxLines");
+    const luil::ui_tree wild_tree { arranged(luil::build_ui_markup(*ranged, { .values = &wild }).element) };
+    REQUIRE(wild_tree.find(node_id(u8"p"))->accessibility().range->value == 1.0f);
+    wild.set(u8"size", std::numeric_limits<double>::infinity()).set(u8"lines", 2.5).set(u8"done", std::nan(""));
+    REQUIRE(luil::build_ui_markup(*ranged, { .values = &wild }).errors.size() == 3);
+}
+
+TEST_CASE("Markup loops key their owners and conditions pick one branch", "[ui][markup][binding]")
+{
+    const auto document { template_of(
+        u8"<stack id=\"root\">"
+        u8"<for each=\"{rows}\" as=\"row\" key=\"{row.key}\">"
+        u8"<textButton id=\"b\" text=\"{row.title}\" length=\"20\"/>"
+        u8"<for each=\"{row.cells}\" as=\"cell\" key=\"{cell.key}\">"
+        u8"<label id=\"c\" text=\"{cell.title}/{row.title}/{title}\" length=\"10\"/>"
+        u8"</for>"
+        u8"</for>"
+        u8"<if test=\"{on}\"><label id=\"yes\" text=\"y\" length=\"10\"/></if>"
+        u8"<unless test=\"{on}\"><label id=\"no\" text=\"n\" length=\"10\"/></unless>"
+        u8"</stack>")
+    };
+    luil::ui_markup_scope first { row_scope(u8"r1", u8"첫째") };
+    first.set(u8"cells", rows_of({ row_scope(u8"x", u8"가"), row_scope(u8"y", u8"나") }));
+    luil::ui_markup_scope second { row_scope(u8"r2", u8"둘째") };
+    second.set(u8"cells", rows_of({}));
+    luil::ui_markup_scope values {};
+    values.set(u8"rows", rows_of({ first, second })).set(u8"on", true).set(u8"title", std::u8string { u8"바깥" });
+
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, { .values = &values }) };
+    INFO(described(built.errors));
+    REQUIRE(built.errors.empty());
+    REQUIRE(built.built == 6);
+    luil::ui_tree tree { arranged(std::move(built.element)) };
+    REQUIRE(tree.duplicate_ids().empty());
+    // owner는 id, U+001F, key 순이고 겹친 반복은 바깥 key부터 잇는다. 이름은 안쪽 항목부터 바깥 표까지 찾는다.
+    REQUIRE(text_of(tree, node_id(joined(u8"b", u8"r1"))) == u8"첫째");
+    REQUIRE(text_of(tree, node_id(joined(joined(u8"c", u8"r1"), u8"y"))) == u8"나/첫째/나");
+    REQUIRE(text_of(tree, node_id(joined(u8"b", u8"r2"))) == u8"둘째");
+    REQUIRE(tree.find(node_id(joined(joined(u8"c", u8"r2"), u8"x"))) == nullptr);
+    REQUIRE(tree.find(node_id(u8"yes")) != nullptr);
+    REQUIRE(tree.find(node_id(u8"no")) == nullptr);
+    // 자식 순서는 항목 순서다.
+    const auto& children { tree.root()->children() };
+    REQUIRE(children.size() == 5);
+    REQUIRE(children[0]->id() == node_id(joined(u8"b", u8"r1")));
+    REQUIRE(children[3]->id() == node_id(joined(u8"b", u8"r2")));
+
+    // 빈 목록과 거짓 조건이다.
+    values.set(u8"rows", rows_of({})).set(u8"on", false);
+    tree = arranged(luil::build_ui_markup(*document, { .values = &values }).element);
+    REQUIRE(tree.root()->children().size() == 1);
+    REQUIRE(tree.find(node_id(u8"no")) != nullptr);
+
+    // 조건 값이 없으면 거짓으로 서므로 unless의 가지가 선다.
+    values = {};
+    values.set(u8"rows", rows_of({}));
+    built = luil::build_ui_markup(*document, { .values = &values });
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::unknown_value, ui_markup_error_kind::unknown_value });
+    tree = arranged(std::move(built.element));
+    REQUIRE(tree.find(node_id(u8"no")) != nullptr);
+
+    // 목록 자리에 글이면 형 오류이고 빈 목록이다.
+    values.set(u8"rows", std::u8string { u8"rows" }).set(u8"on", true);
+    built = luil::build_ui_markup(*document, { .values = &values });
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::wrong_value_type });
+    REQUIRE(narrow(built.errors.front().name) == "each");
+}
+
+TEST_CASE("Markup reports a repeated key and keeps the duplicate ids visible", "[ui][markup][binding]")
+{
+    const auto document { template_of(u8"<stack id=\"root\"><for each=\"{rows}\" as=\"row\" key=\"{row.key}\"><textButton id=\"b\" text=\"{row.title}\" length=\"20\"/></for></stack>") };
+    luil::ui_markup_scope values {};
+    values.set(u8"rows", rows_of({ row_scope(u8"r1", u8"a"), row_scope(u8"r1", u8"b"), row_scope(u8"r2", u8"c") }));
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, { .values = &values }) };
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::duplicate_key });
+    REQUIRE(narrow(built.errors.front().value) == "r1");
+    REQUIRE(narrow(built.errors.front().path) == "stack/for");
+    // 펼침은 그대로 서고 tree의 겹친 id에도 남는다.
+    REQUIRE(built.built == 4);
+    const luil::ui_tree tree { arranged(std::move(built.element)) };
+    REQUIRE(tree.duplicate_ids() == std::vector<luil::ui_element_id> { node_id(joined(u8"b", u8"r1")) });
+}
+
+TEST_CASE("Markup stops at max_built with one error", "[ui][markup][binding]")
+{
+    luil::ui_markup_limits limits {};
+    limits.max_built = 3;
+    const auto document { template_of(u8"<stack id=\"root\"><for each=\"{rows}\" as=\"row\" key=\"{row.key}\"><label id=\"l\" text=\"{row.title}\" length=\"10\"/></for></stack>", limits) };
+    std::vector<luil::ui_markup_scope> rows {};
+    for (int index { 0 }; index < 10; ++index)
+        rows.push_back(row_scope(std::u8string(1, static_cast<char8_t>(u8'a' + index)), u8"t"));
+    luil::ui_markup_scope values {};
+    values.set(u8"rows", rows_of(std::move(rows)));
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, { .values = &values }) };
+    INFO(described(built.errors));
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::too_many_built });
+    REQUIRE(narrow(built.errors.front().name) == "max_built");
+    REQUIRE(narrow(built.errors.front().value) == "3");
+    REQUIRE(narrow(luil::describe(built.errors.front())).ends_with("Built elements exceed max_built (3)"));
+    REQUIRE(built.built == 3);
+    // 뿌리와 그 앞까지 지은 것은 선다.
+    const luil::ui_tree tree { arranged(std::move(built.element)) };
+    REQUIRE(tree.root()->children().size() == 2);
+    REQUIRE(tree.unarranged().empty());
+}
+
+TEST_CASE("Markup builds walk deep templates without recursion", "[ui][markup][binding]")
+{
+    // 앱이 깊이 한도를 올린 틀도 펼치기는 쌓은 frame으로 돈다 (읽기와 같은 까닭). element의 해제는 자식을 따라 재귀해
+    // Debug 빌드에서 2000단이면 호출 스택을 넘긴다. 이 시험은 기본 한도(64)의 네 배에서 멈춘다.
+    constexpr std::size_t depth { 256 };
+    std::u8string text {};
+    for (std::size_t index { 0 }; index < depth; ++index)
+        text += u8"<stack>";
+    for (std::size_t index { 0 }; index < depth; ++index)
+        text += u8"</stack>";
+    luil::ui_markup_limits limits {};
+    limits.max_depth = depth + 1;
+    limits.max_nodes = depth + 1;
+    const auto document { template_of(text, limits) };
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, {}) };
+    REQUIRE(built.errors.empty());
+    REQUIRE(built.built == depth);
+    // 이름 없는 요소의 owner는 자식 차례의 자리다.
+    const luil::ui_element* element { built.element.get() };
+    REQUIRE(element->id() == node_id(u8"/"));
+    element = element->children().front().get();
+    REQUIRE(element->id() == node_id(u8"/0"));
+    REQUIRE(element->children().front()->id() == node_id(u8"/0/0"));
+}
+
+TEST_CASE("Markup actions are made once while building", "[ui][markup][binding][action]")
+{
+    const auto document { template_of(
+        u8"<stack id=\"root\">"
+        u8"<for each=\"{rows}\" as=\"row\" key=\"{row.key}\">"
+        u8"<textButton id=\"pick\" text=\"{row.title}\" action=\"select\" argument=\"고른 {row.key}\" length=\"20\"/>"
+        u8"</for>"
+        u8"<check id=\"list\" label=\"목록\" checked=\"{on}\" action=\"toggle\" length=\"24\"/>"
+        u8"<textButton id=\"lost\" text=\"모름\" action=\"unknownName\" length=\"20\"/>"
+        u8"<check id=\"lost-check\" label=\"모름\" action=\"unknownToggle\" length=\"24\"/>"
+        u8"<textButton id=\"plain\" text=\"그냥\" length=\"20\"/>"
+        u8"</stack>")
+    };
+    luil::ui_markup_scope values {};
+    values.set(u8"rows", rows_of({ row_scope(u8"a", u8"가"), row_scope(u8"b", u8"나") })).set(u8"on", true);
+    std::vector<std::pair<std::u8string, std::u8string>> calls {};
+    std::vector<luil::ui_element_id> ids {};
+    const luil::ui_markup_context context {
+        .values = &values,
+        .make_action = [&calls, &ids](const luil::ui_markup_action& action) {
+            calls.emplace_back(action.name, action.argument);
+            ids.push_back(action.id);
+            return echo_action(action);
+        },
+    };
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, context) };
+    INFO(described(built.errors));
+    // 누르는 요소마다 한 번이다. 사건이 없는 단추는 부르지 않는다.
+    REQUIRE(calls.size() == 5);
+    REQUIRE(calls[0] == std::pair<std::u8string, std::u8string> { u8"select", u8"고른 a" });
+    REQUIRE(calls[1] == std::pair<std::u8string, std::u8string> { u8"select", u8"고른 b" });
+    REQUIRE(calls[2] == std::pair<std::u8string, std::u8string> { u8"toggle", u8"" });
+    REQUIRE(ids[0] == node_id(joined(u8"pick", u8"a")));
+    REQUIRE(ids[2] == luil::ui_element_id { luil::ui_element_kind::check, u8"list" });
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::unknown_action, ui_markup_error_kind::unknown_action });
+    REQUIRE(narrow(built.errors.front().name) == "unknownName");
+
+    const luil::ui_tree tree { arranged(std::move(built.element)) };
+    // 지은 액션은 쥔 값을 돌려준다. 돌릴 때 앱 함수를 다시 부르지 않는다.
+    const std::vector<luil::input_action> picked { run(*tree.find(node_id(joined(u8"pick", u8"b")))) };
+    REQUIRE(picked.size() == 1);
+    REQUIRE(intent_of(picked.front()).name == u8"select");
+    REQUIRE(intent_of(picked.front()).argument == u8"고른 b");
+    const std::vector<luil::input_action> toggled { run(*tree.find({ luil::ui_element_kind::check, u8"list" })) };
+    REQUIRE(intent_of(toggled.front()).name == u8"toggle");
+    REQUIRE(calls.size() == 5);
+    // 모르는 사건이면 단추는 비활성이고 체크는 누를 수 없다. 사건이 없는 단추는 그대로 선다.
+    REQUIRE(tree.find(node_id(u8"lost"))->enabled() == false);
+    REQUIRE(tree.find({ luil::ui_element_kind::check, u8"lost-check" })->action(luil::ui_trigger::left_click) == nullptr);
+    REQUIRE(tree.find(node_id(u8"plain"))->enabled());
+    REQUIRE(tree.find(node_id(u8"plain"))->action(luil::ui_trigger::left_click) == nullptr);
+    REQUIRE(tree.find(node_id(joined(u8"pick", u8"a")))->enabled());
+
+    // make_action이 비어 있으면 모든 사건이 모르는 이름이다.
+    REQUIRE(luil::build_ui_markup(*document, { .values = &values }).errors.size() == 4);
+}
+
+TEST_CASE("Markup ids take app kinds, prefixes and positions", "[ui][markup][binding][id]")
+{
+    const auto document { template_of(
+        u8"<stack id=\"root\" kind=\"appPanel\">"
+        u8"<label text=\"a\" length=\"10\"/>"
+        u8"<label id=\"named\" kind=\"appLabel\" text=\"b\" length=\"10\"/>"
+        u8"<label id=\"odd\" kind=\"nowhere\" text=\"c\" length=\"10\"/>"
+        u8"<stack length=\"20\"><if test=\"{on}\"><label text=\"d\" length=\"10\"/></if></stack>"
+        u8"</stack>")
+    };
+    const std::vector<luil::inspector_kind_name> kinds { { kind_app_panel, u8"appPanel" }, { kind_app_label, u8"appLabel" } };
+    luil::ui_markup_scope values {};
+    values.set(u8"on", true);
+    luil::ui_markup_context context { .values = &values, .kinds = kinds };
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, context) };
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::unknown_kind });
+    REQUIRE(narrow(luil::describe(built.errors.front())).ends_with("Unknown kind: nowhere"));
+    luil::ui_tree tree { arranged(std::move(built.element)) };
+    REQUIRE(tree.root()->id() == luil::ui_element_id { kind_app_panel, u8"root" });
+    REQUIRE(tree.find({ kind_app_label, u8"named" }) != nullptr);
+    REQUIRE(tree.find(node_id(u8"odd")) != nullptr);
+    // 이름 없는 요소는 뿌리부터 센 자식 차례다. 구조 요소도 한 단이다.
+    REQUIRE(tree.find(node_id(u8"/0")) != nullptr);
+    REQUIRE(tree.find(node_id(u8"/3")) != nullptr);
+    REQUIRE(tree.find(node_id(u8"/3/0/0")) != nullptr);
+    // 같은 틀·같은 값이면 frame 사이에 같은 owner다.
+    const luil::ui_tree again { arranged(luil::build_ui_markup(*document, context).element) };
+    REQUIRE(again.find(node_id(u8"/3/0/0")) != nullptr);
+
+    // 같은 틀을 한 tree에 두 번 펼칠 때는 앞붙이로 가른다.
+    context.owner_prefix = u8"left";
+    tree = arranged(luil::build_ui_markup(*document, context).element);
+    REQUIRE(tree.root()->id() == luil::ui_element_id { kind_app_panel, joined(u8"left", u8"root") });
+    REQUIRE(tree.find(node_id(joined(u8"left", u8"/0"))) != nullptr);
+}
+
+TEST_CASE("Markup slots come from the app with the visible names", "[ui][markup][binding][slot]")
+{
+    const auto document { template_of(
+        u8"<stack id=\"root\">"
+        u8"<for each=\"{rows}\" as=\"row\" key=\"{row.key}\"><slot name=\"cell\" length=\"10\"/></for>"
+        u8"<slot name=\"missing\" length=\"12\"/>"
+        u8"<label id=\"after\" text=\"z\" length=\"5\"/>"
+        u8"</stack>")
+    };
+    luil::ui_markup_scope values {};
+    values.set(u8"rows", rows_of({ row_scope(u8"a", u8"가"), row_scope(u8"b", u8"나") })).set(u8"title", std::u8string { u8"바깥" }).set(u8"outer", true);
+    const luil::ui_markup_context context {
+        .values = &values,
+        .make_slot = [](const std::u8string_view name, const luil::ui_markup_scope& scope) -> std::unique_ptr<luil::ui_element> {
+            if (name != u8"cell")
+                return nullptr;
+            // 바깥 표 위에 항목을 덮은 표다. 항목의 이름이 이긴다.
+            const auto* const key { std::get_if<std::u8string>(scope.find(u8"key")) };
+            const auto* const title { std::get_if<std::u8string>(scope.find(u8"title")) };
+            const auto* const outer { std::get_if<bool>(scope.find(u8"outer")) };
+            REQUIRE(key != nullptr);
+            REQUIRE(title != nullptr);
+            REQUIRE(outer != nullptr);
+            luil::label_config config {};
+            config.text = *title;
+            return std::make_unique<luil::label_element>(luil::ui_element_id { kind_app_label, u8"cell-" + *key }, std::move(config));
+        },
+    };
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, context) };
+    REQUIRE(kinds_of(built.errors) == std::vector<ui_markup_error_kind> { ui_markup_error_kind::unknown_slot });
+    REQUIRE(narrow(luil::describe(built.errors.front())).ends_with("Unknown slot: missing"));
+    REQUIRE(built.built == 4);
+    const luil::ui_tree tree { arranged(std::move(built.element)) };
+    // slot의 요소는 앱의 id를 그대로 쓰고 마크업의 자리로 담긴다.
+    REQUIRE(text_of(tree, { kind_app_label, u8"cell-a" }) == u8"가");
+    REQUIRE(tree.find({ kind_app_label, u8"cell-b" })->bounds().y == 10.0f);
+    REQUIRE(tree.find({ kind_app_label, u8"cell-b" })->bounds().height == 10.0f);
+    // 빈 slot의 자리는 남는다.
+    REQUIRE(tree.find(node_id(u8"after"))->bounds().y == 32.0f);
+}
+
+TEST_CASE("Markup keeps focus on the same key after an item is inserted", "[ui][markup][binding][focus]")
+{
+    const auto document { template_of(u8"<stack id=\"root\"><for each=\"{rows}\" as=\"row\" key=\"{row.key}\"><textButton id=\"item\" text=\"{row.title}\" action=\"select\" length=\"24\"/></for></stack>") };
+    const auto tree_of = [&document](std::vector<luil::ui_markup_scope> rows) {
+        luil::ui_markup_scope values {};
+        values.set(u8"rows", rows_of(std::move(rows)));
+        return std::make_shared<const luil::ui_tree>(arranged(luil::build_ui_markup(*document, { .values = &values, .make_action = echo_action }).element));
+    };
+    luil::interaction_controller controller {};
+    controller.set_tree(tree_of({ row_scope(u8"a", u8"가"), row_scope(u8"b", u8"나"), row_scope(u8"c", u8"다") }));
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::tab }));
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::tab }));
+    REQUIRE(controller.snapshot().focused == node_id(joined(u8"item", u8"b")));
+
+    // 앞에 항목이 끼어도 key가 같은 단추에 초점이 남는다.
+    controller.set_tree(tree_of({ row_scope(u8"z", u8"앞"), row_scope(u8"a", u8"가"), row_scope(u8"b", u8"나"), row_scope(u8"c", u8"다") }));
+    REQUIRE(controller.snapshot().focused == node_id(joined(u8"item", u8"b")));
+    // 다시 읽은 틀에서 그 key가 사라지면 controller가 초점을 거둔다.
+    controller.set_tree(tree_of({ row_scope(u8"a", u8"가") }));
+    REQUIRE(controller.snapshot().focused != node_id(joined(u8"item", u8"b")));
+}
+
+TEST_CASE("Markup build errors carry the place of the attribute", "[ui][markup][binding][errors]")
+{
+    const std::u8string text {
+        u8"<stack id=\"root\">\n"
+        u8"  <label id=\"a\" text=\"{cuont}\" length=\"10\"/>\n"
+        u8"  <label id=\"b\" text=\"{count}\" length=\"10\"/>\n"
+        u8"  <for each=\"{rows}\" as=\"row\" key=\"{row.key}\">\n"
+        u8"    <textButton id=\"c\" text=\"{row.missing}\" action=\"unknownGo\" length=\"20\"/>\n"
+        u8"  </for>\n"
+        u8"  <slot name=\"nothing\" length=\"10\"/>\n"
+        u8"</stack>"
+    };
+    const auto document { template_of(text) };
+    luil::ui_markup_scope values {};
+    values.set(u8"count", 1.0).set(u8"rows", rows_of({ row_scope(u8"k", u8"x"), row_scope(u8"k", u8"y") }));
+    const luil::ui_markup_context context { .values = &values, .make_action = echo_action };
+    const luil::ui_markup_build_result built { luil::build_ui_markup(*document, context) };
+    INFO(described(built.errors));
+    const std::vector<std::string> expected {
+        "2:17 Unknown value: cuont",
+        "3:17 Wrong value type for text on label: count",
+        "4:31 Duplicate key in for: k",
+        "5:24 Unknown value: row.missing",
+        "5:45 Unknown action: unknownGo",
+        "7:9 Unknown slot: nothing",
+    };
+    REQUIRE(built.errors.size() == expected.size());
+    for (std::size_t index { 0 }; index < expected.size(); ++index)
+        REQUIRE(narrow(luil::describe(built.errors[index])) == expected[index]);
+    // 반복이 같은 자리에서 같은 실수를 되풀이해도 하나다.
+    REQUIRE(built.errors[0].offset == text.find(u8"text=\"{cuont}"));
+    REQUIRE(built.errors[3].offset == text.find(u8"text=\"{row.missing}"));
+    REQUIRE(narrow(built.errors[0].path) == "stack/label[1]");
+    REQUIRE(narrow(built.errors[3].path) == "stack/for/textButton");
+    REQUIRE(narrow(built.errors[5].path) == "stack/slot");
+    // 같은 틀·같은 값이면 같은 목록이다.
+    REQUIRE(luil::build_ui_markup(*document, context).errors == built.errors);
+}
+
+TEST_CASE("A markup screen arranges like the same screen built in C++", "[ui][markup][binding][parity]")
+{
+    // hello 예제 꼴의 화면을 C++와 마크업으로 같은 값으로 짓고, 같은 자리에 배치한 두 tree를 pre-order로 견준다.
+    const auto document { template_of(
+        u8"<stack id=\"screen\" direction=\"column\" spacing=\"12\" padding=\"24\">"
+        u8"<label id=\"count\" text=\"{countText}\" fontSize=\"14\" color=\"primary\" length=\"18\"/>"
+        u8"<stack id=\"row\" direction=\"row\" spacing=\"8\" length=\"30\">"
+        u8"<textButton id=\"more\" text=\"하나 더\" action=\"increment\" length=\"120\"/>"
+        u8"<check id=\"list\" label=\"목록 보기\" checked=\"{showList}\" action=\"toggle\" weight=\"1\"/>"
+        u8"</stack>"
+        u8"<gap length=\"6\"/>"
+        u8"<panel id=\"card\" background=\"surfaceBackground\" cornerRadius=\"6\" length=\"40\"><progress id=\"bar\" value=\"{progress}\" thickness=\"4\"/></panel>"
+        u8"<wrap id=\"chips\" itemWidth=\"40\" itemHeight=\"20\" spacing=\"4\" lineSpacing=\"4\" weight=\"1\"><label id=\"w1\" text=\"a\"/><label id=\"w2\" text=\"b\" enabled=\"false\" tooltip=\"둘째\"/></wrap>"
+        u8"</stack>")
+    };
+    luil::ui_markup_scope values {};
+    values.set(u8"countText", std::u8string { u8"누른 횟수 2" }).set(u8"showList", true).set(u8"progress", 0.25);
+    luil::ui_markup_build_result built { luil::build_ui_markup(*document, { .values = &values, .make_action = echo_action }) };
+    INFO(described(built.errors));
+    REQUIRE(built.errors.empty());
+    const luil::ui_tree markup { arranged(std::move(built.element), 360.0f, 280.0f) };
+
+    luil::stack_config screen_config {};
+    screen_config.spacing = 12.0f;
+    screen_config.padding = luil::edge_insets::all(24.0f);
+    auto screen { std::make_unique<luil::stack_element>(node_id(u8"screen"), screen_config) };
+    luil::label_config count {};
+    count.text = u8"누른 횟수 2";
+    count.font_size = 14.0f;
+    count.color = luil::label_color_role::primary;
+    screen->add(std::make_unique<luil::label_element>(node_id(u8"count"), std::move(count)), 18.0f);
+    luil::stack_config row_config {};
+    row_config.direction = luil::stack_direction::row;
+    row_config.spacing = 8.0f;
+    auto row { std::make_unique<luil::stack_element>(node_id(u8"row"), row_config) };
+    auto more { std::make_unique<luil::text_button_element>(node_id(u8"more"), luil::text_button_config { .text = u8"하나 더" }) };
+    more->set_cursor(luil::ui_cursor::hand);
+    more->set_action(luil::ui_trigger::left_click, luil::make_message_action(markup_intent { u8"increment" }));
+    row->add(std::move(more), 120.0f);
+    luil::check_config list {};
+    list.owner = u8"list";
+    list.label = u8"목록 보기";
+    list.checked = true;
+    list.toggle = luil::make_message_action(markup_intent { u8"toggle" });
+    row->add_flexible(std::make_unique<luil::check_element>(std::move(list)));
+    screen->add(std::move(row), 30.0f);
+    screen->add_gap(6.0f);
+    luil::panel_config card {};
+    card.corner_radius = 6.0f;
+    card.background = [](const luil::ui_color_palette& palette) {
+        return luil::palette_color(palette, luil::palette_role::surface_background);
+    };
+    auto panel { std::make_unique<luil::panel_element>(node_id(u8"card"), std::move(card)) };
+    panel->set_content(std::make_unique<luil::progress_element>(node_id(u8"bar"), luil::progress_config { .value = 0.25f, .thickness = 4.0f }));
+    screen->add(std::move(panel), 40.0f);
+    luil::wrap_config chips_config {};
+    chips_config.item_width = 40.0f;
+    chips_config.item_height = 20.0f;
+    chips_config.spacing = 4.0f;
+    chips_config.line_spacing = 4.0f;
+    auto chips { std::make_unique<luil::wrap_element>(node_id(u8"chips"), chips_config) };
+    luil::label_config first {};
+    first.text = u8"a";
+    chips->add(std::make_unique<luil::label_element>(node_id(u8"w1"), std::move(first)));
+    luil::label_config second {};
+    second.text = u8"b";
+    auto second_label { std::make_unique<luil::label_element>(node_id(u8"w2"), std::move(second)) };
+    second_label->set_enabled(false);
+    second_label->set_tooltip(u8"둘째");
+    chips->add(std::move(second_label));
+    screen->add_flexible(std::move(chips));
+    const luil::ui_tree by_hand { arranged(std::move(screen), 360.0f, 280.0f) };
+
+    REQUIRE(markup.unarranged().empty());
+    REQUIRE(markup.duplicate_ids().empty());
+    std::vector<std::pair<const luil::ui_element*, const luil::ui_element*>> pending { { markup.root(), by_hand.root() } };
+    std::size_t compared { 0 };
+    while (pending.empty() == false)
+    {
+        const auto [left, right] { pending.back() };
+        pending.pop_back();
+        ++compared;
+        INFO("owner " << narrow(right->id().owner));
+        REQUIRE(left->id() == right->id());
+        REQUIRE(left->bounds().x == right->bounds().x);
+        REQUIRE(left->bounds().y == right->bounds().y);
+        REQUIRE(left->bounds().width == right->bounds().width);
+        REQUIRE(left->bounds().height == right->bounds().height);
+        REQUIRE(left->visible() == right->visible());
+        REQUIRE(left->enabled() == right->enabled());
+        REQUIRE(left->accessibility().role == right->accessibility().role);
+        REQUIRE(left->accessibility().name == right->accessibility().name);
+        REQUIRE(left->tooltip() == right->tooltip());
+        REQUIRE(left->cursor() == right->cursor());
+        REQUIRE((left->action(luil::ui_trigger::left_click) == nullptr) == (right->action(luil::ui_trigger::left_click) == nullptr));
+        REQUIRE(left->children().size() == right->children().size());
+        for (std::size_t index { left->children().size() }; index > 0; --index)
+            pending.emplace_back(left->children()[index - 1].get(), right->children()[index - 1].get());
+    }
+    REQUIRE(compared == 10);
+}
+
+TEST_CASE("A markup panel background paints its palette role", "[ui][markup][binding][raster]")
+{
+    // 역할을 고르는 선택자라 테마와 고대비를 그대로 따른다. 자리는 물리 픽셀이다 (raster_probe.h).
+    const auto document { template_of(u8"<stack id=\"root\"><panel id=\"card\" background=\"accentSoft\" length=\"30\"><label text=\"\"/></panel></stack>") };
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::ui_color expected { luil::palette_color(palette, luil::palette_role::accent_soft) };
+        INFO("theme " << static_cast<int>(theme));
+        REQUIRE(expected != palette.window_background);
+        const luil::ui_tree tree { luil::make_arranged_tree(luil::build_ui_markup(*document, {}).element, { 0.0f, 0.0f, 100.0f, 80.0f }, 2.0f) };
+        luil::testing::raster_frame frame { 100, 80, palette };
+        frame.set_theme(theme);
+        frame.draw(tree, luil::interaction_snapshot {});
+        REQUIRE(frame.pixel_at(50, 30) == expected);
+        REQUIRE(frame.pixel_at(50, 70) == palette.window_background);
+    }
 }
