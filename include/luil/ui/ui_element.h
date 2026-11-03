@@ -1393,6 +1393,8 @@ namespace luil {
         // 않는다** (`tab_bar_element`). 재정의하는 것은 흘리는 컨테이너다 —
         // `scroll_view_element`·`strip_element`가 직접 재고, 그것을 안에 두는
         // `scroll_area_element`·`list_element`·`virtual_list_element`가 물려준다.
+        // `table_element`는 가로로 흐를 때 왼쪽 끝이 고정 열 경계 이상인 대상에만 답한다
+        // (본문·행·머리글과 고정 칸은 0이다. frozen-columns-design.md).
         //  - 물리 좌표(`bounds()`)를 논리 값으로 옮기는 것은 배율을 아는 이쪽뿐이라
         //    여기가 자리다. `arrange` 뒤에만 유효하다.
         //  - virtual인 이유는 **앱이 만든 흘리는 컨테이너도 답해야 해서다.**

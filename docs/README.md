@@ -46,6 +46,7 @@
 - [확대·축소하는 보기](zoom-view-design.md)
 - [가상 목록](virtual-list-design.md)
 - [표](table-design.md)
+- [고정 열](frozen-columns-design.md): 표의 앞쪽 열을 가로 스크롤에서 제자리에 세운다
 - [여러 줄 칸의 자동 줄 넘김](text-area-wrap-design.md)
 - [줄 나눔 규칙](line-break-design.md): UAX #14로 접는 자리를 고르고 한국어는 어절에서 바꾼다
 - [텍스트 칸의 하이퍼링크](text-link-design.md)
@@ -98,6 +99,10 @@
 - [줄 나눔 정책 스타일 키](wrap-policy-key-design.md): 스타일 파일 한 줄로 여러 줄 글의 기본 줄 나눔 정책을 고른다
 - [잉크 캔버스](ink-design.md): 펜으로 필압 획을 그리고 지우개로 지운다. 획은 앱 상태다
 - [잉크 입력](ink-input-design.md): 펜의 압력·기울기·지우개 표식과 합쳐 온 표본을 포인터 이벤트에 싣는다
+- [색 고르기](color-picker-design.md): 판·막대·견본·16진 칸으로 색을 고르고 색 칸 popup으로 연다
+- [색 공간과 16진 색](color-space-design.md): HSV와 sRGB 변환, 16진 글의 검사·쓰기·거르기
+- [서식 있는 글 편집](rich-edit-design.md): 여러 줄 칸에서 굵게·기울임·밑줄·코드·링크를 편집하고 되돌린다
+- [서식 글 교환](rich-edit-exchange-design.md): 글과 HTML을 한 클립에 넣고 거른 HTML을 서식째 붙여넣는다
 - [검사기](inspector-design.md): 실행 중 화면에 요소의 윤곽과 정보 상자를 얹는 개발 도구
 
 ## 플랫폼과 콘텐츠
