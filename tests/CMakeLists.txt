@@ -90,6 +90,8 @@ add_executable(luil_core_tests
     spring_tests.cpp
     text_area_element_tests.cpp
     text_change_tests.cpp
+    text_format_tests.cpp
+    rich_text_tests.cpp
     syntax_highlighter_tests.cpp
     text_link_tests.cpp
     stack_element_tests.cpp

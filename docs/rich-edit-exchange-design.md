@@ -6,7 +6,7 @@
 
 - 칸의 복사는 고른 글만 싣는다. Ctrl+C는 4단계 텍스트 칸이 먼저 받아 `copy_focused_selection`이 `clipboard_copy_request { 고른 글 }`을 낸다([ui_interaction.cpp](../src/ui/ui_interaction.cpp) 3258행). controller는 서식을 모르고 칸의 기록은 logic thread에 있다.
 - 붙여넣기도 글만이다. Ctrl+V가 낸 `clipboard_paste_request`를 UI thread가 `CF_UNICODETEXT`로 읽어 insert 편집으로 바꾼다([win32_window.cpp](../src/win32/win32_window.cpp) 1912~1926행, [android_app.cpp](../src/android/android_app.cpp) 1748~1758행). 서식을 실을 자리가 없다.
-- 여러 형식 클립은 있지만 HTML 칸이 없다. `clipboard_data_copy_request`는 글·그림·PNG(ui_events.h 703행), `clipboard_data`는 글·그림(729행)이다. Win32는 `clipboard_data_blocks`·`read_clipboard_data`([win32_image_clipboard.cpp](../src/win32/win32_image_clipboard.cpp) 123·139행)가 이 둘을 다루고, Android는 글 칸만 넣는다(android_app.cpp 1742행).
+- 여러 형식 클립은 있지만 HTML 칸이 없다. `clipboard_data_copy_request`는 글·그림·PNG(ui_events.h 703행), `clipboard_data`는 글·그림(729행)이다. Win32는 `clipboard_data_blocks`·`read_clipboard_data`([win32_image_clipboard.cpp](../src/win32/win32_image_clipboard.cpp) 91·139행)가 이 둘을 다루고, Android는 글 칸만 넣는다(android_app.cpp 1742행).
 - 거르기가 없다. 외부 HTML에는 스크립트, 바깥 자원, 문서 머리, 조건부 주석이 섞여 온다. 저장소에는 HTML 읽기가 없다(마크다운은 core의 md4c, JSON은 nlohmann이다).
 - 저장 형식이 없다. 앱이 `text_format`을 파일로 남기려면 형식을 직접 정한다.
 
@@ -44,8 +44,8 @@ bool rich_text_paste(text::text_edit_state& state, const clipboard_data& data, b
 bool clipboard_keys_to_parent { false };
 
 // include/luil/ui/ui_element.h, `text_input_snapshot` 끝에 (칸이 설정에서 옮겨 싣는다)
+// 앞 노드가 먼저 `const std::vector<text_span>* spans`(보조 기술의 서식 속성이 읽는 칸 설정의 구간, text_span은 전방 선언)를 더했다. 이 칸은 그 뒤다.
 bool clipboard_keys_to_parent { false };
-const std::vector<text_span>* spans { nullptr };  // 칸 설정의 구간이다. 보조 기술의 서식 속성이 읽는다 (text_span은 전방 선언)
 ```
 
 앱의 길은 이렇다. 칸에 단 `make_rich_text_key_handler`가 Ctrl+C를 `rich_text_command::copy` 앱 메시지로 낸다. logic thread가 `app_host::post_clipboard_request(rich_text_copy_request(state))`를 부른다. 잘라내기는 그 뒤에 `text_edit_erase_selection`을 부른다. 붙여넣기는 `clipboard_data_paste_request { tag }`를 넣고, `app_delegate::make_clipboard_data_message`의 답을 받은 `handle`이 `rich_text_paste`를 부른다.
@@ -118,7 +118,7 @@ const std::vector<text_span>* spans { nullptr };  // 칸 설정의 구간이다.
 - **줄 3(controller).** `process_text_input_key`에 갈래 하나: snapshot의 `clipboard_keys_to_parent`가 참이고 `secret`이 아니면 위의 복사·잘라내기·붙여넣기 조합에 nullopt를 돌려준다. 읽기 전용 갈래 뒤, `multiline` 갈래 앞이다. 필드는 이 노드가 `ui_element.h`의 `text_input_snapshot` 끝과 `text_area_config` 끝에 더하므로, 통합 때 줄 2를 먼저 합치고 줄 3의 갈래 커밋과 그 test(`tests/key_propagation_tests.cpp` 끝)를 그 뒤에 쌓는다. `navigation_keys_to_parent`(ui_element.h 160행)와 같은 꼴이다.
 - **그림 클립보드(R2).** 그 문서가 이 노드에 남긴 것을 닫는다([image-clipboard-design.md](image-clipboard-design.md) 205행). `html`은 두 구조체 끝에 더하고(앞 구조체의 손으로 쓴 `operator==`에도 한 칸) 기존 칸은 그대로다. `rtf`는 결정 8로 더하지 않는다. 입력 thread에서 짓는 여러 형식 복사(그 문서 결정 6의 b)는 결정 7로 하지 않는다. 그림 붙여넣기는 1단계에 넣지 않는다.
 - **줄 4(tray·hotkey).** `win32_window.cpp`·`app_delegate.h`·`app_host.h`·`ui_platform.h`를 고치지 않는다. HTML은 두 플랫폼 모두 다뤄 능력 칸이 늘지 않는다. `android_app.cpp`는 위의 분기 한 줄만이고 줄 4가 같은 파일을 고치면 다른 함수다.
-- **R4 markup.** markup이 서식 글을 선언하면 이 문서의 HTML 조각을 `rich_text_from_html`로 읽는다. 마크다운식 새 인라인 문법을 두지 않는다.
+- **R4 markup.** R4 markup이 서식 글을 선언하면 `rich_text_from_html`로 HTML 조각을 읽는 길을 쓸 수 있다(core 코드라 바로 부를 수 있다). 꼴은 그 문서가 정한다.
 - **데모는 따로 커밋한다.** [서식 있는 글 편집](rich-edit-design.md)의 데모 페이지가 복사·붙여넣기 단추와 클립보드 답 연결(`make_clipboard_data_message`의 tag)을 함께 가진다. `examples/demo_main.cpp`의 delegate 갈래 한 줄은 통합 때 직렬로 쌓는다.
 
 ## 확인

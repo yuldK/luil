@@ -169,6 +169,8 @@ controls.fit_label = u8"Fit";
 
 **ink**(줄 3, 같은 라운드). 캔버스의 기본 이름(잉크 캔버스)과 획 수 요약(획 N개)을 이 헤더에 함수 둘로 더한다. `ink_canvas_name()`은 `std::u8string_view`를, `ink_canvas_summary(count)`는 수가 끼는 문장이라 `std::u8string`을 돌려준다. 앱이 덮는 칸은 `ink_canvas_config`의 `access_name`과 `std::function<std::u8string(std::size_t strokes)>` 꼴의 `access_summary`다. 줄 3은 이 헤더가 main에 들어온 뒤 병합한다. 같은 `default_text.h`·`default_text.cpp`의 끝에 함수를 덧붙이는 병합이고, `verify_default_text`가 서면 `ink_canvas_element.cpp`에도 한글 리터럴을 두지 않는다. R5에서 요약은 복수형 항목이 된다.
 
+**rich_edit**(R3 줄 2, [서식 있는 글 편집](rich-edit-design.md)). 서식 명령표(`make_rich_text_commands`)의 기본 이름 여섯을 이 헤더 끝에 더했다. `rich_text_bold()`(굵게), `rich_text_italic()`(기울임꼴), `rich_text_underline()`(밑줄), `rich_text_code()`(코드), `rich_text_link()`(링크), `rich_text_clear_format()`(서식 지우기)다. 앱이 덮는 칸은 `rich_text_command_labels`이고 빈 칸만 기본 이름을 쓴다(`text_or_default`).
+
 **R5 i18n.** 함수 이름이 키 이름의 출처다. 호출부는 바꾸지 않고 `default_text.cpp`의 몸통을 표 조회로 바꾼다. 인자가 있는 문구는 자리 값 문장으로 바꾼다. 편집 메뉴의 `bool korean`, 강조색 이름 25개, 시스템 강조색 라벨은 R5가 같은 표로 흡수한다.
 
 **R1에서 미룬 것을 닫는다.** 구현 커밋이 아래 줄을 고쳤다. 각 문서는 그 한두 줄만 바뀐다.

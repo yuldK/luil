@@ -160,6 +160,36 @@ namespace luil::default_text {
         return summary;
     }
 
+    std::u8string_view rich_text_bold() noexcept
+    {
+        return u8"굵게";
+    }
+
+    std::u8string_view rich_text_italic() noexcept
+    {
+        return u8"기울임꼴";
+    }
+
+    std::u8string_view rich_text_underline() noexcept
+    {
+        return u8"밑줄";
+    }
+
+    std::u8string_view rich_text_code() noexcept
+    {
+        return u8"코드";
+    }
+
+    std::u8string_view rich_text_link() noexcept
+    {
+        return u8"링크";
+    }
+
+    std::u8string_view rich_text_clear_format() noexcept
+    {
+        return u8"서식 지우기";
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;

@@ -21,6 +21,7 @@
 #include "luil/text/line_break.h"
 #include "luil/text/text_change.h"
 #include "luil/text/text_edit.h"
+#include "luil/text/text_format.h"
 #include "luil/text/utf8_text.h"
 
 // 색·글꼴 선호 값과 팔레트 합성이다.
@@ -72,6 +73,8 @@
 #include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"
 #include "luil/ui/rating_element.h"
+#include "luil/ui/rich_text.h"
+#include "luil/ui/rich_text_commands.h"
 #include "luil/ui/root_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scroll_view_element.h"

@@ -121,6 +121,9 @@ namespace luil {
         //  - offset은 확정 글(`text_input_view::text`) 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
         //  - 편집하는 코드 글의 구간은 `syntax_highlighter`(syntax_highlighter.h)가 편집마다 바뀐 줄부터 다시 칠해 만든다.
         //    구문 색(`text_color_role::keyword`…`function`)과 굵기·기울임(`text_span::bold`·`italic`)을 싣는다.
+        //  - 서식 있는 글의 구간은 `rich_text_presenter`(rich_text.h)가 편집 상태의 서식에서 옮겨 만든다. 굵기·기울임·밑줄·코드
+        //    (`underline`·`code`)를 싣는다. 칸 하나에 도우미 하나다. 두 도우미가 함께 채우지 않는다.
+        //  - 보조 기술의 서식 속성(굵기·기울임·밑줄)이 이 구간을 읽는다 (`text_input_snapshot::spans`).
         std::shared_ptr<const std::vector<text_span>> spans {};
         // `line` 오름차순이고 같은 줄이 둘 없다. 그리기가 줄마다 이분 탐색(`lower_bound`)으로 찾는다.
         std::shared_ptr<const std::vector<line_decoration>> lines {};
