@@ -121,10 +121,11 @@ namespace {
         }
     };
 
-    // 망가뜨린 글이 막혔으면 오류가 자리 순이고 자리가 글 안이다. 받았으면 오류가 없다.
+    // 망가뜨린 글이 막혔으면 오류가 자리 순이고 자리가 글 안이다. 받았으면 오류가 없다. 같은 글은 같은 답이다.
     void require_well_formed_answer(const std::u8string_view text)
     {
         const luil::ui_markup_parse_result result { luil::parse_ui_markup(text) };
+        REQUIRE(luil::parse_ui_markup(text).errors == result.errors);
         if (result.ok())
         {
             REQUIRE(result.errors.empty());
