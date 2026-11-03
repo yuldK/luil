@@ -141,12 +141,12 @@ struct rich_text_command_labels { std::u8string bold {}, italic {}, underline {}
 
 **1. 문서 모델(N2).** 질문: 서식 있는 글을 보이는 대로 편집하는 서식 문서로 만드는가, 마크다운 원문을 편집하게 하는가.
 
-- 길 a: 서식 문서(이 문서). 되는 것: 굵게·기울임·밑줄·코드·링크를 보이는 대로 고치고, 편집마다 구간이 따라가며 Ctrl+B 같은 명령을 받는다. R1이 바탕을 놓았다(`text_change_between`, `text_span::italic`, 칸의 굵기 배치). 대가: XL이다. `text_edit.h`·`text_edit.cpp`와 `text_area_element.cpp`를 깊게 고치고, 서식 undo와 HTML 거르기라는 새 유지 몫이 생긴다.
+- 길 a: 서식 문서(이 문서). 되는 것: 굵게·기울임·밑줄·코드·링크를 보이는 대로 고치고, 편집마다 구간이 따라가며 Ctrl+B 같은 명령을 받는다. R1이 바탕을 놓았다(`text_change_between`, `text_span::italic`, 칸의 굵기 배치). 대가: XL이다. `text_edit.h`·`text_edit.cpp`와 `text_area_element.cpp`를 깊게 고치고, 서식 undo와 HTML 거르기라는 새 유지 몫이 생긴다. 서식은 칸 기록(`text_edit_revision`·`text_edit_state` 끝)에 들어 결정 3이 여기에 딸려 정해진다.
 - 길 b: 원문 + 미리보기. 되는 것: 새 편집 모델이 없어 위험이 가장 작다. 대가: 보이는 대로 편집이 아니고 사용자가 마크다운 문법을 알아야 한다.
 - 길 c: 원문 + 칸 안 서식. 되는 것: 원문이 저장 형식 그대로이고 편집 모델이 지금 그대로다. 대가: 기호가 화면에 남고, 여러 줄에 걸친 강조는 줄 상태 정수 하나로 다루기 어렵다. `parse_markdown`은 기호를 벗긴 글을 내어([markdown_element.h](../include/luil/ui/markdown_element.h) 32행) 원문 offset과 맞지 않으므로 렉서를 따로 짓는다.
 - 권장: a. 대가: 위의 XL과 유지 몫이다. 보이는 대로 편집보다 원문이 저장 형식인 메모 앱이 주된 쓰임이면 c가, 렌더 확인만 필요하면 b가 낫다. **승인 필요.**
-- b를 고르면 줄여 쓴다. 공개 형식은 새 헤더 없이 `text_area_element`와 `markdown_element`를 나란히 두는 조립 예다(스크롤 맞추기는 범위 밖). 고칠 파일은 `examples/demo`의 새 페이지와 이 문서뿐이고 `text_edit.h`·`text_document.h`·클립보드·UIA는 그대로다. 확인은 데모에서 칸에 글을 넣고 미리보기의 접근 값이 바뀌는지 UIA로 읽는다.
-- c를 고르면 줄여 쓴다. 공개 형식은 `include/luil/ui/markdown_lexer.h`의 `make_markdown_line_lexer()`(`syntax_line_lexer`를 돌려준다)와 `text_span`의 `underline`·`code` 두 칸이다. 기호는 `text_color_role::secondary`로 흐리게 칠한다. 고칠 파일은 새 `src/ui/markdown_lexer.cpp`, `text_document.h`, `text_area_element.cpp`의 `metric_styles`·`draw_content`다. 확인은 `tests/markdown_lexer_tests.cpp`(luil_core_tests)가 `**굵게**`·`*기울임*`·`` `코드` ``·`[글](주소)`와 닫히지 않은 기호, 줄 상태를 넘는 강조를 단언한다.
+- b를 고르면 줄여 쓴다. 공개 형식은 새 헤더 없이 `text_area_element`와 `markdown_element`를 나란히 두는 조립 예다(스크롤 맞추기는 범위 밖). 고칠 파일은 `examples/demo`의 새 페이지와 이 문서뿐이고 `text_edit.h`·`text_document.h`·클립보드·UIA는 그대로다. 확인은 데모에서 칸에 글을 넣고 미리보기의 접근 값이 바뀌는지 UIA로 읽는다. [서식 글 교환](rich-edit-exchange-design.md)(결정 7~10)은 통째로 빠지고 줄 3에 낼 갈래도 없다. `ui_events.h`·`win32_image_clipboard.cpp`·`android_clipboard.cpp`·`uia_provider.cpp`는 고치지 않는다.
+- c를 고르면 줄여 쓴다. 공개 형식은 `include/luil/ui/markdown_lexer.h`의 `make_markdown_line_lexer()`(`syntax_line_lexer`를 돌려준다)와 `text_span`의 `underline`·`code` 두 칸이다. 기호는 `text_color_role::secondary`로 흐리게 칠한다. 고칠 파일은 새 `src/ui/markdown_lexer.cpp`, `text_document.h`, `text_area_element.cpp`의 `metric_styles`·`draw_content`다. 확인은 `tests/markdown_lexer_tests.cpp`(luil_core_tests)가 `**굵게**`·`*기울임*`·`` `코드` ``·`[글](주소)`와 닫히지 않은 기호, 줄 상태를 넘는 강조를 단언한다. [서식 글 교환](rich-edit-exchange-design.md)(결정 7~10)은 통째로 빠지고 줄 3에 낼 갈래도 없다. `ui_events.h`·`win32_image_clipboard.cpp`·`android_clipboard.cpp`·`uia_provider.cpp`는 고치지 않는다. 서식 글 쪽으로는 `text_span` 두 칸과 그리기만 남는다.
 
 **2. 구간의 형과 그리는 자리.** 질문: 서식을 어떤 형으로 들고 어디서 그리는가.
 
@@ -159,8 +159,8 @@ struct rich_text_command_labels { std::u8string bold {}, italic {}, underline {}
 
 - 길 a: 칸 기록을 넓힌다. `text_edit_revision`과 `text_edit_state` 끝에 `format`을 더한다(이 문서). 되는 것: 한 기록이라 글과 서식이 어긋나지 않고, 칸의 Ctrl+Z가 둘을 함께 되돌린다. IME `replace_all`과 묶기 규칙도 그대로다. 대가: 공통 모듈 `text_edit.h`·`.cpp`가 깊게 바뀌고, 바이트 상한 계산과 모든 변경 함수의 옮기기를 test로 잠가야 한다.
 - 길 b: 앱 수준 `undo_stack`에 서식 걸음을 쌓는다. 되는 것: `text_edit.h`를 고치지 않는다. 대가: 칸에 초점이 있으면 Ctrl+Z가 칸의 글만 되돌린다. 글 편집과 서식 걸음의 차례가 두 stack에 갈려 되돌리면 구간이 엉뚱한 글에 걸린다.
-- 길 c: presenter가 칸 기록 옆에 서식 기록을 병렬로 든다. `undo.size()`를 지켜보며 맞춘다. 대가: 상한으로 앞 시점이 버려지거나 묶기가 갈리는 순간 짝이 어긋나고, 서식만 바꾼 걸음을 칸 기록에 넣을 길이 없다.
-- 권장: a. 대가: 위의 깊은 변경이다. 서식이 없는 칸은 빈 포인터 하나라 비용이 없다. **승인 필요.**
+- 길 c: presenter가 칸 기록 옆에 서식 기록을 병렬로 든다. `undo.size()`를 지켜보며 맞춘다. 되는 것: 칸 기록의 구조(`text_edit.h`)를 건드리지 않는다. 대가: 상한으로 앞 시점이 버려지거나 묶기가 갈리는 순간 짝이 어긋나고, 서식만 바꾼 걸음을 칸 기록에 넣을 길이 없다.
+- 권장: a. 대가: 위의 깊은 변경이다. 서식이 없는 칸은 빈 포인터 하나라 비용이 없다. **권장대로 진행.** 결정 1이 a일 때 따라온다. b·c는 위 대가로 고르지 못하는 길이다.
 
 **4. 넣은 글의 서식.** 질문: 새 글은 어떤 서식을 받는가.
 
@@ -173,7 +173,7 @@ struct rich_text_command_labels { std::u8string bold {}, italic {}, underline {}
 
 - 길 a: 새 헤더의 `make_rich_text_key_handler`를 앱이 칸에 단다(이 문서). 되는 것: controller를 고치지 않는다(키가 이미 8단계로 흐른다). 명령표 하나로 판정·메뉴·팔레트·사용자 단축키를 함께 쓴다. hotkey가 고치는 `commands.h`를 이 노드가 건드리지 않는다. 대가: 앱이 칸을 지을 때 한 줄을 더 쓴다.
 - 길 b: 칸이 config 칸으로 키를 내장한다. 되는 것: 앱 코드가 가장 적다. 대가: 단축키를 다시 정하는 길이 명령표와 갈리고, 칸 설정에 명령 어휘가 들어간다.
-- 길 c: 앱 `on_key`(11단계)에 맡긴다. 대가: 초점이 칸 밖이어도 맞아 앱이 초점을 따로 확인하고, 칸의 부모 `key_handler`가 먼저 가져갈 수 있다.
+- 길 c: 앱 `on_key`(11단계)에 맡긴다. 되는 것: 칸 설정과 key handler가 필요 없다. 대가: 초점이 칸 밖이어도 맞아 앱이 초점을 따로 확인하고, 칸의 부모 `key_handler`가 먼저 가져갈 수 있다.
 - 권장: a. 대가: 위의 한 줄이다. **권장대로 진행.**
 
 **6. 보조 기술의 서식.** 질문: 1단계에 UIA 서식 속성을 넣는가.
@@ -195,7 +195,7 @@ struct rich_text_command_labels { std::u8string bold {}, italic {}, underline {}
 - **줄 4(hotkey).** hotkey가 `key_chord`를 고치므로 `make_rich_text_commands`는 지정 초기화(`.key`, `.control`, `.shift`)로 짓는다. `commands.h`·`app_host.h`·`ui_platform.h`·`win32_window.cpp`는 이 노드가 고치지 않는다.
 - **같은 파일을 고치는 자리.** `uia_provider.cpp`는 Text 패턴 범위 함수 둘과 `access_text_document`만 고친다(줄 1·줄 3의 표·메뉴 막대는 요소 provider 쪽이다). `ui_element.h`의 `text_input_snapshot`은 끝에 칸을 더한다. `default_text.h`·`.cpp`는 끝에 여섯 낱말을 더한다. kind를 더하지 않아 `ui_element_id.h`·`inspect_names.cpp`·`ui_element_tests.cpp`의 `last[]`는 그대로다.
 - **R4 markup.** markup이 서식 글을 선언하면 교환 문서의 HTML 조각을 읽는다. 새 인라인 문법을 두지 않는다.
-- **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 구현, test, 문서)을 먼저 내고, 데모 연결 커밋은 통합 때 다른 줄의 데모 커밋 뒤에 직렬로 쌓는다. `examples/demo_main.cpp`는 새 페이지 등록 줄만 더한다.
+- **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 구현, test, 문서)을 먼저 내고, 데모 연결 커밋은 통합 때 다른 줄의 데모 커밋 뒤에 직렬로 쌓는다. `examples/demo_main.cpp`는 새 페이지 등록 줄만 더한다. 새 편집 칸 `rich-editor`는 `examples/demo/common.h` 끝에 kind·target 상수(`kind_rich_editor_input`, `target_rich_editor`)를, [text_targets.h](../examples/demo/text_targets.h)의 `text_target_of_kind`에 한 줄을 더한다. 거기에 없으면 키 입력이 닿지 않고 UIA Value도 읽기 전용이다. 모바일은 `examples/mobile_demo/common.h` 끝에 같은 상수를, `common.cpp`의 `text_target_of_kind`에 한 줄을 더한다. 이 파일들과 `examples/mobile_demo/basics_page.cpp`는 줄 1 color_picker도 고치므로 데모 연결 커밋은 통합 때 color_picker 뒤에 직렬로 쌓고, kind 숫자는 그때 끝의 다음 수를 쓴다.
 
 ## 확인
 
@@ -206,6 +206,7 @@ struct rich_text_command_labels { std::u8string bold {}, italic {}, underline {}
 - `tests/rich_text_tests.cpp`(luil_core_tests, 새 파일): presenter가 같은 포인터에 같은 vector를 돌려주는지, 명령 helper의 id·단축키·`checked`, `match_command`가 Ctrl+B·I·U·K에 맞고 `find_conflicts`가 `make_undo_commands({})`와 겹치지 않는지, key handler가 맞지 않는 키에 nullopt인지.
 - `tests/text_area_element_tests.cpp`(luil_core_tests, 끝에 더함): 코드 구간이 `metric_styles`에 실려 cache 항목이 갈리는지, `text_input()`의 `spans`가 설정의 구간을 가리키는지, 밑줄 구간의 그리기(raster test 방식)에서 밑줄 줄의 화소가 글자색인지.
 - `tests/uia_provider_tests.cpp`(luil_tests): 굵게·기울임·밑줄 범위의 값, 섞인 범위의 예약 값, `FindAttribute`의 앞뒤 찾기. `tests/text_layout_native_tests.cpp`(luil_tests): code face 구간의 폭이 보통 face와 다른지.
+- `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`(luil_core_tests, 칸 표에 한 줄씩): `rich-editor`의 kind가 `text_target_of_kind`에 등록돼 편집 대상이 있는지.
 - `luil_umbrella_header`, `luil_core_portability`, `luil_source_style`, `luil_default_text`.
 
 데모. 상태를 label로 그려 `luil-uia`로 되읽는다.

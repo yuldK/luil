@@ -14,6 +14,8 @@
 
 ```cpp
 // include/luil/ui/ui_events.h, 두 구조체 끝에 더한다 (기존 칸의 순서와 뜻은 그대로)
+// `clipboard_data_copy_request::operator==`는 `= default`가 아니라 손으로 쓴 인라인 함수(746행, text·image·png만 견준다)다. 거기에 `html == other.html`을 더한다.
+// 701행 주석의 넣는 차례도 "PNG, CF_DIBV5, HTML Format, CF_UNICODETEXT"로 고친다. `clipboard_data`의 `==`는 `= default`라 새 칸을 그대로 견준다.
 struct clipboard_data_copy_request { /* text, image, png */ std::u8string html {}; };  // 조각 HTML(UTF-8). 비면 HTML 형식을 넣지 않는다
 struct clipboard_data { /* text, image_format, image, image_too_large, tag, sequence */ std::u8string html {}; };  // 비면 없었거나 읽지 못했다
 
@@ -114,7 +116,7 @@ const std::vector<text_span>* spans { nullptr };  // 칸 설정의 구간이다.
 ## 다른 노드와의 약속
 
 - **줄 3(controller).** `process_text_input_key`에 갈래 하나: snapshot의 `clipboard_keys_to_parent`가 참이고 `secret`이 아니면 위의 복사·잘라내기·붙여넣기 조합에 nullopt를 돌려준다. 읽기 전용 갈래 뒤, `multiline` 갈래 앞이다. 필드는 이 노드가 `ui_element.h`의 `text_input_snapshot` 끝과 `text_area_config` 끝에 더하므로, 통합 때 줄 2를 먼저 합치고 줄 3의 갈래 커밋과 그 test(`tests/key_propagation_tests.cpp` 끝)를 그 뒤에 쌓는다. `navigation_keys_to_parent`(ui_element.h 160행)와 같은 꼴이다.
-- **그림 클립보드(R2).** 그 문서가 이 노드에 남긴 것을 닫는다([image-clipboard-design.md](image-clipboard-design.md) 205행). `html`은 두 구조체 끝에 더하고 기존 칸은 그대로다. `rtf`는 결정 8로 더하지 않는다. 입력 thread에서 짓는 여러 형식 복사(그 문서 결정 6의 b)는 결정 7로 하지 않는다. 그림 붙여넣기는 1단계에 넣지 않는다.
+- **그림 클립보드(R2).** 그 문서가 이 노드에 남긴 것을 닫는다([image-clipboard-design.md](image-clipboard-design.md) 205행). `html`은 두 구조체 끝에 더하고(앞 구조체의 손으로 쓴 `operator==`에도 한 칸) 기존 칸은 그대로다. `rtf`는 결정 8로 더하지 않는다. 입력 thread에서 짓는 여러 형식 복사(그 문서 결정 6의 b)는 결정 7로 하지 않는다. 그림 붙여넣기는 1단계에 넣지 않는다.
 - **줄 4(tray·hotkey).** `win32_window.cpp`·`app_delegate.h`·`app_host.h`·`ui_platform.h`를 고치지 않는다. HTML은 두 플랫폼 모두 다뤄 능력 칸이 늘지 않는다. `android_app.cpp`는 위의 분기 한 줄만이고 줄 4가 같은 파일을 고치면 다른 함수다.
 - **R4 markup.** markup이 서식 글을 선언하면 이 문서의 HTML 조각을 `rich_text_from_html`로 읽는다. 마크다운식 새 인라인 문법을 두지 않는다.
 - **데모는 따로 커밋한다.** [서식 있는 글 편집](rich-edit-design.md)의 데모 페이지가 복사·붙여넣기 단추와 클립보드 답 연결(`make_clipboard_data_message`의 tag)을 함께 가진다. `examples/demo_main.cpp`의 delegate 갈래 한 줄은 통합 때 직렬로 쌓는다.
@@ -125,6 +127,7 @@ const std::vector<text_span>* spans { nullptr };  // 칸 설정의 구간이다.
 
 - `tests/rich_text_html_tests.cpp`(luil_core_tests, 새 파일): 쓰기·읽기 왕복이 같은 값인지, 이스케이프와 `<br>`, 서식 경계마다 바르게 닫히는지, `style`이 태그보다 앞서는지(`<b style="font-weight:normal">`), 허용 scheme만 링크인지, 버리는 요소의 내용이 사라지는지, 블록·표의 줄 바꿈과 탭, 문자 참조, 공백 접기와 `pre`, `max_bytes`·`max_depth`·깨진 UTF-8에서 물러서는지.
 - `tests/rich_text_tests.cpp`(luil_core_tests, 끝에 더함): `rich_text_copy_request`가 고른 구간의 글·HTML을 싣는지, `rich_text_paste`가 HTML·글·`plain`·그림만 있는 답에서 각각 무엇을 넣고 한 걸음으로 되돌아가는지, key handler가 고정 조합을 `copy`·`cut`·`paste`·`paste_plain`으로 옮기는지.
+- `tests/clipboard_image_tests.cpp`(luil_core_tests, 끝에 더함): `html`만 다른 두 `clipboard_data_copy_request`가 같지 않고 `html`이 같으면 같은지. 손으로 쓴 `operator==`가 새 칸을 보는지를 잠근다.
 - `tests/win32_image_clipboard_tests.cpp`(luil_tests): `cf_html_block` 머리 offset이 맞는지, `cf_html_fragment`가 잘리거나 범위 밖인 offset을 거절하는지. `[system]` 태그 test가 실제 클립보드에 글·HTML을 넣고 되읽어 같은지(일반 ctest 밖).
 - Android: JNI 길은 구현 때 `.cpp`를 묶은 확인 프로그램을 `run-as`로 실기기에서 돌려 `newHtmlText`로 넣고 `getHtmlText`로 되읽는다.
 
