@@ -2787,6 +2787,28 @@ TEST_CASE("The mobile toasts page opens a finger sized teaching tip and back clo
     REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 뒤로 가기");
 }
 
+TEST_CASE("Back closes only the modal mobile teaching tip and passes over the modeless one", "[ui][teaching-tip][mobile-demo]")
+{
+    // 비modal은 닫기 단추로만 닫는다 (teaching-tip-design.md 결정 G2-dismiss 길 c). 셸은 이 답이 참일 때만 뒤로 가기를 싣고,
+    // 거짓이면 뒤로 가기가 앱으로 흘러 페이지를 떠난다 (떠날 때 풍선을 닫는다).
+    mobile_demo::toasts_page page {};
+    REQUIRE(page.back_closes_tip() == false);
+    auto screen { scrolled_toasts(page, 0.0f) };
+    const luil::ui_element* const modeless { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modeless" }) };
+    REQUIRE(modeless != nullptr);
+    run_tip(page, modeless->action(luil::ui_trigger::left_click), modeless->id());
+    REQUIRE(page.tip_open());
+    REQUIRE(page.back_closes_tip() == false);
+    page.close_tip();
+
+    screen = scrolled_toasts(page, 0.0f);
+    const luil::ui_element* const modal { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    REQUIRE(modal != nullptr);
+    run_tip(page, modal->action(luil::ui_trigger::left_click), modal->id());
+    REQUIRE(page.tip_open());
+    REQUIRE(page.back_closes_tip());
+}
+
 TEST_CASE("Scrolling the mobile new feature button away leaves the teaching tip without a target", "[ui][teaching-tip][mobile-demo]")
 {
     mobile_demo::toasts_page page {};

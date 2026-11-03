@@ -210,7 +210,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 
 **Win32.** tree 안 요소라 `win32_window.cpp`·`window_surface.cpp`·`uia_provider.cpp`를 고치지 않는다. UIA는 root가 Window 또는 Pane과 Name을, 단추가 Invoke를 낸다. 풍선은 창 client 안에만 그리고 popup 배경 효과(아크릴)를 쓰지 않는다.
 
-**Android.** Java 소스는 0줄이다. 코어 요소라 JNI도 unsupported도 없고 데스크톱과 같은 코드다. 탭은 클릭이라 덮개 탭이 `outside`, 단추 탭이 그 액션이다. 뒤로 가기는 앱이 `ui_frame::back`에 `dismiss(back)`을 싣는다([app_host.h](../include/luil/app/app_host.h) 382~387행). hover가 없어 머물면 여는 계기는 쓰지 않고 앱이 연다. 터치 앱은 `control_size`를 44 안팎으로 올린다. 회전·화면 분할 뒤에도 열림은 앱 상태라 남고 새 자리에 다시 놓인다. root 자리가 안전 영역이면 풍선도 그 안이다. Android의 luil에는 접근성 계층이 없다. 접근성 규칙은 Win32 UIA 기준이다.
+**Android.** Java 소스는 0줄이다. 코어 요소라 JNI도 unsupported도 없고 데스크톱과 같은 코드다. 탭은 클릭이라 덮개 탭이 `outside`, 단추 탭이 그 액션이다. 뒤로 가기는 modal 풍선이 열려 있을 때 앱이 `ui_frame::back`에 `dismiss(back)`을 싣는다([app_host.h](../include/luil/app/app_host.h) 382~387행). 비modal은 결정 G2-dismiss 길 c대로 닫기 단추로만 닫아 싣지 않고, 뒤로 가기는 앱의 다음 갈래(좁은 화면이면 페이지 닫기)로 흐른다. hover가 없어 머물면 여는 계기는 쓰지 않고 앱이 연다. 터치 앱은 `control_size`를 44 안팎으로 올린다. 회전·화면 분할 뒤에도 열림은 앱 상태라 남고 새 자리에 다시 놓인다. root 자리가 안전 영역이면 풍선도 그 안이다. Android의 luil에는 접근성 계층이 없다. 접근성 규칙은 Win32 UIA 기준이다.
 
 ## 다른 노드와의 약속
 

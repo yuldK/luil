@@ -90,7 +90,10 @@ namespace mobile_demo {
         // 안내 풍선을 닫는다. 셸이 페이지를 떠날 때 부른다.
         void close_tip();
         [[nodiscard]] bool tip_open() const noexcept;
-        // 뒤로 가기가 풍선을 닫는 메시지다 (`ui_frame::back`). 셸은 풍선이 열려 있을 때 싣는다.
+        // 뒤로 가기가 풍선을 닫는가다. 덮개(modal) 풍선이 열려 있을 때만 참이다.
+        //  - 비modal은 닫기 단추로만 닫는다 (teaching-tip-design.md 결정 G2-dismiss 길 c). 뒤로 가기는 앱으로 흘러 페이지를 떠난다.
+        [[nodiscard]] bool back_closes_tip() const noexcept;
+        // 뒤로 가기가 풍선을 닫는 메시지다 (`ui_frame::back`). 셸은 `back_closes_tip`이 참일 때 싣는다.
         [[nodiscard]] luil::input_action back_action() const;
 
         // 끝난 토스트를 목록에서 지운다 (만료 판정은 앱 몫).

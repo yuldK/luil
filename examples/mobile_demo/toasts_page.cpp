@@ -346,6 +346,11 @@ namespace mobile_demo {
         return tip_open_;
     }
 
+    bool toasts_page::back_closes_tip() const noexcept
+    {
+        return tip_open_ && tip_modal_;
+    }
+
     luil::input_action toasts_page::back_action() const
     {
         return luil::make_app_action(tip_dismiss_intent { luil::teaching_tip_dismiss_reason::back });
