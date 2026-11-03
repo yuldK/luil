@@ -74,7 +74,7 @@ namespace luil {
         invalid_value,        // 허용 이름 밖, 수가 아님, 범위 밖, id·바인딩의 꼴, 구체 색, 함께 못 쓰는 자리 속성
         invalid_child,        // 받지 않는 자식이나 글 (panel의 둘째 자식, label 안의 요소)
         missing_length,       // 원하는 크기를 답하지 않는 요소나 slot에 자리가 없다
-        duplicate_id,         // 반복 밖에서 같은 id가 둘이다
+        duplicate_id,         // 글 전체에서 같은 id를 두 번 적었다
         // 펼칠 때 (build_ui_markup)
         unknown_value,        // 값 표에 없는 이름
         wrong_value_type,     // 형이 맞지 않는 값 (글 자리에 수, each에 글)
@@ -142,7 +142,7 @@ const luil::ui_markup_context context {
 
 **id와 owner(결정 6).**
 
-- `id`는 `[A-Za-z0-9_.-]`로 1~64바이트다. 단추·체크처럼 누르는 요소는 `id`가 꼭 있다(`missing_attribute`). 반복 밖에서 같은 `id`가 둘이면 읽을 때 `duplicate_id`다.
+- `id`는 `[A-Za-z0-9_.-]`로 1~64바이트다. 단추·체크처럼 누르는 요소는 `id`가 꼭 있다(`missing_attribute`). 글 전체에서 같은 `id`를 두 번 적으면 반복 안팎을 가리지 않고 읽을 때 `duplicate_id`다.
 - owner는 `id`다. 반복 안이면 그 뒤에 단위 구분자(U+001F)와 항목의 `key`를 잇고, 겹친 반복은 바깥 key부터 잇는다. 확인 대화 상자의 단추와 별점 칸이 쓰는 구분자다(ui_element_id.h 166·170행). context의 `owner_prefix`가 있으면 맨 앞에 그것과 구분자를 둔다.
 - kind는 `kind` 속성의 이름을 `kinds`에서 찾은 앱 kind이고, 없으면 `markup_node`다. `check`는 kind가 `check`로 정해져 `kind` 속성이 없다. 찾지 못한 이름은 `unknown_kind`이고 `markup_node`로 선다.
 - `id`가 없는 요소의 owner는 뿌리부터 센 자식 번호를 `/`로 이은 자리다(`/0/2`, 반복 안이면 key가 붙는다). 번호는 틀의 자식 차례이고 구조 요소도 한 단이다(`<stack><if><label/></if></stack>`의 label은 `/0/0`). 그래서 값이 바뀌어도 같은 자리는 같은 owner다. 뿌리는 `/`다. `/`는 `id`에 쓰지 못해 겹치지 않는다. 글을 고치면 바뀌지만 누르는 요소가 아니라 잃을 상태가 없다.

@@ -106,6 +106,11 @@
 - [서식 있는 글 편집](rich-edit-design.md): 여러 줄 칸에서 굵게·기울임·밑줄·코드·링크를 편집하고 되돌린다
 - [서식 글 교환](rich-edit-exchange-design.md): 글과 HTML을 한 클립에 넣고 거른 HTML을 서식째 붙여넣는다
 - [검사기](inspector-design.md): 실행 중 화면에 요소의 윤곽과 정보 상자를 얹는 개발 도구
+- [날짜 고르기](date-picker-design.md): 닫힌 날짜 칸의 달력 popup이나 인라인 달력에서 날짜 하나를 고른다
+- [달력 날짜 계산과 문구](calendar-date-design.md): 42칸 격자, 달 이동의 말일 접기, 범위, ISO 날짜 글
+- [안내 풍선](teaching-tip-design.md): 화면의 한 요소를 꼬리로 가리키며 제목·본문·행동 단추를 띄우는 상주 안내
+- [화면 마크업](markup-design.md): 실행 중 읽은 엄한 XML 마크업 글을 불변 틀로 두고 frame마다 element tree로 펼친다
+- [마크업 바인딩과 오류](markup-binding-design.md): 값·반복·조건·사건을 앱 상태에 잇고 오류를 줄·열과 자리로 알린다
 
 ## 플랫폼과 콘텐츠
 

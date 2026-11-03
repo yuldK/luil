@@ -15,6 +15,7 @@
 | 포인터·키보드 입력 정책 | `interaction_policy` | [ui/ui_interaction.h](../include/luil/ui/ui_interaction.h) | [설명](concepts/interaction.md) |
 | 문자열·커스텀·마크다운 툴팁 | `set_tooltip`, `set_tooltip_content`, `make_markdown_tooltip` | [ui/ui_element.h](../include/luil/ui/ui_element.h) | [설명](tooltip-design.md) |
 | 마크다운 본문·링크 | `markdown_element`, `parse_markdown` | [ui/markdown_element.h](../include/luil/ui/markdown_element.h) | [설명](tooltip-design.md) |
+| 화면 마크업(실행 중 읽은 XML 글을 앱 상태로 펼쳐 요소 짓기, 바인딩·반복·조건·오류 자리) | `parse_ui_markup`, `build_ui_markup`, `ui_markup_document`, `ui_markup_context`, `ui_markup_error` | [ui/ui_markup.h](../include/luil/ui/ui_markup.h) | [설명](markup-design.md) · [바인딩](markup-binding-design.md) |
 | 텍스트 표시 | `label_element` | [ui/label_element.h](../include/luil/ui/label_element.h) | [설명](concepts/ui-element.md) · [여러 줄](label-wrap-design.md) |
 | 경로 조각 막대 | `breadcrumb_element` | [ui/breadcrumb_element.h](../include/luil/ui/breadcrumb_element.h) | [설명](breadcrumb-design.md) |
 | 명령 팔레트 | `make_command_palette`, `filter_commands`, `make_command_palette_entry` | [ui/command_palette.h](../include/luil/ui/command_palette.h) | [설명](command-palette-design.md) |
