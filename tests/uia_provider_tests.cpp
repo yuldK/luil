@@ -10,6 +10,7 @@
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/menu_bar_element.h"
+#include "luil/ui/page_transition_element.h"
 #include "luil/ui/rating_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/split_button_element.h"
@@ -3383,4 +3384,38 @@ TEST_CASE("A menu bar is a UIA MenuBar whose items expand and collapse and carry
         bar->Release();
         root->Release();
     }
+}
+
+TEST_CASE("UIA children of a tree in a page transition are the new screen's alone", "[win32][uia][page-transition]")
+{
+    // 떠나는 화면은 따로 지은 tree라 어느 frame의 접근 tree에도 없다. 전환 요소와 덮개는 구조라 접힌다.
+    auto prior_root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"prior" }) };
+    prior_root->add(std::make_unique<role_probe>(luil::ui_element_id { kind_item, u8"old" }, luil::access_role::button));
+    const auto prior { std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(prior_root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f)) };
+    auto screen { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"next" }) };
+    screen->add(std::make_unique<role_probe>(luil::ui_element_id { kind_item, u8"new" }, luil::access_role::button));
+    const luil::page_transition transition { prior, std::chrono::steady_clock::now(), {} };
+    auto element { std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", transition }, std::move(screen)) };
+
+    fake_uia_host host {};
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(element), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    REQUIRE(host.tree->find({ luil::ui_element_kind::page_transition_cover, u8"page" }) != nullptr);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+
+    IRawElementProviderFragment* first { nullptr };
+    REQUIRE(root->Navigate(NavigateDirection_FirstChild, &first) == S_OK);
+    REQUIRE(first != nullptr);
+    auto* const only { static_cast<luil::win32::uia_element_provider*>(first) };
+    REQUIRE(only->element_id() == luil::ui_element_id { kind_item, u8"new" });
+    IRawElementProviderFragment* next { nullptr };
+    REQUIRE(only->Navigate(NavigateDirection_NextSibling, &next) == S_OK);
+    REQUIRE(next == nullptr);
+    IRawElementProviderFragment* last { nullptr };
+    REQUIRE(root->Navigate(NavigateDirection_LastChild, &last) == S_OK);
+    REQUIRE(last != nullptr);
+    REQUIRE(static_cast<luil::win32::uia_element_provider*>(last)->element_id() == luil::ui_element_id { kind_item, u8"new" });
+
+    last->Release();
+    only->Release();
+    root->Release();
 }

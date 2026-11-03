@@ -68,6 +68,7 @@ add_executable(luil_core_tests
     notification_queue_tests.cpp
     number_input_tests.cpp
     overlay_input_tests.cpp
+    page_transition_tests.cpp
     panel_element_tests.cpp
     pointer_drag_start_tests.cpp
     pointer_modifier_tests.cpp

@@ -453,3 +453,30 @@ TEST_CASE("Physical parameters convert to the same motion", "[ui][spring]")
     REQUIRE(luil::spring_from_physics(1.0f, 1.0e30f, 1.0f).response == std::chrono::milliseconds { 1 });
     REQUIRE(luil::spring_from_physics(1.0f, 1.0e-30f, 1.0f).response > std::chrono::milliseconds { 0 });
 }
+
+TEST_CASE("The rest time is the first frame at which the spring has finished", "[ui][spring]")
+{
+    // 화면 전환이 끝 시각 하나를 `next_tick`에 싣는 길이다 (page-transition-design.md 결정 2).
+    for (const luil::spring_config& preset : { luil::spring_smooth, luil::spring_snappy, luil::spring_bouncy })
+    {
+        CAPTURE(preset.response.count(), preset.damping_fraction);
+        const luil::spring value { 0.0f, 300.0f, at(1000), preset, 0.0f };
+        const time_point rest { luil::spring_rest_time(value) };
+        REQUIRE(rest > value.started);
+        REQUIRE((rest - value.started) % luil::transition_frame == std::chrono::steady_clock::duration { 0 });
+        REQUIRE(luil::spring_finished(value, rest));
+        REQUIRE(luil::spring_finished(value, rest - luil::transition_frame) == false);
+        REQUIRE(luil::spring_value(value, rest) == 300.0f);
+    }
+
+    // 끝나지 않는 config는 상한을 답한다.
+    const luil::spring slow { 0.0f, 300.0f, at(1000), luil::spring_config { std::chrono::seconds { 60 }, 1.0f }, 0.0f };
+    REQUIRE(luil::spring_finished(slow, at(1000) + std::chrono::seconds { 10 }) == false);
+    REQUIRE(luil::spring_rest_time(slow) == at(1000) + std::chrono::seconds { 10 });
+    REQUIRE(luil::spring_rest_time(slow, std::chrono::milliseconds { 500 }) == at(1500));
+
+    // 정지한 스프링과 잘못된 값은 시작 시각에 끝나 있다.
+    REQUIRE(luil::spring_rest_time(luil::spring_at_rest(5.0f)) == time_point {});
+    const luil::spring none { 0.0f, 300.0f, at(1000), luil::spring_config { std::chrono::milliseconds { 0 }, 1.0f }, 0.0f };
+    REQUIRE(luil::spring_rest_time(none) == at(1000));
+}

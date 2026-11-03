@@ -9,7 +9,7 @@
 - 데모의 페이지 바꿈은 값 하나를 바꿀 뿐이다. [demo_main.cpp](../examples/demo_main.cpp) 441~449줄이 `navigate_intent`에서 `page_`를 바꾸고 popup을 닫는다. 다음 `make_frame`이 `build_page`로 새 페이지만 짓는다(689줄). 이전 페이지는 그 frame에 통째로 사라진다. 모바일 데모도 같다([app.cpp](../examples/mobile_demo/app.cpp) 39~51줄의 이동·뒤로, 144~162줄의 본문).
 - 움직임 값은 앱이 든다([transition.h](../include/luil/ui/transition.h) 9~16줄). 사이드바는 `spring_value`로 폭을 config에 넣고(demo_main.cpp 935줄), 도는 동안 `next_tick`이 `spring_next_update`를 내 16ms마다 tree를 다시 짓는다(836~845줄). 이 길로는 값 하나가 움직일 뿐 두 화면을 겹쳐 그릴 수 없다. 이전 화면은 tree에 없다.
 - 하위 tree를 시각만으로 옮겨 그리는 요소가 없다. 독립 tree를 그리는 선례는 tooltip 하나다(`tooltip_config::content`, [ui_element.h](../include/luil/ui/ui_element.h) 1031줄). `draw_tooltip_content`([ui_tree.cpp](../src/ui/ui_tree.cpp) 60~89줄)가 옮기고 자른 canvas에 빈 snapshot으로 그린다. 그룹 알파는 요소 안의 `saveLayerAlphaf`뿐이다([color_picker_element.cpp](../src/ui/color_picker_element.cpp) 364줄, [list_element.cpp](../src/ui/list_element.cpp) 199줄).
-- 그리기 밖은 모두 배치한 `bounds()`를 읽는다. hit test([ui_element.cpp](../src/ui/ui_element.cpp) 566~589줄), 놓을 자리(617~641줄), 초점 테(ui_tree.cpp 711~757줄의 `visible_bounds`), UIA 좌표다. 앱이 이전 화면을 같은 tree에 넣으면 id가 겹치고([ui_tree.h](../include/luil/ui/ui_tree.h) 94~100줄) 두 화면이 함께 눌리고 읽힌다.
+- 그리기 밖은 모두 배치한 `bounds()`를 읽는다. hit test([ui_element.cpp](../src/ui/ui_element.cpp) 566~589줄), 놓을 자리(617~641줄), 초점 테(ui_tree.cpp 711~757줄의 `draw_focus_ring`이 `visible_bounds`를 부른다), UIA 좌표다. 앱이 이전 화면을 같은 tree에 넣으면 id가 겹치고([ui_tree.h](../include/luil/ui/ui_tree.h) 94~100줄) 두 화면이 함께 눌리고 읽힌다.
 
 ## 공개 형식
 
@@ -113,7 +113,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 | `fade` | p < 0.5에서 이전 화면 알파 `1 - 2p`, 뒤 절반에 새 화면 알파 `2p - 1`이다. 두 화면이 반투명으로 겹치지 않는다 | 같다 |
 | `zoom` | `fade`의 알파에 이전 화면 1 → 1.04배, 새 화면 0.94 → 1배를 얹는다 | 이전 1 → 0.94배, 새 1.04 → 1배 |
 
-- 배율은 요소 bounds의 가운데가 기준이다. 밀기 거리는 기기 픽셀로 반올림해 글이 반 픽셀에 걸려 번지지 않게 한다.
+- 배율은 요소 bounds의 가운데가 기준이다. 밀기 거리는 기기 픽셀로 반올림해 글이 반 픽셀에 걸려 번지지 않게 한다. 나간 거리만 반올림하고 들어오는 쪽은 그 나머지라 두 화면 사이에 틈이 없다. 옅어짐·확대는 화면 하나를 한 층(`saveLayerAlphaf`)으로 옅게 그려 겹친 자식이 따로 비치지 않는다.
 - 요소는 `clip_children`이 참이다. 밀리는 화면이 칸 밖으로 새지 않고, frozen_col 선례대로 그리기·hit·`visible_bounds`·접근 좌표가 같은 상자를 따른다([frozen-columns-design.md](frozen-columns-design.md) 13줄).
 
 **이전 tree.**
@@ -124,7 +124,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 - 넘기는 순간은 페이지를 바꾸는 메시지를 처리할 때 한 번이다. 놓는 순간은 `tick`에서 `page_transition_finished`가 참일 때, 새 전환이 덮을 때(결정 4), 움직임 줄이기가 켜질 때다. 놓기 전까지 이전 화면의 그림·글 배치 cache가 산다.
 - `shared_ptr<const ui_tree>`라 logic thread가 짓고 UI thread가 읽기만 한다. tooltip 내용과 같은 규칙이다.
 
-**곡선.** 길이는 `easing(clamp((now - started) / duration, 0, 1))`이고 끝은 `started + duration`이다. 스프링은 `spring { 0, 1, started, config, velocity }`를 `spring_value`로 묻고 끝은 `spring_rest_time`이다. 허용치는 0.001을 넘지 않게 쓰고 진행은 [0, 1]로 자른다(결정 6). 두 곡선 모두 시작 전이면 0이다.
+**곡선.** 길이는 `easing(clamp((now - started) / duration, 0, 1))`이고 끝은 `started + duration`이다. 스프링은 `spring { 0, 1, started, config, velocity }`를 `spring_value`로 묻고 끝은 `spring_rest_time`이다. 허용치는 0.001을 넘지 않게 쓰고 진행은 [0, 1]로 자른다(결정 6). 두 곡선 모두 시작 전이면 0이다. 움직이지 않는 곡선은 결정 7을 따른다.
 
 **입력과 초점.**
 
@@ -139,7 +139,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 - 새 화면 알림 API는 두지 않는다. 자식 목록이 바뀌면 `diff_access_snapshots`가 부모의 structure 변화를 내고([accessibility.cpp](../src/ui/accessibility.cpp) 437~443줄) UIA가 StructureChanged를 쏜다([uia_provider.cpp](../src/win32/uia_provider.cpp) 589~599줄). 제목을 읽히려는 앱은 새 화면의 머리글로 `focus_request`를 싣는다([색 고르기](color-picker-design.md) 결정 3의 길).
 - UIA 좌표는 최종 bounds다. Invoke 같은 패턴은 포인터가 아니라 덮개에 막히지 않는다.
 
-**배율·크기·회전.** 그릴 때 이전 root의 크기가 요소 bounds의 크기와 다르면(창 크기 바뀜·배율 바뀜·기기 회전) 새 화면만 그리고 예고를 멈춘다(결정 5). R1의 두 손가락 회전([rotate-gesture-design.md](rotate-gesture-design.md))은 확대 보기 내용이 `canvas.rotate`로 그리는 일이라 이 요소와 닿지 않는다.
+**배율·크기·회전.** 그릴 때 이전 root의 크기가 요소 bounds의 크기와 0.5 물리 픽셀 넘게 다르면(창 크기 바뀜·배율 바뀜·기기 회전) 새 화면만 그리고 예고를 멈춘다(결정 5). R1의 두 손가락 회전([rotate-gesture-design.md](rotate-gesture-design.md))은 확대 보기 내용이 `canvas.rotate`로 그리는 일이라 이 요소와 닿지 않는다.
 
 **테마·고대비.** 요소와 덮개는 제 색이 없다. 이전 tree는 지금 문맥의 팔레트로 그리므로 도중에 테마나 고대비가 바뀌면 이전 화면도 새 색이다. layered presentation에서 옅어짐의 반투명 픽셀은 그 아래 바탕과 합성된다. 바탕 알파가 0인 창의 규칙은 그대로다([layered-presentation-design.md](layered-presentation-design.md) 95줄).
 
@@ -159,7 +159,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 
 - 길 a: 이전 그림만 움직인다. 새 화면은 제자리에 그리고 이전 화면이 그 위에서 밀려 나가거나 사라진다. 되는 것: 그림과 hit·초점 테·IME·UIA 좌표가 늘 맞아 덮개 없이 입력을 받을 수 있다. 대가: 앞으로 가기가 위 화면을 걷어 내는 모양이 되어 새 화면이 들어오는 흔한 밀기를 못 한다. 옅어짐은 새 화면 위에 이전 화면이 겹쳐 비친다.
 - 길 b: 두 화면이 함께 움직인다(위 표). 되는 것: 플랫폼들의 익숙한 밀기·확대이고 옅어짐에서 두 화면이 겹쳐 비치지 않는다. 대가: 도는 동안 포인터 입력을 막고(확정 길 a의 대가와 같다) 새 화면 안 키보드 초점의 테가 먼저 제자리에 선다.
-- 권장: b. 대가: 위. 입력 막기는 길 a를 고를 때도 남겨 두면 되돌리기 쉽다. **승인 필요.**
+- 권장: b. 대가: 위. 입력 막기는 길 a를 고를 때도 남겨 두면 되돌리기 쉽다. 승인: 길 b (2026-11-03).
 
 **2. 끝을 앱이 아는 길.** 질문: 앱은 언제 prior를 놓는가.
 
@@ -194,6 +194,8 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 - 길 b: 허용치를 0.001 이하로 쓰고 진행을 [0, 1]로 자른다. 되는 것: `spring_snappy` 같은 프리셋을 그대로 넣어도 끝이 매끄럽고 빈 띠가 없다([spring.h](../include/luil/ui/spring.h) 20~22줄이 권하는 값이다). 대가: ζ < 1 곡선은 넘침이 잘려 끝에서 잠깐 멈춘 듯 보인다. 앱이 준 더 큰 허용치는 쓰이지 않는다.
 - 길 c: 진행을 논리 픽셀 거리(요소 폭)로 돌린다. 되는 것: 허용치가 스프링 기본의 뜻 그대로다. 대가: `page_transition_end`가 배치 크기를 알아야 해 앱이 폭을 넘기고, 옅어짐·확대에는 거리가 없다.
 - 권장: b. 대가: 위. 권장대로 진행.
+
+**7. 움직이지 않는 곡선(구현 중 정함, 2026-11-03).** 길이 0 이하이거나 쓸 수 없는 스프링(`response` 0 이하 등)이면 `start_page_transition`이 `reduce_motion`처럼 prior를 버린다. 언제 물어도 끝인 전환이 앱의 첫 `tick`까지 덮개로 입력을 막지 않는다. 빈 easing은 `ease_in_out`으로, 유한하지 않은 진행은 끝(1)으로 본다. 다른 길(prior를 두고 끝 시각을 `started`로 답한다)은 덮개가 한 번 서므로 고르지 않았다.
 
 ## 플랫폼
 

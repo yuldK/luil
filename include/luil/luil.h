@@ -72,6 +72,8 @@
 #include "luil/ui/message_box.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/number_input.h"
+#include "luil/ui/page_transition.h"
+#include "luil/ui/page_transition_element.h"
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/progress_element.h"

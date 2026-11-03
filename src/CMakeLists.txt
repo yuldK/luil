@@ -189,6 +189,10 @@ luil_add_source_filter(luil_core_files "ui/layout"
     "${public_headers}/ui/group_element.h"
     ui/layer_element.cpp
     "${public_headers}/ui/layer_element.h"
+    ui/page_transition.cpp
+    "${public_headers}/ui/page_transition.h"
+    ui/page_transition_element.cpp
+    "${public_headers}/ui/page_transition_element.h"
     ui/palette_scope_element.cpp
     "${public_headers}/ui/palette_scope_element.h"
     ui/panel_element.cpp
