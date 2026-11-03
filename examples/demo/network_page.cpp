@@ -34,10 +34,23 @@ namespace demo {
         // 한 줄에서 담아 둘 바이트 상한이다. 흘리는 창이 가로로 잘라 주지만,
         // 잘릴 글을 tree에 싣는 것은 그리기가 아니라 메모리의 문제다.
         constexpr std::size_t preview_line_bytes { 400 };
-        // 자동 업데이트 구역의 줄 높이와 줄 사이다. 구역 높이는 제목·단추·확인란·상태·진단 다섯 줄을 쌓은 값이다.
+        // 자동 업데이트 구역의 줄 높이와 줄 사이다. 구역 높이는 제목·단추·확인란·상태·진단·적용 방식 여섯 줄을 쌓은 값이다.
         constexpr float update_line_height { 18.0f };
         constexpr float update_section_spacing { 6.0f };
-        constexpr float update_section_height { update_line_height * 3.0f + 28.0f + luil::check_row_height + update_section_spacing * 4.0f };
+        constexpr float update_section_height { update_line_height * 4.0f + 28.0f + luil::check_row_height + update_section_spacing * 5.0f };
+
+        // 이 플랫폼의 적용 방식을 사람 글로 옮긴다 (auto-update-apply-design.md).
+        [[nodiscard]] std::u8string_view apply_mode_text(const luil::update_apply_mode mode) noexcept
+        {
+            switch (mode)
+            {
+            case luil::update_apply_mode::replace_executable:
+                return u8"실행 파일 바꾸기";
+            case luil::update_apply_mode::open_store:
+                return u8"스토어 열기";
+            }
+            return u8"실행 파일 바꾸기";
+        }
 
         // 미리 놓은 과녁 하나다 (단추의 글, 서버의 길, 동사).
         struct preset_target
@@ -1088,6 +1101,9 @@ namespace demo {
         if (note.empty())
             note = u8"받는 자리: %LOCALAPPDATA%\\luil-demo\\update";
         section->add(make_label(luil::ui_element_id { kind_text, u8"network-update-note" }, u8"업데이트 진단: " + note, 11.0f, luil::label_color_role::dim), update_line_height);
+        // 적용은 시연하지 않는다. 돌고 있는 데모의 실행 파일을 바꾸지 않기 위해서다. 적용 흐름은 update_apply_tests의 시험 앱이 돈다.
+        const std::u8string apply_mode { u8"업데이트 적용 방식: " + std::u8string { apply_mode_text(luil::platform_update_apply_mode()) } };
+        section->add(make_label(luil::ui_element_id { kind_text, u8"network-update-apply-mode" }, apply_mode, 11.0f, luil::label_color_role::dim), update_line_height);
         return section;
     }
 

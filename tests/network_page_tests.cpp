@@ -129,6 +129,16 @@ TEST_CASE("the update section reads its phase as a label", "[demo][network][upda
     }
 }
 
+TEST_CASE("the update section names how this platform applies an update", "[demo][network][update]")
+{
+    // 데모는 적용하지 않고 플랫폼의 적용 방식만 label로 보인다. Windows 빌드라 실행 파일 바꾸기다.
+    demo::network_page page {};
+    const luil::ui_tree tree { page_tree(page) };
+    CHECK(name_of(tree, u8"network-update-apply-mode") == u8"업데이트 적용 방식: 실행 파일 바꾸기");
+    // 적용 단추는 두지 않는다.
+    CHECK(tree.find({ demo::kind_network_target, u8"update-apply" }) == nullptr);
+}
+
 TEST_CASE("the update section's checkboxes steer the demo server", "[demo][network][update]")
 {
     demo::network_page page {};

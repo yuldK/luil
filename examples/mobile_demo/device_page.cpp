@@ -1,6 +1,7 @@
 #include "mobile_demo/device_page.h"
 
 #include "luil/app/secret_store.h"
+#include "luil/app/updater.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -78,6 +79,18 @@ namespace mobile_demo {
                 return u8"expanded";
             }
             return u8"compact";
+        }
+
+        [[nodiscard]] std::u8string_view apply_mode_text(const luil::update_apply_mode mode) noexcept
+        {
+            switch (mode)
+            {
+            case luil::update_apply_mode::replace_executable:
+                return u8"실행 파일 바꾸기";
+            case luil::update_apply_mode::open_store:
+                return u8"스토어 열기";
+            }
+            return u8"스토어 열기";
         }
 
         constexpr std::array<orientation_choice, 4> orientation_choices {
@@ -299,6 +312,11 @@ namespace mobile_demo {
             column.note(u8"hotkeys-none", u8"이 플랫폼에는 전역 단축키가 없다.");
         else
             column.note(u8"hotkeys-note", u8"앱이 뒤에 있어도 받는 키 조합을 걸 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
+
+        // 자동 업데이트의 적용 방식이다 (auto-update-apply-design.md). Android는 스토어 페이지를 연다. 이 페이지는 적용하지 않고 방식만 보인다.
+        column.gap(20.0f);
+        column.heading(u8"update-heading", u8"자동 업데이트");
+        column.note(u8"update-apply-mode", u8"업데이트 적용 방식: " + std::u8string { apply_mode_text(luil::platform_update_apply_mode()) });
 
         // 집 안 NAS 같은 같은 네트워크의 기기에 붙으려면 Android 17부터 이 권한이 있어야 한다.
         column.gap(20.0f);

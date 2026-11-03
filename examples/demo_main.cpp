@@ -1530,6 +1530,10 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     const auto arguments { luil::win32::command_line_arguments() };
     if (arguments.has_value() == false)
         return 1;
+    // 자동 업데이트의 도우미 실행은 단일 인스턴스·인자 넘기기·알림 실행 갈래보다 먼저 갈라진다 (auto-update-apply-design.md).
+    //  - 도우미는 창·single_instance·앱 식별을 세우지 않고 끝난다. 데모는 적용하지 않지만 앱의 첫머리 꼴을 그대로 보인다.
+    if (const std::optional<int> helper { luil::run_update_helper(*arguments) }; helper.has_value())
+        return *helper;
 
     // 같은 세션에서 둘째로 뜬 데모도 막지 않고 띄운다 — 데모는 창을 여럿 띄워 보는 자리이기도 하다. 제목만 다르다.
     //  - 프로세스가 끝날 때까지 쥔다. wWinMain의 지역이라 메시지 루프가 끝난 뒤에 놓인다.

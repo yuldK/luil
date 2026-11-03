@@ -17,6 +17,7 @@
 // asset을 내고, 셸이 든 `updater`가 확인·받기를 몬다. 페이지는 단추가 낸 메시지와 `report`가 나른 단계만 본다.
 //  - 받은 파일은 `%LOCALAPPDATA%\luil-demo\update\`에 선다. `받은 파일 지우기`가 그 폴더를 비운다.
 //  - 확인란 셋이 서버에게 변조를 시킨다. 서버 thread가 읽으므로 페이지가 원자적 값으로 든다.
+//  - 적용은 하지 않고 플랫폼의 적용 방식만 label로 보인다 (auto-update-apply-design.md). 돌고 있는 데모 실행 파일을 바꾸지 않는다.
 
 #include "demo/common.h"
 #include "loopback_http_server.h"

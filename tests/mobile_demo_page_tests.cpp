@@ -424,6 +424,19 @@ TEST_CASE("The device page says whether the platform has global hotkeys", "[mobi
     luil::set_ui_platform(previous);
 }
 
+TEST_CASE("The device page names how this platform applies an update", "[mobile-demo][update]")
+{
+    // 적용 방식은 `platform_update_apply_mode()`의 답이다. core test는 Android의 답(스토어 열기)을 대역으로 채운다 (update_apply_stub.cpp).
+    mobile_demo::device_page page {};
+    const auto tree { device_tree(page, false) };
+    REQUIRE(tree.find({ mobile_demo::kind_text, u8"update-heading" }) != nullptr);
+    const auto* const mode { tree.find({ mobile_demo::kind_text, u8"update-apply-mode" }) };
+    REQUIRE(mode != nullptr);
+    CHECK(mode->accessibility().name == u8"업데이트 적용 방식: 스토어 열기");
+    // 이 페이지는 적용하지 않는다. 열기 단추가 없다.
+    CHECK(tree.find({ mobile_demo::kind_layout, u8"update-apply" }) == nullptr);
+}
+
 TEST_CASE("The demo clears an interrupted adaptive sheet drag while preserving its stop and list", "[ui][sheet][mobile-demo]")
 {
     for (const auto detent : { luil::sheet_detent::half, luil::sheet_detent::full })
