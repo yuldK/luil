@@ -90,6 +90,8 @@
 - [탭 막대 스타일과 공용 스타일](tab-bar-style-design.md)
 - [모바일 앱 바](app-bar-design.md)
 - [분할 버튼](split-button-design.md): 기본 동작 본체와 메뉴 화살표, 필드 popup 열림 규약
+- [메뉴 초점 고침](menu-focus-fixes-design.md): 묶음 안 Tab이 다음 자리로 가고, 열린 popup을 연 요소를 다시 누르면 닫힌다
+- [메뉴 막대](menu-bar-design.md): 창 위 메뉴 줄을 Alt·F10·접근 키로 세우고 이웃 메뉴로 옮긴다
 - [정보 막대](info-bar-design.md): 닫을 때까지 남는 상태 알림과 토스트가 함께 쓰는 심각도
 - [라이브러리 기본 문구](default-text-design.md): 요소가 스스로 놓는 한국어 글을 한 헤더에 모으고 앱 글이 비었을 때만 쓴다
 - [확인 대화 상자](message-box-design.md): 제목·본문·표준 단추를 한 요소로 짓고 좁은 화면에서 단추를 쌓는다
@@ -116,6 +118,8 @@
 - [둘째 인스턴스의 인자 넘기기](single-instance-args-design.md): 같은 이름의 두 번째 실행이 첫 실행에 명령 줄 인자와 작업 폴더를 넘긴다
 - [작업 표시줄 진행률과 오버레이](taskbar-design.md): Win32 전용, 작업 표시줄 단추의 진행률과 오버레이 아이콘
 - [작업 표시줄 점프 목록](jump-list-design.md): Win32 전용, 단추의 점프 목록에 앱이 작업을 싣는다
+- [알림 영역 아이콘](tray-icon-design.md): Win32 전용, 트레이에 아이콘을 세우고 누름과 시스템 메뉴를 받는다
+- [전역 단축키](global-hotkey-design.md): Win32 전용, 앱이 뒤에 있어도 받는 단축키를 걸고 걸린 결과를 알린다
 - [OS 알림](os-notification-design.md): 앱 창 밖 알림을 올리고 바꾸고 거두며, 꺼진 앱도 눌림을 받는다
 - [Popup overlay 표면](popup-overlay-design.md)
 - [Popup 앵커 표면](popup-anchor-design.md)
