@@ -5,7 +5,10 @@
 # 다음 JNI 호출이 예외가 남은 채 불려 깨진다 (android_settings.cpp 머리 주석). 기기 test는 자리의 일부만 치므로,
 # 이 검사가 `src` 아래 모든 `.h`와 `.cpp`에서 `||` 뒤에 `jni_failed(`가 오는 꼴을 막는다.
 #
-# 여러 줄로 나뉜 `||`도 잡도록 파일 글 전체에서 찾는다. 줄 번호 대신 파일 이름과 개수를 준다.
+# 같은 위험의 `&&` 꼴(`x != nullptr && jni_failed(env) == false`)도 막는다. x가 null이면 `&&`가 `jni_failed`를
+# 부르지 않아 예외가 남는다. 성공 쪽은 `jni_failed(env) == false && x != nullptr`로 쓴다.
+#
+# 여러 줄로 나뉜 `||`·`&&`도 잡도록 파일 글 전체에서 찾는다. 줄 번호 대신 파일 이름과 개수를 준다.
 if(NOT DEFINED SOURCE_DIRECTORY)
     message(FATAL_ERROR "SOURCE_DIRECTORY is required.")
 endif()
@@ -20,7 +23,7 @@ endif()
 set(violations "")
 foreach(source IN LISTS sources)
     file(READ "${source}" text)
-    string(REGEX MATCHALL "\\|\\|[ \t\r\n]*jni_failed\\(" hits "${text}")
+    string(REGEX MATCHALL "(\\|\\||&&)[ \t\r\n]*jni_failed\\(" hits "${text}")
     list(LENGTH hits hit_count)
     if(hit_count GREATER 0)
         file(RELATIVE_PATH relative "${SOURCE_DIRECTORY}" "${source}")
@@ -30,5 +33,5 @@ endforeach()
 
 if(violations)
     list(JOIN violations "\n  " listed)
-    message(FATAL_ERROR "jni_failed must come first in a || chain, before the nullptr checks:\n  ${listed}")
+    message(FATAL_ERROR "jni_failed must come first in a || or && chain, before the nullptr checks:\n  ${listed}")
 endif()

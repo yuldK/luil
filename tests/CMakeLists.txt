@@ -613,7 +613,7 @@ add_test(NAME luil_default_text
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
 
-# JNI 실패 검사(`jni_failed`)는 `||` 체인의 맨 앞에 둔다. nullptr 검사가 먼저면 예외가 남은 채 돌아간다.
+# JNI 실패 검사(`jni_failed`)는 `||`·`&&` 체인의 맨 앞에 둔다. nullptr 검사가 먼저면 예외가 남은 채 돌아간다.
 # 기기 test는 자리의 일부만 치므로 전체 자리를 여기서 본다 (script에 이유가 있다).
 add_test(NAME luil_jni_order
     COMMAND "${CMAKE_COMMAND}"

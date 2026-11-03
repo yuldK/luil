@@ -280,7 +280,7 @@ namespace luil {
             if (calls.failed() == false)
             {
                 const jmethodID get_channel { calls.env().GetMethodID(calls.env().GetObjectClass(manager), "getNotificationChannel", "(Ljava/lang/String;)Landroid/app/NotificationChannel;") };
-                if (get_channel != nullptr && jni_failed(calls.env()) == false)
+                if (jni_failed(calls.env()) == false && get_channel != nullptr)
                 {
                     const jobject channel { calls.env().CallObjectMethod(manager, get_channel, id) };
                     if (jni_failed(calls.env()) == false && channel != nullptr)
