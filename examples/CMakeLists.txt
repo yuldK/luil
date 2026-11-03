@@ -88,6 +88,7 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/ink_sketch.h
     demo/theme_page.cpp
     demo/theme_page.h
+    demo/markup_sample.h
     demo/style_sheet_sample.h
     demo/toasts_page.cpp
     demo/toasts_page.h
@@ -119,8 +120,21 @@ add_custom_command(
     DEPENDS "${LUIL_STYLE}" "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
     COMMENT "Embedding the style file for the demo"
     VERBATIM)
+# 테마 페이지의 마크업 묶음이 처음 읽는 견본 글이다. 실행 중에 디스크를 읽지 않도록 실행 파일에 싣는다 (markup-design.md 확인 절).
+set(luil_demo_markup_source "${CMAKE_CURRENT_BINARY_DIR}/demo_generated/luil_demo_markup_xml.cpp")
+add_custom_command(
+    OUTPUT "${luil_demo_markup_source}"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/demo/assets/markup_sample.xml"
+        "-DOUTPUT_FILE=${luil_demo_markup_source}"
+        "-DSYMBOL=luil_demo_markup_xml"
+        -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/demo/assets/markup_sample.xml" "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+    COMMENT "Embedding the markup sample for the demo"
+    VERBATIM)
 luil_add_source_filter(luil_demo_files "generated"
-    "${luil_demo_style_source}")
+    "${luil_demo_style_source}"
+    "${luil_demo_markup_source}")
 add_executable(luil_demo WIN32
     ${luil_example_resource}
     ${luil_demo_files})

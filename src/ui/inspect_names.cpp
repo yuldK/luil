@@ -231,6 +231,8 @@ namespace luil {
             return u8"teaching_tip_close";
         case ui_element_kind::teaching_tip_action:
             return u8"teaching_tip_action";
+        case ui_element_kind::markup_node:
+            return u8"markup_node";
         case ui_element_kind::end_of_library_kinds:
         case ui_element_kind::first_application_kind:
             // 끝 표시와 앱 대역의 시작은 kind가 아니다.

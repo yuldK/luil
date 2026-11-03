@@ -57,6 +57,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_color_hex_input { luil::application_element_kind(48) };
     // 기본 페이지의 서식 칸이다 (`demo/rich_text_sample.h`).
     constexpr luil::ui_element_kind kind_rich_editor_input { luil::application_element_kind(49) };
+    // 테마 페이지의 마크업 견본 단추다 (demo/markup_sample.h). 단추마다 owner가 갈린다.
+    constexpr luil::ui_element_kind kind_markup_button { luil::application_element_kind(50) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     // 확인 대화 상자의 scrim·내용·단추는 라이브러리 kind(modal_host·message_box·message_box_button)가 짓는다.

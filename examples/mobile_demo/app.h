@@ -82,7 +82,7 @@ namespace mobile_demo {
         zoom_page zoom_ {};
         ink_page ink_ {};
         inspector_page inspector_ {};
-        theme_page theme_ { std::u8string { style_json() } };
+        theme_page theme_ { std::u8string { style_json() }, std::u8string { markup_xml() } };
         device_page device_ {};
         sheets_page sheets_ {};
         smb_page smb_ {};

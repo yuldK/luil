@@ -1,9 +1,10 @@
 #pragma once
 
-// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그, 실행 중에 읽는 스타일 파일.
+// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그, 실행 중에 읽는 스타일 파일과 화면 마크업.
 // 고른 값은 frame에 실려 가고 실제 팔레트 선택은 UI thread가 한다.
 
 #include "demo/common.h"
+#include "demo/markup_sample.h"
 #include "demo/style_sheet_sample.h"
 #include "luil/text/text_edit.h"
 #include "luil/theme/appearance.h"
@@ -90,9 +91,11 @@ namespace demo {
     {
     public:
         // `style_source`는 스타일 파일 묶음이 처음 싣는 글이다. 데모 빌드가 실은 LUIL_STYLE 글이고, 견본의 바탕이다.
-        explicit theme_page(std::u8string style_source = {});
+        // `markup_source`는 마크업 묶음이 처음 읽는 글이다. 데모 빌드가 실은 assets/markup_sample.xml이다.
+        explicit theme_page(std::u8string style_source = {}, std::u8string markup_source = {});
 
-        // 편집 메시지(edit_intent·composition_intent)는 스타일 JSON 칸(`target_style_json`)의 것만 받는다.
+        // 편집 메시지(edit_intent·composition_intent)는 스타일 JSON 칸(`target_style_json`)과 마크업 slot 칸(`target_markup_search`)의
+        // 것만 받는다.
         bool handle(const luil::app_message& message);
         [[nodiscard]] std::unique_ptr<luil::ui_element> build(float width, float height, float scale);
 
@@ -138,12 +141,19 @@ namespace demo {
         void handle_style_sheet(style_sheet_action action);
         // 칸의 글을 통째로 바꾼다. 실행 취소 한 덩어리다.
         void set_style_text(std::u8string_view text);
+        // 마크업 묶음이다. 견본 글을 펼친 가지, 견본 단추 줄, 상태 줄을 카드에 담는다.
+        void add_markup(page_layout& page, float width, float scale) const;
 
         style_sheet_state style_sheet_ {};
         luil::text::text_edit_state style_json_ {};
         std::optional<luil::text_composition_event> style_composition_ {};
         float style_json_scroll_ { 0.0f };
         std::shared_ptr<luil::text_area_wrap_cache> style_json_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+
+        markup_sample_state markup_ {};
+        // 마크업 slot에 C++가 짓는 한 줄 칸의 글이다.
+        luil::text::text_edit_state markup_search_ {};
+        std::optional<luil::text_composition_event> markup_search_composition_ {};
 
         luil::appearance_settings appearance_ {};
         luil::window_backdrop backdrop_ { luil::window_backdrop::none };

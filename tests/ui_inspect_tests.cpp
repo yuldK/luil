@@ -403,6 +403,7 @@ TEST_CASE("Library kind names are the enumerator names", "[ui][inspect]")
     REQUIRE(luil::library_kind_name(luil::ui_element_kind::info_bar_close) == u8"info_bar_close");
     REQUIRE(luil::library_kind_name(luil::ui_element_kind::split_button_arrow) == u8"split_button_arrow");
     REQUIRE(luil::library_kind_name(luil::ui_element_kind::ink_canvas) == u8"ink_canvas");
+    REQUIRE(luil::library_kind_name(luil::ui_element_kind::markup_node) == u8"markup_node");
     // 끝 표시와 앱 대역은 라이브러리 kind가 아니다.
     REQUIRE(luil::library_kind_name(luil::ui_element_kind::end_of_library_kinds).empty());
     REQUIRE(luil::library_kind_name(luil::ui_element_kind::first_application_kind).empty());

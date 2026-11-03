@@ -740,11 +740,18 @@ namespace luil {
         }
         if (text.empty() == false)
         {
+            // 고른 구간의 글자는 맨 끝에서 고른 글자색으로 한 번만 그린다. 본문색과 링크색 글자를 그 구간에도 먼저 그려 두면
+            // 같은 글자가 한 번 더 그려져 글자 가장자리의 반투명 픽셀에 먼저 그린 색이 비치므로, 그 둘은 고른 구간을 뺀 자리에만 그린다.
+            const bool selected_text { selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground };
             const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
+            context.canvas.save();
+            if (selected_text)
+                context.canvas.clipRect(*selection, SkClipOp::kDifference);
             if (layout.valid())
                 draw_text_layout(context.canvas, layout, { left - scroll, box.y }, foreground);
             else
                 draw_text(context.canvas, text, left - scroll, baseline, font, foreground);
+            context.canvas.restore();
             // 링크는 강조색 글자와 밑줄이다. 조각은 배치가 링크 자식에 놓은 그대로다.
             for (const auto& [index, element] : link_elements_)
             {
@@ -755,6 +762,8 @@ namespace luil {
                 {
                     context.canvas.save();
                     context.canvas.clipRect(SkRect::MakeXYWH(part.x, part.y, part.width, part.height));
+                    if (selected_text)
+                        context.canvas.clipRect(*selection, SkClipOp::kDifference);
                     if (layout.valid())
                         draw_text_layout(context.canvas, layout, { left - scroll, box.y }, solid_paint(context.palette.accent));
                     else
@@ -764,9 +773,9 @@ namespace luil {
                 context.canvas.drawRect(SkRect::MakeXYWH(part.x, baseline + 1.0f * scale, part.width, (element->emphasized(interaction) ? 2.0f : 1.0f) * scale),
                     solid_paint(enabled() ? context.palette.accent : context.palette.disabled_foreground));
             }
-            // 고른 구간의 글자는 그 바탕의 짝이다. 옅은 바탕에서는 본문 글자와 같은 값이라
-            // 겹쳐 그려도 같은 그림이고, 고대비에서만 highlight 글자로 바뀐다.
-            if (selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground)
+            // 고른 구간의 글자는 그 바탕의 짝이다. 옅은 바탕에서는 본문 글자와 같은 값이라 덧그리지 않고,
+            // 고대비에서만 highlight 글자로 바뀐다. 링크 밑줄은 고른 구간 안에서도 남는다.
+            if (selected_text)
             {
                 context.canvas.save();
                 context.canvas.clipRect(*selection);

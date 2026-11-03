@@ -125,6 +125,8 @@ add_executable(luil_core_tests
     ui_element_tests.cpp
     ui_inspect_tests.cpp
     ui_interaction_tests.cpp
+    ui_markup_read_tests.cpp
+    ui_markup_tests.cpp
     ui_style_json_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp
@@ -214,10 +216,12 @@ target_link_libraries(luil_core_tests
         Catch2::Catch2WithMain)
 # 스타일 파서 시험이 읽는 파일을 실행 파일에 싣는다. 기기에는 소스 트리가 없다.
 #  - LUIL_STYLE이 가리킨 파일은 내장값과 견주고, assets/style.json은 공유 사례 표(style_cases.json)의 바탕이다.
+#  - 마크업 견본은 두 데모의 테마 페이지 시험이 데모 빌드처럼 처음 읽는 글이다.
 set(luil_tests_embedded_directory "${CMAKE_CURRENT_BINARY_DIR}/embedded")
 foreach(embedded
     "${LUIL_STYLE}|luil_test_built_in_style"
     "${PROJECT_SOURCE_DIR}/assets/style.json|luil_test_base_style"
+    "${PROJECT_SOURCE_DIR}/examples/demo/assets/markup_sample.xml|luil_test_markup_sample"
     "${CMAKE_CURRENT_SOURCE_DIR}/style_cases.json|luil_test_style_cases")
     string(REGEX REPLACE "\\|.*$" "" embedded_input "${embedded}")
     string(REGEX REPLACE "^.*\\|" "" embedded_symbol "${embedded}")
