@@ -202,7 +202,7 @@ inline constexpr std::size_t max_clipboard_image_bytes { 256u * 1024u * 1024u };
 ## 다른 노드와의 약속
 
 - **인자 넘기기·os_notify(줄 4, 앞).** `win32_window.cpp`, `app_delegate.h`, `ui_platform.h`를 두 노드 뒤에 직렬로 고친다. 병합 순서는 인자 넘기기, os_notify, image_clip이다. 훅은 os_notify의 `make_notification_message` 뒤, 능력은 그 노드의 `notifications` 뒤에 더한다. os_notify 문서 216줄의 "`ui_image`→Bitmap 변환을 공용 헤더로 꺼낸다"는 이 노드가 Android에 그림을 넣지 않아 필요 없다. 꺼내지 않는다.
-- **rich_edit(줄 2, R3).** `clipboard_data_copy_request`와 `clipboard_data` 끝에 `html`·`rtf` 칸을 더한다. 기존 칸의 순서와 뜻은 바꾸지 않는다. Win32는 `put_clipboard_blocks`에 블록을 더하고, 읽기는 이 노드의 한 번 열기 안에서 읽는다. Android는 `ClipData.newHtmlText`로 글 칸과 함께 넣는다. 입력 thread에서 만드는 복사가 필요하면 결정 6의 b를 그때 줄 3과 함께 낸다.
+- **rich_edit(줄 2, R3).** `clipboard_data_copy_request`와 `clipboard_data` 끝에 `html`·`rtf` 칸을 더한다. 기존 칸의 순서와 뜻은 바꾸지 않는다. Win32는 `put_clipboard_blocks`에 블록을 더하고, 읽기는 이 노드의 한 번 열기 안에서 읽는다. Android는 `ClipData.newHtmlText`로 글 칸과 함께 넣는다. 입력 thread에서 만드는 복사가 필요하면 결정 6의 b를 그때 줄 3과 함께 낸다. [서식 글 교환](rich-edit-exchange-design.md)이 이 약속을 닫았다. `html`만 더했고 `rtf`는 그 문서 결정 8로 더하지 않으며, 입력 thread의 복사(결정 6의 b)는 그 문서 결정 7로 내지 않는다.
 - **ink(줄 3, 같은 라운드).** 잉크 그림 복사는 `render_ink_image`가 낸 `ui_image`를 이 요청에 싣는다. `ui_events.h`에서 이 노드는 include 한 줄, `clipboard_change` 끝, 새 구조체, `clipboard_request` 끝만 고친다. `pen_sample`과 `pointer_*_event`, `input_action`, `raw_input_event`의 구성원 순서는 건드리지 않는다. `android_app.cpp`에서 ink는 `copy_motion`과 축 켜기, 이 노드는 `execute_clipboard`다.
 - **inspector(줄 3).** `android_app.cpp`의 `render()` 한 줄과 겹치지 않는다. 그 노드가 필요로 하는 `win32_window.cpp`의 frame 칸 한 줄은 줄 4가 통합 단계에서 별도 커밋으로 내고([인자 넘기기](single-instance-args-design.md)가 맡는다) 이 노드 커밋에 섞지 않는다.
 - **`image_element.h`.** 이번 라운드에 이 헤더를 고치는 노드는 이 노드뿐이다. ink는 반환 형식으로 `ui_image`를 쓸 뿐이라 옮긴 뒤에도 그대로 빌드된다.

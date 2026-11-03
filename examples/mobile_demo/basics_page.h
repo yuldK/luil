@@ -8,6 +8,7 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
 #include "demo/readonly_undo_keys.h"
+#include "demo/rich_text_sample.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/clipboard_image.h"
 #include "luil/ui/color_picker_element.h"
@@ -163,6 +164,12 @@ namespace mobile_demo {
         // 뒤로 가기가 낼 메시지다. Esc와 바깥 누름이 내는 결과와 같다 (`luil::message_box_dismiss_message`).
         [[nodiscard]] luil::input_action back_action() const;
 
+        // 서식 칸의 복사·붙여넣기가 쥐어 둔 클립보드 요청이다 (rich-edit-exchange-design.md). 셸이 가져가 host에 넣는다.
+        [[nodiscard]] std::optional<luil::clipboard_request> take_clipboard_request()
+        {
+            return rich_text_.take_clipboard_request();
+        }
+
     private:
         void apply_edit(const luil::text_edit_request& request);
         void apply_composition(const luil::text_composition_event& event);
@@ -238,6 +245,8 @@ namespace mobile_demo {
             .text = u8"이 칸은 읽기 전용이다. 선택과 복사만 된다. 하드웨어 키보드로 이 칸에 초점을 두고 Ctrl+Z나 Ctrl+Y를 누르면 칸이 삼키지 않고 앱으로 넘긴다.",
         };
         demo::readonly_undo_keys undo_keys_ {};
+        // 서식 있는 글 칸과 그 토글·상태 글이다 (데스크톱 서식 페이지와 같은 견본).
+        demo::rich_text_sample rich_text_ {};
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };

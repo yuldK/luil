@@ -41,6 +41,8 @@ namespace {
             // 감시자도 logic이 `stop_workers`에서 멈춘다.
             if (files_directory_.empty() == false)
                 watcher_ = mobile_demo::start_files_watch(host, files_directory_ / "watch-demo");
+            // 서식 칸의 복사·붙여넣기 요청은 logic thread가 이 host에 넣는다.
+            host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
         }
 
         // 기기 페이지의 "묻기"와 "알림 보내기", 기본 페이지의 클립보드 그림 붙여넣기다. 묻지 않았으면(필요 없음·이미 받음) 지금
@@ -105,9 +107,11 @@ namespace {
             return mobile_demo::make_metrics_message(metrics);
         }
 
-        // 클립보드의 글과 그림이다. 기본 페이지가 받아 logic thread에서 푼다.
+        // 클립보드의 글과 그림이다. 기본 페이지가 받아 logic thread에서 푼다. 서식 칸이 청한 답은 표식으로 가른다.
         [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
         {
+            if (data.tag == demo::rich_text_clipboard_tag)
+                return luil::app_message { demo::rich_text_clipboard_intent { data } };
             return luil::app_message { mobile_demo::clipboard_image_intent { data } };
         }
 

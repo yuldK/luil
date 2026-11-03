@@ -3086,3 +3086,151 @@ TEST_CASE("Drawing a frame with the inspector on leaves the UIA children as they
     REQUIRE(after == before);
     root->Release();
 }
+
+namespace {
+    // 굵게·밑줄 [0, 3)과 기울임 [4, 7)을 그리는 여러 줄 칸이다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_styled_memo_tree(luil::text_input_view value)
+    {
+        luil::text_span strong { 0, 3, luil::text_color_role::primary, true };
+        strong.underline = true;
+        luil::text_span leaning { 4, 7 };
+        leaning.italic = true;
+        luil::text_area_config config {};
+        config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { strong, leaning });
+        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_item, u8"memo" }, std::move(value), std::move(config)) };
+        const luil::text_measurer measurer { fixed_glyph_width };
+        memo->arrange({ .slot = { 0.0f, 0.0f, 200.0f, 100.0f }, .scale = 1.0f, .measurer = &measurer });
+        return std::make_shared<const luil::ui_tree>(std::move(memo));
+    }
+
+    [[nodiscard]] VARIANT attribute_of(luil::win32::uia_root_provider& root, const std::size_t begin, const std::size_t end, const TEXTATTRIBUTEID attribute)
+    {
+        auto* const range { new luil::win32::uia_text_range_provider { root, { kind_item, u8"memo" }, begin, end } };
+        VARIANT value {};
+        REQUIRE(range->GetAttributeValue(attribute, &value) == S_OK);
+        range->Release();
+        return value;
+    }
+
+    [[nodiscard]] bool reserved_mixed(const VARIANT& value)
+    {
+        IUnknown* mixed { nullptr };
+        REQUIRE(UiaGetReservedMixedAttributeValue(&mixed) == S_OK);
+        return value.vt == VT_UNKNOWN && value.punkVal == mixed;
+    }
+
+    [[nodiscard]] bool reserved_not_supported(const VARIANT& value)
+    {
+        IUnknown* not_supported { nullptr };
+        REQUIRE(UiaGetReservedNotSupportedValue(&not_supported) == S_OK);
+        return value.vt == VT_UNKNOWN && value.punkVal == not_supported;
+    }
+
+    [[nodiscard]] long long_of(const VARIANT& value)
+    {
+        REQUIRE(value.vt == VT_I4);
+        return value.lVal;
+    }
+
+    [[nodiscard]] bool bool_of(const VARIANT& value)
+    {
+        REQUIRE(value.vt == VT_BOOL);
+        return value.boolVal != VARIANT_FALSE;
+    }
+
+    // 문서 전체에서 그 값의 범위를 찾는다. 없으면 빈 값이다.
+    [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>> found_range(luil::win32::uia_root_provider& root, const std::size_t end, const TEXTATTRIBUTEID attribute, const VARIANT& value, const bool backward)
+    {
+        auto* const document { new luil::win32::uia_text_range_provider { root, { kind_item, u8"memo" }, 0, end } };
+        ITextRangeProvider* found { nullptr };
+        REQUIRE(document->FindAttribute(attribute, value, backward ? TRUE : FALSE, &found) == S_OK);
+        document->Release();
+        if (found == nullptr)
+            return std::nullopt;
+        const auto* const range { static_cast<luil::win32::uia_text_range_provider*>(found) };
+        const std::pair<std::size_t, std::size_t> result { range->begin_offset(), range->end_offset() };
+        found->Release();
+        return result;
+    }
+}
+
+TEST_CASE("Text ranges answer the bold, italic and underline of the spans the area draws", "[win32][uia][rich-text]")
+{
+    fake_uia_host host {};
+    host.tree = make_styled_memo_tree({ .text = u8"abc def ghi" });
+    host.text_target = static_cast<luil::text_input_target>(7);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+
+    REQUIRE(long_of(attribute_of(*root, 0, 3, UIA_FontWeightAttributeId)) == 700);
+    REQUIRE(bool_of(attribute_of(*root, 0, 3, UIA_IsItalicAttributeId)) == false);
+    REQUIRE(long_of(attribute_of(*root, 0, 3, UIA_UnderlineStyleAttributeId)) == TextDecorationLineStyle_Single);
+    REQUIRE(long_of(attribute_of(*root, 4, 7, UIA_FontWeightAttributeId)) == 400);
+    REQUIRE(bool_of(attribute_of(*root, 4, 7, UIA_IsItalicAttributeId)));
+    REQUIRE(long_of(attribute_of(*root, 4, 7, UIA_UnderlineStyleAttributeId)) == TextDecorationLineStyle_None);
+    // 빈 범위는 그 자리 뒤 글자의 값이다. 글 끝이면 앞 글자다.
+    REQUIRE(long_of(attribute_of(*root, 1, 1, UIA_FontWeightAttributeId)) == 700);
+    REQUIRE(long_of(attribute_of(*root, 11, 11, UIA_FontWeightAttributeId)) == 400);
+
+    // 범위 안에서 값이 갈리면 섞였다는 예약 값이다.
+    REQUIRE(reserved_mixed(attribute_of(*root, 0, 7, UIA_FontWeightAttributeId)));
+    REQUIRE(reserved_mixed(attribute_of(*root, 2, 5, UIA_IsItalicAttributeId)));
+    REQUIRE(reserved_mixed(attribute_of(*root, 0, 11, UIA_UnderlineStyleAttributeId)));
+    // 다른 속성은 지금처럼 지원하지 않는다는 예약 값이다.
+    REQUIRE(reserved_not_supported(attribute_of(*root, 0, 3, UIA_FontNameAttributeId)));
+    root->Release();
+}
+
+TEST_CASE("Finding an attribute walks to the next or the previous range with that value", "[win32][uia][rich-text]")
+{
+    fake_uia_host host {};
+    host.tree = make_styled_memo_tree({ .text = u8"abc def ghi" });
+    host.text_target = static_cast<luil::text_input_target>(7);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+
+    VARIANT italic {};
+    italic.vt = VT_BOOL;
+    italic.boolVal = VARIANT_TRUE;
+    REQUIRE(found_range(*root, 11, UIA_IsItalicAttributeId, italic, false) == std::pair<std::size_t, std::size_t> { 4u, 7u });
+    VARIANT bold {};
+    bold.vt = VT_I4;
+    bold.lVal = 700;
+    REQUIRE(found_range(*root, 11, UIA_FontWeightAttributeId, bold, true) == std::pair<std::size_t, std::size_t> { 0u, 3u });
+    // 보통 굵기는 굵은 낱말 뒤의 나머지 전부다.
+    VARIANT normal {};
+    normal.vt = VT_I4;
+    normal.lVal = 400;
+    REQUIRE(found_range(*root, 11, UIA_FontWeightAttributeId, normal, false) == std::pair<std::size_t, std::size_t> { 3u, 11u });
+    VARIANT none {};
+    none.vt = VT_I4;
+    none.lVal = TextDecorationLineStyle_None;
+    REQUIRE(found_range(*root, 11, UIA_UnderlineStyleAttributeId, none, true) == std::pair<std::size_t, std::size_t> { 3u, 11u });
+    // 찾는 범위 안에 그 값이 없거나, 답하지 않는 값이면 찾지 못한다.
+    REQUIRE(found_range(*root, 3, UIA_IsItalicAttributeId, italic, false).has_value() == false);
+    VARIANT medium {};
+    medium.vt = VT_I4;
+    medium.lVal = 500;
+    REQUIRE(found_range(*root, 11, UIA_FontWeightAttributeId, medium, false).has_value() == false);
+    REQUIRE(found_range(*root, 11, UIA_FontNameAttributeId, italic, false).has_value() == false);
+    root->Release();
+}
+
+TEST_CASE("While composing, a text range does not answer the format attributes", "[win32][uia][rich-text]")
+{
+    // 조합 중의 Text 패턴은 조합 글 문서이고 구간은 확정 글 기준이라 서식을 답하지 않는다.
+    luil::text_input_view value { .text = u8"abc def ghi", .caret = 11, .anchor = 11 };
+    value.composing = true;
+    value.composition_text = u8"abc def ghi가";
+    value.composition_caret = 14;
+    value.composing_begin = 11;
+    value.composing_end = 14;
+    fake_uia_host host {};
+    host.tree = make_styled_memo_tree(std::move(value));
+    host.text_target = static_cast<luil::text_input_target>(7);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    REQUIRE(reserved_not_supported(attribute_of(*root, 0, 3, UIA_FontWeightAttributeId)));
+    VARIANT bold {};
+    bold.vt = VT_I4;
+    bold.lVal = 700;
+    REQUIRE(found_range(*root, 14, UIA_FontWeightAttributeId, bold, false).has_value() == false);
+    root->Release();
+}

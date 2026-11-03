@@ -27,6 +27,9 @@ class SkCanvas;
 class SkTypeface;
 
 namespace luil {
+    // 여러 줄 칸이 그리는 구간이다 (text_document.h). `text_input_snapshot`이 칸 설정의 구간을 가리키기만 한다.
+    struct text_span;
+
     struct rect_f
     {
         float x { 0.0f };
@@ -164,6 +167,12 @@ namespace luil {
         // 그 링크를 여는 앱 메시지를 짓는다 (칸 설정의 `activate_link`). 칸의 설정을 가리키므로 위의 글처럼 element와
         // 수명이 같다. 링크가 있어도 비어 있을 수 있다 — 그러면 주소 복사만 선다.
         const std::function<input_action(std::u8string_view)>* activate_link { nullptr };
+        // 칸이 그리는 구간이다 (`text_area_config::spans`, 확정 글 기준). 칸의 설정을 가리키므로 element와 수명이 같다.
+        //  - 보조 기술의 서식 속성(굵기·기울임·밑줄)이 읽는다 (docs/rich-edit-design.md 결정 6). 없으면 서식 없는 글이다.
+        const std::vector<text_span>* spans { nullptr };
+        // 복사·잘라내기·붙여넣기 키를 칸이 쓰지 않고 `key_handler`로 넘긴다 (`text_area_config::clipboard_keys_to_parent`).
+        //  - 서식 칸이 서식째 주고받으려고 세운다 (docs/rich-edit-exchange-design.md). 암호 칸에는 뜻이 없다.
+        bool clipboard_keys_to_parent { false };
     };
 
     // 포인터 자리에 놓을 caret이다. `upstream`이면 그 offset의 앞 글자 쪽(넘겨 접은 윗줄의 끝)에 붙는다.

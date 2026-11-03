@@ -37,6 +37,8 @@ namespace mobile_demo {
             return target_readonly;
         if (kind == kind_color_hex_input)
             return target_color_hex;
+        if (kind == kind_rich_editor_input)
+            return target_rich_editor;
         // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다 (popup-ime-design.md).
         if (kind == kind_dropdown_search_input)
             return target_dropdown_search;

@@ -32,6 +32,11 @@ namespace mobile_demo {
             sheets_.set_reduce_motion(metrics->reduce_motion);
             return;
         }
+        if (const auto* const clipboard_host { message.get<clipboard_host_intent>() }; clipboard_host != nullptr)
+        {
+            host_ = clipboard_host->host;
+            return;
+        }
         if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
         {
             page_ = navigate->page;
@@ -64,7 +69,14 @@ namespace mobile_demo {
         }
         // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다. 편집 메시지만 타입이 같고
         // target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
-        if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message) || ink_.handle(message)
+        // 기본 페이지의 서식 칸이 쥔 클립보드 요청은 받은 자리에서 host에 넣는다.
+        if (basics_.handle(message))
+        {
+            if (std::optional<luil::clipboard_request> request { basics_.take_clipboard_request() }; request.has_value() && host_ != nullptr)
+                host_->post_clipboard_request(std::move(*request));
+            return;
+        }
+        if (lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message) || ink_.handle(message)
             || inspector_.handle(message) || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
             || files_.handle(message))
             return;

@@ -92,6 +92,9 @@ add_executable(luil_core_tests
     spring_tests.cpp
     text_area_element_tests.cpp
     text_change_tests.cpp
+    text_format_tests.cpp
+    rich_text_tests.cpp
+    rich_text_html_tests.cpp
     syntax_highlighter_tests.cpp
     text_link_tests.cpp
     stack_element_tests.cpp
@@ -183,6 +186,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/rich_text_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/zoom_page.cpp"
     demo_gallery_tests.cpp)

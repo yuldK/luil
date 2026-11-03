@@ -357,3 +357,21 @@ TEST_CASE("Clipboard copy requests compare their image by value identity", "[cli
     REQUIRE((request == luil::clipboard_data_copy_request { u8"name", luil::make_rgba_image(1, 1, pixel), { 1, 2 } }) == false);
     REQUIRE((request == luil::clipboard_data_copy_request { u8"other", image, { 1, 2 } }) == false);
 }
+
+TEST_CASE("Clipboard copy requests compare their HTML", "[clipboard][rich-text]")
+{
+    // `operator==`는 손으로 쓴 함수다. 새 칸을 빠뜨리면 HTML만 다른 두 요청이 같아 보인다.
+    luil::clipboard_data_copy_request first {};
+    first.text = u8"a";
+    first.html = u8"<b>a</b>";
+    luil::clipboard_data_copy_request second { first };
+    REQUIRE(first == second);
+    second.html = u8"<i>a</i>";
+    REQUIRE((first == second) == false);
+    second.html.clear();
+    REQUIRE((first == second) == false);
+
+    luil::clipboard_data data {};
+    data.html = u8"<b>a</b>";
+    REQUIRE((data == luil::clipboard_data {}) == false);
+}

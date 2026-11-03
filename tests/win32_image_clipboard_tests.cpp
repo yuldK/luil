@@ -319,3 +319,195 @@ TEST_CASE("PNG is read before DIB when both were put by hand", "[win32][clipboar
     REQUIRE(data.image != nullptr);
     REQUIRE(*data.image == png);
 }
+
+namespace {
+    [[nodiscard]] std::vector<std::byte> bytes_of(const std::string_view text)
+    {
+        std::vector<std::byte> bytes(text.size());
+        std::memcpy(bytes.data(), text.data(), text.size());
+        return bytes;
+    }
+
+    [[nodiscard]] std::string string_of(const std::vector<std::byte>& bytes)
+    {
+        return { reinterpret_cast<const char*>(bytes.data()), bytes.size() };
+    }
+
+    [[nodiscard]] long long header_number(const std::string& block, const std::string& key)
+    {
+        const std::size_t at { block.find(key + ":") };
+        REQUIRE(at != std::string::npos);
+        return std::stoll(block.substr(at + key.size() + 1, 10));
+    }
+
+    [[nodiscard]] UINT html_format()
+    {
+        const UINT format { RegisterClipboardFormatW(luil::win32::html_clipboard_format) };
+        REQUIRE(format != 0);
+        return format;
+    }
+
+    // 소멸자가 클립보드를 비우지 않는 메시지 전용 창이다.
+    class backup_window final
+    {
+    public:
+        backup_window()
+            : handle_ { CreateWindowExW(0, L"STATIC", L"luil clipboard backup", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr) }
+        {
+        }
+        backup_window(const backup_window&) = delete;
+        backup_window& operator=(const backup_window&) = delete;
+        ~backup_window()
+        {
+            DestroyWindow(handle_);
+        }
+
+        [[nodiscard]] HWND handle() const noexcept
+        {
+            return handle_;
+        }
+
+    private:
+        HWND handle_ { nullptr };
+    };
+
+    // 시작 전 클립보드의 글과 HTML을 쥐었다가 끝에 되돌린다. 사용자의 클립보드를 test가 지우지 않는다.
+    //  - 다른 test 창이 끝에 클립보드를 비운 뒤에 되돌려야 하므로 그 창보다 먼저 짓는다.
+    class clipboard_backup final
+    {
+    public:
+        clipboard_backup()
+        {
+            REQUIRE(window_.handle() != nullptr);
+            if (luil::win32::open_clipboard(window_.handle()) == false)
+                return;
+            const std::array<UINT, 2> formats { static_cast<UINT>(CF_UNICODETEXT), RegisterClipboardFormatW(luil::win32::html_clipboard_format) };
+            for (const UINT format : formats)
+            {
+                if (format == 0 || IsClipboardFormatAvailable(format) == FALSE)
+                    continue;
+                const HANDLE handle { GetClipboardData(format) };
+                if (handle == nullptr)
+                    continue;
+                const luil::win32::scoped_global_lock lock { handle };
+                if (lock.memory == nullptr)
+                    continue;
+                const auto* const begin { static_cast<const std::byte*>(lock.memory) };
+                saved_.push_back(luil::win32::clipboard_block { format, std::vector<std::byte>(begin, begin + GlobalSize(handle)) });
+            }
+            CloseClipboard();
+        }
+        clipboard_backup(const clipboard_backup&) = delete;
+        clipboard_backup& operator=(const clipboard_backup&) = delete;
+        ~clipboard_backup()
+        {
+            if (saved_.empty() == false)
+                static_cast<void>(luil::win32::put_clipboard_blocks(window_.handle(), saved_));
+        }
+
+    private:
+        backup_window window_ {};
+        std::vector<luil::win32::clipboard_block> saved_ {};
+    };
+}
+
+TEST_CASE("A CF_HTML block points its header offsets at the document and the fragment", "[win32][clipboard][rich-text]")
+{
+    const std::u8string fragment { u8"<b>굵게</b> 글" };
+    const std::optional<std::vector<std::byte>> block { luil::win32::cf_html_block(fragment) };
+    REQUIRE(block.has_value());
+    const std::string text { string_of(*block) };
+    REQUIRE(text.starts_with("Version:0.9\r\nStartHTML:"));
+    // 값은 열 자리 0 채움이라 머리 길이가 늘 같다.
+    REQUIRE(text.find("StartHTML:0000000") != std::string::npos);
+    const long long start_html { header_number(text, "StartHTML") };
+    const long long end_html { header_number(text, "EndHTML") };
+    const long long start_fragment { header_number(text, "StartFragment") };
+    const long long end_fragment { header_number(text, "EndFragment") };
+    REQUIRE(text.substr(static_cast<std::size_t>(start_html)).starts_with("<html><body>"));
+    REQUIRE(text.substr(static_cast<std::size_t>(start_fragment), static_cast<std::size_t>(end_fragment - start_fragment)) == std::string { fragment.begin(), fragment.end() });
+    REQUIRE(text.substr(static_cast<std::size_t>(start_fragment) - 20, 20) == "<!--StartFragment-->");
+    REQUIRE(text.substr(static_cast<std::size_t>(end_fragment), 18) == "<!--EndFragment-->");
+    // 끝의 NUL은 `EndHTML` 밖이다.
+    REQUIRE(static_cast<std::size_t>(end_html) == block->size() - 1);
+    REQUIRE(block->back() == std::byte { 0 });
+    REQUIRE(text.substr(0, static_cast<std::size_t>(end_html)).ends_with("</body></html>"));
+
+    // 지은 블록에서 같은 조각이 나온다. 깨진 UTF-8은 블록을 짓지 않는다.
+    REQUIRE(luil::win32::cf_html_fragment(*block) == fragment);
+    REQUIRE(luil::win32::cf_html_block(std::u8string { u8"<b>" } + char8_t { 0xFF } + u8"</b>").has_value() == false);
+}
+
+TEST_CASE("A CF_HTML fragment is read only inside the block and its offsets", "[win32][clipboard][rich-text]")
+{
+    const std::optional<std::vector<std::byte>> block { luil::win32::cf_html_block(u8"<i>x</i>") };
+    REQUIRE(block.has_value());
+    // 잘린 블록은 조각도 문서도 범위 밖이라 거절한다.
+    const std::vector<std::byte> truncated(block->begin(), block->begin() + static_cast<std::ptrdiff_t>(block->size() / 2 + 20));
+    REQUIRE(luil::win32::cf_html_fragment(truncated).has_value() == false);
+    // `GlobalSize`가 올림한 뒤의 바이트는 첫 NUL에서 끊는다.
+    std::vector<std::byte> padded { *block };
+    padded.insert(padded.end(), 16, std::byte { 0x7A });
+    REQUIRE(luil::win32::cf_html_fragment(padded) == std::u8string { u8"<i>x</i>" });
+
+    // LF 줄, 모르는 키, 조각 offset이 없으면 문서 범위다. `EndHTML:-1`은 블록 끝이다.
+    const std::string_view document { "Version:1.0\nStartHTML:0000000075\nEndHTML:-1\nSourceURL:https://example.com/\n<b>a</b>" };
+    REQUIRE(document.find("<b>") == 75u);
+    REQUIRE(luil::win32::cf_html_fragment(bytes_of(document)) == std::u8string { u8"<b>a</b>" });
+    // 조각 offset이 거꾸로이거나 범위 밖이면 문서 범위로 물러선다. 그것도 맞지 않으면 거절한다.
+    const std::string_view reversed { "Version:0.9\r\nStartHTML:0000000105\r\nEndHTML:0000000113\r\nStartFragment:0000000110\r\nEndFragment:0000000108\r\n<u>b</u>" };
+    REQUIRE(reversed.find("<u>") == 105u);
+    REQUIRE(reversed.size() == 113u);
+    REQUIRE(luil::win32::cf_html_fragment(bytes_of(reversed)) == std::u8string { u8"<u>b</u>" });
+    const std::string_view outside { "Version:0.9\r\nStartHTML:0000000105\r\nEndHTML:0000099999\r\nStartFragment:0000000105\r\nEndFragment:0000099999\r\n<u>b</u>" };
+    REQUIRE(luil::win32::cf_html_fragment(bytes_of(outside)).has_value() == false);
+    REQUIRE(luil::win32::cf_html_fragment(bytes_of("<b>no header</b>")).has_value() == false);
+    REQUIRE(luil::win32::cf_html_fragment({}).has_value() == false);
+}
+
+TEST_CASE("Clipboard data blocks put HTML between the image and the text", "[win32][clipboard][rich-text]")
+{
+    std::u8string error {};
+    luil::clipboard_data_copy_request request {};
+    request.text = u8"글";
+    request.html = u8"<b>글</b>";
+    request.image = make_sample_image();
+    request.png = luil::encode_png(request.image, error);
+    const std::optional<std::vector<luil::win32::clipboard_block>> blocks { luil::win32::clipboard_data_blocks(request, error) };
+    REQUIRE(blocks.has_value());
+    REQUIRE(blocks->size() == 4u);
+    REQUIRE((*blocks)[0].format == png_format());
+    REQUIRE((*blocks)[1].format == CF_DIBV5);
+    REQUIRE((*blocks)[2].format == html_format());
+    REQUIRE((*blocks)[3].format == CF_UNICODETEXT);
+    REQUIRE(luil::win32::cf_html_fragment((*blocks)[2].bytes) == request.html);
+
+    // 깨진 HTML은 반쪽 클립을 짓지 않는다.
+    luil::clipboard_data_copy_request broken {};
+    broken.text = u8"글";
+    broken.html = std::u8string { u8"<b>" } + char8_t { 0xFF } + u8"</b>";
+    REQUIRE(luil::win32::clipboard_data_blocks(broken, error).has_value() == false);
+    REQUIRE(error.empty() == false);
+}
+
+TEST_CASE("Text and HTML put on the clipboard read back together", "[win32][clipboard][rich-text][system]")
+{
+    // 되돌리기가 test 창의 비우기보다 뒤에 서도록 먼저 짓는다.
+    const clipboard_backup backup {};
+    const image_clipboard_window owner {};
+    luil::clipboard_data_copy_request request {};
+    request.text = u8"굵게 그리고 링크";
+    request.html = u8"<span style=\"white-space: pre-wrap;\"><b>굵게</b> 그리고 <a href=\"https://example.com/\">링크</a></span>";
+    REQUIRE(luil::win32::copy_data_to_clipboard(owner.handle(), request));
+    REQUIRE(format_on_clipboard(html_format()));
+    REQUIRE(format_on_clipboard(CF_UNICODETEXT));
+
+    const luil::clipboard_data data { luil::win32::read_clipboard_data(owner.handle()) };
+    REQUIRE(data.text == request.text);
+    REQUIRE(data.html == request.html);
+    REQUIRE(data.image_format == luil::clipboard_image_format::none);
+
+    // 글만 넣은 클립에는 HTML이 없다.
+    REQUIRE(luil::win32::copy_text_to_clipboard(owner.handle(), u8"글만"));
+    REQUIRE(luil::win32::read_clipboard_data(owner.handle()).html.empty());
+}

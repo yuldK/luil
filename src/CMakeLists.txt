@@ -103,6 +103,9 @@ luil_add_source_filter(luil_core_files "text"
     text/text_change.cpp
     "${public_headers}/text/text_change.h"
     text/text_edit.cpp
+    text/text_format.cpp
+    text/text_format_internal.h
+    "${public_headers}/text/text_format.h"
     "${public_headers}/text/fonts.h"
     "${public_headers}/text/font_style.h"
     "${public_headers}/text/text_edit.h"
@@ -365,6 +368,11 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     ui/text_span_color.h
     ui/syntax_highlighter.cpp
     "${public_headers}/ui/syntax_highlighter.h"
+    ui/rich_text.cpp
+    ui/rich_text_html.cpp
+    "${public_headers}/ui/rich_text.h"
+    ui/rich_text_commands.cpp
+    "${public_headers}/ui/rich_text_commands.h"
     ui/commands.cpp
     "${public_headers}/ui/commands.h"
     ui/menu_element.cpp

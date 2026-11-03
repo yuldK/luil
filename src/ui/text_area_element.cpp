@@ -459,21 +459,23 @@ namespace luil {
         std::vector<text_span> shown {};
         if (displayed)
             shown = displayed_ranges<text_span>(displayed_text(), shift_of(value_), begin, end, query);
+        // 밑줄은 폭을 바꾸지 않아 싣지 않는다. 코드는 code face라 advance가 달라 싣는다.
         for (const auto& span : displayed ? std::span<const text_span> { shown } : query(begin, end))
-            if (span.bold || span.italic)
+            if (span.bold || span.italic || span.code)
             {
                 const auto from { std::max(span.begin, begin) - begin };
                 const auto to { std::min(span.end, end) - begin };
                 if (from >= to)
                     continue;
-                // 이웃 항목은 굵기와 기울임이 모두 같을 때만 합친다. 하나라도 다르면 face가 달라 따로 배치한다.
+                // 이웃 항목은 굵기·기울임·코드가 모두 같을 때만 합친다. 하나라도 다르면 face가 달라 따로 배치한다.
                 if (styles.empty() == false
                     && styles.back().end == from
                     && styles.back().bold == span.bold
-                    && styles.back().italic == span.italic)
+                    && styles.back().italic == span.italic
+                    && styles.back().code == span.code)
                     styles.back().end = to;
                 else
-                    styles.push_back({ from, to, span.bold, span.italic });
+                    styles.push_back({ from, to, span.bold, span.italic, span.code });
             }
         return styles;
     }
@@ -783,6 +785,8 @@ namespace luil {
         snapshot.multiline = true;
         snapshot.read_only = config_.read_only;
         snapshot.caret_upstream = value_.caret_upstream;
+        snapshot.spans = config_.spans.get();
+        snapshot.clipboard_keys_to_parent = config_.clipboard_keys_to_parent;
         // caret이 링크 안이거나 바로 뒤면 그 링크다 — 링크 끝 글자를 누르면 caret이 링크 뒤에 선다.
         if (config_.links != nullptr && value_.composing == false)
         {
@@ -970,8 +974,14 @@ namespace luil {
                 return SkRect::MakeXYWH(x, row_top, position(to - row.begin) - position(from - row.begin) + newline, line_height);
             };
             for (const auto& span : styled)
+            {
                 if (span.background != text_background_role::none)
                     context.canvas.drawRect(range_rect(span.begin, span.end), solid_paint(span_background(span.background, context.palette)));
+                // 코드 바탕은 문서 바탕 역할(`text_background_role`)이 아니라 팔레트의 떠 있는 바탕이다. 고대비에서는 창 바탕과
+                // 같아 사라지고 code face가 남는 단서다. 바탕 역할이 함께 있으면 그쪽이 뜻이 커서 앞선다.
+                else if (span.code)
+                    context.canvas.drawRect(range_rect(span.begin, span.end), solid_paint(context.palette.raised_background));
+            }
             const std::vector<text_highlight> highlights { displayed_ranges<text_highlight>(text, shift, row.begin, reach,
                 [this](const std::size_t from, const std::size_t to) { return text_highlights_in_range(config_.highlights, from, to); })
             };
@@ -1038,6 +1048,20 @@ namespace luil {
                     draw_piece(cursor, row.end, font, foreground.getColor());
                 };
                 draw_content(std::nullopt);
+                // 밑줄 구간은 글자 아래 1 논리 픽셀 선을 그 구간의 글자색으로 긋는다. 링크 밑줄과 같은 자리이고, 줄 바꿈 칸은
+                // 긋지 않는다 (글자 아래의 선이다).
+                for (const auto& span : styled)
+                {
+                    if (span.underline == false)
+                        continue;
+                    const auto from { std::max(span.begin, row.begin) };
+                    const auto to { std::min(span.end, row.end) };
+                    if (from >= to)
+                        continue;
+                    const float x { left + position(from - row.begin) };
+                    context.canvas.drawRect(SkRect::MakeXYWH(x, baseline_of(index) + 1.0f * scale, left + position(to - row.begin) - x, 1.0f * scale),
+                        solid_paint(enabled() ? span_foreground(span.color, context.palette) : context.palette.disabled_foreground));
+                }
                 // 링크는 강조색 글자와 밑줄이다. 검색 결과와 선택이 그 위에 덮는다.
                 for (const auto& [link, element] : row_links)
                 {

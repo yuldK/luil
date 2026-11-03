@@ -121,6 +121,9 @@ namespace luil {
         //  - offset은 확정 글(`text_input_view::text`) 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
         //  - 편집하는 코드 글의 구간은 `syntax_highlighter`(syntax_highlighter.h)가 편집마다 바뀐 줄부터 다시 칠해 만든다.
         //    구문 색(`text_color_role::keyword`…`function`)과 굵기·기울임(`text_span::bold`·`italic`)을 싣는다.
+        //  - 서식 있는 글의 구간은 `rich_text_presenter`(rich_text.h)가 편집 상태의 서식에서 옮겨 만든다. 굵기·기울임·밑줄·코드
+        //    (`underline`·`code`)를 싣는다. 칸 하나에 도우미 하나다. 두 도우미가 함께 채우지 않는다.
+        //  - 보조 기술의 서식 속성(굵기·기울임·밑줄)이 이 구간을 읽는다 (`text_input_snapshot::spans`).
         std::shared_ptr<const std::vector<text_span>> spans {};
         // `line` 오름차순이고 같은 줄이 둘 없다. 그리기가 줄마다 이분 탐색(`lower_bound`)으로 찾는다.
         std::shared_ptr<const std::vector<line_decoration>> lines {};
@@ -138,6 +141,11 @@ namespace luil {
         std::function<input_action(std::u8string_view destination)> activate_link {};
         // 편집 칸의 링크 tooltip에서 주소 뒤에 붙는 안내다 (예: "Ctrl+클릭하여 열기"). 비어 있으면 주소만 보인다.
         std::u8string link_hint {};
+        // 복사·잘라내기·붙여넣기 키(Ctrl+C·X·V, Ctrl+Insert, Shift+Insert, Shift+Delete)를 칸이 쓰지 않고 `key_handler`로 넘긴다.
+        //  - 서식 칸이 켠다. 칸에 단 `make_rich_text_key_handler`가 그 키를 복사·붙여넣기 명령으로 내고, 앱이 logic thread에서
+        //    `rich_text_copy_request`·`rich_text_paste`로 글과 HTML을 주고받는다 (docs/rich-edit-exchange-design.md).
+        //  - `text_input_snapshot`에 같은 이름으로 실린다. 읽기 전용 칸이 Ctrl+X·Ctrl+V를 삼키는 것은 그대로다.
+        bool clipboard_keys_to_parent { false };
     };
 
     // 글자 크기와 줄 높이, 안쪽 여백이다 (논리 픽셀).

@@ -41,6 +41,7 @@ namespace {
         {
             folder_ = std::filesystem::temp_directory_path() / (L"luil-mobile-demo-watch-" + std::to_wstring(GetCurrentProcessId()));
             watcher_ = mobile_demo::start_files_watch(host, folder_);
+            host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
         }
 
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
@@ -55,8 +56,11 @@ namespace {
                 host.post_clipboard_request(luil::clipboard_data_paste_request {});
         }
 
+        // 서식 칸이 청한 답은 표식으로 가른다.
         [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
         {
+            if (data.tag == demo::rich_text_clipboard_tag)
+                return luil::app_message { demo::rich_text_clipboard_intent { data } };
             return luil::app_message { mobile_demo::clipboard_image_intent { data } };
         }
 

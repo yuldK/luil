@@ -55,6 +55,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_readonly_input { luil::application_element_kind(47) };
     // 기본 페이지 색 고르기의 16진 칸이다 (`color_picker_hex::id`).
     constexpr luil::ui_element_kind kind_color_hex_input { luil::application_element_kind(48) };
+    // 기본 페이지의 서식 칸이다 (`demo/rich_text_sample.h`).
+    constexpr luil::ui_element_kind kind_rich_editor_input { luil::application_element_kind(49) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     // 확인 대화 상자의 scrim·내용·단추는 라이브러리 kind(modal_host·message_box·message_box_button)가 짓는다.
@@ -101,6 +103,7 @@ namespace mobile_demo {
     constexpr luil::text_input_target target_smb_password { static_cast<luil::text_input_target>(12) };
     constexpr luil::text_input_target target_readonly { static_cast<luil::text_input_target>(13) };
     constexpr luil::text_input_target target_color_hex { static_cast<luil::text_input_target>(14) };
+    constexpr luil::text_input_target target_rich_editor { static_cast<luil::text_input_target>(15) };
 
     // --- 페이지 키 ---
     inline constexpr std::u8string_view page_basics { u8"basics" };

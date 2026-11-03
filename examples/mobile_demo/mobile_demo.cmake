@@ -37,6 +37,7 @@ function(luil_mobile_demo_sources out_var)
         "${directory}/popups_page.cpp"
         "${directory}/popups_page.h"
         "${directory}/../demo/readonly_undo_keys.h"
+        "${directory}/../demo/rich_text_sample.h"
         "${directory}/sheets_page.cpp"
         "${directory}/sheets_page.h"
         "${directory}/smb_page.cpp"

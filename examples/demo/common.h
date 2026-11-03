@@ -91,6 +91,8 @@ namespace demo {
     // 갤러리와 popups 페이지의 색 고르기 16진 칸이다 (`color_picker_hex::id`). 편집 메시지가 대상으로만 갈려 페이지마다 하나다.
     constexpr luil::ui_element_kind kind_gallery_color_hex_input { luil::application_element_kind(67) };
     constexpr luil::ui_element_kind kind_popups_color_hex_input { luil::application_element_kind(68) };
+    // 서식 있는 글 페이지의 서식 칸이다 (`rich_text_sample.h`).
+    constexpr luil::ui_element_kind kind_rich_editor_input { luil::application_element_kind(69) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
@@ -119,6 +121,7 @@ namespace demo {
     constexpr luil::text_input_target target_style_json { static_cast<luil::text_input_target>(16) };
     constexpr luil::text_input_target target_gallery_color_hex { static_cast<luil::text_input_target>(17) };
     constexpr luil::text_input_target target_popups_color_hex { static_cast<luil::text_input_target>(18) };
+    constexpr luil::text_input_target target_rich_editor { static_cast<luil::text_input_target>(19) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.
@@ -139,6 +142,7 @@ namespace demo {
     inline constexpr std::u8string_view page_inspector { u8"inspector" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
     inline constexpr std::u8string_view page_workbench { u8"workbench" };
+    inline constexpr std::u8string_view page_rich_text { u8"rich-text" };
 
     // --- 셸 수준 메시지 ---
     struct close_intent

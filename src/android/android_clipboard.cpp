@@ -73,6 +73,8 @@ namespace luil::android {
             jmethodID get_text { nullptr };
             jmethodID get_uri { nullptr };
             jmethodID coerce_to_text { nullptr };
+            // 항목의 HTML이다 (API 16). 글과 한 항목에 실린다.
+            jmethodID get_html_text { nullptr };
         };
 
         [[nodiscard]] std::optional<item_methods> find_item_methods(JNIEnv& env)
@@ -84,7 +86,8 @@ namespace luil::android {
             methods.get_text = env.GetMethodID(item_class, "getText", "()Ljava/lang/CharSequence;");
             methods.get_uri = env.GetMethodID(item_class, "getUri", "()Landroid/net/Uri;");
             methods.coerce_to_text = env.GetMethodID(item_class, "coerceToText", "(Landroid/content/Context;)Ljava/lang/CharSequence;");
-            if (jni_failed(env) || methods.get_text == nullptr || methods.get_uri == nullptr || methods.coerce_to_text == nullptr)
+            methods.get_html_text = env.GetMethodID(item_class, "getHtmlText", "()Ljava/lang/String;");
+            if (jni_failed(env) || methods.get_text == nullptr || methods.get_uri == nullptr || methods.coerce_to_text == nullptr || methods.get_html_text == nullptr)
                 return std::nullopt;
             return methods;
         }
@@ -201,6 +204,42 @@ namespace luil::android {
         return jni_failed(env) == false;
     }
 
+    bool copy_rich_text_to_clipboard(JNIEnv& env, const jobject context, const std::u8string_view text, const std::u8string_view html)
+    {
+        if (html.empty())
+            return copy_text_to_clipboard(env, context, text);
+        const jni_local_frame frame { env };
+        if (frame.pushed() == false)
+            return false;
+        const jobject manager { clipboard_manager(env, context) };
+        if (manager == nullptr)
+            return false;
+
+        const jclass clip_data_class { env.FindClass("android/content/ClipData") };
+        if (jni_failed(env) || clip_data_class == nullptr)
+            return false;
+        // 글과 HTML을 한 항목에 싣는 framework 정적 메서드다 (API 16). Java 클래스를 쓰지 않는다.
+        const jmethodID new_html_text { env.GetStaticMethodID(clip_data_class, "newHtmlText", "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/String;)Landroid/content/ClipData;") };
+        // JNI의 글은 modified UTF-8이다. BMP 밖 글자(이모지)는 그대로 넘기면 깨진다.
+        const std::string modified_text { modified_utf8_from_utf8(text) };
+        const std::string modified_html { modified_utf8_from_utf8(html) };
+        const jstring label { env.NewStringUTF("") };
+        const jstring text_value { env.NewStringUTF(modified_text.c_str()) };
+        const jstring html_value { env.NewStringUTF(modified_html.c_str()) };
+        if (jni_failed(env) || new_html_text == nullptr || label == nullptr || text_value == nullptr || html_value == nullptr)
+            return false;
+        const jobject clip { env.CallStaticObjectMethod(clip_data_class, new_html_text, label, text_value, html_value) };
+        if (jni_failed(env) || clip == nullptr)
+            return false;
+
+        const jclass manager_class { env.GetObjectClass(manager) };
+        const jmethodID set_primary_clip { env.GetMethodID(manager_class, "setPrimaryClip", "(Landroid/content/ClipData;)V") };
+        if (jni_failed(env) || set_primary_clip == nullptr)
+            return false;
+        env.CallVoidMethod(manager, set_primary_clip, clip);
+        return jni_failed(env) == false;
+    }
+
     std::optional<std::u8string> read_text_from_clipboard(JNIEnv& env, const jobject context)
     {
         const jni_local_frame frame { env };
@@ -287,6 +326,10 @@ namespace luil::android {
                     {
                         data.text = std::move(*value);
                         has_text = true;
+                        // HTML은 글을 집은 그 항목의 것이다. 없거나 읽지 못하면 비운다 (`rich_text_paste`가 글로 물러선다).
+                        const jobject html { env.CallObjectMethod(item, methods->get_html_text) };
+                        if (jni_failed(env) == false && html != nullptr)
+                            data.html = string_of(env, html).value_or(std::u8string {});
                     }
             }
             if (data.image_format != clipboard_image_format::none || resolver == nullptr)

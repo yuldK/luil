@@ -1,6 +1,7 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
 #include "demo/readonly_undo_keys.h"
+#include "demo/rich_text_sample.h"
 #include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
@@ -1315,6 +1316,7 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
         { mobile_demo::kind_line_break_input, mobile_demo::target_line_break },
         { mobile_demo::kind_readonly_input, mobile_demo::target_readonly },
         { mobile_demo::kind_color_hex_input, mobile_demo::target_color_hex },
+        { mobile_demo::kind_rich_editor_input, mobile_demo::target_rich_editor },
         { mobile_demo::kind_dropdown_search_input, mobile_demo::target_dropdown_search },
         { mobile_demo::kind_smb_address_input, mobile_demo::target_smb_address },
         { mobile_demo::kind_smb_user_input, mobile_demo::target_smb_user },
@@ -2443,4 +2445,57 @@ TEST_CASE("The basics page pastes a clipboard image and names what it read", "[m
     large.image_too_large = true;
     REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { large } }));
     REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 너무 큼");
+}
+
+TEST_CASE("The mobile basics page names its format toggles and reads the rich text state back", "[mobile-demo][basics][rich-text]")
+{
+    // 견본 글의 caret은 처음이라 다음 글자 서식은 뒤 글자("굵게")의 굵게다.
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-state") == u8"굵게 켜짐 · 기울임 꺼짐 · 밑줄 꺼짐 · 코드 꺼짐 · 링크 꺼짐");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-count") == u8"구간 4 · 링크 1 · 되돌리기 0");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-bold") == u8"굵게");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-italic") == u8"기울임");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-underline") == u8"밑줄");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-code") == u8"코드");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-link") == u8"링크");
+
+    // 모두 골라 굵게를 누르면 한 걸음으로 글 전체가 굵어진다. 다른 서식과 겹친 곳은 따로 센다.
+    luil::text_edit_request select_all {};
+    select_all.target = mobile_demo::target_rich_editor;
+    select_all.command = luil::text::text_edit_command::select_all;
+    deliver(page, mobile_demo::edit_intent { select_all });
+    deliver(page, demo::rich_text_command_intent { luil::rich_text_command::bold });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-count") == u8"구간 7 · 링크 1 · 되돌리기 1");
+}
+
+TEST_CASE("The mobile basics page names its rich clipboard buttons and hands the copy request to the shell", "[mobile-demo][basics][rich-text][clipboard]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_layout, u8"rich-copy") == u8"서식 복사");
+    REQUIRE(basics_text(page, mobile_demo::kind_layout, u8"rich-paste") == u8"서식 붙여넣기");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-clipboard") == u8"복사·붙여넣기 전");
+
+    // 모두 골라 복사하면 셸이 host에 넣을 요청이 한 번 나온다.
+    luil::text_edit_request select_all {};
+    select_all.target = mobile_demo::target_rich_editor;
+    select_all.command = luil::text::text_edit_command::select_all;
+    deliver(page, mobile_demo::edit_intent { select_all });
+    deliver(page, demo::rich_text_command_intent { luil::rich_text_command::copy });
+    const std::optional<luil::clipboard_request> request { page.take_clipboard_request() };
+    REQUIRE(request.has_value());
+    const auto* const copy { std::get_if<luil::clipboard_data_copy_request>(&*request) };
+    REQUIRE(copy != nullptr);
+    REQUIRE(copy->html.empty() == false);
+    REQUIRE(page.take_clipboard_request().has_value() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-clipboard").starts_with(u8"복사 · HTML "));
+
+    // 붙여넣기 답은 표식으로 이 칸에 온다.
+    deliver(page, demo::rich_text_command_intent { luil::rich_text_command::paste });
+    REQUIRE(std::holds_alternative<luil::clipboard_data_paste_request>(*page.take_clipboard_request()));
+    luil::clipboard_data answer {};
+    answer.tag = demo::rich_text_clipboard_tag;
+    answer.text = copy->text;
+    answer.html = copy->html;
+    deliver(page, demo::rich_text_clipboard_intent { answer });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-clipboard").starts_with(u8"붙여넣기 · HTML "));
 }

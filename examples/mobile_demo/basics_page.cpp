@@ -129,7 +129,8 @@ namespace mobile_demo {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
             if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret && edit->request.target != target_memo
-                && edit->request.target != target_code && edit->request.target != target_line_break && edit->request.target != target_readonly && edit->request.target != target_color_hex)
+                && edit->request.target != target_code && edit->request.target != target_line_break && edit->request.target != target_readonly && edit->request.target != target_color_hex
+                && edit->request.target != target_rich_editor)
                 return false;
             apply_edit(edit->request);
             return true;
@@ -138,7 +139,7 @@ namespace mobile_demo {
         {
             if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_secret
                 && composition->event.target != target_memo && composition->event.target != target_code && composition->event.target != target_line_break
-                && composition->event.target != target_color_hex)
+                && composition->event.target != target_color_hex && composition->event.target != target_rich_editor)
                 return false;
             apply_composition(composition->event);
             return true;
@@ -149,6 +150,8 @@ namespace mobile_demo {
             return true;
         }
         if (undo_keys_.handle(message))
+            return true;
+        if (rich_text_.handle(message))
             return true;
         if (const auto* const dialog { message.get<dialog_intent>() }; dialog != nullptr)
         {
@@ -248,6 +251,8 @@ namespace mobile_demo {
             luil::apply_text_edit(readonly_, request);
         else if (request.target == target_color_hex)
             luil::apply_text_edit(color_hex_, request, luil::hex_color_filter());
+        else if (request.target == target_rich_editor)
+            rich_text_.apply_edit(request);
         else if (request.target == target_code)
         {
             luil::apply_text_edit(code_, request);
@@ -383,6 +388,23 @@ namespace mobile_demo {
         const luil::size_f color_size { luil::color_picker_element::size_for(color) };
         column.add(std::make_unique<luil::color_picker_element>(color), color_size.height, color_size.width);
         column.body(u8"color-value", u8"색: " + luil::format_hex_color(luil::color_from_hsv(color_), true));
+        column.gap(20.0f);
+
+        // 서식 있는 글 칸이다 (rich-edit-design.md). 토글이 고른 범위나 다음에 칠 글자의 서식을 켜고 끈다. 토글을 눌러도 초점이
+        // 칸에 남아 화면 키보드와 조합이 이어진다. 상태 글은 한 줄에 다 들지 않아 두 줄이다.
+        column.note(u8"rich-title", u8"서식 있는 글 (범위를 골라 토글을 누릅니다)");
+        column.gap(4.0f);
+        column.add(rich_text_.make_toolbar(kind_layout, 6.0f), luil::text_button_height);
+        column.gap(6.0f);
+        column.add(rich_text_.make_editor(kind_rich_editor_input, make_input_view(rich_text_.state(), target_rich_editor)), 140.0f);
+        column.gap(4.0f);
+        column.note(u8"rich-state", rich_text_.marks_text());
+        column.note(u8"rich-count", rich_text_.counts_text());
+        // 서식 복사·붙여넣기다 (rich-edit-exchange-design.md). 요청은 셸이 host에 넣고, 붙여넣기 답은 표식으로 이 칸에 온다.
+        column.gap(8.0f);
+        column.add(rich_text_.make_clipboard_buttons(kind_layout, 8.0f, std::min((width - 2.0f * page_padding - 8.0f) / 2.0f, 160.0f)), touch_height);
+        column.gap(4.0f);
+        column.note(u8"rich-clipboard", rich_text_.clipboard_text());
         column.gap(20.0f);
 
         // 텍스트 칸 셋이다. 휴대폰은 좁아 위아래로 쌓는다.

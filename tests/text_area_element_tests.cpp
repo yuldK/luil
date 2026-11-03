@@ -950,3 +950,54 @@ TEST_CASE("Changing the line break policy refills the wrap cache", "[ui][text-ar
     REQUIRE(syllables == arrange(luil::text::line_break_policy::unicode, nullptr));
     REQUIRE(syllables != words);
 }
+
+TEST_CASE("A text area hands its spans to the text input snapshot", "[ui][text-area][rich-text]")
+{
+    // 보조 기술의 서식 속성이 칸 설정의 구간을 그대로 읽는다. 복사하지 않고 가리킨다.
+    luil::text_area_config config {};
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 2, luil::text_color_role::primary, true } });
+    const auto tree { memo_tree(view_of(u8"abc", 0), config) };
+    const auto snapshot { memo_of(*tree).text_input() };
+    REQUIRE(snapshot.has_value());
+    REQUIRE(snapshot->spans == memo_of(*tree).config().spans.get());
+    // 구간이 없는 칸은 비어 있다.
+    const auto plain { memo_tree(view_of(u8"abc", 0)) };
+    REQUIRE(memo_of(*plain).text_input()->spans == nullptr);
+}
+
+TEST_CASE("A code span paints the raised background behind its text", "[ui][text-area][rich-text][raster]")
+{
+    // core test에는 글꼴이 없어 글자 칸의 폭이 0이다. 줄 바꿈 칸(폭이 글꼴에 매이지 않는 4 논리 픽셀)을 덮는 코드 구간으로 바탕을 본다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    REQUIRE(palette.raised_background != palette.input_background);
+    const auto raised = [&](std::shared_ptr<const std::vector<luil::text_span>> spans) {
+        luil::text_area_config config {};
+        config.spans = std::move(spans);
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(u8"ab\ncd", 0), std::move(config)), { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        luil::testing::raster_frame frame { 400, 200, palette };
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame.count_color({ 0.0f, 0.0f, 400.0f, 200.0f }, palette.raised_background);
+    };
+    luil::text_span code { 1, 3 };
+    code.code = true;
+    luil::text_span underline { 1, 3 };
+    underline.underline = true;
+    const int without { raised(nullptr) };
+    REQUIRE(raised(std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { code })) > without);
+    // 밑줄은 바탕을 칠하지 않는다.
+    REQUIRE(raised(std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { underline })) == without);
+    // 고대비에서는 떠 있는 바탕이 창 바탕이라 코드 바탕이 따로 보이지 않는다. code face가 남는 단서다.
+    const luil::ui_color_palette high_contrast { luil::color_palette_for(luil::color_theme::high_contrast) };
+    REQUIRE(high_contrast.raised_background == high_contrast.window_background);
+}
+
+TEST_CASE("A text area hands its clipboard key flag to the text input snapshot", "[ui][text-area][rich-text]")
+{
+    // 서식 칸은 복사·붙여넣기 키를 key handler로 넘긴다. controller가 snapshot의 이 칸을 본다 (docs/rich-edit-exchange-design.md).
+    luil::text_area_config config {};
+    config.clipboard_keys_to_parent = true;
+    const auto tree { memo_tree(view_of(u8"abc", 0), config) };
+    REQUIRE(memo_of(*tree).text_input()->clipboard_keys_to_parent);
+    const auto plain { memo_tree(view_of(u8"abc", 0)) };
+    REQUIRE(memo_of(*plain).text_input()->clipboard_keys_to_parent == false);
+}

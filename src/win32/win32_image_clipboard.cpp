@@ -1,5 +1,6 @@
 #include "win32/win32_image_clipboard.h"
 
+#include "luil/text/utf8_text.h"
 #include "luil/ui/clipboard_image.h"
 #include "ui/image_pixels.h"
 #include "win32/utf8.h"
@@ -9,8 +10,10 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstring>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 namespace luil::win32 {
@@ -24,6 +27,69 @@ namespace luil::win32 {
             UINT format { 0 };
             clipboard_image_format kind { clipboard_image_format::none };
         };
+
+        // CF_HTML 머리의 offset 칸 이름이다. 값은 열 자리로 써서 머리 길이가 값과 상관없이 정해진다.
+        constexpr std::string_view html_version_line { "Version:0.9\r\n" };
+        constexpr std::array<std::string_view, 4> html_offset_keys { "StartHTML:", "EndHTML:", "StartFragment:", "EndFragment:" };
+        constexpr std::size_t html_offset_digits { 10 };
+        constexpr std::string_view html_document_begin { "<html><body>\r\n<!--StartFragment-->" };
+        constexpr std::string_view html_document_end { "<!--EndFragment-->\r\n</body></html>" };
+
+        void append_offset(std::string& header, const std::string_view key, const std::size_t value)
+        {
+            std::array<char, html_offset_digits> digits {};
+            std::size_t remaining { value };
+            for (std::size_t index = html_offset_digits; index > 0; --index)
+            {
+                digits[index - 1] = static_cast<char>('0' + remaining % 10);
+                remaining /= 10;
+            }
+            header += key;
+            header.append(digits.data(), digits.size());
+            header += "\r\n";
+        }
+
+        // 머리 값 하나다. 음수(`-1`)도 받는다. 없거나 숫자가 아니면 nullopt다.
+        [[nodiscard]] std::optional<long long> header_value(const std::string_view header, const std::string_view key) noexcept
+        {
+            std::size_t at { 0 };
+            while (at < header.size())
+            {
+                std::size_t end { header.find('\n', at) };
+                if (end == std::string_view::npos)
+                    end = header.size();
+                std::string_view line { header.substr(at, end - at) };
+                at = end + 1;
+                if (line.empty() == false && line.back() == '\r')
+                    line.remove_suffix(1);
+                if (line.starts_with(key) == false)
+                    continue;
+                std::string_view number { line.substr(key.size()) };
+                while (number.empty() == false && number.front() == ' ')
+                    number.remove_prefix(1);
+                long long value { 0 };
+                const auto [stop, error] { std::from_chars(number.data(), number.data() + number.size(), value) };
+                if (error != std::errc {} || stop != number.data() + number.size())
+                    return std::nullopt;
+                return value;
+            }
+            return std::nullopt;
+        }
+
+        // [begin, end)가 블록 안의 바른 범위인가.
+        [[nodiscard]] bool html_range(const std::optional<long long> begin, const std::optional<long long> end, const std::size_t size) noexcept
+        {
+            return begin.has_value() && end.has_value() && *begin >= 0 && *begin <= *end && static_cast<unsigned long long>(*end) <= size;
+        }
+
+        // 머리 한 벌의 길이다. 값의 크기와 상관없다.
+        [[nodiscard]] constexpr std::size_t html_header_size() noexcept
+        {
+            std::size_t size { html_version_line.size() };
+            for (const std::string_view key : html_offset_keys)
+                size += key.size() + html_offset_digits + 2;
+            return size;
+        }
     }
 
     bool png_signature(const std::span<const std::uint8_t> bytes) noexcept
@@ -88,6 +154,70 @@ namespace luil::win32 {
         return block;
     }
 
+    std::optional<std::vector<std::byte>> cf_html_block(const std::u8string_view fragment)
+    {
+        if (text::utf8_is_valid(fragment) == false)
+            return std::nullopt;
+        // 머리 길이를 먼저 알아야 offset을 정한다. 값은 열 자리라 길이가 늘 같다.
+        const std::size_t start_html { html_header_size() };
+        const std::size_t start_fragment { start_html + html_document_begin.size() };
+        const std::size_t end_fragment { start_fragment + fragment.size() };
+        const std::size_t end_html { end_fragment + html_document_end.size() };
+
+        std::string header { html_version_line };
+        append_offset(header, html_offset_keys[0], start_html);
+        append_offset(header, html_offset_keys[1], end_html);
+        append_offset(header, html_offset_keys[2], start_fragment);
+        append_offset(header, html_offset_keys[3], end_fragment);
+
+        std::vector<std::byte> block(end_html + 1);
+        std::byte* cursor { block.data() };
+        const auto put = [&cursor](const void* data, const std::size_t size) {
+            std::memcpy(cursor, data, size);
+            cursor += size;
+        };
+        put(header.data(), header.size());
+        put(html_document_begin.data(), html_document_begin.size());
+        put(fragment.data(), fragment.size());
+        put(html_document_end.data(), html_document_end.size());
+        // 끝의 NUL은 `EndHTML` 밖이다. NUL 종단을 기대하는 받는 앱이 있다.
+        *cursor = std::byte { 0 };
+        return block;
+    }
+
+    std::optional<std::u8string> cf_html_fragment(const std::span<const std::byte> block)
+    {
+        if (block.empty())
+            return std::nullopt;
+        // 블록은 첫 NUL까지다. `GlobalSize`는 할당 단위로 올림한 크기라 뒤에 다른 바이트가 붙을 수 있다.
+        const auto* const begin { reinterpret_cast<const char*>(block.data()) };
+        std::size_t size { block.size() };
+        if (const void* const nul { std::memchr(begin, 0, size) }; nul != nullptr)
+            size = static_cast<std::size_t>(static_cast<const char*>(nul) - begin);
+        const std::string_view whole { begin, size };
+        // 머리는 첫 `<` 앞이다. 값을 찾는 데만 쓴다.
+        const std::string_view header { whole.substr(0, std::min(whole.find('<'), whole.size())) };
+        const std::optional<long long> start_html { header_value(header, html_offset_keys[0]) };
+        std::optional<long long> end_html { header_value(header, html_offset_keys[1]) };
+        const std::optional<long long> start_fragment { header_value(header, html_offset_keys[2]) };
+        const std::optional<long long> end_fragment { header_value(header, html_offset_keys[3]) };
+        // `EndHTML:-1`을 쓰는 생산자가 있다. 블록 끝이다.
+        if (end_html.has_value() && *end_html < 0)
+            end_html = static_cast<long long>(size);
+
+        std::string_view selected {};
+        if (html_range(start_fragment, end_fragment, size))
+            selected = whole.substr(static_cast<std::size_t>(*start_fragment), static_cast<std::size_t>(*end_fragment - *start_fragment));
+        else if (html_range(start_html, end_html, size))
+            selected = whole.substr(static_cast<std::size_t>(*start_html), static_cast<std::size_t>(*end_html - *start_html));
+        else
+            return std::nullopt;
+        const std::u8string_view fragment { reinterpret_cast<const char8_t*>(selected.data()), selected.size() };
+        if (fragment.size() > max_clipboard_html_bytes || text::utf8_is_valid(fragment) == false)
+            return std::nullopt;
+        return std::u8string { fragment };
+    }
+
     std::optional<std::vector<clipboard_block>> clipboard_data_blocks(const clipboard_data_copy_request& request, std::u8string& error)
     {
         std::vector<clipboard_block> blocks {};
@@ -106,6 +236,17 @@ namespace luil::win32 {
             if (dib.has_value() == false)
                 return std::nullopt;
             blocks.push_back(clipboard_block { CF_DIBV5, std::move(*dib) });
+        }
+        if (request.html.empty() == false)
+        {
+            std::optional<std::vector<std::byte>> html { cf_html_block(request.html) };
+            if (html.has_value() == false)
+            {
+                error = u8"The clipboard HTML is not valid UTF-8.";
+                return std::nullopt;
+            }
+            if (const UINT format { RegisterClipboardFormatW(html_clipboard_format) }; format != 0)
+                blocks.push_back(clipboard_block { format, std::move(*html) });
         }
         if (request.text.empty() == false)
         {
@@ -143,6 +284,7 @@ namespace luil::win32 {
         try
         {
             const UINT png_format { RegisterClipboardFormatW(png_clipboard_format) };
+            const UINT html_format { RegisterClipboardFormatW(html_clipboard_format) };
             const scoped_clipboard clipboard { owner };
             if (clipboard.open == false)
                 return data;
@@ -157,6 +299,15 @@ namespace luil::win32 {
                     if (lock.memory != nullptr)
                         if (utf_conversion_result<std::u8string> converted { text_from_utf16_block(lock.memory, GlobalSize(handle)) }; converted.value.has_value())
                             data.text = std::move(*converted.value);
+                }
+
+            if (html_format != 0 && IsClipboardFormatAvailable(html_format) != FALSE)
+                if (const HANDLE handle { GetClipboardData(html_format) }; handle != nullptr)
+                {
+                    const scoped_global_lock lock { handle };
+                    if (lock.memory != nullptr)
+                        if (std::optional<std::u8string> fragment { cf_html_fragment(std::span { static_cast<const std::byte*>(lock.memory), GlobalSize(handle) }) }; fragment.has_value())
+                            data.html = std::move(*fragment);
                 }
 
             const std::array<image_candidate, 3> candidates {
@@ -194,6 +345,7 @@ namespace luil::win32 {
         catch (...)
         {
             data.text.clear();
+            data.html.clear();
             data.image.reset();
             data.image_format = clipboard_image_format::none;
             data.image_too_large = false;

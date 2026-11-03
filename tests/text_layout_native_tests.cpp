@@ -5,6 +5,8 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/text_area_element.h"
+#include "luil/ui/ui_tree.h"
+#include "raster_probe.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_layout_skia.h"
 
@@ -402,4 +404,79 @@ TEST_CASE("Native layouts keep line break policies apart and cut at break opport
                 REQUIRE(layout.line_at(row.end, true) == index);
         }
     }
+}
+
+TEST_CASE("A code span lays out in the code face and keeps its own wrap cache entry", "[ui][text-layout][native][rich-text]")
+{
+    if (luil::ui_text_shaping_enabled() == false)
+        SKIP("The configured application retains the legacy text input path");
+
+    // 코드 구간의 배치 폭이 `styles { code }` 요청의 폭과 같고, 보통 face의 폭과 다르다.
+    const std::u8string text { u8"office text" };
+    luil::text_input_view view { .text = text };
+    luil::text_area_config config {};
+    config.wrap = false;
+    config.font_size = 20.0f;
+    luil::text_span code_span { 0, 6 };
+    code_span.code = true;
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { code_span });
+    luil::text_area_element document { { luil::application_element_kind(2) }, view, config };
+    document.arrange({ { 0.0f, 0.0f, 500.0f, 100.0f } });
+    const auto code { luil::make_text_layout({ .text = text, .font_size = 20.0f, .styles = { { 0, 6, false, false, true } } }) };
+    const auto plain { luil::make_text_layout({ .text = text, .font_size = 20.0f }) };
+    const auto start { document.text_span_bounds({ text, 0, 0, 0 }, luil::default_text_measurer()) };
+    const auto end { document.text_span_bounds({ text, 0, text.size(), text.size() }, luil::default_text_measurer()) };
+    REQUIRE(start.has_value());
+    REQUIRE(end.has_value());
+    REQUIRE(end->x - start->x == Catch::Approx(code.size().width));
+    // 시험 실행의 글꼴 설정이 코드 글꼴을 따로 두지 않으면 같은 face라 폭도 같다. 다른 face일 때만 폭이 갈린다.
+    const auto ui_face { luil::configured_ui_typeface() };
+    const auto code_face { luil::configured_code_typeface() };
+    if (ui_face != nullptr && code_face != nullptr && ui_face->uniqueID() != code_face->uniqueID())
+        REQUIRE(code.size().width != Catch::Approx(plain.size().width));
+
+    // 같은 글의 문단이 코드 구간만 다르면 wrap cache가 따로 쥔다. 코드 face는 advance를 바꾼다.
+    const std::u8string paragraphs { u8"abc\nabc\nabc" };
+    luil::text_area_config repeated {};
+    repeated.wrap = false;
+    repeated.font_size = 20.0f;
+    repeated.wrap_cache = std::make_shared<luil::text_area_wrap_cache>();
+    luil::text_span middle { 4, 7 };
+    middle.code = true;
+    repeated.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { middle });
+    luil::text_area_element three { { luil::application_element_kind(3) }, luil::text_input_view { .text = paragraphs }, repeated };
+    three.arrange({ { 0.0f, 0.0f, 500.0f, 100.0f } });
+    REQUIRE(repeated.wrap_cache->size() == 2u);
+    // 밑줄은 폭을 바꾸지 않아 배치에 싣지 않는다. 밑줄만 다른 문단은 한 항목이다.
+    luil::text_area_config underlined { repeated };
+    underlined.wrap_cache = std::make_shared<luil::text_area_wrap_cache>();
+    luil::text_span line { 4, 7 };
+    line.underline = true;
+    underlined.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { line });
+    luil::text_area_element lined { { luil::application_element_kind(3) }, luil::text_input_view { .text = paragraphs }, underlined };
+    lined.arrange({ { 0.0f, 0.0f, 500.0f, 100.0f } });
+    REQUIRE(underlined.wrap_cache->size() == 1u);
+}
+
+TEST_CASE("An underline span draws a line under its glyphs in the span color", "[ui][text-layout][native][rich-text][raster]")
+{
+    if (luil::ui_text_shaping_enabled() == false)
+        SKIP("The configured application retains the legacy text input path");
+
+    // 강조색 구간이라 글자와 밑줄이 강조색이다. 밑줄이 있으면 강조색 화소가 그만큼 는다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const auto accent_pixels = [&](const bool underline) {
+        luil::text_span span { 0, 6, luil::text_color_role::accent };
+        span.underline = underline;
+        luil::text_area_config config {};
+        config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { span });
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::text_area_element>(luil::ui_element_id { luil::application_element_kind(4) }, luil::text_input_view { .text = u8"office" }, std::move(config)), { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        luil::testing::raster_frame frame { 400, 200, palette };
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame.count_color({ 0.0f, 0.0f, 400.0f, 200.0f }, palette.accent);
+    };
+    const int plain { accent_pixels(false) };
+    const int lined { accent_pixels(true) };
+    // 글 폭이 수십 물리 픽셀이고 밑줄은 2 물리 픽셀 두께라 적어도 그 폭만큼 는다.
+    REQUIRE(lined > plain + 40);
 }

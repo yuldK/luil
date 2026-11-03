@@ -15,13 +15,16 @@ namespace luil::android {
     //    읽으면 시스템이 알림을 띄운다.
     //  - Java 예외는 거두고 실패로 돌려준다.
     [[nodiscard]] bool copy_text_to_clipboard(JNIEnv& env, jobject context, std::u8string_view text);
+    // 글과 HTML 조각을 한 항목에 넣는다 (`ClipData.newHtmlText`, docs/rich-edit-exchange-design.md). HTML이 비면 글만 넣는다.
+    //  - `clipboard_data_copy_request`의 글·HTML 칸이다. 그림 칸은 넣지 못한다 (image-clipboard-design.md 결정 7).
+    [[nodiscard]] bool copy_rich_text_to_clipboard(JNIEnv& env, jobject context, std::u8string_view text, std::u8string_view html);
     // 글이 없거나 읽지 못하면 nullopt다.
     //  - 첫 항목에 글(`getText`)이 없고 URI의 형식이 `text/`가 아니면(그림 URI 같은) 글이 없다고 본다. `coerceToText`가
     //    그 URI를 `content://…` 글로 바꿔 칸에 붙이는 것을 막는다 (image-clipboard-design.md 결정 8).
     [[nodiscard]] std::optional<std::u8string> read_text_from_clipboard(JNIEnv& env, jobject context);
 
     // 클립보드의 글과 그림을 함께 읽는다 (`clipboard_data_paste_request`, image-clipboard-design.md).
-    //  - 항목을 차례로 보아 첫 `getText()`가 글이고, `getUri()`의 형식(`ContentResolver.getType`)이 `image/`로 시작하는 첫
+    //  - 항목을 차례로 보아 첫 `getText()`가 글(그 항목의 `getHtmlText()`가 HTML)이고, `getUri()`의 형식(`ContentResolver.getType`)이 `image/`로 시작하는 첫
     //    항목을 `openInputStream`으로 읽어 `encoded` 바이트로 싣는다.
     //  - `max_clipboard_image_bytes`(256 MiB)에서 멈추고 `image_too_large`다. 번호(`sequence`)는 0이다.
     //  - 다른 프로세스의 provider가 느리면 그만큼 이 thread가 멈춘다. 읽지 못하면 빈 답이다.
