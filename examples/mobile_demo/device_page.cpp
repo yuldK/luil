@@ -150,7 +150,6 @@ namespace mobile_demo {
 
     page_content device_page::build(const float width, const float scale, const window_metrics_intent& window)
     {
-        static_cast<void>(scale);
         const luil::ui_platform_capabilities capabilities { luil::current_ui_platform().capabilities };
         const float choice_width { std::min(width - 2.0f * page_padding, 360.0f) };
 
@@ -287,8 +286,9 @@ namespace mobile_demo {
         // 알림 영역 아이콘도 데스크톱의 것이다 (tray-icon-design.md). 요청(`ui_frame::tray`)은 실을 수 있고 하지 못하는 플랫폼은 받기만 한다.
         column.gap(20.0f);
         column.heading(u8"tray-heading", u8"알림 영역 아이콘");
+        // 없다는 설명은 좁은 화면과 큰 글꼴 배율에서 한 줄 끝이 말줄임으로 잘리므로 줄을 바꾼다.
         if (capabilities.tray == false)
-            column.note(u8"tray-none", u8"이 플랫폼에는 알림 영역 아이콘이 없다. 알림은 OS 알림이 맡는다.");
+            column.wrapped_note(u8"tray-none", u8"이 플랫폼에는 알림 영역 아이콘이 없다. 알림은 OS 알림이 맡는다.", width, scale);
         else
             column.note(u8"tray-note", u8"알림 영역에 아이콘을 세울 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
 

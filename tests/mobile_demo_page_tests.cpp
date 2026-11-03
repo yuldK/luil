@@ -1669,6 +1669,30 @@ TEST_CASE("The long notes of the basics page break lines instead of ending in an
     }
 }
 
+TEST_CASE("The device page breaks the tray note into lines instead of an ellipsis", "[mobile-demo][tray]")
+{
+    // 실기기 폭 384dp·글꼴 배율 1.1에서 한 줄 설명이 "…알림은 OS 알림이…"로 잘렸다. 폭 320dp 쪽은 어느 글꼴에서나 두 줄 이상이다.
+    // 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다. 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform platform { previous };
+    platform.capabilities.tray = false;
+    luil::set_ui_platform(platform);
+    mobile_demo::device_page page {};
+    const mobile_demo::window_metrics_intent window { .width = 320.0f, .height = 800.0f, .scale = 1.0f };
+    auto content { page.build(320.0f, 1.0f, window) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
+    luil::set_ui_platform(previous);
+
+    const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, u8"tray-none" }) };
+    REQUIRE(note != nullptr);
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+    REQUIRE(wrapped.has_value());
+    REQUIRE(wrapped->height >= 2.0f * line);
+}
+
 TEST_CASE("The mobile rating row has finger sized stars and reads its value back", "[mobile-demo][basics][rating]")
 {
     mobile_demo::basics_page page {};
