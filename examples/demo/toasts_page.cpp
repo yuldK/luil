@@ -3,7 +3,9 @@
 #include "luil/generated/codicons.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/info_bar_element.h"
+#include "luil/ui/layer_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/teaching_tip_element.h"
 
 #include <algorithm>
 #include <array>
@@ -114,6 +116,23 @@ namespace demo {
             return text;
         }
 
+        // 풍선이 닫힌 계기의 낱말이다. 상태 label에 적힌다.
+        [[nodiscard]] std::u8string_view dismiss_word(const luil::teaching_tip_dismiss_reason reason) noexcept
+        {
+            switch (reason)
+            {
+            case luil::teaching_tip_dismiss_reason::outside:
+                return u8"바깥 누름";
+            case luil::teaching_tip_dismiss_reason::escape:
+                return u8"Esc";
+            case luil::teaching_tip_dismiss_reason::back:
+                return u8"뒤로 가기";
+            case luil::teaching_tip_dismiss_reason::close_button:
+                break;
+            }
+            return u8"닫기 단추";
+        }
+
         [[nodiscard]] luil::info_bar_config make_info_bar(const luil::ui_severity severity)
         {
             const bar_text text { bar_text_of(severity) };
@@ -165,6 +184,33 @@ namespace demo {
             os_event_ = event->event;
             return true;
         }
+        if (const auto* const open { message.get<tip_open_intent>() }; open != nullptr)
+        {
+            tip_open_ = true;
+            tip_modal_ = open->modal;
+            tip_opener_ = open->opener;
+            tip_opened_at_ = std::chrono::steady_clock::now();
+            // 명령으로 연 비modal 풍선은 초점을 primary로 옮긴다. 덮개는 가둠의 진입이 옮긴다.
+            if (tip_modal_ == false)
+                request_focus(luil::teaching_tip_element::primary_id(tip_owner));
+            return true;
+        }
+        if (const auto* const dismiss { message.get<tip_dismiss_intent>() }; dismiss != nullptr)
+        {
+            finish_tip(std::u8string { dismiss_word(dismiss->reason) });
+            return true;
+        }
+        if (const auto* const action { message.get<tip_action_intent>() }; action != nullptr)
+        {
+            // 행동 단추는 풍선을 닫지 않는다. 닫는 것은 이 앱의 선택이다.
+            finish_tip(action->primary ? u8"써 보기" : u8"나중에");
+            return true;
+        }
+        if (message.get<tip_target_intent>() != nullptr)
+        {
+            push(u8"새 기능을 눌렀습니다.", luil::toast_severity::info, toast_request_intent {}.duration);
+            return true;
+        }
         if (message.get<info_bar_reopen_intent>() != nullptr)
         {
             bars_open_.fill(true);
@@ -208,6 +254,9 @@ namespace demo {
 
     std::optional<std::chrono::steady_clock::time_point> toasts_page::next_expiry() const
     {
+        // 풍선 상태 label이 이번 frame의 대상 자리와 다르면 지금 한 frame을 더 짓는다.
+        if (tip_relabel_)
+            return std::chrono::steady_clock::now();
         std::optional<std::chrono::steady_clock::time_point> next {};
         for (const toast_entry& entry : toasts_)
         {
@@ -223,8 +272,10 @@ namespace demo {
     std::unique_ptr<luil::ui_element> toasts_page::build(const float width, const float height, const float scale)
     {
         static_cast<void>(height);
+        page_root_ = nullptr;
         page_layout page { u8"toasts" };
         page.heading(u8"토스트", u8"토스트는 오른쪽 아래에 쌓이고, 시간이 다 되면 흐려집니다.");
+        add_tip_card(page);
 
         // 심각도별 트리거다. 단추의 글리프가 토스트에 붙을 글리프와 같다.
         page.begin_card(u8"심각도", u8"바탕은 모두 같은 중립 판입니다. 심각도는 글리프와 그 색이 말합니다.");
@@ -317,7 +368,88 @@ namespace demo {
         page.end_card();
 
         add_os_notification_card(page);
-        return page.finish(scroll_, [](const float delta) { return luil::make_app_action(toasts_scroll_intent { delta }); });
+        auto root { page.finish(scroll_, [](const float delta) { return luil::make_app_action(toasts_scroll_intent { delta }); }) };
+        page_root_ = root.get();
+        return root;
+    }
+
+    void toasts_page::add_tip_card(page_layout& page)
+    {
+        page.begin_card(u8"안내 풍선", u8"새 기능 단추를 꼬리로 가리킵니다. 덮개는 바깥 누름과 Esc로도 닫히고, 비modal은 닫기 단추로만 닫힙니다.");
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tip-buttons" }, row_config) };
+        auto target { std::make_unique<luil::text_button_element>(tip_target_id(), luil::text_button_config { .text = u8"새 기능" }) };
+        target->set_cursor(luil::ui_cursor::hand);
+        target->set_action(luil::ui_trigger::left_click, luil::make_message_action(tip_target_intent {}));
+        row->add_fit(std::move(target));
+        const auto add_opener = [&row](std::u8string owner, std::u8string label, const bool modal) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_toast_trigger, std::move(owner) }, luil::text_button_config { .text = std::move(label) }) };
+            button->set_cursor(luil::ui_cursor::hand);
+            // 연 단추가 돌아갈 자리다. 액션이 자기 id를 받는다.
+            button->set_action(luil::ui_trigger::left_click, [modal](const luil::ui_action_context& context) -> std::vector<luil::input_action> {
+                return { luil::make_app_action(tip_open_intent { modal, context.element }) };
+            });
+            row->add_fit(std::move(button));
+        };
+        add_opener(u8"toasts/tip-open-modal", u8"덮개로 열기", true);
+        add_opener(u8"toasts/tip-open-modeless", u8"비modal로 열기", false);
+        page.add(std::move(row), luil::text_button_height);
+        page.gap(8.0f);
+
+        // 열림, 방향, 마지막 닫힘을 label로 그려 UIA가 되읽는다. 방향은 바라는 방향이고, 지난 frame에 대상을 찾지 못했으면 "대상 없음"이다.
+        std::u8string state { u8"안내 풍선: " };
+        if (tip_open_)
+            state += tip_modal_ ? u8"열림(덮개)" : u8"열림(비modal)";
+        else
+            state += u8"닫힘";
+        state += u8" · 방향: ";
+        if (tip_open_ == false)
+            state += u8"없음";
+        else
+            state += tip_target_found_ ? u8"아래" : u8"대상 없음";
+        state += u8" · 마지막 닫힘: ";
+        state += tip_last_close_.empty() ? std::u8string { u8"없음" } : tip_last_close_;
+        tip_label_found_ = tip_target_found_;
+        page.add(make_label({ kind_text, u8"toasts/tip-state" }, std::move(state), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.end_card();
+    }
+
+    void toasts_page::finish_tip(std::u8string reason)
+    {
+        // 늦게 온 닫기 메시지가 다시 연 풍선의 기록을 덮지 않는다.
+        if (tip_open_ == false)
+            return;
+        tip_open_ = false;
+        tip_last_close_ = std::move(reason);
+        // 비modal은 가둠이 없어 되돌리기가 없다. 연 단추로 초점 요청을 싣는다.
+        if (tip_modal_ == false && tip_opener_ != luil::ui_element_id {})
+            request_focus(tip_opener_);
+    }
+
+    void toasts_page::close_tip()
+    {
+        tip_open_ = false;
+        tip_relabel_ = false;
+    }
+
+    bool toasts_page::tip_open() const noexcept
+    {
+        return tip_open_;
+    }
+
+    void toasts_page::request_focus(luil::ui_element_id target)
+    {
+        ++focus_revision_;
+        focus_target_ = std::move(target);
+    }
+
+    std::optional<luil::focus_request> toasts_page::make_focus_request() const
+    {
+        if (focus_revision_ == 0)
+            return std::nullopt;
+        return luil::focus_request { .id = focus_revision_, .target = focus_target_ };
     }
 
     void toasts_page::add_os_notification_card(page_layout& page) const
@@ -349,6 +481,49 @@ namespace demo {
     std::unique_ptr<luil::ui_element> toasts_page::make_overlay()
     {
         prune();
+        std::unique_ptr<luil::ui_element> tip { make_tip() };
+        std::unique_ptr<luil::ui_element> stack { make_toast_stack() };
+        if (tip == nullptr)
+            return stack;
+        if (stack == nullptr)
+            return tip;
+        // 둘 다 창 전체를 받는다. 풍선이 뒤라 위에 그려지고 Tab 순서의 끝이다.
+        auto layer { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"toasts/overlay" }) };
+        layer->add(std::move(stack));
+        layer->add(std::move(tip));
+        return layer;
+    }
+
+    std::unique_ptr<luil::ui_element> toasts_page::make_tip()
+    {
+        // 이번 build의 가지가 있을 때만 대상을 찾는다. 쓴 뒤 잊어 다음 frame에 낡은 가지를 읽지 않는다.
+        const luil::ui_element* const branch { page_root_ };
+        page_root_ = nullptr;
+        if (tip_open_ == false)
+        {
+            tip_relabel_ = false;
+            return nullptr;
+        }
+        luil::teaching_tip_config config {};
+        config.owner = std::u8string { tip_owner };
+        if (branch != nullptr)
+            config.target = luil::teaching_tip_target(*branch, tip_target_id());
+        tip_target_found_ = config.target.has_value();
+        tip_relabel_ = branch != nullptr && tip_target_found_ != tip_label_found_;
+        config.side = luil::field_popup_side::below;
+        config.modal = tip_modal_;
+        config.title = u8"새 기능";
+        config.body = u8"새 기능 단추로 바로 시작할 수 있습니다. 덮개 풍선은 바깥을 누르거나 Esc를 치면 닫힙니다.";
+        config.primary = luil::teaching_tip_button { u8"써 보기", luil::make_message_action(tip_action_intent { true }) };
+        config.secondary = luil::teaching_tip_button { u8"나중에", luil::make_message_action(tip_action_intent { false }) };
+        config.dismiss = [](const luil::teaching_tip_dismiss_reason reason) { return luil::make_app_action(tip_dismiss_intent { reason }); };
+        config.focus_return = tip_opener_;
+        config.opened_at = tip_opened_at_;
+        return std::make_unique<luil::teaching_tip_element>(std::move(config));
+    }
+
+    std::unique_ptr<luil::ui_element> toasts_page::make_toast_stack() const
+    {
         if (toasts_.empty())
             return nullptr;
 

@@ -1,6 +1,7 @@
 #include "raster_probe.h"
 
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -22,6 +23,8 @@
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/split_handle_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/teaching_tip_element.h"
+#include "luil/ui/transition.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
@@ -37,6 +40,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -1906,4 +1910,167 @@ TEST_CASE("A menu bar paints no row background and shades only hovered, selected
     REQUIRE(open.pixel_at(132, 28) == palette.window_background);
     // 막대 오른쪽의 빈 자리도 칠하지 않는다.
     REQUIRE(open.pixel_at(300, 28) == palette.window_background);
+}
+
+namespace {
+    [[nodiscard]] std::chrono::year_month_day raster_date(const unsigned day)
+    {
+        return { std::chrono::year { 2026 }, std::chrono::November, std::chrono::day { day } };
+    }
+
+    // 2026년 11월 달력이다 (1일이 일요일). 배율 2에서 칸은 물리 64이고 격자는 y 112부터다. n일(1~7)은 x (n - 1) × 64부터다.
+    //  - 고른 날 `value`, 오늘 `today`다. 주말은 고를 수 없다. 글꼴이 없어 숫자는 그려지지 않고 채움과 테만 남는다.
+    [[nodiscard]] luil::ui_tree make_calendar_tree(const unsigned value, const unsigned today)
+    {
+        luil::calendar_config config {};
+        config.owner = u8"trip";
+        config.value = raster_date(value);
+        config.cursor = raster_date(value);
+        config.today = raster_date(today);
+        config.available = [](const std::chrono::year_month_day day) {
+            const std::chrono::weekday weekday { std::chrono::sys_days { day } };
+            return weekday != std::chrono::Saturday && weekday != std::chrono::Sunday;
+        };
+        config.select = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        config.move_to = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        return luil::make_arranged_tree(std::make_unique<luil::calendar_element>(std::move(config)), { 0.0f, 0.0f, 500.0f, 700.0f }, raster_scale);
+    }
+
+    [[nodiscard]] luil::ui_element_id raster_day(const unsigned day)
+    {
+        return luil::calendar_element::day_id(u8"trip", raster_date(day));
+    }
+}
+
+TEST_CASE("The chosen day is an accent fill and today is an accent ring with an inner ring when both", "[ui][raster][calendar]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::ui_color accent { over(palette.accent, palette.window_background) };
+        // 3일을 고르고 오늘은 5일이다. 3일 칸은 x 128..192, 5일 칸은 x 256..320, 줄은 y 112..176이다.
+        luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+        frame.set_theme(theme);
+        frame.draw(make_calendar_tree(3, 5), luil::interaction_snapshot {});
+        REQUIRE(same_color(frame.pixel_at(160, 144), accent));
+        // 칸 안쪽 여백(논리 2, 물리 4)은 채우지 않는다.
+        REQUIRE(frame.pixel_at(129, 144) == palette.window_background);
+        // 오늘은 채움 없이 테 1.5 논리 픽셀(물리 3)이다. 테는 칸 여백 안쪽 x 260..263이다.
+        REQUIRE(same_color(frame.pixel_at(261, 144), accent));
+        REQUIRE(frame.pixel_at(288, 144) == palette.window_background);
+        // 고르지 않은 평일은 아무것도 칠하지 않는다.
+        REQUIRE(frame.pixel_at(224, 144) == palette.window_background);
+
+        // 고른 날이 오늘이면 채움 바깥 테는 강조색, 그 안쪽 테는 강조 위 글색이다. 색 하나로만 가르지 않는다.
+        luil::testing::raster_frame both { 500, 700, palette, raster_scale };
+        both.set_theme(theme);
+        both.draw(make_calendar_tree(3, 3), luil::interaction_snapshot {});
+        REQUIRE(same_color(both.pixel_at(133, 144), accent));
+        REQUIRE(same_color(both.pixel_at(136, 144), over(palette.accent_foreground, accent)));
+        REQUIRE(same_color(both.pixel_at(160, 144), accent));
+    }
+}
+
+TEST_CASE("Only a day that can be chosen shows the hover fill", "[ui][raster][calendar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color hover { over(palette.button_hover_background, palette.window_background) };
+    REQUIRE(same_color(hover, palette.window_background) == false);
+    // 4일(수요일, x 192..256)은 고를 수 있고 7일(토요일, x 384..448)은 고를 수 없다.
+    luil::interaction_snapshot over_wednesday {};
+    over_wednesday.hovered = raster_day(4);
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(make_calendar_tree(3, 5), over_wednesday);
+    REQUIRE(same_color(frame.pixel_at(224, 144), hover));
+
+    luil::interaction_snapshot over_saturday {};
+    over_saturday.hovered = raster_day(7);
+    luil::testing::raster_frame blocked { 500, 700, palette, raster_scale };
+    blocked.draw(make_calendar_tree(3, 5), over_saturday);
+    REQUIRE(blocked.pixel_at(416, 144) == palette.window_background);
+}
+
+namespace {
+    // 안내 풍선 raster 축이다. 화면은 물리 400x300이고 배율은 2다.
+    //  - 대상은 물리 (150, 20) 100x40이고 가운데 x는 200이다. 풍선은 논리 80x48(닫기만 있다)이라 물리 (120, 80) 160x96에 선다.
+    //  - 꼬리는 위 변(y 80)에서 위를 가리키고 끝이 y 64다. 밑변은 x 184..216이다.
+    [[nodiscard]] luil::ui_tree make_tip_tree(const std::chrono::steady_clock::time_point opened_at = {})
+    {
+        luil::teaching_tip_config config {};
+        config.owner = u8"tip";
+        config.width = 80.0f;
+        config.target = luil::rect_f { 150.0f, 20.0f, 100.0f, 40.0f };
+        config.opened_at = opened_at;
+        config.dismiss = [](const luil::teaching_tip_dismiss_reason) { return luil::input_action {}; };
+        auto tip { std::make_unique<luil::teaching_tip_element>(std::move(config)) };
+        tip->arrange({ { 0.0f, 0.0f, 400.0f, 300.0f }, raster_scale });
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 300.0f }, raster_scale });
+        root->add(std::move(tip));
+        return luil::ui_tree { std::move(root) };
+    }
+
+    // 채널마다 `tolerance` 안이면 같은 색이다. 비스듬한 획은 안티에일리어싱이 덮개를 조금 덜 채운다.
+    [[nodiscard]] bool near_color(const luil::ui_color actual, const luil::ui_color expected, const int tolerance) noexcept
+    {
+        for (const std::uint32_t shift : { 0U, 8U, 16U })
+        {
+            const int difference { static_cast<int>((actual >> shift) & 0xFFU) - static_cast<int>((expected >> shift) & 0xFFU) };
+            if (std::abs(difference) > tolerance)
+                return false;
+        }
+        return true;
+    }
+}
+
+TEST_CASE("A teaching tip tail shares the body fill and its border runs around the tail, not across its base", "[ui][raster][teaching-tip]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        CAPTURE(static_cast<int>(theme));
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::ui_color border { over(palette.control_border, palette.raised_background) };
+        REQUIRE(same_color(border, palette.raised_background) == false);
+        luil::testing::raster_frame frame { 400, 300, palette, raster_scale };
+        frame.set_theme(theme);
+        frame.draw(make_tip_tree(), luil::interaction_snapshot {});
+
+        // 꼬리 안은 몸과 같은 바탕이다. 밑변 자리(y 80)에도 테가 가로지르지 않는다.
+        REQUIRE(frame.pixel_at(200, 74) == palette.raised_background);
+        REQUIRE(frame.pixel_at(200, 80) == palette.raised_background);
+        REQUIRE(frame.pixel_at(200, 130) == palette.raised_background);
+        // 꼬리 밖의 위 변은 1 논리 픽셀 테다.
+        REQUIRE(same_color(frame.pixel_at(150, 80), border));
+        // 꼬리의 비스듬한 변에도 테가 돈다. 끝(y 64) 위는 창 쪽이다.
+        bool edged { false };
+        for (int x { 186 }; x < 200; ++x)
+            edged = edged || near_color(frame.pixel_at(x, 72), border, 24);
+        REQUIRE(edged);
+        // 덮개는 투명하다. 풍선 밖은 창 바탕 그대로다.
+        REQUIRE(frame.pixel_at(20, 280) == palette.window_background);
+    }
+}
+
+TEST_CASE("A teaching tip fades in from the side away from its tail while it appears", "[ui][raster][teaching-tip]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const std::chrono::steady_clock::time_point opened { std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { 1000 } };
+
+    // 연 시각 전에는 아무것도 그리지 않는다.
+    luil::testing::raster_frame before { 400, 300, palette, raster_scale };
+    before.draw(make_tip_tree(opened), luil::interaction_snapshot {}, opened - std::chrono::milliseconds { 1 });
+    REQUIRE(before.pixel_at(200, 130) == palette.window_background);
+
+    // 길이의 가운데(70 ms)에서 몸 전체가 반쯤 비치고, 꼬리 반대쪽(아래)으로 논리 2(물리 4)만큼 밀려 있다.
+    luil::testing::raster_frame middle { 400, 300, palette, raster_scale };
+    middle.draw(make_tip_tree(opened), luil::interaction_snapshot {}, opened + std::chrono::milliseconds { 70 });
+    const luil::ui_color half { over((palette.raised_background & 0x00FFFFFFU) | 0x80000000U, palette.window_background) };
+    REQUIRE(near_color(middle.pixel_at(200, 130), half, 3));
+    REQUIRE(middle.pixel_at(200, 82) != palette.raised_background);
+
+    // 끝나면 제자리에 불투명하게 선다.
+    luil::testing::raster_frame done { 400, 300, palette, raster_scale };
+    done.draw(make_tip_tree(opened), luil::interaction_snapshot {}, opened + luil::transition_duration);
+    REQUIRE(done.pixel_at(200, 130) == palette.raised_background);
+    REQUIRE(done.pixel_at(200, 82) == palette.raised_background);
 }

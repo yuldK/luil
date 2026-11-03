@@ -16,12 +16,15 @@
 #include "mobile_demo/zoom_page.h"
 #include "sample_image_bytes.h"
 
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/message_box.h"
 #include "luil/ui/rating_element.h"
 #include "luil/ui/root_element.h"
+#include "luil/ui/scroll_view_element.h"
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/strip_element.h"
+#include "luil/ui/teaching_tip_element.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
@@ -1659,7 +1662,7 @@ TEST_CASE("The long notes of the basics page break lines instead of ending in an
     const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
     const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
     const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
-    for (const std::u8string& owner : { std::u8string { u8"rating-title" }, std::u8string { u8"readonly" }, std::u8string { u8"basics-hint" } })
+    for (const std::u8string& owner : { std::u8string { u8"rating-title" }, std::u8string { u8"color-title" }, std::u8string { u8"line-break" }, std::u8string { u8"readonly" }, std::u8string { u8"basics-hint" } })
     {
         const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, owner }) };
         REQUIRE(note != nullptr);
@@ -2598,4 +2601,157 @@ TEST_CASE("The mobile first screen stands no menu bar", "[mobile-demo][menu-bar]
     const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
     REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar).empty());
     REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar_item).empty());
+}
+
+TEST_CASE("The mobile date field opens a finger sized calendar and choosing a day closes it", "[ui][date-picker][mobile-demo]")
+{
+    const auto date = [](const unsigned month, const unsigned day) { return std::chrono::year_month_day { std::chrono::year { 2026 }, std::chrono::month { month }, std::chrono::day { day } }; };
+    const luil::ui_element_id field_id { luil::ui_element_kind::date_field, u8"date-field" };
+    mobile_demo::popups_page page {};
+    auto screen { build_popups_screen(page) };
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 3일");
+    const luil::ui_element* const field { screen.tree.find(field_id) };
+    REQUIRE(field != nullptr);
+    // 손가락으로 누르는 칸이라 높이가 터치 영역이다.
+    REQUIRE(field->bounds().height == mobile_demo::touch_height);
+    REQUIRE(field->accessibility().name == u8"마감 날짜");
+    REQUIRE(page.make_focus_request().has_value() == false);
+
+    // 누르면 열리고 popup의 커서 날로 초점 요청이 실린다. 달력 칸은 44라 popup 폭이 7칸과 여백이다.
+    const auto pressed { (*field->action(luil::ui_trigger::left_click))({ field->id(), 0.0f, 0.0f }) };
+    deliver(page, std::get<luil::app_message>(pressed.front()));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface == u8"date-popup");
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"date", date(11, 3)));
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 열림 · 2026년 11월 3일");
+    const luil::rect_f bounds { screen.tree.find(field_id)->bounds() };
+    auto popups { page.make_popups(1.0f, { 0.0f, 0.0f, 400.0f, 2000.0f }) };
+    REQUIRE(popups.size() == 1u);
+    REQUIRE(popups.front().id == u8"date-popup");
+    REQUIRE(popups.front().width == 44.0f * 7.0f + 16.0f);
+    REQUIRE(popups.front().x == bounds.x);
+    REQUIRE(popups.front().y == bounds.y + bounds.height + 2.0f);
+    const luil::ui_element* const day { popups.front().tree->find(luil::calendar_element::day_id(u8"date", date(11, 20))) };
+    REQUIRE(day != nullptr);
+    REQUIRE(day->bounds().width == 44.0f);
+
+    // 날을 누르면 커서를 옮긴 뒤 고르고, 닫히고, 칸으로 초점이 돌아온다.
+    for (const luil::input_action& action : (*day->action(luil::ui_trigger::left_click))({ day->id(), 0.0f, 0.0f }))
+        deliver(page, std::get<luil::app_message>(action));
+    const std::optional<luil::focus_request> back { page.make_focus_request() };
+    REQUIRE(back->id == focus->id + 2u);
+    REQUIRE(back->surface.empty());
+    REQUIRE(back->target == field_id);
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 20일");
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+
+    // 바깥 누름 닫기는 초점을 옮기지 않는다.
+    deliver(page, mobile_demo::date_field_intent { true });
+    screen = build_popups_screen(page);
+    const std::uint64_t opened { page.make_focus_request()->id };
+    popups = page.make_popups(1.0f, screen.surface());
+    REQUIRE(popups.size() == 1u);
+    deliver(page, std::get<luil::app_message>(popups.front().dismiss(luil::popup_dismiss_reason::pointer_press_outside)));
+    REQUIRE(page.make_focus_request()->id == opened);
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+}
+
+namespace {
+    const luil::ui_element_id mobile_tip_root { luil::ui_element_kind::teaching_tip, u8"tip" };
+
+    // 셸처럼 흘리는 창에 담아 높이 `height`로 배치한 토스트 페이지다. 흘린 양은 `offset`이다.
+    [[nodiscard]] luil::ui_tree scrolled_toasts(mobile_demo::toasts_page& page, const float offset, const float height = 700.0f)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { mobile_demo::kind_layout, u8"toasts-scroll" }, luil::scroll_view_config { content.height, offset }) };
+        view->set_content(std::move(content.element));
+        return luil::make_arranged_tree(std::move(view), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] luil::ui_tree mobile_tip_overlay(mobile_demo::toasts_page& page, const luil::ui_tree& screen, const float height = 700.0f)
+    {
+        auto overlay { page.make_overlay(screen.root()) };
+        if (overlay == nullptr)
+            overlay = std::make_unique<luil::root_element>();
+        return luil::make_arranged_tree(std::move(overlay), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] std::u8string mobile_tip_state(const luil::ui_tree& tree)
+    {
+        const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, u8"tip-state" }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    void run_tip(mobile_demo::toasts_page& page, const luil::ui_action* const action, const luil::ui_element_id& id)
+    {
+        REQUIRE(action != nullptr);
+        const auto pressed { (*action)(luil::ui_action_context { id, 0.0f, 0.0f }) };
+        REQUIRE(pressed.size() == 1u);
+        deliver(page, std::get<luil::app_message>(pressed.front()));
+    }
+}
+
+TEST_CASE("The mobile toasts page opens a finger sized teaching tip and back closes it", "[ui][teaching-tip][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f) };
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    REQUIRE(opener != nullptr);
+    REQUIRE(opener->bounds().height == mobile_demo::touch_height);
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+    REQUIRE(page.tip_open());
+
+    screen = scrolled_toasts(page, 0.0f);
+    {
+        const luil::ui_tree overlay { mobile_tip_overlay(page, screen) };
+        const luil::ui_element* const tip { overlay.find(mobile_tip_root) };
+        REQUIRE(tip != nullptr);
+        REQUIRE(tip->accessibility().role == luil::access_role::dialog);
+        // 손가락 칸이다. 닫기는 44 정사각이고 행동 단추도 44 높이다.
+        const luil::rect_f close { overlay.find(luil::teaching_tip_element::close_id(mobile_demo::tip_owner))->bounds() };
+        REQUIRE(close.width == mobile_demo::touch_height);
+        REQUIRE(close.height == mobile_demo::touch_height);
+        REQUIRE(overlay.find(luil::teaching_tip_element::primary_id(mobile_demo::tip_owner))->bounds().height == mobile_demo::touch_height);
+        // 대상 아래에 선다.
+        const luil::rect_f target { screen.find(mobile_demo::tip_target_id())->bounds() };
+        REQUIRE(overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"tip" })->bounds().y >= target.y + target.height);
+    }
+    screen = scrolled_toasts(page, 0.0f);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 없음");
+    static_cast<void>(mobile_tip_overlay(page, screen));
+    REQUIRE(page.next_expiry().has_value() == false);
+
+    // 뒤로 가기는 셸이 frame에 싣는 메시지로 닫는다.
+    deliver(page, std::get<luil::app_message>(page.back_action()));
+    screen = scrolled_toasts(page, 0.0f);
+    REQUIRE(page.tip_open() == false);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 뒤로 가기");
+}
+
+TEST_CASE("Scrolling the mobile new feature button away leaves the teaching tip without a target", "[ui][teaching-tip][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f, 300.0f) };
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modeless" }) };
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+
+    // 흘려 대상을 창 밖으로 내보낸다. 그 frame의 풍선은 대상이 없고 다음 frame의 설명이 적는다.
+    screen = scrolled_toasts(page, 900.0f, 300.0f);
+    {
+        const luil::ui_tree overlay { mobile_tip_overlay(page, screen, 300.0f) };
+        REQUIRE(overlay.find(mobile_tip_root)->accessibility().role == luil::access_role::pane);
+    }
+    screen = scrolled_toasts(page, 900.0f, 300.0f);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 열림(비modal) · 방향: 대상 없음 · 마지막 닫힘: 없음");
+
+    // 다른 페이지에 있는 동안(설명을 짓지 않는 frame)에는 한 frame을 더 청하지 않는다.
+    static_cast<void>(page.make_overlay(nullptr));
+    REQUIRE(page.next_expiry().has_value() == false);
+    page.close_tip();
+    REQUIRE(page.make_overlay(nullptr) == nullptr);
 }

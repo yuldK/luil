@@ -459,7 +459,7 @@ namespace mobile_demo {
 
         // 줄 나눔 칸이다. 같은 글을 같은 폭의 여러 줄 label과 여러 줄 칸에 위아래로 놓고, 스위치로 정책을 바꾼다.
         // 상태 줄은 이 배율에서 잰 줄 수와 label 첫 줄의 끝 글자를 그린다 (line-break-design.md).
-        column.note(u8"line-break", u8"줄 나눔 (한국어는 어절 · 닫는 부호는 줄 머리에 두지 않는다)");
+        column.wrapped_note(u8"line-break", u8"줄 나눔 (한국어는 어절 · 닫는 부호는 줄 머리에 두지 않는다)", width, scale);
         column.gap(4.0f);
         {
             const bool syllables { line_break_policy_ == luil::text::line_break_policy::unicode };

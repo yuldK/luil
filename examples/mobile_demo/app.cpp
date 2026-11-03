@@ -169,7 +169,8 @@ namespace mobile_demo {
         // 시트는 창 전체에 겹친다. 열림은 페이지의 상태라 회전·화면 분할 뒤에도 다시 선다.
         if (shown == page_sheets)
             sheets_.add_overlay(*root, width, height, scale, metrics_.surface, frame_time_);
-        if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
+        // 안내 풍선은 이번 frame에 배치한 root에서 대상의 보이는 자리를 찾는다.
+        if (auto toasts { toasts_.make_overlay(root.get()) }; toasts != nullptr)
         {
             toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
             root->add(std::move(toasts));
@@ -189,6 +190,9 @@ namespace mobile_demo {
             frame->popups = tabs_.make_popups(scale);
         if (shown == page_popups)
             frame->popups = popups_.make_popups(scale, { 0.0f, 0.0f, width, height });
+        // 날짜 칸 popup의 초점 요청이다. 이 페이지만 요청을 내므로 번호를 그대로 싣는다.
+        if (shown == page_popups)
+            frame->focus = popups_.make_focus_request();
         // 뒤로 가기는 열린 dialog를 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
         // 두어 플랫폼의 기본 동작(앱을 떠나기)을 받는다. popup은 host가 그보다 먼저 닫는다.
         if (shown == page_basics && basics_.dialog_open())

@@ -1044,7 +1044,8 @@ namespace demo {
             tabs_page tabs_ {};
             groups_page groups_ {};
             toasts_page toasts_ {};
-            popups_page popups_ {};
+            // 오늘은 시작할 때 한 번 읽어 날짜 칸과 달력에 준다 (라이브러리는 시계를 읽지 않는다).
+            popups_page popups_ { popups_page::local_today() };
             windows_page windows_ {};
             images_page images_ {};
             std::optional<luil::file_dialog_request> file_dialog_ {};

@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <limits>
 #include <string>
@@ -139,4 +140,45 @@ TEST_CASE("The ink canvas summary builds the stroke count digits itself", "[ui][
     REQUIRE(luil::default_text::ink_canvas_summary(3) == u8"획 3개");
     // 여러 자리 수도 그대로 읽는다.
     REQUIRE(luil::default_text::ink_canvas_summary(1205) == u8"획 1205개");
+}
+
+TEST_CASE("The calendar words are Korean and the dates build their digits without leading zeros", "[ui][default-text][calendar]")
+{
+    // 날짜 칸과 달력의 열한 함수다 (calendar-date-design.md). 낱말은 한국어이고 날짜는 숫자 글자를 직접 짓는다.
+    const std::array<std::pair<std::u8string_view, std::u8string_view>, 7> words {
+        std::pair { luil::default_text::date_field_name(), std::u8string_view { u8"날짜" } },
+        std::pair { luil::default_text::date_field_placeholder(), std::u8string_view { u8"날짜 선택" } },
+        std::pair { luil::default_text::calendar_name(), std::u8string_view { u8"달력" } },
+        std::pair { luil::default_text::calendar_previous_month(), std::u8string_view { u8"이전 달" } },
+        std::pair { luil::default_text::calendar_next_month(), std::u8string_view { u8"다음 달" } },
+        std::pair { luil::default_text::calendar_today(), std::u8string_view { u8"오늘" } },
+        std::pair { luil::default_text::calendar_unavailable(), std::u8string_view { u8"고를 수 없음" } },
+    };
+    for (const auto& [text, expected] : words)
+        REQUIRE(text == expected);
+
+    const std::chrono::year_month_day day { std::chrono::year { 2026 }, std::chrono::November, std::chrono::day { 3 } };
+    REQUIRE(luil::default_text::date_field_text(day) == u8"2026년 11월 3일");
+    REQUIRE(luil::default_text::calendar_day_name(day) == u8"2026년 11월 3일 화요일");
+    REQUIRE(luil::default_text::calendar_month_title({ std::chrono::year { 2026 }, std::chrono::November }) == u8"2026년 11월");
+    // 달·날 앞에 0이 없다. 네 자리가 안 되는 해도 그대로다.
+    const std::chrono::year_month_day early { std::chrono::year { 5 }, std::chrono::January, std::chrono::day { 9 } };
+    REQUIRE(luil::default_text::date_field_text(early) == u8"5년 1월 9일");
+    REQUIRE(luil::default_text::calendar_month_title({ std::chrono::year { 2026 }, std::chrono::March }) == u8"2026년 3월");
+    // 틀린 날에는 요일을 붙이지 않는다.
+    REQUIRE(luil::default_text::calendar_day_name({ std::chrono::year { 2026 }, std::chrono::February, std::chrono::day { 30 } }) == u8"2026년 2월 30일");
+
+    // 요일 일곱은 일요일부터다. 틀린 요일은 빈 글이다.
+    const std::array<std::u8string_view, 7> weekdays { u8"일", u8"월", u8"화", u8"수", u8"목", u8"금", u8"토" };
+    for (unsigned index { 0 }; index < 7u; ++index)
+        REQUIRE(luil::default_text::calendar_weekday_short(std::chrono::weekday { index }) == weekdays[index]);
+    REQUIRE(luil::default_text::calendar_weekday_short(std::chrono::weekday { 9 }).empty());
+}
+
+TEST_CASE("The teaching tip words are its own functions even where the word matches the info bar", "[ui][default-text][teaching-tip]")
+{
+    // 안내 풍선의 두 함수다 (teaching-tip-design.md). 닫기는 정보 막대와 같은 낱말이지만 요소마다 함수를 둔다.
+    REQUIRE(luil::default_text::teaching_tip_name() == u8"안내");
+    REQUIRE(luil::default_text::teaching_tip_close() == u8"닫기");
+    REQUIRE(luil::default_text::teaching_tip_close() == luil::default_text::info_bar_close());
 }

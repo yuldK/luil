@@ -38,6 +38,8 @@
 | 값 조절 | `slider_element` | [ui/slider_element.h](../include/luil/ui/slider_element.h) | [설명](value-step-design.md) · [자석](slider-magnet-design.md) |
 | 별점(별 몇 개로 점수 매기기, 같은 모양으로 평균 보이기) | `rating_element`, `rating_config`, `rating_precision` | [ui/rating_element.h](../include/luil/ui/rating_element.h) | [설명](rating-design.md) |
 | 색 고르기(채도·명도 판, 색상·알파 막대, 견본, 16진 칸, 닫힌 색 칸과 popup) | `color_picker_element`, `color_field_element`, `make_color_picker_popup` | [ui/color_picker_element.h](../include/luil/ui/color_picker_element.h) · [app/color_picker_popup.h](../include/luil/app/color_picker_popup.h) | [설명](color-picker-design.md) |
+| 날짜 고르기(달력, 닫힌 날짜 칸과 달력 popup) | `calendar_element`, `date_field_element`, `make_date_picker_popup` | [ui/calendar_element.h](../include/luil/ui/calendar_element.h) · [app/date_picker_popup.h](../include/luil/app/date_picker_popup.h) | [설명](date-picker-design.md) |
+| 달력 날짜 계산(42칸 격자, 말일 접기, 범위, ISO 글) | `calendar_month_grid`, `add_months_clamped`, `calendar_moved`, `format_iso_date`, `parse_iso_date` | [ui/calendar_date.h](../include/luil/ui/calendar_date.h) | [설명](calendar-date-design.md) |
 | HSV 색과 16진 색 글(변환·검사·쓰기·거르기) | `hsv_color`, `color_from_hsv`, `hsv_from_color`, `check_hex_color`, `format_hex_color`, `hex_color_filter` | [ui/color_space.h](../include/luil/ui/color_space.h) | [설명](color-space-design.md) |
 | 세로·가로 배치 | `stack_element` | [ui/stack_element.h](../include/luil/ui/stack_element.h) | [설명](stack-expressiveness-design.md) |
 | 줄바꿈 배치 | `wrap_element` | [ui/wrap_element.h](../include/luil/ui/wrap_element.h) | [설명](stack-expressiveness-design.md) |
@@ -82,6 +84,7 @@
 | 플랫폼 성질 | `ui_platform`, `current_ui_platform` | [ui/ui_platform.h](../include/luil/ui/ui_platform.h) | [설명](app-bar-design.md) |
 | 알림과 만료 | `toast_stack_element` | [ui/toast_element.h](../include/luil/ui/toast_element.h) | [설명](concepts/ui-element.md) |
 | 남아 있는 상태 알림(심각도 글리프·제목·줄이 바뀌는 본문·동작·닫기) | `info_bar_element`, `info_bar_config` | [ui/info_bar_element.h](../include/luil/ui/info_bar_element.h) | [설명](info-bar-design.md) |
+| 대상을 꼬리로 가리키는 상주 안내(덮개·비modal, 행동 단추 둘, 네 방향 자리) | `teaching_tip_element`, `teaching_tip_target`, `place_field_popup_at_side` | [ui/teaching_tip_element.h](../include/luil/ui/teaching_tip_element.h) · [ui/field_popup.h](../include/luil/ui/field_popup.h) | [설명](teaching-tip-design.md) |
 | 알림 심각도(토스트·정보 막대 공용) | `ui_severity` | [ui/severity.h](../include/luil/ui/severity.h) | [설명](info-bar-design.md) |
 | 정지·애니메이션 이미지 | `image_element` | [ui/image_element.h](../include/luil/ui/image_element.h) | [설명](image-design.md) |
 | 펜 잉크 캔버스(필압 획 그리기·지우개·내보내기) | `ink_canvas_element`, `ink_layer`, `make_ink_stroke`, `simplify_ink_points`, `render_ink_image` | [ui/ink_canvas_element.h](../include/luil/ui/ink_canvas_element.h) · [ui/ink.h](../include/luil/ui/ink.h) | [설명](ink-design.md) · [입력](ink-input-design.md) |

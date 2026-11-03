@@ -1,7 +1,9 @@
 #include "mobile_demo/popups_page.h"
 
+#include "luil/app/date_picker_popup.h"
 #include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/dropdown_element.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/split_button_element.h"
@@ -9,6 +11,7 @@
 #include "luil/ui/ui_tree.h"
 
 #include <algorithm>
+#include <ctime>
 #include <utility>
 
 namespace mobile_demo {
@@ -19,6 +22,22 @@ namespace mobile_demo {
         constexpr float field_button_width { 220.0f };
         constexpr float field_arrow_width { 48.0f };
         inline constexpr std::u8string_view renderer_values[] { u8"자동", u8"CPU", u8"Vulkan" };
+        // 날짜 칸 popup의 임자와 popup id, 그 안 달력의 owner, 칸의 owner다. 칸은 손가락 칸 44로 키운다.
+        inline constexpr std::u8string_view date_owner { u8"date-field" };
+        inline constexpr std::u8string_view date_popup_id { u8"date-popup" };
+        inline constexpr std::u8string_view date_calendar_owner { u8"date" };
+        inline constexpr std::u8string_view date_field_owner { u8"date-field" };
+        constexpr float date_cell_size { 44.0f };
+        // test가 쓰는 고정 오늘이다.
+        constexpr std::chrono::year_month_day fixed_today { std::chrono::year { 2026 }, std::chrono::November, std::chrono::day { 3 } };
+
+        // "2026년 11월 3일"이다. 날짜 칸이 그리는 기본 글과 같은 꼴로 label을 짓는다.
+        [[nodiscard]] std::u8string korean_date(const std::chrono::year_month_day day)
+        {
+            const int month { static_cast<int>(static_cast<unsigned>(day.month())) };
+            const int date { static_cast<int>(static_cast<unsigned>(day.day())) };
+            return to_u8(static_cast<int>(day.year())) + u8"년 " + to_u8(month) + u8"월 " + to_u8(date) + u8"일";
+        }
 
         // 필드 메뉴의 항목 키가 마지막 동작 label에 적히는 글이다.
         [[nodiscard]] std::u8string field_menu_action_text(const std::u8string_view key)
@@ -49,6 +68,50 @@ namespace mobile_demo {
             popup.dismiss = [owner](const luil::popup_dismiss_reason) { return luil::make_app_action(field_menu_intent { owner, false }); };
             return luil::make_menu_popup(std::move(menu), std::move(popup));
         }
+    }
+
+    popups_page::popups_page() noexcept
+        : popups_page { fixed_today }
+    {
+    }
+
+    popups_page::popups_page(const std::chrono::year_month_day today) noexcept
+        : today_ { today.ok() ? today : fixed_today }
+        , date_value_ { today_ }
+        , date_cursor_ { today_ }
+    {
+    }
+
+    std::chrono::year_month_day popups_page::local_today() noexcept
+    {
+        // 데모가 시작할 때 한 번 읽는다. 자정을 넘겨도 바꾸지 않는다.
+        const std::time_t now { std::time(nullptr) };
+        std::tm local {};
+#if defined(_WIN32)
+        if (localtime_s(&local, &now) != 0)
+            return fixed_today;
+#else
+        if (localtime_r(&now, &local) == nullptr)
+            return fixed_today;
+#endif
+        const std::chrono::year year { local.tm_year + 1900 };
+        const std::chrono::month month { static_cast<unsigned>(local.tm_mon + 1) };
+        return std::chrono::year_month_day { year, month, std::chrono::day { static_cast<unsigned>(local.tm_mday) } };
+    }
+
+    void popups_page::request_focus(std::u8string surface, luil::ui_element_id target)
+    {
+        ++focus_revision_;
+        focus_surface_ = std::move(surface);
+        focus_target_ = std::move(target);
+    }
+
+    std::optional<luil::focus_request> popups_page::make_focus_request() const
+    {
+        if (focus_revision_ == 0)
+            return std::nullopt;
+        // popup은 overlay라 초점만 옮긴다. popup이 서는 frame을 기다린다 (timeout).
+        return luil::focus_request { .id = focus_revision_, .surface = focus_surface_, .target = focus_target_ };
     }
 
     void popups_page::show_popup(std::u8string owner)
@@ -103,6 +166,55 @@ namespace mobile_demo {
             last_action_ = u8"저장";
             return true;
         }
+        // 날짜 칸이다. 열면 커서를 시작 커서로 두고 popup의 커서 날로 초점을 옮긴다.
+        if (const auto* const date { message.get<date_field_intent>() }; date != nullptr)
+        {
+            if (date->open)
+            {
+                if (open_popup_ != date_owner)
+                {
+                    show_popup(std::u8string { date_owner });
+                    date_cursor_ = luil::calendar_start_cursor(date_value_, today_, {});
+                    request_focus(std::u8string { date_popup_id }, luil::calendar_element::day_id(date_calendar_owner, date_cursor_));
+                }
+            }
+            else
+                close_popup(date_owner);
+            return true;
+        }
+        if (const auto* const dismiss { message.get<date_field_dismiss_intent>() }; dismiss != nullptr)
+        {
+            if (open_popup_ != date_owner)
+                return true;
+            close_popup(date_owner);
+            if (dismiss->reason == luil::popup_dismiss_reason::escape_key)
+                request_focus({}, luil::ui_element_id { luil::ui_element_kind::date_field, std::u8string { date_field_owner } });
+            return true;
+        }
+        if (const auto* const move { message.get<date_move_intent>() }; move != nullptr)
+        {
+            if (open_popup_ != date_owner)
+                return true;
+            date_cursor_ = move->day;
+            request_focus(std::u8string { date_popup_id }, luil::calendar_element::day_id(date_calendar_owner, move->day));
+            return true;
+        }
+        if (const auto* const turn { message.get<date_turn_intent>() }; turn != nullptr)
+        {
+            date_cursor_ = turn->day;
+            return true;
+        }
+        // 날을 고르면 값을 바꾸고 닫고 칸으로 초점을 돌린다.
+        if (const auto* const select { message.get<date_select_intent>() }; select != nullptr)
+        {
+            if (open_popup_ != date_owner)
+                return true;
+            date_value_ = select->day;
+            date_cursor_ = select->day;
+            close_popup(date_owner);
+            request_focus({}, luil::ui_element_id { luil::ui_element_kind::date_field, std::u8string { date_field_owner } });
+            return true;
+        }
         // 검색 칸의 편집·조합이다.
         // popup 안이라고 다른 경로가 아니다 — target으로 자기 것만 갖는다.
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
@@ -143,6 +255,7 @@ namespace mobile_demo {
         dropdown_ = nullptr;
         split_ = nullptr;
         send_ = nullptr;
+        date_field_ = nullptr;
 
         page_column column { u8"popups" };
         column.note(u8"popups-hint", u8"popup은 화면 위에 겹쳐 뜬다.");
@@ -218,6 +331,23 @@ namespace mobile_demo {
         column.note(u8"split-state-save", state_text(u8"save", u8"저장"));
         column.note(u8"split-state-send", state_text(u8"send", u8"보내기"));
         column.note(u8"split-last-action", std::u8string { u8"마지막 동작: " } + (last_action_.empty() ? std::u8string { u8"없음" } : last_action_));
+        column.gap(24.0f);
+
+        // 날짜 칸이다. 누르면 아래에 손가락 칸(44)의 달력 popup이 뜬다. 날을 누르면 고르고 닫는다.
+        column.note(u8"date-label", u8"마감 날짜 (달력 popup)");
+        column.gap(4.0f);
+        luil::date_field_config date {};
+        date.owner = std::u8string { date_field_owner };
+        date.value = date_value_;
+        date.open = open_popup_ == date_owner;
+        date.set_open = [](const bool open) { return luil::make_app_action(date_field_intent { open }); };
+        date.name = u8"마감 날짜";
+        auto date_field { std::make_unique<luil::date_field_element>(std::move(date)) };
+        date_field_ = date_field.get();
+        column.add(std::move(date_field), touch_height, std::min(width - 2.0f * page_padding, field_button_width));
+        column.gap(8.0f);
+        const std::u8string date_shown { date_value_.has_value() ? korean_date(*date_value_) : std::u8string { u8"없음" } };
+        column.note(u8"date-state", std::u8string { u8"날짜 칸: " } + (open_popup_ == date_owner ? u8"열림" : u8"닫힘") + u8" · " + date_shown);
         return column.finish();
     }
 
@@ -276,6 +406,26 @@ namespace mobile_demo {
             items.push_back({ u8"mail", u8"메일로 보내기", luil::codicons::icon_mail });
             items.push_back({ u8"link", u8"링크 복사", luil::codicons::icon_link });
             popups.push_back(make_field_menu(u8"send", std::move(items), send_->bounds(), surface, scale));
+        }
+
+        if (open_popup_ == date_owner && date_field_ != nullptr)
+        {
+            luil::calendar_config calendar {};
+            calendar.owner = std::u8string { date_calendar_owner };
+            calendar.value = date_value_;
+            calendar.cursor = date_cursor_;
+            calendar.today = today_;
+            calendar.cell_size = date_cell_size;
+            calendar.select = [](const std::chrono::year_month_day day) { return luil::make_app_action(date_select_intent { day }); };
+            calendar.move_to = [](const std::chrono::year_month_day day) { return luil::make_app_action(date_move_intent { day }); };
+            calendar.turn_month = [](const std::chrono::year_month_day day) { return luil::make_app_action(date_turn_intent { day }); };
+
+            luil::date_picker_popup_config popup {};
+            popup.id = std::u8string { date_popup_id };
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = date_field_->bounds(), .limit = surface };
+            popup.dismiss = [](const luil::popup_dismiss_reason reason) { return luil::make_app_action(date_field_dismiss_intent { reason }); };
+            popups.push_back(luil::make_date_picker_popup(std::move(calendar), std::move(popup)));
         }
 
         if (open_popup_ == u8"card")

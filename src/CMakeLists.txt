@@ -239,6 +239,8 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/rating_element.h"
     ui/color_picker_element.cpp
     "${public_headers}/ui/color_picker_element.h"
+    ui/calendar_element.cpp
+    "${public_headers}/ui/calendar_element.h"
     ui/split_button_element.cpp
     "${public_headers}/ui/split_button_element.h")
 
@@ -357,6 +359,8 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     "${public_headers}/ui/number_input.h"
     ui/color_space.cpp
     "${public_headers}/ui/color_space.h"
+    ui/calendar_date.cpp
+    "${public_headers}/ui/calendar_date.h"
     ui/command_palette.cpp
     "${public_headers}/ui/command_palette.h"
     ui/text_document.cpp
@@ -388,6 +392,8 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     "${public_headers}/ui/modal_host_element.h"
     ui/sheet_host_element.cpp
     "${public_headers}/ui/sheet_host_element.h"
+    ui/teaching_tip_element.cpp
+    "${public_headers}/ui/teaching_tip_element.h"
     ui/toast_element.cpp
     "${public_headers}/ui/toast_element.h")
 
@@ -410,6 +416,8 @@ luil_add_source_filter(luil_core_files "app"
     "${public_headers}/app/menu_popup.h"
     host/color_picker_popup.cpp
     "${public_headers}/app/color_picker_popup.h"
+    host/date_picker_popup.cpp
+    "${public_headers}/app/date_picker_popup.h"
     "${public_headers}/app/notification.h"
     "${public_headers}/app/file_dialog.h"
     host/file_dialog_gate.h

@@ -20,6 +20,8 @@ add_executable(luil_core_tests
     app_host_tests.cpp
     badge_element_tests.cpp
     button_element_tests.cpp
+    calendar_date_tests.cpp
+    calendar_element_tests.cpp
     check_element_tests.cpp
     theme_picker_tests.cpp
     choice_group_element_tests.cpp
@@ -31,6 +33,7 @@ add_executable(luil_core_tests
     content_layout_tests.cpp
     cursor_idle_tests.cpp
     default_text_tests.cpp
+    date_field_element_tests.cpp
     dialog_elements_tests.cpp
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
@@ -108,6 +111,7 @@ add_executable(luil_core_tests
     tray_sync_tests.cpp
     hotkey_sync_tests.cpp
     table_element_tests.cpp
+    teaching_tip_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
     grapheme_tests.cpp

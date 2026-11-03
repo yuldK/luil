@@ -1,6 +1,6 @@
 # 고정 열
 
-표의 앞쪽 열 N개를 가로 스크롤에서 제자리에 세운다. 나머지 열만 `scroll_x`를 따라 흐르고, 머리글과 본문이 같은 경계를 쓴다. 공개 형식은 `table_config::frozen_columns`, 순수 함수 `table_frozen_width`·`table_frozen_fits`·`table_reveal_delta`, `table_element`의 `frozen_columns()`·`frozen_width()`·`scroll_delta_to_reveal`이다. 흐르는 열을 고정 구역 밖으로 자르는 레인 kind `table_header_lane`·`table_row_lane`은 비공개 부품의 이름표다.
+표의 앞쪽 열 N개를 가로 스크롤에서 제자리에 세운다. 나머지 열만 `scroll_x`를 따라 흐르고, 머리글과 본문이 같은 경계를 쓴다. 공개 형식은 `table_config::frozen_columns`, 순수 함수 `table_frozen_width`·`table_frozen_fits`·`table_reveal_delta`, `table_element`의 `frozen_columns()`·`frozen_width()`·`viewport_width()`·`scroll_delta_to_reveal`이다. `viewport_width()`는 세로 막대를 뺀 본문 폭이고, 고정 열 폭 끌기의 한도가 쓴다. 흐르는 열을 고정 구역 밖으로 자르는 레인 kind `table_header_lane`·`table_row_lane`은 비공개 부품의 이름표다.
 
 [표 문서](table-design.md)가 "고정 열"을 뒤로 미룬 확장으로 적었고 이 문서가 닫는다. 열 폭 끌기·순서 바꾸기·셀 커서는 그 문서의 규칙을 따른다.
 
