@@ -663,9 +663,10 @@ namespace demo {
                 // 초점 요청의 결과는 셸이 토스트로 알린다. 덮어쓴 요청은 새 요청이 이어받아 말하지 않는다.
                 if (const auto* const focus_report { message.get<tool_focus_report_intent>() }; focus_report != nullptr)
                 {
-                    // 팔레트와 색 칸 popup의 초점 요청은 알리지 않는다 — 열면 곧바로 칸·판에 초점이 서는 것이 보인다.
+                    // 팔레트와 색 칸 popup, 안내 풍선의 초점 요청은 알리지 않는다 — 열면 곧바로 칸·판·단추에 초점이 서는 것이 보인다.
                     // 도구 창 페이지의 주 창 활성화(트레이 `창 보이기`, 단축키 `창 앞으로`)도 메모 칸으로 옮긴 것이 아니라 알리지 않는다.
-                    if (focus_report->id == palette_focus_id_ || focus_report->id == popups_focus_id_ || focus_report->id == main_focus_id_)
+                    if (focus_report->id == palette_focus_id_ || focus_report->id == popups_focus_id_ || focus_report->id == toasts_focus_id_
+                        || focus_report->id == main_focus_id_)
                         return;
                     if (focus_report->outcome == luil::focus_request_outcome::fulfilled)
                         static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"도구 창 메모 칸으로 초점을 옮겼습니다.", luil::toast_severity::success } }));
@@ -1016,6 +1017,7 @@ namespace demo {
                     seen_toasts_focus_ = request->id;
                     focus_ = *request;
                     focus_->id = ++focus_revision_;
+                    toasts_focus_id_ = focus_->id;
                 }
                 frame->focus = focus_;
                 frame->focus_report = [](const std::uint64_t id, const luil::focus_request_outcome outcome) { return luil::app_message { tool_focus_report_intent { id, outcome } }; };
@@ -1296,6 +1298,7 @@ namespace demo {
             std::uint64_t seen_popups_focus_ { 0 };
             std::uint64_t popups_focus_id_ { 0 };
             std::uint64_t seen_toasts_focus_ { 0 };
+            std::uint64_t toasts_focus_id_ { 0 };
             theme_page theme_ {
                 std::u8string { reinterpret_cast<const char8_t*>(luil_demo_style_json), luil_demo_style_json_size },
                 std::u8string { reinterpret_cast<const char8_t*>(luil_demo_markup_xml), luil_demo_markup_xml_size },
