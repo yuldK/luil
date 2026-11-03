@@ -232,8 +232,8 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 
 데모.
 
-- 데스크톱: 보기 메뉴에 "페이지 전환" 하위 메뉴(라디오: 없음·밀기·옅어짐·확대·스프링 밀기)를 둔다. 사이드바 목록이 세로라 밀기는 세로 축이고, 목록에서 아래 페이지로 가면 forward, 위면 backward다. `sidebar-motion` 옆에 label `page-transition-state`("페이지 전환: 밀기 · 도는 중" / "· 멈춤" / "꺼짐")를 둔다. 인자 `--page-transition=slide|fade|zoom|spring`과 UIA가 도는 중을 읽도록 길이를 늘리는 `--page-transition-ms=`를 더한다. 웹뷰 페이지로 오가는 바꿈은 전환하지 않는다. UIA(격리 데스크톱, luil-uia)는 `--page-transition-ms=3000`으로 띄워 페이지를 바꾸고, 도는 동안 label이 "도는 중"이고 새 페이지 요소가 있으며 옛 페이지 요소가 없는지, 끝난 뒤 "멈춤"인지 되읽는다.
-- 모바일: 좁은 화면의 목록 → 페이지는 가로 forward 밀기, 앱 바·시스템 뒤로는 backward, 넓은 화면의 오른쪽 칸은 옅어짐이다. 기기 페이지의 움직임 줄이기 칸 아래에 "페이지 전환" 스위치와 label `page-transition-state`를 둔다.
+- 데스크톱: 보기 메뉴에 "페이지 전환" 하위 메뉴(라디오: 없음·밀기·옅어짐·확대·스프링 밀기)를 둔다. 사이드바 목록이 세로라 밀기는 세로 축이고, 목록에서 아래 페이지로 가면 forward, 위면 backward다. `sidebar-motion` 바로 위에 label `page-transition-state`("페이지 전환: 밀기 · 도는 중" / "· 멈춤" / "꺼짐")를 둔다. 도는 동안 tree를 다시 짓지 않아 시작 frame의 "도는 중"이 끝 tick까지 남는다. 인자 `--page-transition=none|slide|fade|zoom|spring`(기본 slide)과 UIA가 도는 중을 읽도록 길이를 늘리는 `--page-transition-ms=`(스프링이면 `response`)를 더한다. 웹뷰 페이지로 오가는 바꿈은 전환하지 않는다. UIA(격리 데스크톱, luil-uia)는 `--page-transition-ms=3000`으로 띄워 페이지를 바꾸고, 도는 동안 label이 "도는 중"이고 새 페이지 요소가 있으며 옛 페이지 요소가 없는지, 끝난 뒤 "멈춤"인지 되읽는다.
+- 모바일: 좁은 화면의 목록 → 페이지는 가로 forward 밀기, 앱 바·시스템 뒤로는 backward, 넓은 화면의 오른쪽 칸은 옅어짐이다. 기기 페이지의 움직임 줄이기 칸 아래에 "페이지 전환" 스위치(기본 켜짐)와 label `page-transition-state`("페이지 전환: 켜짐 · 도는 중" / "· 멈춤" / "페이지 전환: 꺼짐")를 둔다. 같은 페이지로 가는 바꿈과 꼴(좁음·넓음)이 바뀐 직후의 바꿈은 전환하지 않는다.
 
 사람 확인.
 
