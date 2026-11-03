@@ -148,7 +148,7 @@ target_sources(luil_core_tests PRIVATE
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
 # 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지와 검사기 페이지의 상태 줄, 파일 감시 묶음의 표시,
-# 테마 페이지의 스타일 파일 견본도 서버·감시자 없이 검증한다.
+# 테마 페이지의 스타일 파일 견본도 서버·감시자 없이 검증한다. 첫 화면의 페이지 목록 칸이 내는 접근 이름과 실행도 같은 목록에 오른다.
 # 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
 # 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
 target_sources(luil_core_tests PRIVATE
@@ -159,6 +159,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/ink_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/inspector_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/lists_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/page_list.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
@@ -167,6 +168,7 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/zoom_page.cpp"
     mobile_demo_assets_stub.cpp
     secret_store_stub.cpp
+    mobile_demo_page_list_tests.cpp
     mobile_demo_page_tests.cpp)
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
 # 확대 보기 페이지는 도면 요소가 luil과 Skia 헤더만 써서 같은 목록에 오른다. 줌 단추 글을 바꾸는 단추를 검증한다.
