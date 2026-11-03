@@ -170,11 +170,12 @@ namespace mobile_demo {
             make_label({ kind_text, u8"zoom-edge-swipe" }, last_swipe_.has_value() ? describe(*last_swipe_) : std::u8string { u8"경계 쓸기: 아직 없음" }, note_text_size, luil::label_color_role::dim),
             note_line_height);
         // 영어 앱은 세 칸을 채운다. 비워 두면 단추 이름이 기본 문구(축소·확대·맞춤)다.
+        // 단추 폭이 56dp로 정해져 있어 "Zoom out"은 글꼴 배율 1.1에서 "Zoom o…"로 잘린다. 세 글자 안팎으로 짧게 쓴다.
         luil::zoom_controls_config zoom_buttons { .view = config(), .viewport = viewport_ };
         if (english_labels_)
         {
-            zoom_buttons.decrease_label = u8"Zoom out";
-            zoom_buttons.increase_label = u8"Zoom in";
+            zoom_buttons.decrease_label = u8"Out";
+            zoom_buttons.increase_label = u8"In";
             zoom_buttons.fit_label = u8"Fit";
         }
 

@@ -9,6 +9,7 @@
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace mobile_demo {
@@ -34,6 +35,8 @@ namespace mobile_demo {
             return target_line_break;
         if (kind == kind_readonly_input)
             return target_readonly;
+        if (kind == kind_color_hex_input)
+            return target_color_hex;
         // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다 (popup-ime-design.md).
         if (kind == kind_dropdown_search_input)
             return target_dropdown_search;
@@ -65,7 +68,8 @@ namespace mobile_demo {
     }
 
     page_column::page_column(std::u8string owner, const float padding)
-        : height_ { 2.0f * padding }
+        : padding_ { padding }
+        , height_ { 2.0f * padding }
     {
         luil::stack_config config {};
         config.padding = luil::edge_insets::all(padding);
@@ -94,6 +98,21 @@ namespace mobile_demo {
     {
         add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), note_text_size, luil::label_color_role::dim),
             luil::text_line_height(note_text_size, note_line_height - note_text_size));
+    }
+
+    void page_column::wrapped_note(std::u8string owner, std::u8string text, const float page_width, const float scale, const luil::text_measurer* const measurer)
+    {
+        luil::label_config config {};
+        config.text = std::move(text);
+        config.font_size = note_text_size;
+        config.color = luil::label_color_role::dim;
+        config.wrap = true;
+        // 줄 나눔 규칙을 스타일에 맡기면 여기서 잴 때와 배치할 때의 규칙이 갈려 줄 수가 달라질 수 있다.
+        config.line_break = luil::text::line_break_policy::hangul_words;
+        // 한 줄이면 한 줄 `note`와 같은 높이를 지켜 위아래 간격이 그대로다.
+        const float one_line { luil::text_line_height(note_text_size, note_line_height - note_text_size) };
+        const float measured { luil::label_element::measure_wrap(config, luil::measure_context { .scale = scale, .measurer = measurer }, page_width - 2.0f * padding_).height };
+        add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, std::move(owner) }, std::move(config)), std::max(one_line, measured));
     }
 
     void page_column::body(std::u8string owner, std::u8string text)

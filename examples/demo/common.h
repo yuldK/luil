@@ -88,6 +88,9 @@ namespace demo {
     constexpr luil::ui_element_kind kind_dialog_details_open { luil::application_element_kind(65) };
     // 테마 페이지의 스타일 JSON 칸이다 (`parse_ui_style`, style-sheet-design.md).
     constexpr luil::ui_element_kind kind_style_json_input { luil::application_element_kind(66) };
+    // 갤러리와 popups 페이지의 색 고르기 16진 칸이다 (`color_picker_hex::id`). 편집 메시지가 대상으로만 갈려 페이지마다 하나다.
+    constexpr luil::ui_element_kind kind_gallery_color_hex_input { luil::application_element_kind(67) };
+    constexpr luil::ui_element_kind kind_popups_color_hex_input { luil::application_element_kind(68) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
@@ -114,6 +117,8 @@ namespace demo {
     constexpr luil::text_input_target target_code { static_cast<luil::text_input_target>(14) };
     constexpr luil::text_input_target target_line_break { static_cast<luil::text_input_target>(15) };
     constexpr luil::text_input_target target_style_json { static_cast<luil::text_input_target>(16) };
+    constexpr luil::text_input_target target_gallery_color_hex { static_cast<luil::text_input_target>(17) };
+    constexpr luil::text_input_target target_popups_color_hex { static_cast<luil::text_input_target>(18) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.

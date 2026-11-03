@@ -27,6 +27,11 @@ namespace demo {
             return target_line_break;
         if (kind == kind_style_json_input)
             return target_style_json;
+        // 색 고르기의 16진 칸이다. 갤러리의 인라인 본체와 popups 페이지의 popup이 하나씩 갖는다.
+        if (kind == kind_gallery_color_hex_input)
+            return target_gallery_color_hex;
+        if (kind == kind_popups_color_hex_input)
+            return target_popups_color_hex;
         if (kind == kind_tool_note_input)
             return target_tool_note;
         // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다.

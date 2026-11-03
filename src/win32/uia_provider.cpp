@@ -9,6 +9,8 @@
 #include <uiautomation.h>
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -436,6 +439,24 @@ namespace luil::win32 {
             return value;
         }
 
+        // 범위 값(float)을 UIA의 double로 옮긴다. static_cast는 float의 이진 오차를 그대로 실어
+        // 평균 별점 4.3이 4.30000019로 읽힌다. float를 되읽을 수 있는 가장 짧은 십진 표기로 적고
+        // 그 글을 double로 읽어, 앱이 쓴 값 그대로 보조 기술에 나간다.
+        [[nodiscard]] double range_number(const float value) noexcept
+        {
+            if (std::isfinite(value) == false)
+                return static_cast<double>(value);
+            std::array<char, 48> text {};
+            const std::to_chars_result written { std::to_chars(text.data(), text.data() + text.size(), value) };
+            if (written.ec != std::errc {})
+                return static_cast<double>(value);
+            double number { 0.0 };
+            const std::from_chars_result read { std::from_chars(text.data(), written.ptr, number) };
+            if (read.ec != std::errc {})
+                return static_cast<double>(value);
+            return number;
+        }
+
         // property 짝 하나를 이벤트 하나로 쏘고 VARIANT를 정리한다.
         void raise_property(uia_event_sink& events, uia_element_provider& provider, const PROPERTYID property, VARIANT old_value, VARIANT new_value)
         {
@@ -510,8 +531,7 @@ namespace luil::win32 {
                     events_->notification(*provider, after.error);
             }
             if (before.range.has_value() && after.range.has_value() && before.range->value != after.range->value)
-                raise_property(
-                    *events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(static_cast<double>(before.range->value)), variant_from_double(static_cast<double>(after.range->value)));
+                raise_property(*events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(range_number(before.range->value)), variant_from_double(range_number(after.range->value)));
             provider->Release();
         }
     }
@@ -1330,7 +1350,9 @@ namespace luil::win32 {
                 return UIA_E_INVALIDOPERATION;
             // 범위 밖은 UIA의 약속대로 인자 오류다 — 자르지 않는다. 무엇을 잘못
             // 말했는지 클라이언트가 알아야 한다.
-            if (value < static_cast<double>(info.range->minimum) || value > static_cast<double>(info.range->maximum))
+            // 경계도 읽어 준 그 십진 값으로 견준다. 클라이언트가 Minimum으로 읽은 값(0.1)을 그대로 되돌려 정할 때
+            // float의 이진 오차(0.100000001)보다 작다며 범위 밖이 되지 않게 한다.
+            if (value < range_number(info.range->minimum) || value > range_number(info.range->maximum))
                 return E_INVALIDARG;
             // 읽기 전용에는 접근 거부가 UIA의 낱말이다 (표시 전용 막대·진행률).
             BOOL read_only { TRUE };
@@ -1354,7 +1376,7 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (info.range.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            *result = static_cast<double>(info.range->value);
+            *result = range_number(info.range->value);
             return S_OK;
         });
     }
@@ -1401,7 +1423,7 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (info.range.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            *result = static_cast<double>(info.range->maximum);
+            *result = range_number(info.range->maximum);
             return S_OK;
         });
     }
@@ -1418,7 +1440,7 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (info.range.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            *result = static_cast<double>(info.range->minimum);
+            *result = range_number(info.range->minimum);
             return S_OK;
         });
     }
@@ -1435,7 +1457,7 @@ namespace luil::win32 {
             // 걸음의 크기는 element가 정하고 `access_range::page`가 알린다. 비워 둔 요소(막대·스크롤 막대·진행률)는 0이다.
             const access_info info { element->accessibility() };
             if (info.range.has_value())
-                *result = static_cast<double>(info.range->page);
+                *result = range_number(info.range->page);
             return S_OK;
         });
     }
@@ -1451,7 +1473,7 @@ namespace luil::win32 {
                 return UIA_E_ELEMENTNOTAVAILABLE;
             const access_info info { element->accessibility() };
             if (info.range.has_value())
-                *result = static_cast<double>(info.range->step);
+                *result = range_number(info.range->step);
             return S_OK;
         });
     }

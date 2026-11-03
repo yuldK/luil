@@ -15,6 +15,7 @@
 #include "mobile_demo/zoom_page.h"
 #include "sample_image_bytes.h"
 
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/message_box.h"
 #include "luil/ui/rating_element.h"
 #include "luil/ui/root_element.h"
@@ -1161,8 +1162,8 @@ TEST_CASE("The zoom page names its buttons in the default language until the but
 
     // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
     REQUIRE(press_zoom_button(page, u8"zoom-label-toggle") == 1);
-    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"Zoom out");
-    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"Zoom in");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"Out");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"In");
     REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"Fit");
     REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: English");
 
@@ -1192,6 +1193,40 @@ TEST_CASE("The language row of the zoom page fits the 400dp window below the rot
     REQUIRE(toggle->bounds().x + toggle->bounds().width <= language->bounds().x);
     REQUIRE(language->bounds().x + language->bounds().width <= 400.0f);
     REQUIRE(toggle->bounds().y + toggle->bounds().height <= view->bounds().y);
+}
+
+namespace {
+    // 글꼴이 넓은 쪽을 본뜬 측정기다: 로마자는 글자 크기의 0.6배, 그 밖(한글)은 1배. 이 폭이면 56dp 단추에 글꼴 배율 1.1에서
+    // 일곱 글자쯤 들어, 실기기에서 "Zoom out"이 "Zoom o…"로 잘린 것과 맞는다. 설치 글꼴에 기대지 않아 어느 기기에서나 같다.
+    [[nodiscard]] float wide_sans_width(const std::u8string_view text, const float pixel_size)
+    {
+        float em { 0.0f };
+        for (const char8_t byte : text)
+        {
+            if ((byte & 0xC0u) == 0x80u)
+                continue;
+            em += byte < 0x80u ? 0.6f : 1.0f;
+        }
+        return em * pixel_size;
+    }
+
+    const luil::text_measurer wide_sans_measurer { wide_sans_width };
+}
+
+TEST_CASE("The English zoom button names fit their buttons at a 1.1 font scale", "[mobile-demo][zoom][default-text]")
+{
+    // 줌 단추의 폭은 라이브러리가 정한다(56dp). 영어 글이 길면 "Zoom o…"로 잘리므로 데모는 짧은 글을 쓴다.
+    mobile_demo::zoom_page page {};
+    REQUIRE(page.handle(luil::app_message { mobile_demo::zoom_labels_intent { true } }));
+    const auto tree { zoom_tree(page) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    for (const luil::ui_element_kind kind : { luil::ui_element_kind::zoom_decrease, luil::ui_element_kind::zoom_increase, luil::ui_element_kind::zoom_fit })
+    {
+        const luil::ui_element* const button { tree->find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        const float text_width { measure.text_width(button->accessibility().name, measure.style_metrics().body_font_size) };
+        REQUIRE(text_width * 1.1f <= button->bounds().width);
+    }
 }
 
 namespace {
@@ -1279,6 +1314,7 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
         { mobile_demo::kind_code_input, mobile_demo::target_code },
         { mobile_demo::kind_line_break_input, mobile_demo::target_line_break },
         { mobile_demo::kind_readonly_input, mobile_demo::target_readonly },
+        { mobile_demo::kind_color_hex_input, mobile_demo::target_color_hex },
         { mobile_demo::kind_dropdown_search_input, mobile_demo::target_dropdown_search },
         { mobile_demo::kind_smb_address_input, mobile_demo::target_smb_address },
         { mobile_demo::kind_smb_user_input, mobile_demo::target_smb_user },
@@ -1525,6 +1561,52 @@ namespace {
     }
 }
 
+TEST_CASE("A wrapped note reserves the height of the lines it breaks into", "[mobile-demo][common]")
+{
+    // 한 줄 설명은 좁은 화면에서 끝이 말줄임으로 잘렸다. 줄을 바꾸는 설명은 칸이 바꾼 줄을 모두 담을 높이를 잡는다.
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const std::u8string long_text { u8"alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron" };
+
+    mobile_demo::page_column column { u8"notes", 0.0f };
+    column.wrapped_note(u8"long", long_text, 288.0f, 1.0f, &wide_sans_measurer);
+    column.wrapped_note(u8"short", u8"short", 288.0f, 1.0f, &wide_sans_measurer);
+    mobile_demo::page_content content { column.finish() };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 288.0f, height }, 1.0f) };
+
+    const luil::ui_element* const long_note { tree.find({ mobile_demo::kind_text, u8"long" }) };
+    const luil::ui_element* const short_note { tree.find({ mobile_demo::kind_text, u8"short" }) };
+    REQUIRE(long_note != nullptr);
+    REQUIRE(short_note != nullptr);
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    // 긴 글은 여러 줄이 되고, 칸의 높이가 그 줄들을 모두 담는다.
+    const std::optional<luil::size_f> wrapped { long_note->preferred_size(measure, 288.0f) };
+    REQUIRE(wrapped.has_value());
+    REQUIRE(wrapped->height >= 2.0f * line);
+    REQUIRE(long_note->bounds().height >= wrapped->height);
+    // 한 줄이면 한 줄 설명(`note`)과 같은 높이를 지켜 위아래 간격이 그대로다.
+    REQUIRE(short_note->bounds().height == luil::text_line_height(mobile_demo::note_text_size, mobile_demo::note_line_height - mobile_demo::note_text_size));
+}
+
+TEST_CASE("The long notes of the basics page break lines instead of ending in an ellipsis", "[mobile-demo][basics]")
+{
+    // 폭 320dp 쪽은 어느 글꼴에서나 두 줄 이상이 된다. 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다.
+    mobile_demo::basics_page page {};
+    auto content { page.build(320.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    for (const std::u8string& owner : { std::u8string { u8"rating-title" }, std::u8string { u8"readonly" }, std::u8string { u8"basics-hint" } })
+    {
+        const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(note != nullptr);
+        const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+        REQUIRE(wrapped.has_value());
+        REQUIRE(wrapped->height >= 2.0f * line);
+    }
+}
+
 TEST_CASE("The mobile rating row has finger sized stars and reads its value back", "[mobile-demo][basics][rating]")
 {
     mobile_demo::basics_page page {};
@@ -1552,6 +1634,48 @@ TEST_CASE("The mobile rating row has finger sized stars and reads its value back
     // 범위 밖 값은 앱이 자른다.
     deliver(page, mobile_demo::rating_intent { u8"stars", 9.0f });
     REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 5 / 5");
+}
+
+TEST_CASE("The mobile color row fits the plane to the page and raises the bars for fingers", "[mobile-demo][basics][color-picker]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #3366FF80");
+    const auto tree { basics_tree(page) };
+    // 폭 400에 여백 16씩이라 판은 368이다. 막대는 32다.
+    const luil::ui_element* const plane { tree->find(luil::color_picker_element::plane_id(u8"color")) };
+    REQUIRE(plane != nullptr);
+    REQUIRE(plane->bounds().width == 368.0f);
+    REQUIRE(plane->bounds().height == 368.0f);
+    std::u8string hue_owner { u8"color" };
+    hue_owner += u8'\u001f';
+    hue_owner += u8"hue";
+    const luil::ui_element* const hue { tree->find({ luil::ui_element_kind::color_picker_bar, hue_owner }) };
+    REQUIRE(hue != nullptr);
+    REQUIRE(hue->bounds().height == 32.0f);
+    REQUIRE(hue->bounds().y == plane->bounds().y + 368.0f + 8.0f);
+    // 판은 시작 거리를 둔 끌기라 쓸기가 페이지를 흘린다.
+    REQUIRE(plane->pointer_drag() != nullptr);
+    REQUIRE(plane->pointer_drag()->start_distance == luil::color_picker_drag_start_distance);
+    const luil::ui_element* const hex { tree->find({ mobile_demo::kind_color_hex_input, u8"color-hex" }) };
+    REQUIRE(hex != nullptr);
+    REQUIRE(hex->accessibility().value == u8"#3366FF80");
+
+    // 판을 탭한 메시지가 label과 16진 칸을 함께 바꾼다.
+    const luil::rect_f box { plane->bounds() };
+    const luil::ui_action* const tap { plane->action(luil::ui_trigger::left_click) };
+    REQUIRE(tap != nullptr);
+    deliver_actions(page, (*tap)({ plane->id(), box.x + box.width, box.y + box.height }));
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #00000080");
+
+    // 키보드의 확정 단추로 16진 초안을 확정한다. 회색에서도 색상은 지킨다.
+    luil::text_edit_request request {};
+    request.target = mobile_demo::target_color_hex;
+    request.command = luil::text::text_edit_command::replace_all;
+    request.text = u8"#ff0000";
+    request.offset = request.text.size();
+    deliver(page, mobile_demo::edit_intent { request });
+    deliver(page, mobile_demo::color_commit_intent {});
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #FF0000FF");
 }
 
 TEST_CASE("Tapping a mobile star rates it and tapping it again clears it", "[mobile-demo][basics][rating]")

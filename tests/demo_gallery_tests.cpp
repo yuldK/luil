@@ -11,6 +11,7 @@
 
 #include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/text_area_element.h"
@@ -480,6 +481,8 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
         { demo::kind_workbench_diff, demo::target_workbench_diff },
         { demo::kind_workbench_find_input, demo::target_workbench_find },
         { luil::ui_element_kind::command_palette_search, demo::target_palette },
+        { demo::kind_gallery_color_hex_input, demo::target_gallery_color_hex },
+        { demo::kind_popups_color_hex_input, demo::target_popups_color_hex },
     };
     for (const field& each : fields)
     {
@@ -530,8 +533,8 @@ TEST_CASE("The desktop zoom page switches its button names between the default l
     // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
     press_zoom_labels(page, tree);
     tree = zoom_tree(page);
-    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"Zoom out");
-    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"Zoom in");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"Out");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"In");
     REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"Fit");
     REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: English");
 
@@ -562,6 +565,40 @@ TEST_CASE("The desktop zoom page puts the language switch after the fit buttons 
     REQUIRE(language->bounds().x >= toggle->bounds().x + toggle->bounds().width);
     REQUIRE(language->bounds().x + language->bounds().width <= 800.0f);
     REQUIRE(toggle->bounds().y == Catch::Approx(controls->bounds().y));
+}
+
+namespace {
+    // 글꼴이 넓은 쪽을 본뜬 측정기다: 로마자는 글자 크기의 0.6배, 그 밖(한글)은 1배. 이 폭이면 56dp 단추에 글꼴 배율 1.1에서
+    // 일곱 글자쯤 들어, 실기기에서 "Zoom out"이 "Zoom o…"로 잘린 것과 맞는다. 설치 글꼴에 기대지 않아 어느 기기에서나 같다.
+    [[nodiscard]] float wide_sans_width(const std::u8string_view text, const float pixel_size)
+    {
+        float em { 0.0f };
+        for (const char8_t byte : text)
+        {
+            if ((byte & 0xC0u) == 0x80u)
+                continue;
+            em += byte < 0x80u ? 0.6f : 1.0f;
+        }
+        return em * pixel_size;
+    }
+
+    const luil::text_measurer wide_sans_measurer { wide_sans_width };
+}
+
+TEST_CASE("The English zoom button names of the desktop page fit their buttons at a 1.1 font scale", "[demo][zoom][default-text]")
+{
+    // 줌 단추의 폭은 라이브러리가 정한다(56dp). 영어 글이 길면 "Zoom o…"로 잘리므로 데모는 짧은 글을 쓴다.
+    demo::zoom_page page {};
+    send(page, demo::zoom_labels_intent { true });
+    const auto tree { zoom_tree(page) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    for (const luil::ui_element_kind kind : { luil::ui_element_kind::zoom_decrease, luil::ui_element_kind::zoom_increase, luil::ui_element_kind::zoom_fit })
+    {
+        const luil::ui_element* const button { tree.find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        const float text_width { measure.text_width(button->accessibility().name, measure.style_metrics().body_font_size) };
+        REQUIRE(text_width * 1.1f <= button->bounds().width);
+    }
 }
 
 namespace {
@@ -673,6 +710,197 @@ TEST_CASE("A star click, a value set from assistive technology and the reset but
     tree = arranged(page.build_controls());
     REQUIRE(rating_label(tree, u8"whole") == u8"별점: 3 / 5");
     REQUIRE(rating_label(tree, u8"half") == u8"반 별: 3.5 / 5");
+}
+
+namespace {
+    [[nodiscard]] std::u8string color_part(const std::u8string_view owner, const std::u8string_view part)
+    {
+        std::u8string text { owner };
+        text += u8'\u001f';
+        text += part;
+        return text;
+    }
+
+    // 초안 전체를 이 글로 바꾸는 편집 메시지다. 앱 정책이 칸의 kind를 이 대상으로 옮긴다.
+    [[nodiscard]] demo::edit_intent replace_draft(const luil::text_input_target target, const std::u8string_view text)
+    {
+        luil::text_edit_request request {};
+        request.target = target;
+        request.command = luil::text::text_edit_command::replace_all;
+        request.text = std::u8string { text };
+        request.offset = request.text.size();
+        return demo::edit_intent { request };
+    }
+
+    // 액션 하나를 페이지에 그대로 전한다.
+    template<typename Page>
+    void deliver_action(Page& page, const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        REQUIRE(page.handle(*message));
+    }
+}
+
+TEST_CASE("The gallery color card shows the picker, the presets and the hex field and reads the color back", "[demo][gallery][color-picker]")
+{
+    demo::gallery_page page {};
+    auto tree { arranged(page.build_controls()) };
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #3366FF80 · 색상 225° · 채도 80% · 명도 100% · 알파 50%");
+    const luil::ui_element* const picker { tree.find({ luil::ui_element_kind::color_picker, u8"gallery/color" }) };
+    REQUIRE(picker != nullptr);
+    REQUIRE(picker->accessibility().value == u8"#3366FF80");
+    const luil::ui_element* const hex { tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" }) };
+    REQUIRE(hex != nullptr);
+    REQUIRE(hex->accessibility().value == u8"#3366FF80");
+    // 견본 넷이고 첫 견본이 처음 색이다. 알파 막대가 선다.
+    for (const std::u8string_view number : { u8"1", u8"2", u8"3", u8"4" })
+        REQUIRE(tree.find({ luil::ui_element_kind::color_picker_preset, color_part(u8"gallery/color", number) }) != nullptr);
+    REQUIRE(tree.find({ luil::ui_element_kind::color_picker_preset, color_part(u8"gallery/color", u8"1") })->accessibility().name == u8"처음 색");
+    REQUIRE(tree.find({ luil::ui_element_kind::color_picker_bar, color_part(u8"gallery/color", u8"alpha") }) != nullptr);
+
+    // 보조 기술이 색상 막대를 120도로 정하면 label과 16진 칸이 함께 바뀐다.
+    const luil::ui_element* const hue { tree.find({ luil::ui_element_kind::color_picker_bar, color_part(u8"gallery/color", u8"hue") }) };
+    REQUIRE(hue != nullptr);
+    const auto plan { luil::plan_access_request(*hue, { luil::access_command::set_value, 120.0f }) };
+    REQUIRE(plan.has_value());
+    deliver_action(page, first_action(*plan));
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #33FF3380 · 색상 120° · 채도 80% · 명도 100% · 알파 50%");
+    REQUIRE(tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" })->accessibility().value == u8"#33FF3380");
+
+    // 회색 견본은 지금 색상을 지킨다.
+    const luil::ui_element* const gray { tree.find({ luil::ui_element_kind::color_picker_preset, color_part(u8"gallery/color", u8"3") }) };
+    REQUIRE(gray != nullptr);
+    deliver_action(page, first_action((*gray->action(luil::ui_trigger::left_click))({ gray->id() })));
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #808080FF · 색상 120° · 채도 0% · 명도 50% · 알파 100%");
+
+    // 초기화는 처음 색으로 돌린다.
+    send(page, demo::gallery_reset_intent {});
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #3366FF80 · 색상 225° · 채도 80% · 명도 100% · 알파 50%");
+}
+
+TEST_CASE("A typed hex color is filtered, committed when the field is left and marks a bad draft", "[demo][gallery][color-picker]")
+{
+    demo::gallery_page page {};
+    // 넣는 글은 16진 글자만 남는다. 칸을 떠나는 훅이 확정 메시지를 낸다.
+    send(page, replace_draft(demo::target_gallery_color_hex, u8"색 #00 80 00"));
+    auto tree { arranged(page.build_controls()) };
+    const luil::ui_element* const hex { tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" }) };
+    REQUIRE(hex != nullptr);
+    REQUIRE(hex->accessibility().value == u8"#008000");
+    REQUIRE(hex->focus_leave_action() != nullptr);
+    deliver_action(page, first_action((*hex->focus_leave_action())({ hex->id() })));
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #008000FF · 색상 120° · 채도 100% · 명도 50% · 알파 100%");
+    REQUIRE(tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" })->accessibility().value == u8"#008000FF");
+
+    // 읽히지 않는 초안은 칸을 붉게 두고 색은 그대로다.
+    send(page, replace_draft(demo::target_gallery_color_hex, u8"#12"));
+    send(page, demo::gallery_color_commit_intent {});
+    tree = arranged(page.build_controls());
+    REQUIRE(tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" })->accessibility().invalid);
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #008000FF · 색상 120° · 채도 100% · 명도 50% · 알파 100%");
+    // 다른 페이지의 칸 편집은 받지 않는다.
+    REQUIRE(page.handle(luil::app_message { replace_draft(demo::target_popups_color_hex, u8"#000") }) == false);
+}
+
+namespace {
+    const luil::ui_element_id color_field_id { luil::ui_element_kind::color_field, u8"popups/color-field" };
+
+    [[nodiscard]] std::optional<luil::ui_popup> color_popup_of(const demo::popups_page& page)
+    {
+        for (luil::ui_popup& popup : page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }))
+            if (popup.id == u8"color-popup")
+                return std::move(popup);
+        return std::nullopt;
+    }
+}
+
+TEST_CASE("The color field opens a picker popup under it and asks to focus the plane", "[demo][popups][color-picker]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #3366FF");
+    REQUIRE(page.make_focus_request().has_value() == false);
+    const luil::ui_element* const field { tree.find(color_field_id) };
+    REQUIRE(field != nullptr);
+    REQUIRE(field->accessibility().name == u8"글자 색");
+    REQUIRE(field->accessibility().value == u8"#3366FF");
+
+    // 누르면 여는 메시지이고, 열면 popup 표면의 판으로 초점을 옮기는 요청이 실린다.
+    deliver_action(page, first_action((*field->action(luil::ui_trigger::left_click))({ field->id() })));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface == u8"color-popup");
+    REQUIRE(focus->target == luil::color_picker_element::plane_id(u8"popups/color"));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 열림 · #3366FF");
+    REQUIRE(tree.find(color_field_id)->accessibility().expanded == true);
+    const luil::rect_f bounds { tree.find(color_field_id)->bounds() };
+    const std::optional<luil::ui_popup> popup { color_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->x == bounds.x);
+    REQUIRE(popup->y == bounds.y + bounds.height + 2.0f);
+    REQUIRE(popup->tree->find(luil::color_picker_element::plane_id(u8"popups/color")) != nullptr);
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" }) != nullptr);
+    // 한 번에 하나만 뜬다.
+    REQUIRE(page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }).size() == 1u);
+
+    // 창 이동·활성 전환에는 남는다. 글을 치는 popup이다.
+    REQUIRE(std::holds_alternative<std::monostate>(popup->dismiss(luil::popup_dismiss_reason::surface_moved)));
+    REQUIRE(std::holds_alternative<std::monostate>(popup->dismiss(luil::popup_dismiss_reason::activation_changed)));
+    // Esc로 닫으면 칸으로 돌아오는 초점 요청을 한 번 더 싣는다.
+    deliver_action(page, popup->dismiss(luil::popup_dismiss_reason::escape_key));
+    const std::optional<luil::focus_request> back { page.make_focus_request() };
+    REQUIRE(back.has_value());
+    REQUIRE(back->id == focus->id + 1u);
+    REQUIRE(back->surface.empty());
+    REQUIRE(back->target == color_field_id);
+    REQUIRE(color_popup_of(page).has_value() == false);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #3366FF");
+}
+
+TEST_CASE("Closing the color popup commits the hex draft typed in it and keeps the hue of a gray", "[demo][popups][color-picker]")
+{
+    demo::popups_page page {};
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#808080"));
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    std::optional<luil::ui_popup> popup { color_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" })->accessibility().value == u8"#808080");
+
+    // 바깥을 눌러 닫으면 popup의 tree가 사라져 떠남 훅이 없다. 닫는 메시지가 초안을 확정하고, 초점은 옮기지 않는다.
+    const std::uint64_t opened { page.make_focus_request()->id };
+    deliver_action(page, popup->dismiss(luil::popup_dismiss_reason::pointer_press_outside));
+    REQUIRE(page.make_focus_request()->id == opened);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+
+    // 다시 열면 회색에서도 색상은 225도 그대로다.
+    send(page, demo::color_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    popup = color_popup_of(page);
+    REQUIRE(popup.has_value());
+    const luil::ui_element* const hue { popup->tree->find({ luil::ui_element_kind::color_picker_bar, color_part(u8"popups/color", u8"hue") }) };
+    REQUIRE(hue != nullptr);
+    REQUIRE(hue->accessibility().range->value == 225.0f);
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" })->accessibility().value == u8"#808080");
+
+    // 칸을 다시 누르는 닫기와 페이지를 떠나는 닫기도 초안을 확정한다.
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#f00"));
+    send(page, demo::color_field_intent { false });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #FF0000");
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#00f"));
+    page.close_popups();
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #0000FF");
 }
 
 TEST_CASE("The theme page reads a style file and keeps the earlier style when one is refused", "[demo][style_json]")

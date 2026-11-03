@@ -102,6 +102,7 @@ namespace luil {
         table_cell_builder build_cell {};
         // 가로로 흘러간 양이다 (논리 픽셀, 앱 상태). 머리글과 본문이 이 값 하나로 함께 흐른다.
         //  - 범위 밖 값은 `arrange`가 다듬고 `scroll_x()`가 다듬은 값을 돌려준다.
+        //  - 고정 열(`frozen_columns`)이 서 있으면 흐르는 열만 이만큼 간다. 고정 열은 제자리다.
         float scroll_x { 0.0f };
         // 가로로 이만큼 흘리자는 메시지다 (+ = 오른쪽 내용이 보인다). 가로 휠·←·→가 낸다.
         //  - 없으면 가로로 흐르지 않는다. 넘친 열은 잘린다.
@@ -161,6 +162,13 @@ namespace luil {
         table_cell_message_factory commit_edit {};
         table_cell_message_factory cancel_edit {};
         table_editor_builder build_editor {};
+
+        // 앞(시작 쪽)에서 이 수만큼의 열은 가로로 흘러도 제자리에 선다 (frozen-columns-design.md).
+        //  - 0이면 지금과 같다. 열 수보다 크면 열 수로 본다.
+        //  - 고정 열이 창을 거의 채우면(`table_frozen_fits`가 거짓) 그 배치에서는 고정이 풀려 모든 열이 흐른다.
+        //  - 앞 열을 숨기거나 옮기는 앱이 이 수를 함께 맞춘다. 표는 끌어서 고정 집합을 바꾸지 않는다 —
+        //    머리글 칸을 끌어 놓는 일은 같은 구역 안에서만 받는다.
+        std::size_t frozen_columns { 0 };
     };
 
     // 열 하나가 차지하는 가로 자리다 (논리 픽셀, 가로 스크롤 전).
@@ -180,6 +188,14 @@ namespace luil {
     [[nodiscard]] float table_resize_delta(const table_column& column, float delta) noexcept;
     // 가로 스크롤을 범위 안으로 다듬는다. 내용이 창보다 좁으면 0이다.
     [[nodiscard]] float table_clamp_scroll(float scroll_x, float content_width, float viewport_width) noexcept;
+    // 앞 count개 열의 폭 합이다 (논리 픽셀). count가 열 수보다 크면 열 수로 다듬고, 폭이 음수인 열은 0으로 본다.
+    [[nodiscard]] float table_frozen_width(std::span<const table_column> columns, std::size_t count) noexcept;
+    // 고정 폭을 두고도 흐르는 창이 `table_key_scroll_step`(48) 이상 남는가.
+    [[nodiscard]] bool table_frozen_fits(float frozen_width, float viewport_width) noexcept;
+    // 그 열을 흐르는 창 [frozen_width + scroll_x, scroll_x + viewport_width]로 들이는 가로 스크롤 변화량이다 (이미 보이면 0).
+    //  - 창보다 넓은 열은 시작을 창의 시작에 맞춘다.
+    //  - frozen_width가 0이면 창이 [scroll_x, scroll_x + viewport_width]라 고정 없는 표의 들이기와 같은 값이다.
+    [[nodiscard]] float table_reveal_delta(const table_column_span& span, float scroll_x, float frozen_width, float viewport_width) noexcept;
 
     // 열 머리글이 있고 행을 고를 수 있는 표다 (Qt `QTreeView`+`QHeaderView`, WPF `DataGrid`의 1단계).
     //
@@ -190,8 +206,9 @@ namespace luil {
     //  - 가로 창 폭은 세로 막대를 뺀 본문의 폭이다. 끝까지 흘리면 마지막 열의 끝이 세로 막대 앞에 선다.
     //  - 열 경계를 끌면 폭 변화량을, 머리글을 누르면 정렬 요청을 낸다. 정렬과 폭 저장은 앱의 몫이다.
     //  - 보조 기술은 본문을 표(DataGrid)로, 행을 DataItem으로, 머리글 칸을 HeaderItem으로 읽는다.
+    //  - 앞 열 몇 개는 가로 스크롤에서 제자리에 세울 수 있다 (`table_config::frozen_columns`). 흐르는 열은 고정 구역 밖으로 잘린다.
     //
-    // 아직 없는 것은 table-design.md의 "범위"에 있다 (셀 커서와 편집, 열 재배치·숨김, 트리 열, 고정 열).
+    // 아직 없는 것은 table-design.md의 "범위"에 있다 (열 가상화, 셀 범위 선택, Grid·Table 패턴, 오른쪽 고정).
     class table_element final : public ui_element
     {
     public:
@@ -206,10 +223,21 @@ namespace luil {
         // 가로 막대다. `scroll_horizontal`이 없거나 `horizontal_bar`가 `never`면 nullptr다.
         //  - 열이 넘치지 않는 배치에서는 숨는다 (`visible()`이 거짓).
         [[nodiscard]] const scrollbar_element* horizontal_bar() const noexcept;
+        // 이번 배치에 서 있는 고정 열 수와 폭이다 (논리 픽셀). 고정이 없거나 풀렸으면 0이다. `arrange` 뒤에 유효하다.
+        [[nodiscard]] std::size_t frozen_columns() const noexcept;
+        [[nodiscard]] float frozen_width() const noexcept;
+        // 가로 창 폭이다 (논리 픽셀, 세로 막대를 뺀 본문의 폭). `arrange` 뒤에 유효하다.
+        //  - 고정 열의 폭 끌기가 한도(`창 - 48 - 고정 폭`)를 잰다.
+        [[nodiscard]] float viewport_width() const noexcept;
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
         [[nodiscard]] access_info accessibility() const override;
+        // 칸 안 컨트롤에 초점이 갈 때 흐르는 창으로 들이는 가로 스크롤 변화량이다 (논리 픽셀).
+        //  - **왼쪽 끝이 고정 경계 이상인 대상에만** 답하고 나머지는 0이다 (0.5 물리 픽셀의 여유를 둔다). 본문·행·머리글은
+        //    왼쪽 끝이 표의 시작이라 늘 0이다 — 경계와 맞춰 답하면 본문에 초점이 갈 때마다 표가 되돌아간다.
+        //  - 한계: 왼쪽 밖이나 고정 구역 아래에 일부 숨은 칸은 이 길로 들이지 못한다. 셀 커서와 F2 길은 들인다.
+        [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
 
         // 행 칸과 머리글이 배치에서 읽는다 (같은 tree 안의 부품이라 표가 먼저 배치된다).
         [[nodiscard]] const table_config& config() const noexcept;
@@ -240,5 +268,11 @@ namespace luil {
         float content_width_ { 0.0f };
         float scroll_x_ { 0.0f };
         float viewport_width_ { 0.0f };
+        float scale_ { 1.0f };
+        // 구성 때 정한 고정 열 수다 (`table_config::frozen_columns`를 열 수로 다듬은 값). 레인이 서는지를 가른다.
+        std::size_t configured_frozen_ { 0 };
+        // 이번 배치에서 서 있는 고정 열 수와 폭이다. 창이 좁으면 풀려 0이다.
+        std::size_t frozen_columns_ { 0 };
+        float frozen_width_ { 0.0f };
     };
 }

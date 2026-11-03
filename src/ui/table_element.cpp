@@ -31,6 +31,74 @@ namespace luil {
             return { row.x + (span.begin - scroll_x) * scale, row.y, span.width * scale, row.height };
         }
 
+        // 구성 때 정한 고정 열 수를 열 수로 다듬은 값이다.
+        [[nodiscard]] std::size_t clamped_frozen(const table_config& config) noexcept
+        {
+            return std::min(config.frozen_columns, config.columns.size());
+        }
+
+        // 레인이 서는 고정 열 수다. 고정이 없거나 모든 열이 고정이면 흐르는 열이 없어 0이다.
+        //  - 창 폭은 레인의 있고 없음을 정하지 않는다. tree 모양이 frame마다 달라지지 않는다.
+        [[nodiscard]] std::size_t lane_split(const table_config& config) noexcept
+        {
+            const std::size_t frozen { clamped_frozen(config) };
+            return frozen < config.columns.size() ? frozen : 0u;
+        }
+
+        // 열이 가로 스크롤을 따라 가는 양이다. 서 있는 고정 열은 제자리다.
+        [[nodiscard]] float column_scroll(const table_element& table, const std::size_t column) noexcept
+        {
+            return column < table.frozen_columns() ? 0.0f : table.scroll_x();
+        }
+
+        // 머리글 칸을 끌어 놓을 수 있는 구역 규칙이다. 고정 열과 흐르는 열은 서로 자리를 받지 않는다 (결정 3).
+        //  - 고정 열 키 목록을 값으로 든다. 기존 놓기 판정과 같이 표를 가리키는 포인터는 담지 않는다.
+        struct drop_zone
+        {
+            // 레인이 없으면 비어 있고 모든 놓기가 같은 구역이다.
+            std::shared_ptr<const std::vector<std::u8string>> frozen_keys {};
+            // 이 칸이 고정 열인가.
+            bool frozen { false };
+
+            [[nodiscard]] bool same_zone(const std::u8string& dragged) const
+            {
+                if (frozen_keys == nullptr)
+                    return true;
+                const bool dragged_frozen { std::find(frozen_keys->begin(), frozen_keys->end(), dragged) != frozen_keys->end() };
+                return dragged_frozen == frozen;
+            }
+        };
+
+        // 흐르는 열의 부품을 담아 고정 구역 밖으로 자르는 레인이다. 구조일 뿐이다 (접근 역할 `none`).
+        //  - 자기 자리만 정한다. 부품의 배치는 행과 머리글이 한다 — 흐르는 칸의 x는 레인 원점이 아니라 지금 식
+        //    그대로(`column_rect`)라 머리글 칸과 행 칸의 bounds가 같다는 약속이 유지된다.
+        //  - 그리기·hit·놓을 자리·`visible_bounds`·접근 좌표 질의·휠과 팬 임자가 모두 `clip_children`과 `bounds()`를
+        //    따르므로 한 번 세우면 가려진 칸이 함께 잘린다.
+        class table_lane_element final : public ui_element
+        {
+        public:
+            explicit table_lane_element(ui_element_id id)
+                : ui_element { std::move(id) }
+            {
+                set_clip_children(true);
+            }
+
+            void add(std::unique_ptr<ui_element> part)
+            {
+                add_child(std::move(part));
+            }
+
+            void arrange(const arrange_context& context) override
+            {
+                set_bounds(context.slot);
+            }
+
+            void draw(draw_context& context, const interaction_snapshot& interaction) const override
+            {
+                draw_children(context, interaction);
+            }
+        };
+
         // 칸 글 한 줄을 그린다. 끝 정렬은 글이 들어갈 때만 오른쪽에 붙고, 넘치면 시작에서 잘라 그린다 —
         // 넘친 숫자를 오른쪽에 붙이면 앞자리가 잘려 다른 숫자로 읽힌다.
         //  - 가운데 말줄임은 label과 같은 도우미(`elide_text_middle`)로 줄인 뒤 그린다. 줄인 글은 언제나 들어가므로
@@ -129,6 +197,18 @@ namespace luil {
                 texts_.resize(config.columns.size());
                 leads_.resize(config.columns.size(), 0.0f);
                 const ui_element_id body { ui_element_kind::virtual_list, config.owner };
+                // 고정 열이 있으면 흐르는 열의 부품은 레인에 담긴다. 자식 순서는 고정 부품, 레인이라 Tab 순서가 열 순서와 맞는다.
+                const std::size_t split { lane_split(config) };
+                std::unique_ptr<table_lane_element> lane {};
+                if (split > 0u)
+                    lane = std::make_unique<table_lane_element>(ui_element_id { ui_element_kind::table_row_lane, part_owner(config.owner, item.key) });
+                const auto add_part = [this, &lane, split](std::unique_ptr<ui_element> part, const std::size_t column, const part_kind kind) {
+                    places_.push_back({ part.get(), column, kind });
+                    if (lane != nullptr && column >= split)
+                        lane->add(std::move(part));
+                    else
+                        add_child(std::move(part));
+                };
                 for (std::size_t column = 0; column < config.columns.size(); ++column)
                 {
                     const table_column& info { config.columns[column] };
@@ -182,39 +262,48 @@ namespace luil {
                         // 글을 주지 않은 표는 첫 열에 행 이름을 보인다 (가상 목록의 기본 행과 같다).
                         texts_[column] = item.label;
                 }
+                if (lane != nullptr)
+                {
+                    lane_ = lane.get();
+                    add_child(std::move(lane));
+                }
             }
 
             void arrange(const arrange_context& context) override
             {
                 set_bounds(context.slot);
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
-                const std::span<const std::unique_ptr<ui_element>> parts { children() };
                 const std::vector<table_column_span>& spans { table_->spans() };
-                for (std::size_t index = 0; index < parts.size(); ++index)
+                // 레인은 경계에서 행의 오른쪽 끝까지다. 고정이 풀렸으면 경계가 행의 왼쪽 끝이라 레인이 행 전체다.
+                if (lane_ != nullptr)
                 {
-                    const part_place& place { places_[index] };
+                    const float edge { context.slot.x + table_->frozen_width() * scale };
+                    lane_->arrange(context.for_child({ edge, context.slot.y, std::max(0.0f, context.slot.x + context.slot.width - edge), context.slot.height }));
+                }
+                for (const part_place& place : places_)
+                {
                     if (place.column >= spans.size())
                     {
-                        parts[index]->arrange(context.for_child({}));
+                        place.part->arrange(context.for_child({}));
                         continue;
                     }
-                    const rect_f cell { column_rect(context.slot, spans[place.column], table_->scroll_x(), scale) };
+                    const rect_f cell { column_rect(context.slot, spans[place.column], column_scroll(*table_, place.column), scale) };
                     switch (place.kind)
                     {
                     case part_kind::expander:
-                        parts[index]->arrange(context.for_child(
+                        place.part->arrange(context.for_child(
                             { cell.x + (table_cell_padding + static_cast<float>(depth_) * list_indent_step) * scale, cell.y, list_expander_width * scale, cell.height }));
                         break;
                     case part_kind::check: {
                         // 체크박스는 자기 줄 높이를 정한다. 행 높이와 다르면 가운데에 앉힌다.
                         const float height { check_element::height_for({}) * scale };
                         const float left { cell.x + (table_cell_padding - 4.0f + check_lead_.at(place.column)) * scale };
-                        parts[index]->arrange(context.for_child({ left, cell.y + (cell.height - height) / 2.0f, check_slot_width * scale, height }));
+                        place.part->arrange(context.for_child({ left, cell.y + (cell.height - height) / 2.0f, check_slot_width * scale, height }));
                         break;
                     }
                     case part_kind::cell: {
                         const float lead { leads_[place.column] * scale };
-                        parts[index]->arrange(context.for_child({ cell.x + lead, cell.y, std::max(0.0f, cell.width - lead), cell.height }));
+                        place.part->arrange(context.for_child({ cell.x + lead, cell.y, std::max(0.0f, cell.width - lead), cell.height }));
                         break;
                     }
                     }
@@ -229,17 +318,24 @@ namespace luil {
                 const std::vector<table_column>& columns { table_->config().columns };
                 const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                 const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
-                context.canvas.save();
-                context.canvas.clipRect(SkRect::MakeXYWH(box.x, box.y, box.width, box.height));
-                for (std::size_t column = 0; column < texts_.size() && column < spans.size(); ++column)
-                {
-                    rect_f cell { column_rect(box, spans[column], table_->scroll_x(), scale) };
-                    const float lead { leads_[column] * scale };
-                    cell.x += lead;
-                    cell.width = std::max(0.0f, cell.width - lead);
-                    draw_cell_text(context.canvas, texts_[column], cell, columns[column].align, columns[column].elide, scale, font, foreground);
-                }
-                context.canvas.restore();
+                // 글은 구역마다 따로 자른다. 레인이 없으면 행 전체 한 번이다.
+                const auto draw_columns = [&](const std::size_t first, const std::size_t last, const rect_f& zone) {
+                    context.canvas.save();
+                    context.canvas.clipRect(SkRect::MakeXYWH(zone.x, zone.y, zone.width, zone.height));
+                    for (std::size_t column = first; column < last && column < texts_.size() && column < spans.size(); ++column)
+                    {
+                        rect_f cell { column_rect(box, spans[column], column_scroll(*table_, column), scale) };
+                        const float lead { leads_[column] * scale };
+                        cell.x += lead;
+                        cell.width = std::max(0.0f, cell.width - lead);
+                        draw_cell_text(context.canvas, texts_[column], cell, columns[column].align, columns[column].elide, scale, font, foreground);
+                    }
+                    context.canvas.restore();
+                };
+                const std::size_t split { lane_ != nullptr ? lane_split(table_->config()) : 0u };
+                if (split > 0u)
+                    draw_columns(0u, split, zone_of(0u, box, scale));
+                draw_columns(split, texts_.size(), zone_of(split, box, scale));
                 draw_children(context, interaction);
                 draw_cell_cursor(context, interaction, scale);
             }
@@ -258,14 +354,28 @@ namespace luil {
                 check,
             };
 
-            // 자식 하나가 선 열과 그 쓰임이다 (자식 순서 그대로).
+            // 부품 하나가 선 열과 그 쓰임이다. 흐르는 열의 부품은 레인의 자식이라 자식 순서가 아니라 부품을 직접 든다.
             struct part_place
             {
+                ui_element* part { nullptr };
                 std::size_t column { 0 };
                 part_kind kind { part_kind::cell };
             };
 
+            // 열이 앉는 구역의 물리 사각형이다. 레인이 없으면 행 전체다.
+            [[nodiscard]] rect_f zone_of(const std::size_t column, const rect_f& box, const float scale) const noexcept
+            {
+                if (lane_ == nullptr)
+                    return box;
+                const float edge { box.x + table_->frozen_width() * scale };
+                if (column < lane_split(table_->config()))
+                    // 고정이 풀렸으면 모든 열이 흐르는 중이라 고정 열의 구역도 행 전체다.
+                    return table_->frozen_columns() > 0u ? rect_f { box.x, box.y, edge - box.x, box.height } : box;
+                return { edge, box.y, std::max(0.0f, box.x + box.width - edge), box.height };
+            }
+
             // 셀 커서의 테다. 행의 커서 표시와 같은 규칙으로 **본문에 키보드 초점이 있을 때만** 선다.
+            //  - 칸이 속한 구역 안에서만 그린다. 고정 구역 아래로 흘러든 칸의 테가 고정 칸 위에 비치지 않는다.
             void draw_cell_cursor(draw_context& context, const interaction_snapshot& interaction, const float scale) const
             {
                 const table_config& config { table_->config() };
@@ -278,19 +388,20 @@ namespace luil {
                 {
                     if (config.columns[column].key != config.cell_column)
                         continue;
-                    const rect_f cell { column_rect(bounds(), spans[column], table_->scroll_x(), scale) };
+                    const rect_f cell { column_rect(bounds(), spans[column], column_scroll(*table_, column), scale) };
                     SkPaint outline { solid_paint(context.palette.accent) };
                     outline.setStyle(SkPaint::kStroke_Style);
                     outline.setStrokeWidth(2.0f * scale);
+                    context.canvas.save();
+                    if (lane_ != nullptr)
+                    {
+                        const rect_f zone { zone_of(column, bounds(), scale) };
+                        context.canvas.clipRect(SkRect::MakeXYWH(zone.x, zone.y, zone.width, zone.height));
+                    }
                     context.canvas.drawRect(SkRect::MakeXYWH(cell.x + scale, cell.y + scale, cell.width - 2.0f * scale, cell.height - 2.0f * scale), outline);
+                    context.canvas.restore();
                     return;
                 }
-            }
-
-            void add_part(std::unique_ptr<ui_element> part, const std::size_t column, const part_kind kind)
-            {
-                places_.push_back({ column, kind });
-                add_child(std::move(part));
             }
 
             const table_element* table_ { nullptr };
@@ -302,6 +413,8 @@ namespace luil {
             // 체크박스가 서는 거리다 (트리 열과 겹치면 삼각형 뒤).
             std::unordered_map<std::size_t, float> check_lead_ {};
             std::vector<part_place> places_ {};
+            // 흐르는 열의 부품을 담은 레인이다 (고정 열이 있을 때만 서고, 자식 끝에 있다).
+            table_lane_element* lane_ { nullptr };
         };
 
         // 머리글의 부품을 누르면 초점이 본문 목록에 선다.
@@ -316,14 +429,18 @@ namespace luil {
         //  - 변화량만 나른다 (`split_handle_element`와 같은 규약). 폭을 가진 것은 앱이다.
         //  - 최소 폭 아래로 가는 몫은 미리 잘라 낸다 (`table_resize_delta`).
         //  - Tab의 자리가 아니다. 열마다 자리가 서면 표 하나에 자리가 열 수만큼 는다.
+        //  - 고정 열의 손잡이(`frozen_table`)는 표를 가리키는 포인터를 들고 넓히는 몫만 막는다. 고정이 서 있으면 흐르는 창이
+        //    한 걸음(`table_key_scroll_step`) 아래로 좁아지는 폭까지 넓힐 수 없다 — 넘으면 고정이 풀려 열이 한꺼번에 움직인다.
+        //    `table_resize_delta`는 그대로고, 끌기가 한도에서 멈춰도 끝 알림은 끌기마다 한 번 온다.
         class table_column_grip_element final : public ui_element
         {
         public:
             table_column_grip_element(ui_element_id id, const std::u8string& table, const table_column& column, const table_resize_message_factory& resize,
-                const table_column_message_factory& finish)
+                const table_column_message_factory& finish, const table_element* const frozen_table)
                 : ui_element { std::move(id) }
                 , body_ { body_id(table) }
                 , header_ { column.header }
+                , frozen_table_ { frozen_table }
             {
                 set_tab_stop(false);
                 set_cursor(ui_cursor::resize_horizontal);
@@ -331,7 +448,9 @@ namespace luil {
                 // 끄는 동안 머리글이 다시 배치되며 손잡이가 경계를 따라 옮겨 간다.
                 target.follows_pointer = true;
                 target.on_move = [this, column, resize](const ui_action_context& previous, const ui_action_context& current) -> std::vector<input_action> {
-                    const float delta { table_resize_delta(column, (current.x - previous.x) / scale_) };
+                    float delta { table_resize_delta(column, (current.x - previous.x) / scale_) };
+                    if (frozen_table_ != nullptr && frozen_table_->frozen_columns() > 0u)
+                        delta = std::min(delta, std::max(0.0f, frozen_table_->viewport_width() - table_key_scroll_step - frozen_table_->frozen_width()));
                     if (delta == 0.0f)
                         return {};
                     return { resize(column.key, delta) };
@@ -369,6 +488,8 @@ namespace luil {
         private:
             ui_element_id body_ {};
             std::u8string header_ {};
+            // 고정 열의 손잡이면 표다. 아니면 nullptr이다.
+            const table_element* frozen_table_ { nullptr };
             float scale_ { 1.0f };
         };
 
@@ -376,7 +497,7 @@ namespace luil {
         class table_header_cell_element final : public ui_element
         {
         public:
-            table_header_cell_element(ui_element_id id, const table_config& config, const table_column& column)
+            table_header_cell_element(ui_element_id id, const table_config& config, const table_column& column, drop_zone zone)
                 : ui_element { std::move(id) }
                 , body_ { body_id(config.owner) }
                 , header_ { column.header }
@@ -386,7 +507,8 @@ namespace luil {
                 set_tab_stop(false);
                 const ui_element_id header { ui_element_kind::table_header, config.owner };
                 // 머리글 칸을 끌어 다른 칸에 놓으면 열 순서를 바꾸자는 메시지다. 규칙은 탭·목록 행과 한 벌이다
-                // (reorder_drop.h) — 같은 표의 머리글 칸만 받고, 자기 자리는 받지 않는다.
+                // (reorder_drop.h) — 같은 표의 머리글 칸만 받고, 자기 자리는 받지 않는다. 고정 열이 있으면 거기에
+                // 구역 판정이 더해진다: 구역 경계를 넘는 놓기는 받지 않는다. 표가 고정 집합을 바꾸지 않으니 N이 늘 맞는다.
                 if (const auto& reorder { config.reorder_column }; reorder != nullptr)
                 {
                     const ui_element* const self { this };
@@ -403,7 +525,9 @@ namespace luil {
                     };
                     set_drag_source(std::move(source));
                     drop_target drop {};
-                    drop.accepts = [key = column.key, header](const drag_payload& payload) { return accepts_reorder_drop(payload, ui_element_kind::table_header_cell, header, key); };
+                    drop.accepts = [key = column.key, header, zone = std::move(zone)](const drag_payload& payload) {
+                        return accepts_reorder_drop(payload, ui_element_kind::table_header_cell, header, key) && zone.same_zone(payload.dragged_owner);
+                    };
                     drop.on_drop = [key = column.key, reorder](const drag_payload& payload, const ui_action_context&) -> std::vector<input_action> {
                         return { reorder(payload.dragged_owner, key) };
                     };
@@ -468,6 +592,11 @@ namespace luil {
         };
 
         // 머리글 줄이다. 칸과 경계 손잡이를 열 자리에 앉힌다.
+        //
+        // 고정 열이 있으면 자식 순서는 고정 칸, 레인(흐르는 칸, 흐르는 손잡이), 고정 손잡이다. hit와 접근 질의는 뒤 자식이
+        // 이기므로, 경계에 걸친 마지막 고정 열 손잡이의 흐르는 쪽 절반이 흐르는 칸을 이긴다. 칸(HeaderItem)이 손잡이보다
+        // 앞이고 칸끼리는 열 순서라 보조 기술이 읽는 머리글 칸의 순서는 고정이 없을 때와 같다. 머리글의 부품은 Tab의
+        // 자리가 아니라 순서가 초점에 닿지 않는다. 고정 열이 없으면 칸들, 손잡이들 순서 그대로다.
         class table_header_element final : public ui_element
         {
         public:
@@ -477,18 +606,60 @@ namespace luil {
             {
                 set_clip_children(true);
                 const table_config& config { table.config() };
-                for (const table_column& column : config.columns)
-                    add_child(std::make_unique<table_header_cell_element>(ui_element_id { ui_element_kind::table_header_cell, part_owner(config.owner, column.key) }, config, column));
+                const std::size_t split { lane_split(config) };
+                const std::size_t frozen { clamped_frozen(config) };
+                drop_zone zone {};
+                if (split > 0u)
+                {
+                    std::vector<std::u8string> keys {};
+                    keys.reserve(split);
+                    for (std::size_t index = 0; index < split; ++index)
+                        keys.push_back(config.columns[index].key);
+                    zone.frozen_keys = std::make_shared<const std::vector<std::u8string>>(std::move(keys));
+                }
+
+                // 부품은 구역별로 모아 두었다가 순서대로 담는다.
+                std::vector<std::unique_ptr<ui_element>> fixed_cells {};
+                std::vector<std::unique_ptr<ui_element>> fixed_grips {};
+                std::vector<std::unique_ptr<ui_element>> flowing {};
+                const auto place = [this, split, &fixed_cells, &fixed_grips, &flowing](std::unique_ptr<ui_element> part, const std::size_t column, const bool grip) {
+                    places_.push_back({ part.get(), column, grip });
+                    if (split > 0u && column >= split)
+                        flowing.push_back(std::move(part));
+                    else if (grip)
+                        fixed_grips.push_back(std::move(part));
+                    else
+                        fixed_cells.push_back(std::move(part));
+                };
+                for (std::size_t index = 0; index < config.columns.size(); ++index)
+                {
+                    const table_column& column { config.columns[index] };
+                    zone.frozen = index < split;
+                    place(std::make_unique<table_header_cell_element>(ui_element_id { ui_element_kind::table_header_cell, part_owner(config.owner, column.key) }, config, column, zone), index,
+                        false);
+                }
                 // 손잡이는 칸 **뒤에** 담는다. 경계에 절반씩 걸쳐 다음 칸 위에도 서므로, 나중에 그려진 것이 hit에서 이긴다.
                 for (std::size_t index = 0; index < config.columns.size(); ++index)
                 {
                     const table_column& column { config.columns[index] };
                     if (column.resizable == false || config.resize_column == nullptr)
                         continue;
-                    grip_columns_.push_back(index);
-                    add_child(std::make_unique<table_column_grip_element>(ui_element_id { ui_element_kind::table_column_grip, part_owner(config.owner, column.key) }, config.owner,
-                        column, config.resize_column, config.resize_column_end));
+                    place(std::make_unique<table_column_grip_element>(ui_element_id { ui_element_kind::table_column_grip, part_owner(config.owner, column.key) }, config.owner, column,
+                              config.resize_column, config.resize_column_end, index < frozen ? &table : nullptr),
+                        index, true);
                 }
+                for (std::unique_ptr<ui_element>& part : fixed_cells)
+                    add_child(std::move(part));
+                if (split > 0u)
+                {
+                    auto lane { std::make_unique<table_lane_element>(ui_element_id { ui_element_kind::table_header_lane, part_owner(config.owner, u8"lane") }) };
+                    for (std::unique_ptr<ui_element>& part : flowing)
+                        lane->add(std::move(part));
+                    lane_ = lane.get();
+                    add_child(std::move(lane));
+                }
+                for (std::unique_ptr<ui_element>& part : fixed_grips)
+                    add_child(std::move(part));
             }
 
             void arrange(const arrange_context& context) override
@@ -496,15 +667,25 @@ namespace luil {
                 set_bounds(context.slot);
                 const float scale { context.scale > 0.0f ? context.scale : 1.0f };
                 const std::vector<table_column_span>& spans { table_->spans() };
-                const std::span<const std::unique_ptr<ui_element>> parts { children() };
-                const std::size_t cells { spans.size() };
-                for (std::size_t index = 0; index < cells && index < parts.size(); ++index)
-                    parts[index]->arrange(context.for_child(column_rect(context.slot, spans[index], table_->scroll_x(), scale)));
-                const float grip { table_grip_width * scale };
-                for (std::size_t index = cells; index < parts.size(); ++index)
+                // 레인은 경계에서 머리글의 오른쪽 끝까지다. 고정이 풀렸으면 경계가 왼쪽 끝이라 머리글 전체다.
+                if (lane_ != nullptr)
                 {
-                    const rect_f cell { column_rect(context.slot, spans[grip_columns_[index - cells]], table_->scroll_x(), scale) };
-                    parts[index]->arrange(context.for_child({ cell.x + cell.width - grip / 2.0f, cell.y, grip, cell.height }));
+                    const float edge { context.slot.x + table_->frozen_width() * scale };
+                    lane_->arrange(context.for_child({ edge, context.slot.y, std::max(0.0f, context.slot.x + context.slot.width - edge), context.slot.height }));
+                }
+                const float grip { table_grip_width * scale };
+                for (const part_place& place : places_)
+                {
+                    if (place.column >= spans.size())
+                    {
+                        place.part->arrange(context.for_child({}));
+                        continue;
+                    }
+                    const rect_f cell { column_rect(context.slot, spans[place.column], column_scroll(*table_, place.column), scale) };
+                    if (place.grip)
+                        place.part->arrange(context.for_child({ cell.x + cell.width - grip / 2.0f, cell.y, grip, cell.height }));
+                    else
+                        place.part->arrange(context.for_child(cell));
                 }
             }
 
@@ -524,9 +705,18 @@ namespace luil {
             }
 
         private:
+            // 부품 하나가 선 열과 쓰임이다. 흐르는 열의 부품은 레인의 자식이라 부품을 직접 든다.
+            struct part_place
+            {
+                ui_element* part { nullptr };
+                std::size_t column { 0 };
+                bool grip { false };
+            };
+
             const table_element* table_ { nullptr };
-            // 손잡이(칸 뒤의 자식들) 하나하나가 선 열이다.
-            std::vector<std::size_t> grip_columns_ {};
+            std::vector<part_place> places_ {};
+            // 흐르는 열의 부품을 담은 레인이다 (고정 열이 있을 때만 서고, 고정 칸 뒤 고정 손잡이 앞이다).
+            table_lane_element* lane_ { nullptr };
         };
     }
 
@@ -565,12 +755,41 @@ namespace luil {
         return std::clamp(scroll_x, 0.0f, maximum);
     }
 
+    float table_frozen_width(const std::span<const table_column> columns, const std::size_t count) noexcept
+    {
+        float total { 0.0f };
+        const std::size_t end { std::min(count, columns.size()) };
+        for (std::size_t index = 0; index < end; ++index)
+            total += columns[index].width > 0.0f ? columns[index].width : 0.0f;
+        return total;
+    }
+
+    bool table_frozen_fits(const float frozen_width, const float viewport_width) noexcept
+    {
+        return viewport_width - frozen_width >= table_key_scroll_step;
+    }
+
+    float table_reveal_delta(const table_column_span& span, const float scroll_x, const float frozen_width, const float viewport_width) noexcept
+    {
+        // 흐르는 창은 [고정 폭 + 스크롤, 스크롤 + 창]이다. 고정 폭이 0이면 고정 없는 표의 창과 같다.
+        const float left { span.begin };
+        const float right { left + span.width };
+        const float window_left { frozen_width + scroll_x };
+        if (left < window_left)
+            return left - window_left;
+        if (right > scroll_x + viewport_width)
+            // 창보다 넓은 열은 시작을 맞춘다.
+            return std::min(left - frozen_width, right - viewport_width) - scroll_x;
+        return 0.0f;
+    }
+
     table_element::table_element(table_config config)
         : ui_element { ui_element_id { ui_element_kind::table, config.owner } }
         , config_ { std::move(config) }
     {
         spans_ = table_column_spans(config_.columns);
         content_width_ = table_content_width(config_.columns);
+        configured_frozen_ = clamped_frozen(config_);
 
         auto header { std::make_unique<table_header_element>(*this) };
         header_ = header.get();
@@ -703,16 +922,21 @@ namespace luil {
 
     float table_element::reveal_delta(const std::size_t column) const noexcept
     {
-        if (column >= spans_.size())
+        // 서 있는 고정 열은 흘러도 제자리라 들일 것이 없다.
+        if (column >= spans_.size() || column < frozen_columns_)
             return 0.0f;
-        const float left { spans_[column].begin };
-        const float right { left + spans_[column].width };
-        if (left < scroll_x_)
-            return left - scroll_x_;
-        if (right > scroll_x_ + viewport_width_)
-            // 창보다 넓은 열은 시작을 맞춘다.
-            return std::min(left, right - viewport_width_) - scroll_x_;
-        return 0.0f;
+        return table_reveal_delta(spans_[column], scroll_x_, frozen_width_, viewport_width_);
+    }
+
+    float table_element::scroll_delta_to_reveal(const rect_f& target) const
+    {
+        // 왼쪽 끝이 경계 이상인 대상에만 답한다. 본문·행·머리글(왼쪽 끝이 표의 시작)과 고정 칸은 모두 0이다.
+        // 경계와 맞춰 답하면 본문에 초점이 갈 때 -고정 폭이 나와 표가 0으로 되돌아간다.
+        const float edge { bounds().x + frozen_width_ * scale_ };
+        if (target.x < edge - 0.5f)
+            return 0.0f;
+        const table_column_span span { (target.x - bounds().x) / scale_ + scroll_x_, target.width / scale_ };
+        return table_reveal_delta(span, scroll_x_, frozen_width_, viewport_width_);
     }
 
     std::optional<std::size_t> table_element::column_index(const std::u8string_view key) const noexcept
@@ -752,6 +976,21 @@ namespace luil {
     const scrollbar_element* table_element::horizontal_bar() const noexcept
     {
         return horizontal_bar_;
+    }
+
+    std::size_t table_element::frozen_columns() const noexcept
+    {
+        return frozen_columns_;
+    }
+
+    float table_element::frozen_width() const noexcept
+    {
+        return frozen_width_;
+    }
+
+    float table_element::viewport_width() const noexcept
+    {
+        return viewport_width_;
     }
 
     const table_config& table_element::config() const noexcept
@@ -799,6 +1038,19 @@ namespace luil {
         const float view_width { context.slot.width - (vertical ? vertical_width : 0.0f) };
         viewport_width_ = view_width / scale;
         scroll_x_ = table_clamp_scroll(config_.scroll_x, content_width_, viewport_width_);
+        scale_ = scale;
+
+        // 고정 열은 흐르는 창이 한 걸음(48) 이상 남을 때만 선다. 거짓이면 그 배치에서 모든 열이 흐른다 (결정 4).
+        //  - 판정은 창 폭만 본다. 가로 막대는 열 폭의 합으로 정해지므로 고정과 맞물려 돌지 않는다.
+        //  - 스크롤 값(`config_.scroll_x`)은 앱 상태 그대로다. 창이 넓어지면 고정이 돌아온다.
+        frozen_columns_ = 0u;
+        frozen_width_ = 0.0f;
+        const float frozen_width { table_frozen_width(config_.columns, configured_frozen_) };
+        if (configured_frozen_ > 0u && table_frozen_fits(frozen_width, viewport_width_))
+        {
+            frozen_columns_ = configured_frozen_;
+            frozen_width_ = frozen_width;
+        }
 
         // 가로 휠의 임자다. 세로 휠은 안쪽 본문이 가지고, 가로 휠은 축이 다른 본문을 지나 여기로 온다
         // (`route_wheel`의 이벤트 짝).
@@ -837,6 +1089,14 @@ namespace luil {
     void table_element::draw(draw_context& context, const interaction_snapshot& interaction) const
     {
         draw_children(context, interaction);
+        // 고정 경계선이다. 머리글과 본문을 함께 가로지르는 곳이 여기뿐이라 표가 자식 뒤에 긋는다 (결정 6).
+        //  - 머리글 마지막 고정 칸의 오른쪽 선(`box.x + box.width - scale`)과 같은 x에서 본문 높이만큼 이어진다.
+        //  - 흐르는 열이 없으면(레인이 없으면) 경계가 아니다.
+        if (frozen_columns_ == 0u || lane_split(config_) == 0u)
+            return;
+        const rect_f rows { body_->bounds() };
+        const float edge { bounds().x + frozen_width_ * scale_ };
+        context.canvas.drawRect(SkRect::MakeXYWH(edge - scale_, rows.y, scale_, rows.height), solid_paint(context.palette.divider));
     }
 
     access_info table_element::accessibility() const

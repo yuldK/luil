@@ -17,10 +17,10 @@ namespace {
 TEST_CASE("Every default text is a non-empty Korean word, the same as the ones the elements wrote themselves", "[ui][default-text]")
 {
     // 요소마다 박혀 있던 낱말을 옮긴 것이라 글자가 전과 같아야 한다. 열다섯 낱말에 확인 대화 상자의 표준 단추 넷과 별점의 이름,
-    // 실행 취소 명령표의 두 이름, 잉크 캔버스의 이름을 더한 스물셋이다.
+    // 실행 취소 명령표의 두 이름, 잉크 캔버스의 이름, 색 고르기의 이름 다섯을 더한 스물여덟이다.
     // 분할 버튼의 이름은 문자열을 새로 짓는다. view로 들기 전에 수명을 잡아 둔다.
     const std::u8string arrow_name { luil::default_text::split_button_arrow_name(u8"저장") };
-    const std::array<std::pair<std::u8string_view, std::u8string_view>, 23> words {
+    const std::array<std::pair<std::u8string_view, std::u8string_view>, 28> words {
         std::pair { luil::default_text::info_bar_close(), std::u8string_view { u8"닫기" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::info), std::u8string_view { u8"정보" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::success), std::u8string_view { u8"성공" } },
@@ -44,6 +44,11 @@ TEST_CASE("Every default text is a non-empty Korean word, the same as the ones t
         std::pair { luil::default_text::undo_command_undo(), std::u8string_view { u8"실행 취소" } },
         std::pair { luil::default_text::undo_command_redo(), std::u8string_view { u8"다시 실행" } },
         std::pair { luil::default_text::ink_canvas_name(), std::u8string_view { u8"잉크 캔버스" } },
+        std::pair { luil::default_text::color_picker_name(), std::u8string_view { u8"색" } },
+        std::pair { luil::default_text::color_picker_plane_name(), std::u8string_view { u8"채도와 명도" } },
+        std::pair { luil::default_text::color_picker_hue_name(), std::u8string_view { u8"색상" } },
+        std::pair { luil::default_text::color_picker_alpha_name(), std::u8string_view { u8"불투명도" } },
+        std::pair { luil::default_text::color_picker_hex_name(), std::u8string_view { u8"16진 색" } },
     };
     for (const auto& [text, expected] : words)
     {
@@ -90,6 +95,16 @@ TEST_CASE("The split button arrow name keeps the word order in one place", "[ui]
     REQUIRE(luil::default_text::split_button_arrow_name(u8"Save") == u8"Save 옵션");
     // 본체 이름이 비어도 앞 공백이 든 채 그대로다 (분할 버튼이 비어 있던 때의 동작).
     REQUIRE(luil::default_text::split_button_arrow_name({}) == u8" 옵션");
+}
+
+TEST_CASE("The color plane value names both percents as whole numbers", "[ui][default-text][color-picker]")
+{
+    REQUIRE(luil::default_text::color_picker_plane_value(0.4f, 0.8f) == u8"채도 40%, 명도 80%");
+    REQUIRE(luil::default_text::color_picker_plane_value(0.0f, 1.0f) == u8"채도 0%, 명도 100%");
+    // 백분율은 반올림한 정수다. 범위 밖과 NaN은 가장자리로 읽는다.
+    REQUIRE(luil::default_text::color_picker_plane_value(0.406f, 0.994f) == u8"채도 41%, 명도 99%");
+    REQUIRE(luil::default_text::color_picker_plane_value(-1.0f, 3.0f) == u8"채도 0%, 명도 100%");
+    REQUIRE(luil::default_text::color_picker_plane_value(std::numeric_limits<float>::quiet_NaN(), 0.5f) == u8"채도 0%, 명도 50%");
 }
 
 TEST_CASE("The rating value name builds digits itself and keeps one decimal at most", "[ui][default-text]")

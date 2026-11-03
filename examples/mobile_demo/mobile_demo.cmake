@@ -32,6 +32,8 @@ function(luil_mobile_demo_sources out_var)
         "${directory}/../demo/inspector_state.h"
         "${directory}/lists_page.cpp"
         "${directory}/lists_page.h"
+        "${directory}/page_list.cpp"
+        "${directory}/page_list.h"
         "${directory}/popups_page.cpp"
         "${directory}/popups_page.h"
         "${directory}/../demo/readonly_undo_keys.h"

@@ -15,8 +15,11 @@
 // 남는다 — 잠깐 다른 창을 봤다고 치던 글이 사라지면 안 되기 때문이다.
 
 #include "demo/common.h"
+#include "luil/ui/color_space.h"
 #include "luil/win32/app_host.h"
 
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace demo {
@@ -74,6 +77,29 @@ namespace demo {
     {
     };
 
+    // 색 칸의 popup을 이 상태로 하라는 절대 메시지다 (`color_field_config::set_open`). 닫기는 16진 초안을 먼저 확정한다.
+    struct color_field_intent
+    {
+        bool open { false };
+    };
+
+    // 색 칸 popup의 닫힘 계기다. Esc로 닫으면 초점을 칸으로 돌린다 (color-picker-design.md 결정 3).
+    struct color_field_dismiss_intent
+    {
+        luil::popup_dismiss_reason reason { luil::popup_dismiss_reason::pointer_press_outside };
+    };
+
+    // popup 안 색 고르기의 값이다.
+    struct color_field_value_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    // popup 안 16진 칸을 확정한다 (칸을 떠날 때와 Enter).
+    struct color_field_commit_intent
+    {
+    };
+
     // popup 모양을 골랐다 (`setting`은 "corner"·"border", `value`는 고른 값).
     struct popup_shape_intent
     {
@@ -92,13 +118,11 @@ namespace demo {
         // `surface`는 앵커 창의 client 사각형이다 (물리 픽셀). 필드 메뉴가 이 안에서 위아래를 고른다.
         [[nodiscard]] std::vector<luil::win32::ui_popup> make_popups(float scale, const luil::rect_f& surface) const;
 
-        // 떠 있는 popup을 닫는다 (페이지 이동·Esc·바깥 클릭).
-        void close_popups() noexcept
-        {
-            open_popup_.clear();
-            search_ = {};
-            composition_.reset();
-        }
+        // 떠 있는 popup을 닫는다 (페이지 이동·Esc·바깥 클릭). 색 칸 popup이면 16진 초안을 먼저 확정한다.
+        void close_popups();
+
+        // 색 칸 popup을 열 때 판으로, Esc로 닫을 때 칸으로 초점을 옮기는 요청이다. 번호가 바뀔 때만 새 요청이다.
+        [[nodiscard]] std::optional<luil::focus_request> make_focus_request() const;
 
     private:
         // 떠 있는 popup의 임자를 바꾼다. 빈 값이면 모두 닫는다.
@@ -106,6 +130,12 @@ namespace demo {
         void show_popup(std::u8string owner);
         // 그 임자의 popup이 떠 있을 때만 닫는다. 늦게 온 닫기 메시지가 다른 필드의 popup을 닫지 않는다.
         void close_popup(std::u8string_view owner);
+        // 색 칸 popup의 16진 초안을 읽어 색으로 확정한다. 읽히지 않으면 칸을 붉게 둔다.
+        void commit_color_hex();
+        // 16진 초안을 지금 색의 글로 다시 쓴다.
+        void reset_color_hex();
+        // 초점 요청을 새로 싣는다.
+        void request_focus(std::u8string surface, luil::ui_element_id target);
 
         // 이 페이지의 popup에 거는 모서리와 경계다. 기본은 OS 기본(Windows 11은 작게 둥글다)과 경계 있음이다.
         luil::popup_corner corner_ { luil::popup_corner::system };
@@ -133,5 +163,15 @@ namespace demo {
         // 이번 build가 만든 분할 버튼과 드롭다운 단추다. 같은 규칙으로 frame이 게시되기 전까지만 유효하다.
         const luil::ui_element* split_ { nullptr };
         const luil::ui_element* send_ { nullptr };
+        const luil::ui_element* color_field_ { nullptr };
+        // 색 칸의 값과 popup 안 16진 칸의 초안이다. 값은 HSV로 든다 (color-space-design.md).
+        luil::hsv_color field_color_ { 225.0f, 0.8f, 1.0f, 1.0f };
+        luil::text::text_edit_state field_hex_ {};
+        std::optional<luil::text_composition_event> field_composition_ {};
+        bool field_hex_invalid_ { false };
+        // 마지막 초점 요청이다. 열 때와 Esc로 닫을 때 번호를 올린다.
+        std::uint64_t focus_revision_ { 0 };
+        std::u8string focus_surface_ {};
+        luil::ui_element_id focus_target_ {};
     };
 }

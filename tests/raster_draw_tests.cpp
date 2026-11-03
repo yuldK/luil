@@ -2,6 +2,7 @@
 
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/check_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_element.h"
@@ -1736,4 +1737,118 @@ TEST_CASE("A display only or disabled rating never previews and a disabled one i
     REQUIRE(gray.pixel_at(star_center_x(3), 30) == palette.window_background);
     REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, gray_color) > 0);
     REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, over(palette.secondary_foreground, palette.window_background)) == 0);
+}
+
+namespace {
+    // 알파를 켠 색 고르기다. 배율 2에서 판은 (0, 0, 400, 400), 색상 막대는 y 416..448, 알파 막대는 y 464..496이다.
+    [[nodiscard]] luil::ui_tree make_picker_tree(const luil::hsv_color value, const bool enabled = true)
+    {
+        luil::color_picker_config config {};
+        config.owner = u8"paint";
+        config.value = value;
+        config.alpha = true;
+        config.change_to = [](const luil::hsv_color) { return luil::input_action {}; };
+        auto picker { std::make_unique<luil::color_picker_element>(std::move(config)) };
+        picker->set_enabled(enabled);
+        return luil::make_arranged_tree(std::move(picker), { 0.0f, 0.0f, 500.0f, 700.0f }, raster_scale);
+    }
+
+    // 채널마다 허용치 안인가다. 그라디언트는 픽셀 가운데에서 샘플하므로 정확한 정지점과 조금 어긋난다.
+    [[nodiscard]] bool close_to(const luil::ui_color actual, const luil::ui_color expected, const int tolerance) noexcept
+    {
+        for (const std::uint32_t shift : { 0U, 8U, 16U })
+        {
+            const int difference { static_cast<int>((actual >> shift) & 0xFFU) - static_cast<int>((expected >> shift) & 0xFFU) };
+            if (std::abs(difference) > tolerance)
+                return false;
+        }
+        return true;
+    }
+}
+
+TEST_CASE("The color plane is white at the top left, the pure hue at the top right and black at the bottom", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // 손잡이는 오른쪽 아래(360, 360)에 있어 표본 자리를 덮지 않는다.
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.9f, 0.1f, 0.75f }) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    const luil::ui_color white { luil::make_ui_color(255, 255, 255) };
+    REQUIRE(close_to(frame.pixel_at(4, 4), white, 8));
+    REQUIRE(close_to(frame.pixel_at(395, 4), luil::color_from_hsv({ 200.0f, 1.0f, 1.0f, 1.0f }), 8));
+    REQUIRE(close_to(frame.pixel_at(200, 396), luil::make_ui_color(0, 0, 0), 8));
+    // 가운데는 HSV 식과 허용치 2로 같다. 흰색 쪽 투명 정지점이 검정이면 미리 곱하지 않은 보간이 이 자리를 회색으로 끈다.
+    REQUIRE(same_color(frame.pixel_at(200, 200), luil::color_from_hsv({ 200.0f, 0.5f, 0.5f, 1.0f })));
+    REQUIRE(same_color(frame.pixel_at(100, 300), luil::color_from_hsv({ 200.0f, 0.25f, 0.25f, 1.0f })));
+}
+
+TEST_CASE("The hue bar runs through the six stops and the alpha bar shows the checker", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.9f, 0.1f, 0.75f }) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    // 정지점은 400의 여섯 등분 자리다. 손잡이(200도, x 222)는 표본을 덮지 않는다.
+    REQUIRE(close_to(frame.pixel_at(66, 432), luil::make_ui_color(255, 255, 0), 3));
+    REQUIRE(close_to(frame.pixel_at(133, 432), luil::make_ui_color(0, 255, 0), 3));
+    REQUIRE(close_to(frame.pixel_at(200, 432), luil::make_ui_color(0, 255, 255), 3));
+    REQUIRE(close_to(frame.pixel_at(266, 432), luil::make_ui_color(0, 0, 255), 3));
+    REQUIRE(close_to(frame.pixel_at(333, 432), luil::make_ui_color(255, 0, 255), 3));
+    REQUIRE(close_to(frame.pixel_at(397, 432), luil::make_ui_color(255, 0, 0), 12));
+    // 알파 막대의 왼쪽 끝은 거의 투명이라 체커가 보인다. 칸은 물리 8이고 흰색과 #CCCCCC가 엇갈린다. 몇 %의 색이 얹혀 조금 어둡다.
+    REQUIRE(close_to(frame.pixel_at(4, 468), luil::make_ui_color(255, 255, 255), 10));
+    REQUIRE(close_to(frame.pixel_at(12, 468), luil::make_ui_color(0xCC, 0xCC, 0xCC), 10));
+    REQUIRE(close_to(frame.pixel_at(4, 476), luil::make_ui_color(0xCC, 0xCC, 0xCC), 10));
+    // 오른쪽 끝은 불투명한 그 색이다.
+    REQUIRE(close_to(frame.pixel_at(395, 480), luil::color_from_hsv({ 200.0f, 0.9f, 0.1f, 1.0f }), 6));
+}
+
+TEST_CASE("The plane handle ring is white over a dark color and black over a light one", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color white { luil::make_ui_color(255, 255, 255) };
+    const luil::ui_color black { luil::make_ui_color(0, 0, 0) };
+    // 반지름 7(물리 14)의 원이다. 안쪽 테는 반지름 10..14, 바깥 테는 14..16이다.
+    const luil::ui_tree dark { make_picker_tree({ 200.0f, 0.9f, 0.1f, 1.0f }) };
+    luil::testing::raster_frame on_dark { 500, 700, palette, raster_scale };
+    on_dark.draw(dark, luil::interaction_snapshot {});
+    REQUIRE(close_to(on_dark.pixel_at(372, 360), white, 8));
+    REQUIRE(close_to(on_dark.pixel_at(375, 360), black, 8));
+
+    const luil::ui_tree light { make_picker_tree({ 200.0f, 0.1f, 0.9f, 1.0f }) };
+    luil::testing::raster_frame on_light { 500, 700, palette, raster_scale };
+    on_light.draw(light, luil::interaction_snapshot {});
+    REQUIRE(close_to(on_light.pixel_at(52, 40), black, 8));
+    REQUIRE(close_to(on_light.pixel_at(55, 40), white, 8));
+}
+
+TEST_CASE("In high contrast the plane keeps the real colors and the outline is the window foreground", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::high_contrast) };
+    REQUIRE(palette.control_border == palette.primary_foreground);
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.9f, 0.1f, 0.75f }) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.set_theme(luil::color_theme::high_contrast);
+    frame.draw(tree, luil::interaction_snapshot {});
+    REQUIRE(same_color(frame.pixel_at(200, 200), luil::color_from_hsv({ 200.0f, 0.5f, 0.5f, 1.0f })));
+    REQUIRE(close_to(frame.pixel_at(266, 432), luil::make_ui_color(0, 0, 255), 3));
+    // 둘레 1 논리 픽셀(물리 2)이 윤곽 색이다.
+    REQUIRE(frame.pixel_at(0, 200) == palette.control_border);
+    REQUIRE(frame.pixel_at(1, 200) == palette.control_border);
+    REQUIRE(frame.pixel_at(399, 200) == palette.control_border);
+}
+
+TEST_CASE("A disabled picker draws its content faded and its handle in the disabled color", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.5f, 0.5f, 1.0f }, false) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    // 내용은 40% 불투명이라 바탕과 섞인다.
+    const luil::ui_color full { luil::color_from_hsv({ 200.0f, 0.9f, 0.9f, 1.0f }) };
+    REQUIRE(same_color(frame.pixel_at(360, 40), full) == false);
+    REQUIRE(same_color(frame.pixel_at(360, 40), over(luil::with_alpha(luil::color_from_hsv({ 200.0f, 360.5f / 400.0f, 1.0f - 40.5f / 400.0f, 1.0f }), 0.4f), palette.window_background)));
+    // 손잡이 테는 비활성 색이다 (알파가 있어 아래와 섞인다).
+    REQUIRE(frame.pixel_at(212, 200) != luil::make_ui_color(255, 255, 255));
+    REQUIRE(frame.pixel_at(212, 200) != luil::make_ui_color(0, 0, 0));
 }

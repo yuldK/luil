@@ -53,6 +53,8 @@ namespace mobile_demo {
     constexpr luil::ui_element_kind kind_style_sheet_button { luil::application_element_kind(46) };
     // 읽기 전용 안내 칸이다 (`text_area_element`). 하드웨어 키보드의 Ctrl+Z·Ctrl+Y가 칸을 지나 앱 on_key에 닿는지 본다.
     constexpr luil::ui_element_kind kind_readonly_input { luil::application_element_kind(47) };
+    // 기본 페이지 색 고르기의 16진 칸이다 (`color_picker_hex::id`).
+    constexpr luil::ui_element_kind kind_color_hex_input { luil::application_element_kind(48) };
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
     // 확인 대화 상자의 scrim·내용·단추는 라이브러리 kind(modal_host·message_box·message_box_button)가 짓는다.
@@ -98,6 +100,7 @@ namespace mobile_demo {
     constexpr luil::text_input_target target_smb_user { static_cast<luil::text_input_target>(11) };
     constexpr luil::text_input_target target_smb_password { static_cast<luil::text_input_target>(12) };
     constexpr luil::text_input_target target_readonly { static_cast<luil::text_input_target>(13) };
+    constexpr luil::text_input_target target_color_hex { static_cast<luil::text_input_target>(14) };
 
     // --- 페이지 키 ---
     inline constexpr std::u8string_view page_basics { u8"basics" };
@@ -216,6 +219,10 @@ namespace mobile_demo {
         void gap(float height);
         // 회색 설명 한 줄, 본문 한 줄, 머리글 한 줄이다.
         void note(std::u8string owner, std::u8string text);
+        // 폭에서 줄을 바꾸는 회색 설명이다. 한 줄 `note`는 좁은 화면(384dp에 글꼴 배율 1.1)에서 긴 설명의 끝이 말줄임으로
+        // 잘리므로, 긴 설명은 이쪽을 쓴다. 높이는 `page_width`(페이지 전체 폭)에서 바꾼 줄 수만큼 잡는다.
+        //  - `measurer`는 글 폭을 재는 쪽이다. 비면 설치 글꼴로 잰다. 글꼴이 없는 test가 고정 폭 측정기를 넣는다.
+        void wrapped_note(std::u8string owner, std::u8string text, float page_width, float scale, const luil::text_measurer* measurer = nullptr);
         void body(std::u8string owner, std::u8string text);
         void heading(std::u8string owner, std::u8string text);
 
@@ -223,6 +230,7 @@ namespace mobile_demo {
 
     private:
         std::unique_ptr<luil::stack_element> column_ {};
+        float padding_ { page_padding };
         float height_ { 0.0f };
     };
 

@@ -5,6 +5,7 @@
 #include "luil/ui/caption_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/dropdown_element.h"
 #include "luil/ui/group_element.h"
@@ -277,6 +278,104 @@ TEST_CASE("A rating is one slider node in the access tree whose cells fold away"
     REQUIRE(snapshot.entries[0].info.role == luil::access_role::slider);
     REQUIRE(snapshot.entries[0].info.range == luil::access_range { 0.0f, 5.0f, 3.0f, 1.0f, 1.0f });
     REQUIRE(snapshot.entries[0].info.value == u8"3 / 5");
+}
+
+namespace {
+    struct access_color_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    [[nodiscard]] luil::color_picker_config access_picker_config()
+    {
+        luil::color_picker_config config {};
+        config.owner = u8"paint";
+        config.value = { 225.0f, 0.4f, 0.8f, 0.5f };
+        config.alpha = true;
+        config.change_to = [](const luil::hsv_color value) { return luil::make_app_action(access_color_intent { value }); };
+        config.hex = luil::color_picker_hex { .id = { kind_item, u8"paint-hex" }, .value = { .text = u8"#7A8FCC80" } };
+        config.presets = { { luil::make_ui_color(255, 0, 0), u8"red" }, { luil::make_ui_color(0, 0, 255), u8"" } };
+        return config;
+    }
+
+    [[nodiscard]] std::u8string paint_part(const std::u8string_view name)
+    {
+        std::u8string owner { u8"paint" };
+        owner += u8'\u001f';
+        owner += name;
+        return owner;
+    }
+}
+
+TEST_CASE("A color picker is a group over the plane, the bars, the hex field and the preset buttons", "[ui][access][color-picker]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::color_picker_element>(access_picker_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+
+    // 견본은 root가 그리고 노드가 아니다. 견본 칸 줄은 구조라 접힌다.
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    const luil::ui_element_id picker { luil::ui_element_kind::color_picker, u8"paint" };
+    REQUIRE(snapshot.entries.size() == 7u);
+    REQUIRE(snapshot.entries[0].id == picker);
+    REQUIRE(snapshot.entries[0].info.role == luil::access_role::group);
+    REQUIRE(snapshot.entries[0].info.name == u8"색");
+    // 값 글은 16진 글이다. 225도·40%·80%·50%는 #7A8FCC80이다.
+    REQUIRE(snapshot.entries[0].info.value == u8"#7A8FCC80");
+    const luil::ui_element_id expected[] {
+        { luil::ui_element_kind::color_picker_plane, paint_part(u8"plane") }, { luil::ui_element_kind::color_picker_bar, paint_part(u8"hue") },
+        { luil::ui_element_kind::color_picker_bar, paint_part(u8"alpha") }, { kind_item, u8"paint-hex" },
+        { luil::ui_element_kind::color_picker_preset, paint_part(u8"1") }, { luil::ui_element_kind::color_picker_preset, paint_part(u8"2") }
+    };
+    for (std::size_t index { 0 }; index < std::size(expected); ++index)
+    {
+        REQUIRE(snapshot.entries[index + 1u].id == expected[index]);
+        REQUIRE(snapshot.entries[index + 1u].parent == picker);
+    }
+
+    // 판은 두 값을 글로만 알린다. 범위가 없다.
+    const luil::access_info& plane { snapshot.entries[1].info };
+    REQUIRE(plane.role == luil::access_role::slider);
+    REQUIRE(plane.name == u8"채도와 명도");
+    REQUIRE(plane.value == u8"채도 40%, 명도 80%");
+    REQUIRE(plane.range.has_value() == false);
+    // 막대는 범위와 걸음을 알린다.
+    REQUIRE(snapshot.entries[2].info.name == u8"색상");
+    REQUIRE(snapshot.entries[2].info.range == luil::access_range { 0.0f, 360.0f, 225.0f, 1.0f, 10.0f });
+    REQUIRE(snapshot.entries[3].info.name == u8"불투명도");
+    REQUIRE(snapshot.entries[3].info.range == luil::access_range { 0.0f, 100.0f, 50.0f, 1.0f, 10.0f });
+    REQUIRE(snapshot.entries[4].info.role == luil::access_role::edit);
+    REQUIRE(snapshot.entries[4].info.name == u8"16진 색");
+    REQUIRE(snapshot.entries[5].info == luil::access_info { .role = luil::access_role::button, .name = u8"red" });
+    REQUIRE(snapshot.entries[6].info.name == u8"#0000FFFF");
+}
+
+TEST_CASE("Setting a bar value changes only that channel and the same value does nothing", "[ui][access][color-picker]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::color_picker_element>(access_picker_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+    const auto value_of = [](const std::optional<std::vector<luil::input_action>>& actions) {
+        REQUIRE(actions.has_value());
+        REQUIRE(actions->size() == 1u);
+        const auto* const message { std::get_if<luil::app_message>(&actions->front()) };
+        REQUIRE(message != nullptr);
+        REQUIRE(message->get<access_color_intent>() != nullptr);
+        return message->get<access_color_intent>()->value;
+    };
+    const luil::ui_element* const hue { tree.find({ luil::ui_element_kind::color_picker_bar, paint_part(u8"hue") }) };
+    const luil::ui_element* const alpha { tree.find({ luil::ui_element_kind::color_picker_bar, paint_part(u8"alpha") }) };
+    REQUIRE(hue != nullptr);
+    REQUIRE(alpha != nullptr);
+    REQUIRE(value_of(hue->access_actions({ luil::access_command::set_value, 90.0f })) == luil::hsv_color { 90.0f, 0.4f, 0.8f, 0.5f });
+    REQUIRE(value_of(alpha->access_actions({ luil::access_command::set_value, 25.0f })) == luil::hsv_color { 225.0f, 0.4f, 0.8f, 0.25f });
+    // 같은 값이면 할 일이 없다.
+    REQUIRE(hue->access_actions({ luil::access_command::set_value, 225.0f })->empty());
+    REQUIRE(alpha->access_actions({ luil::access_command::set_value, 50.0f })->empty());
+    // 판은 값 정하기를 받지 않는다 (범위가 없다).
+    const luil::ui_element* const plane { tree.find(luil::color_picker_element::plane_id(u8"paint")) };
+    REQUIRE(plane != nullptr);
+    REQUIRE(plane->access_actions({ luil::access_command::set_value, 10.0f }).has_value() == false);
 }
 
 TEST_CASE("A scrollbar reads how far it can scroll", "[ui][access]")

@@ -35,6 +35,8 @@
 | 상태 배지 | `badge_element` | [ui/badge_element.h](../include/luil/ui/badge_element.h) | [설명](concepts/ui-element.md) |
 | 값 조절 | `slider_element` | [ui/slider_element.h](../include/luil/ui/slider_element.h) | [설명](value-step-design.md) · [자석](slider-magnet-design.md) |
 | 별점(별 몇 개로 점수 매기기, 같은 모양으로 평균 보이기) | `rating_element`, `rating_config`, `rating_precision` | [ui/rating_element.h](../include/luil/ui/rating_element.h) | [설명](rating-design.md) |
+| 색 고르기(채도·명도 판, 색상·알파 막대, 견본, 16진 칸, 닫힌 색 칸과 popup) | `color_picker_element`, `color_field_element`, `make_color_picker_popup` | [ui/color_picker_element.h](../include/luil/ui/color_picker_element.h) · [app/color_picker_popup.h](../include/luil/app/color_picker_popup.h) | [설명](color-picker-design.md) |
+| HSV 색과 16진 색 글(변환·검사·쓰기·거르기) | `hsv_color`, `color_from_hsv`, `hsv_from_color`, `check_hex_color`, `format_hex_color`, `hex_color_filter` | [ui/color_space.h](../include/luil/ui/color_space.h) | [설명](color-space-design.md) |
 | 세로·가로 배치 | `stack_element` | [ui/stack_element.h](../include/luil/ui/stack_element.h) | [설명](stack-expressiveness-design.md) |
 | 줄바꿈 배치 | `wrap_element` | [ui/wrap_element.h](../include/luil/ui/wrap_element.h) | [설명](stack-expressiveness-design.md) |
 | 행·열 칸 배치 (폼) | `grid_element` | [ui/grid_element.h](../include/luil/ui/grid_element.h) | [설명](stack-expressiveness-design.md#grid) |
@@ -51,7 +53,7 @@
 | 선택·계층·재정렬·컨텍스트 메뉴 목록 | `list_element` | [ui/list_element.h](../include/luil/ui/list_element.h) | [설명](list-view-design.md) |
 | 그룹 머리행 목록 | `grouped_list_element` | [ui/grouped_list_element.h](../include/luil/ui/grouped_list_element.h) | [설명](list-view-design.md) |
 | 아주 긴 목록·계층 (가상화) | `virtual_list_element` | [ui/virtual_list_element.h](../include/luil/ui/virtual_list_element.h) | [설명](virtual-list-design.md) |
-| 열 머리글이 있는 표 | `table_element` | [ui/table_element.h](../include/luil/ui/table_element.h) | [설명](table-design.md) |
+| 열 머리글이 있는 표 (앞 열 고정 포함) | `table_element`, `table_config::frozen_columns` | [ui/table_element.h](../include/luil/ui/table_element.h) | [설명](table-design.md) · [고정 열](frozen-columns-design.md) |
 | 여러 항목 선택 규칙(기준점·범위·토글) | `item_selection`, `selection_pick`, `selection_move` | [ui/selection_model.h](../include/luil/ui/selection_model.h) | [설명](keyboard-selection-design.md) |
 | 탭 선택·닫기·재정렬·컨텍스트 메뉴 | `tab_bar_element` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](focus-group-design.md) |
 | 탭 모양·상태 표시·가운데 버튼 닫기·줄이기·한 탭씩 넘기기·견본 | `tab_bar_style`, `tab_indicator`, `tab_bar_preview` | [ui/tab_bar_element.h](../include/luil/ui/tab_bar_element.h) | [설명](tab-bar-style-design.md) |

@@ -129,7 +129,7 @@ namespace mobile_demo {
             // 편집 메시지는 target으로 나눠 갖는다.
             // 남의 칸이면 다음 페이지(창 페이지)가 받는다.
             if (edit->request.target != target_number && edit->request.target != target_note && edit->request.target != target_secret && edit->request.target != target_memo
-                && edit->request.target != target_code && edit->request.target != target_line_break && edit->request.target != target_readonly)
+                && edit->request.target != target_code && edit->request.target != target_line_break && edit->request.target != target_readonly && edit->request.target != target_color_hex)
                 return false;
             apply_edit(edit->request);
             return true;
@@ -137,7 +137,8 @@ namespace mobile_demo {
         if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
         {
             if (composition->event.target != target_number && composition->event.target != target_note && composition->event.target != target_secret
-                && composition->event.target != target_memo && composition->event.target != target_code && composition->event.target != target_line_break)
+                && composition->event.target != target_memo && composition->event.target != target_code && composition->event.target != target_line_break
+                && composition->event.target != target_color_hex)
                 return false;
             apply_composition(composition->event);
             return true;
@@ -175,6 +176,26 @@ namespace mobile_demo {
                 rating_stars_ = std::clamp(rating->value, 0.0f, 5.0f);
             else if (rating->key == u8"strip")
                 rating_strip_ = std::clamp(rating->value, 0.0f, 10.0f);
+            return true;
+        }
+        if (const auto* const color { message.get<color_intent>() }; color != nullptr)
+        {
+            // 범위 다듬기는 값을 가진 앱의 몫이다. 16진 칸은 그 색의 글로 다시 쓴다.
+            color_ = luil::clamp_hsv(color->value);
+            reset_color_hex();
+            return true;
+        }
+        if (message.get<color_commit_intent>() != nullptr)
+        {
+            // 읽히면 지금 값을 keep으로 넘겨 회색·검정에서도 색상과 채도를 지킨다. 읽히지 않으면 칸을 붉게 둔다.
+            const luil::hex_color_check check { luil::check_hex_color(color_hex_.text, true) };
+            if (check.valid() == false)
+            {
+                color_hex_invalid_ = true;
+                return true;
+            }
+            color_ = luil::hsv_from_color(*check.color, color_);
+            reset_color_hex();
             return true;
         }
         if (const auto* const scroll { message.get<rating_scroll_intent>() }; scroll != nullptr)
@@ -225,6 +246,8 @@ namespace mobile_demo {
             luil::apply_text_edit(line_break_, request);
         else if (request.target == target_readonly)
             luil::apply_text_edit(readonly_, request);
+        else if (request.target == target_color_hex)
+            luil::apply_text_edit(color_hex_, request, luil::hex_color_filter());
         else if (request.target == target_code)
         {
             luil::apply_text_edit(code_, request);
@@ -243,6 +266,39 @@ namespace mobile_demo {
             return;
         }
         composition_ = event;
+    }
+
+    void basics_page::reset_color_hex()
+    {
+        luil::text_edit_request request {};
+        request.target = target_color_hex;
+        request.command = luil::text::text_edit_command::replace_all;
+        request.text = luil::format_hex_color(luil::color_from_hsv(color_), true);
+        request.offset = request.text.size();
+        luil::apply_text_edit(color_hex_, request);
+        color_hex_invalid_ = false;
+    }
+
+    luil::color_picker_config basics_page::make_color_config(const float width) const
+    {
+        luil::color_picker_config config {};
+        config.owner = u8"color";
+        config.value = color_;
+        config.alpha = true;
+        config.change_to = [](const luil::hsv_color value) { return luil::make_app_action(color_intent { value }); };
+        config.hex = luil::color_picker_hex {
+            .id = { kind_color_hex_input, u8"color-hex" },
+            .value = make_input_view(color_hex_, target_color_hex),
+            .invalid = color_hex_invalid_,
+            .commit = luil::make_message_action(color_commit_intent {}),
+        };
+        config.presets = {
+            { luil::make_ui_color(0x33, 0x66, 0xFF, 0x80), u8"처음 색" }, { luil::make_ui_color(0xE5, 0x39, 0x35), u8"빨강" }, { luil::make_ui_color(0x80, 0x80, 0x80), u8"회색" }
+        };
+        // 판은 페이지 폭에 맞추고 막대는 손가락에 맞게 높인다. 판이 화면을 덮어도 쓸기는 페이지를 흘리고, 잠깐 눌러 옮기면 끈다.
+        config.plane_size = std::max(1.0f, width - 2.0f * page_padding);
+        config.bar_height = 32.0f;
+        return config;
     }
 
     void basics_page::open_dialog(const dialog_kind kind)
@@ -306,7 +362,7 @@ namespace mobile_demo {
         column.gap(12.0f);
 
         // 별점이다. 탭이 칸의 값이고 같은 별을 다시 탭하면 지운다. 손가락으로 훑으면 별이 따라온다.
-        column.note(u8"rating-title", u8"별점 (탭하거나 훑어서 매기고, 같은 별을 다시 탭하면 지웁니다)");
+        column.wrapped_note(u8"rating-title", u8"별점 (탭하거나 훑어서 매기고, 같은 별을 다시 탭하면 지웁니다)", width, scale);
         column.gap(4.0f);
         const luil::rating_config stars { make_stars_config() };
         column.add(std::make_unique<luil::rating_element>(stars), luil::rating_element::height_for(stars), luil::rating_element::width_for(stars));
@@ -319,6 +375,14 @@ namespace mobile_demo {
         rating_scroll_limit_ = std::max(0.0f, luil::rating_element::width_for(strip_rating) - (width - 2.0f * page_padding));
         column.add(make_rating_strip(), luil::rating_element::height_for(strip_rating));
         column.body(u8"rating-strip-value", u8"가로 창 별점: " + rating_text(rating_strip_, 10));
+        column.gap(12.0f);
+        // 색 고르기다. 판을 탭하면 그 자리 색이고, 잠깐 눌러 옮기면 끈다. 쓸면 페이지가 흐른다.
+        column.wrapped_note(u8"color-title", u8"색 고르기 (판을 탭하거나 잠깐 눌러 끌고, 막대와 16진 칸으로 고릅니다)", width, scale);
+        column.gap(4.0f);
+        const luil::color_picker_config color { make_color_config(width) };
+        const luil::size_f color_size { luil::color_picker_element::size_for(color) };
+        column.add(std::make_unique<luil::color_picker_element>(color), color_size.height, color_size.width);
+        column.body(u8"color-value", u8"색: " + luil::format_hex_color(luil::color_from_hsv(color_), true));
         column.gap(20.0f);
 
         // 텍스트 칸 셋이다. 휴대폰은 좁아 위아래로 쌓는다.
@@ -408,7 +472,7 @@ namespace mobile_demo {
 
         // 읽기 전용 안내 칸이다. 하드웨어 키보드로 칸에 초점을 두고 Ctrl+Z나 Ctrl+Y를 누르면 칸이 삼키지 않고 앱 on_key로
         // 넘기고, 상태 줄이 그 횟수를 센다.
-        column.note(u8"readonly", u8"읽기 전용 칸 (하드웨어 키보드의 Ctrl+Z·Ctrl+Y는 앱으로 넘어간다)");
+        column.wrapped_note(u8"readonly", u8"읽기 전용 칸 (하드웨어 키보드의 Ctrl+Z·Ctrl+Y는 앱으로 넘어간다)", width, scale);
         column.gap(4.0f);
         {
             luil::text_area_config readonly {};
@@ -467,7 +531,7 @@ namespace mobile_demo {
         }
         column.gap(24.0f);
 
-        column.note(u8"basics-hint", u8"확인 대화 상자는 뒤로 가기나 바깥을 눌러 닫는다. 초기화 대화는 취소에 초점이 선다.");
+        column.wrapped_note(u8"basics-hint", u8"확인 대화 상자는 뒤로 가기나 바깥을 눌러 닫는다. 초기화 대화는 취소에 초점이 선다.", width, scale);
         column.gap(8.0f);
         auto open { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_open }, luil::text_button_config { .text = u8"카운터 초기화" }) };
         open->set_tooltip(u8"확인 대화 상자를 연다");

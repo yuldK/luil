@@ -49,6 +49,16 @@ namespace luil::default_text {
     [[nodiscard]] std::u8string_view ink_canvas_name() noexcept;
     // 잉크 캔버스의 기본 접근 값 글이다 ("획 3개"). 획 수가 끼는 문장이라 문자열을 새로 짓는다. 복수형은 R5 몫이다.
     [[nodiscard]] std::u8string ink_canvas_summary(std::size_t strokes);
+    // 색 고르기와 색 칸의 기본 접근 이름이다 (색).
+    [[nodiscard]] std::u8string_view color_picker_name() noexcept;
+    // 색 고르기 판의 기본 접근 이름이다 (채도와 명도).
+    [[nodiscard]] std::u8string_view color_picker_plane_name() noexcept;
+    // 색 고르기 판의 접근 값 글이다 ("채도 40%, 명도 80%"). 백분율은 [0, 1]로 자른 값을 lround한 정수다.
+    //  - NaN은 0이다. 숫자 글자를 직접 지어 로케일에 달리지 않는다.
+    [[nodiscard]] std::u8string color_picker_plane_value(float saturation, float value);
+    [[nodiscard]] std::u8string_view color_picker_hue_name() noexcept;  // 색상
+    [[nodiscard]] std::u8string_view color_picker_alpha_name() noexcept;  // 불투명도
+    [[nodiscard]] std::u8string_view color_picker_hex_name() noexcept;  // 16진 색
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

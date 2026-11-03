@@ -191,6 +191,20 @@ namespace luil {
             return u8"rating_cell";
         case ui_element_kind::ink_canvas:
             return u8"ink_canvas";
+        case ui_element_kind::table_header_lane:
+            return u8"table_header_lane";
+        case ui_element_kind::table_row_lane:
+            return u8"table_row_lane";
+        case ui_element_kind::color_picker:
+            return u8"color_picker";
+        case ui_element_kind::color_picker_plane:
+            return u8"color_picker_plane";
+        case ui_element_kind::color_picker_bar:
+            return u8"color_picker_bar";
+        case ui_element_kind::color_picker_preset:
+            return u8"color_picker_preset";
+        case ui_element_kind::color_field:
+            return u8"color_field";
         case ui_element_kind::end_of_library_kinds:
         case ui_element_kind::first_application_kind:
             // 끝 표시와 앱 대역의 시작은 kind가 아니다.

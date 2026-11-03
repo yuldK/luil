@@ -3,6 +3,7 @@
 #include "luil/ui/app_message.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/group_element.h"
 #include "luil/ui/info_bar_element.h"
@@ -1307,6 +1308,264 @@ TEST_CASE("A slider still announces no step and the change getters need a live e
     REQUIRE(slider->get_LargeChange(&number) == static_cast<HRESULT>(UIA_E_ELEMENTNOTAVAILABLE));
 
     slider->Release();
+    root->Release();
+}
+
+namespace {
+    struct probe_color_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    // 알파를 켠 색 고르기와 닫힌 색 칸을 담은 화면이다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_color_tree(const bool open = false)
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::color_picker_config picker {};
+        picker.owner = u8"paint";
+        picker.value = { 225.0f, 0.8f, 1.0f, 0.5f };
+        picker.alpha = true;
+        picker.change_to = [](const luil::hsv_color value) { return luil::make_app_action(probe_color_intent { value }); };
+        page->add(std::make_unique<luil::color_picker_element>(std::move(picker)));
+        luil::color_field_config field {};
+        field.owner = u8"swatch";
+        field.value = { 225.0f, 0.8f, 1.0f, 0.5f };
+        field.open = open;
+        field.set_open = [](const bool state) { return luil::make_app_action(probe_state_intent { state }); };
+        page->add(std::make_unique<luil::color_field_element>(std::move(field)));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f));
+    }
+
+    [[nodiscard]] std::u8string paint_part(const std::u8string_view name)
+    {
+        std::u8string owner { u8"paint" };
+        owner += u8'\u001f';
+        owner += name;
+        return owner;
+    }
+}
+
+TEST_CASE("The color plane serves only a value and the bars serve a range with their steps", "[win32][uia][color-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_color_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const plane { root->make_element_provider(luil::color_picker_element::plane_id(u8"paint")) };
+    luil::win32::uia_element_provider* const hue { root->make_element_provider({ luil::ui_element_kind::color_picker_bar, paint_part(u8"hue") }) };
+    luil::win32::uia_element_provider* const alpha { root->make_element_provider({ luil::ui_element_kind::color_picker_bar, paint_part(u8"alpha") }) };
+
+    // 판은 두 값을 글로만 알린다. RangeValue가 서지 않는다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(plane->GetPatternProvider(UIA_RangeValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern == nullptr);
+    REQUIRE(plane->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    pattern->Release();
+    pattern = nullptr;
+    REQUIRE(read_text_property(*plane, UIA_NamePropertyId) == L"채도와 명도");
+
+    // 막대의 걸음은 1과 10이다. 값은 색상의 도와 알파의 백분율이다.
+    double number { -1.0 };
+    REQUIRE(hue->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 1.0);
+    REQUIRE(hue->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 10.0);
+    REQUIRE(hue->get_Value(&number) == S_OK);
+    REQUIRE(number == 225.0);
+    REQUIRE(hue->get_Maximum(&number) == S_OK);
+    REQUIRE(number == 360.0);
+    REQUIRE(alpha->get_Value(&number) == S_OK);
+    REQUIRE(number == 50.0);
+    REQUIRE(alpha->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 10.0);
+    BOOL read_only { TRUE };
+    REQUIRE(hue->get_IsReadOnly(&read_only) == S_OK);
+    REQUIRE(read_only == FALSE);
+
+    // 값 정하기는 그 채널만 바꾼 절대 메시지다.
+    REQUIRE(hue->SetValue(90.0) == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<probe_color_intent>() != nullptr);
+    REQUIRE(message->get<probe_color_intent>()->value == luil::hsv_color { 90.0f, 0.8f, 1.0f, 0.5f });
+
+    alpha->Release();
+    hue->Release();
+    plane->Release();
+    root->Release();
+}
+
+TEST_CASE("The color picker root reads its hex value and refuses to take one as text", "[win32][uia][color-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_color_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const picker { root->make_element_provider({ luil::ui_element_kind::color_picker, u8"paint" }) };
+
+    IUnknown* pattern { nullptr };
+    REQUIRE(picker->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IValueProvider* text { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IValueProvider), reinterpret_cast<void**>(&text)) == S_OK);
+    BSTR spoken { nullptr };
+    REQUIRE(text->get_Value(&spoken) == S_OK);
+    REQUIRE(std::wstring { spoken, SysStringLen(spoken) } == L"#3366FF80");
+    SysFreeString(spoken);
+    // 글로 색을 정하는 길은 16진 칸이다. root는 읽기 전용이다.
+    REQUIRE(text->SetValue(L"#000000") == E_ACCESSDENIED);
+    REQUIRE(host.dispatched.empty());
+    text->Release();
+    pattern->Release();
+    REQUIRE(read_text_property(*picker, UIA_NamePropertyId) == L"색");
+
+    picker->Release();
+    root->Release();
+}
+
+TEST_CASE("The color field expands by a target state message", "[win32][uia][color-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_color_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const field { root->make_element_provider({ luil::ui_element_kind::color_field, u8"swatch" }) };
+
+    ExpandCollapseState state { ExpandCollapseState_Expanded };
+    REQUIRE(field->get_ExpandCollapseState(&state) == S_OK);
+    REQUIRE(state == ExpandCollapseState_Collapsed);
+    REQUIRE(field->Expand() == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<probe_state_intent>() != nullptr);
+    REQUIRE(message->get<probe_state_intent>()->state == true);
+    // 값은 16진 글이다 (알파를 끈 칸이라 여섯 자리다).
+    IUnknown* pattern { nullptr };
+    REQUIRE(field->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IValueProvider* text { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IValueProvider), reinterpret_cast<void**>(&text)) == S_OK);
+    BSTR spoken { nullptr };
+    REQUIRE(text->get_Value(&spoken) == S_OK);
+    REQUIRE(std::wstring { spoken, SysStringLen(spoken) } == L"#3366FF");
+    SysFreeString(spoken);
+    text->Release();
+    pattern->Release();
+
+    field->Release();
+    root->Release();
+}
+
+namespace {
+    // 범위만 내주는 element다. 경계·값·걸음을 정한 그대로 알린다.
+    class range_probe final : public luil::ui_element
+    {
+    public:
+        range_probe(luil::ui_element_id id, const luil::access_range range)
+            : ui_element { std::move(id) }
+            , range_ { range }
+        {
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+
+        [[nodiscard]] luil::access_info accessibility() const override
+        {
+            luil::access_info info { .role = luil::access_role::slider, .name = u8"probe" };
+            info.range = range_;
+            return info;
+        }
+
+    private:
+        luil::access_range range_ {};
+    };
+}
+
+TEST_CASE("A display only rating hands its fractional average to UIA as the decimal the app wrote", "[win32][uia][rating]")
+{
+    // 평균 별점은 float 4.3이다. 이진 오차를 그대로 double로 옮기면 4.30000019로 읽힌다.
+    fake_uia_host host {};
+    host.tree = make_rating_tree(4.3f, false);
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const rating { root->make_element_provider(rating_id) };
+
+    double number { -1.0 };
+    REQUIRE(rating->get_Value(&number) == S_OK);
+    REQUIRE(number == 4.3);
+    REQUIRE(rating->get_Minimum(&number) == S_OK);
+    REQUIRE(number == 0.0);
+    REQUIRE(rating->get_Maximum(&number) == S_OK);
+    REQUIRE(number == 5.0);
+    BOOL read_only { FALSE };
+    REQUIRE(rating->get_IsReadOnly(&read_only) == S_OK);
+    REQUIRE(read_only == TRUE);
+
+    rating->Release();
+    root->Release();
+}
+
+TEST_CASE("Every range value getter hands a float to UIA as its shortest decimal", "[win32][uia]")
+{
+    auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    page->add(std::make_unique<range_probe>(luil::ui_element_id { kind_item, u8"level" }, luil::access_range { .minimum = 0.1f, .maximum = 4.3f, .value = 2.7f, .step = 0.1f, .page = 0.3f }));
+    fake_uia_host host {};
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const level { root->make_element_provider({ kind_item, u8"level" }) };
+
+    double number { -1.0 };
+    REQUIRE(level->get_Value(&number) == S_OK);
+    REQUIRE(number == 2.7);
+    REQUIRE(level->get_Minimum(&number) == S_OK);
+    REQUIRE(number == 0.1);
+    REQUIRE(level->get_Maximum(&number) == S_OK);
+    REQUIRE(number == 4.3);
+    REQUIRE(level->get_SmallChange(&number) == S_OK);
+    REQUIRE(number == 0.1);
+    REQUIRE(level->get_LargeChange(&number) == S_OK);
+    REQUIRE(number == 0.3);
+
+    // 읽은 경계를 그대로 되돌려 정하는 값은 범위 안이다. 밖은 여전히 인자 오류다.
+    // 이 요소는 값을 받을 액션이 없어 범위 안의 값이 접근 거부로 끝난다.
+    REQUIRE(level->SetValue(0.1) == E_ACCESSDENIED);
+    REQUIRE(level->SetValue(4.3) == E_ACCESSDENIED);
+    REQUIRE(level->SetValue(0.09) == E_INVALIDARG);
+    REQUIRE(level->SetValue(4.31) == E_INVALIDARG);
+
+    level->Release();
+    root->Release();
+}
+
+TEST_CASE("A range value change event carries the decimal the app wrote", "[win32][uia]")
+{
+    const auto make_level_tree = [](const float level) {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        root->add(std::make_unique<luil::slider_element>(luil::ui_element_id { kind_item, u8"level" }, luil::slider_config { .minimum = 0.0f, .maximum = 10.0f, .value = level }));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    };
+
+    fake_uia_host host {};
+    host.tree = make_level_tree(4.3f);
+    const luil::access_snapshot before { luil::make_access_snapshot(*host.tree) };
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    recording_event_sink sink {};
+    sink.root = static_cast<IRawElementProviderSimple*>(root);
+    root->set_event_sink_for_test(sink);
+
+    host.tree = make_level_tree(4.4f);
+    root->announce_changes(luil::diff_access_snapshots(before, luil::make_access_snapshot(*host.tree)));
+    REQUIRE(sink.records.size() == 1u);
+    REQUIRE(sink.records[0].property == UIA_RangeValueValuePropertyId);
+    REQUIRE(sink.records[0].old_number == 4.3);
+    REQUIRE(sink.records[0].new_number == 4.4);
+
     root->Release();
 }
 
