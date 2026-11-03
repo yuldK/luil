@@ -96,15 +96,10 @@ namespace luil {
 }
 ```
 
-앱은 이렇게 쓴다(데스크톱 데모의 모양).
+앱은 이렇게 쓴다(데스크톱 데모의 모양). 이동 메시지에서 `page_`가 아직 옛 값일 때 지난 frame의 본문 자리(`content_slot_`)와 배율로 떠나는 화면 `prior`를 `build_page`로 따로 짓고 `arrange`한 뒤 넘기고, 그다음 `page_`를 바꾼다. `make_frame`은 늘 감싼다(prior가 비면 새 화면만 그리는 껍질). `next_tick`은 `page_transition_end`를 견주고 `tick`은 끝났으면 놓는다.
 
 ```cpp
-// 이동 메시지: page_가 아직 옛 값일 때, 지난 frame의 본문 자리(content_slot_)와 배율로 떠나는 화면을 따로 짓는다.
-auto prior { build_page(content_slot_.width / scale, content_slot_.height / scale, scale) };
-prior->arrange({ .slot = content_slot_, .scale = scale, .style = style });
 page_motion_ = luil::start_page_transition(std::make_shared<const luil::ui_tree>(std::move(prior)), page_style_, now, metrics_.reduce_motion);
-page_ = navigate->page;
-// make_frame은 늘 감싼다 (prior가 비면 새 화면만 그리는 껍질). next_tick은 page_transition_end를 견주고 tick은 끝났으면 놓는다.
 shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", page_motion_ }, build_page(w, h, scale)));
 ```
 
@@ -133,8 +128,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 
 **입력과 초점.**
 
-- prior가 있는 동안(시각과 무관하게) 요소는 마지막 자식으로 덮개를 담는다. 덮개는 칠하지 않는 `hit_opaque` 판이다(scrim은 진하기 0이어도 막는다는 [modal_host_element.h](../include/luil/ui/modal_host_element.h) 29~31줄 선례). 누름·hover·커서·끌어 놓기가 덮개에서 멈춘다. `drop_hit_test`는 virtual이 아니고 자식부터 걷기 때문에(ui_element.cpp 617~641줄) `hit_test` 재정의가 아니라 자식으로 둔다.
-- `hit_test`는 시각을 받지 않아 요소가 끝을 스스로 알 수 없다. 입력이 풀리는 것은 앱이 prior 없는 tree를 낼 때다. 그래서 끝 시각을 앱에 알리는 길이 필요하다(결정 2).
+- prior가 있는 동안(시각과 무관하게) 요소는 마지막 자식으로 덮개를 담는다. 덮개는 칠하지 않는 `hit_opaque` 판이다(scrim은 진하기 0이어도 막는다는 [modal_host_element.h](../include/luil/ui/modal_host_element.h) 29~31줄 선례). 누름·hover·커서·끌어 놓기가 덮개에서 멈춘다. `drop_hit_test`는 virtual이 아니고 자식부터 걷기 때문에(ui_element.cpp 617~641줄) `hit_test` 재정의가 아니라 자식으로 둔다. `hit_test`는 시각을 받지 않아 요소가 끝을 스스로 알 수 없다. 입력이 풀리는 것은 앱이 prior 없는 tree를 낼 때다. 그래서 끝 시각을 앱에 알리는 길이 필요하다(결정 2).
 - 키는 막지 않는다. 키는 자리와 무관하고 controller가 새 tree의 초점 자리에 보낸다. Tab은 새 화면으로 들어간다.
 - 초점은 새 tree에만 선다. controller가 받는 것은 발행한 tree 하나이고(`set_tree`, [ui_interaction.cpp](../src/ui/ui_interaction.cpp) 168~172줄) 사라진 자리의 초점은 `update_focus`가 거둔다. controller의 `prior_tree_`([ui_interaction.h](../include/luil/ui/ui_interaction.h) 904줄)는 닫힌 popup 누름 판정 전용이라 이 전환과 무관하다. **controller를 고치지 않는다.**
 - 새 화면 안에 키보드 초점이 있는 채 밀기·확대가 돌면 초점 테와 IME 후보 창은 최종 자리에 먼저 선다(결정 1의 대가). 전환이 끝나 tree가 바뀌면 `set_tree`가 hover를 다시 판정해 포인터 아래 자리가 곧 선다.
@@ -230,23 +224,19 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 - 같은 파일, 그림: `raster_frame::draw`([raster_probe.h](../tests/raster_probe.h) 39줄)에 고정 시각을 준다. 글 없는 색 판 두 장(이전·새)으로 밀기 forward·backward의 시작·가운데(경계가 가운데 열)·끝, 옅어짐 p = 0.25에서 이전 알파 0.5, 확대 끝의 새 화면만, 요소 bounds 밖 픽셀 불변, `reduce_motion` 문맥과 크기가 다른 이전 root에서 새 화면만을 본다.
 - 같은 파일, tree: 이전 tree에만 있는 id는 `find`·`focus_order`·`access_top_level`·`ids_of_kind`에 없고, 같은 id가 두 tree에 있어도 `duplicate_ids`가 빈다. prior가 있으면 `hit_test`가 덮개를, `find_drop_target`이 막힘을 답하고, 없으면 새 화면의 단추를 답한다. 요소의 `next_update`는 도는 중 `now + 16ms`, 끝과 `reduce_motion`에서 nullopt다.
 - `tests/spring_tests.cpp`: `spring_rest_time`이 `spring_finished`와 맞고 끝나지 않는 config에서 상한을 답한다.
-- `tests/ui_inspect_tests.cpp`의 kind 이름 전수 test와 `tests/ui_element_tests.cpp`의 kind 대역 test. `library_kind_name`은 `default` 없는 switch라 Android 빌드도 case를 요구한다.
+- `tests/ui_inspect_tests.cpp`의 kind 이름 전수 test와 `tests/ui_element_tests.cpp`의 kind 대역 test(`library_kind_name`은 `default` 없는 switch라 Android 빌드도 case를 요구한다), 우산 헤더 검사, `luil_core_portability`, `scripts/check_source_style.ps1`.
 - `tests/mobile_demo_page_tests.cpp`: 기기 페이지의 전환 스위치와 label이 두 상태에서 맞는 글이다.
 - `luil_tests`의 `tests/uia_provider_tests.cpp`: 전환 중인 tree의 UIA 자식이 새 화면 것뿐이다.
-- 우산 헤더 검사, `luil_core_portability`, `scripts/check_source_style.ps1`.
 
 데모.
 
-- 데스크톱: 보기 메뉴에 "페이지 전환" 하위 메뉴(라디오: 없음·밀기·옅어짐·확대·스프링 밀기)를 둔다. 사이드바 목록이 세로라 밀기는 세로 축이고, 목록에서 아래 페이지로 가면 forward, 위면 backward다. `sidebar-motion` 옆에 label `page-transition-state`("페이지 전환: 밀기 · 도는 중" / "· 멈춤" / "꺼짐")를 둔다. 인자 `--page-transition=slide|fade|zoom|spring`과 UIA가 도는 중을 읽도록 길이를 늘리는 `--page-transition-ms=`를 더한다. 웹뷰 페이지로 오가는 바꿈은 전환하지 않는다.
+- 데스크톱: 보기 메뉴에 "페이지 전환" 하위 메뉴(라디오: 없음·밀기·옅어짐·확대·스프링 밀기)를 둔다. 사이드바 목록이 세로라 밀기는 세로 축이고, 목록에서 아래 페이지로 가면 forward, 위면 backward다. `sidebar-motion` 옆에 label `page-transition-state`("페이지 전환: 밀기 · 도는 중" / "· 멈춤" / "꺼짐")를 둔다. 인자 `--page-transition=slide|fade|zoom|spring`과 UIA가 도는 중을 읽도록 길이를 늘리는 `--page-transition-ms=`를 더한다. 웹뷰 페이지로 오가는 바꿈은 전환하지 않는다. UIA(격리 데스크톱, luil-uia)는 `--page-transition-ms=3000`으로 띄워 페이지를 바꾸고, 도는 동안 label이 "도는 중"이고 새 페이지 요소가 있으며 옛 페이지 요소가 없는지, 끝난 뒤 "멈춤"인지 되읽는다.
 - 모바일: 좁은 화면의 목록 → 페이지는 가로 forward 밀기, 앱 바·시스템 뒤로는 backward, 넓은 화면의 오른쪽 칸은 옅어짐이다. 기기 페이지의 움직임 줄이기 칸 아래에 "페이지 전환" 스위치와 label `page-transition-state`를 둔다.
-- UIA(격리 데스크톱, luil-uia): `--page-transition-ms=3000`으로 띄워 페이지를 바꾼다. 도는 동안 label이 "도는 중"이고 새 페이지 요소가 있으며 옛 페이지 요소가 없는지, 끝난 뒤 "멈춤"인지 되읽는다.
 
 사람 확인.
 
-- 60Hz에서 끊기지 않는지(GPU·CPU 렌더러, 큰 창, layered presentation). 밀기 중 글이 번지지 않는지, 확대 중 글 품질.
-- Windows 설정에서 애니메이션 효과를 끄면 바로 바뀌는지. 시스템 설정을 바꾸는 일이라 사람이 한다.
-- 실기기에서 목록 탭과 뒤로 가기 키의 체감, 개발자 옵션의 애니메이터 배율 0에서 바로 바뀌는지.
-- 키보드로 사이드바를 오가며 초점 테가 튀지 않는지.
+- 60Hz에서 끊기지 않는지(GPU·CPU 렌더러, 큰 창, layered presentation), 밀기 중 글이 번지지 않는지와 확대 중 글 품질, 키보드로 사이드바를 오가며 초점 테가 튀지 않는지.
+- Windows 설정에서 애니메이션 효과를 끄면 바로 바뀌는지(시스템 설정을 바꾸는 일이라 사람이 한다), 실기기에서 목록 탭과 뒤로 가기 키의 체감과 개발자 옵션의 애니메이터 배율 0에서 바로 바뀌는지.
 
 ## 범위 밖
 
