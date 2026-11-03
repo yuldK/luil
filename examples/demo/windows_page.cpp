@@ -5,6 +5,7 @@
 #include "luil/ui/caption_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_platform.h"
@@ -30,6 +31,12 @@ namespace demo {
         constexpr float tool_initial_y { 90.0f };
         // 도구 창 안 메뉴의 너비다 (논리 픽셀).
         constexpr float tool_menu_width { 180.0f };
+
+        // 페이지 위쪽에 고정한 흘림 상태 줄이다 (논리 픽셀).
+        // 본문은 이 줄 아래의 영역에서 흐르므로 영역이 받는 높이는 페이지 높이에서 이 줄을 뺀 값이다.
+        constexpr luil::edge_insets scroll_status_padding { 24.0f, 8.0f, 24.0f, 4.0f };
+        constexpr float scroll_status_line_height { 18.0f };
+        constexpr float scroll_status_height { scroll_status_padding.top + scroll_status_line_height + scroll_status_padding.bottom };
 
         // 작업 표시줄 구역이다 (논리 픽셀).
         // 독립 창은 만들 때 한 번만 이 크기와 자리를 쓴다.
@@ -269,6 +276,18 @@ namespace demo {
 
     bool windows_page::handle(const luil::app_message& message)
     {
+        // 위치는 0 아래로 내려가지 않는다. 위쪽 끝은 여기서, 아래쪽 끝은 페이지를 지을 때 다듬는다
+        // (창 높이를 아는 것이 그때뿐이다).
+        if (const auto* const scroll { message.get<windows_scroll_intent>() }; scroll != nullptr)
+        {
+            scroll_ = std::max(0.0f, scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<windows_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
         // 플랫폼 도구는 logic thread에서 부른다. 탐색기와 메모장은 따로 뜨는 창이라 이쪽은 결과만 적는다.
         if (message.get<reveal_executable_intent>() != nullptr)
         {
@@ -438,9 +457,48 @@ namespace demo {
 
     std::unique_ptr<luil::ui_element> windows_page::build(const float width, const float height, const float scale)
     {
-        static_cast<void>(width);
-        static_cast<void>(height);
-        static_cast<void>(scale);
+        return make_scroll_page(build_content(), width, height, scale);
+    }
+
+    std::unique_ptr<luil::ui_element> windows_page::make_scroll_page(std::unique_ptr<luil::stack_element> content, const float width, const float height, const float scale)
+    {
+        // 내용 높이는 담긴 줄에서 읽는다. 구역이 줄을 더해도 손으로 센 합이 어긋날 일이 없다.
+        //  - 줄은 모두 고정 길이라 글 측정기는 이 높이에 닿지 않는다. 맞춤 줄을 더해도 같은 식이 센다.
+        const luil::measure_context measure { .scale = scale };
+        const float content_height { content->preferred_size(measure, std::max(0.0f, width - luil::scroll_area_bar_width)).value_or(luil::size_f {}).height };
+        const float viewport_height { std::max(0.0f, height - scroll_status_height) };
+        // 창이 커져 흘릴 것이 줄었으면 쌓인 위치도 되돌린다. 그대로 두면 끝에서 돌린 휠이 보이지 않는 곳에 쌓여
+        // 되돌릴 때 아무 일도 없는 것처럼 보인다.
+        scroll_ = luil::clamp_scroll(content_height, viewport_height, scroll_);
+
+        luil::scroll_area_config area_config {};
+        area_config.owner = u8"windows";
+        area_config.content_height = content_height;
+        area_config.scroll_offset = scroll_;
+        area_config.scroll = [](const float delta) { return luil::make_app_action(windows_scroll_intent { delta }); };
+        area_config.scroll_to = [](const float offset) { return luil::make_app_action(windows_scroll_to_intent { offset }); };
+        // 막대 자리를 늘 지킨다. 구역이 늘고 줄어도 글의 폭이 흔들리지 않는다.
+        area_config.bar = luil::scrollbar_visibility::always;
+        auto area { std::make_unique<luil::scroll_area_element>(std::move(area_config)) };
+        area->set_content(std::move(content));
+
+        // 상태 줄은 영역 밖에 고정한다. 흘려도 읽히고, 화면 밖으로 간 구역을 UIA가 찾을 때도 같은 이름이다.
+        const float maximum_scroll { std::max(0.0f, content_height - viewport_height) };
+        std::u8string status_text { u8"페이지 흘림: " + to_u8(static_cast<int>(std::lround(scroll_))) + u8" / " + to_u8(static_cast<int>(std::lround(maximum_scroll))) };
+        luil::stack_config status_config {};
+        status_config.padding = scroll_status_padding;
+        auto status { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-scroll-status" }, status_config) };
+        status->add(make_label(luil::ui_element_id { kind_text, u8"windows-scroll" }, std::move(status_text), 11.0f, luil::label_color_role::dim), scroll_status_line_height);
+
+        luil::stack_config page_config {};
+        auto page { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-page" }, page_config) };
+        page->add(std::move(status), scroll_status_height);
+        page->add_flexible(std::move(area));
+        return page;
+    }
+
+    std::unique_ptr<luil::stack_element> windows_page::build_content()
+    {
         luil::stack_config config {};
         config.padding = luil::edge_insets::all(24.0f);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows" }, config) };

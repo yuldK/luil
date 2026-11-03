@@ -23,6 +23,9 @@
 //    라이브러리가 `window_delegate::on_instance_arguments`로 건넨 것을 셸이 `instance_arguments_intent`로 게시한다.
 //  - 점프 목록 줄은 작업 표시줄 단추의 오른쪽 클릭 목록에 작업 둘을 싣는 예다 (jump-list-design.md). 작업은 데모를
 //    `--send-to-first`로 띄워 떠 있는 데모의 둘째 인스턴스 줄에 닿는다. 두 줄이 UIA로 읽힌다: 요청·반영.
+//  - 본문 전체가 흘리는 영역에 든다 (scroll-area-design.md). 구역을 모두 쌓으면 기본 창(1280 x 720)보다 길어
+//    맨 아래 구역이 잘렸다. 영역의 내용 높이는 담긴 줄에서 읽으므로 구역이 줄을 더해도 그대로 흐른다.
+//    위쪽에 고정한 줄 `페이지 흘림: <흘린 양> / <흘릴 수 있는 최대>`(논리 픽셀)가 UIA로 읽힌다.
 
 #include "demo/common.h"
 #include "luil/app/platform_services.h"
@@ -106,6 +109,18 @@ namespace demo {
     struct tool_note_file_intent
     {
         std::u8string path {};
+    };
+
+    // 페이지 본문을 흘린다 (논리 픽셀, 양수면 내용이 위로 간다). 휠·막대·초점 되살리기가 같은 메시지를 낸다.
+    struct windows_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    // 페이지 본문을 이 자리로 옮긴다 (논리 픽셀). 보조 기술이 자리를 정할 때 온다.
+    struct windows_scroll_to_intent
+    {
+        float offset { 0.0f };
     };
 
     // --- 작업 표시줄 구역의 메시지 ---
@@ -219,6 +234,10 @@ namespace demo {
         }
 
     private:
+        // 본문의 줄들을 쌓는다. 구역을 더하는 자리는 여기다.
+        [[nodiscard]] std::unique_ptr<luil::stack_element> build_content();
+        // 쌓은 본문을 흘리는 영역에 담고 위쪽에 흘림 상태 줄을 붙인다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_scroll_page(std::unique_ptr<luil::stack_element> content, float width, float height, float scale);
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_tool_tree();
         [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_taskbar_window_tree();
         // 독립 창 단추에 바라는 진행률이다. 값은 60%로 고정하고 상태만 돌린다.
@@ -236,6 +255,8 @@ namespace demo {
         bool tool_menu_open_ { false };
         bool caption_bottom_ { false };
         bool layered_ { false };
+        // 본문이 흘러간 양이다 (논리 픽셀). 창이 커져 흘릴 것이 줄면 `make_scroll_page`가 범위 안으로 되돌린다.
+        float scroll_ { 0.0f };
         // 메모 칸 초점 요청의 번호다. 청할 때마다 하나씩 올린다.
         std::uint64_t focus_revision_ { 0 };
         // 플랫폼 도구를 마지막으로 부른 결과 한 줄이다.
