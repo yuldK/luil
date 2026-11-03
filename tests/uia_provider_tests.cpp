@@ -8,6 +8,7 @@
 #include "luil/ui/info_bar_element.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/rating_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/split_button_element.h"
@@ -2826,4 +2827,85 @@ TEST_CASE("Drawing a frame with the inspector on leaves the UIA children as they
     const std::vector<child_facts> after { read_children(*root) };
     REQUIRE(after == before);
     root->Release();
+}
+
+namespace {
+    // 막대가 낸 상태를 실은 메시지다 (`menu_bar_config::set_state`).
+    struct menu_bar_probe_intent
+    {
+        luil::menu_bar_state state {};
+    };
+
+    [[nodiscard]] std::optional<luil::menu_bar_state> menu_bar_state_of(const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        const auto* const intent { message != nullptr ? message->get<menu_bar_probe_intent>() : nullptr };
+        return intent != nullptr ? std::optional<luil::menu_bar_state> { intent->state } : std::nullopt;
+    }
+}
+
+TEST_CASE("A menu bar is a UIA MenuBar whose items expand and collapse and carry an access key", "[win32][uia][menu-bar]")
+{
+    for (const bool open : { false, true })
+    {
+        CAPTURE(open);
+        fake_uia_host host {};
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::menu_bar_config config {};
+        config.owner = u8"main";
+        config.items = { { .key = u8"file", .label = u8"파일", .access_key = U'f' }, { .key = u8"edit", .label = u8"Edit", .access_key = U'E' } };
+        config.state = open ? luil::menu_bar_state { u8"file", true, false } : luil::menu_bar_state {};
+        config.set_state = [](const luil::menu_bar_state& state) { return luil::make_app_action(menu_bar_probe_intent { state }); };
+        page->add(std::make_unique<luil::menu_bar_element>(std::move(config)));
+        host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 300.0f, 28.0f }, 1.0f));
+        auto* const root { new luil::win32::uia_root_provider { host } };
+        luil::win32::uia_element_provider* const bar { root->make_element_provider({ luil::ui_element_kind::menu_bar, u8"main" }) };
+        luil::win32::uia_element_provider* const file { root->make_element_provider({ luil::ui_element_kind::menu_bar_item, u8"file" }) };
+
+        VARIANT value {};
+        REQUIRE(bar->GetPropertyValue(UIA_ControlTypePropertyId, &value) == S_OK);
+        REQUIRE(value.vt == VT_I4);
+        REQUIRE(value.lVal == UIA_MenuBarControlTypeId);
+        REQUIRE(bar->GetPropertyValue(UIA_NamePropertyId, &value) == S_OK);
+        REQUIRE(value.vt == VT_BSTR);
+        REQUIRE(std::wstring_view { value.bstrVal } == L"메뉴 막대");
+        static_cast<void>(VariantClear(&value));
+
+        REQUIRE(file->GetPropertyValue(UIA_ControlTypePropertyId, &value) == S_OK);
+        REQUIRE(value.lVal == UIA_MenuItemControlTypeId);
+        // 이름은 라벨 그대로다. 덧붙여 그린 "(F)"는 이름에 없고 키는 AccessKey가 읽힌다.
+        REQUIRE(file->GetPropertyValue(UIA_NamePropertyId, &value) == S_OK);
+        REQUIRE(std::wstring_view { value.bstrVal } == L"파일");
+        static_cast<void>(VariantClear(&value));
+        REQUIRE(file->GetPropertyValue(UIA_AccessKeyPropertyId, &value) == S_OK);
+        REQUIRE(value.vt == VT_BSTR);
+        REQUIRE(std::wstring_view { value.bstrVal } == L"Alt+F");
+        static_cast<void>(VariantClear(&value));
+
+        // 항목은 Invoke 없이 ExpandCollapse만 내건다 (`expanded`가 있다).
+        IUnknown* pattern { nullptr };
+        REQUIRE(file->GetPatternProvider(UIA_InvokePatternId, &pattern) == S_OK);
+        REQUIRE(pattern == nullptr);
+        REQUIRE(file->GetPatternProvider(UIA_ExpandCollapsePatternId, &pattern) == S_OK);
+        REQUIRE(pattern != nullptr);
+        pattern->Release();
+        ExpandCollapseState state { ExpandCollapseState_Collapsed };
+        REQUIRE(file->get_ExpandCollapseState(&state) == S_OK);
+        REQUIRE(state == (open ? ExpandCollapseState_Expanded : ExpandCollapseState_Collapsed));
+
+        // 펼치기는 포인터로 연 상태, 접기는 쉬는 막대다. 이미 그 상태면 할 일이 없다.
+        REQUIRE(file->Expand() == S_OK);
+        REQUIRE(host.dispatched.size() == (open ? 0u : 1u));
+        if (open == false)
+            REQUIRE(menu_bar_state_of(host.dispatched.front()) == luil::menu_bar_state { u8"file", true, false });
+        host.dispatched.clear();
+        REQUIRE(file->Collapse() == S_OK);
+        REQUIRE(host.dispatched.size() == (open ? 1u : 0u));
+        if (open)
+            REQUIRE(menu_bar_state_of(host.dispatched.front()) == luil::menu_bar_state {});
+
+        file->Release();
+        bar->Release();
+        root->Release();
+    }
 }

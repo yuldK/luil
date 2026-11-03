@@ -9,7 +9,7 @@
 - 막대 요소가 없다. 앱이 글자 단추 줄과 `make_menu_popup`을 손으로 잇고, 열린 메뉴 사이 이동은 만들 수 없다. `process_menu_key`([ui_interaction.cpp](../src/ui/ui_interaction.cpp))는 →를 하위 메뉴 열기로, ←를 깊이가 0보다 클 때의 하위 메뉴 닫기로만 쓴다. 깊이 0의 ←/→로 이웃 최상위 메뉴에 갈 길이 없다. 메뉴가 열려 있으면 `process_key`가 메뉴가 갖지 않은 키를 삼켜 Alt+글자로 다른 메뉴에 갈 길도 없다.
 - Alt 단독은 키가 아니다. `modified_key_from_virtual`([surface_input.cpp](../src/win32/surface_input.cpp))이 `VK_MENU`를 `key_code::none`으로 버리고, 규약도 "수정자 키 자체는 키가 아니다"다([keyboard-shortcut-design.md](keyboard-shortcut-design.md)).
 - Alt 뗌은 OS의 메뉴 모드로 간다. [window_surface.cpp](../src/win32/window_surface.cpp)의 `WM_SYSKEYUP`·`WM_SYSCHAR`는 `key_capturing()`일 때만 삼키고 나머지는 `DefWindowProc`의 `SC_KEYMENU`로 간다. 그 뒤의 ↓가 시스템 메뉴를 열 것이다(추정, 사람 확인). F10은 `WM_SYSKEYDOWN`이 `key_code::f10`으로 나르지만 그 뗌도 같은 길이다. Alt+글자도 키 이벤트로 오지만 짝인 `WM_SYSCHAR`가 메뉴 없는 창의 경고음이 될 수 있다(추정, 사람 확인).
-- 접근 키 칸이 없다. `menu_item_config`([menu_element.h](../include/luil/ui/menu_element.h))에는 key·label·icon·shortcut_text만 있다.
+- 접근 키 칸이 없다(`menu_item_config`([menu_element.h](../include/luil/ui/menu_element.h))는 key·label·icon·enabled·separator_above·kind·checked·shortcut_text·children).
 - 접근성 역할이 없다. `access_role`에 메뉴 막대가 없어 `control_type_for`([uia_provider.cpp](../src/win32/uia_provider.cpp))가 Pane으로 답한다.
 
 ## 공개 형식
@@ -76,7 +76,15 @@ public:
 [[nodiscard]] ui_popup make_menu_bar_popup(const menu_bar_element& bar, menu_config menu, menu_popup_config popup, rect_f limit);
 ```
 
-끝에 더하는 칸: `menu_item_config::access_key`(`char32_t`, `children` 뒤), `key_code::alt_tap`(`numpad_decimal` 뒤), `interaction_snapshot::menu_keys`(`pointer_control` 뒤), `access_role::menu_bar`(`navigation` 뒤), `access_info::access_key`(`error` 뒤). kind `menu_bar`·`menu_bar_item`은 `end_of_library_kinds` 위다.
+끝에 더하는 칸: `menu_item_config::access_key`(`char32_t`, `children` 뒤), `key_code::alt_tap`(`numpad_decimal` 뒤), `interaction_snapshot::menu_keys`(`pointer_control` 뒤), `access_role::menu_bar`(`navigation` 뒤), `access_info::access_key`(`error` 뒤). kind `menu_bar`·`menu_bar_item`은 `end_of_library_kinds` 위다. `ui_inspect.cpp`의 `access_role_name`에 `menu_bar` case를 같은 커밋에 더한다.
+
+구현에서 더 정한 공개 모양이다. 새로 가른 길은 결정 8~10에 적었다.
+
+- `menu_bar_element`는 `preferred_size`(항목 폭의 합과 `menu_bar_height`)를 낸다. 항목과 막대는 `set_preserve_pointer_focus(true)`라 눌러도 텍스트 칸의 초점을 가져가지 않는다.
+- `handle_key`의 `menu_shown`이 참이면 막대는 메뉴가 쓰지 않은 ←/→와 깊이 0의 Esc, 그리고 언제나 받는 Alt 단독·F10·Alt+접근 키만 받는다. 거짓이면 선 막대의 표 전부다. 열렸다고 했는데 메뉴가 아직 서지 않은 사이(게시 사이)의 키도 거짓으로 받는다.
+- `make_menu_bar_popup`은 `popup.below`의 간격을 0으로 둬 메뉴가 항목 바로 아래에 붙는다. 막대에 `set_state`가 없으면 dismiss와 `after_select`를 건드리지 않는다.
+- 메뉴 항목도 라벨에 접근 키 글자가 없으면 "(N)"을 붙여 그리고 폭(`menu_element::width_for`)에 넣는다. 밑줄은 `interaction_snapshot::menu_keys`일 때만 긋고, `access_info::access_key`는 수식 키 없는 글자("N")다(결정 8).
+- 접근 키 글자 규칙(대문자로 올림, 라벨 안 자리, 덧붙임)은 내부 header `src/ui/access_key.h` 하나가 막대·메뉴 항목·controller에 준다.
 
 ## 규칙
 
@@ -112,9 +120,9 @@ public:
 3. 막대가 서 있고 열리지 않았으면 `handle_key(event, false)`가 모든 키를 받는다. 막대의 것이 아닌 키는 삼킨다. 열린 메뉴가 갖지 않은 키를 삼키는 지금 규칙과 같다.
 4. 막대가 열려 있으면 메뉴 블록이 먼저다. `process_menu_key`가 깊이 0에서 쓰지 않은 ←/→는 `handle_key(event, true)`로 가고, 깊이 0의 Esc는 앱 정책의 `close_menu` 대신 그리로 간다. 막대가 열린 동안 깊이 0 메뉴는 막대의 것으로 본다(한 번에 하나만).
 5. 키보드로 연 막대 메뉴(`state.keyboard`)가 서거나 그 owner가 바뀌면 `update_focus`가 첫 활성 항목을 강조한다. ←/→로 옮긴 메뉴도 새 메뉴다. 포인터로 연 메뉴는 지금처럼 강조 없이 선다.
-6. 막대가 쉬지 않는 동안 `snapshot_.menu_keys`가 참이고 글자 입력(`character_typed_event`)은 버린다. 같은 키가 키로 온다(아래 Win32). 열리지 않고 선 막대(`open == false`)의 밖 누름과 `surface_focus_lost_event`는 그 액션 앞에 `{}`를 더한다. 열린 동안의 바깥 누름은 popup dismiss의 몫이고 popup 표면 안의 누름은 메뉴의 것이라 더하지 않는다. 더하면 하위 메뉴가 있는 항목의 누름이 메뉴를 닫는다.
+6. 막대가 쉬지 않는 동안 `snapshot_.menu_keys`가 참이고 글자 입력(`character_typed_event`)은 버린다. 같은 키가 키로 온다(아래 Win32). 열리지 않고 선 막대(`open == false`)의 밖 누름과, 열림과 상관없이 막대 표면의 `surface_focus_lost_event`(결정 9)는 그 액션 앞에 `{}`를 더한다. 열린 동안의 바깥 누름은 popup dismiss의 몫이고 popup 표면 안의 누름은 메뉴의 것이라 더하지 않는다. 더하면 하위 메뉴가 있는 항목의 누름이 메뉴를 닫는다.
 
-**접근 키.** 막대 항목과 막대에서 연 메뉴의 항목(`menu_item_config::access_key`)이 받는다. 맞추기는 `key_code`(`key_a`…`key_z`, `key_0`…`key_9`)로 한다. 이름은 미국 배열 자리라 한국어 입력기가 켜져 있어도 같은 키가 맞는다. 메뉴 안에서 맞는 항목이 하나면 실행하고(하위 메뉴가 있으면 연다) 여럿이면 다음 것으로 강조만 옮긴다.
+**접근 키.** 막대 항목과 막대에서 연 메뉴의 항목(`menu_item_config::access_key`)이 받는다. 맞추기는 `key_code`(`key_a`…`key_z`, `key_0`…`key_9`)로 한다. 이름은 미국 배열 자리라 한국어 입력기가 켜져 있어도 같은 키가 맞는다. 메뉴 안에서 맞는 항목이 하나면 실행하고(하위 메뉴가 있으면 연다) 여럿이면 다음 것으로 강조만 옮긴다. 메뉴 안 접근 키는 `menu_keys` 동안만 받고, 그리기는 결정 8이다.
 
 **접근성.** 막대는 `access_role::menu_bar`로 UIA MenuBar다. 이름은 `access_name`, 비면 기본 문구다. 항목은 `menu_item`이고 `expanded`가 `current == key && open`이다. `invokable()`이 `expanded`를 가진 요소의 Invoke를 빼므로 ExpandCollapse만 서고, expand는 `{ key, true, false }`, collapse는 `{}`다. `access_info::access_key`("Alt+F")를 UIA AccessKey 속성으로 낸다. 라벨의 "(F)"는 이름에 넣지 않는다.
 
@@ -127,7 +135,7 @@ public:
 - 길 a: 앱 상태 `menu_bar_state { current, open, keyboard }`와 절대 메시지 `set_state`. controller는 tree에서 막대를 찾아 키를 보낸다. 되는 것: 열림은 앱 상태라는 popup 규약 그대로이고 test가 상태 하나로 막대를 재현한다. 대가: 키보드로 서기만 해도 app 메시지가 오가고 frame이 다시 선다.
 - 길 b: 선 항목은 controller가 snapshot 강조로 들고(`menu_highlight` 선례) 앱은 열린 메뉴 키만 든다. 되는 것: 메시지가 줄어든다. 대가: 열림은 앱, 선 자리는 controller로 상태가 둘로 갈려 Esc 단계와 hover 전환이 두 곳을 맞춘다. snapshot 칸이 하나 더 는다.
 - 길 c: 막대 항목에 키보드 초점을 옮긴다. 되는 것: ←/→가 기존 가로 묶음(`process_group_key`)으로 돈다. 대가: `focusable`이 `tab_stop`을 요구해 항목이 Tab 자리가 되고, 텍스트 칸의 초점이 떠나 Esc 뒤 되돌릴 자리를 따로 든다. 초점 떠남 훅이 열린 popup을 닫는다.
-- 권장: a. 대가: 위의 메시지 왕복이다. 공개 API 모양을 정하므로 승인 필요.
+- 권장: a. 대가: 위의 메시지 왕복이다. 승인: 길 a (2026-11-03). [분할 버튼](split-button-design.md)의 열림 규약을 막대에 맞게 넓힌 것이다.
 
 **2. Alt 단독을 무엇으로 나르는가.** 질문: Alt를 홀로 뗀 것을 controller에 어떻게 알리는가.
 
@@ -169,11 +177,30 @@ public:
 - 길 c: Android에서 막대를 서지 않게 한다(높이 0). 되는 것: 모바일 회귀가 없다. 대가: 태블릿·데스크톱 모드 앱이 막대를 쓸 수 없다.
 - 권장: a. 대가: 위의 Alt 단독 차이다. 권장대로 진행.
 
+**8. 메뉴 안 접근 키를 어떻게 보이는가.** 질문: 결정 4 b로 메뉴 항목도 접근 키를 받는데, 메뉴 요소는 막대가 키보드로 열렸는지 모른다. 무엇을 그리는가. (구현 때 정했다.)
+
+- 길 a: 막대 항목과 같이 라벨에 글자가 없으면 "(N)"을 늘 붙이고, 밑줄은 `interaction_snapshot::menu_keys`일 때만 긋는다. 되는 것: 메뉴 요소가 막대를 몰라도 되고 폭이 상태마다 흔들리지 않는다. 대가: 포인터로 연 막대 메뉴에도 밑줄이 선다(막대 항목은 키보드일 때만). Windows는 연 방법으로 가른다.
+- 길 b: 그리지 않고 라벨에 "(N)"을 적는 것을 앱에 맡긴다. 되는 것: 메뉴 요소가 그대로다. 대가: 접근 이름에 "(N)"이 섞이고 영문 라벨에는 단서가 없다.
+- 길 c: `menu_config`에 밑줄 여부 칸을 더하고 `make_menu_bar_popup`이 `state.keyboard`로 채운다. 되는 것: Windows와 같다. 대가: 공개 칸이 하나 늘고 하위 메뉴마다 앱이 같은 값을 옮긴다.
+- 권장: a. 대가: 위의 포인터 메뉴 밑줄이다. 권장대로 진행.
+
+**9. 창 비활성은 열린 막대도 쉬게 하는가.** 질문: controller 6은 `open == false`일 때 밖 누름과 `surface_focus_lost_event`에 `{}`를 더한다고 적었다. 열린 막대의 창이 비활성이 되면? (구현 때 정했다.)
+
+- 길 a: 비활성은 열림과 상관없이 막대 표면의 것이면 `{}`를 더한다. 밖 누름만 `open == false`다. 되는 것: popup이 없는 플랫폼·tree(주 tree에 둔 메뉴)에서도 막대가 쉰다. 대가: Win32에서는 popup dismiss(`activation_changed`)의 `{}`와 둘이 온다. 절대 상태라 같다.
+- 길 b: 둘 다 `open == false`만이다. 되는 것: 메시지가 하나다. 대가: dismiss가 없는 자리에서 막대가 열린 채 남는다.
+- 권장: a. 대가: 위의 중복 메시지다. 권장대로 진행.
+
+**10. Alt+Space가 Alt 단독의 무장을 어떻게 푸는가.** 질문: Alt+Space는 `caption_surface`가 `WM_SYSKEYDOWN`에서 끝내 `window_surface`의 풀기 길에 오지 않는다. (구현 때 정했다.)
+
+- 길 a: `caption_surface.cpp`의 Alt+Space 갈래가 `cancel_alt_tap()`을 부른다(한 줄). 되는 것: 시스템 메뉴 뒤에 늦게 온 Alt 뗌이 막대를 세우지 않는다. 대가: 키 경로 파일이 하나 는다.
+- 길 b: 그대로 둔다. 되는 것: 파일이 그대로다. 대가: 무장이 다음 키까지 남는다.
+- 권장: a. 대가: 위의 한 줄이다. 권장대로 진행.
+
 ## 플랫폼
 
 **Win32.** 키 경로는 `window_surface.cpp`·`surface_input.cpp`(이번 라운드 줄 3만)에 든다. 무장과 삼킴 판정은 순수 함수(`alt_tap_tracker`, `swallow_system_key`)로 `surface_input.h`에 두어 창 없이 test한다.
 
-- 무장: `WM_SYSKEYDOWN`의 `VK_MENU`가 반복이 아니고(bit 30), Ctrl이 함께가 아니고(AltGr), 키 잡기 중이 아니고, 이 창의 게시된 tree에 `active_menu_bar`가 있을 때다. 풀기: 다른 키의 `WM_KEYDOWN`·`WM_SYSKEYDOWN`, 마우스 누름, `WM_KILLFOCUS`·비활성, 전역 단축키 눌림.
+- 무장: `WM_SYSKEYDOWN`의 `VK_MENU`가 반복이 아니고(bit 30), Ctrl이 함께가 아니고(AltGr), 키 잡기 중이 아니고, 이 창의 게시된 tree에 `active_menu_bar`가 있을 때다. 누르고 있는 동안의 반복은 무장도 풀기도 하지 않는다. 풀기: 다른 키의 `WM_KEYDOWN`·`WM_SYSKEYDOWN`, 마우스·펜·터치 누름(`WM_xBUTTONDOWN`·`WM_POINTERDOWN`), `WM_KILLFOCUS`·비활성, Alt+Space(결정 10), 전역 단축키 눌림.
 - 전역 단축키 눌림: `RegisterHotKey`로 건 Alt 조합은 OS가 글자 키를 가져가 창에 오지 않아 `VK_MENU`의 누름과 뗌만 오고, 풀지 않으면 `alt_tap`이 잘못 나간다. 풀기 입구는 공개 멤버 `window_surface::cancel_alt_tap()`([window_surface.h](../src/win32/window_surface.h))이고 안에서 `alt_tap_tracker::cancel`을 부른다. 무장은 키보드 초점 표면에 서는데 그 표면은 보조 창(`secondary_surface`)일 수 있고 `WM_HOTKEY`는 주 창으로만 온다. 그래서 `global-hotkey-design.md`의 `case WM_HOTKEY`가 주 창과 모든 보조 창 표면(`main_`·`windows_`)에 이 함수를 부른다. 그 호출은 줄 4가 통합 때 menu_bar 뒤에 한 줄로 낸다.
 - `WM_SYSKEYUP`의 `VK_MENU`는 무장이었으면 `alt_tap`을 게시한다. 막대가 있으면 무장 여부와 상관없이 0을 돌려 메뉴 모드를 막는다. `VK_F10`의 뗌도 같다. `WM_SYSCHAR`도 막대가 있으면 삼키되 Space(Alt+Space 시스템 메뉴)는 넘긴다. Alt+F4는 `WM_SYSKEYDOWN`에서 그대로 시스템에 간다.
 - `menu_keys` 동안 `WM_KEYDOWN`을 TIP(`text_input_->handle_key`)에 먼저 주지 않고, `post_key_event`의 글자 키 판정이 키 잡기와 같이 수식 키 없는 글자를 키로 보낸다.
@@ -191,12 +218,12 @@ public:
 
 - **X-3·X-4(같은 줄, 앞)**: [menu-focus-fixes-design.md](menu-focus-fixes-design.md)가 먼저 들어간다. 열린 항목 다시 누르기는 그 규칙에 기댄다.
 - **split_button(R1)**: `set_open`·닫는 계기 표·한 번에 하나만·`place_field_popup`을 따른다. 그 문서가 menu_bar에 남긴 여는 키·항목 사이 이동·hover 전환을 여기서 닫는다.
-- **R2 메뉴 폭·기본 문구·검사기**: `make_menu_bar_popup`은 `make_menu_popup`을 불러 배율을 받는 `width_for`를 그대로 쓴다. `menu_bar_name`은 `default_text.h/.cpp` 끝, kind 이름(`menu_bar`, `menu_bar_item`)은 `inspect_names.cpp`의 `library_kind_name`에 kind를 더하는 같은 커밋에서 더한다.
+- **R2 메뉴 폭·기본 문구·검사기**: `make_menu_bar_popup`은 `make_menu_popup`을 불러 배율을 받는 `width_for`를 그대로 쓴다. `menu_bar_name`은 `default_text.h/.cpp` 끝, kind 이름(`menu_bar`, `menu_bar_item`)은 `inspect_names.cpp`의 `library_kind_name`에 kind를 더하는 같은 커밋에서 더한다. kind 숫자를 test·UIA script에 박지 않는다(AutomationId는 kind 수:owner). `tests/ui_element_tests.cpp`의 `last[]`는 이 노드가 이 브랜치의 마지막 kind(`menu_bar_item`)로 맞추고, 병합 때 통합이 다시 맞춘다.
 - **undo_stack(R2)**: 편집 메뉴는 `make_undo_commands`를 `menu_item_from`으로 짓는다. 접근 키는 앱이 `menu_item_config::access_key`에 채운다. `commands.h`는 고치지 않는다.
-- **hotkey(줄 4)**: `alt_tap`에는 VK가 없다. `key_mapping.cpp`의 역표는 이 키를 0으로 답하고 단축키 잡기는 거절한다. `tests/surface_input_tests.cpp`는 menu_bar만 끝에 더한다. hotkey는 `alt_tap`이 `invalid_key`임을 `hotkey_sync_tests.cpp`에서 잠그고, 그 단언은 통합 커밋이 menu_bar 뒤에 낸다. 줄 4의 `case WM_HOTKEY`가 `cancel_alt_tap()`을 부른다(위 Win32 절).
+- **hotkey(줄 4)**: `alt_tap`에는 VK가 없다. 줄 4의 `key_mapping.cpp` 역표는 이 키를 0으로 답하고 단축키 잡기는 거절한다(라벨이 없어 `shortcut_label`이 빈 글이다). `surface_input_tests.cpp`는 이 노드만 더한다. `win32_virtual_from_key(alt_tap) == 0` 단언은 통합 커밋이 `hotkey_sync_tests.cpp` 끝에 더한다. 줄 4의 `case WM_HOTKEY`가 `cancel_alt_tap()`을 부른다(위 Win32 절). 이 노드는 `window_surface::cancel_alt_tap()`을 공개 멤버로 낸다.
 - **tray(줄 4)**: 이 노드는 `win32_window.cpp`를 고치지 않는다. 트레이 메뉴는 시스템 `HMENU`라 X-4와 무관하다. 이 노드가 더한 `menu_item_config::access_key`는 `make_tray_menu`가 `&` 표기로 옮긴다. 그 구현은 통합 커밋이 menu_bar 뒤에 낸다(`tray-icon-design.md`).
 - **rich_edit(줄 2)**: `menu_keys` 동안 텍스트 칸에 글자와 TIP 키가 가지 않는다. 서식 메뉴를 막대에 달면 이 문서의 접근 키를 쓴다. `rich-edit-exchange-design.md`가 요청한 갈래 하나를 줄 3이 별도 커밋으로 낸다. `process_text_input_key`의 읽기 전용 갈래 뒤, `multiline` 갈래 앞에서 snapshot의 `clipboard_keys_to_parent`가 참이고 `secret`이 아니면 Ctrl+C·Ctrl+X·Ctrl+V(Shift 포함), Ctrl+Insert, Shift+Insert, Shift+Delete에 `nullopt`를 돌려준다. 필드는 줄 2가 `text_input_snapshot` 끝과 `text_area_config` 끝에 더하므로, 이 갈래 커밋과 `tests/key_propagation_tests.cpp` 끝의 test는 통합 때 줄 2 병합 뒤에 쌓는다. `ui_interaction.cpp`는 줄 3만 고친다.
-- **같은 라운드 공용 파일**: `ui_element.h`(`interaction_snapshot` 끝 칸), `accessibility.h`(enum 끝과 `access_info` 끝 칸), `uia_provider.cpp`(`control_type_for`의 case 한 줄과 AccessKey 속성 case), `ui_element_id.h`, `android_app.cpp` 한 줄은 모두 끝에 더하거나 한 줄이다.
+- **같은 라운드 공용 파일**: `ui_element.h`(`interaction_snapshot` 끝 칸), `accessibility.h`(enum 끝과 `access_info` 끝 칸), `uia_provider.cpp`(`control_type_for`의 case 한 줄과 AccessKey 속성 case), `ui_element_id.h`, `android_app.cpp` 한 줄, `caption_surface.cpp`의 Alt+Space 갈래 한 줄(결정 10)은 모두 끝에 더하거나 한 줄이다.
 - **데모**: 라이브러리 커밋과 데모 연결 커밋을 나눈다. `examples/demo_main.cpp`는 여러 줄이 고치므로 데모 연결은 통합 때 직렬로 쌓는다.
 - 통합 때 [keyboard-shortcut-design.md](keyboard-shortcut-design.md)의 수정자 문장에 `alt_tap` 예외를, [popup-anchor-design.md](popup-anchor-design.md)에 막대 앵커 한 단락을, `docs/components.md`에 한 행을 더한다.
 
@@ -213,8 +240,11 @@ public:
 - `tests/key_propagation_tests.cpp`(luil_core_tests): `clipboard_keys_to_parent`가 참인 칸에서 Ctrl+C·Ctrl+X·Ctrl+V(Shift 포함), Ctrl+Insert, Shift+Insert, Shift+Delete가 `nullopt`로 칸 밖에 닿는지, `secret` 칸과 플래그가 꺼진 칸은 지금 길 그대로인지, 읽기 전용 칸의 Ctrl+X·Ctrl+V 삼킴이 그대로인지. 줄 2의 필드 커밋 뒤 통합 때 끝에 쌓는다.
 - `tests/uia_provider_tests.cpp`(luil_tests): MenuBar ControlType, 항목의 ExpandCollapse와 Invoke 없음, AccessKey 속성.
 - `tests/keyboard_shortcut_tests.cpp`: `alt_tap`의 라벨이 비어 이름 키 수가 89 그대로인지.
-- `tests/raster_draw_tests.cpp`: 밑줄이 `keyboard`일 때만 그려지는지, 열린 항목의 눌림 바탕.
-- 데모: `examples/demo/shell_menu.cpp·.h`(새 파일)가 파일(F)·편집(E)·보기(V)를 짓는다. 보기에는 사이드바 체크와 하위 메뉴 "테마"(밝게·시스템·어둡게)를 둔다. `demo_main.cpp`가 caption 아래(caption이 아래면 창 위)에 막대 줄을 놓고 본문을 그만큼 내린다. 막대 오른쪽 label에 "메뉴 막대: 쉼", "파일 · 키보드", "편집 열림 · 포인터"와 "마지막 메뉴 명령: …"을 그려 UIA가 되읽는다. `tests/demo_gallery_tests.cpp`가 막대 조립을, `tests/mobile_demo_page_tests.cpp`가 모바일 첫 화면에 `menu_bar` kind가 없음을 잠근다. 격리 데스크톱에서 luil-uia로 항목을 이름으로 Expand하고 메뉴 항목을 Invoke하며, PostMessage 키로 Alt 뗌·←/→·Esc를 보내 label을 되읽는다.
+- `tests/raster_draw_tests.cpp`(luil_core_tests): 줄 바탕이 없는지, 키보드로 선 항목의 hover 바탕, 열린 항목의 눌림 바탕, 포인터가 올라간 항목의 hover 바탕.
+- `tests/menu_bar_native_tests.cpp`(luil_tests, 새 파일): 막대 밑줄이 `keyboard`일 때만, 메뉴 항목 밑줄이 `menu_keys`일 때만 그려지는지. 밑줄은 글 폭의 축이라 UI 글꼴을 싣는 실행 파일에 둔다. luil_core_tests의 raster 축은 글꼴이 없어 글 폭이 0이다.
+- `tests/default_text_tests.cpp`(luil_core_tests): 기본 문구 표에 `menu_bar_name`을 더한다.
+- 데모: `examples/demo/shell_menu.cpp·.h`(새 파일)가 파일(F)·편집(E)·보기(V)를 짓는다. 파일은 새로 만들기(N)·열기(O)·저장(S), 편집은 실행 취소(U)·다시 실행(R)·잘라내기(T)·복사(C)·붙여넣기(P)다. 보기에는 사이드바(S) 체크와 하위 메뉴 "테마"(T: 밝게(L)·시스템(S)·어둡게(D))를 둔다. 사이드바와 테마는 셸이 단축키·팔레트와 같은 메시지로 실행하고, 나머지 명령은 마지막 명령 label만 바꾼다. `demo_main.cpp`가 caption 아래(caption이 아래면 창 위)에 막대 줄을 놓고 본문을 그만큼 내린다. 막대는 앱 내용이라 전체 화면에서도 남는다. 막대 오른쪽 label 둘(owner `shell-menu-state`·`shell-menu-last`)에 "메뉴 막대: 쉼", "파일 · 키보드", "편집 열림 · 포인터"와 "마지막 메뉴 명령: …"을 그려 UIA가 되읽는다. `shell_menu.cpp`는 `luil_core_tests`의 데모 묶음에 올라 `tests/demo_gallery_tests.cpp`가 막대 조립(이름·AccessKey·label), Alt 단독과 포인터의 label, 메뉴 자리·고른 명령·셸 명령·테마 하위 메뉴 자리를 잠근다. `tests/mobile_demo_page_tests.cpp`가 모바일 첫 화면에 `menu_bar`·`menu_bar_item` kind가 없음을 잠근다. 격리 데스크톱에서 luil-uia로 항목을 이름으로 Expand하고 메뉴 항목을 Invoke하며, PostMessage 키로 Alt 뗌·←/→·Esc를 보내 label을 되읽는다.
+  - UIA 되읽기 목록: 첫 화면에서 "메뉴 막대: 쉼"·"마지막 메뉴 명령: 없음". "파일" 항목 Expand 뒤 "파일 열림 · 포인터"와 메뉴 popup의 "새로 만들기"·"열기"·"저장". "새로 만들기" Invoke 뒤 "마지막 메뉴 명령: 새로 만들기"·"메뉴 막대: 쉼". Alt 뗌 뒤 "파일 · 키보드", →·↓ 뒤 "편집 열림 · 키보드", Esc 뒤 "편집 · 키보드", 다시 Esc 뒤 "메뉴 막대: 쉼". "보기" 메뉴의 "사이드바" Invoke 뒤 사이드바 접힘(`sidebar-motion` label이 "사이드바 44 · 멈춤").
 - 사람 확인: 실제 키보드로 Alt 단독·Alt+F·F10·방향키·Esc 단계, 경고음과 시스템 메뉴 모드가 없는지, 한국어 입력기를 켠 텍스트 칸에서 Alt+F와 메뉴 안 글자, 마우스로 열린 항목 다시 누르기와 hover 전환, 배율 100·150·200%와 고대비, Narrator가 "메뉴 막대"와 "파일, 메뉴 항목, 접힘, Alt+F"를 읽는지.
 
 ## 범위 밖

@@ -17,10 +17,10 @@ namespace {
 TEST_CASE("Every default text is a non-empty Korean word, the same as the ones the elements wrote themselves", "[ui][default-text]")
 {
     // 요소마다 박혀 있던 낱말을 옮긴 것이라 글자가 전과 같아야 한다. 열다섯 낱말에 확인 대화 상자의 표준 단추 넷과 별점의 이름,
-    // 실행 취소 명령표의 두 이름, 잉크 캔버스의 이름을 더한 스물셋이다.
+    // 실행 취소 명령표의 두 이름, 잉크 캔버스와 메뉴 막대의 이름을 더한 스물넷이다.
     // 분할 버튼의 이름은 문자열을 새로 짓는다. view로 들기 전에 수명을 잡아 둔다.
     const std::u8string arrow_name { luil::default_text::split_button_arrow_name(u8"저장") };
-    const std::array<std::pair<std::u8string_view, std::u8string_view>, 23> words {
+    const std::array<std::pair<std::u8string_view, std::u8string_view>, 24> words {
         std::pair { luil::default_text::info_bar_close(), std::u8string_view { u8"닫기" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::info), std::u8string_view { u8"정보" } },
         std::pair { luil::default_text::severity_name(luil::ui_severity::success), std::u8string_view { u8"성공" } },
@@ -44,6 +44,7 @@ TEST_CASE("Every default text is a non-empty Korean word, the same as the ones t
         std::pair { luil::default_text::undo_command_undo(), std::u8string_view { u8"실행 취소" } },
         std::pair { luil::default_text::undo_command_redo(), std::u8string_view { u8"다시 실행" } },
         std::pair { luil::default_text::ink_canvas_name(), std::u8string_view { u8"잉크 캔버스" } },
+        std::pair { luil::default_text::menu_bar_name(), std::u8string_view { u8"메뉴 막대" } },
     };
     for (const auto& [text, expected] : words)
     {

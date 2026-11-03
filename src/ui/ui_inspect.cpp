@@ -574,6 +574,8 @@ namespace luil {
             return u8"status_bar";
         case access_role::navigation:
             return u8"navigation";
+        case access_role::menu_bar:
+            return u8"menu_bar";
         default:
             return {};
         }

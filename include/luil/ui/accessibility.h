@@ -73,6 +73,8 @@ namespace luil {
         status_bar,
         // 이동 길잡이 묶음이다 (경로 조각 막대). UIA에서는 Group에 navigation 랜드마크를 단다.
         navigation,
+        // 창 위의 최상위 메뉴 줄이다 (`menu_bar_element`). 항목은 `menu_item`이다. UIA에서는 MenuBar다.
+        menu_bar,
     };
 
     // 범위 값이다 (막대·스크롤 막대·진행률).
@@ -125,6 +127,8 @@ namespace luil {
         bool invalid { false };
         // 입력 칸 아래의 오류 글이다. 새로 생기거나 바뀌면 platform이 그 글을 읽게 알린다 (number-input-design.md).
         std::u8string error {};
+        // 이 요소를 고르는 키다 ("Alt+F", 메뉴 안 항목은 "N"). 비면 없다. UIA에서는 AccessKey 속성이다.
+        std::u8string access_key {};
 
         [[nodiscard]] bool operator==(const access_info&) const = default;
     };

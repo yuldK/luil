@@ -288,3 +288,90 @@ TEST_CASE("Native mouse hover and press carry the same surface DPI for tooltip h
     REQUIRE(press.has_value());
     REQUIRE(std::get<luil::pointer_pressed_event>(*press).scale == 1.5f);
 }
+
+TEST_CASE("A lone Alt press and release is an Alt tap only while a menu bar can take it", "[surface-input][menu-bar]")
+{
+    // 첫 누름이 무장하고 뗌이 Alt 단독이다. 누르고 있는 동안의 반복은 무장을 그대로 둔다.
+    luil::win32::alt_tap_tracker tracker {};
+    tracker.key_down(VK_MENU, false, false, true);
+    REQUIRE(tracker.armed());
+    tracker.key_down(VK_MENU, true, false, true);
+    REQUIRE(tracker.armed());
+    REQUIRE(tracker.key_up(VK_MENU));
+    REQUIRE(tracker.armed() == false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 막대가 없거나 키 잡기 중이면(`eligible` 거짓) 무장하지 않는다.
+    tracker.key_down(VK_MENU, false, false, false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // Ctrl과 함께인 Alt는 AltGr다.
+    tracker.key_down(VK_MENU, false, true, true);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 반복으로 시작한 누름은 무장하지 않는다 (창 밖에서 눌러 들고 온 Alt다).
+    tracker.key_down(VK_MENU, true, false, true);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+}
+
+TEST_CASE("Another key, a pointer press or a global hotkey cancels an armed Alt tap", "[surface-input][menu-bar]")
+{
+    luil::win32::alt_tap_tracker tracker {};
+    // Alt+F처럼 다른 키가 끼면 Alt 단독이 아니다. 그 키의 뗌은 무장을 바꾸지 않는다.
+    tracker.key_down(VK_MENU, false, false, true);
+    tracker.key_down('F', false, false, true);
+    REQUIRE(tracker.key_up('F') == false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // Shift도 다른 키다.
+    tracker.key_down(VK_MENU, false, false, true);
+    tracker.key_down(VK_SHIFT, false, false, true);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 마우스 누름·창 비활성·전역 단축키 눌림은 창이 `cancel`을 부른다 (`window_surface::cancel_alt_tap`).
+    tracker.key_down(VK_MENU, false, false, true);
+    REQUIRE(tracker.armed());
+    tracker.cancel();
+    REQUIRE(tracker.armed() == false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 풀린 뒤의 새 첫 누름은 다시 무장한다.
+    tracker.key_down(VK_MENU, false, false, true);
+    REQUIRE(tracker.key_up(VK_MENU));
+}
+
+TEST_CASE("A window with a menu bar swallows Alt and F10 releases and Alt characters but not Alt+Space", "[surface-input][menu-bar]")
+{
+    using luil::win32::swallow_system_key;
+    // 막대가 있으면 메뉴 모드와 경고음을 막는다.
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_MENU, true, false));
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_F10, true, false));
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L'f', true, false));
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L'7', true, false));
+    // Alt+Space는 시스템 메뉴라 넘긴다. 다른 키의 뗌도 OS의 것이다.
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L' ', true, false) == false);
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, 'F', true, false) == false);
+
+    // 막대가 없으면 지금처럼 OS의 것이다.
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_MENU, false, false) == false);
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_F10, false, false) == false);
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L'f', false, false) == false);
+
+    // 키 잡기 중이면 막대와 상관없이 둘 다 삼킨다 (Alt+Space까지 잡는 칸의 것이다).
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_MENU, false, true));
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L' ', false, true));
+    // 시스템 키 메시지가 아니면 삼키지 않는다.
+    REQUIRE(swallow_system_key(WM_SYSKEYDOWN, VK_MENU, true, true) == false);
+    REQUIRE(swallow_system_key(WM_KEYUP, VK_MENU, true, true) == false);
+}
+
+TEST_CASE("Menu keys send plain letters as keys the way key capture does", "[surface-input][menu-bar]")
+{
+    // 막대가 선 동안 창은 글자 키를 문자 키로 치지 않고 넘긴다 (`character_key` 거짓). 그러면 수식 키 없는 글자도 이름 키다.
+    REQUIRE(modified_key_from_virtual('F', false, false, false) == key_code::key_f);
+    REQUIRE(modified_key_from_virtual('3', false, false, false) == key_code::key_3);
+    // 막대가 쉬면 지금처럼 문자 경로다.
+    REQUIRE(modified_key_from_virtual('F', false, false, true) == key_code::none);
+    // Alt 자체는 여전히 키가 아니다. Alt 단독은 뗌에서 창이 따로 보낸다.
+    REQUIRE(modified_key_from_virtual(VK_MENU, false, true, false) == key_code::none);
+}

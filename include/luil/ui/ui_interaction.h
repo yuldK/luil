@@ -19,6 +19,7 @@
 
 namespace luil {
     class menu_element;
+    class menu_bar_element;
     // 텍스트 편집 한 동작이다.
     // controller가 만들고 policy가 앱 메시지로 바꾼다.
     struct text_edit_request
@@ -778,7 +779,20 @@ namespace luil {
         // 메뉴가 갖는 키(↑/↓/Enter/Esc)면 그 결과고, 아니면 nullopt라 호출자가
         // 메뉴 안의 텍스트 박스에게 넘긴다.
         //  - 강조를 세우면 그 메뉴가 사는 표면도 함께 세운다 (`menu_surface`).
-        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host);
+        //  - `bar`는 이 메뉴를 연 메뉴 막대다 (열린 막대가 없으면 nullptr). 깊이 0에서 메뉴가 쓰지 않은 ←/→와 Esc가 막대로 간다.
+        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host, const menu_bar_element* bar);
+        // 막대에서 연 메뉴 안의 접근 키다 (`menu_item_config::access_key`). 맞는 항목이 없거나 막대가 쉬면 nullopt다.
+        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_access_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host);
+        // 키를 받을 메뉴 막대와 그 표면이다 (docs/menu-bar-design.md). 없으면 `bar`가 nullptr다.
+        struct menu_bar_location
+        {
+            const menu_bar_element* bar { nullptr };
+            std::u8string surface {};
+        };
+        // 키가 온 표면의 tree가 먼저이고 없으면 초점 표면의 tree다.
+        [[nodiscard]] menu_bar_location key_menu_bar(const std::u8string& surface) const;
+        // 활성 표면의 tree가 먼저이고 없으면 주 tree다. 키 없이 막대를 보는 자리(tree 교체·누름·창 비활성)가 쓴다.
+        [[nodiscard]] menu_bar_location shown_menu_bar() const;
         // 메뉴 container가 있는 자리다.
         // 주 tree와 popup tree를 차례로 보고 없으면 tree가 nullptr다 (메뉴가 닫혀 있다).
         [[nodiscard]] menu_location find_menu(const menu_kinds& kinds) const;
@@ -1103,6 +1117,8 @@ namespace luil {
         // 키보드(→·Enter)가 하위 메뉴를 열었다. 그 메뉴가 서면 첫 활성 항목을 강조한다 — hover로 연 메뉴는
         // 강조 없이 선다 (Windows 메뉴의 갈래다).
         bool submenu_opened_by_key_ { false };
+        // 지난번에 본 메뉴 막대의 깊이 0 메뉴의 owner(항목 키)다. 바뀌면(←/→·hover·Alt+글자) 새 메뉴라 강조를 다시 세운다.
+        std::u8string menu_bar_menu_ {};
 
         // 마지막으로 본 포인터 위치·시각·표면이다.
         // 포인터가 머문 채 내용만 스크롤되면 (휠) 새

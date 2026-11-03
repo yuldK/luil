@@ -64,6 +64,7 @@
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
 #include "luil/ui/markdown_element.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/message_box.h"
 #include "luil/ui/modal_host_element.h"

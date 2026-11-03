@@ -378,6 +378,12 @@ namespace luil {
         numpad_multiply,
         numpad_divide,
         numpad_decimal,
+        // Alt를 눌렀다 다른 키 없이 뗐다 (docs/menu-bar-design.md). 메뉴 막대를 세우는 키다.
+        //  - "수정자 키 자체는 키가 아니다" 규약의 예외 하나다. 막대가 있는 창만 보내고(`alt == false`인 누름 하나),
+        //    그 밖의 창의 Alt는 지금처럼 키가 아니다.
+        //  - 가상 키가 없고 라벨도 없다. 단축키로 적거나 잡을 수 없다 (`shortcut_label`이 빈 글이다).
+        //  - Android는 Alt 뗌을 보지 않아 보내지 않는다.
+        alt_tap,
         first_platform_key = 0x1000,
     };
 

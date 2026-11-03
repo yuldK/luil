@@ -49,6 +49,8 @@ namespace luil::default_text {
     [[nodiscard]] std::u8string_view ink_canvas_name() noexcept;
     // 잉크 캔버스의 기본 접근 값 글이다 ("획 3개"). 획 수가 끼는 문장이라 문자열을 새로 짓는다. 복수형은 R5 몫이다.
     [[nodiscard]] std::u8string ink_canvas_summary(std::size_t strokes);
+    // 메뉴 막대의 기본 접근 이름이다 (메뉴 막대).
+    [[nodiscard]] std::u8string_view menu_bar_name() noexcept;
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

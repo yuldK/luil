@@ -365,6 +365,9 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     "${public_headers}/ui/commands.h"
     ui/menu_element.cpp
     "${public_headers}/ui/menu_element.h"
+    ui/menu_bar_element.cpp
+    "${public_headers}/ui/menu_bar_element.h"
+    ui/access_key.h
     ui/message_box.cpp
     "${public_headers}/ui/message_box.h"
     ui/message_box_element.cpp

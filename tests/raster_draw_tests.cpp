@@ -8,6 +8,7 @@
 #include "luil/ui/info_bar_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
 #include "luil/ui/message_box.h"
 #include "luil/ui/modal_host_element.h"
@@ -1736,4 +1737,58 @@ TEST_CASE("A display only or disabled rating never previews and a disabled one i
     REQUIRE(gray.pixel_at(star_center_x(3), 30) == palette.window_background);
     REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, gray_color) > 0);
     REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, over(palette.secondary_foreground, palette.window_background)) == 0);
+}
+
+namespace {
+    // 바이트마다 글자 크기의 절반인 고정 폭이다. 이 축에는 글꼴이 없어 기본 측정기는 0을 잰다.
+    const luil::text_measurer menu_bar_width { [](const std::u8string_view text, const float size) { return static_cast<float>(text.size()) * size * 0.5f; } };
+
+    // "File·Edit·Help"를 (0, 0)부터 세운 막대를 그린다. 항목은 물리 88픽셀씩이다 ((24 + 20) × 2).
+    [[nodiscard]] luil::testing::raster_frame draw_menu_bar(const luil::menu_bar_state state, const luil::ui_color_palette& palette, const luil::interaction_snapshot& interaction = {})
+    {
+        luil::menu_bar_config config {};
+        config.owner = u8"bar";
+        config.items = { { .key = u8"file", .label = u8"File", .access_key = U'f' }, { .key = u8"edit", .label = u8"Edit" }, { .key = u8"help", .label = u8"Help" } };
+        config.state = state;
+        config.set_state = [](const luil::menu_bar_state&) { return luil::input_action {}; };
+        auto bar { std::make_unique<luil::menu_bar_element>(std::move(config)) };
+        bar->arrange({ .slot = { 0.0f, 0.0f, 400.0f, luil::menu_bar_height * raster_scale }, .scale = raster_scale, .measurer = &menu_bar_width });
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 80.0f }, raster_scale });
+        root->add(std::move(bar));
+        const luil::ui_tree tree { std::move(root) };
+        luil::testing::raster_frame frame { 400, 80, palette, raster_scale };
+        frame.draw(tree, interaction);
+        return frame;
+    }
+}
+
+TEST_CASE("A menu bar paints no row background and shades only hovered, selected and open items", "[ui][raster][menu-bar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // hover·눌림 바탕은 반투명이라 창 바탕 위에 섞인 색이다.
+    const luil::ui_color hover { over(palette.button_hover_background, palette.window_background) };
+    const luil::ui_color pressed { over(palette.button_pressed_background, palette.window_background) };
+    REQUIRE(same_color(hover, palette.window_background) == false);
+    REQUIRE(same_color(pressed, hover) == false);
+
+    // 쉬는 막대는 줄도 항목도 바탕이 없다.
+    const luil::testing::raster_frame resting { draw_menu_bar({}, palette) };
+    for (const int x : { 44, 132, 220, 300 })
+        REQUIRE(resting.pixel_at(x, 28) == palette.window_background);
+
+    // 키보드로 선 항목은 hover 바탕이다. 이웃은 그대로다.
+    const luil::testing::raster_frame selected { draw_menu_bar({ u8"edit", false, true }, palette) };
+    REQUIRE(same_color(selected.pixel_at(132, 28), hover));
+    REQUIRE(selected.pixel_at(44, 28) == palette.window_background);
+
+    // 열린 항목은 눌림 바탕이고, 포인터가 올라간 다른 항목은 hover 바탕이다.
+    luil::interaction_snapshot over_help {};
+    over_help.hovered = luil::ui_element_id { luil::ui_element_kind::menu_bar_item, u8"help" };
+    const luil::testing::raster_frame open { draw_menu_bar({ u8"file", true, false }, palette, over_help) };
+    REQUIRE(same_color(open.pixel_at(44, 28), pressed));
+    REQUIRE(same_color(open.pixel_at(220, 28), hover));
+    REQUIRE(open.pixel_at(132, 28) == palette.window_background);
+    // 막대 오른쪽의 빈 자리도 칠하지 않는다.
+    REQUIRE(open.pixel_at(300, 28) == palette.window_background);
 }

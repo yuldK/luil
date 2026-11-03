@@ -3,6 +3,7 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/text_block.h"
+#include "ui/access_key.h"
 
 #include <algorithm>
 #include <cmath>
@@ -106,7 +107,20 @@ namespace luil {
                 {
                     const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                     const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
-                    static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
+                    // 접근 키 글자가 라벨에 없으면 "(N)"을 붙여 그린다. 폭(`width_for`)도 같은 글로 잰다.
+                    const std::u8string text { access_key_display(item_.label, item_.access_key) };
+                    const float baseline { box.y + centered_text_baseline(font, box.height) };
+                    const float drawn { draw_text_within(context.canvas, text, text_left, baseline, text_width, font, foreground) };
+                    // 밑줄은 메뉴 막대가 선 동안만 긋는다 (`menu_keys`). 그때만 수식 키 없는 글자가 항목을 고른다.
+                    const std::optional<std::size_t> offset { access_key_underline(item_.label, item_.access_key) };
+                    if (interaction.menu_keys && offset.has_value() && *offset < text.size())
+                    {
+                        const std::u8string_view view { text };
+                        const float left { text_left + measure_text(view.substr(0, *offset), font) };
+                        const float glyph { measure_text(view.substr(*offset, 1), font) };
+                        if (left + glyph <= text_left + drawn)
+                            context.canvas.drawRect(SkRect::MakeXYWH(left, baseline + 2.0f * scale, glyph, 1.0f * scale), foreground);
+                    }
                 }
             }
 
@@ -120,6 +134,9 @@ namespace luil {
                 // 자식이 있는 항목은 펼침 상태를 알린다 (UIA ExpandCollapse). 보조 기술이 하위 메뉴가 열렸는지 읽는다.
                 if (item_.children.empty() == false)
                     info.expanded = opened_;
+                // 메뉴 안 접근 키는 수식 키 없는 글자다 (막대 항목은 "Alt+F").
+                if (const char32_t glyph { access_key_glyph(item_.access_key) }; glyph != 0)
+                    info.access_key = std::u8string(1, static_cast<char8_t>(glyph));
                 return info;
             }
 
@@ -218,7 +235,7 @@ namespace luil {
         for (const auto& item : config.items)
         {
             const float shortcut { item.shortcut_text.empty() ? 0.0f : 16.0f + logical_width(item.shortcut_text) };
-            width = std::max(width, logical_width(item.label) + shortcut + (item.children.empty() ? 0.0f : 18.0f));
+            width = std::max(width, logical_width(access_key_display(item.label, item.access_key)) + shortcut + (item.children.empty() ? 0.0f : 18.0f));
         }
         return width + 2.0f * menu_padding + 16.0f + 22.0f;
     }

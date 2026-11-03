@@ -160,6 +160,11 @@ namespace luil::default_text {
         return summary;
     }
 
+    std::u8string_view menu_bar_name() noexcept
+    {
+        return u8"메뉴 막대";
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;

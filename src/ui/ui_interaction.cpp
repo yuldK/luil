@@ -3,7 +3,9 @@
 
 #include "luil/messaging/envelope.h"
 #include "luil/text/case_fold.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/zoom_view_element.h"
+#include "ui/access_key.h"
 
 #include <algorithm>
 #include <chrono>
@@ -279,6 +281,26 @@ namespace luil {
         // **여기 한 곳에서** 전후 비교로 센다 (focus-reveal-design.md).
         const ui_element_id focused_before { snapshot_.focused };
         const std::u8string focused_surface_before { snapshot_.focused_surface };
+        // 열리지 않고 선 막대의 밖 누름과 막대 표면의 비활성화는 막대를 쉬게 한다 (docs/menu-bar-design.md의 controller 6).
+        //  - 열린 막대의 바깥 누름은 popup dismiss의 몫이고, popup 표면 안의 누름은 메뉴의 것이라 더하지 않는다. 더하면
+        //    하위 메뉴가 있는 항목의 누름이 메뉴를 닫는다.
+        //  - 이 이벤트의 다른 액션보다 앞선다. 막대 밖을 누른 것이 먼저이고, 누른 자리의 클릭은 그 뒤다.
+        std::optional<input_action> rest_menu_bar {};
+        if (const menu_bar_location shown { shown_menu_bar() }; shown.bar != nullptr && shown.bar->config().state.current.empty() == false)
+        {
+            const menu_bar_state& state { shown.bar->config().state };
+            if (const auto* const pressed { std::get_if<pointer_pressed_event>(&event) }; pressed != nullptr && state.open == false)
+            {
+                const rect_f box { shown.bar->bounds() };
+                const bool on_bar { pressed->surface == shown.surface && pressed->x >= box.x && pressed->x < box.x + box.width && pressed->y >= box.y
+                    && pressed->y < box.y + box.height
+                };
+                if (on_bar == false)
+                    rest_menu_bar = shown.bar->config().set_state(menu_bar_state {});
+            }
+            if (const auto* const lost { std::get_if<surface_focus_lost_event>(&event) }; lost != nullptr && lost->surface == shown.surface)
+                rest_menu_bar = shown.bar->config().set_state(menu_bar_state {});
+        }
         std::vector<input_action> actions {};
         actions = std::visit(
             [this](const auto& value) -> std::vector<input_action> {
@@ -399,8 +421,8 @@ namespace luil {
                 }
                 else if constexpr (std::is_same_v<value_type, character_typed_event>)
                 {
-                    // 키 잡기 칸이 받는 동안의 글자는 버린다. 같은 키가 키로 이미 갔다.
-                    if (focused_key_capture() != nullptr)
+                    // 키 잡기 칸이 받는 동안과 메뉴 막대가 선 동안의 글자는 버린다. 같은 키가 키로 이미 갔다.
+                    if (focused_key_capture() != nullptr || snapshot_.menu_keys)
                         return {};
                     // 문자 입력은 초점을 가진 텍스트 박스로만 간다.
                     // 받을 값인지는 앱 logic이 거른다.
@@ -446,6 +468,8 @@ namespace luil {
                     return {};
             },
             event);
+        if (rest_menu_bar.has_value())
+            actions.insert(actions.begin(), std::move(*rest_menu_bar));
 
         // 가지를 떠난 초점도 되살리기와 같은 전후 비교 한 곳에서 센다 (`ui_element::focus_leave_action`).
         // Tab·묶음·글자 탐색·누름·보조 기술이 초점을 옮기는 자리마다 심으면 언젠가 하나를 빠뜨린다.
@@ -3439,6 +3463,28 @@ namespace luil {
         if (const key_capture_target* const capture { focused_key_capture() }; capture != nullptr)
             return capture->on_key(event);
 
+        // 메뉴 막대가 열린 메뉴 블록보다 먼저 보는 키다 (docs/menu-bar-design.md의 controller 1~3).
+        //  - Alt 단독·F10은 막대를 세우거나 쉬게 하고, Alt+접근 키는 그 메뉴를 연다. 열린 동안이어도 그렇다.
+        //    키 처리기와 앱 정책보다 앞이라 같은 Alt+글자 명령보다 막대가 이긴다 (`menu_bar_access_conflicts`).
+        //  - 열리지 않고 선 막대는 모든 키를 받는다. 막대의 것이 아닌 키는 삼킨다. 열린 메뉴가 갖지 않은 키를 삼키는
+        //    규칙과 같다.
+        const menu_bar_element* const bar { key_menu_bar(event.surface).bar };
+        const menu_bar_element* open_bar { nullptr };
+        if (bar != nullptr)
+        {
+            const menu_bar_state& state { bar->config().state };
+            const bool activation { event.key == key_code::alt_tap || (event.key == key_code::f10 && event.shift == false && event.shortcut_modifier_down() == false)
+                || (event.alt && event.control == false && event.meta == false && access_key_candidate(event.key))
+            };
+            if (activation)
+                if (std::optional<std::vector<input_action>> handled { bar->handle_key(event, false) }; handled.has_value())
+                    return std::move(*handled);
+            if (state.current.empty() == false && state.open == false)
+                return bar->handle_key(event, false).value_or(std::vector<input_action> {});
+            if (state.current.empty() == false)
+                open_bar = bar;
+        }
+
         // 컨텍스트 메뉴가 열려 있으면 ↑/↓/Enter/Esc는 메뉴의 몫이다.
         // 목록 탐색으로 흘러가지 않는다.
         // 메뉴는 주 tree에 있을 수도, popup tree에 있을 수도 있다.
@@ -3446,7 +3492,7 @@ namespace luil {
         if (menu.has_value())
             if (const menu_location host { find_menu(*menu) }; host.tree != nullptr)
             {
-                if (std::optional<std::vector<input_action>> handled { process_menu_key(event, *menu, host) }; handled.has_value())
+                if (std::optional<std::vector<input_action>> handled { process_menu_key(event, *menu, host, open_bar) }; handled.has_value())
                     return std::move(*handled);
                 // 메뉴가 갖지 않은 키는 그 안에 초점을 가진 텍스트 박스까지만 간다
                 // (검색 칸이 있는 메뉴). 메뉴가 전부 삼키면 caret도 옮길 수 없다.
@@ -3456,6 +3502,9 @@ namespace luil {
                     return std::move(*typed);
                 return {};
             }
+        // 열렸다는 막대의 메뉴가 아직 서지 않았다 (게시 사이). 메뉴가 서기 전의 키도 막대가 받고 나머지는 삼킨다.
+        if (open_bar != nullptr)
+            return open_bar->handle_key(event, false).value_or(std::vector<input_action> {});
 
         // 키보드의 컨텍스트 메뉴도 오른쪽 클릭과 같은 액션을 실행한다.
         // 초점이 자식 단추에 있어도 가장 가까운 메뉴 임자를 찾는다.
@@ -3651,7 +3700,7 @@ namespace luil {
         return *snapshot_.hover_started_at + menu->config().hover_delay;
     }
 
-    std::optional<std::vector<input_action>> interaction_controller::process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host)
+    std::optional<std::vector<input_action>> interaction_controller::process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host, const menu_bar_element* const bar)
     {
         const ui_tree& tree { *host.tree };
         const menu_element* const menu { host.menu };
@@ -3691,7 +3740,15 @@ namespace luil {
                 const auto* const close { &menu->config().close_submenu };
                 return *close ? (*close)({ snapshot_.menu_highlight }) : std::vector<input_action> {};
             }
+            // 막대가 연 메뉴의 깊이 0에서 메뉴가 쓰지 않은 ←/→는 이웃 메뉴로, Esc는 앱 정책의 `close_menu` 대신 막대로 간다.
+            // 막대가 열린 동안 깊이 0 메뉴는 막대의 것으로 본다 (한 번에 하나만).
+            if (bar != nullptr && menu->config().depth == 0
+                && (event.key == key_code::arrow_left || event.key == key_code::arrow_right || event.key == key_code::escape))
+                if (std::optional<std::vector<input_action>> handled { bar->handle_key(event, true) }; handled.has_value())
+                    return handled;
         }
+        if (std::optional<std::vector<input_action>> chosen { process_menu_access_key(event, kinds, host) }; chosen.has_value())
+            return chosen;
         switch (event.key)
         {
         case key_code::arrow_down:
@@ -3757,6 +3814,72 @@ namespace luil {
         }
         // 메뉴의 키가 아니다.
         return std::nullopt;
+    }
+
+    std::optional<std::vector<input_action>> interaction_controller::process_menu_access_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host)
+    {
+        // 막대가 선 동안(`menu_keys`)만이다. 그때는 글자가 문자가 아니라 키로 와 입력기와 섞이지 않는다 (결정 4 b).
+        //  - 컨텍스트 메뉴·명령 팔레트의 글자는 지금처럼 문자 경로(검색 칸)의 것이다.
+        const menu_element* const menu { host.menu };
+        if (snapshot_.menu_keys == false || menu == nullptr || event.shortcut_modifier_down() || access_key_candidate(event.key) == false)
+            return std::nullopt;
+        std::vector<ui_element_id> matches {};
+        for (const menu_item_config& item : menu->config().items)
+            if (item.enabled && access_key_code(item.access_key) == event.key)
+                matches.push_back({ kinds.item, item.key });
+        if (matches.empty())
+            return std::nullopt;
+
+        // 여럿이면 지금 강조 다음의 것으로 강조만 옮긴다. 끝에서 처음으로 돈다.
+        if (matches.size() > 1)
+        {
+            std::size_t next { 0 };
+            for (std::size_t index = 0; index < matches.size(); ++index)
+                if (matches[index] == snapshot_.menu_highlight && snapshot_.menu_surface == host.surface)
+                    next = (index + 1) % matches.size();
+            snapshot_.menu_highlight = matches[next];
+            snapshot_.menu_surface = host.surface;
+            return std::vector<input_action> {};
+        }
+
+        // 하나면 고른다. 하위 메뉴가 있으면 키보드로 연 것처럼 열고(첫 항목 강조), 없으면 클릭과 같은 길로 실행한다.
+        const ui_element_id& id { matches.front() };
+        snapshot_.menu_highlight = id;
+        snapshot_.menu_surface = host.surface;
+        if (std::optional<std::vector<input_action>> opened { menu->open_submenu(id.owner) }; opened.has_value())
+        {
+            submenu_opened_by_key_ = true;
+            return opened;
+        }
+        const ui_element* const item { host.tree->find(id) };
+        if (item == nullptr || item->enabled() == false)
+            return std::vector<input_action> {};
+        const rect_f box { item->bounds() };
+        return run_trigger(*item, ui_trigger::left_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, modifiers_of(event));
+    }
+
+    interaction_controller::menu_bar_location interaction_controller::key_menu_bar(const std::u8string& surface) const
+    {
+        // 키가 온 표면이 먼저다. popup은 키를 받지 않아 앵커 창이 나르고, 그 창의 막대가 임자다.
+        if (const ui_tree* const tree { surface_tree(surface) }; tree != nullptr)
+            if (const menu_bar_element* const bar { active_menu_bar(*tree) }; bar != nullptr)
+                return { bar, surface };
+        if (snapshot_.focused_surface != surface)
+            if (const ui_tree* const tree { surface_tree(snapshot_.focused_surface) }; tree != nullptr)
+                if (const menu_bar_element* const bar { active_menu_bar(*tree) }; bar != nullptr)
+                    return { bar, snapshot_.focused_surface };
+        return {};
+    }
+
+    interaction_controller::menu_bar_location interaction_controller::shown_menu_bar() const
+    {
+        if (const ui_tree* const tree { surface_tree(active_surface_) }; tree != nullptr)
+            if (const menu_bar_element* const bar { active_menu_bar(*tree) }; bar != nullptr)
+                return { bar, active_surface_ };
+        if (active_surface_.empty() == false && tree_ != nullptr)
+            if (const menu_bar_element* const bar { active_menu_bar(*tree_) }; bar != nullptr)
+                return { bar, {} };
+        return {};
     }
 
     interaction_controller::menu_location interaction_controller::find_menu(const menu_kinds& kinds) const
@@ -4433,6 +4556,11 @@ namespace luil {
                 set_keyboard_focus(active_surface_, target, std::nullopt);
         }
 
+        // 메뉴 막대가 선 동안은 플랫폼이 글자 키를 키로 보낸다 (`menu_keys`). 막대 상태는 tree로 오므로 여기서 센다 —
+        // 입력이 올 때만 세면 막대가 선 뒤 첫 글자가 입력기로 간다.
+        const menu_bar_location shown_bar { shown_menu_bar() };
+        snapshot_.menu_keys = shown_bar.bar != nullptr && shown_bar.bar->config().state.current.empty() == false;
+
         // 컨텍스트 메뉴가 열리고 닫힐 때마다 키보드 강조를 지운다.
         // 깊이 0의 새 메뉴는 강조 없이 시작한다 (첫 ↓가 첫 활성 항목을 고른다).
         const std::optional<menu_kinds> menu { policy_ != nullptr ? policy_->menu() : std::nullopt };
@@ -4450,6 +4578,7 @@ namespace luil {
             menu_anchor_.clear();
             menu_parent_surface_.clear();
             submenu_opened_by_key_ = false;
+            menu_bar_menu_.clear();
             return;
         }
 
@@ -4482,6 +4611,45 @@ namespace luil {
         menu_depth_ = depth;
         menu_anchor_ = deepest.menu != nullptr ? deepest.menu->config().anchor_key : std::u8string {};
         menu_parent_surface_ = deepest.menu != nullptr ? deepest.menu->config().parent_surface : std::u8string {};
+
+        // 막대의 깊이 0 메뉴가 섰거나 바뀌었다 (←/→·hover·Alt+글자). 바뀐 메뉴는 새 메뉴라 옛 강조를 버린다.
+        //  - 키보드로 연 막대(`state.keyboard`)의 메뉴는 첫 활성 항목을 강조한다. 포인터로 연 메뉴는 지금처럼 강조 없이 선다.
+        //  - 메뉴는 `make_menu_bar_popup`이 owner에 항목 키를 싣는다. 그 이름으로 막대 메뉴인지 안다.
+        const menu_bar_state* const bar_state { shown_bar.bar != nullptr ? &shown_bar.bar->config().state : nullptr };
+        if (bar_state == nullptr || bar_state->open == false || bar_state->current.empty())
+        {
+            menu_bar_menu_.clear();
+            return;
+        }
+        if (bar_state->current == menu_bar_menu_)
+            return;
+        const menu_element* bar_menu { nullptr };
+        std::u8string bar_menu_surface {};
+        const auto consider = [&](const ui_tree* const tree, const std::u8string& surface) {
+            const menu_element* const found { tree != nullptr && bar_menu == nullptr ? menu_in_element(tree->root()) : nullptr };
+            if (found != nullptr && found->config().depth == 0 && found->config().owner == bar_state->current)
+            {
+                bar_menu = found;
+                bar_menu_surface = surface;
+            }
+        };
+        consider(tree_.get(), {});
+        for (const auto& [id, tree] : surface_trees_)
+            consider(tree.get(), id);
+        if (bar_menu == nullptr)
+            return;
+        menu_bar_menu_ = bar_state->current;
+        snapshot_.menu_highlight = {};
+        snapshot_.menu_surface.clear();
+        if (bar_state->keyboard == false)
+            return;
+        for (const auto& item : bar_menu->config().items)
+            if (item.enabled)
+            {
+                snapshot_.menu_highlight = { menu->item, item.key };
+                snapshot_.menu_surface = bar_menu_surface;
+                break;
+            }
     }
 
     void interaction_controller::clear_focus() noexcept

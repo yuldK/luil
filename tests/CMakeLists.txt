@@ -57,6 +57,7 @@ add_executable(luil_core_tests
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
+    menu_bar_tests.cpp
     message_box_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
@@ -455,6 +456,7 @@ add_executable(luil_tests
     loopback_http_server.cpp
     loopback_http_server_tests.cpp
     loopback_socket_win32.cpp
+    menu_bar_native_tests.cpp
     raster_probe.cpp
     secondary_surface_tests.cpp
     platform_services_tests.cpp

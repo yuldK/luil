@@ -2,6 +2,7 @@
 
 #include "luil/app/app_host.h"
 #include "luil/ui/field_popup.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
 
 namespace luil {
@@ -44,4 +45,12 @@ namespace luil {
     // 메뉴 높이·배율·분리 tree를 한곳에서 조립한다. 열림 상태와 명령 실행은 앱의 몫이다.
     // 반환한 popup을 ui_frame::popups에 싣고, 닫힘 메시지에서 목록에서 뺀다.
     [[nodiscard]] ui_popup make_menu_popup(menu_config menu, menu_popup_config popup);
+
+    // 막대 항목 아래에 그 메뉴를 띄운다 (docs/menu-bar-design.md). 막대 상태의 `current`가 그 항목이다.
+    //  - `popup.below`는 항목 자리와 `limit`(앵커 표면의 client 사각형, 물리 픽셀)으로 채운다. 간격은 0이라 메뉴가
+    //    항목 바로 아래에 붙는다. 항목이 없으면 `popup.x`·`popup.y`를 그대로 쓴다.
+    //  - dismiss는 Esc면 { current, false, keyboard }, 그 밖의 계기면 {}다. `menu.after_select`가 비면 {}로 채운다.
+    //    막대에 `set_state`가 없으면 둘 다 건드리지 않는다.
+    //  - `menu.owner`는 항목 키다. 나머지는 `make_menu_popup`이다.
+    [[nodiscard]] ui_popup make_menu_bar_popup(const menu_bar_element& bar, menu_config menu, menu_popup_config popup, rect_f limit);
 }
