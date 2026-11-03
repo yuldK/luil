@@ -908,6 +908,37 @@ TEST_CASE("Closing the color popup commits the hex draft typed in it and keeps t
     REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #0000FF");
 }
 
+TEST_CASE("Opening another field popup over the open color popup commits the hex draft", "[demo][popups][color-picker]")
+{
+    demo::popups_page page {};
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#808080"));
+
+    // 다른 칸을 누르면 그 칸의 열기 메시지가 바깥 누름 닫기보다 먼저 와 임자를 바꾼다. 늦게 온 닫기는 색 칸이 이미 닫혀 있어 초안을
+    // 확정할 길이 없으니, 임자가 바뀌는 자리가 확정해야 한다.
+    send(page, demo::field_menu_intent { u8"save", true });
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+    REQUIRE(label_text(tree, u8"split-state-save") == u8"저장 메뉴 열림: 열림");
+    send(page, demo::color_field_dismiss_intent { luil::popup_dismiss_reason::pointer_press_outside });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+    REQUIRE(label_text(tree, u8"split-state-save") == u8"저장 메뉴 열림: 열림");
+
+    // 읽히지 않는 초안은 색을 바꾸지 않고, 다시 열면 지금 색의 글로 돌아간다.
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#12"));
+    send(page, demo::field_menu_intent { u8"send", true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+    REQUIRE(label_text(tree, u8"split-state-send") == u8"보내기 메뉴 열림: 열림");
+    send(page, demo::color_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    const std::optional<luil::ui_popup> popup { color_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" })->accessibility().value == u8"#808080");
+}
+
 TEST_CASE("The theme page reads a style file and keeps the earlier style when one is refused", "[demo][style_json]")
 {
     // 데모 빌드가 실은 파일 글 대신 시험 실행 파일에 실은 assets/style.json을 바탕으로 준다 (ui_style_json_tests.cpp와 같은 것).

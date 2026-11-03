@@ -139,7 +139,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 - 접근 역할 `combo_box`, 이름 기본(색), `expanded = open`, 값은 16진 글이다. expand·collapse는 `set_open(목표)`다. 클릭은 `set_open(!open)`, 키는 `field_popup_key_handler(open, set_open, true)`, 열린 동안 root에 `set_focus_leave_action`을 단다(분할 버튼 규약).
 - `make_color_picker_popup`이 `size_for`로 크기를 정하고, tree를 `scale`로 배치하고, `place_field_popup`으로 자리를 놓는다. 크기는 논리 상수의 합이라 글 폭을 재지 않는다. R2 메뉴 폭 고침(배율로 잰 글 폭)이 막은 잘림은 이 popup에 생기지 않는다.
 - 열 때 앱은 `focus_request { surface = popup id, target = plane_id(owner) }`를 싣는다. 다른 표면으로 옮긴 초점은 떠남으로 치지 않아([ui_interaction.cpp](../src/ui/ui_interaction.cpp) 4464~4467행) 칸이 스스로 닫히지 않는다. Tab은 초점이 선 표면의 tree에서 돈다(4061행). Esc 닫기(`escape_key`)에서는 앱이 칸으로 돌아오는 초점 요청을 한 번 더 싣는다. popup이 사라지면 초점은 지워질 뿐이다. 다른 닫는 계기에서는 돌리지 않는다. 사용자가 누른 자리가 초점을 가진다.
-- 닫는 계기는 분할 버튼 표 그대로다. 16진 칸을 실은 popup은 글을 치는 popup이라 앱이 `surface_moved`·`activation_changed`에 빈 액션을 줘 남긴다. popup이 사라지면 그 tree가 없어 초점 떠남 훅이 서지 않으므로(ui_interaction.cpp 4460~4461행) 앱은 닫는 메시지를 처리할 때 읽히는 16진 초안을 확정한다. 한 번에 하나만은 앱의 열린 필드 owner 하나(`open_popup_`)로 지킨다.
+- 닫는 계기는 분할 버튼 표 그대로다. 16진 칸을 실은 popup은 글을 치는 popup이라 앱이 `surface_moved`·`activation_changed`에 빈 액션을 줘 남긴다. popup이 사라지면 그 tree가 없어 초점 떠남 훅이 서지 않으므로(ui_interaction.cpp 4460~4461행) 앱은 닫는 메시지를 처리할 때 읽히는 16진 초안을 확정한다. 다른 필드를 눌러 임자가 바뀌는 길은 열기 메시지가 바깥 누름 닫기보다 먼저 와 닫는 메시지가 아무것도 하지 않으므로, 데모는 임자가 바뀌는 자리(`show_popup`)에서도 같은 확정을 한다. 한 번에 하나만은 앱의 열린 필드 owner 하나(`open_popup_`)로 지킨다.
 - 열린 동안 칸을 다시 누르면 X-4 규칙(줄 3, "펼친 요소의 클릭은 누를 때의 액션")이 닫는다. 칸이 `expanded`를 알리므로 이 노드가 할 일은 없다.
 
 ## 결정

@@ -67,6 +67,10 @@ namespace demo {
     {
         if (open_popup_ != owner)
         {
+            // 색 칸 popup이 열린 채 다른 임자로 바뀌면 바깥 누름 닫기가 이미 임자를 바꾼 뒤에 와 16진 초안을 확정할 길이
+            // 없다. 임자가 바뀌는 자리에서 초안을 확정해 닫는 길마다 같은 값이 남는다.
+            if (open_popup_ == color_owner)
+                commit_color_hex();
             search_ = {};
             composition_.reset();
         }
