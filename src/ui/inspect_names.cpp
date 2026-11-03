@@ -209,6 +209,16 @@ namespace luil {
             return u8"menu_bar";
         case ui_element_kind::menu_bar_item:
             return u8"menu_bar_item";
+        case ui_element_kind::calendar:
+            return u8"calendar";
+        case ui_element_kind::calendar_nav:
+            return u8"calendar_nav";
+        case ui_element_kind::calendar_grid:
+            return u8"calendar_grid";
+        case ui_element_kind::calendar_day:
+            return u8"calendar_day";
+        case ui_element_kind::date_field:
+            return u8"date_field";
         case ui_element_kind::end_of_library_kinds:
         case ui_element_kind::first_application_kind:
             // 끝 표시와 앱 대역의 시작은 kind가 아니다.

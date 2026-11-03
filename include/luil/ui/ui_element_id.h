@@ -189,6 +189,15 @@ namespace luil {
         menu_bar,
         // 메뉴 막대의 항목 하나다. owner는 항목 키다 (`menu_bar_item_config::key`).
         menu_bar_item,
+        // 달력과 그 부분, 날짜 칸이다 (`calendar_element`·`date_field_element`). root는 group이고 머리 줄 제목과 요일 줄을 그린다.
+        // 단추(이전·다음 달)는 button, 격자는 list, 날 칸은 list_item이다. 격자의 owner는 달력 owner이고, 단추의 owner는 달력 owner,
+        // 단위 구분자(U+001F), `prev`·`next`이며, 날 칸의 owner는 달력 owner, 단위 구분자, ISO 날짜(`2026-11-03`)다.
+        // 날짜 칸의 owner는 칸 설정의 owner다.
+        calendar,
+        calendar_nav,
+        calendar_grid,
+        calendar_day,
+        date_field,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

@@ -21,6 +21,24 @@ namespace luil::default_text {
             while (length > 0)
                 text += digits[--length];
         }
+
+        // 해의 수다. 음수 해는 날짜 범위(1~9999년) 밖이라 0으로 본다.
+        [[nodiscard]] std::size_t year_number(const std::chrono::year year) noexcept
+        {
+            const int value { static_cast<int>(year) };
+            return value > 0 ? static_cast<std::size_t>(value) : 0u;
+        }
+
+        // "2026년 11월 3일"을 덧붙인다. 달·날 앞에 0을 붙이지 않는다.
+        void append_date(std::u8string& text, const std::chrono::year_month_day day)
+        {
+            append_number(text, year_number(day.year()));
+            text += u8"년 ";
+            append_number(text, static_cast<unsigned>(day.month()));
+            text += u8"월 ";
+            append_number(text, static_cast<unsigned>(day.day()));
+            text += u8"일";
+        }
     }
 
     std::u8string_view info_bar_close() noexcept
@@ -230,6 +248,79 @@ namespace luil::default_text {
     std::u8string_view menu_bar_name() noexcept
     {
         return u8"메뉴 막대";
+    }
+
+    std::u8string_view date_field_name() noexcept
+    {
+        return u8"날짜";
+    }
+
+    std::u8string_view date_field_placeholder() noexcept
+    {
+        return u8"날짜 선택";
+    }
+
+    std::u8string date_field_text(const std::chrono::year_month_day day)
+    {
+        std::u8string text {};
+        append_date(text, day);
+        return text;
+    }
+
+    std::u8string_view calendar_name() noexcept
+    {
+        return u8"달력";
+    }
+
+    std::u8string_view calendar_previous_month() noexcept
+    {
+        return u8"이전 달";
+    }
+
+    std::u8string_view calendar_next_month() noexcept
+    {
+        return u8"다음 달";
+    }
+
+    std::u8string calendar_month_title(const std::chrono::year_month month)
+    {
+        std::u8string text {};
+        append_number(text, year_number(month.year()));
+        text += u8"년 ";
+        append_number(text, static_cast<unsigned>(month.month()));
+        text += u8"월";
+        return text;
+    }
+
+    std::u8string_view calendar_weekday_short(const std::chrono::weekday day) noexcept
+    {
+        // `c_encoding`은 일요일이 0이다.
+        static constexpr std::u8string_view names[] { u8"일", u8"월", u8"화", u8"수", u8"목", u8"금", u8"토" };
+        return day.ok() ? names[day.c_encoding()] : std::u8string_view {};
+    }
+
+    std::u8string calendar_day_name(const std::chrono::year_month_day day)
+    {
+        std::u8string text {};
+        append_date(text, day);
+        // 틀린 날은 요일을 붙이지 않는다. 요일 계산이 틀린 날에는 뜻이 없다.
+        if (day.ok())
+        {
+            text += u8' ';
+            text += calendar_weekday_short(std::chrono::weekday { std::chrono::sys_days { day } });
+            text += u8"요일";
+        }
+        return text;
+    }
+
+    std::u8string_view calendar_today() noexcept
+    {
+        return u8"오늘";
+    }
+
+    std::u8string_view calendar_unavailable() noexcept
+    {
+        return u8"고를 수 없음";
     }
 
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept

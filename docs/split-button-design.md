@@ -153,7 +153,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 
 - Alt+↓는 Alt만 눌렸을 때, F4는 수식 키 없이 `set_open(true)`를 낸다. `down_opens`가 참이면 수식 키 없는 ↓도 연다. 화살표 단추처럼 ↓가 달리 쓰이지 않는 자리에 준다.
 - 이미 열려 있으면 그 키들을 빈 목록으로 삼켜 앱 단축키로 새지 않게 한다. 그 밖의 키는 `std::nullopt`다.
-- 메뉴가 열려도 키보드 초점은 필드에 남는다. 메뉴 항목은 초점을 받지 않고(`set_tab_stop(false)`) 강조는 따로 선다. 닫힌 뒤에도 초점은 그 자리다. 메뉴가 아닌 popup(달력·색 고르개)의 키 경로는 그 노드가 정한다. 색 고르개는 열 때 초점을 popup 표면의 판으로 옮기고 Esc로 닫으면 칸으로 돌린다([색 고르기](color-picker-design.md) 결정 3). 날짜 칸(R4)이 같은 규약을 따른다.
+- 메뉴가 열려도 키보드 초점은 필드에 남는다. 메뉴 항목은 초점을 받지 않고(`set_tab_stop(false)`) 강조는 따로 선다. 닫힌 뒤에도 초점은 그 자리다. 메뉴가 아닌 popup(달력·색 고르개)의 키 경로는 그 노드가 정한다. 색 고르개는 열 때 초점을 popup 표면의 판으로 옮기고 Esc로 닫으면 칸으로 돌린다([색 고르기](color-picker-design.md) 결정 3). 날짜 칸(R4)은 열 때 초점을 popup의 커서 날로 옮기고 Esc·날 고르기로 닫으면 칸으로 돌린다([날짜 고르기](date-picker-design.md) 결정 2).
 
 **한 번에 하나만.** 라이브러리가 강제하지 못한다. popup 목록이 앱 상태이기 때문이다. 앱이 어느 필드의 `set_open(true)`를 처리할 때 다른 anchored popup의 열림을 모두 지운다. 지금 데모는 `dropdown_toggle_intent`가 `menu_open_`을, `card_menu_intent`가 `close_dropdown()`을 부르는 식으로 짝마다 적었다. 이 노드를 더하면서 열린 필드의 owner 하나(`open_popup_`)를 두는 식으로 바꾼다. 값이 하나라 둘이 함께 열릴 수 없다.
 
@@ -228,7 +228,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 
 - **date_picker**, **color_picker**(popup 조립을 고를 때)는 열림 규약을 그대로 따른다. `set_open` 절대 메시지, `field_popup_key_handler`, `place_field_popup`, 닫는 계기 표, 한 번에 하나만이다. **menu_bar**는 상태와 절대 메시지(`set_open`), 닫는 계기 표, 한 번에 하나만, `place_field_popup` 자리는 따른다. 여는 키와 열린 동안 막대 항목 사이 이동은 menu_bar가 정한다(Alt·F10·←/→). 이동 코드는 `process_menu_key`에 들어가므로 controller를 고치는 menu_bar(줄 3)가 맡는다. 항목 사이 hover 전환도 그 노드의 몫이다.
 - **teaching_tip**은 `field_popup.h`에 방향을 더해 늘린다. 이 노드가 아래 한 방향의 시그니처를 세운다.
-- `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.cpp`는 date_picker·teaching_tip과 겹친다. 이 노드가 `open_popup_` 하나로 바꾸고 뒤 노드는 그 값을 쓴다.
+- `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.cpp`는 date_picker·teaching_tip과 겹친다. 이 노드가 `open_popup_` 하나로 바꾸고 뒤 노드는 그 값을 쓴다. popups 페이지에는 date_picker가 날짜 칸을 싣고 teaching_tip은 다른 페이지로 간다([날짜 고르기](date-picker-design.md)).
 - `ui_element_id.h`의 kind 추가는 병렬 노드와 같은 자리라 통합 때 줄 충돌이 난다. AutomationId는 kind의 수라 병합 순서가 번호를 정한다. test와 luil-uia 스크립트는 번호를 박지 않는다.
 - 접근 이름 기본 문구(" 옵션")는 [default-text-design.md](default-text-design.md)의 헤더로 옮겼다. 분할 버튼 화살표의 이름은 `split_button_arrow_name`이 짓는다. `text_button_background`를 꺼내도 동작은 같고 기존 raster test가 지킨다.
 

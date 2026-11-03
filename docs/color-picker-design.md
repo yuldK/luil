@@ -155,7 +155,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 
 **2. 16진 칸.** 질문: 16진 칸을 컨트롤이 품는가.
 
-- 길 a: 앱이 준 id(앱 kind)로 `text_input_element`를 품는다. 거르기·검사·쓰기는 순수 함수다. 되는 것: 콤보의 선례대로 자리·폭·오류 테두리·접근 이름이 한 컨트롤 안에서 서고 popup에 한 덩어리로 실린다. 날짜 칸(R4)의 시·분 칸도 같은 길을 쓸 수 있다. 대가: 앱은 여전히 초안을 들고 정책 `text_target_of`에 한 줄, `apply_text_edit`에 `hex_color_filter`를 준다. 설정 칸이 하나 늘고 popup에 IME 칸이 선다.
+- 길 a: 앱이 준 id(앱 kind)로 `text_input_element`를 품는다. 거르기·검사·쓰기는 순수 함수다. 되는 것: 콤보의 선례대로 자리·폭·오류 테두리·접근 이름이 한 컨트롤 안에서 서고 popup에 한 덩어리로 실린다. 날짜 칸(R4)은 시·분을 이번에 내지 않았다([날짜 고르기](date-picker-design.md) 결정 1). 시간을 더할 때 같은 길을 쓸 수 있다. 대가: 앱은 여전히 초안을 들고 정책 `text_target_of`에 한 줄, `apply_text_edit`에 `hex_color_filter`를 준다. 설정 칸이 하나 늘고 popup에 IME 칸이 선다.
 - 길 b: 순수 함수만 주고 앱이 칸을 옆에 둔다(숫자 칸의 선례). 되는 것: 요소가 글 편집과 무관하다. 대가: 앱마다 칸 자리·이름·popup 크기를 맞추고, 16진 칸이 popup에 들어갈 자리를 앱이 계산한다.
 - 길 c: 16진 없음. 되는 것: 요소와 앱 모두 글 편집이 없다. 대가: 정확한 색을 넣을 길이 보조 기술에도 없다.
 - 권장: a. 대가: 위의 설정 칸과 앱의 한 줄이다. 승인: 길 a (2026-11-03).
@@ -165,7 +165,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 - 길 a: 인라인 본체만. 되는 것: 새 popup helper와 칸이 없다. 대가: 칸에 붙여 여는 흔한 꼴을 앱이 `ui_popup`·자리·초점까지 짓는다.
 - 길 b: 인라인 본체, 색 칸, `make_color_picker_popup`, 열 때 초점을 판으로 옮긴다. 되는 것: 열자마자 화살표가 판을 움직이고 화면 읽기가 판을 읽는다. 초점 요청은 popup 표면을 받고(데모 명령 팔레트, [palette.cpp](../examples/demo/palette.cpp) 105행) Android도 overlay에서 이행한다([android_app.cpp](../src/android/android_app.cpp) 1434행). controller를 고치지 않는다. 대가: popup이 사라지면 초점이 지워지므로 Esc 뒤 칸으로 돌리는 요청을 앱이 싣는다. kind 하나와 helper 헤더 하나가 는다.
 - 길 c: b와 같되 초점을 칸에 두고 칸의 키 처리기가 판을 움직인다(메뉴 꼴). 되는 것: 되돌릴 초점이 없다. 대가: 막대·견본·16진 칸에 키로 닿지 못하고 보조 기술은 칸만 읽는다.
-- 권장: b. 날짜 칸(R4)이 이 초점 규약을 따른다. 대가: 위의 되돌림 요청이다. 승인: 길 b (2026-11-03).
+- 권장: b. 날짜 칸(R4)이 이 초점 규약을 따르고 날 고르기로 닫을 때도 칸으로 되돌린다. 대가: 위의 되돌림 요청이다. 승인: 길 b (2026-11-03).
 
 **4. 판의 접근성.** 질문: 값이 둘인 판을 어떻게 알리는가.
 
@@ -218,7 +218,7 @@ color_picker, color_picker_plane, color_picker_bar, color_picker_preset, color_f
 - **줄 2(rich_edit).** 그 줄의 파일(`text_edit.h`, `text_document.h`, `text_area_element.*`, `text_layout.*`, 클립보드)을 고치지 않는다. `text_input_element`는 그대로 쓴다. `default_text.h/.cpp` 끝에 함께 붙는다.
 - **줄 4(tray·hotkey).** `win32_window.cpp`·`app_host.h`·`app_delegate.h`·`ui_platform.h`를 고치지 않는다. 새 헤더 `color_picker_popup.h`는 `menu_popup.h` 곁의 새 파일이다.
 - **default_text.** 끝에 `color_picker_name()`(색), `color_picker_plane_name()`(채도와 명도), `color_picker_plane_value(s, v)`("채도 40%, 명도 80%", 백분율은 lround 정수), `color_picker_hue_name()`(색상), `color_picker_alpha_name()`(불투명도), `color_picker_hex_name()`(16진 색)을 더한다.
-- **date_picker(R4).** 결정 3의 초점 규약, 결정 2의 칸 품기, 판의 두 축 키 조합을 따른다.
+- **date_picker(R4).** 결정 3의 초점 규약을 따르고 날 고르기에도 되돌림을 싣는다. 시·분을 내지 않아 결정 2의 칸 품기는 쓰지 않고, 판의 두 축 키 조합 대신 격자 처리기 하나를 쓴다([날짜 고르기](date-picker-design.md) 결정 1·2).
 - **데모.** 라이브러리 커밋과 데모 연결 커밋을 나누고 연결은 통합 때 직렬로 쌓는다. 갤러리 `build_controls`의 별점 카드 뒤, `examples/demo/popups_page.*`의 `open_popup_`, 모바일 `basics_page.cpp`의 별점 줄 뒤, 16진 칸의 앱 kind는 `examples/demo/common.h` 끝과 [text_targets.h](../examples/demo/text_targets.h)다. 갤러리와 popups 페이지가 칸을 하나씩 가져 kind와 편집 대상이 둘이다(편집 메시지가 대상으로만 갈려 한 kind면 앞 페이지가 다 가져간다).
 
 **미룬 것을 닫는다.** 이 단계에서는 기존 문서를 고치지 않고 구현 커밋이 고친다.

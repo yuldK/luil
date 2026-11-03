@@ -1,6 +1,7 @@
 #include "raster_probe.h"
 
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -37,6 +38,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -1906,4 +1908,82 @@ TEST_CASE("A menu bar paints no row background and shades only hovered, selected
     REQUIRE(open.pixel_at(132, 28) == palette.window_background);
     // 막대 오른쪽의 빈 자리도 칠하지 않는다.
     REQUIRE(open.pixel_at(300, 28) == palette.window_background);
+}
+
+namespace {
+    [[nodiscard]] std::chrono::year_month_day raster_date(const unsigned day)
+    {
+        return { std::chrono::year { 2026 }, std::chrono::November, std::chrono::day { day } };
+    }
+
+    // 2026년 11월 달력이다 (1일이 일요일). 배율 2에서 칸은 물리 64이고 격자는 y 112부터다. n일(1~7)은 x (n - 1) × 64부터다.
+    //  - 고른 날 `value`, 오늘 `today`다. 주말은 고를 수 없다. 글꼴이 없어 숫자는 그려지지 않고 채움과 테만 남는다.
+    [[nodiscard]] luil::ui_tree make_calendar_tree(const unsigned value, const unsigned today)
+    {
+        luil::calendar_config config {};
+        config.owner = u8"trip";
+        config.value = raster_date(value);
+        config.cursor = raster_date(value);
+        config.today = raster_date(today);
+        config.available = [](const std::chrono::year_month_day day) {
+            const std::chrono::weekday weekday { std::chrono::sys_days { day } };
+            return weekday != std::chrono::Saturday && weekday != std::chrono::Sunday;
+        };
+        config.select = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        config.move_to = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        return luil::make_arranged_tree(std::make_unique<luil::calendar_element>(std::move(config)), { 0.0f, 0.0f, 500.0f, 700.0f }, raster_scale);
+    }
+
+    [[nodiscard]] luil::ui_element_id raster_day(const unsigned day)
+    {
+        return luil::calendar_element::day_id(u8"trip", raster_date(day));
+    }
+}
+
+TEST_CASE("The chosen day is an accent fill and today is an accent ring with an inner ring when both", "[ui][raster][calendar]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::ui_color accent { over(palette.accent, palette.window_background) };
+        // 3일을 고르고 오늘은 5일이다. 3일 칸은 x 128..192, 5일 칸은 x 256..320, 줄은 y 112..176이다.
+        luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+        frame.set_theme(theme);
+        frame.draw(make_calendar_tree(3, 5), luil::interaction_snapshot {});
+        REQUIRE(same_color(frame.pixel_at(160, 144), accent));
+        // 칸 안쪽 여백(논리 2, 물리 4)은 채우지 않는다.
+        REQUIRE(frame.pixel_at(129, 144) == palette.window_background);
+        // 오늘은 채움 없이 테 1.5 논리 픽셀(물리 3)이다. 테는 칸 여백 안쪽 x 260..263이다.
+        REQUIRE(same_color(frame.pixel_at(261, 144), accent));
+        REQUIRE(frame.pixel_at(288, 144) == palette.window_background);
+        // 고르지 않은 평일은 아무것도 칠하지 않는다.
+        REQUIRE(frame.pixel_at(224, 144) == palette.window_background);
+
+        // 고른 날이 오늘이면 채움 바깥 테는 강조색, 그 안쪽 테는 강조 위 글색이다. 색 하나로만 가르지 않는다.
+        luil::testing::raster_frame both { 500, 700, palette, raster_scale };
+        both.set_theme(theme);
+        both.draw(make_calendar_tree(3, 3), luil::interaction_snapshot {});
+        REQUIRE(same_color(both.pixel_at(133, 144), accent));
+        REQUIRE(same_color(both.pixel_at(136, 144), over(palette.accent_foreground, accent)));
+        REQUIRE(same_color(both.pixel_at(160, 144), accent));
+    }
+}
+
+TEST_CASE("Only a day that can be chosen shows the hover fill", "[ui][raster][calendar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color hover { over(palette.button_hover_background, palette.window_background) };
+    REQUIRE(same_color(hover, palette.window_background) == false);
+    // 4일(수요일, x 192..256)은 고를 수 있고 7일(토요일, x 384..448)은 고를 수 없다.
+    luil::interaction_snapshot over_wednesday {};
+    over_wednesday.hovered = raster_day(4);
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(make_calendar_tree(3, 5), over_wednesday);
+    REQUIRE(same_color(frame.pixel_at(224, 144), hover));
+
+    luil::interaction_snapshot over_saturday {};
+    over_saturday.hovered = raster_day(7);
+    luil::testing::raster_frame blocked { 500, 700, palette, raster_scale };
+    blocked.draw(make_calendar_tree(3, 5), over_saturday);
+    REQUIRE(blocked.pixel_at(416, 144) == palette.window_background);
 }

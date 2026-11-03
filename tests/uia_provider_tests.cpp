@@ -1,6 +1,7 @@
 #include "win32/uia_provider.h"
 
 #include "luil/ui/app_message.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/color_picker_element.h"
@@ -3383,4 +3384,114 @@ TEST_CASE("A menu bar is a UIA MenuBar whose items expand and collapse and carry
         bar->Release();
         root->Release();
     }
+}
+
+namespace {
+    struct probe_day_intent
+    {
+        std::chrono::year_month_day day {};
+    };
+
+    [[nodiscard]] std::chrono::year_month_day probe_date(const unsigned day)
+    {
+        return { std::chrono::year { 2026 }, std::chrono::November, std::chrono::day { day } };
+    }
+
+    // 3일을 고른 2026년 11월 달력과 닫힌 날짜 칸을 담은 화면이다. 커서는 3일이다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_date_tree()
+    {
+        auto page { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        luil::calendar_config calendar {};
+        calendar.owner = u8"trip";
+        calendar.value = probe_date(3);
+        calendar.cursor = probe_date(3);
+        calendar.select = [](const std::chrono::year_month_day day) { return luil::make_app_action(probe_day_intent { day }); };
+        page->add(std::make_unique<luil::calendar_element>(std::move(calendar)));
+        luil::date_field_config field {};
+        field.owner = u8"due";
+        field.value = probe_date(3);
+        field.set_open = [](const bool state) { return luil::make_app_action(probe_state_intent { state }); };
+        page->add(std::make_unique<luil::date_field_element>(std::move(field)));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(page), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f));
+    }
+}
+
+TEST_CASE("The date field expands by a target state message and reads its shown date", "[win32][uia][date-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_date_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const field { root->make_element_provider({ luil::ui_element_kind::date_field, u8"due" }) };
+
+    ExpandCollapseState state { ExpandCollapseState_Expanded };
+    REQUIRE(field->get_ExpandCollapseState(&state) == S_OK);
+    REQUIRE(state == ExpandCollapseState_Collapsed);
+    REQUIRE(field->Expand() == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<probe_state_intent>() != nullptr);
+    REQUIRE(message->get<probe_state_intent>()->state == true);
+    REQUIRE(read_text_property(*field, UIA_NamePropertyId) == L"날짜");
+    IUnknown* pattern { nullptr };
+    REQUIRE(field->GetPatternProvider(UIA_ValuePatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    IValueProvider* text { nullptr };
+    REQUIRE(pattern->QueryInterface(__uuidof(IValueProvider), reinterpret_cast<void**>(&text)) == S_OK);
+    BSTR spoken { nullptr };
+    REQUIRE(text->get_Value(&spoken) == S_OK);
+    REQUIRE(std::wstring { spoken, SysStringLen(spoken) } == L"2026년 11월 3일");
+    SysFreeString(spoken);
+    text->Release();
+    pattern->Release();
+
+    field->Release();
+    root->Release();
+}
+
+TEST_CASE("The calendar grid serves the chosen day as its selection and a day selects through its click", "[win32][uia][date-picker]")
+{
+    fake_uia_host host {};
+    host.tree = make_date_tree();
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    luil::win32::uia_element_provider* const grid { root->make_element_provider({ luil::ui_element_kind::calendar_grid, u8"trip" }) };
+
+    // 격자는 Selection 패턴이고 선택은 고른 날 하나다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(grid->GetPatternProvider(UIA_SelectionPatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    pattern->Release();
+    REQUIRE(read_text_property(*grid, UIA_NamePropertyId) == L"2026년 11월");
+    SAFEARRAY* array { nullptr };
+    REQUIRE(grid->GetSelection(&array) == S_OK);
+    REQUIRE(array != nullptr);
+    LONG lower { 0 };
+    LONG upper { -1 };
+    REQUIRE(SafeArrayGetLBound(array, 1, &lower) == S_OK);
+    REQUIRE(SafeArrayGetUBound(array, 1, &upper) == S_OK);
+    REQUIRE(upper - lower + 1 == 1);
+    IUnknown* item { nullptr };
+    REQUIRE(SafeArrayGetElement(array, &lower, &item) == S_OK);
+    REQUIRE(item != nullptr);
+    REQUIRE(static_cast<luil::win32::uia_element_provider*>(static_cast<IRawElementProviderSimple*>(item))->element_id() == luil::calendar_element::day_id(u8"trip", probe_date(3)));
+    item->Release();
+    static_cast<void>(SafeArrayDestroy(array));
+
+    // 고른 날을 다시 고르면 할 일이 없고, 다른 날의 Select는 그 날의 `select`다 (`move_to`가 없어 커서 메시지는 없다).
+    luil::win32::uia_element_provider* const chosen { root->make_element_provider(luil::calendar_element::day_id(u8"trip", probe_date(3))) };
+    REQUIRE(chosen->Select() == S_OK);
+    REQUIRE(host.dispatched.empty());
+    luil::win32::uia_element_provider* const other { root->make_element_provider(luil::calendar_element::day_id(u8"trip", probe_date(12))) };
+    REQUIRE(read_text_property(*other, UIA_NamePropertyId) == L"2026년 11월 12일 목요일");
+    REQUIRE(other->Select() == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    const auto* const message { std::get_if<luil::app_message>(&host.dispatched.front()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<probe_day_intent>() != nullptr);
+    REQUIRE(message->get<probe_day_intent>()->day == probe_date(12));
+
+    other->Release();
+    chosen->Release();
+    grid->Release();
+    root->Release();
 }

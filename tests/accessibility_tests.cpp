@@ -2,6 +2,7 @@
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/badge_element.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
@@ -32,6 +33,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -1591,4 +1593,111 @@ TEST_CASE("A trap refuses only what it actually covers", "[ui][access]")
     // 이름표는 hit을 흡수하지 않으므로 가림이 아니다.
     REQUIRE(tree.find({ kind_item, u8"veil" })->accessibility().role == luil::access_role::static_text);
     REQUIRE(luil::access_reachable(tree, { kind_item, u8"under" }));
+}
+
+namespace {
+    struct access_day_intent
+    {
+        std::chrono::year_month_day day {};
+    };
+
+    [[nodiscard]] std::chrono::year_month_day access_date(const unsigned month, const unsigned day)
+    {
+        return { std::chrono::year { 2026 }, std::chrono::month { month }, std::chrono::day { day } };
+    }
+
+    // 2026년 11월, 고른 날 3일, 오늘 5일, 커서 10일이다. 주말과 20일 뒤는 고를 수 없다.
+    [[nodiscard]] luil::calendar_config access_calendar_config()
+    {
+        luil::calendar_config config {};
+        config.owner = u8"trip";
+        config.value = access_date(11, 3);
+        config.cursor = access_date(11, 10);
+        config.today = access_date(11, 5);
+        config.bounds = { std::nullopt, access_date(11, 20) };
+        config.available = [](const std::chrono::year_month_day day) {
+            const std::chrono::weekday weekday { std::chrono::sys_days { day } };
+            return weekday != std::chrono::Saturday && weekday != std::chrono::Sunday;
+        };
+        config.select = [](const std::chrono::year_month_day day) { return luil::make_app_action(access_day_intent { day }); };
+        config.move_to = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        return config;
+    }
+}
+
+TEST_CASE("A calendar is a group over two buttons and a list of 42 days", "[ui][access][calendar]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::calendar_element>(access_calendar_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    REQUIRE(snapshot.entries.size() == 46u);
+    const luil::ui_element_id calendar { luil::ui_element_kind::calendar, u8"trip" };
+    const luil::ui_element_id grid { luil::ui_element_kind::calendar_grid, u8"trip" };
+    REQUIRE(snapshot.entries[0].id == calendar);
+    REQUIRE(snapshot.entries[0].info == luil::access_info { .role = luil::access_role::group, .name = u8"달력" });
+    REQUIRE(snapshot.entries[1].info == luil::access_info { .role = luil::access_role::button, .name = u8"이전 달" });
+    REQUIRE(snapshot.entries[1].parent == calendar);
+    REQUIRE(snapshot.entries[2].info == luil::access_info { .role = luil::access_role::button, .name = u8"다음 달" });
+    REQUIRE(snapshot.entries[3].id == grid);
+    REQUIRE(snapshot.entries[3].parent == calendar);
+    REQUIRE(snapshot.entries[3].info == luil::access_info { .role = luil::access_role::list, .name = u8"2026년 11월" });
+    for (std::size_t index { 4 }; index < snapshot.entries.size(); ++index)
+    {
+        REQUIRE(snapshot.entries[index].parent == grid);
+        REQUIRE(snapshot.entries[index].info.role == luil::access_role::list_item);
+    }
+
+    // 1일이 첫 칸이라 n일은 n + 3번째 줄이다. 고른 날만 `selected`이고 꼬리는 오늘, 고를 수 없음 순이다.
+    const auto day_info = [&snapshot](const std::size_t day) { return snapshot.entries[day + 3u].info; };
+    REQUIRE(day_info(3) == luil::access_info { .role = luil::access_role::list_item, .name = u8"2026년 11월 3일 화요일", .selected = true });
+    REQUIRE(day_info(4) == luil::access_info { .role = luil::access_role::list_item, .name = u8"2026년 11월 4일 수요일", .selected = false });
+    REQUIRE(day_info(5).name == u8"2026년 11월 5일 목요일, 오늘");
+    REQUIRE(day_info(7).name == u8"2026년 11월 7일 토요일, 고를 수 없음");
+    REQUIRE(day_info(23).name == u8"2026년 11월 23일 월요일, 고를 수 없음");
+    // 이웃 달의 날도 항목이다. 끝 칸은 12월 12일이다.
+    REQUIRE(snapshot.entries.back().info.name == u8"2026년 12월 12일 토요일, 고를 수 없음");
+
+    // 앱이 준 글이 기본 문구를 덮는다. 꼬리의 차례와 쉼표는 요소의 것이다.
+    luil::calendar_config custom { access_calendar_config() };
+    custom.text.name = u8"trip";
+    custom.text.today = u8"today";
+    custom.text.unavailable = u8"blocked";
+    custom.text.previous_month = u8"back";
+    custom.text.month_title = [](const std::chrono::year_month) { return std::u8string { u8"Nov" }; };
+    custom.text.day_name = [](const std::chrono::year_month_day day) { return luil::format_iso_date(day); };
+    custom.today = access_date(11, 7);
+    const luil::calendar_element named { custom };
+    REQUIRE(named.accessibility().name == u8"trip");
+    REQUIRE(named.children()[0]->accessibility().name == u8"back");
+    REQUIRE(named.children()[2]->accessibility().name == u8"Nov");
+    REQUIRE(named.children()[2]->children()[6]->accessibility().name == u8"2026-11-07, today, blocked");
+}
+
+TEST_CASE("Selecting a day plans its click and an already chosen day does nothing", "[ui][access][calendar]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::calendar_element>(access_calendar_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+    const auto day_of = [&tree](const unsigned day) {
+        const luil::ui_element* const found { tree.find(luil::calendar_element::day_id(u8"trip", access_date(11, day))) };
+        REQUIRE(found != nullptr);
+        return found;
+    };
+
+    // 이미 고른 날이면 할 일이 없다.
+    const std::optional<std::vector<luil::input_action>> chosen { luil::plan_access_request(*day_of(3), { luil::access_command::select }) };
+    REQUIRE(chosen.has_value());
+    REQUIRE(chosen->empty());
+    // 다른 날은 클릭이다. 커서가 아닌 날이라 커서를 먼저 옮기고 고른다.
+    const std::optional<std::vector<luil::input_action>> picked { luil::plan_access_request(*day_of(12), { luil::access_command::select }) };
+    REQUIRE(picked.has_value());
+    REQUIRE(picked->size() == 2u);
+    const auto* const message { std::get_if<luil::app_message>(&picked->back()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<access_day_intent>() != nullptr);
+    REQUIRE(message->get<access_day_intent>()->day == access_date(11, 12));
+    // 고를 수 없는 날은 클릭이 없다.
+    REQUIRE(day_of(7)->action(luil::ui_trigger::left_click) == nullptr);
 }

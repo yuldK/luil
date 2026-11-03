@@ -3,6 +3,7 @@
 #include "luil/theme/appearance.h"
 #include "luil/ui/severity.h"
 
+#include <chrono>
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -68,6 +69,24 @@ namespace luil::default_text {
     [[nodiscard]] std::u8string_view rich_text_clear_format() noexcept;  // 서식 지우기
     // 메뉴 막대의 기본 접근 이름이다 (메뉴 막대).
     [[nodiscard]] std::u8string_view menu_bar_name() noexcept;
+    // 날짜 칸과 달력의 기본 문구다 (docs/calendar-date-design.md). 숫자는 별점 값 글처럼 숫자 글자를 직접 짓고 달·날 앞에
+    // 0을 붙이지 않는다 ("11월 3일"). 지역 서식은 R5 몫이다.
+    [[nodiscard]] std::u8string_view date_field_name() noexcept;  // 날짜
+    [[nodiscard]] std::u8string_view date_field_placeholder() noexcept;  // 날짜 선택
+    // 닫힌 날짜 칸의 글이자 접근 값이다 ("2026년 11월 3일").
+    [[nodiscard]] std::u8string date_field_text(std::chrono::year_month_day day);
+    [[nodiscard]] std::u8string_view calendar_name() noexcept;  // 달력
+    [[nodiscard]] std::u8string_view calendar_previous_month() noexcept;  // 이전 달
+    [[nodiscard]] std::u8string_view calendar_next_month() noexcept;  // 다음 달
+    // 달력 머리 줄의 제목이자 격자의 접근 이름이다 ("2026년 11월").
+    [[nodiscard]] std::u8string calendar_month_title(std::chrono::year_month month);
+    // 요일 줄의 한 글자 이름이다 (일·월·화·수·목·금·토). `ok()`가 아닌 요일은 빈 글이다.
+    [[nodiscard]] std::u8string_view calendar_weekday_short(std::chrono::weekday day) noexcept;
+    // 날 칸의 접근 이름이다 ("2026년 11월 3일 화요일"). 요일은 온 이름이다.
+    [[nodiscard]] std::u8string calendar_day_name(std::chrono::year_month_day day);
+    // 날 이름 뒤 꼬리의 낱말이다 (", 오늘"·", 고를 수 없음"의 낱말). 잇는 차례와 쉼표는 요소가 정한다.
+    [[nodiscard]] std::u8string_view calendar_today() noexcept;  // 오늘
+    [[nodiscard]] std::u8string_view calendar_unavailable() noexcept;  // 고를 수 없음
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

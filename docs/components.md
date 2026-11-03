@@ -38,6 +38,8 @@
 | 값 조절 | `slider_element` | [ui/slider_element.h](../include/luil/ui/slider_element.h) | [설명](value-step-design.md) · [자석](slider-magnet-design.md) |
 | 별점(별 몇 개로 점수 매기기, 같은 모양으로 평균 보이기) | `rating_element`, `rating_config`, `rating_precision` | [ui/rating_element.h](../include/luil/ui/rating_element.h) | [설명](rating-design.md) |
 | 색 고르기(채도·명도 판, 색상·알파 막대, 견본, 16진 칸, 닫힌 색 칸과 popup) | `color_picker_element`, `color_field_element`, `make_color_picker_popup` | [ui/color_picker_element.h](../include/luil/ui/color_picker_element.h) · [app/color_picker_popup.h](../include/luil/app/color_picker_popup.h) | [설명](color-picker-design.md) |
+| 날짜 고르기(달력, 닫힌 날짜 칸과 달력 popup) | `calendar_element`, `date_field_element`, `make_date_picker_popup` | [ui/calendar_element.h](../include/luil/ui/calendar_element.h) · [app/date_picker_popup.h](../include/luil/app/date_picker_popup.h) | [설명](date-picker-design.md) |
+| 달력 날짜 계산(42칸 격자, 말일 접기, 범위, ISO 글) | `calendar_month_grid`, `add_months_clamped`, `calendar_moved`, `format_iso_date`, `parse_iso_date` | [ui/calendar_date.h](../include/luil/ui/calendar_date.h) | [설명](calendar-date-design.md) |
 | HSV 색과 16진 색 글(변환·검사·쓰기·거르기) | `hsv_color`, `color_from_hsv`, `hsv_from_color`, `check_hex_color`, `format_hex_color`, `hex_color_filter` | [ui/color_space.h](../include/luil/ui/color_space.h) | [설명](color-space-design.md) |
 | 세로·가로 배치 | `stack_element` | [ui/stack_element.h](../include/luil/ui/stack_element.h) | [설명](stack-expressiveness-design.md) |
 | 줄바꿈 배치 | `wrap_element` | [ui/wrap_element.h](../include/luil/ui/wrap_element.h) | [설명](stack-expressiveness-design.md) |
