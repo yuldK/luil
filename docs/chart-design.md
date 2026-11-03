@@ -136,7 +136,7 @@ public:
 
 - 길 a: root `image`에 이름과 요약, 플롯은 범위 없는 `slider`에 고른 점의 글이다. 되는 것: 잉크와 색 판이 선 꼴이라 공유 파일을 고치지 않고, 접근 노드가 점 수와 무관하게 둘이다. 대가: 화면 읽기는 한 번에 한 점만 읽고 자료 표를 훑지 못한다.
 - 길 b: root `list`, 범주마다 `list_item`(달력 격자 선례, [date-picker-design.md](date-picker-design.md) 165~166행). 되는 것: 화면 읽기가 항목을 훑는다. 대가: 범주 수만큼 접근 노드가 서고, 큰 자료면 `access_item_model`로 화면 밖 항목을 답해야 한다.
-- 길 c: 접근 전용 표(`table`·`data_item`)를 곁에 둔다. 대가: 행 고르기가 없는 정적 표라 DataGrid 번역과 맞지 않는다(accessibility.h 60~63행).
+- 길 c: 접근 전용 표(`table`·`data_item`)를 곁에 둔다. 되는 것: 화면 읽기가 행·열 구조로 자료를 훑는다. 대가: 행 고르기가 없는 정적 표라 DataGrid 번역과 맞지 않는다(accessibility.h 60~63행).
 - 권장: a. 대가: 위. 권장대로 진행.
 
 ## 플랫폼
@@ -148,7 +148,7 @@ public:
 ## 다른 노드와의 약속
 
 - **core와 빌드.** [차트 라이브러리](chart-library-design.md)의 약속 절이 고칠 core 줄과 자리를 적는다. 이 요소는 그 밖의 core 파일을 고치지 않는다.
-- **줄 4(i18n).** 기본 문구는 `chart_text` 함수이고 이름이 키다. 요약의 "계열 N개"·"범주 N개"가 복수형 항목, 점 글이 자리 값 문장(계열, 범주, 값)이 된다. 숫자 서식이 없어 `format_value` 칸은 i18n 뒤에도 남는다.
+- **줄 4(i18n).** 기본 문구는 `chart_text` 함수이고 이름이 키다. 라이브러리 커밋에서는 한국어 몸통이고, 줄 1이 쓰는 표 전환 커밋이 `chart/text/ko.json`·`en.json`과 `luil_add_string_table`로 몸통을 `select_strings` 조회로 바꾼다. 통합 때 줄 4 표 커밋 뒤, 줄 4 검사 넓힘 커밋 앞에 쌓는다([차트 라이브러리](chart-library-design.md) 약속 절). 요약의 "계열 N개"·"범주 N개"가 복수형 항목, 점 글이 자리 값 문장(계열, 범주, 값)이 된다. 숫자 서식이 없어 `format_value` 칸은 i18n 뒤에도 남는다.
 - **줄 2(hot_reload·markup).** 스타일 키를 더하지 않아 다시 읽기와 무관하다. 마크업 어휘에 들지 않는다.
 - **줄 3.** controller와 `ui_tree.*`를 고치지 않는다(결정 E3).
 - **데모.** 라이브러리 커밋과 데모 연결 커밋을 나누고, 연결은 통합 때 다른 줄의 데모 커밋 뒤에 직렬로 쌓는다. 차트 페이지는 새 파일이라 다른 줄의 페이지와 겹치지 않고, 두 셸의 페이지 목록·`handle`·`build` 자리에 한 줄씩 든다.
@@ -160,7 +160,7 @@ public:
 | teaching-tip-design.md 219행 | 값 상자 자리는 `place_field_popup_at_side`다. 차트는 마크업 어휘에 들지 않고 slot으로 짓는다 |
 | style-sheet-design.md 231행, syntax-highlight-design.md 225행 | 차트는 core 팔레트에 역할을 더하지 않는다(결정 E2). 두 팔레트 구조체 끝 자리는 차트 몫이 아니다 |
 | markup-design.md 222행 | 모델을 쥔 요소의 slot 규칙을 차트에도 쓴다(위 마크업 규칙) |
-| default-text-design.md 170·174행 | 차트 문구는 core `default_text` 끝이 아니라 `chart_text`에 둔다(라이브러리 결정 L4) |
+| default-text-design.md 170·174행 | 차트 문구는 core `default_text` 끝이 아니라 `chart_text`에 두고, 표 전환 뒤 원본은 `chart/text/ko.json`이다(라이브러리 결정 L4) |
 
 ## 확인
 
@@ -173,7 +173,7 @@ public:
 - `chart_page_tests.cpp`. 두 데모의 차트 페이지가 내는 메시지와 상태 label, 종류 바꾸기와 큰 자료 켜기.
 - UIA 형 번역은 기존 role(Image·Slider)이라 새 provider test가 없다.
 
-데모 칸. 데스크톱 데모와 모바일 데모에 새 페이지 `chart`("차트")를 둔다(`examples/demo/chart_page.*`, `examples/mobile_demo/chart_page.*`). 차트 하나(owner `chart/sales`)에 선 계열 "매출"과 막대 계열 "비용", 1월~12월 범주를 싣는다. 종류 고르기(선·막대·영역, owner `chart/kind`), 큰 자료 켜기(10만 점, `chart/large`), 상태 label `chart/state`("고른 점: 매출, 3월, 120 · 계열 2 · 범주 12", 없으면 "고른 점: 없음")를 둔다. 모바일은 같은 owner에서 `chart/` 접두를 뺀다. 격리 데스크톱에서 luil-uia로 데모를 띄워 root Image의 Value(요약)를 읽고, 플롯 Slider에 초점을 준 뒤 PostMessage 오른쪽 키로 Value("매출, 2월, …")와 label을 되읽는다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다.
+데모 칸. 데스크톱 데모와 모바일 데모에 새 페이지 `chart`("차트")를 둔다(`examples/demo/chart_page.*`, `examples/mobile_demo/chart_page.*`). 차트 하나(owner `chart/sales`)에 선 계열 "매출"과 막대 계열 "비용", 1월~12월 범주를 싣는다. 종류 고르기(선·막대·영역, owner `chart/kind`), 큰 자료 켜기(10만 점, `chart/large`), 상태 label `chart/state`("고른 점: 매출, 3월, 120 · 계열 2 · 범주 12", 없으면 "고른 점: 없음")를 둔다. 모바일은 같은 owner에서 `chart/` 접두를 뺀다(상태 label은 `state`). 모바일 목록의 `차트` 칸(`kind_page_entry`, owner `chart`)이 button이고 Invoke가 `navigate_intent{chart}`를 내는지는 [mobile_demo_page_list_tests.cpp](../tests/mobile_demo_page_list_tests.cpp)가 항목 수(46행)만 바꿔 자동으로 잰다. 이름이 겹치지 않는지(61~66행)도 그대로 본다. 격리 데스크톱에서 Windows로 지은 모바일 데모를 띄우면 UIA로 이름 `차트`인 Button을 찾아 Invoke하고, 열린 페이지의 `state` label을 되읽는다. 격리 데스크톱에서 luil-uia로 데모를 띄워 root Image의 Value(요약)를 읽고, 플롯 Slider에 초점을 준 뒤 PostMessage 오른쪽 키로 Value("매출, 2월, …")와 label을 되읽는다. 실제 입력이 필요하면 먼저 요청하고 허락한 시간만 쓴다.
 
 사람 확인: 밝은·어두운·고대비와 색각 이상 흉내에서 계열 구별, 배율 100%·150%·200%와 큰 글자에서 눈금 글 겹침과 잘림, Narrator가 요약과 점 글을 읽는 방식, 실기기에서 탭·훑기와 세로 스크롤의 충돌, 10만 점에서 hover와 창 크기 바꾸기의 체감.
 
