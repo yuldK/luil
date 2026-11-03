@@ -143,22 +143,22 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 
 ## 결정
 
-확정(2026-11-03): N1-input 길 a. 읽기 전용 칸이고 날짜는 달력으로만 고른다. 근거는 [색 고르기 결정 2](color-picker-design.md)와 [dropdown_element.h](../include/luil/ui/dropdown_element.h) 34~36행.
+확정(2026-11-03): N1-input 길 a. 읽기 전용 칸이고 날짜는 달력으로만 고른다. 근거는 [색 고르기 결정 2](color-picker-design.md)와 [dropdown_element.h](../include/luil/ui/dropdown_element.h) 34~36행. 확정 설명은 popup 안 시·분 글 칸 품기까지 담았다. 결정 1이 그 시·분 칸을 R4 범위에서 뺄지 묻는다.
 
 확정(2026-11-03): N1-focus 길 a. 열 때 초점을 달력 popup으로 옮기고 Esc·날 고르기로 닫을 때 칸으로 되돌리는 요청을 앱이 싣는다. controller를 고치지 않는다. 근거는 [색 고르기 결정 3](color-picker-design.md)과 [split-button-design.md](split-button-design.md) 156행.
 
-**1. 시간 고르기.** 질문: 노드 제목은 "날짜·시간"이다. 이번에 시·분을 넣는가.
+**1. 시간 고르기.** 질문: 확정 a 설명의 시·분 칸을 R4에 넣을까, 날짜만 내고 `calendar_config` 끝 덧붙임으로 미룰까. 노드 제목은 "날짜·시간"이다.
 
 - 길 a: 날짜만 낸다. 시간은 범위 밖이다. 되는 것: popup에 글 칸이 없어 닫는 계기·IME·앱 편집 대상이 없고 크기가 날짜에 머문다. 시간은 뒤에 `calendar_config` 끝에 칸을 더하는 덧붙임이라 이 API를 깨지 않는다. 대가: 날짜와 시각을 함께 받는 앱은 칸 곁에 숫자 칸 둘(`number_input_range { 0, 23 }`·`{ 0, 59 }`)을 스스로 둔다.
 - 길 b: 확정 N1-input a의 설명대로 popup 아래에 앱 id의 시·분 글 칸 둘을 품는다(색 고르기 결정 2의 길). 되는 것: 한 컨트롤로 날짜와 시각을 고른다. 대가: 칸마다 앱 kind와 편집 대상 둘, popup이 글을 치는 popup이 되어 이동·활성 전환에 남기고 닫을 때 초안을 확정한다. 숫자 칸 걸음은 범위로 접기만 해 23시 다음이 0시로 돌지 않는다([number_input.h](../include/luil/ui/number_input.h) 59~63행, [dialog_elements.cpp](../src/ui/dialog_elements.cpp) 383행). 12시간제는 R5 지역 몫이다. 문서와 구현이 약 절반 는다.
 - 권장: a. 대가: 위의 앱 몫이다. 확정 a의 시·분 설명은 시간을 더할 때의 모양으로 남긴다. 승인 필요.
 
-**2. 격자 안의 초점.** 질문: 화살표가 커서를 옮길 때 키보드 초점은 어디에 두는가.
+**2. 격자 안의 초점.** 질문: 화살표가 커서를 옮길 때 키보드 초점은 어디에 두는가. 확정 N1-focus a가 고른 날에 초점이 서도록 정했으므로 길 a를 따른다. b는 그 설명과 갈리고 c는 줄 3 파일(`ui_interaction.cpp`)이라 넘긴 길의 기록이다.
 
 - 길 a: 날 칸마다 초점이 선다. 커서 날만 Tab 자리이고 처리기가 `move_to`를 내면 앱이 커서를 옮기며 그 날로 초점 요청을 싣는다. 되는 것: 확정 N1-focus a의 "고른 날에 초점이 서고 화면 읽기가 그 날을 읽는다"가 그대로 선다. UIA FocusChanged가 날마다 나고 테도 그 칸에 선다. 다음 날은 늘 지어진 칸이라 가상 목록이 초점을 행에 두지 못한 까닭(351~353행)이 여기에는 없다. controller를 고치지 않는다. 대가: 키마다 앱 메시지와 초점 요청 한 번이고, 초점이 다음 게시에 선다. 달을 넘을 때 초점이 잠깐 지워진다.
 - 길 b: 격자 하나가 자리다(가상 목록 꼴). 커서는 앱 상태이고 격자 값 글이 커서 날 이름이다. 되는 것: 초점 요청이 열 때 한 번뿐이고 키가 같은 frame에 선다. 대가: 화면 읽기는 초점 이동이 아니라 값 바뀜으로만 날을 듣는다(목록의 값 바뀜을 Narrator가 읽는지 재지 못했다). 확정 N1-focus a의 설명과 갈린다.
 - 길 c: controller에 열 수를 가진 두 축 묶음을 더한다. 되는 것: 초점 이동이 controller 안에서 곧바로 서고 앱 몫이 없다. 대가: `ui_interaction.cpp`는 이번 라운드 줄 3(page_anim)의 것이라 그 줄과의 약속과 직렬이 된다. 달을 넘는 이동은 여전히 앱 메시지다.
-- 권장: a. 대가: 위의 키마다 요청이다. 앱은 `day_id`로 대상을 짓는다. 승인 필요.
+- 권장: a. 대가: 위의 키마다 요청이다. 앱은 `day_id`로 대상을 짓는다. 권장대로 진행.
 
 **3. 보기 단계.** 질문: 머리 줄을 눌러 월 보기·연 보기로 넓히는가.
 
@@ -198,9 +198,9 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 
 ## 다른 노드와의 약속
 
-- **color_picker(R3, 같은 줄 앞).** 결정 3의 초점 규약을 따르고 날 고르기에도 되돌림을 더한다. 결정 2의 칸 품기는 시간이 없어 쓰지 않는다(결정 1). 두 축 키 조합 대신 격자 처리기 하나를 쓴다(결정 2). `color_picker_popup.h` 곁에 새 헤더를 두고 `field_popup.h`는 고치지 않는다.
+- **color_picker(R3, 같은 줄 앞).** 결정 3의 초점 규약을 따르고 날 고르기에도 되돌림을 더한다. 결정 2의 칸 품기는 결정 1의 답을 따른다(권장 a면 쓰지 않는다). 두 축 키 조합 대신 격자 처리기 하나를 쓴다(결정 2). `color_picker_popup.h` 곁에 새 헤더를 두고 `field_popup.h`는 고치지 않는다.
 - **teaching_tip(R4, 같은 줄 뒤).** 겹치는 파일은 `ui_element_id.h`, `inspect_names.cpp`, `default_text.h/.cpp`이고 같은 줄이라 차례로 쌓는다. 데모는 이 노드가 `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.*`를 가진다. teaching_tip은 다른 페이지에 싣는다(split-button-design.md 231행의 겹침을 여기서 가른다).
-- **줄 3(page_anim).** `ui_interaction.cpp`·`.h`와 `transition.h`·`spring.h`를 고치지 않는다. 달 넘김 전환은 그리지 않는다. 결정 2의 길 c를 고르면 그 줄과의 약속이 된다.
+- **줄 3(page_anim).** `ui_interaction.cpp`·`.h`와 `transition.h`·`spring.h`를 고치지 않는다. 달 넘김 전환은 그리지 않는다. 결정 2의 길 c는 고르지 않으므로 그 줄과의 약속이 없다.
 - **줄 4(auto_update).** `win32_window.cpp`·`app_host.h`·`ui_platform.h`·`platform_services*`를 고치지 않는다. 지역 질의를 더하지 않는 까닭이다([달력 날짜 계산과 문구](calendar-date-design.md) 결정 2).
 - **kind.** 다섯 kind는 `menu_bar_item` 뒤, `end_of_library_kinds` 바로 위에 두고 `library_kind_name`의 case를 같은 커밋에 끝에 더한다. [ui_element_tests.cpp](../tests/ui_element_tests.cpp) 84행 `last[]`는 이 노드가 `date_field`로 맞추고 병합 때 다른 줄의 마지막 kind와 다시 맞춘다. kind 숫자를 test·UIA 스크립트에 박지 않는다.
 - **default_text.** 끝에 더하는 함수는 [달력 날짜 계산과 문구](calendar-date-design.md)에 적었다.
@@ -213,7 +213,7 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 | field_popup.h 9행, split-button-design.md 5·133·229행 | 날짜 칸이 열림 규약을 따른다. 주석은 그대로다 |
 | split-button-design.md 156행 | 날짜 칸은 열 때 초점을 popup의 커서 날로 옮긴다고 이 문서(확정 N1-focus a, 결정 2)로 잇는다 |
 | split-button-design.md 231행 | popups 페이지는 이 노드가 쓰고 teaching_tip은 다른 페이지로 간다 |
-| color-picker-design.md 158·221행 | 시·분 칸은 이번에 없다(결정 1). 초점 규약은 따르고 키 조합은 결정 2로 바꾼다 |
+| color-picker-design.md 158·221행 | 시·분 칸은 결정 1의 답을 따른다. 초점 규약은 따르고 키 조합은 결정 2로 바꾼다 |
 | color-picker-design.md 168행 | 따른다. 날 고르기에도 되돌림을 싣는다 |
 | menu-focus-fixes-design.md 103행 | 날짜 칸이 `expanded`를 알려 X-4를 받는다. controller를 고치지 않는다 |
 | default-text-design.md 208행 | 한국어 기본 날짜 문구를 지금 두고 지역 서식은 R5로 남긴다(calendar-date-design.md) |
@@ -237,7 +237,7 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 
 ## 범위 밖
 
-- 시·분 고르기(결정 1), 월·연 보기(결정 3), 터치 쓸기(결정 7).
+- 시·분 고르기(결정 1을 권장 a로 고를 때), 월·연 보기(결정 3), 터치 쓸기(결정 7).
 - 기간 고르기(시작과 끝), 여러 날 고르기, 주 번호.
 - 날짜를 글로 쳐 넣는 칸(확정 N1-input a). 앱이 칸을 따로 둔다.
 - 달 넘김 전환 움직임. page_anim 뒤에 따로 정한다.

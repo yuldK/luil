@@ -125,7 +125,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 **비modal(modal 거짓).**
 
 - 덮개와 가둠이 없다. 뒤 화면을 그대로 쓰고 풍선 밖 누름은 뒤 요소의 것이다. 사용자가 닫는 길은 닫기 단추다. `focus_return`은 쓰이지 않는다.
-- 초점을 옮기지 않는다. 풍선은 root 끝에 담겨 그 단추가 Tab 순서의 끝이다. 초점이 풍선 안에 있을 때의 Esc는 몸의 처리기가 받아 `dismiss(escape)`를 낸다. 이 처리기는 비modal에서만 단다. 밖의 Esc는 앱으로 흐른다(결정 4).
+- 초점을 옮기지 않는다. 풍선은 root 끝에 담겨 그 단추가 Tab 순서의 끝이다. 요소는 Esc를 받지 않는다. 초점이 풍선 안이든 밖이든 Esc는 앱의 `interaction_policy::on_key`로 흐르고(ui_interaction.cpp 3607행), Esc로도 닫고 싶은 앱은 거기서 닫는다(결정 4).
 - 사용자의 명령으로 열었으면 앱이 열 때 `focus_request { target = primary_id(owner) }`(없으면 `close_id`)를, 닫을 때 연 자리로 요청을 싣는다. [색 고르기](color-picker-design.md) 결정 3의 두 줄이다. 스스로 뜬 안내에는 싣지 않는다.
 
 **단추.**
@@ -147,7 +147,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 
 ## 결정
 
-확정(2026-11-03): G2-dismiss 길 c. modal 칸 하나로 고르고 기본은 덮개(light-dismiss)다. 근거는 [sheet_host_element.h](../include/luil/ui/sheet_host_element.h) 84~86행과 [sheet-design.md](sheet-design.md) 93~97행.
+확정(2026-11-03): G2-dismiss 길 c. modal 칸 하나로 고르고 기본은 덮개(light-dismiss)다. 비modal은 닫기 단추로만 닫고 Esc는 앱으로 흐른다(확정 설명). 근거는 [sheet_host_element.h](../include/luil/ui/sheet_host_element.h) 84~86행과 [sheet-design.md](sheet-design.md) 93~97행.
 
 확정(2026-11-03): G2-surface 길 a. 주 tree 안의 겹침 요소로 그리고 `ui_frame::popups`에 싣지 않는다. 근거는 window_surface.cpp 600~606행과 [menu-focus-fixes-design.md](menu-focus-fixes-design.md) 58~61행.
 
@@ -162,7 +162,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 
 - 길 a: 대상 없음과 같이 가운데에 꼬리 없이 둔다. 되는 것: tree 모양이 그대로라 가둠·초점·덮개가 흔들리지 않는다. 배치는 메시지를 낼 수 없으니 닫을지는 nullopt를 본 앱이 정한다. 대가: 가리키던 것이 사라진 안내가 가운데로 뛴다.
 - 길 b: 풍선을 숨긴다. 되는 것: 흘려 지나간 비modal 안내가 사라졌다 돌아온다. 대가: 숨은 가지의 가둠은 없는 것이라(ui_tree.cpp 365행) modal이면 되돌리기가 터지고, 풍선 안 초점은 거둬진다(ui_interaction.cpp 4522~4528행).
-- 길 c: 앞 자리를 지킨다. 대가: 앱이 마지막 사각형을 들고, 대상과 어긋난 꼬리가 남는다.
+- 길 c: 앞 자리를 지킨다. 되는 것: 대상이 흘러 나가도 풍선이 제자리에 남아 가둠·초점이 흔들리지 않는다. 대가: 앱이 마지막 사각형을 들고, 대상과 어긋난 꼬리가 남는다.
 - 권장: a. 대가: 위. 권장대로 진행.
 
 **3. 방향 자리 함수의 집.** 질문: 네 방향 자리 계산을 어디에 두는가.
@@ -173,10 +173,10 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 
 **4. 비modal의 키보드.** 질문: 비modal 풍선에 키보드 사용자는 어떻게 닿고 닫는가.
 
-- 길 a: 초점을 옮기지 않는다. 풍선 단추는 Tab 끝 자리이고, 풍선 안 Esc는 몸의 처리기가 `dismiss(escape)`로 받는다. 명령으로 연 앱은 초점 요청 두 줄을 싣는다. 되는 것: controller를 고치지 않고 하던 일을 끊지 않는다. 대가: 스스로 뜬 안내에는 Tab을 끝까지 쳐야 닿는다.
-- 길 b: F6을 진입 키로 둔다. 대가: 초점이 풍선 밖이면 처리기가 키를 받지 못해(처리기는 초점에서 root 쪽으로만 흐른다, ui_interaction.cpp 3610행) 앱 단축키나 controller(줄 3)가 맡는다. 라이브러리가 탈출 키를 예약하지 않는 규칙(ui_element.h 1141행)과도 갈린다.
-- 길 c: 풍선 안 Esc도 앱으로 흘린다. 되는 것: "닫기 단추로만 닫는다"를 글자 그대로 지킨다. 대가: 키보드 사용자가 닫기 단추까지 Tab한다.
-- 권장: a. 대가: 위. 바깥 누름으로 닫지 않는 확정 내용은 그대로다. 권장대로 진행.
+- 길 a: 초점을 옮기지 않고, 풍선 안 Esc는 몸의 처리기가 `dismiss(escape)`로 받는다. 되는 것: 앱 코드 없이 풍선 안 Esc로 닫힌다. 대가: 확정 c의 "닫기 단추로만"에 닫는 길 하나를 더해 확정 문구를 넓힌다. 몸 처리기를 비modal에서만 다는 갈래와 그 test가 는다.
+- 길 b: F6을 진입 키로 둔다. 되는 것: 초점이 어디에 있든 한 키로 풍선에 닿는다. 대가: 초점이 풍선 밖이면 처리기가 키를 받지 못해(처리기는 초점에서 root 쪽으로만 흐른다, ui_interaction.cpp 3610행) 앱 단축키나 controller(줄 3)가 맡는다. 라이브러리가 탈출 키를 예약하지 않는 규칙(ui_element.h 1141행)과도 갈린다.
+- 길 c: 초점을 옮기지 않고 풍선 안 Esc도 앱으로 흘린다. 풍선 단추는 Tab 끝 자리이고, 명령으로 연 앱은 초점 요청 두 줄을 싣는다. 되는 것: 확정 c의 "닫기 단추로만 닫는다"와 "Esc는 앱으로 흐른다"를 글자 그대로 지킨다. controller를 고치지 않고 하던 일을 끊지 않는다. Esc로도 닫고 싶은 앱은 `on_key`에서 열림을 보고 닫는다. 대가: 그 한 갈래는 앱 몫이고, 스스로 뜬 안내에는 Tab을 끝까지 쳐야 닿는다.
+- 권장: c. 확정 설명을 따르는 길이라 따로 묻지 않는다. 대가: 위. 바깥 누름으로 닫지 않는 확정 내용도 그대로다. 권장대로 진행.
 
 **5. 나타남 움직임.** 질문: 나타날 때 움직이는가.
 
@@ -187,7 +187,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 **6. 나타남 알림.** 질문: 나타나는 순간을 보조 기술에 알리는가.
 
 - 길 a: 알리지 않는다. 되는 것: `accessibility.h`·`uia_provider.cpp`를 고치지 않는다. modal은 진입 초점이 창 이름을 읽힌다. 대가: 스스로 뜬 비modal 안내는 읽히지 않는다.
-- 길 b: UIA Notification. 대가: [정보 막대](info-bar-design.md) 결정 6의 b와 같은 변경(`access_change_kind` 갈래, 활동 id 인자, `announce_changes` 한 갈래)이고 지금 알림은 입력 칸 오류 글뿐이다([uia_provider.cpp](../src/win32/uia_provider.cpp) 437~449·643~647행).
+- 길 b: UIA Notification. 되는 것: 스스로 뜬 비modal 안내도 화면 읽기가 읽는다. 대가: [정보 막대](info-bar-design.md) 결정 6의 b와 같은 변경(`access_change_kind` 갈래, 활동 id 인자, `announce_changes` 한 갈래)이고 지금 알림은 입력 칸 오류 글뿐이다([uia_provider.cpp](../src/win32/uia_provider.cpp) 437~449·643~647행).
 - 권장: a. 정보 막대와 같은 선택이다. 대가: 위. 권장대로 진행.
 
 **7. 행동 단추의 칸.** 질문: 0~2개 단추를 어떻게 받는가.
@@ -205,10 +205,10 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 ## 다른 노드와의 약속
 
 - **date_picker(R4, 같은 줄 앞).** `ui_element_id.h`(`date_field` 뒤), `inspect_names.cpp` case 여섯, `default_text.h/.cpp` 끝에 차례로 쌓는다. [ui_element_tests.cpp](../tests/ui_element_tests.cpp) 84행 `last[]`는 `teaching_tip_action`으로 맞추고 병합 때 다른 줄의 마지막 kind와 다시 맞춘다. kind 숫자를 test·UIA 스크립트에 박지 않는다. popups 페이지는 date_picker의 것이고 이 노드는 toasts 페이지에 싣는다. `field_popup.h`는 date_picker가 고치지 않으므로(date-picker-design.md 201행) 이 노드만 끝에 더한다.
-- **줄 3(page_anim).** `ui_interaction.*`, `transition.h`·`spring.h`, 움직임 줄이기 연결을 고치지 않고 읽기만 한다. [page-transition-design.md](page-transition-design.md) 217행대로 풍선은 이전 화면 tree에 넣지 않고, 화면이 바뀌면 앱이 닫는다. 데모의 페이지 바꿈 자리는 그 줄이 고친다.
+- **줄 3(page_anim).** `ui_interaction.*`, `transition.h`·`spring.h`, 움직임 줄이기 연결을 고치지 않고 읽기만 한다. [page-transition-design.md](page-transition-design.md) 217행대로 풍선은 이전 화면 tree에 넣지 않고, 화면이 바뀌면 앱이 닫는다. 데모의 페이지 바꿈 자리는 그 줄이 고친다. 이 노드의 데모 연결은 page_anim의 `navigate_intent`·`back_intent` 변경 뒤에 쌓고, 이전 화면을 짓기 전에 풍선을 닫는다.
 - **줄 2(markup)와 R5 chart.** markup 1단계 어휘에 들지 않고 이 노드가 들어온 뒤 어휘 행으로 더한다. chart의 값 상자는 `place_field_popup_at_side`를 쓸 수 있다.
 - **줄 4.** `app_host.h`·`ui_platform.h`·`win32_window.cpp`·`window_surface.cpp`를 고치지 않는다. `ui_frame::back`과 `focus`는 있는 칸이다. `ui_events.h`·`accessibility.h`·`uia_provider.cpp`도 고치지 않는다.
-- **데모.** 라이브러리 커밋과 데모 연결 커밋을 나누고, 연결은 통합 때 직렬로 쌓는다. 모바일 `app.cpp`의 `back` 갈래(195~199행)에 한 줄이 는다.
+- **데모.** 라이브러리 커밋과 데모 연결 커밋을 나누고, 연결은 통합 때 직렬로 쌓는다. `make_overlay`는 어느 페이지에서나 불리고(demo_main.cpp 727행, 모바일 app.cpp 172행) 대상 포인터는 toasts 페이지 build에서 오므로, 페이지를 떠날 때 풍선을 닫아야 낡은 포인터가 남지 않는다. [demo_main.cpp](../examples/demo_main.cpp)의 `navigate_intent` 갈래(441~449행)에 닫기 한 줄, 모바일 `app.cpp`의 `close_popups`(91~95행, `navigate_intent`·`back_intent` 갈래가 부른다)에 한 줄, `back` 갈래(195~199행)에 한 줄이 는다. 명령으로 연 비modal 풍선에 초점 요청을 쓰면 demo_main.cpp 798~818행 초점 요청 합치기에 toasts 갈래가 하나 는다.
 
 **미룬 것을 닫는다.** 이 단계에서는 기존 문서를 고치지 않고 구현 커밋이 고친다.
 
@@ -228,7 +228,7 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 자동 test는 UIA 하나만 빼고 `luil_core_tests`라 Windows와 Android 실기기에서 함께 돈다.
 
 - `tests/field_popup_tests.cpp`. 네 방향, 뒤집기 순서(바라는 방향, 반대, 남은 둘), 다른 축 가운데 맞춤과 밀기, `fits` 거짓, 배율 2에서 논리 값, 잘못된 배율. `place_field_popup`의 기존 단언은 그대로 통과.
-- `tests/teaching_tip_element_tests.cpp`(새 파일). `place`의 방향별 풍선·꼬리 자리, 꼬리 밑변 물림, 대상 없음과 자리 밖 대상의 가운데·꼬리 없음, 폭 자름과 본문 줄 줄임, 배율 1·1.5·2에서 같은 논리 자리. 자식 id, `dismiss`가 비면 닫기 없음, 글과 액션이 다 있어야 행동 단추. `teaching_tip_target`의 숨은 가지·자르는 조상·스크롤 창 밖·없는 id와 `ui_tree::visible_bounds`와 같은 답. controller로 modal 진입(primary)·Tab 가둠·Esc의 `escape`·덮개 누름의 `outside`와 대상 미실행·닫힌 뒤 `focus_return`, 비modal의 초점 그대로·Tab 끝 자리·풍선 안 Esc·밖 Esc nullopt·뒤 화면 클릭. `next_update`는 나타나는 동안만이고 움직임 줄이기면 없다.
+- `tests/teaching_tip_element_tests.cpp`(새 파일). `place`의 방향별 풍선·꼬리 자리, 꼬리 밑변 물림, 대상 없음과 자리 밖 대상의 가운데·꼬리 없음, 폭 자름과 본문 줄 줄임, 배율 1·1.5·2에서 같은 논리 자리. 자식 id, `dismiss`가 비면 닫기 없음, 글과 액션이 다 있어야 행동 단추. `teaching_tip_target`의 숨은 가지·자르는 조상·스크롤 창 밖·없는 id와 `ui_tree::visible_bounds`와 같은 답. controller로 modal 진입(primary)·Tab 가둠·Esc의 `escape`·덮개 누름의 `outside`와 대상 미실행·닫힌 뒤 `focus_return`, 비modal의 초점 그대로·Tab 끝 자리·풍선 안·밖 Esc 모두 `dismiss` 없이 policy `on_key`로 흐름·뒤 화면 클릭. `next_update`는 나타나는 동안만이고 움직임 줄이기면 없다.
 - `tests/accessibility_tests.cpp`. dialog·pane, 이름 우선순위(name, title, 기본 문구), 몸의 static_text, 단추. `tests/ui_element_tests.cpp`의 `last[]`.
 - `tests/raster_draw_tests.cpp`. 배율 2에서 꼬리가 몸과 같은 바탕으로 이어지는지, 테가 꼬리까지 도는지, 고대비 팔레트, 나타나는 중간의 투명도.
 - `tests/uia_provider_tests.cpp`(`luil_tests`, Windows). Window·Pane ControlType, 닫기 Invoke가 `dismiss(close_button)`을 나르는지.
@@ -244,6 +244,6 @@ teaching_tip, teaching_tip_scrim, teaching_tip_body, teaching_tip_image, teachin
 - 임의 내용 tree, 본문 마크다운과 링크. 자유로운 내용은 앱이 `modal_host`로 짓는다.
 - 심각도 글리프. 정보 막대의 몫이다.
 - 사라짐 움직임과 스프링 나타남(결정 5).
-- 대상 id의 자동 해석(결정 1의 c), UIA 대상 관계, 나타남 알림(결정 6의 b).
+- 대상 id의 자동 해석(결정 1의 c), UIA 대상 관계, 나타남 알림(결정 6의 b), 비modal 풍선 안 Esc를 요소가 받는 길(결정 4의 a).
 - 대상 없음일 때 구석 자리를 고르는 칸. 지금은 가운데뿐이다.
 - Android 접근성 계층.
