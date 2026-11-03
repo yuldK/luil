@@ -50,6 +50,8 @@ namespace luil::testing {
         // 그리기에 줄 UI·코드 글꼴이다 (`draw_context::ui_typeface`·`code_typeface`). 기본은 없다.
         //  - 글자 가장자리 픽셀을 보는 축이 직접 지은 글꼴을 싣는다. core test에는 OS 글꼴이 없다.
         void set_typeface(sk_sp<SkTypeface> typeface) noexcept;
+        // 그리기에 줄 움직임 줄이기다 (`draw_context::reduce_motion`). 기본은 거짓이다. 멈춘 그림을 묻는 축이 바꾼다.
+        void set_reduce_motion(bool value) noexcept;
 
         // 물리 픽셀 하나의 색이다 (알파를 푼 ARGB — `ui_color`와 같은 배치다).
         // 화면 밖이면 0이다.
@@ -63,6 +65,7 @@ namespace luil::testing {
         ui_color_palette palette_ {};
         ui_metrics metrics_ {};
         color_theme theme_ { color_theme::dark };
+        bool reduce_motion_ { false };
         float scale_ { 2.0f };
         sk_sp<SkTypeface> typeface_ {};
         SkBitmap pixels_ {};

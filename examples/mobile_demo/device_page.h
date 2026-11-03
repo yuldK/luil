@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace mobile_demo {
     // --- 이 페이지의 메시지 ---
@@ -71,6 +72,12 @@ namespace mobile_demo {
     {
     };
 
+    // 페이지를 바꿀 때 화면 전환을 쓸지다 (docs/page-transition-design.md). 셸이 읽는다.
+    struct page_transition_toggle_intent
+    {
+        bool enabled { true };
+    };
+
     // 로컬 네트워크 권한을 묻는 앱 UI 명령이다. delegate가 받아 `app_host::request_permission`을 부른다.
     inline constexpr std::uint32_t command_request_local_network { 0x6c6e };
     // 알림 권한을 묻고 알림 하나를 올리는 앱 UI 명령이다. delegate가 받는다.
@@ -92,6 +99,21 @@ namespace mobile_demo {
             return request_;
         }
 
+        // 셸이 페이지를 바꿀 때 전환을 쓰는가다.
+        [[nodiscard]] bool page_transition_enabled() const noexcept
+        {
+            return page_transition_;
+        }
+
+        // 셸이 frame을 지을 때 알리는 전환의 상태다. 상태 label이 "도는 중"·"멈춤"을 가른다.
+        void set_page_transition_turning(const bool turning) noexcept
+        {
+            page_transition_turning_ = turning;
+        }
+
+        // "페이지 전환: 켜짐 · 도는 중", "페이지 전환: 켜짐 · 멈춤", "페이지 전환: 꺼짐"이다.
+        [[nodiscard]] std::u8string page_transition_text() const;
+
     private:
         luil::device_request request_ {};
         // 받은 볼륨 키의 수다. 누르고 있어 이어 온 반복도 센다.
@@ -108,5 +130,8 @@ namespace mobile_demo {
         std::u8string notification_launch_ {};
         // 비밀 저장소를 돌린 결과 한 줄이다. 아직 돌리지 않았으면 비었다.
         std::u8string secret_report_ {};
+        // 페이지 전환을 쓰는가와, 마지막으로 지은 frame에서 도는 중이었는가다.
+        bool page_transition_ { true };
+        bool page_transition_turning_ { false };
     };
 }

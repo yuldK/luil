@@ -2517,9 +2517,12 @@ namespace luil {
                 const bool horizontal { source->axis == scroll_axis::horizontal };
                 if (decided[horizontal ? 1 : 0])
                     continue;
+                // 시작 쪽 여백(고정 열)만큼 띠를 안쪽으로 민다. 여백이 창보다 넓으면 남는 길이가 0이라 흐르지 않는다.
                 const rect_f& box { window.bounds() };
-                const float start { horizontal ? box.x : box.y };
-                const float length { horizontal ? box.width : box.height };
+                const float inset { std::isfinite(source->leading_inset) ? std::max(0.0f, source->leading_inset) * positive_scale(source->scale) : 0.0f };
+                const float full { horizontal ? box.width : box.height };
+                const float start { (horizontal ? box.x : box.y) + std::min(inset, std::max(0.0f, full)) };
+                const float length { std::max(0.0f, full - inset) };
                 const float speed { drag_auto_scroll_speed(horizontal ? x : y, start, start + length, source->scale, config) };
                 if (speed == 0.0f || (speed < 0.0f ? source->at_start : source->at_end))
                     continue;

@@ -28,6 +28,8 @@
 //       --presentation=standard|layered (주 창의 표시 방식 — layered는 CPU 렌더러로 배치와 frame을 한 합성에 낸다)
 //       --caption=top|bottom (주 창 캡션의 처음 자리 — 창 페이지의 전환과 같다)
 //       --backdrop=none|mica|mica_alt|acrylic (주 창 배경 효과의 처음 값 — 테마 페이지의 고르기와 같다)
+//       --page-transition=none|slide|fade|zoom|spring (페이지를 바꿀 때의 전환 — 보기 메뉴의 "페이지 전환"과 같다. 기본은 slide)
+//       --page-transition-ms=N (전환의 길이 — 스프링이면 response다. UIA가 도는 중을 읽도록 길게 잡는다)
 //       --send-to-first (둘째 실행이 창을 띄우지 않고, 이 플래그를 뺀 나머지 인자와 작업 폴더를 먼저 뜬 데모에 보내고 끝낸다.
 //                       종료 코드는 받았으면 0, 먼저 뜬 데모가 없으면 3, 그 밖의 실패는 4다. 받은 인자는 창 페이지의 "둘째 인스턴스 인자" 줄에 보인다)
 //       --unregister-app-identity (창을 띄우지 않고 데모의 앱 식별 `luil.Demo`의 HKCU 항목을 지우고 끝낸다. 지웠으면 0, 없으면 3, 실패는 4다)
@@ -67,6 +69,7 @@
 #include "luil/ui/command_palette.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/page_transition_element.h"
 #include "luil/ui/sidebar_element.h"
 #include "luil/ui/spring.h"
 #include "luil/ui/stack_element.h"
@@ -109,6 +112,57 @@ namespace demo {
         // 사이드바의 처음 폭과 접힌 폭이다 (논리 픽셀).
         constexpr float sidebar_default_width { 200.0f };
         constexpr float sidebar_collapsed_width { 44.0f };
+
+        // 사이드바 목록의 페이지와 그 순서다. 페이지 전환의 쪽도 이 순서로 정한다 (목록에서 아래 페이지로 가면 forward).
+        struct navigation_page
+        {
+            std::u8string_view key {};
+            std::u8string_view label {};
+        };
+
+        constexpr navigation_page navigation_pages[] {
+            { page_overview, u8"시작 / 기능 색인" },
+            { page_controls, u8"버튼과 컨트롤" },
+            { page_basics, u8"입력과 다이얼로그" },
+            { page_lists, u8"목록" },
+            { page_files, u8"파일" },
+            { page_tabs, u8"탭" },
+            { page_groups, u8"그룹" },
+            { page_toasts, u8"토스트" },
+            { page_popups, u8"메뉴·팝업" },
+            { page_windows, u8"창" },
+            { page_images, u8"이미지" },
+            { page_network, u8"네트워크" },
+            { page_webview, u8"웹뷰" },
+            { page_zoom, u8"확대 보기" },
+            { page_ink, u8"잉크" },
+            { page_inspector, u8"검사기" },
+            { page_theme, u8"모양과 색" },
+            { page_workbench, u8"변경 작업대" },
+            { page_rich_text, u8"서식 있는 글" },
+        };
+
+        [[nodiscard]] std::size_t navigation_index(const std::u8string_view key) noexcept
+        {
+            for (std::size_t index = 0; index < std::size(navigation_pages); ++index)
+                if (navigation_pages[index].key == key)
+                    return index;
+            return 0;
+        }
+
+        // 페이지 전환 label에 쓰는 이름이다. 보기 메뉴의 라디오와 같다. 꺼져 있으면 빈 글이다.
+        [[nodiscard]] std::u8string_view page_transition_name(const std::u8string_view mode) noexcept
+        {
+            if (mode == shell_menu_page_transition_slide)
+                return u8"밀기";
+            if (mode == shell_menu_page_transition_fade)
+                return u8"옅어짐";
+            if (mode == shell_menu_page_transition_zoom)
+                return u8"확대";
+            if (mode == shell_menu_page_transition_spring)
+                return u8"스프링 밀기";
+            return {};
+        }
 
         // 데모의 앱 식별이다 (`window_config::identity`). `--unregister-app-identity`가 같은 id를 지운다.
         constexpr std::u8string_view demo_app_identity { u8"luil.Demo" };
@@ -248,6 +302,13 @@ namespace demo {
                 , page_ { page.empty() ? std::u8string { page_overview } : std::move(page) }
                 , primary_instance_ { primary_instance }
             {
+            }
+
+            // 페이지 전환의 시작 상태다 (`--page-transition=`, `--page-transition-ms=`). `mode`는 보기 메뉴의 라디오 키다.
+            void set_page_transition(std::u8string mode, const std::optional<std::chrono::milliseconds> length)
+            {
+                page_transition_mode_ = std::move(mode);
+                page_transition_length_ = length;
             }
 
             // 창 페이지·테마 페이지의 시작 상태다 (`--caption=bottom`, `--presentation=`, `--backdrop=`).
@@ -438,11 +499,19 @@ namespace demo {
                     // 도는 중에 움직임 줄이기가 켜지면 끝 폭에 붙인다. 두면 남은 시간만큼 더 돌고 끝난다.
                     if (metrics->reduce_motion && metrics_.reduce_motion == false)
                         sidebar_motion_ = luil::spring_at_rest(target_sidebar_width());
+                    // 페이지 전환은 움직임 줄이기가 켜지거나 창 크기·배율이 바뀌면 놓는다. 요소도 옛 크기 그림을 그리지 않지만
+                    // 놓아야 덮개가 곧 걷혀 포인터가 풀린다 (page-transition-design.md 결정 5).
+                    if ((metrics->reduce_motion && metrics_.reduce_motion == false) || metrics->width != metrics_.width || metrics->height != metrics_.height
+                        || metrics->scale != metrics_.scale)
+                        page_motion_ = {};
                     metrics_ = *metrics;
                     return;
                 }
                 if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
                 {
+                    // 떠나는 화면은 `page_`가 아직 옛 값일 때 짓는다. 도는 중에 또 바뀌면 들어오던 화면을 다시 지어 새 전환이다.
+                    if (navigate->page != page_)
+                        page_motion_ = make_page_motion(navigate->page);
                     page_ = navigate->page;
                     // 페이지를 떠나면 그 페이지의 popup도 닫는다.
                     tabs_.close_popups();
@@ -556,6 +625,11 @@ namespace demo {
                             static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::system } }));
                         else if (*command == shell_menu_theme_dark)
                             static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::dark } }));
+                        else if (command->starts_with(shell_menu_page_transition_prefix))
+                        {
+                            page_transition_mode_ = *command;
+                            page_motion_ = {};
+                        }
                     }
                     return;
                 }
@@ -689,8 +763,14 @@ namespace demo {
                 shell_config.direction = luil::stack_direction::row;
                 auto shell { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, shell_config) };
                 shell->add(std::make_unique<luil::sidebar_element>(sidebar_config, sidebar_collapsed_ ? nullptr : make_navigation()), sidebar_width);
-                shell->add_flexible(build_page(content_width, content_height, scale));
+                // 페이지는 늘 화면 전환 요소로 감싼다. 떠나는 화면이 없으면 새 화면만 그리는 껍질이다.
+                auto page { std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", page_motion_ }, build_page(content_width, content_height, scale)) };
+                const luil::page_transition_element* const page_slot { page.get() };
+                shell->add_flexible(std::move(page));
                 shell->arrange({ .slot = { 0.0f, content_top, width, height - caption_height - menu_bar_row }, .scale = scale, .style = style });
+                // 다음 이동에서 떠나는 화면을 이 자리와 배율로 짓는다.
+                content_slot_ = page_slot->bounds();
+                content_scale_ = scale;
                 root->add(std::move(shell));
 
                 // 막대와 그 오른쪽 상태 label 둘이다. 막대는 메뉴 popup의 자리를 정하므로 아래에서 다시 읽는다.
@@ -723,6 +803,19 @@ namespace demo {
                     auto motion { make_label(luil::ui_element_id { kind_text, u8"sidebar-motion" }, std::move(motion_text), 11.0f, luil::label_color_role::dim) };
                     motion->arrange({ { 6.0f * scale, content_top + (content_height - motion_label_height - 4.0f) * scale, motion_label_width * scale, motion_label_height * scale }, scale });
                     root->add(std::move(motion));
+
+                    // 페이지 전환의 상태다. 도는 동안은 tree를 다시 짓지 않으므로 시작 frame의 "도는 중"이 끝 tick까지 남는다.
+                    constexpr float transition_label_width { 190.0f };
+                    const std::u8string_view name { page_transition_name(page_transition_mode_) };
+                    std::u8string transition_text { u8"페이지 전환: 꺼짐" };
+                    if (name.empty() == false)
+                    {
+                        const bool turning { page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, frame_time_) == false };
+                        transition_text = u8"페이지 전환: " + std::u8string { name } + (turning ? u8" · 도는 중" : u8" · 멈춤");
+                    }
+                    auto transition { make_label(luil::ui_element_id { kind_text, u8"page-transition-state" }, std::move(transition_text), 11.0f, luil::label_color_role::dim) };
+                    transition->arrange({ { 6.0f * scale, content_top + (content_height - motion_label_height * 2.0f - 4.0f) * scale, transition_label_width * scale, motion_label_height * scale }, scale });
+                    root->add(std::move(transition));
                 }
 
                 // 오버레이들: dialog는 화면을 덮고 토스트는 오른쪽 아래에 쌓인다.
@@ -766,7 +859,7 @@ namespace demo {
                     frame->popups.push_back(std::move(popup));
                 // 메뉴 막대의 메뉴는 이번 frame에 배치한 항목 아래에 선다. 보기 메뉴는 사이드바와 테마의 지금 상태를 그린다.
                 if (menu_bar != nullptr)
-                    for (luil::win32::ui_popup& popup : shell_menu_.make_popups(*menu_bar, scale, { 0.0f, 0.0f, width, height }, sidebar_collapsed_ == false, theme_.appearance().theme))
+                    for (luil::win32::ui_popup& popup : shell_menu_.make_popups(*menu_bar, scale, { 0.0f, 0.0f, width, height }, sidebar_collapsed_ == false, theme_.appearance().theme, page_transition_mode_))
                         frame->popups.push_back(std::move(popup));
                 // 도구 창은 페이지의 일부가 아니라 어느 페이지에서든 열려 있다.
                 for (luil::ui_window& window : tabs_.make_windows())
@@ -841,7 +934,9 @@ namespace demo {
                 std::optional<std::chrono::steady_clock::time_point> next { toasts_.next_expiry() };
                 // 접힘 스프링은 마지막으로 지은 frame의 시각에서 센다. 그 frame이 도는 중이었다면 한 frame 뒤에 하나를 더 지어
                 // 멈춘 모습으로 끝낸다 (지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다).
-                for (const std::optional<std::chrono::steady_clock::time_point> other : { luil::spring_next_update(sidebar_motion_, frame_time_), workbench_.next_due() })
+                //  - 페이지 전환은 끝 시각 하나를 싣는다. 도는 동안의 frame은 요소의 예고가 다시 그리고, tree는 끝에 한 번 짓는다.
+                for (const std::optional<std::chrono::steady_clock::time_point> other :
+                    { luil::spring_next_update(sidebar_motion_, frame_time_), workbench_.next_due(), luil::page_transition_end(page_motion_) })
                     if (other.has_value() && (next.has_value() == false || *other < *next))
                         next = other;
                 return next;
@@ -851,6 +946,9 @@ namespace demo {
             {
                 toasts_.prune();
                 workbench_.tick(now);
+                // 끝난 전환은 놓는다. 다음 frame은 prior 없는 tree라 덮개가 걷혀 포인터가 풀린다.
+                if (page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, now))
+                    page_motion_ = {};
             }
 
         private:
@@ -955,25 +1053,8 @@ namespace demo {
                     const char32_t icon { key == page_overview ? luil::codicons::icon_rocket : (key == page_theme ? luil::codicons::icon_settings_gear : luil::codicons::icon_file) };
                     navigation.items.push_back({ std::u8string { key }, std::move(label), icon });
                 };
-                add_page(page_overview, u8"시작 / 기능 색인");
-                add_page(page_controls, u8"버튼과 컨트롤");
-                add_page(page_basics, u8"입력과 다이얼로그");
-                add_page(page_lists, u8"목록");
-                add_page(page_files, u8"파일");
-                add_page(page_tabs, u8"탭");
-                add_page(page_groups, u8"그룹");
-                add_page(page_toasts, u8"토스트");
-                add_page(page_popups, u8"메뉴·팝업");
-                add_page(page_windows, u8"창");
-                add_page(page_images, u8"이미지");
-                add_page(page_network, u8"네트워크");
-                add_page(page_webview, u8"웹뷰");
-                add_page(page_zoom, u8"확대 보기");
-                add_page(page_ink, u8"잉크");
-                add_page(page_inspector, u8"검사기");
-                add_page(page_theme, u8"모양과 색");
-                add_page(page_workbench, u8"변경 작업대");
-                add_page(page_rich_text, u8"서식 있는 글");
+                for (const navigation_page& page : navigation_pages)
+                    add_page(page.key, std::u8string { page.label });
                 navigation.selected = page_;
                 navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
 
@@ -997,6 +1078,41 @@ namespace demo {
                     column->add(make_label(luil::ui_element_id { kind_text, u8"sidebar-saved-width" }, std::move(saved), 11.0f, luil::label_color_role::dim), 16.0f);
                 }
                 return column;
+            }
+
+            // 지금 페이지(`page_`)에서 `next`로 가는 전환이다. 떠나는 화면을 지난 frame의 본문 자리와 배율로 따로 짓는다.
+            //  - 꺼져 있거나 움직임 줄이기면 짓지도 않는다. 웹뷰는 창 위의 자식 창이라 함께 움직이지 않아 오가는 바꿈은 전환하지 않는다.
+            [[nodiscard]] luil::page_transition make_page_motion(const std::u8string& next)
+            {
+                if (page_transition_name(page_transition_mode_).empty() || metrics_.reduce_motion || page_ == page_webview || next == page_webview
+                    || content_slot_.width <= 0.0f || content_slot_.height <= 0.0f)
+                    return {};
+                const float scale { content_scale_ };
+                auto prior { build_page(content_slot_.width / scale, content_slot_.height / scale, scale) };
+                const luil::ui_style* const style { theme_.style().get() };
+                auto tree { std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(prior), content_slot_, scale, {}, nullptr, style)) };
+                return luil::start_page_transition(std::move(tree), page_style_for(next), std::chrono::steady_clock::now(), metrics_.reduce_motion);
+            }
+
+            // 고른 전환의 모양이다. 사이드바 목록이 세로라 밀기는 세로 축이다.
+            [[nodiscard]] luil::page_transition_style page_style_for(const std::u8string& next) const
+            {
+                luil::page_transition_style style {};
+                style.axis = luil::page_transition_axis::vertical;
+                style.direction = navigation_index(next) >= navigation_index(page_) ? luil::page_transition_direction::forward : luil::page_transition_direction::backward;
+                style.curve = luil::page_transition_timing { page_transition_length_.value_or(luil::page_transition_duration) };
+                if (page_transition_mode_ == shell_menu_page_transition_fade)
+                    style.effect = luil::page_transition_effect::fade;
+                else if (page_transition_mode_ == shell_menu_page_transition_zoom)
+                    style.effect = luil::page_transition_effect::zoom;
+                else if (page_transition_mode_ == shell_menu_page_transition_spring)
+                {
+                    luil::spring_config config { luil::spring_smooth };
+                    if (page_transition_length_.has_value())
+                        config.response = *page_transition_length_;
+                    style.curve = luil::page_transition_spring { config, 0.0f };
+                }
+                return style;
             }
 
             [[nodiscard]] std::unique_ptr<luil::ui_element> build_page(const float width, const float height, const float scale)
@@ -1116,6 +1232,13 @@ namespace demo {
             luil::spring sidebar_motion_ { luil::spring_at_rest(sidebar_default_width) };
             // 마지막으로 지은 frame의 시각이다. 시간이 흘러야 바뀌는 상태의 다음 예고를 이 시각에서 센다.
             std::chrono::steady_clock::time_point frame_time_ {};
+            // 페이지 전환이다 (앱 상태). 고른 모양은 보기 메뉴의 라디오 키이고, 길이는 인자로 바꿀 수 있다.
+            std::u8string page_transition_mode_ { shell_menu_page_transition_slide };
+            std::optional<std::chrono::milliseconds> page_transition_length_ {};
+            luil::page_transition page_motion_ {};
+            // 지난 frame의 본문 자리(물리 픽셀)와 배율이다. 떠나는 화면을 같은 크기·배율로 짓는다.
+            luil::rect_f content_slot_ {};
+            float content_scale_ { 1.0f };
             window_metrics_intent metrics_ {};
             std::atomic<bool> closed_ { false };
         };
@@ -1372,7 +1495,8 @@ namespace {
     }
 
     [[nodiscard]] bool parse_arguments(
-        const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom, luil::window_backdrop& backdrop)
+        const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom, luil::window_backdrop& backdrop
+        , std::u8string& page_transition, std::optional<std::chrono::milliseconds>& page_transition_length)
     {
         for (std::size_t index = 1; index < arguments.size(); ++index)
         {
@@ -1422,6 +1546,27 @@ namespace {
                 backdrop = luil::window_backdrop::mica_alt;
             else if (argument == u8"--backdrop=acrylic")
                 backdrop = luil::window_backdrop::acrylic;
+            else if (argument.starts_with(u8"--page-transition="))
+            {
+                const std::u8string mode { std::u8string { demo::shell_menu_page_transition_prefix } + std::u8string { argument.substr(18) } };
+                const bool known { mode == demo::shell_menu_page_transition_none || mode == demo::shell_menu_page_transition_slide || mode == demo::shell_menu_page_transition_fade
+                    || mode == demo::shell_menu_page_transition_zoom || mode == demo::shell_menu_page_transition_spring
+                };
+
+                if (known == false)
+                    return false;
+                page_transition = mode;
+            }
+            else if (argument.starts_with(u8"--page-transition-ms="))
+            {
+                const std::u8string_view value { argument.substr(21) };
+                int milliseconds { 0 };
+                const auto* const first { reinterpret_cast<const char*>(value.data()) };
+                const auto [parsed, code] { std::from_chars(first, first + value.size(), milliseconds) };
+                if (code != std::errc {} || parsed != first + value.size() || milliseconds <= 0)
+                    return false;
+                page_transition_length = std::chrono::milliseconds { milliseconds };
+            }
             else
                 return false;
         }
@@ -1462,7 +1607,9 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     std::u8string start_page {};
     bool caption_bottom { false };
     luil::window_backdrop backdrop { luil::window_backdrop::none };
-    if (parse_arguments(without_notification_flags(*arguments), config, start_page, caption_bottom, backdrop) == false)
+    std::u8string page_transition { demo::shell_menu_page_transition_slide };
+    std::optional<std::chrono::milliseconds> page_transition_length {};
+    if (parse_arguments(without_notification_flags(*arguments), config, start_page, caption_bottom, backdrop, page_transition, page_transition_length) == false)
         return 2;
     // OS 알림이 쓰는 앱 식별이다. 아이콘은 실행 파일 옆 assets의 PNG다 (IconUri는 실행 파일 리소스를 가리키지 못한다).
     config.identity.id = std::u8string { demo::demo_app_identity };
@@ -1484,6 +1631,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
 
     demo::demo_driver driver { restore, start_page, instance.primary() };
     driver.set_window_options(caption_bottom, config.presentation == luil::win32::window_presentation::layered, backdrop);
+    driver.set_page_transition(std::move(page_transition), page_transition_length);
     demo::demo_policy policy {};
     demo::demo_delegate delegate { driver };
 

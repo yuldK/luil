@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -63,6 +64,9 @@ namespace {
         bool at_end { false };
         bool auto_scroll { true };
         luil::scroll_axis axis { luil::scroll_axis::vertical };
+        // 두 목록 모두에 싣는다. 고정 열을 세운 표가 그 폭을 싣는 자리다.
+        float leading_inset { 0.0f };
+        float scale { 1.0f };
     };
 
     [[nodiscard]] std::chrono::steady_clock::time_point at(const int milliseconds)
@@ -94,6 +98,8 @@ namespace {
             source.axis = state.axis;
             source.at_start = state.at_start;
             source.at_end = state.at_end;
+            source.leading_inset = state.leading_inset;
+            source.scale = state.scale;
             list->set_scroll_source(std::move(source));
             return list;
         };
@@ -387,6 +393,106 @@ TEST_CASE("Horizontal windows flow along their own axis", "[ui][interaction][aut
     static_cast<void>(controller.process(move(195.0f, 200.0f, 20)));
     const auto actions { controller.advance(at(30)) };
     REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(3.75f));
+}
+
+TEST_CASE("A leading inset moves the start band to where the content flows and leaves the end band", "[ui][interaction][auto-scroll]")
+{
+    // 가로 창 0–200의 왼쪽 50이 흐르지 않는 몫(고정 열)이다. 왼쪽 띠는 50–70이고 그 왼쪽은 창 밖과 같다.
+    luil::interaction_controller controller { nullptr, config() };
+    list_state state {};
+    state.axis = luil::scroll_axis::horizontal;
+    state.leading_inset = 50.0f;
+    controller.set_tree(make_tree(state));
+    grab_handle(controller, 100.0f, 200.0f);
+    REQUIRE(controller.next_deadline().has_value() == false);
+
+    // 띠 안 3/4 깊이 = 375/초다.
+    static_cast<void>(controller.process(move(55.0f, 200.0f, 20)));
+    auto actions { controller.advance(at(30)) };
+    REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(-3.75f));
+    // 여백 위는 경계에서 띠 폭의 1.5배 밖이라 750/초다.
+    static_cast<void>(controller.process(move(40.0f, 200.0f, 35)));
+    actions = controller.advance(at(40));
+    REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(-7.5f));
+    // 창의 왼쪽 끝은 띠 폭 둘 넘게 밖이라 최대다.
+    static_cast<void>(controller.process(move(0.0f, 200.0f, 45)));
+    actions = controller.advance(at(50));
+    REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(-10.0f));
+    // 끝 쪽 띠는 그대로다 (180–200).
+    static_cast<void>(controller.process(move(195.0f, 200.0f, 55)));
+    actions = controller.advance(at(60));
+    REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(3.75f));
+    static_cast<void>(controller.process(move(175.0f, 200.0f, 65)));
+    REQUIRE(controller.next_deadline().has_value() == false);
+}
+
+TEST_CASE("A zero or invalid leading inset keeps the bands at the window edges", "[ui][interaction][auto-scroll]")
+{
+    for (const float inset : { 0.0f, -50.0f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() })
+    {
+        luil::interaction_controller controller { nullptr, config() };
+        list_state state {};
+        state.axis = luil::scroll_axis::horizontal;
+        state.leading_inset = inset;
+        controller.set_tree(make_tree(state));
+        // 여백 50이면 흐를 자리지만 창 가장자리 띠(0–20) 밖이다.
+        grab_handle(controller, 55.0f, 200.0f);
+        REQUIRE(controller.next_deadline().has_value() == false);
+        // 띠 안 절반 깊이 = 250/초다.
+        static_cast<void>(controller.process(move(10.0f, 200.0f, 20)));
+        auto actions { controller.advance(at(30)) };
+        REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(-2.5f));
+        static_cast<void>(controller.process(move(195.0f, 200.0f, 35)));
+        actions = controller.advance(at(40));
+        REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(3.75f));
+    }
+}
+
+TEST_CASE("A leading inset is logical and follows the window scale", "[ui][interaction][auto-scroll]")
+{
+    // 배율 2에서 여백 50은 물리 100이고 띠는 물리 40이다. 왼쪽 띠는 100–140, 오른쪽 띠는 160–200이다.
+    luil::interaction_controller controller { nullptr, config() };
+    list_state state {};
+    state.axis = luil::scroll_axis::horizontal;
+    state.leading_inset = 50.0f;
+    state.scale = 2.0f;
+    controller.set_tree(make_tree(state));
+    grab_handle(controller, 150.0f, 200.0f);
+    REQUIRE(controller.next_deadline().has_value() == false);
+    static_cast<void>(controller.process(move(120.0f, 200.0f, 20)));
+    auto actions { controller.advance(at(30)) };
+    REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(-2.5f));
+    static_cast<void>(controller.process(move(190.0f, 200.0f, 35)));
+    actions = controller.advance(at(40));
+    REQUIRE(scroll_of(actions[0])->delta == Catch::Approx(3.75f));
+}
+
+TEST_CASE("A window at its start ignores the inset band and an inset wider than the window never flows", "[ui][interaction][auto-scroll]")
+{
+    {
+        luil::interaction_controller controller { nullptr, config() };
+        list_state state {};
+        state.axis = luil::scroll_axis::horizontal;
+        state.leading_inset = 50.0f;
+        state.at_start = true;
+        controller.set_tree(make_tree(state));
+        grab_handle(controller, 55.0f, 200.0f);
+        REQUIRE(controller.next_deadline().has_value() == false);
+        static_cast<void>(controller.process(move(195.0f, 200.0f, 20)));
+        REQUIRE(scroll_of(controller.advance(at(30))[0])->delta > 0.0f);
+    }
+    {
+        // 흐르는 길이가 남지 않으면 띠가 없어 어느 쪽으로도 흐르지 않는다.
+        luil::interaction_controller controller { nullptr, config() };
+        list_state state {};
+        state.axis = luil::scroll_axis::horizontal;
+        state.leading_inset = 300.0f;
+        controller.set_tree(make_tree(state));
+        grab_handle(controller, 0.0f, 200.0f);
+        REQUIRE(controller.next_deadline().has_value() == false);
+        static_cast<void>(controller.process(move(195.0f, 200.0f, 20)));
+        REQUIRE(controller.next_deadline().has_value() == false);
+    }
 }
 
 TEST_CASE("A touch handle drag scrolls at the edge as well", "[ui][interaction][auto-scroll][touch]")

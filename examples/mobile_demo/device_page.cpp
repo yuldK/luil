@@ -117,6 +117,11 @@ namespace mobile_demo {
                 ++volume_repeat_count_;
             return true;
         }
+        if (const auto* const transition { message.get<page_transition_toggle_intent>() }; transition != nullptr)
+        {
+            page_transition_ = transition->enabled;
+            return true;
+        }
         if (message.get<secret_check_intent>() != nullptr)
         {
             // logic thread에서 돈다 — Keystore 호출은 수십 ms까지 걸려 UI thread의 자리가 아니다.
@@ -148,6 +153,13 @@ namespace mobile_demo {
         return false;
     }
 
+    std::u8string device_page::page_transition_text() const
+    {
+        if (page_transition_ == false)
+            return u8"페이지 전환: 꺼짐";
+        return page_transition_turning_ ? u8"페이지 전환: 켜짐 · 도는 중" : u8"페이지 전환: 켜짐 · 멈춤";
+    }
+
     page_content device_page::build(const float width, const float scale, const window_metrics_intent& window)
     {
         const luil::ui_platform_capabilities capabilities { luil::current_ui_platform().capabilities };
@@ -165,6 +177,18 @@ namespace mobile_demo {
         column.body(u8"motion-state", window.reduce_motion ? u8"켜짐 · 도는 표시가 멈춘다" : u8"꺼짐 · 도는 표시가 돈다");
         column.gap(8.0f);
         column.add(std::make_unique<luil::spinner_element>(luil::ui_element_id { kind_layout, u8"motion-spinner" }, luil::spinner_config { .name = u8"도는 표시" }), 24.0f, 24.0f);
+        // 페이지를 바꿀 때의 전환이다. 좁은 화면은 목록과 페이지가 가로로 밀리고, 넓은 화면의 오른쪽 판은 옅어진다.
+        //  - 움직임 줄이기가 켜져 있으면 켜 두어도 바로 바뀐다.
+        luil::check_config transition {};
+        transition.owner = u8"page-transition";
+        transition.style = luil::check_style::toggle_switch;
+        transition.label = u8"페이지 전환";
+        transition.checked = page_transition_;
+        transition.toggle = luil::make_message_action(page_transition_toggle_intent { page_transition_ == false });
+        const float transition_height { luil::check_element::height_for(transition) };
+        column.gap(10.0f);
+        column.add(std::make_unique<luil::check_element>(std::move(transition)), std::max(transition_height, touch_height), choice_width);
+        column.body(u8"page-transition-state", page_transition_text());
         column.gap(20.0f);
         column.heading(u8"orientation-heading", u8"화면 방향");
         if (capabilities.screen_orientation == false)

@@ -1664,6 +1664,25 @@ TEST_CASE("A demo shell menu opens under its item, records the command and hands
     REQUIRE(menu.take_command() == std::u8string { u8"view.sidebar" });
     REQUIRE(menu.take_command().has_value() == false);
     REQUIRE(menu.last_command_text() == u8"마지막 메뉴 명령: 사이드바");
+    // 페이지 전환 하위 메뉴도 부모 popup 기준 자리에 서고, 고른 전환이 라디오로 선다. 고르면 셸 명령이다.
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_submenu_intent { u8"view.page-transition" } }));
+    {
+        const luil::ui_tree again { shell_bar_tree(menu) };
+        const std::vector<luil::ui_popup> transitions {
+            menu.make_popups(*luil::active_menu_bar(again), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, true, luil::theme_preference::dark, demo::shell_menu_page_transition_fade)
+        };
+        REQUIRE(transitions.size() == 2u);
+        REQUIRE(transitions[1].id == u8"shell-menu-page-transition");
+        REQUIRE(transitions[1].anchor == transitions[0].id);
+        REQUIRE(transitions[1].y > popups[1].y);
+        REQUIRE(transitions[1].tree->ids_of_kind(luil::ui_element_kind::menu_item).size() == 5u);
+        for (const std::u8string_view key : { demo::shell_menu_page_transition_none, demo::shell_menu_page_transition_slide, demo::shell_menu_page_transition_zoom, demo::shell_menu_page_transition_spring })
+            REQUIRE(transitions[1].tree->find({ luil::ui_element_kind::menu_item, std::u8string { key } })->accessibility().selected == false);
+        REQUIRE(transitions[1].tree->find({ luil::ui_element_kind::menu_item, std::u8string { demo::shell_menu_page_transition_fade } })->accessibility().selected == true);
+    }
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_select_intent { std::u8string { demo::shell_menu_page_transition_zoom } } }));
+    REQUIRE(menu.take_command() == std::u8string { demo::shell_menu_page_transition_zoom });
+    REQUIRE(menu.last_command_text() == u8"마지막 메뉴 명령: 확대");
     // 다른 메뉴로 옮기면 열린 하위 메뉴가 닫힌다.
     REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"file", true, true } } }));
     const luil::ui_tree moved { shell_bar_tree(menu) };

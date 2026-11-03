@@ -36,11 +36,18 @@ namespace demo {
     inline constexpr std::u8string_view shell_menu_theme_light { u8"theme.light" };
     inline constexpr std::u8string_view shell_menu_theme_system { u8"theme.system" };
     inline constexpr std::u8string_view shell_menu_theme_dark { u8"theme.dark" };
+    // 보기 메뉴의 "페이지 전환" 라디오다 (docs/page-transition-design.md의 확인 절). 키 앞부분이 같아 셸이 한 갈래로 받는다.
+    inline constexpr std::u8string_view shell_menu_page_transition_prefix { u8"page-transition." };
+    inline constexpr std::u8string_view shell_menu_page_transition_none { u8"page-transition.none" };
+    inline constexpr std::u8string_view shell_menu_page_transition_slide { u8"page-transition.slide" };
+    inline constexpr std::u8string_view shell_menu_page_transition_fade { u8"page-transition.fade" };
+    inline constexpr std::u8string_view shell_menu_page_transition_zoom { u8"page-transition.zoom" };
+    inline constexpr std::u8string_view shell_menu_page_transition_spring { u8"page-transition.spring" };
 
     // 창 위의 "파일(F)·편집(E)·보기(V)" 막대다 (docs/menu-bar-design.md의 확인 절).
     //  - 열림·선 자리·하위 메뉴는 이 상태가 든다. 막대와 popup은 frame마다 이 상태로 새로 짓는다.
     //  - 막대 오른쪽 label 둘이 상태("파일 · 키보드")와 마지막 명령을 그려 UIA가 이름으로 되읽는다.
-    //  - 고른 명령 중 셸의 것(사이드바, 테마)은 `take_command`로 넘긴다. 이 상태는 셸을 모른다.
+    //  - 고른 명령 중 셸의 것(사이드바, 테마, 페이지 전환)은 `take_command`로 넘긴다. 이 상태는 셸을 모른다.
     class shell_menu
     {
     public:
@@ -65,8 +72,10 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::label_element> make_last_label() const;
 
         // 열린 메뉴와 하위 메뉴다. `bar`는 이번 frame에 배치한 막대이고 `limit`은 주 창 client(물리 픽셀)다.
-        //  - 보기 메뉴의 체크와 라디오는 셸 상태(`sidebar_visible`, `theme`)를 그대로 그린다.
-        [[nodiscard]] std::vector<luil::ui_popup> make_popups(const luil::menu_bar_element& bar, float scale, const luil::rect_f& limit, bool sidebar_visible, luil::theme_preference theme) const;
+        //  - 보기 메뉴의 체크와 라디오는 셸 상태(`sidebar_visible`, `theme`, `page_transition`)를 그대로 그린다.
+        //  - `page_transition`은 고른 페이지 전환의 키다 (`shell_menu_page_transition_slide` 같은 것). 비면 어느 것도 고르지 않은 것이다.
+        [[nodiscard]] std::vector<luil::ui_popup> make_popups(
+            const luil::menu_bar_element& bar, float scale, const luil::rect_f& limit, bool sidebar_visible, luil::theme_preference theme, std::u8string_view page_transition = {}) const;
 
     private:
         luil::menu_bar_state state_ {};

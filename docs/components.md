@@ -79,7 +79,8 @@
 | 모달 입력 범위와 배경 | `modal_host_element` | [ui/modal_host_element.h](../include/luil/ui/modal_host_element.h) | [설명](modal-dialog-design.md) |
 | 확인 대화 상자(제목·본문·단추 행·확인 칸, 크기는 내용에서) | `make_message_box`, `message_box_config`, `message_box_ok` | [ui/message_box.h](../include/luil/ui/message_box.h) | [설명](message-box-design.md) |
 | 아래 시트·옆 시트·서랍 | `sheet_host_element` | [ui/sheet_host_element.h](../include/luil/ui/sheet_host_element.h) | [설명](sheet-design.md) |
-| 값 하나를 목표로 스프링처럼 움직이기 (놓은 속도에서 이어 출발) | `spring`, `spring_to`, `spring_release` | [ui/spring.h](../include/luil/ui/spring.h) | [설명](spring-design.md) |
+| 값 하나를 목표로 스프링처럼 움직이기 (놓은 속도에서 이어 출발) | `spring`, `spring_to`, `spring_release`, `spring_rest_time` | [ui/spring.h](../include/luil/ui/spring.h) | [설명](spring-design.md) |
+| 화면 전환(밀기·옅어짐·확대, 길이·스프링 곡선, 도는 동안 포인터 막기) | `page_transition_element`, `start_page_transition`, `page_transition_end` | [ui/page_transition_element.h](../include/luil/ui/page_transition_element.h) · [ui/page_transition.h](../include/luil/ui/page_transition.h) | [설명](page-transition-design.md) |
 | 창 캡션 | `caption_element` | [ui/caption_element.h](../include/luil/ui/caption_element.h) | [설명](caption-button-design.md) |
 | 모바일 앱 바 | `app_bar_element` | [ui/app_bar_element.h](../include/luil/ui/app_bar_element.h) | [설명](app-bar-design.md) |
 | 플랫폼 성질 | `ui_platform`, `current_ui_platform` | [ui/ui_platform.h](../include/luil/ui/ui_platform.h) | [설명](app-bar-design.md) |

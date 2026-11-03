@@ -214,4 +214,21 @@ namespace luil {
         const double fraction { std::min(c / (2.0 * std::sqrt(k * m)), static_cast<double>(std::numeric_limits<float>::max())) };
         return spring_config { std::chrono::milliseconds { static_cast<std::chrono::milliseconds::rep>(milliseconds) }, static_cast<float>(fraction), rest_threshold };
     }
+
+    // 처음 끝난 시각이다. `started`부터 `transition_frame` 간격으로 재어 `spring_finished`가 처음 참인 시각을 답한다.
+    //  - 앱이 끝을 시각 하나로 예고하려고 쓴다 (`next_tick`). 끝 판정의 척도는 줄기만 하므로 처음 끝난 frame이 하나로 정해진다.
+    //  - `limit` 안에 끝나지 않으면 `started + limit`이다. 기본 10초면 평가는 많아야 625번이다.
+    //  - 잘못된 값이면 시작한 적도 없이 끝난 것이라 `started`다.
+    [[nodiscard]] inline std::chrono::steady_clock::time_point spring_rest_time(const spring& value, const std::chrono::milliseconds limit = std::chrono::seconds { 10 }) noexcept
+    {
+        if (spring_detail::usable(value) == false)
+            return value.started;
+        const std::chrono::steady_clock::time_point last { value.started + std::max(limit, std::chrono::milliseconds { 0 }) };
+        for (std::chrono::steady_clock::time_point at { value.started }; at < last; at += transition_frame)
+        {
+            if (spring_detail::evaluate(value, spring_detail::elapsed_seconds(value, at)).finished)
+                return at;
+        }
+        return last;
+    }
 }
