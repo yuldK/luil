@@ -189,6 +189,10 @@ namespace luil {
         menu_bar,
         // 메뉴 막대의 항목 하나다. owner는 항목 키다 (`menu_bar_item_config::key`).
         menu_bar_item,
+        // 마크업이 지은 요소다 (`build_ui_markup`, docs/markup-design.md). owner는 마크업의 id이고, 반복 안이면 단위 구분자(U+001F)와
+        // 항목 key를 잇는다. kind 속성을 적은 요소는 이 kind가 아니라 그 앱 kind다.
+        //  - 라이브러리 구조 부품이 쓰는 `{none, owner}`와 겹치지 않도록 따로 둔다.
+        markup_node,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

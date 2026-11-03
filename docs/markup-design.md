@@ -5,7 +5,7 @@
 ## 문제
 
 - 화면은 C++로만 짓는다. [hello_app.cpp](../examples/hello/hello_app.cpp) 84~107행은 요소마다 `ui_element_id`·config·길이·액션을 손으로 적는다. 글 하나, 간격 하나를 바꿔도 다시 빌드한다. R5 hot_reload가 "마크업 파일을 저장하면 다음 frame에 반영"하려면 구조를 실행 중에 읽는 길이 먼저 있어야 한다(N3 a).
-- 엄한 마크업 읽기가 없다. core에는 nlohmann(JSON, 스타일 파서가 안쪽에서만 쓴다, `src/CMakeLists.txt` 700~703행), md4c(마크다운, 889~891행), `ui/rich_text_html.cpp`(372행)가 있다. 마지막 것은 남의 HTML을 너그럽게 거르는 읽기라 모르는 요소의 글을 남기고 끝나지 않은 태그에서 조용히 멈춘다([서식 글 교환](rich-edit-exchange-design.md) 73~75행). 틀린 자리를 알려야 하는 화면 정의에는 쓰지 못한다. Skia 꾸러미에도 XML 읽기가 없다.
+- 엄한 마크업 읽기가 없다. core에는 nlohmann(JSON, 스타일 파서가 안쪽에서만 쓴다, `src/CMakeLists.txt` 700~703행), md4c(마크다운, 889~891행), `ui/rich_text_html.cpp`(372행)가 있다. 마지막 것은 남의 HTML을 너그럽게 거르는 읽기라 모르는 요소의 글을 남기고 끝나지 않은 태그에서 조용히 멈춘다([서식 글 교환](rich-edit-exchange-design.md) 73~75행). 틀린 자리를 알려야 하는 화면 정의에는 쓰지 못한다. Skia 꾸러미에는 SVG 모듈 안에서만 쓰이는 비공개 XML 읽기가 있고(`svg_decode.cpp`가 쓰는 `SkSVGDOM`) 범용 XML 읽기 API는 공개되지 않는다.
 - 이름으로 요소를 짓는 표가 없다. 요소는 대부분 `xxx_element(ui_element_id, xxx_config)`이지만 `check_element`는 config의 `owner`만 받고 kind를 스스로 정한다([check_element.h](../include/luil/ui/check_element.h) 33·76행). config에는 값 칸과 함수 칸이 섞여 있다. `panel_config::background`는 팔레트 선택자다([panel_element.h](../include/luil/ui/panel_element.h) 31행).
 - 길이는 담을 때 정한다([stack_element.h](../include/luil/ui/stack_element.h) 98행). 원하는 크기를 답하는 요소(label 75행, 글자 단추 `dialog_elements.h` 209행, check 90행, stack 139행)만 맞춤(`add_fit`)으로 담는다. panel·progress·wrap은 답하지 않아 맞춤이면 0이 된다.
 - 앞 노드가 R4 markup에 남긴 약속이 넷이다. [스타일 읽기](style-sheet-design.md) 228행(소스만 더하고 오류 꼴을 맞춘다), [줄 나눔](line-break-design.md) 166행과 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md) 245행(정책 칸), [서식 있는 글 편집](rich-edit-design.md) 210행과 [서식 글 교환](rich-edit-exchange-design.md) 127행(서식 글의 꼴), [파일 감시](file-watch-design.md) 234행(감시는 그 API만)이다. 이 문서와 바인딩 문서가 닫는다(약속 절).
@@ -80,13 +80,14 @@ root->add(std::move(built.element));
 
 **문법은 XML 1.0의 엄한 부분집합이다.** 받는 글은 모두 바른 XML이라 XML 편집기와 검사 도구가 같은 글을 받는다. 받지 않는 구문은 조용히 넘기지 않고 오류다(오류 종류는 바인딩 문서).
 
-- UTF-8만 받는다. 맨 앞의 BOM은 건너뛰고 깨진 UTF-8은 `syntax`다. 맨 앞의 XML 선언(`<?xml version="1.0" encoding="UTF-8"?>`)은 받고 그 밖의 처리 지시는 `unsupported`다.
-- `<!DOCTYPE`, CDATA, 이름 공간(이름 속의 `:`)은 `unsupported`다. DTD가 없으므로 글이 정하는 엔티티도 바깥 엔티티도 없다.
-- 엔티티는 `&amp;`·`&lt;`·`&gt;`·`&quot;`·`&apos;`와 숫자 참조(`&#10;`, `&#x41;`)뿐이다. 0, surrogate, U+10FFFF 밖의 숫자는 `syntax`다.
-- 주석(`<!-- -->`)은 요소 사이 어디든 둔다. 요소 사이의 공백뿐인 글은 버린다. 공백이 아닌 글은 글을 받는 요소 안에서만 된다. 1단계에는 그런 요소가 없어 `invalid_child`다.
+- UTF-8만 받는다. 맨 앞의 BOM은 건너뛰고 깨진 UTF-8은 `syntax`다. 맨 앞의 XML 선언(`<?xml version="1.0" encoding="UTF-8"?>`)은 받고 그 밖의 처리 지시는 `unsupported`다. 선언은 `version`(1.0만), `encoding`(UTF-8만, 대소문자 무시), `standalone`(`yes`·`no`) 차례이고, 1.0 밖의 version과 UTF-8 밖의 encoding은 `unsupported`, 그 밖에 틀린 선언과 맨 앞이 아닌 선언은 `syntax`다.
+- `<!DOCTYPE`, CDATA, 이름 공간(이름 속의 `:`, `xmlns` 속성)은 `unsupported`다. DTD가 없으므로 글이 정하는 엔티티도 바깥 엔티티도 없다.
+- 엔티티는 `&amp;`·`&lt;`·`&gt;`·`&quot;`·`&apos;`와 숫자 참조(`&#10;`, `&#x41;`)뿐이다. 문자 참조와 본문 글자는 XML 1.0 Char 범위(U+0009·000A·000D·0020~D7FF·E000~FFFD·10000~10FFFF)만 받고 그 밖(`&#0;`, `&#1;`, surrogate, U+FFFE·FFFF, U+10FFFF 밖)은 `syntax`다. XML이 막는 주석 속 `--`, 글 속 `]]>`, 속성 값의 `<`도 `syntax`다.
+- 주석(`<!-- -->`)은 요소 사이 어디든 둔다. 요소 사이의 공백뿐인 글(XML의 S: 공백·탭·CR·LF)은 버린다. U+00A0과 참조로 적은 공백(`&#32;`)은 글이다. 공백이 아닌 글은 글을 받는 요소 안에서만 된다. 1단계에는 그런 요소가 없어 `invalid_child`다.
 - 속성 값은 큰따옴표나 작은따옴표로 감싼다. 같은 속성이 둘이면 `duplicate_attribute`다. 속성 값의 줄 바꿈과 탭은 XML 규칙대로 공백 하나가 된다. 글 속의 줄 바꿈은 `&#10;`로 적는다.
 - 뿌리 요소는 하나이고 어휘의 요소다. `for`·`if`·`unless`·`gap`·`slot`은 뿌리가 되지 못한다. 뿌리 뒤에는 공백과 주석만 온다.
-- 줄은 LF, CR LF, CR을 모두 한 줄 바꿈으로 센다. 열은 줄 처음부터 센 코드 포인트다(1부터).
+- 줄은 LF, CR LF, CR을 모두 한 줄 바꿈으로 센다. 열은 줄 처음부터 센 코드 포인트다(1부터). 맨 앞의 BOM은 열로 세지 않고 `offset`에는 든다. 문법 오류(`syntax`·`unsupported`·`too_large`)는 형제를 다 읽기 전이라 `path`가 비고 줄·열이 자리를 말한다. 닫지 않은 요소는 그 여는 태그를, 닫지 않은 값·주석은 그 속성·주석의 처음을 가리킨다.
+- 읽기와 어휘 확인은 재귀하지 않는다. 열린 요소를 목록으로 쥐어, 앱이 `max_depth`를 크게 올려도 호출 깊이가 글을 따라 깊어지지 않는다.
 
 **어휘(1단계).** 요소 이름은 C++ 클래스 이름에서 `_element`를 떼고 camelCase로 쓴다. 속성 이름은 config 필드 이름을 camelCase로 쓴다(`font_size` → `fontSize`). enum 값도 열거자를 camelCase로 쓴다(`toggle_switch` → `toggleSwitch`, `hangul_words` → `hangulWords`). [스타일 읽기](style-sheet-design.md) 116행과 같은 규칙이고, 이름과 C++ 값의 짝은 어휘 소스의 constexpr 표가 쥔다. 실행 중 이름 바꾸기는 없다.
 
@@ -95,7 +96,7 @@ root->add(std::move(built.element));
 | `stack` | `stack_element` | kind 속성·`markup_node` | `direction`(`column`·`row`), `spacing`, `padding`, `crossAlignment`, `mainAlignment` | 여럿, 자리 속성 | 답한다 |
 | `wrap` | `wrap_element` | kind 속성·`markup_node` | `itemWidth`, `itemHeight`, `spacing`, `lineSpacing` | 여럿 | 답하지 않는다 |
 | `panel` | `panel_element` | kind 속성·`markup_node` | `background`(역할), `cornerRadius`, `shadow` | 하나 | 답하지 않는다 |
-| `label` | `label_element` | kind 속성·`markup_node` | `text`, `fontSize`, `weight`, `slant`, `color`, `background`, `padding`, `align`, `elide`, `wrap`, `lineBreak`, `maxLines` | 없음 | 답한다 |
+| `label` | `label_element` | kind 속성·`markup_node` | `text`, `fontSize`, `fontWeight`, `slant`, `color`, `background`, `padding`, `align`, `elide`, `wrap`, `lineBreak`, `maxLines` | 없음 | 답한다 |
 | `textButton` | `text_button_element` | kind 속성·`markup_node`, `id` 꼭 | `text`, `visual`, `defaultButton`, `selected`, `action`, `argument` | 없음 | 답한다 |
 | `check` | `check_element` | `check` 고정, `id` 꼭 | `style`, `label`, `checked`, `mixed`, `action`, `argument` | 없음 | 답한다 |
 | `progress` | `progress_element` | kind 속성·`markup_node` | `value`, `thickness` | 없음 | 답하지 않는다 |
@@ -103,19 +104,22 @@ root->add(std::move(built.element));
 | `slot` | 앱이 짓는다 | 앱 요소의 것 | `name` | 없음 | 자리를 적어야 한다 |
 | `for`·`if`·`unless` | 구조 | 없다 | `each`·`as`·`key`, `test` | 여럿 | 부모 자리로 펼친다 |
 
-- 공통 속성은 `id`, `kind`(`check` 밖), `enabled`, `visible`, `tooltip`, `accessName`이다. 각각 `ui_element`의 `set_enabled`·`set_visible`·`set_tooltip`·`set_access_name`(ui_element.h 1217~1237행)으로 가고 `check`의 `tooltip`은 `check_config::tooltip`이다. `textButton`은 손 모양 커서를 건다(hello와 같다).
+- 공통 속성은 `id`, `kind`(`check` 밖), `enabled`, `visible`, `tooltip`, `accessName`이다. 각각 `ui_element`의 `set_enabled`·`set_visible`·`set_tooltip`·`set_access_name`(ui_element.h 1217~1237행)으로 가고 `check`의 `tooltip`은 `check_config::tooltip`이다. `textButton`은 손 모양 커서를 건다(hello와 같다). `gap`·`slot`·구조 요소는 공통 속성을 받지 않는다.
+- `id`는 `[A-Za-z0-9_.-]`로 1~64바이트이고, `kind`·`action`·slot의 `name`은 `[A-Za-z_][A-Za-z0-9_.-]*`로 64바이트까지다. 같은 `id`를 글에 두 번 적으면 반복 안팎을 가리지 않고 `duplicate_id`다. 반복은 한 번 적은 `id`를 항목마다 key로 가르므로, 형제 반복 둘이 같은 `id`와 같은 key를 내어 겹치는 일을 읽을 때 막는다.
+- `label`의 굵기는 `fontWeight`다. 필드 이름 `weight`가 stack 안의 자리 속성 `weight`(유연 항목)와 겹쳐 이름 규칙의 예외로 둔다(`fontSize`의 짝).
 - `stack`의 `padding`은 수 하나(네 변)이고 `paddingLeft`·`paddingTop`·`paddingRight`·`paddingBottom`이 한 변을 고친다. 이름 없는 수를 늘어놓지 않는다(`stack_item` 주석, stack_element.h 57~63행의 까닭). `label`의 `padding`은 좌우 여백 수 하나다(label_element.h 37행).
-- 수는 십진 꼴(부호, 소수점, 지수)이고 유한해야 한다. 길이·간격·크기는 0 이상이고 `fontSize`·`thickness`는 0보다 크다. 적은 글자의 범위는 읽을 때, 바인딩한 값은 요소의 규칙(progress는 자른다)으로 다룬다. 참거짓은 `true`·`false`다.
+- 수는 십진 꼴 `[+-]?(숫자+(.숫자*)?|.숫자+)([eE][+-]?숫자+)?`이고 앞뒤 공백을 받지 않는다. 유한하고 float에 들어야 한다. 로캘을 보지 않고 직접 읽는다(Android NDK의 libc++에는 실수 `from_chars`가 없고 `strtod`는 소수점이 로캘을 따른다). 길이·간격·크기는 0 이상(음수는 `-0`까지 막는다)이고 `fontSize`·`thickness`·`weight`는 0보다 크다. `value`·`shadow`는 0~1, `maxLines`는 0 이상의 정수다. 적은 글자의 범위는 읽을 때, 바인딩한 값은 요소의 규칙(progress는 자른다)으로 다룬다. 참거짓은 `true`·`false`다.
+- 바인딩의 꼴은 읽을 때 본다(바인딩 문서 규칙). `{a.b}`의 `a`는 열린 반복의 `as`여야 하고, 수·참거짓 속성은 값 전체가 이름 하나일 때만 바인딩이다. 틀리면 `invalid_value`다.
 - `lineBreak`·`selected`는 적지 않으면 비운다(`std::optional`). `lineBreak`가 비면 배치 문맥의 앱 스타일 `text.wrap_policy`를 따른다([줄 나눔 정책 스타일 키](wrap-policy-key-design.md) 245행).
 - 내지 않는 칸: 함수 칸(선택자, factory, 스크롤 액션), `text_button_config::glyph`, `panel_config::border`(테 색은 `palette_role`에 없는 역할이다)와 `border_sides`. 필요하면 다음 단계에 행으로 더한다.
 
 **자리 속성.** `stack`의 자식은 `stack_item` 필드 이름 그대로 `length`·`weight`·`crossLength`·`minimum`·`maximum`·`fit`을 받는다(stack_element.h 67~94행).
 
 - `weight`가 있으면 유연 항목, `length`면 고정 항목이다. 둘 다 없으면 맞춤이다.
-- 맞춤은 원하는 크기를 답하는 요소(표의 "맞춤" 칸)만 된다. 답하지 않는 요소에 `length`도 `weight`도 없으면 읽을 때 `missing_length`다. 0으로 접혀 보이지 않는 자식을 만들지 않는다. `slot`은 앱 요소가 답하는지 읽기가 모르므로 늘 자리를 적는다(`fit="true"`도 된다).
-- `minimum`·`maximum`은 `weight`와 함께일 때만 받는다. `fit`과 `length`·`weight`를 함께 적으면 `invalid_value`다.
-- `stack` 밖(뿌리, `panel`의 자식, `wrap`의 자식)의 자리 속성은 `unknown_attribute`다. 뿌리의 자리는 앱이 `arrange`로 준다.
-- 구조 요소(`for`·`if`·`unless`)는 자리를 갖지 않는다. 그 자식들이 부모 `stack`의 자식 자리에 차례로 들고 자리 속성은 그 자식들이 적는다.
+- 맞춤은 원하는 크기를 답하는 요소(표의 "맞춤" 칸)만 된다. 답하지 않는 요소에 `length`도 `weight`도 없으면 읽을 때 `missing_length`다. 0으로 접혀 보이지 않는 자식을 만들지 않는다. `slot`은 앱 요소가 답하는지 읽기가 모르므로 늘 자리를 적는다(`fit="true"`도 된다). 답하지 않는 요소의 `fit`과 `fit="false"`는 자리가 아니다.
+- `minimum`·`maximum`은 `weight`와 함께일 때만 받는다. `fit`과 `length`·`weight`를 함께 적거나 `length`와 `weight`를 함께 적으면 `invalid_value`다.
+- `stack` 밖(뿌리, `panel`의 자식, `wrap`의 자식)의 자리 속성은 `unknown_attribute`다. 뿌리의 자리는 앱이 `arrange`로 주고, panel·wrap의 자식은 그 컨테이너가 크기를 주므로 자리 없이 선다.
+- 구조 요소(`for`·`if`·`unless`)는 자리를 갖지 않는다. 그 자식들이 부모 `stack`의 자식 자리에 차례로 들고 자리 속성은 그 자식들이 적는다. 구조 요소는 자식을 여럿 받는 `stack`·`wrap` 안에만 두고, `gap`은 구조 요소를 건너 가장 가까운 요소가 `stack`일 때만 된다. `panel`의 내용은 요소나 `slot` 하나다(펼친 수가 frame마다 달라지는 구조 요소는 내용이 되지 못한다).
 
 **색은 역할로만 말한다.**
 
@@ -144,7 +148,7 @@ root->add(std::move(built.element));
 - 길 a: JSON. 요소 하나가 객체(`{"type": "label", "text": "…"}`)이고 자식은 `children` 배열이다. 되는 것: 새 읽기가 없다. core의 nlohmann을 스타일 파서처럼 안쪽에서 쓴다. 대가: 깊은 tree에서 괄호·따옴표·`children`이 화면 구조를 가린다. 주석이 없다(스타일 파서는 RFC 8259 그대로 막는다, [스타일 읽기](style-sheet-design.md) 120행). 의미 오류(모르는 속성)의 줄·열이 어렵다. nlohmann의 SAX 처리기는 자리를 받지 못하고(`sax_parse`에는 lexer가 넘어가지 않는다, `third_party/nlohmann_json/include/nlohmann/detail/input/parser.hpp` 164·180행) 자리는 `JSON_DIAGNOSTIC_POSITIONS`를 켠 DOM에만 있다(`json_sax.hpp` 182·239~246행). 읽기 소스 하나에서만 켜면 ABI 태그 `_dp`로 이름 공간이 갈려(`abi_macros.hpp` 43~46행) 스타일 파서와 겹치지 않지만, 키에는 자리가 없어 값의 자리를 대신 가리킨다. 서식 글은 HTML을 JSON 문자열 안에 이스케이프해 싣는다.
 - 길 b: XML 1.0의 엄한 부분집합(위의 규칙). 되는 것: 요소는 요소, 속성은 config 칸, 자식은 자식이라 tree가 글 모양 그대로다. 주석이 있다. 줄·열을 읽는 자리에서 바로 센다. XML 편집기가 강조하고 짝을 맞춘다. 서식 글이 내용(`<b>`·`<a>`)으로 들어가 `rich_text_from_html`과 그대로 맞는다. 대가: core에 엄한 읽기(약 450줄)와 그 시험을 새로 짓는다. 스타일(JSON)과 형식이 둘이 된다.
 - 길 c: 자체 중괄호 문법(QML꼴, `stack { label { text: "…" } }`). 되는 것: 가장 짧고 읽기 좋다. 대가: 낱말 읽기, 글·수 표기, 이스케이프를 모두 새로 정해 문서로 남긴다. 편집기 지원이 없다. 가장 크다.
-- 권장: b. 화면은 깊은 tree이고 스타일은 얕은 키 표라 모양이 다르다. 대가: 위의 새 읽기와 두 형식이다. **승인 필요.**
+- 권장: b. 화면은 깊은 tree이고 스타일은 얕은 키 표라 모양이 다르다. 대가: 위의 새 읽기와 두 형식이다. 승인: 길 b (2026-11-03).
 
 **2. 이름.** 질문: `markdown_element.h`와 섞이지 않는 이름을 무엇으로 하는가.
 
@@ -161,16 +165,24 @@ root->add(std::move(built.element));
 - 서식 글(`richText`)은 꼴만 정하고(위) 2단계에 펼친다. `text_format`을 `text_span`으로 옮기는 일이 `rich_text_presenter` 안에만 있고(`rich_text.cpp` 140~165행) 읽기 전용 `text_area_element`도 `text_input_view`를 받는다(text_area_element.h 182행). 1단계는 바인딩 모델을 먼저 굳힌다.
 - 권장: a. 대가: 위의 slot이다. 권장대로 진행.
 
+**구현 때 정한 것(2026-11-03).** 결정 절의 길을 바꾸지 않는 세부라 규칙 절에 적었다.
+
+- `label`의 굵기 속성은 `fontWeight`다. 까닭: `weight`를 그대로 두면 label을 stack의 유연 항목으로 담을 수 없다.
+- 구조 요소는 `stack`·`wrap` 안에만, `panel`의 내용은 요소나 `slot` 하나다. 까닭: panel 안의 `if`를 받으면 내용이 0이나 둘이 될 수 있다.
+- 같은 `id`는 글 전체에서 한 번이다(바인딩 문서의 "반복 밖에서"보다 엄하다). 까닭: 반복 안을 풀면 형제 반복 둘의 owner가 key에 따라 겹친다.
+- 읽기와 어휘 확인은 재귀하지 않는다. 까닭: 재귀하면 `max_depth`를 크게 올린 앱이 깊은 글에서 호출 스택을 넘친다.
+
 ## 플랫폼
 
 **Win32.** `src/win32`를 고치지 않는다. 펼친 요소는 지금의 요소라 UIA·IME·DPI가 그대로다.
 
 **Android.** Java 소스는 0줄이고 JNI도 부르지 않는다. 읽기·펼치기는 core라 그대로 돌고 `luil_core_tests`가 기기에서 돈다. 글을 얻는 것은 앱의 몫이다. 앱 전용 폴더의 파일은 표준 입출력으로 읽고, APK assets는 앱이 NDK의 `AAssetManager`(C API)로 읽는다. luil은 그 관리자를 내지 않는다([스타일 읽기](style-sheet-design.md) 결정 6과 같다). 모바일 데모는 글을 `embed_binary.cmake`로 실행 파일에 싣는다. Android의 luil에는 접근성 계층이 없어 접근성 규칙은 Win32 UIA만이다. unsupported인 부분은 없다.
 
-**빌드.** 길 b면 새 소스 셋(`src/ui/ui_markup_read.cpp` 엄한 읽기, `ui_markup_vocabulary.cpp` 어휘 표, `ui_markup_build.cpp` 펼치기)을 `luil_core` 목록에 더할 뿐 링크가 바뀌지 않는다. 어휘 소스는 스타일 키 표 헤더를 읽으려고 비공개 생성 include를 쓴다. 이미 `luil_core` PRIVATE에 있다(`src/CMakeLists.txt` 685~688행). 새 공개 헤더는 `include/luil/luil.h`에 더한다. 길 a면 nlohmann 링크는 그대로이고 `JSON_DIAGNOSTIC_POSITIONS`를 읽기 소스 한 곳에서만 켠다.
+**빌드.** 길 b면 새 소스 셋(`src/ui/ui_markup_read.cpp` 엄한 읽기와 `describe`, `ui_markup_vocabulary.cpp` 어휘 표, 바인딩 노드의 `ui_markup_build.cpp` 펼치기, 셋이 함께 쓰는 비공개 헤더 `ui_markup_document.h`)을 `luil_core`의 `ui/markup` 목록에 더할 뿐 링크가 바뀌지 않는다. 어휘 소스는 스타일 키 표 헤더를 읽으려고 비공개 생성 include를 쓴다. 이미 `luil_core` PRIVATE에 있다(`src/CMakeLists.txt` 685~688행). 새 공개 헤더는 `include/luil/luil.h`에 더한다. 길 a면 nlohmann 링크는 그대로이고 `JSON_DIAGNOSTIC_POSITIONS`를 읽기 소스 한 곳에서만 켠다.
 
 ## 다른 노드와의 약속
 
+- **markup_binding(R4, 같은 줄 다음 노드).** 이 노드는 읽기 쪽을 한다. `ui_markup.h`의 `ui_markup_limits`·`ui_markup_document`·`ui_markup_error_kind`(펼칠 때 종류까지 한 벌)·`ui_markup_error`·`describe`(모든 종류)·`ui_markup_parse_result`·`parse_ui_markup`, kind `markup_node`, 읽을 때의 바인딩 꼴 확인이다. 틀의 속은 비공개 헤더 `src/ui/ui_markup_document.h`에 있다: 노드 목록(자식은 부모 뒤), 속성마다 적은 값이나 바인딩 조각과 그 자리, 표의 행과 그 행이 값을 거는 `apply`, 자리 방식(`placement`). 다음 노드가 `ui_markup_value`·`ui_markup_scope`·`ui_markup_action`·`ui_markup_context`·`ui_markup_build_result`·`build_ui_markup`을 헤더 끝에 더하고, 속성을 행 순서대로(바인딩은 찾은 값으로) 다시 걸어 요소를 짓는다. 같은 화면 견줌·견본 픽셀 시험과 데모 칸도 그 노드다.
 - **style_sheet(R2, 같은 줄).** [스타일 읽기](style-sheet-design.md) 228행을 닫는다. 이 노드는 소스만 더하고 길 b면 nlohmann도 쓰지 않는다. 오류는 같은 꼴(종류 enum, 자리, 영문 한 줄 `describe`)에 줄·열을 더하고 형은 따로다(`ui_markup_error`). 자리는 점 대신 요소 이름을 `/`로 잇는다. 같은 줄의 "결정 5의 길 b가 markup에서 필요해지면"과 173행의 "첫 소비자"는 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 이미 길 b를 했으므로 이 노드가 질 것이 없다. `palette_role` 이름은 그 노드의 키 표를 읽는다.
 - **uax14·wrap_policy(R1·R2, 같은 줄).** [줄 나눔](line-break-design.md) 166행과 [정책 키](wrap-policy-key-design.md) 245행을 닫는다. `label`의 `lineBreak`는 `std::optional` 칸을 비우거나 채운다. 비면 측정 문맥의 `line_break_for`가 앱 스타일을 따른다. 1단계 마크업은 스타일의 다른 칸을 읽지 않아 `measure_context::app_style()`을 쓸 일이 없다.
 - **rich_edit·교환(R3, 같은 줄).** [서식 있는 글 편집](rich-edit-design.md) 210행과 [서식 글 교환](rich-edit-exchange-design.md) 127행의 꼴은 위의 "서식 글의 꼴"로 정한다. 펼치기는 2단계로 미룬다(결정 3의 까닭). 그때 `rich_text.*`에 `text_format`을 구간으로 옮기는 공개 도우미를 하나 더한다(같은 줄의 파일이다).
@@ -184,14 +196,14 @@ root->add(std::move(built.element));
 
 자동 test.
 
-- `tests/ui_markup_read_tests.cpp`(`luil_core_tests`, Windows와 Android 기기, 새 파일): 바른 글의 요소·속성·주석·엔티티·숫자 참조, BOM과 XML 선언. 막는 글마다 종류와 줄·열. 닫지 않은 태그, 짝이 틀린 닫기, 따옴표 없는 값, 겹친 속성, 모르는 엔티티, `<!DOCTYPE`·CDATA·처리 지시·이름의 `:`(unsupported), 깨진 UTF-8, 뿌리 둘, 뿌리 뒤의 글이다. CR LF·CR 줄과 한글이 든 줄의 열(코드 포인트). 한도 셋(`max_bytes`·`max_depth`·`max_nodes`)이 `too_large` 하나로 멈추는지.
-- `tests/ui_markup_tests.cpp`(`luil_core_tests`, 새 파일): 어휘. 모르는 요소·속성, 허용 밖 enum 이름, `#rrggbb`, 범위 밖 수, `panel`의 둘째 자식, `missing_length`(panel·progress·wrap·slot을 자리 없이), `fit`과 `length`를 함께, `stack` 밖의 자리 속성. `palette_role` 이름이 키 표의 행과 같은 수·같은 값인지.
-- 같은 화면 견줌(같은 파일): 같은 화면을 C++로 짓고 마크업으로 펼쳐 같은 자리에 배치한 두 `ui_tree`를 pre-order로 돌며 bounds·`visible`·`enabled`·접근 역할·이름이 같은지, 마크업 쪽 `unarranged()`·`duplicate_ids()`가 비었는지. 속성 표의 행마다 기본값이 아닌 값을 적어 C++로 같은 값을 준 요소와 같은지(행이 엉뚱한 필드를 가리키는 것을 잡는다). C++20은 config의 필드를 셀 수 없어 config에 새 필드가 늘어난 것은 잡지 못한다. 어휘 표의 머리 주석이 그 짝을 적는다.
-- 견본 픽셀(`tests/raster_probe.h`): `panel`의 `background` 역할이 그 팔레트 색이고 고대비에서는 시스템 색인지.
+- `tests/ui_markup_read_tests.cpp`(`luil_core_tests`, Windows와 Android 기기, 새 파일): 바른 글의 요소·속성·주석·엔티티·숫자 참조, BOM과 XML 선언. 막는 글마다 종류와 줄·열. 닫지 않은 태그, 짝이 틀린 닫기, 따옴표 없는 값, 겹친 속성, 모르는 엔티티, `<!DOCTYPE`·CDATA·처리 지시·이름의 `:`·`xmlns`(unsupported), 깨진 UTF-8, XML Char 밖의 글자와 숫자 참조, 뿌리 둘, 뿌리 뒤의 글이다. CR LF·CR 줄과 한글·이모지가 든 줄의 열(코드 포인트). 한도 셋(`max_bytes`·`max_depth`·`max_nodes`)이 `too_large` 하나로 멈추는지. 신뢰하지 않는 글: 바른 견본의 모든 앞부분(잘린 글), 망가뜨린 글 3000개(정해진 의사 난수), 깊이 10만, 1 MiB에 가까운 글, 한 요소의 속성 6만 개가 멈추거나 넘치지 않고(제곱 시간도 쓰지 않고) 오류가 자리 순인지.
+- `tests/ui_markup_tests.cpp`(`luil_core_tests`, 새 파일): 어휘. 모르는 요소·속성, 허용 밖 enum 이름, `#rrggbb`, 범위 밖 수, `panel`의 둘째 자식, `missing_length`(panel·progress·wrap·slot을 자리 없이), `fit`과 `length`를 함께, `stack` 밖의 자리 속성. `palette_role` 이름이 키 표의 행과 같은 수·같은 값인지. 속성 표의 행마다 기본값이 아닌 값을 적어 C++로 같은 값을 준 config와 같은지(비공개 헤더의 `ui_markup_literal_values`). 읽을 때의 바인딩 꼴, 필수 속성, id·이름 꼴, 겹친 id.
+- 같은 화면 견줌(같은 파일, 바인딩 노드): 같은 화면을 C++로 짓고 마크업으로 펼쳐 같은 자리에 배치한 두 `ui_tree`를 pre-order로 돌며 bounds·`visible`·`enabled`·접근 역할·이름이 같은지, 마크업 쪽 `unarranged()`·`duplicate_ids()`가 비었는지. 속성 표의 행마다 기본값이 아닌 값을 적어 C++로 같은 값을 준 요소와 같은지(행이 엉뚱한 필드를 가리키는 것을 잡는다). C++20은 config의 필드를 셀 수 없어 config에 새 필드가 늘어난 것은 잡지 못한다. 어휘 표의 머리 주석이 그 짝을 적는다.
+- 견본 픽셀(`tests/raster_probe.h`, 바인딩 노드): `panel`의 `background` 역할이 그 팔레트 색이고 고대비에서는 시스템 색인지.
 - 기존 kind 이름 전수 test(`tests/ui_inspect_tests.cpp`, `tests/ui_element_tests.cpp`)가 `markup_node`를 받는지.
 - `luil_umbrella_header`, `luil_core_portability`, `luil_source_style`, `luil_default_text`.
 
-데모. 상태를 label로 그려 `luil-uia`로 되읽는다.
+데모(바인딩 노드). 상태를 label로 그려 `luil-uia`로 되읽는다.
 
 - 견본 묶음 `examples/demo/markup_sample.h`(새 파일, 두 데모와 page test가 함께 쓴다, `style_sheet_sample.h`의 선례)와 견본 글 `examples/demo/assets/markup_sample.xml`(데모 빌드가 `embed_binary.cmake`로 싣는다)이다.
 - 데스크톱 테마 페이지의 "스타일 파일" 묶음 아래에 "마크업" 묶음을 둔다. 둘 다 R5 hot_reload가 다시 읽을 파일이라 한 자리에 둔다. 묶음 안의 가지가 견본 글을 펼친 것이다. label `markup-count`("누른 횟수 0"), 단추 `markup-more`, 체크 `markup-list`, 반복 단추 셋(`markup-item`과 key), slot `markup-search`(C++가 짓는 한 줄 칸)다. 가지 밖(C++)에 단추 `markup-reload`("다시 읽기")·`markup-sample-unknown`("견본: 모르는 속성")·`markup-sample-broken`("견본: 닫지 않은 태그")·`markup-sample-value`("견본: 없는 값")와 label `markup-status`를 둔다.

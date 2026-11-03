@@ -112,6 +112,7 @@
 #include "luil/ui/ui_image.h"
 #include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_markup.h"
 #include "luil/ui/undo_commands.h"
 #include "luil/ui/undo_stack.h"
 #include "luil/ui/ui_platform.h"

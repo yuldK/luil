@@ -121,6 +121,8 @@ add_executable(luil_core_tests
     ui_element_tests.cpp
     ui_inspect_tests.cpp
     ui_interaction_tests.cpp
+    ui_markup_read_tests.cpp
+    ui_markup_tests.cpp
     ui_style_json_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp

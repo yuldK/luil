@@ -159,6 +159,14 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/ui_inspect.cpp
     "${public_headers}/ui/ui_inspect.h")
 
+# 화면 마크업이다 (docs/markup-design.md). 엄한 XML 읽기와 어휘 표가 틀을 짓는다.
+# 어휘는 스타일 키 표(비공개 생성 헤더)의 역할·굵기 이름을 그대로 읽는다.
+luil_add_source_filter(luil_core_files "ui/markup"
+    ui/ui_markup_document.h
+    ui/ui_markup_read.cpp
+    ui/ui_markup_vocabulary.cpp
+    "${public_headers}/ui/ui_markup.h")
+
 # 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
 luil_add_source_filter(luil_core_files "ui/interaction"
     "${public_headers}/ui/text_input_state.h"
