@@ -16,6 +16,7 @@
 - 클릭은 뗄 때의 tree에서 액션을 꺼낸다. 마우스는 `process_release`가 `hit_test`로 찾은 요소의 `run_trigger`이고, 터치는 `finish_touch_tap`이 `live_touch_target`으로 찾은 요소다.
 - 누름과 뗌 사이에 `open == false` frame이 게시되면 클릭이 build 때의 `open`(거짓)의 반대인 `set_open(true)`를 낸다. 닫으려던 누름이 도로 연다. `tests/split_button_element_tests.cpp`의 "Locks the current behaviour of re-pressing the arrow once the closed frame is published"가 지금 동작을 잠갔다.
 - 드롭다운·분할 버튼·메뉴 막대 항목처럼 절대 메시지로 여닫는 요소에 공통이다.
+- 닫힌 frame이 누름보다 **먼저** 오는 순서도 있다. 표면은 닫자는 메시지를 앱 inbox에 먼저 넣고 누름을 입력 inbox에 넣는다. 입력 thread는 받은 사건을 처리하기 전에 최신 tree를 집으므로([ui_interaction.cpp](../src/ui/ui_interaction.cpp)의 입력 루프), 앱이 그 사이 닫힌 frame을 게시했으면 누를 때 요소는 이미 접혀 있다. 그러면 누를 때의 액션도 `set_open(true)`라 도로 연다. 실기기 터치에서 열린 드롭다운과 분할 버튼 화살표를 다시 탭하면 여섯 번 가운데 네 번 열린 채였다. Win32 `WM_LBUTTONDOWN`도 같은 순서라 같은 일이 날 수 있다.
 
 ## 공개 형식
 
@@ -28,7 +29,13 @@
 [[nodiscard]] std::optional<ui_element_id> focus_stop_of(const ui_element_id& id) const;
 ```
 
-controller에는 공개 형식이 늘지 않는다. 비공개 상태에 두 칸이 더해진다. 마우스 누름의 `pressed_open_tree_`와 터치 접촉의 `touch_contact::open_tree`다(아래 X-4, 결정 3).
+```cpp
+// include/luil/ui/ui_events.h (pointer_pressed_event의 마지막 필드, pen 뒤)
+// 이 누름이 popup을 닫았다 (표면이 popup 밖 누름으로 닫자는 메시지를 냈다).
+bool closed_popup { false };
+```
+
+controller에는 공개 형식이 늘지 않는다. 비공개 상태에 네 칸이 더해진다. 마우스 누름의 `pressed_open_tree_`와 터치 접촉의 `touch_contact::open_tree`(아래 X-4, 결정 3), 직전 tree 한 벌인 `prior_tree_`와 `prior_surface_trees_`다(결정 4).
 
 ## 규칙
 
@@ -49,6 +56,9 @@ controller에는 공개 형식이 늘지 않는다. 비공개 상태에 두 칸�
 - 쥔 tree의 액션은 열린 tree가 지은 것이라 `set_open(false)`다. 바깥 누름의 `dismiss`도 `set_open(false)`이고 절대 메시지라 둘이 함께 와도 결과는 닫힘이다. frame이 게시되었든 아니든 같다.
 - 마우스 쪽은 `clear_press`가 지운다(`cancel_pointer_gesture`·드롭 유실도 그것을 부른다). 뗌은 판정 앞에서 `clear_press`를 부르므로 그 전에 지역으로 옮긴다. 터치 쪽은 접촉과 함께 버려진다. 탭 확정 앞에서 `clear_press`가 불리므로 접촉에 둔다. 누름 하나에 요소 하나라 쥐는 tree도 하나다.
 - 펼침을 알리지 않는 요소의 클릭은 지금처럼 뗌 tree의 액션이다. 누르는 동안 바뀐 상태로 실행하는 지금의 계약을 넓게 바꾸지 않는다.
+- 표면은 popup 밖 누름이 실제로 닫았으면(`dismiss_popups`가 참) 그 누름에 `closed_popup`을 싣는다. Win32 마우스 누름(`WM_*BUTTONDOWN`)과 펜·터치 누름(`WM_POINTERDOWN`), Android의 overlay 밖 누름이다. 비클라이언트 누름은 luil 누름을 내지 않아 싣지 않는다.
+- controller는 `set_tree`·`set_surface_trees`가 갈아 끼우기 전의 tree를 한 벌 쥔다. 누를 때 hit 요소가 `left_click`을 갖지만 펼쳐 있지 않고 누름에 `closed_popup`이 있으면, 그 표면의 직전 tree에서 같은 id의 요소를 찾는다. 거기서 `left_click`이 있고 펼쳐 있었으면 직전 tree를 누름 상태에 쥔다. 뗌은 위와 같이 그 tree의 액션(`set_open(false)`)을 낸다.
+- `closed_popup`이 없는 누름은 직전 tree를 보지 않는다. 항목을 골라 닫힌 칸을 다시 누르면 그대로 연다. 직전 tree에서도 접혀 있던 요소(popup이 열린 동안 누른 다른 칸)도 지금처럼 뗌 tree의 액션이라 연다. 결정 2의 길 d를 고르지 않은 까닭이 그대로 지켜진다.
 - 하위 메뉴가 열린 메뉴 항목도 `expanded`를 알린다(`menu_element.cpp`). 그 항목의 클릭은 `open_submenu(key)`라 누를 때의 것이어도 같은 메시지다. 펼친 묶음 상자 머리(`group_element`)도 `expanded`를 알리고 클릭은 누를 때의 `set_collapsed(true)`다. 나무 행의 펼침 칸도 절대 메시지면 같다. 토글 메시지를 쓰는 앱 요소는 누를 때의 상태로 뒤집으므로 이것이 맞다.
 
 ## 결정
@@ -74,10 +84,17 @@ controller에는 공개 형식이 늘지 않는다. 비공개 상태에 두 칸�
 - 길 c: 누를 때 액션을 실행해 나온 `input_action`만 쥔다. 되는 것: 아무것도 가리키지 않는다. 대가: 앱 람다의 부작용이 누를 때 일어나고, 뗌이 다른 자리에서 끝나 클릭이 서지 않아도 이미 일어났다. 문맥(뗌의 자리·수식 키)도 누를 때의 것이 된다.
 - 길 a로 했다. 결정 2의 길 b(모든 클릭이 tree를 쥔다)와 달리 펼친 요소의 누름만 쥐고 나머지 클릭의 뜻은 그대로다.
 
+**4. 닫힌 frame이 누름보다 먼저 오면 어떻게 막는가.** 구현 뒤 실기기 확인에서 나왔다. 질문: 누를 때 이미 접힌 여는 요소가 그 누름이 닫은 popup의 것인지를 무엇으로 아는가.
+
+- 길 a: 표면이 popup을 닫은 누름에 표식(`closed_popup`)을 싣고, controller가 직전 tree 한 벌을 쥐어 그 tree에서 요소가 펼쳐 있었는지 본다. 되는 것: 결정 2의 길 a·결정 3의 길 a와 같은 결로 직전 tree의 액션을 쓴다. 열린 동안 다른 칸을 누르면 그 칸은 그대로 열린다. 표면의 닫힘 순서와 "popup 닫힘은 클릭을 막지 않는다"는 계약은 그대로다. 대가: 공개 필드 하나가 늘고, 직전 tree 한 벌이 늘 메모리에 남는다(다음 교체 때 바뀐다). 닫힘과 누름 처리 사이에 frame이 둘 넘게 게시되면 직전 tree도 이미 닫힌 tree라 이 틈은 남는다.
+- 길 b: 표식만 보고, 닫은 누름이면 접힌 요소의 클릭을 삼킨다. 되는 것: 직전 tree를 쥐지 않는다. 대가: popup이 열린 동안 다른 드롭다운을 누르면 그 칸도 열리지 않는다. 펼침 요소에 한정한 결정 2의 길 d라 그 결정과 어긋난다. popup의 `anchor`는 부모 popup id라 표면은 여는 요소를 모른다.
+- 길 c: 표면이 popup 밖 누름의 닫힘을 앱에 바로 내지 않고 누름에 실어 controller가 누름을 처리할 때 낸다. 되는 것: 닫힘과 누름의 순서가 한 thread에서 정해진다. 대가: 두 host의 닫힘 계약을 바꾼다. Win32 popup 창의 닫힘이 입력 thread를 거쳐야 한다.
+- 길 a로 했다. 고침 범위가 controller와 표면의 표식 한 줄이고 결정 2·3의 방향 안이다.
+
 ## 플랫폼
 
-- **Win32**: 고치는 곳은 controller와 `ui_tree`뿐이다. `window_surface.cpp`의 누름 닫힘은 그대로다.
-- **Android**: 같은 controller라 터치 탭(`finish_touch_tap`)과 마우스 모두 받는다. overlay 밖 누름의 닫힘(`android_app.cpp`)은 그대로다. Java 소스는 없다.
+- **Win32**: 고치는 곳은 controller와 `ui_tree`다. `window_surface.cpp`의 누름 닫힘은 그대로이고 닫았으면 누름에 `closed_popup`만 싣는다(결정 4).
+- **Android**: 같은 controller라 터치 탭(`finish_touch_tap`)과 마우스 모두 받는다. overlay 밖 누름의 닫힘(`android_app.cpp`)은 그대로이고 닫았으면 누름에 `closed_popup`만 싣는다(결정 4). Java 소스는 없다.
 
 ## 다른 노드와의 약속
 
@@ -95,6 +112,7 @@ controller에는 공개 형식이 늘지 않는다. 비공개 상태에 두 칸�
 - 같은 파일: `focus_stop_of`가 자리 자신, 대표, 바깥 묶음 대표, 숨은 가지의 nullopt를 답하는지.
 - `tests/split_button_element_tests.cpp`(luil_core_tests): 잠근 test를 뒤집는다. `open == true` tree에서 누르고 `open == false` tree를 게시한 뒤 떼면 `set_open(false)`다. 게시가 없을 때의 `set_open(false)`는 기존 test가 잠근다. 닫힌 화살표를 누르는 사이 열린 tree가 게시되면 지금처럼 뗌 tree의 것인지도 본다. 화살표에서 Tab·Shift+Tab이 다음 단추로 가고, 열린 동안이면 떠남 훅이 닫는지를 더한다.
 - `tests/dropdown_element_tests.cpp`(luil_core_tests): 드롭다운도 같은 경쟁에서 닫히는지, 게시가 없어도 닫히는지, 닫힌 칸은 여는지. 마우스와 터치 탭 둘 다다.
+- 같은 파일과 `tests/split_button_element_tests.cpp`: 열린 tree 다음 닫힌 tree를 받은 뒤 `closed_popup`을 단 누름이 오면 닫히는지(결정 4), 표식이 없으면 여는지, 표식이 있어도 직전 tree에서 접혀 있던 다른 칸은 여는지.
 - `tests/submenu_tests.cpp`(luil_core_tests): 하위 메뉴를 연 항목의 클릭이 그대로 `open_submenu`인지.
 - 데모: 기존 popups 페이지의 분할 버튼·드롭다운이 시연이다. "저장 메뉴 열림" label을 UIA로 되읽으며 격리 데스크톱에서 화살표를 Expand한 뒤 Collapse한다(화살표는 `expanded`를 알려 Invoke가 아니라 ExpandCollapse로 선다). 다시 누르기의 경쟁 자체는 합성 입력으로 재현하기 어려워 사람 확인이다.
 - 사람 확인: 실제 마우스로 열린 드롭다운·분할 버튼 화살표를 빠르게 다시 눌러 닫히는지, 실기기 터치로 같은 동작, 키보드로 분할 버튼 화살표에서 Tab이 다음 단추로 가는지.

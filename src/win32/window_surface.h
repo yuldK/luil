@@ -493,7 +493,8 @@ namespace luil::win32 {
         // 번역이 됐으면 참이라 호출자가 메시지를 삼킨다.
         //  - `captured`는 이 메시지가 올 때 이 창이 포인터를 잡고 있었는가다. 뗌 처리기는 캡처를 먼저 풀고 부르므로
         //    풀기 전의 값을 넘긴다. 비어 있으면 지금 캡처를 본다.
-        [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter, std::optional<bool> captured = std::nullopt);
+        //  - `closed_popup`은 이 누름이 popup을 닫았는가다. 누름 이벤트에만 싣는다 (`pointer_pressed_event::closed_popup`).
+        [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter, std::optional<bool> captured = std::nullopt, bool closed_popup = false);
         // Ctrl을 누르거나 뗐다. 포인터가 이 창 위에 있으면 그 자리의 이동을 다시 알린다 (`interaction_snapshot::pointer_control`).
         void post_control_move(bool control);
 

@@ -167,7 +167,8 @@ namespace luil {
 
     void interaction_controller::set_tree(std::shared_ptr<const ui_tree> tree)
     {
-        tree_ = std::move(tree);
+        // 물러나는 tree를 한 벌 쥔다. popup을 닫은 누름이 닫힌 frame보다 늦게 오면 그 tree에서 여는 element를 찾는다 (`prior_tree_`).
+        prior_tree_ = std::exchange(tree_, std::move(tree));
         clear_gone_surface_gestures();
 
         // 사라진 element를 가리키는 초점·강조는 새 tree를 받는 즉시 거둔다.
@@ -191,7 +192,8 @@ namespace luil {
 
     void interaction_controller::set_surface_trees(surface_tree_list surfaces)
     {
-        surface_trees_ = std::move(surfaces);
+        // 주 tree와 같이 물러나는 목록을 한 벌 쥔다 (`prior_surface_trees_`).
+        prior_surface_trees_ = std::exchange(surface_trees_, std::move(surfaces));
 
         // 사라진 표면에 매인 몸짓을 **먼저** 거둔다.
         // 아래 hover 재판정이 `snapshot_.drag`를 보므로 이 순서여야 한다 —
@@ -1365,7 +1367,7 @@ namespace luil {
         drag_candidate_ = event.button == pointer_button::left && hit->drag() != nullptr;
         // 펼쳐 있는 element의 클릭은 누를 때의 것이다 (`pressed_open_tree_`). 위의 `cancel_pointer_gesture`가 옛 값을 이미 지웠다.
         if (event.button == pointer_button::left)
-            pressed_open_tree_ = open_press_tree(event.surface, *hit);
+            pressed_open_tree_ = open_press_tree(event, *hit);
         if (event.button == pointer_button::left)
         {
             snapshot_.pressed = hit->id();
@@ -1757,7 +1759,7 @@ namespace luil {
             return {};
         }
         contact.target = hit->id();
-        contact.open_tree = open_press_tree(event.surface, *hit);
+        contact.open_tree = open_press_tree(event, *hit);
         pressed_modifiers_ = contact.modifiers;
         // 누름 관찰은 터치도 누르는 순간이다. 탭이 될지 스크롤이 될지는 아직 모른다.
         std::vector<input_action> actions {};
@@ -3926,14 +3928,38 @@ namespace luil {
         return (*action)(action_context(element.id(), x, y, modifiers));
     }
 
-    std::shared_ptr<const ui_tree> interaction_controller::open_press_tree(const std::u8string& surface, const ui_element& hit) const
+    std::shared_ptr<const ui_tree> interaction_controller::open_press_tree(const pointer_pressed_event& event, const ui_element& hit) const
     {
         // 누를 수 없는 element는 쥘 것이 없다. 접근 정보는 그 뒤에 읽는다 (누름마다 한 번이다).
-        if (hit.action(ui_trigger::left_click) == nullptr || hit.accessibility().expanded != true)
+        if (hit.action(ui_trigger::left_click) == nullptr)
             return {};
+        if (hit.accessibility().expanded == true)
+        {
+            if (event.surface.empty())
+                return tree_;
+            for (const auto& [id, tree] : surface_trees_)
+                if (id == event.surface)
+                    return tree;
+            return {};
+        }
+        // 이 누름이 popup을 닫았는데 element가 접혀 있으면 닫힌 frame이 누름보다 먼저 왔을 수 있다.
+        // 직전 tree에서 펼쳐 있던 element면 그 누름이 닫은 popup을 연 것이라 직전 tree의 액션(`set_open(false)`)을 쓴다.
+        //  - popup을 닫지 않은 누름은 보지 않는다. 항목을 골라 닫힌 칸을 다시 누르면 지금처럼 연다.
+        //  - 직전 tree에서도 접혀 있던 element(열린 동안 누른 다른 칸)는 지금처럼 뗌 tree의 액션이라 연다.
+        if (event.closed_popup == false)
+            return {};
+        std::shared_ptr<const ui_tree> prior { prior_surface_tree(event.surface) };
+        const ui_element* const before { prior != nullptr ? prior->find(hit.id()) : nullptr };
+        if (before == nullptr || before->action(ui_trigger::left_click) == nullptr || before->accessibility().expanded != true)
+            return {};
+        return prior;
+    }
+
+    std::shared_ptr<const ui_tree> interaction_controller::prior_surface_tree(const std::u8string& surface) const
+    {
         if (surface.empty())
-            return tree_;
-        for (const auto& [id, tree] : surface_trees_)
+            return prior_tree_;
+        for (const auto& [id, tree] : prior_surface_trees_)
             if (id == surface)
                 return tree;
         return {};

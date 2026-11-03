@@ -592,19 +592,21 @@ namespace luil::win32 {
         case WM_RBUTTONDOWN:
         case WM_RBUTTONDBLCLK:
         case WM_MBUTTONDOWN:
-        case WM_MBUTTONDBLCLK:
+        case WM_MBUTTONDBLCLK: {
             if (duplicate_pointer_mouse_message())
                 return LRESULT { 0 };
             commit_composition_before_press();
             note_pointer_activity(POINT { GET_X_LPARAM(long_parameter), GET_Y_LPARAM(long_parameter) }, true);
             // 이 표면 위의 누름은 popup 밖 클릭이다.
             // 닫자는 메시지를 내고 클릭 자체는 그대로 진행한다.
-            if (input_dismisses_popups())
-                static_cast<void>(context_.dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+            //  - 닫았으면 누름에 싣는다. 앱이 닫힌 frame을 누름보다 먼저 게시해도 controller가 여는 요소를 다시 열지 않는다
+            //    (menu-focus-fixes-design.md의 X-4).
+            const bool closed_popup { input_dismisses_popups() && context_.dismiss_popups(popup_dismiss_reason::pointer_press_outside) };
             capture_pointer();
-            if (post_pointer_message(message, word_parameter, long_parameter))
+            if (post_pointer_message(message, word_parameter, long_parameter, std::nullopt, closed_popup))
                 return LRESULT { 0 };
             return std::nullopt;
+        }
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
         case WM_MBUTTONUP: {
@@ -1054,7 +1056,7 @@ namespace luil::win32 {
         context_.report_error(error);
     }
 
-    bool window_surface::post_pointer_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter, const std::optional<bool> captured)
+    bool window_surface::post_pointer_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter, const std::optional<bool> captured, const bool closed_popup)
     {
         app_host* const host { context_.host() };
         if (host == nullptr)
@@ -1085,6 +1087,8 @@ namespace luil::win32 {
         std::optional<raw_input_event> event { translate_pointer_message(translated) };
         if (event.has_value() == false)
             return false;
+        if (auto* const pressed { std::get_if<pointer_pressed_event>(&*event) }; pressed != nullptr)
+            pressed->closed_popup = closed_popup;
         // 휠의 점은 위에서 client로 옮겼다. 화면 자리는 이동·뗌만 싣는다.
         if (message != WM_MOUSEWHEEL && message != WM_MOUSEHWHEEL)
         {
@@ -1252,15 +1256,16 @@ namespace luil::win32 {
                 forget();
             return true;
         }
+        // 이 누름이 popup을 닫았는가다. 누름 이벤트에 싣는다 (`pointer_pressed_event::closed_popup`).
+        bool closed_popup { false };
         if (owner.has_value() == false)
         {
             if (message == WM_POINTERDOWN)
             {
                 // 펜·터치도 마우스 누름처럼 조합을 먼저 확정한다.
                 commit_composition_before_press();
-                // 이 표면 위의 누름은 popup 밖 누름이다 (마우스 누름과 같은 규칙).
-                if (input_dismisses_popups())
-                    static_cast<void>(context_.dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+                // 이 표면 위의 누름은 popup 밖 누름이다 (마우스 누름과 같은 규칙). 닫았으면 아래에서 누름에 싣는다.
+                closed_popup = input_dismisses_popups() && context_.dismiss_popups(popup_dismiss_reason::pointer_press_outside);
                 // 접촉이 시작될 때 웹뷰와 luil UI 중 임자를 하나 고른다.
                 if (context_.relay_webview_pointer_input(id_, input))
                 {
@@ -1374,6 +1379,8 @@ namespace luil::win32 {
                 // 펜·손가락으로 끄는 탭도 다른 창에 놓을 수 있다. 포인터 메시지의 자리는 원래 화면 좌표다.
                 //  - 이 길에 온 접촉은 이 창이 받은 것이라 끝날 때까지 이 창이 쥔다 (암묵 캡처).
                 annotate_pointer_event(event, input.info.ptPixelLocation, true);
+                if (auto* const pressed { std::get_if<pointer_pressed_event>(&event) }; pressed != nullptr)
+                    pressed->closed_popup = closed_popup;
                 host->post_raw_input(std::move(event));
             }
         if (type == PT_PEN)

@@ -560,6 +560,25 @@ TEST_CASE("Re-pressing the arrow closes the menu even once the closed frame is p
     REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(1050) })) == described_actions { u8"close" });
 }
 
+TEST_CASE("Re-pressing the arrow closes the menu even when the closed frame arrives before the press", "[ui][split-button][reopen]")
+{
+    // 바깥 누름의 닫힘을 앱이 먼저 처리해 닫힌 frame이 누름보다 먼저 오면 controller가 누름을 받을 때 화살표는 이미 접혀 있다.
+    // 표면이 실은 "popup을 닫았다"(`closed_popup`)로 직전 tree의 펼친 화살표 액션이 나간다 (menu-focus-fixes-design.md의 X-4).
+    luil::interaction_controller controller {};
+    controller.set_tree(make_tree(save_config(true)));
+    controller.set_tree(make_tree(save_config(false)));
+    luil::pointer_pressed_event press { 156.0f, 24.0f, luil::pointer_button::left, at(0) };
+    press.closed_popup = true;
+    static_cast<void>(controller.process(press));
+    REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(50) })) == described_actions { u8"close" });
+
+    // popup을 닫지 않은 누름은 닫힌 tree의 것이라 연다.
+    controller.set_tree(make_tree(save_config(true)));
+    controller.set_tree(make_tree(save_config(false)));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 156.0f, 24.0f, luil::pointer_button::left, at(1000) }));
+    REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(1050) })) == described_actions { u8"open" });
+}
+
 TEST_CASE("Tab from the arrow leaves the split button for the next stop", "[ui][split-button][focus]")
 {
     // 화살표는 묶음의 대표가 아닌 구성원이다. 전에는 Tab이 순서의 처음(본체)으로 갔다 (menu-focus-fixes-design.md의 X-3).

@@ -137,6 +137,11 @@ namespace luil {
         bool alt { false };
         // 펜의 표본 값이다 (`pen_sample`). 마우스·터치는 비어 있다.
         std::optional<pen_sample> pen {};
+        // 이 누름이 popup을 닫았다 (표면이 popup 밖 누름으로 닫자는 메시지를 냈다, menu-focus-fixes-design.md의 X-4).
+        //  - 표면은 닫자는 메시지를 앱에 먼저 내고 누름을 입력 thread에 넣는다. 앱이 닫힌 frame을 먼저 게시하면 controller가
+        //    누름을 받을 때 여는 요소는 이미 접혀 있다. 이 표식이 있으면 controller가 직전 tree에서 그 요소가 펼쳐 있었는지 본다.
+        //  - 끝에 두는 까닭은 `pen`과 같다. 앞 필드만 채운 기존 초기화가 그대로 "닫지 않았다"다.
+        bool closed_popup { false };
     };
 
     struct pointer_released_event

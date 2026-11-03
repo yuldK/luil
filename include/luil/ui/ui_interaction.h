@@ -798,7 +798,11 @@ namespace luil {
         [[nodiscard]] menu_location find_menu(const menu_kinds& kinds) const;
         [[nodiscard]] std::vector<input_action> run_trigger(const ui_element& element, ui_trigger trigger, float x, float y, modifier_keys modifiers);
         // 누른 element가 펼쳐 있고 누를 수 있으면 그 표면의 tree다 (`pressed_open_tree_`). 아니면 비어 있다.
-        [[nodiscard]] std::shared_ptr<const ui_tree> open_press_tree(const std::u8string& surface, const ui_element& hit) const;
+        //  - 누름이 popup을 닫았고(`pointer_pressed_event::closed_popup`) element가 지금 tree에서 접혀 있으면, 직전 tree
+        //    (`prior_tree_`)에서 같은 element가 펼쳐 있고 누를 수 있을 때 그 tree다. 닫힌 frame이 누름보다 먼저 온 경우다.
+        [[nodiscard]] std::shared_ptr<const ui_tree> open_press_tree(const pointer_pressed_event& event, const ui_element& hit) const;
+        // 그 표면의 직전 tree다 (`prior_tree_`, `prior_surface_trees_`). 없으면 nullptr다.
+        [[nodiscard]] std::shared_ptr<const ui_tree> prior_surface_tree(const std::u8string& surface) const;
         // 클릭이 선 뗌의 왼쪽 클릭이다. `pressed_tree`에 같은 id의 element가 있으면 그것의 액션이고, 없으면 `hit`의 것이다.
         [[nodiscard]] std::vector<input_action> run_left_click(const ui_element& hit, const ui_tree* pressed_tree, float x, float y, modifier_keys modifiers);
         // 칸으로 넘기는 창(`scroll_source::step`)의 휠이다. 그런 창이 아니면 nullopt다.
@@ -893,6 +897,12 @@ namespace luil {
         interaction_config config_ {};
         std::shared_ptr<const ui_tree> tree_ {};
         surface_tree_list surface_trees_ {};
+        // `set_tree`·`set_surface_trees`가 갈아 끼우기 전의 tree다 (menu-focus-fixes-design.md의 X-4, 결정 4).
+        //  - 표면은 popup 밖 누름에서 닫자는 메시지를 앱에 먼저 내고 누름을 입력 thread에 넣는다. 앱이 닫힌 frame을 먼저
+        //    게시하면 누름이 올 때 여는 element는 이미 접혀 있어, 그 누름이 닫았는지를 지금 tree로는 알 수 없다.
+        //  - popup을 닫은 누름(`pointer_pressed_event::closed_popup`)만 이 tree를 본다. 다음 교체 때 바뀌므로 한 벌만 남는다.
+        std::shared_ptr<const ui_tree> prior_tree_ {};
+        surface_tree_list prior_surface_trees_ {};
         interaction_snapshot snapshot_ {};
 
         // 텍스트 박스를 누른 채 끄는 중이면 그 박스다.

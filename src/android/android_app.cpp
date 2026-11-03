@@ -1223,12 +1223,15 @@ namespace luil::android {
                     // 겹쳐 그린 popup의 자리면 그 표면 id와 popup 좌표를 싣는다.
                     routed_input routed { router_.route(std::move(event)) };
                     // popup 밖의 누름·휠은 닫는 계기다. 누름·휠 자체는 그대로 간다 (Win32와 같다).
-                    if (routed.pressed_outside)
-                        static_cast<void>(dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+                    //  - 누름이 닫았으면 그 누름에 싣는다. 앱이 닫힌 frame을 누름보다 먼저 게시해도 controller가 여는 요소를
+                    //    다시 열지 않는다 (menu-focus-fixes-design.md의 X-4).
+                    const bool closed_popup { routed.pressed_outside && dismiss_popups(popup_dismiss_reason::pointer_press_outside) };
                     if (routed.wheel_outside)
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::wheel_scrolled));
                     for (raw_input_event& value : routed.events)
                     {
+                        if (auto* const pressed { std::get_if<pointer_pressed_event>(&value) }; pressed != nullptr)
+                            pressed->closed_popup = closed_popup;
                         // 조합 중의 누름은 조합을 먼저 확정한다 (Windows 표면과 같다). 확정 글이 앱 inbox에 먼저
                         // 들어가야 누름·탭이 낸 caret 이동과 끌기 선택이 그 글 위에 선다 — 미루면 caret 이동이
                         // 조합 표시에 가려지고, 조합이 끝날 때의 replace_all이 caret을 조합 끝으로 되돌린다.
