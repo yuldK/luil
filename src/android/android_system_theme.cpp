@@ -40,6 +40,8 @@ namespace luil::android {
         if (jni_failed(env) || field == nullptr)
             return std::nullopt;
         const jint id { env.GetStaticIntField(colors, field) };
+        if (jni_failed(env))
+            return std::nullopt;
 
         const jclass context_type { env.FindClass("android/content/Context") };
         if (jni_failed(env) || context_type == nullptr)
@@ -69,6 +71,8 @@ namespace luil::android {
         if (jni_failed(env) || get_service == nullptr)
             return false;
         const jstring name { env.NewStringUTF("uimode") };
+        if (jni_failed(env) || name == nullptr)
+            return false;
         const jobject manager { env.CallObjectMethod(context, get_service, name) };
         if (jni_failed(env) || manager == nullptr)
             return false;
@@ -145,8 +149,10 @@ namespace luil::android {
         if (jni_failed(env) || view_type == nullptr)
             return;
         const jmethodID get_flags { env.GetMethodID(view_type, "getSystemUiVisibility", "()I") };
+        if (jni_failed(env) || get_flags == nullptr)
+            return;
         const jmethodID set_flags { env.GetMethodID(view_type, "setSystemUiVisibility", "(I)V") };
-        if (jni_failed(env) || get_flags == nullptr || set_flags == nullptr)
+        if (jni_failed(env) || set_flags == nullptr)
             return;
         jint flags { env.CallIntMethod(decor, get_flags) };
         if (jni_failed(env))

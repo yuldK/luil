@@ -66,7 +66,10 @@ namespace luil::android {
             const jfieldID field { env.GetFieldID(type, "orientation", "I") };
             if (jni_failed(env) || field == nullptr)
                 return false;
-            return env.GetIntField(configuration, field) == configuration_landscape;
+            const jint orientation { env.GetIntField(configuration, field) };
+            if (jni_failed(env))
+                return false;
+            return orientation == configuration_landscape;
         }
     }
 
@@ -131,15 +134,24 @@ namespace luil::android {
 
         if (android_get_device_api_level() >= 30)
         {
+            // call_object가 자기 안에서 예외를 거두고 nullptr을 돌려주므로 여기서는 nullptr만 본다.
             const jobject controller { call_object(env, window, "getInsetsController", "()Landroid/view/WindowInsetsController;") };
+            if (controller == nullptr)
+                return;
             const jclass types { env.FindClass("android/view/WindowInsets$Type") };
+            if (jni_failed(env) || types == nullptr)
+                return;
             const jclass controller_type { env.FindClass("android/view/WindowInsetsController") };
-            if (jni_failed(env) || controller == nullptr || types == nullptr || controller_type == nullptr)
+            if (jni_failed(env) || controller_type == nullptr)
                 return;
             const jmethodID system_bars { env.GetStaticMethodID(types, "systemBars", "()I") };
+            if (jni_failed(env) || system_bars == nullptr)
+                return;
             const jmethodID set_behavior { env.GetMethodID(controller_type, "setSystemBarsBehavior", "(I)V") };
+            if (jni_failed(env) || set_behavior == nullptr)
+                return;
             const jmethodID change { env.GetMethodID(controller_type, hide ? "hide" : "show", "(I)V") };
-            if (jni_failed(env) || system_bars == nullptr || set_behavior == nullptr || change == nullptr)
+            if (jni_failed(env) || change == nullptr)
                 return;
             const jint bars { env.CallStaticIntMethod(types, system_bars) };
             if (jni_failed(env))
@@ -208,11 +220,15 @@ namespace luil::android {
             return;
         const jclass type { env.GetObjectClass(activity) };
         const jmethodID request { env.GetMethodID(type, "requestPermissions", "([Ljava/lang/String;I)V") };
+        if (jni_failed(env) || request == nullptr)
+            return;
         const jclass string_type { env.FindClass("java/lang/String") };
-        if (jni_failed(env) || request == nullptr || string_type == nullptr)
+        if (jni_failed(env) || string_type == nullptr)
             return;
         const jstring name { env.NewStringUTF(permission) };
-        const jobjectArray names { name != nullptr ? env.NewObjectArray(1, string_type, name) : nullptr };
+        if (jni_failed(env) || name == nullptr)
+            return;
+        const jobjectArray names { env.NewObjectArray(1, string_type, name) };
         if (jni_failed(env) || names == nullptr)
             return;
         // 요청 번호는 결과 콜백이 쓰는 것이라 우리에게는 뜻이 없다. 하위 16비트 안의 값이면 된다.
