@@ -215,7 +215,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 - **markup(줄 2)**: 마크업이 화면을 선언하면 이 요소의 이름과 config를 쓴다. 이 노드는 마크업 어휘를 정하지 않는다.
 - **검사기**: [inspector-design.md](inspector-design.md) 235줄의 약속을 `draw_frame`을 고치지 않는 것으로 지킨다. 도는 중에 `inspect_at`은 덮개를 답한다.
 - **auto_update(줄 4)**: 닿는 파일이 없다. `app_host.h`·`app_delegate.h`·`ui_platform.h`에 칸을 더하지 않는다.
-- **R5 i18n**: 오른쪽에서 왼쪽으로 쓰는 앱에서 가로 forward의 쪽을 뒤집는 것은 그 노드가 정한다. 지금은 가로 forward가 오른쪽에서 들어온다. **R5 hot_reload**: 다시 읽은 화면으로 바꿀 때 이 요소를 쓸 수 있다.
+- **오른쪽에서 왼쪽으로 쓰는 앱**: 밀기에서는 앱이 forward·backward를 바꿔 넣어 같은 쪽을 얻는다. 확대는 바꾸지 않는다. **R5 hot_reload**: hot_reload는 이 요소를 쓰지 않는다. 다시 읽기는 같은 자리의 포인터를 바꾼다.
 - **데모 파일**: `examples/demo_main.cpp`(이동 441~449줄, `make_frame` 689줄, `next_tick`·`tick` 836~851줄, 사이드바 label 716~722줄 옆), `examples/demo/shell_menu.cpp`·`.h`(보기 메뉴), `examples/mobile_demo/app.cpp`·`app.h`·`device_page.cpp`는 여러 줄이 고친다. 라이브러리 커밋과 데모 연결 커밋을 나누고, 데모 연결은 통합 때 직렬로 쌓는다.
 
 ## 확인

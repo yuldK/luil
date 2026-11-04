@@ -77,9 +77,9 @@ controls.fit_label = u8"Fit";
 | `zoom_view_element.cpp` 438·443·446행 | 축소·확대·맞춤 | 옮긴다. 칸 셋을 더한다(결정 6) |
 | `theme_picker_element.h` 18·20·51행 | 공개 헤더의 한국어 기본값 | 옮긴다. 헤더는 비우고 생성자가 채운다(결정 3) |
 | `combo_box_element.cpp` 164행 | 영어 "Loading suggestions" | 옮긴다. 한국어로 바꾸고 칸을 더한다(결정 5) |
-| `src/theme/ui_theme.cpp` 376행 | 시스템 강조색의 라벨 "시스템" | 그대로 둔다. `src/theme`은 `src/ui`·`src/host`의 비공개 헤더를 include하는 곳이 없는 아래 층이다. 이 헤더를 부르면 층이 뒤집힌다. R5의 표가 아래 층(조사 계획은 `src/text`)에 서면 그때 옮긴다 |
-| `assets/accents.json` 라벨 25개 | 빌드 때 생성되는 카탈로그 자료 | 그대로 둔다. 카탈로그는 소비자가 `LUIL_ACCENT_CATALOG`로 통째 바꾸는 자료이고, 표에 넣을지는 R5 B가 정한다(G6) |
-| `src/host/text_edit_menu.cpp` 25~30행 | 편집 메뉴 여섯 쌍. 이미 `korean` 인자로 OS 언어를 가름 | 그대로 둔다. 한국어 반쪽만 옮기면 영어가 사라진다. R5가 `bool korean`째 표 조회로 바꾼다 |
+| `src/theme/ui_theme.cpp` 376행 | 시스템 강조색의 라벨 "시스템" | R5가 옮겼다. 표가 아래 층(`src/text`)에 서서 층이 뒤집히지 않는다(키 `system_accent_label`) |
+| `assets/accents.json` 라벨 25개 | 빌드 때 생성되는 카탈로그 자료 | R5가 옮겼다. 표가 아니라 카탈로그의 언어 맵으로 두고 `accent_label`로 고른다([흡수 문서](i18n-adoption-design.md) 결정 4) |
+| `src/host/text_edit_menu.cpp` 25~30행 | 편집 메뉴 여섯 쌍 | R5가 옮겼다. `bool korean`이 표 조회가 됐다(키 `text_edit_menu_*`, [흡수 문서](i18n-adoption-design.md) 결정 1) |
 | 캡션·대화 상자 닫기·사이드바·탭 막대·이동 경로·트리 상태 줄·숫자 칸 증감과 지우기 툴팁·오류 글·명령 팔레트 글 | 앱이 주고 비면 없다 | 그대로 둔다(결정 4) |
 | `commands.cpp` 키 이름, 디코드·플랫폼 진단 영어 글, `text_area_element.cpp` 544행 측정 견본 | 단축키 왕복 이름, 개발자용 진단, 글자 높이 재기 | 대상이 아니다 |
 
@@ -87,7 +87,7 @@ controls.fit_label = u8"Fit";
 
 **빈 값 판정.** `std::u8string::empty()`뿐이다. 공백만 있는 글은 앱의 글이다. 판정은 글을 쓰는 자리에서 한다. 정보 막대·줌 단추·콤보 상자는 이름을 짓는 자리에서 `text_or_default`를 부르고, 테마 고르기는 생성자가 `config_`의 빈 칸을 채운다. 분할 버튼은 같은 판정(`empty()`)을 하되 기본 이름이 문자열을 짓는 함수라 앱 이름이 비었을 때만 `split_button_arrow_name`을 부른다. `labels`는 칸마다 판정해 하나만 덮어도 된다.
 
-**언어.** OS 언어를 읽지 않는다. 기본 문구는 늘 한국어다. 편집 메뉴(Android)만 OS 언어를 따르는 어긋남이 R5까지 남는다.
+**언어.** OS 언어를 읽지 않는다. 기본 문구는 한국어이고 앱이 `set_text_languages`로 정하면 그 언어다. 앱이 정하지 않았을 때만 편집 메뉴(Android)가 OS 언어를 따른다([흡수 문서](i18n-adoption-design.md) 결정 1).
 
 **접근 이름과 화면 글.** 줌 단추와 테마 카드는 화면 글이 접근 이름이다. 칸은 하나(`*_label`)이고 요소가 둘 다 세운다. 이 노드는 접근 전용 이름 칸을 더하지 않는다.
 
@@ -148,7 +148,7 @@ controls.fit_label = u8"Fit";
 **Android.** Java 소스는 0줄이다. JNI도 unsupported도 없다.
 
 - 접근 이름은 Android에서 소비되지 않는다([number-input-design.md](number-input-design.md)와 같은 까닭). 폰에 보이는 것은 줌 단추 글과 테마 카드 낱말이다.
-- 영어 폰에서도 이 낱말들은 한국어다. 편집 메뉴만 `user_ui_language()`를 따라 영어로 나온다. 정책 a의 알려진 어긋남이고 R5까지 앱이 칸을 채워 푼다.
+- 앱이 언어를 정하지 않으면 영어 폰에서도 이 낱말들은 한국어다. 편집 메뉴만 OS 언어를 따라 영어로 나온다. 정책 a의 남은 어긋남이고 앱이 `set_text_languages`로 언어를 정하면 풀린다.
 
 ## 다른 노드와의 약속
 
@@ -205,8 +205,8 @@ controls.fit_label = u8"Fit";
 ## 범위 밖
 
 - 기본값을 영어로 하거나 OS 언어를 따르는 정책(정책 b·c). 사용자가 a를 골랐다.
-- 공개 표 API, 자리 값, 복수형, 숫자 서식과 지역 날짜 서식. R5 i18n의 몫이다. 한국어 기본 날짜 문구("2026년 11월 3일")는 지금 둔다([달력 날짜 계산과 문구](calendar-date-design.md)).
-- 편집 메뉴, 강조색 이름 25개, 시스템 강조색 라벨을 헤더나 표로 옮기는 일. R5가 정한다.
+- 공개 표 API, 자리 값, 복수형. 언어별 문장은 R5 표, 숫자·날짜 서식은 범위 C다. 한국어 기본 날짜 문구("2026년 11월 3일")도 그 표에 있다([달력 날짜 계산과 문구](calendar-date-design.md)).
+- 편집 메뉴, 강조색 이름 25개, 시스템 강조색 라벨을 헤더나 표로 옮기는 일. R5가 옮겼다.
 - 앱이 주는 기존 칸에 기본값을 켜는 일(결정 4).
 - 회전 단추. `zoom_controls_element`의 자식 구성은 그대로다.
 - 접근 이름과 화면 글이 갈리는 단추의 `*_name` 칸. 필요가 생긴 단추에서 더한다.

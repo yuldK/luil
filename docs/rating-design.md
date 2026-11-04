@@ -259,6 +259,6 @@ column.add(std::make_unique<luil::rating_element>(std::move(rating)), { .length 
 - 별 모양을 앱이 바꾸기(하트, 이미지)와 색 지정. 요소가 앱에서 색을 받는 자리는 없다([theming.md](concepts/theming.md)).
 - 평균과 내 점수를 한 컨트롤에 함께 보이기(결정 4의 a)와 별 옆 설명 글.
 - 수 키(1~5)로 정하기, 세로 배치, 오른쪽에서 왼쪽 글 방향.
-- 값 글의 숫자·언어 서식. R5 i18n의 몫이다.
+- 값 글의 언어별 문장은 R5 표, 숫자 서식은 범위 C다.
 - slider·scrollbar가 `step`·`page`를 채우는 일(결정 7 b에서도 이 노드는 별점만 채운다).
 - Android 접근성 계층.
