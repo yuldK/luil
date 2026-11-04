@@ -2,6 +2,7 @@
 
 #include "win32/command_line.h"
 #include "win32/instance_message.h"
+#include "win32/win32_locale.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -594,4 +595,57 @@ TEST_CASE("An instance that could not be created cannot send", "[platform][insta
     const luil::single_instance unnamed { u8"" };
     REQUIRE(unnamed.status().ok() == false);
     REQUIRE(unnamed.send_to_primary({}, send_options(50)).status == luil::platform_status::failed);
+}
+
+TEST_CASE("The locale value for the first day maps 0 to Monday and 6 to Sunday and nothing else", "[platform][locale]")
+{
+    REQUIRE(luil::win32::weekday_from_locale_first_day(0u) == std::chrono::Monday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(1u) == std::chrono::Tuesday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(5u) == std::chrono::Saturday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(6u) == std::chrono::Sunday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(7u).has_value() == false);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(0xFFFFFFFFu).has_value() == false);
+}
+
+TEST_CASE("The first weekday answers what this PC's locale says", "[platform][locale]")
+{
+    // 값 자체는 PC마다 다르다. 같은 OS 호출과 맞는지만 본다.
+    const std::optional<std::chrono::weekday> first_day { luil::user_first_weekday() };
+    DWORD value { 0 };
+    const bool answered { GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER, reinterpret_cast<LPWSTR>(&value), sizeof(value) / sizeof(wchar_t)) != 0 };
+    REQUIRE(first_day.has_value() == answered);
+    if (first_day.has_value())
+    {
+        REQUIRE(first_day->ok());
+        REQUIRE(first_day == luil::win32::weekday_from_locale_first_day(value));
+    }
+}
+
+TEST_CASE("The language list splits on each NUL and stops at the empty name", "[platform][locale]")
+{
+    using namespace std::string_view_literals;
+    const std::vector<std::u8string> two { u8"ko-KR", u8"en-US" };
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"ko-KR\0en-US\0\0"sv) == two);
+    // 끝 NUL이 없어도 끝까지 읽고, 빈 이름 뒤는 보지 않는다.
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"ko-KR\0en-US"sv) == two);
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"ko-KR\0en-US\0\0fr-FR\0"sv) == two);
+    REQUIRE(luil::win32::language_tags_from_multi_string(L""sv).empty());
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"\0\0"sv).empty());
+    // UTF-8로 바꾸지 못한 이름(짝 없는 surrogate)은 건너뛴다.
+    const std::vector<std::u8string> kept { u8"en" };
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"\xD800\0en\0\0"sv) == kept);
+}
+
+TEST_CASE("The display languages are tags without empty names", "[platform][locale]")
+{
+    // 어떤 언어가 나오는지는 PC마다 다르다. 태그 꼴만 본다.
+    for (const std::u8string& tag : luil::user_ui_languages())
+    {
+        REQUIRE(tag.empty() == false);
+        for (const char8_t unit : tag)
+        {
+            const bool alphanumeric { (unit >= u8'a' && unit <= u8'z') || (unit >= u8'A' && unit <= u8'Z') || (unit >= u8'0' && unit <= u8'9') };
+            REQUIRE((alphanumeric || unit == u8'-'));
+        }
+    }
 }

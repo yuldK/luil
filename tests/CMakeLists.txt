@@ -314,6 +314,11 @@ if(LUIL_PLATFORM STREQUAL "android")
             "${LUIL_SOURCE_DIRECTORY}/android/android_system_theme.cpp"
             "${LUIL_SOURCE_DIRECTORY}/android/android_window_control.cpp"
             android_jni_order_tests.cpp)
+    # 주 첫 요일의 JNI 흐름도 같은 가짜 JNIEnv 길로 잠근다 (android_locale_tests.cpp).
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_locale.cpp"
+            android_locale_tests.cpp)
     # 창 조절의 원본이 로그를 쓴다 (`__android_log_print`).
     target_link_libraries(luil_core_tests PRIVATE log)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
@@ -351,6 +356,7 @@ if(LUIL_PLATFORM STREQUAL "android")
     # 쓴다 (플랫폼 도구는 주소 열기에 쓰는 UTF-8 변환을 함께 끌어온다). 미리 서명한 봉투만 쓴다. Android는 받지 않는다.
     # 적용(스토어 열기)은 상태 기계가 부르므로 링크하지만, GameActivity가 없는 이 JVM에서는 열리지 않아 돌리지 않는다.
     target_sources(luil_net_tests PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}/android/android_locale.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/update_apply_android.cpp"

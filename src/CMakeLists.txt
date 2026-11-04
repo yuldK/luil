@@ -533,6 +533,7 @@ luil_add_source_filter(luil_files "win32/host"
     win32/instance_message.cpp
     win32/instance_message.h
     win32/platform_services_win32.cpp
+    win32/win32_locale.h
     win32/app_identity.cpp
     win32/app_identity.h
     win32/notification_win32.cpp
@@ -847,6 +848,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_fonts.h
         android/android_input.cpp
         android/android_input.h
+        android/android_locale.cpp
+        android/android_locale.h
         android/android_system_theme.cpp
         android/android_system_theme.h
         android/android_settings.cpp

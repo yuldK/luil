@@ -167,4 +167,15 @@ namespace luil {
         struct state;
         std::unique_ptr<state> state_ {};
     };
+
+    // 사용자 지역 설정의 주 첫 요일이다. OS가 답하지 않으면 빈 값이다. 어느 thread에서나 부른다.
+    //  - 라이브러리는 이 값을 스스로 쓰지 않는다. `calendar_config::first_day`의 기본은 일요일 그대로이고 앱이 넣는다.
+    //  - 부를 때마다 OS에 묻는다. frame마다 부르지 말고 시작할 때와 앞으로 올 때(`app_lifecycle::foreground`) 읽어 둔다.
+    //  - Windows: `GetLocaleInfoEx`(`LOCALE_IFIRSTDAYOFWEEK`). Android: `java.util.Calendar.getFirstDayOfWeek()`.
+    [[nodiscard]] std::optional<std::chrono::weekday> user_first_weekday();
+
+    // 사용자가 고른 표시 언어의 BCP 47 태그다. 앞이 먼저다. 읽지 못하면 빈 목록이다. 어느 thread에서나 부른다.
+    //  - 라이브러리 기본 문구는 이 값을 읽지 않는다. OS 언어를 따르려는 앱이 `set_text_languages(user_ui_languages())`로 넣는다.
+    //  - Windows: `GetUserPreferredUILanguages`의 목록. Android: 호스트가 `AConfiguration`에서 읽어 둔 태그 하나(Activity가 다시 설 때 새로 읽는다).
+    [[nodiscard]] std::vector<std::u8string> user_ui_languages();
 }

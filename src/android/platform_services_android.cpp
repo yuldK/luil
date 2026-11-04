@@ -1,8 +1,10 @@
 #include "luil/app/platform_services.h"
 
+#include "android/android_locale.h"
 #include "android/android_text_input.h"
 #include "android/errno_text.h"
 #include "android/java_vm.h"
+#include "host/font_registry.h"
 
 #include <jni.h>
 
@@ -307,5 +309,24 @@ namespace luil {
     platform_result blocking_io_canceller::cancel() const
     {
         return unsupported(u8"Android has no call that cancels another thread's blocking I/O.");
+    }
+
+    std::optional<std::chrono::weekday> user_first_weekday()
+    {
+        // 앱 thread는 JVM에 붙어 있지 않을 수 있어 범위 동안 붙인다.
+        const android::jni_thread_scope scope { "luil-locale" };
+        JNIEnv* const env { scope.env() };
+        if (env == nullptr)
+            return std::nullopt;
+        return android::read_first_weekday(*env);
+    }
+
+    std::vector<std::u8string> user_ui_languages()
+    {
+        // 호스트가 `AConfiguration`에서 읽어 둔 태그다. JNI가 없고 Activity가 다시 설 때 새 값이 된다.
+        const std::string language { user_ui_language() };
+        if (language.empty())
+            return {};
+        return { std::u8string { language.begin(), language.end() } };
     }
 }
