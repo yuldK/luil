@@ -332,7 +332,9 @@ namespace demo {
         config.resize = [](const float delta) { return luil::make_app_action(split_intent { delta }); };
         // 위아래 판 사이를 가르는 다른 선이 없어 쉬는 동안에도 얇은 구분선을 긋는다.
         config.resting_divider = true;
-        return std::make_unique<luil::split_handle_element>(luil::ui_element_id { kind_list_split }, config);
+        auto handle { std::make_unique<luil::split_handle_element>(luil::ui_element_id { kind_list_split }, config) };
+        handle->set_access_name(u8"그룹 목록 높이 손잡이");
+        return handle;
     }
 
     std::unique_ptr<luil::ui_element> lists_page::make_top_row(const float viewport_height)
@@ -548,6 +550,7 @@ namespace demo {
         add_group(u8"지난", u8"지난", 8);
 
         auto list { std::make_unique<luil::grouped_list_element>(std::move(config), std::move(groups)) };
+        list->set_access_name(u8"그룹 머리행 목록");
         const float content_height { list->content_height() };
         grouped_scroll_ = luil::clamp_scroll(content_height, viewport_height, grouped_scroll_);
 

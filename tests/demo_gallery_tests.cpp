@@ -501,7 +501,7 @@ TEST_CASE("Each page body and its scroll bar read the first heading of the page"
     require_body_name(arranged(toasts.build(800.0f, 600.0f, 1.0f)), u8"toasts", u8"토스트");
 }
 
-TEST_CASE("The three lists of the lists page and their scroll bars have names", "[demo][scroll]")
+TEST_CASE("The lists of the lists page, their scroll bars and the split handle have names", "[demo][scroll]")
 {
     demo::lists_page page {};
     const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
@@ -517,6 +517,13 @@ TEST_CASE("The three lists of the lists page and their scroll bars have names", 
     require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"items", u8"순서를 바꾸는 목록");
     require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"tree", u8"접는 트리");
     require_named(luil::ui_element_kind::virtual_list, luil::ui_element_kind::scroll_area_bar, u8"log", u8"가상 목록");
+    // 묶은 목록은 막대를 자기 안에 세우지 않고 데모의 스크롤 뷰에 든다. 목록 자신의 이름만 본다.
+    const luil::ui_element* const grouped { tree.find({ luil::ui_element_kind::grouped_list, u8"history" }) };
+    REQUIRE(grouped != nullptr);
+    REQUIRE(grouped->accessibility().name == u8"그룹 머리행 목록");
+    const luil::ui_element* const handle { tree.find({ demo::kind_list_split }) };
+    REQUIRE(handle != nullptr);
+    REQUIRE(handle->accessibility().name == u8"그룹 목록 높이 손잡이");
 }
 
 TEST_CASE("A page layout names its body after the first heading and leaves it nameless without one", "[demo][scroll]")
