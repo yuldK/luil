@@ -92,7 +92,7 @@ std::u8string_view info_bar_close() noexcept
 
 **한글 검사를 넓힌다.** 흡수 뒤 `src`·`include`의 코드 줄 한글은 `text_area_element.cpp` 547행의 측정 견본 하나뿐이다(이 문서를 쓰며 주석 밖 줄을 센 값). 검사 목록을 `src`와 `include` 전체로 넓히고 `default_text.cpp`의 파일 예외를 뺀다. 한국어는 `assets/strings/ko.json`과 `accents.json`에만 산다.
 
-- 넓힘 커밋이 [verify_default_text.cmake](../cmake/verify_default_text.cmake)에 선택 인자 둘을 함께 들인다. `CHECKED_DIRECTORIES`(없으면 `src`·`include` 전체, 지금 13~15행 자리)와 `TEXT_FILE`(문구 파일 예외, 없으면 예외 파일이 없다. 지금 52~55행 자리)이다. 이 파일은 이번 라운드에 줄 4만 고친다. 줄 1은 그 두 인자로 차트 검사(`luil_chart_default_text`, `chart/src`·`chart/include`)를 등록할 뿐 스크립트를 고치지 않는다. core 검사는 인자 없이 `src`·`include`만 본다.
+- 넓힘 커밋이 [verify_default_text.cmake](../cmake/verify_default_text.cmake)에 선택 인자 둘을 함께 들인다. `CHECKED_DIRECTORIES`(없으면 `src`·`include` 전체, 지금 13~15행 자리)와 `TEXT_FILE`(문구 파일 예외, 없으면 예외 파일이 없다. 지금 52~55행 자리)이다. 이 파일은 이번 라운드에 줄 4만 고친다. 줄 1은 그 두 인자로 차트 검사(`luil_chart_default_text`, `chart/src`·`chart/include`)를 등록할 뿐 스크립트를 고치지 않는다. core 검사는 인자 없이 `src`·`include`만 본다. 두 인자는 `tests/default_text_check_tests.cmake`(`luil_default_text_check`)가 친다.
 - 통합 순서는 줄 1 문서와 같다. 표·흡수(줄 4) → 차트 라이브러리(줄 1) → 차트 표 전환(줄 1) → 한글 검사 넓힘(줄 4) → 차트 검사 등록(줄 1)이다.
 
 ## 결정

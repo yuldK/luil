@@ -658,13 +658,19 @@ add_test(NAME luil_core_portability
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_core_portability.cmake")
 
-# 요소의 .cpp와 공개 헤더에 한글이 박혀 있지 않은지 본다.
-# 기본 문구는 src/ui/default_text.cpp 한곳이다 (script에 이유가 있다).
+# src·include의 코드 줄에 한글이 박혀 있지 않은지 본다.
+# 글은 문자열 표와 강조색 카탈로그에 산다 (script에 이유가 있다).
 add_test(NAME luil_default_text
     COMMAND "${CMAKE_COMMAND}"
         "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
+# 그 검사 자체를 본다. 선택 라이브러리가 쓰는 두 선택 인자도 여기서 친다.
+add_test(NAME luil_default_text_check
+    COMMAND "${CMAKE_COMMAND}"
+        "-DCMAKE_DIRECTORY=${LUIL_CMAKE_DIRECTORY}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/default_text_check_tests.cmake")
 
 # JNI 실패 검사(`jni_failed`)는 `||`·`&&` 체인의 맨 앞에 둔다. nullptr 검사가 먼저면 예외가 남은 채 돌아간다.
 # 기기 test는 자리의 일부만 치므로 전체 자리를 여기서 본다 (script에 이유가 있다).

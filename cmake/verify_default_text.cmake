@@ -1,18 +1,26 @@
-# 요소의 .cpp와 공개 헤더가 한글 문자열을 직접 들이지 않았는지 본다.
+# 라이브러리의 코드 줄에 한글이 없는지 본다.
 #
-# 라이브러리 요소가 스스로 놓는 글의 기본 문구는 `src/ui/default_text.cpp` 한곳에 모은다
-# (docs/default-text-design.md). 요소마다 한국어를 박으면 R5의 i18n이 모을 자리가 다시 흩어지는데
-# 컴파일러는 그것을 잡지 못한다. 다음 노드가 헤더 밖에 한국어를 박는 것을 여기서 막는다.
+# 라이브러리가 스스로 놓는 글은 문자열 표(assets/strings)에, 강조색 이름은 카탈로그(assets/accents.json)에 산다
+# (docs/i18n-adoption-design.md). 코드에 한국어를 박으면 그 글은 언어를 따르지 못하는데 컴파일러는 그것을 잡지 못한다.
 #
-# 한글은 `//` 주석 안에서만 허용한다. 기본 문구를 설명하는 한글이 주석에 정당하게 든다.
+# 한글은 `//` 주석 안에서만 허용한다. 왜 그 모양인지를 적는 주석은 한글이다.
 # 코드 줄에 한글이 있으면 문자열이든 문자든 위반이다. 식별자는 ASCII뿐이라 다른 경우가 없다.
+#
+# 인자
+#  - SOURCE_DIRECTORY, INCLUDE_DIRECTORY: 필수다. 진단의 경로는 SOURCE_DIRECTORY의 부모에서 센다.
+#  - CHECKED_DIRECTORIES: 볼 폴더 목록이다. 없으면 두 폴더 전체다. 선택 라이브러리가 자기 폴더를 넘긴다.
+#  - TEXT_FILE: 한글을 들여도 되는 파일 이름 하나다. 없으면 그런 파일이 없다.
 if(NOT DEFINED SOURCE_DIRECTORY OR NOT DEFINED INCLUDE_DIRECTORY)
     message(FATAL_ERROR "SOURCE_DIRECTORY and INCLUDE_DIRECTORY are required.")
 endif()
 
-set(checked_directories
-    "${SOURCE_DIRECTORY}/ui"
-    "${INCLUDE_DIRECTORY}/luil/ui")
+if(DEFINED CHECKED_DIRECTORIES)
+    set(checked_directories ${CHECKED_DIRECTORIES})
+else()
+    set(checked_directories
+        "${SOURCE_DIRECTORY}"
+        "${INCLUDE_DIRECTORY}")
+endif()
 
 # 한글(음절·자모·호환 자모)의 UTF-8 바이트열이다.
 # CMake의 정규식은 바이트 단위라 `[가-힣]`로 적으면 `·`나 `…` 같은 다른 비ASCII 글자까지 잡는다.
@@ -49,8 +57,7 @@ foreach(directory IN LISTS checked_directories)
     file(GLOB_RECURSE files "${directory}/*.h" "${directory}/*.cpp")
     foreach(file IN LISTS files)
         get_filename_component(name "${file}" NAME)
-        # 기본 문구가 사는 유일한 자리다.
-        if(name STREQUAL "default_text.cpp")
+        if(DEFINED TEXT_FILE AND name STREQUAL TEXT_FILE)
             continue()
         endif()
         math(EXPR checked_count "${checked_count} + 1")
@@ -81,8 +88,8 @@ list(LENGTH violations violation_count)
 if(violation_count GREATER 0)
     string(REPLACE ";" "\n  " violation_text "${violations}")
     message(FATAL_ERROR
-        "Hangul text is written outside src/ui/default_text.cpp.\n"
-        "Add a function to src/ui/default_text.h and call it (docs/default-text-design.md):\n  ${violation_text}")
+        "Hangul text is written in code.\n"
+        "Add a key to the string table and look it up (docs/i18n-adoption-design.md):\n  ${violation_text}")
 endif()
 
 message(STATUS "Default text check passed: ${checked_count} file(s)")
