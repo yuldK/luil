@@ -78,6 +78,13 @@ namespace mobile_demo {
             close_popups();
             return;
         }
+        // 테마 페이지 파일 감시 묶음의 단추다. 쓰기만 하고 화면은 감시를 거쳐서만 바뀐다. 실패는 감시로 오지 않아 페이지에 알린다.
+        if (const auto* const write { message.get<demo::hot_reload_write_intent>() }; write != nullptr)
+        {
+            if (const std::u8string error { demo::write_hot_reload_files(theme_.hot_reload_folder(), write->what, style_json(), markup_xml()) }; error.empty() == false)
+                theme_.note_hot_reload_write_failure(error);
+            return;
+        }
         // 컨텍스트 메뉴 선택은 페이지가 메뉴를 닫고 셸이 토스트로 잇는다.
         if (const auto* const select { message.get<card_menu_select_intent>() }; select != nullptr)
         {
@@ -104,6 +111,7 @@ namespace mobile_demo {
     {
         smb_.stop();
         files_.stop();
+        theme_.stop_hot_reload();
     }
 
     void mobile_driver::close_popups()

@@ -21,7 +21,7 @@ namespace {
     class mobile_delegate final : public luil::app_delegate
     {
     public:
-        // 파일 감시 페이지가 볼 앱 전용 폴더다 (`internalDataPath`).
+        // 파일 감시 페이지와 테마 페이지의 파일 감시 묶음이 볼 앱 전용 폴더다 (`internalDataPath`).
         explicit mobile_delegate(std::filesystem::path files_directory)
             : files_directory_ { std::move(files_directory) }
         {
@@ -38,9 +38,13 @@ namespace {
             smb_ = luil::net::smb_client::create(std::move(config), error);
             if (smb_ != nullptr)
                 host.post_app_message(luil::app_message { mobile_demo::smb_client_intent { smb_.get() } });
-            // 감시자도 logic이 `stop_workers`에서 멈춘다.
+            // 감시자와 핫 리로드 도우미도 logic이 `stop_workers`에서 멈춘다.
             if (files_directory_.empty() == false)
+            {
                 watcher_ = mobile_demo::start_files_watch(host, files_directory_ / "watch-demo");
+                // 앱 전용 폴더의 파일만 감시한다. APK assets는 감시할 수 없어 앱이 실은 글을 이 폴더에 써 둔다 (hot-reload-design.md).
+                reloader_ = mobile_demo::start_theme_hot_reload(host, files_directory_ / "hot-reload");
+            }
             // 서식 칸의 복사·붙여넣기 요청은 logic thread가 이 host에 넣는다.
             host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
         }
@@ -119,6 +123,7 @@ namespace {
         std::unique_ptr<luil::net::smb_client> smb_ {};
         std::filesystem::path files_directory_ {};
         std::unique_ptr<luil::file_watcher> watcher_ {};
+        std::unique_ptr<luil::hot_reloader> reloader_ {};
     };
 }
 

@@ -123,6 +123,17 @@ namespace demo {
         // 마크업 묶음의 견본 단추와 가지의 사건이다.
         if (markup_.handle(message))
             return true;
+        // 도우미가 감시 thread에서 낸 결과와 셸이 감시를 세운 결과다. 쓰기 intent는 셸이 먼저 받아 여기로 오지 않는다.
+        if (const auto* const update { message.get<luil::hot_reload_update>() }; update != nullptr)
+        {
+            apply_hot_reload(*update);
+            return true;
+        }
+        if (const auto* const started { message.get<hot_reload_started_intent>() }; started != nullptr)
+        {
+            hot_reload_.started(*started);
+            return true;
+        }
         if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
         {
             if (edit->request.target == target_markup_search)
@@ -236,6 +247,19 @@ namespace demo {
             style_sheet_.apply(style_json_.text);
             break;
         }
+    }
+
+    void theme_page::apply_hot_reload(const luil::hot_reload_update& update)
+    {
+        hot_reload_.note(update);
+        if (update.style != nullptr)
+            style_sheet_.accept(update.style);
+        if (update.markup != nullptr)
+            markup_.accept(update.markup);
+        // 칸이 파일과 같은 글을 보인다. 막힌 글도 실어 고칠 곳을 칸에서 본다.
+        if (update.kind == luil::hot_reload_kind::style
+            && (update.status == luil::hot_reload_status::loaded || update.status == luil::hot_reload_status::rejected))
+            set_style_text(update.text);
     }
 
     void theme_page::set_style_text(const std::u8string_view text)
@@ -395,6 +419,66 @@ namespace demo {
         page.end_card();
     }
 
+    void theme_page::add_hot_reload(page_layout& page, const float width, const float scale) const
+    {
+        // 파일을 저장하면 다시 읽는다. 단추도 파일에 쓰기만 하므로 화면은 감시를 거쳐서만 바뀐다.
+        page.begin_card(u8"파일 감시", u8"아래 폴더의 두 파일을 저장하면 다음 frame에 반영합니다. 틀린 글이면 이전 값이 남습니다.");
+        // 폴더와 오류 글은 길어 폭에서 줄을 바꾼다. 높이는 그 label에게 묻는다.
+        const luil::measure_context measure { .scale = scale, .style = style_sheet_.style().get() };
+        const auto add_wrapped = [&page, &measure, width](std::u8string owner, std::u8string text) {
+            luil::label_config config {};
+            config.text = std::move(text);
+            config.font_size = 11.0f;
+            config.color = luil::label_color_role::dim;
+            config.wrap = true;
+            auto label { std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, std::move(owner) }, std::move(config)) };
+            const std::optional<luil::size_f> size { label->preferred_size(measure, page_layout::card_content_width(width)) };
+            page.add(std::move(label), std::max(18.0f, size.has_value() ? size->height : 0.0f));
+        };
+        add_wrapped(u8"theme-reload-path", hot_reload_.folder().empty() ? std::u8string { u8"감시 폴더 없음" } : hot_reload_.folder());
+        page.gap(8.0f);
+
+        struct write_button
+        {
+            std::u8string_view owner {};
+            std::u8string_view text {};
+            hot_reload_write what { hot_reload_write::defaults };
+        };
+        constexpr write_button rows[][2] {
+            {
+                { u8"theme-reload-write-style", u8"견본 스타일을 파일에", hot_reload_write::style_sample },
+                { u8"theme-reload-write-default", u8"내장 글을 파일에", hot_reload_write::defaults },
+            },
+            {
+                { u8"theme-reload-write-style-broken", u8"깨진 스타일을 파일에", hot_reload_write::style_broken },
+                { u8"theme-reload-write-markup-broken", u8"깨진 마크업을 파일에", hot_reload_write::markup_broken },
+            },
+        };
+        constexpr float button_width { 170.0f };
+        constexpr float button_height { 26.0f };
+        for (const auto& buttons : rows)
+        {
+            luil::stack_config row_config {};
+            row_config.direction = luil::stack_direction::row;
+            row_config.spacing = 8.0f;
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, std::u8string { buttons[0].owner } + u8"-row" }, row_config) };
+            for (const write_button& button : buttons)
+            {
+                luil::text_button_config config {};
+                config.text = std::u8string { button.text };
+                auto element { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, std::u8string { button.owner } }, std::move(config)) };
+                element->set_cursor(luil::ui_cursor::hand);
+                element->set_action(luil::ui_trigger::left_click, luil::make_message_action(hot_reload_write_intent { button.what }));
+                row->add(std::move(element), button_width);
+            }
+            page.add(std::move(row), button_height);
+            page.gap(6.0f);
+        }
+        page.gap(4.0f);
+        add_wrapped(u8"theme-reload-status", hot_reload_.status());
+        page.end_card();
+    }
+
     std::vector<luil::win32::ui_window> theme_page::make_windows() const
     {
         std::vector<luil::win32::ui_window> windows {};
@@ -549,6 +633,7 @@ namespace demo {
 
         add_style_sheet(page, scale);
         add_markup(page, width, scale);
+        add_hot_reload(page, width, scale);
         return page.finish(scroll_, [](const float delta) { return luil::make_app_action(theme_scroll_intent { delta }); });
     }
 }

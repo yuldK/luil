@@ -1,9 +1,10 @@
 #pragma once
 
-// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그, 실행 중에 읽는 스타일 파일과 화면 마크업.
+// 테마 페이지다: 테마 선호 셋과 키 컬러 카탈로그, 실행 중에 읽는 스타일 파일과 화면 마크업, 저장하면 다시 읽는 파일 감시.
 // 고른 값은 frame에 실려 가고 실제 팔레트 선택은 UI thread가 한다.
 
 #include "demo/common.h"
+#include "demo/hot_reload_sample.h"
 #include "demo/markup_sample.h"
 #include "demo/style_sheet_sample.h"
 #include "luil/text/text_edit.h"
@@ -117,6 +118,28 @@ namespace demo {
             return style_sheet_.style();
         }
 
+        // 파일 감시 묶음의 단추를 셸이 받아 쓰는 자리다. 쓰기와 도우미는 core test에 들지 않는 셸이 맡는다 (hot_reload_sample.h).
+        //  - 내장 글은 처음에 정해 바뀌지 않아 도우미를 세우는 UI thread도 읽는다.
+        [[nodiscard]] const std::u8string& style_source() const noexcept
+        {
+            return style_sheet_.source();
+        }
+
+        [[nodiscard]] const std::u8string& markup_source() const noexcept
+        {
+            return markup_.source();
+        }
+
+        [[nodiscard]] const std::u8string& hot_reload_folder() const noexcept
+        {
+            return hot_reload_.folder();
+        }
+
+        void note_hot_reload_write_failure(const std::u8string_view error)
+        {
+            hot_reload_.note_write_failure(error);
+        }
+
         // 배경 효과를 고르고 시작한다 (`--backdrop=`).
         void set_backdrop(const luil::window_backdrop backdrop) noexcept
         {
@@ -143,7 +166,12 @@ namespace demo {
         void set_style_text(std::u8string_view text);
         // 마크업 묶음이다. 견본 글을 펼친 가지, 견본 단추 줄, 상태 줄을 카드에 담는다.
         void add_markup(page_layout& page, float width, float scale) const;
+        // 파일 감시 묶음이다. 감시하는 폴더, 파일에 쓰는 단추 넷, 상태 줄을 카드에 담는다.
+        void add_hot_reload(page_layout& page, float width, float scale) const;
+        // 도우미의 결과를 받는다. 받은 값은 위의 두 묶음으로 가고, 값이 없는 결과는 상태 줄만 바꾼다.
+        void apply_hot_reload(const luil::hot_reload_update& update);
 
+        hot_reload_state hot_reload_ {};
         style_sheet_state style_sheet_ {};
         luil::text::text_edit_state style_json_ {};
         std::optional<luil::text_composition_event> style_composition_ {};
