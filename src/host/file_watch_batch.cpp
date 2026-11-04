@@ -142,6 +142,7 @@ namespace luil {
         batch.rescan = rescan_;
         batch.end = end_;
         batch.error = error_;
+        batch.retried = retried_;
         batch.changes.reserve(live_);
         for (const std::optional<file_change>& entry : entries_)
         {
@@ -172,6 +173,7 @@ namespace luil {
             return;
         }
         // 쥔 채 다시 센다. 새 변경이 없으면 `settle` 뒤, 이어지면 늦어도 `max_delay` 뒤에 합친 묶음으로 다시 낸다.
+        retried_ = true;
         first_ = now;
         last_ = now;
         if (end_due_.has_value())
@@ -186,6 +188,7 @@ namespace luil {
         live_ = 0;
         move_.reset();
         rescan_ = false;
+        retried_ = false;
         first_.reset();
         last_.reset();
         end_due_.reset();

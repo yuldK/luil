@@ -446,6 +446,58 @@ TEST_CASE("File watch batches keep a rejected batch and merge it into the next",
     REQUIRE(batch.due_at().has_value() == false);
 }
 
+TEST_CASE("File watch batches say when they offer a rejected batch again", "[file_watch]")
+{
+    auto batch { make_batch() };
+    bool offered_again { true };
+    const auto reject = [&offered_again](const luil::file_change_batch& offered) {
+        offered_again = offered.retried;
+        return false;
+    };
+    batch.set_name_filter([](const std::u8string_view name) { return name == u8"a"; });
+    batch.created(u8"a", start);
+
+    // 처음 내는 묶음은 거짓이다.
+    luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+    REQUIRE(offered_again == false);
+
+    SECTION("Until it is accepted")
+    {
+        luil::offer_file_change_batch(batch, ticket, reject, start + 200ms);
+        REQUIRE(offered_again);
+        // 새 변경과 합쳐도 그 묶음이다.
+        batch.modified(u8"a", start + 250ms);
+        const std::optional<luil::file_change_batch> received { take(batch, start + 350ms) };
+        REQUIRE(received.has_value());
+        REQUIRE(received->retried);
+    }
+    SECTION("Even when it became a rescan")
+    {
+        batch.overflow(start + 150ms);
+        const std::optional<luil::file_change_batch> received { take(batch, start + 1s) };
+        REQUIRE(received.has_value());
+        REQUIRE(received->rescan);
+        REQUIRE(received->retried);
+    }
+    SECTION("Not after it came and went")
+    {
+        batch.removed(u8"a", start + 150ms);
+    }
+    SECTION("Not after the filter emptied it")
+    {
+        // 다른 이름만 남으면 낼 것이 없어 거절한 묶음은 사라진다.
+        batch.modified(u8"other", start + 120ms);
+        batch.removed(u8"a", start + 150ms);
+        REQUIRE(take(batch, start + 1s).has_value() == false);
+    }
+
+    // 어느 길이든 그 뒤의 묶음은 새것이다.
+    batch.modified(u8"a", start + 5s);
+    const std::optional<luil::file_change_batch> next { take(batch, start + 6s) };
+    REQUIRE(next.has_value());
+    REQUIRE(next->retried == false);
+}
+
 TEST_CASE("File watch batches over the limit after a rejection become a rescan", "[file_watch]")
 {
     auto batch { make_batch(2) };

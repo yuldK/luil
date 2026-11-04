@@ -469,6 +469,54 @@ TEST_CASE("Retries further apart than the limit still give unreadable", "[hot_re
     REQUIRE(sink.calls() == 1u);
 }
 
+TEST_CASE("A folder under the watched name reaches the limit while another file keeps the watcher busy", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path held { folder.file(u8"held.xml") };
+    const std::filesystem::path busy { folder.file(u8"busy.xml") };
+    write_file(busy, markup_one);
+    recorder sink {};
+    luil::hot_reloader_config config { test_config(sink) };
+    // 감시 thread는 하나다. 다른 표의 `deliver`가 쥐는 동안에는 거절한 묶음이 늦게 온다. 늦은 것을 사라진 것으로 보면 상한을 매번 처음부터 센다.
+    config.deliver = [forward = sink.deliver(), name = busy.u8string()](hot_reload_update update) {
+        if (update.path == name)
+            std::this_thread::sleep_for(800ms);
+        return forward(std::move(update));
+    };
+    const auto reloader { make_reloader(std::move(config)) };
+    const hot_reload_update first { add_markup(*reloader, held) };
+    static_cast<void>(add_markup(*reloader, busy));
+
+    std::atomic<bool> writing { true };
+    const auto burst = [&busy, &writing] {
+        for (bool flip { false }; writing.load(); flip = flip == false)
+        {
+            try
+            {
+                save_file(busy, flip ? markup_one : markup_two);
+            }
+            catch (const std::filesystem::filesystem_error&)
+            {
+                // Windows에서 감시 thread가 읽는 동안에는 이름을 바꾸지 못할 수 있다. 다음 차례에 다시 한다.
+            }
+            std::this_thread::sleep_for(20ms);
+        }
+    };
+    std::thread writer { burst };
+    std::filesystem::create_directories(held);
+    const auto held_unreadable = [&first](const std::vector<hot_reload_update>& updates) {
+        const auto matches = [&first](const hot_reload_update& update) {
+            return update.ticket == first.ticket
+                && update.status == hot_reload_status::unreadable;
+        };
+        return std::any_of(updates.begin(), updates.end(), matches);
+    };
+    const bool seen { sink.wait(held_unreadable, 6s) };
+    writing.store(false);
+    writer.join();
+    REQUIRE(seen);
+}
+
 TEST_CASE("A refused result comes again and reads the file again", "[hot_reload][platform]")
 {
     const scratch_folder folder {};

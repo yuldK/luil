@@ -123,6 +123,8 @@ namespace luil {
         file_watch_end end_ { file_watch_end::none };
         std::u8string error_ {};
         bool closed_ { false };
+        // 거절해 쥔 묶음이 있다. 쥔 것이 모두 사라지면 `clear`가 풀어, 다음 묶음이 새것임을 안다.
+        bool retried_ { false };
         std::optional<clock::time_point> first_ {};
         std::optional<clock::time_point> last_ {};
         std::optional<clock::time_point> end_due_ {};

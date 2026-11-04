@@ -75,6 +75,9 @@ namespace luil {
         file_watch_end end { file_watch_end::none };
         // 개발자용 영문 진단이다 (`lost`의 이유). 화면에 그대로 내지 않는다.
         std::u8string error {};
+        // 앞서 `deliver`가 거절한 묶음을 다시 낸 것이다. 그 사이의 변경이 합쳐졌을 수 있다.
+        //  - 거절한 변경이 순 변화 없이 사라졌으면 쥔 것이 없어지므로 다음 묶음은 거짓이다.
+        bool retried { false };
     };
 
     struct file_watcher_config
