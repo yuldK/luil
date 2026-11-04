@@ -2,11 +2,11 @@
 
 #include "demo/line_break_sample.h"
 #include "luil/theme/ui_theme.h"
-#include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/font_scale.h"
 #include "luil/ui/label_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/theme_picker_element.h"
 #include "luil/ui/wrap_element.h"
 
 #include "include/core/SkCanvas.h"
@@ -115,30 +115,21 @@ namespace mobile_demo {
 
     page_content theme_page::build(const float width, const float scale)
     {
-        // 테마 선호는 배타 선택이라 선택 묶음으로 그린다. 폰 화면 폭에 채운다.
-        luil::choice_group_config themes {};
+        // 테마 선호는 라이브러리의 테마 카드로 그린다. 글을 주지 않아 기기 페이지에서 고른 언어의 기본 문구를 따른다.
+        const float themes_width { width - 2.0f * page_padding };
+        luil::theme_picker_config themes {};
         themes.owner = u8"theme";
-        themes.style = luil::choice_style::toggle;
-        themes.width = luil::choice_width::fill;
-        const auto add_theme
-            = [&themes](const luil::theme_preference value, std::u8string label) { themes.items.push_back({ std::u8string { luil::theme_preference_name(value) }, std::move(label) }); };
-        add_theme(luil::theme_preference::system, u8"시스템");
-        add_theme(luil::theme_preference::light, u8"밝게");
-        add_theme(luil::theme_preference::dark, u8"어둡게");
-        themes.selected = std::u8string { luil::theme_preference_name(appearance_.theme) };
-        themes.name = u8"테마";
-        themes.select = [](const std::u8string& value) {
-            for (const luil::theme_preference preference : { luil::theme_preference::system, luil::theme_preference::light, luil::theme_preference::dark })
-                if (value == luil::theme_preference_name(preference))
-                    return luil::make_app_action(theme_intent { preference });
-            return luil::input_action {};
-        };
-        const float themes_height { luil::choice_group_element::height_for(themes) };
+        themes.selected = appearance_.theme;
+        themes.accent_id = appearance_.accent_id;
+        // 폰 폭에서도 세 장이 한 줄에 들게 줄인다. 다음 줄로 넘기면 왼쪽에 두 장만 서서 화면을 많이 먹는다.
+        themes.card_width = std::min(themes.card_width, (themes_width - 2.0f * themes.gap) / 3.0f);
+        themes.select = [](const luil::theme_preference value) { return luil::make_app_action(theme_intent { value }); };
+        const float themes_height { luil::theme_picker_element::height_for(themes, themes_width) };
 
         page_column column { u8"theme" };
         column.note(u8"theme-hint", u8"테마 선호");
         column.gap(6.0f);
-        column.add(std::make_unique<luil::choice_group_element>(std::move(themes)), themes_height, std::min(width - 2.0f * page_padding, 320.0f));
+        column.add(std::make_unique<luil::theme_picker_element>(std::move(themes)), themes_height, themes_width);
         column.gap(8.0f);
         column.note(u8"theme-bars", u8"상태 표시줄 아이콘도 바탕을 따른다.");
         column.gap(20.0f);

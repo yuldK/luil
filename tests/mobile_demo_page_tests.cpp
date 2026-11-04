@@ -15,6 +15,7 @@
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
 #include "sample_image_bytes.h"
+#include "text_languages_guard.h"
 
 #include "luil/text/string_table.h"
 #include "luil/ui/calendar_element.h"
@@ -2043,6 +2044,56 @@ TEST_CASE("A new reorder after an undo clears the redo side and a reorder that m
     for (int number { 1 }; number < 8; ++number)
         REQUIRE(list_row_top(*tree, number) < list_row_top(*tree, number + 1));
     REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 2 · 다음: 없음");
+}
+
+TEST_CASE("The mobile theme cards draw the library language and pick the theme", "[mobile-demo][i18n]")
+{
+    const std::u8string source { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    mobile_demo::theme_page page { source };
+    const auto tree_at = [&page](const float width) {
+        auto content { page.build(width, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, width, height }, 1.0f);
+    };
+    const auto card_name = [&tree_at](const std::u8string& owner) {
+        const luil::ui_tree tree { tree_at(400.0f) };
+        const auto* const card { tree.find({ luil::ui_element_kind::choice, owner }) };
+        REQUIRE(card != nullptr);
+        return card->accessibility().name;
+    };
+
+    const luil_test::text_languages_guard guard {};
+    guard.use(u8"ko");
+    REQUIRE(card_name(u8"theme/light") == u8"밝게");
+    REQUIRE(card_name(u8"theme/system") == u8"시스템");
+    REQUIRE(card_name(u8"theme/dark") == u8"어둡게");
+    guard.use(u8"en");
+    REQUIRE(card_name(u8"theme/light") == u8"Light");
+    REQUIRE(card_name(u8"theme/system") == u8"System");
+    REQUIRE(card_name(u8"theme/dark") == u8"Dark");
+
+    // 폰에서 흔한 폭에서도 세 장이 한 줄에 들어 페이지 여백 안에 선다.
+    const luil::ui_tree narrow { tree_at(360.0f) };
+    const auto* const light { narrow.find({ luil::ui_element_kind::choice, u8"theme/light" }) };
+    const auto* const dark { narrow.find({ luil::ui_element_kind::choice, u8"theme/dark" }) };
+    REQUIRE(light != nullptr);
+    REQUIRE(dark != nullptr);
+    REQUIRE(dark->bounds().y == Catch::Approx(light->bounds().y));
+    REQUIRE(dark->bounds().x + dark->bounds().width <= Catch::Approx(360.0f - mobile_demo::page_padding));
+
+    // 카드를 누르면 페이지의 선호가 바뀌고 고른 칸이 따라간다.
+    {
+        const luil::ui_tree tree { tree_at(400.0f) };
+        const auto* const card { tree.find({ luil::ui_element_kind::choice, u8"theme/dark" }) };
+        REQUIRE(card != nullptr);
+        REQUIRE(card->accessibility().selected != true);
+        const auto actions { (*card->action(luil::ui_trigger::left_click))({ card->id() }) };
+        REQUIRE(actions.size() == 1u);
+        deliver(page, std::get<luil::app_message>(actions.front()));
+    }
+    REQUIRE(page.appearance().theme == luil::theme_preference::dark);
+    const luil::ui_tree chosen { tree_at(400.0f) };
+    REQUIRE(chosen.find({ luil::ui_element_kind::choice, u8"theme/dark" })->accessibility().selected == true);
 }
 
 TEST_CASE("The mobile theme page applies a sample style and keeps it when a broken sample is refused", "[mobile-demo][style_json]")
