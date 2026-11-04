@@ -110,6 +110,18 @@ namespace mobile_demo {
             return std::u8string { language_cell_prefix } + std::u8string { language };
         }
 
+        // 라이브러리 언어를 고른 칸으로 되읽는다. 칸이 정하는 목록은 "ko"나 "en" 하나뿐이고 OS 목록은 지역이 붙어(ko-KR) 시스템 칸의 것으로 읽는다.
+        //  - OS 목록이 지역 없는 `en` 하나뿐이면 English 칸으로 읽는다. 그 뒤로 OS 언어를 따르지 않을 뿐 지금 글은 같다.
+        [[nodiscard]] std::u8string language_from_library()
+        {
+            const std::optional<std::vector<std::u8string>> chosen { luil::text_languages() };
+            if (chosen.has_value()
+                && chosen->size() == 1u
+                && (chosen->front() == u8"ko" || chosen->front() == u8"en"))
+                return chosen->front();
+            return u8"system";
+        }
+
         [[nodiscard]] std::u8string ui_language_text(const std::optional<device_locale_intent>& locale)
         {
             if (locale.has_value() == false)
@@ -146,6 +158,11 @@ namespace mobile_demo {
             orientation_choice { luil::screen_orientation::landscape, u8"landscape", u8"가로" },
             orientation_choice { luil::screen_orientation::current, u8"current", u8"지금 고정" },
         };
+    }
+
+    device_page::device_page()
+        : language_ { language_from_library() }
+    {
     }
 
     bool device_page::handle(const luil::app_message& message)

@@ -387,6 +387,41 @@ TEST_CASE("The device page keeps the chosen language cell and leaves the library
     REQUIRE(luil::text_languages() == before);
 }
 
+TEST_CASE("A new device page finds the language cell from the library language", "[mobile-demo][i18n]")
+{
+    // 라이브러리 언어는 프로세스에 남고 페이지는 Activity마다 새로 선다. 칸이 실제 언어와 어긋나면 안 된다.
+    const auto cell = [] {
+        mobile_demo::device_page page {};
+        const auto tree { device_tree(page, false) };
+        const auto* const group { tree.find({ luil::ui_element_kind::choice_group, u8"device-language" }) };
+        REQUIRE(group != nullptr);
+        for (const auto& child : group->children())
+        {
+            if (child->accessibility().selected == true)
+                return child->id().owner;
+        }
+        return std::u8string {};
+    };
+    const luil_test::text_languages_guard guard {};
+
+    luil::reset_text_languages();
+    REQUIRE(cell() == u8"device-language-system");
+    guard.use(u8"en");
+    REQUIRE(cell() == u8"device-language-en");
+    guard.use(u8"ko");
+    REQUIRE(cell() == u8"device-language-ko");
+
+    // OS 목록은 지역이 붙어 칸이 정한 값과 갈린다. 시스템 칸에서 온 목록으로 읽는다.
+    const std::vector<std::u8string> from_system { u8"ko-KR", u8"en-US" };
+    luil::set_text_languages(from_system);
+    REQUIRE(cell() == u8"device-language-system");
+    const std::vector<std::u8string> one_from_system { u8"en-US" };
+    luil::set_text_languages(one_from_system);
+    REQUIRE(cell() == u8"device-language-system");
+    luil::set_text_languages({});
+    REQUIRE(cell() == u8"device-language-system");
+}
+
 TEST_CASE("The device page gives every choice its own id and each cell picks its own group", "[mobile-demo][i18n]")
 {
     // 능력이 있어야 서는 묶음까지 함께 본다. 성질은 프로세스 전역이라 시험 뒤에 되돌린다.

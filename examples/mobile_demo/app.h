@@ -58,6 +58,8 @@ namespace mobile_demo {
     class mobile_driver final : public luil::logic_driver
     {
     public:
+        mobile_driver();
+
         void handle(luil::app_message message) override;
         [[nodiscard]] std::shared_ptr<const luil::ui_frame> make_frame() override;
         [[nodiscard]] luil::app_message make_close_message() override;
@@ -99,6 +101,7 @@ namespace mobile_demo {
         chart_page chart_ {};
 
         // 기기 페이지에서 고른 언어 칸과 OS 표시 언어다. 고른 적이 없으면 비었고 라이브러리 언어를 정하지 않는다.
+        //  - 프로세스가 언어를 정한 뒤에 Activity가 다시 서면 페이지가 되찾은 칸으로 선다.
         std::u8string text_language_ {};
         std::vector<std::u8string> system_languages_ {};
 

@@ -20,6 +20,13 @@ namespace mobile_demo {
         constexpr float navigation_width { 260.0f };
     }
 
+    mobile_driver::mobile_driver()
+    {
+        // 라이브러리 언어는 프로세스에 남고 이 driver는 Activity마다 새로 선다. 시스템 칸이면 `on_started`가 다시 읽은 OS 목록을 따른다.
+        if (luil::text_languages().has_value())
+            text_language_ = device_.language();
+    }
+
     void mobile_driver::handle(luil::app_message message)
     {
         if (message.get<close_intent>() != nullptr)
@@ -106,7 +113,7 @@ namespace mobile_demo {
         if (const auto* const locale { message.get<device_locale_intent>() }; locale != nullptr)
         {
             system_languages_ = locale->languages;
-            // "시스템"을 고른 뒤 OS 언어가 바뀌면 새 목록을 따른다.
+            // "시스템"을 고른 뒤 OS 언어가 바뀌면 새 목록을 따른다. Android는 Activity가 다시 서서 새 driver가 여기로 온다.
             if (text_language_ == u8"system")
                 apply_text_language(text_language_);
         }

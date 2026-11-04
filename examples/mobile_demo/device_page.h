@@ -105,6 +105,9 @@ namespace mobile_demo {
     class device_page
     {
     public:
+        // 고른 언어 칸을 지금 라이브러리 언어에서 되찾는다. 언어는 프로세스에 남고 페이지는 Activity마다 새로 선다.
+        device_page();
+
         bool handle(const luil::app_message& message);
         // 창 metrics는 창 폭 등급과 움직임 줄이기를 보이려고 받는다.
         [[nodiscard]] page_content build(float width, float scale, const window_metrics_intent& window);
@@ -113,6 +116,12 @@ namespace mobile_demo {
         [[nodiscard]] const luil::device_request& request() const noexcept
         {
             return request_;
+        }
+
+        // 고른 언어 칸이다 ("system"·"ko"·"en"). 셸이 설 때 자기 칸을 여기에 맞춘다.
+        [[nodiscard]] const std::u8string& language() const noexcept
+        {
+            return language_;
         }
 
         // 셸이 페이지를 바꿀 때 전환을 쓰는가다.
@@ -148,7 +157,7 @@ namespace mobile_demo {
         std::u8string secret_report_ {};
         // 셸이 넣어 준 OS 값이다. 아직 받지 않았으면 빈 값이다. 고른 언어 칸은 `device_language_intent`가 바꾼다.
         std::optional<device_locale_intent> locale_ {};
-        std::u8string language_ { u8"system" };
+        std::u8string language_ {};
         // 페이지 전환을 쓰는가와, 마지막으로 지은 frame에서 도는 중이었는가다.
         bool page_transition_ { true };
         bool page_transition_turning_ { false };
