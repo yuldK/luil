@@ -54,13 +54,12 @@ namespace luil {
         resolve_pending_move();
         apply_removed(std::move(path));
         check_limit();
-        // 생겼다 사라져 묶음이 비었다. 시각을 남기면 다음 변경의 `max_delay`가 이미 지나 조용해지기를 기다리지 않고 나간다.
+        // 생겼다 사라져 묶음이 비었다. 모은 자리와 시각을 함께 비운다.
+        //  - 시각을 남기면 다음 변경의 `max_delay`가 이미 지나 조용해지기를 기다리지 않고 나간다.
+        //  - 자리를 남기면 낼 것이 없어 `prepare`가 돌지 않으므로, 순 변화 없는 변경만 이어지는 폴더에서 칸이 끝없이 는다.
         //  - `apply_removed`에서 비우지 않는다. 그 길은 `resolve_pending_move`로도 오는데, 그때는 곧이어 다른 항목이나 반쪽이 들어온다.
         if (pending() == false)
-        {
-            first_.reset();
-            last_.reset();
-        }
+            clear();
     }
 
     void file_watch_batch::renamed(std::u8string from, std::u8string to, const clock::time_point now)

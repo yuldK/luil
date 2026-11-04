@@ -343,6 +343,43 @@ TEST_CASE("File watch batches keep their times while something still waits", "[f
     }
 }
 
+TEST_CASE("File watch batches that only come and go keep no slots", "[file_watch]")
+{
+    auto batch { make_batch() };
+    const auto come_and_go = [&batch]() {
+        for (int index { 0 }; index < 1000; ++index)
+        {
+            batch.created(u8"a", start + 1ms * index);
+            batch.removed(u8"a", start + 1ms * index);
+        }
+    };
+
+    SECTION("Nothing else waits")
+    {
+        // 낼 것이 없어 `prepare`가 돌지 않고 `max_changes`도 지운 자리를 세지 않는다. 자리를 남기면 이런 변경만 이어지는 폴더에서 칸이 끝없이 는다.
+        come_and_go();
+        REQUIRE(batch.size() == 0u);
+        REQUIRE(batch.slots() == 0u);
+        REQUIRE(batch.due_at().has_value() == false);
+
+        // 비운 뒤의 변경도 그대로 모인다.
+        batch.modified(u8"b", start + 2s);
+        REQUIRE(batch.slots() == 1u);
+        REQUIRE(batch.due_at() == start + 2s + 100ms);
+    }
+    SECTION("Something else waits")
+    {
+        // 낼 것이 남아 있으면 비우지 않는다. 그 묶음을 낼 때 칸도 함께 빈다.
+        batch.modified(u8"b", start);
+        come_and_go();
+        REQUIRE(batch.size() == 1u);
+        const std::optional<luil::file_change_batch> received { take(batch, start + 10s) };
+        REQUIRE(received.has_value());
+        REQUIRE(received->changes == std::vector { modified(u8"b") });
+        REQUIRE(batch.slots() == 0u);
+    }
+}
+
 TEST_CASE("File watch batches over max changes become a rescan", "[file_watch]")
 {
     auto batch { make_batch(3) };

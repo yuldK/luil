@@ -75,6 +75,11 @@ namespace luil {
         {
             return live_;
         }
+        // 지운 자리까지 센 칸 수다. 낼 것이 없는데 칸만 쌓이지 않는지 test가 본다.
+        [[nodiscard]] std::size_t slots() const noexcept
+        {
+            return entries_.size();
+        }
 
         // 지금 모은 것을 묶음으로 짓는다. 거르고 나서 낼 것이 없으면 nullopt이고 모은 것을 비운다.
         //  - 짝 없는 반쪽 이름 바꿈은 여기서 풀린다.
