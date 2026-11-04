@@ -246,10 +246,12 @@ namespace demo {
         void add(std::unique_ptr<luil::ui_element> element, float height);
         void add(std::unique_ptr<luil::ui_element> element, luil::stack_item item);
         void gap(float height = 12.0f);
+        // 첫 제목은 흘림 영역의 이름도 된다 (`finish`).
         void heading(std::u8string title, std::u8string description);
         // 카드를 연다. 제목이 비어 있지 않으면 첫 줄에 둔다.
         void begin_card(std::u8string title, std::u8string description = {});
         void end_card();
+        // 흘림 영역으로 감싸 낸다. 영역과 막대는 첫 제목으로 읽힌다. 이름이 없으면 보조 기술에서 막대가 무엇을 흘리는지 모른다.
         [[nodiscard]] std::unique_ptr<luil::ui_element> finish(float offset, std::function<luil::input_action(float)> scroll);
 
     private:
@@ -260,6 +262,8 @@ namespace demo {
         std::unique_ptr<luil::stack_element> column_ {};
         float height_ { 0.0f };
         int heading_ { 0 };
+        // 첫 제목이다. 비어 있으면 영역에 이름을 주지 않는다.
+        std::u8string first_heading_ {};
         std::unique_ptr<luil::stack_element> card_ {};
         float card_height_ { 0.0f };
         int cards_ { 0 };

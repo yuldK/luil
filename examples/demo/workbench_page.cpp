@@ -1260,7 +1260,10 @@ namespace demo {
         panel.corner_radius = 6.0f;
         panel.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
         auto card { std::make_unique<luil::panel_element>(workbench_id(u8"changes-panel"), std::move(panel)) };
-        card->set_content(std::make_unique<luil::table_element>(std::move(table)));
+        auto named_table { std::make_unique<luil::table_element>(std::move(table)) };
+        // 머리글과 가로 막대가 표의 이름을 물려받는다. 이름이 없으면 막대가 빈 글로 읽힌다.
+        named_table->set_access_name(u8"변경 파일");
+        card->set_content(std::move(named_table));
         return card;
     }
 

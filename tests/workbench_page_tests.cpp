@@ -1,6 +1,7 @@
 #include "demo/workbench_page.h"
 
 #include "luil/ui/grid_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/table_element.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
@@ -179,6 +180,24 @@ TEST_CASE("The workbench assembles without duplicate or unarranged elements", "[
     REQUIRE(tree.find(luil::virtual_list_row_id(u8"workbench-tree", u8"trunk/CMakeLists.txt")) != nullptr);
     REQUIRE(tree.find(luil::virtual_list_row_id(u8"workbench-changes", u8"trunk/CMakeLists.txt")) != nullptr);
     REQUIRE(changes(tree).body().model().size() == 45u);
+}
+
+TEST_CASE("The changes table names its header and horizontal bar and keeps the end band off the vertical bar", "[demo][workbench]")
+{
+    demo::workbench_page page {};
+    const luil::ui_tree tree { published(page) };
+    const luil::table_element& table { changes(tree) };
+    REQUIRE(table.access_name() == u8"변경 파일");
+    const luil::ui_element* const header { tree.find({ luil::ui_element_kind::table_header, u8"workbench-changes" }) };
+    REQUIRE(header != nullptr);
+    REQUIRE(header->accessibility().name == u8"변경 파일");
+    // 가로 막대는 표의 이름을 물려받는다. 이름이 없으면 빈 글이다.
+    REQUIRE(table.horizontal_bar() != nullptr);
+    REQUIRE(table.horizontal_bar()->visible());
+    REQUIRE(table.horizontal_bar()->accessibility().name == u8"변경 파일");
+    // 마흔다섯 행이 넘쳐 세로 막대가 서므로 머리글을 오른쪽으로 끌 때의 띠가 그 막대 앞에 선다.
+    REQUIRE(table.scroll() != nullptr);
+    REQUIRE(table.scroll()->trailing_inset == luil::scroll_area_bar_width);
 }
 
 TEST_CASE("Expanding a folder loads it later and drops a stale result", "[demo][workbench]")
