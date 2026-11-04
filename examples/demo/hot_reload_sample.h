@@ -125,7 +125,8 @@ namespace demo {
                 status_ = name + u8" 너무 큼" + reason + u8" · 이전 값 유지";
                 return;
             case luil::hot_reload_status::lost:
-                status_ = name + u8" 감시 끊김" + reason + u8" · 이전 값 유지";
+                // 끊긴 감시는 다시 오지 않는다. 쓰기 단추가 폴더를 되살려도 이 실행에서는 화면에 닿지 않으므로 되살리는 길을 말한다.
+                status_ = name + u8" 감시 끊김" + reason + u8" · 이전 값 유지 · 앱을 다시 띄우면 다시 감시한다";
                 return;
             }
         }
@@ -177,6 +178,9 @@ namespace demo {
     {
         if (folder.empty())
             return u8"감시 폴더가 없습니다.";
+        // 폴더를 통째로 지운 뒤에도 쓸 수 있어야 다음 실행의 감시가 그 글을 읽는다. 만들지 못하면 아래 쓰기가 이유를 돌려준다.
+        std::error_code ignored {};
+        std::filesystem::create_directories(std::filesystem::path { folder }, ignored);
         for (const hot_reload_file_text& file : hot_reload_write_plan(what, style_source, markup_source))
         {
             const luil::platform_result result { write_hot_reload_file(std::filesystem::path { folder } / std::filesystem::path { file.name }, file.text) };

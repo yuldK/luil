@@ -5,6 +5,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #if defined(_WIN32)
+#include "demo/hot_reload_sample.h"
+
 #include <windows.h>
 #endif
 
@@ -568,3 +570,18 @@ TEST_CASE("An empty deliver reads nothing and does not refuse", "[hot_reload][pl
     std::this_thread::sleep_for(200ms);
     reloader->stop();
 }
+
+#if defined(_WIN32)
+// 데모의 쓰기 단추다. `replace_file_atomically`가 Android core test에 링크되지 않아 Windows에서만 잰다. 모바일 데모도 같은 함수를 부른다.
+TEST_CASE("The demo write buttons bring back a watched folder that was removed", "[hot_reload][demo]")
+{
+    const scratch_folder folder {};
+    std::filesystem::remove_all(folder.path());
+    REQUIRE(std::filesystem::exists(folder.path()) == false);
+
+    const std::u8string error { demo::write_hot_reload_files(folder.path().u8string(), demo::hot_reload_write::defaults, u8"{}", u8"<stack/>") };
+    REQUIRE(error == std::u8string {});
+    REQUIRE(std::filesystem::exists(folder.file(demo::hot_reload_style_file)));
+    REQUIRE(std::filesystem::exists(folder.file(demo::hot_reload_markup_file)));
+}
+#endif
