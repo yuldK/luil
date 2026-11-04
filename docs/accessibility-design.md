@@ -111,9 +111,15 @@ Surface는 직전 published tree의 접근성 snapshot을 보관한다. `make_ac
 - 다중 선택 container의 항목은 container마다 모아 added-to-selection·removed-from-selection event. 바뀐 끝에 하나만 골라졌으면 그 항목의 selected event 하나, 한꺼번에 `access_selection_burst`(20)보다 많이 바뀌었으면 container의 selection-invalidated event 하나. 가상 목록은 창 밖의 고른 행도 상한(`virtual_list_offscreen_selection_limit`)까지 지어 두므로 흘려도 이 대조가 그 행들을 본다. 선택 읽기는 상한 없이 model이 답한다 ([virtual-list-design.md](virtual-list-design.md))
 - 구조가 바뀌면 가장 가까운 affected accessible parent의 structure change
 
+- live region(`access_info::live`)의 글이 바뀌면 그 live region의 live-region event 하나. 글은 이름·값·도움말·오류이고, 안쪽 요소의 글이 바뀌거나 글을 가진 요소가 들고 나도 가장 안쪽 live region이 한 번 알린다. 글을 가진 채 새로 선 live region도 알린다. 이 변경은 목록의 맨 끝에 선다 — 클라이언트가 바뀐 구조를 다시 읽은 뒤에 그 글을 읽는다.
+
+발행본은 요소의 `accessibility()`에 공통 값을 채운 `access_info_of`로 짓는다. 활성(`enabled`, `ui_element::enabled()`), 도움말(`help`, 비어 있으면 tooltip 글), live region(`live`, `ui_element::set_live_region` — 정하지 않은 `alert`는 assertive)이 그것이다. 비활성 단추가 이름과 까닭을 지닌 채 tree에 남으면 활성과 까닭이 바뀔 때 property change가 된다. 질의(`GetPropertyValue`)도 같은 함수로 읽어 알린 글과 읽히는 글이 어긋나지 않는다.
+
 Role 변경은 structure event를 통한 교체로 취급한다. Element 추가와 제거도 parent structure event가 된다. 단일 선택의 새 selected item이 이미 상태 전환을 표현하면 별도 deselection property event를 중복 발생시키지 않는다. 두 발행본에 모두 있는 항목만 선택 event로 알린다 — 새로 지어진 가상 목록 행은 structure가 말한다.
 
-Win32 root는 이 변경을 UIA property, element-selected, `ElementAddedToSelection`·`ElementRemovedFromSelection`·`Selection_Invalidated`, structure event로 변환한다. Invoke는 snapshot으로 보이는 상태가 아닌 event이므로 해당 동작을 dispatch할 때 발생한다.
+Win32 root는 이 변경을 UIA property, element-selected, `ElementAddedToSelection`·`ElementRemovedFromSelection`·`Selection_Invalidated`, structure, `LiveRegionChanged` event로 변환한다. property 짝에서 `IsEnabled`, `HelpText`(오류 글이 있으면 그것이 먼저인 읽히는 글), `LiveSetting`, `ScrollVerticalScrollPercent`·`ScrollHorizontalScrollPercent`도 편다.
+
+흘리는 창은 `access_info::scroll`(백분율 자리, 100이 끝)을 내주면 Scroll pattern을 내건다. `SetScrollPercent`와 `Scroll`(칸·쪽을 지금 자리에서 백분율로 옮긴다)은 `access_command::set_scroll_percent` 하나로 요소에 간다. 백분율인 까닭은 내용이 계속 늘어나는 목록에서 "끝까지"를 offset으로는 정확히 말할 수 없어서다. `scroll_area_config::scroll_to_percent`를 채운 영역이 pane으로 서서 이 pattern을 내건다. 채우지 않은 영역은 지금처럼 접히고 막대(RangeValue)만 선다. Invoke는 snapshot으로 보이는 상태가 아닌 event이므로 해당 동작을 dispatch할 때 발생한다.
 
 ## Foreground와 자동화 실행
 

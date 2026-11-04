@@ -2,13 +2,17 @@
 
 #include "luil/theme/ui_style.h"
 #include "luil/theme/ui_theme.h"
+#include "luil/generated/codicons.h"
+#include "luil/ui/draw_primitives.h"
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
 #include "include/core/SkMaskFilter.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkTypeface.h"
 
 #include <chrono>
 
@@ -112,6 +116,19 @@ namespace luil {
         //    화면에는 주 tree의 hover tooltip이 서지 않아 겹칠 일이 드물다.
         for (const overlay_layer& layer : state.overlays)
             draw_overlay(canvas, context, colors, scale, layer);
+
+        // 흘리는 popup의 화살표 칸이다. 내용 위에 판을 깔고 그 가운데 화살표를 둔다.
+        //  - 효과가 선 popup이면 판도 효과를 비춘다 (메뉴 몸통이 바탕을 칠하지 않는 것과 같다).
+        const auto draw_scroll_strip = [&](const float top, const float height, const char32_t glyph) {
+            if (height <= 0.0f)
+                return;
+            const float width { static_cast<float>(state.width) };
+            canvas.drawRect(SkRect::MakeXYWH(0.0f, top, width, height), solid_paint(state.backdrop ? colors.backdrop_background : colors.surface_background));
+            if (codicon_typeface != nullptr)
+                draw_centered_glyph(canvas, glyph, { 0.0f, top, width, height }, SkFont { sk_ref_sp(codicon_typeface), 12.0f * scale }, solid_paint(colors.secondary_foreground));
+        };
+        draw_scroll_strip(0.0f, static_cast<float>(state.scroll_up_strip), codicons::icon_chevron_up);
+        draw_scroll_strip(static_cast<float>(state.height - state.scroll_down_strip), static_cast<float>(state.scroll_down_strip), codicons::icon_chevron_down);
 
         // popup의 테두리다. tree 위에 긋는다 — 가장자리까지 채운 내용에도 경계가 남는다.
         if (state.border)

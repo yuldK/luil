@@ -105,8 +105,28 @@ namespace luil {
             if (info.range.has_value() == false)
                 return std::nullopt;
             break;
+        case access_command::set_scroll_percent:
+            // 흘리는 창이 아니면 할 수 없는 일이다. 같은 자리로의 명령도 요소에 간다 — 내용이 늘어나는 창의 100은
+            // 지금 자리가 100이어도 "끝에 붙어 있으라"는 뜻이 있다.
+            if (info.scroll.has_value() == false)
+                return std::nullopt;
+            break;
         }
         return element.access_actions(request);
+    }
+
+    access_info access_info_of(const ui_element& element)
+    {
+        access_info info { element.accessibility() };
+        info.enabled = element.enabled();
+        // 요소가 도움말을 따로 답하지 않았으면 tooltip 글이 도움말이다 — 눈으로 읽는 설명이 귀로도 읽힌다.
+        if (info.help.empty())
+            info.help = element.tooltip();
+        if (const std::optional<access_live> live { element.live_region() }; live.has_value())
+            info.live = *live;
+        else if (info.live == access_live::off && info.role == access_role::alert)
+            info.live = access_live::assertive;
+        return info;
     }
 
     std::vector<const ui_element*> access_children(const ui_element& element)
@@ -274,7 +294,7 @@ namespace luil {
         {
             for (const ui_element* const child : access_children(element))
             {
-                snapshot.entries.push_back({ child->id(), parent, child->accessibility() });
+                snapshot.entries.push_back({ child->id(), parent, access_info_of(*child) });
                 collect_access_snapshot(*child, child->id(), snapshot);
             }
         }
@@ -299,7 +319,7 @@ namespace luil {
         // 그 자식이 최상위가 된다.
         if (root->accessibility().role != access_role::none)
         {
-            snapshot.entries.push_back({ root->id(), {}, root->accessibility() });
+            snapshot.entries.push_back({ root->id(), {}, access_info_of(*root) });
             collect_access_snapshot(*root, root->id(), snapshot);
             return snapshot;
         }
@@ -442,6 +462,44 @@ namespace luil {
             if (already == false && old_list != new_list)
                 changes.push_back({ access_change_kind::structure, parent, {}, {} });
         }
+
+        // live region은 글이 바뀐 요소에서 가장 안쪽 live region으로 걸어 올라가 그 자리에서 한 번 알린다.
+        // 들고 난 요소도 글이 바뀐 것이다 — 상태 막대에 줄 하나가 새로 서는 것이 그 예다.
+        const auto live_owner = [&current_by_id](ui_element_id id) -> const access_snapshot_entry* {
+            while (id != ui_element_id {})
+            {
+                const auto found { current_by_id.find(id) };
+                if (found == current_by_id.end())
+                    return nullptr;
+                if (found->second->info.live != access_live::off)
+                    return found->second;
+                id = found->second->parent;
+            }
+            return nullptr;
+        };
+        const auto has_text = [](const access_info& info) {
+            return info.name.empty() == false || info.value.empty() == false || info.help.empty() == false || info.error.empty() == false;
+        };
+        const auto text_changed = [](const access_info& before, const access_info& after) {
+            return before.name != after.name || before.value != after.value || before.help != after.help || before.error != after.error;
+        };
+        std::vector<ui_element_id> live {};
+        const auto announce_live = [&live](const access_snapshot_entry* owner) {
+            if (owner != nullptr && std::find(live.begin(), live.end(), owner->id) == live.end())
+                live.push_back(owner->id);
+        };
+        for (const access_snapshot_entry& entry : current.entries)
+        {
+            const auto found { previous_by_id.find(entry.id) };
+            const bool spoke { found == previous_by_id.end() ? has_text(entry.info) : text_changed(found->second->info, entry.info) };
+            if (spoke)
+                announce_live(live_owner(entry.id));
+        }
+        for (const access_snapshot_entry& entry : previous.entries)
+            if (current_by_id.contains(entry.id) == false && has_text(entry.info))
+                announce_live(live_owner(entry.parent));
+        for (const ui_element_id& id : live)
+            changes.push_back({ access_change_kind::live_region, id, {}, {} });
         return changes;
     }
 

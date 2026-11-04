@@ -118,7 +118,8 @@ namespace luil::win32 {
         return set_window_composition_attribute() != nullptr;
     }
 
-    void apply_backdrop_mechanism(const HWND window, const backdrop_mechanism mechanism, const backdrop_mechanism previous, const bool system_supported, const bool dark) noexcept
+    void apply_backdrop_mechanism(const HWND window, const backdrop_mechanism mechanism, const backdrop_mechanism previous, const bool system_supported, const bool dark,
+        const acrylic_accent_style& accent_style) noexcept
     {
         if (window == nullptr)
             return;
@@ -141,10 +142,11 @@ namespace luil::win32 {
         if (accent != nullptr && (mechanism == backdrop_mechanism::accent_acrylic || previous == backdrop_mechanism::accent_acrylic))
         {
             // 4는 acrylic blur behind, 0은 끔이다. 19는 `WCA_ACCENT_POLICY`다.
-            //  - 플래그 0이 표준 창의 시스템 acrylic과 가장 가까운 밝기다. 플래그 2(색 막을 쓴다)는 알파 0x10
-            //    이하에서 거의 검게 되고, 0x40에서도 한 단 어둡다 (실측). 색 막은 명암에 맞춰 둔다.
-            const DWORD tint { dark ? 0x40202020u : 0x40f3f3f3u };
-            accent_policy policy { mechanism == backdrop_mechanism::accent_acrylic ? 4 : 0, 0, tint, 0 };
+            //  - flag와 색 막은 앱이 고른다 (`acrylic_accent_style`). 기본(flag 0)이 표준 창의 시스템 acrylic과 가장
+            //    가까운 밝기다. 플래그 2(색 막을 쓴다)는 알파 0x10 이하에서 거의 검게 되고, 0x40에서도 한 단 어둡다
+            //    (실측). 색 막은 명암에 맞춰 둔다.
+            const DWORD tint { dark ? accent_style.dark_tint : accent_style.light_tint };
+            accent_policy policy { mechanism == backdrop_mechanism::accent_acrylic ? 4 : 0, static_cast<int>(accent_style.flags), tint, 0 };
             window_composition_attribute_data data { 19, &policy, sizeof(policy) };
             static_cast<void>(accent(window, &data));
         }

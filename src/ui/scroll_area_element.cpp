@@ -145,6 +145,33 @@ namespace luil {
         bar_->arrange(context.for_child({ context.slot.x + context.slot.width - bar_width, context.slot.y, bar_width, context.slot.height }));
     }
 
+    access_info scroll_area_element::accessibility() const
+    {
+        // 백분율로 자리를 정할 길이 없으면 지금까지처럼 구조다 — 막대(RangeValue)가 흘림을 맡는다.
+        if (config_.scroll_to_percent == nullptr)
+            return ui_element::accessibility();
+        access_info info { .role = access_role::pane, .name = access_name() };
+        access_scroll_state state {};
+        // 흘릴 것이 있을 때만 세로로 흘리는 창이다. 가로로는 흘리지 않는다.
+        if (metrics_.overflowing())
+        {
+            state.vertical_percent = std::clamp(metrics_.scroll_offset / metrics_.maximum_scroll * 100.0f, 0.0f, 100.0f);
+            state.vertical_view_size = metrics_.content_height > 0.0f ? std::clamp(metrics_.viewport_height / metrics_.content_height * 100.0f, 0.0f, 100.0f) : 100.0f;
+        }
+        info.scroll = state;
+        return info;
+    }
+
+    std::optional<std::vector<input_action>> scroll_area_element::access_actions(const access_request& request) const
+    {
+        if (request.command != access_command::set_scroll_percent || config_.scroll_to_percent == nullptr)
+            return ui_element::access_actions(request);
+        // 가로 축은 없다. 세로를 그대로 두라면 할 일이 없다.
+        if (request.vertical_percent < 0.0f)
+            return std::vector<input_action> {};
+        return std::vector<input_action> { config_.scroll_to_percent(std::clamp(request.vertical_percent, 0.0f, 100.0f)) };
+    }
+
     void scroll_area_element::draw(draw_context& context, const interaction_snapshot& interaction) const
     {
         // 영역 자체는 바탕을 칠하지 않는다.

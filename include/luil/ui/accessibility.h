@@ -85,11 +85,40 @@ namespace luil {
         [[nodiscard]] bool operator==(const access_range&) const = default;
     };
 
-    // 요소 하나가 보조 기술에 내주는 정보다.
-    // 비활성·초점 가능 여부는 담지 않는다 — `enabled()`·`focusable()`이 이미
-    // 공개라 같은 값을 두 곳에 두지 않는다.
     enum class access_orientation { horizontal, vertical };
 
+    // 글이 바뀌면 보조 기술이 저절로 읽는 자리(live region)인가다 (UIA LiveSetting).
+    enum class access_live
+    {
+        // 바뀌어도 알리지 않는다.
+        off,
+        // 하던 말을 마친 뒤 읽는다 (상태 글).
+        polite,
+        // 하던 말을 끊고 곧바로 읽는다 (입력 거절 사유 같은 경고).
+        assertive,
+    };
+
+    // 흘리는 창의 지금 자리다 (UIA Scroll 패턴). 자리는 백분율이고 100이 끝이다.
+    //  - 픽셀이 아니라 백분율인 것이 요점이다. 내용이 계속 늘어나는 목록에서 "끝까지"는 어느 offset으로도 정확히
+    //    말할 수 없다 — 그 사이에 내용이 늘면 그 offset은 끝이 아니다. 100은 늘어도 끝이다.
+    struct access_scroll_state
+    {
+        // 그 축의 자리다 (0~100). 음수(`access_no_scroll`)면 그 축으로는 흘리지 않는다.
+        float horizontal_percent { -1.0f };
+        float vertical_percent { -1.0f };
+        // 창이 내용의 몇 %를 보이는가 (0~100). 흘리지 않는 축은 100이다.
+        float horizontal_view_size { 100.0f };
+        float vertical_view_size { 100.0f };
+
+        [[nodiscard]] bool operator==(const access_scroll_state&) const = default;
+    };
+
+    // 흘리지 않는 축의 자리이자 "이 축은 그대로 두라"는 목표다 (UIA `UIA_ScrollPatternNoScroll`과 같은 값).
+    inline constexpr float access_no_scroll { -1.0f };
+
+    // 요소 하나가 보조 기술에 내주는 정보다.
+    // 요소가 `accessibility()`로 답하는 것은 역할에서 흘림 자리(`scroll`)까지다. 뒤의 공통 값(활성·도움말·live region)은 모든 요소에
+    // 같은 규칙이라 `access_info_of`가 요소의 상태에서 채운다 — 요소마다 재정의하면 하나쯤 빠뜨린다.
     struct access_info
     {
         access_role role { access_role::none };
@@ -118,9 +147,27 @@ namespace luil {
         bool invalid { false };
         // 입력 칸 아래의 오류 글이다. 새로 생기거나 바뀌면 platform이 그 글을 읽게 알린다 (number-input-design.md).
         std::u8string error {};
+        // 흘리는 창의 자리다 (UIA Scroll). 있으면 `access_command::set_scroll_percent`를 받는다.
+        std::optional<access_scroll_state> scroll {};
+        // 실행을 받는가다 (UIA IsEnabled). `access_info_of`가 `ui_element::enabled()`로 채운다.
+        //  - 비활성 단추도 이름과 까닭(`help`)을 지닌 채 tree에 남는다. 활성이 바뀌면 platform이 알린다.
+        bool enabled { true };
+        // 도움말이다 (UIA HelpText). 비어 있으면 `access_info_of`가 tooltip 글로 채운다.
+        //  - 비활성 단추의 "왜 누를 수 없는가"를 싣는 자리다. 바뀌면 platform이 알린다.
+        //  - 오류 글(`error`)이 있으면 platform은 그것을 먼저 읽는다 — 지금 들어야 하는 것이 그 글이다.
+        std::u8string help {};
+        // live region이다. `access_info_of`가 `ui_element::live_region()`으로 채우고, 정하지 않은 경고(`alert`)는
+        // `assertive`다. 켜진 요소의 글(이름·값·도움말·오류)이나 그 안의 글이 바뀌면 platform이 읽게 알린다
+        // (`access_change_kind::live_region`).
+        access_live live { access_live::off };
 
         [[nodiscard]] bool operator==(const access_info&) const = default;
     };
+
+    // 요소의 `accessibility()`에 공통 값(활성·도움말·live region)을 채운 정보다.
+    // 접근 발행본(`make_access_snapshot`)과 platform의 읽기가 모두 이것으로 읽는다 — 한 값을 두 길로 읽으면 알림과
+    // 질의의 답이 어긋난다.
+    [[nodiscard]] access_info access_info_of(const ui_element& element);
 
     // 보조 기술이 시키는 실행이다.
     // 읽기(`access_info`)의 짝이고, 어휘가 platform을 모르는 것도 같다 —
@@ -144,6 +191,9 @@ namespace luil {
         // 답하지 않으면 할 수 없는 일이다 (`ui_element::set_access_handler`).
         add_to_selection,
         remove_from_selection,
+        // 흘리는 창의 자리를 백분율로 하라 (`access_request::horizontal_percent`·`vertical_percent`, 100은 끝).
+        // 목표 자리를 나르는 절대 명령이라 기본 실행(클릭)이 없다. 요소가 답해야 한다 (`scroll_area_config::scroll_to_percent`).
+        set_scroll_percent,
     };
 
     struct access_request
@@ -156,6 +206,9 @@ namespace luil {
         //  - 참이면 `select`는 "이것 **하나만** 골라라"라 이미 골라져 있어도 요소에 간다 — 다른 항목이 함께
         //    골라져 있을 수 있고, 그것을 아는 것은 앱이다.
         bool multiple_selection { false };
+        // `set_scroll_percent`의 목표 자리다 (0~100, 100은 끝). `access_no_scroll`이면 그 축은 그대로 둔다.
+        float horizontal_percent { access_no_scroll };
+        float vertical_percent { access_no_scroll };
 
         [[nodiscard]] bool operator==(const access_request&) const = default;
     };
@@ -346,6 +399,10 @@ namespace luil {
         // 이 다중 선택 container의 선택이 한꺼번에 많이 바뀌었다 (`access_selection_burst`보다 많이).
         // 항목마다 알리지 않고 다시 읽으라고 한다 (UIA Selection_Invalidated).
         selection_invalidated,
+        // 이 live region(`access_info::live`)의 글이 바뀌었다 — 지금 다시 읽으라 (UIA LiveRegionChanged).
+        //  - 자기 글(이름·값·도움말·오류)이 바뀌었거나, 글을 가진 채 새로 나타났거나, 안쪽 요소의 글이 바뀌거나 들고 났다.
+        //  - live region 하나에 한 frame에 하나다. 안쪽이 여럿 바뀌어도 가장 안쪽 live region이 한 번 알린다.
+        live_region,
     };
 
     // 다중 선택 container 하나의 선택 변화를 항목마다 알리는 한계다. 넘으면 `selection_invalidated` 하나다.
@@ -366,7 +423,8 @@ namespace luil {
     };
 
     // 이전/현재 접근 발행본을 견줘 알릴 변화를 편다.
-    // 순서는 property·selected(현재 발행본의 게시 순서) 뒤에 다중 선택(container 차례), 그 뒤에 structure다.
+    // 순서는 property·selected(현재 발행본의 게시 순서) 뒤에 다중 선택(container 차례), 그 뒤에 structure, 마지막에
+    // live region이다 — 클라이언트가 바뀐 구조를 다시 읽은 뒤에 그 글을 읽는다.
     //  - 다중 선택 container의 항목은 골라짐이 바뀐 것을 container마다 모은다. 바뀐 것이 `access_selection_burst`
     //    보다 많으면 container의 `selection_invalidated` 하나, 지금 골라진 것이 바뀐 항목 하나뿐이고 그것이
     //    새로 골라졌으면 그 항목의 `selected` 하나, 그 밖에는 항목마다 `added_to_selection`·`removed_from_selection`

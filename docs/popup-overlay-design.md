@@ -109,6 +109,13 @@ Factory가 없으면 모든 reason에서 popup을 유지한다. Factory가 빈 a
 
 Popup 좌표와 크기는 앵커 client 기준 논리 픽셀이다. UI thread는 앵커 DPI를 적용해 물리 픽셀로 만들고 화면 좌표와 작업 영역을 계산한다. Popup은 앵커 표면의 DPI를 그대로 사용한다.
 
+작업 영역보다 긴 popup은 작업 영역 높이로 줄여 세우고 내용을 흘려 보인다(`popup_surface::set_viewport_height`). 작은 화면을 높은 배율로 쓰면 항목 수를 줄인 메뉴도 넘친다. 흘린 양은 popup 표면(UI thread)의 것이고 앱과 input thread는 모른다 — 그림은 그만큼 위로 옮겨 그리고(`frame_state::origin_y`), 포인터와 커서는 그만큼 더해 tree에 묻는다(`window_surface::content_offset_y`).
+
+- 휠은 흘릴 것이 남은 쪽이면 popup이 흘리고, 끝이면 지금처럼 tree에 간다. 한 칸은 메뉴 항목 셋이다.
+- 흘릴 것이 남은 쪽에 화살표 칸(16 논리 픽셀)이 선다. 칸 위에 포인터를 두면 그쪽으로 흘러가고, 누르면 한 칸 흘린다. 칸 밑에 가려진 항목은 hover도 누름도 받지 않는다.
+- 키보드 강조(`menu_highlight`)나 키보드 초점이 옮겨 가면 그 항목이 칸에 가리지 않게 따라간다. 포인터가 고른 강조는 이미 보이므로 따라가지 않는다.
+- 흘린 popup에 앵커한 하위 메뉴는 흘린 만큼 올라간 자리에 선다.
+
 앵커 이동과 DPI 변화는 popup placement를 다시 계산한다. 앵커 선택과 재생성 규칙은 [popup-anchor-design.md](popup-anchor-design.md)를 따른다.
 
 ## 창이 하나뿐인 플랫폼 (Android)

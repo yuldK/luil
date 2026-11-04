@@ -1148,6 +1148,16 @@ namespace luil {
         // 글을 세우지 않는 컨테이너(목록·탭 막대·스크롤 막대)에 이름을 주는 자리다.
         // 그리기에도 글자 탐색에도 쓰이지 않으므로 화면은 그대로다.
         void set_access_name(std::u8string text);
+        // 글이 바뀌면 보조 기술이 저절로 읽는 자리로 둔다 (`access_info::live`, UIA LiveSetting·LiveRegionChanged).
+        //  - 상태 글을 바꾸는 단추는 `polite`, 입력 거절 사유는 `assertive`다. 경고 역할(`access_role::alert`)은 정하지
+        //    않아도 `assertive`다.
+        //  - 이 요소 안쪽 요소의 글이 바뀌어도 이 요소가 알린다 — 여러 줄을 한 판에 담은 상태 막대가 그렇다.
+        //  - 접근 tree에 서는 요소(역할이 있는 것)만 뜻이 있다.
+        void set_live_region(access_live live) noexcept;
+        [[nodiscard]] std::optional<access_live> live_region() const noexcept
+        {
+            return live_region_;
+        }
         void set_action(ui_trigger trigger, ui_action action);
         void clear_action(ui_trigger trigger) noexcept;
         void set_drag_source(std::optional<drag_source> source);
@@ -1373,6 +1383,8 @@ namespace luil {
         bool preserve_pointer_focus_ { false };
         std::u8string search_label_ {};
         std::u8string access_name_ {};
+        // 정하지 않았으면 역할에서 고른다 (`access_info_of`).
+        std::optional<access_live> live_region_ {};
         std::array<ui_action, ui_trigger_count> actions_ {};
         std::optional<drag_source> drag_source_ {};
         std::optional<drop_target> drop_target_ {};

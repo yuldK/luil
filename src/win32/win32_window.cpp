@@ -6,6 +6,7 @@
 #include "host/popup_reconcile.h"
 #include "host/surface_invalidate.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/font_scale.h"
 #include "luil/ui/webview_element.h"
 #include "win32/backdrop.h"
 #include "win32/caption_surface.h"
@@ -19,6 +20,7 @@
 #include "win32/secondary_surface.h"
 #include "win32/skia_renderer.h"
 #include "win32/surface_input.h"
+#include "win32/text_scale.h"
 #include "win32/utf8.h"
 #include "win32/webview_host.h"
 #include "win32/webview_layout.h"
@@ -152,6 +154,12 @@ namespace luil::win32 {
         constexpr UINT app_ui_command_request_message { WM_APP + 3 };
         // 클립보드 요청(복사·붙여넣기)을 UI thread로 넘기는 신호다.
         constexpr UINT clipboard_request_message { WM_APP + 4 };
+        // input thread가 Alt 조합 하나를 처리했다는 신호다 (`app_host::wake_signals::key_report`).
+        // wParam이 표(`key_pressed_event::report_ticket`), lParam이 받았는가다.
+        //  - WM_APP + 5는 표면들이 쓴다 (window_surface.h의 `access_dispatch_message`).
+        constexpr UINT key_report_message { WM_APP + 6 };
+        // 사용자가 텍스트 크기(설정 > 접근성)를 바꿨다는 신호다 (`text_scale_watcher`).
+        constexpr UINT text_scale_changed_message { WM_APP + 7 };
         // tree가 next_update로 예고한 "다음에 그림이 달라지는 시각"에 다시 그리기 위한 timer다.
         // 매 render가 남은 시간을 다시 계산해 하나만 걸므로 반복 timer가 아니어도 이어진다.
         // 예고가 없으면 timer도 없다.
@@ -386,6 +394,8 @@ namespace luil::win32 {
                 // 바뀌면 WM_DWMCOLORIZATIONCOLORCHANGED가 다시 세운다.
                 //  - 스레드들이 돌기 전이라 첫 게시부터 목록에 서 있다.
                 set_system_accent(read_system_accent_color());
+                // 사용자가 키운 텍스트 크기를 글자 크기에 싣는다 (`scaled_font_size`). 첫 metrics부터 그 값이다.
+                apply_text_scale(read_text_scale_factor());
             }
 
             application_window(const application_window&) = delete;
@@ -713,6 +723,8 @@ namespace luil::win32 {
                     .at_creation = config_.simulate_direct3d_failure,
                     .after_frames = config_.simulate_direct3d_loss_after_frames,
                 };
+                // 텍스트 크기가 바뀌면 이 창에 알린다. 구독하지 못해도 `WM_SETTINGCHANGE`가 다시 읽는다.
+                text_scale_watcher_ = std::make_unique<text_scale_watcher>(window_, text_scale_changed_message);
                 main_.set_cpu_presentation(cpu_presentation { .layered = layered_, .click_through = config_.layered_click_through });
                 if (layered_)
                     main_.set_placement_host(this);
@@ -742,6 +754,9 @@ namespace luil::win32 {
                     host_config.wake.ui_command = [wake_window] { PostMessageW(wake_window, ui_command_request_message, 0, 0); };
                     host_config.wake.app_ui_command = [wake_window] { PostMessageW(wake_window, app_ui_command_request_message, 0, 0); };
                     host_config.wake.clipboard = [wake_window] { PostMessageW(wake_window, clipboard_request_message, 0, 0); };
+                    host_config.wake.key_report = [wake_window](const std::uint64_t ticket, const bool handled) {
+                        PostMessageW(wake_window, key_report_message, static_cast<WPARAM>(ticket), handled ? 1 : 0);
+                    };
                     // 더블 클릭 임계는 사용자의 시스템 설정을 따른다.
                     host_config.interaction.double_click_time = std::chrono::milliseconds { GetDoubleClickTime() };
                     host_config.interaction.touch = config_.touch;
@@ -974,6 +989,15 @@ namespace luil::win32 {
                         for (const app_ui_command& command : host_->take_app_ui_commands())
                             environment_.delegate->execute_app_ui_command(*host_, command);
                     return 0;
+                case key_report_message:
+                    // 표는 프로세스 안에서 유일하다. 어느 표면의 조합인지는 그 표를 기다리는 표면이 안다.
+                    main_.alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0);
+                    for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                        secondary->alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0);
+                    return 0;
+                case text_scale_changed_message:
+                    refresh_text_scale();
+                    return 0;
                 case clipboard_request_message:
                     if (host_ != nullptr)
                         for (const clipboard_request& request : host_->take_clipboard_requests())
@@ -1179,6 +1203,8 @@ namespace luil::win32 {
                     reduce_motion_ = read_reduce_motion();
                     publish_popup_support();
                     set_text_render_quality(read_text_render_quality());
+                    // 텍스트 크기의 변경 알림을 구독하지 못한 환경에서도 설정 변경이 다시 읽게 한다. 같으면 아무 일도 없다.
+                    refresh_text_scale();
                     // 투명 효과·고대비가 바뀌면 배경 효과가 서는지도 바뀐다.
                     transparency_enabled_ = read_transparency_enabled();
                     refresh_backdrop();
@@ -1196,6 +1222,7 @@ namespace luil::win32 {
                     return 0;
                 case WM_DESTROY:
                     static_cast<void>(RemoveClipboardFormatListener(window_));
+                    text_scale_watcher_.reset();
                     // **웹뷰가 가장 먼저다.** 웹뷰는 표면 렌더러가 소유한 visual에
                     // 붙어 있고 배출구가 `app_host`를 잡고 있어, 그 둘보다 늦게
                     // 정리되면 이미 놓인 것을 만진다.
@@ -1404,8 +1431,12 @@ namespace luil::win32 {
 
             // 주 창의 닫힘 요청을 앱의 훅(`ui_frame::close`)에 넘긴다. 훅이 없으면 거짓이라 지금처럼 끝낸다.
             //  - 게시된 frame당 한 번만 낸다 (보조 창의 `close`와 같은 빗장). 같은 frame에 거듭 온 요청은 삼킨다.
+            //  - logic이나 input thread가 멈췄으면(`app_host::faulted`) 훅을 부르지 않고 닫는다. 훅이 낸 메시지를 받을
+            //    logic이 없어 창이 영영 닫히지 않는다.
             [[nodiscard]] bool request_main_close()
             {
+                if (host_ != nullptr && host_->faulted())
+                    return false;
                 const std::shared_ptr<const ui_frame> frame { host_ != nullptr ? host_->acquire_frame() : nullptr };
                 if (frame == nullptr || frame->close == nullptr)
                     return false;
@@ -1617,13 +1648,44 @@ namespace luil::win32 {
                 // delegate는 noexcept가 아니다 (`post_window_placement`와 같은 이유).
                 try
                 {
-                    return environment_.delegate->make_metrics_message(make_window_metrics(width, height, scale));
+                    window_metrics metrics { make_window_metrics(width, height, scale) };
+                    // 시스템이 키운 글자의 배율이다 (Android와 같은 대표값 — `scaled_font_size`가 실제 크기를 답한다).
+                    metrics.text_scale = scaled_font_size(12.0f) / 12.0f;
+                    return environment_.delegate->make_metrics_message(metrics);
                 }
                 catch (...)
                 {
                     report_runtime_error(u8"The window metrics delegate threw an exception.");
                 }
                 return {};
+            }
+
+            // 텍스트 크기를 글자 크기 표에 싣는다. 1이면 표를 비워 기본 배율로 돌아간다.
+            //  - 표는 선형이다 (0에서 0, 1에서 배율). Windows의 텍스트 크기는 모든 글자를 같은 비율로 키운다.
+            void apply_text_scale(const float factor) noexcept
+            {
+                text_scale_ = factor;
+                try
+                {
+                    static_cast<void>(set_system_font_sizes(factor > 1.0f ? std::vector<float> { 0.0f, factor } : std::vector<float> {}));
+                }
+                catch (...)
+                {
+                    // 표를 세우지 못하면 기본 배율로 남는다.
+                }
+            }
+
+            // 텍스트 크기를 다시 읽는다. 바뀌었으면 모든 창에 metrics를 다시 알려 앱이 새 글자 크기로 다시 배치하게 한다.
+            void refresh_text_scale() noexcept
+            {
+                const float factor { read_text_scale_factor() };
+                if (factor == text_scale_)
+                    return;
+                apply_text_scale(factor);
+                post_window_metrics();
+                for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                    secondary->post_metrics();
+                invalidate_all_surfaces();
             }
 
             void post_window_metrics() noexcept
@@ -2487,15 +2549,30 @@ namespace luil::win32 {
                 return nullptr;
             }
 
+            // popup 창이 화면에 서는 자리와 보이는 높이다 (물리 픽셀).
+            struct popup_screen_area
+            {
+                int x { 0 };
+                int y { 0 };
+                int height { 0 };
+            };
+
             // 앵커 표면의 client 자리를 화면 자리로 옮기고 모니터 작업 영역 안으로 다듬는다.
             // 앵커가 사라진 뒤 한 frame 동안은 주 창을 기준으로 물러선다.
-            [[nodiscard]] POINT popup_screen_position(const popup_placement& placement)
+            //  - 작업 영역보다 긴 popup은 작업 영역 높이로 줄인다. 내용은 popup이 흘려 보인다
+            //    (`popup_surface::set_viewport_height`). 줄이지 않으면 위에 붙고 아래가 화면 밖으로 잘린다.
+            //  - 앵커가 흘려 보이는 popup이면 그 안의 자리는 흘린 만큼 올라가 있다 (하위 메뉴가 연 항목 곁에 선다).
+            [[nodiscard]] popup_screen_area popup_screen_bounds(const popup_placement& placement)
             {
                 const window_surface* const anchor { anchor_surface(placement.anchor) };
                 POINT origin { 0, 0 };
                 ClientToScreen(anchor != nullptr ? anchor->window() : window_, &origin);
+                const popup_surface* const anchor_popup { find_popup(placement.anchor) };
+                if (anchor_popup != nullptr)
+                    origin.y -= anchor_popup->scroll_offset();
                 int x { origin.x + placement.x };
                 int y { origin.y + placement.y };
+                int height { placement.height };
 
                 RECT desired { x, y, x + placement.width, y + placement.height };
                 const HMONITOR monitor { MonitorFromRect(&desired, MONITOR_DEFAULTTONEAREST) };
@@ -2504,13 +2581,14 @@ namespace luil::win32 {
                 if (GetMonitorInfoW(monitor, &information) != FALSE)
                 {
                     const screen_area work { information.rcWork.left, information.rcWork.top, information.rcWork.right, information.rcWork.bottom };
-                    if (find_popup(placement.anchor) != nullptr && x + placement.width > work.right)
+                    height = std::min(height, std::max(1, static_cast<int>(work.bottom - work.top)));
+                    if (anchor_popup != nullptr && x + placement.width > work.right)
                         x = origin.x - placement.width;
-                    const auto [clamped_x, clamped_y] { clamp_popup_position(x, y, placement.width, placement.height, work) };
+                    const auto [clamped_x, clamped_y] { clamp_popup_position(x, y, placement.width, height, work) };
                     x = clamped_x;
                     y = clamped_y;
                 }
-                return { x, y };
+                return { x, y, height };
             }
 
             void create_popup(const popup_placement& placement, const ui_popup& source, const popup_shape& shape)
@@ -2529,13 +2607,14 @@ namespace luil::win32 {
                 const window_surface* const anchor { anchor_surface(placement.anchor) };
                 // popup은 앵커 표면의 배율을 그대로 쓴다 (popup-overlay-design.md).
                 popup->set_dpi(anchor != nullptr ? anchor->dpi() : dpi_);
-                const POINT screen { popup_screen_position(placement) };
+                const popup_screen_area screen { popup_screen_bounds(placement) };
+                popup->set_viewport_height(screen.height);
                 // 앵커 창이 소유해 언제나 그 위에 있고, 초점·작업 표시줄에는 나타나지 않는다.
                 // 그 창이 사라지면 popup도 함께 사라진다.
                 const HWND owner { anchor != nullptr ? anchor->window() : window_ };
                 const HWND handle {
                     CreateWindowExW(
-                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, class_name->c_str(), L"", WS_POPUP, screen.x, screen.y, placement.width, placement.height, owner, nullptr, instance_, popup.get()),
+                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, class_name->c_str(), L"", WS_POPUP, screen.x, screen.y, placement.width, screen.height, owner, nullptr, instance_, popup.get()),
                 };
                 if (handle == nullptr)
                 {
@@ -2545,7 +2624,7 @@ namespace luil::win32 {
 
                 // popup 표면은 CPU 렌더러로 고정한다 (popup-overlay-design.md).
                 std::u8string error {};
-                if (popup->create_renderer(renderer_mode::cpu, {}, placement.width, placement.height, error) == false)
+                if (popup->create_renderer(renderer_mode::cpu, {}, placement.width, screen.height, error) == false)
                 {
                     report_runtime_error(error);
                     DestroyWindow(handle);
@@ -2567,14 +2646,19 @@ namespace luil::win32 {
                 if (popup == nullptr)
                     return;
                 const popup_placement previous { popup->placement() };
-                const bool resized { previous.width != placement.width || previous.height != placement.height };
+                const int previous_height { popup->viewport_height() };
                 popup->set_placement(placement);
-                const POINT screen { popup_screen_position(placement) };
-                SetWindowPos(popup->window(), nullptr, screen.x, screen.y, placement.width, placement.height, SWP_NOACTIVATE | SWP_NOZORDER);
+                const popup_screen_area screen { popup_screen_bounds(placement) };
+                popup->set_viewport_height(screen.height);
+                // 창의 크기는 보이는 높이다. 내용 높이만 바뀌었으면 창은 그대로이고 흘릴 범위만 바뀐다.
+                const bool resized { previous.width != placement.width || previous_height != screen.height };
+                SetWindowPos(popup->window(), nullptr, screen.x, screen.y, placement.width, screen.height, SWP_NOACTIVATE | SWP_NOZORDER);
+                if (previous.height != placement.height)
+                    InvalidateRect(popup->window(), nullptr, FALSE);
                 if (resized)
                 {
                     std::u8string error {};
-                    if (popup->resize_renderer(placement.width, placement.height, error) == false)
+                    if (popup->resize_renderer(placement.width, screen.height, error) == false)
                         report_runtime_error(error);
                     InvalidateRect(popup->window(), nullptr, FALSE);
                 }
@@ -2592,8 +2676,12 @@ namespace luil::win32 {
                 {
                     if (anchored_popup(anchor, popup->id()) == nullptr)
                         continue;
-                    const POINT screen { popup_screen_position(popup->placement()) };
-                    SetWindowPos(popup->window(), nullptr, screen.x, screen.y, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
+                    // 다른 모니터로 옮겨 작업 영역이 달라졌으면 보이는 높이도 다시 정한다.
+                    const popup_screen_area screen { popup_screen_bounds(popup->placement()) };
+                    if (screen.height != popup->viewport_height())
+                        move_popup(popup->placement());
+                    else
+                        SetWindowPos(popup->window(), nullptr, screen.x, screen.y, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
                 }
             }
 
@@ -2967,6 +3055,10 @@ namespace luil::win32 {
             //  - 표면마다 세워 둔 효과와 알린 상태는 표면이 든다 (`window_surface::refresh_backdrop`).
             bool system_backdrop_supported_ { false };
             bool reduce_motion_ { read_reduce_motion() };
+            // 지금 실은 텍스트 크기다 (`apply_text_scale`).
+            float text_scale_ { 1.0f };
+            // 텍스트 크기의 변경 알림이다. 창을 만들 때 구독하고 창이 사라질 때 푼다.
+            std::unique_ptr<text_scale_watcher> text_scale_watcher_ {};
             // update timer가 깨울 표면들이다.
             // "그 시각을 답한 표면"을 timer와 함께 들고 있는 것이 표면별 다시 그리기의
             // 절반이다 — 나머지 절반은 frame 대조가 낸다 (rendering.md).
