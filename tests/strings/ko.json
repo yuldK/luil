@@ -1,0 +1,15 @@
+{
+    "language": "ko",
+    "plural": "other",
+    "strings": {
+        "save": "저장",
+        "files_selected": { "other": "파일 {count}개 선택됨" },
+        "files_found": { "other": "파일 {count}개 찾음" },
+        "file_summary": { "other": "파일 {count}개" },
+        "greeting": "{place}의 {name}님 안녕하세요",
+        "echo": "{word} 그리고 {word}",
+        "braces": "{{{value}}} 그리고 {{value}}",
+        "number": "수={number}",
+        "date_line": "{year}년 {month}월 {day}일"
+    }
+}

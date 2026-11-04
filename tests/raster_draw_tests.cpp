@@ -1,23 +1,32 @@
 #include "raster_probe.h"
 
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/check_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_element.h"
 #include "luil/ui/info_bar_element.h"
 #include "luil/ui/layout_metrics.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/message_box.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/palette_scope_element.h"
 #include "luil/ui/panel_element.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/sheet_host_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/split_handle_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/teaching_tip_element.h"
+#include "luil/ui/text_area_element.h"
+#include "luil/ui/text_document.h"
+#include "luil/ui/transition.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
@@ -27,17 +36,23 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkFontMetrics.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkCustomTypeface.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -1491,4 +1506,868 @@ TEST_CASE("An info bar draws a narrow bar's action button on its own line under 
     REQUIRE(frame.pixel_at(90, 120) == palette.raised_background);
     // 옆에 서던 자리는 비어 있다.
     REQUIRE(frame.pixel_at(450, 60) == palette.raised_background);
+}
+
+namespace {
+    // 확인 대화 상자를 그린다. 글은 비워 둔다 (이 축이 보는 것은 도형과 색이다). 화면은 800x400 물리 픽셀이고 배율은 2다.
+    //  - 상자는 논리 360 x 88(위 20 + 아래 20 + 단추 28 + 20 + 20)이라 물리 (40, 112)에서 720 x 176이다.
+    //  - 단추는 논리 88 폭이고 오른쪽 끝(논리 360)에 붙는다. 마지막 단추는 물리 x 544~720, 그 앞 단추는 352~528이다.
+    constexpr luil::rect_f message_box_last_button { 544.0f, 192.0f, 176.0f, 56.0f };
+    constexpr luil::rect_f message_box_previous_button { 352.0f, 192.0f, 176.0f, 56.0f };
+
+    [[nodiscard]] luil::testing::raster_frame draw_message_box(std::vector<luil::message_box_button> buttons, const luil::ui_color_palette& palette)
+    {
+        luil::message_box_config config {};
+        config.owner = u8"raster";
+        config.buttons = std::move(buttons);
+        config.result = [](const std::u8string_view) { return luil::input_action {}; };
+        std::unique_ptr<luil::modal_host_element> host { luil::make_message_box(std::move(config)) };
+        host->arrange({ { 0.0f, 0.0f, 800.0f, 400.0f }, raster_scale });
+        const luil::ui_tree tree { std::move(host) };
+        luil::testing::raster_frame frame { 800, 400, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    }
+}
+
+TEST_CASE("A message box stands on the surface color inside a one pixel divider border over the scrim", "[ui][raster][message-box]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light })
+    {
+        CAPTURE(theme);
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_cancel(), luil::message_box_ok() }, palette) };
+
+        // 몸은 표면 색이다. 단추가 서지 않는 왼쪽 위 안쪽이다.
+        REQUIRE(frame.pixel_at(120, 140) == palette.surface_background);
+        // 테는 몸 안쪽의 1 논리 픽셀(물리 2)이고 네 변 모두다. 테 색은 표면 위에 얹힌 `divider`다.
+        const luil::ui_color border { over(palette.divider, palette.surface_background) };
+        REQUIRE(border != palette.surface_background);
+        const std::array samples { frame.pixel_at(40, 200), frame.pixel_at(41, 200), frame.pixel_at(758, 200), frame.pixel_at(759, 200), frame.pixel_at(400, 112), frame.pixel_at(400, 113), frame.pixel_at(400, 286), frame.pixel_at(400, 287) };
+        for (const luil::ui_color sample : samples)
+        {
+            CAPTURE(sample, border);
+            REQUIRE(same_color(sample, border));
+        }
+        // 상자 밖은 scrim이다. 표면과도 창 바탕과도 다르다.
+        const luil::ui_color scrim { frame.pixel_at(10, 10) };
+        REQUIRE(scrim != palette.surface_background);
+        REQUIRE(scrim != palette.window_background);
+        REQUIRE(frame.pixel_at(30, 200) == scrim);
+    }
+}
+
+TEST_CASE("Only the last accept button is filled with the accent and a destructive one wears the danger fill", "[ui][raster][message-box]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+
+    SECTION("마지막 긍정 단추가 강조색 채움이고 거절은 채우지 않는다")
+    {
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_cancel(), luil::message_box_ok() }, palette) };
+        REQUIRE(frame.pixel_at(632, 220) == palette.accent);
+        REQUIRE(frame.count_color(message_box_last_button, palette.accent) > 176 * 56 / 2);
+        REQUIRE(frame.count_color(message_box_previous_button, palette.accent) == 0);
+        REQUIRE(frame.pixel_at(440, 220) != palette.surface_background);
+    }
+
+    SECTION("긍정이 둘이면 마지막만 채우고 앞의 것은 옅은 강조다")
+    {
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_yes(), luil::message_box_ok() }, palette) };
+        REQUIRE(frame.count_color(message_box_last_button, palette.accent) > 176 * 56 / 2);
+        REQUIRE(frame.count_color(message_box_previous_button, palette.accent) == 0);
+        REQUIRE(frame.pixel_at(440, 220) != palette.surface_background);
+    }
+
+    SECTION("위험한 단추는 강조색으로 채우지 않는다")
+    {
+        const luil::testing::raster_frame frame { draw_message_box({ luil::message_box_cancel(), luil::message_box_button { .key = u8"erase", .role = luil::message_box_role::destructive } }, palette) };
+        REQUIRE(frame.count_color(message_box_last_button, palette.accent) == 0);
+        REQUIRE(frame.count_color(message_box_previous_button, palette.accent) == 0);
+        // 옅은 오류색 바탕이 깔려 있다. 표면 색 그대로가 아니다.
+        REQUIRE(frame.pixel_at(632, 220) != palette.surface_background);
+        // 거절 단추의 보통 바탕과도 다르다.
+        REQUIRE(frame.pixel_at(632, 220) != frame.pixel_at(440, 220));
+    }
+}
+
+namespace {
+    // 별 다섯짜리 별점이다. 배율 2에서 칸이 56이라 폭 280, 슬롯 300 x 60 안에서 왼쪽에 붙는다.
+    // 별 `n`(1부터)의 칸은 x 56(n-1)..56n이고 별의 가로 폭은 칸보다 16 작은 40이다. 가운데는 (56n-28, 30)이다.
+    [[nodiscard]] luil::ui_tree make_rating_tree(const float value, const luil::rating_precision precision = luil::rating_precision::whole, const bool display_only = false)
+    {
+        luil::rating_config config {};
+        config.owner = u8"stars";
+        config.value = value;
+        config.precision = precision;
+        if (display_only == false)
+            config.change_to = [](const float) { return luil::input_action {}; };
+        return luil::make_arranged_tree(std::make_unique<luil::rating_element>(std::move(config)), { 0.0f, 0.0f, 300.0f, 60.0f }, raster_scale);
+    }
+
+    [[nodiscard]] luil::ui_element_id rating_cell(const char8_t digit)
+    {
+        std::u8string owner { u8"stars" };
+        owner += u8'\u001f';
+        owner += digit;
+        return { luil::ui_element_kind::rating_cell, std::move(owner) };
+    }
+
+    [[nodiscard]] int star_center_x(const int number)
+    {
+        return 56 * number - 28;
+    }
+
+    // 영역 안에서 기대한 색에 가까운 픽셀 수다. 보조 글자색은 알파가 있어 선이 바탕과 섞여 그려지므로 `over`로 섞은 색을 준다.
+    [[nodiscard]] int count_near(const luil::testing::raster_frame& frame, const luil::rect_f& area, const luil::ui_color expected)
+    {
+        int count { 0 };
+        for (int y = static_cast<int>(area.y); y < static_cast<int>(area.y + area.height); ++y)
+        {
+            for (int x = static_cast<int>(area.x); x < static_cast<int>(area.x + area.width); ++x)
+            {
+                if (same_color(frame.pixel_at(x, y), expected))
+                    ++count;
+            }
+        }
+        return count;
+    }
+}
+
+TEST_CASE("Filled stars are the accent face and empty stars are a line", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_tree tree { make_rating_tree(2.0f) };
+    luil::testing::raster_frame frame { 300, 60, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+
+    // 채운 별은 면이다. 가운데가 accent이고 선 색은 없다.
+    REQUIRE(frame.pixel_at(star_center_x(1), 30) == palette.accent);
+    REQUIRE(frame.pixel_at(star_center_x(2), 30) == palette.accent);
+    const luil::ui_color outline { over(palette.secondary_foreground, palette.window_background) };
+    REQUIRE(outline != palette.window_background);
+    REQUIRE(count_near(frame, { 0.0f, 0.0f, 112.0f, 60.0f }, outline) == 0);
+    // 빈 별은 선이다. 가운데가 바탕이고 둘레에 secondary_foreground 선이 선다.
+    REQUIRE(frame.pixel_at(star_center_x(3), 30) == palette.window_background);
+    REQUIRE(frame.pixel_at(star_center_x(5), 30) == palette.window_background);
+    REQUIRE(count_near(frame, { 112.0f, 0.0f, 56.0f, 60.0f }, outline) > 0);
+    REQUIRE(frame.count_color({ 112.0f, 0.0f, 56.0f, 60.0f }, palette.accent) == 0);
+    // 슬롯의 남는 자리(별 줄 밖)에는 아무것도 그리지 않는다.
+    REQUIRE(frame.pixel_at(290, 30) == palette.window_background);
+}
+
+TEST_CASE("A fractional value fills only part of the last star", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // 4.3이면 별 넷과 다섯째의 30%다. 다섯째 별의 가로 폭은 x 232..272이고 30% 지점이 244다.
+    const luil::ui_tree tree { make_rating_tree(4.3f) };
+    luil::testing::raster_frame frame { 300, 60, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    REQUIRE(frame.pixel_at(star_center_x(4), 30) == palette.accent);
+    REQUIRE(frame.count_color({ 232.0f, 0.0f, 12.0f, 60.0f }, palette.accent) > 0);
+    REQUIRE(frame.count_color({ 248.0f, 0.0f, 32.0f, 60.0f }, palette.accent) == 0);
+    // 나머지 70%는 빈 별의 선이다.
+    REQUIRE(count_near(frame, { 248.0f, 0.0f, 32.0f, 60.0f }, over(palette.secondary_foreground, palette.window_background)) > 0);
+    REQUIRE(frame.pixel_at(star_center_x(5), 30) == palette.window_background);
+
+    // 반 별은 별을 정확히 절반으로 가른다. 셋째 별의 폭은 x 120..160이고 가운데가 140이다.
+    const luil::ui_tree half_tree { make_rating_tree(2.5f, luil::rating_precision::half) };
+    luil::testing::raster_frame half { 300, 60, palette, raster_scale };
+    half.draw(half_tree, luil::interaction_snapshot {});
+    REQUIRE(half.count_color({ 120.0f, 0.0f, 18.0f, 60.0f }, palette.accent) > 0);
+    REQUIRE(half.count_color({ 142.0f, 0.0f, 20.0f, 60.0f }, palette.accent) == 0);
+}
+
+TEST_CASE("A star the pointer is over previews its value in the hover accent", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    REQUIRE(palette.accent_hover != palette.accent);
+    const luil::ui_tree tree { make_rating_tree(1.0f) };
+
+    // 칸 3 위에서는 별 셋이 accent_hover로 채워진다. 지금 값(1)의 accent는 남지 않는다.
+    luil::interaction_snapshot hovering {};
+    hovering.hovered = rating_cell(u8'3');
+    luil::testing::raster_frame preview { 300, 60, palette, raster_scale };
+    preview.draw(tree, hovering);
+    REQUIRE(preview.pixel_at(star_center_x(1), 30) == palette.accent_hover);
+    REQUIRE(preview.pixel_at(star_center_x(3), 30) == palette.accent_hover);
+    REQUIRE(preview.pixel_at(star_center_x(4), 30) == palette.window_background);
+    REQUIRE(preview.count_color({ 0.0f, 0.0f, 300.0f, 60.0f }, palette.accent) == 0);
+
+    // 칸의 값이 현재 값보다 작으면 사이의 별이 빈 별로 돌아간다.
+    const luil::ui_tree high { make_rating_tree(4.0f) };
+    luil::testing::raster_frame lower { 300, 60, palette, raster_scale };
+    lower.draw(high, hovering);
+    REQUIRE(lower.pixel_at(star_center_x(3), 30) == palette.accent_hover);
+    REQUIRE(lower.pixel_at(star_center_x(4), 30) == palette.window_background);
+
+    // 반 별의 칸 하나는 반 별이다. 칸 5는 2.5다.
+    const luil::ui_tree half_tree { make_rating_tree(0.0f, luil::rating_precision::half) };
+    luil::interaction_snapshot half_hover {};
+    half_hover.hovered = rating_cell(u8'5');
+    luil::testing::raster_frame half { 300, 60, palette, raster_scale };
+    half.draw(half_tree, half_hover);
+    REQUIRE(half.pixel_at(star_center_x(2), 30) == palette.accent_hover);
+    REQUIRE(half.count_color({ 120.0f, 0.0f, 18.0f, 60.0f }, palette.accent_hover) > 0);
+    REQUIRE(half.count_color({ 142.0f, 0.0f, 20.0f, 60.0f }, palette.accent_hover) == 0);
+
+    // 누른 동안은 미리 보기를 끄고 값을 그린다. 끌기가 서면 hover가 누른 칸에 머물기 때문이다.
+    luil::interaction_snapshot pressing {};
+    pressing.hovered = rating_cell(u8'3');
+    pressing.pressed = rating_cell(u8'3');
+    luil::testing::raster_frame held { 300, 60, palette, raster_scale };
+    held.draw(tree, pressing);
+    REQUIRE(held.pixel_at(star_center_x(1), 30) == palette.accent);
+    REQUIRE(held.pixel_at(star_center_x(3), 30) == palette.window_background);
+}
+
+TEST_CASE("A display only or disabled rating never previews and a disabled one is gray", "[ui][raster][rating]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::interaction_snapshot hovering {};
+    hovering.hovered = rating_cell(u8'3');
+
+    // 표시 전용에는 칸이 없다. 같은 id가 와도 미리 보기가 서지 않는다.
+    const luil::ui_tree display { make_rating_tree(2.0f, luil::rating_precision::whole, true) };
+    luil::testing::raster_frame shown { 300, 60, palette, raster_scale };
+    shown.draw(display, hovering);
+    REQUIRE(shown.pixel_at(star_center_x(2), 30) == palette.accent);
+    REQUIRE(shown.pixel_at(star_center_x(3), 30) == palette.window_background);
+
+    luil::rating_config config {};
+    config.owner = u8"stars";
+    config.value = 2.0f;
+    config.change_to = [](const float) { return luil::input_action {}; };
+    auto rating { std::make_unique<luil::rating_element>(std::move(config)) };
+    rating->set_enabled(false);
+    const luil::ui_tree disabled { luil::make_arranged_tree(std::move(rating), { 0.0f, 0.0f, 300.0f, 60.0f }, raster_scale) };
+    luil::testing::raster_frame gray { 300, 60, palette, raster_scale };
+    gray.draw(disabled, hovering);
+    // 채움과 선이 모두 비활성 색이다. 비활성 색은 알파가 있어 바탕과 섞인다. 미리 보기는 서지 않는다.
+    const luil::ui_color gray_color { over(palette.disabled_foreground, palette.window_background) };
+    REQUIRE(same_color(gray.pixel_at(star_center_x(2), 30), gray_color));
+    REQUIRE(gray.pixel_at(star_center_x(3), 30) == palette.window_background);
+    REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, gray_color) > 0);
+    REQUIRE(count_near(gray, { 112.0f, 0.0f, 56.0f, 60.0f }, over(palette.secondary_foreground, palette.window_background)) == 0);
+}
+
+namespace {
+    // 알파를 켠 색 고르기다. 배율 2에서 판은 (0, 0, 400, 400), 색상 막대는 y 416..448, 알파 막대는 y 464..496이다.
+    [[nodiscard]] luil::ui_tree make_picker_tree(const luil::hsv_color value, const bool enabled = true)
+    {
+        luil::color_picker_config config {};
+        config.owner = u8"paint";
+        config.value = value;
+        config.alpha = true;
+        config.change_to = [](const luil::hsv_color) { return luil::input_action {}; };
+        auto picker { std::make_unique<luil::color_picker_element>(std::move(config)) };
+        picker->set_enabled(enabled);
+        return luil::make_arranged_tree(std::move(picker), { 0.0f, 0.0f, 500.0f, 700.0f }, raster_scale);
+    }
+
+    // 채널마다 허용치 안인가다. 그라디언트는 픽셀 가운데에서 샘플하므로 정확한 정지점과 조금 어긋난다.
+    [[nodiscard]] bool close_to(const luil::ui_color actual, const luil::ui_color expected, const int tolerance) noexcept
+    {
+        for (const std::uint32_t shift : { 0U, 8U, 16U })
+        {
+            const int difference { static_cast<int>((actual >> shift) & 0xFFU) - static_cast<int>((expected >> shift) & 0xFFU) };
+            if (std::abs(difference) > tolerance)
+                return false;
+        }
+        return true;
+    }
+}
+
+TEST_CASE("The color plane is white at the top left, the pure hue at the top right and black at the bottom", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // 손잡이는 오른쪽 아래(360, 360)에 있어 표본 자리를 덮지 않는다.
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.9f, 0.1f, 0.75f }) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    const luil::ui_color white { luil::make_ui_color(255, 255, 255) };
+    REQUIRE(close_to(frame.pixel_at(4, 4), white, 8));
+    REQUIRE(close_to(frame.pixel_at(395, 4), luil::color_from_hsv({ 200.0f, 1.0f, 1.0f, 1.0f }), 8));
+    REQUIRE(close_to(frame.pixel_at(200, 396), luil::make_ui_color(0, 0, 0), 8));
+    // 가운데는 HSV 식과 허용치 2로 같다. 흰색 쪽 투명 정지점이 검정이면 미리 곱하지 않은 보간이 이 자리를 회색으로 끈다.
+    REQUIRE(same_color(frame.pixel_at(200, 200), luil::color_from_hsv({ 200.0f, 0.5f, 0.5f, 1.0f })));
+    REQUIRE(same_color(frame.pixel_at(100, 300), luil::color_from_hsv({ 200.0f, 0.25f, 0.25f, 1.0f })));
+}
+
+TEST_CASE("The hue bar runs through the six stops and the alpha bar shows the checker", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.9f, 0.1f, 0.75f }) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    // 정지점은 400의 여섯 등분 자리다. 손잡이(200도, x 222)는 표본을 덮지 않는다.
+    REQUIRE(close_to(frame.pixel_at(66, 432), luil::make_ui_color(255, 255, 0), 3));
+    REQUIRE(close_to(frame.pixel_at(133, 432), luil::make_ui_color(0, 255, 0), 3));
+    REQUIRE(close_to(frame.pixel_at(200, 432), luil::make_ui_color(0, 255, 255), 3));
+    REQUIRE(close_to(frame.pixel_at(266, 432), luil::make_ui_color(0, 0, 255), 3));
+    REQUIRE(close_to(frame.pixel_at(333, 432), luil::make_ui_color(255, 0, 255), 3));
+    REQUIRE(close_to(frame.pixel_at(397, 432), luil::make_ui_color(255, 0, 0), 12));
+    // 알파 막대의 왼쪽 끝은 거의 투명이라 체커가 보인다. 칸은 물리 8이고 흰색과 #CCCCCC가 엇갈린다. 몇 %의 색이 얹혀 조금 어둡다.
+    REQUIRE(close_to(frame.pixel_at(4, 468), luil::make_ui_color(255, 255, 255), 10));
+    REQUIRE(close_to(frame.pixel_at(12, 468), luil::make_ui_color(0xCC, 0xCC, 0xCC), 10));
+    REQUIRE(close_to(frame.pixel_at(4, 476), luil::make_ui_color(0xCC, 0xCC, 0xCC), 10));
+    // 오른쪽 끝은 불투명한 그 색이다.
+    REQUIRE(close_to(frame.pixel_at(395, 480), luil::color_from_hsv({ 200.0f, 0.9f, 0.1f, 1.0f }), 6));
+}
+
+TEST_CASE("The plane handle ring is white over a dark color and black over a light one", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color white { luil::make_ui_color(255, 255, 255) };
+    const luil::ui_color black { luil::make_ui_color(0, 0, 0) };
+    // 반지름 7(물리 14)의 원이다. 안쪽 테는 반지름 10..14, 바깥 테는 14..16이다.
+    const luil::ui_tree dark { make_picker_tree({ 200.0f, 0.9f, 0.1f, 1.0f }) };
+    luil::testing::raster_frame on_dark { 500, 700, palette, raster_scale };
+    on_dark.draw(dark, luil::interaction_snapshot {});
+    REQUIRE(close_to(on_dark.pixel_at(372, 360), white, 8));
+    REQUIRE(close_to(on_dark.pixel_at(375, 360), black, 8));
+
+    const luil::ui_tree light { make_picker_tree({ 200.0f, 0.1f, 0.9f, 1.0f }) };
+    luil::testing::raster_frame on_light { 500, 700, palette, raster_scale };
+    on_light.draw(light, luil::interaction_snapshot {});
+    REQUIRE(close_to(on_light.pixel_at(52, 40), black, 8));
+    REQUIRE(close_to(on_light.pixel_at(55, 40), white, 8));
+}
+
+TEST_CASE("In high contrast the plane keeps the real colors and the outline is the window foreground", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::high_contrast) };
+    REQUIRE(palette.control_border == palette.primary_foreground);
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.9f, 0.1f, 0.75f }) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.set_theme(luil::color_theme::high_contrast);
+    frame.draw(tree, luil::interaction_snapshot {});
+    REQUIRE(same_color(frame.pixel_at(200, 200), luil::color_from_hsv({ 200.0f, 0.5f, 0.5f, 1.0f })));
+    REQUIRE(close_to(frame.pixel_at(266, 432), luil::make_ui_color(0, 0, 255), 3));
+    // 둘레 1 논리 픽셀(물리 2)이 윤곽 색이다.
+    REQUIRE(frame.pixel_at(0, 200) == palette.control_border);
+    REQUIRE(frame.pixel_at(1, 200) == palette.control_border);
+    REQUIRE(frame.pixel_at(399, 200) == palette.control_border);
+}
+
+TEST_CASE("A disabled picker draws its content faded and its handle in the disabled color", "[ui][raster][color-picker]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_tree tree { make_picker_tree({ 200.0f, 0.5f, 0.5f, 1.0f }, false) };
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(tree, luil::interaction_snapshot {});
+    // 내용은 40% 불투명이라 바탕과 섞인다.
+    const luil::ui_color full { luil::color_from_hsv({ 200.0f, 0.9f, 0.9f, 1.0f }) };
+    REQUIRE(same_color(frame.pixel_at(360, 40), full) == false);
+    REQUIRE(same_color(frame.pixel_at(360, 40), over(luil::with_alpha(luil::color_from_hsv({ 200.0f, 360.5f / 400.0f, 1.0f - 40.5f / 400.0f, 1.0f }), 0.4f), palette.window_background)));
+    // 손잡이 테는 비활성 색이다 (알파가 있어 아래와 섞인다).
+    REQUIRE(frame.pixel_at(212, 200) != luil::make_ui_color(255, 255, 255));
+    REQUIRE(frame.pixel_at(212, 200) != luil::make_ui_color(0, 0, 0));
+}
+
+namespace {
+    // 바이트마다 글자 크기의 절반인 고정 폭이다. 이 축에는 글꼴이 없어 기본 측정기는 0을 잰다.
+    const luil::text_measurer menu_bar_width { [](const std::u8string_view text, const float size) { return static_cast<float>(text.size()) * size * 0.5f; } };
+
+    // "File·Edit·Help"를 (0, 0)부터 세운 막대를 그린다. 항목은 물리 88픽셀씩이다 ((24 + 20) × 2).
+    [[nodiscard]] luil::testing::raster_frame draw_menu_bar(const luil::menu_bar_state state, const luil::ui_color_palette& palette, const luil::interaction_snapshot& interaction = {})
+    {
+        luil::menu_bar_config config {};
+        config.owner = u8"bar";
+        config.items = { { .key = u8"file", .label = u8"File", .access_key = U'f' }, { .key = u8"edit", .label = u8"Edit" }, { .key = u8"help", .label = u8"Help" } };
+        config.state = state;
+        config.set_state = [](const luil::menu_bar_state&) { return luil::input_action {}; };
+        auto bar { std::make_unique<luil::menu_bar_element>(std::move(config)) };
+        bar->arrange({ .slot = { 0.0f, 0.0f, 400.0f, luil::menu_bar_height * raster_scale }, .scale = raster_scale, .measurer = &menu_bar_width });
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 80.0f }, raster_scale });
+        root->add(std::move(bar));
+        const luil::ui_tree tree { std::move(root) };
+        luil::testing::raster_frame frame { 400, 80, palette, raster_scale };
+        frame.draw(tree, interaction);
+        return frame;
+    }
+}
+
+TEST_CASE("A menu bar paints no row background and shades only hovered, selected and open items", "[ui][raster][menu-bar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    // hover·눌림 바탕은 반투명이라 창 바탕 위에 섞인 색이다.
+    const luil::ui_color hover { over(palette.button_hover_background, palette.window_background) };
+    const luil::ui_color pressed { over(palette.button_pressed_background, palette.window_background) };
+    REQUIRE(same_color(hover, palette.window_background) == false);
+    REQUIRE(same_color(pressed, hover) == false);
+
+    // 쉬는 막대는 줄도 항목도 바탕이 없다.
+    const luil::testing::raster_frame resting { draw_menu_bar({}, palette) };
+    for (const int x : { 44, 132, 220, 300 })
+        REQUIRE(resting.pixel_at(x, 28) == palette.window_background);
+
+    // 키보드로 선 항목은 hover 바탕이다. 이웃은 그대로다.
+    const luil::testing::raster_frame selected { draw_menu_bar({ u8"edit", false, true }, palette) };
+    REQUIRE(same_color(selected.pixel_at(132, 28), hover));
+    REQUIRE(selected.pixel_at(44, 28) == palette.window_background);
+
+    // 열린 항목은 눌림 바탕이고, 포인터가 올라간 다른 항목은 hover 바탕이다.
+    luil::interaction_snapshot over_help {};
+    over_help.hovered = luil::ui_element_id { luil::ui_element_kind::menu_bar_item, u8"help" };
+    const luil::testing::raster_frame open { draw_menu_bar({ u8"file", true, false }, palette, over_help) };
+    REQUIRE(same_color(open.pixel_at(44, 28), pressed));
+    REQUIRE(same_color(open.pixel_at(220, 28), hover));
+    REQUIRE(open.pixel_at(132, 28) == palette.window_background);
+    // 막대 오른쪽의 빈 자리도 칠하지 않는다.
+    REQUIRE(open.pixel_at(300, 28) == palette.window_background);
+}
+
+namespace {
+    [[nodiscard]] std::chrono::year_month_day raster_date(const unsigned day)
+    {
+        return { std::chrono::year { 2026 }, std::chrono::November, std::chrono::day { day } };
+    }
+
+    // 2026년 11월 달력이다 (1일이 일요일). 배율 2에서 칸은 물리 64이고 격자는 y 112부터다. n일(1~7)은 x (n - 1) × 64부터다.
+    //  - 고른 날 `value`, 오늘 `today`다. 주말은 고를 수 없다. 글꼴이 없어 숫자는 그려지지 않고 채움과 테만 남는다.
+    [[nodiscard]] luil::ui_tree make_calendar_tree(const unsigned value, const unsigned today)
+    {
+        luil::calendar_config config {};
+        config.owner = u8"trip";
+        config.value = raster_date(value);
+        config.cursor = raster_date(value);
+        config.today = raster_date(today);
+        config.available = [](const std::chrono::year_month_day day) {
+            const std::chrono::weekday weekday { std::chrono::sys_days { day } };
+            return weekday != std::chrono::Saturday && weekday != std::chrono::Sunday;
+        };
+        config.select = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        config.move_to = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        return luil::make_arranged_tree(std::make_unique<luil::calendar_element>(std::move(config)), { 0.0f, 0.0f, 500.0f, 700.0f }, raster_scale);
+    }
+
+    [[nodiscard]] luil::ui_element_id raster_day(const unsigned day)
+    {
+        return luil::calendar_element::day_id(u8"trip", raster_date(day));
+    }
+}
+
+TEST_CASE("The chosen day is an accent fill and today is an accent ring with an inner ring when both", "[ui][raster][calendar]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::ui_color accent { over(palette.accent, palette.window_background) };
+        // 3일을 고르고 오늘은 5일이다. 3일 칸은 x 128..192, 5일 칸은 x 256..320, 줄은 y 112..176이다.
+        luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+        frame.set_theme(theme);
+        frame.draw(make_calendar_tree(3, 5), luil::interaction_snapshot {});
+        REQUIRE(same_color(frame.pixel_at(160, 144), accent));
+        // 칸 안쪽 여백(논리 2, 물리 4)은 채우지 않는다.
+        REQUIRE(frame.pixel_at(129, 144) == palette.window_background);
+        // 오늘은 채움 없이 테 1.5 논리 픽셀(물리 3)이다. 테는 칸 여백 안쪽 x 260..263이다.
+        REQUIRE(same_color(frame.pixel_at(261, 144), accent));
+        REQUIRE(frame.pixel_at(288, 144) == palette.window_background);
+        // 고르지 않은 평일은 아무것도 칠하지 않는다.
+        REQUIRE(frame.pixel_at(224, 144) == palette.window_background);
+
+        // 고른 날이 오늘이면 채움 바깥 테는 강조색, 그 안쪽 테는 강조 위 글색이다. 색 하나로만 가르지 않는다.
+        luil::testing::raster_frame both { 500, 700, palette, raster_scale };
+        both.set_theme(theme);
+        both.draw(make_calendar_tree(3, 3), luil::interaction_snapshot {});
+        REQUIRE(same_color(both.pixel_at(133, 144), accent));
+        REQUIRE(same_color(both.pixel_at(136, 144), over(palette.accent_foreground, accent)));
+        REQUIRE(same_color(both.pixel_at(160, 144), accent));
+    }
+}
+
+TEST_CASE("Only a day that can be chosen shows the hover fill", "[ui][raster][calendar]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_color hover { over(palette.button_hover_background, palette.window_background) };
+    REQUIRE(same_color(hover, palette.window_background) == false);
+    // 4일(수요일, x 192..256)은 고를 수 있고 7일(토요일, x 384..448)은 고를 수 없다.
+    luil::interaction_snapshot over_wednesday {};
+    over_wednesday.hovered = raster_day(4);
+    luil::testing::raster_frame frame { 500, 700, palette, raster_scale };
+    frame.draw(make_calendar_tree(3, 5), over_wednesday);
+    REQUIRE(same_color(frame.pixel_at(224, 144), hover));
+
+    luil::interaction_snapshot over_saturday {};
+    over_saturday.hovered = raster_day(7);
+    luil::testing::raster_frame blocked { 500, 700, palette, raster_scale };
+    blocked.draw(make_calendar_tree(3, 5), over_saturday);
+    REQUIRE(blocked.pixel_at(416, 144) == palette.window_background);
+}
+
+namespace {
+    // 안내 풍선 raster 축이다. 화면은 물리 400x300이고 배율은 2다.
+    //  - 대상은 물리 (150, 20) 100x40이고 가운데 x는 200이다. 풍선은 논리 80x48(닫기만 있다)이라 물리 (120, 80) 160x96에 선다.
+    //  - 꼬리는 위 변(y 80)에서 위를 가리키고 끝이 y 64다. 밑변은 x 184..216이다.
+    [[nodiscard]] luil::ui_tree make_tip_tree(const std::chrono::steady_clock::time_point opened_at = {})
+    {
+        luil::teaching_tip_config config {};
+        config.owner = u8"tip";
+        config.width = 80.0f;
+        config.target = luil::rect_f { 150.0f, 20.0f, 100.0f, 40.0f };
+        config.opened_at = opened_at;
+        config.dismiss = [](const luil::teaching_tip_dismiss_reason) { return luil::input_action {}; };
+        auto tip { std::make_unique<luil::teaching_tip_element>(std::move(config)) };
+        tip->arrange({ { 0.0f, 0.0f, 400.0f, 300.0f }, raster_scale });
+        auto root { std::make_unique<raster_group>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 400.0f, 300.0f }, raster_scale });
+        root->add(std::move(tip));
+        return luil::ui_tree { std::move(root) };
+    }
+
+    // 채널마다 `tolerance` 안이면 같은 색이다. 비스듬한 획은 안티에일리어싱이 덮개를 조금 덜 채운다.
+    [[nodiscard]] bool near_color(const luil::ui_color actual, const luil::ui_color expected, const int tolerance) noexcept
+    {
+        for (const std::uint32_t shift : { 0U, 8U, 16U })
+        {
+            const int difference { static_cast<int>((actual >> shift) & 0xFFU) - static_cast<int>((expected >> shift) & 0xFFU) };
+            if (std::abs(difference) > tolerance)
+                return false;
+        }
+        return true;
+    }
+}
+
+TEST_CASE("A teaching tip tail shares the body fill and its border runs around the tail, not across its base", "[ui][raster][teaching-tip]")
+{
+    for (const luil::color_theme theme : { luil::color_theme::dark, luil::color_theme::light, luil::color_theme::high_contrast })
+    {
+        CAPTURE(static_cast<int>(theme));
+        const luil::ui_color_palette palette { luil::color_palette_for(theme) };
+        const luil::ui_color border { over(palette.control_border, palette.raised_background) };
+        REQUIRE(same_color(border, palette.raised_background) == false);
+        luil::testing::raster_frame frame { 400, 300, palette, raster_scale };
+        frame.set_theme(theme);
+        frame.draw(make_tip_tree(), luil::interaction_snapshot {});
+
+        // 꼬리 안은 몸과 같은 바탕이다. 밑변 자리(y 80)에도 테가 가로지르지 않는다.
+        REQUIRE(frame.pixel_at(200, 74) == palette.raised_background);
+        REQUIRE(frame.pixel_at(200, 80) == palette.raised_background);
+        REQUIRE(frame.pixel_at(200, 130) == palette.raised_background);
+        // 꼬리 밖의 위 변은 1 논리 픽셀 테다.
+        REQUIRE(same_color(frame.pixel_at(150, 80), border));
+        // 꼬리의 비스듬한 변에도 테가 돈다. 끝(y 64) 위는 창 쪽이다.
+        bool edged { false };
+        for (int x { 186 }; x < 200; ++x)
+            edged = edged || near_color(frame.pixel_at(x, 72), border, 24);
+        REQUIRE(edged);
+        // 덮개는 투명하다. 풍선 밖은 창 바탕 그대로다.
+        REQUIRE(frame.pixel_at(20, 280) == palette.window_background);
+    }
+}
+
+TEST_CASE("A teaching tip fades in from the side away from its tail while it appears", "[ui][raster][teaching-tip]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const std::chrono::steady_clock::time_point opened { std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { 1000 } };
+
+    // 연 시각 전에는 아무것도 그리지 않는다.
+    luil::testing::raster_frame before { 400, 300, palette, raster_scale };
+    before.draw(make_tip_tree(opened), luil::interaction_snapshot {}, opened - std::chrono::milliseconds { 1 });
+    REQUIRE(before.pixel_at(200, 130) == palette.window_background);
+
+    // 길이의 가운데(70 ms)에서 몸 전체가 반쯤 비치고, 꼬리 반대쪽(아래)으로 논리 2(물리 4)만큼 밀려 있다.
+    luil::testing::raster_frame middle { 400, 300, palette, raster_scale };
+    middle.draw(make_tip_tree(opened), luil::interaction_snapshot {}, opened + std::chrono::milliseconds { 70 });
+    const luil::ui_color half { over((palette.raised_background & 0x00FFFFFFU) | 0x80000000U, palette.window_background) };
+    REQUIRE(near_color(middle.pixel_at(200, 130), half, 3));
+    REQUIRE(middle.pixel_at(200, 82) != palette.raised_background);
+
+    // 끝나면 제자리에 불투명하게 선다.
+    luil::testing::raster_frame done { 400, 300, palette, raster_scale };
+    done.draw(make_tip_tree(opened), luil::interaction_snapshot {}, opened + luil::transition_duration);
+    REQUIRE(done.pixel_at(200, 130) == palette.raised_background);
+    REQUIRE(done.pixel_at(200, 82) == palette.raised_background);
+}
+
+namespace {
+    constexpr int selection_frame_width { 400 };
+    constexpr int selection_frame_height { 120 };
+    constexpr luil::ui_color white { 0xFFFFFFFFu };
+    constexpr luil::ui_color red { 0xFFFF0000u };
+
+    // 글자마다 같은 직사각형인 글꼴이다. core test에는 OS 글꼴이 없어 글자 가장자리 픽셀을 보려면 직접 지어야 한다.
+    //  - 한 글자가 0.5 em이라 22 물리 픽셀 글자에서 11 픽셀씩 나아가고, 직사각형의 가로 변은 정수 픽셀에 맞지 않는다.
+    //    안티에일리어싱된 가장자리 픽셀이 서야 같은 글을 두 번 그렸을 때 그 픽셀이 달라진다.
+    [[nodiscard]] sk_sp<SkTypeface> make_block_typeface()
+    {
+        SkFontMetrics metrics {};
+        metrics.fTop = -0.9f;
+        metrics.fAscent = -0.8f;
+        metrics.fDescent = 0.2f;
+        metrics.fBottom = 0.3f;
+        metrics.fXHeight = 0.5f;
+        metrics.fCapHeight = 0.7f;
+        const SkPath block { SkPath::Rect(SkRect::MakeLTRB(0.1f, -0.613f, 0.45f, 0.0f)) };
+        SkCustomTypefaceBuilder builder {};
+        builder.setMetrics(metrics);
+        for (SkGlyphID glyph { 0 }; glyph < 128; ++glyph)
+            builder.setGlyph(glyph, 0.5f, block);
+        return builder.detach();
+    }
+
+    // 위에서 `rows`줄까지 다른 픽셀의 수다.
+    [[nodiscard]] int differing_pixels(const luil::testing::raster_frame& left, const luil::testing::raster_frame& right, const int rows)
+    {
+        int found { 0 };
+        for (int y { 0 }; y < rows; ++y)
+            for (int x { 0 }; x < selection_frame_width; ++x)
+                found += left.pixel_at(x, y) != right.pixel_at(x, y) ? 1 : 0;
+        return found;
+    }
+
+    // 칸의 안쪽(테와 모서리 밖)에서 칸 바탕도 고른 바탕도 글자색도 아닌 픽셀의 수다. 안티에일리어싱된 글자 가장자리다.
+    [[nodiscard]] int edge_pixels(const luil::testing::raster_frame& frame, const luil::ui_color_palette& palette, const luil::ui_color ink)
+    {
+        int found { 0 };
+        for (int y { 14 }; y < 42; ++y)
+            for (int x { 12 }; x < selection_frame_width - 12; ++x)
+            {
+                const luil::ui_color color { frame.pixel_at(x, y) };
+                found += color != palette.input_background && color != palette.selection_background && color != ink ? 1 : 0;
+            }
+        return found;
+    }
+
+    // 글자색이 꽉 찬 가장 아래 줄이다. 그 밑은 밑줄이 긋는 자리라 글자 비교에서 뺀다.
+    [[nodiscard]] int lowest_ink_row(const luil::testing::raster_frame& frame, const luil::ui_color ink)
+    {
+        int lowest { -1 };
+        for (int y { 0 }; y < selection_frame_height; ++y)
+            for (int x { 0 }; x < selection_frame_width; ++x)
+                if (frame.pixel_at(x, y) == ink)
+                    lowest = y;
+        return lowest;
+    }
+}
+
+TEST_CASE("A selected styled run is painted once in the selection color", "[ui][raster][text-area][selection]")
+{
+    // 고른 구간의 글자는 구문색·링크색·검색색으로 한 번 그린 위에 다시 그리지 않는다. 두 번 그리면 글자 가장자리의 반투명
+    // 픽셀에 먼저 그린 색이 비쳐 글자가 굵고 탁해 보인다.
+    //  - 기준은 서식이 없는 같은 칸이다. 고른 글자색이 본문색과 같아 덧그림이 서지 않고 글자를 한 번만 그린다.
+    //  - 글자는 모두 고른 구간 안이고 구간의 가로 변이 정수 픽셀이라, 한 번 그린 그림과 픽셀 단위로 같아야 한다.
+    const sk_sp<SkTypeface> typeface { make_block_typeface() };
+    luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    palette.primary_foreground = white;
+    palette.selection_foreground = white;
+    palette.syntax_keyword = red;
+    palette.accent = red;
+    palette.document_search_foreground = red;
+    // 검색 결과의 바탕은 비워 둔다. 고른 바탕은 반투명이라 위에 한 번 더 깔면 색이 달라진다.
+    palette.document_search_background = 0x00000000u;
+    const luil::ui_element_id memo { luil::application_element_kind(2), u8"memo" };
+    luil::text_input_view all_selected {};
+    all_selected.text = u8"aaaa";
+    all_selected.caret = 4;
+    all_selected.anchor = 0;
+    const auto draw_memo = [&](const luil::text_input_view& view, luil::text_area_config config) {
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::text_area_element>(memo, view, std::move(config)), { 0.0f, 0.0f, 200.0f, 60.0f }, raster_scale) };
+        luil::testing::raster_frame frame { selection_frame_width, selection_frame_height, palette, raster_scale };
+        frame.set_typeface(typeface);
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    };
+
+    const luil::testing::raster_frame reference { draw_memo(all_selected, {}) };
+    // 기준 그림에 글자가 서 있고 그 가장자리가 반투명 픽셀이어야 두 번 그린 차이가 드러난다.
+    REQUIRE(reference.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, white) > 0);
+    REQUIRE(edge_pixels(reference, palette, white) > 0);
+    const int ink_rows { lowest_ink_row(reference, white) + 1 };
+    REQUIRE(ink_rows > 0);
+
+    SECTION("a syntax colored run")
+    {
+        luil::text_area_config config {};
+        config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 4, luil::text_color_role::keyword } });
+        REQUIRE(differing_pixels(draw_memo(all_selected, config), reference, selection_frame_height) == 0);
+    }
+
+    SECTION("a search match")
+    {
+        luil::text_area_config config {};
+        config.highlights = std::vector<luil::text_highlight> { { 0, 4, false } };
+        REQUIRE(differing_pixels(draw_memo(all_selected, config), reference, selection_frame_height) == 0);
+    }
+
+    SECTION("a link keeps its underline and loses only its own color")
+    {
+        // 서식 구간도 검색 결과도 없고 고른 글자색이 본문색과 같은 일반 테마의 칸이다. 링크가 놓인 줄은 그래도 덧그림이 서서
+        // 고른 링크 글자를 링크색으로 먼저 그려 두지 않는다.
+        REQUIRE(palette.selection_foreground == palette.primary_foreground);
+        luil::text_area_config config {};
+        config.links = std::make_shared<const std::vector<luil::text_link>>(std::vector<luil::text_link> { { 0, 4, u8"https://example.com" } });
+        const luil::testing::raster_frame linked { draw_memo(all_selected, config) };
+        REQUIRE(differing_pixels(linked, reference, ink_rows) == 0);
+        // 밑줄은 고른 구간 안에서도 링크색으로 남는다.
+        REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, red) > 0);
+        REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, static_cast<float>(ink_rows) }, red) == 0);
+    }
+
+    SECTION("a link outside the selection keeps the link color")
+    {
+        luil::text_area_config config {};
+        config.links = std::make_shared<const std::vector<luil::text_link>>(std::vector<luil::text_link> { { 0, 4, u8"https://example.com" } });
+        luil::text_input_view tail_selected { all_selected };
+        tail_selected.anchor = 2;
+        const luil::testing::raster_frame partly { draw_memo(tail_selected, config) };
+        luil::text_input_view none_selected { all_selected };
+        none_selected.anchor = 4;
+        const luil::testing::raster_frame unselected { draw_memo(none_selected, config) };
+        // 글자 높이 안에서 링크색이 처음 서는 열이다. 그 앞 두 글자는 고르지 않은 그림과 같다.
+        const float glyph_rows { static_cast<float>(ink_rows) };
+        int first_red { 0 };
+        while (first_red < selection_frame_width && unselected.count_color({ static_cast<float>(first_red), 0.0f, 1.0f, glyph_rows }, red) == 0)
+            ++first_red;
+        REQUIRE(first_red < selection_frame_width);
+        const luil::rect_f leading { static_cast<float>(first_red), 0.0f, 18.0f, glyph_rows };
+        REQUIRE(unselected.count_color(leading, red) > 0);
+        REQUIRE(partly.count_color(leading, red) == unselected.count_color(leading, red));
+        int differing { 0 };
+        for (int y { 0 }; y < ink_rows; ++y)
+            for (int x { first_red }; x < first_red + 18; ++x)
+                differing += partly.pixel_at(x, y) != unselected.pixel_at(x, y) ? 1 : 0;
+        REQUIRE(differing == 0);
+        // 고른 글자 둘은 고른 글자색이고 링크색이 남지 않는다. 밑줄은 글자 높이 밖이라 따로 남는다.
+        const luil::rect_f selected { static_cast<float>(first_red + 22), 0.0f, 22.0f, glyph_rows };
+        REQUIRE(partly.count_color(selected, white) > 0);
+        REQUIRE(partly.count_color(selected, red) == 0);
+        REQUIRE(partly.count_color({ static_cast<float>(first_red + 22), glyph_rows, 22.0f, 120.0f - glyph_rows }, red) > 0);
+    }
+
+    SECTION("text outside the selection keeps its own color")
+    {
+        luil::text_area_config config {};
+        config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 4, luil::text_color_role::keyword } });
+        luil::text_input_view tail_selected { all_selected };
+        tail_selected.anchor = 2;
+        const luil::testing::raster_frame partly { draw_memo(tail_selected, config) };
+        luil::text_input_view none_selected { all_selected };
+        none_selected.anchor = 4;
+        const luil::testing::raster_frame unselected { draw_memo(none_selected, config) };
+        // 고른 바탕이 시작하기 전의 글자 둘은 아무것도 고르지 않은 그림과 같고 구문색으로 남는다.
+        //  - 글자는 11 픽셀씩 나아가고 고른 구간은 그 둘 뒤에서 시작한다. 첫 구문색 열에서 18 픽셀까지가 그 앞이다.
+        int first_red { 0 };
+        while (first_red < selection_frame_width && unselected.count_color({ static_cast<float>(first_red), 0.0f, 1.0f, 120.0f }, red) == 0)
+            ++first_red;
+        REQUIRE(first_red < selection_frame_width);
+        const luil::rect_f leading { static_cast<float>(first_red), 0.0f, 18.0f, 120.0f };
+        REQUIRE(unselected.count_color(leading, red) > 0);
+        REQUIRE(partly.count_color(leading, red) == unselected.count_color(leading, red));
+        int differing { 0 };
+        for (int y { 0 }; y < selection_frame_height; ++y)
+            for (int x { first_red }; x < first_red + 18; ++x)
+                differing += partly.pixel_at(x, y) != unselected.pixel_at(x, y) ? 1 : 0;
+        REQUIRE(differing == 0);
+        // 고른 글자 둘은 고른 글자색이고 구문색이 남지 않는다.
+        const luil::rect_f selected { static_cast<float>(first_red + 22), 0.0f, 22.0f, 120.0f };
+        REQUIRE(partly.count_color(selected, white) > 0);
+        REQUIRE(partly.count_color(selected, red) == 0);
+    }
+}
+
+TEST_CASE("A selected single line run is painted once in the selection color", "[ui][raster][text-field][selection]")
+{
+    // 고대비는 고른 글자색이 본문색과 달라 칸이 고른 구간에 글자를 다시 그린다. 본문색으로 한 번 그린 위에 얹지 않고
+    // 구간 밖에만 본문색을 그려, 구간 안은 고른 글자색으로 한 번만 그려야 한다.
+    //  - 기준은 본문색이 고른 글자색과 같은 팔레트의 같은 칸이다. 이때 덧그림이 서지 않고 글자를 한 번만 그린다.
+    const sk_sp<SkTypeface> typeface { make_block_typeface() };
+    luil::ui_color_palette contrast { luil::color_palette_for(luil::color_theme::dark) };
+    contrast.primary_foreground = red;
+    contrast.selection_foreground = white;
+    luil::ui_color_palette single { contrast };
+    single.primary_foreground = white;
+    const luil::ui_element_id field { luil::application_element_kind(2), u8"field" };
+    luil::text_input_view all_selected {};
+    all_selected.text = u8"aaaa";
+    all_selected.caret = 4;
+    all_selected.anchor = 0;
+    const auto draw_field = [&](const luil::ui_color_palette& with) {
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::text_input_element>(field, all_selected, luil::text_input_config {}), { 0.0f, 0.0f, 200.0f, 28.0f }, raster_scale) };
+        luil::testing::raster_frame frame { selection_frame_width, selection_frame_height, with, raster_scale };
+        frame.set_typeface(typeface);
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    };
+
+    const luil::testing::raster_frame reference { draw_field(single) };
+    REQUIRE(reference.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, white) > 0);
+    REQUIRE(edge_pixels(reference, single, white) > 0);
+    const luil::testing::raster_frame drawn { draw_field(contrast) };
+    REQUIRE(differing_pixels(drawn, reference, selection_frame_height) == 0);
+}
+
+TEST_CASE("A selected single line link is painted once in the selection color", "[ui][raster][text-field][selection][link]")
+{
+    // 링크가 놓인 칸은 고른 글자색이 본문색과 같은 일반 테마에서도 고른 구간에 글자를 다시 그린다. 고른 링크 글자를 링크색으로
+    // 먼저 그려 두면 같은 글자가 한 번 더 그려져 가장자리에 링크색이 비치므로, 링크색 글자는 고른 구간을 뺀 자리에만 그린다.
+    //  - 기준은 링크가 없는 같은 칸이다. 글자를 한 번만 그리므로 링크 칸의 글자 높이 안과 픽셀 단위로 같아야 한다.
+    const sk_sp<SkTypeface> typeface { make_block_typeface() };
+    luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    palette.primary_foreground = white;
+    palette.selection_foreground = white;
+    palette.accent = red;
+    REQUIRE(palette.selection_foreground == palette.primary_foreground);
+    const luil::ui_element_id field { luil::application_element_kind(2), u8"field" };
+    luil::text_input_view all_selected {};
+    all_selected.text = u8"aaaa";
+    all_selected.caret = 4;
+    all_selected.anchor = 0;
+    // 글꼴의 글자 폭(0.5 em)에 맞춘 측정기다. 링크 조각이 그려진 글자 자리에 놓인다.
+    const luil::text_measurer measurer { [](const std::u8string_view text, const float size) { return 0.5f * size * static_cast<float>(text.size()); } };
+    const auto draw_field = [&](const luil::text_input_view& view, luil::text_input_config config) {
+        auto element { std::make_unique<luil::text_input_element>(field, view, std::move(config)) };
+        element->arrange({ .slot = { 0.0f, 0.0f, 200.0f, 28.0f }, .scale = raster_scale, .measurer = &measurer });
+        const luil::ui_tree tree { std::move(element) };
+        luil::testing::raster_frame frame { selection_frame_width, selection_frame_height, palette, raster_scale };
+        frame.set_typeface(typeface);
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    };
+    luil::text_input_config linked_config {};
+    linked_config.links = std::make_shared<const std::vector<luil::text_link>>(std::vector<luil::text_link> { { 0, 4, u8"https://example.com" } });
+
+    const luil::testing::raster_frame reference { draw_field(all_selected, {}) };
+    REQUIRE(reference.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, white) > 0);
+    REQUIRE(edge_pixels(reference, palette, white) > 0);
+    const int ink_rows { lowest_ink_row(reference, white) + 1 };
+    REQUIRE(ink_rows > 0);
+
+    SECTION("a fully selected link keeps its underline and loses only its own color")
+    {
+        const luil::testing::raster_frame linked { draw_field(all_selected, linked_config) };
+        REQUIRE(differing_pixels(linked, reference, ink_rows) == 0);
+        REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, static_cast<float>(ink_rows) }, red) == 0);
+        // 밑줄은 고른 구간 안에서도 링크색으로 남는다.
+        REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, red) > 0);
+    }
+
+    SECTION("a link outside the selection keeps the link color")
+    {
+        luil::text_input_view tail_selected { all_selected };
+        tail_selected.anchor = 2;
+        const luil::testing::raster_frame partly { draw_field(tail_selected, linked_config) };
+        luil::text_input_view none_selected { all_selected };
+        none_selected.anchor = 4;
+        const luil::testing::raster_frame unselected { draw_field(none_selected, linked_config) };
+        const float glyph_rows { static_cast<float>(ink_rows) };
+        int first_red { 0 };
+        while (first_red < selection_frame_width && unselected.count_color({ static_cast<float>(first_red), 0.0f, 1.0f, glyph_rows }, red) == 0)
+            ++first_red;
+        REQUIRE(first_red < selection_frame_width);
+        // 고른 구간이 시작하기 전의 글자 둘은 아무것도 고르지 않은 그림과 같고 링크색으로 남는다.
+        const luil::rect_f leading { static_cast<float>(first_red), 0.0f, 18.0f, glyph_rows };
+        REQUIRE(unselected.count_color(leading, red) > 0);
+        REQUIRE(partly.count_color(leading, red) == unselected.count_color(leading, red));
+        int differing { 0 };
+        for (int y { 0 }; y < ink_rows; ++y)
+            for (int x { first_red }; x < first_red + 18; ++x)
+                differing += partly.pixel_at(x, y) != unselected.pixel_at(x, y) ? 1 : 0;
+        REQUIRE(differing == 0);
+        // 고른 글자 둘은 고른 글자색이고 링크색이 남지 않는다.
+        const luil::rect_f selected { static_cast<float>(first_red + 22), 0.0f, 22.0f, glyph_rows };
+        REQUIRE(partly.count_color(selected, white) > 0);
+        REQUIRE(partly.count_color(selected, red) == 0);
+    }
 }

@@ -8,6 +8,7 @@
 #include "include/core/SkTypeface.h"
 
 #include <cstddef>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -75,8 +76,10 @@ namespace luil {
         // 사이)에서 바꾸고, 후보가 없는 긴 낱말은 글자소 경계에서 바꾼다. `\n`은 줄 바꿈이다. 거짓이면 한 줄이고 글
         // 안의 줄바꿈은 `draw_text`의 규칙을 따른다.
         bool wrap { false };
-        // 후보를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾼다.
-        text::line_break_policy line_break { text::line_break_policy::hangul_words };
+        // 후보를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다 (docs/wrap-policy-key-design.md).
+        //  - 측정(`measure_text_block`)은 측정 문맥의 스타일(`measure_context::line_break_for`)로, 줄 없이 그리는 길은
+        //    그리기 문맥의 정책(`draw_context::wrap_policy`)으로 푼다. 배치에서 잰 줄로 그리는 길은 정책을 읽지 않는다.
+        std::optional<text::line_break_policy> line_break {};
         // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 보이는 줄이 남은 글을 한 줄로 펴서 끝을 `…`로 줄인다.
         std::size_t max_lines { 0 };
         // 한 줄의 높이다 (논리 픽셀). 0이면 label의 한 줄 높이(`text_line_height(size, 7)`)다.

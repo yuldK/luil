@@ -136,6 +136,6 @@ namespace luil {
     }
     access_info grouped_list_element::accessibility() const
     {
-        return { .role = access_role::list, .name = tooltip() };
+        return { .role = access_role::list, .name = access_name() };
     }
 }

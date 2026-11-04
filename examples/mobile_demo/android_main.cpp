@@ -4,10 +4,12 @@
 // UI thread가 되고, run_application이 Activity가 끝날 때까지 돈다.
 
 #include "mobile_demo/app.h"
+#include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
 
 #include "luil/android/android_app.h"
+#include "luil/app/notification.h"
 
 #include <game-activity/GameActivity.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
@@ -19,7 +21,7 @@ namespace {
     class mobile_delegate final : public luil::app_delegate
     {
     public:
-        // 파일 감시 페이지가 볼 앱 전용 폴더다 (`internalDataPath`).
+        // 파일 감시 페이지와 테마 페이지의 파일 감시 묶음이 볼 앱 전용 폴더다 (`internalDataPath`).
         explicit mobile_delegate(std::filesystem::path files_directory)
             : files_directory_ { std::move(files_directory) }
         {
@@ -29,29 +31,63 @@ namespace {
         void on_started(luil::app_host& host) override
         {
             host.post_app_message(luil::app_message { mobile_demo::local_network_intent { host.permission(luil::app_permission::local_network) } });
+            host.post_app_message(luil::app_message { mobile_demo::notification_permission_intent { host.permission(luil::app_permission::notifications) } });
             luil::net::smb_client_config config {};
             config.deliver = [&host](luil::net::smb_response response) { host.post_app_message(luil::app_message { mobile_demo::smb_result_intent { std::move(response) } }); };
             std::u8string error {};
             smb_ = luil::net::smb_client::create(std::move(config), error);
             if (smb_ != nullptr)
                 host.post_app_message(luil::app_message { mobile_demo::smb_client_intent { smb_.get() } });
-            // 감시자도 logic이 `stop_workers`에서 멈춘다.
+            // 감시자와 핫 리로드 도우미도 logic이 `stop_workers`에서 멈춘다.
             if (files_directory_.empty() == false)
+            {
                 watcher_ = mobile_demo::start_files_watch(host, files_directory_ / "watch-demo");
+                // 앱 전용 폴더의 파일만 감시한다. APK assets는 감시할 수 없어 앱이 실은 글을 이 폴더에 써 둔다 (hot-reload-design.md).
+            }
+            // 서식 칸의 복사·붙여넣기 요청은 logic thread가 이 host에 넣는다.
+            host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
+            // 시스템 언어를 바꾸면 Activity가 다시 서서 이 자리가 다시 불린다.
+            host.post_app_message(read_locale());
         }
 
-        // 기기 페이지의 "묻기"다. 묻지 않았으면(필요 없음·이미 받음) 지금 상태를 그대로 알린다.
+        // 기기 페이지의 "묻기"와 "알림 보내기", 기본 페이지의 클립보드 그림 붙여넣기다. 묻지 않았으면(필요 없음·이미 받음) 지금
+        // 상태를 그대로 알린다.
         void execute_app_ui_command(luil::app_host& host, const luil::app_ui_command& command) override
         {
-            if (command.command != mobile_demo::command_request_local_network)
+            // 답은 `make_clipboard_data_message`로 온다.
+            if (command.command == mobile_demo::command_paste_clipboard_image)
+            {
+                host.post_clipboard_request(luil::clipboard_data_paste_request {});
                 return;
-            if (host.request_permission(luil::app_permission::local_network) == false)
-                host.post_app_message(luil::app_message { mobile_demo::local_network_intent { host.permission(luil::app_permission::local_network) } });
+            }
+            if (command.command == mobile_demo::command_request_local_network)
+            {
+                if (host.request_permission(luil::app_permission::local_network) == false)
+                    host.post_app_message(luil::app_message { mobile_demo::local_network_intent { host.permission(luil::app_permission::local_network) } });
+                return;
+            }
+            if (command.command == mobile_demo::command_request_notifications)
+            {
+                if (host.request_permission(luil::app_permission::notifications) == false)
+                    host.post_app_message(luil::app_message { mobile_demo::notification_permission_intent { host.permission(luil::app_permission::notifications) } });
+                return;
+            }
+            if (command.command == mobile_demo::command_send_notification)
+            {
+                luil::notification value {};
+                value.id = std::u8string { mobile_demo::device_notification_id };
+                value.title = u8"luil 모바일 데모";
+                value.body = u8"알림 창에 올린 알림입니다. 앱을 끈 뒤 누르면 이 id로 앱이 뜹니다.";
+                host.post_app_message(luil::app_message { mobile_demo::notification_send_intent { luil::show_notification(value) } });
+            }
         }
 
         // 앱이 뒤로 가면 SMB의 쉬는 연결을 닫는다. 돌아와서 망이 바뀌었어도 끊긴 연결을 다시 쓰지 않는다.
+        //  - 앞으로 오면 지역 값을 다시 읽는다. 지역 설정에서 첫 요일을 바꾸고 돌아온 자리다.
         [[nodiscard]] luil::app_message make_lifecycle_message(const luil::app_lifecycle lifecycle) override
         {
+            if (lifecycle == luil::app_lifecycle::foreground)
+                return read_locale();
             if (lifecycle != luil::app_lifecycle::background)
                 return {};
             return luil::app_message { mobile_demo::smb_close_idle_intent {} };
@@ -59,9 +95,19 @@ namespace {
 
         [[nodiscard]] luil::app_message make_permission_message(const luil::app_permission permission, const luil::permission_state state) override
         {
+            if (permission == luil::app_permission::notifications)
+                return luil::app_message { mobile_demo::notification_permission_intent { state, true } };
             if (permission != luil::app_permission::local_network)
                 return {};
             return luil::app_message { mobile_demo::local_network_intent { state, true } };
+        }
+
+        // Android가 알리는 사건은 콜드 스타트의 눌림 하나뿐이다 (os-notification-design.md 결정 5).
+        [[nodiscard]] luil::app_message make_notification_message(const luil::notification_event& event) override
+        {
+            if (event.kind != luil::notification_event_kind::activated)
+                return {};
+            return luil::app_message { mobile_demo::notification_launch_intent { event.id } };
         }
 
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
@@ -69,7 +115,21 @@ namespace {
             return mobile_demo::make_metrics_message(metrics);
         }
 
+        // 클립보드의 글과 그림이다. 기본 페이지가 받아 logic thread에서 푼다. 서식 칸이 청한 답은 표식으로 가른다.
+        [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
+        {
+            if (data.tag == demo::rich_text_clipboard_tag)
+                return luil::app_message { demo::rich_text_clipboard_intent { data } };
+            return luil::app_message { mobile_demo::clipboard_image_intent { data } };
+        }
+
     private:
+        // 지역 질의는 부를 때마다 OS에 묻는다. 페이지 대신 delegate가 읽어 메시지로 넣는다.
+        [[nodiscard]] static luil::app_message read_locale()
+        {
+            return luil::app_message { mobile_demo::device_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } };
+        }
+
         std::unique_ptr<luil::net::smb_client> smb_ {};
         std::filesystem::path files_directory_ {};
         std::unique_ptr<luil::file_watcher> watcher_ {};

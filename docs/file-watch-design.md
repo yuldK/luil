@@ -1,5 +1,7 @@
 # 파일 변경 감시
 
+> 선택 이식 범위: 이 문서의 차트·마크업·업데이트·실행 중 스타일·핫 리로드 교차 참조는 원래 전체 통합 브랜치의 설계 기록이다. 현재 main의 채택 범위와 보존 위치는 [선택 기능 이식 기록](selected-adoption.md)에 적었다.
+
 폴더 하나, 그 아래 전부, 또는 파일 하나의 변경을 OS 알림으로 받아 앱에 묶음으로 건넨다. Windows는 `ReadDirectoryChangesW`, Android는 NDK의 inotify다. 공개 형식은 새 헤더 `include/luil/app/file_watcher.h`의 `file_watcher`·`file_watcher_config`·`file_change_batch`다. thread 수명과 전달은 [`http_client`](http-client-design.md)와 같은 계약이다.
 
 ## 문제
@@ -59,6 +61,8 @@ namespace luil {
         bool rescan { false };
         file_watch_end end { file_watch_end::none };
         std::u8string error {};
+        // 앞서 deliver가 거절한 묶음을 다시 낸 것이다. 그 사이의 변경이 합쳐졌을 수 있다.
+        bool retried { false };
     };
 
     struct file_watcher_config
@@ -127,10 +131,12 @@ namespace luil {
 | renamed A→B | removed(B) | removed(A) |
 | renamed A→B | created(A) | created(B), modified(A) |
 
-- 묶음은 묶기 시작한 때와 지금 사이의 순 변화다. 한 경로는 묶음 안에서 한 번만 나온다(`path`로든 `old_path`로든). 그래서 마지막 줄(편집기가 원본을 백업 이름으로 옮기고 새 원본을 쓰는 저장)은 이름 바꿈이 아니라 두 항목으로 풀린다. 원본은 내용이 바뀌었고 백업 이름은 새로 생겼다. 제자리로 돌아온 이름 바꿈(A→B 뒤 B→A)은 modified(A)다.
+- 묶음은 묶기 시작한 때와 지금 사이의 순 변화다. 한 경로는 묶음 안에서 한 번만 나온다(`path`로든 `old_path`로든). 그래서 마지막 줄(편집기가 원본을 백업 이름으로 옮기고 새 원본을 쓰는 저장)은 이름 바꿈이 아니라 두 항목으로 풀린다. 원본은 내용이 바뀌었고 백업 이름은 새로 생겼다. 제자리로 돌아온 이름 바꿈(A→B 뒤 B→A)은 modified(A)다. 생겼다 사라져 묶음이 비면 모은 자리와 묶기 시작한 때도 잊는다. 다음 변경은 `settle`과 `max_delay`를 처음부터 센다. 자리를 남기면 낼 것이 없어 묶음을 짓지 않으므로 순 변화 없는 변경만 이어지는 폴더에서 메모리가 끝없이 는다.
 - 이름 바꿈의 짝은 Windows가 이어 오는 `FILE_ACTION_RENAMED_OLD_NAME`·`NEW_NAME`, inotify가 같은 cookie의 `IN_MOVED_FROM`·`IN_MOVED_TO`다. 묶음을 낼 때까지 짝이 없으면 옛 이름만은 removed, 새 이름만은 created다. 감시 밖으로 나가고 들어온 것이 이 길이다. 반쪽 사이에 다른 이벤트가 끼어도 짝이 아니다. 반쪽이 두 번의 읽기에 걸쳐 와도 된다.
 - `file` 감시는 부모 폴더의 변경을 다 합친 **뒤에** 이름으로 거른다. 임시 이름의 created가 있어야 이름 바꾼 저장이 그 파일의 항목 하나가 된다. 그래서 `max_changes`는 부모 폴더 전체의 항목 수로 센다. 거른 뒤 남는 것이 없으면 묶음을 내지 않는다.
-- `deliver`가 거짓이면 그 묶음을 버리지 않는다. 다음 묶음에 합쳐 `settle` 뒤에 다시 낸다. 합친 것이 `max_changes`를 넘으면 비우고 rescan이다. 끝 묶음도 같은 길로 다시 낸다.
+- `deliver`가 거짓이면 그 묶음을 버리지 않는다. 다음 묶음에 합쳐 `settle` 뒤에 다시 낸다. 합친 것이 `max_changes`를 넘으면 비우고 rescan이다. 끝 묶음도 같은 길로 다시 낸다. 다시 낸 묶음은 `retried`가 참이다. 쥔 것이 순 변화 없이 사라지면 다음 묶음은 거짓이다. 받는 쪽이 앞서 거절한 일을 이어 세는지 시간으로 짐작하지 않게 하는 칸이다.
+- `retried`가 보는 범위는 감시마다 다르다. `file` 감시는 그 파일이다. 앱에 나가는 것은 이름이 맞는 항목뿐이라 거절한 것도 그것뿐이다. 그 항목이 사라지면 같은 폴더의 다른 이름이 묶음에 남아 있어도 다음 묶음은 거짓이다. 옛 이름으로 남은 이름 바꿈은 사라진 것이 아니다. `folder`·`subtree` 감시는 묶음 전체다. 항목마다 세지 않으므로 거절한 항목이 사라져도 그 사이에 모인 다른 항목이 남아 있으면 참이고, 모은 것이 모두 사라져야 거짓이다. rescan과 끝 묶음은 항목으로 가르지 않으므로 앞서 거절했으면 참이다.
+- 앱이 거절을 이어 가는 동안에는 생겼다 사라진 항목의 빈 칸이 묶음을 받을 때까지 남는다(거절이 풀리면 비워진다). `max_changes`는 살아 있는 항목만 세어 이 칸을 막지 않으므로 칸 수는 거절이 이어진 시간에 묶인다.
 - OS 넘침(Windows의 빈 결과나 `ERROR_NOTIFY_ENUM_DIR`, inotify의 `IN_Q_OVERFLOW`)은 그 감시의 rescan이다. 감시는 다시 걸린다. inotify의 큐는 감시자 하나에 하나라 어느 감시의 것이 빠졌는지 모른다. 그 감시자의 모든 감시에 rescan을 단다.
 
 **종류의 뜻.** 두 플랫폼이 같은 뜻이 되게 맞춘다.
@@ -227,7 +233,7 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - `owned_handle`은 복제본이 없어 제자리에 두었던 것이다. 감시자가 폴더 핸들과 완료 포트에 쓰는 두 번째 사용자다. `platform_services_win32.cpp`는 자기 사본을 지우고 헤더를 쓴다.
 - `errno_failure`는 `platform_result`를 돌려줘 그대로는 옮길 수 없다. `make_last_error`처럼 글만 만들고(`errno`는 부른 바로 뒤에 읽는다), `platform_result` 래퍼는 `platform_services_android.cpp`에 남는다. 감시자는 이 글을 `std::u8string& error`에 쓴다.
 - 오류 문구와 호출 순서는 그대로다. 기존 `tests/platform_services_tests.cpp`가 무변경으로 통과해야 한다.
-- 범위 밖: `android_settings.cpp`의 `local_frame`. 소멸자에서 예외를 거두는 다른 뜻이다.
+- 범위 밖: `android_settings.cpp`의 `local_frame`. 이 노드 때는 소멸자에서 예외를 거두는 다른 뜻이었다. 뒤의 `local_frame` 노드가 `jni_local_frame`·`jni_failed`로 옮겼다.
 
 ## 다른 노드와의 약속
 
@@ -243,7 +249,7 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 
 ## 확인
 
-- `tests/file_watch_batch_tests.cpp`(core, `luil_core_tests`라 Android 기기에서도 돈다): 합치기 표의 각 줄, 짝 없는 옛 이름·새 이름, 이어진 이름 바꿈, `settle` 경계와 `max_delay` 상한, `max_changes`를 넘으면 비우고 rescan, 거절된 묶음이 다음 묶음에 합쳐지는지, 끝 묶음이 하나뿐인지, 경로 구분자.
+- `tests/file_watch_batch_tests.cpp`(core, `luil_core_tests`라 Android 기기에서도 돈다): 합치기 표의 각 줄, 짝 없는 옛 이름·새 이름, 이어진 이름 바꿈, `settle` 경계와 `max_delay` 상한, 생겼다 사라진 뒤 다음 변경이 `settle`을 기다리는지, 생겼다 사라지기만 하는 변경이 칸을 남기지 않는지, `max_changes`를 넘으면 비우고 rescan, 거절된 묶음이 다음 묶음에 합쳐지는지, 다시 낸 묶음의 `retried`와 쥔 것이 사라진 뒤의 묶음, `file` 감시에서 옆 이름이 남아도 그 이름이 사라지면 거짓인지와 옛 이름으로 남으면 참인지, 폴더 감시의 `retried`가 묶음 전체를 보는지, 끝 묶음이 하나뿐인지, 경로 구분자.
 - `tests/file_watcher_tests.cpp`(실제 폴더, [platform_services_tests.cpp](../tests/platform_services_tests.cpp)의 `scratch_folder` 관용구): 생성·수정·삭제·이름 바꿈, `subtree`의 하위 폴더 파일과 새로 만든 폴더 안의 파일, `file` 감시가 임시 파일 저장을 한 항목으로 받는지, `replace_file_atomically`로 쓴 파일, 감시 폴더 삭제의 `lost`, `remove`의 끝 묶음, 두 감시자 동시, 변경 없을 때와 폭주 중의 `stop`이 예산 안에 끝나는지, `stop` 뒤 `deliver`가 없는지, `deliver`가 거짓을 답한 뒤 다시 오는지.
   - Windows는 `luil_tests`다. 작은 버퍼를 test 손잡이로 주어 넘침을 일으켜 rescan을 본다.
   - Android는 `file_watcher_android.cpp`가 JVM이 필요 없어 `android_input.cpp`처럼 `luil_core_tests`에 소스를 넣어 기기 셸(`cmake/android/adb_run.cmake`)에서 돈다. 넘침은 감시 thread를 `deliver` 안에 묶어 둔 채 `max_queued_events`보다 많은 이벤트가 나도록 파일을 만들어 본다. `replace_file_atomically`는 `luil` 쪽이라 그 경우만 Windows에서 본다.

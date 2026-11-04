@@ -1,6 +1,7 @@
 #include "mobile_demo/device_page.h"
 
 #include "luil/app/secret_store.h"
+#include "luil/text/string_table.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -80,12 +81,76 @@ namespace mobile_demo {
             return u8"compact";
         }
 
+        [[nodiscard]] std::u8string first_weekday_text(const std::optional<device_locale_intent>& locale)
+        {
+            constexpr std::array<std::u8string_view, 7> names { u8"일요일", u8"월요일", u8"화요일", u8"수요일", u8"목요일", u8"금요일", u8"토요일" };
+            if (locale.has_value() == false)
+                return u8"주 첫 요일: 아직 읽지 않음";
+            if (locale->first_weekday.has_value() == false || locale->first_weekday->ok() == false)
+                return u8"주 첫 요일: OS가 답하지 않음";
+            return u8"주 첫 요일: " + std::u8string { names[locale->first_weekday->c_encoding()] };
+        }
+
+        // 태그를 쉼표로 잇는다. 비었으면 빈 글이다.
+        [[nodiscard]] std::u8string joined_tags(const std::vector<std::u8string>& tags)
+        {
+            std::u8string text {};
+            for (const std::u8string& tag : tags)
+                text += (text.empty() ? std::u8string {} : std::u8string { u8", " }) + tag;
+            return text;
+        }
+
+        // 언어 칸의 값이다. 값이 곧 항목의 id라 방향 묶음의 system과 겹치지 않게 묶음 owner를 앞에 붙인다.
+        //  - 메시지와 페이지 상태는 붙이지 않은 값("system"·"ko"·"en")이다. 셸이 그 값을 언어 태그로 쓴다.
+        constexpr std::u8string_view language_cell_prefix { u8"device-language-" };
+
+        [[nodiscard]] std::u8string language_cell(const std::u8string_view language)
+        {
+            return std::u8string { language_cell_prefix } + std::u8string { language };
+        }
+
+        // 라이브러리 언어를 고른 칸으로 되읽는다. 칸이 정하는 목록은 "ko"나 "en" 하나뿐이고 OS 목록은 지역이 붙어(ko-KR) 시스템 칸의 것으로 읽는다.
+        //  - OS 목록이 지역 없는 `en` 하나뿐이면 English 칸으로 읽는다. 그 뒤로 OS 언어를 따르지 않을 뿐 지금 글은 같다.
+        [[nodiscard]] std::u8string language_from_library()
+        {
+            const std::optional<std::vector<std::u8string>> chosen { luil::text_languages() };
+            if (chosen.has_value()
+                && chosen->size() == 1u
+                && (chosen->front() == u8"ko" || chosen->front() == u8"en"))
+                return chosen->front();
+            return u8"system";
+        }
+
+        [[nodiscard]] std::u8string ui_language_text(const std::optional<device_locale_intent>& locale)
+        {
+            if (locale.has_value() == false)
+                return u8"표시 언어: 아직 읽지 않음";
+            if (locale->languages.empty())
+                return u8"표시 언어: OS가 답하지 않음";
+            return u8"표시 언어: " + joined_tags(locale->languages);
+        }
+
+        // 라이브러리가 지금 쓰는 선호 목록이다. 정한 목록은 프로세스에 남아 Activity가 다시 서도 그대로다.
+        [[nodiscard]] std::u8string text_language_text()
+        {
+            const std::optional<std::vector<std::u8string>> chosen { luil::text_languages() };
+            if (chosen.has_value() == false)
+                return u8"기본 문구 선호: 정하지 않음";
+            return u8"기본 문구 선호: " + (chosen->empty() ? std::u8string { u8"빈 목록" } : joined_tags(*chosen));
+        }
+
+
         constexpr std::array<orientation_choice, 4> orientation_choices {
             orientation_choice { luil::screen_orientation::system, u8"system", u8"시스템" },
             orientation_choice { luil::screen_orientation::portrait, u8"portrait", u8"세로" },
             orientation_choice { luil::screen_orientation::landscape, u8"landscape", u8"가로" },
             orientation_choice { luil::screen_orientation::current, u8"current", u8"지금 고정" },
         };
+    }
+
+    device_page::device_page()
+        : language_ { language_from_library() }
+    {
     }
 
     bool device_page::handle(const luil::app_message& message)
@@ -117,6 +182,21 @@ namespace mobile_demo {
                 ++volume_repeat_count_;
             return true;
         }
+        if (const auto* const locale { message.get<device_locale_intent>() }; locale != nullptr)
+        {
+            locale_ = *locale;
+            return true;
+        }
+        if (const auto* const language { message.get<device_language_intent>() }; language != nullptr)
+        {
+            language_ = language->value;
+            return true;
+        }
+        if (const auto* const transition { message.get<page_transition_toggle_intent>() }; transition != nullptr)
+        {
+            page_transition_ = transition->enabled;
+            return true;
+        }
         if (message.get<secret_check_intent>() != nullptr)
         {
             // logic thread에서 돈다 — Keystore 호출은 수십 ms까지 걸려 UI thread의 자리가 아니다.
@@ -129,12 +209,34 @@ namespace mobile_demo {
             local_network_answered_ = local_network_answered_ || local->answered;
             return true;
         }
+        if (const auto* const permission { message.get<notification_permission_intent>() }; permission != nullptr)
+        {
+            notifications_ = permission->state;
+            notifications_answered_ = notifications_answered_ || permission->answered;
+            return true;
+        }
+        if (const auto* const sent { message.get<notification_send_intent>() }; sent != nullptr)
+        {
+            notification_sent_ = sent->result;
+            return true;
+        }
+        if (const auto* const launch { message.get<notification_launch_intent>() }; launch != nullptr)
+        {
+            notification_launch_ = launch->id;
+            return true;
+        }
         return false;
+    }
+
+    std::u8string device_page::page_transition_text() const
+    {
+        if (page_transition_ == false)
+            return u8"페이지 전환: 꺼짐";
+        return page_transition_turning_ ? u8"페이지 전환: 켜짐 · 도는 중" : u8"페이지 전환: 켜짐 · 멈춤";
     }
 
     page_content device_page::build(const float width, const float scale, const window_metrics_intent& window)
     {
-        static_cast<void>(scale);
         const luil::ui_platform_capabilities capabilities { luil::current_ui_platform().capabilities };
         const float choice_width { std::min(width - 2.0f * page_padding, 360.0f) };
 
@@ -150,6 +252,36 @@ namespace mobile_demo {
         column.body(u8"motion-state", window.reduce_motion ? u8"켜짐 · 도는 표시가 멈춘다" : u8"꺼짐 · 도는 표시가 돈다");
         column.gap(8.0f);
         column.add(std::make_unique<luil::spinner_element>(luil::ui_element_id { kind_layout, u8"motion-spinner" }, luil::spinner_config { .name = u8"도는 표시" }), 24.0f, 24.0f);
+        // 페이지를 바꿀 때의 전환이다. 좁은 화면은 목록과 페이지가 가로로 밀리고, 넓은 화면의 오른쪽 판은 옅어진다.
+        //  - 움직임 줄이기가 켜져 있으면 켜 두어도 바로 바뀐다.
+        luil::check_config transition {};
+        transition.owner = u8"page-transition";
+        transition.style = luil::check_style::toggle_switch;
+        transition.label = u8"페이지 전환";
+        transition.checked = page_transition_;
+        transition.toggle = luil::make_message_action(page_transition_toggle_intent { page_transition_ == false });
+        const float transition_height { luil::check_element::height_for(transition) };
+        column.gap(10.0f);
+        column.add(std::make_unique<luil::check_element>(std::move(transition)), std::max(transition_height, touch_height), choice_width);
+        column.body(u8"page-transition-state", page_transition_text());
+        column.gap(20.0f);
+        // OS 값은 셸이 읽어 넣는다. 언어를 고르면 테마 카드·날짜 칸·달력·편집 메뉴의 글이 바뀐다.
+        column.heading(u8"locale-heading", u8"지역과 언어");
+        column.body(u8"device-first-weekday", first_weekday_text(locale_));
+        column.body(u8"device-ui-language", ui_language_text(locale_));
+        luil::choice_group_config languages {};
+        languages.owner = u8"device-language";
+        languages.name = u8"기본 문구 언어";
+        languages.style = luil::choice_style::toggle;
+        languages.width = luil::choice_width::fill;
+        languages.items = { { language_cell(u8"system"), u8"시스템" }, { language_cell(u8"ko"), u8"한국어" }, { language_cell(u8"en"), u8"English" } };
+        languages.selected = language_cell(language_);
+        languages.select = [](const std::u8string& key) { return luil::make_app_action(device_language_intent { key.substr(language_cell_prefix.size()) }); };
+        const float languages_height { luil::choice_group_element::height_for(languages) };
+        column.gap(6.0f);
+        column.add(std::make_unique<luil::choice_group_element>(std::move(languages)), languages_height, choice_width);
+        column.gap(6.0f);
+        column.note(u8"device-text-language", text_language_text());
         column.gap(20.0f);
         column.heading(u8"orientation-heading", u8"화면 방향");
         if (capabilities.screen_orientation == false)
@@ -268,6 +400,24 @@ namespace mobile_demo {
         else
             column.note(u8"taskbar-note", u8"창 단추에 진행률과 오버레이를 걸 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
 
+        // 알림 영역 아이콘도 데스크톱의 것이다 (tray-icon-design.md). 요청(`ui_frame::tray`)은 실을 수 있고 하지 못하는 플랫폼은 받기만 한다.
+        column.gap(20.0f);
+        column.heading(u8"tray-heading", u8"알림 영역 아이콘");
+        // 없다는 설명은 좁은 화면과 큰 글꼴 배율에서 한 줄 끝이 말줄임으로 잘리므로 줄을 바꾼다.
+        if (capabilities.tray == false)
+            column.wrapped_note(u8"tray-none", u8"이 플랫폼에는 알림 영역 아이콘이 없다. 알림은 OS 알림이 맡는다.", width, scale);
+        else
+            column.note(u8"tray-note", u8"알림 영역에 아이콘을 세울 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
+
+        // 앱이 뒤에 있을 때 받는 전역 단축키도 데스크톱의 것이다 (global-hotkey-design.md). 요청(`ui_frame::hotkeys`)은 실을 수 있고 하지 못하는 플랫폼은 받기만 한다.
+        column.gap(20.0f);
+        column.heading(u8"hotkeys-heading", u8"전역 단축키");
+        if (capabilities.global_hotkeys == false)
+            column.note(u8"hotkeys-none", u8"이 플랫폼에는 전역 단축키가 없다.");
+        else
+            column.note(u8"hotkeys-note", u8"앱이 뒤에 있어도 받는 키 조합을 걸 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
+
+
         // 집 안 NAS 같은 같은 네트워크의 기기에 붙으려면 Android 17부터 이 권한이 있어야 한다.
         column.gap(20.0f);
         column.heading(u8"local-network-heading", u8"로컬 네트워크 권한");
@@ -289,6 +439,43 @@ namespace mobile_demo {
                 [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_request_local_network } } }; });
             column.add(std::move(ask), touch_height);
             break;
+        }
+
+        // OS 알림이다 (os-notification-design.md). 알림 창에 올리고, 꺼진 앱에서 누르면 그 id로 앱이 뜬다.
+        column.gap(20.0f);
+        column.heading(u8"notification-heading", u8"알림");
+        if (capabilities.notifications == false)
+            column.note(u8"notification-none", u8"이 플랫폼은 OS 알림을 올리지 못한다.");
+        else
+        {
+            switch (notifications_)
+            {
+            case luil::permission_state::not_required:
+                column.note(u8"notification-state", u8"알림 권한: 묻지 않아도 된다.");
+                break;
+            case luil::permission_state::granted:
+                column.note(u8"notification-state", notifications_answered_ ? u8"알림 권한: 받았다 (방금 허락)." : u8"알림 권한: 받았다.");
+                break;
+            case luil::permission_state::denied:
+                column.note(u8"notification-state", notifications_answered_ ? u8"알림 권한: 받지 못했다 (거절)." : u8"알림 권한: 아직 받지 못했다.");
+                column.gap(8.0f);
+                auto ask { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"notification-ask" }, luil::text_button_config { .text = u8"알림 권한 묻기" }) };
+                ask->set_action(luil::ui_trigger::left_click,
+                    [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_request_notifications } } }; });
+                column.add(std::move(ask), touch_height);
+                break;
+            }
+            column.gap(8.0f);
+            // 올리기는 앱 UI 명령으로 delegate에 넘긴다. 페이지는 플랫폼을 부르지 않는다.
+            auto send { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"notification-send" }, luil::text_button_config { .text = u8"알림 보내기" }) };
+            send->set_action(luil::ui_trigger::left_click,
+                [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_send_notification } } }; });
+            column.add(std::move(send), touch_height);
+            std::u8string sent { u8"알림 결과: 없음" };
+            if (notification_sent_.has_value())
+                sent = notification_sent_->ok() ? std::u8string { u8"알림 결과: ok" } : u8"알림 결과: 실패 · " + notification_sent_->error;
+            column.note(u8"notification-result", std::move(sent));
+            column.note(u8"notification-launch", u8"알림으로 시작: " + (notification_launch_.empty() ? std::u8string { u8"아니오" } : notification_launch_));
         }
 
         // 비밀 저장소다. Keystore의 AES-GCM 키로 암호화해 앱 내부 파일에 둔다 (Java 0줄, JNI).

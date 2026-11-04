@@ -62,6 +62,9 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/groups_page.h
     demo/images_page.cpp
     demo/images_page.h
+    demo/inspector_page.cpp
+    demo/inspector_page.h
+    demo/inspector_state.h
     demo/lists_page.cpp
     demo/lists_page.h
     demo/network_page.cpp
@@ -70,10 +73,19 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/palette.h
     demo/popups_page.cpp
     demo/popups_page.h
+    demo/readonly_undo_keys.h
+    demo/rich_text_page.cpp
+    demo/rich_text_page.h
+    demo/rich_text_sample.h
+    demo/shell_menu.cpp
+    demo/shell_menu.h
     demo/tabs_page.cpp
     demo/tabs_page.h
     demo/zoom_page.cpp
     demo/zoom_page.h
+    demo/ink_page.cpp
+    demo/ink_page.h
+    demo/ink_sketch.h
     demo/theme_page.cpp
     demo/theme_page.h
     demo/toasts_page.cpp

@@ -17,7 +17,7 @@ namespace luil::android {
         {
             const jclass type { env.GetObjectClass(activity) };
             const jmethodID get_window { env.GetMethodID(type, "getWindow", "()Landroid/view/Window;") };
-            if (get_window == nullptr || jni_failed(env))
+            if (jni_failed(env) || get_window == nullptr)
                 return nullptr;
             const jobject window { env.CallObjectMethod(activity, get_window) };
             return jni_failed(env) ? nullptr : window;
@@ -34,18 +34,20 @@ namespace luil::android {
 
         // 자원 번호는 판마다 다를 수 있어 상수로 박지 않고 `android.R.color`에서 읽는다.
         const jclass colors { env.FindClass("android/R$color") };
-        if (colors == nullptr || jni_failed(env))
+        if (jni_failed(env) || colors == nullptr)
             return std::nullopt;
         const jfieldID field { env.GetStaticFieldID(colors, "system_accent1_500", "I") };
-        if (field == nullptr || jni_failed(env))
+        if (jni_failed(env) || field == nullptr)
             return std::nullopt;
         const jint id { env.GetStaticIntField(colors, field) };
+        if (jni_failed(env))
+            return std::nullopt;
 
         const jclass context_type { env.FindClass("android/content/Context") };
-        if (context_type == nullptr || jni_failed(env))
+        if (jni_failed(env) || context_type == nullptr)
             return std::nullopt;
         const jmethodID get_color { env.GetMethodID(context_type, "getColor", "(I)I") };
-        if (get_color == nullptr || jni_failed(env))
+        if (jni_failed(env) || get_color == nullptr)
             return std::nullopt;
         const jint color { env.CallIntMethod(context, get_color, id) };
         if (jni_failed(env))
@@ -63,20 +65,22 @@ namespace luil::android {
             return false;
 
         const jclass context_type { env.FindClass("android/content/Context") };
-        if (context_type == nullptr || jni_failed(env))
+        if (jni_failed(env) || context_type == nullptr)
             return false;
         const jmethodID get_service { env.GetMethodID(context_type, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;") };
-        if (get_service == nullptr || jni_failed(env))
+        if (jni_failed(env) || get_service == nullptr)
             return false;
         const jstring name { env.NewStringUTF("uimode") };
+        if (jni_failed(env) || name == nullptr)
+            return false;
         const jobject manager { env.CallObjectMethod(context, get_service, name) };
-        if (manager == nullptr || jni_failed(env))
+        if (jni_failed(env) || manager == nullptr)
             return false;
         const jclass manager_type { env.FindClass("android/app/UiModeManager") };
-        if (manager_type == nullptr || jni_failed(env))
+        if (jni_failed(env) || manager_type == nullptr)
             return false;
         const jmethodID get_contrast { env.GetMethodID(manager_type, "getContrast", "()F") };
-        if (get_contrast == nullptr || jni_failed(env))
+        if (jni_failed(env) || get_contrast == nullptr)
             return false;
         const jfloat contrast { env.CallFloatMethod(manager, get_contrast) };
         if (jni_failed(env))
@@ -112,22 +116,22 @@ namespace luil::android {
         if (window == nullptr)
             return;
         const jclass window_type { env.FindClass("android/view/Window") };
-        if (window_type == nullptr || jni_failed(env))
+        if (jni_failed(env) || window_type == nullptr)
             return;
 
         if (android_get_device_api_level() >= 30)
         {
             const jmethodID get_controller { env.GetMethodID(window_type, "getInsetsController", "()Landroid/view/WindowInsetsController;") };
-            if (get_controller == nullptr || jni_failed(env))
+            if (jni_failed(env) || get_controller == nullptr)
                 return;
             const jobject controller { env.CallObjectMethod(window, get_controller) };
-            if (controller == nullptr || jni_failed(env))
+            if (jni_failed(env) || controller == nullptr)
                 return;
             const jclass controller_type { env.FindClass("android/view/WindowInsetsController") };
-            if (controller_type == nullptr || jni_failed(env))
+            if (jni_failed(env) || controller_type == nullptr)
                 return;
             const jmethodID set_appearance { env.GetMethodID(controller_type, "setSystemBarsAppearance", "(II)V") };
-            if (set_appearance == nullptr || jni_failed(env))
+            if (jni_failed(env) || set_appearance == nullptr)
                 return;
             const jint mask { light_status_bars_appearance | light_navigation_bars_appearance };
             env.CallVoidMethod(controller, set_appearance, light_background ? mask : 0, mask);
@@ -136,17 +140,19 @@ namespace luil::android {
         }
 
         const jmethodID get_decor { env.GetMethodID(window_type, "getDecorView", "()Landroid/view/View;") };
-        if (get_decor == nullptr || jni_failed(env))
+        if (jni_failed(env) || get_decor == nullptr)
             return;
         const jobject decor { env.CallObjectMethod(window, get_decor) };
-        if (decor == nullptr || jni_failed(env))
+        if (jni_failed(env) || decor == nullptr)
             return;
         const jclass view_type { env.FindClass("android/view/View") };
-        if (view_type == nullptr || jni_failed(env))
+        if (jni_failed(env) || view_type == nullptr)
             return;
         const jmethodID get_flags { env.GetMethodID(view_type, "getSystemUiVisibility", "()I") };
+        if (jni_failed(env) || get_flags == nullptr)
+            return;
         const jmethodID set_flags { env.GetMethodID(view_type, "setSystemUiVisibility", "(I)V") };
-        if (get_flags == nullptr || set_flags == nullptr || jni_failed(env))
+        if (jni_failed(env) || set_flags == nullptr)
             return;
         jint flags { env.CallIntMethod(decor, get_flags) };
         if (jni_failed(env))

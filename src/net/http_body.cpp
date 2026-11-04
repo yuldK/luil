@@ -192,7 +192,8 @@ namespace luil::net {
                 nlohmann::json value { nlohmann::json::parse(first, first + payload.size()) };
                 body.json = std::make_shared<const nlohmann::json>(std::move(value));
             }
-            // 예외가 값으로 바뀌는 **유일한 자리**다. `allow_exceptions = false`는 값은
+            // HTTP 본문에서 예외가 값으로 바뀌는 **유일한 자리**다(라이브러리 전체로는 여기와 스타일 파서
+            // 다른 읽기 경로도 같은 규칙이다). `allow_exceptions = false`는 값은
             // 주지만 이유를 못 준다 ("22째 바이트"가 사라진다) — 그 한 줄이 사람이
             // 서버를 고칠 수 있는지를 가른다 (http-client-design.md).
             catch (const nlohmann::json::exception& failure)

@@ -2,8 +2,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
+#include <cstddef>
+#include <optional>
+#include <span>
 #include <variant>
+#include <vector>
 
 namespace {
     using namespace luil;
@@ -208,6 +213,40 @@ TEST_CASE("Pointer times move onto the steady clock", "[surface-input][touch]")
     REQUIRE(pointer_tick_time(1'300u, 1'200u, now) == now);
 }
 
+TEST_CASE("Pen values follow the mask and history goes oldest first without repeats", "[surface-input][pen][ink]")
+{
+    POINTER_PEN_INFO pen {};
+    pen.pressure = 512;
+    pen.tiltX = 10;
+    pen.tiltY = -20;
+    // 마스크가 없으면 압력은 모르는 것이고 기울기는 0이다 (합성 입력·원격 연결).
+    REQUIRE(pen_values_of(pen) == pen_values {});
+    pen.penMask = PEN_MASK_PRESSURE | PEN_MASK_TILT_X | PEN_MASK_TILT_Y;
+    const pen_values values { pen_values_of(pen) };
+    REQUIRE(values.pressure == 0.5f);
+    REQUIRE(values.tilt_x == 10.0f);
+    REQUIRE(values.tilt_y == -20.0f);
+
+    // 기록은 최근 것이 앞이고 0번이 현재 표본이다. 보낼 것은 1번부터 오래된 것 순서다.
+    std::array<POINTER_PEN_INFO, 4> history {};
+    history[0].pointerInfo.frameId = 13;
+    history[1].pointerInfo.frameId = 12;
+    history[2].pointerInfo.frameId = 11;
+    history[3].pointerInfo.frameId = 10;
+    REQUIRE(pen_history_order(history, std::nullopt) == std::vector<std::size_t> { 3, 2, 1 });
+    // 이미 보낸 frameId(11)와 그 앞은 거른다.
+    REQUIRE(pen_history_order(history, 11u) == std::vector<std::size_t> { 1 });
+    REQUIRE(pen_history_order(history, 13u).empty());
+    // 현재 표본만 있으면 보낼 기록이 없다.
+    REQUIRE(pen_history_order(std::span { history.data(), 1 }, std::nullopt).empty());
+    // frameId가 32비트 경계를 넘어도 순서가 맞다.
+    history[0].pointerInfo.frameId = 1;
+    history[1].pointerInfo.frameId = 0;
+    history[2].pointerInfo.frameId = 0xFFFF'FFFFu;
+    history[3].pointerInfo.frameId = 0xFFFF'FFFEu;
+    REQUIRE(pen_history_order(history, 0xFFFF'FFFEu) == std::vector<std::size_t> { 2, 1 });
+}
+
 TEST_CASE("Mouse presses, moves and releases carry Ctrl, Shift and Alt", "[surface-input][modifiers]")
 {
     // Ctrl·Shift는 wparam이, Alt는 창이 조회해 넣은 값이 싣는다.
@@ -248,4 +287,91 @@ TEST_CASE("Native mouse hover and press carry the same surface DPI for tooltip h
     const auto press { luil::win32::translate_pointer_message(message) };
     REQUIRE(press.has_value());
     REQUIRE(std::get<luil::pointer_pressed_event>(*press).scale == 1.5f);
+}
+
+TEST_CASE("A lone Alt press and release is an Alt tap only while a menu bar can take it", "[surface-input][menu-bar]")
+{
+    // 첫 누름이 무장하고 뗌이 Alt 단독이다. 누르고 있는 동안의 반복은 무장을 그대로 둔다.
+    luil::win32::alt_tap_tracker tracker {};
+    tracker.key_down(VK_MENU, false, false, true);
+    REQUIRE(tracker.armed());
+    tracker.key_down(VK_MENU, true, false, true);
+    REQUIRE(tracker.armed());
+    REQUIRE(tracker.key_up(VK_MENU));
+    REQUIRE(tracker.armed() == false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 막대가 없거나 키 잡기 중이면(`eligible` 거짓) 무장하지 않는다.
+    tracker.key_down(VK_MENU, false, false, false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // Ctrl과 함께인 Alt는 AltGr다.
+    tracker.key_down(VK_MENU, false, true, true);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 반복으로 시작한 누름은 무장하지 않는다 (창 밖에서 눌러 들고 온 Alt다).
+    tracker.key_down(VK_MENU, true, false, true);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+}
+
+TEST_CASE("Another key, a pointer press or a global hotkey cancels an armed Alt tap", "[surface-input][menu-bar]")
+{
+    luil::win32::alt_tap_tracker tracker {};
+    // Alt+F처럼 다른 키가 끼면 Alt 단독이 아니다. 그 키의 뗌은 무장을 바꾸지 않는다.
+    tracker.key_down(VK_MENU, false, false, true);
+    tracker.key_down('F', false, false, true);
+    REQUIRE(tracker.key_up('F') == false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // Shift도 다른 키다.
+    tracker.key_down(VK_MENU, false, false, true);
+    tracker.key_down(VK_SHIFT, false, false, true);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 마우스 누름·창 비활성·전역 단축키 눌림은 창이 `cancel`을 부른다 (`window_surface::cancel_alt_tap`).
+    tracker.key_down(VK_MENU, false, false, true);
+    REQUIRE(tracker.armed());
+    tracker.cancel();
+    REQUIRE(tracker.armed() == false);
+    REQUIRE(tracker.key_up(VK_MENU) == false);
+
+    // 풀린 뒤의 새 첫 누름은 다시 무장한다.
+    tracker.key_down(VK_MENU, false, false, true);
+    REQUIRE(tracker.key_up(VK_MENU));
+}
+
+TEST_CASE("A window with a menu bar swallows Alt and F10 releases and Alt characters but not Alt+Space", "[surface-input][menu-bar]")
+{
+    using luil::win32::swallow_system_key;
+    // 막대가 있으면 메뉴 모드와 경고음을 막는다.
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_MENU, true, false));
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_F10, true, false));
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L'f', true, false));
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L'7', true, false));
+    // Alt+Space는 시스템 메뉴라 넘긴다. 다른 키의 뗌도 OS의 것이다.
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L' ', true, false) == false);
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, 'F', true, false) == false);
+
+    // 막대가 없으면 지금처럼 OS의 것이다.
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_MENU, false, false) == false);
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_F10, false, false) == false);
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L'f', false, false) == false);
+
+    // 키 잡기 중이면 막대와 상관없이 둘 다 삼킨다 (Alt+Space까지 잡는 칸의 것이다).
+    REQUIRE(swallow_system_key(WM_SYSKEYUP, VK_MENU, false, true));
+    REQUIRE(swallow_system_key(WM_SYSCHAR, L' ', false, true));
+    // 시스템 키 메시지가 아니면 삼키지 않는다.
+    REQUIRE(swallow_system_key(WM_SYSKEYDOWN, VK_MENU, true, true) == false);
+    REQUIRE(swallow_system_key(WM_KEYUP, VK_MENU, true, true) == false);
+}
+
+TEST_CASE("Menu keys send plain letters as keys the way key capture does", "[surface-input][menu-bar]")
+{
+    // 막대가 선 동안 창은 글자 키를 문자 키로 치지 않고 넘긴다 (`character_key` 거짓). 그러면 수식 키 없는 글자도 이름 키다.
+    REQUIRE(modified_key_from_virtual('F', false, false, false) == key_code::key_f);
+    REQUIRE(modified_key_from_virtual('3', false, false, false) == key_code::key_3);
+    // 막대가 쉬면 지금처럼 문자 경로다.
+    REQUIRE(modified_key_from_virtual('F', false, false, true) == key_code::none);
+    // Alt 자체는 여전히 키가 아니다. Alt 단독은 뗌에서 창이 따로 보낸다.
+    REQUIRE(modified_key_from_virtual(VK_MENU, false, true, false) == key_code::none);
 }

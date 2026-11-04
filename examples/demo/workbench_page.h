@@ -17,9 +17,12 @@
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_interaction.h"
+#include "luil/ui/undo_commands.h"
+#include "luil/ui/undo_stack.h"
 #include "luil/win32/app_host.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -34,6 +37,15 @@ namespace demo {
     constexpr luil::ui_element_kind kind_workbench_author_input { luil::application_element_kind(41) };
     constexpr luil::ui_element_kind kind_workbench_diff { luil::application_element_kind(42) };
     constexpr luil::ui_element_kind kind_workbench_find_input { luil::application_element_kind(43) };
+
+    // 변경 하나다 (앱의 모델). 버린 행을 되돌리는 메시지에도 실린다.
+    struct workbench_change
+    {
+        std::u8string path {};
+        std::u8string status {};
+        int size { 0 };
+        bool staged { false };
+    };
 
     // --- 저장소 계층의 메시지 ---
     struct workbench_tree_expand_intent
@@ -103,6 +115,12 @@ namespace demo {
         float delta { 0.0f };
     };
 
+    // 열 경계를 끌어 놓았다. 끌기 하나가 걸음 하나가 되도록 다음 조절은 합치지 않는다.
+    struct workbench_resize_end_intent
+    {
+        std::u8string column {};
+    };
+
     struct workbench_change_scroll_intent
     {
         float delta { 0.0f };
@@ -117,6 +135,13 @@ namespace demo {
     struct workbench_change_scroll_x_to_intent
     {
         float offset { 0.0f };
+    };
+
+    // 머리글 칸을 끌어 다른 머리글 칸에 놓았다. 옮긴 열이 대상 열의 자리로 간다 (보기 상태라 걸음이 쌓이지 않는다).
+    struct workbench_reorder_column_intent
+    {
+        std::u8string moved {};
+        std::u8string target {};
     };
 
     // 행을 우클릭했다. 메뉴는 그 자리에 선다 (물리 픽셀).
@@ -224,6 +249,66 @@ namespace demo {
         float offset { 0.0f };
     };
 
+    // --- 실행 취소 ---
+    // 단추와 팔레트 명령과 Ctrl+Z·Ctrl+Y가 같은 요청을 낸다. 읽기 전용 차이 보기가 이 키를 삼키므로 단추가 따로 있다.
+    struct workbench_undo_intent
+    {
+    };
+
+    struct workbench_redo_intent
+    {
+    };
+
+    // 지금 자리를 저장 지점으로 삼는다.
+    struct workbench_mark_saved_intent
+    {
+    };
+
+    // 경로 열 고정을 뒤집는다. 보기 상태라 실행 취소 걸음을 만들지 않는다.
+    struct workbench_freeze_intent
+    {
+    };
+
+    // 걸음이 싣는 재생 전용 메시지다. 사용자 동작은 걸음을 쌓은 뒤 다시 실행과 같은 메시지를 적용하므로 처음 실행과 다시 실행이
+    // 한 길이고, 모두 절대 값을 담는다.
+    struct workbench_staged_entry
+    {
+        std::u8string key {};
+        bool staged { false };
+    };
+
+    // 행마다 스테이지를 이 값으로 정한다.
+    struct workbench_set_staged_intent
+    {
+        std::vector<workbench_staged_entry> entries {};
+    };
+
+    // 이 키의 행을 모델에서 뺀다.
+    struct workbench_remove_intent
+    {
+        std::vector<std::u8string> keys {};
+    };
+
+    // 지운 행과 모델에서 있던 자리다.
+    struct workbench_restored_change
+    {
+        workbench_change change {};
+        std::size_t position { 0 };
+    };
+
+    // 지운 행을 자리로 돌려놓는다. 자리가 앞선 행부터 오른다.
+    struct workbench_restore_intent
+    {
+        std::vector<workbench_restored_change> rows {};
+    };
+
+    // 열 폭을 이 값으로 정한다.
+    struct workbench_set_width_intent
+    {
+        std::u8string column {};
+        float width { 0.0f };
+    };
+
     class workbench_page
     {
     public:
@@ -234,6 +319,9 @@ namespace demo {
         [[nodiscard]] std::vector<luil::win32::ui_popup> make_popups(float scale) const;
         void close_popups() noexcept;
 
+        // 팔레트와 메뉴에 보일 실행 취소·다시 실행의 글과 켜짐이다. 걸음 이름을 잇는 문장은 앱의 말이다.
+        [[nodiscard]] luil::undo_command_state undo_state() const;
+
         // 흉내 낸 불러오기(폴더 목록·작성자 후보)가 끝나는 가장 이른 시각이다. 없으면 기다릴 것이 없다.
         [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_due() const;
         // 그 시각까지 끝난 불러오기를 들인다.
@@ -242,14 +330,7 @@ namespace demo {
         [[nodiscard]] static luil::file_dialog_request patch_dialog_request(std::uint64_t id);
 
     private:
-        // 변경 하나다 (앱의 모델).
-        struct change
-        {
-            std::u8string path {};
-            std::u8string status {};
-            int size { 0 };
-            bool staged { false };
-        };
+        using change = workbench_change;
 
         // 묻는 중인 폴더 하나다. 끝나는 시각에 결과가 온 것처럼 들인다.
         struct pending_load
@@ -269,6 +350,16 @@ namespace demo {
         void reconcile(const std::vector<luil::virtual_list_item>& previous);
         // 선택한 행들(없으면 커서 행)의 스테이지를 정한다.
         void stage_selection(bool staged);
+        // 이 행들의 스테이지를 `staged`로 정하는 걸음을 쌓고 적용한다. 바뀌는 행이 없으면 걸음도 없다.
+        void stage_changes(std::u8string label, const std::vector<std::u8string>& keys, bool staged);
+        // 선택한 행들을 버리는 걸음을 쌓고 적용한다. 되돌림은 지운 행을 있던 자리에 돌려놓는다.
+        void discard_selection();
+        // 걸음을 쌓고 그 다시 실행 메시지를 적용한다. 처음 실행과 다시 실행이 한 길이다.
+        void commit_step(luil::undo_step step);
+        // 실행 취소 기록의 상태를 말하는 글이다 ("되돌리기 2 · 다시 실행 1 · 다음: 변경 버리기 · 저장 지점 일치").
+        [[nodiscard]] std::u8string history_text() const;
+        // 경로 열 고정의 상태를 말하는 글이다 ("고정 열 1: 경로"). 서 있는지는 창 폭에 달려 이 글이 말하지 않는다.
+        [[nodiscard]] std::u8string freeze_text() const;
         // 보기에 띄울 문서(불러온 패치, 없으면 표의 커서 행)가 바뀌었으면 글·장식을 다시 짓는다.
         void refresh_diff();
         // 찾는 글이 바뀌었으면 찾은 곳을 다시 모으고 참을 돌려준다.
@@ -281,6 +372,7 @@ namespace demo {
         void set_author(std::u8string text);
 
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_header(float scale);
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_history_bar();
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_tree_panel();
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_changes_table();
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_diff_panel();
@@ -298,12 +390,16 @@ namespace demo {
 
         // 변경 표의 앱 상태다.
         std::vector<change> changes_ {};
+        // 체크·스테이지·버리기·열 폭의 실행 취소 기록이다. 상태는 handle에서만 바뀌고 기록은 그 메시지만 쥔다.
+        luil::undo_stack history_ {};
         std::vector<luil::table_column> columns_ {};
         std::u8string sort_column_ { u8"path" };
         luil::sort_direction sort_direction_ { luil::sort_direction::ascending };
         luil::item_selection selection_ {};
         float changes_scroll_ { 0.0f };
         float changes_scroll_x_ { 0.0f };
+        // 경로 열을 가로 스크롤에서 고정하는가. 보기 상태라 실행 취소 기록에 들지 않는다.
+        bool freeze_path_ { false };
         bool menu_open_ { false };
         float menu_x_ { 0.0f };
         float menu_y_ { 0.0f };

@@ -20,13 +20,20 @@ add_executable(luil_core_tests
     app_host_tests.cpp
     badge_element_tests.cpp
     button_element_tests.cpp
+    calendar_date_tests.cpp
+    calendar_element_tests.cpp
     check_element_tests.cpp
     theme_picker_tests.cpp
     choice_group_element_tests.cpp
+    clipboard_image_tests.cpp
+    color_picker_element_tests.cpp
+    color_space_tests.cpp
     case_fold_tests.cpp
     command_palette_tests.cpp
     content_layout_tests.cpp
     cursor_idle_tests.cpp
+    default_text_tests.cpp
+    date_field_element_tests.cpp
     dialog_elements_tests.cpp
     drag_auto_scroll_tests.cpp
     dropdown_element_tests.cpp
@@ -42,21 +49,29 @@ add_executable(luil_core_tests
     image_element_tests.cpp
     image_encode_tests.cpp
     info_bar_element_tests.cpp
+    ink_canvas_tests.cpp
+    ink_stroke_tests.cpp
+    inspector_overlay_tests.cpp
     item_model_tests.cpp
     key_propagation_tests.cpp
     keyboard_shortcut_tests.cpp
     label_wrap_tests.cpp
     font_style_tests.cpp
     text_block_tests.cpp
+    wrap_policy_tests.cpp
     keyboard_selection_tests.cpp
     list_element_tests.cpp
     menu_element_tests.cpp
+    menu_bar_tests.cpp
+    message_box_tests.cpp
     messaging_channel_tests.cpp
     messaging_latest_slot_tests.cpp
     modal_host_element_tests.cpp
     multi_item_drag_tests.cpp
+    notification_queue_tests.cpp
     number_input_tests.cpp
     overlay_input_tests.cpp
+    page_transition_tests.cpp
     panel_element_tests.cpp
     pointer_drag_start_tests.cpp
     pointer_modifier_tests.cpp
@@ -65,6 +80,7 @@ add_executable(luil_core_tests
     popup_reconcile_tests.cpp
     progress_element_tests.cpp
     raster_draw_tests.cpp
+    rating_element_tests.cpp
     renderer_host_tests.cpp
     renderer_policy_tests.cpp
     scroll_area_element_tests.cpp
@@ -81,6 +97,9 @@ add_executable(luil_core_tests
     spring_tests.cpp
     text_area_element_tests.cpp
     text_change_tests.cpp
+    text_format_tests.cpp
+    rich_text_tests.cpp
+    rich_text_html_tests.cpp
     syntax_highlighter_tests.cpp
     text_link_tests.cpp
     stack_element_tests.cpp
@@ -90,7 +109,10 @@ add_executable(luil_core_tests
     tab_bar_element_tests.cpp
     tab_bar_style_tests.cpp
     taskbar_sync_tests.cpp
+    tray_sync_tests.cpp
+    hotkey_sync_tests.cpp
     table_element_tests.cpp
+    teaching_tip_element_tests.cpp
     text_button_element_tests.cpp
     text_edit_menu_tests.cpp
     grapheme_tests.cpp
@@ -102,9 +124,11 @@ add_executable(luil_core_tests
     touch_input_tests.cpp
     transition_tests.cpp
     ui_element_tests.cpp
+    ui_inspect_tests.cpp
     ui_interaction_tests.cpp
     ui_style_tests.cpp
     ui_theme_tests.cpp
+    undo_stack_tests.cpp
     vector_image_tests.cpp
     virtual_list_access_tests.cpp
     virtual_list_benchmark_tests.cpp
@@ -118,7 +142,8 @@ add_executable(luil_core_tests
     zoom_view_tests.cpp
     # core가 링크로 묶어 부르는 플랫폼 hook의 test용 정의다 (파일에 이유가 있다).
     core_platform_stub.cpp
-    raster_probe.cpp)
+    raster_probe.cpp
+    string_table_tests.cpp)
 # IME 연결은 OS 헤더를 쓰지 않아 Windows에서도 지연·선택 회귀를 실행할 수 있다.
 # 기기 요청의 값 변환도 같다 (Java 상수를 옮길 뿐이다).
 target_sources(luil_core_tests PRIVATE
@@ -135,46 +160,69 @@ target_sources(luil_core_tests PRIVATE
     dns_message_tests.cpp
     smb_pool_tests.cpp
     smb_rules_tests.cpp)
-# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 파일 감시 묶음의 표시도
-# 서버·감시자 없이 검증한다.
-# 기기 페이지는 비밀 저장소를 부르므로 플랫폼 없이 링크되도록 대역을 함께 넣는다 (secret_store_stub.cpp).
+# 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지와 검사기 페이지의 상태 줄, 파일 감시 묶음의 표시,
+# 서버·감시자 없이 검증한다. 첫 화면의 페이지 목록 칸이 내는 접근 이름과 실행도 같은 목록에 오른다.
+# 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
 target_sources(luil_core_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/basics_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/device_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/files_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/ink_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/inspector_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/lists_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/page_list.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/popups_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/sheets_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/smb_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/zoom_page.cpp"
-    secret_store_stub.cpp
+    mobile_demo_assets_stub.cpp
+    mobile_demo_page_list_tests.cpp
     mobile_demo_page_tests.cpp)
+# Android는 비밀 저장소의 JNI 흐름을 test하느라 원본을 묶는다 (아래 android_jni_order_tests.cpp의 자리). JavaVM이 없으면 대역처럼 "지원 안 함"이다.
+if(NOT LUIL_PLATFORM STREQUAL "android")
+    target_sources(luil_core_tests PRIVATE secret_store_stub.cpp)
+endif()
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
+# 확대 보기 페이지는 도면 요소가 luil과 Skia 헤더만 써서 같은 목록에 오른다. 줌 단추 글을 바꾸는 단추를 검증한다.
 target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/workbench_page.cpp"
     workbench_page_tests.cpp
     "${PROJECT_SOURCE_DIR}/examples/demo/gallery_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/inspector_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/lists_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/rich_text_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/shell_menu.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/toasts_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/zoom_page.cpp"
     demo_gallery_tests.cpp)
 target_include_directories(luil_core_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
         "${PROJECT_SOURCE_DIR}/examples"
-        "${LUIL_TEST_DIRECTORY}")
+        "${LUIL_TEST_DIRECTORY}"
+        "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
 target_link_libraries(luil_core_tests
     PRIVATE
         luil::luil_core
         luil_options
+        "$<BUILD_INTERFACE:luil_nlohmann_json>"
         Catch2::Catch2WithMain)
+set(luil_tests_embedded_directory "${CMAKE_CURRENT_BINARY_DIR}/embedded")
+
 # SVG·Lottie 진입점은 켠 구성에서 실제 모듈로 읽어 그리고, 끈 구성에서 "지원 안 함"으로 답한다.
 target_compile_definitions(luil_core_tests PRIVATE
     "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"
     "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
     "LUIL_TESTS_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
+# 문자열 표 test의 시험 표다. 앱이 쓰는 공개 함수를 저장소 안에서 먼저 쓴다.
+luil_add_string_table(luil_core_tests NAME test_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE en)
 
 # ICU가 없는 환경은 별도 프로세스에서 재현한다. Skia와 luil의 초기화 캐시를 공유하지 않는다.
 if(LUIL_ENABLE_TEXT_SHAPING)
@@ -216,6 +264,43 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/file_watcher_android.cpp"
             file_watcher_tests.cpp)
+    # 핫 리로드 도우미는 감시자 위에 얇게 선다. 위의 감시자 소스에 도우미만 더해 같은 길로 기기 셸에서 실제 폴더를 본다.
+    # 설정 읽기의 JNI 흐름은 가짜 JNIEnv로 잠근다. 틀과 예외 거둠을 실패 지점마다 친다 (android_settings_tests.cpp).
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_settings.cpp"
+            android_settings_tests.cpp)
+    # 알림 작은 아이콘 고르기도 같은 가짜 JNIEnv 길로 잠근다. 앱 아이콘이 없는 앱의 framework 갈음까지 친다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/notification_icon.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/notification_intent.cpp"
+            android_notification_icon_tests.cpp)
+    # 시스템 색·대비·막대·햅틱·권한, 앱 context 잡기, 클립보드, 주소 열기, 비밀 저장소, HTTP client의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 여는 첫 호출부터 지점마다 실패를 친다
+    # (android_jni_order_tests.cpp). 자리 전체의 검사 순서는 호스트의 luil_jni_order가 본다. HTTP의 진짜 전송은 아래 luil_net_tests가 JVM 안에서 잰다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_clipboard.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/android_system_theme.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/android_window_control.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/java_vm.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/secret_store_android.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/luil/url_scheme.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/android/android_http_client.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/android/android_text_transcode.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/http_body.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/http_media_type.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/http_message.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/http_request_rules.cpp"
+            android_jni_order_tests.cpp)
+    # 주 첫 요일의 JNI 흐름도 같은 가짜 JNIEnv 길로 잠근다 (android_locale_tests.cpp).
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_locale.cpp"
+            android_locale_tests.cpp)
+    # 창 조절의 원본이 로그를 쓴다 (`__android_log_print`).
+    target_link_libraries(luil_core_tests PRIVATE log)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
     if(LUIL_ENABLE_TEXT_SHAPING)
         set_target_properties(luil_text_shaping_tests PROPERTIES
@@ -247,6 +332,14 @@ if(LUIL_PLATFORM STREQUAL "android")
         loopback_http_server.cpp
         loopback_http_server_tests.cpp
         loopback_socket_posix.cpp)
+    # 쓴다 (플랫폼 도구는 주소 열기에 쓰는 UTF-8 변환을 함께 끌어온다). 미리 서명한 봉투만 쓴다. Android는 받지 않는다.
+    # 적용(스토어 열기)은 상태 기계가 부르므로 링크하지만, GameActivity가 없는 이 JVM에서는 열리지 않아 돌리지 않는다.
+    target_sources(luil_net_tests PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}/android/android_locale.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/luil/url_scheme.cpp"
+        )
     target_include_directories(luil_net_tests
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}"
@@ -353,6 +446,9 @@ add_test(NAME luil_accent_catalog
 add_test(NAME luil_style
     COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
         "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/style_tests.cmake")
+add_test(NAME luil_strings
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/string_table_tests.cmake")
 
 if(LUIL_INSTALL)
     add_test(NAME luil_installed_consumer
@@ -377,27 +473,34 @@ add_executable(luil_tests
     backdrop_tests.cpp
     breadcrumb_tests.cpp
     caption_layout_tests.cpp
+    app_identity_tests.cpp
     dpi_scale_tests.cpp
     embedded_assets_tests.cpp
     file_watcher_tests.cpp
     font_fallback_tests.cpp
     font_style_native_tests.cpp
+    global_hotkey_tests.cpp
     glyph_element_tests.cpp
     http_body_tests.cpp
     http_client_tests.cpp
     http_media_type_tests.cpp
     http_text_transcode_tests.cpp
     image_decode_tests.cpp
+    instance_message_tests.cpp
+    jump_list_tests.cpp
     layered_placement_tests.cpp
     loopback_http_server.cpp
     loopback_http_server_tests.cpp
     loopback_socket_win32.cpp
+    menu_bar_native_tests.cpp
     raster_probe.cpp
     secondary_surface_tests.cpp
     platform_services_tests.cpp
     secret_store_tests.cpp
     surface_input_tests.cpp
     taskbar_button_tests.cpp
+    toast_payload_tests.cpp
+    tray_icon_tests.cpp
     tsf_input_tests.cpp
     uia_provider_tests.cpp
     utf8_tests.cpp
@@ -406,6 +509,7 @@ add_executable(luil_tests
     webview_message_gate_tests.cpp
     win32_clipboard_tests.cpp
     win32_file_clipboard_tests.cpp
+    win32_image_clipboard_tests.cpp
     win32_drop_tests.cpp
     win32_fonts_tests.cpp
     win32_window_tests.cpp
@@ -415,7 +519,15 @@ add_executable(luil_tests
     # 데스크톱 데모의 창 페이지는 Win32 호출(탐색기·메모장)을 부르므로 Windows 전용 test에서 읽는다.
     "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/windows_page.cpp"
-    windows_page_tests.cpp)
+    windows_page_tests.cpp
+    # 데스크톱 데모의 기본 페이지도 <windows.h>와 비밀 저장소를 불러 Windows 전용 test에서 읽는다. 확인 대화의 열기·결과·닫기를 검증한다.
+    "${PROJECT_SOURCE_DIR}/examples/demo/basics_page.cpp"
+    basics_page_tests.cpp)
+# 변조를 시키는지 본다 (페이지가 <windows.h>를 불러 Windows 전용 test에서 읽는다).
+target_sources(luil_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/examples/demo/network_page.cpp"
+    )
+# 핫 리로드 도우미를 실제 폴더와 OS 알림으로 본다 (Android는 luil_core_tests의 inotify 묶음이 같은 시험을 싣는다).
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
@@ -513,6 +625,27 @@ add_test(NAME luil_core_portability
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_core_portability.cmake")
 
+# src·include의 코드 줄에 한글이 박혀 있지 않은지 본다.
+# 글은 문자열 표와 강조색 카탈로그에 산다 (script에 이유가 있다).
+add_test(NAME luil_default_text
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
+        "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
+        -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
+# 그 검사 자체를 본다. 선택 라이브러리가 쓰는 두 선택 인자도 여기서 친다.
+add_test(NAME luil_default_text_check
+    COMMAND "${CMAKE_COMMAND}"
+        "-DCMAKE_DIRECTORY=${LUIL_CMAKE_DIRECTORY}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/default_text_check_tests.cmake")
+
+# JNI 실패 검사(`jni_failed`)는 `||`·`&&` 체인의 맨 앞에 둔다. nullptr 검사가 먼저면 예외가 남은 채 돌아간다.
+# 기기 test는 자리의 일부만 치므로 전체 자리를 여기서 본다 (script에 이유가 있다).
+add_test(NAME luil_jni_order
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
+        -P "${LUIL_CMAKE_DIRECTORY}/verify_jni_order.cmake")
+
 # PowerShell은 script가 돌 때 PATH에서 찾는다 (run_style_check.cmake에 이유가 있다).
 add_test(NAME luil_source_style
     COMMAND "${CMAKE_COMMAND}"
@@ -554,6 +687,8 @@ luil_set_ide_folder("Tests"
     luil_core_tests
     luil_messaging_asan_tests
     luil_tests)
+
+# 옛 판·새 판으로 띄우고, 도우미 실행은 `run_update_helper`가 평소 길보다 먼저 가른다. luil_tests 옆에 놓여 test가 거기서 찾는다.
 
 # 위·왼쪽 끝 크기 변경에서 아래·오른쪽 내용이 한 합성이라도 튀는지 합성된 화면을 캡처해 본다
 # (layered-presentation-design.md). 사람의 입력 데스크톱에 창을 띄우므로 LUIL_SCREEN_TESTS=1일 때만 돌고,

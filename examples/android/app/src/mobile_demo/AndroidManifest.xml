@@ -9,6 +9,11 @@
         주소로 연결할 수 없다. 그 아래 판의 기기는 모르는 이름이라 무시한다 (docs/device-request-design.md).
     -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!--
+        기기 페이지가 묻는 알림 권한이다. Android 13부터 targetSdk 33 이상 앱은 이것을 받아야 알림이 보인다.
+        그 아래 판의 기기는 모르는 이름이라 무시한다 (docs/os-notification-design.md).
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- SMB 페이지가 NAS에 붙는다 (LUIL_ENABLE_SMB를 켠 구성). -->
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

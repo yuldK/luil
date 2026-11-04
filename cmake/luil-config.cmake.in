@@ -61,6 +61,7 @@ endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/luil-targets.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/generate_notices.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/string_table.cmake")
 
 # 설치본에 지금 빌드하는 구성의 luil 산출물이 있는지 확인한다.
 # 없는 구성은 조용한 CRT 불일치 링크 오류가 아니라 여기서 원인과 함께 잡힌다.

@@ -63,5 +63,7 @@ function(luil_install_rules)
         "${LUIL_CMAKE_DIRECTORY}/dependencies/skia.cmake"
         "${LUIL_CMAKE_DIRECTORY}/dependencies/webview2.cmake"
         "${LUIL_CMAKE_DIRECTORY}/generate_notices.cmake"
+        "${LUIL_CMAKE_DIRECTORY}/string_table.cmake"
+        "${LUIL_CMAKE_DIRECTORY}/generate_strings.cmake"
         DESTINATION lib/cmake/luil)
 endfunction()

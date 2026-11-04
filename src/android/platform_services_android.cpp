@@ -1,8 +1,10 @@
 #include "luil/app/platform_services.h"
 
+#include "android/android_locale.h"
 #include "android/android_text_input.h"
 #include "android/errno_text.h"
 #include "android/java_vm.h"
+#include "host/font_registry.h"
 
 #include <jni.h>
 
@@ -49,9 +51,11 @@ namespace luil {
             if (jni_failed(env) || uri_class == nullptr)
                 return nullptr;
             const jmethodID parse { env.GetStaticMethodID(uri_class, "parse", "(Ljava/lang/String;)Landroid/net/Uri;") };
+            if (jni_failed(env) || parse == nullptr)
+                return nullptr;
             // JNI의 글은 modified UTF-8이다. BMP 밖 글자(이모지 도메인 등)는 그대로 넘기면 깨진다.
             const jstring text { env.NewStringUTF(android::modified_utf8_from_utf8(url).c_str()) };
-            if (jni_failed(env) || parse == nullptr || text == nullptr)
+            if (jni_failed(env) || text == nullptr)
                 return nullptr;
             const jobject uri { env.CallStaticObjectMethod(uri_class, parse, text) };
             if (jni_failed(env) || uri == nullptr)
@@ -61,11 +65,19 @@ namespace luil {
             if (jni_failed(env) || intent_class == nullptr)
                 return nullptr;
             const jmethodID construct { env.GetMethodID(intent_class, "<init>", "(Ljava/lang/String;Landroid/net/Uri;)V") };
+            if (jni_failed(env) || construct == nullptr)
+                return nullptr;
             const jmethodID add_flags { env.GetMethodID(intent_class, "addFlags", "(I)Landroid/content/Intent;") };
+            if (jni_failed(env) || add_flags == nullptr)
+                return nullptr;
             const jmethodID add_category { env.GetMethodID(intent_class, "addCategory", "(Ljava/lang/String;)Landroid/content/Intent;") };
+            if (jni_failed(env) || add_category == nullptr)
+                return nullptr;
             const jstring action { env.NewStringUTF("android.intent.action.VIEW") };
+            if (jni_failed(env) || action == nullptr)
+                return nullptr;
             const jstring browsable { env.NewStringUTF("android.intent.category.BROWSABLE") };
-            if (jni_failed(env) || construct == nullptr || add_flags == nullptr || add_category == nullptr || action == nullptr || browsable == nullptr)
+            if (jni_failed(env) || browsable == nullptr)
                 return nullptr;
             const jobject intent { env.NewObject(intent_class, construct, action, uri) };
             if (jni_failed(env) || intent == nullptr)
@@ -73,6 +85,8 @@ namespace luil {
             // Application context에서 띄우므로 새 task가 반드시 있어야 한다 (FLAG_ACTIVITY_NEW_TASK).
             constexpr jint flag_activity_new_task { 0x10000000 };
             static_cast<void>(env.CallObjectMethod(intent, add_flags, flag_activity_new_task));
+            if (jni_failed(env))
+                return nullptr;
             // 믿을 수 없는 링크라 브라우저처럼 BROWSABLE을 단다. 링크로 불려도 안전하다고 밝힌 앱만 받는다.
             static_cast<void>(env.CallObjectMethod(intent, add_category, browsable));
             if (jni_failed(env))
@@ -133,13 +147,14 @@ namespace luil {
 
     struct single_instance::state
     {
+        std::u8string name {};
         platform_result status {};
     };
 
     single_instance::single_instance(const std::u8string_view name)
         : state_ { std::make_unique<state>() }
     {
-        static_cast<void>(name);
+        state_->name = name;
         // OS가 앱(패키지)마다 프로세스와 task를 하나로 묶는다 — 이 프로세스가 곧 첫째다.
         state_->status = unsupported(u8"Android keeps one process per app; every instance is the primary one.");
     }
@@ -157,6 +172,20 @@ namespace luil {
     {
         static const platform_result moved { platform_status::failed, u8"The instance guard was moved from.", std::nullopt };
         return state_ != nullptr ? state_->status : moved;
+    }
+
+    std::u8string_view single_instance::name() const noexcept
+    {
+        return state_ != nullptr ? std::u8string_view { state_->name } : std::u8string_view {};
+    }
+
+    platform_result single_instance::send_to_primary(const std::span<const std::u8string> arguments, const instance_send_options& options) const
+    {
+        static_cast<void>(arguments);
+        static_cast<void>(options);
+        // 둘째 프로세스가 생기지 않는다. 앱을 다시 여는 요청은 Activity의 Intent로 오고 이 길이 아니다.
+        // `primary()`가 늘 참이어도 `not_found`보다 `unsupported`가 먼저다.
+        return unsupported(u8"Android keeps one process per app; there is no second instance to send arguments from.");
     }
 
     struct file_lock::state
@@ -292,5 +321,24 @@ namespace luil {
     platform_result blocking_io_canceller::cancel() const
     {
         return unsupported(u8"Android has no call that cancels another thread's blocking I/O.");
+    }
+
+    std::optional<std::chrono::weekday> user_first_weekday()
+    {
+        // 앱 thread는 JVM에 붙어 있지 않을 수 있어 범위 동안 붙인다.
+        const android::jni_thread_scope scope { "luil-locale" };
+        JNIEnv* const env { scope.env() };
+        if (env == nullptr)
+            return std::nullopt;
+        return android::read_first_weekday(*env);
+    }
+
+    std::vector<std::u8string> user_ui_languages()
+    {
+        // 호스트가 `AConfiguration`에서 읽어 둔 태그다. JNI가 없고 Activity가 다시 설 때 새 값이 된다.
+        const std::string language { user_ui_language() };
+        if (language.empty())
+            return {};
+        return { std::u8string { language.begin(), language.end() } };
     }
 }

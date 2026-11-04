@@ -17,6 +17,7 @@
 #include "host/focus_request_tracker.h"
 #include "host/font_registry.h"
 #include "host/frame_state.h"
+#include "host/notification_queue.h"
 #include "host/overlay_input.h"
 #include "host/popup_dismiss.h"
 #include "host/popup_reconcile.h"
@@ -65,6 +66,10 @@ namespace luil::android {
         constexpr std::chrono::milliseconds continuous_repaint_interval { 33 };
         // Android 밀도의 기준(mdpi)이다. 배율은 이 값에 대한 비라 논리 픽셀 1이 1dp다.
         constexpr int density_baseline { ACONFIGURATION_DENSITY_MEDIUM };
+        // 알림이 런처 intent에 싣는 id extra다 (notification_android.cpp와 같은 이름).
+        constexpr const char* notification_extra_name { "luil.notification.id" };
+        // `Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`다.
+        constexpr jint intent_flag_launched_from_history { 0x00100000 };
 
         void log_error(const std::u8string& message)
         {
@@ -212,7 +217,12 @@ namespace luil::android {
             for (std::uint32_t index { 0 }; index < event.pointerCount; ++index)
             {
                 const GameActivityPointerAxes& axes { event.pointers[index] };
-                input.current.pointers.push_back({ axes.id, axes.toolType, GameActivityPointerAxes_getX(&axes), GameActivityPointerAxes_getY(&axes) });
+                motion_pointer pointer { axes.id, axes.toolType, GameActivityPointerAxes_getX(&axes), GameActivityPointerAxes_getY(&axes) };
+                // 펜의 압력·기울기는 `start`가 켠 축이다 (ink-input-design.md).
+                pointer.pressure = GameActivityPointerAxes_getAxisValue(&axes, AMOTION_EVENT_AXIS_PRESSURE);
+                pointer.tilt = GameActivityPointerAxes_getAxisValue(&axes, AMOTION_EVENT_AXIS_TILT);
+                pointer.orientation = GameActivityPointerAxes_getAxisValue(&axes, AMOTION_EVENT_AXIS_ORIENTATION);
+                input.current.pointers.push_back(pointer);
             }
             if (event.pointerCount > 0)
             {
@@ -228,7 +238,12 @@ namespace luil::android {
                     const int pointer { static_cast<int>(index) };
                     const float x { GameActivityMotionEvent_getHistoricalX(&event, pointer, position) };
                     const float y { GameActivityMotionEvent_getHistoricalY(&event, pointer, position) };
-                    frame.pointers.push_back({ event.pointers[index].id, event.pointers[index].toolType, x, y });
+                    motion_pointer past { event.pointers[index].id, event.pointers[index].toolType, x, y };
+                    // 인자 순서는 축이 먼저다 (GameActivityEvents.h).
+                    past.pressure = GameActivityMotionEvent_getHistoricalAxisValue(&event, AMOTION_EVENT_AXIS_PRESSURE, pointer, position);
+                    past.tilt = GameActivityMotionEvent_getHistoricalAxisValue(&event, AMOTION_EVENT_AXIS_TILT, pointer, position);
+                    past.orientation = GameActivityMotionEvent_getHistoricalAxisValue(&event, AMOTION_EVENT_AXIS_ORIENTATION, pointer, position);
+                    frame.pointers.push_back(past);
                 }
                 input.history.push_back(std::move(frame));
             }
@@ -535,7 +550,7 @@ namespace luil::android {
                 set_ui_platform({
                     .form_factor = ui_form_factor::mobile,
                     .window_caption = false,
-                    .capabilities = { .screen_orientation = true, .system_bars = true, .volume_keys = true, .haptics = true },
+                    .capabilities = { .screen_orientation = true, .system_bars = true, .volume_keys = true, .haptics = true, .notifications = true },
                 });
                 prefers_light_ = read_prefers_light(app_->activity);
                 scale_ = read_scale(app_->config);
@@ -652,6 +667,10 @@ namespace luil::android {
                 // 휠 값은 켠 축만 GameActivity가 옮겨 준다.
                 GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_VSCROLL);
                 GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HSCROLL);
+                // 펜의 압력·기울기도 켠 축만 온다 (ink-input-design.md). 켜기는 프로세스 전체 설정이다.
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_PRESSURE);
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_TILT);
+                GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_ORIENTATION);
 
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);
@@ -765,6 +784,14 @@ namespace luil::android {
                     refresh_reduce_motion();
                     // 권한 대화상자에서 돌아왔다. 묻는 중이었으면 지금 상태가 답이다.
                     refresh_permissions(true);
+                    // 알림을 눌러 뜬 Activity면 그 id를 낸다. 초점이 오기 전에는 사건이 앱에 가지 않는다. 한 Activity에 한 번 읽는다.
+                    if (launch_notification_read_ == false)
+                    {
+                        launch_notification_read_ = true;
+                        take_launch_notification();
+                    }
+                    // inbox가 차서 되돌려 둔 사건도 여기서 다시 낸다 (결정 8).
+                    deliver_notification_events();
                     dirty_ = true;
                     break;
                 case APP_CMD_LOST_FOCUS:
@@ -1021,7 +1048,7 @@ namespace luil::android {
             void refresh_permissions(const bool deliver)
             {
                 const int api_level { android_get_device_api_level() };
-                for (const app_permission permission : { app_permission::local_network })
+                for (const app_permission permission : { app_permission::local_network, app_permission::notifications })
                 {
                     const char* const name { android_permission_name(permission, api_level, target_sdk_) };
                     permission_state state { permission_state::not_required };
@@ -1035,6 +1062,74 @@ namespace luil::android {
                         if (app_message message { environment_.delegate->make_permission_message(permission, state) }; message.empty() == false)
                             host_->post_app_message(std::move(message));
                 }
+            }
+
+            // 이 Activity를 세운 intent에 알림 id가 실렸으면 `launched` 눌림으로 대기열에 넣는다 (os-notification-design.md 결정 5).
+            //  - 최근 앱에서 다시 연 것(`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`)은 옛 intent를 다시 받은 것이라 내지 않는다.
+            //  - 읽은 extra는 지운다. Activity가 같은 intent로 다시 서도 같은 프로세스에서 두 번 내지 않는다.
+            void take_launch_notification()
+            {
+                if (jni_ == nullptr || app_->activity == nullptr)
+                    return;
+                JNIEnv& env { *jni_ };
+                const jni_local_frame frame { env };
+                if (frame.pushed() == false)
+                    return;
+                const jobject activity { app_->activity->javaGameActivity };
+                const jclass activity_type { env.GetObjectClass(activity) };
+                const jmethodID get_intent { env.GetMethodID(activity_type, "getIntent", "()Landroid/content/Intent;") };
+                if (jni_failed(env) || get_intent == nullptr)
+                    return;
+                const jobject intent { env.CallObjectMethod(activity, get_intent) };
+                if (jni_failed(env) || intent == nullptr)
+                    return;
+                const jclass intent_type { env.GetObjectClass(intent) };
+                const jmethodID get_extra { env.GetMethodID(intent_type, "getStringExtra", "(Ljava/lang/String;)Ljava/lang/String;") };
+                if (jni_failed(env) || get_extra == nullptr)
+                    return;
+                const jmethodID remove_extra { env.GetMethodID(intent_type, "removeExtra", "(Ljava/lang/String;)V") };
+                if (jni_failed(env) || remove_extra == nullptr)
+                    return;
+                const jmethodID get_flags { env.GetMethodID(intent_type, "getFlags", "()I") };
+                if (jni_failed(env) || get_flags == nullptr)
+                    return;
+                const jstring name { env.NewStringUTF(notification_extra_name) };
+                if (jni_failed(env) || name == nullptr)
+                    return;
+                const auto value { static_cast<jstring>(env.CallObjectMethod(intent, get_extra, name)) };
+                if (jni_failed(env) || value == nullptr)
+                    return;
+                const jint flags { env.CallIntMethod(intent, get_flags) };
+                const bool from_history { jni_failed(env) == false && (flags & intent_flag_launched_from_history) != 0 };
+                const char* const characters { env.GetStringUTFChars(value, nullptr) };
+                // 글을 얻지 못하면 `OutOfMemoryError`가 남는다. 아래의 `removeExtra` 호출 전에 거둔다.
+                if (characters == nullptr)
+                    static_cast<void>(jni_failed(env));
+                std::u8string id {};
+                if (characters != nullptr)
+                {
+                    id = utf8_from_modified_utf8(characters);
+                    env.ReleaseStringUTFChars(value, characters);
+                }
+                env.CallVoidMethod(intent, remove_extra, name);
+                static_cast<void>(jni_failed(env));
+                if (from_history || notification_id_valid(id) == false)
+                    return;
+                notification_event event { notification_event_kind::activated, std::move(id) };
+                event.launched = true;
+                notifications_.push(std::move(event));
+            }
+
+            // 대기열의 알림 사건을 앱에 낸다. 게시하지 못한 사건은 되돌려 다음 초점에서 다시 낸다.
+            void deliver_notification_events()
+            {
+                if (host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                const auto make = [this](const notification_event& event) { return environment_.delegate->make_notification_message(event); };
+                const auto post = [this](app_message message) { return host_->post_app_message_ticketed(std::move(message)); };
+                const notification_delivery delivery { luil::deliver_notification_events(notifications_, make, post) };
+                if (delivery.failed_calls > 0)
+                    log_error(u8"The notification delegate threw an exception.");
             }
 
             [[nodiscard]] int poll_timeout() const
@@ -1118,8 +1213,10 @@ namespace luil::android {
                     // Esc가 popup을 닫았으면 키를 삼킨다 (Win32와 같다).
                     if (key.keyCode == AKEYCODE_ESCAPE && key.action == AKEY_EVENT_ACTION_DOWN && dismiss_popups(popup_dismiss_reason::escape_key))
                         continue;
-                    // 키 잡기 칸이 초점을 가졌으면 글자 키도 키로 보낸다 (`ui_element::set_key_capture`).
-                    input_.set_key_capture(host_->acquire_interaction().key_capture);
+                    // 키 잡기 칸이 초점을 가졌거나 메뉴 막대가 선 동안은 글자 키도 키로 보낸다 (`ui_element::set_key_capture`,
+                    // `interaction_snapshot::menu_keys`).
+                    const interaction_snapshot interaction { host_->acquire_interaction() };
+                    input_.set_key_capture(interaction.key_capture || interaction.menu_keys);
                     post_events(input_.translate(copy_key(key)));
                 }
                 android_app_clear_motion_events(inputs);
@@ -1135,12 +1232,15 @@ namespace luil::android {
                     // 겹쳐 그린 popup의 자리면 그 표면 id와 popup 좌표를 싣는다.
                     routed_input routed { router_.route(std::move(event)) };
                     // popup 밖의 누름·휠은 닫는 계기다. 누름·휠 자체는 그대로 간다 (Win32와 같다).
-                    if (routed.pressed_outside)
-                        static_cast<void>(dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+                    //  - 누름이 닫았으면 그 누름에 싣는다. 앱이 닫힌 frame을 누름보다 먼저 게시해도 controller가 여는 요소를
+                    //    다시 열지 않는다 (menu-focus-fixes-design.md의 X-4).
+                    const bool closed_popup { routed.pressed_outside && dismiss_popups(popup_dismiss_reason::pointer_press_outside) };
                     if (routed.wheel_outside)
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::wheel_scrolled));
                     for (raw_input_event& value : routed.events)
                     {
+                        if (auto* const pressed { std::get_if<pointer_pressed_event>(&value) }; pressed != nullptr)
+                            pressed->closed_popup = closed_popup;
                         // 조합 중의 누름은 조합을 먼저 확정한다 (Windows 표면과 같다). 확정 글이 앱 inbox에 먼저
                         // 들어가야 누름·탭이 낸 caret 이동과 끌기 선택이 그 글 위에 선다 — 미루면 caret 이동이
                         // 조합 표시에 가려지고, 조합이 끝날 때의 replace_all이 caret을 조합 끝으로 되돌린다.
@@ -1192,7 +1292,8 @@ namespace luil::android {
                 }
                 const int width { std::min(content_width(), static_cast<int>(std::ceil(288.0f * scale_))) };
                 const int height { std::min(content_height(), static_cast<int>(std::ceil(text_edit_menu_height(text_edit_menu_has_link(*value)) * scale_))) };
-                edit_menu_->tree = make_text_edit_menu(*value, user_ui_language().starts_with("ko"), static_cast<float>(width), static_cast<float>(height), scale_);
+                const std::string os_language { user_ui_language() };
+                edit_menu_->tree = make_text_edit_menu(*value, text_edit_menu_strings(std::u8string { os_language.begin(), os_language.end() }), static_cast<float>(width), static_cast<float>(height), scale_);
                 const rect_f anchor { location.element->bounds() };
                 const int left { static_cast<int>(std::lround(location.origin_x + anchor.x + (anchor.width - static_cast<float>(width)) / 2.0f)) };
                 const int below { static_cast<int>(std::lround(location.origin_y + anchor.y + anchor.height + 4.0f * scale_)) };
@@ -1631,12 +1732,31 @@ namespace luil::android {
                         host_->post_app_message(std::move(message));
                     return;
                 }
+                // 글과 그림을 함께 읽는다 (image-clipboard-design.md). 그림이 없어도, JNI가 없어도 답은 간다.
+                if (const auto* const read { std::get_if<clipboard_data_paste_request>(&request) }; read != nullptr)
+                {
+                    if (environment_.delegate == nullptr)
+                        return;
+                    clipboard_data data { jni_ != nullptr ? read_clipboard_data(*jni_, app_->activity->javaGameActivity) : clipboard_data {} };
+                    data.tag = read->tag;
+                    if (app_message message { environment_.delegate->make_clipboard_data_message(data) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                    return;
+                }
                 if (jni_ == nullptr)
                     return;
                 const jobject context { app_->activity->javaGameActivity };
                 if (const auto* const copy { std::get_if<clipboard_copy_request>(&request) }; copy != nullptr)
                 {
                     if (copy_text_to_clipboard(*jni_, context, copy->text) == false)
+                        log_error(u8"Failed to copy the text to the clipboard.");
+                    return;
+                }
+                // 그림은 넣지 못한다 (결정 7, Java 0줄). 글과 HTML 칸만 넣고 그림은 버린다 — `clipboard_image_copy`가 거짓이라 앱이 그림
+                // 복사를 감출 수 있다. HTML이 비면 글만 넣는다 (rich-edit-exchange-design.md).
+                if (const auto* const data { std::get_if<clipboard_data_copy_request>(&request) }; data != nullptr)
+                {
+                    if (data->text.empty() == false && copy_rich_text_to_clipboard(*jni_, context, data->text, data->html) == false)
                         log_error(u8"Failed to copy the text to the clipboard.");
                     return;
                 }
@@ -1688,6 +1808,7 @@ namespace luil::android {
                 update_system_bars(state.theme);
                 state.accent_id = appearance.accent_id;
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
+                state.inspector = frame != nullptr ? &frame->inspector : nullptr;
                 // 한 줄 도우미는 문맥 인자가 없어 스타일의 줄바꿈 처리를 프로세스 값으로 건다 (실린 것이 없으면 내장값).
                 set_single_line_break(frame_style(state).text.line_break);
 
@@ -1800,6 +1921,7 @@ namespace luil::android {
             struct permission_book
             {
                 std::atomic<permission_state> local_network { permission_state::not_required };
+                std::atomic<permission_state> notifications { permission_state::not_required };
                 std::atomic<std::optional<app_permission>> pending {};
                 // 물은 시각이다 (`steady_clock`의 눈금).
                 std::atomic<std::chrono::steady_clock::rep> asked_at { 0 };
@@ -1810,11 +1932,17 @@ namespace luil::android {
                     {
                     case app_permission::local_network:
                         return local_network;
+                    case app_permission::notifications:
+                        return notifications;
                     }
                     return local_network;
                 }
             };
             std::shared_ptr<permission_book> permissions_ { std::make_shared<permission_book>() };
+            // 앱에 내지 못한 OS 알림 사건이다. 지금은 콜드 스타트의 눌림 하나뿐이다 (os-notification-design.md 결정 8).
+            notification_queue notifications_ {};
+            // 이 Activity를 세운 intent의 알림 id를 읽었다.
+            bool launch_notification_read_ { false };
             int target_sdk_ { 0 };
             std::optional<std::chrono::steady_clock::time_point> update_deadline_ {};
             // 마지막으로 앱에 알린 크기와 배율이다.

@@ -1,23 +1,47 @@
 #include "demo/gallery_page.h"
+#include "demo/inspector_page.h"
+#include "demo/line_break_sample.h"
+#include "demo/lists_page.h"
 #include "demo/popups_page.h"
+#include "demo/readonly_undo_keys.h"
+#include "demo/rich_text_page.h"
+#include "demo/shell_menu.h"
 #include "demo/tabs_page.h"
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
 #include "demo/toasts_page.h"
+#include "demo/zoom_page.h"
 
+#include "luil/text/string_table.h"
+#include "luil/ui/accessibility.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/calendar_element.h"
+#include "luil/ui/color_picker_element.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
+#include "luil/ui/root_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/teaching_tip_element.h"
+#include "luil/ui/text_area_element.h"
+#include "luil/ui/ui_inspect.h"
+#include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
+
+// 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt).
+#include <vector>
 
 namespace {
     [[nodiscard]] luil::ui_tree arranged(std::unique_ptr<luil::ui_element> root, const float width = 800.0f, const float height = 600.0f)
@@ -438,6 +462,78 @@ TEST_CASE("The action button of an info bar moves under the text when the page n
     REQUIRE(narrow_bar.height > wide_bar.height);
 }
 
+namespace {
+    // 막대는 영역이 세우는 부품이라 앱이 이름을 줄 수 없고 영역의 이름을 물려받는다. 영역에 이름이 없으면 막대가 이름 없이 읽힌다.
+    void require_body_name(const luil::ui_tree& tree, const std::u8string& owner, const std::u8string& name)
+    {
+        CAPTURE(owner);
+        const luil::ui_element* const area { tree.find({ luil::ui_element_kind::scroll_area, owner }) };
+        REQUIRE(area != nullptr);
+        REQUIRE(area->access_name() == name);
+        const luil::ui_element* const bar { tree.find({ luil::ui_element_kind::scroll_area_bar, owner }) };
+        REQUIRE(bar != nullptr);
+        REQUIRE(bar->accessibility().name == name);
+    }
+
+    [[nodiscard]] luil::input_action scroll_gallery(const float delta)
+    {
+        return luil::make_app_action(demo::gallery_scroll_intent { false, delta });
+    }
+}
+
+TEST_CASE("Each page body and its scroll bar read the first heading of the page", "[demo][scroll]")
+{
+    demo::gallery_page gallery {};
+    require_body_name(arranged(gallery.build_overview(800.0f)), u8"overview", u8"luil UI 갤러리");
+    require_body_name(arranged(gallery.build_controls()), u8"controls", u8"버튼과 컨트롤");
+    demo::popups_page popups {};
+    require_body_name(arranged(popups.build(800.0f, 600.0f, 1.0f)), u8"popups", u8"메뉴와 팝업");
+    demo::rich_text_page rich_text {};
+    require_body_name(arranged(rich_text.build(800.0f, 600.0f, 1.0f)), u8"rich-text", u8"서식 있는 글");
+    demo::theme_page theme {};
+    require_body_name(arranged(theme.build(800.0f, 600.0f, 1.0f)), u8"theme", u8"모양과 색");
+    demo::toasts_page toasts {};
+    require_body_name(arranged(toasts.build(800.0f, 600.0f, 1.0f)), u8"toasts", u8"토스트");
+}
+
+TEST_CASE("The lists of the lists page, their scroll bars and the split handle have names", "[demo][scroll]")
+{
+    demo::lists_page page {};
+    const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+    const auto require_named = [&tree](const luil::ui_element_kind kind, const luil::ui_element_kind bar_kind, const std::u8string& owner, const std::u8string& name) {
+        CAPTURE(owner);
+        const luil::ui_element* const list { tree.find({ kind, owner }) };
+        REQUIRE(list != nullptr);
+        REQUIRE(list->accessibility().name == name);
+        const luil::ui_element* const bar { tree.find({ bar_kind, owner }) };
+        REQUIRE(bar != nullptr);
+        REQUIRE(bar->accessibility().name == name);
+    };
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"items", u8"순서를 바꾸는 목록");
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"tree", u8"접는 트리");
+    require_named(luil::ui_element_kind::virtual_list, luil::ui_element_kind::scroll_area_bar, u8"log", u8"가상 목록");
+    // 묶은 목록은 막대를 자기 안에 세우지 않고 데모의 스크롤 뷰에 든다. 목록 자신의 이름만 본다.
+    const luil::ui_element* const grouped { tree.find({ luil::ui_element_kind::grouped_list, u8"history" }) };
+    REQUIRE(grouped != nullptr);
+    REQUIRE(grouped->accessibility().name == u8"그룹 머리행 목록");
+    const luil::ui_element* const handle { tree.find({ demo::kind_list_split }) };
+    REQUIRE(handle != nullptr);
+    REQUIRE(handle->accessibility().name == u8"그룹 목록 높이 손잡이");
+}
+
+TEST_CASE("A page layout names its body after the first heading and leaves it nameless without one", "[demo][scroll]")
+{
+    // 기본 페이지는 앱 빌드에만 들어 여기서 짓지 않는다. 같은 `page_layout`을 쓰므로 이 사례가 그 자리를 덮는다.
+    demo::page_layout titled { u8"titled" };
+    titled.heading(u8"첫 제목", u8"설명");
+    titled.heading(u8"둘째 제목", u8"설명");
+    require_body_name(arranged(titled.finish(0.0f, scroll_gallery)), u8"titled", u8"첫 제목");
+
+    demo::page_layout plain { u8"plain" };
+    plain.add(demo::make_label({ demo::kind_text, u8"plain/line" }, u8"제목 없는 본문", 12.0f, luil::label_color_role::dim), 20.0f);
+    require_body_name(arranged(plain.finish(0.0f, scroll_gallery)), u8"plain", u8"");
+}
+
 TEST_CASE("Every editable field of the demo has a text target", "[demo][text-input]")
 {
     // 편집 대상이 없는 칸은 키 입력이 닿지 않고 UIA Value가 읽기 전용으로 답한다. 칸을 더하면 이 표에도 더한다.
@@ -453,6 +549,7 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
         { demo::kind_link_view_input, demo::target_link_view },
         { demo::kind_code_input, demo::target_code },
         { demo::kind_line_break_input, demo::target_line_break },
+        { demo::kind_rich_editor_input, demo::target_rich_editor },
         { demo::kind_tool_note_input, demo::target_tool_note },
         { demo::kind_dropdown_search_input, demo::target_dropdown_search },
         { demo::kind_tool_menu_search_input, demo::target_tool_menu_search },
@@ -462,6 +559,8 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
         { demo::kind_workbench_diff, demo::target_workbench_diff },
         { demo::kind_workbench_find_input, demo::target_workbench_find },
         { luil::ui_element_kind::command_palette_search, demo::target_palette },
+        { demo::kind_gallery_color_hex_input, demo::target_gallery_color_hex },
+        { demo::kind_popups_color_hex_input, demo::target_popups_color_hex },
     };
     for (const field& each : fields)
     {
@@ -471,4 +570,1580 @@ TEST_CASE("Every editable field of the demo has a text target", "[demo][text-inp
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(demo::text_target_of_kind(demo::kind_text).has_value() == false);
+}
+
+namespace {
+    [[nodiscard]] luil::ui_tree zoom_tree(demo::zoom_page& page)
+    {
+        return arranged(page.build(800.0f, 600.0f, 1.0f));
+    }
+
+    // UIA가 되읽는 줌 단추의 이름이다. 단추의 글이 곧 접근 이름이다.
+    [[nodiscard]] std::u8string zoom_button_name(const luil::ui_tree& tree, const luil::ui_element_kind kind)
+    {
+        const luil::ui_element* const button { tree.find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+
+    // 줌 단추 글을 바꾸는 단추를 눌러 나온 메시지를 페이지에 넘긴다. 누름은 tree에 있던 그 액션이다.
+    void press_zoom_labels(demo::zoom_page& page, const luil::ui_tree& tree)
+    {
+        const luil::ui_element_id id { demo::kind_layout, u8"zoom-label-toggle" };
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+}
+
+TEST_CASE("The desktop zoom page switches its button names between the default language and English", "[demo][zoom][default-text]")
+{
+    demo::zoom_page page {};
+    auto tree { zoom_tree(page) };
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"확대");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"맞춤");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+
+    // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
+    press_zoom_labels(page, tree);
+    tree = zoom_tree(page);
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"Out");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_increase) == u8"In");
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_fit) == u8"Fit");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: English");
+
+    // 같은 메시지가 거듭 와도 결과가 같다.
+    send(page, demo::zoom_labels_intent { true });
+    REQUIRE(zoom_button_name(zoom_tree(page), luil::ui_element_kind::zoom_fit) == u8"Fit");
+
+    press_zoom_labels(page, tree);
+    tree = zoom_tree(page);
+    REQUIRE(zoom_button_name(tree, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(label_text(tree, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+}
+
+TEST_CASE("The desktop zoom page puts the language switch after the fit buttons in the same row", "[demo][zoom][default-text]")
+{
+    demo::zoom_page page {};
+    const auto tree { zoom_tree(page) };
+    const luil::ui_element* const controls { tree.find({ luil::ui_element_kind::zoom_controls, u8"diagram" }) };
+    const luil::ui_element* const fit_height { tree.find({ demo::kind_layout, u8"zoom-fit-height" }) };
+    const luil::ui_element* const toggle { tree.find({ demo::kind_layout, u8"zoom-label-toggle" }) };
+    const luil::ui_element* const language { tree.find({ demo::kind_text, u8"zoom-label-language" }) };
+    REQUIRE(controls != nullptr);
+    REQUIRE(fit_height != nullptr);
+    REQUIRE(toggle != nullptr);
+    REQUIRE(language != nullptr);
+    // 한 줄에 놓이고 800 폭 창 안에 든다.
+    REQUIRE(toggle->bounds().x >= fit_height->bounds().x + fit_height->bounds().width);
+    REQUIRE(language->bounds().x >= toggle->bounds().x + toggle->bounds().width);
+    REQUIRE(language->bounds().x + language->bounds().width <= 800.0f);
+    REQUIRE(toggle->bounds().y == Catch::Approx(controls->bounds().y));
+}
+
+namespace {
+    // 글꼴이 넓은 쪽을 본뜬 측정기다: 로마자는 글자 크기의 0.6배, 그 밖(한글)은 1배. 이 폭이면 56dp 단추에 글꼴 배율 1.1에서
+    // 일곱 글자쯤 들어, 실기기에서 "Zoom out"이 "Zoom o…"로 잘린 것과 맞는다. 설치 글꼴에 기대지 않아 어느 기기에서나 같다.
+    [[nodiscard]] float wide_sans_width(const std::u8string_view text, const float pixel_size)
+    {
+        float em { 0.0f };
+        for (const char8_t byte : text)
+        {
+            if ((byte & 0xC0u) == 0x80u)
+                continue;
+            em += byte < 0x80u ? 0.6f : 1.0f;
+        }
+        return em * pixel_size;
+    }
+
+    const luil::text_measurer wide_sans_measurer { wide_sans_width };
+}
+
+TEST_CASE("The English zoom button names of the desktop page fit their buttons at a 1.1 font scale", "[demo][zoom][default-text]")
+{
+    // 줌 단추의 폭은 라이브러리가 정한다(56dp). 영어 글이 길면 "Zoom o…"로 잘리므로 데모는 짧은 글을 쓴다.
+    demo::zoom_page page {};
+    send(page, demo::zoom_labels_intent { true });
+    const auto tree { zoom_tree(page) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    for (const luil::ui_element_kind kind : { luil::ui_element_kind::zoom_decrease, luil::ui_element_kind::zoom_increase, luil::ui_element_kind::zoom_fit })
+    {
+        const luil::ui_element* const button { tree.find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        const float text_width { measure.text_width(button->accessibility().name, measure.style_metrics().body_font_size) };
+        REQUIRE(text_width * 1.1f <= button->bounds().width);
+    }
+}
+
+namespace {
+    // 별점 줄의 label이 그린 글이다. 줄마다 "이름: 3 / 5" 꼴이고 화면과 보조 기술이 같은 말을 한다.
+    [[nodiscard]] std::u8string rating_label(const luil::ui_tree& tree, const std::u8string& line)
+    {
+        return label_text(tree, u8"gallery/rating-" + line + u8"-value");
+    }
+
+    [[nodiscard]] const luil::ui_element& rating_of(const luil::ui_tree& tree, const std::u8string& line)
+    {
+        const luil::ui_element* const rating { tree.find({ luil::ui_element_kind::rating, u8"gallery/rating-" + line }) };
+        REQUIRE(rating != nullptr);
+        return *rating;
+    }
+
+    // 낸 메시지에서 별점 intent를 꺼낸다.
+    [[nodiscard]] demo::gallery_rating_intent rating_intent_of(const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        const auto* const intent { message->get<demo::gallery_rating_intent>() };
+        REQUIRE(intent != nullptr);
+        return *intent;
+    }
+}
+
+TEST_CASE("The gallery rating card draws whole, half and average lines and reads each value back", "[demo][gallery][rating]")
+{
+    demo::gallery_page page {};
+    const auto tree { arranged(page.build_controls()) };
+
+    // 줄마다 label이 값을 그린다. UIA가 이름으로 되읽는 말이다.
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 3 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 3.5 / 5");
+    REQUIRE(rating_label(tree, u8"average") == u8"평균: 4.3 / 5");
+
+    // 별점 요소의 접근 값도 같은 글이다. 이름은 줄마다 다르다.
+    const luil::access_info whole { rating_of(tree, u8"whole").accessibility() };
+    REQUIRE(whole.role == luil::access_role::slider);
+    REQUIRE(whole.name == u8"별점");
+    REQUIRE(whole.value == u8"3 / 5");
+    REQUIRE(whole.range == luil::access_range { 0.0f, 5.0f, 3.0f, 1.0f, 1.0f });
+    const luil::access_info half { rating_of(tree, u8"half").accessibility() };
+    REQUIRE(half.name == u8"반 별 점수");
+    REQUIRE(half.value == u8"3.5 / 5");
+    REQUIRE(half.range == luil::access_range { 0.0f, 5.0f, 3.5f, 0.5f, 1.0f });
+    const luil::access_info average { rating_of(tree, u8"average").accessibility() };
+    REQUIRE(average.name == u8"평균 점수");
+    REQUIRE(average.value == u8"4.3 / 5");
+
+    // 정수 별은 칸이 다섯, 반 별은 열이고, 평균은 표시 전용이라 칸이 없다.
+    REQUIRE(rating_of(tree, u8"whole").children().size() == 5u);
+    REQUIRE(rating_of(tree, u8"half").children().size() == 10u);
+    REQUIRE(rating_of(tree, u8"average").children().empty());
+    REQUIRE(luil::plan_access_request(rating_of(tree, u8"average"), { luil::access_command::set_value, 4.0f }).has_value() == false);
+}
+
+TEST_CASE("A star click, a value set from assistive technology and the reset button change the rating lines", "[demo][gallery][rating]")
+{
+    demo::gallery_page page {};
+    auto tree { arranged(page.build_controls()) };
+
+    // 별 3은 지금 값이라 다시 누르면 지운다. 별 4는 4를 매긴다.
+    const luil::ui_element& whole { rating_of(tree, u8"whole") };
+    const luil::ui_action* const clear { whole.children()[2]->action(luil::ui_trigger::left_click) };
+    REQUIRE(clear != nullptr);
+    const demo::gallery_rating_intent cleared { rating_intent_of(first_action((*clear)({ whole.children()[2]->id() }))) };
+    REQUIRE(cleared.key == u8"whole");
+    REQUIRE(cleared.value == 0.0f);
+    const luil::ui_action* const fourth { whole.children()[3]->action(luil::ui_trigger::left_click) };
+    REQUIRE(fourth != nullptr);
+    const demo::gallery_rating_intent chosen { rating_intent_of(first_action((*fourth)({ whole.children()[3]->id() }))) };
+    REQUIRE(chosen.value == 4.0f);
+    send(page, chosen);
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 4 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 3.5 / 5");
+
+    // 보조 기술의 값 정하기는 가장 가까운 별로 반올림해 같은 메시지를 낸다. 반 별 줄은 반 별이 걸음이다.
+    const luil::ui_element& half { rating_of(tree, u8"half") };
+    const auto plan { luil::plan_access_request(half, { luil::access_command::set_value, 1.3f }) };
+    REQUIRE(plan.has_value());
+    const demo::gallery_rating_intent set { rating_intent_of(first_action(*plan)) };
+    REQUIRE(set.key == u8"half");
+    REQUIRE(set.value == 1.5f);
+    send(page, set);
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 1.5 / 5");
+
+    // 범위 밖 값은 앱이 자른다.
+    send(page, demo::gallery_rating_intent { u8"whole", 9.0f });
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 5 / 5");
+
+    // 초기화 단추는 두 줄을 아직 매기지 않음으로 되돌리고 평균은 그대로다.
+    const luil::ui_element* const reset { tree.find({ demo::kind_layout, u8"gallery/rating-reset" }) };
+    REQUIRE(reset != nullptr);
+    const luil::ui_action* const pressed { reset->action(luil::ui_trigger::left_click) };
+    REQUIRE(pressed != nullptr);
+    send(page, rating_intent_of(first_action((*pressed)({ reset->id() }))));
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 0 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 0 / 5");
+    REQUIRE(rating_label(tree, u8"average") == u8"평균: 4.3 / 5");
+
+    // 상태 초기화는 처음 값으로 돌린다.
+    send(page, demo::gallery_reset_intent {});
+    tree = arranged(page.build_controls());
+    REQUIRE(rating_label(tree, u8"whole") == u8"별점: 3 / 5");
+    REQUIRE(rating_label(tree, u8"half") == u8"반 별: 3.5 / 5");
+}
+
+namespace {
+    [[nodiscard]] std::u8string color_part(const std::u8string_view owner, const std::u8string_view part)
+    {
+        std::u8string text { owner };
+        text += u8'\u001f';
+        text += part;
+        return text;
+    }
+
+    // 초안 전체를 이 글로 바꾸는 편집 메시지다. 앱 정책이 칸의 kind를 이 대상으로 옮긴다.
+    [[nodiscard]] demo::edit_intent replace_draft(const luil::text_input_target target, const std::u8string_view text)
+    {
+        luil::text_edit_request request {};
+        request.target = target;
+        request.command = luil::text::text_edit_command::replace_all;
+        request.text = std::u8string { text };
+        request.offset = request.text.size();
+        return demo::edit_intent { request };
+    }
+
+    // 액션 하나를 페이지에 그대로 전한다.
+    template<typename Page>
+    void deliver_action(Page& page, const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        REQUIRE(page.handle(*message));
+    }
+}
+
+TEST_CASE("The gallery color card shows the picker, the presets and the hex field and reads the color back", "[demo][gallery][color-picker]")
+{
+    demo::gallery_page page {};
+    auto tree { arranged(page.build_controls()) };
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #3366FF80 · 색상 225° · 채도 80% · 명도 100% · 알파 50%");
+    const luil::ui_element* const picker { tree.find({ luil::ui_element_kind::color_picker, u8"gallery/color" }) };
+    REQUIRE(picker != nullptr);
+    REQUIRE(picker->accessibility().value == u8"#3366FF80");
+    const luil::ui_element* const hex { tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" }) };
+    REQUIRE(hex != nullptr);
+    REQUIRE(hex->accessibility().value == u8"#3366FF80");
+    // 견본 넷이고 첫 견본이 처음 색이다. 알파 막대가 선다.
+    for (const std::u8string_view number : { u8"1", u8"2", u8"3", u8"4" })
+        REQUIRE(tree.find({ luil::ui_element_kind::color_picker_preset, color_part(u8"gallery/color", number) }) != nullptr);
+    REQUIRE(tree.find({ luil::ui_element_kind::color_picker_preset, color_part(u8"gallery/color", u8"1") })->accessibility().name == u8"처음 색");
+    REQUIRE(tree.find({ luil::ui_element_kind::color_picker_bar, color_part(u8"gallery/color", u8"alpha") }) != nullptr);
+
+    // 보조 기술이 색상 막대를 120도로 정하면 label과 16진 칸이 함께 바뀐다.
+    const luil::ui_element* const hue { tree.find({ luil::ui_element_kind::color_picker_bar, color_part(u8"gallery/color", u8"hue") }) };
+    REQUIRE(hue != nullptr);
+    const auto plan { luil::plan_access_request(*hue, { luil::access_command::set_value, 120.0f }) };
+    REQUIRE(plan.has_value());
+    deliver_action(page, first_action(*plan));
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #33FF3380 · 색상 120° · 채도 80% · 명도 100% · 알파 50%");
+    REQUIRE(tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" })->accessibility().value == u8"#33FF3380");
+
+    // 회색 견본은 지금 색상을 지킨다.
+    const luil::ui_element* const gray { tree.find({ luil::ui_element_kind::color_picker_preset, color_part(u8"gallery/color", u8"3") }) };
+    REQUIRE(gray != nullptr);
+    deliver_action(page, first_action((*gray->action(luil::ui_trigger::left_click))({ gray->id() })));
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #808080FF · 색상 120° · 채도 0% · 명도 50% · 알파 100%");
+
+    // 초기화는 처음 색으로 돌린다.
+    send(page, demo::gallery_reset_intent {});
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #3366FF80 · 색상 225° · 채도 80% · 명도 100% · 알파 50%");
+}
+
+TEST_CASE("A typed hex color is filtered, committed when the field is left and marks a bad draft", "[demo][gallery][color-picker]")
+{
+    demo::gallery_page page {};
+    // 넣는 글은 16진 글자만 남는다. 칸을 떠나는 훅이 확정 메시지를 낸다.
+    send(page, replace_draft(demo::target_gallery_color_hex, u8"색 #00 80 00"));
+    auto tree { arranged(page.build_controls()) };
+    const luil::ui_element* const hex { tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" }) };
+    REQUIRE(hex != nullptr);
+    REQUIRE(hex->accessibility().value == u8"#008000");
+    REQUIRE(hex->focus_leave_action() != nullptr);
+    deliver_action(page, first_action((*hex->focus_leave_action())({ hex->id() })));
+    tree = arranged(page.build_controls());
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #008000FF · 색상 120° · 채도 100% · 명도 50% · 알파 100%");
+    REQUIRE(tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" })->accessibility().value == u8"#008000FF");
+
+    // 읽히지 않는 초안은 칸을 붉게 두고 색은 그대로다.
+    send(page, replace_draft(demo::target_gallery_color_hex, u8"#12"));
+    send(page, demo::gallery_color_commit_intent {});
+    tree = arranged(page.build_controls());
+    REQUIRE(tree.find({ demo::kind_gallery_color_hex_input, u8"gallery/color-hex" })->accessibility().invalid);
+    REQUIRE(label_text(tree, u8"gallery/color-value") == u8"색: #008000FF · 색상 120° · 채도 100% · 명도 50% · 알파 100%");
+    // 다른 페이지의 칸 편집은 받지 않는다.
+    REQUIRE(page.handle(luil::app_message { replace_draft(demo::target_popups_color_hex, u8"#000") }) == false);
+}
+
+namespace {
+    const luil::ui_element_id color_field_id { luil::ui_element_kind::color_field, u8"popups/color-field" };
+
+    [[nodiscard]] std::optional<luil::ui_popup> color_popup_of(const demo::popups_page& page)
+    {
+        for (luil::ui_popup& popup : page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }))
+            if (popup.id == u8"color-popup")
+                return std::move(popup);
+        return std::nullopt;
+    }
+}
+
+TEST_CASE("The color field opens a picker popup under it and asks to focus the plane", "[demo][popups][color-picker]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #3366FF");
+    REQUIRE(page.make_focus_request().has_value() == false);
+    const luil::ui_element* const field { tree.find(color_field_id) };
+    REQUIRE(field != nullptr);
+    REQUIRE(field->accessibility().name == u8"글자 색");
+    REQUIRE(field->accessibility().value == u8"#3366FF");
+
+    // 누르면 여는 메시지이고, 열면 popup 표면의 판으로 초점을 옮기는 요청이 실린다.
+    deliver_action(page, first_action((*field->action(luil::ui_trigger::left_click))({ field->id() })));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface == u8"color-popup");
+    REQUIRE(focus->target == luil::color_picker_element::plane_id(u8"popups/color"));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 열림 · #3366FF");
+    REQUIRE(tree.find(color_field_id)->accessibility().expanded == true);
+    const luil::rect_f bounds { tree.find(color_field_id)->bounds() };
+    const std::optional<luil::ui_popup> popup { color_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->x == bounds.x);
+    REQUIRE(popup->y == bounds.y + bounds.height + 2.0f);
+    REQUIRE(popup->tree->find(luil::color_picker_element::plane_id(u8"popups/color")) != nullptr);
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" }) != nullptr);
+    // 한 번에 하나만 뜬다.
+    REQUIRE(page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }).size() == 1u);
+
+    // 창 이동·활성 전환에는 남는다. 글을 치는 popup이다.
+    REQUIRE(std::holds_alternative<std::monostate>(popup->dismiss(luil::popup_dismiss_reason::surface_moved)));
+    REQUIRE(std::holds_alternative<std::monostate>(popup->dismiss(luil::popup_dismiss_reason::activation_changed)));
+    // Esc로 닫으면 칸으로 돌아오는 초점 요청을 한 번 더 싣는다.
+    deliver_action(page, popup->dismiss(luil::popup_dismiss_reason::escape_key));
+    const std::optional<luil::focus_request> back { page.make_focus_request() };
+    REQUIRE(back.has_value());
+    REQUIRE(back->id == focus->id + 1u);
+    REQUIRE(back->surface.empty());
+    REQUIRE(back->target == color_field_id);
+    REQUIRE(color_popup_of(page).has_value() == false);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #3366FF");
+}
+
+TEST_CASE("Closing the color popup commits the hex draft typed in it and keeps the hue of a gray", "[demo][popups][color-picker]")
+{
+    demo::popups_page page {};
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#808080"));
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    std::optional<luil::ui_popup> popup { color_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" })->accessibility().value == u8"#808080");
+
+    // 바깥을 눌러 닫으면 popup의 tree가 사라져 떠남 훅이 없다. 닫는 메시지가 초안을 확정하고, 초점은 옮기지 않는다.
+    const std::uint64_t opened { page.make_focus_request()->id };
+    deliver_action(page, popup->dismiss(luil::popup_dismiss_reason::pointer_press_outside));
+    REQUIRE(page.make_focus_request()->id == opened);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+
+    // 다시 열면 회색에서도 색상은 225도 그대로다.
+    send(page, demo::color_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    popup = color_popup_of(page);
+    REQUIRE(popup.has_value());
+    const luil::ui_element* const hue { popup->tree->find({ luil::ui_element_kind::color_picker_bar, color_part(u8"popups/color", u8"hue") }) };
+    REQUIRE(hue != nullptr);
+    REQUIRE(hue->accessibility().range->value == 225.0f);
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" })->accessibility().value == u8"#808080");
+
+    // 칸을 다시 누르는 닫기와 페이지를 떠나는 닫기도 초안을 확정한다.
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#f00"));
+    send(page, demo::color_field_intent { false });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #FF0000");
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#00f"));
+    page.close_popups();
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #0000FF");
+}
+
+TEST_CASE("Opening another field popup over the open color popup commits the hex draft", "[demo][popups][color-picker]")
+{
+    demo::popups_page page {};
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#808080"));
+
+    // 다른 칸을 누르면 그 칸의 열기 메시지가 바깥 누름 닫기보다 먼저 와 임자를 바꾼다. 늦게 온 닫기는 색 칸이 이미 닫혀 있어 초안을
+    // 확정할 길이 없으니, 임자가 바뀌는 자리가 확정해야 한다.
+    send(page, demo::field_menu_intent { u8"save", true });
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+    REQUIRE(label_text(tree, u8"split-state-save") == u8"저장 메뉴 열림: 열림");
+    send(page, demo::color_field_dismiss_intent { luil::popup_dismiss_reason::pointer_press_outside });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+    REQUIRE(label_text(tree, u8"split-state-save") == u8"저장 메뉴 열림: 열림");
+
+    // 읽히지 않는 초안은 색을 바꾸지 않고, 다시 열면 지금 색의 글로 돌아간다.
+    send(page, demo::color_field_intent { true });
+    send(page, replace_draft(demo::target_popups_color_hex, u8"#12"));
+    send(page, demo::field_menu_intent { u8"send", true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/color-state") == u8"색 칸: 닫힘 · #808080");
+    REQUIRE(label_text(tree, u8"split-state-send") == u8"보내기 메뉴 열림: 열림");
+    send(page, demo::color_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    const std::optional<luil::ui_popup> popup { color_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->tree->find({ demo::kind_popups_color_hex_input, u8"popups/color-hex" })->accessibility().value == u8"#808080");
+}
+
+
+
+namespace {
+    // 1000x700 창의 콘텐츠 영역에서 조립해 배치한 검사기 페이지다 (배율 1).
+    [[nodiscard]] luil::ui_tree inspector_tree(demo::inspector_page& page)
+    {
+        return arranged(page.build(1000.0f, 700.0f, 1.0f), 1000.0f, 700.0f);
+    }
+
+    [[nodiscard]] std::u8string inspector_button(demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const button { tree.find({ demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+
+    [[nodiscard]] std::u8string inspector_number(const std::size_t value)
+    {
+        const std::string digits { std::to_string(value) };
+        return std::u8string { digits.begin(), digits.end() };
+    }
+
+    // 단추의 left_click 액션을 실행해 낸 앱 메시지를 페이지에 돌려준다 (UIA Invoke가 타는 길과 같다).
+    int press_inspector_button(demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const button { tree.find({ demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        int delivered { 0 };
+        for (const luil::input_action& each : (*action)(luil::ui_action_context { .element = button->id() }))
+        {
+            if (const auto* const message { std::get_if<luil::app_message>(&each) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        }
+        return delivered;
+    }
+}
+
+TEST_CASE("The inspector page starts off and counts the elements of its own tree", "[demo][inspector]")
+{
+    demo::inspector_page page {};
+    const luil::ui_tree tree { inspector_tree(page) };
+    REQUIRE(label_text(tree, u8"inspector-state") == u8"검사기: 끔");
+    REQUIRE(label_text(tree, u8"inspector-pick") == u8"집기: hovered");
+    REQUIRE(label_text(tree, u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(label_text(tree, u8"inspector-selected") == u8"선택: 없음");
+    const std::size_t elements { luil::inspect_nodes(tree).size() };
+    REQUIRE(elements > 20);
+    REQUIRE(label_text(tree, u8"inspector-count") == u8"요소 " + inspector_number(elements) + u8"개");
+    REQUIRE(page.config().enabled == false);
+}
+
+TEST_CASE("The inspector shortcut is Ctrl+Shift+I", "[demo][inspector]")
+{
+    REQUIRE(demo::inspector_shortcut.key == luil::key_code::key_i);
+    REQUIRE(demo::inspector_shortcut.control);
+    REQUIRE(demo::inspector_shortcut.shift);
+    REQUIRE(demo::inspector_shortcut.alt == false);
+    // 명령 팔레트의 Ctrl+Shift+P와 겹치지 않는다.
+    REQUIRE(demo::inspector_shortcut != luil::key_chord { luil::key_code::key_p, true, true });
+    // 단축키가 내는 메시지를 페이지가 받는다.
+    demo::inspector_page page {};
+    send(page, demo::inspector_command_intent { demo::inspector_command::toggle });
+    REQUIRE(page.config().enabled);
+}
+
+TEST_CASE("The inspector buttons run the same actions a UIA invoke would", "[demo][inspector]")
+{
+    demo::inspector_page page {};
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-state") == u8"검사기: 켬");
+    REQUIRE(page.config().enabled);
+    REQUIRE(page.config().pick == luil::inspector_pick::hovered);
+
+    REQUIRE(press_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(press_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(press_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-levels") == u8"조상 단계: 3");
+    REQUIRE(page.config().ancestor_levels == 3);
+    REQUIRE(press_inspector_button(page, u8"inspector-down") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-levels") == u8"조상 단계: 2");
+
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 끔");
+    REQUIRE(press_inspector_button(page, u8"inspector-outline") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 켬");
+    REQUIRE(page.config().outline_all);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 끔");
+    REQUIRE(press_inspector_button(page, u8"inspector-palette") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
+    REQUIRE(page.config().show_palette);
+
+    // 끄고 다시 켜면 조상 단계도 처음 모습인 0이다.
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(page.config().ancestor_levels == 0);
+}
+
+TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[demo][inspector]")
+{
+    demo::inspector_page page {};
+    REQUIRE(press_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: layout:inspector-page");
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-pick") == u8"집기: selected");
+    REQUIRE(page.config().pick == luil::inspector_pick::selected);
+    REQUIRE(page.config().selected == luil::ui_element_id { demo::kind_layout, u8"inspector-page" });
+
+    REQUIRE(press_inspector_button(page, u8"inspector-child") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: text:inspector-help");
+    REQUIRE(press_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: layout:inspector-status");
+    REQUIRE(press_inspector_button(page, u8"inspector-child") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: text:inspector-state");
+    REQUIRE(press_inspector_button(page, u8"inspector-prev") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: layout:inspector-status");
+    REQUIRE(press_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: layout:inspector-page");
+    // 뿌리 위로는 갈 곳이 없어 선택이 그대로다.
+    REQUIRE(press_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: layout:inspector-page");
+
+    // 끄고 다시 켜면 처음 모습이다.
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(press_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-selected") == u8"선택: 없음");
+    REQUIRE(label_text(inspector_tree(page), u8"inspector-pick") == u8"집기: hovered");
+}
+
+TEST_CASE("The inspector names the demo kinds and reads the sample's inner padding", "[demo][inspector]")
+{
+    demo::inspector_page page {};
+    const luil::inspector_config config { page.config() };
+    REQUIRE(luil::kind_display_name(demo::kind_layout, config) == u8"layout");
+    REQUIRE(luil::kind_display_name(demo::kind_text, config) == u8"text");
+    REQUIRE(luil::kind_display_name(luil::application_element_kind(900), config) == u8"kind#1924");
+
+    const luil::ui_tree tree { inspector_tree(page) };
+    const luil::ui_element* const stack { tree.find({ demo::kind_layout, u8"inspector-sample-stack" }) };
+    REQUIRE(stack != nullptr);
+    const std::u8string text { luil::describe_element(tree, *stack, 1.0f, config) };
+    REQUIRE(text.starts_with(u8"layout:inspector-sample-stack  "));
+    // 견본 stack의 안쪽 여백 위 8, 오른쪽 12, 아래 8, 왼쪽 12다 (설계 문서의 정보 상자 예시와 같은 수다).
+    REQUIRE(text.find(u8"  inset 8 12 8 12\n") != std::u8string::npos);
+    REQUIRE(text.find(u8"children 3  ") != std::u8string::npos);
+
+    // 조상 한 단계를 올리면 견본 stack에서 그것을 감싼 panel이 집힌다.
+    luil::inspector_config picking { config };
+    picking.enabled = true;
+    picking.pick = luil::inspector_pick::selected;
+    picking.selected = stack->id();
+    picking.ancestor_levels = 1;
+    const luil::interaction_snapshot interaction {};
+    const luil::ui_element* const picked { luil::pick_inspected(tree, interaction, picking) };
+    REQUIRE(picked != nullptr);
+    REQUIRE(picked->id() == luil::ui_element_id { demo::kind_layout, u8"inspector-sample" });
+}
+
+namespace {
+    // 데모 앱이 on_key에서 하는 일과 같은 정책이다. 읽기 전용 안내 칸에 초점이 있는 채 닿은 되돌리기 키를 메시지로 바꾼다.
+    class undo_key_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+        {
+            return demo::text_target_of_kind(kind);
+        }
+
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
+        {
+            if (const auto undo { demo::readonly_undo_key_of(event, snapshot, demo::kind_link_view_input) }; undo.has_value())
+                return { luil::make_app_action(*undo) };
+            return {};
+        }
+    };
+
+    [[nodiscard]] luil::key_pressed_event undo_chord(const luil::key_code code, const bool control, const bool shift = false)
+    {
+        luil::key_pressed_event event { code };
+        event.control = control;
+        event.shift = shift;
+        return event;
+    }
+
+    // 안내 칸 하나를 든 tree에서 칸을 눌러 초점을 주고 되돌리기 키와 그 밖의 키를 보낸 뒤, 앱이 센 값이다.
+    [[nodiscard]] demo::readonly_undo_keys press_undo_keys(const bool read_only)
+    {
+        undo_key_policy policy {};
+        luil::interaction_controller controller { &policy };
+        luil::text_input_view view {};
+        view.text = u8"읽기 전용 안내";
+        luil::text_area_config config {};
+        config.read_only = read_only;
+        auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { demo::kind_link_view_input }, std::move(view), std::move(config)) };
+        controller.set_tree(std::make_shared<const luil::ui_tree>(arranged(std::move(area), 200.0f, 100.0f)));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 12.0f, luil::pointer_button::left, std::chrono::steady_clock::time_point {} }));
+        static_cast<void>(controller.process(luil::pointer_released_event { 20.0f, 12.0f, luil::pointer_button::left, std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { 5 } }));
+        REQUIRE(controller.snapshot().focused_input.kind == demo::kind_link_view_input);
+
+        demo::readonly_undo_keys counts {};
+        const luil::key_pressed_event keys[] {
+            undo_chord(luil::key_code::key_z, true),
+            undo_chord(luil::key_code::key_y, true),
+            undo_chord(luil::key_code::key_z, true, true),
+            // 수식 키 없는 z와 다른 Ctrl 키는 되돌리기가 아니다.
+            undo_chord(luil::key_code::key_z, false),
+            undo_chord(luil::key_code::key_x, true),
+        };
+        for (const luil::key_pressed_event& event : keys)
+        {
+            for (const luil::input_action& action : controller.process(event))
+            {
+                if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                    static_cast<void>(counts.handle(*message));
+            }
+        }
+        return counts;
+    }
+}
+
+TEST_CASE("A read-only demo field hands Ctrl+Z and Ctrl+Y to the app and the label counts them", "[demo][read-only]")
+{
+    // Ctrl+Z 하나, Ctrl+Y 하나, Ctrl+Shift+Z 하나(다시 실행)가 앱 on_key에 닿는다.
+    const demo::readonly_undo_keys passed { press_undo_keys(true) };
+    REQUIRE(passed.undo_count() == 1);
+    REQUIRE(passed.redo_count() == 2);
+    REQUIRE(passed.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 1회 · Ctrl+Y 2회");
+
+    // 같은 칸이 편집 칸이면 칸이 되돌리기를 가져가 앱까지 오지 않는다.
+    const demo::readonly_undo_keys kept { press_undo_keys(false) };
+    REQUIRE(kept.undo_count() == 0);
+    REQUIRE(kept.redo_count() == 0);
+    REQUIRE(kept.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 0회 · Ctrl+Y 0회");
+}
+
+TEST_CASE("The OS notification card reads the state, the result and the event the shell hands it", "[demo][toasts][notification]")
+{
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    REQUIRE(label_text(tree, u8"os-notification-status") == u8"OS 알림 상태: 확인 전");
+    REQUIRE(label_text(tree, u8"os-notification-result") == u8"OS 알림 결과: 없음");
+    REQUIRE(label_text(tree, u8"os-notification-event") == u8"OS 알림 사건: 없음");
+    REQUIRE(label_text(tree, u8"os-notification-hint").empty() == false);
+
+    send(page, demo::os_notification_status_intent { luil::notification_availability::available });
+    send(page, demo::os_notification_result_intent { luil::platform_result { luil::platform_status::ok, {}, std::nullopt } });
+    luil::notification_event pressed { luil::notification_event_kind::activated, u8"demo-1" };
+    pressed.launched = true;
+    send(page, demo::os_notification_event_intent { pressed });
+    tree = toasts_tree(page);
+    REQUIRE(label_text(tree, u8"os-notification-status") == u8"OS 알림 상태: 사용 가능");
+    REQUIRE(label_text(tree, u8"os-notification-result") == u8"OS 알림 결과: ok");
+    REQUIRE(label_text(tree, u8"os-notification-event") == u8"OS 알림 사건: 눌림 demo-1 · 꺼진 앱에서");
+
+    // 꺼진 알림과 실패, 사용자가 닫은 사건과 앞서 버린 수다.
+    send(page, demo::os_notification_status_intent { luil::notification_availability::blocked });
+    send(page, demo::os_notification_result_intent { luil::platform_result { luil::platform_status::failed, u8"turned off", std::nullopt } });
+    luil::notification_event dismissed { luil::notification_event_kind::dismissed, u8"demo-1" };
+    dismissed.lost_before = 2;
+    send(page, demo::os_notification_event_intent { dismissed });
+    tree = toasts_tree(page);
+    REQUIRE(label_text(tree, u8"os-notification-status") == u8"OS 알림 상태: 꺼짐");
+    REQUIRE(label_text(tree, u8"os-notification-result") == u8"OS 알림 결과: failed · turned off");
+    REQUIRE(label_text(tree, u8"os-notification-event") == u8"OS 알림 사건: 닫음 demo-1 · 앞서 버린 사건 2개");
+}
+
+TEST_CASE("The OS notification buttons ask the shell to send, replace and close the same notification", "[demo][toasts][notification]")
+{
+    demo::toasts_page page {};
+    const auto tree { toasts_tree(page) };
+    const std::pair<std::u8string_view, demo::os_notification_action> buttons[] {
+        { u8"os-notification-send", demo::os_notification_action::send },
+        { u8"os-notification-replace", demo::os_notification_action::replace },
+        { u8"os-notification-close", demo::os_notification_action::close },
+    };
+    for (const auto& [owner, action] : buttons)
+    {
+        const luil::ui_element_id id { demo::kind_toast_trigger, std::u8string { owner } };
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name.starts_with(u8"OS 알림 "));
+        const luil::ui_action* const pressed { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(pressed != nullptr);
+        const luil::input_action result { first_action((*pressed)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        const auto* const request { std::get<luil::app_message>(result).get<demo::os_notification_request_intent>() };
+        REQUIRE(request != nullptr);
+        REQUIRE(request->action == action);
+        // 요청은 셸의 몫이라 페이지가 받지 않는다.
+        REQUIRE(page.handle(std::get<luil::app_message>(result)) == false);
+    }
+}
+
+namespace {
+    // 상태 글을 좁은 글로 옮긴다. 실패하면 Catch가 글을 그대로 보인다.
+    [[nodiscard]] std::string narrow(const std::u8string_view text)
+    {
+        return { text.begin(), text.end() };
+    }
+
+    [[nodiscard]] std::string rich_state(demo::rich_text_page& page)
+    {
+        return narrow(label_text(arranged(page.build(800.0f, 600.0f, 1.0f)), u8"rich-state"));
+    }
+
+    // 토글을 눌러 나온 메시지를 페이지에 넘긴다. 누름은 tree에 있던 그 액션이다.
+    void press_rich_toggle(demo::rich_text_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+        const luil::ui_element_id id { luil::ui_element_kind::check, owner };
+        const luil::ui_element* const toggle { tree.find(id) };
+        REQUIRE(toggle != nullptr);
+        REQUIRE(toggle->preserves_pointer_focus());
+        const luil::ui_action* const action { toggle->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+
+    void send_rich_edit(demo::rich_text_page& page, const luil::text::text_edit_command command)
+    {
+        luil::text_edit_request request {};
+        request.target = demo::target_rich_editor;
+        request.command = command;
+        send(page, demo::edit_intent { request });
+    }
+}
+
+TEST_CASE("The rich text page draws its state and the toggles change the typing marks or the selection", "[demo][rich-text]")
+{
+    // 견본 글의 caret은 처음이라 다음 글자 서식은 뒤 글자("굵게")의 굵게다.
+    demo::rich_text_page page {};
+    REQUIRE(rich_state(page) == narrow(u8"굵게 켜짐 · 기울임 꺼짐 · 밑줄 꺼짐 · 코드 꺼짐 · 링크 꺼짐 · 구간 4 · 링크 1 · 되돌리기 0"));
+    {
+        const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+        REQUIRE(tree.find({ luil::ui_element_kind::check, u8"rich-bold" })->accessibility().checked == true);
+        REQUIRE(tree.find({ demo::kind_rich_editor_input, u8"rich-editor" }) != nullptr);
+    }
+
+    // 고른 곳 없이 누르면 다음 글자의 서식만 바뀐다. 걸음이 아니다.
+    press_rich_toggle(page, u8"rich-bold");
+    REQUIRE(rich_state(page) == narrow(u8"굵게 꺼짐 · 기울임 꺼짐 · 밑줄 꺼짐 · 코드 꺼짐 · 링크 꺼짐 · 구간 4 · 링크 1 · 되돌리기 0"));
+
+    // 모두 골라 굵게를 누르면 한 걸음이다. Ctrl+Z가 서식을 되돌린다.
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    press_rich_toggle(page, u8"rich-bold");
+    REQUIRE(rich_state(page) == narrow(u8"굵게 켜짐 · 기울임 꺼짐 · 밑줄 꺼짐 · 코드 꺼짐 · 링크 꺼짐 · 구간 7 · 링크 1 · 되돌리기 1"));
+    // 되돌리면 고른 범위도 그때로 돌아온다. 모두 고른 글은 다 굵지 않아 굵게가 꺼져 보인다.
+    send_rich_edit(page, luil::text::text_edit_command::undo);
+    REQUIRE(rich_state(page) == narrow(u8"굵게 꺼짐 · 기울임 꺼짐 · 밑줄 꺼짐 · 코드 꺼짐 · 링크 꺼짐 · 구간 4 · 링크 1 · 되돌리기 0"));
+
+    // 링크 토글은 고정 주소를 걸고, 켜진 곳에서 누르면 걷는다.
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    press_rich_toggle(page, u8"rich-link");
+    REQUIRE(rich_state(page).ends_with(narrow(u8"링크 켜짐 · 구간 4 · 링크 1 · 되돌리기 1")));
+    press_rich_toggle(page, u8"rich-link");
+    REQUIRE(rich_state(page).ends_with(narrow(u8"링크 꺼짐 · 구간 4 · 링크 0 · 되돌리기 2")));
+}
+
+TEST_CASE("Ctrl+B on the rich text editor reaches the page as the bold command", "[demo][rich-text]")
+{
+    demo::rich_text_page page {};
+    const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+    const luil::ui_element* const editor { tree.find({ demo::kind_rich_editor_input, u8"rich-editor" }) };
+    REQUIRE(editor != nullptr);
+    const luil::key_handler* const handler { editor->key_handler_of() };
+    REQUIRE(handler != nullptr);
+    luil::key_pressed_event bold { luil::key_code::key_b };
+    bold.control = true;
+    const auto actions { (*handler)(bold) };
+    REQUIRE(actions.has_value());
+    REQUIRE(page.handle(std::get<luil::app_message>(first_action(*actions))));
+    REQUIRE(rich_state(page).starts_with(narrow(u8"굵게 꺼짐")));
+    // 칸 밖의 키는 소비하지 않는다.
+    REQUIRE((*handler)(luil::key_pressed_event { luil::key_code::key_b }).has_value() == false);
+}
+
+namespace {
+    [[nodiscard]] std::string rich_clipboard(demo::rich_text_page& page)
+    {
+        return narrow(label_text(arranged(page.build(800.0f, 600.0f, 1.0f)), u8"rich-clipboard"));
+    }
+
+    // 서식 복사·붙여넣기 단추를 눌러 나온 메시지를 페이지에 넘긴다.
+    void press_rich_button(demo::rich_text_page& page, const std::u8string& owner, const std::u8string_view name)
+    {
+        const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+        const luil::ui_element_id id { demo::kind_layout, owner };
+        const luil::ui_element* const button { tree.find(id) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name == name);
+        REQUIRE(button->preserves_pointer_focus());
+        const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+
+    [[nodiscard]] std::string number_text(const std::size_t value)
+    {
+        return std::to_string(value);
+    }
+}
+
+TEST_CASE("The rich text page copies and pastes formatted text through clipboard requests", "[demo][rich-text][clipboard]")
+{
+    demo::rich_text_page page {};
+    REQUIRE(rich_clipboard(page) == narrow(u8"복사·붙여넣기 전"));
+    {
+        // 서식 칸은 복사·붙여넣기 키를 키 처리기로 넘긴다.
+        const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+        const luil::ui_element* const editor { tree.find({ demo::kind_rich_editor_input, u8"rich-editor" }) };
+        REQUIRE(editor != nullptr);
+        REQUIRE(editor->text_input()->clipboard_keys_to_parent);
+    }
+
+    // 고른 곳이 없으면 넣을 것이 없다.
+    press_rich_button(page, u8"rich-copy", u8"서식 복사");
+    REQUIRE(page.take_clipboard_request().has_value() == false);
+    REQUIRE(rich_clipboard(page) == narrow(u8"복사할 글 없음"));
+
+    // 모두 골라 복사하면 글과 HTML을 한 클립에 넣는 요청이 한 번 나온다. 견본의 굵게 구간은 하나, 링크도 하나다.
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    press_rich_button(page, u8"rich-copy", u8"서식 복사");
+    std::optional<luil::clipboard_request> request { page.take_clipboard_request() };
+    REQUIRE(request.has_value());
+    REQUIRE(page.take_clipboard_request().has_value() == false);
+    REQUIRE(std::holds_alternative<luil::clipboard_data_copy_request>(*request));
+    // 아래에서 요청 칸을 다시 쓰므로 값으로 옮겨 둔다.
+    const luil::clipboard_data_copy_request copied { std::get<luil::clipboard_data_copy_request>(*request) };
+    const luil::clipboard_data_copy_request* const copy { &copied };
+    const luil::text::text_edit_state& state { page.sample().state() };
+    REQUIRE(copy->text == state.text);
+    REQUIRE(copy->html == luil::rich_text_to_html(state.text, *state.format));
+    const std::size_t html_bytes { copy->html.size() };
+    REQUIRE(rich_clipboard(page) == narrow(u8"복사 · HTML ") + number_text(html_bytes) + narrow(u8"바이트 · 굵게 1 · 링크 1"));
+
+    // 끝에 붙여넣는다. 요청은 표식을 단 읽기이고, 답은 표식으로 갈라 온다.
+    send_rich_edit(page, luil::text::text_edit_command::move_right);
+    press_rich_button(page, u8"rich-paste", u8"서식 붙여넣기");
+    request = page.take_clipboard_request();
+    REQUIRE(request.has_value());
+    const auto* const paste { std::get_if<luil::clipboard_data_paste_request>(&*request) };
+    REQUIRE(paste != nullptr);
+    REQUIRE(paste->tag == demo::rich_text_clipboard_tag);
+    luil::clipboard_data answer {};
+    answer.tag = paste->tag;
+    answer.text = copy->text;
+    answer.html = copy->html;
+    send(page, demo::rich_text_clipboard_intent { answer });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣기 · HTML ") + number_text(html_bytes) + narrow(u8"바이트 · 굵게 1 · 링크 1"));
+    REQUIRE(rich_state(page).ends_with(narrow(u8"구간 8 · 링크 2 · 되돌리기 1")));
+    // 붙인 조각은 한 걸음으로 되돌아간다.
+    send_rich_edit(page, luil::text::text_edit_command::undo);
+    REQUIRE(rich_state(page).ends_with(narrow(u8"구간 4 · 링크 1 · 되돌리기 0")));
+
+    // HTML이 없는 답은 글로 물러선다.
+    luil::clipboard_data plain {};
+    plain.tag = demo::rich_text_clipboard_tag;
+    plain.text = u8"글";
+    send(page, demo::rich_text_clipboard_intent { plain });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣기 · 글만"));
+    send(page, demo::rich_text_clipboard_intent { luil::clipboard_data {} });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣을 글 없음"));
+}
+
+TEST_CASE("Ctrl+C and Ctrl+Shift+V on the rich text editor reach the page as clipboard commands", "[demo][rich-text][clipboard]")
+{
+    demo::rich_text_page page {};
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+    const luil::key_handler* const handler { tree.find({ demo::kind_rich_editor_input, u8"rich-editor" })->key_handler_of() };
+    REQUIRE(handler != nullptr);
+    luil::key_pressed_event copy { luil::key_code::key_c };
+    copy.control = true;
+    REQUIRE(page.handle(std::get<luil::app_message>(first_action(*(*handler)(copy)))));
+    REQUIRE(page.take_clipboard_request().has_value());
+    luil::key_pressed_event plain { luil::key_code::key_v };
+    plain.control = true;
+    plain.shift = true;
+    REQUIRE(page.handle(std::get<luil::app_message>(first_action(*(*handler)(plain)))));
+    REQUIRE(std::holds_alternative<luil::clipboard_data_paste_request>(*page.take_clipboard_request()));
+    // 서식 없이 붙이면 HTML이 있어도 글을 넣는다.
+    luil::clipboard_data answer {};
+    answer.tag = demo::rich_text_clipboard_tag;
+    answer.text = u8"평문";
+    answer.html = u8"<b>굵게</b>";
+    send(page, demo::rich_text_clipboard_intent { answer });
+    REQUIRE(rich_clipboard(page) == narrow(u8"붙여넣기 · 글만"));
+    REQUIRE(page.sample().state().text.starts_with(u8"평문"));
+}
+
+namespace {
+    [[nodiscard]] std::optional<luil::menu_bar_state> shell_bar_state(const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                if (const auto* const intent { message->get<demo::shell_menu_state_intent>() }; intent != nullptr)
+                    return intent->state;
+        return std::nullopt;
+    }
+
+    // 막대를 (0, 32)에 세운 tree다. 데모 셸처럼 caption 아래 줄이다.
+    [[nodiscard]] luil::ui_tree shell_bar_tree(const demo::shell_menu& menu)
+    {
+        auto root { std::make_unique<luil::root_element>() };
+        auto bar { menu.make_bar() };
+        bar->arrange({ .slot = { 0.0f, 32.0f, 500.0f, luil::menu_bar_height }, .scale = 1.0f });
+        root->add(std::move(bar));
+        auto state { menu.make_state_label() };
+        state->arrange({ { 520.0f, 32.0f, 150.0f, luil::menu_bar_height }, 1.0f });
+        root->add(std::move(state));
+        auto last { menu.make_last_label() };
+        last->arrange({ { 680.0f, 32.0f, 220.0f, luil::menu_bar_height }, 1.0f });
+        root->add(std::move(last));
+        return luil::ui_tree { std::move(root) };
+    }
+
+    [[nodiscard]] std::u8string shell_label(const luil::ui_tree& tree, const std::u8string& owner)
+    {
+        const luil::ui_element* const label { tree.find({ demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+}
+
+TEST_CASE("The demo shell menu bar has File, Edit and View with access keys and state labels", "[demo][menu-bar]")
+{
+    demo::shell_menu menu {};
+    const luil::ui_tree tree { shell_bar_tree(menu) };
+    const auto* const bar { luil::active_menu_bar(tree) };
+    REQUIRE(bar != nullptr);
+    REQUIRE(bar->accessibility().role == luil::access_role::menu_bar);
+    REQUIRE(bar->accessibility().name == u8"메뉴 막대");
+    struct expected_item
+    {
+        std::u8string key {};
+        std::u8string name {};
+        std::u8string access_key {};
+    };
+    for (const expected_item& item : { expected_item { u8"file", u8"파일", u8"Alt+F" }, expected_item { u8"edit", u8"편집", u8"Alt+E" }, expected_item { u8"view", u8"보기", u8"Alt+V" } })
+    {
+        const luil::ui_element* const found { tree.find({ luil::ui_element_kind::menu_bar_item, item.key }) };
+        REQUIRE(found != nullptr);
+        REQUIRE(found->accessibility().name == item.name);
+        REQUIRE(found->accessibility().access_key == item.access_key);
+        REQUIRE(found->accessibility().expanded == false);
+    }
+    REQUIRE(shell_label(tree, u8"shell-menu-state") == u8"메뉴 막대: 쉼");
+    REQUIRE(shell_label(tree, u8"shell-menu-last") == u8"마지막 메뉴 명령: 없음");
+}
+
+TEST_CASE("The demo shell menu labels follow the bar state from the keyboard and the pointer", "[demo][menu-bar]")
+{
+    demo::shell_menu menu {};
+    luil::interaction_controller controller {};
+    controller.set_tree(std::make_shared<const luil::ui_tree>(shell_bar_tree(menu)));
+    const std::optional<luil::menu_bar_state> raised { shell_bar_state(controller.process(luil::key_pressed_event { luil::key_code::alt_tap })) };
+    REQUIRE(raised == luil::menu_bar_state { u8"file", false, true });
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { *raised } }));
+    REQUIRE(menu.state_text() == u8"파일 · 키보드");
+
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"edit", true, false } } }));
+    REQUIRE(menu.state_text() == u8"편집 열림 · 포인터");
+    const luil::ui_tree open { shell_bar_tree(menu) };
+    REQUIRE(shell_label(open, u8"shell-menu-state") == u8"편집 열림 · 포인터");
+    REQUIRE(open.find({ luil::ui_element_kind::menu_bar_item, u8"edit" })->accessibility().expanded == true);
+
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent {} }));
+    REQUIRE(menu.state_text() == u8"메뉴 막대: 쉼");
+}
+
+TEST_CASE("A demo shell menu opens under its item, records the command and hands shell commands over", "[demo][menu-bar]")
+{
+    demo::shell_menu menu {};
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"edit", true, true } } }));
+    {
+        const luil::ui_tree tree { shell_bar_tree(menu) };
+        const std::vector<luil::ui_popup> popups { menu.make_popups(*luil::active_menu_bar(tree), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, true, luil::theme_preference::system) };
+        REQUIRE(popups.size() == 1u);
+        const luil::rect_f edit { *luil::active_menu_bar(tree)->item_bounds(u8"edit") };
+        REQUIRE(popups[0].x == edit.x);
+        REQUIRE(popups[0].y == edit.y + edit.height);
+        // 편집 메뉴는 접근 키가 붙은 다섯 명령이다.
+        const auto* const undo { popups[0].tree->find({ luil::ui_element_kind::menu_item, u8"edit.undo" }) };
+        REQUIRE(undo != nullptr);
+        REQUIRE(undo->accessibility().access_key == u8"U");
+        REQUIRE(popups[0].tree->ids_of_kind(luil::ui_element_kind::menu_item).size() == 5u);
+        // Esc는 메뉴만 닫고 막대는 선 채 남는다.
+        REQUIRE(shell_bar_state({ popups[0].dismiss(luil::popup_dismiss_reason::escape_key) }) == luil::menu_bar_state { u8"edit", false, true });
+        // 고르면 명령이 실리고 막대가 쉰다.
+        const std::vector<luil::input_action> chosen { (*undo->action(luil::ui_trigger::left_click))({ undo->id() }) };
+        for (const luil::input_action& action : chosen)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(menu.handle(*message));
+    }
+    REQUIRE(menu.last_command_text() == u8"마지막 메뉴 명령: 실행 취소");
+    REQUIRE(menu.state_text() == u8"메뉴 막대: 쉼");
+    REQUIRE(menu.take_command().has_value() == false);
+
+    // 보기 메뉴의 사이드바는 셸 명령이고, 테마 하위 메뉴는 부모 popup 기준 자리에 선다.
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"view", true, true } } }));
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_submenu_intent { u8"view.theme" } }));
+    const luil::ui_tree tree { shell_bar_tree(menu) };
+    const std::vector<luil::ui_popup> popups { menu.make_popups(*luil::active_menu_bar(tree), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, false, luil::theme_preference::dark) };
+    REQUIRE(popups.size() == 2u);
+    const auto* const sidebar { popups[0].tree->find({ luil::ui_element_kind::menu_item, u8"view.sidebar" }) };
+    REQUIRE(sidebar->accessibility().checked == false);
+    REQUIRE(popups[1].anchor == popups[0].id);
+    REQUIRE(popups[1].x == popups[0].width);
+    const auto* const dark { popups[1].tree->find({ luil::ui_element_kind::menu_item, u8"theme.dark" }) };
+    REQUIRE(dark->accessibility().selected == true);
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_select_intent { u8"view.sidebar" } }));
+    REQUIRE(menu.take_command() == std::u8string { u8"view.sidebar" });
+    REQUIRE(menu.take_command().has_value() == false);
+    REQUIRE(menu.last_command_text() == u8"마지막 메뉴 명령: 사이드바");
+    // 페이지 전환 하위 메뉴도 부모 popup 기준 자리에 서고, 고른 전환이 라디오로 선다. 고르면 셸 명령이다.
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_submenu_intent { u8"view.page-transition" } }));
+    {
+        const luil::ui_tree again { shell_bar_tree(menu) };
+        const std::vector<luil::ui_popup> transitions {
+            menu.make_popups(*luil::active_menu_bar(again), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, true, luil::theme_preference::dark, demo::shell_menu_page_transition_fade)
+        };
+        REQUIRE(transitions.size() == 2u);
+        REQUIRE(transitions[1].id == u8"shell-menu-page-transition");
+        REQUIRE(transitions[1].anchor == transitions[0].id);
+        REQUIRE(transitions[1].y > popups[1].y);
+        REQUIRE(transitions[1].tree->ids_of_kind(luil::ui_element_kind::menu_item).size() == 5u);
+        for (const std::u8string_view key : { demo::shell_menu_page_transition_none, demo::shell_menu_page_transition_slide, demo::shell_menu_page_transition_zoom, demo::shell_menu_page_transition_spring })
+            REQUIRE(transitions[1].tree->find({ luil::ui_element_kind::menu_item, std::u8string { key } })->accessibility().selected == false);
+        REQUIRE(transitions[1].tree->find({ luil::ui_element_kind::menu_item, std::u8string { demo::shell_menu_page_transition_fade } })->accessibility().selected == true);
+    }
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_select_intent { std::u8string { demo::shell_menu_page_transition_zoom } } }));
+    REQUIRE(menu.take_command() == std::u8string { demo::shell_menu_page_transition_zoom });
+    REQUIRE(menu.last_command_text() == u8"마지막 메뉴 명령: 확대");
+    // 다른 메뉴로 옮기면 열린 하위 메뉴가 닫힌다.
+    REQUIRE(menu.handle(luil::app_message { demo::shell_menu_state_intent { { u8"file", true, true } } }));
+    const luil::ui_tree moved { shell_bar_tree(menu) };
+    REQUIRE(menu.make_popups(*luil::active_menu_bar(moved), 1.0f, { 0.0f, 0.0f, 1000.0f, 700.0f }, false, luil::theme_preference::dark).size() == 1u);
+}
+
+namespace {
+    // 서식 칸에 초점을 주는 정책이다. 칸이 넘긴 키는 칸에 단 처리기가 받는다.
+    class rich_key_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+        {
+            return demo::text_target_of_kind(kind);
+        }
+    };
+
+    // 컨트롤러가 낸 앱 메시지를 페이지에 넘긴다. 평문 복사·붙여넣기 요청이 섞였으면 참이다.
+    [[nodiscard]] bool deliver_rich_keys(demo::rich_text_page& page, const std::vector<luil::input_action>& actions)
+    {
+        bool plain { false };
+        for (const luil::input_action& action : actions)
+        {
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                static_cast<void>(page.handle(*message));
+            else if (std::holds_alternative<luil::clipboard_copy_request>(action) || std::holds_alternative<luil::clipboard_paste_request>(action))
+                plain = true;
+        }
+        return plain;
+    }
+
+    [[nodiscard]] luil::key_pressed_event rich_chord(const luil::key_code code, const bool control, const bool shift)
+    {
+        luil::key_pressed_event event { code };
+        event.control = control;
+        event.shift = shift;
+        return event;
+    }
+}
+
+TEST_CASE("Clipboard keys in the focused rich text editor copy and paste with the formatting", "[demo][rich-text][clipboard]")
+{
+    demo::rich_text_page page {};
+    send_rich_edit(page, luil::text::text_edit_command::select_all);
+    auto tree { std::make_shared<const luil::ui_tree>(arranged(page.build(800.0f, 600.0f, 1.0f))) };
+    const luil::ui_element* const editor { tree->find({ demo::kind_rich_editor_input, u8"rich-editor" }) };
+    REQUIRE(editor != nullptr);
+    const luil::rect_f box { editor->bounds() };
+    rich_key_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(tree);
+    const float x { box.x + box.width * 0.5f };
+    const float y { box.y + box.height * 0.5f };
+    static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, std::chrono::steady_clock::time_point {} }));
+    static_cast<void>(controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { 5 } }));
+    REQUIRE(controller.snapshot().focused_input.kind == demo::kind_rich_editor_input);
+
+    // 칸이 키를 쓰지 않고 처리기로 넘겨 복사는 글과 HTML을 한 클립에 넣는 요청이다. 누름이 낸 caret 이동은 페이지에 주지 않아 모두 고른 채다.
+    REQUIRE(deliver_rich_keys(page, controller.process(rich_chord(luil::key_code::key_c, true, false))) == false);
+    std::optional<luil::clipboard_request> request { page.take_clipboard_request() };
+    REQUIRE(request.has_value());
+    const auto* const copy { std::get_if<luil::clipboard_data_copy_request>(&*request) };
+    REQUIRE(copy != nullptr);
+    REQUIRE(copy->html.empty() == false);
+
+    // Ctrl+Insert도 같은 서식 복사이고, Ctrl+V와 Shift+Insert는 표식을 단 읽기다.
+    REQUIRE(deliver_rich_keys(page, controller.process(rich_chord(luil::key_code::insert, true, false))) == false);
+    request = page.take_clipboard_request();
+    REQUIRE(request.has_value());
+    REQUIRE(std::holds_alternative<luil::clipboard_data_copy_request>(*request));
+    // Shift가 함께 서도 칸이 넘기는 키이고 처리기가 같은 복사로 받는다. 버리면 이 키가 어디에도 닿지 않는다.
+    REQUIRE(deliver_rich_keys(page, controller.process(rich_chord(luil::key_code::insert, true, true))) == false);
+    request = page.take_clipboard_request();
+    REQUIRE(request.has_value());
+    REQUIRE(std::holds_alternative<luil::clipboard_data_copy_request>(*request));
+    for (const luil::key_pressed_event& paste : { rich_chord(luil::key_code::key_v, true, false), rich_chord(luil::key_code::insert, false, true) })
+    {
+        REQUIRE(deliver_rich_keys(page, controller.process(paste)) == false);
+        request = page.take_clipboard_request();
+        REQUIRE(request.has_value());
+        const auto* const read { std::get_if<luil::clipboard_data_paste_request>(&*request) };
+        REQUIRE(read != nullptr);
+        REQUIRE(read->tag == demo::rich_text_clipboard_tag);
+    }
+}
+
+namespace {
+    const luil::ui_element_id date_field_id { luil::ui_element_kind::date_field, u8"popups/date-field" };
+
+    [[nodiscard]] std::chrono::year_month_day demo_date(const int year, const unsigned month, const unsigned day)
+    {
+        return { std::chrono::year { year }, std::chrono::month { month }, std::chrono::day { day } };
+    }
+
+    [[nodiscard]] std::optional<luil::ui_popup> date_popup_of(const demo::popups_page& page)
+    {
+        for (luil::ui_popup& popup : page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }))
+            if (popup.id == u8"date-popup")
+                return std::move(popup);
+        return std::nullopt;
+    }
+
+    // 액션 여럿을 차례로 페이지에 전한다 (커서가 아닌 날의 클릭은 커서 다음 고르기다).
+    template<typename Page>
+    void deliver_all(Page& page, const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            deliver_action(page, action);
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> click_of(const luil::ui_element& element)
+    {
+        REQUIRE(element.action(luil::ui_trigger::left_click) != nullptr);
+        return (*element.action(luil::ui_trigger::left_click))({ element.id() });
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> grid_key(const luil::ui_tree& tree, const std::u8string& owner, const luil::key_code code)
+    {
+        const luil::ui_element* const grid { tree.find({ luil::ui_element_kind::calendar_grid, owner }) };
+        REQUIRE(grid != nullptr);
+        REQUIRE(grid->key_handler_of() != nullptr);
+        luil::key_pressed_event event {};
+        event.key = code;
+        const std::optional<std::vector<luil::input_action>> actions { (*grid->key_handler_of())(event) };
+        REQUIRE(actions.has_value());
+        return *actions;
+    }
+}
+
+TEST_CASE("The date field opens a calendar popup under it and asks to focus the cursor day", "[demo][popups][date-picker]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 3일");
+    const luil::ui_element* const field { tree.find(date_field_id) };
+    REQUIRE(field != nullptr);
+    REQUIRE(field->accessibility().name == u8"마감 날짜");
+    REQUIRE(field->accessibility().value == u8"2026년 11월 3일");
+    REQUIRE(field->accessibility().expanded == false);
+
+    // 누르면 여는 메시지이고, 열면 popup 표면의 커서 날(고른 날)로 초점을 옮기는 요청이 실린다.
+    deliver_action(page, first_action((*field->action(luil::ui_trigger::left_click))({ field->id() })));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface == u8"date-popup");
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 11, 3)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 열림 · 2026년 11월 3일");
+    REQUIRE(tree.find(date_field_id)->accessibility().expanded == true);
+    const luil::rect_f bounds { tree.find(date_field_id)->bounds() };
+    const std::optional<luil::ui_popup> popup { date_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(popup->x == bounds.x);
+    REQUIRE(popup->y == bounds.y + bounds.height + 2.0f);
+    const luil::ui_element* const cursor { popup->tree->find(focus->target) };
+    REQUIRE(cursor != nullptr);
+    REQUIRE(cursor->focusable());
+    REQUIRE(cursor->accessibility().selected == true);
+    // 한 번에 하나만 뜬다.
+    REQUIRE(page.make_popups(1.0f, { 0.0f, 0.0f, 800.0f, 2000.0f }).size() == 1u);
+
+    // 글 칸이 없어 창 이동에도 닫는다. 초점은 옮기지 않는다.
+    deliver_action(page, popup->dismiss(luil::popup_dismiss_reason::surface_moved));
+    REQUIRE(date_popup_of(page).has_value() == false);
+    REQUIRE(page.make_focus_request()->id == focus->id);
+
+    // 다시 열고 Esc로 닫으면 칸으로 돌아오는 초점 요청을 한 번 더 싣는다. 값은 그대로다.
+    send(page, demo::date_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    const std::uint64_t reopened { page.make_focus_request()->id };
+    REQUIRE(reopened == focus->id + 1u);
+    deliver_action(page, date_popup_of(page)->dismiss(luil::popup_dismiss_reason::escape_key));
+    const std::optional<luil::focus_request> back { page.make_focus_request() };
+    REQUIRE(back->id == reopened + 1u);
+    REQUIRE(back->surface.empty());
+    REQUIRE(back->target == date_field_id);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 3일");
+}
+
+TEST_CASE("The popup cursor moves with the focus, the month buttons keep it and choosing a day closes it", "[demo][popups][date-picker]")
+{
+    demo::popups_page page {};
+    send(page, demo::date_field_intent { true });
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    std::optional<luil::ui_popup> popup { date_popup_of(page) };
+    REQUIRE(popup.has_value());
+
+    // 화살표는 커서를 옮기고 그 날로 초점 요청을 싣는다. 새 popup에서 그 날이 Tab 자리다.
+    const std::uint64_t opened { page.make_focus_request()->id };
+    deliver_all(page, grid_key(*popup->tree, u8"popups/date", luil::key_code::arrow_right));
+    std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus->id == opened + 1u);
+    REQUIRE(focus->surface == u8"date-popup");
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 11, 4)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    popup = date_popup_of(page);
+    REQUIRE(popup->tree->find(focus->target)->tab_stop());
+
+    // 다음 달 단추는 커서만 옮긴다. 초점 요청이 없어 초점이 단추에 남는다.
+    const luil::ui_element* const next { popup->tree->find({ luil::ui_element_kind::calendar_nav, color_part(u8"popups/date", u8"next") }) };
+    REQUIRE(next != nullptr);
+    deliver_all(page, click_of(*next));
+    REQUIRE(page.make_focus_request()->id == focus->id);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    popup = date_popup_of(page);
+    REQUIRE(popup->tree->find({ luil::ui_element_kind::calendar_grid, u8"popups/date" })->accessibility().name == u8"2026년 12월");
+
+    // 커서가 아닌 날을 누르면 커서를 옮긴 뒤 고른다. 고르면 값이 바뀌고 닫히고 칸으로 초점이 돌아온다.
+    const luil::ui_element* const day { popup->tree->find(luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 12, 18))) };
+    REQUIRE(day != nullptr);
+    deliver_all(page, click_of(*day));
+    focus = page.make_focus_request();
+    REQUIRE(focus->surface.empty());
+    REQUIRE(focus->target == date_field_id);
+    REQUIRE(date_popup_of(page).has_value() == false);
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 12월 18일");
+    REQUIRE(tree.find(date_field_id)->accessibility().value == u8"2026년 12월 18일");
+
+    // 다시 열면 커서가 고른 날에서 시작한다. 다른 칸을 열면 날짜 칸 popup은 닫힌다.
+    send(page, demo::date_field_intent { true });
+    REQUIRE(page.make_focus_request()->target == luil::calendar_element::day_id(u8"popups/date", demo_date(2026, 12, 18)));
+    send(page, demo::field_menu_intent { u8"save", true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 12월 18일");
+    REQUIRE(date_popup_of(page).has_value() == false);
+}
+
+TEST_CASE("The OS first day is the shell's value and only the check puts it in the calendars", "[demo][popups][date-picker][i18n]")
+{
+    demo::popups_page page {};
+    const auto first_cell = [](const luil::ui_tree& tree, const std::u8string& owner) {
+        const luil::ui_element* const grid { tree.find({ luil::ui_element_kind::calendar_grid, owner }) };
+        REQUIRE(grid != nullptr);
+        return grid->children().front()->accessibility().name;
+    };
+    const luil::ui_element_id check { luil::ui_element_kind::check, u8"date-os-first-day" };
+
+    // 기본은 꺼져 일요일이다. 셸이 값을 넣어도 체크를 켜기 전에는 그대로다.
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 일요일 · 기본");
+    REQUIRE(tree.find(check)->accessibility().name == u8"OS 첫 요일");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"일요일") != std::u8string::npos);
+    send(page, demo::date_os_first_day_intent { std::chrono::Monday });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 일요일 · 기본");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"일요일") != std::u8string::npos);
+
+    // 켜면 두 달력의 첫 칸이 그 요일이다.
+    deliver_all(page, click_of(*tree.find(check)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 월요일 · OS");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"월요일") != std::u8string::npos);
+    send(page, demo::date_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    const std::optional<luil::ui_popup> popup { date_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(first_cell(*popup->tree, u8"popups/date").find(u8"월요일") != std::u8string::npos);
+    send(page, demo::date_field_intent { false });
+
+    // OS가 답하지 않으면 일요일로 서고 그 사실을 적는다.
+    send(page, demo::date_os_first_day_intent {});
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 일요일 · OS가 답하지 않음");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"일요일") != std::u8string::npos);
+}
+
+TEST_CASE("Clearing the date field empties its value so the placeholder can show", "[demo][popups][date-picker][i18n]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(tree.find(date_field_id)->accessibility().value == u8"2026년 11월 3일");
+    REQUIRE(tree.find({ demo::kind_layout, u8"popups/date-clear" }) != nullptr);
+    send(page, demo::date_clear_intent {});
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(tree.find(date_field_id)->accessibility().value.empty());
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 없음");
+}
+
+TEST_CASE("The gallery gives every element its own id", "[demo][gallery][i18n]")
+{
+    // 선택 항목은 값이 곧 id다. 언어 묶음의 값(system·ko·en)이 다른 묶음과 겹치면 뒤에 등록한 칸이 눌리지 않는다.
+    demo::gallery_page page {};
+    const luil::ui_tree tree { arranged(page.build_controls()) };
+    REQUIRE(tree.duplicate_ids().empty());
+}
+
+TEST_CASE("The gallery draws the library language it did not set itself", "[demo][gallery][i18n]")
+{
+    // 페이지는 전역 언어를 건드리지 않는다. 언어 칸을 골라도 라이브러리 언어를 잇는 일은 셸의 몫이다.
+    const std::optional<std::vector<std::u8string>> before { luil::text_languages() };
+    demo::gallery_page page {};
+    const luil::ui_tree tree { arranged(page.build_controls()) };
+    REQUIRE(label_text(tree, u8"gallery/language-state").starts_with(u8"기본 문구 선호: "));
+    REQUIRE(page.handle(luil::app_message { demo::gallery_choice_intent { u8"en", u8"language" } }));
+    REQUIRE(luil::text_languages() == before);
+}
+
+TEST_CASE("The inline calendar reads its chosen day and cursor back and blocks the weekend", "[demo][popups][date-picker]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"popups/calendar-state") == u8"고른 날: 2026-11-03 · 커서: 2026-11-10");
+    const luil::ui_element* const calendar { tree.find({ luil::ui_element_kind::calendar, u8"popups/calendar" }) };
+    REQUIRE(calendar != nullptr);
+    REQUIRE(calendar->accessibility().name == u8"달력");
+    const auto inline_day = [&tree](const unsigned month, const unsigned day) {
+        const luil::ui_element* const found { tree.find(luil::calendar_element::day_id(u8"popups/calendar", demo_date(2026, month, day))) };
+        REQUIRE(found != nullptr);
+        return found;
+    };
+    REQUIRE(inline_day(11, 3)->accessibility().name == u8"2026년 11월 3일 화요일, 오늘");
+    REQUIRE(inline_day(11, 7)->accessibility().name == u8"2026년 11월 7일 토요일, 고를 수 없음");
+    REQUIRE(inline_day(11, 7)->action(luil::ui_trigger::left_click) == nullptr);
+    REQUIRE(inline_day(11, 10)->tab_stop());
+
+    // 키는 인라인 달력의 커서를 옮기고 주 창의 그 날로 초점을 옮긴다.
+    deliver_all(page, grid_key(tree, u8"popups/calendar", luil::key_code::arrow_down));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface.empty());
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"popups/calendar", demo_date(2026, 11, 17)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/calendar-state") == u8"고른 날: 2026-11-03 · 커서: 2026-11-17");
+
+    // 평일을 누르면 커서와 고른 날이 그 날이다. 범위(오늘 뒤 60일) 끝에서는 멈춘다.
+    deliver_all(page, click_of(*inline_day(11, 12)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"popups/calendar-state") == u8"고른 날: 2026-11-12 · 커서: 2026-11-12");
+    REQUIRE(inline_day(11, 12)->accessibility().selected == true);
+    send(page, demo::date_move_intent { u8"popups/calendar", demo_date(2027, 1, 2) });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(grid_key(tree, u8"popups/calendar", luil::key_code::arrow_right).empty());
+}
+
+namespace {
+    const luil::ui_element_id tip_root_id { luil::ui_element_kind::teaching_tip, u8"toasts/tip" };
+    const luil::ui_element_id tip_open_modal_id { demo::kind_toast_trigger, u8"toasts/tip-open-modal" };
+    const luil::ui_element_id tip_open_modeless_id { demo::kind_toast_trigger, u8"toasts/tip-open-modeless" };
+
+    // 이번 build의 가지를 살려 둔 채 오버레이를 짓고 창 전체로 배치한 tree다. 풍선이 없으면 빈 root다.
+    [[nodiscard]] luil::ui_tree tip_overlay(demo::toasts_page& page, const float height = 2000.0f)
+    {
+        auto overlay { page.make_overlay() };
+        if (overlay == nullptr)
+            overlay = std::make_unique<luil::root_element>();
+        return luil::make_arranged_tree(std::move(overlay), { 0.0f, 0.0f, 800.0f, height }, 1.0f);
+    }
+
+    // 풍선 tree에 선 단추나 root의 액션 메시지를 페이지에 넘긴다.
+    void run(demo::toasts_page& page, const luil::ui_action* const action, const luil::ui_element_id& id)
+    {
+        REQUIRE(action != nullptr);
+        const luil::input_action pressed { first_action((*action)(luil::ui_action_context { id, 0.0f, 0.0f })) };
+        REQUIRE(page.handle(std::get<luil::app_message>(pressed)));
+    }
+
+    [[nodiscard]] std::u8string tip_state(const luil::ui_tree& tree)
+    {
+        return label_text(tree, u8"toasts/tip-state");
+    }
+}
+
+TEST_CASE("The toasts page opens a modal teaching tip under the new feature button and reads its state", "[demo][toasts][teaching-tip]")
+{
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    REQUIRE(tree.find(demo::tip_target_id()) != nullptr);
+    REQUIRE(page.make_overlay() == nullptr);
+
+    press(page, tree, tip_open_modal_id);
+    REQUIRE(page.tip_open());
+    tree = toasts_tree(page);
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        const luil::ui_element* const tip { overlay.find(tip_root_id) };
+        REQUIRE(tip != nullptr);
+        REQUIRE(tip->accessibility().role == luil::access_role::dialog);
+        REQUIRE(tip->focus_return() == tip_open_modal_id);
+        REQUIRE(overlay.focus_trap() == tip);
+        // 풍선은 대상 아래에 선다.
+        const luil::rect_f target { tree.find(demo::tip_target_id())->bounds() };
+        const luil::rect_f body { overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"toasts/tip" })->bounds() };
+        REQUIRE(body.y >= target.y + target.height);
+        // 처음 지은 label은 대상을 찾기 전의 것이라 한 frame을 더 청한다.
+        REQUIRE(page.next_expiry().has_value());
+    }
+    tree = toasts_tree(page);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 없음");
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        REQUIRE(page.next_expiry().has_value() == false);
+        // 덮개는 초점 요청을 내지 않는다. 가둠의 진입과 복귀가 옮긴다.
+        REQUIRE(page.make_focus_request().has_value() == false);
+        // Esc는 가둠의 dismiss다.
+        run(page, overlay.find(tip_root_id)->dismiss_action(), tip_root_id);
+    }
+    tree = toasts_tree(page);
+    REQUIRE(page.tip_open() == false);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: Esc");
+    REQUIRE(page.make_overlay() == nullptr);
+
+    // 덮개 누름과 행동 단추도 닫는다. 늦게 온 닫기는 기록을 덮지 않는다.
+    press(page, tree, tip_open_modal_id);
+    tree = toasts_tree(page);
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        const luil::ui_element_id scrim { luil::ui_element_kind::teaching_tip_scrim, u8"toasts/tip" };
+        run(page, overlay.find(scrim)->action(luil::ui_trigger::left_click), scrim);
+        tree = toasts_tree(page);
+        REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 바깥 누름");
+        const luil::ui_element_id primary { luil::teaching_tip_element::primary_id(demo::tip_owner) };
+        run(page, overlay.find(primary)->action(luil::ui_trigger::left_click), primary);
+    }
+    tree = toasts_tree(page);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 바깥 누름");
+}
+
+TEST_CASE("A modeless teaching tip on the toasts page moves the focus to primary and back to its opener", "[demo][toasts][teaching-tip]")
+{
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    press(page, tree, tip_open_modeless_id);
+    const std::optional<luil::focus_request> opened { page.make_focus_request() };
+    REQUIRE(opened.has_value());
+    REQUIRE(opened->target == luil::teaching_tip_element::primary_id(demo::tip_owner));
+    tree = toasts_tree(page);
+    {
+        const luil::ui_tree overlay { tip_overlay(page) };
+        const luil::ui_element* const tip { overlay.find(tip_root_id) };
+        REQUIRE(tip->accessibility().role == luil::access_role::pane);
+        REQUIRE(overlay.focus_trap() == nullptr);
+        REQUIRE(tip->dismiss_action() == nullptr);
+        REQUIRE(overlay.find({ luil::ui_element_kind::teaching_tip_scrim, u8"toasts/tip" }) == nullptr);
+        const luil::ui_element_id close { luil::teaching_tip_element::close_id(demo::tip_owner) };
+        run(page, overlay.find(close)->action(luil::ui_trigger::left_click), close);
+    }
+    // 닫으면 연 단추로 돌아간다. 새 번호의 요청이다.
+    const std::optional<luil::focus_request> closed { page.make_focus_request() };
+    REQUIRE(closed.has_value());
+    REQUIRE(closed->id > opened->id);
+    REQUIRE(closed->target == tip_open_modeless_id);
+    tree = toasts_tree(page);
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 닫기 단추");
+}
+
+TEST_CASE("Scrolling the new feature button away leaves the teaching tip without a target", "[demo][toasts][teaching-tip]")
+{
+    demo::toasts_page page {};
+    const auto short_tree = [&page] { return arranged(page.build(800.0f, 400.0f, 1.0f), 800.0f, 400.0f); };
+    auto tree { short_tree() };
+    press(page, tree, tip_open_modal_id);
+    tree = short_tree();
+    static_cast<void>(tip_overlay(page, 400.0f));
+    tree = short_tree();
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 없음");
+    static_cast<void>(tip_overlay(page, 400.0f));
+
+    // 흘려 대상을 창 밖으로 내보내면 그 frame의 풍선은 꼬리 없이 가운데에 서고, 다음 frame의 label이 그것을 적는다.
+    send(page, demo::toasts_scroll_intent { 1000.0f });
+    tree = short_tree();
+    {
+        const luil::ui_tree overlay { tip_overlay(page, 400.0f) };
+        REQUIRE(page.next_expiry().has_value());
+        const luil::rect_f body { overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"toasts/tip" })->bounds() };
+        REQUIRE(body.x + body.width / 2.0f == Catch::Approx(400.0f));
+    }
+    tree = short_tree();
+    REQUIRE(tip_state(tree) == u8"안내 풍선: 열림(덮개) · 방향: 대상 없음 · 마지막 닫힘: 없음");
+
+    // 페이지를 떠나며 셸이 닫으면 풍선은 서지 않는다.
+    page.close_tip();
+    REQUIRE(page.make_overlay() == nullptr);
+}
+
+TEST_CASE("Leaving the toasts page closes the teaching tip before the departing screen is built", "[demo][toasts][teaching-tip]")
+{
+    // 셸의 차례다 (demo_main.cpp `navigate_intent`). 풍선을 닫고, 화면 전환의 떠나는 화면을 짓고, 다음 frame은 다른 페이지다.
+    demo::toasts_page page {};
+    auto tree { toasts_tree(page) };
+    press(page, tree, tip_open_modeless_id);
+    const std::optional<luil::focus_request> opened { page.make_focus_request() };
+    REQUIRE(opened.has_value());
+    tree = toasts_tree(page);
+    static_cast<void>(tip_overlay(page));
+
+    page.close_tip();
+    const luil::ui_tree departing { toasts_tree(page) };
+    REQUIRE(tip_state(departing) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    // 떠나는 화면을 지은 가지는 다음 frame의 오버레이가 쓰지 않고 잊는다. 연 단추로 돌아가는 초점 요청도 새로 내지 않는다.
+    REQUIRE(page.make_overlay() == nullptr);
+    REQUIRE(page.next_expiry().has_value() == false);
+    REQUIRE(page.make_focus_request()->id == opened->id);
 }

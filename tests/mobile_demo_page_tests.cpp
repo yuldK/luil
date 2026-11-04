@@ -1,14 +1,34 @@
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
+#include "demo/readonly_undo_keys.h"
+#include "demo/rich_text_sample.h"
+#include "mobile_demo/basics_page.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
+#include "mobile_demo/ink_page.h"
+#include "mobile_demo/inspector_page.h"
+#include "mobile_demo/lists_page.h"
 #include "mobile_demo/popups_page.h"
 #include "mobile_demo/sheets_page.h"
 #include "mobile_demo/smb_page.h"
+#include "mobile_demo/theme_page.h"
 #include "mobile_demo/toasts_page.h"
 #include "mobile_demo/zoom_page.h"
+#include "sample_image_bytes.h"
+#include "text_languages_guard.h"
 
+#include "luil/text/string_table.h"
+#include "luil/ui/calendar_element.h"
+#include "luil/ui/color_picker_element.h"
+#include "luil/ui/message_box.h"
+#include "luil/ui/rating_element.h"
+#include "luil/ui/root_element.h"
+#include "luil/ui/scroll_view_element.h"
 #include "luil/ui/split_button_element.h"
+#include "luil/ui/strip_element.h"
+#include "luil/ui/teaching_tip_element.h"
+#include "luil/ui/text_area_element.h"
+#include "luil/ui/ui_inspect.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_platform.h"
 
@@ -16,6 +36,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,6 +45,8 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+// 시험 실행 파일에 실은 assets/style.json이다 (tests/CMakeLists.txt). 스타일 파일 견본의 바탕으로 준다.
 
 namespace {
     using time_point = std::chrono::steady_clock::time_point;
@@ -180,6 +204,59 @@ namespace {
         return deliver_actions(page, controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }));
     }
 
+    // 400x800 창에서 조립해 배치한 목록 페이지다 (배율 1).
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> lists_tree(mobile_demo::lists_page& page)
+    {
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(page.build(400.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 400.0f, 800.0f }, 1.0f));
+    }
+
+    // UIA가 되읽는 이름이 화면의 글과 같다.
+    [[nodiscard]] std::u8string lists_text(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const label { tree->find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] bool lists_button_enabled(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        return button->enabled();
+    }
+
+    // 순서 목록의 항목이 위에서부터 서는 높이다. 행은 모두 tree에 담기므로 순서가 높이로 읽힌다.
+    [[nodiscard]] float list_row_top(const luil::ui_tree& tree, const int number)
+    {
+        const auto* const row { tree.find({ luil::ui_element_kind::list_row, u8"항목 " + mobile_demo::to_u8(number) }) };
+        REQUIRE(row != nullptr);
+        return row->bounds().y;
+    }
+
+    // 단추를 눌러 나온 메시지를 페이지에 돌려준다. 실제 입력 경로를 그대로 탄다. 돌려준 수를 돌려준다.
+    int press_list_button(mobile_demo::lists_page& page, const std::u8string& owner)
+    {
+        const auto tree { lists_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        int delivered { 0 };
+        for (const luil::input_action& action : controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } }))
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
+    }
+
     // 요청을 기록하고 사람이 고른 차례로 답한다. 실제 페이지의 send·cancel·응답 처리 경로를 그대로 쓴다.
     struct smb_fixture
     {
@@ -259,6 +336,157 @@ TEST_CASE("The device page states whether the system reduces motion", "[mobile-d
     }
 }
 
+TEST_CASE("The device page draws the OS values the shell gives it", "[mobile-demo][i18n]")
+{
+    mobile_demo::device_page page {};
+    const auto text = [&page](const std::u8string& owner) {
+        const auto tree { device_tree(page, false) };
+        const auto* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    };
+
+    // 셸이 넣기 전이다. 기기마다 다른 값은 test가 넣는 값으로만 단언한다.
+    REQUIRE(text(u8"device-first-weekday") == u8"주 첫 요일: 아직 읽지 않음");
+    REQUIRE(text(u8"device-ui-language") == u8"표시 언어: 아직 읽지 않음");
+    REQUIRE(text(u8"device-text-language").starts_with(u8"기본 문구 선호: "));
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::device_locale_intent { std::chrono::Monday, { u8"ko-KR", u8"en-US" } } }));
+    REQUIRE(text(u8"device-first-weekday") == u8"주 첫 요일: 월요일");
+    REQUIRE(text(u8"device-ui-language") == u8"표시 언어: ko-KR, en-US");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::device_locale_intent {} }));
+    REQUIRE(text(u8"device-first-weekday") == u8"주 첫 요일: OS가 답하지 않음");
+    REQUIRE(text(u8"device-ui-language") == u8"표시 언어: OS가 답하지 않음");
+}
+
+TEST_CASE("The device page keeps the chosen language cell and leaves the library language to the shell", "[mobile-demo][i18n]")
+{
+    const std::optional<std::vector<std::u8string>> before { luil::text_languages() };
+    mobile_demo::device_page page {};
+    const auto selected = [&page](const std::u8string& key) {
+        const auto tree { device_tree(page, false) };
+        const auto* const group { tree.find({ luil::ui_element_kind::choice_group, u8"device-language" }) };
+        REQUIRE(group != nullptr);
+        for (const auto& child : group->children())
+        {
+            if (child->accessibility().selected == true)
+                return child->id().owner == key;
+        }
+        return false;
+    };
+
+    REQUIRE(selected(u8"device-language-system"));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::device_language_intent { u8"en" } }));
+    REQUIRE(selected(u8"device-language-en"));
+    REQUIRE(luil::text_languages() == before);
+}
+
+TEST_CASE("A new device page finds the language cell from the library language", "[mobile-demo][i18n]")
+{
+    // 라이브러리 언어는 프로세스에 남고 페이지는 Activity마다 새로 선다. 칸이 실제 언어와 어긋나면 안 된다.
+    const auto cell = [] {
+        mobile_demo::device_page page {};
+        const auto tree { device_tree(page, false) };
+        const auto* const group { tree.find({ luil::ui_element_kind::choice_group, u8"device-language" }) };
+        REQUIRE(group != nullptr);
+        for (const auto& child : group->children())
+        {
+            if (child->accessibility().selected == true)
+                return child->id().owner;
+        }
+        return std::u8string {};
+    };
+    const luil_test::text_languages_guard guard {};
+
+    luil::reset_text_languages();
+    REQUIRE(cell() == u8"device-language-system");
+    guard.use(u8"en");
+    REQUIRE(cell() == u8"device-language-en");
+    guard.use(u8"ko");
+    REQUIRE(cell() == u8"device-language-ko");
+
+    // OS 목록은 지역이 붙어 칸이 정한 값과 갈린다. 시스템 칸에서 온 목록으로 읽는다.
+    const std::vector<std::u8string> from_system { u8"ko-KR", u8"en-US" };
+    luil::set_text_languages(from_system);
+    REQUIRE(cell() == u8"device-language-system");
+    const std::vector<std::u8string> one_from_system { u8"en-US" };
+    luil::set_text_languages(one_from_system);
+    REQUIRE(cell() == u8"device-language-system");
+    luil::set_text_languages({});
+    REQUIRE(cell() == u8"device-language-system");
+}
+
+TEST_CASE("The device page gives every choice its own id and each cell picks its own group", "[mobile-demo][i18n]")
+{
+    // 능력이 있어야 서는 묶음까지 함께 본다. 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform platform { previous };
+    platform.capabilities.screen_orientation = true;
+    platform.capabilities.system_bars = true;
+    luil::set_ui_platform(platform);
+    mobile_demo::device_page page {};
+    const auto tree { device_tree(page, false) };
+    const bool unique { tree.duplicate_ids().empty() };
+    const auto press = [&tree, &page](const std::u8string& owner) {
+        const auto* const cell { tree.find({ luil::ui_element_kind::choice, owner }) };
+        REQUIRE(cell != nullptr);
+        const auto actions { (*cell->action(luil::ui_trigger::left_click))({ cell->id() }) };
+        REQUIRE(actions.size() == 1u);
+        deliver(page, std::get<luil::app_message>(actions.front()));
+    };
+    luil::set_ui_platform(previous);
+    REQUIRE(unique);
+
+    // 방향의 시스템 칸은 방향을 고른다. 언어 칸이 먼저 등록돼 그 자리를 가로채면 방향이 그대로였다.
+    press(u8"current");
+    REQUIRE(page.request().orientation == luil::screen_orientation::current);
+    press(u8"system");
+    REQUIRE(page.request().orientation == luil::screen_orientation::system);
+    // 언어의 시스템 칸은 방향을 건드리지 않는다.
+    press(u8"current");
+    press(u8"device-language-system");
+    REQUIRE(page.request().orientation == luil::screen_orientation::current);
+}
+
+TEST_CASE("The device page switches page transitions and states whether one is turning", "[mobile-demo][page-transition]")
+{
+    mobile_demo::device_page page {};
+    REQUIRE(page.page_transition_enabled());
+    for (const bool turning : { false, true })
+    {
+        CAPTURE(turning);
+        page.set_page_transition_turning(turning);
+        const auto tree { device_tree(page, false) };
+        const auto* const toggle { tree.find({ luil::ui_element_kind::check, u8"page-transition" }) };
+        REQUIRE(toggle != nullptr);
+        REQUIRE(toggle->accessibility().name == u8"페이지 전환");
+        REQUIRE(toggle->accessibility().checked == true);
+        const auto* const state { tree.find({ mobile_demo::kind_text, u8"page-transition-state" }) };
+        REQUIRE(state != nullptr);
+        // UIA가 되읽는 이름이 화면의 글과 같다.
+        REQUIRE(state->accessibility().name == (turning ? u8"페이지 전환: 켜짐 · 도는 중" : u8"페이지 전환: 켜짐 · 멈춤"));
+        // 움직임 줄이기 칸 아래에 선다.
+        REQUIRE(state->bounds().y > tree.find({ mobile_demo::kind_layout, u8"motion-spinner" })->bounds().y);
+    }
+
+    // 스위치를 누르면 끈다. 끈 동안은 도는 중이라도 "꺼짐"이다.
+    {
+        const auto tree { device_tree(page, false) };
+        const auto* const toggle { tree.find({ luil::ui_element_kind::check, u8"page-transition" }) };
+        const std::vector<luil::input_action> actions { (*toggle->action(luil::ui_trigger::left_click))({ toggle->id() }) };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(page.handle(*message));
+    }
+    REQUIRE(page.page_transition_enabled() == false);
+    const auto off { device_tree(page, false) };
+    REQUIRE(off.find({ luil::ui_element_kind::check, u8"page-transition" })->accessibility().checked == false);
+    REQUIRE(off.find({ mobile_demo::kind_text, u8"page-transition-state" })->accessibility().name == u8"페이지 전환: 꺼짐");
+    REQUIRE(page.handle(luil::app_message { mobile_demo::page_transition_toggle_intent { true } }));
+    REQUIRE(page.page_transition_enabled());
+}
+
 TEST_CASE("The device page says whether the platform has a taskbar", "[mobile-demo][taskbar]")
 {
     // 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
@@ -289,6 +517,67 @@ TEST_CASE("The device page says whether the platform has a taskbar", "[mobile-de
     }
     luil::set_ui_platform(previous);
 }
+
+TEST_CASE("The device page says whether the platform has a tray icon", "[mobile-demo][tray]")
+{
+    // 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    mobile_demo::device_page page {};
+    for (const bool capable : { false, true })
+    {
+        CAPTURE(capable);
+        luil::ui_platform platform { previous };
+        platform.capabilities.tray = capable;
+        luil::set_ui_platform(platform);
+        const auto tree { device_tree(page, false) };
+        REQUIRE(tree.find({ mobile_demo::kind_text, u8"tray-heading" }) != nullptr);
+        const auto* const none { tree.find({ mobile_demo::kind_text, u8"tray-none" }) };
+        const auto* const note { tree.find({ mobile_demo::kind_text, u8"tray-note" }) };
+        if (capable)
+        {
+            REQUIRE(none == nullptr);
+            REQUIRE(note != nullptr);
+        }
+        else
+        {
+            REQUIRE(note == nullptr);
+            REQUIRE(none != nullptr);
+            REQUIRE(none->accessibility().name == u8"이 플랫폼에는 알림 영역 아이콘이 없다. 알림은 OS 알림이 맡는다.");
+        }
+    }
+    luil::set_ui_platform(previous);
+}
+
+TEST_CASE("The device page says whether the platform has global hotkeys", "[mobile-demo][hotkey]")
+{
+    // 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    mobile_demo::device_page page {};
+    for (const bool capable : { false, true })
+    {
+        CAPTURE(capable);
+        luil::ui_platform platform { previous };
+        platform.capabilities.global_hotkeys = capable;
+        luil::set_ui_platform(platform);
+        const auto tree { device_tree(page, false) };
+        REQUIRE(tree.find({ mobile_demo::kind_text, u8"hotkeys-heading" }) != nullptr);
+        const auto* const none { tree.find({ mobile_demo::kind_text, u8"hotkeys-none" }) };
+        const auto* const note { tree.find({ mobile_demo::kind_text, u8"hotkeys-note" }) };
+        if (capable)
+        {
+            REQUIRE(none == nullptr);
+            REQUIRE(note != nullptr);
+        }
+        else
+        {
+            REQUIRE(note == nullptr);
+            REQUIRE(none != nullptr);
+            REQUIRE(none->accessibility().name == u8"이 플랫폼에는 전역 단축키가 없다.");
+        }
+    }
+    luil::set_ui_platform(previous);
+}
+
 
 TEST_CASE("The demo clears an interrupted adaptive sheet drag while preserving its stop and list", "[ui][sheet][mobile-demo]")
 {
@@ -1069,6 +1358,94 @@ TEST_CASE("Turning to another zoom page stands the page upright", "[mobile-demo]
 }
 
 namespace {
+    // UIA가 되읽는 줌 단추의 이름이다. 단추의 글이 곧 접근 이름이다.
+    [[nodiscard]] std::u8string zoom_button_name(mobile_demo::zoom_page& page, const luil::ui_element_kind kind)
+    {
+        const auto tree { zoom_tree(page) };
+        const auto* const button { tree->find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+}
+
+TEST_CASE("The zoom page names its buttons in the default language until the button switches them to English", "[mobile-demo][zoom][default-text]")
+{
+    mobile_demo::zoom_page page {};
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"확대");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"맞춤");
+    REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+
+    // 바꾸는 단추는 반대 언어를 절대 값으로 보낸다.
+    REQUIRE(press_zoom_button(page, u8"zoom-label-toggle") == 1);
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"Out");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_increase) == u8"In");
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"Fit");
+    REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: English");
+
+    // 같은 메시지가 거듭 와도 결과가 같다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::zoom_labels_intent { true } }));
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_fit) == u8"Fit");
+
+    REQUIRE(press_zoom_button(page, u8"zoom-label-toggle") == 1);
+    REQUIRE(zoom_button_name(page, luil::ui_element_kind::zoom_decrease) == u8"축소");
+    REQUIRE(zoom_text(page, u8"zoom-label-language") == u8"줌 단추 글: 기본");
+}
+
+TEST_CASE("The language row of the zoom page fits the 400dp window below the rotation row", "[mobile-demo][zoom][default-text]")
+{
+    mobile_demo::zoom_page page {};
+    const auto tree { zoom_tree(page) };
+    const auto* const rotate { tree->find({ mobile_demo::kind_layout, u8"zoom-rotate-left" }) };
+    const auto* const toggle { tree->find({ mobile_demo::kind_layout, u8"zoom-label-toggle" }) };
+    const auto* const language { tree->find({ mobile_demo::kind_text, u8"zoom-label-language" }) };
+    const auto* const view { tree->find({ luil::ui_element_kind::zoom_view, u8"diagram" }) };
+    REQUIRE(rotate != nullptr);
+    REQUIRE(toggle != nullptr);
+    REQUIRE(language != nullptr);
+    REQUIRE(view != nullptr);
+    // 줄이 늘어도 단추는 창 안에 들고 보기를 가리지 않는다.
+    REQUIRE(toggle->bounds().y >= rotate->bounds().y + rotate->bounds().height);
+    REQUIRE(toggle->bounds().x + toggle->bounds().width <= language->bounds().x);
+    REQUIRE(language->bounds().x + language->bounds().width <= 400.0f);
+    REQUIRE(toggle->bounds().y + toggle->bounds().height <= view->bounds().y);
+}
+
+namespace {
+    // 글꼴이 넓은 쪽을 본뜬 측정기다: 로마자는 글자 크기의 0.6배, 그 밖(한글)은 1배. 이 폭이면 56dp 단추에 글꼴 배율 1.1에서
+    // 일곱 글자쯤 들어, 실기기에서 "Zoom out"이 "Zoom o…"로 잘린 것과 맞는다. 설치 글꼴에 기대지 않아 어느 기기에서나 같다.
+    [[nodiscard]] float wide_sans_width(const std::u8string_view text, const float pixel_size)
+    {
+        float em { 0.0f };
+        for (const char8_t byte : text)
+        {
+            if ((byte & 0xC0u) == 0x80u)
+                continue;
+            em += byte < 0x80u ? 0.6f : 1.0f;
+        }
+        return em * pixel_size;
+    }
+
+    const luil::text_measurer wide_sans_measurer { wide_sans_width };
+}
+
+TEST_CASE("The English zoom button names fit their buttons at a 1.1 font scale", "[mobile-demo][zoom][default-text]")
+{
+    // 줌 단추의 폭은 라이브러리가 정한다(56dp). 영어 글이 길면 "Zoom o…"로 잘리므로 데모는 짧은 글을 쓴다.
+    mobile_demo::zoom_page page {};
+    REQUIRE(page.handle(luil::app_message { mobile_demo::zoom_labels_intent { true } }));
+    const auto tree { zoom_tree(page) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    for (const luil::ui_element_kind kind : { luil::ui_element_kind::zoom_decrease, luil::ui_element_kind::zoom_increase, luil::ui_element_kind::zoom_fit })
+    {
+        const luil::ui_element* const button { tree->find({ kind, u8"diagram" }) };
+        REQUIRE(button != nullptr);
+        const float text_width { measure.text_width(button->accessibility().name, measure.style_metrics().body_font_size) };
+        REQUIRE(text_width * 1.1f <= button->bounds().width);
+    }
+}
+
+namespace {
     // 페이지를 짓고 label 하나의 이름(UIA Name과 같은 글)을 읽는다.
     [[nodiscard]] std::u8string files_label(mobile_demo::files_page& page, const std::u8string& owner)
     {
@@ -1152,6 +1529,9 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
         { mobile_demo::kind_memo_input, mobile_demo::target_memo },
         { mobile_demo::kind_code_input, mobile_demo::target_code },
         { mobile_demo::kind_line_break_input, mobile_demo::target_line_break },
+        { mobile_demo::kind_readonly_input, mobile_demo::target_readonly },
+        { mobile_demo::kind_color_hex_input, mobile_demo::target_color_hex },
+        { mobile_demo::kind_rich_editor_input, mobile_demo::target_rich_editor },
         { mobile_demo::kind_dropdown_search_input, mobile_demo::target_dropdown_search },
         { mobile_demo::kind_smb_address_input, mobile_demo::target_smb_address },
         { mobile_demo::kind_smb_user_input, mobile_demo::target_smb_user },
@@ -1165,4 +1545,1437 @@ TEST_CASE("Every editable field of the mobile demo has a text target", "[mobile-
     }
     // 글이 아닌 element는 편집 대상이 없다.
     REQUIRE(mobile_demo::text_target_of_kind(mobile_demo::kind_text).has_value() == false);
+}
+
+namespace {
+    // 창 전체를 덮는 확인 대화 상자의 tree다 (배율 1, 안전 영역 없음). 대화가 열려 있을 때만 의미가 있다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> basics_overlay(mobile_demo::basics_page& page, const float width = 400.0f, const float height = 800.0f)
+    {
+        auto root { std::make_unique<luil::root_element>() };
+        page.add_overlay(*root, width, height, 1.0f, {});
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, width, height }, 1.0f));
+    }
+
+    // 400dp 창에서 조립해 배치한 기본 페이지에서 읽은 글이다. 화면의 글이 곧 보조 기술이 읽는 이름이다.
+    [[nodiscard]] std::u8string basics_text(mobile_demo::basics_page& page, const luil::ui_element_kind kind, const std::u8string& owner)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
+        const luil::ui_element* const found { tree.find({ kind, owner }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    // 입력 경로가 돌려준 메시지를 페이지에 그대로 전한다. 앱 메시지가 아닌 것은 건너뛴다.
+    void deliver_actions(mobile_demo::basics_page& page, const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(page.handle(*message));
+    }
+
+    // 자리 한가운데를 눌렀다 뗀 입력이 내는 메시지다. 실제 입력 경로를 그대로 탄다.
+    [[nodiscard]] std::vector<luil::input_action> click_element(luil::interaction_controller& controller, const luil::ui_tree& tree, const luil::ui_element_id& id)
+    {
+        const luil::ui_element* const element { tree.find(id) };
+        REQUIRE(element != nullptr);
+        const luil::rect_f box { element->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        return controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 40 } });
+    }
+
+    [[nodiscard]] luil::ui_element_id box_button(const std::u8string_view owner, const std::u8string_view key)
+    {
+        return luil::message_box_button_id(owner, key);
+    }
+
+    [[nodiscard]] luil::rect_f bounds_of(const luil::ui_tree& tree, const luil::ui_element_id& id)
+    {
+        const luil::ui_element* const found { tree.find(id) };
+        REQUIRE(found != nullptr);
+        return found->bounds();
+    }
+
+    [[nodiscard]] std::u8string result_key_of(const luil::input_action& action)
+    {
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        const auto* const result { message->get<mobile_demo::dialog_result_intent>() };
+        REQUIRE(result != nullptr);
+        return result->key;
+    }
+}
+
+TEST_CASE("The mobile reset box opens, reads its state back, and closes with one result from every way", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-state") == u8"대화: 닫힘");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: 없음");
+
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::reset });
+    REQUIRE(page.dialog_open());
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-state") == u8"대화: 열림");
+
+    // 뒤로 가기가 낼 메시지는 Esc가 내는 결과와 같다. 앱이 한 길을 빼먹어 대화가 열린 채 남지 않는다.
+    REQUIRE(result_key_of(page.back_action()) == u8"cancel");
+    {
+        luil::interaction_controller controller {};
+        controller.set_tree(basics_overlay(page));
+        const std::vector<luil::input_action> escaped { controller.process(luil::key_pressed_event { luil::key_code::escape, false, false, false, false, time_point {} }) };
+        REQUIRE(escaped.size() == 1u);
+        REQUIRE(result_key_of(escaped.front()) == u8"cancel");
+    }
+
+    // 뒤로 가기가 낸 메시지로 닫힌다.
+    deliver_actions(page, { page.back_action() });
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: cancel");
+
+    // 초기화 단추는 카운터를 0으로 되돌린다.
+    deliver(page, mobile_demo::increment_intent {});
+    deliver(page, mobile_demo::increment_intent {});
+    REQUIRE(basics_text(page, mobile_demo::kind_counter_label, {}) == u8"누른 횟수: 2");
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::reset });
+    const std::shared_ptr<const luil::ui_tree> tree { basics_overlay(page) };
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    deliver_actions(page, click_element(controller, *tree, box_button(u8"reset", u8"reset")));
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: reset");
+    REQUIRE(basics_text(page, mobile_demo::kind_counter_label, {}) == u8"누른 횟수: 0");
+}
+
+TEST_CASE("The mobile box buttons are finger sized and stand inside the screen margin", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::reset });
+    // 폭이 좁은 휴대폰이다. 자리 폭 320에서 양쪽 여백 16을 남기면 상자 폭은 288이다.
+    const std::shared_ptr<const luil::ui_tree> tree { basics_overlay(page, 320.0f, 640.0f) };
+    const luil::rect_f box { bounds_of(*tree, { luil::ui_element_kind::message_box, u8"reset" }) };
+    REQUIRE(box.x >= 16.0f);
+    REQUIRE(box.x + box.width <= 320.0f - 16.0f);
+    REQUIRE(bounds_of(*tree, box_button(u8"reset", u8"cancel")).height == Catch::Approx(mobile_demo::touch_height));
+    REQUIRE(bounds_of(*tree, box_button(u8"reset", u8"reset")).height == Catch::Approx(mobile_demo::touch_height));
+}
+
+TEST_CASE("The long mobile box stacks its three buttons on a narrow phone and keeps a row on a wide window", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::details });
+    const luil::ui_element_id later { box_button(u8"details", u8"later") };
+    const luil::ui_element_id discard { box_button(u8"details", u8"discard") };
+    const luil::ui_element_id save { box_button(u8"details", u8"ok") };
+
+    // 넓은 창에서는 세 단추가 한 행이다.
+    {
+        const std::shared_ptr<const luil::ui_tree> wide { basics_overlay(page, 480.0f, 800.0f) };
+        REQUIRE(bounds_of(*wide, later).y == Catch::Approx(bounds_of(*wide, save).y));
+        REQUIRE(bounds_of(*wide, later).x < bounds_of(*wide, discard).x);
+        REQUIRE(bounds_of(*wide, discard).x < bounds_of(*wide, save).x);
+    }
+
+    // 좁은 화면에서는 넘쳐서 쌓인다. 순서는 그대로 위에서 아래이고 모두 안쪽 폭 전체다.
+    const std::shared_ptr<const luil::ui_tree> narrow { basics_overlay(page, 320.0f, 800.0f) };
+    const luil::rect_f box { bounds_of(*narrow, { luil::ui_element_kind::message_box, u8"details" }) };
+    const luil::rect_f first { bounds_of(*narrow, later) };
+    const luil::rect_f second { bounds_of(*narrow, discard) };
+    const luil::rect_f third { bounds_of(*narrow, save) };
+    REQUIRE(first.y < second.y);
+    REQUIRE(second.y < third.y);
+    REQUIRE(first.x == Catch::Approx(second.x));
+    REQUIRE(second.x == Catch::Approx(third.x));
+    REQUIRE(first.width == Catch::Approx(box.width - 40.0f));
+    REQUIRE(second.y == Catch::Approx(first.y + mobile_demo::touch_height + 8.0f));
+    REQUIRE(third.y == Catch::Approx(second.y + mobile_demo::touch_height + 8.0f));
+    // 맨 아래 단추 아래가 안쪽 여백이라 상자가 단추를 모두 감싼다.
+    REQUIRE(third.y + third.height + 20.0f == Catch::Approx(box.y + box.height));
+}
+
+TEST_CASE("The long mobile box keeps its check apart from its buttons and closes only on a button", "[mobile-demo][basics][message-box]")
+{
+    mobile_demo::basics_page page {};
+    deliver(page, mobile_demo::dialog_intent { mobile_demo::dialog_kind::details });
+    REQUIRE(page.make_dialog_config().check.has_value());
+    REQUIRE(page.make_dialog_config().check->checked == false);
+    {
+        const std::shared_ptr<const luil::ui_tree> tree { basics_overlay(page) };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        deliver_actions(page, click_element(controller, *tree, luil::message_box_check_id(u8"details")));
+    }
+    REQUIRE(page.dialog_open());
+    REQUIRE(page.make_dialog_config().check->checked);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: 없음");
+
+    // 뒤로 가기는 나중에 다시 묻기(거절)의 key로 닫는다.
+    REQUIRE(result_key_of(page.back_action()) == u8"later");
+    deliver_actions(page, { page.back_action() });
+    REQUIRE(page.dialog_open() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"dialog-result") == u8"마지막 결과: later");
+    // 닫히면 설정이 비어 단추도 없다.
+    REQUIRE(page.make_dialog_config().buttons.empty());
+}
+
+namespace {
+    // 400dp 창에서 조립해 배치한 기본 페이지의 tree다. 높이는 내용이 정한다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> basics_tree(mobile_demo::basics_page& page)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f));
+    }
+
+    [[nodiscard]] const luil::ui_element& rating_in(const luil::ui_tree& tree, const std::u8string& owner)
+    {
+        const luil::ui_element* const rating { tree.find({ luil::ui_element_kind::rating, owner }) };
+        REQUIRE(rating != nullptr);
+        return *rating;
+    }
+
+    // 낸 메시지 가운데 별점 값만 뽑는다.
+    [[nodiscard]] std::vector<float> rating_values_of(const std::vector<luil::input_action>& actions)
+    {
+        std::vector<float> values {};
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                if (const auto* const intent { message->get<mobile_demo::rating_intent>() }; intent != nullptr)
+                    values.push_back(intent->value);
+        return values;
+    }
+
+    [[nodiscard]] luil::pointer_pressed_event touch_press(const float x, const float y, const int milliseconds)
+    {
+        luil::pointer_pressed_event event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { milliseconds } };
+        event.device = luil::pointer_device::touch;
+        return event;
+    }
+
+    [[nodiscard]] luil::pointer_moved_event touch_move(const float x, const float y, const int milliseconds)
+    {
+        luil::pointer_moved_event event { x, y, time_point {} + std::chrono::milliseconds { milliseconds } };
+        event.device = luil::pointer_device::touch;
+        event.in_contact = true;
+        return event;
+    }
+
+    [[nodiscard]] luil::pointer_released_event touch_release(const float x, const float y, const int milliseconds)
+    {
+        luil::pointer_released_event event { x, y, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { milliseconds } };
+        event.device = luil::pointer_device::touch;
+        return event;
+    }
+
+    [[nodiscard]] bool has_rating_scroll(const std::vector<luil::input_action>& actions)
+    {
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr && message->get<mobile_demo::rating_scroll_intent>() != nullptr)
+                return true;
+        return false;
+    }
+}
+
+TEST_CASE("A wrapped note reserves the height of the lines it breaks into", "[mobile-demo][common]")
+{
+    // 한 줄 설명은 좁은 화면에서 끝이 말줄임으로 잘렸다. 줄을 바꾸는 설명은 칸이 바꾼 줄을 모두 담을 높이를 잡는다.
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const std::u8string long_text { u8"alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron" };
+
+    mobile_demo::page_column column { u8"notes", 0.0f };
+    column.wrapped_note(u8"long", long_text, 288.0f, 1.0f, &wide_sans_measurer);
+    column.wrapped_note(u8"short", u8"short", 288.0f, 1.0f, &wide_sans_measurer);
+    mobile_demo::page_content content { column.finish() };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 288.0f, height }, 1.0f) };
+
+    const luil::ui_element* const long_note { tree.find({ mobile_demo::kind_text, u8"long" }) };
+    const luil::ui_element* const short_note { tree.find({ mobile_demo::kind_text, u8"short" }) };
+    REQUIRE(long_note != nullptr);
+    REQUIRE(short_note != nullptr);
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    // 긴 글은 여러 줄이 되고, 칸의 높이가 그 줄들을 모두 담는다.
+    const std::optional<luil::size_f> wrapped { long_note->preferred_size(measure, 288.0f) };
+    REQUIRE(wrapped.has_value());
+    REQUIRE(wrapped->height >= 2.0f * line);
+    REQUIRE(long_note->bounds().height >= wrapped->height);
+    // 한 줄이면 한 줄 설명(`note`)과 같은 높이를 지켜 위아래 간격이 그대로다.
+    REQUIRE(short_note->bounds().height == luil::text_line_height(mobile_demo::note_text_size, mobile_demo::note_line_height - mobile_demo::note_text_size));
+}
+
+TEST_CASE("The long notes of the basics page break lines instead of ending in an ellipsis", "[mobile-demo][basics]")
+{
+    // 폭 320dp 쪽은 어느 글꼴에서나 두 줄 이상이 된다. 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다.
+    mobile_demo::basics_page page {};
+    auto content { page.build(320.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    for (const std::u8string& owner : { std::u8string { u8"rating-title" }, std::u8string { u8"color-title" }, std::u8string { u8"line-break" }, std::u8string { u8"readonly" }, std::u8string { u8"basics-hint" } })
+    {
+        const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(note != nullptr);
+        const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+        REQUIRE(wrapped.has_value());
+        REQUIRE(wrapped->height >= 2.0f * line);
+    }
+}
+
+TEST_CASE("The device page breaks the tray note into lines instead of an ellipsis", "[mobile-demo][tray]")
+{
+    // 실기기 폭 384dp·글꼴 배율 1.1에서 한 줄 설명이 "…알림은 OS 알림이…"로 잘렸다. 폭 320dp 쪽은 어느 글꼴에서나 두 줄 이상이다.
+    // 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다. 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform platform { previous };
+    platform.capabilities.tray = false;
+    luil::set_ui_platform(platform);
+    mobile_demo::device_page page {};
+    const mobile_demo::window_metrics_intent window { .width = 320.0f, .height = 800.0f, .scale = 1.0f };
+    auto content { page.build(320.0f, 1.0f, window) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
+    luil::set_ui_platform(previous);
+
+    const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, u8"tray-none" }) };
+    REQUIRE(note != nullptr);
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+    REQUIRE(wrapped.has_value());
+    REQUIRE(wrapped->height >= 2.0f * line);
+}
+
+TEST_CASE("The mobile rating row has finger sized stars and reads its value back", "[mobile-demo][basics][rating]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 0 / 5");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-strip-value") == u8"가로 창 별점: 0 / 10");
+
+    // 별 다섯이 칸 44라 폭 220이다. 칸마다 손가락 크기다.
+    const auto tree { basics_tree(page) };
+    const luil::ui_element& stars { rating_in(*tree, u8"rating") };
+    REQUIRE(stars.bounds().width == 220.0f);
+    REQUIRE(stars.bounds().height == 44.0f);
+    REQUIRE(stars.children().size() == 5u);
+    for (const std::unique_ptr<luil::ui_element>& cell : stars.children())
+    {
+        REQUIRE(cell->bounds().width == 44.0f);
+        REQUIRE(cell->bounds().height == 44.0f);
+    }
+    REQUIRE(stars.accessibility().name == u8"별점");
+    REQUIRE(stars.accessibility().value == u8"0 / 5");
+
+    // 값은 앱 상태다. 절대 값이 오면 label과 접근 값이 함께 바뀐다.
+    deliver(page, mobile_demo::rating_intent { u8"stars", 3.0f });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 3 / 5");
+    REQUIRE(rating_in(*basics_tree(page), u8"rating").accessibility().value == u8"3 / 5");
+    // 범위 밖 값은 앱이 자른다.
+    deliver(page, mobile_demo::rating_intent { u8"stars", 9.0f });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 5 / 5");
+}
+
+TEST_CASE("The mobile color row fits the plane to the page and raises the bars for fingers", "[mobile-demo][basics][color-picker]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #3366FF80");
+    const auto tree { basics_tree(page) };
+    // 폭 400에 여백 16씩이라 판은 368이다. 막대는 32다.
+    const luil::ui_element* const plane { tree->find(luil::color_picker_element::plane_id(u8"color")) };
+    REQUIRE(plane != nullptr);
+    REQUIRE(plane->bounds().width == 368.0f);
+    REQUIRE(plane->bounds().height == 368.0f);
+    std::u8string hue_owner { u8"color" };
+    hue_owner += u8'\u001f';
+    hue_owner += u8"hue";
+    const luil::ui_element* const hue { tree->find({ luil::ui_element_kind::color_picker_bar, hue_owner }) };
+    REQUIRE(hue != nullptr);
+    REQUIRE(hue->bounds().height == 32.0f);
+    REQUIRE(hue->bounds().y == plane->bounds().y + 368.0f + 8.0f);
+    // 판은 시작 거리를 둔 끌기라 쓸기가 페이지를 흘린다.
+    REQUIRE(plane->pointer_drag() != nullptr);
+    REQUIRE(plane->pointer_drag()->start_distance == luil::color_picker_drag_start_distance);
+    const luil::ui_element* const hex { tree->find({ mobile_demo::kind_color_hex_input, u8"color-hex" }) };
+    REQUIRE(hex != nullptr);
+    REQUIRE(hex->accessibility().value == u8"#3366FF80");
+
+    // 판을 탭한 메시지가 label과 16진 칸을 함께 바꾼다.
+    const luil::rect_f box { plane->bounds() };
+    const luil::ui_action* const tap { plane->action(luil::ui_trigger::left_click) };
+    REQUIRE(tap != nullptr);
+    deliver_actions(page, (*tap)({ plane->id(), box.x + box.width, box.y + box.height }));
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #00000080");
+
+    // 키보드의 확정 단추로 16진 초안을 확정한다. 회색에서도 색상은 지킨다.
+    luil::text_edit_request request {};
+    request.target = mobile_demo::target_color_hex;
+    request.command = luil::text::text_edit_command::replace_all;
+    request.text = u8"#ff0000";
+    request.offset = request.text.size();
+    deliver(page, mobile_demo::edit_intent { request });
+    deliver(page, mobile_demo::color_commit_intent {});
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"color-value") == u8"색: #FF0000FF");
+}
+
+TEST_CASE("Tapping a mobile star rates it and tapping it again clears it", "[mobile-demo][basics][rating]")
+{
+    mobile_demo::basics_page page {};
+    {
+        const auto tree { basics_tree(page) };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        const std::vector<luil::input_action> tapped { click_element(controller, *tree, rating_in(*tree, u8"rating").children()[3]->id()) };
+        REQUIRE(rating_values_of(tapped) == std::vector<float> { 4.0f });
+        deliver_actions(page, tapped);
+    }
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 4 / 5");
+
+    // 같은 별을 다시 탭하면 지운다.
+    const auto tree { basics_tree(page) };
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    const std::vector<luil::input_action> again { click_element(controller, *tree, rating_in(*tree, u8"rating").children()[3]->id()) };
+    REQUIRE(rating_values_of(again) == std::vector<float> { 0.0f });
+    deliver_actions(page, again);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-value") == u8"별점: 0 / 5");
+}
+
+TEST_CASE("The mobile star row inside the horizontal window scrolls on a swipe and rates on a tap", "[mobile-demo][basics][rating]")
+{
+    mobile_demo::basics_page page {};
+    const auto tree { basics_tree(page) };
+
+    // 별 열은 열 개라 폭 440이고 400dp 창의 흘리는 창보다 넓다. 넘치므로 창이 가로 흘림의 임자다.
+    const luil::ui_element& stars { rating_in(*tree, u8"rating-strip") };
+    REQUIRE(stars.children().size() == 10u);
+    REQUIRE(stars.bounds().width == 440.0f);
+    const luil::ui_element* const window { tree->find({ mobile_demo::kind_layout, u8"rating-strip-window" }) };
+    REQUIRE(window != nullptr);
+    REQUIRE(window->scroll() != nullptr);
+    REQUIRE(window->scroll()->axis == luil::scroll_axis::horizontal);
+    const float before { stars.bounds().x };
+
+    // 별 위에서 시작한 빠른 가로 쓸기는 창을 흘리고 값을 정하지 않는다.
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    const luil::rect_f start { stars.children()[2]->bounds() };
+    const float x { start.x + start.width / 2.0f };
+    const float y { start.y + start.height / 2.0f };
+    static_cast<void>(controller.process(touch_press(x, y, 0)));
+    const std::vector<luil::input_action> swiped { controller.process(touch_move(x - 60.0f, y, 50)) };
+    REQUIRE(has_rating_scroll(swiped));
+    REQUIRE(rating_values_of(swiped).empty());
+    static_cast<void>(controller.process(touch_release(x - 60.0f, y, 80)));
+    deliver_actions(page, swiped);
+    REQUIRE(rating_in(*basics_tree(page), u8"rating-strip").bounds().x < before);
+
+    // 탭은 값을 정한다. 흘러간 뒤에도 같은 자리에서 칸의 값이 나간다.
+    const auto scrolled_tree { basics_tree(page) };
+    luil::interaction_controller tapper {};
+    tapper.set_tree(scrolled_tree);
+    const std::vector<luil::input_action> tapped { click_element(tapper, *scrolled_tree, rating_in(*scrolled_tree, u8"rating-strip").children()[5]->id()) };
+    REQUIRE(rating_values_of(tapped) == std::vector<float> { 6.0f });
+    deliver_actions(page, tapped);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rating-strip-value") == u8"가로 창 별점: 6 / 10");
+}
+
+TEST_CASE("The mobile read-only field reads the access name the page gave it", "[mobile-demo][basics][read-only]")
+{
+    // 보조 기술이 읽는 이름은 페이지가 단 이름이다. 칸에 안내 글이 없어도 이름이 빈 채로 읽히지 않는다.
+    mobile_demo::basics_page page {};
+    const auto tree { basics_tree(page) };
+    const luil::ui_element* const area { tree->find({ mobile_demo::kind_readonly_input }) };
+    REQUIRE(area != nullptr);
+    REQUIRE(area->accessibility().role == luil::access_role::edit);
+    REQUIRE(area->accessibility().name == u8"읽기 전용 안내 칸");
+}
+
+TEST_CASE("The lists and the split handle of the mobile list page read their names", "[mobile-demo][lists][accessibility]")
+{
+    // 넓은 화면은 목록 셋이 나란히 서서 한 tree에 모두 있다. 좁은 화면은 같은 판을 하나씩 세운다.
+    mobile_demo::lists_page page {};
+    const luil::ui_tree tree { luil::make_arranged_tree(page.build(800.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 800.0f, 800.0f }, 1.0f) };
+    const auto require_named = [&tree](const luil::ui_element_kind kind, const luil::ui_element_kind bar_kind, const std::u8string& owner, const std::u8string& name) {
+        CAPTURE(owner);
+        const luil::ui_element* const list { tree.find({ kind, owner }) };
+        REQUIRE(list != nullptr);
+        REQUIRE(list->accessibility().name == name);
+        // 막대는 목록이 세우는 부품이라 앱이 따로 이름을 줄 수 없고 목록의 이름을 물려받는다.
+        const luil::ui_element* const bar { tree.find({ bar_kind, owner }) };
+        REQUIRE(bar != nullptr);
+        REQUIRE(bar->accessibility().name == name);
+    };
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"items", u8"순서를 바꾸는 목록");
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"tree", u8"접는 트리");
+    require_named(luil::ui_element_kind::virtual_list, luil::ui_element_kind::scroll_area_bar, u8"log", u8"가상 목록");
+    // 묶은 목록은 막대를 자기 안에 세우지 않고 데모의 스크롤 뷰에 든다. 목록 자신의 이름만 본다.
+    const luil::ui_element* const grouped { tree.find({ luil::ui_element_kind::grouped_list, u8"history" }) };
+    REQUIRE(grouped != nullptr);
+    REQUIRE(grouped->accessibility().name == u8"그룹 머리행 목록");
+    const luil::ui_element* const handle { tree.find({ mobile_demo::kind_list_split }) };
+    REQUIRE(handle != nullptr);
+    REQUIRE(handle->accessibility().name == u8"그룹 목록 높이 손잡이");
+}
+
+TEST_CASE("Undoing a reorder on the mobile list page brings back the earlier order and the buttons follow", "[mobile-demo][lists][undo]")
+{
+    mobile_demo::lists_page page {};
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음");
+    // 할 일이 없으면 꺼 둔다. 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.
+    REQUIRE(lists_button_enabled(page, u8"list-undo") == false);
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+    REQUIRE(press_list_button(page, u8"list-undo") == 0);
+
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 2));
+    }
+    // 항목 1을 항목 4 앞으로 끌어 놓는다.
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 4" });
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 2) < list_row_top(*tree, 3));
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 1));
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 4));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 1 · 다시 실행 0 · 다음: 순서 바꿈");
+    REQUIRE(lists_button_enabled(page, u8"list-undo"));
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+
+    // 단추가 되돌림 메시지를 낸다. 처음 순서로 돌아온다.
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 1) < list_row_top(*tree, 2));
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 4));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 1 · 다음: 없음");
+    REQUIRE(lists_button_enabled(page, u8"list-undo") == false);
+    REQUIRE(lists_button_enabled(page, u8"list-redo"));
+
+    // 다시 실행하면 옮긴 순서다.
+    REQUIRE(press_list_button(page, u8"list-redo") == 1);
+    {
+        const auto tree { lists_tree(page) };
+        REQUIRE(list_row_top(*tree, 3) < list_row_top(*tree, 1));
+    }
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 1 · 다시 실행 0 · 다음: 순서 바꿈");
+}
+
+TEST_CASE("A new reorder after an undo clears the redo side and a reorder that moves nothing is not a step", "[mobile-demo][lists][undo]")
+{
+    mobile_demo::lists_page page {};
+    // 제자리로 놓거나 없는 항목을 옮기면 걸음이 없다.
+    deliver(page, mobile_demo::reorder_intent { u8"항목 2", u8"항목 2" });
+    deliver(page, mobile_demo::reorder_intent { u8"없는 항목", u8"항목 2" });
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 2" });
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 0 · 다음: 없음");
+
+    deliver(page, mobile_demo::reorder_intent { u8"항목 1", u8"항목 3" });
+    deliver(page, mobile_demo::reorder_intent { u8"항목 5", u8"항목 1" });
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 2 · 다시 실행 0 · 다음: 순서 바꿈");
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    REQUIRE(lists_button_enabled(page, u8"list-redo"));
+    deliver(page, mobile_demo::reorder_intent { u8"항목 6", u8"항목 1" });
+    REQUIRE(lists_button_enabled(page, u8"list-redo") == false);
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 2 · 다시 실행 0 · 다음: 순서 바꿈");
+
+    // 두 걸음을 모두 되돌리면 처음 순서다. 되돌림이 기록하지 않아 걸음이 늘지 않는다.
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    REQUIRE(press_list_button(page, u8"list-undo") == 1);
+    const auto tree { lists_tree(page) };
+    for (int number { 1 }; number < 8; ++number)
+        REQUIRE(list_row_top(*tree, number) < list_row_top(*tree, number + 1));
+    REQUIRE(lists_text(page, u8"list-history") == u8"되돌리기 0 · 다시 실행 2 · 다음: 없음");
+}
+
+TEST_CASE("The mobile theme cards draw the library language and pick the theme", "[mobile-demo][i18n]")
+{
+    mobile_demo::theme_page page {};
+    const auto tree_at = [&page](const float width) {
+        auto content { page.build(width, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, width, height }, 1.0f);
+    };
+    const auto card_name = [&tree_at](const std::u8string& owner) {
+        const luil::ui_tree tree { tree_at(400.0f) };
+        const auto* const card { tree.find({ luil::ui_element_kind::choice, owner }) };
+        REQUIRE(card != nullptr);
+        return card->accessibility().name;
+    };
+
+    const luil_test::text_languages_guard guard {};
+    guard.use(u8"ko");
+    REQUIRE(card_name(u8"theme/light") == u8"밝게");
+    REQUIRE(card_name(u8"theme/system") == u8"시스템");
+    REQUIRE(card_name(u8"theme/dark") == u8"어둡게");
+    guard.use(u8"en");
+    REQUIRE(card_name(u8"theme/light") == u8"Light");
+    REQUIRE(card_name(u8"theme/system") == u8"System");
+    REQUIRE(card_name(u8"theme/dark") == u8"Dark");
+
+    // 폰에서 흔한 폭에서도 세 장이 한 줄에 들어 페이지 여백 안에 선다.
+    const luil::ui_tree narrow { tree_at(360.0f) };
+    const auto* const light { narrow.find({ luil::ui_element_kind::choice, u8"theme/light" }) };
+    const auto* const dark { narrow.find({ luil::ui_element_kind::choice, u8"theme/dark" }) };
+    REQUIRE(light != nullptr);
+    REQUIRE(dark != nullptr);
+    REQUIRE(dark->bounds().y == Catch::Approx(light->bounds().y));
+    REQUIRE(dark->bounds().x + dark->bounds().width <= Catch::Approx(360.0f - mobile_demo::page_padding));
+
+    // 카드를 누르면 페이지의 선호가 바뀌고 고른 칸이 따라간다.
+    {
+        const luil::ui_tree tree { tree_at(400.0f) };
+        const auto* const card { tree.find({ luil::ui_element_kind::choice, u8"theme/dark" }) };
+        REQUIRE(card != nullptr);
+        REQUIRE(card->accessibility().selected != true);
+        const auto actions { (*card->action(luil::ui_trigger::left_click))({ card->id() }) };
+        REQUIRE(actions.size() == 1u);
+        deliver(page, std::get<luil::app_message>(actions.front()));
+    }
+    REQUIRE(page.appearance().theme == luil::theme_preference::dark);
+    const luil::ui_tree chosen { tree_at(400.0f) };
+    REQUIRE(chosen.find({ luil::ui_element_kind::choice, u8"theme/dark" })->accessibility().selected == true);
+}
+
+
+
+namespace {
+    // 400x800 창에서 조립해 배치한 잉크 페이지다 (배율 1).
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> ink_tree(mobile_demo::ink_page& page)
+    {
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(page.build(400.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 400.0f, 800.0f }, 1.0f));
+    }
+
+    [[nodiscard]] std::u8string ink_text(mobile_demo::ink_page& page, const std::u8string& owner)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const label { tree->find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] luil::rect_f ink_canvas_bounds(mobile_demo::ink_page& page)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const canvas { tree->find({ luil::ui_element_kind::ink_canvas, u8"ink-canvas" }) };
+        REQUIRE(canvas != nullptr);
+        return canvas->bounds();
+    }
+
+    // 컨트롤러가 낸 앱 메시지를 페이지에 돌려준다. 돌려준 수를 돌려준다.
+    int deliver_ink(mobile_demo::ink_page& page, const std::vector<luil::input_action>& actions)
+    {
+        int delivered { 0 };
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        return delivered;
+    }
+
+    // 한 접촉을 실제 입력 경로로 긋는다. 표본마다 tree를 다시 지어 앱 상태(진행 중 획)가 따라오는 길과 같다.
+    void stroke_ink(mobile_demo::ink_page& page, const luil::pointer_device device, const std::vector<luil::point_f>& points, const bool eraser = false)
+    {
+        luil::interaction_controller controller {};
+        const std::optional<luil::pen_sample> pen { device == luil::pointer_device::pen ? std::optional { luil::pen_sample { 0.6f, 0.0f, 0.0f, eraser } } : std::nullopt };
+        const time_point start {};
+        controller.set_tree(ink_tree(page));
+        luil::pointer_pressed_event pressed { points.front().x, points.front().y, luil::pointer_button::left, start };
+        pressed.device = device;
+        pressed.pointer_id = 4;
+        pressed.pen = pen;
+        static_cast<void>(deliver_ink(page, controller.process(pressed)));
+        for (std::size_t index { 1 }; index < points.size(); ++index)
+        {
+            controller.set_tree(ink_tree(page));
+            luil::pointer_moved_event moved { points[index].x, points[index].y, after_milliseconds(start, static_cast<int>(index) * 8) };
+            moved.device = device;
+            moved.pointer_id = 4;
+            moved.in_contact = true;
+            moved.pen = pen;
+            static_cast<void>(deliver_ink(page, controller.process(moved)));
+        }
+        luil::pointer_released_event released { points.back().x, points.back().y, luil::pointer_button::left, after_milliseconds(start, 200) };
+        released.device = device;
+        released.pointer_id = 4;
+        released.pen = pen;
+        static_cast<void>(deliver_ink(page, controller.process(released)));
+    }
+
+    int press_ink_button(mobile_demo::ink_page& page, const std::u8string& owner)
+    {
+        const auto tree { ink_tree(page) };
+        const auto* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        return deliver_ink(page, controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, after_milliseconds(time_point {}, 40) }));
+    }
+}
+
+TEST_CASE("A pen stroke on the ink page counts the stroke and says it carried pressure", "[mobile-demo][ink]")
+{
+    mobile_demo::ink_page page {};
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 펜");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 없음");
+    const luil::rect_f box { ink_canvas_bounds(page) };
+    REQUIRE(box.width > 100.0f);
+    REQUIRE(box.height > 100.0f);
+    const float y { box.y + 60.0f };
+    stroke_ink(page, luil::pointer_device::pen, { { box.x + 20.0f, y }, { box.x + 60.0f, y + 5.0f }, { box.x + 100.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 1개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 펜, 압력 있음");
+    // 캔버스의 Value(UIA 요약)가 상태 줄과 같은 글이다.
+    const auto tree { ink_tree(page) };
+    const auto* const canvas { tree->find({ luil::ui_element_kind::ink_canvas, u8"ink-canvas" }) };
+    REQUIRE(canvas->accessibility().value == u8"획 1개");
+    REQUIRE(canvas->accessibility().name == u8"잉크 캔버스");
+
+    // 지우개 끝으로 그 획을 가로지르면 지워진다.
+    stroke_ink(page, luil::pointer_device::pen, { { box.x + 60.0f, y - 40.0f }, { box.x + 60.0f, y + 40.0f } }, true);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"지운 획 1");
+}
+
+TEST_CASE("The ink page buttons add sample strokes, switch tools and let fingers draw", "[mobile-demo][ink]")
+{
+    mobile_demo::ink_page page {};
+    // 견본 단추는 캔버스가 내는 것과 같은 메시지를 낸다 (UIA가 그리기 대신 되풀이한다).
+    REQUIRE(press_ink_button(page, u8"ink-sample") > 2);
+    REQUIRE(press_ink_button(page, u8"ink-sample") > 2);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 2개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 펜, 압력 있음");
+    REQUIRE(press_ink_button(page, u8"ink-clear") == 1);
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+
+    REQUIRE(press_ink_button(page, u8"ink-tool-toggle") == 1);
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 지우개");
+    REQUIRE(press_ink_button(page, u8"ink-tool-toggle") == 1);
+    REQUIRE(ink_text(page, u8"ink-tool") == u8"도구: 펜");
+
+    // 손가락은 켜기 전까지 그리지 않는다.
+    const luil::rect_f box { ink_canvas_bounds(page) };
+    const float y { box.y + 80.0f };
+    stroke_ink(page, luil::pointer_device::touch, { { box.x + 20.0f, y }, { box.x + 120.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 0개");
+    REQUIRE(page.handle(luil::app_message { demo::ink_command_intent { demo::ink_command::toggle_touch } }));
+    stroke_ink(page, luil::pointer_device::touch, { { box.x + 20.0f, y }, { box.x + 120.0f, y } });
+    REQUIRE(ink_text(page, u8"ink-count") == u8"획 1개");
+    REQUIRE(ink_text(page, u8"ink-last") == u8"마지막 획: 손가락, 압력 없음");
+}
+
+namespace {
+    // 폭 400의 휴대폰 화면에서 조립해 배치한 검사기 페이지다 (배율 1). 높이는 페이지 내용 높이다.
+    [[nodiscard]] luil::ui_tree inspector_tree(mobile_demo::inspector_page& page)
+    {
+        mobile_demo::page_content content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] std::u8string inspector_label(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    }
+
+    [[nodiscard]] std::u8string inspector_button(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const luil::ui_tree tree { inspector_tree(page) };
+        const luil::ui_element* const button { tree.find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        return button->accessibility().name;
+    }
+
+    [[nodiscard]] std::u8string inspector_number(const std::size_t value)
+    {
+        const std::string digits { std::to_string(value) };
+        return std::u8string { digits.begin(), digits.end() };
+    }
+
+    // 손가락 탭이 단추에서 낸 앱 메시지를 페이지에 돌려준다. 돌려준 수를 돌려준다.
+    int tap_inspector_button(mobile_demo::inspector_page& page, const std::u8string& owner)
+    {
+        const auto tree { std::make_shared<const luil::ui_tree>(inspector_tree(page)) };
+        const luil::ui_element* const button { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(button != nullptr);
+        const luil::rect_f box { button->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        luil::interaction_controller controller {};
+        controller.set_tree(tree);
+        static_cast<void>(controller.process(luil::pointer_pressed_event { x, y, luil::pointer_button::left, time_point {} }));
+        int delivered { 0 };
+        for (const luil::input_action& action : controller.process(luil::pointer_released_event { x, y, luil::pointer_button::left, after_milliseconds(time_point {}, 40) }))
+        {
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+            {
+                REQUIRE(page.handle(*message));
+                ++delivered;
+            }
+        }
+        return delivered;
+    }
+}
+
+TEST_CASE("The inspector page starts off and counts the elements of its own tree", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    const luil::ui_tree tree { inspector_tree(page) };
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: focused");
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: 없음");
+    const std::size_t elements { luil::inspect_nodes(tree).size() };
+    REQUIRE(elements > 20);
+    REQUIRE(inspector_label(page, u8"inspector-count") == u8"요소 " + inspector_number(elements) + u8"개");
+    // 꺼져 있으면 frame에 켜지 않은 설정이 실린다.
+    REQUIRE(page.config().enabled == false);
+}
+
+TEST_CASE("The inspector buttons switch it on, move the ancestor level and toggle the extras", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 켬");
+    REQUIRE(page.config().enabled);
+    REQUIRE(page.config().pick == luil::inspector_pick::focused);
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 2");
+    REQUIRE(page.config().ancestor_levels == 2);
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    // 0 아래로는 내려가지 않는다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-down") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 끔");
+    REQUIRE(tap_inspector_button(page, u8"inspector-outline") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-outline") == u8"모든 윤곽: 켬");
+    REQUIRE(page.config().outline_all);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 끔");
+    REQUIRE(tap_inspector_button(page, u8"inspector-palette") == 1);
+    REQUIRE(inspector_button(page, u8"inspector-palette") == u8"팔레트 견본: 켬");
+    REQUIRE(page.config().show_palette);
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-up") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-state") == u8"검사기: 끔");
+    REQUIRE(page.config().enabled == false);
+    // 다시 켜면 조상 단계도 처음 모습인 0이다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 0");
+    REQUIRE(page.config().ancestor_levels == 0);
+}
+
+TEST_CASE("The inspector selection buttons walk the page tree in drawing order", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    // 선택이 없을 때 다음은 뿌리(페이지 기둥)다. 집는 길이 선택으로 바뀐다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: selected");
+    REQUIRE(page.config().pick == luil::inspector_pick::selected);
+    REQUIRE(page.config().selected == luil::ui_element_id { mobile_demo::kind_layout, u8"inspector-page" });
+
+    REQUIRE(tap_inspector_button(page, u8"inspector-child") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-help");
+    REQUIRE(tap_inspector_button(page, u8"inspector-next") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-state");
+    REQUIRE(tap_inspector_button(page, u8"inspector-prev") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: text:inspector-help");
+    REQUIRE(tap_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+    // 뿌리 위로는 갈 곳이 없어 선택이 그대로다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-parent") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: layout:inspector-page");
+
+    // 끄고 다시 켜면 처음 모습이다.
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(tap_inspector_button(page, u8"inspector-toggle") == 1);
+    REQUIRE(inspector_label(page, u8"inspector-selected") == u8"선택: 없음");
+    REQUIRE(inspector_label(page, u8"inspector-pick") == u8"집기: focused");
+}
+
+TEST_CASE("The inspector buttons keep the tapped sample focused so the ancestor steps climb from it", "[mobile-demo][inspector]")
+{
+    // 실기기의 손가락 탭과 같은 길이다. 탭마다 페이지가 메시지를 받고 tree를 새로 지어 같은 controller에 건넨다.
+    mobile_demo::inspector_page page {};
+    luil::interaction_controller controller {};
+    auto tree { std::make_shared<const luil::ui_tree>(inspector_tree(page)) };
+    controller.set_tree(tree);
+    int now { 0 };
+    const auto tap = [&](const std::u8string& owner) {
+        const luil::ui_element* const target { tree->find({ mobile_demo::kind_layout, owner }) };
+        REQUIRE(target != nullptr);
+        const luil::rect_f box { target->bounds() };
+        const float x { box.x + box.width / 2.0f };
+        const float y { box.y + box.height / 2.0f };
+        static_cast<void>(controller.process(touch_press(x, y, now)));
+        const std::vector<luil::input_action> actions { controller.process(touch_release(x, y, now + 40)) };
+        now += 1000;
+        for (const luil::input_action& action : actions)
+            if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                REQUIRE(page.handle(*message));
+        tree = std::make_shared<const luil::ui_tree>(inspector_tree(page));
+        controller.set_tree(tree);
+    };
+    const auto picked_owner = [&]() {
+        const luil::ui_element* const picked { luil::pick_inspected(*tree, controller.snapshot(), page.config()) };
+        REQUIRE(picked != nullptr);
+        return picked->id().owner;
+    };
+    const luil::ui_element_id sample_button { mobile_demo::kind_layout, u8"inspector-sample-button" };
+
+    tap(u8"inspector-toggle");
+    tap(u8"inspector-sample-button");
+    REQUIRE(controller.snapshot().focused == sample_button);
+    REQUIRE(picked_owner() == u8"inspector-sample-button");
+
+    // 조상 위로를 누를 때마다 견본 단추에서 견본 stack, 견본 panel, 페이지 순으로 오른다. 초점은 견본 단추에 남는다.
+    tap(u8"inspector-up");
+    REQUIRE(controller.snapshot().focused == sample_button);
+    REQUIRE(inspector_label(page, u8"inspector-levels") == u8"조상 단계: 1");
+    REQUIRE(picked_owner() == u8"inspector-sample-stack");
+    tap(u8"inspector-up");
+    REQUIRE(picked_owner() == u8"inspector-sample");
+    tap(u8"inspector-up");
+    REQUIRE(picked_owner() == u8"inspector-page");
+    REQUIRE(controller.snapshot().focused == sample_button);
+
+    // 다른 제어 단추도 초점을 옮기지 않는다.
+    tap(u8"inspector-outline");
+    tap(u8"inspector-down");
+    REQUIRE(controller.snapshot().focused == sample_button);
+    REQUIRE(picked_owner() == u8"inspector-sample");
+}
+
+TEST_CASE("The inspector names the demo kinds and reads the sample's inner padding", "[mobile-demo][inspector]")
+{
+    mobile_demo::inspector_page page {};
+    const luil::inspector_config config { page.config() };
+    REQUIRE(luil::kind_display_name(mobile_demo::kind_layout, config) == u8"layout");
+    REQUIRE(luil::kind_display_name(mobile_demo::kind_text, config) == u8"text");
+    REQUIRE(luil::kind_display_name(luil::ui_element_kind::ink_canvas, config) == u8"ink_canvas");
+
+    const luil::ui_tree tree { inspector_tree(page) };
+    const luil::ui_element* const stack { tree.find({ mobile_demo::kind_layout, u8"inspector-sample-stack" }) };
+    REQUIRE(stack != nullptr);
+    const std::u8string text { luil::describe_element(tree, *stack, 1.0f, config) };
+    REQUIRE(text.starts_with(u8"layout:inspector-sample-stack  "));
+    // 견본 stack의 안쪽 여백 위 8, 오른쪽 12, 아래 8, 왼쪽 12다.
+    REQUIRE(text.find(u8"  inset 8 12 8 12\n") != std::u8string::npos);
+
+    // 조상 한 단계를 올리면 견본 stack에서 그것을 감싼 panel이 집힌다.
+    luil::inspector_config picking { config };
+    picking.enabled = true;
+    picking.pick = luil::inspector_pick::selected;
+    picking.selected = stack->id();
+    picking.ancestor_levels = 1;
+    const luil::interaction_snapshot interaction {};
+    const luil::ui_element* const picked { luil::pick_inspected(tree, interaction, picking) };
+    REQUIRE(picked != nullptr);
+    REQUIRE(picked->id() == luil::ui_element_id { mobile_demo::kind_layout, u8"inspector-sample" });
+}
+
+namespace {
+    // 모바일 데모 앱이 on_key에서 하는 일과 같은 정책이다. 읽기 전용 안내 칸에 초점이 있는 채 닿은 되돌리기 키를 메시지로 바꾼다.
+    class undo_key_policy final : public luil::interaction_policy
+    {
+    public:
+        [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+        {
+            return mobile_demo::text_target_of_kind(kind);
+        }
+
+        [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
+        {
+            if (const auto undo { demo::readonly_undo_key_of(event, snapshot, mobile_demo::kind_readonly_input) }; undo.has_value())
+                return { luil::make_app_action(*undo) };
+            return {};
+        }
+    };
+
+    [[nodiscard]] luil::key_pressed_event undo_chord(const luil::key_code code, const bool control, const bool shift = false)
+    {
+        luil::key_pressed_event event { code };
+        event.control = control;
+        event.shift = shift;
+        return event;
+    }
+
+    // 안내 칸 하나를 든 tree에서 칸을 눌러 초점을 주고 되돌리기 키와 그 밖의 키를 보낸 뒤, 앱이 센 값이다.
+    [[nodiscard]] demo::readonly_undo_keys press_undo_keys(const bool read_only)
+    {
+        undo_key_policy policy {};
+        luil::interaction_controller controller { &policy };
+        luil::text_input_view view {};
+        view.text = u8"읽기 전용 안내";
+        luil::text_area_config config {};
+        config.read_only = read_only;
+        auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { mobile_demo::kind_readonly_input }, std::move(view), std::move(config)) };
+        controller.set_tree(std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(area), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f)));
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 20.0f, 12.0f, luil::pointer_button::left, time_point {} }));
+        static_cast<void>(controller.process(luil::pointer_released_event { 20.0f, 12.0f, luil::pointer_button::left, time_point {} + std::chrono::milliseconds { 5 } }));
+        REQUIRE(controller.snapshot().focused_input.kind == mobile_demo::kind_readonly_input);
+
+        demo::readonly_undo_keys counts {};
+        const luil::key_pressed_event keys[] {
+            undo_chord(luil::key_code::key_z, true),
+            undo_chord(luil::key_code::key_y, true),
+            undo_chord(luil::key_code::key_z, true, true),
+            // 수식 키 없는 z와 다른 Ctrl 키는 되돌리기가 아니다.
+            undo_chord(luil::key_code::key_z, false),
+            undo_chord(luil::key_code::key_x, true),
+        };
+        for (const luil::key_pressed_event& event : keys)
+        {
+            for (const luil::input_action& action : controller.process(event))
+            {
+                if (const auto* const message { std::get_if<luil::app_message>(&action) }; message != nullptr)
+                    static_cast<void>(counts.handle(*message));
+            }
+        }
+        return counts;
+    }
+}
+
+TEST_CASE("A read-only mobile field hands Ctrl+Z and Ctrl+Y to the app and the label counts them", "[mobile-demo][read-only]")
+{
+    // Ctrl+Z 하나, Ctrl+Y 하나, Ctrl+Shift+Z 하나(다시 실행)가 앱 on_key에 닿는다.
+    const demo::readonly_undo_keys passed { press_undo_keys(true) };
+    REQUIRE(passed.undo_count() == 1);
+    REQUIRE(passed.redo_count() == 2);
+    REQUIRE(passed.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 1회 · Ctrl+Y 2회");
+
+    // 같은 칸이 편집 칸이면 칸이 되돌리기를 가져가 앱까지 오지 않는다.
+    const demo::readonly_undo_keys kept { press_undo_keys(false) };
+    REQUIRE(kept.undo_count() == 0);
+    REQUIRE(kept.redo_count() == 0);
+    REQUIRE(kept.text() == u8"읽기 전용 칸에서 앱이 받은 Ctrl+Z 0회 · Ctrl+Y 0회");
+}
+
+TEST_CASE("The device page reads the notification permission, the send result and the launch id", "[mobile-demo][notification]")
+{
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform platform { previous };
+    platform.capabilities.notifications = true;
+    luil::set_ui_platform(platform);
+    const auto name_of = [](const luil::ui_tree& tree, const std::u8string& owner) {
+        const luil::ui_element* const element { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(element != nullptr);
+        return element->accessibility().name;
+    };
+
+    mobile_demo::device_page page {};
+    auto tree { device_tree(page, false) };
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 묻지 않아도 된다.");
+    REQUIRE(name_of(tree, u8"notification-result") == u8"알림 결과: 없음");
+    REQUIRE(name_of(tree, u8"notification-launch") == u8"알림으로 시작: 아니오");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" }) != nullptr);
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-ask" }) == nullptr);
+
+    // 권한이 없으면 묻기 단추가 선다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_permission_intent { luil::permission_state::denied } }));
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 아직 받지 못했다.");
+    const luil::ui_element* const ask { tree.find({ mobile_demo::kind_layout, u8"notification-ask" }) };
+    REQUIRE(ask != nullptr);
+    REQUIRE(ask->accessibility().name == u8"알림 권한 묻기");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_permission_intent { luil::permission_state::granted, true } }));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_send_intent { luil::platform_result { luil::platform_status::failed, u8"blocked", std::nullopt } } }));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::notification_launch_intent { u8"mobile-demo-1" } }));
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-state") == u8"알림 권한: 받았다 (방금 허락).");
+    REQUIRE(name_of(tree, u8"notification-result") == u8"알림 결과: 실패 · blocked");
+    REQUIRE(name_of(tree, u8"notification-launch") == u8"알림으로 시작: mobile-demo-1");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" })->accessibility().name == u8"알림 보내기");
+
+    // 능력이 없는 플랫폼은 단추 대신 이유를 보인다.
+    platform.capabilities.notifications = false;
+    luil::set_ui_platform(platform);
+    tree = device_tree(page, false);
+    REQUIRE(name_of(tree, u8"notification-none") == u8"이 플랫폼은 OS 알림을 올리지 못한다.");
+    REQUIRE(tree.find({ mobile_demo::kind_layout, u8"notification-send" }) == nullptr);
+    luil::set_ui_platform(previous);
+}
+
+namespace {
+    // 400dp 창에서 지은 기본 페이지의 tree다 (배율 1).
+    [[nodiscard]] luil::ui_tree clipboard_basics_tree(mobile_demo::basics_page& page)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    // 클립보드 붙여넣기 결과 줄의 이름이다. 화면의 글이 곧 UIA Name이다.
+    [[nodiscard]] std::u8string clipboard_basics_result(mobile_demo::basics_page& page)
+    {
+        const luil::ui_tree tree { clipboard_basics_tree(page) };
+        const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, u8"clipboard-image-result" }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    [[nodiscard]] luil::clipboard_data clipboard_basics_data(const luil::clipboard_image_format format, std::vector<std::uint8_t> bytes)
+    {
+        luil::clipboard_data data {};
+        data.image_format = format;
+        data.image = std::make_shared<const std::vector<std::uint8_t>>(std::move(bytes));
+        return data;
+    }
+}
+
+TEST_CASE("The basics page pastes a clipboard image and names what it read", "[mobile-demo][clipboard][image]")
+{
+    mobile_demo::basics_page page {};
+    {
+        const luil::ui_tree tree { clipboard_basics_tree(page) };
+        const luil::ui_element* const button { tree.find({ mobile_demo::kind_layout, u8"clipboard-image-paste" }) };
+        REQUIRE(button != nullptr);
+        REQUIRE(button->accessibility().name == u8"클립보드 그림 붙여넣기");
+    }
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 아직 없음");
+
+    // 그림이 없어도 답은 온다.
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { luil::clipboard_data { .text = u8"글만" } } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 그림 없음");
+
+    const std::vector<std::uint8_t> png { luil::testing::sample_quadrant_png.begin(), luil::testing::sample_quadrant_png.end() };
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::encoded, png) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 2×2 PNG");
+
+    // 24비트 1×1 DIB다 (40바이트 머리, 행은 4바이트).
+    std::vector<std::uint8_t> dib(44, 0u);
+    dib[0] = 40;
+    dib[4] = 1;
+    dib[8] = 1;
+    dib[12] = 1;
+    dib[14] = 24;
+    dib[40] = 0xFFu;
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::dib, dib) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 1×1 DIB");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { clipboard_basics_data(luil::clipboard_image_format::encoded, { 1, 2, 3 }) } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 풀지 못함");
+
+    luil::clipboard_data large {};
+    large.image_format = luil::clipboard_image_format::encoded;
+    large.image_too_large = true;
+    REQUIRE(page.handle(luil::app_message { mobile_demo::clipboard_image_intent { large } }));
+    REQUIRE(clipboard_basics_result(page) == u8"붙여넣기 결과: 너무 큼");
+}
+
+TEST_CASE("The mobile basics page names its format toggles and reads the rich text state back", "[mobile-demo][basics][rich-text]")
+{
+    // 견본 글의 caret은 처음이라 다음 글자 서식은 뒤 글자("굵게")의 굵게다.
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-state") == u8"굵게 켜짐 · 기울임 꺼짐 · 밑줄 꺼짐 · 코드 꺼짐 · 링크 꺼짐");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-count") == u8"구간 4 · 링크 1 · 되돌리기 0");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-bold") == u8"굵게");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-italic") == u8"기울임");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-underline") == u8"밑줄");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-code") == u8"코드");
+    REQUIRE(basics_text(page, luil::ui_element_kind::check, u8"rich-link") == u8"링크");
+
+    // 모두 골라 굵게를 누르면 한 걸음으로 글 전체가 굵어진다. 다른 서식과 겹친 곳은 따로 센다.
+    luil::text_edit_request select_all {};
+    select_all.target = mobile_demo::target_rich_editor;
+    select_all.command = luil::text::text_edit_command::select_all;
+    deliver(page, mobile_demo::edit_intent { select_all });
+    deliver(page, demo::rich_text_command_intent { luil::rich_text_command::bold });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-count") == u8"구간 7 · 링크 1 · 되돌리기 1");
+}
+
+TEST_CASE("The mobile basics page names its rich clipboard buttons and hands the copy request to the shell", "[mobile-demo][basics][rich-text][clipboard]")
+{
+    mobile_demo::basics_page page {};
+    REQUIRE(basics_text(page, mobile_demo::kind_layout, u8"rich-copy") == u8"서식 복사");
+    REQUIRE(basics_text(page, mobile_demo::kind_layout, u8"rich-paste") == u8"서식 붙여넣기");
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-clipboard") == u8"복사·붙여넣기 전");
+
+    // 모두 골라 복사하면 셸이 host에 넣을 요청이 한 번 나온다.
+    luil::text_edit_request select_all {};
+    select_all.target = mobile_demo::target_rich_editor;
+    select_all.command = luil::text::text_edit_command::select_all;
+    deliver(page, mobile_demo::edit_intent { select_all });
+    deliver(page, demo::rich_text_command_intent { luil::rich_text_command::copy });
+    const std::optional<luil::clipboard_request> request { page.take_clipboard_request() };
+    REQUIRE(request.has_value());
+    const auto* const copy { std::get_if<luil::clipboard_data_copy_request>(&*request) };
+    REQUIRE(copy != nullptr);
+    REQUIRE(copy->html.empty() == false);
+    REQUIRE(page.take_clipboard_request().has_value() == false);
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-clipboard").starts_with(u8"복사 · HTML "));
+
+    // 붙여넣기 답은 표식으로 이 칸에 온다.
+    deliver(page, demo::rich_text_command_intent { luil::rich_text_command::paste });
+    REQUIRE(std::holds_alternative<luil::clipboard_data_paste_request>(*page.take_clipboard_request()));
+    luil::clipboard_data answer {};
+    answer.tag = demo::rich_text_clipboard_tag;
+    answer.text = copy->text;
+    answer.html = copy->html;
+    deliver(page, demo::rich_text_clipboard_intent { answer });
+    REQUIRE(basics_text(page, mobile_demo::kind_text, u8"rich-clipboard").starts_with(u8"붙여넣기 · HTML "));
+}
+
+TEST_CASE("The mobile first screen stands no menu bar", "[mobile-demo][menu-bar]")
+{
+    // 메뉴 막대는 데스크톱 chrome이다. 휴대폰 화면에는 서지 않는다 (docs/menu-bar-design.md의 결정 7).
+    mobile_demo::basics_page page {};
+    auto content { page.build(400.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f) };
+    REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar).empty());
+    REQUIRE(tree.ids_of_kind(luil::ui_element_kind::menu_bar_item).empty());
+}
+
+TEST_CASE("The mobile date field opens a finger sized calendar and choosing a day closes it", "[ui][date-picker][mobile-demo]")
+{
+    const auto date = [](const unsigned month, const unsigned day) { return std::chrono::year_month_day { std::chrono::year { 2026 }, std::chrono::month { month }, std::chrono::day { day } }; };
+    const luil::ui_element_id field_id { luil::ui_element_kind::date_field, u8"date-field" };
+    mobile_demo::popups_page page {};
+    auto screen { build_popups_screen(page) };
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 3일");
+    const luil::ui_element* const field { screen.tree.find(field_id) };
+    REQUIRE(field != nullptr);
+    // 손가락으로 누르는 칸이라 높이가 터치 영역이다.
+    REQUIRE(field->bounds().height == mobile_demo::touch_height);
+    REQUIRE(field->accessibility().name == u8"마감 날짜");
+    REQUIRE(page.make_focus_request().has_value() == false);
+
+    // 누르면 열리고 popup의 커서 날로 초점 요청이 실린다. 달력 칸은 44라 popup 폭이 7칸과 여백이다.
+    const auto pressed { (*field->action(luil::ui_trigger::left_click))({ field->id(), 0.0f, 0.0f }) };
+    deliver(page, std::get<luil::app_message>(pressed.front()));
+    const std::optional<luil::focus_request> focus { page.make_focus_request() };
+    REQUIRE(focus.has_value());
+    REQUIRE(focus->surface == u8"date-popup");
+    REQUIRE(focus->target == luil::calendar_element::day_id(u8"date", date(11, 3)));
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 열림 · 2026년 11월 3일");
+    const luil::rect_f bounds { screen.tree.find(field_id)->bounds() };
+    auto popups { page.make_popups(1.0f, { 0.0f, 0.0f, 400.0f, 2000.0f }) };
+    REQUIRE(popups.size() == 1u);
+    REQUIRE(popups.front().id == u8"date-popup");
+    REQUIRE(popups.front().width == 44.0f * 7.0f + 16.0f);
+    REQUIRE(popups.front().x == bounds.x);
+    REQUIRE(popups.front().y == bounds.y + bounds.height + 2.0f);
+    const luil::ui_element* const day { popups.front().tree->find(luil::calendar_element::day_id(u8"date", date(11, 20))) };
+    REQUIRE(day != nullptr);
+    REQUIRE(day->bounds().width == 44.0f);
+
+    // 날을 누르면 커서를 옮긴 뒤 고르고, 닫히고, 칸으로 초점이 돌아온다.
+    for (const luil::input_action& action : (*day->action(luil::ui_trigger::left_click))({ day->id(), 0.0f, 0.0f }))
+        deliver(page, std::get<luil::app_message>(action));
+    const std::optional<luil::focus_request> back { page.make_focus_request() };
+    REQUIRE(back->id == focus->id + 2u);
+    REQUIRE(back->surface.empty());
+    REQUIRE(back->target == field_id);
+    screen = build_popups_screen(page);
+    REQUIRE(screen.label(u8"date-state") == u8"날짜 칸: 닫힘 · 2026년 11월 20일");
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+
+    // 바깥 누름 닫기는 초점을 옮기지 않는다.
+    deliver(page, mobile_demo::date_field_intent { true });
+    screen = build_popups_screen(page);
+    const std::uint64_t opened { page.make_focus_request()->id };
+    popups = page.make_popups(1.0f, screen.surface());
+    REQUIRE(popups.size() == 1u);
+    deliver(page, std::get<luil::app_message>(popups.front().dismiss(luil::popup_dismiss_reason::pointer_press_outside)));
+    REQUIRE(page.make_focus_request()->id == opened);
+    REQUIRE(page.make_popups(1.0f, screen.surface()).empty());
+}
+
+namespace {
+    const luil::ui_element_id mobile_tip_root { luil::ui_element_kind::teaching_tip, u8"tip" };
+
+    // 셸처럼 흘리는 창에 담아 높이 `height`로 배치한 토스트 페이지다. 흘린 양은 `offset`이다.
+    [[nodiscard]] luil::ui_tree scrolled_toasts(mobile_demo::toasts_page& page, const float offset, const float height = 700.0f)
+    {
+        auto content { page.build(400.0f, 1.0f) };
+        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { mobile_demo::kind_layout, u8"toasts-scroll" }, luil::scroll_view_config { content.height, offset }) };
+        view->set_content(std::move(content.element));
+        return luil::make_arranged_tree(std::move(view), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] luil::ui_tree mobile_tip_overlay(mobile_demo::toasts_page& page, const luil::ui_tree& screen, const float height = 700.0f)
+    {
+        auto overlay { page.make_overlay(screen.root()) };
+        if (overlay == nullptr)
+            overlay = std::make_unique<luil::root_element>();
+        return luil::make_arranged_tree(std::move(overlay), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    }
+
+    [[nodiscard]] std::u8string mobile_tip_state(const luil::ui_tree& tree)
+    {
+        const luil::ui_element* const found { tree.find({ mobile_demo::kind_text, u8"tip-state" }) };
+        REQUIRE(found != nullptr);
+        return found->accessibility().name;
+    }
+
+    void run_tip(mobile_demo::toasts_page& page, const luil::ui_action* const action, const luil::ui_element_id& id)
+    {
+        REQUIRE(action != nullptr);
+        const auto pressed { (*action)(luil::ui_action_context { id, 0.0f, 0.0f }) };
+        REQUIRE(pressed.size() == 1u);
+        deliver(page, std::get<luil::app_message>(pressed.front()));
+    }
+}
+
+TEST_CASE("The mobile toasts page opens a finger sized teaching tip and back closes it", "[ui][teaching-tip][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f) };
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    REQUIRE(opener != nullptr);
+    REQUIRE(opener->bounds().height == mobile_demo::touch_height);
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+    REQUIRE(page.tip_open());
+
+    screen = scrolled_toasts(page, 0.0f);
+    {
+        const luil::ui_tree overlay { mobile_tip_overlay(page, screen) };
+        const luil::ui_element* const tip { overlay.find(mobile_tip_root) };
+        REQUIRE(tip != nullptr);
+        REQUIRE(tip->accessibility().role == luil::access_role::dialog);
+        // 손가락 칸이다. 닫기는 44 정사각이고 행동 단추도 44 높이다.
+        const luil::rect_f close { overlay.find(luil::teaching_tip_element::close_id(mobile_demo::tip_owner))->bounds() };
+        REQUIRE(close.width == mobile_demo::touch_height);
+        REQUIRE(close.height == mobile_demo::touch_height);
+        REQUIRE(overlay.find(luil::teaching_tip_element::primary_id(mobile_demo::tip_owner))->bounds().height == mobile_demo::touch_height);
+        // 대상 아래에 선다.
+        const luil::rect_f target { screen.find(mobile_demo::tip_target_id())->bounds() };
+        REQUIRE(overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"tip" })->bounds().y >= target.y + target.height);
+    }
+    screen = scrolled_toasts(page, 0.0f);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 열림(덮개) · 방향: 아래 · 마지막 닫힘: 없음");
+    static_cast<void>(mobile_tip_overlay(page, screen));
+    REQUIRE(page.next_expiry().has_value() == false);
+
+    // 뒤로 가기는 셸이 frame에 싣는 메시지로 닫는다.
+    deliver(page, std::get<luil::app_message>(page.back_action()));
+    screen = scrolled_toasts(page, 0.0f);
+    REQUIRE(page.tip_open() == false);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 뒤로 가기");
+}
+
+TEST_CASE("Back closes only the modal mobile teaching tip and passes over the modeless one", "[ui][teaching-tip][mobile-demo]")
+{
+    // 비modal은 닫기 단추로만 닫는다 (teaching-tip-design.md 결정 G2-dismiss 길 c). 셸은 이 답이 참일 때만 뒤로 가기를 싣고,
+    // 거짓이면 뒤로 가기가 앱으로 흘러 페이지를 떠난다 (떠날 때 풍선을 닫는다).
+    mobile_demo::toasts_page page {};
+    REQUIRE(page.back_closes_tip() == false);
+    auto screen { scrolled_toasts(page, 0.0f) };
+    const luil::ui_element* const modeless { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modeless" }) };
+    REQUIRE(modeless != nullptr);
+    run_tip(page, modeless->action(luil::ui_trigger::left_click), modeless->id());
+    REQUIRE(page.tip_open());
+    REQUIRE(page.back_closes_tip() == false);
+    page.close_tip();
+
+    screen = scrolled_toasts(page, 0.0f);
+    const luil::ui_element* const modal { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    REQUIRE(modal != nullptr);
+    run_tip(page, modal->action(luil::ui_trigger::left_click), modal->id());
+    REQUIRE(page.tip_open());
+    REQUIRE(page.back_closes_tip());
+}
+
+TEST_CASE("The mobile teaching tip state sits above the buttons so the open tip does not cover it", "[ui][teaching-tip][mobile-demo]")
+{
+    // 풍선은 대상 단추 아래에 선다. 설명이 단추 줄 아래에 있으면 풍선이 열린 동안 가려 사람이 상태를 읽지 못한다.
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f) };
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    REQUIRE(opener != nullptr);
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+
+    screen = scrolled_toasts(page, 0.0f);
+    const luil::ui_tree overlay { mobile_tip_overlay(page, screen) };
+    const luil::rect_f state { screen.find({ mobile_demo::kind_text, u8"tip-state" })->bounds() };
+    const luil::rect_f buttons { screen.find({ mobile_demo::kind_layout, u8"tip-buttons" })->bounds() };
+    const luil::rect_f target { screen.find(mobile_demo::tip_target_id())->bounds() };
+    const luil::rect_f tip { overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"tip" })->bounds() };
+    REQUIRE(state.y + state.height <= buttons.y);
+    // 풍선이 대상 아래에 섰고, 설명은 풍선 위에 남는다.
+    REQUIRE(tip.y >= target.y + target.height);
+    REQUIRE(state.y + state.height <= tip.y);
+}
+
+TEST_CASE("The mobile info bar hint breaks into lines instead of an ellipsis", "[mobile-demo][toasts][info-bar]")
+{
+    // 폭 320dp 쪽은 어느 글꼴에서나 두 줄 이상이 된다. 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다.
+    mobile_demo::toasts_page page {};
+    auto content { page.build(320.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
+    const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, u8"info-bar-hint" }) };
+    REQUIRE(note != nullptr);
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+    REQUIRE(wrapped.has_value());
+    REQUIRE(wrapped->height >= 2.0f * line);
+}
+
+TEST_CASE("Scrolling the mobile new feature button away leaves the teaching tip without a target", "[ui][teaching-tip][mobile-demo]")
+{
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f, 300.0f) };
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modeless" }) };
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+
+    // 흘려 대상을 창 밖으로 내보낸다. 그 frame의 풍선은 대상이 없고 다음 frame의 설명이 적는다.
+    screen = scrolled_toasts(page, 900.0f, 300.0f);
+    {
+        const luil::ui_tree overlay { mobile_tip_overlay(page, screen, 300.0f) };
+        REQUIRE(overlay.find(mobile_tip_root)->accessibility().role == luil::access_role::pane);
+    }
+    screen = scrolled_toasts(page, 900.0f, 300.0f);
+    REQUIRE(mobile_tip_state(screen) == u8"안내 풍선: 열림(비modal) · 방향: 대상 없음 · 마지막 닫힘: 없음");
+
+    // 다른 페이지에 있는 동안(설명을 짓지 않는 frame)에는 한 frame을 더 청하지 않는다.
+    static_cast<void>(page.make_overlay(nullptr));
+    REQUIRE(page.next_expiry().has_value() == false);
+    page.close_tip();
+    REQUIRE(page.make_overlay(nullptr) == nullptr);
+}
+
+TEST_CASE("Leaving the mobile toasts page closes the teaching tip before the departing screen is built", "[ui][teaching-tip][mobile-demo]")
+{
+    // 셸의 차례다 (app.cpp `navigate_intent`·`back_intent`). 풍선을 닫고, 떠나는 본문을 짓고, 다음 frame은 다른 페이지다.
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f) };
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+    screen = scrolled_toasts(page, 0.0f);
+    static_cast<void>(mobile_tip_overlay(page, screen));
+    REQUIRE(page.tip_open());
+
+    page.close_tip();
+    REQUIRE(page.tip_open() == false);
+    const luil::ui_tree departing { scrolled_toasts(page, 0.0f) };
+    REQUIRE(mobile_tip_state(departing) == u8"안내 풍선: 닫힘 · 방향: 없음 · 마지막 닫힘: 없음");
+    // 다른 페이지의 frame에는 풍선이 서지 않고 한 frame을 더 청하지도 않는다.
+    auto other { std::make_unique<luil::root_element>() };
+    const luil::ui_tree elsewhere { luil::make_arranged_tree(std::move(other), { 0.0f, 0.0f, 400.0f, 700.0f }, 1.0f) };
+    REQUIRE(page.make_overlay(elsewhere.root()) == nullptr);
+    REQUIRE(page.next_expiry().has_value() == false);
 }

@@ -288,6 +288,7 @@ namespace luil {
         : ui_element { id }
         , value_ { std::move(value) }
         , config_ { std::move(config) }
+        , resolved_line_break_ { config_.line_break.value_or(default_ui_style().text.wrap_policy) }
     {
         // 누름·끌기·더블 클릭은 interaction controller가 직접 다룬다 (`text_input_element`와 같다).
         // 여기서는 클릭을 흡수해 hit test의 대상이 되게만 한다.
@@ -444,7 +445,7 @@ namespace luil {
                 storage.push_back({ row.begin, row.end, row.wrapped });
             return storage;
         }
-        storage = wrap_lines(text, wrap_width_, measure, config_.line_break);
+        storage = wrap_lines(text, wrap_width_, measure, resolved_line_break_);
         return storage;
     }
 
@@ -458,21 +459,23 @@ namespace luil {
         std::vector<text_span> shown {};
         if (displayed)
             shown = displayed_ranges<text_span>(displayed_text(), shift_of(value_), begin, end, query);
+        // 밑줄은 폭을 바꾸지 않아 싣지 않는다. 코드는 code face라 advance가 달라 싣는다.
         for (const auto& span : displayed ? std::span<const text_span> { shown } : query(begin, end))
-            if (span.bold || span.italic)
+            if (span.bold || span.italic || span.code)
             {
                 const auto from { std::max(span.begin, begin) - begin };
                 const auto to { std::min(span.end, end) - begin };
                 if (from >= to)
                     continue;
-                // 이웃 항목은 굵기와 기울임이 모두 같을 때만 합친다. 하나라도 다르면 face가 달라 따로 배치한다.
+                // 이웃 항목은 굵기·기울임·코드가 모두 같을 때만 합친다. 하나라도 다르면 face가 달라 따로 배치한다.
                 if (styles.empty() == false
                     && styles.back().end == from
                     && styles.back().bold == span.bold
-                    && styles.back().italic == span.italic)
+                    && styles.back().italic == span.italic
+                    && styles.back().code == span.code)
                     styles.back().end = to;
                 else
-                    styles.push_back({ from, to, span.bold, span.italic });
+                    styles.push_back({ from, to, span.bold, span.italic, span.code });
             }
         return styles;
     }
@@ -487,7 +490,7 @@ namespace luil {
         request.wrap = wrap;
         request.line_height = line_height_logical() * scale_;
         request.styles = metric_styles(begin, begin + text.size(), displayed);
-        request.line_break = config_.line_break;
+        request.line_break = resolved_line_break_;
         return request;
     }
 
@@ -526,7 +529,7 @@ namespace luil {
             }
             else
             {
-                entry.cuts = wrap_paragraph(paragraph, wrap_width_, measure, config_.line_break);
+                entry.cuts = wrap_paragraph(paragraph, wrap_width_, measure, resolved_line_break_);
                 entry.width = config_.wrap ? 0.0f : measure(paragraph) / scale_;
             }
             return entry;
@@ -545,14 +548,14 @@ namespace luil {
         const auto face { config_.face == text_face::code ? text_layout_face::code : text_layout_face::ui };
         const auto revision { native_layout_ ? text_layout_revision() : 0 };
         if (cache.width_ != wrap_width_ || cache.font_size_ != font_size() || cache.scale_ != scale_ || cache.sample_width_ != sample
-            || cache.wrap_ != config_.wrap || cache.line_break_ != config_.line_break || cache.native_ != native_layout_ || cache.face_ != face
+            || cache.wrap_ != config_.wrap || cache.line_break_ != resolved_line_break_ || cache.native_ != native_layout_ || cache.face_ != face
             || cache.font_revision_ != revision)
         {
             cache.entries_.clear();
             cache.rows_.clear();
             cache.width_ = wrap_width_;
             cache.wrap_ = config_.wrap;
-            cache.line_break_ = config_.line_break;
+            cache.line_break_ = resolved_line_break_;
             cache.font_size_ = font_size();
             cache.scale_ = scale_;
             cache.sample_width_ = sample;
@@ -600,6 +603,8 @@ namespace luil {
     {
         set_bounds(context.slot);
         scale_ = context.scale > 0.0f ? context.scale : 1.0f;
+        // 정책은 배치에서 한 번 푼다. 아래의 글꼴 배치(`layout_request`)부터 이 값을 읽는다.
+        resolved_line_break_ = context.measure().line_break_for(config_.line_break);
 
         // 줄은 여기서 접는다 — 접은 줄 수가 내용 높이고, 내용 높이가 흘리는 범위와 막대다.
         //  - 흘리는 칸은 막대 자리를 늘 뺀 폭으로 접는다. 막대는 넘칠 때만 서는데, 그 자리를 그때만 빼면 줄 하나가
@@ -655,11 +660,14 @@ namespace luil {
         const float horizontal_height { horizontal_bar_ != nullptr ? std::min(scrollbar_visual_width * scale_ + 8.0f * scale_, context.slot.height) : 0.0f };
         rect_f area_slot { context.slot };
         area_slot.height -= horizontal_height;
+        // 막대는 칸 안의 부품이라 앱이 손댈 수 없다. 칸이 읽히는 이름을 물려준다 (`list_element`와 같은 줄).
+        area_->set_access_name(field_name());
         area_->arrange(context.for_child(area_slot));
         const float viewport_width { std::max(0.0f, area_->viewport().width / scale_ - gutter_width_) };
         horizontal_offset_ = config_.wrap ? 0.0f : clamp_scroll(content_width_, viewport_width, config_.scroll_x);
         if (horizontal_bar_ != nullptr)
         {
+            horizontal_bar_->set_access_name(field_name());
             horizontal_bar_->set_metrics(content_width_, viewport_width, horizontal_offset_);
             horizontal_bar_->arrange(context.for_child({ area_slot.x, area_slot.y + area_slot.height, area_->viewport().width, horizontal_height }));
         }
@@ -780,6 +788,8 @@ namespace luil {
         snapshot.multiline = true;
         snapshot.read_only = config_.read_only;
         snapshot.caret_upstream = value_.caret_upstream;
+        snapshot.spans = config_.spans.get();
+        snapshot.clipboard_keys_to_parent = config_.clipboard_keys_to_parent;
         // caret이 링크 안이거나 바로 뒤면 그 링크다 — 링크 끝 글자를 누르면 caret이 링크 뒤에 선다.
         if (config_.links != nullptr && value_.composing == false)
         {
@@ -967,8 +977,14 @@ namespace luil {
                 return SkRect::MakeXYWH(x, row_top, position(to - row.begin) - position(from - row.begin) + newline, line_height);
             };
             for (const auto& span : styled)
+            {
                 if (span.background != text_background_role::none)
                     context.canvas.drawRect(range_rect(span.begin, span.end), solid_paint(span_background(span.background, context.palette)));
+                // 코드 바탕은 문서 바탕 역할(`text_background_role`)이 아니라 팔레트의 떠 있는 바탕이다. 고대비에서는 창 바탕과
+                // 같아 사라지고 code face가 남는 단서다. 바탕 역할이 함께 있으면 그쪽이 뜻이 커서 앞선다.
+                else if (span.code)
+                    context.canvas.drawRect(range_rect(span.begin, span.end), solid_paint(context.palette.raised_background));
+            }
             const std::vector<text_highlight> highlights { displayed_ranges<text_highlight>(text, shift, row.begin, reach,
                 [this](const std::size_t from, const std::size_t to) { return text_highlights_in_range(config_.highlights, from, to); })
             };
@@ -1034,7 +1050,33 @@ namespace luil {
                     }
                     draw_piece(cursor, row.end, font, foreground.getColor());
                 };
-                draw_content(std::nullopt);
+                // 고른 구간의 글자는 맨 끝에서 고른 글자색으로 한 번만 그린다. 그 구간에 구문색·링크색·검색색 글자를 먼저
+                // 그려 두면 같은 글자가 한 번 더 그려져 글자 가장자리의 반투명 픽셀에 먼저 그린 색이 비치고 글자가 굵어 보인다.
+                // 그래서 앞의 글자 그리기는 고른 구간을 뺀 자리에만 그린다. 이 줄에 링크가 있어도 같다. 링크가 있는 줄은 고른 글자의
+                // 색이 본문색과 같아도 링크색이 고른 구간에 비치지 않게 덧그림이 선다.
+                const bool selected_text { selection.has_value() && enabled() && (styled.empty() == false || highlights.empty() == false || row_links.empty() == false || context.palette.selection_foreground != context.palette.primary_foreground) };
+                const auto draw_outside_selection = [&](const std::optional<ui_color> override_color) {
+                    context.canvas.save();
+                    if (selected_text)
+                        context.canvas.clipRect(*selection, SkClipOp::kDifference);
+                    draw_content(override_color);
+                    context.canvas.restore();
+                };
+                draw_outside_selection(std::nullopt);
+                // 밑줄 구간은 글자 아래 1 논리 픽셀 선을 그 구간의 글자색으로 긋는다. 링크 밑줄과 같은 자리이고, 줄 바꿈 칸은
+                // 긋지 않는다 (글자 아래의 선이다).
+                for (const auto& span : styled)
+                {
+                    if (span.underline == false)
+                        continue;
+                    const auto from { std::max(span.begin, row.begin) };
+                    const auto to { std::min(span.end, row.end) };
+                    if (from >= to)
+                        continue;
+                    const float x { left + position(from - row.begin) };
+                    context.canvas.drawRect(SkRect::MakeXYWH(x, baseline_of(index) + 1.0f * scale, left + position(to - row.begin) - x, 1.0f * scale),
+                        solid_paint(enabled() ? span_foreground(span.color, context.palette) : context.palette.disabled_foreground));
+                }
                 // 링크는 강조색 글자와 밑줄이다. 검색 결과와 선택이 그 위에 덮는다.
                 for (const auto& [link, element] : row_links)
                 {
@@ -1043,7 +1085,7 @@ namespace luil {
                     {
                         context.canvas.save();
                         context.canvas.clipRect(link_box);
-                        draw_content(context.palette.accent);
+                        draw_outside_selection(context.palette.accent);
                         context.canvas.restore();
                     }
                     const bool emphasized { element != nullptr && element->emphasized(interaction) };
@@ -1054,11 +1096,12 @@ namespace luil {
                 {
                     context.canvas.save();
                     context.canvas.clipRect(range_rect(match.begin, match.end));
-                    draw_content(context.palette.document_search_foreground);
+                    draw_outside_selection(context.palette.document_search_foreground);
                     context.canvas.restore();
                 }
-                // 고른 구간의 글자는 그 바탕의 짝이다 (한 줄 칸과 같은 규칙 — 고대비에서만 바뀐다).
-                if (selection.has_value() && enabled() && (styled.empty() == false || highlights.empty() == false || context.palette.selection_foreground != context.palette.primary_foreground))
+                // 고른 구간의 글자는 그 바탕의 짝이다 (한 줄 칸과 같은 규칙으로 고대비에서만 본문색과 다르다). 밑줄과 링크 밑줄은
+                // 고른 구간 안에서도 남고, 링크색·검색색 글자는 이 글자색이 대신한다.
+                if (selected_text)
                 {
                     context.canvas.save();
                     context.canvas.clipRect(*selection);
@@ -1142,9 +1185,15 @@ namespace luil {
         return context.now + (caret_blink_interval - phase);
     }
 
+    const std::u8string& text_area_element::field_name() const noexcept
+    {
+        // 안내 글은 글을 쓰면 사라지는 것이라 이름이 없을 때의 대신이다.
+        return access_name().empty() ? config_.placeholder : access_name();
+    }
+
     access_info text_area_element::accessibility() const
     {
         // 값은 확정 글이다 — 조합 글은 아직 사용자의 글이 아니다 (`text_input_element`와 같은 판단).
-        return { .role = access_role::edit, .name = config_.placeholder, .value = value_.text };
+        return { .role = access_role::edit, .name = field_name(), .value = value_.text };
     }
 }

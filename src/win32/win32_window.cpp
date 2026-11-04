@@ -7,6 +7,7 @@
 #include "host/surface_invalidate.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/webview_element.h"
+#include "win32/app_identity.h"
 #include "win32/backdrop.h"
 #include "win32/caption_surface.h"
 #include "win32/composition_device.h"
@@ -14,16 +15,22 @@
 #include "win32/drag_ghost_window.h"
 #include "win32/embedded_assets.h"
 #include "win32/file_dialog.h"
+#include "win32/hotkey_win32.h"
+#include "win32/instance_message.h"
+#include "win32/jump_list.h"
 #include "win32/layered_placement.h"
+#include "win32/notification_win32.h"
 #include "win32/popup_surface.h"
 #include "win32/secondary_surface.h"
 #include "win32/skia_renderer.h"
 #include "win32/surface_input.h"
 #include "win32/taskbar_button.h"
+#include "win32/tray_icon_win32.h"
 #include "win32/utf8.h"
 #include "win32/webview_host.h"
 #include "win32/webview_layout.h"
 #include "win32/win32_clipboard.h"
+#include "win32/win32_image_clipboard.h"
 #include "win32/win32_drop.h"
 #include "win32/win32_error.h"
 #include "win32/window_messages.h"
@@ -245,6 +252,16 @@ namespace luil::win32 {
                 .button_foreground = read_system_color(COLOR_BTNTEXT),
                 .disabled_foreground = read_system_color(COLOR_GRAYTEXT),
             };
+        }
+
+        // 창을 앞으로 세운다. 최소화는 되살린다.
+        //  - 앞 창을 빼앗지 않는 OS 규칙을 넘지 않는다: 이 프로세스가 앞 창이 아니면 OS가 막고 작업 표시줄 단추만 깜빡인다.
+        //    초점 요청(`advance_focus_request`)과 둘째 인스턴스의 인자(`receive_instance_message`)가 같은 규칙을 쓴다.
+        void bring_window_forward(const HWND window) noexcept
+        {
+            if (IsIconic(window) != FALSE)
+                ShowWindow(window, SW_RESTORE);
+            SetForegroundWindow(window);
         }
 
         // 주 창의 표면이다.
@@ -583,9 +600,19 @@ namespace luil::win32 {
 
             // 셸이 단추를 만들었다고 알렸다. 새 단추에는 아무것도 걸려 있지 않으므로 지금 요청을 처음부터 다시 낸다.
             //  - 탐색기가 다시 뜰 때도 같은 메시지가 와서 같은 길로 복원된다.
-            //  - `taskbar_created` 방송은 이 노드가 쓰지 않는다 (tray가 쓴다).
+            //  - `taskbar_created` 방송은 알림 영역 아이콘의 것이다 (tray-icon-design.md). 새 알림 영역에는 아무것도 없으므로
+            //    적용 기록을 지우고 요청을 처음부터 다시 더한다. 방송은 최상위 창마다 오므로 주 창의 것만 본다.
             void handle_shell_event(const std::u8string& surface, const shell_event event) override
             {
+                if (event == shell_event::taskbar_created)
+                {
+                    if (surface.empty())
+                    {
+                        tray_.shell_restarted();
+                        synchronize_tray();
+                    }
+                    return;
+                }
                 if (event != shell_event::taskbar_button_created)
                     return;
                 HWND handle { nullptr };
@@ -686,6 +713,11 @@ namespace luil::win32 {
                 }
                 // 셸이 단추를 만들면 보내는 등록 메시지를 관리자 권한에서도 받게 한다.
                 allow_shell_events(window_);
+                // 알림 영역 아이콘의 콜백도 같다 (tray-icon-design.md). 아이콘은 frame이 실을 때 선다.
+                allow_tray_callback(window_);
+                tray_.configure(window_, instance_, config_.icon_resource, config_.caption.title, tray_shell_for_new_windows());
+                // 전역 단축키의 눌림(`WM_HOTKEY`)도 주 창으로 온다 (global-hotkey-design.md). 조합은 frame이 실을 때 걸린다.
+                hotkeys_.configure(window_, hotkey_api_for_new_windows());
                 caption_surface::apply_dwm_frame(window_, window_display_mode::normal);
                 // DWM이 모서리 선택을 받는 판인지 주 창에 기본값을 걸어 묻는다 — 기본값이라 주 창 모양은 그대로다.
                 // 받지 않는 판(Windows 10 이하)은 실패를 돌려주고 popup은 직각으로 물러선다.
@@ -700,6 +732,8 @@ namespace luil::win32 {
                 system_backdrop_supported_ = SUCCEEDED(DwmSetWindowAttribute(window_, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_probe, sizeof(backdrop_probe)));
                 // 작업 표시줄 개체는 UI thread의 STA에서만 만들어진다. 능력 플래그가 이 결과를 따르므로 게시보다 앞선다.
                 taskbar_.open();
+                // 점프 목록은 앱 식별의 id로 짓는다. 식별은 `run_application_window`가 창보다 먼저 걸었다.
+                jump_list_.configure(config_.identity.id, current_executable_path());
                 publish_platform();
                 set_dpi(GetDpiForWindow(window_));
                 // 요청 크기는 논리 96 DPI 기준이다.
@@ -815,6 +849,13 @@ namespace luil::win32 {
 
                 if (environment_.delegate != nullptr)
                     environment_.delegate->on_started(*host_);
+                // 앱이 둘째 인스턴스의 인자를 받을 준비가 됐다. 창을 보이기 전에 표식을 건다.
+                publish_instance_mark();
+                // OS 알림의 사건을 이 창이 받는다. 앱 객체가 서기 전에 온 사건은 대기열에 있다가 곧 나간다.
+                attach_notification_window(window_);
+                // 꺼진 앱의 알림 클릭도 받도록 활성화기를 건다. 둘째 인스턴스는 걸지 않는다.
+                if (config_.identity.activator && (environment_.instance == nullptr || environment_.instance->primary()))
+                    register_notification_activator();
                 // 클립보드가 바뀌면 앱에 알린다 (잘라 둔 항목의 표시를 거둘 때를 안다).
                 // 실패해도 알림만 없을 뿐 클립보드 읽기·쓰기는 그대로다.
                 static_cast<void>(AddClipboardFormatListener(window_));
@@ -932,6 +973,8 @@ namespace luil::win32 {
                     std::vector<surface_content> contents { synchronize_windows() };
                     // 독립 창의 단추는 창이 선 뒤에 걸 수 있다.
                     synchronize_taskbar();
+                    synchronize_tray();
+                    synchronize_hotkeys();
                     synchronize_webviews();
                     for (surface_content& popup_content : synchronize_popups())
                         contents.push_back(std::move(popup_content));
@@ -977,6 +1020,9 @@ namespace luil::win32 {
                     refresh_backdrop();
                     // 창과 popup을 맞춘 뒤에 본다. 새 보조 창의 tree가 있어야 그 안의 칸이 섰는지 안다.
                     advance_focus_request();
+                    // inbox가 차서 되돌려 둔 알림 사건이다. logic이 frame을 냈으니 inbox에 자리가 났을 수 있다 (결정 8).
+                    if (notification_events().empty() == false)
+                        deliver_notification_events();
                     return 0;
                 }
                 case ui_command_request_message:
@@ -1049,6 +1095,14 @@ namespace luil::win32 {
                     // 창 배치는 종료 신호보다 먼저 게시해야 같은 채널의 순서로 반영된다.
                     if (host_ != nullptr)
                     {
+                        // 거두기 전에 표식부터 지운다. 둘째가 이미 정리를 시작한 앱에 인자를 보내지 않는다.
+                        clear_instance_mark();
+                        // 알림 영역 아이콘도 지운다. 두면 마우스가 지나갈 때까지 유령 아이콘이 남는다.
+                        static_cast<void>(tray_.remove());
+                        // 전역 단축키도 푼다. 창이 사라지면 OS도 거두지만 다른 프로그램이 곧바로 같은 조합을 걸 수 있게 먼저 푼다.
+                        hotkeys_.release_all();
+                        // 알림 사건도 더 받지 않는다. 늦게 온 사건은 대기열에 남아 앱에 가지 않는다.
+                        detach_notification_window(window_);
                         // 끝나는 창이 미뤄 둔 배치는 내지 않는다. 화면에 있는 그대로의 배치를 알린다.
                         deferred_placements_.clear();
                         post_window_placement();
@@ -1067,6 +1121,10 @@ namespace luil::win32 {
                     // shutdown의 3초 상한은 세션 종료 유예(기본 5초) 안이다.
                     if (word_parameter != FALSE && host_ != nullptr)
                     {
+                        clear_instance_mark();
+                        static_cast<void>(tray_.remove());
+                        hotkeys_.release_all();
+                        detach_notification_window(window_);
                         deferred_placements_.clear();
                         post_window_placement();
                         host_->shutdown();
@@ -1080,7 +1138,21 @@ namespace luil::win32 {
                         // 다른 창으로 넘어간 것도 popup 밖 클릭과 같은 뜻이다.
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::activation_changed));
                     }
+                    else
+                    {
+                        // 다른 프로그램이 조합을 놓았을 수 있다. 걸지 못한 항목을 한 번씩 다시 건다 (결정 6).
+                        hotkeys_.reactivated();
+                        synchronize_hotkeys();
+                    }
                     break;
+                case WM_HOTKEY:
+                    // 건 Alt 조합의 글자 키는 OS가 가져가 창에 오지 않는다. 풀지 않으면 뒤이은 Alt 뗌이 메뉴 막대를 세운다.
+                    //  - 무장은 키보드 초점 표면에 서고 그 표면은 보조 창일 수 있다. 이 알림은 주 창으로만 와서 모두 푼다.
+                    main_.cancel_alt_tap();
+                    for (const std::unique_ptr<secondary_surface>& secondary : windows_)
+                        secondary->cancel_alt_tap();
+                    handle_hotkey(word_parameter);
+                    return 0;
                 case WM_WINDOWPOSCHANGING: {
                     if (layered_ == false)
                         break;
@@ -1163,6 +1235,7 @@ namespace luil::win32 {
                     //    popup이 낡은 채로 남는다.
                     invalidate_surfaces(surfaces_to_repaint(synchronize_popups(), false));
                     InvalidateRect(window_, nullptr, FALSE);
+                    refresh_tray_appearance();
                     return 0;
                 }
                 case WM_DISPLAYCHANGE:
@@ -1180,6 +1253,8 @@ namespace luil::win32 {
                     //    나간 창을 다듬는 것은 이미 OS가 한다.
                     if (main_.fullscreen())
                         static_cast<void>(main_.reapply_fullscreen_bounds());
+                    // 주 모니터의 배율이 바뀌었을 수 있다. 알림 영역 그림의 크기가 그것을 따른다.
+                    refresh_tray_appearance();
                     return 0;
                 case WM_FONTCHANGE:
                     // 글꼴이 설치·삭제되면 캐시의 해석 결과를 비운다.
@@ -1199,6 +1274,8 @@ namespace luil::win32 {
                     // 투명 효과·고대비가 바뀌면 배경 효과가 서는지도 바뀐다.
                     transparency_enabled_ = read_transparency_enabled();
                     refresh_backdrop();
+                    // 작업 표시줄 밝기·고대비가 바뀌면 알림 영역 그림도 다시 고른다.
+                    refresh_tray_appearance();
                     invalidate_all_surfaces();
                     // 움직임 줄이기는 앱의 상태에도 닿는다 (앱이 든 전환·스프링). 그리기에 닿는 갱신을 마친 뒤, 값이 달라졌을
                     // 때만 알린다 — 이 메시지는 이 설정이 아닌 일로도 자주 온다.
@@ -1216,6 +1293,19 @@ namespace luil::win32 {
                 case WM_CLIPBOARDUPDATE:
                     post_clipboard_change();
                     return 0;
+                case notification_event_message:
+                    deliver_notification_events();
+                    return 0;
+                case tray_callback_message:
+                    handle_tray_callback(word_parameter, long_parameter);
+                    return 0;
+                case WM_COPYDATA: {
+                    // 같은 이름의 둘째 인스턴스가 보낸 인자다. 표식이 없거나 이 형식의 표식이 아닌 WM_COPYDATA는 기본 처리에 넘긴다.
+                    const auto* const data { reinterpret_cast<const COPYDATASTRUCT*>(long_parameter) };
+                    if (instance_property_.empty() || data == nullptr || data->dwData != instance_message_tag)
+                        break;
+                    return receive_instance_message(*data);
+                }
                 case WM_DESTROY:
                     static_cast<void>(RemoveClipboardFormatListener(window_));
                     // **웹뷰가 가장 먼저다.** 웹뷰는 표면 렌더러가 소유한 visual에
@@ -1225,9 +1315,14 @@ namespace luil::win32 {
                     // WM_CLOSE를 거치지 않은 파괴 경로에서도 스레드를 먼저 정리한다.
                     if (host_ != nullptr)
                     {
+                        clear_instance_mark();
+                        detach_notification_window(window_);
                         host_->shutdown();
                         host_.reset();
                     }
+                    // 닫기를 거치지 않은 파괴 경로에서도 알림 영역 아이콘을 지우고 전역 단축키를 푼다. 이미 했으면 할 일이 없다.
+                    static_cast<void>(tray_.remove());
+                    hotkeys_.release_all();
                     destroy_all_popups();
                     destroy_all_secondary_windows();
                     // 창이 사라지면 단추에 걸린 오버레이 아이콘도 더는 쓸 데가 없다.
@@ -1840,6 +1935,30 @@ namespace luil::win32 {
                     }
                     return;
                 }
+                // 글과 그림을 한 클립에 넣는다 (image-clipboard-design.md). 결과는 돌려주지 않는다 (글·파일 복사와 같다).
+                if (const auto* const data { std::get_if<clipboard_data_copy_request>(&request) }; data != nullptr)
+                {
+                    static_cast<void>(copy_data_to_clipboard(window_, *data));
+                    return;
+                }
+                // 그림이 없어도 답은 간다. 그림은 풀지 않은 바이트라 앱이 logic thread에서 푼다.
+                if (const auto* const read { std::get_if<clipboard_data_paste_request>(&request) }; read != nullptr)
+                {
+                    if (host_ == nullptr || environment_.delegate == nullptr)
+                        return;
+                    clipboard_data data { read_clipboard_data(window_) };
+                    data.tag = read->tag;
+                    try
+                    {
+                        if (app_message message { environment_.delegate->make_clipboard_data_message(data) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
+                    }
+                    catch (...)
+                    {
+                        report_runtime_error(u8"The clipboard data delegate threw an exception.");
+                    }
+                    return;
+                }
                 const auto* const paste { std::get_if<clipboard_paste_request>(&request) };
                 if (paste == nullptr || host_ == nullptr || environment_.policy == nullptr)
                     return;
@@ -1867,7 +1986,7 @@ namespace luil::win32 {
             {
                 if (host_ == nullptr || environment_.delegate == nullptr)
                     return;
-                const clipboard_change change { GetClipboardOwner() == window_, static_cast<std::uint32_t>(GetClipboardSequenceNumber()), IsClipboardFormatAvailable(CF_HDROP) != FALSE };
+                const clipboard_change change { GetClipboardOwner() == window_, static_cast<std::uint32_t>(GetClipboardSequenceNumber()), IsClipboardFormatAvailable(CF_HDROP) != FALSE, clipboard_has_image() };
                 try
                 {
                     if (app_message message { environment_.delegate->make_clipboard_changed_message(change) }; message.empty() == false)
@@ -2044,6 +2163,8 @@ namespace luil::win32 {
                 state.accent_id = appearance.accent_id;
                 // 앱이 실은 스타일이다. frame은 이 렌더 동안 살아 있으므로 포인터로 족하다.
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
+                // 앱이 실은 검사기다. 스타일과 같은 까닭으로 포인터로 족하다.
+                state.inspector = frame != nullptr ? &frame->inspector : nullptr;
                 // 한 줄 도우미는 문맥 인자가 없어 스타일의 줄바꿈 처리를 프로세스 값으로 건다 (실린 것이 없으면 내장값).
                 set_single_line_break(frame_style(state).text.line_break);
                 state.reduce_motion = reduce_motion_;
@@ -2152,16 +2273,27 @@ namespace luil::win32 {
             // 이 프로세스가 지금 실제로 하는 일을 플랫폼 성질로 게시한다. Win32의 `ui_platform`을 적는 유일한 자리다.
             //  - popup 모양 지원 (`ui_platform::rounded_popup_corners`). 앱은 이것으로 popup 안 tree의 반지름을 고른다.
             //  - 작업 표시줄 요청을 셸에 낼 수 있는가 (`capabilities.taskbar`). 개체를 만들 수 있었는가다.
+            //  - OS 알림을 올릴 수 있는가 (`capabilities.notifications`). 앱 식별이 서고 알림 개체를 얻었는가다.
+            //  - 그림을 클립보드에 넣을 수 있는가 (`capabilities.clipboard_image_copy`). Win32는 늘 참이다.
+            //  - 알림 영역에 아이콘을 세울 수 있는가 (`capabilities.tray`). 주 창이 섰으면 늘 참이다. 늘 참인 칸은 아래 조건에
+            //    항을 더하지 않아도 된다. `clipboard_image_copy`가 첫 게시의 표지라 첫 호출에서 함께 적힌다.
+            //  - 전역 단축키를 걸 수 있는가 (`capabilities.global_hotkeys`). 주 창이 섰으면 늘 참이다. 조건에는 항을 더했다.
             // 바뀐 때만 적는다. 새 능력은 `ui_platform_capabilities` 끝에 기본 거짓으로 더하고 여기에 한 줄을 더한다.
             void publish_platform()
             {
                 ui_platform platform { current_ui_platform() };
                 const bool rounded { rounded_popups() };
                 const bool taskbar { taskbar_.available() };
-                if (platform.rounded_popup_corners == rounded && platform.capabilities.taskbar == taskbar)
+                const bool notifications { notifications_available() };
+                if (platform.rounded_popup_corners == rounded && platform.capabilities.taskbar == taskbar && platform.capabilities.notifications == notifications
+                    && platform.capabilities.clipboard_image_copy && platform.capabilities.global_hotkeys)
                     return;
                 platform.rounded_popup_corners = rounded;
                 platform.capabilities.taskbar = taskbar;
+                platform.capabilities.notifications = notifications;
+                platform.capabilities.clipboard_image_copy = true;
+                platform.capabilities.tray = true;
+                platform.capabilities.global_hotkeys = true;
                 set_ui_platform(platform);
             }
 
@@ -2382,12 +2514,7 @@ namespace luil::win32 {
                     window_surface* const surface { anchor_surface(request.surface) };
                     // popup은 활성화를 받지 않는 표면이다 (`WS_EX_NOACTIVATE`).
                     if (request.activate && surface != nullptr && find_popup(request.surface) == nullptr)
-                    {
-                        const HWND window { surface->window() };
-                        if (IsIconic(window) != FALSE)
-                            ShowWindow(window, SW_RESTORE);
-                        SetForegroundWindow(window);
-                    }
+                        bring_window_forward(surface->window());
                     if (request.target != ui_element_id {})
                         host_->post_raw_input(access_focus_event { request.target, request.surface, now });
                 }
@@ -2803,6 +2930,8 @@ namespace luil::win32 {
                     taskbar_.button_lost(u8"");
                 std::vector<std::u8string> live { u8"" };
                 post_taskbar_report(taskbar_.apply(u8"", window_, dpi_, frame->taskbar));
+                // 점프 목록은 단추가 아니라 앱 식별에 묶여 숨은 동안에도 낸다. 독립 창의 것은 읽지 않는다 (jump-list-design.md).
+                post_jump_list_report(jump_list_.apply(frame->taskbar.jump_list));
                 for (const ui_window& source : frame->windows)
                 {
                     if (source.independent == false)
@@ -2829,6 +2958,188 @@ namespace luil::win32 {
                 catch (...)
                 {
                     report_runtime_error(u8"The taskbar delegate threw an exception.");
+                }
+            }
+
+            // frame이 실은 알림 영역 아이콘을 셸에 맞춘다 (tray-icon-design.md). 게시 wake·탐색기 재시작·환경 변화가 부른다.
+            //  - 주 창이 숨은 동안에도 선다. 아이콘은 창 표면과 무관하다.
+            //  - 메뉴가 떠 있는데 아이콘이 빠졌으면 메뉴를 닫는다. 메뉴의 modal 루프 안에서도 이 메시지는 풀린다.
+            void synchronize_tray()
+            {
+                if (host_ == nullptr || window_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr)
+                    return;
+                if (tray_menu_open_ && frame->tray.has_value() == false)
+                    static_cast<void>(EndMenu());
+                post_tray_report(tray_.apply(frame->tray));
+            }
+
+            // 고대비·작업 표시줄 밝기·주 모니터 배율을 다시 읽고, 바뀌었으면 알림 영역 그림을 다시 고른다.
+            void refresh_tray_appearance()
+            {
+                const tray_appearance appearance { read_tray_appearance() };
+                if (appearance == tray_.appearance())
+                    return;
+                tray_.set_appearance(appearance);
+                synchronize_tray();
+            }
+
+            // 셸의 알림 영역 콜백이다. 사건은 그 순간의 frame이 실은 것으로 낸다 (메뉴와 `activate`는 견주지 않는다).
+            //  - 라이브러리는 창을 앞으로 세우지 않는다. 앱이 `main_hidden`을 끄고 활성화를 싣는다.
+            void handle_tray_callback(const WPARAM word_parameter, const LPARAM long_parameter)
+            {
+                if (host_ == nullptr)
+                    return;
+                const std::optional<tray_icon_event> event { tray_.receive(word_parameter, long_parameter) };
+                if (event.has_value() == false)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr || frame->tray.has_value() == false)
+                    return;
+                if (event->action == tray_icon_action::context && frame->tray->menu.has_value())
+                {
+                    show_tray_menu(*frame->tray->menu, event->point);
+                    return;
+                }
+                if (frame->tray->activate == nullptr)
+                    return;
+                try
+                {
+                    dispatch_action(frame->tray->activate(*event));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The tray icon action threw an exception.");
+                }
+            }
+
+            // 알림 영역 아이콘의 메뉴를 시스템 메뉴로 띄운다 (결정 1의 길 a). 고른 키는 연 순간의 설정 사본의 `select`로 낸다.
+            //  - 앞으로 세우지 않으면 바깥을 눌러도 메뉴가 닫히지 않는다. 닫은 뒤 빈 메시지를 보내야 다음 메뉴가 곧바로
+            //    닫히지 않는다. 둘 다 이 API의 알려진 규칙이다.
+            //  - 떠 있는 동안 UI thread는 메뉴의 modal 루프에서 이 창의 메시지를 계속 푼다. 그 사이 창이 끝났을 수 있어
+            //    돌아온 뒤 다시 본다.
+            void show_tray_menu(const menu_config menu, const screen_point point)
+            {
+                if (tray_menu_open_ || window_ == nullptr)
+                    return;
+                const tray_menu built { make_tray_menu(menu) };
+                if (built.menu.get() == nullptr)
+                    return;
+                SetForegroundWindow(window_);
+                tray_menu_open_ = true;
+                const UINT command { static_cast<UINT>(TrackPopupMenuEx(built.menu.get(), TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, window_, nullptr)) };
+                tray_menu_open_ = false;
+                if (window_ == nullptr)
+                    return;
+                PostMessageW(window_, WM_NULL, 0, 0);
+                const std::optional<std::u8string> key { built.key_of(command) };
+                if (host_ == nullptr || key.has_value() == false || menu.select == nullptr)
+                    return;
+                try
+                {
+                    dispatch_action(menu.select(*key));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The tray menu action threw an exception.");
+                }
+            }
+
+            void post_tray_report(const std::optional<tray_report>& report)
+            {
+                if (report.has_value() == false || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                try
+                {
+                    if (app_message message { environment_.delegate->make_tray_message(*report) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The tray delegate threw an exception.");
+                }
+            }
+
+            // frame이 실은 전역 단축키를 OS에 맞춘다 (global-hotkey-design.md). 게시 wake·활성화가 부른다.
+            //  - 주 창이 숨거나 최소화돼도 건다. 받는 창의 `HWND`가 살아 있다.
+            //  - 키 잡기 칸이 초점을 가진 동안은 건 것을 모두 푼다. 걸린 조합은 OS가 먼저 가져가 칸에 오지 않기 때문이다.
+            //    이 순간의 발행본을 직접 읽는다. `last_interaction_`은 이 호출 뒤에 갱신된다.
+            void synchronize_hotkeys()
+            {
+                if (host_ == nullptr || window_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr)
+                    return;
+                // 건 것이 없는 앱은 발행본을 복사하지 않는다. 목록이 비면 키 잡기와 상관없이 풀 것만 푼다.
+                const bool key_capture { frame->hotkeys.empty() == false && host_->acquire_interaction().key_capture };
+                post_hotkey_reports(hotkeys_.apply(frame->hotkeys, key_capture));
+            }
+
+            // 전역 단축키가 눌렸다. 눌림은 그 순간의 frame이 실은 같은 id의 `pressed`로 낸다.
+            //  - 장부에 없는 번호는 무시한다. 풀기 직전에 게시된 눌림이 늦게 오거나 시스템의 `IDHOT_*`가 온 것이다.
+            //  - 라이브러리는 창을 앞으로 세우지 않는다. 앱이 `main_hidden`을 끄고 활성화를 싣는다.
+            void handle_hotkey(const WPARAM number)
+            {
+                if (host_ == nullptr)
+                    return;
+                const std::optional<std::u8string> id { hotkeys_.id_of(number) };
+                if (id.has_value() == false)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr)
+                    return;
+                for (const global_hotkey& hotkey : frame->hotkeys)
+                {
+                    if (hotkey.id != *id)
+                        continue;
+                    if (hotkey.pressed == nullptr)
+                        return;
+                    try
+                    {
+                        dispatch_action(hotkey.pressed());
+                    }
+                    catch (...)
+                    {
+                        report_runtime_error(u8"The global hotkey action threw an exception.");
+                    }
+                    return;
+                }
+            }
+
+            void post_hotkey_reports(const std::vector<hotkey_report>& reports)
+            {
+                if (reports.empty() || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                // 보고마다 따로 지킨다. 한 보고에서 delegate가 던져도 같은 대조의 나머지 보고는 간다.
+                for (const hotkey_report& report : reports)
+                {
+                    try
+                    {
+                        if (app_message message { environment_.delegate->make_hotkey_message(report) }; message.empty() == false)
+                            host_->post_app_message(std::move(message));
+                    }
+                    catch (...)
+                    {
+                        report_runtime_error(u8"The hotkey delegate threw an exception.");
+                    }
+                }
+            }
+
+            void post_jump_list_report(const std::optional<jump_list_report>& report)
+            {
+                if (report.has_value() == false || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                try
+                {
+                    if (app_message message { environment_.delegate->make_jump_list_message(*report) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The jump list delegate threw an exception.");
                 }
             }
 
@@ -2998,6 +3309,80 @@ namespace luil::win32 {
                 return MulDiv(value, static_cast<int>(dpi_), 96);
             }
 
+            // 첫째이면 주 창에 이름 표식을 건다. 둘째 인스턴스가 이 표식으로 첫째의 주 창을 찾는다 (single-instance-args-design.md).
+            //  - 표식이 서면 받을 준비가 된 것이다: 단일 인스턴스가 첫째이고 host와 delegate가 있다. 아니면 걸지 않아 보내는 쪽이 `not_found`를 본다.
+            //  - 낮은 권한 프로세스가 보낸 인자는 앱이 허락한 경우에만 받는다 (UIPI).
+            void publish_instance_mark()
+            {
+                if (environment_.instance == nullptr || environment_.instance->primary() == false || host_ == nullptr || environment_.delegate == nullptr)
+                    return;
+                std::optional<std::wstring> property { instance_property_name(environment_.instance->name()) };
+                if (property.has_value() == false)
+                {
+                    report_runtime_error(u8"The instance name is empty or longer than 241 UTF-16 code units, so the main window cannot be marked.");
+                    return;
+                }
+                if (SetPropW(window_, property->c_str(), reinterpret_cast<HANDLE>(1)) == FALSE)
+                {
+                    report_runtime_error(make_last_error(u8"Failed to mark the main window for the second instance"));
+                    return;
+                }
+                instance_property_ = std::move(*property);
+                if (environment_.instance_from_lower_integrity)
+                    allow_instance_message(window_);
+            }
+
+            // 표식을 지운다. host를 거두기 직전에 부른다 (WM_CLOSE·WM_ENDSESSION·WM_DESTROY).
+            //  - 닫기를 앱이 막아 창이 남으면 지우지 않아 표식도 남는다.
+            void clear_instance_mark() noexcept
+            {
+                if (instance_property_.empty())
+                    return;
+                static_cast<void>(RemovePropW(window_, instance_property_.c_str()));
+                instance_property_.clear();
+            }
+
+            // 둘째가 보낸 WM_COPYDATA를 읽어 앱에 건넨다. 앱이 받았으면 TRUE다. 모양이 맞지 않거나 앱이 받지 않았으면 FALSE다.
+            //  - `lpData`는 이 호출 안에서만 유효해 그 안에서 `instance_arguments`로 옮긴다.
+            //  - 앞으로 세우기는 콜백이 true를 답하든 false를 답하든 같다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다.
+            [[nodiscard]] LRESULT receive_instance_message(const COPYDATASTRUCT& data)
+            {
+                if (host_ == nullptr || environment_.delegate == nullptr)
+                    return FALSE;
+                const std::span<const std::byte> bytes { static_cast<const std::byte*>(data.lpData), data.lpData != nullptr ? data.cbData : 0 };
+                instance_decode_result message { decode_instance_message(data.dwData, bytes) };
+                if (message.ok() == false)
+                    return FALSE;
+                bool accepted { false };
+                try
+                {
+                    accepted = environment_.delegate->on_instance_arguments(*host_, message.value);
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The instance arguments delegate threw an exception.");
+                }
+                if (message.activate && IsWindowVisible(window_) != FALSE)
+                    bring_window_forward(window_);
+                return accepted ? TRUE : FALSE;
+            }
+
+            // 대기열의 OS 알림 사건을 앱에 낸다 (os-notification-design.md의 "thread"). UI thread에서만 부른다.
+            //  - 게시하지 못한 사건은 되돌려 다음 frame 게시(`snapshot_wake_message`) 때 다시 낸다.
+            //  - 눌림을 냈으면 보이는 주 창을 앞으로 세운다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다.
+            void deliver_notification_events()
+            {
+                if (host_ == nullptr)
+                    return;
+                const auto make = [this](const notification_event& event) { return environment_.delegate != nullptr ? environment_.delegate->make_notification_message(event) : app_message {}; };
+                const auto post = [this](app_message message) { return host_->post_app_message_ticketed(std::move(message)); };
+                const notification_delivery delivery { luil::deliver_notification_events(notification_events(), make, post) };
+                if (delivery.failed_calls > 0)
+                    report_runtime_error(u8"The notification delegate threw an exception.");
+                if (delivery.activated && IsWindowVisible(window_) != FALSE)
+                    bring_window_forward(window_);
+            }
+
             void report_runtime_error(const std::u8string& error) const noexcept
             {
                 const auto wide_error { utf8_to_utf16(error) };
@@ -3012,6 +3397,8 @@ namespace luil::win32 {
             window_config config_ {};
             window_environment environment_ {};
             HWND window_ { nullptr };
+            // 주 창에 건 표식의 속성 이름이다. 비어 있으면 둘째 인스턴스의 인자를 받지 않는다.
+            std::wstring instance_property_ {};
             std::uint32_t dpi_ { 96 };
             std::optional<initial_window_placement> initial_placement_ {};
             // 마지막으로 적용한 창 배치 게시 번호다.
@@ -3049,6 +3436,14 @@ namespace luil::win32 {
             // 작업 표시줄 단추에 거는 진행률과 오버레이다. 개체는 주 창을 만들 때 연다.
             //  - 창 표면들보다 먼저 선언해 나중에 사라진다. 오버레이 아이콘은 창이 모두 사라진 뒤에 놓는다.
             taskbar_button taskbar_ {};
+            // 작업 표시줄 점프 목록을 셸에 내는 자리다. 목록은 셸이 파일로 쥐므로 창이 사라져도 놓을 것이 없다.
+            jump_list_writer jump_list_ {};
+            // 알림 영역 아이콘이다 (tray-icon-design.md). 주 창을 만들 때 창과 셸 호출을 받는다. 그림 핸들을 쥔다.
+            tray_icon_host tray_ {};
+            // 알림 영역 메뉴가 떠 있다 (`show_tray_menu`의 modal 루프 안이다).
+            bool tray_menu_open_ { false };
+            // 전역 단축키다 (global-hotkey-design.md). 주 창을 만들 때 창과 OS 호출을 받는다. 건 장부를 쥔다.
+            hotkey_host hotkeys_ {};
             // update timer가 깨울 표면들이다.
             // "그 시각을 답한 표면"을 timer와 함께 들고 있는 것이 표면별 다시 그리기의
             // 절반이다 — 나머지 절반은 frame 대조가 낸다 (rendering.md).
@@ -3250,6 +3645,32 @@ namespace luil::win32 {
         {
             show_startup_error(error, config);
             return 1;
+        }
+
+        // 앱 식별은 창보다 먼저다. 창이 서는 순간 작업 표시줄이 프로세스의 AUMID로 단추를 묶는다.
+        //  - 규칙 밖의 id는 시작 실패다 (잘못된 터치 설정과 같다). 조용히 넘기면 앱은 알림이 서는 줄 안다.
+        //  - 레지스트리 쓰기 같은 OS 실패는 시작을 막지 않는다. 그때 알림이 `unsupported`이고 `show_notification`이 그 글을 든다.
+        if (config.identity.id.empty() == false)
+        {
+            if (app_identity_id_valid(config.identity.id) == false)
+            {
+                show_startup_error(u8"The app identity id must be 1 to 128 UTF-16 code units without spaces, control characters or backslashes.", config);
+                return 1;
+            }
+            if (config.smoke_test == false)
+            {
+                // 알림 클릭이 띄운 실행이면 활성화기의 첫 눌림이 `launched`다.
+                if (const std::optional<std::vector<std::u8string>> arguments { command_line_arguments() }; arguments.has_value())
+                    set_notification_launch(notification_launch(*arguments));
+                if (const platform_result applied { apply_app_identity(config.identity, config.caption.title) }; applied.ok() == false)
+                {
+                    if (const auto wide_error { utf8_to_utf16(applied.error) }; wide_error.value.has_value())
+                    {
+                        OutputDebugStringW(wide_error.value->c_str());
+                        OutputDebugStringW(L"\n");
+                    }
+                }
+            }
         }
 
         // 실행 module은 여기서 스스로 얻는다.

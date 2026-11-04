@@ -45,6 +45,6 @@ namespace luil {
     }
     access_info progress_element::accessibility() const
     {
-        return { .role = access_role::progress, .name = tooltip(), .range = access_range { 0.0f, 1.0f, clamp_value(config_.value) } };
+        return { .role = access_role::progress, .name = access_name(), .range = access_range { 0.0f, 1.0f, clamp_value(config_.value) } };
     }
 }

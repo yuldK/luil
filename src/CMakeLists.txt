@@ -27,7 +27,9 @@ add_custom_command(
     COMMENT "Generating the accent catalog"
     VERBATIM)
 
-# 스타일(중립 색·tone·치수)도 같은 방식이다.
+# 같은 생성기가 기본값 헤더와 실행 중 파서의 키 표 헤더를 낸다.
+#  - 명령을 둘로 나눈다. 키 표는 LUIL_STYLE과 무관해서, 한 명령의 두 OUTPUT으로 두면 스타일 파일만 바뀌어도
+#    키 표가 낡은 출력으로 보여 빌드마다 생성과 파서 컴파일이 다시 돈다.
 add_custom_command(
     OUTPUT "${LUIL_GENERATED_STYLE}"
     COMMAND "${CMAKE_COMMAND}"
@@ -39,6 +41,15 @@ add_custom_command(
         "${LUIL_CMAKE_DIRECTORY}/generate_style.cmake"
     COMMENT "Generating the style"
     VERBATIM)
+
+# 라이브러리 기본 문구의 문자열 표도 같은 방식이다 (docs/i18n-design.md). 앱의 표와 같은 생성 명령을 쓴다.
+#  - 소비자가 `LUIL_STRINGS`로 폴더를 바꿔도 키 집합은 저장소 파일과 같아야 한다. 라이브러리 코드가 생성 enum으로 부른다.
+luil_add_string_table_command(
+    OUTPUT "${LUIL_GENERATED_STRINGS}"
+    NAMESPACE "luil::library_text"
+    DIRECTORY "${LUIL_STRINGS}"
+    BASE ko
+    REFERENCE_FILE "${PROJECT_SOURCE_DIR}/assets/strings/ko.json")
 
 # 파일은 IDE 필터 단위로 적고, 그렇게 모인 것이 곧 라이브러리의 source 목록이다
 # (luil_add_source_filter, cmake/macro.cmake).
@@ -61,7 +72,8 @@ set(luil_files)
 luil_add_source_filter(luil_core_files "generated"
     "${LUIL_GENERATED_CODICONS}"
     "${LUIL_GENERATED_ACCENTS}"
-    "${LUIL_GENERATED_STYLE}")
+    "${LUIL_GENERATED_STYLE}"
+    "${LUIL_GENERATED_STRINGS}")
 
 # core: 판번이다.
 luil_add_source_filter(luil_core_files "core"
@@ -88,11 +100,17 @@ luil_add_source_filter(luil_core_files "text"
     text/text_change.cpp
     "${public_headers}/text/text_change.h"
     text/text_edit.cpp
+    text/text_format.cpp
+    text/text_format_internal.h
+    "${public_headers}/text/text_format.h"
     "${public_headers}/text/fonts.h"
     "${public_headers}/text/font_style.h"
     "${public_headers}/text/text_edit.h"
     text/utf8_text.cpp
-    "${public_headers}/text/utf8_text.h")
+    "${public_headers}/text/utf8_text.h"
+    text/library_text.h
+    text/string_table.cpp
+    "${public_headers}/text/string_table.h")
 
 # theme: 색·글꼴 선호 값과 팔레트 합성이다.
 luil_add_source_filter(luil_core_files "theme"
@@ -111,6 +129,10 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/accessibility.cpp
     "${public_headers}/ui/accessibility.h"
     "${public_headers}/ui/app_message.h"
+    ui/undo_commands.cpp
+    "${public_headers}/ui/undo_commands.h"
+    ui/undo_stack.cpp
+    "${public_headers}/ui/undo_stack.h"
     ui/ui_element.cpp
     "${public_headers}/ui/ui_element.h"
     ui/text_measurer.cpp
@@ -126,8 +148,18 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     "${public_headers}/ui/ui_platform.h"
     ui/font_scale.cpp
     "${public_headers}/ui/font_scale.h"
+    ui/default_text.cpp
+    ui/default_text.h
     ui/ui_tree.cpp
-    "${public_headers}/ui/ui_tree.h")
+    "${public_headers}/ui/ui_tree.h"
+    ui/inspect_geometry.h
+    ui/inspect_names.cpp
+    ui/ui_inspect.cpp
+    "${public_headers}/ui/ui_inspect.h")
+
+# 화면 마크업이다 (docs/markup-design.md). 엄한 XML 읽기와 어휘 표가 틀을 짓는다.
+# 어휘는 스타일 키 표(비공개 생성 헤더)의 역할·굵기 이름을 그대로 읽는다. 펼치기가 그 틀을 앱 값으로 element tree로 짓는다
+# (docs/markup-binding-design.md).
 
 # 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
 luil_add_source_filter(luil_core_files "ui/interaction"
@@ -159,6 +191,10 @@ luil_add_source_filter(luil_core_files "ui/layout"
     "${public_headers}/ui/group_element.h"
     ui/layer_element.cpp
     "${public_headers}/ui/layer_element.h"
+    ui/page_transition.cpp
+    "${public_headers}/ui/page_transition.h"
+    ui/page_transition_element.cpp
+    "${public_headers}/ui/page_transition_element.h"
     ui/palette_scope_element.cpp
     "${public_headers}/ui/palette_scope_element.h"
     ui/panel_element.cpp
@@ -205,6 +241,12 @@ luil_add_source_filter(luil_core_files "ui/controls"
     "${public_headers}/ui/field_popup.h"
     ui/slider_element.cpp
     "${public_headers}/ui/slider_element.h"
+    ui/rating_element.cpp
+    "${public_headers}/ui/rating_element.h"
+    ui/color_picker_element.cpp
+    "${public_headers}/ui/color_picker_element.h"
+    ui/calendar_element.cpp
+    "${public_headers}/ui/calendar_element.h"
     ui/split_button_element.cpp
     "${public_headers}/ui/split_button_element.h")
 
@@ -218,11 +260,17 @@ luil_add_source_filter(luil_core_files "ui/content"
     ui/badge_paint.h
     ui/info_bar_element.cpp
     "${public_headers}/ui/info_bar_element.h"
+    ui/ink.cpp
+    ui/ink_backing.h
+    "${public_headers}/ui/ink.h"
+    ui/ink_canvas_element.cpp
+    "${public_headers}/ui/ink_canvas_element.h"
     ui/severity_paint.cpp
     ui/severity_paint.h
     "${public_headers}/ui/severity.h"
     ui/image_element.cpp
     "${public_headers}/ui/image_element.h"
+    "${public_headers}/ui/ui_image.h"
     ui/markdown_element.cpp
     "${public_headers}/ui/markdown_element.h"
     ui/label_element.cpp
@@ -262,6 +310,8 @@ else()
     set(luil_text_shaping_source ui/text_shaping_default.cpp)
 endif()
 luil_add_source_filter(luil_core_files "ui/image"
+    ui/clipboard_image.cpp
+    "${public_headers}/ui/clipboard_image.h"
     ui/image_decode.cpp
     "${public_headers}/ui/image_decode.h"
     ui/image_backing.h
@@ -313,6 +363,10 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     ui/text_button_paint.h
     ui/number_input.cpp
     "${public_headers}/ui/number_input.h"
+    ui/color_space.cpp
+    "${public_headers}/ui/color_space.h"
+    ui/calendar_date.cpp
+    "${public_headers}/ui/calendar_date.h"
     ui/command_palette.cpp
     "${public_headers}/ui/command_palette.h"
     ui/text_document.cpp
@@ -324,14 +378,28 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     ui/text_span_color.h
     ui/syntax_highlighter.cpp
     "${public_headers}/ui/syntax_highlighter.h"
+    ui/rich_text.cpp
+    ui/rich_text_html.cpp
+    "${public_headers}/ui/rich_text.h"
+    ui/rich_text_commands.cpp
+    "${public_headers}/ui/rich_text_commands.h"
     ui/commands.cpp
     "${public_headers}/ui/commands.h"
     ui/menu_element.cpp
     "${public_headers}/ui/menu_element.h"
+    ui/menu_bar_element.cpp
+    "${public_headers}/ui/menu_bar_element.h"
+    ui/access_key.h
+    ui/message_box.cpp
+    "${public_headers}/ui/message_box.h"
+    ui/message_box_element.cpp
+    ui/message_box_element.h
     ui/modal_host_element.cpp
     "${public_headers}/ui/modal_host_element.h"
     ui/sheet_host_element.cpp
     "${public_headers}/ui/sheet_host_element.h"
+    ui/teaching_tip_element.cpp
+    "${public_headers}/ui/teaching_tip_element.h"
     ui/toast_element.cpp
     "${public_headers}/ui/toast_element.h")
 
@@ -352,6 +420,11 @@ luil_add_source_filter(luil_core_files "app"
     host/app_host.cpp
     host/menu_popup.cpp
     "${public_headers}/app/menu_popup.h"
+    host/color_picker_popup.cpp
+    "${public_headers}/app/color_picker_popup.h"
+    host/date_picker_popup.cpp
+    "${public_headers}/app/date_picker_popup.h"
+    "${public_headers}/app/notification.h"
     "${public_headers}/app/file_dialog.h"
     host/file_dialog_gate.h
     "${public_headers}/app/file_watcher.h"
@@ -360,7 +433,10 @@ luil_add_source_filter(luil_core_files "app"
     host/renderer_policy.cpp
     "${public_headers}/app/renderer_policy.h"
     "${public_headers}/app/taskbar.h"
-    "${public_headers}/app/webview.h")
+    "${public_headers}/app/tray_icon.h"
+    "${public_headers}/app/global_hotkey.h"
+    "${public_headers}/app/webview.h"
+    )
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
@@ -383,8 +459,14 @@ luil_add_source_filter(luil_core_files "host"
     host/focus_request_tracker.h
     host/frame_state.cpp
     host/frame_state.h
+    host/hotkey_sync.cpp
+    host/hotkey_sync.h
+    host/inspector_overlay.cpp
+    host/inspector_overlay.h
     host/key_mapping.cpp
     host/key_mapping.h
+    host/notification_queue.cpp
+    host/notification_queue.h
     host/pointer_sequence.cpp
     host/overlay_input.cpp
     host/overlay_input.h
@@ -401,7 +483,10 @@ luil_add_source_filter(luil_core_files "host"
     host/surface_invalidate.h
     host/taskbar_sync.cpp
     host/taskbar_sync.h
-    host/text_input_host.h)
+    host/text_input_host.h
+    host/tray_sync.cpp
+    host/tray_sync.h
+    )
 
 # 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.
 luil_add_source_filter(luil_files "umbrella"
@@ -419,8 +504,19 @@ luil_add_source_filter(luil_files "win32/host"
     win32/secret_store_win32.cpp
     "${public_headers}/app/platform_services.h"
     win32/command_line.h
+    win32/executable_path.cpp
+    win32/executable_path.h
     win32/owned_handle.h
+    win32/instance_message.cpp
+    win32/instance_message.h
     win32/platform_services_win32.cpp
+    win32/win32_locale.h
+    win32/app_identity.cpp
+    win32/app_identity.h
+    win32/notification_win32.cpp
+    win32/notification_win32.h
+    win32/toast_payload.cpp
+    win32/toast_payload.h
     win32/file_watcher_win32.cpp
     win32/file_watcher_win32.h
     luil/url_scheme.cpp
@@ -434,12 +530,20 @@ luil_add_source_filter(luil_files "win32/host"
     "${public_headers}/win32/webview.h")
 
 # 작업 표시줄 단추다 (taskbar-design.md). 어떤 호출을 할지는 core의 host/taskbar_sync가 고르고, 여기는
-# ITaskbarList3 호출과 창별 아이콘 핸들만 쥔다.
+# ITaskbarList3 호출과 창별 아이콘 핸들만 쥔다. 점프 목록(jump-list-design.md)은 ICustomDestinationList로 같은 자리에서 낸다.
+# 알림 영역 아이콘(tray-icon-design.md)도 같은 그림 변환을 쓰고, 어떤 호출을 할지는 core의 host/tray_sync가 고른다.
+# 전역 단축키(global-hotkey-design.md)는 RegisterHotKey 호출만 여기서 하고, 어떤 호출을 할지는 core의 host/hotkey_sync가 고른다.
 luil_add_source_filter(luil_files "win32/taskbar"
+    win32/hotkey_win32.cpp
+    win32/hotkey_win32.h
     win32/icon_from_image.cpp
     win32/icon_from_image.h
+    win32/jump_list.cpp
+    win32/jump_list.h
     win32/taskbar_button.cpp
-    win32/taskbar_button.h)
+    win32/taskbar_button.h
+    win32/tray_icon_win32.cpp
+    win32/tray_icon_win32.h)
 
 # Direct3D 렌더러다. 끈 구성은 "없음"을 돌려주는 stub을 대신 컴파일한다 —
 # Ganesh를 부르는 파일이 이것 하나라, 빠지면 링커가 Skia의 GPU 코드를 걷어 낸다.
@@ -517,6 +621,8 @@ luil_add_source_filter(luil_files "win32/input"
     win32/surface_input.h
     win32/win32_clipboard.cpp
     win32/win32_clipboard.h
+    win32/win32_image_clipboard.cpp
+    win32/win32_image_clipboard.h
     win32/win32_drop.cpp
     win32/win32_drop.h
     win32/win32_tsf_input.cpp
@@ -581,6 +687,9 @@ luil_add_source_filter(luil_files "net/winhttp"
     net/winhttp/winhttp_error.cpp
     net/winhttp/winhttp_error.h)
 
+# auto-update-apply-design.md). 상태 기계는 두 플랫폼 묶음에 같이 든다.
+
+
 # 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
 # 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만
 # target으로 긋는다.
@@ -596,7 +705,8 @@ target_include_directories(luil_core
         "$<BUILD_INTERFACE:${LUIL_GENERATED_INCLUDE_DIRECTORY}>"
         "$<INSTALL_INTERFACE:include>"
     PRIVATE
-        "${LUIL_SOURCE_DIRECTORY}")
+        "${LUIL_SOURCE_DIRECTORY}"
+        "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
 target_link_libraries(luil_core
     PUBLIC
         # 소비자 요건(C++20·/utf-8)만 전파한다.
@@ -607,7 +717,10 @@ target_link_libraries(luil_core
         # 같은 검사(cmake/dependencies/skia.cmake)로 다시 만들어 잇는다.
         "$<BUILD_INTERFACE:luil_skia>"
     PRIVATE
-        luil_options)
+        luil_options
+        # 정적 라이브러리라 PRIVATE 의존도 export의 링크 목록에 남으므로 감싼다 — 감싸지 않으면
+        # install(EXPORT)가 "export set에 없는 target"으로 선다 (아래 luil의 웹뷰 SDK와 같은 까닭).
+        "$<BUILD_INTERFACE:luil_nlohmann_json>")
 
 # 자산 checksum 검증은 빌드마다 한 번 실행한다.
 # 별도 target 대신 라이브러리의 빌드 전 단계에 붙여 솔루션 구성 요소를 늘리지 않는다.
@@ -648,6 +761,7 @@ if(LUIL_PLATFORM STREQUAL "windows")
             # Skia가 요구하는 것은 cmake/dependencies/skia.cmake에 따로 있다.
             # 비밀 저장소의 자격 증명 관리자 API다 (CredWriteW 등, secret-store-design.md).
             advapi32
+            bcrypt
             d3d12
             # Direct3D 제시가 창이 아니라 합성에 붙는다
             # (webview-composition-design.md).
@@ -659,6 +773,8 @@ if(LUIL_PLATFORM STREQUAL "windows")
             imm32
             ole32
             oleaut32
+            # OS 알림의 WinRT 활성화 팩토리다 (`RoGetActivationFactory`, os-notification-design.md).
+            runtimeobject
             shell32
             shcore
             uiautomationcore
@@ -699,6 +815,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_fonts.h
         android/android_input.cpp
         android/android_input.h
+        android/android_locale.cpp
+        android/android_locale.h
         android/android_system_theme.cpp
         android/android_system_theme.h
         android/android_settings.cpp
@@ -721,6 +839,12 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/fail_fast.cpp
         android/main_thread.cpp
         android/main_thread.h
+        "${public_headers}/app/notification.h"
+        android/notification_android.cpp
+        android/notification_icon.cpp
+        android/notification_icon.h
+        android/notification_intent.cpp
+        android/notification_intent.h
         android/vulkan_device.cpp
         android/vulkan_device.h
         android/vulkan_memory_allocator.h
@@ -757,6 +881,8 @@ if(LUIL_PLATFORM STREQUAL "android")
     else()
         luil_add_source_filter(luil_android_files "net" net/smb_client_unsupported.cpp)
     endif()
+    # 적용은 스토어 주소를 여는 것이 전부다 (auto-update-apply-design.md).
+
 
     add_library(luil STATIC ${luil_android_files})
     add_library(luil::luil ALIAS luil)

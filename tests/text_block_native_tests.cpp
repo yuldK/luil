@@ -13,7 +13,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 namespace {
@@ -128,6 +131,38 @@ TEST_CASE("Measuring a text block agrees with drawing it, weights included", "[u
         REQUIRE(measured.truncated == false);
         REQUIRE(measured.width == Catch::Approx(drawn.width));
     }
+}
+
+TEST_CASE("Drawing a text block without laid out lines wraps with the draw context policy", "[ui][text-block][native][wrap-policy]")
+{
+    // 배치한 줄 없이 그리는 길은 칸이 비면 그리기 문맥의 정책으로 접는다 (docs/wrap-policy-key-design.md). 글꼴이 있어야 폭이
+    // 서므로 core가 아니라 여기서 견준다. 그린 자리의 높이가 줄 수 곱하기 줄 높이다.
+    text_canvas surface {};
+    const std::u8string_view text { u8"가나다라 마바사아 자차카타 파하가나 다라마바" };
+    luil::text_block_style style { .font = { .size = 12.0f }, .vertical = luil::text_vertical_align::top, .wrap = true };
+    // 일곱 음절 남짓이다. 어절 정책은 어절마다 한 줄이고 음절 정책은 어절 가운데서도 접는다.
+    const float width { luil::measure_text(u8"가나다라 마바사", luil::make_text_font(surface.context(), style.font)) + 1.0f };
+    luil::ui_style unicode_style { luil::default_ui_style() };
+    unicode_style.text.wrap_policy = luil::text::line_break_policy::unicode;
+    luil::ui_style words_style { luil::default_ui_style() };
+    words_style.text.wrap_policy = luil::text::line_break_policy::hangul_words;
+    const std::size_t unicode_lines { luil::measure_text_block(luil::measure_context { .style = &unicode_style }, text, style, width).lines.size() };
+    const std::size_t words_lines { luil::measure_text_block(luil::measure_context { .style = &words_style }, text, style, width).lines.size() };
+    REQUIRE(unicode_lines < words_lines);
+
+    const auto drawn_lines = [&](const luil::text::line_break_policy policy, const luil::text_block_style& block) {
+        auto context { surface.context() };
+        context.wrap_policy = policy;
+        const luil::rect_f drawn { luil::draw_text_block(context, text, { 0.0f, 0.0f, width, 150.0f }, block, luil::solid_paint(SK_ColorBLACK)) };
+        return static_cast<std::size_t>(std::lround(drawn.height / luil::text_block_line_height(block)));
+    };
+    REQUIRE(drawn_lines(luil::text::line_break_policy::unicode, style) == unicode_lines);
+    REQUIRE(drawn_lines(luil::text::line_break_policy::hangul_words, style) == words_lines);
+    // 채우지 않은 그리기 문맥은 어절 정책이다.
+    REQUIRE(surface.context().wrap_policy == luil::text::line_break_policy::hangul_words);
+    // 적은 칸은 그리기 문맥보다 앞선다.
+    style.line_break = luil::text::line_break_policy::hangul_words;
+    REQUIRE(drawn_lines(luil::text::line_break_policy::unicode, style) == words_lines);
 }
 
 TEST_CASE("A text block halo rings the letters for text over a picture", "[ui][text-block][native]")

@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -114,6 +115,12 @@ namespace demo {
         [[nodiscard]] std::u8string size_text(const int size)
         {
             return to_u8(size) + u8" B";
+        }
+
+        // 지운 행 하나가 되돌림 메시지에 쥐는 바이트의 어림이다. 걸음은 메시지 안을 볼 수 없어 앱이 알린다.
+        [[nodiscard]] std::size_t discarded_bytes(const workbench_change& change)
+        {
+            return sizeof(workbench_restored_change) + change.path.size() + change.status.size();
         }
 
         // 흉내 낸 저장소가 변경 하나에 돌려줄 차이다. 수정 차이에는 가로로 흘려야 보이는 긴 줄과 여러 hunk를 둔다.
@@ -264,10 +271,12 @@ namespace demo {
         }
 
         // 경로 열은 가운데를 줄인다. 좁혀도 폴더의 시작과 파일 이름이 함께 남는다.
+        // 폴더 열은 가로로 흘릴 거리를 만든다. 경로 열을 고정하면 이 열이 경로 열 밑으로 지나가지 않고 옆으로 흐른다.
         columns_ = {
             { .key = u8"path", .header = u8"경로", .width = 340.0f, .min_width = 120.0f, .elide = luil::text_elide::middle },
             { .key = u8"status", .header = u8"상태", .width = 90.0f },
             { .key = u8"size", .header = u8"크기", .width = 100.0f, .align = luil::column_align::end },
+            { .key = u8"folder", .header = u8"폴더", .width = 300.0f, .min_width = 80.0f, .elide = luil::text_elide::middle, .sortable = false },
         };
         const std::vector<luil::virtual_list_item> items { change_items() };
         selection_ = luil::selection_reconcile(selection_, {}, items);
@@ -492,9 +501,83 @@ namespace demo {
         std::vector<std::u8string> keys { selection_.keys };
         if (keys.empty() && selection_.cursor.empty() == false)
             keys.push_back(selection_.cursor);
+        stage_changes(staged ? u8"스테이지" : u8"스테이지 취소", keys, staged);
+    }
+
+    void workbench_page::stage_changes(std::u8string label, const std::vector<std::u8string>& keys, const bool staged)
+    {
+        // 되돌림은 행마다 쌓기 전의 값을 담는다. 절대 값이라 일부만 바뀐 선택도 그대로 돌아간다.
+        workbench_set_staged_intent undo {};
+        workbench_set_staged_intent redo {};
+        std::size_t weight { 0 };
         for (const std::u8string& key : keys)
-            if (const auto found { find_change(key) }; found != changes_.end())
-                found->staged = staged;
+        {
+            const auto found { find_change(key) };
+            if (found == changes_.end() || found->staged == staged)
+                continue;
+            undo.entries.push_back({ key, found->staged });
+            redo.entries.push_back({ key, staged });
+            weight += 2u * (sizeof(workbench_staged_entry) + key.size());
+        }
+        if (redo.entries.empty())
+            return;
+        commit_step({ .label = std::move(label), .undo = luil::app_message { std::move(undo) }, .redo = luil::app_message { std::move(redo) }, .weight = weight });
+    }
+
+    void workbench_page::discard_selection()
+    {
+        // 지운 행은 모델에서 있던 자리와 함께 든다. 되돌림이 같은 자리에 돌려놓는다.
+        workbench_restore_intent undo {};
+        workbench_remove_intent redo {};
+        std::size_t weight { 0 };
+        for (std::size_t index { 0 }; index < changes_.size(); ++index)
+        {
+            if (luil::selection_contains(selection_, changes_[index].path) == false)
+                continue;
+            undo.rows.push_back({ changes_[index], index });
+            redo.keys.push_back(changes_[index].path);
+            weight += discarded_bytes(changes_[index]);
+        }
+        if (redo.keys.empty())
+            return;
+        commit_step({ .label = u8"변경 버리기", .undo = luil::app_message { std::move(undo) }, .redo = luil::app_message { std::move(redo) }, .weight = weight });
+    }
+
+    void workbench_page::commit_step(luil::undo_step step)
+    {
+        // 처음 실행도 다시 실행과 같은 메시지를 적용한다. 재생 메시지는 기록하지 않으므로 걸음이 두 번 쌓이지 않는다.
+        const luil::app_message redo { step.redo };
+        history_.push(std::move(step));
+        static_cast<void>(handle(redo));
+    }
+
+    std::u8string workbench_page::history_text() const
+    {
+        const std::u8string_view next { history_.undo_label() };
+        return u8"되돌리기 " + to_u8(static_cast<int>(history_.undo_count()))
+            + u8" · 다시 실행 " + to_u8(static_cast<int>(history_.redo_count()))
+            + u8" · 다음: " + (next.empty() ? std::u8string { u8"없음" } : std::u8string { next })
+            + u8" · 저장 지점 " + (history_.clean() ? u8"일치" : u8"다름");
+    }
+
+    std::u8string workbench_page::freeze_text() const
+    {
+        return freeze_path_ ? u8"고정 열 1: 경로" : u8"고정 열 없음";
+    }
+
+    luil::undo_command_state workbench_page::undo_state() const
+    {
+        // 최종 글은 앱이 잇는다. 라이브러리는 기본 문구를 두지 않는다.
+        luil::undo_command_state state {};
+        state.can_undo = history_.can_undo();
+        state.can_redo = history_.can_redo();
+        state.undo_label = u8"실행 취소";
+        if (state.can_undo)
+            state.undo_label += u8": " + std::u8string { history_.undo_label() };
+        state.redo_label = u8"다시 실행";
+        if (state.can_redo)
+            state.redo_label += u8": " + std::u8string { history_.redo_label() };
+        return state;
     }
 
     void workbench_page::close_popups() noexcept
@@ -576,7 +659,7 @@ namespace demo {
         if (const auto* const check { message.get<workbench_change_check_intent>() }; check != nullptr)
         {
             if (const auto found { find_change(check->key) }; found != changes_.end())
-                found->staged = found->staged == false;
+                stage_changes(u8"스테이지 바꿈", { found->path }, found->staged == false);
             return true;
         }
         if (const auto* const sort { message.get<workbench_sort_intent>() }; sort != nullptr)
@@ -595,8 +678,30 @@ namespace demo {
         if (const auto* const resize { message.get<workbench_resize_intent>() }; resize != nullptr)
         {
             for (luil::table_column& column : columns_)
-                if (column.key == resize->column)
-                    column.width += luil::table_resize_delta(column, resize->delta);
+            {
+                if (column.key != resize->column)
+                    continue;
+                const float width { column.width };
+                const float next { width + luil::table_resize_delta(column, resize->delta) };
+                // 같은 열을 이어서 조절하면 한 걸음이다. 한 번의 끌기가 끝나면 `workbench_resize_end_intent`가 끊는다.
+                if (next != width)
+                {
+                    luil::undo_step step {
+                        .label = u8"열 폭 조절",
+                        .undo = luil::app_message { workbench_set_width_intent { column.key, width } },
+                        .redo = luil::app_message { workbench_set_width_intent { column.key, next } },
+                        .merge_key = u8"resize:" + column.key,
+                        .weight = 2u * (sizeof(workbench_set_width_intent) + column.key.size()),
+                    };
+                    commit_step(std::move(step));
+                }
+                break;
+            }
+            return true;
+        }
+        if (message.get<workbench_resize_end_intent>() != nullptr)
+        {
+            history_.break_merge();
             return true;
         }
         if (const auto* const scroll { message.get<workbench_change_scroll_intent>() }; scroll != nullptr)
@@ -655,18 +760,16 @@ namespace demo {
             else if (select->command == u8"stage" || select->command == u8"unstage")
                 stage_selection(select->command == u8"stage");
             else if (select->command == u8"discard")
-            {
-                const std::vector<luil::virtual_list_item> previous { change_items() };
-                std::erase_if(changes_, [this](const change& item) { return luil::selection_contains(selection_, item.path); });
-                reconcile(previous);
-            }
+                discard_selection();
             return true;
         }
         if (message.get<workbench_stage_all_intent>() != nullptr)
         {
             const bool all { std::all_of(changes_.begin(), changes_.end(), [](const change& item) { return item.staged; }) };
-            for (change& item : changes_)
-                item.staged = all == false;
+            std::vector<std::u8string> keys {};
+            for (const change& item : changes_)
+                keys.push_back(item.path);
+            stage_changes(all ? u8"모두 스테이지 취소" : u8"모두 스테이지", keys, all == false);
             return true;
         }
         if (message.get<workbench_commit_intent>() != nullptr)
@@ -680,6 +783,74 @@ namespace demo {
             summary_ = {};
             composition_.reset();
             reconcile(previous);
+            // 커밋한 행은 저장소로 넘어가 되돌림 메시지가 가리킬 대상이 사라진다. 밖에서 상태가 바뀔 때의 규칙대로 비운다.
+            history_.clear();
+            return true;
+        }
+
+        // 실행 취소 기록이다. 단추·팔레트·Ctrl+Z가 같은 요청을 낸다.
+        if (message.get<workbench_undo_intent>() != nullptr)
+        {
+            static_cast<void>(history_.undo([this](const luil::app_message& step) { static_cast<void>(handle(step)); }));
+            return true;
+        }
+        if (message.get<workbench_redo_intent>() != nullptr)
+        {
+            static_cast<void>(history_.redo([this](const luil::app_message& step) { static_cast<void>(handle(step)); }));
+            return true;
+        }
+        if (message.get<workbench_mark_saved_intent>() != nullptr)
+        {
+            history_.set_clean();
+            return true;
+        }
+        if (message.get<workbench_freeze_intent>() != nullptr)
+        {
+            freeze_path_ = !freeze_path_;
+            return true;
+        }
+        // 고정 구역을 넘는 놓기는 표가 받지 않으므로 경로 열은 고정된 동안 맨 앞에 남는다.
+        if (const auto* const reorder { message.get<workbench_reorder_column_intent>() }; reorder != nullptr)
+        {
+            const auto key_is = [](const std::u8string& key) {
+                return [key](const luil::table_column& column) { return column.key == key; };
+            };
+            const auto moved { std::find_if(columns_.begin(), columns_.end(), key_is(reorder->moved)) };
+            if (reorder->moved == reorder->target || moved == columns_.end())
+                return true;
+            const luil::table_column value { *moved };
+            columns_.erase(moved);
+            columns_.insert(std::find_if(columns_.begin(), columns_.end(), key_is(reorder->target)), value);
+            return true;
+        }
+        // 걸음이 싣는 재생 메시지다. 모두 절대 값이라 몇 번을 받아도 결과가 같다.
+        if (const auto* const staged { message.get<workbench_set_staged_intent>() }; staged != nullptr)
+        {
+            for (const workbench_staged_entry& entry : staged->entries)
+                if (const auto found { find_change(entry.key) }; found != changes_.end())
+                    found->staged = entry.staged;
+            return true;
+        }
+        if (const auto* const remove { message.get<workbench_remove_intent>() }; remove != nullptr)
+        {
+            const std::vector<luil::virtual_list_item> previous { change_items() };
+            std::erase_if(changes_, [remove](const change& item) { return std::find(remove->keys.begin(), remove->keys.end(), item.path) != remove->keys.end(); });
+            reconcile(previous);
+            return true;
+        }
+        if (const auto* const restore { message.get<workbench_restore_intent>() }; restore != nullptr)
+        {
+            const std::vector<luil::virtual_list_item> previous { change_items() };
+            for (const workbench_restored_change& row : restore->rows)
+                changes_.insert(changes_.begin() + static_cast<std::ptrdiff_t>(std::min(row.position, changes_.size())), row.change);
+            reconcile(previous);
+            return true;
+        }
+        if (const auto* const width { message.get<workbench_set_width_intent>() }; width != nullptr)
+        {
+            for (luil::table_column& column : columns_)
+                if (column.key == width->column)
+                    column.width = width->width;
             return true;
         }
         if (const auto* const patch { message.get<workbench_patch_intent>() }; patch != nullptr)
@@ -843,6 +1014,7 @@ namespace demo {
         auto root { std::make_unique<luil::stack_element>(workbench_id(u8"root"), config) };
         // 머리 줄과 양식은 내용 크기로 담는다 — 버튼 글·라벨 폭이 언어와 글꼴에 따라 바뀌어도 손으로 고칠 길이가 없다.
         root->add_fit(make_header(scale));
+        root->add_fit(make_history_bar());
 
         luil::stack_config body_config {};
         body_config.direction = luil::stack_direction::row;
@@ -910,6 +1082,59 @@ namespace demo {
             layer->add(std::make_unique<luil::badge_element>(workbench_id(u8"commit-count"), luil::badge_config { .text = to_u8(static_cast<int>(staged)), .tone = luil::badge_tone::accent }),
                 { .horizontal = luil::layout_alignment::end, .vertical = luil::layout_alignment::start, .margin = { 0.0f, -8.0f, -8.0f, 0.0f } });
         row->add_fit(std::move(layer));
+        return row;
+    }
+
+    std::unique_ptr<luil::ui_element> workbench_page::make_history_bar()
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 8.0f;
+        config.cross_alignment = luil::stack_alignment::center;
+        auto row { std::make_unique<luil::stack_element>(workbench_id(u8"history-bar"), config) };
+
+        // 툴팁(글과 단축키)과 켜짐은 팔레트와 같은 명령표에서 읽는다.
+        //  - 읽기 전용 차이 보기에 초점이 있으면 Ctrl+Z가 앱에 닿지 않으므로 같은 요청을 단추가 낸다.
+        //  - 할 일이 없으면 끈다. 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.
+        const std::array<luil::app_command, 2> commands { luil::make_undo_commands(undo_state()) };
+        const auto history_button = [&row](std::u8string owner, std::u8string text, const char32_t glyph, const luil::app_command& command, luil::ui_action action) {
+            luil::text_button_config button_config {};
+            button_config.text = std::move(text);
+            button_config.glyph = glyph;
+            auto button { std::make_unique<luil::text_button_element>(workbench_id(std::move(owner)), std::move(button_config)) };
+            button->set_action(luil::ui_trigger::left_click, std::move(action));
+            button->set_tooltip(luil::command_tooltip(command));
+            button->set_enabled(command.enabled);
+            row->add_fit(std::move(button));
+        };
+        history_button(u8"workbench-undo", u8"실행 취소", luil::codicons::icon_discard, commands[0], luil::make_message_action(workbench_undo_intent {}));
+        history_button(u8"workbench-redo", u8"다시 실행", luil::codicons::icon_redo, commands[1], luil::make_message_action(workbench_redo_intent {}));
+
+        // 지금 자리를 저장 지점으로 삼는다. 아래 글의 "저장 지점"이 이 자리와 맞는지를 말한다.
+        luil::text_button_config saved_config {};
+        saved_config.text = u8"저장 지점으로 표시";
+        saved_config.glyph = luil::codicons::icon_save;
+        auto saved { std::make_unique<luil::text_button_element>(workbench_id(u8"workbench-mark-saved"), std::move(saved_config)) };
+        saved->set_action(luil::ui_trigger::left_click, luil::make_message_action(workbench_mark_saved_intent {}));
+        saved->set_tooltip(u8"지금 자리를 저장 지점으로 삼는다");
+        row->add_fit(std::move(saved));
+
+        // 경로 열 고정이다. 눌러도 실행 취소 걸음은 쌓이지 않는다 (보기 상태). 서 있는지는 창이 넓어야 하므로 UIA로 되읽는다.
+        luil::check_config freeze_config {};
+        freeze_config.owner = u8"workbench-freeze";
+        freeze_config.style = luil::check_style::toggle_switch;
+        freeze_config.label = u8"경로 열 고정";
+        freeze_config.checked = freeze_path_;
+        freeze_config.toggle = luil::make_message_action(workbench_freeze_intent {});
+        freeze_config.tooltip = u8"가로로 흘려도 경로 열을 제자리에 둔다";
+        row->add_fit(std::make_unique<luil::check_element>(std::move(freeze_config)));
+        row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"workbench-freeze-state"), luil::label_config { .text = freeze_text(), .color = luil::label_color_role::dim }));
+        // 끌기 자동 스크롤이 흘린 거리를 되읽는 자리다 (앱이 든 가로 위치, 논리 픽셀).
+        row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"workbench-scroll-x-state")
+            , luil::label_config { .text = u8"가로 위치 " + to_u8(static_cast<int>(std::lround(changes_scroll_x_))), .color = luil::label_color_role::dim }
+        ));
+
+        row->add_flexible(std::make_unique<luil::label_element>(workbench_id(u8"workbench-history"), luil::label_config { .text = history_text(), .color = luil::label_color_role::dim }));
         return row;
     }
 
@@ -1011,6 +1236,8 @@ namespace demo {
                 return found->status;
             if (column.key == u8"size")
                 return size_text(found->size);
+            if (column.key == u8"folder")
+                return found->path.substr(0, found->path.rfind(u8'/') == std::u8string::npos ? 0u : found->path.rfind(u8'/'));
             return found->path;
         };
         table.check_column = u8"path";
@@ -1020,16 +1247,23 @@ namespace demo {
         };
         table.toggle_check = [](const std::u8string& key) { return luil::make_app_action(workbench_change_check_intent { key }); };
         table.scroll_x = changes_scroll_x_;
+        table.frozen_columns = freeze_path_ ? 1u : 0u;
         table.scroll_horizontal = [](const float delta) { return luil::make_app_action(workbench_change_scroll_x_intent { delta }); };
         table.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(workbench_change_scroll_x_to_intent { offset }); };
+        // 머리글 칸 끌기가 끌기 자동 스크롤을 부른다. 경로 열을 고정하면 왼쪽 띠가 고정 경계에 선다.
+        table.reorder_column = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(workbench_reorder_column_intent { moved, target }); };
         table.sort_request = [](const std::u8string& column) { return luil::make_app_action(workbench_sort_intent { column }); };
         table.resize_column = [](const std::u8string& column, const float delta) { return luil::make_app_action(workbench_resize_intent { column, delta }); };
+        table.resize_column_end = [](const std::u8string& column) { return luil::make_app_action(workbench_resize_end_intent { column }); };
 
         luil::panel_config panel {};
         panel.corner_radius = 6.0f;
         panel.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
         auto card { std::make_unique<luil::panel_element>(workbench_id(u8"changes-panel"), std::move(panel)) };
-        card->set_content(std::make_unique<luil::table_element>(std::move(table)));
+        auto named_table { std::make_unique<luil::table_element>(std::move(table)) };
+        // 머리글과 가로 막대가 표의 이름을 물려받는다. 이름이 없으면 막대가 빈 글로 읽힌다.
+        named_table->set_access_name(u8"변경 파일");
+        card->set_content(std::move(named_table));
         return card;
     }
 

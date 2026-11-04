@@ -353,7 +353,7 @@ namespace luil {
                 .width = std::max(1.0f, width - indent - padding * 2.0f),
                 .wrap = true,
                 .line_height = std::max(config_.line_height * scale, size * 1.5f),
-                .line_break = config_.line_break,
+                .line_break = context.line_break_for(config_.line_break),
             };
             for (const auto& span : block.spans)
                 request.styles.push_back({ span.begin, span.end, span.bold || block.heading > 0, span.italic, span.code });

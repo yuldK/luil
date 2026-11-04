@@ -51,6 +51,10 @@ namespace luil::android {
             if (api_level >= api_level_local_network_permission && target_sdk >= api_level_local_network_permission)
                 return "android.permission.ACCESS_LOCAL_NETWORK";
             return nullptr;
+        case app_permission::notifications:
+            if (api_level >= api_level_notification_permission && target_sdk >= api_level_notification_permission)
+                return "android.permission.POST_NOTIFICATIONS";
+            return nullptr;
         }
         return nullptr;
     }

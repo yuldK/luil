@@ -170,7 +170,7 @@ else if (const auto* const rotate { message.get<rotate_intent>() }; rotate != nu
 - **menu_bar**: 이 노드는 컨트롤러의 키 경로를 고치지 않는다. 키는 `zoom_source::on_key` 안이라 함수가 겹치지 않는다.
 - **스프링**: 손을 뗄 때의 각속도는 건네지 않는다. 건네게 되면 [스프링](spring-design.md)의 규칙대로 도/초이고 시계 방향이 양수다.
 - **움직임 줄이기 연결**: 이 노드가 새로 가진 시간 기반 값이 없다. 키로 바뀐 각도를 앱이 잇는다면 [움직임 줄이기 연결](reduce-motion-design.md)의 `motion_duration`을 거친다.
-- **i18n**: 새 사용자 글이 없다. `zoom_controls_element`의 박힌 글(축소·확대·맞춤)을 건드리지 않아 겹치는 곳은 `zoom_view_tests.cpp`에 덧붙인 test뿐이다. 회전 단추를 그 요소에 더하는 일은 G6(라이브러리 문자열 정책)이 정해지면 한다.
+- **i18n**: 새 사용자 글이 없다. `zoom_controls_element`의 박힌 글(축소·확대·맞춤)은 [기본 문구](default-text-design.md)가 `zoom_controls_config`의 이름 칸 셋(`decrease_label`·`increase_label`·`fit_label`)으로 옮겼다. 회전 단추를 그 요소에 더하는 일은 이 문서의 범위 밖이고 줄 3 몫이며 이번 라운드에 하지 않는다. 더할 때 `rotate_*_label` 칸을 기본 문구의 규칙으로 `zoom_controls_config` 끝에 잇는다.
 - **zoom 계열 문서**: 구현할 때 [확대 보기](zoom-view-design.md)에 입력 표 한 줄, 두 접촉의 수명 한 문단, 불변식 한 줄을 더하고 "남은 열린 질문"의 Transform 줄에 회전을 덧붙인다.
 
 ## 확인

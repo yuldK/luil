@@ -23,6 +23,11 @@ namespace demo {
         float degrees { 0.0f };
         luil::zoom_point anchor {};
     };
+    // 줌 단추의 글을 영어로 쓸지다. 누른 때의 반대 언어를 절대 값으로 담아 거듭 와도 결과가 같다.
+    struct zoom_labels_intent
+    {
+        bool english { false };
+    };
     class zoom_page
     {
     public:
@@ -33,5 +38,7 @@ namespace demo {
         [[nodiscard]] luil::zoom_view_config config() const;
         luil::zoom_view_state state_ { 1.0f, {} };
         luil::zoom_point viewport_ {};
+        // 줌 단추의 글을 영어로 주는가. 거짓이면 config 칸을 비워 기본 문구가 서게 한다.
+        bool english_labels_ { false };
     };
 }

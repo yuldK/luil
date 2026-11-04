@@ -542,14 +542,63 @@ TEST_CASE("Pressing the arrow while the menu is open closes it", "[ui][split-but
     REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(50) })) == described_actions { u8"close" });
 }
 
-TEST_CASE("Locks the current behaviour of re-pressing the arrow once the closed frame is published", "[ui][split-button][reopen]")
+TEST_CASE("Re-pressing the arrow closes the menu even once the closed frame is published", "[ui][split-button][reopen]")
 {
     // 열린 동안 화살표를 누르면 바깥 누름이 먼저 `set_open(false)`를 내고(`window_surface.cpp`) 클릭이 이어진다.
-    // 클릭은 **뗄 때의 tree**에서 액션을 꺼내므로, 그 사이 `open == false` frame이 게시되면 클릭이 `set_open(true)`를 낸다.
-    // 닫으려던 누름이 도로 여는 셈이다. 고칠 자리는 controller라 이 노드에서는 바꾸지 않고 현재 동작을 그대로 잠근다.
+    // 그 사이 `open == false` frame이 게시되어도 펼쳐 있던 화살표의 클릭은 **누를 때의 tree**의 액션이라 닫힌다
+    // (menu-focus-fixes-design.md의 X-4). 전에는 뗌 tree의 `set_open(true)`가 나가 도로 열렸다.
     luil::interaction_controller controller {};
     controller.set_tree(make_tree(save_config(true)));
     static_cast<void>(controller.process(luil::pointer_pressed_event { 156.0f, 24.0f, luil::pointer_button::left, at(0) }));
     controller.set_tree(make_tree(save_config(false)));
-    REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(50) })) == described_actions { u8"open" });
+    REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(50) })) == described_actions { u8"close" });
+
+    // 닫힌 화살표의 누름은 지금처럼 뗌 tree의 것이다. 누르는 사이 열린 frame이 게시되면 그 tree의 `set_open(false)`다.
+    controller.set_tree(make_tree(save_config(false)));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 156.0f, 24.0f, luil::pointer_button::left, at(1000) }));
+    controller.set_tree(make_tree(save_config(true)));
+    REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(1050) })) == described_actions { u8"close" });
+}
+
+TEST_CASE("Re-pressing the arrow closes the menu even when the closed frame arrives before the press", "[ui][split-button][reopen]")
+{
+    // 바깥 누름의 닫힘을 앱이 먼저 처리해 닫힌 frame이 누름보다 먼저 오면 controller가 누름을 받을 때 화살표는 이미 접혀 있다.
+    // 표면이 실은 "popup을 닫았다"(`closed_popup`)로 직전 tree의 펼친 화살표 액션이 나간다 (menu-focus-fixes-design.md의 X-4).
+    luil::interaction_controller controller {};
+    controller.set_tree(make_tree(save_config(true)));
+    controller.set_tree(make_tree(save_config(false)));
+    luil::pointer_pressed_event press { 156.0f, 24.0f, luil::pointer_button::left, at(0) };
+    press.closed_popup = true;
+    static_cast<void>(controller.process(press));
+    REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(50) })) == described_actions { u8"close" });
+
+    // popup을 닫지 않은 누름은 닫힌 tree의 것이라 연다.
+    controller.set_tree(make_tree(save_config(true)));
+    controller.set_tree(make_tree(save_config(false)));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 156.0f, 24.0f, luil::pointer_button::left, at(1000) }));
+    REQUIRE(describe(controller.process(luil::pointer_released_event { 156.0f, 24.0f, luil::pointer_button::left, at(1050) })) == described_actions { u8"open" });
+}
+
+TEST_CASE("Tab from the arrow leaves the split button for the next stop", "[ui][split-button][focus]")
+{
+    // 화살표는 묶음의 대표가 아닌 구성원이다. 전에는 Tab이 순서의 처음(본체)으로 갔다 (menu-focus-fixes-design.md의 X-3).
+    keyboard board { save_config() };
+    board.press(luil::key_code::tab);
+    board.press(luil::key_code::arrow_right);
+    REQUIRE(board.focused() == arrow_id);
+    board.press(luil::key_code::tab);
+    REQUIRE(board.focused() == other_id);
+    board.press(luil::key_code::tab);
+    board.press(luil::key_code::arrow_right);
+    REQUIRE(board.focused() == arrow_id);
+    board.press(luil::key_code::tab, false, true);
+    REQUIRE(board.focused() == other_id);
+
+    // 열린 동안 화살표에서 Tab으로 떠나면 초점 떠남 훅이 닫는다.
+    keyboard open_board { save_config(true) };
+    open_board.press(luil::key_code::tab);
+    open_board.press(luil::key_code::arrow_right);
+    REQUIRE(open_board.focused() == arrow_id);
+    REQUIRE(describe(open_board.press(luil::key_code::tab)) == described_actions { u8"close" });
+    REQUIRE(open_board.focused() == other_id);
 }

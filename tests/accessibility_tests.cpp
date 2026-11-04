@@ -2,9 +2,11 @@
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/badge_element.h"
+#include "luil/ui/calendar_element.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/dropdown_element.h"
 #include "luil/ui/group_element.h"
@@ -16,6 +18,7 @@
 #include "luil/ui/menu_element.h"
 #include "luil/ui/modal_host_element.h"
 #include "luil/ui/progress_element.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/scrollbar_element.h"
 #include "luil/ui/slider_element.h"
@@ -23,13 +26,18 @@
 #include "luil/ui/split_handle_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/teaching_tip_element.h"
 #include "luil/ui/toast_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 
+#include "text_languages_guard.h"
+
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -229,6 +237,13 @@ TEST_CASE("A check control reads its style, label, and state", "[ui][access]")
     luil::check_element bare { { .owner = u8"row", .checked = true } };
     bare.set_tooltip(u8"이 행을 포함한다");
     REQUIRE(bare.accessibility().name == u8"이 행을 포함한다");
+    bare.set_access_name(u8"행 포함");
+    REQUIRE(bare.accessibility().name == u8"행 포함");
+
+    // 적힌 라벨이 있으면 그 글이 이름이다.
+    luil::check_element labeled { { .owner = u8"labeled", .label = u8"알림" } };
+    labeled.set_access_name(u8"다른 이름");
+    REQUIRE(labeled.accessibility().name == u8"알림");
 }
 
 TEST_CASE("A slider reads its range and clamped value", "[ui][access]")
@@ -241,6 +256,139 @@ TEST_CASE("A slider reads its range and clamped value", "[ui][access]")
     REQUIRE(info.range->maximum == 10.0f);
     // 범위 밖 값은 그리기와 같은 함수로 잘린다.
     REQUIRE(info.range->value == 10.0f);
+}
+
+TEST_CASE("A slider and a scrollbar leave the announced step and page at zero", "[ui][access]")
+{
+    // 걸음을 알리는 것은 값이 이산인 요소뿐이다. 델타로 움직이는 막대는 0을 알려 UIA의 SmallChange·LargeChange가 지금처럼 0이다.
+    const luil::slider_element slider { luil::ui_element_id { kind_item, u8"volume" }, { .minimum = 0.0f, .maximum = 10.0f, .value = 3.0f } };
+    REQUIRE(slider.accessibility().range->step == 0.0f);
+    REQUIRE(slider.accessibility().range->page == 0.0f);
+    const luil::scrollbar_element bar { luil::ui_element_id { kind_item, u8"log" }, { .content_height = 400.0f, .viewport_height = 100.0f, .scroll_offset = 50.0f } };
+    REQUIRE(bar.accessibility().range->step == 0.0f);
+    REQUIRE(bar.accessibility().range->page == 0.0f);
+    const luil::progress_element progress { luil::ui_element_id { kind_item, u8"load" }, { .value = 0.5f } };
+    REQUIRE(progress.accessibility().range->step == 0.0f);
+    REQUIRE(progress.accessibility().range->page == 0.0f);
+
+    // 같은 범위라도 걸음이 다르면 다른 정보다 (변화 알림이 걸음의 변화도 본다).
+    REQUIRE((luil::access_range { 0.0f, 5.0f, 3.0f } == luil::access_range { 0.0f, 5.0f, 3.0f, 1.0f, 1.0f }) == false);
+}
+
+TEST_CASE("A rating is one slider node in the access tree whose cells fold away", "[ui][access][rating]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    luil::rating_config config {};
+    config.owner = u8"review";
+    config.value = 3.0f;
+    config.change_to = [](const float value) { return luil::make_app_action(access_value_intent { value }); };
+    root->add(std::make_unique<luil::rating_element>(std::move(config)));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    REQUIRE(snapshot.entries.size() == 1u);
+    REQUIRE(snapshot.entries[0].id == luil::ui_element_id { luil::ui_element_kind::rating, u8"review" });
+    REQUIRE(snapshot.entries[0].info.role == luil::access_role::slider);
+    REQUIRE(snapshot.entries[0].info.range == luil::access_range { 0.0f, 5.0f, 3.0f, 1.0f, 1.0f });
+    REQUIRE(snapshot.entries[0].info.value == u8"3 / 5");
+}
+
+namespace {
+    struct access_color_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    [[nodiscard]] luil::color_picker_config access_picker_config()
+    {
+        luil::color_picker_config config {};
+        config.owner = u8"paint";
+        config.value = { 225.0f, 0.4f, 0.8f, 0.5f };
+        config.alpha = true;
+        config.change_to = [](const luil::hsv_color value) { return luil::make_app_action(access_color_intent { value }); };
+        config.hex = luil::color_picker_hex { .id = { kind_item, u8"paint-hex" }, .value = { .text = u8"#7A8FCC80" } };
+        config.presets = { { luil::make_ui_color(255, 0, 0), u8"red" }, { luil::make_ui_color(0, 0, 255), u8"" } };
+        return config;
+    }
+
+    [[nodiscard]] std::u8string paint_part(const std::u8string_view name)
+    {
+        std::u8string owner { u8"paint" };
+        owner += u8'\u001f';
+        owner += name;
+        return owner;
+    }
+}
+
+TEST_CASE("A color picker is a group over the plane, the bars, the hex field and the preset buttons", "[ui][access][color-picker]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::color_picker_element>(access_picker_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+
+    // 견본은 root가 그리고 노드가 아니다. 견본 칸 줄은 구조라 접힌다.
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    const luil::ui_element_id picker { luil::ui_element_kind::color_picker, u8"paint" };
+    REQUIRE(snapshot.entries.size() == 7u);
+    REQUIRE(snapshot.entries[0].id == picker);
+    REQUIRE(snapshot.entries[0].info.role == luil::access_role::group);
+    REQUIRE(snapshot.entries[0].info.name == u8"색");
+    // 값 글은 16진 글이다. 225도·40%·80%·50%는 #7A8FCC80이다.
+    REQUIRE(snapshot.entries[0].info.value == u8"#7A8FCC80");
+    const luil::ui_element_id expected[] {
+        { luil::ui_element_kind::color_picker_plane, paint_part(u8"plane") }, { luil::ui_element_kind::color_picker_bar, paint_part(u8"hue") },
+        { luil::ui_element_kind::color_picker_bar, paint_part(u8"alpha") }, { kind_item, u8"paint-hex" },
+        { luil::ui_element_kind::color_picker_preset, paint_part(u8"1") }, { luil::ui_element_kind::color_picker_preset, paint_part(u8"2") }
+    };
+    for (std::size_t index { 0 }; index < std::size(expected); ++index)
+    {
+        REQUIRE(snapshot.entries[index + 1u].id == expected[index]);
+        REQUIRE(snapshot.entries[index + 1u].parent == picker);
+    }
+
+    // 판은 두 값을 글로만 알린다. 범위가 없다.
+    const luil::access_info& plane { snapshot.entries[1].info };
+    REQUIRE(plane.role == luil::access_role::slider);
+    REQUIRE(plane.name == u8"채도와 명도");
+    REQUIRE(plane.value == u8"채도 40%, 명도 80%");
+    REQUIRE(plane.range.has_value() == false);
+    // 막대는 범위와 걸음을 알린다.
+    REQUIRE(snapshot.entries[2].info.name == u8"색상");
+    REQUIRE(snapshot.entries[2].info.range == luil::access_range { 0.0f, 360.0f, 225.0f, 1.0f, 10.0f });
+    REQUIRE(snapshot.entries[3].info.name == u8"불투명도");
+    REQUIRE(snapshot.entries[3].info.range == luil::access_range { 0.0f, 100.0f, 50.0f, 1.0f, 10.0f });
+    REQUIRE(snapshot.entries[4].info.role == luil::access_role::edit);
+    REQUIRE(snapshot.entries[4].info.name == u8"16진 색");
+    REQUIRE(snapshot.entries[5].info == luil::access_info { .role = luil::access_role::button, .name = u8"red" });
+    REQUIRE(snapshot.entries[6].info.name == u8"#0000FFFF");
+}
+
+TEST_CASE("Setting a bar value changes only that channel and the same value does nothing", "[ui][access][color-picker]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::color_picker_element>(access_picker_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+    const auto value_of = [](const std::optional<std::vector<luil::input_action>>& actions) {
+        REQUIRE(actions.has_value());
+        REQUIRE(actions->size() == 1u);
+        const auto* const message { std::get_if<luil::app_message>(&actions->front()) };
+        REQUIRE(message != nullptr);
+        REQUIRE(message->get<access_color_intent>() != nullptr);
+        return message->get<access_color_intent>()->value;
+    };
+    const luil::ui_element* const hue { tree.find({ luil::ui_element_kind::color_picker_bar, paint_part(u8"hue") }) };
+    const luil::ui_element* const alpha { tree.find({ luil::ui_element_kind::color_picker_bar, paint_part(u8"alpha") }) };
+    REQUIRE(hue != nullptr);
+    REQUIRE(alpha != nullptr);
+    REQUIRE(value_of(hue->access_actions({ luil::access_command::set_value, 90.0f })) == luil::hsv_color { 90.0f, 0.4f, 0.8f, 0.5f });
+    REQUIRE(value_of(alpha->access_actions({ luil::access_command::set_value, 25.0f })) == luil::hsv_color { 225.0f, 0.4f, 0.8f, 0.25f });
+    // 같은 값이면 할 일이 없다.
+    REQUIRE(hue->access_actions({ luil::access_command::set_value, 225.0f })->empty());
+    REQUIRE(alpha->access_actions({ luil::access_command::set_value, 50.0f })->empty());
+    // 판은 값 정하기를 받지 않는다 (범위가 없다).
+    const luil::ui_element* const plane { tree.find(luil::color_picker_element::plane_id(u8"paint")) };
+    REQUIRE(plane != nullptr);
+    REQUIRE(plane->access_actions({ luil::access_command::set_value, 10.0f }).has_value() == false);
 }
 
 TEST_CASE("A scrollbar reads how far it can scroll", "[ui][access]")
@@ -1323,6 +1471,44 @@ TEST_CASE("A container takes its name from the access name, not a visible toolti
     REQUIRE(tabs.accessibility().name == u8"문서 탭");
 }
 
+TEST_CASE("Elements that write no name of their own answer to the access name", "[ui][access]")
+{
+    // `accessibility()`를 재정의해도 이름의 원천은 `access_name()` 하나다. 자리마다 갈리면 앱이 어디에 적어야 할지 알 수 없다.
+    const auto require_named = [](luil::ui_element& element) {
+        element.set_tooltip(u8"툴팁");
+        REQUIRE(element.accessibility().name == u8"툴팁");
+        element.set_access_name(u8"전용 이름");
+        REQUIRE(element.accessibility().name == u8"전용 이름");
+    };
+
+    SECTION("A slider")
+    {
+        luil::slider_element slider { luil::ui_element_id { kind_item, u8"volume" }, { .maximum = 10.0f, .value = 3.0f } };
+        require_named(slider);
+    }
+    SECTION("A progress bar")
+    {
+        luil::progress_element progress { luil::ui_element_id { kind_item, u8"load" }, { .value = 0.5f } };
+        require_named(progress);
+    }
+    SECTION("A split handle")
+    {
+        luil::split_handle_element handle { luil::ui_element_id { kind_item, u8"split" }, {} };
+        require_named(handle);
+    }
+    SECTION("A grouped list")
+    {
+        luil::grouped_list_element list { { .owner = u8"history" }, std::vector<luil::list_group> {} };
+        require_named(list);
+    }
+    SECTION("A menu")
+    {
+        const luil::menu_message_factory select { [](const std::u8string&) { return luil::input_action {}; } };
+        luil::menu_element menu { { .owner = u8"context", .items = { { .key = u8"open", .label = u8"열기" } }, .select = select } };
+        require_named(menu);
+    }
+}
+
 TEST_CASE("A list is the scrolling window its rows are revealed in", "[ui][access]")
 {
     luil::list_config config {};
@@ -1456,4 +1642,220 @@ TEST_CASE("A trap refuses only what it actually covers", "[ui][access]")
     // 이름표는 hit을 흡수하지 않으므로 가림이 아니다.
     REQUIRE(tree.find({ kind_item, u8"veil" })->accessibility().role == luil::access_role::static_text);
     REQUIRE(luil::access_reachable(tree, { kind_item, u8"under" }));
+}
+
+namespace {
+    struct access_day_intent
+    {
+        std::chrono::year_month_day day {};
+    };
+
+    [[nodiscard]] std::chrono::year_month_day access_date(const unsigned month, const unsigned day)
+    {
+        return { std::chrono::year { 2026 }, std::chrono::month { month }, std::chrono::day { day } };
+    }
+
+    // 2026년 11월, 고른 날 3일, 오늘 5일, 커서 10일이다. 주말과 20일 뒤는 고를 수 없다.
+    [[nodiscard]] luil::calendar_config access_calendar_config()
+    {
+        luil::calendar_config config {};
+        config.owner = u8"trip";
+        config.value = access_date(11, 3);
+        config.cursor = access_date(11, 10);
+        config.today = access_date(11, 5);
+        config.bounds = { std::nullopt, access_date(11, 20) };
+        config.available = [](const std::chrono::year_month_day day) {
+            const std::chrono::weekday weekday { std::chrono::sys_days { day } };
+            return weekday != std::chrono::Saturday && weekday != std::chrono::Sunday;
+        };
+        config.select = [](const std::chrono::year_month_day day) { return luil::make_app_action(access_day_intent { day }); };
+        config.move_to = [](const std::chrono::year_month_day) { return luil::input_action {}; };
+        return config;
+    }
+}
+
+TEST_CASE("A calendar is a group over two buttons and a list of 42 days", "[ui][access][calendar]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::calendar_element>(access_calendar_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    REQUIRE(snapshot.entries.size() == 46u);
+    const luil::ui_element_id calendar { luil::ui_element_kind::calendar, u8"trip" };
+    const luil::ui_element_id grid { luil::ui_element_kind::calendar_grid, u8"trip" };
+    REQUIRE(snapshot.entries[0].id == calendar);
+    REQUIRE(snapshot.entries[0].info == luil::access_info { .role = luil::access_role::group, .name = u8"달력" });
+    REQUIRE(snapshot.entries[1].info == luil::access_info { .role = luil::access_role::button, .name = u8"이전 달" });
+    REQUIRE(snapshot.entries[1].parent == calendar);
+    REQUIRE(snapshot.entries[2].info == luil::access_info { .role = luil::access_role::button, .name = u8"다음 달" });
+    REQUIRE(snapshot.entries[3].id == grid);
+    REQUIRE(snapshot.entries[3].parent == calendar);
+    REQUIRE(snapshot.entries[3].info == luil::access_info { .role = luil::access_role::list, .name = u8"2026년 11월" });
+    for (std::size_t index { 4 }; index < snapshot.entries.size(); ++index)
+    {
+        REQUIRE(snapshot.entries[index].parent == grid);
+        REQUIRE(snapshot.entries[index].info.role == luil::access_role::list_item);
+    }
+
+    // 1일이 첫 칸이라 n일은 n + 3번째 줄이다. 고른 날만 `selected`이고 꼬리는 오늘, 고를 수 없음 순이다.
+    const auto day_info = [&snapshot](const std::size_t day) { return snapshot.entries[day + 3u].info; };
+    REQUIRE(day_info(3) == luil::access_info { .role = luil::access_role::list_item, .name = u8"2026년 11월 3일 화요일", .selected = true });
+    REQUIRE(day_info(4) == luil::access_info { .role = luil::access_role::list_item, .name = u8"2026년 11월 4일 수요일", .selected = false });
+    REQUIRE(day_info(5).name == u8"2026년 11월 5일 목요일, 오늘");
+    REQUIRE(day_info(7).name == u8"2026년 11월 7일 토요일, 고를 수 없음");
+    REQUIRE(day_info(23).name == u8"2026년 11월 23일 월요일, 고를 수 없음");
+    // 이웃 달의 날도 항목이다. 끝 칸은 12월 12일이다.
+    REQUIRE(snapshot.entries.back().info.name == u8"2026년 12월 12일 토요일, 고를 수 없음");
+
+    // 앱이 준 글이 기본 문구를 덮는다. 꼬리의 차례와 쉼표는 요소의 것이다.
+    luil::calendar_config custom { access_calendar_config() };
+    custom.text.name = u8"trip";
+    custom.text.today = u8"today";
+    custom.text.unavailable = u8"blocked";
+    custom.text.previous_month = u8"back";
+    custom.text.month_title = [](const std::chrono::year_month) { return std::u8string { u8"Nov" }; };
+    custom.text.day_name = [](const std::chrono::year_month_day day) { return luil::format_iso_date(day); };
+    custom.today = access_date(11, 7);
+    const luil::calendar_element named { custom };
+    REQUIRE(named.accessibility().name == u8"trip");
+    REQUIRE(named.children()[0]->accessibility().name == u8"back");
+    REQUIRE(named.children()[2]->accessibility().name == u8"Nov");
+    REQUIRE(named.children()[2]->children()[6]->accessibility().name == u8"2026-11-07, today, blocked");
+}
+
+TEST_CASE("The calendar and the date field read in the library language", "[ui][access][calendar][i18n]")
+{
+    const luil_test::text_languages_guard guard {};
+    guard.use(u8"en");
+
+    const luil::calendar_element calendar { access_calendar_config() };
+    CHECK(calendar.accessibility().name == u8"Calendar");
+    CHECK(calendar.children()[0]->accessibility().name == u8"Previous month");
+    CHECK(calendar.children()[1]->accessibility().name == u8"Next month");
+    const luil::ui_element& grid { *calendar.children()[2] };
+    CHECK(grid.accessibility().name == u8"November 2026");
+    // 1일이 첫 칸이다. 요일 줄은 그림이라 접근 이름이 없고, 꼬리는 요소가 쉼표로 잇는다.
+    CHECK(grid.children()[2]->accessibility().name == u8"Tuesday, November 3, 2026");
+    CHECK(grid.children()[4]->accessibility().name == u8"Thursday, November 5, 2026, Today");
+    CHECK(grid.children()[6]->accessibility().name == u8"Saturday, November 7, 2026, Unavailable");
+
+    luil::date_field_config field {};
+    field.owner = u8"due";
+    field.value = access_date(11, 3);
+    const luil::date_field_element chosen { field };
+    CHECK(chosen.accessibility().name == u8"Date");
+    CHECK(chosen.accessibility().value == u8"November 3, 2026");
+
+    guard.use(u8"ko");
+    const luil::calendar_element korean { access_calendar_config() };
+    CHECK(korean.accessibility().name == u8"달력");
+    CHECK(korean.children()[2]->accessibility().name == u8"2026년 11월");
+    CHECK(luil::date_field_element { field }.accessibility().value == u8"2026년 11월 3일");
+}
+
+TEST_CASE("Selecting a day plans its click and an already chosen day does nothing", "[ui][access][calendar]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::calendar_element>(access_calendar_config()));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 300.0f, 400.0f }, 1.0f) };
+    const auto day_of = [&tree](const unsigned day) {
+        const luil::ui_element* const found { tree.find(luil::calendar_element::day_id(u8"trip", access_date(11, day))) };
+        REQUIRE(found != nullptr);
+        return found;
+    };
+
+    // 이미 고른 날이면 할 일이 없다.
+    const std::optional<std::vector<luil::input_action>> chosen { luil::plan_access_request(*day_of(3), { luil::access_command::select }) };
+    REQUIRE(chosen.has_value());
+    REQUIRE(chosen->empty());
+    // 다른 날은 클릭이다. 커서가 아닌 날이라 커서를 먼저 옮기고 고른다.
+    const std::optional<std::vector<luil::input_action>> picked { luil::plan_access_request(*day_of(12), { luil::access_command::select }) };
+    REQUIRE(picked.has_value());
+    REQUIRE(picked->size() == 2u);
+    const auto* const message { std::get_if<luil::app_message>(&picked->back()) };
+    REQUIRE(message != nullptr);
+    REQUIRE(message->get<access_day_intent>() != nullptr);
+    REQUIRE(message->get<access_day_intent>()->day == access_date(11, 12));
+    // 고를 수 없는 날은 클릭이 없다.
+    REQUIRE(day_of(7)->action(luil::ui_trigger::left_click) == nullptr);
+}
+
+namespace {
+    struct access_tip_intent
+    {
+    };
+
+    // 제목·본문·설명 있는 그림·두 단추·닫기가 다 있는 안내 풍선이다. 그림은 2x1 픽셀이다.
+    [[nodiscard]] luil::teaching_tip_config access_tip_config()
+    {
+        const std::array<std::uint8_t, 8> pixels { 255, 0, 0, 255, 0, 0, 255, 255 };
+        luil::teaching_tip_config config {};
+        config.owner = u8"tip";
+        config.title = u8"New";
+        config.body = u8"Body text";
+        config.image = luil::image_config { .image = luil::make_rgba_image(2, 1, pixels), .description = u8"Picture" };
+        config.primary = luil::teaching_tip_button { u8"Try", luil::make_message_action(access_tip_intent {}) };
+        config.secondary = luil::teaching_tip_button { u8"Later", luil::make_message_action(access_tip_intent {}) };
+        config.dismiss = [](const luil::teaching_tip_dismiss_reason) { return luil::make_app_action(access_tip_intent {}); };
+        return config;
+    }
+}
+
+TEST_CASE("A teaching tip is a dialog or a pane over its body text, its picture and its buttons", "[ui][access][teaching-tip]")
+{
+    for (const bool modal : { true, false })
+    {
+        CAPTURE(modal);
+        luil::teaching_tip_config config { access_tip_config() };
+        config.modal = modal;
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        root->add(std::make_unique<luil::teaching_tip_element>(std::move(config)));
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f) };
+
+        // 덮개는 접근 tree에 서지 않는다. 몸은 본문 글이고 그림과 단추는 그 아래다.
+        const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+        const luil::ui_element_id tip { luil::ui_element_kind::teaching_tip, u8"tip" };
+        const luil::ui_element_id body { luil::ui_element_kind::teaching_tip_body, u8"tip" };
+        REQUIRE(snapshot.entries.size() == 6u);
+        REQUIRE(snapshot.entries[0].id == tip);
+        REQUIRE(snapshot.entries[0].info == luil::access_info { .role = modal ? luil::access_role::dialog : luil::access_role::pane, .name = u8"New" });
+        REQUIRE(snapshot.entries[1].id == body);
+        REQUIRE(snapshot.entries[1].parent == tip);
+        REQUIRE(snapshot.entries[1].info == luil::access_info { .role = luil::access_role::static_text, .name = u8"Body text" });
+        REQUIRE(snapshot.entries[2].info == luil::access_info { .role = luil::access_role::image, .name = u8"Picture" });
+        REQUIRE(snapshot.entries[2].parent == body);
+        REQUIRE(snapshot.entries[3].id == luil::teaching_tip_element::close_id(u8"tip"));
+        REQUIRE(snapshot.entries[3].info == luil::access_info { .role = luil::access_role::button, .name = u8"닫기" });
+        REQUIRE(snapshot.entries[4].info == luil::access_info { .role = luil::access_role::button, .name = u8"Try" });
+        REQUIRE(snapshot.entries[5].info == luil::access_info { .role = luil::access_role::button, .name = u8"Later" });
+        for (std::size_t index { 3 }; index < snapshot.entries.size(); ++index)
+            REQUIRE(snapshot.entries[index].parent == body);
+    }
+}
+
+TEST_CASE("A teaching tip is named by its name, then its title, then the default word", "[ui][access][teaching-tip]")
+{
+    luil::teaching_tip_config config { access_tip_config() };
+    config.name = u8"Tip";
+    REQUIRE(luil::teaching_tip_element { config }.accessibility().name == u8"Tip");
+    config.name.clear();
+    REQUIRE(luil::teaching_tip_element { config }.accessibility().name == u8"New");
+    config.title.clear();
+    REQUIRE(luil::teaching_tip_element { config }.accessibility().name == u8"안내");
+
+    // 본문이 없으면 몸은 구조다. 설명 없는 그림은 장식이라 읽히지 않는다. 닫기 이름은 앱이 덮을 수 있다.
+    config.body.clear();
+    config.image->description.clear();
+    config.close_tooltip = u8"Dismiss";
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::make_unique<luil::teaching_tip_element>(std::move(config)));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f) };
+    REQUIRE(tree.find({ luil::ui_element_kind::teaching_tip_body, u8"tip" })->accessibility().role == luil::access_role::none);
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    REQUIRE(snapshot.entries.size() == 4u);
+    REQUIRE(snapshot.entries[1].id == luil::teaching_tip_element::close_id(u8"tip"));
+    REQUIRE(snapshot.entries[1].parent == luil::ui_element_id { luil::ui_element_kind::teaching_tip, u8"tip" });
+    REQUIRE(snapshot.entries[1].info.name == u8"Dismiss");
+    REQUIRE(tree.find(luil::teaching_tip_element::close_id(u8"tip"))->tooltip() == u8"Dismiss");
 }

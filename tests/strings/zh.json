@@ -1,0 +1,14 @@
+{
+    "language": "zh",
+    "strings": {
+        "save": "保存",
+        "files_selected": { "other": "已选择 {count} 个文件" },
+        "files_found": { "other": "找到 {count} 个文件" },
+        "file_summary": { "other": "{count} 个文件" },
+        "greeting": "{place} 的 {name}",
+        "echo": "{word} {word}",
+        "braces": "{{{value}}} {{value}}",
+        "number": "n={number}",
+        "date_line": "{year}-{month}-{day}"
+    }
+}

@@ -390,6 +390,44 @@ TEST_CASE("A text area says it takes several lines and reads as an edit", "[ui][
     REQUIRE(info.value == u8"a\nb");
 }
 
+TEST_CASE("A text area reads the access name the app gave before its placeholder", "[ui][text-area][accessibility]")
+{
+    // 앱이 단 이름이 안내 글보다 먼저다. 이름이 없을 때만 안내 글로 물러선다 (바로 위 case).
+    auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(u8"a\nb", 1), scrolling_config()) };
+    memo->set_access_name(u8"읽기 전용 안내 칸");
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(memo), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+    const luil::ui_element* const found { tree.find({ kind_memo, u8"memo" }) };
+    REQUIRE(found != nullptr);
+    const luil::access_info info { found->accessibility() };
+    REQUIRE(info.role == luil::access_role::edit);
+    REQUIRE(info.name == u8"읽기 전용 안내 칸");
+    REQUIRE(info.value == u8"a\nb");
+}
+
+TEST_CASE("The bars of a text area read the name the field reads", "[ui][text-area][accessibility]")
+{
+    // 막대는 칸 안의 부품이라 앱이 손댈 수 없다. 앱이 단 이름이 먼저고, 없으면 칸과 같이 안내 글이다. 둘 다 없으면 빈 이름이다.
+    const auto names_of = [](const std::u8string& name, std::u8string placeholder) {
+        luil::text_area_config config { scrolling_config() };
+        config.placeholder = std::move(placeholder);
+        config.wrap = false;
+        config.scroll_horizontal = config.scroll;
+        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(u8"a\nb", 1), std::move(config)) };
+        memo->set_access_name(name);
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(memo), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+        const luil::ui_element* const field { tree.find({ kind_memo, u8"memo" }) };
+        const luil::ui_element* const vertical { tree.find({ luil::ui_element_kind::scroll_area_bar, u8"text-area:memo" }) };
+        const luil::ui_element* const horizontal { tree.find({ luil::ui_element_kind::scroll_area_bar, u8"text-area-x:memo" }) };
+        REQUIRE(field != nullptr);
+        REQUIRE(vertical != nullptr);
+        REQUIRE(horizontal != nullptr);
+        return std::vector<std::u8string> { field->accessibility().name, vertical->accessibility().name, horizontal->accessibility().name };
+    };
+    REQUIRE(names_of(u8"읽기 전용 안내 칸", u8"메모") == std::vector<std::u8string>(3u, u8"읽기 전용 안내 칸"));
+    REQUIRE(names_of(std::u8string {}, u8"메모") == std::vector<std::u8string>(3u, u8"메모"));
+    REQUIRE(names_of(std::u8string {}, std::u8string {}) == std::vector<std::u8string>(3u, std::u8string {}));
+}
+
 TEST_CASE("Enter breaks the line in a text area and stays a default key in a single line field", "[ui][text-area][interaction]")
 {
     memo_policy policy {};
@@ -638,8 +676,17 @@ TEST_CASE("Read only documents keep selection and copy while suppressing edits",
     REQUIRE(memo_of(*tree).text_input()->read_only);
     REQUIRE(controller.process(luil::character_typed_event { U'z' }).empty());
     REQUIRE(controller.process(luil::character_typed_event { U'\b' }).empty());
-    for (const auto key : { luil::key_code::key_x, luil::key_code::key_v, luil::key_code::key_z, luil::key_code::key_y })
+    for (const auto key : { luil::key_code::key_x, luil::key_code::key_v })
         REQUIRE(controller.process(luil::key_pressed_event { key, true }).empty());
+    REQUIRE(policy.unhandled.empty());
+    // Ctrl+Z·Ctrl+Y(Shift 포함)는 칸이 되돌리기를 내지 않고 칸 밖으로 넘겨, 앱 on_key가 받는다.
+    for (const bool shift : { false, true })
+    {
+        for (const auto code : { luil::key_code::key_z, luil::key_code::key_y })
+            REQUIRE(controller.process(key(code, shift, true)).empty());
+    }
+    REQUIRE(policy.unhandled == std::vector<luil::key_code> { luil::key_code::key_z, luil::key_code::key_y, luil::key_code::key_z, luil::key_code::key_y });
+    policy.unhandled.clear();
     const auto copied { controller.process(luil::key_pressed_event { luil::key_code::key_c, true }) };
     REQUIRE(copied.size() == 1u);
     REQUIRE(std::get<luil::clipboard_copy_request>(copied.front()).text == u8"abc");
@@ -926,4 +973,55 @@ TEST_CASE("Changing the line break policy refills the wrap cache", "[ui][text-ar
     REQUIRE(cache->size() == 2u);
     REQUIRE(syllables == arrange(luil::text::line_break_policy::unicode, nullptr));
     REQUIRE(syllables != words);
+}
+
+TEST_CASE("A text area hands its spans to the text input snapshot", "[ui][text-area][rich-text]")
+{
+    // 보조 기술의 서식 속성이 칸 설정의 구간을 그대로 읽는다. 복사하지 않고 가리킨다.
+    luil::text_area_config config {};
+    config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 2, luil::text_color_role::primary, true } });
+    const auto tree { memo_tree(view_of(u8"abc", 0), config) };
+    const auto snapshot { memo_of(*tree).text_input() };
+    REQUIRE(snapshot.has_value());
+    REQUIRE(snapshot->spans == memo_of(*tree).config().spans.get());
+    // 구간이 없는 칸은 비어 있다.
+    const auto plain { memo_tree(view_of(u8"abc", 0)) };
+    REQUIRE(memo_of(*plain).text_input()->spans == nullptr);
+}
+
+TEST_CASE("A code span paints the raised background behind its text", "[ui][text-area][rich-text][raster]")
+{
+    // core test에는 글꼴이 없어 글자 칸의 폭이 0이다. 줄 바꿈 칸(폭이 글꼴에 매이지 않는 4 논리 픽셀)을 덮는 코드 구간으로 바탕을 본다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    REQUIRE(palette.raised_background != palette.input_background);
+    const auto raised = [&](std::shared_ptr<const std::vector<luil::text_span>> spans) {
+        luil::text_area_config config {};
+        config.spans = std::move(spans);
+        const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(u8"ab\ncd", 0), std::move(config)), { 0.0f, 0.0f, 400.0f, 200.0f }, 2.0f) };
+        luil::testing::raster_frame frame { 400, 200, palette };
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame.count_color({ 0.0f, 0.0f, 400.0f, 200.0f }, palette.raised_background);
+    };
+    luil::text_span code { 1, 3 };
+    code.code = true;
+    luil::text_span underline { 1, 3 };
+    underline.underline = true;
+    const int without { raised(nullptr) };
+    REQUIRE(raised(std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { code })) > without);
+    // 밑줄은 바탕을 칠하지 않는다.
+    REQUIRE(raised(std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { underline })) == without);
+    // 고대비에서는 떠 있는 바탕이 창 바탕이라 코드 바탕이 따로 보이지 않는다. code face가 남는 단서다.
+    const luil::ui_color_palette high_contrast { luil::color_palette_for(luil::color_theme::high_contrast) };
+    REQUIRE(high_contrast.raised_background == high_contrast.window_background);
+}
+
+TEST_CASE("A text area hands its clipboard key flag to the text input snapshot", "[ui][text-area][rich-text]")
+{
+    // 서식 칸은 복사·붙여넣기 키를 key handler로 넘긴다. controller가 snapshot의 이 칸을 본다 (docs/rich-edit-exchange-design.md).
+    luil::text_area_config config {};
+    config.clipboard_keys_to_parent = true;
+    const auto tree { memo_tree(view_of(u8"abc", 0), config) };
+    REQUIRE(memo_of(*tree).text_input()->clipboard_keys_to_parent);
+    const auto plain { memo_tree(view_of(u8"abc", 0)) };
+    REQUIRE(memo_of(*plain).text_input()->clipboard_keys_to_parent == false);
 }

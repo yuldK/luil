@@ -111,6 +111,6 @@ namespace luil {
     {
         // 범위가 없다 — 손잡이는 자기 범위를 모른다. Home/End를 흘려보내는 것과
         // 같은 이유다 (value-step-design.md).
-        return { .role = access_role::handle, .name = tooltip() };
+        return { .role = access_role::handle, .name = access_name() };
     }
 }

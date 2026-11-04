@@ -116,6 +116,31 @@ namespace luil::win32 {
         return now - std::chrono::milliseconds { age };
     }
 
+    pen_values pen_values_of(const POINTER_PEN_INFO& pen) noexcept
+    {
+        pen_values values {};
+        if ((pen.penMask & PEN_MASK_PRESSURE) != 0)
+            values.pressure = static_cast<float>(pen.pressure) / 1024.0f;
+        if ((pen.penMask & PEN_MASK_TILT_X) != 0)
+            values.tilt_x = static_cast<float>(pen.tiltX);
+        if ((pen.penMask & PEN_MASK_TILT_Y) != 0)
+            values.tilt_y = static_cast<float>(pen.tiltY);
+        return values;
+    }
+
+    std::vector<std::size_t> pen_history_order(const std::span<const POINTER_PEN_INFO> entries, const std::optional<std::uint32_t> last_frame)
+    {
+        std::vector<std::size_t> order {};
+        for (std::size_t index { entries.size() }; index > 1; --index)
+        {
+            const std::uint32_t frame { entries[index - 1].pointerInfo.frameId };
+            if (last_frame.has_value() && static_cast<std::int32_t>(frame - *last_frame) <= 0)
+                continue;
+            order.push_back(index - 1);
+        }
+        return order;
+    }
+
     pointer_button pointer_button_of(const UINT message) noexcept
     {
         if (message == WM_MBUTTONDOWN || message == WM_MBUTTONDBLCLK || message == WM_MBUTTONUP)
@@ -211,5 +236,43 @@ namespace luil::win32 {
         if (const key_code named { named_key_from_win32_virtual(static_cast<std::uint32_t>(virtual_key)) }; named != key_code::none)
             return named;
         return platform_key_code(static_cast<std::uint32_t>(virtual_key));
+    }
+
+    void alt_tap_tracker::key_down(const WPARAM virtual_key, const bool repeat, const bool control, const bool eligible) noexcept
+    {
+        if (virtual_key != VK_MENU)
+        {
+            armed_ = false;
+            return;
+        }
+        // 누르고 있는 Alt의 반복은 같은 누름이다. 무장한 채로, 풀린 채로 둔다.
+        if (repeat)
+            return;
+        armed_ = eligible && control == false;
+    }
+
+    bool alt_tap_tracker::key_up(const WPARAM virtual_key) noexcept
+    {
+        if (virtual_key != VK_MENU)
+            return false;
+        return std::exchange(armed_, false);
+    }
+
+    void alt_tap_tracker::cancel() noexcept
+    {
+        armed_ = false;
+    }
+
+    bool swallow_system_key(const UINT message, const WPARAM word_parameter, const bool menu_bar, const bool capturing) noexcept
+    {
+        if (message != WM_SYSKEYUP && message != WM_SYSCHAR)
+            return false;
+        if (capturing)
+            return true;
+        if (menu_bar == false)
+            return false;
+        if (message == WM_SYSKEYUP)
+            return word_parameter == VK_MENU || word_parameter == VK_F10;
+        return word_parameter != L' ';
     }
 }

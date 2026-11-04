@@ -27,6 +27,9 @@ class SkCanvas;
 class SkTypeface;
 
 namespace luil {
+    // 여러 줄 칸이 그리는 구간이다 (text_document.h). `text_input_snapshot`이 칸 설정의 구간을 가리키기만 한다.
+    struct text_span;
+
     struct rect_f
     {
         float x { 0.0f };
@@ -164,6 +167,12 @@ namespace luil {
         // 그 링크를 여는 앱 메시지를 짓는다 (칸 설정의 `activate_link`). 칸의 설정을 가리키므로 위의 글처럼 element와
         // 수명이 같다. 링크가 있어도 비어 있을 수 있다 — 그러면 주소 복사만 선다.
         const std::function<input_action(std::u8string_view)>* activate_link { nullptr };
+        // 칸이 그리는 구간이다 (`text_area_config::spans`, 확정 글 기준). 칸의 설정을 가리키므로 element와 수명이 같다.
+        //  - 보조 기술의 서식 속성(굵기·기울임·밑줄)이 읽는다 (docs/rich-edit-design.md 결정 6). 없으면 서식 없는 글이다.
+        const std::vector<text_span>* spans { nullptr };
+        // 복사·잘라내기·붙여넣기 키를 칸이 쓰지 않고 `key_handler`로 넘긴다 (`text_area_config::clipboard_keys_to_parent`).
+        //  - 서식 칸이 서식째 주고받으려고 세운다 (docs/rich-edit-exchange-design.md). 암호 칸에는 뜻이 없다.
+        bool clipboard_keys_to_parent { false };
     };
 
     // 포인터 자리에 놓을 caret이다. `upstream`이면 그 offset의 앞 글자 쪽(넘겨 접은 윗줄의 끝)에 붙는다.
@@ -527,6 +536,59 @@ namespace luil {
         std::function<input_action(float degrees, zoom_point anchor)> rotate_by {};
     };
 
+    // 잉크 접촉 하나의 단계다 (ink-design.md).
+    enum class ink_phase
+    {
+        begin,
+        extend,
+        end,
+        cancel,
+    };
+
+    // 표본 하나다. 좌표는 표면 client 물리 픽셀이다 (이벤트와 같다).
+    //  - pressure는 0~1이고, 장치가 알리지 않으면(마우스·터치·압력 없는 펜) 비어 있다.
+    //  - 기울기는 도(-90~90)이고 W3C Pointer Events의 tiltX·tiltY와 같다. 모르면 0이다.
+    struct ink_sample
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+        std::chrono::steady_clock::time_point time {};
+        std::optional<float> pressure {};
+        float tilt_x { 0.0f };
+        float tilt_y { 0.0f };
+
+        [[nodiscard]] bool operator==(const ink_sample&) const noexcept = default;
+    };
+
+    // `eraser`는 지우개 끝의 접촉이다. `interrupted`는 `end`가 정상적인 뗌이 아니라는 뜻이다
+    // (입력 큐 유실, 접촉 중 배럴 전환). 받은 표본까지가 획이다. cancel의 `sample`에는 뜻이 없다.
+    //  - `previous`는 직전에 건넨 표본이다. begin이면 `sample`과 같다. 지우개가 두 표본 사이의 선분을 쓸 때 쓴다.
+    //    tree는 표본마다 새로 서서 받는 쪽이 직전 자리를 들 수 없다.
+    struct ink_input
+    {
+        ink_phase phase { ink_phase::begin };
+        pointer_device device { pointer_device::pen };
+        std::uint32_t pointer_id { 0 };
+        bool eraser { false };
+        bool interrupted { false };
+        ink_sample sample {};
+        ink_sample previous {};
+    };
+
+    // 접촉 하나를 처음부터 끝까지 받는 역할이다 (ink-design.md). 콜백은 input thread에서 부른다 (최신 tree의 factory).
+    //  - 기본은 펜만 받는다. `mouse`·`touch`를 켜면 마우스 왼쪽 버튼과 손가락도 받는다. 끈 장치에는 일반 요소다.
+    //    손가락은 감싼 창의 스크롤과 확대 보기의 이동·핀치를 한다.
+    //  - `eraser`가 거짓이면 지우개 접촉은 일반 컨트롤처럼 삼킨다.
+    //  - 접촉을 쥐는 자리는 누름 대상 찾기 뒤, 확대 보기 이동 앞이다. 위에 놓인 자식 단추가 먼저 hit한다.
+    //  - 이동마다 최신 tree에서 같은 id를 다시 찾는다. 사라졌거나 숨었거나 비활성이면 `cancel`을 내고 접촉의 나머지를 삼킨다.
+    struct ink_source
+    {
+        std::function<std::vector<input_action>(const ink_input&)> on_ink {};
+        bool mouse { false };
+        bool touch { false };
+        bool eraser { true };
+    };
+
     struct scroll_source
     {
         // 스크롤 위치를 이만큼 옮기자는 메시지다 (delta는 논리 픽셀).
@@ -551,6 +613,16 @@ namespace luil {
         //  - 칸을 항목 경계에 맞춘 변화량으로 바꾸는 것은 이 메시지를 지은 쪽이다 (탭 막대는 다음 탭이 온전히 드러나는
         //    자리로 옮긴다). 그래서 `scroll`과 따로다 — 터치 끌기와 초점 되살리기는 지금처럼 양으로 흘린다.
         std::function<input_action(int steps)> step {};
+        // 창의 시작 쪽(위·왼쪽)에서 내용이 흐르지 않는 몫이다 (논리 픽셀, 기본 0). 고정 열을 세운 표가 그 폭을 싣는다.
+        //  - 끌기 자동 스크롤만 읽는다. 시작 쪽 띠가 이만큼 안쪽, 흐르는 내용이 실제로 시작하는 자리에 선다 — 고정 열
+        //    위에 띠가 있으면 고정 칸을 지나 끌고 갈 때 엉뚱한 자리에서 흐른다. 그 위는 창 밖과 같아 더 빠르다.
+        //  - 휠·팬·초점 되살리기는 창 전체를 받으므로 보지 않는다. 끝 쪽은 `trailing_inset`이 맡는다.
+        float leading_inset { 0.0f };
+        // 창의 끝 쪽(아래·오른쪽)에서 내용이 보이지 않는 몫이다 (논리 픽셀, 기본 0). 세로 막대가 선 표가 그 폭을 싣는다.
+        //  - 표의 가로 창은 표 전체 폭이지만 세로 막대 밑으로는 열이 보이지 않는다. 띠가 창 가장자리에 서면 일부가 막대
+        //    위에 놓여 내용이 실제로 끝나는 자리보다 늦게 흐른다. 이만큼 안쪽에 서고, 그 위는 창 밖과 같아 더 빠르다.
+        //  - 읽는 자리와 다듬기는 `leading_inset`과 같다. 두 여백의 합이 창보다 넓으면 어느 쪽으로도 흐르지 않는다.
+        float trailing_inset { 0.0f };
         // 절대 자리(`scroll_to`)는 여기 두지 않는다. 휠도 되살리기도 변화량으로만
         // 말하고, 절대 자리를 읽는 것은 보조 기술뿐이라 그 값은 그것을 실제로
         // 내주는 자리(`scrollbar_config::scroll_to`)에 있다 — 아무도 읽지 않는
@@ -645,13 +717,22 @@ namespace luil {
     // 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
     //  - 배율은 글을 물리 크기로 재고 논리 픽셀로 되돌리는 데 쓴다. 글꼴의 힌팅이 크기마다 달라 논리 크기로 잰
     //    폭은 그린 폭과 어긋날 수 있다.
-    //  - 측정기와 치수는 배치 문맥에서 온다 (`arrange_context::measure`). 비어 있으면 기본값이다.
+    //  - 측정기·치수·스타일은 배치 문맥에서 온다 (`arrange_context::measure`). 비어 있으면 기본값이다.
     struct measure_context
     {
         float scale { 1.0f };
         const text_measurer* measurer { nullptr };
         const ui_metrics* metrics { nullptr };
+        // 앱 스타일이다 (`arrange_context::style`에서 온다). 비어 있으면 내장 스타일(`default_ui_style`, LUIL_STYLE로 바꾼 값)이다.
+        //  - 여러 줄 글이 config에 정하지 않은 줄 나눔 정책(`text.wrap_policy`)을 여기서 읽는다 (`line_break_for`).
+        //  - 끝에 두어 세 칸만 적은 초기화(`{ scale, &measurer, metrics }`, `{ .scale = 2.0f }`)가 그대로다.
+        //  - 포인터만 들고 잰 뒤 잊는다 (`metrics`와 같다).
+        const ui_style* style { nullptr };
 
+        // 이 문맥이 쓸 앱 스타일이다 (비었으면 내장 스타일).
+        [[nodiscard]] const ui_style& app_style() const noexcept;
+        // config가 고른 정책이 있으면 그것, 없으면 앱 스타일의 `text.wrap_policy`다 (docs/wrap-policy-key-design.md).
+        [[nodiscard]] text::line_break_policy line_break_for(std::optional<text::line_break_policy> chosen) const noexcept;
         // 이 문맥이 쓸 측정기다 (비었으면 `default_text_measurer`).
         [[nodiscard]] const text_measurer& measure_text() const;
         // 이 문맥이 쓸 스타일 치수다 (비었으면 내장 스타일).
@@ -661,7 +742,7 @@ namespace luil {
         [[nodiscard]] float text_width(std::u8string_view text, float font_size) const;
         // 굵기·기울임을 건 UI 글꼴로 잰 폭이다 (그리기의 `make_text_font`와 같은 face).
         //  - 넣은 측정기(`measurer`)는 굵기보다 앞선다 — test의 고정 폭 측정기가 그대로 잰다.
-        [[nodiscard]] float text_width(std::u8string_view text, float font_size, font_style style) const;
+        [[nodiscard]] float text_width(std::u8string_view text, float font_size, font_style face_style) const;
     };
 
     // 배치 문맥이다.
@@ -707,7 +788,7 @@ namespace luil {
         //    (`text_measurer.cpp`의 경계).
         [[nodiscard]] measure_context measure() const noexcept
         {
-            return { scale, measurer, metrics };
+            return { scale, measurer, metrics, style };
         }
 
         // 같은 배율·scroll_offset으로 자식에게 줄 문맥이다.
@@ -771,6 +852,12 @@ namespace luil {
         // 스타일의 치수다 (`ui_style::metrics`). 그리기 안에 박혀 있던 글자 크기·모서리가
         // 여기서 온다. 기본값은 내장 스타일과 같아 채우지 않은 context도 지금까지의 그림이다.
         ui_metrics metrics {};
+        // 스타일의 여러 줄 정책이다 (`ui_style::text::wrap_policy`). 그리기에서 줄을 접는 길(배치한 줄 없이 부르는
+        // `draw_text_block`)이 config 칸이 빈 글에 쓴다.
+        //  - 기본값은 struct 기본값이라 채우지 않은 문맥은 지금까지의 그림이다 (`metrics`와 같은 규칙이다). 측정 문맥은
+        //    비면 내장 스타일(LUIL_STYLE)을 보므로, 손으로 지은 두 빈 문맥은 LUIL_STYLE이 정책을 바꾼 앱에서 갈린다.
+        //  - 배치에서 접은 줄을 그리는 label·markdown·여러 줄 칸·info_bar 본문은 이 값을 읽지 않는다.
+        text::line_break_policy wrap_policy { text::line_break_policy::hangul_words };
         // 시스템의 움직임 줄이기 설정이다 (Win32는 클라이언트 영역 애니메이션을 끈 것).
         //  - 참이면 돌아가는 표시가 멈춘 그림으로 선다. `update_context::reduce_motion`과 같은 값이라야 한다 —
         //    멈춘 그림에 다음 frame을 청하면 헛도는 timer만 남는다.
@@ -919,6 +1006,11 @@ namespace luil {
         //  - 편집 칸의 링크가 "지금 누르면 열린다"를 손 모양과 굵은 밑줄로 보이는 근거다 (Ctrl+누름만 링크의 것이다).
         //  - 포인터를 움직이지 않고 Ctrl만 누르고 떼도 바뀌도록 Windows 표면이 그 자리의 이동을 다시 알린다.
         bool pointer_control { false };
+        // 메뉴 막대가 서 있거나 열려 있다 (`menu_bar_state::current`가 비지 않았다, docs/menu-bar-design.md).
+        //  - 플랫폼이 읽는다. 키 잡기처럼 수식 키 없는 글자 키도 키로 보내고 입력기(TIP)에 먼저 주지 않는다. 같은 글자의
+        //    문자 입력은 controller가 버린다.
+        //  - 막대 상태는 tree로 오므로 tree를 받을 때도 다시 센다.
+        bool menu_keys { false };
 
         [[nodiscard]] bool operator==(const interaction_snapshot&) const = default;
     };
@@ -1011,6 +1103,8 @@ namespace luil {
         // 휠과 초점 되살리기가 표 없이 이 값으로 임자를 찾는다.
         [[nodiscard]] const scroll_source* scroll() const noexcept;
         [[nodiscard]] const zoom_source* zoom() const noexcept;
+        // 접촉 하나를 통째로 받는 잉크 역할이다 (`ink_source`). 없으면 nullptr다.
+        [[nodiscard]] const ink_source* ink() const noexcept;
         // 안쪽 창의 끝에서 터치 끌기를 넘겨받는 역할이다. 없으면 nullptr다.
         [[nodiscard]] const pan_handoff_target* pan_handoff() const noexcept;
         // 초점을 가진 채 글자로 자기 모델을 찾는 역할이다. 없으면 nullptr다.
@@ -1163,6 +1257,8 @@ namespace luil {
         // `scroll_delta_to_reveal`을 재정의한 컨테이너와 짝이 되는 값이다.
         void set_scroll_source(std::optional<scroll_source> source);
         void set_zoom_source(std::optional<zoom_source> source);
+        // 펜 접촉을 처음부터 끝까지 받는다 (잉크 캔버스). 세우면 hit test의 대상이 된다.
+        void set_ink_source(std::optional<ink_source> source);
         void set_pan_handoff(std::optional<pan_handoff_target> target);
         // 글자 탐색이 이 element의 모델을 묻게 한다 (가상 목록).
         void set_key_search_target(std::optional<key_search_target> target);
@@ -1312,6 +1408,8 @@ namespace luil {
         // 않는다** (`tab_bar_element`). 재정의하는 것은 흘리는 컨테이너다 —
         // `scroll_view_element`·`strip_element`가 직접 재고, 그것을 안에 두는
         // `scroll_area_element`·`list_element`·`virtual_list_element`가 물려준다.
+        // `table_element`는 가로로 흐를 때 왼쪽 끝이 고정 열 경계 이상인 대상에만 답한다
+        // (본문·행·머리글과 고정 칸은 0이다. frozen-columns-design.md).
         //  - 물리 좌표(`bounds()`)를 논리 값으로 옮기는 것은 배율을 아는 이쪽뿐이라
         //    여기가 자리다. `arrange` 뒤에만 유효하다.
         //  - virtual인 이유는 **앱이 만든 흘리는 컨테이너도 답해야 해서다.**
@@ -1383,6 +1481,7 @@ namespace luil {
         std::optional<key_step_target> key_step_target_ {};
         std::optional<scroll_source> scroll_source_ {};
         std::optional<zoom_source> zoom_source_ {};
+        std::optional<ink_source> ink_source_ {};
         std::optional<pan_handoff_target> pan_handoff_ {};
         std::optional<key_search_target> key_search_target_ {};
         std::optional<key_capture_target> key_capture_target_ {};

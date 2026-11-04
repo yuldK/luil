@@ -54,6 +54,12 @@ namespace luil {
         resolve_pending_move();
         apply_removed(std::move(path));
         check_limit();
+        // 생겼다 사라져 묶음이 비었다. 모은 자리와 시각을 함께 비운다.
+        //  - 시각을 남기면 다음 변경의 `max_delay`가 이미 지나 조용해지기를 기다리지 않고 나간다.
+        //  - 자리를 남기면 낼 것이 없어 `prepare`가 돌지 않으므로, 순 변화 없는 변경만 이어지는 폴더에서 칸이 끝없이 는다.
+        //  - `apply_removed`에서 비우지 않는다. 그 길은 `resolve_pending_move`로도 오는데, 그때는 곧이어 다른 항목이나 반쪽이 들어온다.
+        if (pending() == false)
+            clear();
     }
 
     void file_watch_batch::renamed(std::u8string from, std::u8string to, const clock::time_point now)
@@ -136,16 +142,12 @@ namespace luil {
         batch.rescan = rescan_;
         batch.end = end_;
         batch.error = error_;
+        batch.retried = retried_;
         batch.changes.reserve(live_);
         for (const std::optional<file_change>& entry : entries_)
         {
-            if (entry.has_value() == false)
-                continue;
-            if (name_filter_ != nullptr
-                && name_filter_(entry->path) == false
-                && (entry->kind != file_change_kind::renamed || name_filter_(entry->old_path) == false))
-                continue;
-            batch.changes.push_back(*entry);
+            if (entry.has_value() && passes_filter(*entry))
+                batch.changes.push_back(*entry);
         }
         if (batch.changes.empty() && batch.rescan == false && batch.end == file_watch_end::none)
         {
@@ -166,6 +168,7 @@ namespace luil {
             return;
         }
         // 쥔 채 다시 센다. 새 변경이 없으면 `settle` 뒤, 이어지면 늦어도 `max_delay` 뒤에 합친 묶음으로 다시 낸다.
+        retried_ = true;
         first_ = now;
         last_ = now;
         if (end_due_.has_value())
@@ -180,9 +183,32 @@ namespace luil {
         live_ = 0;
         move_.reset();
         rescan_ = false;
+        retried_ = false;
         first_.reset();
         last_.reset();
         end_due_.reset();
+    }
+
+    bool file_watch_batch::passes_filter(const file_change& entry) const
+    {
+        return name_filter_ == nullptr
+            || name_filter_(entry.path)
+            || (entry.kind == file_change_kind::renamed && name_filter_(entry.old_path));
+    }
+
+    void file_watch_batch::forget_vanished_rejection()
+    {
+        // 거름이 있으면 앱이 거절한 것은 거름에 맞는 항목뿐이다. 옆 이름은 앱에 나간 적이 없다.
+        //  - 그 항목이 사라졌는데 옆 이름 때문에 표식이 남으면 다시 생긴 파일의 묶음이 앞의 거절을 잇는 것으로 나간다.
+        //  - 표식만 푼다. 항목은 거름이 묶음을 지을 때 비우고, 시각은 다음 변경의 `settle`을 세는 데 쓴다.
+        //  - rescan은 항목 없이 다시 낼 것을 쥐고, 끝 묶음은 항목과 상관없이 나가므로 항목으로 가르지 않는다.
+        //  - 맞는 항목을 만나면 곧 그치므로 거절 중에 지움이 잇따라도 대개 앞쪽만 본다.
+        if (retried_ == false || name_filter_ == nullptr || rescan_ || ending())
+            return;
+        for (const std::optional<file_change>& entry : entries_)
+            if (entry.has_value() && passes_filter(*entry))
+                return;
+        retried_ = false;
     }
 
     void file_watch_batch::resolve_pending_move()
@@ -320,6 +346,7 @@ namespace luil {
             place(*index, file_change { file_change_kind::removed, entry.old_path, {} });
             break;
         }
+        forget_vanished_rejection();
     }
 
     void file_watch_batch::apply_renamed(std::u8string from, std::u8string to)
@@ -363,6 +390,7 @@ namespace luil {
         if (target.has_value() == false)
         {
             append(std::move(moved));
+            forget_vanished_rejection();
             return;
         }
         const file_change entry { *entries_[*target] };
@@ -387,6 +415,7 @@ namespace luil {
             place(*placed, std::move(moved));
         else
             append(std::move(moved));
+        forget_vanished_rejection();
     }
 
     void offer_file_change_batch(file_watch_batch& batch, const file_watch_ticket ticket, const std::function<bool(file_change_batch)>& deliver, const file_watch_batch::clock::time_point now)

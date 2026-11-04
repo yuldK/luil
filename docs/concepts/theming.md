@@ -1,5 +1,7 @@
 # 테마와 글꼴
 
+> 선택 이식 범위: 이 문서의 차트·마크업·업데이트·실행 중 스타일·핫 리로드 교차 참조는 원래 전체 통합 브랜치의 설계 기록이다. 현재 main의 채택 범위와 보존 위치는 [선택 기능 이식 기록](../selected-adoption.md)에 적었다.
+
 앱은 [`appearance_settings`](../../include/luil/theme/appearance.h)로 테마 선호와 accent id를, `font_settings`로 UI·고정폭 글꼴 가족을 게시한다. 좁은 범위는 `appearance_overrides`와 `font_overrides`의 optional 값으로 덮어쓴다.
 
 `theme_preference`는 `system`, `light`, `dark`다. `apply_overrides()`는 지정된 항목만 대체한다. accent override의 빈 문자열은 미지정으로 취급하지만, font override의 빈 문자열은 내장 기본 글꼴을 명시적으로 선택한다. accent id를 모르는 경우에도 저장된 문자열은 보존하고 표시 계층은 기본 `mint`로 물러선다. font family가 비어 있거나 설치되지 않아도 설정 값은 보존하고 font resolver가 내장 글꼴을 선택한다.
@@ -31,7 +33,7 @@ accent 4역할에서 파생한 역할은 팔레트에 따로 있다. element가 
 
 high contrast는 이 파생 역할도 알파 없이 highlight 짝으로 접는다. `row_selection_background`만은 알파 0으로 접어 채움을 없앤다 — 행의 글자는 앱이 그려 highlight 글자로 바꿀 수 없으므로 온전한 highlight를 깔면 글이 사라지고, 왼쪽 표식(`accent`)이 어느 행인지 남긴다. `selection_foreground`는 텍스트 입력이 고른 구간의 글자에 쓰는 짝이라 high contrast에서만 본문 글자와 달라진다.
 
-accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `system` accent는 OS key color를 실행 시점에 `make_system_accent()`로 합성하고 `set_system_accent()`의 atomic 값으로 교체한다. 정적 `accent_catalog()`에는 넣지 않고 `system_accent()`가 optional 값으로 반환한다. `accent_for()`는 값으로 반환하므로 정적 카탈로그나 실행 시점 합성 결과의 수명이 호출자에게 새지 않는다.
+accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `system` accent는 OS key color를 실행 시점에 `make_system_accent()`로 합성하고 `set_system_accent()`의 atomic 값으로 교체한다. 정적 `accent_catalog()`에는 넣지 않고 `system_accent()`가 optional 값으로 반환한다. `accent_for()`는 값으로 반환하므로 정적 카탈로그나 실행 시점 합성 결과의 수명이 호출자에게 새지 않는다. 항목의 이름은 `accent_label()`이 라이브러리 언어(`set_text_languages`)로 고른다.
 
 ## 스타일 — 앱이 정하는 중립 색과 치수
 
@@ -41,6 +43,8 @@ accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `sys
 
 - **빌드 시점** — 같은 스키마의 JSON을 `LUIL_STYLE`로 준다 ([자산 파이프라인](asset-pipeline.md)). 앱 브랜딩처럼 고정된 값이면 이것으로 충분하다.
 - **실행 시점** — `ui_style` 값을 세워 `ui_frame::style`에 `shared_ptr`로 싣는다. 비어 있으면 내장 스타일이다. 값을 계산해서 만드는 앱(OS 색에서 중립 색을 뽑는 경우 등)은 `compose_palette()`가 같은 규칙으로 팔레트를 접어 주므로 그리기 코드가 그것을 구별하지 못한다.
+  - 값을 파일에서 얻는 갈래도 있다. 앱이 스타일 JSON 글을 읽어 [`parse_ui_style` · 보존](../selected-adoption.md#구현-완료-후-보존한-항목)에 넘기면 `LUIL_STYLE`과 같은 스키마·판정·대신 값으로 `ui_style`이 나온다. 오류가 하나라도 있으면 값이 비고 오류 목록(`style_error`, `describe`의 영문 한 줄)이 온다. 앱은 쥔 스타일을 그대로 둔다. 읽은 값은 `ui_frame::style`과 배치(`make_arranged_tree`의 `style`)에 같은 포인터로 준다 ([실행 중 스타일 읽기](../style-sheet-design.md)).
+  - 파일을 저장할 때마다 다시 읽는 갈래는 [`hot_reloader` · 보존](../selected-adoption.md#구현-완료-후-보존한-항목)다. 파일을 감시해 바뀌면 감시 thread에서 읽고 해석한 결과(`hot_reload_update`)를 앱에 건넨다. 앱은 `loaded`의 스타일을 앱 메시지로 옮겨 같은 두 자리에 주고, 그 밖의 상태에서는 쥔 스타일을 그대로 둔다 ([핫 리로드 · 보존](../selected-adoption.md#구현-완료-후-보존한-항목)).
 
 중립 색 가운데 `backdrop_background`(`backdropBackground`)는 창 배경 효과가 선 표면(주 창·보조 창·popup)의 바탕이다. 알파가 효과를 얼마나 비출지를 정하고, 효과가 서지 않은 창은 이 색을 쓰지 않는다([창 배경 효과](../backdrop-design.md)). 이 키가 없는 스타일은 `windowBackground`로 물러선다.
 
@@ -60,6 +64,8 @@ frame->style = style; // 매 frame 같은 포인터를 실으면 된다
 
 앱이 화면 전체에서 통일하고 싶은 **모양의 선택**은 컴포넌트마다 `ui_style`의 한 칸에 둔다. 첫 칸은 탭 막대의 `ui_style::tab_bar`(모양·닫기 단추 보이기·상태 표시 자리·바탕 역할)다. popup 창의 모서리(`ui_style::popup`)도 같은 모양의 칸이지만 tree가 아니라 host가 만드는 창이라 `ui_frame::style`에서 읽는다 ([popup 오버레이](../popup-overlay-design.md#모서리그림자테두리)). 한 줄 글의 줄바꿈 처리(`ui_style::text`, JSON `text.lineBreak`: `space`·`symbol`·`paragraphs`, 기본 `space`)도 host가 `ui_frame::style`에서 읽어 한 줄 도우미(`draw_text`·`measure_text`)에 건다 — 도우미에 문맥 인자가 없어서다 ([한 줄 도우미의 줄바꿈](../text-layout-design.md#한-줄-도우미의-줄바꿈)). 칸의 값은 enum과 `palette_role`뿐이라 비교되고 JSON(`tabBar`)에 적힌다. 컴포넌트는 그 칸을 **배치 문맥**(`arrange_context::style`, `make_arranged_tree`의 `style`)에서 읽고, 컴포넌트 config의 `std::optional` 칸이 그 막대 하나만 덮는다. 앱이 한 번 적으면 config에 모양을 적지 않은 모든 막대가 따른다. 자세한 규칙과 다음 컴포넌트를 늘리는 모양은 [탭 막대 스타일과 공용 스타일](../tab-bar-style-design.md)에 있다.
 
+여러 줄 글의 줄 나눔 정책도 `ui_style::text`의 한 칸이다(`text.wrap_policy`, JSON `text.wrapPolicy`: `hangulWords`·`unicode`, 기본 `hangulWords`). label·markdown·여러 줄 칸·`text_block_style`의 `line_break`가 비면 이 값이고, config에 적은 값이 앞선다. 배치·측정은 배치 문맥의 `style`(`measure_context::style`로 이어진다)에서, 배치한 줄 없이 그리는 글은 `draw_context::wrap_policy`에서 읽는다. 스타일을 실행 중에 바꾸는 앱은 `make_arranged_tree`와 `ui_frame::style`에 같은 포인터를 주면 정책도 함께 닿는다 ([줄 나눔 정책 스타일 키](../wrap-policy-key-design.md)).
+
 `ui_metrics`는 `draw_context::metrics`로 element에 닿는다. config에 이미 열린 값(`label_config::font_size`·`button_config::corner_radius`)과 앱이 tree를 짓는 산수에 쓰는 배치 상수(`check_row_height` 같은 `inline constexpr`)는 여기 담지 않는다. 텍스트 입력의 글꼴 크기도 담지 않는다 — 포인터를 caret으로 옮기는 계산이 그리기 밖에서 같은 글꼴을 재기 때문이다.
 
 ## 색은 역할로 말한다
@@ -67,6 +73,10 @@ frame->style = style; // 매 frame 같은 포인터를 실으면 된다
 element 설정은 구체 색을 담지 않는다. [`button_visual_role`](../../include/luil/ui/button_element.h), [`text_button_visual`](../../include/luil/ui/dialog_elements.h), [`badge_tone`](../../include/luil/ui/badge_element.h), [`ui_severity`](../../include/luil/ui/severity.h), [`label_color_role`](../../include/luil/ui/label_element.h)는 모두 "이 자리가 무엇을 뜻하는가"만 담고, 그 뜻을 색으로 바꾸는 일은 그리기 시점에 팔레트가 한다. 그래서 테마를 바꾸면 element를 하나도 손대지 않고 화면 전체가 따라온다.
 
 element가 `ui_color`를 앱에서 받는 자리는 라이브러리 어디에도 없다. 색을 그대로 받으면 그 색은 dark에서 고른 값 그대로 light에 남고, 고대비에서는 사용자가 OS에서 고른 색을 그 element 하나만 무시한다. 접근성 설정을 element가 뒤엎는 자리가 되는 것이라 열지 않는다.
+
+예외는 **내용의 색**이다. 사용자가 고른 잉크 획의 색(`ink_style::color`)은 그림의 픽셀처럼 문서 내용이라 테마를 따르지 않는다. 캔버스 자신(테·바탕)은 색을 받지 않고, 색이 빈 획은 그리는 시점 팔레트의 `primary_foreground`라 테마와 고대비를 따른다 ([잉크 캔버스](../ink-design.md)의 결정 6).
+
+색 고르기가 고르는 색(`color_picker_config::value`)과 미리 정한 견본 칸의 색(`color_picker_preset::color`)도 내용의 색이다. 판·막대·견본·견본 칸은 앱이 준 색 그대로 모든 테마와 고대비에서 실제 색으로 그린다. 둘레(`control_border`, 고대비에서 창 전경색)와 손잡이·초점 테는 팔레트의 역할색이다 ([색 고르기](../color-picker-design.md)).
 
 이 원칙의 예외는 팔레트 자체다. `ui_style`은 색을 받지만 element 하나의 색이 아니라 **역할 전체의 값**이고, 테마마다 따로 있으며, 고대비는 그것을 무시한다. 그래서 element가 색을 받을 때 생기던 세 문제(테마를 따라오지 못함·역할 사이의 어긋남·접근성 설정을 뒤엎음)가 그대로 열리지 않는다.
 
@@ -91,7 +101,7 @@ element가 `ui_color`를 앱에서 받는 자리는 라이브러리 어디에도
 - 고대비에서 접히는 방식을 정해야 하는 색: `high_contrast_palette_for()`가 역할마다 어떤 시스템 색으로 접을지 정한다. 선택자로 고른 색에는 그 자리가 없다.
 - 비활성 표시: element마다 알파를 발명하지 않고 `disabled_foreground` 하나를 쓴다.
 
-역할이 늘면 `ui_color_palette`와 합성 둘(`compose_palette`·`high_contrast_palette_for`)이 함께 늘어난다. 중립 역할이면 `neutral_color_palette`와 `assets/style.json`, 생성 script의 키 목록도 늘어난다. 그것을 같이 정할 수 없는 색이라면 그것은 아직 역할이 아니다.
+역할이 늘면 `ui_color_palette`와 합성 둘(`compose_palette`·`high_contrast_palette_for`)이 함께 늘어난다. 중립 역할이면 `neutral_color_palette`와 `assets/style.json`, 키 표 데이터 파일([`cmake/style_keys.cmake`](../../cmake/style_keys.cmake))의 한 행도 늘어난다. 생성기와 실행 중 파서가 그 한 행을 함께 읽는다. 그것을 같이 정할 수 없는 색이라면 그것은 아직 역할이 아니다.
 
 ## 글꼴 fallback
 

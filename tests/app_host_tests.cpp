@@ -728,3 +728,34 @@ TEST_CASE("File clipboard requests reach the UI thread from input actions and fr
     host.post_clipboard_request(luil::clipboard_files_paste_request {});
     REQUIRE(host.take_clipboard_requests().empty());
 }
+
+TEST_CASE("Clipboard data requests reach the UI thread from any thread", "[win32][host][clipboard]")
+{
+    counting_driver driver {};
+    std::atomic<int> wakes { 0 };
+    luil::win32::app_host::config config {};
+    config.wake.clipboard = [&wakes] { wakes.fetch_add(1); };
+    luil::win32::app_host host { std::move(config), driver, nullptr };
+
+    // 그림은 앱 상태라 logic thread가 넣는다 (image-clipboard-design.md 결정 6). 그림은 같은 값으로 나온다.
+    const std::vector<std::uint8_t> pixel { 1, 2, 3, 255 };
+    const luil::ui_image image { luil::make_rgba_image(1, 1, pixel) };
+    const auto post_from_logic = [&host, &image]() {
+        host.post_clipboard_request(luil::clipboard_data_copy_request { u8"name", image, { 0x89u, 0x50u } });
+        host.post_clipboard_request(luil::clipboard_data_paste_request { 9u });
+    };
+    std::thread logic { post_from_logic };
+    logic.join();
+    REQUIRE(wakes.load() == 2);
+
+    const std::vector<luil::clipboard_request> requests { host.take_clipboard_requests() };
+    REQUIRE(requests.size() == 2u);
+    const auto* const copy { std::get_if<luil::clipboard_data_copy_request>(&requests[0]) };
+    REQUIRE(copy != nullptr);
+    REQUIRE(*copy == luil::clipboard_data_copy_request { u8"name", image, { 0x89u, 0x50u } });
+    REQUIRE(copy->image.backing() == image.backing());
+    const auto* const paste { std::get_if<luil::clipboard_data_paste_request>(&requests[1]) };
+    REQUIRE(paste != nullptr);
+    REQUIRE(paste->tag == 9u);
+    REQUIRE(driver.pings.load() == 0);
+}

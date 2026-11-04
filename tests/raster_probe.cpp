@@ -38,10 +38,13 @@ namespace luil::testing {
         canvas.clear(palette_.window_background);
         draw_context context {
             .canvas = canvas,
+            .ui_typeface = typeface_.get(),
+            .code_typeface = typeface_.get(),
             .palette = palette_,
             .scale = scale_,
             .now = now,
             .metrics = metrics_,
+            .reduce_motion = reduce_motion_,
             .theme = theme_,
         };
         tree.draw(context, interaction);
@@ -50,6 +53,16 @@ namespace luil::testing {
     void raster_frame::set_theme(const color_theme theme) noexcept
     {
         theme_ = theme;
+    }
+
+    void raster_frame::set_typeface(sk_sp<SkTypeface> typeface) noexcept
+    {
+        typeface_ = std::move(typeface);
+    }
+
+    void raster_frame::set_reduce_motion(const bool value) noexcept
+    {
+        reduce_motion_ = value;
     }
 
     const ui_color_palette& raster_frame::palette() const noexcept

@@ -1,5 +1,6 @@
 #include "host/frame_state.h"
 
+#include "host/inspector_overlay.h"
 #include "luil/theme/ui_style.h"
 #include "luil/theme/ui_theme.h"
 
@@ -47,7 +48,7 @@ namespace luil {
         // popup 하나를 주 tree 위에 겹쳐 그린다.
         // 데스크톱은 popup이 자기 창이라 창의 배경·OS 그림자가 경계를 세운다. 여기서는 표면이
         // 그 셋을 대신한다: 아래로 번지는 그림자, 창 배경, 그리고 tree와 테두리다.
-        void draw_overlay(SkCanvas& canvas, draw_context& context, const ui_color_palette& colors, const float scale, const overlay_layer& layer)
+        void draw_overlay(SkCanvas& canvas, draw_context& context, const ui_color_palette& colors, const float scale, const overlay_layer& layer, const inspector_config* const inspector)
         {
             if (layer.bounds.width <= 0 || layer.bounds.height <= 0)
                 return;
@@ -68,6 +69,8 @@ namespace luil {
                 SkAutoCanvasRestore restore_origin { &canvas, true };
                 canvas.translate(bounds.x(), bounds.y());
                 layer.tree->draw(context, layer.interaction);
+                if (inspector != nullptr)
+                    draw_inspector(context, *layer.tree, layer.interaction, *inspector);
             }
             if (layer.border)
                 draw_border(canvas, colors, scale, bounds);
@@ -90,6 +93,7 @@ namespace luil {
             .maximized = state.maximized,
             .fullscreen = state.fullscreen,
             .metrics = frame_style(state).metrics,
+            .wrap_policy = frame_style(state).text.wrap_policy,
             .reduce_motion = state.reduce_motion,
             .theme = state.theme,
             .backdrop = state.backdrop && state.popup,
@@ -105,13 +109,16 @@ namespace luil {
             SkAutoCanvasRestore restore_origin { &canvas, true };
             canvas.translate(static_cast<float>(state.origin_x), static_cast<float>(state.origin_y));
             state.tree->draw(context, state.interaction);
+            // 검사기는 tooltip과 끌기 그림 위에 얹는다. 꺼져 있으면 비용은 포인터 검사 하나다.
+            if (state.inspector != nullptr)
+                draw_inspector(context, *state.tree, state.interaction, *state.inspector);
         }
 
         // 주 tree 위의 popup이다 (모바일). 뒤의 것이 위다.
         //  - 주 tree의 tooltip·끌기 표시는 위에서 이미 그렸으므로 popup이 그 위를 덮는다. 터치
         //    화면에는 주 tree의 hover tooltip이 서지 않아 겹칠 일이 드물다.
         for (const overlay_layer& layer : state.overlays)
-            draw_overlay(canvas, context, colors, scale, layer);
+            draw_overlay(canvas, context, colors, scale, layer, state.inspector);
 
         // popup의 테두리다. tree 위에 긋는다 — 가장자리까지 채운 내용에도 경계가 남는다.
         if (state.border)

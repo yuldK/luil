@@ -74,6 +74,7 @@ root의 `bounds()`를 내용 크기로 쓴다. 원점은 자유이며 같은 tre
 - 표시 전에는 지연 끝 시각을 예약하고 표시 중에는 내용의 `next_update`도 예약한다. 숨은 내용은 타이머를 깨우지 않는다.
 - 툴팁의 hover·눌림·스크롤은 `tooltip_interaction`으로 분리한다. 내용과 주 화면에 같은 id가 있어도 섞이지 않으며,
   `interaction_for_surface`가 다른 표면의 툴팁을 거른다. 키보드 초점과 접근 tree는 주 화면에 남는다.
+- 툴팁은 hover 동안만 살고 초점과 단추를 받지 않는다. 단추가 있는 상주 안내는 [안내 풍선](teaching-tip-design.md)이다.
 - 보조 기술이 읽을 요약은 대상의 `set_tooltip`에 둔다. Windows UIA는 이 문자열을 `HelpText`로 제공한다.
   기존 접근성 이름의 우선순위는 바뀌지 않는다.
 

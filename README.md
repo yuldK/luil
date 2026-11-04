@@ -122,3 +122,5 @@ ctest --preset android-arm64-release
 - [컴포넌트 안내](docs/components.md): 필요한 UI 요소와 관련 예제
 - [스레드 모델](docs/concepts/threading-model.md): 상태 소유권과 메시지 흐름
 - [불변 tree](docs/concepts/immutable-tree.md): 게시·배치·조회 규칙
+
+이번 main의 선택 기능과 보존한 여섯 기능은 [선택 기능 이식 기록](docs/selected-adoption.md)에 정리했다.
