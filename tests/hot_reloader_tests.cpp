@@ -401,7 +401,7 @@ TEST_CASE("A writer that keeps writing under its lock still gives unreadable", "
     write_file(path, markup_one);
     recorder sink {};
     luil::hot_reloader_config config { test_config(sink) };
-    // 변경이 이어지면 다시 내는 간격이 `settle`을 넘어 `max_delay`까지 벌어진다. 그 간격을 묶음이 사라진 것으로 보면 상한에 닿지 못한다.
+    // 변경이 이어지면 다시 내는 간격이 `settle`을 넘어 `max_delay`까지 벌어진다. 벌어져도 거절한 묶음을 다시 낸 것(`retried`)이라 앞선 실패를 이어 세어 상한에 닿는다.
     config.settle = 200ms;
     const auto reloader { make_reloader(std::move(config)) };
     static_cast<void>(add_markup(*reloader, path));
@@ -458,7 +458,7 @@ TEST_CASE("Retries further apart than the limit still give unreadable", "[hot_re
     const std::filesystem::path path { folder.file(u8"markup.xml") };
     recorder sink {};
     luil::hot_reloader_config config { test_config(sink) };
-    // 앱이 고른 간격이 다시 읽는 상한보다 길어도 묶음이 사라진 것으로 보지 않는다. 그렇게 보면 끝없이 처음부터 센다.
+    // 앱이 고른 간격이 다시 읽는 상한보다 길어도 다시 낸 묶음은 `retried`다. 묶음이 사라졌는지는 간격으로 가르지 않으므로 처음부터 세지 않고 다음 차례에 건넨다.
     config.settle = 2100ms;
     config.max_delay = 2100ms;
     const auto reloader { make_reloader(std::move(config)) };
