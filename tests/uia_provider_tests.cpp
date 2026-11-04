@@ -93,6 +93,8 @@ namespace {
     public:
         std::shared_ptr<const luil::ui_tree> tree {};
         luil::ui_element_id focus {};
+        int content_offset_y { 0 };
+        std::optional<luil::rect_f> viewport {};
 
         [[nodiscard]] const luil::ui_tree* accessibility_tree() const noexcept override
         {
@@ -102,6 +104,15 @@ namespace {
         [[nodiscard]] HWND accessibility_window() const noexcept override
         {
             return nullptr;
+        }
+
+        [[nodiscard]] int accessibility_content_offset_y() const noexcept override
+        {
+            return content_offset_y;
+        }
+        [[nodiscard]] std::optional<luil::rect_f> accessibility_viewport() const noexcept override
+        {
+            return viewport;
         }
 
         [[nodiscard]] luil::ui_element_id accessibility_focus() const override
@@ -1204,6 +1215,54 @@ TEST_CASE("UIA runtime ids stay stable per element and differ between elements",
 
     button->Release();
     slider->Release();
+    root->Release();
+}
+
+TEST_CASE("UIA queries use the scrolled popup viewport and exclude its arrow strips", "[win32][uia][popup]")
+{
+    fake_uia_host host {};
+    host.content_offset_y = 100;
+    host.viewport = luil::rect_f { 0.0f, 16.0f, 200.0f, 68.0f };
+    auto panel { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    panel->arrange({ { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f });
+    auto shown { std::make_unique<role_probe>(luil::ui_element_id { kind_item, u8"shown" }, luil::access_role::button) };
+    shown->arrange({ { 0.0f, 100.0f, 200.0f, 40.0f }, 1.0f });
+    panel->add(std::move(shown));
+    auto hidden { std::make_unique<role_probe>(luil::ui_element_id { kind_item, u8"hidden" }, luil::access_role::button) };
+    hidden->arrange({ { 0.0f, 0.0f, 200.0f, 40.0f }, 1.0f });
+    panel->add(std::move(hidden));
+    host.tree = std::make_shared<const luil::ui_tree>(std::move(panel));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const visible { root->make_element_provider({ kind_item, u8"shown" }) };
+    auto* const offscreen { root->make_element_provider({ kind_item, u8"hidden" }) };
+
+    UiaRect bounds {};
+    REQUIRE(visible->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.top == 16.0);
+    REQUIRE(bounds.height == 24.0);
+    REQUIRE(offscreen->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.height == 0.0);
+    VARIANT property {};
+    REQUIRE(offscreen->GetPropertyValue(UIA_IsOffscreenPropertyId, &property) == S_OK);
+    REQUIRE(property.vt == VT_BOOL);
+    REQUIRE(property.boolVal == VARIANT_TRUE);
+
+    IRawElementProviderFragment* hit { nullptr };
+    REQUIRE(root->ElementProviderFromPoint(10.0, 20.0, &hit) == S_OK);
+    REQUIRE(hit != nullptr);
+    REQUIRE(hit->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.top == 16.0);
+    REQUIRE(bounds.height == 24.0);
+    hit->Release();
+    hit = nullptr;
+    REQUIRE(root->ElementProviderFromPoint(10.0, 8.0, &hit) == S_OK);
+    REQUIRE(hit == nullptr);
+
+    host.content_offset_y = 200;
+    REQUIRE(visible->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.height == 0.0);
+    offscreen->Release();
+    visible->Release();
     root->Release();
 }
 

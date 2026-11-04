@@ -497,7 +497,18 @@ namespace luil {
         }
         for (const access_snapshot_entry& entry : previous.entries)
             if (current_by_id.contains(entry.id) == false && has_text(entry.info))
-                announce_live(live_owner(entry.parent));
+            {
+                // 부모도 함께 사라졌으면 이전 경로를 따라 살아 있는 조상까지 간다.
+                ui_element_id parent { entry.parent };
+                while (parent != ui_element_id {} && current_by_id.contains(parent) == false)
+                {
+                    const auto found { previous_by_id.find(parent) };
+                    if (found == previous_by_id.end())
+                        break;
+                    parent = found->second->parent;
+                }
+                announce_live(live_owner(parent));
+            }
         for (const ui_element_id& id : live)
             changes.push_back({ access_change_kind::live_region, id, {}, {} });
         return changes;

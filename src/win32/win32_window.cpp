@@ -2653,6 +2653,7 @@ namespace luil::win32 {
                 // 창의 크기는 보이는 높이다. 내용 높이만 바뀌었으면 창은 그대로이고 흘릴 범위만 바뀐다.
                 const bool resized { previous.width != placement.width || previous_height != screen.height };
                 SetWindowPos(popup->window(), nullptr, screen.x, screen.y, placement.width, screen.height, SWP_NOACTIVATE | SWP_NOZORDER);
+                surface_scrolled(placement.id);
                 if (previous.height != placement.height)
                     InvalidateRect(popup->window(), nullptr, FALSE);
                 if (resized)
@@ -2672,6 +2673,11 @@ namespace luil::win32 {
                 if (popups_.empty())
                     return;
                 static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_moved));
+                surface_scrolled(anchor);
+            }
+
+            void surface_scrolled(const std::u8string& anchor) override
+            {
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                 {
                     if (anchored_popup(anchor, popup->id()) == nullptr)

@@ -1414,3 +1414,25 @@ TEST_CASE("A scroll area with a percent factory exposes its scroll position", "[
     REQUIRE(folded.accessibility().scroll.has_value() == false);
     REQUIRE(luil::plan_access_request(folded, end).has_value() == false);
 }
+
+TEST_CASE("Removing an unnamed subtree announces its surviving live region", "[ui][access][live]")
+{
+    const luil::ui_element_id board { kind_panel, u8"board" };
+    const luil::ui_element_id list { kind_panel, u8"list" };
+    const luil::ui_element_id line { kind_item, u8"line" };
+    const luil::access_snapshot before {
+        .entries = {
+            { board, {}, { .role = luil::access_role::pane, .name = u8"상태", .live = luil::access_live::polite } },
+            { list, board, { .role = luil::access_role::list } },
+            { line, list, { .role = luil::access_role::static_text, .name = u8"기다리는 작업" } },
+        },
+    };
+    const luil::access_snapshot after { { before.entries.front() } };
+
+    const std::vector<luil::access_change> changes { luil::diff_access_snapshots(before, after) };
+    REQUIRE(changes.size() == 2u);
+    REQUIRE(changes[0].kind == luil::access_change_kind::structure);
+    REQUIRE(changes[0].id == board);
+    REQUIRE(changes[1].kind == luil::access_change_kind::live_region);
+    REQUIRE(changes[1].id == board);
+}

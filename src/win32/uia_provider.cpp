@@ -345,6 +345,22 @@ namespace luil::win32 {
         }
     }
 
+    std::optional<rect_f> uia_surface_host::accessibility_client_bounds(rect_f bounds) const noexcept
+    {
+        bounds.y -= static_cast<float>(accessibility_content_offset_y());
+        if (const std::optional<rect_f> viewport { accessibility_viewport() }; viewport.has_value())
+        {
+            const float left { std::max(bounds.x, viewport->x) };
+            const float top { std::max(bounds.y, viewport->y) };
+            const float right { std::min(bounds.x + bounds.width, viewport->x + viewport->width) };
+            const float bottom { std::min(bounds.y + bounds.height, viewport->y + viewport->height) };
+            if (right < left || bottom <= top)
+                return std::nullopt;
+            bounds = { left, top, right - left, bottom - top };
+        }
+        return bounds;
+    }
+
     // --- uia_root_provider ---
 
     uia_root_provider::uia_root_provider(uia_surface_host& host) noexcept
@@ -758,12 +774,15 @@ namespace luil::win32 {
                 return UIA_E_ELEMENTNOTAVAILABLE;
             const ui_tree* const tree { host_->accessibility_tree() };
             const HWND window { host_->accessibility_window() };
-            if (tree == nullptr || window == nullptr)
+            if (tree == nullptr)
                 return S_OK;
             POINT point { static_cast<LONG>(std::lround(x)), static_cast<LONG>(std::lround(y)) };
-            if (ScreenToClient(window, &point) == FALSE)
+            if (window != nullptr && ScreenToClient(window, &point) == FALSE)
                 return S_OK;
-            const ui_element* const element { access_element_at(*tree, static_cast<float>(point.x), static_cast<float>(point.y)) };
+            if (const std::optional<rect_f> viewport { host_->accessibility_viewport() };
+                viewport.has_value() && viewport->contains(static_cast<float>(point.x), static_cast<float>(point.y)) == false)
+                return S_OK;
+            const ui_element* const element { access_element_at(*tree, static_cast<float>(point.x), static_cast<float>(point.y + host_->accessibility_content_offset_y())) };
             if (element == nullptr)
                 return S_OK;
             *result = make_element_provider(element->id());
@@ -1157,10 +1176,14 @@ namespace luil::win32 {
                 break;
             }
             case UIA_IsOffscreenPropertyId:
-                // 지어지지 않은 항목은 화면에 없다. 지어진 요소는 UIA가 사각형에서 정한다.
-                if (probe != nullptr)
-                    set_bool(*result, true);
+            {
+                UiaRect bounds {};
+                const HRESULT read { get_BoundingRectangle(&bounds) };
+                if (FAILED(read))
+                    return read;
+                set_bool(*result, bounds.width <= 0.0 || bounds.height <= 0.0);
                 break;
+            }
             case UIA_IsControlElementPropertyId:
             case UIA_IsContentElementPropertyId:
                 set_bool(*result, true);
@@ -1297,11 +1320,13 @@ namespace luil::win32 {
             return S_OK;
         // 조상의 잘라내기를 거친 사각형이다 — 스크롤로 잘린 행이 화면 밖
         // 사각형을 내면 안 된다 (accessibility-design.md).
-        const std::optional<rect_f> bounds { tree->visible_bounds(*element) };
+        std::optional<rect_f> bounds { tree->visible_bounds(*element) };
+        const uia_surface_host* const host { root_->host() };
+        if (bounds.has_value() && host != nullptr)
+            bounds = host->accessibility_client_bounds(*bounds);
         if (bounds.has_value() == false)
             return S_OK;
         POINT origin { 0, 0 };
-        const uia_surface_host* const host { root_->host() };
         if (host != nullptr)
         {
             if (const HWND window { host->accessibility_window() }; window != nullptr)

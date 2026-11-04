@@ -123,7 +123,10 @@ namespace luil {
             if (height <= 0.0f)
                 return;
             const float width { static_cast<float>(state.width) };
-            canvas.drawRect(SkRect::MakeXYWH(0.0f, top, width, height), solid_paint(state.backdrop ? colors.backdrop_background : colors.surface_background));
+            SkPaint background { solid_paint(state.backdrop ? colors.backdrop_background : colors.surface_background) };
+            // 반투명 판도 아래의 글을 지운다. 덧칠하면 그 글의 알파가 남아 화살표 뒤로 비친다.
+            background.setBlendMode(SkBlendMode::kSrc);
+            canvas.drawRect(SkRect::MakeXYWH(0.0f, top, width, height), background);
             if (codicon_typeface != nullptr)
                 draw_centered_glyph(canvas, glyph, { 0.0f, top, width, height }, SkFont { sk_ref_sp(codicon_typeface), 12.0f * scale }, solid_paint(colors.secondary_foreground));
         };
