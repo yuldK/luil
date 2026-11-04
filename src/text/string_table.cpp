@@ -25,33 +25,16 @@ namespace luil {
             return unit >= u8'A' && unit <= u8'Z' ? static_cast<char8_t>(unit - u8'A' + u8'a') : unit;
         }
 
-        [[nodiscard]] bool same_tag(const std::u8string_view left, const std::u8string_view right) noexcept
-        {
-            if (left.size() != right.size())
-                return false;
-            for (std::size_t index { 0 }; index < left.size(); ++index)
-            {
-                if (folded_tag_unit(left[index]) != folded_tag_unit(right[index]))
-                    return false;
-            }
-            return true;
-        }
-
         // 태그와 끝 부분을 하나씩 뗀 태그를 차례로 찾는다 (`zh-Hant-TW`, `zh-Hant`, `zh`).
         [[nodiscard]] std::optional<std::size_t> find_language(const string_table& table, std::u8string_view tag) noexcept
         {
-            while (tag.empty() == false)
+            for (; tag.empty() == false; tag = parent_language_tag(tag))
             {
                 for (std::size_t index { 0 }; index < table.languages.size(); ++index)
                 {
-                    if (same_tag(table.languages[index].tag, tag))
+                    if (same_language_tag(table.languages[index].tag, tag))
                         return index;
                 }
-
-                const std::size_t cut { tag.find_last_of(u8"-_") };
-                if (cut == std::u8string_view::npos)
-                    break;
-                tag = tag.substr(0, cut);
             }
             return std::nullopt;
         }
@@ -231,5 +214,23 @@ namespace luil {
         const std::lock_guard lock { languages_mutex };
         chosen_languages.reset();
         library_language.store(0u);
+    }
+
+    bool same_language_tag(const std::u8string_view left, const std::u8string_view right) noexcept
+    {
+        if (left.size() != right.size())
+            return false;
+        for (std::size_t index { 0 }; index < left.size(); ++index)
+        {
+            if (folded_tag_unit(left[index]) != folded_tag_unit(right[index]))
+                return false;
+        }
+        return true;
+    }
+
+    std::u8string_view parent_language_tag(const std::u8string_view tag) noexcept
+    {
+        const std::size_t cut { tag.find_last_of(u8"-_") };
+        return cut == std::u8string_view::npos ? std::u8string_view {} : tag.substr(0, cut);
     }
 }

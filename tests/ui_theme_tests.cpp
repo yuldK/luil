@@ -2,6 +2,8 @@
 
 #include "luil/theme/ui_style.h"
 
+#include "text_languages_guard.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -160,6 +162,44 @@ TEST_CASE("A system accent synthesized from a catalog key lands beside it", "[th
     REQUIRE(close(synthesized.dark.hover, blue.dark.hover, 4));
     REQUIRE(close(synthesized.dark.soft, blue.dark.soft, 4));
     REQUIRE(close(synthesized.dark.emphasis_foreground, blue.dark.emphasis_foreground, 4));
+}
+
+TEST_CASE("The accent name follows the library language and falls back to its label", "[theme][accent][i18n]")
+{
+    const luil_test::text_languages_guard guard {};
+    const luil::accent_definition blue { luil::accent_for(u8"blue") };
+    REQUIRE(blue.id == u8"blue");
+
+    // 기본은 한국어이고 `label`은 언어를 바꿔도 `ko` 글 그대로다.
+    CHECK(blue.label == u8"블루");
+    CHECK(luil::accent_label(blue) == u8"블루");
+    for (const luil::accent_definition& accent : luil::accent_catalog())
+        CHECK(luil::accent_label(accent) == accent.label);
+
+    guard.use(u8"en-GB");
+    CHECK(luil::accent_label(blue) == u8"Blue");
+    CHECK(luil::accent_label(luil::accent_for(u8"skyblue")) == u8"Sky blue");
+    CHECK(blue.label == u8"블루");
+    // 저장소 카탈로그는 모든 항목이 영어 이름을 든다.
+    for (const luil::accent_definition& accent : luil::accent_catalog())
+    {
+        CAPTURE(std::string { accent.id.begin(), accent.id.end() });
+        CHECK(luil::accent_label(accent).empty() == false);
+        CHECK(luil::accent_label(accent) != accent.label);
+    }
+
+    // 시스템 항목은 합성할 때 고른 언어를 `label`이 이미 든다. 카탈로그 밖 항목은 `label`이다.
+    const luil::accent_definition system { luil::make_system_accent(luil::make_ui_color(0, 120, 212)) };
+    CHECK(system.label == u8"System");
+    CHECK(luil::accent_label(system) == u8"System");
+    luil::accent_definition custom {};
+    custom.id = u8"brand";
+    custom.label = u8"Brand";
+    CHECK(luil::accent_label(custom) == u8"Brand");
+
+    guard.use(u8"ko");
+    CHECK(luil::accent_label(blue) == u8"블루");
+    CHECK(luil::make_system_accent(luil::make_ui_color(0, 120, 212)).label == u8"시스템");
 }
 
 TEST_CASE("A system accent keeps the roles on the lightness ladder", "[theme][accent]")

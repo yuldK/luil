@@ -99,6 +99,9 @@ namespace luil {
     // 목록에 그 id가 있는지다.
     // 설정을 읽을 때 경고를 남길지 판정한다.
     [[nodiscard]] bool accent_exists(std::u8string_view id) noexcept;
+    // 키 컬러의 이름을 라이브러리 언어(`set_text_languages`)로 고른다. 카탈로그에 그 언어가 없으면 `label`이다.
+    //  - 프레임마다 견본 수만큼 부르므로 라이브러리 표에서 고른 언어를 잠금 없이 읽는다. 표에 없는 언어는 고르지 않는다.
+    [[nodiscard]] std::u8string_view accent_label(const accent_definition& accent) noexcept;
 
     // 실행 시점 항목이 쓰는 예약 id다.
     // 정적 목록(assets/accents.json)은 이 id를 가질 수 없다 — 생성이 거른다.

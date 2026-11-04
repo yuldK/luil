@@ -144,7 +144,7 @@ label.text = app_strings::format(strings_, app_strings::key::files_selected, cou
 **라이브러리 표.**
 
 - 원본은 `assets/strings/ko.json`·`en.json`이고 기본 언어는 `ko`다. 키는 `default_text` 함수 이름이다([default-text-design.md](default-text-design.md) 174행. 키 목록은 흡수 문서).
-- 생성 헤더는 내부 표라 설치하지 않는 자리(`LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY`, [CMakeLists.txt](../CMakeLists.txt) 73~76행)에 둔다. 경로는 `luil/generated/library_text.h`이고 이름 공간은 `luil::library_text`다. `luil_core`만 include한다. 키 83개와 ko·en 글은 이 표 커밋에 모두 든다. 언어 상태가 이 표로 고르므로 표가 처음부터 다 서야 하고, 한국어 글이 기본 문구와 바이트까지 같은지를 흡수 전에 test로 잠근다. 흡수는 조회로 바꾸기만 한다.
+- 생성 헤더는 내부 표라 설치하지 않는 자리(`LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY`, [CMakeLists.txt](../CMakeLists.txt) 73~76행)에 둔다. 경로는 `luil/generated/library_text.h`이고 이름 공간은 `luil::library_text`다. `luil_core`만 include한다. 키 83개와 ko·en 글은 이 표 커밋에 모두 든다. 언어 상태가 이 표로 고르므로 표가 처음부터 다 서야 하고, 한국어 글이 기본 문구와 바이트까지 같은지를 흡수 전에 test로 잠갔다. 흡수는 조회로 바꾸기만 했다. 그 test는 이제 함수와 키의 짝을 잠그고 글자 기대값은 `default_text_tests`가 든다.
 - `LUIL_STRINGS` 캐시 변수(폴더, 기본 `assets/strings`)로 소비자가 통째로 바꾼다(`LUIL_STYLE` 선례, 68~71행, 결정 5). 키 집합은 저장소의 `assets/strings/ko.json`과 같아야 하고 기본 언어는 `ko` 그대로다. 생성기의 `REFERENCE_FILE` 인자가 이 일치를 본다. 언어 파일은 더해도 된다. `ja.json`을 더하면 라이브러리 기본 문구에 일본어가 선다.
 
 **앱 표.**
@@ -243,7 +243,7 @@ label.text = app_strings::format(strings_, app_strings::key::files_selected, cou
 
 - 숫자·날짜·목록 서식, 통화, 상대 시간(범위 C).
 - 실행 중 표 읽기(파일, APK assets)와 표 다시 읽기(확정 N6 a).
-- 오른쪽에서 왼쪽으로 쓰는 언어의 글 방향과 거울 배치. 화면 전환의 쪽은 화면 전환 노드의 후속이다(흡수 문서).
+- 오른쪽에서 왼쪽으로 쓰는 언어의 글 방향과 거울 배치. 화면 전환의 쪽은 앱이 밀기의 forward·backward를 바꿔 넣는다(X-10 c, [화면 전환](page-transition-design.md) 218행).
 - 대체 글꼴의 언어를 앱 언어에 맞추기. 대체 글꼴은 OS 언어로 고른다([font_registry.h](../src/host/font_registry.h) 105~115행). 앱 언어가 OS와 다르면 한자 자형이 OS 언어를 따른다.
 - 성·격에 따른 꼴, 조사 고르기(이/가). 문장은 자리 값 뒤에 조사가 오지 않게 쓴다.
 - 1단계 밖의 복수 규칙(결정 3의 b)과 수 여럿을 섞는 문장.

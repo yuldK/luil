@@ -2,6 +2,7 @@
 #include "ui/default_text.h"
 
 #include "test_strings.h"
+#include "text_languages_guard.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -42,30 +43,7 @@ namespace {
         return test_strings::format(strings, key::files_selected, arguments);
     }
 
-    // 언어 상태는 프로세스에 하나다. 바꾼 test는 끝에서 앞 상태로 되돌려 다른 test에 새지 않게 한다.
-    //  - 정한 적 없던 상태는 공개 함수로 돌아갈 수 없어 비공개 되돌림을 쓴다.
-    class text_languages_guard
-    {
-    public:
-        text_languages_guard()
-            : saved_ { luil::text_languages() }
-        {
-        }
-
-        ~text_languages_guard()
-        {
-            if (saved_.has_value())
-                luil::set_text_languages(*saved_);
-            else
-                luil::reset_text_languages();
-        }
-
-        text_languages_guard(const text_languages_guard&) = delete;
-        text_languages_guard& operator=(const text_languages_guard&) = delete;
-
-    private:
-        std::optional<std::vector<std::u8string>> saved_ {};
-    };
+    using luil_test::text_languages_guard;
 }
 
 TEST_CASE("The generator puts the base language first and the keys in name order", "[text][string-table]")
@@ -394,6 +372,7 @@ TEST_CASE("The library table follows set_text_languages and stays Korean until t
 
 TEST_CASE("The Korean library table is byte for byte the text the default text functions write", "[text][string-table]")
 {
+    // 함수 몸통이 표 조회가 된 뒤에는 글이 아니라 함수와 키의 짝을 잠근다. 글자 기대값은 default_text_tests가 든다.
     using luil::library_text::key;
     namespace default_text = luil::default_text;
     const luil::string_lookup korean { luil::library_text::table, 0u };

@@ -69,7 +69,7 @@ namespace luil {
                 : ui_element { ui_element_id { ui_element_kind::choice, config.owner + u8"/" + std::u8string { accent.id } } }
                 , color_ { accent.swatch }
                 , selected_ { accent.id == config.selected }
-                , name_ { accent.label }
+                , name_ { accent_label(accent) }
             {
                 set_tooltip(name_);
                 set_search_label(name_);

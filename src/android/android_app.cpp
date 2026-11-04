@@ -1283,7 +1283,8 @@ namespace luil::android {
                 }
                 const int width { std::min(content_width(), static_cast<int>(std::ceil(288.0f * scale_))) };
                 const int height { std::min(content_height(), static_cast<int>(std::ceil(text_edit_menu_height(text_edit_menu_has_link(*value)) * scale_))) };
-                edit_menu_->tree = make_text_edit_menu(*value, user_ui_language().starts_with("ko"), static_cast<float>(width), static_cast<float>(height), scale_);
+                const std::string os_language { user_ui_language() };
+                edit_menu_->tree = make_text_edit_menu(*value, text_edit_menu_strings(std::u8string { os_language.begin(), os_language.end() }), static_cast<float>(width), static_cast<float>(height), scale_);
                 const rect_f anchor { location.element->bounds() };
                 const int left { static_cast<int>(std::lround(location.origin_x + anchor.x + (anchor.width - static_cast<float>(width)) / 2.0f)) };
                 const int below { static_cast<int>(std::lround(location.origin_y + anchor.y + anchor.height + 4.0f * scale_)) };

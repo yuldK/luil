@@ -31,7 +31,7 @@ accent 4역할에서 파생한 역할은 팔레트에 따로 있다. element가 
 
 high contrast는 이 파생 역할도 알파 없이 highlight 짝으로 접는다. `row_selection_background`만은 알파 0으로 접어 채움을 없앤다 — 행의 글자는 앱이 그려 highlight 글자로 바꿀 수 없으므로 온전한 highlight를 깔면 글이 사라지고, 왼쪽 표식(`accent`)이 어느 행인지 남긴다. `selection_foreground`는 텍스트 입력이 고른 구간의 글자에 쓰는 짝이라 high contrast에서만 본문 글자와 달라진다.
 
-accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `system` accent는 OS key color를 실행 시점에 `make_system_accent()`로 합성하고 `set_system_accent()`의 atomic 값으로 교체한다. 정적 `accent_catalog()`에는 넣지 않고 `system_accent()`가 optional 값으로 반환한다. `accent_for()`는 값으로 반환하므로 정적 카탈로그나 실행 시점 합성 결과의 수명이 호출자에게 새지 않는다.
+accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `system` accent는 OS key color를 실행 시점에 `make_system_accent()`로 합성하고 `set_system_accent()`의 atomic 값으로 교체한다. 정적 `accent_catalog()`에는 넣지 않고 `system_accent()`가 optional 값으로 반환한다. `accent_for()`는 값으로 반환하므로 정적 카탈로그나 실행 시점 합성 결과의 수명이 호출자에게 새지 않는다. 항목의 이름은 `accent_label()`이 라이브러리 언어(`set_text_languages`)로 고른다.
 
 ## 스타일 — 앱이 정하는 중립 색과 치수
 

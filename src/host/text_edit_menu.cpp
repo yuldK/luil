@@ -3,6 +3,7 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/panel_element.h"
 #include "luil/ui/stack_element.h"
+#include "text/library_text.h"
 
 #include <algorithm>
 #include <utility>
@@ -18,16 +19,34 @@ namespace luil {
         return (link ? 3.0f : 2.0f) * std::max(48.0f, text_line_height(12.0f, 24.0f)) + 8.0f;
     }
 
-    std::shared_ptr<const ui_tree> make_text_edit_menu(const text_input_snapshot& value, const bool korean, const float width, const float height, const float scale)
+    std::vector<std::u8string> text_edit_menu_languages(const std::optional<std::vector<std::u8string>>& chosen, const std::u8string_view os_tag)
     {
+        if (chosen.has_value())
+            return *chosen;
+
+        std::vector<std::u8string> languages {};
+        if (os_tag.empty() == false)
+            languages.emplace_back(os_tag);
+        languages.emplace_back(u8"en");
+        return languages;
+    }
+
+    string_lookup text_edit_menu_strings(const std::u8string_view os_tag)
+    {
+        return select_strings(library_text::table, text_edit_menu_languages(text_languages(), os_tag));
+    }
+
+    std::shared_ptr<const ui_tree> make_text_edit_menu(const text_input_snapshot& value, const string_lookup& strings, const float width, const float height, const float scale)
+    {
+        using library_text::key;
         const bool selected { value.caret != value.anchor && value.composing == false };
         const std::u8string labels[] {
-            korean ? u8"복사" : u8"Copy",
-            korean ? u8"잘라내기" : u8"Cut",
-            korean ? u8"붙여넣기" : u8"Paste",
-            korean ? u8"전체 선택" : u8"Select all",
-            korean ? u8"링크 열기" : u8"Open link",
-            korean ? u8"주소 복사" : u8"Copy link",
+            std::u8string { library_text::text(strings, key::text_edit_menu_copy) }
+            , std::u8string { library_text::text(strings, key::text_edit_menu_cut) }
+            , std::u8string { library_text::text(strings, key::text_edit_menu_paste) }
+            , std::u8string { library_text::text(strings, key::text_edit_menu_select_all) }
+            , std::u8string { library_text::text(strings, key::text_edit_menu_open_link) }
+            , std::u8string { library_text::text(strings, key::text_edit_menu_copy_link) }
         };
         const std::u8string keys[] { u8"copy", u8"cut", u8"paste", u8"all", u8"open-link", u8"copy-link" };
         const bool link { text_edit_menu_has_link(value) };
