@@ -11,8 +11,14 @@
 if(NOT DEFINED INCLUDE_DIRECTORY)
     message(FATAL_ERROR "INCLUDE_DIRECTORY is required.")
 endif()
+# 우산 헤더의 include 루트 기준 이름이다. 기본은 core의 `luil/luil.h`다.
+#  - core 밖에 따로 선 라이브러리(chart/)는 자기 include 루트와 우산 헤더(`luil/chart.h`)를 넘긴다
+#    (docs/chart-library-design.md). 아래 glob이 우산 헤더 자신도 찾으므로 건너뛰는 이름도 이 값이다.
+if(NOT DEFINED UMBRELLA_HEADER)
+    set(UMBRELLA_HEADER "luil/luil.h")
+endif()
 
-set(umbrella_header "${INCLUDE_DIRECTORY}/luil/luil.h")
+set(umbrella_header "${INCLUDE_DIRECTORY}/${UMBRELLA_HEADER}")
 if(NOT EXISTS "${umbrella_header}")
     message(FATAL_ERROR "The umbrella header is missing: ${umbrella_header}")
 endif()
@@ -21,7 +27,7 @@ file(READ "${umbrella_header}" umbrella_text)
 file(GLOB_RECURSE public_headers RELATIVE "${INCLUDE_DIRECTORY}" "${INCLUDE_DIRECTORY}/luil/*.h")
 set(missing_headers "")
 foreach(header IN LISTS public_headers)
-    if(header STREQUAL "luil/luil.h")
+    if(header STREQUAL "${UMBRELLA_HEADER}")
         continue()
     endif()
     string(FIND "${umbrella_text}" "#include \"${header}\"" include_position)
@@ -35,7 +41,7 @@ if(missing_count GREATER 0)
     string(REPLACE ";" "\n  " missing_text "${missing_headers}")
     message(FATAL_ERROR
         "The umbrella header does not include every public header.\n"
-        "Add these to include/luil/luil.h:\n  ${missing_text}")
+        "Add these to ${umbrella_header}:\n  ${missing_text}")
 endif()
 
 list(LENGTH public_headers header_count)

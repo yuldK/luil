@@ -37,6 +37,8 @@ Skia 위치는 `LUIL_SKIA_ROOT`, Debug·Release 산출물 위치는 `LUIL_SKIA_B
 
 `LUIL_ENABLE_WEBVIEW`의 기본값은 `LUIL_ENABLE_DIRECT3D`와 같다. 웹뷰는 Direct3D 렌더러의 합성 아래에만 서므로 CPU 전용 구성에서는 켜도 placeholder뿐이다. 캐시에 이미 값이 있는 빌드 디렉터리에서 Direct3D만 끄면 웹뷰는 켜진 채 남는다. configure가 이 조합을 경고하므로 그때 웹뷰도 명시적으로 끈다.
 
+`LUIL_BUILD_CHART`는 선택 라이브러리 `luil_chart`([차트 라이브러리](../chart-library-design.md))를 짓는다. core 밖에 있어 끄면 `chart/`를 읽지도 않는다. 기본은 끄고, 예제나 테스트를 켠 구성에서는 켬을 따른다. 데모와 그 테스트가 이 라이브러리를 쓰므로 예제나 테스트를 켜고 끄면 configure가 원인과 함께 멈춘다. 캐시에 끈 값이 남은 빌드 디렉터리에서 예제만 켜도 같다.
+
 [프리셋](../../CMakePresets.json)은 일반·테스트·분석 구성을 제공한다.
 
 ```powershell

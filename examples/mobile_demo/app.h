@@ -10,6 +10,7 @@
 
 #include "mobile_demo/assets.h"
 #include "mobile_demo/basics_page.h"
+#include "mobile_demo/chart_page.h"
 #include "mobile_demo/common.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
@@ -95,6 +96,7 @@ namespace mobile_demo {
         sheets_page sheets_ {};
         smb_page smb_ {};
         files_page files_ {};
+        chart_page chart_ {};
 
         // 기기 페이지에서 고른 언어 칸과 OS 표시 언어다. 고른 적이 없으면 비었고 라이브러리 언어를 정하지 않는다.
         std::u8string text_language_ {};

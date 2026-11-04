@@ -4,6 +4,7 @@
 #include "luil/ui/font_scale.h"
 #include "luil/ui/glyph_element.h"
 #include "luil/ui/stack_element.h"
+#include "mobile_demo/chart_page.h"
 #include "mobile_demo/files_page.h"
 
 #include <array>
@@ -19,7 +20,7 @@ namespace mobile_demo {
             return luil::text_line_height(font_size, height - font_size);
         }
 
-        constexpr std::array<page_entry, 14> entries {
+        constexpr std::array<page_entry, 15> entries {
             page_entry { page_basics, u8"기본", u8"단추, 글 칸, 그림, dialog", luil::codicons::icon_home },
             page_entry { page_lists, u8"목록", u8"순서 바꾸기, tree, 가상 목록", luil::codicons::icon_list_unordered },
             page_entry { page_tabs, u8"탭", u8"쓸어 넘기기, 넘침 메뉴", luil::codicons::icon_files },
@@ -34,6 +35,7 @@ namespace mobile_demo {
             page_entry { page_device, u8"기기", u8"방향, 막대, 볼륨 키, 햅틱, 창 폭", luil::codicons::icon_device_mobile },
             page_entry { page_smb, u8"SMB", u8"NAS 폴더 열거와 파일 읽기", luil::codicons::icon_server },
             page_entry { page_files, u8"파일 감시", u8"파일 변경 묶음과 끝 묶음", luil::codicons::icon_eye },
+            page_entry { page_chart, u8"차트", u8"선, 막대, 영역과 값 상자", luil::codicons::icon_graph },
         };
     }
 

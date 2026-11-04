@@ -237,6 +237,12 @@ namespace luil {
             return u8"page_transition";
         case ui_element_kind::page_transition_cover:
             return u8"page_transition_cover";
+        case ui_element_kind::chart:
+            return u8"chart";
+        case ui_element_kind::chart_plot:
+            return u8"chart_plot";
+        case ui_element_kind::chart_cell:
+            return u8"chart_cell";
         case ui_element_kind::end_of_library_kinds:
         case ui_element_kind::first_application_kind:
             // 끝 표시와 앱 대역의 시작은 kind가 아니다.

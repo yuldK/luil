@@ -114,7 +114,7 @@ namespace mobile_demo {
             apply_text_language(language->value);
         if (lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message) || ink_.handle(message)
             || inspector_.handle(message) || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
-            || files_.handle(message))
+            || files_.handle(message) || chart_.handle(message))
             return;
     }
 
@@ -352,6 +352,8 @@ namespace mobile_demo {
             return wrap_scroll(page, smb_.build(width, scale), height, scale);
         if (page == page_files)
             return wrap_scroll(page, files_.build(width, scale), height, scale);
+        if (page == page_chart)
+            return wrap_scroll(page, chart_.build(width), height, scale);
         return wrap_scroll(page, basics_.build(width, scale), height, scale);
     }
 

@@ -52,5 +52,6 @@ luil_add_android_example(mobile_demo
     SOURCES
         ../mobile_demo/android_main.cpp
         ${luil_mobile_demo_files})
+target_link_libraries(luil_mobile_demo PRIVATE luil::luil_chart)
 
 luil_set_ide_folder("Examples" luil_hello luil_mobile_demo luil_widgets)

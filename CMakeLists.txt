@@ -269,6 +269,25 @@ if(LUIL_BUILD_POINTER_INTEGRATION_TESTS AND NOT LUIL_BUILD_TESTS)
 endif()
 option(LUIL_BUILD_EXAMPLES "Build the luil example targets." OFF)
 option(LUIL_BUILD_TOOLING "Build the source style check target." OFF)
+# 선택 라이브러리 차트(`luil::luil_chart`)를 짓는다 (docs/chart-library-design.md). 저장소가 제공하지만 core 밖이라 끄면 target도
+# 헤더도 없다. 끈 구성에도 API가 남는 `LUIL_ENABLE_*`와 달리 target을 더하는 옵션이라 `BUILD_*`다.
+#
+# 기본은 끄고, 예제나 test를 켠 구성에서는 켬을 따른다. 저장소의 데모와 그 test가 이 라이브러리를 쓰기 때문이다.
+#  - option은 캐시에 이미 값이 있으면 기본값을 다시 보지 않는다. 차트를 끈 채 구성한 빌드 디렉터리에서 예제나 test만
+#    켜면 아래 검사가 그 사실을 알린다.
+if(LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS)
+    set(luil_chart_default ON)
+else()
+    set(luil_chart_default OFF)
+endif()
+option(LUIL_BUILD_CHART "Build the optional chart library (luil::luil_chart)." ${luil_chart_default})
+unset(luil_chart_default)
+if((LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS) AND NOT LUIL_BUILD_CHART)
+    message(FATAL_ERROR
+        "LUIL_BUILD_CHART is OFF while LUIL_BUILD_EXAMPLES or LUIL_BUILD_TESTS is ON.\n"
+        "The demos and their tests use the chart library. Set LUIL_BUILD_CHART=ON. "
+        "A build directory configured earlier keeps the old value in its cache.")
+endif()
 option(LUIL_ENABLE_MSVC_ANALYZE "Enable MSVC /analyze for library sources." OFF)
 # Direct3D 12 렌더러를 넣는다. 끄면 CPU 렌더러만 남는다 — `automatic`은 CPU로
 # 그리고 `direct3d`를 명시한 창은 만들기에 실패한다. 공개 API는 그대로다.
@@ -495,4 +514,10 @@ if(TARGET luil)
     luil_set_ide_folder("Libraries" luil luil_core)
 else()
     luil_set_ide_folder("Libraries" luil_core)
+endif()
+
+# 선택 라이브러리 차트다. 끄면 이 디렉터리를 읽지도 않는다 (docs/chart-library-design.md).
+#  - 차트 test가 tests/가 찾은 adb 실행기를 쓰므로 tests/ 뒤에 읽는다. 예제가 먼저 읽혀도 링크는 생성 때 풀린다.
+if(LUIL_BUILD_CHART)
+    add_subdirectory(chart)
 endif()

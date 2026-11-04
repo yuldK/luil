@@ -37,6 +37,8 @@ set(LUIL_ENABLE_TEXT_SHAPING @LUIL_ENABLE_TEXT_SHAPING@)
 set(LUIL_ENABLE_TEXT_SHAPING_FALLBACK @LUIL_ENABLE_TEXT_SHAPING_FALLBACK@)
 set(LUIL_ENABLE_AVIF @LUIL_ENABLE_AVIF@)
 set(LUIL_ENABLE_LOTTIE @LUIL_ENABLE_LOTTIE@)
+# 설치한 패키지에 선택 라이브러리 차트가 들어 있는가다 (docs/chart-library-design.md). 소비자는 구성 요소 `chart`로 묻는다.
+set(LUIL_BUILD_CHART @LUIL_BUILD_CHART@)
 
 include("${CMAKE_CURRENT_LIST_DIR}/skia.cmake")
 luil_find_skia()
@@ -60,6 +62,19 @@ if(LUIL_ENABLE_WEBVIEW)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/luil-targets.cmake")
+# 차트의 내보내기 묶음은 따로다. `luil::luil_core`를 참조하므로 위의 파일 뒤에 읽는다.
+#  - `luil_chart_FOUND`는 아래 `check_required_components`가 본다. 그 매크로는 찾지 못했다는 사실만 세우므로, 차트를 끄고 설치한
+#    패키지에서 `COMPONENTS chart`로 물었을 때 원인은 여기서 적어 둔다.
+#  - 값까지 보는 까닭은 같은 prefix에 끈 구성을 덮어 설치하면 옛 파일이 남아서다.
+if(LUIL_BUILD_CHART AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/luil-chart-targets.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/luil-chart-targets.cmake")
+    set(luil_chart_FOUND TRUE)
+else()
+    set(luil_chart_FOUND FALSE)
+    if(luil_FIND_REQUIRED_chart)
+        set(luil_NOT_FOUND_MESSAGE "This luil package was installed without the chart library. Install it from a build configured with LUIL_BUILD_CHART=ON.")
+    endif()
+endif()
 include("${CMAKE_CURRENT_LIST_DIR}/generate_notices.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/string_table.cmake")
 

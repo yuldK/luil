@@ -6,14 +6,21 @@
 #include "luil/ui/image_encode.h"
 #include "luil/ui/markdown_element.h"
 
+// 차트를 끄고 설치한 패키지에는 이 헤더가 없다.
+#if LUIL_CONSUMER_CHART
+#include "luil/chart.h"
+#endif
+
 #include <windows.h>
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 int main()
 {
@@ -65,6 +72,20 @@ int main()
     constexpr std::string_view lottie { R"({"v":"5.7.0","fr":10,"ip":0,"op":10,"w":4,"h":4,"layers":[]})" };
     if (luil::decode_lottie_bytes(bytes_of(lottie), decode_error).valid() != (LUIL_CONSUMER_LOTTIE != 0))
         return 9;
+
+#if LUIL_CONSUMER_CHART
+    // 설치본의 차트 공개 헤더와 라이브러리도 소비자가 부를 수 있어야 한다.
+    const luil::chart_ticks ticks { luil::nice_ticks({ 0.0, 97.0 }, 5u) };
+    if (ticks.count != 6u || luil::format_chart_number(ticks.step, ticks.decimals) != u8"20")
+        return 13;
+    // 차트 요소도 설치본의 헤더와 라이브러리만으로 지어진다. 배치 전에도 접근 정보가 선다.
+    luil::chart_config chart {};
+    chart.owner = u8"consumer";
+    chart.series.push_back({ .name = u8"series", .values = std::make_shared<const std::vector<double>>(std::vector<double> { 1.0, 2.0 }) });
+    const luil::chart_element element { std::move(chart) };
+    if (element.accessibility().role != luil::access_role::image)
+        return 14;
+#endif
 
     luil::net::http_client_config config {};
     config.deliver = [](luil::net::http_response) {};
