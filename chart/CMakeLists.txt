@@ -68,5 +68,13 @@ if(LUIL_BUILD_TESTS)
                 "-DINCLUDE_DIRECTORY=${luil_chart_include_directory}"
                 "-DUMBRELLA_HEADER=luil/chart.h"
                 -P "${LUIL_CMAKE_DIRECTORY}/verify_umbrella_header.cmake")
+        # 차트의 코드 줄에도 한글이 없다. 글은 text/의 표에 산다 (script에 이유가 있다).
+        #  - core 검사(`luil_default_text`)는 chart/를 보지 않는다. 차트를 끈 구성에서도 core 검사가 그대로 돌게 하려는 것이다.
+        add_test(NAME luil_chart_default_text
+            COMMAND "${CMAKE_COMMAND}"
+                "-DSOURCE_DIRECTORY=${CMAKE_CURRENT_SOURCE_DIR}/src"
+                "-DINCLUDE_DIRECTORY=${luil_chart_include_directory}"
+                "-DCHECKED_DIRECTORIES=${CMAKE_CURRENT_SOURCE_DIR}/src$<SEMICOLON>${luil_chart_include_directory}"
+                -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
     endif()
 endif()
