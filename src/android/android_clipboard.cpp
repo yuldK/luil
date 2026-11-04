@@ -23,8 +23,10 @@ namespace luil::android {
             if (jni_failed(env) || context_class == nullptr)
                 return nullptr;
             const jmethodID get_system_service { env.GetMethodID(context_class, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;") };
+            if (jni_failed(env) || get_system_service == nullptr)
+                return nullptr;
             const jstring name { env.NewStringUTF("clipboard") };
-            if (jni_failed(env) || get_system_service == nullptr || name == nullptr)
+            if (jni_failed(env) || name == nullptr)
                 return nullptr;
             const jobject manager { env.CallObjectMethod(context, get_system_service, name) };
             return jni_failed(env) ? nullptr : manager;
@@ -84,10 +86,16 @@ namespace luil::android {
                 return std::nullopt;
             item_methods methods {};
             methods.get_text = env.GetMethodID(item_class, "getText", "()Ljava/lang/CharSequence;");
+            if (jni_failed(env) || methods.get_text == nullptr)
+                return std::nullopt;
             methods.get_uri = env.GetMethodID(item_class, "getUri", "()Landroid/net/Uri;");
+            if (jni_failed(env) || methods.get_uri == nullptr)
+                return std::nullopt;
             methods.coerce_to_text = env.GetMethodID(item_class, "coerceToText", "(Landroid/content/Context;)Ljava/lang/CharSequence;");
+            if (jni_failed(env) || methods.coerce_to_text == nullptr)
+                return std::nullopt;
             methods.get_html_text = env.GetMethodID(item_class, "getHtmlText", "()Ljava/lang/String;");
-            if (jni_failed(env) || methods.get_text == nullptr || methods.get_uri == nullptr || methods.coerce_to_text == nullptr || methods.get_html_text == nullptr)
+            if (jni_failed(env) || methods.get_html_text == nullptr)
                 return std::nullopt;
             return methods;
         }
@@ -133,9 +141,13 @@ namespace luil::android {
                 return std::nullopt;
             const jclass stream_class { env.GetObjectClass(stream) };
             const jmethodID read { env.GetMethodID(stream_class, "read", "([B)I") };
+            if (jni_failed(env) || read == nullptr)
+                return std::nullopt;
             const jmethodID close { env.GetMethodID(stream_class, "close", "()V") };
+            if (jni_failed(env) || close == nullptr)
+                return std::nullopt;
             const jbyteArray buffer { env.NewByteArray(image_read_chunk_bytes) };
-            if (jni_failed(env) || read == nullptr || close == nullptr || buffer == nullptr)
+            if (jni_failed(env) || buffer == nullptr)
                 return std::nullopt;
 
             std::optional<std::vector<std::uint8_t>> bytes { std::vector<std::uint8_t> {} };
@@ -186,11 +198,15 @@ namespace luil::android {
         if (jni_failed(env) || clip_data_class == nullptr)
             return false;
         const jmethodID new_plain_text { env.GetStaticMethodID(clip_data_class, "newPlainText", "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;") };
+        if (jni_failed(env) || new_plain_text == nullptr)
+            return false;
         // JNI의 글은 modified UTF-8이다. BMP 밖 글자(이모지)는 그대로 넘기면 깨진다.
         const std::string modified { modified_utf8_from_utf8(text) };
         const jstring label { env.NewStringUTF("") };
+        if (jni_failed(env) || label == nullptr)
+            return false;
         const jstring value { env.NewStringUTF(modified.c_str()) };
-        if (jni_failed(env) || new_plain_text == nullptr || label == nullptr || value == nullptr)
+        if (jni_failed(env) || value == nullptr)
             return false;
         const jobject clip { env.CallStaticObjectMethod(clip_data_class, new_plain_text, label, value) };
         if (jni_failed(env) || clip == nullptr)
@@ -220,13 +236,19 @@ namespace luil::android {
             return false;
         // 글과 HTML을 한 항목에 싣는 framework 정적 메서드다 (API 16). Java 클래스를 쓰지 않는다.
         const jmethodID new_html_text { env.GetStaticMethodID(clip_data_class, "newHtmlText", "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/String;)Landroid/content/ClipData;") };
+        if (jni_failed(env) || new_html_text == nullptr)
+            return false;
         // JNI의 글은 modified UTF-8이다. BMP 밖 글자(이모지)는 그대로 넘기면 깨진다.
         const std::string modified_text { modified_utf8_from_utf8(text) };
         const std::string modified_html { modified_utf8_from_utf8(html) };
         const jstring label { env.NewStringUTF("") };
+        if (jni_failed(env) || label == nullptr)
+            return false;
         const jstring text_value { env.NewStringUTF(modified_text.c_str()) };
+        if (jni_failed(env) || text_value == nullptr)
+            return false;
         const jstring html_value { env.NewStringUTF(modified_html.c_str()) };
-        if (jni_failed(env) || new_html_text == nullptr || label == nullptr || text_value == nullptr || html_value == nullptr)
+        if (jni_failed(env) || html_value == nullptr)
             return false;
         const jobject clip { env.CallStaticObjectMethod(clip_data_class, new_html_text, label, text_value, html_value) };
         if (jni_failed(env) || clip == nullptr)
@@ -251,8 +273,10 @@ namespace luil::android {
 
         const jclass clip_data_class { env.GetObjectClass(clip) };
         const jmethodID get_item_count { env.GetMethodID(clip_data_class, "getItemCount", "()I") };
+        if (jni_failed(env) || get_item_count == nullptr)
+            return std::nullopt;
         const jmethodID get_item_at { env.GetMethodID(clip_data_class, "getItemAt", "(I)Landroid/content/ClipData$Item;") };
-        if (jni_failed(env) || get_item_count == nullptr || get_item_at == nullptr)
+        if (jni_failed(env) || get_item_at == nullptr)
             return std::nullopt;
         const jint count { env.CallIntMethod(clip, get_item_count) };
         if (jni_failed(env) || count <= 0)
@@ -296,8 +320,10 @@ namespace luil::android {
             return data;
         const jclass clip_data_class { env.GetObjectClass(clip) };
         const jmethodID get_item_count { env.GetMethodID(clip_data_class, "getItemCount", "()I") };
+        if (jni_failed(env) || get_item_count == nullptr)
+            return data;
         const jmethodID get_item_at { env.GetMethodID(clip_data_class, "getItemAt", "(I)Landroid/content/ClipData$Item;") };
-        if (jni_failed(env) || get_item_count == nullptr || get_item_at == nullptr)
+        if (jni_failed(env) || get_item_at == nullptr)
             return data;
         const jint count { env.CallIntMethod(clip, get_item_count) };
         if (jni_failed(env) || count <= 0)

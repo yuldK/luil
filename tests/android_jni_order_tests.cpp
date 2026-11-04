@@ -1,3 +1,4 @@
+#include "android/android_clipboard.h"
 #include "android/android_system_theme.h"
 #include "android/android_window_control.h"
 #include "android/java_vm.h"
@@ -18,6 +19,7 @@
 //    앞 호출의 예외를 거둔 뒤에 불리는지(예외가 남은 채 부른 호출 수 0)를 아홉 읽기와 쓰기 모두에서 본다.
 //  - 읽기의 틀은 API 수준에 따라 갈린다. 기기에서 JNI 호출이 하나도 없으면 그 읽기는 SKIP한다.
 //  - 앱 context 잡기처럼 thread를 JVM에 붙이는 길은 가짜 JavaVM으로 같은 가짜 JNIEnv를 내준다.
+//  - 클립보드는 글·HTML·그림 URI를 다 든 클립과 글 없는 URI 항목으로 읽기의 모든 갈래를 지난다.
 namespace {
     struct fake_state
     {
@@ -39,11 +41,20 @@ namespace {
         // `PackageManager.PERMISSION_GRANTED`는 0이다.
         jint permission { 0 };
         jboolean performed { JNI_TRUE };
+        // 클립 항목의 `getText`가 null이다 (글 없는 URI 항목).
+        bool clip_text_missing { false };
+        // `ContentResolver.getType`의 답이다.
+        const char* mime { "image/png" };
+        // `InputStream.read`를 부른 수다. 첫 번은 네 바이트, 그 뒤는 끝(-1)이다.
+        int reads { 0 };
     };
 
     fake_state* current { nullptr };
     JNIEnv* current_env { nullptr };
     int marker { 0 };
+    // `getType`의 답과 그 `toString`이다. 어느 글을 읽는지 가른다.
+    int mime_marker { 0 };
+    int mime_text_marker { 0 };
 
     [[nodiscard]] jobject object() noexcept
     {
@@ -180,6 +191,30 @@ namespace {
         return reinterpret_cast<jstring>(&marker);
     }
 
+    const char* JNICALL get_string_utf_chars(JNIEnv*, const jstring text, jboolean*)
+    {
+        if (step())
+            return nullptr;
+        return reinterpret_cast<const int*>(text) == &mime_text_marker ? current->mime : "hello";
+    }
+
+    // 글 놓기는 예외가 남아도 불러도 되는 JNI다. 세지 않는다.
+    void JNICALL release_string_utf_chars(JNIEnv*, jstring, const char*)
+    {
+    }
+
+    jbyteArray JNICALL new_byte_array(JNIEnv*, const jsize)
+    {
+        if (step())
+            return nullptr;
+        return reinterpret_cast<jbyteArray>(&marker);
+    }
+
+    void JNICALL get_byte_array_region(JNIEnv*, jbyteArray, const jsize, const jsize, jbyte*)
+    {
+        static_cast<void>(step());
+    }
+
     jobjectArray JNICALL new_object_array(JNIEnv*, const jsize, jclass, jobject)
     {
         if (step())
@@ -187,7 +222,21 @@ namespace {
         return reinterpret_cast<jobjectArray>(&marker);
     }
 
-    jobject JNICALL call_object_v(JNIEnv*, jobject, jmethodID, va_list)
+    jobject JNICALL call_object_v(JNIEnv*, const jobject receiver, const jmethodID method, va_list)
+    {
+        if (step())
+            return nullptr;
+        const std::string_view name { method_name(method) };
+        if (name == "getText" && current->clip_text_missing)
+            return nullptr;
+        if (name == "getType")
+            return reinterpret_cast<jobject>(&mime_marker);
+        if (name == "toString" && reinterpret_cast<const int*>(receiver) == &mime_marker)
+            return reinterpret_cast<jobject>(&mime_text_marker);
+        return object();
+    }
+
+    jobject JNICALL call_static_object_v(JNIEnv*, jclass, jmethodID, va_list)
     {
         if (step())
             return nullptr;
@@ -203,6 +252,10 @@ namespace {
             return current->color;
         if (name == "checkSelfPermission")
             return current->permission;
+        if (name == "getItemCount")
+            return 1;
+        if (name == "read")
+            return ++current->reads == 1 ? 4 : -1;
         // `getRotation`과 `getSystemUiVisibility`는 0이다.
         return 0;
     }
@@ -254,8 +307,13 @@ namespace {
         table.GetIntField = get_int_field;
         table.GetStaticIntField = get_static_int_field;
         table.NewStringUTF = new_string_utf;
+        table.GetStringUTFChars = get_string_utf_chars;
+        table.ReleaseStringUTFChars = release_string_utf_chars;
+        table.NewByteArray = new_byte_array;
+        table.GetByteArrayRegion = get_byte_array_region;
         table.NewObjectArray = new_object_array;
         table.CallObjectMethodV = call_object_v;
+        table.CallStaticObjectMethodV = call_static_object_v;
         table.CallIntMethodV = call_int_v;
         table.CallStaticIntMethodV = call_static_int_v;
         table.CallFloatMethodV = call_float_v;
@@ -317,9 +375,30 @@ namespace {
         return outcome { scope.state(), answer };
     }
 
-    // 성공한 한 번을 기준으로 실패 지점을 모두 친다. 답은 `failure_answer`이고, 예외는 남지 않고, 틀은 닫혀야 한다.
+    // 실패 지점 하나를 친 결과다. 예외는 남지 않고, 틀은 닫혀야 한다.
     //  - 지점 1은 틀을 여는 호출이다. 틀을 얻지 못한 호출은 다른 JNI 호출을 하지 않고 돌아가야 한다.
     //  - 어느 지점에서도 예외가 남은 채 다음 JNI 호출을 부르면 안 된다.
+    void check_clean(const outcome& failing, const int point)
+    {
+        CHECK_FALSE(failing.state.pending);
+        if (point == 1)
+            CHECK(failing.state.calls == 1);
+        CHECK(failing.state.calls_while_pending == 0);
+        CHECK(failing.state.popped == failing.state.pushed);
+    }
+
+    // 성공한 한 번을 기준으로 실패 지점을 모두 친다. 항목마다 따로 읽는 읽기처럼 지점마다 답이 다른 자리에 쓴다.
+    template <typename Run>
+    void check_clean_failure_points(Run&& run, const outcome& success)
+    {
+        for (int point { 1 }; point <= success.state.calls; ++point)
+        {
+            INFO("failure point " << point);
+            check_clean(run_once(run, point), point);
+        }
+    }
+
+    // 성공한 한 번을 기준으로 실패 지점을 모두 친다. 답은 `failure_answer`다.
     template <typename Run>
     void check_failure_points(Run&& run, const outcome& success, const int failure_answer)
     {
@@ -328,11 +407,7 @@ namespace {
             INFO("failure point " << point);
             const outcome failing { run_once(run, point) };
             CHECK(failing.answer == failure_answer);
-            CHECK_FALSE(failing.state.pending);
-            if (point == 1)
-                CHECK(failing.state.calls == 1);
-            CHECK(failing.state.calls_while_pending == 0);
-            CHECK(failing.state.popped == failing.state.pushed);
+            check_clean(failing, point);
         }
     }
 }
@@ -488,6 +563,87 @@ TEST_CASE("Screen orientation leaves no pending exception when any JNI call fail
     REQUIRE(success.state.calls > 1);
     CHECK(success.state.void_calls == 1);
     check_failure_points(run, success, 0);
+}
+
+TEST_CASE("Copying text leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const auto run = [](JNIEnv& env)
+    {
+        return luil::android::copy_text_to_clipboard(env, object(), u8"hello") ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.void_calls == 1);
+    CHECK(success.state.popped == 1);
+    check_failure_points(run, success, 0);
+}
+
+TEST_CASE("Copying rich text leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const auto run = [](JNIEnv& env)
+    {
+        return luil::android::copy_rich_text_to_clipboard(env, object(), u8"hello", u8"<b>hello</b>") ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.void_calls == 1);
+    CHECK(success.state.popped == 1);
+    check_failure_points(run, success, 0);
+}
+
+TEST_CASE("Reading clipboard text leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const auto run = [](JNIEnv& env)
+    {
+        return luil::android::read_text_from_clipboard(env, object()).has_value() ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.popped == 1);
+    check_failure_points(run, success, 0);
+}
+
+TEST_CASE("Reading a text URI item leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const auto run = [](JNIEnv& env)
+    {
+        current->clip_text_missing = true;
+        current->mime = "text/plain";
+        return luil::android::read_text_from_clipboard(env, object()).has_value() ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.popped == 1);
+    check_failure_points(run, success, 0);
+}
+
+TEST_CASE("An image URI item reads as no text and leaves no pending exception", "[android][jni_order]")
+{
+    const auto run = [](JNIEnv& env)
+    {
+        current->clip_text_missing = true;
+        return luil::android::read_text_from_clipboard(env, object()).has_value() ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 0);
+    CHECK(success.state.popped == 1);
+    check_failure_points(run, success, 0);
+}
+
+TEST_CASE("Reading clipboard data leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const auto run = [](JNIEnv& env)
+    {
+        const luil::clipboard_data data { luil::android::read_clipboard_data(env, object()) };
+        const bool has_image { data.image != nullptr && data.image->size() == 4 };
+        return (data.text.empty() ? 0 : 1) + (data.html.empty() ? 0 : 2) + (has_image ? 4 : 0);
+    };
+    const outcome success { run_once(run) };
+    // 글, 그 항목의 HTML, 그림 URI의 네 바이트를 다 읽는 길이다.
+    CHECK(success.answer == 7);
+    CHECK(success.state.void_calls == 1);
+    CHECK(success.state.popped == success.state.pushed);
+    check_clean_failure_points(run, success);
 }
 
 TEST_CASE("A local frame that cannot open clears the exception it left", "[android][jni_order]")
