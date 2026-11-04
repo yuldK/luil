@@ -22,7 +22,7 @@
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|ink|inspector|theme|workbench|rich-text
+//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|ink|inspector|chart|theme|workbench|rich-text
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
