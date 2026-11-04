@@ -150,7 +150,7 @@ namespace luil::win32 {
         const surface_backdrop::update update { backdrop_.refresh(requested_backdrop_, environment) };
         if (update.apply.has_value() && window_ != nullptr)
         {
-            apply_backdrop_mechanism(window_, *update.apply, update.previous, system_supported, backdrop_dark_);
+            apply_backdrop_mechanism(window_, *update.apply, update.previous, system_supported, backdrop_dark_, context_.config().acrylic_accent);
             // 바탕을 옅게 칠하는 것은 효과가 선 뒤다. 프레임을 넓히는 것도 같은 값을 따른다 — 넓힌 창에 효과가 없으면
             // 옅은 바탕 자리가 검게 보인다.
             if (backdrop_active() != (update.previous != backdrop_mechanism::none))
@@ -170,7 +170,7 @@ namespace luil::win32 {
         backdrop_dark_ = dark;
         const backdrop_mechanism mechanism { backdrop_.decision().mechanism };
         if (mechanism == backdrop_mechanism::accent_acrylic)
-            apply_backdrop_mechanism(window_, mechanism, mechanism, false, dark);
+            apply_backdrop_mechanism(window_, mechanism, mechanism, false, dark, context_.config().acrylic_accent);
     }
 
     void window_surface::backdrop_frame_changed(const bool active) noexcept
@@ -239,6 +239,13 @@ namespace luil::win32 {
         // 표식은 이 표면의 것이고 시각은 게시 시점이다 — 포인터·키와 같은 규약이다.
         if (app_host* const host { context_.host() }; host != nullptr)
             host->post_raw_input(access_focus_event { id, id_, std::chrono::steady_clock::now() });
+    }
+
+    void window_surface::accessibility_clicked(const ui_element_id& id)
+    {
+        // 정책 훅은 input thread에서 부른다 — 초점 요청과 같은 길이고 같은 표식이다.
+        if (app_host* const host { context_.host() }; host != nullptr)
+            host->post_raw_input(access_click_event { id, id_, std::chrono::steady_clock::now() });
     }
 
     std::optional<text_input_target> window_surface::accessibility_text_target(const ui_element_kind kind) const
@@ -662,13 +669,29 @@ namespace luil::win32 {
             // Alt+F4는 창 닫기라 삼키지 않고 시스템에 맡긴다.
             //  - 키 잡기 모드에서는 Alt+F4·Alt+Space도 잡는 칸의 것이다. 단축키를 고르다 창이 닫히면 안 된다.
             //    잡는 칸은 그것이 시스템 예약 키라는 것을 보여 준다 (`system_reserved_chord`).
-            if ((word_parameter != VK_F4 || key_capturing()) && post_key_event(word_parameter, long_parameter))
-                return LRESULT { 0 };
+            //  - 앱에 보낸 조합은 누가 받았는지 돌려받는다. 받았으면 뒤따르는 `WM_SYSCHAR`·`WM_SYSKEYUP`도 삼킨다
+            //    (`alt_chord_`). 키 잡기 모드는 아래에서 전부 삼키므로 물을 것이 없다.
+            //  - Alt를 새로 누르면 앞의 조합은 끝났다. 남겨 두면 그 답이 다음 Alt 단독 뗌(시스템 메뉴로 가는 길)까지 삼킨다.
+            if (word_parameter == VK_MENU && (long_parameter & (LPARAM { 1 } << 30)) == 0)
+                alt_chord_.reset();
+            if (word_parameter != VK_F4 || key_capturing())
+            {
+                static std::uint64_t next_ticket { 0 };
+                const std::uint64_t ticket { key_capturing() ? 0 : ++next_ticket };
+                if (post_key_event(word_parameter, long_parameter, ticket))
+                {
+                    if (ticket != 0)
+                        alt_chord_ = alt_chord { ticket };
+                    return LRESULT { 0 };
+                }
+            }
             return std::nullopt;
         case WM_SYSKEYUP:
         case WM_SYSCHAR:
             // 키 잡기 모드에서 Alt를 떼면 메뉴 모드(SC_KEYMENU)로 들어가 다음 키를 OS가 가져간다. 그것을 막는다.
             if (key_capturing())
+                return LRESULT { 0 };
+            if (hold_alt_chord_message(message, word_parameter, long_parameter))
                 return LRESULT { 0 };
             return std::nullopt;
         case WM_IME_SETCONTEXT:
@@ -1035,7 +1058,8 @@ namespace luil::win32 {
         translated.message = message;
         translated.word_parameter = word_parameter;
         translated.x = static_cast<float>(point.x);
-        translated.y = static_cast<float>(point.y);
+        // 흘려 보이는 표면이면 tree의 자리로 옮긴다 (`content_offset_y`).
+        translated.y = static_cast<float>(point.y + content_offset_y());
         translated.time = std::chrono::steady_clock::now();
         translated.surface = id_;
         // 이 메시지가 꺼내진 시점의 큐에 동기화된 상태다 (펜의 키 상태와 같은 규칙).
@@ -1192,6 +1216,8 @@ namespace luil::win32 {
                 forget();
             return owner.has_value();
         }
+        // 흘려 보이는 표면이면 tree의 자리로 옮긴다 (`content_offset_y` — 마우스와 같다).
+        client.y += content_offset_y();
         input.client = client;
         input.screen_to_client = POINT { client.x - input.info.ptPixelLocation.x, client.y - input.info.ptPixelLocation.y };
         static_cast<void>(GetPointerDeviceRects(input.info.sourceDevice, &input.device_rect, &input.display_rect));
@@ -1329,7 +1355,47 @@ namespace luil::win32 {
         return pointer_owners_.empty() == false && (GetMessageExtraInfo() & signature_mask) == signature;
     }
 
-    bool window_surface::post_key_event(const WPARAM virtual_key, const LPARAM long_parameter)
+    bool window_surface::hold_alt_chord_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
+    {
+        if (alt_chord_.has_value() == false)
+            return false;
+        alt_chord& chord { *alt_chord_ };
+        const bool alt_released { message == WM_SYSKEYUP && word_parameter == VK_MENU };
+        bool swallow { false };
+        if (chord.handled.has_value())
+            // 답이 왔다. 받은 조합이면 뒷 메시지를 삼키고, 아니면 지금까지처럼 기본 처리에 맡긴다.
+            swallow = *chord.handled;
+        else
+        {
+            // 답이 아직이다. 붙들어 두고 답에 맞춰 정리한다.
+            chord.held.push_back(held_message { message, word_parameter, long_parameter });
+            swallow = true;
+        }
+        if (alt_released)
+        {
+            chord.released = true;
+            if (chord.handled.has_value())
+                alt_chord_.reset();
+        }
+        return swallow;
+    }
+
+    void window_surface::alt_chord_reported(const std::uint64_t ticket, const bool handled)
+    {
+        if (alt_chord_.has_value() == false || alt_chord_->ticket != ticket || alt_chord_->handled.has_value())
+            return;
+        alt_chord_->handled = handled;
+        std::vector<held_message> held { std::exchange(alt_chord_->held, {}) };
+        const bool released { alt_chord_->released };
+        if (released)
+            alt_chord_.reset();
+        // 아무도 받지 않은 조합이다. 붙든 메시지를 늦게라도 기본 처리에 넘긴다 — 붙들지 않았을 때와 같은 경고음·메뉴다.
+        if (handled == false && window_ != nullptr)
+            for (const held_message& message : held)
+                static_cast<void>(DefWindowProcW(window_, message.message, message.word_parameter, message.long_parameter));
+    }
+
+    bool window_surface::post_key_event(const WPARAM virtual_key, const LPARAM long_parameter, const std::uint64_t report_ticket)
     {
         app_host* const host { context_.host() };
         if (host == nullptr)
@@ -1356,6 +1422,7 @@ namespace luil::win32 {
         // 편집 역할은 비워 Windows 기본(Control)을 따르게 한다.
         key_pressed_event event { key, control, shift, alt, repeat, std::chrono::steady_clock::now(), id_ };
         event.meta = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
+        event.report_ticket = report_ticket;
         host->post_raw_input(std::move(event));
         return true;
     }
@@ -1430,7 +1497,17 @@ namespace luil::win32 {
             SetCursor(nullptr);
             return;
         }
-        apply_surface_cursor(window_, tree_.get(), context_.host(), context_.config(), id_, client_position);
+        // 흘려 보이는 표면이면 tree의 자리로 묻는다 (`content_offset_y`).
+        std::optional<POINT> position { client_position };
+        if (const int offset { content_offset_y() }; offset != 0)
+        {
+            POINT cursor {};
+            if (position.has_value() == false && GetCursorPos(&cursor) != FALSE && ScreenToClient(window_, &cursor) != FALSE)
+                position = cursor;
+            if (position.has_value())
+                position->y += offset;
+        }
+        apply_surface_cursor(window_, tree_.get(), context_.host(), context_.config(), id_, position);
     }
 
     bool window_surface::key_capturing() const

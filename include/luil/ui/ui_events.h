@@ -460,6 +460,10 @@ namespace luil {
         std::optional<bool> word_navigation {};
         // Windows 키·Command 키다.
         bool meta { false };
+        // 0이 아니면 처리한 뒤 "누가 받았는가"를 플랫폼에 돌려줄 표다 (`run_ui_input_pump`의 `report_key`).
+        // Win32가 Alt 조합에 단다 — 받은 조합이면 뒤따르는 `WM_SYSCHAR`·`WM_SYSKEYUP`을 기본 처리(경고음·메뉴
+        // 모드)에 넘기지 않으려는 것이다. 처리는 input thread의 일이라 UI thread는 이 표로 답을 기다린다.
+        std::uint64_t report_ticket { 0 };
 
         // Shift를 뺀 수정자가 하나라도 눌렸는가. 눌렸으면 그 키는 앱 단축키라
         // 실행 키·기본 버튼·단계 키가 가로채지 않는다 — 물리 키와 역할 중 어느 쪽으로
@@ -507,6 +511,18 @@ namespace luil {
         std::chrono::steady_clock::time_point time {};
     };
 
+    // 보조 기술이 요소를 눌렀다 (UIA Invoke·Toggle·Select).
+    // 실행(액션)은 표면이 그 자리에서 이미 배분했다. 이 이벤트는 마우스 클릭이 부르는 정책 훅
+    // (`interaction_policy::on_click`)을 같은 자리에서 부르려고 input thread에 온다 — 정책은 input thread의 것이다.
+    //  - Tab의 자리가 아닌 요소도 부른다. 그런 요소는 초점이 서지 않아, 앱이 초점으로 대신 알 길이 없다.
+    //  - 그 요소가 지금 tree에 없거나 비활성이면 부르지 않는다.
+    struct access_click_event
+    {
+        ui_element_id target {};
+        std::u8string surface {};
+        std::chrono::steady_clock::time_point time {};
+    };
+
     // 표면에서 보이는 자리가 줄었다 (휴대폰의 소프트 키보드가 올라왔다).
     // 초점이 그 표면에 있으면 다시 드러내 달라는 뜻이다 — 키보드로 옮긴 초점의 자동 스크롤
     // (`interaction_policy::on_focus_moved`)과 같은 길을 탄다. 눌러서 잡은 초점도 드러낸다.
@@ -519,7 +535,8 @@ namespace luil {
 
     using raw_input_event
         = std::variant<pointer_moved_event, pointer_pressed_event, pointer_released_event, pointer_left_event, surface_focus_lost_event, surface_focus_gained_event, mouse_wheel_event,
-            file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event, pointer_cancelled_event, focus_reveal_event>;
+            file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event, pointer_cancelled_event, focus_reveal_event,
+            access_click_event>;
 
     // UI thread에서만 실행할 수 있는 창 명령이다.
     // 창 조작은 앱 상태가 아니므로 logic을 거치지 않는다.

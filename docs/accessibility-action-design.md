@@ -102,6 +102,8 @@ UIA 호출은 window sizing loop, system menu, paint 또는 다른 automation ev
 
 Provider는 동작 목록을 dispatch한 뒤 Invoke event를 알린다. Checked, selected, expanded, range, text value 같은 상태 변화는 이후 published frame의 접근성 snapshot 비교로 알린다. Application logic이 동작을 처리하기 전에 상태가 바뀌었다고 보고하지 않기 위한 순서다.
 
+눌러서 하는 명령(Invoke·Toggle·Select)이 기본 실행인 클릭을 배분하면 surface는 `access_click_event { id, surface }`도 input pump에 post한다. Controller는 그 요소가 지금 tree에 있고 활성이면 `interaction_policy::on_click`을 부른다. 마우스로 누를 때 부르는 그 훅이라, 클릭 대상으로 상태를 잇는 앱이 보조 기술로 누른 것도 같은 대상으로 본다. Tab의 자리가 아닌 요소는 초점이 서지 않아 초점으로 대신 알 수 없다. 정책은 input thread의 것이라 UI thread의 provider가 직접 부르지 않는다. 동작은 이미 배분된 뒤라 훅은 동작보다 늦지만, 같은 input thread의 다음 입력보다는 앞선다. 지어지지 않은 model 항목은 tree에 없어 부르지 않는다.
+
 ## Focus 요청
 
 UIA `SetFocus`는 input controller의 mutable interaction state를 바꾸므로 action dispatch와 별도 경로를 쓴다. Surface는 `access_focus_event { id, surface }`를 input pump에 post한다. Controller는 현재 tree를 다시 찾고 focusable이며 도달 가능한 target에만 logical focus를 공개한다. 이 경로는 secondary window와 popup에서도 surface identity를 유지한다. 이미 제거된 target에는 focus가 가지 않는다.

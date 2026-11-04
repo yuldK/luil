@@ -351,6 +351,9 @@ namespace luil {
         // 키보드 탐색 초점 등 앱 쪽 입력 상태를 잇는 데 쓴다.
         //  - 터치 탭·터치 길게 누르기·펜 클릭도 같은 자리에서 부른다.
         //    스크롤로 끝난 접촉에는 부르지 않는다.
+        //  - 보조 기술의 누름(UIA Invoke·Toggle·Select)에도 부른다 (`access_click_event`). 그때는 액션이 이미 앱으로
+        //    떠난 뒤다 — 표면이 UI thread에서 배분하고 이 훅은 input thread에서 뒤따른다. 같은 input thread의
+        //    다음 입력보다는 앞선다.
         virtual void on_click(const ui_element& element)
         {
             static_cast<void>(element);
@@ -478,6 +481,15 @@ namespace luil {
         // 끝·나감을, 영역이 새로 섰으면 들어옴을 낸다 (hover-dwell-design.md). 입력 pump가 tree를 받을 때마다 부른다.
         [[nodiscard]] std::vector<input_action> refresh_hover_tracking();
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
+        // 마지막으로 처리한 키를 누가 받았는가다 (`process`의 키 이벤트).
+        //  - 라이브러리의 소비자(키 잡기 칸·메뉴·초점 이동·텍스트 칸·값·묶음·키 handler·가둠·기본 버튼)가 가져갔거나
+        //    앱 정책(`interaction_policy::on_key`)이 액션을 하나라도 돌려줬으면 참이다.
+        //  - 아무도 가져가지 않았으면 거짓이다 — 열린 메뉴가 갖지 않은 키를 삼킨 것도 받은 것이 아니다.
+        //  - 플랫폼이 그 키의 뒷처리(Win32 Alt 조합의 `WM_SYSCHAR`)를 기본 처리에 넘길지 가르는 값이다.
+        [[nodiscard]] bool last_key_handled() const noexcept
+        {
+            return key_handled_;
+        }
 
     private:
         // `follow_text_caret`이 마지막으로 본 caret이다. 같은 칸·같은 글·같은 caret이면 다시 들이지 않는다.
@@ -1076,6 +1088,8 @@ namespace luil {
             bool hold_while_captured { true };
         };
         std::vector<hover_region_entry> hover_regions_ {};
+        // 마지막 키를 누가 받았는가 (`last_key_handled`).
+        bool key_handled_ { false };
     };
 
     // input thread의 소비 루프다.
@@ -1085,9 +1099,12 @@ namespace luil {
     // `ui_command`·`app_ui_command`·클립보드 요청은 UI thread 전용이라 callback으로 넘긴다.
     // 햅틱은 `execute_haptic`으로 곧장 넘긴다 (플랫폼의 출력이 thread를 가린다).
     // `touch_slot`이 있으면 실행 중 바뀐 터치 설정을 다음 이벤트 처리 전에 적용한다.
+    // `report_key`가 있으면 표(`key_pressed_event::report_ticket`)를 단 키를 처리한 뒤 그 표와 받았는가
+    // (`interaction_controller::last_key_handled`)를 넘긴다. input thread에서 불리므로 thread-safe해야 한다.
     void run_ui_input_pump(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
         messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* policy = nullptr, interaction_config config = {},
         const std::function<void(app_ui_command)>& execute_app_ui_command = {}, const std::function<void(clipboard_request)>& execute_clipboard = {},
-        messaging::latest_slot<touch_gesture_config>* touch_slot = nullptr, const std::function<void(haptic_feedback)>& execute_haptic = {});
+        messaging::latest_slot<touch_gesture_config>* touch_slot = nullptr, const std::function<void(haptic_feedback)>& execute_haptic = {},
+        const std::function<void(std::uint64_t ticket, bool handled)>& report_key = {});
 }

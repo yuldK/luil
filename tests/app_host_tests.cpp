@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -727,4 +728,52 @@ TEST_CASE("File clipboard requests reach the UI thread from input actions and fr
     luil::win32::app_host host { luil::win32::app_host::config {}, quiet, nullptr };
     host.post_clipboard_request(luil::clipboard_files_paste_request {});
     REQUIRE(host.take_clipboard_requests().empty());
+}
+
+TEST_CASE("Window commands reach the UI thread from any thread", "[win32][host][command]")
+{
+    counting_driver driver {};
+    std::atomic<int> wakes { 0 };
+    luil::win32::app_host::config config {};
+    config.wake.ui_command = [&wakes] { wakes.fetch_add(1); };
+    {
+        luil::win32::app_host host { std::move(config), driver, nullptr };
+        // 기다리던 작업이 끝난 logic이 앱을 끝내는 길이다 — 닫힘 훅을 거치지 않는 명령을 고른다.
+        std::thread logic { [&host] { host.post_ui_command(luil::ui_command::application_exit); } };
+        logic.join();
+        REQUIRE(wakes.load() == 1);
+        REQUIRE(host.take_ui_commands() == std::vector<luil::ui_command> { luil::ui_command::application_exit });
+    }
+
+    // 창 명령의 길이 없는 플랫폼에서는 아무 일도 없다.
+    counting_driver quiet {};
+    luil::win32::app_host host { luil::win32::app_host::config {}, quiet, nullptr };
+    host.post_ui_command(luil::ui_command::window_close);
+    REQUIRE(host.take_ui_commands().empty());
+}
+
+TEST_CASE("A key carrying a report ticket comes back with whether anyone took it", "[win32][host][key]")
+{
+    counting_driver driver {};
+    std::mutex mutex {};
+    std::vector<std::pair<std::uint64_t, bool>> reports {};
+    luil::win32::app_host::config config {};
+    config.wake.key_report = [&](const std::uint64_t ticket, const bool handled) {
+        const std::lock_guard<std::mutex> lock { mutex };
+        reports.emplace_back(ticket, handled);
+    };
+    luil::win32::app_host host { std::move(config), driver, nullptr };
+    // 정책이 없으니 아무도 받지 않는다. 표가 없는 키는 답하지 않는다.
+    luil::key_pressed_event plain { luil::key_code::key_1 };
+    plain.alt = true;
+    host.post_raw_input(plain);
+    luil::key_pressed_event chord { plain };
+    chord.report_ticket = 7u;
+    host.post_raw_input(chord);
+    REQUIRE(wait_until([&] {
+        const std::lock_guard<std::mutex> lock { mutex };
+        return reports.empty() == false;
+    }));
+    const std::lock_guard<std::mutex> lock { mutex };
+    REQUIRE(reports == std::vector<std::pair<std::uint64_t, bool>> { { 7u, false } });
 }

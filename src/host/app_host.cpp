@@ -19,7 +19,7 @@ namespace luil {
             messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
             const std::function<void(ui_command)> wake_ui_command, interaction_policy* const policy, interaction_config config, const std::function<void(app_ui_command)> execute_app_ui_command,
             const std::function<void(clipboard_request)> execute_clipboard, messaging::latest_slot<touch_gesture_config>& touch_slot, const std::function<void(haptic_feedback)> haptic,
-            std::atomic<bool>& faulted)
+            const std::function<void(std::uint64_t, bool)> key_report, std::atomic<bool>& faulted)
         {
             // policy·wake callback의 예외는 계약 밖 입력이다.
             // 스레드 진입 함수를 벗어난 예외는 곧 terminate라, 여기서 삼키고
@@ -39,7 +39,7 @@ namespace luil {
                         if (wake_ui_command != nullptr)
                             wake_ui_command(command);
                     },
-                    policy, std::move(config), execute_app_ui_command, execute_clipboard, &touch_slot, haptic);
+                    policy, std::move(config), execute_app_ui_command, execute_clipboard, &touch_slot, haptic, key_report);
             }
             catch (...)
             {
@@ -104,6 +104,8 @@ namespace luil {
         // 신호는 유실될 수 있어도(창 메시지 게시 실패) 내용은 여기 남는다.
         std::mutex ui_command_mutex {};
         std::vector<ui_command> ui_commands {};
+        // 큐에 넣고 UI thread를 깨우는 길이다. input thread와 `post_ui_command`가 함께 쓴다.
+        std::function<void(ui_command)> forward_ui_command {};
 
         // 앱 UI 명령 큐다.
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
@@ -176,6 +178,7 @@ namespace luil {
                 wake();
             };
         }
+        parts.forward_ui_command = forward_ui_command;
 
         std::function<void(app_ui_command)> execute_app_ui_command {};
         if (configuration.wake.app_ui_command != nullptr)
@@ -221,6 +224,7 @@ namespace luil {
                 std::move(execute_clipboard),
                 std::ref(parts.touch_slot),
                 parts.haptic,
+                configuration.wake.key_report,
                 std::ref(parts.faulted),
             };
         }
@@ -381,6 +385,19 @@ namespace luil {
         try
         {
             assembly_->execute_clipboard(std::move(request));
+        }
+        catch (...)
+        {
+        }
+    }
+
+    void app_host::post_ui_command(const ui_command command) noexcept
+    {
+        if (assembly_->forward_ui_command == nullptr)
+            return;
+        try
+        {
+            assembly_->forward_ui_command(command);
         }
         catch (...)
         {

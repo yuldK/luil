@@ -52,6 +52,15 @@ namespace luil::win32 {
         // 초점은 tree가 아니라 **입력 상태**라 여기서 곧바로 세울 수 없다 (3.4).
         virtual void accessibility_request_focus(const ui_element_id& id) = 0;
 
+        // 보조 기술이 이 요소를 눌렀다 (Invoke·Toggle·Select가 기본 실행인 클릭을 배분했다).
+        // 마우스 클릭처럼 앱 정책의 `interaction_policy::on_click`이 불리게 input thread에 알린다 — 정책은 input
+        // thread의 것이라 여기서 부를 수 없다 (`access_click_event`).
+        //  - 기본은 아무 일도 없다 — 정책을 모르는 test 대역이 그대로 선다.
+        virtual void accessibility_clicked(const ui_element_id& id)
+        {
+            static_cast<void>(id);
+        }
+
         // --- 텍스트 칸의 Text pattern·값 쓰기가 딛는 자리다 ---
         // TSF와 같은 편집 파이프라인을 탄다: 대상 해석은 앱 정책
         // (`text_target_of`)이, 적용은 앱 logic(`apply_text_edit`)이 한다.
@@ -126,6 +135,12 @@ namespace luil::win32 {
         virtual void structure_changed(IRawElementProviderSimple& provider) = 0;
         // 이 글을 지금 읽게 알린다 (입력 칸의 오류 글, UiaRaiseNotificationEvent).
         virtual void notification(uia_element_provider& provider, std::u8string_view text) = 0;
+        // 이 live region의 글이 바뀌었다 (LiveRegionChanged).
+        //  - 기본은 아무것도 쏘지 않는다 — 이 알림을 세지 않는 test 대역이 그대로 선다.
+        virtual void live_region_changed(uia_element_provider& provider)
+        {
+            static_cast<void>(provider);
+        }
     };
 
     // 표면 하나의 UIA fragment root다.
@@ -253,7 +268,8 @@ namespace luil::win32 {
         public ITextProvider,
         public IScrollItemProvider,
         public IItemContainerProvider,
-        public IVirtualizedItemProvider
+        public IVirtualizedItemProvider,
+        public IScrollProvider
     {
     public:
         // `container`가 있으면 이 provider는 모델 container의 항목이다. 그 행이 tree에 없어도 container의 모델이
@@ -358,6 +374,18 @@ namespace luil::win32 {
         // IVirtualizedItemProvider다 (지어지지 않은 모델 항목 — 창 안으로 흘려 짓게 한다).
         HRESULT STDMETHODCALLTYPE Realize() override;
 
+        // IScrollProvider다 (흘리는 창 — `access_info::scroll`).
+        // 자리는 백분율이고 100이 끝이다. 쓰기는 `access_command::set_scroll_percent` 하나로 간다 — `Scroll`의 칸·쪽
+        // 단위도 지금 자리에서 백분율로 옮겨 그 명령으로 낸다.
+        HRESULT STDMETHODCALLTYPE Scroll(ScrollAmount horizontal, ScrollAmount vertical) override;
+        HRESULT STDMETHODCALLTYPE SetScrollPercent(double horizontal, double vertical) override;
+        HRESULT STDMETHODCALLTYPE get_HorizontalScrollPercent(double* result) override;
+        HRESULT STDMETHODCALLTYPE get_VerticalScrollPercent(double* result) override;
+        HRESULT STDMETHODCALLTYPE get_HorizontalViewSize(double* result) override;
+        HRESULT STDMETHODCALLTYPE get_VerticalViewSize(double* result) override;
+        HRESULT STDMETHODCALLTYPE get_HorizontallyScrollable(BOOL* result) override;
+        HRESULT STDMETHODCALLTYPE get_VerticallyScrollable(BOOL* result) override;
+
     private:
         // 지금 tree에서 이 id를 다시 찾는다. 없으면 nullptr다.
         [[nodiscard]] const ui_element* resolve(const ui_tree** tree = nullptr) const;
@@ -375,6 +403,8 @@ namespace luil::win32 {
         // 선택 명령(Select·AddToSelection·RemoveFromSelection)이다. 항목의 container가 다중 선택인지 실어
         // `perform`으로 넘긴다.
         [[nodiscard]] HRESULT perform_selection(access_command command);
+        // 지금 흘림 자리다. 흘리는 창이 아니면 nullopt다.
+        [[nodiscard]] std::optional<access_scroll_state> scroll_state() const;
 
         uia_root_provider* root_ { nullptr };
         ui_element_id id_ {};

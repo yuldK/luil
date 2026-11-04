@@ -382,6 +382,9 @@ namespace luil {
         //    `ui_command::application_exit`를 낸다.
         //  - 보조 창의 `close`처럼 게시된 frame당 한 번만 낸다. 같은 frame에 거듭 와도 앱이 넘치지 않는다.
         //  - 세션 종료(로그오프·재시작)는 이것을 거치지 않고 끝낸다 — 저장은 종료 메시지가 한다.
+        //  - logic이나 input thread가 멈췄으면(`app_host::faulted`) 이것을 부르지 않고 끝낸다. 낸 동작을 받을 logic이 없다.
+        //  - logic thread가 비동기 작업을 기다렸다가 끝낼 때는 `app_host::post_ui_command`로 `application_exit`(훅을 거치지
+        //    않는다)나 `window_close`(훅을 다시 거친다)를 낸다.
         std::function<input_action()> close {};
         // 주 창을 숨긴다 (작업 표시줄에서도 빠진다). 독립 창만 남기고 앱을 계속 돌리는 동안이다.
         //  - 주 창이 소유한 보조 창과 주 창에 앵커한 popup은 함께 숨지 않는다 — 앱이 같은 frame에서 뺀다.
@@ -493,6 +496,9 @@ namespace luil {
             std::function<void()> app_ui_command {};
             // 클립보드 요청이 큐에 들어갔다.
             std::function<void()> clipboard {};
+            // 표를 단 키(`key_pressed_event::report_ticket`)를 input thread가 처리했다 — 받았는가와 함께다.
+            // 내용이 표와 참거짓 하나라 큐 없이 신호가 나른다. 유실되면 그 키의 답은 오지 않는다 (플랫폼이 견딘다).
+            std::function<void(std::uint64_t ticket, bool handled)> key_report {};
         };
 
         struct config
@@ -565,6 +571,14 @@ namespace luil {
         // 순간(골라 둔 파일의 잘라내기·복사)에 쓴다. element 액션은 같은 요청을 돌려주면 같은 길로 간다.
         //  - 플랫폼이 클립보드 길을 꽂지 않았으면(`wake_signals::clipboard`가 비었다) 아무 일도 없다.
         void post_clipboard_request(clipboard_request request) noexcept;
+        // 창 명령(`ui_command`)을 UI thread에 넘긴다. **어느 thread에서 불러도 된다.** logic thread가 앱 상태에서 정한
+        // 순간(기다리던 비동기 작업이 끝났다)에 앱을 끝내거나 주 창을 닫는 길이다. element 액션이 같은 명령을 돌려주면
+        // 같은 큐로 간다.
+        //  - `ui_command::application_exit`는 주 창의 닫힘 훅(`ui_frame::close`)을 거치지 않고 끝낸다. 훅이 종료를 미뤄
+        //    두었다가 작업이 끝난 뒤 정말로 끝내는 길이 이것이다.
+        //  - `ui_command::window_close`는 사용자가 닫기를 누른 것과 같다 — 훅이 있으면 훅을 다시 거친다.
+        //  - 플랫폼이 창 명령의 길을 꽂지 않았으면(`wake_signals::ui_command`가 비었다) 아무 일도 없다.
+        void post_ui_command(ui_command command) noexcept;
         // 권한의 지금 상태다. **어느 thread에서 불러도 된다.**
         [[nodiscard]] permission_state permission(app_permission permission) const noexcept;
         // 사용자에게 권한을 묻는다. **어느 thread에서 불러도 된다.**

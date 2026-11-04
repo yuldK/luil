@@ -71,6 +71,14 @@ namespace luil {
         // 없으면 보조 기술이 자리를 정할 수 없다 (UIA `SetValue`가 읽기 전용으로
         // 선다). 델타로 환산해 보내면 오래된 발행본 기준의 변화량이 겹쳐 쌓인다.
         std::function<input_action(float offset)> scroll_to {};
+        // 스크롤 위치를 **이 백분율로** 하라는 절대 메시지다 (0~100, **100은 끝**).
+        // 있으면 영역이 보조 기술에 흘리는 창(UIA Pane + Scroll 패턴 — `SetScrollPercent`·`VerticalScrollPercent`)으로
+        // 선다. 없으면 지금처럼 접근 tree에서 접히고 막대(RangeValue)만 선다.
+        //  - offset(`scroll_to`)과 따로인 이유: 내용이 계속 늘어나는 목록에서 "끝까지"는 어느 offset으로도 정확히
+        //    말할 수 없다. 메시지가 앱에 닿는 사이 내용이 늘면 그 offset은 끝이 아니다. 100을 받은 앱은 "끝에 붙어
+        //    있으라"로 읽는다.
+        //  - 지금 자리는 영역이 `arrange`가 다듬은 offset에서 잰다 (흘릴 것이 없으면 세로로 흘리지 않는 창이다).
+        std::function<input_action(float percent)> scroll_to_percent {};
         scrollbar_visibility bar { scrollbar_visibility::automatic };
         // 막대가 Tab의 자리인가.
         //
@@ -141,6 +149,10 @@ namespace luil {
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        // `scroll_to_percent`가 있으면 흘리는 창(pane)이고 자리(`access_info::scroll`)를 내준다.
+        [[nodiscard]] access_info accessibility() const override;
+        // `set_scroll_percent`를 `scroll_to_percent`로 낸다.
+        [[nodiscard]] std::optional<std::vector<input_action>> access_actions(const access_request& request) const override;
 
     private:
         // 막대가 이번 배치에서 자리를 차지하는가.

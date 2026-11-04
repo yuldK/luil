@@ -31,6 +31,23 @@ namespace luil::win32 {
         // popup은 부모 창의 배율을 그대로 쓴다 (`set_dpi`).
         void set_placement(const popup_placement& placement) noexcept;
 
+        // 창의 보이는 높이다 (물리 픽셀). 소유자가 모니터 작업 영역에 맞춰 정한다.
+        // popup의 내용(`placement().height`)보다 작으면 popup이 내용을 흘려 보인다 — 작업 영역보다 긴 메뉴가 아래가
+        // 잘리는 대신 스크롤된다 (popup-overlay-design.md).
+        //  - 휠로 흘리고, 위·아래 화살표 칸에 포인터를 두면 그쪽으로 흘러가며, 키보드 강조(`menu_highlight`)와
+        //    키보드 초점이 옮겨 가면 그 항목이 보이게 따라간다.
+        //  - 흘린 양은 이 표면의 것이다 (UI thread). 앱도 input thread도 모른다 — 포인터는 그만큼 옮겨 tree에 묻는다.
+        void set_viewport_height(int height) noexcept;
+        [[nodiscard]] int viewport_height() const noexcept
+        {
+            return viewport_height_ > 0 ? viewport_height_ : height_;
+        }
+        // 흘린 양이다 (물리 픽셀). 이 popup에 앵커한 자식 popup의 자리가 그만큼 올라간다.
+        [[nodiscard]] int scroll_offset() const noexcept
+        {
+            return scroll_;
+        }
+
         // 새 frame이 실은 값으로 갱신한다.
         // 새 frame이 popup을 계속 실었다는 것은 앱이 상태를 유지하기로 했다는 뜻이라
         // 닫힘 메시지를 다시 낼 수 있게 풀고 factory도 새 것으로 바꾼다.
@@ -68,6 +85,25 @@ namespace luil::win32 {
         // 맞춘다 — 그 색은 frame의 테마에서 오므로 그릴 때마다 견주고 바뀐 때만 DWM에 말한다.
         void prepare_frame(frame_state& state) override;
 
+        [[nodiscard]] int content_offset_y() const noexcept override
+        {
+            return scroll_;
+        }
+        // 내용이 창보다 길어 흘리는가.
+        [[nodiscard]] bool scrollable() const noexcept;
+        [[nodiscard]] int maximum_scroll() const noexcept;
+        // 화살표 칸의 높이다 (물리 픽셀).
+        [[nodiscard]] int strip_height() const noexcept;
+        // client y가 화살표 칸 위인가다. 위 칸이면 -1, 아래 칸이면 1, 아니면 0이다. 지금 선 칸만 답한다.
+        [[nodiscard]] int strip_at(int y) const noexcept;
+        // 흘린 양을 바꾼다. 바뀌었으면 참이고, 다시 그리며 포인터 밑의 hover를 새 자리로 다시 묻는다.
+        bool scroll_by(int delta);
+        // 키보드 강조·초점이 새로 옮겨 갔으면 그 항목이 칸에 가리지 않게 흘린다 (`prepare_frame`).
+        void follow_keyboard(const interaction_snapshot& interaction);
+        // 화살표 칸 위의 포인터를 다룬다. 다뤘으면 결과다.
+        [[nodiscard]] std::optional<LRESULT> handle_scroll_message(UINT message, WPARAM word_parameter, LPARAM long_parameter);
+        void stop_strip_scroll() noexcept;
+
         std::u8string anchor_ {};
         int x_ { 0 };
         int y_ { 0 };
@@ -81,5 +117,12 @@ namespace luil::win32 {
         popup_shape shape_ {};
         // DWM에 마지막으로 말한 테두리 색과 명암이다. 같은 답이면 다시 말하지 않는다.
         std::optional<std::pair<COLORREF, BOOL>> dwm_theme_ {};
+        // 창의 보이는 높이와 흘린 양이다 (물리 픽셀, `set_viewport_height`).
+        int viewport_height_ { 0 };
+        int scroll_ { 0 };
+        // 화살표 칸이 흘리는 쪽이다 (-1 위, 1 아래, 0 멈춤). 칸 위에 있는 동안 timer가 흘린다.
+        int strip_direction_ { 0 };
+        // 마지막으로 따라간 키보드 강조·초점이다. 바뀔 때만 따라간다 — 휠로 흘린 자리를 그리기마다 되돌리지 않는다.
+        ui_element_id followed_ {};
     };
 }

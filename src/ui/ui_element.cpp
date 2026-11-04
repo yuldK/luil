@@ -303,6 +303,11 @@ namespace luil {
         access_name_ = std::move(text);
     }
 
+    void ui_element::set_live_region(const access_live live) noexcept
+    {
+        live_region_ = live;
+    }
+
     void ui_element::set_action(const ui_trigger trigger, ui_action action)
     {
         actions_[static_cast<std::size_t>(trigger)] = std::move(action);
@@ -695,7 +700,8 @@ namespace luil {
         // 목표 상태를 나르는 factory를 가진 요소만 재정의로 답한다
         // (accessibility-action-design.md).
         if (request.command == access_command::set_value || request.command == access_command::expand || request.command == access_command::collapse
-            || request.command == access_command::add_to_selection || request.command == access_command::remove_from_selection)
+            || request.command == access_command::add_to_selection || request.command == access_command::remove_from_selection
+            || request.command == access_command::set_scroll_percent)
             return std::nullopt;
         const ui_action* const pressed { action(ui_trigger::left_click) };
         if (pressed == nullptr)
