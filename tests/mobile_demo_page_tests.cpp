@@ -2009,6 +2009,33 @@ TEST_CASE("The mobile read-only field reads the access name the page gave it", "
     REQUIRE(area->accessibility().name == u8"읽기 전용 안내 칸");
 }
 
+TEST_CASE("The lists and the split handle of the mobile list page read their names", "[mobile-demo][lists][accessibility]")
+{
+    // 넓은 화면은 목록 셋이 나란히 서서 한 tree에 모두 있다. 좁은 화면은 같은 판을 하나씩 세운다.
+    mobile_demo::lists_page page {};
+    const luil::ui_tree tree { luil::make_arranged_tree(page.build(800.0f, 800.0f, 1.0f), { 0.0f, 0.0f, 800.0f, 800.0f }, 1.0f) };
+    const auto require_named = [&tree](const luil::ui_element_kind kind, const luil::ui_element_kind bar_kind, const std::u8string& owner, const std::u8string& name) {
+        CAPTURE(owner);
+        const luil::ui_element* const list { tree.find({ kind, owner }) };
+        REQUIRE(list != nullptr);
+        REQUIRE(list->accessibility().name == name);
+        // 막대는 목록이 세우는 부품이라 앱이 따로 이름을 줄 수 없고 목록의 이름을 물려받는다.
+        const luil::ui_element* const bar { tree.find({ bar_kind, owner }) };
+        REQUIRE(bar != nullptr);
+        REQUIRE(bar->accessibility().name == name);
+    };
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"items", u8"순서를 바꾸는 목록");
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"tree", u8"접는 트리");
+    require_named(luil::ui_element_kind::virtual_list, luil::ui_element_kind::scroll_area_bar, u8"log", u8"가상 목록");
+    // 묶은 목록은 막대를 자기 안에 세우지 않고 데모의 스크롤 뷰에 든다. 목록 자신의 이름만 본다.
+    const luil::ui_element* const grouped { tree.find({ luil::ui_element_kind::grouped_list, u8"history" }) };
+    REQUIRE(grouped != nullptr);
+    REQUIRE(grouped->accessibility().name == u8"그룹 머리행 목록");
+    const luil::ui_element* const handle { tree.find({ mobile_demo::kind_list_split }) };
+    REQUIRE(handle != nullptr);
+    REQUIRE(handle->accessibility().name == u8"그룹 목록 높이 손잡이");
+}
+
 TEST_CASE("Undoing a reorder on the mobile list page brings back the earlier order and the buttons follow", "[mobile-demo][lists][undo]")
 {
     mobile_demo::lists_page page {};
