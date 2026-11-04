@@ -128,7 +128,7 @@ shell->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_t
 
 **입력과 초점.**
 
-- prior가 있는 동안(시각과 무관하게) 요소는 마지막 자식으로 덮개를 담는다. 덮개는 칠하지 않는 `hit_opaque` 판이다(scrim은 진하기 0이어도 막는다는 [modal_host_element.h](../include/luil/ui/modal_host_element.h) 29~31줄 선례). 누름·hover·커서·끌어 놓기가 덮개에서 멈춘다. `drop_hit_test`는 virtual이 아니고 자식부터 걷기 때문에(ui_element.cpp 617~641줄) `hit_test` 재정의가 아니라 자식으로 둔다. `hit_test`는 시각을 받지 않아 요소가 끝을 스스로 알 수 없다. 입력이 풀리는 것은 앱이 prior 없는 tree를 낼 때다. 그래서 끝 시각을 앱에 알리는 길이 필요하다(결정 2).
+- prior가 있는 동안(시각과 무관하게) 요소는 마지막 자식으로 덮개를 담는다. 덮개는 칠하지 않는 `hit_opaque` 판이다(scrim은 진하기 0이어도 막는다는 [modal_host_element.h](../include/luil/ui/modal_host_element.h) 29~31줄 선례). 누름·요소의 hover·끌어 놓기가 덮개에서 멈춘다. 커서 자동 숨김도 hit 검사로 멈춘다(`cursor_idle_hide_at`, [ui_tree.cpp](../src/ui/ui_tree.cpp) 696~709줄). hover 영역(`hover_region_target`)은 덮개 아래에서도 들고 난다. `hover_regions_at`(같은 파일 687~694줄)이 hit 없이 보이는 자리만 보기 때문이다. 전환이 도는 짧은 동안 메뉴 막대 같은 영역이 들 수 있고, modal 아래 등 전환 밖의 동작까지 바뀌므로 규칙을 고치지 않고 한계로 둔다(사용자 결정 2026-11-04). `drop_hit_test`는 virtual이 아니고 자식부터 걷기 때문에(ui_element.cpp 617~641줄) `hit_test` 재정의가 아니라 자식으로 둔다. `hit_test`는 시각을 받지 않아 요소가 끝을 스스로 알 수 없다. 입력이 풀리는 것은 앱이 prior 없는 tree를 낼 때다. 그래서 끝 시각을 앱에 알리는 길이 필요하다(결정 2).
 - 키는 막지 않는다. 키는 자리와 무관하고 controller가 새 tree의 초점 자리에 보낸다. Tab은 새 화면으로 들어간다.
 - 초점은 새 tree에만 선다. controller가 받는 것은 발행한 tree 하나이고(`set_tree`, [ui_interaction.cpp](../src/ui/ui_interaction.cpp) 168~172줄) 사라진 자리의 초점은 `update_focus`가 거둔다. controller의 `prior_tree_`([ui_interaction.h](../include/luil/ui/ui_interaction.h) 904줄)는 닫힌 popup 누름 판정 전용이라 이 전환과 무관하다. **controller를 고치지 않는다.**
 - 새 화면 안에 키보드 초점이 있는 채 밀기·확대가 돌면 초점 테와 IME 후보 창은 최종 자리에 먼저 선다(결정 1의 대가). 전환이 끝나 tree가 바뀌면 `set_tree`가 hover를 다시 판정해 포인터 아래 자리가 곧 선다.
