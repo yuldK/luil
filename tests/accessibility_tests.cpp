@@ -237,6 +237,13 @@ TEST_CASE("A check control reads its style, label, and state", "[ui][access]")
     luil::check_element bare { { .owner = u8"row", .checked = true } };
     bare.set_tooltip(u8"이 행을 포함한다");
     REQUIRE(bare.accessibility().name == u8"이 행을 포함한다");
+    bare.set_access_name(u8"행 포함");
+    REQUIRE(bare.accessibility().name == u8"행 포함");
+
+    // 적힌 라벨이 있으면 그 글이 이름이다.
+    luil::check_element labeled { { .owner = u8"labeled", .label = u8"알림" } };
+    labeled.set_access_name(u8"다른 이름");
+    REQUIRE(labeled.accessibility().name == u8"알림");
 }
 
 TEST_CASE("A slider reads its range and clamped value", "[ui][access]")
