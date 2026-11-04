@@ -22,6 +22,7 @@
 #include <span>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -596,31 +597,34 @@ namespace {
         return std::vector<luil::ui_color>(count, color);
     }
 
-    // test가 쓰고 지우는 임시 파일 하나다.
+    // test가 쓰고 지우는 임시 파일 하나다. 폴더에 마지막으로 남은 파일이면 폴더도 지운다.
     // 이름에 한글을 넣어 UTF-8 경로가 UTF-16으로 옳게 넘어가는 자리를 함께 잠근다.
     class temporary_image_file
     {
     public:
         // 확장자는 이름만 정직하게 한다 — 코덱은 내용으로 형식을 가린다.
-        temporary_image_file(const std::span<const std::uint8_t> contents, const int serial, const std::wstring& extension = L".png")
+        temporary_image_file(const std::span<const std::uint8_t> contents, const int serial, const std::wstring& extension = L".png", const std::wstring& folder = L"luil-tests")
         {
             std::error_code code {};
-            const std::filesystem::path directory { std::filesystem::temp_directory_path(code) / L"luil-tests" };
-            if (code)
-                return;
-            std::filesystem::create_directories(directory, code);
+            const std::filesystem::path directory { std::filesystem::temp_directory_path(code) / folder };
             if (code)
                 return;
 
             // 이름이 겹치면 나란히 도는 test 둘이 같은 파일을 쓰고 지운다.
             path_ = directory / (L"그림 견본-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(serial) + extension);
-            std::ofstream file { path_, std::ios::binary | std::ios::trunc };
-            if (file.is_open() == false)
+            // 나란히 도는 test의 소멸자가 파일이 서기 전의 빈 폴더를 지울 수 있어, 파일이 열릴 때까지 폴더를 다시 만든다.
+            for (int attempt { 0 }; attempt < 20; ++attempt)
             {
-                path_.clear();
-                return;
+                std::filesystem::create_directories(directory, code);
+                std::ofstream file { path_, std::ios::binary | std::ios::trunc };
+                if (file.is_open())
+                {
+                    file.write(reinterpret_cast<const char*>(contents.data()), static_cast<std::streamsize>(contents.size()));
+                    return;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds { 5 });
             }
-            file.write(reinterpret_cast<const char*>(contents.data()), static_cast<std::streamsize>(contents.size()));
+            path_.clear();
         }
 
         temporary_image_file(const temporary_image_file&) = delete;
@@ -634,6 +638,8 @@ namespace {
                 return;
             std::error_code code {};
             std::filesystem::remove(path_, code);
+            // 비어 있지 않으면 실패하고 그대로 남는다. 다른 test가 같은 폴더에 둔 파일을 건드리지 않는다.
+            std::filesystem::remove(path_.parent_path(), code);
         }
 
         [[nodiscard]] std::u8string path() const
@@ -925,6 +931,27 @@ TEST_CASE("Bytes that are not an image fail with a reason", "[ui][image][decode]
         REQUIRE(error.kind == luil::image_decode_error_kind::too_many_pixels);
         REQUIRE(error.message.find(u8"decode limit") != std::u8string::npos);
     }
+}
+
+TEST_CASE("A temporary image file takes its folder away with the last file in it", "[ui][image][decode]")
+{
+    // 임시 폴더에 빈 폴더가 남지 않는다. 폴더를 이 프로세스만 쓰게 해 나란히 도는 다른 test가 답을 흔들지 않는다.
+    const std::wstring folder { L"luil-tests-cleanup-" + std::to_wstring(GetCurrentProcessId()) };
+    const std::filesystem::path directory { std::filesystem::temp_directory_path() / folder };
+    {
+        const temporary_image_file kept { bytes_of(quadrant_png), 100, L".png", folder };
+        REQUIRE(kept.path().empty() == false);
+        {
+            const temporary_image_file gone { bytes_of(quadrant_png), 101, L".png", folder };
+            REQUIRE(gone.path().empty() == false);
+        }
+        // 다른 파일이 남았으면 폴더를 지우지 않는다.
+        REQUIRE(std::filesystem::exists(directory));
+    }
+    const bool left { std::filesystem::exists(directory) };
+    std::error_code ignored {};
+    std::filesystem::remove_all(directory, ignored);
+    REQUIRE(left == false);
 }
 
 TEST_CASE("An image file is read from its path", "[ui][image][decode]")
