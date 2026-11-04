@@ -4,20 +4,27 @@
 #include "android/java_vm.h"
 #include "luil/app/platform_services.h"
 #include "luil/app/secret_store.h"
+#include "luil/net/http_client.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <jni.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iterator>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 // 가짜 JNIEnv로 시스템 색·대비·막대·햅틱·권한 읽기와 쓰기의 JNI 흐름을 잠근다 (android_settings_tests.cpp와 같은 틀).
@@ -58,6 +65,8 @@ namespace {
         int reads { 0 };
         // `KeyStore.getKey`가 null이다 (아직 키가 없다).
         bool key_missing { false };
+        // `NewByteArray`가 예외 없이 null이다.
+        bool byte_array_missing { false };
     };
 
     fake_state* current { nullptr };
@@ -237,9 +246,39 @@ namespace {
 
     jbyteArray JNICALL new_byte_array(JNIEnv*, const jsize)
     {
-        if (step())
+        if (step() || current->byte_array_missing)
             return nullptr;
         return reinterpret_cast<jbyteArray>(&marker);
+    }
+
+    jstring JNICALL new_string(JNIEnv*, const jchar*, const jsize)
+    {
+        if (step())
+            return nullptr;
+        return reinterpret_cast<jstring>(&marker);
+    }
+
+    // 글 길이와 구간 읽기는 받은 글에 맞춰 부르면 예외를 내지 않는다. 빈 글로 둔다.
+    jsize JNICALL get_string_length(JNIEnv*, jstring)
+    {
+        note();
+        return 0;
+    }
+
+    void JNICALL get_string_region(JNIEnv*, jstring, const jsize, const jsize, jchar*)
+    {
+        note();
+    }
+
+    jobject JNICALL get_static_object_field(JNIEnv*, jclass, jfieldID)
+    {
+        note();
+        return object();
+    }
+
+    // 전역 참조 지우기는 예외가 남아도 불러도 되는 JNI다. 세지 않는다.
+    void JNICALL delete_global_ref(JNIEnv*, jobject)
+    {
     }
 
     void JNICALL get_byte_array_region(JNIEnv*, jbyteArray, const jsize, const jsize, jbyte*)
@@ -281,6 +320,9 @@ namespace {
             return nullptr;
         if (name == "getIV")
             return reinterpret_cast<jobject>(&iv_marker);
+        // HTTP 답의 헤더 줄이 없다. 헤더를 읽는 차례가 첫 줄에서 끝난다.
+        if (name == "getHeaderField")
+            return nullptr;
         return object();
     }
 
@@ -304,6 +346,8 @@ namespace {
             return 1;
         if (name == "read")
             return ++current->reads == 1 ? 4 : -1;
+        if (name == "getResponseCode")
+            return 200;
         // `getRotation`과 `getSystemUiVisibility`는 0이다.
         return 0;
     }
@@ -361,6 +405,11 @@ namespace {
         table.GetStringUTFChars = get_string_utf_chars;
         table.ReleaseStringUTFChars = release_string_utf_chars;
         table.NewByteArray = new_byte_array;
+        table.NewString = new_string;
+        table.GetStringLength = get_string_length;
+        table.GetStringRegion = get_string_region;
+        table.GetStaticObjectField = get_static_object_field;
+        table.DeleteGlobalRef = delete_global_ref;
         table.GetByteArrayRegion = get_byte_array_region;
         table.SetByteArrayRegion = set_byte_array_region;
         table.GetArrayLength = get_array_length;
@@ -952,4 +1001,143 @@ TEST_CASE("A local frame that opens is popped once and leaves no exception", "[a
     }
     CHECK(opening.state().pushed == 1);
     CHECK(opening.state().popped == 1);
+}
+
+// HTTP client는 표를 받은 뒤 자기 thread에서 JNI를 부른다. 그 동안 test thread는 답을 기다리기만 하므로 가짜 환경을 한 thread씩 쓴다.
+//  - pump thread는 끊을 요청이 있을 때만 JNI를 부른다. 이 test에는 취소도 마감도 없다.
+//  - 진짜 전송은 JVM 안의 http_client_tests.cpp가 재고, 여기서는 호출 하나가 실패할 때의 흐름만 본다.
+namespace {
+    // 답을 받지 못했거나 표를 얻지 못했다.
+    constexpr int http_no_answer { -2 };
+    // 오류 없이 답했는데 몸이 비었다. 실패가 빈 몸의 성공으로 읽히는 자리다.
+    constexpr int http_lost_body { -1 };
+    constexpr int http_failed { 0 };
+    constexpr int http_answered { 1 };
+
+    [[nodiscard]] luil::net::http_request get_request()
+    {
+        luil::net::http_request request {};
+        // 평문 주소라 앱 정책을 묻는 길까지 지난다.
+        request.url = u8"http://example.com/";
+        return request;
+    }
+
+    [[nodiscard]] luil::net::http_request post_request()
+    {
+        luil::net::http_request request {};
+        request.url = u8"https://example.com/";
+        request.method = luil::net::http_method::post;
+        request.body = { 1, 2, 3, 4 };
+        return request;
+    }
+
+    // 요청 하나를 끝까지 몬다. 가짜의 몸은 네 바이트다.
+    [[nodiscard]] int exchange(luil::net::http_request request)
+    {
+        std::mutex guard {};
+        std::condition_variable arrived {};
+        std::optional<luil::net::http_response> answer {};
+        luil::net::http_client_config configuration {};
+        configuration.deliver = [&guard, &arrived, &answer](luil::net::http_response response)
+        {
+            const std::lock_guard lock { guard };
+            answer = std::move(response);
+            arrived.notify_all();
+        };
+        std::u8string error {};
+        const std::unique_ptr<luil::net::http_client> client { luil::net::http_client::create(std::move(configuration), error) };
+        if (client == nullptr
+            || client->send(std::move(request), error) == luil::net::http_ticket {})
+            return http_no_answer;
+
+        std::unique_lock lock { guard };
+        const bool received { arrived.wait_for(lock, std::chrono::seconds { 30 }, [&answer] { return answer.has_value(); }) };
+        lock.unlock();
+        client->stop();
+        if (received == false)
+            return http_no_answer;
+        if (answer->error.empty() == false)
+            return http_failed;
+        const bool body_arrived { answer->status_code == 200
+            && answer->body.bytes != nullptr
+            && answer->body.bytes->size() == 4
+        };
+        return body_arrived ? http_answered : http_lost_body;
+    }
+
+    // Java 클래스와 메서드는 프로세스에 한 번만 잡는다. 지점을 세기 전에 잡아 회차마다 같은 호출이 돌게 한다.
+    template <typename Run>
+    void load_http_classes(Run&& run)
+    {
+        REQUIRE(run_once(run).answer == http_answered);
+    }
+
+    // 실패 지점을 모두 친다. 답을 읽은 뒤의 실패(닫기)와 틀을 여는 호출은 답을 바꾸지 않으므로 답이 있어도 된다.
+    template <typename Run>
+    void check_http_failure_points(Run&& run)
+    {
+        load_http_classes(run);
+        const outcome success { run_once(run) };
+        CHECK(success.answer == http_answered);
+        CHECK(success.state.calls_while_pending == 0);
+        CHECK(success.state.popped == 1);
+        for (int point { 1 }; point <= success.state.calls; ++point)
+        {
+            INFO("failure point " << point);
+            const outcome failing { run_once(run, point) };
+            CHECK((failing.answer == http_failed || failing.answer == http_answered));
+            CHECK_FALSE(failing.state.pending);
+            CHECK(failing.state.calls_while_pending == 0);
+            CHECK(failing.state.popped == failing.state.pushed);
+        }
+    }
+}
+
+TEST_CASE("An HTTP GET leaves no pending exception and no empty success when any JNI call fails", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const auto run = [](JNIEnv&)
+    {
+        return exchange(get_request());
+    };
+    check_http_failure_points(run);
+}
+
+TEST_CASE("An HTTP POST leaves no pending exception and no empty success when any JNI call fails", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const auto run = [](JNIEnv&)
+    {
+        return exchange(post_request());
+    };
+    check_http_failure_points(run);
+}
+
+TEST_CASE("An HTTP transfer buffer that is null without an exception fails the request", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const auto load = [](JNIEnv&)
+    {
+        return exchange(get_request());
+    };
+    load_http_classes(load);
+
+    SECTION("Reading the response")
+    {
+        const auto run = [](JNIEnv&)
+        {
+            current->byte_array_missing = true;
+            return exchange(get_request());
+        };
+        CHECK(run_once(run).answer == http_failed);
+    }
+    SECTION("Sending the request body")
+    {
+        const auto run = [](JNIEnv&)
+        {
+            current->byte_array_missing = true;
+            return exchange(post_request());
+        };
+        CHECK(run_once(run).answer == http_failed);
+    }
 }

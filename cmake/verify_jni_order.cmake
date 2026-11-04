@@ -8,6 +8,9 @@
 # 같은 위험의 `&&` 꼴(`x != nullptr && jni_failed(env) == false`)도 막는다. x가 null이면 `&&`가 `jni_failed`를
 # 부르지 않아 예외가 남는다. 성공 쪽은 `jni_failed(env) == false && x != nullptr`로 쓴다.
 #
+# HTTP client의 `check_call`과 비밀 저장소의 `check`도 예외를 거두는 같은 뜻의 도우미라 같은 꼴을 막는다. 두 이름은
+# 흔한 말이라 JNI와 상관없는 파일에 걸리지 않도록 `<jni.h>`를 든 파일에서만 본다.
+#
 # 여러 줄로 나뉜 `||`·`&&`도 잡도록 파일 글 전체에서 찾는다. 줄 번호 대신 파일 이름과 개수를 준다.
 if(NOT DEFINED SOURCE_DIRECTORY)
     message(FATAL_ERROR "SOURCE_DIRECTORY is required.")
@@ -23,7 +26,13 @@ endif()
 set(violations "")
 foreach(source IN LISTS sources)
     file(READ "${source}" text)
-    string(REGEX MATCHALL "(\\|\\||&&)[ \t\r\n]*jni_failed\\(" hits "${text}")
+    string(FIND "${text}" "<jni.h>" jni_include)
+    if(jni_include EQUAL -1)
+        set(checks "jni_failed")
+    else()
+        set(checks "jni_failed|check_call|check")
+    endif()
+    string(REGEX MATCHALL "(\\|\\||&&)[ \t\r\n]*(${checks})\\(" hits "${text}")
     list(LENGTH hits hit_count)
     if(hit_count GREATER 0)
         file(RELATIVE_PATH relative "${SOURCE_DIRECTORY}" "${source}")
@@ -33,5 +42,5 @@ endforeach()
 
 if(violations)
     list(JOIN violations "\n  " listed)
-    message(FATAL_ERROR "jni_failed must come first in a || or && chain, before the nullptr checks:\n  ${listed}")
+    message(FATAL_ERROR "jni_failed, check_call and check must come first in a || or && chain, before the nullptr checks:\n  ${listed}")
 endif()
