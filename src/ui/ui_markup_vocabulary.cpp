@@ -496,7 +496,7 @@ namespace luil {
             return false;
         }
 
-        // `{…}` 안의 이름이다. 점이 있으면 앞이 열린 반복 변수여야 한다. `:`는 앞으로의 접두(R5 i18n)를 위해 비워 둔다.
+        // `{…}` 안의 이름이다. 점이 있으면 앞이 열린 반복 변수여야 한다. `:`는 앞으로의 접두(마크업 후속)를 위해 비워 둔다.
         [[nodiscard]] std::optional<ui_markup_reference> parse_reference(const std::u8string_view text, const std::span<const std::u8string> variables)
         {
             const std::size_t dot { text.find(u8'.') };
