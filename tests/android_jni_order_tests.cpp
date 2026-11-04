@@ -2,6 +2,7 @@
 #include "android/android_system_theme.h"
 #include "android/android_window_control.h"
 #include "android/java_vm.h"
+#include "luil/app/platform_services.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,7 +19,7 @@
 //  - 값을 읽는 `GetIntField`·`GetStaticIntField`도 실패 지점이다. 읽은 값을 쓰기 전에 예외를 거두는지, 모든 JNI 호출이
 //    앞 호출의 예외를 거둔 뒤에 불리는지(예외가 남은 채 부른 호출 수 0)를 아홉 읽기와 쓰기 모두에서 본다.
 //  - 읽기의 틀은 API 수준에 따라 갈린다. 기기에서 JNI 호출이 하나도 없으면 그 읽기는 SKIP한다.
-//  - 앱 context 잡기처럼 thread를 JVM에 붙이는 길은 가짜 JavaVM으로 같은 가짜 JNIEnv를 내준다.
+//  - 주소 열기처럼 thread를 JVM에 붙이는 길은 가짜 JavaVM으로 같은 가짜 JNIEnv를 내준다.
 //  - 클립보드는 글·HTML·그림 URI를 다 든 클립과 글 없는 URI 항목으로 읽기의 모든 갈래를 지난다.
 namespace {
     struct fake_state
@@ -116,6 +117,18 @@ namespace {
         current->pending = false;
     }
 
+    // 예외 꺼내기는 예외가 남아도 불러도 되는 JNI다. 세지 않는다.
+    jthrowable JNICALL exception_occurred(JNIEnv*)
+    {
+        return reinterpret_cast<jthrowable>(&marker);
+    }
+
+    jboolean JNICALL is_instance_of(JNIEnv*, jobject, jclass)
+    {
+        note();
+        return JNI_TRUE;
+    }
+
     jobject JNICALL new_global_ref(JNIEnv*, const jobject reference)
     {
         note();
@@ -182,6 +195,13 @@ namespace {
         if (step())
             return 0;
         return 0x0106001d;
+    }
+
+    jobject JNICALL new_object_v(JNIEnv*, jclass, jmethodID, va_list)
+    {
+        if (step())
+            return nullptr;
+        return object();
     }
 
     jstring JNICALL new_string_utf(JNIEnv*, const char*)
@@ -296,6 +316,9 @@ namespace {
         table.PopLocalFrame = pop_local_frame;
         table.ExceptionCheck = exception_check;
         table.ExceptionClear = exception_clear;
+        table.ExceptionOccurred = exception_occurred;
+        table.IsInstanceOf = is_instance_of;
+        table.NewObjectV = new_object_v;
         table.NewGlobalRef = new_global_ref;
         table.DeleteLocalRef = delete_local_ref;
         table.FindClass = find_class;
@@ -368,11 +391,57 @@ namespace {
     };
 
     template <typename Run>
-    [[nodiscard]] outcome run_once(Run&& run, const int fail_at = 0)
+    [[nodiscard]] outcome run_once(Run&& run, const int fail_at = 0, const int also_fail_at = 0)
     {
         fake_env scope { fail_at };
+        current->also_fail_at = also_fail_at;
         const int answer { run(scope.env()) };
         return outcome { scope.state(), answer };
+    }
+
+    // 지금 살아 있는 가짜 환경의 JNIEnv를 내주는 JavaVM이다. thread를 붙이지 않고 그 env를 쓰게 한다.
+    jint JNICALL vm_get_env(JavaVM*, void** const env, jint)
+    {
+        *env = current_env;
+        return JNI_OK;
+    }
+
+    [[nodiscard]] JNIInvokeInterface make_vm_table()
+    {
+        JNIInvokeInterface table {};
+        table.GetEnv = vm_get_env;
+        return table;
+    }
+
+    // 살아 있는 동안만 프로세스의 JavaVM이 가짜다. `open_url`과 비밀 저장소는 JNIEnv를 인자로 받지 않고 여기서 얻는다.
+    class fake_vm_scope
+    {
+    public:
+        fake_vm_scope()
+            : table_ { make_vm_table() }
+            , vm_ { &table_ }
+        {
+            luil::android::set_java_vm(&vm_);
+        }
+        fake_vm_scope(const fake_vm_scope&) = delete;
+        fake_vm_scope(fake_vm_scope&&) = delete;
+        fake_vm_scope& operator=(const fake_vm_scope&) = delete;
+        fake_vm_scope& operator=(fake_vm_scope&&) = delete;
+        ~fake_vm_scope()
+        {
+            luil::android::set_java_vm(nullptr);
+        }
+
+    private:
+        JNIInvokeInterface table_;
+        JavaVM vm_;
+    };
+
+    // 주소 열기가 쓸 앱 context를 적어 둔다. 이미 있으면 먼저 적힌 것을 쓴다.
+    void capture_app_context()
+    {
+        fake_env scope {};
+        luil::android::set_application_context(scope.env(), object());
     }
 
     // 실패 지점 하나를 친 결과다. 예외는 남지 않고, 틀은 닫혀야 한다.
@@ -412,7 +481,8 @@ namespace {
     }
 }
 
-// 프로세스에 하나인 context는 한 번 적으면 지울 수 없어, 이 파일에서 context를 쓰는 어느 test보다 앞에 둔다.
+// 프로세스에 하나인 context는 한 번 적으면 지울 수 없다. CTest는 test마다 프로세스를 따로 띄워 여기서 늘 비어 있고,
+// 한 프로세스에 몰아 돌릴 때 먼저 적혔으면 건너뛴다.
 TEST_CASE("App context capture leaves no pending exception when any JNI call fails", "[android][jni_order]")
 {
     if (luil::android::application_context() != nullptr)
@@ -644,6 +714,42 @@ TEST_CASE("Reading clipboard data leaves no pending exception when any JNI call 
     CHECK(success.state.void_calls == 1);
     CHECK(success.state.popped == success.state.pushed);
     check_clean_failure_points(run, success);
+}
+
+TEST_CASE("Opening a URL leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    capture_app_context();
+    const auto run = [](JNIEnv&)
+    {
+        return luil::open_url(u8"https://example.com/").ok() ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.void_calls == 1);
+    CHECK(success.state.popped == 1);
+    check_failure_points(run, success, 0);
+}
+
+TEST_CASE("A URL no app can open answers not found without a pending exception", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    capture_app_context();
+    const auto run = [](JNIEnv&)
+    {
+        return static_cast<int>(luil::open_url(u8"https://example.com/").status);
+    };
+    const outcome success { run_once(run) };
+    REQUIRE(success.answer == static_cast<int>(luil::platform_status::ok));
+    // 마지막 호출이 `startActivity`다. 그 예외를 거둔 뒤에 `ActivityNotFoundException`을 찾는다.
+    const int start_activity { success.state.calls };
+    const outcome not_found { run_once(run, start_activity) };
+    CHECK(not_found.answer == static_cast<int>(luil::platform_status::not_found));
+    check_clean(not_found, start_activity);
+    // 예외 종류를 찾는 호출마저 실패해도 예외가 남지 않는다.
+    const outcome unknown { run_once(run, start_activity, start_activity + 1) };
+    CHECK(unknown.answer == static_cast<int>(luil::platform_status::failed));
+    check_clean(unknown, start_activity);
 }
 
 TEST_CASE("A local frame that cannot open clears the exception it left", "[android][jni_order]")
