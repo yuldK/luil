@@ -488,10 +488,12 @@ namespace luil {
         const chart_marker automatic { marker_order[series % marker_order.size()] };
 
         series_look look {};
-        if (high_contrast)
-            look.color = context.palette.primary_foreground;
-        else if (owner.enabled() == false)
+        // 비활성이 고대비보다 먼저다. 고대비의 비활성을 활성과 같은 색으로 그리면 눌리지 않는 차트가 눌리는 것처럼 보인다.
+        //  - 고대비 팔레트에도 비활성 색(COLOR_GRAYTEXT)이 있다. 계열은 색이 아니라 선 모양과 표식으로 가르므로 그대로 갈린다.
+        if (owner.enabled() == false)
             look.color = context.palette.disabled_foreground;
+        else if (high_contrast)
+            look.color = context.palette.primary_foreground;
         else
             look.color = source.color.value_or(chart_layout::series_table_color(is_dark_background(context.palette.window_background), series));
         look.line_style = high_contrast ? series : 0u;

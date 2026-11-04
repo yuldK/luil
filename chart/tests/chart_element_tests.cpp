@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <limits>
 #include <memory>
@@ -164,6 +165,30 @@ namespace {
     [[nodiscard]] luil::ui_tree raster_tree(luil::chart_config config, const luil::rect_f& slot)
     {
         return luil::make_arranged_tree(std::make_unique<luil::chart_element>(std::move(config)), slot, 2.0f);
+    }
+
+    // 비활성 차트다. 부품이 배치에서 비활성을 물려받으므로 배치 전에 끈다.
+    [[nodiscard]] luil::ui_tree disabled_raster_tree(luil::chart_config config, const luil::rect_f& slot)
+    {
+        auto chart { std::make_unique<luil::chart_element>(std::move(config)) };
+        chart->set_enabled(false);
+        return luil::make_arranged_tree(std::move(chart), slot, 2.0f);
+    }
+
+    // 밝은·어두운 팔레트의 비활성 색은 알파가 있어 바탕과 섞여 찍힌다. 반올림 오차(채널당 둘)까지 같은 색으로 본다.
+    [[nodiscard]] bool is_disabled_color(const luil::ui_color pixel, const luil::ui_color_palette& palette) noexcept
+    {
+        const std::uint32_t alpha { palette.disabled_foreground >> 24U };
+        for (const std::uint32_t shift : { 0U, 8U, 16U })
+        {
+            const std::uint32_t top { (palette.disabled_foreground >> shift) & 0xFFU };
+            const std::uint32_t bottom { (palette.window_background >> shift) & 0xFFU };
+            const int expected { static_cast<int>((top * alpha + bottom * (255U - alpha) + 127U) / 255U) };
+            const int actual { static_cast<int>((pixel >> shift) & 0xFFU) };
+            if (actual - expected > 2 || expected - actual > 2)
+                return false;
+        }
+        return true;
     }
 
     [[nodiscard]] luil::chart_series silent_series(const luil::chart_series_kind kind, const std::initializer_list<double> values, const luil::ui_color color)
@@ -836,6 +861,85 @@ TEST_CASE("High contrast folds the series to one color and tells them apart by l
         const int y { static_cast<int>(plot.y + plot.height / 2.0f) };
         REQUIRE(frame.pixel_at(static_cast<int>(center - quarter), y) == palette.primary_foreground);
         REQUIRE(frame.pixel_at(static_cast<int>(center + quarter), y) == palette.window_background);
+    }
+}
+
+TEST_CASE("A disabled chart draws every series in the disabled color, in high contrast too", "[chart][raster]")
+{
+    constexpr luil::rect_f slot { 0.0f, 0.0f, 800.0f, 600.0f };
+    const auto two_lines = [] {
+        luil::chart_config config { silent_config(2u) };
+        config.series.push_back(silent_series(luil::chart_series_kind::line, { 50.0, 50.0 }, first_color));
+        config.series.push_back(silent_series(luil::chart_series_kind::line, { 150.0, 150.0 }, second_color));
+        config.series.front().marker = luil::chart_marker::none;
+        config.series.back().marker = luil::chart_marker::none;
+        return config;
+    };
+    const auto two_bars = [] {
+        luil::chart_config config { silent_config(1u) };
+        config.series.push_back(silent_series(luil::chart_series_kind::bar, { 200.0 }, first_color));
+        config.series.push_back(silent_series(luil::chart_series_kind::bar, { 200.0 }, second_color));
+        return config;
+    };
+    const auto row_count = [](const luil::testing::raster_frame& frame, const luil::rect_f& plot, const double value, const luil::ui_color color) {
+        const int y { static_cast<int>(y_of(plot, value)) };
+        return static_cast<float>(frame.count_color({ plot.x + 8.0f, static_cast<float>(y), plot.width - 16.0f, 1.0f }, color));
+    };
+
+    SECTION("The plain theme gives up the series colors")
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+        const luil::ui_tree tree { disabled_raster_tree(two_lines(), slot) };
+        const luil::rect_f plot { chart_in(tree).plot_bounds() };
+        luil::testing::raster_frame frame { 800, 600, palette };
+        frame.draw(tree, {});
+
+        REQUIRE(frame.contains_color({ 0.0f, 0.0f, 800.0f, 600.0f }, first_color) == false);
+        REQUIRE(frame.contains_color({ 0.0f, 0.0f, 800.0f, 600.0f }, second_color) == false);
+        const int middle { static_cast<int>(plot.x + plot.width / 2.0f) };
+        REQUIRE(is_disabled_color(frame.pixel_at(middle, static_cast<int>(y_of(plot, 50.0))), palette));
+        REQUIRE(is_disabled_color(frame.pixel_at(middle, static_cast<int>(y_of(plot, 150.0))), palette));
+
+        const luil::ui_tree bar_tree { disabled_raster_tree(two_bars(), slot) };
+        const luil::rect_f bar_plot { chart_in(bar_tree).plot_bounds() };
+        luil::testing::raster_frame bar_frame { 800, 600, palette };
+        bar_frame.draw(bar_tree, {});
+        const float quarter { bar_plot.width * 0.7f / 4.0f };
+        const float center { bar_plot.x + bar_plot.width / 2.0f };
+        const int y { static_cast<int>(bar_plot.y + bar_plot.height / 2.0f) };
+        REQUIRE(is_disabled_color(bar_frame.pixel_at(static_cast<int>(center - quarter), y), palette));
+        REQUIRE(is_disabled_color(bar_frame.pixel_at(static_cast<int>(center + quarter), y), palette));
+    }
+
+    SECTION("High contrast keeps the line styles and the unfilled bars but not the primary color")
+    {
+        const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::high_contrast) };
+        // 두 색이 같은 팔레트면 아래 단언이 활성과 비활성을 가르지 못한다.
+        REQUIRE(palette.disabled_foreground != palette.primary_foreground);
+        const luil::ui_tree tree { disabled_raster_tree(two_lines(), slot) };
+        const luil::rect_f plot { chart_in(tree).plot_bounds() };
+        luil::testing::raster_frame frame { 800, 600, palette };
+        frame.set_theme(luil::color_theme::high_contrast);
+        frame.draw(tree, {});
+
+        // 첫 계열은 실선이고 둘째는 긴 점선(8 긋고 4 쉼)이다. 색만 비활성으로 바뀐다.
+        const float width { plot.width - 16.0f };
+        REQUIRE(row_count(frame, plot, 50.0, palette.disabled_foreground) >= width * 0.95f);
+        REQUIRE(row_count(frame, plot, 150.0, palette.disabled_foreground) <= width * 0.75f);
+        REQUIRE(row_count(frame, plot, 150.0, palette.disabled_foreground) >= width * 0.55f);
+        REQUIRE(row_count(frame, plot, 50.0, palette.primary_foreground) == 0.0f);
+        REQUIRE(row_count(frame, plot, 150.0, palette.primary_foreground) == 0.0f);
+
+        const luil::ui_tree bar_tree { disabled_raster_tree(two_bars(), slot) };
+        const luil::rect_f bar_plot { chart_in(bar_tree).plot_bounds() };
+        luil::testing::raster_frame bar_frame { 800, 600, palette };
+        bar_frame.set_theme(luil::color_theme::high_contrast);
+        bar_frame.draw(bar_tree, {});
+        const float quarter { bar_plot.width * 0.7f / 4.0f };
+        const float center { bar_plot.x + bar_plot.width / 2.0f };
+        const int y { static_cast<int>(bar_plot.y + bar_plot.height / 2.0f) };
+        REQUIRE(bar_frame.pixel_at(static_cast<int>(center - quarter), y) == palette.disabled_foreground);
+        REQUIRE(bar_frame.pixel_at(static_cast<int>(center + quarter), y) == palette.window_background);
     }
 }
 
