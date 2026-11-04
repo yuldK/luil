@@ -101,6 +101,15 @@ namespace mobile_demo {
             return text;
         }
 
+        // 언어 칸의 값이다. 값이 곧 항목의 id라 방향 묶음의 system과 겹치지 않게 묶음 owner를 앞에 붙인다.
+        //  - 메시지와 페이지 상태는 붙이지 않은 값("system"·"ko"·"en")이다. 셸이 그 값을 언어 태그로 쓴다.
+        constexpr std::u8string_view language_cell_prefix { u8"device-language-" };
+
+        [[nodiscard]] std::u8string language_cell(const std::u8string_view language)
+        {
+            return std::u8string { language_cell_prefix } + std::u8string { language };
+        }
+
         [[nodiscard]] std::u8string ui_language_text(const std::optional<device_locale_intent>& locale)
         {
             if (locale.has_value() == false)
@@ -260,9 +269,9 @@ namespace mobile_demo {
         languages.name = u8"기본 문구 언어";
         languages.style = luil::choice_style::toggle;
         languages.width = luil::choice_width::fill;
-        languages.items = { { u8"system", u8"시스템" }, { u8"ko", u8"한국어" }, { u8"en", u8"English" } };
-        languages.selected = language_;
-        languages.select = [](const std::u8string& key) { return luil::make_app_action(device_language_intent { key }); };
+        languages.items = { { language_cell(u8"system"), u8"시스템" }, { language_cell(u8"ko"), u8"한국어" }, { language_cell(u8"en"), u8"English" } };
+        languages.selected = language_cell(language_);
+        languages.select = [](const std::u8string& key) { return luil::make_app_action(device_language_intent { key.substr(language_cell_prefix.size()) }); };
         const float languages_height { luil::choice_group_element::height_for(languages) };
         column.gap(6.0f);
         column.add(std::make_unique<luil::choice_group_element>(std::move(languages)), languages_height, choice_width);

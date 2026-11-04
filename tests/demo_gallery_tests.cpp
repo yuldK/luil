@@ -2011,6 +2011,14 @@ TEST_CASE("Clearing the date field empties its value so the placeholder can show
     REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 없음");
 }
 
+TEST_CASE("The gallery gives every element its own id", "[demo][gallery][i18n]")
+{
+    // 선택 항목은 값이 곧 id다. 언어 묶음의 값(system·ko·en)이 다른 묶음과 겹치면 뒤에 등록한 칸이 눌리지 않는다.
+    demo::gallery_page page {};
+    const luil::ui_tree tree { arranged(page.build_controls()) };
+    REQUIRE(tree.duplicate_ids().empty());
+}
+
 TEST_CASE("The gallery draws the library language it did not set itself", "[demo][gallery][i18n]")
 {
     // 페이지는 전역 언어를 건드리지 않는다. 언어 칸을 골라도 라이브러리 언어를 잇는 일은 셸의 몫이다.

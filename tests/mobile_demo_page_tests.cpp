@@ -380,10 +380,42 @@ TEST_CASE("The device page keeps the chosen language cell and leaves the library
         return false;
     };
 
-    REQUIRE(selected(u8"system"));
+    REQUIRE(selected(u8"device-language-system"));
     REQUIRE(page.handle(luil::app_message { mobile_demo::device_language_intent { u8"en" } }));
-    REQUIRE(selected(u8"en"));
+    REQUIRE(selected(u8"device-language-en"));
     REQUIRE(luil::text_languages() == before);
+}
+
+TEST_CASE("The device page gives every choice its own id and each cell picks its own group", "[mobile-demo][i18n]")
+{
+    // 능력이 있어야 서는 묶음까지 함께 본다. 성질은 프로세스 전역이라 시험 뒤에 되돌린다.
+    const luil::ui_platform previous { luil::current_ui_platform() };
+    luil::ui_platform platform { previous };
+    platform.capabilities.screen_orientation = true;
+    platform.capabilities.system_bars = true;
+    luil::set_ui_platform(platform);
+    mobile_demo::device_page page {};
+    const auto tree { device_tree(page, false) };
+    const bool unique { tree.duplicate_ids().empty() };
+    const auto press = [&tree, &page](const std::u8string& owner) {
+        const auto* const cell { tree.find({ luil::ui_element_kind::choice, owner }) };
+        REQUIRE(cell != nullptr);
+        const auto actions { (*cell->action(luil::ui_trigger::left_click))({ cell->id() }) };
+        REQUIRE(actions.size() == 1u);
+        deliver(page, std::get<luil::app_message>(actions.front()));
+    };
+    luil::set_ui_platform(previous);
+    REQUIRE(unique);
+
+    // 방향의 시스템 칸은 방향을 고른다. 언어 칸이 먼저 등록돼 그 자리를 가로채면 방향이 그대로였다.
+    press(u8"current");
+    REQUIRE(page.request().orientation == luil::screen_orientation::current);
+    press(u8"system");
+    REQUIRE(page.request().orientation == luil::screen_orientation::system);
+    // 언어의 시스템 칸은 방향을 건드리지 않는다.
+    press(u8"current");
+    press(u8"device-language-system");
+    REQUIRE(page.request().orientation == luil::screen_orientation::current);
 }
 
 TEST_CASE("The device page switches page transitions and states whether one is turning", "[mobile-demo][page-transition]")
