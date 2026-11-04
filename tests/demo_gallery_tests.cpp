@@ -2440,9 +2440,9 @@ TEST_CASE("The theme page shows what the hot reloader delivers and keeps the ear
     REQUIRE(label(u8"theme-reload-status") == u8"style.json 읽지 못함 · Could not open file: style.json · 이전 값 유지");
     send(page, failure(luil::hot_reload_kind::style, luil::hot_reload_status::too_large, u8"File too large: style.json"));
     REQUIRE(label(u8"theme-reload-status") == u8"style.json 너무 큼 · File too large: style.json · 이전 값 유지");
-    send(page, failure(luil::hot_reload_kind::markup, luil::hot_reload_status::lost, u8"The watched folder was removed."));
-    // 끊긴 감시는 다시 오지 않는다(`hot_reload_status::lost`). 되살리는 길을 상태 줄이 말한다.
-    REQUIRE(label(u8"theme-reload-status") == u8"markup.xml 감시 끊김 · The watched folder was removed. · 이전 값 유지 · 앱을 다시 띄우면 다시 감시한다");
+    send(page, failure(luil::hot_reload_kind::markup, luil::hot_reload_status::lost, u8"The watched folder is gone or the system stopped watching it (HRESULT=0x80070005)"));
+    // 끊긴 감시는 다시 오지 않는다(`hot_reload_status::lost`). 되살리는 길을 상태 줄이 말한다. 까닭은 개발자용 진단이라 화면에 내지 않는다(`file_change_batch::error`).
+    REQUIRE(label(u8"theme-reload-status") == u8"markup.xml 감시 끊김 · 이전 값 유지 · 앱을 다시 띄우면 다시 감시한다");
     REQUIRE(page.style() == received.style);
     REQUIRE(label(u8"theme-style-status") == style_status);
     REQUIRE(label(u8"markup-status") == markup_status);

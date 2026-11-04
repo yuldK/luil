@@ -126,7 +126,8 @@ namespace demo {
                 return;
             case luil::hot_reload_status::lost:
                 // 끊긴 감시는 다시 오지 않는다. 쓰기 단추가 폴더를 되살려도 이 실행에서는 화면에 닿지 않으므로 되살리는 길을 말한다.
-                status_ = name + u8" 감시 끊김" + reason + u8" · 이전 값 유지 · 앱을 다시 띄우면 다시 감시한다";
+                //  - 까닭은 개발자용 진단이라 내지 않는다 (`file_change_batch::error`). 다른 상태의 진단과 달리 고칠 자리를 가리키지 않는다.
+                status_ = name + u8" 감시 끊김 · 이전 값 유지 · 앱을 다시 띄우면 다시 감시한다";
                 return;
             }
         }
