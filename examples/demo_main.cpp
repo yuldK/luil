@@ -1209,6 +1209,7 @@ namespace demo {
                 config.toggle = luil::make_message_action(sidebar_toggle_intent {});
                 config.resize = [](const float delta) { return luil::make_app_action(sidebar_resize_intent { delta }); };
                 config.resize_finish = []() { return luil::make_app_action(sidebar_resize_finish_intent {}); };
+                config.handle_access_name = u8"내비게이션 폭 손잡이";
                 return config;
             }
 

@@ -19,7 +19,7 @@ Luil은 각 Win32 surface를 UI Automation fragment로 공개한다. Element는 
 
 Application element는 가장 가까운 semantic role과 실제로 유지할 수 있는 상태만 반환해야 한다. 설명 없는 image와 구조 전용 layout panel은 일반적으로 `access_role::none`을 반환한다.
 
-**이름의 원천은 한 술어다.** 자기 글을 그리는 element(button, label, list row)는 그 글이 곧 이름이다. 글을 세우지 않는 element(list, grouped list, menu, tab bar, scroll bar, slider, progress, split handle, 라벨 없는 check)는 `ui_element::access_name()`이 답한다. `set_access_name` → `search_label` → tooltip 순서다. Tooltip을 이름으로 쓰려면 화면에 글 상자가 떠야 하므로, 화면에 뜨지 않는 이름의 자리를 따로 둔다. Container가 자기 안에 세우는 부품(list와 scroll area의 막대, table의 머리글·본문·두 막대, text area의 두 막대)은 application이 손댈 수 없으므로 container의 이름을 물려받는다. Text area는 이름이 없으면 안내 글로 읽히므로 막대도 그 글을 읽고, 둘 다 없으면 빈 이름이다.
+**이름의 원천은 한 술어다.** 자기 글을 그리는 element(button, label, list row)는 그 글이 곧 이름이다. 글을 세우지 않는 element(list, grouped list, menu, tab bar, scroll bar, slider, progress, split handle, 라벨 없는 check)는 `ui_element::access_name()`이 답한다. `set_access_name` → `search_label` → tooltip 순서다. Tooltip을 이름으로 쓰려면 화면에 글 상자가 떠야 하므로, 화면에 뜨지 않는 이름의 자리를 따로 둔다. Container가 자기 안에 세우는 부품(list와 scroll area의 막대, table의 머리글·본문·두 막대, text area의 두 막대)은 application이 손댈 수 없으므로 container의 이름을 물려받는다. Text area는 이름이 없으면 안내 글로 읽히므로 막대도 그 글을 읽고, 둘 다 없으면 빈 이름이다. 사이드바의 폭 손잡이는 물려받을 이름이 없어 `sidebar_config::handle_access_name`이 이름이다. 비면 빈 이름이고 기본 문구를 넣지 않는다. 키보드 초점을 받는 부품이므로 `resize`를 주는 앱은 이름도 준다.
 
 Modal dialog(`modal_host_config::name`)와 선택 묶음(`choice_group_config::name`)의 이름도 application이 준다. 화면 읽기는 dialog가 뜨는 순간 그 이름을 말하고, 묶음의 이름이 "무엇을 고르는 중인가"를 답한다 — 항목의 "선택됨"만으로는 반쪽이다. Library가 지어낼 수 있는 말이 아니라 비면 이름 없이 선다.
 
