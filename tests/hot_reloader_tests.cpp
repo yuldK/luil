@@ -263,12 +263,10 @@ namespace {
     {
     public:
         locked_save(const std::filesystem::path& path, const std::u8string_view text)
-            : file_ { CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) }
+            : file_ { CreateFileW(path.c_str(), GENERIC_WRITE | DELETE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) }
         {
             REQUIRE(file_ != INVALID_HANDLE_VALUE);
-            DWORD written { 0 };
-            REQUIRE(WriteFile(file_, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) != FALSE);
-            REQUIRE(FlushFileBuffers(file_) != FALSE);
+            write(text);
         }
         locked_save(const locked_save&) = delete;
         locked_save& operator=(const locked_save&) = delete;
@@ -277,12 +275,27 @@ namespace {
             close();
         }
 
+        void write(const std::u8string_view text)
+        {
+            DWORD written { 0 };
+            REQUIRE(WriteFile(file_, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) != FALSE);
+            REQUIRE(FlushFileBuffers(file_) != FALSE);
+        }
+
         void close() noexcept
         {
             if (file_ == INVALID_HANDLE_VALUE)
                 return;
             CloseHandle(file_);
             file_ = INVALID_HANDLE_VALUE;
+        }
+
+        // 닫자마자 지운다. 닫은 뒤에 따로 지우면 그 틈에 감시 thread가 파일을 읽어 앞의 실패를 풀어 버릴 수 있다.
+        void close_and_delete()
+        {
+            FILE_DISPOSITION_INFO disposition { TRUE };
+            REQUIRE(SetFileInformationByHandle(file_, FileDispositionInfo, &disposition, sizeof(disposition)) != FALSE);
+            close();
         }
 
     private:
@@ -343,6 +356,67 @@ TEST_CASE("A lock past the retry limit gives unreadable once and the next save r
     REQUIRE(sink.updates().back().text == markup_two);
 }
 
+TEST_CASE("A lock after a held batch vanished gets the whole retry time", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path path { folder.file(u8"markup.xml") };
+    recorder sink {};
+    const auto reloader { make_reloader(test_config(sink)) };
+    static_cast<void>(add_markup(*reloader, path));
+
+    // 없던 자리에 잠근 채 만들어 `settle`을 넘겨 쥐면 읽지 못해 거절한다. 닫자마자 지우면 그 묶음은 순 변화가 없어져 다시 오지 않는다.
+    //  - 다시 읽기(약 62ms마다)와 겹치지 않는 때에 닫는다. 겹치면 지움 알림보다 읽기가 먼저 없음을 보아 앞의 실패가 풀린다.
+    {
+        locked_save vanished { path, markup_one };
+        std::this_thread::sleep_for(330ms);
+        vanished.close_and_delete();
+    }
+    REQUIRE(std::filesystem::exists(path) == false);
+
+    SECTION("Another file in the folder was saved and the limit passed")
+    {
+        // 거른 항목만 든 묶음을 내며 감시자가 시간을 비운다. 그래서 다음 저장의 알림이 한 묶음으로 합쳐지고, 그 묶음을 건네면 닫을 때 다시 읽을 길이 없다.
+        save_file(folder.file(u8"other.xml"), markup_one);
+        std::this_thread::sleep_for(2200ms);
+    }
+    SECTION("Nothing happened and less than the limit passed")
+    {
+        // 처음 읽지 못한 때부터는 상한 안이어도 다음 잠금의 몫을 깎지 않는다.
+        std::this_thread::sleep_for(1500ms);
+    }
+
+    {
+        const locked_save again { path, markup_two };
+        std::this_thread::sleep_for(500ms);
+    }
+    REQUIRE(sink.wait_status(hot_reload_status::loaded, 4s));
+    REQUIRE(sink.updates().back().text == markup_two);
+    REQUIRE(count_status(sink.updates(), hot_reload_status::unreadable) == 0u);
+}
+
+TEST_CASE("A writer that keeps writing under its lock still gives unreadable", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path path { folder.file(u8"markup.xml") };
+    write_file(path, markup_one);
+    recorder sink {};
+    luil::hot_reloader_config config { test_config(sink) };
+    // 변경이 이어지면 다시 내는 간격이 `settle`을 넘어 `max_delay`까지 벌어진다. 그 간격을 묶음이 사라진 것으로 보면 상한에 닿지 못한다.
+    config.settle = 200ms;
+    const auto reloader { make_reloader(std::move(config)) };
+    static_cast<void>(add_markup(*reloader, path));
+
+    locked_save save { path, markup_two };
+    const auto give_up { std::chrono::steady_clock::now() + 8s };
+    bool seen { false };
+    while (seen == false && std::chrono::steady_clock::now() < give_up)
+    {
+        save.write(markup_two);
+        seen = sink.wait_status(hot_reload_status::unreadable, 50ms);
+    }
+    REQUIRE(seen);
+}
+
 TEST_CASE("A save under another case of the name still reaches deliver", "[hot_reload][platform]")
 {
     // Windows의 이름은 대소문자를 가리지 않는다. OS는 디스크의 표기로 알리므로 앱이 준 표기와 다를 수 있다.
@@ -375,6 +449,23 @@ TEST_CASE("A folder under the watched name gives unreadable once and is not read
     REQUIRE(sink.wait_status(hot_reload_status::unreadable));
     REQUIRE(sink.calls() == 1u);
     std::this_thread::sleep_for(300ms);
+    REQUIRE(sink.calls() == 1u);
+}
+
+TEST_CASE("Retries further apart than the limit still give unreadable", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path path { folder.file(u8"markup.xml") };
+    recorder sink {};
+    luil::hot_reloader_config config { test_config(sink) };
+    // 앱이 고른 간격이 다시 읽는 상한보다 길어도 묶음이 사라진 것으로 보지 않는다. 그렇게 보면 끝없이 처음부터 센다.
+    config.settle = 2100ms;
+    config.max_delay = 2100ms;
+    const auto reloader { make_reloader(std::move(config)) };
+    static_cast<void>(add_markup(*reloader, path));
+
+    std::filesystem::create_directories(path);
+    REQUIRE(sink.wait_status(hot_reload_status::unreadable));
     REQUIRE(sink.calls() == 1u);
 }
 
