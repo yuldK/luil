@@ -573,7 +573,7 @@ TEST_CASE("File watch batches with a name filter judge a rejected batch by that 
     SECTION("A changed name that moved away stays as the old name")
     {
         // 있던 파일이 떠난 것은 순 변화다. 옛 이름으로 남아 쥔 것이 이어진다.
-        //  - 그래서 곧 다시 잠근 저장은 이어지는 잠금으로 센다 (hot-reload-design.md 결정 8의 한계).
+        //  - 그래서 곧 다시 잠근 저장은 이어지는 잠금으로 센다.
         batch.modified(u8"a", start);
         luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
         batch.renamed(u8"a", u8"a.bak", start + 120ms);
@@ -584,7 +584,7 @@ TEST_CASE("File watch batches with a name filter judge a rejected batch by that 
     SECTION("A changed name that was removed and written again is still held")
     {
         // 있던 파일은 지워도 removed로 남고 다시 만들면 modified라 표식이 이어진다. 옆 이름과 상관없다.
-        //  - 곧 다시 잠근 저장은 앞 잠금의 시각을 이어 세어 상한에 닿을 수 있다 (hot-reload-design.md 결정 8의 한계).
+        //  - 곧 다시 잠근 저장은 앞 잠금의 시각을 이어 세어 상한에 닿을 수 있다.
         //  - 저장 손실 자체를 잠그지 않는 까닭: 잠금 길이가 settle의 배수면 다시 읽기가 닫는 틈에 들어맞아 위상에 따라 가려진다.
         batch.modified(u8"a", start);
         batch.modified(u8"other", start);

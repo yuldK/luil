@@ -86,7 +86,6 @@ namespace demo {
     constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(64) };
     // 기본 페이지의 둘째 확인 대화(긴 본문·단추 셋·확인 칸)를 여는 단추다.
     constexpr luil::ui_element_kind kind_dialog_details_open { luil::application_element_kind(65) };
-    // 테마 페이지의 스타일 JSON 칸이다 (`parse_ui_style`, style-sheet-design.md).
     // 갤러리와 popups 페이지의 색 고르기 16진 칸이다 (`color_picker_hex::id`). 편집 메시지가 대상으로만 갈려 페이지마다 하나다.
     constexpr luil::ui_element_kind kind_gallery_color_hex_input { luil::application_element_kind(67) };
     constexpr luil::ui_element_kind kind_popups_color_hex_input { luil::application_element_kind(68) };

@@ -614,7 +614,6 @@ namespace luil::win32 {
     platform_result apply_app_identity(const app_identity& identity, const std::u8string_view fallback_display_name)
     {
         // 활성화기 명령 줄이 이 실행 파일을 가리킨다. 실행 파일을 옮기면 다음 실행이 고쳐 쓴다.
-        //  - 자동 업데이트의 적용은 같은 경로에서 바꾸므로 고쳐 쓸 것이 없다 (auto-update-apply-design.md).
         const std::wstring executable { current_executable_path() };
         const std::optional<identity_registry> registry { make_identity_registry(identity, fallback_display_name, executable) };
         const std::optional<std::wstring> aumid { utf8_to_utf16(identity.id).value };

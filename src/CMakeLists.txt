@@ -157,10 +157,6 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/ui_inspect.cpp
     "${public_headers}/ui/ui_inspect.h")
 
-# 화면 마크업이다 (docs/markup-design.md). 엄한 XML 읽기와 어휘 표가 틀을 짓는다.
-# 어휘는 스타일 키 표(비공개 생성 헤더)의 역할·굵기 이름을 그대로 읽는다. 펼치기가 그 틀을 앱 값으로 element tree로 짓는다
-# (docs/markup-binding-design.md).
-
 # 들어온 입력과 그 해석이다 (포인터·키 이벤트, 편집 동작, 커서 모양).
 luil_add_source_filter(luil_core_files "ui/interaction"
     "${public_headers}/ui/text_input_state.h"
@@ -687,9 +683,6 @@ luil_add_source_filter(luil_files "net/winhttp"
     net/winhttp/winhttp_error.cpp
     net/winhttp/winhttp_error.h)
 
-# auto-update-apply-design.md). 상태 기계는 두 플랫폼 묶음에 같이 든다.
-
-
 # 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
 # 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만
 # target으로 긋는다.
@@ -881,9 +874,6 @@ if(LUIL_PLATFORM STREQUAL "android")
     else()
         luil_add_source_filter(luil_android_files "net" net/smb_client_unsupported.cpp)
     endif()
-    # 적용은 스토어 주소를 여는 것이 전부다 (auto-update-apply-design.md).
-
-
     add_library(luil STATIC ${luil_android_files})
     add_library(luil::luil ALIAS luil)
     target_include_directories(luil

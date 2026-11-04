@@ -5,8 +5,7 @@
 #include "luil/theme/ui_theme.h"
 
 namespace luil {
-    // 여러 줄 글의 줄 나눔 정책이다 (`text::line_break_policy`). 스타일 키 표가 enum 형 이름을 식별자로 쓰므로
-    // (`line_break_policy_names`) `luil` 이름공간에서도 이 이름으로 본다. 같은 형이라 두 이름이 섞여도 된다.
+    // 여러 줄 글의 줄 나눔 정책이다 (`text::line_break_policy`). 같은 형을 두 이름공간에서 쓸 수 있다.
     using line_break_policy = text::line_break_policy;
 
     // 컴포넌트 글의 굵기다 (`ui_metrics::font_weights`, docs/font-style-design.md).
@@ -164,14 +163,14 @@ namespace luil {
         paragraphs,
     };
 
-    // 글의 앱 스타일이다 (`ui_style::text`). JSON(`assets/style.json`의 `text`)에 적힌다.
+    // 글의 앱 스타일이다 (`ui_style::text`). 앱은 구조체 값으로 여러 줄 정책을 지정할 수 있다.
     struct text_style
     {
         // 한 줄 도우미의 줄바꿈 처리다 (JSON `text.lineBreak`).
         //  - popup처럼 host가 frame의 스타일(`ui_frame::style`)에서 읽어 한 줄 도우미에 건다(`set_single_line_break`).
         //    도우미에는 문맥 인자가 없어 배치 문맥으로는 닿지 않는다.
         single_line_break line_break { single_line_break::space };
-        // 여러 줄 글이 config에 정책을 적지 않았을 때의 정책이다 (JSON `text.wrapPolicy`, docs/wrap-policy-key-design.md).
+        // 여러 줄 글이 config에 정책을 적지 않았을 때의 정책이다 (docs/wrap-policy-key-design.md).
         //  - label·markdown·여러 줄 칸·`text_block_style`의 `line_break`가 비면 이 값이다. 배치·측정은
         //    `measure_context::style`로, 그리기에서 접는 길은 `draw_context::wrap_policy`로 받는다.
         //  - config에 적은 값이 이것보다 앞선다. 한 칸만 어절로 두려면 그 칸에 적는다.
@@ -187,7 +186,6 @@ namespace luil {
     // 내장값은 assets/style.json에서 빌드 시점에 만들어진다 (`default_ui_style`).
     // 앱은 (1) 자기 JSON으로 내장값을 바꿔치거나(LUIL_STYLE), (2) 실행 시점에 값을 세워
     // `ui_frame::style`로 싣는다. 둘 다 같은 자리로 온다.
-    //  - 키 목록은 cmake/style_keys.cmake 하나에 있다. 필드를 더하면 거기 한 행을 더한다.
     struct ui_style
     {
         neutral_color_palette dark {};
