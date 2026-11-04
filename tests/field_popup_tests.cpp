@@ -220,3 +220,120 @@ TEST_CASE("Without a message factory there is no open key handler", "[ui][field-
 {
     REQUIRE(luil::field_popup_key_handler(false, nullptr, true) == nullptr);
 }
+
+namespace {
+    // 가운데 필드다. (340, 250) 120x100이고 창은 800x600이다 (물리 픽셀, 배율 1). popup은 100x60이다.
+    [[nodiscard]] luil::field_popup_anchor centered_field()
+    {
+        return { .field = { 340.0f, 250.0f, 120.0f, 100.0f }, .limit = { 0.0f, 0.0f, 800.0f, 600.0f } };
+    }
+
+    constexpr luil::size_f side_popup { 100.0f, 60.0f };
+}
+
+TEST_CASE("A side popup stands outside the asked edge, centered on the field along the other axis", "[ui][field-popup][side]")
+{
+    const luil::field_popup_side_position below { luil::place_field_popup_at_side(centered_field(), side_popup, 1.0f, luil::field_popup_side::below) };
+    REQUIRE(below.side == luil::field_popup_side::below);
+    REQUIRE(below.fits);
+    REQUIRE(below.x == 350.0f);
+    REQUIRE(below.y == 352.0f);
+
+    const luil::field_popup_side_position above { luil::place_field_popup_at_side(centered_field(), side_popup, 1.0f, luil::field_popup_side::above) };
+    REQUIRE(above.side == luil::field_popup_side::above);
+    REQUIRE(above.x == 350.0f);
+    REQUIRE(above.y == 188.0f);
+
+    const luil::field_popup_side_position right { luil::place_field_popup_at_side(centered_field(), side_popup, 1.0f, luil::field_popup_side::right) };
+    REQUIRE(right.side == luil::field_popup_side::right);
+    REQUIRE(right.x == 462.0f);
+    REQUIRE(right.y == 270.0f);
+
+    const luil::field_popup_side_position left { luil::place_field_popup_at_side(centered_field(), side_popup, 1.0f, luil::field_popup_side::left) };
+    REQUIRE(left.side == luil::field_popup_side::left);
+    REQUIRE(left.x == 238.0f);
+    REQUIRE(left.y == 270.0f);
+
+    // 맞춤은 보지 않는다. 다른 축은 언제나 가운데다.
+    luil::field_popup_anchor end_aligned { centered_field() };
+    end_aligned.alignment = luil::field_popup_alignment::end;
+    REQUIRE(luil::place_field_popup_at_side(end_aligned, side_popup, 1.0f, luil::field_popup_side::below).x == 350.0f);
+}
+
+TEST_CASE("A side popup tries the asked edge, the opposite one, then the other two in order", "[ui][field-popup][side]")
+{
+    // 아래가 모자라면 위로 뒤집는다.
+    luil::field_popup_anchor anchor { .field = { 340.0f, 520.0f, 120.0f, 60.0f }, .limit = { 0.0f, 0.0f, 800.0f, 600.0f } };
+    luil::field_popup_side_position position { luil::place_field_popup_at_side(anchor, side_popup, 1.0f, luil::field_popup_side::below) };
+    REQUIRE(position.side == luil::field_popup_side::above);
+    REQUIRE(position.y == 458.0f);
+
+    // 아래·위가 다 모자라면 오른쪽, 그다음 왼쪽이다. 옆으로 서면 다른 축(세로)을 가운데에 맞춘다.
+    anchor = { .field = { 100.0f, 20.0f, 80.0f, 60.0f }, .limit = { 0.0f, 0.0f, 800.0f, 100.0f } };
+    position = luil::place_field_popup_at_side(anchor, side_popup, 1.0f, luil::field_popup_side::below);
+    REQUIRE(position.side == luil::field_popup_side::right);
+    REQUIRE(position.fits);
+    REQUIRE(position.x == 182.0f);
+    REQUIRE(position.y == 20.0f);
+    anchor.field = { 700.0f, 20.0f, 80.0f, 60.0f };
+    position = luil::place_field_popup_at_side(anchor, side_popup, 1.0f, luil::field_popup_side::above);
+    REQUIRE(position.side == luil::field_popup_side::left);
+    REQUIRE(position.x == 598.0f);
+
+    // 옆을 바라면 반대 옆, 그다음 아래, 위다.
+    anchor = { .field = { 100.0f, 100.0f, 100.0f, 40.0f }, .limit = { 0.0f, 0.0f, 300.0f, 600.0f } };
+    position = luil::place_field_popup_at_side(anchor, { 120.0f, 60.0f }, 1.0f, luil::field_popup_side::right);
+    REQUIRE(position.side == luil::field_popup_side::below);
+    REQUIRE(position.x == 90.0f);
+    REQUIRE(position.y == 142.0f);
+    anchor.field = { 100.0f, 540.0f, 100.0f, 40.0f };
+    position = luil::place_field_popup_at_side(anchor, { 120.0f, 60.0f }, 1.0f, luil::field_popup_side::left);
+    REQUIRE(position.side == luil::field_popup_side::above);
+    REQUIRE(position.y == 478.0f);
+}
+
+TEST_CASE("A side popup is pushed inside the limit along the other axis", "[ui][field-popup][side]")
+{
+    // 왼쪽 끝 필드의 가운데 맞춤은 limit 왼쪽에, 오른쪽 끝은 limit 오른쪽에 막힌다.
+    luil::field_popup_anchor anchor { .field = { 0.0f, 100.0f, 40.0f, 30.0f }, .limit = { 0.0f, 0.0f, 800.0f, 600.0f } };
+    REQUIRE(luil::place_field_popup_at_side(anchor, { 120.0f, 60.0f }, 1.0f, luil::field_popup_side::below).x == 0.0f);
+    anchor.field = { 780.0f, 100.0f, 40.0f, 30.0f };
+    REQUIRE(luil::place_field_popup_at_side(anchor, { 120.0f, 60.0f }, 1.0f, luil::field_popup_side::below).x == 680.0f);
+    // 옆으로 설 때는 세로로 민다.
+    anchor = { .field = { 300.0f, 570.0f, 40.0f, 30.0f }, .limit = { 0.0f, 0.0f, 800.0f, 600.0f } };
+    REQUIRE(luil::place_field_popup_at_side(anchor, { 100.0f, 80.0f }, 1.0f, luil::field_popup_side::right).y == 520.0f);
+    // limit보다 넓으면 왼쪽 가장자리를 지킨다.
+    anchor = { .field = { 50.0f, 100.0f, 40.0f, 30.0f }, .limit = { 20.0f, 0.0f, 100.0f, 600.0f } };
+    REQUIRE(luil::place_field_popup_at_side(anchor, { 120.0f, 60.0f }, 1.0f, luil::field_popup_side::below).x == 20.0f);
+}
+
+TEST_CASE("A side popup that fits nowhere stays on the asked edge, pushed inside, and says so", "[ui][field-popup][side]")
+{
+    const luil::field_popup_anchor anchor { .field = { 50.0f, 20.0f, 100.0f, 60.0f }, .limit = { 0.0f, 0.0f, 200.0f, 100.0f } };
+    const luil::field_popup_side_position position { luil::place_field_popup_at_side(anchor, { 180.0f, 90.0f }, 1.0f, luil::field_popup_side::below) };
+    REQUIRE(position.fits == false);
+    REQUIRE(position.side == luil::field_popup_side::below);
+    // 아래 자리(82)를 limit 안으로 밀어 필드를 덮는다.
+    REQUIRE(position.y == 10.0f);
+    REQUIRE(position.x == 10.0f);
+}
+
+TEST_CASE("A side popup reads physical pixels, answers logical ones and treats a bad scale as 1", "[ui][field-popup][side]")
+{
+    // 배율 2에서 논리 (100, 50) 80x30인 필드다. 간격은 논리 2(물리 4)다.
+    const luil::field_popup_anchor anchor { .field = { 200.0f, 100.0f, 160.0f, 60.0f }, .limit = { 0.0f, 0.0f, 1600.0f, 1200.0f } };
+    const luil::field_popup_side_position below { luil::place_field_popup_at_side(anchor, side_popup, 2.0f, luil::field_popup_side::below) };
+    REQUIRE(below.x == 90.0f);
+    REQUIRE(below.y == 82.0f);
+    const luil::field_popup_side_position right { luil::place_field_popup_at_side(anchor, side_popup, 2.0f, luil::field_popup_side::right) };
+    REQUIRE(right.x == 182.0f);
+    REQUIRE(right.y == 35.0f);
+
+    for (const float scale : { 0.0f, -2.0f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() })
+    {
+        CAPTURE(scale);
+        const luil::field_popup_side_position position { luil::place_field_popup_at_side(centered_field(), side_popup, scale, luil::field_popup_side::below) };
+        REQUIRE(position.x == 350.0f);
+        REQUIRE(position.y == 352.0f);
+    }
+}

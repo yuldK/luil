@@ -25,6 +25,17 @@ namespace luil {
         return style != nullptr ? *style : default_ui_style();
     }
 
+    const ui_style& measure_context::app_style() const noexcept
+    {
+        return style != nullptr ? *style : default_ui_style();
+    }
+
+    text::line_break_policy measure_context::line_break_for(const std::optional<text::line_break_policy> chosen) const noexcept
+    {
+        // config에 적은 값, 문맥의 앱 스타일, 내장 스타일 순이다 (`app_style`이 뒤의 둘을 고른다).
+        return chosen.has_value() ? *chosen : app_style().text.wrap_policy;
+    }
+
     bool rect_f::contains(const float point_x, const float point_y) const noexcept
     {
         return point_x >= x && point_x < x + width && point_y >= y && point_y < y + height;
@@ -211,6 +222,16 @@ namespace luil {
         zoom_source_ = std::move(source);
     }
 
+    const ink_source* ui_element::ink() const noexcept
+    {
+        return ink_source_.has_value() ? &*ink_source_ : nullptr;
+    }
+
+    void ui_element::set_ink_source(std::optional<ink_source> source)
+    {
+        ink_source_ = std::move(source);
+    }
+
     const scroll_source* ui_element::scroll() const noexcept
     {
         return scroll_source_.has_value() ? &*scroll_source_ : nullptr;
@@ -244,6 +265,9 @@ namespace luil {
     bool ui_element::interactive() const noexcept
     {
         if (has_tooltip() || cursor_ != ui_cursor::inherit || drag_source_.has_value() || drop_target_.has_value() || pointer_drag_target_.has_value())
+            return true;
+        // 잉크 캔버스는 액션 없이 펜 접촉만 받는다. hit가 되지 않으면 누름 대상 찾기가 그 뒤의 것을 집는다.
+        if (ink_source_.has_value())
             return true;
         // 머무름도 hover에만 필요한 역할이라 hit가 되어야 뜻이 생긴다 — 액션 없는 카드가 포인터를 받지 못하면 머무름이 영영
         // 차지 않는다. hover 영역은 반대로 hit를 받지 않는 것이 계약이라 여기 넣지 않는다.
@@ -782,6 +806,7 @@ namespace luil {
             .maximized = context.maximized,
             .fullscreen = context.fullscreen,
             .metrics = context.metrics,
+            .wrap_policy = context.wrap_policy,
             .reduce_motion = context.reduce_motion,
             .theme = context.theme,
             .backdrop = context.backdrop,

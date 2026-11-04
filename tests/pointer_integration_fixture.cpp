@@ -10,9 +10,12 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace luil::testing {
     namespace {
@@ -68,6 +71,14 @@ namespace luil::testing {
         struct command_intent
         {
             std::u8string command {};
+        };
+        struct ink_stroke_intent
+        {
+            ink_stroke_input input {};
+        };
+        struct ink_erase_intent
+        {
+            std::vector<std::uint64_t> ids {};
         };
 
         // UIA가 읽는 결과와 OS 메시지 관측을 함께 남긴다. 입력을 우회해 만들지 않는다.
@@ -164,6 +175,8 @@ send();
                         zoom_visible_ = !zoom_visible_;
                     else if (command->command == u8"modal")
                         modal_ = !modal_;
+                    else if (command->command == u8"ink-visible")
+                        ink_visible_ = !ink_visible_;
 
                     if (command->command == u8"pan" || command->command == u8"hold")
                     {
@@ -171,6 +184,27 @@ send();
                         config_ok_ = host != nullptr && host->set_touch_gesture_config(touch_);
                         ++config_revision_;
                     }
+                }
+                else if (const auto* stroke { message.get<ink_stroke_intent>() })
+                {
+                    // 앱이 점을 모으다가 끝에 굳힌다 (ink-design.md). 받은 압력은 처음 표본의 것을 적는다.
+                    if (stroke->input.phase == ink_phase::begin)
+                    {
+                        ink_points_ = { stroke->input.point };
+                        ink_pressure_ = stroke->input.pressure_reported ? stroke->input.point.pressure : -1.0f;
+                    }
+                    else if (stroke->input.phase == ink_phase::extend)
+                        ink_points_.push_back(stroke->input.point);
+                    else if (stroke->input.phase == ink_phase::end)
+                        ink_layer_ = ink_layer_.with(make_ink_stroke(ink_next_id_++, std::exchange(ink_points_, {}), { .width = 4.0f }));
+                    else
+                        ink_points_.clear();
+                }
+                else if (const auto* erase { message.get<ink_erase_intent>() })
+                {
+                    const std::size_t before { ink_layer_.size() };
+                    ink_layer_ = ink_layer_.without(erase->ids);
+                    ink_erased_ += static_cast<int>(before - ink_layer_.size());
                 }
                 else if (const auto* event { message.get<win32::webview_event>() })
                 {
@@ -243,6 +277,20 @@ send();
                 zoom->arrange({ { 16.0f * scale, 140.0f * scale, 630.0f * scale, 310.0f * scale }, scale });
                 root->add(std::move(zoom));
 
+                // 펜 잉크 표적이다. 확대 보기처럼 단추로 켜서 기존 시나리오의 자리를 덮지 않는다.
+                ink_canvas_config ink_config {
+                    .owner = u8"ink",
+                    .strokes = ink_layer_,
+                    .wet = make_ink_stroke(0, ink_points_, { .width = 4.0f }),
+                    .on_stroke = [](const ink_stroke_input& input) { return make_app_action(ink_stroke_intent { input }); },
+                    .on_erase = [](std::vector<std::uint64_t> ids) { return make_app_action(ink_erase_intent { std::move(ids) }); },
+                    .access_name = u8"Native ink target",
+                };
+                auto ink { std::make_unique<ink_canvas_element>(std::move(ink_config)) };
+                ink->set_visible(ink_visible_);
+                ink->arrange({ { 16.0f * scale, 140.0f * scale, 630.0f * scale, 310.0f * scale }, scale });
+                root->add(std::move(ink));
+
                 if (modal_)
                 {
                     auto scrim { std::make_unique<panel_element>(ui_element_id { modal_kind, u8"modal-scrim" }, panel_config {}) };
@@ -254,9 +302,14 @@ send();
                 add_button(u8"modal", u8"Toggle modal blocker", 16.0f, 520.0f, make_message_action(command_intent { u8"modal" }));
 
                 add_button(u8"zoom-visible", u8"Toggle zoom target", 176.0f, 520.0f, make_message_action(command_intent { u8"zoom-visible" }));
+                add_button(u8"ink-visible", u8"Toggle ink target", 336.0f, 520.0f, make_message_action(command_intent { u8"ink-visible" }));
 
                 nlohmann::json status {};
                 status["zoom_visible"] = zoom_visible_;
+                status["ink_visible"] = ink_visible_;
+                status["ink_strokes"] = ink_layer_.size();
+                status["ink_pressure"] = ink_pressure_;
+                status["ink_erased"] = ink_erased_;
                 status["zoom"] = zoom_.zoom;
                 status["zoom_x"] = zoom_.origin.x;
                 status["zoom_y"] = zoom_.origin.y;
@@ -350,6 +403,13 @@ send();
             bool web_visible_ { true };
             bool modal_ { false };
             bool zoom_visible_ { false };
+            bool ink_visible_ { false };
+            ink_layer ink_layer_ {};
+            std::vector<ink_point> ink_points_ {};
+            std::uint64_t ink_next_id_ { 1 };
+            // 마지막 획의 처음 표본이 실은 압력이다. 장치가 알리지 않았으면 -1이다.
+            float ink_pressure_ { -1.0f };
+            int ink_erased_ { 0 };
             bool config_ok_ { true };
             int config_revision_ { 0 };
             touch_gesture_config touch_ {};

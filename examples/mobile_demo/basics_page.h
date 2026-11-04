@@ -1,21 +1,30 @@
 #pragma once
 
-// 기본 페이지다: 버튼·카운터, 텍스트 입력 세 칸(숫자 전용·자유 입력·암호),
-// 앱에 실린 그림(정지 한 장과 움직이는 둘), 화면을 덮는 확인 dialog
-// (캡션을 잡아 옮긴다).
+// 기본 페이지다: 버튼·카운터, 별점 둘(손가락 크기의 별 다섯, 가로로 흐르는 창 안의 별 열),
+// 텍스트 입력 세 칸(숫자 전용·자유 입력·암호),
+// 앱에 실린 그림(정지 한 장과 움직이는 둘), 화면을 덮는 확인 대화 상자 둘
+// (`luil::make_message_box` — 크기는 내용에서 나오고 닫는 모든 계기가 한 결과 메시지를 낸다).
 
 #include "demo/code_lexer.h"
 #include "demo/line_break_sample.h"
+#include "demo/readonly_undo_keys.h"
+#include "demo/rich_text_sample.h"
 #include "luil/text/text_edit.h"
+#include "luil/ui/clipboard_image.h"
+#include "luil/ui/color_picker_element.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
+#include "luil/ui/message_box.h"
+#include "luil/ui/rating_element.h"
 #include "luil/ui/stack_element.h"
+#include "luil/ui/strip_element.h"
 #include "luil/ui/syntax_highlighter.h"
 #include "luil/ui/text_area_element.h"
 #include "luil/ui/text_input_state.h"
 #include "luil/ui/ui_interaction.h"
 #include "mobile_demo/common.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -27,6 +36,10 @@ namespace mobile_demo {
     // 그때 등록부로 옮긴다.
     constexpr luil::ui_element_kind kind_playback_toggle { luil::application_element_kind(30) };
 
+    // 클립보드의 그림을 붙이는 앱 UI 명령이다. 요청은 host가 받으므로 delegate가 받아 `clipboard_data_paste_request`를 넣는다
+    // (image-clipboard-design.md). 페이지는 플랫폼을 부르지 않는다.
+    inline constexpr std::uint32_t command_paste_clipboard_image { 0x6369 };
+
     // --- 이 페이지의 메시지 ---
     // 텍스트 편집·조합 메시지(edit_intent·composition_intent)는 창 페이지와
     // target으로 나눠 가지므로 common.h에 있다.
@@ -34,20 +47,56 @@ namespace mobile_demo {
     {
     };
 
+    // 열린 확인 대화 상자다. 열림은 앱 상태이고 하나만 열린다.
+    //  - reset은 카운터 초기화(취소와 위험한 초기화), details는 긴 본문과 단추 셋과 확인 칸을 가진 대화다.
+    enum class dialog_kind
+    {
+        none,
+        reset,
+        details,
+    };
+
+    // 대화를 열거나 닫는다. 값이 절대 값이라 거듭 와도 결과가 같다.
     struct dialog_intent
     {
-        bool open { false };
+        dialog_kind open { dialog_kind::none };
     };
 
-    struct counter_reset_intent
+    // 대화 상자를 닫는 모든 계기(단추, Esc, 바깥 누름, 뒤로 가기)가 내는 결과다 (`message_box_config::result`).
+    // 앱은 이 메시지 하나를 받아 닫고 key로 가른다.
+    struct dialog_result_intent
+    {
+        std::u8string key {};
+    };
+
+    // 둘째 대화의 "다시 묻지 않기" 칸을 뒤집는다. 칸은 닫지 않는다.
+    struct dialog_check_intent
     {
     };
 
-    // 캡션을 잡고 끈 만큼 dialog를 옮긴다 (논리 픽셀).
-    struct move_dialog_intent
+    // 별점의 값이다. key는 어느 별점인지(`stars` 별 다섯, `strip` 가로로 흐르는 창 안의 별 열)이다.
+    // 값은 절대 값이라 몇 번 겹쳐 와도 마지막 값 그대로다.
+    struct rating_intent
     {
-        float dx { 0.0f };
-        float dy { 0.0f };
+        std::u8string key {};
+        float value { 0.0f };
+    };
+
+    // 색 고르기의 값이다 (`color_picker_config::change_to`). 절대 값이다.
+    struct color_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    // 색 고르기의 16진 칸을 확정한다 (칸을 떠날 때와 키보드의 확정 단추).
+    struct color_commit_intent
+    {
+    };
+
+    // 별 열을 담은 가로로 흐르는 창의 스크롤이다 (논리 픽셀, 양수는 내용이 왼쪽으로). 위치는 앱 상태다.
+    struct rating_scroll_intent
+    {
+        float delta { 0.0f };
     };
 
     // 움직이는 그림을 멈추거나, 멈춘 자리에서 이어 돌린다.
@@ -55,6 +104,12 @@ namespace mobile_demo {
     // 알고 있고(`image_playback::paused_at`), 단추의 글이 그것을 그대로 말한다.
     struct playback_toggle_intent
     {
+    };
+
+    // 클립보드에서 읽은 글과 그림이다 (`app_delegate::make_clipboard_data_message`). 페이지가 logic thread에서 푼다.
+    struct clipboard_image_intent
+    {
+        luil::clipboard_data data {};
     };
 
     // 암호 칸의 글을 보이거나 가린다.
@@ -101,27 +156,44 @@ namespace mobile_demo {
 
         [[nodiscard]] bool dialog_open() const noexcept
         {
-            return dialog_open_;
+            return dialog_ != dialog_kind::none;
+        }
+
+        // 열린 대화 상자의 설정이다. 닫힌 때는 빈 설정이다.
+        [[nodiscard]] luil::message_box_config make_dialog_config() const;
+        // 뒤로 가기가 낼 메시지다. Esc와 바깥 누름이 내는 결과와 같다 (`luil::message_box_dismiss_message`).
+        [[nodiscard]] luil::input_action back_action() const;
+
+        // 서식 칸의 복사·붙여넣기가 쥐어 둔 클립보드 요청이다 (rich-edit-exchange-design.md). 셸이 가져가 host에 넣는다.
+        [[nodiscard]] std::optional<luil::clipboard_request> take_clipboard_request()
+        {
+            return rich_text_.take_clipboard_request();
         }
 
     private:
         void apply_edit(const luil::text_edit_request& request);
         void apply_composition(const luil::text_composition_event& event);
-        void open_dialog(bool open);
+        void open_dialog(dialog_kind kind);
         // 움직이는 견본 둘을 읽고, 읽혔으면 그 자리에서 재생을 시작한다.
         void read_films();
         // 멈춰 있으면 잇고, 돌고 있으면 멈춘다.
         void toggle_playback();
         [[nodiscard]] luil::text_input_view make_input_view(const luil::text::text_edit_state& state, luil::text_input_target target) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_counter_row() const;
+        // 별점 설정이다. 손가락 크기(44)의 칸이고, 별 수가 다섯이면 폭 220이다.
+        [[nodiscard]] luil::rating_config make_stars_config() const;
+        [[nodiscard]] luil::rating_config make_strip_rating_config() const;
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_rating_strip() const;
+        // 색 고르기의 설정이다. 판은 페이지 폭에 맞춘다.
+        [[nodiscard]] luil::color_picker_config make_color_config(float width) const;
+        // 16진 초안을 지금 색의 글로 다시 쓴다.
+        void reset_color_hex();
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_pair_row(std::u8string owner, std::unique_ptr<luil::ui_element> left, std::unique_ptr<luil::ui_element> right) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_picture(std::u8string owner, std::u8string label, luil::image_fit fit, std::u8string description) const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_film(std::u8string owner, std::u8string label, const luil::ui_animated_image& film, std::u8string description) const;
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_playback_button() const;
         [[nodiscard]] std::unique_ptr<luil::stack_element> make_labeled_input(
             std::u8string owner, std::u8string label, luil::ui_element_kind input_kind, luil::text_input_view view, luil::text_input_config input) const;
-        [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_body();
-        [[nodiscard]] static std::unique_ptr<luil::stack_element> make_dialog_buttons();
 
         // 그림은 만들 때 한 번 준비되는 불변 값이라 페이지가 들고 있는다 —
         // frame마다 config에 실리는 것은 손잡이뿐이다 (image-design.md).
@@ -133,6 +205,8 @@ namespace mobile_demo {
         luil::ui_image picture_ {};
         luil::image_decode_error picture_error_ {};
         bool picture_read_ { false };
+        // 클립보드 그림 붙여넣기의 결과 글이다. 화면의 label이 곧 보조 기술이 읽는 이름이다.
+        std::u8string clipboard_result_ { u8"붙여넣기 결과: 아직 없음" };
         // 움직이는 견본 둘이다 (webp 하나, gif 하나). 정지 그림과 같은 규칙으로
         // 한 번만 읽고, **읽었다는 사실**을 기억한다 — 성공을 기억하면 읽지 못한
         // 파일을 frame마다 다시 연다.
@@ -165,12 +239,31 @@ namespace mobile_demo {
         luil::text::text_edit_state line_break_ { .text = std::u8string { demo::line_break_sample } };
         luil::text::line_break_policy line_break_policy_ { luil::text::line_break_policy::hangul_words };
         std::shared_ptr<luil::text_area_wrap_cache> line_break_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+        // 읽기 전용 안내 칸의 글이다. 글은 고정이고 caret·선택만 바뀐다. 그 칸에 초점이 있는 채 앱 on_key에 닿은
+        // Ctrl+Z·Ctrl+Y를 센다 (데스크톱 demo의 `readonly_undo_keys.h`를 함께 쓴다).
+        luil::text::text_edit_state readonly_ {
+            .text = u8"이 칸은 읽기 전용이다. 선택과 복사만 된다. 하드웨어 키보드로 이 칸에 초점을 두고 Ctrl+Z나 Ctrl+Y를 누르면 칸이 삼키지 않고 앱으로 넘긴다.",
+        };
+        demo::readonly_undo_keys undo_keys_ {};
+        // 서식 있는 글 칸과 그 토글·상태 글이다 (데스크톱 서식 페이지와 같은 견본).
+        demo::rich_text_sample rich_text_ {};
         bool secret_reveal_ { false };
         std::optional<luil::text_composition_event> composition_ {};
         int clicks_ { 0 };
-        bool dialog_open_ { false };
-        // 가운데에서 얼마나 밀어 둔 dialog인지다 (논리 픽셀).
-        float dialog_x_ { 0.0f };
-        float dialog_y_ { 0.0f };
+        // 별점 둘의 값이다. 0은 아직 매기지 않음이다.
+        float rating_stars_ { 0.0f };
+        float rating_strip_ { 0.0f };
+        // 별 열을 담은 창이 흘러간 양과, 끝까지 흘린 값이다 (논리 픽셀). 끝은 창의 폭에 달려 조립할 때 안다.
+        float rating_scroll_ { 0.0f };
+        float rating_scroll_limit_ { 0.0f };
+        // 색 고르기의 값과 16진 칸의 초안이다. 값은 HSV로 든다 (color-space-design.md).
+        luil::hsv_color color_ { 225.0f, 0.8f, 1.0f, 0.5f };
+        luil::text::text_edit_state color_hex_ { .text = u8"#3366FF80" };
+        bool color_hex_invalid_ { false };
+        dialog_kind dialog_ { dialog_kind::none };
+        // 마지막으로 닫은 결과의 key다. 아직 닫은 적이 없으면 비었다.
+        std::u8string dialog_result_ {};
+        // 둘째 대화의 "다시 묻지 않기" 칸이다.
+        bool ask_again_ { false };
     };
 }

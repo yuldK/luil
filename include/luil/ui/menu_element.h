@@ -26,6 +26,13 @@ namespace luil {
         // 표시만 하는 열이다. 실행의 일치 판정은 명령표가 맡는다.
         std::u8string shortcut_text {};
         std::vector<menu_item_config> children {};
+        // 접근 키다. 영문자나 숫자 하나이고 대소문자를 가리지 않는다. 0이면 없다 (docs/menu-bar-design.md).
+        //  - 메뉴 막대에서 연 메뉴(하위 메뉴 포함)만 받는다. 수식 키 없는 그 글자 키가 이 항목을 고른다. 맞는 항목이
+        //    하나면 실행하고(하위 메뉴가 있으면 연다) 여럿이면 다음 것으로 강조만 옮긴다.
+        //  - 컨텍스트 메뉴·명령 팔레트에서는 쓰지 않는다. 그 글자는 문자 경로(검색 칸)의 것이다.
+        //  - 글자가 라벨에 없으면 라벨 뒤에 "(N)"을 붙여 그린다 (폭에도 든다). 밑줄은 막대가 선 동안
+        //    (`interaction_snapshot::menu_keys`)만 그 글자 아래에 긋는다. 접근 이름에는 붙이지 않는다.
+        char32_t access_key { 0 };
     };
 
     // 고른 항목의 키를 담은 메시지다.
@@ -78,7 +85,13 @@ namespace luil {
         // 이 설정의 전체 높이다 (논리 픽셀).
         // 담는 쪽이 popup 크기에 같은 값을 쓴다.
         [[nodiscard]] static float height_for(const menu_config& config) noexcept;
-        [[nodiscard]] static float width_for(const menu_config& config, const text_measurer& measurer = default_text_measurer(), float font_size = 12.0f);
+        // 이 설정의 폭이다 (논리 픽셀). 담는 쪽이 popup 크기에 같은 값을 쓴다.
+        //  - 글은 그릴 때와 같은 물리 크기(`scaled_font_size(font_size, scale)`)로 재고 `scale`로 나눈다. 글자 advance를
+        //    정수로 맞추는 글꼴은 `폭(12 * 1.1)`이 `폭(12) * 1.1`과 달라, 논리 크기로 재면 배율 1.1 이상에서 가장 긴 항목이
+        //    자리보다 넓어져 말줄임된다. 시스템 글자 크기 표는 `scaled_font_size`가 이미 반영하므로 따로 곱하지 않는다.
+        //  - `scale`은 그리는 문맥의 배율(`draw_context::scale`)이다. 0 이하거나 유한하지 않으면 1로 본다.
+        //  - 각 글 폭은 논리 픽셀로 되돌린 뒤 올림한다. 나눗셈 잔차로 글이 자리보다 한 올 모자라지 않게 한다.
+        [[nodiscard]] static float width_for(const menu_config& config, const text_measurer& measurer = default_text_measurer(), float font_size = 12.0f, float scale = 1.0f);
 
         void arrange(const arrange_context& context) override;
         void draw(draw_context& context, const interaction_snapshot& interaction) const override;

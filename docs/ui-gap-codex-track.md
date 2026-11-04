@@ -273,7 +273,7 @@ std::function<input_action(float offset)> scroll_horizontal_to {};
 ```
 
 - **읽기 전용:**
-  - 막는 것: 글자 삽입, 붙여넣기, 잘라내기, 삭제, undo·redo, IME 조합 시작.
+  - 막는 것: 글자 삽입, 붙여넣기, 잘라내기, 삭제, 칸 자신의 undo·redo 명령, IME 조합 시작. Ctrl+Z·Ctrl+Y 키는 삼키지 않고 칸 밖 앱 `on_key`로 넘긴다.
   - 남기는 것: caret 이동, 선택, 복사, Ctrl+A, 포인터 선택, 그리고 Text 패턴(IsReadOnly 참).
   - TSF에 읽기 전용 문서로 알려 조합이 시작되지 않게 한다(`src/win32/win32_tsf_input.cpp`). Android는 IME를 띄우지 않는다.
 - **줄 넘김 해제:** `wrap=false`면 줄을 접지 않는다. 가로 휠·Shift+휠·가로 막대(X0)로 흐르고, caret을 따라 가로 스크롤한다.

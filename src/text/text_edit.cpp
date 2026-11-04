@@ -1,10 +1,13 @@
 #include "luil/text/text_edit.h"
 
+#include "luil/text/text_change.h"
 #include "luil/text/utf8_text.h"
 #include "luil/text/grapheme.h"
 #include "text/grapheme_internal.h"
+#include "text/text_format_internal.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace luil::text {
@@ -112,22 +115,32 @@ namespace luil::text {
             return offset;
         }
         // 선택 범위만 지운다.
-        // 기록은 호출한 쪽이 연다.
+        // 기록은 호출한 쪽이 연다. 서식은 여기서 함께 옮긴다 (`shift_format`은 아래에 있어 앞에 선언한다).
+        void shift_format(text_edit_state& state, const text_change& change, text_mark inserted);
+
         void erase_selection_only(text_edit_state& state)
         {
             if (text_edit_has_selection(state) == false)
                 return;
             const std::size_t begin { text_edit_selection_begin(state) };
-            state.text.erase(begin, text_edit_selection_end(state) - begin);
+            const std::size_t length { text_edit_selection_end(state) - begin };
+            state.text.erase(begin, length);
             state.caret = begin;
             state.anchor = begin;
+            shift_format(state, { begin, length, 0 }, text_mark::none);
+        }
+
+        // 시점 하나가 쥔 바이트다. 나눠 쥔 서식도 시점마다 센다 (실제보다 크게 세어 상한을 넘지 않는 쪽이다).
+        std::size_t revision_bytes(const text_edit_revision& revision) noexcept
+        {
+            return revision.text.size() + (revision.format != nullptr ? text_format_bytes(*revision.format) : 0);
         }
 
         std::size_t history_bytes(const std::vector<text_edit_revision>& revisions) noexcept
         {
             std::size_t bytes { 0 };
             for (const text_edit_revision& revision : revisions)
-                bytes += revision.text.size();
+                bytes += revision_bytes(revision);
             return bytes;
         }
 
@@ -138,7 +151,7 @@ namespace luil::text {
             std::size_t count { 0 };
             while (bytes > text_edit_history_byte_limit && count + 1 < revisions.size())
             {
-                bytes -= revisions[count].text.size();
+                bytes -= revision_bytes(revisions[count]);
                 ++count;
             }
             revisions.erase(revisions.begin(), revisions.begin() + static_cast<std::ptrdiff_t>(count));
@@ -166,7 +179,7 @@ namespace luil::text {
             state.redo.clear();
             if (joins == false)
             {
-                state.undo.push_back({ state.text, state.caret, state.anchor });
+                state.undo.push_back({ state.text, state.caret, state.anchor, state.format });
                 trim_history(state);
             }
             state.group = group;
@@ -174,15 +187,85 @@ namespace luil::text {
 
         // 편집이 끝난 자리를 기억한다.
         // 다음 같은 종류의 편집이 여기서 이어지면 묶인다.
+        // 다음 글자 서식은 넣은 글이 받았거나(넣기) 그 자리가 바뀌어(지우기) 비운다.
         void end_edit(text_edit_state& state)
         {
             state.group_caret = state.caret;
+            state.typing_marks.reset();
         }
 
         // caret 이동·선택은 다음 편집을 새 덩어리로 만든다.
+        // 다음 글자 서식도 그 자리의 것이 아니게 되어 비운다.
         void break_group(text_edit_state& state)
         {
             state.group = text_edit_group::none;
+            state.typing_marks.reset();
+        }
+
+        // [begin, end)를 대신해 넣는 글이 이어받는 서식이다 (`typing_marks`가 없을 때).
+        //  - 고른 구간을 대체하면 고른 첫 글자의 서식이다.
+        //  - 아니면 앞 글자의 서식이고, 글 처음이나 줄 처음이면 뒤 글자의 서식이다.
+        text_mark inherited_marks(const text_format* const format, const std::u8string_view text, const std::size_t begin, const std::size_t end) noexcept
+        {
+            if (format == nullptr)
+                return text_mark::none;
+            if (begin < end)
+                return text_marks_at(*format, begin + 1);
+            if (begin == 0 || (begin <= text.size() && is_line_break(text[begin - 1])))
+                return begin < text.size() ? text_marks_at(*format, begin + 1) : text_mark::none;
+            return text_marks_at(*format, begin);
+        }
+
+        // 글이 `change`만큼 바뀐 뒤 서식을 옮기고 바뀐 자리의 경계를 글자소 경계로 맞춘다.
+        //  - 서식이 없는 칸은 넣은 글에 서식이 없는 한 아무것도 하지 않는다. 한 줄 칸과 서식을 쓰지 않는 칸은 비용이 없다.
+        //  - 서식이 없던 칸도 다음 글자 서식(`typing_marks`)을 받은 글을 넣으면 그때 서식이 생긴다.
+        void shift_format(text_edit_state& state, const text_change& change, const text_mark inserted)
+        {
+            if (change.empty())
+                return;
+            if (state.format == nullptr
+                && (inserted == text_mark::none || change.inserted == 0))
+                return;
+            static const text_format empty {};
+            text_format shifted { text_format_shifted(state.format != nullptr ? *state.format : empty, change, inserted) };
+            snap_text_format(shifted, state.text, change.offset, change.offset + change.inserted);
+            state.format = std::make_shared<const text_format>(std::move(shifted));
+        }
+
+        [[nodiscard]] bool codepoint_start(const std::u8string_view text, const std::size_t offset) noexcept
+        {
+            return offset >= text.size() || is_continuation(text[offset]) == false;
+        }
+
+        // `text_change_between`은 접두를 먼저 가져가 바뀐 구간을 가장 뒤에 둔다. 같은 글자가 이어진 자리에서는 바뀐
+        // 구간이 여럿일 수 있어(`aa`에서 `a` 하나를 지움), 변경의 끝이 새 caret에 닿도록 그 범위 안에서 앞으로 옮긴다.
+        //  - caret은 편집이 끝난 자리다. 첫 `a` 앞에서 Delete를 누른 글은 첫 `a`를 지운 것이고, 남은 `a`가 둘째 `a`의 서식을 갖는다.
+        //  - 한 바이트씩 민다. 창 바로 앞 바이트가 창의 마지막 바이트와 같으면 두 글 모두에서 같은 변경이다.
+        //    코드포인트 경계에 선 자리만 답으로 고른다.
+        [[nodiscard]] text_change change_toward_caret(const std::u8string_view before, const std::u8string_view after, text_change change, const std::size_t caret) noexcept
+        {
+            text_change chosen { change };
+            while (change.offset > 0 && change.offset + change.inserted > caret)
+            {
+                const std::size_t last { change.offset - 1 };
+                if (change.removed > 0 && before[last] != before[last + change.removed])
+                    break;
+                if (change.inserted > 0 && after[last] != after[last + change.inserted])
+                    break;
+                --change.offset;
+                if (codepoint_start(before, change.offset)
+                    && codepoint_start(after, change.offset)
+                    && codepoint_start(before, change.offset + change.removed)
+                    && codepoint_start(after, change.offset + change.inserted))
+                    chosen = change;
+            }
+            return chosen;
+        }
+
+        [[nodiscard]] bool same_format(const std::shared_ptr<const text_format>& left, const std::shared_ptr<const text_format>& right) noexcept
+        {
+            static const text_format empty {};
+            return left == right || (left != nullptr ? *left : empty) == (right != nullptr ? *right : empty);
         }
     }
 
@@ -241,12 +324,16 @@ namespace luil::text {
         //  - 붙여넣기와 대체는 한 번에 되돌아가야 한다.
         //  - 친 글자는 바이트가 아니라 코드포인트로 센다. 4바이트 글자(이모지, BMP 밖 한자)도 친 글자로 이어 묶인다.
         const bool replaces { text_edit_has_selection(state) || utf8_decode(text, 0).length < text.size() };
+        // 넣은 글의 서식은 고른 글을 지우기 전에 묻는다. 고른 첫 글자의 서식이 지운 뒤에는 없다.
+        const text_mark marks { text_edit_typing_marks(state) };
         begin_edit(state, replaces ? text_edit_group::replace : text_edit_group::insert);
         erase_selection_only(state);
         state.caret = text_edit_clamp_offset(state.text, state.caret);
-        state.text.insert(state.caret, text);
+        const std::size_t at { state.caret };
+        state.text.insert(at, text);
         state.caret += text.size();
         state.anchor = state.caret;
+        shift_format(state, { at, 0, text.size() }, marks);
         end_edit(state);
     }
 
@@ -264,9 +351,11 @@ namespace luil::text {
             return;
         begin_edit(state, text_edit_group::erase);
         const std::size_t begin { grapheme_backspace_offset(state.text, state.caret) };
-        state.text.erase(begin, state.caret - begin);
+        const std::size_t length { state.caret - begin };
+        state.text.erase(begin, length);
         state.caret = begin;
         state.anchor = begin;
+        shift_format(state, { begin, length, 0 }, text_mark::none);
         end_edit(state);
     }
 
@@ -286,6 +375,7 @@ namespace luil::text {
         const std::size_t end { next_boundary(state.text, state.caret) };
         state.text.erase(state.caret, end - state.caret);
         state.anchor = state.caret;
+        shift_format(state, { state.caret, end - state.caret, 0 }, text_mark::none);
         end_edit(state);
     }
 
@@ -321,10 +411,11 @@ namespace luil::text {
     {
         if (state.undo.empty())
             return false;
-        state.redo.push_back({ state.text, state.caret, state.anchor });
+        state.redo.push_back({ state.text, state.caret, state.anchor, state.format });
         const text_edit_revision previous { std::move(state.undo.back()) };
         state.undo.pop_back();
         state.text = previous.text;
+        state.format = previous.format;
         state.caret = text_edit_clamp_offset(state.text, previous.caret);
         state.anchor = text_edit_clamp_offset(state.text, previous.anchor);
         trim_history(state);
@@ -336,10 +427,11 @@ namespace luil::text {
     {
         if (state.redo.empty())
             return false;
-        state.undo.push_back({ state.text, state.caret, state.anchor });
+        state.undo.push_back({ state.text, state.caret, state.anchor, state.format });
         const text_edit_revision next { std::move(state.redo.back()) };
         state.redo.pop_back();
         state.text = next.text;
+        state.format = next.format;
         state.caret = text_edit_clamp_offset(state.text, next.caret);
         state.anchor = text_edit_clamp_offset(state.text, next.anchor);
         trim_history(state);
@@ -435,10 +527,20 @@ namespace luil::text {
     {
         if (state.text == text)
         {
-            state.caret = text_edit_clamp_offset(state.text, caret);
+            // 글이 같으면 caret 놓기다. caret이 움직였을 때만 다음 글자 서식을 비운다. IME가 같은 글을 다시 알려도
+            // 조합 중에 누른 서식 명령이 살아 있어야 확정 글이 받는다.
+            const std::size_t placed { text_edit_clamp_offset(state.text, caret) };
+            if (placed != state.caret || state.anchor != placed)
+                state.typing_marks.reset();
+            state.caret = placed;
             state.anchor = state.caret;
             return;
         }
+
+        // 바뀐 구간은 견주어 찾는다. IME는 글 전체를 보낸다. 넣은 글의 서식은 바꾸기 전에 묻는다.
+        const std::size_t placed { std::min(caret, text.size()) };
+        const text_change change { change_toward_caret(state.text, text, text_change_between(state.text, text), placed) };
+        const text_mark marks { state.typing_marks.value_or(inherited_marks(state.format.get(), state.text, change.offset, change.offset + change.removed)) };
 
         // 조합 한 번이 실행 취소 한 덩어리다.
         // `replace`라 절대 묶이지 않는다.
@@ -446,6 +548,7 @@ namespace luil::text {
         state.text = text;
         state.caret = text_edit_clamp_offset(state.text, caret);
         state.anchor = state.caret;
+        shift_format(state, change, marks);
         end_edit(state);
         state.group = text_edit_group::none;
     }
@@ -458,6 +561,7 @@ namespace luil::text {
         state.redo.clear();
         break_group(state);
         state.text = text;
+        state.format.reset();
         if (caret_to_end)
         {
             state.caret = state.text.size();
@@ -467,5 +571,68 @@ namespace luil::text {
         state.caret = text_edit_clamp_offset(state.text, state.caret);
         state.anchor = text_edit_clamp_offset(state.text, state.anchor);
         state.group_caret = state.caret;
+    }
+
+    text_mark text_edit_typing_marks(const text_edit_state& state) noexcept
+    {
+        if (state.typing_marks.has_value())
+            return *state.typing_marks;
+        return inherited_marks(state.format.get(), state.text, text_edit_selection_begin(state), text_edit_selection_end(state));
+    }
+
+    void text_edit_set_format(text_edit_state& state, std::shared_ptr<const text_format> format)
+    {
+        if (same_format(state.format, format))
+            return;
+        // 서식만 바꾼 걸음이다. 글 편집과 같은 기록에 들어 Ctrl+Z가 글과 서식을 차례대로 되돌린다.
+        begin_edit(state, text_edit_group::replace);
+        state.format = std::move(format);
+        end_edit(state);
+        state.group = text_edit_group::none;
+    }
+
+    void text_edit_insert_formatted(text_edit_state& state, const std::u8string_view text, const text_format& fragment)
+    {
+        if (text.empty())
+            return;
+        // 붙여넣기다. 묶지 않는다.
+        begin_edit(state, text_edit_group::replace);
+        erase_selection_only(state);
+        state.caret = text_edit_clamp_offset(state.text, state.caret);
+        const std::size_t at { state.caret };
+        state.text.insert(at, text);
+        state.caret += text.size();
+        state.anchor = state.caret;
+        if (state.format != nullptr
+            || fragment.runs.empty() == false
+            || fragment.links.empty() == false)
+        {
+            static const text_format empty {};
+            // 넣은 자리는 서식 없이 비워 두고 조각의 서식을 옮겨 놓는다. 링크 한가운데에 넣었으면 늘어난 링크를 조각
+            // 둘레에서 끊는다. 조각은 주변 서식과 섞지 않는다.
+            text_format result { text_format_shifted(state.format != nullptr ? *state.format : empty, { at, 0, text.size() }, text_mark::none) };
+            result = text_format_with_link(result, at, at + text.size(), {});
+            for (const text_mark_run& run : fragment.runs)
+                if (run.begin < run.end && run.begin < text.size())
+                    result.runs.push_back({ at + run.begin, at + std::min(run.end, text.size()), run.marks });
+            for (const text_format_link& link : fragment.links)
+                if (link.begin < link.end && link.begin < text.size())
+                    result.links.push_back({ at + link.begin, at + std::min(link.end, text.size()), link.destination });
+            snap_text_format(result, state.text, at, at + text.size());
+            state.format = std::make_shared<const text_format>(std::move(result));
+        }
+        end_edit(state);
+        state.group = text_edit_group::none;
+    }
+
+    void text_edit_set_formatted_text(text_edit_state& state, const std::u8string_view text, std::shared_ptr<const text_format> format)
+    {
+        text_edit_set_text(state, text, false);
+        if (format == nullptr)
+            return;
+        // 밖에서 온 값이라 글 크기로 자르고 불변식과 글자소 경계로 다듬는다. 부르는 일이 드물어 글 전체를 본다.
+        text_format tidy { text_format_slice(*format, 0, text.size()) };
+        snap_text_format(tidy, state.text, 0, state.text.size());
+        state.format = std::make_shared<const text_format>(std::move(tidy));
     }
 }

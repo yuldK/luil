@@ -11,6 +11,8 @@ class SkCanvas;
 class SkTypeface;
 
 namespace luil {
+    struct inspector_config;
+
     // 물리 픽셀 사각형이다 (창 client 기준).
     struct pixel_rect
     {
@@ -111,6 +113,11 @@ namespace luil {
 
         // 주 tree 위에 차례로 겹쳐 그릴 popup이다 (뒤의 것이 위). 모바일만 채운다.
         std::span<const overlay_layer> overlays {};
+
+        // 앱이 frame에 실은 검사기다 (`ui_frame::inspector`). 없거나 꺼져 있으면 그리지 않는다.
+        // 포인터는 렌더 호출 동안만 유효하면 된다 (tree와 같은 규칙).
+        //  - tree와 popup layer의 tree를 모두 그린 변환 안에서 그린다. 표면마다 자기 tree와 걸러진 상호작용으로 따로 집는다.
+        const inspector_config* inspector { nullptr };
     };
 
     // frame이 쓸 스타일이다 — 실린 것이 없으면 내장 스타일이다.

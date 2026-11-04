@@ -348,3 +348,12 @@ TEST_CASE("Backspace in a text field edits through the character and never reach
     static_cast<void>(controller.process(luil::character_typed_event { U'\b' }));
     REQUIRE(policy.edits == 1);
 }
+
+TEST_CASE("The Alt tap key has no label and cannot be written as a shortcut", "[shortcut][menu-bar]")
+{
+    // Alt 단독은 메뉴 막대를 세우는 키일 뿐 단축키가 아니다. 라벨이 없어 위의 이름 키 수(89)에 들지 않는다.
+    for (int modifiers { 0 }; modifiers < 8; ++modifiers)
+        REQUIRE(luil::shortcut_label(key_chord { key_code::alt_tap, (modifiers & 1) != 0, (modifiers & 2) != 0, (modifiers & 4) != 0 }).empty());
+    REQUIRE(luil::parse_shortcut(u8"Alt").has_value() == false);
+    REQUIRE(luil::chord_of(luil::key_pressed_event { key_code::alt_tap }) == key_chord { key_code::alt_tap });
+}

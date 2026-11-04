@@ -23,6 +23,8 @@
 
 `hit_test(x, y)`는 자식을 역순으로 검사해 위에 그려진 대상을 우선한다. 상호작용 element뿐 아니라 `hit_opaque`인 element도 hit를 흡수한다. 숨긴 가지와 부모의 clip 밖은 제외한다. `find_drop_target(x, y, payload)`는 같은 순서로 payload를 수락하는 drop target만 찾으므로 위에 놓인 버튼을 통과해 행이 파일이나 다른 행을 받을 수 있다.
 
+독립 tree를 그리는 element가 둘 있다. tooltip 내용(`tooltip_config::content`)과 화면 전환의 떠나는 화면(`page_transition::prior`)이다. 둘 다 앱이 따로 지은 `shared_ptr<const ui_tree>`이고 element가 빈 snapshot으로 그리기만 한다. 그 tree의 id는 주 tree의 색인·hit test·초점·접근 tree에 없으므로 같은 id가 두 tree에 있어도 겹치지 않는다. 화면 전환은 도는 동안 칠하지 않는 `hit_opaque` 덮개를 자식으로 두어 그림과 최종 자리가 어긋난 동안 포인터를 막는다([page-transition-design.md](../page-transition-design.md)).
+
 초점 테·tooltip·drag 표시는 root와 자식을 그린 뒤 tree가 위에 그린다. `visible_bounds()`는 조상 clip을 반영하므로 drop 강조도 잘린 영역을 넘지 않는다. `next_update()`는 시간이 흐른 뒤 그림이 바뀌는 시각만 반환한다.
 
 - `nullopt`: 시간에 따른 갱신 없음

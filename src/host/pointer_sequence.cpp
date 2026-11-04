@@ -1,10 +1,29 @@
 #include "host/pointer_sequence.h"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace luil {
     namespace {
-        [[nodiscard]] raw_input_event pressed_event(const pointer_sample& sample, const pointer_button button)
+        // 펜 표본의 값이다. 펜이 아니면 비어 있다 (마우스·터치의 뜻이 흐려지지 않게 한다).
+        //  - 압력은 0~1로 접는다. 1을 넘게 알리는 장치(Android)도 1이다. 유한하지 않은 값은 모르는 것이다.
+        //  - hover의 압력은 0이다. 압력을 모르는 장치는 hover에서도 비어 있다.
+        //  - 지우개 표식은 접촉 동안 누를 때의 값이다. hover는 그 표본의 값이다.
+        [[nodiscard]] std::optional<pen_sample> pen_of(const pointer_sample& sample, const bool eraser, const bool contact)
+        {
+            if (sample.device != pointer_device::pen)
+                return std::nullopt;
+            pen_sample pen {};
+            if (sample.pressure.has_value() && std::isfinite(*sample.pressure))
+                pen.pressure = contact ? std::clamp(*sample.pressure, 0.0f, 1.0f) : 0.0f;
+            pen.tilt_x = std::isfinite(sample.tilt_x) ? std::clamp(sample.tilt_x, -90.0f, 90.0f) : 0.0f;
+            pen.tilt_y = std::isfinite(sample.tilt_y) ? std::clamp(sample.tilt_y, -90.0f, 90.0f) : 0.0f;
+            pen.eraser = eraser;
+            return pen;
+        }
+
+        [[nodiscard]] raw_input_event pressed_event(const pointer_sample& sample, const pointer_button button, const bool eraser)
         {
             pointer_pressed_event pressed {};
             pressed.x = sample.x;
@@ -18,12 +37,14 @@ namespace luil {
             pressed.scale = sample.scale;
             pressed.control = sample.control;
             pressed.alt = sample.alt;
+            pressed.pen = pen_of(sample, eraser, true);
             return raw_input_event { std::move(pressed) };
         }
 
-        [[nodiscard]] raw_input_event cancelled_event(const pointer_device device, const std::uint32_t pointer_id, const std::chrono::steady_clock::time_point time, const std::u8string& surface)
+        [[nodiscard]] raw_input_event cancelled_event(
+            const pointer_device device, const std::uint32_t pointer_id, const std::chrono::steady_clock::time_point time, const std::u8string& surface, const bool button_switch = false)
         {
-            return raw_input_event { pointer_cancelled_event { device, pointer_id, surface, time } };
+            return raw_input_event { pointer_cancelled_event { device, pointer_id, surface, time, button_switch } };
         }
     }
 
@@ -31,7 +52,9 @@ namespace luil {
     {
         contact* const current { find(sample.pointer_id) };
         // 펜은 배럴 버튼이 우클릭이다. 터치에는 버튼이 하나뿐이다.
-        const pointer_button button { sample.device == pointer_device::pen && sample.barrel ? pointer_button::right : pointer_button::left };
+        //  - 지우개 끝은 언제나 왼쪽이다. 지우개 접촉에는 배럴 전환이 없다.
+        const bool eraser_contact { current != nullptr ? current->eraser : sample.eraser };
+        const pointer_button button { sample.device == pointer_device::pen && sample.barrel && eraser_contact == false ? pointer_button::right : pointer_button::left };
         std::vector<raw_input_event> events {};
         switch (sample.phase)
         {
@@ -40,9 +63,8 @@ namespace luil {
             if (current != nullptr || sample.in_contact == false)
                 return {};
             contacts_.push_back(contact { sample.pointer_id, sample.device, button, sample.eraser });
-            // 지우개 끝의 접촉은 삼킨다 — 삭제나 우클릭으로 임의로 바꾸지 않는다.
-            if (sample.eraser == false)
-                events.push_back(pressed_event(sample, button));
+            // 지우개 끝의 접촉도 표식을 달고 나간다. 일반 컨트롤이 삼키는 자리는 tree를 아는 controller다.
+            events.push_back(pressed_event(sample, button, sample.eraser));
             return events;
         case pointer_phase::update: {
             if (current == nullptr)
@@ -62,6 +84,7 @@ namespace luil {
                 moved.control = sample.control;
                 moved.shift = sample.shift;
                 moved.alt = sample.alt;
+                moved.pen = pen_of(sample, sample.eraser, false);
                 events.push_back(raw_input_event { std::move(moved) });
                 return events;
             }
@@ -69,18 +92,15 @@ namespace luil {
             if (sample.canceled || sample.in_contact == false)
             {
                 forget(sample.pointer_id);
-                if (held.eraser == false)
-                    events.push_back(cancelled_event(held.device, held.pointer_id, sample.time, sample.surface));
+                events.push_back(cancelled_event(held.device, held.pointer_id, sample.time, sample.surface));
                 return events;
             }
-            if (held.eraser)
-                return {};
             // 접촉 중 버튼이 바뀌었다. 이전 버튼의 누름을 취소한 뒤 새 버튼으로 누른다.
             if (button != held.button)
             {
                 current->button = button;
-                events.push_back(cancelled_event(held.device, held.pointer_id, sample.time, sample.surface));
-                events.push_back(pressed_event(sample, button));
+                events.push_back(cancelled_event(held.device, held.pointer_id, sample.time, sample.surface, true));
+                events.push_back(pressed_event(sample, button, held.eraser));
             }
             pointer_moved_event moved {};
             moved.x = sample.x;
@@ -94,6 +114,7 @@ namespace luil {
             moved.control = sample.control;
             moved.shift = sample.shift;
             moved.alt = sample.alt;
+            moved.pen = pen_of(sample, held.eraser, true);
             events.push_back(raw_input_event { std::move(moved) });
             return events;
         }
@@ -102,8 +123,6 @@ namespace luil {
                 return {};
             const contact held { *current };
             forget(sample.pointer_id);
-            if (held.eraser)
-                return {};
             if (sample.canceled)
             {
                 events.push_back(cancelled_event(held.device, held.pointer_id, sample.time, sample.surface));
@@ -120,6 +139,7 @@ namespace luil {
             released.control = sample.control;
             released.shift = sample.shift;
             released.alt = sample.alt;
+            released.pen = pen_of(sample, held.eraser, true);
             events.push_back(raw_input_event { std::move(released) });
             return events;
         }
@@ -143,8 +163,6 @@ namespace luil {
             return {};
         const contact held { *current };
         forget(pointer_id);
-        if (held.eraser)
-            return {};
         return { cancelled_event(held.device, held.pointer_id, time, surface) };
     }
 

@@ -56,6 +56,7 @@ list->set_key_handler([](const luil::key_pressed_event& event) -> std::optional<
 11. 앱 정책의 `on_key`
 
 - 텍스트 칸·값 단계·묶음은 이 단계보다 앞이다. 그것들이 가장 안쪽의 소비자이기 때문이다. 텍스트 칸에 초점이 있으면 Ctrl+A는 칸의 전체 선택이고 목록에 오지 않는다.
+- 읽기 전용 칸은 글을 바꾸는 키(Ctrl+X, Ctrl+V, Delete, Enter, Shift+Insert)만 삼키고, Ctrl+Z·Ctrl+Y(Ctrl+Shift+Z 포함)는 소비하지 않는다. 읽기 전용 칸에는 칸 자신의 되돌릴 글이 없으므로 이 키는 위로 흘러 목록의 처리기와 앱 정책의 `on_key`가 받는다. 앱의 실행 취소 stack이 문서 보기에 초점이 있는 동안에도 같은 키로 돈다. 편집 칸의 Ctrl+Z·Ctrl+Y는 지금처럼 칸 자신의 되돌리기와 다시 실행이다.
 - 가둠의 Esc보다 앞인 이유는 dialog 안의 콤보 때문이다. 콤보가 Esc로 후보 목록만 닫으면 dialog는 남아야 한다. 콤보가 소비하지 않은 Esc만 dialog로 간다.
 - 끌기 취소보다 뒤인 이유는 잡고 있는 손이 언제나 먼저이기 때문이다.
 
@@ -69,3 +70,4 @@ list->set_key_handler([](const luil::key_pressed_event& event) -> std::optional<
 - 아무도 소비하지 않은 키는 앱 정책이 받는다.
 - 비활성 조상은 건너뛰고 그 위는 묻는다.
 - 초점 텍스트 칸이 Ctrl+A를 목록보다 먼저 가진다.
+- 읽기 전용 칸에 초점이 있어도 Ctrl+Z·Ctrl+Y·Ctrl+Shift+Z가 목록과 앱 정책의 `on_key`에 닿고, 글을 바꾸는 나머지 키는 칸에서 끝난다. 편집 칸은 같은 키에 자기 되돌리기·다시 실행을 내고 앱 정책까지 가지 않는다.

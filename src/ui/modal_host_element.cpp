@@ -7,6 +7,9 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
 
+#include <algorithm>
+#include <cmath>
+#include <optional>
 #include <utility>
 
 namespace luil {
@@ -52,6 +55,7 @@ namespace luil {
         // 앱이 손으로 흡수 액션을 다는 대신 host가 세운다 — 잊으면 바깥 클릭으로
         // 닫히는 dialog가 자기 몸을 눌러도 닫힌다.
         content->set_hit_opaque(true);
+        measured_ = content.get();
         if (config_.surface.has_value() == false)
         {
             content_ = content.get();
@@ -82,10 +86,33 @@ namespace luil {
         if (content_ == nullptr)
             return;
 
+        // 크기를 정한다 (논리 픽셀). 기본 설정이면 앱이 준 값 그대로다.
+        //  - 여백은 폭을 먼저 자른다. 높이는 그 폭에서 내용에게 묻는 것이라 폭이 줄 수를 정하는 글이 맞게 선다.
+        //  - 높이를 자르면 내용이 그 높이를 받는다. 내용이 모자란 높이를 어떻게 줄일지는 내용의 몫이다.
+        const bool trims { config_.edge_margin > 0.0f };
+        const float room_width { context.slot.width / scale - 2.0f * config_.edge_margin };
+        const float room_height { context.slot.height / scale - 2.0f * config_.edge_margin };
+        float logical_width { config_.content_width };
+        if (trims)
+            logical_width = std::min(logical_width, std::max(0.0f, room_width));
+        float logical_height { config_.content_height };
+        if (config_.fit_height && measured_ != nullptr)
+        {
+            // 배율은 아래 배치와 같은 값이다. 잘못된 배율(0 이하)을 그대로 넘겨 내용이 엉뚱한 크기로 재지 않게 한다.
+            //  - 스타일도 싣는다. 본문 같은 여러 줄 글이 앱 스타일의 줄 나눔 정책(`text.wrap_policy`)으로 줄 수를 재야
+            //    배치에서 접는 줄과 높이가 맞는다.
+            const measure_context measure { scale, context.measurer, context.metrics, context.style };
+            const std::optional<size_f> preferred { measured_->preferred_size(measure, logical_width) };
+            if (preferred.has_value() && std::isfinite(preferred->height))
+                logical_height = preferred->height;
+        }
+        if (trims)
+            logical_height = std::min(logical_height, std::max(0.0f, room_height));
+
         // 가운데에 놓고 앱이 준 만큼 밀어낸다.
         // 표면이 있으면 이 자리를 표면이 받고 내용은 그 안에서 같은 자리를 물려받는다.
-        const float width { config_.content_width * scale };
-        const float height { config_.content_height * scale };
+        const float width { logical_width * scale };
+        const float height { logical_height * scale };
         const float left { context.slot.x + (context.slot.width - width) / 2.0f + config_.offset_x * scale };
         const float top { context.slot.y + (context.slot.height - height) / 2.0f + config_.offset_y * scale };
         content_->arrange(context.for_child({ left, top, width, height }));

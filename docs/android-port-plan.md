@@ -386,7 +386,8 @@ skia-prep의 `android_probe`와 같은 방식이다.
 
 - **포인터.** 도구 종류(`TOOL_TYPE_FINGER`, `STYLUS`, `ERASER`, `MOUSE`)를 `device`로 옮긴다.
   - 1단계에서 옮긴 `pointer_sequence_tracker`가 처리 규칙을 맡는다: 배럴 버튼은 우클릭, 지우개는
-    삼키기, 호버는 접촉 없는 이동, `ACTION_CANCEL`은 취소다.
+    표식을 단 접촉(일반 컨트롤은 컨트롤러가 삼킨다, [잉크 입력](ink-input-design.md)), 호버는 접촉 없는 이동,
+    `ACTION_CANCEL`은 취소다. 펜의 압력·기울기는 켠 축(`AXIS_PRESSURE`·`TILT`·`ORIENTATION`)으로 읽는다.
   - 묶여 온 과거 표본(historical)도 차례로 넣는다.
 - **시간.** `AMotionEvent_getEventTime`은 `CLOCK_MONOTONIC` 기준 나노초이고, libc++의
   `steady_clock`도 `CLOCK_MONOTONIC`이다. 값을 바로 옮길 수 있다. 이 사실은 테스트로 고정한다.

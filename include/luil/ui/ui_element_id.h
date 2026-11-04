@@ -162,10 +162,60 @@ namespace luil {
         info_bar,
         info_bar_action,
         info_bar_close,
+        // 확인 대화 상자의 내용과 그 단추다 (`make_message_box`). 내용은 비공개 element이고 owner는 상자 설정의 owner다.
+        // 단추의 owner는 상자 owner와 단추 key 사이에 단위 구분자(U+001F)를 둔 것이다 (`message_box_button_id`).
+        message_box,
+        message_box_button,
+        // 별점과 그 걸음 칸이다 (`rating_element`). root는 접근 역할이 slider이고 별을 그린다. 칸은 걸음 하나마다 서서
+        // hit와 hover와 끌기만 맡는다. root의 owner는 별점 설정의 owner이고 칸의 owner는 그 owner, 단위 구분자(U+001F),
+        // 칸 번호(1부터 십진수) 순이다. kind가 달라 id가 겹치지 않는다.
+        rating,
+        rating_cell,
+        // 펜 잉크 캔버스다 (`ink_canvas_element`). owner는 캔버스 설정의 owner다.
+        ink_canvas,
+        // 표의 머리글과 행에서 흐르는 열을 담아 고정 구역 밖으로 자르는 레인이다 (`table_element`의 고정 열). 구조일 뿐이다.
+        // 행 레인의 owner는 표 owner와 행 키를, 머리글 레인의 owner는 표 owner와 "lane"을 단위 구분자(U+001F)로 이은 것이다.
+        table_header_lane,
+        table_row_lane,
+        // 색 고르기와 그 부분, 색 칸이다 (`color_picker_element`·`color_field_element`). root는 group이고 지금 색의 견본을 그린다.
+        // 판(채도·명도)과 막대(색상·알파)는 slider이고, 견본 칸은 단추다. 부분의 owner는 고르기 owner, 단위 구분자(U+001F),
+        // `plane`·`hue`·`alpha`·견본 번호(1부터 십진수) 순이다. 색 칸의 owner는 칸 설정의 owner다.
+        color_picker,
+        color_picker_plane,
+        color_picker_bar,
+        color_picker_preset,
+        color_field,
+        // 메뉴 막대다 (`menu_bar_element`). owner는 막대 설정의 owner다.
+        menu_bar,
+        // 메뉴 막대의 항목 하나다. owner는 항목 키다 (`menu_bar_item_config::key`).
+        menu_bar_item,
+        // 달력과 그 부분, 날짜 칸이다 (`calendar_element`·`date_field_element`). root는 group이고 머리 줄 제목과 요일 줄을 그린다.
+        // 단추(이전·다음 달)는 button, 격자는 list, 날 칸은 list_item이다. 격자의 owner는 달력 owner이고, 단추의 owner는 달력 owner,
+        // 단위 구분자(U+001F), `prev`·`next`이며, 날 칸의 owner는 달력 owner, 단위 구분자, ISO 날짜(`2026-11-03`)다.
+        // 날짜 칸의 owner는 칸 설정의 owner다.
+        calendar,
+        calendar_nav,
+        calendar_grid,
+        calendar_day,
+        date_field,
+        // 안내 풍선과 그 부분이다 (`teaching_tip_element`). root는 dialog(덮개) 또는 pane(비modal)이고 몸이 풍선·꼬리·글을 그린다.
+        // root·덮개·몸·그림의 owner는 설정의 owner다. 닫기와 행동 단추의 owner는 설정 owner, 단위 구분자(U+001F),
+        // `close`·`primary`·`secondary`다. 행동 단추 둘은 kind 하나(`teaching_tip_action`)를 나눠 쓴다.
+        teaching_tip,
+        teaching_tip_scrim,
+        teaching_tip_body,
+        teaching_tip_image,
+        teaching_tip_close,
+        teaching_tip_action,
+        // 화면 전환이다 (`page_transition_element`). owner는 설정의 owner다. 구조일 뿐이다.
+        page_transition,
+        // 화면 전환이 도는 동안 포인터를 막는 덮개다. owner는 전환 요소와 같다. 칠하지 않는 `hit_opaque` 판이다.
+        page_transition_cover,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind
         //    64부터와 같은 수가 된 적이 있다.
+        //  - 새 kind는 같은 커밋에 `src/ui/inspect_names.cpp`의 case를 더한다 (검사기의 이름표다. 빠뜨리면 전수 test가 실패한다).
         end_of_library_kinds,
         // 앱이 정의하는 kind는 이 값부터다 (`application_element_kind`).
         // 라이브러리 kind가 늘어도 앱 상수가 밀리지 않도록 예약 대역을 넉넉히 둔다 (지금 쓰는 것의 열 배 넘게).

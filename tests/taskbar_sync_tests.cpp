@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -284,4 +285,93 @@ TEST_CASE("A frame and a window carry a default taskbar request", "[host][taskba
     REQUIRE(window.taskbar.progress.state == taskbar_progress_state::none);
     REQUIRE(window.taskbar.overlay.icon.valid() == false);
     REQUIRE(window.independent == false);
+    // 점프 목록은 손대지 않음이 기본이다. 앱이 싣지 않으면 셸의 목록을 부르지 않는다.
+    REQUIRE(frame.taskbar.jump_list.has_value() == false);
+    REQUIRE(window.taskbar.jump_list.has_value() == false);
+}
+
+namespace {
+    using luil::jump_list_call_kind;
+    using luil::jump_list_sync;
+    using luil::taskbar_jump_list;
+    using luil::taskbar_jump_task;
+
+    [[nodiscard]] taskbar_jump_list two_tasks()
+    {
+        taskbar_jump_list list {};
+        list.tasks.push_back(taskbar_jump_task { .title = u8"새 메모", .arguments = { u8"--new-note" }, .description = u8"메모를 연다" });
+        list.tasks.push_back(taskbar_jump_task { .title = u8"그림", .arguments = { u8"--image", u8"a b.png" }, .icon_path = u8"C:\\icons\\image.ico", .icon_index = 2 });
+        return list;
+    }
+}
+
+TEST_CASE("An empty jump list request never calls the shell", "[host][taskbar][jump-list]")
+{
+    jump_list_sync sync {};
+    REQUIRE(sync.update(std::nullopt).has_value() == false);
+    REQUIRE(sync.update(std::nullopt).has_value() == false);
+
+    // 낸 뒤에 비어 있음으로 돌아가도 손대지 않는다. 같은 목록이 다시 와도 이미 낸 것이다.
+    REQUIRE(sync.update(two_tasks()).has_value());
+    REQUIRE(sync.update(std::nullopt).has_value() == false);
+    REQUIRE(sync.update(two_tasks()).has_value() == false);
+}
+
+TEST_CASE("The first jump list is committed and the first empty list removes", "[host][taskbar][jump-list]")
+{
+    {
+        jump_list_sync sync {};
+        const auto call { sync.update(two_tasks()) };
+        REQUIRE(call.has_value());
+        REQUIRE(call->kind == jump_list_call_kind::commit);
+        REQUIRE(call->list == two_tasks());
+        REQUIRE(sync.update(two_tasks()).has_value() == false);
+    }
+    {
+        // 셸에는 읽는 길이 없어 앞 실행이 남긴 목록을 지우려면 첫 빈 목록도 낸다.
+        jump_list_sync sync {};
+        const auto call { sync.update(taskbar_jump_list {}) };
+        REQUIRE(call.has_value());
+        REQUIRE(call->kind == jump_list_call_kind::remove);
+        REQUIRE(call->list.tasks.empty());
+        REQUIRE(sync.update(taskbar_jump_list {}).has_value() == false);
+    }
+}
+
+TEST_CASE("Any changed jump task field rebuilds the whole list", "[host][taskbar][jump-list]")
+{
+    jump_list_sync sync {};
+    REQUIRE(sync.update(two_tasks()).has_value());
+
+    taskbar_jump_list title { two_tasks() };
+    title.tasks[0].title = u8"새 메모 열기";
+    REQUIRE(sync.update(title).has_value());
+
+    taskbar_jump_list arguments { title };
+    arguments.tasks[1].arguments.push_back(u8"--again");
+    REQUIRE(sync.update(arguments).has_value());
+
+    taskbar_jump_list description { arguments };
+    description.tasks[0].description.clear();
+    REQUIRE(sync.update(description).has_value());
+
+    taskbar_jump_list icon { description };
+    icon.tasks[1].icon_index = 3;
+    const auto call { sync.update(icon) };
+    REQUIRE(call.has_value());
+    REQUIRE(call->kind == jump_list_call_kind::commit);
+    REQUIRE(call->list == icon);
+    REQUIRE(sync.update(icon).has_value() == false);
+}
+
+TEST_CASE("Emptying a committed jump list removes it once", "[host][taskbar][jump-list]")
+{
+    jump_list_sync sync {};
+    REQUIRE(sync.update(two_tasks()).has_value());
+    const auto removed { sync.update(taskbar_jump_list {}) };
+    REQUIRE(removed.has_value());
+    REQUIRE(removed->kind == jump_list_call_kind::remove);
+    REQUIRE(sync.update(taskbar_jump_list {}).has_value() == false);
+    REQUIRE(sync.update(std::nullopt).has_value() == false);
+    REQUIRE(sync.update(two_tasks())->kind == jump_list_call_kind::commit);
 }

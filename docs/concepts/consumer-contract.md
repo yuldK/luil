@@ -1,5 +1,7 @@
 # 소비자 계약
 
+> 선택 이식 범위: 이 문서의 차트·마크업·업데이트·실행 중 스타일·핫 리로드 교차 참조는 원래 전체 통합 브랜치의 설계 기록이다. 현재 main의 채택 범위와 보존 위치는 [선택 기능 이식 기록](../selected-adoption.md)에 적었다.
+
 앱은 자신의 상태와 메시지를 정의하고 세 경계로 luil에 연결한다. 최소 구성은 [`hello`](../../examples/hello/)를, 기능별 구성은 [`demo`](../../examples/demo/)를 참고한다.
 
 | 구현 | 실행 위치 | 책임 |
@@ -37,6 +39,8 @@ target_link_libraries(my_app PRIVATE luil::luil)
 
 Skia 패키지의 기능별 아카이브를 쓰는 기능은 넷이고 모두 기본은 끈다: `LUIL_ENABLE_SVG`, `LUIL_ENABLE_TEXT_SHAPING`, `LUIL_ENABLE_AVIF`, `LUIL_ENABLE_LOTTIE` ([Skia 빌드 준비](../skia-build.md#기능별-아카이브)). 끈 기능은 아카이브를 링크하지 않고 고지에도 싣지 않으며, 공개 API는 그대로 남아 `unsupported_format`으로 답한다. 켠 기능은 기능별 아카이브가 든 패키지(win-x64 r3, android-arm64 r2 이후)를 요구한다. 설치본의 `luil-config.cmake`는 네 값을 같은 이름으로, 켠 Skia 기능의 목록을 `LUIL_SKIA_FEATURES`로 알린다. 텍스트 모양 잡기는 실행 시점에 플랫폼 ICU(Windows 10 1903, Android 12)를 열고, 없으면 모양 잡기 없이 그린다 ([SVG와 Lottie](../vector-image-design.md)).
 
+선택 라이브러리 차트는 `LUIL_BUILD_CHART`로 켠 구성에만 있다 ([차트 라이브러리 · 보존](../selected-adoption.md#구현-완료-후-보존한-항목)). `add_subdirectory` 소비자는 옵션을 켜고 `luil::luil_chart`를 링크한다. 설치본은 `find_package(luil CONFIG REQUIRED COMPONENTS chart)`로 찾고, 차트 없이 설치한 패키지면 여기서 원인과 함께 실패한다. 설치본의 `luil-config.cmake`는 그 값을 `LUIL_BUILD_CHART`로 알린다. 헤더는 `luil/chart.h`이고 `luil/luil.h`에는 들지 않는다.
+
 luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 고지 생성기는 소스 트리의 루트 LICENSE 또는 설치 패키지의 share/luil/LICENSE.luil에서 그 원문을 읽어 실행 파일 고지에 포함한다. Codicons와 의존성에는 각 원본의 라이선스가 적용된다. 고지 생성기는 Skia 패키지의 `NOTICE.md`를 우선 사용하고, 패키지에 `NOTICE.json`이 있으면 core와 켠 기능의 고지만 골라 싣는다. 직접 빌드한 Skia 소스 트리에는 Bazel 캐시의 Rust PNG crate 고지가 없으므로 생성기가 불완전한 고지를 경고한다. 배포용 고지는 이를 포함하는 패키지에서 생성한다.
 
 ## SMB
@@ -47,6 +51,13 @@ luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 
 - 앱의 고지(설정의 오픈 소스 라이선스 화면 등)에 LGPL-2.1 전문(`third_party/libsmb2/LICENCE-LGPL-2.1.txt`)과 쓴 판(`libsmb2-6.2`)·소스 위치(https://github.com/sahlberg/libsmb2)를 싣는다. luil의 고지 생성기는 Windows 실행 파일 리소스용이라 Android에서는 앱이 직접 싣는다.
 - luil은 libsmb2를 고치지 않고 쓴다. 고쳐 쓰려면 고친 소스도 LGPL로 공개해야 한다.
 - 같은 저장소의 libdcerpc 부분은 BSD-2 라이선스다.
+
+## OS 알림
+
+[OS 알림](../os-notification-design.md)(`show_notification`)을 쓰는 앱이 지는 것이다.
+
+- Windows는 `window_config::identity`에 앱 식별(AUMID)을 준다. 라이브러리가 시작할 때 `HKCU\Software\Classes\AppUserModelId\<id>`와 활성화기의 `HKCU\Software\Classes\CLSID\{clsid}`를 쓰고 스스로 지우지 않는다. 앱의 제거 길에서 `close_all_notifications` 뒤 `win32::unregister_app_identity`를 부른다. 아이콘은 실행 파일 리소스가 아니라 PNG·ICO 파일의 절대 경로로 준다. 꺼진 앱의 알림을 누르면 COM이 `"<실행 파일>" -luil-notification`으로 앱을 띄우므로 앱은 `notification_launch`로 그 실행을 알아보고 인자를 파일로 읽지 않는다.
+- Android는 매니페스트에 `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`를 싣고, targetSdk 33 이상이면 `app_host::request_permission(app_permission::notifications)`으로 묻는다.
 
 ## HTTP와 웹뷰
 

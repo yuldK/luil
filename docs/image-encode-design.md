@@ -14,6 +14,8 @@
 
 형식을 값으로 받는 함수 하나로 두면 그 함수가 세 인코더를 모두 참조한다. 그러면 PNG만 쓰는 앱도 JPEG·WebP 인코더를 싣는다. 함수마다 파일을 나누면(`src/ui/image_encode_png.cpp` 등) **앱이 부른 형식의 인코더만** 실행 파일에 들어온다. skia-prep의 실측으로 Release 실행 파일에서 PNG는 약 0.13 MB, JPEG는 약 0.27 MB가 는다 (win-x64, skia-prep `docs/skia-build.md` 6.6). 부르지 않으면 늘지 않는다.
 
+클립보드에 그림을 넣는 요청(`clipboard_data_copy_request`)도 같은 이유로 PNG를 앱에게서 받는다. 창 계층은 픽셀만 읽어 `CF_DIBV5`를 짓고, "PNG" 형식을 싣고 싶은 앱만 logic thread에서 `encode_png`를 불러 요청에 담는다 ([그림 클립보드](image-clipboard-design.md)).
+
 화면 캡처(`capture_request`)는 이 API가 아니라 창 계층이 직접 무손실 WebP로 남긴다. 창 계층은 창이 있는 모든 앱에 링크되므로, 거기서 PNG 인코더를 부르면 캡처를 쓰지 않는 앱도 그 인코더를 싣는다. PNG 캡처가 필요한 앱은 캡처 파일을 `load_image_file`로 읽어 `encode_png`로 다시 짓는다.
 
 ## 계약

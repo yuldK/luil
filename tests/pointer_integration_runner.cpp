@@ -831,6 +831,28 @@ namespace luil::testing {
                 static_cast<void>(uia.wait([&](const json& state) { return state["pen_down"] == before["pen_down"].get<int>() + 1; }, "Eraser contact delivered"));
                 no_change(before, false);
             });
+            test("pen ink / pressure stroke then eraser removes it", [&] {
+                uia.invoke(L"ink-visible");
+                static_cast<void>(uia.wait([](const json& state) { return state["ink_visible"] == true; }, "Show ink target"));
+                const auto before { uia.status() };
+                pen.down(uia.point(L"ink", 0.2, 0.5));
+                pen.move(uia.point(L"ink", 0.5, 0.55));
+                pen.move(uia.point(L"ink", 0.8, 0.5));
+                pen.up(uia.point(L"ink", 0.8, 0.5));
+                const auto drawn { uia.wait([&](const json& state) { return state["ink_strokes"] == before["ink_strokes"].get<int>() + 1; }, "Pen ink stroke") };
+                // 합성 펜은 압력 512를 싣는다 (0~1024의 가운데).
+                require(std::abs(drawn["ink_pressure"].get<double>() - 0.5) < 0.01, "Pen ink lost its pressure: " + drawn.dump());
+                no_change(before, false);
+                constexpr PEN_FLAGS eraser { PEN_FLAG_ERASER | PEN_FLAG_INVERTED };
+                pen.down(uia.point(L"ink", 0.5, 0.2), eraser);
+                pen.move(uia.point(L"ink", 0.5, 0.8), 0, eraser);
+                pen.up(uia.point(L"ink", 0.5, 0.8), eraser);
+                const auto erased { uia.wait([&](const json& state) { return state["ink_strokes"] == before["ink_strokes"]; }, "Eraser removes the ink stroke") };
+                require(erased["ink_erased"].get<int>() == before["ink_erased"].get<int>() + 1, "Eraser removed an unexpected count: " + erased.dump());
+                no_change(before, false);
+                uia.invoke(L"ink-visible");
+                static_cast<void>(uia.wait([](const json& state) { return state["ink_visible"] == false; }, "Hide ink target"));
+            });
             test("pen Shift click / UIA text selection", [&] {
                 pen.remove();
                 click(pen, uia.point(L"text", 0.1));

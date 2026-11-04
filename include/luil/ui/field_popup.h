@@ -9,6 +9,7 @@ namespace luil {
     // 분할 버튼이 처음 따르고 날짜 칸·색 고르개·메뉴 막대가 이어 따른다.
     //  - popup의 자리를 정하는 순수 함수(`place_field_popup`)와, 닫혀 있을 때 popup을 여는 키 처리기다.
     //  - 열림은 앱 상태이고 popup은 `ui_frame::popups`에 실린 동안만 있다. 이 헤더는 상태를 들지 않는다.
+    //  - 네 방향 자리 함수(`place_field_popup_at_side`)는 tree 안에 겹쳐 그리는 안내 풍선도 쓴다 (docs/teaching-tip-design.md).
 
     // popup을 필드의 어느 가장자리에 맞추는가.
     enum class field_popup_alignment
@@ -53,4 +54,32 @@ namespace luil {
     //  - 이미 열려 있으면 그 키들을 빈 목록으로 삼켜 앱 단축키로 새지 않게 한다. 그 밖의 키는 `std::nullopt`다.
     //  - `set_open`이 비어 있으면 처리기도 비어 있다.
     [[nodiscard]] key_handler field_popup_key_handler(bool open, std::function<input_action(bool open)> set_open, bool down_opens);
+
+    // 필드의 어느 변 바깥에 놓는가다. 왼쪽·오른쪽은 화면의 방향이고 읽는 방향과 무관하다.
+    enum class field_popup_side
+    {
+        below,
+        above,
+        left,
+        right,
+    };
+
+    struct field_popup_side_position
+    {
+        // `place_field_popup`과 같은 논리 픽셀이다.
+        float x { 0.0f };
+        float y { 0.0f };
+        // 실제로 놓은 방향이다.
+        field_popup_side side { field_popup_side::below };
+        // 네 방향 모두 모자라 바라는 방향에 두고 `limit` 안으로 밀었으면 거짓이다. 그때는 필드를 덮을 수 있다.
+        bool fits { true };
+    };
+
+    // 필드의 네 변 가운데 한 곳 바깥에 놓을 자리를 정한다. `size`는 논리 크기다 (docs/teaching-tip-design.md 결정 3).
+    //  - 바라는 방향, 반대 방향, 남은 두 방향(아래·위면 오른쪽·왼쪽, 오른쪽·왼쪽이면 아래·위) 순으로 주 축이 `limit`에
+    //    들어가는 첫 방향에 놓는다. 주 축은 아래·위면 세로, 왼쪽·오른쪽이면 가로다.
+    //  - 다른 축은 필드 가운데에 맞춘 뒤 `limit` 안으로 민다. `limit`보다 크면 처음 가장자리(왼쪽·위)에 붙는다.
+    //  - 어느 방향도 들어가지 않으면 바라는 방향에 두고 주 축도 `limit` 안으로 밀며 `fits`가 거짓이다.
+    //  - `anchor.alignment`는 보지 않는다. 배율이 유효하지 않으면 1로 본다 (`place_field_popup`과 같다).
+    [[nodiscard]] field_popup_side_position place_field_popup_at_side(const field_popup_anchor& anchor, size_f size, float scale, field_popup_side preferred) noexcept;
 }

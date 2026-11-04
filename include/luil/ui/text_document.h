@@ -38,6 +38,11 @@ namespace luil {
         // `background` 뒤에 둔다. `{ begin, end, color, bold }` 같은 순서 초기화가 그대로 읽힌다.
         // 고대비에서 색이 모여도 남는 단서다 (주석을 기울이는 식). 기울임 face가 없는 글꼴은 글자를 눕혀 메운다.
         bool italic { false };
+        // 글자 아래 1 논리 픽셀 선을 그 구간의 글자색으로 긋는다 (링크 밑줄과 같은 자리). 폭을 바꾸지 않아 배치에 싣지 않는다.
+        bool underline { false };
+        // code face로 배치하고 바탕을 `raised_background`로 칠한다. 고대비에서는 그 바탕이 창 바탕과 같아 face만 남는 단서다.
+        //  - 배치가 없는 측정기 길은 보통 글꼴로 재고 그리며 바탕만 칠한다.
+        bool code { false };
     };
 
     struct line_decoration

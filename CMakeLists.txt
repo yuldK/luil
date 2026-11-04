@@ -69,6 +69,15 @@ set(LUIL_STYLE "${PROJECT_SOURCE_DIR}/assets/style.json"
     CACHE FILEPATH "Style JSON (neutral palettes, accent tones, metrics) embedded at build time.")
 set(LUIL_GENERATED_STYLE
     "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/ui_style.h")
+# 내부 문자열 표는 설치하지 않는다. 공개 생성 헤더와 다른 경로에 둔다.
+set(LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY "${LUIL_GENERATED_DIRECTORY}/private")
+# 라이브러리 기본 문구의 문자열 표도 JSON에서 빌드 시점에 만든다 (docs/i18n-design.md). 내부 표라 같은 자리에 둔다.
+# 소비자는 자기 폴더로 통째로 바꿔칠 수 있다. 키 집합은 저장소의 assets/strings/ko.json과 같아야 하고 기본 언어는 ko다.
+# `ja.json`을 더하면 라이브러리 기본 문구에 일본어가 선다. 생성 script가 검사한다.
+set(LUIL_STRINGS "${PROJECT_SOURCE_DIR}/assets/strings"
+    CACHE PATH "String table directory (one <tag>.json per language) embedded at build time.")
+set(LUIL_GENERATED_STRINGS
+    "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}/luil/generated/library_text.h")
 # 판번 헤더는 project VERSION 하나에서 생성한다.
 # version.cpp와 소비자 매크로가 같은 근원을 본다.
 configure_file(
@@ -439,6 +448,8 @@ luil_find_dependencies(
 # 고지 생성과 .rc 조각 구성 함수다.
 # 소비자 실행 파일과 test가 쓴다.
 include("${LUIL_CMAKE_DIRECTORY}/generate_notices.cmake")
+# 문자열 표 생성 함수다. 라이브러리 표와 앱·선택 라이브러리의 표가 함께 쓴다 (docs/i18n-design.md).
+include("${LUIL_CMAKE_DIRECTORY}/string_table.cmake")
 
 # `include(CTest)`는 dashboard target을 함께 만들어 솔루션을 부풀린다.
 # 필요한 것은 test 등록뿐이라 enable_testing만 쓴다.

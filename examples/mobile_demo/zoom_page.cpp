@@ -76,7 +76,7 @@ namespace mobile_demo {
         };
 
         constexpr int page_count { 5 };
-        // 쪽 머리의 줄 셋(설명·쪽·쓸기)과 단추 줄 둘(확대·회전)이다 (논리 픽셀).
+        // 쪽 머리의 줄 셋(설명·쪽·쓸기)과 단추 줄 셋(확대·회전·줌 단추 글)이다 (논리 픽셀).
         constexpr float controls_height { 34.0f };
         constexpr float row_spacing { 8.0f };
 
@@ -132,6 +132,8 @@ namespace mobile_demo {
             state_ = luil::zoom_about(config(), viewport_, target->value / state_.zoom, {});
         else if (const auto* const rotate { message.get<rotate_intent>() }; rotate != nullptr)
             state_ = luil::rotate_about(config(), viewport_, rotate->degrees, rotate->anchor);
+        else if (const auto* const labels { message.get<zoom_labels_intent>() }; labels != nullptr)
+            english_labels_ = labels->english;
         else if (const auto* const edge { message.get<edge_swipe_intent>() }; edge != nullptr)
         {
             last_swipe_ = edge->swipe;
@@ -152,7 +154,7 @@ namespace mobile_demo {
     std::unique_ptr<luil::ui_element> zoom_page::build(const float width, const float height, const float scale)
     {
         static_cast<void>(scale);
-        const float header { 2.0f * note_line_height + body_line_height + 2.0f * controls_height + 5.0f * row_spacing };
+        const float header { 2.0f * note_line_height + body_line_height + 3.0f * controls_height + 6.0f * row_spacing };
         viewport_ = { std::max(0.0f, width - 2.0f * page_padding), std::max(0.0f, height - (2.0f * page_padding + header)) };
         if (fitted_ == false && viewport_.x > 0.0f && viewport_.y > 0.0f)
         {
@@ -167,7 +169,17 @@ namespace mobile_demo {
         column->add(
             make_label({ kind_text, u8"zoom-edge-swipe" }, last_swipe_.has_value() ? describe(*last_swipe_) : std::u8string { u8"경계 쓸기: 아직 없음" }, note_text_size, luil::label_color_role::dim),
             note_line_height);
-        column->add(std::make_unique<luil::zoom_controls_element>(luil::zoom_controls_config { .view = config(), .viewport = viewport_ }), controls_height);
+        // 영어 앱은 세 칸을 채운다. 비워 두면 단추 이름이 기본 문구(축소·확대·맞춤)다.
+        // 단추 폭이 56dp로 정해져 있어 "Zoom out"은 글꼴 배율 1.1에서 "Zoom o…"로 잘린다. 세 글자 안팎으로 짧게 쓴다.
+        luil::zoom_controls_config zoom_buttons { .view = config(), .viewport = viewport_ };
+        if (english_labels_)
+        {
+            zoom_buttons.decrease_label = u8"Out";
+            zoom_buttons.increase_label = u8"In";
+            zoom_buttons.fit_label = u8"Fit";
+        }
+
+        column->add(std::make_unique<luil::zoom_controls_element>(std::move(zoom_buttons)), controls_height);
         // 회전 단추 셋과 지금 각도다. 단추는 키(Shift+←/→/Home)와 같은 `rotate_by` 메시지를 보내 UIA가 Invoke로 되풀이한다.
         //  - 0도 복귀는 지금 각도를 되돌리는 상대 각도다. 이미 0도면 할 일이 없으므로 단추를 끈다. 켜 둔 채 빈 동작을 내면
         //    보조 기술의 Invoke가 오류로 끝난다.
@@ -190,6 +202,17 @@ namespace mobile_demo {
         rotation_controls->add_flexible(
             make_label({ kind_text, u8"zoom-rotation" }, u8"회전 " + to_u8(static_cast<int>(std::lround(state_.rotation))) + u8"°", body_text_size, luil::label_color_role::primary));
         column->add(std::move(rotation_controls), controls_height);
+        // 줌 단추 글의 언어를 바꾸는 단추와 지금 언어다. 누르면 반대 언어를 절대 값으로 보낸다.
+        luil::stack_config language_controls_config {};
+        language_controls_config.direction = luil::stack_direction::row;
+        language_controls_config.spacing = row_spacing;
+        auto language_controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-label-controls" }, language_controls_config) };
+        auto language_toggle { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"zoom-label-toggle" }, luil::text_button_config { .text = u8"줌 단추 글 바꾸기" }) };
+        language_toggle->set_action(luil::ui_trigger::left_click, luil::make_message_action(zoom_labels_intent { english_labels_ == false }));
+        language_controls->add(std::move(language_toggle), 148.0f);
+        language_controls->add_flexible(
+            make_label({ kind_text, u8"zoom-label-language" }, english_labels_ ? u8"줌 단추 글: English" : u8"줌 단추 글: 기본", body_text_size, luil::label_color_role::primary));
+        column->add(std::move(language_controls), controls_height);
         auto view { std::make_unique<luil::zoom_view_element>(config()) };
         view->set_access_name(u8"도면 확대 보기");
         view->set_content(std::make_unique<diagram>(page_, state_.rotation));

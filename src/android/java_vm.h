@@ -50,6 +50,8 @@ namespace luil::android {
 
     // 이 호출 동안의 지역 참조를 모아 끝에서 한꺼번에 지운다. 호출 하나가 만드는 참조 수는 몇 개뿐이다.
     //  - 붙인 thread는 오래 살 수 있어 지역 참조를 남기지 않는다. 틀을 얻지 못하면 `pushed()`가 거짓이다.
+    //  - 틀을 얻지 못하면 `PushLocalFrame`이 `OutOfMemoryError`를 남기는데, 생성자가 그 예외를 거둔다. `pushed()`만 보고
+    //    돌아가는 자리가 많아, 호출부마다 거두게 하면 하나만 빠져도 예외가 남은 채 다음 JNI 호출이 불린다.
     class jni_local_frame final
     {
     public:
@@ -57,6 +59,8 @@ namespace luil::android {
             : env_ { &env }
             , pushed_ { env.PushLocalFrame(capacity) == JNI_OK }
         {
+            if (pushed_ == false)
+                env.ExceptionClear();
         }
 
         jni_local_frame(const jni_local_frame&) = delete;

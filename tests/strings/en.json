@@ -1,0 +1,18 @@
+{
+    "language": "en",
+    "plural": "one",
+    "arguments": {
+        "date_line": [ "year", "month", "day", "month_name" ]
+    },
+    "strings": {
+        "save": "Save",
+        "files_selected": { "one": "{count} file selected", "other": "{count} files selected" },
+        "files_found": { "one": "", "other": "{count} files found" },
+        "file_summary": { "one": "a file", "other": "{count} files" },
+        "greeting": "Hello, {name} of {place}",
+        "echo": "{word} and {word}",
+        "braces": "{{{value}}} and {{value}}",
+        "number": "n={number}",
+        "date_line": "{month_name} {day}, {year}"
+    }
+}

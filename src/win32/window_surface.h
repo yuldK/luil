@@ -381,6 +381,11 @@ namespace luil::win32 {
             return recording_;
         }
 
+        // Alt 단독의 무장을 푼다 (docs/menu-bar-design.md의 Win32 절). 전역 단축키(`RegisterHotKey`)로 건 Alt 조합은
+        // OS가 글자 키를 가져가 창에 Alt의 누름과 뗌만 오므로, 그 눌림(`WM_HOTKEY`)을 받은 쪽이 키보드 초점 표면을 포함한
+        // 모든 표면에 부른다. 풀지 않으면 뗌이 Alt 단독으로 읽혀 막대가 선다.
+        void cancel_alt_tap() noexcept;
+
     protected:
         // 이 표면 위의 입력이 popup 밖 입력인가다.
         // popup 자신만 거짓이다 — 자기 위 클릭은 popup 안 클릭이다.
@@ -446,6 +451,16 @@ namespace luil::win32 {
         std::optional<screen_bounds> next_placement_ {};
 
     private:
+        // 메뉴 막대가 선 동안이다 (발행된 `interaction_snapshot::menu_keys`).
+        [[nodiscard]] bool menu_keys_active() const;
+        // 이 표면의 게시된 tree에 키를 받을 메뉴 막대가 있다 (`active_menu_bar`).
+        [[nodiscard]] bool menu_bar_present() const;
+        // Alt 단독(`key_code::alt_tap`)을 이 표면의 키로 보낸다.
+        void post_alt_tap();
+
+        // Alt 단독의 무장이다. 키보드 초점 표면에 선다.
+        alt_tap_tracker alt_tap_ {};
+
         // 세워 둔 frame을 raster bitmap에 그린다 (찍기와 녹화가 함께 쓴다).
         [[nodiscard]] bool draw_to_bitmap(const frame_state& state, SkBitmap& image, std::u8string& error);
         // 녹화 중이면 이 frame을 모은다. 그린 뒤에 부른다.
@@ -478,7 +493,8 @@ namespace luil::win32 {
         // 번역이 됐으면 참이라 호출자가 메시지를 삼킨다.
         //  - `captured`는 이 메시지가 올 때 이 창이 포인터를 잡고 있었는가다. 뗌 처리기는 캡처를 먼저 풀고 부르므로
         //    풀기 전의 값을 넘긴다. 비어 있으면 지금 캡처를 본다.
-        [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter, std::optional<bool> captured = std::nullopt);
+        //  - `closed_popup`은 이 누름이 popup을 닫았는가다. 누름 이벤트에만 싣는다 (`pointer_pressed_event::closed_popup`).
+        [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter, std::optional<bool> captured = std::nullopt, bool closed_popup = false);
         // Ctrl을 누르거나 뗐다. 포인터가 이 창 위에 있으면 그 자리의 이동을 다시 알린다 (`interaction_snapshot::pointer_control`).
         void post_control_move(bool control);
 
@@ -646,6 +662,8 @@ namespace luil::win32 {
             discarded,
         };
         std::vector<std::pair<std::uint32_t, pointer_owner>> pointer_owners_ {};
+        // 펜 포인터마다 마지막으로 추적기에 보낸 `frameId`다. 합쳐 온 과거 표본에서 이미 보낸 것을 거른다 (ink-input-design.md).
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> pen_frames_ {};
         pointer_sequence_tracker pointer_tracker_ {};
         // 웹뷰 위에 떠 있는 펜이다. 그리로 넘어갈 때 우리 hover를 한 번 거둔다.
         std::vector<std::uint32_t> webview_pen_hovers_ {};

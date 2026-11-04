@@ -24,10 +24,20 @@ function(luil_mobile_demo_sources out_var)
         "${directory}/files_page.h"
         "${directory}/groups_page.cpp"
         "${directory}/groups_page.h"
+        "${directory}/ink_page.cpp"
+        "${directory}/ink_page.h"
+        "${directory}/../demo/ink_sketch.h"
+        "${directory}/inspector_page.cpp"
+        "${directory}/inspector_page.h"
+        "${directory}/../demo/inspector_state.h"
         "${directory}/lists_page.cpp"
         "${directory}/lists_page.h"
+        "${directory}/page_list.cpp"
+        "${directory}/page_list.h"
         "${directory}/popups_page.cpp"
         "${directory}/popups_page.h"
+        "${directory}/../demo/readonly_undo_keys.h"
+        "${directory}/../demo/rich_text_sample.h"
         "${directory}/sheets_page.cpp"
         "${directory}/sheets_page.h"
         "${directory}/smb_page.cpp"
@@ -56,5 +66,7 @@ function(luil_mobile_demo_sources out_var)
             VERBATIM)
         list(APPEND sources "${output}")
     endforeach()
+    # 테마 페이지의 스타일 파일 견본의 바탕이다. 이 빌드가 구운 파일(LUIL_STYLE)을 그대로 싣는다.
+    # 테마 페이지의 마크업 묶음이 처음 읽는 견본 글이다. 데스크톱 demo와 같은 파일이다.
     set(${out_var} ${sources} PARENT_SCOPE)
 endfunction()

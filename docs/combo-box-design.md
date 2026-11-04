@@ -16,7 +16,8 @@
 
 ↑↓·Page와 Enter는 열린 후보의 동작이고 Esc는 조합·열림·편집 복원의 순서다.
 Home·End(Shift 포함)는 열려 있어도 글 칸의 caret을 옮긴다. 편집형 콤보의 관례다.
-조합 중 키는 IME에 맡긴다. 새 token을 요청한 동안에는 스피너를 표시한다.
+조합 중 키는 IME에 맡긴다. 새 token을 요청한 동안에는 스피너를 표시한다. 스피너의 접근 이름은 `loading_name`이고
+비면 기본 문구("추천 항목을 불러오는 중")다. 화면에는 그리지 않는다 ([기본 문구](default-text-design.md)).
 
 열린 콤보(`open`이 참이고 `set_open`이 있다)는 root에 `set_focus_leave_action`을 달아, 키보드 초점이 콤보의 가지를
 떠나면 `set_open(false)`를 보낸다. Tab·Shift+Tab·보조 기술의 초점 이동은 플랫폼의 popup 닫힘(`pointer_press_outside`)에

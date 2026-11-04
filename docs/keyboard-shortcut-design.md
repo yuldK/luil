@@ -52,10 +52,14 @@
 
 - Tab·Esc·Enter·화살표·Alt 조합·앱 단축키보다 먼저 받는다. 초점 이동, 대화 상자의 Esc, 메뉴, 명령이 일어나지 않는다. 빠져나가는 길(포인터로 다른 곳 누르기, 취소 단추)은 앱이 둔다.
 - 글자 키도 수정자 없이 키로 온다. 플랫폼이 발행된 상호작용의 `interaction_snapshot::key_capture`를 보고 바꾼다. 그 사이의 글자 입력은 버린다 — 같은 키가 키로 이미 갔다.
-- 수정자 키 자체(Ctrl·Shift·Alt만 누름)는 키가 아니라 오지 않는다. 잡는 칸은 수정자를 떼기 전까지 기다리지 않고, 수정자와 함께 온 첫 키를 받는다.
+- 수정자 키 자체(Ctrl·Shift·Alt만 누름)는 키가 아니라 오지 않는다. 예외는 메뉴 막대의 `key_code::alt_tap` 하나다. 막대가 있는 창에서 Alt만 눌렀다 떼면 이 이름 키가 수정자 없이 온다([menu-bar-design.md](menu-bar-design.md)). 라벨이 없어 단축키 글로 적을 수 없고, VK가 없어 전역 단축키로도 걸리지 않으며(`invalid_key`), 키 잡기 동안에는 나지 않는다. 잡는 칸은 수정자를 떼기 전까지 기다리지 않고, 수정자와 함께 온 첫 키를 받는다.
 - Windows에서 Alt를 떼면 드는 메뉴 모드(`SC_KEYMENU`)를 막고, Alt+F4·Alt+Space도 잡는 칸에 준다. 단축키를 고르다 창이 닫히거나 시스템 메뉴가 열리면 안 된다.
 - **시스템 예약 키는 보여 주기만 한다.** `system_reserved_chord`가 Alt+F4·Alt+Tab·Alt+Esc·Ctrl+Esc·Alt+Space·Ctrl+Alt+Delete를 알아본다. 잡는 칸은 그것을 받아도 단축키로 정하지 말고 예약 키라고 보여 준다. 그 가운데 Alt+Tab·Ctrl+Alt+Delete·Windows 키 조합은 OS가 먼저 가져가 아예 오지 않는다.
 - 표식은 초점이 바뀔 때만 달라진다. controller가 이벤트마다 한 곳에서 다시 센다.
+
+## 앱이 뒤에 있을 때
+
+앱 안 단축키는 앱이 앞에 있을 때만 온다. 앱이 뒤에 있거나 창이 숨어 있어도 받는 키 조합은 [전역 단축키](global-hotkey-design.md)가 같은 `key_chord`로 건다. `Ctrl`·`Shift`·`Alt`만 쓰고 걸린 조합은 키 잡기 칸이 초점을 가진 동안 풀려 칸이 받는다. `host/key_mapping`에는 `key_code`를 Win32 가상 키로 되돌리는 `win32_virtual_from_key`가 더해졌다.
 
 ## 검증
 

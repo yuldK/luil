@@ -10,6 +10,7 @@
 //   *_page.h / *_page.cpp       — 페이지 하나씩 (데스크톱 demo에서 옮겼다).
 
 #include "mobile_demo/app.h"
+#include "mobile_demo/basics_page.h"
 #include "mobile_demo/files_page.h"
 
 #include "luil/win32/win32_window.h"
@@ -22,6 +23,8 @@
 #include <system_error>
 
 namespace {
+    // 테마 페이지의 파일 감시 묶음이 볼 폴더다 (hot-reload-design.md 결정 5). 실행 파일 옆이라 사람이 찾는다. 읽지 못하면 빈 경로이고 감시가 서지 않는다.
+
     class desktop_delegate final : public luil::win32::window_delegate
     {
     public:
@@ -35,16 +38,33 @@ namespace {
             std::filesystem::remove_all(folder_, ignored);
         }
 
-        // 파일 감시 페이지가 볼 임시 폴더를 걸어 logic에 넘긴다. 감시자는 logic이 `stop_workers`에서 멈춘다.
+        // 파일 감시 페이지가 볼 임시 폴더를 걸어 logic에 넘긴다. 감시자와 핫 리로드 도우미는 logic이 `stop_workers`에서 멈춘다.
         void on_started(luil::app_host& host) override
         {
             folder_ = std::filesystem::temp_directory_path() / (L"luil-mobile-demo-watch-" + std::to_wstring(GetCurrentProcessId()));
             watcher_ = mobile_demo::start_files_watch(host, folder_);
+            host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
+            host.post_app_message(luil::app_message { mobile_demo::device_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
         }
 
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override
         {
             return mobile_demo::make_metrics_message(metrics);
+        }
+
+        // 기본 페이지의 클립보드 그림 붙여넣기다. 답은 `make_clipboard_data_message`로 온다.
+        void execute_app_ui_command(luil::app_host& host, const luil::app_ui_command& command) override
+        {
+            if (command.command == mobile_demo::command_paste_clipboard_image)
+                host.post_clipboard_request(luil::clipboard_data_paste_request {});
+        }
+
+        // 서식 칸이 청한 답은 표식으로 가른다.
+        [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
+        {
+            if (data.tag == demo::rich_text_clipboard_tag)
+                return luil::app_message { demo::rich_text_clipboard_intent { data } };
+            return luil::app_message { mobile_demo::clipboard_image_intent { data } };
         }
 
     private:

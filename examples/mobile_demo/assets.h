@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 extern const std::uint8_t mobile_demo_gradient_png[];
 extern const std::size_t mobile_demo_gradient_png_size;
@@ -14,8 +15,11 @@ extern const std::uint8_t mobile_demo_sweep_webp[];
 extern const std::size_t mobile_demo_sweep_webp_size;
 extern const std::uint8_t mobile_demo_spinner_gif[];
 extern const std::size_t mobile_demo_spinner_gif_size;
+// 앱 빌드가 구운 스타일 파일(LUIL_STYLE)의 글이다. 테마 페이지의 스타일 파일 견본이 이 글을 고쳐 읽는다.
 
 namespace mobile_demo {
+
+
     [[nodiscard]] inline std::span<const std::uint8_t> gradient_png() noexcept
     {
         return { mobile_demo_gradient_png, mobile_demo_gradient_png_size };

@@ -406,6 +406,8 @@ namespace luil::win32 {
             //  - 키 잡기 모드에서는 잡는 칸의 것이다 (window_surface의 `WM_SYSKEYDOWN`).
             if (word_parameter == VK_SPACE && (long_parameter & (1LL << 29)) != 0 && key_capturing() == false)
             {
+                // Space가 이 자리에서 끝나 Alt 단독의 무장을 풀 길이 없다. Alt+Space는 Alt 단독이 아니다.
+                cancel_alt_tap();
                 // 메뉴는 캡션 띠의 왼쪽 아래에서 연다. 띠가 창 아래에 있어 화면 밖으로 넘치면 OS가 위로 뒤집는다.
                 RECT window_rectangle {};
                 GetWindowRect(window_, &window_rectangle);

@@ -120,7 +120,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - 본체의 ↓는 앱으로 흐른다. 목록 안 버튼의 ↓까지 가로채지 않는다.
 - Alt 조합은 값 단계·묶음 단계가 앱 단축키로 흘려보내므로 처리기 단계에서 받는다. Ctrl·Shift·Meta가 함께면 받지 않는다. Alt+F4는 시스템 몫이라 오지 않는다.
 - 드롭다운 단추(본체 없음)는 한 절반이 Enter·Space·↓·Alt+↓·F4를 모두 받는다.
-- 화살표에 초점이 있을 때의 Tab은 다음 자리가 아니라 Tab 순서의 처음으로 간다. `move_focus`(`ui_interaction.cpp`)가 묶음의 대표가 아닌 구성원을 순서에서 찾지 못해 처음에서 시작하기 때문이다. `choice_group_element`의 선택하지 않은 칸에서도 같다. controller의 몫이라 이 노드에서 고치지 않는다. 본체에서의 Tab은 다음 자리로 간다.
+- 화살표에 초점이 있을 때의 Tab도 다음 자리로 간다. 처음에는 `move_focus`(`ui_interaction.cpp`)가 묶음의 대표가 아닌 구성원을 순서에서 찾지 못해 Tab 순서의 처음으로 갔다. `choice_group_element`의 선택하지 않은 칸에서도 같았다. R3에서 고쳤다. `move_focus`가 `ui_tree::focus_stop_of`로 그 자리를 접은 묶음의 대표에서 센다([menu-focus-fixes-design.md](menu-focus-fixes-design.md)의 X-3).
 
 **접근성.** root는 `none`이라 접근 tree에서 접히고(`collect_access_children`) 두 절반이 형제로 선다.
 
@@ -142,7 +142,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 | --- | --- |
 | 바깥 누름·휠·Esc·창 이동·크기 변경·활성 전환 | popup의 `dismiss` factory. 메뉴는 어느 계기에도 닫는다. 글을 치는 popup만 이동·활성 전환에 남긴다(데모 검색 드롭다운) |
 | 항목 선택 | `menu_config::after_select` |
-| 필드를 다시 누름 | 클릭이 `set_open(!open)`을 낸다 |
+| 필드를 다시 누름 | 클릭이 누를 때의 `set_open(!open)`을 낸다(열려 있었으면 닫는다) |
 | 보조 기술 | `collapse` |
 | 키보드 초점이 필드를 떠남 | 열린 동안에만 root에 `set_focus_leave_action`을 단다(콤보와 같다) |
 
@@ -153,7 +153,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 
 - Alt+↓는 Alt만 눌렸을 때, F4는 수식 키 없이 `set_open(true)`를 낸다. `down_opens`가 참이면 수식 키 없는 ↓도 연다. 화살표 단추처럼 ↓가 달리 쓰이지 않는 자리에 준다.
 - 이미 열려 있으면 그 키들을 빈 목록으로 삼켜 앱 단축키로 새지 않게 한다. 그 밖의 키는 `std::nullopt`다.
-- 메뉴가 열려도 키보드 초점은 필드에 남는다. 메뉴 항목은 초점을 받지 않고(`set_tab_stop(false)`) 강조는 따로 선다. 닫힌 뒤에도 초점은 그 자리다. 메뉴가 아닌 popup(달력·색 고르개)의 키 경로는 그 노드가 정한다.
+- 메뉴가 열려도 키보드 초점은 필드에 남는다. 메뉴 항목은 초점을 받지 않고(`set_tab_stop(false)`) 강조는 따로 선다. 닫힌 뒤에도 초점은 그 자리다. 메뉴가 아닌 popup(달력·색 고르개)의 키 경로는 그 노드가 정한다. 색 고르개는 열 때 초점을 popup 표면의 판으로 옮기고 Esc로 닫으면 칸으로 돌린다([색 고르기](color-picker-design.md) 결정 3). 날짜 칸(R4)은 열 때 초점을 popup의 커서 날로 옮기고 Esc·날 고르기로 닫으면 칸으로 돌린다([날짜 고르기](date-picker-design.md) 결정 2).
 
 **한 번에 하나만.** 라이브러리가 강제하지 못한다. popup 목록이 앱 상태이기 때문이다. 앱이 어느 필드의 `set_open(true)`를 처리할 때 다른 anchored popup의 열림을 모두 지운다. 지금 데모는 `dropdown_toggle_intent`가 `menu_open_`을, `card_menu_intent`가 `close_dropdown()`을 부르는 식으로 짝마다 적었다. 이 노드를 더하면서 열린 필드의 owner 하나(`open_popup_`)를 두는 식으로 바꾼다. 값이 하나라 둘이 함께 열릴 수 없다.
 
@@ -163,7 +163,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - `start`는 popup 왼쪽을 필드 왼쪽에, `end`는 popup 오른쪽을 필드 오른쪽에 맞춘다. 가로는 `limit` 안으로 민다.
 - `limit`은 앱이 준다. Android는 내용 영역이고 Win32는 창 client다. 작업 영역은 host만 알기 때문에, Win32에서 창 밖으로 걸칠 수 있던 popup도 이 helper는 창 안에 둔다.
 
-**열린 동안 필드를 누를 때.** 바깥 누름이 먼저 `set_open(false)`를 내고(`window_surface.cpp`) 클릭이 이어진다. 클릭은 뗄 때의 tree에서 액션을 꺼낸다(`ui_interaction.cpp`의 뗌 처리). 그 사이 `open == false` frame이 게시되면 클릭이 `set_open(true)`를 내 되열릴 수 있다. `dropdown_element`도 같은 모양이다. 고칠 자리는 controller라 이 노드에서 하지 않는다. 확인 test가 현재 동작을 재현해 잠갔고 결과는 다음과 같다. `open == true` tree에서 화살표를 눌러 두고 `open == false` tree를 게시한 뒤 떼면 `set_open(true)`가 나간다. 게시가 없으면 같은 누름은 `set_open(false)`다. 닫으려던 누름이 도로 여는 쪽은 앞의 경우뿐이다.
+**열린 동안 필드를 누를 때.** 바깥 누름이 먼저 `set_open(false)`를 내고(`window_surface.cpp`) 클릭이 이어진다. 처음에는 클릭이 뗄 때의 tree에서 액션을 꺼내, 그 사이 `open == false` frame이 게시되면 `set_open(true)`를 내 되열렸다. `dropdown_element`도 같은 모양이었다. R3에서 고쳤다. 누를 때 펼쳐 있던 요소의 클릭은 누를 때의 tree의 액션이라 `set_open(false)`다([menu-focus-fixes-design.md](menu-focus-fixes-design.md)의 X-4). 게시가 있든 없든 같은 누름은 닫는다.
 
 ## 결정
 
@@ -181,7 +181,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - 길 b: 새 순수 함수 `place_field_popup`과 `menu_popup_config::below`. 되는 것: 뒤집기·정렬·간격이 한 곳에 서고 `tooltip_bounds`는 그대로다. 대가: 공개 함수와 설정 한 칸이 늘고, 뒤집기 산술이 tooltip과 비슷하게 두 곳에 생긴다.
 - 길 c: `ui_tree.cpp`의 `tooltip_bounds`를 공용으로 꺼낸다. 되는 것: 산술이 한 곳이다. 대가: 그리기와 입력이 함께 쓰는 tooltip 위치(`tooltip_tests.cpp`가 잠근다)를 건드린다. 그 함수는 포인터 앵커와 창 전체 밀기를 가정해, 필드 아래 정렬이나 창 밖에 걸치는 popup과 인자가 갈린다.
 - 길 d: helper는 정렬·간격만 정하고 뒤집기와 밀기는 host가 작업 영역(Win32)·내용 영역(Android)으로 한다. 되는 것: Win32에서 창 밖에 걸치는 메뉴가 그대로이고 앱이 `limit`을 주지 않는다. 모니터 경계를 host가 맡는다는 `ui_popup`의 원칙과, popup 위의 popup을 host가 왼쪽으로 뒤집는 지금 규칙(`popup_screen_position`, `update_overlays`)의 연장이다. 대가: `ui_popup`에 앵커 사각형 칸이 늘고 `popup_placement`와 `popup_surface::placement()`도 그것을 나른다(창이 움직이면 `surface_moved`가 그 placement로 다시 놓는다). 두 host의 배치 코드와 `clamp_popup_position`(앵커 높이를 받는다)을 고치고 `popup_reconcile_tests.cpp`가 따라온다. `win32_window.cpp`는 줄 4만 고치는 파일이라 이 노드의 Win32 몫을 줄 4 통합 때 얹어야 한다. 앱은 뒤집혔는지 모른다.
-- 권장: b. 뒤집기 산술이 순수 함수 하나라 host 없이 test되고, `field_popup_position::above`로 앱이 뒤집혔는지 안다. 꼬리가 대상을 향해야 하는 teaching_tip이 같은 header에 방향을 더해 늘린다. 이 노드는 아래 한 방향만 만든다. 공유 층(`ui_popup`, host 두 곳)과 줄 4의 `win32_window.cpp`도 건드리지 않는다. 대가: 위에 적은 것과, Win32에서 창 밖에 걸치던 메뉴가 `limit`(창 client) 안에 머문다는 점이다. 창 아래·오른쪽 가장자리의 필드에서는 메뉴가 걸치는 대신 위로 뒤집히거나 왼쪽으로 밀린다. 위도 안 들어가면 지금처럼 아래에 두고 host가 민다. 창 밖 걸침을 지키는 쪽이 낫다고 보면 d다.
+- 권장: b. 뒤집기 산술이 순수 함수 하나라 host 없이 test되고, `field_popup_position::above`로 앱이 뒤집혔는지 안다. 꼬리가 대상을 향해야 하는 teaching_tip이 같은 header에 방향을 더해 늘린다([안내 풍선](teaching-tip-design.md) 결정 3의 `place_field_popup_at_side`). 이 노드는 아래 한 방향만 만든다. 공유 층(`ui_popup`, host 두 곳)과 줄 4의 `win32_window.cpp`도 건드리지 않는다. 대가: 위에 적은 것과, Win32에서 창 밖에 걸치던 메뉴가 `limit`(창 client) 안에 머문다는 점이다. 창 아래·오른쪽 가장자리의 필드에서는 메뉴가 걸치는 대신 위로 뒤집히거나 왼쪽으로 밀린다. 위도 안 들어가면 지금처럼 아래에 두고 host가 민다. 창 밖 걸침을 지키는 쪽이 낫다고 보면 d다.
 - 승인: 길 b (2026-11-02).
 
 **3. Tab 자리.** 질문: Tab 자리를 어떻게 두는가.
@@ -227,10 +227,10 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 ## 다른 노드와의 약속
 
 - **date_picker**, **color_picker**(popup 조립을 고를 때)는 열림 규약을 그대로 따른다. `set_open` 절대 메시지, `field_popup_key_handler`, `place_field_popup`, 닫는 계기 표, 한 번에 하나만이다. **menu_bar**는 상태와 절대 메시지(`set_open`), 닫는 계기 표, 한 번에 하나만, `place_field_popup` 자리는 따른다. 여는 키와 열린 동안 막대 항목 사이 이동은 menu_bar가 정한다(Alt·F10·←/→). 이동 코드는 `process_menu_key`에 들어가므로 controller를 고치는 menu_bar(줄 3)가 맡는다. 항목 사이 hover 전환도 그 노드의 몫이다.
-- **teaching_tip**은 `field_popup.h`에 방향을 더해 늘린다. 이 노드가 아래 한 방향의 시그니처를 세운다.
-- `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.cpp`는 date_picker·teaching_tip과 겹친다. 이 노드가 `open_popup_` 하나로 바꾸고 뒤 노드는 그 값을 쓴다.
+- **teaching_tip**은 `field_popup.h`에 방향을 더해 늘린다. 이 노드가 아래 한 방향의 시그니처를 세운다. teaching_tip은 그 시그니처를 그대로 두고 끝에 `place_field_popup_at_side`를 더했다([안내 풍선](teaching-tip-design.md)).
+- `examples/demo/popups_page.*`와 `examples/mobile_demo/popups_page.cpp`는 date_picker·teaching_tip과 겹친다. 이 노드가 `open_popup_` 하나로 바꾸고 뒤 노드는 그 값을 쓴다. popups 페이지에는 date_picker가 날짜 칸을 싣고 teaching_tip은 toasts 페이지로 간다([날짜 고르기](date-picker-design.md), [안내 풍선](teaching-tip-design.md)).
 - `ui_element_id.h`의 kind 추가는 병렬 노드와 같은 자리라 통합 때 줄 충돌이 난다. AutomationId는 kind의 수라 병합 순서가 번호를 정한다. test와 luil-uia 스크립트는 번호를 박지 않는다.
-- 접근 이름 기본 문구(" 옵션")는 라이브러리 문자열 정책(G6)이 정해지면 그 문자열 헤더로 옮긴다. `text_button_background`를 꺼내도 동작은 같고 기존 raster test가 지킨다.
+- 접근 이름 기본 문구(" 옵션")는 [default-text-design.md](default-text-design.md)의 헤더로 옮겼다. 분할 버튼 화살표의 이름은 `split_button_arrow_name`이 짓는다. `text_button_background`를 꺼내도 동작은 같고 기존 raster test가 지킨다.
 
 ## 확인
 
@@ -240,7 +240,7 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
   - controller에 키를 넣어 Alt+↓·F4는 어느 쪽에서나, ↓는 화살표에서만 열고 본체의 ↓는 앱 정책까지 가는지;
   - 열려 있으면 Alt+↓가 삼켜지고 Ctrl·Shift 조합은 `nullopt`인지, Tab 한 자리와 ←/→ 순환, 본체가 꺼지면 화살표가 자리인지;
   - 열린 동안에만 초점 떠남 훅이 서고 초점이 떠나면 `set_open(false)`가 나가는지;
-  - 열린 동안 화살표를 누르고 `open == false` frame이 게시된 뒤 뗐을 때 되열리는지를 현재 동작 그대로 잠근다.
+  - 열린 동안 화살표를 누르고 `open == false` frame이 게시된 뒤 떼도 `set_open(false)`로 닫히는지(R3에서 뒤집었다).
 - `tests/field_popup_tests.cpp`: 아래 기본 자리, 아래가 넘칠 때 뒤집기, 위도 안 들어가면 아래 유지, `end` 정렬과 가로 밀기, 배율 2의 논리 좌표, 키 처리기가 받는 키와 받지 않는 키.
 - `tests/popup_reconcile_tests.cpp`: `menu_popup_config::below`가 크기를 잰 뒤 `x`·`y`를 정하는지.
 - `tests/accessibility_tests.cpp`: root가 접히고 두 절반이 형제인지, 본체와 화살표의 info(`expanded`), expand·collapse가 절대 메시지인지.
@@ -256,4 +256,4 @@ popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
 - 한 노드 SplitButton 역할(결정 1의 b). 승인이 나면 따로 설계한다.
 - 마지막으로 쓴 동작이 본체가 되는 동작. 앱의 상태다.
 - `dropdown_element`·`combo_box_element`에 Alt+↓ 달기. 같은 처리기를 쓰는 한 줄이지만 기존 요소의 동작이 바뀌어 따로 한다.
-- 위·옆 방향 배치와 꼬리. teaching_tip의 몫이다. 터치 판정 영역을 넓히는 장치도 없다.
+- 위·옆 방향 배치와 꼬리. teaching_tip의 몫이고 [안내 풍선](teaching-tip-design.md)이 네 방향 자리 함수와 꼬리로 닫았다. 터치 판정 영역을 넓히는 장치도 없다.

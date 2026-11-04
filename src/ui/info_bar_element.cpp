@@ -4,6 +4,7 @@
 #include "luil/ui/button_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
+#include "ui/default_text.h"
 #include "ui/severity_paint.h"
 
 #include "include/core/SkCanvas.h"
@@ -36,25 +37,6 @@ namespace luil {
         constexpr float glyph_font_size { 14.0f };
         // 글 앞쪽 몫이다 (여백 + 글리프 칸 + 간격).
         constexpr float leading_width { horizontal_padding + glyph_cell + glyph_gap };
-
-        // 라이브러리 문자열 정책이 정해지면 그 문자열 헤더로 옮긴다. 분할 버튼의 기본 문구와 같은 취급이다.
-        constexpr std::u8string_view default_close_name { u8"닫기" };
-
-        [[nodiscard]] std::u8string_view default_severity_name(const ui_severity severity) noexcept
-        {
-            switch (severity)
-            {
-            case ui_severity::success:
-                return u8"성공";
-            case ui_severity::warning:
-                return u8"경고";
-            case ui_severity::error:
-                return u8"오류";
-            case ui_severity::info:
-                break;
-            }
-            return u8"정보";
-        }
 
         [[nodiscard]] bool has_action(const info_bar_config& config) noexcept
         {
@@ -172,7 +154,7 @@ namespace luil {
         if (config_.close != nullptr)
         {
             auto close { std::make_unique<button_element>(ui_element_id { ui_element_kind::info_bar_close, config_.owner }, button_config { .glyph = codicons::icon_close, .role = button_visual_role::toolbar }) };
-            const std::u8string name { config_.close_tooltip.empty() ? std::u8string { default_close_name } : config_.close_tooltip };
+            const std::u8string name { default_text::text_or_default(config_.close_tooltip, default_text::info_bar_close()) };
             close->set_tooltip(name);
             close->set_access_name(name);
             close->set_cursor(ui_cursor::hand);
@@ -278,7 +260,7 @@ namespace luil {
                 name += u8' ';
             name += part;
         };
-        append(config_.severity_name.empty() ? default_severity_name(config_.severity) : std::u8string_view { config_.severity_name });
+        append(default_text::text_or_default(config_.severity_name, default_text::severity_name(config_.severity)));
         append(config_.title);
         append(config_.message);
         return { .role = access_role::alert, .name = std::move(name) };

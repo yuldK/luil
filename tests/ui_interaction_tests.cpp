@@ -4064,3 +4064,228 @@ TEST_CASE("A drop target can refuse a spot and let the one below answer", "[ui][
     REQUIRE(tree.find_drop_target(20.0f, 20.0f, payload)->id() == luil::ui_element_id { kind_card, u8"half" });
     REQUIRE(tree.find_drop_target(80.0f, 20.0f, payload)->id() == luil::ui_element_id { luil::ui_element_kind::root });
 }
+
+namespace {
+    // 누를 수 있어 Tab 자리인 단추 하나다. 자리는 (x, 0)부터 20x20이다.
+    [[nodiscard]] std::unique_ptr<test_panel> stop_button(const std::u8string& owner, const float x = 0.0f)
+    {
+        auto button { std::make_unique<test_panel>(luil::ui_element_id { kind_button, owner }) };
+        button->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return {}; });
+        button->arrange({ { x, 0.0f, 20.0f, 20.0f }, 1.0f });
+        return button;
+    }
+
+    // 화살표가 도는 묶음 하나다. 자리는 위 줄 전체다.
+    [[nodiscard]] std::unique_ptr<test_panel> focus_row(const std::u8string& owner, const luil::focus_axis axis)
+    {
+        auto group { std::make_unique<test_panel>(luil::ui_element_id { kind_card, owner }) };
+        group->arrange({ { 0.0f, 0.0f, 200.0f, 20.0f }, 1.0f });
+        group->set_focus_group(axis);
+        return group;
+    }
+
+    [[nodiscard]] luil::ui_element_id stop_id(const std::u8string& owner)
+    {
+        return luil::ui_element_id { kind_button, owner };
+    }
+
+    // 키 하나를 넣는다. 묶음 안의 화살표와 Tab만 쓰므로 시각은 모두 같다.
+    void press_key(luil::interaction_controller& controller, const luil::key_code code, const bool shift = false)
+    {
+        static_cast<void>(controller.process(luil::key_pressed_event { code, false, shift, false, false, at(0) }));
+    }
+}
+
+TEST_CASE("Tab from a group member that is not the entry leaves the group for the next stop", "[ui][interaction][focus]")
+{
+    // a · 가로 묶음(대표는 첫 칸 g1) · b다. 화살표로 g2에 선 뒤의 Tab은 묶음의 자리에서 센다 (menu-focus-fixes-design.md).
+    luil::interaction_controller controller {};
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    root->add(stop_button(u8"a", 0.0f));
+    auto group { focus_row(u8"row", luil::focus_axis::horizontal) };
+    group->add(stop_button(u8"g1", 40.0f));
+    group->add(stop_button(u8"g2", 80.0f));
+    root->add(std::move(group));
+    root->add(stop_button(u8"b", 140.0f));
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    const auto focused = [&controller] { return controller.snapshot().focused; };
+
+    press_key(controller, luil::key_code::tab);
+    REQUIRE(focused() == stop_id(u8"a"));
+    press_key(controller, luil::key_code::tab);
+    REQUIRE(focused() == stop_id(u8"g1"));
+    press_key(controller, luil::key_code::arrow_right);
+    REQUIRE(focused() == stop_id(u8"g2"));
+    // g2는 순서에 없지만 처음(a)으로 가지 않고 묶음 다음 자리로 간다.
+    press_key(controller, luil::key_code::tab);
+    REQUIRE(focused() == stop_id(u8"b"));
+    // 묶음으로 돌아오면 대표다. 그 안의 다른 구성원에서 Shift+Tab은 묶음 앞 자리로 간다.
+    press_key(controller, luil::key_code::tab, true);
+    REQUIRE(focused() == stop_id(u8"g1"));
+    press_key(controller, luil::key_code::arrow_right);
+    REQUIRE(focused() == stop_id(u8"g2"));
+    press_key(controller, luil::key_code::tab, true);
+    REQUIRE(focused() == stop_id(u8"a"));
+}
+
+TEST_CASE("Tab from inside a nested group or a trap counts from the outermost group's stop", "[ui][interaction][focus]")
+{
+    {
+        // 가로 묶음 outer ⊃ x1 · 세로 묶음 inner ⊃ y1 · y2이고 뒤에 b다. inner는 outer 안에서 y1 한 자리로 접힌다.
+        luil::interaction_controller controller {};
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        auto outer { focus_row(u8"outer", luil::focus_axis::horizontal) };
+        outer->add(stop_button(u8"x1", 0.0f));
+        auto inner { focus_row(u8"inner", luil::focus_axis::vertical) };
+        inner->add(stop_button(u8"y1", 40.0f));
+        inner->add(stop_button(u8"y2", 80.0f));
+        outer->add(std::move(inner));
+        root->add(std::move(outer));
+        root->add(stop_button(u8"b", 140.0f));
+        controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+        const auto focused = [&controller] { return controller.snapshot().focused; };
+
+        press_key(controller, luil::key_code::tab);
+        REQUIRE(focused() == stop_id(u8"x1"));
+        press_key(controller, luil::key_code::arrow_right);
+        REQUIRE(focused() == stop_id(u8"y1"));
+        press_key(controller, luil::key_code::arrow_down);
+        REQUIRE(focused() == stop_id(u8"y2"));
+        // 안쪽 묶음의 대표(y1)가 아니라 바깥 묶음의 자리에서 센다.
+        press_key(controller, luil::key_code::tab);
+        REQUIRE(focused() == stop_id(u8"b"));
+        press_key(controller, luil::key_code::tab, true);
+        REQUIRE(focused() == stop_id(u8"x1"));
+    }
+    {
+        // 가둠 밖의 c와 가둠 안의 a · 묶음(g1 · g2) · b다. Tab은 가둠 안만 돈다.
+        luil::interaction_controller controller {};
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        root->add(stop_button(u8"c", 180.0f));
+        auto dialog { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"dialog" }) };
+        dialog->arrange({ { 0.0f, 0.0f, 170.0f, 20.0f }, 1.0f });
+        dialog->set_focus_trap(true);
+        dialog->add(stop_button(u8"a", 0.0f));
+        auto group { focus_row(u8"row", luil::focus_axis::horizontal) };
+        group->add(stop_button(u8"g1", 40.0f));
+        group->add(stop_button(u8"g2", 80.0f));
+        dialog->add(std::move(group));
+        dialog->add(stop_button(u8"b", 140.0f));
+        root->add(std::move(dialog));
+        controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+        const auto focused = [&controller] { return controller.snapshot().focused; };
+
+        press_key(controller, luil::key_code::tab);
+        REQUIRE(focused() == stop_id(u8"a"));
+        press_key(controller, luil::key_code::tab);
+        REQUIRE(focused() == stop_id(u8"g1"));
+        press_key(controller, luil::key_code::arrow_right);
+        REQUIRE(focused() == stop_id(u8"g2"));
+        press_key(controller, luil::key_code::tab);
+        REQUIRE(focused() == stop_id(u8"b"));
+        press_key(controller, luil::key_code::tab);
+        REQUIRE(focused() == stop_id(u8"a"));
+        press_key(controller, luil::key_code::tab);
+        press_key(controller, luil::key_code::arrow_right);
+        REQUIRE(focused() == stop_id(u8"g2"));
+        press_key(controller, luil::key_code::tab, true);
+        REQUIRE(focused() == stop_id(u8"a"));
+    }
+}
+
+TEST_CASE("Tab from a group member starts at the end when the app's order dropped the group", "[ui][interaction][focus]")
+{
+    // `ordering_policy`는 owner "two"를 거르고 뒤집는다. 묶음의 대표가 "two"라 묶음이 순서에서 빠진다.
+    ordering_policy policy {};
+    luil::interaction_controller controller { &policy };
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    root->add(stop_button(u8"one", 0.0f));
+    auto group { focus_row(u8"row", luil::focus_axis::horizontal) };
+    group->add(stop_button(u8"two", 40.0f));
+    group->add(stop_button(u8"three", 80.0f));
+    root->add(std::move(group));
+    root->add(stop_button(u8"four", 140.0f));
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    const auto click_three = [&controller] {
+        static_cast<void>(controller.process(luil::pointer_pressed_event { 90.0f, 10.0f, luil::pointer_button::left, at(0) }));
+        static_cast<void>(controller.process(luil::pointer_released_event { 90.0f, 10.0f, luil::pointer_button::left, at(10) }));
+    };
+
+    // 순서는 [four, one]이다. three도 그 대표 two도 없으니 지금처럼 끝에서 시작한다.
+    click_three();
+    REQUIRE(controller.snapshot().focused == stop_id(u8"three"));
+    press_key(controller, luil::key_code::tab);
+    REQUIRE(controller.snapshot().focused == stop_id(u8"four"));
+    click_three();
+    press_key(controller, luil::key_code::tab, true);
+    REQUIRE(controller.snapshot().focused == stop_id(u8"one"));
+}
+
+TEST_CASE("focus_stop_of answers the stop that stands for a spot in the Tab order", "[ui][tree][focus]")
+{
+    {
+        // a · outer(x1 · inner(y1 · y2)) · named(n1 · n2, 대표 n2) · 숨은 가지(h) · 자리가 아닌 plain이다.
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        root->add(stop_button(u8"a"));
+        auto outer { focus_row(u8"outer", luil::focus_axis::horizontal) };
+        outer->add(stop_button(u8"x1"));
+        auto inner { focus_row(u8"inner", luil::focus_axis::vertical) };
+        inner->add(stop_button(u8"y1"));
+        inner->add(stop_button(u8"y2"));
+        outer->add(std::move(inner));
+        root->add(std::move(outer));
+        auto named { focus_row(u8"named", luil::focus_axis::horizontal) };
+        named->add(stop_button(u8"n1"));
+        named->add(stop_button(u8"n2"));
+        named->set_focus_entry(stop_id(u8"n2"));
+        root->add(std::move(named));
+        auto hidden { focus_row(u8"hidden", luil::focus_axis::none) };
+        hidden->add(stop_button(u8"h"));
+        hidden->set_visible(false);
+        root->add(std::move(hidden));
+        auto plain { std::make_unique<test_panel>(luil::ui_element_id { kind_card, u8"plain" }) };
+        plain->arrange({ { 0.0f, 40.0f, 20.0f, 20.0f }, 1.0f });
+        root->add(std::move(plain));
+        const luil::ui_tree tree { std::move(root) };
+
+        REQUIRE(tree.focus_order() == std::vector<luil::ui_element_id> { stop_id(u8"a"), stop_id(u8"x1"), stop_id(u8"n2") });
+        // 자리 자신과 대표는 그대로다.
+        REQUIRE(tree.focus_stop_of(stop_id(u8"a")) == stop_id(u8"a"));
+        REQUIRE(tree.focus_stop_of(stop_id(u8"x1")) == stop_id(u8"x1"));
+        REQUIRE(tree.focus_stop_of(stop_id(u8"n2")) == stop_id(u8"n2"));
+        // 이름 지은 대표가 아닌 구성원은 그 대표다.
+        REQUIRE(tree.focus_stop_of(stop_id(u8"n1")) == stop_id(u8"n2"));
+        // 안쪽 묶음의 구성원은 안쪽 대표(y1)가 아니라 바깥 묶음의 대표다.
+        REQUIRE(tree.focus_stop_of(stop_id(u8"y1")) == stop_id(u8"x1"));
+        REQUIRE(tree.focus_stop_of(stop_id(u8"y2")) == stop_id(u8"x1"));
+        // 숨은 가지, 자리가 아닌 것, 없는 것은 없다.
+        REQUIRE(tree.focus_stop_of(stop_id(u8"h")) == std::nullopt);
+        REQUIRE(tree.focus_stop_of(luil::ui_element_id { kind_card, u8"plain" }) == std::nullopt);
+        REQUIRE(tree.focus_stop_of(stop_id(u8"missing")) == std::nullopt);
+    }
+    {
+        // 가둠이 묶음이기도 하다. 가둠 자신은 접히지 않고 그 안의 묶음만 접힌다. 가둠 밖의 c는 순서에 없다.
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+        root->add(stop_button(u8"c"));
+        auto dialog { focus_row(u8"dialog", luil::focus_axis::horizontal) };
+        dialog->set_focus_trap(true);
+        dialog->add(stop_button(u8"d1"));
+        auto inner { focus_row(u8"inner", luil::focus_axis::vertical) };
+        inner->add(stop_button(u8"e1"));
+        inner->add(stop_button(u8"e2"));
+        dialog->add(std::move(inner));
+        root->add(std::move(dialog));
+        const luil::ui_tree tree { std::move(root) };
+
+        REQUIRE(tree.focus_order() == std::vector<luil::ui_element_id> { stop_id(u8"d1"), stop_id(u8"e1") });
+        REQUIRE(tree.focus_stop_of(stop_id(u8"d1")) == stop_id(u8"d1"));
+        REQUIRE(tree.focus_stop_of(stop_id(u8"e2")) == stop_id(u8"e1"));
+        REQUIRE(tree.focus_stop_of(stop_id(u8"c")) == std::nullopt);
+    }
+}

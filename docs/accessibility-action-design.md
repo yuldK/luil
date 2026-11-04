@@ -76,7 +76,7 @@ ScrollItem은 초점 되살리기와 **같은 길**을 탄다. 얼마나 흘릴�
 
 **그 창의 막대는 그 창의 내용이 아니다.** 창이 자기 안에 세우는 손잡이라 배치로는 창 안에 있지만, 자기를 자기 안으로 들이라는 명령은 없는 일이다. 거르는 것은 **그 창이 세운** 막대뿐이라 창의 직계 자식만 묻는다 — 내용은 언제나 안쪽 창 아래에 살고, 짧아서 스스로 창이 되지 못한 안쪽 목록의 막대는 바깥 창이 들일 수 있는 자리라 그대로 대상이다. 역할만 보고 막대를 통째로 거르면 그 자리를 함께 잃는다. 내걸 때와 실행할 때가 같은 술어(`access_scroll_item`)를 쓴다.
 
-Pattern 제공 여부와 쓰기 가능 여부는 별도로 판정한다. RangeValue의 `get_IsReadOnly`는 set-value 계획이 있는지 확인한다. Provider는 NaN, infinity, 공개된 최솟값과 최댓값 범위를 벗어난 값을 거부한다.
+Pattern 제공 여부와 쓰기 가능 여부는 별도로 판정한다. RangeValue의 `get_IsReadOnly`는 set-value 계획이 있는지 확인한다. Provider는 NaN, infinity, 공개된 최솟값과 최댓값 범위를 벗어난 값을 거부한다. 값·최솟값·최댓값·`SmallChange`·`LargeChange`와 값이 바뀐 이벤트의 옛 값·새 값은 float를 되읽을 수 있는 가장 짧은 십진 표기를 거쳐 double로 내보낸다. float를 그대로 옮기면 평균 별점 4.3이 4.30000019로 읽힌다. 범위 검사의 경계도 읽어 준 그 값으로 견주어, 클라이언트가 읽은 최솟값을 그대로 되돌려 정해도 범위 안이다.
 
 Value에서 combo box와 그 밖의 textual value는 읽기 전용이다. Edit는 element가 text input을 공개하고 application의 `interaction_policy`가 `text_input_target`을 찾을 때만 쓸 수 있다. `SetValue`는 TSF와 같은 application 편집 경로를 거치는 replace-all 요청이 된다.
 

@@ -72,8 +72,8 @@ namespace luil {
         // 되풀이되는 다섯 줄은 언젠가 한 앱에서만 모서리가 달라진다. 그 다섯 줄을 host의
         // 설정 한 줄로 옮긴다.
         //  - 크기를 대신 재 주지는 않는다. 표면은 여전히 `content_width`·`content_height`가
-        //    정한 자리를 받는다 — 이 framework에는 측정 단계가 없어 내용이 자기 크기를
-        //    말할 길이 없고, host가 추측하면 그 추측이 앱의 배치와 갈린다.
+        //    정한 자리를 받는다. 내용에게 높이를 물으려면 아래 `fit_height`를 켠다 — 꺼진 host는
+        //    내용을 묻지 않으므로 host가 추측해 앱의 배치와 갈릴 일이 없다.
         std::optional<panel_config> surface {};
         // 내용의 크기다 (논리 픽셀).
         float content_width { 360.0f };
@@ -85,6 +85,16 @@ namespace luil {
         //    앱 상태는 화면 밖에 남고 다음 끌기가 거기서 시작한다.
         float offset_x { 0.0f };
         float offset_y { 0.0f };
+        // 참이면 배치할 때 내용에게 높이를 묻는다 (`ui_element::preferred_size`, 배치 문맥의 측정기·치수·배율).
+        // 폭은 아래 `edge_margin`으로 자른 `content_width`다.
+        //  - 측정 문맥이 곧 배치 문맥이라 만들 때 잰 높이와 배치가 갈릴 수 없다. 앱은 창 크기도 측정기도 넘기지 않는다.
+        //  - 표면이 있으면 표면이 아니라 **안쪽 내용**에게 묻는다. panel은 크기를 답하지 않는다.
+        //  - 내용이 답하지 않으면(nullopt) `content_height`다. 거짓(기본)이면 내용을 묻지 않고 `content_height`를 그대로 쓴다.
+        bool fit_height { false };
+        // 0보다 크면 내용의 폭과 높이를 host 자리에서 이 여백(논리 픽셀)의 두 배를 뺀 값으로 자른다. 0(기본)이면 자르지 않는다.
+        //  - 좁은 화면이나 키 큰 글자에서 대화가 자리 밖으로 나가지 않는다. 높이를 자르면 내용이 그 높이를 받는다.
+        //  - 앱 상태인 `offset_x`·`offset_y`는 자르지 않는다 (위 설명과 같다).
+        float edge_margin { 0.0f };
     };
 
     // scrim으로 뒤를 덮고 내용을 가운데에 놓는 modal dialog host다.
@@ -126,5 +136,7 @@ namespace luil {
         // 하나뿐이라 arrange가 갈리지 않는다.
         //  - 앱이 넣지 않았으면 nullptr다 (scrim만 있는 host).
         ui_element* content_ { nullptr };
+        // `fit_height`가 높이를 묻는 안쪽 내용이다. 표면이 있어도 표면이 아니라 앱이 넣은 내용을 가리킨다.
+        ui_element* measured_ { nullptr };
     };
 }

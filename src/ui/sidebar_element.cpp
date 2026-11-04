@@ -52,6 +52,7 @@ namespace luil {
             handle_config.resize = config_.resize;
             handle_config.finish = config_.resize_finish;
             auto handle { std::make_unique<split_handle_element>(ui_element_id { ui_element_kind::sidebar_handle, config_.owner }, handle_config) };
+            handle->set_access_name(config_.handle_access_name);
             handle_ = handle.get();
             add_child(std::move(handle));
         }

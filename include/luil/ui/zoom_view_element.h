@@ -130,6 +130,10 @@ namespace luil {
         zoom_point viewport {};
         float fit_margin { 16.0f };
         float maximum_fit_zoom { 1.0f };
+        // 단추의 글이자 접근 이름이다. 칸마다 비면 기본 문구(축소·확대·맞춤)다.
+        std::u8string decrease_label {};
+        std::u8string increase_label {};
+        std::u8string fit_label {};
     };
 
     // 축소·배율·확대·맞춤 단추다. 맞춤은 내용 경계를 받은 때만 선다.

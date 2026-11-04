@@ -6,9 +6,12 @@
 #include <windows.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
+#include <vector>
 
 namespace luil::win32 {
     // 표면 하나가 받은 포인터·휠 메시지다.
@@ -69,6 +72,27 @@ namespace luil::win32 {
     // 그 경계를 넘어 나이를 잰다. 지금보다 뒤인 값은 `now`다.
     [[nodiscard]] std::chrono::steady_clock::time_point pointer_tick_time(std::uint32_t message_tick, std::uint32_t now_tick, std::chrono::steady_clock::time_point now) noexcept;
 
+    // `POINTER_PEN_INFO`에서 옮긴 펜 값이다 (`pointer_sample`의 같은 이름 칸에 들어간다).
+    struct pen_values
+    {
+        std::optional<float> pressure {};
+        float tilt_x { 0.0f };
+        float tilt_y { 0.0f };
+
+        [[nodiscard]] bool operator==(const pen_values&) const noexcept = default;
+    };
+
+    // 마스크를 보고 압력과 기울기를 옮긴다 (ink-input-design.md).
+    //  - 압력은 0~1024를 0~1로 옮긴다. `PEN_MASK_PRESSURE`가 없으면 비어 있다 (합성 입력·원격 연결).
+    //  - 기울기는 `tiltX`·`tiltY`(도)를 그대로 옮긴다. 마스크가 없으면 0이다. 펜 축 회전(`rotation`)은 옮기지 않는다.
+    [[nodiscard]] pen_values pen_values_of(const POINTER_PEN_INFO& pen) noexcept;
+
+    // `GetPointerPenInfoHistory`의 기록 중 현재 표본 앞에 보낼 것의 자리다. 오래된 것부터다.
+    //  - 기록은 최근 것이 앞이고 0번이 현재 메시지의 표본이다. 0번은 현재 표본으로 따로 나가므로 넣지 않는다.
+    //  - `last_frame`은 그 포인터로 마지막에 보낸 `frameId`다. 그보다 이르거나 같은 표본은 이미 보냈다. 비어 있으면 거르지 않는다.
+    //  - frameId는 32비트에서 돈다. 차이를 부호 있는 값으로 보아 경계를 넘어도 순서가 맞다.
+    [[nodiscard]] std::vector<std::size_t> pen_history_order(std::span<const POINTER_PEN_INFO> entries, std::optional<std::uint32_t> last_frame);
+
     // 이 메시지가 누른·뗀 버튼이다.
     // 버튼 메시지가 아니면 none이다.
     //  - 두 번째 누름(`WM_xBUTTONDBLCLK`)도 같은 누름으로 본다.
@@ -85,4 +109,35 @@ namespace luil::win32 {
     // 영문자·숫자는 공통 이름 키로, 나머지는 platform 대역으로 나른다.
     //  - 어떤 키가 문자를 만드는지는 layout이 아는 값이라 창이 조회해 넘긴다.
     [[nodiscard]] key_code modified_key_from_virtual(WPARAM virtual_key, bool control, bool alt, bool character_key) noexcept;
+
+    // Alt를 홀로 눌렀다 뗐는지 지켜본다 (docs/menu-bar-design.md의 Win32 절). 창도 시계도 모른다.
+    //  - 무장: Alt(`VK_MENU`)의 첫 누름이고, Ctrl이 함께가 아니고(AltGr), 막대가 키를 받을 수 있을 때다 (`eligible`).
+    //    누르고 있는 동안의 자동 반복(bit 30)은 무장도 풀기도 하지 않는다.
+    //  - 풀기: 다른 키의 누름, 마우스 누름, 창의 비활성화, 전역 단축키 눌림(`cancel`). 전역 단축키로 건 Alt 조합은
+    //    OS가 글자 키를 가져가 창에 Alt의 누름과 뗌만 온다. 풀지 않으면 Alt 단독으로 읽힌다.
+    //  - 뗌: 무장한 채 Alt를 떼면 참이다 (`key_code::alt_tap`을 보낸다). 어느 쪽이든 무장은 풀린다.
+    class alt_tap_tracker
+    {
+    public:
+        // `WM_SYSKEYDOWN`·`WM_KEYDOWN` 하나다. `repeat`는 lparam의 bit 30이다.
+        void key_down(WPARAM virtual_key, bool repeat, bool control, bool eligible) noexcept;
+        // `WM_SYSKEYUP`·`WM_KEYUP` 하나다. Alt 단독이 끝났으면 참이다.
+        [[nodiscard]] bool key_up(WPARAM virtual_key) noexcept;
+        void cancel() noexcept;
+
+        [[nodiscard]] bool armed() const noexcept
+        {
+            return armed_;
+        }
+
+    private:
+        bool armed_ { false };
+    };
+
+    // 시스템 키 메시지(`WM_SYSKEYUP`·`WM_SYSCHAR`)를 `DefWindowProc`에 넘기지 않고 삼킬지다.
+    //  - 키 잡기 중(`capturing`)이면 둘 다 삼킨다. Alt를 떼면 메뉴 모드(SC_KEYMENU)로 들어가 다음 키를 OS가 가져간다.
+    //  - 막대가 있으면(`menu_bar`) Alt·F10의 뗌을 삼켜 메뉴 모드를 막고, Alt+글자의 `WM_SYSCHAR`도 삼켜 메뉴 없는 창의
+    //    경고음을 막는다. Alt+Space(시스템 메뉴)의 `WM_SYSCHAR`는 넘긴다.
+    //  - 그 밖에는 지금처럼 OS의 것이다.
+    [[nodiscard]] bool swallow_system_key(UINT message, WPARAM word_parameter, bool menu_bar, bool capturing) noexcept;
 }

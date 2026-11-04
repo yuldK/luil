@@ -3,8 +3,10 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/text_block.h"
+#include "ui/access_key.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -105,7 +107,20 @@ namespace luil {
                 {
                     const SkFont font { make_text_font(context, { .size = context.metrics.body_font_size, .weight = context.metrics.font_weights.body_text }) };
                     const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
-                    static_cast<void>(draw_text_within(context.canvas, item_.label, text_left, box.y + centered_text_baseline(font, box.height), text_width, font, foreground));
+                    // 접근 키 글자가 라벨에 없으면 "(N)"을 붙여 그린다. 폭(`width_for`)도 같은 글로 잰다.
+                    const std::u8string text { access_key_display(item_.label, item_.access_key) };
+                    const float baseline { box.y + centered_text_baseline(font, box.height) };
+                    const float drawn { draw_text_within(context.canvas, text, text_left, baseline, text_width, font, foreground) };
+                    // 밑줄은 메뉴 막대가 선 동안만 긋는다 (`menu_keys`). 그때만 수식 키 없는 글자가 항목을 고른다.
+                    const std::optional<std::size_t> offset { access_key_underline(item_.label, item_.access_key) };
+                    if (interaction.menu_keys && offset.has_value() && *offset < text.size())
+                    {
+                        const std::u8string_view view { text };
+                        const float left { text_left + measure_text(view.substr(0, *offset), font) };
+                        const float glyph { measure_text(view.substr(*offset, 1), font) };
+                        if (left + glyph <= text_left + drawn)
+                            context.canvas.drawRect(SkRect::MakeXYWH(left, baseline + 2.0f * scale, glyph, 1.0f * scale), foreground);
+                    }
                 }
             }
 
@@ -119,6 +134,9 @@ namespace luil {
                 // 자식이 있는 항목은 펼침 상태를 알린다 (UIA ExpandCollapse). 보조 기술이 하위 메뉴가 열렸는지 읽는다.
                 if (item_.children.empty() == false)
                     info.expanded = opened_;
+                // 메뉴 안 접근 키는 수식 키 없는 글자다 (막대 항목은 "Alt+F").
+                if (const char32_t glyph { access_key_glyph(item_.access_key) }; glyph != 0)
+                    info.access_key = std::u8string(1, static_cast<char8_t>(glyph));
                 return info;
             }
 
@@ -202,14 +220,22 @@ namespace luil {
         return height;
     }
 
-    float menu_element::width_for(const menu_config& config, const text_measurer& measurer, const float font_size)
+    float menu_element::width_for(const menu_config& config, const text_measurer& measurer, const float font_size, const float scale)
     {
+        // 항목의 글은 `make_text_font`가 물리 크기 `scaled_font_size(font_size, 그리는 배율)`로 그린다. 같은 크기로 재야 한다.
+        //  - 논리 크기로 재서 배율을 곱하면 글자 advance를 정수로 맞추는 글꼴에서 그린 글이 더 넓어져, 항목 자리에 글이
+        //    꼭 맞는 가장 긴 항목이 배율 1.1부터 말줄임된다.
+        const float ratio { std::isfinite(scale) && scale > 0.0f ? scale : 1.0f };
+        const float size { scaled_font_size(font_size, ratio) };
+        const auto logical_width = [&](const std::u8string& text) {
+            return std::ceil(measurer(text, size) / ratio);
+        };
+
         float width { 0.0f };
-        const float size { scaled_font_size(font_size, 1.0f) };
         for (const auto& item : config.items)
         {
-            const float shortcut { item.shortcut_text.empty() ? 0.0f : 16.0f + measurer(item.shortcut_text, size) };
-            width = std::max(width, measurer(item.label, size) + shortcut + (item.children.empty() ? 0.0f : 18.0f));
+            const float shortcut { item.shortcut_text.empty() ? 0.0f : 16.0f + logical_width(item.shortcut_text) };
+            width = std::max(width, logical_width(access_key_display(item.label, item.access_key)) + shortcut + (item.children.empty() ? 0.0f : 18.0f));
         }
         return width + 2.0f * menu_padding + 16.0f + 22.0f;
     }
@@ -260,6 +286,6 @@ namespace luil {
     access_info menu_element::accessibility() const
     {
         const bool radio { std::any_of(config_.items.begin(), config_.items.end(), [](const auto& item) { return item.kind == menu_item_kind::radio; }) };
-        return { .role = access_role::menu, .name = tooltip(), .selection_container = radio };
+        return { .role = access_role::menu, .name = access_name(), .selection_container = radio };
     }
 }

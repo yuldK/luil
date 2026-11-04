@@ -44,6 +44,9 @@ namespace luil {
         split_resize_message_factory resize {};
         // 폭 조절이 끝났을 때 한 번 낸다 — 끝난 폭을 저장하는 자리다 (`split_handle_config::finish`).
         split_finish_message_factory resize_finish {};
+        // 폭 조절 손잡이의 접근 이름이다. 손잡이는 이 element가 안에서 세우는 부품이라 앱이 이름을 줄 자리가 여기뿐이다.
+        //  - 손잡이는 키보드 초점을 받으므로 `resize`를 주는 앱은 이름도 준다. 비면 빈 이름이고 기본 문구를 넣지 않는다.
+        std::u8string handle_access_name {};
     };
 
     // 토글 버튼이 있을 때 내용 위에 남겨 두는 머리 높이와 손잡이의 hit 폭이다 (논리 픽셀).

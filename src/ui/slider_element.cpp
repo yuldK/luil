@@ -235,9 +235,8 @@ namespace luil {
     }
     access_info slider_element::accessibility() const
     {
-        // 곁에 선 라벨과 잇는 어휘가 없어 이름은 tooltip에서만 나온다
-        // (accessibility-design.md의 LabeledBy).
-        return { .role = access_role::slider, .name = tooltip(), .range = access_range { config_.minimum, config_.maximum, clamp_value(config_) } };
+        // 곁에 선 라벨과 잇는 어휘가 없어 이름은 `access_name()`에서만 나온다.
+        return { .role = access_role::slider, .name = access_name(), .range = access_range { config_.minimum, config_.maximum, clamp_value(config_) } };
     }
 
     std::optional<std::vector<input_action>> slider_element::access_actions(const access_request& request) const

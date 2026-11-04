@@ -1,7 +1,7 @@
 [
     {
         "id": "blue",
-        "label": "블루",
+        "label": { "ko": "블루", "en": "Blue" },
         "swatch": "#a2cfff",
         "dark": {
             "accent": "#3f7ebb",
@@ -18,7 +18,7 @@
     },
     {
         "id": "slate",
-        "label": "슬레이트",
+        "label": { "ko": "슬레이트", "en": "Slate" },
         "swatch": "#b6cde7",
         "dark": {
             "accent": "#607d9d",
@@ -35,7 +35,7 @@
     },
     {
         "id": "indigo",
-        "label": "인디고",
+        "label": { "ko": "인디고", "en": "Indigo" },
         "swatch": "#b8c8ff",
         "dark": {
             "accent": "#6375be",
@@ -52,7 +52,7 @@
     },
     {
         "id": "violet",
-        "label": "바이올렛",
+        "label": { "ko": "바이올렛", "en": "Violet" },
         "swatch": "#c7c2ff",
         "dark": {
             "accent": "#786eba",
@@ -69,7 +69,7 @@
     },
     {
         "id": "lavender",
-        "label": "라벤더",
+        "label": { "ko": "라벤더", "en": "Lavender" },
         "swatch": "#d5bef9",
         "dark": {
             "accent": "#8769b3",
@@ -86,7 +86,7 @@
     },
     {
         "id": "mauve",
-        "label": "모브",
+        "label": { "ko": "모브", "en": "Mauve" },
         "swatch": "#d7c2de",
         "dark": {
             "accent": "#896f92",
@@ -103,7 +103,7 @@
     },
     {
         "id": "orchid",
-        "label": "오키드",
+        "label": { "ko": "오키드", "en": "Orchid" },
         "swatch": "#e7b8e9",
         "dark": {
             "accent": "#9c61a0",
@@ -120,7 +120,7 @@
     },
     {
         "id": "magenta",
-        "label": "마젠타",
+        "label": { "ko": "마젠타", "en": "Magenta" },
         "swatch": "#f1b5dc",
         "dark": {
             "accent": "#a75d90",
@@ -137,7 +137,7 @@
     },
     {
         "id": "pink",
-        "label": "핑크",
+        "label": { "ko": "핑크", "en": "Pink" },
         "swatch": "#f9b4cb",
         "dark": {
             "accent": "#af5b7b",
@@ -154,7 +154,7 @@
     },
     {
         "id": "rose",
-        "label": "로즈",
+        "label": { "ko": "로즈", "en": "Rose" },
         "swatch": "#fdb4bc",
         "dark": {
             "accent": "#b35b68",
@@ -171,7 +171,7 @@
     },
     {
         "id": "rosewood",
-        "label": "로즈우드",
+        "label": { "ko": "로즈우드", "en": "Rosewood" },
         "swatch": "#e6c0c0",
         "dark": {
             "accent": "#9b6c6d",
@@ -188,7 +188,7 @@
     },
     {
         "id": "salmon",
-        "label": "살몬",
+        "label": { "ko": "살몬", "en": "Salmon" },
         "swatch": "#fdb6a9",
         "dark": {
             "accent": "#b45e4f",
@@ -205,7 +205,7 @@
     },
     {
         "id": "coral",
-        "label": "코럴",
+        "label": { "ko": "코럴", "en": "Coral" },
         "swatch": "#fbb99e",
         "dark": {
             "accent": "#b2623e",
@@ -222,7 +222,7 @@
     },
     {
         "id": "peach",
-        "label": "피치",
+        "label": { "ko": "피치", "en": "Peach" },
         "swatch": "#f4be92",
         "dark": {
             "accent": "#ab6829",
@@ -239,7 +239,7 @@
     },
     {
         "id": "mocha",
-        "label": "모카",
+        "label": { "ko": "모카", "en": "Mocha" },
         "swatch": "#dfc5ad",
         "dark": {
             "accent": "#937354",
@@ -256,7 +256,7 @@
     },
     {
         "id": "amber",
-        "label": "앰버",
+        "label": { "ko": "앰버", "en": "Amber" },
         "swatch": "#e8c58b",
         "dark": {
             "accent": "#9e7112",
@@ -273,7 +273,7 @@
     },
     {
         "id": "lemon",
-        "label": "레몬",
+        "label": { "ko": "레몬", "en": "Lemon" },
         "swatch": "#d7cc8b",
         "dark": {
             "accent": "#8a7b13",
@@ -290,7 +290,7 @@
     },
     {
         "id": "olive",
-        "label": "올리브",
+        "label": { "ko": "올리브", "en": "Olive" },
         "swatch": "#c7cfaf",
         "dark": {
             "accent": "#777f57",
@@ -307,7 +307,7 @@
     },
     {
         "id": "lime",
-        "label": "라임",
+        "label": { "ko": "라임", "en": "Lime" },
         "swatch": "#bad69a",
         "dark": {
             "accent": "#668736",
@@ -324,7 +324,7 @@
     },
     {
         "id": "green",
-        "label": "그린",
+        "label": { "ko": "그린", "en": "Green" },
         "swatch": "#a8daa9",
         "dark": {
             "accent": "#4a8c4e",
@@ -341,7 +341,7 @@
     },
     {
         "id": "sage",
-        "label": "세이지",
+        "label": { "ko": "세이지", "en": "Sage" },
         "swatch": "#b7d2c3",
         "dark": {
             "accent": "#618371",
@@ -358,7 +358,7 @@
     },
     {
         "id": "mint",
-        "label": "민트",
+        "label": { "ko": "민트", "en": "Mint" },
         "swatch": "#91ddc2",
         "dark": {
             "accent": "#009070",
@@ -375,7 +375,7 @@
     },
     {
         "id": "teal",
-        "label": "티얼",
+        "label": { "ko": "티얼", "en": "Teal" },
         "swatch": "#87ddd3",
         "dark": {
             "accent": "#008d83",
@@ -392,7 +392,7 @@
     },
     {
         "id": "aqua",
-        "label": "아쿠아",
+        "label": { "ko": "아쿠아", "en": "Aqua" },
         "swatch": "#84dbe5",
         "dark": {
             "accent": "#008b96",
@@ -409,7 +409,7 @@
     },
     {
         "id": "skyblue",
-        "label": "스카이블루",
+        "label": { "ko": "스카이블루", "en": "Sky blue" },
         "swatch": "#8ed6f6",
         "dark": {
             "accent": "#0086af",

@@ -10,3 +10,4 @@ target_link_libraries(package_consumer PRIVATE luil::luil)
 target_compile_definitions(package_consumer PRIVATE UNICODE _UNICODE
     "LUIL_CONSUMER_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
     "LUIL_CONSUMER_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
+luil_add_string_table(package_consumer NAME consumer_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE ko)

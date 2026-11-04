@@ -50,10 +50,11 @@ struct text_layout_request
     text::line_break_policy line_break { text::line_break_policy::hangul_words };
 };
 
-struct text_block_style { /* ... */ text::line_break_policy line_break { text::line_break_policy::hangul_words }; };
-struct label_config     { /* ... */ text::line_break_policy line_break { text::line_break_policy::hangul_words }; };
-struct markdown_config  { /* ... */ text::line_break_policy line_break { text::line_break_policy::hangul_words }; };
-struct text_area_config { /* ... */ text::line_break_policy line_break { text::line_break_policy::hangul_words }; };
+// 네 칸은 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 `std::optional`로 바꿨다. 비면 앱 스타일의 `text.wrap_policy`다.
+struct text_block_style { /* ... */ std::optional<text::line_break_policy> line_break {}; };
+struct label_config     { /* ... */ std::optional<text::line_break_policy> line_break {}; };
+struct markdown_config  { /* ... */ std::optional<text::line_break_policy> line_break {}; };
+struct text_area_config { /* ... */ std::optional<text::line_break_policy> line_break {}; };
 ```
 
 - `label_element`는 `block_style`에서 `text_block_style::line_break`로 넘긴다. 나머지는 자기 `text_layout_request`에 싣는다.
@@ -133,8 +134,8 @@ struct text_area_config { /* ... */ text::line_break_policy line_break { text::l
 - 길 a: `text_layout_request` 필드와 네 컨트롤 config의 같은 필드. 배치가 정책을 알고 cache key가 맞다. 컨트롤마다 고를 수 있다. 공개 필드가 다섯 곳에 는다.
 - 길 b: 컨트롤 config에만 둔다. request는 정책을 모르고, 같은 글의 배치를 cache가 구별하지 못한다. 결국 request에 싣게 된다.
 - 길 c: 프로세스 단일 값(`set_single_line_break` 선례). 필드가 늘지 않는다. 바꾸면 모든 배치 cache를 비워야 하고, 한 창 안에서 섞을 수 없고, 시험이 전역 상태에 기댄다.
-- 길 d: 앱 스타일 키(`ui_style::text`). 앱 전체 기본을 JSON에서 고른다. 줄 2 style_sheet의 생성기·파서 순서(G4)에 묶인다. 배치 문맥은 `ui_metrics`만 나르고 `ui_style::text`를 나르지 않아, 값이 `make_text_layout`에 닿으려면 문맥이나 전역을 새로 지나야 한다.
-- 권장: a. 대가: 앱 전체를 `unicode`로 바꾸려는 앱은 컨트롤마다 적는다. G4가 정해지면 스타일 키가 config 기본값을 채우는 길을 그때 더한다. 지금은 스타일 파일을 건드리지 않아 style_sheet와 순서가 묶이지 않는다. **승인: 길 a (2026-11-02).**
+- 길 d: 앱 스타일 키(`ui_style::text`). 앱 전체 기본을 JSON에서 고른다. 줄 2 style_sheet의 생성기·파서 순서(G4)에 묶인다. 배치 문맥은 `ui_metrics`만 나르고 `ui_style::text`를 나르지 않아, 값이 `make_text_layout`에 닿으려면 문맥이나 전역을 새로 지나야 한다. (뒤에 고침: 배치 문맥은 `arrange_context::style`도 들었고, 버린 것은 측정 문맥(`measure_context`)과 그리기 문맥이었다. [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 두 문맥에 스타일을 실었다.)
+- 권장: a. 대가: 앱 전체를 `unicode`로 바꾸려는 앱은 컨트롤마다 적는다. G4가 정해지면 스타일 키가 config 기본값을 채우는 길을 그때 더한다(뒤에 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 더했다). 지금은 스타일 파일을 건드리지 않아 style_sheet와 순서가 묶이지 않는다. **승인: 길 a (2026-11-02).**
 
 **4. 두 접기의 통합.** 질문: 두 접기를 하나로 모으나.
 - 길 a: 자리 고르기만 모은다(`line_fold`). 같은 입력에 같은 자리다. `fit` 찾기는 각자 둔다.
@@ -161,9 +162,9 @@ struct text_area_config { /* ... */ text::line_break_policy line_break { text::l
 
 - **rich_edit(R3, 같은 줄)**: 문단별 접는 폭을 이 위에 얹는다. 약속은 넷이다. (1) `line_fold`의 자리 고르기는 폭을 모른다. 폭은 `fit`을 찾는 쪽에만 있어 문단마다 다른 폭을 넘겨도 된다. (2) 접은 자리는 문단 처음 기준 byte offset이고 글자소 경계다. (3) 정책은 `text_layout_request::line_break`로만 들어간다. (4) `text_area_wrap_cache`의 무효화 조건은 이 노드가 정책을 더한 그 자리에 rich_edit가 문단 폭을 더한다.
 - **syntax(R1, 같은 줄)**: [구문 강조 도우미](syntax-highlight-design.md)에 적은 대로 `text_area_element.cpp`에서 함수가 겹치지 않는다. 이 노드는 `wrap_paragraph`·`wrap_displayed`·`layout_request`이고 syntax는 `span_foreground`·`metric_styles`·`draw_content`다. `text_layout_request`는 이 노드만 고친다.
-- **style_sheet(R2, 같은 줄)**: 이번에는 스타일 키를 두지 않는다. G4가 정해져 `text` 절에 키를 더하면 `single_line_break` 옆이 자리이고, 값은 이 enum 이름 그대로다.
+- **style_sheet(R2, 같은 줄)**: 이번에는 스타일 키를 두지 않는다. G4가 정해져 `text` 절에 키를 더하면 `single_line_break` 옆이 자리이고, 값은 이 enum 이름 그대로다. 뒤에 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 `text.wrapPolicy`(`hangulWords`·`unicode`)를 그 자리에 더했다.
 - **markup(R4, 같은 줄)**: 서식 글이 배치를 지으면 `text_layout_request::line_break`를 config에서 잇는다.
-- **text_block_style을 쓰는 새 요소**: 기본 정책(`hangul_words`)을 따른다. config에 칸을 여는 것은 그 요소의 후속이다(같은 라운드의 info_bar가 그 예다).
+- **text_block_style을 쓰는 새 요소**: 앱 스타일의 정책(`text.wrap_policy`, 측정 문맥의 스타일)을 따른다([줄 나눔 정책 스타일 키](wrap-policy-key-design.md)). config에 칸을 여는 것은 그 요소의 후속이다(같은 라운드의 info_bar가 그 예다).
 - 구현 때 함께 고친 문서: [여러 줄 라벨](label-wrap-design.md), [직접 그리는 글](text-block-design.md), [자동 줄 넘김](text-area-wrap-design.md), [텍스트 레이아웃 설계](text-layout-design.md), [텍스트 입력](concepts/text-input.md)의 "공백에서 먼저 바꾼다" 서술. 색인(`docs/README.md`)은 통합 때 붙인다.
 
 ## 확인

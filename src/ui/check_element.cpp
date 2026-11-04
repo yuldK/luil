@@ -282,8 +282,8 @@ namespace luil {
             info.role = access_role::toggle_switch;
             break;
         }
-        // 라벨이 밖에 있는 칸(표 안)은 tooltip이 이름을 대신한다.
-        info.name = config_.label.empty() ? tooltip() : config_.label;
+        // 라벨이 밖에 있는 칸(표 안)은 접근 이름 술어가 답한다. 표는 tooltip에 행 이름을 적어 그 끝자리로 읽힌다.
+        info.name = config_.label.empty() ? access_name() : config_.label;
         // 라디오는 켬/끔이 아니라 **묶음 안의 하나를 고르는** 값이다.
         // UIA도 그래서 Toggle이 아니라 SelectionItem으로 읽는다
         // (accessibility-action-design.md).

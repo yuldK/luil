@@ -115,3 +115,11 @@ TSF는 최상위 창의 session이 사슬 끝의 문서를 읽는다. Android는
 `commands.h`의 명령표는 순수 값이다. `match_command`는 앱의 마지막 `on_key` 단계에서 부르고,
 실행은 앱이 한다. focused는 window로 물러설 수 있고 modal은 window로 물러서지 않는다.
 `checkable`은 꺼진 체크 명령을 표시하는 데 필요하여 인계안의 `app_command` 끝에 추가했다.
+
+## 메뉴 막대의 메뉴
+
+막대 항목의 메뉴도 이 문서의 popup 하나다. `make_menu_bar_popup`([menu_popup.h](../include/luil/app/menu_popup.h))이
+열린 항목(`menu_bar_state::current`)의 자리를 `popup.below`(`field_popup_anchor`)에 넣고 간격을 0으로 둬 메뉴가
+항목 바로 아래에 붙는다. `anchor`는 막대가 선 표면이고 `limit`은 그 표면의 client 사각형(물리 픽셀)이라, 아래가
+모자라면 필드 popup처럼 위로 뒤집는다. ←/→로 이웃 메뉴로 옮기면 앱이 다음 frame에 다른 항목 아래의 popup을
+싣는다. 하위 메뉴는 위의 사슬 규칙 그대로이고, Esc는 메뉴만 닫고 막대는 선 채 남긴다([menu-bar-design.md](menu-bar-design.md)).

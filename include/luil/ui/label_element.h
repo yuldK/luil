@@ -43,8 +43,9 @@ namespace luil {
         //    붙인 글은 떼지 않는다. 조합형 한글·이모지 결합 글자가 줄 경계에서 갈리지 않는다. `\n`은 줄 바꿈이다.
         //  - 바꾼 줄도 줄마다 `align`을 따른다. `elide`는 한 줄 label의 것이다 — 넘친 마지막 줄은 늘 끝을 줄인다.
         bool wrap { false };
-        // 후보를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾸고, `unicode`는 음절 사이에서도 바꾼다.
-        text::line_break_policy line_break { text::line_break_policy::hangul_words };
+        // 후보를 고르는 규칙이다 (line_break.h). `hangul_words`는 한국어를 어절에서 바꾸고, `unicode`는 음절 사이에서도 바꾼다.
+        //  - 비면 앱 스타일의 `text.wrap_policy`다 (배치 문맥의 `style`, docs/wrap-policy-key-design.md). 적은 값이 스타일보다 앞선다.
+        std::optional<text::line_break_policy> line_break {};
         // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 줄의 끝을 `…`로 줄인다.
         std::size_t max_lines { 0 };
     };

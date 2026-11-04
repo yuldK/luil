@@ -433,6 +433,24 @@ namespace luil {
         return scope;
     }
 
+    std::optional<ui_element_id> ui_tree::focus_stop_of(const ui_element_id& id) const
+    {
+        // 훑기의 시작점이 `focus_order`와 같아야 접은 결과도 같다. 가둠이 있으면 거기서, 없으면 root에서 내려간다.
+        const ui_element* const start { trap_ != nullptr ? trap_ : root_.get() };
+        std::vector<const ui_element*> path {};
+        if (start == nullptr || find_path(*start, id, path) == false)
+            return std::nullopt;
+        // `collect_focus_stops`는 위에서 처음 만난 묶음에서 멈추고 그 안쪽 묶음까지 함께 접는다. 그래서 가장 바깥 묶음이다.
+        //  - 가둠 자신은 묶음으로 세지 않는다 (`collect_group_members`가 가둠의 자식부터 훑는다).
+        const auto first { trap_ != nullptr ? path.begin() + 1 : path.begin() };
+        const auto group { std::find_if(first, path.end(), [](const ui_element* const element) { return element->focus_group() != focus_axis::none; }) };
+        if (group != path.end())
+            return group_entry(**group);
+        if (path.back()->focusable())
+            return id;
+        return std::nullopt;
+    }
+
     std::optional<const ui_element*> ui_tree::find_focus_group(const ui_element& element, const ui_element_id& id, const ui_element* const group)
     {
         // 보이지 않는 가지에는 초점이 설 수 없다.

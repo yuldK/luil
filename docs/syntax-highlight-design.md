@@ -1,5 +1,7 @@
 # 구문 강조 도우미
 
+> 선택 이식 범위: 이 문서의 차트·마크업·업데이트·실행 중 스타일·핫 리로드 교차 참조는 원래 전체 통합 브랜치의 설계 기록이다. 현재 main의 채택 범위와 보존 위치는 [선택 기능 이식 기록](selected-adoption.md)에 적었다.
+
 편집하는 코드 글의 구간 색을 편집에 맞춰 다시 칠한다. 앱이 줄 하나를 칠하는 렉서를 주면, 도우미가 바뀐 줄부터 렉서를 다시 돌려 `text_area_element`가 그리는 스타일 구간(`text_span`)을 만든다. 공개 형식은 [syntax_highlighter.h](../include/luil/ui/syntax_highlighter.h)의 `syntax_highlighter`, [text_change.h](../include/luil/text/text_change.h)의 `text_change_between`, 그리고 [text_document.h](../include/luil/ui/text_document.h)에 더하는 구문 색 역할과 `text_span::italic`이다. 언어별 렉서는 넣지 않는다. 앱은 구간만 준다는 [문서 보기 2단계](ui-gap-codex-track.md)(X5)의 원칙이 그대로다.
 
 ## 문제
@@ -222,7 +224,7 @@ namespace luil::text {
 - **rich_edit(R3, 같은 줄)**: `text_change_between`를 그대로 다시 쓴다. 이 노드가 먼저 세우고 rich_edit는 부르기만 한다. 계약은 다섯이다. (1) `include/luil/text/`에 두어 ui와 Skia를 모른다. (2) 결과의 `offset`과 변경 끝은 두 글 모두에서 코드포인트 경계다. (3) 겹치지 않는 범위에서 접두를 먼저 가져간다(`aa`에서 `aaa`는 `{2, 0, 1}`). (4) 같은 글은 `empty()`다. (5) 비용은 접두·접미 길이에 비례한다. 글자소 경계는 계약에 없다. 필요한 호출자가 두 글에서 경계가 될 때까지 넓힌다. `text_span`의 필드는 앞으로도 끝에 더하고, `text_edit.h`는 이 노드가 건드리지 않아 두 노드가 그 파일에서 부딪히지 않는다.
 - **style_sheet(R2, 같은 줄)**: 구문 여섯 키는 `neutral_optional_fields`의 연속한 여섯 행이다. 생성기 함수와 파서에는 손대지 않는다. G4가 정해져 키 표를 데이터 하나로 빼면 이 여섯 행이 그대로 옮겨 간다. 맞출 곳은 셋이다. 구조체 선언 순서(`neutral_color_palette`은 `backdrop_background` 뒤, `ui_color_palette`은 `document_search_foreground` 뒤), 표의 행 순서, `tests/style_tests.cmake`의 빠진 키 시험이다. `compose_palette`와 `high_contrast_palette_for`의 여섯 줄은 손으로 쓰는 곳이라 표에 없다. `// 구문 색` 주석으로 묶어 찾기 쉽게 둔다. 런타임 로더가 생기면 같은 행의 fallback을 읽어야 한다.
 - **uax14(R1, 같은 줄)**: `text_area_element.cpp`를 같이 만진다. 이 노드는 `span_foreground`·`metric_styles`·`draw_content`의 글꼴 쪽이고, uax14는 `wrap_paragraph`와 wrap cache 쪽이라 함수가 겹치지 않는다.
-- **info_bar·chart(다른 줄)**: 두 팔레트 구조체의 끝에 역할을 더하면 같은 자리다. 구문 칸을 한 덩어리로 두어 합칠 때 충돌이 한 곳이다.
+- **info_bar(다른 줄)**: 두 팔레트 구조체의 끝에 역할을 더하면 같은 자리다. 구문 칸을 한 덩어리로 두어 합칠 때 충돌이 한 곳이다. chart는 core 팔레트에 역할을 더하지 않아 이 자리의 몫이 아니다([차트 · 보존](selected-adoption.md#구현-완료-후-보존한-항목) 결정 E2).
 
 ## 확인
 

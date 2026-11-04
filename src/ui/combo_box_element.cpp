@@ -5,6 +5,7 @@
 #include "luil/ui/spinner_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/virtual_list_element.h"
+#include "ui/default_text.h"
 
 #include <algorithm>
 #include <utility>
@@ -161,7 +162,7 @@ namespace luil {
             return popup;
         auto root { std::make_unique<stack_element>(ui_element_id { ui_element_kind::none, popup.id }, stack_config {}) };
         if (config_.suggestions.loading)
-            root->add(std::make_unique<spinner_element>(ui_element_id { ui_element_kind::none, popup.id + u8":loading" }, spinner_config { u8"Loading suggestions" }), 24.0f);
+            root->add(std::make_unique<spinner_element>(ui_element_id { ui_element_kind::none, popup.id + u8":loading" }, spinner_config { std::u8string { default_text::text_or_default(config_.loading_name, default_text::combo_box_loading()) } }), 24.0f);
         virtual_list_config list {};
         list.owner = popup.id;
         list.selected = config_.highlighted;

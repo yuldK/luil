@@ -1,97 +1,30 @@
 #include "mobile_demo/app.h"
 
+#include "demo/readonly_undo_keys.h"
 #include "luil/generated/codicons.h"
+#include "luil/text/string_table.h"
 #include "luil/ui/app_bar_element.h"
 #include "luil/ui/caption_element.h"
-#include "luil/ui/font_scale.h"
-#include "luil/ui/glyph_element.h"
+#include "luil/ui/page_transition_element.h"
 #include "luil/ui/scroll_view_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_platform.h"
+#include "mobile_demo/page_list.h"
 
 #include <algorithm>
-#include <array>
 #include <utility>
 
 namespace mobile_demo {
     namespace {
         // 넓은 화면에서 왼쪽 목록의 폭이다.
         constexpr float navigation_width { 260.0f };
-        // 목록 한 칸의 높이다. 제목과 설명 두 줄에 손가락이 넉넉히 닿는다.
-        constexpr float entry_height { 64.0f };
+    }
 
-        [[nodiscard]] float entry_line_height(const float font_size, const float height)
-        {
-            return luil::text_line_height(font_size, height - font_size);
-        }
-
-        struct page_entry
-        {
-            std::u8string_view key {};
-            std::u8string_view title {};
-            std::u8string_view summary {};
-            char32_t icon { 0 };
-        };
-
-        constexpr std::array<page_entry, 12> page_entries {
-            page_entry { page_basics, u8"기본", u8"단추, 글 칸, 그림, dialog", luil::codicons::icon_home },
-            page_entry { page_lists, u8"목록", u8"순서 바꾸기, tree, 가상 목록", luil::codicons::icon_list_unordered },
-            page_entry { page_tabs, u8"탭", u8"쓸어 넘기기, 넘침 메뉴", luil::codicons::icon_files },
-            page_entry { page_groups, u8"그룹", u8"접는 섹션, 선택 묶음", luil::codicons::icon_group_by_ref_type },
-            page_entry { page_toasts, u8"토스트", u8"알림과 실행 취소", luil::codicons::icon_bell },
-            page_entry { page_popups, u8"메뉴·팝업", u8"드롭다운, 분할 버튼, 길게 눌러 메뉴", luil::codicons::icon_menu },
-            page_entry { page_zoom, u8"확대 보기", u8"두 손가락 확대와 이동", luil::codicons::icon_zoom_in },
-            page_entry { page_theme, u8"테마", u8"밝기, 키 컬러, 시스템 색", luil::codicons::icon_symbol_color },
-            page_entry { page_sheets, u8"시트", u8"아래 시트, 옆 시트, 서랍", luil::codicons::icon_layout_panel },
-            page_entry { page_device, u8"기기", u8"방향, 막대, 볼륨 키, 햅틱, 창 폭", luil::codicons::icon_device_mobile },
-            page_entry { page_smb, u8"SMB", u8"NAS 폴더 열거와 파일 읽기", luil::codicons::icon_server },
-            page_entry { page_files, u8"파일 감시", u8"파일 변경 묶음과 끝 묶음", luil::codicons::icon_eye },
-        };
-
-        [[nodiscard]] std::u8string page_title(const std::u8string_view page)
-        {
-            for (const page_entry& entry : page_entries)
-                if (entry.key == page)
-                    return std::u8string { entry.title };
-            return std::u8string { u8"luil mobile demo" };
-        }
-
-        // 목록 한 칸이다: 아이콘, 제목, 한 줄 설명. 넓은 화면에서 고른 칸은 목록의 고른 행과 같은 바탕이다.
-        [[nodiscard]] std::unique_ptr<luil::ui_element> make_entry(const page_entry& entry, const bool selected, const bool chevron)
-        {
-            luil::panel_config panel_config {};
-            if (selected)
-                panel_config.background = [](const luil::ui_color_palette& palette) { return palette.row_selection_background; };
-            else
-                panel_config.background = [](const luil::ui_color_palette& palette) { return palette.window_background; };
-            panel_config.corner_radius = selected ? 8.0f : 0.0f;
-            const std::u8string key { entry.key };
-            auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_page_entry, key }, std::move(panel_config)) };
-            panel->set_cursor(luil::ui_cursor::hand);
-            panel->set_action(luil::ui_trigger::left_click, luil::make_message_action(navigate_intent { key }));
-
-            luil::stack_config row_config {};
-            row_config.direction = luil::stack_direction::row;
-            row_config.spacing = 16.0f;
-            row_config.padding = luil::edge_insets::symmetric(16.0f, 10.0f);
-            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"entry-" + key }, row_config) };
-            row->add(std::make_unique<luil::glyph_element>(luil::ui_element_id { kind_text, u8"entry-icon-" + key }, luil::glyph_config { .glyph = entry.icon, .font_size = 22.0f }), 24.0f);
-
-            luil::stack_config text_config {};
-            auto text { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"entry-text-" + key }, text_config) };
-            text->add(make_label(luil::ui_element_id { kind_text, u8"entry-title-" + key }, std::u8string { entry.title }, body_text_size, luil::label_color_role::primary),
-                entry_line_height(body_text_size, body_line_height));
-            text->add(make_label(luil::ui_element_id { kind_text, u8"entry-summary-" + key }, std::u8string { entry.summary }, note_text_size, luil::label_color_role::dim),
-                entry_line_height(note_text_size, note_line_height));
-            row->add_flexible(std::move(text));
-            // 좁은 화면에서는 누르면 다음 장으로 넘어간다는 표시를 둔다.
-            if (chevron)
-                row->add(std::make_unique<luil::glyph_element>(
-                             luil::ui_element_id { kind_text, u8"entry-chevron-" + key }, luil::glyph_config { .glyph = luil::codicons::icon_chevron_right, .font_size = 18.0f }),
-                    20.0f);
-            panel->set_content(std::move(row));
-            return panel;
-        }
+    mobile_driver::mobile_driver()
+    {
+        // 라이브러리 언어는 프로세스에 남고 이 driver는 Activity마다 새로 선다. 시스템 칸이면 `on_started`가 다시 읽은 OS 목록을 따른다.
+        if (luil::text_languages().has_value())
+            text_language_ = device_.language();
     }
 
     void mobile_driver::handle(luil::app_message message)
@@ -103,13 +36,29 @@ namespace mobile_demo {
         }
         if (const auto* const metrics { message.get<window_metrics_intent>() }; metrics != nullptr)
         {
+            // 전환은 움직임 줄이기가 켜지거나 창 크기·배율·폭 등급이 바뀌면(회전·화면 분할) 놓는다 (page-transition-design.md 결정 5).
+            if ((metrics->reduce_motion && metrics_.reduce_motion == false) || metrics->width != metrics_.width || metrics->height != metrics_.height
+                || metrics->scale != metrics_.scale || metrics->width_class != metrics_.width_class)
+                page_motion_ = {};
             metrics_ = *metrics;
             // 시트 페이지는 metrics 메시지를 보지 못하므로 셸이 움직임 줄이기만 넘긴다.
             sheets_.set_reduce_motion(metrics->reduce_motion);
             return;
         }
+        if (const auto* const clipboard_host { message.get<clipboard_host_intent>() }; clipboard_host != nullptr)
+        {
+            host_ = clipboard_host->host;
+            return;
+        }
         if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
         {
+            // 떠나는 본문은 `page_`가 아직 옛 값일 때 짓는다. 목록에서 페이지로 들어가는 것은 앞으로다.
+            //  - 안내 풍선은 대상이 있는 페이지에만 선다. 떠나는 본문을 짓기 전에 닫아 그 본문의 설명도 닫힘을 그린다.
+            if (navigate->page != page_)
+            {
+                toasts_.close_tip();
+                page_motion_ = make_page_motion(navigate->page, luil::page_transition_direction::forward);
+            }
             page_ = navigate->page;
             // 페이지를 떠나면 그 페이지의 popup도 닫는다.
             close_popups();
@@ -117,6 +66,12 @@ namespace mobile_demo {
         }
         if (message.get<back_intent>() != nullptr)
         {
+            // 앱 바의 뒤로 단추와 시스템 뒤로 가기는 뒤로다.
+            if (page_.empty() == false)
+            {
+                toasts_.close_tip();
+                page_motion_ = make_page_motion({}, luil::page_transition_direction::backward);
+            }
             page_.clear();
             close_popups();
             return;
@@ -131,6 +86,7 @@ namespace mobile_demo {
             close_popups();
             return;
         }
+        // 테마 페이지 파일 감시 묶음의 단추다. 쓰기만 하고 화면은 감시를 거쳐서만 바뀐다. 실패는 감시로 오지 않아 페이지에 알린다.
         // 컨텍스트 메뉴 선택은 페이지가 메뉴를 닫고 셸이 토스트로 잇는다.
         if (const auto* const select { message.get<card_menu_select_intent>() }; select != nullptr)
         {
@@ -140,10 +96,39 @@ namespace mobile_demo {
         }
         // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다. 편집 메시지만 타입이 같고
         // target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
-        if (basics_.handle(message) || lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message)
-            || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
+        // 기본 페이지의 서식 칸이 쥔 클립보드 요청은 받은 자리에서 host에 넣는다.
+        if (basics_.handle(message))
+        {
+            if (std::optional<luil::clipboard_request> request { basics_.take_clipboard_request() }; request.has_value() && host_ != nullptr)
+                host_->post_clipboard_request(std::move(*request));
+            return;
+        }
+        // OS 값과 언어 고르기는 페이지에도 간다. 언어를 라이브러리에 잇는 일만 셸이 한다. 페이지와 그 test는 전역 언어를 건드리지 않는다.
+        if (const auto* const locale { message.get<device_locale_intent>() }; locale != nullptr)
+        {
+            system_languages_ = locale->languages;
+            // "시스템"을 고른 뒤 OS 언어가 바뀌면 새 목록을 따른다. Android는 Activity가 다시 서서 새 driver가 여기로 온다.
+            if (text_language_ == u8"system")
+                apply_text_language(text_language_);
+        }
+        if (const auto* const language { message.get<device_language_intent>() }; language != nullptr)
+            apply_text_language(language->value);
+        if (lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message) || ink_.handle(message)
+            || inspector_.handle(message) || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
             || files_.handle(message))
             return;
+    }
+
+    void mobile_driver::apply_text_language(const std::u8string& choice)
+    {
+        text_language_ = choice;
+        if (choice == u8"system")
+        {
+            luil::set_text_languages(system_languages_);
+            return;
+        }
+        const std::vector<std::u8string> languages { choice };
+        luil::set_text_languages(languages);
     }
 
     void mobile_driver::stop_workers()
@@ -156,6 +141,40 @@ namespace mobile_demo {
     {
         tabs_.close_popups();
         popups_.close_popups();
+    }
+
+    luil::page_transition mobile_driver::make_page_motion(const std::u8string& next, const luil::page_transition_direction direction)
+    {
+        page_motion_pending_ = false;
+        if (device_.page_transition_enabled() == false || metrics_.reduce_motion || motion_slot_.width <= 0.0f || motion_slot_.height <= 0.0f)
+            return {};
+        const bool wide { metrics_.width_class != luil::window_width_class::compact };
+        // 지난 frame과 꼴이 다르면(회전 직후) 자리가 맞지 않아 짓지 않는다.
+        if (wide != motion_wide_)
+            return {};
+        // 넓은 화면의 오른쪽 판은 비어 있으면 첫 페이지를 보인다. 같은 페이지로 가는 것이면 바뀌는 것이 없다.
+        const std::u8string shown { page_.empty() && wide ? std::u8string { page_basics } : page_ };
+        const std::u8string coming { next.empty() && wide ? std::u8string { page_basics } : next };
+        if (shown == coming)
+            return {};
+        const float scale { motion_scale_ };
+        auto prior { make_body_page(shown, wide, motion_slot_.width / scale, motion_slot_.height / scale, scale) };
+        auto tree { std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(prior), motion_slot_, scale, {}, nullptr, nullptr)) };
+        // 좁은 화면은 목록 → 페이지를 가로로 민다. 넓은 화면의 오른쪽 판은 자리가 그대로라 옅어짐이다.
+        luil::page_transition_style style {};
+        style.effect = wide ? luil::page_transition_effect::fade : luil::page_transition_effect::slide;
+        style.axis = luil::page_transition_axis::horizontal;
+        style.direction = direction;
+        // 시작 시각은 다음 frame이 들어오는 본문을 지은 뒤 다시 적는다 (`page_motion_pending_`).
+        page_motion_pending_ = true;
+        return luil::start_page_transition(std::move(tree), style, std::chrono::steady_clock::now(), metrics_.reduce_motion);
+    }
+
+    std::unique_ptr<luil::ui_element> mobile_driver::make_body_page(const std::u8string& page, const bool wide, const float width, const float height, const float scale)
+    {
+        if (wide == false && page.empty())
+            return make_navigation(width, height, scale, false);
+        return make_page(page, width, height, scale);
     }
 
     std::shared_ptr<const luil::ui_frame> mobile_driver::make_frame()
@@ -174,6 +193,8 @@ namespace mobile_demo {
 
         auto root { std::make_unique<luil::root_element>() };
         root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+        // 테마 페이지가 읽은 스타일이다 (비면 내장 스타일). 앱 바와 본문을 이 스타일로 배치하고 frame에도 같은 포인터를 싣는다.
+        const luil::ui_style* const style { nullptr };
 
         // 데스크톱 창으로 띄우면 창 caption이 맨 위에 선다. 앱 바는 그 아래에서 같은 일을 한다.
         float top { 0.0f };
@@ -197,31 +218,53 @@ namespace mobile_demo {
             bar.navigation = luil::app_bar_button { .glyph = luil::codicons::icon_arrow_left, .label = u8"뒤로", .action = luil::make_message_action(back_intent {}) };
         const float bar_height { luil::app_bar_element::height_for(bar) * scale };
         auto app_bar { std::make_unique<luil::app_bar_element>(std::move(bar)) };
-        app_bar->arrange({ { 0.0f, top, width, bar_height }, scale });
+        app_bar->arrange({ .slot = { 0.0f, top, width, bar_height }, .scale = scale, .style = style });
         root->add(std::move(app_bar));
         top += bar_height;
 
         const float body_width { width / scale };
         const float body_height { (height - top) / scale };
+        // 기기 페이지의 전환 label이 읽는 상태다. 도는 동안은 tree를 다시 짓지 않으므로 시작 frame의 값이 끝 tick까지 남는다.
+        //  - 시작 시각을 아직 적지 않은 전환은 이 frame에서 시작하므로 도는 중이다.
+        device_.set_page_transition_turning(
+            page_motion_.prior != nullptr
+            && (page_motion_pending_ || luil::page_transition_finished(page_motion_, frame_time_) == false)
+        );
+        // 바뀌는 자리는 늘 화면 전환 요소로 감싼다. 떠나는 화면이 없으면 새 화면만 그리는 껍질이다.
+        //  - 들어오는 본문(인자)을 다 지은 뒤 새 전환의 시작 시각을 적는다. 요소는 전환을 만들 때 복사하므로 그 앞이어야 한다.
+        //    처음 가는 무거운 페이지는 짓는 데 전환 길이보다 오래 걸려, 메시지 시각에서 세면 첫 그림에 이미 끝나 밀기가 보이지 않는다.
+        //    배치와 첫 그리기에 드는 시간은 이 시각 뒤라 세지 않는다.
+        const auto wrap = [this](std::unique_ptr<luil::ui_element> content) {
+            if (page_motion_pending_)
+            {
+                page_motion_.started = std::chrono::steady_clock::now();
+                page_motion_pending_ = false;
+            }
+            return std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", page_motion_ }, std::move(content));
+        };
         std::unique_ptr<luil::ui_element> body {};
+        const luil::ui_element* moving { nullptr };
         if (wide)
         {
             luil::stack_config row_config {};
             row_config.direction = luil::stack_direction::row;
             auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"two-pane" }, row_config) };
             row->add(make_navigation(navigation_width, body_height, scale, true), navigation_width);
-            row->add_flexible(make_page(shown, body_width - navigation_width, body_height, scale));
+            auto pane { wrap(make_page(shown, body_width - navigation_width, body_height, scale)) };
+            moving = pane.get();
+            row->add_flexible(std::move(pane));
             body = std::move(row);
-        }
-        else if (page_.empty())
-        {
-            body = make_navigation(body_width, body_height, scale, false);
         }
         else
         {
-            body = make_page(page_, body_width, body_height, scale);
+            body = wrap(make_body_page(page_, false, body_width, body_height, scale));
+            moving = body.get();
         }
-        body->arrange({ { 0.0f, top, width, height - top }, scale });
+        body->arrange({ .slot = { 0.0f, top, width, height - top }, .scale = scale, .style = style });
+        // 다음 이동에서 떠나는 화면을 이 자리와 배율로 짓는다.
+        motion_slot_ = moving->bounds();
+        motion_scale_ = scale;
+        motion_wide_ = wide;
         root->add(std::move(body));
 
         // 오버레이들: dialog는 화면을 덮고 토스트는 아래쪽에 쌓인다.
@@ -231,28 +274,39 @@ namespace mobile_demo {
         // 시트는 창 전체에 겹친다. 열림은 페이지의 상태라 회전·화면 분할 뒤에도 다시 선다.
         if (shown == page_sheets)
             sheets_.add_overlay(*root, width, height, scale, metrics_.surface, frame_time_);
-        if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
+        // 안내 풍선은 이번 frame에 배치한 root에서 대상의 보이는 자리를 찾는다.
+        if (auto toasts { toasts_.make_overlay(root.get()) }; toasts != nullptr)
         {
-            toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
+            // 풍선은 배치 때 글을 잰다. frame에 싣는 스타일과 같은 포인터라야 잰 줄과 그린 글이 맞는다.
+            toasts->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .style = style });
             root->add(std::move(toasts));
         }
 
         auto frame { std::make_shared<luil::ui_frame>() };
         frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
         frame->appearance = theme_.appearance();
+        // 위의 앱 바·본문 배치에 준 것과 같은 포인터다. 팔레트·그리기 치수는 이쪽에서 읽는다.
         // 기기 요청은 앱 상태라 어느 페이지를 보든 실린다.
         frame->device = device_.request();
+        // 검사기도 앱 상태 하나로 켠다. 켠 채 다른 페이지를 들여다볼 수 있다.
+        frame->inspector = inspector_.config();
         // popup은 이번 frame에서 배치된 element의 자리를 쓴다. 보이는 페이지의 것만 단다.
         if (shown == page_tabs)
             frame->popups = tabs_.make_popups(scale);
         if (shown == page_popups)
             frame->popups = popups_.make_popups(scale, { 0.0f, 0.0f, width, height });
-        // 뒤로 가기는 열린 dialog를 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
+        // 날짜 칸 popup의 초점 요청이다. 이 페이지만 요청을 내므로 번호를 그대로 싣는다.
+        if (shown == page_popups)
+            frame->focus = popups_.make_focus_request();
+        // 뒤로 가기는 열린 dialog·시트·덮개 안내 풍선을 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
         // 두어 플랫폼의 기본 동작(앱을 떠나기)을 받는다. popup은 host가 그보다 먼저 닫는다.
+        //  - 비modal 풍선은 닫기 단추로만 닫아 뒤로 가기를 받지 않는다. 페이지를 떠나면 셸이 닫는다.
         if (shown == page_basics && basics_.dialog_open())
-            frame->back = [] { return luil::make_app_action(dialog_intent { false }); };
+            frame->back = [action = basics_.back_action()] { return action; };
         else if (shown == page_sheets && sheets_.sheet_open())
             frame->back = [action = sheets_.back_action()] { return action; };
+        else if (shown == page_toasts && toasts_.back_closes_tip())
+            frame->back = [action = toasts_.back_action()] { return action; };
         else if (nested)
             frame->back = [] { return luil::make_app_action(back_intent {}); };
         return frame;
@@ -260,16 +314,11 @@ namespace mobile_demo {
 
     std::unique_ptr<luil::ui_element> mobile_driver::make_navigation(const float width, const float height, const float scale, const bool highlight)
     {
-        page_column column { u8"navigation", 0.0f };
-        column.gap(8.0f);
-        const float row_height { entry_height + entry_line_height(body_text_size, body_line_height) - body_line_height + entry_line_height(note_text_size, note_line_height) - note_line_height };
-        for (const page_entry& entry : page_entries)
-        {
-            const bool selected { highlight && (page_.empty() ? entry.key == page_basics : entry.key == page_) };
-            column.add(make_entry(entry, selected, highlight == false), row_height, width);
-        }
-        column.gap(8.0f);
-        return wrap_scroll(u8"navigation", column.finish(), height, scale);
+        // 넓은 화면은 고른 페이지(없으면 첫 페이지)의 칸을 칠하고, 좁은 화면은 칠하지 않고 다음 장 표시를 둔다.
+        std::u8string_view selected {};
+        if (highlight)
+            selected = page_.empty() ? page_basics : std::u8string_view { page_ };
+        return wrap_scroll(u8"navigation", make_page_list(width, selected, highlight == false, scale), height, scale);
     }
 
     std::unique_ptr<luil::ui_element> mobile_driver::make_page(const std::u8string& page, const float width, const float height, const float scale)
@@ -281,6 +330,8 @@ namespace mobile_demo {
             return tabs_.build(width, height, scale);
         if (page == page_zoom)
             return zoom_.build(width, height, scale);
+        if (page == page_ink)
+            return ink_.build(width, height, scale);
         // 위에서 아래로 흘려 보는 페이지다.
         if (page == page_groups)
             return wrap_scroll(page, groups_.build(width, scale), height, scale);
@@ -288,6 +339,8 @@ namespace mobile_demo {
             return wrap_scroll(page, toasts_.build(width, scale), height, scale);
         if (page == page_popups)
             return wrap_scroll(page, popups_.build(width, scale), height, scale);
+        if (page == page_inspector)
+            return wrap_scroll(page, inspector_.build(width, scale), height, scale);
         if (page == page_theme)
             return wrap_scroll(page, theme_.build(width, scale), height, scale);
         if (page == page_sheets)
@@ -334,12 +387,19 @@ namespace mobile_demo {
         // 멈춘 모습으로 끝낸다 (지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다).
         if (const auto sheet { sheets_.next_update(frame_time_) }; sheet.has_value() && (next.has_value() == false || *sheet < *next))
             next = sheet;
+        // 페이지 전환은 끝 시각 하나를 싣는다. 도는 동안의 frame은 요소의 예고가 다시 그린다.
+        if (const auto end { luil::page_transition_end(page_motion_) }; end.has_value() && (next.has_value() == false || *end < *next))
+            next = end;
         return next;
     }
 
-    void mobile_driver::tick(std::chrono::steady_clock::time_point)
+    void mobile_driver::tick(const std::chrono::steady_clock::time_point now)
     {
         toasts_.prune();
+        // 끝난 전환은 놓는다. 다음 frame은 prior 없는 tree라 덮개가 걷혀 손가락이 풀린다.
+        //  - 시작 시각을 아직 적지 않은 전환은 메시지 시각에서 센 끝이라 놓지 않는다.
+        if (page_motion_.prior != nullptr && page_motion_pending_ == false && luil::page_transition_finished(page_motion_, now))
+            page_motion_ = {};
     }
 
     // 표는 page test가 함께 보도록 `common.cpp`에 둔다.
@@ -388,8 +448,11 @@ namespace mobile_demo {
         return luil::route_reveal(tree, focused);
     }
 
-    std::vector<luil::input_action> mobile_policy::on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot&)
+    std::vector<luil::input_action> mobile_policy::on_key(const luil::ui_tree*, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot)
     {
+        // 읽기 전용 안내 칸에 초점이 있는 채 닿은 Ctrl+Z·Ctrl+Y다. 칸이 삼키지 않고 넘긴 키를 기본 페이지가 센다.
+        if (const auto undo { demo::readonly_undo_key_of(event, snapshot, kind_readonly_input) }; undo.has_value())
+            return { luil::make_app_action(*undo) };
         if (event.key == luil::key_code::volume_up || event.key == luil::key_code::volume_down)
             return { luil::make_app_action(volume_key_intent { event.key == luil::key_code::volume_up, event.repeat }) };
         return {};

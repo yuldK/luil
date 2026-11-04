@@ -7,6 +7,7 @@
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_events.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/undo_stack.h"
 #include "luil/ui/virtual_list_element.h"
 #include "mobile_demo/common.h"
 
@@ -36,6 +37,22 @@ namespace mobile_demo {
     {
         std::u8string moved {};
         std::u8string target {};
+    };
+
+    // 순서 전체를 이 차례로 정한다. 재배열 걸음의 되돌림과 다시 실행이 싣는 재생 전용 메시지다.
+    // 항목 하나의 옮김이 아니라 순서 전체(스냅숏)를 담아 절대 값이 되고, 옮긴 자리를 따로 셀 일이 없다.
+    struct reorder_restore_intent
+    {
+        std::vector<std::u8string> order {};
+    };
+
+    // 단추 `list-undo`·`list-redo`가 내는 요청이다. 휴대폰에는 키보드가 없을 수 있어 단추가 들어온다.
+    struct list_undo_intent
+    {
+    };
+
+    struct list_redo_intent
+    {
     };
 
     // tree view의 세 가지 앱 상태 변화다.
@@ -121,6 +138,10 @@ namespace mobile_demo {
 
     private:
         [[nodiscard]] static std::unique_ptr<luil::ui_element> make_split_handle();
+        // 되돌리기·다시 실행 단추 둘이다. 할 일이 없으면 끈다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_history_controls() const;
+        // 실행 취소 기록의 상태를 말하는 글이다 ("되돌리기 2 · 다시 실행 1 · 다음: 순서 바꿈").
+        [[nodiscard]] std::u8string history_text() const;
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_top_row(float width, float viewport_height);
         // 좁은 화면에서 위 판의 목록을 고르는 토글 묶음이다.
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_view_choice() const;
@@ -132,6 +153,8 @@ namespace mobile_demo {
         [[nodiscard]] bool is_expanded(const std::u8string& key) const;
 
         std::vector<std::u8string> items_ {};
+        // 재배열의 실행 취소 기록이다. 순서는 handle에서만 바뀌고 기록은 그 메시지만 쥔다.
+        luil::undo_stack history_ {};
         float scroll_ { 0.0f };
         // tree view의 앱 상태다: 고른 줄, 펼친 가지들, 흘러간 양.
         // 라이브러리는 이 셋을 받아 그리고 바꾸자는 메시지만 낸다.

@@ -1,6 +1,8 @@
 #include "luil/app/platform_services.h"
 
 #include "win32/command_line.h"
+#include "win32/instance_message.h"
+#include "win32/win32_locale.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -10,13 +12,19 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 // 플랫폼 도구의 Windows 쪽을 실제 OS 호출로 본다 (platform-services-design.md).
@@ -262,4 +270,382 @@ TEST_CASE("A thread blocked on a synchronous pipe read is cancelled from another
     REQUIRE(canceller->cancel().status == luil::platform_status::not_found);
     CloseHandle(read_end);
     CloseHandle(write_end);
+}
+
+namespace {
+    // 둘째 인스턴스의 보내기를 받는 시험용 최상위 창이다 (single-instance-args-design.md).
+    //  - 별도 thread의 숨은 창이다. 같은 thread의 창이면 `SendMessageTimeoutW`가 시한 없이 프로시저를 바로 부르므로
+    //    실제로 thread를 건너는 길을 보려면 따로 세워야 한다.
+    //  - 첫째의 주 창처럼 이름 표식을 걸 수도, 걸지 않을 수도 있다.
+    class receiver_window
+    {
+    public:
+        enum class reply
+        {
+            accept,
+            reject,
+            // 받은 것을 적고 한참 있다가 답한다. 응답하지 않는 첫째다.
+            stall,
+        };
+
+        struct delivery
+        {
+            luil::instance_arguments arguments {};
+            bool activate { false };
+        };
+
+        receiver_window(const std::u8string& name, const bool marked, const reply behavior)
+            : behavior_ { behavior }
+        {
+            if (marked)
+                property_ = luil::win32::instance_property_name(name).value_or(std::wstring {});
+            thread_ = std::thread { [this] { run(); } };
+            std::unique_lock lock { mutex_ };
+            ready_.wait(lock, [this] { return window_ != nullptr || failed_; });
+            if (window_ == nullptr)
+            {
+                // 생성자가 던지면 소멸자가 돌지 않으므로 thread를 여기서 거둔다.
+                lock.unlock();
+                thread_.join();
+                FAIL("The receiver window could not be created.");
+            }
+        }
+
+        receiver_window(const receiver_window&) = delete;
+        receiver_window& operator=(const receiver_window&) = delete;
+
+        ~receiver_window()
+        {
+            if (window_ != nullptr)
+                PostMessageW(window_, WM_CLOSE, 0, 0);
+            thread_.join();
+        }
+
+        [[nodiscard]] std::vector<delivery> deliveries() const
+        {
+            const std::lock_guard lock { mutex_ };
+            return deliveries_;
+        }
+
+        [[nodiscard]] int refused() const
+        {
+            const std::lock_guard lock { mutex_ };
+            return refused_;
+        }
+
+    private:
+        static constexpr const wchar_t* class_name { L"Luil.Test.InstanceReceiver" };
+        static constexpr DWORD stall_milliseconds { 1500 };
+
+        static LRESULT CALLBACK procedure(const HWND window, const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
+        {
+            if (message == WM_NCCREATE)
+                SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(reinterpret_cast<const CREATESTRUCTW*>(long_parameter)->lpCreateParams));
+            auto* const self { reinterpret_cast<receiver_window*>(GetWindowLongPtrW(window, GWLP_USERDATA)) };
+            if (message == WM_COPYDATA && self != nullptr)
+                return self->receive(*reinterpret_cast<const COPYDATASTRUCT*>(long_parameter));
+            if (message == WM_CLOSE)
+            {
+                if (self != nullptr && self->property_.empty() == false)
+                    RemovePropW(window, self->property_.c_str());
+                DestroyWindow(window);
+                return 0;
+            }
+            if (message == WM_DESTROY)
+            {
+                PostQuitMessage(0);
+                return 0;
+            }
+            return DefWindowProcW(window, message, word_parameter, long_parameter);
+        }
+
+        LRESULT receive(const COPYDATASTRUCT& data)
+        {
+            const std::span<const std::byte> bytes { static_cast<const std::byte*>(data.lpData), data.cbData };
+            luil::win32::instance_decode_result message { luil::win32::decode_instance_message(data.dwData, bytes) };
+            {
+                const std::lock_guard lock { mutex_ };
+                if (message.ok())
+                    deliveries_.push_back(delivery { std::move(message.value), message.activate });
+                else
+                    ++refused_;
+            }
+            if (message.ok() == false)
+                return FALSE;
+            if (behavior_ == reply::stall)
+                Sleep(stall_milliseconds);
+            return behavior_ == reply::reject ? FALSE : TRUE;
+        }
+
+        void run()
+        {
+            WNDCLASSEXW window_class {};
+            window_class.cbSize = sizeof(window_class);
+            window_class.lpfnWndProc = &procedure;
+            window_class.hInstance = GetModuleHandleW(nullptr);
+            window_class.lpszClassName = class_name;
+            if (RegisterClassExW(&window_class) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+            {
+                publish(nullptr);
+                return;
+            }
+            const HWND window { CreateWindowExW(0, class_name, L"instance receiver", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, GetModuleHandleW(nullptr), this) };
+            if (window != nullptr && property_.empty() == false)
+                SetPropW(window, property_.c_str(), reinterpret_cast<HANDLE>(1));
+            publish(window);
+            if (window == nullptr)
+                return;
+            MSG message {};
+            while (GetMessageW(&message, nullptr, 0, 0) > 0)
+            {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+
+        void publish(const HWND window)
+        {
+            {
+                const std::lock_guard lock { mutex_ };
+                window_ = window;
+                failed_ = window == nullptr;
+            }
+            ready_.notify_all();
+        }
+
+        reply behavior_ { reply::accept };
+        std::wstring property_ {};
+        mutable std::mutex mutex_ {};
+        std::condition_variable ready_ {};
+        HWND window_ { nullptr };
+        bool failed_ { false };
+        std::vector<delivery> deliveries_ {};
+        int refused_ { 0 };
+        std::thread thread_ {};
+    };
+
+    // test마다 다른 이름이다. 한 프로세스 안에서 앞 test의 객체와 겹치지 않게 한다.
+    [[nodiscard]] std::u8string unique_instance_name(const std::string_view purpose)
+    {
+        static int counter { 0 };
+        const std::string text { "luil-tests-send-" + std::string { purpose } + "-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++counter) };
+        return std::u8string { text.begin(), text.end() };
+    }
+
+    // 보내는 test가 쓰는 설정이다. 시험 창은 앞으로 서지 않는다.
+    [[nodiscard]] luil::instance_send_options send_options(const int timeout_milliseconds, const bool activate = false)
+    {
+        luil::instance_send_options options {};
+        options.timeout = std::chrono::milliseconds { timeout_milliseconds };
+        options.activate = activate;
+        return options;
+    }
+}
+
+TEST_CASE("A single instance remembers the name it was given", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("name") };
+    luil::single_instance first { name };
+    REQUIRE(first.name() == name);
+
+    // 옮겨 간 뒤의 빈 객체는 빈 이름이고 보낼 수 없다.
+    const luil::single_instance moved { std::move(first) };
+    REQUIRE(moved.name() == name);
+    REQUIRE(first.name().empty());
+    REQUIRE(first.send_to_primary({}, send_options(50)).status == luil::platform_status::failed);
+}
+
+TEST_CASE("The first instance has no one to send to", "[platform][instance]")
+{
+    const luil::single_instance first { unique_instance_name("first") };
+    REQUIRE(first.primary());
+    REQUIRE(first.send_to_primary(std::vector<std::u8string> { u8"a.txt" }, send_options(50)).status == luil::platform_status::not_found);
+}
+
+TEST_CASE("A second instance gives up after the time limit when no window carries the mark", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("none") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    REQUIRE(second.primary() == false);
+
+    const auto before { std::chrono::steady_clock::now() };
+    const luil::platform_result result { second.send_to_primary(std::vector<std::u8string> { u8"a.txt" }, send_options(50)) };
+    const auto elapsed { std::chrono::steady_clock::now() - before };
+    REQUIRE(result.status == luil::platform_status::not_found);
+    // 한 번은 찾아 보고, 시한을 넘겨 기다리지도 않는다.
+    REQUIRE(elapsed < std::chrono::seconds { 2 });
+}
+
+TEST_CASE("Arguments, the working directory and the flag reach the marked window unchanged", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("deliver") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    receiver_window window { name, true, receiver_window::reply::accept };
+
+    const std::vector<std::u8string> arguments { u8"a.txt", u8"b c", u8"\"q\" \\", u8"한글 \U0001F600", u8"" };
+    const luil::platform_result result { second.send_to_primary(arguments, send_options(2000)) };
+    REQUIRE(result.ok());
+    REQUIRE(result.error.empty());
+
+    // 표지를 켠 보내기는 시험 창을 앞으로 세우지 않는다 (시험 창이 활성화하지 않는다). 보내는 쪽이 권한을 넘길 뿐이다.
+    REQUIRE(second.send_to_primary({}, send_options(2000, true)).ok());
+
+    const std::vector<receiver_window::delivery> received { window.deliveries() };
+    REQUIRE(received.size() == 2);
+    REQUIRE(received[0].arguments.arguments == arguments);
+    REQUIRE(received[0].arguments.working_directory == std::filesystem::current_path().u8string());
+    REQUIRE(received[0].activate == false);
+    REQUIRE(received[1].arguments.arguments.empty());
+    REQUIRE(received[1].activate);
+    REQUIRE(window.refused() == 0);
+}
+
+TEST_CASE("A window that answers false makes the send fail", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("reject") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    receiver_window window { name, true, receiver_window::reply::reject };
+
+    const luil::platform_result result { second.send_to_primary(std::vector<std::u8string> { u8"a.txt" }, send_options(2000)) };
+    REQUIRE(result.status == luil::platform_status::failed);
+    REQUIRE(result.error.empty() == false);
+    // 받기는 했으나 앱이 받지 않았다고 답했다.
+    REQUIRE(window.deliveries().size() == 1);
+}
+
+TEST_CASE("A window that does not answer fails at the time limit", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("stall") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    receiver_window window { name, true, receiver_window::reply::stall };
+
+    const auto before { std::chrono::steady_clock::now() };
+    const luil::platform_result result { second.send_to_primary(std::vector<std::u8string> { u8"a.txt" }, send_options(200)) };
+    const auto elapsed { std::chrono::steady_clock::now() - before };
+    REQUIRE(result.status == luil::platform_status::failed);
+    REQUIRE(result.error.empty() == false);
+    // 응답을 기다린 시간은 시한 안이다. 시한이 지났다고 첫째가 받지 않았다는 뜻은 아니다.
+    REQUIRE(elapsed >= std::chrono::milliseconds { 150 });
+    REQUIRE(elapsed < std::chrono::milliseconds { 1400 });
+}
+
+TEST_CASE("A window without the mark gets nothing", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("unmarked") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    receiver_window window { name, false, receiver_window::reply::accept };
+
+    REQUIRE(second.send_to_primary(std::vector<std::u8string> { u8"a.txt" }, send_options(100)).status == luil::platform_status::not_found);
+    REQUIRE(window.deliveries().empty());
+}
+
+TEST_CASE("A mark of another name is not the first instance of this one", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("mine") };
+    const std::u8string other { unique_instance_name("other") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    receiver_window window { other, true, receiver_window::reply::accept };
+
+    REQUIRE(second.send_to_primary({}, send_options(100)).status == luil::platform_status::not_found);
+    REQUIRE(window.deliveries().empty());
+}
+
+TEST_CASE("Input the format cannot carry fails before anything is sent", "[platform][instance]")
+{
+    const std::u8string name { unique_instance_name("invalid") };
+    const luil::single_instance first { name };
+    const luil::single_instance second { name };
+    receiver_window window { name, true, receiver_window::reply::accept };
+
+    const std::u8string with_nul { u8'a', u8'\0', u8'b' };
+    const std::u8string broken { static_cast<char8_t>(0xC3), u8'(' };
+    const std::vector<std::u8string> too_many(luil::win32::instance_message_max_arguments + 1, u8"a");
+    const std::vector<std::u8string> too_large { std::u8string(luil::win32::instance_message_max_bytes, u8'a') };
+    for (const std::vector<std::u8string>& arguments : { std::vector<std::u8string> { with_nul }, std::vector<std::u8string> { broken }, too_many, too_large })
+        REQUIRE(second.send_to_primary(arguments, send_options(2000)).status == luil::platform_status::failed);
+    REQUIRE(window.deliveries().empty());
+    REQUIRE(window.refused() == 0);
+}
+
+TEST_CASE("An instance name longer than the window mark allows fails even for the first instance", "[platform][instance]")
+{
+    constexpr std::size_t limit { luil::win32::instance_name_max_code_units };
+    const std::u8string prefix { unique_instance_name("long") };
+    // 이름 끝을 채워 241 코드 단위 정확히와 하나 넘는 이름을 만든다.
+    REQUIRE(prefix.size() < limit);
+    const std::u8string longest { prefix + std::u8string(limit - prefix.size(), u8'n') };
+    const std::u8string too_long { longest + u8"n" };
+
+    // 뮤텍스에는 이 한계가 없어 생성자는 그대로 선다. 보내기가 첫째 여부를 보기 전에 이름을 거른다.
+    const luil::single_instance exact { longest };
+    REQUIRE(exact.send_to_primary({}, send_options(50)).status == luil::platform_status::not_found);
+    const luil::single_instance over { too_long };
+    REQUIRE(over.status().ok());
+    REQUIRE(over.send_to_primary({}, send_options(50)).status == luil::platform_status::failed);
+}
+
+TEST_CASE("An instance that could not be created cannot send", "[platform][instance]")
+{
+    const luil::single_instance unnamed { u8"" };
+    REQUIRE(unnamed.status().ok() == false);
+    REQUIRE(unnamed.send_to_primary({}, send_options(50)).status == luil::platform_status::failed);
+}
+
+TEST_CASE("The locale value for the first day maps 0 to Monday and 6 to Sunday and nothing else", "[platform][locale]")
+{
+    REQUIRE(luil::win32::weekday_from_locale_first_day(0u) == std::chrono::Monday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(1u) == std::chrono::Tuesday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(5u) == std::chrono::Saturday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(6u) == std::chrono::Sunday);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(7u).has_value() == false);
+    REQUIRE(luil::win32::weekday_from_locale_first_day(0xFFFFFFFFu).has_value() == false);
+}
+
+TEST_CASE("The first weekday answers what this PC's locale says", "[platform][locale]")
+{
+    // 값 자체는 PC마다 다르다. 같은 OS 호출과 맞는지만 본다.
+    const std::optional<std::chrono::weekday> first_day { luil::user_first_weekday() };
+    DWORD value { 0 };
+    const bool answered { GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER, reinterpret_cast<LPWSTR>(&value), sizeof(value) / sizeof(wchar_t)) != 0 };
+    REQUIRE(first_day.has_value() == answered);
+    if (first_day.has_value())
+    {
+        REQUIRE(first_day->ok());
+        REQUIRE(first_day == luil::win32::weekday_from_locale_first_day(value));
+    }
+}
+
+TEST_CASE("The language list splits on each NUL and stops at the empty name", "[platform][locale]")
+{
+    using namespace std::string_view_literals;
+    const std::vector<std::u8string> two { u8"ko-KR", u8"en-US" };
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"ko-KR\0en-US\0\0"sv) == two);
+    // 끝 NUL이 없어도 끝까지 읽고, 빈 이름 뒤는 보지 않는다.
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"ko-KR\0en-US"sv) == two);
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"ko-KR\0en-US\0\0fr-FR\0"sv) == two);
+    REQUIRE(luil::win32::language_tags_from_multi_string(L""sv).empty());
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"\0\0"sv).empty());
+    // UTF-8로 바꾸지 못한 이름(짝 없는 surrogate)은 건너뛴다.
+    const std::vector<std::u8string> kept { u8"en" };
+    REQUIRE(luil::win32::language_tags_from_multi_string(L"\xD800\0en\0\0"sv) == kept);
+}
+
+TEST_CASE("The display languages are tags without empty names", "[platform][locale]")
+{
+    // 어떤 언어가 나오는지는 PC마다 다르다. 태그 꼴만 본다.
+    for (const std::u8string& tag : luil::user_ui_languages())
+    {
+        REQUIRE(tag.empty() == false);
+        for (const char8_t unit : tag)
+        {
+            const bool alphanumeric { (unit >= u8'a' && unit <= u8'z') || (unit >= u8'A' && unit <= u8'Z') || (unit >= u8'0' && unit <= u8'9') };
+            REQUIRE((alphanumeric || unit == u8'-'));
+        }
+    }
 }

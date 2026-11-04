@@ -144,6 +144,12 @@ namespace luil {
         // 이 자리를 감싸는 가장 안쪽 묶음이다.
         // 화살표가 그 안을 돌 때 쓴다 — 방향은 묶음이 정하고 순서는 자식 순서다.
         [[nodiscard]] focus_group_scope focus_group_of(const ui_element_id& id) const;
+        // 이 자리를 Tab 순서에서 대신하는 자리다 (`focus_order`가 접은 것과 같은 규칙, menu-focus-fixes-design.md).
+        //  - 묶음 안이면 그 자리를 접은 가장 바깥 묶음의 대표다. 묶음 밖이면 자리일 때 자신이고, 자리가 아니면 nullopt다.
+        //  - 가둠이 있으면 가둠 안의 묶음만 센다. 가둠 자신은 접히지 않고, 가둠 밖의 자리는 nullopt다 (`focus_order`와 같다).
+        //  - 보이지 않거나 tree에 없으면 nullopt다.
+        //  - Tab이 묶음의 대표가 아닌 구성원(분할 버튼의 화살표, 고르지 않은 칸)에서 다음 자리로 가는 데 쓴다.
+        [[nodiscard]] std::optional<ui_element_id> focus_stop_of(const ui_element_id& id) const;
         // 초점을 가두는 element다 (없으면 nullptr).
         // modal dialog가 떠 있으면 Tab이 그 안만 돈다
         // (modal-dialog-design.md).

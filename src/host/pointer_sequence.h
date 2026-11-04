@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,7 @@ namespace luil {
         bool canceled { false };
         // 펜 배럴 버튼이다. 접촉 중이면 우클릭이다.
         bool barrel { false };
-        // 펜의 지우개 끝이다. 일반 컨트롤을 실행하지 않는다.
+        // 펜의 지우개 끝이다. 표식을 단 이벤트로 나가고, 일반 컨트롤은 controller가 삼킨다 (ink-input-design.md).
         bool eraser { false };
         // 누름이 발생한 순간 Shift가 눌려 있었는가다 (Win32는 POINTER_MOD_SHIFT).
         // 펜도 Shift+선택을 지원한다.
@@ -52,12 +53,19 @@ namespace luil {
         float scale { 1.0f };
         std::chrono::steady_clock::time_point time {};
         std::u8string surface {};
+        // 펜의 압력이다 (플랫폼 값을 0~1로 옮긴 것). 장치가 알리지 않으면 비어 있다. 추적기가 0~1로 접는다.
+        std::optional<float> pressure {};
+        // 펜의 기울기다 (도, W3C의 tiltX·tiltY). 모르면 0이다.
+        float tilt_x { 0.0f };
+        float tilt_y { 0.0f };
     };
 
     // 표면 하나가 소비하기로 한 터치·펜 시퀀스들을 입력 이벤트로 옮긴다.
     //
     // 접촉마다 지금 버튼을 기억한다 — 접촉 중에 배럴 버튼이 바뀌면 이전 버튼의
-    // 누름을 **취소**하고 새 버튼으로 다시 누른다. 좌클릭과 우클릭이 함께 나가지 않는다.
+    // 누름을 **취소**하고(`button_switch`) 새 버튼으로 다시 누른다. 좌클릭과 우클릭이 함께 나가지 않는다.
+    //  - 펜 표본이면 이동·누름·뗌에 `pen`을 채운다. 지우개인지는 누를 때 정하고 접촉 동안 바꾸지 않는다.
+    //    지우개 접촉에는 배럴 전환이 없다.
     //  - 창도 시계도 모르므로 test가 결정적이다. 플랫폼마다 다시 쓰지 않는다.
     class pointer_sequence_tracker
     {

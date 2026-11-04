@@ -78,7 +78,7 @@ namespace luil {
         float scale_ { 0.0f };
         float sample_width_ { 0.0f };
         bool wrap_ { true };
-        // 접은 자리를 고른 규칙이다. 바뀌면 문단의 접은 자리와 화면 줄의 배치를 함께 비운다.
+        // 접은 자리를 고른 규칙이다 (배치가 푼 값). 바뀌면 문단의 접은 자리와 화면 줄의 배치를 함께 비운다.
         text::line_break_policy line_break_ { text::line_break_policy::hangul_words };
         bool native_ { false };
         text_layout_face face_ { text_layout_face::ui };
@@ -104,10 +104,14 @@ namespace luil {
         //  - 없으면 배치가 frame마다 글 전체를 접는다. 결과는 같다.
         std::shared_ptr<text_area_wrap_cache> wrap_cache {};
         // 읽기 전용에서도 선택·복사와 caret은 남는다.
+        //  - 글을 바꾸는 키(Ctrl+X·Ctrl+V·Delete·Enter·Shift+Insert)는 칸이 삼킨다. Ctrl+Z·Ctrl+Y는 칸에 되돌릴 글이 없어
+        //    삼키지 않고 칸 밖으로 흘러 앱 `on_key`가 받는다 (key-propagation-design.md).
         bool read_only { false };
         bool wrap { true };
-        // 접는 자리를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾼다. 바꾸면 `wrap_cache`가 통째로 비워진다.
-        text::line_break_policy line_break { text::line_break_policy::hangul_words };
+        // 접는 자리를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다 (배치 문맥의 `style`,
+        // docs/wrap-policy-key-design.md). 적은 값이 스타일보다 앞선다.
+        //  - 배치가 푼 정책이 바뀌면 `wrap_cache`가 통째로 비워진다. config가 같아도 스타일이 바뀌어 정책이 뒤집히면 그렇다.
+        std::optional<text::line_break_policy> line_break {};
         text_face face { text_face::ui };
         float font_size { 0.0f };
         float scroll_x { 0.0f };
@@ -117,6 +121,9 @@ namespace luil {
         //  - offset은 확정 글(`text_input_view::text`) 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
         //  - 편집하는 코드 글의 구간은 `syntax_highlighter`(syntax_highlighter.h)가 편집마다 바뀐 줄부터 다시 칠해 만든다.
         //    구문 색(`text_color_role::keyword`…`function`)과 굵기·기울임(`text_span::bold`·`italic`)을 싣는다.
+        //  - 서식 있는 글의 구간은 `rich_text_presenter`(rich_text.h)가 편집 상태의 서식에서 옮겨 만든다. 굵기·기울임·밑줄·코드
+        //    (`underline`·`code`)를 싣는다. 칸 하나에 도우미 하나다. 두 도우미가 함께 채우지 않는다.
+        //  - 보조 기술의 서식 속성(굵기·기울임·밑줄)이 이 구간을 읽는다 (`text_input_snapshot::spans`).
         std::shared_ptr<const std::vector<text_span>> spans {};
         // `line` 오름차순이고 같은 줄이 둘 없다. 그리기가 줄마다 이분 탐색(`lower_bound`)으로 찾는다.
         std::shared_ptr<const std::vector<line_decoration>> lines {};
@@ -134,6 +141,11 @@ namespace luil {
         std::function<input_action(std::u8string_view destination)> activate_link {};
         // 편집 칸의 링크 tooltip에서 주소 뒤에 붙는 안내다 (예: "Ctrl+클릭하여 열기"). 비어 있으면 주소만 보인다.
         std::u8string link_hint {};
+        // 복사·잘라내기·붙여넣기 키(Ctrl+C·X·V, Ctrl+Insert(Shift 포함), Shift+Insert, Shift+Delete)를 칸이 쓰지 않고 `key_handler`로 넘긴다.
+        //  - 서식 칸이 켠다. 칸에 단 `make_rich_text_key_handler`가 그 키를 복사·붙여넣기 명령으로 내고, 앱이 logic thread에서
+        //    `rich_text_copy_request`·`rich_text_paste`로 글과 HTML을 주고받는다 (docs/rich-edit-exchange-design.md).
+        //  - `text_input_snapshot`에 같은 이름으로 실린다. 읽기 전용 칸이 Ctrl+X·Ctrl+V를 삼키는 것은 그대로다.
+        bool clipboard_keys_to_parent { false };
     };
 
     // 글자 크기와 줄 높이, 안쪽 여백이다 (논리 픽셀).
@@ -223,6 +235,8 @@ namespace luil {
         [[nodiscard]] const text_measurer& measure_with(const text_measurer& fallback) const;
         [[nodiscard]] std::u8string_view displayed_text() const noexcept;
         [[nodiscard]] std::size_t displayed_caret() const noexcept;
+        // 칸이 읽히는 이름이다. 앱이 단 이름(`access_name`)이 먼저고, 없으면 안내 글이다. 안쪽 막대도 이 이름을 읽는다.
+        [[nodiscard]] const std::u8string& field_name() const noexcept;
         // 그 글의 화면 줄이다. 배치가 접은 표시 문서면 그 결과를, 아니면(조합 중에 확정 글을 물을 때) 같은 폭으로 다시 접는다.
         // 다시 접은 줄은 `storage`에 담아 돌려준다 — 칸은 여러 thread가 읽으므로 안에 담을 수 없다.
         [[nodiscard]] const std::vector<line>& lines_for(std::u8string_view text, const std::function<float(std::u8string_view)>& measure, std::vector<line>& storage) const;
@@ -242,6 +256,9 @@ namespace luil {
 
         text_input_view value_ {};
         text_area_config config_ {};
+        // 배치가 푼 줄 나눔 정책이다 (config, 배치 문맥의 앱 스타일, 내장값 순). 배치 밖에서 다시 접는 자리
+        // (`lines_for`·`layout_request`)도 이것을 읽어 배치의 줄과 같은 정책이다. 배치 전에는 config나 내장 스타일의 값이다.
+        text::line_break_policy resolved_line_break_ { text::line_break_policy::hangul_words };
         scroll_area_element* area_ { nullptr };
         // 줄을 그리는 몸통이다. 흘린 만큼 위로 밀려 배치된다.
         ui_element* body_ { nullptr };

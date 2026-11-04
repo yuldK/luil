@@ -1,5 +1,7 @@
 # 빌드 체계
 
+> 선택 이식 범위: 이 문서의 차트·마크업·업데이트·실행 중 스타일·핫 리로드 교차 참조는 원래 전체 통합 브랜치의 설계 기록이다. 현재 main의 채택 범위와 보존 위치는 [선택 기능 이식 기록](../selected-adoption.md)에 적었다.
+
 luil의 [CMake 구성](../../CMakeLists.txt)은 준비된 의존성을 검사하며 configure 과정에서 다운로드하지 않는다. Skia와 WebView2 SDK는 각각 [`fetch_skia.ps1`](../../scripts/fetch_skia.ps1), [`fetch_webview2.ps1`](../../scripts/fetch_webview2.ps1)로 준비한다. 직접 빌드한 Skia도 필요한 헤더·라이브러리·GN 설정을 제공하면 사용할 수 있다.
 
 ## 요구 환경과 의존성
@@ -13,7 +15,7 @@ luil의 [CMake 구성](../../CMakeLists.txt)은 준비된 의존성을 검사하
 | SDK·런타임 | Windows SDK 10.0.22621.0 이상 | NDK libc++ 정적판(`c++_static`) |
 | 언어 | C++20 | C++20 |
 
-[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. 이 옵션의 기본값은 `LUIL_ENABLE_DIRECT3D`를 따른다. Catch2는 테스트를 켰을 때 필요하다.
+[`dependencies.cmake`](../../cmake/dependencies.cmake)는 Skia와 nlohmann/json을 모든 라이브러리 구성에서 찾는다. HTTP를 호출하지 않는 앱에도 이 빌드 의존성은 필요하다. `luil_core`도 실행 중 스타일 파서 안쪽에서 nlohmann을 쓴다(`$<BUILD_INTERFACE:...>` PRIVATE, 공개 헤더에는 nlohmann 형이 없다). WebView2 SDK는 `LUIL_ENABLE_WEBVIEW`가 켜진 구성에서 찾는다. 끄면 SDK 준비·정적 로더 링크·고지 항목이 빠지고, 공개 API는 그대로이되 frame에 실은 웹뷰는 placeholder로만 남는다. 이 옵션의 기본값은 `LUIL_ENABLE_DIRECT3D`를 따른다. Catch2는 테스트를 켰을 때 필요하다.
 
 libsmb2는 `LUIL_ENABLE_SMB`를 켠 Android 구성에서만 찾는다. **기본은 끔이다.** submodule(`third_party/libsmb2`, `libsmb2-6.2`에 고정)이고, upstream의 CMakeLists 대신 [`dependencies/libsmb2.cmake`](../../cmake/dependencies/libsmb2.cmake)가 같은 소스 목록과 `config.h`로 공유 라이브러리 `libsmb2.so`(target `luil_smb2`)를 세운다. upstream의 CMakeLists는 디렉터리 전체에 정의를 걸고 `BUILD_SHARED_LIBS`를 캐시에 세워 luil의 target까지 번지기 때문이다. libsmb2는 C라 켠 구성에서만 C 언어를 켠다. Windows에서 켜면 configure가 멈춘다. LGPL-2.1이라 앱 라이브러리에 섞지 않고 따로 싸는 것은 [소비자 계약](consumer-contract.md#smb)이 정한다.
 
@@ -36,6 +38,8 @@ Skia 위치는 `LUIL_SKIA_ROOT`, Debug·Release 산출물 위치는 `LUIL_SKIA_B
 `LUIL_ENABLE_DIRECT3D`를 끄면 Direct3D 렌더러 대신 stub을 컴파일해 CPU 렌더러만 남는다. luil에서 Ganesh를 부르는 파일은 그 렌더러 하나이므로, 링커가 Skia의 GPU 코드를 실행 파일에서 걷어 낸다. Skia 패키지와 GN 설정 검사는 그대로다. 동작은 [렌더링](rendering.md)에 있다.
 
 `LUIL_ENABLE_WEBVIEW`의 기본값은 `LUIL_ENABLE_DIRECT3D`와 같다. 웹뷰는 Direct3D 렌더러의 합성 아래에만 서므로 CPU 전용 구성에서는 켜도 placeholder뿐이다. 캐시에 이미 값이 있는 빌드 디렉터리에서 Direct3D만 끄면 웹뷰는 켜진 채 남는다. configure가 이 조합을 경고하므로 그때 웹뷰도 명시적으로 끈다.
+
+`LUIL_BUILD_CHART`는 선택 라이브러리 `luil_chart`([차트 라이브러리 · 보존](../selected-adoption.md#구현-완료-후-보존한-항목))를 짓는다. core 밖에 있어 끄면 `chart/`를 읽지도 않는다. 기본은 끄고, 예제나 테스트를 켠 구성에서는 켬을 따른다. 데모와 그 테스트가 이 라이브러리를 쓰므로 예제나 테스트를 켜고 끄면 configure가 원인과 함께 멈춘다. 캐시에 끈 값이 남은 빌드 디렉터리에서 예제만 켜도 같다.
 
 [프리셋](../../CMakePresets.json)은 일반·테스트·분석 구성을 제공한다.
 

@@ -82,6 +82,8 @@ Scrollbar는 line step, viewport 길이, 현재 offset과 최대 offset을 사�
 
 앱은 delta를 상태에 적용할 때 범위로 clamp한다. Element도 현재 snapshot에서 delta가 0임을 알 수 있으면 빈 action 목록을 반환해 불필요한 frame 갱신을 막는다.
 
+예외는 값이 이산인 별점(`rating_element`)이다. 걸음이 격자 위의 한 점이라 델타를 쌓을 까닭이 없고, 키·끌기·클릭·접근성이 모두 목표 값(`change_to`)을 절대 메시지로 낸다. 다음 frame 전에 같은 키가 겹쳐도 같은 목표라 한 걸음만 간다. 끝에 닿은 키가 빈 목록으로 삼켜지는 규칙은 그대로다 ([별점](rating-design.md)).
+
 ## 기본 컴포넌트
 
 ### Slider
@@ -105,7 +107,7 @@ Keyboard step은 접근성 RangeValue action과 같은 앱 상태를 바꾸지�
 - 값 step은 현재 초점 element에만 적용한다.
 - Arrow는 target axis와 일치할 때만 처리한다.
 - Page와 Home/End는 축과 무관하다.
-- 결과 action은 변화량 계약을 사용한다.
+- 결과 action은 변화량 계약을 사용한다 (값이 이산인 별점만 절대 값을 낸다).
 - 빈 목록과 `nullopt`는 서로 다른 키 소비 의미다.
 - 텍스트 편집이 값 step보다 먼저이고 group 이동은 뒤다.
 - Step은 초점을 다른 element로 옮기지 않는다.

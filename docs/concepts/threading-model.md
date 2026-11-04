@@ -1,5 +1,7 @@
 # 스레드 모델
 
+> 선택 이식 범위: 이 문서의 차트·마크업·업데이트·실행 중 스타일·핫 리로드 교차 참조는 원래 전체 통합 브랜치의 설계 기록이다. 현재 main의 채택 범위와 보존 위치는 [선택 기능 이식 기록](../selected-adoption.md)에 적었다.
+
 luil은 [`app_host`](../../include/luil/app/app_host.h)를 통해 UI, input, logic 세 실행 맥락을 분리한다.
 
 | 스레드 | 소유 |
@@ -21,6 +23,8 @@ input은 interaction snapshot을 값으로 게시하고 UI는 자신의 표면 i
 `app_host::shutdown()`은 UI thread에서 호출하며 취소 알림, 종료 app message, logic의 `shutdown_completed()` 확인, worker 중지, logic join, input join 순서로 진행한다. 종료 메시지는 inbox가 닫히기 전에 전달한다. `shutdown_completed()`는 앱이 종료 신호를 처리하고 종료 저장을 제출했는지 답한다. host는 그 확인 뒤 worker를 중지하고 inbox를 닫아 남은 메시지를 배출한다. 실제 저장 완료를 언제 보장할지는 앱의 종료 처리와 worker 중지 계약으로 정한다. 취소와 종료 처리가 응답하지 않으면 무기한 join하지 않고 fail-fast한다. `stop_workers()`는 logic 종료 처리 뒤, logic join 전에 UI 스레드에서 호출한다. `cancel()`·`make_close_message()`·`shutdown_completed()`도 UI 호출을 고려해 스레드 안전하게 구현해야 한다.
 
 시간에 따른 logic 상태는 `next_tick()`이 다음 시각을 반환하고 `tick(now)`이 상태를 갱신한 뒤 새 frame을 게시한다. worker가 필요하면 앱이 소유하되 종료 시 `stop_workers()`에서 중지한다.
+
+[핫 리로드 · 보존](../selected-adoption.md#구현-완료-후-보존한-항목)의 `hot_reloader`는 thread를 따로 두지 않는다. 쥔 `file_watcher`의 감시 thread에서 파일을 읽고 해석해 `deliver`로 결과를 건네고, 앱은 그 결과를 앱 메시지로 logic thread에 옮긴다. 결과의 스타일과 틀은 불변이라 thread 사이에 나눠 쥔다. 멈추기는 감시자와 같이 `stop_workers()`에서 `stop()`이고 `deliver`가 쥔 host보다 먼저다.
 
 ## 창 없는 사용
 

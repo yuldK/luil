@@ -137,6 +137,25 @@ TEST_CASE("A sidebar builds its toggle and handle only from what the config give
     REQUIRE(collapsed.children().empty());
 }
 
+TEST_CASE("A sidebar names its handle only when the app gives a name", "[ui][sidebar][accessibility]")
+{
+    // 손잡이는 판이 안에서 세우는 부품이라 앱이 이름을 줄 자리가 설정뿐이다.
+    luil::sidebar_config config {};
+    config.owner = u8"navigation";
+    config.resize = make_resize_factory();
+    config.handle_access_name = u8"내비게이션 폭 손잡이";
+    const luil::sidebar_element named { config };
+    REQUIRE(named.children().size() == 1);
+    REQUIRE(named.children()[0]->accessibility().role == luil::access_role::handle);
+    REQUIRE(named.children()[0]->accessibility().name == u8"내비게이션 폭 손잡이");
+
+    // 비면 기본 문구를 넣지 않는다.
+    config.handle_access_name.clear();
+    const luil::sidebar_element nameless { config };
+    REQUIRE(nameless.children().size() == 1);
+    REQUIRE(nameless.children()[0]->accessibility().name.empty());
+}
+
 TEST_CASE("A sidebar keeps its content below the toggle header", "[ui][sidebar]")
 {
     const luil::rect_f slot { 0.0f, 0.0f, 1000.0f, 600.0f };

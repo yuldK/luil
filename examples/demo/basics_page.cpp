@@ -8,7 +8,7 @@
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/image_decode.h"
-#include "luil/ui/modal_host_element.h"
+#include "luil/ui/message_box.h"
 #include "luil/ui/number_input.h"
 #include "luil/ui/text_area_element.h"
 
@@ -77,17 +77,6 @@ namespace demo {
             return {};
         }
 
-        [[nodiscard]] float clamp_offset(const float value, const float minimum, const float maximum)
-        {
-            if (maximum < minimum)
-                return 0.0f;
-            if (value < minimum)
-                return minimum;
-            if (value > maximum)
-                return maximum;
-            return value;
-        }
-
         // 실행 파일이 있는 디렉터리다. 자산은 그 옆에 선다.
         // 작업 디렉터리로 찾으면 바로 가기·디버거·탐색기 중 무엇으로 띄웠느냐에
         // 따라 자리가 달라진다.
@@ -152,11 +141,6 @@ namespace demo {
             ++clicks_;
             return true;
         }
-        if (message.get<counter_reset_intent>() != nullptr)
-        {
-            clicks_ = 0;
-            return true;
-        }
         if (const auto* const scroll { message.get<memo_scroll_intent>() }; scroll != nullptr)
         {
             // 범위 다듬기는 칸이 한다 — 다음 frame의 칸이 내용 높이로 다시 다듬는다. 아래로 넘친 값만 0으로 막는다.
@@ -190,6 +174,8 @@ namespace demo {
             link_report_ = result.ok() ? link->destination + u8" 를 열었다." : link->destination + u8" 를 열지 못했다 — " + result.error;
             return true;
         }
+        if (undo_keys_.handle(message))
+            return true;
         if (message.get<secret_check_intent>() != nullptr)
         {
             secret_report_ = check_secret_store();
@@ -223,10 +209,18 @@ namespace demo {
             open_dialog(dialog->open);
             return true;
         }
-        if (const auto* const move { message.get<move_dialog_intent>() }; move != nullptr)
+        if (const auto* const result { message.get<dialog_result_intent>() }; result != nullptr)
         {
-            dialog_x_ += move->dx;
-            dialog_y_ += move->dy;
+            // 단추, Esc, 바깥 누름이 모두 이 메시지 하나로 온다. 받아서 닫고 key로 가른다.
+            dialog_result_ = result->key;
+            if (dialog_ == dialog_kind::reset && result->key == u8"reset")
+                clicks_ = 0;
+            dialog_ = dialog_kind::none;
+            return true;
+        }
+        if (message.get<dialog_check_intent>() != nullptr)
+        {
+            ask_again_ = ask_again_ == false;
             return true;
         }
         if (const auto* const stepped { message.get<number_text_intent>() }; stepped != nullptr)
@@ -288,15 +282,9 @@ namespace demo {
         composition_ = event;
     }
 
-    void basics_page::open_dialog(const bool open)
+    void basics_page::open_dialog(const dialog_kind kind)
     {
-        // 열 때마다 가운데에서 시작한다.
-        if (open && dialog_open_ == false)
-        {
-            dialog_x_ = 0.0f;
-            dialog_y_ = 0.0f;
-        }
-        dialog_open_ = open;
+        dialog_ = kind;
     }
 
     void basics_page::read_films()
@@ -365,7 +353,7 @@ namespace demo {
         page.gap(16.0f);
         page.add(make_memo(), 118.0f);
         page.gap(16.0f);
-        page.add(make_link_view(), 86.0f);
+        page.add(make_link_view(), 106.0f);
         page.gap(16.0f);
         page.add(make_code(), 202.0f);
         page.gap(22.0f);
@@ -405,15 +393,37 @@ namespace demo {
             page.add(std::move(secret), 26.0f);
         }
         page.gap(12.0f);
-        page.add(make_label(luil::ui_element_id { kind_text, u8"basics-hint" }, u8"확인 dialog는 캡션을 잡아 옮기고 Esc로 닫는다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        page.add(make_label(luil::ui_element_id { kind_text, u8"basics-hint" }, u8"확인 대화 상자는 Esc나 바깥을 눌러 닫는다. 초기화 대화는 취소에 초점이 서서 Enter도 취소다.", 11.0f, luil::label_color_role::dim),
+            18.0f);
         page.gap(10.0f);
-
-        auto open { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_open }, luil::text_button_config { .text = u8"카운터 초기화" }) };
-        open->set_tooltip(u8"확인 dialog를 연다");
-        open->set_cursor(luil::ui_cursor::hand);
-        open->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { true }));
-        page.add(std::move(open), { .length = 32.0f, .cross_length = 140.0f });
+        page.add(make_dialog_row(), 32.0f);
+        // 대화 상태를 글로도 보인다. 화면과 보조 기술이 같은 말을 읽는다.
+        page.gap(8.0f);
+        page.add(make_label(luil::ui_element_id { kind_text, u8"dialog-state" }, dialog_open() ? u8"대화: 열림" : u8"대화: 닫힘", 11.0f, luil::label_color_role::primary), 18.0f);
+        page.gap(4.0f);
+        page.add(make_label(luil::ui_element_id { kind_text, u8"dialog-result" }, u8"마지막 결과: " + (dialog_result_.empty() ? std::u8string { u8"없음" } : dialog_result_), 11.0f, luil::label_color_role::dim), 18.0f);
         return page.finish(page_scroll_, [](const float delta) { return luil::make_app_action(basics_scroll_intent { delta }); });
+    }
+
+    std::unique_ptr<luil::stack_element> basics_page::make_dialog_row() const
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 12.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"dialog-open-row" }, config) };
+
+        auto reset { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_open }, luil::text_button_config { .text = u8"카운터 초기화" }) };
+        reset->set_tooltip(u8"확인 대화 상자를 연다");
+        reset->set_cursor(luil::ui_cursor::hand);
+        reset->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { dialog_kind::reset }));
+        row->add(std::move(reset), 140.0f);
+
+        auto details { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_details_open }, luil::text_button_config { .text = u8"긴 확인 대화" }) };
+        details->set_tooltip(u8"긴 본문과 단추 셋과 확인 칸이 있는 대화를 연다");
+        details->set_cursor(luil::ui_cursor::hand);
+        details->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { dialog_kind::details }));
+        row->add(std::move(details), 140.0f);
+        return row;
     }
 
     std::unique_ptr<luil::stack_element> basics_page::make_counter_row() const
@@ -666,11 +676,16 @@ namespace demo {
         view.read_only = true;
         view.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(link_view_.text));
         view.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
-        column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_link_view_input }, make_input_view(link_view_, target_link_view), std::move(view)), 44.0f);
+        auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_link_view_input }, make_input_view(link_view_, target_link_view), std::move(view)) };
+        area->set_access_name(u8"읽기 전용 안내 칸");
+        column->add(std::move(area), 44.0f);
         column->add_gap(4.0f);
         column->add(
             make_label(luil::ui_element_id { kind_text, u8"link-report" }, link_report_.empty() ? std::u8string { u8"아직 연 링크가 없다." } : link_report_, 11.0f, luil::label_color_role::dim),
             16.0f);
+        // 칸을 눌러 초점을 둔 채 Ctrl+Z나 Ctrl+Y를 누르면 센다. 칸은 되돌릴 글이 없어 키를 삼키지 않고 앱으로 넘긴다.
+        column->add_gap(4.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"readonly-undo-keys" }, undo_keys_.text(), 11.0f, luil::label_color_role::dim), 16.0f);
         return column;
     }
 
@@ -693,116 +708,51 @@ namespace demo {
         return column;
     }
 
+    luil::message_box_config basics_page::make_dialog_config() const
+    {
+        luil::message_box_config box {};
+        // 닫는 모든 계기(단추, Esc, 바깥 누름)가 이 함수 하나를 부른다.
+        box.result = [](const std::u8string_view key) { return luil::make_app_action(dialog_result_intent { std::u8string { key } }); };
+        if (dialog_ == dialog_kind::details)
+        {
+            box.owner = u8"details";
+            box.severity = luil::ui_severity::info;
+            box.title = u8"변경 내용을 저장할까요?";
+            box.body = u8"이 문서에는 저장하지 않은 변경이 있다. 저장하면 변경이 파일에 쓰이고, 저장하지 않고 닫으면 변경이 사라진다.\n"
+                       u8"나중에 다시 묻기를 고르면 대화만 닫고 문서는 그대로 둔다. 좁은 화면에서는 단추가 위에서 아래로 쌓이고, 본문이 길어도 높이는 내용에서 나온다.";
+            box.buttons = {
+                luil::message_box_button { .key = u8"later", .text = u8"나중에 다시 묻기", .role = luil::message_box_role::reject },
+                luil::message_box_button { .key = u8"discard", .text = u8"저장하지 않고 닫기", .role = luil::message_box_role::destructive },
+                luil::message_box_ok(u8"저장"),
+            };
+            box.check = luil::message_box_check { .label = u8"다시 묻지 않기", .checked = ask_again_, .toggle = luil::make_message_action(dialog_check_intent {}) };
+            box.focus_return = luil::ui_element_id { kind_dialog_details_open };
+            // 단추 셋이 한 행에 서는 폭이다. 창이 이보다 좁으면 host가 줄이고 단추가 쌓인다.
+            box.width = 480.0f;
+            return box;
+        }
+        if (dialog_ == dialog_kind::reset)
+        {
+            box.owner = u8"reset";
+            box.severity = luil::ui_severity::warning;
+            box.title = u8"카운터를 0으로 되돌릴까요?";
+            box.body = u8"누른 횟수가 사라진다.";
+            // 위험한 단추는 Enter의 대상도 첫 초점도 되지 않는다. 뜨면 취소에 서고 Enter도 취소다.
+            box.buttons = { luil::message_box_cancel(), luil::message_box_button { .key = u8"reset", .text = u8"초기화", .role = luil::message_box_role::destructive } };
+            box.focus_return = luil::ui_element_id { kind_dialog_open };
+        }
+        return box;
+    }
+
     void basics_page::add_overlay(luil::root_element& root, const float width, const float height, const float scale)
     {
-        if (dialog_open_ == false)
+        if (dialog_open() == false)
             return;
 
-        // dialog를 만들 때 캡션의 생김새를 정한다.
-        // 라이브러리는 없는 것을 두지 않는다.
-        luil::dialog_caption_config caption {};
-        caption.title = u8"확인";
-        caption.close_tooltip = u8"닫기";
-        caption.close = luil::make_message_action(dialog_intent { false });
-        caption.move = [](const float dx, const float dy) { return luil::make_app_action(move_dialog_intent { dx, dy }); };
-
-        // 캡션이 있으면 그만큼 키가 커진다.
-        // height_for는 논리 픽셀이다 (다른 element의 정적 사이저와 같은 단위).
-        const float caption_height { luil::dialog_caption_element::height_for(caption) };
-        const float dialog_width { 360.0f };
-        const float dialog_height { caption_height + 148.0f };
-
-        // 창 밖으로 나가지 않도록 다듬고, 다듬은 값을 상태에 되돌려
-        // 다음 이동이 화면 밖에서부터 시작하지 않게 한다.
-        //  - 가운데 배치는 host가 하므로 앱이 아는 것은 "가운데에서 얼마나
-        //    밀어낼 수 있는가"뿐이고, 그 여유는 좌우가 같다.
-        const float free_x { (width / scale - dialog_width) / 2.0f };
-        const float free_y { (height / scale - dialog_height) / 2.0f };
-        dialog_x_ = clamp_offset(dialog_x_, -free_x, free_x);
-        dialog_y_ = clamp_offset(dialog_y_, -free_y, free_y);
-
-        // 캡션은 여백 없이 위를 다 차지하고, 본문이 나머지를 갖는다.
-        luil::stack_config content_config {};
-        auto content { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"dialog" }, content_config) };
-        content->add(std::make_unique<luil::dialog_caption_element>(caption), caption_height);
-        content->add_flexible(make_dialog_body());
-
-        luil::panel_config surface_panel {};
-        surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
-        surface_panel.corner_radius = 8.0f;
-        auto dialog { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_dialog }, std::move(surface_panel)) };
-        dialog->set_content(std::move(content));
-
-        // scrim·초점 가둠·Esc는 host의 몫이다.
-        // 앱이 정하는 것은 "무엇을 닫는가"뿐이다.
-        luil::modal_host_config modal {};
-        // dialog의 이름이다. 화면 읽기가 뜨는 순간 말하는 말이라 캡션과 같은 말을 적는다.
-        modal.name = caption.title;
-        modal.outside = luil::make_message_action(dialog_intent { false });
-        modal.dismiss = luil::make_message_action(dialog_intent { false });
-        // 뜨면 취소에 서고, 닫히면 이 dialog를 연 버튼으로 돌아간다.
-        //  - 진입 자리는 **취소**다. 되돌릴 수 없는 쪽(초기화)에 키보드를 미리
-        //    올려 두면 무심코 친 Space가 카운터를 지운다. Enter를 채움으로
-        //    말하는 기본 버튼과 초점이 서는 자리는 서로 다른 것이다.
-        //  - 되돌아갈 자리는 앱이 추측하지 않는다. 여는 계기가 그 버튼의 클릭이라
-        //    이름을 이미 손에 쥐고 있고, dialog를 짓는 이 함수 안에 그 이름이 있다.
-        modal.focus_entry = luil::ui_element_id { kind_dialog_cancel };
-        modal.focus_return = luil::ui_element_id { kind_dialog_open };
-        modal.content_width = dialog_width;
-        modal.content_height = dialog_height;
-        modal.offset_x = dialog_x_;
-        modal.offset_y = dialog_y_;
-        auto host { std::make_unique<luil::modal_host_element>(std::move(modal)) };
-        host->set_content(std::move(dialog));
+        // 크기는 내용에서 나온다. 앱은 높이도 창 크기도 넘기지 않고 배치만 한다.
+        // scrim·초점 가둠·Esc·바깥 누름은 host의 몫이고 앱이 정하는 것은 "무엇을 닫는가"를 받는 결과 메시지 하나뿐이다.
+        auto host { luil::make_message_box(make_dialog_config()) };
         host->arrange({ { 0.0f, 0.0f, width, height }, scale });
         root.add(std::move(host));
-    }
-
-    std::unique_ptr<luil::stack_element> basics_page::make_dialog_body()
-    {
-        luil::stack_config config {};
-        config.padding = luil::edge_insets::all(20.0f);
-        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"dialog-body" }, config) };
-        column->add(make_label(luil::ui_element_id { kind_text, u8"dialog-title" }, u8"카운터를 0으로 되돌릴까요?", 13.0f, luil::label_color_role::primary), 22.0f);
-        column->add_gap(4.0f);
-        column->add(make_label(luil::ui_element_id { kind_text, u8"dialog-note" }, u8"누른 횟수가 사라진다. Esc로 닫고 Enter로 확인한다.", 11.0f, luil::label_color_role::dim), 20.0f);
-        column->add_flexible_gap();
-        column->add(make_dialog_buttons(), 30.0f);
-        return column;
-    }
-
-    std::unique_ptr<luil::stack_element> basics_page::make_dialog_buttons()
-    {
-        luil::stack_config config {};
-        config.direction = luil::stack_direction::row;
-        config.spacing = 8.0f;
-        // 버튼 둘을 오른쪽 끝에 붙인다.
-        // 선두 `add_flexible_gap()`도 같은 자리를 주지만 그것은 항목 **사이**의
-        // 도구다 — 바깥 자리는 정렬이 말한다.
-        config.main_alignment = luil::stack_main_alignment::end;
-        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"dialog-buttons" }, config) };
-
-        auto cancel { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_cancel }, luil::text_button_config { .text = u8"취소" }) };
-        cancel->set_cursor(luil::ui_cursor::hand);
-        cancel->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { false }));
-        row->add(std::move(cancel), 88.0f);
-
-        // Enter로 실행되는 버튼임을 강조색 채움이 말한다.
-        // 초점 테는 취소에 서 있으므로, 채움과 테가 한 화면에서 서로 다른 것을
-        // 말하는 자리가 바로 여기다 (enter-default-design.md).
-        luil::text_button_config confirm_config {};
-        confirm_config.text = u8"초기화";
-        confirm_config.visual = luil::text_button_visual::accent;
-        confirm_config.default_button = true;
-        auto confirm { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_confirm }, std::move(confirm_config)) };
-        confirm->set_cursor(luil::ui_cursor::hand);
-        confirm->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> {
-            return {
-                luil::make_app_action(counter_reset_intent {}),
-                luil::make_app_action(dialog_intent { false }),
-            };
-        });
-        row->add(std::move(confirm), 88.0f);
-        return row;
     }
 }

@@ -2,6 +2,7 @@
 
 #include "luil/app/app_host.h"
 #include "luil/ui/field_popup.h"
+#include "luil/ui/menu_bar_element.h"
 #include "luil/ui/menu_element.h"
 
 namespace luil {
@@ -14,6 +15,8 @@ namespace luil {
         float y { 0.0f };
         // 0이면 메뉴 글·아이콘·단축키 열을 측정해 정한다.
         float width { 0.0f };
+        // 표면의 배율이다. tree를 이 배율로 배치하고, `width`가 0일 때 글 폭도 이 배율의 물리 글자 크기로 잰다
+        // (그리는 크기와 같아야 가장 긴 항목이 말줄임되지 않는다). 0 이하거나 유한하지 않으면 1로 본다.
         float scale { 1.0f };
         std::function<input_action(popup_dismiss_reason)> dismiss {};
         // popup 창의 모서리다 (`ui_popup::corner`). 비어 있으면 내장 스타일의 값이다 — 실행 시점에 스타일을 세운 앱은
@@ -42,4 +45,12 @@ namespace luil {
     // 메뉴 높이·배율·분리 tree를 한곳에서 조립한다. 열림 상태와 명령 실행은 앱의 몫이다.
     // 반환한 popup을 ui_frame::popups에 싣고, 닫힘 메시지에서 목록에서 뺀다.
     [[nodiscard]] ui_popup make_menu_popup(menu_config menu, menu_popup_config popup);
+
+    // 막대 항목 아래에 그 메뉴를 띄운다 (docs/menu-bar-design.md). 막대 상태의 `current`가 그 항목이다.
+    //  - `popup.below`는 항목 자리와 `limit`(앵커 표면의 client 사각형, 물리 픽셀)으로 채운다. 간격은 0이라 메뉴가
+    //    항목 바로 아래에 붙는다. 항목이 없으면 `popup.x`·`popup.y`를 그대로 쓴다.
+    //  - dismiss는 Esc면 { current, false, keyboard }, 그 밖의 계기면 {}다. `menu.after_select`가 비면 {}로 채운다.
+    //    막대에 `set_state`가 없으면 둘 다 건드리지 않는다.
+    //  - `menu.owner`는 항목 키다. 나머지는 `make_menu_popup`이다.
+    [[nodiscard]] ui_popup make_menu_bar_popup(const menu_bar_element& bar, menu_config menu, menu_popup_config popup, rect_f limit);
 }

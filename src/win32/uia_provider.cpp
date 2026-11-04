@@ -3,12 +3,15 @@
 #include "luil/text/case_fold.h"
 #include "luil/text/text_edit.h"
 #include "luil/text/utf8_text.h"
+#include "luil/ui/text_document.h"
 #include "luil/ui/ui_interaction.h"
 #include "win32/utf8.h"
 
 #include <uiautomation.h>
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +20,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -104,6 +108,8 @@ namespace luil::win32 {
             // 이동 길잡이에는 ControlType이 없다. Group에 navigation 랜드마크(LandmarkType)를 단다.
             case access_role::navigation:
                 return UIA_GroupControlTypeId;
+            case access_role::menu_bar:
+                return UIA_MenuBarControlTypeId;
             default:
                 return UIA_PaneControlTypeId;
             }
@@ -187,6 +193,8 @@ namespace luil::win32 {
             std::size_t caret { 0 };
             std::size_t anchor { 0 };
             bool composing { false };
+            // 칸이 그리는 구간이다 (확정 글 기준). 조합 중에는 문서가 조합 글이라 offset이 맞지 않아 싣지 않는다.
+            const std::vector<text_span>* spans { nullptr };
         };
 
         // 암호 칸은 문서를 내주지 않는다 — Text pattern 없이 가린 값(Value)과 IsPassword만 알린다.
@@ -197,7 +205,118 @@ namespace luil::win32 {
                 return std::nullopt;
             if (snapshot->composing)
                 return access_text_document { snapshot->composition_text, snapshot->composition_caret, snapshot->composition_caret, true };
-            return access_text_document { snapshot->text, snapshot->caret, snapshot->anchor, false };
+            return access_text_document { snapshot->text, snapshot->caret, snapshot->anchor, false, snapshot->spans };
+        }
+
+        // 보조 기술에 알리는 서식 속성이다 (docs/rich-edit-design.md 결정 6). 그린 대로 답해 서식 칸과 구문 강조 칸을
+        // 가르지 않는다. 코드는 알리지 않는다 (provider가 글꼴 이름을 모른다).
+        enum class access_text_attribute
+        {
+            weight,
+            italic,
+            underline,
+        };
+
+        [[nodiscard]] std::optional<access_text_attribute> text_attribute_of(const TEXTATTRIBUTEID attribute) noexcept
+        {
+            if (attribute == UIA_FontWeightAttributeId)
+                return access_text_attribute::weight;
+            if (attribute == UIA_IsItalicAttributeId)
+                return access_text_attribute::italic;
+            if (attribute == UIA_UnderlineStyleAttributeId)
+                return access_text_attribute::underline;
+            return std::nullopt;
+        }
+
+        [[nodiscard]] bool span_has(const text_span& span, const access_text_attribute attribute) noexcept
+        {
+            switch (attribute)
+            {
+            case access_text_attribute::weight:
+                return span.bold;
+            case access_text_attribute::italic:
+                return span.italic;
+            case access_text_attribute::underline:
+                return span.underline;
+            }
+            return false;
+        }
+
+        // 굵게 700, 보통 400이다 (UIA FontWeight의 값). 밑줄은 한 줄과 없음 둘이다.
+        constexpr long bold_font_weight { 700 };
+        constexpr long normal_font_weight { 400 };
+
+        [[nodiscard]] VARIANT attribute_variant(const access_text_attribute attribute, const bool on) noexcept
+        {
+            VARIANT value {};
+            switch (attribute)
+            {
+            case access_text_attribute::weight:
+                value.vt = VT_I4;
+                value.lVal = on ? bold_font_weight : normal_font_weight;
+                break;
+            case access_text_attribute::italic:
+                value.vt = VT_BOOL;
+                value.boolVal = on ? VARIANT_TRUE : VARIANT_FALSE;
+                break;
+            case access_text_attribute::underline:
+                value.vt = VT_I4;
+                value.lVal = on ? TextDecorationLineStyle_Single : TextDecorationLineStyle_None;
+                break;
+            }
+            return value;
+        }
+
+        // 보조 기술이 찾는 값이 켜짐인지 꺼짐인지다. 이 provider가 답하는 값이 아니면 없다 (아무 범위도 맞지 않는다).
+        [[nodiscard]] std::optional<bool> wanted_attribute(const access_text_attribute attribute, const VARIANT& value) noexcept
+        {
+            switch (attribute)
+            {
+            case access_text_attribute::weight:
+                if (value.vt != VT_I4 || (value.lVal != bold_font_weight && value.lVal != normal_font_weight))
+                    return std::nullopt;
+                return value.lVal == bold_font_weight;
+            case access_text_attribute::italic:
+                if (value.vt != VT_BOOL)
+                    return std::nullopt;
+                return value.boolVal != VARIANT_FALSE;
+            case access_text_attribute::underline:
+                if (value.vt != VT_I4 || (value.lVal != TextDecorationLineStyle_Single && value.lVal != TextDecorationLineStyle_None))
+                    return std::nullopt;
+                return value.lVal == TextDecorationLineStyle_Single;
+            }
+            return std::nullopt;
+        }
+
+        struct attribute_piece
+        {
+            std::size_t begin { 0 };
+            std::size_t end { 0 };
+            bool on { false };
+        };
+
+        // [begin, end)를 그 속성의 값이 같은 조각으로 나눈다 (begin 순, 맞닿은 같은 값은 합친다). 구간 밖의 글자는 꺼짐이다.
+        [[nodiscard]] std::vector<attribute_piece> attribute_pieces(const std::vector<text_span>* const spans, const access_text_attribute attribute, const std::size_t begin, const std::size_t end)
+        {
+            std::vector<attribute_piece> pieces {};
+            std::size_t cursor { begin };
+            const auto push = [&pieces, &cursor](const std::size_t to, const bool on) {
+                if (to <= cursor)
+                    return;
+                if (pieces.empty() == false && pieces.back().on == on)
+                    pieces.back().end = to;
+                else
+                    pieces.push_back({ cursor, to, on });
+                cursor = to;
+            };
+            if (spans != nullptr)
+                for (const text_span& span : text_spans_in_range(*spans, begin, end))
+                {
+                    push(std::max(span.begin, begin), false);
+                    push(std::min(span.end, end), span_has(span, attribute));
+                }
+            push(end, false);
+            return pieces;
         }
 
         // UTF-8 문자 경계 걷기다 (경계 밖 offset은 끝으로 잘려 들어온다).
@@ -436,6 +555,24 @@ namespace luil::win32 {
             return value;
         }
 
+        // 범위 값(float)을 UIA의 double로 옮긴다. static_cast는 float의 이진 오차를 그대로 실어
+        // 평균 별점 4.3이 4.30000019로 읽힌다. float를 되읽을 수 있는 가장 짧은 십진 표기로 적고
+        // 그 글을 double로 읽어, 앱이 쓴 값 그대로 보조 기술에 나간다.
+        [[nodiscard]] double range_number(const float value) noexcept
+        {
+            if (std::isfinite(value) == false)
+                return static_cast<double>(value);
+            std::array<char, 48> text {};
+            const std::to_chars_result written { std::to_chars(text.data(), text.data() + text.size(), value) };
+            if (written.ec != std::errc {})
+                return static_cast<double>(value);
+            double number { 0.0 };
+            const std::from_chars_result read { std::from_chars(text.data(), written.ptr, number) };
+            if (read.ec != std::errc {})
+                return static_cast<double>(value);
+            return number;
+        }
+
         // property 짝 하나를 이벤트 하나로 쏘고 VARIANT를 정리한다.
         void raise_property(uia_event_sink& events, uia_element_provider& provider, const PROPERTYID property, VARIANT old_value, VARIANT new_value)
         {
@@ -510,8 +647,7 @@ namespace luil::win32 {
                     events_->notification(*provider, after.error);
             }
             if (before.range.has_value() && after.range.has_value() && before.range->value != after.range->value)
-                raise_property(
-                    *events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(static_cast<double>(before.range->value)), variant_from_double(static_cast<double>(after.range->value)));
+                raise_property(*events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(range_number(before.range->value)), variant_from_double(range_number(after.range->value)));
             provider->Release();
         }
     }
@@ -1092,11 +1228,21 @@ namespace luil::win32 {
                 set_bool(*result, host != nullptr && host->accessibility_focus() == id_);
                 break;
             }
-            case UIA_IsOffscreenPropertyId:
-                // 지어지지 않은 항목은 화면에 없다. 지어진 요소는 UIA가 사각형에서 정한다.
+            case UIA_IsOffscreenPropertyId: {
+                // 지어지지 않은 항목은 화면에 없다. 지어진 요소도 조상이 통째로 잘랐으면(고정 열 아래로 흐른 칸, 왼쪽 밖으로
+                // 흘린 머리글) 화면에 없다. `get_BoundingRectangle`과 같은 값(`visible_bounds`)으로 정한다.
+                //  - UIA는 빈 사각형에서 화면 밖을 정하지 않고 기본값(거짓)을 낸다. 그래서 여기서 답한다.
+                //  - 보이는 요소는 비워 UIA 기본값에 맡긴다. 창이 화면 밖으로 나간 경우 같은 판정은 UIA의 것이다.
                 if (probe != nullptr)
+                {
+                    set_bool(*result, true);
+                    break;
+                }
+                const std::optional<rect_f> shown { tree->visible_bounds(*element) };
+                if (shown.has_value() == false || shown->width <= 0.0f || shown->height <= 0.0f)
                     set_bool(*result, true);
                 break;
+            }
             case UIA_IsControlElementPropertyId:
             case UIA_IsContentElementPropertyId:
                 set_bool(*result, true);
@@ -1108,6 +1254,16 @@ namespace luil::win32 {
                 if (element->accessibility().role == access_role::navigation)
                     set_int(*result, UIA_NavigationLandmarkTypeId);
                 break;
+            case UIA_AccessKeyPropertyId: {
+                // 메뉴 막대 항목의 "Alt+F"다. 없는 요소는 비워 UIA 기본(빈 글)을 따른다.
+                const access_info info { element->accessibility() };
+                if (info.access_key.empty() == false)
+                {
+                    result->vt = VT_BSTR;
+                    result->bstrVal = bstr_from_utf8(info.access_key);
+                }
+                break;
+            }
             default:
                 break;
             }
@@ -1330,7 +1486,9 @@ namespace luil::win32 {
                 return UIA_E_INVALIDOPERATION;
             // 범위 밖은 UIA의 약속대로 인자 오류다 — 자르지 않는다. 무엇을 잘못
             // 말했는지 클라이언트가 알아야 한다.
-            if (value < static_cast<double>(info.range->minimum) || value > static_cast<double>(info.range->maximum))
+            // 경계도 읽어 준 그 십진 값으로 견준다. 클라이언트가 Minimum으로 읽은 값(0.1)을 그대로 되돌려 정할 때
+            // float의 이진 오차(0.100000001)보다 작다며 범위 밖이 되지 않게 한다.
+            if (value < range_number(info.range->minimum) || value > range_number(info.range->maximum))
                 return E_INVALIDARG;
             // 읽기 전용에는 접근 거부가 UIA의 낱말이다 (표시 전용 막대·진행률).
             BOOL read_only { TRUE };
@@ -1354,7 +1512,7 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (info.range.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            *result = static_cast<double>(info.range->value);
+            *result = range_number(info.range->value);
             return S_OK;
         });
     }
@@ -1401,7 +1559,7 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (info.range.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            *result = static_cast<double>(info.range->maximum);
+            *result = range_number(info.range->maximum);
             return S_OK;
         });
     }
@@ -1418,26 +1576,42 @@ namespace luil::win32 {
             const access_info info { element->accessibility() };
             if (info.range.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            *result = static_cast<double>(info.range->minimum);
+            *result = range_number(info.range->minimum);
             return S_OK;
         });
     }
 
     HRESULT uia_element_provider::get_LargeChange(double* result)
     {
-        if (result == nullptr)
-            return E_POINTER;
-        // 걸음의 크기는 element가 정하고 아직 어휘에 없다 (value-step-design.md).
-        *result = 0.0;
-        return S_OK;
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            *result = 0.0;
+            const ui_element* const element { resolve() };
+            if (element == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            // 걸음의 크기는 element가 정하고 `access_range::page`가 알린다. 비워 둔 요소(막대·스크롤 막대·진행률)는 0이다.
+            const access_info info { element->accessibility() };
+            if (info.range.has_value())
+                *result = range_number(info.range->page);
+            return S_OK;
+        });
     }
 
     HRESULT uia_element_provider::get_SmallChange(double* result)
     {
-        if (result == nullptr)
-            return E_POINTER;
-        *result = 0.0;
-        return S_OK;
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            *result = 0.0;
+            const ui_element* const element { resolve() };
+            if (element == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            const access_info info { element->accessibility() };
+            if (info.range.has_value())
+                *result = range_number(info.range->step);
+            return S_OK;
+        });
     }
 
     HRESULT uia_element_provider::Toggle()
@@ -2105,14 +2279,38 @@ namespace luil::win32 {
 
     HRESULT uia_text_range_provider::FindAttribute(const TEXTATTRIBUTEID attribute, const VARIANT value, const BOOL backward, ITextRangeProvider** result)
     {
-        static_cast<void>(attribute);
-        static_cast<void>(value);
-        static_cast<void>(backward);
-        if (result == nullptr)
-            return E_POINTER;
-        // 평문 한 벌이라 속성이 갈리는 구간이 없다.
-        *result = nullptr;
-        return S_OK;
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            *result = nullptr;
+            // 서식 속성 셋만 갈린다. 다른 속성은 문서 전체가 한 값이라 찾을 범위가 없다.
+            const std::optional<access_text_attribute> kind { text_attribute_of(attribute) };
+            if (kind.has_value() == false)
+                return S_OK;
+            const std::optional<bool> wanted { wanted_attribute(*kind, value) };
+            if (wanted.has_value() == false)
+                return S_OK;
+            const ui_element* const element { resolve_text_element(*root_, id_) };
+            if (element == nullptr)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            const std::optional<access_text_document> document { text_document_of(*element) };
+            if (document.has_value() == false)
+                return UIA_E_INVALIDOPERATION;
+            // 조합 중에는 구간이 문서와 맞지 않아 서식을 답하지 않는다.
+            if (document->composing)
+                return S_OK;
+            const std::u8string_view text { document->text };
+            const std::size_t begin { text::text_edit_clamp_offset(text, begin_) };
+            const std::size_t end { std::max(begin, text::text_edit_clamp_offset(text, end_)) };
+            const std::vector<attribute_piece> pieces { attribute_pieces(document->spans, *kind, begin, end) };
+            const auto matches = [&wanted](const attribute_piece& piece) { return piece.on == *wanted; };
+            const auto found { backward != FALSE ? std::find_if(pieces.rbegin(), pieces.rend(), matches).base() : std::find_if(pieces.begin(), pieces.end(), matches) };
+            if (backward != FALSE ? found == pieces.begin() : found == pieces.end())
+                return S_OK;
+            const attribute_piece& piece { backward != FALSE ? *(found - 1) : *found };
+            *result = new uia_text_range_provider { *root_, id_, piece.begin, piece.end };
+            return S_OK;
+        });
     }
 
     HRESULT uia_text_range_provider::FindText(const BSTR text, const BOOL backward, const BOOL ignore_case, ITextRangeProvider** result)
@@ -2170,6 +2368,39 @@ namespace luil::win32 {
                 const auto snapshot { element != nullptr ? element->text_input() : std::nullopt };
                 result->boolVal = snapshot.has_value() && snapshot->read_only == false && host != nullptr && host->accessibility_text_target(id_.kind).has_value() ? VARIANT_FALSE : VARIANT_TRUE;
                 return S_OK;
+            }
+            // 굵기·기울임·밑줄은 칸이 그리는 구간에서 답한다. 범위 안에서 값이 갈리면 섞였다는 예약 값이다.
+            if (const std::optional<access_text_attribute> kind { text_attribute_of(attribute) }; kind.has_value())
+            {
+                const ui_element* const element { resolve_text_element(*root_, id_) };
+                const std::optional<access_text_document> document { element != nullptr ? text_document_of(*element) : std::nullopt };
+                // 조합 중의 문서는 구간과 offset이 맞지 않는다. 아래의 지원하지 않는다는 예약 값으로 답한다.
+                if (document.has_value() && document->composing == false)
+                {
+                    const std::u8string_view text { document->text };
+                    std::size_t begin { text::text_edit_clamp_offset(text, begin_) };
+                    std::size_t end { std::max(begin, text::text_edit_clamp_offset(text, end_)) };
+                    // 빈 범위는 그 자리 뒤 글자의 값이다. 글 끝이면 앞 글자의 값이다.
+                    if (begin == end)
+                    {
+                        if (end < text.size())
+                            end = step_character_forward(text, begin);
+                        else
+                            begin = step_character_backward(text, begin);
+                    }
+                    const std::vector<attribute_piece> pieces { attribute_pieces(document->spans, *kind, begin, end) };
+                    if (pieces.size() > 1)
+                    {
+                        IUnknown* mixed { nullptr };
+                        if (FAILED(UiaGetReservedMixedAttributeValue(&mixed)))
+                            return E_FAIL;
+                        result->vt = VT_UNKNOWN;
+                        result->punkVal = mixed;
+                        return S_OK;
+                    }
+                    *result = attribute_variant(*kind, pieces.empty() == false && pieces.front().on);
+                    return S_OK;
+                }
             }
             // 그 밖의 속성은 지원하지 않는다는 예약 값이다.
             IUnknown* not_supported { nullptr };

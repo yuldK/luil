@@ -41,6 +41,9 @@ TEST_CASE("A platform does no device requests unless its host says it can", "[ui
     REQUIRE(luil::current_ui_platform().capabilities.volume_keys == false);
     REQUIRE(luil::current_ui_platform().capabilities.haptics == false);
     REQUIRE(luil::current_ui_platform().capabilities.taskbar == false);
+    REQUIRE(luil::current_ui_platform().capabilities.notifications == false);
+    REQUIRE(luil::current_ui_platform().capabilities.tray == false);
+    REQUIRE(luil::current_ui_platform().capabilities.global_hotkeys == false);
 
     const luil::ui_platform mobile {
         .form_factor = luil::ui_form_factor::mobile,
@@ -144,4 +147,21 @@ TEST_CASE("The local network permission is asked only on Android 17 for apps tar
     REQUIRE(android_permission_name(luil::app_permission::local_network, 26, 26) == std::string_view {});
     // targetSdk를 읽지 못했으면(0) 묻지 않는다.
     REQUIRE(android_permission_name(luil::app_permission::local_network, 37, 0) == std::string_view {});
+}
+
+TEST_CASE("The notification permission is asked only on Android 13 for apps targeting 33", "[android][device][permission][notification]")
+{
+    const auto android_permission_name = [](const luil::app_permission permission, const int api_level, const int target_sdk) {
+        const char* const text { luil::android::android_permission_name(permission, api_level, target_sdk) };
+        return text != nullptr ? std::string_view { text } : std::string_view {};
+    };
+    const std::string_view name { "android.permission.POST_NOTIFICATIONS" };
+    // 기기와 targetSdk의 32·33 네 조합에서 둘 다 33일 때만 묻는다.
+    REQUIRE(android_permission_name(luil::app_permission::notifications, 33, 33) == name);
+    REQUIRE(android_permission_name(luil::app_permission::notifications, 33, 32) == std::string_view {});
+    REQUIRE(android_permission_name(luil::app_permission::notifications, 32, 33) == std::string_view {});
+    REQUIRE(android_permission_name(luil::app_permission::notifications, 32, 32) == std::string_view {});
+    REQUIRE(android_permission_name(luil::app_permission::notifications, 37, 37) == name);
+    // targetSdk를 읽지 못했으면(0) 묻지 않는다. 그때 시스템이 첫 채널을 만들 때 스스로 묻는다.
+    REQUIRE(android_permission_name(luil::app_permission::notifications, 33, 0) == std::string_view {});
 }

@@ -39,8 +39,9 @@ namespace luil {
         float block_spacing { 8.0f };
         // 링크를 눌렀을 때 앱 액션을 만든다. 없으면 링크는 표시만 한다.
         std::function<input_action(std::u8string_view destination)> activate_link {};
-        // 블록을 폭에서 접는 자리를 고르는 규칙이다 (line_break.h). 기본은 한국어를 어절에서 바꾼다.
-        text::line_break_policy line_break { text::line_break_policy::hangul_words };
+        // 블록을 폭에서 접는 자리를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다
+        // (배치 문맥의 `style`, docs/wrap-policy-key-design.md). 적은 값이 스타일보다 앞선다.
+        std::optional<text::line_break_policy> line_break {};
     };
 
     // 선택·편집 상태가 없는 마크다운 본문이다. 링크는 자식 접근 요소이자 클릭 대상이다.

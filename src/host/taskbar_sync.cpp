@@ -104,4 +104,12 @@ namespace luil {
         state_ = is_default(wanted) ? taskbar_sync_state::off : taskbar_sync_state::applied;
         return calls;
     }
+
+    std::optional<jump_list_call> jump_list_sync::update(const std::optional<taskbar_jump_list>& wanted)
+    {
+        if (wanted.has_value() == false || applied_ == wanted)
+            return std::nullopt;
+        applied_ = wanted;
+        return jump_list_call { .kind = wanted->tasks.empty() ? jump_list_call_kind::remove : jump_list_call_kind::commit, .list = *wanted };
+    }
 }

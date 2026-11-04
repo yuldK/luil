@@ -2,7 +2,7 @@
 
 작업 표시줄 단추에 진행률(없음·불확정·정상·오류·일시정지와 0..1 값)과 오버레이 아이콘을 앱이 선언하는 길이다. 앱은 `ui_frame::taskbar`에 지금 바라는 상태를 싣고, UI thread가 바뀐 것만 `ITaskbarList3`로 옮긴다. Win32 전용이고, Android는 능력 플래그가 거짓이며 필드를 받고 무시한다. 공개 형식은 새 헤더 `include/luil/app/taskbar.h`의 `taskbar_request`·`taskbar_progress`·`taskbar_overlay`, `ui_platform_capabilities::taskbar`, Win32의 `taskbar_report`다.
 
-이 노드는 Win32 창 계층의 공통 자리도 정리한다. `WM_APP` 번호표, `TaskbarButtonCreated` 같은 등록 메시지의 수신, 능력 플래그를 게시하는 자리다. 뒤에 오는 tray와 hotkey가 같은 자리를 쓴다. 점프 목록은 이번 범위가 아니다.
+이 노드는 Win32 창 계층의 공통 자리도 정리한다. `WM_APP` 번호표, `TaskbarButtonCreated` 같은 등록 메시지의 수신, 능력 플래그를 게시하는 자리다. 뒤에 오는 tray와 hotkey가 같은 자리를 쓴다. 점프 목록은 이번 범위가 아니었고, 뒤에 [점프 목록](jump-list-design.md)이 같은 `taskbar_request`에 `jump_list` 칸을 더했다.
 
 ## 문제
 
@@ -158,8 +158,9 @@ namespace luil::win32 {
 - 길 a: 쥐기만 한다. 대가: 어디에도 보이지 않는다.
 - 길 b: 가장 앞의 독립 창에 대신 건다. 대가: 어느 창이 대표인지 라이브러리가 정해야 하고, 그 창의 요청과 겹친다.
 - 권장: a. 대체 표시(트레이 툴팁 등)는 앱이 tray(R3)로 고른다. 대가: 숨은 동안 요청은 어디에도 보이지 않는다. **권장대로 진행.**
+- 이은 노드: [알림 영역 아이콘](tray-icon-design.md). 진행률은 앱이 `tray_icon::tooltip`에, 배지 숫자는 앱이 그린 `tray_icon::icon`에 싣는다. 숨은 주 창에도 아이콘은 선다.
 
-G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `description`은 앱이 주고 라이브러리가 만드는 글이 없어 G6에 기대지 않는다. G6이 정해진 뒤 기본 설명이 필요한 자리가 생기는지 다시 본다.
+G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `description`은 앱이 주고 라이브러리가 만드는 글이 없어 기본 설명이 필요한 자리가 없다. [기본 문구](default-text-design.md)의 헤더에 이 노드가 더하는 함수도 없다.
 
 ## 플랫폼
 
@@ -193,7 +194,7 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 - 새 번호는 +6부터 표 끝에만 더한다. 받는 창을 표에 적는다. 같은 창이 받는 번호끼리 겹치면 안 된다.
 - `static_assert`가 값이 서로 다르고 `WM_APP`~`0xBFFF` 안인지 본다. 이 노드는 새 번호를 쓰지 않는다.
-- hotkey가 `RegisterHotKey`를 고르면 `WM_HOTKEY`는 시스템 번호라 표에 넣지 않는다.
+- hotkey가 `RegisterHotKey`를 고르면 `WM_HOTKEY`는 시스템 번호라 표에 넣지 않는다. [전역 단축키](global-hotkey-design.md)가 그 길을 골랐고 표는 그대로다.
 - `SetTimer` 번호(1·2·4는 `win32_window.cpp`, 3은 `window_surface.cpp`)는 이번에 옮기지 않는다. 새 타이머가 필요한 노드가 같은 헤더에 더한다.
 
 **등록 메시지 길.** 이름은 `RegisterWindowMessageW`로 한 번 등록한다. `shell_event`는 지금 `taskbar_button_created`와 `taskbar_created`다.
@@ -212,9 +213,9 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 **`icon_from_image`.** `make_icon(const ui_image&, int size, std::u8string& error)`와 `HICON` 소유자 `owned_icon`이 이 파일에 있다. tray는 크기만 달리해 같은 함수를 쓴다.
 
-**앱 식별(AUMID).** taskbar는 세우지 않는다. 진행률·오버레이는 `HWND`에 거는 것이라 AUMID 없이 선다고 알려져 있다. 이 저장소에서는 실측 전이다. 빌드 폴더의 실행 파일로 데모에서 확인한다. 서지 않으면 os_notify(R2)의 앱 식별이 먼저 서야 하고, 그때 `window_config`에 필드가 붙는다.
+**앱 식별(AUMID).** taskbar는 세우지 않는다. 진행률·오버레이는 `HWND`에 거는 것이라 AUMID 없이 선다고 알려져 있다. 이 저장소에서는 실측 전이다. 빌드 폴더의 실행 파일로 데모에서 확인한다. 서지 않으면 os_notify(R2)의 앱 식별이 먼저 서야 하고, 그때 `window_config`에 필드가 붙는다. 앱 식별은 [OS 알림](os-notification-design.md)이 `window_config::identity`로 세웠다. 진행률·오버레이는 그 필드와 상관없이 `HWND`에 건다. 식별을 단 앱에서 진행률이 그대로 서는지는 그 문서의 사람 확인에 있다.
 
-**점프 목록.** G7(두 번째 인스턴스가 첫 인스턴스에 인자 넘기기)이 정해지고 앱 식별이 서면 `taskbar_request`에 `jump_list` 필드를 더한다. 같은 규약(바뀐 것만 다시 구성)이다. 작업은 인자 달린 새 프로세스라 G7 없이는 떠 있는 앱에 닿지 않고 창이 하나 더 뜬다. 인자 따옴표는 `win32::make_command_line`([command_line.h](../src/win32/command_line.h))을 쓰고, `ICustomDestinationList`는 `propsys`를 링크 목록에 더한다.
+**점프 목록.** [점프 목록](jump-list-design.md)이 세웠다(G7과 앱 식별이 선 뒤, 인자 넘기기 결정 8의 길 a). `taskbar_request`에 `jump_list` 칸을 더했고 주 창의 것만 읽는다. 같은 규약(바뀐 것만 다시 짓는다)이나 단추를 기다리지 않는다. 작업은 인자 달린 새 프로세스이고 앱이 `send_to_primary`로 떠 있는 첫째에 넘긴다. 인자 따옴표는 `win32::quote_argument`([command_line.h](../src/win32/command_line.h))를 쓴다. 제목 속성 상수와 `PROPVARIANT`를 손수 지어 `propsys`는 링크하지 않는다. 진행률·오버레이의 `taskbar_sync`·`taskbar_button`과 단추 보고는 그대로다.
 
 **비공개 helper.** [file-watch-design.md](file-watch-design.md)가 `owned_handle.h`를 꺼내는 일을 기다리지 않는다. 오류 글은 이미 있는 [win32_error.h](../src/win32/win32_error.h)의 `win32::make_hresult_error`와 `win32::make_last_error`를 쓰고 COM은 `ComPtr`이다. `owned_handle`은 `CloseHandle`용이라 `HICON`에 맞지 않는다. `HICON`은 `DestroyIcon`이라 `owned_icon`을 `icon_from_image.h`에 따로 둔다.
 
@@ -237,8 +238,8 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 
 ## 범위 밖
 
-- 점프 목록과 최근·자주 목록(파일 형식 등록이 필요하다). 점프 목록은 G7과 앱 식별 뒤다.
+- 최근·자주 목록(파일 형식 등록이 필요하다). 점프 목록의 작업은 [점프 목록](jump-list-design.md)이 다룬다.
 - 썸네일 도구 막대 단추(결정 2), 썸네일 자르기·툴팁, 탭 썸네일.
 - `FlashWindowEx`로 주목을 끄는 것. 활성화 요청은 [나중에 서는 초점](deferred-focus-design.md)이 다룬다.
-- 숨은 주 창을 대신하는 표시(트레이 툴팁 등)와 알림 배지 숫자.
-- 앱 식별(AUMID) 설정, Android 런처 숏컷·배지.
+- 숨은 주 창을 대신하는 표시(트레이 툴팁 등)와 알림 배지 숫자. [알림 영역 아이콘](tray-icon-design.md)이 이었다 (앱이 툴팁과 그림에 싣는다).
+- Android 런처 숏컷·배지. 앱 식별(AUMID)은 [OS 알림](os-notification-design.md)이 세운다.

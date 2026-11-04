@@ -1,7 +1,11 @@
 #pragma once
 
+#include "luil/text/text_format.h"
+
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,6 +21,9 @@ namespace luil::text {
         std::u8string text {};
         std::size_t caret { 0 };
         std::size_t anchor { 0 };
+        // 그 시점의 서식이다 (docs/rich-edit-design.md 결정 3). 끝에 두어 `{ text, caret, anchor }` 초기화가 그대로 읽힌다.
+        //  - 같은 서식을 가리키는 시점은 포인터를 나눠 쥔다. 서식 없는 칸은 빈 포인터라 비용이 없다.
+        std::shared_ptr<const text_format> format {};
     };
 
     // 연속된 편집을 한 덩어리로 묶는 기준이다.
@@ -64,6 +71,14 @@ namespace luil::text {
         std::size_t group_caret { 0 };
         // 비동기 IME 편집이 어디까지 적용됐는지 snapshot으로 되돌린다. undo 대상은 아니다.
         std::uint64_t applied_sequence { 0 };
+        // 글의 서식이다 (docs/rich-edit-design.md). 비면 서식 없는 글이고, 글을 바꾸는 함수가 옮기지 않는다.
+        //  - 게시한 값은 고치지 않는다. 편집마다 새 값으로 바뀌므로 포인터가 같으면 서식도 같다 (`rich_text_presenter`가 기댄다).
+        //  - 글을 바꾸는 함수가 바뀐 구간만큼 옮기고 실행 취소가 글과 함께 되돌린다.
+        std::shared_ptr<const text_format> format {};
+        // 다음에 넣는 글의 서식이다. 고른 구간 없이 누른 서식 명령이 세운다. 기록 대상이 아니다.
+        //  - 넣은 글이 받고 나면 비운다. 글을 바꾸는 편집, caret 이동·놓기, 선택, 실행 취소, `set_text`도 비운다.
+        //  - IME 조합 중에 세우면 확정 글이 받는다 (조합 중의 글은 편집이 아니라 이 값을 지우지 않는다).
+        std::optional<text_mark> typing_marks {};
     };
 
     enum class text_edit_motion
@@ -178,6 +193,25 @@ namespace luil::text {
 
     // 글을 밖에서 바꾼다.
     // caret·anchor는 범위 안 문자 경계로 되돌아가고,
-    // 사용자의 편집이 아니므로 실행 취소 기록을 비운다.
+    // 사용자의 편집이 아니므로 실행 취소 기록을 비운다. 서식과 다음 글자 서식도 비운다.
     void text_edit_set_text(text_edit_state& state, std::u8string_view text, bool caret_to_end);
+
+    // 다음에 넣는 글이 받을 서식이다 (docs/rich-edit-design.md "넣은 글의 서식").
+    //  - `typing_marks`가 있으면 그것, 선택이 있으면 고른 첫 글자의 서식, 아니면 caret 앞 글자의 서식이다.
+    //    글 처음이나 줄 처음이면 뒤 글자의 서식이다.
+    //  - 메뉴 체크와 도구 막대 단추의 켜짐(`rich_text_state_of`)이 넣을 글과 같은 답을 내려고 공개한다.
+    [[nodiscard]] text_mark text_edit_typing_marks(const text_edit_state& state) noexcept;
+
+    // 서식만 바꾸는 한 걸음이다. 실행 취소 한 덩어리이고 묶이지 않으며 redo를 비운다.
+    //  - 같은 포인터나 같은 값이면 아무 일도 하지 않는다. 빈 포인터는 서식을 걷는다.
+    void text_edit_set_format(text_edit_state& state, std::shared_ptr<const text_format> format);
+
+    // 선택을 대체하며 서식 있는 조각을 넣는다 (서식 붙여넣기). 실행 취소 한 덩어리다.
+    //  - 조각은 자기 서식을 그대로 가진다. 주변 서식을 이어받지 않고, 둘러싼 링크도 조각 위로 늘어나지 않는다.
+    //  - `fragment`의 offset은 `text` 기준이다. 빈 조각은 아무 일도 하지 않는다.
+    void text_edit_insert_formatted(text_edit_state& state, std::u8string_view text, const text_format& fragment);
+
+    // 서식 있는 글을 밖에서 불러온다 (`text_edit_set_text`의 서식 짝). 실행 취소 기록을 비운다.
+    //  - 서식은 글 크기로 자르고 불변식과 글자소 경계로 다듬는다. 빈 포인터면 서식 없는 글이다.
+    void text_edit_set_formatted_text(text_edit_state& state, std::u8string_view text, std::shared_ptr<const text_format> format);
 }

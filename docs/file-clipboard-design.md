@@ -9,7 +9,7 @@
 | `clipboard_files_copy_request { paths, intent, expected_sequence }` | 앱 → 클립보드 | UTF-8 절대 경로 목록과 `file_clipboard_intent::copy`·`cut`을 넣는다. 빈 목록은 클립보드를 비운다. `expected_sequence`가 있으면 클립보드가 그 번호일 때만 쓴다 |
 | `clipboard_files_paste_request { tag }` | 앱 → 클립보드 | 클립보드의 파일 목록을 읽어 달라는 요청이다 |
 | `file_clipboard_content { paths, intent, supported, tag, sequence }` | 클립보드 → 앱 | 읽은 답과 읽은 순간의 클립보드 번호다. `app_delegate::make_file_clipboard_message`가 앱 메시지로 짓는다 |
-| `clipboard_change { owned, sequence, has_files }` | 클립보드 → 앱 | 클립보드가 바뀌었다. `app_delegate::make_clipboard_changed_message`가 앱 메시지로 짓는다 |
+| `clipboard_change { owned, sequence, has_files, has_image }` | 클립보드 → 앱 | 클립보드가 바뀌었다. `app_delegate::make_clipboard_changed_message`가 앱 메시지로 짓는다. `has_image`는 [그림 클립보드](image-clipboard-design.md)의 칸이다 |
 
 두 요청은 `input_action`이라 element 액션이나 정책(`interaction_policy::on_key`의 Ctrl+X·C·V)이 돌려줄 수 있다. logic thread가 앱 상태에서 정한 순간에는 `app_host::post_clipboard_request`로 넣는다 — 어느 thread에서 불러도 된다. 실제 클립보드 접근은 언제나 UI thread의 몫이다.
 
@@ -26,7 +26,7 @@
 
 읽기는 `CF_HDROP`의 목록(파일 끌기와 같은 상한 `max_dropped_paths`)과 `Preferred DropEffect`를 읽는다. 값이 없으면 복사다. 이동만 있으면 잘라내기이고, 복사와 함께 있으면(탐색기의 복사는 복사+링크다) 복사다 — 원본을 옮겨 버리는 쪽으로 추측하지 않는다.
 
-주 창은 시작할 때 `AddClipboardFormatListener`로 클립보드를 듣고, `WM_CLIPBOARDUPDATE`마다 `clipboard_change`를 알린다. `owned`는 지금 클립보드의 임자가 이 앱의 주 창인가(`GetClipboardOwner`)이고 `sequence`는 `GetClipboardSequenceNumber`, `has_files`는 지금 `CF_HDROP`이 있는가다. 앱이 넣은 직후에도 한 번 온다(`owned` 참).
+주 창은 시작할 때 `AddClipboardFormatListener`로 클립보드를 듣고, `WM_CLIPBOARDUPDATE`마다 `clipboard_change`를 알린다. `owned`는 지금 클립보드의 임자가 이 앱의 주 창인가(`GetClipboardOwner`)이고 `sequence`는 `GetClipboardSequenceNumber`, `has_files`는 지금 `CF_HDROP`이 있는가, `has_image`는 지금 등록 형식 "PNG"나 `CF_DIB`가 있는가다. 앱이 넣은 직후에도 한 번 온다(`owned` 참).
 
 "잘라 둔 항목"의 흐린 표시는 `owned`만으로 정하지 않는다. 같은 앱이 텍스트 칸에서 글을 복사하거나 클립보드를 비워도 임자는 이 앱이다. 앱은 잘라 넣은 뒤 처음 온 알림의 `sequence`를 적어 두고, 그 뒤의 알림이 `owned && has_files`이면서 그 번호일 때만 표시를 남긴다. 다른 번호가 오면 클립보드가 바뀐 것이라 표시를 거둔다.
 
@@ -44,3 +44,5 @@ luil은 클립보드에 `IDataObject`를 올리지 않고(`OleSetClipboard`가 �
 ## 지원하지 않는 플랫폼
 
 Android는 파일 경로를 클립보드로 주고받는 관례가 없다(content URI를 쓴다). 넣기는 아무 일도 하지 않고, 읽기는 `supported` 거짓과 빈 목록(`sequence` 0)으로 답한다. 답은 그래도 오므로 앱이 기다리다 멈추지 않는다. 클립보드 변화 알림은 보내지 않는다.
+
+그림 URI는 [그림 클립보드](image-clipboard-design.md)의 `clipboard_data_paste_request`가 읽는다. 그 길은 Android에서도 그림 내용을 바이트로 돌려준다.

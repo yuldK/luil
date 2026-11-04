@@ -335,7 +335,14 @@ namespace luil::net {
                     units.push_back(static_cast<char16_t>(decoded.codepoint));
                 }
             }
-            return env->NewString(reinterpret_cast<const jchar*>(units.data()), static_cast<jsize>(units.size()));
+            const jstring converted { env->NewString(reinterpret_cast<const jchar*>(units.data()), static_cast<jsize>(units.size())) };
+            // 부른 쪽은 nullptr만 보고 다음 글을 만들거나 재지정 없이 몸을 읽으러 간다. 예외를 남기지 않는다.
+            if (env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                return nullptr;
+            }
+            return converted;
         }
 
         // Java 문자열을 UTF-8로 옮긴다. 짝 없는 surrogate는 U+FFFD가 된다 (밖에서 온 값이다).
@@ -753,6 +760,22 @@ namespace luil::net {
                 return false;
             }
 
+            // 몸을 옮길 바이트 배열이다. 실패하면 nullptr이고 언제나 `failure`가 찬다.
+            //  - 빈 `failure`로 돌아가면 `run`이 빈 몸의 성공으로 답한다. 예외 없는 null도 실패로 적는다.
+            //  - 메모리가 모자란 것이지 연결이 끊긴 것이 아니라 종류를 고쳐 적는다.
+            [[nodiscard]] jbyteArray new_block(const jsize size, http_error& failure, const bool before_response)
+            {
+                const jbyteArray block { env_->NewByteArray(size) };
+                if (check_call(failure, before_response) == false)
+                {
+                    failure.kind = http_error_kind::system_error;
+                    return nullptr;
+                }
+                if (block == nullptr)
+                    failure = make_http_error(http_error_kind::system_error, u8"The transfer buffer could not be allocated.");
+                return block;
+            }
+
             [[nodiscard]] bool set_property(const std::u8string_view name, const std::u8string_view value, http_error& failure)
             {
                 const jstring java_name { to_java(env_, name) };
@@ -850,8 +873,14 @@ namespace luil::net {
                 }
 
                 env_->CallVoidMethod(connection_, api_.set_follow_redirects, JNI_FALSE);
+                if (check_call(failure, true) == false)
+                    return false;
                 env_->CallVoidMethod(connection_, api_.set_use_caches, JNI_FALSE);
+                if (check_call(failure, true) == false)
+                    return false;
                 env_->CallVoidMethod(connection_, api_.set_connect_timeout, timeout_value(state_.request.connect_timeout));
+                if (check_call(failure, true) == false)
+                    return false;
                 env_->CallVoidMethod(connection_, api_.set_read_timeout, timeout_value(state_.request.receive_timeout));
                 if (check_call(failure, true) == false)
                     return false;
@@ -876,6 +905,8 @@ namespace luil::net {
                     return true;
 
                 env_->CallVoidMethod(connection_, api_.set_do_output, JNI_TRUE);
+                if (check_call(failure, true) == false)
+                    return false;
                 env_->CallVoidMethod(connection_, api_.set_fixed_length, static_cast<jlong>(state_.request.body.size()));
                 if (check_call(failure, true) == false || is_latched(state_))
                     return false;
@@ -889,14 +920,16 @@ namespace luil::net {
                 }
 
                 const std::size_t block_size { std::min<std::size_t>(state_.request.body.size(), static_cast<std::size_t>(read_chunk_bytes)) };
-                const jbyteArray block { env_->NewByteArray(static_cast<jsize>(block_size)) };
-                if (block == nullptr || check_call(failure, true) == false)
+                const jbyteArray block { new_block(static_cast<jsize>(block_size), failure, true) };
+                if (block == nullptr)
                     return false;
                 std::size_t sent { 0 };
                 while (sent < state_.request.body.size())
                 {
                     const std::size_t count { std::min(block_size, state_.request.body.size() - sent) };
                     env_->SetByteArrayRegion(block, 0, static_cast<jsize>(count), reinterpret_cast<const jbyte*>(state_.request.body.data() + sent));
+                    if (check_call(failure, true) == false)
+                        return false;
                     env_->CallVoidMethod(output, api_.output_write, block, 0, static_cast<jint>(count));
                     if (check_call(failure, true) == false)
                         return false;
@@ -986,8 +1019,8 @@ namespace luil::net {
                 if (state_.request.decompress && wrap_decoder(input, inflater, failure) == false)
                     return false;
 
-                const jbyteArray block { env_->NewByteArray(read_chunk_bytes) };
-                if (block == nullptr || check_call(failure, false) == false)
+                const jbyteArray block { new_block(read_chunk_bytes, failure, false) };
+                if (block == nullptr)
                     return false;
                 std::vector<jbyte> staging(static_cast<std::size_t>(read_chunk_bytes));
                 while (true)
@@ -1004,6 +1037,8 @@ namespace luil::net {
                         return false;
                     }
                     env_->GetByteArrayRegion(block, 0, count, staging.data());
+                    if (check_call(failure, false) == false)
+                        return false;
                     const auto* const first { reinterpret_cast<const std::uint8_t*>(staging.data()) };
                     result_.body.insert(result_.body.end(), first, first + count);
                 }

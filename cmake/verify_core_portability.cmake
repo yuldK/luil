@@ -10,18 +10,26 @@ if(NOT DEFINED SOURCE_DIRECTORY OR NOT DEFINED INCLUDE_DIRECTORY)
     message(FATAL_ERROR "SOURCE_DIRECTORY and INCLUDE_DIRECTORY are required.")
 endif()
 
-# core를 이루는 디렉터리다. src/CMakeLists.txt의 luil_core_files와 같은 범위다.
-set(core_directories
-    "${SOURCE_DIRECTORY}/host"
-    "${SOURCE_DIRECTORY}/luil"
-    "${SOURCE_DIRECTORY}/text"
-    "${SOURCE_DIRECTORY}/theme"
-    "${SOURCE_DIRECTORY}/ui"
-    "${INCLUDE_DIRECTORY}/luil/app"
-    "${INCLUDE_DIRECTORY}/luil/messaging"
-    "${INCLUDE_DIRECTORY}/luil/text"
-    "${INCLUDE_DIRECTORY}/luil/theme"
-    "${INCLUDE_DIRECTORY}/luil/ui")
+# 검사하는 디렉터리다. 기본은 core를 이루는 디렉터리이고 src/CMakeLists.txt의 luil_core_files와 같은 범위다.
+#  - 다른 라이브러리에도 `CHECKED_DIRECTORIES`로 검사할 디렉터리를 지정할 수 있다.
+#    그 라이브러리도 core만 링크하므로 규칙이 같다. 위반 경로는 그때도 SOURCE_DIRECTORY의 부모에서 센다.
+if(DEFINED CHECKED_DIRECTORIES)
+    set(checked_directories ${CHECKED_DIRECTORIES})
+    set(checked_subject "The checked sources include")
+else()
+    set(checked_directories
+        "${SOURCE_DIRECTORY}/host"
+        "${SOURCE_DIRECTORY}/luil"
+        "${SOURCE_DIRECTORY}/text"
+        "${SOURCE_DIRECTORY}/theme"
+        "${SOURCE_DIRECTORY}/ui"
+        "${INCLUDE_DIRECTORY}/luil/app"
+        "${INCLUDE_DIRECTORY}/luil/messaging"
+        "${INCLUDE_DIRECTORY}/luil/text"
+        "${INCLUDE_DIRECTORY}/luil/theme"
+        "${INCLUDE_DIRECTORY}/luil/ui")
+    set(checked_subject "luil_core includes")
+endif()
 
 # 플랫폼 SDK 헤더와 MSVC 전용 헤더다. 비교 전에 소문자로 바꾸므로 소문자로 적는다.
 set(platform_header_pattern
@@ -31,9 +39,9 @@ set(upper_layer_pattern "(luil/)?(win32|net)/")
 
 set(violations "")
 set(checked_count 0)
-foreach(directory IN LISTS core_directories)
+foreach(directory IN LISTS checked_directories)
     if(NOT IS_DIRECTORY "${directory}")
-        message(FATAL_ERROR "A core directory is missing: ${directory}")
+        message(FATAL_ERROR "A checked directory is missing: ${directory}")
     endif()
     file(GLOB_RECURSE files "${directory}/*.h" "${directory}/*.cpp")
     foreach(file IN LISTS files)
@@ -55,7 +63,7 @@ list(LENGTH violations violation_count)
 if(violation_count GREATER 0)
     string(REPLACE ";" "\n  " violation_text "${violations}")
     message(FATAL_ERROR
-        "luil_core includes platform or upper-layer headers.\n"
+        "${checked_subject} platform or upper-layer headers.\n"
         "Move the dependency behind a platform interface or out of core:\n  ${violation_text}")
 endif()
 

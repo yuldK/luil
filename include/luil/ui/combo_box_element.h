@@ -47,6 +47,8 @@ namespace luil {
         std::function<input_action(float delta)> scroll {};
         std::function<input_action(float offset)> scroll_to {};
         std::function<bool(const combo_suggestion&, std::u8string_view)> matches {};
+        // 후보를 받는 동안 popup에 서는 진행 표시의 접근 이름이다. 화면에는 그리지 않는다. 비면 기본 문구("추천 항목을 불러오는 중")다.
+        std::u8string loading_name {};
     };
 
     class combo_box_element final : public ui_element

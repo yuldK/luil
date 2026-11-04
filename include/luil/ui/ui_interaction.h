@@ -19,6 +19,7 @@
 
 namespace luil {
     class menu_element;
+    class menu_bar_element;
     // 텍스트 편집 한 동작이다.
     // controller가 만들고 policy가 앱 메시지로 바꾼다.
     struct text_edit_request
@@ -481,6 +482,8 @@ namespace luil {
         [[nodiscard]] std::vector<input_action> follow_text_caret();
         // 새 tree를 받은 뒤 머무름과 hover 영역을 다시 본다. 포인터가 머문 채 덮개가 서거나 영역이 사라졌으면
         // 끝·나감을, 영역이 새로 섰으면 들어옴을 낸다 (hover-dwell-design.md). 입력 pump가 tree를 받을 때마다 부른다.
+        //  - 잉크 캔버스가 쥔 접촉의 캔버스(나 그 표면)가 새 tree에서 사라졌으면 여기서 `cancel`을 낸다 (ink-design.md).
+        //    표면이 사라지면 그 접촉의 이벤트가 더 오지 않아, 다음 이동을 기다리면 진행 중 획이 남는다.
         [[nodiscard]] std::vector<input_action> refresh_hover_tracking();
         [[nodiscard]] const interaction_snapshot& snapshot() const noexcept;
 
@@ -624,6 +627,9 @@ namespace luil {
             std::optional<second_contact> second {};
             // 누른 자리의 활성 element다. 없으면 빈 곳(또는 비활성)을 누른 것이다.
             ui_element_id target {};
+            // 누를 때 대상이 펼쳐 있었으면 그 표면의 tree다 (`pressed_open_tree_`의 터치 짝). 탭은 이 tree의 액션을 낸다.
+            //  - 접촉에 둔다. 탭이 확정되기 앞에서 `clear_press`가 불리고, 접촉은 뗌·취소와 함께 버려진다.
+            std::shared_ptr<const ui_tree> open_tree {};
             // 경계 쓸기를 알리는 확대 보기 위의 접촉이면 그 기록이다.
             std::optional<view_edge_track> edge {};
             // 둘째 손가락이 한 번이라도 합류했다. 핀치가 섞인 접촉은 탭이 아니다.
@@ -773,11 +779,32 @@ namespace luil {
         // 메뉴가 갖는 키(↑/↓/Enter/Esc)면 그 결과고, 아니면 nullopt라 호출자가
         // 메뉴 안의 텍스트 박스에게 넘긴다.
         //  - 강조를 세우면 그 메뉴가 사는 표면도 함께 세운다 (`menu_surface`).
-        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host);
+        //  - `bar`는 이 메뉴를 연 메뉴 막대다 (열린 막대가 없으면 nullptr). 깊이 0에서 메뉴가 쓰지 않은 ←/→와 Esc가 막대로 간다.
+        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host, const menu_bar_element* bar);
+        // 막대에서 연 메뉴 안의 접근 키다 (`menu_item_config::access_key`). 맞는 항목이 없거나 막대가 쉬면 nullopt다.
+        [[nodiscard]] std::optional<std::vector<input_action>> process_menu_access_key(const key_pressed_event& event, const menu_kinds& kinds, const menu_location& host);
+        // 키를 받을 메뉴 막대와 그 표면이다 (docs/menu-bar-design.md). 없으면 `bar`가 nullptr다.
+        struct menu_bar_location
+        {
+            const menu_bar_element* bar { nullptr };
+            std::u8string surface {};
+        };
+        // 키가 온 표면의 tree가 먼저이고 없으면 초점 표면의 tree다.
+        [[nodiscard]] menu_bar_location key_menu_bar(const std::u8string& surface) const;
+        // 활성 표면의 tree가 먼저이고 없으면 주 tree다. 키 없이 막대를 보는 자리(tree 교체·누름·창 비활성)가 쓴다.
+        [[nodiscard]] menu_bar_location shown_menu_bar() const;
         // 메뉴 container가 있는 자리다.
         // 주 tree와 popup tree를 차례로 보고 없으면 tree가 nullptr다 (메뉴가 닫혀 있다).
         [[nodiscard]] menu_location find_menu(const menu_kinds& kinds) const;
         [[nodiscard]] std::vector<input_action> run_trigger(const ui_element& element, ui_trigger trigger, float x, float y, modifier_keys modifiers);
+        // 누른 element가 펼쳐 있고 누를 수 있으면 그 표면의 tree다 (`pressed_open_tree_`). 아니면 비어 있다.
+        //  - 누름이 popup을 닫았고(`pointer_pressed_event::closed_popup`) element가 지금 tree에서 접혀 있으면, 직전 tree
+        //    (`prior_tree_`)에서 같은 element가 펼쳐 있고 누를 수 있을 때 그 tree다. 닫힌 frame이 누름보다 먼저 온 경우다.
+        [[nodiscard]] std::shared_ptr<const ui_tree> open_press_tree(const pointer_pressed_event& event, const ui_element& hit) const;
+        // 그 표면의 직전 tree다 (`prior_tree_`, `prior_surface_trees_`). 없으면 nullptr다.
+        [[nodiscard]] std::shared_ptr<const ui_tree> prior_surface_tree(const std::u8string& surface) const;
+        // 클릭이 선 뗌의 왼쪽 클릭이다. `pressed_tree`에 같은 id의 element가 있으면 그것의 액션이고, 없으면 `hit`의 것이다.
+        [[nodiscard]] std::vector<input_action> run_left_click(const ui_element& hit, const ui_tree* pressed_tree, float x, float y, modifier_keys modifiers);
         // 칸으로 넘기는 창(`scroll_source::step`)의 휠이다. 그런 창이 아니면 nullopt다.
         [[nodiscard]] std::optional<std::vector<input_action>> step_wheel(const ui_tree& tree, const mouse_wheel_event& event);
         // 초점을 가진 텍스트 박스의 키 처리다.
@@ -870,6 +897,12 @@ namespace luil {
         interaction_config config_ {};
         std::shared_ptr<const ui_tree> tree_ {};
         surface_tree_list surface_trees_ {};
+        // `set_tree`·`set_surface_trees`가 갈아 끼우기 전의 tree다 (menu-focus-fixes-design.md의 X-4, 결정 4).
+        //  - 표면은 popup 밖 누름에서 닫자는 메시지를 앱에 먼저 내고 누름을 입력 thread에 넣는다. 앱이 닫힌 frame을 먼저
+        //    게시하면 누름이 올 때 여는 element는 이미 접혀 있어, 그 누름이 닫았는지를 지금 tree로는 알 수 없다.
+        //  - popup을 닫은 누름(`pointer_pressed_event::closed_popup`)만 이 tree를 본다. 다음 교체 때 바뀌므로 한 벌만 남는다.
+        std::shared_ptr<const ui_tree> prior_tree_ {};
+        surface_tree_list prior_surface_trees_ {};
         interaction_snapshot snapshot_ {};
 
         // 텍스트 박스를 누른 채 끄는 중이면 그 박스다.
@@ -939,6 +972,13 @@ namespace luil {
         float pressed_x_ { 0.0f };
         float pressed_y_ { 0.0f };
         bool drag_candidate_ { false };
+        // 누를 때 펼쳐 있던 element(`access_info::expanded`가 참)를 누른 표면의 tree다 (menu-focus-fixes-design.md의 X-4).
+        //  - 그 누름의 왼쪽 클릭은 뗌 tree가 아니라 이 tree의 같은 element의 액션이다. 열린 tree가 지은 액션은
+        //    `set_open(false)`라, 누르는 사이 닫힌 frame이 게시되어도 닫으려던 누름이 도로 열지 않는다.
+        //  - 액션만 떼어 쥐지 않는다. element를 가리키는 람다(`[this]`)가 옛 tree와 함께 사라지기 때문이다.
+        //    누르는 동안 tree 한 벌을 쥐는 것은 `tooltip_pressed_content_`와 같다.
+        //  - 펼치지 않은 element의 누름에서는 비어 있고 클릭은 지금처럼 뗌 tree의 것이다. `clear_press`가 함께 지운다.
+        std::shared_ptr<const ui_tree> pressed_open_tree_ {};
         // 누름 표시가 내부 끌기로 바뀌어도 시퀀스 소유권은 뗌·취소까지 남는다.
         // 다른 장치의 hover나 늦은 뗌이 잡은 조작을 움직이거나 끝내면 안 된다.
         struct pointer_contact
@@ -961,6 +1001,43 @@ namespace luil {
             float y { 0.0f };
         };
         std::optional<middle_press> middle_press_ {};
+        // 잉크 캔버스가 쥔 접촉이다 (`ink_source`, ink-design.md). 펜·마우스·손가락 모두 이 하나가 든다.
+        //  - 역할은 이동마다 최신 tree에서 같은 id로 다시 찾는다. `held`는 마지막으로 찾은 역할이다. 캔버스가 사라졌을 때
+        //    그 factory로 `cancel`을 낸다.
+        struct ink_contact
+        {
+            ui_element_id id {};
+            std::u8string surface {};
+            pointer_device device { pointer_device::pen };
+            std::uint32_t pointer_id { 0 };
+            bool eraser { false };
+            ink_source held {};
+            ink_sample last {};
+        };
+        std::optional<ink_contact> ink_contact_ {};
+        // 상태를 바꾸지 않고 삼키는 접촉이다 (ink-input-design.md의 지우개 삼킴과 끊긴 잉크 접촉의 나머지).
+        //  - 뗌·취소에 지운다. 같은 포인터의 새 누름도 지운다. 다만 `next_press`면 그 누름(배럴 전환 뒤 다시 누름)까지 삼킨다.
+        //  - 이동은 펜·손가락의 접촉 이동만 삼킨다. 마우스는 이동이 버튼을 싣지 않아 hover로 흘린다.
+        struct swallowed_contact
+        {
+            pointer_device device { pointer_device::pen };
+            std::uint32_t pointer_id { 0 };
+            std::u8string surface {};
+            bool next_press { false };
+        };
+        std::vector<swallowed_contact> swallowed_ {};
+        // 이 이벤트가 삼킬 접촉의 것인가다. 누름이면 지우개 누름의 임자를 가려 일반 컨트롤 위면 삼킬 접촉으로 적는다.
+        [[nodiscard]] bool swallow(const raw_input_event& event);
+        // 이 누름을 잉크 접촉으로 받을 역할이다. 그 장치·지우개를 받지 않으면 nullptr다.
+        [[nodiscard]] static const ink_source* ink_for(const ui_element& element, const pointer_pressed_event& event) noexcept;
+        // 쥔 잉크 접촉의 캔버스를 최신 tree에서 찾는다. 사라졌거나 숨었거나 비활성이거나 그 장치를 받지 않게 됐으면 nullptr다.
+        [[nodiscard]] const ui_element* live_ink(const ink_contact& contact) const;
+        [[nodiscard]] std::vector<input_action> begin_ink(const ui_tree& tree, const ui_element& canvas, const ink_source& source, const pointer_pressed_event& event);
+        [[nodiscard]] std::vector<input_action> move_ink(const pointer_moved_event& event);
+        [[nodiscard]] std::vector<input_action> release_ink(const pointer_released_event& event);
+        // 쥔 잉크 접촉을 닫는다. `cancel`이거나 받은 표본까지의 `end`+`interrupted`다.
+        //  - `swallow_rest`면 그 접촉의 남은 이벤트를 삼킨다 (`next_press`면 바로 뒤의 다시 누름까지). 뗌으로 끝난 접촉은 남은 것이 없다.
+        [[nodiscard]] std::vector<input_action> close_ink(ink_phase phase, bool swallow_rest, bool next_press = false);
         // 칸으로 넘기는 창(`scroll_source::step`)에 쌓인 휠이다 (120 = 한 칸, 부호는 흘림 방향).
         //  - 다른 창으로 옮겨 가거나 방향이 바뀌면 버린다 — 반대로 굴린 몫이 앞의 몫을 갚으면 첫 칸이 늦게 선다.
         struct wheel_steps
@@ -1050,6 +1127,8 @@ namespace luil {
         // 키보드(→·Enter)가 하위 메뉴를 열었다. 그 메뉴가 서면 첫 활성 항목을 강조한다 — hover로 연 메뉴는
         // 강조 없이 선다 (Windows 메뉴의 갈래다).
         bool submenu_opened_by_key_ { false };
+        // 지난번에 본 메뉴 막대의 깊이 0 메뉴의 owner(항목 키)다. 바뀌면(←/→·hover·Alt+글자) 새 메뉴라 강조를 다시 세운다.
+        std::u8string menu_bar_menu_ {};
 
         // 마지막으로 본 포인터 위치·시각·표면이다.
         // 포인터가 머문 채 내용만 스크롤되면 (휠) 새

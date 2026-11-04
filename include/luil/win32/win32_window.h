@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luil/app/app_delegate.h"
+#include "luil/app/platform_services.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/ui_events.h"
@@ -9,6 +10,7 @@
 // 별칭 헤더를 들인다 (luil/win32/app_host.h).
 #include "luil/win32/app_host.h"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -177,6 +179,118 @@ namespace luil::win32 {
         [[nodiscard]] bool operator==(const taskbar_report&) const = default;
     };
 
+    // 점프 목록(`taskbar_request::jump_list`)에 앱의 요청이 닿은 정도다 (docs/jump-list-design.md).
+    enum class jump_list_status
+    {
+        // 작업 목록을 지었다.
+        applied,
+        // 이 앱의 목록을 지웠다.
+        removed,
+        // 셸 개체(`ICustomDestinationList`)를 만들지 못했다. `com_sta_scope`가 없는 앱 등이다.
+        unavailable,
+        // 요청이 규칙 밖이거나 셸 호출이 실패했다. `error`가 그 까닭이다.
+        failed,
+    };
+
+    // 점프 목록의 보고다. 셸에 낸 일(짓기·지우기)마다 한 번 알린다. 요청이 비어 있거나 바뀌지 않았으면 알리지 않는다.
+    //  - 셸에는 읽는 길이 없어 `applied`는 호출이 오류 없이 끝났다는 뜻이다. 목록에 실제로 보이는 모양은 사람이 본다.
+    struct jump_list_report
+    {
+        jump_list_status status { jump_list_status::applied };
+        // 지은 작업 수다. 지웠거나 실패했으면 0이다. 셸은 자리가 모자라면 덜 보인다.
+        std::size_t tasks { 0 };
+        // `failed`·`unavailable`일 때의 영문 진단이다 (HRESULT가 붙는다). 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const jump_list_report&) const = default;
+    };
+
+    // 알림 영역 아이콘(`ui_frame::tray`)에 앱의 요청이 닿은 정도다 (docs/tray-icon-design.md).
+    enum class tray_status
+    {
+        // 요청이 없다. 셸에 걸린 것이 없다.
+        off,
+        // 요청이 있으나 셸이 받지 않았다 (탐색기가 아직 없다). `TaskbarCreated`를 기다린다.
+        waiting,
+        // 아이콘이 섰다. Windows 11은 넘침 칸에 숨어 있을 수 있다.
+        shown,
+        // 셸 호출이나 그림 변환이 실패했거나 툴팁이 올바른 UTF-8이 아니다. `error`가 그 까닭이다.
+        failed,
+    };
+
+    // 알림 영역 아이콘의 상태 보고다. 상태가 바뀔 때 한 번 알린다.
+    //  - 셸에는 읽는 길이 없어 `shown`은 호출이 오류 없이 끝났다는 뜻이다. 알림 영역에 실제로 보이는 모양은 사람이 본다.
+    //  - 실패는 다음 셸 호출(요청 변화나 탐색기 재시작)까지 남는다. 같은 요청으로 다시 하지 않는다.
+    struct tray_report
+    {
+        tray_status status { tray_status::off };
+        // `failed`일 때 첫 실패의 영문 진단이다. 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const tray_report&) const = default;
+    };
+
+    // 전역 단축키(`ui_frame::hotkeys`) 하나를 걸어 본 결과다 (docs/global-hotkey-design.md).
+    enum class hotkey_status
+    {
+        // 걸렸다. 같은 요청이 이어지는 동안 눌림이 `global_hotkey::pressed`로 온다.
+        registered,
+        // 다른 프로그램이나 같은 목록의 앞 항목이 이미 쓰는 조합이다 (`ERROR_HOTKEY_ALREADY_REGISTERED`).
+        conflict,
+        // OS가 예약한 조합이다 (`system_reserved_chord`와 F12). OS를 부르지 않고 걸렀다.
+        reserved,
+        // 글자·이동·편집 키는 Ctrl이나 Alt와 함께여야 한다. 수정자 없이 걸면 그 키가 시스템 전체에서 앱으로만 간다.
+        needs_modifier,
+        // 키가 없거나 Win32 가상 키로 옮길 수 없다 (`key_code::none`, 수정자 키, 휴대폰 키).
+        invalid_key,
+        // id가 비었거나 앞 항목과 겹친다.
+        invalid_id,
+        // 그 밖의 OS 실패다. `error`에 까닭이 있다.
+        failed,
+    };
+
+    // 전역 단축키 하나의 시도 결과다. 항목마다 결과가 바뀔 때 한 번 알린다.
+    //  - 처음 건 시도, 조합을 바꾼 시도, 다시 걸어 결과가 달라진 때다. 목록에서 뺀 항목은 알리지 않는다.
+    //  - `conflict`와 `failed`는 요청이 같으면 frame마다 다시 걸지 않는다. 주 창이 활성화될 때 한 번 다시 건다.
+    struct hotkey_report
+    {
+        // 결과가 가리키는 `global_hotkey::id`다. `invalid_id`가 빈 id를 알릴 때는 비었다.
+        std::u8string id {};
+        hotkey_status status { hotkey_status::registered };
+        // `failed`일 때의 영문 진단이다. 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const hotkey_report&) const = default;
+    };
+
+    // 앱 식별(AUMID)이다 (docs/os-notification-design.md). OS 알림(`show_notification`)이 이것으로 선다.
+    //  - id가 있으면 `run_application_window`가 창보다 먼저 프로세스에 AUMID를 걸고(`SetCurrentProcessExplicitAppUserModelID`)
+    //    `HKCU\Software\Classes\AppUserModelId\<id>`에 표시 이름·아이콘을 쓴다. 바로가기와 설치기가 없어도 빌드 폴더의
+    //    실행 파일이 알림을 올린다.
+    //  - 이 프로세스의 창은 모두 이 id로 작업 표시줄에 묶인다. 식별 없이 고정한 옛 단추와는 갈려 사용자가 다시 고정한다.
+    //  - 라이브러리는 항목을 스스로 지우지 않는다. 앱이 꺼진 뒤에도 알림 센터의 알림이 앱을 가리켜야 해서다.
+    //    지우는 것은 앱의 제거 길이다 (`unregister_app_identity`).
+    struct app_identity
+    {
+        // AUMID다. 비면 앱 식별을 세우지 않는다. 128자(UTF-16) 이하, 공백·제어 문자·백슬래시 없음, `회사.제품` 꼴을 권한다.
+        //  - 규칙 밖이면 창이 시작하지 않는다 (시작 실패로 알린다).
+        std::u8string id {};
+        // 알림에 보이는 앱 이름이다. 비면 `caption.title`이다.
+        std::u8string display_name {};
+        // 앱 아이콘 파일(.png·.ico)의 절대 경로다. 비면 적지 않는다. 실행 파일 리소스는 가리킬 수 없다.
+        std::u8string icon_path {};
+        // 꺼진 앱도 알림 클릭으로 띄운다 (COM 활성화기, 결정 4).
+        //  - 참이면 `CustomActivator`와 `HKCU\Software\Classes\CLSID\{clsid}\LocalServer32`(`"<실행 파일>" -luil-notification`)를
+        //    쓰고, 주 창이 서면 그 CLSID의 클래스 개체를 건다. CLSID는 id에서 이름 기반 UUID(v5)로 짓는다.
+        //  - 꺼진 앱의 알림을 누르면 COM이 그 명령 줄로 앱을 띄운다. 앱은 `notification_launch`로 그 실행을 알아본다.
+        //  - 거짓이면 떠 있는 동안의 눌림만 받고, 창을 거둘 때 이 앱의 알림을 거둔다.
+        bool activator { true };
+    };
+
+    // 앱 식별의 레지스트리 항목을 지운다. 앱의 제거 길에서 부른다. 없으면 `not_found`, id가 규칙 밖이면 `failed`다.
+    //  - 알림 센터에 남은 알림은 거두지 않는다. 먼저 `close_all_notifications`를 부른다.
+    [[nodiscard]] platform_result unregister_app_identity(std::u8string_view id);
+
     // 창의 겉모습과 정책이다.
     // 값만 바꾸면 되도록 한곳에 모아 둔다 (단위를 별도로 적지 않은 크기는 논리 96 DPI 기준 px).
     struct window_config
@@ -248,6 +362,9 @@ namespace luil::win32 {
         // 비어 있거나 무시된 배치는 기존 initial_position·initial_width·initial_height를 따른다.
         // STARTUPINFO의 비활성·최소화·숨김 실행 정책은 유지한다.
         std::optional<window_placement> initial_placement {};
+        // 앱 식별이다. 비어 있으면 지금처럼 세우지 않고, OS 알림은 `unsupported`다.
+        //  - smoke test(`smoke_test`)는 id를 검사만 하고 적용하지 않는다.
+        app_identity identity {};
     };
 
     // 앱이 UI thread에 꽂는 훅이다.
@@ -283,6 +400,13 @@ namespace luil::win32 {
             return {};
         }
 
+        // 점프 목록을 셸에 냈다 (짓기·지우기마다 한 번). 빈 메시지는 게시하지 않는다. UI thread에서 불린다.
+        [[nodiscard]] virtual app_message make_jump_list_message(const jump_list_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
         // 드롭된 파일 경로다 (절대 경로 아님 — 셸이 준 그대로).
         // true면 소비했다는 뜻이라 다음 파일을 보지 않는다.
         //  - 수락한 drop 대상 element가 없는 드롭의 물러섬이다.
@@ -292,6 +416,38 @@ namespace luil::win32 {
             static_cast<void>(host);
             static_cast<void>(path);
             return false;
+        }
+
+        // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다 (`single_instance::send_to_primary`,
+        // docs/single-instance-args-design.md). `window_environment::instance`를 단 첫째의 주 창이 받는다.
+        // true면 앱이 받았다는 뜻이고 보낸 쪽은 `ok`를 본다. false는 보낸 쪽의 `failed`다.
+        //  - UI thread의 주 창 프로시저 안에서 불린다. 보낸 쪽이 끝나기를 기다리므로 곧 돌아와야 한다:
+        //    `host.post_app_message_ticketed`로 게시하고 표가 0이 아닌지를 답한다. 대화 상자나 막는 호출을 하지 않는다.
+        //  - 던진 예외는 삼키고 false로 본다.
+        //  - 인자는 명령 줄과 같이 믿을 수 없는 입력이다. 파일 연결이나 URL 프로토콜로 뜬 둘째의 인자는 문서와 웹 링크에서 온다.
+        //  - 콜백 뒤 보낸 쪽이 `activate`를 켰고 주 창이 보이면 라이브러리가 주 창을 앞으로 세운다 (최소화는 되살린다).
+        //    답이 true든 false든 같다.
+        [[nodiscard]] virtual bool on_instance_arguments(app_host& host, const instance_arguments& arguments)
+        {
+            static_cast<void>(host);
+            static_cast<void>(arguments);
+            return false;
+        }
+
+        // 알림 영역 아이콘의 상태가 바뀌었다 (`make_taskbar_message`와 같은 모양이다). 빈 메시지는 게시하지 않는다.
+        // 아이콘의 사건(누름·메뉴)은 여기가 아니라 `tray_icon::activate`로 온다.
+        [[nodiscard]] virtual app_message make_tray_message(const tray_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 전역 단축키 하나를 걸어 본 결과가 정해졌다 (`make_tray_message`와 같은 모양이다). 빈 메시지는 게시하지 않는다.
+        // 항목마다 한 번씩 불린다. 눌림은 여기가 아니라 `global_hotkey::pressed`로 온다.
+        [[nodiscard]] virtual app_message make_hotkey_message(const hotkey_report& report)
+        {
+            static_cast<void>(report);
+            return {};
         }
     };
 
@@ -305,6 +461,15 @@ namespace luil::win32 {
         logic_driver* driver { nullptr };
         interaction_policy* policy { nullptr };
         window_delegate* delegate { nullptr };
+        // 이 프로세스의 단일 인스턴스다. 첫째(`primary()`)이면 주 창이 같은 이름의 둘째가 보낸 인자를 받는다
+        // (`window_delegate::on_instance_arguments`). 창보다 오래 살아야 한다.
+        //  - 비었거나 둘째이거나 host가 없는 smoke 모드이거나 delegate가 없으면 받지 않는다. 보내는 쪽은 `not_found`를 본다.
+        const single_instance* instance { nullptr };
+        // 관리자 권한으로 도는 첫째가 낮은 권한 프로세스(일반 권한의 탐색기에서 연 파일)의 인자도 받는다 (UIPI를 연다).
+        //  - 기본은 닫힘이다. 인자가 높은 권한 앱의 입력이 되므로 앱이 그 위험을 알고 켠다.
+        //    닫힌 채 낮은 권한 둘째가 보내면 `send_to_primary`가 접근 거부로 `failed`다.
+        //  - 샌드박스 안의 프로세스를 포함해 낮은 권한 프로세스가 인자를 먹일 수 있다.
+        bool instance_from_lower_integrity { false };
     };
 
     // 실행 module은 라이브러리가 스스로 얻는다 (Win32 HINSTANCE를 받지 않는다).

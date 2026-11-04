@@ -2,8 +2,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace {
     luil::text::text_edit_state at_end(const std::u8string_view text)
@@ -436,4 +439,149 @@ TEST_CASE("Word commands walk graphemes across CRLF line breaks", "[domain][text
     REQUIRE(luil::text::text_edit_selected_text(state) == u8"éf");
     luil::text::text_edit_select_word(state, 8);
     REQUIRE(luil::text::text_edit_selected_text(state) == u8"\r\n\r\n");
+}
+
+namespace {
+    [[nodiscard]] std::shared_ptr<const luil::text::text_format> marked(const std::size_t begin, const std::size_t end, const luil::text::text_mark marks)
+    {
+        return std::make_shared<const luil::text::text_format>(luil::text::text_format { { { begin, end, marks } }, {} });
+    }
+}
+
+TEST_CASE("Undo and redo bring back the text and the format together", "[domain][text-edit][rich-text]")
+{
+    luil::text::text_edit_state state { at_end(u8"hello") };
+    const auto bold { marked(0, 5, luil::text::text_mark::bold) };
+    luil::text::text_edit_set_format(state, bold);
+    REQUIRE(state.format == bold);
+    REQUIRE(state.undo.size() == 1u);
+    luil::text::text_edit_insert(state, u8"!");
+    REQUIRE(state.undo.size() == 2u);
+    REQUIRE(state.format->runs == std::vector<luil::text::text_mark_run> { { 0, 6, luil::text::text_mark::bold } });
+
+    // 한 걸음씩 글과 서식이 함께 되돌아간다. 시점은 그때의 서식 포인터를 그대로 쥔다.
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text == u8"hello");
+    REQUIRE(state.format == bold);
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text == u8"hello");
+    REQUIRE(state.format == nullptr);
+    REQUIRE(luil::text::text_edit_redo(state));
+    REQUIRE(state.format == bold);
+    REQUIRE(luil::text::text_edit_redo(state));
+    REQUIRE(state.text == u8"hello!");
+    REQUIRE(state.format->runs == std::vector<luil::text::text_mark_run> { { 0, 6, luil::text::text_mark::bold } });
+}
+
+TEST_CASE("Setting a format is one step that never joins and clears redo", "[domain][text-edit][rich-text]")
+{
+    luil::text::text_edit_state state { at_end(u8"abc") };
+    luil::text::text_edit_insert(state, u8"d");
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.redo.size() == 1u);
+
+    // 서식만 바꾼 걸음 둘은 묶이지 않고, 다시 실행할 것을 비운다.
+    luil::text::text_edit_set_format(state, marked(0, 1, luil::text::text_mark::bold));
+    REQUIRE(state.redo.empty());
+    luil::text::text_edit_set_format(state, marked(0, 2, luil::text::text_mark::bold));
+    REQUIRE(state.undo.size() == 2u);
+    // 같은 값은 걸음이 아니다.
+    luil::text::text_edit_set_format(state, marked(0, 2, luil::text::text_mark::bold));
+    REQUIRE(state.undo.size() == 2u);
+
+    // 이어 친 글은 서식 걸음과 묶이지 않고, 저희끼리는 한 덩어리로 묶인다.
+    luil::text::text_edit_insert(state, u8"x");
+    luil::text::text_edit_insert(state, u8"y");
+    luil::text::text_edit_insert(state, u8"z");
+    REQUIRE(state.undo.size() == 3u);
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.text == u8"abc");
+    REQUIRE(state.format->runs == std::vector<luil::text::text_mark_run> { { 0, 2, luil::text::text_mark::bold } });
+}
+
+TEST_CASE("The history byte limit counts the format of every revision", "[domain][text-edit][rich-text]")
+{
+    // 글은 작고 서식의 링크 주소가 크다. 글만 세면 네 시점이 모두 남는다.
+    const std::u8string destination(std::size_t { 12 } * 1024 * 1024, u8'a');
+    luil::text::text_edit_state state { at_end(u8"abc") };
+    // 걸음마다 굵기 구간의 서식이 달라 같은 값으로 건너뛰지 않는다.
+    for (const luil::text::text_mark marks : { luil::text::text_mark::bold, luil::text::text_mark::italic, luil::text::text_mark::underline, luil::text::text_mark::code })
+    {
+        auto format { std::make_shared<luil::text::text_format>() };
+        format->runs.push_back({ 0, 1, marks });
+        format->links.push_back({ 0, 3, destination });
+        luil::text::text_edit_set_format(state, std::move(format));
+    }
+    std::size_t bytes { 0 };
+    for (const luil::text::text_edit_revision& revision : state.undo)
+        bytes += revision.text.size() + (revision.format != nullptr ? luil::text::text_format_bytes(*revision.format) : 0);
+    // 서식 없는 시점(0)과 첫 서식(12 MiB)을 버려 두 시점(24 MiB)이 남는다.
+    REQUIRE(state.undo.size() == 2u);
+    REQUIRE(bytes <= luil::text::text_edit_history_byte_limit);
+}
+
+TEST_CASE("Setting text from outside drops the format and the typing marks", "[domain][text-edit][rich-text]")
+{
+    luil::text::text_edit_state state { at_end(u8"abc") };
+    luil::text::text_edit_set_format(state, marked(0, 3, luil::text::text_mark::italic));
+    state.typing_marks = luil::text::text_mark::bold;
+    luil::text::text_edit_set_text(state, u8"other", true);
+    REQUIRE(state.format == nullptr);
+    REQUIRE(state.typing_marks.has_value() == false);
+    REQUIRE(state.undo.empty());
+}
+
+TEST_CASE("An IME rewrite of repeated letters moves the format as if the letter at the caret changed", "[domain][text-edit][rich-text]")
+{
+    // "aa"의 첫 `a`만 굵다. caret 0에서 하나를 지운 글 "a"는 첫 `a`를 지운 것이라 남은 `a`가 보통 글이다.
+    //  - 접두를 먼저 가져가는 견줌은 둘째 `a`를 지운 것으로 읽어 굵은 `a`를 남긴다.
+    luil::text::text_edit_state removed {};
+    luil::text::text_edit_set_formatted_text(removed, u8"aa", marked(0, 1, luil::text::text_mark::bold));
+    luil::text::text_edit_replace_all(removed, u8"a", 0);
+    REQUIRE(removed.text == u8"a");
+    REQUIRE(removed.format->runs.empty());
+
+    // "aa"의 둘째 `a`만 굵다. 처음에 `a`를 넣어 caret이 1이면 넣은 글은 글 처음의 것이라 뒤 글자(보통)를 따른다.
+    luil::text::text_edit_state inserted {};
+    luil::text::text_edit_set_formatted_text(inserted, u8"aa", marked(1, 2, luil::text::text_mark::bold));
+    luil::text::text_edit_replace_all(inserted, u8"aaa", 1);
+    REQUIRE(inserted.format->runs == std::vector<luil::text::text_mark_run> { { 2, 3, luil::text::text_mark::bold } });
+
+    // 다음 글자 서식은 확정 글이 받는다.
+    luil::text::text_edit_state typed {};
+    luil::text::text_edit_set_text(typed, u8"가", true);
+    typed.typing_marks = luil::text::text_mark::bold;
+    // 같은 글을 다시 알린 것은 caret이 그대로면 다음 글자 서식을 지우지 않는다.
+    luil::text::text_edit_replace_all(typed, u8"가", 3);
+    REQUIRE(typed.typing_marks == luil::text::text_mark::bold);
+    luil::text::text_edit_replace_all(typed, u8"가나", 6);
+    REQUIRE(typed.format != nullptr);
+    REQUIRE(typed.format->runs == std::vector<luil::text::text_mark_run> { { 3, 6, luil::text::text_mark::bold } });
+    REQUIRE(typed.typing_marks.has_value() == false);
+}
+
+TEST_CASE("Moving the caret, selecting and undoing drop the typing marks", "[domain][text-edit][rich-text]")
+{
+    luil::text::text_edit_state state { at_end(u8"abc") };
+    state.typing_marks = luil::text::text_mark::bold;
+    luil::text::text_edit_move(state, luil::text::text_edit_motion::left, false);
+    REQUIRE(state.typing_marks.has_value() == false);
+
+    state.typing_marks = luil::text::text_mark::bold;
+    luil::text::text_edit_select_all(state);
+    REQUIRE(state.typing_marks.has_value() == false);
+
+    state.typing_marks = luil::text::text_mark::bold;
+    luil::text::text_edit_place_caret(state, 1, false);
+    REQUIRE(state.typing_marks.has_value() == false);
+
+    luil::text::text_edit_insert(state, u8"x");
+    state.typing_marks = luil::text::text_mark::bold;
+    REQUIRE(luil::text::text_edit_undo(state));
+    REQUIRE(state.typing_marks.has_value() == false);
+
+    // 지우기도 그 자리를 바꿔 비운다.
+    state.typing_marks = luil::text::text_mark::bold;
+    luil::text::text_edit_backspace(state);
+    REQUIRE(state.typing_marks.has_value() == false);
 }

@@ -317,3 +317,20 @@ TEST_CASE("Reaching the open submenu before the delay cancels the pending siblin
     REQUIRE(controller.next_deadline().has_value() == false);
     REQUIRE(controller.advance(at(1000)).empty());
 }
+
+TEST_CASE("Clicking a parent whose submenu is open still sends its open intent", "[ui][menu][submenu][reopen]")
+{
+    // 하위 메뉴를 연 항목은 펼침을 알리므로 클릭이 누를 때의 액션이다 (menu-focus-fixes-design.md의 X-4).
+    // 그 액션은 `open_submenu(key)`라 누르는 사이 닫힌 frame이 게시되어도 같은 여는 메시지다.
+    submenu_policy policy {};
+    luil::interaction_controller controller { &policy };
+    const auto opened { submenu_tree(0, item_key(0)) };
+    REQUIRE(opened->find(item_id(item_key(0)))->accessibility().expanded == true);
+    controller.set_tree(opened);
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 30.0f, first_row, luil::pointer_button::left, at(0) }));
+    controller.set_tree(submenu_tree(0));
+    const auto actions { controller.process(luil::pointer_released_event { 30.0f, first_row, luil::pointer_button::left, at(50) }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(message_of<int>(actions[0]) != nullptr);
+    REQUIRE(*message_of<int>(actions[0]) == 1);
+}

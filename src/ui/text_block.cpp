@@ -67,8 +67,9 @@ namespace luil {
         }
 
         // `width`·`line_height`와 같은 단위(물리 픽셀)로 줄을 바꾼다. 폭은 그 단위 그대로 돌려준다.
-        [[nodiscard]] text_block_layout wrap_lines(
-            const std::u8string_view text, const text_block_style& style, const float width, const float pixel_size, const float line_height, const text_measurer& measure)
+        //  - 정책은 부르는 쪽이 푼 값이다. 스타일의 칸이 비었을 때 측정은 측정 문맥의 스타일, 그리기는 그리기 문맥의 정책이다.
+        [[nodiscard]] text_block_layout wrap_lines(const std::u8string_view text, const text_block_style& style, const text::line_break_policy policy, const float width, const float pixel_size
+            , const float line_height, const text_measurer& measure)
         {
             text_block_layout result {};
             // 여러 줄 칸과 같은 배치다 — UAX #14의 후보에서 바꾸고, 후보가 없는 긴 낱말은 글자소 경계에서 바꾼다.
@@ -78,7 +79,7 @@ namespace luil {
                 .width = width,
                 .wrap = true,
                 .line_height = line_height,
-                .line_break = style.line_break,
+                .line_break = policy,
             };
             const text_layout layout { make_text_layout(std::move(request), measure) };
             const std::span<const text_layout_line> lines { layout.lines() };
@@ -250,7 +251,7 @@ namespace luil {
         const float pixel_size { scaled_font_size(style.font.size, scale) };
         const float line_height { text_block_line_height(style) };
         const text_measurer measure { layout_measurer(context, style.font) };
-        text_block_layout result { style.wrap ? wrap_lines(text, style, width * scale, pixel_size, line_height * scale, measure) : single_line(text, width * scale, pixel_size, measure) };
+        text_block_layout result { style.wrap ? wrap_lines(text, style, context.line_break_for(style.line_break), width * scale, pixel_size, line_height * scale, measure) : single_line(text, width * scale, pixel_size, measure) };
         // 줄였으면 받은 폭 그대로다 — 나눗셈 잔차로 받은 폭과 어긋나지 않게 한다.
         result.width = result.truncated ? width : result.width / scale;
         result.height = static_cast<float>(result.lines.size()) * line_height;
@@ -266,7 +267,8 @@ namespace luil {
         if (style.wrap)
         {
             const float scale { positive_scale(context.scale) };
-            layout = wrap_lines(text, style, std::max(1.0f, box.width), font.getSize(), text_block_line_height(style) * scale, font_measurer(font));
+            // 배치한 줄이 없어 그리기에서 접는 유일한 길이다. 칸이 비면 그리기 문맥의 정책이다.
+            layout = wrap_lines(text, style, style.line_break.value_or(context.wrap_policy), std::max(1.0f, box.width), font.getSize(), text_block_line_height(style) * scale, font_measurer(font));
         }
         else
         {

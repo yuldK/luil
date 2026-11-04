@@ -2,9 +2,11 @@
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element_id.h"
+#include "luil/ui/ui_image.h"
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -62,6 +64,20 @@ namespace luil {
         [[nodiscard]] bool operator==(const pointer_over&) const noexcept = default;
     };
 
+    // 펜 하나의 표본 값이다 (ink-input-design.md). 펜이 낸 이동·누름·뗌만 싣는다.
+    //  - pressure는 0~1이다. 장치가 알리지 않으면(Win32 `PEN_MASK_PRESSURE`가 없다) 비어 있다. 펜 hover의 압력은 0이다.
+    //  - 기울기는 도(-90~90)이고 W3C Pointer Events의 tiltX·tiltY와 같다. 오른쪽·사용자 쪽으로 눕힌 것이 양수다.
+    //  - eraser는 지우개 끝이다. hover에도 실린다. 접촉이면 일반 컨트롤은 실행하지 않는다 (잉크 캔버스만 받는다).
+    struct pen_sample
+    {
+        std::optional<float> pressure {};
+        float tilt_x { 0.0f };
+        float tilt_y { 0.0f };
+        bool eraser { false };
+
+        [[nodiscard]] bool operator==(const pen_sample&) const noexcept = default;
+    };
+
     // Win32 메시지의 최소 복사다.
     // `HWND`와 lparam 원문은 담지 않는다.
     // time은 UI thread가 기록하며 더블 클릭·tooltip·길게 누르기 판정의 기준이다.
@@ -96,6 +112,8 @@ namespace luil {
         std::optional<pointer_over> over {};
         // 커스텀 툴팁의 논리 좌표와 표면 좌표를 잇는 배율이다.
         float scale { 1.0f };
+        // 펜의 표본 값이다 (`pen_sample`). 마우스·터치는 비어 있다. 앞 필드만 채운 기존 초기화가 그대로 펜 값 없음이다.
+        std::optional<pen_sample> pen {};
     };
 
     struct pointer_pressed_event
@@ -117,6 +135,13 @@ namespace luil {
         //  - 뒤에 두는 까닭은 장치 정보와 같다 — 앞 필드만 채운 기존 초기화가 그대로 "수식 키 없음"이다.
         bool control { false };
         bool alt { false };
+        // 펜의 표본 값이다 (`pen_sample`). 마우스·터치는 비어 있다.
+        std::optional<pen_sample> pen {};
+        // 이 누름이 popup을 닫았다 (표면이 popup 밖 누름으로 닫자는 메시지를 냈다, menu-focus-fixes-design.md의 X-4).
+        //  - 표면은 닫자는 메시지를 앱에 먼저 내고 누름을 입력 thread에 넣는다. 앱이 닫힌 frame을 먼저 게시하면 controller가
+        //    누름을 받을 때 여는 요소는 이미 접혀 있다. 이 표식이 있으면 controller가 직전 tree에서 그 요소가 펼쳐 있었는지 본다.
+        //  - 끝에 두는 까닭은 `pen`과 같다. 앞 필드만 채운 기존 초기화가 그대로 "닫지 않았다"다.
+        bool closed_popup { false };
     };
 
     struct pointer_released_event
@@ -143,6 +168,8 @@ namespace luil {
         //  - 받는 대상 없이 끝난 끌기를 앱이 놓은 자리에 새 창으로 세울 때 쓴다 (`drag_source::on_unclaimed_drop`).
         std::optional<screen_point> screen {};
         std::optional<pointer_over> over {};
+        // 펜의 표본 값이다 (`pen_sample`). 마우스·터치는 비어 있다.
+        std::optional<pen_sample> pen {};
     };
 
     // 터치·펜 접촉이 정상적인 뗌 없이 끝났다 (캡처 상실·OS 취소·접촉 중 버튼 전환).
@@ -154,6 +181,9 @@ namespace luil {
         std::uint32_t pointer_id { 0 };
         std::u8string surface {};
         std::chrono::steady_clock::time_point time {};
+        // 접촉 중 배럴 버튼이 바뀌어 거둔 취소다. 바로 뒤에 같은 포인터의 새 누름이 온다.
+        //  - 잉크 캔버스는 이 취소를 그리던 획의 끝(`interrupted`)으로 받고, 시스템 취소(손바닥 판정·캡처 상실)는 버린다.
+        bool button_switch { false };
     };
 
     // 포인터가 이 표면의 창을 벗어났다.
@@ -353,6 +383,12 @@ namespace luil {
         numpad_multiply,
         numpad_divide,
         numpad_decimal,
+        // Alt를 눌렀다 다른 키 없이 뗐다 (docs/menu-bar-design.md). 메뉴 막대를 세우는 키다.
+        //  - "수정자 키 자체는 키가 아니다" 규약의 예외 하나다. 막대가 있는 창만 보내고(`alt == false`인 누름 하나),
+        //    그 밖의 창의 Alt는 지금처럼 키가 아니다.
+        //  - 가상 키가 없고 라벨도 없다. 단축키로 적거나 잡을 수 없다 (`shortcut_label`이 빈 글이다).
+        //  - Android는 Alt 뗌을 보지 않아 보내지 않는다.
+        alt_tap,
         first_platform_key = 0x1000,
     };
 
@@ -652,12 +688,88 @@ namespace luil {
         //  - `owned`만으로는 잘라 둔 파일이 남았는지 모른다. 같은 앱이 글을 복사하거나 클립보드를 비워도 임자는 이
         //    앱이다. 잘라 둔 표시는 `owned && has_files`이고 번호가 자기가 넣은 뒤의 것일 때만 남긴다.
         bool has_files { false };
+        // 지금 클립보드에 그림이 있는가 (Win32 등록 형식 "PNG"나 `CF_DIB`, image-clipboard-design.md).
+        //  - `CF_BITMAP`만 넣은 앱도 OS가 `CF_DIB`를 지어 주므로 참이다. "그림 붙여넣기" 단추를 켜고 끄는 근거다.
+        bool has_image { false };
 
         [[nodiscard]] bool operator==(const clipboard_change&) const noexcept = default;
     };
 
+    // 클립보드에서 읽은 그림 바이트의 꼴이다 (`clipboard_data::image_format`).
+    enum class clipboard_image_format
+    {
+        // 그림이 없다.
+        none,
+        // 그림 파일 바이트다 (Win32 "PNG", Android의 image/* 내용). `decode_image_bytes`가 푼다.
+        encoded,
+        // Windows DIB다 (`CF_DIBV5`·`CF_DIB`, 파일 머리 없음). `decode_clipboard_image`가 코덱 없이 옮긴다.
+        dib,
+    };
+
+    // 글과 그림을 **한 클립에** 넣는다 (image-clipboard-design.md). 하나씩 넣으면 뒤의 것이 앞의 것을 지운다.
+    // 실제 클립보드 접근은 UI thread의 몫이다 — logic thread에서 `app_host::post_clipboard_request`로 넣는다.
+    //  - 빈 칸의 형식은 넣지 않고, 모두 비면 아무 일도 없다. 넣은 결과는 돌아오지 않는다 (글·파일 복사와 같다).
+    //  - Win32는 "PNG", `CF_DIBV5`, "HTML Format", `CF_UNICODETEXT` 순으로 넣고, 하나라도 실패하면 넣은 것도 거둔다.
+    //  - 그림을 넣지 못하는 플랫폼(Android)은 글과 HTML 칸만 넣는다 (`ui_platform_capabilities::clipboard_image_copy`).
+    struct clipboard_data_copy_request
+    {
+        std::u8string text {};
+        // 그림이다. Win32는 `CF_DIBV5`(곱하지 않은 알파, 아래에서 위로)로 넣는다. 비면 그림 형식이 없다.
+        ui_image image {};
+        // 앱이 미리 지은 PNG(`encode_png`)다. `image`가 있을 때만 Win32 "PNG" 형식으로 그대로 넣는다.
+        //  - 창 계층은 인코더를 링크하지 않는다. PNG를 원하는 앱만 logic thread에서 짓는다.
+        //  - 앞 8바이트가 PNG 서명이 아니면 버린다.
+        std::vector<std::uint8_t> png {};
+        // 조각 HTML(UTF-8, 문서 머리 없음)이다 (`rich_text_to_html`, docs/rich-edit-exchange-design.md). 비면 HTML 형식을 넣지 않는다.
+        //  - Win32는 "HTML Format"(CF_HTML 머리를 붙인 블록), Android는 `ClipData.newHtmlText`로 글과 한 항목에 넣는다.
+        std::u8string html {};
+
+        // 그림은 같은 값(같은 backing)인가로 견준다.
+        [[nodiscard]] bool operator==(const clipboard_data_copy_request& other) const noexcept;
+    };
+
+    // 클립보드의 글과 그림을 함께 읽어 앱 메시지로 돌려 달라는 요청이다.
+    // UI thread가 한 번 열어 읽고 `app_delegate::make_clipboard_data_message`로 지은 메시지를 app inbox에 넣는다.
+    struct clipboard_data_paste_request
+    {
+        // 요청을 가르는 앱 정의 표식이다. 답에 그대로 실린다.
+        std::uint32_t tag { 0 };
+
+        [[nodiscard]] bool operator==(const clipboard_data_paste_request&) const noexcept = default;
+    };
+
+    // `clipboard_data_paste_request`의 답이다. 그림은 풀지 않은 바이트로 온다 (`decode_clipboard_image`가 logic thread에서 푼다).
+    // 그림이 없어도, 읽지 못해도 답은 온다.
+    struct clipboard_data
+    {
+        // 줄바꿈과 탭을 지킨다. 없으면 비었다. 텍스트 칸 붙여넣기와 달리 파일 경로로 대신하지 않는다.
+        std::u8string text {};
+        clipboard_image_format image_format { clipboard_image_format::none };
+        // 앱 메시지로 옮겨도 복사되지 않게 공유한다. `image_too_large`면 비었다.
+        std::shared_ptr<const std::vector<std::uint8_t>> image {};
+        // 그림은 있으나 `max_clipboard_image_bytes`(256 MiB)를 넘어 복사하지 않았다.
+        bool image_too_large { false };
+        // 요청의 표식이다.
+        std::uint32_t tag { 0 };
+        // 읽은 순간의 클립보드 번호다 (Win32 `GetClipboardSequenceNumber`). Android는 0이다.
+        std::uint32_t sequence { 0 };
+        // 클립의 HTML 조각이다 (Win32 "HTML Format"의 조각, Android 항목의 `getHtmlText`). 비면 없었거나 읽지 못했다.
+        //  - 거르지 않은 남의 HTML이다. 서식으로 읽을 때는 `rich_text_from_html`이 거른다.
+        std::u8string html {};
+
+        [[nodiscard]] bool operator==(const clipboard_data&) const noexcept = default;
+    };
+
+    inline bool clipboard_data_copy_request::operator==(const clipboard_data_copy_request& other) const noexcept
+    {
+        return text == other.text && image.backing() == other.image.backing() && image.width() == other.image.width() && image.height() == other.image.height() && png == other.png
+            && html == other.html;
+    }
+
     // UI thread만 다룰 수 있는 클립보드 요청이다.
-    using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_request, clipboard_files_copy_request, clipboard_files_paste_request>;
+    //  - 여러 형식 요청(`clipboard_data_*`)은 `input_action`에 없다. 그림은 앱 상태라 logic thread가 쥐고 넣는다.
+    using clipboard_request = std::variant<clipboard_copy_request, clipboard_paste_request, clipboard_files_copy_request, clipboard_files_paste_request,
+        clipboard_data_copy_request, clipboard_data_paste_request>;
 
     // 지금 화면을 파일로 남긴다 (무손실 WebP).
     //

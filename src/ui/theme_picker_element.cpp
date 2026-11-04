@@ -3,6 +3,7 @@
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/text_block.h"
+#include "ui/default_text.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -68,7 +69,7 @@ namespace luil {
                 : ui_element { ui_element_id { ui_element_kind::choice, config.owner + u8"/" + std::u8string { accent.id } } }
                 , color_ { accent.swatch }
                 , selected_ { accent.id == config.selected }
-                , name_ { accent.label }
+                , name_ { accent_label(accent) }
             {
                 set_tooltip(name_);
                 set_search_label(name_);
@@ -231,6 +232,15 @@ namespace luil {
         : ui_element { ui_element_id { ui_element_kind::choice_group, config.owner } }
         , config_ { std::move(config) }
     {
+        // 공개 헤더는 기본 문구를 두지 않는다. 앱이 비워 둔 칸은 여기서 채운다.
+        if (config_.name.empty())
+            config_.name = default_text::theme_picker_name();
+        for (std::size_t index = 0; index < preferences.size(); ++index)
+        {
+            if (config_.labels[index].empty())
+                config_.labels[index] = default_text::theme_picker_label(preferences[index]);
+        }
+
         set_focus_group(focus_axis::horizontal);
         set_focus_entry(card_id(config_, config_.selected));
         for (std::size_t index = 0; index < preferences.size(); ++index)
@@ -276,6 +286,8 @@ namespace luil {
         : ui_element { ui_element_id { ui_element_kind::choice_group, config.owner } }
         , config_ { std::move(config) }
     {
+        if (config_.name.empty())
+            config_.name = default_text::accent_picker_name();
         set_focus_group(focus_axis::horizontal);
         set_focus_entry({ ui_element_kind::choice, config_.owner + u8"/" + config_.selected });
         if (config_.include_system)

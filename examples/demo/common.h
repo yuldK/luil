@@ -42,10 +42,8 @@ namespace demo {
     // 남은 상수를 당겨 메우지 않는다 — 무관한 줄이 전부 바뀌고, 번호는 이름의 일부가 아니다.
     constexpr luil::ui_element_kind kind_list_panel { luil::application_element_kind(6) };
     constexpr luil::ui_element_kind kind_dialog_open { luil::application_element_kind(10) };
-    // modal scrim은 예약 kind인 modal_host_element가 만든다.
-    constexpr luil::ui_element_kind kind_dialog { luil::application_element_kind(12) };
-    constexpr luil::ui_element_kind kind_dialog_cancel { luil::application_element_kind(13) };
-    constexpr luil::ui_element_kind kind_dialog_confirm { luil::application_element_kind(14) };
+    // 확인 대화 상자의 scrim·내용·단추는 라이브러리 kind(modal_host·message_box·message_box_button)가 짓는다.
+    // 11~14는 옛 손조립 대화의 자리였다. 당겨 메우지 않는다.
     constexpr luil::ui_element_kind kind_theme { luil::application_element_kind(15) };
     constexpr luil::ui_element_kind kind_accent { luil::application_element_kind(16) };
     // 배치만 하는 컨테이너들이다. 상호작용이 없어 owner로만 구분한다.
@@ -86,6 +84,14 @@ namespace demo {
     constexpr luil::ui_element_kind kind_code_input { luil::application_element_kind(63) };
     // 줄 나눔 정책을 시연하는 여러 줄 칸이다 (line_break_sample.h).
     constexpr luil::ui_element_kind kind_line_break_input { luil::application_element_kind(64) };
+    // 기본 페이지의 둘째 확인 대화(긴 본문·단추 셋·확인 칸)를 여는 단추다.
+    constexpr luil::ui_element_kind kind_dialog_details_open { luil::application_element_kind(65) };
+    // 테마 페이지의 스타일 JSON 칸이다 (`parse_ui_style`, style-sheet-design.md).
+    // 갤러리와 popups 페이지의 색 고르기 16진 칸이다 (`color_picker_hex::id`). 편집 메시지가 대상으로만 갈려 페이지마다 하나다.
+    constexpr luil::ui_element_kind kind_gallery_color_hex_input { luil::application_element_kind(67) };
+    constexpr luil::ui_element_kind kind_popups_color_hex_input { luil::application_element_kind(68) };
+    // 서식 있는 글 페이지의 서식 칸이다 (`rich_text_sample.h`).
+    constexpr luil::ui_element_kind kind_rich_editor_input { luil::application_element_kind(69) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
@@ -111,6 +117,9 @@ namespace demo {
     constexpr luil::text_input_target target_link_view { static_cast<luil::text_input_target>(13) };
     constexpr luil::text_input_target target_code { static_cast<luil::text_input_target>(14) };
     constexpr luil::text_input_target target_line_break { static_cast<luil::text_input_target>(15) };
+    constexpr luil::text_input_target target_gallery_color_hex { static_cast<luil::text_input_target>(17) };
+    constexpr luil::text_input_target target_popups_color_hex { static_cast<luil::text_input_target>(18) };
+    constexpr luil::text_input_target target_rich_editor { static_cast<luil::text_input_target>(19) };
 
     // --- 페이지 키 ---
     // 사이드바 내비게이션과 셸의 페이지 전환이 쓴다.
@@ -127,8 +136,11 @@ namespace demo {
     inline constexpr std::u8string_view page_network { u8"network" };
     inline constexpr std::u8string_view page_webview { u8"webview" };
     inline constexpr std::u8string_view page_zoom { u8"zoom" };
+    inline constexpr std::u8string_view page_ink { u8"ink" };
+    inline constexpr std::u8string_view page_inspector { u8"inspector" };
     inline constexpr std::u8string_view page_theme { u8"theme" };
     inline constexpr std::u8string_view page_workbench { u8"workbench" };
+    inline constexpr std::u8string_view page_rich_text { u8"rich-text" };
 
     // --- 셸 수준 메시지 ---
     struct close_intent
@@ -229,10 +241,12 @@ namespace demo {
         void add(std::unique_ptr<luil::ui_element> element, float height);
         void add(std::unique_ptr<luil::ui_element> element, luil::stack_item item);
         void gap(float height = 12.0f);
+        // 첫 제목은 흘림 영역의 이름도 된다 (`finish`).
         void heading(std::u8string title, std::u8string description);
         // 카드를 연다. 제목이 비어 있지 않으면 첫 줄에 둔다.
         void begin_card(std::u8string title, std::u8string description = {});
         void end_card();
+        // 흘림 영역으로 감싸 낸다. 영역과 막대는 첫 제목으로 읽힌다. 이름이 없으면 보조 기술에서 막대가 무엇을 흘리는지 모른다.
         [[nodiscard]] std::unique_ptr<luil::ui_element> finish(float offset, std::function<luil::input_action(float)> scroll);
 
     private:
@@ -243,6 +257,8 @@ namespace demo {
         std::unique_ptr<luil::stack_element> column_ {};
         float height_ { 0.0f };
         int heading_ { 0 };
+        // 첫 제목이다. 비어 있으면 영역에 이름을 주지 않는다.
+        std::u8string first_heading_ {};
         std::unique_ptr<luil::stack_element> card_ {};
         float card_height_ { 0.0f };
         int cards_ { 0 };

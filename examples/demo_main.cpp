@@ -10,7 +10,7 @@
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
 //  - 토스트: 심각도별 알림, 실행 취소 토스트, 정보 막대      (demo/toasts_page)
 //  - 메뉴·팝업: 드롭다운·컨텍스트 메뉴·분할 버튼 (popup 창) (demo/popups_page)
-//  - 창: 보조 top-level 창(도구 창) 여닫기, 전체 화면 전환, 작업 표시줄 진행률·오버레이 (demo/windows_page)
+//  - 창: 보조 top-level 창(도구 창) 여닫기, 전체 화면 전환, 작업 표시줄 진행률·오버레이, 둘째 인스턴스가 넘긴 인자 (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
@@ -21,24 +21,35 @@
 // 인자: --renderer=auto|cpu|direct3d, --smoke-test, --simulate-direct3d-failure,
 //       --simulate-direct3d-loss-after-frames=N (N frame을 그린 뒤 Direct3D를 잃는다 —
 //                       생성 시점 실패와 달리 **제시에 붙은 창을 놓고** CPU로 물러선다)
-//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|theme|workbench
+//       --page=basics|lists|files|tabs|groups|toasts|popups|windows|images|network|webview|zoom|ink|inspector|theme|workbench|rich-text
 //                      (열고 시작할 페이지 — 눈으로 확인할 때 사이드바를 누르지 않아도 된다)
 //       --position=x,y (창이 뜰 화면 자리 — 물리 픽셀, 가상 화면 좌표라 음수도 된다.
 //                       지난 실행이 저장한 배치보다 세다)
 //       --presentation=standard|layered (주 창의 표시 방식 — layered는 CPU 렌더러로 배치와 frame을 한 합성에 낸다)
 //       --caption=top|bottom (주 창 캡션의 처음 자리 — 창 페이지의 전환과 같다)
 //       --backdrop=none|mica|mica_alt|acrylic (주 창 배경 효과의 처음 값 — 테마 페이지의 고르기와 같다)
+//       --page-transition=none|slide|fade|zoom|spring (페이지를 바꿀 때의 전환 — 보기 메뉴의 "페이지 전환"과 같다. 기본은 slide)
+//       --page-transition-ms=N (전환의 길이 — 스프링이면 response다. UIA가 도는 중을 읽도록 길게 잡는다)
+//       --send-to-first (둘째 실행이 창을 띄우지 않고, 이 플래그를 뺀 나머지 인자와 작업 폴더를 먼저 뜬 데모에 보내고 끝낸다.
+//                       종료 코드는 받았으면 0, 먼저 뜬 데모가 없으면 3, 그 밖의 실패는 4다. 받은 인자는 창 페이지의 "둘째 인스턴스 인자" 줄에 보인다)
+//       --unregister-app-identity (창을 띄우지 않고 데모의 앱 식별 `luil.Demo`의 HKCU 항목을 지우고 끝낸다. 지웠으면 0, 없으면 3, 실패는 4다)
+//  - 데모는 시작할 때마다 앱 식별 `luil.Demo`를 HKCU에 쓴다 (토스트 페이지의 OS 알림 구역, os-notification-design.md).
+//    꺼진 데모의 알림을 누르면 COM이 `-luil-notification`(과 `-Embedding`)을 붙여 데모를 띄운다. 그 표식은 인자 읽기에서 거른다.
 
 #include "demo/basics_page.h"
 #include "demo/common.h"
 #include "demo/files_page.h"
 #include "demo/gallery_page.h"
 #include "demo/groups_page.h"
+#include "demo/ink_page.h"
 #include "demo/images_page.h"
+#include "demo/inspector_page.h"
 #include "demo/lists_page.h"
 #include "demo/network_page.h"
 #include "demo/palette.h"
 #include "demo/popups_page.h"
+#include "demo/readonly_undo_keys.h"
+#include "demo/shell_menu.h"
 #include "demo/tabs_page.h"
 #include "demo/text_targets.h"
 #include "demo/theme_page.h"
@@ -47,14 +58,19 @@
 #include "demo/windows_page.h"
 #include "demo/workbench_page.h"
 #include "demo/zoom_page.h"
+#include "demo/rich_text_page.h"
 
+#include "luil/app/notification.h"
 #include "luil/app/platform_services.h"
 #include "luil/net/http_client.h"
+#include "luil/text/string_table.h"
+#include "luil/ui/image_decode.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/command_palette.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/list_element.h"
+#include "luil/ui/page_transition_element.h"
 #include "luil/ui/sidebar_element.h"
 #include "luil/ui/spring.h"
 #include "luil/ui/stack_element.h"
@@ -78,17 +94,85 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
 
+
 namespace demo {
     namespace {
         // 사이드바의 처음 폭과 접힌 폭이다 (논리 픽셀).
         constexpr float sidebar_default_width { 200.0f };
         constexpr float sidebar_collapsed_width { 44.0f };
+
+        // 사이드바 목록의 페이지와 그 순서다. 페이지 전환의 쪽도 이 순서로 정한다 (목록에서 아래 페이지로 가면 forward).
+        struct navigation_page
+        {
+            std::u8string_view key {};
+            std::u8string_view label {};
+        };
+
+        constexpr navigation_page navigation_pages[] {
+            { page_overview, u8"시작 / 기능 색인" },
+            { page_controls, u8"버튼과 컨트롤" },
+            { page_basics, u8"입력과 다이얼로그" },
+            { page_lists, u8"목록" },
+            { page_files, u8"파일" },
+            { page_tabs, u8"탭" },
+            { page_groups, u8"그룹" },
+            { page_toasts, u8"토스트" },
+            { page_popups, u8"메뉴·팝업" },
+            { page_windows, u8"창" },
+            { page_images, u8"이미지" },
+            { page_network, u8"네트워크" },
+            { page_webview, u8"웹뷰" },
+            { page_zoom, u8"확대 보기" },
+            { page_ink, u8"잉크" },
+            { page_inspector, u8"검사기" },
+            { page_theme, u8"모양과 색" },
+            { page_workbench, u8"변경 작업대" },
+            { page_rich_text, u8"서식 있는 글" },
+        };
+
+        [[nodiscard]] std::size_t navigation_index(const std::u8string_view key) noexcept
+        {
+            for (std::size_t index = 0; index < std::size(navigation_pages); ++index)
+                if (navigation_pages[index].key == key)
+                    return index;
+            return 0;
+        }
+
+        // 페이지 전환 label에 쓰는 이름이다. 보기 메뉴의 라디오와 같다. 꺼져 있으면 빈 글이다.
+        [[nodiscard]] std::u8string_view page_transition_name(const std::u8string_view mode) noexcept
+        {
+            if (mode == shell_menu_page_transition_slide)
+                return u8"밀기";
+            if (mode == shell_menu_page_transition_fade)
+                return u8"옅어짐";
+            if (mode == shell_menu_page_transition_zoom)
+                return u8"확대";
+            if (mode == shell_menu_page_transition_spring)
+                return u8"스프링 밀기";
+            return {};
+        }
+
+        // 데모의 앱 식별이다 (`window_config::identity`). `--unregister-app-identity`가 같은 id를 지운다.
+        constexpr std::u8string_view demo_app_identity { u8"luil.Demo" };
+
+        // 실행 파일이 있는 폴더다. 읽지 못하면 빈 경로다.
+        [[nodiscard]] std::filesystem::path executable_directory()
+        {
+            wchar_t buffer[MAX_PATH] {};
+            const DWORD length { GetModuleFileNameW(nullptr, buffer, MAX_PATH) };
+            if (length == 0 || length >= MAX_PATH)
+                return {};
+            return std::filesystem::path { std::wstring { buffer, length } }.parent_path();
+        }
+
+        // 읽지 못하면 빈 경로이고 감시가 서지 않는다.
 
         // --- 창 배치의 저장·복원 ---
         // 라이브러리는 배치를 보고하고(placement_intent) 요청을 적용할 뿐
@@ -105,6 +189,7 @@ namespace demo {
                 return {};
             return std::filesystem::path { buffer } / L"luil-demo" / L"placement.txt";
         }
+
 
         // "x,y,width,height,max,full"을 배치로 읽는다 (십진 정수 여섯, max·full은 0·1).
         // 형식이 다르면 빈 값이다 — 앞부분만 조용히 읽지 않는다
@@ -200,6 +285,13 @@ namespace demo {
             return caption;
         }
 
+        // 시작할 때 UI thread가 읽어 logic thread로 넣는 OS 값이다 (i18n-adoption-design.md). 페이지는 받은 값만 그린다.
+        struct os_locale_intent
+        {
+            std::optional<std::chrono::weekday> first_weekday {};
+            std::vector<std::u8string> languages {};
+        };
+
         // logic thread가 소유하는 앱 상태다.
         // 페이지가 자기 상태·메시지·화면을 맡고, 셸은 내비게이션과 조립만 한다.
         class demo_driver final : public luil::win32::logic_driver
@@ -215,6 +307,13 @@ namespace demo {
                 , page_ { page.empty() ? std::u8string { page_overview } : std::move(page) }
                 , primary_instance_ { primary_instance }
             {
+            }
+
+            // 페이지 전환의 시작 상태다 (`--page-transition=`, `--page-transition-ms=`). `mode`는 보기 메뉴의 라디오 키다.
+            void set_page_transition(std::u8string mode, const std::optional<std::chrono::milliseconds> length)
+            {
+                page_transition_mode_ = std::move(mode);
+                page_transition_length_ = length;
             }
 
             // 창 페이지·테마 페이지의 시작 상태다 (`--caption=bottom`, `--presentation=`, `--backdrop=`).
@@ -267,6 +366,35 @@ namespace demo {
                 live_client_.store(client_.get());
             }
 
+            //  - 시험 키의 비밀 값은 들이지 않는다. 데모는 서명하지 않고 미리 서명한 바이트만 낸다.
+
+            // `받은 파일 지우기`다. 폴더를 통째로 비우고 다시 세운다 (상태 파일의 sequence도 함께 지워진다).
+
+            // OS 알림 단추 하나를 OS에 옮기고 답과 지금 상태를 토스트 페이지에 넘긴다. logic thread에서 돈다.
+            //  - 보내기와 바꾸기는 같은 id라 바꾸기가 알림 센터의 그 알림을 바꾼다. 보내기만 그림을 싣는다.
+            void run_os_notification(const os_notification_action action)
+            {
+                luil::platform_result result {};
+                if (action == os_notification_action::close)
+                    result = luil::close_notification(os_notification_id);
+                else
+                {
+                    luil::notification value {};
+                    value.id = std::u8string { os_notification_id };
+                    value.title = u8"luil 데모";
+                    value.body = action == os_notification_action::send ? u8"알림 센터에 올린 알림입니다. 누르면 데모가 앞으로 옵니다." : u8"같은 id로 바꾼 알림입니다. 소리 없이 올렸습니다.";
+                    value.silent = action == os_notification_action::replace;
+                    if (action == os_notification_action::send)
+                    {
+                        luil::image_decode_error error {};
+                        value.image = luil::load_image_file((executable_directory() / L"assets" / L"gradient.png").u8string(), error);
+                    }
+                    result = luil::show_notification(value);
+                }
+                static_cast<void>(toasts_.handle(luil::app_message { os_notification_result_intent { std::move(result) } }));
+                static_cast<void>(toasts_.handle(luil::app_message { os_notification_status_intent { luil::notification_status() } }));
+            }
+
             void handle(luil::app_message message) override
             {
                 // 네트워크 메시지는 셸이 먼저 받는다 — client를 든 것이 셸이고
@@ -279,6 +407,12 @@ namespace demo {
                 if (message.get<network_cancel_intent>() != nullptr)
                 {
                     cancel_network_request();
+                    return;
+                }
+                // OS 알림은 셸이 부른다. 토스트 페이지는 답과 지금 상태만 받아 그린다.
+                if (const auto* const request { message.get<os_notification_request_intent>() }; request != nullptr)
+                {
+                    run_os_notification(request->action);
                     return;
                 }
                 if (const auto* const beat { message.get<network_heartbeat_intent>() }; beat != nullptr)
@@ -374,11 +508,23 @@ namespace demo {
                     // 도는 중에 움직임 줄이기가 켜지면 끝 폭에 붙인다. 두면 남은 시간만큼 더 돌고 끝난다.
                     if (metrics->reduce_motion && metrics_.reduce_motion == false)
                         sidebar_motion_ = luil::spring_at_rest(target_sidebar_width());
+                    // 페이지 전환은 움직임 줄이기가 켜지거나 창 크기·배율이 바뀌면 놓는다. 요소도 옛 크기 그림을 그리지 않지만
+                    // 놓아야 덮개가 곧 걷혀 포인터가 풀린다 (page-transition-design.md 결정 5).
+                    if ((metrics->reduce_motion && metrics_.reduce_motion == false) || metrics->width != metrics_.width || metrics->height != metrics_.height
+                        || metrics->scale != metrics_.scale)
+                        page_motion_ = {};
                     metrics_ = *metrics;
                     return;
                 }
                 if (const auto* const navigate { message.get<navigate_intent>() }; navigate != nullptr)
                 {
+                    // 떠나는 화면은 `page_`가 아직 옛 값일 때 짓는다. 도는 중에 또 바뀌면 들어오던 화면을 다시 지어 새 전환이다.
+                    //  - 안내 풍선은 대상 가지가 있는 페이지에만 선다. 떠나는 화면을 짓기 전에 닫아 그 화면의 상태 줄도 닫힘을 그린다.
+                    if (navigate->page != page_)
+                    {
+                        toasts_.close_tip();
+                        page_motion_ = make_page_motion(navigate->page);
+                    }
                     page_ = navigate->page;
                     // 페이지를 떠나면 그 페이지의 popup도 닫는다.
                     tabs_.close_popups();
@@ -443,8 +589,10 @@ namespace demo {
                 // 초점 요청의 결과는 셸이 토스트로 알린다. 덮어쓴 요청은 새 요청이 이어받아 말하지 않는다.
                 if (const auto* const focus_report { message.get<tool_focus_report_intent>() }; focus_report != nullptr)
                 {
-                    // 팔레트의 초점 요청은 알리지 않는다 — 열면 곧바로 칸에 초점이 서는 것이 보인다.
-                    if (focus_report->id == palette_focus_id_)
+                    // 팔레트와 색 칸 popup, 안내 풍선의 초점 요청은 알리지 않는다 — 열면 곧바로 칸·판·단추에 초점이 서는 것이 보인다.
+                    // 도구 창 페이지의 주 창 활성화(트레이 `창 보이기`, 단축키 `창 앞으로`)도 메모 칸으로 옮긴 것이 아니라 알리지 않는다.
+                    if (focus_report->id == palette_focus_id_ || focus_report->id == popups_focus_id_ || focus_report->id == toasts_focus_id_
+                        || focus_report->id == main_focus_id_)
                         return;
                     if (focus_report->outcome == luil::focus_request_outcome::fulfilled)
                         static_cast<void>(toasts_.handle(luil::app_message { toast_request_intent { u8"도구 창 메모 칸으로 초점을 옮겼습니다.", luil::toast_severity::success } }));
@@ -470,16 +618,88 @@ namespace demo {
                         handle(luil::app_message { navigate_intent { run->id.substr(5) } });
                     else if (run->id == u8"view.sidebar")
                         handle(luil::app_message { sidebar_toggle_intent {} });
+                    else if (run->id == luil::undo_command_id && page_ == page_workbench)
+                        static_cast<void>(workbench_.handle(luil::app_message { workbench_undo_intent {} }));
+                    else if (run->id == luil::redo_command_id && page_ == page_workbench)
+                        static_cast<void>(workbench_.handle(luil::app_message { workbench_redo_intent {} }));
                     return;
                 }
                 if (palette_.handle(message))
                     return;
 
+                // 메뉴 막대다. 막대가 고른 셸 명령(사이드바·테마)은 단축키·팔레트와 같은 메시지로 잇는다.
+                if (shell_menu_.handle(message))
+                {
+                    if (const std::optional<std::u8string> command { shell_menu_.take_command() }; command.has_value())
+                    {
+                        if (*command == shell_menu_sidebar)
+                            handle(luil::app_message { sidebar_toggle_intent {} });
+                        else if (*command == shell_menu_theme_light)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::light } }));
+                        else if (*command == shell_menu_theme_system)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::system } }));
+                        else if (*command == shell_menu_theme_dark)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::dark } }));
+                        else if (command->starts_with(shell_menu_page_transition_prefix))
+                        {
+                            page_transition_mode_ = *command;
+                            page_motion_ = {};
+                        }
+                    }
+                    return;
+                }
+
+                // 그림 클립보드다 (image-clipboard-design.md). 클립보드는 UI thread의 몫이라 요청은 host에 넣고, 그림과 PNG는
+                // 앱 상태라 여기(logic thread)서 짓는다. 페이지는 host를 모른다.
+                if (message.get<image_clipboard_copy_intent>() != nullptr)
+                {
+                    if (luil::app_host* const host { host_.load() }; host != nullptr)
+                        if (std::optional<luil::clipboard_data_copy_request> request { images_.make_copy_request() }; request.has_value())
+                            host->post_clipboard_request(std::move(*request));
+                    return;
+                }
+                if (message.get<image_clipboard_paste_intent>() != nullptr)
+                {
+                    if (luil::app_host* const host { host_.load() }; host != nullptr)
+                        host->post_clipboard_request(luil::clipboard_data_paste_request {});
+                    return;
+                }
+                // 클립보드 변화는 파일 페이지가 임자다. 이미지 페이지는 그림이 있는지만 함께 본다.
+                if (const auto* const changed { message.get<files_clipboard_changed_intent>() }; changed != nullptr)
+                    images_.set_clipboard_has_image(changed->change.has_image);
+
+                // 서식 있는 글 페이지다 (rich-edit-exchange-design.md). 복사·붙여넣기는 페이지가 클립보드 요청을 지어 쥐고, 셸이
+                // 여기(logic thread)서 가져가 host에 넣는다. 편집 메시지는 target이 다르면 거짓이라 다음 페이지가 받는다.
+                if (rich_text_.handle(message))
+                {
+                    if (std::optional<luil::clipboard_request> request { rich_text_.take_clipboard_request() }; request.has_value())
+                        if (luil::app_host* const host { host_.load() }; host != nullptr)
+                            host->post_clipboard_request(std::move(*request));
+                    return;
+                }
+
+                // OS 값은 페이지가 직접 읽지 않는다. 페이지는 core test에 함께 컴파일되어 플랫폼 함수를 부르면 링크가 깨진다.
+                if (const auto* const locale { message.get<os_locale_intent>() }; locale != nullptr)
+                {
+                    system_languages_ = locale->languages;
+                    static_cast<void>(popups_.handle(luil::app_message { date_os_first_day_intent { locale->first_weekday } }));
+                    return;
+                }
+
+                // 갤러리의 언어 고르기를 라이브러리 언어에 잇는다. 페이지와 그 test는 전역 언어를 건드리지 않는다.
+                //  - 시작할 때는 부르지 않는다. 기본 문구는 앱이 정할 때까지 한국어다.
+                if (const auto* const choice { message.get<gallery_choice_intent>() }; choice != nullptr && choice->group == u8"language")
+                    apply_text_language(choice->value);
+                if (message.get<gallery_reset_intent>() != nullptr)
+                    apply_text_language(u8"system");
+
+                // 테마 페이지 파일 감시 묶음의 단추다. 쓰기만 하고 화면은 감시를 거쳐서만 바뀐다. 실패는 감시로 오지 않아 페이지에 알린다.
+
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
                     || toasts_.handle(message) || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message)
-                    || zoom_.handle(message) || theme_.handle(message) || workbench_.handle(message))
+                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message))
                     return;
             }
 
@@ -499,7 +719,9 @@ namespace demo {
             {
                 if (luil::net::http_client* const client { live_client_.load() }; client != nullptr)
                     client->stop();
+                // 되돌이 서버보다 먼저다. 이 줄 뒤로 `report`가 불리지 않는다.
                 files_.stop_watcher();
+                // `deliver`가 쥔 host보다 먼저다. 세운 자리(`bind_host`)와 같이 UI thread라 원자적 손잡이가 필요 없다.
                 if (luil::testing::loopback_http_server* const server { live_server_.load() }; server != nullptr)
                     server->stop();
             }
@@ -516,6 +738,8 @@ namespace demo {
 
                 auto root { std::make_unique<luil::root_element>() };
                 root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+                // 테마 페이지가 읽은 스타일이다 (비면 내장 스타일). 캡션과 본문을 이 스타일로 배치하고 frame에도 같은 포인터를 싣는다.
+                const luil::ui_style* const style { nullptr };
 
                 // 높이는 height_for가 미리 알려 준다 (미리 arrange해 보는 우회가 필요 없다).
                 //
@@ -531,11 +755,15 @@ namespace demo {
                 // 라이브러리는 게시된 tree에서 캡션이 선 자리를 읽어 판정한다 (caption-button-design.md).
                 const bool caption_bottom { windows_.caption_at_bottom() };
                 const float caption_top { caption_bottom ? height - caption_height : 0.0f };
-                const float content_top { caption_bottom ? 0.0f : caption_height };
+                // 메뉴 막대는 caption 아래 별도 줄이다 (caption이 아래면 창 위). 본문을 그만큼 내린다 (docs/menu-bar-design.md).
+                //  - 막대는 앱 내용이라 전체 화면에서도 남는다. caption만 접힌다.
+                const float menu_bar_row { luil::menu_bar_height * scale };
+                const float menu_bar_top { caption_bottom ? 0.0f : caption_height };
+                const float content_top { menu_bar_top + menu_bar_row };
                 if (placement_.fullscreen == false)
                 {
                     auto caption { std::make_unique<luil::caption_element>(caption_config) };
-                    caption->arrange({ { 0.0f, caption_top, width, caption_height }, scale });
+                    caption->arrange({ .slot = { 0.0f, caption_top, width, caption_height }, .scale = scale, .style = style });
                     root->add(std::move(caption));
 
                     // 제목 표시줄 가운데의 명령 찾기 단추다. caption 위에 겹쳐 세우고 client 표시를 달면
@@ -563,15 +791,40 @@ namespace demo {
                 const luil::sidebar_config sidebar_config { make_sidebar_config(frame_time_) };
                 const float sidebar_width { luil::sidebar_element::width_for(sidebar_config) };
                 const float content_width { width / scale - sidebar_width };
-                const float content_height { (height - caption_height) / scale };
+                const float content_height { (height - caption_height - menu_bar_row) / scale };
 
                 luil::stack_config shell_config {};
                 shell_config.direction = luil::stack_direction::row;
                 auto shell { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, shell_config) };
                 shell->add(std::make_unique<luil::sidebar_element>(sidebar_config, sidebar_collapsed_ ? nullptr : make_navigation()), sidebar_width);
-                shell->add_flexible(build_page(content_width, content_height, scale));
-                shell->arrange({ { 0.0f, content_top, width, height - caption_height }, scale });
+                // 페이지는 늘 화면 전환 요소로 감싼다. 떠나는 화면이 없으면 새 화면만 그리는 껍질이다.
+                auto page { std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", page_motion_ }, build_page(content_width, content_height, scale)) };
+                const luil::page_transition_element* const page_slot { page.get() };
+                shell->add_flexible(std::move(page));
+                shell->arrange({ .slot = { 0.0f, content_top, width, height - caption_height - menu_bar_row }, .scale = scale, .style = style });
+                // 다음 이동에서 떠나는 화면을 이 자리와 배율로 짓는다.
+                content_slot_ = page_slot->bounds();
+                content_scale_ = scale;
                 root->add(std::move(shell));
+
+                // 막대와 그 오른쪽 상태 label 둘이다. 막대는 메뉴 popup의 자리를 정하므로 아래에서 다시 읽는다.
+                const luil::menu_bar_element* menu_bar { nullptr };
+                {
+                    constexpr float state_label_width { 150.0f };
+                    constexpr float last_label_width { 220.0f };
+                    constexpr float label_gap { 12.0f };
+                    const float labels_width { (state_label_width + last_label_width + label_gap * 2.0f) * scale };
+                    auto bar { shell_menu_.make_bar() };
+                    bar->arrange({ .slot = { 0.0f, menu_bar_top, std::max(0.0f, width - labels_width), menu_bar_row }, .scale = scale, .style = style });
+                    menu_bar = bar.get();
+                    root->add(std::move(bar));
+                    auto state { shell_menu_.make_state_label() };
+                    state->arrange({ { width - labels_width + label_gap * scale, menu_bar_top, state_label_width * scale, menu_bar_row }, scale });
+                    root->add(std::move(state));
+                    auto last { shell_menu_.make_last_label() };
+                    last->arrange({ { width - (last_label_width + label_gap) * scale, menu_bar_top, last_label_width * scale, menu_bar_row }, scale });
+                    root->add(std::move(last));
+                }
 
                 // 사이드바 접힘 스프링의 상태다. 접힌 동안은 사이드바 내용이 없어서 이 label이 폭을 말한다.
                 {
@@ -584,13 +837,27 @@ namespace demo {
                     auto motion { make_label(luil::ui_element_id { kind_text, u8"sidebar-motion" }, std::move(motion_text), 11.0f, luil::label_color_role::dim) };
                     motion->arrange({ { 6.0f * scale, content_top + (content_height - motion_label_height - 4.0f) * scale, motion_label_width * scale, motion_label_height * scale }, scale });
                     root->add(std::move(motion));
+
+                    // 페이지 전환의 상태다. 도는 동안은 tree를 다시 짓지 않으므로 시작 frame의 "도는 중"이 끝 tick까지 남는다.
+                    constexpr float transition_label_width { 190.0f };
+                    const std::u8string_view name { page_transition_name(page_transition_mode_) };
+                    std::u8string transition_text { u8"페이지 전환: 꺼짐" };
+                    if (name.empty() == false)
+                    {
+                        const bool turning { page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, frame_time_) == false };
+                        transition_text = u8"페이지 전환: " + std::u8string { name } + (turning ? u8" · 도는 중" : u8" · 멈춤");
+                    }
+                    auto transition { make_label(luil::ui_element_id { kind_text, u8"page-transition-state" }, std::move(transition_text), 11.0f, luil::label_color_role::dim) };
+                    transition->arrange({ { 6.0f * scale, content_top + (content_height - motion_label_height * 2.0f - 4.0f) * scale, transition_label_width * scale, motion_label_height * scale }, scale });
+                    root->add(std::move(transition));
                 }
 
                 // 오버레이들: dialog는 화면을 덮고 토스트는 오른쪽 아래에 쌓인다.
                 basics_.add_overlay(*root, width, height, scale);
                 if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
                 {
-                    toasts->arrange({ { 0.0f, 0.0f, width, height }, scale });
+                    // 풍선은 배치 때 글을 잰다. frame에 싣는 스타일과 같은 포인터라야 테마 페이지의 글자 크기에서 잰 줄과 그린 글이 맞는다.
+                    toasts->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .style = style });
                     root->add(std::move(toasts));
                 }
 
@@ -598,6 +865,10 @@ namespace demo {
                 frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
                 frame->appearance = theme_.appearance();
                 frame->backdrop = theme_.backdrop();
+                // 테마 페이지가 실행 중에 읽은 스타일이다. 비어 있으면 내장 스타일이다. 위의 캡션·본문 배치에 준 것과 같은 포인터다 —
+                // 팔레트·그리기 치수는 이쪽에서, 컴포넌트 칸·글 크기는 배치에서 읽어 한쪽만 주면 잰 폭과 그린 글이 어긋난다.
+                // 검사기는 페이지의 상태 하나로 켠다. 어느 페이지를 보든 켠 채 다른 페이지를 들여다볼 수 있다.
+                frame->inspector = inspector_.config();
                 // 코드 글꼴은 이름을 줘야 고정폭이 된다. 비워 두면 내장 UI 글꼴이다 (appearance.h).
                 // 변경 작업대의 차이 보기가 이 글꼴로 열을 맞춘다. Windows에 늘 있는 Consolas다.
                 frame->fonts.code_family = u8"Consolas";
@@ -620,6 +891,10 @@ namespace demo {
                     frame->popups.push_back(std::move(popup));
                 for (luil::win32::ui_popup& popup : theme_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
+                // 메뉴 막대의 메뉴는 이번 frame에 배치한 항목 아래에 선다. 보기 메뉴는 사이드바와 테마의 지금 상태를 그린다.
+                if (menu_bar != nullptr)
+                    for (luil::win32::ui_popup& popup : shell_menu_.make_popups(*menu_bar, scale, { 0.0f, 0.0f, width, height }, sidebar_collapsed_ == false, theme_.appearance().theme, page_transition_mode_))
+                        frame->popups.push_back(std::move(popup));
                 // 도구 창은 페이지의 일부가 아니라 어느 페이지에서든 열려 있다.
                 for (luil::ui_window& window : tabs_.make_windows())
                     frame->windows.push_back(std::move(window));
@@ -638,18 +913,26 @@ namespace demo {
                 for (luil::win32::ui_popup& popup : windows_.make_popups())
                     frame->popups.push_back(std::move(popup));
                 // 명령 팔레트는 어느 페이지에서든 내용 영역 맨 위 가운데에 뜬다 (캡션이 위면 제목 표시줄 바로 아래).
-                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale))
+                for (luil::win32::ui_popup& popup : palette_.make_popups(width / scale, content_top / scale + 8.0f, scale, page_ == page_workbench ? workbench_.undo_state() : luil::undo_command_state { u8"실행 취소", u8"다시 실행", false, false }))
                     frame->popups.push_back(std::move(popup));
                 frame->file_dialog = file_dialog_;
                 // 주 창 작업 표시줄 단추의 진행률과 오버레이다. 독립 창의 것은 그 창(`ui_window::taskbar`)에 실린다.
                 frame->taskbar = windows_.make_taskbar_request();
-                // 초점 요청은 두 곳(도구 창 페이지·명령 팔레트)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
+                // 알림 영역 아이콘과, 그 메뉴로 숨긴 주 창이다. 숨기는 것은 앱 상태라 페이지가 쥔다.
+                frame->tray = windows_.make_tray_request();
+                // 앱이 뒤에 있어도 받는 전역 단축키다. 눌림은 항목의 `pressed`가 앱 메시지로 돌려준다.
+                frame->hotkeys = windows_.make_hotkeys_request();
+                frame->main_hidden = windows_.main_hidden();
+                // 초점 요청은 네 곳(도구 창 페이지·명령 팔레트·색 칸 popup·안내 풍선)이 낸다. 요청은 번호가 바뀔 때만 새것이라, 마지막으로 바뀐
                 // 쪽의 요청을 셸 번호로 다시 매겨 싣는다 — 팔레트를 닫았다고 도구 창의 지난 요청이 되살아나지 않는다.
                 if (const auto request { windows_.make_focus_request() }; request.has_value() && request->id != seen_tool_focus_)
                 {
                     seen_tool_focus_ = request->id;
                     focus_ = *request;
                     focus_->id = ++focus_revision_;
+                    // target이 없으면 주 창만 활성화하는 요청이다. 그 결과는 메모 칸 토스트로 알리지 않는다.
+                    if (request->target == luil::ui_element_id {})
+                        main_focus_id_ = focus_->id;
                 }
                 if (const auto request { palette_.make_focus_request() }; request.has_value() && request->id != seen_palette_focus_)
                 {
@@ -657,6 +940,21 @@ namespace demo {
                     focus_ = *request;
                     focus_->id = ++focus_revision_;
                     palette_focus_id_ = focus_->id;
+                }
+                if (const auto request { popups_.make_focus_request() }; request.has_value() && request->id != seen_popups_focus_)
+                {
+                    seen_popups_focus_ = request->id;
+                    focus_ = *request;
+                    focus_->id = ++focus_revision_;
+                    popups_focus_id_ = focus_->id;
+                }
+                // 비modal 안내 풍선은 가둠이 없어 열 때와 닫을 때 페이지가 초점을 옮겨 달라고 한다.
+                if (const auto request { toasts_.make_focus_request() }; request.has_value() && request->id != seen_toasts_focus_)
+                {
+                    seen_toasts_focus_ = request->id;
+                    focus_ = *request;
+                    focus_->id = ++focus_revision_;
+                    toasts_focus_id_ = focus_->id;
                 }
                 frame->focus = focus_;
                 frame->focus_report = [](const std::uint64_t id, const luil::focus_request_outcome outcome) { return luil::app_message { tool_focus_report_intent { id, outcome } }; };
@@ -681,7 +979,9 @@ namespace demo {
                 std::optional<std::chrono::steady_clock::time_point> next { toasts_.next_expiry() };
                 // 접힘 스프링은 마지막으로 지은 frame의 시각에서 센다. 그 frame이 도는 중이었다면 한 frame 뒤에 하나를 더 지어
                 // 멈춘 모습으로 끝낸다 (지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다).
-                for (const std::optional<std::chrono::steady_clock::time_point> other : { luil::spring_next_update(sidebar_motion_, frame_time_), workbench_.next_due() })
+                //  - 페이지 전환은 끝 시각 하나를 싣는다. 도는 동안의 frame은 요소의 예고가 다시 그리고, tree는 끝에 한 번 짓는다.
+                for (const std::optional<std::chrono::steady_clock::time_point> other :
+                    { luil::spring_next_update(sidebar_motion_, frame_time_), workbench_.next_due(), luil::page_transition_end(page_motion_) })
                     if (other.has_value() && (next.has_value() == false || *other < *next))
                         next = other;
                 return next;
@@ -691,9 +991,24 @@ namespace demo {
             {
                 toasts_.prune();
                 workbench_.tick(now);
+                // 끝난 전환은 놓는다. 다음 frame은 prior 없는 tree라 덮개가 걷혀 포인터가 풀린다.
+                if (page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, now))
+                    page_motion_ = {};
             }
 
         private:
+            // 갤러리의 언어 칸을 라이브러리 언어로 잇는다. 시스템은 OS가 준 표시 언어다.
+            void apply_text_language(const std::u8string_view choice)
+            {
+                if (choice == u8"system")
+                {
+                    luil::set_text_languages(system_languages_);
+                    return;
+                }
+                const std::vector<std::u8string> languages { std::u8string { choice } };
+                luil::set_text_languages(languages);
+            }
+
             // 주소 하나를 보낸다. 표를 페이지에게 되돌려 주는 것까지가 이 함수다 —
             // 페이지는 그 표로 자기 흐름을 알아본다 (http-client-design.md).
             void send_network_request(const network_send_intent& request)
@@ -780,6 +1095,7 @@ namespace demo {
                 config.toggle = luil::make_message_action(sidebar_toggle_intent {});
                 config.resize = [](const float delta) { return luil::make_app_action(sidebar_resize_intent { delta }); };
                 config.resize_finish = []() { return luil::make_app_action(sidebar_resize_finish_intent {}); };
+                config.handle_access_name = u8"내비게이션 폭 손잡이";
                 return config;
             }
 
@@ -795,22 +1111,8 @@ namespace demo {
                     const char32_t icon { key == page_overview ? luil::codicons::icon_rocket : (key == page_theme ? luil::codicons::icon_settings_gear : luil::codicons::icon_file) };
                     navigation.items.push_back({ std::u8string { key }, std::move(label), icon });
                 };
-                add_page(page_overview, u8"시작 / 기능 색인");
-                add_page(page_controls, u8"버튼과 컨트롤");
-                add_page(page_basics, u8"입력과 다이얼로그");
-                add_page(page_lists, u8"목록");
-                add_page(page_files, u8"파일");
-                add_page(page_tabs, u8"탭");
-                add_page(page_groups, u8"그룹");
-                add_page(page_toasts, u8"토스트");
-                add_page(page_popups, u8"메뉴·팝업");
-                add_page(page_windows, u8"창");
-                add_page(page_images, u8"이미지");
-                add_page(page_network, u8"네트워크");
-                add_page(page_webview, u8"웹뷰");
-                add_page(page_zoom, u8"확대 보기");
-                add_page(page_theme, u8"모양과 색");
-                add_page(page_workbench, u8"변경 작업대");
+                for (const navigation_page& page : navigation_pages)
+                    add_page(page.key, std::u8string { page.label });
                 navigation.selected = page_;
                 navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
 
@@ -834,6 +1136,41 @@ namespace demo {
                     column->add(make_label(luil::ui_element_id { kind_text, u8"sidebar-saved-width" }, std::move(saved), 11.0f, luil::label_color_role::dim), 16.0f);
                 }
                 return column;
+            }
+
+            // 지금 페이지(`page_`)에서 `next`로 가는 전환이다. 떠나는 화면을 지난 frame의 본문 자리와 배율로 따로 짓는다.
+            //  - 꺼져 있거나 움직임 줄이기면 짓지도 않는다. 웹뷰는 창 위의 자식 창이라 함께 움직이지 않아 오가는 바꿈은 전환하지 않는다.
+            [[nodiscard]] luil::page_transition make_page_motion(const std::u8string& next)
+            {
+                if (page_transition_name(page_transition_mode_).empty() || metrics_.reduce_motion || page_ == page_webview || next == page_webview
+                    || content_slot_.width <= 0.0f || content_slot_.height <= 0.0f)
+                    return {};
+                const float scale { content_scale_ };
+                auto prior { build_page(content_slot_.width / scale, content_slot_.height / scale, scale) };
+                const luil::ui_style* const style { nullptr };
+                auto tree { std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(prior), content_slot_, scale, {}, nullptr, style)) };
+                return luil::start_page_transition(std::move(tree), page_style_for(next), std::chrono::steady_clock::now(), metrics_.reduce_motion);
+            }
+
+            // 고른 전환의 모양이다. 사이드바 목록이 세로라 밀기는 세로 축이다.
+            [[nodiscard]] luil::page_transition_style page_style_for(const std::u8string& next) const
+            {
+                luil::page_transition_style style {};
+                style.axis = luil::page_transition_axis::vertical;
+                style.direction = navigation_index(next) >= navigation_index(page_) ? luil::page_transition_direction::forward : luil::page_transition_direction::backward;
+                style.curve = luil::page_transition_timing { page_transition_length_.value_or(luil::page_transition_duration) };
+                if (page_transition_mode_ == shell_menu_page_transition_fade)
+                    style.effect = luil::page_transition_effect::fade;
+                else if (page_transition_mode_ == shell_menu_page_transition_zoom)
+                    style.effect = luil::page_transition_effect::zoom;
+                else if (page_transition_mode_ == shell_menu_page_transition_spring)
+                {
+                    luil::spring_config config { luil::spring_smooth };
+                    if (page_transition_length_.has_value())
+                        config.response = *page_transition_length_;
+                    style.curve = luil::page_transition_spring { config, 0.0f };
+                }
+                return style;
             }
 
             [[nodiscard]] std::unique_ptr<luil::ui_element> build_page(const float width, const float height, const float scale)
@@ -864,13 +1201,21 @@ namespace demo {
                     return webview_.build(width, height, scale);
                 if (page_ == page_zoom)
                     return zoom_.build(width, height, scale);
+                if (page_ == page_ink)
+                    return ink_.build(width, height, scale);
+                if (page_ == page_inspector)
+                    return inspector_.build(width, height, scale);
                 if (page_ == page_theme)
                     return theme_.build(width, height, scale);
                 if (page_ == page_workbench)
                     return workbench_.build(width, height, scale);
+                if (page_ == page_rich_text)
+                    return rich_text_.build(width, height, scale);
                 return basics_.build(width, height, scale);
             }
 
+            // "시스템"을 고를 때 넣을 OS 표시 언어다 (`os_locale_intent`).
+            std::vector<std::u8string> system_languages_ {};
             gallery_page gallery_ {};
             basics_page basics_ {};
             lists_page lists_ {};
@@ -878,7 +1223,8 @@ namespace demo {
             tabs_page tabs_ {};
             groups_page groups_ {};
             toasts_page toasts_ {};
-            popups_page popups_ {};
+            // 오늘은 시작할 때 한 번 읽어 날짜 칸과 달력에 준다 (라이브러리는 시계를 읽지 않는다).
+            popups_page popups_ { popups_page::local_today() };
             windows_page windows_ {};
             images_page images_ {};
             std::optional<luil::file_dialog_request> file_dialog_ {};
@@ -887,18 +1233,28 @@ namespace demo {
             file_dialog_purpose file_dialog_purpose_ { file_dialog_purpose::image };
             network_page network_ {};
             zoom_page zoom_ {};
+            ink_page ink_ {};
+            inspector_page inspector_ {};
             command_palette_host palette_ {};
+            shell_menu shell_menu_ {};
             // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).
             bool primary_instance_ { true };
-            // 셸이 실은 마지막 초점 요청과, 두 요청원의 마지막으로 본 번호다.
+            // 셸이 실은 마지막 초점 요청과, 네 요청원의 마지막으로 본 번호다.
             std::optional<luil::focus_request> focus_ {};
             std::uint64_t focus_revision_ { 0 };
             std::uint64_t seen_tool_focus_ { 0 };
+            // 도구 창 페이지가 낸 요청 가운데 target이 없는 주 창 활성화의 셸 번호다.
+            std::uint64_t main_focus_id_ { 0 };
             std::uint64_t seen_palette_focus_ { 0 };
             std::uint64_t palette_focus_id_ { 0 };
+            std::uint64_t seen_popups_focus_ { 0 };
+            std::uint64_t popups_focus_id_ { 0 };
+            std::uint64_t seen_toasts_focus_ { 0 };
+            std::uint64_t toasts_focus_id_ { 0 };
             theme_page theme_ {};
             webview_page webview_ {};
             workbench_page workbench_ {};
+            rich_text_page rich_text_ {};
 
             // --- 네트워크 페이지가 기대는 조각들 ---
             // 되돌이 서버와 client는 **셸이 든다.** 페이지는 메시지만 주고받는다.
@@ -913,6 +1269,7 @@ namespace demo {
             std::u8string client_error_ {};
             // 배출구가 답을 나를 자리다. `demo_delegate::on_started`가 채운다.
             std::atomic<luil::win32::app_host*> host_ { nullptr };
+            // 테마 페이지 파일 감시 묶음의 도우미다. `bind_host`가 세우고 `stop_workers`가 멈춘다.
             // 셸이 아는 표 둘이다 (취소가 겨눌 자리 — 페이지의 것과 같은 값이다).
             luil::net::http_ticket network_pending_ {};
             luil::net::http_ticket network_heartbeat_ {};
@@ -937,6 +1294,13 @@ namespace demo {
             luil::spring sidebar_motion_ { luil::spring_at_rest(sidebar_default_width) };
             // 마지막으로 지은 frame의 시각이다. 시간이 흘러야 바뀌는 상태의 다음 예고를 이 시각에서 센다.
             std::chrono::steady_clock::time_point frame_time_ {};
+            // 페이지 전환이다 (앱 상태). 고른 모양은 보기 메뉴의 라디오 키이고, 길이는 인자로 바꿀 수 있다.
+            std::u8string page_transition_mode_ { shell_menu_page_transition_slide };
+            std::optional<std::chrono::milliseconds> page_transition_length_ {};
+            luil::page_transition page_motion_ {};
+            // 지난 frame의 본문 자리(물리 픽셀)와 배율이다. 떠나는 화면을 같은 크기·배율로 짓는다.
+            luil::rect_f content_slot_ {};
+            float content_scale_ { 1.0f };
             window_metrics_intent metrics_ {};
             std::atomic<bool> closed_ { false };
         };
@@ -1012,11 +1376,17 @@ namespace demo {
                 return luil::route_reveal(tree, focused);
             }
 
-            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot&) override
+            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
             {
+                // 읽기 전용 안내 칸에 초점이 있는 채 닿은 Ctrl+Z·Ctrl+Y다. 칸이 삼키지 않고 넘긴 키를 기본 페이지가 센다.
+                if (const auto undo { readonly_undo_key_of(event, snapshot, kind_link_view_input) }; undo.has_value())
+                    return { luil::make_app_action(*undo) };
                 // 팔레트를 여는 단축키와 팔레트 명령의 단축키(Ctrl+B)다. 팔레트에 보이는 단축키 열과 같은 명령표로 맞춘다.
                 if (luil::chord_of(event) == palette_shortcut)
                     return { luil::make_app_action(palette_open_intent {}) };
+                // 검사기를 켜고 끈다. 검사기 페이지의 단추와 같은 메시지다.
+                if (luil::chord_of(event) == inspector_shortcut)
+                    return { luil::make_app_action(inspector_command_intent { inspector_command::toggle }) };
                 if (const auto id { luil::match_command(palette_commands(), event, luil::command_scope::window) }; id.has_value())
                     return { luil::make_app_action(palette_run_intent { *id }) };
                 return tabs_page::route_key(tree, event);
@@ -1038,6 +1408,16 @@ namespace demo {
             void on_started(luil::win32::app_host& host) override
             {
                 driver_.bind_host(host);
+                // 앱 식별은 창보다 먼저 섰다. 토스트 페이지의 상태 줄이 처음부터 이 값을 보인다.
+                host.post_app_message(luil::app_message { os_notification_status_intent { luil::notification_status() } });
+                // 지역 값은 시작할 때 한 번 읽는다. 데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 다시 읽지 않는다.
+                host.post_app_message(luil::app_message { os_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
+            }
+
+            // 사용자가 OS 알림을 누르거나 닫았다. 토스트 페이지가 사건 줄로 보인다.
+            [[nodiscard]] luil::app_message make_notification_message(const luil::notification_event& event) override
+            {
+                return luil::app_message { os_notification_event_intent { event } };
             }
 
             [[nodiscard]] luil::app_message make_file_dialog_message(const luil::file_dialog_result& result) override
@@ -1061,6 +1441,24 @@ namespace demo {
                 return luil::app_message { taskbar_report_intent { report } };
             }
 
+            // 점프 목록을 셸에 낸 결과는 창 페이지의 반영 줄이 읽는다.
+            [[nodiscard]] luil::app_message make_jump_list_message(const luil::win32::jump_list_report& report) override
+            {
+                return luil::app_message { jump_list_report_intent { report } };
+            }
+
+            // 알림 영역 아이콘이 셸에 닿은 정도도 창 페이지의 반영 줄이 읽는다.
+            [[nodiscard]] luil::app_message make_tray_message(const luil::win32::tray_report& report) override
+            {
+                return luil::app_message { tray_report_intent { report } };
+            }
+
+            // 전역 단축키를 걸어 본 결과도 창 페이지의 반영 줄이 읽는다.
+            [[nodiscard]] luil::app_message make_hotkey_message(const luil::win32::hotkey_report& report) override
+            {
+                return luil::app_message { hotkey_report_intent { report } };
+            }
+
             [[nodiscard]] luil::app_message make_window_placement_message(const luil::win32::window_placement& placement) override
             {
                 return luil::app_message { placement_intent { placement } };
@@ -1077,12 +1475,31 @@ namespace demo {
                 return luil::app_message { files_clipboard_changed_intent { change } };
             }
 
+            // 클립보드의 글과 그림이다. 이미지 페이지가 받아 logic thread에서 푼다. 서식 글 페이지가 청한 답은 표식으로 가른다.
+            [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
+            {
+                if (data.tag == rich_text_clipboard_tag)
+                    return luil::app_message { rich_text_clipboard_intent { data } };
+                return luil::app_message { image_clipboard_data_intent { data } };
+            }
+
             // 받는 칸이 아닌 곳에 놓인 파일의 물러섬이다.
             // 데모는 토스트로 알린다 — 참을 돌려주므로 여러 개를 놓아도 하나다.
             [[nodiscard]] bool on_file_dropped(luil::win32::app_host& host, const std::u8string& path) override
             {
                 host.post_app_message(luil::app_message { toast_request_intent { u8"받은 파일: " + path, luil::toast_severity::info } });
                 return true;
+            }
+
+            // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다. 창 페이지가 받아 한 줄로 보인다.
+            //  - 보낸 쪽이 끝나기를 기다리므로 게시만 하고, 표가 0이 아닌지를 답한다 (file-watch-design.md의 `deliver`와 같다).
+            //    앞으로 세우기는 라이브러리가 콜백 뒤에 한다.
+            [[nodiscard]] bool on_instance_arguments(luil::win32::app_host& host, const luil::instance_arguments& arguments) override
+            {
+                // 이 데모가 끝나는 중에 COM이 띄운 둘째가 알림 표식을 넘길 수 있다. 파일 인자가 아니라 받기만 하고 보이지 않는다.
+                if (luil::notification_launch(arguments.arguments))
+                    return true;
+                return host.post_app_message_ticketed(luil::app_message { instance_arguments_intent { arguments } }) != 0;
             }
 
         private:
@@ -1092,8 +1509,58 @@ namespace demo {
 }
 
 namespace {
+    // `--send-to-first`가 있으면 그 플래그를 뺀 나머지 인자를 첫째 인스턴스에 보내고 종료 코드를 돌려준다. 없으면 빈 값이다.
+    //  - 종료 코드: 첫째가 받았으면 0, 첫째의 주 창이 시한 안에 없거나 이 프로세스가 첫째면 3, 그 밖의 실패는 4다.
+    //  - `parse_arguments`가 모르는 인자를 거절하므로 이 분기가 그 앞에 선다. 플래그가 없으면 둘째도 평소처럼 뜬다.
+    [[nodiscard]] std::optional<int> send_to_first_instance(const luil::single_instance& instance, const std::vector<std::u8string>& arguments)
+    {
+        std::vector<std::u8string> forwarded {};
+        bool requested { false };
+        for (std::size_t index = 1; index < arguments.size(); ++index)
+        {
+            if (const std::u8string_view argument { arguments[index] }; argument == u8"--send-to-first")
+                requested = true;
+            else
+                forwarded.push_back(arguments[index]);
+        }
+        if (requested == false)
+            return std::nullopt;
+        const luil::platform_result result { instance.send_to_primary(forwarded) };
+        if (result.ok())
+            return 0;
+        return result.status == luil::platform_status::not_found ? 3 : 4;
+    }
+
+    // `--unregister-app-identity`가 있으면 데모의 앱 식별을 지우고 종료 코드를 돌려준다. 없으면 빈 값이다.
+    //  - 종료 코드: 지웠으면 0, 지울 항목이 없으면 3, 그 밖의 실패는 4다. 알림 센터에 남은 데모 알림은 거두지 않는다.
+    [[nodiscard]] std::optional<int> unregister_identity(const std::vector<std::u8string>& arguments)
+    {
+        bool requested { false };
+        for (std::size_t index = 1; index < arguments.size(); ++index)
+            requested = requested || arguments[index] == u8"--unregister-app-identity";
+        if (requested == false)
+            return std::nullopt;
+        const luil::platform_result result { luil::win32::unregister_app_identity(demo::demo_app_identity) };
+        if (result.ok())
+            return 0;
+        return result.status == luil::platform_status::not_found ? 3 : 4;
+    }
+
+    // 알림 클릭으로 뜬 실행의 표식(`-luil-notification`·`-Embedding`)을 뺀 인자다. `parse_arguments`는 모르는 인자를 거절한다.
+    [[nodiscard]] std::vector<std::u8string> without_notification_flags(const std::vector<std::u8string>& arguments)
+    {
+        std::vector<std::u8string> kept {};
+        for (const std::u8string& argument : arguments)
+        {
+            if (luil::notification_launch(std::span<const std::u8string> { &argument, 1 }) == false)
+                kept.push_back(argument);
+        }
+        return kept;
+    }
+
     [[nodiscard]] bool parse_arguments(
-        const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom, luil::window_backdrop& backdrop)
+        const std::vector<std::u8string>& arguments, luil::win32::window_config& config, std::u8string& start_page, bool& caption_bottom, luil::window_backdrop& backdrop
+        , std::u8string& page_transition, std::optional<std::chrono::milliseconds>& page_transition_length)
     {
         for (std::size_t index = 1; index < arguments.size(); ++index)
         {
@@ -1143,6 +1610,27 @@ namespace {
                 backdrop = luil::window_backdrop::mica_alt;
             else if (argument == u8"--backdrop=acrylic")
                 backdrop = luil::window_backdrop::acrylic;
+            else if (argument.starts_with(u8"--page-transition="))
+            {
+                const std::u8string mode { std::u8string { demo::shell_menu_page_transition_prefix } + std::u8string { argument.substr(18) } };
+                const bool known { mode == demo::shell_menu_page_transition_none || mode == demo::shell_menu_page_transition_slide || mode == demo::shell_menu_page_transition_fade
+                    || mode == demo::shell_menu_page_transition_zoom || mode == demo::shell_menu_page_transition_spring
+                };
+
+                if (known == false)
+                    return false;
+                page_transition = mode;
+            }
+            else if (argument.starts_with(u8"--page-transition-ms="))
+            {
+                const std::u8string_view value { argument.substr(21) };
+                int milliseconds { 0 };
+                const auto* const first { reinterpret_cast<const char*>(value.data()) };
+                const auto [parsed, code] { std::from_chars(first, first + value.size(), milliseconds) };
+                if (code != std::errc {} || parsed != first + value.size() || milliseconds <= 0)
+                    return false;
+                page_transition_length = std::chrono::milliseconds { milliseconds };
+            }
             else
                 return false;
         }
@@ -1158,10 +1646,17 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     const auto arguments { luil::win32::command_line_arguments() };
     if (arguments.has_value() == false)
         return 1;
+    //  - 도우미는 창·single_instance·앱 식별을 세우지 않고 끝난다. 데모는 적용하지 않지만 앱의 첫머리 꼴을 그대로 보인다.
 
     // 같은 세션에서 둘째로 뜬 데모도 막지 않고 띄운다 — 데모는 창을 여럿 띄워 보는 자리이기도 하다. 제목만 다르다.
     //  - 프로세스가 끝날 때까지 쥔다. wWinMain의 지역이라 메시지 루프가 끝난 뒤에 놓인다.
     const luil::single_instance instance { u8"luil-demo" };
+    // 인자를 첫째에 넘기는 일만 하는 둘째는 창을 띄우지 않고 끝낸다.
+    if (const std::optional<int> sent { send_to_first_instance(instance, *arguments) }; sent.has_value())
+        return *sent;
+    // 앱 식별을 지우는 일만 하는 실행도 창을 띄우지 않는다.
+    if (const std::optional<int> removed { unregister_identity(*arguments) }; removed.has_value())
+        return *removed;
     luil::win32::window_config config {};
     config.class_name = L"Luil.Demo.Window";
     config.caption = demo::make_caption_config(instance.primary());
@@ -1177,8 +1672,15 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     std::u8string start_page {};
     bool caption_bottom { false };
     luil::window_backdrop backdrop { luil::window_backdrop::none };
-    if (parse_arguments(*arguments, config, start_page, caption_bottom, backdrop) == false)
+    std::u8string page_transition { demo::shell_menu_page_transition_slide };
+    std::optional<std::chrono::milliseconds> page_transition_length {};
+    if (parse_arguments(without_notification_flags(*arguments), config, start_page, caption_bottom, backdrop, page_transition, page_transition_length) == false)
         return 2;
+    // OS 알림이 쓰는 앱 식별이다. 아이콘은 실행 파일 옆 assets의 PNG다 (IconUri는 실행 파일 리소스를 가리키지 못한다).
+    config.identity.id = std::u8string { demo::demo_app_identity };
+    config.identity.display_name = u8"luil 데모";
+    if (const std::filesystem::path directory { demo::executable_directory() }; directory.empty() == false)
+        config.identity.icon_path = (directory / L"assets" / L"gradient.png").u8string();
 
     // 지난 실행이 갈무리한 배치를 되돌린다.
     // --position이 있으면 그쪽이 이긴다 — 명시한 자리를 저장된 자리가 덮지 않는다.
@@ -1194,6 +1696,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
 
     demo::demo_driver driver { restore, start_page, instance.primary() };
     driver.set_window_options(caption_bottom, config.presentation == luil::win32::window_presentation::layered, backdrop);
+    driver.set_page_transition(std::move(page_transition), page_transition_length);
     demo::demo_policy policy {};
     demo::demo_delegate delegate { driver };
 
@@ -1203,6 +1706,8 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
         environment.driver = &driver;
         environment.policy = &policy;
         environment.delegate = &delegate;
+        // 첫째이면 같은 이름의 둘째가 보낸 인자를 주 창이 받는다. instance는 wWinMain의 지역이라 창보다 오래 산다.
+        environment.instance = &instance;
     }
     return luil::win32::run_application_window(config, environment);
 }
