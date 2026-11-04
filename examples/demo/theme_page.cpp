@@ -491,7 +491,7 @@ namespace demo {
         page.add(make_label({ kind_text, u8"theme-system-help" }, u8"'시스템'을 고르면 Windows의 앱 모드를 따릅니다.", 11.0f, luil::label_color_role::dim), 18.0f);
         page.end_card();
 
-        page.begin_card(u8"강조색 · " + std::u8string { luil::accent_for(appearance_.accent_id).label });
+        page.begin_card(u8"강조색 · " + std::u8string { luil::accent_label(luil::accent_for(appearance_.accent_id)) });
         luil::accent_picker_config accents {};
         accents.owner = u8"accent";
         accents.selected = appearance_.accent_id;

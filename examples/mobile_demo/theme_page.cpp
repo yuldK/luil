@@ -139,7 +139,7 @@ namespace mobile_demo {
         std::u8string chosen { u8"키 컬러" };
         for (const luil::accent_definition& accent : accents)
             if (accent.id == appearance_.accent_id)
-                chosen = u8"키 컬러 — " + std::u8string { accent.label };
+                chosen = u8"키 컬러 — " + std::u8string { luil::accent_label(accent) };
         column.note(u8"accent-hint", std::move(chosen));
         column.gap(8.0f);
 
@@ -154,7 +154,7 @@ namespace mobile_demo {
         {
             std::u8string id { accent.id };
             auto swatch { std::make_unique<swatch_element>(luil::ui_element_id { kind_accent, id }, accent.swatch, appearance_.accent_id == accent.id) };
-            swatch->set_tooltip(std::u8string { accent.label });
+            swatch->set_tooltip(std::u8string { luil::accent_label(accent) });
             swatch->set_cursor(luil::ui_cursor::hand);
             swatch->set_action(luil::ui_trigger::left_click, [id](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(accent_intent { id }) }; });
             grid->add(std::move(swatch));

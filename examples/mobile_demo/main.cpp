@@ -42,6 +42,7 @@ namespace {
             folder_ = std::filesystem::temp_directory_path() / (L"luil-mobile-demo-watch-" + std::to_wstring(GetCurrentProcessId()));
             watcher_ = mobile_demo::start_files_watch(host, folder_);
             host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
+            host.post_app_message(luil::app_message { mobile_demo::device_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
         }
 
         [[nodiscard]] luil::app_message make_metrics_message(const luil::window_metrics& metrics) override

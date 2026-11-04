@@ -16,6 +16,7 @@
 #include "mobile_demo/zoom_page.h"
 #include "sample_image_bytes.h"
 
+#include "luil/text/string_table.h"
 #include "luil/ui/calendar_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/message_box.h"
@@ -337,6 +338,52 @@ TEST_CASE("The device page states whether the system reduces motion", "[mobile-d
         REQUIRE(spinner->accessibility().role == luil::access_role::progress);
         REQUIRE(spinner->bounds().y > state->bounds().y);
     }
+}
+
+TEST_CASE("The device page draws the OS values the shell gives it", "[mobile-demo][i18n]")
+{
+    mobile_demo::device_page page {};
+    const auto text = [&page](const std::u8string& owner) {
+        const auto tree { device_tree(page, false) };
+        const auto* const label { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(label != nullptr);
+        return label->accessibility().name;
+    };
+
+    // 셸이 넣기 전이다. 기기마다 다른 값은 test가 넣는 값으로만 단언한다.
+    REQUIRE(text(u8"device-first-weekday") == u8"주 첫 요일: 아직 읽지 않음");
+    REQUIRE(text(u8"device-ui-language") == u8"표시 언어: 아직 읽지 않음");
+    REQUIRE(text(u8"device-text-language").starts_with(u8"기본 문구 선호: "));
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::device_locale_intent { std::chrono::Monday, { u8"ko-KR", u8"en-US" } } }));
+    REQUIRE(text(u8"device-first-weekday") == u8"주 첫 요일: 월요일");
+    REQUIRE(text(u8"device-ui-language") == u8"표시 언어: ko-KR, en-US");
+
+    REQUIRE(page.handle(luil::app_message { mobile_demo::device_locale_intent {} }));
+    REQUIRE(text(u8"device-first-weekday") == u8"주 첫 요일: OS가 답하지 않음");
+    REQUIRE(text(u8"device-ui-language") == u8"표시 언어: OS가 답하지 않음");
+}
+
+TEST_CASE("The device page keeps the chosen language cell and leaves the library language to the shell", "[mobile-demo][i18n]")
+{
+    const std::optional<std::vector<std::u8string>> before { luil::text_languages() };
+    mobile_demo::device_page page {};
+    const auto selected = [&page](const std::u8string& key) {
+        const auto tree { device_tree(page, false) };
+        const auto* const group { tree.find({ luil::ui_element_kind::choice_group, u8"device-language" }) };
+        REQUIRE(group != nullptr);
+        for (const auto& child : group->children())
+        {
+            if (child->accessibility().selected == true)
+                return child->id().owner == key;
+        }
+        return false;
+    };
+
+    REQUIRE(selected(u8"system"));
+    REQUIRE(page.handle(luil::app_message { mobile_demo::device_language_intent { u8"en" } }));
+    REQUIRE(selected(u8"en"));
+    REQUIRE(luil::text_languages() == before);
 }
 
 TEST_CASE("The device page switches page transitions and states whether one is turning", "[mobile-demo][page-transition]")

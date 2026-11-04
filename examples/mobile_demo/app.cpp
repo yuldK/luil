@@ -2,6 +2,7 @@
 
 #include "demo/readonly_undo_keys.h"
 #include "luil/generated/codicons.h"
+#include "luil/text/string_table.h"
 #include "luil/ui/app_bar_element.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/page_transition_element.h"
@@ -94,10 +95,32 @@ namespace mobile_demo {
                 host_->post_clipboard_request(std::move(*request));
             return;
         }
+        // OS 값과 언어 고르기는 페이지에도 간다. 언어를 라이브러리에 잇는 일만 셸이 한다. 페이지와 그 test는 전역 언어를 건드리지 않는다.
+        if (const auto* const locale { message.get<device_locale_intent>() }; locale != nullptr)
+        {
+            system_languages_ = locale->languages;
+            // "시스템"을 고른 뒤 OS 언어가 바뀌면 새 목록을 따른다.
+            if (text_language_ == u8"system")
+                apply_text_language(text_language_);
+        }
+        if (const auto* const language { message.get<device_language_intent>() }; language != nullptr)
+            apply_text_language(language->value);
         if (lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message) || ink_.handle(message)
             || inspector_.handle(message) || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
             || files_.handle(message))
             return;
+    }
+
+    void mobile_driver::apply_text_language(const std::u8string& choice)
+    {
+        text_language_ = choice;
+        if (choice == u8"system")
+        {
+            luil::set_text_languages(system_languages_);
+            return;
+        }
+        const std::vector<std::u8string> languages { choice };
+        luil::set_text_languages(languages);
     }
 
     void mobile_driver::stop_workers()

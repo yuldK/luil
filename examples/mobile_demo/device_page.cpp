@@ -2,6 +2,7 @@
 
 #include "luil/app/secret_store.h"
 #include "luil/app/updater.h"
+#include "luil/text/string_table.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -81,6 +82,43 @@ namespace mobile_demo {
             return u8"compact";
         }
 
+        [[nodiscard]] std::u8string first_weekday_text(const std::optional<device_locale_intent>& locale)
+        {
+            constexpr std::array<std::u8string_view, 7> names { u8"일요일", u8"월요일", u8"화요일", u8"수요일", u8"목요일", u8"금요일", u8"토요일" };
+            if (locale.has_value() == false)
+                return u8"주 첫 요일: 아직 읽지 않음";
+            if (locale->first_weekday.has_value() == false || locale->first_weekday->ok() == false)
+                return u8"주 첫 요일: OS가 답하지 않음";
+            return u8"주 첫 요일: " + std::u8string { names[locale->first_weekday->c_encoding()] };
+        }
+
+        // 태그를 쉼표로 잇는다. 비었으면 빈 글이다.
+        [[nodiscard]] std::u8string joined_tags(const std::vector<std::u8string>& tags)
+        {
+            std::u8string text {};
+            for (const std::u8string& tag : tags)
+                text += (text.empty() ? std::u8string {} : std::u8string { u8", " }) + tag;
+            return text;
+        }
+
+        [[nodiscard]] std::u8string ui_language_text(const std::optional<device_locale_intent>& locale)
+        {
+            if (locale.has_value() == false)
+                return u8"표시 언어: 아직 읽지 않음";
+            if (locale->languages.empty())
+                return u8"표시 언어: OS가 답하지 않음";
+            return u8"표시 언어: " + joined_tags(locale->languages);
+        }
+
+        // 라이브러리가 지금 쓰는 선호 목록이다. 정한 목록은 프로세스에 남아 Activity가 다시 서도 그대로다.
+        [[nodiscard]] std::u8string text_language_text()
+        {
+            const std::optional<std::vector<std::u8string>> chosen { luil::text_languages() };
+            if (chosen.has_value() == false)
+                return u8"기본 문구 선호: 정하지 않음";
+            return u8"기본 문구 선호: " + (chosen->empty() ? std::u8string { u8"빈 목록" } : joined_tags(*chosen));
+        }
+
         [[nodiscard]] std::u8string_view apply_mode_text(const luil::update_apply_mode mode) noexcept
         {
             switch (mode)
@@ -128,6 +166,16 @@ namespace mobile_demo {
             ++(key->up ? volume_up_count_ : volume_down_count_);
             if (key->repeat)
                 ++volume_repeat_count_;
+            return true;
+        }
+        if (const auto* const locale { message.get<device_locale_intent>() }; locale != nullptr)
+        {
+            locale_ = *locale;
+            return true;
+        }
+        if (const auto* const language { message.get<device_language_intent>() }; language != nullptr)
+        {
+            language_ = language->value;
             return true;
         }
         if (const auto* const transition { message.get<page_transition_toggle_intent>() }; transition != nullptr)
@@ -202,6 +250,24 @@ namespace mobile_demo {
         column.gap(10.0f);
         column.add(std::make_unique<luil::check_element>(std::move(transition)), std::max(transition_height, touch_height), choice_width);
         column.body(u8"page-transition-state", page_transition_text());
+        column.gap(20.0f);
+        // OS 값은 셸이 읽어 넣는다. 언어를 고르면 테마 카드·날짜 칸·달력·편집 메뉴의 글이 바뀐다.
+        column.heading(u8"locale-heading", u8"지역과 언어");
+        column.body(u8"device-first-weekday", first_weekday_text(locale_));
+        column.body(u8"device-ui-language", ui_language_text(locale_));
+        luil::choice_group_config languages {};
+        languages.owner = u8"device-language";
+        languages.name = u8"기본 문구 언어";
+        languages.style = luil::choice_style::toggle;
+        languages.width = luil::choice_width::fill;
+        languages.items = { { u8"system", u8"시스템" }, { u8"ko", u8"한국어" }, { u8"en", u8"English" } };
+        languages.selected = language_;
+        languages.select = [](const std::u8string& key) { return luil::make_app_action(device_language_intent { key }); };
+        const float languages_height { luil::choice_group_element::height_for(languages) };
+        column.gap(6.0f);
+        column.add(std::make_unique<luil::choice_group_element>(std::move(languages)), languages_height, choice_width);
+        column.gap(6.0f);
+        column.note(u8"device-text-language", text_language_text());
         column.gap(20.0f);
         column.heading(u8"orientation-heading", u8"화면 방향");
         if (capabilities.screen_orientation == false)

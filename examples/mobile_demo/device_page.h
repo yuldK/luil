@@ -8,9 +8,11 @@
 #include "luil/app/platform_services.h"
 #include "mobile_demo/common.h"
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace mobile_demo {
     // --- 이 페이지의 메시지 ---
@@ -78,6 +80,20 @@ namespace mobile_demo {
         bool enabled { true };
     };
 
+    // 셸이 읽어 넣는 OS 값이다. 이 페이지는 core test에 함께 컴파일되어 `luil::user_first_weekday`·`user_ui_languages`를 부르면 링크가 깨진다.
+    //  - delegate가 시작할 때와, Android에서는 앞으로 올 때 읽는다.
+    struct device_locale_intent
+    {
+        std::optional<std::chrono::weekday> first_weekday {};
+        std::vector<std::u8string> languages {};
+    };
+
+    // 기본 문구의 언어를 골랐다 ("system"·"ko"·"en"). 셸이 `set_text_languages`로 잇고 페이지는 고른 칸만 쥔다.
+    struct device_language_intent
+    {
+        std::u8string value {};
+    };
+
     // 로컬 네트워크 권한을 묻는 앱 UI 명령이다. delegate가 받아 `app_host::request_permission`을 부른다.
     inline constexpr std::uint32_t command_request_local_network { 0x6c6e };
     // 알림 권한을 묻고 알림 하나를 올리는 앱 UI 명령이다. delegate가 받는다.
@@ -130,6 +146,9 @@ namespace mobile_demo {
         std::u8string notification_launch_ {};
         // 비밀 저장소를 돌린 결과 한 줄이다. 아직 돌리지 않았으면 비었다.
         std::u8string secret_report_ {};
+        // 셸이 넣어 준 OS 값이다. 아직 받지 않았으면 빈 값이다. 고른 언어 칸은 `device_language_intent`가 바꾼다.
+        std::optional<device_locale_intent> locale_ {};
+        std::u8string language_ { u8"system" };
         // 페이지 전환을 쓰는가와, 마지막으로 지은 frame에서 도는 중이었는가다.
         bool page_transition_ { true };
         bool page_transition_turning_ { false };
