@@ -326,7 +326,7 @@ namespace mobile_demo {
         std::u8string_view selected {};
         if (highlight)
             selected = page_.empty() ? page_basics : std::u8string_view { page_ };
-        return wrap_scroll(u8"navigation", make_page_list(width, selected, highlight == false), height, scale);
+        return wrap_scroll(u8"navigation", make_page_list(width, selected, highlight == false, scale), height, scale);
     }
 
     std::unique_ptr<luil::ui_element> mobile_driver::make_page(const std::u8string& page, const float width, const float height, const float scale)
