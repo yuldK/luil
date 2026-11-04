@@ -218,7 +218,7 @@ root->add(std::move(built.element));
 
 ## 범위 밖
 
-- 파일 읽기와 감시, 다시 읽기의 디바운스(R5 hot_reload). APK assets 읽기.
+- 파일 읽기, 감시, 다시 읽기의 디바운스는 [핫 리로드](hot-reload-design.md)가 닫았다. APK assets 읽기.
 - 함수 칸과 모델을 쥔 요소(편집 칸·목록·표·탭·그림)의 어휘. slot으로 짓는다. `richText` 펼치기(꼴만 정했다).
 - 마크업 안의 스타일 키·선택자·상속과 구체 색. 움직임과 전환.
 - 다른 파일 넣기(include), 조각 정의와 재사용, 스키마 파일(XSD) 배포, 마크업 쓰기(직렬화).

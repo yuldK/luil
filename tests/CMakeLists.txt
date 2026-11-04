@@ -110,6 +110,7 @@ add_executable(luil_core_tests
     tab_bar_style_tests.cpp
     taskbar_sync_tests.cpp
     tray_sync_tests.cpp
+    hot_reload_load_tests.cpp
     hotkey_sync_tests.cpp
     table_element_tests.cpp
     teaching_tip_element_tests.cpp
@@ -294,6 +295,11 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/file_watcher_android.cpp"
             file_watcher_tests.cpp)
+    # 핫 리로드 도우미는 감시자 위에 얇게 선다. 위의 감시자 소스에 도우미만 더해 같은 길로 기기 셸에서 실제 폴더를 본다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/luil/hot_reloader.cpp"
+            hot_reloader_tests.cpp)
     # 설정 읽기의 JNI 흐름은 가짜 JNIEnv로 잠근다. 틀과 예외 거둠을 실패 지점마다 친다 (android_settings_tests.cpp).
     target_sources(luil_core_tests
         PRIVATE
@@ -549,6 +555,9 @@ target_sources(luil_tests PRIVATE
 target_sources(luil_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/network_page.cpp"
     network_page_tests.cpp)
+# 핫 리로드 도우미를 실제 폴더와 OS 알림으로 본다 (Android는 luil_core_tests의 inotify 묶음이 같은 시험을 싣는다).
+target_sources(luil_tests PRIVATE
+    hot_reloader_tests.cpp)
 target_include_directories(luil_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"

@@ -96,6 +96,7 @@
 | 렌더러 선택 | `renderer_mode` | [app/renderer_policy.h](../include/luil/app/renderer_policy.h) | [설명](concepts/rendering.md) |
 | 비동기 HTTP | `net::http_client` | [net/http_client.h](../include/luil/net/http_client.h) | [설명](http-client-design.md) |
 | 파일 변경 감시 | `file_watcher` | [app/file_watcher.h](../include/luil/app/file_watcher.h) | [설명](file-watch-design.md) |
+| 스타일 JSON·마크업 파일을 저장하면 다시 읽기(감시 없는 한 번 읽기 포함) | `hot_reloader`, `hot_reload_update`, `load_hot_reload_file` | [app/hot_reload.h](../include/luil/app/hot_reload.h) | [설명](hot-reload-design.md) |
 | 작업 표시줄 진행률과 오버레이 | `taskbar_request`, `ui_frame::taskbar`, `ui_window::taskbar` | [app/taskbar.h](../include/luil/app/taskbar.h) | [설명](taskbar-design.md) |
 | OS 알림(Windows 토스트·Android 알림)과 눌림 사건, 앱 식별 | `show_notification`, `notification_status`, `app_delegate::make_notification_message`, `win32::window_config::identity` | [app/notification.h](../include/luil/app/notification.h) | [설명](os-notification-design.md) |
 | 작업 표시줄 점프 목록의 작업 | `taskbar_request::jump_list`, `taskbar_jump_task`, `win32::window_delegate::make_jump_list_message` | [app/taskbar.h](../include/luil/app/taskbar.h) | [설명](jump-list-design.md) |

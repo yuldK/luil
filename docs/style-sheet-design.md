@@ -264,7 +264,7 @@ namespace luil::generated::style_keys {
 ## 범위 밖
 
 - 선택자·상속·상태별 값(G4 c). 요소가 앱에서 색을 받지 않는다는 [테마](concepts/theming.md) 69행의 원칙과 부딪힌다.
-- 파일 읽기, 감시, 다시 읽기의 디바운스(R5 hot_reload). APK assets 읽기(결정 6).
+- 파일 읽기, 감시, 다시 읽기의 디바운스는 [핫 리로드](hot-reload-design.md)가 닫았다. APK assets 읽기(결정 6).
 - 스타일을 JSON으로 쓰는 직렬화, 덮어쓰기 파일(결정 4의 길 c), 스키마 판 번호.
 - 줄 나눔 정책 키(`text.wrapPolicy`). 결정 5는 길 b이고 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 이 문서의 키 표 위에 더했다.
 - R1에서 넘어온 controller 한계, 메뉴 폭의 글꼴 배율, `android_settings.cpp`의 `local_frame` 복제. 사용자에게 따로 묻는다.

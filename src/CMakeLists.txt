@@ -444,7 +444,8 @@ luil_add_source_filter(luil_core_files "app"
     "${public_headers}/app/tray_icon.h"
     "${public_headers}/app/global_hotkey.h"
     "${public_headers}/app/webview.h"
-    "${public_headers}/app/updater.h")
+    "${public_headers}/app/updater.h"
+    "${public_headers}/app/hot_reload.h")
 
 # host: 플랫폼 host가 함께 쓰는 순수 계산이다.
 # 창도 OS 시계도 모르고 값만 받아 값을 돌려주므로 플랫폼마다 다시 쓰지 않는다
@@ -467,6 +468,8 @@ luil_add_source_filter(luil_core_files "host"
     host/focus_request_tracker.h
     host/frame_state.cpp
     host/frame_state.h
+    host/hot_reload_load.cpp
+    host/hot_reload_load.h
     host/hotkey_sync.cpp
     host/hotkey_sync.h
     host/inspector_overlay.cpp
@@ -706,6 +709,10 @@ luil_add_source_filter(luil_files "net/update"
     win32/update_apply_win32.h
     win32/update_crypto_win32.cpp)
 
+# 핫 리로드 도우미다 (hot-reload-design.md). `file_watcher::create`가 플랫폼 쪽이라 두 플랫폼 묶음에 같이 든다.
+luil_add_source_filter(luil_files "app"
+    luil/hot_reloader.cpp)
+
 # 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
 # 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만
 # target으로 긋는다.
@@ -904,6 +911,10 @@ if(LUIL_PLATFORM STREQUAL "android")
         net/update_apply.h
         net/update_crypto.h
         net/updater.cpp)
+
+    # 핫 리로드 도우미다 (hot-reload-design.md). `file_watcher::create`가 플랫폼 쪽이라 두 플랫폼 묶음에 같이 든다.
+    luil_add_source_filter(luil_android_files "app"
+        luil/hot_reloader.cpp)
 
     add_library(luil STATIC ${luil_android_files})
     add_library(luil::luil ALIAS luil)
