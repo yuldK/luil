@@ -62,7 +62,7 @@ struct chart_config
     bool grid { true };
     std::optional<chart_point> focused {};    // 고른 점(앱 상태)
     std::function<input_action(chart_point)> focus {};  // 비면 고를 수 없는 그림이다
-    std::function<std::u8string(double value)> format_value {};  // 비면 format_chart_number
+    std::function<std::u8string(double value)> format_value {};  // 비면 기본 숫자 글. 20자리를 넘는 소수 정밀도는 과학적 표기
     std::function<std::u8string(const chart_config&)> access_summary {};
     std::function<std::u8string(const chart_config&, chart_point)> access_point {};
 };
@@ -105,7 +105,7 @@ private:
 
 **접근.** root는 `image`이고 이름은 `name`, 비면 기본 문구다. 값은 `access_summary`, 비면(빈 글을 돌려줘도) 기본 요약("계열 2개, 범주 12개, 최솟값 3.0, 최댓값 120.0")이다. 요약의 최솟값과 최댓값은 생성자에서 세어 `arrange` 전에도 답한다. 플롯은 범위 없는 `slider`이고 이름은 "자료 점", 값은 고른 점의 글이다. 고른 점이 없으면 값이 비어 Value 패턴이 서지 않는다. 글은 `access_point`, 비면(빈 글을 돌려줘도) 계열이 하나일 때 "3월, 120.0", 여럿일 때 "매출, 3월, 120.0"이고 빈 점의 값은 "값 없음"이다. `format_value`를 주면 값 자리는 그 글이다. `focus`가 비면 고를 수 없는 그림이라 플롯은 `none`이고 접근 노드는 root 하나다. 칸은 `none`이라 접근 tree에서 접힌다. 값이 비지 않으면 UIA Value 패턴이 읽기 전용으로 서고([uia_provider.cpp](../src/win32/uia_provider.cpp) 1123~1126행), 점을 옮겨 값이 바뀌면 값 바뀜 이벤트가 난다(629행). `accessibility.h`·`uia_provider.cpp`를 고치지 않는다. 접근 노드는 점 수와 무관하게 둘이다.
 
-**숫자 글.** `format_value`가 비면 `format_chart_number`다. 눈금은 `chart_ticks::decimals` 자리, 값 상자와 접근 글은 거기에 한 자리를 더한다(6 자리까지. 눈금이 이미 더 길면 눈금 자리를 그대로 둬 작은 값이 0으로 뭉개지지 않는다). 배치 전에는 칸 상한 5로 잰 눈금의 자리다. 안쪽은 `std::to_chars(double, std::chars_format::fixed, 자리)`라 로케일에 매이지 않는다. 부동소수 `to_chars`는 core가 이미 두 플랫폼에서 쓴다([ui_style_json.cpp](../src/theme/ui_style_json.cpp) 77행). 천 단위 구분, 큰 수 접미, 지역 소수점은 넣지 않고 앱이 함수로 준다.
+**숫자 글.** `format_value`가 비면 기본 숫자 글이다. 눈금은 `chart_ticks::decimals` 자리, 값 상자와 접근 글은 거기에 한 자리를 더한다(6 자리까지. 눈금이 이미 더 길면 눈금 자리를 그대로 둔다). 필요한 소수 자리가 20을 넘으면 눈금·값 상자·접근 글 모두 과학적 표기를 쓴다. 예를 들어 1e-30~2e-30은 `1.0e-30`~`2.0e-30`으로 읽으며, 유효 자리는 눈금 걸음에 맞춘다. 공개 `format_chart_number`의 고정 소수 자리 상한 20은 그대로다. 배치 전에는 칸 상한 5로 잰 눈금의 자리다. 안쪽은 `std::to_chars`의 `fixed` 또는 `scientific`이라 로케일에 매이지 않는다. 부동소수 `to_chars`는 core가 이미 두 플랫폼에서 쓴다([ui_style_json.cpp](../src/theme/ui_style_json.cpp) 77행). 천 단위 구분, 큰 수 접미, 지역 소수점은 넣지 않고 앱이 함수로 준다.
 
 **큰 자료.** 범주 수가 플롯 폭의 물리 픽셀 수를 넘으면, 선과 영역은 픽셀 열마다 그 열에 든 값의 최소·최대만 잇는다. 모양은 같고 긋는 수는 폭의 두 배를 넘지 않는다. 막대는 열마다 절댓값이 가장 큰 값 하나를 1픽셀 폭으로 그리고, 나란히 세울 폭이 없어 계열은 같은 열에 겹친다. 열 표는 `arrange`에서 플롯 폭이 바뀔 때만 세고 그리기와 hover는 그 표만 읽는다. 선은 32점씩 나눠 긋고 영역의 면은 열마다 한 픽셀 폭으로 칠한다. 경로 하나로 그으면 한 줄을 지나는 변이 폭만큼 쌓여 칠하는 비용이 그 곱으로 늘기 때문이다(아래 확인 절의 잰 값). 눈금 범위는 `draw` 전에 요소 수명 동안 한 번만 센다.
 

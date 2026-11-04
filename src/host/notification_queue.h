@@ -41,7 +41,7 @@ namespace luil {
     // id와 글을 검사하고 상한에 맞춰 자른다. 규칙 밖이면 빈 값과 `error`(진단 영문)다.
     [[nodiscard]] std::optional<notification_text> prepare_notification_text(const notification& value, std::u8string& error);
 
-    // Android `PendingIntent`의 요청 번호다. id마다 따로 서도록 id의 FNV-1a 해시를 쓴다. 같은 id면 늘 같다.
+    // Android `PendingIntent`의 요청 번호다. 같은 id면 늘 같은 FNV-1a 해시다. 충돌은 Intent의 data에 든 id 전체로 가른다.
     [[nodiscard]] std::int32_t notification_request_code(std::u8string_view id) noexcept;
 
     // OS가 낸 사건을 UI thread가 앱에 낼 때까지 쥐는 대기열이다. 어느 thread에서나 부른다.

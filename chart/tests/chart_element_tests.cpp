@@ -627,6 +627,55 @@ TEST_CASE("The chart reads as an image with a summary and the plot as a slider w
     }
 }
 
+TEST_CASE("Tiny chart ranges keep distinct tick labels and accessible values", "[chart][accessibility]")
+{
+    luil::chart_config config { make_config(luil::chart_point { 0u, 0u }) };
+    config.series.resize(1u);
+    config.series.front().name.clear();
+    config.series.front().values = shared_values({ 1e-30, 2e-30 });
+    config.y_range = luil::chart_range { 1e-30, 2e-30 };
+    SECTION("The default format uses scientific notation past twenty decimal places")
+    {
+        std::vector<std::u8string> measured {};
+        const luil::text_measurer measurer {
+            [&measured](const std::u8string_view text, const float size)
+            {
+                measured.emplace_back(text);
+                return static_cast<float>(text.size()) * size * 0.5f;
+            }
+        };
+        luil::chart_element chart { std::move(config) };
+        chart.arrange({ wide_slot, 1.0f, 0.0f, {}, &measurer });
+        REQUIRE(std::find(measured.begin(), measured.end(), u8"1.0e-30") != measured.end());
+        REQUIRE(std::find(measured.begin(), measured.end(), u8"2.0e-30") != measured.end());
+        const std::u8string summary { chart.accessibility().value };
+        REQUIRE(summary.find(u8"1.0e-30") != std::u8string::npos);
+        REQUIRE(summary.find(u8"2.0e-30") != std::u8string::npos);
+        REQUIRE(plot_of(chart).accessibility().value == u8"1월, 1.0e-30");
+    }
+    SECTION("The caller still controls the tick and point format")
+    {
+        config.format_value = [](const double value)
+        {
+            return value < 1.5e-30 ? std::u8string { u8"low" } : std::u8string { u8"high" };
+        };
+        const auto chart { make_chart(std::move(config)) };
+        REQUIRE(plot_of(*chart).accessibility().value == u8"1월, low");
+        REQUIRE(chart->accessibility().value.find(u8"high") != std::u8string::npos);
+    }
+    SECTION("Negative values and zero stay readable at much smaller magnitudes")
+    {
+        config.series.front().values = shared_values({ -2e-200, 0.0, 2e-200 });
+        config.y_range = luil::chart_range { -2e-200, 2e-200 };
+        config.focused = luil::chart_point { 0u, 1u };
+        const auto chart { make_chart(std::move(config)) };
+        REQUIRE(plot_of(*chart).accessibility().value == u8"2월, 0");
+        const std::u8string summary { chart->accessibility().value };
+        REQUIRE(summary.find(u8"-2e-200") != std::u8string::npos);
+        REQUIRE(summary.find(u8"2e-200") != std::u8string::npos);
+    }
+}
+
 TEST_CASE("The focus ring goes around the chosen point or the plot", "[chart][focus]")
 {
     REQUIRE(plot_of(*make_chart(make_config())).focus_ring_bounds().has_value() == false);

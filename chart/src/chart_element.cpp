@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <limits>
 #include <span>
@@ -59,6 +60,7 @@ namespace luil {
         // 배치 전의 눈금 칸 상한이다. 접근 글의 소수 자리가 배치 전에도 서야 한다.
         constexpr std::size_t default_tick_target { 5 };
         constexpr int value_decimals_limit { 6 };
+        constexpr int fixed_decimals_limit { 20 };
         // 누른 채 이 거리를 넘으면 끌기다 (물리 픽셀, `pointer_drag_target::start_distance`와 같은 단위).
         constexpr float cell_drag_start_distance { 6.0f };
         // 범위 밖의 값이 이만큼을 넘어도 플롯 밖이라 잘린다. 유한한 큰 값이 float로 넘쳐 경로가 통째로 버려지는 것을 막는다.
@@ -71,6 +73,26 @@ namespace luil {
         constexpr std::size_t line_style_count { 4 };
         // 큰 자료의 선을 이 수만큼씩 나눠 긋는다. 경로 하나로 그으면 한 줄을 지나는 변이 폭만큼 쌓여 칠하는 비용이 그 곱으로 는다.
         constexpr std::size_t large_line_chunk_points { 32 };
+
+        // 공개 고정 소수 서식의 상한을 넘는 눈금은 지수로 옮긴다. 눈금 걸음이 요구하는 유효 자리만 남긴다.
+        [[nodiscard]] std::u8string default_value_text(const double value, const int decimals)
+        {
+            if (decimals <= fixed_decimals_limit)
+                return format_chart_number(value, decimals);
+            if (std::isfinite(value) == false)
+                return {};
+            if (value == 0.0)
+                return u8"0";
+            const int exponent { static_cast<int>(std::floor(std::log10(std::abs(value)))) };
+            const int precision { std::clamp(decimals + exponent, 0, std::numeric_limits<double>::max_digits10 - 1) };
+            std::array<char, 32> buffer {};
+            const std::to_chars_result result { std::to_chars(buffer.data(), buffer.data() + buffer.size()
+                , value, std::chars_format::scientific, precision)
+            };
+            if (result.ec != std::errc {})
+                return {};
+            return { reinterpret_cast<const char8_t*>(buffer.data()), static_cast<std::size_t>(result.ptr - buffer.data()) };
+        }
 
         // hover 칸이다. 그리지 않고 hit와 hover와 끌기만 맡는다. 고르는 일은 전부 차트가 한다.
         class chart_cell final : public ui_element
@@ -241,7 +263,7 @@ namespace luil {
 
         [[nodiscard]] std::u8string tick_text(const double value) const
         {
-            return config.format_value != nullptr ? config.format_value(value) : format_chart_number(value, ticks.decimals);
+            return config.format_value != nullptr ? config.format_value(value) : default_value_text(value, ticks.decimals);
         }
 
         // 값 상자와 접근 글이다. 눈금보다 한 자리 더 쓴다. 눈금이 이미 상한보다 길면 눈금 자리를 그대로 둬 값이 0으로 뭉개지지 않는다.
@@ -249,7 +271,7 @@ namespace luil {
         {
             if (config.format_value != nullptr)
                 return config.format_value(value);
-            return format_chart_number(value, std::max(ticks.decimals, std::min(ticks.decimals + 1, value_decimals_limit)));
+            return default_value_text(value, std::max(ticks.decimals, std::min(ticks.decimals + 1, value_decimals_limit)));
         }
 
         [[nodiscard]] std::optional<chart_point> current_point() const noexcept

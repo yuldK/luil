@@ -2,6 +2,7 @@
 #include "luil/ui/undo_stack.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <cstddef>
@@ -450,6 +451,28 @@ TEST_CASE("The weight limit drops the oldest steps and the newest step stays eve
     REQUIRE(stack.bytes() == 0u);
     REQUIRE(redone(stack) == values { 8 });
     REQUIRE(stack.bytes() == 500u);
+}
+
+TEST_CASE("A growing merged step trims older records and keeps its original undo", "[ui][undo]")
+{
+    luil::undo_stack stack { { .steps = 0, .bytes = 100 } };
+    REQUIRE(stack.push(make_step(u8"old", 1, 2, {}, 40)));
+    const bool saved_after_old { GENERATE(false, true) };
+    if (saved_after_old)
+        stack.set_clean();
+    REQUIRE(stack.push(make_step(u8"drag", 3, 4, u8"drag", 40)));
+    const std::size_t weight { GENERATE(std::size_t { 90 }, std::size_t { 150 }) };
+    REQUIRE(stack.push(make_step(u8"drag end", 5, 6, u8"drag", weight)));
+    REQUIRE(stack.undo_count() == 1u);
+    REQUIRE(stack.bytes() == weight);
+    REQUIRE(stack.undo_label() == u8"drag end");
+    REQUIRE(undone(stack) == values { 3 });
+    REQUIRE(stack.can_undo() == false);
+    REQUIRE(stack.bytes() == 0u);
+    REQUIRE(stack.clean() == saved_after_old);
+    REQUIRE(redone(stack) == values { 6 });
+    REQUIRE(stack.bytes() == weight);
+    REQUIRE(stack.clean() == false);
 }
 
 TEST_CASE("A zero limit means no limit and a step without weight only counts as a step", "[ui][undo]")

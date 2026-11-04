@@ -2,6 +2,8 @@
 #include "android/android_system_theme.h"
 #include "android/android_window_control.h"
 #include "android/java_vm.h"
+#include "android/notification_intent.h"
+#include "host/notification_queue.h"
 #include "luil/app/platform_services.h"
 #include "luil/app/secret_store.h"
 #include "luil/net/http_client.h"
@@ -73,6 +75,10 @@ namespace {
         // 마지막 `NewByteArray`와 `KeyStore.getKey`의 지점 번호다. 그 자리만 골라 칠 때 쓴다.
         int byte_array_call { 0 };
         int get_key_call { 0 };
+        // 알림 Intent에 붙인 data다. 요청 번호가 충돌해도 원래 id로 갈리는지 본다.
+        std::string last_string {};
+        std::string parsed_uri {};
+        std::vector<std::string> notification_data {};
     };
 
     fake_state* current { nullptr };
@@ -233,10 +239,11 @@ namespace {
         return object();
     }
 
-    jstring JNICALL new_string_utf(JNIEnv*, const char*)
+    jstring JNICALL new_string_utf(JNIEnv*, const char* text)
     {
         if (step())
             return nullptr;
+        current->last_string = text;
         return reinterpret_cast<jstring>(&marker);
     }
 
@@ -320,6 +327,8 @@ namespace {
         if (step())
             return nullptr;
         const std::string_view name { method_name(method) };
+        if (name == "setData")
+            current->notification_data.push_back(current->parsed_uri);
         if (name == "getText" && current->clip_text_missing)
             return nullptr;
         if (name == "getType")
@@ -338,10 +347,12 @@ namespace {
         return object();
     }
 
-    jobject JNICALL call_static_object_v(JNIEnv*, jclass, jmethodID, va_list)
+    jobject JNICALL call_static_object_v(JNIEnv*, jclass, const jmethodID method, va_list)
     {
         if (step())
             return nullptr;
+        if (method_name(method) == "parse")
+            current->parsed_uri = current->last_string;
         return object();
     }
 
@@ -649,6 +660,41 @@ namespace {
                 CHECK(twice.state.popped == twice.state.pushed);
             }
         }
+    }
+}
+
+TEST_CASE("Notification intent data distinguishes colliding request codes and stays stable per id", "[android][jni_order][notification]")
+{
+    constexpr std::u8string_view first { u8"job-2654638162" };
+    constexpr std::u8string_view second { u8"job-2883736789" };
+    REQUIRE(luil::notification_request_code(first) == luil::notification_request_code(second));
+    fake_env scope {};
+    REQUIRE(luil::android::set_notification_intent_identity(scope.env(), object(), first));
+    REQUIRE(luil::android::set_notification_intent_identity(scope.env(), object(), second));
+    REQUIRE(luil::android::set_notification_intent_identity(scope.env(), object(), first));
+    const std::vector<std::string> expected { "luil-notification:job-2654638162", "luil-notification:job-2883736789", "luil-notification:job-2654638162" };
+    REQUIRE(scope.state().notification_data == expected);
+    CHECK_FALSE(scope.state().pending);
+    CHECK(scope.state().calls_while_pending == 0);
+    CHECK(scope.state().pushed == scope.state().popped);
+}
+
+TEST_CASE("Notification intent identity stops cleanly at every failed JNI call", "[android][jni_order][notification]")
+{
+    const auto run = [](JNIEnv& env)
+    {
+        return luil::android::set_notification_intent_identity(env, object(), u8"job-2654638162") ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    REQUIRE(success.answer == 1);
+    REQUIRE(success.state.notification_data.size() == 1u);
+    check_failure_points(run, success, 0);
+    for (int point { 1 }; point <= success.state.calls; ++point)
+    {
+        INFO("null point " << point);
+        const outcome missing { run_once_null(run, point) };
+        CHECK(missing.answer == 0);
+        check_clean(missing, point);
     }
 }
 

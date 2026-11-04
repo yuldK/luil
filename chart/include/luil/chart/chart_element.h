@@ -80,8 +80,8 @@ namespace luil {
         // 이 점을 고르라는 절대 메시지다. 누름, 끌기, 키가 모두 이 하나를 탄다.
         //  - 비면 고를 수 없는 그림이다. Tab 자리와 키가 없고 접근 노드는 root 하나이며, 칸은 hover만 맡는다.
         std::function<input_action(chart_point)> focus {};
-        // 값의 글이다. 눈금, 값 상자, 접근 글이 모두 쓴다. 비면 `format_chart_number`다 (눈금은 `chart_ticks::decimals` 자리,
-        // 값 상자와 접근 글은 거기에 한 자리를 더한다).
+        // 값의 글이다. 눈금, 값 상자, 접근 글이 모두 쓴다. 비면 고정 소수 표기다 (눈금은 `chart_ticks::decimals` 자리,
+        // 값 상자와 접근 글은 거기에 한 자리를 더한다). 필요한 소수 자리가 20을 넘으면 과학적 표기다.
         //  - 천 단위 구분, 큰 수 접미, 지역 소수점은 라이브러리에 없어 앱이 이 함수로 준다.
         //  - 배치, 그리기, 보조 기술의 질의에서 불린다. 앱 상태를 읽지 않는 함수로 준다 (게시된 tree는 불변이고 thread가 갈린다).
         std::function<std::u8string(double value)> format_value {};

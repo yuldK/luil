@@ -61,6 +61,7 @@ namespace luil {
             last.label = std::move(step.label);
             last.redo.clear();
             last.redo.push_back(std::move(step.redo));
+            trim();
             return true;
         }
 

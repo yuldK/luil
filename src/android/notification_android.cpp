@@ -5,6 +5,7 @@
 #include "android/device_request.h"
 #include "android/java_vm.h"
 #include "android/notification_icon.h"
+#include "android/notification_intent.h"
 #include "host/notification_queue.h"
 #include "luil/ui/image_decode.h"
 #include "ui/image_pixels.h"
@@ -333,12 +334,14 @@ namespace luil {
             return calls.static_object(calls.find_class("android/graphics/Bitmap"), "createBitmap", "([IIILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;", array, width, height, config);
         }
 
-        // 누르면 런처 Activity를 세우는 PendingIntent다. extra는 intent 비교에 들지 않아 task가 살아 있으면 그 task가 앞으로 온다.
+        // 누르면 런처 Activity를 세운다. extra는 PendingIntent 비교에 들지 않으므로 data에도 id를 넣는다.
         [[nodiscard]] jobject launch_intent(jni_calls& calls, const jobject context, const std::u8string& id)
         {
             const jobject package_manager { calls.object(context, "getPackageManager", "()Landroid/content/pm/PackageManager;") };
             const jobject package_name { calls.object(context, "getPackageName", "()Ljava/lang/String;") };
             const jobject intent { calls.object(package_manager, "getLaunchIntentForPackage", "(Ljava/lang/String;)Landroid/content/Intent;", package_name) };
+            if (calls.failed() || android::set_notification_intent_identity(calls.env(), intent, id) == false)
+                return nullptr;
             const jstring name { calls.string(extra_name) };
             const jstring value { calls.string(id) };
             static_cast<void>(calls.object(intent, "putExtra", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;", name, value));
@@ -427,6 +430,8 @@ namespace luil {
                 static_cast<void>(calls.object(builder, "setLargeIcon", "(Landroid/graphics/Bitmap;)Landroid/app/Notification$Builder;", bitmap));
         }
         const jobject pending { launch_intent(calls, context, value.id) };
+        if (pending == nullptr)
+            return failure(u8"Failed to create the notification launch intent.");
         static_cast<void>(calls.object(builder, "setContentIntent", "(Landroid/app/PendingIntent;)Landroid/app/Notification$Builder;", pending));
         const jobject built { calls.object(builder, "build", "()Landroid/app/Notification;") };
         const jstring tag { calls.string(value.id) };
