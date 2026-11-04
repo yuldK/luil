@@ -1085,10 +1085,16 @@ namespace luil::android {
                     return;
                 const jclass intent_type { env.GetObjectClass(intent) };
                 const jmethodID get_extra { env.GetMethodID(intent_type, "getStringExtra", "(Ljava/lang/String;)Ljava/lang/String;") };
+                if (jni_failed(env) || get_extra == nullptr)
+                    return;
                 const jmethodID remove_extra { env.GetMethodID(intent_type, "removeExtra", "(Ljava/lang/String;)V") };
+                if (jni_failed(env) || remove_extra == nullptr)
+                    return;
                 const jmethodID get_flags { env.GetMethodID(intent_type, "getFlags", "()I") };
+                if (jni_failed(env) || get_flags == nullptr)
+                    return;
                 const jstring name { env.NewStringUTF(notification_extra_name) };
-                if (jni_failed(env) || get_extra == nullptr || remove_extra == nullptr || get_flags == nullptr || name == nullptr)
+                if (jni_failed(env) || name == nullptr)
                     return;
                 const auto value { static_cast<jstring>(env.CallObjectMethod(intent, get_extra, name)) };
                 if (jni_failed(env) || value == nullptr)
@@ -1096,6 +1102,9 @@ namespace luil::android {
                 const jint flags { env.CallIntMethod(intent, get_flags) };
                 const bool from_history { jni_failed(env) == false && (flags & intent_flag_launched_from_history) != 0 };
                 const char* const characters { env.GetStringUTFChars(value, nullptr) };
+                // 글을 얻지 못하면 `OutOfMemoryError`가 남는다. 아래의 `removeExtra` 호출 전에 거둔다.
+                if (characters == nullptr)
+                    static_cast<void>(jni_failed(env));
                 std::u8string id {};
                 if (characters != nullptr)
                 {
@@ -1283,7 +1292,8 @@ namespace luil::android {
                 }
                 const int width { std::min(content_width(), static_cast<int>(std::ceil(288.0f * scale_))) };
                 const int height { std::min(content_height(), static_cast<int>(std::ceil(text_edit_menu_height(text_edit_menu_has_link(*value)) * scale_))) };
-                edit_menu_->tree = make_text_edit_menu(*value, user_ui_language().starts_with("ko"), static_cast<float>(width), static_cast<float>(height), scale_);
+                const std::string os_language { user_ui_language() };
+                edit_menu_->tree = make_text_edit_menu(*value, text_edit_menu_strings(std::u8string { os_language.begin(), os_language.end() }), static_cast<float>(width), static_cast<float>(height), scale_);
                 const rect_f anchor { location.element->bounds() };
                 const int left { static_cast<int>(std::lround(location.origin_x + anchor.x + (anchor.width - static_cast<float>(width)) / 2.0f)) };
                 const int below { static_cast<int>(std::lround(location.origin_y + anchor.y + anchor.height + 4.0f * scale_)) };

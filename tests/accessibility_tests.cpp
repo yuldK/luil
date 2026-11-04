@@ -32,6 +32,8 @@
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 
+#include "text_languages_guard.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -1675,6 +1677,36 @@ TEST_CASE("A calendar is a group over two buttons and a list of 42 days", "[ui][
     REQUIRE(named.children()[0]->accessibility().name == u8"back");
     REQUIRE(named.children()[2]->accessibility().name == u8"Nov");
     REQUIRE(named.children()[2]->children()[6]->accessibility().name == u8"2026-11-07, today, blocked");
+}
+
+TEST_CASE("The calendar and the date field read in the library language", "[ui][access][calendar][i18n]")
+{
+    const luil_test::text_languages_guard guard {};
+    guard.use(u8"en");
+
+    const luil::calendar_element calendar { access_calendar_config() };
+    CHECK(calendar.accessibility().name == u8"Calendar");
+    CHECK(calendar.children()[0]->accessibility().name == u8"Previous month");
+    CHECK(calendar.children()[1]->accessibility().name == u8"Next month");
+    const luil::ui_element& grid { *calendar.children()[2] };
+    CHECK(grid.accessibility().name == u8"November 2026");
+    // 1일이 첫 칸이다. 요일 줄은 그림이라 접근 이름이 없고, 꼬리는 요소가 쉼표로 잇는다.
+    CHECK(grid.children()[2]->accessibility().name == u8"Tuesday, November 3, 2026");
+    CHECK(grid.children()[4]->accessibility().name == u8"Thursday, November 5, 2026, Today");
+    CHECK(grid.children()[6]->accessibility().name == u8"Saturday, November 7, 2026, Unavailable");
+
+    luil::date_field_config field {};
+    field.owner = u8"due";
+    field.value = access_date(11, 3);
+    const luil::date_field_element chosen { field };
+    CHECK(chosen.accessibility().name == u8"Date");
+    CHECK(chosen.accessibility().value == u8"November 3, 2026");
+
+    guard.use(u8"ko");
+    const luil::calendar_element korean { access_calendar_config() };
+    CHECK(korean.accessibility().name == u8"달력");
+    CHECK(korean.children()[2]->accessibility().name == u8"2026년 11월");
+    CHECK(luil::date_field_element { field }.accessibility().value == u8"2026년 11월 3일");
 }
 
 TEST_CASE("Selecting a day plans its click and an already chosen day does nothing", "[ui][access][calendar]")

@@ -43,6 +43,8 @@ namespace {
                 watcher_ = mobile_demo::start_files_watch(host, files_directory_ / "watch-demo");
             // 서식 칸의 복사·붙여넣기 요청은 logic thread가 이 host에 넣는다.
             host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
+            // 시스템 언어를 바꾸면 Activity가 다시 서서 이 자리가 다시 불린다.
+            host.post_app_message(read_locale());
         }
 
         // 기기 페이지의 "묻기"와 "알림 보내기", 기본 페이지의 클립보드 그림 붙여넣기다. 묻지 않았으면(필요 없음·이미 받음) 지금
@@ -78,8 +80,11 @@ namespace {
         }
 
         // 앱이 뒤로 가면 SMB의 쉬는 연결을 닫는다. 돌아와서 망이 바뀌었어도 끊긴 연결을 다시 쓰지 않는다.
+        //  - 앞으로 오면 지역 값을 다시 읽는다. 지역 설정에서 첫 요일을 바꾸고 돌아온 자리다.
         [[nodiscard]] luil::app_message make_lifecycle_message(const luil::app_lifecycle lifecycle) override
         {
+            if (lifecycle == luil::app_lifecycle::foreground)
+                return read_locale();
             if (lifecycle != luil::app_lifecycle::background)
                 return {};
             return luil::app_message { mobile_demo::smb_close_idle_intent {} };
@@ -116,6 +121,12 @@ namespace {
         }
 
     private:
+        // 지역 질의는 부를 때마다 OS에 묻는다. 페이지 대신 delegate가 읽어 메시지로 넣는다.
+        [[nodiscard]] static luil::app_message read_locale()
+        {
+            return luil::app_message { mobile_demo::device_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } };
+        }
+
         std::unique_ptr<luil::net::smb_client> smb_ {};
         std::filesystem::path files_directory_ {};
         std::unique_ptr<luil::file_watcher> watcher_ {};

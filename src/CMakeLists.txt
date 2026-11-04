@@ -54,6 +54,15 @@ add_custom_command(
     COMMENT "Generating the style key table"
     VERBATIM)
 
+# 라이브러리 기본 문구의 문자열 표도 같은 방식이다 (docs/i18n-design.md). 앱의 표와 같은 생성 명령을 쓴다.
+#  - 소비자가 `LUIL_STRINGS`로 폴더를 바꿔도 키 집합은 저장소 파일과 같아야 한다. 라이브러리 코드가 생성 enum으로 부른다.
+luil_add_string_table_command(
+    OUTPUT "${LUIL_GENERATED_STRINGS}"
+    NAMESPACE "luil::library_text"
+    DIRECTORY "${LUIL_STRINGS}"
+    BASE ko
+    REFERENCE_FILE "${PROJECT_SOURCE_DIR}/assets/strings/ko.json")
+
 # 파일은 IDE 필터 단위로 적고, 그렇게 모인 것이 곧 라이브러리의 source 목록이다
 # (luil_add_source_filter, cmake/macro.cmake).
 #
@@ -76,7 +85,8 @@ luil_add_source_filter(luil_core_files "generated"
     "${LUIL_GENERATED_CODICONS}"
     "${LUIL_GENERATED_ACCENTS}"
     "${LUIL_GENERATED_STYLE}"
-    "${LUIL_GENERATED_STYLE_KEYS}")
+    "${LUIL_GENERATED_STYLE_KEYS}"
+    "${LUIL_GENERATED_STRINGS}")
 
 # core: 판번이다.
 luil_add_source_filter(luil_core_files "core"
@@ -110,7 +120,10 @@ luil_add_source_filter(luil_core_files "text"
     "${public_headers}/text/font_style.h"
     "${public_headers}/text/text_edit.h"
     text/utf8_text.cpp
-    "${public_headers}/text/utf8_text.h")
+    "${public_headers}/text/utf8_text.h"
+    text/library_text.h
+    text/string_table.cpp
+    "${public_headers}/text/string_table.h")
 
 # theme: 색·글꼴 선호 값과 팔레트 합성이다.
 luil_add_source_filter(luil_core_files "theme"
@@ -520,6 +533,7 @@ luil_add_source_filter(luil_files "win32/host"
     win32/instance_message.cpp
     win32/instance_message.h
     win32/platform_services_win32.cpp
+    win32/win32_locale.h
     win32/app_identity.cpp
     win32/app_identity.h
     win32/notification_win32.cpp
@@ -834,6 +848,8 @@ if(LUIL_PLATFORM STREQUAL "android")
         android/android_fonts.h
         android/android_input.cpp
         android/android_input.h
+        android/android_locale.cpp
+        android/android_locale.h
         android/android_system_theme.cpp
         android/android_system_theme.h
         android/android_settings.cpp

@@ -11,6 +11,7 @@
 //    (split-button-design.md).
 //  - 날짜 칸과 인라인 달력: 칸을 누르면 아래에 달력 popup이 뜨고 초점이 커서 날로 간다. 화살표·Page·Home·End가 커서를 옮기고
 //    Enter·누름이 고른다. Esc나 날 고르기로 닫으면 칸으로 돌아온다 (date-picker-design.md).
+//    "OS 첫 요일"을 켜면 두 달력의 주 첫 요일이 OS 값이다. 값은 셸이 읽어 메시지로 넣는다 (i18n-adoption-design.md).
 // 떠 있는 popup은 한 번에 하나다. 어느 필드의 것인지를 `open_popup_` 하나가 들고 있어 둘이 함께 열릴 수 없다.
 // popup은 창 경계를 넘을 수 있고, 닫힘 계기는 **이유와 함께** 온다: 컨텍스트
 // 메뉴는 어느 계기에도 닫히지만, 검색 중인 드롭다운은 창 이동·활성 전환에는
@@ -136,6 +137,24 @@ namespace demo {
         std::chrono::year_month_day day {};
     };
 
+    // 날짜 칸의 값을 비운다. 처음 칸에는 오늘이 들어 있어 이것 없이는 placeholder가 서지 않는다.
+    struct date_clear_intent
+    {
+    };
+
+    // 셸이 읽어 넣는 OS의 주 첫 요일이다 (`luil::user_first_weekday`). 이 페이지는 core test에 함께 컴파일되어 플랫폼 함수를 부르면
+    // 링크가 깨진다. 읽지 못했으면 빈 값이다.
+    struct date_os_first_day_intent
+    {
+        std::optional<std::chrono::weekday> value {};
+    };
+
+    // "OS 첫 요일" 체크다. 기본은 꺼져 일요일이다.
+    struct date_use_os_first_day_intent
+    {
+        bool use { false };
+    };
+
     // popup 모양을 골랐다 (`setting`은 "corner"·"border", `value`는 고른 값).
     struct popup_shape_intent
     {
@@ -180,6 +199,8 @@ namespace demo {
         void reset_color_hex();
         // 초점 요청을 새로 싣는다.
         void request_focus(std::u8string surface, luil::ui_element_id target);
+        // 두 달력에 넣는 주 첫 요일이다. 앱이 넣는 값이고 라이브러리의 기본은 일요일 그대로다.
+        [[nodiscard]] std::chrono::weekday first_day() const noexcept;
 
         // 이 페이지의 popup에 거는 모서리와 경계다. 기본은 OS 기본(Windows 11은 작게 둥글다)과 경계 있음이다.
         luil::popup_corner corner_ { luil::popup_corner::system };
@@ -222,6 +243,9 @@ namespace demo {
         std::chrono::year_month_day calendar_cursor_ {};
         luil::calendar_bounds calendar_bounds_ {};
         const luil::ui_element* date_field_ { nullptr };
+        // 셸이 넣어 준 OS의 주 첫 요일과 그 값을 달력에 쓰는가다.
+        std::optional<std::chrono::weekday> os_first_day_ {};
+        bool use_os_first_day_ { false };
         // 마지막 초점 요청이다. 열 때와 Esc로 닫을 때 번호를 올린다.
         std::uint64_t focus_revision_ { 0 };
         std::u8string focus_surface_ {};

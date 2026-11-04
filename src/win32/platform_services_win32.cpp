@@ -5,6 +5,7 @@
 #include "win32/owned_handle.h"
 #include "win32/utf8.h"
 #include "win32/win32_error.h"
+#include "win32/win32_locale.h"
 
 #include <windows.h>
 
@@ -505,5 +506,27 @@ namespace luil {
         if (GetLastError() == ERROR_NOT_FOUND)
             return { platform_status::not_found, {}, std::nullopt };
         return last_error(u8"Failed to cancel the blocked I/O");
+    }
+
+    std::optional<std::chrono::weekday> user_first_weekday()
+    {
+        // `LOCALE_RETURN_NUMBER`면 버퍼에 수가 들고 크기는 wchar_t 수로 센다. 사용자가 지역 설정에서 바꾼 값을 읽는다.
+        DWORD value { 0 };
+        if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER, reinterpret_cast<LPWSTR>(&value), sizeof(value) / sizeof(wchar_t)) == 0)
+            return std::nullopt;
+        return win32::weekday_from_locale_first_day(value);
+    }
+
+    std::vector<std::u8string> user_ui_languages()
+    {
+        // 글꼴이 읽는 `GetUserDefaultLocaleName`은 지역 서식의 이름이라 표시 언어와 다를 수 있어 쓰지 않는다.
+        ULONG count { 0 };
+        ULONG size { 0 };
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, nullptr, &size) == FALSE || size == 0u)
+            return {};
+        std::wstring list(size, L'\0');
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, list.data(), &size) == FALSE)
+            return {};
+        return win32::language_tags_from_multi_string(list);
     }
 }

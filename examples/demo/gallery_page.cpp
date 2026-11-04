@@ -1,6 +1,8 @@
 #include "demo/gallery_page.h"
 #include "demo/files_page.h"
 
+#include "luil/text/string_table.h"
+#include "luil/theme/ui_theme.h"
 #include "luil/ui/badge_element.h"
 #include "luil/ui/breadcrumb_element.h"
 #include "luil/ui/check_element.h"
@@ -20,6 +22,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -124,6 +128,22 @@ namespace demo {
             config.direction = luil::stack_direction::row;
             config.spacing = 8.0f;
             return std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, std::move(owner) }, config);
+        }
+
+        // "기본 문구 선호: en · 강조색 이름: Blue" 꼴이다. 시작할 때는 정하지 않은 상태라 "시스템"을 가리켜도 한국어다.
+        [[nodiscard]] std::u8string language_state_text()
+        {
+            std::u8string text { u8"기본 문구 선호: " };
+            if (const std::optional<std::vector<std::u8string>> chosen { luil::text_languages() }; chosen.has_value() == false)
+                text += u8"정하지 않음";
+            else if (chosen->empty())
+                text += u8"빈 목록";
+            else
+            {
+                for (std::size_t index { 0 }; index < chosen->size(); ++index)
+                    text += (index == 0u ? std::u8string {} : std::u8string { u8", " }) + (*chosen)[index];
+            }
+            return text + u8" · 강조색 이름: " + std::u8string { luil::accent_label(luil::accent_for(u8"blue")) };
         }
 
         [[nodiscard]] std::unique_ptr<luil::check_element> toggle(std::u8string key, std::u8string label, const bool checked, const luil::check_style style)
@@ -407,6 +427,9 @@ namespace demo {
         languages.selected = language_;
         languages.select = [](const std::u8string& value) { return luil::make_app_action(gallery_choice_intent { value, u8"language" }); };
         page.add(std::make_unique<luil::choice_group_element>(std::move(languages)), luil::choice_toggle_height);
+        page.gap(6.0f);
+        // 고른 언어는 셸이 `set_text_languages`로 잇는다. 라이브러리가 지금 무엇을 쓰는지를 그대로 그린다.
+        page.add(make_label({ kind_text, u8"gallery/language-state" }, language_state_text(), 11.0f, luil::label_color_role::dim), 18.0f);
         page.end_card();
 
         page.begin_card(u8"진행률 · " + to_u8(static_cast<int>(value_)) + u8"%");

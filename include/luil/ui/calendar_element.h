@@ -53,7 +53,7 @@ namespace luil {
         calendar_bounds bounds {};
         // 고를 수 있는 날인가다. 비면 범위 안 모두다. 거짓인 날에도 커서는 서지만 고르지 않는다 (결정 6).
         std::function<bool(std::chrono::year_month_day)> available {};
-        // 주의 첫 요일이다. 기본은 일요일이다 (OS 지역을 읽지 않는다, calendar-date 결정 2).
+        // 주의 첫 요일이다. 기본은 일요일이다. OS를 읽지 않는다. 앱은 `user_first_weekday`의 값을 넣는다.
         std::chrono::weekday first_day { std::chrono::Sunday };
         // 이 날을 고르라는 메시지다. 날 칸의 클릭·탭, 초점 날의 Enter·Space, 보조 기술의 Select가 낸다. 없으면 고를 수 없다.
         std::function<input_action(std::chrono::year_month_day)> select {};

@@ -1,3 +1,4 @@
+#include "consumer_strings.h"
 #include "luil/generated/codicons.h"
 #include "luil/net/http_client.h"
 #include "luil/ui/glyph_element.h"
@@ -69,5 +70,13 @@ int main()
     config.deliver = [](luil::net::http_response) {};
     std::u8string error {};
     const auto client { luil::net::http_client::create(std::move(config), error) };
-    return client == nullptr ? 2 : 0;
+    if (client == nullptr)
+        return 2;
+
+    // 설치본의 CMake 함수가 지은 문자열 표와 공개 조회도 소비자가 실제로 부를 수 있어야 한다.
+    const std::array<luil::string_argument, 1> strokes { { { u8"count", std::int64_t { 3 } } } };
+    const luil::string_lookup strings { luil::select_strings(consumer_strings::table, {}) };
+    if (consumer_strings::format(strings, consumer_strings::key::stroke_count, strokes) != u8"획 3개")
+        return 14;
+    return 0;
 }

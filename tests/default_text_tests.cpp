@@ -1,5 +1,7 @@
 #include "ui/default_text.h"
 
+#include "text_languages_guard.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -181,4 +183,93 @@ TEST_CASE("The teaching tip words are its own functions even where the word matc
     REQUIRE(luil::default_text::teaching_tip_name() == u8"안내");
     REQUIRE(luil::default_text::teaching_tip_close() == u8"닫기");
     REQUIRE(luil::default_text::teaching_tip_close() == luil::default_text::info_bar_close());
+}
+
+TEST_CASE("The words and sentences follow the library language and come back the same", "[ui][default-text][i18n]")
+{
+    using namespace std::chrono_literals;
+    const luil_test::text_languages_guard guard {};
+    constexpr std::chrono::year_month_day day { 2026y / std::chrono::November / 3d };
+    constexpr std::chrono::year_month_day impossible { 2026y / std::chrono::February / 30d };
+
+    guard.use(u8"en");
+    CHECK(luil::default_text::info_bar_close() == u8"Close");
+    CHECK(luil::default_text::severity_name(luil::ui_severity::warning) == u8"Warning");
+    CHECK(luil::default_text::theme_picker_name() == u8"Theme");
+    CHECK(luil::default_text::theme_picker_label(luil::theme_preference::light) == u8"Light");
+    CHECK(luil::default_text::theme_picker_label(luil::theme_preference::system) == u8"System");
+    CHECK(luil::default_text::theme_picker_label(luil::theme_preference::dark) == u8"Dark");
+    CHECK(luil::default_text::message_box_no_label() == u8"No");
+    CHECK(luil::default_text::date_field_placeholder() == u8"Select date");
+    CHECK(luil::default_text::split_button_arrow_name(u8"Save") == u8"Save options");
+    CHECK(luil::default_text::date_field_text(day) == u8"November 3, 2026");
+    CHECK(luil::default_text::calendar_day_name(day) == u8"Tuesday, November 3, 2026");
+    CHECK(luil::default_text::calendar_month_title({ 2026y, std::chrono::November }) == u8"November 2026");
+    CHECK(luil::default_text::calendar_weekday_short(std::chrono::Sunday) == u8"Su");
+    CHECK(luil::default_text::calendar_weekday_short(std::chrono::Saturday) == u8"Sa");
+    CHECK(luil::default_text::calendar_weekday_short(std::chrono::weekday { 9 }).empty());
+    CHECK(luil::default_text::ink_canvas_summary(0) == u8"0 strokes");
+    CHECK(luil::default_text::ink_canvas_summary(1) == u8"1 stroke");
+    CHECK(luil::default_text::ink_canvas_summary(2) == u8"2 strokes");
+    CHECK(luil::default_text::rating_value_name(3.5f, 5) == u8"3.5 / 5");
+    CHECK(luil::default_text::color_picker_plane_value(0.4f, 0.8f) == u8"Saturation 40%, brightness 80%");
+    // 틀린 날은 요일 없는 날짜 문장이고, 이름이 없는 달은 숫자 글자다.
+    CHECK(luil::default_text::calendar_day_name(impossible) == u8"February 30, 2026");
+    CHECK(luil::default_text::date_field_text({ 2026y, std::chrono::month { 13 }, 3d }) == u8"13 3, 2026");
+    CHECK(luil::default_text::calendar_month_title({ 2026y, std::chrono::month { 13 } }) == u8"13 2026");
+
+    // 앞서 받은 view는 언어를 바꿔도 산다 (표는 정적 저장소다).
+    const std::u8string_view close { luil::default_text::info_bar_close() };
+    guard.use(u8"ko");
+    CHECK(close == u8"Close");
+    CHECK(luil::default_text::info_bar_close() == u8"닫기");
+    CHECK(luil::default_text::theme_picker_name() == u8"테마");
+    CHECK(luil::default_text::split_button_arrow_name(u8"저장") == u8"저장 옵션");
+    CHECK(luil::default_text::date_field_text(day) == u8"2026년 11월 3일");
+    CHECK(luil::default_text::calendar_day_name(day) == u8"2026년 11월 3일 화요일");
+    CHECK(luil::default_text::calendar_month_title({ 2026y, std::chrono::November }) == u8"2026년 11월");
+    CHECK(luil::default_text::calendar_weekday_short(std::chrono::Sunday) == u8"일");
+    CHECK(luil::default_text::ink_canvas_summary(2) == u8"획 2개");
+    CHECK(luil::default_text::rating_value_name(3.5f, 5) == u8"3.5 / 5");
+    CHECK(luil::default_text::color_picker_plane_value(0.4f, 0.8f) == u8"채도 40%, 명도 80%");
+    CHECK(luil::default_text::calendar_day_name(impossible) == u8"2026년 2월 30일");
+    CHECK(luil::default_text::date_field_text({ 2026y, std::chrono::month { 13 }, 3d }) == u8"2026년 13월 3일");
+
+    // 표에 없는 언어와 빈 목록은 한국어다.
+    guard.use(u8"de");
+    CHECK(luil::default_text::zoom_fit() == u8"맞춤");
+    luil::set_text_languages({});
+    CHECK(luil::default_text::zoom_fit() == u8"맞춤");
+}
+
+TEST_CASE("The date words have a name for every month and weekday in both languages", "[ui][default-text][i18n]")
+{
+    using namespace std::chrono_literals;
+    const luil_test::text_languages_guard guard {};
+    guard.use(u8"en");
+    const std::array<std::u8string_view, 12> months { u8"January", u8"February", u8"March", u8"April", u8"May", u8"June", u8"July", u8"August", u8"September", u8"October", u8"November", u8"December" };
+    for (unsigned month { 1 }; month <= 12u; ++month)
+    {
+        CAPTURE(month);
+        const std::u8string expected { std::u8string { months[month - 1u] } + u8" 2026" };
+        CHECK(luil::default_text::calendar_month_title({ 2026y, std::chrono::month { month } }) == expected);
+    }
+
+    // 2026-11-01은 일요일이다. 차례가 엇갈리면 요일이 어긋난다.
+    const std::array<std::u8string_view, 7> weekdays { u8"Sunday", u8"Monday", u8"Tuesday", u8"Wednesday", u8"Thursday", u8"Friday", u8"Saturday" };
+    for (unsigned offset { 0 }; offset < 7u; ++offset)
+    {
+        CAPTURE(offset);
+        const std::chrono::year_month_day day { 2026y, std::chrono::November, std::chrono::day { 1u + offset } };
+        CHECK(luil::default_text::calendar_day_name(day).starts_with(weekdays[offset]));
+    }
+
+    guard.use(u8"ko");
+    const std::array<std::u8string_view, 7> korean { u8"일요일", u8"월요일", u8"화요일", u8"수요일", u8"목요일", u8"금요일", u8"토요일" };
+    for (unsigned offset { 0 }; offset < 7u; ++offset)
+    {
+        CAPTURE(offset);
+        const std::chrono::year_month_day day { 2026y, std::chrono::November, std::chrono::day { 1u + offset } };
+        CHECK(luil::default_text::calendar_day_name(day).ends_with(korean[offset]));
+    }
 }

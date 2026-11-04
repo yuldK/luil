@@ -3,12 +3,17 @@
 #include "luil/ui/theme_picker_element.h"
 #include "luil/ui/ui_tree.h"
 
+#include "text_languages_guard.h"
+
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -199,6 +204,56 @@ TEST_CASE("The picker configs hold no default text and the elements fill the emp
     accents.owner = u8"accent";
     const luil::ui_tree accent_tree { luil::make_arranged_tree(std::make_unique<luil::accent_picker_element>(accents), { 0.0f, 0.0f, 400.0f, 200.0f }, 1.0f) };
     REQUIRE(accent_tree.root()->accessibility().name == u8"강조색");
+}
+
+TEST_CASE("The picker words and the accent names follow the library language", "[ui][theme-picker][i18n]")
+{
+    const luil_test::text_languages_guard guard {};
+    // 시스템 항목도 세운다. 전역이라 끝에서 내려 다른 test에 새지 않게 한다.
+    struct system_accent_scope
+    {
+        system_accent_scope()
+        {
+            luil::set_system_accent(luil::make_ui_color(0, 120, 212));
+        }
+
+        ~system_accent_scope()
+        {
+            luil::set_system_accent(std::nullopt);
+        }
+    };
+    const system_accent_scope scope {};
+
+    luil::accent_picker_config accents {};
+    accents.owner = u8"accent";
+    accents.include_system = true;
+    const auto swatch = [](const luil::ui_tree& tree, const std::u8string_view id) -> const luil::ui_element&
+    {
+        const luil::ui_element* const found { tree.find({ luil::ui_element_kind::choice, u8"accent/" + std::u8string { id } }) };
+        REQUIRE(found != nullptr);
+        return *found;
+    };
+    const auto check_language = [&](const std::u8string_view picker, const std::u8string_view accent_picker, const std::array<std::u8string_view, 3> cards, const std::u8string_view blue, const std::u8string_view system)
+    {
+        const luil::ui_tree themes_tree { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(themes()), { 0.0f, 0.0f, 700.0f, 200.0f }, 1.0f) };
+        CHECK(themes_tree.root()->accessibility().name == picker);
+        REQUIRE(themes_tree.root()->children().size() == cards.size());
+        for (std::size_t index = 0; index < cards.size(); ++index)
+            CHECK(themes_tree.root()->children()[index]->accessibility().name == cards[index]);
+
+        const luil::ui_tree accent_tree { luil::make_arranged_tree(std::make_unique<luil::accent_picker_element>(accents), { 0.0f, 0.0f, 400.0f, 200.0f }, 1.0f) };
+        CHECK(accent_tree.root()->accessibility().name == accent_picker);
+        // 툴팁과 접근 이름이 같은 글이다.
+        CHECK(swatch(accent_tree, u8"blue").accessibility().name == blue);
+        CHECK(swatch(accent_tree, u8"blue").tooltip() == blue);
+        CHECK(swatch(accent_tree, luil::system_accent_id).accessibility().name == system);
+    };
+
+    check_language(u8"테마", u8"강조색", { u8"밝게", u8"시스템", u8"어둡게" }, u8"블루", u8"시스템");
+    guard.use(u8"en");
+    check_language(u8"Theme", u8"Accent color", { u8"Light", u8"System", u8"Dark" }, u8"Blue", u8"System");
+    guard.use(u8"ko");
+    check_language(u8"테마", u8"강조색", { u8"밝게", u8"시스템", u8"어둡게" }, u8"블루", u8"시스템");
 }
 
 TEST_CASE("The picker fields the app fills are used as given and the others stay default", "[ui][theme-picker][default-text]")

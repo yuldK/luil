@@ -35,6 +35,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace mobile_demo {
     // 흘리는 창 하나를 끈 만큼 옮긴다 (논리 픽셀, +가 아래로). 어느 창인지는 owner가 말한다
@@ -73,6 +74,8 @@ namespace mobile_demo {
         // 좁은 화면은 목록 또는 페이지 하나, 넓은 화면은 오른쪽 판의 페이지다.
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_body_page(const std::u8string& page, bool wide, float width, float height, float scale);
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_navigation(float width, float height, float scale, bool highlight);
+        // 고른 언어 칸을 라이브러리 언어로 잇는다. "system"이면 OS가 준 목록이다.
+        void apply_text_language(const std::u8string& choice);
         // 페이지 하나를 그 자리에 맞춰 짓는다. 흘려 보는 페이지는 scroll view에 담는다.
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_page(const std::u8string& page, float width, float height, float scale);
         [[nodiscard]] std::unique_ptr<luil::ui_element> wrap_scroll(std::u8string owner, page_content content, float height, float scale);
@@ -92,6 +95,10 @@ namespace mobile_demo {
         sheets_page sheets_ {};
         smb_page smb_ {};
         files_page files_ {};
+
+        // 기기 페이지에서 고른 언어 칸과 OS 표시 언어다. 고른 적이 없으면 비었고 라이브러리 언어를 정하지 않는다.
+        std::u8string text_language_ {};
+        std::vector<std::u8string> system_languages_ {};
 
         // 좁은 화면에서 열어 둔 페이지다. 비어 있으면 목록이다. 넓은 화면은 비어 있으면 첫 페이지를 보인다.
         std::u8string page_ {};

@@ -218,7 +218,7 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 | --- | --- |
 | split-button-design.md 156·231행 | 날짜 칸은 열 때 초점을 popup의 커서 날로 옮기고 Esc·날 고르기로 칸에 돌린다. popups 페이지는 이 노드가 쓰고 teaching_tip은 toasts 페이지로 간다 |
 | color-picker-design.md 158·168·221행 | 시·분 칸은 내지 않았다(결정 1). 초점 규약은 따르고 날 고르기에도 되돌림을 싣는다. 키 조합 대신 격자 처리기다(결정 2) |
-| default-text-design.md 208행 | 한국어 기본 날짜 문구는 지금 두고 지역 서식은 R5로 남긴다 |
+| default-text-design.md 208행 | 언어별 문장은 R5 표, 숫자·날짜 서식은 범위 C |
 | components.md | 날짜 고르기와 달력 날짜 계산 행을 더한다 |
 
 잇기만 하는 곳은 고치지 않는다. [field_popup.h](../include/luil/ui/field_popup.h) 9행과 split-button-design.md 5·133·229행(날짜 칸이 열림 규약을 따른다), [menu-focus-fixes-design.md](menu-focus-fixes-design.md) 103행(날짜 칸이 `expanded`를 알려 X-4를 받는다)이다.
@@ -245,5 +245,5 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 - 기간 고르기(시작과 끝), 여러 날 고르기, 주 번호.
 - 날짜를 글로 쳐 넣는 칸(확정 N1-input a). 앱이 칸을 따로 둔다.
 - 달 넘김 전환 움직임. page_anim 뒤에 따로 정한다.
-- OS 지역 설정 읽기와 지역 서식. R5 i18n의 몫이다.
+- OS 날짜 서식(범위 C). 첫 요일 질의는 [흡수 문서](i18n-adoption-design.md).
 - Android 접근성 계층.

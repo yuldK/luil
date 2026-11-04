@@ -124,7 +124,7 @@ const luil::ui_markup_context context {
 
 **값.**
 
-- 속성 값의 `{이름}`은 값 표에서 찾는다. 이름은 `[A-Za-z_][A-Za-z0-9_]*`이고, 반복 변수는 `{item.title}`처럼 점 하나로 그 항목의 이름을 읽는다. `{{`·`}}`는 글자 `{`·`}`다. `{` 안의 `:`는 앞으로의 접두(R5 i18n)를 위해 비워 두어 지금은 `invalid_value`다.
+- 속성 값의 `{이름}`은 값 표에서 찾는다. 이름은 `[A-Za-z_][A-Za-z0-9_]*`이고, 반복 변수는 `{item.title}`처럼 점 하나로 그 항목의 이름을 읽는다. `{{`·`}}`는 글자 `{`·`}`다. `{` 안의 `:`는 앞으로의 접두(마크업 후속)를 위해 비워 두어 지금은 `invalid_value`다.
 - 찾는 차례: `{item.title}`은 `as="item"`인 가장 안쪽 반복의 항목에서만 찾는다. 점 없는 `{title}`은 안쪽 항목부터 바깥 항목, 마지막에 context의 `values` 순으로 찾는다(안쪽이 먼저다).
 - 속성 값 전체가 `{이름}` 하나면 값의 형을 그대로 쓴다. 참거짓 속성(`checked`·`mixed`·`visible`·`enabled`·`test`)에는 참거짓, 수 속성(`value`·`length`·`spacing` 등)에는 수, `each`에는 목록이다. 글이 섞이면(`누른 횟수: {count}`) 글 속성만 되고 끼우는 값도 글이어야 한다. 수를 글로 바꾸지 않는다. 자리 구분과 소수점이 언어마다 달라 앱이 글로 지어 넣는다.
 - 바인딩을 받는 속성은 글·수·참거짓 속성과 `each`·`test`·`key`·`argument`다. enum·역할·`id`·`kind`·`action`·`name`은 적힌 글자뿐이다. 어휘 확인을 모두 읽을 때 끝내기 위해서다.
@@ -226,7 +226,7 @@ const luil::ui_markup_context context {
 
 - **hot_reload(R5, 같은 줄).** [스타일 읽기](style-sheet-design.md) 227행의 다섯 약속을 그대로 따른다. (1) `parse_ui_markup`은 순수 함수라 감시 thread에서 불러도 되고 `shared_ptr<const ui_markup_document>`만 `post_app_message`로 넘긴다. 틀은 불변이라 thread 사이에 나눠 쥔다. (2) 파일 하나가 틀 하나다. 다시 읽기는 파일 전체를 다시 읽는다. (3) 실패하면 `document`가 비고 앱은 쥔 틀을 바꾸지 않는다. 화면은 이전 틀로 남는다. (4) 반쯤 쓴 파일은 `syntax`로 막힌다. 쓰는 쪽은 `replace_file_atomically`를 쓴다. (5) 오류는 `describe` 한 줄이다. 감시는 [파일 감시](file-watch-design.md)의 `file_watch_scope::file`이다(234~240행).
 - **상태 보존(같은 약속).** 앱 상태는 logic driver에 있고 틀은 구조만 든다. 그래서 다시 읽어도 값이 그대로다. 초점·hover·눌림은 id로 이어져 `id`·`key`가 바뀌지 않은 요소는 그대로 남는다. 다시 읽은 틀에서 사라진 id의 초점은 controller가 거둔다(`interaction_controller::update_focus`, `ui_interaction.cpp` 4506~4507행). 스크롤 자리처럼 앱이 id로 쥔 상태도 같다.
-- **i18n(R5, 줄 4).** `{` 안의 `:`를 비워 둔다. 문자열 표 조회는 `{t:key}` 같은 접두로 더할 수 있고 지금의 이름 찾기와 겹치지 않는다. 그 전까지 번역 글은 앱이 값으로 넣는다.
+- **문자열 표(마크업 후속).** R5의 [문자열 표](i18n-design.md)는 마크업을 열지 않았다(그 문서의 결정 6). `{` 안의 `:`는 그대로 비워 둔다. 표 조회는 마크업 후속에서 `{t:key}` 같은 접두로 더할 수 있고 지금의 이름 찾기와 겹치지 않는다. 그 전까지 번역 글은 앱이 고른 문장을 값으로 넣는다.
 - **줄 3(controller).** 사건과 초점은 지금의 `ui_action`·id 길이라 `ui_interaction.*`을 고치지 않는다. 줄 3에 약속할 것이 없다.
 - **검사기(R2).** `kinds`는 `inspector_config::kind_names`와 같은 형이라 앱이 한 벌을 두 곳에 준다.
 
@@ -248,4 +248,4 @@ const luil::ui_markup_context context {
 
 - 식 언어(비교·산술·삼항), 값의 양방향 묶음, 관찰·갱신.
 - 앱 정의 태그 등록(결정 8의 길 b). 좌표·끌기 액션과 한 요소의 여러 사건.
-- 다시 읽기의 감시와 디바운스(R5 hot_reload). 문자열 표 조회(R5 i18n).
+- 다시 읽기의 감시와 디바운스는 [핫 리로드](hot-reload-design.md)가 닫았다. 문자열 표 조회(마크업 후속).

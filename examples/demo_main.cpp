@@ -65,6 +65,7 @@
 #include "luil/app/platform_services.h"
 #include "luil/app/updater.h"
 #include "luil/net/http_client.h"
+#include "luil/text/string_table.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/choice_group_element.h"
@@ -298,6 +299,13 @@ namespace demo {
             });
             return caption;
         }
+
+        // 시작할 때 UI thread가 읽어 logic thread로 넣는 OS 값이다 (i18n-adoption-design.md). 페이지는 받은 값만 그린다.
+        struct os_locale_intent
+        {
+            std::optional<std::chrono::weekday> first_weekday {};
+            std::vector<std::u8string> languages {};
+        };
 
         // logic thread가 소유하는 앱 상태다.
         // 페이지가 자기 상태·메시지·화면을 맡고, 셸은 내비게이션과 조립만 한다.
@@ -752,6 +760,21 @@ namespace demo {
                     return;
                 }
 
+                // OS 값은 페이지가 직접 읽지 않는다. 페이지는 core test에 함께 컴파일되어 플랫폼 함수를 부르면 링크가 깨진다.
+                if (const auto* const locale { message.get<os_locale_intent>() }; locale != nullptr)
+                {
+                    system_languages_ = locale->languages;
+                    static_cast<void>(popups_.handle(luil::app_message { date_os_first_day_intent { locale->first_weekday } }));
+                    return;
+                }
+
+                // 갤러리의 언어 고르기를 라이브러리 언어에 잇는다. 페이지와 그 test는 전역 언어를 건드리지 않는다.
+                //  - 시작할 때는 부르지 않는다. 기본 문구는 앱이 정할 때까지 한국어다.
+                if (const auto* const choice { message.get<gallery_choice_intent>() }; choice != nullptr && choice->group == u8"language")
+                    apply_text_language(choice->value);
+                if (message.get<gallery_reset_intent>() != nullptr)
+                    apply_text_language(u8"system");
+
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
@@ -1061,6 +1084,18 @@ namespace demo {
             }
 
         private:
+            // 갤러리의 언어 칸을 라이브러리 언어로 잇는다. 시스템은 OS가 준 표시 언어다.
+            void apply_text_language(const std::u8string_view choice)
+            {
+                if (choice == u8"system")
+                {
+                    luil::set_text_languages(system_languages_);
+                    return;
+                }
+                const std::vector<std::u8string> languages { std::u8string { choice } };
+                luil::set_text_languages(languages);
+            }
+
             // 주소 하나를 보낸다. 표를 페이지에게 되돌려 주는 것까지가 이 함수다 —
             // 페이지는 그 표로 자기 흐름을 알아본다 (http-client-design.md).
             void send_network_request(const network_send_intent& request)
@@ -1265,6 +1300,8 @@ namespace demo {
                 return basics_.build(width, height, scale);
             }
 
+            // "시스템"을 고를 때 넣을 OS 표시 언어다 (`os_locale_intent`).
+            std::vector<std::u8string> system_languages_ {};
             gallery_page gallery_ {};
             basics_page basics_ {};
             lists_page lists_ {};
@@ -1464,6 +1501,8 @@ namespace demo {
                 driver_.bind_host(host);
                 // 앱 식별은 창보다 먼저 섰다. 토스트 페이지의 상태 줄이 처음부터 이 값을 보인다.
                 host.post_app_message(luil::app_message { os_notification_status_intent { luil::notification_status() } });
+                // 지역 값은 시작할 때 한 번 읽는다. 데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 다시 읽지 않는다.
+                host.post_app_message(luil::app_message { os_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
             }
 
             // 사용자가 OS 알림을 누르거나 닫았다. 토스트 페이지가 사건 줄로 보인다.

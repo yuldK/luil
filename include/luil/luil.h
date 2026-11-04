@@ -19,6 +19,7 @@
 #include "luil/text/fonts.h"
 #include "luil/text/grapheme.h"
 #include "luil/text/line_break.h"
+#include "luil/text/string_table.h"
 #include "luil/text/text_change.h"
 #include "luil/text/text_edit.h"
 #include "luil/text/text_format.h"

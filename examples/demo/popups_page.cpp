@@ -5,6 +5,7 @@
 #include "luil/app/menu_popup.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/calendar_element.h"
+#include "luil/ui/check_element.h"
 #include "luil/ui/choice_group_element.h"
 #include "luil/ui/color_picker_element.h"
 #include "luil/ui/dialog_elements.h"
@@ -16,7 +17,9 @@
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_tree.h"
 #include <algorithm>
+#include <array>
 #include <ctime>
+#include <string_view>
 
 #include <utility>
 
@@ -46,6 +49,13 @@ namespace demo {
             const int month { static_cast<int>(static_cast<unsigned>(day.month())) };
             const int date { static_cast<int>(static_cast<unsigned>(day.day())) };
             return to_u8(static_cast<int>(day.year())) + u8"년 " + to_u8(month) + u8"월 " + to_u8(date) + u8"일";
+        }
+
+        // 상태 줄에 적는 요일 이름이다.
+        [[nodiscard]] std::u8string_view weekday_name(const std::chrono::weekday day) noexcept
+        {
+            constexpr std::array<std::u8string_view, 7> names { u8"일요일", u8"월요일", u8"화요일", u8"수요일", u8"목요일", u8"금요일", u8"토요일" };
+            return day.ok() ? names[day.c_encoding()] : std::u8string_view {};
         }
 
         [[nodiscard]] bool weekday_only(const std::chrono::year_month_day day)
@@ -114,6 +124,11 @@ namespace demo {
         calendar_value_ = today_;
         calendar_bounds_ = { std::chrono::year_month_day { now - std::chrono::days { 30 } }, std::chrono::year_month_day { now + std::chrono::days { 60 } } };
         calendar_cursor_ = std::chrono::year_month_day { now + std::chrono::days { 7 } };
+    }
+
+    std::chrono::weekday popups_page::first_day() const noexcept
+    {
+        return use_os_first_day_ ? os_first_day_.value_or(std::chrono::Sunday) : std::chrono::Sunday;
     }
 
     std::chrono::year_month_day popups_page::local_today() noexcept
@@ -301,6 +316,21 @@ namespace demo {
             return true;
         }
         // 날짜 칸이다. 열면 커서를 시작 커서로 두고 popup의 커서 날로 초점을 옮긴다. 다시 누른 닫기는 초점을 옮기지 않는다.
+        if (message.get<date_clear_intent>() != nullptr)
+        {
+            date_value_.reset();
+            return true;
+        }
+        if (const auto* const os_first_day { message.get<date_os_first_day_intent>() }; os_first_day != nullptr)
+        {
+            os_first_day_ = os_first_day->value;
+            return true;
+        }
+        if (const auto* const use_os_first_day { message.get<date_use_os_first_day_intent>() }; use_os_first_day != nullptr)
+        {
+            use_os_first_day_ = use_os_first_day->use;
+            return true;
+        }
         if (const auto* const date { message.get<date_field_intent>() }; date != nullptr)
         {
             if (date->open)
@@ -566,6 +596,22 @@ namespace demo {
         const std::u8string date_shown { date_value_.has_value() ? korean_date(*date_value_) : std::u8string { u8"없음" } };
         const std::u8string date_state { std::u8string { u8"날짜 칸: " } + (open_popup_ == date_owner ? u8"열림" : u8"닫힘") + u8" · " + date_shown };
         page.add(make_label({ kind_text, u8"popups/date-state" }, date_state, 12.0f, luil::label_color_role::dim), 22.0f);
+        page.gap(6.0f);
+        auto date_clear { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"popups/date-clear" }, luil::text_button_config { .text = u8"날짜 비우기" }) };
+        date_clear->set_action(luil::ui_trigger::left_click, luil::make_message_action(date_clear_intent {}));
+        page.add(std::move(date_clear), luil::stack_item { .length = luil::text_button_height, .cross_length = 104.0f });
+        page.gap(16.0f);
+
+        // 주 첫 요일이다. 라이브러리는 OS를 읽지 않고 앱이 칸에 넣는다. 값은 셸이 시작할 때 읽어 메시지로 넣었다.
+        luil::check_config os_first_day {};
+        os_first_day.owner = u8"date-os-first-day";
+        os_first_day.label = u8"OS 첫 요일";
+        os_first_day.checked = use_os_first_day_;
+        os_first_day.toggle = luil::make_message_action(date_use_os_first_day_intent { use_os_first_day_ == false });
+        const float os_first_day_height { luil::check_element::height_for(os_first_day) };
+        page.add(std::make_unique<luil::check_element>(std::move(os_first_day)), luil::stack_item { .length = os_first_day_height, .cross_length = field_button_width });
+        const std::u8string first_day_source { use_os_first_day_ == false ? u8"기본" : (os_first_day_.has_value() ? u8"OS" : u8"OS가 답하지 않음") };
+        page.add(make_label({ kind_text, u8"date-first-day" }, u8"주 첫 요일: " + std::u8string { weekday_name(first_day()) } + u8" · " + first_day_source, 12.0f, luil::label_color_role::dim), 22.0f);
         page.gap(16.0f);
 
         // 인라인 달력이다. 범위(오늘 앞 30일, 뒤 60일) 밖과 주말은 고를 수 없다. 커서와 고른 날은 label로도 그린다.
@@ -576,6 +622,7 @@ namespace demo {
         calendar.today = today_;
         calendar.bounds = calendar_bounds_;
         calendar.available = weekday_only;
+        calendar.first_day = first_day();
         const luil::size_f calendar_size { luil::calendar_element::size_for(calendar) };
         page.add(std::make_unique<luil::calendar_element>(std::move(calendar)), luil::stack_item { .length = calendar_size.height, .cross_length = calendar_size.width });
         page.gap(8.0f);
@@ -715,6 +762,7 @@ namespace demo {
             calendar.value = date_value_;
             calendar.cursor = date_cursor_;
             calendar.today = today_;
+            calendar.first_day = first_day();
 
             luil::date_picker_popup_config popup {};
             popup.id = std::u8string { date_popup_id };

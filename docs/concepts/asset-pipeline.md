@@ -35,7 +35,7 @@ set(LUIL_DEFAULT_ACCENT_ID "brand" CACHE STRING "Default accent")
 add_subdirectory(luil)
 ```
 
-각 항목에는 `id`, `label`, `swatch`, `dark`, `light`가 필요하다. 두 테마 각각 `accent`, `accentHover`, `accentSoft`, `accentEmphasisFg`를 `#rrggbb`로 지정한다. `accentEmphasisFg`는 옅은 강조 바탕(고른 토글, 옅은 강조 단추) 위의 글자다. 채운 강조 바탕(기본 단추, 체크 표시, 강조 배지) 위의 글자는 표에 두지 않고 `accent`에 대고 대비가 큰 흰색이나 검정을 팔레트가 고른다 (`accent_foreground`). 기본 파일을 복사해 수정하면 된다. 알 수 없는 id의 fallback과 `appearance_settings`의 초기값에 같은 기본 id를 사용한다. 표시 이름에는 UTF-8과 따옴표·줄바꿈·역슬래시를 사용할 수 있다.
+각 항목에는 `id`, `label`, `swatch`, `dark`, `light`가 필요하다. 두 테마 각각 `accent`, `accentHover`, `accentSoft`, `accentEmphasisFg`를 `#rrggbb`로 지정한다. `accentEmphasisFg`는 옅은 강조 바탕(고른 토글, 옅은 강조 단추) 위의 글자다. 채운 강조 바탕(기본 단추, 체크 표시, 강조 배지) 위의 글자는 표에 두지 않고 `accent`에 대고 대비가 큰 흰색이나 검정을 팔레트가 고른다 (`accent_foreground`). 기본 파일을 복사해 수정하면 된다. 알 수 없는 id의 fallback과 `appearance_settings`의 초기값에 같은 기본 id를 사용한다. 표시 이름에는 UTF-8과 따옴표·줄바꿈·역슬래시를 사용할 수 있다. `label`은 글 하나이거나 언어 맵(`{ "ko": "블루", "en": "Blue" }`)이다. 맵에는 `ko`가 있어야 하고 태그는 문자열 표의 꼴이며 틀리면 빌드가 선다. `accent_definition::label`은 `ko` 글이고 `accent_label()`이 라이브러리 언어로 고른다([흡수 문서](../i18n-adoption-design.md)).
 
 카탈로그는 빌드 시 내장된다. JSON 변경 후 라이브러리를 다시 빌드해야 하며 설치된 바이너리의 JSON을 실행 중 읽는 기능은 아니다.
 
@@ -63,3 +63,18 @@ add_subdirectory(luil)
 키 목록은 데이터 파일 [`cmake/style_keys.cmake`](../../cmake/style_keys.cmake) 하나에 있다. 생성기는 그것으로 기본값 헤더와 함께 실행 중 파서가 도는 키 표 헤더(`<빌드>/generated/private/luil/generated/ui_style_keys.h`, 설치하지 않는다)를 낸다. 같은 파일을 실행 중에 [`parse_ui_style`](../../include/luil/theme/ui_style_json.h)로 읽으면 같은 `ui_style`이 된다. 파서는 엄한 JSON이라 CMake가 너그럽게 받는 글(주석, 끝 쉼표, 겹친 키 등)만 막는 쪽이 다르다 ([실행 중 스타일 읽기](../style-sheet-design.md)).
 
 실행 시점에 값을 세우는 길은 [테마와 글꼴](theming.md)의 스타일 절에 있다.
+
+## 문자열 표
+
+`assets/strings/`의 언어 파일(`ko.json`, `en.json`)은 `cmake/generate_strings.cmake`가 라이브러리 기본 문구의 표 헤더로 만든다. 내부 표라 설치하지 않는다(`<빌드>/generated/private/luil/generated/library_text.h`). 소비자는 자기 폴더로 통째로 바꿀 수 있고, 키 집합은 저장소의 `ko.json`과 같아야 하며 기본 언어는 `ko`다. 파일을 더하면(`ja.json`) 그 언어가 선다.
+
+```cmake
+set(LUIL_STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/strings" CACHE PATH "Strings")
+add_subdirectory(luil)
+```
+
+앱의 표는 같은 생성기를 `luil_add_string_table`로 자기 target에 건다. 빌드 트리와 설치본에서 같다. 원본 꼴, 생성기 검사, 조회는 [문자열 표](../i18n-design.md)에 있다.
+
+```cmake
+luil_add_string_table(my_app NAME app_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE en)
+```

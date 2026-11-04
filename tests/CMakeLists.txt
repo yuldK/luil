@@ -145,7 +145,8 @@ add_executable(luil_core_tests
     zoom_view_tests.cpp
     # core가 링크로 묶어 부르는 플랫폼 hook의 test용 정의다 (파일에 이유가 있다).
     core_platform_stub.cpp
-    raster_probe.cpp)
+    raster_probe.cpp
+    string_table_tests.cpp)
 # IME 연결은 OS 헤더를 쓰지 않아 Windows에서도 지연·선택 회귀를 실행할 수 있다.
 # 기기 요청의 값 변환도 같다 (Java 상수를 옮길 뿐이다).
 target_sources(luil_core_tests PRIVATE
@@ -253,6 +254,8 @@ target_compile_definitions(luil_core_tests PRIVATE
     "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"
     "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
     "LUIL_TESTS_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
+# 문자열 표 test의 시험 표다. 앱이 쓰는 공개 함수를 저장소 안에서 먼저 쓴다.
+luil_add_string_table(luil_core_tests NAME test_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE en)
 
 # ICU가 없는 환경은 별도 프로세스에서 재현한다. Skia와 luil의 초기화 캐시를 공유하지 않는다.
 if(LUIL_ENABLE_TEXT_SHAPING)
@@ -311,6 +314,11 @@ if(LUIL_PLATFORM STREQUAL "android")
             "${LUIL_SOURCE_DIRECTORY}/android/android_system_theme.cpp"
             "${LUIL_SOURCE_DIRECTORY}/android/android_window_control.cpp"
             android_jni_order_tests.cpp)
+    # 주 첫 요일의 JNI 흐름도 같은 가짜 JNIEnv 길로 잠근다 (android_locale_tests.cpp).
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/android/android_locale.cpp"
+            android_locale_tests.cpp)
     # 창 조절의 원본이 로그를 쓴다 (`__android_log_print`).
     target_link_libraries(luil_core_tests PRIVATE log)
     catch_discover_tests(luil_core_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 SKIP_REGULAR_EXPRESSION "${luil_device_skip_pattern}")
@@ -348,6 +356,7 @@ if(LUIL_PLATFORM STREQUAL "android")
     # 쓴다 (플랫폼 도구는 주소 열기에 쓰는 UTF-8 변환을 함께 끌어온다). 미리 서명한 봉투만 쓴다. Android는 받지 않는다.
     # 적용(스토어 열기)은 상태 기계가 부르므로 링크하지만, GameActivity가 없는 이 JVM에서는 열리지 않아 돌리지 않는다.
     target_sources(luil_net_tests PRIVATE
+        "${LUIL_SOURCE_DIRECTORY}/android/android_locale.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/android_text_input.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
         "${LUIL_SOURCE_DIRECTORY}/android/update_apply_android.cpp"
@@ -462,6 +471,9 @@ add_test(NAME luil_accent_catalog
 add_test(NAME luil_style
     COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
         "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/style_tests.cmake")
+add_test(NAME luil_strings
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/string_table_tests.cmake")
 
 if(LUIL_INSTALL)
     add_test(NAME luil_installed_consumer
@@ -646,13 +658,19 @@ add_test(NAME luil_core_portability
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_core_portability.cmake")
 
-# 요소의 .cpp와 공개 헤더에 한글이 박혀 있지 않은지 본다.
-# 기본 문구는 src/ui/default_text.cpp 한곳이다 (script에 이유가 있다).
+# src·include의 코드 줄에 한글이 박혀 있지 않은지 본다.
+# 글은 문자열 표와 강조색 카탈로그에 산다 (script에 이유가 있다).
 add_test(NAME luil_default_text
     COMMAND "${CMAKE_COMMAND}"
         "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
+# 그 검사 자체를 본다. 선택 라이브러리가 쓰는 두 선택 인자도 여기서 친다.
+add_test(NAME luil_default_text_check
+    COMMAND "${CMAKE_COMMAND}"
+        "-DCMAKE_DIRECTORY=${LUIL_CMAKE_DIRECTORY}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/default_text_check_tests.cmake")
 
 # JNI 실패 검사(`jni_failed`)는 `||`·`&&` 체인의 맨 앞에 둔다. nullptr 검사가 먼저면 예외가 남은 채 돌아간다.
 # 기기 test는 자리의 일부만 치므로 전체 자리를 여기서 본다 (script에 이유가 있다).

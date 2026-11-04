@@ -6,7 +6,7 @@
 
 - 날짜 계산이 없다. `include`·`src`에 `year_month_day`를 쓰는 곳이 없다. 표준 형만으로는 `2026y/January/31d + months { 1 }`이 2월 31일(`ok()` 거짓)이 되어 앱마다 말일 접기를 짓는다.
 - 주 시작 요일과 월·요일 이름의 출처가 없다. 지금 지역 질의는 두 플랫폼 모두 글꼴용 언어 태그 하나다. Win32는 `GetUserDefaultLocaleName`([win32_fonts.cpp](../src/win32/win32_fonts.cpp) 70~76행), Android는 `AConfiguration`의 `read_language`([android_app.cpp](../src/android/android_app.cpp) 152~156행)다. 기본 문구는 "OS 언어는 읽지 않는다"([default_text.h](../src/ui/default_text.h) 13행).
-- 숫자·날짜 서식은 R5 i18n으로 미뤘다([default-text-design.md](default-text-design.md) 208행). 날짜 칸의 기본 글과 접근 이름은 그 전에 선다.
+- R5 i18n이 날짜 문구를 자리 값 문장으로 바꿨다. 첫 요일은 앱이 `user_first_weekday`로 넣는다. 날짜 꼴의 OS 기본은 넣지 않는다([흡수 문서](i18n-adoption-design.md)).
 
 ## 공개 형식
 
@@ -74,8 +74,8 @@ enum class calendar_move
 **2. 지역의 출처.** 질문: 주 시작 요일과 월·요일 이름을 OS에서 읽는가.
 
 - 길 a: config와 한국어 기본. OS를 읽지 않는다. `first_day` 기본은 일요일이다(한국어 기본 문구와 같은 관례). 되는 것: 기본 문구 규칙(default_text.h 13행)과 같고 두 플랫폼 코드가 없다. R5 i18n이 몸통을 표로 바꿀 때 호출부가 그대로다. 대가: 월요일로 시작하는 지역의 앱은 `first_day`를 스스로 준다.
-- 길 b: 공개 지역 질의를 더한다. Win32는 `GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER, ...)`(0이 월요일, 6이 일요일)로 읽는다. 지금 유일한 지역 질의(win32_fonts.cpp 73행) 곁이다. Android는 JNI로 framework의 `java.util.Calendar.getInstance().getFirstDayOfWeek()`(1이 일요일)와 `java.text.DateFormatSymbols`를 부른다. 기존 framework 클래스 호출이라 Java 소스는 0줄이다(`FindClass` 선례 android_app.cpp 575행). 되는 것: 사용자의 지역을 따른다. 대가: `platform_services*`와 `ui_platform.h`는 이번 라운드 줄 4의 것이고, OS 언어를 읽지 않는다는 규칙과 갈리며, R5가 같은 질의를 표와 함께 다시 정한다.
-- 권장: a. 대가: 위. b의 두 길은 R5 i18n에 넘긴다. 권장대로 진행.
+- 길 b: 공개 지역 질의를 더한다. Win32는 `GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER, ...)`(0이 월요일, 6이 일요일)로 읽는다. 지금 유일한 지역 질의(win32_fonts.cpp 73행) 곁이다. Android는 JNI로 framework의 `java.util.Calendar.getInstance().getFirstDayOfWeek()`(1이 일요일)를 부른다. 기존 framework 클래스 호출이라 Java 소스는 0줄이다(`FindClass` 선례 android_app.cpp 575행). 되는 것: 사용자의 지역을 따른다. 대가: `platform_services*`와 `ui_platform.h`는 이번 라운드 줄 4의 것이고, OS 언어를 읽지 않는다는 규칙과 갈린다. R5에서 G6-locale b로 첫 요일만 질의하고 달·요일 이름은 표 문장으로 닫았다([흡수 문서](i18n-adoption-design.md)).
+- 권장: a. 대가: 위. R5에서 G6-locale b로 앱이 `user_first_weekday`의 값을 넣는 길을 더했다. 기본값은 그대로 일요일이다. 권장대로 진행.
 
 **3. 닫힌 칸의 기본 글.** 질문: 값을 어떤 꼴로 보이는가.
 
@@ -86,11 +86,11 @@ enum class calendar_move
 
 ## 플랫폼
 
-**Win32·Android.** 순수 코어 코드라 플랫폼 코드가 없다. Java 소스는 0줄이고 JNI도 unsupported도 없다. 결정 2의 길 b를 고르면 그때 Win32 한 함수와 Android JNI 호출 둘이 는다.
+**Win32·Android.** 순수 코어 코드라 플랫폼 코드가 없다. Java 소스는 0줄이고 JNI도 unsupported도 없다. R5의 첫 요일 질의는 Win32 함수 하나와 Android JNI 호출 하나(`java.util.Calendar`)다. `DateFormatSymbols`는 넣지 않는다.
 
 ## 다른 노드와의 약속
 
-- **R5 i18n.** 이 문서의 `default_text` 함수 몸통을 표 조회로 바꾸고, 주 시작 요일과 날짜 형식의 OS 기본을 결정 2의 길 b로 더한다. `calendar_text`·`format`·`first_day` 칸과 호출부는 그대로다. default-text-design.md 208행의 "날짜 서식은 R5"를 "한국어 기본은 지금, 지역 서식은 R5"로 닫는다.
+- **R5 i18n.** R5 i18n이 날짜 문구를 자리 값 문장으로 바꿨다. 첫 요일은 앱이 `user_first_weekday`로 넣는다. 날짜 꼴의 OS 기본은 넣지 않는다. `calendar_text`·`format`·`first_day` 칸과 호출부는 그대로다([흡수 문서](i18n-adoption-design.md)).
 - **default_text.** 열한 함수를 끝에 더한다. 같은 줄 뒤 teaching_tip도 끝에 두 함수(`teaching_tip_name`·`teaching_tip_close`)를 붙여 병합은 기계적이다. 한글은 `default_text.cpp`에만 둔다(`luil_default_text` 검사).
 - **markup(줄 2)·auto_update(줄 4).** 겹치는 파일이 없다.
 
@@ -103,5 +103,5 @@ enum class calendar_move
 ## 범위 밖
 
 - 시각과 시간대, 음력과 다른 달력, 주 번호.
-- 지역 서식과 OS 지역 읽기(R5 i18n).
+- OS 날짜 서식(범위 C). 첫 요일 질의는 [흡수 문서](i18n-adoption-design.md).
 - 날짜 글 읽기(쳐 넣는 칸). 날짜 칸은 읽기 전용이다.

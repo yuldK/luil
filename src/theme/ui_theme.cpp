@@ -2,6 +2,7 @@
 
 #include "luil/generated/accents.h"
 #include "luil/theme/ui_style.h"
+#include "text/library_text.h"
 
 #include <algorithm>
 #include <array>
@@ -357,6 +358,28 @@ namespace luil {
         return false;
     }
 
+    std::u8string_view accent_label(const accent_definition& accent) noexcept
+    {
+        // 시스템 항목과 카탈로그 밖의 항목은 찾지 못해 `label`이다. 시스템 항목의 `label`은 이미 고른 언어다.
+        for (const generated::accent_entry& entry : generated::accents)
+        {
+            if (accent.id != entry.id)
+                continue;
+
+            const std::span<const generated::accent_name> names { generated::accent_names + entry.first_name, entry.name_count };
+            for (std::u8string_view tag { library_strings().tag() }; tag.empty() == false; tag = parent_language_tag(tag))
+            {
+                for (const generated::accent_name& name : names)
+                {
+                    if (same_language_tag(name.language, tag))
+                        return name.label;
+                }
+            }
+            break;
+        }
+        return accent.label;
+    }
+
     accent_definition make_system_accent(const ui_color key) noexcept
     {
         // 밝기 사다리는 내장 표를 OKLCH로 읽어 얻은 자리다:
@@ -373,7 +396,8 @@ namespace luil {
 
         accent_definition value {};
         value.id = system_accent_id;
-        value.label = u8"시스템";
+        // 표는 이 층보다 아래(`src/text`)에 선다. 부를 때마다 합성하므로 언어를 바꾸면 다음 조회부터 새 이름이다.
+        value.label = library_text::text(library_strings(), library_text::key::system_accent_label);
         value.dark = accent_color_set {
             .accent = tone(0.12, 0.58),
             .hover = tone(0.12, 0.65),

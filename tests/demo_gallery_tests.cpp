@@ -11,6 +11,7 @@
 #include "demo/toasts_page.h"
 #include "demo/zoom_page.h"
 
+#include "luil/text/string_table.h"
 #include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/calendar_element.h"
@@ -1910,6 +1911,68 @@ TEST_CASE("The popup cursor moves with the focus, the month buttons keep it and 
     tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
     REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 2026년 12월 18일");
     REQUIRE(date_popup_of(page).has_value() == false);
+}
+
+TEST_CASE("The OS first day is the shell's value and only the check puts it in the calendars", "[demo][popups][date-picker][i18n]")
+{
+    demo::popups_page page {};
+    const auto first_cell = [](const luil::ui_tree& tree, const std::u8string& owner) {
+        const luil::ui_element* const grid { tree.find({ luil::ui_element_kind::calendar_grid, owner }) };
+        REQUIRE(grid != nullptr);
+        return grid->children().front()->accessibility().name;
+    };
+    const luil::ui_element_id check { luil::ui_element_kind::check, u8"date-os-first-day" };
+
+    // 기본은 꺼져 일요일이다. 셸이 값을 넣어도 체크를 켜기 전에는 그대로다.
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 일요일 · 기본");
+    REQUIRE(tree.find(check)->accessibility().name == u8"OS 첫 요일");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"일요일") != std::u8string::npos);
+    send(page, demo::date_os_first_day_intent { std::chrono::Monday });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 일요일 · 기본");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"일요일") != std::u8string::npos);
+
+    // 켜면 두 달력의 첫 칸이 그 요일이다.
+    deliver_all(page, click_of(*tree.find(check)));
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 월요일 · OS");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"월요일") != std::u8string::npos);
+    send(page, demo::date_field_intent { true });
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    const std::optional<luil::ui_popup> popup { date_popup_of(page) };
+    REQUIRE(popup.has_value());
+    REQUIRE(first_cell(*popup->tree, u8"popups/date").find(u8"월요일") != std::u8string::npos);
+    send(page, demo::date_field_intent { false });
+
+    // OS가 답하지 않으면 일요일로 서고 그 사실을 적는다.
+    send(page, demo::date_os_first_day_intent {});
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(label_text(tree, u8"date-first-day") == u8"주 첫 요일: 일요일 · OS가 답하지 않음");
+    REQUIRE(first_cell(tree, u8"popups/calendar").find(u8"일요일") != std::u8string::npos);
+}
+
+TEST_CASE("Clearing the date field empties its value so the placeholder can show", "[demo][popups][date-picker][i18n]")
+{
+    demo::popups_page page {};
+    auto tree { arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f) };
+    REQUIRE(tree.find(date_field_id)->accessibility().value == u8"2026년 11월 3일");
+    REQUIRE(tree.find({ demo::kind_layout, u8"popups/date-clear" }) != nullptr);
+    send(page, demo::date_clear_intent {});
+    tree = arranged(page.build(800.0f, 2000.0f, 1.0f), 800.0f, 2000.0f);
+    REQUIRE(tree.find(date_field_id)->accessibility().value.empty());
+    REQUIRE(label_text(tree, u8"popups/date-state") == u8"날짜 칸: 닫힘 · 없음");
+}
+
+TEST_CASE("The gallery draws the library language it did not set itself", "[demo][gallery][i18n]")
+{
+    // 페이지는 전역 언어를 건드리지 않는다. 언어 칸을 골라도 라이브러리 언어를 잇는 일은 셸의 몫이다.
+    const std::optional<std::vector<std::u8string>> before { luil::text_languages() };
+    demo::gallery_page page {};
+    const luil::ui_tree tree { arranged(page.build_controls()) };
+    REQUIRE(label_text(tree, u8"gallery/language-state").starts_with(u8"기본 문구 선호: "));
+    REQUIRE(page.handle(luil::app_message { demo::gallery_choice_intent { u8"en", u8"language" } }));
+    REQUIRE(luil::text_languages() == before);
 }
 
 TEST_CASE("The inline calendar reads its chosen day and cursor back and blocks the weekend", "[demo][popups][date-picker]")
