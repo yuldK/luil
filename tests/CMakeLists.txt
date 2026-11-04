@@ -202,6 +202,7 @@ target_sources(luil_core_tests PRIVATE
     workbench_page_tests.cpp
     "${PROJECT_SOURCE_DIR}/examples/demo/gallery_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/inspector_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/lists_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/theme_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/tabs_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/demo/popups_page.cpp"

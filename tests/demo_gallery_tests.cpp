@@ -1,6 +1,7 @@
 #include "demo/gallery_page.h"
 #include "demo/inspector_page.h"
 #include "demo/line_break_sample.h"
+#include "demo/lists_page.h"
 #include "demo/popups_page.h"
 #include "demo/readonly_undo_keys.h"
 #include "demo/rich_text_page.h"
@@ -498,6 +499,24 @@ TEST_CASE("Each page body and its scroll bar read the first heading of the page"
     require_body_name(arranged(theme.build(800.0f, 600.0f, 1.0f)), u8"theme", u8"모양과 색");
     demo::toasts_page toasts {};
     require_body_name(arranged(toasts.build(800.0f, 600.0f, 1.0f)), u8"toasts", u8"토스트");
+}
+
+TEST_CASE("The three lists of the lists page and their scroll bars have names", "[demo][scroll]")
+{
+    demo::lists_page page {};
+    const luil::ui_tree tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+    const auto require_named = [&tree](const luil::ui_element_kind kind, const luil::ui_element_kind bar_kind, const std::u8string& owner, const std::u8string& name) {
+        CAPTURE(owner);
+        const luil::ui_element* const list { tree.find({ kind, owner }) };
+        REQUIRE(list != nullptr);
+        REQUIRE(list->accessibility().name == name);
+        const luil::ui_element* const bar { tree.find({ bar_kind, owner }) };
+        REQUIRE(bar != nullptr);
+        REQUIRE(bar->accessibility().name == name);
+    };
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"items", u8"순서를 바꾸는 목록");
+    require_named(luil::ui_element_kind::list, luil::ui_element_kind::list_scrollbar, u8"tree", u8"접는 트리");
+    require_named(luil::ui_element_kind::virtual_list, luil::ui_element_kind::scroll_area_bar, u8"log", u8"가상 목록");
 }
 
 TEST_CASE("A page layout names its body after the first heading and leaves it nameless without one", "[demo][scroll]")

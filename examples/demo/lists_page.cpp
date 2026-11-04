@@ -393,7 +393,9 @@ namespace demo {
         luil::stack_config inset {};
         inset.padding = luil::edge_insets::all(panel_inset);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tree" }, inset) };
-        column->add_flexible(std::make_unique<luil::list_element>(std::move(config)));
+        auto tree { std::make_unique<luil::list_element>(std::move(config)) };
+        tree->set_access_name(u8"접는 트리");
+        column->add_flexible(std::move(tree));
 
         luil::panel_config surface_panel {};
         surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
@@ -433,7 +435,10 @@ namespace demo {
         luil::stack_config inset {};
         inset.padding = luil::edge_insets::all(panel_inset);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"list" }, inset) };
-        column->add_flexible(std::make_unique<luil::list_element>(std::move(config)));
+        auto list { std::make_unique<luil::list_element>(std::move(config)) };
+        // 목록과 막대가 함께 이 이름으로 읽힌다. 막대는 목록이 세우는 부품이라 앱이 따로 이름을 줄 수 없다.
+        list->set_access_name(u8"순서를 바꾸는 목록");
+        column->add_flexible(std::move(list));
 
         luil::panel_config surface_panel {};
         surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
@@ -481,7 +486,9 @@ namespace demo {
         luil::stack_config inset {};
         inset.padding = luil::edge_insets::all(panel_inset);
         auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"log" }, inset) };
-        column->add_flexible(std::make_unique<luil::virtual_list_element>(std::move(config)));
+        auto log { std::make_unique<luil::virtual_list_element>(std::move(config)) };
+        log->set_access_name(u8"가상 목록");
+        column->add_flexible(std::move(log));
         column->add_gap(log_footer_gap);
         // 커서와 고른 항목을 함께 적는다. 화살표로 훑기만 하면 앞의 값만 움직이고,
         // 눌러야 뒤의 값이 따라온다 — 둘을 가른 이유가 이 한 줄에서 보인다.
