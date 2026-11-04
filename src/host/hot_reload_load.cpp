@@ -111,7 +111,7 @@ namespace luil {
                 return make_failure(file, hot_reload_status::unreadable, u8"Could not open file: " + shown);
             std::u8string text(static_cast<std::size_t>(size), u8'\0');
             stream.read(reinterpret_cast<char*>(text.data()), static_cast<std::streamsize>(size));
-            // 읽은 바이트가 잰 크기와 다르면 쓰는 중인 파일이다. 다음 묶음이 다시 읽는다.
+            // 읽은 바이트가 잰 크기와 다르면 쓰는 중인 파일이다.
             if (static_cast<std::uintmax_t>(stream.gcount()) != size || stream.peek() != std::ifstream::traits_type::eof())
                 return make_failure(file, hot_reload_status::unreadable, u8"File changed while reading: " + shown);
 
