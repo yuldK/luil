@@ -369,7 +369,7 @@ TEST_CASE("File watch batches that only come and go keep no slots", "[file_watch
     }
     SECTION("Something else waits")
     {
-        // 낼 것이 남아 있으면 비우지 않는다. 그 묶음을 낼 때 칸도 함께 빈다.
+        // 낼 것이 남아 있으면 비우지 않는다. 그 묶음을 받아들일 때 칸도 함께 빈다. 거절을 이어 가는 동안에는 칸이 남는다.
         batch.modified(u8"b", start);
         come_and_go();
         REQUIRE(batch.size() == 1u);
