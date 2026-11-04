@@ -141,6 +141,12 @@ namespace luil::win32 {
         // (popup-anchor-design.md).
         virtual void surface_moved(const std::u8string& anchor) = 0;
 
+        // 내용만 흘러 앵커의 화면 자리가 바뀌었다. 창 이동의 닫힘 정책은 부르지 않는다.
+        virtual void surface_scrolled(const std::u8string& anchor)
+        {
+            static_cast<void>(anchor);
+        }
+
         // 표면이 만든 액션을 통상 규칙대로 배분한다 (앱 메시지·창 명령·클립보드).
         virtual void dispatch_action(input_action action) = 0;
 
@@ -493,6 +499,19 @@ namespace luil::win32 {
             return 0;
         }
 
+        // tree를 그리는 client 영역이다. 화살표처럼 내용 위를 덮는 부분은 뺀다.
+        [[nodiscard]] virtual std::optional<rect_f> content_viewport() const noexcept
+        {
+            return std::nullopt;
+        }
+        // 터치·펜이 내용 위의 별도 영역에 닿았다. 누름이면 그 영역을 실행하고 참을 돌려준다.
+        [[nodiscard]] virtual bool handle_pointer_overlay(POINT position, bool pressed)
+        {
+            static_cast<void>(position);
+            static_cast<void>(pressed);
+            return false;
+        }
+
         // 누름 동안 포인터를 이 창에 묶는다.
         // 배경 스레드의 `SetCapture`는 실제로 캡처를 얻지 못할 수 있어,
         // 얻은 경우에만 상실 취소를 무장한다.
@@ -507,7 +526,7 @@ namespace luil::win32 {
         // 캡처를 빼앗겨 `WM_xBUTTONUP`이 오지 않는 경우의 정리다.
         // 먼 좌표의 왼쪽 뗌을 합성해 press·끌기를 전부 푼다 —
         // hit가 없는 뗌은 클릭이 되지 않고 상태만 정리된다.
-        void cancel_pointer_press();
+        void cancel_pointer_press(pointer_button button = pointer_button::left);
         // 이동·뗌 이벤트에 화면 자리를 싣고, 이 창이 포인터를 잡은 채 내부 끌기 중이면 포인터 밑에 실제로 보이는
         // 표면도 싣는다 (`pointer_over`). 잡은 창 밖으로 끌고 나가도 다른 창의 tree에 놓을 수 있는 것이 이것이다.
         //  - 밑의 창은 OS hit test(`WindowFromPoint`)로 찾는다 — 그 점에서 맨 위에 보이는 창이 답이다(Z 순서).
@@ -549,6 +568,8 @@ namespace luil::win32 {
         // 그대로 내준다.
         [[nodiscard]] const ui_tree* accessibility_tree() const noexcept override;
         [[nodiscard]] HWND accessibility_window() const noexcept override;
+        [[nodiscard]] int accessibility_content_offset_y() const noexcept override;
+        [[nodiscard]] std::optional<rect_f> accessibility_viewport() const noexcept override;
         [[nodiscard]] ui_element_id accessibility_focus() const override;
         void accessibility_dispatch(std::vector<input_action> actions) override;
         void accessibility_request_focus(const ui_element_id& id) override;

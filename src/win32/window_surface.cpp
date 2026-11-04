@@ -213,6 +213,16 @@ namespace luil::win32 {
         return window_;
     }
 
+    int window_surface::accessibility_content_offset_y() const noexcept
+    {
+        return content_offset_y();
+    }
+
+    std::optional<rect_f> window_surface::accessibility_viewport() const noexcept
+    {
+        return content_viewport();
+    }
+
     ui_element_id window_surface::accessibility_focus() const
     {
         app_host* const host { context_.host() };
@@ -284,7 +294,9 @@ namespace luil::win32 {
             const SkFont font { configured_ui_typeface(), pixel_size };
             return measure_text(text, font);
         };
-        const std::optional<rect_f> span { element->text_span_bounds(text_span_query { document, caret, begin, end }, measure) };
+        std::optional<rect_f> span { element->text_span_bounds(text_span_query { document, caret, begin, end }, measure) };
+        if (span.has_value())
+            span = accessibility_client_bounds(*span);
         if (span.has_value() == false)
             return std::nullopt;
 
@@ -1141,7 +1153,7 @@ namespace luil::win32 {
         return true;
     }
 
-    void window_surface::cancel_pointer_press()
+    void window_surface::cancel_pointer_press(const pointer_button button)
     {
         context_.cancel_webview_pointer(id_);
         app_host* const host { context_.host() };
@@ -1150,7 +1162,7 @@ namespace luil::win32 {
         pointer_released_event event {};
         event.x = -10000.0f;
         event.y = -10000.0f;
-        event.button = pointer_button::left;
+        event.button = button;
         event.time = std::chrono::steady_clock::now();
         event.surface = id_;
         event.cancelled = true;
@@ -1216,6 +1228,7 @@ namespace luil::win32 {
                 forget();
             return owner.has_value();
         }
+        const POINT surface_point { client };
         // 흘려 보이는 표면이면 tree의 자리로 옮긴다 (`content_offset_y` — 마우스와 같다).
         client.y += content_offset_y();
         input.client = client;
@@ -1230,6 +1243,19 @@ namespace luil::win32 {
         {
             if (owner == pointer_owner::webview)
                 static_cast<void>(context_.relay_webview_pointer_input(id_, input));
+            if (ends)
+                forget();
+            return true;
+        }
+        if (handle_pointer_overlay(surface_point, message == WM_POINTERDOWN))
+        {
+            // 내용에서 시작했어도 가려진 영역에 닿은 접촉은 취소한다. 남은 시퀀스가 내용으로 다시 새지 않는다.
+            if (owner.has_value())
+                cancel_pointer_contact(pointer_id);
+            else if (message == WM_POINTERDOWN)
+                pointer_owners_.emplace_back(pointer_id, pointer_owner::discarded);
+            if (host != nullptr)
+                host->post_raw_input(pointer_left_event { id_, type == PT_PEN ? pointer_device::pen : pointer_device::touch });
             if (ends)
                 forget();
             return true;
@@ -1323,7 +1349,7 @@ namespace luil::win32 {
         if (type == PT_PEN && message == WM_POINTERUPDATE)
         {
             if ((input.info.pointerFlags & POINTER_FLAG_INRANGE) != 0)
-                apply_cursor(client);
+                apply_cursor(surface_point);
             else
                 apply_cursor();
         }
@@ -1499,11 +1525,18 @@ namespace luil::win32 {
         }
         // 흘려 보이는 표면이면 tree의 자리로 묻는다 (`content_offset_y`).
         std::optional<POINT> position { client_position };
-        if (const int offset { content_offset_y() }; offset != 0)
+        const int offset { content_offset_y() };
+        const std::optional<rect_f> viewport { content_viewport() };
+        if (offset != 0 || viewport.has_value())
         {
             POINT cursor {};
             if (position.has_value() == false && GetCursorPos(&cursor) != FALSE && ScreenToClient(window_, &cursor) != FALSE)
                 position = cursor;
+            if (position.has_value() && viewport.has_value() && viewport->contains(static_cast<float>(position->x), static_cast<float>(position->y)) == false)
+            {
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                return;
+            }
             if (position.has_value())
                 position->y += offset;
         }
@@ -1657,8 +1690,11 @@ namespace luil::win32 {
     std::optional<RECT> surface_tsf_host::text_screen_rect(const shadow_document& document, const std::size_t begin, const std::size_t end) const
     {
         const window_surface* const surface { text_surface() };
-        const std::optional<rect_f> span { text_rect(document, begin, end) };
+        std::optional<rect_f> span { text_rect(document, begin, end) };
         if (surface == nullptr || span.has_value() == false)
+            return std::nullopt;
+        span = static_cast<const uia_surface_host&>(*surface).accessibility_client_bounds(*span);
+        if (span.has_value() == false)
             return std::nullopt;
 
         POINT top_left { static_cast<LONG>(span->x), static_cast<LONG>(span->y) };

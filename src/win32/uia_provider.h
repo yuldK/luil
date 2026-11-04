@@ -38,6 +38,17 @@ namespace luil::win32 {
         [[nodiscard]] virtual const ui_tree* accessibility_tree() const noexcept = 0;
         // 이 표면의 창이다. 없으면 nullptr다 — 화면 좌표 변환만 빠지고 나머지는 선다.
         [[nodiscard]] virtual HWND accessibility_window() const noexcept = 0;
+        // tree의 y에서 빼야 client의 y가 되는 양과, 내용이 보이는 client 영역이다.
+        [[nodiscard]] virtual int accessibility_content_offset_y() const noexcept
+        {
+            return 0;
+        }
+        [[nodiscard]] virtual std::optional<rect_f> accessibility_viewport() const noexcept
+        {
+            return std::nullopt;
+        }
+        // tree 사각형을 client로 옮기고 내용 위의 가림을 뺀다. UIA와 TSF가 같은 변환을 쓴다.
+        [[nodiscard]] std::optional<rect_f> accessibility_client_bounds(rect_f bounds) const noexcept;
         // 이 표면의 것으로 걸러진 논리 초점이다 (빈 id면 초점 없음).
         // OS focus가 아니다 — popup의 초점은 OS focus로는 영영 보이지 않는다
         // (accessibility-design.md).

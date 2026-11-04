@@ -29,7 +29,7 @@ namespace luil::win32 {
 
         [[nodiscard]] popup_placement placement() const;
         // popup은 부모 창의 배율을 그대로 쓴다 (`set_dpi`).
-        void set_placement(const popup_placement& placement) noexcept;
+        void set_placement(const popup_placement& placement);
 
         // 창의 보이는 높이다 (물리 픽셀). 소유자가 모니터 작업 영역에 맞춰 정한다.
         // popup의 내용(`placement().height`)보다 작으면 popup이 내용을 흘려 보인다 — 작업 영역보다 긴 메뉴가 아래가
@@ -37,7 +37,7 @@ namespace luil::win32 {
         //  - 휠로 흘리고, 위·아래 화살표 칸에 포인터를 두면 그쪽으로 흘러가며, 키보드 강조(`menu_highlight`)와
         //    키보드 초점이 옮겨 가면 그 항목이 보이게 따라간다.
         //  - 흘린 양은 이 표면의 것이다 (UI thread). 앱도 input thread도 모른다 — 포인터는 그만큼 옮겨 tree에 묻는다.
-        void set_viewport_height(int height) noexcept;
+        void set_viewport_height(int height);
         [[nodiscard]] int viewport_height() const noexcept
         {
             return viewport_height_ > 0 ? viewport_height_ : height_;
@@ -89,6 +89,10 @@ namespace luil::win32 {
         {
             return scroll_;
         }
+        [[nodiscard]] std::optional<rect_f> content_viewport() const noexcept override;
+        [[nodiscard]] bool handle_pointer_overlay(POINT position, bool pressed) override;
+        // 스크롤 변경은 자식 popup의 화면 자리도 바꾼다.
+        bool set_scroll(int offset);
         // 내용이 창보다 길어 흘리는가.
         [[nodiscard]] bool scrollable() const noexcept;
         [[nodiscard]] int maximum_scroll() const noexcept;

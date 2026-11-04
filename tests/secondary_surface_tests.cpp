@@ -1,4 +1,5 @@
 #include "win32/secondary_surface.h"
+#include "win32/popup_surface.h"
 
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
@@ -29,6 +30,7 @@ namespace {
         luil::app_host* input_host { nullptr };
         bool capture_active { false };
         std::vector<std::u8string> canceled_surfaces {};
+        std::vector<std::u8string> scrolled_surfaces {};
 
         [[nodiscard]] const luil::win32::window_config& config() const noexcept override
         {
@@ -79,6 +81,10 @@ namespace {
 
         void surface_moved(const std::u8string&) override
         {
+        }
+        void surface_scrolled(const std::u8string& surface) override
+        {
+            scrolled_surfaces.push_back(surface);
         }
 
         void dispatch_action(luil::input_action) override
@@ -190,6 +196,41 @@ namespace {
 
     private:
         luil::win32::caption_surface& surface_;
+        HWND window_ { nullptr };
+    };
+
+    class popup_test_window final
+    {
+    public:
+        explicit popup_test_window(luil::win32::popup_surface& surface)
+        {
+            surface.set_placement({ u8"tool", 0, 0, 200, 300 });
+            surface.set_viewport_height(100);
+            WNDCLASSEXW type {};
+            type.cbSize = sizeof(type);
+            type.hInstance = GetModuleHandleW(nullptr);
+            type.lpszClassName = L"luil.popup.surface.test";
+            type.lpfnWndProc = &luil::win32::popup_surface::static_procedure;
+            if (RegisterClassExW(&type) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+                return;
+            window_ = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, type.lpszClassName, L"", WS_POPUP,
+                0, 0, 200, 100, nullptr, nullptr, type.hInstance, &surface);
+        }
+        popup_test_window(const popup_test_window&) = delete;
+        popup_test_window(popup_test_window&&) = delete;
+        popup_test_window& operator=(const popup_test_window&) = delete;
+        popup_test_window& operator=(popup_test_window&&) = delete;
+        ~popup_test_window()
+        {
+            if (window_ != nullptr)
+                DestroyWindow(window_);
+        }
+        [[nodiscard]] HWND handle() const noexcept
+        {
+            return window_;
+        }
+
+    private:
         HWND window_ { nullptr };
     };
 
@@ -418,6 +459,61 @@ namespace {
         REQUIRE(policy.fences.load() == expected);
         REQUIRE_FALSE(host.faulted());
     }
+}
+
+TEST_CASE("Releasing over a popup scroll strip cancels the press and releases capture", "[win32][capture][popup]")
+{
+    capture_driver driver { false };
+    capture_policy policy {};
+    luil::app_host host { {}, driver, &policy };
+    fake_surface_context context {};
+    context.input_host = &host;
+    luil::win32::popup_surface surface { context, u8"tool", {} };
+    const popup_test_window window { surface };
+    REQUIRE(window.handle() != nullptr);
+    const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+    while (host.acquire_frame() == nullptr && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
+    REQUIRE(host.acquire_frame() != nullptr);
+    luil::ui_popup source {};
+    source.tree = driver.tree;
+    REQUIRE(surface.adopt(source, {}));
+
+    SendMessageW(window.handle(), WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(30, 30));
+    REQUIRE(GetCapture() == window.handle());
+    SendMessageW(window.handle(), WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(30, 80));
+    input_fence(host, policy);
+    REQUIRE(driver.drag_starts.load() == 1);
+    SendMessageW(window.handle(), WM_LBUTTONUP, 0, MAKELPARAM(30, 90));
+    input_fence(host, policy);
+    REQUIRE(GetCapture() != window.handle());
+    REQUIRE_FALSE(context.capture_active);
+    REQUIRE(driver.drag_releases.load() == 1);
+    REQUIRE(driver.clicks.load() == 0);
+    REQUIRE(driver.drops.load() == 0);
+    REQUIRE(driver.sentinel_releases.load() == 0);
+    REQUIRE(host.acquire_interaction().pressed == luil::ui_element_id {});
+
+    SendMessageW(window.handle(), WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(30, 30));
+    SendMessageW(window.handle(), WM_LBUTTONUP, 0, MAKELPARAM(30, 30));
+    input_fence(host, policy);
+    REQUIRE(driver.clicks.load() == 1);
+    host.shutdown();
+}
+
+TEST_CASE("Popup scrolling notifies its owner when wheel movement or clamping moves anchors", "[win32][popup]")
+{
+    fake_surface_context context {};
+    luil::win32::popup_surface surface { context, u8"tool", {} };
+    const popup_test_window window { surface };
+    REQUIRE(window.handle() != nullptr);
+    SendMessageW(window.handle(), WM_MOUSEWHEEL, MAKEWPARAM(0, static_cast<WORD>(-WHEEL_DELTA)), 0);
+    REQUIRE(surface.scroll_offset() == 78);
+    REQUIRE(context.scrolled_surfaces == std::vector<std::u8string> { u8"tool" });
+
+    surface.set_viewport_height(400);
+    REQUIRE(surface.scroll_offset() == 0);
+    REQUIRE(context.scrolled_surfaces == std::vector<std::u8string> { u8"tool", u8"tool" });
 }
 
 TEST_CASE("Win32 mouse capture loss cancels the owning surface through the input pump", "[win32][capture][surface-input]")

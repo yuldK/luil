@@ -72,19 +72,19 @@ namespace luil::win32 {
         return popup_placement { id_, x_, y_, width_, height_, anchor_, shape_.rounded() };
     }
 
-    void popup_surface::set_placement(const popup_placement& placement) noexcept
+    void popup_surface::set_placement(const popup_placement& placement)
     {
         x_ = placement.x;
         y_ = placement.y;
         width_ = placement.width;
         height_ = placement.height;
-        scroll_ = std::clamp(scroll_, 0, maximum_scroll());
+        static_cast<void>(set_scroll(scroll_));
     }
 
-    void popup_surface::set_viewport_height(const int height) noexcept
+    void popup_surface::set_viewport_height(const int height)
     {
         viewport_height_ = height;
-        scroll_ = std::clamp(scroll_, 0, maximum_scroll());
+        static_cast<void>(set_scroll(scroll_));
         if (scrollable() == false)
             stop_strip_scroll();
     }
@@ -106,7 +106,7 @@ namespace luil::win32 {
 
     int popup_surface::strip_at(const int y) const noexcept
     {
-        if (scrollable() == false)
+        if (scrollable() == false || y < 0 || y >= viewport_height())
             return 0;
         const int strip { strip_height() };
         if (scroll_ > 0 && y < strip)
@@ -116,15 +116,43 @@ namespace luil::win32 {
         return 0;
     }
 
-    bool popup_surface::scroll_by(const int delta)
+    std::optional<rect_f> popup_surface::content_viewport() const noexcept
     {
-        const int next { std::clamp(scroll_ + delta, 0, maximum_scroll()) };
+        const int top { scroll_ > 0 ? strip_height() : 0 };
+        const int bottom { scroll_ < maximum_scroll() ? strip_height() : 0 };
+        return rect_f { 0.0f, static_cast<float>(top), static_cast<float>(width_), static_cast<float>(std::max(0, viewport_height() - top - bottom)) };
+    }
+
+    bool popup_surface::handle_pointer_overlay(const POINT position, const bool pressed)
+    {
+        const int direction { strip_at(position.y) };
+        if (position.x < 0 || position.x >= width_ || direction == 0)
+            return false;
+        if (pressed)
+            static_cast<void>(scroll_by(direction * strip_height()));
+        apply_cursor(position);
+        return true;
+    }
+
+    bool popup_surface::set_scroll(const int offset)
+    {
+        const int next { std::clamp(offset, 0, maximum_scroll()) };
         if (next == scroll_)
             return false;
         scroll_ = next;
         if (window_ == nullptr)
             return true;
         InvalidateRect(window_, nullptr, FALSE);
+        context_.surface_scrolled(id_);
+        return true;
+    }
+
+    bool popup_surface::scroll_by(const int delta)
+    {
+        if (set_scroll(scroll_ + delta) == false)
+            return false;
+        if (window_ == nullptr)
+            return true;
         // 포인터가 그대로여도 그 밑의 내용이 바뀌었다. 같은 자리의 이동을 다시 알려 hover가 새 항목에 선다.
         //  - 칸 위면 알리지 않는다. 칸 밑의 항목은 가려져 있다.
         POINT cursor {};
@@ -161,6 +189,11 @@ namespace luil::win32 {
         }
         if (scrollable() == false)
             return std::nullopt;
+        if ((message == WM_MOUSEMOVE || message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK || message == WM_LBUTTONUP
+                || message == WM_RBUTTONDOWN || message == WM_RBUTTONDBLCLK || message == WM_RBUTTONUP
+                || message == WM_MBUTTONDOWN || message == WM_MBUTTONDBLCLK || message == WM_MBUTTONUP)
+            && duplicate_pointer_mouse_message())
+            return LRESULT { 0 };
         switch (message)
         {
         case WM_MOUSEWHEEL: {
@@ -194,11 +227,21 @@ namespace luil::win32 {
         case WM_LBUTTONUP:
         case WM_RBUTTONDOWN:
         case WM_RBUTTONDBLCLK:
-        case WM_RBUTTONUP: {
+        case WM_RBUTTONUP:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONDBLCLK:
+        case WM_MBUTTONUP: {
             // 칸 위의 누름은 칸의 것이다 — 가려진 항목을 고르지 않는다. 누르면 한 칸 흘린다.
             const int direction { strip_at(GET_Y_LPARAM(long_parameter)) };
             if (direction == 0)
                 return std::nullopt;
+            if (message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP)
+            {
+                // 내용에서 시작한 누름도 여기서 끝난다. 클릭은 취소하되 뗌과 캡처 해제는 빠뜨리지 않는다.
+                if (GetCapture() == window_ && (word_parameter & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
+                    release_pointer_capture();
+                cancel_pointer_press(pointer_button_of(message));
+            }
             if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK)
                 static_cast<void>(scroll_by(direction * MulDiv(strip_logical_height, static_cast<int>(dpi_), 96)));
             return LRESULT { 0 };
@@ -232,7 +275,7 @@ namespace luil::win32 {
             next = top;
         else if (bottom > next + viewport_height())
             next = bottom - viewport_height();
-        scroll_ = std::clamp(next, 0, maximum_scroll());
+        static_cast<void>(set_scroll(next));
     }
 
     bool popup_surface::adopt(const ui_popup& source, const popup_shape& shape)
