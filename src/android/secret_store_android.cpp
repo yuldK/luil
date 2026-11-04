@@ -85,7 +85,8 @@ namespace luil {
                 if (get_instance == nullptr || provider == nullptr)
                     return nullptr;
                 const jobject store { env_->CallStaticObjectMethod(store_class, get_instance, provider) };
-                if (check(u8"Failed to open the Android key store") == false)
+                if (check(u8"Failed to open the Android key store") == false
+                    || required(store, u8"Failed to open the Android key store") == nullptr)
                     return nullptr;
                 const jmethodID load { method(store_class, "load", "(Ljava/security/KeyStore$LoadStoreParameter;)V") };
                 if (load == nullptr)
@@ -119,7 +120,8 @@ namespace luil {
                 if (get_iv == nullptr)
                     return std::nullopt;
                 const auto iv_array { static_cast<jbyteArray>(env_->CallObjectMethod(cipher, get_iv)) };
-                if (check(u8"Failed to read the encryption IV") == false || iv_array == nullptr)
+                if (check(u8"Failed to read the encryption IV") == false
+                    || required(iv_array, u8"Failed to read the encryption IV") == nullptr)
                     return std::nullopt;
                 std::optional<std::vector<std::uint8_t>> iv_read { from_java(iv_array) };
                 if (iv_read.has_value() == false)
@@ -141,7 +143,8 @@ namespace luil {
                 if (iv_array == nullptr)
                     return std::nullopt;
                 const jobject parameters { env_->NewObject(gcm_class, gcm_init, tag_bits, iv_array) };
-                if (check(u8"Failed to prepare the decryption") == false)
+                if (check(u8"Failed to prepare the decryption") == false
+                    || required(parameters, u8"Failed to prepare the decryption") == nullptr)
                     return std::nullopt;
                 env_->CallVoidMethod(cipher, init, decrypt_mode, key, parameters);
                 if (check(u8"Failed to start the decryption") == false)
@@ -178,12 +181,25 @@ namespace luil {
                 return false;
             }
 
+            // 예외 없는 null도 오류로 적는다. 오류 없는 null 키는 "키가 없다"로 읽혀 `load_secret`이 파일을 지우고, 그 밖의 자리는 빈 글의 실패가 된다.
+            //  - 정상으로 null인 답은 `getKey` 하나다. 그 자리만 이것을 부르지 않는다.
+            template <typename Handle>
+            [[nodiscard]] Handle required(const Handle handle, const std::u8string_view what)
+            {
+                if (handle == nullptr && error_.empty())
+                {
+                    error_ = what;
+                    error_ += u8".";
+                }
+                return handle;
+            }
+
             [[nodiscard]] jclass find(const char* const name)
             {
                 if (error_.empty() == false)
                     return nullptr;
                 const jclass found { env_->FindClass(name) };
-                return check(u8"A key store class is missing") ? found : nullptr;
+                return check(u8"A key store class is missing") ? required(found, u8"A key store class is missing") : nullptr;
             }
 
             [[nodiscard]] jmethodID method(const jclass owner, const char* const name, const char* const signature)
@@ -191,7 +207,7 @@ namespace luil {
                 if (owner == nullptr || error_.empty() == false)
                     return nullptr;
                 const jmethodID found { env_->GetMethodID(owner, name, signature) };
-                return check(u8"A key store method is missing") ? found : nullptr;
+                return check(u8"A key store method is missing") ? required(found, u8"A key store method is missing") : nullptr;
             }
 
             [[nodiscard]] jmethodID static_method(const jclass owner, const char* const name, const char* const signature)
@@ -199,7 +215,7 @@ namespace luil {
                 if (owner == nullptr || error_.empty() == false)
                     return nullptr;
                 const jmethodID found { env_->GetStaticMethodID(owner, name, signature) };
-                return check(u8"A key store method is missing") ? found : nullptr;
+                return check(u8"A key store method is missing") ? required(found, u8"A key store method is missing") : nullptr;
             }
 
             // 인자로 넘길 Java 글이다. 실패하면 nullptr이고 언제나 오류가 남는다.
@@ -313,7 +329,7 @@ namespace luil {
                 if (get_instance == nullptr || transformation == nullptr)
                     return nullptr;
                 const jobject cipher { env_->CallStaticObjectMethod(cipher_class, get_instance, transformation) };
-                return check(u8"Failed to open the AES-GCM cipher") ? cipher : nullptr;
+                return check(u8"Failed to open the AES-GCM cipher") ? required(cipher, u8"Failed to open the AES-GCM cipher") : nullptr;
             }
 
             [[nodiscard]] std::optional<std::vector<std::uint8_t>> final_bytes(
@@ -326,7 +342,8 @@ namespace luil {
                 if (input_array == nullptr)
                     return std::nullopt;
                 const auto output { static_cast<jbyteArray>(env_->CallObjectMethod(cipher, do_final, input_array)) };
-                if (check(what) == false || output == nullptr)
+                if (check(what) == false
+                    || required(output, what) == nullptr)
                     return std::nullopt;
                 return from_java(output);
             }

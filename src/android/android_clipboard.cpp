@@ -146,9 +146,14 @@ namespace luil::android {
             const jmethodID close { env.GetMethodID(stream_class, "close", "()V") };
             if (jni_failed(env) || close == nullptr)
                 return std::nullopt;
+            // 앞의 두 찾기가 실패하면 닫을 메서드를 모른다. 여기부터는 아는 메서드로 닫아 GC가 거둘 때까지 파일을 쥐지 않는다.
             const jbyteArray buffer { env.NewByteArray(image_read_chunk_bytes) };
             if (jni_failed(env) || buffer == nullptr)
+            {
+                env.CallVoidMethod(stream, close);
+                static_cast<void>(jni_failed(env));
                 return std::nullopt;
+            }
 
             std::optional<std::vector<std::uint8_t>> bytes { std::vector<std::uint8_t> {} };
             while (true)

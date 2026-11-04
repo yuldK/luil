@@ -7,6 +7,7 @@
 #include "luil/net/http_client.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <jni.h>
 
@@ -43,6 +44,8 @@ namespace {
         int fail_at { 0 };
         // 둘째 실패 지점이다. 예외를 거둔 뒤의 호출도 실패하는 자리를 본다.
         int also_fail_at { 0 };
+        // 이 지점의 호출은 예외 없이 null이나 0을 돌려준다.
+        int null_at { 0 };
         bool pending { false };
         int pushed { 0 };
         int popped { 0 };
@@ -67,6 +70,9 @@ namespace {
         bool key_missing { false };
         // `NewByteArray`가 예외 없이 null이다.
         bool byte_array_missing { false };
+        // 마지막 `NewByteArray`와 `KeyStore.getKey`의 지점 번호다. 그 자리만 골라 칠 때 쓴다.
+        int byte_array_call { 0 };
+        int get_key_call { 0 };
     };
 
     fake_state* current { nullptr };
@@ -106,6 +112,8 @@ namespace {
     {
         note();
         ++current->calls;
+        if (current->calls == current->null_at)
+            return true;
         if (current->calls != current->fail_at
             && current->calls != current->also_fail_at)
             return false;
@@ -246,7 +254,9 @@ namespace {
 
     jbyteArray JNICALL new_byte_array(JNIEnv*, const jsize)
     {
-        if (step() || current->byte_array_missing)
+        const bool failed { step() };
+        current->byte_array_call = current->calls;
+        if (failed || current->byte_array_missing)
             return nullptr;
         return reinterpret_cast<jbyteArray>(&marker);
     }
@@ -316,6 +326,8 @@ namespace {
             return reinterpret_cast<jobject>(&mime_marker);
         if (name == "toString" && reinterpret_cast<const int*>(receiver) == &mime_marker)
             return reinterpret_cast<jobject>(&mime_text_marker);
+        if (name == "getKey")
+            current->get_key_call = current->calls;
         if (name == "getKey" && current->key_missing)
             return nullptr;
         if (name == "getIV")
@@ -474,6 +486,16 @@ namespace {
     {
         fake_env scope { fail_at };
         current->also_fail_at = also_fail_at;
+        const int answer { run(scope.env()) };
+        return outcome { scope.state(), answer };
+    }
+
+    // 지점 하나의 호출이 예외 없이 null을 주는 한 번이다. ART의 찾기 호출은 이렇게 답하지 않지만 틀린 답이 파일을 지우는 자리를 막는다.
+    template <typename Run>
+    [[nodiscard]] outcome run_once_null(Run&& run, const int null_at)
+    {
+        fake_env scope {};
+        current->null_at = null_at;
         const int answer { run(scope.env()) };
         return outcome { scope.state(), answer };
     }
@@ -863,6 +885,45 @@ TEST_CASE("Reading clipboard data leaves no pending exception when any JNI call 
     check_clean_failure_points(run, success);
 }
 
+TEST_CASE("A clipboard image stream is closed when its read buffer cannot be made", "[android][jni_order]")
+{
+    const auto read = [](JNIEnv& env)
+    {
+        return luil::android::read_clipboard_data(env, object()).image != nullptr ? 1 : 0;
+    };
+    const outcome success { run_once(read) };
+    REQUIRE(success.answer == 1);
+    REQUIRE(success.state.void_calls == 1);
+    const int buffer_call { success.state.byte_array_call };
+    REQUIRE(buffer_call > 0);
+
+    SECTION("The buffer call throws")
+    {
+        const outcome failing { run_once(read, buffer_call) };
+        CHECK(failing.answer == 0);
+        CHECK(failing.state.void_calls == 1);
+        check_clean(failing, buffer_call);
+    }
+    SECTION("The buffer call throws and so does closing")
+    {
+        const outcome failing { run_once(read, buffer_call, buffer_call + 1) };
+        CHECK(failing.answer == 0);
+        check_clean(failing, buffer_call);
+    }
+    SECTION("The buffer call returns null without an exception")
+    {
+        const auto run = [&read](JNIEnv& env)
+        {
+            current->byte_array_missing = true;
+            return read(env);
+        };
+        const outcome failing { run_once(run) };
+        CHECK(failing.answer == 0);
+        CHECK(failing.state.void_calls == 1);
+        check_clean(failing, buffer_call);
+    }
+}
+
 TEST_CASE("Opening a URL leaves no pending exception when any JNI call fails", "[android][jni_order]")
 {
     const fake_vm_scope vm {};
@@ -973,6 +1034,79 @@ TEST_CASE("Loading a secret whose key is gone removes the file and answers not f
     CHECK(gone.answer == 1);
     CHECK(gone.state.calls_while_pending == 0);
     CHECK(folder.stored_files() == 0);
+}
+
+// 예외 없는 null도 오류로 적히는지 본다. 오류 없는 null 키는 "키가 없다"로 읽혀 파일이 지워지고, 그 밖의 null은 빈 글의 실패가 된다.
+namespace {
+    constexpr int secret_empty_failure { -1 };
+    constexpr int secret_failed { 0 };
+    constexpr int secret_done { 1 };
+    constexpr int secret_file_removed { 2 };
+
+    [[nodiscard]] int answer_of(const luil::secret_store_result& result)
+    {
+        if (result.status == luil::secret_store_status::ok)
+            return secret_done;
+        return result.error.empty() ? secret_empty_failure : secret_failed;
+    }
+
+    void check_null_clean(const outcome& nulled)
+    {
+        CHECK_FALSE(nulled.state.pending);
+        CHECK(nulled.state.calls_while_pending == 0);
+        CHECK(nulled.state.popped == nulled.state.pushed);
+    }
+}
+
+TEST_CASE("Loading a secret removes the file only when getKey itself answers null", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const secret_folder folder {};
+    const auto store = [](JNIEnv&)
+    {
+        return store_sample();
+    };
+    REQUIRE(run_once(store).answer == 1);
+    const auto run = [&folder](JNIEnv&)
+    {
+        std::vector<std::uint8_t> secret {};
+        const luil::secret_store_result result { luil::load_secret(u8"service", u8"name", secret) };
+        return folder.stored_files() == 0 ? secret_file_removed : answer_of(result);
+    };
+    const outcome success { run_once(run) };
+    REQUIRE(success.answer == secret_done);
+    REQUIRE(success.state.get_key_call > 0);
+    for (int point { 1 }; point <= success.state.calls; ++point)
+    {
+        INFO("null point " << point);
+        // 앞 회차가 getKey 자리에서 지운 파일을 되돌린다.
+        REQUIRE(run_once(store).answer == 1);
+        const outcome nulled { run_once_null(run, point) };
+        CHECK(nulled.answer != secret_empty_failure);
+        CHECK((nulled.answer == secret_file_removed) == (point == success.state.get_key_call));
+        check_null_clean(nulled);
+    }
+}
+
+TEST_CASE("Storing a secret reports a reason when a JNI call answers null without an exception", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const secret_folder folder {};
+    const bool key_missing { GENERATE(false, true) };
+    const auto run = [key_missing](JNIEnv&)
+    {
+        current->key_missing = key_missing;
+        return answer_of(luil::store_secret(u8"service", u8"name", sample_secret));
+    };
+    const outcome success { run_once(run) };
+    REQUIRE(success.answer == secret_done);
+    for (int point { 1 }; point <= success.state.calls; ++point)
+    {
+        INFO("null point " << point);
+        const outcome nulled { run_once_null(run, point) };
+        CHECK(nulled.answer != secret_empty_failure);
+        check_null_clean(nulled);
+    }
 }
 
 TEST_CASE("A local frame that cannot open clears the exception it left", "[android][jni_order]")
