@@ -286,6 +286,6 @@ namespace luil {
     access_info menu_element::accessibility() const
     {
         const bool radio { std::any_of(config_.items.begin(), config_.items.end(), [](const auto& item) { return item.kind == menu_item_kind::radio; }) };
-        return { .role = access_role::menu, .name = tooltip(), .selection_container = radio };
+        return { .role = access_role::menu, .name = access_name(), .selection_container = radio };
     }
 }

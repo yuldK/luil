@@ -1464,6 +1464,44 @@ TEST_CASE("A container takes its name from the access name, not a visible toolti
     REQUIRE(tabs.accessibility().name == u8"문서 탭");
 }
 
+TEST_CASE("Elements that write no name of their own answer to the access name", "[ui][access]")
+{
+    // `accessibility()`를 재정의해도 이름의 원천은 `access_name()` 하나다. 자리마다 갈리면 앱이 어디에 적어야 할지 알 수 없다.
+    const auto require_named = [](luil::ui_element& element) {
+        element.set_tooltip(u8"툴팁");
+        REQUIRE(element.accessibility().name == u8"툴팁");
+        element.set_access_name(u8"전용 이름");
+        REQUIRE(element.accessibility().name == u8"전용 이름");
+    };
+
+    SECTION("A slider")
+    {
+        luil::slider_element slider { luil::ui_element_id { kind_item, u8"volume" }, { .maximum = 10.0f, .value = 3.0f } };
+        require_named(slider);
+    }
+    SECTION("A progress bar")
+    {
+        luil::progress_element progress { luil::ui_element_id { kind_item, u8"load" }, { .value = 0.5f } };
+        require_named(progress);
+    }
+    SECTION("A split handle")
+    {
+        luil::split_handle_element handle { luil::ui_element_id { kind_item, u8"split" }, {} };
+        require_named(handle);
+    }
+    SECTION("A grouped list")
+    {
+        luil::grouped_list_element list { { .owner = u8"history" }, std::vector<luil::list_group> {} };
+        require_named(list);
+    }
+    SECTION("A menu")
+    {
+        const luil::menu_message_factory select { [](const std::u8string&) { return luil::input_action {}; } };
+        luil::menu_element menu { { .owner = u8"context", .items = { { .key = u8"open", .label = u8"열기" } }, .select = select } };
+        require_named(menu);
+    }
+}
+
 TEST_CASE("A list is the scrolling window its rows are revealed in", "[ui][access]")
 {
     luil::list_config config {};
