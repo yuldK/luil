@@ -23,8 +23,6 @@
 #include <system_error>
 
 namespace {
-    // 테마 페이지의 파일 감시 묶음이 볼 폴더다 (hot-reload-design.md 결정 5). 실행 파일 옆이라 사람이 찾는다. 읽지 못하면 빈 경로이고 감시가 서지 않는다.
-
     class desktop_delegate final : public luil::win32::window_delegate
     {
     public:

@@ -38,11 +38,10 @@ namespace {
             smb_ = luil::net::smb_client::create(std::move(config), error);
             if (smb_ != nullptr)
                 host.post_app_message(luil::app_message { mobile_demo::smb_client_intent { smb_.get() } });
-            // 감시자와 핫 리로드 도우미도 logic이 `stop_workers`에서 멈춘다.
+            // 파일 감시자는 logic이 `stop_workers`에서 멈춘다.
             if (files_directory_.empty() == false)
             {
                 watcher_ = mobile_demo::start_files_watch(host, files_directory_ / "watch-demo");
-                // 앱 전용 폴더의 파일만 감시한다. APK assets는 감시할 수 없어 앱이 실은 글을 이 폴더에 써 둔다 (hot-reload-design.md).
             }
             // 서식 칸의 복사·붙여넣기 요청은 logic thread가 이 host에 넣는다.
             host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
