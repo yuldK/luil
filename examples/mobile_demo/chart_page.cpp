@@ -18,7 +18,7 @@ namespace mobile_demo {
         return sample_.handle(message);
     }
 
-    page_content chart_page::build(const float width)
+    page_content chart_page::build(const float width, const float scale)
     {
         const float content_width { std::max(0.0f, width - 2.0f * page_padding) };
         page_column column { u8"chart" };
@@ -40,8 +40,9 @@ namespace mobile_demo {
         demo::chart_sample::built chart { sample_.build_chart(u8"sales") };
         column.add(std::move(chart.chart), chart_height, content_width);
         column.gap(section_gap);
-        column.note(u8"state", std::move(chart.state));
-        column.note(u8"summary", std::move(chart.summary));
+        // 고른 점의 글과 요약은 큰 자료와 큰 글꼴에서 폭을 넘는다. 한 줄 note면 끝이 말줄임으로 잘린다.
+        column.wrapped_note(u8"state", std::move(chart.state), width, scale);
+        column.wrapped_note(u8"summary", std::move(chart.summary), width, scale);
         return column.finish();
     }
 }

@@ -28,6 +28,20 @@ namespace {
     constexpr float page_width { 700.0f };
     constexpr float page_height { 900.0f };
 
+    // 글자마다 1em으로 재는 측정기다. 글꼴이 없는 test에서도 줄 수가 정해진다.
+    [[nodiscard]] float one_em_width(const std::u8string_view text, const float pixel_size)
+    {
+        float em { 0.0f };
+        for (const char8_t byte : text)
+        {
+            if ((byte & 0xC0u) != 0x80u)
+                em += 1.0f;
+        }
+        return em * pixel_size;
+    }
+
+    const luil::text_measurer one_em_measurer { one_em_width };
+
     // 두 페이지를 같은 말로 재는 틀이다. 다른 것은 짓는 함수와 owner의 접두뿐이다.
     struct desktop_page
     {
@@ -55,7 +69,7 @@ namespace {
 
         [[nodiscard]] luil::ui_tree tree()
         {
-            mobile_demo::page_content content { page.build(page_width) };
+            mobile_demo::page_content content { page.build(page_width, 1.0f) };
             return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, page_width, content.height }, 1.0f);
         }
 
@@ -249,6 +263,27 @@ TEST_CASE("The desktop chart page turns its messages into the labels", "[chart][
 TEST_CASE("The mobile chart page turns its messages into the labels", "[chart][demo]")
 {
     check_page<mobile_page>();
+}
+
+TEST_CASE("The mobile chart page breaks its state and summary into lines instead of an ellipsis", "[chart][demo]")
+{
+    // 실기기의 글꼴 배율 1.1에서 요약 글이 쓸 수 있는 폭의 83%까지 찼다. 더 큰 배율과 긴 글에서 끝이 말줄임으로 잘리지 않게 줄을 바꾼다.
+    // 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다.
+    mobile_page page {};
+    press_right(page);
+    mobile_demo::page_content content { page.page.build(240.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 240.0f, height }, 1.0f) };
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &one_em_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    for (const std::u8string_view owner : { std::u8string_view { u8"state" }, std::u8string_view { u8"summary" } })
+    {
+        const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, std::u8string { owner } }) };
+        REQUIRE(note != nullptr);
+        const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+        REQUIRE(wrapped.has_value());
+        REQUIRE(wrapped->height >= 2.0f * line);
+    }
 }
 
 TEST_CASE("The desktop chart page scrolls its body", "[chart][demo]")

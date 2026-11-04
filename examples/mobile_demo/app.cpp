@@ -360,7 +360,7 @@ namespace mobile_demo {
         if (page == page_files)
             return wrap_scroll(page, files_.build(width, scale), height, scale);
         if (page == page_chart)
-            return wrap_scroll(page, chart_.build(width), height, scale);
+            return wrap_scroll(page, chart_.build(width, scale), height, scale);
         return wrap_scroll(page, basics_.build(width, scale), height, scale);
     }
 

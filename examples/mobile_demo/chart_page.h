@@ -19,7 +19,7 @@ namespace mobile_demo {
     {
     public:
         bool handle(const luil::app_message& message);
-        [[nodiscard]] page_content build(float width);
+        [[nodiscard]] page_content build(float width, float scale);
 
     private:
         demo::chart_sample sample_ {};
