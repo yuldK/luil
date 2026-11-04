@@ -81,9 +81,10 @@ namespace luil {
             {
                 const jclass store_class { find("java/security/KeyStore") };
                 const jmethodID get_instance { static_method(store_class, "getInstance", "(Ljava/lang/String;)Ljava/security/KeyStore;") };
-                if (get_instance == nullptr)
+                const jstring provider { java_string("AndroidKeyStore") };
+                if (get_instance == nullptr || provider == nullptr)
                     return nullptr;
-                const jobject store { env_->CallStaticObjectMethod(store_class, get_instance, env_->NewStringUTF("AndroidKeyStore")) };
+                const jobject store { env_->CallStaticObjectMethod(store_class, get_instance, provider) };
                 if (check(u8"Failed to open the Android key store") == false)
                     return nullptr;
                 const jmethodID load { method(store_class, "load", "(Ljava/security/KeyStore$LoadStoreParameter;)V") };
@@ -93,9 +94,10 @@ namespace luil {
                 if (check(u8"Failed to load the Android key store") == false)
                     return nullptr;
                 const jmethodID get_key { method(store_class, "getKey", "(Ljava/lang/String;[C)Ljava/security/Key;") };
-                if (get_key == nullptr)
+                const jstring alias_text { java_string(alias.c_str()) };
+                if (get_key == nullptr || alias_text == nullptr)
                     return nullptr;
-                const jobject existing { env_->CallObjectMethod(store, get_key, env_->NewStringUTF(alias.c_str()), nullptr) };
+                const jobject existing { env_->CallObjectMethod(store, get_key, alias_text, nullptr) };
                 if (check(u8"Failed to read the secret key") == false)
                     return nullptr;
                 if (existing != nullptr || create == false)
@@ -119,7 +121,10 @@ namespace luil {
                 const auto iv_array { static_cast<jbyteArray>(env_->CallObjectMethod(cipher, get_iv)) };
                 if (check(u8"Failed to read the encryption IV") == false || iv_array == nullptr)
                     return std::nullopt;
-                iv = from_java(iv_array);
+                std::optional<std::vector<std::uint8_t>> iv_read { from_java(iv_array) };
+                if (iv_read.has_value() == false)
+                    return std::nullopt;
+                iv = std::move(*iv_read);
                 return final_bytes(cipher_class, cipher, plain, u8"Failed to encrypt the secret");
             }
 
@@ -132,7 +137,10 @@ namespace luil {
                 const jmethodID init { method(cipher_class, "init", "(ILjava/security/Key;Ljava/security/spec/AlgorithmParameterSpec;)V") };
                 if (cipher == nullptr || gcm_init == nullptr || init == nullptr)
                     return std::nullopt;
-                const jobject parameters { env_->NewObject(gcm_class, gcm_init, tag_bits, to_java(iv)) };
+                const jbyteArray iv_array { to_java(iv) };
+                if (iv_array == nullptr)
+                    return std::nullopt;
+                const jobject parameters { env_->NewObject(gcm_class, gcm_init, tag_bits, iv_array) };
                 if (check(u8"Failed to prepare the decryption") == false)
                     return std::nullopt;
                 env_->CallVoidMethod(cipher, init, decrypt_mode, key, parameters);
@@ -194,28 +202,55 @@ namespace luil {
                 return check(u8"A key store method is missing") ? found : nullptr;
             }
 
+            // 인자로 넘길 Java 글이다. 실패하면 nullptr이고 언제나 오류가 남는다.
+            //  - 오류 없는 null 키는 "키가 없다"로 읽혀 `load_secret`이 파일을 지운다. 예외 없는 null도 오류로 적는다.
+            [[nodiscard]] jstring java_string(const char* const value)
+            {
+                if (error_.empty() == false)
+                    return nullptr;
+                const jstring text { env_->NewStringUTF(value) };
+                if (check(u8"Failed to build a key store string") == false)
+                    return nullptr;
+                if (text == nullptr)
+                    error_ = u8"Failed to build a key store string.";
+                return text;
+            }
+
             [[nodiscard]] jbyteArray to_java(const std::span<const std::uint8_t> bytes)
             {
                 const jbyteArray array { env_->NewByteArray(static_cast<jsize>(bytes.size())) };
-                if (array != nullptr && bytes.empty() == false)
-                    env_->SetByteArrayRegion(array, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
-                return array;
+                if (check(u8"Failed to prepare the secret bytes") == false)
+                    return nullptr;
+                if (array == nullptr)
+                {
+                    error_ = u8"Failed to prepare the secret bytes.";
+                    return nullptr;
+                }
+                if (bytes.empty())
+                    return array;
+                env_->SetByteArrayRegion(array, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
+                return check(u8"Failed to prepare the secret bytes") ? array : nullptr;
             }
 
-            [[nodiscard]] std::vector<std::uint8_t> from_java(const jbyteArray array)
+            [[nodiscard]] std::optional<std::vector<std::uint8_t>> from_java(const jbyteArray array)
             {
                 std::vector<std::uint8_t> bytes(static_cast<std::size_t>(env_->GetArrayLength(array)));
                 if (bytes.empty() == false)
+                {
                     env_->GetByteArrayRegion(array, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<jbyte*>(bytes.data()));
+                    if (check(u8"Failed to read the secret bytes") == false)
+                        return std::nullopt;
+                }
                 return bytes;
             }
 
             [[nodiscard]] jobjectArray single_string(const char* const value)
             {
                 const jclass string_class { find("java/lang/String") };
-                if (string_class == nullptr)
+                const jstring text { java_string(value) };
+                if (string_class == nullptr || text == nullptr)
                     return nullptr;
-                const jobjectArray array { env_->NewObjectArray(1, string_class, env_->NewStringUTF(value)) };
+                const jobjectArray array { env_->NewObjectArray(1, string_class, text) };
                 return check(u8"Failed to build a key parameter") ? array : nullptr;
             }
 
@@ -236,7 +271,10 @@ namespace luil {
                     || generate_key == nullptr)
                     return nullptr;
 
-                const jobject builder { env_->NewObject(builder_class, builder_init, env_->NewStringUTF(alias.c_str()), key_purposes) };
+                const jstring alias_text { java_string(alias.c_str()) };
+                if (alias_text == nullptr)
+                    return nullptr;
+                const jobject builder { env_->NewObject(builder_class, builder_init, alias_text, key_purposes) };
                 if (check(u8"Failed to describe the secret key") == false)
                     return nullptr;
                 const jobjectArray gcm { single_string("GCM") };
@@ -256,7 +294,11 @@ namespace luil {
                 const jobject spec { env_->CallObjectMethod(builder, build) };
                 if (check(u8"Failed to describe the secret key") == false)
                     return nullptr;
-                const jobject generator { env_->CallStaticObjectMethod(generator_class, get_instance, env_->NewStringUTF("AES"), env_->NewStringUTF("AndroidKeyStore")) };
+                const jstring algorithm { java_string("AES") };
+                const jstring provider { java_string("AndroidKeyStore") };
+                if (algorithm == nullptr || provider == nullptr)
+                    return nullptr;
+                const jobject generator { env_->CallStaticObjectMethod(generator_class, get_instance, algorithm, provider) };
                 if (check(u8"Failed to open the key generator") == false)
                     return nullptr;
                 env_->CallVoidMethod(generator, init, spec);
@@ -267,9 +309,10 @@ namespace luil {
             [[nodiscard]] jobject make_cipher(const jclass cipher_class)
             {
                 const jmethodID get_instance { static_method(cipher_class, "getInstance", "(Ljava/lang/String;)Ljavax/crypto/Cipher;") };
-                if (get_instance == nullptr)
+                const jstring transformation { java_string("AES/GCM/NoPadding") };
+                if (get_instance == nullptr || transformation == nullptr)
                     return nullptr;
-                const jobject cipher { env_->CallStaticObjectMethod(cipher_class, get_instance, env_->NewStringUTF("AES/GCM/NoPadding")) };
+                const jobject cipher { env_->CallStaticObjectMethod(cipher_class, get_instance, transformation) };
                 return check(u8"Failed to open the AES-GCM cipher") ? cipher : nullptr;
             }
 
@@ -279,7 +322,10 @@ namespace luil {
                 const jmethodID do_final { method(cipher_class, "doFinal", "([B)[B") };
                 if (do_final == nullptr)
                     return std::nullopt;
-                const auto output { static_cast<jbyteArray>(env_->CallObjectMethod(cipher, do_final, to_java(input))) };
+                const jbyteArray input_array { to_java(input) };
+                if (input_array == nullptr)
+                    return std::nullopt;
+                const auto output { static_cast<jbyteArray>(env_->CallObjectMethod(cipher, do_final, input_array)) };
                 if (check(what) == false || output == nullptr)
                     return std::nullopt;
                 return from_java(output);

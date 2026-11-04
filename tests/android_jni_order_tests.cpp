@@ -3,14 +3,22 @@
 #include "android/android_window_control.h"
 #include "android/java_vm.h"
 #include "luil/app/platform_services.h"
+#include "luil/app/secret_store.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <jni.h>
 
 #include <cstdarg>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <iterator>
 #include <optional>
+#include <span>
 #include <string_view>
+#include <system_error>
+#include <vector>
 
 // 가짜 JNIEnv로 시스템 색·대비·막대·햅틱·권한 읽기와 쓰기의 JNI 흐름을 잠근다 (android_settings_tests.cpp와 같은 틀).
 //  - 실패 지점 번호의 호출 하나가 예외를 남기고 null이나 0을 돌려준다. 지점을 바꿔 가며 모두 친다.
@@ -19,7 +27,7 @@
 //  - 값을 읽는 `GetIntField`·`GetStaticIntField`도 실패 지점이다. 읽은 값을 쓰기 전에 예외를 거두는지, 모든 JNI 호출이
 //    앞 호출의 예외를 거둔 뒤에 불리는지(예외가 남은 채 부른 호출 수 0)를 아홉 읽기와 쓰기 모두에서 본다.
 //  - 읽기의 틀은 API 수준에 따라 갈린다. 기기에서 JNI 호출이 하나도 없으면 그 읽기는 SKIP한다.
-//  - 주소 열기처럼 thread를 JVM에 붙이는 길은 가짜 JavaVM으로 같은 가짜 JNIEnv를 내준다.
+//  - 주소 열기와 비밀 저장소처럼 thread를 JVM에 붙이는 길은 가짜 JavaVM으로 같은 가짜 JNIEnv를 내준다.
 //  - 클립보드는 글·HTML·그림 URI를 다 든 클립과 글 없는 URI 항목으로 읽기의 모든 갈래를 지난다.
 namespace {
     struct fake_state
@@ -48,6 +56,8 @@ namespace {
         const char* mime { "image/png" };
         // `InputStream.read`를 부른 수다. 첫 번은 네 바이트, 그 뒤는 끝(-1)이다.
         int reads { 0 };
+        // `KeyStore.getKey`가 null이다 (아직 키가 없다).
+        bool key_missing { false };
     };
 
     fake_state* current { nullptr };
@@ -56,6 +66,8 @@ namespace {
     // `getType`의 답과 그 `toString`이다. 어느 글을 읽는지 가른다.
     int mime_marker { 0 };
     int mime_text_marker { 0 };
+    // `Cipher.getIV`의 답이다. 길이가 12바이트다.
+    int iv_marker { 0 };
 
     [[nodiscard]] jobject object() noexcept
     {
@@ -235,6 +247,18 @@ namespace {
         static_cast<void>(step());
     }
 
+    void JNICALL set_byte_array_region(JNIEnv*, jbyteArray, const jsize, const jsize, const jbyte*)
+    {
+        static_cast<void>(step());
+    }
+
+    // 배열 길이는 예외를 내지 않는다. 암호문은 태그만큼인 16바이트로 둔다.
+    jsize JNICALL get_array_length(JNIEnv*, const jarray array)
+    {
+        note();
+        return reinterpret_cast<const int*>(array) == &iv_marker ? 12 : 16;
+    }
+
     jobjectArray JNICALL new_object_array(JNIEnv*, const jsize, jclass, jobject)
     {
         if (step())
@@ -253,6 +277,10 @@ namespace {
             return reinterpret_cast<jobject>(&mime_marker);
         if (name == "toString" && reinterpret_cast<const int*>(receiver) == &mime_marker)
             return reinterpret_cast<jobject>(&mime_text_marker);
+        if (name == "getKey" && current->key_missing)
+            return nullptr;
+        if (name == "getIV")
+            return reinterpret_cast<jobject>(&iv_marker);
         return object();
     }
 
@@ -334,6 +362,8 @@ namespace {
         table.ReleaseStringUTFChars = release_string_utf_chars;
         table.NewByteArray = new_byte_array;
         table.GetByteArrayRegion = get_byte_array_region;
+        table.SetByteArrayRegion = set_byte_array_region;
+        table.GetArrayLength = get_array_length;
         table.NewObjectArray = new_object_array;
         table.CallObjectMethodV = call_object_v;
         table.CallStaticObjectMethodV = call_static_object_v;
@@ -483,6 +513,74 @@ namespace {
 
 // 프로세스에 하나인 context는 한 번 적으면 지울 수 없다. CTest는 test마다 프로세스를 따로 띄워 여기서 늘 비어 있고,
 // 한 프로세스에 몰아 돌릴 때 먼저 적혔으면 건너뛴다.
+namespace {
+    // 비밀 저장소가 쓸 앱 폴더다. 기기 셸에는 정해진 임시 폴더가 없어 실행 파일이 도는 자리 아래에 둔다.
+    class secret_folder
+    {
+    public:
+        secret_folder()
+            : path_ { std::filesystem::current_path() / "luil_jni_secret_store" }
+        {
+            std::filesystem::remove_all(path_);
+            std::filesystem::create_directories(path_);
+            luil::android::set_files_directory(path_.string().c_str());
+        }
+        secret_folder(const secret_folder&) = delete;
+        secret_folder(secret_folder&&) = delete;
+        secret_folder& operator=(const secret_folder&) = delete;
+        secret_folder& operator=(secret_folder&&) = delete;
+        ~secret_folder()
+        {
+            luil::android::set_files_directory(nullptr);
+            std::error_code ignored {};
+            std::filesystem::remove_all(path_, ignored);
+        }
+
+        [[nodiscard]] std::ptrdiff_t stored_files() const
+        {
+            return std::distance(std::filesystem::directory_iterator { path_ / "luil-secrets" }, std::filesystem::directory_iterator {});
+        }
+
+    private:
+        std::filesystem::path path_;
+    };
+
+    constexpr std::uint8_t sample_secret[] { 1, 2, 3, 4 };
+
+    [[nodiscard]] int store_sample()
+    {
+        return luil::store_secret(u8"service", u8"name", sample_secret).status == luil::secret_store_status::ok ? 1 : 0;
+    }
+
+    // 예외를 글로 옮기는 동안 부르는 JNI 수다 (클래스, 메서드, `toString`, 글 읽기).
+    constexpr int exception_text_calls { 4 };
+
+    // 비밀 저장소의 실패 지점을 모두 친다.
+    //  - 지점 1은 틀을 여는 호출이다. 저장소는 틀 없이도 일을 이어 성공한다.
+    //  - 예외를 글로 옮기는 호출이 또 실패하는 자리까지 둘째 지점으로 친다.
+    template <typename Run>
+    void check_secret_failure_points(Run&& run, const outcome& success)
+    {
+        for (int point { 1 }; point <= success.state.calls; ++point)
+        {
+            INFO("failure point " << point);
+            const outcome failing { run_once(run, point) };
+            CHECK(failing.answer == (point == 1 ? success.answer : 0));
+            CHECK_FALSE(failing.state.pending);
+            CHECK(failing.state.calls_while_pending == 0);
+            CHECK(failing.state.popped == failing.state.pushed);
+            for (int second { point + 1 }; second <= point + exception_text_calls; ++second)
+            {
+                INFO("second failure point " << second);
+                const outcome twice { run_once(run, point, second) };
+                CHECK_FALSE(twice.state.pending);
+                CHECK(twice.state.calls_while_pending == 0);
+                CHECK(twice.state.popped == twice.state.pushed);
+            }
+        }
+    }
+}
+
 TEST_CASE("App context capture leaves no pending exception when any JNI call fails", "[android][jni_order]")
 {
     if (luil::android::application_context() != nullptr)
@@ -750,6 +848,82 @@ TEST_CASE("A URL no app can open answers not found without a pending exception",
     const outcome unknown { run_once(run, start_activity, start_activity + 1) };
     CHECK(unknown.answer == static_cast<int>(luil::platform_status::failed));
     check_clean(unknown, start_activity);
+}
+
+TEST_CASE("Storing a secret with an existing key leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const secret_folder folder {};
+    const auto run = [](JNIEnv&)
+    {
+        return store_sample();
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.popped == 1);
+    CHECK(folder.stored_files() == 1);
+    check_secret_failure_points(run, success);
+}
+
+TEST_CASE("Storing a secret that creates its key leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const secret_folder folder {};
+    const auto run = [](JNIEnv&)
+    {
+        current->key_missing = true;
+        return store_sample();
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.popped == 1);
+    CHECK(folder.stored_files() == 1);
+    check_secret_failure_points(run, success);
+}
+
+TEST_CASE("Loading a secret leaves no pending exception and keeps the file when any JNI call fails", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const secret_folder folder {};
+    const auto store = [](JNIEnv&)
+    {
+        return store_sample();
+    };
+    REQUIRE(run_once(store).answer == 1);
+    const auto run = [&folder](JNIEnv&)
+    {
+        std::vector<std::uint8_t> secret {};
+        const bool opened { luil::load_secret(u8"service", u8"name", secret).status == luil::secret_store_status::ok };
+        // 실패를 "키가 없다"로 읽으면 풀 수 있는 파일을 지운다. 파일이 남았는지까지 답에 넣는다.
+        if (folder.stored_files() != 1)
+            return -1;
+        return opened && secret.size() == 16 ? 1 : 0;
+    };
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.popped == 1);
+    check_secret_failure_points(run, success);
+}
+
+TEST_CASE("Loading a secret whose key is gone removes the file and answers not found", "[android][jni_order]")
+{
+    const fake_vm_scope vm {};
+    const secret_folder folder {};
+    const auto store = [](JNIEnv&)
+    {
+        return store_sample();
+    };
+    REQUIRE(run_once(store).answer == 1);
+    const auto run = [](JNIEnv&)
+    {
+        current->key_missing = true;
+        std::vector<std::uint8_t> secret {};
+        return luil::load_secret(u8"service", u8"name", secret).status == luil::secret_store_status::not_found ? 1 : 0;
+    };
+    const outcome gone { run_once(run) };
+    CHECK(gone.answer == 1);
+    CHECK(gone.state.calls_while_pending == 0);
+    CHECK(folder.stored_files() == 0);
 }
 
 TEST_CASE("A local frame that cannot open clears the exception it left", "[android][jni_order]")

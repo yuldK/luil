@@ -190,10 +190,13 @@ target_sources(luil_core_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/toasts_page.cpp"
     "${PROJECT_SOURCE_DIR}/examples/mobile_demo/zoom_page.cpp"
     mobile_demo_assets_stub.cpp
-    secret_store_stub.cpp
     update_apply_stub.cpp
     mobile_demo_page_list_tests.cpp
     mobile_demo_page_tests.cpp)
+# Android는 비밀 저장소의 JNI 흐름을 test하느라 원본을 묶는다 (아래 android_jni_order_tests.cpp의 자리). JavaVM이 없으면 대역처럼 "지원 안 함"이다.
+if(NOT LUIL_PLATFORM STREQUAL "android")
+    target_sources(luil_core_tests PRIVATE secret_store_stub.cpp)
+endif()
 # 데스크톱 demo의 변경 작업대도 창 없이 조립·지연 로딩·양식 배치를 검증한다 (커스텀 element 없는 조립).
 # 확대 보기 페이지는 도면 요소가 luil과 Skia 헤더만 써서 같은 목록에 오른다. 줌 단추 글을 바꾸는 단추를 검증한다.
 target_sources(luil_core_tests PRIVATE
@@ -314,7 +317,7 @@ if(LUIL_PLATFORM STREQUAL "android")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/android/notification_icon.cpp"
             android_notification_icon_tests.cpp)
-    # 시스템 색·대비·막대·햅틱·권한, 앱 context 잡기, 클립보드, 주소 열기의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 여는 첫 호출부터 지점마다 실패를 친다
+    # 시스템 색·대비·막대·햅틱·권한, 앱 context 잡기, 클립보드, 주소 열기, 비밀 저장소의 JNI 흐름도 가짜 JNIEnv로 잠근다. 틀을 여는 첫 호출부터 지점마다 실패를 친다
     # (android_jni_order_tests.cpp). 자리 전체의 검사 순서는 호스트의 luil_jni_order가 본다.
     target_sources(luil_core_tests
         PRIVATE
@@ -323,6 +326,7 @@ if(LUIL_PLATFORM STREQUAL "android")
             "${LUIL_SOURCE_DIRECTORY}/android/android_window_control.cpp"
             "${LUIL_SOURCE_DIRECTORY}/android/java_vm.cpp"
             "${LUIL_SOURCE_DIRECTORY}/android/platform_services_android.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/android/secret_store_android.cpp"
             "${LUIL_SOURCE_DIRECTORY}/luil/url_scheme.cpp"
             android_jni_order_tests.cpp)
     # 주 첫 요일의 JNI 흐름도 같은 가짜 JNIEnv 길로 잠근다 (android_locale_tests.cpp).
