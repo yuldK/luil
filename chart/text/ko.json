@@ -1,0 +1,16 @@
+{
+    "language": "ko",
+    "plural": "other",
+    "strings": {
+        "chart_name": "차트",
+        "chart_plot_name": "자료 점",
+        "chart_summary": "{series}, {categories}, 최솟값 {minimum}, 최댓값 {maximum}",
+        "chart_summary_without_range": "{series}, {categories}",
+        "chart_summary_series": { "other": "계열 {count}개" },
+        "chart_summary_categories": { "other": "범주 {count}개" },
+        "chart_point_text": "{series}, {category}, {value}",
+        "chart_point_text_single_series": "{category}, {value}",
+        "chart_missing_value": "값 없음",
+        "chart_empty": "자료 없음"
+    }
+}

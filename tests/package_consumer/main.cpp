@@ -85,6 +85,9 @@ int main()
     const luil::chart_element element { std::move(chart) };
     if (element.accessibility().role != luil::access_role::image)
         return 15;
+    // 차트 문구 표는 설치본의 정적 라이브러리에 들어 있다. 언어를 정하지 않은 소비자의 기본은 한국어다.
+    if (element.accessibility().name != u8"차트")
+        return 16;
 #endif
 
     luil::net::http_client_config config {};

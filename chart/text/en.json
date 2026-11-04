@@ -1,0 +1,16 @@
+{
+    "language": "en",
+    "plural": "one",
+    "strings": {
+        "chart_name": "Chart",
+        "chart_plot_name": "Data points",
+        "chart_summary": "{series}, {categories}, minimum {minimum}, maximum {maximum}",
+        "chart_summary_without_range": "{series}, {categories}",
+        "chart_summary_series": { "one": "{count} series", "other": "{count} series" },
+        "chart_summary_categories": { "one": "{count} category", "other": "{count} categories" },
+        "chart_point_text": "{series}, {category}, {value}",
+        "chart_point_text_single_series": "{category}, {value}",
+        "chart_missing_value": "No value",
+        "chart_empty": "No data"
+    }
+}

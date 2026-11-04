@@ -331,6 +331,8 @@ namespace luil {
 
         const chart_element& owner;
         chart_config config;
+        // 기본 문구의 언어다. 요소를 지을 때 한 번 고른다. 언어가 바뀌면 앱이 다시 지은 요소부터 새 언어다.
+        string_lookup strings { chart_text::select_chart_strings() };
 
         // --- 자료 (생성자) ---
         std::size_t categories { 0 };
@@ -613,7 +615,7 @@ namespace luil {
             else
             {
                 draw_axes(context);
-                draw_text_block(context, chart_text::chart_empty(), plot, block_style(context.metrics.small_font_size, text_align::center), solid_paint(context.palette.secondary_foreground));
+                draw_text_block(context, chart_text::chart_empty(strings), plot, block_style(context.metrics.small_font_size, text_align::center), solid_paint(context.palette.secondary_foreground));
             }
         }
         draw_legend(context);
@@ -861,7 +863,7 @@ namespace luil {
         {
             const double value { value_at(series, *category) };
             row line {};
-            line.value = std::isfinite(value) ? value_text(value) : std::u8string { chart_text::chart_missing_value() };
+            line.value = std::isfinite(value) ? value_text(value) : std::u8string { chart_text::chart_missing_value(strings) };
             line.name_width = measure_text(config.series[series].name, font);
             line.value_width = measure_text(line.value, font);
             content_width = std::max(content_width, marker_slot + line.name_width + column_gap + line.value_width);
@@ -907,7 +909,7 @@ namespace luil {
             if (std::u8string text { config.access_summary(config) }; text.empty() == false)
                 return text;
         }
-        return chart_text::chart_summary(config.series.size(), categories
+        return chart_text::chart_summary(strings, config.series.size(), categories
             , data.has_value() ? value_text(data->minimum) : std::u8string {}
             , data.has_value() ? value_text(data->maximum) : std::u8string {}
         );
@@ -921,10 +923,10 @@ namespace luil {
                 return text;
         }
         const double value { value_at(point.series, point.category) };
-        const std::u8string value_glyphs { std::isfinite(value) ? value_text(value) : std::u8string { chart_text::chart_missing_value() } };
+        const std::u8string value_glyphs { std::isfinite(value) ? value_text(value) : std::u8string { chart_text::chart_missing_value(strings) } };
         // 계열이 하나면 이름이 군말이다.
         const std::u8string_view name { config.series.size() > 1u ? std::u8string_view { config.series[point.series].name } : std::u8string_view {} };
-        return chart_text::chart_point_text(name, category_text(point.category), value_glyphs);
+        return chart_text::chart_point_text(strings, name, category_text(point.category), value_glyphs);
     }
 
     std::optional<std::size_t> chart_element::state::shown_category(const interaction_snapshot& interaction) const
@@ -1110,7 +1112,7 @@ namespace luil {
             if (state_.config.focus == nullptr)
                 return {};
             access_info info { .role = access_role::slider };
-            info.name = chart_text::chart_plot_name();
+            info.name = chart_text::chart_plot_name(state_.strings);
             // 값이 비지 않아야 UIA Value 패턴이 읽기 전용으로 선다. 아직 고른 점이 없으면 읽을 값도 없다.
             if (const std::optional<chart_point> selected { state_.current_point() }; selected.has_value())
                 info.value = state_.point_text(*selected);
@@ -1201,7 +1203,7 @@ namespace luil {
     {
         return {
             .role = access_role::image,
-            .name = state_->config.name.empty() ? std::u8string { chart_text::chart_name() } : state_->config.name,
+            .name = state_->config.name.empty() ? std::u8string { chart_text::chart_name(state_->strings) } : state_->config.name,
             .value = state_->summary_text(),
         };
     }

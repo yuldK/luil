@@ -32,6 +32,8 @@ target_link_libraries(luil_chart
     PRIVATE
         luil_options)
 luil_set_ide_folder("Libraries" luil_chart)
+# 차트의 글은 자기 표에 산다. 생성 헤더는 비공개이고 글은 정적 라이브러리에 들어 설치본에는 원본도 헤더도 필요 없다.
+luil_add_string_table(luil_chart NAME chart_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/text" BASE ko)
 
 # 설치본에서는 구성 요소 `chart`다 (`find_package(luil COMPONENTS chart)`).
 #  - 내보내기 묶음이 core와 따로라 차트를 끄고 설치한 패키지에는 이 파일이 없다. `luil_core`는 `luil-targets` 묶음에 있고
