@@ -660,11 +660,14 @@ namespace luil {
         const float horizontal_height { horizontal_bar_ != nullptr ? std::min(scrollbar_visual_width * scale_ + 8.0f * scale_, context.slot.height) : 0.0f };
         rect_f area_slot { context.slot };
         area_slot.height -= horizontal_height;
+        // 막대는 칸 안의 부품이라 앱이 손댈 수 없다. 칸이 읽히는 이름을 물려준다 (`list_element`와 같은 줄).
+        area_->set_access_name(field_name());
         area_->arrange(context.for_child(area_slot));
         const float viewport_width { std::max(0.0f, area_->viewport().width / scale_ - gutter_width_) };
         horizontal_offset_ = config_.wrap ? 0.0f : clamp_scroll(content_width_, viewport_width, config_.scroll_x);
         if (horizontal_bar_ != nullptr)
         {
+            horizontal_bar_->set_access_name(field_name());
             horizontal_bar_->set_metrics(content_width_, viewport_width, horizontal_offset_);
             horizontal_bar_->arrange(context.for_child({ area_slot.x, area_slot.y + area_slot.height, area_->viewport().width, horizontal_height }));
         }
@@ -1182,10 +1185,15 @@ namespace luil {
         return context.now + (caret_blink_interval - phase);
     }
 
+    const std::u8string& text_area_element::field_name() const noexcept
+    {
+        // 안내 글은 글을 쓰면 사라지는 것이라 이름이 없을 때의 대신이다.
+        return access_name().empty() ? config_.placeholder : access_name();
+    }
+
     access_info text_area_element::accessibility() const
     {
         // 값은 확정 글이다 — 조합 글은 아직 사용자의 글이 아니다 (`text_input_element`와 같은 판단).
-        // 이름은 앱이 단 것(`access_name`)이 먼저다. 안내 글은 글을 쓰면 사라지는 것이라 이름이 없을 때의 대신이다.
-        return { .role = access_role::edit, .name = access_name().empty() ? config_.placeholder : access_name(), .value = value_.text };
+        return { .role = access_role::edit, .name = field_name(), .value = value_.text };
     }
 }

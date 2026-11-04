@@ -404,6 +404,30 @@ TEST_CASE("A text area reads the access name the app gave before its placeholder
     REQUIRE(info.value == u8"a\nb");
 }
 
+TEST_CASE("The bars of a text area read the name the field reads", "[ui][text-area][accessibility]")
+{
+    // 막대는 칸 안의 부품이라 앱이 손댈 수 없다. 앱이 단 이름이 먼저고, 없으면 칸과 같이 안내 글이다. 둘 다 없으면 빈 이름이다.
+    const auto names_of = [](const std::u8string& name, std::u8string placeholder) {
+        luil::text_area_config config { scrolling_config() };
+        config.placeholder = std::move(placeholder);
+        config.wrap = false;
+        config.scroll_horizontal = config.scroll;
+        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo, u8"memo" }, view_of(u8"a\nb", 1), std::move(config)) };
+        memo->set_access_name(name);
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(memo), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+        const luil::ui_element* const field { tree.find({ kind_memo, u8"memo" }) };
+        const luil::ui_element* const vertical { tree.find({ luil::ui_element_kind::scroll_area_bar, u8"text-area:memo" }) };
+        const luil::ui_element* const horizontal { tree.find({ luil::ui_element_kind::scroll_area_bar, u8"text-area-x:memo" }) };
+        REQUIRE(field != nullptr);
+        REQUIRE(vertical != nullptr);
+        REQUIRE(horizontal != nullptr);
+        return std::vector<std::u8string> { field->accessibility().name, vertical->accessibility().name, horizontal->accessibility().name };
+    };
+    REQUIRE(names_of(u8"읽기 전용 안내 칸", u8"메모") == std::vector<std::u8string>(3u, u8"읽기 전용 안내 칸"));
+    REQUIRE(names_of(std::u8string {}, u8"메모") == std::vector<std::u8string>(3u, u8"메모"));
+    REQUIRE(names_of(std::u8string {}, std::u8string {}) == std::vector<std::u8string>(3u, std::u8string {}));
+}
+
 TEST_CASE("Enter breaks the line in a text area and stays a default key in a single line field", "[ui][text-area][interaction]")
 {
     memo_policy policy {};

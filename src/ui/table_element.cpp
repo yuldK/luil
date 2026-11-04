@@ -1075,6 +1075,8 @@ namespace luil {
         header_->arrange(context.for_child({ context.slot.x, context.slot.y, context.slot.width, header_height }));
         // 가로 막대의 높이만큼 본문 창이 준다. 마지막 행이 막대 밑에 숨지 않는다.
         const float body_height { rows_height - horizontal_height };
+        // 이름은 본문(`access_role::table`)을 지나 세로 막대까지 이어진다. 앱은 표에만 이름을 단다.
+        body_->set_access_name(access_name());
         body_->arrange(context.for_child({ context.slot.x, context.slot.y + header_height, context.slot.width, body_height }));
 
         if (horizontal_bar_ == nullptr)

@@ -235,6 +235,8 @@ namespace luil {
         [[nodiscard]] const text_measurer& measure_with(const text_measurer& fallback) const;
         [[nodiscard]] std::u8string_view displayed_text() const noexcept;
         [[nodiscard]] std::size_t displayed_caret() const noexcept;
+        // 칸이 읽히는 이름이다. 앱이 단 이름(`access_name`)이 먼저고, 없으면 안내 글이다. 안쪽 막대도 이 이름을 읽는다.
+        [[nodiscard]] const std::u8string& field_name() const noexcept;
         // 그 글의 화면 줄이다. 배치가 접은 표시 문서면 그 결과를, 아니면(조합 중에 확정 글을 물을 때) 같은 폭으로 다시 접는다.
         // 다시 접은 줄은 `storage`에 담아 돌려준다 — 칸은 여러 thread가 읽으므로 안에 담을 수 없다.
         [[nodiscard]] const std::vector<line>& lines_for(std::u8string_view text, const std::function<float(std::u8string_view)>& measure, std::vector<line>& storage) const;

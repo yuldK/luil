@@ -811,6 +811,35 @@ TEST_CASE("A horizontal bar that pushes the rows into overflow still leaves the 
     REQUIRE(table->scroll_x() == 320.0f - (200.0f - luil::scroll_area_bar_width));
 }
 
+TEST_CASE("A named table reads its name on the rows and both bars, and an unnamed one stays unnamed", "[ui][table][accessibility]")
+{
+    // 세로로도 가로로도 넘치는 표다. 부품은 앱이 손댈 수 없어 표의 이름을 물려받는다.
+    const auto names_of = [](const std::u8string& name) {
+        luil::table_config config { make_config() };
+        config.scroll_x = 50.0f;
+        auto owned { std::make_unique<luil::table_element>(std::move(config)) };
+        owned->set_access_name(name);
+        const luil::ui_tree tree { luil::make_arranged_tree(std::move(owned), { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f) };
+        REQUIRE(tree.unarranged().empty());
+        const luil::ui_element& rows { find(tree, { luil::ui_element_kind::virtual_list, u8"files" }) };
+        REQUIRE(rows.accessibility().role == luil::access_role::table);
+        const luil::ui_element& vertical { find(tree, { luil::ui_element_kind::scroll_area_bar, u8"files" }) };
+        REQUIRE(vertical.visible());
+        REQUIRE(vertical.accessibility().role == luil::access_role::scroll_bar);
+        const luil::ui_element* const horizontal { dynamic_cast<const luil::table_element&>(*tree.root()).horizontal_bar() };
+        REQUIRE(horizontal != nullptr);
+        REQUIRE(horizontal->visible());
+        return std::vector<std::u8string> {
+            find(tree, { luil::ui_element_kind::table_header, u8"files" }).accessibility().name,
+            rows.accessibility().name,
+            vertical.accessibility().name,
+            horizontal->accessibility().name,
+        };
+    };
+    REQUIRE(names_of(u8"변경 파일") == std::vector<std::u8string>(4u, u8"변경 파일"));
+    REQUIRE(names_of(std::u8string {}) == std::vector<std::u8string>(4u, std::u8string {}));
+}
+
 TEST_CASE("A column can shorten its text in the middle", "[ui][table][elide]")
 {
     // 기본은 지금처럼 뒤를 줄인다.
