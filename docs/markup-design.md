@@ -8,7 +8,7 @@
 - 엄한 마크업 읽기가 없다. core에는 nlohmann(JSON, 스타일 파서가 안쪽에서만 쓴다, `src/CMakeLists.txt` 700~703행), md4c(마크다운, 889~891행), `ui/rich_text_html.cpp`(372행)가 있다. 마지막 것은 남의 HTML을 너그럽게 거르는 읽기라 모르는 요소의 글을 남기고 끝나지 않은 태그에서 조용히 멈춘다([서식 글 교환](rich-edit-exchange-design.md) 73~75행). 틀린 자리를 알려야 하는 화면 정의에는 쓰지 못한다. Skia 꾸러미에는 SVG 모듈 안에서만 쓰이는 비공개 XML 읽기가 있고(`svg_decode.cpp`가 쓰는 `SkSVGDOM`) 범용 XML 읽기 API는 공개되지 않는다.
 - 이름으로 요소를 짓는 표가 없다. 요소는 대부분 `xxx_element(ui_element_id, xxx_config)`이지만 `check_element`는 config의 `owner`만 받고 kind를 스스로 정한다([check_element.h](../include/luil/ui/check_element.h) 33·76행). config에는 값 칸과 함수 칸이 섞여 있다. `panel_config::background`는 팔레트 선택자다([panel_element.h](../include/luil/ui/panel_element.h) 31행).
 - 길이는 담을 때 정한다([stack_element.h](../include/luil/ui/stack_element.h) 98행). 원하는 크기를 답하는 요소(label 75행, 글자 단추 `dialog_elements.h` 209행, check 90행, stack 139행)만 맞춤(`add_fit`)으로 담는다. panel·progress·wrap은 답하지 않아 맞춤이면 0이 된다.
-- 앞 노드가 R4 markup에 남긴 약속이 넷이다. [스타일 읽기](style-sheet-design.md) 228행(소스만 더하고 오류 꼴을 맞춘다), [줄 나눔](line-break-design.md) 166행과 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md) 245행(정책 칸), [서식 있는 글 편집](rich-edit-design.md) 210행과 [서식 글 교환](rich-edit-exchange-design.md) 127행(서식 글의 꼴), [파일 감시](file-watch-design.md) 234행(감시는 그 API만)이다. 이 문서와 바인딩 문서가 닫는다(약속 절).
+- 앞 노드가 R4 markup에 남긴 약속이 넷이다. [스타일 읽기](style-sheet-design.md) 228행(소스만 더하고 오류 꼴을 맞춘다), [줄 나눔](line-break-design.md) 166행과 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md) 245행(정책 칸), [서식 있는 글 편집](rich-edit-design.md) 210행과 [서식 글 교환](rich-edit-exchange-design.md) 127행(서식 글의 꼴), [파일 감시](file-watch-design.md) 236행(감시는 그 API만)이다. 이 문서와 바인딩 문서가 닫는다(약속 절).
 
 ## 공개 형식
 
@@ -141,7 +141,7 @@ root->add(std::move(built.element));
 
 ## 결정
 
-확정(2026-11-03): N3 길 a(실행 중 해석). 근거: [스타일 읽기](style-sheet-design.md) 227~228행, [파일 감시](file-watch-design.md) 234행.
+확정(2026-11-03): N3 길 a(실행 중 해석). 근거: [스타일 읽기](style-sheet-design.md) 227~228행, [파일 감시](file-watch-design.md) 236행.
 
 **1. 문법.** 질문: 마크업 글을 어떤 꼴로 적는가.
 
@@ -187,7 +187,7 @@ root->add(std::move(built.element));
 - **uax14·wrap_policy(R1·R2, 같은 줄).** [줄 나눔](line-break-design.md) 166행과 [정책 키](wrap-policy-key-design.md) 245행을 닫는다. `label`의 `lineBreak`는 `std::optional` 칸을 비우거나 채운다. 비면 측정 문맥의 `line_break_for`가 앱 스타일을 따른다. 1단계 마크업은 스타일의 다른 칸을 읽지 않아 `measure_context::app_style()`을 쓸 일이 없다.
 - **rich_edit·교환(R3, 같은 줄).** [서식 있는 글 편집](rich-edit-design.md) 210행과 [서식 글 교환](rich-edit-exchange-design.md) 127행의 꼴은 위의 "서식 글의 꼴"로 정한다. 펼치기는 2단계로 미룬다(결정 3의 까닭). 그때 `rich_text.*`에 `text_format`을 구간으로 옮기는 공개 도우미를 하나 더한다(같은 줄의 파일이다).
 - **inspector(R2).** `markup_node`의 이름표 case를 같은 커밋에 더한다([inspect_names.cpp](../src/ui/inspect_names.cpp) 4~8행). `kind` 속성의 이름표는 검사기의 `kind_names`와 같은 형·같은 값이다(바인딩 문서 결정 6).
-- **file_watch·hot_reload(R1·R5).** [파일 감시](file-watch-design.md) 234행대로 이 노드는 감시하지 않고 파일도 읽지 않는다. 다시 읽기의 약속은 바인딩 문서에 있다.
+- **file_watch·hot_reload(R1·R5).** [파일 감시](file-watch-design.md) 236행대로 이 노드는 감시하지 않고 파일도 읽지 않는다. 다시 읽기의 약속은 바인딩 문서에 있다.
 - **같은 라운드 다른 줄.** `ui_interaction.*`, `win32_window.cpp`, `window_surface.cpp`, `ui_events.h`, `accessibility.h`, `uia_provider.cpp`, `transition.h`·`spring.h`, `app_host.h`·`app_delegate.h`·`ui_platform.h`, `field_popup.h`를 고치지 않는다. 겹치는 곳은 덧붙임뿐이다. `ui_element_id.h`(`end_of_library_kinds` 위 한 줄, 줄 1의 date_picker·teaching_tip과 줄 3의 page_anim도 더할 수 있다), `inspect_names.cpp`(끝의 case), `src/CMakeLists.txt`(`ui` 소스 줄), `tests/CMakeLists.txt`, `include/luil/luil.h`다. 병합은 기계적이고 `tests/ui_element_tests.cpp`의 `last[]`는 통합 때 마지막 kind로 맞춘다. date_picker·teaching_tip은 1단계 어휘에 들지 않는다. 그 노드가 들어온 뒤 어휘 행으로 더한다.
 - **데모는 따로 커밋한다.** 라이브러리 커밋(헤더, 읽기·어휘·펼치기 소스, kind와 이름표, test, 문서) 뒤에 데모 연결 커밋을 낸다. 고치는 데모 파일은 `examples/demo/theme_page.*`·`markup_sample.h`(새 파일)·`assets/markup_sample.xml`(새 파일)·`common.h`(kind)·`text_targets.h`(slot의 칸), `examples/demo_main.cpp`(실은 글을 넘긴다), `examples/CMakeLists.txt`(싣기), `examples/mobile_demo/theme_page.*`·`assets.h`·`app.h`·`common.h`·`mobile_demo.cmake`와 `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`·`tests/CMakeLists.txt`(시험 실행 파일에 견본을 싣는다)다. 통합 때 다른 줄의 데모 변경(특히 page_anim의 페이지 바꿈) 뒤에 직렬로 쌓는다.
 - 통합 때 함께 고치는 문서: [구성 요소](components.md) 한 행과 색인(`docs/README.md`).

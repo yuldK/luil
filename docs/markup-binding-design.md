@@ -224,7 +224,7 @@ const luil::ui_markup_context context {
 
 ## 다른 노드와의 약속
 
-- **hot_reload(R5, 같은 줄).** [스타일 읽기](style-sheet-design.md) 227행의 다섯 약속을 그대로 따른다. (1) `parse_ui_markup`은 순수 함수라 감시 thread에서 불러도 되고 `shared_ptr<const ui_markup_document>`만 `post_app_message`로 넘긴다. 틀은 불변이라 thread 사이에 나눠 쥔다. (2) 파일 하나가 틀 하나다. 다시 읽기는 파일 전체를 다시 읽는다. (3) 실패하면 `document`가 비고 앱은 쥔 틀을 바꾸지 않는다. 화면은 이전 틀로 남는다. (4) 반쯤 쓴 파일은 `syntax`로 막힌다. 쓰는 쪽은 `replace_file_atomically`를 쓴다. (5) 오류는 `describe` 한 줄이다. 감시는 [파일 감시](file-watch-design.md)의 `file_watch_scope::file`이다(234~240행).
+- **hot_reload(R5, 같은 줄).** [스타일 읽기](style-sheet-design.md) 227행의 다섯 약속을 그대로 따른다. (1) `parse_ui_markup`은 순수 함수라 감시 thread에서 불러도 되고 `shared_ptr<const ui_markup_document>`만 `post_app_message`로 넘긴다. 틀은 불변이라 thread 사이에 나눠 쥔다. (2) 파일 하나가 틀 하나다. 다시 읽기는 파일 전체를 다시 읽는다. (3) 실패하면 `document`가 비고 앱은 쥔 틀을 바꾸지 않는다. 화면은 이전 틀로 남는다. (4) 반쯤 쓴 파일은 `syntax`로 막힌다. 쓰는 쪽은 `replace_file_atomically`를 쓴다. (5) 오류는 `describe` 한 줄이다. 감시는 [파일 감시](file-watch-design.md)의 `file_watch_scope::file`이다(236~242행).
 - **상태 보존(같은 약속).** 앱 상태는 logic driver에 있고 틀은 구조만 든다. 그래서 다시 읽어도 값이 그대로다. 초점·hover·눌림은 id로 이어져 `id`·`key`가 바뀌지 않은 요소는 그대로 남는다. 다시 읽은 틀에서 사라진 id의 초점은 controller가 거둔다(`interaction_controller::update_focus`, `ui_interaction.cpp` 4506~4507행). 스크롤 자리처럼 앱이 id로 쥔 상태도 같다.
 - **문자열 표(마크업 후속).** R5의 [문자열 표](i18n-design.md)는 마크업을 열지 않았다(그 문서의 결정 6). `{` 안의 `:`는 그대로 비워 둔다. 표 조회는 마크업 후속에서 `{t:key}` 같은 접두로 더할 수 있고 지금의 이름 찾기와 겹치지 않는다. 그 전까지 번역 글은 앱이 고른 문장을 값으로 넣는다.
 - **줄 3(controller).** 사건과 초점은 지금의 `ui_action`·id 길이라 `ui_interaction.*`을 고치지 않는다. 줄 3에 약속할 것이 없다.

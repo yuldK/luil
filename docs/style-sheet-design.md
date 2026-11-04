@@ -224,7 +224,7 @@ namespace luil::generated::style_keys {
 
 ## 다른 노드와의 약속
 
-- **hot_reload(R5, 같은 줄)**: 이 파서와 [파일 감시](file-watch-design.md)(234행)를 잇는다. 약속은 다섯이다. (1) `parse_ui_style`은 순수 함수라 감시 thread에서 불러도 되고 결과만 `post_app_message`로 넘긴다. (2) 파일 하나가 스타일 하나다. 다시 읽기는 파일 전체를 읽어 다시 파싱하는 것이고 합치기나 증분이 없다. (3) 실패하면 `style`이 비고 쥔 포인터를 바꾸지 않는다. 화면은 이전 스타일로 남는다. (4) 반쯤 쓴 파일은 `syntax`로 막힌다. 쓰는 쪽은 `replace_file_atomically`를 쓴다. (5) 오류는 `path`·`key`와 `describe` 한 줄이라 화면 띠나 로그에 그대로 쓴다. 성공하면 새 `shared_ptr`을 두 자리에 준다.
+- **hot_reload(R5, 같은 줄)**: 이 파서와 [파일 감시](file-watch-design.md)(236행)를 잇는다. 약속은 다섯이다. (1) `parse_ui_style`은 순수 함수라 감시 thread에서 불러도 되고 결과만 `post_app_message`로 넘긴다. (2) 파일 하나가 스타일 하나다. 다시 읽기는 파일 전체를 읽어 다시 파싱하는 것이고 합치기나 증분이 없다. (3) 실패하면 `style`이 비고 쥔 포인터를 바꾸지 않는다. 화면은 이전 스타일로 남는다. (4) 반쯤 쓴 파일은 `syntax`로 막힌다. 쓰는 쪽은 `replace_file_atomically`를 쓴다. (5) 오류는 `path`·`key`와 `describe` 한 줄이라 화면 띠나 로그에 그대로 쓴다. 성공하면 새 `shared_ptr`을 두 자리에 준다.
 - **markup(R4, 같은 줄)**: core의 nlohmann 링크를 이 노드가 세우고 markup은 소스만 더한다. 오류는 같은 꼴(종류 enum, 점으로 이은 자리, `describe`의 영문 한 줄)을 따르면 좋지만 형은 따로다. 결정 5의 길 b가 markup에서 필요해지면 그 노드가 진다.
 - **syntax(R1, 같은 줄)**: 223행의 셋을 지킨다. 구문 여섯 행은 데이터 파일에서도 연속한 여섯 행이고 struct 선언 순서와 사례 표의 빠진 키 사례가 그대로 옮겨 간다. 실행 중 로더는 같은 대신 값(`primaryForeground`)을 표에서 읽는다. 이 약속은 이 문서로 닫는다.
 - **uax14(R1, 같은 줄)**: 결정 5는 길 b다. [줄 나눔](line-break-design.md) 137행(결정 3의 "G4가 정해지면 스타일 키가 config 기본값을 채우는 길을 그때 더한다")과 164행(style_sheet 약속)의 미룸은 [줄 나눔 정책 스타일 키](wrap-policy-key-design.md)가 닫는다. 이 노드는 그 문서가 기댈 키 표·생성기·파서를 세운다. line-break-design.md는 이 노드가 고치지 않는다.
