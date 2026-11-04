@@ -123,12 +123,14 @@ namespace luil {
     // tree 전체를 한 요소 한 줄로 풀어 쓴다. 첫 줄은 요소 수와 중복 id·미배치 수다.
     [[nodiscard]] std::u8string dump_tree(const ui_tree& tree, float scale, const inspector_config& config);
 
-    // 핵심 역할 24개의 이름과 색이다 (inspector-design.md 결정 7). 이름은 팔레트 멤버 이름 그대로다.
+    // 팔레트 역할 하나의 이름과 색이다 (inspector-design.md 결정 7). 이름은 팔레트 멤버 이름 그대로이고 caption 하위 팔레트는
+    // `caption.` 뒤에 멤버 이름을 쓴다.
     struct inspector_swatch
     {
         std::u8string_view name {};
         ui_color color { 0 };
     };
 
+    // `ui_color_palette`의 전 역할을 선언 차례로 낸다. caption 하위 팔레트는 그 칸의 자리에 든다.
     [[nodiscard]] std::vector<inspector_swatch> inspector_palette_swatches(const ui_color_palette& palette);
 }

@@ -697,8 +697,15 @@ namespace luil {
         return text;
     }
 
+    inspect_palette_grid inspect_palette_grid_for(const std::size_t count, const float column_width, const float column_gap, const float available_width, const std::size_t rows_that_fit) noexcept
+    {
+        const std::size_t columns { column_width * 2.0f + column_gap <= available_width ? std::size_t { 2 } : std::size_t { 1 } };
+        return { columns, std::min(rows_that_fit, (count + columns - 1u) / columns) };
+    }
+
     std::vector<inspector_swatch> inspector_palette_swatches(const ui_color_palette& palette)
     {
+        // `ui_color_palette`의 선언 차례다. 역할을 더하면 여기도 더한다 (크기 단언이 빠진 역할을 잡는다).
         return {
             { u8"window_background", palette.window_background },
             { u8"surface_background", palette.surface_background },
@@ -709,21 +716,53 @@ namespace luil {
             { u8"input_background", palette.input_background },
             { u8"input_border", palette.input_border },
             { u8"control_border", palette.control_border },
+            { u8"group_border", palette.group_border },
             { u8"accent", palette.accent },
             { u8"accent_hover", palette.accent_hover },
             { u8"accent_soft", palette.accent_soft },
+            { u8"accent_emphasis_foreground", palette.accent_emphasis_foreground },
             { u8"accent_foreground", palette.accent_foreground },
+            { u8"error_foreground", palette.error_foreground },
+            { u8"accent_pressed", palette.accent_pressed },
+            { u8"soft_button_background", palette.soft_button_background },
+            { u8"soft_button_hover_background", palette.soft_button_hover_background },
+            { u8"active_toggle_background", palette.active_toggle_background },
             { u8"selection_background", palette.selection_background },
             { u8"selection_foreground", palette.selection_foreground },
-            { u8"raised_background", palette.raised_background },
-            { u8"notice_background", palette.notice_background },
+            { u8"row_selection_background", palette.row_selection_background },
+            { u8"drop_target_background", palette.drop_target_background },
+            { u8"danger_button_background", palette.danger_button_background },
+            { u8"danger_button_hover_background", palette.danger_button_hover_background },
+            { u8"danger_button_pressed_background", palette.danger_button_pressed_background },
             { u8"warning_accent", palette.warning_accent },
             { u8"error_accent", palette.error_accent },
+            { u8"button_hover_background", palette.button_hover_background },
+            { u8"button_hover_foreground", palette.button_hover_foreground },
+            { u8"button_pressed_background", palette.button_pressed_background },
             { u8"tooltip_background", palette.tooltip_background },
             { u8"tooltip_border", palette.tooltip_border },
-            { u8"button_hover_background", palette.button_hover_background },
-            { u8"button_pressed_background", palette.button_pressed_background },
+            { u8"content_shadow", palette.content_shadow },
+            { u8"notice_background", palette.notice_background },
+            { u8"raised_background", palette.raised_background },
+            { u8"thumb_background", palette.thumb_background },
             { u8"backdrop_background", palette.backdrop_background },
+            { u8"caption.background", palette.caption.background },
+            { u8"caption.foreground", palette.caption.foreground },
+            { u8"caption.button_hover_background", palette.caption.button_hover_background },
+            { u8"caption.button_hover_foreground", palette.caption.button_hover_foreground },
+            { u8"caption.close_button_hover_background", palette.caption.close_button_hover_background },
+            { u8"caption.close_button_hover_foreground", palette.caption.close_button_hover_foreground },
+            { u8"document_added_background", palette.document_added_background },
+            { u8"document_removed_background", palette.document_removed_background },
+            { u8"document_changed_background", palette.document_changed_background },
+            { u8"document_search_background", palette.document_search_background },
+            { u8"document_search_foreground", palette.document_search_foreground },
+            { u8"syntax_keyword", palette.syntax_keyword },
+            { u8"syntax_string", palette.syntax_string },
+            { u8"syntax_comment", palette.syntax_comment },
+            { u8"syntax_number", palette.syntax_number },
+            { u8"syntax_type", palette.syntax_type },
+            { u8"syntax_function", palette.syntax_function },
         };
     }
 }

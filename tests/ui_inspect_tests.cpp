@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -567,46 +568,113 @@ TEST_CASE("Duplicate ids and unarranged elements are counted with an exclamation
     REQUIRE(lost.find(u8"flags enabled unarranged\n") != std::u8string::npos);
 }
 
-TEST_CASE("The palette swatches name each of the 24 core roles with its own color", "[ui][inspect]")
+TEST_CASE("The palette swatches name every palette role with its own color in declaration order", "[ui][inspect]")
 {
-    using member = luil::ui_color luil::ui_color_palette::*;
-    const std::pair<std::u8string_view, member> roles[] {
-        { u8"window_background", &luil::ui_color_palette::window_background },
-        { u8"surface_background", &luil::ui_color_palette::surface_background },
-        { u8"primary_foreground", &luil::ui_color_palette::primary_foreground },
-        { u8"secondary_foreground", &luil::ui_color_palette::secondary_foreground },
-        { u8"disabled_foreground", &luil::ui_color_palette::disabled_foreground },
-        { u8"divider", &luil::ui_color_palette::divider },
-        { u8"input_background", &luil::ui_color_palette::input_background },
-        { u8"input_border", &luil::ui_color_palette::input_border },
-        { u8"control_border", &luil::ui_color_palette::control_border },
-        { u8"accent", &luil::ui_color_palette::accent },
-        { u8"accent_hover", &luil::ui_color_palette::accent_hover },
-        { u8"accent_soft", &luil::ui_color_palette::accent_soft },
-        { u8"accent_foreground", &luil::ui_color_palette::accent_foreground },
-        { u8"selection_background", &luil::ui_color_palette::selection_background },
-        { u8"selection_foreground", &luil::ui_color_palette::selection_foreground },
-        { u8"raised_background", &luil::ui_color_palette::raised_background },
-        { u8"notice_background", &luil::ui_color_palette::notice_background },
-        { u8"warning_accent", &luil::ui_color_palette::warning_accent },
-        { u8"error_accent", &luil::ui_color_palette::error_accent },
-        { u8"tooltip_background", &luil::ui_color_palette::tooltip_background },
-        { u8"tooltip_border", &luil::ui_color_palette::tooltip_border },
-        { u8"button_hover_background", &luil::ui_color_palette::button_hover_background },
-        { u8"button_pressed_background", &luil::ui_color_palette::button_pressed_background },
-        { u8"backdrop_background", &luil::ui_color_palette::backdrop_background },
+    using palette_member = luil::ui_color luil::ui_color_palette::*;
+    using caption_member = luil::ui_color luil::caption_color_palette::*;
+    const auto role = [](const std::u8string_view name, const palette_member member) {
+        return std::pair<std::u8string_view, std::function<luil::ui_color&(luil::ui_color_palette&)>> { name, [member](luil::ui_color_palette& palette) -> luil::ui_color& { return palette.*member; } };
     };
+    const auto caption_role = [](const std::u8string_view name, const caption_member member) {
+        return std::pair<std::u8string_view, std::function<luil::ui_color&(luil::ui_color_palette&)>> { name, [member](luil::ui_color_palette& palette) -> luil::ui_color& { return palette.caption.*member; } };
+    };
+    const std::vector<std::pair<std::u8string_view, std::function<luil::ui_color&(luil::ui_color_palette&)>>> roles {
+        role(u8"window_background", &luil::ui_color_palette::window_background),
+        role(u8"surface_background", &luil::ui_color_palette::surface_background),
+        role(u8"primary_foreground", &luil::ui_color_palette::primary_foreground),
+        role(u8"secondary_foreground", &luil::ui_color_palette::secondary_foreground),
+        role(u8"disabled_foreground", &luil::ui_color_palette::disabled_foreground),
+        role(u8"divider", &luil::ui_color_palette::divider),
+        role(u8"input_background", &luil::ui_color_palette::input_background),
+        role(u8"input_border", &luil::ui_color_palette::input_border),
+        role(u8"control_border", &luil::ui_color_palette::control_border),
+        role(u8"group_border", &luil::ui_color_palette::group_border),
+        role(u8"accent", &luil::ui_color_palette::accent),
+        role(u8"accent_hover", &luil::ui_color_palette::accent_hover),
+        role(u8"accent_soft", &luil::ui_color_palette::accent_soft),
+        role(u8"accent_emphasis_foreground", &luil::ui_color_palette::accent_emphasis_foreground),
+        role(u8"accent_foreground", &luil::ui_color_palette::accent_foreground),
+        role(u8"error_foreground", &luil::ui_color_palette::error_foreground),
+        role(u8"accent_pressed", &luil::ui_color_palette::accent_pressed),
+        role(u8"soft_button_background", &luil::ui_color_palette::soft_button_background),
+        role(u8"soft_button_hover_background", &luil::ui_color_palette::soft_button_hover_background),
+        role(u8"active_toggle_background", &luil::ui_color_palette::active_toggle_background),
+        role(u8"selection_background", &luil::ui_color_palette::selection_background),
+        role(u8"selection_foreground", &luil::ui_color_palette::selection_foreground),
+        role(u8"row_selection_background", &luil::ui_color_palette::row_selection_background),
+        role(u8"drop_target_background", &luil::ui_color_palette::drop_target_background),
+        role(u8"danger_button_background", &luil::ui_color_palette::danger_button_background),
+        role(u8"danger_button_hover_background", &luil::ui_color_palette::danger_button_hover_background),
+        role(u8"danger_button_pressed_background", &luil::ui_color_palette::danger_button_pressed_background),
+        role(u8"warning_accent", &luil::ui_color_palette::warning_accent),
+        role(u8"error_accent", &luil::ui_color_palette::error_accent),
+        role(u8"button_hover_background", &luil::ui_color_palette::button_hover_background),
+        role(u8"button_hover_foreground", &luil::ui_color_palette::button_hover_foreground),
+        role(u8"button_pressed_background", &luil::ui_color_palette::button_pressed_background),
+        role(u8"tooltip_background", &luil::ui_color_palette::tooltip_background),
+        role(u8"tooltip_border", &luil::ui_color_palette::tooltip_border),
+        role(u8"content_shadow", &luil::ui_color_palette::content_shadow),
+        role(u8"notice_background", &luil::ui_color_palette::notice_background),
+        role(u8"raised_background", &luil::ui_color_palette::raised_background),
+        role(u8"thumb_background", &luil::ui_color_palette::thumb_background),
+        role(u8"backdrop_background", &luil::ui_color_palette::backdrop_background),
+        caption_role(u8"caption.background", &luil::caption_color_palette::background),
+        caption_role(u8"caption.foreground", &luil::caption_color_palette::foreground),
+        caption_role(u8"caption.button_hover_background", &luil::caption_color_palette::button_hover_background),
+        caption_role(u8"caption.button_hover_foreground", &luil::caption_color_palette::button_hover_foreground),
+        caption_role(u8"caption.close_button_hover_background", &luil::caption_color_palette::close_button_hover_background),
+        caption_role(u8"caption.close_button_hover_foreground", &luil::caption_color_palette::close_button_hover_foreground),
+        role(u8"document_added_background", &luil::ui_color_palette::document_added_background),
+        role(u8"document_removed_background", &luil::ui_color_palette::document_removed_background),
+        role(u8"document_changed_background", &luil::ui_color_palette::document_changed_background),
+        role(u8"document_search_background", &luil::ui_color_palette::document_search_background),
+        role(u8"document_search_foreground", &luil::ui_color_palette::document_search_foreground),
+        role(u8"syntax_keyword", &luil::ui_color_palette::syntax_keyword),
+        role(u8"syntax_string", &luil::ui_color_palette::syntax_string),
+        role(u8"syntax_comment", &luil::ui_color_palette::syntax_comment),
+        role(u8"syntax_number", &luil::ui_color_palette::syntax_number),
+        role(u8"syntax_type", &luil::ui_color_palette::syntax_type),
+        role(u8"syntax_function", &luil::ui_color_palette::syntax_function),
+    };
+    // 역할 수를 구조체 크기로 잰다. 역할을 더하고 견본 표(와 이 표)를 잊으면 여기서 실패한다.
+    STATIC_REQUIRE(sizeof(luil::ui_color_palette) % sizeof(luil::ui_color) == 0u);
+    const std::size_t role_count { sizeof(luil::ui_color_palette) / sizeof(luil::ui_color) };
+    REQUIRE(roles.size() == role_count);
     // 멤버마다 서로 다른 색을 넣고, 이름마다 제 멤버의 색이 나오는지 본다.
     luil::ui_color_palette palette {};
-    for (std::size_t index { 0 }; index < std::size(roles); ++index)
-        palette.*roles[index].second = static_cast<luil::ui_color>(0xFF000000u + (index + 1) * 0x010203u);
+    for (std::size_t index { 0 }; index < roles.size(); ++index)
+        roles[index].second(palette) = static_cast<luil::ui_color>(0xFF000000u + (index + 1) * 0x010203u);
     const std::vector<luil::inspector_swatch> swatches { luil::inspector_palette_swatches(palette) };
-    REQUIRE(swatches.size() == std::size(roles));
-    for (std::size_t index { 0 }; index < std::size(roles); ++index)
+    REQUIRE(swatches.size() == role_count);
+    std::set<std::u8string_view> names {};
+    std::set<luil::ui_color> colors {};
+    for (std::size_t index { 0 }; index < roles.size(); ++index)
     {
         const std::string role_name { reinterpret_cast<const char*>(roles[index].first.data()), roles[index].first.size() };
         INFO(role_name);
         REQUIRE(swatches[index].name == roles[index].first);
-        REQUIRE(swatches[index].color == palette.*roles[index].second);
+        REQUIRE(swatches[index].color == roles[index].second(palette));
+        names.insert(swatches[index].name);
+        colors.insert(swatches[index].color);
     }
+    // 표 안에 같은 멤버를 두 번 적으면 다른 역할이 빠진 것이다.
+    REQUIRE(names.size() == role_count);
+    REQUIRE(colors.size() == role_count);
+}
+
+TEST_CASE("The palette panel takes two columns only when they fit and stops rows at the surface height", "[ui][inspect]")
+{
+    using grid = luil::inspect_palette_grid;
+    // 두 열이 들면 반씩 나눈다. 넉넉한 높이에서 56개가 28줄이다.
+    REQUIRE(luil::inspect_palette_grid_for(56u, 100.0f, 10.0f, 300.0f, 100u) == grid { 2u, 28u });
+    // 폭의 경계다. 두 열과 사이 하나가 꼭 맞으면 두 열이고, 1 모자라면 한 열이다.
+    REQUIRE(luil::inspect_palette_grid_for(56u, 100.0f, 10.0f, 210.0f, 100u) == grid { 2u, 28u });
+    REQUIRE(luil::inspect_palette_grid_for(56u, 100.0f, 10.0f, 209.0f, 100u) == grid { 1u, 56u });
+    // 홀수는 첫 열이 하나 더 많다.
+    REQUIRE(luil::inspect_palette_grid_for(5u, 100.0f, 10.0f, 300.0f, 100u) == grid { 2u, 3u });
+    // 높이가 모자라면 들어가는 줄까지다. 열이 몇이든 줄은 넘지 않는다.
+    REQUIRE(luil::inspect_palette_grid_for(56u, 100.0f, 10.0f, 300.0f, 8u) == grid { 2u, 8u });
+    REQUIRE(luil::inspect_palette_grid_for(56u, 100.0f, 10.0f, 209.0f, 8u) == grid { 1u, 8u });
+    REQUIRE(luil::inspect_palette_grid_for(56u, 100.0f, 10.0f, 300.0f, 0u).rows == 0u);
+    REQUIRE(luil::inspect_palette_grid_for(0u, 100.0f, 10.0f, 300.0f, 100u).rows == 0u);
 }
