@@ -84,7 +84,7 @@ int main()
     chart.series.push_back({ .name = u8"series", .values = std::make_shared<const std::vector<double>>(std::vector<double> { 1.0, 2.0 }) });
     const luil::chart_element element { std::move(chart) };
     if (element.accessibility().role != luil::access_role::image)
-        return 14;
+        return 15;
 #endif
 
     luil::net::http_client_config config {};
