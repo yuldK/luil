@@ -48,7 +48,6 @@ namespace mobile_demo {
             return static_cast<std::size_t>(severity);
         }
 
-        // 손가락으로 누르므로 단추를 터치 영역으로 키운다. 막대의 최소 높이도 따라 오른다.
         // 풍선이 닫힌 계기의 낱말이다. 상태 설명에 적힌다.
         [[nodiscard]] std::u8string_view dismiss_word(const luil::teaching_tip_dismiss_reason reason) noexcept
         {
@@ -66,6 +65,7 @@ namespace mobile_demo {
             return u8"닫기 단추";
         }
 
+        // 손가락으로 누르므로 단추를 터치 영역으로 키운다. 막대의 최소 높이도 따라 오른다.
         [[nodiscard]] luil::info_bar_config make_info_bar(const luil::ui_severity severity)
         {
             const bar_text text { bar_text_of(severity) };
@@ -246,7 +246,7 @@ namespace mobile_demo {
         // 정보 막대다. 토스트와 달리 닫기 전까지 남고, 본문은 폭에서 줄을 바꾼다. 회전하면 폭이 바뀌어 높이가 달라지므로
         // 폭을 받아 매번 짓는 이 페이지가 다시 잰다. 페이지 열은 높이만 받아 막대 높이를 같은 폭에서 재서 담는다.
         column.heading(u8"info-bar-heading", u8"정보 막대");
-        column.note(u8"info-bar-hint", u8"닫기 전까지 남는다. 글 폭이 좁으면 동작 단추가 글 아래로 내려간다.");
+        column.wrapped_note(u8"info-bar-hint", u8"닫기 전까지 남는다. 글 폭이 좁으면 동작 단추가 글 아래로 내려간다.", width, scale);
         column.gap(8.0f);
         const float bar_width { width - 2.0f * page_padding };
         for (const luil::ui_severity severity : bar_severities)
@@ -286,6 +286,25 @@ namespace mobile_demo {
         column.heading(u8"tip-heading", u8"안내 풍선");
         column.wrapped_note(u8"tip-hint", u8"새 기능 단추를 꼬리로 가리킨다. 덮개는 바깥 탭과 뒤로 가기로도 닫히고, 비modal은 닫기 단추로만 닫힌다.", width, scale);
         column.gap(8.0f);
+
+        // 열림, 방향, 마지막 닫힘을 설명으로 그려 되읽는다. 방향은 바라는 방향이고, 지난 frame에 대상을 찾지 못했으면 "대상 없음"이다.
+        //  - 풍선은 단추 줄 아래에 서므로 이 설명은 단추 줄 위에 둔다. 아래에 두면 풍선이 열린 동안 풍선에 가려 읽지 못한다.
+        std::u8string state { u8"안내 풍선: " };
+        if (tip_open_)
+            state += tip_modal_ ? u8"열림(덮개)" : u8"열림(비modal)";
+        else
+            state += u8"닫힘";
+        state += u8" · 방향: ";
+        if (tip_open_ == false)
+            state += u8"없음";
+        else
+            state += tip_target_found_ ? u8"아래" : u8"대상 없음";
+        state += u8" · 마지막 닫힘: ";
+        state += tip_last_close_.empty() ? std::u8string { u8"없음" } : tip_last_close_;
+        tip_label_found_ = tip_target_found_;
+        column.wrapped_note(u8"tip-state", std::move(state), width, scale);
+        column.gap(8.0f);
+
         luil::stack_config row_config {};
         row_config.direction = luil::stack_direction::row;
         row_config.spacing = 8.0f;
@@ -306,23 +325,6 @@ namespace mobile_demo {
         add_opener(u8"tip-open-modal", u8"덮개", true);
         add_opener(u8"tip-open-modeless", u8"비modal", false);
         column.add(std::move(row), touch_height);
-        column.gap(8.0f);
-
-        // 열림, 방향, 마지막 닫힘을 설명으로 그려 되읽는다. 방향은 바라는 방향이고, 지난 frame에 대상을 찾지 못했으면 "대상 없음"이다.
-        std::u8string state { u8"안내 풍선: " };
-        if (tip_open_)
-            state += tip_modal_ ? u8"열림(덮개)" : u8"열림(비modal)";
-        else
-            state += u8"닫힘";
-        state += u8" · 방향: ";
-        if (tip_open_ == false)
-            state += u8"없음";
-        else
-            state += tip_target_found_ ? u8"아래" : u8"대상 없음";
-        state += u8" · 마지막 닫힘: ";
-        state += tip_last_close_.empty() ? std::u8string { u8"없음" } : tip_last_close_;
-        tip_label_found_ = tip_target_found_;
-        column.wrapped_note(u8"tip-state", std::move(state), width, scale);
         column.gap(24.0f);
     }
 

@@ -2496,6 +2496,12 @@ namespace luil {
             float speed { 0.0f };
         };
 
+        // 띠를 미는 여백 하나를 물리 픽셀로 옮긴다. 음수·무한·NaN은 0으로 본다. 앱이 잘못 실은 값이 띠를 없애지 않는다.
+        [[nodiscard]] float auto_scroll_inset(const float logical, const float scale) noexcept
+        {
+            return std::isfinite(logical) ? std::max(0.0f, logical) * positive_scale(scale) : 0.0f;
+        }
+
         // `anchor`를 감싼 흘리는 창 가운데 축마다 지금 흘러야 할 가장 안쪽 창이다.
         //  - 안쪽 창이 그쪽 끝에 닿았거나 포인터가 그 창의 띠 밖이면 바깥 창을 본다 — 목록이 끝에 닿은 뒤에는
         //    목록을 품은 판이 흐른다.
@@ -2517,12 +2523,14 @@ namespace luil {
                 const bool horizontal { source->axis == scroll_axis::horizontal };
                 if (decided[horizontal ? 1 : 0])
                     continue;
-                // 시작 쪽 여백(고정 열)만큼 띠를 안쪽으로 민다. 여백이 창보다 넓으면 남는 길이가 0이라 흐르지 않는다.
+                // 시작 쪽 여백(고정 열)과 끝 쪽 여백(세로 막대)만큼 띠를 안쪽으로 민다. 두 여백이 창보다 넓으면 남는 길이가
+                // 0이라 흐르지 않는다.
                 const rect_f& box { window.bounds() };
-                const float inset { std::isfinite(source->leading_inset) ? std::max(0.0f, source->leading_inset) * positive_scale(source->scale) : 0.0f };
+                const float leading { auto_scroll_inset(source->leading_inset, source->scale) };
+                const float trailing { auto_scroll_inset(source->trailing_inset, source->scale) };
                 const float full { horizontal ? box.width : box.height };
-                const float start { (horizontal ? box.x : box.y) + std::min(inset, std::max(0.0f, full)) };
-                const float length { std::max(0.0f, full - inset) };
+                const float start { (horizontal ? box.x : box.y) + std::min(leading, std::max(0.0f, full)) };
+                const float length { std::max(0.0f, full - leading - trailing) };
                 const float speed { drag_auto_scroll_speed(horizontal ? x : y, start, start + length, source->scale, config) };
                 if (speed == 0.0f || (speed < 0.0f ? source->at_start : source->at_end))
                     continue;

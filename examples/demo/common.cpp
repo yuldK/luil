@@ -69,6 +69,8 @@ namespace demo {
 
     void page_layout::heading(std::u8string title, std::u8string description)
     {
+        if (heading_ == 0)
+            first_heading_ = title;
         const std::u8string key { owner_ + u8"/heading/" + to_u8(heading_++) };
         add(make_label({ kind_text, key }, std::move(title), 18.0f, luil::label_color_role::primary), 28.0f);
         add(make_label({ kind_text, key + u8"/description" }, std::move(description), 12.0f, luil::label_color_role::dim), 20.0f);
@@ -124,6 +126,9 @@ namespace demo {
         config.scroll = std::move(scroll);
         config.bar = luil::scrollbar_visibility::always;
         auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        // 막대는 영역이 세우는 부품이라 영역의 이름을 물려받는다 (`scroll_area_element::arrange`).
+        if (first_heading_.empty() == false)
+            area->set_access_name(std::move(first_heading_));
         area->set_content(std::move(row));
         return area;
     }

@@ -86,7 +86,7 @@ table_row_lane,
 - `scroll_delta_to_reveal`(결정 8)은 **왼쪽 끝이 `edge` 이상인 대상에만** 답한다(0.5 물리 픽셀의 여유를 둔다). 본문·행·머리글·고정 칸, 고정 구역에 걸친 칸은 모두 0이다. 본문에 초점이 가면 `route_reveal`이 본문 bounds(왼쪽 끝이 `slot.x`)를 묻는데, 경계와 맞춰 답하면 `-F`가 나와 Tab마다 `scroll(0)`이 logic을 깨우거나 `scroll_x > 0`에서 표가 0으로 되돌아간다. 한계: 고정 구역 아래에 일부 숨은 흐르는 칸은 Tab으로 들이지 못한다. 셀 커서와 F2 길(`table_reveal_delta`)은 들인다. `frozen_columns`가 0이면 본문은 시작과 폭이 창과 같거나 더 넓어 0이라 지금과 같다.
 - 고정 열 손잡이의 한도는 손잡이가 행처럼 표를 가리키는 포인터를 들고 `on_move`의 변화량에만 건다. `table_resize_delta`는 바꾸지 않는다. 작업대가 그 함수를 직접 부른다([workbench_page.cpp](../examples/demo/workbench_page.cpp) 677행).
 - 경계선은 표가 `draw_children` 뒤에 긋는다. 머리글과 본문을 함께 가로지르는 곳이 `table_element::draw`뿐이다.
-- 드래그 앤 드롭 자동 스크롤의 왼쪽 띠는 고정 경계에 선다. 표의 가로 `scroll_source`가 `leading_inset`에 `frozen_width_`(논리)를 싣고 `auto_scroll_flows`가 띠의 시작을 그만큼 안쪽으로 민다. 고정 칸 위는 창 밖과 같아 더 빨리 흐른다. 고정이 서지 않은 배치에서는 0이라 표의 가장자리다. 오른쪽 띠는 그대로다.
+- 드래그 앤 드롭 자동 스크롤의 왼쪽 띠는 고정 경계에 선다. 표의 가로 `scroll_source`가 `leading_inset`에 `frozen_width_`(논리)를 싣고 `auto_scroll_flows`가 띠의 시작을 그만큼 안쪽으로 민다. 고정 칸 위는 창 밖과 같아 더 빨리 흐른다. 고정이 서지 않은 배치에서는 0이라 표의 가장자리다. 오른쪽 띠는 세로 막대 앞에 선다. 세로 막대가 선 배치에서 표가 `trailing_inset`에 막대 폭(논리)을 싣고 `auto_scroll_flows`가 띠의 끝을 그만큼 안쪽으로 민다. 막대 위는 창 밖과 같아 더 빨리 흐른다. 막대가 서지 않으면 0이라 표의 가장자리다.
 - 놓기 판정 람다는 고정 열 키 목록을 값으로 담는다. 기존 람다(`key`·`header`)와 같고 표를 가리키는 포인터를 담지 않는다. 탭과 목록이 함께 쓰는 `reorder_drop.h`의 규칙 위에 구역 판정만 더한다.
 
 **접근성.**
@@ -188,7 +188,7 @@ table_row_lane,
 - 같은 파일의 raster(`raster_probe.h`). 색을 채우는 probe를 칸에 두고 배율 2에서 고정 구역에 흐르는 칸의 색이 한 픽셀도 없고 흐르는 구역에는 있으며, 경계 x에 `divider` 색이 선다. `divider`는 알파가 있어 바탕과 섞인 색(`over`)을 본다.
 - `tests/workbench_page_tests.cpp` 두 케이스. 고정 토글을 실제 입력 경로로 누르면 `frozen_columns`가 1이 되고 상태 글이 바뀌며 실행 취소 걸음이 늘지 않는다. 고정을 켠 채 경로 열 경계를 끌면 걸음 하나로 합쳐지고 되돌려진다.
 
-데모 칸(`examples/demo` 작업대). 넓은 창에서는 열 합 530이 표 안에 들어가 흐를 일이 없으므로 `columns_`에 폭 300의 "폴더" 열(경로의 폴더 부분)을 더한다. 폴더 열은 맨 끝에 두어 기존 열의 차례가 바뀌지 않고 정렬 대상이 아니다. 기록 줄에 토글 `workbench-freeze`(경로 열 고정, `check_element` 스위치이고 UIA 이름은 "경로 열 고정")와 상태 label `workbench-freeze-state`("고정 열 1: 경로" 또는 "고정 열 없음")를 둔다. 켜면 `frozen_columns`가 1이 된다. 서 있는지는 상태 글이 아니라 UIA로 되읽는다. 가로 막대에 `SetValue`를 준 뒤 "경로" 머리글 칸의 BoundingRectangle x가 그대로고 나머지 열은 움직이며 가려진 칸이 화면 밖으로 읽혀야 한다. 머리글 칸은 끌어 놓아 열 순서를 바꾼다(`reorder_column`, 같은 구역 안만). 그 끌기의 자동 스크롤을 되읽도록 앱이 든 가로 위치를 label `workbench-scroll-x-state`("가로 위치 60")로 그린다. 고정을 켜고 흘린 뒤 "폴더" 머리글 칸을 고정 경계 바로 오른쪽으로 끌어 멈추면 이 값이 줄어든다. `mobile_demo`에는 칸이 없다.
+데모 칸(`examples/demo` 작업대). 넓은 창에서는 열 합 530이 표 안에 들어가 흐를 일이 없으므로 `columns_`에 폭 300의 "폴더" 열(경로의 폴더 부분)을 더한다. 폴더 열은 맨 끝에 두어 기존 열의 차례가 바뀌지 않고 정렬 대상이 아니다. 기록 줄에 토글 `workbench-freeze`(경로 열 고정, `check_element` 스위치이고 UIA 이름은 "경로 열 고정")와 상태 label `workbench-freeze-state`("고정 열 1: 경로" 또는 "고정 열 없음")를 둔다. 켜면 `frozen_columns`가 1이 된다. 서 있는지는 상태 글이 아니라 UIA로 되읽는다. 가로 막대에 `SetValue`를 준 뒤 "경로" 머리글 칸의 BoundingRectangle x가 그대로고 나머지 열은 움직이며 가려진 칸이 화면 밖으로 읽혀야 한다. 머리글 칸은 끌어 놓아 열 순서를 바꾼다(`reorder_column`, 같은 구역 안만). 그 끌기의 자동 스크롤을 되읽도록 앱이 든 가로 위치를 label `workbench-scroll-x-state`("가로 위치 60")로 그린다. 고정을 켜고 흘린 뒤 "폴더" 머리글 칸을 고정 경계 바로 오른쪽으로 끌어 멈추면 이 값이 줄어든다. 창을 줄여 세로 막대가 선 배치에서 머리글 칸을 막대 바로 왼쪽으로 끌어 멈추면 이 값이 는다. `mobile_demo`에는 칸이 없다.
 
 사람 확인: 배율 150%·200%에서 경계선과 이음매, 고대비에서 경계선, 터치 PC의 가로 팬이 고정 열을 두고 흐르는지, Narrator가 머리글과 칸을 열 순서대로 읽는지. UIA 되읽기에 실제 입력이 필요하면 격리 데스크톱에서 먼저 요청하고 허락한 시간만 쓴다.
 

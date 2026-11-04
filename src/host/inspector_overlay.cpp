@@ -7,6 +7,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 
 #include <algorithm>
@@ -33,6 +34,8 @@ namespace luil {
         constexpr float info_minimum_width { 200.0f };
         constexpr float swatch_size { 12.0f };
         constexpr float swatch_gap { 6.0f };
+        // 견본 판의 열 사이다.
+        constexpr float swatch_column_gap { 12.0f };
         // 이보다 작은 표면(메뉴 popup)은 상자 없이 윤곽만 긋는다.
         constexpr float roomy_width { 240.0f };
         constexpr float roomy_height { 140.0f };
@@ -127,7 +130,21 @@ namespace luil {
             std::vector<std::u8string> lines {};
             float width { 0.0f };
             float height { 0.0f };
+            // 한 열의 줄 수와 다음 열까지의 거리다. 줄은 열을 위에서 아래로 채운 뒤 다음 열로 넘어간다.
+            std::size_t rows { 0 };
+            float column_step { 0.0f };
         };
+
+        // 줄 하나가 놓일 자리의 왼쪽 위다 (물리 픽셀).
+        [[nodiscard]] SkPoint panel_line_origin(const text_panel& panel, const rect_f& box, const std::size_t index, const float scale) noexcept
+        {
+            const std::size_t column { index / panel.rows };
+            const std::size_t row { index % panel.rows };
+            return SkPoint::Make(
+                box.x + info_padding * scale + static_cast<float>(column) * panel.column_step
+                , box.y + info_padding * scale + static_cast<float>(row) * info_line_height * scale
+            );
+        }
 
         // 판의 크기를 줄들과 글꼴로 정한다. 폭은 가장 넓은 줄을 따르되 흔들리지 않도록 최소 폭을 둔다.
         [[nodiscard]] text_panel measure_panel(std::vector<std::u8string> lines, const SkFont& font, const float scale, const float extra_width, const rect_f& surface)
@@ -138,6 +155,7 @@ namespace luil {
             text_panel panel {};
             panel.width = std::max(widest + extra_width + info_padding * 2.0f * scale, info_minimum_width * scale);
             panel.height = static_cast<float>(lines.size()) * info_line_height * scale + info_padding * 2.0f * scale;
+            panel.rows = lines.size();
             panel.lines = std::move(lines);
             // 표면 밖으로 나가지 않는다.
             panel.width = std::min(panel.width, surface.width - info_margin * 2.0f * scale);
@@ -156,12 +174,11 @@ namespace luil {
             SkAutoCanvasRestore restore { &canvas, true };
             canvas.clipRect(to_sk_rect(box));
             const SkPaint text_paint { solid_paint(context.palette.primary_foreground) };
-            const float line_height { info_line_height * scale };
-            const float baseline { centered_text_baseline(font, line_height) };
+            const float baseline { centered_text_baseline(font, info_line_height * scale) };
             for (std::size_t index { 0 }; index < panel.lines.size(); ++index)
             {
-                const float top { box.y + info_padding * scale + static_cast<float>(index) * line_height };
-                draw_text(canvas, panel.lines[index], box.x + info_padding * scale + text_inset, top + baseline, font, text_paint);
+                const SkPoint origin { panel_line_origin(panel, box, index, scale) };
+                draw_text(canvas, panel.lines[index], origin.x() + text_inset, origin.y() + baseline, font, text_paint);
             }
         }
 
@@ -208,24 +225,39 @@ namespace luil {
         {
             const float scale { context.scale };
             const SkFont font { make_text_font(context, text_font { .size = info_font_size, .face = text_layout_face::code }) };
-            std::vector<std::u8string> lines {};
             const std::vector<inspector_swatch> swatches { inspector_palette_swatches(context.palette) };
-            // 표면의 높이가 모자라면 들어가는 줄까지만 쓴다.
-            const std::size_t rows_that_fit { static_cast<std::size_t>(std::max(0.0f, (surface.height - (info_margin + info_padding) * 2.0f * scale) / (info_line_height * scale))) };
+            std::vector<std::u8string> lines {};
+            lines.reserve(swatches.size());
+            float widest { 0.0f };
             for (const inspector_swatch& swatch : swatches)
             {
-                if (lines.size() >= rows_that_fit)
-                    break;
                 std::u8string line { swatch.name };
                 line += u8" ";
                 append_hex(line, swatch.color);
+                widest = std::max(widest, measure_text(line, font));
                 lines.push_back(std::move(line));
             }
-            if (lines.empty())
-                return;
+
             const float inset { (swatch_size + swatch_gap) * scale };
-            const text_panel panel { measure_panel(std::move(lines), font, scale, inset, surface) };
-            // 오른쪽 위에 한 열로 선다.
+            const float column_width { widest + inset };
+            const float column_gap { swatch_column_gap * scale };
+            const float padding { info_padding * scale };
+            const float available_width { surface.width - info_margin * 2.0f * scale };
+            // 표면의 높이가 모자라면 열마다 들어가는 줄까지만 쓴다.
+            const std::size_t rows_that_fit { static_cast<std::size_t>(std::max(0.0f, (surface.height - (info_margin + info_padding) * 2.0f * scale) / (info_line_height * scale))) };
+            const inspect_palette_grid grid { inspect_palette_grid_for(lines.size(), column_width, column_gap, available_width - padding * 2.0f, rows_that_fit) };
+            if (grid.rows == 0u)
+                return;
+            lines.resize(std::min(lines.size(), grid.rows * grid.columns));
+
+            text_panel panel {};
+            panel.rows = grid.rows;
+            panel.column_step = column_width + column_gap;
+            const float content_width { column_width * static_cast<float>(grid.columns) + column_gap * static_cast<float>(grid.columns - 1u) };
+            panel.width = std::min(std::max(content_width + padding * 2.0f, info_minimum_width * scale), available_width);
+            panel.height = std::min(static_cast<float>(grid.rows) * info_line_height * scale + padding * 2.0f, surface.height - info_margin * 2.0f * scale);
+            panel.lines = std::move(lines);
+            // 오른쪽 위에 선다.
             const rect_f box { surface.x + surface.width - info_margin * scale - panel.width, surface.y + info_margin * scale, panel.width, panel.height };
             draw_panel(context, panel, box, font, inset);
 
@@ -236,8 +268,8 @@ namespace luil {
             const SkPaint border_paint { solid_paint(context.palette.tooltip_border) };
             for (std::size_t index { 0 }; index < panel.lines.size(); ++index)
             {
-                const float top { box.y + info_padding * scale + static_cast<float>(index) * line_height };
-                const rect_f square { box.x + info_padding * scale, top + (line_height - swatch_size * scale) / 2.0f, swatch_size * scale, swatch_size * scale };
+                const SkPoint origin { panel_line_origin(panel, box, index, scale) };
+                const rect_f square { origin.x(), origin.y() + (line_height - swatch_size * scale) / 2.0f, swatch_size * scale, swatch_size * scale };
                 canvas.drawRect(to_sk_rect(square), solid_paint(swatches[index].color));
                 stroke_inside(canvas, square, scale, border_paint);
             }

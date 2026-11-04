@@ -71,7 +71,7 @@ enum class inspect_move { parent, first_child, previous_sibling, next_sibling, p
 [[nodiscard]] std::u8string describe_element(const ui_tree& tree, const ui_element& element, float scale, const inspector_config& config);
 [[nodiscard]] std::u8string dump_tree(const ui_tree& tree, float scale, const inspector_config& config);
 
-// 핵심 역할 24개의 이름과 색이다 (결정 7).
+// 팔레트 전 역할의 이름과 색이다. 선언 차례이고 caption 하위 팔레트는 `caption.` 뒤에 멤버 이름을 쓴다 (결정 7).
 struct inspector_swatch { std::u8string_view name {}; ui_color color { 0 }; };
 [[nodiscard]] std::vector<inspector_swatch> inspector_palette_swatches(const ui_color_palette& palette);
 ```
@@ -129,7 +129,7 @@ elements 214  dup 0  unarranged 0
 - 첫 줄은 `<kind 이름>:<owner>`와 클래스 이름이다. 둘째 줄의 bounds는 논리 픽셀이다. 가려졌으면 `visible x,y WxH`(완전히 가려졌으면 `visible none`)가 붙는다. `inset`은 위, 오른쪽, 아래, 왼쪽 차례(CSS와 같다)이고 배치된 보이는 자식들의 bounds 합집합을 요소 bounds로 자른 자리에서 잰다. 마지막 줄은 tree 전체의 요소 수와 `duplicate_ids()`·`unarranged()` 수이고 0이 아니면 뒤에 `!`가 붙는다.
 - 낱말은 고정이다. `flags`는 `enabled`·`disabled`, 숨은 가지의 `hidden`, 배치되지 않은 `unarranged`, `opaque`(`hit_opaque`), `tab`(`tab_stop`), `clip`(`clip_children`), `group`, `trap`, `default` 차례다. `handles`는 액션과 역할 포인터의 유무로, `click`·`right_click`·`double_click`·`middle_click`, `tooltip`, `drag`, `drop`, `pointer_drag`, `key_step`, `scroll`, `zoom`, `ink`, `pan_handoff`, `key_search`, `key_capture`, `dwell`, `region`, `key_handler`, `cursor` 차례이고 하나도 없으면 `-`다. 접근 역할을 모르면 `role#<수>`다.
 - 자리는 tree root bounds의 왼쪽 위 모서리다(가장자리에서 논리 4). 집은 요소의 보이는 영역과 겹치면 왼쪽 아래로 간다. 폭이 논리 240 미만이거나 높이가 140 미만인 표면(메뉴 popup)은 상자 없이 윤곽만 긋는다. 글꼴은 `make_text_font`의 고정폭 글꼴(11, 줄 높이 15, 안쪽 여백 6)이다. 폭은 가장 긴 줄을 따르되 줄이 바뀔 때마다 흔들리지 않도록 최소 논리 200이고 표면 안에 든다. 바탕은 `tooltip_background`, 테는 `tooltip_border`, 글은 `primary_foreground`다.
-- `show_palette`는 root의 오른쪽 위에 견본 한 열을 그린다. 12px 사각, 역할 이름, `#AARRGGBB`다. 표면의 높이가 모자라면 들어가는 줄까지만 쓴다. 색은 `context.palette`, 곧 `frame_palette`가 합성한 지금 팔레트라 테마·키 컬러·고대비를 따른다.
+- `show_palette`는 root의 오른쪽 위에 견본 판을 그린다. 전 역할(56개)을 두 열로 28줄씩 쓰고, 줄은 첫 열을 위에서 아래로 채운 뒤 둘째 열로 넘어간다. 12px 사각, 역할 이름, `#AARRGGBB`다. 두 열이 표면 폭에 들지 않으면(세로로 선 폰) 한 열로 선다. 표면의 높이가 모자라면 열마다 들어가는 줄까지만 쓴다. 색은 `context.palette`, 곧 `frame_palette`가 합성한 지금 팔레트라 테마·키 컬러·고대비를 따른다.
 
 **좌표.**
 
@@ -190,7 +190,8 @@ elements 214  dup 0  unarranged 0
 - 길 a: 넣지 않는다. 대가: 색 역할을 검사기로 못 본다.
 - 길 b: 핵심 역할 24개를 손으로 적은 표다. `window_background`, `surface_background`, `primary_foreground`, `secondary_foreground`, `disabled_foreground`, `divider`, `input_background`, `input_border`, `control_border`, `accent`, `accent_hover`, `accent_soft`, `accent_foreground`, `selection_background`, `selection_foreground`, `raised_background`, `notice_background`, `warning_accent`, `error_accent`, `tooltip_background`, `tooltip_border`, `button_hover_background`, `button_pressed_background`, `backdrop_background`다. 읽는 것은 `context.palette` 하나이고 `ui_style`을 직접 읽지 않으며 style_sheet 파서에 기대지 않는다. 되는 것: 지금의 테마·고대비 팔레트를 바로 본다. 대가: 완전하지 않다. 새 역할이 빠져도 빌드가 막지 않는다. G4의 키 표는 중립 역할만 덮는다. accent·selection 같은 합성 역할은 `ui_color_palette`(ui_theme.h)에만 있어 전수로 보려면 그쪽 목록이 따로 필요하고, 그것은 후속이다.
 - 길 c: 전 역할 표와 `static_assert(sizeof)`로 역할이 늘면 빌드를 막는다(`ui_color`는 4바이트라 가능하다). 대가: 팔레트에 역할을 더하는 모든 노드가 표를 고치고, G4가 낼 키 표와 같은 목록이 둘이 된다.
-- 권장: b. 대가: 위의 불완전함이다. 전 역할(합성 역할 포함)은 `ui_color_palette` 쪽 목록을 따로 세우는 후속에서 채운다. **권장대로 진행.**
+- 권장: b. 대가: 위의 불완전함이다. **권장대로 진행.**
+- R5에서 넓혔다(사용자 결정 2026-11-04). 스타일을 저장하며 고쳐 보는 흐름(R5 핫 리로드)이 합성 역할까지 볼 일을 만들었다. 견본은 이제 `ui_color_palette`의 전 역할(`ui_color` 50개와 `caption` 6개)을 선언 차례로 내고, 판을 두 열로 그려 기본 창에서 모두 보인다. 빌드를 막는 `static_assert`는 두지 않는다. `tests/ui_inspect_tests.cpp`가 견본 수를 `sizeof(ui_color_palette) / sizeof(ui_color)`와 견주어, 역할을 더하고 표를 잊으면 test가 실패한다. 대가: 팔레트에 역할을 더하는 노드가 이 표도 고친다.
 
 **8. 안쪽 여백을 재는 자리.** 질문: 정보 상자의 `inset` 수치와 overlay의 띠가 같은 답을 어디서 얻는가. 구현하며 정했다.
 - 길 a: 비공개 헤더 `src/ui/inspect_geometry.h`의 함수 하나가 배치된 보이는 자식들의 bounds 합집합을 요소 bounds로 자른 자리를 준다. 넓이 없는 자식(일부러 0인 자리)은 합집합을 끌어당기지 않는다. 되는 것: 두 곳이 어긋나지 않고 공개 형식이 그대로다. 대가: 헤더 하나가 는다.
@@ -236,7 +237,7 @@ elements 214  dup 0  unarranged 0
 - **ink·image_clip·os_notify(줄 3·4, `android_app.cpp`).** 이 노드는 `render()`의 `state.style` 다음 한 줄만 낸다. ink는 `copy_motion`과 `start`의 축 켜기, image_clip은 `execute_clipboard`다. os_notify는 `refresh_permissions`·`permission_book`·`start()`(능력 한 줄 둘)·`APP_CMD_GAINED_FOCUS`를 고친다. 함수가 다르거나 줄이 멀어 겹치지 않는다.
 - **`ui_tree.*`·컨트롤러를 고치지 않는다.** `inspect_at`과 평탄화는 `ui_inspect.cpp`의 자유 함수다. teaching_tip(R4)도 `ui_tree.*`를 고치지 않고 보이는 자리 helper를 제 헤더에 두었다([안내 풍선](teaching-tip-design.md) 결정 1). `ui_events.h`, `ui_interaction.*`, `window_surface.cpp`도 건드리지 않는다.
 - **기본 문구 정책(줄 1).** 검사기 글은 ASCII 식별자라 그 노드의 한국어 리터럴 검사에 걸리지 않고 R5 i18n의 번역 대상도 아니다.
-- **style_sheet·G4(줄 2).** 팔레트 견본은 `context.palette`만 읽어 파서에 기대지 않는다. G4의 키 표는 중립 역할만 덮는다. accent·selection 같은 합성 역할까지 전수로 보려면 `ui_color_palette` 쪽 목록이 따로 필요하고, 24개 표를 바꾸는 일은 그 후속이다.
+- **style_sheet·G4(줄 2).** 팔레트 견본은 `context.palette`만 읽어 파서에 기대지 않는다. G4의 키 표는 중립 역할만 덮는다. accent·selection 같은 합성 역할은 `inspector_palette_swatches`의 전 역할 표가 따로 덮는다(결정 7).
 - **데모.** 라이브러리 커밋과 데모 연결 커밋을 나눈다. 데모 연결 커밋이 `examples/demo_main.cpp`와 `examples/mobile_demo/app.cpp`에 `frame->inspector` 연결을 한 줄씩 더한다. 같은 파일을 고치는 다른 줄의 연결과는 병합에서 직렬로 쌓는다.
 - **줄 1의 kind(message_box·rating).** 이름표의 case는 줄 3의 병합 커밋이 채운다. 이 브랜치에는 줄 1의 kind가 없어 채우지 않았다.
 
@@ -249,10 +250,11 @@ elements 214  dup 0  unarranged 0
   - `inspect_at`: 중첩 stack·panel·clip 안에서 가장 깊은 보이는 요소, interactive가 아닌 label과 컨테이너도 집는 것, 숨은 요소와 잘린 자리를 집지 않는 것, 겹치면 위에 그려진 것이 먼저, 밖의 좌표는 nullptr.
   - `pick_inspected`: 다섯 `pick`, `ancestor_levels`가 뿌리에서 멈춤, tree에 없는 id와 숨은 요소는 nullptr, 걸러진 interaction에서 남의 표면 hover는 없음. `inspect_step`: 여섯 이동의 순서, 끝의 빈 id, 숨은 가지 건너뜀, 빈 `from`의 `next`는 뿌리.
   - 이름: `library_kind_name`이 0부터 `end_of_library_kinds` 직전까지 모두 비지 않고 서로 다르다(새 kind를 이름 없이 더하면 실패한다). 표본 열거자는 이름이 같다. 앱 kind는 `kind_names`이고 없으면 `kind#1024`다. `element_class_name`은 `label_element`를 담고 `class ` 접두가 없다.
-  - `describe_element`: 배율 2에서 논리 픽셀, 가려진 자리, 안쪽 여백, 플래그, 접근 역할과 이름. 값(`access_info::value`)은 안 나온다. `dump_tree`는 작은 tree의 글을 머리줄까지 그대로 잠근다. `inspector_palette_swatches`는 24개 멤버에 서로 다른 색을 넣은 팔레트에서 이름마다 제 멤버의 색을 낸다.
+  - `describe_element`: 배율 2에서 논리 픽셀, 가려진 자리, 안쪽 여백, 플래그, 접근 역할과 이름. 값(`access_info::value`)은 안 나온다. `dump_tree`는 작은 tree의 글을 머리줄까지 그대로 잠근다. `inspector_palette_swatches`는 전 멤버에 서로 다른 색을 넣은 팔레트에서 이름마다 제 멤버의 색을 내고, 견본 수가 `sizeof(ui_color_palette) / sizeof(ui_color)`와 같다. 비공개 `inspect_palette_grid_for`는 두 열이 드는 폭의 경계와 줄 상한을 잠근다. core 시험의 글꼴 관리자는 비어 있어 글 폭으로 한 열을 만들 수 없으므로 그리기와 떼어 재본다.
 - `tests/inspector_overlay_tests.cpp`(`luil_core_tests`, `draw_frame`을 `frame_state`로 부르는 래스터):
   - 끈 frame과 같은 픽셀(`enabled` 거짓, tree 없음)이다. 켠 frame은 윤곽 띠와 정보 상자 밖이 같다. 집은 요소의 변 위 픽셀이 `accent`이고 바깥 후광이 `window_background`이며 상자 자리가 `tooltip_background`·`tooltip_border`다. 글은 래스터 축에 글꼴이 없어 단언하지 않는다.
   - 밝은·어두운·고대비 팔레트에서 윤곽이 바탕과 구별되고 고대비는 칠하지 않는다. `origin`을 준 frame에서 윤곽이 옮겨진 요소 위에 서고 상자가 root bounds 밖을 칠하지 않는다. overlay layer의 윤곽은 layer 원점 기준이고 layer 밖 픽셀은 그대로다. 작은 표면은 상자 없이 윤곽만 선다. `outline_all`은 보이는 요소마다 선을 긋고 숨은 요소는 긋지 않는다.
+  - 견본 판은 두 열로 서서 caption 역할과 마지막 역할(`syntax_function`)까지 제 색으로 보인다. 높이가 모자라면 첫 열이 멈춘 다음 역할부터 둘째 열이 잇는다.
   - 그리기 전후 `make_access_snapshot`, `hit_test` 격자, `interaction_snapshot`이 같다.
 - `tests/uia_provider_tests.cpp`(`luil_tests`, Windows): 켠 frame을 그린 뒤의 UIA provider가 낸 자식 열거의 이름, 역할, bounds, AutomationId가 끈 상태와 같다.
 
@@ -274,5 +276,5 @@ elements 214  dup 0  unarranged 0
 
 - 포인터를 라이브로 따라 label과 여백을 짚는 일(결정 5의 b), hover한 요소를 선택으로 고정하는 일(hover 발행본을 앱 메시지로 올리는 길이 필요하다).
 - 별도 창 패널(결정 1의 b), 요소 값 고치기, 이벤트 기록, frame 시간 그래프.
-- `describe()` 가상 함수와 config 값 표시(결정 4의 b·c), 전 역할 팔레트 견본(결정 7).
+- `describe()` 가상 함수와 config 값 표시(결정 4의 b·c).
 - tooltip 내용 tree, 끌기 그림, 다른 프로세스의 창, 검사기 글의 번역.

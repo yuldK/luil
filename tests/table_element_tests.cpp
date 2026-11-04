@@ -905,6 +905,8 @@ TEST_CASE("A frozen column stays put while the others flow and every part shares
         // 끌기 자동 스크롤의 왼쪽 띠가 고정 경계에 서도록 가로 창이 고정 폭(논리)을 싣는다.
         REQUIRE(view.table->scroll() != nullptr);
         REQUIRE(view.table->scroll()->leading_inset == 100.0f);
+        // 오른쪽 띠는 세로 막대 앞에 서도록 막대 폭을 싣는다. 물리 폭을 그대로 실으면 배율마다 값이 달라진다.
+        REQUIRE(view.table->scroll()->trailing_inset == luil::scroll_area_bar_width);
 
         for (std::size_t index = 0; index < 4u; ++index)
         {
@@ -929,6 +931,23 @@ TEST_CASE("A frozen column stays put while the others flow and every part shares
         REQUIRE(row_lane.x + row_lane.width == row.x + row.width);
         REQUIRE(row_lane.y == row.y);
         REQUIRE(row_lane.height == row.height);
+    }
+}
+
+TEST_CASE("The horizontal scroll source carries the vertical bar width only while that bar stands", "[ui][table][auto-scroll]")
+{
+    // 세로 막대가 서면 가로 창이 그만큼 좁다. 싣는 폭과 가로 창이 같은 막대를 본다.
+    for (const float scale : { 1.0f, 2.0f })
+    {
+        const table_view barred { arrange_table(frozen_config(0u), 200.0f, scale) };
+        REQUIRE(barred.table->scroll()->trailing_inset == luil::scroll_area_bar_width);
+        REQUIRE(barred.table->scroll()->leading_inset == 0.0f);
+
+        // 막대가 서지 않는 표는 창 끝까지 내용이 보이므로 0이다.
+        luil::table_config plain { frozen_config(0u) };
+        plain.rows.bar = luil::scrollbar_visibility::never;
+        const table_view unbarred { arrange_table(std::move(plain), 200.0f, scale) };
+        REQUIRE(unbarred.table->scroll()->trailing_inset == 0.0f);
     }
 }
 

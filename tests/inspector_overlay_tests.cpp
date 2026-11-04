@@ -464,43 +464,106 @@ TEST_CASE("Outlining everything draws every visible element and skips hidden one
     REQUIRE(pixel(drawn, 100, 80) == pixel(baseline, 100, 80));
 }
 
-TEST_CASE("The palette column shows each core role's color in front of its name", "[inspector][raster]")
+namespace {
+    // 오른쪽 위 견본 판의 왼쪽 테다. 글 폭을 모르므로 오른쪽 변에서 왼쪽으로 찾는다. 첫 줄 위 여백(y 14)에는 글도 견본도 없어
+    // 테만 걸린다. 테는 물리 2이고 먼저 만나는 쪽이 안쪽 픽셀이다. 배율 2의 값이다.
+    [[nodiscard]] int palette_left_border(const SkBitmap& drawn, const luil::ui_color_palette& palette, const int surface_right)
+    {
+        for (int x { surface_right - 14 }; x > 0; --x)
+            if (pixel(drawn, x, 14) == palette.tooltip_border)
+                return x;
+        return -1;
+    }
+
+    // 배율 2의 줄 가운데 y다. 줄 높이는 물리 30, 윗 여백은 8 + 12다.
+    [[nodiscard]] int palette_row_y(const int row)
+    {
+        return 8 + 12 + row * 30 + 15;
+    }
+
+    // 줄 `row`에서 `from`의 오른쪽으로 `color`가 처음 나오는 x다. 없으면 -1이다.
+    //  - 글 폭은 글꼴에 달려 숫자로 적을 수 없으므로 견본 색으로 둘째 열의 자리를 찾는다. core 시험의 글꼴 관리자는 비어 있어 글
+    //    폭이 0이고, 그래도 판의 최소 폭 안에 두 열이 선다.
+    [[nodiscard]] int find_color(const SkBitmap& drawn, const int from, const int row, const luil::ui_color color)
+    {
+        for (int x { from }; x < drawn.width(); ++x)
+            if (pixel(drawn, x, palette_row_y(row)) == color)
+                return x;
+        return -1;
+    }
+}
+
+TEST_CASE("The palette shows every role in two columns in front of its name", "[inspector][raster]")
 {
     const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
-    const luil::rect_f tall_root { 0.0f, 0.0f, 600.0f, 800.0f };
-    const luil::ui_tree tree { make_scene(tall_root, { 100.0f, 150.0f, 300.0f, 200.0f }, default_target) };
+    const std::vector<luil::inspector_swatch> swatches { luil::inspector_palette_swatches(palette) };
+    REQUIRE(swatches.size() == 56u);
+    // 배율 2에서 논리 1000x500이다. 56개가 28줄씩 두 열로 다 든다.
+    const luil::rect_f wide_root { 0.0f, 0.0f, 2000.0f, 1000.0f };
+    const luil::ui_tree tree { make_scene(wide_root, { 100.0f, 150.0f, 300.0f, 200.0f }, default_target) };
     frame_options options {};
-    options.height = 800;
+    options.width = 2000;
+    options.height = 1000;
     luil::inspector_config config {};
     config.enabled = true;
     config.show_palette = true;
     const SkBitmap baseline { render(&tree, nullptr, options) };
     const SkBitmap drawn { render(&tree, &config, options) };
 
-    // 오른쪽 위 구석에 열이 선다. 글 폭을 모르므로 오른쪽 변에서 왼쪽 테를 찾는다.
-    REQUIRE(pixel(drawn, 591, 9) == palette.tooltip_border);
-    // 첫 줄 위의 여백(y 14)에는 글도 견본도 없어 왼쪽 테만 걸린다.
-    int left_edge { -1 };
-    for (int x { 586 }; x > 0; --x)
-    {
-        if (pixel(drawn, x, 14) == palette.tooltip_border)
-        {
-            left_edge = x;
-            break;
-        }
-    }
+    REQUIRE(pixel(drawn, 1991, 9) == palette.tooltip_border);
+    const int left_edge { palette_left_border(drawn, palette, 2000) };
     REQUIRE(left_edge > 0);
-    // 줄 높이는 물리 30, 윗 여백은 8 + 12다. 견본(물리 24)은 상자 왼쪽에서 12 떨어져 서고 줄 안에서 세로로 가운데 선다.
-    const int swatch_x { left_edge + 11 + 12 };
-    const auto swatch_at_row = [&drawn, swatch_x](const int row) { return pixel(drawn, swatch_x, 8 + 12 + row * 30 + 15); };
-    REQUIRE(swatch_at_row(0) == palette.window_background);
-    REQUIRE(swatch_at_row(1) == palette.surface_background);
-    REQUIRE(swatch_at_row(2) == palette.primary_foreground);
-    REQUIRE(swatch_at_row(9) == palette.accent);
-    REQUIRE(swatch_at_row(15) == palette.raised_background);
-    REQUIRE(swatch_at_row(19) == palette.tooltip_background);
-    // 열 밖은 그대로다.
-    REQUIRE(pixel(drawn, 10, 400) == pixel(baseline, 10, 400));
+    // 판의 왼쪽 변에서 12 떨어져 첫 열의 견본(물리 24)이 선다. 견본은 줄 안에서 세로로 가운데다.
+    const int first_x { left_edge - 1 + 12 + 12 };
+    const auto expect_role = [&swatches, &drawn](const int x, const int row, const std::size_t index) {
+        CAPTURE(index);
+        REQUIRE(pixel(drawn, x, palette_row_y(row)) == swatches[index].color);
+    };
+    // 불투명한 역할만 그대로 읽는다. 알파가 있는 역할은 판 위에 섞여 보인다.
+    expect_role(first_x, 0, 0u);
+    expect_role(first_x, 1, 1u);
+    expect_role(first_x, 2, 2u);
+    expect_role(first_x, 10, 10u);
+
+    // 둘째 열은 스물아홉째 역할부터다. 견본의 왼쪽 테(물리 2) 안쪽에서 색을 처음 만난다.
+    const int second_hit { find_color(drawn, first_x + 14, 0, swatches[28].color) };
+    REQUIRE(second_hit > first_x);
+    const int second_x { second_hit + 10 };
+    expect_role(second_x, 0, 28u);
+    expect_role(second_x, 4, 32u);
+    expect_role(second_x, 8, 36u);
+    // 하위 팔레트와 마지막 역할까지 보인다.
+    REQUIRE(swatches[39].name == u8"caption.background");
+    expect_role(second_x, 11, 39u);
+    REQUIRE(swatches[55].name == u8"syntax_function");
+    expect_role(second_x, 27, 55u);
+    // 판 밖은 그대로다.
+    REQUIRE(pixel(drawn, 10, 900) == pixel(baseline, 10, 900));
+    REQUIRE(pixel(drawn, 1900, 950) == pixel(baseline, 1900, 950));
+}
+
+TEST_CASE("The palette fills the second column from where the first one ran out of height", "[inspector][raster]")
+{
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const std::vector<luil::inspector_swatch> swatches { luil::inspector_palette_swatches(palette) };
+    // 물리 높이 300이면 (300 - 40) / 30 = 8줄이다. 16개까지 쓰고 둘째 열은 아홉째 역할부터다.
+    const luil::rect_f low_root { 0.0f, 0.0f, 2000.0f, 300.0f };
+    const luil::ui_tree tree { make_scene(low_root, { 100.0f, 50.0f, 300.0f, 200.0f }, { 150.0f, 80.0f, 100.0f, 60.0f }) };
+    frame_options options {};
+    options.width = 2000;
+    options.height = 300;
+    luil::inspector_config config {};
+    config.enabled = true;
+    config.show_palette = true;
+    const SkBitmap drawn { render(&tree, &config, options) };
+
+    const int left_edge { palette_left_border(drawn, palette, 2000) };
+    REQUIRE(left_edge > 0);
+    const int first_x { left_edge - 1 + 12 + 12 };
+    REQUIRE(pixel(drawn, first_x, palette_row_y(0)) == swatches[0].color);
+    // 열한째 역할(`accent`)은 둘째 열의 셋째 줄이다. 판을 한 열로 잇는 그림이면 이 줄에 그 색이 없다.
+    REQUIRE(swatches[10].name == u8"accent");
+    REQUIRE(find_color(drawn, first_x + 14, 2, swatches[10].color) > first_x);
 }
 
 TEST_CASE("Drawing the inspector leaves the tree, the interaction and hit testing as they were", "[inspector][raster]")

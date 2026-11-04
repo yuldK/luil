@@ -81,7 +81,9 @@ namespace mobile_demo {
         bool open { false };
     };
 
-    // 날짜 칸 popup의 닫힘 계기다. 모든 계기에 닫고, Esc(뒤로 가기가 아닌 키보드)로 닫으면 초점을 칸으로 돌린다.
+    // 날짜 칸 popup의 닫힘 계기다. 모든 계기에 닫고, `escape_key`로 닫으면 초점을 칸으로 돌린다.
+    //  - Android host는 뒤로 가기도 `dismiss_popups(popup_dismiss_reason::escape_key)`로 넘긴다. 그래서 뒤로 가기로 닫아도
+    //    초점이 칸으로 돌아와 초점 테가 선다. host가 둘을 가르지 않아 터치에서 테를 감추지 못하는 한계로 둔다.
     struct date_field_dismiss_intent
     {
         luil::popup_dismiss_reason reason { luil::popup_dismiss_reason::pointer_press_outside };

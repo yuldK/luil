@@ -466,6 +466,53 @@ TEST_CASE("The action button of an info bar moves under the text when the page n
     REQUIRE(narrow_bar.height > wide_bar.height);
 }
 
+namespace {
+    // 막대는 영역이 세우는 부품이라 앱이 이름을 줄 수 없고 영역의 이름을 물려받는다. 영역에 이름이 없으면 막대가 이름 없이 읽힌다.
+    void require_body_name(const luil::ui_tree& tree, const std::u8string& owner, const std::u8string& name)
+    {
+        CAPTURE(owner);
+        const luil::ui_element* const area { tree.find({ luil::ui_element_kind::scroll_area, owner }) };
+        REQUIRE(area != nullptr);
+        REQUIRE(area->access_name() == name);
+        const luil::ui_element* const bar { tree.find({ luil::ui_element_kind::scroll_area_bar, owner }) };
+        REQUIRE(bar != nullptr);
+        REQUIRE(bar->accessibility().name == name);
+    }
+
+    [[nodiscard]] luil::input_action scroll_gallery(const float delta)
+    {
+        return luil::make_app_action(demo::gallery_scroll_intent { false, delta });
+    }
+}
+
+TEST_CASE("Each page body and its scroll bar read the first heading of the page", "[demo][scroll]")
+{
+    demo::gallery_page gallery {};
+    require_body_name(arranged(gallery.build_overview(800.0f)), u8"overview", u8"luil UI 갤러리");
+    require_body_name(arranged(gallery.build_controls()), u8"controls", u8"버튼과 컨트롤");
+    demo::popups_page popups {};
+    require_body_name(arranged(popups.build(800.0f, 600.0f, 1.0f)), u8"popups", u8"메뉴와 팝업");
+    demo::rich_text_page rich_text {};
+    require_body_name(arranged(rich_text.build(800.0f, 600.0f, 1.0f)), u8"rich-text", u8"서식 있는 글");
+    demo::theme_page theme {};
+    require_body_name(arranged(theme.build(800.0f, 600.0f, 1.0f)), u8"theme", u8"모양과 색");
+    demo::toasts_page toasts {};
+    require_body_name(arranged(toasts.build(800.0f, 600.0f, 1.0f)), u8"toasts", u8"토스트");
+}
+
+TEST_CASE("A page layout names its body after the first heading and leaves it nameless without one", "[demo][scroll]")
+{
+    // 기본 페이지는 앱 빌드에만 들어 여기서 짓지 않는다. 같은 `page_layout`을 쓰므로 이 사례가 그 자리를 덮는다.
+    demo::page_layout titled { u8"titled" };
+    titled.heading(u8"첫 제목", u8"설명");
+    titled.heading(u8"둘째 제목", u8"설명");
+    require_body_name(arranged(titled.finish(0.0f, scroll_gallery)), u8"titled", u8"첫 제목");
+
+    demo::page_layout plain { u8"plain" };
+    plain.add(demo::make_label({ demo::kind_text, u8"plain/line" }, u8"제목 없는 본문", 12.0f, luil::label_color_role::dim), 20.0f);
+    require_body_name(arranged(plain.finish(0.0f, scroll_gallery)), u8"plain", u8"");
+}
+
 TEST_CASE("Every editable field of the demo has a text target", "[demo][text-input]")
 {
     // 편집 대상이 없는 칸은 키 입력이 닿지 않고 UIA Value가 읽기 전용으로 답한다. 칸을 더하면 이 표에도 더한다.
