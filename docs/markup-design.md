@@ -129,7 +129,7 @@ root->add(std::move(built.element));
 
 **배율·테마·고대비·움직임 줄이기.** 길이는 논리 픽셀이고 배율은 지금처럼 `arrange`가 곱한다. 색이 역할뿐이라 테마와 고대비는 손으로 지은 요소와 똑같이 따른다. 마크업에는 움직임이 없어 움직임 줄이기에 닿지 않는다.
 
-**접근성.** 펼친 요소는 손으로 지은 요소와 같은 형·같은 config라 UIA 역할·이름·패턴이 같다. 이름은 label·단추의 글이고 `accessName`이 앞선다. AutomationId는 지금처럼 `<kind 수>:<owner>`이고([uia_provider.cpp](../src/win32/uia_provider.cpp) 158~166행) 자동화 script는 owner로 집는다. kind 수를 script에 박지 않는다. 검사기에는 `markup_node:<owner>`로 보인다.
+**접근성.** 펼친 요소는 손으로 지은 요소와 같은 형·같은 config라 UIA 역할·이름·패턴이 같다. 적힌 글이 있으면 그 글이 이름이고, 글이 없는 요소는 `accessName`이 앞선다. AutomationId는 지금처럼 `<kind 수>:<owner>`이고([uia_provider.cpp](../src/win32/uia_provider.cpp) 158~166행) 자동화 script는 owner로 집는다. kind 수를 script에 박지 않는다. 검사기에는 `markup_node:<owner>`로 보인다.
 
 **기본 문구.** 마크업은 스스로 글을 넣지 않는다. 요소가 넣는 기본 이름은 그 요소의 것 그대로다([기본 문구](default-text-design.md)). 오류 글은 개발자용 영문 진단이라(`describe`) 마크업 소스에는 `luil_default_text` 검사가 막는 한글이 없다.
 
