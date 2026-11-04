@@ -115,6 +115,8 @@
 - [화면 마크업](markup-design.md): 실행 중 읽은 엄한 XML 마크업 글을 불변 틀로 두고 frame마다 element tree로 펼친다
 - [마크업 바인딩과 오류](markup-binding-design.md): 값·반복·조건·사건을 앱 상태에 잇고 오류를 줄·열과 자리로 알린다
 - [핫 리로드](hot-reload-design.md): 스타일 JSON과 화면 마크업 파일을 저장하면 다시 읽어 결과를 앱에 건넨다
+- [차트](chart-design.md): 계열을 선·막대·영역으로 그리고 포인터와 키로 점을 읽는다. 10만 점도 픽셀 열로 줄여 그린다
+- [차트 라이브러리](chart-library-design.md): core 밖 선택 라이브러리 `luil::luil_chart`를 CMake 옵션으로 켜고 빌드·설치·검사·문구 표를 따로 둔다
 
 ## 플랫폼과 콘텐츠
 

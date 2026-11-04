@@ -56,11 +56,11 @@ target_link_libraries(app PRIVATE luil::luil luil::luil_chart)
 
 **옵션 이름.** `LUIL_BUILD_CHART`다. `BUILD_*`는 target을 더하는 옵션이고, `ENABLE_*`는 끈 구성에도 API가 남는 기능 옵션이다. 차트는 끄면 target도 헤더도 없으므로 `BUILD_*` 쪽이다.
 
-**기본값과 예제·test.** 기본은 끈다. 예제나 test를 켠 구성에서는 기본값이 켬을 따른다. 웹뷰의 기본값이 Direct3D를 따르는 선례(281~287행)와 같은 꼴이다. 예제나 test를 켜고 차트를 명시적으로 끄면 configure가 원인과 함께 멈춘다(259~262행 선례). 옵션은 캐시에 값이 있으면 기본값을 다시 보지 않는다(279~280행). 차트를 끈 채 구성한 빌드 디렉터리에서 예제만 켜면 이 검사가 그 사실을 알린다.
+**기본값과 예제·test.** 기본은 끈다. 예제나 test를 켠 구성에서는 기본값이 켬을 따른다. 웹뷰의 기본값이 Direct3D를 따르는 선례(루트 `CMakeLists.txt`의 `luil_webview_default`)와 같은 꼴이다. 예제나 test를 켜고 차트를 명시적으로 끄면 configure가 원인과 함께 멈춘다(259~262행 선례). 옵션은 캐시에 값이 있으면 기본값을 다시 보지 않는다(279~280행). 차트를 끈 채 구성한 빌드 디렉터리에서 예제만 켜면 이 검사가 그 사실을 알린다.
 
 **프리셋.** [CMakePresets.json](../CMakePresets.json)의 `vs2022-tests`·`vs2026-tests`·`vs2022-examples`·`vs2026-examples`·`android-arm64-core`의 `cacheVariables` 끝에 `"LUIL_BUILD_CHART": "ON"`을 둔다. `android-arm64`는 core 프리셋을 물려받는다. `vs2022`·`vs2026`·analysis 프리셋은 끈 구성의 확인 자리다.
 
-**하위 프로젝트 읽기.** 루트가 `tests` 블록(466~468행) 뒤 파일 끝에서 `add_subdirectory(chart)`를 부른다. 예제가 먼저 읽혀도 `luil::luil_chart` 링크는 생성 때 풀린다. 차트 test는 `tests/`가 찾아 캐시에 둔 `LUIL_ADB_EXECUTABLE`([tests/CMakeLists.txt](../tests/CMakeLists.txt) 274행)을 써서 그 뒤라야 한다. 건너뜀 글(같은 파일 283행)은 디렉터리 범위 변수라 보이지 않아 `chart/tests`가 따로 정한다. IDE 폴더는 차트 CMake가 `luil_set_ide_folder("Libraries" luil_chart)`로 고른다.
+**하위 프로젝트 읽기.** 루트가 `tests` 블록 뒤 파일 끝에서 `add_subdirectory(chart)`를 부른다. 예제가 먼저 읽혀도 `luil::luil_chart` 링크는 생성 때 풀린다. 차트 test는 `tests/`가 찾아 캐시에 둔 `LUIL_ADB_EXECUTABLE`([tests/CMakeLists.txt](../tests/CMakeLists.txt) 274행)을 써서 그 뒤라야 한다. 건너뜀 글(같은 파일 283행)은 디렉터리 범위 변수라 보이지 않아 `chart/tests`가 따로 정한다. IDE 폴더는 차트 CMake가 `luil_set_ide_folder("Libraries" luil_chart)`로 고른다.
 
 **검사.** 차트 CMake가 CTest 셋을 등록한다. core의 세 검사처럼 Windows의 test 구성에서만 돈다. 이식성과 우산 헤더 두 스크립트의 선택 인자는 줄 1이 더한다. `CHECKED_DIRECTORIES`가 없으면 그 스크립트의 기본 목록이다(이식성은 core 목록, 한글 검사는 줄 4 뒤 `src`·`include` 전체). 한글 검사 스크립트는 줄 4가 소유하고, 줄 4의 검사 넓힘 커밋이 선택 인자 `CHECKED_DIRECTORIES`를 함께 들인다(아래 약속 절).
 
@@ -76,7 +76,7 @@ target_link_libraries(app PRIVATE luil::luil luil::luil_chart)
 
 **검사기 이름.** 결정 L2의 길 a면 core 이름표에 세 이름이 들어 앱이 할 일이 없다. 길 b면 앱이 `inspector_config::kind_names`([ui_inspect.h](../include/luil/ui/ui_inspect.h) 56행)에 차트 kind 이름을 넣는다.
 
-**설치.** `LUIL_INSTALL`이 켜진 Windows 구성에서만이다. Android는 설치를 끈다(CMakeLists.txt 252~257행). 차트 CMake가 자기 규칙을 낸다. `install(TARGETS luil_chart EXPORT luil-chart-targets ARCHIVE DESTINATION lib)`, `install(DIRECTORY chart/include/ DESTINATION include)`, `install(EXPORT luil-chart-targets NAMESPACE luil:: FILE luil-chart-targets.cmake DESTINATION lib/cmake/luil)`다. Debug 산출물에는 core처럼 접미사 `d`를 붙인다(install.cmake 15행). `luil_core`는 다른 내보내기 묶음(`luil-targets`)에 있고 CMake가 `luil::luil_core`로 참조를 잇는다. 설치 config는 `LUIL_BUILD_CHART`가 켜졌고 그 파일이 있으면 읽고 `luil_chart_FOUND`를 세운다. 그러면 [luil-config.cmake.in](../cmake/luil-config.cmake.in) 94행의 `check_required_components(luil)`가 `COMPONENTS chart`를 본다. 그 매크로는 찾지 못했다는 사실만 세우므로 차트를 요구받고 없을 때 `luil_NOT_FOUND_MESSAGE`에 원인을 적는다.
+**설치.** `LUIL_INSTALL`이 켜진 Windows 구성에서만이다. Android는 설치를 끈다(루트 `CMakeLists.txt`의 `LUIL_PLATFORM`이 android인 갈래). 차트 CMake가 자기 규칙을 낸다. `install(TARGETS luil_chart EXPORT luil-chart-targets ARCHIVE DESTINATION lib)`, `install(DIRECTORY chart/include/ DESTINATION include)`, `install(EXPORT luil-chart-targets NAMESPACE luil:: FILE luil-chart-targets.cmake DESTINATION lib/cmake/luil)`다. Debug 산출물에는 core처럼 접미사 `d`를 붙인다(install.cmake 15행). `luil_core`는 다른 내보내기 묶음(`luil-targets`)에 있고 CMake가 `luil::luil_core`로 참조를 잇는다. 설치 config는 `LUIL_BUILD_CHART`가 켜졌고 그 파일이 있으면 읽고 `luil_chart_FOUND`를 세운다. 그러면 [luil-config.cmake.in](../cmake/luil-config.cmake.in) 94행의 `check_required_components(luil)`가 `COMPONENTS chart`를 본다. 그 매크로는 찾지 못했다는 사실만 세우므로 차트를 요구받고 없을 때 `luil_NOT_FOUND_MESSAGE`에 원인을 적는다.
 
 **판과 고지.** 판은 luil과 같다(`PROJECT_VERSION`). 차트는 제3자 코드를 들이지 않아 고지가 늘지 않는다.
 
