@@ -375,7 +375,7 @@ TEST_CASE("A lock after a held batch vanished gets the whole retry time", "[hot_
 
     SECTION("Another file in the folder was saved and the limit passed")
     {
-        // 거른 항목만 든 묶음을 내며 감시자가 시간을 비운다. 그래서 다음 저장의 알림이 한 묶음으로 합쳐지고, 그 묶음을 건네면 닫을 때 다시 읽을 길이 없다.
+        // 거른 항목만 든 묶음은 앞의 실패를 풀지 못한다. 다음 저장의 알림은 한 묶음으로 합쳐지고, 그 묶음을 건네면 닫을 때 다시 읽을 길이 없다.
         save_file(folder.file(u8"other.xml"), markup_one);
         std::this_thread::sleep_for(2200ms);
     }

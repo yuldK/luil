@@ -54,6 +54,13 @@ namespace luil {
         resolve_pending_move();
         apply_removed(std::move(path));
         check_limit();
+        // 생겼다 사라져 묶음이 비었다. 시각을 남기면 다음 변경의 `max_delay`가 이미 지나 조용해지기를 기다리지 않고 나간다.
+        //  - `apply_removed`에서 비우지 않는다. 그 길은 `resolve_pending_move`로도 오는데, 그때는 곧이어 다른 항목이나 반쪽이 들어온다.
+        if (pending() == false)
+        {
+            first_.reset();
+            last_.reset();
+        }
     }
 
     void file_watch_batch::renamed(std::u8string from, std::u8string to, const clock::time_point now)

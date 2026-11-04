@@ -259,6 +259,90 @@ TEST_CASE("File watch batches wait for settle and are capped by max delay", "[fi
     REQUIRE(received->changes == std::vector { modified(u8"log") });
 }
 
+TEST_CASE("File watch batches that came and went make the next change wait for settle", "[file_watch]")
+{
+    auto batch { make_batch() };
+    const clock::time_point next { start + 5s };
+
+    // 비어 버린 묶음의 시각이 남으면 `max_delay`가 이미 지나 있어 다음 변경이 조용해지기를 기다리지 않고 나간다.
+    const auto require_next_waits_for_settle = [&batch, next]() {
+        REQUIRE(batch.due_at().has_value() == false);
+        batch.modified(u8"b", next);
+        REQUIRE(batch.due_at() == next + 100ms);
+        REQUIRE(take(batch, next + 99ms).has_value() == false);
+        const std::optional<luil::file_change_batch> received { take(batch, next + 100ms) };
+        REQUIRE(received.has_value());
+        REQUIRE(received->changes == std::vector { modified(u8"b") });
+    };
+
+    SECTION("Created then removed")
+    {
+        batch.created(u8"a", start);
+        batch.removed(u8"a", start + 50ms);
+        require_next_waits_for_settle();
+    }
+    SECTION("Created, renamed, then removed")
+    {
+        batch.created(u8"a", start);
+        batch.renamed(u8"a", u8"c", start + 20ms);
+        batch.removed(u8"c", start + 50ms);
+        require_next_waits_for_settle();
+    }
+    SECTION("A rejected batch that came and went")
+    {
+        batch.created(u8"a", start);
+        const auto reject = [](luil::file_change_batch) {
+            return false;
+        };
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.removed(u8"a", start + 150ms);
+        require_next_waits_for_settle();
+    }
+    SECTION("A lonely old name resolved by the removal that empties the batch")
+    {
+        batch.created(u8"a", start);
+        batch.created(u8"b", start + 10ms);
+        batch.moved_from(u8"a", 1, start + 20ms);
+        batch.removed(u8"b", start + 50ms);
+        require_next_waits_for_settle();
+    }
+}
+
+TEST_CASE("File watch batches keep their times while something still waits", "[file_watch]")
+{
+    auto batch { make_batch() };
+    batch.created(u8"a", start);
+
+    SECTION("Other entries are left")
+    {
+        batch.modified(u8"b", start + 10ms);
+        batch.removed(u8"a", start + 50ms);
+        REQUIRE(batch.due_at() == start + 150ms);
+        // 변경이 이어지면 처음 시각이 `max_delay`를 잰다.
+        batch.modified(u8"b", start + 950ms);
+        REQUIRE(batch.due_at() == start + 1000ms);
+    }
+    SECTION("The removal is swallowed by a rescan")
+    {
+        batch.overflow(start + 10ms);
+        batch.removed(u8"a", start + 50ms);
+        REQUIRE(batch.due_at() == start + 150ms);
+    }
+    SECTION("A new old name waits after the last entry went")
+    {
+        // 앞의 옛 이름이 풀리며 항목이 사라져도 새 옛 이름이 기다리므로 묶음이 끝나지 않는다.
+        batch.moved_from(u8"a", 1, start + 20ms);
+        batch.moved_from(u8"b", 2, start + 50ms);
+        REQUIRE(batch.due_at() == start + 150ms);
+    }
+    SECTION("The next half of a rename arrives after the last entry went")
+    {
+        batch.moved_from(u8"a", 1, start + 20ms);
+        batch.moved_to(u8"b", 2, start + 50ms);
+        REQUIRE(batch.due_at() == start + 150ms);
+    }
+}
+
 TEST_CASE("File watch batches over max changes become a rescan", "[file_watch]")
 {
     auto batch { make_batch(3) };
