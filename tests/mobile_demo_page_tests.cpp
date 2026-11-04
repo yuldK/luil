@@ -2809,6 +2809,43 @@ TEST_CASE("Back closes only the modal mobile teaching tip and passes over the mo
     REQUIRE(page.back_closes_tip());
 }
 
+TEST_CASE("The mobile teaching tip state sits above the buttons so the open tip does not cover it", "[ui][teaching-tip][mobile-demo]")
+{
+    // 풍선은 대상 단추 아래에 선다. 설명이 단추 줄 아래에 있으면 풍선이 열린 동안 가려 사람이 상태를 읽지 못한다.
+    mobile_demo::toasts_page page {};
+    auto screen { scrolled_toasts(page, 0.0f) };
+    const luil::ui_element* const opener { screen.find({ mobile_demo::kind_toast_trigger, u8"tip-open-modal" }) };
+    REQUIRE(opener != nullptr);
+    run_tip(page, opener->action(luil::ui_trigger::left_click), opener->id());
+
+    screen = scrolled_toasts(page, 0.0f);
+    const luil::ui_tree overlay { mobile_tip_overlay(page, screen) };
+    const luil::rect_f state { screen.find({ mobile_demo::kind_text, u8"tip-state" })->bounds() };
+    const luil::rect_f buttons { screen.find({ mobile_demo::kind_layout, u8"tip-buttons" })->bounds() };
+    const luil::rect_f target { screen.find(mobile_demo::tip_target_id())->bounds() };
+    const luil::rect_f tip { overlay.find({ luil::ui_element_kind::teaching_tip_body, u8"tip" })->bounds() };
+    REQUIRE(state.y + state.height <= buttons.y);
+    // 풍선이 대상 아래에 섰고, 설명은 풍선 위에 남는다.
+    REQUIRE(tip.y >= target.y + target.height);
+    REQUIRE(state.y + state.height <= tip.y);
+}
+
+TEST_CASE("The mobile info bar hint breaks into lines instead of an ellipsis", "[mobile-demo][toasts][info-bar]")
+{
+    // 폭 320dp 쪽은 어느 글꼴에서나 두 줄 이상이 된다. 한 줄 label로 되돌아가면 preferred_size가 한 줄 높이에 머문다.
+    mobile_demo::toasts_page page {};
+    auto content { page.build(320.0f, 1.0f) };
+    const float height { content.height };
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 320.0f, height }, 1.0f) };
+    const luil::ui_element* const note { tree.find({ mobile_demo::kind_text, u8"info-bar-hint" }) };
+    REQUIRE(note != nullptr);
+    const luil::measure_context measure { .scale = 1.0f, .measurer = &wide_sans_measurer };
+    const float line { luil::label_element::height_for(luil::label_config { .font_size = mobile_demo::note_text_size }) };
+    const std::optional<luil::size_f> wrapped { note->preferred_size(measure, note->bounds().width) };
+    REQUIRE(wrapped.has_value());
+    REQUIRE(wrapped->height >= 2.0f * line);
+}
+
 TEST_CASE("Scrolling the mobile new feature button away leaves the teaching tip without a target", "[ui][teaching-tip][mobile-demo]")
 {
     mobile_demo::toasts_page page {};

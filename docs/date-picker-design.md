@@ -132,7 +132,7 @@ calendar, calendar_nav, calendar_grid, calendar_day, date_field,
 - `make_date_picker_popup`이 `size_for`에 여백을 더해 크기를 정하고, tree를 `scale`로 배치하고, `place_field_popup`으로 놓는다. 바탕 판이 여백의 누름을 흡수한다.
 - 열 때 앱은 커서를 시작 커서로 두고 `focus_request { surface = popup id, target = day_id(owner, 커서) }`를 싣는다. 칸이 스스로 닫히지 않는다(4708~4712행).
 - 닫는 계기는 분할 버튼 표 그대로이고 모든 계기에 닫는다. 글 칸이 없어 이동·활성 전환에 남기지 않는다. 날 고르기는 앱이 `select`를 처리하며 값을 바꾸고 닫는다(메뉴 `after_select`의 자리).
-- Esc(`escape_key`)와 날 고르기로 닫을 때 앱이 칸으로 돌아오는 초점 요청을 한 번 더 싣는다. 다른 계기에서는 돌리지 않고 누른 자리가 초점을 가진다. 초안이 없다. 커서는 값이 아니어서 Esc·바깥 누름으로 닫으면 값은 그대로다. 색 고르기의 "닫을 때 16진 초안 확정"에 해당하는 일이 없다.
+- Esc(`escape_key`)와 날 고르기로 닫을 때 앱이 칸으로 돌아오는 초점 요청을 한 번 더 싣는다. 다른 계기에서는 돌리지 않고 누른 자리가 초점을 가진다. Android host는 뒤로 가기도 `escape_key`로 넘기므로([android_app.cpp](../src/android/android_app.cpp) 1200행) 뒤로 가기로 닫아도 초점이 칸으로 돌아와 초점 테가 선다. host가 둘을 가르지 않아 터치에서 테를 감추지 못하는 한계로 둔다. 초안이 없다. 커서는 값이 아니어서 Esc·바깥 누름으로 닫으면 값은 그대로다. 색 고르기의 "닫을 때 16진 초안 확정"에 해당하는 일이 없다.
 - 한 번에 하나만은 앱의 열린 필드 owner 하나(`open_popup_`)로 지킨다. 열린 동안 칸을 다시 누르면 R3 X-4(`pointer_pressed_event::closed_popup`)가 닫는다. 칸이 `expanded`를 알리므로 이 노드가 할 일은 없다.
 
 ## 결정
