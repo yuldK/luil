@@ -43,6 +43,9 @@ SVG·Lottie·AVIF·텍스트 모양 잡기(HarfBuzz)는 `LUIL_ENABLE_SVG`·`LUIL
 잡으려면 `LUIL_ENABLE_TEXT_SHAPING_FALLBACK`을 함께 켠다. 모두 기본은 끄고, 끈 기능은
 링크하지도 고지에 싣지도 않는다 ([Skia 빌드 준비](docs/skia-build.md#기능별-아카이브)).
 
+차트는 core 밖의 선택 라이브러리 `luil::luil_chart`이고 `LUIL_BUILD_CHART`로 켠다
+([차트 라이브러리](docs/chart-library-design.md)). 기본은 끄고, 예제나 테스트를 켠 구성에서는 켜진다.
+
 ## 예제 실행
 
 ```powershell

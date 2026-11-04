@@ -215,6 +215,12 @@ namespace luil {
         page_transition,
         // 화면 전환이 도는 동안 포인터를 막는 덮개다. owner는 전환 요소와 같다. 칠하지 않는 `hit_opaque` 판이다.
         page_transition_cover,
+        // 선택 라이브러리 차트(`luil::luil_chart`)의 요소다 (docs/chart-library-design.md 결정 L2). 코드는 core 밖에 있고 여기는 수만
+        // 예약한다. 앱마다 같은 자동화 id가 서도록 core가 정한다. 차트를 끈 구성에도 남는다 (웹뷰 kind와 같다).
+        //  - root·플롯(Tab 자리)·hover 칸이다. owner의 꼴은 차트가 정한다 (docs/chart-design.md).
+        chart,
+        chart_plot,
+        chart_cell,
         // 라이브러리 kind의 끝 표시다. kind가 아니다.
         //  - 새 라이브러리 kind는 이 바로 위에 더한다. 자동화 id(AutomationId)가 kind의 수라 가운데 끼우면 뒤의 수가 밀린다.
         //  - 이 값이 앱 대역에 닿으면 아래 static_assert가 막는다. 예약 대역이 64였을 때 라이브러리 kind가 넘쳐 앱 kind

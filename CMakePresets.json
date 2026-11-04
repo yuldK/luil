@@ -44,7 +44,8 @@
                 "LUIL_ENABLE_TEXT_SHAPING": "ON",
                 "LUIL_ENABLE_TEXT_SHAPING_FALLBACK": "ON",
                 "LUIL_ENABLE_AVIF": "ON",
-                "LUIL_ENABLE_LOTTIE": "ON"
+                "LUIL_ENABLE_LOTTIE": "ON",
+                "LUIL_BUILD_CHART": "ON"
             }
         },
         {
@@ -59,7 +60,8 @@
                 "LUIL_ENABLE_TEXT_SHAPING": "ON",
                 "LUIL_ENABLE_TEXT_SHAPING_FALLBACK": "ON",
                 "LUIL_ENABLE_AVIF": "ON",
-                "LUIL_ENABLE_LOTTIE": "ON"
+                "LUIL_ENABLE_LOTTIE": "ON",
+                "LUIL_BUILD_CHART": "ON"
             }
         },
         {
@@ -73,7 +75,8 @@
                 "LUIL_ENABLE_TEXT_SHAPING": "ON",
                 "LUIL_ENABLE_TEXT_SHAPING_FALLBACK": "ON",
                 "LUIL_ENABLE_AVIF": "ON",
-                "LUIL_ENABLE_LOTTIE": "ON"
+                "LUIL_ENABLE_LOTTIE": "ON",
+                "LUIL_BUILD_CHART": "ON"
             }
         },
         {
@@ -87,7 +90,8 @@
                 "LUIL_ENABLE_TEXT_SHAPING": "ON",
                 "LUIL_ENABLE_TEXT_SHAPING_FALLBACK": "ON",
                 "LUIL_ENABLE_AVIF": "ON",
-                "LUIL_ENABLE_LOTTIE": "ON"
+                "LUIL_ENABLE_LOTTIE": "ON",
+                "LUIL_BUILD_CHART": "ON"
             }
         },
         {
@@ -125,7 +129,8 @@
                 "LUIL_ENABLE_TEXT_SHAPING": "ON",
                 "LUIL_ENABLE_TEXT_SHAPING_FALLBACK": "ON",
                 "LUIL_ENABLE_AVIF": "ON",
-                "LUIL_ENABLE_LOTTIE": "ON"
+                "LUIL_ENABLE_LOTTIE": "ON",
+                "LUIL_BUILD_CHART": "ON"
             }
         },
         {

@@ -24,11 +24,13 @@ struct chart_ticks
     std::size_t count { 0 }; // 마지막 눈금이 범위의 최대 이상이 되는 수
     int decimals { 0 };      // 눈금 글의 소수 자리. step에서 나온다
 };
-// 범위를 덮는 둥근 눈금. target_count는 2~10으로 접는다. 최소와 최대가 같으면 그 값 둘레 한 걸음씩.
+// 범위를 덮는 둥근 눈금. target_count는 눈금 사이 칸 수의 상한이고 2~10으로 접는다. 칸이 상한을 넘지 않는 가장 작은 걸음을 고른다.
+// 최소와 최대가 같거나 끝의 크기에 견줘 폭이 없으면 그 값의 자릿수 단위(5면 1, 120이면 100, 0이면 1)로 앞뒤 한 걸음씩 덮는다.
+// 끝이 유한하지 않거나 절댓값이 1e300을 넘으면 {0, 1}로 본다.
 [[nodiscard]] chart_ticks nice_ticks(chart_range range, std::size_t target_count) noexcept;
-// 지역 무관 숫자 글("-1250.5"). 소수 자리 고정, 천 단위 구분 없음, "-0"은 "0". 유한하지 않으면 빈 글.
+// 지역 무관 숫자 글("-1250.5"). 소수 자리 고정(0~20으로 접는다), 천 단위 구분 없음, 0으로 반올림된 음수는 부호를 뗀다("-0"은 "0"). 유한하지 않으면 빈 글.
 [[nodiscard]] std::u8string format_chart_number(double value, int decimals);
-// 값을 [start, end] 픽셀로 옮긴다. end가 start보다 작으면 축이 뒤집힌다(y축).
+// 값을 [start, end] 픽셀로 옮긴다. end가 start보다 작으면 축이 뒤집힌다(y축). 범위 밖은 자르지 않고, 폭이 0이거나 유한하지 않으면 가운데다.
 [[nodiscard]] float chart_value_to_pixel(double value, chart_range range, float start, float end) noexcept;
 
 // chart/include/luil/chart/chart_element.h
@@ -81,7 +83,7 @@ public:
 
 **자료.** 범주 수는 `categories`와 가장 긴 계열 가운데 큰 쪽이다. 짧은 계열의 뒤는 빈 점이다. NaN과 무한은 빈 점이라 선과 영역은 그 자리에서 끊고 막대는 그리지 않는다. 값은 `shared_ptr<const vector>`로 나눠 쥐어 frame마다 복사하지 않는다(게시된 tree는 불변이다). 계열이나 범주가 없으면 플롯 가운데에 기본 문구 "자료 없음"을 그린다.
 
-**축과 눈금.** x는 같은 간격의 범주다. 막대 계열이 있으면 범주마다 칸 가운데에, 없으면 첫·끝 범주를 플롯 양 끝에 둔다. y 범위는 `y_range`, 비면 빈 점을 뺀 자료의 최소·최대이고 막대·영역 계열이 있으면 0을 넣는다. 눈금은 `nice_ticks`이고 목표 수는 플롯 높이를 글 높이의 2.5배로 나눈 값이다. x 이름표가 겹치면 겹치지 않는 가장 작은 n을 골라 n개마다 하나를 그린다.
+**축과 눈금.** x는 같은 간격의 범주다. 막대 계열이 있으면 범주마다 칸 가운데에, 없으면 첫·끝 범주를 플롯 양 끝에 둔다. y 범위는 `y_range`, 비면 빈 점을 뺀 자료의 최소·최대이고 막대·영역 계열이 있으면 0을 넣는다. 눈금은 `nice_ticks`이고 칸 수의 상한은 플롯 높이를 글 높이의 2.5배로 나눈 값이라 눈금 글 간격이 글 높이의 2.5배보다 좁아지지 않는다. x 이름표가 겹치면 겹치지 않는 가장 작은 n을 골라 n개마다 하나를 그린다.
 
 **플롯 자리.** `arrange`에서 배치 문맥의 측정기로 y 눈금 글의 가장 넓은 폭과 글 높이를 잰다. 요소 자리에서 왼쪽 눈금 글 폭, 아래 x 이름표 한 줄, 범례 줄을 뺀 나머지가 플롯이다. 치수는 논리 픽셀이고 배율을 곱한다. 원하는 높이는 앱이 준다(목록 행처럼 담는 쪽의 길이를 쓴다).
 
@@ -166,7 +168,8 @@ public:
 
 자동 test는 `luil_chart_tests`(`chart/tests`) 하나라 Windows와 Android 실기기에서 함께 돈다. core 밖이라 core의 플랫폼 hook 대역(`tests/core_platform_stub.cpp`)과 raster 도우미(`tests/raster_probe.cpp`)를 같은 파일 그대로 컴파일한다.
 
-- `chart_scale_tests.cpp`. `nice_ticks`: 0~97은 0부터 20 걸음 6개, 음수 범위, 최소와 최대가 같은 범위, 1e-9와 1e12 크기, NaN 범위. `format_chart_number`: 자리 고정, 반올림, "-0", 1e15, 무한은 빈 글. 값과 픽셀의 왕복과 뒤집힌 축.
+- `chart_scale_tests.cpp`. `nice_ticks`: 0~97은 칸 상한 5에서 0부터 20 걸음 6개, 음수 범위, 최소와 최대가 같은 범위, 1e-9와 1e12 크기, NaN 범위. `format_chart_number`: 자리 고정, 반올림, "-0", 1e15, 무한은 빈 글. 값과 픽셀의 왕복과 뒤집힌 축.
+- `chart_text_tests.cpp`. 기본 문구와 요약·점 글의 조립. 값이 없는 요약, 계열 이름이 없는 점 글.
 - `chart_element_tests.cpp`. 플롯 자리가 눈금 글 폭만큼 왼쪽을 비우는지(배율 1·1.5·2에서 같은 논리 자리), x 이름표 솎기, 칸 수 상한과 칸마다 맡은 범주, 키(←·→·Home·End·Page·↑·↓, 끝의 빈 목록, Ctrl의 흐름, 고른 점이 없을 때 첫 점), 누름·끌기의 `focus` 메시지와 같은 점의 빈 목록, `focus`가 비면 Tab 자리 없음, 접근(root image 이름·요약, 플롯 slider 값 글, 기본 문구와 덮는 함수, 빈 점), 계열 표의 대비 3:1.
 - 같은 파일의 raster 단언(`raster_probe`). 막대 높이가 값에 비례하는 픽셀, 선이 지나는 자리, 빈 점에서 끊김, 고대비에서 한 색과 점선 간격, 값 상자가 요소 안에 서는지. 글은 비워 글꼴에 매이지 않는다.
 - 큰 자료. 10만 점 선 계열 한 번 그리기가 상한 안인지(`virtual_list_benchmark_tests.cpp` 선례, 상한은 구현 때 잰 값의 두 배).
