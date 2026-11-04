@@ -22,6 +22,8 @@ input은 interaction snapshot을 값으로 게시하고 UI는 자신의 표면 i
 
 시간에 따른 logic 상태는 `next_tick()`이 다음 시각을 반환하고 `tick(now)`이 상태를 갱신한 뒤 새 frame을 게시한다. worker가 필요하면 앱이 소유하되 종료 시 `stop_workers()`에서 중지한다.
 
+[핫 리로드](../hot-reload-design.md)의 `hot_reloader`는 thread를 따로 두지 않는다. 쥔 `file_watcher`의 감시 thread에서 파일을 읽고 해석해 `deliver`로 결과를 건네고, 앱은 그 결과를 앱 메시지로 logic thread에 옮긴다. 결과의 스타일과 틀은 불변이라 thread 사이에 나눠 쥔다. 멈추기는 감시자와 같이 `stop_workers()`에서 `stop()`이고 `deliver`가 쥔 host보다 먼저다.
+
 ## 창 없는 사용
 
 `app_host`의 wake callback은 비어 있을 수 있다. 따라서 logic/input/channel/slot 조립과 종료·메시지 처리는 HWND 없이도 테스트할 수 있으며, Win32 callback은 host를 사용하는 애플리케이션이 주입한다.

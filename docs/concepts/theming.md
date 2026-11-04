@@ -42,6 +42,7 @@ accent 카탈로그는 `assets/accents.json`에서 빌드 시 생성된다. `sys
 - **빌드 시점** — 같은 스키마의 JSON을 `LUIL_STYLE`로 준다 ([자산 파이프라인](asset-pipeline.md)). 앱 브랜딩처럼 고정된 값이면 이것으로 충분하다.
 - **실행 시점** — `ui_style` 값을 세워 `ui_frame::style`에 `shared_ptr`로 싣는다. 비어 있으면 내장 스타일이다. 값을 계산해서 만드는 앱(OS 색에서 중립 색을 뽑는 경우 등)은 `compose_palette()`가 같은 규칙으로 팔레트를 접어 주므로 그리기 코드가 그것을 구별하지 못한다.
   - 값을 파일에서 얻는 갈래도 있다. 앱이 스타일 JSON 글을 읽어 [`parse_ui_style`](../../include/luil/theme/ui_style_json.h)에 넘기면 `LUIL_STYLE`과 같은 스키마·판정·대신 값으로 `ui_style`이 나온다. 오류가 하나라도 있으면 값이 비고 오류 목록(`style_error`, `describe`의 영문 한 줄)이 온다. 앱은 쥔 스타일을 그대로 둔다. 읽은 값은 `ui_frame::style`과 배치(`make_arranged_tree`의 `style`)에 같은 포인터로 준다 ([실행 중 스타일 읽기](../style-sheet-design.md)).
+  - 파일을 저장할 때마다 다시 읽는 갈래는 [`hot_reloader`](../../include/luil/app/hot_reload.h)다. 파일을 감시해 바뀌면 감시 thread에서 읽고 해석한 결과(`hot_reload_update`)를 앱에 건넨다. 앱은 `loaded`의 스타일을 앱 메시지로 옮겨 같은 두 자리에 주고, 그 밖의 상태에서는 쥔 스타일을 그대로 둔다 ([핫 리로드](../hot-reload-design.md)).
 
 중립 색 가운데 `backdrop_background`(`backdropBackground`)는 창 배경 효과가 선 표면(주 창·보조 창·popup)의 바탕이다. 알파가 효과를 얼마나 비출지를 정하고, 효과가 서지 않은 창은 이 색을 쓰지 않는다([창 배경 효과](../backdrop-design.md)). 이 키가 없는 스타일은 `windowBackground`로 물러선다.
 

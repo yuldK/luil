@@ -145,6 +145,7 @@
 #include "luil/app/global_hotkey.h"
 #include "luil/app/webview.h"
 #include "luil/app/updater.h"
+#include "luil/app/hot_reload.h"
 
 // Win32 platform 조립이다 (창 실행).
 // app_host·renderer_policy·webview는 옛 경로의 별칭 헤더다 (한 판 동안 둔다).

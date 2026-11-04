@@ -5,7 +5,8 @@
 //    앱 상태로 펼친다(`build_ui_markup`). 데스크톱 demo와 모바일 demo, page test가 이 파일 하나를 함께 쓴다
 //    (style_sheet_sample.h처럼).
 //  - 상태 줄(`markup-status`)이 읽기 거부와 펼침 오류를 갈라 말한다. UIA Name과 화면으로 되읽는다.
-//  - 견본의 바탕은 데모 빌드가 실은 견본 글(assets/markup_sample.xml)이다. 글을 고쳐 짓고 파일을 읽지 않는다.
+//  - 견본의 바탕은 데모 빌드가 실은 견본 글(assets/markup_sample.xml)이다. 글을 고쳐 짓고 파일을 읽지 않는다. 파일을 읽는 길은 파일 감시 묶음이다
+//    (hot_reload_sample.h).
 
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element.h"
@@ -127,6 +128,13 @@ namespace demo {
                 return true;
             }
             return false;
+        }
+
+        // 다시 읽은 틀을 받는다 (`hot_reload_update`). 해석은 도우미가 마쳤다. 다음 펼치기가 새 틀로 서고 초점·값은 id로 이어진다.
+        void accept(std::shared_ptr<const luil::ui_markup_document> document)
+        {
+            document_ = std::move(document);
+            refused_.clear();
         }
 
         // 쥔 틀을 이번 상태로 펼친다. 앱 함수를 부르므로 logic thread(페이지의 build)에서 부른다.

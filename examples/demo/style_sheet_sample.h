@@ -5,7 +5,8 @@
 //    포인터로 주고, 막히면 쥔 스타일을 그대로 둔다. 데스크톱 demo와 모바일 demo, page test가 이 파일 하나를 함께 쓴다
 //    (line_break_sample.h처럼).
 //  - 상태 줄(`theme-style-status`)이 결과와 지금 스타일의 어두운 창 바탕을 말한다. UIA Name과 화면으로 되읽는다.
-//  - 견본의 바탕은 데모 빌드가 실은 내장 파일 글(LUIL_STYLE)이다. 글을 고쳐 짓고 파일을 읽지 않는다.
+//  - 견본의 바탕은 데모 빌드가 실은 내장 파일 글(LUIL_STYLE)이다. 글을 고쳐 짓고 파일을 읽지 않는다. 파일을 읽는 길은 파일 감시 묶음이다
+//    (hot_reload_sample.h).
 
 #include "luil/theme/ui_style.h"
 #include "luil/theme/ui_style_json.h"
@@ -171,6 +172,13 @@ namespace demo {
                 return;
             }
             status_ = u8"거부 · 오류 " + count_text(parsed.errors.size()) + u8" · " + luil::describe(parsed.errors.front()) + u8" · 이전 스타일 유지";
+        }
+
+        // 다시 읽은 스타일을 받는다 (`hot_reload_update`). 해석은 도우미가 마쳤다. 값이 없는 결과는 여기로 오지 않아 상태 줄도 그대로다.
+        void accept(std::shared_ptr<const luil::ui_style> style)
+        {
+            style_ = std::move(style);
+            status_ = u8"적용됨 · 오류 0 · dark.windowBackground " + style_color_text(style_->dark.window_background);
         }
 
         void reset()

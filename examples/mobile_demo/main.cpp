@@ -23,6 +23,17 @@
 #include <system_error>
 
 namespace {
+    // 테마 페이지의 파일 감시 묶음이 볼 폴더다 (hot-reload-design.md 결정 5). 실행 파일 옆이라 사람이 찾는다. 읽지 못하면 빈 경로이고 감시가 서지 않는다.
+    [[nodiscard]] std::filesystem::path hot_reload_folder()
+    {
+        wchar_t buffer[MAX_PATH] {};
+        const DWORD length { GetModuleFileNameW(nullptr, buffer, MAX_PATH) };
+        if (length == 0 || length >= MAX_PATH)
+            return {};
+        const std::filesystem::path executable { std::wstring { buffer, length } };
+        return executable.parent_path() / L"hot-reload" / executable.stem();
+    }
+
     class desktop_delegate final : public luil::win32::window_delegate
     {
     public:
@@ -32,15 +43,17 @@ namespace {
             if (watcher_ != nullptr)
                 watcher_->stop();
             watcher_.reset();
+            reloader_.reset();
             std::error_code ignored {};
             std::filesystem::remove_all(folder_, ignored);
         }
 
-        // 파일 감시 페이지가 볼 임시 폴더를 걸어 logic에 넘긴다. 감시자는 logic이 `stop_workers`에서 멈춘다.
+        // 파일 감시 페이지가 볼 임시 폴더를 걸어 logic에 넘긴다. 감시자와 핫 리로드 도우미는 logic이 `stop_workers`에서 멈춘다.
         void on_started(luil::app_host& host) override
         {
             folder_ = std::filesystem::temp_directory_path() / (L"luil-mobile-demo-watch-" + std::to_wstring(GetCurrentProcessId()));
             watcher_ = mobile_demo::start_files_watch(host, folder_);
+            reloader_ = mobile_demo::start_theme_hot_reload(host, hot_reload_folder());
             host.post_app_message(luil::app_message { mobile_demo::clipboard_host_intent { &host } });
             host.post_app_message(luil::app_message { mobile_demo::device_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
         }
@@ -68,6 +81,7 @@ namespace {
     private:
         std::filesystem::path folder_ {};
         std::unique_ptr<luil::file_watcher> watcher_ {};
+        std::unique_ptr<luil::hot_reloader> reloader_ {};
     };
 }
 

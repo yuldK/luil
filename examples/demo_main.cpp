@@ -180,6 +180,18 @@ namespace demo {
             return std::filesystem::path { std::wstring { buffer, length } }.parent_path();
         }
 
+        // 테마 페이지의 파일 감시 묶음이 볼 폴더다 (hot-reload-design.md 결정 5). 실행 파일 옆이라 사람이 찾고 저장소 파일을 건드리지 않는다.
+        // 읽지 못하면 빈 경로이고 감시가 서지 않는다.
+        [[nodiscard]] std::filesystem::path hot_reload_folder()
+        {
+            wchar_t buffer[MAX_PATH] {};
+            const DWORD length { GetModuleFileNameW(nullptr, buffer, MAX_PATH) };
+            if (length == 0 || length >= MAX_PATH)
+                return {};
+            const std::filesystem::path executable { std::wstring { buffer, length } };
+            return executable.parent_path() / L"hot-reload" / executable.stem();
+        }
+
         // --- 창 배치의 저장·복원 ---
         // 라이브러리는 배치를 보고하고(placement_intent) 요청을 적용할 뿐
         // (`window_placement_request` — 너무 작은 값·화면 밖은 그쪽이 거른다),
@@ -347,6 +359,7 @@ namespace demo {
             {
                 host_.store(&host);
                 files_.bind_host(host);
+                hot_reloader_ = start_hot_reload(host, hot_reload_folder(), theme_.style_source(), theme_.markup_source());
             }
 
             // logic thread가 시작한 직후 한 번이다.
@@ -775,6 +788,14 @@ namespace demo {
                 if (message.get<gallery_reset_intent>() != nullptr)
                     apply_text_language(u8"system");
 
+                // 테마 페이지 파일 감시 묶음의 단추다. 쓰기만 하고 화면은 감시를 거쳐서만 바뀐다. 실패는 감시로 오지 않아 페이지에 알린다.
+                if (const auto* const write { message.get<hot_reload_write_intent>() }; write != nullptr)
+                {
+                    if (const std::u8string error { write_hot_reload_files(theme_.hot_reload_folder(), write->what, theme_.style_source(), theme_.markup_source()) }; error.empty() == false)
+                        theme_.note_hot_reload_write_failure(error);
+                    return;
+                }
+
                 // 페이지들의 메시지다. 타입이 겹치지 않아 처음 받는 쪽이 임자다.
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
@@ -805,6 +826,9 @@ namespace demo {
                 if (luil::updater* const updater { live_updater_.load() }; updater != nullptr)
                     updater->stop();
                 files_.stop_watcher();
+                // `deliver`가 쥔 host보다 먼저다. 세운 자리(`bind_host`)와 같이 UI thread라 원자적 손잡이가 필요 없다.
+                if (hot_reloader_ != nullptr)
+                    hot_reloader_->stop();
                 if (luil::testing::loopback_http_server* const server { live_server_.load() }; server != nullptr)
                     server->stop();
             }
@@ -1358,6 +1382,8 @@ namespace demo {
             std::u8string client_error_ {};
             // 배출구가 답을 나를 자리다. `demo_delegate::on_started`가 채운다.
             std::atomic<luil::win32::app_host*> host_ { nullptr };
+            // 테마 페이지 파일 감시 묶음의 도우미다. `bind_host`가 세우고 `stop_workers`가 멈춘다.
+            std::unique_ptr<luil::hot_reloader> hot_reloader_ {};
             // 셸이 아는 표 둘이다 (취소가 겨눌 자리 — 페이지의 것과 같은 값이다).
             luil::net::http_ticket network_pending_ {};
             luil::net::http_ticket network_heartbeat_ {};

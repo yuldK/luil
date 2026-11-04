@@ -84,6 +84,22 @@ namespace mobile_demo {
         }
         if (markup_.handle(message))
             return true;
+        // 도우미가 감시 thread에서 낸 결과와 delegate가 감시를 세운 결과다. 값이 없는 결과는 상태 줄만 바꾸고 쥔 값이 그대로 남는다.
+        // 쓰기 intent는 셸이 먼저 받아 여기로 오지 않는다.
+        if (const auto* const update { message.get<luil::hot_reload_update>() }; update != nullptr)
+        {
+            hot_reload_.note(*update);
+            if (update->style != nullptr)
+                style_sheet_.accept(update->style);
+            if (update->markup != nullptr)
+                markup_.accept(update->markup);
+            return true;
+        }
+        if (const auto* const started { message.get<demo::hot_reload_started_intent>() }; started != nullptr)
+        {
+            hot_reload_.started(*started);
+            return true;
+        }
         if (const auto* const theme { message.get<theme_intent>() }; theme != nullptr)
         {
             appearance_.theme = theme->theme;
@@ -271,6 +287,45 @@ namespace mobile_demo {
         markup_status.max_lines = 3;
         column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"markup-status" }, std::move(markup_status)),
             3.0f * luil::text_line_height(note_text_size, note_line_height - note_text_size));
+        column.gap(20.0f);
+
+        // 파일 감시다. 단추도 파일에 쓰기만 하므로 화면은 감시를 거쳐서만 바뀐다. 개발자는 디버그 빌드에서 `adb shell run-as`로 같은 파일을 바꾼다.
+        column.note(u8"theme-reload-hint", u8"파일 감시 (저장하면 다시 읽는다)");
+        column.gap(8.0f);
+        // 폴더와 오류 글이 길어 폭에서 줄을 바꾼다.
+        const auto add_status = [&column](std::u8string owner, std::u8string text) {
+            luil::label_config config {};
+            config.text = std::move(text);
+            config.font_size = note_text_size;
+            config.color = luil::label_color_role::dim;
+            config.wrap = true;
+            config.max_lines = 3;
+            column.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, std::move(owner) }, std::move(config)),
+                3.0f * luil::text_line_height(note_text_size, note_line_height - note_text_size));
+        };
+        add_status(u8"theme-reload-path", hot_reload_.folder().empty() ? std::u8string { u8"감시 폴더 없음" } : hot_reload_.folder());
+        column.gap(8.0f);
+        struct write_button
+        {
+            std::u8string_view owner {};
+            std::u8string_view text {};
+            demo::hot_reload_write what { demo::hot_reload_write::defaults };
+        };
+        constexpr write_button write_buttons[] {
+            { u8"theme-reload-write-style", u8"견본 스타일을 파일에", demo::hot_reload_write::style_sample },
+            { u8"theme-reload-write-style-broken", u8"깨진 스타일을 파일에", demo::hot_reload_write::style_broken },
+            { u8"theme-reload-write-markup-broken", u8"깨진 마크업을 파일에", demo::hot_reload_write::markup_broken },
+            { u8"theme-reload-write-default", u8"내장 글을 파일에", demo::hot_reload_write::defaults },
+        };
+        for (const write_button& button : write_buttons)
+        {
+            const luil::ui_element_id id { kind_style_sheet_button, std::u8string { button.owner } };
+            auto element { std::make_unique<luil::text_button_element>(id, luil::text_button_config { .text = std::u8string { button.text } }) };
+            element->set_action(luil::ui_trigger::left_click, luil::make_message_action(demo::hot_reload_write_intent { button.what }));
+            column.add(std::move(element), style_button_height, button_width);
+            column.gap(8.0f);
+        }
+        add_status(u8"theme-reload-status", hot_reload_.status());
         return column.finish();
     }
 }

@@ -1049,8 +1049,9 @@ namespace luil {
                 };
                 // 고른 구간의 글자는 맨 끝에서 고른 글자색으로 한 번만 그린다. 그 구간에 구문색·링크색·검색색 글자를 먼저
                 // 그려 두면 같은 글자가 한 번 더 그려져 글자 가장자리의 반투명 픽셀에 먼저 그린 색이 비치고 글자가 굵어 보인다.
-                // 그래서 앞의 글자 그리기는 고른 구간을 뺀 자리에만 그린다.
-                const bool selected_text { selection.has_value() && enabled() && (styled.empty() == false || highlights.empty() == false || context.palette.selection_foreground != context.palette.primary_foreground) };
+                // 그래서 앞의 글자 그리기는 고른 구간을 뺀 자리에만 그린다. 이 줄에 링크가 있어도 같다. 링크가 있는 줄은 고른 글자의
+                // 색이 본문색과 같아도 링크색이 고른 구간에 비치지 않게 덧그림이 선다.
+                const bool selected_text { selection.has_value() && enabled() && (styled.empty() == false || highlights.empty() == false || row_links.empty() == false || context.palette.selection_foreground != context.palette.primary_foreground) };
                 const auto draw_outside_selection = [&](const std::optional<ui_color> override_color) {
                     context.canvas.save();
                     if (selected_text)

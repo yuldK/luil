@@ -2193,14 +2193,47 @@ TEST_CASE("A selected styled run is painted once in the selection color", "[ui][
 
     SECTION("a link keeps its underline and loses only its own color")
     {
+        // 서식 구간도 검색 결과도 없고 고른 글자색이 본문색과 같은 일반 테마의 칸이다. 링크가 놓인 줄은 그래도 덧그림이 서서
+        // 고른 링크 글자를 링크색으로 먼저 그려 두지 않는다.
+        REQUIRE(palette.selection_foreground == palette.primary_foreground);
         luil::text_area_config config {};
-        // 본문색 구간을 하나 걸어 덧그림이 서는 칸으로 만든다. 링크 글자만 있는 칸은 덧그림이 서지 않아 링크색이 남는다.
-        config.spans = std::make_shared<const std::vector<luil::text_span>>(std::vector<luil::text_span> { { 0, 4, luil::text_color_role::primary } });
         config.links = std::make_shared<const std::vector<luil::text_link>>(std::vector<luil::text_link> { { 0, 4, u8"https://example.com" } });
         const luil::testing::raster_frame linked { draw_memo(all_selected, config) };
         REQUIRE(differing_pixels(linked, reference, ink_rows) == 0);
         // 밑줄은 고른 구간 안에서도 링크색으로 남는다.
         REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, red) > 0);
+        REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, static_cast<float>(ink_rows) }, red) == 0);
+    }
+
+    SECTION("a link outside the selection keeps the link color")
+    {
+        luil::text_area_config config {};
+        config.links = std::make_shared<const std::vector<luil::text_link>>(std::vector<luil::text_link> { { 0, 4, u8"https://example.com" } });
+        luil::text_input_view tail_selected { all_selected };
+        tail_selected.anchor = 2;
+        const luil::testing::raster_frame partly { draw_memo(tail_selected, config) };
+        luil::text_input_view none_selected { all_selected };
+        none_selected.anchor = 4;
+        const luil::testing::raster_frame unselected { draw_memo(none_selected, config) };
+        // 글자 높이 안에서 링크색이 처음 서는 열이다. 그 앞 두 글자는 고르지 않은 그림과 같다.
+        const float glyph_rows { static_cast<float>(ink_rows) };
+        int first_red { 0 };
+        while (first_red < selection_frame_width && unselected.count_color({ static_cast<float>(first_red), 0.0f, 1.0f, glyph_rows }, red) == 0)
+            ++first_red;
+        REQUIRE(first_red < selection_frame_width);
+        const luil::rect_f leading { static_cast<float>(first_red), 0.0f, 18.0f, glyph_rows };
+        REQUIRE(unselected.count_color(leading, red) > 0);
+        REQUIRE(partly.count_color(leading, red) == unselected.count_color(leading, red));
+        int differing { 0 };
+        for (int y { 0 }; y < ink_rows; ++y)
+            for (int x { first_red }; x < first_red + 18; ++x)
+                differing += partly.pixel_at(x, y) != unselected.pixel_at(x, y) ? 1 : 0;
+        REQUIRE(differing == 0);
+        // 고른 글자 둘은 고른 글자색이고 링크색이 남지 않는다. 밑줄은 글자 높이 밖이라 따로 남는다.
+        const luil::rect_f selected { static_cast<float>(first_red + 22), 0.0f, 22.0f, glyph_rows };
+        REQUIRE(partly.count_color(selected, white) > 0);
+        REQUIRE(partly.count_color(selected, red) == 0);
+        REQUIRE(partly.count_color({ static_cast<float>(first_red + 22), glyph_rows, 22.0f, 120.0f - glyph_rows }, red) > 0);
     }
 
     SECTION("text outside the selection keeps its own color")
@@ -2263,4 +2296,78 @@ TEST_CASE("A selected single line run is painted once in the selection color", "
     REQUIRE(edge_pixels(reference, single, white) > 0);
     const luil::testing::raster_frame drawn { draw_field(contrast) };
     REQUIRE(differing_pixels(drawn, reference, selection_frame_height) == 0);
+}
+
+TEST_CASE("A selected single line link is painted once in the selection color", "[ui][raster][text-field][selection][link]")
+{
+    // 링크가 놓인 칸은 고른 글자색이 본문색과 같은 일반 테마에서도 고른 구간에 글자를 다시 그린다. 고른 링크 글자를 링크색으로
+    // 먼저 그려 두면 같은 글자가 한 번 더 그려져 가장자리에 링크색이 비치므로, 링크색 글자는 고른 구간을 뺀 자리에만 그린다.
+    //  - 기준은 링크가 없는 같은 칸이다. 글자를 한 번만 그리므로 링크 칸의 글자 높이 안과 픽셀 단위로 같아야 한다.
+    const sk_sp<SkTypeface> typeface { make_block_typeface() };
+    luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    palette.primary_foreground = white;
+    palette.selection_foreground = white;
+    palette.accent = red;
+    REQUIRE(palette.selection_foreground == palette.primary_foreground);
+    const luil::ui_element_id field { luil::application_element_kind(2), u8"field" };
+    luil::text_input_view all_selected {};
+    all_selected.text = u8"aaaa";
+    all_selected.caret = 4;
+    all_selected.anchor = 0;
+    // 글꼴의 글자 폭(0.5 em)에 맞춘 측정기다. 링크 조각이 그려진 글자 자리에 놓인다.
+    const luil::text_measurer measurer { [](const std::u8string_view text, const float size) { return 0.5f * size * static_cast<float>(text.size()); } };
+    const auto draw_field = [&](const luil::text_input_view& view, luil::text_input_config config) {
+        auto element { std::make_unique<luil::text_input_element>(field, view, std::move(config)) };
+        element->arrange({ .slot = { 0.0f, 0.0f, 200.0f, 28.0f }, .scale = raster_scale, .measurer = &measurer });
+        const luil::ui_tree tree { std::move(element) };
+        luil::testing::raster_frame frame { selection_frame_width, selection_frame_height, palette, raster_scale };
+        frame.set_typeface(typeface);
+        frame.draw(tree, luil::interaction_snapshot {});
+        return frame;
+    };
+    luil::text_input_config linked_config {};
+    linked_config.links = std::make_shared<const std::vector<luil::text_link>>(std::vector<luil::text_link> { { 0, 4, u8"https://example.com" } });
+
+    const luil::testing::raster_frame reference { draw_field(all_selected, {}) };
+    REQUIRE(reference.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, white) > 0);
+    REQUIRE(edge_pixels(reference, palette, white) > 0);
+    const int ink_rows { lowest_ink_row(reference, white) + 1 };
+    REQUIRE(ink_rows > 0);
+
+    SECTION("a fully selected link keeps its underline and loses only its own color")
+    {
+        const luil::testing::raster_frame linked { draw_field(all_selected, linked_config) };
+        REQUIRE(differing_pixels(linked, reference, ink_rows) == 0);
+        REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, static_cast<float>(ink_rows) }, red) == 0);
+        // 밑줄은 고른 구간 안에서도 링크색으로 남는다.
+        REQUIRE(linked.count_color({ 0.0f, 0.0f, 400.0f, 120.0f }, red) > 0);
+    }
+
+    SECTION("a link outside the selection keeps the link color")
+    {
+        luil::text_input_view tail_selected { all_selected };
+        tail_selected.anchor = 2;
+        const luil::testing::raster_frame partly { draw_field(tail_selected, linked_config) };
+        luil::text_input_view none_selected { all_selected };
+        none_selected.anchor = 4;
+        const luil::testing::raster_frame unselected { draw_field(none_selected, linked_config) };
+        const float glyph_rows { static_cast<float>(ink_rows) };
+        int first_red { 0 };
+        while (first_red < selection_frame_width && unselected.count_color({ static_cast<float>(first_red), 0.0f, 1.0f, glyph_rows }, red) == 0)
+            ++first_red;
+        REQUIRE(first_red < selection_frame_width);
+        // 고른 구간이 시작하기 전의 글자 둘은 아무것도 고르지 않은 그림과 같고 링크색으로 남는다.
+        const luil::rect_f leading { static_cast<float>(first_red), 0.0f, 18.0f, glyph_rows };
+        REQUIRE(unselected.count_color(leading, red) > 0);
+        REQUIRE(partly.count_color(leading, red) == unselected.count_color(leading, red));
+        int differing { 0 };
+        for (int y { 0 }; y < ink_rows; ++y)
+            for (int x { first_red }; x < first_red + 18; ++x)
+                differing += partly.pixel_at(x, y) != unselected.pixel_at(x, y) ? 1 : 0;
+        REQUIRE(differing == 0);
+        // 고른 글자 둘은 고른 글자색이고 링크색이 남지 않는다.
+        const luil::rect_f selected { static_cast<float>(first_red + 22), 0.0f, 22.0f, glyph_rows };
+        REQUIRE(partly.count_color(selected, white) > 0);
+        REQUIRE(partly.count_color(selected, red) == 0);
+    }
 }

@@ -742,7 +742,9 @@ namespace luil {
         {
             // 고른 구간의 글자는 맨 끝에서 고른 글자색으로 한 번만 그린다. 본문색과 링크색 글자를 그 구간에도 먼저 그려 두면
             // 같은 글자가 한 번 더 그려져 글자 가장자리의 반투명 픽셀에 먼저 그린 색이 비치므로, 그 둘은 고른 구간을 뺀 자리에만 그린다.
-            const bool selected_text { selection.has_value() && enabled() && context.palette.selection_foreground != context.palette.primary_foreground };
+            // 링크가 놓인 칸은 고른 글자의 색이 본문색과 같아도 링크색이 고른 구간에 비치지 않게 덧그림이 선다.
+            const bool linked { std::any_of(link_elements_.begin(), link_elements_.end(), [](const auto& item) { return item.second->bounds().width > 0.0f; }) };
+            const bool selected_text { selection.has_value() && enabled() && (linked || context.palette.selection_foreground != context.palette.primary_foreground) };
             const SkPaint foreground { solid_paint(enabled() ? context.palette.primary_foreground : context.palette.disabled_foreground) };
             context.canvas.save();
             if (selected_text)
@@ -773,7 +775,7 @@ namespace luil {
                 context.canvas.drawRect(SkRect::MakeXYWH(part.x, baseline + 1.0f * scale, part.width, (element->emphasized(interaction) ? 2.0f : 1.0f) * scale),
                     solid_paint(enabled() ? context.palette.accent : context.palette.disabled_foreground));
             }
-            // 고른 구간의 글자는 그 바탕의 짝이다. 옅은 바탕에서는 본문 글자와 같은 값이라 덧그리지 않고,
+            // 고른 구간의 글자는 그 바탕의 짝이다. 링크가 없는 칸은 옅은 바탕에서 본문 글자와 같은 값이라 덧그리지 않고,
             // 고대비에서만 highlight 글자로 바뀐다. 링크 밑줄은 고른 구간 안에서도 남는다.
             if (selected_text)
             {

@@ -2948,3 +2948,105 @@ TEST_CASE("The mobile theme page builds the markup sample and keeps the earlier 
     tree = tree_of();
     REQUIRE(status(tree) == u8"펼침 · 요소 10 · 오류 0");
 }
+
+TEST_CASE("The mobile theme page shows what the hot reloader delivers and keeps the earlier value when one is refused", "[mobile-demo][hot_reload]")
+{
+    // 파일과 감시자 없이 도우미가 낼 메시지만 넣는다. 쓰기와 도우미는 셸의 일이다 (docs/hot-reload-design.md의 확인).
+    const std::u8string style { reinterpret_cast<const char8_t*>(luil_test_base_style), luil_test_base_style_size };
+    const std::u8string markup { reinterpret_cast<const char8_t*>(luil_test_markup_sample), luil_test_markup_sample_size };
+    mobile_demo::theme_page page { style, markup };
+    const auto tree_of = [&page] {
+        auto content { page.build(400.0f, 1.0f) };
+        const float height { content.height };
+        return luil::make_arranged_tree(std::move(content.element), { 0.0f, 0.0f, 400.0f, height }, 1.0f);
+    };
+    const auto label = [&tree_of](const std::u8string& owner) {
+        const luil::ui_tree tree { tree_of() };
+        const luil::ui_element* const element { tree.find({ mobile_demo::kind_text, owner }) };
+        REQUIRE(element != nullptr);
+        return element->accessibility().name;
+    };
+    const auto failure = [](const luil::hot_reload_kind kind, const luil::hot_reload_status status, std::u8string error) {
+        luil::hot_reload_update update {};
+        update.kind = kind;
+        update.status = status;
+        update.errors.push_back(std::move(error));
+        return update;
+    };
+
+    REQUIRE(label(u8"theme-reload-path") == u8"감시 폴더 없음");
+    REQUIRE(label(u8"theme-reload-status") == u8"아직 감시하지 않습니다.");
+
+    // 단추는 intent만 낸다. 셸이 먼저 받아 페이지로 오지 않는다.
+    {
+        const luil::ui_tree tree { tree_of() };
+        const std::vector<std::pair<std::u8string, demo::hot_reload_write>> buttons {
+            { u8"theme-reload-write-style", demo::hot_reload_write::style_sample },
+            { u8"theme-reload-write-style-broken", demo::hot_reload_write::style_broken },
+            { u8"theme-reload-write-markup-broken", demo::hot_reload_write::markup_broken },
+            { u8"theme-reload-write-default", demo::hot_reload_write::defaults },
+        };
+        for (const auto& [owner, what] : buttons)
+        {
+            const luil::ui_element_id id { mobile_demo::kind_style_sheet_button, owner };
+            const luil::ui_element* const button { tree.find(id) };
+            REQUIRE(button != nullptr);
+            const luil::ui_action* const action { button->action(luil::ui_trigger::left_click) };
+            REQUIRE(action != nullptr);
+            const std::vector<luil::input_action> made { (*action)({ id, 0.0f, 0.0f }) };
+            REQUIRE(made.size() == 1);
+            const luil::app_message& message { std::get<luil::app_message>(made.front()) };
+            REQUIRE(message.get<demo::hot_reload_write_intent>() != nullptr);
+            REQUIRE(message.get<demo::hot_reload_write_intent>()->what == what);
+            REQUIRE_FALSE(page.handle(message));
+        }
+    }
+
+    // delegate가 감시를 세운 결과다. 멈추는 함수를 페이지가 쥐고 `stop_workers`가 부른다.
+    std::size_t stops { 0 };
+    deliver(page, demo::hot_reload_started_intent { u8"/data/files/hot-reload", {}, [&stops] { ++stops; } });
+    REQUIRE(label(u8"theme-reload-path") == u8"/data/files/hot-reload");
+    REQUIRE(page.hot_reload_folder() == u8"/data/files/hot-reload");
+    page.stop_hot_reload();
+    REQUIRE(stops == 1);
+
+    // 받은 스타일은 셸이 실을 포인터다.
+    const std::u8string sample { demo::hot_reload_write_plan(demo::hot_reload_write::style_sample, style, markup).front().text };
+    const luil::style_parse_result parsed_style { luil::parse_ui_style(sample) };
+    REQUIRE(parsed_style.ok());
+    luil::hot_reload_update received {};
+    received.kind = luil::hot_reload_kind::style;
+    received.status = luil::hot_reload_status::loaded;
+    received.style = std::make_shared<const luil::ui_style>(*parsed_style.style);
+    received.text = sample;
+    deliver(page, received);
+    REQUIRE(label(u8"theme-reload-status") == u8"다시 읽기 1번 · style.json 받음");
+    REQUIRE(page.style() == received.style);
+    const std::u8string style_status { label(u8"theme-style-status") };
+    REQUIRE(style_status == u8"적용됨 · 오류 0 · dark.windowBackground #1a1b26");
+
+    // 값이 없는 결과는 상태 줄만 바꾼다.
+    const std::u8string markup_status { label(u8"markup-status") };
+    REQUIRE(markup_status == u8"펼침 · 요소 7 · 오류 0");
+    deliver(page, failure(luil::hot_reload_kind::style, luil::hot_reload_status::rejected, u8"Unknown key in dark: windowBackgrund"));
+    REQUIRE(label(u8"theme-reload-status") == u8"다시 읽기 2번 · style.json 거부 · Unknown key in dark: windowBackgrund · 이전 값 유지");
+    deliver(page, failure(luil::hot_reload_kind::markup, luil::hot_reload_status::missing, u8"File not found: markup.xml"));
+    REQUIRE(label(u8"theme-reload-status") == u8"markup.xml 없음 · 이전 값 유지");
+    REQUIRE(page.style() == received.style);
+    REQUIRE(label(u8"theme-style-status") == style_status);
+    REQUIRE(label(u8"markup-status") == markup_status);
+
+    // 받은 틀은 다음 펼치기가 쓴다.
+    const luil::ui_markup_parse_result parsed_markup { luil::parse_ui_markup(u8"<stack id=\"reload-branch\" direction=\"column\"><label id=\"reload-label\" text=\"from file\" length=\"18\"/></stack>") };
+    REQUIRE(parsed_markup.ok());
+    luil::hot_reload_update template_update {};
+    template_update.kind = luil::hot_reload_kind::markup;
+    template_update.status = luil::hot_reload_status::loaded;
+    template_update.markup = parsed_markup.document;
+    deliver(page, template_update);
+    REQUIRE(label(u8"theme-reload-status") == u8"다시 읽기 3번 · markup.xml 받음");
+    REQUIRE(label(u8"markup-status") == u8"펼침 · 요소 2 · 오류 0");
+
+    page.note_hot_reload_write_failure(u8"style.json · failed");
+    REQUIRE(label(u8"theme-reload-status") == u8"파일에 쓰지 못함 · style.json · failed");
+}
