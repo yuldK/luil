@@ -17,11 +17,14 @@
 //  - 값을 읽는 `GetIntField`·`GetStaticIntField`도 실패 지점이다. 읽은 값을 쓰기 전에 예외를 거두는지, 모든 JNI 호출이
 //    앞 호출의 예외를 거둔 뒤에 불리는지(예외가 남은 채 부른 호출 수 0)를 아홉 읽기와 쓰기 모두에서 본다.
 //  - 읽기의 틀은 API 수준에 따라 갈린다. 기기에서 JNI 호출이 하나도 없으면 그 읽기는 SKIP한다.
+//  - 앱 context 잡기처럼 thread를 JVM에 붙이는 길은 가짜 JavaVM으로 같은 가짜 JNIEnv를 내준다.
 namespace {
     struct fake_state
     {
         int calls { 0 };
         int fail_at { 0 };
+        // 둘째 실패 지점이다. 예외를 거둔 뒤의 호출도 실패하는 자리를 본다.
+        int also_fail_at { 0 };
         bool pending { false };
         int pushed { 0 };
         int popped { 0 };
@@ -39,6 +42,7 @@ namespace {
     };
 
     fake_state* current { nullptr };
+    JNIEnv* current_env { nullptr };
     int marker { 0 };
 
     [[nodiscard]] jobject object() noexcept
@@ -69,7 +73,8 @@ namespace {
     {
         note();
         ++current->calls;
-        if (current->calls != current->fail_at)
+        if (current->calls != current->fail_at
+            && current->calls != current->also_fail_at)
             return false;
         current->pending = true;
         return true;
@@ -98,6 +103,17 @@ namespace {
     void JNICALL exception_clear(JNIEnv*)
     {
         current->pending = false;
+    }
+
+    jobject JNICALL new_global_ref(JNIEnv*, const jobject reference)
+    {
+        note();
+        return reference;
+    }
+
+    // 지역 참조 지우기는 예외가 남아도 불러도 되는 JNI다. 세지 않는다.
+    void JNICALL delete_local_ref(JNIEnv*, jobject)
+    {
     }
 
     jclass JNICALL find_class(JNIEnv*, const char*)
@@ -227,6 +243,8 @@ namespace {
         table.PopLocalFrame = pop_local_frame;
         table.ExceptionCheck = exception_check;
         table.ExceptionClear = exception_clear;
+        table.NewGlobalRef = new_global_ref;
+        table.DeleteLocalRef = delete_local_ref;
         table.FindClass = find_class;
         table.GetObjectClass = get_object_class;
         table.GetMethodID = get_method_id;
@@ -256,6 +274,7 @@ namespace {
         {
             state_.fail_at = fail_at;
             current = &state_;
+            current_env = &env_;
         }
         fake_env(const fake_env&) = delete;
         fake_env(fake_env&&) = delete;
@@ -264,6 +283,7 @@ namespace {
         ~fake_env()
         {
             current = nullptr;
+            current_env = nullptr;
         }
 
         [[nodiscard]] JNIEnv& env() noexcept
@@ -315,6 +335,35 @@ namespace {
             CHECK(failing.state.popped == failing.state.pushed);
         }
     }
+}
+
+// 프로세스에 하나인 context는 한 번 적으면 지울 수 없어, 이 파일에서 context를 쓰는 어느 test보다 앞에 둔다.
+TEST_CASE("App context capture leaves no pending exception when any JNI call fails", "[android][jni_order]")
+{
+    if (luil::android::application_context() != nullptr)
+    {
+        SKIP("The app context was captured earlier in this process.");
+    }
+    const auto run = [](JNIEnv& env)
+    {
+        luil::android::set_application_context(env, object());
+        return luil::android::application_context() != nullptr ? 1 : 0;
+    };
+    // `FindClass`, `GetMethodID`, `getApplicationContext` 셋이 예외를 낼 수 있다. 성공 뒤에는 다시 불러도 호출이 없어, 지점을 먼저 친다.
+    constexpr int failure_points { 3 };
+    for (int point { 1 }; point <= failure_points; ++point)
+    {
+        INFO("failure point " << point);
+        const outcome failing { run_once(run, point) };
+        CHECK(failing.answer == 0);
+        CHECK_FALSE(failing.state.pending);
+        CHECK(failing.state.calls == point);
+        CHECK(failing.state.calls_while_pending == 0);
+    }
+    const outcome success { run_once(run) };
+    CHECK(success.answer == 1);
+    CHECK(success.state.calls == failure_points);
+    CHECK(success.state.calls_while_pending == 0);
 }
 
 TEST_CASE("System bar icons leave no pending exception when any JNI call fails", "[android][jni_order]")
