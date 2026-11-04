@@ -31,6 +31,8 @@ namespace luil {
         // 해석이 막혔다. 값이 비고 `errors`가 이유다. 반쯤 쓴 파일도 여기다 (syntax).
         rejected,
         // 열거나 읽지 못했다 (잠김, 읽는 사이에 지워짐, 일반 파일이 아님).
+        //  - 도우미는 이 결과를 약 2초 동안 건네지 않고 다시 읽어 본 뒤에 건넨다. 그 뒤에 잠금이 풀려도 알림이 없으면 다시 읽지 않는다.
+        //    앱은 다음 저장을 기다리거나 `load_hot_reload_file`로 다시 읽는다.
         unreadable,
         // `max_bytes`를 넘어 열지 않았다.
         too_large,
@@ -119,6 +121,7 @@ namespace luil {
         [[nodiscard]] static std::unique_ptr<hot_reloader> create(hot_reloader_config configuration, std::u8string& error);
 
         // 감시를 걸고 그다음 그 자리에서 한 번 읽어 첫 결과를 돌려준다. 첫 결과는 `deliver`로 오지 않는다.
+        //  - 첫 읽기는 다시 읽어 보지 않는다. 잠겨 있으면 곧바로 `unreadable`이다.
         //  - 감시를 걸지 못하면(부모 폴더가 없음, OS 거절) `ticket`이 비고 `error`에 적는다. 읽은 결과는 그래도 담는다.
         [[nodiscard]] hot_reload_update add(const hot_reload_file& file, std::u8string& error);
         // 감시를 내린다. 남은 묶음은 거두고 앱에 건네지 않는다. 모르는 표는 아무 일도 하지 않는다.

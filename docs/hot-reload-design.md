@@ -30,7 +30,7 @@ namespace luil {
     {
         loaded,     // 새 값이 있다
         rejected,   // 해석이 막혔다. 값이 비고 errors가 이유다. 반쯤 쓴 파일도 여기다 (syntax)
-        unreadable, // 열거나 읽지 못했다 (잠김, 읽는 사이에 지워짐, 일반 파일이 아님)
+        unreadable, // 열거나 읽지 못했다 (잠김, 읽는 사이에 지워짐, 일반 파일이 아님). 도우미는 약 2초 다시 읽어 본 뒤에 건넨다
         too_large,  // max_bytes를 넘어 열지 않았다
         missing,    // 지금 없다 (removed, 옛 이름이 그 파일인 renamed, 처음 읽을 때 없음)
         lost,       // 감시가 끊겼다. 이 표로는 더 오지 않는다
@@ -125,11 +125,12 @@ namespace luil {
 - 임시 파일 뒤 이름 바꾸기 저장은 `file` 감시가 임시 이름을 거르므로 그 파일의 created·modified·renamed 가운데 하나로 온다(238행). 따로 할 일이 없다.
 - 아직 모르는 표의 묶음은 거짓을 돌려 다시 받는다. 감시자가 `add`의 표를 돌려주기 전에 첫 묶음이 올 수 있어서다. 내린 표는 끝 묶음이 올 때까지 표시만 해 둔다. 내린 표의 묶음은 참을 돌려 버리고, 끝 묶음에서 표를 거둔다. 지우면 그 끝 묶음이 아직 모르는 표가 되어 끝없이 다시 온다. 읽는 사이에 내렸으면 읽은 결과도 건네지 않는다. 앱의 `deliver`는 표를 지키는 잠금 밖에서 부른다. 그래야 `deliver` 안의 `add`·`remove`와, 감시 thread를 기다리는 `file_watcher::add`가 서로 막지 않는다.
 - 읽기는 늘 파일 전체다. 합치기나 증분이 없다([스타일 읽기](style-sheet-design.md) 227행 약속 2).
+- `unreadable`은 바로 건네지 않는다(결정 8). 약 2초 동안 거짓을 돌려 감시자가 `settle`마다 같은 묶음을 다시 내게 하고, 그때마다 다시 읽는다. 읽으면 그 결과를 건네고, 상한이 지나면 그때 `unreadable`을 건넨다. 건넨 뒤의 다음 실패는 상한을 처음부터 센다. `add`의 첫 읽기는 다시 읽지 않는다.
 
 **읽기.** `load_hot_reload_file`, `add`의 첫 읽기, 감시 thread의 다시 읽기는 같은 함수다. 던지지 않는다. 감시 thread의 `deliver`에서 던지면 감시자가 거절로 보고 같은 묶음을 끝없이 다시 낸다. 경로로 옮길 수 없는 글(깨진 UTF-8), NUL이 든 경로, 메모리 부족은 `unreadable`이다.
 
 1. 크기를 먼저 잰다. 없으면 `missing`, 일반 파일이 아니면 `unreadable`, `max_bytes`를 넘으면 열지 않고 `too_large`다.
-2. 한 번에 읽는다. 읽은 바이트가 잰 크기와 다르거나 그 뒤에 글이 더 있으면 `unreadable`이다. 쓰는 중인 파일이라 다음 묶음이 다시 읽는다.
+2. 한 번에 읽는다. 읽은 바이트가 잰 크기와 다르거나 그 뒤에 글이 더 있으면 `unreadable`이다. 쓰는 중인 파일이다.
 3. 바이트를 그대로 파서에 넘긴다. 글의 꼴(BOM, 줄 끝, 엄한 문법)은 파서의 규칙이다. 오류가 하나라도 있으면 `rejected`다. 반쯤 쓴 파일은 여기서 `syntax`로 막힌다.
 4. 받으면 스타일은 `make_shared<const ui_style>`로, 마크업은 파서의 `document`를 그대로 싣는다.
 
@@ -141,6 +142,7 @@ namespace luil {
 - `loaded` 스타일은 같은 포인터를 `ui_frame::style`과 tree마다의 `make_arranged_tree(..., style)`·`arrange_context::style` 두 자리에 준다. 주 창 tree뿐 아니라 popup·보조 창 tree도 같다([스타일 읽기](style-sheet-design.md) 130행). 그러면 줄 나눔 정책과 cache도 다음 배치에서 따라온다([줄 나눔 정책 스타일 키](wrap-policy-key-design.md) 246행).
 - `loaded` 마크업은 쥔 `shared_ptr<const ui_markup_document>`를 바꾼다. 다음 `make_frame`이 새 틀을 펼친다. 초점·hover·값은 id로 이어진다([마크업 바인딩](markup-binding-design.md) 228행).
 - 그 밖의 상태는 쥔 것을 그대로 두고 `errors`를 상태 줄이나 로그에 보인다. 화면은 이전 스타일과 틀로 남는다(스타일 읽기 227행 약속 3, 마크업 바인딩 227행).
+- `unreadable`을 받은 뒤에는 다음 저장이 다시 읽는다. 상한을 넘겨 잠근 쪽이 닫을 때는 알림이 없을 수 있다(결정 8). 그 저장까지 보여야 하는 앱은 `load_hot_reload_file`로 다시 읽는다.
 - 파일을 앱이 쓰면 `replace_file_atomically`로 쓴다. 반쯤 쓴 파일을 읽을 틈이 없다.
 
 **수명과 thread.** 객체는 thread를 따로 두지 않는다. 다시 읽기와 해석은 감시 thread에서 하고, 결과의 포인터는 불변이라 thread 사이에 나눠 쥔다. `add`의 첫 읽기는 부른 thread에서 한다. 세우기는 `app_host`를 쥔 자리(`app_delegate::on_started`나 host를 받은 logic)에서 한다. 멈추기는 `logic_driver::stop_workers()`에서 `stop()`이고 `deliver`가 쥔 host보다 먼저다(`file_watcher.h` 115행). `stop`은 감시자의 `stop`이라 이 뒤로 `deliver`가 없다. 읽던 파일 하나는 끝까지 읽으므로 종료 예산에 `max_bytes` 한 번 읽기와 해석이 `stop_budget`과 함께 든다.
@@ -199,9 +201,16 @@ namespace luil {
 - 길 c: `file` 거름을 믿고 견주지 않는다. 대가: 옛 이름 쪽과 새 이름 쪽을 가를 수 없다.
 - 정함: a.
 
+**8. 잠겨 읽지 못한 묶음(구현 뒤 정함).** 질문: 쓰는 쪽이 파일을 잠근 채 디스크를 비우고 100ms 넘게 쥐었다가 닫으면 무엇을 하는가. 비움이 알림을 잠긴 동안으로 앞당기고 닫을 때는 새 알림이 없다. 그 묶음을 `unreadable`로 건네고 참을 돌리면 마지막 저장이 읽히지 않는다(격리 데스크톱에서 잠금 300ms·700ms로 재현, 잠금 50ms나 비움 없는 잠금은 이어졌다). 어떤 편집기가 이렇게 쓰는지는 재지 않았다.
+
+- 길 a: `unreadable`이면 약 2초 동안 거짓을 돌려 `settle`마다 다시 읽고, 상한이 지나면 건넨다(이 문서). 되는 것: 그 안에 풀리는 잠금은 저장을 잃지 않고 상태 줄이 "읽지 못함"을 거쳐 가지 않는다. 폴더처럼 다시 읽어도 같은 항목도 상한 뒤에 한 번 건네고 그쳐 묶음이 끝없이 돌지 않는다. 대가: 그런 항목의 상태가 상한만큼 늦게 뜨고, 그 사이 `settle`마다 한 번 열어 본다.
+- 길 b: 그대로 두고 문서에 한계로 적어 앱이 `unreadable`을 받으면 다시 읽게 한다. 되는 것: 코드가 그대로다. 대가: 언제 다시 읽을지를 앱마다 시계로 푼다.
+- 길 c: 열지 못한 경우만 다시 읽고 폴더 같은 항목은 바로 건넨다. 되는 것: 그 항목의 상태가 바로 뜬다. 대가: 읽기 함수가 실패의 종류를 따로 내는 길이 는다.
+- 정함: a. 대가: 상한을 넘긴 잠금은 그대로 한계다. 건넨 뒤에 잠금이 풀려도 알림이 없으면 다음 저장까지 읽지 않는다.
+
 ## 플랫폼
 
-**Win32.** 감시는 `ReadDirectoryChangesW`([file_watcher_win32.cpp](../src/win32/file_watcher_win32.cpp))이고 읽기는 UTF-8 경로의 `std::filesystem::path`와 `std::ifstream`이다. 편집기가 쓰는 동안 잠근 파일은 `unreadable`이고 쓰기가 끝난 묶음이 다시 읽는다. 네트워크 드라이브의 한계는 [파일 감시](file-watch-design.md)의 것을 그대로 받는다.
+**Win32.** 감시는 `ReadDirectoryChangesW`([file_watcher_win32.cpp](../src/win32/file_watcher_win32.cpp))이고 읽기는 UTF-8 경로의 `std::filesystem::path`와 `std::ifstream`이다. 편집기가 쓰는 동안 잠근 파일은 약 2초 동안 다시 읽어 본다(결정 8). 그 뒤에는 `unreadable`을 건네고, 풀린 뒤의 다음 저장이 다시 읽는다. 네트워크 드라이브의 한계는 [파일 감시](file-watch-design.md)의 것을 그대로 받는다.
 
 **Android.** Java 소스 0줄, JNI 없음. 감시는 inotify([file_watcher_android.cpp](../src/android/file_watcher_android.cpp))이고 읽기는 Win32와 같은 표준 입출력이다. 확정 N6-android a대로 앱 전용 폴더의 파일만 보장한다. 경로는 앱이 `android_app`의 `activity->internalDataPath`에서 읽어 넘긴다. luil은 그 경로를 내지 않고 이 노드도 플랫폼 질의를 더하지 않는다. APK assets는 감시할 수 없다. 앱이 `AAssetManager`(NDK C API)로 직접 읽거나 첫 실행에 앱 폴더로 옮겨 쓴다. 데모는 내장 글을 `replace_file_atomically`로 앱 폴더에 써 둔다. 개발자는 디버그 빌드에서 `adb shell run-as <패키지>`로 그 폴더의 파일을 바꾼다. 공유 저장소(`/sdcard`)의 감시는 보장하지 않는다(파일 감시 문서). Android의 luil에는 접근성 계층이 없어 상태 줄은 사람이 화면으로 읽는다. unsupported인 부분은 없다.
 
@@ -229,7 +238,7 @@ namespace luil {
 자동 test.
 
 - `tests/hot_reload_load_tests.cpp`(`luil_core_tests`, Windows와 Android 기기, 새 파일): 임시 폴더의 파일로 `load_hot_reload_file`을 잰다. 바른 스타일은 같은 글의 `parse_ui_style`과 같은 값이고 `text`가 파일 글이다. 깨진 스타일은 `rejected`이고 `errors`가 `describe(style_errors[i])`와 같다. 없는 파일은 `missing`, 폴더는 `unreadable`, `max_bytes`를 1바이트 넘는 파일은 열지 않고 `too_large`다. 마크업도 같은 넷이고 크기는 두 한도 가운데 작은 쪽이다. 묶음 가르기는 위 표의 칸마다 한 사례(`end` 둘, `rescan`, 다시 읽을 셋, 없음 둘, 다른 이름의 항목만 든 묶음)다.
-- `tests/hot_reloader_tests.cpp`(새 파일. Windows는 `luil_tests`, Android는 inotify 묶음이 이미 싣는 `file_watcher_android.cpp` 위에 `luil/hot_reloader.cpp`를 더한 `luil_core_tests`): `add`가 첫 결과를 돌려주고 그것은 `deliver`로 오지 않는다. 임시 파일 뒤 이름 바꾸기로 새 글을 쓰면 `loaded`가 한 번 온다. 깨진 글은 `rejected`, 지우면 `missing`, 다시 만들면 `loaded`다. `deliver`가 한 번 거짓을 돌리면 같은 파일의 결과가 다시 오고 그때 다시 읽은 글이다. `remove` 뒤로 그 표의 결과가 없다. 감시 폴더를 지우면 `lost`가 한 번이다. 결과가 이어지는 중의 `stop`이 예산 안에 끝나고 그 뒤로 `deliver`가 없다. 임시 폴더는 [file_watcher_tests.cpp](../tests/file_watcher_tests.cpp) 53~72행의 `process_id`·`scratch_base`·`scratch_folder` 꼴이다. Windows는 `temp_directory_path` 아래, 기기에서는 `current_path`(adb_run.cmake의 기기 폴더) 아래에 둔다. 기기 셸에는 쓸 수 있는 임시 폴더가 정해져 있지 않아서다. 두 시험 파일은 그 도우미를 공용 헤더 `tests/hot_reload_test_folder.h`에서 함께 쓴다. `hot_reload_load_tests.cpp`가 core test에 들어 OS 헤더를 쓰지 않으므로 폴더 이름의 구별은 `process_id` 대신 `steady_clock` 값과 차례 번호다.
+- `tests/hot_reloader_tests.cpp`(새 파일. Windows는 `luil_tests`, Android는 inotify 묶음이 이미 싣는 `file_watcher_android.cpp` 위에 `luil/hot_reloader.cpp`를 더한 `luil_core_tests`): `add`가 첫 결과를 돌려주고 그것은 `deliver`로 오지 않는다. 임시 파일 뒤 이름 바꾸기로 새 글을 쓰면 `loaded`가 한 번 온다. 깨진 글은 `rejected`, 지우면 `missing`, 다시 만들면 `loaded`다. `deliver`가 한 번 거짓을 돌리면 같은 파일의 결과가 다시 오고 그때 다시 읽은 글이다. 감시 이름에 폴더가 서면 `unreadable`이 한 번 오고 다시 읽지 않는다. Windows에서 잠근 채 쓰고 디스크를 비운 저장은 300ms 뒤에 닫으면 `unreadable` 없이 `loaded`이고, 상한을 넘겨 잠그면 `unreadable`이 한 번 오며 다음 저장이 읽는다. `remove` 뒤로 그 표의 결과가 없다. 감시 폴더를 지우면 `lost`가 한 번이다. 결과가 이어지는 중의 `stop`이 예산 안에 끝나고 그 뒤로 `deliver`가 없다. 임시 폴더는 [file_watcher_tests.cpp](../tests/file_watcher_tests.cpp) 53~72행의 `process_id`·`scratch_base`·`scratch_folder` 꼴이다. Windows는 `temp_directory_path` 아래, 기기에서는 `current_path`(adb_run.cmake의 기기 폴더) 아래에 둔다. 기기 셸에는 쓸 수 있는 임시 폴더가 정해져 있지 않아서다. 두 시험 파일은 그 도우미를 공용 헤더 `tests/hot_reload_test_folder.h`에서 함께 쓴다. `hot_reload_load_tests.cpp`가 core test에 들어 OS 헤더를 쓰지 않으므로 폴더 이름의 구별은 `process_id` 대신 `steady_clock` 값과 차례 번호다.
 - 데모 시험: `tests/demo_gallery_tests.cpp`·`tests/mobile_demo_page_tests.cpp`가 테마 페이지에 `hot_reload_update` 메시지를 넣어 `theme-reload-status`의 글, 셸이 실을 스타일 포인터, `markup-status`를 본다. 파일과 감시자 없이 메시지만 넣는다.
 - `luil_umbrella_header`, `luil_core_portability`, `luil_source_style`. `luil_default_text`는 지금 `src/ui`·`include/luil/ui`만 보아 이 노드의 파일(`include/luil/app`, `src/host`, `src/luil`)에 닿지 않는다. 줄 4가 범위를 `src`·`include` 전체로 넓혀도 이 노드의 코드 줄에는 한글이 없다.
 

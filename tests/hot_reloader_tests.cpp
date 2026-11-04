@@ -4,6 +4,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -250,6 +254,93 @@ TEST_CASE("A style save reaches deliver with its value empty when refused", "[ho
 }
 
 #if defined(_WIN32)
+namespace {
+    // 다른 프로그램이 잠근 채 쓰고 디스크를 비운 파일이다. 닫을 때까지 아무도 열지 못한다.
+    //  - 비움이 변경 알림을 잠긴 동안으로 앞당기고, 닫을 때는 새 알림이 없다.
+    class locked_save
+    {
+    public:
+        locked_save(const std::filesystem::path& path, const std::u8string_view text)
+            : file_ { CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) }
+        {
+            REQUIRE(file_ != INVALID_HANDLE_VALUE);
+            DWORD written { 0 };
+            REQUIRE(WriteFile(file_, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) != FALSE);
+            REQUIRE(FlushFileBuffers(file_) != FALSE);
+        }
+        locked_save(const locked_save&) = delete;
+        locked_save& operator=(const locked_save&) = delete;
+        ~locked_save()
+        {
+            close();
+        }
+
+        void close() noexcept
+        {
+            if (file_ == INVALID_HANDLE_VALUE)
+                return;
+            CloseHandle(file_);
+            file_ = INVALID_HANDLE_VALUE;
+        }
+
+    private:
+        HANDLE file_ { INVALID_HANDLE_VALUE };
+    };
+
+    [[nodiscard]] std::size_t count_status(const std::vector<hot_reload_update>& updates, const hot_reload_status status)
+    {
+        return static_cast<std::size_t>(std::count_if(updates.begin(), updates.end(), [status](const hot_reload_update& update) { return update.status == status; }));
+    }
+}
+
+TEST_CASE("A save that holds its lock past settle is read when the lock ends", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path path { folder.file(u8"markup.xml") };
+    write_file(path, markup_one);
+    recorder sink {};
+    const auto reloader { make_reloader(test_config(sink)) };
+    static_cast<void>(add_markup(*reloader, path));
+
+    {
+        const locked_save save { path, markup_two };
+        std::this_thread::sleep_for(300ms);
+    }
+    REQUIRE(sink.wait_status(hot_reload_status::loaded, 4s));
+    REQUIRE(sink.updates().back().text == markup_two);
+    // 잠긴 동안의 실패는 앱에 건네지 않는다. 화면 글이 "읽지 못함"을 거쳐 가지 않는다.
+    REQUIRE(count_status(sink.updates(), hot_reload_status::unreadable) == 0u);
+}
+
+TEST_CASE("A lock past the retry limit gives unreadable once and the next save reads the file", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path path { folder.file(u8"markup.xml") };
+    write_file(path, markup_one);
+    recorder sink {};
+    const auto reloader { make_reloader(test_config(sink)) };
+    static_cast<void>(add_markup(*reloader, path));
+
+    locked_save save { path, markup_two };
+    REQUIRE(sink.wait_status(hot_reload_status::unreadable));
+    std::this_thread::sleep_for(200ms);
+    REQUIRE(count_status(sink.updates(), hot_reload_status::unreadable) == 1u);
+    REQUIRE(sink.updates().back().errors.size() == 1u);
+    save.close();
+
+    // 닫을 때는 알림이 없어 다음 저장까지 그대로다. 그 저장은 곧바로 읽고, 다음 잠금은 상한을 처음부터 센다.
+    save_file(path, markup_one);
+    REQUIRE(sink.wait_status(hot_reload_status::loaded));
+    REQUIRE(sink.updates().back().text == markup_one);
+    sink.clear();
+    {
+        const locked_save again { path, markup_two };
+        std::this_thread::sleep_for(300ms);
+    }
+    REQUIRE(sink.wait_status(hot_reload_status::loaded, 4s));
+    REQUIRE(sink.updates().back().text == markup_two);
+}
+
 TEST_CASE("A save under another case of the name still reaches deliver", "[hot_reload][platform]")
 {
     // Windows의 이름은 대소문자를 가리지 않는다. OS는 디스크의 표기로 알리므로 앱이 준 표기와 다를 수 있다.
@@ -268,6 +359,22 @@ TEST_CASE("A save under another case of the name still reaches deliver", "[hot_r
     REQUIRE(sink.updates().back().text == markup_two);
 }
 #endif
+
+TEST_CASE("A folder under the watched name gives unreadable once and is not read again", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path path { folder.file(u8"markup.xml") };
+    recorder sink {};
+    const auto reloader { make_reloader(test_config(sink)) };
+    static_cast<void>(add_markup(*reloader, path));
+
+    // 다시 읽어도 같은 항목이다. 다시 읽는 상한 뒤에 한 번 건네고 그친다. 묶음이 끝없이 돌면 안 된다.
+    std::filesystem::create_directories(path);
+    REQUIRE(sink.wait_status(hot_reload_status::unreadable));
+    REQUIRE(sink.calls() == 1u);
+    std::this_thread::sleep_for(300ms);
+    REQUIRE(sink.calls() == 1u);
+}
 
 TEST_CASE("A refused result comes again and reads the file again", "[hot_reload][platform]")
 {
