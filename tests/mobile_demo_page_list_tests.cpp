@@ -43,7 +43,7 @@ TEST_CASE("Each page entry of the mobile list is a button named after its page a
     for (const bool wide : { false, true })
     {
         const luil::ui_tree tree { list_tree(wide ? mobile_demo::page_basics : std::u8string_view {}, wide == false) };
-        REQUIRE(mobile_demo::page_entries().size() == 14u);
+        REQUIRE(mobile_demo::page_entries().size() == 15u);
         for (const mobile_demo::page_entry& entry : mobile_demo::page_entries())
         {
             const luil::ui_element_id id { mobile_demo::kind_page_entry, std::u8string { entry.key } };

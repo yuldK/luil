@@ -15,6 +15,7 @@
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
 //  - 테마: 테마 선호와 키 컬러                             (demo/theme_page)
+//  - 차트: 선·막대·영역, 범례, 값 상자, 키보드와 접근 요약     (demo/chart_page)
 //  - 변경 작업대: 지연 로딩 계층·하위 메뉴가 있는 표·읽기 전용 차이 보기·편집형 콤보·패치 불러오기, 커스텀 element 없이 (demo/workbench_page)
 // 이 파일은 셸이다: 사이드바 내비게이션, 페이지 전환, driver·policy·delegate 조립.
 //
@@ -37,6 +38,7 @@
 //    꺼진 데모의 알림을 누르면 COM이 `-luil-notification`(과 `-Embedding`)을 붙여 데모를 띄운다. 그 표식은 인자 읽기에서 거른다.
 
 #include "demo/basics_page.h"
+#include "demo/chart_page.h"
 #include "demo/common.h"
 #include "demo/files_page.h"
 #include "demo/gallery_page.h"
@@ -139,6 +141,7 @@ namespace demo {
             { page_zoom, u8"확대 보기" },
             { page_ink, u8"잉크" },
             { page_inspector, u8"검사기" },
+            { page_chart, u8"차트" },
             { page_theme, u8"모양과 색" },
             { page_workbench, u8"변경 작업대" },
             { page_rich_text, u8"서식 있는 글" },
@@ -756,7 +759,7 @@ namespace demo {
                 // 편집 메시지(edit_intent)만 타입이 같고 target으로 나뉜다 — 남의 target이면 handle이 거짓을 돌려준다.
                 if (gallery_.handle(message) || basics_.handle(message) || lists_.handle(message) || files_.handle(message) || tabs_.handle(message) || groups_.handle(message)
                     || toasts_.handle(message) || popups_.handle(message) || windows_.handle(message) || images_.handle(message) || network_.handle(message) || webview_.handle(message)
-                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message))
+                    || zoom_.handle(message) || ink_.handle(message) || inspector_.handle(message) || theme_.handle(message) || workbench_.handle(message) || chart_.handle(message))
                     return;
             }
 
@@ -1256,6 +1259,8 @@ namespace demo {
                     return ink_.build(width, height, scale);
                 if (page_ == page_inspector)
                     return inspector_.build(width, height, scale);
+                if (page_ == page_chart)
+                    return chart_.build();
                 if (page_ == page_theme)
                     return theme_.build(width, height, scale);
                 if (page_ == page_workbench)
@@ -1284,6 +1289,7 @@ namespace demo {
             zoom_page zoom_ {};
             ink_page ink_ {};
             inspector_page inspector_ {};
+            chart_page chart_ {};
             command_palette_host palette_ {};
             shell_menu shell_menu_ {};
             // 같은 세션에서 먼저 뜬 데모가 없었는가 (wWinMain의 `single_instance`).

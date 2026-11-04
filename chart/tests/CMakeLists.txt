@@ -1,19 +1,27 @@
 include(Catch)
 
 # 차트의 test다. 같은 실행 파일이 Windows와 Android 실기기에서 돈다 (docs/chart-design.md의 확인 절).
+#  - 두 데모의 차트 페이지도 여기서 잰다. 페이지가 차트를 쓰는데 core test는 차트를 링크하지 않는다.
 #  - core 밖이라 core의 플랫폼 hook 대역과 raster 도우미를 같은 파일 그대로 컴파일한다. 그 대역이 core 비공개 헤더를 들이므로
 #    이 test target만 `${LUIL_SOURCE_DIRECTORY}`를 본다. 라이브러리는 그대로 공개 헤더만 쓴다.
 #  - 비공개 문구를 재므로 차트의 `src/`도 본다.
 add_executable(luil_chart_tests
     "${LUIL_TEST_DIRECTORY}/core_platform_stub.cpp"
     "${LUIL_TEST_DIRECTORY}/raster_probe.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/chart_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/chart_sample.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/demo/common.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/chart_page.cpp"
+    "${PROJECT_SOURCE_DIR}/examples/mobile_demo/common.cpp"
     chart_element_tests.cpp
+    chart_page_tests.cpp
     chart_scale_tests.cpp
     chart_text_tests.cpp)
 target_include_directories(luil_chart_tests
     PRIVATE
         "${LUIL_SOURCE_DIRECTORY}"
         "${LUIL_TEST_DIRECTORY}"
+        "${PROJECT_SOURCE_DIR}/examples"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(luil_chart_tests
     PRIVATE

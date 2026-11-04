@@ -55,6 +55,10 @@ luil_add_source_filter(luil_demo_files "pages"
     demo/gallery_page.h
     demo/basics_page.cpp
     demo/basics_page.h
+    demo/chart_page.cpp
+    demo/chart_page.h
+    demo/chart_sample.cpp
+    demo/chart_sample.h
     demo/code_lexer.h
     demo/files_page.cpp
     demo/files_page.h
@@ -150,7 +154,7 @@ target_include_directories(luil_demo
 # 예제는 저장소의 일부라 내부 규율(luil_options)도 그대로 따른다.
 # 소비자 프로젝트는 luil::luil만 링크하면 된다.
 #  - ws2_32는 되돌이 서버의 것이다. 라이브러리(winhttp)가 요구하는 것은 저절로 따라온다.
-target_link_libraries(luil_demo PRIVATE luil::luil luil_options ws2_32)
+target_link_libraries(luil_demo PRIVATE luil::luil luil::luil_chart luil_options ws2_32)
 
 # 데모의 견본 그림들이다 (정지 png 하나와 움직이는 둘 — webp·gif).
 # 라이브러리 자산(코디콘 폰트·고지)은 실행 파일 resource에 박히지만 이것들은
@@ -179,6 +183,6 @@ add_executable(luil_mobile_demo WIN32
     ${luil_mobile_demo_files}
     mobile_demo/main.cpp)
 target_include_directories(luil_mobile_demo PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(luil_mobile_demo PRIVATE luil::luil luil_options)
+target_link_libraries(luil_mobile_demo PRIVATE luil::luil luil::luil_chart luil_options)
 
 luil_set_ide_folder("Examples" luil_demo luil_hello luil_mobile_demo luil_widgets)

@@ -10,6 +10,7 @@
 
 #include "mobile_demo/assets.h"
 #include "mobile_demo/basics_page.h"
+#include "mobile_demo/chart_page.h"
 #include "mobile_demo/common.h"
 #include "mobile_demo/device_page.h"
 #include "mobile_demo/files_page.h"
@@ -92,6 +93,7 @@ namespace mobile_demo {
         sheets_page sheets_ {};
         smb_page smb_ {};
         files_page files_ {};
+        chart_page chart_ {};
 
         // 좁은 화면에서 열어 둔 페이지다. 비어 있으면 목록이다. 넓은 화면은 비어 있으면 첫 페이지를 보인다.
         std::u8string page_ {};
