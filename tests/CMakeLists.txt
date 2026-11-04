@@ -145,7 +145,8 @@ add_executable(luil_core_tests
     zoom_view_tests.cpp
     # core가 링크로 묶어 부르는 플랫폼 hook의 test용 정의다 (파일에 이유가 있다).
     core_platform_stub.cpp
-    raster_probe.cpp)
+    raster_probe.cpp
+    string_table_tests.cpp)
 # IME 연결은 OS 헤더를 쓰지 않아 Windows에서도 지연·선택 회귀를 실행할 수 있다.
 # 기기 요청의 값 변환도 같다 (Java 상수를 옮길 뿐이다).
 target_sources(luil_core_tests PRIVATE
@@ -253,6 +254,8 @@ target_compile_definitions(luil_core_tests PRIVATE
     "LUIL_TESTS_AVIF=$<BOOL:${LUIL_ENABLE_AVIF}>"
     "LUIL_TESTS_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
     "LUIL_TESTS_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
+# 문자열 표 test의 시험 표다. 앱이 쓰는 공개 함수를 저장소 안에서 먼저 쓴다.
+luil_add_string_table(luil_core_tests NAME test_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE en)
 
 # ICU가 없는 환경은 별도 프로세스에서 재현한다. Skia와 luil의 초기화 캐시를 공유하지 않는다.
 if(LUIL_ENABLE_TEXT_SHAPING)
@@ -462,6 +465,9 @@ add_test(NAME luil_accent_catalog
 add_test(NAME luil_style
     COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
         "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/style_tests.cmake")
+add_test(NAME luil_strings
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DBINARY_DIR=${PROJECT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/string_table_tests.cmake")
 
 if(LUIL_INSTALL)
     add_test(NAME luil_installed_consumer

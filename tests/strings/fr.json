@@ -1,0 +1,15 @@
+{
+    "language": "fr",
+    "plural": "one",
+    "strings": {
+        "save": "Enregistrer",
+        "files_selected": { "one": "{count} fichier", "other": "{count} fichiers" },
+        "files_found": { "one": "{count} fichier", "other": "{count} fichiers" },
+        "file_summary": { "one": "un fichier", "other": "{count} fichiers" },
+        "greeting": "Bonjour {name} de {place}",
+        "echo": "{word} et {word}",
+        "braces": "{{{value}}} et {{value}}",
+        "number": "n={number}",
+        "date_line": "{day} {month_name} {year}"
+    }
+}

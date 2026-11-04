@@ -36,7 +36,7 @@ calendar.first_day = first_weekday_.value_or(std::chrono::Sunday);
 // src/ui/default_text.cpp: 선언과 호출부는 그대로다
 std::u8string_view info_bar_close() noexcept
 {
-    return library_strings().text(key::info_bar_close);
+    return library_text::text(library_strings(), library_text::key::info_bar_close);
 }
 ```
 
@@ -45,7 +45,7 @@ std::u8string_view info_bar_close() noexcept
 { "id": "blue", "label": { "ko": "블루", "en": "Blue" }, "swatch": "#a2cfff", "dark": { … }, "light": { … } }
 ```
 
-`library_strings()`는 비공개 `src/text/library_text.h`가 내는 `string_lookup`이다. `set_text_languages`가 정한 라이브러리 표의 언어 차례(원자 값)를 읽으므로 `noexcept` 함수에서 부른다.
+`library_strings()`는 비공개 `src/text/library_text.h`가 내는 `string_lookup`이다. `set_text_languages`가 정한 라이브러리 표의 언어 차례(원자 값)를 읽으므로 `noexcept` 함수에서 부른다. 생성 헤더의 이름 공간은 `luil::library_text`이고(`key`, `table`, `text`, `format`) `library_text.h`가 그 헤더를 함께 include한다. 키 83개와 ko·en 글은 표 커밋의 `assets/strings`에 이미 있다. 이 문서의 구현은 몸통을 조회로 바꾼다.
 
 ## 규칙
 
@@ -148,7 +148,7 @@ std::u8string_view info_bar_close() noexcept
 | 위치 | 고칠 내용 |
 | --- | --- |
 | calendar-date-design.md 9·93행 | "R5 i18n이 날짜 문구를 자리 값 문장으로 바꿨다. 첫 요일은 앱이 `user_first_weekday`로 넣는다. 날짜 꼴의 OS 기본은 넣지 않는다" |
-| calendar-date-design.md 77·78·88행 | 길 b의 `DateFormatSymbols`와 "R5에 넘긴다"를 "G6-locale b로 첫 요일만 질의, 이름은 표 문장"으로 닫는다 |
+| calendar-date-design.md 77·78·89행 | 길 b의 `DateFormatSymbols`와 "R5에 넘긴다"를 "G6-locale b로 첫 요일만 질의, 이름은 표 문장"으로 닫는다. 89행(플랫폼 절)은 "Win32 함수 하나와 Android JNI 호출 하나(`java.util.Calendar`). `DateFormatSymbols`는 넣지 않는다"로 고친다 |
 | calendar-date-design.md 106행, date-picker-design.md 248행 | "OS 날짜 서식(범위 C). 첫 요일 질의는 [흡수 문서](i18n-adoption-design.md)" |
 | date-picker-design.md 221행, default-text-design.md 208·209행 | "지역 서식은 R5"를 "언어별 문장은 R5 표, 숫자·날짜 서식은 범위 C"로, 편집 메뉴·강조색·시스템 라벨은 "R5가 옮겼다"로 |
 | default-text-design.md 80~82·90·151행 | 세 판정을 "옮겼다"로, 언어 규칙을 `set_text_languages`로 |

@@ -63,3 +63,18 @@ add_subdirectory(luil)
 키 목록은 데이터 파일 [`cmake/style_keys.cmake`](../../cmake/style_keys.cmake) 하나에 있다. 생성기는 그것으로 기본값 헤더와 함께 실행 중 파서가 도는 키 표 헤더(`<빌드>/generated/private/luil/generated/ui_style_keys.h`, 설치하지 않는다)를 낸다. 같은 파일을 실행 중에 [`parse_ui_style`](../../include/luil/theme/ui_style_json.h)로 읽으면 같은 `ui_style`이 된다. 파서는 엄한 JSON이라 CMake가 너그럽게 받는 글(주석, 끝 쉼표, 겹친 키 등)만 막는 쪽이 다르다 ([실행 중 스타일 읽기](../style-sheet-design.md)).
 
 실행 시점에 값을 세우는 길은 [테마와 글꼴](theming.md)의 스타일 절에 있다.
+
+## 문자열 표
+
+`assets/strings/`의 언어 파일(`ko.json`, `en.json`)은 `cmake/generate_strings.cmake`가 라이브러리 기본 문구의 표 헤더로 만든다. 내부 표라 설치하지 않는다(`<빌드>/generated/private/luil/generated/library_text.h`). 소비자는 자기 폴더로 통째로 바꿀 수 있고, 키 집합은 저장소의 `ko.json`과 같아야 하며 기본 언어는 `ko`다. 파일을 더하면(`ja.json`) 그 언어가 선다.
+
+```cmake
+set(LUIL_STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/strings" CACHE PATH "Strings")
+add_subdirectory(luil)
+```
+
+앱의 표는 같은 생성기를 `luil_add_string_table`로 자기 target에 건다. 빌드 트리와 설치본에서 같다. 원본 꼴, 생성기 검사, 조회는 [문자열 표](../i18n-design.md)에 있다.
+
+```cmake
+luil_add_string_table(my_app NAME app_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE en)
+```
