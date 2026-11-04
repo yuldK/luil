@@ -19,6 +19,7 @@ chart/                               # 하위 프로젝트. LUIL_BUILD_CHART가 
   include/luil/chart/chart_element.h
   include/luil/chart/chart_scale.h   # 요소 없는 순수 함수 (calendar_date.h 선례)
   src/chart_element.cpp
+  src/chart_layout.h, chart_layout.cpp # 비공개 순수 계산(계열 표, 범주 자리, 칸, 이름표 솎기, 픽셀 열). test가 그대로 잰다
   src/chart_scale.cpp
   src/chart_text.h                   # 비공개 기본 문구. 낱말마다 함수
   src/chart_text.cpp                 # 차트의 한글은 이 파일 한 곳

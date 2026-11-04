@@ -222,7 +222,7 @@ namespace luil::text {
 - **rich_edit(R3, 같은 줄)**: `text_change_between`를 그대로 다시 쓴다. 이 노드가 먼저 세우고 rich_edit는 부르기만 한다. 계약은 다섯이다. (1) `include/luil/text/`에 두어 ui와 Skia를 모른다. (2) 결과의 `offset`과 변경 끝은 두 글 모두에서 코드포인트 경계다. (3) 겹치지 않는 범위에서 접두를 먼저 가져간다(`aa`에서 `aaa`는 `{2, 0, 1}`). (4) 같은 글은 `empty()`다. (5) 비용은 접두·접미 길이에 비례한다. 글자소 경계는 계약에 없다. 필요한 호출자가 두 글에서 경계가 될 때까지 넓힌다. `text_span`의 필드는 앞으로도 끝에 더하고, `text_edit.h`는 이 노드가 건드리지 않아 두 노드가 그 파일에서 부딪히지 않는다.
 - **style_sheet(R2, 같은 줄)**: 구문 여섯 키는 `neutral_optional_fields`의 연속한 여섯 행이다. 생성기 함수와 파서에는 손대지 않는다. G4가 정해져 키 표를 데이터 하나로 빼면 이 여섯 행이 그대로 옮겨 간다. 맞출 곳은 셋이다. 구조체 선언 순서(`neutral_color_palette`은 `backdrop_background` 뒤, `ui_color_palette`은 `document_search_foreground` 뒤), 표의 행 순서, `tests/style_tests.cmake`의 빠진 키 시험이다. `compose_palette`와 `high_contrast_palette_for`의 여섯 줄은 손으로 쓰는 곳이라 표에 없다. `// 구문 색` 주석으로 묶어 찾기 쉽게 둔다. 런타임 로더가 생기면 같은 행의 fallback을 읽어야 한다.
 - **uax14(R1, 같은 줄)**: `text_area_element.cpp`를 같이 만진다. 이 노드는 `span_foreground`·`metric_styles`·`draw_content`의 글꼴 쪽이고, uax14는 `wrap_paragraph`와 wrap cache 쪽이라 함수가 겹치지 않는다.
-- **info_bar·chart(다른 줄)**: 두 팔레트 구조체의 끝에 역할을 더하면 같은 자리다. 구문 칸을 한 덩어리로 두어 합칠 때 충돌이 한 곳이다.
+- **info_bar(다른 줄)**: 두 팔레트 구조체의 끝에 역할을 더하면 같은 자리다. 구문 칸을 한 덩어리로 두어 합칠 때 충돌이 한 곳이다. chart는 core 팔레트에 역할을 더하지 않아 이 자리의 몫이 아니다([차트](chart-design.md) 결정 E2).
 
 ## 확인
 

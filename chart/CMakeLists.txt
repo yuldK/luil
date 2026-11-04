@@ -8,6 +8,10 @@ set(luil_chart_files)
 
 luil_add_source_filter(luil_chart_files "chart"
     "${luil_chart_public_headers}/chart.h"
+    src/chart_element.cpp
+    "${luil_chart_public_headers}/chart/chart_element.h"
+    src/chart_layout.cpp
+    src/chart_layout.h
     src/chart_scale.cpp
     "${luil_chart_public_headers}/chart/chart_scale.h"
     src/chart_text.cpp

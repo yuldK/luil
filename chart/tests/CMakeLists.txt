@@ -7,6 +7,7 @@ include(Catch)
 add_executable(luil_chart_tests
     "${LUIL_TEST_DIRECTORY}/core_platform_stub.cpp"
     "${LUIL_TEST_DIRECTORY}/raster_probe.cpp"
+    chart_element_tests.cpp
     chart_scale_tests.cpp
     chart_text_tests.cpp)
 target_include_directories(luil_chart_tests

@@ -14,10 +14,12 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 int main()
 {
@@ -75,6 +77,13 @@ int main()
     const luil::chart_ticks ticks { luil::nice_ticks({ 0.0, 97.0 }, 5u) };
     if (ticks.count != 6u || luil::format_chart_number(ticks.step, ticks.decimals) != u8"20")
         return 13;
+    // 차트 요소도 설치본의 헤더와 라이브러리만으로 지어진다. 배치 전에도 접근 정보가 선다.
+    luil::chart_config chart {};
+    chart.owner = u8"consumer";
+    chart.series.push_back({ .name = u8"series", .values = std::make_shared<const std::vector<double>>(std::vector<double> { 1.0, 2.0 }) });
+    const luil::chart_element element { std::move(chart) };
+    if (element.accessibility().role != luil::access_role::image)
+        return 14;
 #endif
 
     luil::net::http_client_config config {};
