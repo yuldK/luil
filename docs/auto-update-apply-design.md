@@ -4,12 +4,12 @@
 
 ## 문제
 
-- 도는 exe를 덮지 못한다. `replace_file_atomically`의 `MoveFileExW(REPLACE_EXISTING)`([platform_services_win32.cpp](../src/win32/platform_services_win32.cpp) 168줄)는 실행 중인 이미지 위로는 실패한다고 알려져 있다. 바꾸는 쪽은 옛 프로세스 밖에 있어야 한다.
-- 부모를 기다리는 길이 없다. `launch_program`은 손잡이를 물려주지 않고(416줄의 `FALSE`) 띄운 자식만 기다린다(426~432줄). PID만 넘기면 부모가 먼저 끝나 PID가 다시 쓰일 때 남의 프로세스를 기다린다.
+- 도는 exe를 덮지 못한다. `replace_file_atomically`의 `MoveFileExW(REPLACE_EXISTING)`([platform_services_win32.cpp](../src/win32/platform_services_win32.cpp))는 실행 중인 이미지 위로는 실패한다고 알려져 있다. 바꾸는 쪽은 옛 프로세스 밖에 있어야 한다.
+- 부모를 기다리는 길이 없다. `launch_program`은 손잡이를 물려주지 않고(`CreateProcessW`의 다섯째 인자 `FALSE`) 띄운 자식만 기다린다(`options.wait` 갈래). PID만 넘기면 부모가 먼저 끝나 PID가 다시 쓰일 때 남의 프로세스를 기다린다.
 - 경로를 지켜야 한다. 알림 활성화기의 명령 줄이 이 exe를 가리키고([notification_win32.cpp](../src/win32/notification_win32.cpp) 615~619줄), 점프 목록은 창을 세울 때 지금 exe 경로로 짓는다([win32_window.cpp](../src/win32/win32_window.cpp) 736줄, [점프 목록](jump-list-design.md) 108줄). 경로가 바뀌면 다음 실행이 고쳐 쓸 때까지 옛 경로를 가리킨다([OS 알림](os-notification-design.md) 112줄).
-- 단일 인스턴스와의 차례가 없다. 뮤텍스 손잡이는 객체가 사는 동안 쥔다(platform_services_win32.cpp 204줄). 앱은 `wWinMain` 첫머리에 `single_instance`를 만들고 둘째면 인자를 넘기고 끝난다([demo_main.cpp](../examples/demo_main.cpp)의 `wWinMain`, `single_instance` 바로 뒤의 `send_to_first_instance` 갈래). 옛 프로세스가 살아 있는 동안 새 exe가 평소 길을 타면 둘째가 되어 인자를 옛 앱에 넘기고 끝난다.
+- 단일 인스턴스와의 차례가 없다. 뮤텍스 손잡이는 객체가 사는 동안 쥔다(platform_services_win32.cpp의 `single_instance` 생성자). 앱은 `wWinMain` 첫머리에 `single_instance`를 만들고 둘째면 인자를 넘기고 끝난다([demo_main.cpp](../examples/demo_main.cpp)의 `wWinMain`, `single_instance` 바로 뒤의 `send_to_first_instance` 갈래). 옛 프로세스가 살아 있는 동안 새 exe가 평소 길을 타면 둘째가 되어 인자를 옛 앱에 넘기고 끝난다.
 - 권한. Program Files처럼 사용자가 쓸 수 없는 폴더의 exe는 바꿀 수 없고 `launch_program`에는 권한 올리기 동사가 없다.
-- Android는 프로세스를 띄우지 못한다([platform_services_android.cpp](../src/android/platform_services_android.cpp) 240~246줄). APK를 직접 설치하면 설치 확인의 답을 살아 있는 앱이 받아야 하는데 새 intent는 `onNewIntent`(Java)가 든다(OS 알림 166줄).
+- Android는 프로세스를 띄우지 못한다([platform_services_android.cpp](../src/android/platform_services_android.cpp)의 `launch_program`). APK를 직접 설치하면 설치 확인의 답을 살아 있는 앱이 받아야 하는데 새 intent는 `onNewIntent`(Java)가 든다(OS 알림 166줄).
 
 ## 공개 형식
 
