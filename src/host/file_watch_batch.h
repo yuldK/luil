@@ -104,6 +104,10 @@ namespace luil {
         void unindex(std::size_t index);
         void check_limit();
         void clear() noexcept;
+        // 이 항목이 앱에 나가는가다. 거름이 없으면 모두 나간다. 이름 바꿈은 옛 이름이 맞아도 나간다 ("지금은 없다").
+        [[nodiscard]] bool passes_filter(const file_change& entry) const;
+        // 거름에 맞는 항목이 없어졌으면 거절한 묶음이 사라진 것이다. 표식만 푼다.
+        void forget_vanished_rejection();
 
         struct pending_move
         {
@@ -123,7 +127,9 @@ namespace luil {
         file_watch_end end_ { file_watch_end::none };
         std::u8string error_ {};
         bool closed_ { false };
-        // 거절해 쥔 묶음이 있다. 쥔 것이 모두 사라지면 `clear`가 풀어, 다음 묶음이 새것임을 안다.
+        // 거절해 쥔 묶음이 있다. 쥔 것이 사라지면 풀어, 다음 묶음이 새것임을 안다.
+        //  - 거름이 있으면 거름에 맞는 항목을 본다 (`forget_vanished_rejection`). 옆 이름이 남아도 풀린다.
+        //  - 거름이 없으면 모은 것 전체를 본다. 항목마다 세지 않으므로 모두 사라져야 `clear`가 푼다.
         bool retried_ { false };
         std::optional<clock::time_point> first_ {};
         std::optional<clock::time_point> last_ {};

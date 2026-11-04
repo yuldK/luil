@@ -498,6 +498,164 @@ TEST_CASE("File watch batches say when they offer a rejected batch again", "[fil
     REQUIRE(next->retried == false);
 }
 
+TEST_CASE("File watch batches with a name filter judge a rejected batch by that name", "[file_watch]")
+{
+    auto batch { make_batch() };
+    batch.set_name_filter([](const std::u8string_view name) { return name == u8"a"; });
+    const auto reject = [](luil::file_change_batch) {
+        return false;
+    };
+    const auto next_batch = [&batch]() {
+        std::optional<luil::file_change_batch> received { take(batch, start + 1s) };
+        REQUIRE(received.has_value());
+        return *std::move(received);
+    };
+
+    SECTION("The name came and went while another name was held with it")
+    {
+        // 쥔 것이 사라졌다. 앱에 나간 적 없는 옆 이름이 남아 묶음이 비지 않아도 다시 생긴 그 이름은 새것이다.
+        batch.created(u8"a", start);
+        batch.created(u8"other", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.removed(u8"a", start + 120ms);
+        // 항목과 시각은 그대로다. 표식만 풀린다.
+        REQUIRE(batch.size() == 1u);
+        REQUIRE(batch.due_at() == start + 220ms);
+        batch.created(u8"a", start + 150ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.changes == std::vector { created(u8"a") });
+        REQUIRE(received.retried == false);
+    }
+    SECTION("The name came and went while another name arrived after the rejection")
+    {
+        batch.created(u8"a", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.modified(u8"other", start + 120ms);
+        batch.removed(u8"a", start + 150ms);
+        batch.created(u8"a", start + 180ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.changes == std::vector { created(u8"a") });
+        REQUIRE(received.retried == false);
+    }
+    SECTION("A created name moved away and a new one took its place")
+    {
+        // 생긴 파일이 다른 이름으로 갔다. 그 이름의 순 변화는 없다.
+        batch.created(u8"a", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.renamed(u8"a", u8"a.bak", start + 120ms);
+        batch.created(u8"a", start + 150ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.changes == std::vector { created(u8"a") });
+        REQUIRE(received.retried == false);
+    }
+    SECTION("The same move reported in two halves")
+    {
+        batch.created(u8"a", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.moved_from(u8"a", 1, start + 120ms);
+        batch.moved_to(u8"a.bak", 1, start + 120ms);
+        batch.created(u8"a", start + 150ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.changes == std::vector { created(u8"a") });
+        REQUIRE(received.retried == false);
+    }
+    SECTION("A lonely old half resolved by the next event")
+    {
+        batch.created(u8"a", start);
+        batch.created(u8"other", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.moved_from(u8"a", 1, start + 120ms);
+        batch.created(u8"a", start + 150ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.changes == std::vector { created(u8"a") });
+        REQUIRE(received.retried == false);
+    }
+    SECTION("A changed name that moved away stays as the old name")
+    {
+        // 있던 파일이 떠난 것은 순 변화다. 옛 이름으로 남아 쥔 것이 이어진다.
+        batch.modified(u8"a", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.renamed(u8"a", u8"a.bak", start + 120ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.changes == std::vector { renamed(u8"a", u8"a.bak") });
+        REQUIRE(received.retried);
+    }
+    SECTION("A changed name that was removed and written again is still held")
+    {
+        batch.modified(u8"a", start);
+        batch.modified(u8"other", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.removed(u8"a", start + 120ms);
+        batch.created(u8"a", start + 150ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.changes == std::vector { modified(u8"a") });
+        REQUIRE(received.retried);
+    }
+    SECTION("A rescan keeps it because it holds no entries to judge")
+    {
+        batch.created(u8"a", start);
+        batch.created(u8"other", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.overflow(start + 120ms);
+        batch.removed(u8"a", start + 150ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.rescan);
+        REQUIRE(received.retried);
+    }
+    SECTION("An end batch keeps it")
+    {
+        // 끝 묶음을 지을 때 풀리는 반쪽이 그 이름을 지워도 끝 묶음은 낸다.
+        batch.created(u8"a", start);
+        batch.created(u8"other", start);
+        luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+        batch.moved_from(u8"a", 1, start + 120ms);
+        batch.finish(luil::file_watch_end::lost, u8"gone", start + 150ms);
+        const luil::file_change_batch received { next_batch() };
+        REQUIRE(received.end == luil::file_watch_end::lost);
+        REQUIRE(received.changes.empty());
+        REQUIRE(received.retried);
+    }
+}
+
+TEST_CASE("File watch batches without a name filter judge a rejected batch as a whole", "[file_watch]")
+{
+    auto batch { make_batch() };
+    const auto reject = [](luil::file_change_batch) {
+        return false;
+    };
+    batch.created(u8"a", start);
+    luil::offer_file_change_batch(batch, ticket, reject, start + 100ms);
+
+    SECTION("Another entry is left")
+    {
+        // 모두 앱에 나갈 항목이다. 항목마다 세지 않으므로 하나가 사라져도 묶음은 이어진다.
+        batch.created(u8"b", start + 120ms);
+        batch.removed(u8"a", start + 150ms);
+        batch.created(u8"a", start + 180ms);
+        const std::optional<luil::file_change_batch> received { take(batch, start + 1s) };
+        REQUIRE(received.has_value());
+        REQUIRE(received->changes == std::vector { created(u8"b"), created(u8"a") });
+        REQUIRE(received->retried);
+    }
+    SECTION("A created name moved away")
+    {
+        batch.renamed(u8"a", u8"b", start + 120ms);
+        const std::optional<luil::file_change_batch> received { take(batch, start + 1s) };
+        REQUIRE(received.has_value());
+        REQUIRE(received->changes == std::vector { created(u8"b") });
+        REQUIRE(received->retried);
+    }
+    SECTION("Nothing is left")
+    {
+        batch.removed(u8"a", start + 120ms);
+        batch.created(u8"a", start + 150ms);
+        const std::optional<luil::file_change_batch> received { take(batch, start + 1s) };
+        REQUIRE(received.has_value());
+        REQUIRE(received->changes == std::vector { created(u8"a") });
+        REQUIRE(received->retried == false);
+    }
+}
+
 TEST_CASE("File watch batches over the limit after a rejection become a rescan", "[file_watch]")
 {
     auto batch { make_batch(2) };

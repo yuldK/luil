@@ -263,7 +263,7 @@ namespace {
     {
     public:
         locked_save(const std::filesystem::path& path, const std::u8string_view text)
-            : file_ { CreateFileW(path.c_str(), GENERIC_WRITE | DELETE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) }
+            : file_ { open_locked(path) }
         {
             REQUIRE(file_ != INVALID_HANDLE_VALUE);
             write(text);
@@ -299,6 +299,21 @@ namespace {
         }
 
     private:
+        // 막 지운 자리는 다른 프로그램(백신·색인)이 쥔 동안 지움 대기라 잠깐 열리지 않는다. 그 틈 때문에 test가 떨어지지 않게 조금 기다린다.
+        [[nodiscard]] static HANDLE open_locked(const std::filesystem::path& path)
+        {
+            HANDLE file { INVALID_HANDLE_VALUE };
+            for (int attempt { 0 }; attempt < 200; ++attempt)
+            {
+                file = CreateFileW(path.c_str(), GENERIC_WRITE | DELETE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (file != INVALID_HANDLE_VALUE
+                    || (GetLastError() != ERROR_ACCESS_DENIED && GetLastError() != ERROR_SHARING_VIOLATION))
+                    break;
+                std::this_thread::sleep_for(1ms);
+            }
+            return file;
+        }
+
         HANDLE file_ { INVALID_HANDLE_VALUE };
     };
 
@@ -376,6 +391,7 @@ TEST_CASE("A lock after a held batch vanished gets the whole retry time", "[hot_
     SECTION("Another file in the folder was saved and the limit passed")
     {
         // 거른 항목만 든 묶음은 앞의 실패를 풀지 못한다. 다음 저장의 알림은 한 묶음으로 합쳐지고, 그 묶음을 건네면 닫을 때 다시 읽을 길이 없다.
+        //  - 옆 파일이 지운 뒤에 온다. 지우기 전에 와서 묶음에 남는 길은 아래의 test가 본다.
         save_file(folder.file(u8"other.xml"), markup_one);
         std::this_thread::sleep_for(2200ms);
     }
@@ -388,6 +404,32 @@ TEST_CASE("A lock after a held batch vanished gets the whole retry time", "[hot_
     {
         const locked_save again { path, markup_two };
         std::this_thread::sleep_for(500ms);
+    }
+    REQUIRE(sink.wait_status(hot_reload_status::loaded, 4s));
+    REQUIRE(sink.updates().back().text == markup_two);
+    REQUIRE(count_status(sink.updates(), hot_reload_status::unreadable) == 0u);
+}
+
+TEST_CASE("A lock right after a held file vanished gets the whole retry time while another file stays in the batch", "[hot_reload][platform]")
+{
+    const scratch_folder folder {};
+    const std::filesystem::path path { folder.file(u8"markup.xml") };
+    recorder sink {};
+    const auto reloader { make_reloader(test_config(sink)) };
+    static_cast<void>(add_markup(*reloader, path));
+
+    // 잠근 채 만들어 쥐는 동안 옆 파일을 저장한다. 닫자마자 지우면 그 파일의 항목은 사라지고 옆 파일의 항목만 묶음에 남는다.
+    //  - 두 잠금은 저마다 상한보다 짧고 합치면 상한보다 길다. 앞 잠금의 시각을 이어 세면 뒤 잠금 중에 상한이 지나 `unreadable`을 건네고, 닫을 때는 알림이 없어 저장을 잃는다.
+    //  - 옆 파일은 한 번만 쓴다. 거절한 묶음은 받을 때까지 항목을 쥐므로 한 번이면 남는다. 쉬지 않고 쓰면 다시 내는 때가 회차마다 갈려 결과가 확률이 된다.
+    //  - 곧바로 다시 잠근다. `settle`을 넘기면 묶음을 지을 때 거름이 옆 파일을 비워 표식이 풀리므로 이 길을 지나지 않는다.
+    {
+        locked_save vanished { path, markup_one };
+        std::this_thread::sleep_for(600ms);
+        save_file(folder.file(u8"other.xml"), markup_one);
+        std::this_thread::sleep_for(700ms);
+        vanished.close_and_delete();
+        const locked_save again { path, markup_two };
+        std::this_thread::sleep_for(1300ms);
     }
     REQUIRE(sink.wait_status(hot_reload_status::loaded, 4s));
     REQUIRE(sink.updates().back().text == markup_two);
