@@ -275,16 +275,21 @@ TEST_CASE("Alt tap, F10 and Alt plus an access key raise the menu bar", "[ui][me
     controller.set_tree(bar_tree(bar_config({})));
     REQUIRE(controller.snapshot().menu_keys == false);
     REQUIRE(bar_state_of(controller.process(key(key_code::alt_tap))) == menu_bar_state { u8"file", false, true });
+    REQUIRE(controller.last_key_handled());
     REQUIRE(bar_state_of(controller.process(key(key_code::f10))) == menu_bar_state { u8"file", false, true });
+    REQUIRE(controller.last_key_handled());
     // Alt+글자는 그 메뉴를 바로 연다. 대소문자를 가리지 않는다.
     REQUIRE(bar_state_of(controller.process(key(key_code::key_e, false, false, true))) == menu_bar_state { u8"edit", true, true });
+    REQUIRE(controller.last_key_handled());
     REQUIRE(bar_state_of(controller.process(key(key_code::key_x, false, false, true))) == menu_bar_state { u8"help", true, true });
     // 꺼진 항목의 접근 키와 맞지 않는 Alt+글자는 앱 단축키로 흐른다.
     luil::interaction_controller disabled { &policy };
     disabled.set_tree(bar_tree(bar_config({}, false)));
     policy.keys.clear();
     REQUIRE(bar_state_of(disabled.process(key(key_code::key_v, false, false, true))).has_value() == false);
+    REQUIRE(disabled.last_key_handled() == false);
     REQUIRE(bar_state_of(disabled.process(key(key_code::key_q, false, false, true))).has_value() == false);
+    REQUIRE(disabled.last_key_handled() == false);
     REQUIRE(policy.keys == std::vector<key_code> { key_code::key_v, key_code::key_q });
     // Shift+F10은 지금처럼 컨텍스트 메뉴다. 막대는 받지 않는다.
     REQUIRE(bar_state_of(controller.process(key(key_code::f10, false, true))).has_value() == false);

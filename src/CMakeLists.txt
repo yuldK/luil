@@ -571,6 +571,8 @@ luil_add_source_filter(luil_files "win32/surface"
     win32/dpi_scale.h
     win32/secondary_surface.cpp
     win32/secondary_surface.h
+    win32/text_scale.cpp
+    win32/text_scale.h
     "${luil_webview_host_source}"
     win32/webview_failure.cpp
     win32/webview_failure.h
@@ -766,7 +768,7 @@ if(LUIL_PLATFORM STREQUAL "windows")
             imm32
             ole32
             oleaut32
-            # OS 알림의 WinRT 활성화 팩토리다 (`RoGetActivationFactory`, os-notification-design.md).
+            # OS 알림의 활성화 팩토리와 텍스트 크기(UISettings)를 WinRT로 읽는다.
             runtimeobject
             shell32
             shcore

@@ -448,6 +448,13 @@ namespace luil::win32 {
                 SysFreeString(activity);
                 SysFreeString(display);
             }
+
+            void live_region_changed(uia_element_provider& provider) override
+            {
+                if (UiaClientsAreListening() == FALSE)
+                    return;
+                static_cast<void>(UiaRaiseAutomationEvent(&provider, UIA_LiveRegionChangedEventId));
+            }
         };
 
         [[nodiscard]] uia_event_sink& default_event_sink() noexcept
@@ -455,6 +462,22 @@ namespace luil::win32 {
             static live_uia_event_sink sink {};
             return sink;
         }
+    }
+
+    std::optional<rect_f> uia_surface_host::accessibility_client_bounds(rect_f bounds) const noexcept
+    {
+        bounds.y -= static_cast<float>(accessibility_content_offset_y());
+        if (const std::optional<rect_f> viewport { accessibility_viewport() }; viewport.has_value())
+        {
+            const float left { std::max(bounds.x, viewport->x) };
+            const float top { std::max(bounds.y, viewport->y) };
+            const float right { std::min(bounds.x + bounds.width, viewport->x + viewport->width) };
+            const float bottom { std::min(bounds.y + bounds.height, viewport->y + viewport->height) };
+            if (right < left || bottom <= top)
+                return std::nullopt;
+            bounds = { left, top, right - left, bottom - top };
+        }
+        return bounds;
     }
 
     // --- uia_root_provider ---
@@ -573,6 +596,27 @@ namespace luil::win32 {
             return number;
         }
 
+        // UIA LiveSetting 값이다.
+        [[nodiscard]] long live_setting_of(const access_live live) noexcept
+        {
+            switch (live)
+            {
+            case access_live::polite:
+                return Polite;
+            case access_live::assertive:
+                return Assertive;
+            default:
+                return Off;
+            }
+        }
+
+        // 보조 기술이 HelpText로 읽는 글이다. 입력 칸의 오류 글이 있으면 그것이 먼저다 — 사용자가 지금 들어야 하는 것이
+        // 그 글이다. 없으면 도움말(`access_info::help`, 기본은 tooltip 글)이다.
+        [[nodiscard]] std::u8string_view help_text_of(const access_info& info) noexcept
+        {
+            return info.error.empty() ? std::u8string_view { info.help } : std::u8string_view { info.error };
+        }
+
         // property 짝 하나를 이벤트 하나로 쏘고 VARIANT를 정리한다.
         void raise_property(uia_event_sink& events, uia_element_provider& provider, const PROPERTYID property, VARIANT old_value, VARIANT new_value)
         {
@@ -601,6 +645,12 @@ namespace luil::win32 {
             }
 
             uia_element_provider* const provider { make_element_provider(change.id) };
+            if (change.kind == access_change_kind::live_region)
+            {
+                events_->live_region_changed(*provider);
+                provider->Release();
+                continue;
+            }
             if (change.kind == access_change_kind::selected)
             {
                 events_->element_selected(*provider);
@@ -640,11 +690,25 @@ namespace luil::win32 {
             // 오류 글은 알림으로 읽게 한다 (number-input-design.md).
             if (before.invalid != after.invalid)
                 raise_property(*events_, *provider, UIA_IsDataValidForFormPropertyId, variant_from_bool(before.invalid == false), variant_from_bool(after.invalid == false));
-            if (before.error != after.error)
+            // 도움말은 보조 기술이 읽는 글(오류 글이 먼저다)이 바뀐 때 알린다. 비활성 단추가 까닭을 바꾸는 것도 이 길이다.
+            if (help_text_of(before) != help_text_of(after))
+                raise_property(*events_, *provider, UIA_HelpTextPropertyId, variant_from_utf8(help_text_of(before)), variant_from_utf8(help_text_of(after)));
+            if (before.error != after.error && after.error.empty() == false)
+                events_->notification(*provider, after.error);
+            // 활성이 바뀌면 알린다. 비활성 단추는 tree에 남으므로 "이제 누를 수 있다"는 이 알림으로만 들린다.
+            if (before.enabled != after.enabled)
+                raise_property(*events_, *provider, UIA_IsEnabledPropertyId, variant_from_bool(before.enabled), variant_from_bool(after.enabled));
+            if (before.live != after.live)
+                raise_property(*events_, *provider, UIA_LiveSettingPropertyId, variant_from_int(live_setting_of(before.live)), variant_from_int(live_setting_of(after.live)));
+            // 흘림 자리는 자리(백분율)가 바뀐 축만 알린다 (범위 값과 같은 까닭으로 보이는 몫은 알리지 않는다).
+            if (before.scroll.has_value() && after.scroll.has_value())
             {
-                raise_property(*events_, *provider, UIA_HelpTextPropertyId, variant_from_utf8(before.error), variant_from_utf8(after.error));
-                if (after.error.empty() == false)
-                    events_->notification(*provider, after.error);
+                if (before.scroll->vertical_percent != after.scroll->vertical_percent)
+                    raise_property(*events_, *provider, UIA_ScrollVerticalScrollPercentPropertyId, variant_from_double(static_cast<double>(before.scroll->vertical_percent)),
+                        variant_from_double(static_cast<double>(after.scroll->vertical_percent)));
+                if (before.scroll->horizontal_percent != after.scroll->horizontal_percent)
+                    raise_property(*events_, *provider, UIA_ScrollHorizontalScrollPercentPropertyId, variant_from_double(static_cast<double>(before.scroll->horizontal_percent)),
+                        variant_from_double(static_cast<double>(after.scroll->horizontal_percent)));
             }
             if (before.range.has_value() && after.range.has_value() && before.range->value != after.range->value)
                 raise_property(*events_, *provider, UIA_RangeValueValuePropertyId, variant_from_double(range_number(before.range->value)), variant_from_double(range_number(after.range->value)));
@@ -846,12 +910,15 @@ namespace luil::win32 {
                 return UIA_E_ELEMENTNOTAVAILABLE;
             const ui_tree* const tree { host_->accessibility_tree() };
             const HWND window { host_->accessibility_window() };
-            if (tree == nullptr || window == nullptr)
+            if (tree == nullptr)
                 return S_OK;
             POINT point { static_cast<LONG>(std::lround(x)), static_cast<LONG>(std::lround(y)) };
-            if (ScreenToClient(window, &point) == FALSE)
+            if (window != nullptr && ScreenToClient(window, &point) == FALSE)
                 return S_OK;
-            const ui_element* const element { access_element_at(*tree, static_cast<float>(point.x), static_cast<float>(point.y)) };
+            if (const std::optional<rect_f> viewport { host_->accessibility_viewport() };
+                viewport.has_value() && viewport->contains(static_cast<float>(point.x), static_cast<float>(point.y)) == false)
+                return S_OK;
+            const ui_element* const element { access_element_at(*tree, static_cast<float>(point.x), static_cast<float>(point.y + host_->accessibility_content_offset_y())) };
             if (element == nullptr)
                 return S_OK;
             *result = make_element_provider(element->id());
@@ -980,6 +1047,11 @@ namespace luil::win32 {
             if (planned->empty())
                 return request.command == access_command::invoke ? UIA_E_INVALIDOPERATION : S_OK;
             host->accessibility_dispatch(std::move(*planned));
+            // 눌러서 하는 명령(누름·켬끔·고르기)은 마우스 클릭과 같은 자리의 정책 훅을 부른다 (`interaction_policy::on_click`).
+            // 앱이 클릭 대상으로 상태를 잇는다면, 보조 기술로 누른 것도 같은 대상이어야 다음 동작이 어긋나지 않는다.
+            //  - 지어지지 않은 모델 항목은 tree에 없어 정책에 내줄 요소가 없다. 부르지 않는다.
+            if (probe == nullptr && (request.command == access_command::invoke || request.command == access_command::toggle || request.command == access_command::select))
+                host->accessibility_clicked(id_);
             // Invoked는 상태 변화가 아니라 발행본 대조로는 알 수 없다 — 배분된
             // 순간이 알릴 수 있는 가장 정직한 시점이다 (쓰기는 비동기다).
             if (request.command == access_command::invoke)
@@ -1018,6 +1090,8 @@ namespace luil::win32 {
             *object = static_cast<IItemContainerProvider*>(this);
         else if (riid == __uuidof(IVirtualizedItemProvider))
             *object = static_cast<IVirtualizedItemProvider*>(this);
+        else if (riid == __uuidof(IScrollProvider))
+            *object = static_cast<IScrollProvider*>(this);
         else
         {
             *object = nullptr;
@@ -1120,6 +1194,10 @@ namespace luil::win32 {
                 if (info.expanded.has_value())
                     *result = static_cast<IExpandCollapseProvider*>(this);
                 break;
+            case UIA_ScrollPatternId:
+                if (info.scroll.has_value())
+                    *result = static_cast<IScrollProvider*>(this);
+                break;
             case UIA_ValuePatternId:
                 // 텍스트 칸은 글이 비어도 값 패턴이다 — 빈 글이 곧 값이다.
                 if (info.role == access_role::edit || info.role == access_role::combo_box || info.value.empty() == false)
@@ -1179,11 +1257,16 @@ namespace luil::win32 {
                 // 커스텀 콘텐츠는 접근 tree에 들지 않으므로 원래 문자열이 설명을 맡는다.
                 // 글자 버튼처럼 이름이 이미 있는 컨트롤도 이름과 도움말을 따로 읽을 수 있다.
                 // 입력 칸의 오류 글이 있으면 그것이 먼저다 — 사용자가 지금 들어야 하는 것이 그 글이다.
-                const access_info info { element->accessibility() };
+                //  - 변화 알림과 같은 함수로 읽는다 (`access_info_of`). 둘이 다르면 알린 글과 읽히는 글이 어긋난다.
+                const access_info info { access_info_of(*element) };
                 result->vt = VT_BSTR;
-                result->bstrVal = bstr_from_utf8(info.error.empty() ? std::u8string_view { element->tooltip() } : std::u8string_view { info.error });
+                result->bstrVal = bstr_from_utf8(help_text_of(info));
                 break;
             }
+            case UIA_LiveSettingPropertyId:
+                if (const access_live live { access_info_of(*element).live }; live != access_live::off)
+                    set_int(*result, static_cast<int>(live_setting_of(live)));
+                break;
             case UIA_FullDescriptionPropertyId: {
                 const access_info info { element->accessibility() };
                 if (info.error.empty() == false)
@@ -1228,18 +1311,14 @@ namespace luil::win32 {
                 set_bool(*result, host != nullptr && host->accessibility_focus() == id_);
                 break;
             }
-            case UIA_IsOffscreenPropertyId: {
-                // 지어지지 않은 항목은 화면에 없다. 지어진 요소도 조상이 통째로 잘랐으면(고정 열 아래로 흐른 칸, 왼쪽 밖으로
-                // 흘린 머리글) 화면에 없다. `get_BoundingRectangle`과 같은 값(`visible_bounds`)으로 정한다.
-                //  - UIA는 빈 사각형에서 화면 밖을 정하지 않고 기본값(거짓)을 낸다. 그래서 여기서 답한다.
-                //  - 보이는 요소는 비워 UIA 기본값에 맡긴다. 창이 화면 밖으로 나간 경우 같은 판정은 UIA의 것이다.
-                if (probe != nullptr)
-                {
-                    set_bool(*result, true);
-                    break;
-                }
-                const std::optional<rect_f> shown { tree->visible_bounds(*element) };
-                if (shown.has_value() == false || shown->width <= 0.0f || shown->height <= 0.0f)
+            case UIA_IsOffscreenPropertyId:
+            {
+                UiaRect bounds {};
+                const HRESULT read { get_BoundingRectangle(&bounds) };
+                if (FAILED(read))
+                    return read;
+                // 내용의 잘라내기와 popup의 가시 영역을 모두 거친다. 보이는 요소의 화면 밖 판정은 UIA 기본값에 맡긴다.
+                if (bounds.width <= 0.0 || bounds.height <= 0.0)
                     set_bool(*result, true);
                 break;
             }
@@ -1389,11 +1468,13 @@ namespace luil::win32 {
             return S_OK;
         // 조상의 잘라내기를 거친 사각형이다 — 스크롤로 잘린 행이 화면 밖
         // 사각형을 내면 안 된다 (accessibility-design.md).
-        const std::optional<rect_f> bounds { tree->visible_bounds(*element) };
+        std::optional<rect_f> bounds { tree->visible_bounds(*element) };
+        const uia_surface_host* const host { root_->host() };
+        if (bounds.has_value() && host != nullptr)
+            bounds = host->accessibility_client_bounds(*bounds);
         if (bounds.has_value() == false)
             return S_OK;
         POINT origin { 0, 0 };
-        const uia_surface_host* const host { root_->host() };
         if (host != nullptr)
         {
             if (const HWND window { host->accessibility_window() }; window != nullptr)
@@ -2093,6 +2174,172 @@ namespace luil::win32 {
             // 이미 창 안이면 빈 목록이다. "이미 그 상태"는 S_OK다 (`ScrollIntoView`와 같은 규약).
             if (actions->empty() == false)
                 host->accessibility_dispatch(std::move(*actions));
+            return S_OK;
+        });
+    }
+
+    std::optional<access_scroll_state> uia_element_provider::scroll_state() const
+    {
+        const ui_element* const element { resolve() };
+        if (element == nullptr)
+            return std::nullopt;
+        return element->accessibility().scroll;
+    }
+
+    namespace {
+        // UIA의 칸·쪽 단위를 지금 자리에서 백분율 목표로 옮긴다. 흘리지 않는 축이나 단위가 없으면 그대로 둔다.
+        //  - 쪽은 창이 보이는 몫이다: 창이 내용의 v%를 보이면 한 쪽은 흘릴 수 있는 범위의 v / (100 - v)다.
+        //  - 칸은 쪽의 10분의 1이다 (막대의 화살표 한 번 — 휠 한 칸에 가깝다).
+        [[nodiscard]] std::optional<float> scrolled_percent(const float percent, const float view_size, const ScrollAmount amount) noexcept
+        {
+            if (amount == ScrollAmount_NoAmount)
+                return access_no_scroll;
+            if (percent < 0.0f)
+                return std::nullopt;
+            const float page { view_size >= 100.0f ? 100.0f : std::min(100.0f, view_size * 100.0f / std::max(1.0f, 100.0f - view_size)) };
+            float step { 0.0f };
+            switch (amount)
+            {
+            case ScrollAmount_LargeDecrement:
+                step = -page;
+                break;
+            case ScrollAmount_SmallDecrement:
+                step = -page / 10.0f;
+                break;
+            case ScrollAmount_LargeIncrement:
+                step = page;
+                break;
+            case ScrollAmount_SmallIncrement:
+                step = page / 10.0f;
+                break;
+            default:
+                return std::nullopt;
+            }
+            return std::clamp(percent + step, 0.0f, 100.0f);
+        }
+    }
+
+    HRESULT uia_element_provider::Scroll(const ScrollAmount horizontal, const ScrollAmount vertical)
+    {
+        return guarded([&]() -> HRESULT {
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return resolve() == nullptr ? UIA_E_ELEMENTNOTAVAILABLE : UIA_E_INVALIDOPERATION;
+            const std::optional<float> next_horizontal { scrolled_percent(state->horizontal_percent, state->horizontal_view_size, horizontal) };
+            const std::optional<float> next_vertical { scrolled_percent(state->vertical_percent, state->vertical_view_size, vertical) };
+            // 흘리지 않는 축으로 흘리라는 것은 할 수 없는 일이다 (UIA 규약).
+            if (next_horizontal.has_value() == false || next_vertical.has_value() == false)
+                return UIA_E_INVALIDOPERATION;
+            access_request request { access_command::set_scroll_percent };
+            request.horizontal_percent = *next_horizontal;
+            request.vertical_percent = *next_vertical;
+            return perform(request);
+        });
+    }
+
+    HRESULT uia_element_provider::SetScrollPercent(const double horizontal, const double vertical)
+    {
+        return guarded([&]() -> HRESULT {
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return resolve() == nullptr ? UIA_E_ELEMENTNOTAVAILABLE : UIA_E_INVALIDOPERATION;
+            // `UIA_ScrollPatternNoScroll`(-1)은 그 축을 그대로 두라는 뜻이다. 그 밖의 범위 밖 값은 인자 오류다 (자르지 않는다).
+            const auto target = [](const double percent, const float current, float& out) -> HRESULT {
+                if (percent == UIA_ScrollPatternNoScroll)
+                {
+                    out = access_no_scroll;
+                    return S_OK;
+                }
+                if (percent < 0.0 || percent > 100.0)
+                    return E_INVALIDARG;
+                if (current < 0.0f)
+                    return UIA_E_INVALIDOPERATION;
+                out = static_cast<float>(percent);
+                return S_OK;
+            };
+            access_request request { access_command::set_scroll_percent };
+            if (const HRESULT checked { target(horizontal, state->horizontal_percent, request.horizontal_percent) }; FAILED(checked))
+                return checked;
+            if (const HRESULT checked { target(vertical, state->vertical_percent, request.vertical_percent) }; FAILED(checked))
+                return checked;
+            return perform(request);
+        });
+    }
+
+    HRESULT uia_element_provider::get_HorizontalScrollPercent(double* const result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            *result = state->horizontal_percent < 0.0f ? UIA_ScrollPatternNoScroll : static_cast<double>(state->horizontal_percent);
+            return S_OK;
+        });
+    }
+
+    HRESULT uia_element_provider::get_VerticalScrollPercent(double* const result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            *result = state->vertical_percent < 0.0f ? UIA_ScrollPatternNoScroll : static_cast<double>(state->vertical_percent);
+            return S_OK;
+        });
+    }
+
+    HRESULT uia_element_provider::get_HorizontalViewSize(double* const result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            *result = static_cast<double>(state->horizontal_view_size);
+            return S_OK;
+        });
+    }
+
+    HRESULT uia_element_provider::get_VerticalViewSize(double* const result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            *result = static_cast<double>(state->vertical_view_size);
+            return S_OK;
+        });
+    }
+
+    HRESULT uia_element_provider::get_HorizontallyScrollable(BOOL* const result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            *result = state->horizontal_percent >= 0.0f ? TRUE : FALSE;
+            return S_OK;
+        });
+    }
+
+    HRESULT uia_element_provider::get_VerticallyScrollable(BOOL* const result)
+    {
+        return guarded([&]() -> HRESULT {
+            if (result == nullptr)
+                return E_POINTER;
+            const std::optional<access_scroll_state> state { scroll_state() };
+            if (state.has_value() == false)
+                return UIA_E_ELEMENTNOTAVAILABLE;
+            *result = state->vertical_percent >= 0.0f ? TRUE : FALSE;
             return S_OK;
         });
     }

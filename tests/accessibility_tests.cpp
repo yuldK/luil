@@ -359,7 +359,7 @@ TEST_CASE("A color picker is a group over the plane, the bars, the hex field and
     REQUIRE(snapshot.entries[3].info.range == luil::access_range { 0.0f, 100.0f, 50.0f, 1.0f, 10.0f });
     REQUIRE(snapshot.entries[4].info.role == luil::access_role::edit);
     REQUIRE(snapshot.entries[4].info.name == u8"16진 색");
-    REQUIRE(snapshot.entries[5].info == luil::access_info { .role = luil::access_role::button, .name = u8"red" });
+    REQUIRE(snapshot.entries[5].info == luil::access_info { .role = luil::access_role::button, .name = u8"red", .help = u8"red" });
     REQUIRE(snapshot.entries[6].info.name == u8"#0000FFFF");
 }
 
@@ -1686,9 +1686,9 @@ TEST_CASE("A calendar is a group over two buttons and a list of 42 days", "[ui][
     const luil::ui_element_id grid { luil::ui_element_kind::calendar_grid, u8"trip" };
     REQUIRE(snapshot.entries[0].id == calendar);
     REQUIRE(snapshot.entries[0].info == luil::access_info { .role = luil::access_role::group, .name = u8"달력" });
-    REQUIRE(snapshot.entries[1].info == luil::access_info { .role = luil::access_role::button, .name = u8"이전 달" });
+    REQUIRE(snapshot.entries[1].info == luil::access_info { .role = luil::access_role::button, .name = u8"이전 달", .help = u8"이전 달" });
     REQUIRE(snapshot.entries[1].parent == calendar);
-    REQUIRE(snapshot.entries[2].info == luil::access_info { .role = luil::access_role::button, .name = u8"다음 달" });
+    REQUIRE(snapshot.entries[2].info == luil::access_info { .role = luil::access_role::button, .name = u8"다음 달", .enabled = false, .help = u8"다음 달" });
     REQUIRE(snapshot.entries[3].id == grid);
     REQUIRE(snapshot.entries[3].parent == calendar);
     REQUIRE(snapshot.entries[3].info == luil::access_info { .role = luil::access_role::list, .name = u8"2026년 11월" });
@@ -1826,7 +1826,7 @@ TEST_CASE("A teaching tip is a dialog or a pane over its body text, its picture 
         REQUIRE(snapshot.entries[2].info == luil::access_info { .role = luil::access_role::image, .name = u8"Picture" });
         REQUIRE(snapshot.entries[2].parent == body);
         REQUIRE(snapshot.entries[3].id == luil::teaching_tip_element::close_id(u8"tip"));
-        REQUIRE(snapshot.entries[3].info == luil::access_info { .role = luil::access_role::button, .name = u8"닫기" });
+        REQUIRE(snapshot.entries[3].info == luil::access_info { .role = luil::access_role::button, .name = u8"닫기", .help = u8"닫기" });
         REQUIRE(snapshot.entries[4].info == luil::access_info { .role = luil::access_role::button, .name = u8"Try" });
         REQUIRE(snapshot.entries[5].info == luil::access_info { .role = luil::access_role::button, .name = u8"Later" });
         for (std::size_t index { 3 }; index < snapshot.entries.size(); ++index)
@@ -1858,4 +1858,141 @@ TEST_CASE("A teaching tip is named by its name, then its title, then the default
     REQUIRE(snapshot.entries[1].parent == luil::ui_element_id { luil::ui_element_kind::teaching_tip, u8"tip" });
     REQUIRE(snapshot.entries[1].info.name == u8"Dismiss");
     REQUIRE(tree.find(luil::teaching_tip_element::close_id(u8"tip"))->tooltip() == u8"Dismiss");
+}
+
+TEST_CASE("Access info carries enabled, tooltip help, and the live setting", "[ui][access]")
+{
+    luil::text_button_element button { luil::ui_element_id { kind_item, u8"send" }, { .text = u8"보내기" } };
+    button.set_enabled(false);
+    button.set_tooltip(u8"받는 사람이 없습니다");
+    const luil::access_info info { luil::access_info_of(button) };
+    REQUIRE(info.enabled == false);
+    REQUIRE(info.help == u8"받는 사람이 없습니다");
+    REQUIRE(info.live == luil::access_live::off);
+
+    // 상태 글을 바꾸는 요소는 live region으로 둔다. 경고 역할은 정하지 않아도 끊고 읽는다.
+    auto status { make_note(u8"status", u8"준비") };
+    status->set_live_region(luil::access_live::polite);
+    REQUIRE(luil::access_info_of(*status).live == luil::access_live::polite);
+    const luil::toast_element toast { luil::toast_config { .text = u8"저장하지 못했습니다" } };
+    REQUIRE(luil::access_info_of(toast).live == luil::access_live::assertive);
+}
+
+namespace {
+    // 활성·도움말·live region 글을 바꿔 가며 같은 화면을 짓는다.
+    [[nodiscard]] luil::ui_tree make_live_tree(const bool enabled, const std::u8string_view reason, const std::u8string_view status, const bool with_alert)
+    {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"send" }, luil::text_button_config { .text = u8"보내기" }) };
+        button->set_enabled(enabled);
+        button->set_tooltip(std::u8string { reason });
+        root->add(std::move(button));
+        // live region인 판 안의 줄이 바뀌면 판이 알린다.
+        auto board { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"board" }) };
+        board->set_access_name(u8"상태");
+        board->set_live_region(luil::access_live::polite);
+        board->set_action(luil::ui_trigger::left_click, noop_action());
+        board->add(make_note(u8"line", status));
+        root->add(std::move(board));
+        if (with_alert)
+        {
+            auto alert { make_note(u8"alert", u8"이름이 너무 깁니다") };
+            alert->set_live_region(luil::access_live::assertive);
+            root->add(std::move(alert));
+        }
+        return luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f);
+    }
+}
+
+TEST_CASE("Snapshot diff reports enabled, help, and live region changes", "[ui][access]")
+{
+    const luil::access_snapshot before { luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"대기", false)) };
+    REQUIRE(luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"대기", false))).empty());
+
+    // 단추가 살아나고 도움말이 바뀌면 그 단추의 property 하나다. 짝에 활성과 도움말이 실린다.
+    const std::vector<luil::access_change> enabled { luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(true, u8"", u8"대기", false))) };
+    REQUIRE(enabled.size() == 1u);
+    REQUIRE(enabled[0].kind == luil::access_change_kind::property);
+    REQUIRE(enabled[0].previous.enabled == false);
+    REQUIRE(enabled[0].current.enabled);
+    REQUIRE(enabled[0].previous.help == u8"받는 사람이 없습니다");
+    REQUIRE(enabled[0].current.help.empty());
+
+    // live region 안의 줄이 바뀌면 줄의 property 뒤에 판의 live region 하나다.
+    const std::vector<luil::access_change> status { luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"보내는 중", false))) };
+    REQUIRE(status.size() == 2u);
+    REQUIRE(status[0].kind == luil::access_change_kind::property);
+    REQUIRE(status[0].id.owner == u8"line");
+    REQUIRE(status[1].kind == luil::access_change_kind::live_region);
+    REQUIRE(status[1].id.owner == u8"board");
+
+    // 글을 가진 채 새로 선 live region은 구조 변화 뒤에 스스로 알린다.
+    const std::vector<luil::access_change> appeared { luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"대기", true))) };
+    REQUIRE(appeared.size() == 2u);
+    REQUIRE(appeared[0].kind == luil::access_change_kind::structure);
+    REQUIRE(appeared[1].kind == luil::access_change_kind::live_region);
+    REQUIRE(appeared[1].id.owner == u8"alert");
+}
+
+TEST_CASE("A scroll area with a percent factory exposes its scroll position", "[ui][access]")
+{
+    std::optional<float> requested {};
+    luil::scroll_area_config config {};
+    config.owner = u8"log";
+    config.content_height = 400.0f;
+    config.scroll_offset = 150.0f;
+    config.scroll = [](const float) { return luil::input_action {}; };
+    config.scroll_to_percent = [&requested](const float percent) {
+        requested = percent;
+        return luil::input_action {};
+    };
+    luil::scroll_area_element area { std::move(config) };
+    area.arrange({ { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f });
+
+    // 창 100 / 내용 400이라 흘릴 범위는 300이고, 150은 그 절반이다.
+    const luil::access_info info { area.accessibility() };
+    REQUIRE(info.role == luil::access_role::pane);
+    REQUIRE(info.scroll.has_value());
+    REQUIRE(info.scroll->vertical_percent == 50.0f);
+    REQUIRE(info.scroll->vertical_view_size == 25.0f);
+    REQUIRE(info.scroll->horizontal_percent < 0.0f);
+
+    // 100은 끝이다 — 픽셀로 바꾸지 않고 백분율 그대로 앱에 간다.
+    luil::access_request end { luil::access_command::set_scroll_percent };
+    end.vertical_percent = 100.0f;
+    const auto planned { luil::plan_access_request(area, end) };
+    REQUIRE(planned.has_value());
+    REQUIRE(planned->size() == 1u);
+    REQUIRE(requested == 100.0f);
+
+    // 백분율 factory가 없는 영역은 지금처럼 구조로 접힌다.
+    luil::scroll_area_config plain {};
+    plain.content_height = 400.0f;
+    plain.scroll = [](const float) { return luil::input_action {}; };
+    luil::scroll_area_element folded { std::move(plain) };
+    folded.arrange({ { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f });
+    REQUIRE(folded.accessibility().scroll.has_value() == false);
+    REQUIRE(luil::plan_access_request(folded, end).has_value() == false);
+}
+
+TEST_CASE("Removing an unnamed subtree announces its surviving live region", "[ui][access][live]")
+{
+    const luil::ui_element_id board { kind_panel, u8"board" };
+    const luil::ui_element_id list { kind_panel, u8"list" };
+    const luil::ui_element_id line { kind_item, u8"line" };
+    const luil::access_snapshot before {
+        .entries = {
+            { board, {}, { .role = luil::access_role::pane, .name = u8"상태", .live = luil::access_live::polite } },
+            { list, board, { .role = luil::access_role::list } },
+            { line, list, { .role = luil::access_role::static_text, .name = u8"기다리는 작업" } },
+        },
+    };
+    const luil::access_snapshot after { { before.entries.front() } };
+
+    const std::vector<luil::access_change> changes { luil::diff_access_snapshots(before, after) };
+    REQUIRE(changes.size() == 2u);
+    REQUIRE(changes[0].kind == luil::access_change_kind::structure);
+    REQUIRE(changes[0].id == board);
+    REQUIRE(changes[1].kind == luil::access_change_kind::live_region);
+    REQUIRE(changes[1].id == board);
 }

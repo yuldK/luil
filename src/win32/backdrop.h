@@ -100,5 +100,7 @@ namespace luil::win32 {
     //    고른 적 없는 창에는 아무것도 말하지 않는다.
     //  - 같은 accent 길을 다시 넘기면 색 막만 다시 건다. `dark`는 그 색 막의 명암이다 (바탕 밝기, `is_dark_background`).
     //  - DWM 프레임 넓히기(`MARGINS` -1)는 부른 쪽의 몫이다. 표면마다 프레임을 다시 거는 자리가 달라서다.
-    void apply_backdrop_mechanism(HWND window, backdrop_mechanism mechanism, backdrop_mechanism previous, bool system_supported, bool dark) noexcept;
+    //  - accent의 flag·색 막은 `accent`가 정한다 (`window_config::acrylic_accent`).
+    void apply_backdrop_mechanism(HWND window, backdrop_mechanism mechanism, backdrop_mechanism previous, bool system_supported, bool dark,
+        const acrylic_accent_style& accent = {}) noexcept;
 }

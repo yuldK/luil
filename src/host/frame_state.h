@@ -84,6 +84,11 @@ namespace luil {
         // popup 표면이다 (`popup_surface::prepare_frame`이 켠다). 효과가 선 popup에서만 창 바탕을 대신하는 판(메뉴 몸통)이
         // 바탕을 비운다 — 주 창·보조 창 안에 둔 메뉴는 효과와 상관없이 지금처럼 불투명하다.
         bool popup { false };
+        // 내용이 표면보다 길어 흘리는 popup의 위·아래 화살표 칸이다 (물리 픽셀 높이, 0이면 없다).
+        //  - tree를 그린 뒤 그 위에 칠한다. 칸 밑의 내용은 가려진다 — 그 자리는 칸의 것이다 (`popup_surface`).
+        //  - 위 칸은 위로 흘릴 것이 있을 때, 아래 칸은 아래로 흘릴 것이 있을 때만 선다.
+        int scroll_up_strip { 0 };
+        int scroll_down_strip { 0 };
 
         // input thread가 게시한 상호작용 상태다.
         // caption의 비클라이언트 hover는 UI thread가 게시 전에 합쳐 둔다.

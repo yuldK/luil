@@ -13,6 +13,7 @@
 #include "luil/ui/menu_bar_element.h"
 #include "luil/ui/page_transition_element.h"
 #include "luil/ui/rating_element.h"
+#include "luil/ui/scroll_area_element.h"
 #include "luil/ui/slider_element.h"
 #include "luil/ui/split_button_element.h"
 #include "luil/ui/teaching_tip_element.h"
@@ -106,6 +107,8 @@ namespace {
     public:
         std::shared_ptr<const luil::ui_tree> tree {};
         luil::ui_element_id focus {};
+        int content_offset_y { 0 };
+        std::optional<luil::rect_f> viewport {};
 
         [[nodiscard]] const luil::ui_tree* accessibility_tree() const noexcept override
         {
@@ -115,6 +118,15 @@ namespace {
         [[nodiscard]] HWND accessibility_window() const noexcept override
         {
             return nullptr;
+        }
+
+        [[nodiscard]] int accessibility_content_offset_y() const noexcept override
+        {
+            return content_offset_y;
+        }
+        [[nodiscard]] std::optional<luil::rect_f> accessibility_viewport() const noexcept override
+        {
+            return viewport;
         }
 
         [[nodiscard]] luil::ui_element_id accessibility_focus() const override
@@ -131,6 +143,11 @@ namespace {
         void accessibility_request_focus(const luil::ui_element_id& id) override
         {
             focus_requested = id;
+        }
+
+        void accessibility_clicked(const luil::ui_element_id& id) override
+        {
+            clicked.push_back(id);
         }
 
         // 텍스트 칸의 편집 파이프라인이다 — test가 값을 미리 꽂는다.
@@ -174,6 +191,8 @@ namespace {
         HWND embedded_window { nullptr };
         std::vector<luil::input_action> dispatched {};
         luil::ui_element_id focus_requested {};
+        // 정책의 클릭 훅을 부르자고 청한 요소들이다 (`accessibility_clicked`).
+        std::vector<luil::ui_element_id> clicked {};
         std::optional<luil::text_input_target> text_target {};
         std::vector<luil::text_edit_request> edits {};
         std::optional<RECT> text_span {};
@@ -450,6 +469,11 @@ namespace {
             record entry { .kind = u8"notification", .owner = provider.element_id().owner };
             entry.new_text = luil::win32::utf8_to_utf16(text).value.value_or(std::wstring {});
             records.push_back(std::move(entry));
+        }
+
+        void live_region_changed(luil::win32::uia_element_provider& provider) override
+        {
+            records.push_back({ .kind = u8"live", .owner = provider.element_id().owner });
         }
 
         void structure_changed(IRawElementProviderSimple& provider) override
@@ -1808,6 +1832,54 @@ TEST_CASE("UIA runtime ids stay stable per element and differ between elements",
 
     button->Release();
     slider->Release();
+    root->Release();
+}
+
+TEST_CASE("UIA queries use the scrolled popup viewport and exclude its arrow strips", "[win32][uia][popup]")
+{
+    fake_uia_host host {};
+    host.content_offset_y = 100;
+    host.viewport = luil::rect_f { 0.0f, 16.0f, 200.0f, 68.0f };
+    auto panel { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    panel->arrange({ { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f });
+    auto shown { std::make_unique<role_probe>(luil::ui_element_id { kind_item, u8"shown" }, luil::access_role::button) };
+    shown->arrange({ { 0.0f, 100.0f, 200.0f, 40.0f }, 1.0f });
+    panel->add(std::move(shown));
+    auto hidden { std::make_unique<role_probe>(luil::ui_element_id { kind_item, u8"hidden" }, luil::access_role::button) };
+    hidden->arrange({ { 0.0f, 0.0f, 200.0f, 40.0f }, 1.0f });
+    panel->add(std::move(hidden));
+    host.tree = std::make_shared<const luil::ui_tree>(std::move(panel));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const visible { root->make_element_provider({ kind_item, u8"shown" }) };
+    auto* const offscreen { root->make_element_provider({ kind_item, u8"hidden" }) };
+
+    UiaRect bounds {};
+    REQUIRE(visible->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.top == 16.0);
+    REQUIRE(bounds.height == 24.0);
+    REQUIRE(offscreen->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.height == 0.0);
+    VARIANT property {};
+    REQUIRE(offscreen->GetPropertyValue(UIA_IsOffscreenPropertyId, &property) == S_OK);
+    REQUIRE(property.vt == VT_BOOL);
+    REQUIRE(property.boolVal == VARIANT_TRUE);
+
+    IRawElementProviderFragment* hit { nullptr };
+    REQUIRE(root->ElementProviderFromPoint(10.0, 20.0, &hit) == S_OK);
+    REQUIRE(hit != nullptr);
+    REQUIRE(hit->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.top == 16.0);
+    REQUIRE(bounds.height == 24.0);
+    hit->Release();
+    hit = nullptr;
+    REQUIRE(root->ElementProviderFromPoint(10.0, 8.0, &hit) == S_OK);
+    REQUIRE(hit == nullptr);
+
+    host.content_offset_y = 200;
+    REQUIRE(visible->get_BoundingRectangle(&bounds) == S_OK);
+    REQUIRE(bounds.height == 0.0);
+    offscreen->Release();
+    visible->Release();
     root->Release();
 }
 
@@ -3577,5 +3649,112 @@ TEST_CASE("UIA children of a tree in a page transition are the new screen's alon
 
     last->Release();
     only->Release();
+    root->Release();
+}
+
+TEST_CASE("A disabled button announces when it becomes enabled and a live region announces its text", "[win32][uia][live]")
+{
+    const auto make_tree = [](const bool enabled, const std::u8string_view status) {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"send" }, luil::text_button_config { .text = u8"보내기" }) };
+        button->set_enabled(enabled);
+        button->set_tooltip(enabled ? u8"" : u8"받는 사람이 없습니다");
+        root->add(std::move(button));
+        auto note { std::make_unique<luil::label_element>(luil::ui_element_id { kind_item, u8"status" }, luil::label_config { .text = std::u8string { status } }) };
+        note->set_live_region(luil::access_live::polite);
+        root->add(std::move(note));
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    };
+
+    fake_uia_host host {};
+    host.tree = make_tree(false, u8"대기");
+    const luil::access_snapshot before { luil::make_access_snapshot(*host.tree) };
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    recording_event_sink sink {};
+    sink.root = static_cast<IRawElementProviderSimple*>(root);
+    root->set_event_sink_for_test(sink);
+
+    // 지금 tree에서 읽으면 비활성 까닭이 도움말이고 상태 글은 polite live region이다.
+    auto* const status { root->make_element_provider({ kind_item, u8"status" }) };
+    VARIANT live {};
+    REQUIRE(status->GetPropertyValue(UIA_LiveSettingPropertyId, &live) == S_OK);
+    REQUIRE(live.vt == VT_I4);
+    REQUIRE(live.lVal == Polite);
+    status->Release();
+
+    host.tree = make_tree(true, u8"보내는 중");
+    root->announce_changes(luil::diff_access_snapshots(before, luil::make_access_snapshot(*host.tree)));
+    // 단추의 도움말과 활성, 상태 글의 이름, 그리고 그 글을 읽으라는 live region 알림이다.
+    REQUIRE(sink.records.size() == 4u);
+    REQUIRE(sink.records[0].owner == u8"send");
+    REQUIRE(sink.records[0].property == UIA_HelpTextPropertyId);
+    REQUIRE(sink.records[0].old_text == L"받는 사람이 없습니다");
+    REQUIRE(sink.records[1].owner == u8"send");
+    REQUIRE(sink.records[1].property == UIA_IsEnabledPropertyId);
+    REQUIRE(sink.records[2].owner == u8"status");
+    REQUIRE(sink.records[2].property == UIA_NamePropertyId);
+    REQUIRE(sink.records[3].kind == u8"live");
+    REQUIRE(sink.records[3].owner == u8"status");
+
+    root->Release();
+}
+
+TEST_CASE("Invoke through UI Automation asks for the policy click hook", "[win32][uia][invoke]")
+{
+    fake_uia_host host {};
+    auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"save" }, luil::text_button_config { .text = u8"저장" }) };
+    button->set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::ui_command::window_minimize } }; });
+    button->set_tab_stop(false);
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(button), { 0.0f, 0.0f, 80.0f, 30.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const provider { root->make_element_provider({ kind_item, u8"save" }) };
+
+    // 액션은 표면이 배분하고, 정책의 클릭 훅은 같은 요소로 청한다 — 마우스로 누른 것과 같은 대상이다.
+    REQUIRE(provider->Invoke() == S_OK);
+    REQUIRE(host.dispatched.size() == 1u);
+    REQUIRE(host.clicked == std::vector<luil::ui_element_id> { luil::ui_element_id { kind_item, u8"save" } });
+
+    provider->Release();
+    root->Release();
+}
+
+TEST_CASE("A scroll area serves the Scroll pattern in percent with 100 as the end", "[win32][uia][scroll]")
+{
+    std::vector<float> requested {};
+    luil::scroll_area_config config {};
+    config.owner = u8"log";
+    config.content_height = 400.0f;
+    config.scroll_offset = 0.0f;
+    config.scroll = [](const float) { return luil::input_action {}; };
+    config.scroll_to_percent = [&requested](const float percent) {
+        requested.push_back(percent);
+        return luil::input_action { luil::ui_command::window_minimize };
+    };
+    fake_uia_host host {};
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::make_unique<luil::scroll_area_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const provider { root->make_element_provider({ luil::ui_element_kind::scroll_area, u8"log" }) };
+
+    IUnknown* pattern { nullptr };
+    REQUIRE(provider->GetPatternProvider(UIA_ScrollPatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    pattern->Release();
+
+    double percent { -2.0 };
+    REQUIRE(provider->get_VerticalScrollPercent(&percent) == S_OK);
+    REQUIRE(percent == 0.0);
+    REQUIRE(provider->get_HorizontalScrollPercent(&percent) == S_OK);
+    REQUIRE(percent == UIA_ScrollPatternNoScroll);
+    BOOL scrollable { FALSE };
+    REQUIRE(provider->get_VerticallyScrollable(&scrollable) == S_OK);
+    REQUIRE(scrollable == TRUE);
+
+    // 끝까지는 100이다. 가로는 그대로 두라는 값만 받는다.
+    REQUIRE(provider->SetScrollPercent(UIA_ScrollPatternNoScroll, 100.0) == S_OK);
+    REQUIRE(requested == std::vector<float> { 100.0f });
+    REQUIRE(provider->SetScrollPercent(50.0, UIA_ScrollPatternNoScroll) == UIA_E_INVALIDOPERATION);
+    REQUIRE(provider->SetScrollPercent(UIA_ScrollPatternNoScroll, 120.0) == E_INVALIDARG);
+
+    provider->Release();
     root->Release();
 }
