@@ -148,3 +148,15 @@ target_include_directories(luil_mobile_demo PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(luil_mobile_demo PRIVATE luil::luil luil_options)
 
 luil_set_ide_folder("Examples" luil_demo luil_hello luil_mobile_demo luil_widgets)
+
+# 선택한 여섯 노드 중 UI 조립을 직접 만져 보는 예제다. 외부 연결·재생은 명시적으로 API를 부른 앱만 시작한다.
+luil_add_source_filter(luil_selected_nodes_files "app"
+    selected_nodes/main.cpp
+    selected_nodes/scene.cpp
+    selected_nodes/scene.h)
+add_executable(luil_selected_nodes WIN32
+    ${luil_example_resource}
+    ${luil_selected_nodes_files})
+target_include_directories(luil_selected_nodes PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(luil_selected_nodes PRIVATE luil::luil luil_options)
+luil_set_ide_folder("Examples" luil_selected_nodes)

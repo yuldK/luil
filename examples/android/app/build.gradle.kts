@@ -60,6 +60,7 @@ android {
 
     // 예제마다 자기 라이브러리만 싼다 (helloDebug는 jniLibs/hello/Debug).
     sourceSets {
+        getByName("main").java.srcDir(rootDir.resolve("../../src/android/java"))
         examples.keys.forEach { example ->
             listOf("Debug", "Release").forEach { configuration ->
                 maybeCreate("$example$configuration").jniLibs.directories.add("$luilBuildDirectory/jniLibs/$example/$configuration")

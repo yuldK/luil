@@ -1070,7 +1070,7 @@ namespace luil {
         if (owner == nullptr || accepts(*owner) == false)
             return std::nullopt;
         const scroll_source& source { *owner->scroll() };
-        return pan_target { owner->id(), axis, positive_scale(source.scale), source.scroll, source.at_start, source.at_end };
+        return pan_target { owner->id(), axis, positive_scale(source.scale), source.scroll, source.at_start, source.at_end, source.settle };
     }
 
     std::optional<pan_target> route_pan(const ui_tree& tree, const float x, const float y, const scroll_axis axis, const std::span<const pan_route> routes)
@@ -1088,7 +1088,7 @@ namespace luil {
         const pan_route* const route { owner != nullptr ? route_of(*owner) : nullptr };
         if (route == nullptr)
             return std::nullopt;
-        return pan_target { route->id, axis, positive_scale(route->scale), route->scroll, route->at_start, route->at_end };
+        return pan_target { route->id, axis, positive_scale(route->scale), route->scroll, route->at_start, route->at_end, route->settle };
     }
 
     bool valid_touch_gesture_config(const touch_gesture_config& config) noexcept
@@ -2151,15 +2151,19 @@ namespace luil {
             const std::optional<pan_target> pan { tree != nullptr ? resolve_pan(*tree, contact.start_x, contact.start_y, contact.pan->axis) : std::nullopt };
             if (pan.has_value() == false || pan->id != contact.pan->id)
                 return {};
-            std::vector<input_action> actions { pan_step(*pan, contact.last_x, contact.last_y, event.x, event.y) };
             contact.motion.add(event.time, event.x, event.y);
             const drag_velocity measured { contact.motion.velocity_at(event.time) };
             const float velocity { -(pan->axis == scroll_axis::horizontal ? measured.x : measured.y) / positive_scale(pan->scale) };
+            if (pan->settle != nullptr)
+            {
+                const float delta { (pan->axis == scroll_axis::horizontal ? contact.last_x - event.x : contact.last_y - event.y) / positive_scale(pan->scale) };
+                return { pan->settle(delta, velocity) };
+            }
             if (contact.config.inertia_enabled && config_.touch.inertia_enabled && std::isfinite(velocity) && std::abs(velocity) >= inertia_minimum_velocity
                 && (velocity > 0.0f ? pan->at_end == false : pan->at_start == false))
                 inertia_
                     = inertial_pan { pan->id, contact.surface, pan->axis, contact.start_x, contact.start_y, std::clamp(velocity, -inertia_maximum_velocity, inertia_maximum_velocity), event.time };
-            return actions;
+            return pan_step(*pan, contact.last_x, contact.last_y, event.x, event.y);
         }
         case touch_phase::dragging:
             if (tree == nullptr || live_touch_target(*tree, contact.target, contact.start_x, contact.start_y) == nullptr)
@@ -3083,6 +3087,13 @@ namespace luil {
 
     std::vector<input_action> interaction_controller::end_touch_drag(const touch_contact& contact, const float x, const float y, const drag_velocity velocity, const float final_delta)
     {
+        if (contact.phase == touch_phase::panning && contact.pan.has_value())
+        {
+            const auto* tree { surface_tree(contact.surface) };
+            const auto pan { tree != nullptr ? resolve_pan(*tree, contact.start_x, contact.start_y, contact.pan->axis) : std::nullopt };
+            if (pan.has_value() && pan->id == contact.pan->id && pan->settle != nullptr)
+                return { pan->settle(0.0f, 0.0f) };
+        }
         const ui_tree* const tree { surface_tree(contact.surface) };
         if (tree == nullptr)
             return {};

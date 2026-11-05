@@ -848,7 +848,11 @@ namespace luil::win32 {
                 }
 
                 if (environment_.delegate != nullptr)
+                {
+                    native_delegate_started_ = true;
+                    environment_.delegate->on_native_window_created(*host_, window_);
                     environment_.delegate->on_started(*host_);
+                }
                 // 앱이 둘째 인스턴스의 인자를 받을 준비가 됐다. 창을 보이기 전에 표식을 건다.
                 publish_instance_mark();
                 // OS 알림의 사건을 이 창이 받는다. 앱 객체가 서기 전에 온 사건은 대기열에 있다가 곧 나간다.
@@ -1106,6 +1110,7 @@ namespace luil::win32 {
                         // 끝나는 창이 미뤄 둔 배치는 내지 않는다. 화면에 있는 그대로의 배치를 알린다.
                         deferred_placements_.clear();
                         post_window_placement();
+                        stop_native_delegate();
                         host_->shutdown();
                         host_.reset();
                     }
@@ -1127,6 +1132,7 @@ namespace luil::win32 {
                         detach_notification_window(window_);
                         deferred_placements_.clear();
                         post_window_placement();
+                        stop_native_delegate();
                         host_->shutdown();
                         host_.reset();
                     }
@@ -1317,6 +1323,7 @@ namespace luil::win32 {
                     {
                         clear_instance_mark();
                         detach_notification_window(window_);
+                        stop_native_delegate();
                         host_->shutdown();
                         host_.reset();
                     }
@@ -2354,6 +2361,15 @@ namespace luil::win32 {
                     PostMessageW(window_, snapshot_wake_message, 0, 0);
             }
 
+            void stop_native_delegate()
+            {
+                if (native_delegate_started_ && host_ != nullptr && environment_.delegate != nullptr)
+                {
+                    native_delegate_started_ = false;
+                    environment_.delegate->on_native_window_destroying(*host_);
+                }
+            }
+
             void synchronize_webviews()
             {
                 if (host_ == nullptr)
@@ -2361,6 +2377,8 @@ namespace luil::win32 {
                 last_frame_ = host_->acquire_frame();
                 if (last_frame_ == nullptr)
                     return;
+                if (native_delegate_started_ && environment_.delegate != nullptr)
+                    environment_.delegate->on_native_frame(*host_, *last_frame_);
                 // 배출구는 한 번만 꽂는다. 사건은 입력이 아니라 앱 메시지이고
                 // 받는 곳은 logic thread다 (http_client_config::deliver와 같은 자리).
                 if (webview_deliver_bound_ == false)
@@ -3396,6 +3414,7 @@ namespace luil::win32 {
             HINSTANCE instance_ { nullptr };
             window_config config_ {};
             window_environment environment_ {};
+            bool native_delegate_started_ { false };
             HWND window_ { nullptr };
             // 주 창에 건 표식의 속성 이름이다. 비어 있으면 둘째 인스턴스의 인자를 받지 않는다.
             std::wstring instance_property_ {};

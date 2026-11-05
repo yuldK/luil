@@ -22,6 +22,7 @@ namespace luil {
         float ascent { 0.0f };
         float descent { 0.0f };
         std::vector<text_layout_cluster> clusters {};
+        std::vector<text_layout_stop> ligature_stops {};
         std::vector<text_layout_run> runs {};
         std::shared_ptr<const text_layout_draw_data> drawing {};
     };

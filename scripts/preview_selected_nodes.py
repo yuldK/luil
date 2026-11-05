@@ -1,0 +1,47 @@
+"""Render a read-only model preview; this does not run the native luil UI."""
+import argparse
+import html
+import json
+from pathlib import Path
+
+
+def render_node(node, x, y, width, height):
+    children = node['children']
+    if children:
+        ratio = max(0.05, min(0.95, node['ratio']))
+        if node['axis'] == 'horizontal':
+            first = (width - 6) * ratio
+            return render_node(children[0], x, y, first, height) + render_node(children[1], x + first + 6, y, width - first - 6, height)
+        first = (height - 6) * ratio
+        return render_node(children[0], x, y, width, first) + render_node(children[1], x, y + first + 6, width, height - first - 6)
+    names = {'editor': '편집기', 'inspector': '속성', 'console': '콘솔', 'notes': '메모'}
+    tabs = ''.join(f'<span class="tab {"active" if panel == node["selected"] else ""}">{html.escape(names.get(panel, panel))}</span>' for panel in node['panels'])
+    body = {'editor': '<div class="code"><em>01</em> office affine ffi<br><em>02</em> <b>caret</b> · GDEF coordinates<br><em>03</em> immutable element tree</div>', 'inspector': '<dl><dt>배치</dt><dd>가로 분할</dd><dt>그룹</dt><dd>탭 묶음</dd><dt>상태 소유</dt><dd>앱 메시지</dd></dl>', 'console': '<div class="console"><i>●</i> 도킹 모델 구성<br><i>●</i> 빈 그룹 정리<br><span>drag tab → split / merge / float</span></div>', 'notes': '<p>떠 있는 패널</p><small>탭을 그룹에 놓아 다시 붙이기</small>'}.get(node['selected'], '')
+    return f'<div class="pane" style="left:{x}px;top:{y}px;width:{width}px;height:{height}px"><div class="tabs">{tabs}</div><div class="pane-body">{body}</div></div>'
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data', required=True)
+    parser.add_argument('--font-info', required=True)
+    parser.add_argument('--output', required=True)
+    args = parser.parse_args()
+    data = json.loads(Path(args.data).read_text())
+    font = json.loads(Path(args.font_info).read_text())
+    dock = render_node(data['root'], 0, 0, 902, 330)
+    for item in data['floating']:
+        x, y, width, height = item['bounds']
+        dock += '<div class="floating">' + render_node(item['node'], x, y, width, height) + '</div>'
+    caret = data['carets'][0]
+    precise = caret / font['advance'] * 264
+    body = '''<!doctype html><html lang="ko"><meta charset="utf-8"><title>luil Linux 모델 미리보기</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef1f6;color:#1d2939;font:15px "Noto Sans CJK KR","Noto Sans",sans-serif}.page{width:1360px;margin:0 auto;padding:40px 44px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.eyebrow{color:#526478;font-size:12px;font-weight:700;letter-spacing:.15em}h1{font-size:32px;letter-spacing:-1.2px;margin:5px 0 7px}header p{margin:0;color:#66758a;font-size:13px}.badge{border:1px solid #b8c8e6;border-radius:30px;color:#345d9b;background:#e8eef8;padding:9px 15px;font-size:12px;font-weight:700}.grid{display:grid;grid-template-columns:942px 306px;gap:22px}.card{background:#fff;border:1px solid #dce3ec;border-radius:14px;overflow:hidden;box-shadow:0 3px 12px #20334d04}.card-head{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf0f4}.card-head strong{font-size:15px}.tag{font:11px monospace;color:#62748b;background:#f0f3f8;border-radius:5px;padding:4px 7px}.workspace{position:relative;width:902px;height:330px;background:#dce3ec;margin:20px}.pane{position:absolute;background:#fbfcfe;border:1px solid #d5deeb;overflow:hidden;border-radius:4px}.tabs{height:34px;display:flex;background:#edf1f7;border-bottom:1px solid #d5deeb;white-space:nowrap}.tab{font-size:12px;min-width:90px;padding:9px 16px;border-right:1px solid #d5deeb;color:#526174}.tab.active{background:#fff;color:#254f91;box-shadow:inset 0 -2px #4776c5}.pane-body{padding:18px 20px;font-size:13px;color:#5e6e84}.floating .pane{z-index:4;box-shadow:0 12px 30px #12284430;background:white}.floating .tabs{background:#e1eafa}.code{font:14px/2.2 "DejaVu Sans Mono",monospace;color:#3d5777}.code em{font-style:normal;color:#a9b5c4;margin-right:18px}.code b{color:#5b65b2}dl{display:grid;grid-template-columns:80px auto;gap:14px;margin:4px 0}dt{color:#8793a3}dd{margin:0}.console{font-size:12px;line-height:2}.console i{font-style:normal;color:#649c86;margin-right:10px}.console span{display:block;font:11px monospace;color:#8996a7;margin-top:8px}.caption{padding:0 20px 18px;color:#8793a3;font-size:12px}.bottom{display:grid;grid-template-columns:340px 580px;gap:22px;margin-top:22px}.time{display:flex;align-items:center;gap:9px;padding:25px 22px 16px}.input{border:1px solid #cbd6e6;border-radius:5px;padding:8px 15px;font-size:23px;min-width:85px;display:flex;justify-content:space-between;align-items:center;font-variant-numeric:tabular-nums}.input small{font-size:10px;color:#8999b0}.info{font-size:12px;color:#718196;padding:0 22px 20px}.pages{padding:24px 20px 18px;display:flex;align-items:center;gap:14px}.arrow{border:1px solid #d1dbe9;border-radius:5px;padding:10px 12px;color:#7188aa}.slide{flex:1;background:#edf3fc;border:1px solid #ccdcf3;border-radius:8px;padding:17px 20px}.slide b{font-size:14px;color:#3e6499}.slide p{font-size:12px;margin:7px 0 0;color:#7188aa}.dots{text-align:center;color:#c4d1e2;letter-spacing:7px;margin-top:-5px;padding-bottom:18px}.dots b{color:#4876bc}.side{display:flex;flex-direction:column;gap:22px}.side .card-head{padding:16px}.metric{height:162px;position:relative;padding:23px 20px}.glyph{font-size:62px;position:absolute;top:8px;right:27px;color:#354e70;line-height:1.6}.metric b{display:block;font-size:24px;color:#3e679f;margin-top:3px}.metric small{display:block;color:#7b8aa0;font-size:11px;width:175px}.ruler{position:absolute;left:20px;right:20px;bottom:24px;height:8px;border-top:2px solid #dce5f1}.tick{position:absolute;top:-10px;height:23px;border-left:2px solid #3e70bb}.uniform{left:50%;border-left:2px dashed #bdc7d6;top:-7px;height:17px}.meta{padding:0 20px 17px;font-size:11px;color:#7e8ba0}.media{margin:18px;background:#23354d;border-radius:7px;color:#b8c9df;height:83px;display:flex;align-items:center;justify-content:center;font-size:28px}.state{padding:0 18px 17px;font-size:12px;color:#697a90;line-height:1.8}.state b{display:block;color:#3b526f}.network{padding:22px 18px}.status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#6c7e97}.status i{width:8px;height:8px;border:2px solid #9aaac0;border-radius:100%}.protocols{display:flex;gap:7px;flex-wrap:wrap;margin-top:17px}.protocols span{font-size:11px;padding:4px 7px;border-radius:4px;background:#edf2f8;color:#5d7390}footer{margin-top:22px;background:#e6ebf3;border:1px solid #d8e0eb;border-radius:9px;padding:16px 19px;color:#66768b;font-size:12px;line-height:1.85}footer b{color:#425875}small{line-height:1.7}
+</style><div class="page"><header><div><div class="eyebrow">LUIL / SELECTED NODES</div><h1>선택 노드 구현</h1><p>0e3927ec 기반 · 6개 노드 · 2026-11-05</p></div><span class="badge">Linux 모델 미리보기</span></header><div class="grid"><div><section class="card"><div class="card-head"><strong>도킹 패널</strong><span class="tag">dock</span></div><div class="workspace">DOCK</div><div class="caption">분할 · 탭 그룹 · 떠 있는 패널 — C++ dock_layout의 초기 구성</div></section><div class="bottom"><section class="card"><div class="card-head"><strong>시·분 선택기</strong><span class="tag">time_picker</span></div><div class="time"><div class="input">HOUR<small>▴<br>▾</small></div><b>:</b><div class="input">MINUTE<small>▴<br>▾</small></div></div><div class="info">24시간제 · 12시간제 / 오전·오후 지원</div></section><section class="card"><div class="card-head"><strong>넘기는 페이지</strong><span class="tag">pager</span></div><div class="pages"><span class="arrow">‹</span><div class="slide"><b>PAGE / 3 · 두 번째 장</b><p>터치 · 휠 · 화살표 키 · 속도에 따른 정착</p></div><span class="arrow">›</span></div><div class="dots">● <b>●</b> ●</div></section></div></div><aside class="side"><section class="card"><div class="card-head"><strong>합자 caret 표</strong><span class="tag">lig_caret</span></div><div class="metric"><small>실제 GDEF 좌표 · design units</small><b>CARET</b><small>Noto Kufi Arabic Bold<br>glyph 561 · advance 714</small><div class="glyph">لا</div><div class="ruler"><span class="tick uniform"></span><span class="tick" style="left:PRECISEpx"></span></div></div><div class="meta">파랑: GDEF / 점선: 기존 균등 분할</div></section><section class="card"><div class="card-head"><strong>동영상·소리</strong><span class="tag">video</span></div><div class="media">▷</div><div class="state"><b>Windows · Media Foundation</b>표면 · 재생 · 탐색 · 볼륨<br>실제 재생은 후속 과제</div></section><section class="card"><div class="card-head"><strong>WebSocket</strong><span class="tag">websocket</span></div><div class="network"><div class="status"><i></i> 연결하지 않음</div><div class="protocols"><span>ws / wss</span><span>UTF-8</span><span>binary</span><span>close</span></div></div></section></aside></div><footer><b>캡처 범위</b> · 구현된 C++ 순수 함수의 모델 출력과 GDEF 파싱 결과를 브라우저로 시각화했습니다.<br>네이티브 UI 실행 화면이 아닙니다. 실제 입력·연결·미디어 재생과 Windows/Android 통합 테스트는 실행하지 않았습니다.</footer></div></html>'''
+    body = body.replace('DOCK', dock).replace('HOUR', str(data['time']['hour'])).replace('MINUTE', f"{data['time']['minute']:02d}").replace('PAGE', str(int(data['page']) + 1)).replace('CARET', str(caret)).replace('PRECISE', f'{precise:.2f}')
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.output).write_text(body, encoding='utf-8')
+
+
+if __name__ == '__main__':
+    main()

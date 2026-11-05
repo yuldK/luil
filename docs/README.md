@@ -151,3 +151,5 @@
 - [UI 공백 보강 구현 인계 (Codex 트랙)](ui-gap-handoff.md)
 
 선택한 기능의 이식 범위와 보존한 여섯 기능은 [선택 기능 이식 기록](selected-adoption.md)에 적었다.
+
+- [선택 노드 여섯 개 구현과 미확인 항목](selected-nodes.md)

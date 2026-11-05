@@ -202,6 +202,8 @@ namespace luil {
         //  - 자리 규칙과 틈 표시는 `move`와 같다. 다른 막대에서 왔으니 그대로인 자리가 없어 어디든 받는다.
         //  - 받는 것은 탭(`ui_element_kind::tab`)뿐이다. 어느 막대에서 왔는지는 `payload.container`로 본다.
         tab_receive_message_factory receive {};
+        // 다른 막대의 탭을 받기 전에 거르는 조건이다. 비면 모든 외부 탭을 받는다.
+        std::function<bool(const drag_payload&)> receive_accepts {};
         // 끌던 탭을 받는 대상이 없는 자리에 놓았다 (창 밖 — 새 창으로 떼어 낼 자리, 또는 다른 창의 빈 곳).
         //  - Esc·캡처 상실로 취소된 끌기에는 오지 않는다. 자리와 화면 좌표는 `drag_release`에 있다.
         //  - 있으면 `reorder`·`move`가 없어도 탭을 끌 수 있다.

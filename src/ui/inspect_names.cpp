@@ -235,6 +235,24 @@ namespace luil {
             return u8"page_transition";
         case ui_element_kind::page_transition_cover:
             return u8"page_transition_cover";
+        case ui_element_kind::pager:
+            return u8"pager";
+        case ui_element_kind::time_picker:
+            return u8"time_picker";
+        case ui_element_kind::time_picker_hour:
+            return u8"time_picker_hour";
+        case ui_element_kind::time_picker_minute:
+            return u8"time_picker_minute";
+        case ui_element_kind::time_picker_period:
+            return u8"time_picker_period";
+        case ui_element_kind::dock:
+            return u8"dock";
+        case ui_element_kind::dock_group:
+            return u8"dock_group";
+        case ui_element_kind::dock_split:
+            return u8"dock_split";
+        case ui_element_kind::dock_drop:
+            return u8"dock_drop";
         case ui_element_kind::end_of_library_kinds:
         case ui_element_kind::first_application_kind:
             // 끝 표시와 앱 대역의 시작은 kind가 아니다.

@@ -375,6 +375,25 @@ namespace luil::win32 {
     class window_delegate : public app_delegate
     {
     public:
+        // 주 창의 네이티브 표면을 앱이 소유할 자리다 (media_player). HWND를 void*로 받으며 보관은 UI thread만 한다.
+        // on_started 앞에 한 번 오고, on_native_window_destroying에서 반드시 놓는다.
+        virtual void on_native_window_created(app_host& host, void* window)
+        {
+            static_cast<void>(host);
+            static_cast<void>(window);
+        }
+        // 새 frame을 UI thread가 반영한다. 게시된 tree는 읽기만 하고 native 자식 창의 자리·가시성만 맞춘다.
+        virtual void on_native_frame(app_host& host, const ui_frame& frame)
+        {
+            static_cast<void>(host);
+            static_cast<void>(frame);
+        }
+        // host의 shutdown 앞에 한 번 온다. worker callback의 배달과 native 자식 창을 여기서 끝낸다.
+        virtual void on_native_window_destroying(app_host& host)
+        {
+            static_cast<void>(host);
+        }
+
         // 창 배치를 보고한다 (이동·크기 조절 끝, 최대화 전환, 종료 직전).
         // 빈 메시지는 게시하지 않는다.
         [[nodiscard]] virtual app_message make_window_placement_message(const window_placement& placement)
