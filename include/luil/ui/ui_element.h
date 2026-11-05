@@ -623,6 +623,9 @@ namespace luil {
         //    위에 놓여 내용이 실제로 끝나는 자리보다 늦게 흐른다. 이만큼 안쪽에 서고, 그 위는 창 밖과 같아 더 빠르다.
         //  - 읽는 자리와 다듬기는 `leading_inset`과 같다. 두 여백의 합이 창보다 넓으면 어느 쪽으로도 흐르지 않는다.
         float trailing_inset { 0.0f };
+        // 손을 뗄 때 페이지 경계에 정착하는 컨테이너다. 있으면 일반 관성 대신 한 번 부른다.
+        // final_delta는 아직 적용하지 않은 마지막 이동, velocity는 초당 논리 픽셀이다 (scroll과 같은 부호).
+        std::function<input_action(float final_delta, float velocity)> settle {};
         // 절대 자리(`scroll_to`)는 여기 두지 않는다. 휠도 되살리기도 변화량으로만
         // 말하고, 절대 자리를 읽는 것은 보조 기술뿐이라 그 값은 그것을 실제로
         // 내주는 자리(`scrollbar_config::scroll_to`)에 있다 — 아무도 읽지 않는

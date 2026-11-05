@@ -1,0 +1,79 @@
+{
+    "base": "0e3927ecb2c48e145c5b553ec797103be3bcc646",
+    "carets": [
+        337
+    ],
+    "floating": [
+        {
+            "bounds": [
+                40.0,
+                48.0,
+                280.0,
+                180.0
+            ],
+            "node": {
+                "axis": "horizontal",
+                "children": [],
+                "key": "dock-5",
+                "panels": [
+                    "notes"
+                ],
+                "ratio": 0.5,
+                "selected": "notes"
+            }
+        }
+    ],
+    "page": 1.0,
+    "root": {
+        "axis": "horizontal",
+        "children": [
+            {
+                "axis": "vertical",
+                "children": [
+                    {
+                        "axis": "horizontal",
+                        "children": [],
+                        "key": "root",
+                        "panels": [
+                            "editor"
+                        ],
+                        "ratio": 0.5,
+                        "selected": "editor"
+                    },
+                    {
+                        "axis": "horizontal",
+                        "children": [],
+                        "key": "dock-3",
+                        "panels": [
+                            "console"
+                        ],
+                        "ratio": 0.5,
+                        "selected": "console"
+                    }
+                ],
+                "key": "dock-4",
+                "panels": [],
+                "ratio": 0.5,
+                "selected": ""
+            },
+            {
+                "axis": "horizontal",
+                "children": [],
+                "key": "dock-1",
+                "panels": [
+                    "inspector"
+                ],
+                "ratio": 0.5,
+                "selected": "inspector"
+            }
+        ],
+        "key": "dock-2",
+        "panels": [],
+        "ratio": 0.5,
+        "selected": ""
+    },
+    "time": {
+        "hour": 23,
+        "minute": 45
+    }
+}

@@ -38,7 +38,14 @@ namespace luil {
                     const auto position { std::lower_bound(first, last, at) - first };
                     const float fraction { count > 0 ? static_cast<float>(position) / static_cast<float>(count) : (at >= item.end ? 1.0f : 0.0f) };
                     x = item.rtl ? item.right - fraction * (item.right - item.left) : item.left + fraction * (item.right - item.left);
-                    approximate = approximate || count > 1;
+                    if (count > 1)
+                    {
+                        const auto precise { std::lower_bound(shaped.ligature_stops.begin(), shaped.ligature_stops.end(), at, [](const auto& stop, const auto offset) { return stop.offset < offset; }) };
+                        if (precise != shaped.ligature_stops.end() && precise->offset == at)
+                            x = precise->x;
+                        else if (at > item.begin && at < item.end)
+                            approximate = true;
+                    }
                 }
                 stops.push_back({ at, x });
             }
