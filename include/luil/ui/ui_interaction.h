@@ -132,6 +132,10 @@ namespace luil {
     //  policy의 몸통은 이 짝을 부르는 것이 낫다 — 위의 짝은 축을 모르므로 가로 휠을 세로 창에 보낸다.
     [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, const mouse_wheel_event& event, float scroll_delta);
     [[nodiscard]] const ui_element* zoom_owner_at(const ui_tree& tree, float x, float y);
+    // 이 자리의 세로 휠을 tree 안의 창이 받아 쓰는가다. 표면이 내용을 통째로 흘리는 popup이 자기보다 안쪽을 먼저 묻는다.
+    //  - 확대 보기는 언제나 받는다. 흘리는 창은 `rolling_up`(위로 굴림) 쪽 끝(`scroll_source::at_start`·`at_end`)에 닿지 않았을 때 받는다.
+    //  - 휠의 창 찾기는 `route_wheel`과 같다. 삼키기만 하는 방벽은 받아 쓰지 않는다.
+    [[nodiscard]] bool wheel_taken_inside(const ui_tree& tree, float x, float y, bool rolling_up);
     [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target);
 
     // 터치 끌기가 흘릴 컨테이너다 (touch-pen-input-design.md).
@@ -357,9 +361,8 @@ namespace luil {
         // 키보드 탐색 초점 등 앱 쪽 입력 상태를 잇는 데 쓴다.
         //  - 터치 탭·터치 길게 누르기·펜 클릭도 같은 자리에서 부른다.
         //    스크롤로 끝난 접촉에는 부르지 않는다.
-        //  - 보조 기술의 누름(UIA Invoke·Toggle·Select)에도 부른다 (`access_click_event`). 그때는 액션이 이미 앱으로
-        //    떠난 뒤다 — 표면이 UI thread에서 배분하고 이 훅은 input thread에서 뒤따른다. 같은 input thread의
-        //    다음 입력보다는 앞선다.
+        //  - 보조 기술의 누름(UIA Invoke·Toggle·Select)에도 부른다 (`access_click_event`). 마우스처럼 이 훅 다음에 액션이
+        //    나가고, 같은 input thread의 다음 입력보다 앞선다.
         virtual void on_click(const ui_element& element)
         {
             static_cast<void>(element);

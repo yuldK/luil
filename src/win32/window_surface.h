@@ -366,7 +366,9 @@ namespace luil::win32 {
         // input thread가 Alt 조합 하나(`key_pressed_event::report_ticket`)를 처리했다 (`app_host::wake_signals::key_report`).
         // 이 표면이 그 조합을 기다리고 있었으면 붙들어 둔 `WM_SYSCHAR`·`WM_SYSKEYUP`을 정리한다 — 받은 조합이면
         // 버리고, 아무도 받지 않았으면 기본 처리(`DefWindowProc`)에 늦게라도 넘긴다. 다른 표면의 표는 무시한다.
-        void alt_chord_reported(std::uint64_t ticket, bool handled);
+        //  - 이 표면의 표였으면 참이다. 참이면 표면 목록을 더 돌지 않는다 — 기본 처리의 모달 루프가 목록과 이 표면을
+        //    바꿔 놓았을 수 있다.
+        [[nodiscard]] bool alt_chord_reported(std::uint64_t ticket, bool handled);
 
         // 이 표면 한 장을 그린다.
         [[nodiscard]] bool render(std::u8string& error);
@@ -589,7 +591,7 @@ namespace luil::win32 {
         [[nodiscard]] ui_element_id accessibility_focus() const override;
         void accessibility_dispatch(std::vector<input_action> actions) override;
         void accessibility_request_focus(const ui_element_id& id) override;
-        void accessibility_clicked(const ui_element_id& id) override;
+        void accessibility_clicked(const ui_element_id& id, std::vector<input_action> actions) override;
         // 텍스트 칸의 Text pattern·값 쓰기다 — 대상 해석은 앱 정책,
         // 편집 배분은 `accessibility_dispatch`와 같은 미룸, 좌표·측정은 TSF가
         // 쓰는 그 함수다.

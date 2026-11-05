@@ -501,6 +501,101 @@ TEST_CASE("Releasing over a popup scroll strip cancels the press and releases ca
     host.shutdown();
 }
 
+TEST_CASE("A keyboard highlight on a stale hover item still scrolls into view", "[win32][popup]")
+{
+    fake_surface_context context {};
+    luil::win32::popup_surface surface { context, u8"tool", {} };
+    const popup_test_window window { surface };
+    REQUIRE(window.handle() != nullptr);
+    const luil::ui_element_id far_item { luil::ui_element_kind::menu_item, u8"far" };
+    auto root { std::make_unique<tool_panel>(luil::ui_element_id { luil::ui_element_kind::root, u8"tool" }) };
+    auto item { std::make_unique<tool_panel>(far_item) };
+    item->arrange({ { 0.0f, 200.0f, 200.0f, 26.0f }, 1.0f });
+    root->add_child(std::move(item));
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f });
+    luil::ui_popup source {};
+    source.tree = std::make_shared<const luil::ui_tree>(std::move(root));
+    REQUIRE(surface.adopt(source, {}));
+
+    // 포인터는 이 창 위에 없다. hovered만 낡은 채 남아 있어도 키보드 강조는 그 항목을 보여야 한다.
+    luil::interaction_snapshot interaction {};
+    interaction.menu_highlight = far_item;
+    interaction.hovered = far_item;
+    surface.follow_keyboard(interaction);
+    REQUIRE(surface.scroll_offset() == 200 + 26 + 16 - 100);
+}
+
+TEST_CASE("A press where a spent scroll strip stood does not reach the item under it", "[win32][popup]")
+{
+    capture_driver driver { false };
+    capture_policy policy {};
+    luil::app_host host { {}, driver, &policy };
+    fake_surface_context context {};
+    context.input_host = &host;
+    luil::win32::popup_surface surface { context, u8"tool", {} };
+    const popup_test_window window { surface };
+    REQUIRE(window.handle() != nullptr);
+    const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+    while (host.acquire_frame() == nullptr && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
+    REQUIRE(host.acquire_frame() != nullptr);
+    luil::ui_popup source {};
+    source.tree = driver.tree;
+    REQUIRE(surface.adopt(source, {}));
+
+    // 아래 칸을 끝까지 연타한다 (내용 300, 창 100, 칸 16). 끝에 닿으면 칸이 사라진다.
+    for (int press { 0 }; press < 13; ++press)
+        SendMessageW(window.handle(), WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(30, 90));
+    REQUIRE(surface.scroll_offset() == 200);
+    // 칸이 없는 자리의 이어진 누름은 삼킨다. 누름이 tree에 가지 않아 눌린 요소가 없다.
+    SendMessageW(window.handle(), WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(30, 90));
+    REQUIRE(GetCapture() != window.handle());
+    input_fence(host, policy);
+    REQUIRE(host.acquire_interaction().pressed == luil::ui_element_id {});
+    // 칸이 있던 자리 밖의 누름은 내용이 받는다.
+    SendMessageW(window.handle(), WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(30, 30));
+    REQUIRE(GetCapture() == window.handle());
+    SendMessageW(window.handle(), WM_LBUTTONUP, 0, MAKELPARAM(30, 30));
+    input_fence(host, policy);
+    host.shutdown();
+}
+
+TEST_CASE("A wheel over a popup's inner scroller goes to the scroller until it reaches its end", "[win32][popup]")
+{
+    fake_surface_context context {};
+    luil::win32::popup_surface surface { context, u8"tool", {} };
+    const popup_test_window window { surface };
+    REQUIRE(window.handle() != nullptr);
+
+    bool at_end { false };
+    const auto adopt = [&] {
+        auto root { std::make_unique<tool_panel>(luil::ui_element_id { luil::ui_element_kind::root, u8"tool" }) };
+        auto inner { std::make_unique<tool_panel>(luil::ui_element_id { luil::ui_element_kind::menu_item, u8"inner" }) };
+        inner->arrange({ { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f });
+        luil::scroll_source scroll {};
+        scroll.scroll = [](float) { return luil::input_action {}; };
+        scroll.at_end = at_end;
+        inner->set_scroll_source(std::move(scroll));
+        root->add_child(std::move(inner));
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f });
+        luil::ui_popup source {};
+        source.tree = std::make_shared<const luil::ui_tree>(std::move(root));
+        return surface.adopt(source, {});
+    };
+    static_cast<void>(adopt());
+
+    POINT screen { 30, 30 };
+    ClientToScreen(window.handle(), &screen);
+    const LPARAM point { MAKELPARAM(screen.x, screen.y) };
+    SendMessageW(window.handle(), WM_MOUSEWHEEL, MAKEWPARAM(0, static_cast<WORD>(-WHEEL_DELTA)), point);
+    REQUIRE(surface.scroll_offset() == 0);
+
+    at_end = true;
+    static_cast<void>(adopt());
+    SendMessageW(window.handle(), WM_MOUSEWHEEL, MAKEWPARAM(0, static_cast<WORD>(-WHEEL_DELTA)), point);
+    REQUIRE(surface.scroll_offset() == 78);
+}
+
 TEST_CASE("Popup scrolling notifies its owner when wheel movement or clamping moves anchors", "[win32][popup]")
 {
     fake_surface_context context {};

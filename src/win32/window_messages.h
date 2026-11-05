@@ -9,7 +9,7 @@ namespace luil::win32 {
     // 창이 앱 안에서 주고받는 `WM_APP` 번호표다 (docs/taskbar-design.md).
     // 번호가 한 창에서 겹치면 안 되므로 받는 창이 같은 번호끼리 한 곳에 모은다.
     //  - 새 번호는 +10부터 표 끝에만 더하고, 받는 창을 아래 주석에 적는다.
-    //  - `SetTimer` 번호는 여기 없다 (win32_window.cpp의 1·2·4, window_surface.cpp의 3).
+    //  - `SetTimer` 번호는 여기 없다 (win32_window.cpp의 1·2·4, window_surface.cpp의 3, popup_surface.cpp의 5).
 
     // 주 창. wake 신호다. frame slot과 interaction slot의 signal callback이 게시한다.
     inline constexpr UINT snapshot_wake_message { WM_APP + 1 };

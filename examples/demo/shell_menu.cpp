@@ -264,7 +264,7 @@ namespace demo {
                     popups.push_back(luil::make_menu_popup(std::move(child), std::move(child_popup)));
                     return popups;
                 }
-                submenu_y += luil::menu_item_height;
+                submenu_y += luil::menu_row_height();
             }
         }
         popups.push_back(std::move(top));

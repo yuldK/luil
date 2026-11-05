@@ -1046,12 +1046,13 @@ namespace luil::win32 {
             // S_OK를 돌려주고 아무 일도 하지 않는 것은 클라이언트를 속이는 것이다.
             if (planned->empty())
                 return request.command == access_command::invoke ? UIA_E_INVALIDOPERATION : S_OK;
-            host->accessibility_dispatch(std::move(*planned));
-            // 눌러서 하는 명령(누름·켬끔·고르기)은 마우스 클릭과 같은 자리의 정책 훅을 부른다 (`interaction_policy::on_click`).
+            // 눌러서 하는 명령(누름·켬끔·고르기)은 마우스 클릭과 같은 순서로 정책 훅 뒤에 실행한다 (`interaction_policy::on_click`).
             // 앱이 클릭 대상으로 상태를 잇는다면, 보조 기술로 누른 것도 같은 대상이어야 다음 동작이 어긋나지 않는다.
-            //  - 지어지지 않은 모델 항목은 tree에 없어 정책에 내줄 요소가 없다. 부르지 않는다.
+            //  - 지어지지 않은 모델 항목은 tree에 없어 정책에 내줄 요소가 없다. 그냥 배분한다.
             if (probe == nullptr && (request.command == access_command::invoke || request.command == access_command::toggle || request.command == access_command::select))
-                host->accessibility_clicked(id_);
+                host->accessibility_clicked(id_, std::move(*planned));
+            else
+                host->accessibility_dispatch(std::move(*planned));
             // Invoked는 상태 변화가 아니라 발행본 대조로는 알 수 없다 — 배분된
             // 순간이 알릴 수 있는 가장 정직한 시점이다 (쓰기는 비동기다).
             if (request.command == access_command::invoke)
@@ -1176,7 +1177,8 @@ namespace luil::win32 {
                 //    들이라는 명령은 없는 일이다 ("상태와 기능은 서로 일치해야
                 //    한다"). 그 판정을 술어 하나가 쥔다 (`access_scroll_item`).
                 //  - 지어지지 않은 모델 항목은 모델이 흘릴 길을 답한다 (`access_realize`).
-                if (tree != nullptr && (probe != nullptr ? item_container(*tree, nullptr) != nullptr : access_scroll_item(*tree, id_)))
+                //  - 표면이 내용을 흘리면(작업 영역보다 긴 popup) 흘리는 창 밖의 요소도 들일 자리가 있다.
+                if (tree != nullptr && (probe != nullptr ? item_container(*tree, nullptr) != nullptr : access_scroll_item(*tree, id_) || root_->host()->accessibility_content_scrollable()))
                     *result = static_cast<IScrollItemProvider*>(this);
                 break;
             case UIA_ItemContainerPatternId:
@@ -1543,13 +1545,18 @@ namespace luil::win32 {
             if (access_reachable(*tree, id_) == false)
                 return UIA_E_ELEMENTNOTENABLED;
             // 내걸 때와 같은 술어를 쓴다 — 패턴이 서지 않는 자리는 실행도 없다.
-            if (access_scroll_item(*tree, id_) == false)
+            const bool within_window { access_scroll_item(*tree, id_) };
+            if (within_window == false && host->accessibility_content_scrollable() == false)
                 return UIA_E_INVALIDOPERATION;
             // 초점 되살리기와 **같은 길**이다. 얼마나 흘릴지는 그 창이 답하고,
             // 이미 보이면 빈 목록이다 — 그때 S_OK로 답하는 것은 다른 절대 명령이
             // "이미 그 상태"에 답하는 것과 같은 규약이다
             // (accessibility-action-design.md).
-            std::vector<input_action> actions { route_reveal(*tree, id_) };
+            std::vector<input_action> actions { within_window ? route_reveal(*tree, id_) : std::vector<input_action> {} };
+            // 안쪽 창이 아직 흐르기 전이면 요소의 자리는 낡았다. 표면은 그 창이 보이게만 흘리고, 나머지는 창의 몫이다.
+            const ui_element* const shown { actions.empty() ? element : tree->scroll_container_of(id_) };
+            if (shown != nullptr)
+                host->accessibility_reveal(shown->id());
             if (actions.empty() == false)
                 host->accessibility_dispatch(std::move(actions));
             return S_OK;

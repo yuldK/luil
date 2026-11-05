@@ -106,6 +106,8 @@ namespace luil {
         std::vector<ui_command> ui_commands {};
         // 큐에 넣고 UI thread를 깨우는 길이다. input thread와 `post_ui_command`가 함께 쓴다.
         std::function<void(ui_command)> forward_ui_command {};
+        // 앱이 `post_ui_command`로 낸 `window_close`가 기다린다 (`take_app_close_request`).
+        std::atomic<bool> app_close_requested { false };
 
         // 앱 UI 명령 큐다.
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
@@ -395,6 +397,9 @@ namespace luil {
     {
         if (assembly_->forward_ui_command == nullptr)
             return;
+        // 명령보다 먼저 세운다. UI thread가 그 명령을 처리할 때 이미 보여야 한다.
+        if (command == ui_command::window_close)
+            assembly_->app_close_requested.store(true);
         try
         {
             assembly_->forward_ui_command(command);
@@ -402,6 +407,11 @@ namespace luil {
         catch (...)
         {
         }
+    }
+
+    bool app_host::take_app_close_request() noexcept
+    {
+        return assembly_->app_close_requested.exchange(false);
     }
 
     permission_state app_host::permission(const app_permission permission) const noexcept

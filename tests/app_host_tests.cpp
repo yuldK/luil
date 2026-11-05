@@ -783,6 +783,22 @@ TEST_CASE("Window commands reach the UI thread from any thread", "[win32][host][
     REQUIRE(host.take_ui_commands().empty());
 }
 
+TEST_CASE("An app window close is remembered past the close hook's latch", "[win32][host]")
+{
+    counting_driver driver {};
+    luil::win32::app_host::config config {};
+    config.wake.ui_command = [] {};
+    luil::win32::app_host host { std::move(config), driver, nullptr };
+    REQUIRE_FALSE(host.take_app_close_request());
+    // 끝내기는 빗장과 상관없다.
+    host.post_ui_command(luil::ui_command::application_exit);
+    REQUIRE_FALSE(host.take_app_close_request());
+    // 한 번 읽으면 지워진다. 다음 사용자 닫기까지 빗장을 열어 두지 않는다.
+    host.post_ui_command(luil::ui_command::window_close);
+    REQUIRE(host.take_app_close_request());
+    REQUIRE_FALSE(host.take_app_close_request());
+}
+
 TEST_CASE("A key carrying a report ticket comes back with whether anyone took it", "[win32][host][key]")
 {
     counting_driver driver {};

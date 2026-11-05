@@ -105,7 +105,7 @@ Caption close button과 Alt+F4는 `ui_window::close`를 호출한다. UI thread�
 - 끝내려면 `ui_command::application_exit`를 낸다. 닫힘 훅을 거치지 않는 유일한 길이다. 숨은 주 창으로 돌다가 마지막 독립 창을 닫을 때 이것을 내는 것도 앱의 몫이다 — 내지 않으면 보이는 창 없이 프로세스가 남는다.
 - 세션 종료(로그오프·재시작)는 훅을 거치지 않고 끝낸다. 저장은 지금처럼 종료 메시지가 한다.
 - logic이나 input thread가 멈췄으면(`app_host::faulted`) 훅을 부르지 않고 끝낸다. 훅이 낸 메시지를 받을 logic이 없어, 훅을 단 앱의 창이 영영 닫히지 않는다.
-- logic thread도 창 명령을 낼 수 있다(`app_host::post_ui_command`, 어느 thread에서나). 비동기 작업의 결과를 기다렸다가 끝내는 앱은 작업이 끝난 뒤 `application_exit`(훅을 거치지 않는다)를 낸다. 사용자가 닫기를 다시 누른 것처럼 훅을 다시 거치려면 `window_close`를 낸다.
+- logic thread도 창 명령을 낼 수 있다(`app_host::post_ui_command`, 어느 thread에서나). 비동기 작업의 결과를 기다렸다가 끝내는 앱은 작업이 끝난 뒤 `application_exit`(훅을 거치지 않는다)를 낸다. 사용자가 닫기를 다시 누른 것처럼 훅을 다시 거치려면 `window_close`를 낸다. 이 닫기는 훅의 frame당 한 번 빗장에 걸리지 않는다 — 작업이 frame 게시보다 먼저 끝나도 사라지지 않는다.
 
 닫힘을 "주 창을 파괴하고 다른 창을 주 창으로 올린다"로 풀지 않는 이유: 주 창의 HWND가 바뀌면 그 위에 선 깨우기 신호·타이머·클립보드 감시·composition target을 모두 옮겨야 하고, 그 사이에 오는 신호가 사라진다. 숨기기는 그 어느 것도 옮기지 않는다.
 

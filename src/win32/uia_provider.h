@@ -63,11 +63,23 @@ namespace luil::win32 {
         // 초점은 tree가 아니라 **입력 상태**라 여기서 곧바로 세울 수 없다 (3.4).
         virtual void accessibility_request_focus(const ui_element_id& id) = 0;
 
-        // 보조 기술이 이 요소를 눌렀다 (Invoke·Toggle·Select가 기본 실행인 클릭을 배분했다).
-        // 마우스 클릭처럼 앱 정책의 `interaction_policy::on_click`이 불리게 input thread에 알린다 — 정책은 input
-        // thread의 것이라 여기서 부를 수 없다 (`access_click_event`).
-        //  - 기본은 아무 일도 없다 — 정책을 모르는 test 대역이 그대로 선다.
-        virtual void accessibility_clicked(const ui_element_id& id)
+        // 보조 기술이 이 요소를 눌렀다 (Invoke·Toggle·Select). `actions`가 그 실행이다.
+        // 마우스 클릭처럼 앱 정책의 `interaction_policy::on_click`을 부른 뒤 낸다 — 정책은 input thread의 것이라 액션을
+        // 싣고 그리로 보낸다 (`access_click_event`).
+        //  - 기본은 훅 없이 배분한다 — 정책을 모르는 test 대역이 그대로 선다.
+        virtual void accessibility_clicked(const ui_element_id& id, std::vector<input_action> actions)
+        {
+            static_cast<void>(id);
+            accessibility_dispatch(std::move(actions));
+        }
+
+        // 표면이 내용을 통째로 흘리는가다 (작업 영역보다 긴 popup). 흘리는 창 밖의 요소도 들일 자리가 있다.
+        [[nodiscard]] virtual bool accessibility_content_scrollable() const noexcept
+        {
+            return false;
+        }
+        // 표면이 흘리는 내용에서 이 요소를 보인다 (`ScrollIntoView`·초점 요청). 그 양은 표면의 것이라 앱에 물을 수 없다.
+        virtual void accessibility_reveal(const ui_element_id& id)
         {
             static_cast<void>(id);
         }

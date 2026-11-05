@@ -47,6 +47,9 @@ namespace luil::win32 {
         {
             return scroll_;
         }
+        // 키보드 강조·초점이 새로 옮겨 갔으면 그 항목이 칸에 가리지 않게 흘린다 (`prepare_frame`).
+        // `interaction`은 이 표면으로 거른 것이다 (`interaction_for_surface`).
+        void follow_keyboard(const interaction_snapshot& interaction);
 
         // 새 frame이 실은 값으로 갱신한다.
         // 새 frame이 popup을 계속 실었다는 것은 앱이 상태를 유지하기로 했다는 뜻이라
@@ -102,8 +105,22 @@ namespace luil::win32 {
         [[nodiscard]] int strip_at(int y) const noexcept;
         // 흘린 양을 바꾼다. 바뀌었으면 참이고, 다시 그리며 포인터 밑의 hover를 새 자리로 다시 묻는다.
         bool scroll_by(int delta);
-        // 키보드 강조·초점이 새로 옮겨 갔으면 그 항목이 칸에 가리지 않게 흘린다 (`prepare_frame`).
-        void follow_keyboard(const interaction_snapshot& interaction);
+        // 포인터 밑의 내용이 바뀌었으니 같은 자리의 이동을 다시 알린다.
+        void refresh_pointer_hover();
+        // 칸이 흘린다 (`direction` 쪽으로 `amount`). 끝에 닿으면 칸이 사라진 자리의 연타를 막아 둔다 (`spent_strip_`).
+        bool scroll_from_strip(int direction, int amount);
+        // 이 누름이 끝에 닿아 사라진 칸 자리의 연타인가다. 참이면 삼키고 막는 시간을 잇는다.
+        [[nodiscard]] bool press_lands_on_spent_strip(int y);
+        // 포인터가 지금 실제로 이 요소 위에 있는가다.
+        [[nodiscard]] bool pointer_over(const ui_element& element) const noexcept;
+        // 요소가 칸에 가리지 않는 자리까지 흘린다.
+        void scroll_to_show(const ui_element& element);
+        // 보조 기술의 들이기·초점 요청도 키보드처럼 그 항목을 보인다. 흘린 양은 이 표면의 것이라 앱은 할 수 없다.
+        [[nodiscard]] bool accessibility_content_scrollable() const noexcept override
+        {
+            return scrollable();
+        }
+        void accessibility_reveal(const ui_element_id& id) override;
         // 화살표 칸 위의 포인터를 다룬다. 다뤘으면 결과다.
         [[nodiscard]] std::optional<LRESULT> handle_scroll_message(UINT message, WPARAM word_parameter, LPARAM long_parameter);
         void stop_strip_scroll() noexcept;
@@ -126,6 +143,11 @@ namespace luil::win32 {
         int scroll_ { 0 };
         // 화살표 칸이 흘리는 쪽이다 (-1 위, 1 아래, 0 멈춤). 칸 위에 있는 동안 timer가 흘린다.
         int strip_direction_ { 0 };
+        // 끝에 닿아 사라진 칸의 쪽과 그 자리의 누름을 삼키는 기한이다 (-1 위, 1 아래, 0 없음).
+        //  - 칸을 연타하던 손의 다음 누름이 그 자리로 올라온 항목(흔히 '삭제'·'종료')을 실행하면 안 된다.
+        //  - 기한은 더블 클릭 시간이다. 터치에는 포인터를 떼어 풀 이동이 없어 시간으로 푼다.
+        int spent_strip_ { 0 };
+        ULONGLONG spent_strip_until_ { 0 };
         // 마지막으로 따라간 키보드 강조·초점이다. 바뀔 때만 따라간다 — 휠로 흘린 자리를 그리기마다 되돌리지 않는다.
         ui_element_id followed_ {};
     };

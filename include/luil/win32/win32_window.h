@@ -343,6 +343,10 @@ namespace luil::win32 {
         // accent acrylic을 거는 값이다 (`acrylic_accent_style`). 레이어드 주 창과 popup의 `acrylic`이 이 길로 선다.
         //  - 시작할 때 정하고 실행 중에는 바꾸지 않는다.
         acrylic_accent_style acrylic_accent {};
+        // 설정 > 접근성 > 텍스트 크기를 글자 크기에 싣는가다 (docs/concepts/fonts.md).
+        //  - 끄면 앱의 글자 크기가 설정과 상관없이 그대로다. 고정 높이로 지은 화면을 아직 옮기지 못한 앱의 물러설 자리다.
+        //  - 시작할 때 정하고 실행 중에는 바꾸지 않는다.
+        bool follow_text_scale { true };
         // Direct3D를 **만들 때** 실패시킨다. 그러면 스왑체인이 아예 없는 채로
         // 처음부터 CPU로 시작한다.
         bool simulate_direct3d_failure { false };

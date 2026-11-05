@@ -419,12 +419,13 @@ namespace luil {
                 }
                 else if constexpr (std::is_same_v<value_type, access_click_event>)
                 {
-                    // 클릭이 부르는 정책 훅만 부른다. 액션은 표면이 이미 배분했다 (`access_click_event`).
+                    // 마우스 클릭과 같은 순서다 — 정책 훅 다음에 액션이다 (`access_click_event`).
+                    //  - 그 사이 요소가 사라졌어도 액션은 보조 기술에 이미 성공으로 답한 실행이라 낸다.
                     const ui_tree* const tree { surface_tree(value.surface) };
                     const ui_element* const element { tree != nullptr ? tree->find(value.target) : nullptr };
                     if (policy_ != nullptr && element != nullptr && element->enabled())
                         policy_->on_click(*element);
-                    return {};
+                    return value.actions;
                 }
                 else if constexpr (std::is_same_v<value_type, pointer_cancelled_event>)
                     return process_cancel(value);
@@ -999,6 +1000,19 @@ namespace luil {
     {
         const ui_element* const owner { tree.root() != nullptr ? wheel_owner_at(*tree.root(), x, y) : nullptr };
         return owner != nullptr && owner->zoom() != nullptr ? owner : nullptr;
+    }
+
+    bool wheel_taken_inside(const ui_tree& tree, const float x, const float y, const bool rolling_up)
+    {
+        const ui_element* const owner { tree.root() != nullptr ? wheel_owner_at(*tree.root(), x, y) : nullptr };
+        if (owner == nullptr)
+            return false;
+        if (owner->zoom() != nullptr)
+            return true;
+        const scroll_source* const source { owner->scroll() };
+        if (source == nullptr || source->scroll == nullptr)
+            return false;
+        return rolling_up ? source->at_start == false : source->at_end == false;
     }
 
     std::vector<input_action> route_wheel(const ui_tree& tree, const mouse_wheel_event& event, const float scroll_delta)
