@@ -3660,6 +3660,39 @@ TEST_CASE("A queued quick tap is not promoted to a long press by the wall clock"
     REQUIRE(app_inbox.try_receive(received) != messaging::receive_status::received);
 }
 
+TEST_CASE("The input pump forwards capture actions after the accessibility click hook", "[ui][interaction][pump][capture]")
+{
+    messaging::channel<luil::raw_input_event> input_inbox { messaging::channel_options { 8, messaging::overflow_policy::drop_oldest, {} } };
+    messaging::channel<luil::app_message> app_inbox { messaging::channel_options { 8, messaging::overflow_policy::reject_newest, {} } };
+    messaging::latest_slot<std::shared_ptr<const luil::ui_tree>> tree_slot {};
+    messaging::latest_slot<luil::surface_tree_list> surface_tree_slot {};
+    messaging::latest_slot<luil::interaction_snapshot> interaction_slot {};
+    const luil::ui_element_id target { kind_button, u8"capture" };
+    auto button { std::make_unique<test_panel>(target) };
+    button->arrange({ { 0.0f, 0.0f, 100.0f, 30.0f }, 1.0f });
+    static_cast<void>(tree_slot.publish(std::make_shared<const luil::ui_tree>(std::move(button))));
+    luil::access_click_event click { target };
+    click.actions = {
+        luil::capture_request { u8"shot.webp" },
+        luil::record_request { luil::record_command::start, u8"record.webp" },
+        luil::record_request { luil::record_command::stop },
+    };
+    REQUIRE(input_inbox.post(std::move(click)) == messaging::post_result::posted);
+    input_inbox.close();
+    recording_policy policy {};
+    std::vector<luil::capture_command> forwarded {};
+    const auto capture = [&](luil::capture_command request) {
+        REQUIRE(policy.clicked == std::vector<luil::ui_element_id> { target });
+        forwarded.push_back(std::move(request));
+    };
+    luil::run_ui_input_pump(input_inbox, tree_slot, surface_tree_slot, app_inbox, interaction_slot, {}, &policy, {}, {}, {}, nullptr, {}, {}, capture);
+    REQUIRE(forwarded == std::vector<luil::capture_command> {
+        luil::capture_request { u8"shot.webp" },
+        luil::record_request { luil::record_command::start, u8"record.webp" },
+        luil::record_request { luil::record_command::stop },
+    });
+}
+
 TEST_CASE("A queued move after the long press deadline does not swallow the menu", "[ui][interaction][pump]")
 {
     messaging::channel<luil::raw_input_event> input_inbox { messaging::channel_options { 8, messaging::overflow_policy::drop_oldest, {} } };

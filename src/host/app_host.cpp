@@ -19,7 +19,7 @@ namespace luil {
             messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
             const std::function<void(ui_command)> wake_ui_command, interaction_policy* const policy, interaction_config config, const std::function<void(app_ui_command)> execute_app_ui_command,
             const std::function<void(clipboard_request)> execute_clipboard, messaging::latest_slot<touch_gesture_config>& touch_slot, const std::function<void(haptic_feedback)> haptic,
-            const std::function<void(std::uint64_t, bool)> key_report, std::atomic<bool>& faulted)
+            const std::function<void(std::uint64_t, bool)> key_report, const std::function<void(capture_command)> execute_capture, std::atomic<bool>& faulted)
         {
             // policy·wake callback의 예외는 계약 밖 입력이다.
             // 스레드 진입 함수를 벗어난 예외는 곧 terminate라, 여기서 삼키고
@@ -39,7 +39,7 @@ namespace luil {
                         if (wake_ui_command != nullptr)
                             wake_ui_command(command);
                     },
-                    policy, std::move(config), execute_app_ui_command, execute_clipboard, &touch_slot, haptic, key_report);
+                    policy, std::move(config), execute_app_ui_command, execute_clipboard, &touch_slot, haptic, key_report, execute_capture);
             }
             catch (...)
             {
@@ -103,11 +103,9 @@ namespace luil {
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
         // 신호는 유실될 수 있어도(창 메시지 게시 실패) 내용은 여기 남는다.
         std::mutex ui_command_mutex {};
-        std::vector<ui_command> ui_commands {};
+        std::vector<ui_command_request> ui_commands {};
         // 큐에 넣고 UI thread를 깨우는 길이다. input thread와 `post_ui_command`가 함께 쓴다.
         std::function<void(ui_command)> forward_ui_command {};
-        // 앱이 `post_ui_command`로 낸 `window_close`가 기다린다 (`take_app_close_request`).
-        std::atomic<bool> app_close_requested { false };
 
         // 앱 UI 명령 큐다.
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
@@ -121,6 +119,10 @@ namespace luil {
         std::vector<clipboard_request> clipboard_requests {};
         // 큐에 넣고 UI thread를 깨우는 길이다. input thread와 `post_clipboard_request`가 함께 쓴다.
         std::function<void(clipboard_request)> execute_clipboard {};
+
+        // 그림을 남기는 일도 UI thread의 것이다. 입력 훅 뒤의 액션이 이 큐로 간다.
+        std::mutex capture_mutex {};
+        std::vector<capture_command> capture_requests {};
 
         // shutdown()이 정한 종료 예산의 마감시각이다.
         // 종료 신호 게시와 logic 처리 대기가 이 하나를 나눠 본다.
@@ -172,15 +174,16 @@ namespace luil {
         std::function<void(ui_command)> forward_ui_command {};
         if (configuration.wake.ui_command != nullptr)
         {
-            forward_ui_command = [&parts, wake = configuration.wake.ui_command](const ui_command command) {
+            const auto enqueue = [&parts, wake = configuration.wake.ui_command](const ui_command command, const bool from_app) {
                 {
                     const std::lock_guard<std::mutex> lock { parts.ui_command_mutex };
-                    parts.ui_commands.push_back(command);
+                    parts.ui_commands.push_back(ui_command_request { command, from_app });
                 }
                 wake();
             };
+            forward_ui_command = [enqueue](const ui_command command) { enqueue(command, false); };
+            parts.forward_ui_command = [enqueue](const ui_command command) { enqueue(command, true); };
         }
-        parts.forward_ui_command = forward_ui_command;
 
         std::function<void(app_ui_command)> execute_app_ui_command {};
         if (configuration.wake.app_ui_command != nullptr)
@@ -207,6 +210,18 @@ namespace luil {
         }
         parts.execute_clipboard = execute_clipboard;
 
+        std::function<void(capture_command)> execute_capture {};
+        if (configuration.wake.capture != nullptr)
+        {
+            execute_capture = [&parts, wake = configuration.wake.capture](capture_command request) {
+                {
+                    const std::lock_guard<std::mutex> lock { parts.capture_mutex };
+                    parts.capture_requests.push_back(std::move(request));
+                }
+                wake();
+            };
+        }
+
         parts.initial_messages = std::move(configuration.initial_messages);
         assembly_->logic_thread = std::thread { &app_host::logic_thread_main, this };
 
@@ -227,6 +242,7 @@ namespace luil {
                 std::ref(parts.touch_slot),
                 parts.haptic,
                 configuration.wake.key_report,
+                std::move(execute_capture),
                 std::ref(parts.faulted),
             };
         }
@@ -397,9 +413,6 @@ namespace luil {
     {
         if (assembly_->forward_ui_command == nullptr)
             return;
-        // 명령보다 먼저 세운다. UI thread가 그 명령을 처리할 때 이미 보여야 한다.
-        if (command == ui_command::window_close)
-            assembly_->app_close_requested.store(true);
         try
         {
             assembly_->forward_ui_command(command);
@@ -407,11 +420,6 @@ namespace luil {
         catch (...)
         {
         }
-    }
-
-    bool app_host::take_app_close_request() noexcept
-    {
-        return assembly_->app_close_requested.exchange(false);
     }
 
     permission_state app_host::permission(const app_permission permission) const noexcept
@@ -509,6 +517,14 @@ namespace luil {
 
     std::vector<ui_command> app_host::take_ui_commands()
     {
+        std::vector<ui_command> commands {};
+        for (const ui_command_request& request : take_ui_command_requests())
+            commands.push_back(request.command);
+        return commands;
+    }
+
+    std::vector<app_host::ui_command_request> app_host::take_ui_command_requests()
+    {
         const std::lock_guard<std::mutex> lock { assembly_->ui_command_mutex };
         return std::exchange(assembly_->ui_commands, {});
     }
@@ -523,6 +539,12 @@ namespace luil {
     {
         const std::lock_guard<std::mutex> lock { assembly_->clipboard_mutex };
         return std::exchange(assembly_->clipboard_requests, {});
+    }
+
+    std::vector<capture_command> app_host::take_capture_requests()
+    {
+        const std::lock_guard<std::mutex> lock { assembly_->capture_mutex };
+        return std::exchange(assembly_->capture_requests, {});
     }
 
     interaction_snapshot app_host::acquire_interaction()

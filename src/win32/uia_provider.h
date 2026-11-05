@@ -78,10 +78,10 @@ namespace luil::win32 {
         {
             return false;
         }
-        // 표면이 흘리는 내용에서 이 요소를 보인다 (`ScrollIntoView`·초점 요청). 그 양은 표면의 것이라 앱에 물을 수 없다.
-        virtual void accessibility_reveal(const ui_element_id& id)
+        // 표면이 흘리는 내용에서 이 구간을 보인다 (`ScrollIntoView`·초점 요청). 안쪽 스크롤 뒤의 tree 좌표다.
+        virtual void accessibility_reveal(const rect_f& bounds)
         {
-            static_cast<void>(id);
+            static_cast<void>(bounds);
         }
 
         // --- 텍스트 칸의 Text pattern·값 쓰기가 딛는 자리다 ---

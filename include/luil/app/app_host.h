@@ -507,6 +507,16 @@ namespace luil {
     class app_host
     {
     public:
+        // 같은 명령이어도 앱이 작업을 마치고 낸 닫기는 사용자 입력의 중복 방지를 비켜 간다.
+        // 출처는 명령마다 함께 나른다 — 별도 표식은 다음 사용자 닫기에 남거나 여러 요청을 하나로 뭉친다.
+        struct ui_command_request
+        {
+            luil::ui_command command {};
+            bool from_app { false };
+
+            [[nodiscard]] bool operator==(const ui_command_request&) const noexcept = default;
+        };
+
         // UI thread를 깨우는 신호들이다.
         // platform 창이 자기 메시지 루프에 맞는 구현을 꽂는다
         // (Win32 창은 PostMessage — 공개 API는 그 타입을 드러내지 않는다).
@@ -530,6 +540,8 @@ namespace luil {
             // 표를 단 키(`key_pressed_event::report_ticket`)를 input thread가 처리했다 — 받았는가와 함께다.
             // 내용이 표와 참거짓 하나라 큐 없이 신호가 나른다. 유실되면 그 키의 답은 오지 않는다 (플랫폼이 견딘다).
             std::function<void(std::uint64_t ticket, bool handled)> key_report {};
+            // 화면 남기기·녹화 요청이 큐에 들어갔다.
+            std::function<void()> capture {};
         };
 
         struct config
@@ -610,10 +622,6 @@ namespace luil {
         //  - `ui_command::window_close`는 사용자가 닫기를 누른 것과 같다 — 훅이 있으면 훅을 다시 거친다.
         //  - 플랫폼이 창 명령의 길을 꽂지 않았으면(`wake_signals::ui_command`가 비었다) 아무 일도 없다.
         void post_ui_command(ui_command command) noexcept;
-        // `post_ui_command`로 온 `window_close`가 기다리는가를 읽고 지운다 (UI thread).
-        // 닫힘 훅의 frame당 한 번 빗장은 사용자의 거듭된 닫기를 삼키는 것이다. 앱이 작업을 마치고 낸 닫기는 frame이
-        // 아직 그대로여도 삼키면 다시 낼 주체가 없어 창이 남는다.
-        [[nodiscard]] bool take_app_close_request() noexcept;
         // 권한의 지금 상태다. **어느 thread에서 불러도 된다.**
         [[nodiscard]] permission_state permission(app_permission permission) const noexcept;
         // 사용자에게 권한을 묻는다. **어느 thread에서 불러도 된다.**
@@ -639,10 +647,14 @@ namespace luil {
         [[nodiscard]] interaction_snapshot acquire_interaction();
         // input thread가 큐에 넣은 창 명령을 모두 꺼낸다 (UI thread 전용).
         [[nodiscard]] std::vector<ui_command> take_ui_commands();
+        // 명령과 그 출처를 함께 꺼낸다. 닫힘 훅의 중복 방지를 구분하는 플랫폼은 이 짝을 쓴다.
+        [[nodiscard]] std::vector<ui_command_request> take_ui_command_requests();
         // input thread가 큐에 넣은 앱 UI 명령을 모두 꺼낸다 (UI thread 전용).
         [[nodiscard]] std::vector<app_ui_command> take_app_ui_commands();
         // input thread가 큐에 넣은 클립보드 요청을 모두 꺼낸다 (UI thread 전용).
         [[nodiscard]] std::vector<clipboard_request> take_clipboard_requests();
+        // input thread가 큐에 넣은 화면 남기기·녹화 요청을 모두 꺼낸다 (UI thread 전용).
+        [[nodiscard]] std::vector<capture_command> take_capture_requests();
         // app inbox의 게시·유실 통계다 (임의 스레드에서 조회 가능).
         // reject_newest 정책이라 포화 중의 게시는 조용히 버려진다
         // (의도된 한계 — docs/concepts/input-pump.md). 유실 여부는 rejected로 관찰한다.

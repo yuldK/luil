@@ -251,7 +251,8 @@ namespace luil::win32 {
         if (app_host* const host { context_.host() }; host != nullptr)
             host->post_raw_input(access_focus_event { id, id_, std::chrono::steady_clock::now() });
         // 초점이 설 항목을 보인다. 키보드 초점의 따라가기는 초점 테가 보일 때만이라 이 요청에는 서지 않는다.
-        accessibility_reveal(id);
+        if (const ui_element* const element { tree_ != nullptr ? tree_->find(id) : nullptr }; element != nullptr)
+            accessibility_reveal(element->bounds());
     }
 
     void window_surface::accessibility_clicked(const ui_element_id& id, std::vector<input_action> actions)

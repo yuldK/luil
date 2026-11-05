@@ -109,6 +109,8 @@ Caption close button과 Alt+F4는 `ui_window::close`를 호출한다. UI thread�
 
 닫힘을 "주 창을 파괴하고 다른 창을 주 창으로 올린다"로 풀지 않는 이유: 주 창의 HWND가 바뀌면 그 위에 선 깨우기 신호·타이머·클립보드 감시·composition target을 모두 옮겨야 하고, 그 사이에 오는 신호가 사라진다. 숨기기는 그 어느 것도 옮기지 않는다.
 
+앱이 낸 닫기라는 출처는 명령마다 함께 큐에 싣고(`take_ui_command_requests`), Windows는 `app_close_message`로 구분한다. 별도 전역 표식으로 기억하면 새 frame에서 처리한 표식이 다음 사용자 닫기에 남거나, 여러 앱 요청이 하나로 합쳐진다. 사용자 입력은 계속 `WM_CLOSE`로 와 frame당 한 번의 빗장을 따른다.
+
 시간 예고(caret 깜빡임 등)의 사슬은 보이는 표면이 하나라도 있으면 잇는다. 예전에는 주 창이 최소화되면 놓았는데, 독립 창은 주 창과 따로 보이기 때문이다.
 
 ## Rendering과 DPI

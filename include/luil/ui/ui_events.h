@@ -814,6 +814,9 @@ namespace luil {
         [[nodiscard]] bool operator==(const record_request&) const noexcept = default;
     };
 
+    // 화면 남기기와 녹화는 같은 UI thread 큐로 간다. 입력 훅이 끝난 뒤에도 인자를 잃지 않는다.
+    using capture_command = std::variant<capture_request, record_request>;
+
     // 플랫폼 햅틱(짧은 진동) 하나의 뜻이다 (device-request-design.md).
     // 진동의 모양은 플랫폼이 고른다. 사용자가 시스템에서 진동·터치 피드백을 껐으면 조용하다.
     enum class haptic_feedback

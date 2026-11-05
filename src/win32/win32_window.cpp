@@ -799,6 +799,7 @@ namespace luil::win32 {
                     host_config.wake.ui_command = [wake_window] { PostMessageW(wake_window, ui_command_request_message, 0, 0); };
                     host_config.wake.app_ui_command = [wake_window] { PostMessageW(wake_window, app_ui_command_request_message, 0, 0); };
                     host_config.wake.clipboard = [wake_window] { PostMessageW(wake_window, clipboard_request_message, 0, 0); };
+                    host_config.wake.capture = [wake_window] { PostMessageW(wake_window, capture_request_message, 0, 0); };
                     host_config.wake.key_report = [wake_window](const std::uint64_t ticket, const bool handled) {
                         PostMessageW(wake_window, key_report_message, static_cast<WPARAM>(ticket), handled ? 1 : 0);
                     };
@@ -1040,8 +1041,13 @@ namespace luil::win32 {
                     // 명령은 큐에서 넣은 순서대로 꺼내 실행한다.
                     // 신호 하나가 유실돼도 내용은 큐에 남아 다음 신호가 함께 실행한다.
                     if (host_ != nullptr)
-                        for (const ui_command command : host_->take_ui_commands())
-                            execute_ui_command(command);
+                        for (const app_host::ui_command_request& request : host_->take_ui_command_requests())
+                            execute_ui_command(request.command, request.from_app);
+                    return 0;
+                case capture_request_message:
+                    if (host_ != nullptr)
+                        for (capture_command& request : host_->take_capture_requests())
+                            std::visit([this](auto&& value) { dispatch_action(input_action { std::move(value) }); }, std::move(request));
                     return 0;
                 case app_ui_command_request_message:
                     if (host_ != nullptr && environment_.delegate != nullptr)
@@ -1109,10 +1115,11 @@ namespace luil::win32 {
                         return 0;
                     }
                     break;
+                case app_close_message:
                 case WM_CLOSE:
                     // 앱이 주 창의 닫힘을 받아 가면(`ui_frame::close`) 그 동작만 내고 아무것도 닫지 않는다. 나머지 창을
                     // 어떻게 할지는 앱이 정한다 — 끝내기로 했으면 `ui_command::application_exit`가 이 길을 비켜 온다.
-                    if (exiting_ == false && request_main_close())
+                    if (exiting_ == false && request_main_close(message == app_close_message))
                         return 0;
                     // 스레드를 모두 정리한 뒤에 창을 파괴한다.
                     // 창 배치는 종료 신호보다 먼저 게시해야 같은 채널의 순서로 반영된다.
@@ -1514,7 +1521,7 @@ namespace luil::win32 {
                 return nullptr;
             }
 
-            void execute_ui_command(const ui_command command)
+            void execute_ui_command(const ui_command command, const bool from_app = false)
             {
                 switch (command)
                 {
@@ -1535,7 +1542,7 @@ namespace luil::win32 {
                         post_window_placement();
                     return;
                 case ui_command::window_close:
-                    PostMessageW(window_, WM_CLOSE, 0, 0);
+                    PostMessageW(window_, from_app ? app_close_message : WM_CLOSE, 0, 0);
                     return;
                 case ui_command::text_edit_menu:
                     return;
@@ -1553,14 +1560,14 @@ namespace luil::win32 {
             //    주체가 없다.
             //  - logic이나 input thread가 멈췄으면(`app_host::faulted`) 훅을 부르지 않고 닫는다. 훅이 낸 메시지를 받을
             //    logic이 없어 창이 영영 닫히지 않는다.
-            [[nodiscard]] bool request_main_close()
+            [[nodiscard]] bool request_main_close(const bool from_app)
             {
                 if (host_ != nullptr && host_->faulted())
                     return false;
                 const std::shared_ptr<const ui_frame> frame { host_ != nullptr ? host_->acquire_frame() : nullptr };
                 if (frame == nullptr || frame->close == nullptr)
                     return false;
-                if (close_requested_frame_ == frame && host_->take_app_close_request() == false)
+                if (close_requested_frame_ == frame && from_app == false)
                     return true;
                 close_requested_frame_ = frame;
                 try

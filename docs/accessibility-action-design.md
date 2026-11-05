@@ -70,7 +70,7 @@ Provider는 element의 현재 semantic 정보가 지원하는 pattern만 공개�
 | Text | editable element에 text-input document가 있음 | text range 공개 |
 | ScrollItem | 흘리는 창 안에 있고 그 창이 세운 막대가 아님 (`access_scroll_item`) | 그 창을 이 자리가 보이도록 흘린다 |
 
-ScrollItem은 초점 되살리기와 **같은 길**을 탄다. 얼마나 흘릴지는 그 창이 답하고(`route_reveal`), 이미 보이면 아무 동작도 dispatch하지 않고 S_OK다 — 다른 절대 명령이 "이미 그 상태"에 답하는 것과 같은 규약이다. 흘리는 창이 없으면 패턴을 내걸지 않고, 그래도 호출되면 `UIA_E_INVALIDOPERATION`이다.
+ScrollItem은 초점 되살리기와 **같은 길**을 탄다. 얼마나 흘릴지는 그 창이 답하고(`route_reveal`), 이미 보이면 아무 동작도 dispatch하지 않고 S_OK다 — 다른 절대 명령이 "이미 그 상태"에 답하는 것과 같은 규약이다. 흘리는 창이나 표면이 없으면 패턴을 내걸지 않고, 그래도 호출되면 `UIA_E_INVALIDOPERATION`이다. 작업 영역보다 긴 popup처럼 표면도 흐르면, 내부 스크롤 뒤 대상이 보일 구간(`route_reveal`의 `revealed_bounds`)을 이어서 들인다. 내부 컨테이너 전체를 기준으로 삼으면 컨테이너가 viewport보다 클 때 항목이 반대쪽 끝에 가려진다.
 
 **`scroll_source`를 세우는 element만 대상이다.** `scroll_area_element`, `list_element`, 그리고 안에 scroll area를 두는 `virtual_list_element`가 그 창이다. 셋 다 흘릴 것이 있을 때만 창이 되므로 짧은 목록의 행에는 패턴이 서지 않는다 — 들일 자리가 없는 명령을 내걸지 않는 것이 "상태와 기능은 서로 일치해야 한다"의 같은 자리다. 앱이 `scroll_route` 표로만 흘리는 자기 컨테이너는 여전히 대상이 아니다. 그 경로까지 열려면 focus가 그러듯 요청을 input controller와 policy로 보내야 한다.
 

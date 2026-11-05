@@ -324,7 +324,7 @@ namespace luil::win32 {
         //  - `hovered`만 보면 안 된다. 키보드로 흘리는 동안 포인터 밑을 떠나 화면 밖으로 간 항목도 다음 이동 전까지 hovered다.
         if (target == interaction.hovered && pointer_over(*element))
             return;
-        scroll_to_show(*element);
+        scroll_to_show(element->bounds());
     }
 
     bool popup_surface::pointer_over(const ui_element& element) const noexcept
@@ -335,10 +335,9 @@ namespace luil::win32 {
         return element.bounds().contains(static_cast<float>(cursor.x), static_cast<float>(cursor.y + scroll_));
     }
 
-    void popup_surface::scroll_to_show(const ui_element& element)
+    void popup_surface::scroll_to_show(const rect_f& box)
     {
         // 항목 위아래에 칸 높이만큼 여유를 둔다 — 칸 밑에 가리지 않게.
-        const rect_f box { element.bounds() };
         const int strip { strip_height() };
         const int top { static_cast<int>(std::floor(box.y)) - strip };
         const int bottom { static_cast<int>(std::ceil(box.y + box.height)) + strip };
@@ -351,12 +350,11 @@ namespace luil::win32 {
             refresh_pointer_hover();
     }
 
-    void popup_surface::accessibility_reveal(const ui_element_id& id)
+    void popup_surface::accessibility_reveal(const rect_f& bounds)
     {
         if (scrollable() == false || tree_ == nullptr)
             return;
-        if (const ui_element* const element { tree_->find(id) }; element != nullptr)
-            scroll_to_show(*element);
+        scroll_to_show(bounds);
     }
 
     bool popup_surface::adopt(const ui_popup& source, const popup_shape& shape)

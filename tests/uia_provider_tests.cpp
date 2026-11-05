@@ -158,9 +158,9 @@ namespace {
             return content_scrollable;
         }
 
-        void accessibility_reveal(const luil::ui_element_id& id) override
+        void accessibility_reveal(const luil::rect_f& bounds) override
         {
-            revealed.push_back(id);
+            revealed.push_back(bounds);
         }
 
         // 텍스트 칸의 편집 파이프라인이다 — test가 값을 미리 꽂는다.
@@ -209,7 +209,7 @@ namespace {
         // 클릭 훅과 함께 실린 액션의 수다. 훅 뒤에 나가도록 input thread로 간다.
         std::size_t clicked_action_count { 0 };
         bool content_scrollable { false };
-        std::vector<luil::ui_element_id> revealed {};
+        std::vector<luil::rect_f> revealed {};
         std::optional<luil::text_input_target> text_target {};
         std::vector<luil::text_edit_request> edits {};
         std::optional<RECT> text_span {};
@@ -3756,7 +3756,11 @@ TEST_CASE("ScrollIntoView reveals an item in a surface that scrolls its whole co
     REQUIRE(pattern != nullptr);
     pattern->Release();
     REQUIRE(provider->ScrollIntoView() == S_OK);
-    REQUIRE(host.revealed == std::vector<luil::ui_element_id> { luil::ui_element_id { kind_item, u8"far" } });
+    REQUIRE(host.revealed.size() == 1u);
+    REQUIRE(host.revealed[0].x == 0.0f);
+    REQUIRE(host.revealed[0].y == 0.0f);
+    REQUIRE(host.revealed[0].width == 80.0f);
+    REQUIRE(host.revealed[0].height == 30.0f);
 
     provider->Release();
     root->Release();
