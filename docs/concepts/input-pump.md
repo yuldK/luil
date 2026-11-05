@@ -11,6 +11,7 @@ input_inbox.receive_wait(min(250ms, next_deadline - 지금))
     → ui_command        → UI callback
     → app_ui_command    → UI callback
     → clipboard request  → UI callback
+    → capture / record   → UI callback
     → interaction_slot.publish() (변경 시)
 ```
 
@@ -22,6 +23,6 @@ input_inbox.receive_wait(min(250ms, next_deadline - 지금))
 
 raw 입력은 `drop_oldest` 정책이다. 포인터 이동의 중간 좌표는 버릴 수 있지만 누름·뗌·초점 상실이 포함될 수 있으므로 `envelope.sequence`가 건너뛴 것을 발견하면 `cancel_dropped_gestures()`로 진행 중인 press와 drag를 취소한다. 끝을 듣는 손잡이가 낸 액션(시트의 멈춤점)은 그대로 보낸다. 초점은 유지하고 다음 초점 이벤트가 갱신한다.
 
-pump의 callback 자체는 input 스레드에서 호출된다. `app_host`는 이 callback에서 UI 명령·클립보드 요청을 내부 큐에 넣고 UI를 깨우며, 실제 동작은 UI가 큐를 꺼내 실행한다. 액션의 실행 스레드는 타입으로 나뉜다. 앱 상태는 logic에서, 창 조작·파일 대화 상자·클립보드는 UI에서 실행한다. pump는 Win32를 include하지 않고 callback만 호출한다. 클립보드가 다른 프로세스에 열려 있으면 유한한 재시도 후 실패하며, 텍스트가 없을 때는 `CF_HDROP`의 첫 파일 경로를 붙여넣을 수 있다.
+pump의 callback 자체는 input 스레드에서 호출된다. `app_host`는 이 callback에서 UI 명령·클립보드·화면 남기기 요청을 내부 큐에 넣고 UI를 깨우며, 실제 동작은 UI가 큐를 꺼내 실행한다. 캡처와 녹화는 `capture_command` 큐(`wake_signals::capture`, `take_capture_requests`)를 함께 쓴다. UIA 클릭도 정책 훅을 거친 뒤 이 길로 가므로 인자와 실행 순서를 보존한다. 액션의 실행 스레드는 타입으로 나뉜다. 앱 상태는 logic에서, 창 조작·파일 대화 상자·클립보드·캡처와 녹화는 UI에서 실행한다. pump는 Win32를 include하지 않고 callback만 호출한다. 클립보드가 다른 프로세스에 열려 있으면 유한한 재시도 후 실패하며, 텍스트가 없을 때는 `CF_HDROP`의 첫 파일 경로를 붙여넣을 수 있다.
 
 `interaction_snapshot`은 값 타입이다. 이전에 게시한 snapshot과 다를 때만 slot에 게시하므로 같은 element 위에서의 단순한 포인터 이동은 UI를 깨우지 않는다.

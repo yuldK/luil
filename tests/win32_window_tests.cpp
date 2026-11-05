@@ -3,6 +3,7 @@
 #include "luil/win32/win32_window.h"
 #include "win32/caption_surface.h"
 #include "win32/notification_win32.h"
+#include "win32/window_messages.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -24,6 +25,94 @@
 #include <vector>
 
 namespace {
+    // 같은 frame을 유지해 사용자 닫기의 중복 방지가 풀리지 않는 조건을 만든다.
+    class close_origin_driver final : public luil::logic_driver
+    {
+    public:
+        close_origin_driver()
+        {
+            frame_ = std::make_shared<luil::ui_frame>();
+            frame_->close = [this] {
+                ++close_calls;
+                return luil::input_action {};
+            };
+        }
+
+        void handle(luil::app_message message) override
+        {
+            if (message.get<bool>() != nullptr)
+                closed_.store(true);
+        }
+
+        [[nodiscard]] std::shared_ptr<const luil::ui_frame> make_frame() override
+        {
+            return frame_;
+        }
+
+        [[nodiscard]] luil::app_message make_close_message() override
+        {
+            return luil::app_message { true };
+        }
+
+        [[nodiscard]] bool shutdown_completed() const override
+        {
+            return closed_.load();
+        }
+
+        int close_calls { 0 };
+
+    private:
+        std::shared_ptr<luil::ui_frame> frame_ {};
+        std::atomic<bool> closed_ { false };
+    };
+
+    class close_origin_delegate final : public luil::win32::window_delegate
+    {
+    public:
+        close_origin_delegate(close_origin_driver& driver, const bool user_first)
+            : driver_ { driver }
+            , user_first_ { user_first }
+        {
+        }
+
+        void on_started(luil::app_host& host) override
+        {
+            const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+            while (host.acquire_frame() == nullptr && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
+            const HWND window { FindWindowW(L"Luil.Test.CloseOrigin", nullptr) };
+            ready = window != nullptr && host.acquire_frame() != nullptr;
+            if (ready)
+            {
+                if (user_first_)
+                    SendMessageW(window, WM_CLOSE, 0, 0);
+                host.post_ui_command(luil::ui_command::window_close);
+                host.post_ui_command(luil::ui_command::window_close);
+                // 기다리는 앱 요청의 출처를 중간에 온 사용자 요청이 가져가지 않아야 한다.
+                if (user_first_)
+                    SendMessageW(window, WM_CLOSE, 0, 0);
+                before_apps = driver_.close_calls;
+                SendMessageW(window, luil::win32::ui_command_request_message, 0, 0);
+                MSG message {};
+                while (PeekMessageW(&message, window, luil::win32::app_close_message, luil::win32::app_close_message, PM_REMOVE))
+                    DispatchMessageW(&message);
+                after_apps = driver_.close_calls;
+                SendMessageW(window, WM_CLOSE, 0, 0);
+                after_user = driver_.close_calls;
+            }
+            host.post_ui_command(luil::ui_command::application_exit);
+        }
+
+        bool ready { false };
+        int before_apps { 0 };
+        int after_apps { 0 };
+        int after_user { 0 };
+
+    private:
+        close_origin_driver& driver_;
+        bool user_first_ { false };
+    };
+
     // 두 test가 함께 쓰는 창 클래스 이름이다.
     // 실패한 시도와 그 뒤의 성공이 같은 이름을 써야 남은 창이 다음 시도를 막는지
     // 함께 볼 수 있다 — 클래스 등록 자체는 남아도 된다.
@@ -308,6 +397,27 @@ namespace {
         REQUIRE(driver.first_metrics->height == static_cast<float>(probe.before_show.bottom - probe.before_show.top));
         REQUIRE(driver.first_metrics->scale == static_cast<float>(probe.dpi) / 96.0f);
         return probe;
+    }
+}
+
+TEST_CASE("App close requests bypass the latch without enabling another user close", "[win32][window][close]")
+{
+    const luil::win32::com_sta_scope com {};
+    for (const bool user_first : { false, true })
+    {
+        close_origin_driver driver {};
+        close_origin_delegate delegate { driver, user_first };
+        luil::win32::window_config config {};
+        config.class_name = L"Luil.Test.CloseOrigin";
+        config.caption.title = u8"close origin test";
+        config.renderer = luil::renderer_mode::cpu;
+        const int result { luil::win32::run_application_window(config, { &driver, nullptr, &delegate }) };
+        drain_quit_message();
+        REQUIRE(result == 0);
+        REQUIRE(delegate.ready);
+        REQUIRE(delegate.before_apps == (user_first ? 1 : 0));
+        REQUIRE(delegate.after_apps == delegate.before_apps + 2);
+        REQUIRE(delegate.after_user == delegate.after_apps);
     }
 }
 

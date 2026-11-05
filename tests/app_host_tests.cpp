@@ -783,20 +783,53 @@ TEST_CASE("Window commands reach the UI thread from any thread", "[win32][host][
     REQUIRE(host.take_ui_commands().empty());
 }
 
-TEST_CASE("An app window close is remembered past the close hook's latch", "[win32][host]")
+TEST_CASE("Each queued window command retains whether the app posted it", "[win32][host][command]")
 {
     counting_driver driver {};
     luil::win32::app_host::config config {};
     config.wake.ui_command = [] {};
     luil::win32::app_host host { std::move(config), driver, nullptr };
-    REQUIRE_FALSE(host.take_app_close_request());
-    // 끝내기는 빗장과 상관없다.
-    host.post_ui_command(luil::ui_command::application_exit);
-    REQUIRE_FALSE(host.take_app_close_request());
-    // 한 번 읽으면 지워진다. 다음 사용자 닫기까지 빗장을 열어 두지 않는다.
+    // 여러 닫기를 한 표식으로 뭉치지 않는다. 입력 액션의 닫기와도 구분한다.
     host.post_ui_command(luil::ui_command::window_close);
-    REQUIRE(host.take_app_close_request());
-    REQUIRE_FALSE(host.take_app_close_request());
+    host.post_ui_command(luil::ui_command::window_close);
+    luil::access_click_event click {};
+    click.actions.push_back(luil::ui_command::window_close);
+    host.post_raw_input(std::move(click));
+    std::vector<luil::app_host::ui_command_request> requests {};
+    REQUIRE(wait_until([&] {
+        for (const auto& request : host.take_ui_command_requests())
+            requests.push_back(request);
+        return requests.size() == 3u;
+    }));
+    REQUIRE(requests == std::vector<luil::app_host::ui_command_request> {
+        { luil::ui_command::window_close, true },
+        { luil::ui_command::window_close, true },
+        { luil::ui_command::window_close, false },
+    });
+    REQUIRE(host.take_ui_command_requests().empty());
+}
+
+TEST_CASE("Accessibility capture and recording actions reach the UI thread queue", "[win32][host][capture]")
+{
+    counting_driver driver {};
+    std::atomic<int> wakes { 0 };
+    luil::app_host::config config {};
+    config.wake.capture = [&] { ++wakes; };
+    luil::app_host host { std::move(config), driver, nullptr };
+    luil::access_click_event click {};
+    click.actions = {
+        luil::capture_request { u8"shot.webp", u8"popup" },
+        luil::record_request { luil::record_command::start, u8"record.webp", u8"tool" },
+        luil::record_request { luil::record_command::stop, {}, u8"tool" },
+    };
+    host.post_raw_input(std::move(click));
+    REQUIRE(wait_until([&] { return wakes.load() == 3; }));
+    REQUIRE(host.take_capture_requests() == std::vector<luil::capture_command> {
+        luil::capture_request { u8"shot.webp", u8"popup" },
+        luil::record_request { luil::record_command::start, u8"record.webp", u8"tool" },
+        luil::record_request { luil::record_command::stop, {}, u8"tool" },
+    });
+    REQUIRE(host.take_capture_requests().empty());
 }
 
 TEST_CASE("A key carrying a report ticket comes back with whether anyone took it", "[win32][host][key]")

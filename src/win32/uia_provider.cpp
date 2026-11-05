@@ -1552,11 +1552,10 @@ namespace luil::win32 {
             // 이미 보이면 빈 목록이다 — 그때 S_OK로 답하는 것은 다른 절대 명령이
             // "이미 그 상태"에 답하는 것과 같은 규약이다
             // (accessibility-action-design.md).
-            std::vector<input_action> actions { within_window ? route_reveal(*tree, id_) : std::vector<input_action> {} };
-            // 안쪽 창이 아직 흐르기 전이면 요소의 자리는 낡았다. 표면은 그 창이 보이게만 흘리고, 나머지는 창의 몫이다.
-            const ui_element* const shown { actions.empty() ? element : tree->scroll_container_of(id_) };
-            if (shown != nullptr)
-                host->accessibility_reveal(shown->id());
+            rect_f shown { element->bounds() };
+            std::vector<input_action> actions { within_window ? route_reveal(*tree, id_, &shown) : std::vector<input_action> {} };
+            // 내부 창이 흐른 뒤 항목이 보일 구간을 잇는다. 큰 컨테이너 전체를 들이면 항목이 반대쪽 끝에 가려진다.
+            host->accessibility_reveal(shown);
             if (actions.empty() == false)
                 host->accessibility_dispatch(std::move(actions));
             return S_OK;

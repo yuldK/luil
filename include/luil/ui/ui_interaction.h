@@ -136,7 +136,9 @@ namespace luil {
     //  - 확대 보기는 언제나 받는다. 흘리는 창은 `rolling_up`(위로 굴림) 쪽 끝(`scroll_source::at_start`·`at_end`)에 닿지 않았을 때 받는다.
     //  - 휠의 창 찾기는 `route_wheel`과 같다. 삼키기만 하는 방벽은 받아 쓰지 않는다.
     [[nodiscard]] bool wheel_taken_inside(const ui_tree& tree, float x, float y, bool rolling_up);
-    [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target);
+    // `revealed_bounds`에는 안쪽부터 스크롤한 뒤 대상이 보일 구간을 쓴다 (tree 좌표).
+    // 표면 자체도 흐르면 그 구간을 이어서 들인다 — 큰 내부 컨테이너 전체를 들이면 대상이 다시 가려진다.
+    [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target, rect_f* revealed_bounds = nullptr);
 
     // 터치 끌기가 흘릴 컨테이너다 (touch-pen-input-design.md).
     // 휠의 `scroll_route`와 달리 축과 배율을 함께 든다 — 손가락의 물리 이동을
@@ -1187,7 +1189,7 @@ namespace luil {
     // raw input 채널이 닫히면 반환한다.
     // tree는 처리 직전에 최신 것으로 갱신하고, interaction snapshot은 바뀔 때만 게시한다.
     // 앱 메시지는 app inbox로 가고,
-    // `ui_command`·`app_ui_command`·클립보드 요청은 UI thread 전용이라 callback으로 넘긴다.
+    // `ui_command`·`app_ui_command`·클립보드·화면 남기기 요청은 UI thread 전용이라 callback으로 넘긴다.
     // 햅틱은 `execute_haptic`으로 곧장 넘긴다 (플랫폼의 출력이 thread를 가린다).
     // `touch_slot`이 있으면 실행 중 바뀐 터치 설정을 다음 이벤트 처리 전에 적용한다.
     // `report_key`가 있으면 표(`key_pressed_event::report_ticket`)를 단 키를 처리한 뒤 그 표와 받았는가
@@ -1197,5 +1199,5 @@ namespace luil {
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* policy = nullptr, interaction_config config = {},
         const std::function<void(app_ui_command)>& execute_app_ui_command = {}, const std::function<void(clipboard_request)>& execute_clipboard = {},
         messaging::latest_slot<touch_gesture_config>* touch_slot = nullptr, const std::function<void(haptic_feedback)>& execute_haptic = {},
-        const std::function<void(std::uint64_t ticket, bool handled)>& report_key = {});
+        const std::function<void(std::uint64_t ticket, bool handled)>& report_key = {}, const std::function<void(capture_command)>& execute_capture = {});
 }

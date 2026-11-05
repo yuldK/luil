@@ -114,13 +114,13 @@ namespace luil::win32 {
         // 포인터가 지금 실제로 이 요소 위에 있는가다.
         [[nodiscard]] bool pointer_over(const ui_element& element) const noexcept;
         // 요소가 칸에 가리지 않는 자리까지 흘린다.
-        void scroll_to_show(const ui_element& element);
+        void scroll_to_show(const rect_f& bounds);
         // 보조 기술의 들이기·초점 요청도 키보드처럼 그 항목을 보인다. 흘린 양은 이 표면의 것이라 앱은 할 수 없다.
         [[nodiscard]] bool accessibility_content_scrollable() const noexcept override
         {
             return scrollable();
         }
-        void accessibility_reveal(const ui_element_id& id) override;
+        void accessibility_reveal(const rect_f& bounds) override;
         // 화살표 칸 위의 포인터를 다룬다. 다뤘으면 결과다.
         [[nodiscard]] std::optional<LRESULT> handle_scroll_message(UINT message, WPARAM word_parameter, LPARAM long_parameter);
         void stop_strip_scroll() noexcept;

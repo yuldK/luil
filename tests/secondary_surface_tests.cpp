@@ -3,6 +3,9 @@
 
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/scroll_area_element.h"
+#include "luil/ui/stack_element.h"
 #include "luil/win32/app_host.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -499,6 +502,57 @@ TEST_CASE("Releasing over a popup scroll strip cancels the press and releases ca
     input_fence(host, policy);
     REQUIRE(driver.clicks.load() == 1);
     host.shutdown();
+}
+
+TEST_CASE("ScrollIntoView keeps an item visible when its inner scroller is taller than the popup", "[win32][popup][uia][scroll]")
+{
+    fake_surface_context context {};
+    luil::win32::popup_surface surface { context, u8"tool", {} };
+    const popup_test_window window { surface };
+    REQUIRE(window.handle() != nullptr);
+    const luil::ui_element_id target { luil::application_element_kind(0), u8"first" };
+    float delta { 0.0f };
+    const auto adopt = [&](const float offset) {
+        auto root { std::make_unique<tool_panel>(luil::ui_element_id { luil::ui_element_kind::root, u8"root" }) };
+        root->arrange({ { 0.0f, 0.0f, 200.0f, 300.0f }, 1.0f });
+        luil::scroll_area_config config {};
+        config.owner = u8"inner";
+        config.content_height = 500.0f;
+        config.scroll_offset = offset;
+        // tree는 그대로 두고, 아래에서 앱이 메시지를 적용한 다음 frame을 따로 게시한다.
+        config.scroll = [&](const float requested) {
+            delta = requested;
+            return luil::input_action {};
+        };
+        auto inner { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        auto content { std::make_unique<luil::stack_element>(luil::ui_element_id { luil::ui_element_kind::root, u8"content" }, luil::stack_config {}) };
+        content->add(std::make_unique<luil::text_button_element>(target, luil::text_button_config { .text = u8"first" }), 26.0f);
+        inner->set_content(std::move(content));
+        inner->arrange({ { 0.0f, 40.0f, 200.0f, 240.0f }, 1.0f });
+        root->add_child(std::move(inner));
+        luil::ui_popup popup {};
+        popup.tree = std::make_shared<const luil::ui_tree>(std::move(root));
+        static_cast<void>(surface.adopt(popup, {}));
+        return popup.tree;
+    };
+    for (const float offset : { 0.0f, 100.0f })
+    {
+        // 처음부터 보이는 항목과 안쪽 창도 흘려야 하는 항목을 같은 구간으로 들인다.
+        delta = 0.0f;
+        static_cast<void>(adopt(offset));
+        auto* const root { new luil::win32::uia_root_provider { surface } };
+        auto* const provider { root->make_element_provider(target) };
+        const HRESULT result { provider->ScrollIntoView() };
+        provider->Release();
+        root->Release();
+        REQUIRE(result == S_OK);
+        REQUIRE(delta == -offset);
+        const auto tree { adopt(offset + delta) };
+        const auto box { tree->find(target)->bounds() };
+        const float client_y { box.y - static_cast<float>(surface.scroll_offset()) };
+        REQUIRE(client_y >= 16.0f);
+        REQUIRE(client_y + box.height <= 84.0f);
+    }
 }
 
 TEST_CASE("A keyboard highlight on a stale hover item still scrolls into view", "[win32][popup]")

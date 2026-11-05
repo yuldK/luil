@@ -1129,12 +1129,14 @@ namespace luil {
             && config.long_press_time.count() > 0 && config.pan_start_time < config.long_press_time;
     }
 
-    std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target)
+    std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target, rect_f* const revealed_bounds)
     {
         const ui_element* const root { tree.root() };
         const ui_element* const focused { tree.find(target) };
         if (root == nullptr || focused == nullptr)
             return {};
+        if (revealed_bounds != nullptr)
+            *revealed_bounds = focused->bounds();
         std::vector<const ui_element*> path {};
         if (collect_ancestry(*root, target, path) == false || path.size() < 2u)
             return {};
@@ -1168,6 +1170,8 @@ namespace luil {
             }
             box = visible_part_of(box, viewport->bounds(), source->axis);
         }
+        if (revealed_bounds != nullptr)
+            *revealed_bounds = box;
         return actions;
     }
 
@@ -4828,7 +4832,7 @@ namespace luil {
         messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* const policy, interaction_config config, const std::function<void(app_ui_command)>& execute_app_ui_command,
         const std::function<void(clipboard_request)>& execute_clipboard, messaging::latest_slot<touch_gesture_config>* const touch_slot, const std::function<void(haptic_feedback)>& execute_haptic,
-        const std::function<void(std::uint64_t, bool)>& report_key)
+        const std::function<void(std::uint64_t, bool)>& report_key, const std::function<void(capture_command)>& execute_capture)
     {
         interaction_controller controller { policy, std::move(config) };
         std::uint64_t tree_version { 0 };
@@ -4866,6 +4870,10 @@ namespace luil {
                     execute_clipboard(clipboard_request { *read });
                 else if (const auto* const haptic { std::get_if<haptic_request>(&action) }; haptic != nullptr && execute_haptic)
                     execute_haptic(haptic->feedback);
+                else if (auto* const capture { std::get_if<capture_request>(&action) }; capture != nullptr && execute_capture)
+                    execute_capture(capture_command { std::move(*capture) });
+                else if (auto* const record { std::get_if<record_request>(&action) }; record != nullptr && execute_capture)
+                    execute_capture(capture_command { std::move(*record) });
         };
         while (true)
         {

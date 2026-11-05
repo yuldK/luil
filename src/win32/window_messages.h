@@ -34,6 +34,10 @@ namespace luil::win32 {
     inline constexpr UINT key_report_message { WM_APP + 8 };
     // 주 창. 접근성 설정의 텍스트 크기가 바뀌었다는 신호다 (`text_scale_watcher`).
     inline constexpr UINT text_scale_changed_message { WM_APP + 9 };
+    // 주 창. 입력 액션의 화면 남기기·녹화 요청이 큐에 들었다는 신호다.
+    inline constexpr UINT capture_request_message { WM_APP + 10 };
+    // 주 창. 앱이 `post_ui_command`로 낸 닫기다. 사용자 닫기의 frame당 한 번 빗장을 비켜 간다.
+    inline constexpr UINT app_close_message { WM_APP + 11 };
 
     // 번호가 서로 다르고 앱이 쓸 수 있는 대역(`WM_APP`~0xBFFF) 안인가다.
     [[nodiscard]] constexpr bool app_message_numbers_valid() noexcept
@@ -48,6 +52,8 @@ namespace luil::win32 {
             tray_callback_message,
             key_report_message,
             text_scale_changed_message,
+            capture_request_message,
+            app_close_message,
         };
         for (std::size_t index = 0; index < std::size(numbers); ++index)
         {
