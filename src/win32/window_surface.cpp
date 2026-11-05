@@ -250,13 +250,21 @@ namespace luil::win32 {
         // 표식은 이 표면의 것이고 시각은 게시 시점이다 — 포인터·키와 같은 규약이다.
         if (app_host* const host { context_.host() }; host != nullptr)
             host->post_raw_input(access_focus_event { id, id_, std::chrono::steady_clock::now() });
+        // 초점이 설 항목을 보인다. 키보드 초점의 따라가기는 초점 테가 보일 때만이라 이 요청에는 서지 않는다.
+        accessibility_reveal(id);
     }
 
-    void window_surface::accessibility_clicked(const ui_element_id& id)
+    void window_surface::accessibility_clicked(const ui_element_id& id, std::vector<input_action> actions)
     {
         // 정책 훅은 input thread에서 부른다 — 초점 요청과 같은 길이고 같은 표식이다.
-        if (app_host* const host { context_.host() }; host != nullptr)
-            host->post_raw_input(access_click_event { id, id_, std::chrono::steady_clock::now() });
+        //  - 액션을 함께 실어 마우스 클릭처럼 훅 뒤에 나가게 한다 (`access_click_event`).
+        app_host* const host { context_.host() };
+        if (host == nullptr)
+        {
+            accessibility_dispatch(std::move(actions));
+            return;
+        }
+        host->post_raw_input(access_click_event { id, id_, std::chrono::steady_clock::now(), std::move(actions) });
     }
 
     std::optional<text_input_target> window_surface::accessibility_text_target(const ui_element_kind kind) const
@@ -439,16 +447,19 @@ namespace luil::win32 {
     {
         file_drag_payload_.custom_visual = true;
         file_drag_payload_.files = files;
+        // OLE가 준 자리는 client다. tree의 자리로 옮긴다 (`content_offset_y`).
+        const float tree_y { y + static_cast<float>(content_offset_y()) };
         if (app_host* const host { context_.host() }; host != nullptr)
-            host->post_raw_input(file_drag_entered_event { x, y, std::move(files), id_ });
-        return file_drop_open(x, y);
+            host->post_raw_input(file_drag_entered_event { x, tree_y, std::move(files), id_ });
+        return file_drop_open(x, tree_y);
     }
 
     bool window_surface::file_drag_moved(const float x, const float y)
     {
+        const float tree_y { y + static_cast<float>(content_offset_y()) };
         if (app_host* const host { context_.host() }; host != nullptr)
-            host->post_raw_input(file_drag_moved_event { x, y, id_ });
-        return file_drop_open(x, y);
+            host->post_raw_input(file_drag_moved_event { x, tree_y, id_ });
+        return file_drop_open(x, tree_y);
     }
 
     void window_surface::file_drag_left()
@@ -465,14 +476,15 @@ namespace luil::win32 {
         drag_payload payload {};
         payload.custom_visual = true;
         payload.files = files;
-        const drop_hit_result hit { tree_ != nullptr ? tree_->drop_hit_test(x, y, payload) : drop_hit_result {} };
+        const float tree_y { y + static_cast<float>(content_offset_y()) };
+        const drop_hit_result hit { tree_ != nullptr ? tree_->drop_hit_test(x, tree_y, payload) : drop_hit_result {} };
         const ui_element* const over { hit.target };
         if (over != nullptr && over->drop()->on_drop)
         {
             // 놓는 순간의 수식 키다 (내부 끌기의 놓기와 같은 규약). OLE에 답하는 효과는 그대로 복사다
             // (win32_drop.cpp) — 앱이 이 값으로 무엇을 하든 원본은 탐색기가 지우지 않는다.
             //  - OLE가 실은 키 상태로 읽는다. 끌어오는 동안 키보드 입력은 끄는 쪽 프로그램에 있다.
-            ui_action_context context { over->id(), x, y };
+            ui_action_context context { over->id(), x, tree_y };
             context.control = (key_state & MK_CONTROL) != 0;
             context.shift = (key_state & MK_SHIFT) != 0;
             context.alt = (key_state & MK_ALT) != 0;
@@ -1167,7 +1179,8 @@ namespace luil::win32 {
         {
             over.surface = under->id();
             over.x = static_cast<float>(client.x);
-            over.y = static_cast<float>(client.y);
+            // tree의 자리다. 포인터 밑이 흘린 popup이면 그만큼 더한다 (`content_offset_y`).
+            over.y = static_cast<float>(client.y + under->content_offset_y());
         }
         if (moved != nullptr)
             moved->over = std::move(over);
@@ -1505,19 +1518,24 @@ namespace luil::win32 {
         return swallow;
     }
 
-    void window_surface::alt_chord_reported(const std::uint64_t ticket, const bool handled)
+    bool window_surface::alt_chord_reported(const std::uint64_t ticket, const bool handled)
     {
         if (alt_chord_.has_value() == false || alt_chord_->ticket != ticket || alt_chord_->handled.has_value())
-            return;
+            return false;
         alt_chord_->handled = handled;
         std::vector<held_message> held { std::exchange(alt_chord_->held, {}) };
         const bool released { alt_chord_->released };
         if (released)
             alt_chord_.reset();
         // 아무도 받지 않은 조합이다. 붙든 메시지를 늦게라도 기본 처리에 넘긴다 — 붙들지 않았을 때와 같은 경고음·메뉴다.
-        if (handled == false && window_ != nullptr)
+        //  - 기본 처리는 시스템 메뉴의 모달 루프로 들어갈 수 있다. 그 안의 frame 대조가 이 표면을 없앨 수 있으므로
+        //    여기서부터는 멤버를 만지지 않고 지역 값만 쓴다.
+        const HWND window { window_ };
+        if (handled == false && window != nullptr)
             for (const held_message& message : held)
-                static_cast<void>(DefWindowProcW(window_, message.message, message.word_parameter, message.long_parameter));
+                if (IsWindow(window) != FALSE)
+                    static_cast<void>(DefWindowProcW(window, message.message, message.word_parameter, message.long_parameter));
+        return true;
     }
 
     bool window_surface::post_key_event(const WPARAM virtual_key, const LPARAM long_parameter, const std::uint64_t report_ticket)

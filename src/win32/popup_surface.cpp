@@ -1,6 +1,8 @@
 #include "win32/popup_surface.h"
 
 #include "luil/theme/ui_theme.h"
+#include "luil/ui/menu_element.h"
+#include "luil/ui/ui_interaction.h"
 
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -15,11 +17,11 @@ namespace luil::win32 {
         //  - 3은 표면의 커서 숨김 timer다 (window_surface.cpp). 같은 창에 걸리므로 겹치지 않게 둔다.
         constexpr UINT_PTR strip_scroll_timer_id { 5 };
         constexpr UINT strip_scroll_interval_milliseconds { 40 };
-        // 화살표 칸의 높이와 그 칸이 timer 한 번에 흘리는 양, 휠 한 칸이 흘리는 양이다 (논리 픽셀).
-        //  - 휠 한 칸은 메뉴 항목 셋이다 (Windows의 기본 휠 줄 수와 같다).
+        // 화살표 칸의 높이와 그 칸이 timer 한 번에 흘리는 양이다 (논리 픽셀).
         constexpr int strip_logical_height { 16 };
         constexpr int strip_logical_step { 8 };
-        constexpr int wheel_logical_step { 78 };
+        // 휠 한 칸이 흘리는 메뉴 항목 수다 (Windows의 기본 휠 줄 수와 같다). 항목 높이는 글자 크기를 따르므로 쓸 때 잰다.
+        constexpr int wheel_menu_rows { 3 };
     }
 
     popup_surface::popup_surface(surface_context& context, std::u8string id, std::u8string anchor) noexcept
@@ -125,11 +127,13 @@ namespace luil::win32 {
 
     bool popup_surface::handle_pointer_overlay(const POINT position, const bool pressed)
     {
-        const int direction { strip_at(position.y) };
-        if (position.x < 0 || position.x >= width_ || direction == 0)
+        if (position.x < 0 || position.x >= width_)
             return false;
-        if (pressed)
-            static_cast<void>(scroll_by(direction * strip_height()));
+        const int direction { strip_at(position.y) };
+        if (direction == 0 && (pressed == false || press_lands_on_spent_strip(position.y) == false))
+            return false;
+        if (pressed && direction != 0)
+            static_cast<void>(scroll_from_strip(direction, strip_height()));
         apply_cursor(position);
         return true;
     }
@@ -151,13 +155,50 @@ namespace luil::win32 {
     {
         if (set_scroll(scroll_ + delta) == false)
             return false;
+        refresh_pointer_hover();
+        return true;
+    }
+
+    void popup_surface::refresh_pointer_hover()
+    {
         if (window_ == nullptr)
-            return true;
+            return;
         // 포인터가 그대로여도 그 밑의 내용이 바뀌었다. 같은 자리의 이동을 다시 알려 hover가 새 항목에 선다.
         //  - 칸 위면 알리지 않는다. 칸 밑의 항목은 가려져 있다.
         POINT cursor {};
         if (GetCursorPos(&cursor) != FALSE && WindowFromPoint(cursor) == window_ && ScreenToClient(window_, &cursor) != FALSE && strip_at(cursor.y) == 0)
             static_cast<void>(post_pointer_message(WM_MOUSEMOVE, 0, MAKELPARAM(cursor.x, cursor.y)));
+    }
+
+    bool popup_surface::scroll_from_strip(const int direction, const int amount)
+    {
+        const bool moved { scroll_by(direction * amount) };
+        // 끝에 닿아 칸이 사라졌다. 같은 자리의 다음 누름은 칸을 누르던 손이지 그 밑의 항목을 고른 것이 아니다.
+        if (moved && (direction < 0 ? scroll_ == 0 : scroll_ == maximum_scroll()))
+        {
+            spent_strip_ = direction;
+            spent_strip_until_ = GetTickCount64() + GetDoubleClickTime();
+        }
+        return moved;
+    }
+
+    bool popup_surface::press_lands_on_spent_strip(const int y)
+    {
+        if (spent_strip_ == 0)
+            return false;
+        const ULONGLONG now { GetTickCount64() };
+        const bool still_at_end { spent_strip_ < 0 ? scroll_ == 0 : scroll_ == maximum_scroll() };
+        if (now >= spent_strip_until_ || still_at_end == false)
+        {
+            spent_strip_ = 0;
+            return false;
+        }
+        const int strip { strip_height() };
+        const bool inside { spent_strip_ < 0 ? y >= 0 && y < strip : y >= viewport_height() - strip && y < viewport_height() };
+        if (inside == false)
+            return false;
+        // 이어 치는 동안은 아직 그 손이다.
+        spent_strip_until_ = now + GetDoubleClickTime();
         return true;
     }
 
@@ -178,7 +219,7 @@ namespace luil::win32 {
             POINT cursor {};
             const bool over { GetCursorPos(&cursor) != FALSE && WindowFromPoint(cursor) == window_ && ScreenToClient(window_, &cursor) != FALSE };
             const int direction { strip_direction_ };
-            if (over == false || strip_at(cursor.y) != direction || scroll_by(direction * MulDiv(strip_logical_step, static_cast<int>(dpi_), 96)) == false)
+            if (over == false || strip_at(cursor.y) != direction || scroll_from_strip(direction, MulDiv(strip_logical_step, static_cast<int>(dpi_), 96)) == false)
                 stop_strip_scroll();
             return LRESULT { 0 };
         }
@@ -197,9 +238,18 @@ namespace luil::win32 {
         switch (message)
         {
         case WM_MOUSEWHEEL: {
-            // 메뉴 자체는 휠을 쓰지 않는다. 흘릴 것이 남은 쪽이면 popup이 흘리고, 끝이면 지금처럼 tree에 간다.
+            // Ctrl+휠은 흘리는 뜻이 아니다 (확대). tree가 받는다.
+            if ((GET_KEYSTATE_WPARAM(word_parameter) & MK_CONTROL) != 0)
+                return std::nullopt;
             const int notches { GET_WHEEL_DELTA_WPARAM(word_parameter) };
-            const int delta { -MulDiv(notches, MulDiv(wheel_logical_step, static_cast<int>(dpi_), 96), WHEEL_DELTA) };
+            // 포인터 밑의 안쪽 창이 그 쪽으로 더 흘릴 수 있으면 그 창이 먼저다. 끝에 닿은 뒤에야 popup이 흘린다.
+            POINT client { GET_X_LPARAM(long_parameter), GET_Y_LPARAM(long_parameter) };
+            if (tree_ != nullptr && ScreenToClient(window_, &client) != FALSE && strip_at(client.y) == 0
+                && wheel_taken_inside(*tree_, static_cast<float>(client.x), static_cast<float>(client.y + scroll_), notches > 0))
+                return std::nullopt;
+            const int step { MulDiv(wheel_menu_rows * static_cast<int>(menu_row_height()), static_cast<int>(dpi_), 96) };
+            const int delta { -MulDiv(notches, step, WHEEL_DELTA) };
+            // 흘릴 것이 남은 쪽이면 popup이 흘리고, 끝이면 지금처럼 tree에 간다.
             if (scroll_by(delta))
                 return LRESULT { 0 };
             return std::nullopt;
@@ -233,9 +283,15 @@ namespace luil::win32 {
         case WM_MBUTTONUP: {
             // 칸 위의 누름은 칸의 것이다 — 가려진 항목을 고르지 않는다. 누르면 한 칸 흘린다.
             const int direction { strip_at(GET_Y_LPARAM(long_parameter)) };
+            const bool released { message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP };
             if (direction == 0)
+            {
+                // 끝에 닿아 사라진 칸 자리의 연타가 그 밑의 항목을 실행하지 않게 한다 (`spent_strip_`).
+                if (released == false && press_lands_on_spent_strip(GET_Y_LPARAM(long_parameter)))
+                    return LRESULT { 0 };
                 return std::nullopt;
-            if (message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP)
+            }
+            if (released)
             {
                 // 내용에서 시작한 누름도 여기서 끝난다. 클릭은 취소하되 뗌과 캡처 해제는 빠뜨리지 않는다.
                 if (GetCapture() == window_ && (word_parameter & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
@@ -243,7 +299,7 @@ namespace luil::win32 {
                 cancel_pointer_press(pointer_button_of(message));
             }
             if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK)
-                static_cast<void>(scroll_by(direction * MulDiv(strip_logical_height, static_cast<int>(dpi_), 96)));
+                static_cast<void>(scroll_from_strip(direction, strip_height()));
             return LRESULT { 0 };
         }
         default:
@@ -259,14 +315,30 @@ namespace luil::win32 {
         if (target == followed_)
             return;
         followed_ = target;
-        // 포인터가 고른 강조는 이미 보이는 자리다. 따라가면 포인터 밑의 내용이 움직인다.
-        if (target == ui_element_id {} || target == interaction.hovered || tree_ == nullptr)
+        if (target == ui_element_id {} || tree_ == nullptr)
             return;
         const ui_element* const element { tree_->find(target) };
         if (element == nullptr)
             return;
+        // 포인터가 실제로 올라 있는 항목은 이미 보이는 자리다. 따라가면 포인터 밑의 내용이 움직인다.
+        //  - `hovered`만 보면 안 된다. 키보드로 흘리는 동안 포인터 밑을 떠나 화면 밖으로 간 항목도 다음 이동 전까지 hovered다.
+        if (target == interaction.hovered && pointer_over(*element))
+            return;
+        scroll_to_show(*element);
+    }
+
+    bool popup_surface::pointer_over(const ui_element& element) const noexcept
+    {
+        POINT cursor {};
+        if (window_ == nullptr || GetCursorPos(&cursor) == FALSE || WindowFromPoint(cursor) != window_ || ScreenToClient(window_, &cursor) == FALSE || strip_at(cursor.y) != 0)
+            return false;
+        return element.bounds().contains(static_cast<float>(cursor.x), static_cast<float>(cursor.y + scroll_));
+    }
+
+    void popup_surface::scroll_to_show(const ui_element& element)
+    {
         // 항목 위아래에 칸 높이만큼 여유를 둔다 — 칸 밑에 가리지 않게.
-        const rect_f box { element->bounds() };
+        const rect_f box { element.bounds() };
         const int strip { strip_height() };
         const int top { static_cast<int>(std::floor(box.y)) - strip };
         const int bottom { static_cast<int>(std::ceil(box.y + box.height)) + strip };
@@ -275,7 +347,16 @@ namespace luil::win32 {
             next = top;
         else if (bottom > next + viewport_height())
             next = bottom - viewport_height();
-        static_cast<void>(set_scroll(next));
+        if (set_scroll(next))
+            refresh_pointer_hover();
+    }
+
+    void popup_surface::accessibility_reveal(const ui_element_id& id)
+    {
+        if (scrollable() == false || tree_ == nullptr)
+            return;
+        if (const ui_element* const element { tree_->find(id) }; element != nullptr)
+            scroll_to_show(*element);
     }
 
     bool popup_surface::adopt(const ui_popup& source, const popup_shape& shape)

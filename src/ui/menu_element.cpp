@@ -1,6 +1,7 @@
 #include "luil/ui/menu_element.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/font_scale.h"
 #include "luil/generated/codicons.h"
 #include "luil/ui/text_block.h"
 #include "ui/access_key.h"
@@ -208,14 +209,21 @@ namespace luil {
         return std::vector<input_action> { config_.open_submenu(std::u8string { key }) };
     }
 
+    float menu_row_height() noexcept
+    {
+        // 12는 `window_metrics::text_scale`이 재는 대표 크기다.
+        return menu_item_height * std::max(1.0f, scaled_font_size(12.0f) / 12.0f);
+    }
+
     float menu_element::height_for(const menu_config& config) noexcept
     {
+        const float row { menu_row_height() };
         float height { 2.0f * menu_padding };
         for (const menu_item_config& item : config.items)
         {
             if (item.separator_above)
                 height += menu_separator_height;
-            height += menu_item_height;
+            height += row;
         }
         return height;
     }
@@ -245,13 +253,14 @@ namespace luil {
         set_bounds(context.slot);
         const float scale { context.scale > 0.0f ? context.scale : 1.0f };
         const float padding { menu_padding * scale };
+        const float row { menu_row_height() * scale };
         float y { context.slot.y + padding };
         for (std::size_t index = 0; index < children().size(); ++index)
         {
             if (config_.items[index].separator_above)
                 y += menu_separator_height * scale;
-            children()[index]->arrange(context.for_child({ context.slot.x + padding, y, context.slot.width - 2.0f * padding, menu_item_height * scale }));
-            y += menu_item_height * scale;
+            children()[index]->arrange(context.for_child({ context.slot.x + padding, y, context.slot.width - 2.0f * padding, row }));
+            y += row;
         }
     }
 

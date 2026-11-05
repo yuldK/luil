@@ -11,7 +11,7 @@ luil::set_ui_typeface_families({ u8"Pretendard", u8"Malgun Gothic", u8"Segoe UI"
 
 ## 시스템 텍스트 크기
 
-글자 크기는 `scaled_font_size`를 지나 시스템의 텍스트 크기를 따른다. Windows는 설정 > 접근성 > 텍스트 크기(`UISettings.TextScaleFactor`, 100%~225%)를 시작할 때 읽고, 바뀌면(`TextScaleFactorChanged`, 놓치면 `WM_SETTINGCHANGE`) 다시 읽는다. Android는 시스템의 비선형 글자 확대 표를 읽는다. 바뀌면 플랫폼이 모든 창의 metrics를 다시 보낸다 — 앱은 그 메시지에서 다시 배치한다. 대표 배율은 `window_metrics::text_scale`(12 논리 픽셀 글자의 배율)이다. 아이콘과 여백은 키우지 않는다.
+글자 크기는 `scaled_font_size`를 지나 시스템의 텍스트 크기를 따른다. Windows는 설정 > 접근성 > 텍스트 크기(`UISettings.TextScaleFactor`, 100%~225%)를 시작할 때 읽고, 바뀌면(`TextScaleFactorChanged`, 놓치면 `WM_SETTINGCHANGE`) 다시 읽는다. Android는 시스템의 비선형 글자 확대 표를 읽는다. 바뀌면 플랫폼이 모든 창의 metrics를 다시 보낸다 — 앱은 그 메시지에서 다시 배치한다. 대표 배율은 `window_metrics::text_scale`(12 논리 픽셀 글자의 배율)이다. 아이콘과 여백은 키우지 않는다. 메뉴 항목의 줄 높이는 같은 배율로 커진다(`menu_row_height`). 메뉴 자리를 세는 앱은 `menu_item_height` 대신 이것을 쓴다. 다른 고정 높이 화면을 아직 옮기지 못한 앱은 `window_config::follow_text_scale`을 꺼 물러설 수 있다.
 
 ## 굵기와 앱 글꼴 가족
 

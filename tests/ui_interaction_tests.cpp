@@ -762,9 +762,13 @@ TEST_CASE("An accessibility click calls the policy click hook for that element",
     root->add(std::move(disabled));
     controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
 
-    // 액션은 표면이 이미 배분했다. 여기서는 훅만 부르고 아무것도 내지 않는다.
+    // 실린 액션이 없으면 훅만 부른다.
     REQUIRE(controller.process(luil::access_click_event { luil::ui_element_id { kind_button, u8"plain" } }).empty());
     REQUIRE(policy.clicked == std::vector<luil::ui_element_id> { luil::ui_element_id { kind_button, u8"plain" } });
+    // 실린 액션은 훅과 같은 처리에서 나온다 — 마우스처럼 훅 다음이다. 요소가 없어도 액션은 나간다.
+    luil::access_click_event carried { luil::ui_element_id { kind_button, u8"gone" } };
+    carried.actions.push_back(luil::input_action { luil::ui_command::window_minimize });
+    REQUIRE(controller.process(carried).size() == 1u);
     // 비활성이거나 tree에 없는 요소는 부르지 않는다.
     static_cast<void>(controller.process(luil::access_click_event { luil::ui_element_id { kind_button, u8"disabled" } }));
     static_cast<void>(controller.process(luil::access_click_event { luil::ui_element_id { kind_button, u8"gone" } }));

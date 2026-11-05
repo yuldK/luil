@@ -52,6 +52,12 @@ namespace {
 TEST_CASE("A menu stacks its items and counts separators into its height", "[ui][menu]")
 {
     const luil::menu_config config { make_config() };
+    REQUIRE(luil::menu_row_height() == luil::menu_item_height);
+    // 시스템이 글자를 키우면 줄도 같은 배율로 커진다. 키운 글자가 이웃 항목에 닿지 않는다.
+    REQUIRE(luil::set_system_font_sizes({ 0.0f, 2.0f }));
+    REQUIRE(luil::menu_row_height() == 2.0f * luil::menu_item_height);
+    REQUIRE(luil::menu_element::height_for(config) == 2.0f * luil::menu_padding + 6.0f * luil::menu_item_height + luil::menu_separator_height);
+    REQUIRE(luil::set_system_font_sizes({}));
     REQUIRE(luil::menu_element::height_for(config) == 2.0f * luil::menu_padding + 3.0f * luil::menu_item_height + luil::menu_separator_height);
 
     luil::menu_element menu { make_config() };

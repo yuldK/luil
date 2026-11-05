@@ -610,6 +610,10 @@ namespace luil {
         //  - `ui_command::window_close`는 사용자가 닫기를 누른 것과 같다 — 훅이 있으면 훅을 다시 거친다.
         //  - 플랫폼이 창 명령의 길을 꽂지 않았으면(`wake_signals::ui_command`가 비었다) 아무 일도 없다.
         void post_ui_command(ui_command command) noexcept;
+        // `post_ui_command`로 온 `window_close`가 기다리는가를 읽고 지운다 (UI thread).
+        // 닫힘 훅의 frame당 한 번 빗장은 사용자의 거듭된 닫기를 삼키는 것이다. 앱이 작업을 마치고 낸 닫기는 frame이
+        // 아직 그대로여도 삼키면 다시 낼 주체가 없어 창이 남는다.
+        [[nodiscard]] bool take_app_close_request() noexcept;
         // 권한의 지금 상태다. **어느 thread에서 불러도 된다.**
         [[nodiscard]] permission_state permission(app_permission permission) const noexcept;
         // 사용자에게 권한을 묻는다. **어느 thread에서 불러도 된다.**

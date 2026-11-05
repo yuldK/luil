@@ -69,6 +69,9 @@ namespace luil {
     inline constexpr float menu_item_height { 26.0f };
     inline constexpr float menu_separator_height { 9.0f };
     inline constexpr float menu_padding { 4.0f };
+    // 지금 글자 크기에서 항목 한 줄의 높이다 (논리 픽셀). 시스템이 글자를 키운 만큼 `menu_item_height`를 키운다.
+    //  - 줄을 그대로 두면 키운 글자가 줄을 넘어 이웃 항목에 닿는다. 메뉴 자리를 세는 쪽은 상수가 아니라 이것을 쓴다.
+    [[nodiscard]] float menu_row_height() noexcept;
 
     // 컨텍스트 메뉴·드롭다운 목록의 본체다.
     // 통상 popup tree의 root로 두고, 정책의 menu_kinds가

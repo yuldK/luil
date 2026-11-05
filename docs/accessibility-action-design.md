@@ -102,7 +102,7 @@ UIA 호출은 window sizing loop, system menu, paint 또는 다른 automation ev
 
 Provider는 동작 목록을 dispatch한 뒤 Invoke event를 알린다. Checked, selected, expanded, range, text value 같은 상태 변화는 이후 published frame의 접근성 snapshot 비교로 알린다. Application logic이 동작을 처리하기 전에 상태가 바뀌었다고 보고하지 않기 위한 순서다.
 
-눌러서 하는 명령(Invoke·Toggle·Select)이 기본 실행인 클릭을 배분하면 surface는 `access_click_event { id, surface }`도 input pump에 post한다. Controller는 그 요소가 지금 tree에 있고 활성이면 `interaction_policy::on_click`을 부른다. 마우스로 누를 때 부르는 그 훅이라, 클릭 대상으로 상태를 잇는 앱이 보조 기술로 누른 것도 같은 대상으로 본다. Tab의 자리가 아닌 요소는 초점이 서지 않아 초점으로 대신 알 수 없다. 정책은 input thread의 것이라 UI thread의 provider가 직접 부르지 않는다. 동작은 이미 배분된 뒤라 훅은 동작보다 늦지만, 같은 input thread의 다음 입력보다는 앞선다. 지어지지 않은 model 항목은 tree에 없어 부르지 않는다.
+눌러서 하는 명령(Invoke·Toggle·Select)은 동작 목록을 `access_click_event { id, surface, time, actions }`에 실어 input pump에 post한다. Controller는 그 요소가 지금 tree에 있고 활성이면 `interaction_policy::on_click`을 부르고 동작을 낸다. 마우스로 누를 때와 같은 자리, 같은 순서(훅 다음 동작)라 클릭 대상으로 상태를 잇는 앱이 보조 기술로 누른 것도 같은 대상으로 본다. 표면이 동작을 따로 배분하면 훅과 동작의 앞뒤가 스케줄링에 달린다. Tab의 자리가 아닌 요소는 초점이 서지 않아 초점으로 대신 알 수 없다. 정책은 input thread의 것이라 UI thread의 provider가 직접 부르지 않는다. 요소가 그 사이 사라졌으면 훅 없이 동작만 낸다. 지어지지 않은 model 항목은 tree에 없어 훅 없이 surface가 배분한다.
 
 ## Focus 요청
 

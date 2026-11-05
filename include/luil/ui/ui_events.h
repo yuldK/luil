@@ -547,18 +547,6 @@ namespace luil {
         std::chrono::steady_clock::time_point time {};
     };
 
-    // 보조 기술이 요소를 눌렀다 (UIA Invoke·Toggle·Select).
-    // 실행(액션)은 표면이 그 자리에서 이미 배분했다. 이 이벤트는 마우스 클릭이 부르는 정책 훅
-    // (`interaction_policy::on_click`)을 같은 자리에서 부르려고 input thread에 온다 — 정책은 input thread의 것이다.
-    //  - Tab의 자리가 아닌 요소도 부른다. 그런 요소는 초점이 서지 않아, 앱이 초점으로 대신 알 길이 없다.
-    //  - 그 요소가 지금 tree에 없거나 비활성이면 부르지 않는다.
-    struct access_click_event
-    {
-        ui_element_id target {};
-        std::u8string surface {};
-        std::chrono::steady_clock::time_point time {};
-    };
-
     // 표면에서 보이는 자리가 줄었다 (휴대폰의 소프트 키보드가 올라왔다).
     // 초점이 그 표면에 있으면 다시 드러내 달라는 뜻이다 — 키보드로 옮긴 초점의 자동 스크롤
     // (`interaction_policy::on_focus_moved`)과 같은 길을 탄다. 눌러서 잡은 초점도 드러낸다.
@@ -568,11 +556,6 @@ namespace luil {
     {
         std::u8string surface {};
     };
-
-    using raw_input_event
-        = std::variant<pointer_moved_event, pointer_pressed_event, pointer_released_event, pointer_left_event, surface_focus_lost_event, surface_focus_gained_event, mouse_wheel_event,
-            file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event, pointer_cancelled_event, focus_reveal_event,
-            access_click_event>;
 
     // UI thread에서만 실행할 수 있는 창 명령이다.
     // 창 조작은 앱 상태가 아니므로 logic을 거치지 않는다.
@@ -864,6 +847,24 @@ namespace luil {
     // 앱 메시지는 `app_message`에 담겨 다니고 앱이 경계에서 복원한다.
     using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request, record_request, haptic_request,
         clipboard_files_copy_request, clipboard_files_paste_request>;
+
+    // 보조 기술이 요소를 눌렀다 (UIA Invoke·Toggle·Select).
+    // 마우스 클릭처럼 정책 훅(`interaction_policy::on_click`)을 부른 뒤 액션을 낸다. 표면이 액션을 따로 배분하면 훅과 액션의
+    // 앞뒤가 스케줄링에 달린다 — 그래서 액션을 함께 싣고 input thread의 한 길로 보낸다. 정책은 input thread의 것이다.
+    //  - Tab의 자리가 아닌 요소도 부른다. 그런 요소는 초점이 서지 않아, 앱이 초점으로 대신 알 길이 없다.
+    //  - 그 요소가 지금 tree에 없거나 비활성이면 훅은 부르지 않고 액션만 낸다.
+    struct access_click_event
+    {
+        ui_element_id target {};
+        std::u8string surface {};
+        std::chrono::steady_clock::time_point time {};
+        std::vector<input_action> actions {};
+    };
+
+    using raw_input_event
+        = std::variant<pointer_moved_event, pointer_pressed_event, pointer_released_event, pointer_left_event, surface_focus_lost_event, surface_focus_gained_event, mouse_wheel_event,
+            file_drag_entered_event, file_drag_moved_event, file_drag_left_event, key_pressed_event, character_typed_event, access_focus_event, pointer_cancelled_event, focus_reveal_event,
+            access_click_event>;
 
     // intent 하나를 액션 값으로 싸는 도우미다.
     // `input_action { app_message { intent {} } }` 3중 중첩을 대신한다.

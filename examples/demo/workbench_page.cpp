@@ -1442,7 +1442,7 @@ namespace demo {
                 submenu_y += luil::menu_separator_height;
             if (item.key == sort_submenu)
                 break;
-            submenu_y += luil::menu_item_height;
+            submenu_y += luil::menu_row_height();
         }
 
         const auto dismiss = [](luil::win32::popup_dismiss_reason) { return luil::make_app_action(workbench_menu_close_intent {}); };

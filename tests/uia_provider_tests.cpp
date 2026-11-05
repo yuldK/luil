@@ -145,9 +145,22 @@ namespace {
             focus_requested = id;
         }
 
-        void accessibility_clicked(const luil::ui_element_id& id) override
+        void accessibility_clicked(const luil::ui_element_id& id, std::vector<luil::input_action> actions) override
         {
             clicked.push_back(id);
+            clicked_action_count += actions.size();
+            // 실제 표면은 훅 다음에 낸다. 실행된 것을 보는 test는 어느 길로 갔든 같은 목록을 본다.
+            dispatched.insert(dispatched.end(), std::make_move_iterator(actions.begin()), std::make_move_iterator(actions.end()));
+        }
+
+        [[nodiscard]] bool accessibility_content_scrollable() const noexcept override
+        {
+            return content_scrollable;
+        }
+
+        void accessibility_reveal(const luil::ui_element_id& id) override
+        {
+            revealed.push_back(id);
         }
 
         // 텍스트 칸의 편집 파이프라인이다 — test가 값을 미리 꽂는다.
@@ -193,6 +206,10 @@ namespace {
         luil::ui_element_id focus_requested {};
         // 정책의 클릭 훅을 부르자고 청한 요소들이다 (`accessibility_clicked`).
         std::vector<luil::ui_element_id> clicked {};
+        // 클릭 훅과 함께 실린 액션의 수다. 훅 뒤에 나가도록 input thread로 간다.
+        std::size_t clicked_action_count { 0 };
+        bool content_scrollable { false };
+        std::vector<luil::ui_element_id> revealed {};
         std::optional<luil::text_input_target> text_target {};
         std::vector<luil::text_edit_request> edits {};
         std::optional<RECT> text_span {};
@@ -3709,10 +3726,37 @@ TEST_CASE("Invoke through UI Automation asks for the policy click hook", "[win32
     auto* const root { new luil::win32::uia_root_provider { host } };
     auto* const provider { root->make_element_provider({ kind_item, u8"save" }) };
 
-    // 액션은 표면이 배분하고, 정책의 클릭 훅은 같은 요소로 청한다 — 마우스로 누른 것과 같은 대상이다.
+    // 액션은 훅과 한 이벤트로 간다 — 마우스처럼 훅 다음에 나가고, 따로 배분하지 않는다.
     REQUIRE(provider->Invoke() == S_OK);
     REQUIRE(host.dispatched.size() == 1u);
+    REQUIRE(host.clicked_action_count == 1u);
     REQUIRE(host.clicked == std::vector<luil::ui_element_id> { luil::ui_element_id { kind_item, u8"save" } });
+
+    provider->Release();
+    root->Release();
+}
+
+TEST_CASE("ScrollIntoView reveals an item in a surface that scrolls its whole content", "[win32][uia][scroll]")
+{
+    fake_uia_host host {};
+    auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"far" }, luil::text_button_config { .text = u8"먼 항목" }) };
+    host.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(button), { 0.0f, 0.0f, 80.0f, 30.0f }, 1.0f));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const provider { root->make_element_provider({ kind_item, u8"far" }) };
+
+    // 흘리는 창도 흘리는 표면도 없으면 들일 자리가 없다.
+    IUnknown* pattern { nullptr };
+    REQUIRE(provider->GetPatternProvider(UIA_ScrollItemPatternId, &pattern) == S_OK);
+    REQUIRE(pattern == nullptr);
+    REQUIRE(provider->ScrollIntoView() == UIA_E_INVALIDOPERATION);
+
+    // 표면이 흘리면 표면이 보인다 (작업 영역보다 긴 popup).
+    host.content_scrollable = true;
+    REQUIRE(provider->GetPatternProvider(UIA_ScrollItemPatternId, &pattern) == S_OK);
+    REQUIRE(pattern != nullptr);
+    pattern->Release();
+    REQUIRE(provider->ScrollIntoView() == S_OK);
+    REQUIRE(host.revealed == std::vector<luil::ui_element_id> { luil::ui_element_id { kind_item, u8"far" } });
 
     provider->Release();
     root->Release();

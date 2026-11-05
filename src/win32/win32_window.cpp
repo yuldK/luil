@@ -399,7 +399,8 @@ namespace luil::win32 {
                 //  - 스레드들이 돌기 전이라 첫 게시부터 목록에 서 있다.
                 set_system_accent(read_system_accent_color());
                 // 사용자가 키운 텍스트 크기를 글자 크기에 싣는다 (`scaled_font_size`). 첫 metrics부터 그 값이다.
-                apply_text_scale(read_text_scale_factor());
+                if (config_.follow_text_scale)
+                    apply_text_scale(read_text_scale_factor());
             }
 
             application_window(const application_window&) = delete;
@@ -767,7 +768,8 @@ namespace luil::win32 {
                     .after_frames = config_.simulate_direct3d_loss_after_frames,
                 };
                 // 텍스트 크기가 바뀌면 이 창에 알린다. 구독하지 못해도 `WM_SETTINGCHANGE`가 다시 읽는다.
-                text_scale_watcher_ = std::make_unique<text_scale_watcher>(window_, text_scale_changed_message);
+                if (config_.follow_text_scale)
+                    text_scale_watcher_ = std::make_unique<text_scale_watcher>(window_, text_scale_changed_message);
                 main_.set_cpu_presentation(cpu_presentation { .layered = layered_, .click_through = config_.layered_click_through });
                 if (layered_)
                     main_.set_placement_host(this);
@@ -1048,9 +1050,12 @@ namespace luil::win32 {
                     return 0;
                 case key_report_message:
                     // 표는 프로세스 안에서 유일하다. 어느 표면의 조합인지는 그 표를 기다리는 표면이 안다.
-                    main_.alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0);
+                    //  - 표의 주인을 만나면 곧바로 끝낸다. 기본 처리의 모달 루프가 `windows_`를 바꿔 놓았을 수 있어 더 돌면 안 된다.
+                    if (main_.alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0))
+                        return 0;
                     for (const std::unique_ptr<secondary_surface>& secondary : windows_)
-                        secondary->alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0);
+                        if (secondary->alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0))
+                            return 0;
                     return 0;
                 case text_scale_changed_message:
                     refresh_text_scale();
@@ -1544,6 +1549,8 @@ namespace luil::win32 {
 
             // 주 창의 닫힘 요청을 앱의 훅(`ui_frame::close`)에 넘긴다. 훅이 없으면 거짓이라 지금처럼 끝낸다.
             //  - 게시된 frame당 한 번만 낸다 (보조 창의 `close`와 같은 빗장). 같은 frame에 거듭 온 요청은 삼킨다.
+            //    앱이 낸 닫기(`app_host::post_ui_command`)는 빗장을 비켜 간다 — 사용자의 거듭된 입력이 아니고, 삼키면 다시 낼
+            //    주체가 없다.
             //  - logic이나 input thread가 멈췄으면(`app_host::faulted`) 훅을 부르지 않고 닫는다. 훅이 낸 메시지를 받을
             //    logic이 없어 창이 영영 닫히지 않는다.
             [[nodiscard]] bool request_main_close()
@@ -1553,7 +1560,7 @@ namespace luil::win32 {
                 const std::shared_ptr<const ui_frame> frame { host_ != nullptr ? host_->acquire_frame() : nullptr };
                 if (frame == nullptr || frame->close == nullptr)
                     return false;
-                if (close_requested_frame_ == frame)
+                if (close_requested_frame_ == frame && host_->take_app_close_request() == false)
                     return true;
                 close_requested_frame_ = frame;
                 try
@@ -1792,6 +1799,8 @@ namespace luil::win32 {
             // 텍스트 크기를 다시 읽는다. 바뀌었으면 모든 창에 metrics를 다시 알려 앱이 새 글자 크기로 다시 배치하게 한다.
             void refresh_text_scale() noexcept
             {
+                if (config_.follow_text_scale == false)
+                    return;
                 const float factor { read_text_scale_factor() };
                 if (factor == text_scale_)
                     return;
