@@ -11,6 +11,7 @@
 #include "luil/win32/app_host.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -291,6 +292,21 @@ namespace luil::win32 {
     //  - 알림 센터에 남은 알림은 거두지 않는다. 먼저 `close_all_notifications`를 부른다.
     [[nodiscard]] platform_result unregister_app_identity(std::u8string_view id);
 
+    // accent acrylic(레이어드 창·popup의 배경 효과)을 거는 값이다 (docs/backdrop-design.md).
+    // 비공개 `SetWindowCompositionAttribute`의 `ACCENT_POLICY`를 그대로 옮긴 것이라 뜻이 OS 판마다 다를 수 있다.
+    // 기본값이 지금까지의 모습이다. 앱이 실측으로 고른 값을 넣는다.
+    struct acrylic_accent_style
+    {
+        // `AccentFlags`다. 0은 색 막을 쓰지 않고, 2는 색 막(`dark_tint`·`light_tint`)을 쓴다.
+        //  - 2에서 색 막의 알파가 낮으면 판이 어두워진다 (0x10 이하에서 거의 검다 — 실측).
+        std::uint32_t flags { 0 };
+        // 색 막이다 (`GradientColor`, 0xAABBGGRR). 표면 바탕이 어두우면 `dark_tint`, 밝으면 `light_tint`다.
+        std::uint32_t dark_tint { 0x40202020u };
+        std::uint32_t light_tint { 0x40f3f3f3u };
+
+        [[nodiscard]] bool operator==(const acrylic_accent_style&) const noexcept = default;
+    };
+
     // 창의 겉모습과 정책이다.
     // 값만 바꾸면 되도록 한곳에 모아 둔다 (단위를 별도로 적지 않은 크기는 논리 96 DPI 기준 px).
     struct window_config
@@ -324,6 +340,9 @@ namespace luil::win32 {
         //    알파 0인 frame에서 알파 0 픽셀을 1로 올려 낸다 — 창 안의 빈 자리 클릭이 창에 온다.
         //  - 바탕 알파가 0이 아닌 테마(기본 테마, 배경 효과의 옅은 바탕)에서는 알파 0 픽셀이 없어 어느 쪽이든 같다.
         bool layered_click_through { false };
+        // accent acrylic을 거는 값이다 (`acrylic_accent_style`). 레이어드 주 창과 popup의 `acrylic`이 이 길로 선다.
+        //  - 시작할 때 정하고 실행 중에는 바꾸지 않는다.
+        acrylic_accent_style acrylic_accent {};
         // Direct3D를 **만들 때** 실패시킨다. 그러면 스왑체인이 아예 없는 채로
         // 처음부터 CPU로 시작한다.
         bool simulate_direct3d_failure { false };

@@ -8,7 +8,7 @@
 namespace luil::win32 {
     // 창이 앱 안에서 주고받는 `WM_APP` 번호표다 (docs/taskbar-design.md).
     // 번호가 한 창에서 겹치면 안 되므로 받는 창이 같은 번호끼리 한 곳에 모은다.
-    //  - 새 번호는 +8부터 표 끝에만 더하고, 받는 창을 아래 주석에 적는다.
+    //  - 새 번호는 +10부터 표 끝에만 더하고, 받는 창을 아래 주석에 적는다.
     //  - `SetTimer` 번호는 여기 없다 (win32_window.cpp의 1·2·4, window_surface.cpp의 3).
 
     // 주 창. wake 신호다. frame slot과 interaction slot의 signal callback이 게시한다.
@@ -30,6 +30,10 @@ namespace luil::win32 {
     // 주 창. 알림 영역 아이콘의 셸 콜백이다 (tray-icon-design.md). NOTIFYICON_VERSION_4라 lParam의 아래 낱말이 사건, 위 낱말이
     // 아이콘 번호이고 wParam이 화면 좌표다.
     inline constexpr UINT tray_callback_message { WM_APP + 7 };
+    // 주 창. input thread가 Alt 조합을 처리한 결과다. wParam이 표이고 lParam이 받았는가다.
+    inline constexpr UINT key_report_message { WM_APP + 8 };
+    // 주 창. 접근성 설정의 텍스트 크기가 바뀌었다는 신호다 (`text_scale_watcher`).
+    inline constexpr UINT text_scale_changed_message { WM_APP + 9 };
 
     // 번호가 서로 다르고 앱이 쓸 수 있는 대역(`WM_APP`~0xBFFF) 안인가다.
     [[nodiscard]] constexpr bool app_message_numbers_valid() noexcept
@@ -42,6 +46,8 @@ namespace luil::win32 {
             access_dispatch_message,
             notification_event_message,
             tray_callback_message,
+            key_report_message,
+            text_scale_changed_message,
         };
         for (std::size_t index = 0; index < std::size(numbers); ++index)
         {

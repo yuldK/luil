@@ -61,6 +61,16 @@
 
 앱 안 단축키는 앱이 앞에 있을 때만 온다. 앱이 뒤에 있거나 창이 숨어 있어도 받는 키 조합은 [전역 단축키](global-hotkey-design.md)가 같은 `key_chord`로 건다. `Ctrl`·`Shift`·`Alt`만 쓰고 걸린 조합은 키 잡기 칸이 초점을 가진 동안 풀려 칸이 받는다. `host/key_mapping`에는 `key_code`를 Win32 가상 키로 되돌리는 `win32_virtual_from_key`가 더해졌다.
 
+## 받은 Alt 조합의 뒷 메시지
+
+Windows는 Alt 조합의 `WM_SYSKEYDOWN` 뒤에 `WM_SYSCHAR`와 `WM_SYSKEYUP`을 보낸다. 기본 처리(`DefWindowProc`)에 가면 경고음이 나거나 메뉴 모드(`SC_KEYMENU`)에 들 수 있다. 앱이 그 조합을 받았으면 둘 다 삼켜야 한다.
+
+키는 input thread가 처리하므로 UI thread는 `WM_SYSKEYDOWN`을 보낸 순간 누가 받았는지 모른다. 그래서 조합에 표(`key_pressed_event::report_ticket`)를 달아 보내고, input thread가 처리한 뒤 받았는가(`interaction_controller::last_key_handled`)를 돌려준다(`app_host::wake_signals::key_report`). 그 사이에 온 `WM_SYSCHAR`·`WM_SYSKEYUP`은 표면이 붙들어 둔다. 받은 조합이면 버리고, 아무도 받지 않았으면 늦게라도 기본 처리에 넘긴다 — 붙들지 않았을 때와 같은 경고음·메뉴다.
+
+- 받았다는 것은 라이브러리의 소비자(키 잡기 칸·메뉴·초점 이동·텍스트 칸·키 handler 등)가 가져갔거나 앱 정책(`on_key`)이 액션을 하나라도 돌려준 것이다.
+- 조합은 Alt를 뗄 때 끝난다. Alt를 새로 누르면 앞의 조합은 끝난 것이다 — Alt 단독 뗌(시스템 메뉴로 가는 길)은 그대로 기본 처리에 간다.
+- 답이 오지 않으면(입력 inbox가 넘쳐 키가 버려졌다) 붙든 메시지는 버린다. 잃는 것은 경고음 하나다.
+
 ## 검증
 
 - `tests/keyboard_shortcut_tests.cpp`: 이름 있는 89개 키 × 수정자 8조합의 왕복, 구두점·키패드·별칭 해석과 거절, Win32·Android 표가 같은 이름으로 모임, 여러 단축키의 맞춤·사용자 재정의·충돌, tooltip 글, 예약 키, 키 잡기 칸이 Tab·Esc·단축키를 먼저 받고 글자를 버림, 잡기를 떠나면 끝남, 텍스트 칸의 Backspace가 앱 단축키로 새지 않음.

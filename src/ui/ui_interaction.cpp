@@ -267,8 +267,15 @@ namespace luil {
         // tooltip·관성·터치 조작·초점·누름 표시·hover가 모두 이 뒤에 있어 맨 앞에서 거른다.
         if (swallow(event))
             return {};
+        const bool key_event { std::holds_alternative<key_pressed_event>(event) };
+        if (key_event)
+            key_handled_ = false;
         if (auto actions { process_tooltip_event(event) }; actions.has_value())
+        {
+            // 떠 있는 tooltip을 거둔 Esc는 그것으로 쓰였다.
+            key_handled_ = key_event;
             return std::move(*actions);
+        }
         // 활성 표면은 `update_focus`의 **전제**라 그보다 먼저 선다.
         // 뒤에 두면 그 `update_focus`가 옛 활성 표면으로 진입을 판정해, 방금
         // 떠난 창의 가둠이 초점을 곧바로 되잡는다 — 거둠과 진입이 서로를 지우는
@@ -409,6 +416,15 @@ namespace luil {
                 {
                     inertia_.reset();
                     return process_access_focus(value);
+                }
+                else if constexpr (std::is_same_v<value_type, access_click_event>)
+                {
+                    // 클릭이 부르는 정책 훅만 부른다. 액션은 표면이 이미 배분했다 (`access_click_event`).
+                    const ui_tree* const tree { surface_tree(value.surface) };
+                    const ui_element* const element { tree != nullptr ? tree->find(value.target) : nullptr };
+                    if (policy_ != nullptr && element != nullptr && element->enabled())
+                        policy_->on_click(*element);
+                    return {};
                 }
                 else if constexpr (std::is_same_v<value_type, pointer_cancelled_event>)
                     return process_cancel(value);
@@ -3484,6 +3500,8 @@ namespace luil {
     {
         // 키 잡기 칸이 초점을 가졌으면 모든 키가 그 칸의 것이다 — 메뉴·Tab·Esc·명령보다 먼저다
         // (keyboard-shortcut-design.md).
+        // 받았다고 두고 시작한다. 아무도 가져가지 않은 자리(아래 셋)에서만 거둔다 (`last_key_handled`).
+        key_handled_ = true;
         if (const key_capture_target* const capture { focused_key_capture() }; capture != nullptr)
             return capture->on_key(event);
 
@@ -3524,6 +3542,8 @@ namespace luil {
                 //    키를 받으면 안 되는 것이 위 규칙의 뜻이다.
                 if (std::optional<std::vector<input_action>> typed { process_text_input_key(event) }; typed.has_value())
                     return std::move(*typed);
+                // 메뉴가 삼켰을 뿐 아무도 쓰지 않았다.
+                key_handled_ = false;
                 return {};
             }
         // 열렸다는 막대의 메뉴가 아직 서지 않았다 (게시 사이). 메뉴가 서기 전의 키도 막대가 받고 나머지는 삼킨다.
@@ -3614,8 +3634,13 @@ namespace luil {
             return std::move(*confirmed);
 
         if (policy_ == nullptr)
+        {
+            key_handled_ = false;
             return {};
-        return policy_->on_key(tree_.get(), event, snapshot_);
+        }
+        std::vector<input_action> routed { policy_->on_key(tree_.get(), event, snapshot_) };
+        key_handled_ = routed.empty() == false;
+        return routed;
     }
 
     std::optional<std::vector<input_action>> interaction_controller::process_handler_key(const key_pressed_event& event)
@@ -3749,6 +3774,12 @@ namespace luil {
                 return std::vector<input_action> {};
             }
         }
+        // 누른 채로 둔 Enter·Space의 자동 반복은 메뉴가 삼킨다. 메뉴는 키로도 클릭으로도 열리고, 연 키를 아직 떼지 않은
+        // 채 반복이 오면 기본 항목(`default_key`)·강조 항목이 거듭 실행된다. 반복은 고른 것이 아니다.
+        //  - 메뉴 안의 글 칸(명령 팔레트의 검색 칸)도 반복된 Enter를 받지 않는다. 칸의 Enter도 메뉴의 실행이다.
+        //  - 반복된 Space는 그대로 글 칸으로 간다 — 공백을 이어 치는 것은 실행이 아니다.
+        if (event.repeat && event.key == key_code::enter)
+            return std::vector<input_action> {};
         if (menu != nullptr && event.shortcut_modifier_down() == false)
         {
             if (event.key == key_code::arrow_right || event.key == key_code::enter)
@@ -4782,7 +4813,8 @@ namespace luil {
     void run_ui_input_pump(messaging::channel<raw_input_event>& input_inbox, messaging::latest_slot<std::shared_ptr<const ui_tree>>& tree_slot,
         messaging::latest_slot<surface_tree_list>& surface_tree_slot, messaging::channel<app_message>& app_inbox, messaging::latest_slot<interaction_snapshot>& interaction_slot,
         const std::function<void(ui_command)>& execute_ui_command, interaction_policy* const policy, interaction_config config, const std::function<void(app_ui_command)>& execute_app_ui_command,
-        const std::function<void(clipboard_request)>& execute_clipboard, messaging::latest_slot<touch_gesture_config>* const touch_slot, const std::function<void(haptic_feedback)>& execute_haptic)
+        const std::function<void(clipboard_request)>& execute_clipboard, messaging::latest_slot<touch_gesture_config>* const touch_slot, const std::function<void(haptic_feedback)>& execute_haptic,
+        const std::function<void(std::uint64_t, bool)>& report_key)
     {
         interaction_controller controller { policy, std::move(config) };
         std::uint64_t tree_version { 0 };
@@ -4880,6 +4912,9 @@ namespace luil {
                 if (const auto time { std::visit(time_of, received.payload) }; time.has_value())
                     dispatch(controller.advance(*time));
                 dispatch(controller.process(received.payload));
+                // 표를 단 키는 누가 받았는지 플랫폼에 돌려준다. 액션을 내보낸 뒤라 받은 조합의 메시지가 먼저 떠난다.
+                if (const auto* const key { std::get_if<key_pressed_event>(&received.payload) }; key != nullptr && key->report_ticket != 0 && report_key)
+                    report_key(key->report_ticket, controller.last_key_handled());
             }
             else
                 dispatch(controller.advance(std::chrono::steady_clock::now()));

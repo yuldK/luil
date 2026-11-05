@@ -954,6 +954,35 @@ TEST_CASE("Content starts at the frame origin while the background fills the sur
     REQUIRE(pixel_at(50, 55) == palette.window_background);
 }
 
+TEST_CASE("Popup scroll strips replace the content even with a translucent backdrop", "[ui][raster][popup]")
+{
+    constexpr luil::ui_color fill { 0xFFFF2040u };
+    auto root { std::make_unique<fill_element>(luil::ui_element_id { luil::ui_element_kind::root }, fill) };
+    root->arrange({ { 0.0f, 0.0f, 80.0f, 60.0f }, 1.0f });
+    const luil::ui_tree tree { std::move(root) };
+    SkBitmap pixels {};
+    pixels.allocN32Pixels(80, 60);
+    SkCanvas canvas { pixels };
+    for (const bool backdrop : { false, true })
+    {
+        luil::frame_state state {};
+        state.width = 80;
+        state.height = 60;
+        state.backdrop = backdrop;
+        state.popup = true;
+        state.scroll_up_strip = 8;
+        state.scroll_down_strip = 8;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        const SkColor background { pixels.getColor(40, 4) };
+
+        state.tree = &tree;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(pixels.getColor(40, 4) == background);
+        REQUIRE(pixels.getColor(40, 56) == background);
+        REQUIRE(pixels.getColor(40, 30) == fill);
+    }
+}
+
 TEST_CASE("An overlay popup paints over the main tree inside its bounds", "[ui][raster][popup]")
 {
     // 창이 하나뿐인 플랫폼은 popup을 주 tree 위의 layer로 그린다 (`frame_state::overlays`).

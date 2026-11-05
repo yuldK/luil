@@ -9,6 +9,10 @@ luil::set_ui_typeface_families({ u8"Pretendard", u8"Malgun Gothic", u8"Segoe UI"
 
 목록은 DirectWrite에서 읽은 UTF-8 가족 이름이며 정렬과 중복 제거를 거친다. 조회에 실패하면 빈 목록을 반환한다. 기본 UI 글꼴은 앞에서부터 설치된 가족을 선택하며, 빈 목록이나 사용할 수 없는 이름만 지정하면 Segoe UI를 사용한다. 앱 시작 전에 설정한다. 호출 시 내부 글꼴 캐시를 비우지만 이미 만들어진 화면과 글꼴 객체를 갱신하지는 않는다.
 
+## 시스템 텍스트 크기
+
+글자 크기는 `scaled_font_size`를 지나 시스템의 텍스트 크기를 따른다. Windows는 설정 > 접근성 > 텍스트 크기(`UISettings.TextScaleFactor`, 100%~225%)를 시작할 때 읽고, 바뀌면(`TextScaleFactorChanged`, 놓치면 `WM_SETTINGCHANGE`) 다시 읽는다. Android는 시스템의 비선형 글자 확대 표를 읽는다. 바뀌면 플랫폼이 모든 창의 metrics를 다시 보낸다 — 앱은 그 메시지에서 다시 배치한다. 대표 배율은 `window_metrics::text_scale`(12 논리 픽셀 글자의 배율)이다. 아이콘과 여백은 키우지 않는다.
+
 ## 굵기와 앱 글꼴 가족
 
 글의 굵기(`font_weight`, 100~900과 그 사이 값)와 기울임(`font_slant`)은 `text_font`·`label_config`·스타일의 `metrics.fontWeights`로 지정한다. 그 굵기의 진짜 face를 찾고, 없으면 획 덧칠·눕힘으로 메운다. 가변 글꼴은 `wght` 축으로 요청한 굵기를 그대로 낸다. 직접 `SkFont`를 짓는 element는 `apply_font_style(font, style)`로 굵기를 건다.

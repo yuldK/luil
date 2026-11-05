@@ -714,6 +714,79 @@ TEST_CASE("Menu keys highlight items and escape asks the policy to close", "[ui]
     REQUIRE(intent_of(actions[0])->name == u8"close-menu");
 }
 
+TEST_CASE("A menu ignores the auto-repeat of a held Enter", "[ui][interaction][policy]")
+{
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto menu { std::make_unique<test_panel>(luil::ui_element_id { kind_menu }) };
+    menu->arrange({ { 10.0f, 10.0f, 100.0f, 30.0f }, 1.0f });
+    auto item { std::make_unique<test_panel>(luil::ui_element_id { kind_menu_item, u8"only" }) };
+    item->arrange({ { 10.0f, 10.0f, 100.0f, 20.0f }, 1.0f });
+    item->set_action(
+        luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_message { fake_intent { u8"item" } } } }; });
+    menu->add(std::move(item));
+    root->add(std::move(menu));
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+    static_cast<void>(controller.process(luil::key_pressed_event { luil::key_code::arrow_down }));
+
+    // 누른 채 둔 Enter의 반복은 고른 것이 아니다. 앱 정책으로도 흐르지 않는다.
+    luil::key_pressed_event repeated { luil::key_code::enter };
+    repeated.repeat = true;
+    REQUIRE(controller.process(repeated).empty());
+    REQUIRE(policy.last_key == luil::key_code::none);
+
+    // 새로 누른 Enter는 그대로 실행한다.
+    const auto actions { controller.process(luil::key_pressed_event { luil::key_code::enter }) };
+    REQUIRE(actions.size() == 1u);
+    REQUIRE(intent_of(actions[0])->name == u8"item");
+}
+
+TEST_CASE("An accessibility click calls the policy click hook for that element", "[ui][interaction][policy][access]")
+{
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    // Tab의 자리가 아닌 단추도 부른다 — 초점으로는 알 수 없는 자리다.
+    auto plain { std::make_unique<test_panel>(luil::ui_element_id { kind_button, u8"plain" }) };
+    plain->arrange({ { 0.0f, 0.0f, 50.0f, 20.0f }, 1.0f });
+    plain->set_tab_stop(false);
+    auto disabled { std::make_unique<test_panel>(luil::ui_element_id { kind_button, u8"disabled" }) };
+    disabled->arrange({ { 0.0f, 30.0f, 50.0f, 20.0f }, 1.0f });
+    disabled->set_enabled(false);
+    root->add(std::move(plain));
+    root->add(std::move(disabled));
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(root)));
+
+    // 액션은 표면이 이미 배분했다. 여기서는 훅만 부르고 아무것도 내지 않는다.
+    REQUIRE(controller.process(luil::access_click_event { luil::ui_element_id { kind_button, u8"plain" } }).empty());
+    REQUIRE(policy.clicked == std::vector<luil::ui_element_id> { luil::ui_element_id { kind_button, u8"plain" } });
+    // 비활성이거나 tree에 없는 요소는 부르지 않는다.
+    static_cast<void>(controller.process(luil::access_click_event { luil::ui_element_id { kind_button, u8"disabled" } }));
+    static_cast<void>(controller.process(luil::access_click_event { luil::ui_element_id { kind_button, u8"gone" } }));
+    REQUIRE(policy.clicked.size() == 1u);
+}
+
+TEST_CASE("The controller reports whether anyone took the last key", "[ui][interaction][policy]")
+{
+    // 정책이 액션을 돌려준 키는 받은 것이다.
+    recording_policy policy {};
+    luil::interaction_controller handled { &policy };
+    luil::key_pressed_event chord { luil::key_code::key_1 };
+    chord.alt = true;
+    REQUIRE(handled.process(chord).size() == 1u);
+    REQUIRE(handled.last_key_handled());
+
+    // 정책이 없거나 아무것도 돌려주지 않으면 받지 않은 것이다 — 플랫폼이 기본 처리에 넘긴다.
+    luil::interaction_controller unrouted {};
+    REQUIRE(unrouted.process(chord).empty());
+    REQUIRE(unrouted.last_key_handled() == false);
+}
+
 TEST_CASE("Dragging past the threshold starts a drag and dropping runs the target action", "[ui][interaction][drag]")
 {
     luil::interaction_controller controller {};

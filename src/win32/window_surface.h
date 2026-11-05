@@ -132,6 +132,12 @@ namespace luil::win32 {
         // (popup-anchor-design.md).
         virtual void surface_moved(const std::u8string& anchor) = 0;
 
+        // 내용만 흘러 앵커의 화면 자리가 바뀌었다. 창 이동의 닫힘 정책은 부르지 않는다.
+        virtual void surface_scrolled(const std::u8string& anchor)
+        {
+            static_cast<void>(anchor);
+        }
+
         // 표면이 만든 액션을 통상 규칙대로 배분한다 (앱 메시지·창 명령·클립보드).
         virtual void dispatch_action(input_action action) = 0;
 
@@ -357,6 +363,11 @@ namespace luil::win32 {
         // 처리했으면 그 결과고, 아니면 nullopt라 호출자가 자기 처리를 이어 본다.
         [[nodiscard]] std::optional<LRESULT> handle_surface_message(UINT message, WPARAM word_parameter, LPARAM long_parameter);
 
+        // input thread가 Alt 조합 하나(`key_pressed_event::report_ticket`)를 처리했다 (`app_host::wake_signals::key_report`).
+        // 이 표면이 그 조합을 기다리고 있었으면 붙들어 둔 `WM_SYSCHAR`·`WM_SYSKEYUP`을 정리한다 — 받은 조합이면
+        // 버리고, 아무도 받지 않았으면 기본 처리(`DefWindowProc`)에 늦게라도 넘긴다. 다른 표면의 표는 무시한다.
+        void alt_chord_reported(std::uint64_t ticket, bool handled);
+
         // 이 표면 한 장을 그린다.
         [[nodiscard]] bool render(std::u8string& error);
 
@@ -497,6 +508,25 @@ namespace luil::win32 {
         [[nodiscard]] bool post_pointer_message(UINT message, WPARAM word_parameter, LPARAM long_parameter, std::optional<bool> captured = std::nullopt, bool closed_popup = false);
         // Ctrl을 누르거나 뗐다. 포인터가 이 창 위에 있으면 그 자리의 이동을 다시 알린다 (`interaction_snapshot::pointer_control`).
         void post_control_move(bool control);
+        // 창 client의 y에 더해야 tree의 y가 되는 양이다 (물리 픽셀). 내용을 흘려 보이는 표면(작업 영역보다 긴 popup)만
+        // 0이 아니다 — 그림은 그만큼 위로 옮겨 그리고(`frame_state::origin_y`), 포인터·커서는 그만큼 더해 tree에 묻는다.
+        [[nodiscard]] virtual int content_offset_y() const noexcept
+        {
+            return 0;
+        }
+
+        // tree를 그리는 client 영역이다. 화살표처럼 내용 위를 덮는 부분은 뺀다.
+        [[nodiscard]] virtual std::optional<rect_f> content_viewport() const noexcept
+        {
+            return std::nullopt;
+        }
+        // 터치·펜이 내용 위의 별도 영역에 닿았다. 누름이면 그 영역을 실행하고 참을 돌려준다.
+        [[nodiscard]] virtual bool handle_pointer_overlay(POINT position, bool pressed)
+        {
+            static_cast<void>(position);
+            static_cast<void>(pressed);
+            return false;
+        }
 
         // 누름 동안 포인터를 이 창에 묶는다.
         // 배경 스레드의 `SetCapture`는 실제로 캡처를 얻지 못할 수 있어,
@@ -512,7 +542,7 @@ namespace luil::win32 {
         // 캡처를 빼앗겨 `WM_xBUTTONUP`이 오지 않는 경우의 정리다.
         // 먼 좌표의 왼쪽 뗌을 합성해 press·끌기를 전부 푼다 —
         // hit가 없는 뗌은 클릭이 되지 않고 상태만 정리된다.
-        void cancel_pointer_press();
+        void cancel_pointer_press(pointer_button button = pointer_button::left);
         // 이동·뗌 이벤트에 화면 자리를 싣고, 이 창이 포인터를 잡은 채 내부 끌기 중이면 포인터 밑에 실제로 보이는
         // 표면도 싣는다 (`pointer_over`). 잡은 창 밖으로 끌고 나가도 다른 창의 tree에 놓을 수 있는 것이 이것이다.
         //  - 밑의 창은 OS hit test(`WindowFromPoint`)로 찾는다 — 그 점에서 맨 위에 보이는 창이 답이다(Z 순서).
@@ -531,7 +561,10 @@ namespace luil::win32 {
 
         // 눌린 키를 이벤트로 만들어 input thread에 보낸다.
         // 이벤트가 됐으면 참이라 호출자가 메시지를 삼킨다.
-        [[nodiscard]] bool post_key_event(WPARAM virtual_key, LPARAM long_parameter);
+        //  - `report_ticket`이 0이 아니면 처리한 뒤 누가 받았는지 돌려받는다 (Alt 조합).
+        [[nodiscard]] bool post_key_event(WPARAM virtual_key, LPARAM long_parameter, std::uint64_t report_ticket = 0);
+        // Alt 조합의 뒷 메시지(`WM_SYSCHAR`·`WM_SYSKEYUP`)를 볼지다. 삼키면 참이다 (`alt_chord_`).
+        [[nodiscard]] bool hold_alt_chord_message(UINT message, WPARAM word_parameter, LPARAM long_parameter);
 
         void track_mouse_leave() noexcept;
         // 초점을 가진 element가 다음 키를 모두 받는 중인가 (`ui_element::set_key_capture`).
@@ -551,9 +584,12 @@ namespace luil::win32 {
         // 그대로 내준다.
         [[nodiscard]] const ui_tree* accessibility_tree() const noexcept override;
         [[nodiscard]] HWND accessibility_window() const noexcept override;
+        [[nodiscard]] int accessibility_content_offset_y() const noexcept override;
+        [[nodiscard]] std::optional<rect_f> accessibility_viewport() const noexcept override;
         [[nodiscard]] ui_element_id accessibility_focus() const override;
         void accessibility_dispatch(std::vector<input_action> actions) override;
         void accessibility_request_focus(const ui_element_id& id) override;
+        void accessibility_clicked(const ui_element_id& id) override;
         // 텍스트 칸의 Text pattern·값 쓰기다 — 대상 해석은 앱 정책,
         // 편집 배분은 `accessibility_dispatch`와 같은 미룸, 좌표·측정은 TSF가
         // 쓰는 그 함수다.
@@ -639,6 +675,27 @@ namespace luil::win32 {
         // `WM_CHAR`로 앞쪽만 도착한 surrogate다.
         // 표면마다 따로다 — UI thread 전용이다.
         std::optional<char16_t> pending_high_surrogate_ {};
+        // input thread에 보낸 Alt 조합 하나다. 처리는 input thread의 일이라 `WM_SYSKEYDOWN`이 돌아온 순간에는 누가
+        // 받았는지 모른다. 그 사이 온 `WM_SYSCHAR`·`WM_SYSKEYUP`을 붙들어 두었다가 답(`alt_chord_reported`)에 맞춰
+        // 버리거나 기본 처리에 넘긴다 — 받은 조합의 뒷 메시지가 기본 처리로 가면 경고음이 나거나 메뉴 모드
+        // (SC_KEYMENU)에 들어간다.
+        //  - 조합은 Alt를 뗄 때(`WM_SYSKEYUP` VK_MENU) 끝난다. 답이 아직이면 답이 올 때까지 남는다.
+        //  - 새 조합(자동 반복 포함)이 오면 앞의 것은 끝난다. 답을 못 받은 앞의 붙든 메시지는 버린다 — 같은 조합의
+        //    반복이라 경고음 하나를 잃을 뿐이다.
+        struct held_message
+        {
+            UINT message { 0 };
+            WPARAM word_parameter { 0 };
+            LPARAM long_parameter { 0 };
+        };
+        struct alt_chord
+        {
+            std::uint64_t ticket { 0 };
+            std::optional<bool> handled {};
+            std::vector<held_message> held {};
+            bool released { false };
+        };
+        std::optional<alt_chord> alt_chord_ {};
         std::shared_ptr<const ui_tree> tree_ {};
         bool tracking_mouse_ { false };
         // 멈춘 커서 감추기의 장부와, 마지막 포인터 자리·그 자리의 감춤 시간이다.
