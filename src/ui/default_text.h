@@ -9,6 +9,14 @@
 #include <string_view>
 
 namespace luil::default_text {
+    [[nodiscard]] std::u8string_view time_minute_decrease() noexcept;
+    [[nodiscard]] std::u8string_view time_minute_increase() noexcept;
+    [[nodiscard]] std::u8string_view time_hour_decrease() noexcept;
+    [[nodiscard]] std::u8string_view time_hour_increase() noexcept;
+    [[nodiscard]] std::u8string_view time_pm() noexcept;
+    [[nodiscard]] std::u8string_view time_am() noexcept;
+    [[nodiscard]] std::u8string_view time_minute() noexcept;
+    [[nodiscard]] std::u8string_view time_hour() noexcept;
     // 라이브러리 요소가 스스로 화면이나 접근 tree에 놓는 글의 기본값이다 (docs/default-text-design.md).
     //
     // 기본은 한국어이고 앱이 `set_text_languages`로 언어를 정하면 그 언어다. 앱이 config로 글을 주면 그 글이고, 비어 있으면 이 함수들이

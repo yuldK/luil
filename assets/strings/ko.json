@@ -7,6 +7,14 @@
         "calendar_day_name": [ "year", "month", "day", "month_name", "weekday" ]
     },
     "strings": {
+        "time_hour": "시",
+        "time_minute": "분",
+        "time_am": "오전",
+        "time_pm": "오후",
+        "time_hour_increase": "시 늘리기",
+        "time_hour_decrease": "시 줄이기",
+        "time_minute_increase": "분 늘리기",
+        "time_minute_decrease": "분 줄이기",
         "info_bar_close": "닫기",
         "severity_name_info": "정보",
         "severity_name_success": "성공",

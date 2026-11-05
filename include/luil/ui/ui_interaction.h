@@ -155,6 +155,7 @@ namespace luil {
         bool at_start { false };
         // 내용이 끝에 있다. 관성이 경계 밖으로 메시지를 계속 보내지 않게 한다.
         bool at_end { false };
+        std::function<input_action(float final_delta, float velocity)> settle {};
     };
 
     // 표로 끌기를 이름 대는 앱의 한 줄이다.
@@ -168,6 +169,7 @@ namespace luil {
         // 앱 상태에서 읽은 양 끝이다 (`scroll_source`와 같은 뜻).
         bool at_start { false };
         bool at_end { false };
+        std::function<input_action(float final_delta, float velocity)> settle {};
     };
 
     // (x, y)를 덮고 `axis`로 흐르는 가장 안쪽·가장 위의 컨테이너다.

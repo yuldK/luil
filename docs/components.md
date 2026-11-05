@@ -118,3 +118,5 @@
 - [통합 예제](../examples/demo)
 
 선택한 기능의 이식 범위와 보존한 여섯 기능은 [선택 기능 이식 기록](selected-adoption.md)에 적었다.
+
+도킹·페이지·시·분·GDEF caret·Windows 미디어·WebSocket은 [선택 노드 구현 안내](selected-nodes.md)를 본다.

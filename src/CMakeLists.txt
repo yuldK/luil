@@ -685,6 +685,29 @@ luil_add_source_filter(luil_files "net/winhttp"
     net/winhttp/winhttp_error.cpp
     net/winhttp/winhttp_error.h)
 
+luil_add_source_filter(luil_core_files "ui/layout"
+    ui/video_element.cpp
+    "${public_headers}/ui/video_element.h"
+    ui/pager_element.cpp
+    ui/dock_element.cpp
+    ui/dock_layout.cpp
+    "${public_headers}/ui/pager_element.h"
+    "${public_headers}/ui/dock_element.h")
+luil_add_source_filter(luil_core_files "ui/controls"
+    ui/time_picker_element.cpp
+    "${public_headers}/ui/time_picker_element.h")
+luil_add_source_filter(luil_core_files "ui/foundation"
+    ui/ligature_carets.cpp
+    ui/ligature_carets.h)
+luil_add_source_filter(luil_files "net/winhttp"
+    net/websocket_client.cpp
+    net/websocket_transport.h
+    net/winhttp/websocket_transport.cpp
+    "${public_headers}/net/websocket_client.h")
+luil_add_source_filter(luil_files "win32/media"
+    win32/media_player.cpp
+    "${public_headers}/win32/media_player.h")
+
 # 플랫폼을 모르는 층이다 (messaging → text → theme → ui).
 # 층 사이의 방향은 디렉터리 구조와 코드 리뷰로 지키고, 플랫폼과의 경계만
 # target으로 긋는다.
@@ -774,7 +797,10 @@ if(LUIL_PLATFORM STREQUAL "windows")
             shcore
             uiautomationcore
             user32
-            # net 계층의 HTTP client다.
+            # Windows 미디어와 net 계층의 HTTP/WebSocket이다.
+            mfplay
+            mfuuid
+            propsys
             winhttp
         PRIVATE
             luil_options)
@@ -852,6 +878,10 @@ if(LUIL_PLATFORM STREQUAL "android")
     luil_add_source_filter(luil_android_files "net"
         android/java_vm.cpp
         android/java_vm.h
+        net/websocket_client.cpp
+        net/websocket_transport.h
+        net/android/websocket_transport.cpp
+        "${public_headers}/net/websocket_client.h"
         net/android/android_http_client.cpp
         net/android/android_text_transcode.cpp
         net/http_body.cpp

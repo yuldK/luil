@@ -347,8 +347,8 @@ namespace luil {
                     const bool reordering { reorder != nullptr };
                     const bool receiving { bar.receive != nullptr };
                     drop_target drop {};
-                    drop.accepts = [container, order, moving, reordering, receiving](const drag_payload& payload) {
-                        return ((moving || reordering) && own_tab(payload, container, *order)) || (receiving && foreign_tab(payload, container, *order));
+                    drop.accepts = [container, order, moving, reordering, receiving, accepts = bar.receive_accepts](const drag_payload& payload) {
+                        return ((moving || reordering) && own_tab(payload, container, *order)) || (receiving && foreign_tab(payload, container, *order) && (accepts == nullptr || accepts(payload)));
                     };
                     drop.accepts_at = [self, key, container, order, index, moving](const drag_payload& payload, const float x, const float) {
                         if (own_tab(payload, container, *order) == false)
@@ -1045,8 +1045,8 @@ namespace luil {
             const bool moving { config_.move != nullptr };
             const bool receiving { config_.receive != nullptr };
             drop_target end {};
-            end.accepts = [container, order, moving, receiving](
-                              const drag_payload& payload) { return (moving && own_tab(payload, container, *order)) || (receiving && foreign_tab(payload, container, *order)); };
+            end.accepts = [container, order, moving, receiving, accepts = config_.receive_accepts](
+                              const drag_payload& payload) { return (moving && own_tab(payload, container, *order)) || (receiving && foreign_tab(payload, container, *order) && (accepts == nullptr || accepts(payload))); };
             end.accepts_at = [self, container, order](const drag_payload& payload, const float x, const float y) {
                 if (self->end_gap_contains(x, y) == false)
                     return false;

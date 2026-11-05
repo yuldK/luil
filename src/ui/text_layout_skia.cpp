@@ -5,6 +5,7 @@
 #include "luil/text/utf8_text.h"
 #include "luil/ui/draw_primitives.h"
 #include "ui/font_synthesis.h"
+#include "ui/ligature_carets.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_shaping.h"
 
@@ -319,6 +320,9 @@ namespace luil {
         class layout_run_handler final : public SkShaper::RunHandler
         {
         public:
+            explicit layout_run_handler(const std::u8string_view text) : text_ { text }
+            {
+            }
             text_layout_segment result {};
             std::shared_ptr<glyph_drawing> drawing { std::make_shared<glyph_drawing>() };
             void beginLine() override
@@ -377,12 +381,56 @@ namespace luil {
                 std::sort(result.clusters.begin(), result.clusters.end(), [](const auto& a, const auto& b) { return a.begin < b.begin; });
                 for (std::size_t index { 0 }; index + 1 < result.clusters.size(); ++index)
                     result.clusters[index].end = result.clusters[index + 1].begin;
+                // 같은 cluster에 glyph가 하나인 합자만 좌표표와 대응한다. 결합 부호의 여러 glyph는 나누지 않는다.
+                for (const auto& run : drawing->runs)
+                {
+                    const bool has_ligature { std::ranges::any_of(run.groups, [&](const auto& group) {
+                        return group.count == 1 && group.end <= text_.size() && group.end > group.begin + 1
+                            && text::grapheme_boundaries(text_.substr(group.begin, group.end - group.begin)).size() > 2;
+                    })
+                    };
+                    if (has_ligature == false)
+                        continue;
+                    const auto face { run.font.refTypeface() };
+                    constexpr SkFontTableTag gdef { SkSetFourByteTag('G', 'D', 'E', 'F') };
+                    const auto size { face->getTableSize(gdef) };
+                    if (size == 0 || size > 16 * 1024 * 1024 || face->getUnitsPerEm() <= 0)
+                        continue;
+                    std::vector<std::uint8_t> table(size);
+                    if (face->getTableData(gdef, 0, size, table.data()) != size)
+                        continue;
+                    for (const auto& group : run.groups)
+                    {
+                        if (group.count != 1 || group.end > text_.size())
+                            continue;
+                        const auto boundaries { text::grapheme_boundaries(text_.substr(group.begin, group.end - group.begin)) };
+                        const auto coordinates { ligature_caret_coordinates(table, run.glyphs[group.first]) };
+                        if (boundaries.size() < 3 || coordinates.size() != boundaries.size() - 2)
+                            continue;
+                        const auto cluster { std::lower_bound(result.clusters.begin(), result.clusters.end(), group.begin, [](const auto& item, const auto begin) { return item.begin < begin; }) };
+                        if (cluster == result.clusters.end())
+                            continue;
+                        std::vector<float> positions {};
+                        const float unit { run.font.getSize() * run.font.getScaleX() / static_cast<float>(face->getUnitsPerEm()) };
+                        for (const auto coordinate : coordinates)
+                            positions.push_back(run.positions[group.first].x() + static_cast<float>(coordinate) * unit);
+                        std::sort(positions.begin(), positions.end());
+                        if (positions.front() <= cluster->left || positions.back() >= cluster->right)
+                            continue;
+                        if (cluster->rtl)
+                            std::reverse(positions.begin(), positions.end());
+                        for (std::size_t index { 0 }; index < positions.size(); ++index)
+                            result.ligature_stops.push_back({ group.begin + boundaries[index + 1], positions[index] });
+                    }
+                }
+                std::sort(result.ligature_stops.begin(), result.ligature_stops.end(), [](const auto& a, const auto& b) { return a.offset < b.offset; });
                 result.ink_bounds = ink_of(*drawing);
                 result.drawing = std::move(drawing);
                 return std::move(result);
             }
 
         private:
+            std::u8string_view text_ {};
             float pen_ { 0.0f };
             std::vector<SkPoint> advances_ {};
             std::vector<SkPoint> offsets_ {};
@@ -597,7 +645,7 @@ namespace luil {
                     layout_font_iterator iterator { fonts };
                     const auto language { user_ui_language() };
                     SkShaper::TrivialLanguageRunIterator languages { language.empty() ? "und" : language.c_str(), text.size() };
-                    layout_run_handler handler {};
+                    layout_run_handler handler { text };
                     handler.drawing->base_font = font;
                     shaper->shape(reinterpret_cast<const char*>(text.data()), text.size(), iterator, *bidi, *script, languages, nullptr, 0, std::numeric_limits<float>::max(), &handler);
                     auto segment { handler.finish() };

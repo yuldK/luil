@@ -7,6 +7,12 @@
 // 어느 쪽이든 경로는 항상 `luil/` 접두로 시작한다.
 
 #include "luil/version.h"
+#include "luil/ui/pager_element.h"
+#include "luil/ui/video_element.h"
+#include "luil/ui/time_picker_element.h"
+#include "luil/ui/dock_element.h"
+#include "luil/net/websocket_client.h"
+#include "luil/win32/media_player.h"
 
 // 스레드 경계 채널이다.
 #include "luil/messaging/channel.h"
