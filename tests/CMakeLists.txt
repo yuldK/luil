@@ -522,7 +522,9 @@ add_executable(luil_tests
     windows_page_tests.cpp
     # 데스크톱 데모의 기본 페이지도 <windows.h>와 비밀 저장소를 불러 Windows 전용 test에서 읽는다. 확인 대화의 열기·결과·닫기를 검증한다.
     "${PROJECT_SOURCE_DIR}/examples/demo/basics_page.cpp"
-    basics_page_tests.cpp)
+    basics_page_tests.cpp
+    # 선택 노드 여섯(dock·pager·time_picker·합자 caret·WebSocket·MFPlay)이다. 실제 글꼴·WinHTTP·Media Foundation을 쓰므로 여기다.
+    selected_nodes_tests.cpp)
 # 변조를 시키는지 본다 (페이지가 <windows.h>를 불러 Windows 전용 test에서 읽는다).
 target_sources(luil_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/examples/demo/network_page.cpp"

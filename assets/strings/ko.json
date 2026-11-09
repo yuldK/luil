@@ -15,6 +15,8 @@
         "time_hour_decrease": "시 줄이기",
         "time_minute_increase": "분 늘리기",
         "time_minute_decrease": "분 줄이기",
+        "dock_group": "패널 묶음",
+        "dock_divider": "패널 크기 조절",
         "info_bar_close": "닫기",
         "severity_name_info": "정보",
         "severity_name_success": "성공",

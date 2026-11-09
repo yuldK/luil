@@ -9,6 +9,8 @@
 #include <string_view>
 
 namespace luil::default_text {
+    [[nodiscard]] std::u8string_view dock_group() noexcept;
+    [[nodiscard]] std::u8string_view dock_divider() noexcept;
     [[nodiscard]] std::u8string_view time_minute_decrease() noexcept;
     [[nodiscard]] std::u8string_view time_minute_increase() noexcept;
     [[nodiscard]] std::u8string_view time_hour_decrease() noexcept;

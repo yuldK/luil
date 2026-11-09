@@ -31,7 +31,8 @@ namespace luil {
         std::u8string pm_label {};
     };
 
-    // 두 숫자 칸은 time_picker_hour/minute + owner다. 타자·IME는 일반 text_input과 같은 편집 경로로 보낸다.
+    // 두 숫자 칸은 time_picker_hour + `owner/hour`, time_picker_minute + `owner/minute`이다. 칸 안 스핀 단추의 id가
+    // 칸의 owner를 따르므로 두 칸의 owner를 가른다. 타자·IME는 일반 text_input과 같은 편집 경로로 보낸다.
     class time_picker_element final : public ui_element
     {
     public:

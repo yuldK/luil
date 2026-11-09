@@ -49,7 +49,10 @@ namespace luil::win32 {
             }
             if (SUCCEEDED(player->GetDuration(MFP_POSITIONTYPE_100NS, &value)))
             {
-                if (value.vt == VT_I8)
+                // GetDuration은 VT_UI8로 답한다(GetPosition은 VT_I8). 한쪽만 읽으면 길이가 늘 0이다.
+                if (value.vt == VT_UI8)
+                    event.duration = std::chrono::milliseconds { static_cast<std::int64_t>(value.uhVal.QuadPart / 10000) };
+                else if (value.vt == VT_I8)
                     event.duration = std::chrono::milliseconds { value.hVal.QuadPart / 10000 };
                 (void)PropVariantClear(&value);
             }
