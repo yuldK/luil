@@ -4,7 +4,7 @@
 `dock`, `pager`, `time_picker`, `lig_caret`, `video`, `websocket` 여섯 개다.
 제목에 적힌 일곱 개 중 하나는 사용자가 제외했다.
 
-이 변경은 구현과 컴파일·정적 확인까지다. 기능·회귀·네이티브 통합 테스트는 실행하지 않았다.
+처음 변경은 구현과 컴파일·정적 확인까지였다. 2026-11-09에 Windows에서 실행 시험을 했다([아래](#windows-실행-확인-2026-11-09)).
 Linux는 정식 앱 지원 플랫폼이 아니므로 아래 캡처는 모델 시각화이며 네이티브 UI 실행 증거가 아니다.
 
 ![Linux 모델 미리보기](screenshots/selected-nodes-linux.png)
@@ -61,7 +61,8 @@ offset = luil::apply_pager_command(offset, page_count, command);
 
 ## 시·분과 합자
 
-시·분 칸은 `time_picker_hour`, `time_picker_minute` kind와 config의 owner를 쓴다.
+시·분 칸은 `time_picker_hour`, `time_picker_minute` kind와 config의 owner에 `/hour`·`/minute`을 붙인 owner를 쓴다.
+칸 안의 스핀 단추가 칸의 owner로 id를 지으므로, 두 칸이 같은 owner면 단추 id가 겹쳐 보조 기술 tree에서 분의 단추가 사라진다.
 `interaction_policy::text_target_of`에 두 kind를 등록하고 타자·붙여넣기·IME를 기존
 `apply_text_edit`와 `make_text_input_view`로 잇는다. 스핀 변경도 초안 전체를 바꾸는 메시지다.
 `read_time_picker`가 범위를 판정하며, 12 AM은 0시, 12 PM은 12시로 읽는다.
@@ -184,12 +185,33 @@ python scripts/preview_selected_nodes.py \
 전체 `win32_window.cpp`의 MinGW 확인은 기존 TSF의 `ITextStoreACP2` 선언이 MinGW SDK에 없어 막혔다.
 따라서 새 네이티브 수명 훅을 포함한 정식 호스트 빌드는 지원 Windows SDK/MSVC에서 후속 확인해야 한다.
 
+## Windows 실행 확인 (2026-11-09)
+
+MSVC Release로 짓고 기존 core·Windows·shaping 시험과 정적 검사가 그대로 통과했다. 새 시험은
+[selected_nodes_tests.cpp](../tests/selected_nodes_tests.cpp)다. 외부 자원이 드는 WebSocket·미디어 시험은 숨은 태그
+`[.live]`라 따로 돌린다(`LUIL_WS_PORT`에 localhost 시험 서버). 예제는 격리 데스크톱의 UI Automation으로 조작했다.
+
+- 도킹: 순서 바꾸기, 다른 그룹·네 가장자리, 한 패널뿐인 그룹의 자기 가장자리, 중첩 분할과 되붙이기, 띄우기·합치기·옮기기,
+  잘못된 명령의 원본 보존, 비율 상한, 배율 1·1.5·2의 손잡이, interaction controller로 끈 실제 마우스 끌기, 다른 dock 탭 거절.
+- 페이지: 명령의 상한·걸음·정착, 터치 끌기·느린 놓기·빠른 튕김(배율 1·2), 키보드 걸음·Home/End, 휠 한 눈금.
+- 시·분: 24/12시간 판정, UIA 값 넣기와 두 칸의 스핀 단추.
+- 합자 caret: 합성 GDEF(형식 1·3, coverage 1·2, 형식 2·device 거절, 모든 길이로 자른 표), Windows 11의
+  Sans Serif Collection에서 `ff` 안쪽 caret이 표의 0.4375 자리에 서고 hit test·선택·줄 바꿈이 그 자리를 따른다.
+- 미디어: 열기·소리 없는 재생·일시정지·탐색·끝·되감기, 없는 파일·미디어 아닌 파일의 실패, 연달아 열기의 마지막만 반영,
+  자식 영상 창의 자리·감춤·소멸, 예제 창의 수명 훅 셋(만듦·frame·소멸이 각각 한 번).
+- WebSocket: 텍스트·바이너리·빈 메시지·한글·200KB 메아리, 조각과 사이의 ping, 잘못된 UTF-8, mask를 켠 서버 frame,
+  원격 닫기 코드·이유, TCP 끊김, upgrade 거절, connect_timeout보다 긴 유휴 연결, 닫기 시한, 연결·수신·여러 thread 송신 중 stop.
+
+확인하며 고친 것: WebSocket이 upgrade 뒤의 핸들에 받기 시한을 걸다 실패해 연결이 열리지 않던 것, MFPlay 길이를 `VT_I8`로만
+읽어 늘 0이던 것, 시·분 두 칸의 스핀 단추 id가 겹쳐 분의 단추가 보조 기술 tree에서 사라지던 것, 도킹 탭 묶음과 분할 손잡이의
+빈 접근 이름(기본 문구 `dock_group`·`dock_divider`, `dock_config::group_name`·`divider_name`).
+
 ## 남겨 둔 실제 테스트
 
-1. 도킹의 같은/다른 그룹 순서, 분리·재부착, 빈 그룹 정리, 중첩 분할, 좁은 창·DPI, 초점·접근성.
-2. 페이지의 빠른 연속 이동, nested scroll, 손 뗌 마지막 이동, 취소·큐 유실, 터치패드·키보드.
-3. 시·분의 타자·붙여넣기·IME·스핀, 빈 값·범위 끝, 12 AM/PM, 번역과 보조 기술.
-4. 좌우 방향의 실제 합자 글꼴, GDEF 없음·손상·device/variation, caret/hit test/선택/IME 왕복.
-5. Windows 실제 영상·오디오, 코덱 실패, 재생·일시정지·탐색·볼륨, 가림·DPI·종료 중 완료, 호스트 수명 훅.
-6. Windows/Android 실제 ws/wss 서버, 인증서·평문 정책, 단편·빈 메시지·ping/pong, 잘못된 frame·UTF-8,
-   큐/메시지 상한, 동시 송수신·원격 종료·연결/송신 중 stop, R8와 APK 포장.
+1. 도킹 분할 손잡이의 키보드·보조 기술 크기 조절(RangeValue 없음), 떠 있는 패널을 옮길 제목줄, 좁은 창.
+2. 페이지의 nested scroll, 터치패드 정밀 스크롤, 보조 기술이 읽을 현재 장.
+3. 시·분의 실제 IME 조합.
+4. 오른쪽에서 왼쪽 쓰기의 실제 합자 글꼴(이 PC에 LigCaretList가 있는 RTL 글꼴이 없다), IME 왕복.
+5. 미디어의 코덱 설치 여부, 실제 오디오 출력, DPI 변경 중의 영상 자리.
+6. WebSocket 메시지 상한 초과는 1009 닫기 frame 없이 끊긴다(전송부가 받는 자리에서 먼저 거절한다). wss 인증서·평문 정책,
+   Android 전송부 전체, R8와 APK 포장.

@@ -49,7 +49,10 @@ namespace luil {
                     return change(checked.valid() ? format_time_part(static_cast<int>(*checked.value)) : std::move(text));
                 };
             input.number = std::move(number);
-            auto element { std::make_unique<text_input_element>(ui_element_id { hour ? ui_element_kind::time_picker_hour : ui_element_kind::time_picker_minute, config.owner }, hour ? std::move(config.hour) : std::move(config.minute), std::move(input)) };
+            // 칸 안의 스핀 단추는 칸의 owner로 id를 짓는다. 두 칸이 owner를 나눠 쓰면 시·분의 단추 id가 겹쳐
+            // 보조 기술 tree에서 분의 단추가 접히므로 칸마다 owner를 가른다.
+            const ui_element_id id { hour ? ui_element_kind::time_picker_hour : ui_element_kind::time_picker_minute, config.owner + (hour ? u8"/hour" : u8"/minute") };
+            auto element { std::make_unique<text_input_element>(id, hour ? std::move(config.hour) : std::move(config.minute), std::move(input)) };
             element->set_access_name(hour ? config.hour_name : config.minute_name);
             return element;
         };

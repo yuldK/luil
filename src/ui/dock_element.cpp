@@ -1,6 +1,7 @@
 #include "luil/ui/dock_element.h"
 
 #include "luil/ui/draw_primitives.h"
+#include "ui/default_text.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
@@ -36,7 +37,9 @@ namespace luil {
                     handle.resize = [this, emit = config.change, key = node.key](const float delta) {
                         return emit({ .operation = dock_operation::resize, .target = key, .delta = extent_ > 0.0f ? delta / extent_ : 0.0f });
                     };
-                add_child(std::make_unique<split_handle_element>(ui_element_id { ui_element_kind::dock_drop, config.owner + u8"/" + node.key }, std::move(handle)));
+                auto divider { std::make_unique<split_handle_element>(ui_element_id { ui_element_kind::dock_drop, config.owner + u8"/" + node.key }, std::move(handle)) };
+                divider->set_access_name(config.divider_name.empty() ? std::u8string { default_text::dock_divider() } : config.divider_name);
+                add_child(std::move(divider));
                 add_child(std::move(second));
             }
 
@@ -209,7 +212,9 @@ namespace luil {
             };
         }
         auto content { config_.content != nullptr && tabs.selected.empty() == false ? config_.content(tabs.selected) : nullptr };
-        auto group { std::make_unique<dock_group_element>(ui_element_id { ui_element_kind::dock_group, config_.owner + u8"/" + node.key }, std::make_unique<tab_bar_element>(std::move(tabs)), std::move(content), config_.tab_height) };
+        auto bar { std::make_unique<tab_bar_element>(std::move(tabs)) };
+        bar->set_access_name(config_.group_name.empty() ? std::u8string { default_text::dock_group() } : config_.group_name);
+        auto group { std::make_unique<dock_group_element>(ui_element_id { ui_element_kind::dock_group, config_.owner + u8"/" + node.key }, std::move(bar), std::move(content), config_.tab_height) };
         if (config_.change != nullptr)
         {
             drop_target target {};

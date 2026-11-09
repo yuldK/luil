@@ -126,6 +126,10 @@ namespace luil::default_text {
 
     std::u8string_view time_minute_decrease() noexcept { return word(key::time_minute_decrease); }
 
+    std::u8string_view dock_group() noexcept { return word(key::dock_group); }
+
+    std::u8string_view dock_divider() noexcept { return word(key::dock_divider); }
+
     std::u8string_view info_bar_close() noexcept
     {
         return word(key::info_bar_close);

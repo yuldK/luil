@@ -47,10 +47,12 @@ namespace luil::net {
                     error = { .kind = http_error_kind::cannot_connect, .message = u8"WebSocket upgrade was rejected." };
                     return false;
                 }
-                if (store(socket_, WinHttpWebSocketCompleteUpgrade(request_, 0)) == false)
-                    return fail(error);
+                // 열린 뒤의 수신은 다음 메시지까지 기다려야 하므로 받기 시한을 없앤다. WebSocket 핸들은 이 옵션을
+                // 받지 않아(ERROR_WINHTTP_INCORRECT_HANDLE_TYPE) upgrade 전의 request 핸들에 걸고 그 값을 물려받게 한다.
                 DWORD idle_timeout { 0 };
-                if (WinHttpSetOption(socket_, WINHTTP_OPTION_RECEIVE_TIMEOUT, &idle_timeout, sizeof(idle_timeout)) == FALSE)
+                if (WinHttpSetOption(request_, WINHTTP_OPTION_RECEIVE_TIMEOUT, &idle_timeout, sizeof(idle_timeout)) == FALSE)
+                    return fail(error);
+                if (store(socket_, WinHttpWebSocketCompleteUpgrade(request_, 0)) == false)
                     return fail(error);
                 return true;
             }

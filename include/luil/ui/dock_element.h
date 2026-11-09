@@ -69,6 +69,9 @@ namespace luil {
         float tab_height { 32.0f };
         float handle_width { 6.0f };
         float minimum_pane { 80.0f };
+        // 보조 기술이 읽는 탭 묶음과 분할 손잡이의 이름이다. 비면 기본 문구다.
+        std::u8string group_name {};
+        std::u8string divider_name {};
     };
 
     class dock_element final : public ui_element

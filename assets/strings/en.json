@@ -10,6 +10,8 @@
         "time_hour_decrease": "Decrease hour",
         "time_minute_increase": "Increase minute",
         "time_minute_decrease": "Decrease minute",
+        "dock_group": "Panel group",
+        "dock_divider": "Resize panels",
         "info_bar_close": "Close",
         "severity_name_info": "Info",
         "severity_name_success": "Success",
