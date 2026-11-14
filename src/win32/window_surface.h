@@ -211,6 +211,13 @@ namespace luil::win32 {
             static_cast<void>(surface);
             static_cast<void>(event);
         }
+
+        // 모니터 구성·작업 영역·배율이 바뀌었을 수 있다 (표면이 받은 `WM_DPICHANGED`·`WM_DISPLAYCHANGE`·`WM_SETTINGCHANGE`).
+        // 소유자가 모니터 목록을 다시 읽고, 달라졌으면 도킹 표면의 자리를 다시 풀고 앱에 알린다 (docked-surface-design.md).
+        //  - 기본은 아무 일도 하지 않는다 — 모니터를 모르는 test 대역이 그대로 선다.
+        virtual void displays_changed()
+        {
+        }
     };
 
     // 표면 하나의 TSF 창구다.
@@ -640,13 +647,17 @@ namespace luil::win32 {
         // 표시(entered·moved·left)는 input thread의 스냅샷으로 보내고,
         // 놓기는 이 표면의 tree에 직접 물어 그 자리에서 실행한다
         // (os-dragdrop-design.md — caption 버튼의 동기 실행과 같은 자리다).
-        bool file_drag_entered(float x, float y, std::vector<std::u8string> files) override;
+        bool file_drag_entered(float x, float y, os_drag_data drag) override;
         bool file_drag_moved(float x, float y) override;
         void file_drag_left() override;
-        bool file_drag_dropped(float x, float y, const std::vector<std::u8string>& files, DWORD key_state) override;
-        // 불투명 표면이 그 자리를 가리지 않았는가 (진입·이동의 답).
+        bool file_drag_dropped(float x, float y, const os_drag_data& drag, IDataObject* data, DWORD key_state) override;
+        // 그 자리에 놓을 수 있는가 (진입·이동의 답).
+        //  - 불투명 표면이 가린 자리는 아니다.
+        //  - 파일 끌기는 그 밖이면 어디나 받는다 — 받는 element가 없으면 창 전체 물러섬(`on_file_dropped`)이 받는다.
+        //  - 파일 없는 끌기(가상 파일·URL·글)는 물러섬이 없어 그 자리의 element가 받을 때만이다. 그렇지 않으면 OS 끌기를
+        //    켠 앱이 모든 글 끌기에 복사 커서를 보인다.
         [[nodiscard]] bool file_drop_open(float x, float y) const;
-        // 지금 끄는 파일이다. 이동마다 목록을 다시 받지 않으려고 진입 때 쥔다.
+        // 지금 끄는 것이다. 이동마다 목록을 다시 받지 않으려고 진입 때 쥔다.
         drag_payload file_drag_payload_ {};
 
         // OS 파일 끌기의 등록·해제다 (attach·detach에서 부른다).

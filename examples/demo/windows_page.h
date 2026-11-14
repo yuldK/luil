@@ -32,6 +32,10 @@
 //  - 본문 전체가 흘리는 영역에 든다 (scroll-area-design.md). 구역을 모두 쌓으면 기본 창(1280 x 720)보다 길어
 //    맨 아래 구역이 잘렸다. 영역의 내용 높이는 담긴 줄에서 읽으므로 구역이 줄을 더해도 그대로 흐른다.
 //    위쪽에 고정한 줄 `페이지 흘림: <흘린 양> / <흘릴 수 있는 최대>`(논리 픽셀)가 UIA로 읽힌다.
+//  - 도킹 표면 구역은 일반 창과 따로 화면 가장자리에 붙는 판을 세우는 예다 (docked-surface-design.md). 캡션·작업 표시줄
+//    단추가 없고, 언제나 위에 뜨며, 눌러도 활성화되지 않는다. 자리는 "주 모니터의 가장자리"로만 말하고 물리 사각형은
+//    라이브러리가 푼다. 판 안의 끌어 놓기 칸은 파일 경로가 아니라 원시 데이터 객체를 받는다 — 브라우저가 끄는 그림처럼
+//    `CF_HDROP` 없이 가상 파일과 URL만 실은 끌기도 받는다 (os-dragdrop-design.md). 네 줄이 UIA로 읽힌다: 요청·모니터·크기·끌어 놓기.
 
 #include "demo/common.h"
 #include "luil/app/platform_services.h"
@@ -224,6 +228,51 @@ namespace demo {
         luil::win32::tray_report report {};
     };
 
+    // --- 도킹 표면 구역의 메시지 ---
+    // 도킹 표면을 세우고 거둔다.
+    struct docked_toggle_intent
+    {
+        bool open { false };
+    };
+
+    // 붙는 가장자리를 다음 것으로 돌린다 (아래 → 오른쪽 → 위 → 왼쪽).
+    struct docked_edge_intent
+    {
+    };
+
+    // 위젯 두께와 3px 띠를 오간다. 띠는 최소 크기가 없다는 것을 보인다.
+    struct docked_thin_intent
+    {
+    };
+
+    // 도킹 표면을 잠깐 활성화한다 (`focus_request::activate`). 다른 곳을 누르면 다시 비활성이다.
+    struct docked_activate_intent
+    {
+    };
+
+    // 도킹 표면의 실제 client 크기(물리 픽셀)와 배율이다.
+    struct docked_metrics_intent
+    {
+        float width { 0.0f };
+        float height { 0.0f };
+        float scale { 1.0f };
+    };
+
+    // 라이브러리가 알린 모니터 목록이다 (`ui_frame::displays`).
+    struct displays_intent
+    {
+        std::vector<luil::display_info> displays {};
+    };
+
+    // 도킹 표면에 놓인 끌기에서 놓는 순간 꺼낸 것이다.
+    struct docked_drop_intent
+    {
+        std::vector<std::u8string> formats {};
+        std::vector<std::u8string> files {};
+        std::vector<std::u8string> virtual_files {};
+        std::u8string url {};
+    };
+
     // --- 전역 단축키 구역의 메시지 ---
     // 전역 단축키를 켜고 끈다. 끄면 충돌 시험도 함께 끈다.
     struct hotkey_toggle_intent
@@ -286,6 +335,9 @@ namespace demo {
             return tray_hidden_;
         }
 
+        // 도킹 표면이다. 끈 동안은 비어 있다. 셸이 매 frame `ui_frame::docked_surfaces`에 그대로 싣는다.
+        [[nodiscard]] std::vector<luil::ui_docked_surface> make_docked_surfaces();
+
         // 마지막으로 청한 초점 요청이다: 도구 창 메모 칸, 또는 트레이 메뉴의 `창 보이기`가 청한 주 창 활성화다.
         // 한 번도 청하지 않았으면 없다.
         //  - 같은 번호를 frame마다 실어도 luil은 한 번만 이행한다.
@@ -332,8 +384,11 @@ namespace demo {
         void add_instance_section(luil::stack_element& column);
         // 알림 영역 구역을 `column`에 더한다 (점프 목록 줄 뒤).
         void add_tray_section(luil::stack_element& column);
-        // 전역 단축키 구역을 `column`에 더한다 (알림 영역 구역 뒤, 본문 끝).
+        // 전역 단축키 구역을 `column`에 더한다 (알림 영역 구역 뒤).
         void add_hotkey_section(luil::stack_element& column);
+        // 도킹 표면 구역을 `column`에 더한다 (전역 단축키 구역 뒤, 본문 끝).
+        void add_docked_section(luil::stack_element& column);
+        [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_docked_tree() const;
         // 메뉴를 닫고 검색 상태도 함께 비운다.
         void close_tool_menu() noexcept;
 
@@ -347,6 +402,8 @@ namespace demo {
         std::uint64_t focus_revision_ { 0 };
         // 마지막 초점 요청이 주 창 활성화(트레이 메뉴의 `창 보이기`)인가다. 아니면 도구 창 메모 칸이다.
         bool focus_main_ { false };
+        // 마지막 초점 요청이 도킹 표면의 잠깐 활성화인가다. 참이면 `focus_main_`보다 앞선다.
+        bool focus_docked_ { false };
         // 플랫폼 도구를 마지막으로 부른 결과 한 줄이다.
         std::u8string platform_report_ {};
         // 이번 frame이 만든 도구 창의 메뉴 버튼이다.
@@ -393,6 +450,14 @@ namespace demo {
         int hotkey_presses_ { 0 };
         // id마다 마지막으로 받은 보고다. 끄고 켜도 지우지 않는다 (까닭은 `hotkey_toggle_intent`를 받는 자리에 있다).
         std::vector<luil::win32::hotkey_report> hotkey_reports_ {};
+        // 도킹 표면 구역의 상태다 (모두 앱 상태다).
+        bool docked_open_ { false };
+        luil::screen_edge docked_edge_ { luil::screen_edge::bottom };
+        bool docked_thin_ { false };
+        docked_metrics_intent docked_metrics_ {};
+        std::vector<luil::display_info> displays_ {};
+        // 마지막으로 놓인 끌기다. 받은 적이 없으면 없다.
+        std::optional<docked_drop_intent> docked_drop_ {};
         luil::text::text_edit_state note_ {};
         // 도구 창 메뉴 안 검색 칸의 상태다.
         // 조합 상태는 창 안 메모 칸과 하나를 같이 쓴다 — target이 구분한다.

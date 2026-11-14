@@ -12,6 +12,7 @@
 #include "luil/ui/stack_element.h"
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/win32/drop_data.h"
 
 #include <windows.h>
 
@@ -51,6 +52,91 @@ namespace demo {
         constexpr float taskbar_window_percent { 60.0f };
         // 독립 창의 표면 id다. 보고가 이 id로 온다.
         constexpr std::u8string_view taskbar_window_id { u8"taskbar-window" };
+        // 도킹 표면의 id와 크기다 (논리 픽셀, 그 모니터의 배율로 곱해진다).
+        constexpr std::u8string_view docked_id { u8"docked-widget" };
+        constexpr float docked_length { 320.0f };
+        constexpr float docked_thickness { 96.0f };
+        constexpr float docked_strip_thickness { 3.0f };
+        constexpr float docked_offset { 16.0f };
+
+        [[nodiscard]] std::u8string_view edge_name(const luil::screen_edge edge)
+        {
+            switch (edge)
+            {
+            case luil::screen_edge::left:
+                return u8"왼쪽";
+            case luil::screen_edge::top:
+                return u8"위";
+            case luil::screen_edge::right:
+                return u8"오른쪽";
+            case luil::screen_edge::bottom:
+                break;
+            }
+            return u8"아래";
+        }
+
+        [[nodiscard]] luil::screen_edge next_edge(const luil::screen_edge edge)
+        {
+            switch (edge)
+            {
+            case luil::screen_edge::bottom:
+                return luil::screen_edge::right;
+            case luil::screen_edge::right:
+                return luil::screen_edge::top;
+            case luil::screen_edge::top:
+                return luil::screen_edge::left;
+            case luil::screen_edge::left:
+                break;
+            }
+            return luil::screen_edge::bottom;
+        }
+
+        // 목록을 "a, b, c 외 N개"로 줄인다.
+        [[nodiscard]] std::u8string short_list(const std::vector<std::u8string>& items, const std::size_t shown)
+        {
+            if (items.empty())
+                return u8"없음";
+            std::u8string text {};
+            for (std::size_t index { 0 }; index < items.size() && index < shown; ++index)
+            {
+                if (index != 0)
+                    text += u8", ";
+                text += items[index];
+            }
+            if (items.size() > shown)
+                text += u8" 외 " + to_u8(static_cast<int>(items.size() - shown)) + u8"개";
+            return text;
+        }
+
+        [[nodiscard]] std::u8string displays_text(const std::vector<luil::display_info>& displays)
+        {
+            if (displays.empty())
+                return u8"보고 없음";
+            std::u8string text { to_u8(static_cast<int>(displays.size())) + u8"개" };
+            for (const luil::display_info& display : displays)
+            {
+                if (display.primary == false)
+                    continue;
+                text += u8" · 주 모니터 " + to_u8(display.bounds.width()) + u8"x" + to_u8(display.bounds.height());
+                text += u8" · 작업 영역 높이 " + to_u8(display.work_area.height());
+                text += u8" · 배율 " + to_u8(static_cast<int>(std::lround(display.scale * 100.0f))) + u8"%";
+            }
+            return text;
+        }
+
+        [[nodiscard]] std::u8string docked_drop_text(const std::optional<docked_drop_intent>& drop)
+        {
+            if (drop.has_value() == false)
+                return u8"없음";
+            std::u8string text { u8"형식 " + to_u8(static_cast<int>(drop->formats.size())) + u8"개" };
+            if (drop->files.empty() == false)
+                text += u8" · 파일 " + short_list(drop->files, 2);
+            if (drop->virtual_files.empty() == false)
+                text += u8" · 가상 파일 " + short_list(drop->virtual_files, 3);
+            if (drop->url.empty() == false)
+                text += u8" · URL " + drop->url;
+            return text;
+        }
         // 독립 창 단추의 진행 상태가 도는 순서의 길이다. 0은 없음이다.
         constexpr int taskbar_window_steps { 5 };
 
@@ -392,6 +478,9 @@ namespace demo {
     {
         if (focus_revision_ == 0)
             return std::nullopt;
+        // 도킹 표면을 잠깐 활성화한다. 눌러서는 활성화되지 않는 표면이라 앱이 청할 때만 키보드를 받는다.
+        if (focus_docked_)
+            return luil::focus_request { .id = focus_revision_, .surface = std::u8string { docked_id }, .activate = true };
         // 트레이에서 되살린 주 창을 앞으로 세운다. 라이브러리는 사건에서 창을 세우지 않는다 (tray-icon-design.md).
         if (focus_main_)
             return luil::focus_request { .id = focus_revision_, .activate = true };
@@ -433,12 +522,54 @@ namespace demo {
             platform_report_ = result.ok() ? u8"메모장을 띄웠다." : u8"메모장을 띄우지 못했다 — " + result.error;
             return true;
         }
+        if (const auto* const toggle { message.get<docked_toggle_intent>() }; toggle != nullptr)
+        {
+            docked_open_ = toggle->open;
+            if (docked_open_ == false)
+                docked_metrics_ = {};
+            return true;
+        }
+        if (message.get<docked_edge_intent>() != nullptr)
+        {
+            docked_edge_ = next_edge(docked_edge_);
+            return true;
+        }
+        if (message.get<docked_thin_intent>() != nullptr)
+        {
+            docked_thin_ = docked_thin_ == false;
+            return true;
+        }
+        if (message.get<docked_activate_intent>() != nullptr)
+        {
+            if (docked_open_ == false)
+                return true;
+            focus_docked_ = true;
+            focus_main_ = false;
+            ++focus_revision_;
+            return true;
+        }
+        if (const auto* const metrics { message.get<docked_metrics_intent>() }; metrics != nullptr)
+        {
+            docked_metrics_ = *metrics;
+            return true;
+        }
+        if (const auto* const displays { message.get<displays_intent>() }; displays != nullptr)
+        {
+            displays_ = displays->displays;
+            return true;
+        }
+        if (const auto* const drop { message.get<docked_drop_intent>() }; drop != nullptr)
+        {
+            docked_drop_ = *drop;
+            return true;
+        }
         if (message.get<tool_focus_intent>() != nullptr)
         {
             if (tool_open_ == false)
                 tool_metrics_ = {};
             tool_open_ = true;
             focus_main_ = false;
+            focus_docked_ = false;
             ++focus_revision_;
             return true;
         }
@@ -572,6 +703,7 @@ namespace demo {
             {
                 tray_hidden_ = false;
                 focus_main_ = true;
+                focus_docked_ = false;
                 ++focus_revision_;
                 tray_event_ = u8"메뉴: 창 보이기";
             }
@@ -620,6 +752,7 @@ namespace demo {
             {
                 tray_hidden_ = false;
                 focus_main_ = true;
+                focus_docked_ = false;
                 ++focus_revision_;
             }
             return true;
@@ -1067,6 +1200,102 @@ namespace demo {
         column.add_gap(6.0f);
         // 마지막 단추다. 같은 조합의 둘째 id를 더한다. 끄기가 되돌린다.
         column.add(make_taskbar_button(u8"hotkey-conflict", u8"충돌 시험 켜기", hotkey_conflict_, luil::make_message_action(hotkey_conflict_intent {})), { .length = 26.0f, .cross_length = 140.0f });
+        add_docked_section(column);
+    }
+
+    void windows_page::add_docked_section(luil::stack_element& column)
+    {
+        column.add_gap(18.0f);
+        const std::u8string hint { u8"주 모니터 가장자리에 붙는 판을 세운다. 캡션·작업 표시줄 단추가 없고 언제나 위에 뜨며 눌러도 활성화되지 않는다. 판에 파일·그림·링크를 끌어다 놓는다." };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-docked-hint" }, hint, 11.0f, luil::label_color_role::dim), 18.0f);
+        column.add_gap(4.0f);
+        // 네 줄이 UIA로 읽힌다: 앱이 바라는 자리, 라이브러리가 알린 모니터, 판의 실제 크기, 마지막 끌어 놓기.
+        std::u8string request { u8"끔" };
+        if (docked_open_)
+            request = u8"켬 · 주 모니터 " + std::u8string { edge_name(docked_edge_) } + u8" 가장자리 · " + (docked_thin_ ? std::u8string { u8"3px 띠" } : std::u8string { u8"위젯" });
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-docked-request" }, u8"도킹 요청: " + request, 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-docked-displays" }, u8"모니터: " + displays_text(displays_), 12.0f, luil::label_color_role::primary), 18.0f);
+        const std::u8string size { docked_metrics_.width > 0.0f
+            ? to_u8(static_cast<int>(docked_metrics_.width)) + u8"x" + to_u8(static_cast<int>(docked_metrics_.height)) + u8" · 배율 " + to_u8(static_cast<int>(std::lround(docked_metrics_.scale * 100.0f))) + u8"%"
+            : std::u8string { u8"없음" }
+        };
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-docked-size" }, u8"도킹 크기: " + size, 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add(make_label(luil::ui_element_id { kind_text, u8"windows-docked-drop" }, u8"도킹 끌어 놓기: " + docked_drop_text(docked_drop_), 12.0f, luil::label_color_role::primary), 18.0f);
+        column.add_gap(6.0f);
+
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        row_config.spacing = 8.0f;
+        auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-docked-controls" }, row_config) };
+        controls->add(make_taskbar_button(u8"docked-on", u8"도킹 표면 켜기", docked_open_, luil::make_message_action(docked_toggle_intent { true })), 140.0f);
+        controls->add(make_taskbar_button(u8"docked-off", u8"도킹 표면 끄기", false, luil::make_message_action(docked_toggle_intent { false })), 140.0f);
+        column.add(std::move(controls), 26.0f);
+        column.add_gap(6.0f);
+        auto shape { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"windows-docked-shape" }, row_config) };
+        shape->add(make_taskbar_button(u8"docked-edge", u8"가장자리 바꾸기", false, luil::make_message_action(docked_edge_intent {})), 140.0f);
+        shape->add(make_taskbar_button(u8"docked-thin", u8"띠로 바꾸기", docked_thin_, luil::make_message_action(docked_thin_intent {})), 140.0f);
+        column.add(std::move(shape), 26.0f);
+        column.add_gap(6.0f);
+        column.add(make_taskbar_button(u8"docked-activate", u8"도킹 표면 활성화", false, luil::make_message_action(docked_activate_intent {})), { .length = 26.0f, .cross_length = 140.0f });
+    }
+
+    std::vector<luil::ui_docked_surface> windows_page::make_docked_surfaces()
+    {
+        std::vector<luil::ui_docked_surface> surfaces {};
+        if (docked_open_ == false)
+            return surfaces;
+        luil::ui_docked_surface docked {};
+        docked.id = std::u8string { docked_id };
+        docked.title = u8"luil 도킹 표면";
+        // 앱은 모니터 배치도 배율도 모른 채 "주 모니터의 이 가장자리, 끝에서 16만큼"만 말한다.
+        luil::docked_edge_placement placement {};
+        placement.edge = docked_edge_;
+        placement.alignment = luil::edge_alignment::end;
+        placement.offset = docked_offset;
+        placement.length = docked_length;
+        placement.thickness = docked_thin_ ? docked_strip_thickness : docked_thickness;
+        docked.placement = placement;
+        docked.metrics = [](const float width, const float height, const float scale) { return luil::app_message { docked_metrics_intent { width, height, scale } }; };
+        docked.tree = make_docked_tree();
+        surfaces.push_back(std::move(docked));
+        return surfaces;
+    }
+
+    std::shared_ptr<const luil::ui_tree> windows_page::make_docked_tree() const
+    {
+        // metrics가 오기 전(표면이 만들어지는 그 frame)에는 빈 tree다. 크기를 모르는 채 그리지 않는다.
+        if (docked_metrics_.width <= 0.0f || docked_metrics_.height <= 0.0f)
+            return nullptr;
+        const float scale { docked_metrics_.scale > 0.0f ? docked_metrics_.scale : 1.0f };
+        auto root { std::make_unique<luil::root_element>(std::u8string { docked_id }) };
+        root->arrange({ { 0.0f, 0.0f, docked_metrics_.width, docked_metrics_.height }, scale });
+        // 띠는 글을 담기엔 얇다. 그려진 바탕만 남는다.
+        if (docked_metrics_.height < 24.0f * scale || docked_metrics_.width < 120.0f * scale)
+            return std::make_shared<const luil::ui_tree>(std::move(root));
+
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(10.0f);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"docked-drop-zone" }, config) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"docked-title" }, u8"여기에 끌어다 놓기", 12.0f, luil::label_color_role::primary), 18.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"docked-last" }, u8"마지막: " + docked_drop_text(docked_drop_), 11.0f, luil::label_color_role::dim), 16.0f);
+        // 들어온 순간에는 형식만 보고 받는다. OS에서 온 끌기면 무엇이든 받는다 — 무엇이 실렸는지 보이는 것이 이 칸의 일이다.
+        luil::drop_target target {};
+        target.accepts = [](const luil::drag_payload& payload) { return payload.external(); };
+        // 놓는 순간 원시 데이터 객체에서 꺼낸다. OLE는 `Drop` 밖에서 꺼내지 말라고 하므로 꺼낸 값을 메시지에 담는다.
+        target.on_drop = [](const luil::drag_payload& payload, const luil::ui_action_context& context) -> std::vector<luil::input_action> {
+            docked_drop_intent drop {};
+            drop.formats = payload.formats;
+            drop.files = payload.files;
+            for (const luil::win32::dropped_virtual_file& file : luil::win32::drop_virtual_files(context.native_drop_data))
+                drop.virtual_files.push_back(file.name);
+            if (payload.has_format(u8"UniformResourceLocatorW"))
+                drop.url = luil::win32::drop_data_text(context.native_drop_data, u8"UniformResourceLocatorW").value_or(std::u8string {});
+            return { luil::make_app_action(std::move(drop)) };
+        };
+        column->set_drop_target(std::move(target));
+        column->arrange({ { 0.0f, 0.0f, docked_metrics_.width, docked_metrics_.height }, scale });
+        root->add(std::move(column));
+        return std::make_shared<const luil::ui_tree>(std::move(root));
     }
 
     std::vector<luil::win32::ui_window> windows_page::make_windows()

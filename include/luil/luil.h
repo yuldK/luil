@@ -152,6 +152,7 @@
 // Win32 platform 조립이다 (창 실행).
 // app_host·renderer_policy·webview는 옛 경로의 별칭 헤더다 (한 판 동안 둔다).
 #include "luil/win32/app_host.h"
+#include "luil/win32/drop_data.h"
 #include "luil/win32/renderer_policy.h"
 #include "luil/win32/webview.h"
 #include "luil/win32/win32_window.h"

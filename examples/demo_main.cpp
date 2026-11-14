@@ -10,7 +10,7 @@
 //  - 그룹: 접이식 섹션, 라디오·토글 묶음                   (demo/groups_page)
 //  - 토스트: 심각도별 알림, 실행 취소 토스트, 정보 막대      (demo/toasts_page)
 //  - 메뉴·팝업: 드롭다운·컨텍스트 메뉴·분할 버튼 (popup 창) (demo/popups_page)
-//  - 창: 보조 top-level 창(도구 창) 여닫기, 전체 화면 전환, 작업 표시줄 진행률·오버레이, 둘째 인스턴스가 넘긴 인자 (demo/windows_page)
+//  - 창: 보조 top-level 창(도구 창) 여닫기, 전체 화면 전환, 작업 표시줄 진행률·오버레이, 둘째 인스턴스가 넘긴 인자, 도킹 표면과 원시 데이터 끌어 놓기 (demo/windows_page)
 //  - 이미지: 파일을 끌어다 놓거나 골라 그림 미리 보기       (demo/images_page)
 //  - 네트워크: 되돌이 서버에 던진 요청과 갈래별 답·심장 박동 (demo/network_page)
 //  - 웹뷰: 되돌이 서버의 문서를 창 안에 띄운다             (demo/webview_page)
@@ -903,6 +903,10 @@ namespace demo {
                 // 테마 페이지의 배경 효과 견본 창이다.
                 for (luil::win32::ui_window& window : theme_.make_windows())
                     frame->windows.push_back(std::move(window));
+                // 창 페이지의 도킹 표면이다. 페이지를 옮겨도 화면 가장자리에 남는다.
+                frame->docked_surfaces = windows_.make_docked_surfaces();
+                // 모니터 목록이다. 도킹 표면 구역이 주 모니터의 크기·배율을 보인다.
+                frame->displays = [](const std::vector<luil::display_info>& displays) { return luil::app_message { demo::displays_intent { displays } }; };
                 // 웹뷰도 어느 페이지에서든 실려 있다. 페이지를 떠났다고 목록에서
                 // 빼면 웹뷰가 사라지고 읽던 문서도 함께 사라진다 — 자리표가 없는
                 // frame에서는 그 자리가 없어 저절로 감춰질 뿐이다.

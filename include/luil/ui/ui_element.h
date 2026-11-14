@@ -107,6 +107,11 @@ namespace luil {
         bool control { false };
         bool shift { false };
         bool alt { false };
+        // OS 끌어 놓기의 원시 데이터 객체다 (os-dragdrop-design.md). Win32에서는 `IDataObject*`이고 그 밖에는 nullptr다.
+        //  - **이 `on_drop` 호출 동안만 유효하다.** OLE는 내용을 `Drop` 안에서 꺼내라고 하므로, 앱은 여기서 꺼낸 값을
+        //    메시지에 담아 돌려준다. 포인터를 쥐어 두거나 다른 thread로 넘기지 않는다. 참조 수는 넘기지 않는다.
+        //  - UI thread에서만 온다. 꺼내는 도우미는 `luil/win32/drop_data.h`에 있다.
+        void* native_drop_data { nullptr };
     };
 
     // 글자 폭을 재는 함수다.
@@ -256,6 +261,21 @@ namespace luil {
         //    알아볼 수 있다. 실제 커서는 `window_config::resolve_cursor`가 준다.
         //  - 창 밖에서는 ghost도 화면 위를 따로 따라온다 (`custom_visual`이 아닐 때 — multi-window-design.md).
         ui_cursor outside_cursor { ui_cursor::inherit };
+        // OS에서 들어온 끌기에 실린 데이터 형식의 이름들이다 (데이터 객체가 알린 순서, 같은 이름은 한 번).
+        //  - 등록 형식은 OS가 준 이름 그대로다 (`FileGroupDescriptorW`, `FileContents`, `UniformResourceLocatorW`,
+        //    `HTML Format`). 표준 형식은 상수 이름이다 (`CF_HDROP`, `CF_UNICODETEXT`, `CF_DIB` …).
+        //  - 들어온 순간 받을지는 이 목록만 보고 정한다 (`drop_target::accepts`). 내용은 놓는 순간 꺼낸다
+        //    (`ui_action_context::native_drop_data`).
+        //  - 안에서 시작한 끌기는 비어 있다.
+        std::vector<std::u8string> formats {};
+
+        // OS에서 들어온 끌기인가다 (파일 경로나 데이터 형식이 실려 있다). 안에서 시작한 끌기와 가르는 판별은 이것 하나다.
+        [[nodiscard]] bool external() const noexcept
+        {
+            return files.empty() == false || formats.empty() == false;
+        }
+        // 그 이름의 형식이 실려 있는가다.
+        [[nodiscard]] bool has_format(std::u8string_view format) const noexcept;
 
         // 이 끌기가 그 키의 항목을 싣고 있는가 (`dragged_owner` 또는 `dragged_owners`).
         [[nodiscard]] bool carries(std::u8string_view owner) const noexcept;

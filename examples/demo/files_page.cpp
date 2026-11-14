@@ -540,7 +540,8 @@ namespace demo {
             return payload;
         };
         // 폴더 행에만 놓는다. 끌리는 폴더 자신은 받지 않는다 — 출발 목록까지 견주므로 보관함의 같은 키 폴더는 받는다.
-        config.accepts_drop = [](const std::u8string& key, const luil::drag_payload& payload) { return is_folder(key) && payload.carries(files_list_id, key) == false; };
+        //  - 안에서 시작한 끌기만 받는다. 밖에서 온 끌기(탐색기의 파일, 브라우저의 글·링크)는 옮길 항목 키가 없다.
+        config.accepts_drop = [](const std::u8string& key, const luil::drag_payload& payload) { return payload.external() == false && is_folder(key) && payload.carries(files_list_id, key) == false; };
         config.drop = [](const std::u8string& key, const luil::drag_payload& payload, const luil::ui_action_context& context) {
             std::vector<std::u8string> items { payload.dragged_owners.empty() ? std::vector<std::u8string> { payload.dragged_owner } : payload.dragged_owners };
             return luil::make_app_action(files_drop_intent { u8"파일", key, std::move(items), context.control });
@@ -562,7 +563,7 @@ namespace demo {
             config.items.push_back({ u8"folder-" + label, u8"[" + label + u8"]" });
         }
         config.row_height = row_height;
-        config.accepts_drop = [](const std::u8string& key, const luil::drag_payload& payload) { return payload.carries(archive_list_id, key) == false; };
+        config.accepts_drop = [](const std::u8string& key, const luil::drag_payload& payload) { return payload.external() == false && payload.carries(archive_list_id, key) == false; };
         config.drop = [](const std::u8string& key, const luil::drag_payload& payload, const luil::ui_action_context& context) {
             std::vector<std::u8string> items { payload.dragged_owners.empty() ? std::vector<std::u8string> { payload.dragged_owner } : payload.dragged_owners };
             return luil::make_app_action(files_drop_intent { u8"보관함", key, std::move(items), context.control });

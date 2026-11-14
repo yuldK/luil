@@ -17,6 +17,8 @@
 #include "win32/embedded_assets.h"
 #include "win32/file_dialog.h"
 #include "win32/hotkey_win32.h"
+#include "host/docked_placement.h"
+#include "win32/docked_surface.h"
 #include "win32/instance_message.h"
 #include "win32/jump_list.h"
 #include "win32/layered_placement.h"
@@ -987,6 +989,9 @@ namespace luil::win32 {
                     // popup의 앵커 표면이 있어야 그 위에 배치할 수 있다.
                     // 대조 결과는 표면별 현재 콘텐츠와 게시된 콘텐츠의 차이를 반영한다.
                     std::vector<surface_content> contents { synchronize_windows() };
+                    // 도킹 표면도 popup의 앵커가 될 수 있어 popup보다 먼저 맞춘다.
+                    for (surface_content& docked_content : synchronize_docks())
+                        contents.push_back(std::move(docked_content));
                     // 독립 창의 단추는 창이 선 뒤에 걸 수 있다.
                     synchronize_taskbar();
                     synchronize_tray();
@@ -1065,6 +1070,9 @@ namespace luil::win32 {
                         return 0;
                     for (const std::unique_ptr<secondary_surface>& secondary : windows_)
                         if (secondary->alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0))
+                            return 0;
+                    for (const std::unique_ptr<docked_surface>& docked : docks_)
+                        if (docked->alt_chord_reported(static_cast<std::uint64_t>(word_parameter), long_parameter != 0))
                             return 0;
                     return 0;
                 case text_scale_changed_message:
@@ -1187,6 +1195,8 @@ namespace luil::win32 {
                     main_.cancel_alt_tap();
                     for (const std::unique_ptr<secondary_surface>& secondary : windows_)
                         secondary->cancel_alt_tap();
+                    for (const std::unique_ptr<docked_surface>& docked : docks_)
+                        docked->cancel_alt_tap();
                     handle_hotkey(word_parameter);
                     return 0;
                 case WM_WINDOWPOSCHANGING: {
@@ -1272,6 +1282,8 @@ namespace luil::win32 {
                     invalidate_surfaces(surfaces_to_repaint(synchronize_popups(), false));
                     InvalidateRect(window_, nullptr, FALSE);
                     refresh_tray_appearance();
+                    // 이 모니터의 배율이 바뀌었다. 그 모니터 가장자리의 도킹 표면을 새 배율로 다시 푼다.
+                    refresh_displays();
                     return 0;
                 }
                 case WM_DISPLAYCHANGE:
@@ -1291,6 +1303,8 @@ namespace luil::win32 {
                         static_cast<void>(main_.reapply_fullscreen_bounds());
                     // 주 모니터의 배율이 바뀌었을 수 있다. 알림 영역 그림의 크기가 그것을 따른다.
                     refresh_tray_appearance();
+                    // 모니터가 붙거나 빠졌다. 도킹 표면의 자리를 다시 풀고 앱에 새 목록을 알린다.
+                    refresh_displays();
                     return 0;
                 case WM_FONTCHANGE:
                     // 글꼴이 설치·삭제되면 캐시의 해석 결과를 비운다.
@@ -1315,6 +1329,8 @@ namespace luil::win32 {
                     // 작업 표시줄 밝기·고대비가 바뀌면 알림 영역 그림도 다시 고른다.
                     refresh_tray_appearance();
                     invalidate_all_surfaces();
+                    // 작업 표시줄을 옮기거나 자동 숨김을 바꾸면 작업 영역이 바뀐다 (`SPI_SETWORKAREA`). 견주어 바뀐 때만 알린다.
+                    refresh_displays();
                     // 움직임 줄이기는 앱의 상태에도 닿는다 (앱이 든 전환·스프링). 그리기에 닿는 갱신을 마친 뒤, 값이 달라졌을
                     // 때만 알린다 — 이 메시지는 이 설정이 아닌 일로도 자주 온다.
                     if (was_reduced != reduce_motion_)
@@ -1365,6 +1381,8 @@ namespace luil::win32 {
                     hotkeys_.release_all();
                     destroy_all_popups();
                     destroy_all_secondary_windows();
+                    // 도킹 표면은 소유자가 없어 주 창과 함께 파괴되지 않는다. 여기서 거둔다.
+                    destroy_all_docked_surfaces();
                     // 창이 사라지면 단추에 걸린 오버레이 아이콘도 더는 쓸 데가 없다.
                     taskbar_.forget_all();
                     drag_ghost_.destroy();
@@ -1497,6 +1515,8 @@ namespace luil::win32 {
                 main_.refresh_captured_cursor();
                 for (const std::unique_ptr<secondary_surface>& window : windows_)
                     window->refresh_captured_cursor();
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    docked->refresh_captured_cursor();
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                     popup->refresh_captured_cursor();
             }
@@ -1511,6 +1531,8 @@ namespace luil::win32 {
                 main_.refresh_hover_cursor();
                 for (const std::unique_ptr<secondary_surface>& window : windows_)
                     window->refresh_hover_cursor();
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    docked->refresh_hover_cursor();
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                     popup->refresh_hover_cursor();
             }
@@ -1522,6 +1544,9 @@ namespace luil::win32 {
                 for (const std::unique_ptr<secondary_surface>& window : windows_)
                     if (window->id() == surface)
                         return window.get();
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    if (docked->id() == surface)
+                        return docked.get();
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                     if (popup->id() == surface)
                         return popup.get();
@@ -1608,6 +1633,10 @@ namespace luil::win32 {
                 for (const std::unique_ptr<secondary_surface>& secondary : windows_)
                     if (const HWND handle { secondary->window() }; handle != nullptr && IsWindowVisible(handle) != FALSE && IsIconic(handle) == FALSE)
                         return true;
+                // 주 창을 숨기고 도킹 표면만으로 도는 위젯 앱이 있다.
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    if (const HWND handle { docked->window() }; handle != nullptr && IsWindowVisible(handle) != FALSE)
+                        return true;
                 return false;
             }
 
@@ -1623,7 +1652,7 @@ namespace luil::win32 {
                     return;
                 }
                 const interaction_snapshot published { host_->acquire_interaction() };
-                const bool detached { published.drag.has_value() && published.drag->outside && published.drag->payload.files.empty() && published.drag->payload.custom_visual == false };
+                const bool detached { published.drag.has_value() && published.drag->outside && published.drag->payload.external() == false && published.drag->payload.custom_visual == false };
                 const window_surface* const origin { detached ? surface_by_id(published.drag->surface) : nullptr };
                 POINT cursor { detached ? static_cast<LONG>(std::lround(published.drag->x)) : 0, detached ? static_cast<LONG>(std::lround(published.drag->y)) : 0 };
                 if (origin == nullptr || origin->window() == nullptr || ClientToScreen(origin->window(), &cursor) == FALSE)
@@ -1822,6 +1851,8 @@ namespace luil::win32 {
                 post_window_metrics();
                 for (const std::unique_ptr<secondary_surface>& secondary : windows_)
                     secondary->post_metrics();
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    docked->post_metrics();
                 invalidate_all_surfaces();
             }
 
@@ -2098,7 +2129,12 @@ namespace luil::win32 {
                         continue;
                     }
                     if (const secondary_surface* const secondary { find_secondary(id) }; secondary != nullptr)
+                    {
                         InvalidateRect(secondary->window(), nullptr, FALSE);
+                        continue;
+                    }
+                    if (const docked_surface* const docked { find_docked(id) }; docked != nullptr)
+                        InvalidateRect(docked->window(), nullptr, FALSE);
                 }
             }
 
@@ -2109,6 +2145,8 @@ namespace luil::win32 {
                 InvalidateRect(window_, nullptr, FALSE);
                 invalidate_popups();
                 invalidate_windows();
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    InvalidateRect(docked->window(), nullptr, FALSE);
             }
 
             // 주 창이 지금 그리는 tree와 이 게시가 실은 tree다.
@@ -2211,6 +2249,8 @@ namespace luil::win32 {
                     ask(popup->tree(), popup->id());
                 for (const std::unique_ptr<secondary_surface>& secondary : windows_)
                     ask(secondary->tree(), secondary->id());
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    ask(docked->tree(), docked->id());
 
                 update_timer_plan plan { plan_update_timer(deadlines, context.now, continuous_repaint_interval) };
                 timer_wake_ = std::move(plan.wake);
@@ -2502,6 +2542,8 @@ namespace luil::win32 {
                     std::vector<std::u8string> roots { u8"" };
                     for (const auto& secondary : windows_)
                         roots.push_back(secondary->id());
+                    for (const auto& docked : docks_)
+                        roots.push_back(docked->id());
                     for (const auto index : order_popup_placements(logical, roots))
                     {
                         const ui_popup& popup { frame->popups[index] };
@@ -2639,7 +2681,9 @@ namespace luil::win32 {
                     return &main_;
                 if (auto* const popup { find_popup(anchor) }; popup != nullptr)
                     return popup;
-                return find_secondary(anchor);
+                if (auto* const secondary { find_secondary(anchor) }; secondary != nullptr)
+                    return secondary;
+                return find_docked(anchor);
             }
 
             [[nodiscard]] popup_surface* find_popup(const std::u8string& id)
@@ -2690,6 +2734,9 @@ namespace luil::win32 {
                 for (const std::unique_ptr<secondary_surface>& secondary : windows_)
                     if (secondary->id() == id)
                         return secondary.get();
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    if (docked->id() == id)
+                        return docked.get();
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                     if (popup->id() == id)
                         return popup.get();
@@ -2705,6 +2752,9 @@ namespace luil::win32 {
                 for (const std::unique_ptr<secondary_surface>& secondary : windows_)
                     if (secondary->window() == window)
                         return secondary.get();
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    if (docked->window() == window)
+                        return docked.get();
                 for (const std::unique_ptr<popup_surface>& popup : popups_)
                     if (popup->window() == window)
                         return popup.get();
@@ -3425,6 +3475,203 @@ namespace luil::win32 {
                     destroy_secondary(windows_.back()->id());
             }
 
+            // --- 도킹 표면 (docked-surface-design.md) ---
+            // frame의 docked_surfaces 목록이 곧 상태다. 보조 창과 달리 자리는 frame마다 앱의 것이라, 대조할 때마다 다시 풀어
+            // 바뀐 것만 창에 건다. 가장자리 자리는 모니터 목록으로 풀고, 목록이 바뀌면 같은 값으로 다시 푼다.
+
+            [[nodiscard]] bool ensure_docked_class()
+            {
+                if (docked_class_registered_)
+                    return true;
+                docked_class_name_ = config_.class_name + L".Docked";
+                WNDCLASSEXW docked_class {};
+                docked_class.cbSize = sizeof(docked_class);
+                docked_class.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+                docked_class.lpfnWndProc = &docked_surface::static_procedure;
+                docked_class.hInstance = instance_;
+                docked_class.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+                docked_class.lpszClassName = docked_class_name_.c_str();
+                docked_class_registered_ = RegisterClassExW(&docked_class) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+                return docked_class_registered_;
+            }
+
+            [[nodiscard]] docked_surface* find_docked(const std::u8string& id)
+            {
+                for (const std::unique_ptr<docked_surface>& docked : docks_)
+                    if (docked->id() == id)
+                        return docked.get();
+                return nullptr;
+            }
+
+            // frame의 docked_surfaces 목록과 살아 있는 도킹 표면을 id로 대조해 만들고 없애고, 자리를 건다.
+            // 돌려주는 것은 보조 창 쪽과 같다 (다시 그릴 표면을 고르는 재료).
+            [[nodiscard]] std::vector<surface_content> synchronize_docks()
+            {
+                // 창이 먼저 사라진 표면을 걷어낸다 (보조 창과 같은 규칙).
+                std::erase_if(docks_, [](const std::unique_ptr<docked_surface>& docked) { return docked->attached() == false; });
+
+                std::shared_ptr<const ui_frame> frame {};
+                if (host_ != nullptr)
+                    frame = host_->acquire_frame();
+                if (displays_read_ == false)
+                {
+                    displays_ = enumerate_displays();
+                    displays_read_ = true;
+                }
+                report_displays(frame.get());
+
+                std::vector<std::u8string> wanted {};
+                if (frame != nullptr)
+                    for (const ui_docked_surface& source : frame->docked_surfaces)
+                        if (source.id.empty() == false)
+                            wanted.push_back(source.id);
+                std::erase_if(failed_docks_, [&wanted](const std::u8string& id) { return std::find(wanted.begin(), wanted.end(), id) == wanted.end(); });
+
+                for (std::size_t index { docks_.size() }; index > 0; --index)
+                {
+                    const std::u8string id { docks_[index - 1]->id() };
+                    if (std::find(wanted.begin(), wanted.end(), id) == wanted.end())
+                        destroy_docked(id);
+                }
+
+                std::vector<surface_content> contents {};
+                if (frame == nullptr)
+                    return contents;
+                for (const ui_docked_surface& source : frame->docked_surfaces)
+                {
+                    if (source.id.empty())
+                        continue;
+                    const std::optional<screen_rect> bounds { resolve_docked_bounds(source.placement, displays_) };
+                    docked_surface* alive { find_docked(source.id) };
+                    bool fresh { false };
+                    if (alive == nullptr)
+                    {
+                        if (std::find(failed_docks_.begin(), failed_docks_.end(), source.id) != failed_docks_.end())
+                            continue;
+                        alive = create_docked(source, bounds);
+                        if (alive == nullptr)
+                            continue;
+                        fresh = true;
+                    }
+                    // 보조 창처럼 **adopt보다 먼저** 견준다.
+                    contents.push_back(surface_content { source.id, fresh ? nullptr : alive->tree(), source.tree.get() });
+                    static_cast<void>(alive->adopt(source));
+                    alive->apply_bounds(bounds);
+                }
+                return contents;
+            }
+
+            [[nodiscard]] docked_surface* create_docked(const ui_docked_surface& source, const std::optional<screen_rect>& bounds)
+            {
+                if (ensure_docked_class() == false)
+                {
+                    failed_docks_.push_back(source.id);
+                    return nullptr;
+                }
+                // 풀리지 않은 자리(빠진 모니터)여도 표면은 세워 두고 숨긴다. 모니터가 돌아오면 같은 tree로 다시 보인다.
+                const screen_rect initial { bounds.value_or(screen_rect { 0, 0, 1, 1 }) };
+                std::wstring title {};
+                if (const auto converted { utf8_to_utf16(source.title) }; converted.value.has_value())
+                    title = *converted.value;
+
+                auto docked { std::make_unique<docked_surface>(*this, source.id) };
+                // 소유자가 없다. 주 창이 최소화·숨김이어도 도킹 표면은 그대로 보인다 (작업 표시줄 곁의 위젯).
+                const HWND handle { CreateWindowExW(docked_extended_style(), docked_class_name_.c_str(), title.c_str(), docked_window_style(), initial.left, initial.top, initial.width(), initial.height(), nullptr, nullptr, instance_, docked.get()) };
+                if (handle == nullptr)
+                {
+                    failed_docks_.push_back(source.id);
+                    return nullptr;
+                }
+                docked->set_dpi(GetDpiForWindow(handle));
+                RECT client {};
+                GetClientRect(handle, &client);
+                std::u8string error {};
+                if (docked->create_renderer(config_.renderer, {}, std::max<LONG>(client.right - client.left, 1), std::max<LONG>(client.bottom - client.top, 1), error) == false)
+                {
+                    report_runtime_error(error);
+                    DestroyWindow(handle);
+                    failed_docks_.push_back(source.id);
+                    return nullptr;
+                }
+                // 잠깐 활성화된 동안 글 칸에 IME로 쓸 수 있게 표면마다 문서를 연다.
+                if (host_ != nullptr)
+                    docked->create_text_input();
+                static_cast<void>(docked->adopt(source));
+                docked->post_metrics();
+                docked_surface* const created { docked.get() };
+                docks_.push_back(std::move(docked));
+                return created;
+            }
+
+            void destroy_docked(const std::u8string& id)
+            {
+                for (auto position = docks_.begin(); position != docks_.end(); ++position)
+                {
+                    if ((*position)->id() != id)
+                        continue;
+                    // 항목을 먼저 꺼내야 WM_DESTROY 중에도 목록이 일관된다.
+                    const std::unique_ptr<docked_surface> taken { std::move(*position) };
+                    docks_.erase(position);
+                    DestroyWindow(taken->window());
+                    return;
+                }
+            }
+
+            void destroy_all_docked_surfaces()
+            {
+                while (docks_.empty() == false)
+                    destroy_docked(docks_.back()->id());
+            }
+
+            // 모니터 목록을 다시 읽는다. 달라졌으면 도킹 표면의 자리를 다시 풀고 앱에 새 목록을 알린다.
+            //  - 화면 변경·설정 변경·배율 변경마다 불려 자주 온다. 목록이 같으면 아무것도 하지 않는다.
+            void refresh_displays()
+            {
+                std::vector<display_info> current { enumerate_displays() };
+                if (displays_read_ && current == displays_)
+                    return;
+                displays_ = std::move(current);
+                displays_read_ = true;
+                displays_reported_ = false;
+                if (host_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame != nullptr)
+                    for (const ui_docked_surface& source : frame->docked_surfaces)
+                        if (docked_surface* const docked { find_docked(source.id) }; docked != nullptr)
+                            docked->apply_bounds(resolve_docked_bounds(source.placement, displays_));
+                report_displays(frame.get());
+            }
+
+            // 앱의 알림 곳에 지금 목록을 알린다. 알림 곳이 처음 실린 frame과 목록이 바뀐 뒤에 한 번이다.
+            void report_displays(const ui_frame* const frame)
+            {
+                if (host_ == nullptr || frame == nullptr || frame->displays == nullptr)
+                {
+                    // 알림 곳을 뺐다가 다시 실으면 그때 다시 알린다.
+                    if (frame != nullptr)
+                        displays_reported_ = false;
+                    return;
+                }
+                if (displays_reported_)
+                    return;
+                displays_reported_ = true;
+                try
+                {
+                    if (app_message message { frame->displays(displays_) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The display report factory threw an exception.");
+                }
+            }
+
+            void displays_changed() override
+            {
+                refresh_displays();
+            }
+
             int scale_for_dpi(const int value) const noexcept
             {
                 return MulDiv(value, static_cast<int>(dpi_), 96);
@@ -3695,6 +3942,16 @@ namespace luil::win32 {
             std::vector<std::unique_ptr<secondary_surface>> windows_ {};
             std::wstring secondary_class_name_ {};
             bool secondary_class_registered_ { false };
+            // 살아 있는 도킹 표면들이다 (docked-surface-design.md). frame의 docked_surfaces 목록과 대조해 유지한다.
+            std::vector<std::unique_ptr<docked_surface>> docks_ {};
+            std::vector<std::u8string> failed_docks_ {};
+            std::wstring docked_class_name_ {};
+            bool docked_class_registered_ { false };
+            // 마지막으로 읽은 모니터 목록이다. 가장자리 자리를 이것으로 풀고, 바뀌면 앱에 알린다.
+            std::vector<display_info> displays_ {};
+            bool displays_read_ { false };
+            // 앱의 알림 곳(`ui_frame::displays`)에 지금 목록을 알렸다. 알림 곳이 처음 실린 frame에서 한 번 알린다.
+            bool displays_reported_ { false };
         };
 
         void show_startup_error(const std::u8string& error, const window_config& config)

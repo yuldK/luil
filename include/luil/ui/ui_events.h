@@ -246,6 +246,8 @@ namespace luil {
         float y { 0.0f };
         std::vector<std::u8string> files {};
         std::u8string surface {};
+        // 데이터 객체가 알린 형식 이름이다 (`drag_payload::formats`). 파일 없이 형식만 실린 끌기(가상 파일·URL)도 있다.
+        std::vector<std::u8string> formats {};
     };
 
     struct file_drag_moved_event

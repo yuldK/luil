@@ -184,7 +184,7 @@ namespace luil {
 
         // 끄는 동안 내용이 흘렀으면(가장자리 자동 스크롤) 포인터 밑의 놓을 자리도 바뀐다. 포인터가 멈춰 있어도
         // 강조가 새 내용을 따라가게 한다. 포인터가 주 창 위에 있을 때만이다 — 다른 창의 자리는 그 창의 tree가 온다.
-        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->pointer_on().empty())
+        if (snapshot_.drag.has_value() && snapshot_.drag->payload.external() == false && snapshot_.drag->pointer_on().empty())
             relocate_drag();
         settle_auto_scroll();
         resume_auto_scroll();
@@ -209,7 +209,7 @@ namespace luil {
             update_hover(last_pointer_x_, last_pointer_y_, last_pointer_time_, false);
 
         // 주 tree를 받을 때와 같이 흐른 내용 위의 놓을 자리를 다시 찾는다.
-        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->pointer_on().empty() == false)
+        if (snapshot_.drag.has_value() && snapshot_.drag->payload.external() == false && snapshot_.drag->pointer_on().empty() == false)
             relocate_drag();
         settle_auto_scroll();
         resume_auto_scroll();
@@ -376,7 +376,7 @@ namespace luil {
                 {
                     // 놓기도 표시로는 떠남이다 — 실행은 UI thread가 이미 했다.
                     // 내부 끌기는 건드리지 않는다 (파일이 실린 것만 거둔다).
-                    if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() == false)
+                    if (snapshot_.drag.has_value() && snapshot_.drag->payload.external())
                         snapshot_.drag.reset();
                     return {};
                 }
@@ -798,6 +798,7 @@ namespace luil {
         // ghost는 출발한 쪽(탐색기)이 그린다 — 우리는 강조만 얹는다.
         payload.custom_visual = true;
         payload.files = event.files;
+        payload.formats = event.formats;
         // 파일 끌기도 들어온 표면에 매인다 — 다른 창으로 넘어가면 그 창이 자기
         // entered를 낸다 (multi-window-design.md).
         drag_visual visual { std::move(payload), event.x, event.y, {}, event.surface };
@@ -812,7 +813,7 @@ namespace luil {
     void interaction_controller::process_file_drag_moved(const file_drag_moved_event& event)
     {
         // 들어온 적 없는 이동은 버린다. 내부 끌기도 건드리지 않는다.
-        if (snapshot_.drag.has_value() == false || snapshot_.drag->payload.files.empty())
+        if (snapshot_.drag.has_value() == false || snapshot_.drag->payload.external() == false)
             return;
         snapshot_.drag->x = event.x;
         snapshot_.drag->y = event.y;
@@ -1701,7 +1702,7 @@ namespace luil {
 
     bool interaction_controller::pointer_gesture_active() const noexcept
     {
-        const bool internal_drag { snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() };
+        const bool internal_drag { snapshot_.drag.has_value() && snapshot_.drag->payload.external() == false };
         // 잉크 접촉도 조작이다. 그리는 동안의 터치 누름(둘째 손가락, 펜이 쥔 동안의 손가락)은 삼킨다.
         return pointer_contact_.has_value() || pressed_id_ != ui_element_id {} || text_drag_id_ != ui_element_id {} || pointer_drag_id_ != ui_element_id {} || internal_drag
             || ink_contact_.has_value()
@@ -2671,7 +2672,7 @@ namespace luil {
             else
                 next.anchor = pointer_drag_id_;
         }
-        else if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && config_.auto_scroll.drag_and_drop)
+        else if (snapshot_.drag.has_value() && snapshot_.drag->payload.external() == false && config_.auto_scroll.drag_and_drop)
         {
             // 포인터 밑의 흘리는 창이 기준이다. 창 밖이면 직전 창(처음에는 끌기를 시작한 자리)이 이어진다 —
             // 목록 위로 끌고 나가도 그 목록이 위로 흐른다.
@@ -2757,7 +2758,7 @@ namespace luil {
         if (auto_scroll_->handle)
             alive = pointer_drag_id_ == auto_scroll_->handle_id;
         else
-            alive = snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty() && snapshot_.drag->pointer_on() == auto_scroll_->surface;
+            alive = snapshot_.drag.has_value() && snapshot_.drag->payload.external() == false && snapshot_.drag->pointer_on() == auto_scroll_->surface;
         if (alive == false)
             auto_scroll_.reset();
     }
@@ -3090,7 +3091,7 @@ namespace luil {
         pointer_contact_.reset();
         middle_press_.reset();
         text_drag_id_ = {};
-        if (snapshot_.drag.has_value() && snapshot_.drag->payload.files.empty())
+        if (snapshot_.drag.has_value() && snapshot_.drag->payload.external() == false)
             abandon_drag();
         clear_press();
     }

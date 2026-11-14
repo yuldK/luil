@@ -569,14 +569,16 @@ namespace luil {
             static_cast<void>(assembly_->tree_slot.publish(frame->tree));
             assembly_->published_tree_ticket = assembly_->handled_ticket;
         }
-        // popup과 보조 창의 tree가 한 표면 목록으로 input thread에 간다.
-        // controller에는 표면만 있고 둘의 구분이 없다.
+        // popup·보조 창·도킹 표면의 tree가 한 표면 목록으로 input thread에 간다.
+        // controller에는 표면만 있고 셋의 구분이 없다.
         surface_tree_list surfaces {};
-        surfaces.reserve(frame->popups.size() + frame->windows.size());
+        surfaces.reserve(frame->popups.size() + frame->windows.size() + frame->docked_surfaces.size());
         for (const ui_popup& popup : frame->popups)
             surfaces.emplace_back(popup.id, popup.tree);
         for (const ui_window& window : frame->windows)
             surfaces.emplace_back(window.id, window.tree);
+        for (const ui_docked_surface& docked : frame->docked_surfaces)
+            surfaces.emplace_back(docked.id, docked.tree);
         static_cast<void>(assembly_->surface_tree_slot.publish(std::move(surfaces)));
         static_cast<void>(assembly_->frame_slot.publish(frame));
     }

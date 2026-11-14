@@ -473,6 +473,8 @@ luil_add_source_filter(luil_core_files "host"
     host/popup_dismiss.h
     host/popup_reconcile.cpp
     host/popup_reconcile.h
+    host/docked_placement.cpp
+    host/docked_placement.h
     host/skia_renderer.cpp
     host/skia_renderer.h
     host/surface_invalidate.cpp
@@ -569,6 +571,8 @@ endif()
 # 창 하나가 그리는 표면과 다시 그릴 자리 판정이다.
 luil_add_source_filter(luil_files "win32/surface"
     win32/dpi_scale.h
+    win32/docked_surface.cpp
+    win32/docked_surface.h
     win32/secondary_surface.cpp
     win32/secondary_surface.h
     win32/text_scale.cpp
@@ -621,6 +625,8 @@ luil_add_source_filter(luil_files "win32/input"
     win32/win32_clipboard.h
     win32/win32_image_clipboard.cpp
     win32/win32_image_clipboard.h
+    win32/drop_data.cpp
+    "${public_headers}/win32/drop_data.h"
     win32/win32_drop.cpp
     win32/win32_drop.h
     win32/win32_tsf_input.cpp

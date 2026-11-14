@@ -78,6 +78,7 @@ add_executable(luil_core_tests
     pointer_sequence_tests.cpp
     popup_dismiss_tests.cpp
     popup_reconcile_tests.cpp
+    docked_placement_tests.cpp
     progress_element_tests.cpp
     raster_draw_tests.cpp
     rating_element_tests.cpp
@@ -494,6 +495,7 @@ add_executable(luil_tests
     loopback_socket_win32.cpp
     menu_bar_native_tests.cpp
     raster_probe.cpp
+    docked_surface_tests.cpp
     secondary_surface_tests.cpp
     platform_services_tests.cpp
     secret_store_tests.cpp

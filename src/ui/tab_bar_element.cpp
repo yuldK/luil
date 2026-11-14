@@ -88,7 +88,7 @@ namespace luil {
         // 다른 막대(다른 창)에서 끌어 온 탭인가.
         [[nodiscard]] bool foreign_tab(const drag_payload& payload, const ui_element_id& container, const std::vector<std::u8string>& order)
         {
-            return payload.source.kind == ui_element_kind::tab && payload.dragged_owner.empty() == false && payload.files.empty() && own_tab(payload, container, order) == false;
+            return payload.source.kind == ui_element_kind::tab && payload.dragged_owner.empty() == false && payload.external() == false && own_tab(payload, container, order) == false;
         }
 
         // 같은 막대 안에서 그 자리에 놓으면 순서가 바뀌는가다. `slot`은 끼울 자리(0 = 맨 앞, 탭 수 = 맨 끝)다.

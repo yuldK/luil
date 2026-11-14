@@ -3,6 +3,8 @@
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/win32/drop_data.h"
+#include "luil/win32/win32_window.h"
 #include "win32/window_surface.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -10,6 +12,7 @@
 #include <shlobj.h>
 #include <windows.h>
 
+#include <array>
 #include <cstddef>
 #include <cstring>
 #include <memory>
@@ -167,6 +170,9 @@ namespace {
         float x { 0.0f };
         float y { 0.0f };
         std::vector<std::u8string> files {};
+        std::vector<std::u8string> formats {};
+        // 놓기에 넘어온 데이터 객체다.
+        IDataObject* data { nullptr };
     };
 
     class recording_drop_host final : public luil::win32::drop_target_host
@@ -176,9 +182,9 @@ namespace {
         // 거짓이면 그 자리를 불투명 표면이 가린 것처럼 답한다.
         bool open { true };
 
-        bool file_drag_entered(const float x, const float y, std::vector<std::u8string> files) override
+        bool file_drag_entered(const float x, const float y, luil::win32::os_drag_data drag) override
         {
-            events.push_back({ u8"entered", x, y, std::move(files) });
+            events.push_back({ u8"entered", x, y, std::move(drag.files), std::move(drag.formats) });
             return open;
         }
 
@@ -193,9 +199,9 @@ namespace {
             events.push_back({ u8"left", 0.0f, 0.0f, {} });
         }
 
-        bool file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files, const DWORD) override
+        bool file_drag_dropped(const float x, const float y, const luil::win32::os_drag_data& drag, IDataObject* const data, const DWORD) override
         {
-            events.push_back({ u8"dropped", x, y, files });
+            events.push_back({ u8"dropped", x, y, drag.files, drag.formats, data });
             return open;
         }
     };
@@ -528,7 +534,7 @@ TEST_CASE("A dropped file runs the accepting element or falls back", "[win32][dr
     const std::vector<std::u8string> files { u8"C:\\a.txt" };
 
     // 수락 element 위 — on_drop의 액션이 통상 규칙으로 배분된다.
-    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, files, 0));
+    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, luil::win32::os_drag_data { files, { u8"CF_HDROP" } }, nullptr, 0));
     REQUIRE(context.dispatched.size() == 1u);
     REQUIRE(context.fallbacks.empty());
     const auto* const message { std::get_if<luil::app_message>(&context.dispatched[0]) };
@@ -537,7 +543,7 @@ TEST_CASE("A dropped file runs the accepting element or falls back", "[win32][dr
     REQUIRE(message->get<drop_intent>()->path == u8"C:\\a.txt");
 
     // 수락 element 밖 — delegate 물러섬이다.
-    REQUIRE(drops.file_drag_dropped(10.0f, 10.0f, files, 0));
+    REQUIRE(drops.file_drag_dropped(10.0f, 10.0f, luil::win32::os_drag_data { files, { u8"CF_HDROP" } }, nullptr, 0));
     REQUIRE(context.dispatched.size() == 1u);
     REQUIRE(context.fallbacks.size() == 1u);
     REQUIRE(context.fallbacks[0] == files);
@@ -568,11 +574,11 @@ TEST_CASE("A file dropped from another program carries the key state OLE reports
         REQUIRE(message->get<drop_keys_intent>() != nullptr);
         return *message->get<drop_keys_intent>();
     };
-    REQUIRE(drops.file_drag_dropped(20.0f, 20.0f, { u8"C:\\a.txt" }, MK_LBUTTON | MK_CONTROL));
+    REQUIRE(drops.file_drag_dropped(20.0f, 20.0f, luil::win32::os_drag_data { { u8"C:\\a.txt" }, { u8"CF_HDROP" } }, nullptr, MK_LBUTTON | MK_CONTROL));
     REQUIRE(keys_of(0).control);
     REQUIRE(keys_of(0).shift == false);
     REQUIRE(keys_of(0).alt == false);
-    REQUIRE(drops.file_drag_dropped(20.0f, 20.0f, { u8"C:\\a.txt" }, MK_LBUTTON | MK_SHIFT | MK_ALT));
+    REQUIRE(drops.file_drag_dropped(20.0f, 20.0f, luil::win32::os_drag_data { { u8"C:\\a.txt" }, { u8"CF_HDROP" } }, nullptr, MK_LBUTTON | MK_SHIFT | MK_ALT));
     REQUIRE(keys_of(1).control == false);
     REQUIRE(keys_of(1).shift);
     REQUIRE(keys_of(1).alt);
@@ -602,9 +608,358 @@ TEST_CASE("An opaque overlay prevents a file drop from reaching the window fallb
 
     luil::win32::drop_target_host& drops { surface };
     // 끄는 동안에도 같은 답이라 커서가 "받음"을 보이지 않는다.
-    REQUIRE(drops.file_drag_entered(120.0f, 120.0f, { u8"C:\\a.txt" }) == false);
+    REQUIRE(drops.file_drag_entered(120.0f, 120.0f, luil::win32::os_drag_data { { u8"C:\\a.txt" }, { u8"CF_HDROP" } }) == false);
     REQUIRE(drops.file_drag_moved(10.0f, 10.0f) == false);
-    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, { u8"C:\\a.txt" }, 0) == false);
+    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, luil::win32::os_drag_data { { u8"C:\\a.txt" }, { u8"CF_HDROP" } }, nullptr, 0) == false);
     REQUIRE(context.dispatched.empty());
     REQUIRE(context.fallbacks.empty());
+}
+
+namespace {
+    // 파일 없이 형식만 싣는 source다 — 브라우저가 그림을 끌 때처럼 가상 파일(`FileGroupDescriptorW` + `FileContents`)과
+    // URL만 준다. 형식 열거는 셸의 표준 열거자에 맡긴다.
+    class virtual_data_object final : public IDataObject
+    {
+    public:
+        struct virtual_item
+        {
+            std::wstring name {};
+            std::string content {};
+        };
+
+        explicit virtual_data_object(std::vector<virtual_item> items, std::wstring url)
+            : items_ { std::move(items) }
+            , url_ { std::move(url) }
+            , descriptor_format_ { static_cast<CLIPFORMAT>(RegisterClipboardFormatW(CFSTR_FILEDESCRIPTORW)) }
+            , contents_format_ { static_cast<CLIPFORMAT>(RegisterClipboardFormatW(CFSTR_FILECONTENTS)) }
+            , url_format_ { static_cast<CLIPFORMAT>(RegisterClipboardFormatW(CFSTR_INETURLW)) }
+        {
+        }
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) override
+        {
+            if (object == nullptr)
+                return E_POINTER;
+            if (riid == IID_IUnknown || riid == IID_IDataObject)
+            {
+                *object = static_cast<IDataObject*>(this);
+                return S_OK;
+            }
+            *object = nullptr;
+            return E_NOINTERFACE;
+        }
+
+        ULONG STDMETHODCALLTYPE AddRef() override
+        {
+            return 2;
+        }
+
+        ULONG STDMETHODCALLTYPE Release() override
+        {
+            return 1;
+        }
+
+        HRESULT STDMETHODCALLTYPE GetData(FORMATETC* format, STGMEDIUM* medium) override
+        {
+            if (format == nullptr || medium == nullptr)
+                return E_POINTER;
+            *medium = STGMEDIUM {};
+            if (format->cfFormat == descriptor_format_ && (format->tymed & TYMED_HGLOBAL) != 0)
+            {
+                const std::size_t size { sizeof(FILEGROUPDESCRIPTORW) + (items_.empty() ? 0 : items_.size() - 1) * sizeof(FILEDESCRIPTORW) };
+                const HGLOBAL global { GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, size) };
+                auto* const group { static_cast<FILEGROUPDESCRIPTORW*>(GlobalLock(global)) };
+                group->cItems = static_cast<UINT>(items_.size());
+                for (std::size_t index { 0 }; index < items_.size(); ++index)
+                {
+                    FILEDESCRIPTORW& descriptor { group->fgd[index] };
+                    descriptor.dwFlags = FD_FILESIZE;
+                    descriptor.nFileSizeLow = static_cast<DWORD>(items_[index].content.size());
+                    wcsncpy_s(descriptor.cFileName, items_[index].name.c_str(), _TRUNCATE);
+                }
+                GlobalUnlock(global);
+                medium->tymed = TYMED_HGLOBAL;
+                medium->hGlobal = global;
+                return S_OK;
+            }
+            if (format->cfFormat == contents_format_ && (format->tymed & TYMED_ISTREAM) != 0)
+            {
+                if (format->lindex < 0 || static_cast<std::size_t>(format->lindex) >= items_.size())
+                    return DV_E_LINDEX;
+                const std::string& content { items_[static_cast<std::size_t>(format->lindex)].content };
+                medium->tymed = TYMED_ISTREAM;
+                const HGLOBAL global { GlobalAlloc(GMEM_MOVEABLE, content.empty() ? 1 : content.size()) };
+                if (content.empty() == false)
+                    std::memcpy(GlobalLock(global), content.data(), content.size());
+                GlobalUnlock(global);
+                // 흐름이 HGLOBAL을 쥐고 풀 때 함께 놓는다. 크기는 내용만큼으로 맞춘다 (할당 단위로 커진 꼬리를 읽지 않게).
+                if (FAILED(CreateStreamOnHGlobal(global, TRUE, &medium->pstm)))
+                    return E_OUTOFMEMORY;
+                ULARGE_INTEGER size {};
+                size.QuadPart = content.size();
+                static_cast<void>(medium->pstm->SetSize(size));
+                // 다 읽은 자리에 둔 흐름을 준다 — 받는 쪽이 앞으로 되감는지 본다.
+                LARGE_INTEGER end {};
+                static_cast<void>(medium->pstm->Seek(end, STREAM_SEEK_END, nullptr));
+                return S_OK;
+            }
+            if (format->cfFormat == url_format_ && (format->tymed & TYMED_HGLOBAL) != 0)
+            {
+                // HGLOBAL은 할당 단위로 커질 수 있어 NUL 뒤에도 자리가 남는다.
+                const std::size_t size { (url_.size() + 8) * sizeof(wchar_t) };
+                const HGLOBAL global { GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, size) };
+                std::memcpy(GlobalLock(global), url_.c_str(), url_.size() * sizeof(wchar_t));
+                GlobalUnlock(global);
+                medium->tymed = TYMED_HGLOBAL;
+                medium->hGlobal = global;
+                return S_OK;
+            }
+            return DV_E_FORMATETC;
+        }
+
+        HRESULT STDMETHODCALLTYPE GetDataHere(FORMATETC*, STGMEDIUM*) override
+        {
+            return E_NOTIMPL;
+        }
+
+        HRESULT STDMETHODCALLTYPE QueryGetData(FORMATETC*) override
+        {
+            return E_NOTIMPL;
+        }
+
+        HRESULT STDMETHODCALLTYPE GetCanonicalFormatEtc(FORMATETC*, FORMATETC*) override
+        {
+            return E_NOTIMPL;
+        }
+
+        HRESULT STDMETHODCALLTYPE SetData(FORMATETC*, STGMEDIUM*, BOOL) override
+        {
+            return E_NOTIMPL;
+        }
+
+        HRESULT STDMETHODCALLTYPE EnumFormatEtc(const DWORD direction, IEnumFORMATETC** enumerator) override
+        {
+            if (direction != DATADIR_GET)
+                return E_NOTIMPL;
+            // 같은 형식을 매체마다 거듭 알리는 source가 있다 — 목록에는 한 번만 실려야 한다.
+            const std::array<FORMATETC, 4> formats {
+                FORMATETC { descriptor_format_, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL },
+                FORMATETC { contents_format_, nullptr, DVASPECT_CONTENT, -1, TYMED_ISTREAM },
+                FORMATETC { contents_format_, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL },
+                FORMATETC { url_format_, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL },
+            };
+            return SHCreateStdEnumFmtEtc(static_cast<UINT>(formats.size()), formats.data(), enumerator);
+        }
+
+        HRESULT STDMETHODCALLTYPE DAdvise(FORMATETC*, DWORD, IAdviseSink*, DWORD*) override
+        {
+            return E_NOTIMPL;
+        }
+
+        HRESULT STDMETHODCALLTYPE DUnadvise(DWORD) override
+        {
+            return E_NOTIMPL;
+        }
+
+        HRESULT STDMETHODCALLTYPE EnumDAdvise(IEnumSTATDATA**) override
+        {
+            return E_NOTIMPL;
+        }
+
+    private:
+        std::vector<virtual_item> items_ {};
+        std::wstring url_ {};
+        CLIPFORMAT descriptor_format_ { 0 };
+        CLIPFORMAT contents_format_ { 0 };
+        CLIPFORMAT url_format_ { 0 };
+    };
+
+    // 놓는 순간 꺼낸 가상 파일이다.
+    struct virtual_drop_intent
+    {
+        std::vector<std::u8string> names {};
+        std::string first_content {};
+        std::u8string url {};
+        bool had_data { false };
+    };
+}
+
+TEST_CASE("Format names round-trip between standard constants and registered names", "[win32][drop]")
+{
+    REQUIRE(luil::win32::clipboard_format_name(CF_HDROP) == u8"CF_HDROP");
+    REQUIRE(luil::win32::clipboard_format_name(CF_UNICODETEXT) == u8"CF_UNICODETEXT");
+    REQUIRE(luil::win32::clipboard_format_of(u8"CF_DIB") == CF_DIB);
+    const CLIPFORMAT registered { luil::win32::clipboard_format_of(u8"FileGroupDescriptorW") };
+    REQUIRE(registered == RegisterClipboardFormatW(CFSTR_FILEDESCRIPTORW));
+    REQUIRE(luil::win32::clipboard_format_name(registered) == u8"FileGroupDescriptorW");
+    REQUIRE(luil::win32::clipboard_format_of(u8"") == 0);
+}
+
+TEST_CASE("A drag without files lists each format once in the order the source gave", "[win32][drop]")
+{
+    virtual_data_object data { { { L"photo.png", "PNG" } }, L"https://example.com/photo.png" };
+    const luil::win32::os_drag_data drag { luil::win32::read_os_drag(&data) };
+    REQUIRE(drag.files.empty());
+    REQUIRE(drag.formats == std::vector<std::u8string> { u8"FileGroupDescriptorW", u8"FileContents", u8"UniformResourceLocatorW" });
+}
+
+TEST_CASE("A virtual file drag reaches the host with its formats and the Drop data object", "[win32][drop]")
+{
+    recording_drop_host host {};
+    auto* const target { new luil::win32::surface_drop_target { nullptr, host } };
+    virtual_data_object data { { { L"photo.png", "PNG" } }, L"https://example.com/photo.png" };
+
+    // 브라우저는 복사와 링크를 허락한다. 우리는 그 안에서 복사만 고른다.
+    DWORD effect { DROPEFFECT_COPY | DROPEFFECT_LINK };
+    REQUIRE(target->DragEnter(&data, 0, POINTL { 10, 20 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_COPY);
+    REQUIRE(host.events.size() == 1u);
+    REQUIRE(host.events[0].files.empty());
+    REQUIRE(host.events[0].formats.size() == 3u);
+
+    // 그 자리에 받는 element가 없으면 host가 거절하고 커서는 "받지 않음"이다.
+    host.open = false;
+    effect = DROPEFFECT_COPY | DROPEFFECT_LINK;
+    REQUIRE(target->DragOver(0, POINTL { 30, 40 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_NONE);
+
+    host.open = true;
+    effect = DROPEFFECT_COPY | DROPEFFECT_LINK;
+    REQUIRE(target->Drop(&data, 0, POINTL { 30, 40 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_COPY);
+    REQUIRE(host.events.back().kind == u8"dropped");
+    REQUIRE(host.events.back().data == &data);
+    REQUIRE(host.events.back().formats.size() == 3u);
+    target->Release();
+}
+
+TEST_CASE("A virtual file drag whose source allows only link is refused", "[win32][drop]")
+{
+    recording_drop_host host {};
+    auto* const target { new luil::win32::surface_drop_target { nullptr, host } };
+    virtual_data_object data { { { L"photo.png", "PNG" } }, L"https://example.com/photo.png" };
+    DWORD effect { DROPEFFECT_LINK };
+    REQUIRE(target->DragEnter(&data, 0, POINTL { 1, 2 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_NONE);
+    REQUIRE(target->DragLeave() == S_OK);
+    REQUIRE(host.events.empty());
+    target->Release();
+}
+
+TEST_CASE("A drag without files is taken only where an element accepts its formats", "[win32][drop]")
+{
+    fake_surface_context context {};
+    luil::win32::window_surface surface { context };
+    auto root { std::make_unique<drop_panel>(luil::ui_element_id { luil::ui_element_kind::root }) };
+    root->arrange({ { 0.0f, 0.0f, 200.0f, 200.0f }, 1.0f });
+    auto target { std::make_unique<drop_panel>(luil::ui_element_id { luil::application_element_kind(0), u8"images" }) };
+    target->arrange({ { 100.0f, 100.0f, 50.0f, 50.0f }, 1.0f });
+    luil::drop_target accepting {};
+    // 들어온 순간에는 형식만 본다.
+    accepting.accepts = [](const luil::drag_payload& payload) { return payload.has_format(u8"FileGroupDescriptorW"); };
+    // 놓는 순간 그 자리에서 내용을 꺼내 메시지에 담는다.
+    accepting.on_drop = [](const luil::drag_payload&, const luil::ui_action_context& context) -> std::vector<luil::input_action> {
+        virtual_drop_intent intent {};
+        intent.had_data = context.native_drop_data != nullptr;
+        for (const luil::win32::dropped_virtual_file& file : luil::win32::drop_virtual_files(context.native_drop_data))
+            intent.names.push_back(file.name);
+        if (const auto bytes { luil::win32::drop_data_bytes(context.native_drop_data, u8"FileContents", 0) }; bytes.has_value())
+            intent.first_content.assign(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+        intent.url = luil::win32::drop_data_text(context.native_drop_data, u8"UniformResourceLocatorW").value_or(std::u8string {});
+        return { luil::make_app_action(std::move(intent)) };
+    };
+    target->set_drop_target(std::move(accepting));
+    root->add(std::move(target));
+    static_cast<void>(surface.set_tree(std::make_shared<const luil::ui_tree>(std::move(root))));
+
+    virtual_data_object data { { { L"photo.png", "PNG-BYTES" }, { L"notes.txt", "hello" } }, L"https://example.com/photo.png" };
+    const luil::win32::os_drag_data drag { luil::win32::read_os_drag(&data) };
+    luil::win32::drop_target_host& drops { surface };
+
+    // 받는 element 밖은 받지 않는다 — 파일 끌기와 달리 창 전체 물러섬이 없어 복사 커서를 보이면 놓아도 아무 일이 없다.
+    REQUIRE(drops.file_drag_entered(10.0f, 10.0f, drag) == false);
+    REQUIRE(drops.file_drag_moved(120.0f, 120.0f));
+    REQUIRE(drops.file_drag_dropped(10.0f, 10.0f, drag, &data, 0) == false);
+    REQUIRE(context.dispatched.empty());
+    REQUIRE(context.fallbacks.empty());
+
+    // 받는 element 위에 놓으면 그 on_drop이 원시 객체로 내용을 꺼낸다.
+    REQUIRE(drops.file_drag_dropped(120.0f, 120.0f, drag, &data, 0));
+    REQUIRE(context.dispatched.size() == 1u);
+    REQUIRE(context.fallbacks.empty());
+    const auto* const message { std::get_if<luil::app_message>(&context.dispatched[0]) };
+    REQUIRE(message != nullptr);
+    const auto* const intent { message->get<virtual_drop_intent>() };
+    REQUIRE(intent != nullptr);
+    REQUIRE(intent->had_data);
+    REQUIRE(intent->names == std::vector<std::u8string> { u8"photo.png", u8"notes.txt" });
+    REQUIRE(intent->first_content == "PNG-BYTES");
+    REQUIRE(intent->url == u8"https://example.com/photo.png");
+}
+
+TEST_CASE("Drop data helpers refuse content above the limit and missing formats", "[win32][drop]")
+{
+    virtual_data_object data { { { L"big.bin", std::string(100, 'x') } }, L"https://example.com" };
+    REQUIRE(luil::win32::drop_data_bytes(&data, u8"FileContents", 0, 99).has_value() == false);
+    REQUIRE(luil::win32::drop_data_bytes(&data, u8"FileContents", 0, 100).value().size() == 100u);
+    REQUIRE(luil::win32::drop_data_bytes(&data, u8"FileContents", 5).has_value() == false);
+    REQUIRE(luil::win32::drop_data_bytes(&data, u8"CF_DIB").has_value() == false);
+    REQUIRE(luil::win32::drop_data_text(nullptr, u8"CF_UNICODETEXT").has_value() == false);
+    REQUIRE(luil::win32::drop_virtual_files(nullptr).empty());
+    const std::vector<luil::win32::dropped_virtual_file> files { luil::win32::drop_virtual_files(&data) };
+    REQUIRE(files.size() == 1u);
+    REQUIRE(files[0].size == 100u);
+    REQUIRE(files[0].directory == false);
+}
+
+TEST_CASE("A drop target on a real window passes every OLE call through the shell drag image", "[win32][drop]")
+{
+    // 끄는 그림(`IDropTargetHelper`)은 창이 있을 때만 선다. 기존 앱의 파일 드롭마다 지나는 길이라 실제 창으로 네 호출을
+    // 모두 지나 보고, 답이 그대로인지 본다.
+    const luil::win32::com_sta_scope com {};
+    REQUIRE(com.succeeded());
+    WNDCLASSEXW type {};
+    type.cbSize = sizeof(type);
+    type.hInstance = GetModuleHandleW(nullptr);
+    type.lpszClassName = L"Luil.Test.DropHelper";
+    type.lpfnWndProc = &DefWindowProcW;
+    REQUIRE((RegisterClassExW(&type) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS));
+    // 보이지 않는 창이다. 사람의 화면을 덮지 않는다.
+    const HWND window { CreateWindowExW(WS_EX_TOOLWINDOW, type.lpszClassName, L"", WS_POPUP, 0, 0, 200, 200, nullptr, nullptr, type.hInstance, nullptr) };
+    REQUIRE(window != nullptr);
+
+    recording_drop_host host {};
+    auto* const target { new luil::win32::surface_drop_target { window, host } };
+    file_data_object files { { L"C:\\a\\first.txt" } };
+    virtual_data_object virtuals { { { L"photo.png", "PNG" } }, L"https://example.com/photo.png" };
+
+    // 파일 끌기를 들였다가 떠난다.
+    DWORD effect { DROPEFFECT_COPY | DROPEFFECT_MOVE };
+    REQUIRE(target->DragEnter(&files, 0, POINTL { 10, 10 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_COPY);
+    effect = DROPEFFECT_COPY | DROPEFFECT_MOVE;
+    REQUIRE(target->DragOver(0, POINTL { 20, 20 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_COPY);
+    REQUIRE(target->DragLeave() == S_OK);
+
+    // 가상 파일 끌기를 들였다가 놓는다.
+    effect = DROPEFFECT_COPY | DROPEFFECT_LINK;
+    REQUIRE(target->DragEnter(&virtuals, 0, POINTL { 10, 10 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_COPY);
+    effect = DROPEFFECT_COPY | DROPEFFECT_LINK;
+    REQUIRE(target->Drop(&virtuals, 0, POINTL { 30, 30 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_COPY);
+    REQUIRE(host.events.back().kind == u8"dropped");
+    REQUIRE(host.events.back().data == &virtuals);
+
+    // 받지 않은 끌기도 그림에는 알린다. 짝인 놓기까지 지나도 아무도 받지 않았다고 답한다.
+    effect = DROPEFFECT_LINK;
+    REQUIRE(target->DragEnter(&virtuals, 0, POINTL { 10, 10 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_NONE);
+    effect = DROPEFFECT_LINK;
+    REQUIRE(target->Drop(&virtuals, 0, POINTL { 10, 10 }, &effect) == S_OK);
+    REQUIRE(effect == DROPEFFECT_NONE);
+
+    target->Release();
+    DestroyWindow(window);
 }

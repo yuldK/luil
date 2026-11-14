@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace luil {
@@ -242,6 +243,117 @@ namespace luil {
         taskbar_request taskbar {};
     };
 
+    // 화면의 사각형이다 (가상 화면 물리 픽셀). 왼쪽·위에 놓인 모니터에서는 음수다.
+    //  - `right`·`bottom`은 포함하지 않는 끝이다 (Win32 `RECT`와 같다).
+    struct screen_rect
+    {
+        int left { 0 };
+        int top { 0 };
+        int right { 0 };
+        int bottom { 0 };
+
+        [[nodiscard]] int width() const noexcept
+        {
+            return right - left;
+        }
+        [[nodiscard]] int height() const noexcept
+        {
+            return bottom - top;
+        }
+        // 너비나 높이가 0 이하면 빈 사각형이다.
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return width() <= 0 || height() <= 0;
+        }
+
+        [[nodiscard]] bool operator==(const screen_rect&) const noexcept = default;
+    };
+
+    // 모니터 하나다 (`ui_frame::displays`, docked-surface-design.md).
+    struct display_info
+    {
+        // 모니터를 가리키는 안정된 이름이다 (Win32는 `\\.\DISPLAY1` 같은 장치 이름). 같은 연결이면 실행 중에 바뀌지 않는다.
+        std::u8string id {};
+        // 모니터 전체와 작업 영역(작업 표시줄·앱 바를 뺀 곳)이다.
+        screen_rect bounds {};
+        screen_rect work_area {};
+        // 논리 픽셀당 물리 픽셀 수다 (150%면 1.5).
+        float scale { 1.0f };
+        bool primary { false };
+
+        [[nodiscard]] bool operator==(const display_info&) const noexcept = default;
+    };
+
+    // 화면 가장자리다.
+    enum class screen_edge
+    {
+        left,
+        top,
+        right,
+        bottom,
+    };
+
+    // 가장자리를 따라 어느 끝에 맞추는가다.
+    //  - 가로 가장자리(위·아래)에서 `start`는 왼쪽, 세로 가장자리(왼쪽·오른쪽)에서는 위쪽이다.
+    enum class edge_alignment
+    {
+        start,
+        center,
+        end,
+    };
+
+    // 모니터의 가장자리에 붙는 자리다 (`ui_docked_surface::placement`).
+    // 앱은 모니터 배치도 배율도 모른 채 "이 모니터의 아래 가장자리, 오른쪽 끝에서 12만큼, 두께 40"처럼만 말한다. 물리 사각형으로
+    // 바꾸는 것은 UI thread이고, 모니터·작업 영역·배율이 바뀌면 같은 값으로 다시 푼다.
+    //  - 길이·거리는 **그 모니터 배율의 논리 픽셀**이다.
+    struct docked_edge_placement
+    {
+        // 모니터 id다 (`display_info::id`). 비어 있으면 주 모니터다.
+        //  - 그 모니터가 없으면(빠졌다) 표면을 숨긴다. 앱은 `ui_frame::displays`로 그 사실을 받고 다른 모니터를 고른다.
+        std::u8string monitor {};
+        screen_edge edge { screen_edge::bottom };
+        // 참이면 작업 영역의 가장자리(작업 표시줄 안쪽), 거짓이면 모니터 전체의 가장자리(작업 표시줄 위에 겹친다)다.
+        bool work_area { true };
+        edge_alignment alignment { edge_alignment::start };
+        // 맞춘 끝에서 가장자리를 따라 띄우는 거리다. `center`면 가운데에서 `start` 쪽의 반대로 민다.
+        float offset { 0.0f };
+        // 가장자리에서 안쪽으로 띄우는 거리다.
+        float inset { 0.0f };
+        // 가장자리를 따라 잰 길이다. 0 이하면 가장자리 전체다. 가장자리보다 길면 가장자리 길이로 줄인다.
+        float length { 0.0f };
+        // 가장자리에서 안쪽으로 잰 두께다. 0 이하면 표면을 숨긴다.
+        float thickness { 0.0f };
+
+        [[nodiscard]] bool operator==(const docked_edge_placement&) const noexcept = default;
+    };
+
+    // 일반 창과 따로 화면에 붙는 작은 판 하나다 (작업 표시줄 곁의 위젯, 화면 가장자리 패널, 알림 띠 — docked-surface-design.md).
+    // popup·보조 창처럼 앱 상태다: frame에 실으면 서고 빼면 사라진다.
+    //  - 캡션·테두리·작업 표시줄 단추가 없고, 언제나 위에 뜨며, 눌러도 활성화되지 않는다.
+    //  - 자리와 크기는 앱의 것이다. 매 frame 실은 값이 이기고 바뀐 frame에서 바로 옮긴다. 사용자가 끌어 옮기거나 크기를
+    //    바꾸지 않고, 최소 크기도 없다 (몇 픽셀 두께의 띠도 된다).
+    //  - 키보드를 받으려면 앱이 잠깐 활성화를 청한다: `ui_frame::focus`에 이 id와 `activate`를 싣는다. 사용자가 다른 곳을
+    //    누르면 다시 비활성이 된다.
+    //  - popup의 앵커(`ui_popup::anchor`)가 될 수 있다. 비활성인 동안에는 다른 앱을 눌러도 활성 전환이 없어
+    //    `activation_changed`가 오지 않는다 — 메뉴를 여는 앱은 그때 잠깐 활성화를 함께 청한다.
+    //  - Android는 지원하지 않는다 (받고 무시한다).
+    struct ui_docked_surface
+    {
+        // 표면 id다. popup·보조 창 id와 같은 이름 공간을 쓴다.
+        std::u8string id {};
+        // 물리 화면 사각형(`screen_rect`)이거나 모니터 가장자리의 자리다. 풀리지 않으면(빈 사각형·두께 0·없는 모니터) 표면을
+        // 숨긴다. 표면과 tree는 남아 자리가 다시 풀리면 그대로 보인다.
+        //  - 물리 사각형이면 배율은 그 사각형이 놓인 모니터의 것이다 (`metrics`의 `scale`).
+        std::variant<screen_rect, docked_edge_placement> placement {};
+        // 보조 기술과 작업 관리자가 읽는 창 이름이다. 그려지지 않는다.
+        std::u8string title {};
+        std::shared_ptr<const ui_tree> tree {};
+        // 크기·배율이 정해지거나 바뀔 때 게시할 메시지다 (생성 직후·자리 변경·모니터 이동·배율 변경).
+        // 크기는 보조 창의 `metrics`처럼 client 물리 픽셀이고 `scale`은 그 모니터의 배율이다. 앱은 이것으로 tree를 다시
+        // 배치한다. 비어 있으면 알리지 않는다.
+        std::function<app_message(float width, float height, float scale)> metrics {};
+    };
+
     // 앱이 바라는 화면 방향이다 (device-request-design.md).
     enum class screen_orientation
     {
@@ -358,6 +470,13 @@ namespace luil {
         std::vector<ui_popup> popups {};
         // 주 창 곁의 보조 top-level 창들이다.
         std::vector<ui_window> windows {};
+        // 일반 창과 따로 화면에 붙는 도킹 표면들이다 (docked-surface-design.md).
+        std::vector<ui_docked_surface> docked_surfaces {};
+        // 모니터 목록을 알릴 메시지다. 처음 실린 frame에서 한 번, 그 뒤로는 모니터 연결·해상도·작업 영역·배율이 바뀔 때마다
+        // 새 목록으로 온다. 비어 있으면 알리지 않는다.
+        //  - 도킹 표면의 자리(`docked_edge_placement::monitor`)를 고르거나 물리 사각형을 계산할 때 쓴다.
+        //  - Android는 부르지 않는다.
+        std::function<app_message(const std::vector<display_info>& displays)> displays {};
         // 표면들에 얹힌 웹뷰들이다.
         // popup·보조 창처럼 실으면 서고 빼면 사라진다. **자리는 여기 없다** —
         // tree의 자리표(`webview_element`)가 정한다 (webview.h에 이유가 있다).

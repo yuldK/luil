@@ -1510,6 +1510,11 @@ namespace luil::android {
                         warned_windows_ = true;
                         log_error(u8"Secondary windows (ui_frame::windows) are not supported on Android and are ignored.");
                     }
+                    if (frame->docked_surfaces.empty() == false && warned_docked_ == false)
+                    {
+                        warned_docked_ = true;
+                        log_error(u8"Docked surfaces (ui_frame::docked_surfaces) are not supported on Android and are ignored.");
+                    }
                 }
                 for (auto& old : previous)
                     if (old.anchor.empty() == false && std::none_of(overlays_.begin(), overlays_.end(), [&old](const auto& entry) { return entry.id == old.anchor; }))
@@ -1881,6 +1886,7 @@ namespace luil::android {
             focus_request_tracker focus_tracker_ {};
             overlay_input_router router_ {};
             bool warned_windows_ { false };
+            bool warned_docked_ { false };
             std::unique_ptr<ime_session> ime_ {};
             // 키보드가 올라와 줄어든 frame이 오면 초점 칸을 드러내 달라고 보낸다.
             bool reveal_pending_ { false };

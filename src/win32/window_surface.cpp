@@ -441,17 +441,27 @@ namespace luil::win32 {
     bool window_surface::file_drop_open(const float x, const float y) const
     {
         // 놓기와 같은 탐색이다 — 커서가 "받음"을 보인 자리에서 놓기가 사라지지 않는다.
-        return tree_ == nullptr || tree_->drop_hit_test(x, y, file_drag_payload_).blocked == false;
+        if (tree_ == nullptr)
+            return file_drag_payload_.files.empty() == false;
+        const drop_hit_result hit { tree_->drop_hit_test(x, y, file_drag_payload_) };
+        if (hit.blocked)
+            return false;
+        return file_drag_payload_.files.empty() == false || hit.target != nullptr;
     }
 
-    bool window_surface::file_drag_entered(const float x, const float y, std::vector<std::u8string> files)
+    bool window_surface::file_drag_entered(const float x, const float y, os_drag_data drag)
     {
         file_drag_payload_.custom_visual = true;
-        file_drag_payload_.files = files;
+        file_drag_payload_.files = drag.files;
+        file_drag_payload_.formats = drag.formats;
         // OLE가 준 자리는 client다. tree의 자리로 옮긴다 (`content_offset_y`).
         const float tree_y { y + static_cast<float>(content_offset_y()) };
         if (app_host* const host { context_.host() }; host != nullptr)
-            host->post_raw_input(file_drag_entered_event { x, tree_y, std::move(files), id_ });
+        {
+            file_drag_entered_event event { x, tree_y, std::move(drag.files), id_ };
+            event.formats = std::move(drag.formats);
+            host->post_raw_input(std::move(event));
+        }
         return file_drop_open(x, tree_y);
     }
 
@@ -470,13 +480,14 @@ namespace luil::win32 {
             host->post_raw_input(file_drag_left_event { id_ });
     }
 
-    bool window_surface::file_drag_dropped(const float x, const float y, const std::vector<std::u8string>& files, const DWORD key_state)
+    bool window_surface::file_drag_dropped(const float x, const float y, const os_drag_data& drag, IDataObject* const data, const DWORD key_state)
     {
         // 답과 실행은 이 표면의 tree에 직접 묻는다 (os-dragdrop-design.md).
         // caption 버튼이 tree의 액션을 동기로 실행하는 것과 같은 자리다.
         drag_payload payload {};
         payload.custom_visual = true;
-        payload.files = files;
+        payload.files = drag.files;
+        payload.formats = drag.formats;
         const float tree_y { y + static_cast<float>(content_offset_y()) };
         const drop_hit_result hit { tree_ != nullptr ? tree_->drop_hit_test(x, tree_y, payload) : drop_hit_result {} };
         const ui_element* const over { hit.target };
@@ -489,18 +500,24 @@ namespace luil::win32 {
             context.control = (key_state & MK_CONTROL) != 0;
             context.shift = (key_state & MK_SHIFT) != 0;
             context.alt = (key_state & MK_ALT) != 0;
+            // 원시 데이터 객체는 이 호출 동안만 산다. 앱은 on_drop 안에서 내용을 꺼낸다 (OLE 규칙).
+            context.native_drop_data = data;
             for (input_action& action : over->drop()->on_drop(payload, context))
                 context_.dispatch_action(std::move(action));
-        }
-        else if (hit.blocked == false)
-        {
-            // 수락 element가 없으면 지금까지의 물러섬이다 (delegate의 on_file_dropped).
-            context_.deliver_file_drop(files);
+            file_drag_left();
+            return true;
         }
         // 놓기도 표시로는 떠남이다.
         file_drag_left();
         // 위에 뜬 불투명 표면(modal·메뉴·토스트)이 가렸으면 아무도 받지 않았다.
-        return hit.blocked == false;
+        if (hit.blocked)
+            return false;
+        // 파일 없는 끌기는 창 전체 물러섬이 없다 — 받는 element가 없으면 아무도 받지 않았다.
+        if (drag.files.empty())
+            return false;
+        // 수락 element가 없으면 지금까지의 물러섬이다 (delegate의 on_file_dropped).
+        context_.deliver_file_drop(drag.files);
+        return true;
     }
 
     void window_surface::set_dpi(const std::uint32_t dpi) noexcept
@@ -1167,7 +1184,7 @@ namespace luil::win32 {
         if (host == nullptr || captured == false || IsWindowVisible(window_) == FALSE)
             return;
         const interaction_snapshot published { host->acquire_interaction() };
-        if (published.drag.has_value() == false || published.drag->payload.files.empty() == false)
+        if (published.drag.has_value() == false || published.drag->payload.external())
             return;
         pointer_over over {};
         const HWND hit { WindowFromPoint(screen) };

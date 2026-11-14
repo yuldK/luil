@@ -131,6 +131,7 @@
 - [Popup 앵커 표면](popup-anchor-design.md)
 - [Popup 안의 텍스트 입력과 IME](popup-ime-design.md)
 - [OS 파일 drag & drop](os-dragdrop-design.md)
+- [도킹 표면](docked-surface-design.md)
 - [파일 목록 클립보드](file-clipboard-design.md)
 - [그림 클립보드](image-clipboard-design.md): 글과 그림을 한 클립에 넣고 다른 앱이 넣은 그림을 읽는다
 - [파일 변경 감시](file-watch-design.md): 폴더와 파일의 변경을 OS 알림으로 받아 묶음으로 건넨다

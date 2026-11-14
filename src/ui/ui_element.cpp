@@ -614,6 +614,11 @@ namespace luil {
         return dragged_owner.empty() ? 0u : 1u;
     }
 
+    bool drag_payload::has_format(const std::u8string_view format) const noexcept
+    {
+        return std::find(formats.begin(), formats.end(), format) != formats.end();
+    }
+
     const ui_element* ui_element::find_drop_target(const float x, const float y, const drag_payload& payload) const
     {
         return drop_hit_test(x, y, payload).target;

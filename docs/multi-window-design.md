@@ -4,6 +4,8 @@ Application은 `ui_frame::windows`에 secondary top-level window를 publish한�
 
 내부 끌기는 창을 넘는다. 한 창에서 시작한 끌기를 다른 창의 tree에 놓을 수 있고, 받는 대상 없이 놓으면(창 밖) 끌기를 시작한 쪽이 화면 좌표와 함께 그 사실을 받는다. 이 둘과 화면 좌표로 창을 세우는 길을 합치면 탭을 창 밖으로 끌어내 새 창으로 떼어 내고, 다른 창의 탭 막대로 끌어 넣어 합칠 수 있다([탭을 떼어 내고 합치기](#탭을-떼어-내고-합치기)). 탭이 어느 창에 속하는지와 창마다 tree를 짓는 일은 앱의 몫이다.
 
+캡션·작업 표시줄 단추 없이 화면 가장자리에 붙고 활성화되지 않는 판은 보조 창이 아니라 도킹 표면이다 ([도킹 표면](docked-surface-design.md)).
+
 공개 frame 계약은 [`include/luil/app/app_host.h`](../include/luil/app/app_host.h)에 있다. Platform 동작은 [`src/win32/secondary_surface.h`](../src/win32/secondary_surface.h)와 [`src/win32/win32_window.cpp`](../src/win32/win32_window.cpp)의 reconciliation code에 구현되어 있다.
 
 ## Window publish
