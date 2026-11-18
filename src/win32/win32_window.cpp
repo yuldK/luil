@@ -5,6 +5,7 @@
 #include "host/font_registry.h"
 #include "host/popup_reconcile.h"
 #include "host/surface_invalidate.h"
+#include "host/system_appearance_observer.h"
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
 #include "luil/ui/webview_element.h"
@@ -258,6 +259,19 @@ namespace luil::win32 {
             };
         }
 
+        [[nodiscard]] system_appearance read_system_appearance() noexcept
+        {
+            const bool contrast { read_high_contrast_enabled() };
+            return {
+                .prefers_light = read_system_prefers_light_theme(),
+                .high_contrast = contrast,
+                .contrast_colors = contrast ? read_high_contrast_colors() : high_contrast_colors {},
+                .accent = read_system_accent_color(),
+                .reduce_motion = read_reduce_motion(),
+                .transparency = read_transparency_enabled(),
+            };
+        }
+
         // 창을 앞으로 세운다. 최소화는 되살린다.
         //  - 앞 창을 빼앗지 않는 OS 규칙을 넘지 않는다: 이 프로세스가 앞 창이 아니면 OS가 막고 작업 표시줄 단추만 깜빡인다.
         //    초점 요청(`advance_focus_request`)과 둘째 인스턴스의 인자(`receive_instance_message`)가 같은 규칙을 쓴다.
@@ -399,7 +413,7 @@ namespace luil::win32 {
                 // OS accent로 시스템 키 컬러 항목을 세운다.
                 // 바뀌면 WM_DWMCOLORIZATIONCOLORCHANGED가 다시 세운다.
                 //  - 스레드들이 돌기 전이라 첫 게시부터 목록에 서 있다.
-                set_system_accent(read_system_accent_color());
+                set_system_accent(system_.accent);
                 // 사용자가 키운 텍스트 크기를 글자 크기에 싣는다 (`scaled_font_size`). 첫 metrics부터 그 값이다.
                 if (config_.follow_text_scale)
                     apply_text_scale(read_text_scale_factor());
@@ -815,6 +829,8 @@ namespace luil::win32 {
                         const SkFont font { configured_ui_typeface(), pixel_size };
                         return measure_text(text, font);
                     };
+                    if (app_message message { observe_appearance() }; message.empty() == false)
+                        host_config.initial_messages.push_back(std::move(message));
                     if (environment_.delegate != nullptr)
                     {
                         host_config.initial_messages.push_back(make_window_metrics_message());
@@ -1313,18 +1329,23 @@ namespace luil::win32 {
                     invalidate_all_surfaces();
                     return 0;
                 case WM_SETTINGCHANGE:
+                case WM_SYSCOLORCHANGE:
+                case WM_DWMCOLORIZATIONCOLORCHANGED:
                 case WM_THEMECHANGED: {
                     // OS 테마가 바뀌면 `system` 선호가 가리키는 팔레트도 바뀐다.
                     // popup·보조 창 표면도 새 팔레트로 다시 칠한다.
-                    system_prefers_light_ = read_system_prefers_light_theme();
-                    high_contrast_ = read_high_contrast_enabled();
-                    const bool was_reduced { std::exchange(reduce_motion_, read_reduce_motion()) };
+                    const bool was_reduced { system_.reduce_motion };
+                    system_ = read_system_appearance();
+                    if (host_ != nullptr)
+                    {
+                        if (app_message changed { observe_appearance() }; changed.empty() == false)
+                            host_->post_app_message(std::move(changed));
+                    }
                     publish_platform();
                     set_text_render_quality(read_text_render_quality());
                     // 텍스트 크기의 변경 알림을 구독하지 못한 환경에서도 설정 변경이 다시 읽게 한다. 같으면 아무 일도 없다.
                     refresh_text_scale();
                     // 투명 효과·고대비가 바뀌면 배경 효과가 서는지도 바뀐다.
-                    transparency_enabled_ = read_transparency_enabled();
                     refresh_backdrop();
                     // 작업 표시줄 밝기·고대비가 바뀌면 알림 영역 그림도 다시 고른다.
                     refresh_tray_appearance();
@@ -1333,17 +1354,10 @@ namespace luil::win32 {
                     refresh_displays();
                     // 움직임 줄이기는 앱의 상태에도 닿는다 (앱이 든 전환·스프링). 그리기에 닿는 갱신을 마친 뒤, 값이 달라졌을
                     // 때만 알린다 — 이 메시지는 이 설정이 아닌 일로도 자주 온다.
-                    if (was_reduced != reduce_motion_)
+                    if (was_reduced != system_.reduce_motion)
                         post_window_metrics();
                     return 0;
                 }
-                case WM_DWMCOLORIZATIONCOLORCHANGED:
-                    // OS accent가 바뀌었다.
-                    // wParam에도 새 색이 실리지만 읽는 길은 시작과 같은 함수 하나로 둔다.
-                    // `u8"system"`을 고른 화면은 다음 그리기부터 새 색이다.
-                    set_system_accent(read_system_accent_color());
-                    invalidate_all_surfaces();
-                    return 0;
                 case WM_CLIPBOARDUPDATE:
                     post_clipboard_change();
                     return 0;
@@ -1812,7 +1826,7 @@ namespace luil::win32 {
                 try
                 {
                     window_metrics metrics { make_window_metrics(width, height, scale) };
-                    metrics.reduce_motion = reduce_motion_;
+                    metrics.reduce_motion = system_.reduce_motion;
                     // 시스템이 키운 글자의 배율이다 (Android와 같은 대표값 — `scaled_font_size`가 실제 크기를 답한다).
                     metrics.text_scale = scaled_font_size(12.0f) / 12.0f;
                     return environment_.delegate->make_metrics_message(metrics);
@@ -1923,8 +1937,8 @@ namespace luil::win32 {
                 return backdrop_environment {
                     .layered = layered,
                     .activates = activates,
-                    .transparency_enabled = transparency_enabled_,
-                    .high_contrast = high_contrast_,
+                    .transparency_enabled = system_.transparency,
+                    .high_contrast = system_.high_contrast,
                     .remote_session = GetSystemMetrics(SM_REMOTESESSION) != 0,
                     .system_backdrop_supported = system_backdrop_supported_,
                     .accent_supported = accent_backdrop_available(),
@@ -2091,6 +2105,19 @@ namespace luil::win32 {
             }
 
             // 클립보드가 바뀌었다 (`WM_CLIPBOARDUPDATE`). 지금 임자가 이 창인지와 바뀐 번호를 앱에 알린다.
+            [[nodiscard]] app_message observe_appearance() noexcept
+            {
+                try
+                {
+                    return appearance_observer_.observe(system_, environment_.delegate);
+                }
+                catch (...)
+                {
+                    report_runtime_error(u8"The system appearance delegate threw an exception.");
+                    return {};
+                }
+            }
+
             void post_clipboard_change() noexcept
             {
                 if (host_ == nullptr || environment_.delegate == nullptr)
@@ -2200,7 +2227,7 @@ namespace luil::win32 {
             //    그때는 모든 표면이 발행본을 자기 것으로 거른 값으로 답한다.
             void arm_update_timer(const std::u8string* const caller, const interaction_snapshot* const interaction) noexcept
             {
-                const update_context context { .now = std::chrono::steady_clock::now(), .reduce_motion = reduce_motion_ };
+                const update_context context { .now = std::chrono::steady_clock::now(), .reduce_motion = system_.reduce_motion };
                 std::vector<surface_update_deadline> deadlines {};
                 deadlines.reserve(1 + popups_.size() + windows_.size());
                 // 부르는 표면의 것은 이미 손에 있다 (거기에만 caption hover가 얹혀
@@ -2277,7 +2304,7 @@ namespace luil::win32 {
                 const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
                 // 고대비 여부는 밝은 모드처럼 캐시를 읽는다.
                 // 매 frame·표면마다 시스템 호출을 반복하지 않고 WM_SETTINGCHANGE가 갱신한다.
-                state.theme = resolve_color_theme(appearance.theme, high_contrast_, system_prefers_light_);
+                state.theme = resolve_color_theme(appearance.theme, system_.high_contrast, system_.prefers_light);
                 state.accent_id = appearance.accent_id;
                 // 앱이 실은 스타일이다. frame은 이 렌더 동안 살아 있으므로 포인터로 족하다.
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
@@ -2285,9 +2312,9 @@ namespace luil::win32 {
                 state.inspector = frame != nullptr ? &frame->inspector : nullptr;
                 // 한 줄 도우미는 문맥 인자가 없어 스타일의 줄바꿈 처리를 프로세스 값으로 건다 (실린 것이 없으면 내장값).
                 set_single_line_break(frame_style(state).text.line_break);
-                state.reduce_motion = reduce_motion_;
+                state.reduce_motion = system_.reduce_motion;
                 if (state.theme == color_theme::high_contrast)
-                    state.high_contrast = read_high_contrast_colors();
+                    state.high_contrast = system_.contrast_colors;
                 // 그리기와 창 테두리·웹뷰 바닥이 **같은 팔레트**를 본다.
                 const ui_color_palette palette { frame_palette(state) };
                 apply_frame_theme(state.theme, palette);
@@ -3790,18 +3817,15 @@ namespace luil::win32 {
             // OS의 "앱 모드" 설정이다.
             // 레지스트리 조회는 프레임마다 하지 않고 시작 시 한 번,
             // 이후 WM_SETTINGCHANGE·WM_THEMECHANGED에서만 갱신한다.
-            bool system_prefers_light_ { read_system_prefers_light_theme() };
+            system_appearance system_ { read_system_appearance() };
+            system_appearance_observer appearance_observer_ {};
             // DWM에 마지막으로 말한 명암과 테두리 색이다 (아직 말하지 않았으면 비어 있다).
             // 테마 이름이 아니라 **보낸 답**을 기억한다 — 스타일이 바뀌어 같은 테마의 답이
             // 달라지는 경우를 이름으로는 잡을 수 없다.
             std::optional<std::pair<BOOL, COLORREF>> frame_theme_ {};
-            // 고대비 여부의 캐시다 (WM_SETTINGCHANGE가 갱신).
-            bool high_contrast_ { read_high_contrast_enabled() };
-            bool transparency_enabled_ { read_transparency_enabled() };
             // 이 Windows가 시스템 배경 효과를 받는가다. 주 창을 만들 때 한 번 묻는다. 보조 창·popup도 이 답을 쓴다.
             //  - 표면마다 세워 둔 효과와 알린 상태는 표면이 든다 (`window_surface::refresh_backdrop`).
             bool system_backdrop_supported_ { false };
-            bool reduce_motion_ { read_reduce_motion() };
             // 작업 표시줄 단추에 거는 진행률과 오버레이다. 개체는 주 창을 만들 때 연다.
             //  - 창 표면들보다 먼저 선언해 나중에 사라진다. 오버레이 아이콘은 창이 모두 사라진 뒤에 놓는다.
             taskbar_button taskbar_ {};

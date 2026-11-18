@@ -102,6 +102,12 @@ namespace luil {
             return make_window_metrics_message(metrics.width, metrics.height, metrics.scale);
         }
 
+        [[nodiscard]] virtual app_message make_system_appearance_message(const system_appearance& appearance)
+        {
+            static_cast<void>(appearance);
+            return {};
+        }
+
         // 앱이 보이거나 사라졌다.
         // 반환 메시지는 app inbox로 간다. 빈 메시지는 게시하지 않는다.
         //  - 데스크톱 창(Win32)은 지금 이것을 부르지 않는다. 창이 닫히기 전까지 프로세스가

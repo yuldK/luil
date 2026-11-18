@@ -337,6 +337,21 @@ namespace luil {
         [[nodiscard]] bool operator==(const high_contrast_colors&) const = default;
     };
 
+    struct system_appearance
+    {
+        bool prefers_light { false };
+        bool high_contrast { false };
+        high_contrast_colors contrast_colors {};
+        std::optional<ui_color> accent {};
+        bool reduce_motion { false };
+        bool transparency { true };
+
+        [[nodiscard]] bool operator==(const system_appearance&) const noexcept = default;
+    };
+
+    // host가 마지막으로 읽은 값이다. 첫 관찰 전에는 기본값이다.
+    [[nodiscard]] system_appearance current_system_appearance() noexcept;
+
     // 시스템 색으로 고대비 팔레트를 합성한다.
     // 키 컬러도 앱의 중립 색도 쓰지 않고, 강조·선택은 시스템의 hotlight·highlight가 맡는다.
     [[nodiscard]] ui_color_palette high_contrast_palette_for(const high_contrast_colors& colors) noexcept;

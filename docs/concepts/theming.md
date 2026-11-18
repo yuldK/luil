@@ -1,5 +1,9 @@
 # 테마와 글꼴
 
+`current_system_appearance()`는 어느 스레드에서나 host가 마지막으로 관찰한 표시 설정 전체를 돌려준다. `resolve_color_theme(preference, value.high_contrast, value.prefers_light)`로 표면과 같은 테마를 고른다. 고대비이면 `high_contrast_palette_for(value.contrast_colors)`를 쓴다.
+
+`app_delegate::make_system_appearance_message`는 UI 스레드에서 불린다. 첫 메시지는 첫 frame 전에 처리하며 이후에는 값이 달라질 때만 알린다. 기본 훅은 빈 메시지를 돌려준다. inbox가 찰 수 있으므로 메시지를 계기로 최신 값을 다시 읽을 수 있다. 고대비가 꺼지면 대비 색은 기본값이다. Windows는 시스템 색 변경도 관찰한다. Android는 시스템 대비에 맞춘 기본색을 쓰고 별도 투명 효과 설정이 없어 `transparency`가 참이다.
+
 > 선택 이식 범위: 이 문서의 차트·마크업·업데이트·실행 중 스타일·핫 리로드 교차 참조는 원래 전체 통합 브랜치의 설계 기록이다. 현재 main의 채택 범위와 보존 위치는 [선택 기능 이식 기록](../selected-adoption.md)에 적었다.
 
 앱은 [`appearance_settings`](../../include/luil/theme/appearance.h)로 테마 선호와 accent id를, `font_settings`로 UI·고정폭 글꼴 가족을 게시한다. 좁은 범위는 `appearance_overrides`와 `font_overrides`의 optional 값으로 덮어쓴다.

@@ -1,5 +1,7 @@
 #include "luil/win32/app_host.h"
 
+#include "host/system_appearance_observer.h"
+
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_interaction.h"
 
@@ -104,6 +106,62 @@ namespace {
         }
         return condition();
     }
+}
+
+TEST_CASE("Appearance publishes one initial message and only effective changes", "[win32][host][appearance]")
+{
+    class appearance_delegate final : public luil::app_delegate
+    {
+    public:
+        luil::app_message make_system_appearance_message(const luil::system_appearance& value) override
+        {
+            REQUIRE(value == luil::current_system_appearance());
+            return luil::app_message { ping_intent { u8"appearance" } };
+        }
+    };
+
+    const auto original { luil::current_system_appearance() };
+    luil::system_appearance value {};
+    luil::app_delegate silent {};
+    luil::system_appearance_observer observer {};
+    REQUIRE(observer.observe(value, &silent).empty());
+    appearance_delegate delegate {};
+    luil::system_appearance_observer restart {};
+    luil::app_host::config config {};
+    config.initial_messages.push_back(restart.observe(value, &delegate));
+    REQUIRE(restart.observe(value, &delegate).empty());
+    counting_driver driver {};
+    luil::app_host host { std::move(config), driver, nullptr };
+    REQUIRE(wait_until([&] { return driver.first_frame_pings.load() >= 0; }));
+    REQUIRE(driver.first_frame_pings.load() == 1);
+    value.contrast_colors.emphasis = 0xff123456;
+    REQUIRE(restart.observe(value, &delegate).empty());
+    value.high_contrast = true;
+    REQUIRE_FALSE(restart.observe(value, &delegate).empty());
+    value.contrast_colors.emphasis = 0xff654321;
+    REQUIRE_FALSE(restart.observe(value, &delegate).empty());
+    value.prefers_light = true;
+    REQUIRE_FALSE(restart.observe(value, &delegate).empty());
+    value.accent = 0xff345678;
+    REQUIRE_FALSE(restart.observe(value, &delegate).empty());
+    value.reduce_motion = true;
+    REQUIRE_FALSE(restart.observe(value, &delegate).empty());
+    value.transparency = false;
+    REQUIRE_FALSE(restart.observe(value, &delegate).empty());
+    REQUIRE(restart.observe(value, &delegate).empty());
+    for (const bool high_contrast : { false, true })
+    {
+        for (const bool light : { false, true })
+        {
+            value.high_contrast = high_contrast;
+            value.prefers_light = light;
+            static_cast<void>(restart.observe(value, nullptr));
+            const auto published { luil::current_system_appearance() };
+            for (const auto preference : { luil::theme_preference::system, luil::theme_preference::dark, luil::theme_preference::light })
+                REQUIRE(luil::resolve_color_theme(preference, published.high_contrast, published.prefers_light) == luil::resolve_color_theme(preference, high_contrast, light));
+        }
+    }
+    REQUIRE(restart.observe(original, nullptr).empty());
 }
 
 TEST_CASE("Initial app messages are handled before the first frame", "[win32][host]")

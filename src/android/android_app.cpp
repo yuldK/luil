@@ -22,6 +22,7 @@
 #include "host/popup_dismiss.h"
 #include "host/popup_reconcile.h"
 #include "host/skia_renderer.h"
+#include "host/system_appearance_observer.h"
 #include "host/text_edit_menu.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/dialog_elements.h"
@@ -552,7 +553,7 @@ namespace luil::android {
                     .window_caption = false,
                     .capabilities = { .screen_orientation = true, .system_bars = true, .volume_keys = true, .haptics = true, .notifications = true },
                 });
-                prefers_light_ = read_prefers_light(app_->activity);
+                system_.prefers_light = read_prefers_light(app_->activity);
                 scale_ = read_scale(app_->config);
                 set_font_fallback(&font_resolver_);
 
@@ -633,6 +634,8 @@ namespace luil::android {
                     const int constant { haptic_feedback_constant(feedback, api_level) };
                     static_cast<void>(post_to_main_thread([constant](JNIEnv& env, const jobject activity) { perform_haptic_feedback(env, activity, constant); }));
                 };
+                if (app_message message { observe_appearance() }; message.empty() == false)
+                    host_config.initial_messages.push_back(std::move(message));
                 host_ = std::make_unique<app_host>(std::move(host_config), *environment_.driver, environment_.policy);
 
                 // IME다. 상태를 넘기고 키보드를 띄우는 일만 GameActivity에 맡긴다.
@@ -728,10 +731,12 @@ namespace luil::android {
                 case APP_CMD_CONFIG_CHANGED:
                     // 회전·밀도·어두운 모드는 Activity를 다시 만들지 않고 여기로 온다
                     // (매니페스트의 configChanges). glue가 구성을 이미 새로 읽어 두었다.
-                    prefers_light_ = read_prefers_light(app_->activity);
+                    system_.prefers_light = read_prefers_light(app_->activity);
                     scale_ = read_scale(app_->config);
                     refresh_system_theme();
                     refresh_system_settings();
+                    refresh_reduce_motion();
+                    post_appearance();
                     refresh_metrics();
                     break;
                 case APP_CMD_SOFTWARE_KB_VIS_CHANGED:
@@ -770,6 +775,7 @@ namespace luil::android {
                     refresh_system_settings();
                     // 애니메이션 배율도 구성 변경으로 오지 않는다 (`Configuration`에는 글자 배율만 있다).
                     refresh_reduce_motion();
+                    post_appearance();
                     post_metrics();
                     restore_system_bars();
                     // 설정 앱에서 권한을 바꾸고 돌아왔을 수 있다. 묻는 중이었으면 답은 초점을 되찾을 때 알린다.
@@ -782,6 +788,7 @@ namespace luil::android {
                     focused_ = true;
                     // 분할 화면처럼 재개 상태인 채 초점만 오가면 `APP_CMD_RESUME`이 오지 않는다.
                     refresh_reduce_motion();
+                    post_appearance();
                     // 권한 대화상자에서 돌아왔다. 묻는 중이었으면 지금 상태가 답이다.
                     refresh_permissions(true);
                     // 알림을 눌러 뜬 Activity면 그 id를 낸다. 초점이 오기 전에는 사건이 앱에 가지 않는다. 한 Activity에 한 번 읽는다.
@@ -941,17 +948,17 @@ namespace luil::android {
                 const float height { static_cast<float>(content_height()) };
                 // 안전 영역 밖의 거리다. 크기가 같아도 이것이 바뀌면 다시 알린다 (막대를 숨김, 돌림).
                 const luil::edge_insets outside { static_cast<float>(insets_.left), static_cast<float>(insets_.top), static_cast<float>(insets_.right), static_cast<float>(insets_.bottom) };
-                if (width == reported_width_ && height == reported_height_ && scale_ == reported_scale_ && outside == reported_outside_ && reduce_motion_ == reported_reduce_motion_)
+                if (width == reported_width_ && height == reported_height_ && scale_ == reported_scale_ && outside == reported_outside_ && system_.reduce_motion == reported_reduce_motion_)
                     return;
                 reported_width_ = width;
                 reported_height_ = height;
                 reported_scale_ = scale_;
                 reported_outside_ = outside;
-                reported_reduce_motion_ = reduce_motion_;
+                reported_reduce_motion_ = system_.reduce_motion;
                 window_metrics metrics { make_window_metrics(width, height, scale_) };
                 metrics.outside = outside;
                 metrics.text_scale = scaled_font_size(12.0f) / 12.0f;
-                metrics.reduce_motion = reduce_motion_;
+                metrics.reduce_motion = system_.reduce_motion;
                 if (app_message message { environment_.delegate->make_metrics_message(metrics) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
             }
@@ -982,9 +989,9 @@ namespace luil::android {
                 if (jni_ == nullptr)
                     return;
                 const bool reduced { read_reduce_motion(*jni_, app_->activity->javaGameActivity) };
-                if (reduced == reduce_motion_)
+                if (reduced == system_.reduce_motion)
                     return;
-                reduce_motion_ = reduced;
+                system_.reduce_motion = reduced;
                 dirty_ = true;
                 post_metrics();
             }
@@ -994,14 +1001,34 @@ namespace luil::android {
             {
                 if (jni_ == nullptr)
                     return;
-                set_system_accent(read_dynamic_accent(*jni_, app_->activity->javaGameActivity));
-                high_contrast_ = read_high_contrast(*jni_, app_->activity->javaGameActivity);
+                system_.accent = read_dynamic_accent(*jni_, app_->activity->javaGameActivity);
+                system_.high_contrast = read_high_contrast(*jni_, app_->activity->javaGameActivity);
+            }
+
+            [[nodiscard]] app_message observe_appearance()
+            {
+                system_.contrast_colors = default_high_contrast_colors(system_.prefers_light);
+                try
+                {
+                    return appearance_observer_.observe(system_, environment_.delegate);
+                }
+                catch (...)
+                {
+                    log_error(u8"The system appearance delegate threw an exception.");
+                    return {};
+                }
+            }
+
+            void post_appearance()
+            {
+                if (app_message message { observe_appearance() }; host_ != nullptr && message.empty() == false)
+                    host_->post_app_message(std::move(message));
             }
 
             // 상태 표시줄·내비게이션 막대의 아이콘을 그린 바탕에 맞춘다. 바뀔 때만 메인 thread에 넘긴다.
             void update_system_bars(const color_theme theme)
             {
-                const bool light { theme == color_theme::light || (theme == color_theme::high_contrast && prefers_light_) };
+                const bool light { theme == color_theme::light || (theme == color_theme::high_contrast && system_.prefers_light) };
                 if (system_bars_light_.has_value() && *system_bars_light_ == light)
                     return;
                 if (post_to_main_thread([light](JNIEnv& env, const jobject activity) { apply_system_bar_icons(env, activity, light); }))
@@ -1786,7 +1813,7 @@ namespace luil::android {
                 state.origin_x = insets_.left;
                 state.origin_y = insets_.top;
                 state.dpi_scale = scale_;
-                state.reduce_motion = reduce_motion_;
+                state.reduce_motion = system_.reduce_motion;
 
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
                 const interaction_snapshot interaction { host_->acquire_interaction() };
@@ -1808,8 +1835,8 @@ namespace luil::android {
                 const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
                 // 고대비는 시스템 대비 설정이 높음일 때다. Android는 시스템 고대비 색을 주지 않아 밝은
                 // 모드에 맞춘 기본 색을 쓴다.
-                state.theme = resolve_color_theme(appearance.theme, high_contrast_, prefers_light_);
-                state.high_contrast = default_high_contrast_colors(prefers_light_);
+                state.theme = resolve_color_theme(appearance.theme, system_.high_contrast, system_.prefers_light);
+                state.high_contrast = system_.contrast_colors;
                 update_system_bars(state.theme);
                 state.accent_id = appearance.accent_id;
                 state.style = frame != nullptr ? frame->style.get() : nullptr;
@@ -1850,7 +1877,7 @@ namespace luil::android {
 
                 // 시간이 흘러야 바뀌는 그림(애니메이션·tooltip 지연)의 다음 시각이다.
                 const auto now { std::chrono::steady_clock::now() };
-                const update_context update { .now = now, .reduce_motion = reduce_motion_ };
+                const update_context update { .now = now, .reduce_motion = system_.reduce_motion };
                 update_deadline_ = tree != nullptr ? tree->next_update(update, state.interaction) : std::nullopt;
                 for (const overlay_layer& layer : layers)
                     if (layer.tree != nullptr)
@@ -1907,10 +1934,8 @@ namespace luil::android {
             float scale_ { 1.0f };
             system_input_settings system_input_ {};
             std::vector<float> system_font_sizes_ {};
-            bool prefers_light_ { false };
-            bool high_contrast_ { false };
-            // 시스템의 애니메이션 배율이 0이다 (`read_reduce_motion`). 읽기 전과 읽지 못했을 때는 거짓이다.
-            bool reduce_motion_ { false };
+            system_appearance system_ {};
+            system_appearance_observer appearance_observer_ {};
             // 마지막으로 맞춘 막대 아이콘이다 (밝은 바탕이면 참).
             std::optional<bool> system_bars_light_ {};
             // 마지막으로 플랫폼에 옮긴 기기 요청이다.
