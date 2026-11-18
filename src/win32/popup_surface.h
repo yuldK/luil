@@ -64,6 +64,13 @@ namespace luil::win32 {
             return shape_;
         }
 
+        [[nodiscard]] bool reports_placement() const noexcept
+        {
+            return placed_ != nullptr;
+        }
+
+        [[nodiscard]] app_message report_placement(const rect_f& bounds);
+
         // 창의 모서리를 DWM에 건다 (창을 만든 직후와 모서리가 바뀔 때).
         // 걸지 못하면(모서리 선택이 없는 OS) 직각으로 물러서 표면의 선을 다시 켠다.
         void apply_corner() noexcept;
@@ -126,6 +133,9 @@ namespace luil::win32 {
         void stop_strip_scroll() noexcept;
 
         std::u8string anchor_ {};
+        bool transparent_ { false };
+        std::function<app_message(const rect_f&)> placed_ {};
+        std::optional<rect_f> reported_bounds_ {};
         int x_ { 0 };
         int y_ { 0 };
         int width_ { 0 };

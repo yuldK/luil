@@ -2446,6 +2446,8 @@ namespace luil::win32 {
             [[nodiscard]] popup_shape popup_shape_for(const ui_frame& frame, const ui_popup& popup) const noexcept
             {
                 const ui_style& style { frame.style != nullptr ? *frame.style : default_ui_style() };
+                if (popup.transparent)
+                    return { .drop_shadow = false, .line = false };
                 return resolve_popup_shape(popup.corner.value_or(style.popup.corner), popup.border, rounded_popups());
             }
 
@@ -2587,7 +2589,7 @@ namespace luil::win32 {
                             continue;
                         const float scale { dpi_scale(anchor->dpi()) };
                         wanted.push_back({ popup.id, scaled_pixels(popup.x, scale), scaled_pixels(popup.y, scale),
-                            scaled_pixels(popup.width, scale), scaled_pixels(popup.height, scale), popup.anchor, popup_shape_for(*frame, popup).rounded()
+                            scaled_pixels(popup.width, scale), scaled_pixels(popup.height, scale), popup.anchor, popup_shape_for(*frame, popup).rounded(), popup.transparent
                         });
                         sources.push_back(&popup);
                     }
@@ -2643,6 +2645,7 @@ namespace luil::win32 {
                     // 새 frame이 popup을 계속 실었다는 것은 앱이 상태를 유지하기로 했다는 뜻이다.
                     // adopt는 tree 말고도 닫힘 factory와 빗장을 갱신하므로 판정과 무관하게 부른다.
                     static_cast<void>(alive_popup->adopt(popup, popup_shape_for(*frame, popup)));
+                    report_popup_placement(*alive_popup);
                 }
                 return contents;
             }
@@ -2852,9 +2855,28 @@ namespace luil::win32 {
                 return { x, y, height };
             }
 
+            void report_popup_placement(popup_surface& popup)
+            {
+                if (host_ == nullptr || popup.reports_placement() == false)
+                    return;
+                const window_surface* const anchor { anchor_surface(popup.anchor()) };
+                RECT bounds {};
+                if (anchor == nullptr || GetWindowRect(popup.window(), &bounds) == FALSE)
+                    return;
+                POINT origin { bounds.left, bounds.top };
+                if (ScreenToClient(anchor->window(), &origin) == FALSE)
+                    return;
+                if (const auto* parent { find_popup(popup.anchor()) }; parent != nullptr)
+                    origin.y += parent->scroll_offset();
+                const float scale { dpi_scale(anchor->dpi()) };
+                const rect_f actual { origin.x / scale, origin.y / scale, (bounds.right - bounds.left) / scale, (bounds.bottom - bounds.top) / scale };
+                if (app_message changed { popup.report_placement(actual) }; changed.empty() == false)
+                    host_->post_app_message(std::move(changed));
+            }
+
             void create_popup(const popup_placement& placement, const ui_popup& source, const popup_shape& shape)
             {
-                const std::wstring* const class_name { ensure_popup_class(shape.rounded()) };
+                const std::wstring* const class_name { ensure_popup_class(shape.drop_shadow == false) };
                 if (class_name == nullptr)
                 {
                     failed_popups_.push_back(placement.id);
@@ -2875,7 +2897,7 @@ namespace luil::win32 {
                 const HWND owner { anchor != nullptr ? anchor->window() : window_ };
                 const HWND handle {
                     CreateWindowExW(
-                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, class_name->c_str(), L"", WS_POPUP, screen.x, screen.y, placement.width, screen.height, owner, nullptr, instance_, popup.get()),
+                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | (placement.transparent ? WS_EX_LAYERED : 0), class_name->c_str(), L"", WS_POPUP, screen.x, screen.y, placement.width, screen.height, owner, nullptr, instance_, popup.get()),
                 };
                 if (handle == nullptr)
                 {
@@ -2885,6 +2907,8 @@ namespace luil::win32 {
 
                 // popup 표면은 CPU 렌더러로 고정한다 (popup-overlay-design.md).
                 std::u8string error {};
+                if (placement.transparent)
+                    popup->set_cpu_presentation({ .layered = true, .click_through = true });
                 if (popup->create_renderer(renderer_mode::cpu, {}, placement.width, screen.height, error) == false)
                 {
                     report_runtime_error(error);
@@ -2949,6 +2973,7 @@ namespace luil::win32 {
                         move_popup(popup->placement());
                     else
                         SetWindowPos(popup->window(), nullptr, screen.x, screen.y, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
+                    report_popup_placement(*popup);
                 }
             }
 

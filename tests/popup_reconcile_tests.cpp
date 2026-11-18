@@ -81,6 +81,18 @@ TEST_CASE("A popup that changes anchor is rebuilt rather than moved", "[win32][p
     REQUIRE(plan.destroy == std::vector<std::u8string> { u8"menu" });
 }
 
+TEST_CASE("A transparent popup replaces the previous window with the same id", "[win32][popup]")
+{
+    const std::vector<popup_placement> opaque { { u8"sample", 10, 20, 50, 40 } };
+    auto layered { opaque };
+    layered.front().transparent = true;
+    const auto plan { luil::reconcile_popups(opaque, layered) };
+    REQUIRE(plan.create == std::vector<std::size_t> { 0 });
+    REQUIRE(plan.destroy == std::vector<std::u8string> { u8"sample" });
+    REQUIRE(plan.move.empty());
+    REQUIRE(luil::reconcile_popups(layered, layered).create.empty());
+}
+
 TEST_CASE("A popup that turns rounded or square is rebuilt with its new window class", "[win32][popup]")
 {
     // 그림자가 창 클래스의 것이라 둥근 창과 직각 창 사이는 옮길 수 없다. 둥근 정도만 바뀐 것은 같은 창이다.

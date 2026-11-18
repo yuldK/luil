@@ -71,11 +71,12 @@ namespace luil::win32 {
 
     popup_placement popup_surface::placement() const
     {
-        return popup_placement { id_, x_, y_, width_, height_, anchor_, shape_.rounded() };
+        return popup_placement { id_, x_, y_, width_, height_, anchor_, shape_.rounded(), transparent_ };
     }
 
     void popup_surface::set_placement(const popup_placement& placement)
     {
+        transparent_ = placement.transparent;
         x_ = placement.x;
         y_ = placement.y;
         width_ = placement.width;
@@ -93,7 +94,7 @@ namespace luil::win32 {
 
     bool popup_surface::scrollable() const noexcept
     {
-        return viewport_height_ > 0 && height_ > viewport_height_;
+        return transparent_ == false && viewport_height_ > 0 && height_ > viewport_height_;
     }
 
     int popup_surface::maximum_scroll() const noexcept
@@ -359,10 +360,13 @@ namespace luil::win32 {
 
     bool popup_surface::adopt(const ui_popup& source, const popup_shape& shape)
     {
+        placed_ = source.placed;
+        if (placed_ == nullptr)
+            reported_bounds_.reset();
         dismiss_ = source.dismiss;
         dismiss_requested_ = false;
         // 효과는 소유자가 OS 사정과 함께 맞춘다 (`refresh_backdrop`). 창을 다시 만들 일은 없다 — 표시 방식이 그대로다.
-        request_backdrop(source.backdrop);
+        request_backdrop(transparent_ ? window_backdrop::none : source.backdrop);
         // 경계·모서리가 바뀐 것도 내용이 바뀐 것이다 — 다시 그려야 화면에 닿는다.
         const bool shape_changed { shape_ != shape };
         const bool corner_changed { shape_.corner != shape.corner };
@@ -372,6 +376,14 @@ namespace luil::win32 {
         if (shape_changed)
             dwm_theme_.reset();
         return set_tree(source.tree) || shape_changed;
+    }
+
+    app_message popup_surface::report_placement(const rect_f& bounds)
+    {
+        if (placed_ == nullptr || reported_bounds_ == bounds)
+            return {};
+        reported_bounds_ = bounds;
+        return placed_(bounds);
     }
 
     void popup_surface::apply_corner() noexcept
@@ -399,6 +411,7 @@ namespace luil::win32 {
     {
         state.border = shape_.line;
         state.popup = true;
+        state.transparent = transparent_;
         // 내용이 창보다 길면 흘린 만큼 위로 옮겨 그리고 화살표 칸을 얹는다.
         if (scrollable())
         {

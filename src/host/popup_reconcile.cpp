@@ -113,7 +113,7 @@ namespace luil {
             const popup_placement* const existing { find_by_id(alive, want.id) };
             // 앵커가 바뀌면 창의 소유자를 고칠 수 없으므로 다시 만든다. 둥근 창과 직각 창 사이를 오가도 같다 —
             // 그림자가 창 클래스의 것이다. 없애는 쪽은 아래 순회가 같은 판정으로 낸다.
-            if (existing == nullptr || existing->anchor != want.anchor || existing->rounded != want.rounded)
+            if (existing == nullptr || existing->anchor != want.anchor || existing->rounded != want.rounded || existing->transparent != want.transparent)
             {
                 result.create.push_back(index);
                 continue;
@@ -125,7 +125,7 @@ namespace luil {
         for (const popup_placement& current : alive)
         {
             const popup_placement* const still { find_by_id(wanted, current.id) };
-            if (still == nullptr || visible(*still) == false || still->anchor != current.anchor || still->rounded != current.rounded)
+            if (still == nullptr || visible(*still) == false || still->anchor != current.anchor || still->rounded != current.rounded || still->transparent != current.transparent)
                 result.destroy.push_back(current.id);
         }
         // 부모 창이 다시 만들어지면 그 소유 창인 자식도 다시 만든다.

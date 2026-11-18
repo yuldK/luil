@@ -22,6 +22,7 @@ namespace luil {
         std::u8string anchor {};
         // OS가 둥글게 잘라 내는 창인가다 (`popup_shape::rounded`). 그림자가 창 클래스의 것이라 만든 뒤 바꿀 수 없다.
         bool rounded { false };
+        bool transparent { false };
 
         [[nodiscard]] bool operator==(const popup_placement&) const = default;
     };

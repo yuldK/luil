@@ -3,6 +3,7 @@
 
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
+#include "luil/ui/panel_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/scroll_area_element.h"
 #include "luil/ui/stack_element.h"
@@ -205,9 +206,9 @@ namespace {
     class popup_test_window final
     {
     public:
-        explicit popup_test_window(luil::win32::popup_surface& surface)
+        explicit popup_test_window(luil::win32::popup_surface& surface, const bool transparent = false)
         {
-            surface.set_placement({ u8"tool", 0, 0, 200, 300 });
+            surface.set_placement({ u8"tool", 0, 0, 200, 300, {}, false, transparent });
             surface.set_viewport_height(100);
             WNDCLASSEXW type {};
             type.cbSize = sizeof(type);
@@ -216,7 +217,7 @@ namespace {
             type.lpfnWndProc = &luil::win32::popup_surface::static_procedure;
             if (RegisterClassExW(&type) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
                 return;
-            window_ = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, type.lpszClassName, L"", WS_POPUP,
+            window_ = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | (transparent ? WS_EX_LAYERED : 0), type.lpszClassName, L"", WS_POPUP,
                 0, 0, 200, 100, nullptr, nullptr, type.hInstance, &surface);
         }
         popup_test_window(const popup_test_window&) = delete;
@@ -243,6 +244,48 @@ namespace {
         root->arrange({ { 0.0f, 0.0f, 200.0f, 120.0f }, 1.0f });
         return std::make_shared<const luil::ui_tree>(std::move(root));
     }
+}
+
+TEST_CASE("Windows routes the painted and clear pixels of a layered popup", "[.screen][popup-alpha]")
+{
+    fake_surface_context context {};
+    luil::win32::popup_surface underneath { context, u8"under", {} };
+    const popup_test_window backing { underneath };
+    luil::win32::popup_surface popup { context, u8"over", {} };
+    const popup_test_window window { popup, true };
+    REQUIRE(backing.handle() != nullptr);
+    REQUIRE(window.handle() != nullptr);
+    popup.set_cpu_presentation({ .layered = true, .click_through = true });
+    std::u8string error {};
+    REQUIRE(popup.create_renderer(luil::renderer_mode::cpu, {}, 200, 100, error));
+    auto ink { std::make_unique<luil::panel_element>(luil::ui_element_id {}, luil::panel_config {}) };
+    ink->arrange({ { 0, 0, 80, 80 }, 1 });
+    luil::ui_popup source {};
+    source.tree = std::make_shared<const luil::ui_tree>(std::move(ink));
+    source.transparent = true;
+    static_cast<void>(popup.adopt(source, { .drop_shadow = false, .line = false }));
+    const UINT flags { SWP_NOACTIVATE | SWP_SHOWWINDOW };
+    REQUIRE(SetWindowPos(backing.handle(), HWND_TOPMOST, 120, 120, 200, 100, flags));
+    REQUIRE(SetWindowPos(window.handle(), HWND_TOPMOST, 120, 120, 200, 100, flags));
+    REQUIRE(popup.render(error));
+    REQUIRE(WindowFromPoint({ 135, 135 }) == window.handle());
+    REQUIRE(WindowFromPoint({ 250, 135 }) == backing.handle());
+}
+
+TEST_CASE("A popup reports the final anchor-relative bounds once", "[win32][popup][placed]")
+{
+    fake_surface_context context {};
+    luil::win32::popup_surface surface { context, u8"sample", {} };
+    luil::ui_popup source {};
+    source.placed = [](const luil::rect_f& bounds) { return luil::app_message { bounds }; };
+    static_cast<void>(surface.adopt(source, {}));
+    const luil::rect_f flipped { -120, 30, 120, 80 };
+    const auto message { surface.report_placement(flipped) };
+    REQUIRE(message.get<luil::rect_f>() != nullptr);
+    REQUIRE(*message.get<luil::rect_f>() == flipped);
+    static_cast<void>(surface.adopt(source, {}));
+    REQUIRE(surface.report_placement(flipped).empty());
+    REQUIRE_FALSE(surface.report_placement({ -120, 20, 120, 80 }).empty());
 }
 
 TEST_CASE("A secondary window adopts the caption and size limits of every frame", "[win32][window][caption]")

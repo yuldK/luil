@@ -105,7 +105,8 @@ namespace luil {
 
         // tree가 화면 전체를 그린다 (caption 포함).
         // 없으면 배경만 칠한다.
-        canvas.clear(state.backdrop ? colors.backdrop_background : colors.window_background);
+        const ui_color background_color { state.backdrop ? colors.backdrop_background : colors.window_background };
+        canvas.clear(state.transparent ? SK_ColorTRANSPARENT : background_color);
         // 내용은 안전 영역의 원점에서 시작한다. 배경은 위에서 표면 전체에 칠했다.
         //  - 옮긴 원점은 tree에만 쓴다. 아래의 테두리와 웹뷰 구멍은 표면 좌표다.
         if (state.tree != nullptr)

@@ -804,6 +804,15 @@ TEST_CASE("A popup frame strokes its border over the whole surface", "[win32][ra
     state.theme = luil::color_theme::dark;
     const auto pixel_at = [&pixels](const int x, const int y) { return static_cast<luil::ui_color>(pixels.getColor(x, y)); };
 
+    SECTION("투명 popup은 매 frame 칠하지 않은 자리의 알파를 지운다")
+    {
+        canvas.clear(SK_ColorWHITE);
+        state.transparent = true;
+        luil::draw_frame(canvas, nullptr, nullptr, state);
+        REQUIRE(pixel_at(0, 0) == SK_ColorTRANSPARENT);
+        REQUIRE(pixel_at(50, 30) == SK_ColorTRANSPARENT);
+    }
+
     SECTION("테두리를 켜면 둘레 1 논리 픽셀이 tooltip_border다")
     {
         state.border = true;

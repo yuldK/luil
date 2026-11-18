@@ -1,5 +1,9 @@
 # Popup overlay 표면
 
+Win32에서 `ui_popup::transparent = true`를 주면 tree의 픽셀 알파로 모양을 정한다. 창 클래스 그림자·모서리·테두리·배경 효과·스크롤 화살표 칸은 붙지 않는다. 작업 영역보다 크면 보이는 높이에서 잘린다. 알파 0인 자리의 입력은 바로 아래 창에 간다. 주 창이면 기존 바깥 누름 닫힘, 다른 앱이면 기존 비활성화, 다른 popup이면 그 popup의 안쪽 누름 규칙을 따른다. Windows 10 및 원격 세션에서도 CPU 레이어드 창을 쓴다. 256색 이하 표시의 알파 제한은 Windows의 `UpdateLayeredWindow` 규칙을 따른다. Android는 단일 표면 오버레이를 쓴다.
+
+`ui_popup::placed`는 보정 후 실제로 선 사각형을 앵커 내용 기준 **논리 픽셀**로 받는다. 원래 앵커 점에서 이 사각형의 원점을 빼면 popup 안에서 꼬리가 가리킬 좌표다. 처음 서거나 최종 사각형이 달라진 때에만 메시지를 만든다. 주 창의 레이어드 배치는 제시 완료에서 자식 popup을 따라 옮기며, popup의 이동·부모 스크롤에서도 배치 직후 실제 창 위치를 읽는다.
+
 `ui_popup`은 주 창이나 보조 창 위에 떠야 하는 메뉴, dropdown, 긴 tooltip을 별도 Win32 popup surface로 표현한다. Popup은 독립 tree와 렌더러를 가지지만 활성화되지 않으며 frame의 선언으로 수명이 결정된다.
 
 공개 형식은 [app_host.h](../include/luil/app/app_host.h)에 있다. 플랫폼 표면은 [popup_surface.h](../src/win32/popup_surface.h)에 정의된다.

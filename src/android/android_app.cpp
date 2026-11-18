@@ -300,6 +300,7 @@ namespace luil::android {
                 // 이 frame에서 이미 닫자고 했다 (`take_popup_dismiss_action`).
                 bool requested { false };
                 std::u8string anchor {};
+                std::optional<rect_f> reported_bounds {};
             };
 
         public:
@@ -1530,6 +1531,17 @@ namespace luil::android {
                         const int x { std::clamp(desired_x, 0, limit_width - width) };
                         const int y { std::clamp(origin_y + static_cast<int>(std::lround(popup.y * scale)), 0, limit_height - height) };
                         overlays_.push_back(overlay_entry { popup.id, popup.tree, { insets_.left + x, insets_.top + y, width, height }, popup.border, popup.dismiss, false, popup.anchor });
+                        if (popup.placed != nullptr)
+                        {
+                            const rect_f bounds { (x - origin_x) / scale, (y - origin_y) / scale, width / scale, height / scale };
+                            const auto old { std::ranges::find_if(previous, [&popup](const auto& entry) { return entry.id == popup.id && entry.anchor == popup.anchor; }) };
+                            overlays_.back().reported_bounds = bounds;
+                            if (old == previous.end() || old->reported_bounds != bounds)
+                            {
+                                if (app_message message { popup.placed(bounds) }; message.empty() == false)
+                                    host_->post_app_message(std::move(message));
+                            }
+                        }
                         areas.push_back(overlay_area { popup.id, { static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height) } });
                     }
                     if (frame->windows.empty() == false && warned_windows_ == false)

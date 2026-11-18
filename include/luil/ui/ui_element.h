@@ -38,6 +38,7 @@ namespace luil {
         float height { 0.0f };
 
         [[nodiscard]] bool contains(float point_x, float point_y) const noexcept;
+        [[nodiscard]] bool operator==(const rect_f&) const noexcept = default;
     };
 
     // 한 점이다 (단위는 쓰는 자리가 정한다).

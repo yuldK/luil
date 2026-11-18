@@ -154,6 +154,10 @@ namespace luil {
         //  - 상태를 알리지 않는다 (`win32::backdrop_report`). 서지 않는 OS 사정은 주 창 보고와 같다.
         //  - 같은 id에서 이 값만 바뀌면 창을 다시 만들지 않고 효과만 다시 건다.
         window_backdrop backdrop { window_backdrop::none };
+        // Win32에서 tree의 픽셀 알파로 창 모양과 입력 영역을 정한다.
+        bool transparent { false };
+        // 작업 영역에 맞춘 최종 자리다. x·y와 같은 앵커 기준 논리 픽셀이다.
+        std::function<app_message(const rect_f&)> placed {};
     };
 
     // 그 모서리 선택이 이 플랫폼에서 실제로 갖는 반지름이다 (논리 픽셀).
