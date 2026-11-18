@@ -545,7 +545,7 @@ namespace luil::win32 {
                 const std::u8string& surface, const ui_tree* const tree, IDCompositionVisual* const underlay, const int client_width, const int client_height) override
             {
                 webview_holes_.clear();
-                if (tree == nullptr || last_frame_ == nullptr)
+                if (last_frame_ == nullptr)
                     return webview_holes_;
 
                 // 이 표면의 배율이다. 다른 배율로 배치된 tree는 아래에서 자리를 주지
@@ -566,12 +566,12 @@ namespace luil::win32 {
                     const ui_element_id placeholder_id { ui_element_kind::webview, want.id };
                     // **자리표가 아니면 자리도 없다.** id만 같은 다른 element는 자리를
                     // 말하지 못한다 — 자리·가림·배율을 전부 자리표에서만 읽는다.
-                    const auto* const placeholder { dynamic_cast<const webview_element*>(tree->find(placeholder_id)) };
+                    const auto* const placeholder { tree != nullptr ? dynamic_cast<const webview_element*>(tree->find(placeholder_id)) : nullptr };
                     const std::optional<rect_f> visible { placeholder != nullptr ? tree->visible_bounds(*placeholder) : std::nullopt };
                     // 배율은 **자리표가 배치된 값**이다. 표면의 `dpi()`가 아니다 —
                     // 자리와 배율은 같은 tree에서 나온 한 쌍이라야 한다 (webview_layout.h).
                     const webview_layout layout {
-                        plan_webview_layout(visible, client_width, client_height, occluded(*tree, placeholder, visible), placeholder != nullptr ? placeholder->scale() : 1.0f),
+                        plan_webview_layout(visible, client_width, client_height, tree != nullptr && occluded(*tree, placeholder, visible), placeholder != nullptr ? placeholder->scale() : 1.0f),
                     };
                     // **이 표면의 배율로 배치된 tree만 자리를 준다.** `WM_DPICHANGED`
                     // 직후 아직 옛 배율의 tree를 **새 크기의 client**에 그리는 frame이
@@ -2536,7 +2536,7 @@ namespace luil::win32 {
                 for (const ui_webview& want : last_frame_->webviews)
                 {
                     const window_surface* const anchor { anchor_surface(want.anchor) };
-                    targets.push_back(webview_target { &want, anchor != nullptr ? anchor->window() : nullptr });
+                    targets.push_back(webview_target { &want, anchor != nullptr ? anchor->window() : nullptr, anchor != nullptr && anchor->has_webview_underlay() });
                 }
                 std::u8string composition_error {};
                 webviews_.synchronize(targets, composition_.acquire(composition_error));

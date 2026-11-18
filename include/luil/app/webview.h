@@ -69,6 +69,7 @@ namespace luil {
         //    또 알린다. 그동안 자리표의 placeholder가 그 자리를 지킨다.
         //  - 상한(`maximum_events_per_second`)을 지나지 않는다 — 페이지가 일으킨 사건이 아니다.
         creation_failed,
+        presentation_changed,
     };
 
     // 웹뷰를 세우지 못한 갈래다 (`creation_failed`).
@@ -110,6 +111,8 @@ namespace luil {
         //  - 0이면 HRESULT가 없는 실패다 — 판이 낮음, 인터페이스 없음, build에 없음이 그렇다.
         //    그 경우의 까닭은 `failure`와 `error`가 말한다.
         std::int32_t hresult { 0 };
+        // presentation_changed가 알리는 표면의 합성 가능 여부다.
+        bool presentation_available { false };
     };
 
     // 앱이 정하는 웹뷰 정책이다.
@@ -234,5 +237,6 @@ namespace luil {
         //    test 대상이 아니라 입력이 아니고, `http_client_config::deliver`가 답을
         //    넘기는 자리와 같다.
         std::function<app_message(webview_event)> on_event {};
+        bool report_presentation { false };
     };
 }

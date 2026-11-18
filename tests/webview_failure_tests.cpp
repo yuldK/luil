@@ -1,4 +1,9 @@
 #include "win32/webview_failure.h"
+#include "win32/composition_device.h"
+#include "win32/webview_host.h"
+
+#include <chrono>
+#include <filesystem>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -9,6 +14,56 @@ namespace {
     using luil::win32::webview_runtime_build_number;
     using luil::win32::webview_runtime_too_old_message;
 }
+
+#if LUIL_TESTS_WEBVIEW
+TEST_CASE("A ready webview reports surface transitions even with a zero page event budget", "[.runtime][webview-presentation]")
+{
+    REQUIRE(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)));
+    const HWND window { CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr) };
+    REQUIRE(window != nullptr);
+    {
+        luil::win32::composition_host composition {};
+        std::u8string error {};
+        auto* const device { composition.acquire(error) };
+        REQUIRE(device != nullptr);
+        luil::win32::webview_host host {};
+        std::vector<bool> reports {};
+        host.set_deliver([&](luil::app_message message) {
+            if (const auto* event { message.get<luil::webview_event>() }; event != nullptr && event->kind == luil::webview_event_kind::presentation_changed)
+                reports.push_back(event->presentation_available);
+        });
+        luil::ui_webview view {};
+        view.id = u8"preview";
+        view.user_data_folder = (std::filesystem::temp_directory_path() / L"luil-webview-presentation-test").u8string();
+        view.policy.maximum_events_per_second = 0;
+        view.on_event = [](luil::webview_event event) { return luil::app_message { std::move(event) }; };
+        view.report_presentation = true;
+        luil::win32::webview_target target { &view, window };
+        host.synchronize({ &target, 1 }, device);
+        const auto timeout { std::chrono::steady_clock::now() + std::chrono::seconds { 15 } };
+        while (reports.empty() && std::chrono::steady_clock::now() < timeout)
+        {
+            MSG message {};
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
+        }
+        REQUIRE(reports == std::vector<bool> { false });
+        target.has_underlay = true;
+        host.synchronize({ &target, 1 }, device);
+        host.synchronize({ &target, 1 }, device);
+        host.apply_layout(view.id, {}, nullptr);
+        host.apply_layout(view.id, { .width = 80, .height = 80 }, nullptr);
+        REQUIRE(reports == std::vector<bool> { false, true, false });
+        host.shutdown();
+    }
+    DestroyWindow(window);
+    CoUninitialize();
+}
+#endif
 
 TEST_CASE("The loader's file-not-found result means the WebView2 runtime is missing", "[win32][webview]")
 {

@@ -32,6 +32,7 @@ namespace luil::win32 {
     {
         const ui_webview* source { nullptr };
         HWND window { nullptr };
+        bool has_underlay { false };
     };
 
     // 웹뷰가 초점에 대해 알려 오는 것이다.
@@ -155,6 +156,7 @@ namespace luil::win32 {
         void begin_controller(entry& target, HWND window);
         // 기억해 둔 명령 중 아직 실행하지 않은 것을 실행한다.
         void flush_commands(entry& target);
+        void report_presentation(entry& target);
         // 사건 하나를 앱으로 나른다.
         //
         // **페이지가 일으킬 수 있는 사건은 상한을 지난다** (`webview_policy`의 초당

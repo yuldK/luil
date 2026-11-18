@@ -205,6 +205,9 @@ namespace luil::win32 {
         // `IsVisible`만 끄기 때문이다. 떼었다 붙이면 `put_RootVisualTarget`을 다시
         // 걸어야 하고 그때 페이지가 빈다.
         bool shown { false };
+        bool report_surface { false };
+        bool has_underlay { false };
+        std::optional<bool> reported_presentation {};
         UINT pressed_buttons { 0 };
         // 이 웹뷰가 쥔 터치·펜 접촉이다 (DOWN을 받은 웹뷰가 끝까지 갖는다).
         // 종류를 함께 든다 — 취소를 보낼 때는 그 접촉의 원본이 더 없다.
@@ -286,7 +289,7 @@ namespace luil::win32 {
         const bool process_failure { event.kind == webview_event_kind::render_process_failed || event.kind == webview_event_kind::browser_process_failed };
         // 세우지 못한 것은 웹뷰마다 한 번이고 페이지가 일으킨 것이 아니다.
         const bool creation_failure { event.kind == webview_event_kind::creation_failed };
-        const bool gated { event.kind != webview_event_kind::events_dropped && process_failure == false && creation_failure == false };
+        const bool gated { event.kind != webview_event_kind::events_dropped && process_failure == false && creation_failure == false && event.kind != webview_event_kind::presentation_changed };
         if (gated)
         {
             const webview_message_decision decision {
@@ -937,6 +940,7 @@ namespace luil::win32 {
             }).Get(),
             &token));
 
+        report_presentation(*target);
         // 서기 전에 온 명령을 이제 흘려보낸다.
         flush_commands(*target);
     }
@@ -1053,6 +1057,9 @@ namespace luil::win32 {
                     apply_settings(*target->view.Get(), target->policy);
             }
             target->on_event = want->on_event;
+            target->report_surface = want->report_presentation;
+            target->has_underlay = source.has_underlay;
+            report_presentation(*target);
             flush_commands(*target);
         }
     }
@@ -1087,11 +1094,27 @@ namespace luil::win32 {
         }
     }
 
+    void webview_host::report_presentation(entry& target)
+    {
+        if (target.report_surface == false || target.on_event == nullptr)
+        {
+            target.reported_presentation.reset();
+            return;
+        }
+        const bool available { target.has_underlay && target.visual != nullptr };
+        if (target.state != creation_state::ready || target.reported_presentation == available)
+            return;
+        target.reported_presentation = available;
+        report(target, webview_event { .kind = webview_event_kind::presentation_changed, .presentation_available = available }, 0);
+    }
+
     void webview_host::apply_layout(const std::u8string& id, const webview_layout& layout, IDCompositionVisual* const underlay)
     {
         entry* const target { find(id) };
         if (target == nullptr || target->state != creation_state::ready || target->controller == nullptr)
             return;
+        target->has_underlay = underlay != nullptr;
+        report_presentation(*target);
         // 접근성 창은 여기서 찾아 둔다 — UIA 질의 안에서는 WebView2를 부르지 않는다 (`entry::automation_window`).
         if (target->painted && (target->automation_window == nullptr || IsWindow(target->automation_window) == FALSE))
             target->automation_window = find_automation_window(*target);

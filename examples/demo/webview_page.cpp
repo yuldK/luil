@@ -67,6 +67,8 @@ namespace demo {
                 return u8"렌더러 죽음";
             case webview_event_kind::browser_process_failed:
                 return u8"브라우저 죽음";
+            case webview_event_kind::presentation_changed:
+                return u8"표면 표시";
             case webview_event_kind::creation_failed:
                 return u8"세우지 못함";
             }
@@ -77,6 +79,8 @@ namespace demo {
         [[nodiscard]] std::u8string describe(const luil::win32::webview_event& event)
         {
             std::u8string line { kind_name(event.kind) };
+            if (event.kind == luil::win32::webview_event_kind::presentation_changed)
+                line += event.presentation_available ? u8" 가능" : u8" 불가";
             if (event.url.empty() == false)
                 line += u8" · " + event.url;
             if (event.error.empty() == false)
@@ -194,6 +198,7 @@ namespace demo {
         luil::win32::ui_webview view {};
         view.id = webview_id();
         view.user_data_folder = user_data_folder_;
+        view.report_presentation = true;
         // 되돌이 서버는 http다. 기본값(https만)으로는 열리지 않으므로 이 예제가
         // 무엇을 여는지를 명시한다 — 목록이 곧 그 웹뷰가 갈 수 있는 곳의 전부다.
         view.policy.allowed_schemes = { u8"http", u8"https" };

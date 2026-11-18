@@ -123,6 +123,10 @@ Environment 생성이 동기적으로 실패하면 실패 원인을 environment�
 
 모든 permission은 거부하고 profile에 저장하지 않는다. 모든 download는 save dialog 전에 취소한다. Host object는 비활성화한다. Certificate failure 무시, host-object proxy 활성화, download나 permission 허용, SmartScreen 비활성화, input 제한 제거를 위한 policy switch는 없다.
 
+## 표면 표시 가능 여부
+
+`ui_webview::report_presentation`을 켜면 준비된 컨트롤러마다 `presentation_changed`가 첫 값과 변경을 알린다. `webview_event::presentation_available`은 표면의 underlay와 웹뷰의 합성 visual로 판정한다. CPU·레이어드 표시와 GPU에서 CPU로 물러난 표면에서는 거짓이다. 자리표가 tree에서 빠지거나 가려져도 이 값은 같다. 페이지 사건의 초당 상한은 적용하지 않는다.
+
 ## Event backpressure
 
 Page event는 application의 bounded message 경로를 공유한다. `maximum_message_bytes` 기본값은 256 KiB이며 web message 하나의 UTF-8 JSON 크기를 제한한다. `maximum_events_per_second` 기본값은 120이며 web message, navigation event, permission request, download attempt를 포함한다.

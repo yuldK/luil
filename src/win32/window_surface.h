@@ -323,6 +323,11 @@ namespace luil::win32 {
         // 창을 붙인 뒤(`WM_NCCREATE`) 한 번 부른다.
         [[nodiscard]] bool create_renderer(renderer_mode mode, renderer_fault_injection fault, int width, int height, std::u8string& error);
         [[nodiscard]] bool resize_renderer(int width, int height, std::u8string& error);
+        [[nodiscard]] bool has_webview_underlay() const noexcept
+        {
+            return renderer_ != nullptr && renderer_underlay(*renderer_) != nullptr;
+        }
+
         // CPU 렌더러가 frame을 내는 방식이다. `create_renderer` 전에 정한다.
         //  - 레이어드면 창이 `WS_EX_LAYERED`로 만들어져 있어야 한다.
         void set_cpu_presentation(const cpu_presentation& presentation) noexcept
