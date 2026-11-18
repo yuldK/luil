@@ -374,6 +374,15 @@ namespace luil::win32 {
         announced_access_valid_ = true;
     }
 
+    void window_surface::announce_webview_structure(const std::u8string& id)
+    {
+        if (uia_root_ == nullptr || tree_ == nullptr || UiaClientsAreListening() == FALSE)
+            return;
+        const ui_element_id slot { ui_element_kind::webview, id };
+        if (tree_->find(slot) != nullptr)
+            uia_root_->announce_changes({ { .kind = access_change_kind::structure, .id = slot } });
+    }
+
     void window_surface::announce_accessibility_changes()
     {
         // provider를 만들기 전에는 접근성 발행본을 비교하지 않는다.

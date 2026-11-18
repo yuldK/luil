@@ -382,6 +382,8 @@ namespace luil::win32 {
         //    바꿔 놓았을 수 있다.
         [[nodiscard]] bool alt_chord_reported(std::uint64_t ticket, bool handled);
 
+        void announce_webview_structure(const std::u8string& id);
+
         // 이 표면 한 장을 그린다.
         [[nodiscard]] bool render(std::u8string& error);
 

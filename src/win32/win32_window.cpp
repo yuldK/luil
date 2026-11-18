@@ -2527,6 +2527,10 @@ namespace luil::win32 {
                     webviews_.set_deliver([target](app_message message) { target->post_app_message(std::move(message)); });
                     // 초점 신호는 **입력**이다. 앱 메시지가 아니라 raw input으로 가야
                     // input thread의 초점 상태 기계가 그것을 본다.
+                    webviews_.set_structure_reporter([this](const std::u8string& anchor, const std::u8string& id) {
+                        if (auto* const surface { anchor_surface(anchor) }; surface != nullptr)
+                            surface->announce_webview_structure(id);
+                    });
                     webviews_.set_focus_reporter([this](const std::u8string& id, const std::u8string& anchor, const webview_focus_signal signal) { report_webview_focus(id, anchor, signal); });
                     webview_deliver_bound_ = true;
                 }

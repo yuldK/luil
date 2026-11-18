@@ -171,6 +171,8 @@ Demo에서 잰 결과는 다음과 같다(runtime 155.0.4283.62).
 - UIA2 관리 client: slot이 group으로 서고 멈추지 않는다. Page 내용은 이 client가 원래 그 창을 훑지 않아 보이지 않는다.
 - Chromium은 접근성을 늦게 켠다. 처음 묻는 순간에는 Document가 비어 있을 수 있고, 다음 질의부터 내용이 찬다.
 
+자리표가 계속 선 채 접근성 HWND가 붙거나 떨어지면 그 자리표에서 `ChildrenInvalidated`를 한 번 낸다. 같은 HWND를 가진 frame을 다시 그려도 알리지 않는다. 실험에서 WebView2의 page provider는 `IRawElementProviderFragmentRoot`를 지원했다. 이를 `GetEmbeddedFragmentRoots`에서 돌려준 빌드에서도 관리 UIA2의 RawView·ControlView 첫 자식과 자손 수는 모두 비어 있었다. 이 실험 경로는 공개하지 않는다.
+
 ## 검증
 
 [`tests/webview_element_tests.cpp`](../tests/webview_element_tests.cpp)는 slot layout, scale 보존, hit opacity, tab 동작, 접근성을 검증한다. [`tests/webview_layout_tests.cpp`](../tests/webview_layout_tests.cpp)는 clipping, occlusion, rounding, half-open pointer bounds, capture, scale을 검증한다. [`tests/webview_message_gate_tests.cpp`](../tests/webview_message_gate_tests.cpp)는 message size와 rate limit, notice 억제, zero limit, clock window를 검증한다. [`tests/webview_failure_tests.cpp`](../tests/webview_failure_tests.cpp)는 생성 실패의 갈래 판정과 runtime build 번호 읽기를 검증한다. [`tests/uia_provider_tests.cpp`](../tests/uia_provider_tests.cpp)는 자식 창을 대신하는 요소가 그 창을 host로 답하고 override 옵션을 내세우며, 창 root가 그 창 자리에 그 요소를 돌려주는 것을 검증한다. Runtime integration에서는 creation, navigation policy, input, IME, focus exit, monitor 간 DPI 이동, process failure, Evergreen runtime 부재도 확인해야 한다.

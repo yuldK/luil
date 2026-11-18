@@ -67,6 +67,12 @@ namespace luil::win32 {
         //    앱 메시지이고, 받는 곳은 logic thread다.
         void set_deliver(std::function<void(app_message)> deliver);
 
+        // UIA에 노출한 자식 창이 바뀐 자리표만 알린다.
+        void set_structure_reporter(std::function<void(const std::u8string&, const std::u8string&)> reporter)
+        {
+            structure_reporter_ = std::move(reporter);
+        }
+
         // 초점 신호를 창으로 나르는 자리다.
         // 무엇을 할지는 창이 정한다 — host는 tree도 초점 순서도 모른다.
         void set_focus_reporter(std::function<void(const std::u8string& id, const std::u8string& anchor, webview_focus_signal signal)> reporter);
@@ -157,6 +163,7 @@ namespace luil::win32 {
         // 기억해 둔 명령 중 아직 실행하지 않은 것을 실행한다.
         void flush_commands(entry& target);
         void report_presentation(entry& target);
+        void set_automation_window(entry& target, HWND window);
         // 사건 하나를 앱으로 나른다.
         //
         // **페이지가 일으킬 수 있는 사건은 상한을 지난다** (`webview_policy`의 초당
@@ -198,6 +205,7 @@ namespace luil::win32 {
         // `synchronize`가 매 게시마다 다시 준다.
         IDCompositionDevice* composition_ { nullptr };
         std::function<void(app_message)> deliver_ {};
+        std::function<void(const std::u8string&, const std::u8string&)> structure_reporter_ {};
         std::function<void(const std::u8string&, const std::u8string&, webview_focus_signal)> focus_reporter_ {};
         // 브라우저의 기본과 같은 흰색에서 시작한다. 창이 첫 frame에서 팔레트 값으로 바꾼다.
         ui_color default_background_ { make_ui_color(255, 255, 255) };

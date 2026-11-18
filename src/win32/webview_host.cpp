@@ -352,6 +352,7 @@ namespace luil::win32 {
 
     void webview_host::tear_down(entry& target) noexcept
     {
+        set_automation_window(target, nullptr);
         // 붙여 둔 visual을 떼지 않으면 underlay에 빈 visual이 남는다.
         if (target.attached_to != nullptr && target.visual != nullptr)
         {
@@ -378,6 +379,7 @@ namespace luil::win32 {
         // 그 자리에서 제 사건으로 알렸고, 같은 id의 두 번째 실패는 이미 알린 것이다.
         const bool announce { target->state == creation_state::pending && failure != webview_creation_failure::none };
         target->state = creation_state::failed;
+        set_automation_window(*target, nullptr);
         if (announce == false)
             return;
         webview_event event {};
@@ -634,6 +636,7 @@ namespace luil::win32 {
                         reason.push_back(static_cast<char8_t>(digit));
                 }
                 target_entry->painted = true;
+                InvalidateRect(target_entry->window, nullptr, FALSE);
                 self->report(*target_entry, succeeded != FALSE ? webview_event_kind::navigation_completed : webview_event_kind::navigation_failed, std::move(url), std::move(reason));
                 return S_OK;
             }).Get(),
@@ -1115,10 +1118,6 @@ namespace luil::win32 {
             return;
         target->has_underlay = underlay != nullptr;
         report_presentation(*target);
-        // 접근성 창은 여기서 찾아 둔다 — UIA 질의 안에서는 WebView2를 부르지 않는다 (`entry::automation_window`).
-        if (target->painted && (target->automation_window == nullptr || IsWindow(target->automation_window) == FALSE))
-            target->automation_window = find_automation_window(*target);
-
         // 합성이 없으면(CPU 백엔드) 설 자리가 없다. 감추고 자리표에 맡긴다.
         const bool showing { layout.visible() && underlay != nullptr && target->visual != nullptr };
         if ((showing == false || layout.punch_hole == false) && target->pressed_buttons != 0)
@@ -1133,6 +1132,7 @@ namespace luil::win32 {
             // **떼지 않는다.** 보이지 않는 visual은 아무것도 그리지 않으므로 떼어 둘
             // 이유가 없고, 떼었다 붙이면 `put_RootVisualTarget`을 다시 걸어야 해서
             // 되살아난 페이지가 빈다.
+            set_automation_window(*target, nullptr);
             if (target->shown == false)
                 return;
             target->shown = false;
@@ -1152,6 +1152,8 @@ namespace luil::win32 {
             static_cast<void>(target->composition_controller->put_RootVisualTarget(target->visual.Get()));
         }
         target->shown = true;
+        if (target->painted && (target->automation_window == nullptr || IsWindow(target->automation_window) == FALSE))
+            set_automation_window(*target, find_automation_window(*target));
 
         if (target->has_applied && target->applied == layout)
             return;
@@ -1523,6 +1525,12 @@ namespace luil::win32 {
         return target != nullptr && target->state == creation_state::ready && target->attached_to != nullptr && target->shown && target->painted;
     }
 
+    void webview_host::set_automation_window(entry& target, const HWND window)
+    {
+        if (std::exchange(target.automation_window, window) != window && structure_reporter_ != nullptr)
+            structure_reporter_(target.anchor, target.id);
+    }
+
     HWND webview_host::automation_window(const std::u8string& anchor, const std::u8string& id) const
     {
         // 찾아 둔 값만 읽는다 — UIA 질의 안에서 WebView2를 부르지 않는다 (`entry::automation_window`).
@@ -1580,6 +1588,7 @@ namespace luil::win32 {
         *alive_ = false;
         // 배출구도 끊는다. 그것이 잡은 `app_host`는 창이 죽을 때 우리보다 먼저 간다.
         deliver_ = nullptr;
+        structure_reporter_ = nullptr;
         composition_ = nullptr;
         for (const std::unique_ptr<entry>& current : entries_)
             tear_down(*current);

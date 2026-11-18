@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <wrl/client.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,6 +29,8 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         REQUIRE(device != nullptr);
         luil::win32::webview_host host {};
         std::vector<bool> reports {};
+        std::vector<HWND> children {};
+        host.set_structure_reporter([&](const std::u8string& anchor, const std::u8string& id) { children.push_back(host.automation_window(anchor, id)); });
         host.set_deliver([&](luil::app_message message) {
             if (const auto* event { message.get<luil::webview_event>() }; event != nullptr && event->kind == luil::webview_event_kind::presentation_changed)
                 reports.push_back(event->presentation_available);
@@ -36,6 +39,9 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         view.id = u8"preview";
         view.user_data_folder = (std::filesystem::temp_directory_path() / L"luil-webview-presentation-test").u8string();
         view.policy.maximum_events_per_second = 0;
+        view.policy.allowed_schemes = { u8"about" };
+        view.navigate_url = u8"about:blank";
+        view.navigate_revision = 1;
         view.on_event = [](luil::webview_event event) { return luil::app_message { std::move(event) }; };
         view.report_presentation = true;
         luil::win32::webview_target target { &view, window };
@@ -58,6 +64,28 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         host.apply_layout(view.id, {}, nullptr);
         host.apply_layout(view.id, { .width = 80, .height = 80 }, nullptr);
         REQUIRE(reports == std::vector<bool> { false, true, false });
+        Microsoft::WRL::ComPtr<IDCompositionVisual> underlay {};
+        REQUIRE(SUCCEEDED(device->CreateVisual(&underlay)));
+        const luil::win32::webview_layout visible { .width = 80, .height = 80, .punch_hole = true };
+        const auto navigation_deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 10 } };
+        while (children.empty() && std::chrono::steady_clock::now() < navigation_deadline)
+        {
+            MSG message {};
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            host.apply_layout(view.id, visible, underlay.Get());
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
+        }
+        REQUIRE(children.size() == 1);
+        REQUIRE(children.front() != nullptr);
+        host.apply_layout(view.id, visible, underlay.Get());
+        host.apply_layout(view.id, {}, underlay.Get());
+        host.apply_layout(view.id, {}, underlay.Get());
+        REQUIRE(children.size() == 2);
+        REQUIRE(children.back() == nullptr);
         host.shutdown();
     }
     DestroyWindow(window);
