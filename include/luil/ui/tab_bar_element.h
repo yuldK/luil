@@ -106,6 +106,7 @@ namespace luil {
         std::u8string focused {};
         // 닫기 단추에 포인터가 올라간 것처럼 그릴 탭이다. 상태 표시가 닫기 단추 자리에 있으면 단추로 바뀐다.
         std::u8string close_hovered {};
+        bool animated { false };
 
         [[nodiscard]] bool operator==(const tab_bar_preview&) const = default;
     };

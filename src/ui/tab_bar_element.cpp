@@ -238,6 +238,7 @@ namespace luil {
             bool pressed { false };
             bool focused { false };
             bool close_hovered { false };
+            bool animated { false };
         };
 
         // 탭 하나다 (짓는 데 필요한 막대 쪽 사실들).
@@ -271,6 +272,7 @@ namespace luil {
                         .pressed = preview.pressed == item_.key,
                         .focused = preview.focused == item_.key,
                         .close_hovered = preview.close_hovered == item_.key,
+                        .animated = preview.animated,
                     };
                     preview_closable_ = item_.closable;
                     return;
@@ -441,7 +443,9 @@ namespace luil {
                     context.canvas.saveLayerAlphaf(nullptr, 0.35f);
 
                 draw_background(context, box, hovered, pressed, dragged, drop_here);
-                draw_content(context, box, hovered || close_hovered, close_hovered, close_pressed, close_focused, interaction);
+                auto content_context { context };
+                content_context.reduce_motion = motion_still(context.reduce_motion);
+                draw_content(content_context, box, hovered || close_hovered, close_hovered, close_pressed, close_focused, interaction);
 
                 if (previewing && pinned_->focused)
                     draw_pinned_focus(context, box);
@@ -457,7 +461,7 @@ namespace luil {
                 // 도는 그림이 있을 때만 다음 frame을 청한다. 움직임 줄이기면 멈춘 그림이라 청하지 않는다.
                 const bool busy { item_.indicator.has_value() && item_.indicator->kind == tab_indicator_kind::busy };
                 const bool spinning_badge { item_.badge.has_value() && item_.badge->spinning && item_.badge->glyph != 0 && badge_element::shows_glyph(item_.badge->tone) == false };
-                if ((busy || spinning_badge) == false || context.reduce_motion || visible() == false || bounds().width <= 0.0f || bounds().height <= 0.0f)
+                if ((busy || spinning_badge) == false || motion_still(context.reduce_motion) || visible() == false || bounds().width <= 0.0f || bounds().height <= 0.0f)
                     return std::nullopt;
                 return context.now + std::chrono::milliseconds { 16 };
             }
@@ -471,6 +475,11 @@ namespace luil {
             }
 
         private:
+            [[nodiscard]] bool motion_still(const bool reduce_motion) const noexcept
+            {
+                return reduce_motion || (pinned_.has_value() && pinned_->animated == false);
+            }
+
             // 닫기 단추가 그려지지 않을 수 있는가다 (배치에서 정한 스타일로).
             [[nodiscard]] bool close_hides() const noexcept
             {

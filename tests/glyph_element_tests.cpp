@@ -2,6 +2,8 @@
 
 #include "luil/generated/codicons.h"
 #include "luil/ui/draw_primitives.h"
+#include "luil/ui/tab_bar_element.h"
+#include "luil/ui/ui_tree.h"
 #include "win32/embedded_assets.h"
 #include "win32/resource_ids.h"
 
@@ -15,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -136,6 +139,33 @@ TEST_CASE("Glyph elements use Codicons by default and retain a custom font", "[u
     // 같은 폰트를 일반 텍스트 API에서도 그대로 사용할 수 있다.
     const SkFont text_font { custom.typeface, 24.0f };
     REQUIRE(luil::measure_text(u8"\uEA60", text_font) > 0.0f);
+}
+
+TEST_CASE("A preview paints a spinning badge as a stationary Codicon", "[ui][tab][preview][glyph]")
+{
+    const auto font { luil::load_codicon_typeface() };
+    REQUIRE(font != nullptr);
+    const auto palette { luil::color_palette_for(luil::color_theme::dark) };
+    const auto render_tab = [&](const bool animated, const bool reduced, const int milliseconds) {
+        luil::tab_bar_config config {};
+        config.owner = u8"tabs";
+        config.items.push_back({ .key = u8"one", .badge = luil::tab_badge { .glyph = luil::codicons::icon_arrow_right, .spinning = true } });
+        config.preview = luil::tab_bar_preview { .animated = animated };
+        const auto tree { luil::make_arranged_tree(std::make_unique<luil::tab_bar_element>(std::move(config)), { 0, 0, 300, 60 }, 1) };
+        SkBitmap bitmap {};
+        bitmap.allocN32Pixels(300, 60);
+        SkCanvas canvas { bitmap };
+        canvas.clear(SK_ColorTRANSPARENT);
+        const auto now { std::chrono::steady_clock::time_point {} + std::chrono::milliseconds { milliseconds } };
+        luil::draw_context context { .canvas = canvas, .codicon_typeface = font.get(), .palette = palette, .now = now, .reduce_motion = reduced };
+        tree.draw(context, {});
+        return bitmap;
+    };
+    const SkBitmap still { render_tab(false, false, 0) };
+    const auto equals_still { [&](const SkBitmap& image) { return std::memcmp(still.getPixels(), image.getPixels(), still.computeByteSize()) == 0; } };
+    REQUIRE(equals_still(render_tab(false, false, 177)));
+    REQUIRE(equals_still(render_tab(true, true, 177)));
+    REQUIRE_FALSE(equals_still(render_tab(true, false, 177)));
 }
 
 TEST_CASE("Glyph drawing clips to its slot and applies the chosen color", "[ui][glyph]")

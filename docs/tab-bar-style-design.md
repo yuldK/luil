@@ -107,7 +107,7 @@ neutral·accent 배지는 `tab_badge::glyph`로 글 앞에 앱의 글리프를 �
 
 ## 견본 막대
 
-`tab_bar_config::preview`가 있으면 그림만 남는다. 동작·끌기·놓기·닫기 단추 element·넘침 단추·꼬리를 하나도 짓지 않으므로 누름·hover·초점·접근 tree에서 모두 빠진다. 탭은 구조(`access_role::none`)로 접히고 막대가 `image` 역할로 앱이 붙인 이름 하나로 선다(이름이 비면 그것도 접힌다).
+`tab_bar_config::preview`가 있으면 그림만 남는다. 진행 표시와 도는 배지도 움직임 줄이기 때의 그림을 쓰며 다음 frame을 청하지 않는다. `tab_bar_preview::animated`를 켜면 시스템의 움직임 설정을 따르는 견본이 된다. 동작·끌기·놓기·닫기 단추 element·넘침 단추·꼬리를 하나도 짓지 않으므로 누름·hover·초점·접근 tree에서 모두 빠진다. 탭은 구조(`access_role::none`)로 접히고 막대가 `image` 역할로 앱이 붙인 이름 하나로 선다(이름이 비면 그것도 접힌다).
 
 견본은 포인터 없이도 상태를 보여야 하므로 `hovered`·`pressed`·`focused`·`close_hovered`에 탭 키를 적어 그 상태로 고정해 그린다. 초점 테는 tree가 아니라 탭이 그린다 — tree는 초점이 실제로 선 element에만 테를 얹는다. 견본은 막대가 잘라 내므로 테를 탭 안쪽으로 접는다.
 

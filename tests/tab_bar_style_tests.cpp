@@ -6,6 +6,7 @@
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
+#include "luil/ui/layer_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
@@ -603,6 +604,49 @@ TEST_CASE("A neutral or accent badge makes room for the app's glyph and severity
     const luil::update_context moving { .now = at(1000) };
     REQUIRE(tab_at(bar_of(*tree), 0).next_update(moving, {}).has_value());
     REQUIRE(tab_at(bar_of(*tree), 1).next_update(moving, {}).has_value() == false);
+}
+
+TEST_CASE("A preview freezes the busy arc and spinning badge unless animated", "[ui][raster][tab][preview]")
+{
+    luil::tab_bar_config config { make_config(2) };
+    config.items[0].indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::busy };
+    config.items[1].badge = luil::tab_badge { .glyph = U'x', .spinning = true };
+    config.preview.emplace();
+    const auto tree { bar_tree(config, 400.0f) };
+    const luil::update_context moving { .now = at(1000) };
+    REQUIRE_FALSE(tree->next_update(moving, {}).has_value());
+    config.preview->animated = true;
+    const auto animated { bar_tree(config, 400.0f) };
+    REQUIRE(animated->next_update(moving, {}) == at(1016));
+    config.preview.reset();
+    const auto live { bar_tree(config, 400.0f) };
+    REQUIRE(live->next_update(moving, {}) == at(1016));
+
+    auto layer { std::make_unique<luil::layer_element>(luil::ui_element_id {}) };
+    layer->add(std::make_unique<luil::tab_bar_element>(config));
+    config.owner = u8"sample";
+    config.preview.emplace();
+    layer->add(std::make_unique<luil::tab_bar_element>(config));
+    const auto mixed { luil::make_arranged_tree(std::move(layer), { 0.0f, 0.0f, 400.0f, 72.0f }, 1.0f) };
+    REQUIRE(mixed.next_update(moving, {}) == live->next_update(moving, {}));
+
+    const auto palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::testing::raster_frame first { 400, 36, palette, 1.0f };
+    luil::testing::raster_frame later { 400, 36, palette, 1.0f };
+    luil::testing::raster_frame reduced { 400, 36, palette, 1.0f };
+    first.draw(*tree, {}, at(1000));
+    later.draw(*tree, {}, at(1234));
+    reduced.set_reduce_motion(true);
+    reduced.draw(*animated, {}, at(1234));
+    for (int y = 0; y < 36; ++y)
+    {
+        for (int x = 0; x < 400; ++x)
+        {
+            const auto pixel { first.pixel_at(x, y) };
+            if (later.pixel_at(x, y) != pixel || reduced.pixel_at(x, y) != pixel)
+                FAIL("Preview pixels changed");
+        }
+    }
 }
 
 TEST_CASE("A preview bar paints its pinned hover", "[ui][raster][tab][preview]")
