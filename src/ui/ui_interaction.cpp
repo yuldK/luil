@@ -2270,6 +2270,11 @@ namespace luil {
         for (const auto candidate : { flow, submenu_deadline(), dwell_deadline() })
             if (candidate.has_value() && (result.has_value() == false || *candidate < *result))
                 result = candidate;
+        for (const auto& region : hover_regions_)
+        {
+            if (region.due && (result.has_value() == false || *region.due < *result))
+                result = region.due;
+        }
         return result;
     }
 
@@ -2288,7 +2293,7 @@ namespace luil {
             actions = close_ink(ink_phase::cancel, true);
         update_dwell(nullptr, actions);
         if (pointer_inside_)
-            update_hover_regions(pointer_moved_event { last_pointer_x_, last_pointer_y_, last_pointer_time_, last_pointer_surface_ }, actions);
+            update_hover_regions(pointer_moved_event { last_pointer_x_, last_pointer_y_, last_pointer_time_, last_pointer_surface_ }, actions, false);
         return actions;
     }
 
@@ -2337,7 +2342,7 @@ namespace luil {
         }
     }
 
-    void interaction_controller::update_hover_regions(const raw_input_event& event, std::vector<input_action>& actions)
+    void interaction_controller::update_hover_regions(const raw_input_event& event, std::vector<input_action>& actions, const bool report_move)
     {
         // 마우스·펜의 자리만 본다. 터치에는 hover가 없다.
         std::optional<point_f> point {};
@@ -2363,6 +2368,15 @@ namespace luil {
             surface = gone->surface;
             left = true;
         }
+        else if (const auto* const lost { std::get_if<surface_focus_lost_event>(&event) }; lost != nullptr)
+        {
+            for (auto& region : hover_regions_)
+            {
+                if (region.surface == lost->surface)
+                    region.due.reset();
+            }
+            return;
+        }
         else
             return;
 
@@ -2376,7 +2390,10 @@ namespace luil {
         const auto contains = [&inside](const ui_element_id& id) { return std::any_of(inside.begin(), inside.end(), [&id](const ui_element* const element) { return element->id() == id; }); };
         for (auto entry { hover_regions_.begin() }; entry != hover_regions_.end();)
         {
-            if (entry->surface != surface || contains(entry->id) || (captured && entry->hold_while_captured))
+            const bool in_region { entry->surface == surface && contains(entry->id) };
+            if (in_region == false && (entry->surface == surface || left == false))
+                entry->due.reset();
+            if (entry->surface != surface || in_region || (captured && entry->hold_while_captured))
             {
                 ++entry;
                 continue;
@@ -2387,13 +2404,42 @@ namespace luil {
         }
         for (const ui_element* const element : inside)
         {
-            const bool known { std::any_of(hover_regions_.begin(), hover_regions_.end(), [&](const hover_region_entry& entry) { return entry.id == element->id() && entry.surface == surface; }) };
-            if (known)
-                continue;
+            auto entry { std::find_if(hover_regions_.begin(), hover_regions_.end(), [&](const hover_region_entry& live) { return live.id == element->id() && live.surface == surface; }) };
             const hover_region_target& region { *element->hover_region() };
-            if (region.on_enter != nullptr)
-                actions.push_back(region.on_enter());
-            hover_regions_.push_back(hover_region_entry { element->id(), surface, region.on_leave, region.hold_while_captured });
+            if (entry == hover_regions_.end())
+            {
+                if (region.on_enter != nullptr)
+                    actions.push_back(region.on_enter());
+                hover_regions_.push_back(hover_region_entry { element->id(), surface, region.on_leave, region.hold_while_captured });
+                entry = std::prev(hover_regions_.end());
+            }
+            if (region.on_move == nullptr)
+                entry->due.reset();
+            else if (const auto* moved { std::get_if<pointer_moved_event>(&event) }; report_move && moved != nullptr)
+            {
+                entry->move = { element->id(), moved->x, moved->y, moved->control, moved->shift, moved->alt };
+                entry->due = entry->last_move ? *entry->last_move + region.move_interval : moved->time;
+            }
+        }
+        if (const auto* moved { std::get_if<pointer_moved_event>(&event) }; report_move && moved != nullptr)
+            flush_hover_moves(moved->time, actions);
+    }
+
+    void interaction_controller::flush_hover_moves(const std::chrono::steady_clock::time_point now, std::vector<input_action>& actions)
+    {
+        for (auto& entry : hover_regions_)
+        {
+            if (entry.due.has_value() == false || *entry.due > now)
+                continue;
+            entry.due.reset();
+            const ui_tree* const tree { surface_tree(entry.surface) };
+            const ui_element* const element { tree != nullptr ? tree->find(entry.id) : nullptr };
+            const auto* const region { element != nullptr ? element->hover_region() : nullptr };
+            if (region == nullptr || region->on_move == nullptr)
+                continue;
+            entry.last_move = now;
+            for (auto& action : region->on_move(entry.move))
+                actions.push_back(std::move(action));
         }
     }
 
@@ -2417,6 +2463,7 @@ namespace luil {
     {
         // 가장자리 흐름은 터치 판정과 따로 간다 (손가락으로 끄는 동안에도 흐른다).
         std::vector<input_action> actions { advance_auto_scroll(now) };
+        flush_hover_moves(now, actions);
         // 머무름이 찼다. 한 번만 낸다 — 끝은 떠남·누름이 알린다.
         if (const auto deadline { dwell_deadline() }; deadline.has_value() && now >= *deadline)
         {

@@ -212,6 +212,62 @@ TEST_CASE("A hover region reports entry and exit without taking hits", "[hover][
     REQUIRE(said(controller.process(luil::pointer_left_event {})) == std::vector<std::u8string> { u8"hide" });
 }
 
+TEST_CASE("Moving over an empty region without a move action preserves its snapshot", "[hover][region]")
+{
+    luil::interaction_controller controller {};
+    controller.set_tree(make_tree());
+    const auto before { controller.snapshot() };
+    REQUIRE(said(controller.process(move_to(100, 175, 0ms))) == std::vector<std::u8string> { u8"reveal" });
+    REQUIRE(controller.process(move_to(150, 180, 1ms)).empty());
+    REQUIRE(controller.process(move_to(200, 185, 2ms)).empty());
+    REQUIRE(controller.snapshot() == before);
+    REQUIRE_FALSE(controller.next_deadline().has_value());
+}
+
+TEST_CASE("Region moves coalesce the last surface point without a hit or tooltip", "[hover][region]")
+{
+    auto panel { make_panel(u8"empty", { 0, 0, 100, 100 }) };
+    const auto owner { panel->id() };
+    std::vector<luil::ui_action_context> moves {};
+    luil::hover_region_target region {};
+    region.move_interval = 30ms;
+    region.on_move = [&](const luil::ui_action_context& point) {
+        moves.push_back(point);
+        return say(u8"move")(point);
+    };
+    panel->set_hover_region(region);
+    luil::interaction_controller controller {};
+    controller.set_tree(std::make_shared<const luil::ui_tree>(std::move(panel)));
+    const auto before { controller.snapshot() };
+    REQUIRE(said(controller.process(move_to(1, 2, 0ms, luil::pointer_device::pen))) == std::vector<std::u8string> { u8"move" });
+    REQUIRE(controller.process(move_to(3, 4, 10ms)).empty());
+    REQUIRE(controller.process(move_to(5, 6, 20ms)).empty());
+    REQUIRE(controller.refresh_hover_tracking().empty());
+    REQUIRE(controller.next_deadline() == at(30ms));
+    REQUIRE(said(controller.advance(at(30ms))) == std::vector<std::u8string> { u8"move" });
+    REQUIRE(moves.size() == 2);
+    REQUIRE(moves.back().element == owner);
+    REQUIRE(moves.back().x == 5);
+    REQUIRE(moves.back().y == 6);
+    REQUIRE(controller.snapshot() == before);
+    REQUIRE(controller.process(move_to(7, 8, 40ms)).empty());
+    SECTION("leave")
+    {
+        REQUIRE(controller.process(luil::pointer_left_event {}).empty());
+    }
+    SECTION("outside")
+    {
+        REQUIRE(controller.process(move_to(200, 300, 45ms)).empty());
+    }
+    SECTION("focus loss")
+    {
+        REQUIRE(controller.process(luil::surface_focus_lost_event {}).empty());
+    }
+    REQUIRE(controller.process(move_to(9, 10, 50ms, luil::pointer_device::touch)).empty());
+    REQUIRE_FALSE(controller.next_deadline().has_value());
+    REQUIRE(controller.advance(at(1s)).empty());
+}
+
 TEST_CASE("A hover region holds while the pointer is captured", "[hover][region]")
 {
     luil::interaction_controller controller {};

@@ -735,6 +735,8 @@ namespace luil {
         std::function<input_action()> on_enter {};
         std::function<input_action()> on_leave {};
         bool hold_while_captured { true };
+        ui_action on_move {};
+        std::chrono::milliseconds move_interval { 16 };
     };
 
     // 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).

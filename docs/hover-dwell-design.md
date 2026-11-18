@@ -41,6 +41,7 @@ strip->set_hover_region(luil::hover_region_target {
 ```
 
 - 판정은 hit test가 아니라 **보이는 자리**(`ui_tree::hover_regions_at`)다. 영역 element가 액션을 갖지 않으면 hit를 받지 않으므로 그 자리의 누름·hover는 아래 element가 그대로 받는다. 위를 다른 element가 덮어도 영역 안이다.
+- `on_move`를 주면 영역 안의 실제 마우스·펜 이동을 받는다. `ui_action_context::element`는 영역 임자이고 `x`, `y`는 이벤트 표면의 물리 픽셀이다. 첫 이동은 즉시 보내고 `move_interval`(기본 16ms) 안에서는 마지막 좌표를 기한에 한 번 보낸다. 0이면 매 이동을 받는다. 영역 밖 이동·창 떠남·초점 상실은 대기 좌표를 취소한다. tree 교체만으로 이동을 만들지 않는다.
 - 영역을 여럿 겹쳐도 된다. 각각 따로 들어옴·나감을 알린다.
 - `hold_while_captured`(기본 참)면 누른 채 끄는 동안은 영역을 벗어나도 나감을 뗄 때까지 미룬다. 드러난 도구 막대의 단추를 끄는 도중에 숨기지 않는다.
 - 포인터가 창을 떠나면 나감이다. 새 tree에서 영역이 포인터 아래에 새로 서면 들어옴, 사라지면 나감이다.

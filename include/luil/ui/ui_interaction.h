@@ -779,7 +779,8 @@ namespace luil {
         //  - `event`가 없으면 새 tree를 받은 뒤다 (덮개가 서서 hover가 옮았을 수 있다).
         void update_dwell(const raw_input_event* event, std::vector<input_action>& actions);
         // 이벤트를 처리한 뒤 포인터가 든 hover 영역을 다시 본다. 들어옴·나감의 액션을 `actions`에 더한다.
-        void update_hover_regions(const raw_input_event& event, std::vector<input_action>& actions);
+        void update_hover_regions(const raw_input_event& event, std::vector<input_action>& actions, bool report_move = true);
+        void flush_hover_moves(std::chrono::steady_clock::time_point now, std::vector<input_action>& actions);
         // hover 시계가 이미 발화한 항목·표면·시각이다 (열었든 형제 자식을 닫았든). 같은 머묾에서 거듭 내지 않는다.
         ui_element_id opened_hover_ {};
         std::u8string opened_hover_surface_ {};
@@ -1181,6 +1182,9 @@ namespace luil {
             std::u8string surface {};
             std::function<input_action()> on_leave {};
             bool hold_while_captured { true };
+            std::optional<std::chrono::steady_clock::time_point> last_move {};
+            std::optional<std::chrono::steady_clock::time_point> due {};
+            ui_action_context move {};
         };
         std::vector<hover_region_entry> hover_regions_ {};
         // 마지막 키를 누가 받았는가 (`last_key_handled`).
