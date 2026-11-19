@@ -1,4 +1,6 @@
 #include "luil/ui/image_element.h"
+#include "luil/ui/video_element.h"
+#include "luil/text/srt.h"
 
 #include "raster_probe.h"
 #include "luil/theme/ui_theme.h"
@@ -8,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <fstream>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -97,6 +100,81 @@ TEST_CASE("An image is made once from RGBA pixels or not at all", "[ui][image]")
     REQUIRE(luil::make_rgba_image(0, 2, {}).valid() == false);
     REQUIRE(luil::ui_image {}.valid() == false);
     REQUIRE(luil::ui_image {}.backing() == nullptr);
+}
+
+TEST_CASE("Padded BGRX rows are copied as opaque pixels", "[ui][image][raster]")
+{
+    std::vector<std::uint8_t> bytes { 0, 0, 255, 0, 21, 22, 23, 24, 255, 0, 0, 17 };
+    const auto image { luil::make_bgrx_image(1, 2, 8, bytes) };
+    REQUIRE(image.valid());
+    REQUIRE_FALSE(luil::make_bgrx_image(1, 2, 3, bytes).valid());
+    REQUIRE_FALSE(luil::make_bgrx_image(1, 2, 8, std::span { bytes }.first(11)).valid());
+    REQUIRE_FALSE(luil::make_bgrx_image(0, 2, 8, bytes).valid());
+    bytes.assign(bytes.size(), 0);
+
+    const auto palette { luil::color_palette_for(luil::color_theme::dark) };
+    auto picture { std::make_unique<luil::image_element>(luil::ui_element_id { kind_picture, u8"video" }
+        , luil::image_config { .image = image, .fit = luil::image_fit::fill }
+    )
+    };
+    picture->arrange({ { 0, 0, 1, 2 }, 1 });
+    const luil::ui_tree tree { std::move(picture) };
+    luil::testing::raster_frame frame { 1, 2, palette, 1 };
+    frame.draw(tree, luil::interaction_snapshot {});
+    REQUIRE(frame.pixel_at(0, 0) == 0xFFFF0000);
+    REQUIRE(frame.pixel_at(0, 1) == 0xFF0000FF);
+}
+
+TEST_CASE("Video overlays stay inside the displayed frame when the viewport is resized", "[ui][video]")
+{
+    auto overlay { std::make_unique<raster_group>(luil::ui_element_id {}) };
+    const auto* content { overlay.get() };
+    luil::video_element video { {}, { .frame = make_solid_image(4, 2, 0, 0, 0) }, std::move(overlay) };
+    video.arrange({ { 10, 20, 100, 100 }, 2 });
+    REQUIRE(content->bounds().x == 10);
+    REQUIRE(content->bounds().y == 45);
+    REQUIRE(content->bounds().width == 100);
+    REQUIRE(content->bounds().height == 50);
+    video.arrange({ { 0, 0, 300, 100 }, 1 });
+    REQUIRE(content->bounds().x == 50);
+    REQUIRE(content->bounds().y == 0);
+    REQUIRE(content->bounds().width == 200);
+    REQUIRE(content->bounds().height == 100);
+}
+
+TEST_CASE("SRT files preserve Korean text across blank separators and malformed cues", "[text][video]")
+{
+    struct temporary_subtitle
+    {
+        std::filesystem::path path;
+        ~temporary_subtitle()
+        {
+            std::error_code error {};
+            std::filesystem::remove(path, error);
+        }
+    } file { std::filesystem::temp_directory_path() / ("luil-srt-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".srt") };
+    {
+        std::ofstream output { file.path, std::ios::binary };
+        output << "\xEF\xBB\xBF" "00:00:00,100\t-->  00:00:00,300\r\n"
+            << "첫 줄\r\n둘째 줄\r\n \t\r\n"
+            << "2\n-0:00:00,000 --> 00:00:01,000\n잘못된 시각\n\n"
+            << "3\n00:00:00,200 --> 00:00:00,400\n다음 자막";
+        REQUIRE(output.good());
+    }
+    const auto cues { luil::read_srt(file.path) };
+    REQUIRE(cues.size() == 2);
+    REQUIRE(luil::subtitle_at(cues, std::chrono::milliseconds { 200 }) == u8"첫 줄\n둘째 줄\n다음 자막");
+}
+
+TEST_CASE("Overlapping subtitles preserve lines and use half-open intervals", "[text][video]")
+{
+    using namespace std::chrono_literals;
+    const std::vector<luil::subtitle_cue> cues { { 100, 300, u8"첫 줄\n둘째 줄" }, { 200, 400, u8"다음 자막" } };
+    REQUIRE(luil::subtitle_at(cues, 99ms).empty());
+    REQUIRE(luil::subtitle_at(cues, 100ms) == u8"첫 줄\n둘째 줄");
+    REQUIRE(luil::subtitle_at(cues, 200ms) == u8"첫 줄\n둘째 줄\n다음 자막");
+    REQUIRE(luil::subtitle_at(cues, 300ms) == u8"다음 자막");
+    REQUIRE(luil::subtitle_at(cues, 400ms).empty());
 }
 
 TEST_CASE("The image destination follows the fit", "[ui][image]")

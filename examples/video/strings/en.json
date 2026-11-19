@@ -1,0 +1,26 @@
+{
+    "language": "en",
+    "plural": "one",
+    "strings": {
+        "window_title": "luil Video",
+        "ridge_title": "Dawn on the Ridge",
+        "no_subtitles": "No subtitles",
+        "subtitle_file": "Subtitles   {file}",
+        "log_error": "Could not create a new frame log file.",
+        "opening": "Opening",
+        "ready": "Ready to play",
+        "playing": "Playing",
+        "stopped": "Stopped",
+        "ended": "Playback ended",
+        "sample_format": "Sample format",
+        "theme_system_hint": "System theme · Switch to dark",
+        "theme_dark_hint": "Dark theme · Switch to light",
+        "theme_light_hint": "Light theme · Use system theme",
+        "change_theme": "Change theme",
+        "play": "Play",
+        "stop": "Stop",
+        "rewind": "Back to start",
+        "next_sample": "Next sample",
+        "video": "Video"
+    }
+}

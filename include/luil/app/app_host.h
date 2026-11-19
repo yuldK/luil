@@ -550,6 +550,10 @@ namespace luil {
         std::vector<global_hotkey> hotkeys {};
         // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
         // 그 element가 `ui_element::next_update`로 예고한다.
+        // Windows Direct3D 주 창에서 대기 중인 옛 그림보다 새 그림을 우선한다.
+        // 연속 영상처럼 뒤 프레임이 앞 프레임을 대체할 수 있을 때만 켠다.
+        // 연속 프레임에서만 켠다. GPU나 표시 큐가 바쁘면 그 장을 건너뛸 수 있다. 마지막 정지 장에서는 끈다.
+        bool prefer_latest_presentation { false };
     };
 
     // 앱이 logic thread에 꽂는 구동기다.

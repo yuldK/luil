@@ -1,0 +1,26 @@
+{
+    "language": "ko",
+    "plural": "other",
+    "strings": {
+        "window_title": "luil 동영상",
+        "ridge_title": "능선의 새벽",
+        "no_subtitles": "자막 없음",
+        "subtitle_file": "자막   {file}",
+        "log_error": "프레임 로그를 새 파일로 만들 수 없습니다",
+        "opening": "여는 중",
+        "ready": "재생 준비",
+        "playing": "재생 중",
+        "stopped": "중지됨",
+        "ended": "재생 끝",
+        "sample_format": "샘플 형식",
+        "theme_system_hint": "시스템 테마 · 어두운 테마로 변경",
+        "theme_dark_hint": "어두운 테마 · 밝은 테마로 변경",
+        "theme_light_hint": "밝은 테마 · 시스템 테마로 변경",
+        "change_theme": "테마 변경",
+        "play": "재생",
+        "stop": "중지",
+        "rewind": "처음으로",
+        "next_sample": "다음 샘플",
+        "video": "동영상"
+    }
+}

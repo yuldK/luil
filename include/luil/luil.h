@@ -13,6 +13,8 @@
 #include "luil/ui/dock_element.h"
 #include "luil/net/websocket_client.h"
 #include "luil/win32/media_player.h"
+#include "luil/win32/video_frame_player.h"
+#include "luil/text/srt.h"
 
 // 스레드 경계 채널이다.
 #include "luil/messaging/channel.h"

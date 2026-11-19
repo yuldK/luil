@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -77,6 +78,30 @@ namespace luil {
         image.width_ = width;
         image.height_ = height;
         return image;
+    }
+
+    ui_image make_bgrx_image(const int width, const int height, const std::size_t row_bytes, const std::span<const std::uint8_t> pixels)
+    {
+        if (width <= 0 || height <= 0)
+            return {};
+
+        const auto info { SkImageInfo::Make(width, height, kBGRA_8888_SkColorType, kOpaque_SkAlphaType, SkColorSpace::MakeSRGB()) };
+        const auto used { info.minRowBytes64() };
+        if (used > row_bytes || used > pixels.size()
+            || static_cast<std::size_t>(height - 1) > (pixels.size() - used) / row_bytes)
+            return {};
+        SkBitmap bitmap {};
+        if (bitmap.tryAllocPixels(info) == false)
+            return {};
+        for (int y { 0 }; y < height; ++y)
+        {
+            auto* row { static_cast<std::uint8_t*>(bitmap.getAddr(0, y)) };
+            std::memcpy(row, pixels.data() + static_cast<std::size_t>(y) * row_bytes, static_cast<std::size_t>(used));
+            for (int x { 0 }; x < width; ++x)
+                row[static_cast<std::size_t>(x) * 4 + 3] = 255;
+        }
+        bitmap.setImmutable();
+        return image_access::raster_image(bitmap.asImage());
     }
 
     namespace {

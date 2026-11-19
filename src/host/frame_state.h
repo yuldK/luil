@@ -124,6 +124,7 @@ namespace luil {
         //  - tree와 popup layer의 tree를 모두 그린 변환 안에서 그린다. 표면마다 자기 tree와 걸러진 상호작용으로 따로 집는다.
         const inspector_config* inspector { nullptr };
         bool transparent { false };
+        bool prefer_latest_presentation { false };
     };
 
     // frame이 쓸 스타일이다 — 실린 것이 없으면 내장 스타일이다.

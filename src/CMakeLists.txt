@@ -109,6 +109,8 @@ luil_add_source_filter(luil_core_files "text"
     text/utf8_text.cpp
     "${public_headers}/text/utf8_text.h"
     text/library_text.h
+    text/srt.cpp
+    "${public_headers}/text/srt.h"
     text/string_table.cpp
     "${public_headers}/text/string_table.h")
 
@@ -711,6 +713,8 @@ luil_add_source_filter(luil_files "net/winhttp"
     net/winhttp/websocket_transport.cpp
     "${public_headers}/net/websocket_client.h")
 luil_add_source_filter(luil_files "win32/media"
+    win32/video_frame_player.cpp
+    "${public_headers}/win32/video_frame_player.h"
     win32/media_player.cpp
     "${public_headers}/win32/media_player.h")
 
@@ -765,7 +769,8 @@ if(LUIL_PLATFORM STREQUAL "windows")
     add_library(luil::luil ALIAS luil)
     target_include_directories(luil
         PRIVATE
-            "${LUIL_SOURCE_DIRECTORY}")
+            "${LUIL_SOURCE_DIRECTORY}"
+            "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
     target_link_libraries(luil
         PUBLIC
             luil_core
@@ -804,6 +809,10 @@ if(LUIL_PLATFORM STREQUAL "windows")
             uiautomationcore
             user32
             # Windows 미디어와 net 계층의 HTTP/WebSocket이다.
+            d3d11
+            shlwapi
+            mfplat
+            wmcodecdspuuid
             mfplay
             mfuuid
             propsys

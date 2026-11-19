@@ -254,6 +254,9 @@ namespace luil::win32 {
                 }
 
                 const UINT frame_index { swap_chain_->GetCurrentBackBufferIndex() };
+                // 재생 중 밀린 장을 기다리면 다음 장까지 늦어진다. 사용 중인 버퍼는 다음 게시 때 다시 시도한다.
+                if (state.prefer_latest_presentation && fence_->GetCompletedValue() < frame_fence_values_[frame_index])
+                    return true;
                 if (wait_for_fence(frame_fence_values_[frame_index]) == false)
                 {
                     error = fence_wait_error(u8"Failed to wait for the Direct3D back buffer fence");
@@ -268,8 +271,11 @@ namespace luil::win32 {
                 context_->flush(surfaces_[frame_index].get(), SkSurfaces::BackendSurfaceAccess::kPresent, flush_info);
                 context_->submit();
 
-                HRESULT result { swap_chain_->Present(1, 0) };
-                if (FAILED(result))
+                const UINT present_flags { state.prefer_latest_presentation ? DXGI_PRESENT_DO_NOT_WAIT : 0u };
+                HRESULT result { swap_chain_->Present(state.prefer_latest_presentation ? 0 : 1, present_flags) };
+                // 표시 큐가 가득 차서 건너뛰어도 이미 제출한 그리기의 fence는 기록해야 한다.
+                const bool skipped { state.prefer_latest_presentation && result == DXGI_ERROR_WAS_STILL_DRAWING };
+                if (FAILED(result) && skipped == false)
                 {
                     error = make_hresult_error(u8"Failed to present the Direct3D frame", result);
                     return false;

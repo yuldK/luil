@@ -909,6 +909,7 @@ namespace luil::win32 {
             //    지워진다.
             state.interaction = interaction_for_surface(host->acquire_interaction(), id_);
         }
+        state.prefer_latest_presentation = id_.empty() && frame && frame->prefer_latest_presentation;
         code = context_.apply_frame_appearance(state, frame.get());
         state.tree = tree_.get();
         prepare_frame(state);

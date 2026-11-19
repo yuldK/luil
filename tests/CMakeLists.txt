@@ -629,12 +629,13 @@ add_test(NAME luil_core_portability
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_core_portability.cmake")
 
-# src·include의 코드 줄에 한글이 박혀 있지 않은지 본다.
+# 라이브러리와 동영상 데모의 코드 줄에 한글이 박혀 있지 않은지 본다.
 # 글은 문자열 표와 강조색 카탈로그에 산다 (script에 이유가 있다).
 add_test(NAME luil_default_text
     COMMAND "${CMAKE_COMMAND}"
         "-DSOURCE_DIRECTORY=${LUIL_SOURCE_DIRECTORY}"
         "-DINCLUDE_DIRECTORY=${LUIL_INCLUDE_DIRECTORY}"
+        "-DCHECKED_DIRECTORIES=${LUIL_SOURCE_DIRECTORY};${LUIL_INCLUDE_DIRECTORY};${PROJECT_SOURCE_DIR}/examples/video"
         -P "${LUIL_CMAKE_DIRECTORY}/verify_default_text.cmake")
 # 그 검사 자체를 본다. 선택 라이브러리가 쓰는 두 선택 인자도 여기서 친다.
 add_test(NAME luil_default_text_check

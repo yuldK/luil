@@ -160,3 +160,22 @@ add_executable(luil_selected_nodes WIN32
 target_include_directories(luil_selected_nodes PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(luil_selected_nodes PRIVATE luil::luil luil_options)
 luil_set_ide_folder("Examples" luil_selected_nodes)
+
+# Windows Media Engine의 프레임을 luil 트리에서 자막·버튼과 함께 그리는 예제다.
+add_executable(luil_video WIN32
+    ${luil_example_resource}
+    video/main.cpp
+    video/scene.cpp
+    video/scene.h)
+target_include_directories(luil_video PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+luil_add_string_table(luil_video NAME video_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/video/strings" BASE ko)
+target_link_libraries(luil_video PRIVATE luil::luil luil_options)
+luil_set_ide_folder("Examples" luil_video)
+add_custom_target(luil_video_assets
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/video/assets"
+        "$<TARGET_FILE_DIR:luil_video>/video"
+    COMMENT "Copying video demo samples and subtitles"
+    VERBATIM)
+add_dependencies(luil_video luil_video_assets)
+luil_set_ide_folder("Examples" luil_video_assets)

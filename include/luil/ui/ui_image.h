@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -22,6 +23,9 @@ namespace luil {
     // 죽지 않고 조용히 비운다 (`drawable_text`가 깨진 UTF-8을 거르는 것과 같은
     // 성격이다).
     [[nodiscard]] ui_image make_rgba_image(int width, int height, std::span<const std::uint8_t> pixels);
+
+    // 패딩이 있는 BGRX 8888 영상을 복사한다. 네 번째 바이트는 무시하고 불투명하게 그린다.
+    [[nodiscard]] ui_image make_bgrx_image(int width, int height, std::size_t row_bytes, std::span<const std::uint8_t> pixels);
 
     // 불변 픽셀 이미지다.
     // 만들어진 뒤 바뀌지 않아 logic thread가 만들고 UI thread가 그려도 새

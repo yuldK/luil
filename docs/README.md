@@ -137,6 +137,7 @@
 - [파일 변경 감시](file-watch-design.md): 폴더와 파일의 변경을 OS 알림으로 받아 묶음으로 건넨다
 - [UI Automation 접근성](accessibility-design.md)
 - [접근성 동작](accessibility-action-design.md)
+- [Windows 동영상 재생 API·전용 데모·실측 결과](video-playback-design.md)
 - [이미지](image-design.md)
 - [이미지 디코딩](image-decode-design.md)
 - [이미지 인코딩](image-encode-design.md)
