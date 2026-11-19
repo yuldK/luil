@@ -167,8 +167,7 @@ namespace luil::win32 {
         // 레이어드 표시에서 미룬 배치가 새 tree를 기다리는 기한이다 (`layered_placement_timeout`).
         //  - 3은 표면의 커서 숨김 timer다 (window_surface.cpp). 같은 창에 걸리므로 겹치지 않게 둔다.
         constexpr UINT_PTR layered_placement_timer_id { 4 };
-        // 연속 애니메이션(회전 표시처럼 next_update가 "지금"을 답하는 것)의 다시 그리기 간격이다.
-        // 30fps면 눈에 매끄럽다.
+        // 현재 이하의 시각을 예고한 표면의 지연이다. 회전 표시의 16ms 미래 예고는 여유 15ms를 더한 31ms다.
         constexpr std::chrono::milliseconds continuous_repaint_interval { 33 };
 
         // OS의 앱 모드가 밝은지다.
@@ -1126,7 +1125,7 @@ namespace luil::win32 {
                         update_timer_armed_ = false;
                         // 이 시각을 답한 표면만 깨운다.
                         // 보조 창 하나의 caret 깜빡임이나 회전 표시가 모든 창을
-                        // 33ms 주기로 끌고 가던 자리다 (rendering.md).
+                        // 같은 주기로 끌고 가던 자리다 (rendering.md).
                         invalidate_surfaces(timer_wake_);
                         // 다음 예고는 **여기서** 다시 건다. 깨운 표면이 실제로
                         // 그려지는지에 기대지 않는다 — 최소화된 창은
@@ -2222,7 +2221,7 @@ namespace luil::win32 {
 
             // 예고를 모아 timer 하나를 걸고 **그때 깨울 표면을 기억한다**.
             // 그 기억이 이 묶음의 핵심이다 — 없으면 보조 창 하나의 회전 표시가
-            // 모든 창을 33ms 주기로 끌고 간다 (rendering.md).
+            // 모든 창을 같은 주기로 끌고 간다 (rendering.md).
             //  - `caller`가 nullptr이면 부르는 표면이 없다 (WM_TIMER의 되걸기).
             //    그때는 모든 표면이 발행본을 자기 것으로 거른 값으로 답한다.
             void arm_update_timer(const std::u8string* const caller, const interaction_snapshot* const interaction) noexcept

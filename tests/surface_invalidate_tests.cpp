@@ -130,6 +130,12 @@ TEST_CASE("Surfaces that come due within the same tick wake together", "[win32][
     REQUIRE(plan.wake == both);
 }
 
+TEST_CASE("A 16ms spinner deadline arms a 31ms timer", "[win32][render]")
+{
+    const std::vector<surface_update_deadline> deadlines { { {}, base + std::chrono::milliseconds { 16 } } };
+    REQUIRE(luil::plan_update_timer(deadlines, base, continuous).delay_milliseconds == 31u);
+}
+
 TEST_CASE("A future moment is announced with slack past it", "[win32][render]")
 {
     const std::vector<surface_update_deadline> deadlines {
