@@ -2,6 +2,7 @@
 #include "win32/composition_device.h"
 #include "win32/webview_host.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <wrl/client.h>
@@ -14,6 +15,16 @@ namespace {
     using luil::win32::webview_environment_failure_for;
     using luil::win32::webview_runtime_build_number;
     using luil::win32::webview_runtime_too_old_message;
+
+    void pump_messages()
+    {
+        MSG message {};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
 }
 
 #if LUIL_TESTS_WEBVIEW
@@ -49,12 +60,7 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         const auto timeout { std::chrono::steady_clock::now() + std::chrono::seconds { 15 } };
         while (reports.empty() && std::chrono::steady_clock::now() < timeout)
         {
-            MSG message {};
-            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
-            {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
+            pump_messages();
             MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
         }
         REQUIRE(reports == std::vector<bool> { false });
@@ -70,12 +76,7 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         const auto navigation_deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 10 } };
         while (children.empty() && std::chrono::steady_clock::now() < navigation_deadline)
         {
-            MSG message {};
-            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
-            {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
+            pump_messages();
             host.apply_layout(view.id, visible, underlay.Get());
             MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
         }
@@ -92,6 +93,50 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
     CoUninitialize();
 }
 #endif
+
+TEST_CASE("The configured host reports one creation failure per requested webview", "[win32][webview][webview-failure-once]")
+{
+    REQUIRE(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)));
+    {
+        // 실행 파일 자체는 프로필 디렉터리가 될 수 없다. 실제 host는 환경 생성에서, stub은 즉시 실패한다.
+        wchar_t executable[MAX_PATH] {};
+        REQUIRE(GetModuleFileNameW(nullptr, executable, MAX_PATH) > 0);
+        luil::ui_webview first {};
+        first.id = u8"first";
+        first.user_data_folder = (std::filesystem::path { executable } / L"profile").u8string();
+        first.policy.maximum_events_per_second = 0;
+        first.on_event = [](luil::webview_event event) { return luil::app_message { std::move(event) }; };
+        luil::ui_webview second { first };
+        second.id = u8"second";
+        const luil::win32::webview_target views[] { { &first, GetDesktopWindow() }, { &second, GetDesktopWindow() } };
+        std::vector<std::u8string> failed {};
+        luil::win32::webview_host host {};
+        host.set_deliver([&](luil::app_message message) {
+            if (const auto* event { message.get<luil::webview_event>() }; event != nullptr && event->kind == luil::webview_event_kind::creation_failed)
+                failed.push_back(event->id);
+        });
+        const auto check_requests = [&] {
+            host.synchronize(views, nullptr);
+            const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 10 } };
+            while (failed.size() < 2 && std::chrono::steady_clock::now() < deadline)
+            {
+                pump_messages();
+                host.synchronize(views, nullptr);
+                MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
+            }
+            host.synchronize(views, nullptr);
+            host.synchronize(views, nullptr);
+            std::sort(failed.begin(), failed.end());
+            REQUIRE(failed == std::vector<std::u8string> { u8"first", u8"second" });
+        };
+        check_requests();
+        host.synchronize({}, nullptr);
+        failed.clear();
+        check_requests();
+        host.shutdown();
+    }
+    CoUninitialize();
+}
 
 TEST_CASE("The loader's file-not-found result means the WebView2 runtime is missing", "[win32][webview]")
 {

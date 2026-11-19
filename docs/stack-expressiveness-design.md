@@ -181,6 +181,19 @@ Strip은 overflow 버튼이나 scrollbar를 포함하지 않는다. 담는 쪽�
 
 Wrap에는 항목별 크기, weight, 정렬, padding이 없다. 가변 크기나 여백이 필요하면 stack과 panel을 조합한다. 내용이 slot보다 크면 overflow하며 wrap 자체는 스크롤하거나 clip하지 않는다.
 
+## 너비를 놓을 때 한 번 저장하기
+
+`resize`에서는 변화량을 앱 상태의 너비에 더해 다음 frame을 짓고, `finish`에서 현재 너비를 저장한다. 사이드바는 같은 두 작업을 `resize`와 `resize_finish`로 받는다.
+
+```cpp
+split.resize = [](float delta) { return luil::input_action { luil::app_message { resize_intent { delta } } }; };
+split.finish = [] { return luil::input_action { luil::app_message { save_width_intent {} } }; };
+sidebar.resize = split.resize;
+sidebar.resize_finish = split.finish;
+```
+
+포인터를 놓거나 캡처를 잃어 끌기가 끝나면 그때까지의 폭을 한 번 저장한다. 키보드 조절은 각 키의 변화량 직후에 끝을 알린다.
+
 ## 조합 패턴
 
 - 고정 sidebar와 유연 content: 가로 stack에 고정 `length`와 `add_flexible`

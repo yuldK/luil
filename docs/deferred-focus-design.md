@@ -30,6 +30,19 @@ frame->focus_report = [](std::uint64_t id, luil::focus_request_outcome outcome) 
 - `activate`는 그 표면의 창을 앞으로 세우고 활성화한다. 최소화돼 있으면 되살린다. popup은 활성화를 받지 않는 표면이라 무시한다.
 - `timeout`(기본 2초) 안에 대상이 서지 않으면 버린다.
 
+### Popup을 열면서 입력 칸에 초점 주기
+
+popup을 처음 싣는 frame에 그 popup의 id와 입력 칸의 element id를 함께 지정한다. 다음 frame에도 열린 채라면 요청 번호를 유지한다. Win32는 앵커 창의 키 입력을 popup 안의 논리 초점으로 전달한다.
+
+```cpp
+frame->popups.push_back(search_popup);
+frame->focus = luil::focus_request {
+    .id = search_open_revision,
+    .surface = search_popup.id,
+    .target = search_field_id,
+};
+```
+
 ## 대상이 섰다는 것
 
 `focus_target_ready(tree, target)`가 참일 때다.

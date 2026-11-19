@@ -111,6 +111,8 @@ WebView를 세우지 못하면 `creation_failed`를 WebView마다 한 번 보낸
 | `controller_failed` | Environment는 섰지만 composition controller나 core view를 얻지 못했다. | 그 값, 없으면 0 |
 | `not_built` | `LUIL_ENABLE_WEBVIEW=OFF` build의 stub host다. | 0 |
 
+`tests/webview_failure_tests.cpp`는 두 id를 같은 실패 프로필로 여러 번 게시해 실제 host와 stub에서 id마다 한 번씩 `creation_failed`를 받는지 확인한다. 두 id를 뺀 뒤 다시 실으면 각 수명의 첫 실패를 다시 받는다.
+
 Environment 생성이 동기적으로 실패하면 실패 원인을 environment에 남겨, 같은 frame에서 그 folder를 쓰는 WebView도 같은 원인을 받는다. 알림은 생성 중이던 항목이 실패로 바뀔 때만 나간다. 이미 선 WebView의 browser process가 죽은 경우는 `browser_process_failed`가 알리므로 `creation_failed`를 다시 보내지 않는다. 이 event는 page가 일으킨 것이 아니므로 rate limit을 지나지 않는다. Application이 id를 목록에서 뺐다가 다시 publish하면 다시 시도하고, 또 실패하면 또 알린다.
 
 ## Policy와 trust boundary

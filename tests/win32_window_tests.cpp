@@ -1,4 +1,5 @@
 #include "luil/ui/root_element.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/ui_tree.h"
 #include "luil/win32/win32_window.h"
 #include "win32/caption_surface.h"
@@ -12,6 +13,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cwchar>
 #include <filesystem>
 #include <limits>
@@ -29,9 +31,9 @@ namespace {
     class close_origin_driver final : public luil::logic_driver
     {
     public:
-        close_origin_driver()
+        explicit close_origin_driver(std::shared_ptr<luil::ui_frame> frame = std::make_shared<luil::ui_frame>())
+            : frame_ { std::move(frame) }
         {
-            frame_ = std::make_shared<luil::ui_frame>();
             frame_->close = [this] {
                 ++close_calls;
                 return luil::input_action {};
@@ -398,6 +400,61 @@ namespace {
         REQUIRE(driver.first_metrics->scale == static_cast<float>(probe.dpi) / 96.0f);
         return probe;
     }
+}
+
+TEST_CASE("Opening a popup focuses its input even with the same field on the main surface", "[win32][window][popup-focus]")
+{
+    const luil::ui_element_id field { luil::application_element_kind(0), u8"query" };
+    auto input { std::make_unique<luil::text_input_element>(field, luil::text_input_view {}, luil::text_input_config {}) };
+    auto frame { std::make_shared<luil::ui_frame>() };
+    frame->tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(input), { 0, 0, 150, 30 }, 1));
+    std::vector<luil::rect_f> placements {};
+    luil::ui_popup popup { .id = u8"search", .x = 100000, .y = 100000, .width = 150, .height = 30, .tree = frame->tree };
+    popup.transparent = true;
+    popup.placed = [&](const luil::rect_f& bounds) {
+        placements.push_back(bounds);
+        return luil::app_message { bounds };
+    };
+    frame->popups.push_back(std::move(popup));
+    frame->focus = luil::focus_request { .id = 1, .surface = frame->popups.front().id, .target = field };
+    close_origin_driver driver { frame };
+    class focus_delegate final : public luil::win32::window_delegate
+    {
+    public:
+        void on_started(luil::app_host& host) override
+        {
+            const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+            while (std::chrono::steady_clock::now() < deadline)
+            {
+                MSG message {};
+                while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+                {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+                observed = host.acquire_interaction();
+                if (observed.focused_surface == u8"search")
+                    break;
+                MsgWaitForMultipleObjects(0, nullptr, FALSE, 5, QS_ALLINPUT);
+            }
+            host.post_ui_command(luil::ui_command::application_exit);
+        }
+
+        luil::interaction_snapshot observed {};
+    };
+    focus_delegate delegate {};
+    luil::win32::window_config config {};
+    config.class_name = L"Luil.Test.PopupFocus";
+    config.renderer = luil::renderer_mode::cpu;
+    REQUIRE(luil::win32::run_application_window(config, { &driver, nullptr, &delegate }) == 0);
+    drain_quit_message();
+    REQUIRE(delegate.observed.focused_surface == frame->popups.front().id);
+    REQUIRE(delegate.observed.focused == field);
+    REQUIRE(placements.size() == 1);
+    REQUIRE(placements.front().x < frame->popups.front().x);
+    REQUIRE(placements.front().y < frame->popups.front().y);
+    REQUIRE(std::abs(placements.front().width - 150) <= 1);
+    REQUIRE(std::abs(placements.front().height - 30) <= 1);
 }
 
 TEST_CASE("App close requests bypass the latch without enabling another user close", "[win32][window][close]")

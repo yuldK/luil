@@ -444,6 +444,23 @@ TEST_CASE("Header cells and body cells share column boundaries at every scale", 
     }
 }
 
+TEST_CASE("Table rows keep their shared model across published frames", "[ui][table][shared-items]")
+{
+    auto config { make_config(true) };
+    const auto first { std::make_shared<const std::vector<luil::virtual_list_item>>(std::move(config.rows.items)) };
+    config.rows.shared_items = first;
+    const auto old { published(config) };
+    auto replacement { *first };
+    replacement.front().key = u8"replacement";
+    config.rows.shared_items = std::make_shared<const std::vector<luil::virtual_list_item>>(std::move(replacement));
+    const auto next { published(config) };
+    REQUIRE(&static_cast<const luil::table_element&>(*old->root()).body().model() == first.get());
+    REQUIRE(&static_cast<const luil::table_element&>(*next->root()).body().model() == config.rows.shared_items.get());
+    REQUIRE(old->find({ kind_cell, u8"row-a/name" }) != nullptr);
+    REQUIRE(next->find({ kind_cell, u8"replacement/name" }) != nullptr);
+    REQUIRE(next->find({ kind_cell, u8"row-a/name" }) == nullptr);
+}
+
 TEST_CASE("A table clamps its horizontal scroll and only realises the visible rows", "[ui][table]")
 {
     luil::table_config config { make_config() };

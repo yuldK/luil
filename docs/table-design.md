@@ -1,5 +1,7 @@
 # 표
 
+`table_config::rows.shared_items`에 불변 행 벡터를 넘기면 표가 그 모델을 공유한다. 행을 바꾸려면 새 벡터를 다음 frame에 싣는다. 기존 tree의 행과 셀은 원래 모델을 계속 본다.
+
 `table_element`는 열 머리글이 있고 행을 고를 수 있는 표다. Qt의 `QTreeView`와 `QHeaderView`, WPF의 `DataGrid`에 해당하는 컴포넌트의 1단계다.
 
 정의는 [table_element.h](../include/luil/ui/table_element.h)에 있다.
