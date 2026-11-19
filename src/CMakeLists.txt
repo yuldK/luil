@@ -373,6 +373,8 @@ luil_add_source_filter(luil_core_files "ui/overlays"
     ui/text_link_element.h
     ui/text_area_element.cpp
     "${public_headers}/ui/text_area_element.h"
+    ui/visible_text_ranges.cpp
+    ui/visible_text_ranges.h
     ui/text_span_color.h
     ui/syntax_highlighter.cpp
     "${public_headers}/ui/syntax_highlighter.h"

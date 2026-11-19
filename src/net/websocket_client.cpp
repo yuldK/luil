@@ -45,6 +45,15 @@ namespace luil::net {
             bool close { false };
             std::uint16_t code { 1000 };
         };
+        enum class close_state
+        {
+            none,
+            queued,
+            sending,
+            sent,
+            failed,
+        };
+
         websocket_request request {};
         websocket_client_config config {};
         std::unique_ptr<websocket_transport> transport {};
@@ -54,7 +63,9 @@ namespace luil::net {
         std::deque<outgoing> pending {};
         std::size_t pending_bytes { 0 };
         bool opened { false };
-        bool closing { false };
+        close_state close_progress { close_state::none };
+        bool writing_data { false };
+        bool peer_closed { false };
         bool finished { false };
         bool stopped { false };
         http_error send_error {};
@@ -73,6 +84,49 @@ namespace luil::net {
                 catch (...)
                 {
                 }
+        }
+
+        [[nodiscard]] bool send_close(const std::uint16_t code, const std::u8string_view reason)
+        {
+            http_error error {};
+            const bool sent { transport->close(code, reason, error) };
+            if (sent == false && error.empty())
+                error = { .kind = http_error_kind::system_error, .message = u8"WebSocket close could not be sent." };
+            {
+                const std::scoped_lock lock { mutex };
+                close_progress = sent ? close_state::sent : close_state::failed;
+                if (sent == false)
+                    send_error = std::move(error);
+            }
+            changed.notify_all();
+            return sent;
+        }
+
+        [[nodiscard]] bool respond_to_close(const std::uint16_t code, const std::u8string_view reason, http_error& error)
+        {
+            std::unique_lock lock { mutex };
+            // writer가 다음 항목을 꺼내기 전에 대기 데이터를 버린다. 이미 시작한 송신과 Close는 끝날 때까지 기다린다.
+            peer_closed = true;
+            pending.clear();
+            pending_bytes = 0;
+            changed.notify_all();
+            const auto idle = [&] {
+                return stopped || send_error.empty() == false || (writing_data == false && close_progress != close_state::sending);
+            };
+            if (changed.wait_for(lock, config.close_timeout, idle) == false)
+            {
+                error = { .kind = http_error_kind::timed_out, .message = u8"Timed out waiting to send WebSocket close." };
+                return false;
+            }
+            if (stopped || send_error.empty() == false)
+                return false;
+            if (close_progress == close_state::sent)
+                return true;
+
+            // peer_closed를 본 writer는 새 항목을 꺼내지 않는다. 예약만 된 로컬 Close 대신 여기서 응답한다.
+            close_progress = close_state::sending;
+            lock.unlock();
+            return send_close(code == 1005 ? 1000 : code, reason);
         }
 
         void read() noexcept
@@ -111,17 +165,14 @@ namespace luil::net {
                                 error = { .kind = http_error_kind::system_error, .message = u8"Invalid WebSocket close payload." };
                                 break;
                             }
-                            code = packet.code;
-                            reason.assign(reinterpret_cast<const char8_t*>(packet.bytes.data()), packet.bytes.size());
-                            http_error ignored {};
-                            bool reply { false };
+                            std::u8string peer_reason {};
+                            if (packet.bytes.empty() == false)
+                                peer_reason.assign(reinterpret_cast<const char8_t*>(packet.bytes.data()), packet.bytes.size());
+                            if (respond_to_close(packet.code, peer_reason, error))
                             {
-                                const std::scoped_lock lock { mutex };
-                                reply = closing == false;
-                                closing = true;
+                                code = packet.code;
+                                reason = std::move(peer_reason);
                             }
-                            if (reply)
-                                (void)transport->close(code == 1005 ? 1000 : code, reason, ignored);
                             break;
                         }
                         if (fragment == false)
@@ -155,12 +206,17 @@ namespace luil::net {
             {
                 const std::scoped_lock lock { mutex };
                 opened = false;
-                closing = true;
                 finished = true;
+                pending.clear();
+                pending_bytes = 0;
                 if (send_error.empty() == false)
                     error = send_error;
                 if (stopped)
+                {
+                    code = 1006;
+                    reason.clear();
                     error = { .kind = http_error_kind::stopped, .message = u8"WebSocket stopped." };
+                }
             }
             changed.notify_all();
             transport->shutdown();
@@ -176,29 +232,43 @@ namespace luil::net {
                     outgoing item {};
                     {
                         std::unique_lock lock { mutex };
-                        changed.wait(lock, [&] { return stopped || finished || (opened && pending.empty() == false); });
-                        if (stopped || finished)
+                        changed.wait(lock, [&] { return stopped || finished || peer_closed || (opened && pending.empty() == false); });
+                        if (stopped || finished || peer_closed)
                             return;
                         item = std::move(pending.front());
                         pending.pop_front();
                         pending_bytes -= item.bytes.size();
+                        if (item.close)
+                            close_progress = close_state::sending;
+                        else
+                            writing_data = true;
                     }
-                    http_error error {};
                     if (item.close)
                     {
-                        (void)transport->close(item.code, { reinterpret_cast<const char8_t*>(item.bytes.data()), item.bytes.size() }, error);
-                        std::unique_lock lock { mutex };
-                        (void)changed.wait_for(lock, config.close_timeout, [&] { return stopped || finished; });
-                        lock.unlock();
+                        if (send_close(item.code, { reinterpret_cast<const char8_t*>(item.bytes.data()), item.bytes.size() }))
+                        {
+                            std::unique_lock lock { mutex };
+                            if (changed.wait_for(lock, config.close_timeout, [&] { return stopped || finished || peer_closed; }))
+                                return;
+                            send_error = { .kind = http_error_kind::timed_out, .message = u8"Timed out waiting for WebSocket close." };
+                        }
                         transport->shutdown();
                         return;
                     }
-                    if (transport->send(item.bytes, item.text, error) == false)
+
+                    http_error error {};
+                    const bool sent { transport->send(item.bytes, item.text, error) };
+                    if (sent == false && error.empty())
+                        error = { .kind = http_error_kind::system_error, .message = u8"WebSocket data could not be sent." };
                     {
-                        {
-                            const std::scoped_lock lock { mutex };
+                        const std::scoped_lock lock { mutex };
+                        writing_data = false;
+                        if (sent == false)
                             send_error = std::move(error);
-                        }
+                    }
+                    changed.notify_all();
+                    if (sent == false)
+                    {
                         transport->shutdown();
                         return;
                     }
@@ -206,6 +276,11 @@ namespace luil::net {
             }
             catch (...)
             {
+                {
+                    const std::scoped_lock lock { mutex };
+                    send_error = { .kind = http_error_kind::system_error, .message = u8"WebSocket writer failed." };
+                }
+                changed.notify_all();
                 transport->shutdown();
             }
         }
@@ -213,12 +288,14 @@ namespace luil::net {
         bool enqueue(const std::span<const std::uint8_t> bytes, const bool text, const bool close = false, const std::uint16_t code = 1000)
         {
             const std::scoped_lock lock { mutex };
-            if (opened == false || closing || stopped || bytes.size() > config.max_message_bytes
-                || pending.size() >= config.max_pending_messages || bytes.size() > config.max_pending_bytes - pending_bytes)
+            if (opened == false || close_progress != close_state::none || peer_closed || stopped || send_error.empty() == false
+                || bytes.size() > config.max_message_bytes || pending.size() >= config.max_pending_messages
+                || bytes.size() > config.max_pending_bytes - pending_bytes)
                 return false;
             pending.push_back({ { bytes.begin(), bytes.end() }, text, close, code });
             pending_bytes += bytes.size();
-            closing = close;
+            if (close)
+                close_progress = close_state::queued;
             changed.notify_all();
             return true;
         }

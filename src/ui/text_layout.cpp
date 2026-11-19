@@ -280,9 +280,7 @@ namespace luil {
             }
             if (newline == std::u8string_view::npos)
                 break;
-            paragraph = newline + 1;
-            if (text[newline] == u8'\r' && paragraph < text.size() && text[paragraph] == u8'\n')
-                ++paragraph;
+            paragraph = after_line_break(text, newline);
         }
         return text_layout_access::make(std::move(data));
     }

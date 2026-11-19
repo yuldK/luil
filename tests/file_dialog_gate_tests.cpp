@@ -28,10 +28,13 @@ TEST_CASE("File dialog requests without an ID fail instead of opening once", "[f
     REQUIRE(rejected->status == luil::file_dialog_status::failed);
     REQUIRE(rejected->error.empty() == false);
     REQUIRE_FALSE(gate.rejection(unnamed).has_value());
+    REQUIRE_FALSE(gate.try_begin(9));
+    gate.finish();
+    REQUIRE_FALSE(gate.rejection(unnamed).has_value());
     // 요청이 빠졌다가 다시 오면 다시 알린다.
     gate.idle();
     REQUIRE(gate.rejection(unnamed).has_value());
-    // 0은 gate를 잠그지 않는다.
+    gate.finish();
     REQUIRE(gate.try_begin(9));
     REQUIRE_FALSE(gate.rejection(unnamed).has_value());
     gate.finish();

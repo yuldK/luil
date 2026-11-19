@@ -152,6 +152,10 @@ target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/android/device_request.cpp"
     android_text_input_tests.cpp
     device_request_tests.cpp)
+# WebSocket 닫기 경쟁을 전송 대역으로 고정 순서에서 재현한다.
+target_sources(luil_core_tests PRIVATE
+    "${LUIL_SOURCE_DIRECTORY}/net/websocket_client.cpp"
+    websocket_client_tests.cpp)
 # SMB client의 순수 규칙, 연결 장부, DNS 메시지(서버 찾기), "지원 안 함" client다. libsmb2 없이 어느 플랫폼에서나 돈다.
 target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/net/dns_message.cpp"

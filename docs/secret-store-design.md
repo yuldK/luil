@@ -18,9 +18,10 @@ static_cast<void>(luil::erase_secret(u8"my-app", u8"server/admin"));
 - 값은 바이트다. 글을 넣으려면 UTF-8 바이트로 넣는다. 크기는 2560바이트까지다(Windows 자격 증명의 상한). 넘으면 두 플랫폼 모두 `failed`다. 한 플랫폼에서만 되는 크기를 두지 않으려는 것이다.
 - 결과는 상태와 진단 글이다.
   - `ok`;
-  - `not_found`(읽거나 지울 항목이 없다);
+  - `not_found`(읽거나 지우거나 옮길 항목이 없다);
   - `unsupported`(이 플랫폼·구성에 저장소가 없다);
-  - `failed`(OS가 거절했다. 글이 OS의 이유를 든다).
+  - `failed`(입력이 잘못됐거나 OS가 거절했다. 진단 글이 이유를 담는다);
+  - `already_exists`(Windows 이전에서 새 항목이 이미 있다).
 - 지울 항목이 없으면 `not_found`다. 앱이 "이미 없다"를 실패와 가를 수 있다.
 - 동기 호출이다. Android에서는 Keystore 호출이 수십 ms까지 걸리므로 UI thread에서 부르지 않는다.
 - 값은 이 기기·이 사용자에게만 열린다. 백업·동기화로 다른 기기에 옮겨 가는 것을 바라는 값은 이 저장소에 두지 않는다.
@@ -29,16 +30,25 @@ static_cast<void>(luil::erase_secret(u8"my-app", u8"server/admin"));
 
 자격 증명 관리자의 일반 자격 증명이다(`CredWriteW`·`CredReadW`·`CredDeleteW`, `CRED_TYPE_GENERIC`).
 
-- 대상 이름은 `luil:<service>/<name>`이다. 사용자가 "자격 증명 관리자"에서 그 이름으로 보고 지울 수 있다. 앱이 직접 쓰던 DPAPI 파일은 어디 있는지 사용자에게 보이지 않았다.
+- 새 대상 이름은 `luil-v2:<service의 16진>-<name의 16진>`이다. 각 이름의 UTF-8 바이트를 소문자 16진수로 옮긴다. 슬래시, 대소문자, 이름 안의 NUL을 포함한 바이트 차이가 자격 증명 관리자에서도 구분된다.
+- 두 이름 모두 비어 있지 않은 유효한 UTF-8이어야 한다. 인코딩한 대상이 Windows 자격 증명 이름 상한을 넘으면 `failed`다. 사용자는 자격 증명 관리자에서 새 대상 이름을 보고 지울 수 있다.
 - 보존은 `CRED_PERSIST_LOCAL_MACHINE`이다. 이 기기의 이 사용자에게만 남고, 도메인 로밍 프로필로 옮겨 가지 않는다.
 - OS가 사용자 로그온 비밀로 값을 암호화한다. 같은 사용자의 다른 프로세스는 읽을 수 있다. 그것이 이 저장소의 경계다.
+
+### Windows 기존 항목 이전
+
+옛 `luil:<service>/<name>`에는 슬래시와 대소문자 때문에 여러 이름 쌍이 들어갈 수 있었고, NUL 뒤가 잘렸다. 일반 쓰기·읽기·삭제는 새 대상에만 적용된다.
+
+옛 항목의 소유권을 확인한 앱은 `migrate_legacy_win32_secret(service, name)`으로 원래 이름 쌍의 값을 새 키로 복사할 수 있다. 옛 버전과 다른 프로세스의 쓰기·삭제를 멈춘 상태에서 호출한다. 복사 성공은 `ok`, 원본이 없으면 `not_found`, 새 대상에 값이 이미 있으면 `already_exists`다. `ok`와 `already_exists` 뒤에는 일반 `load_secret`으로 새 값을 읽을 수 있다. 소유권을 확인할 수 없는 앱은 로그인으로 새 값을 받는다. Windows 이외에서는 `unsupported`다.
+
+앱은 업그레이드 단계에서 복사를 한 번 수행하고 완료 여부를 기록한다. 복사와 재시도 중에 원본을 보존하므로 로그아웃 뒤 다시 복사하면 옛 값이 되살아난다.
 
 ## Android
 
 Android Keystore의 AES-256-GCM 키로 값을 암호화해 앱 내부 저장소의 파일에 둔다.
 
 - 키는 `service`마다 하나다(별칭 `luil-secret:<service>`). Keystore 밖으로 나오지 않는다. 처음 쓸 때 짓는다(`KeyGenParameterSpec`, GCM·패딩 없음).
-- 파일은 `<files>/luil-secrets/<service와 name의 16진>`이다. 판 번호 1바이트, IV 12바이트, 암호문과 태그 순이다. 임시 파일에 쓰고 이름을 바꿔, 쓰다 끊긴 반쪽 파일이 남지 않는다.
+- 파일은 `<files>/luil-secrets/<service와 name의 16진>`이다. 판 번호 1바이트, IV 12바이트, 암호문과 태그 순이다. 임시 파일 쓰기와 닫기가 끝난 뒤 이름을 바꾼다. 쓰기, 닫기 또는 이름 바꾸기가 실패하면 기존 파일을 보존하고 임시 파일 정리를 시도한다.
 - **Java 0줄이다.** Keystore와 Cipher는 JNI로 프레임워크 클래스를 부른다. HTTP client가 `HttpURLConnection`을 부르는 길과 같다. 앱 클래스를 찾지 않으므로 어느 thread에서든 class loader 문제가 없다.
 - 앱을 지우면 키와 파일이 함께 사라진다. 기기 백업에 파일이 실려 가도 키가 없어 다른 기기에서는 풀리지 않는다. 그때는 `failed`가 아니라 항목을 지우고 `not_found`로 답한다. 앱은 다시 로그인하라고 하면 된다.
 - 판 번호가 모르는 값이거나 파일이 짧으면 `failed`다.
@@ -53,6 +63,6 @@ Android Keystore의 AES-256-GCM 키로 값을 암호화해 앱 내부 저장소�
 
 ## 검증
 
-- `tests/secret_store_tests.cpp`(Windows): 시험용 service 이름으로 쓰기·읽기·덮어쓰기·지우기를 한다. 없는 항목, 상한을 넘는 값, 빈 이름도 본다. test가 쓴 자격 증명은 그 자리에서 지운다.
-- Android는 JavaVM이 있어야 해서 단위 test로 돌지 않는다. 모바일 데모의 "기기" 페이지("한 바퀴 돌려 보기")에서 실기기로 확인한다. 쓰기·읽기·덮어쓰기·지우기·없는 항목을 차례로 돌려 결과를 화면에 적는다.
+- `tests/secret_store_tests.cpp`(Windows): 시험 계정용 키로 읽기·쓰기·덮어쓰기·삭제, 이름의 충돌 방지와 옛 키의 명시적 복사를 검증한다. 테스트가 쓴 자격 증명은 그 자리에서 지운다.
+- `tests/android_jni_order_tests.cpp`(Android): 가짜 JNI와 `/dev/full`을 사용해 닫기 중 쓰기가 실패했을 때 기존 파일이 보존되고 임시 파일이 정리되는지 검증한다. 모바일 데모의 "기기" 페이지("한 바퀴 돌려 보기")에서 실제 Keystore로 쓰기·읽기·덮어쓰기·지우기·없는 항목을 확인한다.
 - 데모 "입력과 다이얼로그" 페이지의 "비밀 저장소 확인" 단추가 같은 차례를 Windows에서 돌려 결과를 옆 줄에 적는다.

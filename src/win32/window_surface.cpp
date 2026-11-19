@@ -221,7 +221,12 @@ namespace luil::win32 {
 
     std::optional<rect_f> window_surface::accessibility_viewport() const noexcept
     {
-        return content_viewport();
+        if (const auto viewport { content_viewport() }; viewport.has_value())
+            return viewport;
+        RECT client {};
+        if (window_ == nullptr || GetClientRect(window_, &client) == FALSE)
+            return std::nullopt;
+        return rect_f { 0.0f, 0.0f, static_cast<float>(client.right), static_cast<float>(client.bottom) };
     }
 
     ui_element_id window_surface::accessibility_focus() const

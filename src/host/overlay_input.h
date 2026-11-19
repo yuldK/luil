@@ -2,8 +2,10 @@
 
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_events.h"
+#include "luil/ui/ui_interaction.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,6 +17,19 @@ namespace luil {
         std::u8string id {};
         // 주 tree 좌표의 자리다 (물리 픽셀).
         rect_f bounds {};
+        float scroll_y { 0.0f };
+        float max_scroll_y { 0.0f };
+        // 같은 frame의 tree다. 자리를 다시 넘길 때까지 호스트가 소유한다.
+        const ui_tree* tree { nullptr };
+        float scale { 1.0f };
+    };
+
+    [[nodiscard]] float overlay_scroll_to_show(float offset, float maximum, float height, const rect_f& target) noexcept;
+
+    struct overlay_scroll
+    {
+        std::u8string surface {};
+        float offset { 0.0f };
     };
 
     // 이벤트 하나를 layer로 보낸 결과다.
@@ -25,6 +40,8 @@ namespace luil {
         bool pressed_outside { false };
         // 어느 popup도 아닌 곳에서 휠을 굴렸다 (`popup_dismiss_reason::wheel_scrolled`).
         bool wheel_outside { false };
+        // 다음 이벤트를 보내기 전에 호스트가 이 위치로 옮긴다.
+        std::optional<overlay_scroll> scroll {};
     };
 
     // 창 하나에 popup을 겹쳐 그리는 플랫폼(모바일)이 포인터 입력을 layer로 보낸다.
@@ -42,10 +59,20 @@ namespace luil {
     public:
         // 지금 frame의 popup 자리다. 뒤의 것이 위다.
         void set_areas(std::vector<overlay_area> areas);
+        void set_touch_config(const touch_gesture_config& config) noexcept;
         [[nodiscard]] routed_input route(raw_input_event event);
         [[nodiscard]] bool has_areas() const noexcept;
 
     private:
+        struct pending_pan
+        {
+            // 판정 거리는 주 표면 좌표, 내부 요소의 임자는 누른 tree 좌표로 본다.
+            point_f start {};
+            point_f tree_start {};
+            float distance { 0.0f };
+            std::chrono::steady_clock::time_point deadline {};
+        };
+
         struct capture
         {
             pointer_device device { pointer_device::mouse };
@@ -55,15 +82,21 @@ namespace luil {
             float origin_y { 0.0f };
             // 같은 포인터로 눌린 버튼 수다 (마우스는 둘을 겹쳐 누를 수 있다).
             int buttons { 0 };
+            std::optional<pending_pan> pan {};
+            bool surface_scrolling { false };
+            bool suppressed { false };
         };
 
         [[nodiscard]] const overlay_area* hit(float x, float y) const noexcept;
+        [[nodiscard]] const overlay_area* area_for(const std::u8string& surface) const noexcept;
         [[nodiscard]] capture* find(pointer_device device, std::uint32_t pointer_id) noexcept;
+        [[nodiscard]] bool take_touch_pan(capture& held, point_f to, std::chrono::steady_clock::time_point time, routed_input& result);
         // 호버를 이 표면으로 옮긴다. 다른 표면에서 오면 앞 표면에 이탈을 낸다.
         void hover(pointer_device device, const std::u8string& surface, std::vector<raw_input_event>& events);
 
         std::vector<overlay_area> areas_ {};
         std::vector<capture> captures_ {};
+        touch_gesture_config touch_ {};
         bool hovering_ { false };
         pointer_device hover_device_ { pointer_device::mouse };
         std::u8string hover_surface_ {};

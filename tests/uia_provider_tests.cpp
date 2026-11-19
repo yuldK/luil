@@ -2302,9 +2302,9 @@ namespace {
         return width;
     }
 
-    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_memo_tree(luil::text_input_view value)
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> make_memo_tree(luil::text_input_view value, luil::text_area_config config = { .placeholder = u8"메모" })
     {
-        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_item, u8"memo" }, std::move(value), luil::text_area_config { .placeholder = u8"메모" }) };
+        auto memo { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_item, u8"memo" }, std::move(value), std::move(config)) };
         const luil::text_measurer measurer { fixed_glyph_width };
         memo->arrange({ .slot = { 0.0f, 0.0f, 200.0f, 100.0f }, .scale = 1.0f, .measurer = &measurer });
         return std::make_shared<const luil::ui_tree>(std::move(memo));
@@ -2318,6 +2318,76 @@ namespace {
         SysFreeString(text);
         return value;
     }
+
+    [[nodiscard]] std::vector<std::wstring> visible_text(ITextProvider& provider)
+    {
+        SAFEARRAY* array {};
+        REQUIRE(provider.GetVisibleRanges(&array) == S_OK);
+        REQUIRE(array != nullptr);
+        LONG last {};
+        REQUIRE(SafeArrayGetUBound(array, 1, &last) == S_OK);
+        std::vector<std::wstring> result {};
+        for (LONG index {}; index <= last; ++index)
+        {
+            ITextRangeProvider* range {};
+            REQUIRE(SafeArrayGetElement(array, &index, &range) == S_OK);
+            result.push_back(range_text(*range));
+            range->Release();
+        }
+        REQUIRE(SafeArrayDestroy(array) == S_OK);
+        return result;
+    }
+}
+
+TEST_CASE("Visible text ranges follow the single line caret scroll and the composing document", "[win32][uia]")
+{
+    fake_uia_host host {};
+    const luil::ui_element_id id { kind_item, u8"field" };
+    luil::text_input_view value {};
+    value.text = u8"old";
+    value.composing = true;
+    value.composition_text = u8"가나다라마바";
+    value.composition_caret = value.composition_text.size();
+    auto field { std::make_unique<luil::text_input_element>(id, std::move(value), luil::text_input_config {}) };
+    const luil::text_measurer measure { fixed_glyph_width };
+    field->arrange({ .slot = { 0.0f, 0.0f, 54.0f, 30.0f }, .measurer = &measure });
+    host.tree = std::make_shared<const luil::ui_tree>(std::move(field));
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const provider { root->make_element_provider(id) };
+    REQUIRE(visible_text(*provider) == std::vector<std::wstring> { L"다라마바" });
+    host.viewport = luil::rect_f { 8.0f, 0.0f, 10.0f, 20.0f };
+    REQUIRE(visible_text(*provider) == std::vector<std::wstring> { L"다라" });
+    provider->Release();
+    root->Release();
+}
+
+TEST_CASE("Visible text ranges clip each row and preserve offsets across popup scrolling and wrapping", "[win32][uia]")
+{
+    fake_uia_host host {};
+    host.tree = make_memo_tree({ .text = u8"abcdef\r\nUVWXYZ", .caret = 0 });
+    auto* const root { new luil::win32::uia_root_provider { host } };
+    auto* const provider { root->make_element_provider({ kind_item, u8"memo" }) };
+    host.viewport = luil::rect_f { 17.5f, 0.0f, 19.0f, 100.0f };
+    REQUIRE(visible_text(*provider) == std::vector<std::wstring> { L"bc", L"VW" });
+    host.content_offset_y = 23;
+    host.viewport = luil::rect_f { 0.0f, 0.0f, 200.0f, 17.0f };
+    REQUIRE(visible_text(*provider) == std::vector<std::wstring> { L"UVWXYZ" });
+    host.tree = make_memo_tree({ .text = u8"aaaa bbbb cccc dddd eeee\nff", .caret = 0 });
+    REQUIRE(visible_text(*provider) == std::vector<std::wstring> { L"dddd eeee\n" });
+    host.content_offset_y = 300;
+    REQUIRE(visible_text(*provider) == std::vector<std::wstring> { L"" });
+    luil::text_area_config config {};
+    config.wrap = false;
+    config.scroll = [](float) { return luil::input_action {}; };
+    config.scroll_offset = 18.0f;
+    config.scroll_horizontal = config.scroll;
+    config.scroll_x = 20.0f;
+    host.content_offset_y = 0;
+    host.viewport = luil::rect_f { 8.0f, 6.0f, 15.0f, 12.0f };
+    host.tree = make_memo_tree({ .text = u8"012345678901234567890123456789\nabe\u0301fg\n2\n3\n4\n5\n6\n7" }, std::move(config));
+    REQUIRE(visible_text(*provider) == std::vector<std::wstring> { L"e\u0301" });
+    provider->Release();
+    root->Release();
 }
 
 TEST_CASE("A wired text box serves the Text pattern from its published document", "[win32][uia]")

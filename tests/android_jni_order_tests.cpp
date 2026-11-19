@@ -12,6 +12,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <jni.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <condition_variable>
@@ -19,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -601,7 +603,7 @@ namespace {
     {
     public:
         secret_folder()
-            : path_ { std::filesystem::current_path() / "luil_jni_secret_store" }
+            : path_ { std::filesystem::current_path() / ("luil_jni_secret_store-" + std::to_string(getpid())) }
         {
             std::filesystem::remove_all(path_);
             std::filesystem::create_directories(path_);
@@ -620,7 +622,12 @@ namespace {
 
         [[nodiscard]] std::ptrdiff_t stored_files() const
         {
-            return std::distance(std::filesystem::directory_iterator { path_ / "luil-secrets" }, std::filesystem::directory_iterator {});
+            return std::distance(std::filesystem::directory_iterator { directory() }, std::filesystem::directory_iterator {});
+        }
+
+        [[nodiscard]] std::filesystem::path directory() const
+        {
+            return path_ / "luil-secrets";
         }
 
     private:
@@ -1019,6 +1026,46 @@ TEST_CASE("Storing a secret with an existing key leaves no pending exception whe
     CHECK(success.state.popped == 1);
     CHECK(folder.stored_files() == 1);
     check_secret_failure_points(run, success);
+}
+
+TEST_CASE("A secret survives a buffered write that fails on close", "[android][secret]")
+{
+    const std::filesystem::path full_device { "/dev/full" };
+    if (std::filesystem::is_character_file(full_device) == false)
+        SKIP("This device does not have /dev/full.");
+    const fake_vm_scope vm {};
+    const secret_folder folder {};
+    const auto run = [](JNIEnv&)
+    {
+        return static_cast<int>(luil::store_secret(u8"service", u8"name", sample_secret).status);
+    };
+    REQUIRE(run_once(run).answer == static_cast<int>(luil::secret_store_status::ok));
+    REQUIRE(folder.stored_files() == 1);
+    const std::filesystem::path target { std::filesystem::directory_iterator { folder.directory() }->path() };
+    const auto read_bytes = [](const std::filesystem::path& path)
+    {
+        std::ifstream file { path, std::ios::binary };
+        REQUIRE(file.is_open());
+        return std::vector<char> { std::istreambuf_iterator<char> { file }, std::istreambuf_iterator<char> {} };
+    };
+    const auto saved { read_bytes(target) };
+    std::filesystem::path temporary { target };
+    temporary += ".tmp";
+    // 아주 짧은 쓰기는 버퍼에서 성공한 뒤 닫으면서 ENOSPC를 받는다.
+    std::filesystem::create_symlink(full_device, temporary);
+    {
+        std::ofstream probe { temporary, std::ios::binary | std::ios::trunc };
+        probe.put('x');
+        if (probe.good() == false)
+            SKIP("This device cannot buffer writes to /dev/full.");
+        probe.close();
+        REQUIRE_FALSE(probe.good());
+    }
+
+    CHECK(run_once(run).answer == static_cast<int>(luil::secret_store_status::failed));
+    CHECK(std::filesystem::symlink_status(temporary).type() == std::filesystem::file_type::not_found);
+    REQUIRE(std::filesystem::is_regular_file(std::filesystem::symlink_status(target)));
+    CHECK(read_bytes(target) == saved);
 }
 
 TEST_CASE("Storing a secret that creates its key leaves no pending exception when any JNI call fails", "[android][jni_order]")

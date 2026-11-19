@@ -3,8 +3,12 @@
 #include "luil/text/case_fold.h"
 #include "luil/text/text_edit.h"
 #include "luil/text/utf8_text.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/text_area_element.h"
 #include "luil/ui/text_document.h"
 #include "luil/ui/ui_interaction.h"
+#include "ui/line_fold.h"
+#include "ui/visible_text_ranges.h"
 #include "win32/utf8.h"
 
 #include <uiautomation.h>
@@ -1880,27 +1884,49 @@ namespace luil::win32 {
             if (result == nullptr)
                 return E_POINTER;
             *result = nullptr;
-            const ui_element* const element { resolve() };
+            const ui_tree* tree {};
+            const ui_element* const element { resolve(&tree) };
             if (element == nullptr)
                 return UIA_E_ELEMENTNOTAVAILABLE;
             const std::optional<access_text_document> document { text_document_of(*element) };
             if (document.has_value() == false)
                 return UIA_E_INVALIDOPERATION;
-            // 한 줄 칸이라 문서 전체가 보이는 구간이다 — 가로 스크롤로 잘린
-            // 부분까지 세밀히 자르지 않는다 (caret이 서면 그 자리가 드러난다).
-            SAFEARRAY* const array { SafeArrayCreateVector(VT_UNKNOWN, 0, 1) };
+            std::vector<visible_text_ranges::span> spans {};
+            const auto* const host { root_->host() };
+            if (host != nullptr && tree->visibly_contains(id_))
+            {
+                auto clip { tree->visible_bounds(*element) };
+                if (clip.has_value())
+                    clip = host->accessibility_client_bounds(*clip);
+                if (clip.has_value() && clip->width > 0.0f && clip->height > 0.0f)
+                {
+                    clip->y += static_cast<float>(host->accessibility_content_offset_y());
+                    if (const auto* input { dynamic_cast<const text_input_element*>(element) })
+                        spans = visible_text_ranges::of(*input, *clip);
+                    else if (const auto* area { dynamic_cast<const text_area_element*>(element) })
+                        spans = visible_text_ranges::of(*area, *clip);
+                    else
+                        spans.push_back({ 0, document->text.size() });
+                }
+            }
+            if (spans.empty())
+                spans.push_back({});
+            std::unique_ptr<SAFEARRAY, decltype(&SafeArrayDestroy)> array {
+                SafeArrayCreateVector(VT_UNKNOWN, 0, static_cast<ULONG>(spans.size())), &SafeArrayDestroy
+            };
             if (array == nullptr)
                 return E_OUTOFMEMORY;
             LONG index { 0 };
-            uia_text_range_provider* const range { new uia_text_range_provider { *root_, id_, 0, document->text.size() } };
-            const HRESULT put { SafeArrayPutElement(array, &index, static_cast<ITextRangeProvider*>(range)) };
-            range->Release();
-            if (FAILED(put))
+            for (const auto& span : spans)
             {
-                static_cast<void>(SafeArrayDestroy(array));
-                return E_FAIL;
+                auto* const range { new uia_text_range_provider { *root_, id_, span.begin, span.end } };
+                const HRESULT put { SafeArrayPutElement(array.get(), &index, static_cast<ITextRangeProvider*>(range)) };
+                range->Release();
+                if (FAILED(put))
+                    return put;
+                ++index;
             }
-            *result = array;
+            *result = array.release();
             return S_OK;
         });
     }
@@ -2403,9 +2429,9 @@ namespace luil::win32 {
             }
             else if (unit == text_unit_kind::paragraph)
             {
-                for (std::size_t offset = 0; offset < text.size(); ++offset)
-                    if (text[offset] == u8'\n')
-                        starts.push_back(offset + 1);
+                for (auto newline { text.find_first_of(u8"\r\n") }; newline != std::u8string_view::npos;
+                    newline = text.find_first_of(u8"\r\n", starts.back()))
+                    starts.push_back(after_line_break(text, newline));
             }
             return starts;
         }

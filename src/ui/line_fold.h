@@ -7,6 +7,12 @@
 #include <string_view>
 
 namespace luil {
+    // CR, LF 또는 CRLF로 끝나는 문단의 다음 시작 바이트다. at은 줄 바꿈의 첫 바이트다.
+    [[nodiscard]] inline std::size_t after_line_break(const std::u8string_view text, const std::size_t at) noexcept
+    {
+        return at + (text[at] == u8'\r' && at + 1 < text.size() && text[at + 1] == u8'\n' ? 2u : 1u);
+    }
+
     // 두 접기(`build_text_layout`·여러 줄 칸의 `wrap_paragraph`)가 함께 쓰는 자리 고르기다 (docs/line-break-design.md).
     //  - 폭을 모른다. 폭에 드는 가장 먼 글자소 경계(`fit`)는 부르는 쪽이 자기 측정으로 찾아 넘긴다. 그래서 문단마다
     //    다른 폭을 넘겨도 된다.

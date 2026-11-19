@@ -719,6 +719,8 @@ namespace luil {
         //  - 포화하면 조용히 버려진다 (reject_newest). 유실 여부는
         //    `app_inbox_statistics`가 답한다.
         void post_app_message(app_message message) noexcept;
+        // UI thread에서 만든 대화상자 결과를 보낸다. 포화 중에는 logic이 빈자리에 다시 게시한다.
+        void post_file_dialog_message(app_message message) noexcept;
         // `post_app_message`와 같고, 받았으면 이 메시지의 표(0보다 큰 수)를, 버려졌으면 0을 돌려준다.
         // 표는 게시 순서대로 커진다. `acquired_tree_ticket`이 이 값 이상이면 그 tree는 이 메시지를 처리한 뒤에
         // 지어졌다 — 플랫폼이 "새 크기로 배치한 tree가 왔는가"를 앱의 협조 없이 아는 길이다

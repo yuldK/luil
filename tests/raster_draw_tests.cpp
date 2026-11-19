@@ -1010,7 +1010,7 @@ TEST_CASE("An overlay popup paints over the main tree inside its bounds", "[ui][
     auto popup_root { std::make_unique<fill_element>(luil::ui_element_id { luil::ui_element_kind::root }, popup_fill) };
     popup_root->arrange({ { 0.0f, 0.0f, 10.0f, 10.0f }, 1.0f });
     const luil::ui_tree popup_tree { std::move(popup_root) };
-    const luil::overlay_layer layer { &popup_tree, { 40, 30, 40, 40 }, true, {} };
+    luil::overlay_layer layer { &popup_tree, { 40, 30, 40, 40 }, true, {} };
     luil::frame_state state {};
     state.width = 100;
     state.height = 100;
@@ -1026,6 +1026,13 @@ TEST_CASE("An overlay popup paints over the main tree inside its bounds", "[ui][
     REQUIRE(pixel_at(60, 50) == palette.window_background);
     REQUIRE(pixel_at(40, 50) == palette.tooltip_border);
     REQUIRE(pixel_at(79, 50) == palette.tooltip_border);
+
+    layer.scroll_y = 6.0f;
+    luil::draw_frame(canvas, nullptr, nullptr, state);
+    REQUIRE(pixel_at(45, 29) != popup_fill);
+    REQUIRE(pixel_at(45, 32) == popup_fill);
+    REQUIRE(pixel_at(45, 35) == palette.window_background);
+    REQUIRE(pixel_at(40, 50) == palette.tooltip_border);
 }
 
 TEST_CASE("A modal scrim and a sheet background paint out to the surface", "[ui][raster][sheet]")

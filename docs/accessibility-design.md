@@ -106,6 +106,10 @@ Model container는 ItemContainer pattern을 제공한다. `FindItemByProperty`�
 
 Text-input document가 있는 editable text element는 Value와 Text pattern을 제공한다. Text range는 내부에서 UTF-8 byte offset을 쓰고 COM 경계에서 UTF-16으로 변환한다. Document와 selection range, text 읽기, character·line·paragraph·document 단위의 넓히기와 이동, point-to-range 조회, screen rectangle을 지원한다. Line은 요소가 내주는 화면 줄이다(`ui_element::text_line_starts`) — 여러 줄 칸은 넘겨 접은 줄도 한 줄로 내주고, 한 줄 칸은 답하지 않아 문서 하나가 한 줄이다. Paragraph는 줄 바꿈 뒤에서 시작한다. 지원하지 않는 단위는 다음 큰 단위로 물러선다: format·word는 line으로, page는 document로 간다. `Move`는 품은 단위의 처음에서 옮기고 그 단위로 넓힌다. 뒤로 옮길 때 단위 가운데에 있었으면 그 처음까지가 한 걸음이다.
 
+기본 한 줄·여러 줄 편집기의 `GetVisibleRanges`는 현재 화면에 걸친 글자소를 문서 순서로 돌려준다.
+가로로 잘린 여러 행은 구간이 나뉠 수 있다. 줄 접기, 편집기와 팝업의 스크롤, 조상 요소의 잘라내기,
+IME 조합 중에 보이는 글을 반영하며, 표시할 글이 없으면 빈 구간 하나를 돌려준다.
+
 Surface는 직전 published tree의 접근성 snapshot을 보관한다. `make_access_snapshot`은 accessible element를 preorder로 기록하고 `diff_access_snapshots`은 다음 변경을 만든다.
 
 - semantic value가 바뀌면 property change

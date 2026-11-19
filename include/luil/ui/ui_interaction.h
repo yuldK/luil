@@ -178,6 +178,8 @@ namespace luil {
     // (`hit_opaque`)이 먼저 걸리면 없다.
     [[nodiscard]] std::optional<pan_target> route_pan(const ui_tree& tree, float x, float y, scroll_axis axis);
     [[nodiscard]] std::optional<pan_target> route_pan(const ui_tree& tree, float x, float y, scroll_axis axis, std::span<const pan_route> routes);
+    // 시트처럼 안쪽 창에서 끌기를 넘겨받을 수 있는 컨테이너다.
+    [[nodiscard]] const ui_element* pan_handoff_owner_at(const ui_tree& tree, float x, float y, scroll_axis axis);
 
     // 터치 몸짓의 설정이다. 마우스·펜·키보드에는 몸짓을 켜는 설정이 없다.
     //  - 끄는 것은 bool이다. 거리·시간 0을 "끔"으로 읽는 중의적 계약을 두지 않는다.

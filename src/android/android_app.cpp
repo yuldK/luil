@@ -300,7 +300,27 @@ namespace luil::android {
                 // 이 frame에서 이미 닫자고 했다 (`take_popup_dismiss_action`).
                 bool requested { false };
                 std::u8string anchor {};
+                int anchor_x { 0 };
+                int anchor_y { 0 };
+                float scroll_y { 0.0f };
+                float max_scroll_y { 0.0f };
+                struct followed_focus
+                {
+                    ui_element_id target {};
+                    float y { 0.0f };
+                    float height { 0.0f };
+                    int viewport_height { 0 };
+
+                    [[nodiscard]] bool operator==(const followed_focus&) const noexcept = default;
+                };
+                std::optional<followed_focus> followed {};
+                std::function<app_message(const rect_f&)> placed {};
                 std::optional<rect_f> reported_bounds {};
+
+                [[nodiscard]] float content_origin_y() const noexcept
+                {
+                    return static_cast<float>(bounds.y) - scroll_y;
+                }
             };
 
         public:
@@ -613,6 +633,7 @@ namespace luil::android {
                 host_config.wake.clipboard = [signal] { static_cast<void>(signal()); };
                 host_config.interaction.double_click_time = system_input_.double_tap_time;
                 host_config.interaction.touch = config_.use_system_touch_settings ? apply_system_input_settings(config_.touch, system_input_) : config_.touch;
+                router_.set_touch_config(host_config.interaction.touch);
                 host_config.interaction.text_edit_menu = true;
                 // 권한이다. 상태는 이 thread가 갱신하고(시작·초점을 되찾음·물은 뒤 1초), 앱은 아무 thread에서 읽는다.
                 target_sdk_ = jni_ != nullptr ? read_target_sdk(*jni_, app_->activity->javaGameActivity) : 0;
@@ -715,6 +736,7 @@ namespace luil::android {
                     renderer_.reset();
                     update_deadline_.reset();
                     reveal_pending_ = false;
+                    follow_ime_focus_ = false;
                     // 장치는 남긴다. 창이 다시 생기면 스왑체인만 새로 선다. 그릴 표면이 없는
                     // 동안 GPU 메모리는 돌려준다.
                     if (vulkan_ != nullptr)
@@ -744,6 +766,11 @@ namespace luil::android {
                     // 사용자가 내린 키보드다 (뒤로 가기, 키보드의 내리기 단추). 같은 칸을 다시
                     // 누르면 다시 띄운다.
                     ime_->set_keyboard_visible(app_->softwareKeyboardVisible);
+                    if (app_->softwareKeyboardVisible == false)
+                    {
+                        reveal_pending_ = false;
+                        follow_ime_focus_ = false;
+                    }
                     break;
                 case APP_CMD_EDITOR_ACTION:
                     // 키보드의 완료 단추는 Enter다 (기본 단추 실행, 한 줄 칸의 확정).
@@ -886,7 +913,7 @@ namespace luil::android {
                 // 크기 변경(화면 분할의 비율 조절)이 "바뀌지 않음"으로 보여 popup이 닫히지도 다시 자리 잡지도 않는다.
                 const int previous_window_width { window_width_ };
                 const int previous_window_height { window_height_ };
-                const int previous_bottom { insets_.bottom };
+                const edge_insets previous_insets { insets_ };
                 const int previous_width { content_width() };
                 const int previous_height { content_height() };
                 if (app_->window != nullptr)
@@ -909,12 +936,17 @@ namespace luil::android {
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
                     overlay_frame_.reset();
                 }
+                else if (insets_.left != previous_insets.left || insets_.top != previous_insets.top)
+                    place_overlays();
                 // 키보드가 올라와 아래가 줄었다. 줄어든 크기로 다시 지은 frame이 오면 초점 칸을
                 // 다시 드러내 달라고 보낸다 (`render`).
-                if (insets_.bottom > previous_bottom && ime_ != nullptr && ime_->target().has_value())
+                if (insets_.bottom > previous_insets.bottom && ime_ != nullptr && ime_->target().has_value())
                     reveal_pending_ = true;
-                else if (insets_.bottom < previous_bottom)
+                else if (insets_.bottom < previous_insets.bottom)
+                {
                     reveal_pending_ = false;
+                    follow_ime_focus_ = false;
+                }
                 // 표면과 안전 영역이 바뀔 때만 한 줄 남긴다. 기기마다 다른 막대·컷아웃 배치를
                 // logcat에서 바로 맞대 보는 자리다.
                 __android_log_print(ANDROID_LOG_INFO, log_tag, "surface %dx%d, safe insets %d,%d,%d,%d, scale %.2f", window_width_, window_height_, insets_.left, insets_.top, insets_.right,
@@ -979,7 +1011,11 @@ namespace luil::android {
                 if (const auto settings { read_system_input_settings(*jni_, context, scale_) }; settings.has_value())
                     system_input_ = *settings;
                 if (host_ != nullptr && config_.use_system_touch_settings)
-                    static_cast<void>(host_->set_touch_gesture_config(apply_system_input_settings(config_.touch, system_input_)));
+                {
+                    const touch_gesture_config touch { apply_system_input_settings(config_.touch, system_input_) };
+                    static_cast<void>(host_->set_touch_gesture_config(touch));
+                    router_.set_touch_config(touch);
+                }
             }
 
             // 시스템의 애니메이션 배율이 0인지 다시 읽는다. 달라졌으면 다시 그리고 앱에 알린다.
@@ -1265,6 +1301,8 @@ namespace luil::android {
                     const bool closed_popup { routed.pressed_outside && dismiss_popups(popup_dismiss_reason::pointer_press_outside) };
                     if (routed.wheel_outside)
                         static_cast<void>(dismiss_popups(popup_dismiss_reason::wheel_scrolled));
+                    if (routed.scroll.has_value())
+                        scroll_overlay(*routed.scroll);
                     for (raw_input_event& value : routed.events)
                     {
                         if (auto* const pressed { std::get_if<pointer_pressed_event>(&value) }; pressed != nullptr)
@@ -1441,20 +1479,20 @@ namespace luil::android {
                     return;
                 }
                 // id 없는 요청은 Win32와 같이 실패로 답한다 (file_dialog_gate.h).
-                if (const std::optional<file_dialog_result> rejected { file_dialog_gate_.rejection(*frame->file_dialog) }; rejected.has_value())
+                auto result { file_dialog_gate_.rejection(*frame->file_dialog) };
+                if (result.has_value() == false)
                 {
-                    if (environment_.delegate != nullptr)
-                        if (auto message { environment_.delegate->make_file_dialog_message(*rejected) }; message.empty() == false)
-                            host_->post_app_message(std::move(message));
-                    return;
+                    if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
+                        return;
+                    result.emplace(frame->file_dialog->id, file_dialog_status::unsupported);
                 }
-                if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
-                    return;
-                const file_dialog_result result { frame->file_dialog->id, file_dialog_status::unsupported };
-                file_dialog_gate_.finish();
                 if (environment_.delegate != nullptr)
-                    if (auto message { environment_.delegate->make_file_dialog_message(result) }; message.empty() == false)
-                        host_->post_app_message(std::move(message));
+                {
+                    auto message { environment_.delegate->make_file_dialog_message(*result) };
+                    if (host_ != nullptr)
+                        host_->post_file_dialog_message(std::move(message));
+                }
+                file_dialog_gate_.finish();
             }
 
             // 게시된 초점 요청을 받고, 대상이 섰으면 한 번 이행한다 (deferred-focus-design.md).
@@ -1500,7 +1538,6 @@ namespace luil::android {
                 overlay_frame_ = frame;
                 auto previous { std::move(overlays_) };
                 overlays_.clear();
-                std::vector<overlay_area> areas {};
                 if (frame != nullptr)
                 {
                     const float scale { scale_ };
@@ -1514,35 +1551,19 @@ namespace luil::android {
                     {
                         const ui_popup& popup { frame->popups[index] };
                         const int width { std::min(limit_width, static_cast<int>(std::lround(popup.width * scale))) };
-                        const int height { std::min(limit_height, static_cast<int>(std::lround(popup.height * scale))) };
-                        int origin_x { 0 };
-                        int origin_y { 0 };
-                        if (popup.anchor.empty() == false)
-                        {
-                            const auto parent { std::find_if(overlays_.begin(), overlays_.end(), [&popup](const auto& entry) { return entry.id == popup.anchor; }) };
-                            if (parent == overlays_.end())
-                                continue;
-                            origin_x = parent->bounds.x - insets_.left;
-                            origin_y = parent->bounds.y - insets_.top;
-                        }
-                        int desired_x { origin_x + static_cast<int>(std::lround(popup.x * scale)) };
-                        if (popup.anchor.empty() == false && desired_x + width > limit_width)
-                            desired_x = origin_x - width;
-                        const int x { std::clamp(desired_x, 0, limit_width - width) };
-                        const int y { std::clamp(origin_y + static_cast<int>(std::lround(popup.y * scale)), 0, limit_height - height) };
-                        overlays_.push_back(overlay_entry { popup.id, popup.tree, { insets_.left + x, insets_.top + y, width, height }, popup.border, popup.dismiss, false, popup.anchor });
-                        if (popup.placed != nullptr)
-                        {
-                            const rect_f bounds { (x - origin_x) / scale, (y - origin_y) / scale, width / scale, height / scale };
-                            const auto old { std::ranges::find_if(previous, [&popup](const auto& entry) { return entry.id == popup.id && entry.anchor == popup.anchor; }) };
-                            overlays_.back().reported_bounds = bounds;
-                            if (old == previous.end() || old->reported_bounds != bounds)
-                            {
-                                if (app_message message { popup.placed(bounds) }; message.empty() == false)
-                                    host_->post_app_message(std::move(message));
-                            }
-                        }
-                        areas.push_back(overlay_area { popup.id, { static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height) } });
+                        const int full_height { static_cast<int>(std::lround(popup.height * scale)) };
+                        const int height { std::min(limit_height, full_height) };
+                        const float maximum { static_cast<float>(full_height - height) };
+                        const auto old { std::ranges::find(previous, popup.id, &overlay_entry::id) };
+                        const float offset { old != previous.end() ? std::clamp(old->scroll_y, 0.0f, maximum) : 0.0f };
+                        const std::optional<rect_f> reported_bounds { popup.placed != nullptr && old != previous.end() && old->anchor == popup.anchor
+                            ? old->reported_bounds : std::nullopt
+                        };
+                        overlays_.push_back(overlay_entry {
+                            popup.id, popup.tree, { 0, 0, width, height }, popup.border, popup.dismiss, false, popup.anchor
+                            , static_cast<int>(std::lround(popup.x * scale)), static_cast<int>(std::lround(popup.y * scale)), offset, maximum
+                            , old != previous.end() ? old->followed : std::nullopt, popup.placed, reported_bounds
+                        });
                     }
                     if (frame->windows.empty() == false && warned_windows_ == false)
                     {
@@ -1559,11 +1580,96 @@ namespace luil::android {
                     if (old.anchor.empty() == false && std::none_of(overlays_.begin(), overlays_.end(), [&old](const auto& entry) { return entry.id == old.anchor; }))
                         if (auto action { take_popup_dismiss_action(old.dismiss, old.requested, popup_dismiss_reason::anchor_closed) }; action.has_value())
                             dispatch(std::move(*action));
-                router_.set_areas(std::move(areas));
+                place_overlays();
                 popups_visible.store(overlays_.empty() == false || edit_menu_.has_value());
                 back_claimed.store(frame != nullptr && frame->back != nullptr);
                 apply_device_request(frame != nullptr ? frame->device : device_request {});
                 dirty_ = true;
+            }
+
+            void place_overlays()
+            {
+                const int limit_width { content_width() };
+                const int limit_height { content_height() };
+                std::vector<overlay_area> areas {};
+                areas.reserve(overlays_.size());
+                for (overlay_entry& entry : overlays_)
+                {
+                    const overlay_entry* const parent { entry.anchor.empty() ? nullptr : find_overlay(entry.anchor) };
+                    const int origin_x { parent != nullptr ? parent->bounds.x - insets_.left : 0 };
+                    const float origin_y { parent != nullptr ? parent->content_origin_y() - static_cast<float>(insets_.top) : 0.0f };
+                    int desired_x { origin_x + entry.anchor_x };
+                    if (parent != nullptr && desired_x + entry.bounds.width > limit_width)
+                        desired_x = origin_x - entry.bounds.width;
+                    const int x { std::clamp(desired_x, 0, limit_width - entry.bounds.width) };
+                    const int y { std::clamp(static_cast<int>(std::lround(origin_y + static_cast<float>(entry.anchor_y))), 0, limit_height - entry.bounds.height) };
+                    entry.bounds.x = insets_.left + x;
+                    entry.bounds.y = insets_.top + y;
+                    areas.push_back(overlay_area {
+                        entry.id, { static_cast<float>(x), static_cast<float>(y), static_cast<float>(entry.bounds.width), static_cast<float>(entry.bounds.height) }
+                        , entry.scroll_y, entry.max_scroll_y, entry.tree.get(), scale_
+                    });
+                    if (entry.placed != nullptr)
+                    {
+                        // 자식 popup의 기준은 부모의 보이는 판이 아니라 스크롤을 적용한 내용 원점이다.
+                        const rect_f bounds { (x - origin_x) / scale_, (y - origin_y) / scale_, entry.bounds.width / scale_, entry.bounds.height / scale_ };
+                        if (entry.reported_bounds != bounds)
+                        {
+                            entry.reported_bounds = bounds;
+                            if (app_message message { entry.placed(bounds) }; message.empty() == false)
+                                host_->post_app_message(std::move(message));
+                        }
+                    }
+                }
+                router_.set_areas(std::move(areas));
+            }
+
+            void scroll_overlay(const overlay_scroll& scroll)
+            {
+                const auto entry { std::ranges::find(overlays_, scroll.surface, &overlay_entry::id) };
+                if (entry == overlays_.end() || entry->scroll_y == scroll.offset)
+                    return;
+                entry->scroll_y = scroll.offset;
+                // 자식 popup은 부모 tree를 앵커로 삼으므로 부모의 새 내용 원점을 따라간다.
+                place_overlays();
+                dirty_ = true;
+            }
+
+            void reveal_overlay_focus(const interaction_snapshot& interaction, const bool ime_reveal)
+            {
+                bool moved { false };
+                for (overlay_entry& entry : overlays_)
+                {
+                    if (entry.max_scroll_y <= 0.0f)
+                        continue;
+                    const auto local { interaction_for_surface(interaction, entry.id) };
+                    const bool show_text { follow_ime_focus_ && local.focused_input != ui_element_id {} };
+                    ui_element_id target { show_text ? local.focused_input : local.menu_highlight };
+                    if (target == ui_element_id {} && local.focus_visible)
+                        target = local.focused;
+                    const ui_element* const element { entry.tree->find(target) };
+                    const auto bounds { element != nullptr ? entry.tree->visible_bounds(*element) : std::nullopt };
+                    if (target == ui_element_id {} || bounds.has_value() == false)
+                    {
+                        entry.followed.reset();
+                        continue;
+                    }
+                    const overlay_entry::followed_focus next { target, bounds->y, bounds->height, entry.bounds.height };
+                    if ((ime_reveal == false || show_text == false) && entry.followed == next)
+                        continue;
+                    entry.followed = next;
+                    const float height { static_cast<float>(entry.bounds.height) };
+                    if (target == local.hovered && show_text == false && bounds->y < entry.scroll_y + height && bounds->y + bounds->height > entry.scroll_y)
+                        continue;
+                    const float offset { overlay_scroll_to_show(entry.scroll_y, entry.max_scroll_y, height, *bounds) };
+                    if (offset != entry.scroll_y)
+                    {
+                        entry.scroll_y = offset;
+                        moved = true;
+                    }
+                }
+                if (moved)
+                    place_overlays();
             }
 
             // 앱이 기기에 바라는 것 중 바뀐 것만 플랫폼에 옮긴다 (device-request-design.md).
@@ -1731,7 +1837,7 @@ namespace luil::android {
                 {
                     location.tree = overlay->tree;
                     location.origin_x = static_cast<float>(overlay->bounds.x);
-                    location.origin_y = static_cast<float>(overlay->bounds.y);
+                    location.origin_y = overlay->content_origin_y();
                 }
                 if (location.tree != nullptr)
                     location.element = location.tree->find(interaction.focused_input);
@@ -1832,10 +1938,23 @@ namespace luil::android {
                 state.interaction = interaction_for_surface(interaction, std::u8string {});
                 // popup은 주 표면 위의 layer다. 표면마다 자기 상호작용만 남겨 그린다.
                 update_overlays();
+                const std::shared_ptr<const ui_tree> tree { host_->acquire_ui_tree() };
+                state.tree = tree.get();
+                // 키보드가 올라온 뒤 줄어든 크기로 지은 frame까지 기다려 내부 스크롤과 popup을 함께 들인다.
+                const bool ime_reveal { reveal_pending_ && tree != nullptr && tree->root() != nullptr
+                    && std::abs(tree->root()->bounds().height - static_cast<float>(content_height())) < 1.0f
+                };
+                if (ime_reveal)
+                {
+                    reveal_pending_ = false;
+                    follow_ime_focus_ = true;
+                    host_->post_raw_input(focus_reveal_event { interaction.focused_surface });
+                }
+                reveal_overlay_focus(interaction, ime_reveal);
                 std::vector<overlay_layer> layers {};
                 layers.reserve(overlays_.size());
                 for (const overlay_entry& entry : overlays_)
-                    layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id) });
+                    layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id), entry.scroll_y });
                 update_edit_menu();
                 if (edit_menu_.has_value())
                 {
@@ -1861,15 +1980,6 @@ namespace luil::android {
                 const sk_sp<SkTypeface> code { configured_code_typeface() };
                 state.code_typeface = code.get();
                 state.fonts = &font_resolver_;
-
-                const std::shared_ptr<const ui_tree> tree { host_->acquire_ui_tree() };
-                state.tree = tree.get();
-                // 키보드가 올라온 뒤 줄어든 크기로 지은 frame이다. 초점 칸을 드러내 달라고 보낸다.
-                if (reveal_pending_ && tree != nullptr && tree->root() != nullptr && std::abs(tree->root()->bounds().height - static_cast<float>(content_height())) < 1.0f)
-                {
-                    reveal_pending_ = false;
-                    host_->post_raw_input(focus_reveal_event { interaction.focused_surface });
-                }
 
                 std::u8string error {};
                 if (renderer_->render(state, error) == false)
@@ -1929,6 +2039,8 @@ namespace luil::android {
             std::unique_ptr<ime_session> ime_ {};
             // 키보드가 올라와 줄어든 frame이 오면 초점 칸을 드러내 달라고 보낸다.
             bool reveal_pending_ { false };
+            // 키보드가 보이는 동안 내부 스크롤이 뒤늦게 옮긴 초점 칸도 따라간다.
+            bool follow_ime_focus_ { false };
             // 이 thread의 JNI 환경이다. 우리가 붙였으면 끝날 때 뗀다.
             JNIEnv* jni_ { nullptr };
             bool jni_attached_ { false };

@@ -134,8 +134,12 @@ Windows는 WinHTTP가 framing과 ping/pong을 맡고 Android는 Java 전송부�
 Android는 앱의 평문 통신 정책을 지키고 TLS의 신뢰 사슬·호스트 이름을 검사한다.
 URL은 ASCII escape한 ws/wss 주소이며 URL 자격 증명·재지정·사용자 지정 헤더·서브프로토콜·압축 확장은 지원하지 않는다.
 
-`close`는 닫기 frame을 보내고 기본 3초 동안 응답을 기다린다. `stop`은 소켓을 끊고 reader/writer를 join한다.
-돌아온 뒤 callback은 없다. callback 안에서 stop/소멸하면 자기 reader를 join하므로 금지다.
+`close`는 닫기 frame을 예약하고, 전송에 성공한 뒤 기본 3초 동안 상대 응답을 기다린다.
+상대 Close가 먼저 오면 대기 중인 데이터와 예약된 로컬 Close를 버리고, 진행 중인 송신이 끝난 뒤 상대에게 한 번 응답한다.
+로컬 Close를 이미 보냈으면 그 frame으로 교환을 마친다. 상대 Close가 도착할 때 이미 진행 중이던 송신은 같은 마감 시간까지
+기다린다. 마감 시간을 넘기거나 닫기 frame 전송이 실패하면 비정상 종료 코드 1006과 오류를 전달한다.
+`stop`은 소켓을 끊고 reader/writer를 join한다. 돌아온 뒤 callback은 없다.
+callback 안에서 stop/소멸하면 자기 reader를 join하므로 금지다.
 앱은 worker 종료 단계에서 client를 끝내고 host보다 먼저 배출구를 놓는다.
 
 Android 소비자는 다음 둘을 APK에 포함해야 한다. 예제 Gradle은 Java source 폴더를 이미 포함한다.

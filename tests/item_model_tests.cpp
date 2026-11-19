@@ -117,6 +117,31 @@ TEST_CASE("Only expanded, unasked nodes need loading", "[ui][model]")
     REQUIRE(luil::tree_nodes_to_load(roots, { u8"branches", u8"feature", u8"tags", u8"archive" }) == std::vector<std::u8string> { u8"feature", u8"tags" });
 }
 
+TEST_CASE("Filtering a deep matching path evaluates each node only once per search", "[ui][model]")
+{
+    constexpr std::size_t depth { 256 };
+    luil::tree_node root { node(u8"leaf") };
+    for (std::size_t index { 1 }; index < depth; ++index)
+    {
+        luil::tree_node parent {};
+        parent.key = root.key + u8"x";
+        parent.children.push_back(std::move(root));
+        root = std::move(parent);
+    }
+
+    std::size_t calls { 0 };
+    luil::tree_flatten_options filter {};
+    filter.expand_matches = true;
+    filter.keep = [&](const luil::tree_node& candidate) {
+        ++calls;
+        return candidate.key == u8"leaf";
+    };
+    const auto rows { luil::flatten_tree({ &root, 1 }, {}, filter) };
+    REQUIRE(rows.size() == depth);
+    REQUIRE(rows.back().node == u8"leaf");
+    REQUIRE(calls == depth);
+}
+
 TEST_CASE("A view order sorts stably and filters without touching the source", "[ui][model]")
 {
     struct change

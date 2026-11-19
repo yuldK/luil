@@ -305,6 +305,13 @@ namespace {
             }
             while (gate.load() == false)
                 std::this_thread::sleep_for(1ms);
+            if (const auto* result { message.get<luil::file_dialog_result>() }; result != nullptr)
+            {
+                dialog_results.push_back(*result);
+                dialogs.fetch_add(1);
+            }
+            if (message.empty())
+                ++empty_messages;
             handled.fetch_add(1);
         }
 
@@ -326,6 +333,9 @@ namespace {
         std::atomic<bool> gate { false };
         std::atomic<bool> closed { false };
         std::atomic<int> handled { 0 };
+        std::atomic<int> dialogs { 0 };
+        int empty_messages { 0 };
+        std::vector<luil::file_dialog_result> dialog_results {};
     };
 }
 
@@ -360,6 +370,38 @@ TEST_CASE("The close message survives a saturated app inbox", "[win32][host][shu
         // gate가 열린 뒤 막혀 있던 소비가 실제로 풀렸다는 확인이다.
         REQUIRE(driver.handled.load() > 0);
     }
+}
+
+TEST_CASE("File dialog messages reach the app in order after a saturated inbox drains", "[host][file_dialog]")
+{
+    blocking_driver driver {};
+    luil::app_host host { luil::app_host::config {}, driver, nullptr };
+    for (int index { 0 }; index < 2048; ++index)
+        host.post_app_message(luil::app_message { ping_intent { u8"flood" } });
+
+    const auto rejected { host.app_inbox_statistics().rejected };
+    CHECK(rejected > 0);
+    const luil::file_dialog_result chosen { 7, luil::file_dialog_status::chosen, { u8"C:/자료/선택.png" } };
+    const luil::file_dialog_result unsupported { 8, luil::file_dialog_status::unsupported };
+    host.post_file_dialog_message(luil::app_message { chosen });
+    host.post_file_dialog_message({});
+    host.post_file_dialog_message(luil::app_message { unsupported });
+    CHECK(host.app_inbox_statistics().rejected > rejected);
+
+    // 새 UI wake나 게시 없이 소비 스레드가 자리를 만들기만 하면 두 결과가 도착한다.
+    driver.gate.store(true);
+    REQUIRE(wait_until([&] { return driver.dialogs.load() >= 2; }));
+    host.shutdown();
+    const auto posted { host.app_inbox_statistics().posted };
+    host.post_file_dialog_message(luil::app_message { unsupported });
+    CHECK(host.app_inbox_statistics().posted == posted);
+    CHECK(driver.empty_messages == 0);
+    REQUIRE(driver.dialog_results.size() == 2);
+    CHECK(driver.dialog_results[0].id == chosen.id);
+    CHECK(driver.dialog_results[0].status == chosen.status);
+    CHECK(driver.dialog_results[0].paths == chosen.paths);
+    CHECK(driver.dialog_results[1].id == unsupported.id);
+    CHECK(driver.dialog_results[1].status == unsupported.status);
 }
 
 namespace {

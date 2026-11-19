@@ -37,6 +37,8 @@ namespace luil {
         bool border { true };
         // 이 popup 표면의 상호작용 상태다 (`interaction_for_surface`).
         interaction_snapshot interaction {};
+        // 판의 자리는 그대로 두고 tree만 위로 옮긴다 (물리 픽셀).
+        float scroll_y { 0.0f };
     };
 
     // 렌더러가 한 frame을 그리는 데 필요한 전부다.

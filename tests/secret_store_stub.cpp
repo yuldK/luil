@@ -19,4 +19,9 @@ namespace luil {
     {
         return { secret_store_status::unsupported, {} };
     }
+
+    secret_store_result migrate_legacy_win32_secret(std::u8string_view, std::u8string_view)
+    {
+        return { secret_store_status::unsupported, {} };
+    }
 }

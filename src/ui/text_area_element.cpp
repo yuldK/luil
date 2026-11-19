@@ -185,20 +185,16 @@ namespace luil {
             return cuts;
         }
 
-        // 글을 화면의 줄로 나눈다. 줄 바꿈에서 나누고, 문단마다 `cuts_of`가 답한 자리에서 넘겨 접는다.
+        // 문단마다 측정기가 답한 자리에서 화면 줄을 접는다.
         template<typename cuts_function>
-        [[nodiscard]] std::vector<text_line> split_screen_lines(const std::u8string_view text, cuts_function&& cuts_of, const bool crlf = false)
+        [[nodiscard]] std::vector<text_line> split_screen_lines(const std::u8string_view text, cuts_function&& cuts_of)
         {
             std::vector<text_line> lines {};
             std::size_t begin { 0 };
             while (true)
             {
-                const std::size_t newline { crlf ? text.find_first_of(u8"\r\n", begin) : text.find(u8'\n', begin) };
-                std::size_t end { newline != std::u8string_view::npos ? newline : text.size() };
-                // LF만 나누는 길에서도 CRLF의 CR은 줄의 글이 아니다. 남기면 글리프로 그려지고, End나 줄 끝 누름이 CR과
-                // LF 사이(글자소 한가운데)에 선다. native 배치와 같은 줄 끝이 된다.
-                if (crlf == false && newline != std::u8string_view::npos && end > begin && text[end - 1] == u8'\r')
-                    --end;
+                const std::size_t newline { text.find_first_of(u8"\r\n", begin) };
+                const std::size_t end { newline != std::u8string_view::npos ? newline : text.size() };
                 std::size_t start { begin };
                 for (const std::size_t cut : cuts_of(text.substr(begin, end - begin)))
                 {
@@ -208,9 +204,7 @@ namespace luil {
                 lines.push_back({ start, end, false });
                 if (newline == std::u8string_view::npos)
                     return lines;
-                begin = newline + 1;
-                if (crlf && text[newline] == u8'\r' && begin < text.size() && text[begin] == u8'\n')
-                    ++begin;
+                begin = after_line_break(text, newline);
             }
         }
 
@@ -220,12 +214,12 @@ namespace luil {
         }
 
         // offset이 선 화면 줄이다. 줄 바꿈 바로 뒤와 넘겨 접은 자리는 다음 줄의 처음이다.
-        //  - 줄의 끝은 오름차순이라 이분 탐색한다. 큰 글에서 caret을 물을 때마다 줄 전체를 훑지 않는다.
+        // CRLF 두 바이트 사이는 윗줄 끝이다. 시작 위치를 찾으면 원문을 고치지 않고 그 자리를 보존한다.
         [[nodiscard]] std::size_t line_of(const std::vector<text_line>& lines, const std::size_t offset) noexcept
         {
-            const auto before = [offset](const text_line& row) { return offset > row.end || (offset == row.end && row.wrapped); };
-            const auto found { std::partition_point(lines.begin(), lines.end(), before) };
-            return found != lines.end() ? static_cast<std::size_t>(found - lines.begin()) : lines.size() - 1;
+            const auto before = [](const std::size_t at, const text_line& row) { return at < row.begin; };
+            const auto next { std::upper_bound(lines.begin(), lines.end(), offset, before) };
+            return next == lines.begin() ? 0u : static_cast<std::size_t>(std::prev(next) - lines.begin());
         }
         // caret이 서는 화면 줄이다. 앞 글자 쪽에 붙은 caret(affinity)이 넘겨 접은 자리에 있으면 윗줄이다.
         [[nodiscard]] std::size_t caret_line_of(const std::vector<text_line>& lines, const std::size_t offset, const bool upstream) noexcept
@@ -540,7 +534,7 @@ namespace luil {
                 auto entry { entry_for(paragraph) };
                 content_width_ = std::max(content_width_, entry.width);
                 return entry.cuts;
-            }, native_layout_);
+            });
         }
         text_area_wrap_cache& cache { *config_.wrap_cache };
         const std::scoped_lock lock { cache.mutex_ };
@@ -584,7 +578,7 @@ namespace luil {
             variant->used = generation;
             return variant->cuts;
         };
-        std::vector<line> lines { split_screen_lines(text, cached_cuts, native_layout_) };
+        std::vector<line> lines { split_screen_lines(text, cached_cuts) };
         prune_unused(cache.entries_, generation);
         return lines;
     }
@@ -629,13 +623,9 @@ namespace luil {
         {
             logical_count = 1;
             const auto text { displayed_text() };
-            for (std::size_t index { 0 }; index < text.size(); ++index)
-                if (text[index] == u8'\n' || (native_layout_ && text[index] == u8'\r'))
-                {
-                    ++logical_count;
-                    if (native_layout_ && text[index] == u8'\r' && index + 1 < text.size() && text[index + 1] == u8'\n')
-                        ++index;
-                }
+            for (auto newline { text.find_first_of(u8"\r\n") }; newline != std::u8string_view::npos;
+                newline = text.find_first_of(u8"\r\n", after_line_break(text, newline)))
+                ++logical_count;
         }
         for (const auto& column : config_.gutters)
         {
@@ -829,7 +819,7 @@ namespace luil {
         const std::u8string_view content { text.substr(row.begin, row.end - row.begin) };
         const auto layout { row_layout(text, row) };
         const auto position { [&](const std::size_t at) { return layout.valid() ? layout.caret_rect(at).x : measure(content.substr(0, at)); } };
-        const float from { text_left() + position(begin - row.begin) };
+        const float from { text_left() + position(std::min(begin, row.end) - row.begin) };
         const float to { text_left() + position(std::min(end, row.end) - row.begin) };
         return rect_f { from, top, to - from, line_height };
     }
@@ -1138,7 +1128,8 @@ namespace luil {
             const std::size_t index { caret_line_of(lines, caret, value_.composing == false && value_.caret_upstream) };
             const line row { lines[index] };
             const auto layout { row_layout(text, row) };
-            const float caret_x { left + (layout.valid() ? layout.caret_rect(caret - row.begin).x : measure(text.substr(row.begin, caret - row.begin))) };
+            const auto in_row { std::min(caret, row.end) - row.begin };
+            const float caret_x { left + (layout.valid() ? layout.caret_rect(in_row).x : measure(text.substr(row.begin, in_row))) };
             const float row_top { top + static_cast<float>(index) * line_height };
             context.canvas.drawRect(SkRect::MakeXYWH(caret_x, row_top + 2.0f * scale, 1.0f * scale, line_height - 4.0f * scale), solid_paint(context.palette.primary_foreground));
         }

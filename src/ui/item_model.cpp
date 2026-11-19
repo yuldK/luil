@@ -9,20 +9,42 @@ namespace luil {
             return node.children.empty() == false || node.load != node_load::loaded;
         }
 
-        // 필터가 이 노드를 남기는가 (자기 또는 자손이 맞는다).
-        [[nodiscard]] bool kept(const tree_node& node, const tree_flatten_options& options)
+        enum class filter_match
         {
-            if (options.keep == nullptr || options.keep(node))
-                return true;
-            return std::any_of(node.children.begin(), node.children.end(), [&options](const tree_node& child) { return kept(child, options); });
+            none,
+            descendant,
+            self,
+        };
+
+        using filter_results = std::unordered_map<const tree_node*, filter_match>;
+
+        // 펼칠 가지를 찾을 때 읽은 자손은 다음 깊이에서도 같은 결과를 쓴다.
+        // 맞는 접힌 가지의 자손까지 미리 평가할 필요는 없다.
+        [[nodiscard]] filter_match match_node(const tree_node& node, const tree_flatten_options& options, filter_results& matches)
+        {
+            if (options.keep == nullptr)
+                return filter_match::self;
+            if (const auto found { matches.find(&node) }; found != matches.end())
+                return found->second;
+
+            filter_match match { filter_match::self };
+            if (options.keep(node) == false)
+            {
+                const auto kept = [&](const tree_node& child) {
+                    return match_node(child, options, matches) != filter_match::none;
+                };
+                match = std::any_of(node.children.begin(), node.children.end(), kept) ? filter_match::descendant : filter_match::none;
+            }
+            matches.emplace(&node, match);
+            return match;
         }
 
-        [[nodiscard]] std::vector<const tree_node*> ordered(std::span<const tree_node> nodes, const tree_flatten_options& options)
+        [[nodiscard]] std::vector<const tree_node*> ordered(std::span<const tree_node> nodes, const tree_flatten_options& options, filter_results& matches)
         {
             std::vector<const tree_node*> order {};
             order.reserve(nodes.size());
             for (const tree_node& node : nodes)
-                if (kept(node, options))
+                if (match_node(node, options, matches) != filter_match::none)
                     order.push_back(&node);
             if (options.less != nullptr)
                 std::stable_sort(order.begin(), order.end(), [&options](const tree_node* left, const tree_node* right) { return options.less(*left, *right); });
@@ -45,12 +67,12 @@ namespace luil {
         }
 
         void flatten(std::span<const tree_node> nodes, const int depth, const std::unordered_set<std::u8string>& expanded, const tree_flatten_options& options,
-            std::vector<tree_row>& rows)
+            filter_results& matches, std::vector<tree_row>& rows)
         {
-            for (const tree_node* const node : ordered(nodes, options))
+            for (const tree_node* const node : ordered(nodes, options, matches))
             {
                 // 필터가 있으면 자기가 맞지 않고 자손만 맞는 노드는 길이다. 그 노드는 찾는 동안 펼친 것으로 볼 수 있다.
-                const bool path_only { options.keep != nullptr && options.keep(*node) == false };
+                const bool path_only { options.keep != nullptr && matches.at(node) == filter_match::descendant };
                 const bool open { expanded.contains(node->key) || (options.expand_matches && path_only) };
                 tree_row row {};
                 row.item.key = node->key;
@@ -74,7 +96,7 @@ namespace luil {
                     break;
                 case node_load::loaded:
                     // 맞는 자손이 있어 남은 길은 자손도 거른다. 자기가 맞는 노드의 자손도 맞아야 남는다.
-                    flatten(node->children, depth + 1, expanded, options, rows);
+                    flatten(node->children, depth + 1, expanded, options, matches, rows);
                     break;
                 }
             }
@@ -97,7 +119,8 @@ namespace luil {
     std::vector<tree_row> flatten_tree(const std::span<const tree_node> roots, const std::unordered_set<std::u8string>& expanded, const tree_flatten_options& options)
     {
         std::vector<tree_row> rows {};
-        flatten(roots, 0, expanded, options, rows);
+        filter_results matches {};
+        flatten(roots, 0, expanded, options, matches, rows);
         return rows;
     }
 

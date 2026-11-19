@@ -2472,9 +2472,7 @@ namespace luil::win32 {
                 // id 없는 요청은 열지 않고 실패로 답한다. 조용히 버리면 앱이 답을 영영 기다린다.
                 if (const std::optional<file_dialog_result> rejected { file_dialog_gate_.rejection(*frame->file_dialog) }; rejected.has_value())
                 {
-                    if (environment_.delegate != nullptr)
-                        if (auto message { environment_.delegate->make_file_dialog_message(*rejected) }; message.empty() == false)
-                            host_->post_app_message(std::move(message));
+                    complete_file_dialog(*rejected);
                     return;
                 }
                 if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
@@ -2490,12 +2488,19 @@ namespace luil::win32 {
                     owner_id = parent->anchor;
                 }
                 const auto* const owner { anchor_surface(owner_id) };
-                const file_dialog_result result { run_file_dialog(owner != nullptr ? owner->window() : nullptr, *frame->file_dialog) };
-                file_dialog_gate_.finish();
+                complete_file_dialog(run_file_dialog(owner != nullptr ? owner->window() : nullptr, *frame->file_dialog));
+            }
+
+            void complete_file_dialog(const file_dialog_result& result)
+            {
                 if (host_ != nullptr && environment_.delegate != nullptr)
-                    if (auto message { environment_.delegate->make_file_dialog_message(result) }; message.empty() == false)
-                        host_->post_app_message(std::move(message));
-                // modal loop가 새 frame의 wake를 이미 읽었을 수 있다.
+                {
+                    auto message { environment_.delegate->make_file_dialog_message(result) };
+                    if (host_ != nullptr)
+                        host_->post_file_dialog_message(std::move(message));
+                }
+                file_dialog_gate_.finish();
+                // modal loop나 delegate가 새 frame의 wake를 이미 읽었을 수 있다.
                 if (window_ != nullptr)
                     PostMessageW(window_, snapshot_wake_message, 0, 0);
             }

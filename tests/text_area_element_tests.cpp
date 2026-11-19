@@ -700,15 +700,35 @@ TEST_CASE("Read only documents keep selection and copy while suppressing edits",
     REQUIRE(controller.process(key(luil::key_code::insert, false, true)).size() == 1u);
 }
 
-TEST_CASE("A text area without native layout ends a CRLF line before its CR", "[ui][text-area]")
+TEST_CASE("Measured text areas keep original byte offsets for CR, LF and CRLF", "[ui][text-area]")
 {
-    // LF만 나누는 길에서도 CR은 줄의 글이 아니다. 남기면 글리프로 그려지고 줄 끝 누름이 CR과 LF 사이에 선다.
     using line = luil::text_area_element::line;
-    const auto tree { wrapped_tree(view_of(u8"ab\r\ncd\r\n", 0)) };
-    const luil::text_area_element& memo { memo_of(*tree) };
-    REQUIRE(memo.lines() == std::vector<line> { { 0, 2, false }, { 4, 6, false }, { 8, 8, false } });
-    REQUIRE(memo.caret_at_point(7.0f + 5000.0f, row_middle(0), fixed_width) == luil::text_caret_position { 2, false });
-    REQUIRE(memo.caret_at_point(7.0f + 5000.0f, row_middle(1), fixed_width) == luil::text_caret_position { 6, false });
+    for (const bool wrap : { true, false })
+    {
+        auto config { scrolling_config() };
+        config.wrap = wrap;
+        config.wrap_cache = std::make_shared<luil::text_area_wrap_cache>();
+        const auto tree { wrapped_tree(view_of(u8"ab\rcd\n한\r\n", 0), config) };
+        const luil::text_area_element& memo { memo_of(*tree) };
+        REQUIRE(memo.lines() == std::vector<line> { { 0, 2, false }, { 3, 5, false }, { 6, 9, false }, { 11, 11, false } });
+        REQUIRE(memo.text_line_starts() == std::vector<std::size_t> { 0, 3, 6, 11 });
+        REQUIRE(memo.line_rect(3).has_value());
+        REQUIRE(memo.caret_at_point(5000.0f, row_middle(0), fixed_width) == luil::text_caret_position { 2, false });
+        REQUIRE(memo.caret_at_point(5000.0f, row_middle(2), fixed_width) == luil::text_caret_position { 9, false });
+        const auto end { memo.text_span_bounds({ memo.text_input()->text, 9, 9, 9 }, fixed_width) };
+        const auto between { memo.text_span_bounds({ memo.text_input()->text, 10, 10, 10 }, fixed_width) };
+        REQUIRE(between.has_value());
+        REQUIRE(end.has_value());
+        REQUIRE(between->x == end->x);
+        REQUIRE(between->y == end->y);
+        REQUIRE(between->width == 0.0f);
+    }
+    auto numbered { scrolling_config() };
+    numbered.gutters.push_back({ luil::gutter_kind::line_number });
+    const auto cr { wrapped_tree(view_of(std::u8string(11, u8'\r'), 0), numbered) };
+    const auto lf { wrapped_tree(view_of(std::u8string(11, u8'\n'), 0), numbered) };
+    REQUIRE(memo_of(*cr).line_rect(11).has_value());
+    REQUIRE(memo_of(*cr).line_rect(0)->x == memo_of(*lf).line_rect(0)->x);
 }
 
 TEST_CASE("Horizontal caret following keeps the caret inside the text padding", "[ui][text-area]")

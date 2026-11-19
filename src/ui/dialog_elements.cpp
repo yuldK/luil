@@ -518,6 +518,7 @@ namespace luil {
         set_bounds(context.slot);
         scale_ = context.scale > 0.0f ? context.scale : 1.0f;
         font_size_ = scaled_font_size(11.0f, scale_);
+        layout_measurer_ = context.measure_text();
         layout_ = {};
         const rect_f area { box() };
         if (ui_text_shaping_enabled() && context.measurer == nullptr)

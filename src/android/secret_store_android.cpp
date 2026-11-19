@@ -406,7 +406,7 @@ namespace luil {
         if (iv.size() != iv_bytes)
             return failure(u8"The cipher returned an unexpected IV length.");
 
-        // 임시 파일에 다 쓴 뒤 이름을 바꾼다 — 쓰다 끊긴 반쪽 파일이 그 자리에 남지 않는다.
+        // 닫을 때 버퍼를 쓰다 실패해도 기존 비밀을 보존한다.
         std::error_code failed {};
         std::filesystem::create_directories(context.directory, failed);
         if (failed)
@@ -414,18 +414,22 @@ namespace luil {
         const std::filesystem::path target { secret_path(context.directory, service, name) };
         std::filesystem::path temporary { target };
         temporary += ".tmp";
+        std::ofstream file { temporary, std::ios::binary | std::ios::trunc };
+        file.put(static_cast<char>(file_version));
+        file.write(reinterpret_cast<const char*>(iv.data()), static_cast<std::streamsize>(iv.size()));
+        file.write(reinterpret_cast<const char*>(sealed->data()), static_cast<std::streamsize>(sealed->size()));
+        file.close();
+        const bool written { file.good() };
+        if (written)
         {
-            std::ofstream file { temporary, std::ios::binary | std::ios::trunc };
-            file.put(static_cast<char>(file_version));
-            file.write(reinterpret_cast<const char*>(iv.data()), static_cast<std::streamsize>(iv.size()));
-            file.write(reinterpret_cast<const char*>(sealed->data()), static_cast<std::streamsize>(sealed->size()));
-            if (file.good() == false)
-                return failure(u8"Failed to write the secret file.");
+            std::filesystem::rename(temporary, target, failed);
+            if (!failed)
+                return success();
         }
-        std::filesystem::rename(temporary, target, failed);
-        if (failed)
-            return failure(u8"Failed to replace the secret file.");
-        return success();
+
+        std::error_code ignored {};
+        std::filesystem::remove(temporary, ignored);
+        return failure(written ? u8"Failed to replace the secret file." : u8"Failed to write the secret file.");
     }
 
     secret_store_result load_secret(const std::u8string_view service, const std::u8string_view name, std::vector<std::uint8_t>& secret)
@@ -485,5 +489,10 @@ namespace luil {
         if (removed == false)
             return { secret_store_status::not_found, {} };
         return success();
+    }
+
+    secret_store_result migrate_legacy_win32_secret(std::u8string_view, std::u8string_view)
+    {
+        return { secret_store_status::unsupported, {} };
     }
 }

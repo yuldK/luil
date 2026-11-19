@@ -71,7 +71,7 @@ namespace luil {
             if (layer.tree != nullptr)
             {
                 SkAutoCanvasRestore restore_origin { &canvas, true };
-                canvas.translate(bounds.x(), bounds.y());
+                canvas.translate(bounds.x(), bounds.y() - layer.scroll_y);
                 layer.tree->draw(context, layer.interaction);
                 if (inspector != nullptr)
                     draw_inspector(context, *layer.tree, layer.interaction, *inspector);

@@ -301,6 +301,8 @@ namespace luil {
     // 계산과 어긋나는 순간 caret이 글자와 어긋난다. 그래서 둘을 안으로 들인다.
     class text_input_element final : public ui_element
     {
+        friend struct visible_text_ranges;
+
     public:
         text_input_element(ui_element_id id, text_input_view value, text_input_config config);
 
@@ -364,6 +366,7 @@ namespace luil {
         text_input_config config_ {};
         float font_size_ { 11.0f };
         text_layout layout_ {};
+        text_measurer layout_measurer_ {};
 
         // 가린 칸이 그리는 점들이다 (보이는 글을 가린 것). 값이 element의 수명 동안 그대로라 한 번 짓는다.
         std::u8string masked_ {};

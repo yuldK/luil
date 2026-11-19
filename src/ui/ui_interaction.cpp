@@ -1664,20 +1664,6 @@ namespace luil {
             return live_touch_target(tree, id, x, y);
         }
 
-        // (x, y)를 덮고 `axis`로 끌기를 넘겨받는 가장 안쪽 컨테이너다. 막기만 하는 것이 먼저 걸리면 없다.
-        [[nodiscard]] const ui_element* handoff_owner_at(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
-        {
-            const ui_element* const root { tree.root() };
-            if (root == nullptr)
-                return nullptr;
-            const auto accepts = [axis](const ui_element& element) {
-                const pan_handoff_target* const target { element.pan_handoff() };
-                return target != nullptr && target->drag != nullptr && target->axis == axis;
-            };
-            const ui_element* const owner { pan_owner_at(*root, x, y, accepts) };
-            return owner != nullptr && accepts(*owner) ? owner : nullptr;
-        }
-
         // 넘겨받은 컨테이너가 아직 살아 있는가다. 시트는 손가락을 따라 내려가 누른 자리를 떠나므로 id로 찾는다.
         [[nodiscard]] const pan_handoff_target* live_handoff(const ui_tree& tree, const ui_element_id& id, const scroll_axis axis)
         {
@@ -1698,6 +1684,19 @@ namespace luil {
                 return {};
             return { pan.scroll(delta) };
         }
+    }
+
+    const ui_element* pan_handoff_owner_at(const ui_tree& tree, const float x, const float y, const scroll_axis axis)
+    {
+        const ui_element* const root { tree.root() };
+        if (root == nullptr)
+            return nullptr;
+        const auto accepts = [axis](const ui_element& element) {
+            const pan_handoff_target* const target { element.pan_handoff() };
+            return target != nullptr && target->drag != nullptr && target->axis == axis;
+        };
+        const ui_element* const owner { pan_owner_at(*root, x, y, accepts) };
+        return owner != nullptr && accepts(*owner) ? owner : nullptr;
     }
 
     bool interaction_controller::pointer_gesture_active() const noexcept
@@ -1763,7 +1762,7 @@ namespace luil {
         //  - 클릭 대상이 없는 여백·일반 글 위에서도 후보는 선다 (휠과 같은 탐색이다).
         //  - 끌기를 넘겨받는 컨테이너(시트)도 후보다. 안에 흘리는 창이 없는 짧은 시트도 끌어 내린다.
         const auto pan_candidate
-            = [this, tree, &event](const scroll_axis axis) { return resolve_pan(*tree, event.x, event.y, axis).has_value() || handoff_owner_at(*tree, event.x, event.y, axis) != nullptr; };
+            = [this, tree, &event](const scroll_axis axis) { return resolve_pan(*tree, event.x, event.y, axis).has_value() || pan_handoff_owner_at(*tree, event.x, event.y, axis) != nullptr; };
         contact.pan_open = contact.config.pan_enabled && (pan_candidate(scroll_axis::vertical) || pan_candidate(scroll_axis::horizontal));
 
         // 초점은 아직 옮기지 않는다. 스크롤이 될 접촉이 칸의 초점과 IME를 빼앗으면
@@ -2014,7 +2013,7 @@ namespace luil {
                 std::optional<pan_target> pan { resolve_pan(*tree, contact.start_x, contact.start_y, axis) };
                 // 바깥 컨테이너(시트)가 넘겨받는 것은 이 순간 한 번만 정한다. 안쪽 창이 없거나, 처음에 있는 창을
                 // 처음 쪽(손가락이 아래·오른쪽)으로 끄는 때다. 안쪽 창이 그 컨테이너 밖이면 컨테이너의 일이 아니다.
-                const ui_element* handoff { handoff_owner_at(*tree, contact.start_x, contact.start_y, axis) };
+                const ui_element* handoff { pan_handoff_owner_at(*tree, contact.start_x, contact.start_y, axis) };
                 if (handoff != nullptr && pan.has_value() && tree->within(handoff->id(), pan->id) == false)
                     handoff = nullptr;
                 const float toward { axis == scroll_axis::horizontal ? delta_x : delta_y };

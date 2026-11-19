@@ -178,6 +178,8 @@ namespace luil {
     // (`interaction_controller::follow_text_caret`).
     class text_area_element final : public ui_element
     {
+        friend struct visible_text_ranges;
+
     public:
         text_area_element(ui_element_id id, text_input_view value, text_area_config config);
 

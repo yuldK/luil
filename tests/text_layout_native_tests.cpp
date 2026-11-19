@@ -9,6 +9,7 @@
 #include "raster_probe.h"
 #include "ui/text_layout_internal.h"
 #include "ui/text_layout_skia.h"
+#include "ui/visible_text_ranges.h"
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
@@ -479,4 +480,38 @@ TEST_CASE("An underline span draws a line under its glyphs in the span color", "
     const int lined { accent_pixels(true) };
     // 글 폭이 수십 물리 픽셀이고 밑줄은 2 물리 픽셀 두께라 적어도 그 폭만큼 는다.
     REQUIRE(lined > plain + 40);
+}
+
+TEST_CASE("Visible native text ranges preserve gaps in bidirectional rows", "[ui][text-layout][native][bidi]")
+{
+    if (luil::ui_text_shaping_enabled() == false)
+        SKIP("Text shaping is disabled");
+
+    const std::u8string text { u8"ab אבג cd" };
+    luil::text_area_config config {};
+    config.font_size = 20.0f;
+    luil::text_area_element field { { luil::application_element_kind(1), u8"bidi" }, { .text = text }, config };
+    field.arrange({ .slot = { 0.0f, 0.0f, 500.0f, 100.0f } });
+    const auto row { field.line_rect(0) };
+    REQUIRE(row.has_value());
+    const auto layout { luil::make_text_layout({ .text = text, .font_size = config.font_size }) };
+    const auto get_cluster = [&](const std::size_t begin) {
+        const auto clusters { layout.clusters() };
+        const auto found { std::find_if(clusters.begin(), clusters.end(), [begin](const auto& cluster) { return cluster.begin == begin; }) };
+        REQUIRE(found != clusters.end());
+        return *found;
+    };
+
+    const auto space { get_cluster(2) };
+    const auto gimel { get_cluster(7) };
+    REQUIRE(gimel.rtl);
+    const float left { (space.left + space.right) * 0.5f };
+    const float right { (gimel.left + gimel.right) * 0.5f };
+    REQUIRE(left < right);
+    const auto ranges { luil::visible_text_ranges::of(field, { row->x + left, row->y, right - left, row->height }) };
+    REQUIRE(ranges.size() == 2);
+    CHECK(ranges[0].begin == 2);
+    CHECK(ranges[0].end == 3);
+    CHECK(ranges[1].begin == 7);
+    CHECK(ranges[1].end == 9);
 }

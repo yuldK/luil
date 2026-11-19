@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -77,6 +78,9 @@ namespace luil {
     {
         messaging::channel<raw_input_event> input_inbox { messaging::channel_options { 4096, messaging::overflow_policy::drop_oldest, {} } };
         messaging::channel<app_message> app_inbox { messaging::channel_options { 1024, messaging::overflow_policy::reject_newest, {} } };
+        // UI가 이미 만든 완료 메시지는 app inbox에 들어갈 때까지 보관한다.
+        std::mutex file_dialog_mutex {};
+        std::deque<app_message> file_dialog_messages {};
         std::vector<app_message> initial_messages {};
         messaging::latest_slot<std::shared_ptr<const ui_frame>> frame_slot {};
         messaging::latest_slot<std::shared_ptr<const ui_tree>> tree_slot {};
@@ -320,7 +324,11 @@ namespace luil {
         //    확인한다. cancel과 close에도 나오지 않는 logic은 회복 불능이다 —
         //    보이지 않는 무기한 hang(창 닫힘·세션 종료가 영원히 멎는다) 대신
         //    즉시 실패를 택한다. detach는 assembly 수명을 깨므로 금지다.
-        assembly_->app_inbox.close();
+        {
+            const std::scoped_lock lock { assembly_->file_dialog_mutex };
+            assembly_->app_inbox.close();
+            assembly_->file_dialog_messages.clear();
+        }
         if (assembly_->logic_thread.joinable())
         {
             wait_for_logic_exit();
@@ -477,6 +485,23 @@ namespace luil {
         }
     }
 
+    void app_host::post_file_dialog_message(app_message message) noexcept
+    {
+        if (message.empty() || shut_down_)
+            return;
+        try
+        {
+            const std::scoped_lock lock { assembly_->file_dialog_mutex };
+            if (assembly_->file_dialog_messages.empty()
+                && assembly_->app_inbox.post(message) != messaging::post_result::channel_full)
+                return;
+            assembly_->file_dialog_messages.push_back(std::move(message));
+        }
+        catch (...)
+        {
+        }
+    }
+
     std::uint64_t app_host::post_app_message_ticketed(app_message message) noexcept
     {
         try
@@ -596,7 +621,9 @@ namespace luil {
         catch (...)
         {
             assembly_->faulted.store(true);
+            const std::scoped_lock lock { assembly_->file_dialog_mutex };
             assembly_->app_inbox.close();
+            assembly_->file_dialog_messages.clear();
         }
         assembly_->logic_thread_exited.store(true);
     }
@@ -641,6 +668,23 @@ namespace luil {
                 // 상한이 렌더링 기회를 보존한다.
                 batch.clear();
                 static_cast<void>(assembly_->app_inbox.drain(batch, 63));
+                {
+                    // 포화 거절과 같은 자물쇠로 묶어, 직전 drain과 엇갈린 결과도 이 자리에서 집는다.
+                    const std::scoped_lock lock { assembly_->file_dialog_mutex };
+                    auto& messages { assembly_->file_dialog_messages };
+                    while (messages.empty() == false)
+                    {
+                        const auto result { assembly_->app_inbox.post(messages.front()) };
+                        if (result == messaging::post_result::channel_full)
+                            break;
+                        if (result == messaging::post_result::channel_closed)
+                        {
+                            messages.clear();
+                            break;
+                        }
+                        messages.pop_front();
+                    }
+                }
                 for (messaging::envelope<app_message>& entry : batch)
                 {
                     driver_.handle(std::move(entry.payload));
