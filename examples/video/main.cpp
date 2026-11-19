@@ -12,6 +12,11 @@ namespace video_demo {
 
         constexpr std::array<std::u8string_view, 3> formats { u8".mp4", u8".avi", u8".ts" };
 
+        struct dropped_video
+        {
+            std::filesystem::path path;
+        };
+
         std::u8string clock_text(std::chrono::milliseconds position)
         {
             const auto total { std::chrono::duration_cast<std::chrono::seconds>(position).count() };
@@ -56,6 +61,14 @@ namespace video_demo {
                 publish_for_message_ = true;
                 if (const auto* size { message.get<luil::window_metrics>() }; size != nullptr)
                     metrics_ = *size;
+                if (const auto* drop { message.get<dropped_video>() }; drop && closed_.load() == false)
+                {
+                    video_ = drop->path;
+                    subtitle_ = video_;
+                    subtitle_.replace_extension(".srt");
+                    open(true);
+                    return;
+                }
                 if (const auto* choice { message.get<sample_choice>() }; choice && closed_.load() == false)
                 {
                     if (choice->extension != format_)
@@ -118,6 +131,11 @@ namespace video_demo {
                     return;
                 const auto previous { player_->image().backing() };
                 player_->update();
+                if (play_when_ready_ && player_->state() == luil::win32::media_state::ready)
+                {
+                    play_when_ready_ = false;
+                    player_->play();
+                }
                 if (frame_log_ != nullptr && player_->image().valid() && previous != player_->image().backing())
                 {
                     LARGE_INTEGER counter {};
@@ -198,8 +216,9 @@ namespace video_demo {
                 open();
             }
 
-            void open()
+            void open(const bool autoplay = false)
             {
+                play_when_ready_ = autoplay;
                 format_.clear();
                 for (const auto extension : formats)
                 {
@@ -251,6 +270,7 @@ namespace video_demo {
             luil::ui_image last_image_ {};
             std::u8string last_status_ {};
             std::u8string last_subtitle_ {};
+            bool play_when_ready_ {};
             bool translucent_overlays_ { true };
             bool publish_for_message_ { true };
             std::unique_ptr<luil::win32::video_frame_player> player_ {};
@@ -261,6 +281,23 @@ namespace video_demo {
         class delegate final : public luil::win32::window_delegate
         {
         public:
+            bool on_file_dropped(luil::win32::app_host& host, const std::u8string& path) override
+            {
+                const std::filesystem::path file { path };
+                auto extension { file.extension().u8string() };
+                for (auto& c : extension)
+                {
+                    if (c >= u8'A' && c <= u8'Z')
+                        c = static_cast<char8_t>(c + (u8'a' - u8'A'));
+                }
+                if (std::find(formats.begin(), formats.end(), extension) == formats.end())
+                    return false;
+                std::error_code error {};
+                if (std::filesystem::is_regular_file(file, error) == false)
+                    return false;
+                return host.post_app_message_ticketed(luil::app_message { dropped_video { file } }) != 0;
+            }
+
             luil::app_message make_system_appearance_message(const luil::system_appearance& appearance) override
             {
                 return luil::app_message { appearance };
@@ -327,6 +364,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     config.class_name = L"Luil.VideoDemo";
     config.caption.title = video_strings::text(strings, video_strings::key::window_title);
     config.renderer = renderer;
+    config.accept_file_drop = true;
     config.initial_width = 880;
     config.initial_height = 610;
     luil::win32::window_environment environment {};
