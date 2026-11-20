@@ -49,6 +49,7 @@ namespace luil::win32 {
 
     private:
         LRESULT procedure(UINT message, WPARAM word_parameter, LPARAM long_parameter);
+        [[nodiscard]] bool needs_topmost() const noexcept;
 
         // 이 표면의 시간 예고를 update timer에 싣는다 (보조 창과 같다).
         void prepare_frame(frame_state& state) override;

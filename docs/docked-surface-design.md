@@ -71,6 +71,10 @@ frame.displays = [](const std::vector<luil::display_info>& displays) {
 자리는 바뀐 frame에서 `SetWindowPos(HWND_TOPMOST, …, SWP_NOACTIVATE)` 한 번으로 옮긴다. 같은 값이면 OS를 부르지 않는다.
 옮길 때마다 맨 위를 다시 세운다. 작업 표시줄처럼 같은 맨 위 창이 앞으로 나서면 그 아래로 밀리기 때문이다.
 
+도킹 표면이 소유한 popup을 일반 창 순서로 내리면 Windows는 도킹 표면도 함께 내린다. 이때 도킹 표면은
+`WM_WINDOWPOSCHANGED`를 받아 자기 창에 복구 메시지를 게시한다. 메시지를 처리할 때도 표면이 보이고
+`WS_EX_TOPMOST`가 꺼져 있으면, 위치·크기·활성 창을 유지하면서 맨 위 상태를 복구한다. 새 frame이 올 필요는 없다.
+
 ### 배율
 
 배율 변화(`WM_DPICHANGED`)에서 OS가 제안하는 사각형은 쓰지 않는다. 그 사각형은 지금 창을 새 배율로 곱한 것이라, 앱이 정한 크기를 OS가

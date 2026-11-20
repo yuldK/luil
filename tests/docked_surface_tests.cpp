@@ -1,4 +1,5 @@
 #include "win32/docked_surface.h"
+#include "win32/window_messages.h"
 
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_tree.h"
@@ -7,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -179,6 +181,14 @@ namespace {
         GetWindowRect(window, &rectangle);
         return rectangle;
     }
+
+    [[nodiscard]] auto create_test_popup(const HWND owner, const luil::screen_rect& bounds)
+    {
+        const HWND window { CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, L"BUTTON", L"", WS_POPUP
+            , bounds.left, bounds.top, bounds.width(), bounds.height(), owner, nullptr, GetModuleHandleW(nullptr), nullptr)
+        };
+        return std::unique_ptr<std::remove_pointer_t<HWND>, decltype(&DestroyWindow)> { window, &DestroyWindow };
+    }
 }
 
 TEST_CASE("A docked surface window has no caption, no taskbar button and never activates", "[win32][docked]")
@@ -202,6 +212,63 @@ TEST_CASE("A docked surface window has no caption, no taskbar button and never a
     // Alt+F4도 창을 없애지 않는다. 표면을 없애는 것은 앱이 목록에서 빼는 것뿐이다.
     SendMessageW(window.handle(), WM_CLOSE, 0, 0);
     REQUIRE(IsWindow(window.handle()) != FALSE);
+}
+
+TEST_CASE("A docked surface recovers when Windows lowers its owned popup", "[win32][docked]")
+{
+    fake_surface_context context {};
+    luil::win32::docked_surface surface { context, u8"widget" };
+    docked_test_window window { surface };
+    REQUIRE(window.handle() != nullptr);
+    const luil::screen_rect bounds { -25100, -25100, -25000, -25000 };
+    surface.apply_bounds(bounds);
+    const auto popup { create_test_popup(window.handle(), { bounds.left, bounds.top, bounds.left + 8, bounds.top + 8 }) };
+    const auto ordinary { create_test_popup(nullptr, bounds) };
+    REQUIRE(popup.get() != nullptr);
+    REQUIRE(ordinary.get() != nullptr);
+    ShowWindow(popup.get(), SW_SHOWNOACTIVATE);
+
+    // 소유 팝업을 내리면 Windows가 도킹 창까지 함께 내린다. 겹친 자리 중 팝업 바깥에서 어느 창이 앞인지 잰다.
+    const POINT overlap { bounds.left + 50, bounds.top + 50 };
+    const UINT flags { SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE };
+    REQUIRE(SetWindowPos(popup.get(), HWND_NOTOPMOST, 0, 0, 0, 0, flags));
+    REQUIRE((GetWindowLongW(window.handle(), GWL_EXSTYLE) & WS_EX_TOPMOST) == 0);
+    REQUIRE(SetWindowPos(ordinary.get(), HWND_TOP, 0, 0, 0, 0, flags | SWP_SHOWWINDOW));
+    REQUIRE(WindowFromPoint(overlap) == ordinary.get());
+
+    const auto dispatch_restore = [&window] {
+        MSG message {};
+        const UINT restore { luil::win32::restore_docked_topmost_message };
+        while (PeekMessageW(&message, window.handle(), restore, restore, PM_REMOVE) != FALSE)
+            DispatchMessageW(&message);
+    };
+
+    SECTION("The next window message restores the visible dock above the ordinary window")
+    {
+        const HWND active { GetActiveWindow() };
+        dispatch_restore();
+        REQUIRE(GetActiveWindow() == active);
+        REQUIRE((GetWindowLongW(window.handle(), GWL_EXSTYLE) & WS_EX_TOPMOST) != 0);
+        REQUIRE((GetWindowLongW(ordinary.get(), GWL_EXSTYLE) & WS_EX_TOPMOST) == 0);
+        REQUIRE(WindowFromPoint(overlap) == window.handle());
+    }
+
+    SECTION("A queued restore keeps a subsequently hidden dock hidden")
+    {
+        surface.apply_bounds(std::nullopt);
+        dispatch_restore();
+        REQUIRE(IsWindowVisible(window.handle()) == FALSE);
+        REQUIRE((GetWindowLongW(window.handle(), GWL_EXSTYLE) & WS_EX_TOPMOST) == 0);
+        REQUIRE(WindowFromPoint(overlap) == ordinary.get());
+    }
+
+    SECTION("An already restored dock keeps its place behind another topmost window")
+    {
+        REQUIRE(SetWindowPos(window.handle(), HWND_TOPMOST, 0, 0, 0, 0, flags));
+        REQUIRE(SetWindowPos(ordinary.get(), HWND_TOPMOST, 0, 0, 0, 0, flags));
+        dispatch_restore();
+        REQUIRE(WindowFromPoint(overlap) == ordinary.get());
+    }
 }
 
 TEST_CASE("A docked surface takes the bounds the app gives, down to a thin strip", "[win32][docked]")

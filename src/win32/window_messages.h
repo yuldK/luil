@@ -38,6 +38,8 @@ namespace luil::win32 {
     inline constexpr UINT capture_request_message { WM_APP + 10 };
     // 주 창. 앱이 `post_ui_command`로 낸 닫기다. 사용자 닫기의 frame당 한 번 빗장을 비켜 간다.
     inline constexpr UINT app_close_message { WM_APP + 11 };
+    // 도킹 표면. 소유 popup까지 포함한 창 순서 변경이 끝난 뒤 맨 위 상태를 다시 확인한다.
+    inline constexpr UINT restore_docked_topmost_message { WM_APP + 12 };
 
     // 번호가 서로 다르고 앱이 쓸 수 있는 대역(`WM_APP`~0xBFFF) 안인가다.
     [[nodiscard]] constexpr bool app_message_numbers_valid() noexcept
@@ -54,6 +56,7 @@ namespace luil::win32 {
             text_scale_changed_message,
             capture_request_message,
             app_close_message,
+            restore_docked_topmost_message,
         };
         for (std::size_t index = 0; index < std::size(numbers); ++index)
         {

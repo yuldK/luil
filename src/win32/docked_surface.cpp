@@ -77,6 +77,16 @@ namespace luil::win32 {
     {
         switch (message)
         {
+        case WM_WINDOWPOSCHANGED:
+            // 소유 popup이 일반 창 뒤로 옮겨지면 Windows가 도킹 창도 함께 내린다.
+            // 같은 배치에서 여러 창이 통지를 받으므로, 그 변경이 끝난 뒤 순서를 되돌린다.
+            if (needs_topmost())
+                PostMessageW(window_, restore_docked_topmost_message, 0, 0);
+            break;
+        case restore_docked_topmost_message:
+            if (needs_topmost())
+                SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            return 0;
         case WM_MOUSEACTIVATE:
             // 눌러도 활성화되지 않는다. 다른 앱이 쥔 앞 창과 키보드를 빼앗지 않는다 (드래그 중의 원본 앱도 그대로다).
             return MA_NOACTIVATE;
@@ -137,6 +147,11 @@ namespace luil::win32 {
         if (const std::optional<LRESULT> handled { handle_surface_message(message, word_parameter, long_parameter) }; handled.has_value())
             return *handled;
         return DefWindowProcW(window_, message, word_parameter, long_parameter);
+    }
+
+    bool docked_surface::needs_topmost() const noexcept
+    {
+        return IsWindowVisible(window_) != FALSE && (GetWindowLongPtrW(window_, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0;
     }
 
     bool docked_surface::adopt(const ui_docked_surface& source)
