@@ -997,7 +997,7 @@ namespace luil::win32 {
             // 이어 본다 — caption chrome → 표면 공통 (win32-surface-design.md).
             LRESULT handle_window_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
             {
-                if (main_.placement_report_due(message, long_parameter))
+                if (main_.placement_report_due(message, word_parameter, long_parameter))
                     post_window_placement();
                 switch (message)
                 {

@@ -59,7 +59,7 @@ namespace luil::win32 {
 
     LRESULT secondary_surface::procedure(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
     {
-        if (placement_report_due(message, long_parameter))
+        if (placement_report_due(message, word_parameter, long_parameter))
             post_placement();
         switch (message)
         {

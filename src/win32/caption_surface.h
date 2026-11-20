@@ -116,7 +116,7 @@ namespace luil::win32 {
             return tracking_placement_;
         }
         void queue_placement_report() noexcept;
-        [[nodiscard]] bool placement_report_due(UINT message, LPARAM parameter) noexcept;
+        [[nodiscard]] bool placement_report_due(UINT message, WPARAM word_parameter, LPARAM parameter) noexcept;
 
         // 전체 화면으로 넣거나 뺀다.
         // 실제로 상태가 바뀌었으면 참이다 (이미 그 상태이거나 모니터·배치를 읽지
@@ -203,6 +203,7 @@ namespace luil::win32 {
         bool tracking_placement_ { false };
         bool in_size_move_ { false };
         bool placement_pending_ { false };
+        bool last_maximized_ { false };
         caption_config caption_ {};
         // 전체 화면이면 값이 있고 아니면 비어 있다.
         // **곁에 `bool`을 두지 않는다** — 없음이 곧 상태다 (app_host.h의 "빈 값이 곧

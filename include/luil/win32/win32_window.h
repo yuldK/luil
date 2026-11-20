@@ -417,7 +417,7 @@ namespace luil::win32 {
             static_cast<void>(host);
         }
 
-        // 창 배치를 보고한다 (이동·크기 조절 끝, 최대화 전환, 종료 직전).
+        // 끌기 끝과 끌기 밖의 이동·크기 변경, 전체 화면 전환, 종료 직전의 배치를 보고한다.
         // 빈 메시지는 게시하지 않는다.
         [[nodiscard]] virtual app_message make_window_placement_message(const window_placement& placement)
         {

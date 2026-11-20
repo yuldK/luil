@@ -922,14 +922,20 @@ TEST_CASE("A secondary window reports its placement when moving ends and when it
     const test_window window { surface, true };
     REQUIRE(window.handle() != nullptr);
 
-    const auto wait_for = [&driver](const int count) {
+    ShowWindow(window.handle(), SW_SHOWNOACTIVATE);
+    surface.track_placement(true);
+    const auto wait_for = [&driver, &window](const int count) {
+        MSG message {};
+        constexpr UINT signal { luil::win32::placement_changed_message };
+        while (PeekMessageW(&message, window.handle(), signal, signal, PM_REMOVE))
+            DispatchMessageW(&message);
         const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
         while (driver.reports.load() < count && std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
         REQUIRE(driver.reports.load() == count);
     };
 
-    // 이동·크기 조절의 끝이다. 숨은 창의 실제 사각형이 그대로 실린다.
+    // 이동·크기 조절의 끝이다. 보이는 창의 실제 사각형이 그대로 실린다.
     SendMessageW(window.handle(), WM_EXITSIZEMOVE, 0, 0);
     wait_for(1);
     REQUIRE(driver.last.width == 400);

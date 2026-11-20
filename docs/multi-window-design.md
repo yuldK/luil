@@ -82,7 +82,7 @@ Caption close button과 Alt+F4는 `ui_window::close`를 호출한다. UI thread�
 
 ## 배치 보고와 복원
 
-`ui_window::placement`를 달면 그 창의 배치를 앱 메시지로 받는다. 만든 직후, 이동·크기 조절이 끝났을 때(`WM_EXITSIZEMOVE`), 최대화 ↔ 복원이 바뀌었을 때다. 값은 주 창의 `window_delegate::make_window_placement_message`와 같은 `window_placement`이고(최대화·최소화 중에도 복원 사각형), 앱은 그것을 저장했다가 다음 실행의 `initial_placement`로 되돌린다. 비어 있으면 알리지 않는다.
+`ui_window::placement`를 달면 그 창의 배치를 앱 메시지로 받는다. 처음 보인 뒤와 끌기 끝(`WM_EXITSIZEMOVE`)에 한 번씩 보낸다. 끌기 밖의 이동·크기 변경과 최대화 ↔ 복원은 게시 메시지로 모아 최종 자리를 알린다. 값은 주 창의 `window_delegate::make_window_placement_message`와 같은 `window_placement`이고(최대화·최소화 중에도 복원 사각형), 앱은 그것을 저장했다가 다음 실행의 `initial_placement`로 되돌린다. 비어 있으면 알리지 않는다.
 
 소유된 창과 독립 창이 함께 받는다. 예전에는 "보조 창의 자리는 만들 때 한 번이고 그 뒤로는 사용자의 것이라 저장하고 되돌릴 주체가 없다"고 보아 주 창만 받았다. 창을 떼어 내고 합치는 앱에서는 앱이 바로 그 주체다 — 창마다 탭 목록과 배치를 저장하고 다음 실행에서 같은 창들을 같은 자리에 되살린다. 소유 여부는 이 질문과 상관이 없어 둘로 가르지 않는다.
 

@@ -229,7 +229,7 @@ namespace luil {
         //    (x·y는 작업 영역 좌표, 크기는 물리 픽셀). 잘못된 값·화면 밖 배치는 통째로 무시한다.
         //  - `fullscreen`은 보지 않는다. 전체 화면은 주 창의 것이다.
         std::optional<window_placement> initial_placement {};
-        // 배치를 알릴 메시지다 (만든 직후, 이동·크기 조절이 끝났을 때, 최대화 ↔ 복원).
+        // 처음 표시한 자리와 이동·크기·최대화 변경을 알린다. 끌기 안에서는 끝에 한 번 알린다.
         //  - 앱은 받은 값을 저장했다가 다음 실행의 `initial_placement`로 되돌린다. 주 창의
         //    `window_delegate::make_window_placement_message`와 같은 값이다 (`fullscreen`은 늘 거짓).
         //  - 비어 있으면 알리지 않는다.

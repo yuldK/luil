@@ -231,10 +231,19 @@ namespace luil::win32 {
             placement_pending_ = PostMessageW(window_, placement_changed_message, 0, 0) != FALSE;
     }
 
-    bool caption_surface::placement_report_due(const UINT message, const LPARAM parameter) noexcept
+    bool caption_surface::placement_report_due(const UINT message, const WPARAM word_parameter, const LPARAM parameter) noexcept
     {
         switch (message)
         {
+        case WM_SIZE:
+            // 크기가 우연히 같아도 최대화 여부의 전환은 저장할 배치의 변화다.
+            if (word_parameter == SIZE_MAXIMIZED || word_parameter == SIZE_RESTORED)
+            {
+                const bool maximized { word_parameter == SIZE_MAXIMIZED };
+                if (std::exchange(last_maximized_, maximized) != maximized)
+                    queue_placement_report();
+            }
+            return false;
         case WM_WINDOWPOSCHANGED:
             if ((reinterpret_cast<const WINDOWPOS*>(parameter)->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE))
                 queue_placement_report();
