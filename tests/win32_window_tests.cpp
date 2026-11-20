@@ -42,6 +42,8 @@ namespace {
 
         void handle(luil::app_message message) override
         {
+            if (const auto* next { message.get<std::shared_ptr<luil::ui_frame>>() }; next != nullptr)
+                frame_ = *next;
             if (message.get<bool>() != nullptr)
                 closed_.store(true);
         }
@@ -376,6 +378,86 @@ namespace {
         return TRUE;
     }
 
+    void drain_placement_reports(const HWND window)
+    {
+        MSG message {};
+        constexpr UINT signal { luil::win32::placement_changed_message };
+        while (PeekMessageW(&message, window, signal, signal, PM_REMOVE))
+            DispatchMessageW(&message);
+    }
+
+    class live_placement_delegate final : public luil::win32::window_delegate
+    {
+    public:
+        HWND window {};
+        std::function<void(luil::app_host&)> exercise {};
+        std::vector<luil::window_placement> reports {};
+        bool exercised {};
+        std::exception_ptr failure {};
+
+        void on_native_window_created(luil::app_host&, void* handle) override
+        {
+            window = static_cast<HWND>(handle);
+        }
+
+        void on_native_frame(luil::app_host& host, const luil::ui_frame&) override
+        {
+            if (exercised || IsWindowVisible(window) == FALSE)
+                return;
+            exercised = true;
+            try
+            {
+                exercise(host);
+            }
+            catch (...)
+            {
+                failure = std::current_exception();
+            }
+            host.post_ui_command(luil::ui_command::application_exit);
+        }
+
+        luil::app_message make_window_placement_message(const luil::window_placement& placement) override
+        {
+            reports.push_back(placement);
+            return {};
+        }
+
+        void publish(luil::app_host& host, const std::shared_ptr<luil::ui_frame>& frame) const
+        {
+            host.post_app_message(luil::app_message { frame });
+            const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 3 } };
+            while (host.acquire_frame() != frame && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
+            REQUIRE(host.acquire_frame() == frame);
+            SendMessageW(window, luil::win32::snapshot_wake_message, 0, 0);
+            drain_placement_reports(window);
+        }
+
+        void run(const luil::window_placement& initial, const std::shared_ptr<luil::ui_frame>& frame)
+        {
+            const luil::win32::com_sta_scope com {};
+            close_origin_driver driver { frame };
+            luil::win32::window_config config {};
+            config.class_name = L"Luil.Test.LivePlacement";
+            config.renderer = luil::renderer_mode::cpu;
+            config.initial_placement = initial;
+            config.minimum_client_width = 100;
+            config.minimum_client_height = 80;
+            REQUIRE(luil::win32::run_application_window(config, { &driver, nullptr, this }) == 0);
+            drain_quit_message();
+            if (failure)
+                std::rethrow_exception(failure);
+            REQUIRE(exercised);
+        }
+    };
+
+    [[nodiscard]] RECT actual_bounds(const HWND window)
+    {
+        RECT bounds {};
+        REQUIRE(GetWindowRect(window, &bounds));
+        return bounds;
+    }
+
     [[nodiscard]] placement_probe run_placement_probe(luil::win32::window_config config, const bool send_setting_change = false)
     {
         luil::win32::enable_per_monitor_dpi_awareness();
@@ -399,6 +481,161 @@ namespace {
         REQUIRE(driver.first_metrics->height == static_cast<float>(probe.before_show.bottom - probe.before_show.top));
         REQUIRE(driver.first_metrics->scale == static_cast<float>(probe.dpi) / 96.0f);
         return probe;
+    }
+}
+
+TEST_CASE("Frame fullscreen waits for first display and reconciles repeated requests", "[win32][window][live-placement]")
+{
+    const MONITORINFO monitor { test_monitor() };
+    const auto saved { saved_test_placement(monitor) };
+    live_placement_delegate probe {};
+    auto frame { std::make_shared<luil::ui_frame>() };
+    frame->fullscreen = true;
+    probe.exercise = [&](luil::app_host& host) {
+        REQUIRE(probe.reports.size() == 2);
+        REQUIRE(probe.reports.front() == saved);
+        REQUIRE(probe.reports.back().fullscreen);
+        const RECT full { actual_bounds(probe.window) };
+        REQUIRE(EqualRect(&full, &monitor.rcMonitor));
+        probe.publish(host, std::make_shared<luil::ui_frame>(*frame));
+        REQUIRE(probe.reports.size() == 2);
+        host.post_ui_command(luil::ui_command::window_toggle_fullscreen);
+        SendMessageW(probe.window, luil::win32::ui_command_request_message, 0, 0);
+        REQUIRE(probe.reports.back() == saved);
+        probe.publish(host, std::make_shared<luil::ui_frame>(*frame));
+        REQUIRE(probe.reports.size() == 4);
+        REQUIRE(probe.reports.back().fullscreen);
+        auto next { std::make_shared<luil::ui_frame>() };
+        next->fullscreen = false;
+        probe.publish(host, next);
+        REQUIRE(probe.reports.size() == 5);
+        REQUIRE(probe.reports.back() == saved);
+    };
+    probe.run(saved, frame);
+}
+
+TEST_CASE("Secondary placement coalesces moves and waits for the drag loop to end", "[win32][window][live-placement]")
+{
+    const MONITORINFO monitor { test_monitor() };
+    std::vector<luil::window_placement> reports {};
+    auto frame { std::make_shared<luil::ui_frame>() };
+    luil::ui_window child { .id = u8"tool", .width = 400, .height = 280 };
+    child.tree = std::make_shared<const luil::ui_tree>(std::make_unique<luil::root_element>());
+    child.placement = [&](const luil::window_placement& value) {
+        reports.push_back(value);
+        return luil::app_message {};
+    };
+    frame->windows.push_back(std::move(child));
+    live_placement_delegate probe {};
+    probe.exercise = [&](luil::app_host&) {
+        const HWND tool { FindWindowW(L"Luil.Test.LivePlacement.Secondary", nullptr) };
+        REQUIRE(tool != nullptr);
+        REQUIRE(GetWindow(tool, GW_OWNER) == probe.window);
+        REQUIRE(reports.size() == 1);
+        const int x { monitor.rcWork.left + 80 };
+        const int y { monitor.rcWork.top + 100 };
+        REQUIRE(SetWindowPos(tool, nullptr, x, y, 500, 360, SWP_NOZORDER | SWP_NOACTIVATE));
+        REQUIRE(SetWindowPos(tool, nullptr, x + 10, y + 10, 520, 360, SWP_NOZORDER | SWP_NOACTIVATE));
+        drain_placement_reports(tool);
+        REQUIRE(reports.size() == 2);
+        REQUIRE(reports.back().width == 520);
+        SendMessageW(tool, WM_ENTERSIZEMOVE, 0, 0);
+        REQUIRE(SetWindowPos(tool, nullptr, x, y, 500, 360, SWP_NOZORDER | SWP_NOACTIVATE));
+        drain_placement_reports(tool);
+        REQUIRE(reports.size() == 2);
+        SendMessageW(tool, WM_EXITSIZEMOVE, 0, 0);
+        REQUIRE(reports.size() == 3);
+        REQUIRE(reports.back().width == 500);
+        ShowWindow(tool, SW_MINIMIZE);
+        drain_placement_reports(tool);
+        REQUIRE(reports.size() == 3);
+    };
+    probe.run(saved_test_placement(monitor), frame);
+}
+
+TEST_CASE("Moved windows cover their current monitor through all fullscreen entry points", "[win32][window][live-placement]")
+{
+    luil::win32::enable_per_monitor_dpi_awareness();
+    std::vector<HMONITOR> monitors {};
+    REQUIRE(EnumDisplayMonitors(nullptr, nullptr, &collect_monitors, reinterpret_cast<LPARAM>(&monitors)));
+    if (monitors.size() < 2)
+        SKIP("Two connected monitors are required for cross-monitor placement");
+    MONITORINFO first { sizeof(MONITORINFO) };
+    REQUIRE(GetMonitorInfoW(monitors.front(), &first));
+    const auto saved { saved_test_placement(first) };
+    for (const auto target : monitors)
+    {
+        if (target == monitors.front())
+            continue;
+        MONITORINFO other { sizeof(MONITORINFO) };
+        REQUIRE(GetMonitorInfoW(target, &other));
+        live_placement_delegate probe {};
+        probe.exercise = [&](luil::app_host& host) {
+            const HWND window { probe.window };
+            auto& reports { probe.reports };
+            REQUIRE(SetWindowPos(window, nullptr, other.rcWork.left + 40, other.rcWork.top + 50, 600, 400, SWP_NOZORDER | SWP_NOACTIVATE));
+            drain_placement_reports(window);
+            REQUIRE(reports.size() == 2);
+            REQUIRE(MonitorFromWindow(window, MONITOR_DEFAULTTONULL) == target);
+            SendMessageW(window, WM_ENTERSIZEMOVE, 0, 0);
+            REQUIRE(SetWindowPos(window, nullptr, other.rcWork.left + 60, other.rcWork.top + 70, 600, 400, SWP_NOZORDER | SWP_NOACTIVATE));
+            drain_placement_reports(window);
+            REQUIRE(reports.size() == 2);
+            SendMessageW(window, WM_EXITSIZEMOVE, 0, 0);
+            REQUIRE(reports.size() == 3);
+            const auto moved { reports.back() };
+            const RECT before { actual_bounds(window) };
+            REQUIRE(moved.x == before.left - other.rcWork.left + other.rcMonitor.left);
+            REQUIRE(moved.y == before.top - other.rcWork.top + other.rcMonitor.top);
+            const auto toggle = [&] {
+                host.post_ui_command(luil::ui_command::window_toggle_fullscreen);
+                SendMessageW(window, luil::win32::ui_command_request_message, 0, 0);
+                drain_placement_reports(window);
+            };
+            for (int path = 0; path != 4; ++path)
+            {
+                const auto count { reports.size() };
+                auto frame { std::make_shared<luil::ui_frame>() };
+                if (path == 0)
+                    toggle();
+                else
+                {
+                    if (path == 1 || path == 3)
+                    {
+                        frame->window_placement_request = path == 3 ? saved : moved;
+                        frame->window_placement_request->fullscreen = path == 3;
+                        frame->window_placement_revision = path;
+                    }
+                    if (path != 3)
+                        frame->fullscreen = true;
+                    probe.publish(host, frame);
+                }
+                REQUIRE(reports.size() == count + 1);
+                REQUIRE(reports.back().fullscreen);
+                const RECT full { actual_bounds(window) };
+                REQUIRE(MonitorFromWindow(window, MONITOR_DEFAULTTONULL) == target);
+                REQUIRE(EqualRect(&full, &other.rcMonitor));
+                if (path == 2)
+                {
+                    auto normal { std::make_shared<luil::ui_frame>() };
+                    normal->fullscreen = false;
+                    probe.publish(host, normal);
+                }
+                else
+                    toggle();
+                REQUIRE(reports.size() == count + 2);
+                const auto expected { path == 3 ? saved : moved };
+                CAPTURE(path, expected.x, expected.y, expected.width, expected.height, reports.back().x, reports.back().y, reports.back().width, reports.back().height);
+                REQUIRE(reports.back() == expected);
+                REQUIRE(MonitorFromWindow(window, MONITOR_DEFAULTTONULL) == (path == 3 ? monitors.front() : target));
+            }
+        };
+        probe.run(saved, std::make_shared<luil::ui_frame>());
+        luil::win32::window_config config {};
+        config.initial_placement = saved_test_placement(other);
+        config.initial_placement->fullscreen = true;
+        const auto initial { run_placement_probe(config) };
+        REQUIRE(EqualRect(&initial.first_show, &other.rcMonitor));
     }
 }
 

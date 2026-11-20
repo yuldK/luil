@@ -94,7 +94,7 @@ config.initial_placement = saved_placement;
 
 | 메시지 | 전체 화면 | 통상·최대화 |
 | --- | --- | --- |
-| `WM_DPICHANGED` | 제안 사각형을 **버리고** 지금 모니터의 rcMonitor를 다시 구해 앉힌다 | OS가 제안한 사각형을 적용한다 |
+| `WM_DPICHANGED` | 제안 사각형을 **버리고** 지금 모니터의 rcMonitor를 다시 구해 앉힌다 | 보통은 OS 제안을 적용한다. 물리 픽셀로 명시한 복원 중에는 요청 크기를 유지한다 |
 | `WM_DISPLAYCHANGE` | 지금 모니터의 rcMonitor를 다시 구해 앉힌다 | 아무것도 하지 않는다 |
 
 `WM_DPICHANGED`의 제안 사각형은 지금 창 사각형에 배율 비를 곱한 값이다. 1920x1080 모니터를 100%에서 150%로 바꾸면 모니터는 그대로인데 창만 2880x1620이 되므로 전체 화면 창에는 쓸 수 없다. 배율 값 갱신·metrics 게시·popup 다시 맞추기는 두 길이 똑같이 지나고, 달라지는 것은 사각형을 어디서 얻는가뿐이다.
@@ -124,6 +124,8 @@ config.initial_placement = saved_placement;
 
 ## 검증
 
-붙임은 데모의 ‘창’ 페이지에서 확인한다. 통상 창을 Win+←로 붙인 후 `GetWindowRect`와 `GetWindowPlacement().rcNormalPosition`을 기록한다. ‘전체 화면 전환’을 두 번 누르고 마지막 `GetWindowRect`의 네 변을 첫 값과 비교한다. 작업 표시줄이 위·왼쪽인 모니터에서는 두 API의 좌표계 차이도 함께 확인한다.
+붙임은 데모의 ‘창’ 페이지에서 확인한다. 통상 창을 Win+←로 붙인 후 `GetWindowRect`와 `GetWindowPlacement().rcNormalPosition`을 기록한다. ‘전체 화면 전환’을 두 번 누르고 마지막 `GetWindowRect`의 네 변을 첫 값과 비교한다. 작업 표시줄이 위·왼쪽인 모니터에서는 두 API의 좌표계 차이도 함께 확인한다. 3840×2160 모니터에서 왼쪽 붙임 직후의 화면 사각형은 `(0,0,1920,2088)`, OS의 복원 사각형은 `(100,100,2020,1180)`이었다. 전체 화면에서 `(0,0,3840,2160)`을 덮었고 해제 후 네 변이 붙임 직전과 일치했다.
+
+`[live-placement]` 실제 창 테스트는 주·보조 창 보고 횟수, frame 상태의 반복 게시, 세 전체 화면 진입 경로와 명시적 타 모니터 복원을 검사한다. 모니터 사이를 옮기는 경우만 모니터가 하나면 건너뛴다.
 
 [`tests/window_mode_tests.cpp`](../../tests/window_mode_tests.cpp)는 모드별 스타일과 hit 결과, 모니터 목표 사각형, 보고할 배치의 왕복을 창 없이 검증한다. 전체 화면에서 나올 때의 스타일도 여기서 못 박는다 — 전체 화면인 동안 버튼 집합이 바뀐 경우와, 그 계산이 `WS_MAXIMIZE`를 만들지 않는다는 것까지다. [`tests/win32_window_tests.cpp`](../../tests/win32_window_tests.cpp)는 실제 창에서 전체 화면의 hit이 전부 `HTCLIENT`인지와 창 수명을 검증하고, [`tests/caption_layout_tests.cpp`](../../tests/caption_layout_tests.cpp)는 caption 자리 계산이 두 판정에서 하나임을 검증한다.

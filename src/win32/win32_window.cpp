@@ -1265,7 +1265,8 @@ namespace luil::win32 {
                     //    똑같이 지난다. 달라지는 것은 사각형을 어디서 얻는가뿐이다.
                     if (main_.fullscreen())
                         static_cast<void>(main_.reapply_fullscreen_bounds());
-                    else
+                    // 명시적 복원 중에는 바깥 SetWindowPlacement가 이미 물리 픽셀 크기를 주었다.
+                    else if (main_.tracking_placement())
                     {
                         const auto* suggested_rectangle { reinterpret_cast<const RECT*>(long_parameter) };
                         SetWindowPos(window_, nullptr, suggested_rectangle->left, suggested_rectangle->top, suggested_rectangle->right - suggested_rectangle->left,

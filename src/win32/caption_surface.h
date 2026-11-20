@@ -111,6 +111,10 @@ namespace luil::win32 {
         }
         // 첫 표시와 명시적 배치 전환 동안 동기 메시지가 중간 배치를 내보내지 않게 한다.
         void track_placement(bool enabled) noexcept;
+        [[nodiscard]] bool tracking_placement() const noexcept
+        {
+            return tracking_placement_;
+        }
         void queue_placement_report() noexcept;
         [[nodiscard]] bool placement_report_due(UINT message, LPARAM parameter) noexcept;
 
