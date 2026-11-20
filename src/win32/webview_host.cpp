@@ -226,6 +226,10 @@ namespace luil::win32 {
         // 마지막으로 적용한 자리다. 같으면 다시 적용하지 않는다.
         webview_layout applied {};
         bool has_applied { false };
+        // 보이기 전에 미리 준 크기와 배율이다 (`prepare_size`). 0은 아직 주지 않았다는 뜻이다.
+        int prepared_width { 0 };
+        int prepared_height { 0 };
+        float prepared_scale { 0.0f };
 
         // 앱이 마지막으로 **원한** 명령이다. 만들기가 비동기라 컨트롤러가 서기 전에
         // 오는 것이 보통이므로 기억해 두었다가 준비되면 흘려보낸다.
@@ -1120,9 +1124,8 @@ namespace luil::win32 {
         target->has_layer = parent != nullptr;
         report_presentation(*target);
         // 합성이 없으면(CPU 백엔드) 설 자리가 없다. 감추고 자리표에 맡긴다.
-        const bool showing { layout.visible() && parent != nullptr && target->visual != nullptr
-            && (layout.layer == webview_layer::underlay || target->navigation_finished)
-        };
+        const bool placed { layout.visible() && parent != nullptr && target->visual != nullptr };
+        const bool showing { placed && (layout.layer == webview_layer::underlay || target->navigation_finished) };
         if ((showing == false || layout.uncovered == false) && target->pressed_buttons != 0)
             cancel_pointer(target->anchor);
         // 브라우저가 DOWN만 받은 채 감춰지지 않도록 먼저 접촉을 끝낸다.
@@ -1136,6 +1139,10 @@ namespace luil::win32 {
             // 이유가 없고, 떼었다 붙이면 `put_RootVisualTarget`을 다시 걸어야 해서
             // 되살아난 페이지가 빈다.
             set_automation_window(*target, nullptr);
+            // 자리는 있는데 보이지 못하는 것은 첫 항해를 기다리는 위층뿐이다. 그 문서는 보이기 전에 열리므로
+            // 크기와 배율을 숨긴 채로 먼저 준다.
+            if (placed)
+                prepare_size(*target, layout);
             if (target->shown == false)
                 return;
             target->shown = false;
@@ -1212,6 +1219,24 @@ namespace luil::win32 {
         // 커밋 전에는 아무 일도 일어나지 않는다 (0.5us — 자리가 바뀐 frame에만 든다).
         if (composition_ != nullptr)
             static_cast<void>(composition_->Commit());
+    }
+
+    void webview_host::prepare_size(entry& target, const webview_layout& layout)
+    {
+        if (target.prepared_width == layout.width && target.prepared_height == layout.height && target.prepared_scale == layout.scale)
+            return;
+        // 주지 않으면 첫 문서가 0×0 뷰포트에서 열린다. load 때 크기를 재는 페이지는 0으로 초기화하고,
+        // 보이는 순간 리플로를 한 번 더 한다. 아래층은 첫 자리에서 바로 받으므로 이 길이 필요 없다.
+        //  - 순서는 `apply_layout`과 같다 (배율 다음에 크기). 보이게 하는 것은 여전히 `apply_layout`의 몫이다.
+        ComPtr<ICoreWebView2Controller3> controller3 {};
+        if (SUCCEEDED(target.controller.As(&controller3)) && controller3 != nullptr)
+            static_cast<void>(controller3->put_RasterizationScale(static_cast<double>(layout.scale)));
+        const RECT bounds { 0, 0, layout.width, layout.height };
+        if (FAILED(target.controller->put_Bounds(bounds)))
+            return;
+        target.prepared_width = layout.width;
+        target.prepared_height = layout.height;
+        target.prepared_scale = layout.scale;
     }
 
     namespace {

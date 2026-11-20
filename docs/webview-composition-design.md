@@ -48,7 +48,7 @@ Element는 arranged physical bounds와 arrange에 사용한 scale을 보관한�
 
 `plan_webview_layout`은 visible rectangle을 정수 physical pixel로 반올림하고 surface client rectangle과 교차시킨다. 비었거나 완전히 clip되면 controller를 숨긴다. DirectComposition visual offset이 위치를 정하고 visual-local clip이 page pixel을 slot 밖으로 나가지 못하게 한다. Controller bounds는 `(0, 0)`에서 시작하는 width와 height만 제공한다.
 
-자리표는 두 방식 모두 매번 바탕과 placeholder를 그린다. **위층**에서는 그 픽셀을 그대로 두고 WebView2가 실제로 제출한 페이지 픽셀을 위에 합성한다. 빈 visual은 투명하지만 컨트롤러의 초기 빈 문서가 먼저 단색 면을 제출할 수 있다. 실측에서 위층을 즉시 보인 구현은 placeholder 다음에 단색 슬롯이 3장 잡혔다. 위층은 첫 항해가 끝날 때까지 기본 바탕을 투명하게 두고 컨트롤러를 숨긴다. 첫 `NavigationCompleted`에서 페이지용 불투명 바탕을 복구하고 표시를 허용한다. 이 사건 뒤에 합성 픽셀이 늦어져도 아래에는 자리표가 그대로 있다. 이후 항해는 그때마다 숨기지 않는다. 다시 보일 때 브라우저가 보존한 직전 페이지 픽셀이 새 항해보다 먼저 보일 수 있다.
+자리표는 두 방식 모두 매번 바탕과 placeholder를 그린다. **위층**에서는 그 픽셀을 그대로 두고 WebView2가 실제로 제출한 페이지 픽셀을 위에 합성한다. 빈 visual은 투명하지만 컨트롤러의 초기 빈 문서가 먼저 단색 면을 제출할 수 있다. 실측에서 위층을 즉시 보인 구현은 placeholder 다음에 단색 슬롯이 3장 잡혔다. 위층은 첫 항해가 끝날 때까지 기본 바탕을 투명하게 두고 컨트롤러를 숨긴다. 숨긴 동안에도 자리의 크기와 배율은 먼저 준다. 첫 문서는 보이기 전에 열리므로, 주지 않으면 0×0 뷰포트에서 load되어 그때 크기를 재는 페이지가 0으로 초기화한다. 첫 `NavigationCompleted`에서 페이지용 불투명 바탕을 복구하고 표시를 허용한다. 이 사건 뒤에 합성 픽셀이 늦어져도 아래에는 자리표가 그대로 있다. 이후 항해는 그때마다 숨기지 않는다. 다시 보일 때 브라우저가 보존한 직전 페이지 픽셀이 새 항해보다 먼저 보일 수 있다.
 
 **아래층**은 기존처럼 controller가 보이고 첫 `NavigationCompleted`를 받은 뒤 Skia 슬롯을 알파 0으로 비운다. 이 사건은 첫 합성 그림보다 먼저 올 수 있어 그 사이 슬롯에 창 뒤가 비치는 결함이 남는다. GDI 면을 바탕색으로 칠하는 완화책은 backdrop을 쓰는 창에서 효과까지 가린다. 컨트롤러의 기본 바탕색도 브라우저가 첫 그림을 낸 뒤에 보인다.
 

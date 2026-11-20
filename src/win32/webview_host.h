@@ -166,6 +166,8 @@ namespace luil::win32 {
         // 기억해 둔 명령 중 아직 실행하지 않은 것을 실행한다.
         void flush_commands(entry& target);
         void report_presentation(entry& target);
+        // 첫 항해를 기다리느라 숨은 위층 웹뷰에 자리의 크기와 배율만 먼저 준다.
+        void prepare_size(entry& target, const webview_layout& layout);
         void set_automation_window(entry& target, HWND window);
         // 사건 하나를 앱으로 나른다.
         //
