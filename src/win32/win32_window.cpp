@@ -1777,20 +1777,24 @@ namespace luil::win32 {
                 if (GetWindowPlacement(window_, &placement) == FALSE)
                     return;
 
-                // 전체 화면 요청도 **정상 배치를 먼저 놓고** 들어간다.
-                // 요청의 자리·크기·최대화는 전체 화면 창의 사각형이 아니라 나올 때
-                // 돌아갈 배치이므로(app_host.h), 순서를 뒤집으면 돌아갈 자리로
-                // 갈무리되는 것이 지금 창의 자리가 된다.
-                //  - 이미 전체 화면인 창이면 먼저 빠져나온다. 그러지 않으면 갈무리해
-                //    둔 옛 배치가 아래의 `SetWindowPlacement`를 이겨 요청이 묻힌다.
                 const bool was_fullscreen { main_.fullscreen() };
-                if (was_fullscreen)
-                    static_cast<void>(main_.set_fullscreen(false));
                 placement.rcNormalPosition = bounds;
-                placement.showCmd = requested.maximized ? static_cast<UINT>(SW_SHOWMAXIMIZED) : static_cast<UINT>(SW_SHOWNORMAL);
-                static_cast<void>(SetWindowPlacement(window_, &placement));
+                placement.showCmd = requested.maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
                 if (requested.fullscreen)
+                {
                     static_cast<void>(main_.set_fullscreen(true));
+                    main_.set_fullscreen_restore(placement);
+                }
+                else
+                {
+                    if (was_fullscreen)
+                    {
+                        main_.set_fullscreen_restore(placement);
+                        static_cast<void>(main_.set_fullscreen(false));
+                    }
+                    else
+                        static_cast<void>(SetWindowPlacement(window_, &placement));
+                }
                 // 전체 화면 여부가 바뀌었으면 알린다.
                 // **요청을 그대로 되울리는 것이 아니다.** 앱은 이 사실로 tree를 다시
                 // 짓는데(캡션 줄을 접는다), 이 전환의 `WM_SIZE`는 최대화 전환으로 세지

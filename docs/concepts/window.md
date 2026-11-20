@@ -62,7 +62,7 @@ config.initial_placement = saved_placement;
 
 전체 화면은 **테두리 없는 창**이다. 제시가 DirectComposition 합성 swap chain을 지나므로 독점 전체 화면(exclusive fullscreen)은 설 수 없다 — 합성 swap chain은 `SetFullscreenState`를 받지 못한다. 그래서 유일하게 가능한 길인 "`MONITORINFO::rcMonitor`를 그대로 덮는 창"을 구현한다. rcWork를 쓰는 다른 계산(최대화 한계, popup 다듬기, 보조 창 초기 배치)과 달리 여기만 rcMonitor를 목표로 삼는다.
 
-**주 창 전용이다.** 보조 창(소유된 창·독립 창)과 popup은 대상이 아니다. 보조 창도 배치 보고·복원은 받지만([여러 top-level window](../multi-window-design.md)) 화면을 덮는 창이 여럿이면 어느 것이 덮는지가 앱 상태 밖에서 갈리므로 전체 화면은 주 창에만 둔다. 앱은 [`ui_command::window_toggle_fullscreen`](../../include/luil/ui/ui_events.h)만 내고 어느 모니터를 덮을지, 나올 때 어디로 돌아갈지는 UI thread가 든다.
+**주 창 전용이다.** 보조 창(소유된 창·독립 창)과 popup은 대상이 아니다. 보조 창도 배치 보고·복원은 받지만([여러 top-level window](../multi-window-design.md)) 화면을 덮는 창이 여럿이면 어느 것이 덮는지가 앱 상태 밖에서 갈리므로 전체 화면은 주 창에만 둔다. 이미 보이는 주 창은 명령과 배치 요청 모두 **들어가기 직전 창이 서 있는 모니터**의 `rcMonitor`를 덮는다.
 
 창이 지금 어떤 모습인지는 [`window_display_mode`](../../src/win32/window_mode.h) 한 값이다. 창 스타일, 비클라이언트 판정, `WM_GETMINMAXINFO`의 최대화 크기, DWM 프레임이 모두 이 값을 본다. 특히 **스타일은 버튼 집합과 모드를 함께 받는 하나의 계산**이다. `caption_surface::set_caption`이 버튼이 바뀔 때마다 `GWL_STYLE`을 통째로 다시 쓰기 때문에, 전체 화면이 스타일을 나중에 덧칠하는 방식이면 caption이 바뀌는 아무 frame에서나 그 덧칠이 지워진다.
 
@@ -103,7 +103,7 @@ config.initial_placement = saved_placement;
 
 전체 화면인 동안 OS의 관측값은 쓸 수 없다. 들어갈 때의 `SetWindowPos`가 `rcNormalPosition`을 모니터 사각형으로 덮어쓰고, 같은 순간의 `WM_SIZE`는 `SIZE_RESTORED`로 와서 최대화 표식까지 지운다. 무엇을 알릴지는 [`placement_to_report`](../../src/win32/window_mode.h)가 정한다 — 갈무리해 둔 값이 있으면 그것을, 없으면 관측값을 그대로 답한다. 전체 화면 전환의 `WM_SIZE`는 최대화 전환으로 세지 않고 명령이 직접 보고한다.
 
-복원 요청이 전체 화면이면 **정상 배치를 먼저 놓고 창이 보인 뒤에** 들어간다. 순서가 뒤집히면 돌아갈 자리로 갈무리되는 것이 요청한 값이 아니라 지금 창의 자리가 된다.
+시작 복원은 저장한 자리의 모니터에서 전체 화면으로 열린다. 실행 중 전체 화면 배치 요청의 사각형과 최대화 여부는 그대로 돌아갈 배치로 저장한다. 요청한 사각형이 다른 모니터에 있어도 덮을 모니터는 현재 창이 정한다. 전체 화면을 해제하면 요청이 지정한 자리로 돌아가므로 앱이 저장한 명시적 복원 좌표가 보존된다.
 
 앱에는 두 길로 알린다. 배치 메시지의 `fullscreen`은 tree를 다시 짓는 데 쓰고(캡션 줄을 접는다), `frame_state`에서 `draw_context::fullscreen`으로 흐르는 값은 그리기가 본다. `maximized`와 `fullscreen`은 함께 참이 되지 않는다 — 표면이 모드 하나에서 둘을 함께 세운다.
 

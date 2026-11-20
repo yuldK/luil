@@ -217,6 +217,12 @@ namespace luil::win32 {
         return true;
     }
 
+    void caption_surface::set_fullscreen_restore(const WINDOWPLACEMENT& placement) noexcept
+    {
+        if (before_fullscreen_)
+            before_fullscreen_->placement = placement;
+    }
+
     bool caption_surface::set_fullscreen(const bool enter)
     {
         if (window_ == nullptr || enter == before_fullscreen_.has_value())

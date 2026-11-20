@@ -124,6 +124,8 @@ namespace luil::win32 {
         //    캡션이 그리지 않는 버튼의 시스템 기능만 되살아난다 (window_mode.h의
         //    `window_style_for`).
         bool set_fullscreen(bool enter);
+        // 전체 화면 배치 요청이 명시한 복원 자리만 바꾼다. 덮고 있는 창은 움직이지 않는다.
+        void set_fullscreen_restore(const WINDOWPLACEMENT& placement) noexcept;
         // 전체 화면 창을 **지금** 모니터의 사각형에 다시 앉힌다.
         // 다시 앉혔으면 참이다 (전체 화면이 아니거나 모니터를 읽지 못하면 거짓이고
         // 아무것도 건드리지 않는다).
