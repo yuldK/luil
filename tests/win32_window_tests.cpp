@@ -1185,6 +1185,11 @@ namespace {
     {
         luil::win32::enable_per_monitor_dpi_awareness();
         const luil::win32::com_sta_scope com {};
+        // 이 thread가 메시지를 본 지 5초가 넘었으면 OS가 "응답 없음"으로 본다. 앞선 테스트가 창을 한 번 띄운 뒤 창 없는
+        // 테스트가 오래 이어지면 그렇게 되고, 그때 둘째의 `SendMessageTimeout(SMTO_ABORTIFHUNG)`은 기다리지 않고 바로
+        // 실패한다. 실제 앱은 메시지 루프 안에 있어 이 상태가 아니다. 한 번 들여다봐 시계를 되돌린다.
+        MSG pending {};
+        static_cast<void>(PeekMessageW(&pending, nullptr, 0, 0, PM_NOREMOVE));
         luil::win32::window_config config {};
         config.class_name = instance_class_name;
         config.caption.title = u8"instance arguments";
