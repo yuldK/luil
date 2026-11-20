@@ -554,6 +554,9 @@ namespace luil {
         // 연속 영상처럼 뒤 프레임이 앞 프레임을 대체할 수 있을 때만 켠다.
         // 연속 프레임에서만 켠다. GPU나 표시 큐가 바쁘면 그 장을 건너뛸 수 있다. 마지막 정지 장에서는 끈다.
         bool prefer_latest_presentation { false };
+        // 주 창에 바라는 전체 화면 상태다. 빈 값이면 명령과 배치 요청이 정한다.
+        // 보인 뒤 게시 wake에서 대조하며 같은 frame의 배치 요청보다 우선한다.
+        std::optional<bool> fullscreen {};
     };
 
     // 앱이 logic thread에 꽂는 구동기다.

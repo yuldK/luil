@@ -928,6 +928,7 @@ namespace luil::win32 {
                     post_window_placement();
                 }
                 main_.track_placement(true);
+                apply_requested_window_placement();
                 UpdateWindow(window_);
                 MSG message {};
                 BOOL received {};
@@ -1001,8 +1002,8 @@ namespace luil::win32 {
                 switch (message)
                 {
                 case snapshot_wake_message: {
-                    apply_requested_window_placement();
                     apply_main_visibility();
+                    apply_requested_window_placement();
                     // 창을 먼저 맞춘다.
                     // popup의 앵커 표면이 있어야 그 위에 배치할 수 있다.
                     // 대조 결과는 표면별 현재 콘텐츠와 게시된 콘텐츠의 차이를 반영한다.
@@ -1728,14 +1729,24 @@ namespace luil::win32 {
                 if (IsWindowVisible(window_) == FALSE)
                     return;
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
-                if (frame == nullptr || frame->window_placement_revision == applied_window_placement_revision_)
+                if (frame == nullptr || frame->main_hidden)
                     return;
+                if (frame->window_placement_revision != applied_window_placement_revision_)
+                {
+                    applied_window_placement_revision_ = frame->window_placement_revision;
+                    if (frame->window_placement_request)
+                    {
+                        window_placement requested { *frame->window_placement_request };
+                        requested.fullscreen = frame->fullscreen.value_or(requested.fullscreen);
+                        apply_window_placement(requested);
+                    }
+                }
+                if (frame->fullscreen)
+                    change_fullscreen(*frame->fullscreen);
+            }
 
-                applied_window_placement_revision_ = frame->window_placement_revision;
-                if (frame->window_placement_request.has_value() == false)
-                    return;
-
-                const window_placement& requested { *frame->window_placement_request };
+            void apply_window_placement(const window_placement& requested)
+            {
                 // 너무 작은 값은 창을 사실상 못 쓰게 만든다.
                 // 저장이 깨진 경우의 방어다.
                 if (requested.valid() == false || requested.width < scale_for_dpi(config_.minimum_client_width) || requested.height < scale_for_dpi(config_.minimum_client_height))
