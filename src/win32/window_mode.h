@@ -242,6 +242,9 @@ namespace luil::win32 {
     // (`caption_surface::reapply_fullscreen_bounds`).
     [[nodiscard]] window_bounds fullscreen_bounds_for(const screen_area& monitor) noexcept;
 
+    // 두 사각형은 같은 작업 영역 좌표다. 최대화된 창의 보이는 크기는 복원 크기로 쓸 수 없다.
+    [[nodiscard]] screen_area fullscreen_restore_area(const screen_area& normal, const screen_area& visible, bool maximized) noexcept;
+
     // 앱에 알릴 창 배치다.
     //
     // `observed`는 OS가 방금 답한 값이다 (`WINDOWPLACEMENT::rcNormalPosition`과

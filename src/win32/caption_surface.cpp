@@ -316,6 +316,20 @@ namespace luil::win32 {
         // 사용자가 창을 되찾을 길이 없는 상태다.
         if (GetWindowPlacement(window_, &saved.placement) == FALSE)
             return false;
+        if (IsWindowVisible(window_) && IsIconic(window_) == FALSE)
+        {
+            RECT visible {};
+            MONITORINFO monitor { sizeof(MONITORINFO) };
+            if (GetWindowRect(window_, &visible) == FALSE || GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &monitor) == FALSE)
+                return false;
+            // 일반 top-level 창의 WINDOWPLACEMENT는 작업 영역 좌표다.
+            OffsetRect(&visible, monitor.rcMonitor.left - monitor.rcWork.left, monitor.rcMonitor.top - monitor.rcWork.top);
+            RECT& normal { saved.placement.rcNormalPosition };
+            const screen_area restore { fullscreen_restore_area({ normal.left, normal.top, normal.right, normal.bottom }
+                , { visible.left, visible.top, visible.right, visible.bottom }, saved.placement.showCmd == SW_SHOWMAXIMIZED)
+            };
+            normal = { restore.left, restore.top, restore.right, restore.bottom };
+        }
         saved.extended_style = static_cast<window_style_bits>(GetWindowLongPtrW(window_, GWL_EXSTYLE));
 
         // 상태를 **스타일보다 먼저** 세운다. 아래 호출들이 `display_mode()`로 지금

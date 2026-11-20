@@ -82,6 +82,8 @@ config.initial_placement = saved_placement;
 
 들어갈 때 갈무리하는 것은 `GWL_EXSTYLE`와 `WINDOWPLACEMENT` 전부(`rcNormalPosition`과 `showCmd`)이고, 그 뒤 `SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE`로 모니터 사각형에 옮긴다. 갈무리에 실패하면 들어가지 않는다 — 돌아갈 자리를 모르는 전체 화면은 창을 되찾을 길이 없는 상태다. 나올 때 그 둘을 그대로 되돌리므로 최대화된 창에서 들어가면 최대화된 창으로 나온다.
 
+화면 가장자리에 맞춰 붙인 통상 창은 `GetWindowPlacement`가 붙이기 전 자리를 보고할 수 있다. 명령이나 `ui_frame::fullscreen`으로 들어갈 때는 `GetWindowRect`의 보이는 사각형을 현재 모니터의 작업 영역 좌표로 바꾸어 복원 자리로 쓴다. 최대화·최소화된 창과 숨은 시작 창은 원래 `WINDOWPLACEMENT`를 보존한다. 해제하면 들어가기 직전 사각형을 복원하며, Windows의 붙임 그룹까지 복원하지는 않는다.
+
 **`GWL_STYLE`은 갈무리하지 않는다.** 들어갈 때가 버튼 집합과 모드로 계산해 세우는 값이므로 나올 때도 같은 계산이다(`custom_window_style_for(buttons, normal)`). 갈무리한 비트를 되돌리면 전체 화면인 동안 앱이 바꾼 버튼 집합이 그 순간 뒤집힌다 — 전체 화면에서 최대화 버튼을 접은 앱이 나올 때 `WS_MAXIMIZEBOX`를 되찾아, 캡션은 그 버튼을 그리지 않는데 Win+↑·캡션 더블클릭·시스템 메뉴의 최대화만 사는 창이 된다. `set_caption`은 버튼 집합이 바뀔 때만 `GWL_STYLE`을 다시 쓰므로 그 어긋남은 저절로 지워지지도 않는다.
 
 다시 계산한 값에 `WS_MAXIMIZE`가 없다는 것이 나올 때의 **자리**도 정한다. 최대화된 창에서 전체 화면에 들어가면 그 표식은 내내 남고(자리를 직접 준 `SetWindowPos`는 지우지 않는다), 남은 채로 `SetWindowPlacement`에 `SW_SHOWMAXIMIZED`를 주면 OS가 이미 최대화된 창으로 보아 사각형을 다시 세우지 않을 수 있다 — 창이 화면을 덮은 크기 그대로 앉는다. 계산한 스타일을 통째로 쓰는 것이 곧 그 표식을 지우는 일이라, 나올 때의 자리는 OS의 그 모서리에 기대지 않는다.
@@ -121,5 +123,7 @@ config.initial_placement = saved_placement;
 - caption button은 `caption_config::buttons`, `caption_layout`, `window_style_for()`가 같은 목록을 본다.
 
 ## 검증
+
+붙임은 데모의 ‘창’ 페이지에서 확인한다. 통상 창을 Win+←로 붙인 후 `GetWindowRect`와 `GetWindowPlacement().rcNormalPosition`을 기록한다. ‘전체 화면 전환’을 두 번 누르고 마지막 `GetWindowRect`의 네 변을 첫 값과 비교한다. 작업 표시줄이 위·왼쪽인 모니터에서는 두 API의 좌표계 차이도 함께 확인한다.
 
 [`tests/window_mode_tests.cpp`](../../tests/window_mode_tests.cpp)는 모드별 스타일과 hit 결과, 모니터 목표 사각형, 보고할 배치의 왕복을 창 없이 검증한다. 전체 화면에서 나올 때의 스타일도 여기서 못 박는다 — 전체 화면인 동안 버튼 집합이 바뀐 경우와, 그 계산이 `WS_MAXIMIZE`를 만들지 않는다는 것까지다. [`tests/win32_window_tests.cpp`](../../tests/win32_window_tests.cpp)는 실제 창에서 전체 화면의 hit이 전부 `HTCLIENT`인지와 창 수명을 검증하고, [`tests/caption_layout_tests.cpp`](../../tests/caption_layout_tests.cpp)는 caption 자리 계산이 두 판정에서 하나임을 검증한다.

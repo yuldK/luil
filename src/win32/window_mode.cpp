@@ -88,6 +88,11 @@ namespace luil::win32 {
         };
     }
 
+    screen_area fullscreen_restore_area(const screen_area& normal, const screen_area& visible, const bool maximized) noexcept
+    {
+        return maximized ? normal : visible;
+    }
+
     window_placement placement_to_report(const window_placement& observed, const std::optional<window_placement>& restore) noexcept
     {
         // 전체 화면이 아니면 OS가 답한 그대로다.

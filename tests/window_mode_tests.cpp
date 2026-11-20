@@ -23,6 +23,23 @@ TEST_CASE("Updating the window frame preserves visibility and unrelated state", 
     REQUIRE((maximized & luil::win32::style_maximize_box) == 0);
 }
 
+TEST_CASE("Fullscreen restores visible snapped bounds and preserves maximized restore bounds", "[win32][window]")
+{
+    const luil::screen_area normal { 100, 120, 800, 720 };
+    for (const auto visible : { normal, luil::screen_area { 0, 0, 960, 1040 }, luil::screen_area { -1280, 40, -640, 960 } })
+    {
+        for (const bool maximized : { false, true })
+        {
+            const auto restore { luil::win32::fullscreen_restore_area(normal, visible, maximized) };
+            const auto expected { maximized ? normal : visible };
+            CHECK(restore.left == expected.left);
+            CHECK(restore.top == expected.top);
+            CHECK(restore.right == expected.right);
+            CHECK(restore.bottom == expected.bottom);
+        }
+    }
+}
+
 namespace {
     using luil::win32::window_display_mode;
     using luil::win32::window_hit;
