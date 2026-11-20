@@ -514,6 +514,46 @@ TEST_CASE("Frame fullscreen waits for first display and reconciles repeated requ
     probe.run(saved, frame);
 }
 
+TEST_CASE("Frame fullscreen waits while the window is minimized and applies after it is restored", "[win32][window][live-placement]")
+{
+    const MONITORINFO monitor { test_monitor() };
+    const auto saved { saved_test_placement(monitor) };
+    live_placement_delegate probe {};
+    probe.exercise = [&](luil::app_host& host) {
+        const auto count { probe.reports.size() };
+        // 활성 창을 건드리지 않고 내린다.
+        ShowWindow(probe.window, SW_SHOWMINNOACTIVE);
+        auto frame { std::make_shared<luil::ui_frame>() };
+        frame->fullscreen = true;
+        probe.publish(host, frame);
+        REQUIRE(IsIconic(probe.window));
+        REQUIRE(probe.reports.size() == count);
+        // 한 번뿐인 명령도 최소화된 창은 건드리지 않는다.
+        host.post_ui_command(luil::ui_command::window_toggle_fullscreen);
+        SendMessageW(probe.window, luil::win32::ui_command_request_message, 0, 0);
+        REQUIRE(probe.reports.size() == count);
+
+        ShowWindow(probe.window, SW_SHOWNOACTIVATE);
+        REQUIRE_FALSE(IsIconic(probe.window));
+        // 되살아난 창이 미룬 대조를 wake로 넘겼다.
+        MSG message {};
+        constexpr UINT wake { luil::win32::snapshot_wake_message };
+        while (PeekMessageW(&message, probe.window, wake, wake, PM_REMOVE))
+            DispatchMessageW(&message);
+        drain_placement_reports(probe.window);
+        REQUIRE(probe.reports.back().fullscreen);
+        const RECT full { actual_bounds(probe.window) };
+        REQUIRE(EqualRect(&full, &monitor.rcMonitor));
+
+        auto normal { std::make_shared<luil::ui_frame>() };
+        normal->fullscreen = false;
+        probe.publish(host, normal);
+        REQUIRE(probe.reports.back() == saved);
+        REQUIRE_FALSE(IsIconic(probe.window));
+    };
+    probe.run(saved, std::make_shared<luil::ui_frame>());
+}
+
 TEST_CASE("Secondary placement coalesces moves and waits for the drag loop to end", "[win32][window][live-placement]")
 {
     const MONITORINFO monitor { test_monitor() };

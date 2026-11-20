@@ -1228,6 +1228,10 @@ namespace luil::win32 {
                 }
                 case WM_SIZE:
                     main_.update_caption_hover(caption_button_hover::none);
+                    // 최소화된 동안 미룬 전체 화면 대조를 창이 되살아난 뒤에 다시 한다. 이 메시지 안에서 바로 하면
+                    // 되살리는 배치 변경 도중에 창을 또 옮기게 되므로 wake로 넘긴다.
+                    if (word_parameter != SIZE_MINIMIZED && std::exchange(placement_waits_for_restore_, false))
+                        PostMessageW(window_, snapshot_wake_message, 0, 0);
                     // 레이어드 창의 크기 변경을 미뤄 둔 동안 오는 `WM_SIZE`는 최대화 표식이 바뀐 것을 알릴 뿐 크기는
                     // 옛 값이다. 렌더러·metrics는 미룬 배치가 맡는다 (`defer_layered_placement`).
                     if (word_parameter != SIZE_MINIMIZED && layered_ && deferred_placements_.empty() == false)
@@ -1550,9 +1554,13 @@ namespace luil::win32 {
                 return nullptr;
             }
 
+            // 최소화된 창은 건드리지 않는다. 들어가면 "최소화"가 돌아갈 배치로 갈무리되어 나올 때 창이 최소화되고,
+            // 나오면 `SetWindowPlacement`가 사용자가 내려 둔 창을 되살린다.
+            //  - frame이 바라는 상태는 되살아난 뒤에 다시 대조한다 (`apply_requested_window_placement`).
+            //    한 번뿐인 명령(`window_toggle_fullscreen`)은 그대로 버린다.
             void change_fullscreen(const bool enter)
             {
-                if (main_.fullscreen() == enter)
+                if (main_.fullscreen() == enter || IsIconic(window_) != FALSE)
                     return;
                 main_.track_placement(false);
                 const bool changed { main_.set_fullscreen(enter) };
@@ -1732,18 +1740,32 @@ namespace luil::win32 {
                 const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
                 if (frame == nullptr || frame->main_hidden)
                     return;
+                placement_waits_for_restore_ = false;
                 if (frame->window_placement_revision != applied_window_placement_revision_)
                 {
-                    applied_window_placement_revision_ = frame->window_placement_revision;
-                    if (frame->window_placement_request)
+                    std::optional<window_placement> requested { frame->window_placement_request };
+                    if (requested)
+                        requested->fullscreen = frame->fullscreen.value_or(requested->fullscreen);
+                    // **최소화된 창을 전체 화면으로 넣는 요청은 미룬다** (`change_fullscreen`의 이유). 게시 번호를
+                    // 소비하지 않았으므로 창이 되살아난 뒤의 wake가 그대로 다시 시도한다 (`WM_SIZE`).
+                    //  - 전체 화면이 아닌 요청은 예전처럼 창을 되살리며 적용한다.
+                    if (requested && requested->fullscreen && IsIconic(window_) != FALSE)
                     {
-                        window_placement requested { *frame->window_placement_request };
-                        requested.fullscreen = frame->fullscreen.value_or(requested.fullscreen);
-                        apply_window_placement(requested);
+                        placement_waits_for_restore_ = true;
+                        return;
                     }
+                    applied_window_placement_revision_ = frame->window_placement_revision;
+                    if (requested)
+                        apply_window_placement(*requested);
                 }
-                if (frame->fullscreen)
-                    change_fullscreen(*frame->fullscreen);
+                if (frame->fullscreen.has_value() == false || *frame->fullscreen == main_.fullscreen())
+                    return;
+                if (IsIconic(window_) != FALSE)
+                {
+                    placement_waits_for_restore_ = true;
+                    return;
+                }
+                change_fullscreen(*frame->fullscreen);
             }
 
             void apply_window_placement(const window_placement& requested)
@@ -3840,6 +3862,8 @@ namespace luil::win32 {
             // 마지막으로 적용한 창 배치 게시 번호다.
             // 0은 아직 적용한 적이 없다는 뜻이다.
             std::uint64_t applied_window_placement_revision_ { 0 };
+            // 최소화된 창이라 미뤄 둔 전체 화면 대조가 있다. 창이 되살아나면 wake를 하나 더 낸다.
+            bool placement_waits_for_restore_ { false };
             // 대상이 설 때까지 들고 있는 초점 요청이다 (`advance_focus_request`).
             focus_request_tracker focus_tracker_ {};
             // 주 창이 레이어드 창이다 (`window_presentation::layered`).

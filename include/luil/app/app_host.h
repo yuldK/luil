@@ -556,6 +556,13 @@ namespace luil {
         bool prefer_latest_presentation { false };
         // 주 창에 바라는 전체 화면 상태다. 빈 값이면 명령과 배치 요청이 정한다.
         // 보인 뒤 게시 wake에서 대조하며 같은 frame의 배치 요청보다 우선한다.
+        //  - **앱이 정한 값만 싣는다.** 배치 보고의 `fullscreen`을 여기에 되비추지 않는다. 대조는 게시마다 하고
+        //    전환마다 보고가 나가므로, 보고를 되비추면 늦게 도착한 보고와 새 frame이 서로를 뒤집어 전체 화면이
+        //    끝없이 들락거린다.
+        //  - 이 값을 싣는 앱은 `ui_command::window_toggle_fullscreen`을 쓰지 않고 자기 상태를 뒤집는다. 명령이 뒤집은
+        //    상태는 다음 게시 wake가 이 값으로 되돌린다.
+        //  - 최소화된 동안에는 전환을 미루고 창이 되살아난 뒤에 대조한다.
+        //  - 하지 못하는 플랫폼(Android)은 받고 무시한다.
         std::optional<bool> fullscreen {};
     };
 

@@ -66,6 +66,10 @@ config.initial_placement = saved_placement;
 
 `ui_frame::fullscreen`에 원하는 상태를 매 frame 싣는다. UI thread는 첫 표시 후와 게시 wake에서 보이는 창을 대조하고, 상태가 다를 때만 전환한다. 값이 비면 전체 화면을 제어하지 않는다. 사각형 없이 들어가면 그 순간의 창 배치를 복원 자리로 삼는다. 같은 frame에 새 배치 요청도 있으면 사각형과 최대화 여부는 배치 요청에서, 전체 화면 여부는 `ui_frame::fullscreen`에서 취한다. `ui_command::window_toggle_fullscreen`은 즉시 뒤집고, 다음 게시 wake는 frame에 실린 상태를 다시 적용한다.
 
+그래서 `ui_frame::fullscreen`에는 **앱이 정한 값만** 싣는다. 이 값을 싣는 앱은 명령 대신 자기 상태를 뒤집고, 배치 보고의 `fullscreen`을 이 값에 되비추지 않는다. 대조는 게시마다 하고 전환마다 보고가 나가므로, 보고를 되비추는 앱에서는 늦게 도착한 보고와 새 frame이 서로를 뒤집어 전체 화면이 끝없이 들락거린다. 배치 보고의 `fullscreen`은 tree를 다시 짓고 저장하는 데만 쓴다.
+
+최소화된 창은 전체 화면으로 넣지도 빼지도 않는다. 들어가면 "최소화"가 돌아갈 배치로 갈무리되어 나올 때 창이 최소화되고, 나오면 `SetWindowPlacement`가 사용자가 내려 둔 창을 되살리기 때문이다. `ui_frame::fullscreen`과 전체 화면 배치 요청은 창이 되살아난 뒤의 wake에서 적용하고(게시 번호를 그때 소비한다), 한 번뿐인 명령은 버린다. 전체 화면이 아닌 배치 요청은 예전처럼 창을 되살리며 적용한다.
+
 창이 지금 어떤 모습인지는 [`window_display_mode`](../../src/win32/window_mode.h) 한 값이다. 창 스타일, 비클라이언트 판정, `WM_GETMINMAXINFO`의 최대화 크기, DWM 프레임이 모두 이 값을 본다. 특히 **스타일은 버튼 집합과 모드를 함께 받는 하나의 계산**이다. `caption_surface::set_caption`이 버튼이 바뀔 때마다 `GWL_STYLE`을 통째로 다시 쓰기 때문에, 전체 화면이 스타일을 나중에 덧칠하는 방식이면 caption이 바뀌는 아무 frame에서나 그 덧칠이 지워진다.
 
 전체 화면인 동안의 차이는 다음과 같다.
