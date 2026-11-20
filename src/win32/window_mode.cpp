@@ -88,9 +88,13 @@ namespace luil::win32 {
         };
     }
 
-    screen_area fullscreen_restore_area(const screen_area& normal, const screen_area& visible, const bool maximized) noexcept
+    screen_area fullscreen_restore_area(
+        const screen_area& normal, const screen_area& visible, const screen_area& monitor, const screen_area& work, const bool maximized) noexcept
     {
-        return maximized ? normal : visible;
+        if (maximized)
+            return normal;
+        const workspace_offset offset { workspace_offset_for(monitor, work) };
+        return screen_area { visible.left - offset.x, visible.top - offset.y, visible.right - offset.x, visible.bottom - offset.y };
     }
 
     window_placement placement_to_report(const window_placement& observed, const std::optional<window_placement>& restore) noexcept

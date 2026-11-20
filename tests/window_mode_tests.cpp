@@ -25,19 +25,34 @@ TEST_CASE("Updating the window frame preserves visibility and unrelated state", 
 
 TEST_CASE("Fullscreen restores visible snapped bounds and preserves maximized restore bounds", "[win32][window]")
 {
-    const luil::screen_area normal { 100, 120, 800, 720 };
-    for (const auto visible : { normal, luil::screen_area { 0, 0, 960, 1040 }, luil::screen_area { -1280, 40, -640, 960 } })
-    {
-        for (const bool maximized : { false, true })
-        {
-            const auto restore { luil::win32::fullscreen_restore_area(normal, visible, maximized) };
-            const auto expected { maximized ? normal : visible };
-            CHECK(restore.left == expected.left);
-            CHECK(restore.top == expected.top);
-            CHECK(restore.right == expected.right);
-            CHECK(restore.bottom == expected.bottom);
-        }
-    }
+    using luil::screen_area;
+    const auto check = [](const screen_area& restore, const int left, const int top, const int right, const int bottom) {
+        CHECK(restore.left == left);
+        CHECK(restore.top == top);
+        CHECK(restore.right == right);
+        CHECK(restore.bottom == bottom);
+    };
+    const screen_area normal { 100, 120, 800, 720 };
+
+    // 작업 표시줄이 아래에 있으면 두 좌표계의 원점이 같다. 왼쪽에 붙인 창의 보이는 사각형이 그대로 돌아갈 자리다.
+    const screen_area monitor { 0, 0, 1920, 1080 };
+    const screen_area bottom_bar { 0, 0, 1920, 1040 };
+    check(luil::win32::fullscreen_restore_area(normal, { 0, 0, 960, 1040 }, monitor, bottom_bar, false), 0, 0, 960, 1040);
+
+    // 작업 표시줄이 위에 있으면 작업 영역 좌표는 그 높이만큼 위로 당겨진다.
+    const screen_area top_bar { 0, 48, 1920, 1080 };
+    REQUIRE(luil::win32::workspace_offset_for(monitor, top_bar).x == 0);
+    REQUIRE(luil::win32::workspace_offset_for(monitor, top_bar).y == 48);
+    check(luil::win32::fullscreen_restore_area(normal, { 0, 48, 960, 1080 }, monitor, top_bar, false), 0, 0, 960, 1032);
+
+    // 왼쪽 작업 표시줄과 주 모니터 왼편의 모니터(음수 좌표)다. 거리는 그 모니터 안에서 잰다.
+    const screen_area left_monitor { -1280, 0, 0, 1024 };
+    const screen_area left_bar { -1218, 0, 0, 1024 };
+    REQUIRE(luil::win32::workspace_offset_for(left_monitor, left_bar).x == 62);
+    check(luil::win32::fullscreen_restore_area(normal, { -609, 0, 0, 1024 }, left_monitor, left_bar, false), -671, 0, -62, 1024);
+
+    // 최대화된 창은 보이는 사각형을 쓰지 않고 OS가 기억한 복원 사각형을 지킨다.
+    check(luil::win32::fullscreen_restore_area(normal, { 0, 48, 1920, 1080 }, monitor, top_bar, true), 100, 120, 800, 720);
 }
 
 namespace {

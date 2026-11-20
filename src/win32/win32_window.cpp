@@ -136,8 +136,12 @@ namespace luil::win32 {
 
             // WINDOWPLACEMENT는 작업 영역 좌표지만 CreateWindowEx는 화면 좌표다.
             // 작업 표시줄이 왼쪽·위에 있어도 저장한 자리로 돌아가도록 한 번만 옮긴다.
-            const long long screen_x { static_cast<long long>(placement.x) + information.rcWork.left - information.rcMonitor.left };
-            const long long screen_y { static_cast<long long>(placement.y) + information.rcWork.top - information.rcMonitor.top };
+            const workspace_offset offset {
+                workspace_offset_for({ information.rcMonitor.left, information.rcMonitor.top, information.rcMonitor.right, information.rcMonitor.bottom }
+                    , { information.rcWork.left, information.rcWork.top, information.rcWork.right, information.rcWork.bottom }),
+            };
+            const long long screen_x { static_cast<long long>(placement.x) + offset.x };
+            const long long screen_y { static_cast<long long>(placement.y) + offset.y };
             constexpr long long minimum { std::numeric_limits<int>::min() };
             constexpr long long maximum { std::numeric_limits<int>::max() };
             if (screen_x < minimum || screen_y < minimum || screen_x + placement.width > maximum || screen_y + placement.height > maximum)
@@ -997,7 +1001,7 @@ namespace luil::win32 {
             // 이어 본다 — caption chrome → 표면 공통 (win32-surface-design.md).
             LRESULT handle_window_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
             {
-                if (main_.placement_report_due(message, word_parameter, long_parameter))
+                if (main_.handle_placement_message(message, word_parameter, long_parameter))
                     post_window_placement();
                 switch (message)
                 {
@@ -1269,8 +1273,9 @@ namespace luil::win32 {
                     //    똑같이 지난다. 달라지는 것은 사각형을 어디서 얻는가뿐이다.
                     if (main_.fullscreen())
                         static_cast<void>(main_.reapply_fullscreen_bounds());
-                    // 명시적 복원 중에는 바깥 SetWindowPlacement가 이미 물리 픽셀 크기를 주었다.
-                    else if (main_.tracking_placement())
+                    // 명시적 배치 전환 중에는 바깥 SetWindowPlacement가 이미 물리 픽셀 크기를 주었다.
+                    // 첫 표시 전의 배율 변경은 전환이 아니므로 제안 사각형을 그대로 쓴다.
+                    else if (main_.applying_placement() == false)
                     {
                         const auto* suggested_rectangle { reinterpret_cast<const RECT*>(long_parameter) };
                         SetWindowPos(window_, nullptr, suggested_rectangle->left, suggested_rectangle->top, suggested_rectangle->right - suggested_rectangle->left,
@@ -1562,9 +1567,11 @@ namespace luil::win32 {
             {
                 if (main_.fullscreen() == enter || IsIconic(window_) != FALSE)
                     return;
-                main_.track_placement(false);
-                const bool changed { main_.set_fullscreen(enter) };
-                main_.track_placement(true);
+                bool changed { false };
+                {
+                    const caption_surface::placement_transition transition { main_ };
+                    changed = main_.set_fullscreen(enter);
+                }
                 if (changed)
                     post_window_placement();
             }
@@ -1803,18 +1810,18 @@ namespace luil::win32 {
                 if (GetWindowPlacement(window_, &placement) == FALSE)
                     return;
 
-                main_.track_placement(false);
                 const bool was_fullscreen { main_.fullscreen() };
                 placement.rcNormalPosition = bounds;
                 placement.showCmd = requested.maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
-                if (requested.fullscreen)
                 {
-                    static_cast<void>(main_.set_fullscreen(true));
-                    main_.set_fullscreen_restore(placement);
-                }
-                else
-                {
-                    if (was_fullscreen)
+                    // 전환 중의 중간 배치는 내지 않고, 범위가 끝난 뒤 최종 배치를 한 번 알린다.
+                    const caption_surface::placement_transition transition { main_ };
+                    if (requested.fullscreen)
+                    {
+                        static_cast<void>(main_.set_fullscreen(true));
+                        main_.set_fullscreen_restore(placement);
+                    }
+                    else if (was_fullscreen)
                     {
                         main_.set_fullscreen_restore(placement);
                         static_cast<void>(main_.set_fullscreen(false));
@@ -1822,7 +1829,6 @@ namespace luil::win32 {
                     else
                         static_cast<void>(SetWindowPlacement(window_, &placement));
                 }
-                main_.track_placement(true);
                 post_window_placement();
             }
 

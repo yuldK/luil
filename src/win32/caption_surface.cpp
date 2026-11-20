@@ -17,6 +17,11 @@ namespace luil::win32 {
             const auto current { static_cast<window_style_bits>(GetWindowLongPtrW(window, GWL_STYLE)) };
             SetWindowLongPtrW(window, GWL_STYLE, static_cast<LONG_PTR>(updated_custom_window_style(current, buttons, mode)));
         }
+
+        [[nodiscard]] screen_area area_of(const RECT& rectangle) noexcept
+        {
+            return screen_area { rectangle.left, rectangle.top, rectangle.right, rectangle.bottom };
+        }
     }
 
     LRESULT caption_hit_test(const HWND window, const LPARAM long_parameter, const std::uint32_t dpi, const caption_config& caption, const window_config& config,
@@ -195,15 +200,22 @@ namespace luil::win32 {
 
     std::optional<window_bounds> caption_surface::fullscreen_bounds_of_monitor() const noexcept
     {
+        // 덮을 모니터는 창이 지금 있는 그것이다.
+        const std::optional<MONITORINFO> information { monitor_information() };
+        if (information.has_value() == false)
+            return std::nullopt;
+        return fullscreen_bounds_for(area_of(information->rcMonitor));
+    }
+
+    std::optional<MONITORINFO> caption_surface::monitor_information() const noexcept
+    {
         if (window_ == nullptr)
             return std::nullopt;
-        // 덮을 모니터는 창이 지금 있는 그것이다.
         MONITORINFO information {};
         information.cbSize = sizeof(information);
         if (GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &information) == FALSE)
             return std::nullopt;
-        const screen_area monitor { information.rcMonitor.left, information.rcMonitor.top, information.rcMonitor.right, information.rcMonitor.bottom };
-        return fullscreen_bounds_for(monitor);
+        return information;
     }
 
     bool caption_surface::reapply_fullscreen_bounds()
@@ -224,14 +236,33 @@ namespace luil::win32 {
         placement_pending_ = false;
     }
 
+    caption_surface::placement_transition::placement_transition(caption_surface& surface) noexcept
+        : surface_ { surface }
+        , previous_ { std::exchange(surface.applying_placement_, true) }
+    {
+        surface_.placement_pending_ = false;
+    }
+
+    caption_surface::placement_transition::~placement_transition()
+    {
+        surface_.applying_placement_ = previous_;
+        // 전환 앞뒤에 모인 보고는 부른 쪽이 내는 최종 보고가 대신한다.
+        surface_.placement_pending_ = false;
+    }
+
+    bool caption_surface::placement_reportable() const noexcept
+    {
+        return tracking_placement_ && applying_placement_ == false && in_size_move_ == false && fullscreen() == false
+            && IsWindowVisible(window_) && IsIconic(window_) == FALSE;
+    }
+
     void caption_surface::queue_placement_report() noexcept
     {
-        if (tracking_placement_ && in_size_move_ == false && fullscreen() == false && placement_pending_ == false
-            && IsWindowVisible(window_) && IsIconic(window_) == FALSE)
+        if (placement_pending_ == false && placement_reportable())
             placement_pending_ = PostMessageW(window_, placement_changed_message, 0, 0) != FALSE;
     }
 
-    bool caption_surface::placement_report_due(const UINT message, const WPARAM word_parameter, const LPARAM parameter) noexcept
+    bool caption_surface::handle_placement_message(const UINT message, const WPARAM word_parameter, const LPARAM parameter) noexcept
     {
         switch (message)
         {
@@ -262,7 +293,7 @@ namespace luil::win32 {
         default:
             return false;
         }
-        return tracking_placement_ && in_size_move_ == false && fullscreen() == false && IsWindowVisible(window_) && IsIconic(window_) == FALSE;
+        return placement_reportable();
     }
 
     void caption_surface::set_fullscreen_restore(const WINDOWPLACEMENT& placement) noexcept
@@ -316,9 +347,10 @@ namespace luil::win32 {
 
         // 모니터를 **먼저** 읽는다. 아래 갈무리와 마찬가지로, 읽지 못하면
         // 아무것도 건드리지 않고 들어가지 않는다.
-        const std::optional<window_bounds> bounds { fullscreen_bounds_of_monitor() };
-        if (bounds.has_value() == false)
+        const std::optional<MONITORINFO> monitor { monitor_information() };
+        if (monitor.has_value() == false)
             return false;
+        const window_bounds bounds { fullscreen_bounds_for(area_of(monitor->rcMonitor)) };
         saved_window_frame saved {};
         saved.placement.length = sizeof(saved.placement);
         // 갈무리에 실패하면 **들어가지 않는다.** 나올 자리를 모르는 전체 화면은
@@ -328,14 +360,12 @@ namespace luil::win32 {
         if (IsWindowVisible(window_) && IsIconic(window_) == FALSE)
         {
             RECT visible {};
-            MONITORINFO monitor { sizeof(MONITORINFO) };
-            if (GetWindowRect(window_, &visible) == FALSE || GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &monitor) == FALSE)
+            if (GetWindowRect(window_, &visible) == FALSE)
                 return false;
-            // 일반 top-level 창의 WINDOWPLACEMENT는 작업 영역 좌표다.
-            OffsetRect(&visible, monitor.rcMonitor.left - monitor.rcWork.left, monitor.rcMonitor.top - monitor.rcWork.top);
+            // 보이는 사각형은 화면 좌표이고 WINDOWPLACEMENT는 작업 영역 좌표다. 옮기는 식은 한 곳에 있다.
             RECT& normal { saved.placement.rcNormalPosition };
-            const screen_area restore { fullscreen_restore_area({ normal.left, normal.top, normal.right, normal.bottom }
-                , { visible.left, visible.top, visible.right, visible.bottom }, saved.placement.showCmd == SW_SHOWMAXIMIZED)
+            const screen_area restore { fullscreen_restore_area(area_of(normal), area_of(visible)
+                , area_of(monitor->rcMonitor), area_of(monitor->rcWork), saved.placement.showCmd == SW_SHOWMAXIMIZED)
             };
             normal = { restore.left, restore.top, restore.right, restore.bottom };
         }
@@ -349,7 +379,7 @@ namespace luil::win32 {
         update_custom_window_style(window_, caption_.buttons, mode);
         SetWindowLongPtrW(window_, GWL_EXSTYLE, static_cast<LONG_PTR>(extended_window_style_for(saved.extended_style, mode)));
         apply_dwm_frame(window_, mode, backdrop_glass_);
-        SetWindowPos(window_, nullptr, bounds->x, bounds->y, bounds->width, bounds->height, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(window_, nullptr, bounds.x, bounds.y, bounds.width, bounds.height, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
         return true;
     }
 

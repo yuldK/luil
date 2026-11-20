@@ -109,14 +109,35 @@ namespace luil::win32 {
         {
             return before_fullscreen_.has_value();
         }
-        // 첫 표시와 명시적 배치 전환 동안 동기 메시지가 중간 배치를 내보내지 않게 한다.
+        // 첫 표시 뒤에 켠다. 그 전의 동기 메시지는 창이 자리를 잡는 중이라 배치로 보고하지 않는다.
         void track_placement(bool enabled) noexcept;
-        [[nodiscard]] bool tracking_placement() const noexcept
+        // 명시적 배치 전환 한 번이다 (전체 화면 전환, 앱의 배치 요청).
+        //  - 사는 동안 `SetWindowPlacement`·`SetWindowPos`의 동기 메시지가 중간 배치를 보고하지 않는다. 끝난 뒤
+        //    부른 쪽이 최종 배치를 한 번 알린다.
+        //  - 그 사이의 `WM_DPICHANGED`는 제안 사각형을 쓰지 않는다 (`applying_placement`). 자리를 이미 물리
+        //    픽셀로 주었다.
+        //  - **보고를 켜고 끄는 값과 따로 둔다.** 한 값이 둘을 겸하면 첫 표시 전의 배율 변경까지 제안 사각형을
+        //    잃는다. 끝날 때는 직전 값으로 돌아가므로 겹쳐 써도 바깥 범위가 끝날 때까지 전환 중이다.
+        class placement_transition
         {
-            return tracking_placement_;
+        public:
+            explicit placement_transition(caption_surface& surface) noexcept;
+            ~placement_transition();
+            placement_transition(const placement_transition&) = delete;
+            placement_transition& operator=(const placement_transition&) = delete;
+
+        private:
+            caption_surface& surface_;
+            bool previous_ { false };
+        };
+        [[nodiscard]] bool applying_placement() const noexcept
+        {
+            return applying_placement_;
         }
         void queue_placement_report() noexcept;
-        [[nodiscard]] bool placement_report_due(UINT message, WPARAM word_parameter, LPARAM parameter) noexcept;
+        // 배치 추적에 쓰는 메시지를 처리한다. 지금 최종 배치를 알릴 때면 참이다.
+        //  - 끌기·최대화·모아 둔 보고의 상태를 바꾸므로 메시지마다 한 번만 부른다.
+        [[nodiscard]] bool handle_placement_message(UINT message, WPARAM word_parameter, LPARAM parameter) noexcept;
 
         // 전체 화면으로 넣거나 뺀다.
         // 실제로 상태가 바뀌었으면 참이다 (이미 그 상태이거나 모니터·배치를 읽지
@@ -188,6 +209,11 @@ namespace luil::win32 {
         //  - 들어갈 때와 다시 앉힐 때가 **같은 유도**를 본다. 둘이 갈리면 "전체
         //    화면은 rcMonitor를 덮는다"가 들어선 순간에만 참인 말이 된다.
         [[nodiscard]] std::optional<window_bounds> fullscreen_bounds_of_monitor() const noexcept;
+        // 이 창이 지금 있는 모니터다. 읽지 못하면 빈 값이다.
+        //  - 덮을 사각형과 돌아갈 자리의 좌표 변환이 **한 번 읽은 값**을 함께 본다.
+        [[nodiscard]] std::optional<MONITORINFO> monitor_information() const noexcept;
+        // 지금 배치를 보고해도 되는 창인가 (추적 중이고, 전환·끌기·전체 화면·숨김·최소화가 아니다).
+        [[nodiscard]] bool placement_reportable() const noexcept;
 
         // 전체 화면에 들어가기 전의 창이다.
         // 나올 때 이 둘을 그대로 되돌리면 프레임과 자리가 제자리로 온다.
@@ -201,6 +227,7 @@ namespace luil::win32 {
         };
 
         bool tracking_placement_ { false };
+        bool applying_placement_ { false };
         bool in_size_move_ { false };
         bool placement_pending_ { false };
         bool last_maximized_ { false };

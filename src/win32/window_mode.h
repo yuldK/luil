@@ -242,8 +242,26 @@ namespace luil::win32 {
     // (`caption_surface::reapply_fullscreen_bounds`).
     [[nodiscard]] window_bounds fullscreen_bounds_for(const screen_area& monitor) noexcept;
 
-    // 두 사각형은 같은 작업 영역 좌표다. 최대화된 창의 보이는 크기는 복원 크기로 쓸 수 없다.
-    [[nodiscard]] screen_area fullscreen_restore_area(const screen_area& normal, const screen_area& visible, bool maximized) noexcept;
+    // 작업 영역 좌표(`WINDOWPLACEMENT`)의 원점이 화면 좌표에서 떨어진 거리다.
+    // 화면 좌표 = 작업 영역 좌표 + 이 값이다. 작업 표시줄이 위나 왼쪽에 있는 모니터에서만 0이 아니다.
+    //  - 저장 배치를 화면 사각형으로 옮기는 자리와 보이는 사각형을 복원 배치로 옮기는 자리가 같은 식을 본다.
+    struct workspace_offset
+    {
+        int x { 0 };
+        int y { 0 };
+    };
+
+    [[nodiscard]] constexpr workspace_offset workspace_offset_for(const screen_area& monitor, const screen_area& work) noexcept
+    {
+        return workspace_offset { work.left - monitor.left, work.top - monitor.top };
+    }
+
+    // 전체 화면에서 나올 때 돌아갈 사각형이다 (작업 영역 좌표).
+    //  - `normal`은 OS가 기억한 복원 사각형(작업 영역 좌표), `visible`은 지금 보이는 창의 사각형(화면 좌표)이다.
+    //  - 맞춰 붙인 창은 `normal`이 붙이기 전 자리라, 보이는 사각형을 작업 영역 좌표로 옮겨 쓴다.
+    //  - 최대화된 창의 보이는 크기는 복원 크기로 쓸 수 없어 `normal`을 그대로 둔다.
+    [[nodiscard]] screen_area fullscreen_restore_area(
+        const screen_area& normal, const screen_area& visible, const screen_area& monitor, const screen_area& work, bool maximized) noexcept;
 
     // 앱에 알릴 창 배치다.
     //
