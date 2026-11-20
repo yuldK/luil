@@ -1,5 +1,10 @@
 #include "luil/ui/webview_element.h"
 
+#include "luil/app/webview.h"
+
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 namespace {
@@ -15,6 +20,25 @@ namespace {
     {
         return ui_element_id { ui_element_kind::webview, std::move(owner) };
     }
+}
+
+TEST_CASE("An overlay slot paints its opaque backing before the page arrives", "[ui][webview]")
+{
+    luil::ui_webview view { .id = u8"docs" };
+    REQUIRE(view.layer == luil::webview_layer::underlay);
+    view.layer = luil::webview_layer::overlay;
+    webview_element slot { placeholder_id(view.id), { .webview = view.id } };
+    slot.arrange({ .slot = { 10, 10, 32, 16 }, .scale = 1.0f });
+    SkBitmap bitmap {};
+    bitmap.allocN32Pixels(64, 40);
+    bitmap.eraseColor(SK_ColorTRANSPARENT);
+    SkCanvas canvas { bitmap };
+    const auto palette { luil::color_palette_for(luil::color_theme::dark) };
+    luil::draw_context context { .canvas = canvas, .palette = palette };
+    slot.draw(context, {});
+    CHECK(bitmap.getColor(26, 18) == palette.surface_background);
+    CHECK(SkColorGetA(bitmap.getColor(10, 10)) == 255);
+    CHECK(bitmap.getColor(9, 10) == SK_ColorTRANSPARENT);
 }
 
 TEST_CASE("A webview placeholder takes the slot it is given", "[ui][webview]")

@@ -3,11 +3,10 @@
 #include <utility>
 
 namespace luil::win32 {
-    IDCompositionVisual* renderer_underlay(renderer_host& host) noexcept
+    composition_renderer* renderer_composition(renderer_host& host) noexcept
     {
         // 합성 자리를 내는 것은 Direct3D 렌더러뿐이다. 물러선 CPU 렌더러는 이 확장이 없다.
-        auto* const composition { dynamic_cast<composition_renderer*>(&host.current()) };
-        return composition != nullptr ? composition->underlay() : nullptr;
+        return dynamic_cast<composition_renderer*>(&host.current());
     }
 
     layered_renderer* renderer_layered(renderer_host& host) noexcept

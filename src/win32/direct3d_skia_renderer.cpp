@@ -68,6 +68,8 @@ namespace luil::win32 {
                     static_cast<void>(target_->SetRoot(nullptr));
                     static_cast<void>(composition_->Commit());
                 }
+                if (overlay_ != nullptr)
+                    overlay_->Release();
                 if (visual_ != nullptr)
                     visual_->Release();
                 if (underlay_ != nullptr)
@@ -197,9 +199,9 @@ namespace luil::win32 {
                 return renderer_backend::direct3d;
             }
 
-            [[nodiscard]] IDCompositionVisual* underlay() noexcept override
+            [[nodiscard]] IDCompositionVisual* webview_parent(const webview_layer layer) noexcept override
             {
-                return underlay_;
+                return layer == webview_layer::overlay ? overlay_ : underlay_;
             }
 
             [[nodiscard]] bool resize(const int width, const int height, std::u8string& error) override
@@ -308,16 +310,17 @@ namespace luil::win32 {
                     error = make_hresult_error(u8"Failed to create the DirectComposition target", result);
                     return false;
                 }
-                // visual 셋을 세운다.
+                // Skia 양쪽에 웹뷰를 붙일 자리를 둔다.
                 //
                 //   root
                 //     ├─ underlay   ← 웹뷰가 여기 들어간다 (아래)
-                //     └─ visual     ← 우리 스왑체인 (위)
+                //     ├─ visual     ← 우리 스왑체인
+                //     └─ overlay    ← 자리표 위에 얹는 웹뷰
                 //
                 // 우리가 위에 있어야 알파 0으로 비운 자리에 **아래**가 비친다.
                 // 컨테이너를 따로 두는 이유: `IDCompositionTarget`은 root를 하나만
                 // 받고, 그 하나가 스왑체인이면 형제를 놓을 자리가 없다.
-                for (IDCompositionVisual** slot : { &root_, &underlay_, &visual_ })
+                for (IDCompositionVisual** slot : { &root_, &underlay_, &visual_, &overlay_ })
                 {
                     result = composition_->CreateVisual(slot);
                     if (FAILED(result))
@@ -336,6 +339,8 @@ namespace luil::win32 {
                 result = root_->AddVisual(underlay_, FALSE, nullptr);
                 if (SUCCEEDED(result))
                     result = root_->AddVisual(visual_, TRUE, underlay_);
+                if (SUCCEEDED(result))
+                    result = root_->AddVisual(overlay_, TRUE, visual_);
                 if (FAILED(result))
                 {
                     error = make_hresult_error(u8"Failed to order the DirectComposition visuals", result);
@@ -460,9 +465,10 @@ namespace luil::win32 {
             IDCompositionDevice* composition_ { nullptr };
             // 창이 소유하는 쪽이다. 렌더러와 수명을 같이한다.
             IDCompositionTarget* target_ { nullptr };
-            // root 아래에 underlay(웹뷰)와 visual(우리 스왑체인)이 이 순서로 든다.
+            // 스왑체인의 위와 아래에 웹뷰 전용 컨테이너가 선다.
             IDCompositionVisual* root_ { nullptr };
             IDCompositionVisual* underlay_ { nullptr };
+            IDCompositionVisual* overlay_ { nullptr };
             IDCompositionVisual* visual_ { nullptr };
             int width_ { 1 };
             int height_ { 1 };

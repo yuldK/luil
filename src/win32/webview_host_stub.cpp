@@ -73,11 +73,16 @@ namespace luil::win32 {
         }
     }
 
-    void webview_host::apply_layout(const std::u8string& id, const webview_layout& layout, IDCompositionVisual* const underlay)
+    void webview_host::apply_layout(const std::u8string& id, const webview_layout& layout, IDCompositionVisual* const parent)
     {
         static_cast<void>(id);
         static_cast<void>(layout);
-        static_cast<void>(underlay);
+        static_cast<void>(parent);
+    }
+
+    bool webview_host::opens_hole(const std::u8string&) const noexcept
+    {
+        return false;
     }
 
     bool webview_host::standing(const std::u8string& id) const noexcept

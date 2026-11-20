@@ -14,7 +14,7 @@ namespace luil::win32 {
         }
     }
 
-    webview_layout plan_webview_layout(const std::optional<rect_f>& visible, const int client_width, const int client_height, const bool occluded, const float scale) noexcept
+    webview_layout plan_webview_layout(const std::optional<rect_f>& visible, const int client_width, const int client_height, const bool occluded, const float scale, const webview_layer layer) noexcept
     {
         if (visible.has_value() == false)
             return {};
@@ -32,15 +32,16 @@ namespace luil::win32 {
             .width = right - left,
             .height = bottom - top,
             // 가려졌으면 자리는 그대로 두고 구멍만 뚫지 않는다 (헤더의 이유).
-            .punch_hole = occluded == false,
+            .uncovered = occluded == false,
             // 자리와 같은 tree의 배율이다 (헤더의 이유).
             .scale = scale > 0.0f ? scale : 1.0f,
+            .layer = layer,
         };
     }
 
     webview_pointer translate_webview_pointer(const webview_layout& layout, const int client_x, const int client_y, const bool captured) noexcept
     {
-        if (layout.visible() == false || layout.punch_hole == false)
+        if (layout.visible() == false || layout.uncovered == false)
             return {};
         // 반열림이다 — 오른쪽·아래 가장자리는 바깥이다. 자리를 잇대어 놓아도
         // 한 점이 두 웹뷰의 것이 되지 않는다 (`screen_area`와 같은 규칙).

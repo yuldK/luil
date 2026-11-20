@@ -45,8 +45,7 @@ namespace luil {
         if (box.width <= 0.0f || box.height <= 0.0f)
             return;
 
-        // 바탕을 칠한다. 웹뷰가 실제로 서면 이 위가 구멍으로 비워지므로 보이지
-        // 않고, 못 서면 이것이 그 자리의 모습이 된다.
+        // 위층 웹뷰의 첫 그림이 오기 전에도 자리가 비지 않도록 바탕을 매번 칠한다.
         const SkRect area { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
         context.canvas.drawRect(area, solid_paint(context.palette.surface_background));
 

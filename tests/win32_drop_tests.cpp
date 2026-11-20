@@ -238,7 +238,7 @@ namespace {
 
         // 창 없는 test는 웹뷰를 세우지 않는다.
         [[nodiscard]] std::span<const luil::pixel_rect> apply_webviews(
-            const std::u8string&, const luil::ui_tree*, IDCompositionVisual*, int, int) override
+            const std::u8string&, const luil::ui_tree*, luil::win32::composition_renderer*, int, int) override
         {
             return {};
         }

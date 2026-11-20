@@ -32,7 +32,7 @@ namespace luil::win32 {
     {
         const ui_webview* source { nullptr };
         HWND window { nullptr };
-        bool has_underlay { false };
+        bool has_layer { false };
     };
 
     // 웹뷰가 초점에 대해 알려 오는 것이다.
@@ -77,7 +77,7 @@ namespace luil::win32 {
         // 무엇을 할지는 창이 정한다 — host는 tree도 초점 순서도 모른다.
         void set_focus_reporter(std::function<void(const std::u8string& id, const std::u8string& anchor, webview_focus_signal signal)> reporter);
 
-        // 페이지가 자기 배경을 정하기 전에 보이는 바닥색이다 (불투명으로 깐다).
+        // 자체 배경이 없는 페이지의 바닥색이다. 위층의 초기 빈 문서만 투명하게 둔다.
         // 창이 매 frame 팔레트의 창 바탕을 준다. 같은 값이면 아무 일도 하지 않고,
         // 바뀌면 서 있는 웹뷰 전부와 앞으로 설 웹뷰에 적용한다.
         void set_default_background(ui_color color);
@@ -101,13 +101,16 @@ namespace luil::win32 {
         void synchronize(std::span<const webview_target> wanted, IDCompositionDevice* composition);
 
         // 이 웹뷰의 자리를 적용한다. 없는 id는 아무 일도 하지 않는다.
-        //  - `underlay`는 그 표면의 렌더러가 내준 자리다. nullptr이면(CPU 백엔드)
+        //  - `parent`는 그 표면의 렌더러가 내준 자리다. nullptr이면(CPU 백엔드)
         //    웹뷰를 감춘다 — 합성이 없으면 설 자리도 없다.
-        void apply_layout(const std::u8string& id, const webview_layout& layout, IDCompositionVisual* underlay);
+        void apply_layout(const std::u8string& id, const webview_layout& layout, IDCompositionVisual* parent);
 
         // 이 웹뷰가 지금 화면에 그려지고 있는가.
         // 거짓이면 그 자리에 구멍을 뚫지 않는다 — 뚫으면 바탕 화면이 비친다.
         [[nodiscard]] bool standing(const std::u8string& id) const noexcept;
+
+        // 직전에 적용한 자리가 아래층이고 항해가 끝나야 구멍을 낼 수 있다.
+        [[nodiscard]] bool opens_hole(const std::u8string& id) const noexcept;
 
         // 이 표면에 서 있는 이 웹뷰의 접근성 창이다 (페이지의 UIA tree가 매달린 숨은 자식 창).
         //  - 합성 호스팅의 WebView2는 앵커 창 아래에 크기 0의 자식 창을 두고, 페이지의 UIA tree를 그 창의

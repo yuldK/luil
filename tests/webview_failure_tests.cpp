@@ -64,7 +64,7 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
             MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
         }
         REQUIRE(reports == std::vector<bool> { false });
-        target.has_underlay = true;
+        target.has_layer = true;
         host.synchronize({ &target, 1 }, device);
         host.synchronize({ &target, 1 }, device);
         host.apply_layout(view.id, {}, nullptr);
@@ -72,7 +72,7 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         REQUIRE(reports == std::vector<bool> { false, true, false });
         Microsoft::WRL::ComPtr<IDCompositionVisual> underlay {};
         REQUIRE(SUCCEEDED(device->CreateVisual(&underlay)));
-        const luil::win32::webview_layout visible { .width = 80, .height = 80, .punch_hole = true };
+        const luil::win32::webview_layout visible { .width = 80, .height = 80, .uncovered = true };
         const auto navigation_deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 10 } };
         while (children.empty() && std::chrono::steady_clock::now() < navigation_deadline)
         {
@@ -82,7 +82,20 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         }
         REQUIRE(children.size() == 1);
         REQUIRE(children.front() != nullptr);
-        host.apply_layout(view.id, visible, underlay.Get());
+        REQUIRE(host.opens_hole(view.id));
+        Microsoft::WRL::ComPtr<IDCompositionVisual> overlay {};
+        REQUIRE(SUCCEEDED(device->CreateVisual(&overlay)));
+        view.layer = luil::webview_layer::overlay;
+        host.synchronize({ &target, 1 }, device);
+        auto above { visible };
+        above.layer = view.layer;
+        host.apply_layout(view.id, above, overlay.Get());
+        REQUIRE(host.standing(view.id));
+        REQUIRE_FALSE(host.opens_hole(view.id));
+        REQUIRE(host.automation_window({}, view.id) == children.front());
+        above.uncovered = false;
+        host.apply_layout(view.id, above, overlay.Get());
+        REQUIRE_FALSE(host.standing(view.id));
         host.apply_layout(view.id, {}, underlay.Get());
         host.apply_layout(view.id, {}, underlay.Get());
         REQUIRE(children.size() == 2);

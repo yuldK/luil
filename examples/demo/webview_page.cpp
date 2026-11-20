@@ -1,6 +1,8 @@
 #include "demo/webview_page.h"
+#include "demo/basics_page.h"
 
 #include "luil/ui/check_element.h"
+#include "luil/ui/dialog_elements.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/tab_bar_element.h"
@@ -197,6 +199,7 @@ namespace demo {
 
         luil::win32::ui_webview view {};
         view.id = webview_id();
+        view.layer = luil::webview_layer::overlay;
         view.user_data_folder = user_data_folder_;
         view.report_presentation = true;
         // 되돌이 서버는 http다. 기본값(https만)으로는 열리지 않으므로 이 예제가
@@ -250,14 +253,20 @@ namespace demo {
         column->add(std::make_unique<luil::check_element>(std::move(windows)), luil::check_row_height);
         column->add_gap(6.0f);
 
+        auto dialog { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_details_open }
+            , luil::text_button_config { .text = u8"웹뷰 위에 대화 열기" })
+        };
+        dialog->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_intent { dialog_kind::details }));
+        column->add(std::move(dialog), { .length = 26.0f, .cross_length = 150.0f });
+        column->add_gap(6.0f);
+
         const tab* const current { selected() };
-        const float body { height > 0.0f ? height - 246.0f : 320.0f };
+        const float body { height > 0.0f ? height - 278.0f : 320.0f };
         const float body_height { body > 80.0f ? body : 80.0f };
 
         if (current != nullptr && current->path.empty() == false)
         {
-            // 웹뷰 탭이다. 자리표가 자리를 잡고, 웹뷰가 서면 그 위가 구멍으로
-            // 비워져 페이지가 대신 보인다.
+            // 첫 페이지 픽셀이 자리표를 자연스럽게 덮는다.
             luil::webview_config placeholder {};
             placeholder.webview = webview_id();
             placeholder.name = u8"문서 미리 보기";

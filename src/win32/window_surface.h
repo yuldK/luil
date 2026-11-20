@@ -76,11 +76,11 @@ namespace luil::win32 {
         //
         // 자리는 tree의 자리표가 정하므로 그리기 직전에야 알 수 있다 — 그래서
         // 대조(수명)와 달리 이것은 표면마다 render 안에서 불린다.
-        //  - `underlay`는 이 표면의 렌더러가 내준 자리다. nullptr이면(CPU 백엔드)
+        //  - `composition`은 이 표면에서 합성 층을 제공한다. nullptr이면(CPU 백엔드)
         //    웹뷰가 설 자리가 없어 아무것도 앉히지 않고 빈 span을 답한다.
         //  - 돌려준 span은 **다음 호출까지만** 유효하다. 표면 하나를 그리는 동안만
         //    쓰이고, 그리기가 끝나면 다음 표면이 같은 자리를 다시 채운다.
-        [[nodiscard]] virtual std::span<const pixel_rect> apply_webviews(const std::u8string& surface, const ui_tree* tree, IDCompositionVisual* underlay, int client_width, int client_height) = 0;
+        [[nodiscard]] virtual std::span<const pixel_rect> apply_webviews(const std::u8string& surface, const ui_tree* tree, composition_renderer* composition, int client_width, int client_height) = 0;
 
         // 이 표면의 웹뷰가 이 포인터를 가져갔는가.
         // 참이면 우리 tree는 그것을 보지 않는다 — 같은 포인터를 양쪽에 주면 웹뷰
@@ -323,9 +323,10 @@ namespace luil::win32 {
         // 창을 붙인 뒤(`WM_NCCREATE`) 한 번 부른다.
         [[nodiscard]] bool create_renderer(renderer_mode mode, renderer_fault_injection fault, int width, int height, std::u8string& error);
         [[nodiscard]] bool resize_renderer(int width, int height, std::u8string& error);
-        [[nodiscard]] bool has_webview_underlay() const noexcept
+        [[nodiscard]] bool has_webview_layer(const webview_layer layer) const noexcept
         {
-            return renderer_ != nullptr && renderer_underlay(*renderer_) != nullptr;
+            auto* const composition { renderer_ != nullptr ? renderer_composition(*renderer_) : nullptr };
+            return composition != nullptr && composition->webview_parent(layer) != nullptr;
         }
 
         // CPU 렌더러가 frame을 내는 방식이다. `create_renderer` 전에 정한다.

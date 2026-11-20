@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/app/webview.h"
 #include "luil/ui/ui_element.h"
 
 #include <optional>
@@ -15,11 +16,8 @@ namespace luil::win32 {
         int y { 0 };
         int width { 0 };
         int height { 0 };
-        // 이 frame에서 해당 영역을 알파 0으로 남길지 나타낸다.
-        // luil visual 아래의 웹뷰는 투명 영역을 통해 보인다.
-        // modal로 웹뷰를 가릴 때는 구멍을 막는다. 구멍 위에 반투명 scrim만 그리면
-        // 아래 웹뷰가 계속 비치기 때문이다.
-        bool punch_hole { false };
+        // 다섯 가림 표본이 모두 자리표에 닿았다. 두 층의 포인터 중계가 같은 값을 본다.
+        bool uncovered { false };
         // 이 자리가 **배치된 배율**이다 (CSS 픽셀 = 물리 픽셀 / 이 값).
         //
         // 자리와 함께 실리는 이유: 둘은 같은 tree에서 나온 한 쌍이라야 한다.
@@ -28,11 +26,17 @@ namespace luil::win32 {
         // 새 tree가 오면 다시 한 번 한다. 자리표가 배치될 때의 배율을 그대로
         // 실으면 어긋난 쌍이 생길 길이 없다 (webview-composition-design.md).
         float scale { 1.0f };
+        webview_layer layer { webview_layer::underlay };
+
+        [[nodiscard]] bool punch_hole() const noexcept
+        {
+            return layer == webview_layer::underlay && uncovered;
+        }
 
         // 그릴 자리가 있는가다. 거짓이면 웹뷰를 감춘다.
         [[nodiscard]] bool visible() const noexcept
         {
-            return width > 0 && height > 0;
+            return width > 0 && height > 0 && (uncovered || layer == webview_layer::underlay);
         }
 
         [[nodiscard]] bool operator==(const webview_layout&) const noexcept = default;
@@ -48,16 +52,15 @@ namespace luil::win32 {
     // (웹뷰 자리에서 `hit_test`가 자리표 자신을 돌려주는가) 이 함수는 그 답을
     // 받기만 한다 — 그래야 이 함수가 tree도 창도 모른 채로 test된다.
     //
-    // 가려져도 **자리는 그대로 둔다.** 웹뷰 visual은 우리 아래에 있어 덮이기만
-    // 하고, 자리를 흔들면 페이지가 리플로를 한 번 더 한다. 바뀌는 것은
-    // `punch_hole` 하나다.
+    // 가려지면 아래층은 자리를 유지하고 구멍만 닫는다. 위층은 controller를 숨긴다.
     //  - 1차는 **전부 아니면 전무**다. 토스트가 모서리만 덮어도 통째로 안 뚫는다.
     //    걸치는 것을 rect 차집합으로 빼는 것은 오버레이가 여럿이면 rect 목록의
     //    차집합이 되고, 그것이 곧 layer다.
     //
     // `scale`은 자리표가 배치된 배율이다 — 그 자리를 낸 tree의 것이지 표면의
     // 것이 아니다 (`webview_layout::scale`). 0 이하는 1로 본다.
-    [[nodiscard]] webview_layout plan_webview_layout(const std::optional<rect_f>& visible, int client_width, int client_height, bool occluded, float scale) noexcept;
+    [[nodiscard]] webview_layout plan_webview_layout(
+        const std::optional<rect_f>& visible, int client_width, int client_height, bool occluded, float scale, webview_layer layer = webview_layer::underlay) noexcept;
 
     // 표면 client의 포인터 하나를 웹뷰 자리에 비추어 본 것이다.
     struct webview_pointer

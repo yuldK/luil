@@ -948,8 +948,8 @@ namespace luil::win32 {
         // 웹뷰를 자리에 앉히고 비울 자리를 받는다. **`prepare_frame` 뒤라야 한다** —
         // 주 표면은 자기 tree를 거기서 집으므로, 앞에 두면 한 frame 낡은 tree에서
         // 자리표를 찾게 된다.
-        IDCompositionVisual* const underlay { renderer_underlay(*renderer_) };
-        state.holes = context_.apply_webviews(id_, state.tree, underlay, state.width, state.height);
+        composition_renderer* const composition { renderer_composition(*renderer_) };
+        state.holes = context_.apply_webviews(id_, state.tree, composition, state.width, state.height);
         // 값·상태·구조 변경을 prepare_frame 뒤에 직전 접근성 발행본과 비교한다.
         // prepare_frame 전에 비교하면 주 표면이 이전 tree를 사용해 변경 알림을 놓친다.
         announce_accessibility_changes();
@@ -964,7 +964,7 @@ namespace luil::win32 {
         if (renderer_->render(state, error) == false)
             return false;
         // 그리는 도중 CPU로 물러났으면 웹뷰를 숨기고 비웠던 자리를 다시 칠한다.
-        if (underlay != nullptr && has_webview_underlay() == false)
+        if (composition != nullptr && renderer_composition(*renderer_) == nullptr)
         {
             static_cast<void>(context_.apply_webviews(id_, state.tree, nullptr, state.width, state.height));
             InvalidateRect(window_, nullptr, FALSE);

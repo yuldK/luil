@@ -194,9 +194,9 @@ namespace luil::win32 {
         ComPtr<ICoreWebView2CompositionController> composition_controller {};
         ComPtr<ICoreWebView2Controller> controller {};
         ComPtr<ICoreWebView2> view {};
-        // 이 웹뷰가 그려지는 visual이다. 표면의 underlay 아래에 든다.
+        // 이 웹뷰가 그려지는 visual이다. 표면에서 선택한 합성 층에 든다.
         ComPtr<IDCompositionVisual> visual {};
-        // 표면의 underlay visual이 바뀌면 웹뷰를 새 visual에 연결한다.
+        // 표면의 부모 visual이 바뀌면 웹뷰를 새 visual에 연결한다.
         // 렌더러가 먼저 소멸해도 RemoveVisual을 안전하게 호출하도록 COM 참조를 유지한다.
         ComPtr<IDCompositionVisual> attached_to {};
         // 지금 실제로 그려지고 있는가.
@@ -206,7 +206,8 @@ namespace luil::win32 {
         // 걸어야 하고 그때 페이지가 빈다.
         bool shown { false };
         bool report_surface { false };
-        bool has_underlay { false };
+        bool has_layer { false };
+        webview_layer layer { webview_layer::underlay };
         std::optional<bool> reported_presentation {};
         UINT pressed_buttons { 0 };
         // 이 웹뷰가 쥔 터치·펜 접촉이다 (DOWN을 받은 웹뷰가 끝까지 갖는다).
@@ -214,15 +215,9 @@ namespace luil::win32 {
         std::vector<std::pair<UINT32, POINTER_INPUT_TYPE>> pointer_contacts {};
         // 이 웹뷰 위에 떠 있는 펜이다. 떠나면 LEAVE를 준다.
         std::vector<UINT32> pointer_hovers {};
-        // 한 번이라도 그렸는가.
-        //
-        // 만들고 보이게 한 직후의 visual은 **비어 있다.** 그때 자리를 비우면 그 아래에
-        // 아무것도 없어 바탕 화면이 비친다 — 페이지가 처음 뜨는 동안의 구멍이다.
-        //  - `NavigationCompleted`를 그 표식으로 쓴다. 실패해도 참으로 둔다:
-        //    WebView2가 자기 오류 페이지를 그리므로 그 자리도 이미 칠해져 있다.
-        //  - 아무 데도 가지 않는 웹뷰는 영영 거짓이고, 그동안 자리표의 placeholder가
-        //    그 자리를 지킨다 (webview_element.h).
-        bool painted { false };
+        // 첫 항해가 끝나야 초기 빈 문서를 지나왔다. 이 표식이 서도 첫 합성 픽셀은 늦을 수 있다.
+        // 위층은 그 동안에도 아래의 자리표를 유지한다.
+        bool navigation_finished { false };
         // 페이지의 UIA tree가 매달린 숨은 자식 창이다 (`automation_window`).
         //  - **UIA 질의 밖에서 찾아 둔다.** 찾으려면 WebView2를 부르는데(브라우저 프로세스로 가는 COM), UIA가
         //    그 창의 가지를 훑는 도중에 부르면 브라우저가 우리 UI thread에 되묻는 동안 서로를 기다린다.
@@ -353,7 +348,7 @@ namespace luil::win32 {
     void webview_host::tear_down(entry& target) noexcept
     {
         set_automation_window(target, nullptr);
-        // 붙여 둔 visual을 떼지 않으면 underlay에 빈 visual이 남는다.
+        // 붙여 둔 visual을 떼지 않으면 합성 층에 빈 visual이 남는다.
         if (target.attached_to != nullptr && target.visual != nullptr)
         {
             static_cast<void>(target.attached_to->RemoveVisual(target.visual.Get()));
@@ -566,13 +561,7 @@ namespace luil::win32 {
 
         apply_settings(*target->view.Get(), target->policy);
 
-        // **웹뷰를 불투명하게 만든다.**
-        //
-        // 합성 호스팅에서 페이지가 배경을 정하지 않으면 그 자리가 알파 그대로
-        // 합성된다. 우리는 그 자리를 이미 비워 두었으므로(구멍) 곧바로 **바탕 화면이
-        // 비친다.** 창 바탕색을 깔아 그 길을 막는다 (`set_default_background`).
-        //  - 페이지가 자기 배경을 정하는 것이 정상이고, 이 값은 정하지 않은 페이지의
-        //    바닥일 뿐이다. 그 바닥이 창 바탕과 같아야 페이지가 뜨는 동안 판이 번쩍이지 않는다.
+        // 첫 항해 전 위층 컨트롤러의 초기 단색 면이 자리표를 가리지 않게 한다.
         apply_default_background(*target);
 
         // **배율은 우리가 소유한다.** 이 값을 끄지 않으면 `put_RasterizationScale`이
@@ -611,7 +600,7 @@ namespace luil::win32 {
                 if (target_entry == nullptr)
                     return S_OK;
                 // 우리가 막은 항해의 끝은 알리지 않는다 — 막았다고 이미 알렸다.
-                // 막힌 페이지는 그려지지 않았으므로 `painted`도 그대로 둔다.
+                // 막힌 페이지는 그려지지 않았으므로 `navigation_finished`도 그대로 둔다.
                 UINT64 navigation { 0 };
                 if (args != nullptr && SUCCEEDED(args->get_NavigationId(&navigation)) && std::erase(target_entry->cancelled_navigations, navigation) > 0)
                     return S_OK;
@@ -635,7 +624,9 @@ namespace luil::win32 {
                     for (const char digit : std::to_string(static_cast<int>(status)))
                         reason.push_back(static_cast<char8_t>(digit));
                 }
-                target_entry->painted = true;
+                const bool first { std::exchange(target_entry->navigation_finished, true) == false };
+                if (first && target_entry->layer == webview_layer::overlay)
+                    self->apply_default_background(*target_entry);
                 InvalidateRect(target_entry->window, nullptr, FALSE);
                 self->report(*target_entry, succeeded != FALSE ? webview_event_kind::navigation_completed : webview_event_kind::navigation_failed, std::move(url), std::move(reason));
                 return S_OK;
@@ -963,9 +954,11 @@ namespace luil::win32 {
         ComPtr<ICoreWebView2Controller2> controller2 {};
         if (FAILED(target.controller.As(&controller2)) || controller2 == nullptr)
             return;
-        // 알파는 언제나 불투명이다 — 바닥이 비치면 그 아래는 바탕 화면이다.
+        // 위층의 초기 빈 문서는 투명하게 둔다. 항해 후에는 자체 배경이 없는 페이지도 읽을 수 있게 한다.
         const auto channel = [this](const int shift) { return static_cast<BYTE>((default_background_ >> shift) & 0xFFu); };
-        static_cast<void>(controller2->put_DefaultBackgroundColor(COREWEBVIEW2_COLOR { 255, channel(16), channel(8), channel(0) }));
+        const bool transparent { target.layer == webview_layer::overlay && target.navigation_finished == false };
+        const COREWEBVIEW2_COLOR background { transparent ? COREWEBVIEW2_COLOR {} : COREWEBVIEW2_COLOR { 255, channel(16), channel(8), channel(0) } };
+        static_cast<void>(controller2->put_DefaultBackgroundColor(background));
     }
 
     void webview_host::synchronize(const std::span<const webview_target> wanted, IDCompositionDevice* const composition)
@@ -1020,6 +1013,7 @@ namespace luil::win32 {
             auto created { std::make_unique<entry>() };
             created->id = want.id;
             created->anchor = want.anchor;
+            created->layer = want.layer;
             created->user_data_folder = want.user_data_folder;
             created->policy = want.policy;
             created->window = sources[index].window;
@@ -1061,7 +1055,14 @@ namespace luil::win32 {
             }
             target->on_event = want->on_event;
             target->report_surface = want->report_presentation;
-            target->has_underlay = source.has_underlay;
+            if (target->layer != want->layer)
+            {
+                target->layer = want->layer;
+                if (target->controller != nullptr)
+                    apply_default_background(*target);
+                InvalidateRect(target->window, nullptr, FALSE);
+            }
+            target->has_layer = source.has_layer;
             report_presentation(*target);
             flush_commands(*target);
         }
@@ -1104,27 +1105,29 @@ namespace luil::win32 {
             target.reported_presentation.reset();
             return;
         }
-        const bool available { target.has_underlay && target.visual != nullptr };
+        const bool available { target.has_layer && target.visual != nullptr };
         if (target.state != creation_state::ready || target.reported_presentation == available)
             return;
         target.reported_presentation = available;
         report(target, webview_event { .kind = webview_event_kind::presentation_changed, .presentation_available = available }, 0);
     }
 
-    void webview_host::apply_layout(const std::u8string& id, const webview_layout& layout, IDCompositionVisual* const underlay)
+    void webview_host::apply_layout(const std::u8string& id, const webview_layout& layout, IDCompositionVisual* const parent)
     {
         entry* const target { find(id) };
         if (target == nullptr || target->state != creation_state::ready || target->controller == nullptr)
             return;
-        target->has_underlay = underlay != nullptr;
+        target->has_layer = parent != nullptr;
         report_presentation(*target);
         // 합성이 없으면(CPU 백엔드) 설 자리가 없다. 감추고 자리표에 맡긴다.
-        const bool showing { layout.visible() && underlay != nullptr && target->visual != nullptr };
-        if ((showing == false || layout.punch_hole == false) && target->pressed_buttons != 0)
+        const bool showing { layout.visible() && parent != nullptr && target->visual != nullptr
+            && (layout.layer == webview_layer::underlay || target->navigation_finished)
+        };
+        if ((showing == false || layout.uncovered == false) && target->pressed_buttons != 0)
             cancel_pointer(target->anchor);
         // 브라우저가 DOWN만 받은 채 감춰지지 않도록 먼저 접촉을 끝낸다.
         // 표면은 남은 시퀀스를 계속 소유하므로 뒤의 luil UI에 누름이 새지 않는다.
-        if (showing == false || layout.punch_hole == false)
+        if (showing == false || layout.uncovered == false)
             while (target->pointer_contacts.empty() == false)
                 cancel_pointer_input(target->anchor, target->pointer_contacts.back().first);
         if (showing == false)
@@ -1143,16 +1146,23 @@ namespace luil::win32 {
             return;
         }
 
-        if (target->attached_to.Get() != underlay)
+        if (target->attached_to.Get() != parent)
         {
             if (target->attached_to != nullptr)
-                static_cast<void>(target->attached_to->RemoveVisual(target->visual.Get()));
-            static_cast<void>(underlay->AddVisual(target->visual.Get(), FALSE, nullptr));
-            target->attached_to = underlay;
-            static_cast<void>(target->composition_controller->put_RootVisualTarget(target->visual.Get()));
+            {
+                if (FAILED(target->attached_to->RemoveVisual(target->visual.Get())))
+                    return;
+                target->attached_to.Reset();
+            }
+            else if (FAILED(target->composition_controller->put_RootVisualTarget(target->visual.Get())))
+                return;
+            if (FAILED(parent->AddVisual(target->visual.Get(), FALSE, nullptr)))
+                return;
+            target->attached_to = parent;
+            target->has_applied = false;
         }
         target->shown = true;
-        if (target->painted && (target->automation_window == nullptr || IsWindow(target->automation_window) == FALSE))
+        if (target->navigation_finished && (target->automation_window == nullptr || IsWindow(target->automation_window) == FALSE))
             set_automation_window(*target, find_automation_window(*target));
 
         if (target->has_applied && target->applied == layout)
@@ -1522,7 +1532,13 @@ namespace luil::win32 {
         const entry* const target { find(id) };
         // **보이는 것까지 요구한다.** 붙어만 있고 감춰진 웹뷰의 자리를 비우면
         // 그 아래에 아무것도 없어 바탕 화면이 비친다.
-        return target != nullptr && target->state == creation_state::ready && target->attached_to != nullptr && target->shown && target->painted;
+        return target != nullptr && target->state == creation_state::ready && target->attached_to != nullptr && target->shown && target->navigation_finished;
+    }
+
+    bool webview_host::opens_hole(const std::u8string& id) const noexcept
+    {
+        const entry* const target { find(id) };
+        return target != nullptr && target->applied.punch_hole() && standing(id);
     }
 
     void webview_host::set_automation_window(entry& target, const HWND window)

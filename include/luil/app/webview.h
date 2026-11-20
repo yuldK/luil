@@ -189,6 +189,13 @@ namespace luil {
         [[nodiscard]] bool operator==(const webview_policy&) const noexcept = default;
     };
 
+    // Skia 스왑체인에 대한 웹뷰 visual의 순서다.
+    enum class webview_layer
+    {
+        underlay,
+        overlay,
+    };
+
     // 창 하나에 얹히는 웹뷰 하나다.
     //
     // 열림·닫힘은 popup·보조 창처럼 앱 상태다: frame에 실으면 서고 빼면 사라진다.
@@ -238,5 +245,9 @@ namespace luil {
         //    넘기는 자리와 같다.
         std::function<app_message(webview_event)> on_event {};
         bool report_presentation { false };
+        // 기본 아래층은 기존 합성을 보존한다. 위층은 자리표를 비우지 않고 그 위에 페이지를 얹는다.
+        // 위층은 가림 표본에 다른 요소가 닿으면 통째로 숨긴다. 사각 clip 밖의 모양과
+        // 표본 사이의 가는 겹침은 docs/webview-composition-design.md의 가림 규칙을 따른다.
+        webview_layer layer { webview_layer::underlay };
     };
 }

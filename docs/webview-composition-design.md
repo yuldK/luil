@@ -2,7 +2,7 @@
 
 Luil은 WebView2 composition controller를 Skia가 그리는 tree의 한 slot에 배치한다. Application은 `ui_frame::webviews`로 controller의 수명과 policy를 publish하고, 같은 id의 `webview_element`를 anchor surface tree에 배치한다.
 
-공개 계약은 [`include/luil/app/app_host.h`](../include/luil/app/app_host.h)와 [`include/luil/ui/webview_element.h`](../include/luil/ui/webview_element.h)에 있다. Hosting은 [`src/win32/webview_host.h`](../src/win32/webview_host.h)와 [`src/win32/webview_host.cpp`](../src/win32/webview_host.cpp), layout 판단은 [`src/win32/webview_layout.h`](../src/win32/webview_layout.h)에 구현되어 있다.
+공개 계약은 [`include/luil/app/webview.h`](../include/luil/app/webview.h)와 [`include/luil/ui/webview_element.h`](../include/luil/ui/webview_element.h)에 있다. Hosting은 [`src/win32/webview_host.h`](../src/win32/webview_host.h)와 [`src/win32/webview_host.cpp`](../src/win32/webview_host.cpp), layout 판단은 [`src/win32/webview_layout.h`](../src/win32/webview_layout.h)에 구현되어 있다.
 
 WebView 기능을 사용하려면 WebView2 SDK로 build해야 하며 runtime에는 Evergreen WebView2 Runtime build 2210 이상이 필요하다. Runtime이나 필요한 interface가 없으면 slot은 placeholder를 유지하고 application에 `creation_failed` event를 보낸다.
 
@@ -28,17 +28,19 @@ Environment는 정규화된 user-data folder별로 공유한다. 서로 다른 f
 ```text
 root
 ├── underlay
-│   └── WebView visuals
-└── Skia swap-chain visual
+│   └── 아래층 WebView visuals
+├── Skia swap-chain visual
+└── overlay
+    └── 위층 WebView visuals
 ```
 
-Skia visual은 WebView underlay 위에 있다. Composition swap chain은 `DXGI_ALPHA_MODE_PREMULTIPLIED`를 사용하므로 alpha가 0인 Skia pixel에서 아래 WebView가 보이고 opaque pixel은 WebView를 덮는다.
+`ui_webview::layer`로 웹뷰마다 `webview_layer::underlay`와 `webview_layer::overlay`를 고른다. 아래층을 기본값으로 두어 기존 앱의 가림·모서리 합성을 보존한다. 위층은 처음 표시할 때 창 뒤가 잠깐 비쳐서는 안 되는 사각 슬롯에 적합하다. 같은 id의 층을 바꾸면 컨트롤러와 페이지를 유지하며 부모 visual을 바꾼다. Composition swap chain은 `DXGI_ALPHA_MODE_PREMULTIPLIED`를 사용하므로 alpha가 0인 Skia pixel에서 아래 WebView가 보이고 opaque pixel은 WebView를 덮는다.
 
 Direct3D renderer는 flip-model swap chain을 `HWND`에 직접 붙이지 않고 `CreateSwapChainForComposition`을 사용한다. 따라서 presentation이 DirectComposition target 안에 머물고 CPU renderer로 돌아가기 전에 target을 안전하게 detach할 수 있다.
 
-DirectComposition device는 application 전체에서 공유한다. 각 `HWND`는 자체 target, root, underlay, Skia visual, swap chain을 가지며 각 WebView는 anchor surface의 underlay에 붙은 child visual을 가진다.
+DirectComposition device는 application 전체에서 공유한다. 각 `HWND`는 자체 target, root, 두 컨테이너, Skia visual, swap chain을 가진다. 각 WebView는 anchor surface에서 고른 컨테이너의 자식이다. 별도 HWND인 popup과 소유 창은 이 tree 전체 위에 설 수 있다.
 
-Direct3D가 실패해 CPU로 fallback하면 GDI presentation 전에 기존 composition target을 detach한다. CPU path에는 composition underlay가 없으므로 WebView를 숨기고 slot에는 placeholder를 그린다.
+Direct3D가 실패해 CPU로 fallback하면 GDI presentation 전에 기존 composition target을 detach한다. CPU·레이어드 표면에는 합성 층이 없으므로 WebView를 숨기고 slot에는 placeholder를 그린다.
 
 ## Slot, clipping, transparency
 
@@ -46,15 +48,15 @@ Element는 arranged physical bounds와 arrange에 사용한 scale을 보관한�
 
 `plan_webview_layout`은 visible rectangle을 정수 physical pixel로 반올림하고 surface client rectangle과 교차시킨다. 비었거나 완전히 clip되면 controller를 숨긴다. DirectComposition visual offset이 위치를 정하고 visual-local clip이 page pixel을 slot 밖으로 나가지 못하게 한다. Controller bounds는 `(0, 0)`에서 시작하는 width와 height만 제공한다.
 
-Element는 항상 일반 background와 placeholder text를 그린다. WebView2가 navigation을 한 번 완료하고 controller가 visible이 되면 그 영역에 alpha-zero hole을 낸다. 그 전에는 비어 있는 composition visual을 통해 desktop이 보이지 않도록 placeholder를 유지한다. Navigation 실패도 WebView2가 error page를 그리므로 painted 상태다.
+자리표는 두 방식 모두 매번 바탕과 placeholder를 그린다. **위층**에서는 그 픽셀을 그대로 두고 WebView2가 실제로 제출한 페이지 픽셀을 위에 합성한다. 빈 visual은 투명하지만 컨트롤러의 초기 빈 문서가 먼저 단색 면을 제출할 수 있다. 실측에서 위층을 즉시 보인 구현은 placeholder 다음에 단색 슬롯이 3장 잡혔다. 위층은 첫 항해가 끝날 때까지 기본 바탕을 투명하게 두고 컨트롤러를 숨긴다. 첫 `NavigationCompleted`에서 페이지용 불투명 바탕을 복구하고 표시를 허용한다. 이 사건 뒤에 합성 픽셀이 늦어져도 아래에는 자리표가 그대로 있다. 이후 항해는 그때마다 숨기지 않는다. 다시 보일 때 브라우저가 보존한 직전 페이지 픽셀이 새 항해보다 먼저 보일 수 있다.
 
-Slot 위에 다른 element가 있다고 판단되면 hole을 내지 않는다. 현재 판정은 center와 네 inset corner를 sample하고 다섯 지점 모두에서 interaction hit testing 결과가 `webview_element`일 것을 요구한다. 하나라도 덮이면 전체 hole을 보류해 Luil pixel이 page를 가린다. Rectangle subtraction을 하지 않는 all-or-nothing 근사이며 sample 사이의 좁은 overlay를 반드시 찾지는 못한다.
+**아래층**은 기존처럼 controller가 보이고 첫 `NavigationCompleted`를 받은 뒤 Skia 슬롯을 알파 0으로 비운다. 이 사건은 첫 합성 그림보다 먼저 올 수 있어 그 사이 슬롯에 창 뒤가 비치는 결함이 남는다. GDI 면을 바탕색으로 칠하는 완화책은 backdrop을 쓰는 창에서 효과까지 가린다. 컨트롤러의 기본 바탕색도 브라우저가 첫 그림을 낸 뒤에 보인다.
 
-가려진 동안 WebView rectangle은 유지해 불필요한 page reflow를 피한다. Hole이 보류되거나 view가 숨겨지면 pointer capture는 취소된다.
+가림 판정은 슬롯 중앙과 안쪽 네 모서리의 hit test다. 한 점이라도 다른 요소에 닿으면 아래층은 구멍을 막고, 위층은 `put_IsVisible(FALSE)`로 웹뷰 전체를 숨긴다. 부모 visual은 붙인 채 유지해 페이지 수명과 스크롤을 보존한다. 표본이 다시 모두 자리표에 닿으면 같은 컨트롤러를 보인다. 두 층 모두 가림·숨김 전에 포인터 capture를 취소한다.
 
-투명 WebView hole이 있는 frame은 Skia surface의 LCD subpixel text를 끄고 grayscale antialiasing을 쓴다. Channel별 subpixel coverage는 투명 pixel과 올바르게 합성할 수 없기 때문이다. Hole이 없는 frame은 일반 RGB pixel geometry를 유지한다.
+표본 사이의 가는 요소와 hit test에 잡히지 않는 초점 테두리·그림자는 이 판정에서 빠질 수 있다. 위층에서는 이런 Skia 픽셀이 페이지 뒤로 간다. visual의 clip은 사각형이므로 Skia가 그린 둥근 모서리도 위층 페이지를 자를 수 없다. 둥근 마스크나 부분 겹침을 Skia 픽셀로 표현하는 슬롯은 아래층을 선택한다.
 
-Controller 기본 background는 opaque white다. Page가 직접 background를 그릴 수 있지만 background가 지정되지 않았다고 desktop이 composition hole을 통해 보이지는 않는다.
+한 frame에 아래층의 실제 구멍이 하나라도 있으면 LCD subpixel 글꼴을 끄고 grayscale antialiasing을 쓴다. 위층만 있는 frame은 구멍 목록이 비므로 원래의 RGB pixel geometry를 유지한다.
 
 ## DPI 계약
 
@@ -127,7 +129,7 @@ Environment 생성이 동기적으로 실패하면 실패 원인을 environment�
 
 ## 표면 표시 가능 여부
 
-`ui_webview::report_presentation`을 켜면 준비된 컨트롤러마다 `presentation_changed`가 첫 값과 변경을 알린다. `webview_event::presentation_available`은 표면의 underlay와 웹뷰의 합성 visual로 판정한다. CPU·레이어드 표시와 GPU에서 CPU로 물러난 표면에서는 거짓이다. 자리표가 tree에서 빠지거나 가려져도 이 값은 같다. 페이지 사건의 초당 상한은 적용하지 않는다.
+`ui_webview::report_presentation`을 켜면 준비된 컨트롤러마다 `presentation_changed`가 첫 값과 변경을 알린다. `webview_event::presentation_available`은 표면에서 선택한 층과 웹뷰의 합성 visual로 판정한다. CPU·레이어드 표시와 GPU에서 CPU로 물러난 표면에서는 거짓이다. 자리표가 tree에서 빠지거나 가려져도 이 값은 같다. 페이지 사건의 초당 상한은 적용하지 않는다.
 
 ## Event backpressure
 
@@ -145,7 +147,7 @@ Browser process 종료는 `browser_process_failed`를 보내고 WebView를 faile
 
 Host와 controller는 모두 UI-thread object다. 비동기 생성 callback은 shared alive flag와 creation serial을 capture한다. Shutdown, 제거, 교체 뒤 도착한 callback은 orphan controller를 닫고 죽은 host에 접근하지 않는다.
 
-Host는 WebView가 붙어 있는 동안 underlay visual의 COM reference를 보유한다. 그렇지 않으면 renderer 파괴가 WebView teardown보다 먼저 visual을 해제할 수 있다. 숨길 때 root visual을 detach하지 않고 `IsVisible`을 사용해 다음 frame까지 page content를 보존한다.
+Host는 WebView가 붙어 있는 동안 선택한 부모 visual의 COM reference를 보유한다. 그렇지 않으면 renderer 파괴가 WebView teardown보다 먼저 visual을 해제할 수 있다. 숨길 때 root visual을 detach하지 않고 `IsVisible`을 사용해 다음 frame까지 page content를 보존한다.
 
 Shutdown은 future callback을 먼저 무효화하고 event delivery function을 지운 뒤 child visual 제거, controller close, environment release 순서로 진행한다. WebView event가 파괴된 `app_host`를 delivery closure로 붙잡지 못하게 한다.
 
@@ -176,5 +178,9 @@ Demo에서 잰 결과는 다음과 같다(runtime 155.0.4283.62).
 자리표가 계속 선 채 접근성 HWND가 붙거나 떨어지면 그 자리표에서 `ChildrenInvalidated`를 한 번 낸다. 같은 HWND를 가진 frame을 다시 그려도 알리지 않는다. 실험에서 WebView2의 page provider는 `IRawElementProviderFragmentRoot`를 지원했다. 이를 `GetEmbeddedFragmentRoots`에서 돌려준 빌드에서도 관리 UIA2의 RawView·ControlView 첫 자식과 자손 수는 모두 비어 있었다. 이 실험 경로는 공개하지 않는다.
 
 ## 검증
+
+Release 데모에서 새 프로세스의 주 창이 처음 보인 순간부터 `PrintWindow(PW_RENDERFULLCONTENT)`로 64장씩 세 번 찍었다. placeholder가 각각 10장·9장·8장 이어진 뒤 페이지가 보였고 단색 슬롯은 없었다. 같은 데모에서 글 탭으로 자리표를 빼고 메모 탭으로 돌아오면 직전 문서가 1장, 새 문서가 63장 보였다. 이는 표본 간격보다 짧은 전환까지 보증하지 않는다.
+
+‘웹뷰 위에 대화 열기’로 Skia 대화가 페이지를 가리고 닫으면 페이지가 다시 보였다. 명령 팔레트 popup과 도구 창은 페이지와 실제로 겹치는 지점에서 해당 HWND가 맨 위였다. CSS 100px 자의 물리 폭은 144 DPI 두 모니터에서 각각 150px, 120 DPI 모니터에서 125px이었다. GPU 손실 주입 후에는 ‘표면 표시 불가’ 알림과 자리표가 보였고 페이지의 자가 사라졌다.
 
 [`tests/webview_element_tests.cpp`](../tests/webview_element_tests.cpp)는 slot layout, scale 보존, hit opacity, tab 동작, 접근성을 검증한다. [`tests/webview_layout_tests.cpp`](../tests/webview_layout_tests.cpp)는 clipping, occlusion, rounding, half-open pointer bounds, capture, scale을 검증한다. [`tests/webview_message_gate_tests.cpp`](../tests/webview_message_gate_tests.cpp)는 message size와 rate limit, notice 억제, zero limit, clock window를 검증한다. [`tests/webview_failure_tests.cpp`](../tests/webview_failure_tests.cpp)는 생성 실패의 갈래 판정과 runtime build 번호 읽기를 검증한다. [`tests/uia_provider_tests.cpp`](../tests/uia_provider_tests.cpp)는 자식 창을 대신하는 요소가 그 창을 host로 답하고 override 옵션을 내세우며, 창 root가 그 창 자리에 그 요소를 돌려주는 것을 검증한다. Runtime integration에서는 creation, navigation policy, input, IME, focus exit, monitor 간 DPI 이동, process failure, Evergreen runtime 부재도 확인해야 한다.

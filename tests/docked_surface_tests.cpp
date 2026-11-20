@@ -40,7 +40,7 @@ namespace {
             return nullptr;
         }
 
-        [[nodiscard]] std::span<const luil::pixel_rect> apply_webviews(const std::u8string&, const luil::ui_tree*, IDCompositionVisual*, int, int) override
+        [[nodiscard]] std::span<const luil::pixel_rect> apply_webviews(const std::u8string&, const luil::ui_tree*, luil::win32::composition_renderer*, int, int) override
         {
             return {};
         }

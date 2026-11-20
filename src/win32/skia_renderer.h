@@ -1,6 +1,7 @@
 #pragma once
 
 #include "host/skia_renderer.h"
+#include "luil/app/webview.h"
 #include "win32/layered_placement.h"
 
 #include <windows.h>
@@ -28,8 +29,8 @@ namespace luil::win32 {
     class composition_renderer : public skia_renderer
     {
     public:
-        // 우리가 그린 것 **아래**에 놓이는 visual이다. 웹뷰가 여기 들어간다.
-        [[nodiscard]] virtual IDCompositionVisual* underlay() noexcept = 0;
+        // 이 표면에서 웹뷰가 선택한 층의 부모 visual이다.
+        [[nodiscard]] virtual IDCompositionVisual* webview_parent(webview_layer layer) noexcept = 0;
     };
 
     // 레이어드 창에 `UpdateLayeredWindow`로 내는 렌더러다 (CPU).
@@ -52,7 +53,7 @@ namespace luil::win32 {
     // 웹뷰가 설 자리도 없고, 자리표의 placeholder가 그 사실을 화면에 남긴다
     // (webview-composition-design.md).
     //  - CPU로 물러선 창은 여기서 nullptr가 되고, 그 순간 웹뷰는 설 자리를 잃는다.
-    [[nodiscard]] IDCompositionVisual* renderer_underlay(renderer_host& host) noexcept;
+    [[nodiscard]] composition_renderer* renderer_composition(renderer_host& host) noexcept;
 
     // 창 하나의 렌더러를 세운다.
     // `composition`은 Direct3D 제시가 붙을 DirectComposition device다

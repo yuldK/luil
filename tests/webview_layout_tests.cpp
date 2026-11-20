@@ -12,7 +12,7 @@ TEST_CASE("A webview with no visible bounds takes no place", "[win32][webview]")
     // 자리표가 tree에 없거나 통째로 잘렸다.
     const auto layout { plan_webview_layout(std::nullopt, 800, 600, false, 1.0f) };
     REQUIRE(layout.visible() == false);
-    REQUIRE(layout.punch_hole == false);
+    REQUIRE(layout.punch_hole() == false);
 }
 
 TEST_CASE("A visible webview takes its bounds and punches a hole", "[win32][webview]")
@@ -22,7 +22,7 @@ TEST_CASE("A visible webview takes its bounds and punches a hole", "[win32][webv
     REQUIRE(layout.y == 80);
     REQUIRE(layout.width == 300);
     REQUIRE(layout.height == 220);
-    REQUIRE(layout.punch_hole);
+    REQUIRE(layout.punch_hole());
 }
 
 TEST_CASE("An occluded webview keeps its place and stops punching", "[win32][webview]")
@@ -37,8 +37,25 @@ TEST_CASE("An occluded webview keeps its place and stops punching", "[win32][web
     REQUIRE(covered.y == shown.y);
     REQUIRE(covered.width == shown.width);
     REQUIRE(covered.height == shown.height);
-    REQUIRE(shown.punch_hole);
-    REQUIRE(covered.punch_hole == false);
+    REQUIRE(shown.punch_hole());
+    REQUIRE(covered.punch_hole() == false);
+}
+
+TEST_CASE("An overlay webview takes input without a hole and hides when covered", "[win32][webview]")
+{
+    const rect_f bounds { 20.0f, 10.0f, 300.0f, 200.0f };
+    const auto shown { plan_webview_layout(bounds, 240, 150, false, 1.5f, luil::webview_layer::overlay) };
+    REQUIRE(shown.visible());
+    REQUIRE_FALSE(shown.punch_hole());
+    REQUIRE(shown.width == 220);
+    REQUIRE(shown.height == 140);
+    REQUIRE(shown.scale == 1.5f);
+    REQUIRE(luil::win32::translate_webview_pointer(shown, 30, 20).inside);
+    REQUIRE(luil::win32::translate_webview_pointer(shown, 0, 0, true).inside);
+    const auto covered { plan_webview_layout(bounds, 240, 150, true, 1.5f, luil::webview_layer::overlay) };
+    REQUIRE_FALSE(covered.visible());
+    REQUIRE_FALSE(covered.punch_hole());
+    REQUIRE_FALSE(luil::win32::translate_webview_pointer(covered, 30, 20, true).inside);
 }
 
 TEST_CASE("A webview is clipped to the client rectangle", "[win32][webview]")
@@ -55,7 +72,7 @@ TEST_CASE("A webview entirely outside the client takes no place", "[win32][webvi
 {
     const auto right { plan_webview_layout(rect_f { 900.0f, 10.0f, 100.0f, 100.0f }, 800, 600, false, 1.0f) };
     REQUIRE(right.visible() == false);
-    REQUIRE(right.punch_hole == false);
+    REQUIRE(right.punch_hole() == false);
 
     const auto above { plan_webview_layout(rect_f { 10.0f, -200.0f, 100.0f, 100.0f }, 800, 600, false, 1.0f) };
     REQUIRE(above.visible() == false);

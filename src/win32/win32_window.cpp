@@ -541,7 +541,7 @@ namespace luil::win32 {
             }
 
             [[nodiscard]] std::span<const pixel_rect> apply_webviews(
-                const std::u8string& surface, const ui_tree* const tree, IDCompositionVisual* const underlay, const int client_width, const int client_height) override
+                const std::u8string& surface, const ui_tree* const tree, composition_renderer* const composition, const int client_width, const int client_height) override
             {
                 webview_holes_.clear();
                 if (last_frame_ == nullptr)
@@ -570,7 +570,7 @@ namespace luil::win32 {
                     // 배율은 **자리표가 배치된 값**이다. 표면의 `dpi()`가 아니다 —
                     // 자리와 배율은 같은 tree에서 나온 한 쌍이라야 한다 (webview_layout.h).
                     const webview_layout layout {
-                        plan_webview_layout(visible, client_width, client_height, tree != nullptr && occluded(*tree, placeholder, visible), placeholder != nullptr ? placeholder->scale() : 1.0f),
+                        plan_webview_layout(visible, client_width, client_height, tree != nullptr && occluded(*tree, placeholder, visible), placeholder != nullptr ? placeholder->scale() : 1.0f, want.layer),
                     };
                     // **이 표면의 배율로 배치된 tree만 자리를 준다.** `WM_DPICHANGED`
                     // 직후 아직 옛 배율의 tree를 **새 크기의 client**에 그리는 frame이
@@ -582,8 +582,8 @@ namespace luil::win32 {
                     // 무관하게 그대로 준다.
                     const float tree_scale { placeholder != nullptr ? placeholder->scale() : surface_scale };
                     const bool arranged_for_this_surface { tree_scale - surface_scale < 0.001f && surface_scale - tree_scale < 0.001f };
-                    if (arranged_for_this_surface)
-                        webviews_.apply_layout(want.id, layout, underlay);
+                    if (arranged_for_this_surface || composition == nullptr || (want.layer == webview_layer::overlay && layout.visible() == false))
+                        webviews_.apply_layout(want.id, layout, composition != nullptr ? composition->webview_parent(want.layer) : nullptr);
                     // **초점이 자리표에 닿으면 페이지로 넘긴다.**
                     //
                     // Tab이 자리표를 하나의 자리로 보고 거기 서면, 그 자리는 그릴
@@ -596,7 +596,7 @@ namespace luil::win32 {
                     // **웹뷰가 실제로 서 있을 때만 비운다.** 서지 않은 자리를 비우면
                     // 그 아래에 아무것도 없어 바탕 화면이 비친다 — 자리표의
                     // placeholder가 보여야 하는 자리다 (webview_element.h).
-                    if (layout.punch_hole && webviews_.standing(want.id))
+                    if (layout.punch_hole() && webviews_.opens_hole(want.id))
                         webview_holes_.push_back(pixel_rect { layout.x, layout.y, layout.width, layout.height });
                 }
                 last_focus_ = state_focus;
@@ -2550,7 +2550,7 @@ namespace luil::win32 {
                 for (const ui_webview& want : last_frame_->webviews)
                 {
                     const window_surface* const anchor { anchor_surface(want.anchor) };
-                    targets.push_back(webview_target { &want, anchor != nullptr ? anchor->window() : nullptr, anchor != nullptr && anchor->has_webview_underlay() });
+                    targets.push_back(webview_target { &want, anchor != nullptr ? anchor->window() : nullptr, anchor != nullptr && anchor->has_webview_layer(want.layer) });
                 }
                 std::u8string composition_error {};
                 webviews_.synchronize(targets, composition_.acquire(composition_error));
