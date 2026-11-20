@@ -1,6 +1,7 @@
 #include "win32/caption_surface.h"
 
 #include "win32/utf8.h"
+#include "win32/window_messages.h"
 
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -215,6 +216,44 @@ namespace luil::win32 {
         // 스타일과 갈무리는 그대로다 — 여기서 달라진 것은 **모니터 사각형뿐**이다.
         SetWindowPos(window_, nullptr, bounds->x, bounds->y, bounds->width, bounds->height, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
         return true;
+    }
+
+    void caption_surface::track_placement(const bool enabled) noexcept
+    {
+        tracking_placement_ = enabled;
+        placement_pending_ = false;
+    }
+
+    void caption_surface::queue_placement_report() noexcept
+    {
+        if (tracking_placement_ && in_size_move_ == false && fullscreen() == false && placement_pending_ == false
+            && IsWindowVisible(window_) && IsIconic(window_) == FALSE)
+            placement_pending_ = PostMessageW(window_, placement_changed_message, 0, 0) != FALSE;
+    }
+
+    bool caption_surface::placement_report_due(const UINT message, const LPARAM parameter) noexcept
+    {
+        switch (message)
+        {
+        case WM_WINDOWPOSCHANGED:
+            if ((reinterpret_cast<const WINDOWPOS*>(parameter)->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE))
+                queue_placement_report();
+            return false;
+        case WM_ENTERSIZEMOVE:
+            in_size_move_ = true;
+            placement_pending_ = false;
+            return false;
+        case WM_EXITSIZEMOVE:
+            in_size_move_ = false;
+            break;
+        case placement_changed_message:
+            if (std::exchange(placement_pending_, false) == false)
+                return false;
+            break;
+        default:
+            return false;
+        }
+        return tracking_placement_ && in_size_move_ == false && fullscreen() == false && IsWindowVisible(window_) && IsIconic(window_) == FALSE;
     }
 
     void caption_surface::set_fullscreen_restore(const WINDOWPLACEMENT& placement) noexcept

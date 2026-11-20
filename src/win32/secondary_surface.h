@@ -74,8 +74,6 @@ namespace luil::win32 {
         std::function<app_message(float, float, float)> metrics_ {};
         std::function<input_action()> close_ {};
         std::function<app_message(const window_placement&)> placement_ {};
-        // 마지막으로 알린 최대화 상태다. 크기를 끄는 동안 연달아 오는 `SIZE_RESTORED`를 전환으로 세지 않는다.
-        bool posted_maximized_ { false };
         // 한 계기에 닫힘 요청을 한 번만 낸다.
         // 새 frame이 창을 계속 실으면 다시 낼 수 있게 풀린다.
         bool close_requested_ { false };

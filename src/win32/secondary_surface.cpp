@@ -59,6 +59,8 @@ namespace luil::win32 {
 
     LRESULT secondary_surface::procedure(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
     {
+        if (placement_report_due(message, long_parameter))
+            post_placement();
         switch (message)
         {
         case WM_ACTIVATE:
@@ -82,17 +84,6 @@ namespace luil::win32 {
             return 0;
         }
         case WM_SIZE:
-            // 최대화 ↔ 복원 전환만 배치로 알린다. 끌어서 크기를 바꾸는 동안의 `SIZE_RESTORED`는 끝(`WM_EXITSIZEMOVE`)이
-            // 알린다 (주 창과 같은 규칙).
-            if (word_parameter == SIZE_MAXIMIZED || word_parameter == SIZE_RESTORED)
-            {
-                const bool maximized { word_parameter == SIZE_MAXIMIZED };
-                if (maximized != posted_maximized_)
-                {
-                    posted_maximized_ = maximized;
-                    post_placement();
-                }
-            }
             if (word_parameter != SIZE_MINIMIZED)
             {
                 // 크기 변경은 popup의 닫힘 계기다 (주 창과 같은 규칙).
@@ -106,10 +97,6 @@ namespace luil::win32 {
                 return 0;
             }
             break;
-        case WM_EXITSIZEMOVE:
-            // 이동·크기 조절이 끝난 자리다. 앱이 저장할 값을 알아야 한다.
-            post_placement();
-            return 0;
         case WM_CLOSE:
             // Alt+F4도 캡션 close처럼 닫자는 메시지만 낸다.
             // 창을 없애는 것은 다음 frame의 대조다.
@@ -176,7 +163,6 @@ namespace luil::win32 {
         if (GetWindowPlacement(window_, &placement) == FALSE)
             return;
         const window_placement value { placement_from(placement) };
-        posted_maximized_ = value.maximized;
         // 앱의 factory는 noexcept가 아니다. 창 메시지 처리 밖으로 새지 않게 여기서 거둔다.
         try
         {

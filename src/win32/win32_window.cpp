@@ -927,6 +927,7 @@ namespace luil::win32 {
                     // 다음 실행도 또 기본 배치다. 배치가 있는 실행은 위의 초기 메시지가 이미 알렸다.
                     post_window_placement();
                 }
+                main_.track_placement(true);
                 UpdateWindow(window_);
                 MSG message {};
                 BOOL received {};
@@ -995,6 +996,8 @@ namespace luil::win32 {
             // 이어 본다 — caption chrome → 표면 공통 (win32-surface-design.md).
             LRESULT handle_window_message(const UINT message, const WPARAM word_parameter, const LPARAM long_parameter)
             {
+                if (main_.placement_report_due(message, long_parameter))
+                    post_window_placement();
                 switch (message)
                 {
                 case snapshot_wake_message: {
@@ -1224,22 +1227,6 @@ namespace luil::win32 {
                 }
                 case WM_SIZE:
                     main_.update_caption_hover(caption_button_hover::none);
-                    // 최대화 ↔ 복원 전환만 배치로 알린다.
-                    // 끌어서 크기를 바꾸는 동안 에도 SIZE_RESTORED가
-                    // 연속으로 오므로 상태가 바뀐 경우로 한정 한다.
-                    //  - **전체 화면으로 들어가는 길은 여기서 세지 않는다.** 그
-                    //    `SetWindowPos`도 `SIZE_RESTORED`로 오므로, 최대화 창에서
-                    //    들어가면 이 판정이 "최대화가 풀렸다"고 보아 갈무리해 둔 것과
-                    //    다른 배치를 알린다. 그 전환의 보고는 명령이 직접 한다.
-                    if (main_.fullscreen() == false && (word_parameter == SIZE_MAXIMIZED || word_parameter == SIZE_RESTORED))
-                    {
-                        const bool maximized { word_parameter == SIZE_MAXIMIZED };
-                        if (maximized != posted_maximized_)
-                        {
-                            posted_maximized_ = maximized;
-                            post_window_placement();
-                        }
-                    }
                     // 레이어드 창의 크기 변경을 미뤄 둔 동안 오는 `WM_SIZE`는 최대화 표식이 바뀐 것을 알릴 뿐 크기는
                     // 옛 값이다. 렌더러·metrics는 미룬 배치가 맡는다 (`defer_layered_placement`).
                     if (word_parameter != SIZE_MINIMIZED && layered_ && deferred_placements_.empty() == false)
@@ -1262,11 +1249,6 @@ namespace luil::win32 {
                         post_window_metrics();
                         InvalidateRect(window_, nullptr, FALSE);
                     }
-                    return 0;
-                case WM_EXITSIZEMOVE:
-                    // 이동·크기 조절이 끝난 시점의 배치다.
-                    // 앱이 저장할 값을 알고 있어야 한다.
-                    post_window_placement();
                     return 0;
                 case WM_DPICHANGED: {
                     set_dpi(HIWORD(word_parameter));
@@ -1566,6 +1548,17 @@ namespace luil::win32 {
                 return nullptr;
             }
 
+            void change_fullscreen(const bool enter)
+            {
+                if (main_.fullscreen() == enter)
+                    return;
+                main_.track_placement(false);
+                const bool changed { main_.set_fullscreen(enter) };
+                main_.track_placement(true);
+                if (changed)
+                    post_window_placement();
+            }
+
             void execute_ui_command(const ui_command command, const bool from_app = false)
             {
                 switch (command)
@@ -1583,8 +1576,7 @@ namespace luil::win32 {
                     // 배치를 알리는 것도 여기다. 들어가고 나오는 것 자체가 **저장할
                     // 값의 변화**이고(전체 화면 여부는 배치에 실려 저장된다), 이 전환의
                     // `WM_SIZE`는 최대화 전환으로 세지 않아 아무도 알리지 않는다.
-                    if (main_.set_fullscreen(main_.fullscreen() == false))
-                        post_window_placement();
+                    change_fullscreen(main_.fullscreen() == false);
                     return;
                 case ui_command::window_close:
                     PostMessageW(window_, from_app ? app_close_message : WM_CLOSE, 0, 0);
@@ -1777,6 +1769,7 @@ namespace luil::win32 {
                 if (GetWindowPlacement(window_, &placement) == FALSE)
                     return;
 
+                main_.track_placement(false);
                 const bool was_fullscreen { main_.fullscreen() };
                 placement.rcNormalPosition = bounds;
                 placement.showCmd = requested.maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
@@ -1795,12 +1788,8 @@ namespace luil::win32 {
                     else
                         static_cast<void>(SetWindowPlacement(window_, &placement));
                 }
-                // 전체 화면 여부가 바뀌었으면 알린다.
-                // **요청을 그대로 되울리는 것이 아니다.** 앱은 이 사실로 tree를 다시
-                // 짓는데(캡션 줄을 접는다), 이 전환의 `WM_SIZE`는 최대화 전환으로 세지
-                // 않으므로 알리지 않으면 화면을 덮은 창이 캡션을 그린 채로 남는다.
-                if (main_.fullscreen() != was_fullscreen)
-                    post_window_placement();
+                main_.track_placement(true);
+                post_window_placement();
             }
 
             [[nodiscard]] app_message make_window_metrics_message() noexcept
@@ -1916,6 +1905,7 @@ namespace luil::win32 {
                 if (deferred_placements_.empty() && resized == false)
                     return;
 
+                main_.queue_placement_report();
                 position.flags |= SWP_NOSIZE | SWP_NOMOVE;
                 const auto now { std::chrono::steady_clock::now() };
                 if (resized)
@@ -3514,6 +3504,7 @@ namespace luil::win32 {
                 // 저장 배치가 최대화였으면 복원 사각형 위에서 최대화한다 — 돌아갈 자리가 그 사각형으로 남는다.
                 ShowWindow(handle, restored.has_value() && restored->placement.maximized ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE);
                 // 앱이 저장할 처음 배치다. 이후는 이동·크기 조절의 끝과 최대화 전환이 알린다.
+                created->track_placement(true);
                 created->post_placement();
             }
 
@@ -3839,9 +3830,6 @@ namespace luil::win32 {
             std::uint64_t applied_window_placement_revision_ { 0 };
             // 대상이 설 때까지 들고 있는 초점 요청이다 (`advance_focus_request`).
             focus_request_tracker focus_tracker_ {};
-            // 마지막으로 배치를 알린 최대화 상태다.
-            // WM_SIZE 폭주 중에 같은 상태를 반복해서 보내지 않는다.
-            bool posted_maximized_ { false };
             // 주 창이 레이어드 창이다 (`window_presentation::layered`).
             bool layered_ { false };
             // 새 tree를 기다리는 크기 변경들이다 (layered-presentation-design.md).

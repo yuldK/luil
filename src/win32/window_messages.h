@@ -41,6 +41,9 @@ namespace luil::win32 {
     // 도킹 표면. 소유 popup까지 포함한 창 순서 변경이 끝난 뒤 맨 위 상태를 다시 확인한다.
     inline constexpr UINT restore_docked_topmost_message { WM_APP + 12 };
 
+    // 주 창·보조 창. 한 차례의 이동·크기 변경을 모아 최종 배치를 읽는다.
+    inline constexpr UINT placement_changed_message { WM_APP + 13 };
+
     // 번호가 서로 다르고 앱이 쓸 수 있는 대역(`WM_APP`~0xBFFF) 안인가다.
     [[nodiscard]] constexpr bool app_message_numbers_valid() noexcept
     {
@@ -57,6 +60,7 @@ namespace luil::win32 {
             capture_request_message,
             app_close_message,
             restore_docked_topmost_message,
+            placement_changed_message,
         };
         for (std::size_t index = 0; index < std::size(numbers); ++index)
         {

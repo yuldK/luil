@@ -39,7 +39,7 @@ caption button은 `caption_config::buttons`, `caption_layout`, `window_style_for
 
 같은 이름의 둘째 인스턴스가 보낸 명령 줄 인자와 작업 폴더는 `window_environment::instance`를 단 첫째의 주 창이 받는다. `run()`이 `on_started` 뒤 창을 보이기 전에 주 창에 이름 표식(창 속성)을 걸고, 둘째(`single_instance::send_to_primary`)가 그 표식으로 첫째의 주 창을 찾아 `WM_COPYDATA`로 보낸다. 주 창은 UI thread에서 `window_delegate::on_instance_arguments`로 앱에 건네고 앱의 답(받았는가)을 보낸 쪽에 돌려준다. 보낸 쪽이 `activate`를 켰으면 보이는 주 창을 앞으로 세운다(최소화는 되살리고, 숨은 주 창은 보이게 하지 않는다). 표식은 host를 거두기 직전에 지운다. 관리자 권한 첫째가 낮은 권한 프로세스의 인자를 받으려면 앱이 `instance_from_lower_integrity`를 켠다. Android는 `unsupported`다([둘째 인스턴스의 인자 넘기기](../single-instance-args-design.md)).
 
-창 배치는 `WM_EXITSIZEMOVE`, maximized/restored 전환, 전체 화면 전환, `WM_CLOSE`에서 delegate에 보고한다. 앱이 복원할 배치는 `window_placement_revision`이 새로울 때만 적용한다. 창 또는 renderer 생성이 실패하면 `show_startup_error`가 디버그 출력과 메시지 상자를 내며 smoke 모드에서는 상자를 생략한다. 상자의 제목과 앞글은 `window_config::startup_error`로 앱이 정한다.
+주 창과 보조 창은 끌기 중 배치를 모아 `WM_EXITSIZEMOVE`에서 한 번 보고한다. 끌기 밖의 이동·크기 변경(단축키, 맞춰 붙이기, `SetWindowPos`, 최대화·복원)은 게시 메시지 한 번으로 모아 마지막 배치를 알린다. 최소화·전체 화면 동안과 luil의 명시적 전환 중에는 중간 배치를 보내지 않는다. 주 창은 전체 화면 전환 결과와 종료 직전 배치도 delegate에 보고한다. 앱이 복원할 배치는 `window_placement_revision`이 새로울 때만 적용한다. 창 또는 renderer 생성이 실패하면 `show_startup_error`가 디버그 출력과 메시지 상자를 내며 smoke 모드에서는 상자를 생략한다. 상자의 제목과 앞글은 `window_config::startup_error`로 앱이 정한다.
 
 ## 초기 배치
 
