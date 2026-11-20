@@ -91,8 +91,6 @@ namespace demo {
     constexpr luil::ui_element_kind kind_popups_color_hex_input { luil::application_element_kind(68) };
     // 서식 있는 글 페이지의 서식 칸이다 (`rich_text_sample.h`).
     constexpr luil::ui_element_kind kind_rich_editor_input { luil::application_element_kind(69) };
-    // 웹뷰 페이지의 떠 있는 단추다 (popup 표면에 서거나 자리표와 같은 tree에 겹친다).
-    constexpr luil::ui_element_kind kind_webview_floating { luil::application_element_kind(70) };
 
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
