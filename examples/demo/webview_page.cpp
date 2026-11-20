@@ -4,8 +4,10 @@
 #include "luil/ui/check_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/image_decode.h"
+#include "luil/ui/layer_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/tab_bar_element.h"
+#include "luil/ui/ui_tree.h"
 #include "luil/ui/webview_element.h"
 
 #include "luil/generated/codicons.h"
@@ -35,6 +37,24 @@ namespace demo {
 
         // 네이티브로 그리는 글 문서다.
         // 웹뷰가 푸는 HTML과 나란히 두어 무엇이 무엇을 그리는지 보이게 한다.
+        // 떠 있는 단추의 크기와 자리표 오른쪽 아래 모서리에서 떨어진 거리다 (논리 픽셀).
+        //  - 거리를 둔 자리는 가림 표본(가운데와 네 모서리)에 닿지 않는다. 닿게 두면 페이지가 통째로 사라진다.
+        constexpr float floating_width { 132.0f };
+        constexpr float floating_height { 30.0f };
+        constexpr float floating_margin { 16.0f };
+
+        // 두 방식이 같은 단추를 쓴다. 달라지는 것은 그 단추가 서는 표면뿐이다.
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_floating_button()
+        {
+            luil::text_button_config config {};
+            config.text = u8"떠 있는 단추";
+            config.glyph = luil::codicons::icon_globe;
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_webview_floating, u8"webview-floating" }, std::move(config)) };
+            button->set_cursor(luil::ui_cursor::hand);
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(webview_floating_press_intent {}));
+            return button;
+        }
+
         constexpr std::u8string_view text_document {
             u8"이 탭은 웹뷰가 아니다. 글은 label_element가 그린다.\n"
             u8"탭 막대도, 이 아래 알림 줄도 우리 tree의 것이다.\n"
@@ -143,6 +163,16 @@ namespace demo {
             overlay_ = layer->overlay;
             return true;
         }
+        if (const auto* const floating { message.get<webview_floating_intent>() }; floating != nullptr)
+        {
+            floating_ = floating->mode;
+            return true;
+        }
+        if (message.get<webview_floating_press_intent>() != nullptr)
+        {
+            ++floating_presses_;
+            return true;
+        }
         return false;
     }
 
@@ -217,10 +247,28 @@ namespace demo {
         return view;
     }
 
+    std::vector<luil::win32::ui_popup> webview_page::make_popups(const float scale) const
+    {
+        if (floating_ != webview_floating::popup || slot_ == nullptr || scale <= 0.0f)
+            return {};
+        // 자리표의 오른쪽 아래 모서리 안쪽이다. 자리는 물리 픽셀로 배치돼 있고 popup의 자리는 논리 픽셀이다.
+        const luil::rect_f slot { slot_->bounds() };
+        luil::win32::ui_popup popup {};
+        popup.id = u8"webview-floating";
+        popup.width = floating_width;
+        popup.height = floating_height;
+        popup.x = (slot.x + slot.width) / scale - floating_width - floating_margin;
+        popup.y = (slot.y + slot.height) / scale - floating_height - floating_margin;
+        popup.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(make_floating_button(), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
+        // `dismiss`를 비워 둔다. 바깥을 누르거나 창이 움직여도 남아 있는 도구 단추라, 닫는 것은 확인란뿐이다.
+        return { std::move(popup) };
+    }
+
     std::unique_ptr<luil::ui_element> webview_page::build(const float width, const float height, const float scale)
     {
         static_cast<void>(width);
         static_cast<void>(scale);
+        slot_ = nullptr;
 
         luil::tab_bar_config bar {};
         bar.owner = u8"webview";
@@ -276,8 +324,34 @@ namespace demo {
         column->add(std::move(dialog), { .length = 26.0f, .cross_length = 150.0f });
         column->add_gap(6.0f);
 
+        // 웹뷰 위에 떠 있는 단추다. 두 확인란은 서로를 끈다 — 고른 쪽의 반대를 누르면 그쪽으로 옮긴다.
+        luil::check_config floating_popup {};
+        floating_popup.owner = u8"webview-floating-popup";
+        floating_popup.style = luil::check_style::checkbox;
+        floating_popup.label = u8"떠 있는 단추를 popup 표면으로 띄운다";
+        floating_popup.checked = floating_ == webview_floating::popup;
+        floating_popup.tooltip = u8"popup은 자기 창이라 위층과 아래층 모두에서 페이지 위에 보인다. 웹뷰 위에 띄울 UI는 이 길로 둔다";
+        floating_popup.toggle = luil::make_message_action(webview_floating_intent { floating_ == webview_floating::popup ? webview_floating::none : webview_floating::popup });
+        column->add(std::make_unique<luil::check_element>(std::move(floating_popup)), luil::check_row_height);
+        column->add_gap(6.0f);
+        luil::check_config floating_tree {};
+        floating_tree.owner = u8"webview-floating-tree";
+        floating_tree.style = luil::check_style::checkbox;
+        floating_tree.label = u8"떠 있는 단추를 자리표와 같은 tree에 겹친다";
+        floating_tree.checked = floating_ == webview_floating::tree;
+        floating_tree.tooltip = u8"보이지 않는다. 아래층은 자리를 비우는 구멍이 단추까지 지우고, 위층은 페이지가 단추 위에 얹힌다";
+        floating_tree.toggle = luil::make_message_action(webview_floating_intent { floating_ == webview_floating::tree ? webview_floating::none : webview_floating::tree });
+        column->add(std::make_unique<luil::check_element>(std::move(floating_tree)), luil::check_row_height);
+        column->add_gap(4.0f);
+        std::u8string presses { u8"떠 있는 단추 눌림: " };
+        for (const char digit : std::to_string(floating_presses_))
+            presses.push_back(static_cast<char8_t>(digit));
+        presses += u8"번";
+        column->add(make_label(luil::ui_element_id { kind_text, u8"webview-floating-presses" }, std::move(presses), 11.0f, luil::label_color_role::dim), 16.0f);
+        column->add_gap(6.0f);
+
         const tab* const current { selected() };
-        const float body { height > 0.0f ? height - 308.0f : 320.0f };
+        const float body { height > 0.0f ? height - 390.0f : 320.0f };
         const float body_height { body > 80.0f ? body : 80.0f };
 
         if (current != nullptr && current->path.empty() == false)
@@ -287,8 +361,26 @@ namespace demo {
             placeholder.webview = webview_id();
             placeholder.name = u8"문서 미리 보기";
             placeholder.placeholder = base_url_.empty() ? u8"되돌이 서버를 기다린다" : u8"웹뷰가 서지 않았다 — 런타임이 없거나 CPU 렌더러다";
-            column->add(std::make_unique<luil::webview_element>(luil::ui_element_id { luil::ui_element_kind::webview, webview_id() }, std::move(placeholder)),
-                { .length = body_height });
+            auto slot { std::make_unique<luil::webview_element>(luil::ui_element_id { luil::ui_element_kind::webview, webview_id() }, std::move(placeholder)) };
+            slot_ = slot.get();
+            if (floating_ == webview_floating::tree)
+            {
+                // 자리표 위에 같은 tree의 단추를 겹친다. **이렇게 두면 보이지 않는다** — 그것을 확인하는 견본이다.
+                // 자리표가 먼저, 단추가 나중이라 그리는 순서로는 단추가 위다. 그래도 웹뷰는 이 tree의 그림과 다른
+                // 층에서 합성되므로 순서가 뜻을 갖지 못한다 (webview_floating의 주석).
+                auto layers { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"webview-floating-layers" }) };
+                layers->add(std::move(slot));
+                luil::layer_item corner {};
+                corner.horizontal = luil::layout_alignment::end;
+                corner.vertical = luil::layout_alignment::end;
+                corner.width = floating_width;
+                corner.height = floating_height;
+                corner.margin = luil::edge_insets::all(floating_margin);
+                layers->add(make_floating_button(), corner);
+                column->add(std::move(layers), { .length = body_height });
+            }
+            else
+                column->add(std::move(slot), { .length = body_height });
         }
         else if (current != nullptr && current->key == u8"image")
         {

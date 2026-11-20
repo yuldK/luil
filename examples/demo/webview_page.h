@@ -12,6 +12,7 @@
 #include "demo/common.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_element.h"
+#include "luil/win32/app_host.h"
 #include "luil/win32/webview.h"
 
 #include <filesystem>
@@ -43,11 +44,39 @@ namespace demo {
         bool overlay { true };
     };
 
+    // 웹뷰 위에 떠 있는 단추를 어디에 둘 것인가다.
+    //
+    // **웹뷰 위에 띄울 UI는 popup 표면에 둔다.** tree 안에 겹쳐 그린 것은 어느 층에서도 페이지 위에 보이지
+    // 않는다 — 아래층은 자리표 자리를 통째로 비우는 구멍이 그 그림까지 지우고, 위층은 페이지가 그 위에 얹힌다.
+    // 가림 표본(자리의 가운데와 네 모서리)에 닿게 두면 이번에는 페이지가 통째로 사라진다
+    // (docs/webview-composition-design.md의 가림 규칙). popup은 자기 창이라 두 층 모두의 위에 선다.
+    enum class webview_floating
+    {
+        none,
+        // popup 표면이다. 다른 앱이 따라 쓸 길이다.
+        popup,
+        // 자리표와 같은 tree에 겹친다. 보이지 않는다는 것을 확인하는 견본이다.
+        tree,
+    };
+
+    struct webview_floating_intent
+    {
+        webview_floating mode { webview_floating::none };
+    };
+
+    // 떠 있는 단추가 눌렸다.
+    struct webview_floating_press_intent
+    {
+    };
+
     class webview_page
     {
     public:
         bool handle(const luil::app_message& message);
         [[nodiscard]] std::unique_ptr<luil::ui_element> build(float width, float height, float scale);
+        // 웹뷰 위에 띄우는 단추의 popup이다. 이번 frame에 배치한 자리표의 자리를 쓰므로 `build` 뒤에 부른다.
+        //  - **이 페이지를 지은 frame에서만 부른다.** 자리표는 그 frame의 tree가 쥐고 있다.
+        [[nodiscard]] std::vector<luil::win32::ui_popup> make_popups(float scale) const;
 
         // 되돌이 서버의 뿌리다. 서버가 서기 전에는 비어 있다.
         void set_base_url(std::u8string url);
@@ -87,6 +116,10 @@ namespace demo {
         bool open_new_windows_here_ { false };
         // 위층이면 페이지가 자리표 위에 얹히고, 아니면 자리표를 비운 구멍 아래에 깔린다. 같은 웹뷰가 층만 옮긴다.
         bool overlay_ { true };
+        webview_floating floating_ { webview_floating::none };
+        unsigned floating_presses_ { 0 };
+        // 이번 frame의 자리표다. popup의 자리를 여기서 읽는다. 웹뷰 탭이 아닌 frame에서는 비어 있다.
+        const luil::ui_element* slot_ { nullptr };
         // 브라우저 프로세스가 죽은 횟수다. 웹뷰의 id에 붙여 **다른 웹뷰로** 다시 싣는다 —
         // 목록에서 뺐다가 다시 싣는 것과 같은 일을 한 frame에 한다 (webview.h).
         unsigned generation_ { 0 };

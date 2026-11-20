@@ -894,6 +894,10 @@ namespace demo {
                     frame->popups.push_back(std::move(popup));
                 for (luil::win32::ui_popup& popup : theme_.make_popups(scale))
                     frame->popups.push_back(std::move(popup));
+                // 웹뷰 위에 떠 있는 단추다. 자리표가 이번 frame의 tree에 있을 때만 자리를 안다.
+                if (page_ == page_webview)
+                    for (luil::win32::ui_popup& popup : webview_.make_popups(scale))
+                        frame->popups.push_back(std::move(popup));
                 // 메뉴 막대의 메뉴는 이번 frame에 배치한 항목 아래에 선다. 보기 메뉴는 사이드바와 테마의 지금 상태를 그린다.
                 if (menu_bar != nullptr)
                     for (luil::win32::ui_popup& popup : shell_menu_.make_popups(*menu_bar, scale, { 0.0f, 0.0f, width, height }, sidebar_collapsed_ == false, theme_.appearance().theme, page_transition_mode_))

@@ -58,6 +58,14 @@ Element는 arranged physical bounds와 arrange에 사용한 scale을 보관한�
 
 한 frame에 아래층의 실제 구멍이 하나라도 있으면 LCD subpixel 글꼴을 끄고 grayscale antialiasing을 쓴다. 위층만 있는 frame은 구멍 목록이 비므로 원래의 RGB pixel geometry를 유지한다.
 
+### 웹뷰 위에 떠 있는 UI
+
+웹뷰 위에 띄울 단추·도구 막대는 **popup 표면**(`ui_popup`)에 둔다. popup은 자기 `HWND`라 두 층 모두의 위에 서고, 자리표의 배치된 자리를 읽어 그 안쪽에 앉히면 된다. `dismiss`를 비워 두면 바깥 클릭이나 창 이동에도 남는다.
+
+자리표와 같은 tree에 겹쳐 그린 요소는 어느 층에서도 페이지 위에 보이지 않는다. 아래층은 자리표 자리를 통째로 비우는 구멍이 tree를 다 그린 뒤에 그 그림까지 지우고, 위층은 페이지가 그 위에 얹힌다. 그 요소가 가림 표본에 닿으면 이번에는 두 층 모두에서 페이지가 통째로 사라진다. tree 안의 그리는 순서는 웹뷰와의 위아래를 정하지 못한다.
+
+데모의 ‘웹뷰’ 페이지에 두 방식이 나란히 있다. ‘떠 있는 단추를 popup 표면으로 띄운다’는 자리표 오른쪽 아래 안쪽에 popup을 세우고, ‘떠 있는 단추를 자리표와 같은 tree에 겹친다’는 같은 자리에 같은 단추를 `layer_element`로 겹쳐 보이지 않는 것을 확인한다.
+
 ## DPI 계약
 
 Tree bounds와 pointer coordinate는 physical pixel이다. Composition controller는 `COREWEBVIEW2_BOUNDS_MODE_USE_RAW_PIXELS`를 사용하므로 bounds와 `SendMouseInput`의 단위가 같다.
