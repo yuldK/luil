@@ -37,6 +37,12 @@ namespace demo {
         bool open { false };
     };
 
+    // 웹뷰를 자리표 위에 얹을지(위층) 아래에 깔지(아래층)를 바꾼다 (`ui_webview::layer`).
+    struct webview_layer_toggle_intent
+    {
+        bool overlay { true };
+    };
+
     class webview_page
     {
     public:
@@ -79,6 +85,8 @@ namespace demo {
         // 곧바로 덮어 무엇이 있었는지 보이지 않는다.
         std::vector<std::u8string> recent_events_ {};
         bool open_new_windows_here_ { false };
+        // 위층이면 페이지가 자리표 위에 얹히고, 아니면 자리표를 비운 구멍 아래에 깔린다. 같은 웹뷰가 층만 옮긴다.
+        bool overlay_ { true };
         // 브라우저 프로세스가 죽은 횟수다. 웹뷰의 id에 붙여 **다른 웹뷰로** 다시 싣는다 —
         // 목록에서 뺐다가 다시 싣는 것과 같은 일을 한 frame에 한다 (webview.h).
         unsigned generation_ { 0 };

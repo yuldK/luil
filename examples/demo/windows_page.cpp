@@ -590,6 +590,21 @@ namespace demo {
             caption_bottom_ = position->bottom;
             return true;
         }
+        if (const auto* const mode { message.get<frame_fullscreen_mode_intent>() }; mode != nullptr)
+        {
+            // 켜는 순간에는 통상 창을 바란다. 지금 창이 어떤 모습인지는 이 페이지가 모르고, 보고를 읽어 맞추지도 않는다.
+            if (mode->on)
+                frame_fullscreen_ = false;
+            else
+                frame_fullscreen_.reset();
+            return true;
+        }
+        if (const auto* const wanted { message.get<frame_fullscreen_intent>() }; wanted != nullptr)
+        {
+            if (frame_fullscreen_.has_value())
+                frame_fullscreen_ = wanted->fullscreen;
+            return true;
+        }
         if (const auto* const menu { message.get<tool_menu_toggle_intent>() }; menu != nullptr)
         {
             if (menu->open)
@@ -901,9 +916,27 @@ namespace demo {
         // id는 이 페이지의 전환 단추 종류를 이름으로 갈라 쓴다.
         auto fullscreen { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool_toggle, u8"fullscreen" }, luil::text_button_config { .text = u8"전체 화면 전환" }) };
         fullscreen->set_cursor(luil::ui_cursor::hand);
-        fullscreen->set_action(luil::ui_trigger::left_click,
-            [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::ui_command::window_toggle_fullscreen } }; });
+        // frame 상태가 정하는 동안에는 명령을 내지 않고 **자기 상태를 뒤집는다.** 명령이 뒤집은 것은 다음 게시가
+        // frame 값으로 되돌리기 때문이다 (app_host.h의 `ui_frame::fullscreen`).
+        if (frame_fullscreen_.has_value())
+            fullscreen->set_action(luil::ui_trigger::left_click, luil::make_message_action(frame_fullscreen_intent { *frame_fullscreen_ == false }));
+        else
+        {
+            fullscreen->set_action(luil::ui_trigger::left_click,
+                [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::ui_command::window_toggle_fullscreen } }; });
+        }
         column->add(std::move(fullscreen), { .length = 26.0f, .cross_length = 140.0f });
+        column->add_gap(6.0f);
+
+        // 같은 전환을 앱 상태로 하는 길이다. 켜면 셸이 이 값을 매 frame 싣고 UI thread가 창과 대조한다.
+        luil::check_config frame_mode {};
+        frame_mode.owner = u8"windows-frame-fullscreen";
+        frame_mode.style = luil::check_style::checkbox;
+        frame_mode.label = u8"전체 화면을 frame 상태로 정한다";
+        frame_mode.checked = frame_fullscreen_.has_value();
+        frame_mode.tooltip = u8"켜면 위 단추가 명령 대신 앱 상태를 뒤집고 frame이 그 값을 싣는다. 켜는 순간에는 통상 창을 바란다";
+        frame_mode.toggle = luil::make_message_action(frame_fullscreen_mode_intent { frame_fullscreen_.has_value() == false });
+        column->add(std::make_unique<luil::check_element>(std::move(frame_mode)), luil::check_row_height);
 
         // 주 창 캡션의 자리다. 그리기는 셸의 배치를 따르고, 끌기·창 버튼·Alt+Space 메뉴는 게시된 tree에서
         // 캡션이 선 자리를 읽어 따라간다 — 라이브러리에 앵커를 따로 알리지 않는다.

@@ -138,6 +138,11 @@ namespace demo {
             open_new_windows_here_ = toggle->open;
             return true;
         }
+        if (const auto* const layer { message.get<webview_layer_toggle_intent>() }; layer != nullptr)
+        {
+            overlay_ = layer->overlay;
+            return true;
+        }
         return false;
     }
 
@@ -199,7 +204,7 @@ namespace demo {
 
         luil::win32::ui_webview view {};
         view.id = webview_id();
-        view.layer = luil::webview_layer::overlay;
+        view.layer = overlay_ ? luil::webview_layer::overlay : luil::webview_layer::underlay;
         view.user_data_folder = user_data_folder_;
         view.report_presentation = true;
         // 되돌이 서버는 http다. 기본값(https만)으로는 열리지 않으므로 이 예제가
@@ -253,6 +258,17 @@ namespace demo {
         column->add(std::make_unique<luil::check_element>(std::move(windows)), luil::check_row_height);
         column->add_gap(6.0f);
 
+        // 두 합성 층을 같은 화면에서 오간다. 기본값인 아래층도 여기서 확인한다.
+        luil::check_config layer {};
+        layer.owner = u8"webview-layer";
+        layer.style = luil::check_style::checkbox;
+        layer.label = u8"페이지를 자리표 위에 얹는다 (위층)";
+        layer.checked = overlay_;
+        layer.tooltip = u8"꺼져 있으면 자리표를 투명하게 비우고 그 아래에 깐다 (아래층, 기본값). 같은 웹뷰가 층만 옮긴다";
+        layer.toggle = luil::make_message_action(webview_layer_toggle_intent { overlay_ == false });
+        column->add(std::make_unique<luil::check_element>(std::move(layer)), luil::check_row_height);
+        column->add_gap(6.0f);
+
         auto dialog { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_dialog_details_open }
             , luil::text_button_config { .text = u8"웹뷰 위에 대화 열기" })
         };
@@ -261,12 +277,12 @@ namespace demo {
         column->add_gap(6.0f);
 
         const tab* const current { selected() };
-        const float body { height > 0.0f ? height - 278.0f : 320.0f };
+        const float body { height > 0.0f ? height - 308.0f : 320.0f };
         const float body_height { body > 80.0f ? body : 80.0f };
 
         if (current != nullptr && current->path.empty() == false)
         {
-            // 첫 페이지 픽셀이 자리표를 자연스럽게 덮는다.
+            // 위층이면 첫 페이지 픽셀이 자리표를 덮고, 아래층이면 웹뷰가 선 뒤 이 자리가 구멍으로 비워진다.
             luil::webview_config placeholder {};
             placeholder.webview = webview_id();
             placeholder.name = u8"문서 미리 보기";

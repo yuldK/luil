@@ -69,6 +69,18 @@ namespace demo {
         bool bottom { false };
     };
 
+    // 주 창의 전체 화면을 frame 상태(`ui_frame::fullscreen`)로 정할지 고른다. 끄면 명령이 정한다.
+    struct frame_fullscreen_mode_intent
+    {
+        bool on { false };
+    };
+
+    // frame 상태가 정하는 동안 바라는 전체 화면 여부다. 페이지가 자기 상태를 뒤집는다.
+    struct frame_fullscreen_intent
+    {
+        bool fullscreen { false };
+    };
+
     // 주 창의 위·왼쪽 끝을 옮겨 크기를 바꾼다 (논리 px, 양수면 커진다). 아래·오른쪽 끝은 그대로다.
     // 셸이 마지막 배치 보고에 더해 배치 요청(`window_placement_request`)으로 낸다. 레이어드 표시
     // (`--presentation=layered`)는 그 크기의 tree와 창 배치를 한 합성에 내므로 아래 캡션이 한 frame도 튀지 않는다
@@ -355,6 +367,13 @@ namespace demo {
             return caption_bottom_;
         }
 
+        // frame에 실을 전체 화면 상태다 (`ui_frame::fullscreen`). 비어 있으면 싣지 않아 명령이 정한다.
+        //  - **이 페이지가 정한 값이다.** 배치 보고의 `fullscreen`을 여기에 되비추지 않는다 (app_host.h).
+        [[nodiscard]] std::optional<bool> frame_fullscreen() const noexcept
+        {
+            return frame_fullscreen_;
+        }
+
         // 캡션을 아래에 두고 시작한다 (`--caption=bottom`).
         void set_caption_at_bottom(const bool bottom) noexcept
         {
@@ -395,6 +414,8 @@ namespace demo {
         bool tool_open_ { false };
         bool tool_menu_open_ { false };
         bool caption_bottom_ { false };
+        // 값이 있으면 frame 상태가 전체 화면을 정하고, 전환 단추는 명령 대신 이 값을 뒤집는다.
+        std::optional<bool> frame_fullscreen_ {};
         bool layered_ { false };
         // 본문이 흘러간 양이다 (논리 픽셀). 창이 커져 흘릴 것이 줄면 `make_scroll_page`가 범위 안으로 되돌린다.
         float scroll_ { 0.0f };

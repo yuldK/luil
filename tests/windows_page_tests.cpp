@@ -853,3 +853,25 @@ TEST_CASE("The hotkey controls are buttons and a checkbox a person can read by n
     REQUIRE(front != nullptr);
     REQUIRE(front->accessibility().name == u8"눌리면 창 앞으로");
 }
+
+TEST_CASE("The frame fullscreen mode makes the page own the state and the shell carry it", "[windows-page][fullscreen]")
+{
+    demo::windows_page page {};
+    // 고르지 않으면 frame에 싣지 않는다. 명령이 정하는 동안의 값 요청은 버린다.
+    REQUIRE(page.frame_fullscreen().has_value() == false);
+    deliver(page, demo::frame_fullscreen_intent { true });
+    REQUIRE(page.frame_fullscreen().has_value() == false);
+
+    // 켜는 순간에는 통상 창을 바라고, 그 뒤로는 페이지가 자기 값을 뒤집는다.
+    deliver(page, demo::frame_fullscreen_mode_intent { true });
+    REQUIRE(page.frame_fullscreen() == std::optional<bool> { false });
+    deliver(page, demo::frame_fullscreen_intent { true });
+    REQUIRE(page.frame_fullscreen() == std::optional<bool> { true });
+    const auto tree { page_tree(page) };
+    const luil::ui_element* const mode { tree.find({ luil::ui_element_kind::check, u8"windows-frame-fullscreen" }) };
+    REQUIRE(mode != nullptr);
+    REQUIRE(mode->accessibility().name == u8"전체 화면을 frame 상태로 정한다");
+
+    deliver(page, demo::frame_fullscreen_mode_intent { false });
+    REQUIRE(page.frame_fullscreen().has_value() == false);
+}
